@@ -1,0 +1,1289 @@
+================================================================================
+[V1.17 全天回测报告 - 2026-07-06]
+================================================================================
+
+================================================================================
+  002261 拓维信息
+================================================================================
+
+  触发信号总数: 142
+
+时间       类型                 价格     分数        买分/卖分 路径                  
+----------------------------------------------------------------------
+10:02    SELL_HIGH       29.32     69         0/69 sell_observe_path   
+    原因: 回吐空间, 布林偏上, 区间高位, 强空头优先高抛, 最优卖点
+10:03    SELL_HIGH       29.36     69         0/69 sell_observe_path   
+    原因: 回吐空间, 布林偏上, 区间高位, 强空头优先高抛, 最优卖点
+10:04    SELL_HIGH       29.29     74        -2/74 sell_observe_path   
+    原因: 回吐空间, MACD拐头, 长上影, 区间高位, 强空头优先高抛
+10:05    SELL_HIGH       29.40     84         0/84 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 布林偏上, 区间高位, 强空头优先高抛, 最优卖点
+10:06    SELL_HIGH       29.52     99         0/99 sell_observe_path   
+    原因: 回吐空间, 盈利空间, RSI超买, 布林偏上, 区间高位, 强空头优先高抛, 最优卖点
+10:07    SELL_HIGH       29.52     99         0/99 sell_observe_path   
+    原因: 回吐空间, 盈利空间, RSI超买, 布林偏上, 区间高位, 强空头优先高抛, 最优卖点
+10:08    SELL_HIGH       29.56     99         0/99 sell_observe_path   
+    原因: 回吐空间, 盈利空间, RSI超买, 布林偏上, 区间高位, 强空头优先高抛, 最优卖点
+10:09    SELL_HIGH       29.48     74        -2/74 sell_observe_path   
+    原因: 回吐空间, 盈利空间, MACD拐头, 区间高位, 强空头优先高抛
+10:10    SELL_HIGH       29.47     89        -2/89 sell_observe_path   
+    原因: 回吐空间, 盈利空间, MACD拐头, 长上影, 区间高位, 强空头优先高抛
+10:11    SELL_HIGH       29.50     89        -2/89 sell_observe_path   
+    原因: 回吐空间, 盈利空间, MACD拐头, 长上影, 区间高位, 强空头优先高抛
+10:12    SELL_HIGH       29.47     74        -2/74 sell_observe_path   
+    原因: 回吐空间, MACD拐头, 长上影, 区间高位, 强空头优先高抛
+10:13    SELL_HIGH       29.35     60        10/60 sell_observe_path   
+    原因: 回吐空间, 长上影, 强空头优先高抛
+10:14    SELL_HIGH       29.43     45        10/45 sell_observe_path   
+    原因: 回吐空间, 强空头优先高抛
+10:15    SELL_HIGH       29.44     45        -2/45 sell_observe_path   
+    原因: 回吐空间, 强空头优先高抛
+10:16    SELL_HIGH       29.39     64        -2/64 sell_observe_path   
+    原因: 回吐空间, 长上影, EMA转弱, 强空头优先高抛
+10:17    SELL_HIGH       29.37     64        10/64 sell_observe_path   
+    原因: 回吐空间, 长上影, EMA转弱, 强空头优先高抛
+10:18    SELL_HIGH       29.33     64        10/64 sell_observe_path   
+    原因: 回吐空间, 长上影, EMA转弱, 强空头优先高抛
+10:19    SELL_HIGH       29.30     64        -2/64 sell_observe_path   
+    原因: 回吐空间, 长上影, EMA转弱, 强空头优先高抛
+10:20    SELL_HIGH       29.21     49        21/49 sell_observe_path   
+    原因: 长上影, EMA转弱, 强空头优先高抛
+10:21    SELL_HIGH       29.23     49        21/49 sell_observe_path   
+    原因: 长上影, EMA转弱, 强空头优先高抛
+10:43    SELL_HIGH       29.19     59        19/59 sell_observe_path   
+    原因: MACD拐头, 长上影, EMA转弱, 强空头优先高抛
+11:03    SELL_HIGH       29.75     65        -9/65 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 布林偏上, 强空头优先高抛, 最优卖点
+11:04    SELL_HIGH       29.87     65        -9/65 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 布林偏上, 强空头优先高抛, 最优卖点
+11:05    SELL_HIGH       29.72     72        -9/72 sell_observe_path   
+    原因: 回吐空间, 盈利空间, RSI超买, 布林偏上, 强空头优先高抛
+11:06    SELL_HIGH       29.72     82        -9/82 sell_observe_path   
+    原因: 回吐空间, 盈利空间, RSI超买, 布林偏上, MACD拐头, 强空头优先高抛
+11:07    SELL_HIGH       29.67     70       -11/70 sell_observe_path   
+    原因: 回吐空间, 盈利空间, MACD拐头, 长上影, 强空头优先高抛
+11:08    SELL_HIGH       29.94     99        -9/99 sell_observe_path   
+    原因: 回吐空间, 盈利空间, RSI超买, 布林偏上, 区间高位, 冲顶衰竭, 强空头优先高抛, 最优卖点
+11:09    SELL_HIGH       29.88     83        -9/83 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 布林偏上, MACD拐头, 区间高位, 冲高背离, 强空头优先高抛
+11:10    SELL_HIGH       29.92     91        -9/91 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 布林偏上, MACD拐头, 区间高位, 冲高背离, 强空头优先高抛, 最优卖点
+11:11    SELL_HIGH       29.85     71       -11/71 sell_observe_path   
+    原因: 回吐空间, 盈利空间, MACD拐头, 区间高位, 冲高背离, 强空头优先高抛
+11:12    SELL_HIGH       30.06     65        -9/65 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 布林偏上, 强空头优先高抛, 最优卖点
+11:13    SELL_HIGH       30.03     94        -9/94 sell_observe_path   
+    原因: 回吐空间, 盈利空间, MACD拐头, 区间高位, 冲顶衰竭, 冲高背离, 强空头优先高抛, 最优卖点
+11:14    SELL_HIGH       30.06     79        -9/79 sell_observe_path   
+    原因: 回吐空间, 盈利空间, MACD拐头, 区间高位, 冲高背离, 强空头优先高抛, 最优卖点
+11:15    SELL_HIGH       30.01     94       -11/94 sell_observe_path   
+    原因: 回吐空间, 盈利空间, MACD拐头, 区间高位, 冲顶衰竭, 冲高背离, 强空头优先高抛, 最优卖点
+11:16    SELL_HIGH       29.99    101      -11/101 sell_observe_path   
+    原因: 回吐空间, 盈利空间, MACD拐头, 长上影, 区间高位, 冲顶衰竭, 冲高背离, 强空头优先高抛
+11:17    SELL_HIGH       29.99    101      -11/101 sell_observe_path   
+    原因: 回吐空间, 盈利空间, MACD拐头, 长上影, 区间高位, 冲顶衰竭, 冲高背离, 强空头优先高抛
+11:18    SELL_HIGH       29.97     86        -1/86 sell_observe_path   
+    原因: 回吐空间, 盈利空间, MACD拐头, 长上影, 区间高位, 冲高背离, 强空头优先高抛
+11:19    SELL_HIGH       29.86     72        -1/72 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 长上影, 冲高背离, 强空头优先高抛
+11:20    SELL_HIGH       29.88     72        -1/72 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 长上影, 冲高背离, 强空头优先高抛
+11:21    SELL_HIGH       29.99     61         5/61 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 区间高位, 冲高背离, 强空头优先高抛
+11:22    SELL_HIGH       30.09     81         9/81 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 布林偏上, 区间高位, 冲高背离, 强空头优先高抛, 最优卖点
+11:23    SELL_HIGH       30.03     69       -11/69 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 区间高位, 冲高背离, 强空头优先高抛, 最优卖点
+11:24    SELL_HIGH       30.00     61       -11/61 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 区间高位, 冲高背离, 强空头优先高抛
+11:25    SELL_HIGH       30.01     91       -11/91 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 长上影, 区间高位, 冲顶衰竭, 冲高背离, 强空头优先高抛
+11:26    SELL_HIGH       30.00     91       -11/91 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 长上影, 区间高位, 冲顶衰竭, 冲高背离, 强空头优先高抛
+11:27    SELL_HIGH       29.98     76       -11/76 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 长上影, 区间高位, 冲高背离, 强空头优先高抛
+11:28    SELL_HIGH       30.06     69         9/69 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 区间高位, 冲高背离, 强空头优先高抛, 最优卖点
+11:29    SELL_HIGH       30.29     84         9/84 sell_observe_path   
+    原因: 回吐空间, 盈利空间, RSI超买, 布林偏上, 区间高位, 强空头优先高抛, 最优卖点
+11:30    SELL_HIGH       30.24     84       -15/84 sell_observe_path   
+    原因: 回吐空间, 盈利空间, RSI超买, 布林偏上, 区间高位, 强空头优先高抛, 最优卖点
+13:00    SELL_HIGH       30.24     84       -15/84 sell_observe_path   
+    原因: 回吐空间, 盈利空间, RSI超买, 布林偏上, 区间高位, 强空头优先高抛, 最优卖点
+13:01    SELL_HIGH       30.13     64       -17/64 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 长上影, 区间高位, 强空头优先高抛
+13:02    SELL_HIGH       30.02     60       -17/60 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 长上影, 强空头优先高抛
+13:03    SELL_HIGH       29.99     60       -17/60 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 长上影, 强空头优先高抛
+13:04    SELL_HIGH       29.93     64       -10/64 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 长上影, EMA转弱, 强空头优先高抛
+13:05    SELL_HIGH       30.00     64        -7/64 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 长上影, EMA转弱, 强空头优先高抛
+13:06    SELL_HIGH       30.05     49        13/49 sell_observe_path   
+    原因: 回吐空间, 盈利空间, EMA转弱, 强空头优先高抛
+13:07    SELL_HIGH       30.03     49        -1/49 sell_observe_path   
+    原因: 回吐空间, 盈利空间, EMA转弱, 强空头优先高抛
+13:08    SELL_HIGH       29.98     64       -17/64 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 长上影, EMA转弱, 强空头优先高抛
+13:09    SELL_HIGH       30.12     49         3/49 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 区间高位, 强空头优先高抛
+13:10    SELL_HIGH       30.04     64        -1/64 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 长上影, EMA转弱, 强空头优先高抛
+13:11    SELL_HIGH       30.07     45         3/45 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 强空头优先高抛
+13:12    SELL_HIGH       30.20     49         3/49 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 区间高位, 强空头优先高抛
+13:13    SELL_HIGH       30.20     49         3/49 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 区间高位, 强空头优先高抛
+13:14    SELL_HIGH       30.14     65       -17/65 sell_observe_path   
+    原因: 回吐空间, 盈利空间, EMA转弱, 区间高位, 冲高背离, 强空头优先高抛
+13:15    SELL_HIGH       30.36     65        -9/65 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 布林偏上, 强空头优先高抛, 最优卖点
+13:16    SELL_HIGH       30.30     69        -9/69 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 布林偏上, 区间高位, 强空头优先高抛, 最优卖点
+13:17    SELL_HIGH       30.31     69        -9/69 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 区间高位, 冲高背离, 强空头优先高抛, 最优卖点
+13:18    SELL_HIGH       30.22     86       -11/86 sell_observe_path   
+    原因: 回吐空间, 盈利空间, MACD拐头, 长上影, 区间高位, 冲高背离, 强空头优先高抛
+13:19    SELL_HIGH       30.15     64        -5/64 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 长上影, 区间高位, 强空头优先高抛
+13:20    SELL_HIGH       30.09     64        -5/64 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 长上影, EMA转弱, 强空头优先高抛
+13:21    SELL_HIGH       30.02     64         2/64 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 长上影, EMA转弱, 强空头优先高抛
+13:22    SELL_HIGH       30.13     49        25/49 sell_observe_path   
+    原因: 回吐空间, 盈利空间, EMA转弱, 强空头优先高抛
+13:23    SELL_HIGH       30.12     49        25/49 sell_observe_path   
+    原因: 回吐空间, 盈利空间, EMA转弱, 强空头优先高抛
+13:24    SELL_HIGH       30.04     64         2/64 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 长上影, EMA转弱, 强空头优先高抛
+13:25    SELL_HIGH       30.08     49        11/49 sell_observe_path   
+    原因: 回吐空间, 盈利空间, EMA转弱, 强空头优先高抛
+13:26    SELL_HIGH       30.15     49        15/49 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 区间高位, 强空头优先高抛
+13:27    SELL_HIGH       30.26     76         9/76 sell_observe_path   
+    原因: 回吐空间, 盈利空间, RSI超买, 区间高位, 冲高背离, 强空头优先高抛
+13:28    SELL_HIGH       30.19     49         9/49 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 区间高位, 强空头优先高抛
+13:29    SELL_HIGH       30.18     49         9/49 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 区间高位, 强空头优先高抛
+13:30    SELL_HIGH       30.10     64       -14/64 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 长上影, EMA转弱, 强空头优先高抛
+13:31    SELL_HIGH       30.06     64        -8/64 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 长上影, EMA转弱, 强空头优先高抛
+13:32    SELL_HIGH       30.10     64       -14/64 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 长上影, EMA转弱, 强空头优先高抛
+13:33    SELL_HIGH       30.09     64        -4/64 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 长上影, EMA转弱, 强空头优先高抛
+13:34    SELL_HIGH       30.02     64         2/64 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 长上影, EMA转弱, 强空头优先高抛
+13:35    SELL_HIGH       30.02     64         2/64 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 长上影, EMA转弱, 强空头优先高抛
+13:36    SELL_HIGH       30.03     64        22/64 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 长上影, EMA转弱, 强空头优先高抛
+13:37    SELL_HIGH       30.08     45         6/45 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 强空头优先高抛
+13:38    SELL_HIGH       30.05     49         8/49 sell_observe_path   
+    原因: 回吐空间, 盈利空间, EMA转弱, 强空头优先高抛
+13:39    SELL_HIGH       30.08     45         6/45 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 强空头优先高抛
+13:40    SELL_HIGH       30.15     64         6/64 sell_observe_path   
+    原因: 回吐空间, 盈利空间, RSI超买, 区间高位, 强空头优先高抛
+13:41    SELL_HIGH       30.10     45         6/45 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 强空头优先高抛
+13:42    SELL_HIGH       30.13     45       -12/45 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 强空头优先高抛
+13:43    SELL_HIGH       30.17     49        -9/49 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 区间高位, 强空头优先高抛
+13:44    SELL_HIGH       30.19     64        -9/64 sell_observe_path   
+    原因: 回吐空间, 盈利空间, RSI超买, 区间高位, 强空头优先高抛
+13:45    SELL_HIGH       30.19     49       -12/49 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 区间高位, 强空头优先高抛
+13:46    SELL_HIGH       30.18     59       -12/59 sell_observe_path   
+    原因: 回吐空间, 盈利空间, MACD拐头, 区间高位, 强空头优先高抛
+13:47    SELL_HIGH       30.20     72       -12/72 sell_observe_path   
+    原因: 回吐空间, 盈利空间, RSI超买, 区间高位, 强空头优先高抛, 最优卖点
+13:48    SELL_HIGH       30.27     96       -15/96 sell_observe_path   
+    原因: 回吐空间, 盈利空间, RSI超买, 布林偏上, 区间高位, 冲高背离, 强空头优先高抛, 最优卖点
+13:49    SELL_HIGH       30.29     96       -15/96 sell_observe_path   
+    原因: 回吐空间, 盈利空间, RSI超买, 布林偏上, 区间高位, 冲高背离, 强空头优先高抛, 最优卖点
+13:50    SELL_HIGH       30.28    106      -15/106 sell_observe_path   
+    原因: 回吐空间, 盈利空间, RSI超买, 布林偏上, MACD拐头, 区间高位, 冲高背离, 强空头优先高抛, 最优卖点
+13:51    SELL_HIGH       30.23     90       -17/90 sell_observe_path   
+    原因: 回吐空间, 盈利空间, MACD拐头, 长上影, EMA转弱, 区间高位, 冲高背离, 强空头优先高抛
+13:52    SELL_HIGH       30.28     98       -15/98 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 布林偏上, MACD拐头, 区间高位, 冲顶衰竭, 冲高背离, 强空头优先高抛
+13:53    SELL_HIGH       30.29     79       -15/79 sell_observe_path   
+    原因: 回吐空间, 盈利空间, MACD拐头, 区间高位, 冲高背离, 强空头优先高抛, 最优卖点
+13:54    SELL_HIGH       30.29     79       -15/79 sell_observe_path   
+    原因: 回吐空间, 盈利空间, MACD拐头, 区间高位, 冲高背离, 强空头优先高抛, 最优卖点
+13:55    SELL_HIGH       30.28     75       -17/75 sell_observe_path   
+    原因: 回吐空间, 盈利空间, MACD拐头, EMA转弱, 区间高位, 冲高背离, 强空头优先高抛
+13:56    SELL_HIGH       30.23     90       -17/90 sell_observe_path   
+    原因: 回吐空间, 盈利空间, MACD拐头, 长上影, EMA转弱, 区间高位, 冲高背离, 强空头优先高抛
+13:57    SELL_HIGH       30.26     75       -17/75 sell_observe_path   
+    原因: 回吐空间, 盈利空间, MACD拐头, EMA转弱, 区间高位, 冲高背离, 强空头优先高抛
+13:58    SELL_HIGH       30.25     80       -17/80 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 长上影, EMA转弱, 区间高位, 冲高背离, 强空头优先高抛
+13:59    SELL_HIGH       30.23     80        -7/80 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 长上影, EMA转弱, 区间高位, 冲高背离, 强空头优先高抛
+14:00    SELL_HIGH       30.17     83        30/83 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 长上影, EMA转弱, 区间高位, 强空头优先高抛
+14:01    SELL_HIGH       30.12     79        38/79 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 长上影, EMA转弱, 强空头优先高抛
+14:02    SELL_HIGH       30.12     79        38/79 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 长上影, EMA转弱, 强空头优先高抛
+14:06    SELL_HIGH       30.20     64        31/64 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 区间高位, 强空头优先高抛
+14:07    SELL_HIGH       30.18     64        31/64 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 区间高位, 强空头优先高抛
+14:08    SELL_HIGH       30.15     83        33/83 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 长上影, EMA转弱, 区间高位, 强空头优先高抛
+14:09    SELL_HIGH       30.14     83        33/83 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 长上影, EMA转弱, 区间高位, 强空头优先高抛
+14:10    SELL_HIGH       30.13     64        36/64 sell_observe_path   
+    原因: 回吐空间, 长上影, EMA转弱, 强空头优先高抛
+14:11    SELL_HIGH       30.14     79        40/79 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 长上影, 区间高位, 强空头优先高抛
+14:26    SELL_HIGH       30.07     45        20/45 sell_observe_path   
+    原因: 回吐空间, 强空头优先高抛
+14:27    SELL_HIGH       30.02     70        34/70 sell_observe_path   
+    原因: 回吐空间, MACD拐头, 长上影, 强空头优先高抛
+14:28    SELL_HIGH       30.01     74        32/74 sell_observe_path   
+    原因: 回吐空间, MACD拐头, 长上影, EMA转弱, 强空头优先高抛
+14:29    SELL_HIGH       30.01     70        34/70 sell_observe_path   
+    原因: 回吐空间, MACD拐头, 长上影, 强空头优先高抛
+14:30    SELL_HIGH       30.02     60        34/60 sell_observe_path   
+    原因: 回吐空间, 长上影, 强空头优先高抛
+14:31    SELL_HIGH       30.06     45        15/45 sell_observe_path   
+    原因: 回吐空间, 强空头优先高抛
+14:32    SELL_HIGH       30.10     57        15/57 sell_observe_path   
+    原因: 回吐空间, 布林偏上, 强空头优先高抛
+14:33    SELL_HIGH       30.12     80         9/80 sell_observe_path   
+    原因: 回吐空间, RSI超买, 布林偏上, 强空头优先高抛, 最优卖点
+14:34    SELL_HIGH       30.08     55        15/55 sell_observe_path   
+    原因: 回吐空间, MACD拐头, 强空头优先高抛
+14:35    SELL_HIGH       30.09     55        15/55 sell_observe_path   
+    原因: 回吐空间, MACD拐头, 强空头优先高抛
+14:36    SELL_HIGH       30.09     55        15/55 sell_observe_path   
+    原因: 回吐空间, MACD拐头, 强空头优先高抛
+14:37    SELL_HIGH       30.08     74        13/74 sell_observe_path   
+    原因: 回吐空间, MACD拐头, 长上影, EMA转弱, 强空头优先高抛
+14:38    SELL_HIGH       30.08     59        13/59 sell_observe_path   
+    原因: 回吐空间, MACD拐头, EMA转弱, 强空头优先高抛
+14:39    SELL_HIGH       30.07     59        25/59 sell_observe_path   
+    原因: 回吐空间, MACD拐头, EMA转弱, 强空头优先高抛
+14:40    SELL_HIGH       30.05     74        25/74 sell_observe_path   
+    原因: 回吐空间, MACD拐头, 长上影, EMA转弱, 强空头优先高抛
+14:41    SELL_HIGH       30.02     74        44/74 sell_observe_path   
+    原因: 回吐空间, MACD拐头, 长上影, EMA转弱, 强空头优先高抛
+14:42    SELL_HIGH       30.01     64        44/64 sell_observe_path   
+    原因: 回吐空间, 长上影, EMA转弱, 强空头优先高抛
+14:43    SELL_HIGH       30.01     64        44/64 sell_observe_path   
+    原因: 回吐空间, 长上影, EMA转弱, 强空头优先高抛
+14:44    SELL_HIGH       30.01     64        44/64 sell_observe_path   
+    原因: 回吐空间, 长上影, EMA转弱, 强空头优先高抛
+14:53    SELL_HIGH       30.04     53         5/53 sell_observe_path   
+    原因: 回吐空间, RSI超买, 强空头优先高抛, 最优卖点
+14:54    SELL_HIGH       30.05     45         5/45 sell_observe_path   
+    原因: 回吐空间, RSI超买, 强空头优先高抛
+14:56    SELL_HIGH       30.05     45         5/45 sell_observe_path   
+    原因: 回吐空间, RSI超买, 强空头优先高抛
+14:57    SELL_HIGH       30.09     65        -6/65 sell_observe_path   
+    原因: 回吐空间, RSI超买, 布林偏上, 强空头优先高抛, 最优卖点
+14:58    SELL_HIGH       30.10     65        -6/65 sell_observe_path   
+    原因: 回吐空间, RSI超买, 布林偏上, 强空头优先高抛, 最优卖点
+
+  全天买分最高: 73 @ 10:31 (价格29.16)
+  全天卖分最高: 106 @ 13:50 (价格30.28)
+
+================================================================================
+  588170 科创半导体ETF
+================================================================================
+
+  触发信号总数: 163
+
+时间       类型                 价格     分数        买分/卖分 路径                  
+----------------------------------------------------------------------
+09:45    SELL_HIGH        1.21     66       -10/66 sell_observe_path   
+    原因: 回吐空间, 盈利空间, RSI超买, 量能确认, 强空头优先高抛, ETF T+0加成
+09:46    SELL_HIGH        1.21     66       -10/66 sell_observe_path   
+    原因: 回吐空间, 盈利空间, RSI超买, 量能确认, 强空头优先高抛, ETF T+0加成
+09:47    SELL_HIGH        1.22     60       -13/60 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 布林偏上, 强空头优先高抛, ETF T+0加成
+09:48    SELL_HIGH        1.22     71       -10/71 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 布林偏上, 量能确认, 强空头优先高抛, ETF T+0加成, 最优卖点
+09:49    SELL_HIGH        1.22     71       -10/71 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 布林偏上, 量能确认, 强空头优先高抛, ETF T+0加成, 最优卖点
+09:50    SELL_HIGH        1.22    102      -10/102 sell_observe_path   
+    原因: 回吐空间, 盈利空间, RSI超买, 布林偏上, 量能确认, 区间高位, 开盘冲高回落, 强空头优先高抛, ETF T+0加成
+09:51    SELL_HIGH        1.22    108      -10/108 sell_observe_path   
+    原因: 回吐空间, 盈利空间, MACD拐头, 量能确认, 长上影, 开盘冲高回落, 冲高背离, 强空头优先高抛, ETF T+0加成
+09:52    SELL_HIGH        1.22    108      -14/108 sell_observe_path   
+    原因: 回吐空间, 盈利空间, MACD拐头, 量能确认, 长上影, 开盘冲高回落, 冲高背离, 强空头优先高抛, ETF T+0加成
+09:53    SELL_HIGH        1.22     87       -10/87 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 布林偏上, 量能确认, 区间高位, 冲高背离, 强空头优先高抛, ETF T+0加成, 最优卖点
+09:54    SELL_HIGH        1.23     87       -10/87 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 布林偏上, 量能确认, 区间高位, 冲高背离, 强空头优先高抛, ETF T+0加成, 最优卖点
+09:55    SELL_HIGH        1.23     75       -10/75 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 布林偏上, 量能确认, 区间高位, 强空头优先高抛, ETF T+0加成, 最优卖点
+09:56    SELL_HIGH        1.22    108      -14/108 sell_observe_path   
+    原因: 回吐空间, 盈利空间, MACD拐头, 量能确认, 长上影, 开盘冲高回落, 冲高背离, 强空头优先高抛, ETF T+0加成
+09:57    SELL_HIGH        1.21     81       -14/81 sell_observe_path   
+    原因: 回吐空间, MACD拐头, 量能确认, 长上影, 开盘冲高回落, 强空头优先高抛, ETF T+0加成
+09:58    SELL_HIGH        1.21     63        -7/63 sell_observe_path   
+    原因: MACD拐头, 长上影, 开盘冲高回落, 强空头优先高抛, ETF T+0加成
+09:59    SELL_HIGH        1.21     57        18/57 sell_observe_path   
+    原因: 长上影, EMA转弱, 开盘冲高回落, 强空头优先高抛, ETF T+0加成
+10:00    SELL_HIGH        1.21     72        21/72 sell_observe_path   
+    原因: 长上影, EMA转弱, 开盘冲高回落, 强空头优先高抛, ETF T+0加成
+10:01    SELL_HIGH        1.21     52        21/52 sell_observe_path   
+    原因: 长上影, EMA转弱, 强空头优先高抛, ETF T+0加成
+10:07    BUY_LOW          1.20    111       111/33 buy_soft_path       
+    原因: 回归空间, 盈利空间, RSI超卖, MACD拐头, MACD强拐头, 回落确认, 5分量能反转, 均线回踩, 均线上破回踩, ETF T+0加成, 5分企稳反转
+10:12    BUY_LOW          1.20     72        72/48 buy_soft_path       
+    原因: 回归空间, 盈利空间, MACD拐头, MACD强拐头, 回落确认, 均线回踩, 均线上破回踩, ETF T+0加成
+10:16    BUY_LOW          1.20     74        74/33 buy_soft_path       
+    原因: 回归空间, 盈利空间, RSI超卖, MACD拐头, MACD强拐头, 回落确认, 均线上破回踩, ETF T+0加成
+10:22    BUY_LOW          1.19    118       118/33 buy_path            
+    原因: 回归空间, 盈利空间, VWAP深度偏离, RSI超卖, MACD拐头, MACD强拐头, 回落确认, 区间低位, 15分多重底, 15分RSI超卖, 5分量能反转, 15分低点支撑, ETF T+0加成
+10:25    BUY_LOW          1.18    125       125/52 buy_soft_path       
+    原因: 回归空间, 盈利空间, VWAP深度偏离, RSI超卖, 布林偏下, MACD拐头, MACD强拐头, 回落确认, 区间低位, 15分RSI超卖, 5分量能反转, 15分低点支撑, ETF T+0加成, 5分企稳反转
+10:28    BUY_LOW          1.18    102       102/33 buy_path            
+    原因: 回归空间, 盈利空间, VWAP深度偏离, RSI超卖, MACD拐头, MACD强拐头, 回落确认, 15分RSI超卖, 5分量能反转, 15分低点附近, ETF T+0加成
+10:30    BUY_LOW          1.17    115       115/52 buy_soft_path       
+    原因: 回归空间, 盈利空间, VWAP深度偏离, 布林偏下, 回落确认, 区间低位, 15分强支撑, 15分多重底, 15分RSI超卖, 5分量能反转, 15分低点强支撑, ETF T+0加成
+10:35    BUY_LOW          1.16    113       113/52 buy_soft_path       
+    原因: 回归空间, 盈利空间, VWAP深度偏离, RSI超卖, 布林偏下, 回落确认, 15分强支撑, 15分RSI超卖, 5分量能反转, 15分低点强支撑, ETF T+0加成
+10:37    BUY_LOW          1.16    134       134/48 buy_soft_path       
+    原因: 回归空间, 盈利空间, VWAP深度偏离, RSI超卖, 布林偏下, MACD拐头, MACD强拐头, 回落确认, 区间低位, 15分强支撑, 15分RSI超卖, 5分量能反转, 15分低点强支撑, ETF T+0加成
+10:38    BUY_LOW          1.17     82        82/33 buy_path            
+    原因: 回归空间, 盈利空间, VWAP深度偏离, MACD拐头, 15分RSI超卖, 5分量能反转, 15分低点附近, ETF T+0加成
+10:39    BUY_LOW          1.17     61        61/33 buy_path            
+    原因: 回归空间, 盈利空间, VWAP深度偏离, 15分RSI超卖, 5分量能反转, ETF T+0加成
+10:40    BUY_LOW          1.17     76        76/33 buy_path            
+    原因: 回归空间, 盈利空间, VWAP深度偏离, 区间低位, 15分RSI超卖, 5分量能反转, 15分低点附近, ETF T+0加成, 5分企稳反转
+10:42    BUY_LOW          1.17     72        72/33 buy_path            
+    原因: 回归空间, 盈利空间, VWAP深度偏离, 15分RSI超卖, 5分量能反转, 15分低点附近, ETF T+0加成, 5分企稳反转
+10:45    BUY_LOW          1.16    123       123/62 buy_soft_path       
+    原因: 回归空间, 盈利空间, VWAP深度偏离, RSI超卖, 布林偏下, 回落确认, 区间低位, 15分强支撑, 15分多重底, 15分RSI超卖, 5分量能反转, 15分低点强支撑, ETF T+0加成
+10:47    BUY_LOW          1.16     92        92/43 buy_soft_path       
+    原因: 回归空间, 盈利空间, VWAP深度偏离, 回落确认, 区间低位, 15分强支撑, 15分多重底, 15分RSI超卖, 5分量能反转, 15分低点强支撑, ETF T+0加成
+10:50    BUY_LOW          1.15    102       102/37 buy_soft_path       
+    原因: 回归空间, 盈利空间, VWAP深度偏离, RSI超卖, 布林偏下, 回落确认, 区间低位, 15分强支撑, 15分RSI超卖, 5分量能反转, 15分低点强支撑, ETF T+0加成
+10:51    BUY_LOW          1.15    102       102/37 buy_soft_path       
+    原因: 回归空间, 盈利空间, VWAP深度偏离, RSI超卖, 布林偏下, 回落确认, 区间低位, 15分强支撑, 15分RSI超卖, 5分量能反转, 15分低点强支撑, ETF T+0加成
+10:52    BUY_LOW          1.15    117       117/33 buy_soft_path       
+    原因: 回归空间, 盈利空间, VWAP深度偏离, RSI超卖, 布林偏下, MACD拐头, 回落确认, 区间低位, 15分强支撑, 15分RSI超卖, 5分量能反转, 15分低点强支撑, ETF T+0加成
+10:53    BUY_LOW          1.15     94        94/18 buy_path            
+    原因: 回归空间, 盈利空间, VWAP深度偏离, RSI超卖, 回落确认, 区间低位, 15分强支撑, 15分RSI超卖, 5分量能反转, 15分低点强支撑, ETF T+0加成
+10:54    BUY_LOW          1.15     98        98/33 buy_path            
+    原因: 回归空间, 盈利空间, VWAP深度偏离, RSI超卖, 回落确认, 区间低位, 15分强支撑, 15分RSI超卖, 5分量能反转, 15分低点强支撑, ETF T+0加成
+10:55    BUY_LOW          1.15     81        81/33 buy_path            
+    原因: 回归空间, 盈利空间, VWAP深度偏离, 区间低位, 15分强支撑, 15分RSI超卖, 5分量能反转, 15分低点强支撑, ETF T+0加成, 5分企稳反转
+10:58    BUY_LOW          1.16     62        62/18 buy_path            
+    原因: 回归空间, 盈利空间, VWAP深度偏离, 区间低位, 15分RSI超卖, 5分量能反转, 15分低点支撑, ETF T+0加成
+10:59    BUY_LOW          1.16     46        46/18 buy_path            
+    原因: 回归空间, 盈利空间, VWAP深度偏离, 15分RSI超卖, 5分量能反转, ETF T+0加成
+11:00    BUY_LOW          1.16     55        55/18 buy_path            
+    原因: 回归空间, 盈利空间, VWAP深度偏离, EMA转强, 15分RSI超卖, 5分量能反转, ETF T+0加成, 5分企稳反转
+11:02    BUY_LOW          1.17     72        72/30 buy_path            
+    原因: 回归空间, 盈利空间, EMA转强, 15分动能衰竭, 15分RSI超卖, 5分量能反转, 均线上破回踩, ETF T+0加成, 5分企稳反转
+11:04    SELL_HIGH        1.18     53        26/53 sell_observe_path   
+    原因: RSI超买, 布林偏上, 强空头优先高抛, ETF T+0加成, 最优卖点
+11:05    SELL_HIGH        1.18     68         2/68 sell_observe_path   
+    原因: 回吐空间, RSI超买, 布林偏上, 强空头优先高抛, ETF T+0加成, 最优卖点
+11:06    SELL_HIGH        1.18     68         2/68 sell_observe_path   
+    原因: 回吐空间, RSI超买, 布林偏上, 强空头优先高抛, ETF T+0加成, 最优卖点
+11:07    SELL_HIGH        1.18     55         2/55 sell_observe_path   
+    原因: 回吐空间, 布林偏上, MACD拐头, 强空头优先高抛, ETF T+0加成
+11:08    SELL_HIGH        1.18     70         2/70 sell_observe_path   
+    原因: 回吐空间, RSI超买, 布林偏上, MACD拐头, 强空头优先高抛, ETF T+0加成
+11:09    BUY_LOW          1.17     55        55/43 buy_soft_path       
+    原因: 回归空间, 盈利空间, 回落确认, 15分动能衰竭, 15分RSI超卖, 均线回踩, 均线上破回踩, ETF T+0加成
+11:10    SELL_HIGH        1.18     60        -3/60 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 布林偏上, 强空头优先高抛, ETF T+0加成
+11:11    SELL_HIGH        1.18     60        -3/60 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 布林偏上, 强空头优先高抛, ETF T+0加成
+11:12    SELL_HIGH        1.19     60        -3/60 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 布林偏上, 强空头优先高抛, ETF T+0加成
+11:13    SELL_HIGH        1.19     70        -3/70 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 布林偏上, MACD拐头, 强空头优先高抛, ETF T+0加成
+11:14    SELL_HIGH        1.19     70        -3/70 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 布林偏上, MACD拐头, 强空头优先高抛, ETF T+0加成
+11:15    SELL_HIGH        1.20     83        -3/83 sell_observe_path   
+    原因: 回吐空间, 盈利空间, RSI超买, 布林偏上, 强空头优先高抛, ETF T+0加成, 最优卖点
+11:16    SELL_HIGH        1.19     73        -5/73 sell_observe_path   
+    原因: 回吐空间, 盈利空间, MACD拐头, 长上影, 强空头优先高抛, ETF T+0加成
+11:17    SELL_HIGH        1.19     73        -5/73 sell_observe_path   
+    原因: 回吐空间, 盈利空间, MACD拐头, 长上影, 强空头优先高抛, ETF T+0加成
+11:18    SELL_HIGH        1.19     58        -5/58 sell_observe_path   
+    原因: 回吐空间, 盈利空间, MACD拐头, 强空头优先高抛, ETF T+0加成
+11:19    SELL_HIGH        1.20     70        -3/70 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 布林偏上, MACD拐头, 强空头优先高抛, ETF T+0加成
+11:20    SELL_HIGH        1.20     60        -3/60 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 布林偏上, 强空头优先高抛, ETF T+0加成
+11:21    SELL_HIGH        1.20     60        -3/60 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 布林偏上, 强空头优先高抛, ETF T+0加成
+11:22    SELL_HIGH        1.21     75        -3/75 sell_observe_path   
+    原因: 回吐空间, 盈利空间, RSI超买, 布林偏上, 强空头优先高抛, ETF T+0加成
+11:23    SELL_HIGH        1.20     88        -5/88 sell_observe_path   
+    原因: 回吐空间, 盈利空间, RSI超买, MACD拐头, 长上影, 强空头优先高抛, ETF T+0加成
+11:24    SELL_HIGH        1.20     85        -5/85 sell_observe_path   
+    原因: 回吐空间, 盈利空间, RSI超买, 布林偏上, MACD拐头, 强空头优先高抛, ETF T+0加成
+11:25    SELL_HIGH        1.21     70        -5/70 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 布林偏上, MACD拐头, 强空头优先高抛, ETF T+0加成
+11:26    SELL_HIGH        1.20     73        -5/73 sell_observe_path   
+    原因: 回吐空间, 盈利空间, MACD拐头, 长上影, 强空头优先高抛, ETF T+0加成
+11:27    SELL_HIGH        1.20     73        -5/73 sell_observe_path   
+    原因: 回吐空间, 盈利空间, MACD拐头, 长上影, 强空头优先高抛, ETF T+0加成
+11:28    SELL_HIGH        1.21     58        -5/58 sell_observe_path   
+    原因: 回吐空间, 盈利空间, MACD拐头, 强空头优先高抛, ETF T+0加成
+11:29    SELL_HIGH        1.21     60        -3/60 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 布林偏上, 强空头优先高抛, ETF T+0加成
+11:30    SELL_HIGH        1.21     60       -10/60 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 布林偏上, 强空头优先高抛, ETF T+0加成
+13:00    SELL_HIGH        1.21     70       -10/70 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 布林偏上, MACD拐头, 强空头优先高抛, ETF T+0加成
+13:01    SELL_HIGH        1.20     63       -12/63 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 长上影, 强空头优先高抛, ETF T+0加成
+13:02    SELL_HIGH        1.20     63       -12/63 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 长上影, 强空头优先高抛, ETF T+0加成
+13:03    SELL_HIGH        1.21     48       -12/48 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 强空头优先高抛, ETF T+0加成
+13:04    SELL_HIGH        1.21     48         3/48 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 强空头优先高抛, ETF T+0加成
+13:05    SELL_HIGH        1.21     60         7/60 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 布林偏上, 强空头优先高抛, ETF T+0加成
+13:06    SELL_HIGH        1.21     60         7/60 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 布林偏上, 强空头优先高抛, ETF T+0加成
+13:07    SELL_HIGH        1.21     63       -12/63 sell_observe_path   
+    原因: 回吐空间, 盈利空间, RSI超买, 强空头优先高抛, ETF T+0加成
+13:08    SELL_HIGH        1.21     63         3/63 sell_observe_path   
+    原因: 回吐空间, 盈利空间, RSI超买, 强空头优先高抛, ETF T+0加成
+13:09    SELL_HIGH        1.20     63        -2/63 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 长上影, 强空头优先高抛, ETF T+0加成
+13:10    SELL_HIGH        1.20     63        -2/63 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 长上影, 强空头优先高抛, ETF T+0加成
+13:11    SELL_HIGH        1.20     67        -2/67 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 长上影, EMA转弱, 强空头优先高抛, ETF T+0加成
+13:12    SELL_HIGH        1.21     48         7/48 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 强空头优先高抛, ETF T+0加成
+13:13    SELL_HIGH        1.20     67        -2/67 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 长上影, EMA转弱, 强空头优先高抛, ETF T+0加成
+13:14    SELL_HIGH        1.20     67        -2/67 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 长上影, EMA转弱, 强空头优先高抛, ETF T+0加成
+13:15    SELL_HIGH        1.20     67         0/67 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 长上影, EMA转弱, 强空头优先高抛, ETF T+0加成
+13:16    SELL_HIGH        1.20     67         0/67 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 长上影, EMA转弱, 强空头优先高抛, ETF T+0加成
+13:17    SELL_HIGH        1.20     67         3/67 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 长上影, EMA转弱, 强空头优先高抛, ETF T+0加成
+13:18    SELL_HIGH        1.20     52        17/52 sell_observe_path   
+    原因: 回吐空间, 盈利空间, EMA转弱, 强空头优先高抛, ETF T+0加成
+13:19    SELL_HIGH        1.20     67         4/67 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 长上影, EMA转弱, 强空头优先高抛, ETF T+0加成
+13:20    SELL_HIGH        1.20     67        20/67 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 长上影, EMA转弱, 强空头优先高抛, ETF T+0加成
+13:21    SELL_HIGH        1.20     67         9/67 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 长上影, EMA转弱, 强空头优先高抛, ETF T+0加成
+13:22    SELL_HIGH        1.20     48        13/48 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 强空头优先高抛, ETF T+0加成
+13:23    SELL_HIGH        1.19     67         1/67 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 长上影, EMA转弱, 强空头优先高抛, ETF T+0加成
+13:24    SELL_HIGH        1.19     67        20/67 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 长上影, EMA转弱, 强空头优先高抛, ETF T+0加成
+13:25    SELL_HIGH        1.20     63         6/63 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 长上影, 强空头优先高抛, ETF T+0加成
+13:26    SELL_HIGH        1.20     48         7/48 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 强空头优先高抛, ETF T+0加成
+13:27    SELL_HIGH        1.20     48        13/48 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 强空头优先高抛, ETF T+0加成
+13:28    SELL_HIGH        1.20     48       -10/48 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 强空头优先高抛, ETF T+0加成
+13:29    SELL_HIGH        1.20     48       -10/48 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 强空头优先高抛, ETF T+0加成
+13:30    SELL_HIGH        1.20     77         0/77 sell_observe_path   
+    原因: 回吐空间, 盈利空间, MACD拐头, 长上影, EMA转弱, 强空头优先高抛, ETF T+0加成
+13:31    SELL_HIGH        1.20     77         3/77 sell_observe_path   
+    原因: 回吐空间, 盈利空间, MACD拐头, 长上影, EMA转弱, 强空头优先高抛, ETF T+0加成
+13:32    SELL_HIGH        1.20     67        27/67 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 长上影, EMA转弱, 强空头优先高抛, ETF T+0加成
+13:33    SELL_HIGH        1.19     67        35/67 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 长上影, EMA转弱, 强空头优先高抛, ETF T+0加成
+13:34    SELL_HIGH        1.20     67        46/67 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 长上影, EMA转弱, 强空头优先高抛, ETF T+0加成
+13:39    SELL_HIGH        1.20     63         2/63 sell_observe_path   
+    原因: 回吐空间, 盈利空间, RSI超买, 强空头优先高抛, ETF T+0加成
+13:40    SELL_HIGH        1.20     60         2/60 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 布林偏上, 强空头优先高抛, ETF T+0加成
+13:41    SELL_HIGH        1.21     60        -4/60 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 布林偏上, 强空头优先高抛, ETF T+0加成
+13:42    SELL_HIGH        1.21     60        -4/60 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 布林偏上, 强空头优先高抛, ETF T+0加成
+13:43    SELL_HIGH        1.21     60        -4/60 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 布林偏上, 强空头优先高抛, ETF T+0加成
+13:44    SELL_HIGH        1.21     60        -4/60 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 布林偏上, 强空头优先高抛, ETF T+0加成
+13:45    SELL_HIGH        1.21     60        -4/60 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 布林偏上, 强空头优先高抛, ETF T+0加成
+13:46    SELL_HIGH        1.21     93        -4/93 sell_observe_path   
+    原因: 回吐空间, 盈利空间, RSI超买, 布林偏上, MACD拐头, 强空头优先高抛, ETF T+0加成, 最优卖点
+13:47    SELL_HIGH        1.21     85        -4/85 sell_observe_path   
+    原因: 回吐空间, 盈利空间, RSI超买, 布林偏上, MACD拐头, 强空头优先高抛, ETF T+0加成
+13:48    SELL_HIGH        1.20     73        10/73 sell_observe_path   
+    原因: 回吐空间, 盈利空间, MACD拐头, 长上影, 强空头优先高抛, ETF T+0加成
+13:49    SELL_HIGH        1.21     73        -6/73 sell_observe_path   
+    原因: 回吐空间, 盈利空间, MACD拐头, 长上影, 强空头优先高抛, ETF T+0加成
+13:50    SELL_HIGH        1.21     58        -6/58 sell_observe_path   
+    原因: 回吐空间, 盈利空间, MACD拐头, 强空头优先高抛, ETF T+0加成
+13:51    SELL_HIGH        1.21     58        -4/58 sell_observe_path   
+    原因: 回吐空间, 盈利空间, MACD拐头, 强空头优先高抛, ETF T+0加成
+13:52    SELL_HIGH        1.21     58        -6/58 sell_observe_path   
+    原因: 回吐空间, 盈利空间, MACD拐头, 强空头优先高抛, ETF T+0加成
+13:53    SELL_HIGH        1.21     48        -4/48 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 强空头优先高抛, ETF T+0加成
+13:54    SELL_HIGH        1.21     63        -4/63 sell_observe_path   
+    原因: 回吐空间, 盈利空间, RSI超买, 强空头优先高抛, ETF T+0加成
+13:55    SELL_HIGH        1.21     58        -6/58 sell_observe_path   
+    原因: 回吐空间, 盈利空间, MACD拐头, 强空头优先高抛, ETF T+0加成
+13:56    SELL_HIGH        1.21     73        -6/73 sell_observe_path   
+    原因: 回吐空间, 盈利空间, MACD拐头, 长上影, 强空头优先高抛, ETF T+0加成
+13:57    SELL_HIGH        1.21     48        -4/48 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 强空头优先高抛, ETF T+0加成
+13:58    SELL_HIGH        1.21     48        -4/48 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 强空头优先高抛, ETF T+0加成
+13:59    SELL_HIGH        1.21     58        -6/58 sell_observe_path   
+    原因: 回吐空间, 盈利空间, MACD拐头, 强空头优先高抛, ETF T+0加成
+14:00    SELL_HIGH        1.21     82        21/82 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 长上影, EMA转弱, 强空头优先高抛, ETF T+0加成
+14:01    SELL_HIGH        1.20     82        32/82 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 长上影, EMA转弱, 强空头优先高抛, ETF T+0加成
+14:02    SELL_HIGH        1.21     82         9/82 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 长上影, EMA转弱, 强空头优先高抛, ETF T+0加成
+14:03    SELL_HIGH        1.21     82        21/82 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 长上影, EMA转弱, 强空头优先高抛, ETF T+0加成
+14:04    SELL_HIGH        1.20     82        26/82 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 长上影, EMA转弱, 强空头优先高抛, ETF T+0加成
+14:05    SELL_HIGH        1.20     82        32/82 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 长上影, EMA转弱, 强空头优先高抛, ETF T+0加成
+14:06    SELL_HIGH        1.21     67        35/67 sell_observe_path   
+    原因: 回吐空间, 盈利空间, EMA转弱, 强空头优先高抛, ETF T+0加成
+14:07    SELL_HIGH        1.20     67        23/67 sell_observe_path   
+    原因: 回吐空间, 盈利空间, EMA转弱, 强空头优先高抛, ETF T+0加成
+14:08    SELL_HIGH        1.20     82        32/82 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 长上影, EMA转弱, 强空头优先高抛, ETF T+0加成
+14:09    SELL_HIGH        1.20     82        32/82 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 长上影, EMA转弱, 强空头优先高抛, ETF T+0加成
+14:10    SELL_HIGH        1.20     82        32/82 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 长上影, EMA转弱, 强空头优先高抛, ETF T+0加成
+14:11    SELL_HIGH        1.20     67        43/67 sell_observe_path   
+    原因: 回吐空间, 长上影, EMA转弱, 强空头优先高抛, ETF T+0加成
+14:12    SELL_HIGH        1.20     82        49/82 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 长上影, EMA转弱, 强空头优先高抛, ETF T+0加成
+14:13    SELL_HIGH        1.20     82        41/82 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 长上影, EMA转弱, 强空头优先高抛, ETF T+0加成
+14:14    SELL_HIGH        1.20     67        43/67 sell_observe_path   
+    原因: 回吐空间, 长上影, EMA转弱, 强空头优先高抛, ETF T+0加成
+14:15    SELL_HIGH        1.20     67        46/67 sell_observe_path   
+    原因: 回吐空间, 长上影, EMA转弱, 强空头优先高抛, ETF T+0加成
+14:17    SELL_HIGH        1.20     63        40/63 sell_observe_path   
+    原因: 回吐空间, 长上影, 强空头优先高抛, ETF T+0加成
+14:31    SELL_HIGH        1.20     48         8/48 sell_observe_path   
+    原因: 回吐空间, 强空头优先高抛, ETF T+0加成
+14:32    SELL_HIGH        1.20     63         8/63 sell_observe_path   
+    原因: 回吐空间, RSI超买, 强空头优先高抛, ETF T+0加成
+14:33    SELL_HIGH        1.19     78         8/78 sell_observe_path   
+    原因: 回吐空间, RSI超买, 长上影, 强空头优先高抛, ETF T+0加成
+14:34    SELL_HIGH        1.20     63         8/63 sell_observe_path   
+    原因: 回吐空间, RSI超买, 强空头优先高抛, ETF T+0加成
+14:35    SELL_HIGH        1.20     48         8/48 sell_observe_path   
+    原因: 回吐空间, 强空头优先高抛, ETF T+0加成
+14:36    SELL_HIGH        1.20     90         8/90 sell_observe_path   
+    原因: 回吐空间, 盈利空间, RSI超买, 布林偏上, 强空头优先高抛, ETF T+0加成
+14:37    SELL_HIGH        1.20     73         8/73 sell_observe_path   
+    原因: 回吐空间, MACD拐头, 长上影, 强空头优先高抛, ETF T+0加成
+14:38    SELL_HIGH        1.19     77         6/77 sell_observe_path   
+    原因: 回吐空间, MACD拐头, 长上影, EMA转弱, 强空头优先高抛, ETF T+0加成
+14:39    SELL_HIGH        1.20     73         8/73 sell_observe_path   
+    原因: 回吐空间, MACD拐头, 长上影, 强空头优先高抛, ETF T+0加成
+14:40    SELL_HIGH        1.20     73         8/73 sell_observe_path   
+    原因: 回吐空间, MACD拐头, 长上影, 强空头优先高抛, ETF T+0加成
+14:41    SELL_HIGH        1.19     62        30/62 sell_observe_path   
+    原因: MACD拐头, 长上影, EMA转弱, 强空头优先高抛, ETF T+0加成
+14:44    SELL_HIGH        1.19     62        44/62 sell_observe_path   
+    原因: MACD拐头, 长上影, EMA转弱, 强空头优先高抛, ETF T+0加成
+14:47    SELL_HIGH        1.20     48        -7/48 sell_observe_path   
+    原因: 回吐空间, RSI超买, 强空头优先高抛, ETF T+0加成
+14:48    SELL_HIGH        1.20     48        -7/48 sell_observe_path   
+    原因: 回吐空间, RSI超买, 强空头优先高抛, ETF T+0加成
+14:49    SELL_HIGH        1.20     58        -7/58 sell_observe_path   
+    原因: 回吐空间, RSI超买, MACD拐头, 强空头优先高抛, ETF T+0加成
+14:50    SELL_HIGH        1.19     62        -9/62 sell_observe_path   
+    原因: 回吐空间, MACD拐头, 长上影, EMA转弱, 强空头优先高抛, ETF T+0加成
+14:51    SELL_HIGH        1.19     47        17/47 sell_observe_path   
+    原因: MACD拐头, 长上影, EMA转弱, 强空头优先高抛, ETF T+0加成
+14:54    SELL_HIGH        1.19     47         1/47 sell_observe_path   
+    原因: 回吐空间, MACD拐头, EMA转弱, 强空头优先高抛, ETF T+0加成
+14:55    SELL_HIGH        1.19     47         1/47 sell_observe_path   
+    原因: 回吐空间, MACD拐头, EMA转弱, 强空头优先高抛, ETF T+0加成
+14:56    SELL_HIGH        1.19     47        -9/47 sell_observe_path   
+    原因: 回吐空间, MACD拐头, EMA转弱, 强空头优先高抛, ETF T+0加成
+14:57    SELL_HIGH        1.19     47        -9/47 sell_observe_path   
+    原因: 回吐空间, MACD拐头, EMA转弱, 强空头优先高抛, ETF T+0加成
+
+  全天买分最高: 136 @ 10:21 (价格1.19)
+  全天卖分最高: 108 @ 09:51 (价格1.22)
+
+================================================================================
+  600089 特变电工
+================================================================================
+
+  触发信号总数: 58
+
+时间       类型                 价格     分数        买分/卖分 路径                  
+----------------------------------------------------------------------
+09:45    SELL_HIGH       21.85     45       -18/45 sell_observe_path   
+    原因: 回吐空间, RSI超买, 强空头优先高抛
+10:07    SELL_HIGH       21.75     60         2/60 sell_observe_path   
+    原因: 回吐空间, RSI超买, 强空头优先高抛
+10:10    SELL_HIGH       21.77     45         7/45 sell_observe_path   
+    原因: 回吐空间, 强空头优先高抛
+10:11    SELL_HIGH       21.74     74         0/74 sell_observe_path   
+    原因: 回吐空间, MACD拐头, 长上影, EMA转弱, 强空头优先高抛
+10:12    SELL_HIGH       21.76     55         2/55 sell_observe_path   
+    原因: 回吐空间, MACD拐头, 强空头优先高抛
+10:13    SELL_HIGH       21.75     59         0/59 sell_observe_path   
+    原因: 回吐空间, MACD拐头, EMA转弱, 强空头优先高抛
+10:35    BUY_LOW         21.55    135       135/30 buy_path            
+    原因: 回归空间, RSI超卖, MACD拐头, MACD强拐头, 回落确认, 区间低位, 15分强支撑, 15分多重底, 15分RSI超卖, 5分量能反转, 15分低点强支撑, 均线回踩, 均线上破回踩, 5分企稳反转
+10:36    BUY_LOW         21.54    135       135/30 buy_path            
+    原因: 回归空间, RSI超卖, MACD拐头, MACD强拐头, 回落确认, 区间低位, 15分强支撑, 15分多重底, 15分RSI超卖, 5分量能反转, 15分低点强支撑, 均线回踩, 均线上破回踩, 5分企稳反转
+10:40    BUY_LOW         21.52    121       121/30 buy_path            
+    原因: 回归空间, MACD拐头, MACD强拐头, 回落确认, 区间低位, 15分强支撑, 15分RSI超卖, 5分量能反转, 15分低点强支撑, 均线回踩, 均线上破回踩, 5分企稳反转
+10:41    BUY_LOW         21.53    107       107/30 buy_path            
+    原因: 回归空间, MACD拐头, MACD强拐头, 回落确认, 区间低位, 15分RSI超卖, 5分量能反转, 15分低点支撑, 均线回踩, 均线上破回踩, 5分企稳反转
+10:42    BUY_LOW         21.52     87        87/30 buy_path            
+    原因: 回归空间, EMA转强, 区间低位, 15分强支撑, 15分RSI超卖, 5分量能反转, 15分低点强支撑, 均线上破回踩, 5分企稳反转
+10:45    BUY_LOW         21.45    135       135/49 buy_path            
+    原因: 回归空间, 盈利空间, RSI超卖, 布林偏下, 回落确认, 区间低位, 15分强支撑, 15分多重底, 15分RSI超卖, 5分量能反转, 15分低点强支撑, 均线回踩, 均线上破回踩
+10:46    BUY_LOW         21.46    130       130/34 buy_path            
+    原因: 回归空间, 盈利空间, RSI超卖, MACD拐头, MACD强拐头, 回落确认, 区间低位, 15分强支撑, 15分多重底, 15分RSI超卖, 5分量能反转, 15分低点强支撑, 均线回踩, 均线上破回踩
+10:50    BUY_LOW         21.39     82        82/34 buy_path            
+    原因: 回归空间, VWAP深度偏离, RSI超卖, 布林偏下, 回落确认, 区间低位, 15分强支撑, 15分RSI超卖, 5分量能反转, 15分低点强支撑
+10:55    BUY_LOW         21.37    112       112/15 buy_path            
+    原因: 回归空间, 盈利空间, VWAP深度偏离, RSI超卖, MACD拐头, MACD强拐头, 回落确认, 区间低位, 15分强支撑, 15分RSI超卖, 5分量能反转, 15分低点强支撑, 5分企稳反转
+11:00    BUY_LOW         21.36    114       114/15 buy_path            
+    原因: 回归空间, 盈利空间, VWAP深度偏离, 回落确认, 区间低位, 15分强支撑, 15分多重底, 15分RSI超卖, 5分量能反转, 15分低点强支撑, 均线回踩, 均线上破回踩, 5分企稳反转
+11:01    BUY_LOW         21.36     89        89/15 buy_path            
+    原因: 回归空间, 盈利空间, 区间低位, 15分强支撑, 15分多重底, 15分RSI超卖, 5分量能反转, 15分低点强支撑, 均线上破回踩, 5分企稳反转
+11:02    BUY_LOW         21.38     79        79/15 buy_path            
+    原因: 回归空间, 盈利空间, EMA转强, 区间低位, 15分多重底, 15分RSI超卖, 5分量能反转, 15分低点支撑, 均线上破回踩, 5分企稳反转
+11:05    BUY_LOW         21.34    113       113/30 buy_path            
+    原因: 回归空间, 盈利空间, VWAP深度偏离, EMA转强, 回落确认, 区间低位, 15分强支撑, 15分多重底, 15分RSI超卖, 5分量能反转, 15分低点强支撑, 均线回踩, 均线上破回踩
+11:06    BUY_LOW         21.34    116       116/30 buy_path            
+    原因: 回归空间, 盈利空间, RSI超卖, EMA转强, 回落确认, 区间低位, 15分强支撑, 15分多重底, 15分RSI超卖, 5分量能反转, 15分低点强支撑, 均线回踩, 均线上破回踩
+11:07    BUY_LOW         21.33     99        99/25 buy_path            
+    原因: 回归空间, 盈利空间, VWAP深度偏离, RSI超卖, EMA转强, 回落确认, 区间低位, 15分强支撑, 15分多重底, 15分RSI超卖, 5分量能反转, 15分低点强支撑
+11:08    BUY_LOW         21.34    110       110/15 buy_path            
+    原因: 回归空间, 盈利空间, RSI超卖, EMA转强, 回落确认, 区间低位, 15分强支撑, 15分多重底, 15分RSI超卖, 5分量能反转, 15分低点强支撑, 均线上破回踩
+11:10    BUY_LOW         21.33    113       113/15 buy_path            
+    原因: 回归空间, 盈利空间, EMA转强, 回落确认, 区间低位, 15分强支撑, 15分多重底, 15分RSI超卖, 5分量能反转, 15分低点强支撑, 均线回踩, 均线上破回踩, 5分企稳反转
+11:11    BUY_LOW         21.34    103       103/15 buy_path            
+    原因: 回归空间, 盈利空间, EMA转强, 回落确认, 区间低位, 15分强支撑, 15分多重底, 15分RSI超卖, 5分量能反转, 15分低点强支撑, 均线上破回踩, 5分企稳反转
+11:12    BUY_LOW         21.36     80        80/15 buy_path            
+    原因: 回归空间, EMA转强, 区间低位, 15分强支撑, 15分多重底, 15分RSI超卖, 5分量能反转, 15分低点强支撑, 均线上破回踩, 5分企稳反转
+11:13    BUY_LOW         21.37     66        66/15 buy_path            
+    原因: 回归空间, EMA转强, 区间低位, 15分多重底, 15分RSI超卖, 5分量能反转, 15分低点支撑, 均线上破回踩, 5分企稳反转
+11:14    BUY_LOW         21.35     88        88/25 buy_path            
+    原因: 回归空间, 盈利空间, EMA转强, 区间低位, 15分强支撑, 15分多重底, 15分RSI超卖, 5分量能反转, 15分低点强支撑, 均线上破回踩
+11:15    BUY_LOW         21.36     80        80/15 buy_path            
+    原因: 回归空间, EMA转强, 区间低位, 15分强支撑, 15分多重底, 15分RSI超卖, 5分量能反转, 15分低点强支撑, 均线上破回踩, 5分企稳反转
+11:16    BUY_LOW         21.35     75        75/25 buy_path            
+    原因: 回归空间, EMA转强, 区间低位, 15分强支撑, 15分多重底, 15分RSI超卖, 5分量能反转, 15分低点强支撑, 均线上破回踩
+11:18    BUY_LOW         21.37     76        76/27 buy_path            
+    原因: 回归空间, EMA转强, 区间低位, 15分动能衰竭, 15分多重底, 15分RSI超卖, 5分量能反转, 15分低点支撑, 均线上破回踩, 5分企稳反转
+11:19    BUY_LOW         21.36     75        75/25 buy_path            
+    原因: 回归空间, EMA转强, 区间低位, 15分强支撑, 15分多重底, 15分RSI超卖, 5分量能反转, 15分低点强支撑, 均线上破回踩
+11:20    BUY_LOW         21.34     81        81/44 buy_path            
+    原因: 回归空间, 区间低位, 15分强支撑, 15分多重底, 15分RSI超卖, 5分量能反转, 15分低点强支撑, 均线回踩, 均线上破回踩
+11:21    BUY_LOW         21.36     75        75/15 buy_path            
+    原因: 回归空间, EMA转强, 区间低位, 15分强支撑, 15分多重底, 15分RSI超卖, 5分量能反转, 15分低点强支撑, 均线上破回踩
+11:22    BUY_LOW         21.36     75        75/25 buy_path            
+    原因: 回归空间, EMA转强, 区间低位, 15分强支撑, 15分多重底, 15分RSI超卖, 5分量能反转, 15分低点强支撑, 均线上破回踩
+11:23    BUY_LOW         21.34     81        81/29 buy_path            
+    原因: 回归空间, 区间低位, 15分强支撑, 15分多重底, 15分RSI超卖, 5分量能反转, 15分低点强支撑, 均线回踩, 均线上破回踩
+11:24    BUY_LOW         21.34     89        89/29 buy_path            
+    原因: 回归空间, RSI超卖, 区间低位, 15分强支撑, 15分多重底, 15分RSI超卖, 5分量能反转, 15分低点强支撑, 均线回踩, 均线上破回踩
+13:11    BUY_LOW         21.37     75        75/34 buy_soft_path       
+    原因: 回归空间, 下午回落, RSI超卖, 回落确认, 区间低位, 15分动能衰竭, 15分强支撑, 15分多重底, 15分RSI超卖, 15分低点强支撑, 均线回踩
+13:21    BUY_LOW         21.36     75        75/34 buy_soft_path       
+    原因: 回归空间, 下午回落, RSI超卖, 回落确认, 区间低位, 15分动能衰竭, 15分强支撑, 15分多重底, 15分RSI超卖, 15分低点强支撑, 均线回踩
+13:24    BUY_LOW         21.35     83        83/19 buy_soft_path       
+    原因: 回归空间, 下午回落, RSI超卖, 布林偏下, 回落确认, 区间低位, 15分动能衰竭, 15分强支撑, 15分多重底, 15分RSI超卖, 15分低点强支撑, 均线回踩
+13:27    BUY_LOW         21.35     87        87/19 buy_path            
+    原因: 回归空间, 布林偏下, 区间低位, 15分动能衰竭, 15分强支撑, 15分多重底, 15分RSI超卖, 5分量能反转, 15分低点强支撑, 均线回踩
+13:28    BUY_LOW         21.35    129       129/19 buy_path            
+    原因: 回归空间, 下午回落, RSI超卖, 布林偏下, MACD拐头, MACD强拐头, 回落确认, 区间低位, 15分动能衰竭, 15分强支撑, 15分多重底, 15分RSI超卖, 5分量能反转, 15分低点强支撑, 均线回踩
+13:32    BUY_LOW         21.34     78        78/34 buy_soft_path       
+    原因: 回归空间, 下午回落, RSI超卖, 布林偏下, 回落确认, 区间低位, 15分动能衰竭, 15分强支撑, 15分多重底, 15分低点强支撑, 均线回踩
+13:34    BUY_LOW         21.34     80        80/19 buy_soft_path       
+    原因: 回归空间, 布林偏下, MACD拐头, MACD强拐头, 回落确认, 区间低位, 15分动能衰竭, 15分强支撑, 15分多重底, 15分低点强支撑, 均线回踩
+13:35    BUY_LOW         21.34    120       120/15 buy_path            
+    原因: 回归空间, 下午回落, RSI超卖, MACD拐头, MACD强拐头, EMA转强, 回落确认, 区间低位, 15分动能衰竭, 15分强支撑, 15分多重底, 5分量能反转, 15分低点强支撑, 均线回踩
+13:46    SELL_HIGH       21.42     50        26/50 sell_observe_path   
+    原因: RSI超买, 布林偏上, 强空头优先高抛, 最优卖点
+13:49    SELL_HIGH       21.42     52        26/52 sell_observe_path   
+    原因: RSI超买, 布林偏上, MACD拐头, 强空头优先高抛
+13:51    SELL_HIGH       21.45     57         4/57 sell_observe_path   
+    原因: 回吐空间, RSI超买, 布林偏上, 强空头优先高抛
+13:52    SELL_HIGH       21.47     65         4/65 sell_observe_path   
+    原因: 回吐空间, RSI超买, 布林偏上, 强空头优先高抛, 最优卖点
+13:53    SELL_HIGH       21.48     65         4/65 sell_observe_path   
+    原因: 回吐空间, RSI超买, 布林偏上, 强空头优先高抛, 最优卖点
+13:54    SELL_HIGH       21.48     52         4/52 sell_observe_path   
+    原因: 回吐空间, 布林偏上, MACD拐头, 强空头优先高抛
+13:55    SELL_HIGH       21.47     59         2/59 sell_observe_path   
+    原因: 回吐空间, RSI超买, MACD拐头, EMA转弱, 强空头优先高抛
+14:00    SELL_HIGH       21.49     59        17/59 sell_observe_path   
+    原因: 回吐空间, MACD拐头, EMA转弱, 强空头优先高抛
+14:01    SELL_HIGH       21.45     74        17/74 sell_observe_path   
+    原因: 回吐空间, MACD拐头, 长上影, EMA转弱, 强空头优先高抛
+14:02    SELL_HIGH       21.45     64        17/64 sell_observe_path   
+    原因: 回吐空间, 长上影, EMA转弱, 强空头优先高抛
+14:03    SELL_HIGH       21.45     64        17/64 sell_observe_path   
+    原因: 回吐空间, 长上影, EMA转弱, 强空头优先高抛
+14:05    SELL_HIGH       21.45     49        29/49 sell_observe_path   
+    原因: 回吐空间, EMA转弱, 强空头优先高抛
+14:09    SELL_HIGH       21.45     49        17/49 sell_observe_path   
+    原因: 回吐空间, EMA转弱, 强空头优先高抛
+14:10    SELL_HIGH       21.45     49        17/49 sell_observe_path   
+    原因: 回吐空间, EMA转弱, 强空头优先高抛
+
+  全天买分最高: 135 @ 10:35 (价格21.55)
+  全天卖分最高: 74 @ 10:11 (价格21.74)
+
+================================================================================
+  000988 华工科技
+================================================================================
+
+  触发信号总数: 110
+
+时间       类型                 价格     分数        买分/卖分 路径                  
+----------------------------------------------------------------------
+09:46    SELL_HIGH      153.47     45       -20/45 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 强空头优先高抛
+09:47    SELL_HIGH      153.76     45       -20/45 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 强空头优先高抛
+09:48    SELL_HIGH      153.21     60       -18/60 sell_observe_path   
+    原因: 回吐空间, RSI超买, 长上影, 强空头优先高抛
+09:49    SELL_HIGH      153.58     60       -18/60 sell_observe_path   
+    原因: 回吐空间, 盈利空间, RSI超买, 强空头优先高抛
+09:50    SELL_HIGH      154.37     72       -18/72 sell_observe_path   
+    原因: 回吐空间, 盈利空间, RSI超买, 布林偏上, 强空头优先高抛
+09:51    SELL_HIGH      153.86     55       -18/55 sell_observe_path   
+    原因: 回吐空间, 盈利空间, MACD拐头, 强空头优先高抛
+09:52    SELL_HIGH      153.48     59       -20/59 sell_observe_path   
+    原因: 回吐空间, MACD拐头, 长上影, EMA转弱, 强空头优先高抛
+09:53    SELL_HIGH      153.38     59       -20/59 sell_observe_path   
+    原因: 回吐空间, MACD拐头, 长上影, EMA转弱, 强空头优先高抛
+09:54    SELL_HIGH      154.21     45       -18/45 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 强空头优先高抛
+09:55    SELL_HIGH      155.01     57       -18/57 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 布林偏上, 强空头优先高抛
+09:56    SELL_HIGH      154.08     55       -20/55 sell_observe_path   
+    原因: 回吐空间, MACD拐头, 长上影, 强空头优先高抛
+09:57    SELL_HIGH      153.60     59       -20/59 sell_observe_path   
+    原因: 回吐空间, MACD拐头, 长上影, EMA转弱, 强空头优先高抛
+09:58    SELL_HIGH      153.46     59       -20/59 sell_observe_path   
+    原因: 回吐空间, MACD拐头, 长上影, EMA转弱, 强空头优先高抛
+10:00    SELL_HIGH      152.50     49        24/49 sell_observe_path   
+    原因: 长上影, EMA转弱, 强空头优先高抛
+10:01    SELL_HIGH      152.22     49        26/49 sell_observe_path   
+    原因: 长上影, EMA转弱, 强空头优先高抛
+10:30    BUY_LOW        148.31    118       118/49 buy_soft_path       
+    原因: 回归空间, 盈利空间, VWAP深度偏离, RSI超卖, 布林偏下, 回落确认, 区间低位, 15分强支撑, 15分多重底, 15分RSI超卖, 5分量能反转, 15分低点强支撑
+10:35    BUY_LOW        147.49    112       112/49 buy_soft_path       
+    原因: 回归空间, 盈利空间, VWAP深度偏离, RSI超卖, 布林偏下, 回落确认, 区间低位, 15分强支撑, 15分RSI超卖, 5分量能反转, 15分低点强支撑
+10:38    BUY_LOW        147.51    108       108/30 buy_soft_path       
+    原因: 回归空间, 盈利空间, VWAP深度偏离, RSI超卖, MACD拐头, MACD强拐头, 回落确认, 区间低位, 15分RSI超卖, 5分量能反转, 15分低点支撑
+10:39    BUY_LOW        148.17     66        66/30 buy_path            
+    原因: 回归空间, 盈利空间, VWAP深度偏离, 区间低位, 15分RSI超卖, 5分量能反转, 15分低点附近
+10:40    BUY_LOW        148.47     65        65/30 buy_path            
+    原因: 回归空间, 盈利空间, VWAP深度偏离, 区间低位, 15分RSI超卖, 5分量能反转, 5分企稳反转
+10:45    BUY_LOW        147.17    110       110/59 buy_soft_path       
+    原因: 回归空间, 盈利空间, VWAP深度偏离, RSI超卖, 回落确认, 区间低位, 15分强支撑, 15分多重底, 15分RSI超卖, 5分量能反转, 15分低点强支撑
+10:50    BUY_LOW        146.01     97        97/34 buy_soft_path       
+    原因: 回归空间, 盈利空间, VWAP深度偏离, RSI超卖, 布林偏下, 回落确认, 区间低位, 15分强支撑, 15分RSI超卖, 5分量能反转, 15分低点强支撑
+10:52    BUY_LOW        146.06    115       115/30 buy_soft_path       
+    原因: 回归空间, 盈利空间, VWAP深度偏离, RSI超卖, 布林偏下, MACD拐头, MACD强拐头, 回落确认, 区间低位, 15分强支撑, 15分RSI超卖, 5分量能反转, 15分低点强支撑
+10:53    BUY_LOW        146.46     85        85/15 buy_path            
+    原因: 回归空间, 盈利空间, VWAP深度偏离, MACD拐头, MACD强拐头, 回落确认, 区间低位, 15分RSI超卖, 5分量能反转, 15分低点支撑
+10:54    BUY_LOW        146.60     51        51/15 buy_path            
+    原因: 回归空间, 盈利空间, VWAP深度偏离, 区间低位, 15分RSI超卖, 5分量能反转, 15分低点附近
+10:55    BUY_LOW        146.80     56        56/15 buy_path            
+    原因: 回归空间, 盈利空间, VWAP深度偏离, 区间低位, 15分RSI超卖, 5分量能反转, 15分低点附近, 5分企稳反转
+10:56    BUY_LOW        146.78     56        56/30 buy_path            
+    原因: 回归空间, 盈利空间, VWAP深度偏离, 区间低位, 15分RSI超卖, 5分量能反转, 15分低点附近, 5分企稳反转
+10:59    BUY_LOW        147.00     51        51/15 buy_path            
+    原因: 回归空间, 盈利空间, VWAP深度偏离, 区间低位, 15分RSI超卖, 5分量能反转, 15分低点附近
+11:03    BUY_LOW        147.94     54        54/50 buy_soft_path       
+    原因: 回归空间, EMA转强, 15分动能衰竭, 15分RSI超卖, 5分量能反转, 均线上破回踩, 5分企稳反转
+11:04    SELL_HIGH      148.54     50        21/50 sell_observe_path   
+    原因: RSI超买, 布林偏上, 强空头优先高抛, 最优卖点
+11:05    SELL_HIGH      148.78     50        21/50 sell_observe_path   
+    原因: RSI超买, 布林偏上, 强空头优先高抛, 最优卖点
+11:06    SELL_HIGH      148.69     60        21/60 sell_observe_path   
+    原因: RSI超买, 布林偏上, MACD拐头, 强空头优先高抛, 最优卖点
+11:07    SELL_HIGH      149.00     50        21/50 sell_observe_path   
+    原因: RSI超买, 布林偏上, 强空头优先高抛, 最优卖点
+11:08    SELL_HIGH      149.36     65        -3/65 sell_observe_path   
+    原因: 回吐空间, RSI超买, 布林偏上, 强空头优先高抛, 最优卖点
+11:11    SELL_HIGH      149.38     52        -3/52 sell_observe_path   
+    原因: 回吐空间, 布林偏上, MACD拐头, 强空头优先高抛
+11:12    SELL_HIGH      149.54     52        -3/52 sell_observe_path   
+    原因: 回吐空间, 布林偏上, MACD拐头, 强空头优先高抛
+11:13    SELL_HIGH      149.68     52        -3/52 sell_observe_path   
+    原因: 回吐空间, 布林偏上, MACD拐头, 强空头优先高抛
+11:16    SELL_HIGH      149.30     55        -5/55 sell_observe_path   
+    原因: 回吐空间, MACD拐头, 长上影, 强空头优先高抛
+11:22    SELL_HIGH      150.40     57        -8/57 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 布林偏上, 强空头优先高抛
+11:23    SELL_HIGH      150.30     57        -8/57 sell_observe_path   
+    原因: 回吐空间, RSI超买, 布林偏上, 强空头优先高抛
+11:25    SELL_HIGH      150.54     65        -8/65 sell_observe_path   
+    原因: 回吐空间, RSI超买, 布林偏上, 强空头优先高抛, 最优卖点
+11:26    SELL_HIGH      150.63     65        -8/65 sell_observe_path   
+    原因: 回吐空间, RSI超买, 布林偏上, 强空头优先高抛, 最优卖点
+11:28    SELL_HIGH      150.30     55       -10/55 sell_observe_path   
+    原因: 回吐空间, MACD拐头, 长上影, 强空头优先高抛
+11:29    SELL_HIGH      150.38     55       -10/55 sell_observe_path   
+    原因: 回吐空间, MACD拐头, 长上影, 强空头优先高抛
+11:30    SELL_HIGH      150.94     57        -8/57 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 布林偏上, 强空头优先高抛
+13:00    SELL_HIGH      150.94     57        -8/57 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 布林偏上, 强空头优先高抛
+13:01    SELL_HIGH      151.04     57        -8/57 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 布林偏上, 强空头优先高抛
+13:02    SELL_HIGH      151.25     80        -8/80 sell_observe_path   
+    原因: 回吐空间, 盈利空间, RSI超买, 布林偏上, 强空头优先高抛, 最优卖点
+13:03    SELL_HIGH      151.15     55       -10/55 sell_observe_path   
+    原因: 回吐空间, RSI超买, MACD拐头, 强空头优先高抛
+13:04    SELL_HIGH      151.03     85       -10/85 sell_observe_path   
+    原因: 回吐空间, 盈利空间, RSI超买, MACD拐头, 长上影, 强空头优先高抛
+13:05    SELL_HIGH      150.98     60       -10/60 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 长上影, 强空头优先高抛
+13:06    SELL_HIGH      151.26     45       -10/45 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 强空头优先高抛
+13:07    SELL_HIGH      151.30     45       -10/45 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 强空头优先高抛
+13:08    SELL_HIGH      151.01     60       -10/60 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 长上影, 强空头优先高抛
+13:09    SELL_HIGH      150.88     60       -10/60 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 长上影, 强空头优先高抛
+13:10    SELL_HIGH      150.10     49         8/49 sell_observe_path   
+    原因: 回吐空间, 长上影, EMA转弱, 强空头优先高抛
+13:11    SELL_HIGH      149.83     49         8/49 sell_observe_path   
+    原因: 回吐空间, 长上影, EMA转弱, 强空头优先高抛
+13:12    SELL_HIGH      150.99     45        10/45 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 强空头优先高抛
+13:13    SELL_HIGH      150.99     45         0/45 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 强空头优先高抛
+13:16    SELL_HIGH      150.22     49        -4/49 sell_observe_path   
+    原因: 回吐空间, 长上影, EMA转弱, 强空头优先高抛
+13:17    SELL_HIGH      150.35     49        -4/49 sell_observe_path   
+    原因: 回吐空间, 长上影, EMA转弱, 强空头优先高抛
+13:18    SELL_HIGH      150.82     45        10/45 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 强空头优先高抛
+13:20    SELL_HIGH      150.20     49         6/49 sell_observe_path   
+    原因: 回吐空间, 长上影, EMA转弱, 强空头优先高抛
+13:21    SELL_HIGH      149.91     49        14/49 sell_observe_path   
+    原因: 回吐空间, 长上影, EMA转弱, 强空头优先高抛
+13:22    SELL_HIGH      150.09     49        12/49 sell_observe_path   
+    原因: 回吐空间, 长上影, EMA转弱, 强空头优先高抛
+13:23    SELL_HIGH      149.90     49         2/49 sell_observe_path   
+    原因: 回吐空间, 长上影, EMA转弱, 强空头优先高抛
+13:24    SELL_HIGH      149.80     49        14/49 sell_observe_path   
+    原因: 回吐空间, 长上影, EMA转弱, 强空头优先高抛
+13:25    SELL_HIGH      149.65     49        14/49 sell_observe_path   
+    原因: 回吐空间, 长上影, EMA转弱, 强空头优先高抛
+13:28    SELL_HIGH      151.00     57        -8/57 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 布林偏上, 强空头优先高抛
+13:31    SELL_HIGH      150.06     59        22/59 sell_observe_path   
+    原因: 回吐空间, MACD拐头, 长上影, EMA转弱, 强空头优先高抛
+13:32    SELL_HIGH      149.91     49        22/49 sell_observe_path   
+    原因: 回吐空间, 长上影, EMA转弱, 强空头优先高抛
+13:34    SELL_HIGH      149.89     49        22/49 sell_observe_path   
+    原因: 回吐空间, 长上影, EMA转弱, 强空头优先高抛
+13:35    SELL_HIGH      149.86     49        22/49 sell_observe_path   
+    原因: 回吐空间, 长上影, EMA转弱, 强空头优先高抛
+13:40    SELL_HIGH      150.50     45        -6/45 sell_observe_path   
+    原因: 回吐空间, RSI超买, 强空头优先高抛
+13:41    SELL_HIGH      150.59     45        -6/45 sell_observe_path   
+    原因: 回吐空间, RSI超买, 强空头优先高抛
+13:42    SELL_HIGH      150.96     65        -6/65 sell_observe_path   
+    原因: 回吐空间, RSI超买, 布林偏上, 强空头优先高抛, 最优卖点
+13:44    SELL_HIGH      151.24     65       -12/65 sell_observe_path   
+    原因: 回吐空间, RSI超买, 布林偏上, 强空头优先高抛, 最优卖点
+13:45    SELL_HIGH      151.35     65       -12/65 sell_observe_path   
+    原因: 回吐空间, RSI超买, 布林偏上, 强空头优先高抛, 最优卖点
+13:46    SELL_HIGH      151.99     80        -9/80 sell_observe_path   
+    原因: 回吐空间, 盈利空间, RSI超买, 布林偏上, 强空头优先高抛, 最优卖点
+13:47    SELL_HIGH      151.99     80        -9/80 sell_observe_path   
+    原因: 回吐空间, 盈利空间, RSI超买, 布林偏上, 强空头优先高抛, 最优卖点
+13:48    SELL_HIGH      151.74     67       -12/67 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 布林偏上, MACD拐头, 强空头优先高抛
+13:49    SELL_HIGH      152.17     80        -9/80 sell_observe_path   
+    原因: 回吐空间, 盈利空间, RSI超买, 布林偏上, 强空头优先高抛, 最优卖点
+13:50    SELL_HIGH      152.03     67        -9/67 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 布林偏上, MACD拐头, 强空头优先高抛
+13:51    SELL_HIGH      151.96     55       -11/55 sell_observe_path   
+    原因: 回吐空间, 盈利空间, MACD拐头, 强空头优先高抛
+13:52    SELL_HIGH      151.78     70       -14/70 sell_observe_path   
+    原因: 回吐空间, 盈利空间, MACD拐头, 长上影, 强空头优先高抛
+13:53    SELL_HIGH      151.64     70       -14/70 sell_observe_path   
+    原因: 回吐空间, 盈利空间, MACD拐头, 长上影, 强空头优先高抛
+13:54    SELL_HIGH      152.09     55        -9/55 sell_observe_path   
+    原因: 回吐空间, 盈利空间, MACD拐头, 强空头优先高抛
+13:55    SELL_HIGH      152.10     55       -11/55 sell_observe_path   
+    原因: 回吐空间, 盈利空间, MACD拐头, 强空头优先高抛
+13:56    SELL_HIGH      151.96     55       -11/55 sell_observe_path   
+    原因: 回吐空间, 盈利空间, MACD拐头, 强空头优先高抛
+13:57    SELL_HIGH      151.67     60       -14/60 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 长上影, 强空头优先高抛
+13:58    SELL_HIGH      151.98     45       -11/45 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 强空头优先高抛
+13:59    SELL_HIGH      151.97     45       -11/45 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 强空头优先高抛
+14:00    SELL_HIGH      151.97     60         4/60 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 强空头优先高抛
+14:01    SELL_HIGH      151.76     79        16/79 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 长上影, EMA转弱, 强空头优先高抛
+14:02    SELL_HIGH      151.68     79        13/79 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 长上影, EMA转弱, 强空头优先高抛
+14:03    SELL_HIGH      151.55     79         4/79 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 长上影, EMA转弱, 强空头优先高抛
+14:04    SELL_HIGH      151.48     79        24/79 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 长上影, EMA转弱, 强空头优先高抛
+14:05    SELL_HIGH      151.43     79        24/79 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 长上影, EMA转弱, 强空头优先高抛
+14:06    SELL_HIGH      151.53     64        34/64 sell_observe_path   
+    原因: 回吐空间, 盈利空间, EMA转弱, 强空头优先高抛
+14:07    SELL_HIGH      151.60     64        34/64 sell_observe_path   
+    原因: 回吐空间, 盈利空间, EMA转弱, 强空头优先高抛
+14:08    SELL_HIGH      151.10     64        30/64 sell_observe_path   
+    原因: 回吐空间, 长上影, EMA转弱, 强空头优先高抛
+14:09    SELL_HIGH      150.81     64        30/64 sell_observe_path   
+    原因: 回吐空间, 长上影, EMA转弱, 强空头优先高抛
+14:10    SELL_HIGH      150.52     64        27/64 sell_observe_path   
+    原因: 回吐空间, 长上影, EMA转弱, 强空头优先高抛
+14:15    SELL_HIGH      150.66     64        16/64 sell_observe_path   
+    原因: 回吐空间, 长上影, EMA转弱, 强空头优先高抛
+14:16    SELL_HIGH      150.41     64        13/64 sell_observe_path   
+    原因: 回吐空间, 长上影, EMA转弱, 强空头优先高抛
+14:18    SELL_HIGH      150.41     64        37/64 sell_observe_path   
+    原因: 回吐空间, 长上影, EMA转弱, 强空头优先高抛
+14:19    SELL_HIGH      150.35     64        37/64 sell_observe_path   
+    原因: 回吐空间, 长上影, EMA转弱, 强空头优先高抛
+14:32    SELL_HIGH      150.46     60         3/60 sell_observe_path   
+    原因: 回吐空间, RSI超买, 强空头优先高抛
+14:33    SELL_HIGH      150.17     55        29/55 sell_observe_path   
+    原因: MACD拐头, 长上影, 强空头优先高抛
+14:45    BUY_LOW        149.36    126       126/49 buy_soft_path       
+    原因: 回归空间, RSI超卖, 布林偏下, 回落确认, 15分强支撑, 15分多重底, 15分RSI超卖, 5分量能反转, 15分低点强支撑, 尾盘跌破均线, 均线回踩, 均线上破回踩
+
+  全天买分最高: 136 @ 10:22 (价格150.11)
+  全天卖分最高: 85 @ 13:04 (价格151.03)
+
+================================================================================
+  300666 江丰电子
+================================================================================
+
+  触发信号总数: 140
+
+时间       类型                 价格     分数        买分/卖分 路径                  
+----------------------------------------------------------------------
+09:47    SELL_HIGH      339.00     60       -18/60 sell_observe_path   
+    原因: 回吐空间, 盈利空间, RSI超买, 强空头优先高抛
+09:48    SELL_HIGH      338.96     53       -18/53 sell_observe_path   
+    原因: 回吐空间, RSI超买, 强空头优先高抛, 最优卖点
+09:49    SELL_HIGH      341.00     80       -18/80 sell_observe_path   
+    原因: 回吐空间, 盈利空间, RSI超买, 布林偏上, 强空头优先高抛, 最优卖点
+09:50    SELL_HIGH      340.69     80       -18/80 sell_observe_path   
+    原因: 回吐空间, 盈利空间, RSI超买, 布林偏上, 强空头优先高抛, 最优卖点
+09:51    SELL_HIGH      338.22     75       -20/75 sell_observe_path   
+    原因: 回吐空间, MACD拐头, 长上影, 开盘冲高回落, 强空头优先高抛
+09:52    SELL_HIGH      336.98     75       -20/75 sell_observe_path   
+    原因: 回吐空间, MACD拐头, 长上影, 开盘冲高回落, 强空头优先高抛
+09:53    SELL_HIGH      338.28     75       -20/75 sell_observe_path   
+    原因: 回吐空间, MACD拐头, 长上影, 开盘冲高回落, 强空头优先高抛
+09:54    SELL_HIGH      339.96     77       -18/77 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 开盘冲高回落, 冲高背离, 强空头优先高抛
+09:55    SELL_HIGH      340.21     61       -18/61 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 区间高位, 冲高背离, 强空头优先高抛
+09:56    SELL_HIGH      338.15     75       -20/75 sell_observe_path   
+    原因: 回吐空间, MACD拐头, 长上影, 开盘冲高回落, 强空头优先高抛
+09:57    SELL_HIGH      336.17     64        10/64 sell_observe_path   
+    原因: MACD拐头, 长上影, EMA转弱, 开盘冲高回落, 强空头优先高抛
+09:58    SELL_HIGH      337.00     69       -20/69 sell_observe_path   
+    原因: 回吐空间, 长上影, EMA转弱, 开盘冲高回落, 强空头优先高抛
+09:59    SELL_HIGH      334.84     54        -4/54 sell_observe_path   
+    原因: 长上影, EMA转弱, 开盘冲高回落, 强空头优先高抛
+10:01    SELL_HIGH      334.48     49        24/49 sell_observe_path   
+    原因: 长上影, EMA转弱, 强空头优先高抛
+10:07    BUY_LOW        333.11     91        91/30 buy_path            
+    原因: 回归空间, MACD拐头, MACD强拐头, 回落确认, 15分RSI超卖, 5分量能反转, 均线回踩, 均线上破回踩, 5分企稳反转
+10:09    BUY_LOW        331.68     78        78/45 buy_path            
+    原因: 回归空间, 盈利空间, VWAP深度偏离, MACD拐头, MACD强拐头, 区间低位, 15分RSI超卖, 5分量能反转
+10:10    BUY_LOW        332.90     71        71/30 buy_path            
+    原因: 回归空间, MACD拐头, MACD强拐头, 15分RSI超卖, 5分量能反转, 均线上破回踩, 5分企稳反转
+10:11    BUY_LOW        333.00     71        71/30 buy_path            
+    原因: 回归空间, MACD拐头, MACD强拐头, 15分RSI超卖, 5分量能反转, 均线上破回踩, 5分企稳反转
+10:15    BUY_LOW        328.66    108       108/49 buy_soft_path       
+    原因: 回归空间, 盈利空间, VWAP深度偏离, RSI超卖, 布林偏下, 回落确认, 15分强支撑, 15分RSI超卖, 5分量能反转, 15分低点强支撑
+10:22    BUY_LOW        326.51    114       114/30 buy_path            
+    原因: 回归空间, 盈利空间, VWAP深度偏离, MACD拐头, MACD强拐头, 回落确认, 区间低位, 15分强支撑, 15分RSI超卖, 5分量能反转, 15分低点强支撑
+10:25    BUY_LOW        323.27    135       135/49 buy_soft_path       
+    原因: 回归空间, 盈利空间, VWAP深度偏离, RSI超卖, 布林偏下, MACD拐头, MACD强拐头, 回落确认, 区间低位, 15分强支撑, 15分RSI超卖, 5分量能反转, 15分低点强支撑, 5分企稳反转
+10:30    BUY_LOW        320.07    118       118/49 buy_soft_path       
+    原因: 回归空间, 盈利空间, VWAP深度偏离, RSI超卖, 布林偏下, 回落确认, 区间低位, 15分强支撑, 15分多重底, 15分RSI超卖, 5分量能反转, 15分低点强支撑
+10:35    BUY_LOW        316.67    126       126/49 buy_soft_path       
+    原因: 回归空间, 盈利空间, VWAP深度偏离, RSI超卖, 布林偏下, MACD拐头, MACD强拐头, 回落确认, 15分强支撑, 15分RSI超卖, 5分量能反转, 15分低点强支撑
+10:38    BUY_LOW        318.81     78        78/30 buy_path            
+    原因: 回归空间, 盈利空间, VWAP深度偏离, MACD拐头, MACD强拐头, 区间低位, 15分RSI超卖, 5分量能反转
+10:39    BUY_LOW        317.51     76        76/30 buy_path            
+    原因: 回归空间, 盈利空间, VWAP深度偏离, 回落确认, 区间低位, 15分RSI超卖, 5分量能反转, 15分低点附近
+10:40    BUY_LOW        319.27     65        65/30 buy_path            
+    原因: 回归空间, 盈利空间, VWAP深度偏离, 区间低位, 15分RSI超卖, 5分量能反转, 5分企稳反转
+10:45    BUY_LOW        314.00    108       108/59 buy_soft_path       
+    原因: 回归空间, 盈利空间, VWAP深度偏离, RSI超卖, 布林偏下, 回落确认, 15分强支撑, 15分RSI超卖, 5分量能反转, 15分低点强支撑
+10:47    BUY_LOW        314.16     89        89/40 buy_soft_path       
+    原因: 回归空间, 盈利空间, VWAP深度偏离, RSI超卖, 回落确认, 区间低位, 15分强支撑, 15分RSI超卖, 5分量能反转, 15分低点强支撑
+10:50    BUY_LOW        312.92     97        97/44 buy_path            
+    原因: 回归空间, 盈利空间, VWAP深度偏离, RSI超卖, 布林偏下, 回落确认, 区间低位, 15分强支撑, 15分RSI超卖, 5分量能反转, 15分低点强支撑
+10:51    BUY_LOW        313.16     97        97/30 buy_soft_path       
+    原因: 回归空间, 盈利空间, VWAP深度偏离, RSI超卖, 布林偏下, 回落确认, 区间低位, 15分强支撑, 15分RSI超卖, 5分量能反转, 15分低点强支撑
+10:52    BUY_LOW        314.18     57        57/15 buy_path            
+    原因: 回归空间, 盈利空间, VWAP深度偏离, 区间低位, 15分RSI超卖, 5分量能反转, 15分低点支撑
+10:53    BUY_LOW        313.52     81        81/30 buy_path            
+    原因: 回归空间, 盈利空间, VWAP深度偏离, 回落确认, 区间低位, 15分强支撑, 15分RSI超卖, 5分量能反转, 15分低点强支撑
+10:54    BUY_LOW        314.01     57        57/15 buy_path            
+    原因: 回归空间, 盈利空间, VWAP深度偏离, 区间低位, 15分RSI超卖, 5分量能反转, 15分低点支撑
+11:02    BUY_LOW        317.78     64        64/42 buy_path            
+    原因: 回归空间, 盈利空间, VWAP深度偏离, EMA转强, 区间低位, 15分动能衰竭, 15分RSI超卖, 5分量能反转, 5分企稳反转
+11:08    SELL_HIGH      322.00     60        21/60 sell_observe_path   
+    原因: RSI超买, 布林偏上, MACD拐头, 强空头优先高抛, 最优卖点
+11:09    SELL_HIGH      321.54     55        17/55 sell_observe_path   
+    原因: RSI超买, MACD拐头, 长上影, 强空头优先高抛
+11:10    SELL_HIGH      323.80     57        -3/57 sell_observe_path   
+    原因: 回吐空间, RSI超买, 布林偏上, 强空头优先高抛
+11:11    SELL_HIGH      324.30     67        -3/67 sell_observe_path   
+    原因: 回吐空间, RSI超买, 布林偏上, MACD拐头, 强空头优先高抛
+11:12    SELL_HIGH      326.46     65        -3/65 sell_observe_path   
+    原因: 回吐空间, RSI超买, 布林偏上, 强空头优先高抛, 最优卖点
+11:13    SELL_HIGH      325.57     67        -3/67 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 布林偏上, MACD拐头, 强空头优先高抛
+11:14    SELL_HIGH      326.89     82        -8/82 sell_observe_path   
+    原因: 回吐空间, 盈利空间, RSI超买, 布林偏上, MACD拐头, 强空头优先高抛
+11:15    SELL_HIGH      325.98     55       -10/55 sell_observe_path   
+    原因: 回吐空间, 盈利空间, MACD拐头, 强空头优先高抛
+11:16    SELL_HIGH      324.93     55        -5/55 sell_observe_path   
+    原因: 回吐空间, MACD拐头, 长上影, 强空头优先高抛
+11:17    SELL_HIGH      323.14     55        -5/55 sell_observe_path   
+    原因: 回吐空间, MACD拐头, 长上影, 强空头优先高抛
+11:18    SELL_HIGH      325.70     55       -10/55 sell_observe_path   
+    原因: 回吐空间, 盈利空间, MACD拐头, 强空头优先高抛
+11:19    SELL_HIGH      325.98     55       -10/55 sell_observe_path   
+    原因: 回吐空间, 盈利空间, MACD拐头, 强空头优先高抛
+11:20    SELL_HIGH      326.06     55       -10/55 sell_observe_path   
+    原因: 回吐空间, 盈利空间, MACD拐头, 强空头优先高抛
+11:21    SELL_HIGH      327.68     57        -8/57 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 布林偏上, 强空头优先高抛
+11:22    SELL_HIGH      326.99     55       -10/55 sell_observe_path   
+    原因: 回吐空间, 盈利空间, MACD拐头, 强空头优先高抛
+11:23    SELL_HIGH      327.39     70       -10/70 sell_observe_path   
+    原因: 回吐空间, 盈利空间, RSI超买, MACD拐头, 强空头优先高抛
+11:24    SELL_HIGH      329.00     80        -8/80 sell_observe_path   
+    原因: 回吐空间, 盈利空间, RSI超买, 布林偏上, 强空头优先高抛, 最优卖点
+11:25    SELL_HIGH      329.03     72        -8/72 sell_observe_path   
+    原因: 回吐空间, 盈利空间, RSI超买, 布林偏上, 强空头优先高抛
+11:26    SELL_HIGH      328.82     70       -10/70 sell_observe_path   
+    原因: 回吐空间, 盈利空间, RSI超买, MACD拐头, 强空头优先高抛
+11:27    SELL_HIGH      329.15     55       -10/55 sell_observe_path   
+    原因: 回吐空间, 盈利空间, MACD拐头, 强空头优先高抛
+11:28    SELL_HIGH      329.90     72        -8/72 sell_observe_path   
+    原因: 回吐空间, 盈利空间, RSI超买, 布林偏上, 强空头优先高抛
+11:29    SELL_HIGH      330.99     80        -8/80 sell_observe_path   
+    原因: 回吐空间, 盈利空间, RSI超买, 布林偏上, 强空头优先高抛, 最优卖点
+11:30    SELL_HIGH      332.57     80        -8/80 sell_observe_path   
+    原因: 回吐空间, 盈利空间, RSI超买, 布林偏上, 强空头优先高抛, 最优卖点
+13:00    SELL_HIGH      332.57     80       -18/80 sell_observe_path   
+    原因: 回吐空间, 盈利空间, RSI超买, 布林偏上, 强空头优先高抛, 最优卖点
+13:01    SELL_HIGH      329.01     70       -10/70 sell_observe_path   
+    原因: 回吐空间, 盈利空间, MACD拐头, 长上影, 强空头优先高抛
+13:02    SELL_HIGH      331.27     55       -20/55 sell_observe_path   
+    原因: 回吐空间, 盈利空间, MACD拐头, 强空头优先高抛
+13:03    SELL_HIGH      330.39     60       -10/60 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 长上影, 强空头优先高抛
+13:04    SELL_HIGH      332.00     45         0/45 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 强空头优先高抛
+13:05    SELL_HIGH      332.60     45         0/45 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 强空头优先高抛
+13:06    SELL_HIGH      332.12     45       -20/45 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 强空头优先高抛
+13:07    SELL_HIGH      332.09     45       -20/45 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 强空头优先高抛
+13:08    SELL_HIGH      331.52     60       -20/60 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 长上影, 强空头优先高抛
+13:09    SELL_HIGH      329.95     60       -10/60 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 长上影, 强空头优先高抛
+13:10    SELL_HIGH      328.02     60         0/60 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 长上影, 强空头优先高抛
+13:11    SELL_HIGH      327.01     49         8/49 sell_observe_path   
+    原因: 回吐空间, 长上影, EMA转弱, 强空头优先高抛
+13:12    SELL_HIGH      329.79     49         6/49 sell_observe_path   
+    原因: 回吐空间, 盈利空间, EMA转弱, 强空头优先高抛
+13:13    SELL_HIGH      327.87     64        -2/64 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 长上影, EMA转弱, 强空头优先高抛
+13:14    SELL_HIGH      328.56     49        -4/49 sell_observe_path   
+    原因: 回吐空间, 盈利空间, EMA转弱, 强空头优先高抛
+13:15    SELL_HIGH      327.23     49       -14/49 sell_observe_path   
+    原因: 回吐空间, 长上影, EMA转弱, 强空头优先高抛
+13:16    SELL_HIGH      326.14     49        -8/49 sell_observe_path   
+    原因: 回吐空间, 长上影, EMA转弱, 强空头优先高抛
+13:17    SELL_HIGH      327.77     45        10/45 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 强空头优先高抛
+13:19    SELL_HIGH      326.35     49        12/49 sell_observe_path   
+    原因: 回吐空间, 长上影, EMA转弱, 强空头优先高抛
+13:20    SELL_HIGH      326.44     49        10/49 sell_observe_path   
+    原因: 回吐空间, 长上影, EMA转弱, 强空头优先高抛
+13:21    SELL_HIGH      326.46     49        -4/49 sell_observe_path   
+    原因: 回吐空间, 长上影, EMA转弱, 强空头优先高抛
+13:23    SELL_HIGH      326.38     49        10/49 sell_observe_path   
+    原因: 回吐空间, 长上影, EMA转弱, 强空头优先高抛
+13:24    SELL_HIGH      325.62     49        -4/49 sell_observe_path   
+    原因: 回吐空间, 长上影, EMA转弱, 强空头优先高抛
+13:25    SELL_HIGH      325.84     49         2/49 sell_observe_path   
+    原因: 回吐空间, 长上影, EMA转弱, 强空头优先高抛
+13:27    SELL_HIGH      328.01     45        10/45 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 强空头优先高抛
+13:28    SELL_HIGH      329.00     45       -18/45 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 强空头优先高抛
+13:29    SELL_HIGH      328.54     45       -18/45 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 强空头优先高抛
+13:30    SELL_HIGH      327.97     60       -12/60 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 长上影, 强空头优先高抛
+13:31    SELL_HIGH      326.74     59        -8/59 sell_observe_path   
+    原因: 回吐空间, MACD拐头, 长上影, EMA转弱, 强空头优先高抛
+13:32    SELL_HIGH      327.46     55       -12/55 sell_observe_path   
+    原因: 回吐空间, MACD拐头, 长上影, 强空头优先高抛
+13:33    SELL_HIGH      326.31     49        22/49 sell_observe_path   
+    原因: 回吐空间, 长上影, EMA转弱, 强空头优先高抛
+13:34    SELL_HIGH      326.32     49        22/49 sell_observe_path   
+    原因: 回吐空间, 长上影, EMA转弱, 强空头优先高抛
+13:36    SELL_HIGH      325.76     49        22/49 sell_observe_path   
+    原因: 回吐空间, 长上影, EMA转弱, 强空头优先高抛
+13:37    SELL_HIGH      325.81     49        28/49 sell_observe_path   
+    原因: 回吐空间, 长上影, EMA转弱, 强空头优先高抛
+13:38    SELL_HIGH      325.50     49        22/49 sell_observe_path   
+    原因: 回吐空间, 长上影, EMA转弱, 强空头优先高抛
+13:41    SELL_HIGH      327.69     45        -6/45 sell_observe_path   
+    原因: 回吐空间, RSI超买, 强空头优先高抛
+13:42    SELL_HIGH      328.72     57       -12/57 sell_observe_path   
+    原因: 回吐空间, RSI超买, 布林偏上, 强空头优先高抛
+13:44    SELL_HIGH      328.69     60       -12/60 sell_observe_path   
+    原因: 回吐空间, 盈利空间, RSI超买, 强空头优先高抛
+13:45    SELL_HIGH      329.60     72       -12/72 sell_observe_path   
+    原因: 回吐空间, 盈利空间, RSI超买, 布林偏上, 强空头优先高抛
+13:46    SELL_HIGH      329.85     72       -12/72 sell_observe_path   
+    原因: 回吐空间, 盈利空间, RSI超买, 布林偏上, 强空头优先高抛
+13:47    SELL_HIGH      331.62     80       -12/80 sell_observe_path   
+    原因: 回吐空间, 盈利空间, RSI超买, 布林偏上, 强空头优先高抛, 最优卖点
+13:48    SELL_HIGH      329.84     70       -14/70 sell_observe_path   
+    原因: 回吐空间, 盈利空间, MACD拐头, 长上影, 强空头优先高抛
+13:49    SELL_HIGH      329.15     70       -14/70 sell_observe_path   
+    原因: 回吐空间, 盈利空间, MACD拐头, 长上影, 强空头优先高抛
+13:50    SELL_HIGH      330.00     70       -12/70 sell_observe_path   
+    原因: 回吐空间, 盈利空间, MACD拐头, 长上影, 强空头优先高抛
+13:51    SELL_HIGH      330.71     57       -12/57 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 布林偏上, 强空头优先高抛
+13:52    SELL_HIGH      329.86     70       -14/70 sell_observe_path   
+    原因: 回吐空间, 盈利空间, MACD拐头, 长上影, 强空头优先高抛
+13:53    SELL_HIGH      331.44     57       -12/57 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 布林偏上, 强空头优先高抛
+13:54    SELL_HIGH      331.90     57       -12/57 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 布林偏上, 强空头优先高抛
+13:55    SELL_HIGH      330.39     70       -14/70 sell_observe_path   
+    原因: 回吐空间, 盈利空间, MACD拐头, 长上影, 强空头优先高抛
+13:56    SELL_HIGH      331.33     55       -12/55 sell_observe_path   
+    原因: 回吐空间, 盈利空间, MACD拐头, 强空头优先高抛
+13:57    SELL_HIGH      331.97     45       -12/45 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 强空头优先高抛
+13:58    SELL_HIGH      332.99     57       -12/57 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 布林偏上, 强空头优先高抛
+13:59    SELL_HIGH      332.66     67       -12/67 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 布林偏上, MACD拐头, 强空头优先高抛
+14:00    SELL_HIGH      332.50     70         4/70 sell_observe_path   
+    原因: 回吐空间, 盈利空间, MACD拐头, 强空头优先高抛
+14:01    SELL_HIGH      330.86     85         1/85 sell_observe_path   
+    原因: 回吐空间, 盈利空间, MACD拐头, 长上影, 强空头优先高抛
+14:02    SELL_HIGH      330.12     75         1/75 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 长上影, 强空头优先高抛
+14:03    SELL_HIGH      329.41     79        13/79 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 长上影, EMA转弱, 强空头优先高抛
+14:04    SELL_HIGH      329.25     79        13/79 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 长上影, EMA转弱, 强空头优先高抛
+14:05    SELL_HIGH      329.00     64        21/64 sell_observe_path   
+    原因: 回吐空间, 长上影, EMA转弱, 强空头优先高抛
+14:06    SELL_HIGH      329.57     64        31/64 sell_observe_path   
+    原因: 回吐空间, 盈利空间, EMA转弱, 强空头优先高抛
+14:07    SELL_HIGH      330.19     60        20/60 sell_observe_path   
+    原因: 回吐空间, 盈利空间, 强空头优先高抛
+14:08    SELL_HIGH      328.21     64        27/64 sell_observe_path   
+    原因: 回吐空间, 长上影, EMA转弱, 强空头优先高抛
+14:09    SELL_HIGH      327.51     64        27/64 sell_observe_path   
+    原因: 回吐空间, 长上影, EMA转弱, 强空头优先高抛
+14:10    SELL_HIGH      327.11     64        27/64 sell_observe_path   
+    原因: 回吐空间, 长上影, EMA转弱, 强空头优先高抛
+14:14    SELL_HIGH      327.63     64        22/64 sell_observe_path   
+    原因: 回吐空间, 长上影, EMA转弱, 强空头优先高抛
+14:15    SELL_HIGH      328.28     45        21/45 sell_observe_path   
+    原因: 回吐空间, 强空头优先高抛
+14:16    SELL_HIGH      327.12     64         6/64 sell_observe_path   
+    原因: 回吐空间, 长上影, EMA转弱, 强空头优先高抛
+14:17    SELL_HIGH      327.60     60        24/60 sell_observe_path   
+    原因: 回吐空间, 长上影, 强空头优先高抛
+14:18    SELL_HIGH      327.19     64        24/64 sell_observe_path   
+    原因: 回吐空间, 长上影, EMA转弱, 强空头优先高抛
+14:19    SELL_HIGH      327.89     45        21/45 sell_observe_path   
+    原因: 回吐空间, 强空头优先高抛
+14:21    SELL_HIGH      328.48     45        20/45 sell_observe_path   
+    原因: 回吐空间, 强空头优先高抛
+14:22    SELL_HIGH      327.69     60        25/60 sell_observe_path   
+    原因: 回吐空间, 长上影, 强空头优先高抛
+14:23    SELL_HIGH      327.53     64         6/64 sell_observe_path   
+    原因: 回吐空间, 长上影, EMA转弱, 强空头优先高抛
+14:31    SELL_HIGH      327.84     60         3/60 sell_observe_path   
+    原因: 回吐空间, RSI超买, 强空头优先高抛
+14:32    SELL_HIGH      327.50     45         9/45 sell_observe_path   
+    原因: 回吐空间, 强空头优先高抛
+14:33    SELL_HIGH      327.03     70         9/70 sell_observe_path   
+    原因: 回吐空间, MACD拐头, 长上影, 强空头优先高抛
+14:34    SELL_HIGH      327.90     45         3/45 sell_observe_path   
+    原因: 回吐空间, 强空头优先高抛
+14:35    SELL_HIGH      327.06     74         7/74 sell_observe_path   
+    原因: 回吐空间, MACD拐头, 长上影, EMA转弱, 强空头优先高抛
+14:36    SELL_HIGH      328.60     57         3/57 sell_observe_path   
+    原因: 回吐空间, 布林偏上, 强空头优先高抛
+14:37    SELL_HIGH      327.69     70         3/70 sell_observe_path   
+    原因: 回吐空间, MACD拐头, 长上影, 强空头优先高抛
+14:38    SELL_HIGH      326.89     74        27/74 sell_observe_path   
+    原因: 回吐空间, MACD拐头, 长上影, EMA转弱, 强空头优先高抛
+14:39    SELL_HIGH      327.28     74        13/74 sell_observe_path   
+    原因: 回吐空间, MACD拐头, 长上影, EMA转弱, 强空头优先高抛
+14:50    SELL_HIGH      326.80     55         0/55 sell_observe_path   
+    原因: 回吐空间, MACD拐头, 长上影, 强空头优先高抛
+
+  全天买分最高: 135 @ 10:25 (价格323.27)
+  全天卖分最高: 85 @ 14:01 (价格330.86)

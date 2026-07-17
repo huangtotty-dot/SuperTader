@@ -1,0 +1,25 @@
+{
+  "feishu": {
+    "webhook_url": "https://open.feishu.cn/open-apis/bot/v2/hook/e8018470-eb02-49ee-ba96-c6fcf7c3e46f",
+    "enabled": true,
+    "notify_on_signals": true,
+    "notify_on_completion": true,
+    "at_all_on_signal": true,
+    "use_strong_notification": true,
+    "relay_urgent_alarm_on_feishu": true,
+    "startup_self_test": true,
+    "keyword": "做T猎手预警",
+    "system_keyword": "系统消息"
+  },
+  "alert": {
+    "enabled": true,
+    "type": "auto",
+    "description": "系统报警配置 - enabled: 启用/禁用报警, type: auto(自动)/gentle(温和)/normal(普通)/urgent(加急)/critical(严重)"
+  },
+  "scan": {
+    "clear_cache_before_scan": true,
+    "min_signals_to_notify": 1
+  }
+}
+
+

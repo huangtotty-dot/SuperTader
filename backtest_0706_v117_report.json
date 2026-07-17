@@ -1,0 +1,5477 @@
+{
+  "summary": {
+    "completed_cycles": 1,
+    "incomplete_cycles": 0,
+    "total_trades": 1,
+    "total_pnl": -17.021999999999153
+  },
+  "daily_pnl": {
+    "2026-07-06": -17.021999999999153
+  },
+  "by_code": {
+    "002261": {
+      "trades": 0,
+      "completed": 0,
+      "incomplete": 0,
+      "pnl": 0.0,
+      "buy_signals": 0,
+      "sell_signals": 0,
+      "vol_rev_signals": 0
+    },
+    "588170": {
+      "trades": 0,
+      "completed": 0,
+      "incomplete": 0,
+      "pnl": 0.0,
+      "buy_signals": 0,
+      "sell_signals": 0,
+      "vol_rev_signals": 0
+    },
+    "600089": {
+      "trades": 1,
+      "completed": 1,
+      "incomplete": 0,
+      "pnl": -17.021999999999153,
+      "buy_signals": 1,
+      "sell_signals": 1,
+      "vol_rev_signals": 0
+    },
+    "000988": {
+      "trades": 0,
+      "completed": 0,
+      "incomplete": 0,
+      "pnl": 0.0,
+      "buy_signals": 0,
+      "sell_signals": 0,
+      "vol_rev_signals": 0
+    },
+    "300666": {
+      "trades": 0,
+      "completed": 0,
+      "incomplete": 0,
+      "pnl": 0.0,
+      "buy_signals": 0,
+      "sell_signals": 0,
+      "vol_rev_signals": 0
+    }
+  },
+  "trade_log": [
+    {
+      "date": "2026-07-06",
+      "code": "600089",
+      "action": "SELL",
+      "time": "13:46:00",
+      "price": 21.42,
+      "score": 50,
+      "buy_price": 21.37,
+      "pnl": -17.021999999999153,
+      "qty": 1200
+    }
+  ],
+  "signal_log": [
+    {
+      "date": "2026-07-06",
+      "code": "002261",
+      "time": "10:02:00",
+      "action": "SELL_HIGH",
+      "price": 29.32,
+      "score": 69,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "002261",
+      "time": "10:03:00",
+      "action": "SELL_HIGH",
+      "price": 29.36,
+      "score": 69,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "002261",
+      "time": "10:04:00",
+      "action": "SELL_HIGH",
+      "price": 29.29,
+      "score": 74,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "002261",
+      "time": "10:05:00",
+      "action": "SELL_HIGH",
+      "price": 29.4,
+      "score": 84,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "002261",
+      "time": "10:06:00",
+      "action": "SELL_HIGH",
+      "price": 29.52,
+      "score": 99,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "002261",
+      "time": "10:07:00",
+      "action": "SELL_HIGH",
+      "price": 29.52,
+      "score": 99,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "002261",
+      "time": "10:08:00",
+      "action": "SELL_HIGH",
+      "price": 29.56,
+      "score": 99,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "002261",
+      "time": "10:09:00",
+      "action": "SELL_HIGH",
+      "price": 29.48,
+      "score": 74,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "002261",
+      "time": "10:10:00",
+      "action": "SELL_HIGH",
+      "price": 29.47,
+      "score": 89,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "002261",
+      "time": "10:11:00",
+      "action": "SELL_HIGH",
+      "price": 29.5,
+      "score": 89,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "002261",
+      "time": "10:12:00",
+      "action": "SELL_HIGH",
+      "price": 29.47,
+      "score": 74,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "002261",
+      "time": "10:13:00",
+      "action": "SELL_HIGH",
+      "price": 29.35,
+      "score": 60,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "002261",
+      "time": "10:14:00",
+      "action": "SELL_HIGH",
+      "price": 29.43,
+      "score": 45,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "002261",
+      "time": "10:15:00",
+      "action": "SELL_HIGH",
+      "price": 29.44,
+      "score": 45,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "002261",
+      "time": "10:16:00",
+      "action": "SELL_HIGH",
+      "price": 29.39,
+      "score": 64,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "002261",
+      "time": "10:17:00",
+      "action": "SELL_HIGH",
+      "price": 29.37,
+      "score": 64,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "002261",
+      "time": "10:18:00",
+      "action": "SELL_HIGH",
+      "price": 29.33,
+      "score": 64,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "002261",
+      "time": "10:19:00",
+      "action": "SELL_HIGH",
+      "price": 29.3,
+      "score": 64,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "002261",
+      "time": "10:20:00",
+      "action": "SELL_HIGH",
+      "price": 29.21,
+      "score": 49,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "002261",
+      "time": "10:21:00",
+      "action": "SELL_HIGH",
+      "price": 29.23,
+      "score": 49,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "002261",
+      "time": "10:43:00",
+      "action": "SELL_HIGH",
+      "price": 29.19,
+      "score": 59,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "002261",
+      "time": "11:03:00",
+      "action": "SELL_HIGH",
+      "price": 29.75,
+      "score": 65,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "002261",
+      "time": "11:04:00",
+      "action": "SELL_HIGH",
+      "price": 29.87,
+      "score": 65,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "002261",
+      "time": "11:05:00",
+      "action": "SELL_HIGH",
+      "price": 29.72,
+      "score": 72,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "002261",
+      "time": "11:06:00",
+      "action": "SELL_HIGH",
+      "price": 29.72,
+      "score": 82,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "002261",
+      "time": "11:07:00",
+      "action": "SELL_HIGH",
+      "price": 29.67,
+      "score": 70,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "002261",
+      "time": "11:08:00",
+      "action": "SELL_HIGH",
+      "price": 29.94,
+      "score": 99,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "002261",
+      "time": "11:09:00",
+      "action": "SELL_HIGH",
+      "price": 29.88,
+      "score": 83,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "002261",
+      "time": "11:10:00",
+      "action": "SELL_HIGH",
+      "price": 29.92,
+      "score": 91,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "002261",
+      "time": "11:11:00",
+      "action": "SELL_HIGH",
+      "price": 29.85,
+      "score": 71,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "002261",
+      "time": "11:12:00",
+      "action": "SELL_HIGH",
+      "price": 30.06,
+      "score": 65,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "002261",
+      "time": "11:13:00",
+      "action": "SELL_HIGH",
+      "price": 30.03,
+      "score": 94,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "002261",
+      "time": "11:14:00",
+      "action": "SELL_HIGH",
+      "price": 30.06,
+      "score": 79,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "002261",
+      "time": "11:15:00",
+      "action": "SELL_HIGH",
+      "price": 30.01,
+      "score": 94,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "002261",
+      "time": "11:16:00",
+      "action": "SELL_HIGH",
+      "price": 29.99,
+      "score": 101,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "002261",
+      "time": "11:17:00",
+      "action": "SELL_HIGH",
+      "price": 29.99,
+      "score": 101,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "002261",
+      "time": "11:18:00",
+      "action": "SELL_HIGH",
+      "price": 29.97,
+      "score": 86,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "002261",
+      "time": "11:19:00",
+      "action": "SELL_HIGH",
+      "price": 29.86,
+      "score": 72,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "002261",
+      "time": "11:20:00",
+      "action": "SELL_HIGH",
+      "price": 29.88,
+      "score": 72,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "002261",
+      "time": "11:21:00",
+      "action": "SELL_HIGH",
+      "price": 29.99,
+      "score": 61,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "002261",
+      "time": "11:22:00",
+      "action": "SELL_HIGH",
+      "price": 30.09,
+      "score": 81,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "002261",
+      "time": "11:23:00",
+      "action": "SELL_HIGH",
+      "price": 30.03,
+      "score": 69,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "002261",
+      "time": "11:24:00",
+      "action": "SELL_HIGH",
+      "price": 30.0,
+      "score": 61,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "002261",
+      "time": "11:25:00",
+      "action": "SELL_HIGH",
+      "price": 30.01,
+      "score": 91,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "002261",
+      "time": "11:26:00",
+      "action": "SELL_HIGH",
+      "price": 30.0,
+      "score": 91,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "002261",
+      "time": "11:27:00",
+      "action": "SELL_HIGH",
+      "price": 29.98,
+      "score": 76,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "002261",
+      "time": "11:28:00",
+      "action": "SELL_HIGH",
+      "price": 30.06,
+      "score": 69,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "002261",
+      "time": "11:29:00",
+      "action": "SELL_HIGH",
+      "price": 30.29,
+      "score": 84,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "002261",
+      "time": "11:30:00",
+      "action": "SELL_HIGH",
+      "price": 30.24,
+      "score": 84,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "002261",
+      "time": "13:00:00",
+      "action": "SELL_HIGH",
+      "price": 30.24,
+      "score": 84,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "002261",
+      "time": "13:01:00",
+      "action": "SELL_HIGH",
+      "price": 30.13,
+      "score": 64,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "002261",
+      "time": "13:02:00",
+      "action": "SELL_HIGH",
+      "price": 30.02,
+      "score": 60,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "002261",
+      "time": "13:03:00",
+      "action": "SELL_HIGH",
+      "price": 29.99,
+      "score": 60,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "002261",
+      "time": "13:04:00",
+      "action": "SELL_HIGH",
+      "price": 29.93,
+      "score": 64,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "002261",
+      "time": "13:05:00",
+      "action": "SELL_HIGH",
+      "price": 30.0,
+      "score": 64,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "002261",
+      "time": "13:06:00",
+      "action": "SELL_HIGH",
+      "price": 30.05,
+      "score": 49,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "002261",
+      "time": "13:07:00",
+      "action": "SELL_HIGH",
+      "price": 30.03,
+      "score": 49,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "002261",
+      "time": "13:08:00",
+      "action": "SELL_HIGH",
+      "price": 29.98,
+      "score": 64,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "002261",
+      "time": "13:09:00",
+      "action": "SELL_HIGH",
+      "price": 30.12,
+      "score": 49,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "002261",
+      "time": "13:10:00",
+      "action": "SELL_HIGH",
+      "price": 30.04,
+      "score": 64,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "002261",
+      "time": "13:11:00",
+      "action": "SELL_HIGH",
+      "price": 30.07,
+      "score": 45,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "002261",
+      "time": "13:12:00",
+      "action": "SELL_HIGH",
+      "price": 30.2,
+      "score": 49,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "002261",
+      "time": "13:13:00",
+      "action": "SELL_HIGH",
+      "price": 30.2,
+      "score": 49,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "002261",
+      "time": "13:14:00",
+      "action": "SELL_HIGH",
+      "price": 30.14,
+      "score": 65,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "002261",
+      "time": "13:15:00",
+      "action": "SELL_HIGH",
+      "price": 30.36,
+      "score": 65,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "002261",
+      "time": "13:16:00",
+      "action": "SELL_HIGH",
+      "price": 30.3,
+      "score": 69,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "002261",
+      "time": "13:17:00",
+      "action": "SELL_HIGH",
+      "price": 30.31,
+      "score": 69,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "002261",
+      "time": "13:18:00",
+      "action": "SELL_HIGH",
+      "price": 30.22,
+      "score": 86,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "002261",
+      "time": "13:19:00",
+      "action": "SELL_HIGH",
+      "price": 30.15,
+      "score": 64,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "002261",
+      "time": "13:20:00",
+      "action": "SELL_HIGH",
+      "price": 30.09,
+      "score": 64,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "002261",
+      "time": "13:21:00",
+      "action": "SELL_HIGH",
+      "price": 30.02,
+      "score": 64,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "002261",
+      "time": "13:22:00",
+      "action": "SELL_HIGH",
+      "price": 30.13,
+      "score": 49,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "002261",
+      "time": "13:23:00",
+      "action": "SELL_HIGH",
+      "price": 30.12,
+      "score": 49,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "002261",
+      "time": "13:24:00",
+      "action": "SELL_HIGH",
+      "price": 30.04,
+      "score": 64,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "002261",
+      "time": "13:25:00",
+      "action": "SELL_HIGH",
+      "price": 30.08,
+      "score": 49,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "002261",
+      "time": "13:26:00",
+      "action": "SELL_HIGH",
+      "price": 30.15,
+      "score": 49,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "002261",
+      "time": "13:27:00",
+      "action": "SELL_HIGH",
+      "price": 30.26,
+      "score": 76,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "002261",
+      "time": "13:28:00",
+      "action": "SELL_HIGH",
+      "price": 30.19,
+      "score": 49,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "002261",
+      "time": "13:29:00",
+      "action": "SELL_HIGH",
+      "price": 30.18,
+      "score": 49,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "002261",
+      "time": "13:30:00",
+      "action": "SELL_HIGH",
+      "price": 30.1,
+      "score": 64,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "002261",
+      "time": "13:31:00",
+      "action": "SELL_HIGH",
+      "price": 30.06,
+      "score": 64,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "002261",
+      "time": "13:32:00",
+      "action": "SELL_HIGH",
+      "price": 30.1,
+      "score": 64,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "002261",
+      "time": "13:33:00",
+      "action": "SELL_HIGH",
+      "price": 30.09,
+      "score": 64,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "002261",
+      "time": "13:34:00",
+      "action": "SELL_HIGH",
+      "price": 30.02,
+      "score": 64,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "002261",
+      "time": "13:35:00",
+      "action": "SELL_HIGH",
+      "price": 30.02,
+      "score": 64,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "002261",
+      "time": "13:36:00",
+      "action": "SELL_HIGH",
+      "price": 30.03,
+      "score": 64,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "002261",
+      "time": "13:37:00",
+      "action": "SELL_HIGH",
+      "price": 30.08,
+      "score": 45,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "002261",
+      "time": "13:38:00",
+      "action": "SELL_HIGH",
+      "price": 30.05,
+      "score": 49,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "002261",
+      "time": "13:39:00",
+      "action": "SELL_HIGH",
+      "price": 30.08,
+      "score": 45,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "002261",
+      "time": "13:40:00",
+      "action": "SELL_HIGH",
+      "price": 30.15,
+      "score": 64,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "002261",
+      "time": "13:41:00",
+      "action": "SELL_HIGH",
+      "price": 30.1,
+      "score": 45,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "002261",
+      "time": "13:42:00",
+      "action": "SELL_HIGH",
+      "price": 30.13,
+      "score": 45,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "002261",
+      "time": "13:43:00",
+      "action": "SELL_HIGH",
+      "price": 30.17,
+      "score": 49,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "002261",
+      "time": "13:44:00",
+      "action": "SELL_HIGH",
+      "price": 30.19,
+      "score": 64,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "002261",
+      "time": "13:45:00",
+      "action": "SELL_HIGH",
+      "price": 30.19,
+      "score": 49,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "002261",
+      "time": "13:46:00",
+      "action": "SELL_HIGH",
+      "price": 30.18,
+      "score": 59,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "002261",
+      "time": "13:47:00",
+      "action": "SELL_HIGH",
+      "price": 30.2,
+      "score": 72,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "002261",
+      "time": "13:48:00",
+      "action": "SELL_HIGH",
+      "price": 30.27,
+      "score": 96,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "002261",
+      "time": "13:49:00",
+      "action": "SELL_HIGH",
+      "price": 30.29,
+      "score": 96,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "002261",
+      "time": "13:50:00",
+      "action": "SELL_HIGH",
+      "price": 30.28,
+      "score": 106,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "002261",
+      "time": "13:51:00",
+      "action": "SELL_HIGH",
+      "price": 30.23,
+      "score": 90,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "002261",
+      "time": "13:52:00",
+      "action": "SELL_HIGH",
+      "price": 30.28,
+      "score": 98,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "002261",
+      "time": "13:53:00",
+      "action": "SELL_HIGH",
+      "price": 30.29,
+      "score": 79,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "002261",
+      "time": "13:54:00",
+      "action": "SELL_HIGH",
+      "price": 30.29,
+      "score": 79,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "002261",
+      "time": "13:55:00",
+      "action": "SELL_HIGH",
+      "price": 30.28,
+      "score": 75,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "002261",
+      "time": "13:56:00",
+      "action": "SELL_HIGH",
+      "price": 30.23,
+      "score": 90,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "002261",
+      "time": "13:57:00",
+      "action": "SELL_HIGH",
+      "price": 30.26,
+      "score": 75,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "002261",
+      "time": "13:58:00",
+      "action": "SELL_HIGH",
+      "price": 30.25,
+      "score": 80,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "002261",
+      "time": "13:59:00",
+      "action": "SELL_HIGH",
+      "price": 30.23,
+      "score": 80,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "002261",
+      "time": "14:00:00",
+      "action": "SELL_HIGH",
+      "price": 30.17,
+      "score": 83,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "002261",
+      "time": "14:01:00",
+      "action": "SELL_HIGH",
+      "price": 30.12,
+      "score": 79,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "002261",
+      "time": "14:02:00",
+      "action": "SELL_HIGH",
+      "price": 30.12,
+      "score": 79,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "002261",
+      "time": "14:06:00",
+      "action": "SELL_HIGH",
+      "price": 30.2,
+      "score": 64,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "002261",
+      "time": "14:07:00",
+      "action": "SELL_HIGH",
+      "price": 30.18,
+      "score": 64,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "002261",
+      "time": "14:08:00",
+      "action": "SELL_HIGH",
+      "price": 30.15,
+      "score": 83,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "002261",
+      "time": "14:09:00",
+      "action": "SELL_HIGH",
+      "price": 30.14,
+      "score": 83,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "002261",
+      "time": "14:10:00",
+      "action": "SELL_HIGH",
+      "price": 30.13,
+      "score": 64,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "002261",
+      "time": "14:11:00",
+      "action": "SELL_HIGH",
+      "price": 30.14,
+      "score": 79,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "002261",
+      "time": "14:26:00",
+      "action": "SELL_HIGH",
+      "price": 30.07,
+      "score": 45,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "002261",
+      "time": "14:27:00",
+      "action": "SELL_HIGH",
+      "price": 30.02,
+      "score": 70,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "002261",
+      "time": "14:28:00",
+      "action": "SELL_HIGH",
+      "price": 30.01,
+      "score": 74,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "002261",
+      "time": "14:29:00",
+      "action": "SELL_HIGH",
+      "price": 30.01,
+      "score": 70,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "002261",
+      "time": "14:30:00",
+      "action": "SELL_HIGH",
+      "price": 30.02,
+      "score": 60,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "002261",
+      "time": "14:31:00",
+      "action": "SELL_HIGH",
+      "price": 30.06,
+      "score": 45,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "002261",
+      "time": "14:32:00",
+      "action": "SELL_HIGH",
+      "price": 30.1,
+      "score": 57,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "002261",
+      "time": "14:33:00",
+      "action": "SELL_HIGH",
+      "price": 30.12,
+      "score": 80,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "002261",
+      "time": "14:34:00",
+      "action": "SELL_HIGH",
+      "price": 30.08,
+      "score": 55,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "002261",
+      "time": "14:35:00",
+      "action": "SELL_HIGH",
+      "price": 30.09,
+      "score": 55,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "002261",
+      "time": "14:36:00",
+      "action": "SELL_HIGH",
+      "price": 30.09,
+      "score": 55,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "002261",
+      "time": "14:37:00",
+      "action": "SELL_HIGH",
+      "price": 30.08,
+      "score": 74,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "002261",
+      "time": "14:38:00",
+      "action": "SELL_HIGH",
+      "price": 30.08,
+      "score": 59,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "002261",
+      "time": "14:39:00",
+      "action": "SELL_HIGH",
+      "price": 30.07,
+      "score": 59,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "002261",
+      "time": "14:40:00",
+      "action": "SELL_HIGH",
+      "price": 30.05,
+      "score": 74,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "002261",
+      "time": "14:41:00",
+      "action": "SELL_HIGH",
+      "price": 30.02,
+      "score": 74,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "002261",
+      "time": "14:42:00",
+      "action": "SELL_HIGH",
+      "price": 30.01,
+      "score": 64,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "002261",
+      "time": "14:43:00",
+      "action": "SELL_HIGH",
+      "price": 30.01,
+      "score": 64,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "002261",
+      "time": "14:44:00",
+      "action": "SELL_HIGH",
+      "price": 30.01,
+      "score": 64,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "002261",
+      "time": "14:53:00",
+      "action": "SELL_HIGH",
+      "price": 30.04,
+      "score": 53,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "002261",
+      "time": "14:54:00",
+      "action": "SELL_HIGH",
+      "price": 30.05,
+      "score": 45,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "002261",
+      "time": "14:56:00",
+      "action": "SELL_HIGH",
+      "price": 30.05,
+      "score": 45,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "002261",
+      "time": "14:57:00",
+      "action": "SELL_HIGH",
+      "price": 30.09,
+      "score": 65,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "002261",
+      "time": "14:58:00",
+      "action": "SELL_HIGH",
+      "price": 30.1,
+      "score": 65,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "600089",
+      "time": "09:45:00",
+      "action": "SELL_HIGH",
+      "price": 21.85,
+      "score": 45,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "600089",
+      "time": "10:07:00",
+      "action": "SELL_HIGH",
+      "price": 21.75,
+      "score": 60,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "600089",
+      "time": "10:10:00",
+      "action": "SELL_HIGH",
+      "price": 21.77,
+      "score": 45,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "600089",
+      "time": "10:11:00",
+      "action": "SELL_HIGH",
+      "price": 21.74,
+      "score": 74,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "600089",
+      "time": "10:12:00",
+      "action": "SELL_HIGH",
+      "price": 21.76,
+      "score": 55,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "600089",
+      "time": "10:13:00",
+      "action": "SELL_HIGH",
+      "price": 21.75,
+      "score": 59,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "600089",
+      "time": "13:11:00",
+      "action": "BUY_LOW",
+      "price": 21.37,
+      "score": 75,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "600089",
+      "time": "13:21:00",
+      "action": "BUY_LOW",
+      "price": 21.36,
+      "score": 75,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "600089",
+      "time": "13:24:00",
+      "action": "BUY_LOW",
+      "price": 21.35,
+      "score": 83,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "600089",
+      "time": "13:28:00",
+      "action": "BUY_LOW",
+      "price": 21.35,
+      "score": 101,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "600089",
+      "time": "13:32:00",
+      "action": "BUY_LOW",
+      "price": 21.34,
+      "score": 78,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "600089",
+      "time": "13:34:00",
+      "action": "BUY_LOW",
+      "price": 21.34,
+      "score": 80,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "600089",
+      "time": "13:35:00",
+      "action": "BUY_LOW",
+      "price": 21.34,
+      "score": 92,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "600089",
+      "time": "13:46:00",
+      "action": "SELL_HIGH",
+      "price": 21.42,
+      "score": 50,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "600089",
+      "time": "13:49:00",
+      "action": "SELL_HIGH",
+      "price": 21.42,
+      "score": 52,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "600089",
+      "time": "13:51:00",
+      "action": "SELL_HIGH",
+      "price": 21.45,
+      "score": 57,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "600089",
+      "time": "13:52:00",
+      "action": "SELL_HIGH",
+      "price": 21.47,
+      "score": 65,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "600089",
+      "time": "13:53:00",
+      "action": "SELL_HIGH",
+      "price": 21.48,
+      "score": 65,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "600089",
+      "time": "13:54:00",
+      "action": "SELL_HIGH",
+      "price": 21.48,
+      "score": 52,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "600089",
+      "time": "13:55:00",
+      "action": "SELL_HIGH",
+      "price": 21.47,
+      "score": 59,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "600089",
+      "time": "14:00:00",
+      "action": "SELL_HIGH",
+      "price": 21.49,
+      "score": 59,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "600089",
+      "time": "14:01:00",
+      "action": "SELL_HIGH",
+      "price": 21.45,
+      "score": 74,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "600089",
+      "time": "14:02:00",
+      "action": "SELL_HIGH",
+      "price": 21.45,
+      "score": 64,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "600089",
+      "time": "14:03:00",
+      "action": "SELL_HIGH",
+      "price": 21.45,
+      "score": 64,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "600089",
+      "time": "14:05:00",
+      "action": "SELL_HIGH",
+      "price": 21.45,
+      "score": 49,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "600089",
+      "time": "14:09:00",
+      "action": "SELL_HIGH",
+      "price": 21.45,
+      "score": 49,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "600089",
+      "time": "14:10:00",
+      "action": "SELL_HIGH",
+      "price": 21.45,
+      "score": 49,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "000988",
+      "time": "09:46:00",
+      "action": "SELL_HIGH",
+      "price": 153.47,
+      "score": 45,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "000988",
+      "time": "09:47:00",
+      "action": "SELL_HIGH",
+      "price": 153.76,
+      "score": 45,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "000988",
+      "time": "09:48:00",
+      "action": "SELL_HIGH",
+      "price": 153.21,
+      "score": 60,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "000988",
+      "time": "09:49:00",
+      "action": "SELL_HIGH",
+      "price": 153.58,
+      "score": 60,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "000988",
+      "time": "09:50:00",
+      "action": "SELL_HIGH",
+      "price": 154.37,
+      "score": 72,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "000988",
+      "time": "09:51:00",
+      "action": "SELL_HIGH",
+      "price": 153.86,
+      "score": 55,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "000988",
+      "time": "09:52:00",
+      "action": "SELL_HIGH",
+      "price": 153.48,
+      "score": 59,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "000988",
+      "time": "09:53:00",
+      "action": "SELL_HIGH",
+      "price": 153.38,
+      "score": 59,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "000988",
+      "time": "09:54:00",
+      "action": "SELL_HIGH",
+      "price": 154.21,
+      "score": 45,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "000988",
+      "time": "09:55:00",
+      "action": "SELL_HIGH",
+      "price": 155.01,
+      "score": 57,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "000988",
+      "time": "09:56:00",
+      "action": "SELL_HIGH",
+      "price": 154.08,
+      "score": 55,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "000988",
+      "time": "09:57:00",
+      "action": "SELL_HIGH",
+      "price": 153.6,
+      "score": 59,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "000988",
+      "time": "09:58:00",
+      "action": "SELL_HIGH",
+      "price": 153.46,
+      "score": 59,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "000988",
+      "time": "10:00:00",
+      "action": "SELL_HIGH",
+      "price": 152.5,
+      "score": 49,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "000988",
+      "time": "10:01:00",
+      "action": "SELL_HIGH",
+      "price": 152.22,
+      "score": 49,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "000988",
+      "time": "11:03:00",
+      "action": "SELL_HIGH",
+      "price": 147.94,
+      "score": 50,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "000988",
+      "time": "11:04:00",
+      "action": "SELL_HIGH",
+      "price": 148.54,
+      "score": 50,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "000988",
+      "time": "11:05:00",
+      "action": "SELL_HIGH",
+      "price": 148.78,
+      "score": 50,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "000988",
+      "time": "11:06:00",
+      "action": "SELL_HIGH",
+      "price": 148.69,
+      "score": 60,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "000988",
+      "time": "11:07:00",
+      "action": "SELL_HIGH",
+      "price": 149.0,
+      "score": 50,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "000988",
+      "time": "11:08:00",
+      "action": "SELL_HIGH",
+      "price": 149.36,
+      "score": 65,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "000988",
+      "time": "11:11:00",
+      "action": "SELL_HIGH",
+      "price": 149.38,
+      "score": 52,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "000988",
+      "time": "11:12:00",
+      "action": "SELL_HIGH",
+      "price": 149.54,
+      "score": 52,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "000988",
+      "time": "11:13:00",
+      "action": "SELL_HIGH",
+      "price": 149.68,
+      "score": 52,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "000988",
+      "time": "11:16:00",
+      "action": "SELL_HIGH",
+      "price": 149.3,
+      "score": 55,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "000988",
+      "time": "11:22:00",
+      "action": "SELL_HIGH",
+      "price": 150.4,
+      "score": 57,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "000988",
+      "time": "11:23:00",
+      "action": "SELL_HIGH",
+      "price": 150.3,
+      "score": 57,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "000988",
+      "time": "11:25:00",
+      "action": "SELL_HIGH",
+      "price": 150.54,
+      "score": 65,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "000988",
+      "time": "11:26:00",
+      "action": "SELL_HIGH",
+      "price": 150.63,
+      "score": 65,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "000988",
+      "time": "11:28:00",
+      "action": "SELL_HIGH",
+      "price": 150.3,
+      "score": 55,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "000988",
+      "time": "11:29:00",
+      "action": "SELL_HIGH",
+      "price": 150.38,
+      "score": 55,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "000988",
+      "time": "11:30:00",
+      "action": "SELL_HIGH",
+      "price": 150.94,
+      "score": 57,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "000988",
+      "time": "13:00:00",
+      "action": "SELL_HIGH",
+      "price": 150.94,
+      "score": 57,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "000988",
+      "time": "13:01:00",
+      "action": "SELL_HIGH",
+      "price": 151.04,
+      "score": 57,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "000988",
+      "time": "13:02:00",
+      "action": "SELL_HIGH",
+      "price": 151.25,
+      "score": 80,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "000988",
+      "time": "13:03:00",
+      "action": "SELL_HIGH",
+      "price": 151.15,
+      "score": 55,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "000988",
+      "time": "13:04:00",
+      "action": "SELL_HIGH",
+      "price": 151.03,
+      "score": 85,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "000988",
+      "time": "13:05:00",
+      "action": "SELL_HIGH",
+      "price": 150.98,
+      "score": 60,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "000988",
+      "time": "13:06:00",
+      "action": "SELL_HIGH",
+      "price": 151.26,
+      "score": 45,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "000988",
+      "time": "13:07:00",
+      "action": "SELL_HIGH",
+      "price": 151.3,
+      "score": 45,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "000988",
+      "time": "13:08:00",
+      "action": "SELL_HIGH",
+      "price": 151.01,
+      "score": 60,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "000988",
+      "time": "13:09:00",
+      "action": "SELL_HIGH",
+      "price": 150.88,
+      "score": 60,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "000988",
+      "time": "13:10:00",
+      "action": "SELL_HIGH",
+      "price": 150.1,
+      "score": 49,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "000988",
+      "time": "13:11:00",
+      "action": "SELL_HIGH",
+      "price": 149.83,
+      "score": 49,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "000988",
+      "time": "13:12:00",
+      "action": "SELL_HIGH",
+      "price": 150.99,
+      "score": 45,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "000988",
+      "time": "13:13:00",
+      "action": "SELL_HIGH",
+      "price": 150.99,
+      "score": 45,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "000988",
+      "time": "13:16:00",
+      "action": "SELL_HIGH",
+      "price": 150.22,
+      "score": 49,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "000988",
+      "time": "13:17:00",
+      "action": "SELL_HIGH",
+      "price": 150.35,
+      "score": 49,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "000988",
+      "time": "13:18:00",
+      "action": "SELL_HIGH",
+      "price": 150.82,
+      "score": 45,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "000988",
+      "time": "13:20:00",
+      "action": "SELL_HIGH",
+      "price": 150.2,
+      "score": 49,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "000988",
+      "time": "13:21:00",
+      "action": "SELL_HIGH",
+      "price": 149.91,
+      "score": 49,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "000988",
+      "time": "13:22:00",
+      "action": "SELL_HIGH",
+      "price": 150.09,
+      "score": 49,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "000988",
+      "time": "13:23:00",
+      "action": "SELL_HIGH",
+      "price": 149.9,
+      "score": 49,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "000988",
+      "time": "13:24:00",
+      "action": "SELL_HIGH",
+      "price": 149.8,
+      "score": 49,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "000988",
+      "time": "13:25:00",
+      "action": "SELL_HIGH",
+      "price": 149.65,
+      "score": 49,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "000988",
+      "time": "13:28:00",
+      "action": "SELL_HIGH",
+      "price": 151.0,
+      "score": 57,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "000988",
+      "time": "13:31:00",
+      "action": "SELL_HIGH",
+      "price": 150.06,
+      "score": 59,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "000988",
+      "time": "13:32:00",
+      "action": "SELL_HIGH",
+      "price": 149.91,
+      "score": 49,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "000988",
+      "time": "13:34:00",
+      "action": "SELL_HIGH",
+      "price": 149.89,
+      "score": 49,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "000988",
+      "time": "13:35:00",
+      "action": "SELL_HIGH",
+      "price": 149.86,
+      "score": 49,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "000988",
+      "time": "13:40:00",
+      "action": "SELL_HIGH",
+      "price": 150.5,
+      "score": 45,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "000988",
+      "time": "13:41:00",
+      "action": "SELL_HIGH",
+      "price": 150.59,
+      "score": 45,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "000988",
+      "time": "13:42:00",
+      "action": "SELL_HIGH",
+      "price": 150.96,
+      "score": 65,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "000988",
+      "time": "13:44:00",
+      "action": "SELL_HIGH",
+      "price": 151.24,
+      "score": 65,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "000988",
+      "time": "13:45:00",
+      "action": "SELL_HIGH",
+      "price": 151.35,
+      "score": 65,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "000988",
+      "time": "13:46:00",
+      "action": "SELL_HIGH",
+      "price": 151.99,
+      "score": 80,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "000988",
+      "time": "13:47:00",
+      "action": "SELL_HIGH",
+      "price": 151.99,
+      "score": 80,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "000988",
+      "time": "13:48:00",
+      "action": "SELL_HIGH",
+      "price": 151.74,
+      "score": 67,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "000988",
+      "time": "13:49:00",
+      "action": "SELL_HIGH",
+      "price": 152.17,
+      "score": 80,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "000988",
+      "time": "13:50:00",
+      "action": "SELL_HIGH",
+      "price": 152.03,
+      "score": 67,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "000988",
+      "time": "13:51:00",
+      "action": "SELL_HIGH",
+      "price": 151.96,
+      "score": 55,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "000988",
+      "time": "13:52:00",
+      "action": "SELL_HIGH",
+      "price": 151.78,
+      "score": 70,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "000988",
+      "time": "13:53:00",
+      "action": "SELL_HIGH",
+      "price": 151.64,
+      "score": 70,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "000988",
+      "time": "13:54:00",
+      "action": "SELL_HIGH",
+      "price": 152.09,
+      "score": 55,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "000988",
+      "time": "13:55:00",
+      "action": "SELL_HIGH",
+      "price": 152.1,
+      "score": 55,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "000988",
+      "time": "13:56:00",
+      "action": "SELL_HIGH",
+      "price": 151.96,
+      "score": 55,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "000988",
+      "time": "13:57:00",
+      "action": "SELL_HIGH",
+      "price": 151.67,
+      "score": 60,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "000988",
+      "time": "13:58:00",
+      "action": "SELL_HIGH",
+      "price": 151.98,
+      "score": 45,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "000988",
+      "time": "13:59:00",
+      "action": "SELL_HIGH",
+      "price": 151.97,
+      "score": 45,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "000988",
+      "time": "14:00:00",
+      "action": "SELL_HIGH",
+      "price": 151.97,
+      "score": 60,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "000988",
+      "time": "14:01:00",
+      "action": "SELL_HIGH",
+      "price": 151.76,
+      "score": 79,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "000988",
+      "time": "14:02:00",
+      "action": "SELL_HIGH",
+      "price": 151.68,
+      "score": 79,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "000988",
+      "time": "14:03:00",
+      "action": "SELL_HIGH",
+      "price": 151.55,
+      "score": 79,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "000988",
+      "time": "14:04:00",
+      "action": "SELL_HIGH",
+      "price": 151.48,
+      "score": 79,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "000988",
+      "time": "14:05:00",
+      "action": "SELL_HIGH",
+      "price": 151.43,
+      "score": 79,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "000988",
+      "time": "14:06:00",
+      "action": "SELL_HIGH",
+      "price": 151.53,
+      "score": 64,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "000988",
+      "time": "14:07:00",
+      "action": "SELL_HIGH",
+      "price": 151.6,
+      "score": 64,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "000988",
+      "time": "14:08:00",
+      "action": "SELL_HIGH",
+      "price": 151.1,
+      "score": 64,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "000988",
+      "time": "14:09:00",
+      "action": "SELL_HIGH",
+      "price": 150.81,
+      "score": 64,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "000988",
+      "time": "14:10:00",
+      "action": "SELL_HIGH",
+      "price": 150.52,
+      "score": 64,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "000988",
+      "time": "14:15:00",
+      "action": "SELL_HIGH",
+      "price": 150.66,
+      "score": 64,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "000988",
+      "time": "14:16:00",
+      "action": "SELL_HIGH",
+      "price": 150.41,
+      "score": 64,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "000988",
+      "time": "14:18:00",
+      "action": "SELL_HIGH",
+      "price": 150.41,
+      "score": 64,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "000988",
+      "time": "14:19:00",
+      "action": "SELL_HIGH",
+      "price": 150.35,
+      "score": 64,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "000988",
+      "time": "14:32:00",
+      "action": "SELL_HIGH",
+      "price": 150.46,
+      "score": 60,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "000988",
+      "time": "14:33:00",
+      "action": "SELL_HIGH",
+      "price": 150.17,
+      "score": 55,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "300666",
+      "time": "09:47:00",
+      "action": "SELL_HIGH",
+      "price": 339.0,
+      "score": 60,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "300666",
+      "time": "09:48:00",
+      "action": "SELL_HIGH",
+      "price": 338.96,
+      "score": 45,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "300666",
+      "time": "09:49:00",
+      "action": "SELL_HIGH",
+      "price": 341.0,
+      "score": 72,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "300666",
+      "time": "09:50:00",
+      "action": "SELL_HIGH",
+      "price": 340.69,
+      "score": 72,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "300666",
+      "time": "09:51:00",
+      "action": "SELL_HIGH",
+      "price": 338.22,
+      "score": 75,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "300666",
+      "time": "09:52:00",
+      "action": "SELL_HIGH",
+      "price": 336.98,
+      "score": 75,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "300666",
+      "time": "09:53:00",
+      "action": "SELL_HIGH",
+      "price": 338.28,
+      "score": 75,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "300666",
+      "time": "09:54:00",
+      "action": "SELL_HIGH",
+      "price": 339.96,
+      "score": 65,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "300666",
+      "time": "09:55:00",
+      "action": "SELL_HIGH",
+      "price": 340.21,
+      "score": 49,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "300666",
+      "time": "09:56:00",
+      "action": "SELL_HIGH",
+      "price": 338.15,
+      "score": 75,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "300666",
+      "time": "09:57:00",
+      "action": "SELL_HIGH",
+      "price": 336.17,
+      "score": 64,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "300666",
+      "time": "09:58:00",
+      "action": "SELL_HIGH",
+      "price": 337.0,
+      "score": 69,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "300666",
+      "time": "09:59:00",
+      "action": "SELL_HIGH",
+      "price": 334.84,
+      "score": 54,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "300666",
+      "time": "10:00:00",
+      "action": "SELL_HIGH",
+      "price": 334.9,
+      "score": 69,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "300666",
+      "time": "10:01:00",
+      "action": "SELL_HIGH",
+      "price": 334.48,
+      "score": 49,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "300666",
+      "time": "11:08:00",
+      "action": "SELL_HIGH",
+      "price": 322.0,
+      "score": 60,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "300666",
+      "time": "11:09:00",
+      "action": "SELL_HIGH",
+      "price": 321.54,
+      "score": 55,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "300666",
+      "time": "11:10:00",
+      "action": "SELL_HIGH",
+      "price": 323.8,
+      "score": 57,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "300666",
+      "time": "11:11:00",
+      "action": "SELL_HIGH",
+      "price": 324.3,
+      "score": 67,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "300666",
+      "time": "11:12:00",
+      "action": "SELL_HIGH",
+      "price": 326.46,
+      "score": 65,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "300666",
+      "time": "11:13:00",
+      "action": "SELL_HIGH",
+      "price": 325.57,
+      "score": 67,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "300666",
+      "time": "11:14:00",
+      "action": "SELL_HIGH",
+      "price": 326.89,
+      "score": 82,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "300666",
+      "time": "11:15:00",
+      "action": "SELL_HIGH",
+      "price": 325.98,
+      "score": 55,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "300666",
+      "time": "11:16:00",
+      "action": "SELL_HIGH",
+      "price": 324.93,
+      "score": 55,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "300666",
+      "time": "11:17:00",
+      "action": "SELL_HIGH",
+      "price": 323.14,
+      "score": 55,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "300666",
+      "time": "11:18:00",
+      "action": "SELL_HIGH",
+      "price": 325.7,
+      "score": 55,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "300666",
+      "time": "11:19:00",
+      "action": "SELL_HIGH",
+      "price": 325.98,
+      "score": 55,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "300666",
+      "time": "11:20:00",
+      "action": "SELL_HIGH",
+      "price": 326.06,
+      "score": 55,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "300666",
+      "time": "11:21:00",
+      "action": "SELL_HIGH",
+      "price": 327.68,
+      "score": 57,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "300666",
+      "time": "11:22:00",
+      "action": "SELL_HIGH",
+      "price": 326.99,
+      "score": 55,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "300666",
+      "time": "11:23:00",
+      "action": "SELL_HIGH",
+      "price": 327.39,
+      "score": 70,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "300666",
+      "time": "11:24:00",
+      "action": "SELL_HIGH",
+      "price": 329.0,
+      "score": 80,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "300666",
+      "time": "11:25:00",
+      "action": "SELL_HIGH",
+      "price": 329.03,
+      "score": 72,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "300666",
+      "time": "11:26:00",
+      "action": "SELL_HIGH",
+      "price": 328.82,
+      "score": 70,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "300666",
+      "time": "11:27:00",
+      "action": "SELL_HIGH",
+      "price": 329.15,
+      "score": 55,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "300666",
+      "time": "11:28:00",
+      "action": "SELL_HIGH",
+      "price": 329.9,
+      "score": 72,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "300666",
+      "time": "11:29:00",
+      "action": "SELL_HIGH",
+      "price": 330.99,
+      "score": 80,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "300666",
+      "time": "11:30:00",
+      "action": "SELL_HIGH",
+      "price": 332.57,
+      "score": 80,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "300666",
+      "time": "13:00:00",
+      "action": "SELL_HIGH",
+      "price": 332.57,
+      "score": 80,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "300666",
+      "time": "13:01:00",
+      "action": "SELL_HIGH",
+      "price": 329.01,
+      "score": 70,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "300666",
+      "time": "13:02:00",
+      "action": "SELL_HIGH",
+      "price": 331.27,
+      "score": 55,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "300666",
+      "time": "13:03:00",
+      "action": "SELL_HIGH",
+      "price": 330.39,
+      "score": 60,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "300666",
+      "time": "13:04:00",
+      "action": "SELL_HIGH",
+      "price": 332.0,
+      "score": 45,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "300666",
+      "time": "13:05:00",
+      "action": "SELL_HIGH",
+      "price": 332.6,
+      "score": 45,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "300666",
+      "time": "13:06:00",
+      "action": "SELL_HIGH",
+      "price": 332.12,
+      "score": 45,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "300666",
+      "time": "13:07:00",
+      "action": "SELL_HIGH",
+      "price": 332.09,
+      "score": 45,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "300666",
+      "time": "13:08:00",
+      "action": "SELL_HIGH",
+      "price": 331.52,
+      "score": 60,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "300666",
+      "time": "13:09:00",
+      "action": "SELL_HIGH",
+      "price": 329.95,
+      "score": 60,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "300666",
+      "time": "13:10:00",
+      "action": "SELL_HIGH",
+      "price": 328.02,
+      "score": 60,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "300666",
+      "time": "13:11:00",
+      "action": "SELL_HIGH",
+      "price": 327.01,
+      "score": 49,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "300666",
+      "time": "13:12:00",
+      "action": "SELL_HIGH",
+      "price": 329.79,
+      "score": 49,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "300666",
+      "time": "13:13:00",
+      "action": "SELL_HIGH",
+      "price": 327.87,
+      "score": 64,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "300666",
+      "time": "13:14:00",
+      "action": "SELL_HIGH",
+      "price": 328.56,
+      "score": 49,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "300666",
+      "time": "13:15:00",
+      "action": "SELL_HIGH",
+      "price": 327.23,
+      "score": 49,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "300666",
+      "time": "13:16:00",
+      "action": "SELL_HIGH",
+      "price": 326.14,
+      "score": 49,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "300666",
+      "time": "13:17:00",
+      "action": "SELL_HIGH",
+      "price": 327.77,
+      "score": 45,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "300666",
+      "time": "13:19:00",
+      "action": "SELL_HIGH",
+      "price": 326.35,
+      "score": 49,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "300666",
+      "time": "13:20:00",
+      "action": "SELL_HIGH",
+      "price": 326.44,
+      "score": 49,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "300666",
+      "time": "13:21:00",
+      "action": "SELL_HIGH",
+      "price": 326.46,
+      "score": 49,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "300666",
+      "time": "13:23:00",
+      "action": "SELL_HIGH",
+      "price": 326.38,
+      "score": 49,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "300666",
+      "time": "13:24:00",
+      "action": "SELL_HIGH",
+      "price": 325.62,
+      "score": 49,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "300666",
+      "time": "13:25:00",
+      "action": "SELL_HIGH",
+      "price": 325.84,
+      "score": 49,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "300666",
+      "time": "13:27:00",
+      "action": "SELL_HIGH",
+      "price": 328.01,
+      "score": 45,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "300666",
+      "time": "13:28:00",
+      "action": "SELL_HIGH",
+      "price": 329.0,
+      "score": 45,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "300666",
+      "time": "13:29:00",
+      "action": "SELL_HIGH",
+      "price": 328.54,
+      "score": 45,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "300666",
+      "time": "13:30:00",
+      "action": "SELL_HIGH",
+      "price": 327.97,
+      "score": 60,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "300666",
+      "time": "13:31:00",
+      "action": "SELL_HIGH",
+      "price": 326.74,
+      "score": 59,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "300666",
+      "time": "13:32:00",
+      "action": "SELL_HIGH",
+      "price": 327.46,
+      "score": 55,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "300666",
+      "time": "13:33:00",
+      "action": "SELL_HIGH",
+      "price": 326.31,
+      "score": 49,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "300666",
+      "time": "13:34:00",
+      "action": "SELL_HIGH",
+      "price": 326.32,
+      "score": 49,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "300666",
+      "time": "13:36:00",
+      "action": "SELL_HIGH",
+      "price": 325.76,
+      "score": 49,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "300666",
+      "time": "13:37:00",
+      "action": "SELL_HIGH",
+      "price": 325.81,
+      "score": 49,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "300666",
+      "time": "13:38:00",
+      "action": "SELL_HIGH",
+      "price": 325.5,
+      "score": 49,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "300666",
+      "time": "13:41:00",
+      "action": "SELL_HIGH",
+      "price": 327.69,
+      "score": 45,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "300666",
+      "time": "13:42:00",
+      "action": "SELL_HIGH",
+      "price": 328.72,
+      "score": 57,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "300666",
+      "time": "13:44:00",
+      "action": "SELL_HIGH",
+      "price": 328.69,
+      "score": 60,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "300666",
+      "time": "13:45:00",
+      "action": "SELL_HIGH",
+      "price": 329.6,
+      "score": 72,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "300666",
+      "time": "13:46:00",
+      "action": "SELL_HIGH",
+      "price": 329.85,
+      "score": 72,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "300666",
+      "time": "13:47:00",
+      "action": "SELL_HIGH",
+      "price": 331.62,
+      "score": 80,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "300666",
+      "time": "13:48:00",
+      "action": "SELL_HIGH",
+      "price": 329.84,
+      "score": 70,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "300666",
+      "time": "13:49:00",
+      "action": "SELL_HIGH",
+      "price": 329.15,
+      "score": 70,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "300666",
+      "time": "13:50:00",
+      "action": "SELL_HIGH",
+      "price": 330.0,
+      "score": 70,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "300666",
+      "time": "13:51:00",
+      "action": "SELL_HIGH",
+      "price": 330.71,
+      "score": 57,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "300666",
+      "time": "13:52:00",
+      "action": "SELL_HIGH",
+      "price": 329.86,
+      "score": 70,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "300666",
+      "time": "13:53:00",
+      "action": "SELL_HIGH",
+      "price": 331.44,
+      "score": 57,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "300666",
+      "time": "13:54:00",
+      "action": "SELL_HIGH",
+      "price": 331.9,
+      "score": 57,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "300666",
+      "time": "13:55:00",
+      "action": "SELL_HIGH",
+      "price": 330.39,
+      "score": 70,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "300666",
+      "time": "13:56:00",
+      "action": "SELL_HIGH",
+      "price": 331.33,
+      "score": 55,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "300666",
+      "time": "13:57:00",
+      "action": "SELL_HIGH",
+      "price": 331.97,
+      "score": 45,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "300666",
+      "time": "13:58:00",
+      "action": "SELL_HIGH",
+      "price": 332.99,
+      "score": 57,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "300666",
+      "time": "13:59:00",
+      "action": "SELL_HIGH",
+      "price": 332.66,
+      "score": 67,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "300666",
+      "time": "14:00:00",
+      "action": "SELL_HIGH",
+      "price": 332.5,
+      "score": 70,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "300666",
+      "time": "14:01:00",
+      "action": "SELL_HIGH",
+      "price": 330.86,
+      "score": 85,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "300666",
+      "time": "14:02:00",
+      "action": "SELL_HIGH",
+      "price": 330.12,
+      "score": 75,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "300666",
+      "time": "14:03:00",
+      "action": "SELL_HIGH",
+      "price": 329.41,
+      "score": 79,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "300666",
+      "time": "14:04:00",
+      "action": "SELL_HIGH",
+      "price": 329.25,
+      "score": 79,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "300666",
+      "time": "14:05:00",
+      "action": "SELL_HIGH",
+      "price": 329.0,
+      "score": 64,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "300666",
+      "time": "14:06:00",
+      "action": "SELL_HIGH",
+      "price": 329.57,
+      "score": 64,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "300666",
+      "time": "14:07:00",
+      "action": "SELL_HIGH",
+      "price": 330.19,
+      "score": 60,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "300666",
+      "time": "14:08:00",
+      "action": "SELL_HIGH",
+      "price": 328.21,
+      "score": 64,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "300666",
+      "time": "14:09:00",
+      "action": "SELL_HIGH",
+      "price": 327.51,
+      "score": 64,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "300666",
+      "time": "14:10:00",
+      "action": "SELL_HIGH",
+      "price": 327.11,
+      "score": 64,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "300666",
+      "time": "14:14:00",
+      "action": "SELL_HIGH",
+      "price": 327.63,
+      "score": 64,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "300666",
+      "time": "14:15:00",
+      "action": "SELL_HIGH",
+      "price": 328.28,
+      "score": 45,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "300666",
+      "time": "14:16:00",
+      "action": "SELL_HIGH",
+      "price": 327.12,
+      "score": 64,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "300666",
+      "time": "14:17:00",
+      "action": "SELL_HIGH",
+      "price": 327.6,
+      "score": 60,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "300666",
+      "time": "14:18:00",
+      "action": "SELL_HIGH",
+      "price": 327.19,
+      "score": 64,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "300666",
+      "time": "14:19:00",
+      "action": "SELL_HIGH",
+      "price": 327.89,
+      "score": 45,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "300666",
+      "time": "14:21:00",
+      "action": "SELL_HIGH",
+      "price": 328.48,
+      "score": 45,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "300666",
+      "time": "14:22:00",
+      "action": "SELL_HIGH",
+      "price": 327.69,
+      "score": 60,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "300666",
+      "time": "14:23:00",
+      "action": "SELL_HIGH",
+      "price": 327.53,
+      "score": 64,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "300666",
+      "time": "14:31:00",
+      "action": "SELL_HIGH",
+      "price": 327.84,
+      "score": 60,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "300666",
+      "time": "14:32:00",
+      "action": "SELL_HIGH",
+      "price": 327.5,
+      "score": 45,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "300666",
+      "time": "14:33:00",
+      "action": "SELL_HIGH",
+      "price": 327.03,
+      "score": 70,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "300666",
+      "time": "14:34:00",
+      "action": "SELL_HIGH",
+      "price": 327.9,
+      "score": 45,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "300666",
+      "time": "14:35:00",
+      "action": "SELL_HIGH",
+      "price": 327.06,
+      "score": 74,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "300666",
+      "time": "14:36:00",
+      "action": "SELL_HIGH",
+      "price": 328.6,
+      "score": 57,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "300666",
+      "time": "14:37:00",
+      "action": "SELL_HIGH",
+      "price": 327.69,
+      "score": 70,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "300666",
+      "time": "14:38:00",
+      "action": "SELL_HIGH",
+      "price": 326.89,
+      "score": 74,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "300666",
+      "time": "14:39:00",
+      "action": "SELL_HIGH",
+      "price": 327.28,
+      "score": 74,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    },
+    {
+      "date": "2026-07-06",
+      "code": "300666",
+      "time": "14:50:00",
+      "action": "SELL_HIGH",
+      "price": 326.8,
+      "score": 55,
+      "is_vol_rev": false,
+      "factors": [
+        "side",
+        "threshold",
+        "time_score"
+      ]
+    }
+  ]
+}

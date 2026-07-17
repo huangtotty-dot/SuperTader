@@ -1,0 +1,12 @@
+{
+  "BREAKTHROUGH": true,
+  "MA_CLUSTER": true,
+  "A_AREA": true,
+  "B_AREA": true,
+  "BOX_BOTTOM": true,
+  "BOX_TOP": true,
+  "BOX_INTERNAL": true,
+  "HISTORY_BREAK": true,
+  "MILD_TREND": true,
+  "MA_NEAR": true
+}

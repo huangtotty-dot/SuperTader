@@ -1,0 +1,24 @@
+{
+  "date": "2026-07-07",
+  "version": "V1.18",
+  "feishu_commands": [
+    {
+      "time": "14:30",
+      "code": "600089",
+      "name": "特变电工",
+      "action": "BUY_LOW",
+      "price": 20.64,
+      "score": 104,
+      "desc": "特变电工尾盘前"
+    },
+    {
+      "time": "13:17",
+      "code": "300666",
+      "name": "江丰电子",
+      "action": "BUY_LOW",
+      "price": 325.1,
+      "score": 95,
+      "desc": "江丰电子预期低吸点"
+    }
+  ]
+}

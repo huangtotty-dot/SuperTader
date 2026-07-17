@@ -1,0 +1,24 @@
+{
+  "long": {
+    "signals": [],
+    "pnl": {
+      "total_pnl": 0.0,
+      "total_commission": 0.0,
+      "net_pnl": 0.0,
+      "trade_count": 0
+    },
+    "matched_trades": [],
+    "unmatched_positions": []
+  },
+  "short": {
+    "signals": [],
+    "pnl": {
+      "total_pnl": 0.0,
+      "total_commission": 0.0,
+      "net_pnl": 0.0,
+      "trade_count": 0
+    },
+    "matched_trades": [],
+    "unmatched_positions": []
+  }
+}

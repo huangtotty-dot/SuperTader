@@ -1,0 +1,806 @@
+{
+  "days": 8,
+  "total_buy_signals": 68,
+  "total_sell_signals": 99,
+  "total_panic_sell": 0,
+  "buy_sell_ratio": 1.4558823529411764,
+  "t_cycles": {
+    "300153": [
+      {
+        "day": "2026-05-18",
+        "buy_ts": "",
+        "buy_score": 53,
+        "sell_ts": "",
+        "sell_score": 55,
+        "sell_type": "SELL",
+        "completed": true
+      },
+      {
+        "day": "2026-05-19",
+        "buy_ts": "",
+        "buy_score": 44,
+        "sell_ts": "",
+        "sell_score": 47,
+        "sell_type": "SELL",
+        "completed": true
+      },
+      {
+        "day": "2026-05-20",
+        "buy_ts": "",
+        "buy_score": 56,
+        "sell_ts": "",
+        "sell_score": 54,
+        "sell_type": "SELL",
+        "completed": true
+      }
+    ],
+    "603667": [
+      {
+        "day": "2026-05-18",
+        "buy_ts": "",
+        "buy_score": 53,
+        "sell_ts": "",
+        "sell_score": 43,
+        "sell_type": "SELL",
+        "completed": true
+      },
+      {
+        "day": "2026-05-19",
+        "buy_ts": "",
+        "buy_score": 44,
+        "sell_ts": "",
+        "sell_score": 57,
+        "sell_type": "SELL",
+        "completed": true
+      },
+      {
+        "day": "2026-05-19",
+        "buy_ts": "",
+        "buy_score": 39,
+        "sell_ts": "",
+        "sell_score": 57,
+        "sell_type": "SELL",
+        "completed": true
+      }
+    ],
+    "000001": [
+      {
+        "day": "2026-05-18",
+        "buy_ts": "",
+        "buy_score": 88,
+        "sell_ts": "",
+        "sell_score": 88,
+        "sell_type": "SELL",
+        "completed": true
+      }
+    ],
+    "002261": [
+      {
+        "day": "2026-05-19",
+        "buy_ts": "",
+        "buy_score": 47,
+        "sell_ts": "",
+        "sell_score": 45,
+        "sell_type": "SELL",
+        "completed": true
+      },
+      {
+        "day": "2026-05-19",
+        "buy_ts": "",
+        "buy_score": 47,
+        "sell_ts": "",
+        "sell_score": 46,
+        "sell_type": "SELL",
+        "completed": true
+      }
+    ],
+    "002407": [
+      {
+        "day": "2026-05-19",
+        "buy_ts": "",
+        "buy_score": 47,
+        "sell_ts": "",
+        "sell_score": 57,
+        "sell_type": "SELL",
+        "completed": true
+      },
+      {
+        "day": "2026-05-20",
+        "buy_ts": "",
+        "buy_score": 49,
+        "sell_ts": "",
+        "sell_score": 57,
+        "sell_type": "SELL",
+        "completed": true
+      }
+    ],
+    "600089": [
+      {
+        "day": "2026-05-19",
+        "buy_ts": "",
+        "buy_score": 47,
+        "sell_ts": "",
+        "sell_score": 57,
+        "sell_type": "SELL",
+        "completed": true
+      },
+      {
+        "day": "2026-05-20",
+        "buy_ts": "",
+        "buy_score": 40,
+        "sell_ts": "",
+        "sell_score": 54,
+        "sell_type": "SELL",
+        "completed": true
+      }
+    ],
+    "002600": [
+      {
+        "day": "2026-05-19",
+        "buy_ts": "",
+        "buy_score": 67,
+        "sell_ts": "",
+        "sell_score": 47,
+        "sell_type": "SELL",
+        "completed": true
+      },
+      {
+        "day": "2026-05-19",
+        "buy_ts": "",
+        "buy_score": 52,
+        "sell_ts": "",
+        "sell_score": 52,
+        "sell_type": "SELL",
+        "completed": true
+      },
+      {
+        "day": "2026-05-20",
+        "buy_ts": "",
+        "buy_score": 67,
+        "sell_ts": "",
+        "sell_score": 54,
+        "sell_type": "SELL",
+        "completed": true
+      }
+    ],
+    "002451": [
+      {
+        "day": "2026-05-19",
+        "buy_ts": "",
+        "buy_score": 55,
+        "sell_ts": "",
+        "sell_score": 47,
+        "sell_type": "SELL",
+        "completed": true
+      },
+      {
+        "day": "2026-05-20",
+        "buy_ts": "",
+        "buy_score": 74,
+        "sell_ts": "",
+        "sell_score": 64,
+        "sell_type": "SELL",
+        "completed": true
+      }
+    ],
+    "002639": [
+      {
+        "day": "2026-05-19",
+        "buy_ts": "",
+        "buy_score": 47,
+        "sell_ts": "",
+        "sell_score": 62,
+        "sell_type": "SELL",
+        "completed": true
+      }
+    ],
+    "588000": [
+      {
+        "day": "2026-05-19",
+        "buy_ts": "",
+        "buy_score": 43,
+        "sell_ts": "",
+        "sell_score": 57,
+        "sell_type": "SELL",
+        "completed": true
+      }
+    ],
+    "300364": [
+      {
+        "day": "2026-05-19",
+        "buy_ts": "",
+        "buy_score": 47,
+        "sell_ts": "",
+        "sell_score": 47,
+        "sell_type": "SELL",
+        "completed": true
+      },
+      {
+        "day": "2026-05-20",
+        "buy_ts": "",
+        "buy_score": 55,
+        "sell_ts": "",
+        "sell_score": 52,
+        "sell_type": "SELL",
+        "completed": true
+      }
+    ],
+    "688102": [
+      {
+        "day": "2026-05-19",
+        "buy_ts": "",
+        "buy_score": 55,
+        "sell_ts": "",
+        "sell_score": 57,
+        "sell_type": "SELL",
+        "completed": true
+      },
+      {
+        "day": "2026-05-19",
+        "buy_ts": "",
+        "buy_score": 52,
+        "sell_ts": "",
+        "sell_score": 47,
+        "sell_type": "SELL",
+        "completed": true
+      },
+      {
+        "day": "2026-05-20",
+        "buy_ts": "",
+        "buy_score": 43,
+        "sell_ts": "",
+        "sell_score": 61,
+        "sell_type": "SELL",
+        "completed": true
+      }
+    ],
+    "601698": [
+      {
+        "day": "2026-05-19",
+        "buy_ts": "",
+        "buy_score": 47,
+        "sell_ts": "",
+        "sell_score": 57,
+        "sell_type": "SELL",
+        "completed": true
+      },
+      {
+        "day": "2026-05-19",
+        "buy_ts": "",
+        "buy_score": 48,
+        "sell_ts": "",
+        "sell_score": 47,
+        "sell_type": "SELL",
+        "completed": true
+      },
+      {
+        "day": "2026-05-20",
+        "buy_ts": "",
+        "buy_score": 47,
+        "sell_ts": "",
+        "sell_score": 52,
+        "sell_type": "SELL",
+        "completed": true
+      }
+    ]
+  },
+  "buy_without_sell": {
+    "600821": [
+      {
+        "day": "2026-05-13",
+        "ts": "",
+        "score": 70
+      }
+    ],
+    "300153": [
+      {
+        "day": "2026-05-14",
+        "ts": "",
+        "score": 70
+      }
+    ],
+    "002451": [
+      {
+        "day": "2026-05-14",
+        "ts": "",
+        "score": 85
+      },
+      {
+        "day": "2026-05-18",
+        "ts": "",
+        "score": 53
+      }
+    ],
+    "601698": [
+      {
+        "day": "2026-05-14",
+        "ts": "",
+        "score": 70
+      },
+      {
+        "day": "2026-05-18",
+        "ts": "",
+        "score": 43
+      }
+    ],
+    "002407": [
+      {
+        "day": "2026-05-14",
+        "ts": "",
+        "score": 70
+      },
+      {
+        "day": "2026-05-18",
+        "ts": "",
+        "score": 45
+      }
+    ],
+    "300364": [
+      {
+        "day": "2026-05-14",
+        "ts": "",
+        "score": 70
+      },
+      {
+        "day": "2026-05-18",
+        "ts": "",
+        "score": 43
+      }
+    ],
+    "002261": [
+      {
+        "day": "2026-05-14",
+        "ts": "",
+        "score": 85
+      },
+      {
+        "day": "2026-05-18",
+        "ts": "",
+        "score": 43
+      },
+      {
+        "day": "2026-05-20",
+        "ts": "",
+        "score": 56
+      }
+    ],
+    "002600": [
+      {
+        "day": "2026-05-18",
+        "ts": "",
+        "score": 45
+      }
+    ],
+    "688102": [
+      {
+        "day": "2026-05-18",
+        "ts": "",
+        "score": 43
+      }
+    ],
+    "002639": [
+      {
+        "day": "2026-05-18",
+        "ts": "",
+        "score": 43
+      }
+    ],
+    "600089": [
+      {
+        "day": "2026-05-18",
+        "ts": "",
+        "score": 53
+      }
+    ],
+    "588000": [
+      {
+        "day": "2026-05-18",
+        "ts": "",
+        "score": 43
+      }
+    ],
+    "603667": [
+      {
+        "day": "2026-05-18",
+        "ts": "",
+        "score": 43
+      }
+    ]
+  },
+  "sell_without_buy": {
+    "002600": [
+      {
+        "day": "2026-05-13",
+        "ts": "",
+        "score": 65
+      },
+      {
+        "day": "2026-05-13",
+        "ts": "",
+        "score": 65
+      },
+      {
+        "day": "2026-05-13",
+        "ts": "",
+        "score": 65
+      },
+      {
+        "day": "2026-05-13",
+        "ts": "",
+        "score": 70
+      },
+      {
+        "day": "2026-05-13",
+        "ts": "",
+        "score": 70
+      },
+      {
+        "day": "2026-05-13",
+        "ts": "",
+        "score": 80
+      },
+      {
+        "day": "2026-05-13",
+        "ts": "",
+        "score": 80
+      },
+      {
+        "day": "2026-05-13",
+        "ts": "",
+        "score": 70
+      },
+      {
+        "day": "2026-05-18",
+        "ts": "",
+        "score": 75
+      },
+      {
+        "day": "2026-05-18",
+        "ts": "",
+        "score": 40
+      },
+      {
+        "day": "2026-05-19",
+        "ts": "",
+        "score": 57
+      },
+      {
+        "day": "2026-05-19",
+        "ts": "",
+        "score": 52
+      },
+      {
+        "day": "2026-05-20",
+        "ts": "",
+        "score": 42
+      },
+      {
+        "day": "2026-05-21",
+        "ts": "",
+        "score": 57
+      }
+    ],
+    "600821": [
+      {
+        "day": "2026-05-13",
+        "ts": "",
+        "score": 65
+      }
+    ],
+    "300153": [
+      {
+        "day": "2026-05-13",
+        "ts": "",
+        "score": 65
+      },
+      {
+        "day": "2026-05-13",
+        "ts": "",
+        "score": 65
+      },
+      {
+        "day": "2026-05-13",
+        "ts": "",
+        "score": 65
+      },
+      {
+        "day": "2026-05-19",
+        "ts": "",
+        "score": 54
+      },
+      {
+        "day": "2026-05-19",
+        "ts": "",
+        "score": 55
+      },
+      {
+        "day": "2026-05-20",
+        "ts": "",
+        "score": 52
+      }
+    ],
+    "300364": [
+      {
+        "day": "2026-05-13",
+        "ts": "",
+        "score": 70
+      },
+      {
+        "day": "2026-05-18",
+        "ts": "",
+        "score": 40
+      },
+      {
+        "day": "2026-05-19",
+        "ts": "",
+        "score": 61
+      },
+      {
+        "day": "2026-05-19",
+        "ts": "",
+        "score": 52
+      },
+      {
+        "day": "2026-05-20",
+        "ts": "",
+        "score": 52
+      },
+      {
+        "day": "2026-05-21",
+        "ts": "",
+        "score": 42
+      }
+    ],
+    "601698": [
+      {
+        "day": "2026-05-18",
+        "ts": "",
+        "score": 75
+      },
+      {
+        "day": "2026-05-19",
+        "ts": "",
+        "score": 57
+      },
+      {
+        "day": "2026-05-21",
+        "ts": "",
+        "score": 71
+      }
+    ],
+    "000001": [
+      {
+        "day": "2026-05-18",
+        "ts": "",
+        "score": 88
+      }
+    ],
+    "002261": [
+      {
+        "day": "2026-05-19",
+        "ts": "",
+        "score": 46
+      },
+      {
+        "day": "2026-05-19",
+        "ts": "",
+        "score": 44
+      },
+      {
+        "day": "2026-05-19",
+        "ts": "",
+        "score": 61
+      },
+      {
+        "day": "2026-05-19",
+        "ts": "",
+        "score": 46
+      },
+      {
+        "day": "2026-05-21",
+        "ts": "",
+        "score": 57
+      }
+    ],
+    "002407": [
+      {
+        "day": "2026-05-19",
+        "ts": "",
+        "score": 47
+      },
+      {
+        "day": "2026-05-19",
+        "ts": "",
+        "score": 42
+      },
+      {
+        "day": "2026-05-19",
+        "ts": "",
+        "score": 42
+      },
+      {
+        "day": "2026-05-20",
+        "ts": "",
+        "score": 67
+      },
+      {
+        "day": "2026-05-21",
+        "ts": "",
+        "score": 42
+      }
+    ],
+    "603667": [
+      {
+        "day": "2026-05-19",
+        "ts": "",
+        "score": 52
+      },
+      {
+        "day": "2026-05-19",
+        "ts": "",
+        "score": 57
+      },
+      {
+        "day": "2026-05-20",
+        "ts": "",
+        "score": 52
+      },
+      {
+        "day": "2026-05-21",
+        "ts": "",
+        "score": 46
+      }
+    ],
+    "600089": [
+      {
+        "day": "2026-05-19",
+        "ts": "",
+        "score": 42
+      },
+      {
+        "day": "2026-05-19",
+        "ts": "",
+        "score": 46
+      },
+      {
+        "day": "2026-05-19",
+        "ts": "",
+        "score": 46
+      },
+      {
+        "day": "2026-05-19",
+        "ts": "",
+        "score": 49
+      },
+      {
+        "day": "2026-05-19",
+        "ts": "",
+        "score": 56
+      },
+      {
+        "day": "2026-05-21",
+        "ts": "",
+        "score": 42
+      }
+    ],
+    "002451": [
+      {
+        "day": "2026-05-19",
+        "ts": "",
+        "score": 46
+      },
+      {
+        "day": "2026-05-19",
+        "ts": "",
+        "score": 57
+      },
+      {
+        "day": "2026-05-19",
+        "ts": "",
+        "score": 42
+      },
+      {
+        "day": "2026-05-20",
+        "ts": "",
+        "score": 57
+      }
+    ],
+    "002639": [
+      {
+        "day": "2026-05-19",
+        "ts": "",
+        "score": 62
+      },
+      {
+        "day": "2026-05-19",
+        "ts": "",
+        "score": 42
+      },
+      {
+        "day": "2026-05-19",
+        "ts": "",
+        "score": 57
+      },
+      {
+        "day": "2026-05-20",
+        "ts": "",
+        "score": 57
+      },
+      {
+        "day": "2026-05-21",
+        "ts": "",
+        "score": 42
+      }
+    ],
+    "588000": [
+      {
+        "day": "2026-05-19",
+        "ts": "",
+        "score": 44
+      },
+      {
+        "day": "2026-05-19",
+        "ts": "",
+        "score": 44
+      },
+      {
+        "day": "2026-05-19",
+        "ts": "",
+        "score": 61
+      },
+      {
+        "day": "2026-05-19",
+        "ts": "",
+        "score": 46
+      },
+      {
+        "day": "2026-05-19",
+        "ts": "",
+        "score": 59
+      },
+      {
+        "day": "2026-05-20",
+        "ts": "",
+        "score": 46
+      },
+      {
+        "day": "2026-05-21",
+        "ts": "",
+        "score": 52
+      }
+    ],
+    "688102": [
+      {
+        "day": "2026-05-19",
+        "ts": "",
+        "score": 57
+      },
+      {
+        "day": "2026-05-19",
+        "ts": "",
+        "score": 45
+      },
+      {
+        "day": "2026-05-20",
+        "ts": "",
+        "score": 57
+      },
+      {
+        "day": "2026-05-21",
+        "ts": "",
+        "score": 57
+      }
+    ]
+  },
+  "stand_down_reasons": {
+    "买卖都不够强": 1941,
+    "日内波动过低": 50,
+    "ETF波动不足": 6,
+    "高位但无明确优势": 2,
+    "当日轮次已满": 18
+  },
+  "block_reasons": {
+    "buy": {},
+    "sell": {}
+  }
+}
