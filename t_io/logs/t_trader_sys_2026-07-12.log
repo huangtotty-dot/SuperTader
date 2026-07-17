@@ -1,8 +1,0 @@
-00:45:54 [WARNING] ⚠️  tushare 获取 000988 分钟数据失败: HTTPConnectionPool(host='127.0.0.1', port=7890): Read timed out.
-00:50:47 [WARNING] ⚠️  tushare 获取 000988 分钟数据失败: HTTPConnectionPool(host='127.0.0.1', port=7890): Read timed out.
-00:51:35 [WARNING] ⚠️  tushare 获取 000988 分钟数据失败: HTTPConnectionPool(host='127.0.0.1', port=7890): Read timed out.
-00:57:10 [WARNING] tushare fetch 000988 2026-06-16~2026-06-16 failed: HTTPConnectionPool(host='127.0.0.1', port=7890): Read timed out.
-01:06:41 [WARNING] tushare fetch 000988 2026-05-01~2026-06-22 failed: HTTPConnectionPool(host='127.0.0.1', port=7890): Read timed out.
-21:37:38 [INFO] ⏸ 非交易时段，进入低频保活
-22:00:02 [INFO] ⏸ 非交易时段，进入低频保活
-22:01:57 [INFO] ⏸ 非交易时段，进入低频保活
