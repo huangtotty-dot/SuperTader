@@ -1,0 +1,48 @@
+{
+  "long": [
+    {
+      "time": "09:46",
+      "action": "SELL_HIGH",
+      "score": 80,
+      "price": 162.08,
+      "vwap": 160.4528857579425
+    },
+    {
+      "time": "11:30",
+      "action": "SELL_HIGH",
+      "score": 94,
+      "price": 156.92,
+      "vwap": 158.9850952165109
+    },
+    {
+      "time": "13:29",
+      "action": "BUY_LOW",
+      "score": 78,
+      "price": 155.95,
+      "vwap": 158.50159627484322
+    }
+  ],
+  "short": [
+    {
+      "time": "09:46",
+      "action": "SELL_HIGH",
+      "score": 80,
+      "price": 162.08,
+      "vwap": 160.4528857579425
+    },
+    {
+      "time": "11:30",
+      "action": "SELL_HIGH",
+      "score": 94,
+      "price": 156.92,
+      "vwap": 158.9850952165109
+    },
+    {
+      "time": "13:29",
+      "action": "BUY_LOW",
+      "score": 80,
+      "price": 155.95,
+      "vwap": 158.50159627484322
+    }
+  ]
+}

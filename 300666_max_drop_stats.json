@@ -1,0 +1,513 @@
+{
+  "summary": {
+    "股票": "300666.SZ",
+    "统计区间": "2026-05-18 至 2026-07-03",
+    "交易日数": 34,
+    "平均日内最大跌幅": -9.2,
+    "平均开盘到最低跌幅": -5.26,
+    "平均最高到收盘跌幅": -5.19
+  },
+  "distribution": {
+    "严重下跌(>=5%)": {
+      "天数": 31,
+      "平均跌幅": -9.76,
+      "日期": [
+        "2026-05-19",
+        "2026-05-20",
+        "2026-05-21",
+        "2026-05-22",
+        "2026-05-25",
+        "2026-05-26",
+        "2026-05-27",
+        "2026-05-28",
+        "2026-05-29",
+        "2026-06-01",
+        "2026-06-02",
+        "2026-06-05",
+        "2026-06-08",
+        "2026-06-09",
+        "2026-06-10",
+        "2026-06-11",
+        "2026-06-12",
+        "2026-06-15",
+        "2026-06-16",
+        "2026-06-17",
+        "2026-06-18",
+        "2026-06-22",
+        "2026-06-23",
+        "2026-06-24",
+        "2026-06-25",
+        "2026-06-26",
+        "2026-06-29",
+        "2026-06-30",
+        "2026-07-01",
+        "2026-07-02",
+        "2026-07-03"
+      ]
+    },
+    "中度下跌(2.5%~5%)": {
+      "天数": 2,
+      "平均跌幅": -4.35,
+      "日期": [
+        "2026-06-03",
+        "2026-06-04"
+      ]
+    },
+    "轻度下跌(1%~2.5%)": {
+      "天数": 1,
+      "平均跌幅": -1.74,
+      "日期": [
+        "2026-05-18"
+      ]
+    },
+    "微跌(<1%)": {
+      "天数": 0,
+      "平均跌幅": 0,
+      "日期": []
+    }
+  },
+  "worst10": [
+    {
+      "date": "2026-06-12",
+      "open": 274.08,
+      "high": 338.88,
+      "low": 271.93,
+      "close": 330.0,
+      "max_drop_pct": -19.76,
+      "open_to_low_pct": -0.78,
+      "high_to_close_pct": -2.62
+    },
+    {
+      "date": "2026-05-21",
+      "open": 191.02,
+      "high": 222.22,
+      "low": 188.9,
+      "close": 216.65,
+      "max_drop_pct": -14.99,
+      "open_to_low_pct": -1.11,
+      "high_to_close_pct": -2.51
+    },
+    {
+      "date": "2026-06-09",
+      "open": 224.88,
+      "high": 226.5,
+      "low": 195.22,
+      "close": 199.01,
+      "max_drop_pct": -13.81,
+      "open_to_low_pct": -13.19,
+      "high_to_close_pct": -12.14
+    },
+    {
+      "date": "2026-06-29",
+      "open": 382.48,
+      "high": 388.99,
+      "low": 339.02,
+      "close": 369.0,
+      "max_drop_pct": -12.85,
+      "open_to_low_pct": -11.36,
+      "high_to_close_pct": -5.14
+    },
+    {
+      "date": "2026-06-11",
+      "open": 292.4,
+      "high": 292.4,
+      "low": 255.13,
+      "close": 257.01,
+      "max_drop_pct": -12.75,
+      "open_to_low_pct": -12.75,
+      "high_to_close_pct": -12.1
+    },
+    {
+      "date": "2026-06-02",
+      "open": 209.22,
+      "high": 215.88,
+      "low": 188.6,
+      "close": 189.9,
+      "max_drop_pct": -12.64,
+      "open_to_low_pct": -9.86,
+      "high_to_close_pct": -12.03
+    },
+    {
+      "date": "2026-06-10",
+      "open": 243.67,
+      "high": 249.88,
+      "low": 220.0,
+      "close": 224.0,
+      "max_drop_pct": -11.96,
+      "open_to_low_pct": -9.71,
+      "high_to_close_pct": -10.36
+    },
+    {
+      "date": "2026-07-01",
+      "open": 394.33,
+      "high": 418.99,
+      "low": 369.0,
+      "close": 369.75,
+      "max_drop_pct": -11.93,
+      "open_to_low_pct": -6.42,
+      "high_to_close_pct": -11.75
+    },
+    {
+      "date": "2026-06-26",
+      "open": 354.78,
+      "high": 366.65,
+      "low": 324.48,
+      "close": 326.4,
+      "max_drop_pct": -11.5,
+      "open_to_low_pct": -8.54,
+      "high_to_close_pct": -10.98
+    },
+    {
+      "date": "2026-05-28",
+      "open": 203.05,
+      "high": 204.97,
+      "low": 181.67,
+      "close": 182.3,
+      "max_drop_pct": -11.37,
+      "open_to_low_pct": -10.53,
+      "high_to_close_pct": -11.06
+    }
+  ],
+  "all_days": [
+    {
+      "date": "2026-05-18",
+      "open": 201.26,
+      "high": 201.5,
+      "low": 197.99,
+      "close": 199.48,
+      "max_drop_pct": -1.74,
+      "open_to_low_pct": -1.62,
+      "high_to_close_pct": -1.0
+    },
+    {
+      "date": "2026-05-19",
+      "open": 213.93,
+      "high": 216.49,
+      "low": 196.0,
+      "close": 198.0,
+      "max_drop_pct": -9.46,
+      "open_to_low_pct": -8.38,
+      "high_to_close_pct": -8.54
+    },
+    {
+      "date": "2026-05-20",
+      "open": 213.68,
+      "high": 218.0,
+      "low": 205.24,
+      "close": 209.6,
+      "max_drop_pct": -5.85,
+      "open_to_low_pct": -3.95,
+      "high_to_close_pct": -3.85
+    },
+    {
+      "date": "2026-05-21",
+      "open": 191.02,
+      "high": 222.22,
+      "low": 188.9,
+      "close": 216.65,
+      "max_drop_pct": -14.99,
+      "open_to_low_pct": -1.11,
+      "high_to_close_pct": -2.51
+    },
+    {
+      "date": "2026-05-22",
+      "open": 196.6,
+      "high": 201.87,
+      "low": 184.0,
+      "close": 193.0,
+      "max_drop_pct": -8.85,
+      "open_to_low_pct": -6.41,
+      "high_to_close_pct": -4.39
+    },
+    {
+      "date": "2026-05-25",
+      "open": 207.99,
+      "high": 209.38,
+      "low": 189.68,
+      "close": 198.0,
+      "max_drop_pct": -9.41,
+      "open_to_low_pct": -8.8,
+      "high_to_close_pct": -5.44
+    },
+    {
+      "date": "2026-05-26",
+      "open": 197.09,
+      "high": 205.63,
+      "low": 188.25,
+      "close": 204.12,
+      "max_drop_pct": -8.45,
+      "open_to_low_pct": -4.49,
+      "high_to_close_pct": -0.73
+    },
+    {
+      "date": "2026-05-27",
+      "open": 183.4,
+      "high": 197.99,
+      "low": 182.24,
+      "close": 195.0,
+      "max_drop_pct": -7.95,
+      "open_to_low_pct": -0.63,
+      "high_to_close_pct": -1.51
+    },
+    {
+      "date": "2026-05-28",
+      "open": 203.05,
+      "high": 204.97,
+      "low": 181.67,
+      "close": 182.3,
+      "max_drop_pct": -11.37,
+      "open_to_low_pct": -10.53,
+      "high_to_close_pct": -11.06
+    },
+    {
+      "date": "2026-05-29",
+      "open": 190.2,
+      "high": 204.14,
+      "low": 187.74,
+      "close": 202.98,
+      "max_drop_pct": -8.03,
+      "open_to_low_pct": -1.29,
+      "high_to_close_pct": -0.57
+    },
+    {
+      "date": "2026-06-01",
+      "open": 188.06,
+      "high": 198.6,
+      "low": 186.55,
+      "close": 190.5,
+      "max_drop_pct": -6.07,
+      "open_to_low_pct": -0.8,
+      "high_to_close_pct": -4.08
+    },
+    {
+      "date": "2026-06-02",
+      "open": 209.22,
+      "high": 215.88,
+      "low": 188.6,
+      "close": 189.9,
+      "max_drop_pct": -12.64,
+      "open_to_low_pct": -9.86,
+      "high_to_close_pct": -12.03
+    },
+    {
+      "date": "2026-06-03",
+      "open": 208.0,
+      "high": 214.44,
+      "low": 204.27,
+      "close": 209.22,
+      "max_drop_pct": -4.74,
+      "open_to_low_pct": -1.79,
+      "high_to_close_pct": -2.43
+    },
+    {
+      "date": "2026-06-04",
+      "open": 210.53,
+      "high": 213.46,
+      "low": 205.0,
+      "close": 206.0,
+      "max_drop_pct": -3.96,
+      "open_to_low_pct": -2.63,
+      "high_to_close_pct": -3.49
+    },
+    {
+      "date": "2026-06-05",
+      "open": 201.19,
+      "high": 215.96,
+      "low": 198.2,
+      "close": 205.08,
+      "max_drop_pct": -8.22,
+      "open_to_low_pct": -1.49,
+      "high_to_close_pct": -5.04
+    },
+    {
+      "date": "2026-06-08",
+      "open": 193.57,
+      "high": 205.8,
+      "low": 191.0,
+      "close": 195.0,
+      "max_drop_pct": -7.19,
+      "open_to_low_pct": -1.33,
+      "high_to_close_pct": -5.25
+    },
+    {
+      "date": "2026-06-09",
+      "open": 224.88,
+      "high": 226.5,
+      "low": 195.22,
+      "close": 199.01,
+      "max_drop_pct": -13.81,
+      "open_to_low_pct": -13.19,
+      "high_to_close_pct": -12.14
+    },
+    {
+      "date": "2026-06-10",
+      "open": 243.67,
+      "high": 249.88,
+      "low": 220.0,
+      "close": 224.0,
+      "max_drop_pct": -11.96,
+      "open_to_low_pct": -9.71,
+      "high_to_close_pct": -10.36
+    },
+    {
+      "date": "2026-06-11",
+      "open": 292.4,
+      "high": 292.4,
+      "low": 255.13,
+      "close": 257.01,
+      "max_drop_pct": -12.75,
+      "open_to_low_pct": -12.75,
+      "high_to_close_pct": -12.1
+    },
+    {
+      "date": "2026-06-12",
+      "open": 274.08,
+      "high": 338.88,
+      "low": 271.93,
+      "close": 330.0,
+      "max_drop_pct": -19.76,
+      "open_to_low_pct": -0.78,
+      "high_to_close_pct": -2.62
+    },
+    {
+      "date": "2026-06-15",
+      "open": 293.6,
+      "high": 298.0,
+      "low": 265.6,
+      "close": 286.0,
+      "max_drop_pct": -10.87,
+      "open_to_low_pct": -9.54,
+      "high_to_close_pct": -4.03
+    },
+    {
+      "date": "2026-06-16",
+      "open": 299.61,
+      "high": 308.8,
+      "low": 288.18,
+      "close": 292.15,
+      "max_drop_pct": -6.68,
+      "open_to_low_pct": -3.81,
+      "high_to_close_pct": -5.39
+    },
+    {
+      "date": "2026-06-17",
+      "open": 301.57,
+      "high": 304.4,
+      "low": 285.01,
+      "close": 291.0,
+      "max_drop_pct": -6.37,
+      "open_to_low_pct": -5.49,
+      "high_to_close_pct": -4.4
+    },
+    {
+      "date": "2026-06-18",
+      "open": 311.2,
+      "high": 325.68,
+      "low": 300.6,
+      "close": 301.99,
+      "max_drop_pct": -7.7,
+      "open_to_low_pct": -3.41,
+      "high_to_close_pct": -7.27
+    },
+    {
+      "date": "2026-06-22",
+      "open": 308.75,
+      "high": 326.53,
+      "low": 299.19,
+      "close": 324.2,
+      "max_drop_pct": -8.37,
+      "open_to_low_pct": -3.1,
+      "high_to_close_pct": -0.71
+    },
+    {
+      "date": "2026-06-23",
+      "open": 292.83,
+      "high": 308.53,
+      "low": 289.0,
+      "close": 300.06,
+      "max_drop_pct": -6.33,
+      "open_to_low_pct": -1.31,
+      "high_to_close_pct": -2.75
+    },
+    {
+      "date": "2026-06-24",
+      "open": 304.04,
+      "high": 308.62,
+      "low": 285.0,
+      "close": 292.81,
+      "max_drop_pct": -7.65,
+      "open_to_low_pct": -6.26,
+      "high_to_close_pct": -5.12
+    },
+    {
+      "date": "2026-06-25",
+      "open": 330.0,
+      "high": 337.7,
+      "low": 304.1,
+      "close": 315.0,
+      "max_drop_pct": -9.95,
+      "open_to_low_pct": -7.85,
+      "high_to_close_pct": -6.72
+    },
+    {
+      "date": "2026-06-26",
+      "open": 354.78,
+      "high": 366.65,
+      "low": 324.48,
+      "close": 326.4,
+      "max_drop_pct": -11.5,
+      "open_to_low_pct": -8.54,
+      "high_to_close_pct": -10.98
+    },
+    {
+      "date": "2026-06-29",
+      "open": 382.48,
+      "high": 388.99,
+      "low": 339.02,
+      "close": 369.0,
+      "max_drop_pct": -12.85,
+      "open_to_low_pct": -11.36,
+      "high_to_close_pct": -5.14
+    },
+    {
+      "date": "2026-06-30",
+      "open": 368.6,
+      "high": 374.97,
+      "low": 345.8,
+      "close": 370.0,
+      "max_drop_pct": -7.78,
+      "open_to_low_pct": -6.19,
+      "high_to_close_pct": -1.33
+    },
+    {
+      "date": "2026-07-01",
+      "open": 394.33,
+      "high": 418.99,
+      "low": 369.0,
+      "close": 369.75,
+      "max_drop_pct": -11.93,
+      "open_to_low_pct": -6.42,
+      "high_to_close_pct": -11.75
+    },
+    {
+      "date": "2026-07-02",
+      "open": 342.47,
+      "high": 375.0,
+      "low": 340.51,
+      "close": 370.17,
+      "max_drop_pct": -9.2,
+      "open_to_low_pct": -0.57,
+      "high_to_close_pct": -1.29
+    },
+    {
+      "date": "2026-07-03",
+      "open": 332.19,
+      "high": 351.0,
+      "low": 320.88,
+      "close": 349.0,
+      "max_drop_pct": -8.58,
+      "open_to_low_pct": -3.4,
+      "high_to_close_pct": -0.57
+    }
+  ]
+}

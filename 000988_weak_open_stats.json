@@ -1,0 +1,268 @@
+{
+  "summary": {
+    "股票": "000988.SZ",
+    "统计区间": "2026-05-19 至 2026-07-03",
+    "总交易日": 33,
+    "弱势开盘日": 16,
+    "强势开盘日": 17
+  },
+  "weak_open": {
+    "弱势开盘日平均冲高": 4.66,
+    "弱势开盘日平均回落": 2.15,
+    "弱势开盘日平均日内波动": 6.54,
+    "大幅低开(<-1.5%)": {
+      "天数": 14,
+      "平均冲高": 5.17
+    },
+    "中幅低开(-1.5%~-0.5%)": {
+      "天数": 2,
+      "平均冲高": 1.11
+    },
+    "小幅低开(-0.5%~0%)": {
+      "天数": 0,
+      "平均冲高": 0
+    },
+    "平开(0%~0.3%)": {
+      "天数": 0,
+      "平均冲高": 0
+    }
+  },
+  "strong_open": {
+    "强势开盘日平均冲高": 2.0
+  },
+  "top5": [
+    {
+      "date": "2026-05-29",
+      "open": 151.92,
+      "high": 166.34,
+      "low": 150.28,
+      "close": 166.0,
+      "pre_close": 158.34,
+      "open_gain": -4.05,
+      "surge_pct": 9.49,
+      "pullback_pct": 0.2
+    },
+    {
+      "date": "2026-06-01",
+      "open": 143.07,
+      "high": 154.92,
+      "low": 142.58,
+      "close": 154.84,
+      "pre_close": 166.0,
+      "open_gain": -13.81,
+      "surge_pct": 8.28,
+      "pullback_pct": 0.05
+    },
+    {
+      "date": "2026-07-01",
+      "open": 173.55,
+      "high": 187.66,
+      "low": 171.8,
+      "close": 183.88,
+      "pre_close": 178.89,
+      "open_gain": -2.99,
+      "surge_pct": 8.13,
+      "pullback_pct": 2.01
+    },
+    {
+      "date": "2026-05-21",
+      "open": 153.96,
+      "high": 165.8,
+      "low": 152.99,
+      "close": 164.1,
+      "pre_close": 159.0,
+      "open_gain": -3.17,
+      "surge_pct": 7.69,
+      "pullback_pct": 1.03
+    },
+    {
+      "date": "2026-05-27",
+      "open": 159.88,
+      "high": 170.99,
+      "low": 159.0,
+      "close": 167.19,
+      "pre_close": 171.5,
+      "open_gain": -6.78,
+      "surge_pct": 6.95,
+      "pullback_pct": 2.22
+    }
+  ],
+  "all_weak_days": [
+    {
+      "date": "2026-05-21",
+      "open": 153.96,
+      "high": 165.8,
+      "low": 152.99,
+      "close": 164.1,
+      "pre_close": 159.0,
+      "open_gain": -3.17,
+      "surge_pct": 7.69,
+      "pullback_pct": 1.03
+    },
+    {
+      "date": "2026-05-22",
+      "open": 156.31,
+      "high": 159.14,
+      "low": 153.6,
+      "close": 156.14,
+      "pre_close": 164.1,
+      "open_gain": -4.75,
+      "surge_pct": 1.81,
+      "pullback_pct": 1.89
+    },
+    {
+      "date": "2026-05-27",
+      "open": 159.88,
+      "high": 170.99,
+      "low": 159.0,
+      "close": 167.19,
+      "pre_close": 171.5,
+      "open_gain": -6.78,
+      "surge_pct": 6.95,
+      "pullback_pct": 2.22
+    },
+    {
+      "date": "2026-05-28",
+      "open": 165.63,
+      "high": 167.1,
+      "low": 155.71,
+      "close": 158.34,
+      "pre_close": 167.19,
+      "open_gain": -0.93,
+      "surge_pct": 0.89,
+      "pullback_pct": 5.24
+    },
+    {
+      "date": "2026-05-29",
+      "open": 151.92,
+      "high": 166.34,
+      "low": 150.28,
+      "close": 166.0,
+      "pre_close": 158.34,
+      "open_gain": -4.05,
+      "surge_pct": 9.49,
+      "pullback_pct": 0.2
+    },
+    {
+      "date": "2026-06-01",
+      "open": 143.07,
+      "high": 154.92,
+      "low": 142.58,
+      "close": 154.84,
+      "pre_close": 166.0,
+      "open_gain": -13.81,
+      "surge_pct": 8.28,
+      "pullback_pct": 0.05
+    },
+    {
+      "date": "2026-06-02",
+      "open": 149.25,
+      "high": 151.36,
+      "low": 141.22,
+      "close": 144.85,
+      "pre_close": 154.84,
+      "open_gain": -3.61,
+      "surge_pct": 1.41,
+      "pullback_pct": 4.3
+    },
+    {
+      "date": "2026-06-08",
+      "open": 148.85,
+      "high": 154.78,
+      "low": 146.0,
+      "close": 146.3,
+      "pre_close": 156.48,
+      "open_gain": -4.88,
+      "surge_pct": 3.98,
+      "pullback_pct": 5.48
+    },
+    {
+      "date": "2026-06-10",
+      "open": 149.0,
+      "high": 153.13,
+      "low": 147.01,
+      "close": 152.65,
+      "pre_close": 152.69,
+      "open_gain": -2.42,
+      "surge_pct": 2.77,
+      "pullback_pct": 0.31
+    },
+    {
+      "date": "2026-06-11",
+      "open": 150.5,
+      "high": 152.5,
+      "low": 147.13,
+      "close": 148.18,
+      "pre_close": 152.65,
+      "open_gain": -1.41,
+      "surge_pct": 1.33,
+      "pullback_pct": 2.83
+    },
+    {
+      "date": "2026-06-23",
+      "open": 163.66,
+      "high": 172.79,
+      "low": 162.51,
+      "close": 172.72,
+      "pre_close": 180.91,
+      "open_gain": -9.54,
+      "surge_pct": 5.58,
+      "pullback_pct": 0.04
+    },
+    {
+      "date": "2026-06-24",
+      "open": 167.89,
+      "high": 168.0,
+      "low": 161.3,
+      "close": 162.0,
+      "pre_close": 172.72,
+      "open_gain": -2.8,
+      "surge_pct": 0.07,
+      "pullback_pct": 3.57
+    },
+    {
+      "date": "2026-06-26",
+      "open": 160.94,
+      "high": 171.87,
+      "low": 160.0,
+      "close": 170.08,
+      "pre_close": 168.9,
+      "open_gain": -4.71,
+      "surge_pct": 6.79,
+      "pullback_pct": 1.04
+    },
+    {
+      "date": "2026-07-01",
+      "open": 173.55,
+      "high": 187.66,
+      "low": 171.8,
+      "close": 183.88,
+      "pre_close": 178.89,
+      "open_gain": -2.99,
+      "surge_pct": 8.13,
+      "pullback_pct": 2.01
+    },
+    {
+      "date": "2026-07-02",
+      "open": 156.2,
+      "high": 164.84,
+      "low": 156.2,
+      "close": 164.77,
+      "pre_close": 183.88,
+      "open_gain": -15.05,
+      "surge_pct": 5.53,
+      "pullback_pct": 0.04
+    },
+    {
+      "date": "2026-07-03",
+      "open": 153.95,
+      "high": 159.86,
+      "low": 149.9,
+      "close": 153.22,
+      "pre_close": 164.77,
+      "open_gain": -6.57,
+      "surge_pct": 3.84,
+      "pullback_pct": 4.15
+    }
+  ]
+}
