@@ -2,12 +2,35 @@
   "_description": "T模式配置: long=正T(先买后卖), short=反T(先卖后买). 启动时未设置会提示选择.",
   "_last_updated": "2026-07-15",
   "_update_source": "持仓截图更新",
+  "_auto_decision": {
+    "date": "2026-07-18",
+    "regime": "uni_down",
+    "regime_name": "单边下行",
+    "z_top3": 0.0,
+    "basis_date": null,
+    "matrix_mode": "short",
+    "pos_factor": 1.0,
+    "reason": "单边下行×偏热→反T标准仓",
+    "per_stock": {
+      "300153": "short",
+      "300364": "short",
+      "300054": "short",
+      "588170": "short",
+      "600176": "hold",
+      "600481": "short",
+      "603667": "short",
+      "000988": "hold",
+      "000988_B": "hold"
+    },
+    "source": "auto+manual"
+  },
   "300153": "short",
-  "300364": "long",
+  "300364": "short",
   "300054": "short",
-  "588170": "long",
-  "600176": "short",
+  "588170": "short",
+  "600176": "hold",
   "600481": "short",
   "603667": "short",
-  "000988": "short"
+  "000988": "hold",
+  "000988_B": "hold"
 }
