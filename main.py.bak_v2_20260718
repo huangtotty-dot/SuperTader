@@ -383,14 +383,8 @@ def _index_regime_feishu_enabled() -> bool:
 
 
 def _build_index_regime_card(ctx: dict, title_prefix: str, switched: bool = False,
-                             prev_regime: Optional[str] = None, as_of_note: str = "",
-                             recent_days: Optional[list] = None,
-                             extra_lines: Optional[list] = None) -> dict:
-    """组装大盘态势飞书卡片：标题模板按状态选 green/red/blue，切换日加急红/绿
-
-    recent_days：morning 模式 detail.recent_days（近3日 [{date,regime,score}]），
-    以 "MM-DD regime score → ..." 序列展示；extra_lines：附加说明行（插在基准日期之后）。
-    """
+                             prev_regime: Optional[str] = None, as_of_note: str = "") -> dict:
+    """组装大盘态势飞书卡片：标题模板按状态选 green/red/blue，切换日加急红/绿"""
     regime = str(ctx.get("regime", "range"))
     regime_name = ctx.get("regime_name") or index_regime_name(regime)
     score = float(ctx.get("score") or 0.0)
@@ -413,14 +407,6 @@ def _build_index_regime_card(ctx: dict, title_prefix: str, switched: bool = Fals
         f"**综合分 S**：{score:+.2f}（趋势T {trend_score} ／ 环境E {env_score}）",
         f"**基准日期**：{ctx.get('date', '-')}{as_of_note}",
     ]
-    if recent_days:
-        seq = " → ".join(
-            f"{str(r.get('date', '-'))[5:]} {r.get('regime', '-')} {float(r.get('score') or 0.0):+.1f}"
-            for r in recent_days[-3:]
-        )
-        lines.append(f"**近3日态势**：{seq}")
-    if extra_lines:
-        lines.extend(str(x) for x in extra_lines)
     if switched and prev_regime:
         lines.insert(0, f"**⚡ 状态切换**：{index_regime_name(prev_regime)} → {regime_name}")
     if ctx.get("exhaust_flag"):
@@ -437,12 +423,7 @@ def _build_index_regime_card(ctx: dict, title_prefix: str, switched: bool = Fals
 
 
 def _maybe_push_index_regime_morning(now: datetime) -> None:
-    """09:26-09:31 早盘大盘基调推送（每日一次；须在 scan_once 的 <9:30 早退分支之前调用）
-
-    V2：调 detect_index_regime(mode="morning")，模块自动对齐到今天之前最近一个
-    已完成交易日（基于其收盘判定），并输出 detail.recent_days 近3日
-    [{date,regime,score}]；卡片注明 9:30-10:00 决策窗口主要参考前两日状态。
-    """
+    """09:26-09:31 早盘大盘基调推送（每日一次；须在 scan_once 的 <9:30 早退分支之前调用）"""
     global _index_regime_morning_pushed_date
     try:
         t = now.time()
@@ -454,19 +435,14 @@ def _maybe_push_index_regime_morning(now: datetime) -> None:
         _index_regime_morning_pushed_date = today          # 先占位防重复触发（无论成败）
         if not _index_regime_feishu_enabled():
             return
-        # mode="morning"：as_of 默认=今天，模块内部对齐到 <今天 的最近已完成交易日，
-        # 保证评分基于昨日收盘（周一自动对齐到上周五），不受当日集合竞价 partial bar 影响
-        regime, score, ctx = detect_index_regime(mode="morning")
-        recent_days = (ctx.get("detail") or {}).get("recent_days") or []
-        payload = _build_index_regime_card(
-            ctx, "🧭 早盘大盘基调",
-            as_of_note="（基于昨日收盘的判定）",
-            recent_days=recent_days,
-            extra_lines=["**决策提示**：9:30-10:00 决策窗口主要参考前两日状态"],
-        )
+        # as_of 取前一自然日，模块内部自动对齐到 ≤该日的最近交易日，
+        # 保证评分基于最近一个【已完成】交易日，不受当日集合竞价 partial bar 影响
+        as_of = (now - timedelta(days=1)).strftime("%Y-%m-%d")
+        regime, score, ctx = detect_index_regime(as_of=as_of)
+        payload = _build_index_regime_card(ctx, "🧭 早盘大盘基调", as_of_note="（最近已完成交易日）")
         send_feishu_payload(
             payload=payload,
-            success_log=f"✅ 早盘大盘基调已推送: {ctx.get('regime_name')} S={ctx.get('score')} (mode=morning)",
+            success_log=f"✅ 早盘大盘基调已推送: {ctx.get('regime_name')} S={ctx.get('score')}",
             error_prefix="早盘大盘基调推送",
         )
     except Exception as e:
@@ -474,12 +450,11 @@ def _maybe_push_index_regime_morning(now: datetime) -> None:
 
 
 def _maybe_push_index_regime_eod(now: datetime) -> None:
-    """14:30-14:55 尾盘大盘评分预判推送（每日一次，mode="tail" 含当日 forming bar；
-    盘中预判 estimate，最终以收盘落库为准；标注状态切换；推送后更新 INDEX_REGIME_CONTEXT）"""
+    """14:56-15:05 收盘大盘评分推送（每日一次，含当日；标注状态切换；推送后更新 INDEX_REGIME_CONTEXT）"""
     global _index_regime_eod_pushed_date
     try:
         t = now.time()
-        if now.weekday() >= 5 or not (dtime(14, 30) <= t <= dtime(14, 55)):
+        if now.weekday() >= 5 or not (dtime(14, 56) <= t <= dtime(15, 5)):
             return
         today = now.strftime("%Y-%m-%d")
         if _index_regime_eod_pushed_date == today:
@@ -487,20 +462,16 @@ def _maybe_push_index_regime_eod(now: datetime) -> None:
         _index_regime_eod_pushed_date = today              # 先占位防重复触发（无论成败）
         if not _index_regime_feishu_enabled():
             return
-        # mode="tail"：14:30 后当日态势已基本定型，腾讯日线含 forming bar；
-        # 模块标注 estimate=true 且不写 state.json/trace（保持 EOD 状态机纯净，收盘落库为准）
-        regime, score, ctx = detect_index_regime(mode="tail")
+        regime, score, ctx = detect_index_regime()         # as_of 默认=今天，含当日完整 bar
         state_detail = (ctx.get("detail") or {}).get("state") or {}
         prev_regime = state_detail.get("prev_regime")
         switched = bool(prev_regime) and str(prev_regime) != str(ctx.get("regime"))
-        payload = _build_index_regime_card(
-            ctx, "📊 尾盘大盘评分预判", switched=switched, prev_regime=prev_regime,
-            as_of_note="（盘中预判 estimate，最终以收盘落库为准）",
-        )
+        payload = _build_index_regime_card(ctx, "📊 收盘大盘评分", switched=switched,
+                                           prev_regime=prev_regime)
         send_feishu_payload(
             payload=payload,
-            success_log=f"✅ 尾盘大盘评分预判已推送: {ctx.get('regime_name')} S={ctx.get('score')} 切换={switched} (mode=tail)",
-            error_prefix="尾盘大盘评分预判推送",
+            success_log=f"✅ 收盘大盘评分已推送: {ctx.get('regime_name')} S={ctx.get('score')} 切换={switched}",
+            error_prefix="收盘大盘评分推送",
             trigger_urgent_alarm_after_success=switched,   # 切换日加急
         )
         try:
@@ -508,7 +479,7 @@ def _maybe_push_index_regime_eod(now: datetime) -> None:
         except Exception as e:
             log.warning(f"⚠️ push_index_regime_context 异常: {str(e)[:80]}")
     except Exception as e:
-        log.warning(f"⚠️ 尾盘大盘评分预判钩子异常（已吞掉，不影响主循环）: {str(e)[:120]}")
+        log.warning(f"⚠️ 收盘大盘评分钩子异常（已吞掉，不影响主循环）: {str(e)[:120]}")
 
 
 def _maybe_check_index_intraday_alert(now: datetime) -> None:
@@ -600,7 +571,7 @@ def scan_once():
         _maybe_push_index_regime_morning(now)          # 09:26-09:31 早盘大盘基调（须在 <9:30 早退之前）
 
         if dtime(14, 55) <= t <= dtime(15, 5): log_eod_summary()
-        _maybe_push_index_regime_eod(now)              # 14:30-14:55 尾盘大盘评分预判 mode="tail"（须在 >15:00 早退之前）
+        _maybe_push_index_regime_eod(now)              # 14:56-15:05 收盘大盘评分（须在 >15:00 早退之前）
 
         if now.weekday() >= 5 or t < dtime(9, 30) or (dtime(11, 30) < t < dtime(13, 0)) or t > dtime(15, 0):
             if (_now() - _last_idle_log).total_seconds() >= PARAMS["idle_log_minutes"] * 60:

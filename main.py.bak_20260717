@@ -70,7 +70,7 @@ except Exception:
     shared['_log_enhancer'] = None
 
 # 按顺序加载模块：后面的模块可以引用前面的模块
-module_order = ['config', 'utils', 'data_fetcher', 'multi_timeframe_fetcher', 'signal_engine', 'preopen', 'index_regime', 'index_regime_intraday', 'market_regime', 'position_sizer']
+module_order = ['config', 'utils', 'data_fetcher', 'multi_timeframe_fetcher', 'signal_engine', 'preopen', 'market_regime', 'position_sizer']
 for mod_name in module_order:
     mod_path = _os.path.join(BASE_DIR, f"{mod_name}.py")
     if not _os.path.exists(mod_path):
@@ -79,15 +79,11 @@ for mod_name in module_order:
     with open(mod_path, 'r', encoding='utf-8') as f:
         code = f.read()
     # 在共享命名空间中执行模块代码
-    # exec 期间把 __name__ 置为模块名，防止模块内 if __name__ == "__main__" 守卫
-    # （如 index_regime / index_regime_intraday 的 CLI）在加载时被误触发
-    shared['__name__'] = mod_name
     exec(compile(code, mod_path, 'exec'), shared)
     try:
         print(f"[OK] 模块已加载: {mod_name}.py")
     except UnicodeEncodeError:
         print(f"[OK] 模块已加载: {mod_name}.py")
-shared['__name__'] = '__main__'  # 恢复：main.py 尾部自身的 __main__ 启动守卫依赖该值
 
 # 将共享命名空间中的关键变量暴露到当前模块的 globals，使 main.py 的代码可以运行
 globals().update(shared)
@@ -359,223 +355,6 @@ def send_morning_alert(code, name, alert_level, triggered_rules, morning_stats):
     except Exception as e:
         log.warning(f"⚠️ send_morning_alert 异常: {str(e)[:100]}")
 
-# ==================== 大盘态势判定钩子（index_regime 日线 + 分时预警） ====================
-
-_INDEX_INTRADAY_LAST_FETCH_TS = 0.0   # 分时数据拉取节流（至多 300 秒一次）
-
-_IR_GATE_ADVICE_CN = {
-    "trend_up_hold": "单边上涨：正T优先、买入门控放宽、减少卖飞",
-    "defensive_t": "单边下行：防守做T、买入收紧、禁止追跌",
-    "panic_capitulation_watch": "恐慌末端：停止割肉、暂停反T、关注反向机会",
-    "normal_t": "横盘震荡：黄金做T环境，正常执行策略",
-    "data_unavailable": "数据不可用：按默认横盘处理",
-}
-
-
-def _index_regime_feishu_enabled() -> bool:
-    """读取 config.json 的 feishu.enabled 开关（仿 preopen.py 读法）"""
-    try:
-        runtime_config = load_runtime_config()
-        feishu_cfg = runtime_config.get("feishu", {}) if isinstance(runtime_config, dict) else {}
-        return bool(feishu_cfg.get("enabled", True))
-    except Exception:
-        return True
-
-
-def _build_index_regime_card(ctx: dict, title_prefix: str, switched: bool = False,
-                             prev_regime: Optional[str] = None, as_of_note: str = "",
-                             recent_days: Optional[list] = None,
-                             extra_lines: Optional[list] = None) -> dict:
-    """组装大盘态势飞书卡片：标题模板按状态选 green/red/blue，切换日加急红/绿
-
-    recent_days：morning 模式 detail.recent_days（近3日 [{date,regime,score}]），
-    以 "MM-DD regime score → ..." 序列展示；extra_lines：附加说明行（插在基准日期之后）。
-    """
-    regime = str(ctx.get("regime", "range"))
-    regime_name = ctx.get("regime_name") or index_regime_name(regime)
-    score = float(ctx.get("score") or 0.0)
-    trend_score = ctx.get("trend_score")
-    env_score = ctx.get("env_score")
-    days_in_regime = ctx.get("days_in_regime", 0)
-    degraded = ctx.get("degraded") or []
-    gate = ctx.get("gate_advice", "normal_t")
-    gate_cn = _IR_GATE_ADVICE_CN.get(gate, str(gate))
-
-    if switched:
-        template = "green" if regime == "uni_up" else ("red" if regime == "uni_down" else "blue")
-        title = f"⚡ 大盘态势切换 → {regime_name} {score:+.1f}分 - {FEISHU_KEYWORD}"
-    else:
-        template = {"uni_up": "green", "uni_down": "red"}.get(regime, "blue")
-        title = f"{title_prefix} {regime_name} {score:+.1f}分 - {FEISHU_KEYWORD}"
-
-    lines = [
-        f"**状态**：{regime_name}（{regime}）｜持续 {days_in_regime} 个交易日",
-        f"**综合分 S**：{score:+.2f}（趋势T {trend_score} ／ 环境E {env_score}）",
-        f"**基准日期**：{ctx.get('date', '-')}{as_of_note}",
-    ]
-    if recent_days:
-        seq = " → ".join(
-            f"{str(r.get('date', '-'))[5:]} {r.get('regime', '-')} {float(r.get('score') or 0.0):+.1f}"
-            for r in recent_days[-3:]
-        )
-        lines.append(f"**近3日态势**：{seq}")
-    if extra_lines:
-        lines.extend(str(x) for x in extra_lines)
-    if switched and prev_regime:
-        lines.insert(0, f"**⚡ 状态切换**：{index_regime_name(prev_regime)} → {regime_name}")
-    if ctx.get("exhaust_flag"):
-        lines.append("**衰竭提示**：斜率/乖离处于近一年极值区，分数已×衰竭系数")
-    lines.append(f"**操作建议**：{gate_cn}")
-    if degraded:
-        lines.append(f"**降级项**：{'、'.join(str(d) for d in degraded[:8])}（已按权重归一化，宁缺毋崩）")
-
-    card_elements = [_feishu_md_div(line) for line in lines]
-    card = {"config": {"wide_screen_mode": True},
-            "header": _feishu_card_header(title, template),
-            "elements": card_elements}
-    return {"msg_type": "interactive", "card": card, "notify_type": 1}
-
-
-def _maybe_push_index_regime_morning(now: datetime) -> None:
-    """09:26-09:31 早盘大盘基调推送（每日一次；须在 scan_once 的 <9:30 早退分支之前调用）
-
-    V2：调 detect_index_regime(mode="morning")，模块自动对齐到今天之前最近一个
-    已完成交易日（基于其收盘判定），并输出 detail.recent_days 近3日
-    [{date,regime,score}]；卡片注明 9:30-10:00 决策窗口主要参考前两日状态。
-    """
-    global _index_regime_morning_pushed_date
-    try:
-        t = now.time()
-        if now.weekday() >= 5 or not (dtime(9, 26) <= t <= dtime(9, 31)):
-            return
-        today = now.strftime("%Y-%m-%d")
-        if _index_regime_morning_pushed_date == today:
-            return
-        _index_regime_morning_pushed_date = today          # 先占位防重复触发（无论成败）
-        if not _index_regime_feishu_enabled():
-            return
-        # mode="morning"：as_of 默认=今天，模块内部对齐到 <今天 的最近已完成交易日，
-        # 保证评分基于昨日收盘（周一自动对齐到上周五），不受当日集合竞价 partial bar 影响
-        regime, score, ctx = detect_index_regime(mode="morning")
-        recent_days = (ctx.get("detail") or {}).get("recent_days") or []
-        payload = _build_index_regime_card(
-            ctx, "🧭 早盘大盘基调",
-            as_of_note="（基于昨日收盘的判定）",
-            recent_days=recent_days,
-            extra_lines=["**决策提示**：9:30-10:00 决策窗口主要参考前两日状态"],
-        )
-        send_feishu_payload(
-            payload=payload,
-            success_log=f"✅ 早盘大盘基调已推送: {ctx.get('regime_name')} S={ctx.get('score')} (mode=morning)",
-            error_prefix="早盘大盘基调推送",
-        )
-    except Exception as e:
-        log.warning(f"⚠️ 早盘大盘基调钩子异常（已吞掉，不影响主循环）: {str(e)[:120]}")
-
-
-def _maybe_push_index_regime_eod(now: datetime) -> None:
-    """14:30-14:55 尾盘大盘评分预判推送（每日一次，mode="tail" 含当日 forming bar；
-    盘中预判 estimate，最终以收盘落库为准；标注状态切换；推送后更新 INDEX_REGIME_CONTEXT）"""
-    global _index_regime_eod_pushed_date
-    try:
-        t = now.time()
-        if now.weekday() >= 5 or not (dtime(14, 30) <= t <= dtime(14, 55)):
-            return
-        today = now.strftime("%Y-%m-%d")
-        if _index_regime_eod_pushed_date == today:
-            return
-        _index_regime_eod_pushed_date = today              # 先占位防重复触发（无论成败）
-        if not _index_regime_feishu_enabled():
-            return
-        # mode="tail"：14:30 后当日态势已基本定型，腾讯日线含 forming bar；
-        # 模块标注 estimate=true 且不写 state.json/trace（保持 EOD 状态机纯净，收盘落库为准）
-        regime, score, ctx = detect_index_regime(mode="tail")
-        state_detail = (ctx.get("detail") or {}).get("state") or {}
-        prev_regime = state_detail.get("prev_regime")
-        switched = bool(prev_regime) and str(prev_regime) != str(ctx.get("regime"))
-        payload = _build_index_regime_card(
-            ctx, "📊 尾盘大盘评分预判", switched=switched, prev_regime=prev_regime,
-            as_of_note="（盘中预判 estimate，最终以收盘落库为准）",
-        )
-        send_feishu_payload(
-            payload=payload,
-            success_log=f"✅ 尾盘大盘评分预判已推送: {ctx.get('regime_name')} S={ctx.get('score')} 切换={switched} (mode=tail)",
-            error_prefix="尾盘大盘评分预判推送",
-            trigger_urgent_alarm_after_success=switched,   # 切换日加急
-        )
-        try:
-            push_index_regime_context(ctx)                 # 更新 INDEX_REGIME_CONTEXT / SESSION_CONTEXT
-        except Exception as e:
-            log.warning(f"⚠️ push_index_regime_context 异常: {str(e)[:80]}")
-    except Exception as e:
-        log.warning(f"⚠️ 尾盘大盘评分预判钩子异常（已吞掉，不影响主循环）: {str(e)[:120]}")
-
-
-def _maybe_check_index_intraday_alert(now: datetime) -> None:
-    """盘中 09:35-14:55 大盘分时预警（每轮检查；拉数据 300s 节流；同 tag 60 分钟不重复推）"""
-    global _INDEX_INTRADAY_LAST_FETCH_TS
-    try:
-        t = now.time()
-        if now.weekday() >= 5 or not (dtime(9, 35) <= t <= dtime(14, 55)):
-            return
-        if dtime(11, 30) < t < dtime(13, 0):
-            return
-        now_ts = time.time()
-        if now_ts - _INDEX_INTRADAY_LAST_FETCH_TS < 300:   # 拉取节流：至多 300 秒一次
-            return
-        _INDEX_INTRADAY_LAST_FETCH_TS = now_ts
-        if not _index_regime_feishu_enabled():
-            return
-        # 宿主调参合并：index_regime_intraday 无 globals 合并机制，调用前把
-        # config.py 的 INDEX_INTRADAY_PARAMS 合入模块内 IRI_DEFAULT_PARAMS
-        try:
-            if isinstance(INDEX_INTRADAY_PARAMS, dict):
-                IRI_DEFAULT_PARAMS.update(INDEX_INTRADAY_PARAMS)
-        except Exception:
-            pass
-        minute_bars = fetch_index_minutes_live("sh000001")
-        result = detect_intraday_alert(
-            minute_bars,
-            daily_regime=str(INDEX_REGIME_CONTEXT.get("regime", "range")),
-            daily_score=float(INDEX_REGIME_CONTEXT.get("score") or 0.0),
-        )
-        alerts = result.get("alerts") or []
-        if not alerts:
-            return
-        # 同 tag 60 分钟内不重复推
-        fresh = [a for a in alerts
-                 if now_ts - float(_index_intraday_alert_cache.get(a.get("tag", ""), 0)) >= 3600]
-        if not fresh:
-            return
-        for a in fresh:
-            _index_intraday_alert_cache[a.get("tag", "")] = now_ts
-
-        snapshot = result.get("snapshot") or {}
-        level_rank = {"alert": 2, "warn": 1, "info": 0}
-        top_level = max((level_rank.get(a.get("level"), 0) for a in fresh), default=0)
-        template = "red" if top_level >= 2 else "blue"
-        icon = "🚨" if top_level >= 2 else ("⚠️" if top_level == 1 else "ℹ️")
-        title = f"{icon} 大盘分时预警 - {FEISHU_KEYWORD}"
-        lines = [f"- 【{a.get('tag')}｜{a.get('level')}】{a.get('msg')}" for a in fresh]
-        if snapshot:
-            lines.append(_feishu_hr())
-            lines.append(
-                f"现价 {snapshot.get('last')}（{snapshot.get('chg_pct', 0):+.2f}%）｜"
-                f"日线态势 {index_regime_name(snapshot.get('daily_regime', 'range'))}｜"
-                f"VWAP {snapshot.get('vwap')}")
-        card_elements = [_feishu_md_div(line) if not isinstance(line, dict) else line for line in lines]
-        card = {"config": {"wide_screen_mode": True},
-                "header": _feishu_card_header(title, template),
-                "elements": card_elements}
-        send_feishu_payload(
-            payload={"msg_type": "interactive", "card": card, "notify_type": 1},
-            success_log=f"✅ 大盘分时预警已推送: {[a.get('tag') for a in fresh]}",
-            error_prefix="大盘分时预警推送",
-        )
-    except Exception as e:
-        log.warning(f"⚠️ 大盘分时预警钩子异常（已吞掉，不影响主循环）: {str(e)[:120]}")
-
-
 # ==================== 主循环函数（从原始 t_trader_v1.10.py lines 4970-5363 提取） ====================
 
 def scan_once():
@@ -597,10 +376,7 @@ def scan_once():
                 log.info("📡 盘前集合竞价监控已刷新")
                 _last_idle_log = _now()
 
-        _maybe_push_index_regime_morning(now)          # 09:26-09:31 早盘大盘基调（须在 <9:30 早退之前）
-
         if dtime(14, 55) <= t <= dtime(15, 5): log_eod_summary()
-        _maybe_push_index_regime_eod(now)              # 14:30-14:55 尾盘大盘评分预判 mode="tail"（须在 >15:00 早退之前）
 
         if now.weekday() >= 5 or t < dtime(9, 30) or (dtime(11, 30) < t < dtime(13, 0)) or t > dtime(15, 0):
             if (_now() - _last_idle_log).total_seconds() >= PARAMS["idle_log_minutes"] * 60:
@@ -609,8 +385,6 @@ def scan_once():
             return
 
         log.info(f"🫀 扫描心跳 第{_scan_count + 1}轮开始")
-
-        _maybe_check_index_intraday_alert(now)         # 09:35-14:55 大盘分时预警（300s 节流）
 
         if not HOLDINGS:
             return
