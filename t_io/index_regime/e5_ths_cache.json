@@ -1,0 +1,32 @@
+{
+ "20260715": {
+  "date": "20260715",
+  "zt_count": 71,
+  "dt_count": 31,
+  "zb_count": 20,
+  "zt_touched": 91,
+  "zb_rate": 0.2198,
+  "seal_rate": 0.7802197802197802,
+  "source": "ths_limit_up_pool"
+ },
+ "20260716": {
+  "date": "20260716",
+  "zt_count": 40,
+  "dt_count": 33,
+  "zb_count": 25,
+  "zt_touched": 65,
+  "zb_rate": 0.3846,
+  "seal_rate": 0.6153846153846154,
+  "source": "ths_limit_up_pool"
+ },
+ "20260717": {
+  "date": "20260717",
+  "zt_count": 32,
+  "dt_count": 192,
+  "zb_count": 9,
+  "zt_touched": 41,
+  "zb_rate": 0.2195,
+  "seal_rate": 0.7804878048780488,
+  "source": "ths_limit_up_pool"
+ }
+}
