@@ -906,7 +906,7 @@ ETF_T0_PARAMS = {
 
 # ==================== 大盘态势判定参数（index_regime.py 日线核心 V2.2.1） ====================
 # index_regime.py 的 _ir_params() 通过 globals().get("INDEX_REGIME_PARAMS") 合并本 dict
-# 覆盖模块内 IR_DEFAULT_PARAMS 默认值（2026-07-18 全面对齐 V2.2.2 含 K-day 跃迁与 SHARP C1~C6 修正，键表见 index_regime.py IR_DEFAULT_PARAMS）。
+# 覆盖模块内 IR_DEFAULT_PARAMS 默认值（2026-07-18 全面对齐 V2.2.1 含 K-day 跃迁与 SHARP C1~C4 修正，键表见 index_regime.py IR_DEFAULT_PARAMS）。
 # 红线：键名必须与模块 IR_DEFAULT_PARAMS 完全一致；V1 残留键（chop/均线排列等）一律删除，
 # 否则成为死键或错误覆盖 V2 默认值。
 # 评估时点说明：eod/morning/tail 是 detect_index_regime() 的调用参数（非配置键），
@@ -963,19 +963,17 @@ INDEX_REGIME_PARAMS = {
     "k_ma5_up_days": 3,            # K-down 前置：此前连续站上 MA5 天数下限
     "k_bull_streak_bg": 8,         # K-down 背景：多头 streak 下限（02-13 streak=3 排除）
     "k_anchor_recover_days": 2,    # 空头锚点解除：收复 MA5 连续天数
-    # —— V2.2.2 指标锐化分 SHARP（转折日锐化 + 触发-衰减携带；2026-07-18 对齐 index_regime.py IR_DEFAULT_PARAMS）——
+    # —— V2.2.1 指标锐化分 SHARP（转折日锐化 + 触发-衰减携带；2026-07-18 对齐 index_regime.py IR_DEFAULT_PARAMS）——
     # 机制：波动突破(0~9)+量能确认(0~5,默认补全)+均线状态(0~8,默认补全) → sharp_net/22×40 映射为
-    # sharp_s（±40），规则层加法项（E5 同层，R0 之后 EMA 之前）；|sharp_s|>=32 当日触发全额计入，
+    # sharp_s（±40），规则层加法项（E5 同层，R0 之后 EMA 之前）；|sharp_s|>=28 当日触发全额计入，
     # 其后每交易日 ×0.5 衰减，新触发重置、状态切换清零、反向 K-day 清零。
     # V2.2.1 结构性修正：C1 同向触发抑制（uni_up 只监测空头/uni_down 只监测多头/range 双向，
     # 被抑制侧计入 detail 但不入 S、不触发、不重置衰减）；C2 补位缠绕门控（ku_fill/anchor_fill
-    # 需近 k_cross_bg_days 日交叉>=k_cross_bg）；C3 触发线 20→28；C4 S 量程封顶（EMA 后 clip ±s_clip_max，记 s_pre_clip）。
-    # V2.2.2 补丁：C5 档内子项聚合修复（收破确认/竞价跳空此前未计入 up/dn 聚合，波动侧由实际
-    # 封顶5恢复规格满分9，04-08 sharp_up 13→17）；C6 触发线 28→32（= sharp_net 17.6/22，整数分
-    # >=18：聚合修复后满档突破9+均线8=17→30.9 被拦，触发必须带量能确认 9+3+8=20→36.4）。
+    # 需近 k_cross_bg_days 日交叉>=k_cross_bg）；C3 触发线 20→28（= sharp_net 15.4/22，整数分
+    # >=16：必须带量能确认才算转折）；C4 S 量程封顶（EMA 后 clip ±s_clip_max，记 s_pre_clip）。
     "sharp_full": 22,              # 锐化满分（波动9 + 量能5 + 均线8）
     "sharp_map_max": 40.0,         # sharp_s = sharp_net/sharp_full × 40（±40 封顶）
-    "sharp_trigger": 32.0,         # 【V2.2.2 C6】转折触发线 |sharp_s|（= sharp_net 17.6/22，整数分>=18，必须带量能确认；V2.2.1 为 28）
+    "sharp_trigger": 28.0,         # 【V2.2.1 C3】转折触发线 |sharp_s|（= sharp_net 15.4/22，整数分>=16）
     "sharp_decay": 0.5,            # 触发后每交易日衰减系数（age+1 → ×0.5）
     "sharp_suppress_same_dir": True,  # 【V2.2.1 C1】同向触发抑制：uni_up 只监测空头锐化、uni_down 只监测多头锐化
     "sharp_fill_cross_bg": True,   # 【V2.2.1 C2】补位缠绕门控：ku_fill/anchor_fill 需交叉背景>=k_cross_bg

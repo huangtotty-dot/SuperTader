@@ -1,16 +1,16 @@
 {
-  "market_score": 28.28333333333334,
+  "market_score": 33.36666666666667,
   "market_bias": "risk_off",
   "breadth": {
     "total_codes": 9,
     "etf_count": 1,
     "stock_count": 8,
-    "theme_count": 24,
-    "top_theme_share": 0.111,
+    "theme_count": 0,
+    "top_theme_share": 0.0,
     "advance_decline": {
-      "up": 2406,
-      "down": 2917,
-      "flat": 204
+      "up": 482,
+      "down": 5000,
+      "flat": 45
     },
     "hot_theme": [
       "安徽凤凰",
@@ -28,108 +28,29 @@
       "strong_open_count": 0,
       "weak_open_count": 0,
       "missing_open_count": 1,
-      "mean_score": 7.5,
+      "mean_score": 10.0,
       "source": "qt",
-      "source_ts": "2026-07-17 09:43:18"
+      "source_ts": "2026-07-17 23:35:56"
     }
   },
-  "theme_rank": [
-    {
-      "sector": "数据中心(AIDC)",
-      "count": 1,
-      "score": 2.0,
-      "codes": [
-        "300153"
-      ]
-    },
-    {
-      "sector": "阿里巴巴概念",
-      "count": 1,
-      "score": 2.0,
-      "codes": [
-        "300153"
-      ]
-    },
-    {
-      "sector": "腾讯概念",
-      "count": 1,
-      "score": 2.0,
-      "codes": [
-        "300153"
-      ]
-    },
-    {
-      "sector": "数字媒体",
-      "count": 1,
-      "score": 2.0,
-      "codes": [
-        "300364"
-      ]
-    },
-    {
-      "sector": "AI视频",
-      "count": 1,
-      "score": 2.0,
-      "codes": [
-        "300364"
-      ]
-    },
-    {
-      "sector": "快手概念",
-      "count": 1,
-      "score": 2.0,
-      "codes": [
-        "300364"
-      ]
-    },
-    {
-      "sector": "短剧游戏",
-      "count": 1,
-      "score": 2.0,
-      "codes": [
-        "300364"
-      ]
-    },
-    {
-      "sector": "计算机、通信和其他电子设备制造业",
-      "count": 1,
-      "score": 2.0,
-      "codes": [
-        "300054"
-      ]
-    }
-  ],
+  "theme_rank": [],
   "focus_codes": [],
-  "active_codes": [
-    "300153"
-  ],
-  "watch_codes": [
-    "300364"
-  ],
-  "blocked_codes": [
-    "000988"
-  ],
-  "favored_sectors": [
-    "数据中心(AIDC)",
-    "阿里巴巴概念",
-    "腾讯概念"
-  ],
-  "weak_sectors": [
-    "共封装光学(CPO)",
-    "F5G概念",
-    "铜缆高速连接"
-  ],
-  "session_note": "盘面快照 涨2406 / 跌2917 / 平204 | 竞价强0/弱0/缺1",
-  "generated_at": "2026-07-17 09:43:18",
+  "active_codes": [],
+  "watch_codes": [],
+  "blocked_codes": [],
+  "favored_sectors": [],
+  "weak_sectors": [],
+  "session_note": "盘面快照 涨482 / 跌5000 / 平45 | 竞价强0/弱0/缺1",
+  "generated_at": "2026-07-17 23:35:56",
   "source": "spot",
   "market_snapshot": {
     "source": "spot",
     "market_open": false,
     "index_trend": "unknown",
     "advance_decline": {
-      "up": 2406,
-      "down": 2917,
-      "flat": 204
+      "up": 482,
+      "down": 5000,
+      "flat": 45
     },
     "hot_theme": [
       "安徽凤凰",
@@ -139,18 +60,18 @@
       "鼎佳精密"
     ],
     "risk_flag": "risk_off",
-    "market_sentence": "涨2406 / 跌2917 / 平204"
+    "market_sentence": "涨482 / 跌5000 / 平45"
   },
   "code_snapshots": {
     "300153": {
       "code": "300153",
       "name": "科泰电源",
-      "price": 20.79,
+      "price": 19.8,
       "prev_close": 0.0,
       "open_gap": 0.0,
-      "volume": 16627.0,
-      "amount": 34593571.0,
-      "auction_score": 0.0,
+      "volume": 106786.0,
+      "amount": 216981430.0,
+      "auction_score": 10.0,
       "auction_tag": "flat_open",
       "data_quality": 0.7,
       "daily_gate": "neutral",
@@ -163,10 +84,10 @@
       "raw": {
         "symbol": "v_sz300153",
         "name": "科泰电源",
-        "price": 20.79,
-        "volume": 16627.0,
-        "amount": 34593571.0,
-        "turnover_raw": "34593571",
+        "price": 19.8,
+        "volume": 106786.0,
+        "amount": 216981430.0,
+        "turnover_raw": "216981430",
         "source": "qt"
       },
       "daily_context": {
@@ -211,11 +132,11 @@
     "300364": {
       "code": "300364",
       "name": "中文在线",
-      "price": 23.34,
+      "price": 21.45,
       "prev_close": 0.0,
       "open_gap": 0.0,
-      "volume": 84097.0,
-      "amount": 196769847.0,
+      "volume": 482408.0,
+      "amount": 1078070689.0,
       "auction_score": 10.0,
       "auction_tag": "flat_open",
       "data_quality": 0.7,
@@ -229,10 +150,10 @@
       "raw": {
         "symbol": "v_sz300364",
         "name": "中文在线",
-        "price": 23.34,
-        "volume": 84097.0,
-        "amount": 196769847.0,
-        "turnover_raw": "196769847",
+        "price": 21.45,
+        "volume": 482408.0,
+        "amount": 1078070689.0,
+        "turnover_raw": "1078070689",
         "source": "qt"
       },
       "daily_context": {
@@ -277,11 +198,11 @@
     "300054": {
       "code": "300054",
       "name": "鼎龙股份",
-      "price": 72.84,
+      "price": 69.41,
       "prev_close": 0.0,
       "open_gap": 0.0,
-      "volume": 80636.0,
-      "amount": 586300225.0,
+      "volume": 511517.0,
+      "amount": 3689291882.0,
       "auction_score": 10.0,
       "auction_tag": "flat_open",
       "data_quality": 0.7,
@@ -295,10 +216,10 @@
       "raw": {
         "symbol": "v_sz300054",
         "name": "鼎龙股份",
-        "price": 72.84,
-        "volume": 80636.0,
-        "amount": 586300225.0,
-        "turnover_raw": "586300225",
+        "price": 69.41,
+        "volume": 511517.0,
+        "amount": 3689291882.0,
+        "turnover_raw": "3689291882",
         "source": "qt"
       },
       "daily_context": {
@@ -343,11 +264,11 @@
     "588170": {
       "code": "588170",
       "name": "科创半导体ETF华夏",
-      "price": 1.025,
+      "price": 0.973,
       "prev_close": 0.0,
       "open_gap": 0.0,
-      "volume": 10080285.0,
-      "amount": 1027221557.0,
+      "volume": 62013265.0,
+      "amount": 6281490700.0,
       "auction_score": 10.0,
       "auction_tag": "flat_open",
       "data_quality": 0.7,
@@ -361,10 +282,10 @@
       "raw": {
         "symbol": "v_sh588170",
         "name": "科创半导体ETF华夏",
-        "price": 1.025,
-        "volume": 10080285.0,
-        "amount": 1027221557.0,
-        "turnover_raw": "1027221557",
+        "price": 0.973,
+        "volume": 62013265.0,
+        "amount": 6281490700.0,
+        "turnover_raw": "6281490700",
         "source": "qt"
       },
       "daily_context": {
@@ -409,11 +330,11 @@
     "600176": {
       "code": "600176",
       "name": "中国巨石",
-      "price": 46.65,
+      "price": 43.8,
       "prev_close": 0.0,
       "open_gap": 0.0,
-      "volume": 389865.0,
-      "amount": 1807711514.0,
+      "volume": 1828494.0,
+      "amount": 8225524374.0,
       "auction_score": 10.0,
       "auction_tag": "flat_open",
       "data_quality": 0.7,
@@ -427,10 +348,10 @@
       "raw": {
         "symbol": "v_sh600176",
         "name": "中国巨石",
-        "price": 46.65,
-        "volume": 389865.0,
-        "amount": 1807711514.0,
-        "turnover_raw": "1807711514",
+        "price": 43.8,
+        "volume": 1828494.0,
+        "amount": 8225524374.0,
+        "turnover_raw": "8225524374",
         "source": "qt"
       },
       "daily_context": {
@@ -475,12 +396,12 @@
     "600481": {
       "code": "600481",
       "name": "双良节能",
-      "price": 4.14,
+      "price": 4.01,
       "prev_close": 0.0,
       "open_gap": 0.0,
-      "volume": 49933.0,
-      "amount": 20668595.0,
-      "auction_score": 0.0,
+      "volume": 456095.0,
+      "amount": 185440912.0,
+      "auction_score": 10.0,
       "auction_tag": "flat_open",
       "data_quality": 0.7,
       "daily_gate": "neutral",
@@ -493,10 +414,10 @@
       "raw": {
         "symbol": "v_sh600481",
         "name": "双良节能",
-        "price": 4.14,
-        "volume": 49933.0,
-        "amount": 20668595.0,
-        "turnover_raw": "20668595",
+        "price": 4.01,
+        "volume": 456095.0,
+        "amount": 185440912.0,
+        "turnover_raw": "185440912",
         "source": "qt"
       },
       "daily_context": {
@@ -541,11 +462,11 @@
     "603667": {
       "code": "603667",
       "name": "五洲新春",
-      "price": 57.65,
+      "price": 54.07,
       "prev_close": 0.0,
       "open_gap": 0.0,
-      "volume": 28545.0,
-      "amount": 164874477.0,
+      "volume": 196738.0,
+      "amount": 1115801497.0,
       "auction_score": 10.0,
       "auction_tag": "flat_open",
       "data_quality": 0.7,
@@ -559,10 +480,10 @@
       "raw": {
         "symbol": "v_sh603667",
         "name": "五洲新春",
-        "price": 57.65,
-        "volume": 28545.0,
-        "amount": 164874477.0,
-        "turnover_raw": "164874477",
+        "price": 54.07,
+        "volume": 196738.0,
+        "amount": 1115801497.0,
+        "turnover_raw": "1115801497",
         "source": "qt"
       },
       "daily_context": {
@@ -607,11 +528,11 @@
     "000988": {
       "code": "000988",
       "name": "华工科技",
-      "price": 122.75,
+      "price": 117.62,
       "prev_close": 0.0,
       "open_gap": 0.0,
-      "volume": 194261.0,
-      "amount": 2385110541.0,
+      "volume": 639085.0,
+      "amount": 7683106995.0,
       "auction_score": 10.0,
       "auction_tag": "flat_open",
       "data_quality": 0.7,
@@ -625,10 +546,10 @@
       "raw": {
         "symbol": "v_sz000988",
         "name": "华工科技",
-        "price": 122.75,
-        "volume": 194261.0,
-        "amount": 2385110541.0,
-        "turnover_raw": "2385110541",
+        "price": 117.62,
+        "volume": 639085.0,
+        "amount": 7683106995.0,
+        "turnover_raw": "7683106995",
         "source": "qt"
       },
       "daily_context": {
@@ -674,65 +595,58 @@
       "code": "000988_B",
       "name": "华工科技",
       "price": 0.0,
-      "prev_close": 130.69,
-      "open_gap": -1.0,
+      "prev_close": 0.0,
+      "open_gap": 0.0,
       "volume": 0.0,
       "amount": 0.0,
-      "auction_score": -36.0,
+      "auction_score": -2.0,
       "auction_tag": "stale_or_missing",
-      "data_quality": 0.19999999999999998,
-      "daily_gate": "risk",
-      "daily_trend_bg": "downtrend",
+      "data_quality": 0.0,
+      "daily_gate": "neutral",
+      "daily_trend_bg": "unknown",
       "daily_pullback_support": false,
       "daily_near_support": false,
-      "daily_breakdown_risk": true,
+      "daily_breakdown_risk": false,
       "daily_hard_breakdown": false,
       "source": "qt",
       "raw": {},
       "daily_context": {
-        "daily_status": "ok",
-        "daily_reason": "",
+        "daily_status": "unavailable",
+        "daily_reason": "日线拉取为空",
         "daily_asof": "2026-07-17",
-        "daily_price_ref": 122.76,
-        "daily_prev_close": 130.69,
-        "daily_prev_low": 130.69,
-        "daily_day_ret": -0.06067794016374622,
-        "daily_prev_day_ret": -0.0999931134219407,
-        "daily_ma5": 142.54800000000003,
-        "daily_ma5_slope": -0.07178391894355707,
+        "daily_price_ref": 0.0,
+        "daily_prev_close": 0.0,
+        "daily_prev_low": 0.0,
+        "daily_day_ret": 0.0,
+        "daily_ma5": 0.0,
+        "daily_ma5_slope": 0.0,
         "daily_above_ma5": false,
-        "daily_ma5_gap": -0.1388163986867583,
-        "daily_ma5_state": "below_ma5_weak",
-        "daily_ma10": 148.06,
-        "daily_ma20": 158.334,
-        "daily_ma30": 158.35199999999998,
-        "daily_ma60": 149.85033333333334,
-        "daily_ma120": NaN,
-        "daily_ma150": NaN,
-        "daily_ma180": NaN,
-        "daily_ma250": NaN,
-        "daily_ma365": NaN,
-        "daily_ma10_slope": -0.08219687577485738,
-        "daily_ma20_slope": -0.03395678449293631,
-        "daily_ma30_slope": -0.008970368577841963,
-        "daily_ma60_slope": 0.01548237281933231,
-        "daily_ma120_slope": NaN,
-        "daily_ma150_slope": NaN,
-        "daily_ma180_slope": NaN,
-        "daily_ma250_slope": NaN,
-        "daily_ma365_slope": NaN,
-        "daily_trend_bg": "downtrend",
-        "daily_gate": "risk",
+        "daily_ma5_gap": 0.0,
+        "daily_ma5_state": "unknown",
+        "daily_ma10": 0.0,
+        "daily_ma20": 0.0,
+        "daily_ma30": 0.0,
+        "daily_ma60": 0.0,
+        "daily_ma10_slope": 0.0,
+        "daily_ma20_slope": 0.0,
+        "daily_ma30_slope": 0.0,
+        "daily_ma60_slope": 0.0,
+        "daily_trend_bg": "unknown",
+        "daily_gate": "neutral",
         "daily_support_name": "",
         "daily_support_level": 0.0,
         "daily_support_gap": 0.0,
         "daily_near_support": false,
         "daily_pullback_support": false,
-        "daily_breakdown_risk": true,
+        "daily_breakdown_risk": false,
         "daily_hard_breakdown": false,
         "daily_overheated": false,
-        "daily_ma_clustered": true,
-        "daily_bull_aligned": false
+        "daily_ma_clustered": false,
+        "daily_bull_aligned": false,
+        "daily_high_10d": 0.0,
+        "daily_low_10d": 0.0,
+        "pre2_close": 0.0,
+        "daily_ma150": 0.0
       }
     }
   },
@@ -742,8 +656,8 @@
     "strong_open_count": 0,
     "weak_open_count": 0,
     "missing_open_count": 1,
-    "mean_score": 7.5,
+    "mean_score": 10.0,
     "source": "qt",
-    "source_ts": "2026-07-17 09:43:18"
+    "source_ts": "2026-07-17 23:35:56"
   }
 }

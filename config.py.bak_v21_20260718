@@ -904,9 +904,9 @@ ETF_T0_PARAMS = {
     "open_dip_buy_penalty": 20,                  # ETF 开盘急跌无反包时买入惩罚
 }
 
-# ==================== 大盘态势判定参数（index_regime.py 日线核心 V2.2.1） ====================
+# ==================== 大盘态势判定参数（index_regime.py 日线核心 V2） ====================
 # index_regime.py 的 _ir_params() 通过 globals().get("INDEX_REGIME_PARAMS") 合并本 dict
-# 覆盖模块内 IR_DEFAULT_PARAMS 默认值（2026-07-18 全面对齐 V2.2.2 含 K-day 跃迁与 SHARP C1~C6 修正，键表见 index_regime.py IR_DEFAULT_PARAMS）。
+# 覆盖模块内 IR_DEFAULT_PARAMS 默认值（2026-07-18 全面对齐 V2.0，键表见 index_regime.py:94）。
 # 红线：键名必须与模块 IR_DEFAULT_PARAMS 完全一致；V1 残留键（chop/均线排列等）一律删除，
 # 否则成为死键或错误覆盖 V2 默认值。
 # 评估时点说明：eod/morning/tail 是 detect_index_regime() 的调用参数（非配置键），
@@ -951,48 +951,6 @@ INDEX_REGIME_PARAMS = {
     "r0_pos_lo": 15.0,             # 20日价格区间位置带下沿
     "r0_pos_hi": 65.0,             # 20日价格区间位置带上沿
     "r0_factor": 0.6,              # 命中 → 总分 ×0.6
-    # —— V2.1 K-day 关键日跃迁（校准自 sh000001_daily_features.csv，2026-07-18；
-    #    K-up：04-08 实测 pct=+2.70%/margin=1.74%/cross15=3；K-down：05-14 实测 pct=-1.52%/prev_ma5_up=8；
-    #    k_boost=9 校准：+4 在 E=-27.76 环境拖累+EMA 稀释下 04-08 仅 +2.7 跳升，不满足验收 +10）——
-    "k_up_pct": 1.0,               # K-up 大阳线当日涨幅下限%（04-08=+2.70%）
-    "k_down_pct": 1.0,             # K-down 大阴线当日跌幅下限%（05-14=-1.52%；04-24=-0.33% 排除）
-    "k_margin": 0.3,               # K-up 收盘站上两线的最小余量%（06-12=0.08% 排除）
-    "k_boost": 9,                  # K日 streak 等效天数跃迁（第1天按第10天档 36/40 计，存续期 real+boost 并入曲线）
-    "k_cross_bg": 2,               # K-up 缠绕背景：近 k_cross_bg_days 日交叉次数下限（06-16 段 cross15<=1 排除）
-    "k_cross_bg_days": 15,         # 缠绕背景回看窗
-    "k_ma5_up_days": 3,            # K-down 前置：此前连续站上 MA5 天数下限
-    "k_bull_streak_bg": 8,         # K-down 背景：多头 streak 下限（02-13 streak=3 排除）
-    "k_anchor_recover_days": 2,    # 空头锚点解除：收复 MA5 连续天数
-    # —— V2.2.2 指标锐化分 SHARP（转折日锐化 + 触发-衰减携带；2026-07-18 对齐 index_regime.py IR_DEFAULT_PARAMS）——
-    # 机制：波动突破(0~9)+量能确认(0~5,默认补全)+均线状态(0~8,默认补全) → sharp_net/22×40 映射为
-    # sharp_s（±40），规则层加法项（E5 同层，R0 之后 EMA 之前）；|sharp_s|>=32 当日触发全额计入，
-    # 其后每交易日 ×0.5 衰减，新触发重置、状态切换清零、反向 K-day 清零。
-    # V2.2.1 结构性修正：C1 同向触发抑制（uni_up 只监测空头/uni_down 只监测多头/range 双向，
-    # 被抑制侧计入 detail 但不入 S、不触发、不重置衰减）；C2 补位缠绕门控（ku_fill/anchor_fill
-    # 需近 k_cross_bg_days 日交叉>=k_cross_bg）；C3 触发线 20→28；C4 S 量程封顶（EMA 后 clip ±s_clip_max，记 s_pre_clip）。
-    # V2.2.2 补丁：C5 档内子项聚合修复（收破确认/竞价跳空此前未计入 up/dn 聚合，波动侧由实际
-    # 封顶5恢复规格满分9，04-08 sharp_up 13→17）；C6 触发线 28→32（= sharp_net 17.6/22，整数分
-    # >=18：聚合修复后满档突破9+均线8=17→30.9 被拦，触发必须带量能确认 9+3+8=20→36.4）。
-    "sharp_full": 22,              # 锐化满分（波动9 + 量能5 + 均线8）
-    "sharp_map_max": 40.0,         # sharp_s = sharp_net/sharp_full × 40（±40 封顶）
-    "sharp_trigger": 32.0,         # 【V2.2.2 C6】转折触发线 |sharp_s|（= sharp_net 17.6/22，整数分>=18，必须带量能确认；V2.2.1 为 28）
-    "sharp_decay": 0.5,            # 触发后每交易日衰减系数（age+1 → ×0.5）
-    "sharp_suppress_same_dir": True,  # 【V2.2.1 C1】同向触发抑制：uni_up 只监测空头锐化、uni_down 只监测多头锐化
-    "sharp_fill_cross_bg": True,   # 【V2.2.1 C2】补位缠绕门控：ku_fill/anchor_fill 需交叉背景>=k_cross_bg
-    "s_clip_max": 100.0,           # 【V2.2.1 C4】S 量程封顶：EMA 之后 clip 到 ±100（detail.pipeline 记 s_pre_clip）
-    "sharp_bo5_high": 5,           # 5日档：high > max(前5日 high)
-    "sharp_bo5_close": 2,          # 5日档内：close > max(前5日 close)
-    "sharp_bo3_high": 3,           # 3日档：high > max(前3日 high)（未达5日档时）
-    "sharp_bo3_close": 1,          # 3日档内：close > max(前3日 close)
-    "sharp_gap": 2,                # 档内竞价高开/低开：open vs prev_close
-    "sharp_vol_15": 1.5,           # 【默认补全】vol_ma5/vol_ma20 高档（用户表格第2项截断，参数化待校正）
-    "sharp_vol_12": 1.2,           # 【默认补全】vol_ma5/vol_ma20 低档
-    "sharp_vol_hi_score": 5,       # 【默认补全】量比高档分值
-    "sharp_vol_lo_score": 3,       # 【默认补全】量比低档分值
-    "sharp_ma5": 4,                # 【默认补全】close 站上/跌破 MA5（用户表格第3项截断）
-    "sharp_ma10": 4,               # 【默认补全】close 站上/跌破 MA10（与 MA5 叠加）
-    "sharp_fast_enter": True,      # 多头锐化触发：RANGE 中 S>=enter 允许单日确认进 uni_up
-    "sharp_fast_enter_down": False,  # 空头锐化单日确认进 uni_down（默认关，对齐 K-down 沿用退出规则）
     # —— 指标窗口 ——
     "atr_len": 14,                 # ATR（Wilder）窗口
     "adx_len": 14,                 # ADX 窗口
