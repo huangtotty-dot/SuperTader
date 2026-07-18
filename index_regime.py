@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 """
-index_regime.py — 大盘态势判定模块 V2.2.1（日线级：streak 主导打分 + K日跃迁 + SHARP 指标锐化 + 规则修正层 + 磁滞状态机）
+index_regime.py — 大盘态势判定模块 V2.2.4（日线级：streak 主导打分 + K日跃迁 + SHARP 指标锐化 + 结构分强化 + 分数转折 + 规则修正层 + 磁滞状态机）
 
-V2.2.1 结构性修正（SHARP 锐化分语义回归"关键转折日"，2026-07-18）：
+V2.2.4 结构性修正（价格结构强化 + 分数转折 + SHARP 锐化分语义回归"关键转折日"，2026-07-18）：
   V2.2 全量测试（108 交易日）暴露 4 个结构性问题，逐条修正（全部参数化）：
   C1【同向触发抑制】锐化监测范围按状态收窄：uni_up 只监测空头锐化、uni_down 只监测
      多头锐化、range 双向监测（开关 sharp_suppress_same_dir）。同向锐化分仍照常计算并
@@ -24,6 +24,12 @@ V2.2.1 结构性修正（SHARP 锐化分语义回归"关键转折日"，2026-07-
      s_pre_clip——修复 V2.2 中 05-08 S=104.61 破量程。
   R0 豁免范围同步收窄：仅真实 K-day 或 sharp 转折触发（|sharp_s|>=sharp_trigger）
   当日豁免（C1/C3 后自然满足，03-24~04-07 R0 命中由 8/10 恢复 >=9/10）。
+
+V2.2.4 补丁（2026-07-18，价格结构强化）：
+  C7【价格结构强化】新增 MA5 持续站稳/站下确认、MA20/MA60 破位与触线回落的结构分。
+     规则层在 MA60 关键位被击穿时可直接把 range 拉向 uni_down；持续站稳 MA5 的场景则
+     更快确认 uni_up。目标是让“参考前几日的信息”真正参与当日判断，避免关键转折
+     被 EMA/磁滞拖成震荡。
 
 V2.2.2 补丁（2026-07-18，SHARP 聚合修复）：
   C5【档内子项聚合修复】V2.2~V2.2.1 的 up/dn 聚合误只用档基分 bo+量能+均线，
@@ -215,8 +221,8 @@ IR_DEFAULT_PARAMS: Dict[str, Any] = {
     "exhaust_factor": 0.7,            # 衰竭修正系数
     "score_cache_ttl": 1800,          # 内存缓存 TTL（秒），复用 daily_cache_ttl_seconds 语义
     # —— 趋势维度内权重（V2，合计 1.00；T1 streak 为主导因子）——
-    "w_ma_streak": 0.40, "w_adx": 0.20, "w_reg_r2": 0.20,
-    "w_er": 0.10, "w_aroon": 0.10,
+    "w_ma_streak": 0.35, "w_structure": 0.15, "w_adx": 0.18, "w_reg_r2": 0.17,
+    "w_er": 0.08, "w_aroon": 0.07,
     # —— 环境维度内权重（合计 1.00）——
     "w_breadth": 0.35, "w_nhnl": 0.25, "w_volume": 0.25, "w_qvix": 0.15,
     # —— T1 MA streak 累积分曲线（分段线性锚点：第k天 → 分值，±40 封顶）——
@@ -240,10 +246,25 @@ IR_DEFAULT_PARAMS: Dict[str, Any] = {
     "k_ma5_up_days": 3,               # K-down 前置：此前连续站上 MA5 天数下限（05-14 实测 8）
     "k_bull_streak_bg": 8,            # K-down 背景：多头 streak 下限（05-14=24，03-03=9）
     "k_anchor_recover_days": 2,       # 空头锚点解除：收复 MA5 连续天数
+    # —— V2.2.4 价格结构强化（MA5 持续站稳/跌破 + MA20/MA60 关键线破位）——
+    "ma5_persist_days": 3,           # 连续站上/站下 MA5 的确认天数
+    "ma20_break_bonus": 8,           # 跌破/收复 MA20 的结构分加减
+    "ma60_break_bonus": 18,          # 跌破/收复 MA60 的结构分加减
+    "ma_touch_bonus": 6,             # 触及关键均线后收回/回落的结构分
+    "ma5_slope_eps_pct": 0.0,        # MA5 斜率阈值（绝对值小于视为平）
+    "full_above_ma5_confirm_days": 2,# 全 K 站上 MA5 的确认天数
+    "full_above_ma5_bonus": 8,       # 全 K 站上 MA5 的结构加分
+    "ma60_break_ma5_slope_down_hard": True,  # MA60 破位 + MA5 下行硬切下行
+    "full_above_ma5_hard_up": True,  # 全 K 站上 MA5 硬切上行
+    "struct_hard_before_r2": True,   # 结构硬转向优先于 R2 退出
+    "score_drop_turn_threshold": 15.0,# 分数单日下坠转折阈值
+    "score_rise_turn_threshold": 15.0,# 分数单日上冲转折阈值
+    "score_turn_hard_enabled": True,  # 分数突变硬转向开关
     # —— V2.2 指标锐化分 SHARP（转折日锐化 + 触发-衰减携带；规格表分值全部参数化）——
     "sharp_full": 22,                 # 锐化满分（波动9 + 量能5 + 均线8）
     "sharp_map_max": 40.0,            # sharp_s = sharp_net/sharp_full × 40（±40 封顶）
     "sharp_trigger": 32.0,            # 【V2.2.2 C6】转折触发线 |sharp_s|（= sharp_net 17.6/22，整数分>=18：聚合修复后满档突破9+均线8=17→30.9 被拦，触发必须带量能确认 9+3+8=20→36.4；V2.2.1 为 28）
+    "structure_trigger": 10.0,        # 价格结构强信号阈值（用于日线主判定/盘中 hint）
     "sharp_decay": 0.5,               # 触发后每交易日衰减系数（age+1 → ×0.5）
     "sharp_suppress_same_dir": True,  # 【V2.2.1 C1】同向触发抑制：uni_up 只监测空头锐化、uni_down 只监测多头锐化、range 双向
     "sharp_fill_cross_bg": True,      # 【V2.2.1 C2】补位缠绕门控：ku_fill/anchor_fill 需近 k_cross_bg_days 日交叉>=k_cross_bg
@@ -1050,7 +1071,7 @@ def _ir_hurst_bar(close: pd.Series, window: int, smooth: int) -> Tuple[Optional[
 # V2 特征层：MA5/MA10 streak + R0 三元组（口径与 feature_study_v2.md §1 一致）
 # ============================================================================
 
-def _ir_streak_features(df: pd.DataFrame) -> Dict[str, Any]:
+def _ir_streak_features(df: pd.DataFrame, p: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     """MA streak / cross20 / vol_ratio / pos20 末日值。
 
     - streak：MA5>MA10 连续天数（正，多头）；MA5<MA10 连续天数（负，空头）；
@@ -1061,7 +1082,16 @@ def _ir_streak_features(df: pd.DataFrame) -> Dict[str, Any]:
     """
     out: Dict[str, Any] = {"ok": False, "streak": None, "cross20": None,
                            "vol_ratio": None, "pos20": None,
-                           "ma5": None, "ma10": None, "ma20": None, "close": None}
+                           "ma5": None, "ma10": None, "ma20": None, "ma60": None,
+                           "ma5_slope_pct": None, "ma5_slope_up": False, "ma5_slope_down": False,
+                           "full_above_ma5": False, "full_below_ma5": False,
+                           "full_above_ma5_days": None, "full_below_ma5_days": None,
+                           "close_below_ma60": False, "close_above_ma60": False,
+                           "close": None, "above_ma5_days": None, "below_ma5_days": None,
+                           "above_ma20_days": None, "below_ma20_days": None,
+                           "above_ma60_days": None, "below_ma60_days": None,
+                           "touch_ma20": False, "touch_ma60": False,
+                           "break_ma20": False, "break_ma60": False}
     try:
         n = len(df)
         if n < 10:
@@ -1069,6 +1099,8 @@ def _ir_streak_features(df: pd.DataFrame) -> Dict[str, Any]:
         close, high, low, vol = df["close"], df["high"], df["low"], df["volume"]
         ma5 = close.rolling(5, min_periods=5).mean()
         ma10 = close.rolling(10, min_periods=10).mean()
+        ma20 = close.rolling(20, min_periods=20).mean()
+        ma60 = close.rolling(60, min_periods=60).mean()
         diff = ma5 - ma10
         sign = np.sign(diff.values.astype(float))
         streaks = np.zeros(n, dtype=int)
@@ -1085,8 +1117,17 @@ def _ir_streak_features(df: pd.DataFrame) -> Dict[str, Any]:
         out["ma5"] = _ir_f(ma5.iloc[-1], 2)
         out["ma10"] = _ir_f(ma10.iloc[-1], 2)
         out["close"] = _ir_f(close.iloc[-1], 2)
+        if n >= 6 and not np.isnan(ma5.iloc[-2]) and ma5.iloc[-2] != 0:
+            ma5_slope_pct = (float(ma5.iloc[-1]) / float(ma5.iloc[-2]) - 1.0) * 100.0
+            out["ma5_slope_pct"] = _ir_f(ma5_slope_pct, 4)
+            eps = float(p.get("ma5_slope_eps_pct", 0.0)) if isinstance(p, dict) else 0.0
+            out["ma5_slope_up"] = bool(ma5_slope_pct > eps)
+            out["ma5_slope_down"] = bool(ma5_slope_pct < -eps)
+        out["full_above_ma5"] = bool(n >= 5 and float(low.iloc[-1]) > float(ma5.iloc[-1]))
+        out["full_below_ma5"] = bool(n >= 5 and float(high.iloc[-1]) < float(ma5.iloc[-1]))
         if n >= 20:
-            out["ma20"] = _ir_f(close.rolling(20, min_periods=20).mean().iloc[-1], 2)
+            out["ma20"] = _ir_f(ma20.iloc[-1], 2)
+            out["ma60"] = _ir_f(close.rolling(60, min_periods=60).mean().iloc[-1], 2)
             s_ser = pd.Series(sign, index=df.index)
             cross = ((s_ser * s_ser.shift(1)) < 0).astype(float)
             cross[s_ser.isna() | s_ser.shift(1).isna()] = np.nan
@@ -1100,10 +1141,160 @@ def _ir_streak_features(df: pd.DataFrame) -> Dict[str, Any]:
             ll20 = low.rolling(20, min_periods=20).min().iloc[-1]
             if not (np.isnan(hh20) or np.isnan(ll20) or hh20 <= ll20):
                 out["pos20"] = _ir_f((close.iloc[-1] - ll20) / (hh20 - ll20) * 100.0, 2)
+            def _tail_run(series: pd.Series, cond) -> int:
+                cnt = 0
+                for v in reversed(series.astype(float).tolist()):
+                    if cond(v):
+                        cnt += 1
+                    else:
+                        break
+                return cnt
+            if n >= 60:
+                out["above_ma5_days"] = _tail_run(close >= ma5, lambda x: bool(x))
+                out["below_ma5_days"] = _tail_run(close < ma5, lambda x: bool(x))
+                out["above_ma20_days"] = _tail_run(close >= ma20, lambda x: bool(x))
+                out["below_ma20_days"] = _tail_run(close < ma20, lambda x: bool(x))
+                out["above_ma60_days"] = _tail_run(close >= ma60, lambda x: bool(x))
+                out["below_ma60_days"] = _tail_run(close < ma60, lambda x: bool(x))
+                out["full_above_ma5_days"] = _tail_run(low > ma5, lambda x: bool(x))
+                out["full_below_ma5_days"] = _tail_run(high < ma5, lambda x: bool(x))
+                prev_ma20 = float(ma20.iloc[-2]) if n >= 21 and not np.isnan(ma20.iloc[-2]) else np.nan
+                prev_ma60 = float(ma60.iloc[-2]) if n >= 61 and not np.isnan(ma60.iloc[-2]) else np.nan
+                if not np.isnan(prev_ma20):
+                    out["touch_ma20"] = bool(float(low.iloc[-1]) <= prev_ma20 <= float(high.iloc[-1]))
+                    out["break_ma20"] = bool(float(close.iloc[-1]) < float(ma20.iloc[-1])
+                                              and float(close.iloc[-2]) >= prev_ma20)
+                if not np.isnan(prev_ma60):
+                    out["touch_ma60"] = bool(float(low.iloc[-1]) <= prev_ma60 <= float(high.iloc[-1]))
+                    out["break_ma60"] = bool(float(close.iloc[-1]) < float(ma60.iloc[-1])
+                                              and float(close.iloc[-2]) >= prev_ma60)
+        if n >= 60:
+            out["close_below_ma60"] = bool(float(close.iloc[-1]) < float(ma60.iloc[-1]))
+            out["close_above_ma60"] = bool(float(close.iloc[-1]) > float(ma60.iloc[-1]))
         out["ok"] = True
     except Exception as e:
         _ir_log.info(f"[index_regime] streak 特征计算失败: {type(e).__name__}: {e}")
     return out
+
+
+def _ir_structure_score(df: pd.DataFrame, feat: Dict[str, Any], p: Dict[str, Any]) -> Tuple[float, Dict[str, Any], bool]:
+    """价格结构附加分：强调 MA5 持续站稳/失守，以及 MA20/MA60 关键位破位。"""
+    if not feat.get("ok") or feat.get("ma5") is None or feat.get("ma20") is None:
+        return 0.0, {"score": 0.0, "degraded": True, "reason": "structure 特征不足"}, True
+    close = df["close"].astype(float)
+    high = df["high"].astype(float)
+    low = df["low"].astype(float)
+    ma5 = close.rolling(5, min_periods=5).mean()
+    ma20 = close.rolling(20, min_periods=20).mean()
+    ma60 = close.rolling(60, min_periods=60).mean()
+    last = len(df) - 1
+    c = float(close.iloc[last])
+    m5 = float(ma5.iloc[last])
+    m20 = float(ma20.iloc[last])
+    m60 = float(ma60.iloc[last]) if len(df) >= 60 and not np.isnan(ma60.iloc[last]) else None
+    pc = float(close.iloc[last - 1]) if last >= 1 else c
+    pm20 = float(ma20.iloc[last - 1]) if last >= 1 and not np.isnan(ma20.iloc[last - 1]) else None
+    pm60 = float(ma60.iloc[last - 1]) if last >= 1 and len(df) >= 61 and not np.isnan(ma60.iloc[last - 1]) else None
+
+    def _run(cond_series: pd.Series) -> int:
+        nrun = 0
+        for v in reversed(cond_series.astype(bool).tolist()):
+            if v:
+                nrun += 1
+            else:
+                break
+        return nrun
+
+    above5 = _run(close > ma5)
+    below5 = _run(close < ma5)
+    full_above5 = int(feat.get("full_above_ma5_days") or 0)
+    full_below5 = int(feat.get("full_below_ma5_days") or 0)
+    ma5_slope_down = bool(feat.get("ma5_slope_down"))
+    ma5_slope_up = bool(feat.get("ma5_slope_up"))
+    above20 = _run(close > ma20)
+    below20 = _run(close < ma20)
+    above60 = _run(close > ma60) if m60 is not None else 0
+    below60 = _run(close < ma60) if m60 is not None else 0
+
+    score = 0.0
+    reasons = []
+
+    if above5 >= int(p["ma5_persist_days"]):
+        boost = min(12.0, 4.0 + (above5 - int(p["ma5_persist_days"])) * 2.0)
+        score += boost
+        reasons.append(f"above_ma5({above5})=+{boost:.1f}")
+    if below5 >= int(p["ma5_persist_days"]):
+        bump = min(12.0, 4.0 + (below5 - int(p["ma5_persist_days"])) * 2.0)
+        score -= bump
+        reasons.append(f"below_ma5({below5})=-{bump:.1f}")
+    if full_above5 >= int(p.get("full_above_ma5_confirm_days", 2)):
+        boost = min(16.0, float(p.get("full_above_ma5_bonus", 8)) + (full_above5 - int(p.get("full_above_ma5_confirm_days", 2))) * 2.0)
+        score += boost
+        reasons.append(f"full_above_ma5({full_above5})=+{boost:.1f}")
+    if full_below5 >= int(p.get("full_above_ma5_confirm_days", 2)):
+        bump = min(16.0, float(p.get("full_above_ma5_bonus", 8)) + (full_below5 - int(p.get("full_above_ma5_confirm_days", 2))) * 2.0)
+        score -= bump
+        reasons.append(f"full_below_ma5({full_below5})=-{bump:.1f}")
+
+    if c > m20:
+        score += 2.0 if above20 >= int(p["ma5_persist_days"]) else 0.0
+    elif c < m20:
+        if pm20 is not None and pc >= pm20:
+            score -= float(p["ma20_break_bonus"])
+            reasons.append("break_ma20")
+        elif below20 >= int(p["ma5_persist_days"]):
+            score -= max(2.0, float(p["ma20_break_bonus"]) * 0.5)
+            reasons.append(f"below_ma20({below20})")
+
+    if m60 is not None:
+        if c > m60:
+            if pm60 is not None and pc <= pm60:
+                score += float(p["ma60_break_bonus"])
+                reasons.append("reclaim_ma60")
+            elif above60 >= int(p["ma5_persist_days"]):
+                score += max(4.0, float(p["ma60_break_bonus"]) * 0.5)
+                reasons.append(f"above_ma60({above60})")
+        elif c < m60:
+            if pm60 is not None and pc >= pm60:
+                score -= float(p["ma60_break_bonus"])
+                reasons.append("break_ma60")
+            elif below60 >= 2:
+                score -= max(8.0, float(p["ma60_break_bonus"]) * 0.75)
+                reasons.append(f"below_ma60({below60})")
+            if ma5_slope_down:
+                score -= max(float(p["ma60_break_bonus"]), 22.0)
+                reasons.append("ma60_break_ma5_slope_down")
+
+        if float(low.iloc[last]) <= m20 <= float(high.iloc[last]) and c < m20:
+            score -= float(p["ma_touch_bonus"])
+            reasons.append("touch_reject_ma20")
+        if float(low.iloc[last]) <= m60 <= float(high.iloc[last]) and c < m60:
+            score -= float(p["ma_touch_bonus"]) + 2.0
+            reasons.append("touch_reject_ma60")
+
+    score = _ir_clip(score, -40.0, 40.0)
+    detail = {
+        "score": _ir_f(score, 2),
+        "above_ma5_days": above5, "below_ma5_days": below5,
+        "above_ma20_days": above20, "below_ma20_days": below20,
+        "above_ma60_days": above60 if m60 is not None else None,
+        "below_ma60_days": below60 if m60 is not None else None,
+        "touch_ma20": bool(feat.get("touch_ma20")),
+        "touch_ma60": bool(feat.get("touch_ma60")),
+        "break_ma20": bool(feat.get("break_ma20")),
+        "break_ma60": bool(feat.get("break_ma60")),
+        "ma5_slope_pct": feat.get("ma5_slope_pct"),
+        "ma5_slope_up": ma5_slope_up,
+        "ma5_slope_down": ma5_slope_down,
+        "full_above_ma5": bool(feat.get("full_above_ma5")),
+        "full_below_ma5": bool(feat.get("full_below_ma5")),
+        "full_above_ma5_days": full_above5,
+        "full_below_ma5_days": full_below5,
+        "close_below_ma60": bool(feat.get("close_below_ma60")),
+        "close_above_ma60": bool(feat.get("close_above_ma60")),
+        "reasons": reasons,
+    }
+    return score, detail, False
 
 
 def _ir_streak_curve_value(k: int, p: Dict[str, Any]) -> float:
@@ -1459,6 +1650,7 @@ def _ir_score_ma_streak(feat: Dict[str, Any], p: Dict[str, Any],
     - 晚期警示：|streak|>=streak_late_day → R1 惩罚 ×late_penalty_mult（扣减 100%）。
     - V2.1 K-up 跃迁：等效 streak 天数 = real + k_boost（曲线封顶），当日分数跃迁；
     - V2.1 K-down 空头锚点：kctx.anchor40（<=0）与正常 streak 分取更负值（死叉后无缝接管）。
+    - V2.2.4 价格结构强化：连续站上/站下 MA5 以及 MA20/MA60 破位会额外强化方向分。
     输出分按 ±40 → ±100 线性放大，与其余趋势因子同量程参与加权。
     """
     if not feat.get("ok") or feat.get("streak") is None:
@@ -1821,7 +2013,8 @@ def _ir_exhaust_check(df: pd.DataFrame, p: Dict[str, Any]) -> Tuple[bool, Dict[s
 def _ir_step_regime(prev_regime: IndexRegime, s_today: float, s_prev: Optional[float],
                     p: Dict[str, Any], feat: Dict[str, Any],
                     key_day_type: Optional[str] = None,
-                    sharp_dir: int = 0) -> Tuple[IndexRegime, str]:
+                    sharp_dir: int = 0,
+                    score_delta: Optional[float] = None) -> Tuple[IndexRegime, str]:
     """单步迁移。返回 (新状态, note)。s_prev 为前一交易日最终分（相邻才可确认入场）。
 
     V2 新增：
@@ -1844,7 +2037,26 @@ def _ir_step_regime(prev_regime: IndexRegime, s_today: float, s_prev: Optional[f
     close = feat.get("close")
     ma10 = feat.get("ma10")
     streak = int(feat["streak"]) if feat.get("streak") is not None else 0
-    # 0) R2 破位快速通道（当日生效）
+    score_drop_th = float(p.get("score_drop_turn_threshold", 15.0))
+    score_rise_th = float(p.get("score_rise_turn_threshold", 15.0))
+    hard_turn_enabled = bool(p.get("score_turn_hard_enabled", True))
+    # 0) 结构性硬转向（优先于 R2）
+    full_above5_days = int(feat.get("full_above_ma5_days") or 0)
+    full_below5_days = int(feat.get("full_below_ma5_days") or 0)
+    above5_days = int(feat.get("above_ma5_days") or 0)
+    below5_days = int(feat.get("below_ma5_days") or 0)
+    hard_down_ma60_slope = bool(p.get("ma60_break_ma5_slope_down_hard", True)) and bool(
+        feat.get("close_below_ma60") or feat.get("break_ma60")
+    ) and bool(feat.get("ma5_slope_down"))
+    hard_up_full_ma5 = bool(p.get("full_above_ma5_hard_up", True)) and full_above5_days >= int(
+        p.get("full_above_ma5_confirm_days", 2)
+    )
+    if bool(p.get("struct_hard_before_r2", True)):
+        if prev_regime != IndexRegime.UNI_DOWN and hard_down_ma60_slope:
+            return IndexRegime.UNI_DOWN, "struct_down_ma60_ma5_slope"
+        if prev_regime != IndexRegime.UNI_UP and hard_up_full_ma5 and s_today >= -enter:
+            return IndexRegime.UNI_UP, f"struct_up_full_ma5(full_above5={full_above5_days})"
+    # 1) R2 破位快速通道（当日生效）
     if prev_regime == IndexRegime.UNI_UP and close is not None and ma10 is not None and close < ma10:
         return IndexRegime.RANGE, f"r2_exit_up(close={close}<MA10={ma10})"
     if prev_regime == IndexRegime.UNI_DOWN and close is not None and ma10 is not None and close > ma10:
@@ -1864,7 +2076,33 @@ def _ir_step_regime(prev_regime: IndexRegime, s_today: float, s_prev: Optional[f
     if (prev_regime == IndexRegime.RANGE and sharp_dir < 0
             and bool(p.get("sharp_fast_enter_down", False)) and s_today <= -enter):
         return IndexRegime.UNI_DOWN, f"sharp_down_enter(S={s_today:.1f}<=-{enter:.0f})"
-    # 2) 入场（仅自 RANGE，需前一交易日同向越阈 + streak 方向门控；两单边态不可直接互跳）
+    # 2) 结构性硬转向：MA60 破位/收复、MA5 持续站稳/失守优先于磁滞
+    if prev_regime != IndexRegime.UNI_DOWN:
+        if (feat.get("touch_ma60") and (feat.get("below_ma5_days") or 0) >= 2
+                and (feat.get("below_ma20_days") or 0) >= 2):
+            return IndexRegime.UNI_DOWN, (
+                f"struct_down_ma60_reject(touch60={feat.get('touch_ma60')},"
+                f"below5={feat.get('below_ma5_days')},below20={feat.get('below_ma20_days')})"
+            )
+        if feat.get("break_ma60") or (feat.get("below_ma60_days") or 0) >= 2:
+            return IndexRegime.UNI_DOWN, f"struct_down_ma60(below60={feat.get('below_ma60_days')},break60={feat.get('break_ma60')})"
+        if (feat.get("below_ma5_days") or 0) >= int(p.get("ma5_persist_days", 3)) and s_today <= enter:
+            return IndexRegime.UNI_DOWN, f"struct_down_ma5(below5={feat.get('below_ma5_days')})"
+    if prev_regime != IndexRegime.UNI_UP:
+        if feat.get("break_ma60") is False and (feat.get("above_ma60_days") or 0) >= 2:
+            pass
+        if (feat.get("above_ma5_days") or 0) >= int(p.get("ma5_persist_days", 3)) and s_today >= -enter:
+            return IndexRegime.UNI_UP, f"struct_up_ma5(above5={feat.get('above_ma5_days')})"
+        if (feat.get("full_above_ma5_days") or 0) >= int(p.get("full_above_ma5_confirm_days", 2)) and s_today >= -enter:
+            return IndexRegime.UNI_UP, f"struct_up_full_ma5(full_above5={feat.get('full_above_ma5_days')})"
+    if hard_turn_enabled and score_delta is not None:
+        if score_delta <= -score_drop_th and (
+                feat.get("close_below_ma60") or feat.get("break_ma60") or (feat.get("below_ma5_days") or 0) >= 2):
+            return IndexRegime.UNI_DOWN, f"score_turn_down(delta={score_delta:.2f},th={score_drop_th:.1f})"
+        if score_delta >= score_rise_th and (
+                feat.get("full_above_ma5") or (feat.get("above_ma5_days") or 0) >= int(p.get("ma5_persist_days", 3))):
+            return IndexRegime.UNI_UP, f"score_turn_up(delta={score_delta:.2f},th={score_rise_th:.1f})"
+    # 3) 入场（仅自 RANGE，需前一交易日同向越阈 + streak 方向门控；两单边态不可直接互跳）
     if prev_regime == IndexRegime.RANGE:
         if s_today >= enter:
             if streak <= 0:
@@ -1982,7 +2220,7 @@ class _IndexRegimeEngine:
         is_today = date_str >= today_str
 
         # 2) V2 特征层（streak / cross20 / vol_ratio / pos20）+ V2.1 K-day 评估
-        feat = _ir_streak_features(df)
+        feat = _ir_streak_features(df, p)
         detail: Dict[str, Any] = {}
 
         # 状态前置加载（K-day 判定需要 prev_regime 与锚点状态；幂等重跑先回卷）
@@ -2092,6 +2330,7 @@ class _IndexRegimeEngine:
         t_comp: Dict[str, Tuple[float, bool, float]] = {}
         for key, func, wkey in (
             ("ma_streak", lambda: _ir_score_ma_streak(feat, p, kctx), "w_ma_streak"),
+            ("structure", lambda: _ir_structure_score(df, feat, p), "w_structure"),
             ("adx", lambda: _ir_score_adx(df, p), "w_adx"),
             ("reg_r2", lambda: _ir_score_reg_r2(df, atr, p), "w_reg_r2"),
             ("er", lambda: _ir_score_er(df, p), "w_er"),
@@ -2178,12 +2417,30 @@ class _IndexRegimeEngine:
         _s_clip_max = float(p.get("s_clip_max", 100.0))
         s_final = _ir_clip(s_final, -_s_clip_max, _s_clip_max)
 
+        score_delta = None
+        if prev_adjacent and prev_rec and prev_rec.get("S") is not None:
+            score_delta = float(s_final) - float(prev_rec.get("S"))
+
+        structure_detail = detail.get("structure", {}) or {}
+        structure_score = float(structure_detail.get("score") or 0.0)
+        if feat.get("break_ma60") or (feat.get("below_ma60_days") or 0) >= 2:
+            if s_final > 0:
+                s_final -= max(8.0, abs(structure_score))
+        if feat.get("break_ma20") or (feat.get("below_ma20_days") or 0) >= int(p.get("ma5_persist_days", 3)):
+            if s_final > -10:
+                s_final -= max(4.0, abs(structure_score) * 0.5)
+        if (feat.get("above_ma5_days") or 0) >= int(p.get("ma5_persist_days", 3)):
+            if s_final < 0:
+                s_final += max(4.0, abs(structure_score) * 0.5)
         new_regime, note = _ir_step_regime(prev_regime, s_final,
                                            s_prev if prev_adjacent else None, p, feat,
-                                           key_day_type=k_type, sharp_dir=sharp_dir)
+                                           key_day_type=k_type, sharp_dir=sharp_dir,
+                                           score_delta=score_delta)
         days_in_regime = prev_days + 1 if (new_regime == prev_regime and prev_adjacent) else 1
 
         gate = _ir_gate_advice(new_regime, detail.get("qvix", {}), pools)
+        structure_trigger = float(p.get("structure_trigger", 10.0))
+        structure_strong = abs(structure_score) >= structure_trigger
 
         # V2/V2.1/V2.2 触发规则汇总（便于复盘/推送）
         fired_rules: List[str] = []
@@ -2193,6 +2450,16 @@ class _IndexRegimeEngine:
             fired_rules.append("K_DOWN")
         if not k_type and key_day.get("anchor_active"):
             fired_rules.append("K_ANCHOR")           # 空头锚点存续日（非触发日）
+        if note.startswith("struct_down_ma60_ma5_slope"):
+            fired_rules.append("STRUCT_DOWN_MA60_MA5_SLOPE")
+        if note.startswith("struct_up_full_ma5"):
+            fired_rules.append("STRUCT_UP_FULL_MA5")
+        if structure_strong:
+            fired_rules.append("STRUCTURE_STRONG")
+        if note.startswith("score_turn_down"):
+            fired_rules.append("SCORE_TURN_DOWN")
+        if note.startswith("score_turn_up"):
+            fired_rules.append("SCORE_TURN_UP")
         if d_r0.get("hit") and not d_r0.get("k_exempt") and not d_r0.get("sharp_exempt"):
             fired_rules.append("R0")
         if detail.get("ma_streak", {}).get("r1_hit"):
@@ -2241,6 +2508,9 @@ class _IndexRegimeEngine:
             "gate_advice": gate,
         }
         ctx["detail"]["fired_rules"] = fired_rules
+        score_drop_th = float(p.get("score_drop_turn_threshold", 15.0))
+        score_rise_th = float(p.get("score_rise_turn_threshold", 15.0))
+        hard_turn_enabled = bool(p.get("score_turn_hard_enabled", True))
         ctx["detail"]["pipeline"] = {
             "s_blend": _ir_f(s_raw, 2), "s_r0": _ir_f(s_r0, 2), "s_e5": _ir_f(s_e5, 2),
             "s_sharp": _ir_f(s_sharp, 2), "sharp_add": _ir_f(sharp_add, 2),
@@ -2248,6 +2518,15 @@ class _IndexRegimeEngine:
             "s_final": _ir_f(s_final, 2),
             "ema_seeded": bool(prev_adjacent), "px_source": px_src,
             "k_day_ema_bypass": k_ema_bypass, "sharp_ema_bypass": sharp_ema_bypass,
+            "structure_score": _ir_f(structure_score, 2),
+            "structure_trigger": _ir_f(structure_trigger, 2),
+            "structure_strong": bool(structure_strong),
+            "score_delta": _ir_f(score_delta, 3) if score_delta is not None else None,
+            "score_turn_threshold": {
+                "drop": _ir_f(score_drop_th, 2),
+                "rise": _ir_f(score_rise_th, 2),
+                "enabled": hard_turn_enabled,
+            },
         }
         ctx["detail"]["state"] = {
             "prev_regime": prev_regime.value, "note": note,
@@ -2358,7 +2637,7 @@ def detect_index_regime(as_of: str = None, force: bool = False, mode: str = "eod
 # ============================================================================
 
 def _ir_cli() -> None:
-    ap = argparse.ArgumentParser(description="大盘态势判定 V2.2.1（streak主导打分+K日跃迁+SHARP锐化(C1同向抑制/C2补位门控/C3触发线28/C4量程封顶)+规则层+状态机）")
+    ap = argparse.ArgumentParser(description="大盘态势判定 V2.2.4（streak主导打分+K日跃迁+SHARP锐化+价格结构强化+规则层+状态机）")
     ap.add_argument("--date", default=None, help="判定日期 YYYY-MM-DD，默认今天")
     ap.add_argument("--json", action="store_true", help="打印完整 JSON 输出")
     ap.add_argument("--force", action="store_true", help="绕过内存缓存")

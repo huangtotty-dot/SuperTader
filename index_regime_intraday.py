@@ -383,11 +383,18 @@ def detect_intraday_alert(minute_bars, daily_regime: str = "range",
 
     # ---- I4 状态冲突：日线趋势 vs 盘中反向剧烈波动（相对当日开盘）----
     th = p["i4_conflict_pct"]
-    if daily_regime == "uni_up" and chg_pct <= -th:
+    regime_hint = daily_regime
+    if regime_hint == "range":
+        hint_th = float(p.get("i4_range_hint_score", 15.0))
+        if daily_score <= -hint_th:
+            regime_hint = "uni_down"
+        elif daily_score >= hint_th:
+            regime_hint = "uni_up"
+    if regime_hint == "uni_up" and chg_pct <= -th:
         alerts.append({"tag": "I4", "level": "alert",
                        "msg": f"趋势破坏预警: 日线 uni_up 但盘中 {chg_pct:+.2f}% "
                               f"(<= {-th:+.1f}%)"})
-    elif daily_regime == "uni_down" and chg_pct >= th:
+    elif regime_hint == "uni_down" and chg_pct >= th:
         alerts.append({"tag": "I4", "level": "info",
                        "msg": f"反弹预警: 日线 uni_down 但盘中 {chg_pct:+.2f}% "
                               f"(>= {th:+.1f}%)"})
@@ -432,6 +439,7 @@ def detect_intraday_alert(minute_bars, daily_regime: str = "range",
         "vol_ratio_vs_5d": round(vol_ratio, 3) if vol_ratio is not None else None,
         "time": last_time.strftime("%Y-%m-%d %H:%M:%S"),
         "daily_regime": daily_regime,
+        "daily_regime_hint": regime_hint,
         "daily_score": daily_score,
     }
     return {"alerts": alerts, "snapshot": snapshot, "degraded": degraded}
