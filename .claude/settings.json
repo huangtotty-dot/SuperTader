@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python index_regime.py --date 2026-03-16 --json)",
+      "Bash(python index_regime.py --date 2026-03-17 --json)",
+      "Bash(python index_regime_intraday.py --mode live --code sh000001 --regime range --score 20 --no-daily)",
+      "Bash(python -m py_compile index_regime.py index_regime_intraday.py)",
+      "Read(//c/Users/Lenovo/AppData/Local/Temp/**)",
+      "Read(//e/04_实战资料/**)",
+      "Skill(run)",
+      "Skill(run:*)",
+      "Bash(python index_regime_backtest.py --start 2026-02-03 --end 2026-07-17 --calendar bdays)"
+    ]
+  }
+}

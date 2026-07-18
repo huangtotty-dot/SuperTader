@@ -904,9 +904,9 @@ ETF_T0_PARAMS = {
     "open_dip_buy_penalty": 20,                  # ETF 开盘急跌无反包时买入惩罚
 }
 
-# ==================== 大盘态势判定参数（index_regime.py 日线核心 V2.2.1） ====================
+# ==================== 大盘态势判定参数（index_regime.py 日线核心 V2.2.4） ====================
 # index_regime.py 的 _ir_params() 通过 globals().get("INDEX_REGIME_PARAMS") 合并本 dict
-# 覆盖模块内 IR_DEFAULT_PARAMS 默认值（2026-07-18 全面对齐 V2.2.2 含 K-day 跃迁与 SHARP C1~C6 修正，键表见 index_regime.py IR_DEFAULT_PARAMS）。
+# 覆盖模块内 IR_DEFAULT_PARAMS 默认值（2026-07-18 全面对齐 V2.2.4 含 K-day 跃迁、SHARP C1~C6、价格结构强化与分数转折，键表见 index_regime.py IR_DEFAULT_PARAMS）。
 # 红线：键名必须与模块 IR_DEFAULT_PARAMS 完全一致；V1 残留键（chop/均线排列等）一律删除，
 # 否则成为死键或错误覆盖 V2 默认值。
 # 评估时点说明：eod/morning/tail 是 detect_index_regime() 的调用参数（非配置键），
@@ -926,12 +926,13 @@ INDEX_REGIME_PARAMS = {
     "exhaust_bias_pct": 0.90,      # 衰竭：BIAS20 > 近一年 90% 分位
     "exhaust_factor": 0.7,         # 衰竭修正系数
     "score_cache_ttl": 1800,       # 评分内存缓存 TTL（秒）；缓存键=评估时点mode+日期
-    # —— 趋势维度内权重（V2，合计 1.00；T1 streak 为主导因子）——
-    "w_ma_streak": 0.40,           # T1 MA5>MA10 多头 streak 累积分（V2 最大因子）
-    "w_adx": 0.20,                 # T2 ADX
-    "w_reg_r2": 0.20,              # T3 回归斜率×R²
-    "w_er": 0.10,                  # T4 Kaufman ER
-    "w_aroon": 0.10,               # T5 Aroon
+    # —— 趋势维度内权重（V2.2.4；结构分显式纳入）——
+    "w_ma_streak": 0.35,           # T1 MA5>MA10 多头 streak 累积分
+    "w_structure": 0.15,           # T1.5 价格结构强化（MA5/MA20/MA60）
+    "w_adx": 0.18,                 # T2 ADX
+    "w_reg_r2": 0.17,              # T3 回归斜率×R²
+    "w_er": 0.08,                  # T4 Kaufman ER
+    "w_aroon": 0.07,               # T5 Aroon
     # —— 环境维度内权重（合计 1.00）——
     "w_breadth": 0.35,             # E1 涨跌家数强度+ADL
     "w_nhnl": 0.25,                # E2 NH-NL（数据层降级中）
@@ -963,7 +964,7 @@ INDEX_REGIME_PARAMS = {
     "k_ma5_up_days": 3,            # K-down 前置：此前连续站上 MA5 天数下限
     "k_bull_streak_bg": 8,         # K-down 背景：多头 streak 下限（02-13 streak=3 排除）
     "k_anchor_recover_days": 2,    # 空头锚点解除：收复 MA5 连续天数
-    # —— V2.2.2 指标锐化分 SHARP（转折日锐化 + 触发-衰减携带；2026-07-18 对齐 index_regime.py IR_DEFAULT_PARAMS）——
+    # —— V2.2.4 指标锐化分 SHARP（转折日锐化 + 触发-衰减携带；2026-07-18 对齐 index_regime.py IR_DEFAULT_PARAMS）——
     # 机制：波动突破(0~9)+量能确认(0~5,默认补全)+均线状态(0~8,默认补全) → sharp_net/22×40 映射为
     # sharp_s（±40），规则层加法项（E5 同层，R0 之后 EMA 之前）；|sharp_s|>=32 当日触发全额计入，
     # 其后每交易日 ×0.5 衰减，新触发重置、状态切换清零、反向 K-day 清零。
@@ -973,6 +974,7 @@ INDEX_REGIME_PARAMS = {
     # V2.2.2 补丁：C5 档内子项聚合修复（收破确认/竞价跳空此前未计入 up/dn 聚合，波动侧由实际
     # 封顶5恢复规格满分9，04-08 sharp_up 13→17）；C6 触发线 28→32（= sharp_net 17.6/22，整数分
     # >=18：聚合修复后满档突破9+均线8=17→30.9 被拦，触发必须带量能确认 9+3+8=20→36.4）。
+    # V2.2.4 追加：价格结构强化与分数突变 turn 规则，MA5/MA20/MA60 与 score_delta 同时参与转折判定。
     "sharp_full": 22,              # 锐化满分（波动9 + 量能5 + 均线8）
     "sharp_map_max": 40.0,         # sharp_s = sharp_net/sharp_full × 40（±40 封顶）
     "sharp_trigger": 32.0,         # 【V2.2.2 C6】转折触发线 |sharp_s|（= sharp_net 17.6/22，整数分>=18，必须带量能确认；V2.2.1 为 28）
@@ -993,6 +995,15 @@ INDEX_REGIME_PARAMS = {
     "sharp_ma10": 4,               # 【默认补全】close 站上/跌破 MA10（与 MA5 叠加）
     "sharp_fast_enter": True,      # 多头锐化触发：RANGE 中 S>=enter 允许单日确认进 uni_up
     "sharp_fast_enter_down": False,  # 空头锐化单日确认进 uni_down（默认关，对齐 K-down 沿用退出规则）
+    "ma5_slope_eps_pct": 0.0,       # MA5 斜率阈值（绝对值小于视为平）
+    "full_above_ma5_confirm_days": 2,  # 全 K 站上 MA5 的确认天数
+    "full_above_ma5_bonus": 8,      # 全 K 站上 MA5 的结构加分
+    "ma60_break_ma5_slope_down_hard": True,  # MA60 破位 + MA5 下行硬切下行
+    "full_above_ma5_hard_up": True, # 全 K 站上 MA5 硬切上行
+    "struct_hard_before_r2": True,  # 结构硬转向优先于 R2 退出
+    "score_drop_turn_threshold": 15.0,  # 分数单日下坠转折阈值
+    "score_rise_turn_threshold": 15.0,   # 分数单日上冲转折阈值
+    "score_turn_hard_enabled": True,     # 分数突变硬转向开关
     # —— 指标窗口 ——
     "atr_len": 14,                 # ATR（Wilder）窗口
     "adx_len": 14,                 # ADX 窗口
