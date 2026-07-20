@@ -1649,6 +1649,7 @@ class SignalEngine:
         if is_deep_loss:
             diag["is_deep_loss"] = True
             diag["profit_pct"] = round(profit_pct * 100, 2)
+        indicators["daily_loss_pct"] = round(profit_pct * 100, 2)
 
         # 1. GAP_BOUNCE20: 集合竞价弱势 + 早盘反弹高抛（保持，不受振幅门控限制，但加观察）
         # 条件：低开+早盘反弹+未突破开盘价
@@ -2731,6 +2732,12 @@ class SignalEngine:
                 morning_sell_guard = False
                 diag["deep_loss_bypass_morning_guard"] = True
                 # 移除阻塞记录，避免诊断信息误导
+                if "morning_first_sell_guard" in diag.get("sell_block_reasons", []):
+                    diag["sell_block_reasons"].remove("morning_first_sell_guard")
+            # V1.27fix: 大幅低开直接绕过（>4% gap-down，深套直接止损，不等待反弹确认）
+            if morning_sell_guard and is_deep_loss and t_val < p.get("morning_no_sell_until", 940) and today_ret < -0.04:
+                morning_sell_guard = False
+                diag["gap_down_bypass_morning_guard"] = True
                 if "morning_first_sell_guard" in diag.get("sell_block_reasons", []):
                     diag["sell_block_reasons"].remove("morning_first_sell_guard")
             if can_sell and sell_score >= sell_threshold and (sell_score - buy_score) >= buy_fast_path_gap and not self._in_cooldown(code, "SELL_HIGH") and (not morning_sell_guard or is_optimal_sell):

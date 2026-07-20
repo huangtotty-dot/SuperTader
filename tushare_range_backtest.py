@@ -665,11 +665,12 @@ def run_backtest(code: str, start: str, end: str, freq: str, step: int, out_dir:
                 current_price = float(sub_df.iloc[-1]["close"])
                 daily_ctx = _build_partial_daily_context(code, daily_bars, sub_df, current_price=current_price, as_of=ds)
                 daily_ctx = _attach_index_regime_backtest_context(daily_ctx, ds, sim_now, index_regime_rows, index_regime_timing)
+                # 尝试用 sentiment JSONL 历史记录设置 T-mode
                 dt_row = sentiment_by_date.get(ds) or sentiment_by_date.get(str(pd.to_datetime(sim_now).date())) or {}
                 try:
                     auto = sentiment_by_date.get(ds)
-                    if isinstance(auto, dict) and auto:
-                        decision = dict(auto.get("t_decision") or auto.get("decision") or {})
+                    if isinstance(auto, dict) and auto and auto.get("t_decision"):
+                        decision = dict(auto["t_decision"])
                         per_stock = auto.get("per_stock") or {}
                         sd = per_stock.get(code) or {}
                         if isinstance(sd, dict) and sd:
@@ -686,36 +687,41 @@ def run_backtest(code: str, start: str, end: str, freq: str, step: int, out_dir:
                         daily_ctx["t_basis_date"] = auto.get("date")
                         daily_ctx["t_heat"] = auto.get("z_top3")
                     else:
-                        auto = _auto_t_mode_suggestion()
-                        if auto:
-                            decision = dict(auto.get("decision") or {})
-                            per_stock = auto.get("per_stock") or {}
-                            sd = per_stock.get(code) or {}
-                            if isinstance(sd, dict) and sd:
-                                decision.update(sd)
-                            mode = decision.get("mode", "long")
-                            if mode not in {"long", "short"}:
-                                mode = "long"
-                            daily_ctx["t_mode"] = mode
-                            daily_ctx["effective_t_mode"] = mode
-                            daily_ctx["t_mode_source"] = "dynamic_sentiment"
-                            daily_ctx["t_pos_factor"] = float(decision.get("pos_factor", 1.0) or 0.0)
-                            daily_ctx["t_trade_gate"] = str(decision.get("trade_gate", "normal") or "normal")
-                            daily_ctx["t_reason"] = str(decision.get("reason", "") or "")
-                            daily_ctx["t_basis_date"] = auto.get("basis_date")
-                            daily_ctx["t_heat"] = auto.get("z_top3")
+                        # 无 sentiment 历史 → 用大盘态判定 T-mode（基于 daily_ctx 中的 index_regime 数据）
+                        regime = daily_ctx.get("index_regime", "range")
+                        score = float(daily_ctx.get("index_score", 0.0) or 0.0)
+                        temp_bucket = daily_ctx.get("index_temp_bucket", "neutral")
+                        circuit = daily_ctx.get("index_circuit_state", "normal")
+                        pos_factor = float(daily_ctx.get("index_pos_factor", 1.0) or 1.0)
+                        if regime == "uni_down":
+                            mode = "short"
+                            gate = "defensive" if temp_bucket in ("cold", "freeze", "clear") else "normal"
+                            reason = f"单边下行({score:.0f}分) → 反T"
                         else:
-                            daily_ctx.setdefault("t_mode", "long")
-                            daily_ctx.setdefault("t_mode_source", "fallback")
-                            daily_ctx.setdefault("t_pos_factor", 1.0)
-                            daily_ctx.setdefault("t_trade_gate", "normal")
-                            daily_ctx.setdefault("t_reason", "fallback")
+                            mode = "long"
+                            gate = "normal"
+                            reason = f"{daily_ctx.get('index_regime_name', '横盘')}({score:.0f}分) → 正T"
+                        if circuit in ("reduce", "clear"):
+                            if gate == "normal":
+                                gate = circuit
+                            pos_factor *= 0.5
+                            reason += f" | 熔断:{circuit}"
+                        daily_ctx["t_mode"] = mode
+                        daily_ctx["effective_t_mode"] = mode
+                        daily_ctx["t_mode_source"] = "regime_fallback"
+                        daily_ctx["t_pos_factor"] = float(max(0.0, pos_factor))
+                        daily_ctx["t_trade_gate"] = str(gate)
+                        daily_ctx["t_reason"] = reason
                     global T_MODE
                     if isinstance(T_MODE, dict):
                         T_MODE[code] = str(daily_ctx.get("t_mode", "long"))
                     shared["T_MODE"] = T_MODE
-                except Exception:
-                    daily_ctx.setdefault("t_mode", "long")
+                except Exception as e:
+                    if "T_MODE" not in daily_ctx:
+                        daily_ctx["t_mode"] = "long"
+                        daily_ctx["t_mode_source"] = "exception_fallback"
+                        daily_ctx["t_trade_gate"] = "normal"
+                        daily_ctx["t_pos_factor"] = 1.0
                 try:
                     scored = sub_df
                     buy_score, sell_score, sig = engine.evaluate(
@@ -733,7 +739,16 @@ def run_backtest(code: str, start: str, end: str, freq: str, step: int, out_dir:
                     continue
 
                 t_val = SIM_NOW.hour * 100 + SIM_NOW.minute
-                notify_threshold = 68 if sig.action in ["BUY_LOW", "ADD_POS"] else (65 if t_val >= 1000 else 75)
+                # V1.27fix: 大幅低开(>4%)时降低早盘通知门槛
+                _today_ret = (current_price / daily_ctx.get("daily_prev_close", current_price) - 1) if daily_ctx.get("daily_prev_close", 0) > 0 else 0.0
+                if sig.action in ["BUY_LOW", "ADD_POS"]:
+                    notify_threshold = 68
+                elif t_val >= 1000:
+                    notify_threshold = 65
+                elif _today_ret < -0.04 and sig.action in ("PANIC_SELL", "SELL_HIGH"):
+                    notify_threshold = 60
+                else:
+                    notify_threshold = 75
                 notify = float(sig.score) >= notify_threshold
                 signal_row = {
                     "index_regime_date": daily_ctx.get("index_regime_date"),

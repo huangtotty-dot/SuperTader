@@ -861,6 +861,7 @@ def scan_once():
                     try:
                         from position_sizer import calc_sell_qty, calc_buy_qty
                         threshold = float(sig.factors.get("threshold", 35))
+                        cur_price = float(sig.price or 0)
                         if sig.action in ["SELL_HIGH", "PANIC_SELL"]:
                             dynamic_qty = calc_sell_qty(
                                 code, holding, regime,
@@ -869,6 +870,7 @@ def scan_once():
                                 params={**PARAMS, **STOCK_PARAMS.get(code, {})},
                                 virtual_trades=VIRTUAL_TRADES,
                                 index_ctx=daily_ctx,
+                                current_price=cur_price,
                             )
                         else:
                             dynamic_qty = calc_buy_qty(
@@ -877,6 +879,7 @@ def scan_once():
                                 params={**PARAMS, **STOCK_PARAMS.get(code, {})},
                                 virtual_trades=VIRTUAL_TRADES,
                                 index_ctx=daily_ctx,
+                                current_price=cur_price,
                             )
                         if dynamic_qty > 0:
                             sig.hold_qty = dynamic_qty
@@ -892,12 +895,15 @@ def scan_once():
                     # 3. 信号分数门槛 + 通知
                     # 早盘加时：9:30-10:00 设 75 分门槛，10:00 后 65 分
                     # 低吸额外：无论什么时间都 68 分
+                    # V1.27fix: 大幅低开(>4%)时降低早盘门槛，确保暴跌通知送达
+                    today_ret_snap = daily_ctx.get("daily_day_ret", 0.0)
                     if sig.action in ["BUY_LOW", "ADD_POS"]:
                         notify_threshold = 68
                     else:
-                        # 卖信号
                         if t >= dtime(10, 0):
                             notify_threshold = 65
+                        elif today_ret_snap < -0.04 and sig.action in ("PANIC_SELL", "SELL_HIGH"):
+                            notify_threshold = 60
                         else:
                             notify_threshold = 75
                     
@@ -1452,25 +1458,17 @@ def _push_morning_t_strategy(t_mode: dict, auto: dict) -> None:
         log.warning(f"⚠️ 当日T策略卡推送异常（已吞掉）: {str(e)[:120]}")
 
 
-def _prompt_t_mode_selection(holdings, t_mode):
-    """V3.0: 启动时按决策矩阵自动建议正T/反T，支持手动覆盖。
-    回车=接受自动建议 / l=正T / s=反T；T_AUTO_MODE=1 跳过人工直接采用。
-    t_mode.json 写入 "_auto_decision" 元信息（日期+矩阵依据）。"""
-    try:
-        import builtins
-        input_fn = builtins.input
-    except Exception:
-        input_fn = lambda x: ""
-
-    mode_names = {"long": "正T(先买后卖)", "short": "反T(先卖后买)"}
+def _auto_apply_t_mode(holdings, t_mode):
+    """V3.1: 基于昨日热度+sentiment自动决定今日正T/反T，无需人工选择。
+    sentiment_daily.jsonl 由 daily_sentiment.py 在 14:30 写入昨日大盘热度+z_top3，
+    启动时 _auto_t_mode_suggestion() 读取该记录并通过决策矩阵判定 T-mode，
+    结果自动写入 t_mode.json，推送飞书策略卡。"""
     auto = _auto_t_mode_suggestion()
     dec = auto.get("decision") or {}
     auto_mode = dec.get("mode", "long")
     auto_factor = dec.get("pos_factor", 1.0)
     auto_reason = dec.get("reason", "")
-    auto_flag = bool(globals().get("AUTO_T_MODE")) or os.getenv("T_AUTO_MODE", "0").strip() == "1"
     today = _now().strftime("%Y-%m-%d")
-    # 读旧元信息（判断今日是否已推过策略卡）
     prev_meta = {}
     try:
         if os.path.exists(T_MODE_FILE):
@@ -1479,45 +1477,23 @@ def _prompt_t_mode_selection(holdings, t_mode):
     except Exception:
         prev_meta = {}
 
+    mode_names = {"long": "正T(先买后卖)", "short": "反T(先卖后买)"}
     print("\n" + "=" * 60)
-    print("【V3.0 T模式选择】决策矩阵自动建议 + 手动覆盖")
+    print("【V3.1 T模式自动决策】基于昨日热度 + 大盘态势")
     print(f"  依据: 大盘{auto.get('regime_name')}｜z_top3={float(auto.get('z_top3') or 0):+.2f}"
           f"（{auto.get('basis_date') or '无热度记录'}）")
-    print(f"  矩阵建议: {mode_names.get(auto_mode, auto_mode)} ×{auto_factor} — {auto_reason}")
-    print("  回车=接受建议 / l=正T / s=反T"
-          + ("｜T_AUTO_MODE=1 已开启，全自动采用" if auto_flag else ""))
+    print(f"  矩阵结论: {dec.get('mode_cn', '正T')} ×{auto_factor} — {auto_reason}")
     print("=" * 60)
 
-    updated = False
     per_stock_auto = auto.get("per_stock") or {}
     for code, holding in holdings.items():
         name = holding.get("name", code)
-        current = t_mode.get(code, "long")
         s_dec = per_stock_auto.get(code) or {}
         s_mode = s_dec.get("mode", auto_mode)
         s_reason = s_dec.get("reason", auto_reason)
-        s_factor = s_dec.get("pos_factor", auto_factor)
-        print(f"  {name}({code}) [当前 {mode_names.get(current, current)}]"
-              f" 自动建议: {mode_names.get(s_mode, s_mode)} ×{s_factor}（{s_reason}）")
-        choice = ""
-        if not auto_flag:
-            try:
-                choice = input_fn("    选择(回车/l/s): ").strip().lower()
-            except (EOFError, KeyboardInterrupt):
-                choice = ""
-        if choice in ("l", "long", "正", "正t"):
-            new_mode = "long"
-        elif choice in ("s", "short", "反", "反t"):
-            new_mode = "short"
-        else:
-            new_mode = s_mode
-        if t_mode.get(code) != new_mode:
-            updated = True
-        t_mode[code] = new_mode
-        tag = "自动采用" if (not choice and auto_flag) else ("接受建议" if not choice else "手动覆盖")
-        print(f"    → {tag}: {mode_names.get(new_mode, new_mode)}")
+        t_mode[code] = s_mode
+        print(f"  {name}({code}) → {mode_names.get(s_mode, s_mode)} — {s_reason}")
 
-    # 元信息：日期 + 矩阵依据（load_t_mode/save_t_mode 自动保留/过滤 _ 前缀键）
     t_mode["_auto_decision"] = {
         "date": today,
         "regime": auto.get("regime"),
@@ -1528,14 +1504,14 @@ def _prompt_t_mode_selection(holdings, t_mode):
         "pos_factor": auto_factor,
         "reason": auto_reason,
         "per_stock": {c: (d.get("mode") if isinstance(d, dict) else str(d))
-                      for c, d in (auto.get("per_stock") or {}).items()},
-        "source": "auto" if auto_flag else "auto+manual",
+                      for c, d in per_stock_auto.items()},
+        "source": "auto_v3.1",
     }
     if 'save_t_mode' in globals():
         save_t_mode(t_mode)
-        print(f"\n✅ T模式已保存到 t_mode.json（{'有' if updated else '无'}变更，含 _auto_decision 元信息）")
-    # 早盘策略卡：今日首次决策 或 有手动变更 时推送一次
-    if updated or str(prev_meta.get("date")) != today:
+        print(f"✅ T模式已自动保存到 t_mode.json（含 _auto_decision 元信息）")
+    # 早盘策略卡：今日首次推送一次
+    if str(prev_meta.get("date")) != today:
         _push_morning_t_strategy(t_mode, auto)
     print("=" * 60 + "\n")
 
@@ -1545,10 +1521,10 @@ def run_watch():
     HOLDINGS = load_holdings()
     shared['HOLDINGS'] = HOLDINGS  # V1.12: 更新共享命名空间中的HOLDINGS，供signal_engine使用
 
-    # V1.26: 加载T模式配置并提示选择
+    # V3.1: 基于昨日大盘热度+数决矩阵自动决定今日正T/反T，无需人工选择
     T_MODE = load_t_mode()
     shared['T_MODE'] = T_MODE
-    _prompt_t_mode_selection(HOLDINGS, T_MODE)
+    _auto_apply_t_mode(HOLDINGS, T_MODE)
 
     _ensure_preopen_context(force=True)
     engine = SignalEngine()

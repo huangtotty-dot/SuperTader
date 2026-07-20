@@ -46,32 +46,6 @@
   "last_date": "2026-07-17",
   "history": [
     {
-      "date": "2026-03-26",
-      "S": -27.5895,
-      "sadj": -28.7389,
-      "regime": "uni_down",
-      "days_in_regime": 8,
-      "k_anchor": {
-        "active": false,
-        "below_days": 0,
-        "recover_days": 0,
-        "start_date": null
-      },
-      "k_up": {
-        "active": false,
-        "boost": 0,
-        "start_date": null
-      },
-      "sharp": {
-        "active": false,
-        "value": 0.0,
-        "age": 0,
-        "direction": 0,
-        "trigger_date": null,
-        "regime_at_trigger": null
-      }
-    },
-    {
       "date": "2026-03-27",
       "S": -25.0079,
       "sadj": -22.4263,
