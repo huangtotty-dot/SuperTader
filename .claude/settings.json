@@ -9,7 +9,8 @@
       "Read(//e/04_实战资料/**)",
       "Skill(run)",
       "Skill(run:*)",
-      "Bash(python index_regime_backtest.py --start 2026-02-03 --end 2026-07-17 --calendar bdays)"
+      "Bash(python index_regime_backtest.py --start 2026-02-03 --end 2026-07-17 --calendar bdays)",
+      "Bash(python tushare_range_backtest.py --help)"
     ]
   }
 }

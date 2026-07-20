@@ -1,0 +1,73 @@
+{
+  "metadata": {
+    "generated_at": "2026-07-19 02:23:17",
+    "script": "tushare_range_backtest.py",
+    "code": "000988",
+    "name": "华工科技",
+    "ts_code": "000988.SZ",
+    "start": "2026-07-17",
+    "end": "2026-07-17",
+    "minute_source": "tushare_stk_mins",
+    "daily_source": "fallback_daily",
+    "step": 5,
+    "holding_key": "000988",
+    "stock_params_applied": true,
+    "minute_token_env": "TUSHARE_TOKEN",
+    "minute_cache_dir": "E:\\06_T\\t_io\\cache\\tushare_mins\\000988"
+  },
+  "summary": {
+    "requested_days": 1,
+    "evaluated_days": 0,
+    "skipped_days": 1,
+    "total_signals": 0,
+    "notify_signals": 0,
+    "buy_signals": 0,
+    "sell_signals": 0,
+    "completed_cycles": 0,
+    "unmatched_buys": 0,
+    "unmatched_sells": 0,
+    "gross_pnl": 0.0,
+    "fees": 0.0,
+    "net_pnl": 0.0,
+    "commission_rate": 0.0015,
+    "slippage_bps": 0.0,
+    "t_mode": "hold"
+  },
+  "data_quality": [
+    {
+      "date": "2026-07-17",
+      "status": "error",
+      "reason": "ConnectionError: HTTPConnectionPool(host='127.0.0.1', port=7890): Read timed out."
+    }
+  ],
+  "daily": [],
+  "signals": [],
+  "trades": [],
+  "unmatched": [
+    {
+      "type": "buy",
+      "count": 0
+    },
+    {
+      "type": "sell",
+      "count": 0
+    }
+  ],
+  "skipped": [
+    {
+      "date": "2026-07-17",
+      "reason": "ConnectionError: HTTPConnectionPool(host='127.0.0.1', port=7890): Read timed out."
+    }
+  ],
+  "stock_params_snapshot": {
+    "vwap_buy_deviation": -0.02,
+    "awaiting_buyback_vwap_gap": 0.975,
+    "take_profit_pct": 0.01,
+    "morning_no_sell_until": 1000,
+    "morning_no_sell_min_ret": 0.03,
+    "buy_confirm_min_score": 18,
+    "daily_trade_limit": 3,
+    "stock_qty_base_pct": 0.3,
+    "stock_qty_strong_pct": 0.5
+  }
+}

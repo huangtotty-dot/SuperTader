@@ -313,6 +313,27 @@ PARAMS = {
     "daily_context_enabled": True,
     "daily_cache_ttl_seconds": 1800,
     "daily_context_min_rows": 65,
+    # V1.27: 大盘态势温度 / 仓位熔断
+    "index_regime_context_enabled": True,
+    "index_temp_hot_score": 25.0,
+    "index_temp_cold_score": -15.0,
+    "index_temp_freeze_score": -25.0,
+    "index_temp_clear_score": -40.0,
+    "index_deterioration_delta": -10.0,
+    "index_deterioration_days": 2,
+    "index_stabilize_score": -10.0,
+    "index_stabilize_days": 2,
+    "index_pos_factor_uni_down": 0.6,
+    "index_pos_factor_range": 1.0,
+    "index_pos_factor_uni_up": 1.1,
+    "index_pos_factor_cold": 0.6,
+    "index_pos_factor_reduce": 0.4,
+    "index_pos_factor_clear": 0.0,
+    "index_defensive_buy_penalty": 8,
+    "index_freeze_buy_penalty": 100,
+    "index_defensive_sell_relief": 3,
+    "index_reduce_sell_boost": 10,
+    "index_clear_sell_boost": 100,
     "daily_ma_support_gap": 0.025,
     "daily_ma_support_loose_gap": 0.04,
     "daily_ma_breakdown_gap": 0.015,
@@ -1115,17 +1136,32 @@ _index_intraday_alert_cache: Dict[str, float] = {}       # {预警tag: 上次推
 # ==================== V1.26: T模式配置（正T/反T切换） ====================
 # long = 正T（先买后卖，默认）
 # short = 反T（先卖后买，下跌趋势用）
+_T_MODE_VALID = {"long", "short"}
+
+
+def _normalize_t_mode_value(value: Any) -> str:
+    if value in _T_MODE_VALID:
+        return str(value)
+    return ""
+
+
 def load_t_mode() -> Dict[str, str]:
     """加载T模式配置，返回 {code: 'long'|'short'}"""
-    default_mode = "long"
     if not os.path.exists(T_MODE_FILE):
         return {}
     try:
         with open(T_MODE_FILE, "r", encoding="utf-8") as f:
             data = json.load(f)
-        if isinstance(data, dict):
-            # 过滤掉以 _ 开头的内部字段
-            return {k: v for k, v in data.items() if not k.startswith("_")}
+        if not isinstance(data, dict):
+            return {}
+        runtime: Dict[str, str] = {}
+        for k, v in data.items():
+            if str(k).startswith("_"):
+                continue
+            mode = _normalize_t_mode_value(v)
+            if mode:
+                runtime[str(k)] = mode
+        return runtime
     except Exception as e:
         log.warning(f"⚠️  T模式配置读取失败: {str(e)[:80]}")
     return {}
@@ -1134,13 +1170,18 @@ def load_t_mode() -> Dict[str, str]:
 def save_t_mode(t_mode: Dict[str, str]):
     """保存T模式配置到文件"""
     try:
-        # 保留原有注释字段
         existing = {}
         if os.path.exists(T_MODE_FILE):
             with open(T_MODE_FILE, "r", encoding="utf-8") as f:
                 existing = json.load(f)
-        merged = {k: v for k, v in existing.items() if k.startswith("_")}
-        merged.update(t_mode)
+        merged = {k: v for k, v in existing.items() if str(k).startswith("_")}
+        for k, v in (t_mode or {}).items():
+            if str(k).startswith("_"):
+                merged[k] = v
+                continue
+            mode = _normalize_t_mode_value(v)
+            if mode:
+                merged[k] = mode
         with open(T_MODE_FILE, "w", encoding="utf-8") as f:
             json.dump(merged, f, ensure_ascii=False, indent=2)
     except Exception as e:

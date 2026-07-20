@@ -1,0 +1,137 @@
+{
+  "metadata": {
+    "generated_at": "2026-07-19 23:22:41",
+    "script": "tushare_range_backtest.py",
+    "code": "000988",
+    "name": "华工科技",
+    "ts_code": "000988.SZ",
+    "start": "2026-07-17",
+    "end": "2026-07-17",
+    "minute_source": "tushare_stk_mins",
+    "daily_source": "tencent_fqkline_partial_daily",
+    "step": 20,
+    "holding_key": "000988",
+    "stock_params_applied": true,
+    "minute_token_env": "TUSHARE_TOKEN",
+    "minute_cache_dir": "E:\\06_T\\t_io\\cache\\tushare_mins\\000988",
+    "index_regime_csv": "",
+    "index_regime_timing": "prior_then_tail",
+    "sentiment_source": "E:\\06_T\\t_io\\logs\\sentiment_daily.jsonl"
+  },
+  "summary": {
+    "requested_days": 1,
+    "evaluated_days": 1,
+    "skipped_days": 0,
+    "total_signals": 1,
+    "notify_signals": 0,
+    "buy_signals": 0,
+    "sell_signals": 1,
+    "completed_cycles": 0,
+    "unmatched_buys": 0,
+    "unmatched_sells": 2,
+    "gross_pnl": 0.0,
+    "fees": 0.0,
+    "net_pnl": 0.0,
+    "commission_rate": 0.0015,
+    "slippage_bps": 0.0,
+    "t_mode_source": "dynamic_sentiment",
+    "t_mode_counts": {
+      "long": 1
+    },
+    "t_gate_counts": {
+      "null": 1
+    }
+  },
+  "data_quality": [
+    {
+      "date": "2026-07-17",
+      "status": "ok",
+      "minute_source": "cache",
+      "rows": 241
+    }
+  ],
+  "daily": [
+    {
+      "date": "2026-07-17",
+      "minute_source": "cache",
+      "signals": 1,
+      "trades": 0,
+      "gross_pnl": 0.0,
+      "fees": 0.0,
+      "net_pnl": 0.0,
+      "minute_rows": 241,
+      "daily_status": "ok",
+      "daily_gate": "risk",
+      "daily_trend_bg": "downtrend",
+      "daily_support_name": "",
+      "daily_support_gap": 0.0,
+      "daily_context_source": "direct_build"
+    }
+  ],
+  "signals": [
+    {
+      "index_regime_date": "2026-07-17",
+      "index_regime": "range",
+      "index_score": 0.0,
+      "index_score_delta": 0.0,
+      "index_gate_advice": "normal_t",
+      "index_temp_bucket": "neutral",
+      "index_circuit_state": "normal",
+      "index_pos_factor": 1.0,
+      "index_policy_reason": "index_csv_missing",
+      "t_mode": "long",
+      "t_mode_source": null,
+      "t_pos_factor": null,
+      "t_trade_gate": null,
+      "t_reason": null,
+      "t_basis_date": null,
+      "dynamic_qty": 800,
+      "qty_source": "position_sizer",
+      "blocked_by_index_circuit": false,
+      "date": "2026-07-17",
+      "time": "10:34:00",
+      "code": "000988",
+      "name": "华工科技",
+      "action": "PANIC_SELL",
+      "score": 64.0,
+      "buy_score": 42.0,
+      "sell_score": 64.0,
+      "price": 118.18,
+      "vwap": 121.77306334530452,
+      "notify": false,
+      "notify_threshold": 65,
+      "hold_qty": 800,
+      "daily_gate": "risk",
+      "daily_trend_bg": "downtrend",
+      "daily_support_name": "",
+      "daily_support_gap": 0.0,
+      "daily_status": "ok",
+      "reasons": "深套止损最终防线|量能确认|长上影|EMA转弱|下跌趋势高抛|强空头优先高抛|日线破位风险",
+      "minute_source": "cache",
+      "daily_context_source": "direct_build"
+    }
+  ],
+  "trades": [],
+  "unmatched": [
+    {
+      "type": "buy",
+      "count": 0
+    },
+    {
+      "type": "sell",
+      "count": 2
+    }
+  ],
+  "skipped": [],
+  "stock_params_snapshot": {
+    "vwap_buy_deviation": -0.02,
+    "awaiting_buyback_vwap_gap": 0.975,
+    "take_profit_pct": 0.01,
+    "morning_no_sell_until": 1000,
+    "morning_no_sell_min_ret": 0.03,
+    "buy_confirm_min_score": 18,
+    "daily_trade_limit": 3,
+    "stock_qty_base_pct": 0.3,
+    "stock_qty_strong_pct": 0.5
+  }
+}

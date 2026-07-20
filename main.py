@@ -776,6 +776,7 @@ def scan_once():
                 dec["last_daily_support"] = daily_ctx.get("daily_support_name", "")
                 dec["last_daily_support_gap"] = daily_ctx.get("daily_support_gap", 0.0)
                 dec["last_daily_overheated"] = daily_ctx.get("daily_overheated", False)
+                _attach_dynamic_t_decision(code, holding, daily_ctx, now)
                 buy_score, sell_score, sig = engine.evaluate(code, holding.get("name", code), df, holding, daily_ctx=daily_ctx)
 
                 dec["last_benchmark_code"] = sig.indicators.get("benchmark_code", "") if sig else dec.get("last_benchmark_code", "")
@@ -862,24 +863,29 @@ def scan_once():
                         threshold = float(sig.factors.get("threshold", 35))
                         if sig.action in ["SELL_HIGH", "PANIC_SELL"]:
                             dynamic_qty = calc_sell_qty(
-                                code, holding, regime, 
+                                code, holding, regime,
                                 float(sig.score), threshold,
                                 used_sells=engine.sell_count_per_stock.get(code, 0),
-                                params=PARAMS,
-                                virtual_trades=VIRTUAL_TRADES
+                                params={**PARAMS, **STOCK_PARAMS.get(code, {})},
+                                virtual_trades=VIRTUAL_TRADES,
+                                index_ctx=daily_ctx,
                             )
                         else:
                             dynamic_qty = calc_buy_qty(
                                 code, holding, regime,
                                 float(sig.score), threshold,
-                                params=PARAMS,
-                                virtual_trades=VIRTUAL_TRADES
+                                params={**PARAMS, **STOCK_PARAMS.get(code, {})},
+                                virtual_trades=VIRTUAL_TRADES,
+                                index_ctx=daily_ctx,
                             )
                         if dynamic_qty > 0:
                             sig.hold_qty = dynamic_qty
                             total_t = int(holding.get("t_qty", 0) or holding.get("qty", 0) or 0)
                             pct = dynamic_qty / total_t * 100 if total_t > 0 else 0
                             log.info(f"📊 动态份数 {code}: 状态={regime.value if regime else 'normal'} 信号强度{sig.score:.0f}/阈值{threshold:.0f}, 建议交易{dynamic_qty}股/份 ({pct:.0f}%)")
+                        else:
+                            sig.hold_qty = 0
+                            log.info(f"🛑 大盘熔断/仓控阻断 {code}: {daily_ctx.get('index_circuit_state', 'normal')} / {daily_ctx.get('index_gate_advice', 'normal_t')}")
                     except Exception as e:
                         log.warning(f"⚠️  动态份数计算失败 {code}: {e}")
                     
@@ -901,8 +907,11 @@ def scan_once():
                         action_type = "买入" if sig.action in ["BUY_LOW", "ADD_POS"] else "卖出"
                         time_window = "10:00前" if t < dtime(10, 0) else "10:00后"
                         log.info(f"📉 {code} {action_type}信号得分{sig.score:.0f}分，低于{time_window}阈值{notify_threshold}分，静默处理（不推送飞书）")
-                    engine.record_signal(code, sig.action, sig.price, sig.score)
-                    engine.record_trade_action(code, sig.action, sig.hold_qty)
+                    if sig.hold_qty > 0:
+                        engine.record_signal(code, sig.action, sig.price, sig.score)
+                        engine.record_trade_action(code, sig.action, sig.hold_qty)
+                    else:
+                        log.info(f"🛑 {code} 受大盘熔断/仓控阻断，跳过交易记录")
                     if sig.action in ["SELL_HIGH", "PANIC_SELL"]:
                         engine.cycle_count[code] = engine.cycle_count.get(code, 0) + 1
 
@@ -1009,6 +1018,7 @@ def replay_today():
                     daily_ctx = snap.get("daily_context") if isinstance(snap, dict) else None
                     if not isinstance(daily_ctx, dict):
                         daily_ctx = _default_daily_context(code, status="replay_missing", reason="snapshot missing daily_context")
+                    _attach_dynamic_t_decision(code, state, daily_ctx, SIM_NOW)
                     buy_score, sell_score, sig = engine_local.evaluate(code, snap.get("name", code), add_indicators(df), state, daily_ctx=daily_ctx)
                 except Exception:
                     continue
@@ -1178,7 +1188,8 @@ def tushare_replay():
             
             # 获取 daily_ctx（简单版）
             daily_ctx = _default_daily_context(code)
-            
+            _attach_dynamic_t_decision(code, state, daily_ctx, SIM_NOW)
+
             try:
                 buy_score, sell_score, sig = engine.evaluate(
                     code, holding.get("name", code), sub_df, state, daily_ctx=daily_ctx
@@ -1345,15 +1356,63 @@ def _auto_t_mode_suggestion() -> dict:
                 regime=out["regime"], z_S=out["z_S"], z_top3=out["z_top3"],
                 overheat_streak=out["overheat_streak"], k_day_type=None,
                 prev_k_down=out["prev_k_down"], uni_down_days=out["uni_down_days"])
-        # 昨日触发系统性风险 → 次日继续 hold（清仓覆盖的次日延续）
+        # 昨日触发系统性风险 → 今日保持清仓门控，不再落为 hold
         if out.get("systemic_risk") and isinstance(out.get("decision"), dict):
-            out["decision"]["mode"] = "hold"
-            out["decision"]["mode_cn"] = "不做T"
+            out["decision"]["mode"] = "short"
+            out["decision"]["mode_cn"] = "反T"
             out["decision"]["pos_factor"] = 0.0
-            out["decision"]["reason"] = str(out["decision"].get("reason", "")) + "；昨日系统性风险→今日继续hold"
+            out["decision"]["trade_gate"] = "clear"
+            out["decision"]["t_enabled"] = False
+            out["decision"]["reason"] = str(out["decision"].get("reason", "")) + "；昨日系统性风险→今日清仓门控"
     except Exception as e:
         log.warning(f"⚠️ 自动建议计算异常（按默认正T兜底）: {str(e)[:120]}")
     return out
+
+
+def _attach_dynamic_t_decision(code: str, holding: dict, daily_ctx: dict, now_dt=None) -> dict:
+    """把当前有效T决策写回daily_ctx和全局T_MODE，供执行层和回测复用。"""
+    decision = {}
+    per_stock = {}
+    try:
+        auto = _auto_t_mode_suggestion()
+        decision = dict(auto.get("decision") or {})
+        per_stock = auto.get("per_stock") or {}
+        stock_decision = per_stock.get(code) or {}
+        if isinstance(stock_decision, dict) and stock_decision:
+            decision.update({
+                "mode": stock_decision.get("mode", decision.get("mode", "long")),
+                "mode_cn": stock_decision.get("mode_cn", decision.get("mode_cn", "正T")),
+                "pos_factor": stock_decision.get("pos_factor", decision.get("pos_factor", 1.0)),
+                "reason": stock_decision.get("reason", decision.get("reason", "")),
+                "trade_gate": stock_decision.get("trade_gate", decision.get("trade_gate", "normal")),
+                "t_enabled": stock_decision.get("t_enabled", decision.get("t_enabled", True)),
+            })
+        mode = decision.get("mode", "long")
+        if mode not in {"long", "short"}:
+            mode = "long"
+        daily_ctx["t_mode"] = mode
+        daily_ctx["effective_t_mode"] = mode
+        daily_ctx["t_mode_source"] = "dynamic_sentiment"
+        daily_ctx["t_pos_factor"] = float(decision.get("pos_factor", 1.0) or 0.0)
+        daily_ctx["t_trade_gate"] = str(decision.get("trade_gate", "normal") or "normal")
+        daily_ctx["t_reason"] = str(decision.get("reason", "") or "")
+        daily_ctx["t_basis_date"] = auto.get("basis_date")
+        daily_ctx["t_heat"] = auto.get("z_top3")
+        daily_ctx["t_sysrisk"] = bool(auto.get("systemic_risk"))
+        global T_MODE
+        if isinstance(T_MODE, dict):
+            T_MODE[code] = mode
+        shared["T_MODE"] = T_MODE
+        return {"auto": auto, "decision": decision, "per_stock": per_stock}
+    except Exception as e:
+        log.warning(f"⚠️ 动态T决策注入失败: {str(e)[:120]}")
+        daily_ctx.setdefault("t_mode", "long")
+        daily_ctx.setdefault("effective_t_mode", "long")
+        daily_ctx.setdefault("t_mode_source", "fallback")
+        daily_ctx.setdefault("t_pos_factor", 1.0)
+        daily_ctx.setdefault("t_trade_gate", "normal")
+        daily_ctx.setdefault("t_reason", "fallback")
+        return {"auto": {}, "decision": {}, "per_stock": {}}
 
 
 def _push_morning_t_strategy(t_mode: dict, auto: dict) -> None:
@@ -1362,7 +1421,7 @@ def _push_morning_t_strategy(t_mode: dict, auto: dict) -> None:
         if not FEISHU_WEBHOOK:
             return
         dec = auto.get("decision") or {}
-        mode_names = {"long": "正T(先买后卖)", "short": "反T(先卖后买)", "hold": "不做T"}
+        mode_names = {"long": "正T(先买后卖)", "short": "反T(先卖后买)"}
         lines = [
             f"**依据**：大盘{auto.get('regime_name')}｜z_top3={float(auto.get('z_top3') or 0):+.2f}"
             f"（{auto.get('basis_date') or '无热度记录'}）",
@@ -1380,7 +1439,7 @@ def _push_morning_t_strategy(t_mode: dict, auto: dict) -> None:
                 line += f"｜{'；'.join(notes)}"
             lines.append(line)
         if auto.get("systemic_risk"):
-            lines.append("🚨 昨日触发系统性风险：今日以清仓/观望为主，禁止正T")
+            lines.append("🚨 昨日触发系统性风险：今日以清仓门控为主，禁止正T")
         card = {"config": {"wide_screen_mode": True},
                 "header": _feishu_card_header(f"🎯 当日T策略（矩阵） - {FEISHU_KEYWORD}", "blue"),
                 "elements": [_feishu_md_div(x) for x in lines]}
@@ -1394,8 +1453,8 @@ def _push_morning_t_strategy(t_mode: dict, auto: dict) -> None:
 
 
 def _prompt_t_mode_selection(holdings, t_mode):
-    """V3.0: 启动时按决策矩阵自动建议正T/反T/不做T，支持手动覆盖。
-    回车=接受自动建议 / l=正T / s=反T / h=不做T；T_AUTO_MODE=1 跳过人工直接采用。
+    """V3.0: 启动时按决策矩阵自动建议正T/反T，支持手动覆盖。
+    回车=接受自动建议 / l=正T / s=反T；T_AUTO_MODE=1 跳过人工直接采用。
     t_mode.json 写入 "_auto_decision" 元信息（日期+矩阵依据）。"""
     try:
         import builtins
@@ -1403,7 +1462,7 @@ def _prompt_t_mode_selection(holdings, t_mode):
     except Exception:
         input_fn = lambda x: ""
 
-    mode_names = {"long": "正T(先买后卖)", "short": "反T(先卖后买)", "hold": "不做T"}
+    mode_names = {"long": "正T(先买后卖)", "short": "反T(先卖后买)"}
     auto = _auto_t_mode_suggestion()
     dec = auto.get("decision") or {}
     auto_mode = dec.get("mode", "long")
@@ -1425,7 +1484,7 @@ def _prompt_t_mode_selection(holdings, t_mode):
     print(f"  依据: 大盘{auto.get('regime_name')}｜z_top3={float(auto.get('z_top3') or 0):+.2f}"
           f"（{auto.get('basis_date') or '无热度记录'}）")
     print(f"  矩阵建议: {mode_names.get(auto_mode, auto_mode)} ×{auto_factor} — {auto_reason}")
-    print("  回车=接受建议 / l=正T / s=反T / h=不做T"
+    print("  回车=接受建议 / l=正T / s=反T"
           + ("｜T_AUTO_MODE=1 已开启，全自动采用" if auto_flag else ""))
     print("=" * 60)
 
@@ -1443,15 +1502,13 @@ def _prompt_t_mode_selection(holdings, t_mode):
         choice = ""
         if not auto_flag:
             try:
-                choice = input_fn("    选择(回车/l/s/h): ").strip().lower()
+                choice = input_fn("    选择(回车/l/s): ").strip().lower()
             except (EOFError, KeyboardInterrupt):
                 choice = ""
         if choice in ("l", "long", "正", "正t"):
             new_mode = "long"
         elif choice in ("s", "short", "反", "反t"):
             new_mode = "short"
-        elif choice in ("h", "hold", "不", "不做t"):
-            new_mode = "hold"
         else:
             new_mode = s_mode
         if t_mode.get(code) != new_mode:

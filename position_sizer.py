@@ -29,11 +29,20 @@ class PositionSizer:
         self.params = params or {}
         self.virtual_trades = virtual_trades or {}
 
+    def _effective_params(self, code: str, holding: dict) -> dict:
+        p = dict(self.params or {})
+        stock_params = p.get("STOCK_PARAMS") if isinstance(p.get("STOCK_PARAMS"), dict) else {}
+        if stock_params:
+            p.update(stock_params.get(code, {}))
+        if holding.get("type") == "etf" and isinstance(p.get("ETF_T0_PARAMS"), dict):
+            p = {**p, **p.get("ETF_T0_PARAMS", {})}
+        return p
+
     # ==================== 核心：卖出份数计算 ====================
 
-    def calc_sell_qty(self, code: str, holding: dict, regime, 
+    def calc_sell_qty(self, code: str, holding: dict, regime,
                       sig_score: float, threshold: float,
-                      used_sells: int = 0) -> int:
+                      used_sells: int = 0, index_ctx: dict = None) -> int:
         """
         计算卖出股数
 
@@ -56,29 +65,42 @@ class PositionSizer:
             return 0
 
         is_etf = holding.get("type") == "etf"
-        p = self.params if not is_etf else {**self.params, **self.params.get("ETF_T0_PARAMS", {})}
+        p = self._effective_params(code, holding)
         strength = sig_score - threshold
+        index_ctx = index_ctx or {}
+        index_state = str(index_ctx.get("index_circuit_state", "normal") or "normal")
+        index_factor = float(index_ctx.get("index_pos_factor", 1.0) or 1.0)
+        target_qty = max(0, int(total_t * index_factor))
+        excess_qty = max(0, net_qty - target_qty)
 
-        # 场景1：重压/出货 → 全清或大减仓
-        if should_clear_all(regime):
+        # 场景1：大盘熔断/清仓/减仓
+        if index_state == "clear" or should_clear_all(regime):
+            return net_qty
+        if index_state == "reduce" or should_reduce(regime):
+            if excess_qty > 0:
+                if is_etf:
+                    min_unit = p.get("etf_min_trade_unit", 100)
+                else:
+                    min_unit = p.get("stock_min_trade_unit", 100)
+                return max(min_unit, (excess_qty // min_unit) * min_unit)
             if is_etf:
-                # ETF 重压下：卖80%（保留T+0灵活性）
-                return max(p.get("etf_min_trade_unit", 100), 
-                          (net_qty * 0.8 // p.get("etf_min_trade_unit", 100)) * p.get("etf_min_trade_unit", 100))
-            else:
-                # 个股重压下：全清
-                return net_qty
-
-        # 场景2：早盘冲高回落 → 减仓50%
-        if should_reduce(regime):
-            if is_etf:
-                return max(p.get("etf_min_trade_unit", 100),
-                          (net_qty * 0.5 // p.get("etf_min_trade_unit", 100)) * p.get("etf_min_trade_unit", 100))
-            else:
-                return max(p.get("stock_min_trade_unit", 100),
-                          (net_qty * 0.5 // p.get("stock_min_trade_unit", 100)) * p.get("stock_min_trade_unit", 100))
+                return max(p.get("etf_min_trade_unit", 100), (net_qty * 0.5 // p.get("etf_min_trade_unit", 100)) * p.get("etf_min_trade_unit", 100))
+            return max(p.get("stock_min_trade_unit", 100), (net_qty * 0.5 // p.get("stock_min_trade_unit", 100)) * p.get("stock_min_trade_unit", 100))
+        if index_state == "defensive":
+            if excess_qty > 0:
+                if is_etf:
+                    min_unit = p.get("etf_min_trade_unit", 100)
+                else:
+                    min_unit = p.get("stock_min_trade_unit", 100)
+                return max(min_unit, (excess_qty // min_unit) * min_unit)
+            # fall through to normal sizing with tighter factor
 
         # 场景3：正常模式 → 分批卖出
+        if index_factor < 1.0 and excess_qty <= 0:
+            qty_cap = max(0, int(net_qty * index_factor))
+            if qty_cap <= 0:
+                return 0
+            net_qty = min(net_qty, qty_cap)
         if is_etf:
             return self._calc_etf_sell_qty(p, net_qty, strength, used_sells)
         else:
@@ -87,7 +109,7 @@ class PositionSizer:
     # ==================== 核心：买入份数计算 ====================
 
     def calc_buy_qty(self, code: str, holding: dict, regime,
-                     sig_score: float, threshold: float) -> int:
+                     sig_score: float, threshold: float, index_ctx: dict = None) -> int:
         """
         计算买入股数
 
@@ -108,39 +130,43 @@ class PositionSizer:
             return 0
 
         is_etf = holding.get("type") == "etf"
-        p = self.params if not is_etf else {**self.params, **self.params.get("ETF_T0_PARAMS", {})}
+        p = self._effective_params(code, holding)
         strength = sig_score - threshold
+        index_ctx = index_ctx or {}
+        index_state = str(index_ctx.get("index_circuit_state", "normal") or "normal")
+        index_factor = float(index_ctx.get("index_pos_factor", 1.0) or 1.0)
 
         # 计算已卖出未接回量
         unrebuilt = self._calc_unrebuilt(code)
 
-        # 场景1：重压模式 → 谨慎接回
-        if should_clear_all(regime):
-            if unrebuilt > 0:
-                pct = p.get("stock_rebuild_tight_pct", 0.30) if not is_etf else p.get("etf_rebuild_tight_pct", 0.30)
-                qty = int(unrebuilt * pct)
+        # 场景1：熔断/观望/减仓 → 不买
+        if index_state in {"clear", "reduce", "stand_aside"} or should_clear_all(regime):
+            return 0
+
+        # 场景2：防守模式 → 只允许低风险接回，且受大盘目标仓位限制
+        if index_factor <= 0:
+            return 0
+        target_cap = max(0, int(total_t * index_factor))
+        max_buyable = min(max_buyable, max(0, target_cap - net_qty))
+        if max_buyable <= 0:
+            return 0
+
+        if unrebuilt > 0:
+            if is_etf:
+                pct = p.get("etf_qty_strong_pct", 0.25) if strength >= 10 else \
+                      (p.get("etf_qty_base_pct", 0.15) if strength >= 5 else p.get("etf_qty_weak_pct", 0.08))
             else:
-                # 重压下不主动加仓
-                return 0
+                pct = p.get("stock_rebuild_strong_pct", 0.80) if strength >= 10 else \
+                      (p.get("stock_rebuild_base_pct", 0.50) if strength >= 5 else p.get("stock_rebuild_weak_pct", 0.30))
+            qty = int(unrebuilt * pct)
         else:
-            # 场景2：正常模式 → 优先接回
-            if unrebuilt > 0:
-                if is_etf:
-                    pct = p.get("etf_qty_strong_pct", 0.25) if strength >= 10 else \
-                          (p.get("etf_qty_base_pct", 0.15) if strength >= 5 else p.get("etf_qty_weak_pct", 0.08))
-                else:
-                    pct = p.get("stock_rebuild_strong_pct", 0.80) if strength >= 10 else \
-                          (p.get("stock_rebuild_base_pct", 0.50) if strength >= 5 else p.get("stock_rebuild_weak_pct", 0.30))
-                qty = int(unrebuilt * pct)
+            if is_etf:
+                pct = p.get("etf_qty_strong_pct", 0.25) if strength >= 10 else \
+                      (p.get("etf_qty_base_pct", 0.15) if strength >= 5 else p.get("etf_qty_weak_pct", 0.08))
             else:
-                # 场景3：首次买入/加仓（从未卖出过）
-                if is_etf:
-                    pct = p.get("etf_qty_strong_pct", 0.25) if strength >= 10 else \
-                          (p.get("etf_qty_base_pct", 0.15) if strength >= 5 else p.get("etf_qty_weak_pct", 0.08))
-                else:
-                    pct = p.get("stock_first_add_strong_pct", 0.30) if strength >= 10 else \
-                          (p.get("stock_first_add_pct", 0.20) if strength >= 5 else p.get("stock_first_add_weak_pct", 0.10))
-                qty = int(total_t * pct)
+                pct = p.get("stock_first_add_strong_pct", 0.30) if strength >= 10 else \
+                      (p.get("stock_first_add_pct", 0.20) if strength >= 5 else p.get("stock_first_add_weak_pct", 0.10))
+            qty = int(total_t * pct)
 
         # 确保不超过剩余可买额度
         qty = min(qty, max_buyable)
@@ -236,16 +262,16 @@ def get_sizer(params: dict = None, virtual_trades: dict = None) -> PositionSizer
     return _default_sizer
 
 
-def calc_sell_qty(code: str, holding: dict, regime, sig_score: float, threshold: float, 
-                  used_sells: int = 0, params: dict = None, virtual_trades: dict = None) -> int:
+def calc_sell_qty(code: str, holding: dict, regime, sig_score: float, threshold: float,
+                  used_sells: int = 0, params: dict = None, virtual_trades: dict = None, index_ctx: dict = None) -> int:
     """便捷函数：计算卖出股数"""
-    return get_sizer(params, virtual_trades).calc_sell_qty(code, holding, regime, sig_score, threshold, used_sells)
+    return get_sizer(params, virtual_trades).calc_sell_qty(code, holding, regime, sig_score, threshold, used_sells, index_ctx=index_ctx)
 
 
 def calc_buy_qty(code: str, holding: dict, regime, sig_score: float, threshold: float,
-                 params: dict = None, virtual_trades: dict = None) -> int:
+                 params: dict = None, virtual_trades: dict = None, index_ctx: dict = None) -> int:
     """便捷函数：计算买入股数"""
-    return get_sizer(params, virtual_trades).calc_buy_qty(code, holding, regime, sig_score, threshold)
+    return get_sizer(params, virtual_trades).calc_buy_qty(code, holding, regime, sig_score, threshold, index_ctx=index_ctx)
 
 
 def get_trade_summary(code: str, virtual_trades: dict = None) -> dict:

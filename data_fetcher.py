@@ -217,6 +217,127 @@ def _build_daily_context_from_df(code: str, df: pd.DataFrame, current_price: flo
         return _default_daily_context(code, status="error", reason=str(e)[:80])
 
 
+def _attach_index_regime_context(ctx: Dict[str, Any], code: str, as_of: Optional[str] = None) -> Dict[str, Any]:
+    if not PARAMS.get("index_regime_context_enabled", True):
+        ctx.update({
+            "index_regime_status": "disabled",
+            "index_regime_source": "disabled",
+            "index_regime_date": as_of or get_today_str(),
+            "index_regime_mode": "eod",
+            "index_regime": "range",
+            "index_regime_name": "横盘震荡",
+            "index_score": 0.0,
+            "index_score_raw": 0.0,
+            "index_trend_score": 0.0,
+            "index_env_score": 0.0,
+            "index_days_in_regime": 0,
+            "index_gate_advice": "normal_t",
+            "index_fired_rules": [],
+            "index_score_delta": 0.0,
+            "index_recent_scores": [],
+            "index_pos_factor": 1.0,
+            "index_temp_bucket": "neutral",
+            "index_circuit_state": "normal",
+            "index_policy_reason": "index_regime_context_disabled",
+            "index_degraded": ["index_regime"],
+        })
+        return ctx
+
+    target_date = as_of or get_today_str()
+    mode = "eod"
+    try:
+        from index_regime import detect_index_regime, get_regime_position_factor, index_regime_name
+        regime, score, ir_ctx = detect_index_regime(as_of=target_date, force=False, mode=mode)
+        regime_value = getattr(regime, "value", str(regime))
+        score = float(ir_ctx.get("score", score) or 0.0)
+        raw_score = float(ir_ctx.get("score_raw", score) or score)
+        trend_score = float(ir_ctx.get("trend_score", 0.0) or 0.0)
+        env_score = float(ir_ctx.get("env_score", 0.0) or 0.0)
+        days_in_regime = int(ir_ctx.get("days_in_regime", 0) or 0)
+        gate_advice = str(ir_ctx.get("gate_advice", "normal_t") or "normal_t")
+        degraded = ir_ctx.get("degraded") or []
+        detail = ir_ctx.get("detail", {}) or {}
+        fired_rules = detail.get("fired_rules") or []
+        recent_scores = []
+        try:
+            recent_days = detail.get("recent_days") or []
+            for row in recent_days[-5:]:
+                if isinstance(row, dict) and row.get("score") is not None:
+                    recent_scores.append(float(row.get("score", 0.0)))
+        except Exception:
+            recent_scores = []
+        score_delta = 0.0
+        if len(recent_scores) >= 2:
+            score_delta = float(recent_scores[-1] - recent_scores[-2])
+        index_pos_factor = float(get_regime_position_factor(regime))
+        temp_bucket = "neutral"
+        if score <= float(PARAMS.get("index_temp_clear_score", -40.0)):
+            temp_bucket = "clear"
+        elif score <= float(PARAMS.get("index_temp_freeze_score", -25.0)):
+            temp_bucket = "freeze"
+        elif score <= float(PARAMS.get("index_temp_cold_score", -15.0)):
+            temp_bucket = "cold"
+        elif score >= float(PARAMS.get("index_temp_hot_score", 25.0)):
+            temp_bucket = "hot"
+        circuit = "normal"
+        if temp_bucket in {"freeze", "clear"} and score_delta <= float(PARAMS.get("index_deterioration_delta", -10.0)):
+            circuit = "clear" if temp_bucket == "clear" else "reduce"
+        elif temp_bucket == "cold" or gate_advice == "defensive_t":
+            circuit = "defensive"
+        if regime_value == "uni_down" and days_in_regime >= int(PARAMS.get("index_deterioration_days", 2)) and score_delta <= 0:
+            if circuit == "defensive":
+                circuit = "reduce"
+        if score >= float(PARAMS.get("index_stabilize_score", -10.0)) and days_in_regime >= int(PARAMS.get("index_stabilize_days", 2)) and gate_advice in {"normal_t", "trend_up_hold"}:
+            if circuit in {"reduce", "defensive"}:
+                circuit = "stand_aside" if score < 0 else "normal"
+        ctx.update({
+            "index_regime_status": "ok",
+            "index_regime_source": "index_regime.py",
+            "index_regime_date": target_date,
+            "index_regime_mode": mode,
+            "index_regime": regime_value,
+            "index_regime_name": index_regime_name(regime),
+            "index_score": score,
+            "index_score_raw": raw_score,
+            "index_trend_score": trend_score,
+            "index_env_score": env_score,
+            "index_days_in_regime": days_in_regime,
+            "index_gate_advice": gate_advice,
+            "index_fired_rules": fired_rules,
+            "index_score_delta": score_delta,
+            "index_recent_scores": recent_scores,
+            "index_pos_factor": index_pos_factor,
+            "index_temp_bucket": temp_bucket,
+            "index_circuit_state": circuit,
+            "index_policy_reason": detail.get("state", {}).get("note") or gate_advice,
+            "index_degraded": degraded,
+        })
+    except Exception as e:
+        ctx.update({
+            "index_regime_status": "error",
+            "index_regime_source": "fallback",
+            "index_regime_date": target_date,
+            "index_regime_mode": mode,
+            "index_regime": "range",
+            "index_regime_name": "横盘震荡",
+            "index_score": 0.0,
+            "index_score_raw": 0.0,
+            "index_trend_score": 0.0,
+            "index_env_score": 0.0,
+            "index_days_in_regime": 0,
+            "index_gate_advice": "normal_t",
+            "index_fired_rules": [],
+            "index_score_delta": 0.0,
+            "index_recent_scores": [],
+            "index_pos_factor": 1.0,
+            "index_temp_bucket": "neutral",
+            "index_circuit_state": "normal",
+            "index_policy_reason": str(e)[:80],
+            "index_degraded": ["index_regime"],
+        })
+    return ctx
+
+
 def get_daily_context(code: str, holding: dict, current_price: float = 0.0, as_of: Optional[str] = None) -> Dict[str, Any]:
     if not PARAMS.get("daily_context_enabled", True):
         return _default_daily_context(code, status="disabled", reason="参数关闭")
@@ -234,10 +355,12 @@ def get_daily_context(code: str, holding: dict, current_price: float = 0.0, as_o
             ctx = _default_daily_context(code, status="unavailable", reason="日线拉取为空")
         else:
             ctx = _build_daily_context_from_df(code, df, current_price=current_price)
+        ctx = _attach_index_regime_context(ctx, code, as_of=as_of)
         DAILY_CONTEXT_CACHE[cache_key] = {"ts": _now(), "ctx": ctx}
         return ctx
     except Exception as e:
         ctx = _default_daily_context(code, status="error", reason=str(e)[:80])
+        ctx = _attach_index_regime_context(ctx, code, as_of=as_of)
         DAILY_CONTEXT_CACHE[cache_key] = {"ts": _now(), "ctx": ctx}
         return ctx
 
