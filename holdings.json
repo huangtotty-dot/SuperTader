@@ -57,7 +57,7 @@
     "t_qty": 2800,
     "type": "stock",
     "account": "账户A",
-    "pre_close": 4.150
+    "pre_close": 4.01
   },
   "603667": {
     "name": "五洲新春",
@@ -67,7 +67,7 @@
     "t_qty": 400,
     "type": "stock",
     "account": "账户A",
-    "pre_close": 58.180
+    "pre_close": 54.07
   },
   "000988": {
     "name": "华工科技",
@@ -77,7 +77,7 @@
     "t_qty": 800,
     "type": "stock",
     "account": "账户A",
-    "pre_close": 130.690
+    "pre_close": 117.62
   },
   "000988_B": {
     "name": "华工科技",
@@ -87,6 +87,6 @@
     "t_qty": 400,
     "type": "stock",
     "account": "账户B",
-    "pre_close": 130.690
+    "pre_close": 117.62
   }
 }

@@ -678,17 +678,46 @@ class SignalEngine:
         prev = df.iloc[-2]
         _dt = pd.to_datetime(last["time"])
         t_val = _dt.hour * 100 + _dt.minute
+        cached_minute_df = None
+        cached_15m_df = None
+        cached_5m_df = None
+        try:
+            backtest_cache = globals().get("BACKTEST_DAY_CACHE", {})
+            if isinstance(backtest_cache, dict):
+                cache_key = str(pd.to_datetime(last["time"]).strftime("%Y-%m-%d"))
+                cache = backtest_cache.get(cache_key)
+                if isinstance(cache, dict):
+                    cached_minute_df = cache.get("minute_indicators")
+                    cached_15m_df = cache.get("resample_15m")
+                    cached_5m_df = cache.get("resample_5m")
+        except Exception:
+            cached_minute_df = None
+            cached_15m_df = None
+            cached_5m_df = None
 
-        # V1.26: T模式切换（正T/反T）
-        t_mode = "long"
-        if 'T_MODE' in globals() and isinstance(T_MODE, dict):
-            t_mode = T_MODE.get(code, "long")
-        elif 'load_t_mode' in globals():
-            try:
-                t_mode = load_t_mode().get(code, "long")
-            except Exception:
-                t_mode = "long"
+        # V1.26: T模式切换（优先使用动态 daily_ctx 注入）
+        t_mode = str((daily_ctx or {}).get("t_mode") or (daily_ctx or {}).get("effective_t_mode") or "")
+        t_mode_source = "daily_ctx" if t_mode else ""
+        if t_mode not in {"long", "short"}:
+            t_mode = ""
+        if not t_mode:
+            if 'T_MODE' in globals() and isinstance(T_MODE, dict):
+                t_mode = T_MODE.get(code, "long")
+                t_mode_source = "global_T_MODE"
+            elif 'load_t_mode' in globals():
+                try:
+                    t_mode = load_t_mode().get(code, "long")
+                    t_mode_source = "t_mode_file"
+                except Exception:
+                    t_mode = "long"
+                    t_mode_source = "fallback"
+        if t_mode not in {"long", "short"}:
+            t_mode = "long"
         diag["t_mode"] = t_mode
+        diag["t_mode_source"] = t_mode_source or "fallback"
+        diag["t_trade_gate"] = (daily_ctx or {}).get("t_trade_gate", "normal")
+        diag["t_pos_factor"] = float((daily_ctx or {}).get("t_pos_factor", 1.0) or 0.0)
+        diag["t_reason"] = (daily_ctx or {}).get("t_reason", "")
         is_short_mode = t_mode == "short"
         if is_short_mode:
             # 反T模式：应用short专属参数覆盖
@@ -851,8 +880,12 @@ class SignalEngine:
                     diag["upper_shadow_approx"] = True
 
         # ==================== 15分钟线分析（低吸优化 V1.13） ====================
-        df_15min = resample_to_15min(df)
-        df_15min = add_15min_indicators(df_15min)
+        if isinstance(cached_15m_df, pd.DataFrame) and not cached_15m_df.empty:
+            cutoff_15m = pd.to_datetime(last["time"]).floor("15min")
+            df_15min = cached_15m_df[cached_15m_df["time"] <= cutoff_15m].copy()
+        else:
+            df_15min = resample_to_15min(df)
+            df_15min = add_15min_indicators(df_15min)
 
         # 15分钟指标默认值
         rsi_15m = 50.0
@@ -905,8 +938,12 @@ class SignalEngine:
                     is_multi_bottom_15m = low_count >= 2
 
         # V1.14: 5分钟线分析 — 低吸时确认量能缩量 + 企稳反转
-        df_5min = resample_to_5min(df)
-        df_5min = add_5min_indicators(df_5min)
+        if isinstance(cached_5m_df, pd.DataFrame) and not cached_5m_df.empty:
+            cutoff_5m = pd.to_datetime(last["time"]).floor("5min")
+            df_5min = cached_5m_df[cached_5m_df["time"] <= cutoff_5m].copy()
+        else:
+            df_5min = resample_to_5min(df)
+            df_5min = add_5min_indicators(df_5min)
         
         # 5分钟指标默认值
         vol_ratio_5m = 1.0
@@ -991,7 +1028,11 @@ class SignalEngine:
                         indicators["bullish_reversal_pct"] = _5m_pct
                         indicators["bullish_reversal_body"] = _5m_body / (_5m_amplitude + 1e-9)
         
-        today_open = float(df[df["date"] == last["date"]].iloc[0]["open"])
+        if isinstance(cached_minute_df, pd.DataFrame) and not cached_minute_df.empty:
+            day_rows = cached_minute_df[cached_minute_df["date"] == last["date"]]
+            today_open = float(day_rows.iloc[0]["open"])
+        else:
+            today_open = float(df[df["date"] == last["date"]].iloc[0]["open"])
         h = HOLDINGS.get(code, {})
         pre_close = h.get("pre_close", today_open)
         today_ret = (price - pre_close) / pre_close if pre_close > 0 else 0.0
@@ -2269,6 +2310,13 @@ class SignalEngine:
         net_qty = self._virtual_net_qty(code, holding)
         last_state = self.last_signal_state.get(code, {})
         base_memory = _strategy_memory_for_code(code)
+        index_regime_status = daily_ctx.get("index_regime_status", "missing")
+        index_circuit_state = daily_ctx.get("index_circuit_state", "normal")
+        index_gate_advice = daily_ctx.get("index_gate_advice", "normal_t")
+        index_pos_factor = float(daily_ctx.get("index_pos_factor", 1.0) or 1.0)
+        index_temp_bucket = daily_ctx.get("index_temp_bucket", "neutral")
+        index_score_delta = float(daily_ctx.get("index_score_delta", 0.0) or 0.0)
+        index_regime = daily_ctx.get("index_regime", "range")
 
         if benchmark_gate == "weak":
             buy_threshold += 5
@@ -2280,6 +2328,27 @@ class SignalEngine:
             if not is_strong_pullback:
                 sell_threshold += 3
 
+        if index_regime_status == "ok":
+            if index_circuit_state == "clear":
+                buy_threshold += int(PARAMS.get("index_clear_sell_boost", 100))
+                sell_threshold = max(35, sell_threshold - int(PARAMS.get("index_defensive_sell_relief", 3)))
+            elif index_circuit_state == "reduce":
+                buy_threshold += int(PARAMS.get("index_freeze_buy_penalty", 100))
+                sell_threshold = max(35, sell_threshold - int(PARAMS.get("index_reduce_sell_boost", 10)))
+            elif index_circuit_state == "defensive":
+                buy_threshold += int(PARAMS.get("index_defensive_buy_penalty", 8))
+                sell_threshold = max(35, sell_threshold - int(PARAMS.get("index_defensive_sell_relief", 3)))
+            elif index_circuit_state == "stand_aside":
+                buy_threshold += int(PARAMS.get("index_freeze_buy_penalty", 100))
+            if index_temp_bucket == "cold":
+                buy_threshold += int(PARAMS.get("index_defensive_buy_penalty", 8))
+            if index_temp_bucket in {"freeze", "clear"}:
+                buy_threshold += int(PARAMS.get("index_freeze_buy_penalty", 100))
+            if index_gate_advice == "trend_up_hold" and index_pos_factor > 1.0:
+                buy_threshold = max(35, buy_threshold - 2)
+            if index_score_delta <= float(PARAMS.get("index_deterioration_delta", -10.0)) and index_regime == "uni_down":
+                buy_threshold += 5
+
         daily_status = daily_ctx.get("daily_status", "unknown")
         daily_gate = daily_ctx.get("daily_gate", "neutral")
         daily_trend_bg = daily_ctx.get("daily_trend_bg", "unknown")
@@ -2289,6 +2358,13 @@ class SignalEngine:
         daily_overheated = bool(daily_ctx.get("daily_overheated", False))
         daily_pullback_support = bool(daily_ctx.get("daily_pullback_support", False))
         daily_near_support = bool(daily_ctx.get("daily_near_support", False))
+        index_regime_status = daily_ctx.get("index_regime_status", "missing")
+        index_circuit_state = daily_ctx.get("index_circuit_state", "normal")
+        index_gate_advice = daily_ctx.get("index_gate_advice", "normal_t")
+        index_pos_factor = float(daily_ctx.get("index_pos_factor", 1.0) or 1.0)
+        index_temp_bucket = daily_ctx.get("index_temp_bucket", "neutral")
+        index_score_delta = float(daily_ctx.get("index_score_delta", 0.0) or 0.0)
+        index_regime = daily_ctx.get("index_regime", "range")
         preopen_context = PREOPEN_CONTEXT if isinstance(PREOPEN_CONTEXT, PreOpenContext) else None
         if daily_status == "ok":
             if daily_gate == "risk" or daily_hard_breakdown:
@@ -2373,6 +2449,12 @@ class SignalEngine:
             buy_threshold += 2
             sell_threshold += 2
 
+        if index_regime_status == "ok" and index_circuit_state == "clear" and hold_qty > 0 and net_qty > 0:
+            sell_score += 100
+            sell_threshold = max(35, sell_threshold - 20)
+            diag["index_circuit_forced_sell"] = True
+        if index_regime_status == "ok" and index_circuit_state in {"reduce", "clear"} and hold_qty > 0 and net_qty > 0:
+            sell_score += int(PARAMS.get("index_reduce_sell_boost", 10))
         if hold_qty <= 0:
             sell_score = -999
         if net_qty <= 0:

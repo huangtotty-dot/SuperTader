@@ -226,7 +226,7 @@ DEFAULT_SENTIMENT_PARAMS: Dict[str, Any] = {
         "uni_down|overheat": ["short", 0.5, "单边下行×过热→反T轻仓"],
         "uni_down|hot": ["short", 1.0, "单边下行×偏热→反T标准仓"],
         "uni_down|cold": ["short", 0.5, "单边下行×偏冷→反T轻仓"],
-        "uni_down|ice": ["hold", 0.0, "单边下行×冰点→观望不做T(仅恐慌急杀允许极小仓正T)"],
+        "uni_down|ice": ["long", 0.3, "单边下行×冰点→小仓正T，严禁追买"],
     },
     # —— 数据源 ——
     "report_gen_dir": r"E:\04_实战资料\report_gen",
@@ -266,7 +266,7 @@ def sentiment_csv_path() -> str:
 # ============================================================================
 
 # heat 分档：overheat z>=+1.5 / hot 0<=z<+1.5 / cold -1<z<0 / ice z<=-1
-_MODE_CN = {"long": "正T", "short": "反T", "hold": "不做T"}
+_MODE_CN = {"long": "正T", "short": "反T"}
 _HEAT_CN = {"overheat": "过热", "hot": "偏热", "cold": "偏冷", "ice": "冰点"}
 
 
@@ -291,7 +291,7 @@ def t_decision(regime: str, z_S: Optional[float] = None, z_top3: float = 0.0,
     覆盖优先级（本函数内，后应用者优先级高；个股级 P1~P7 见 per_stock_decisions）：
       1) uni_up 且连续过热 >=N 日 → 反T止盈
       2) K-up 当日 → 强制正T（仓位系数抬至 >=1.0）
-      3) uni_down 连续 >=3 日 → 禁止正T（mode=long 时降为 hold）
+      3) uni_down 连续 >=3 日 → 禁止正T（改由 trade_gate/pos_factor 表达，而不是 hold）
       4) K-down 当日或次日 → 强制反T 且 pos_factor×0.5（k_override=True，优先级 P5）
     """
     p = params or sentiment_params()
@@ -317,13 +317,14 @@ def t_decision(regime: str, z_S: Optional[float] = None, z_top3: float = 0.0,
 
     if regime == "uni_down" and int(uni_down_days) >= int(p["uni_down_ban_long_days"]) \
             and mode == "long":
-        mode, factor = "hold", 0.0
-        reasons.append(f"uni_down连续{int(uni_down_days)}日≥{p['uni_down_ban_long_days']}日→禁止正T")
+        mode = "short"
+        factor = min(float(factor), 0.5)
+        reasons.append(f"uni_down连续{int(uni_down_days)}日≥{p['uni_down_ban_long_days']}日→禁止正T，切换反T")
 
     if k_day_type == "k_down" or prev_k_down:
-        base = float(factor) if mode != "hold" else 1.0
+        base = float(factor)
         mode = "short"
-        factor = round(base * 0.5, 2)
+        factor = round(max(0.0, base * 0.5), 2)
         tag = "K-down当日" if k_day_type == "k_down" else "K-down次日"
         reasons.append(f"{tag}→强制反T，仓位系数×0.5")
         k_override = True
@@ -331,7 +332,9 @@ def t_decision(regime: str, z_S: Optional[float] = None, z_top3: float = 0.0,
     return {"mode": mode, "mode_cn": _MODE_CN.get(mode, mode),
             "pos_factor": factor, "heat": heat, "heat_cn": _HEAT_CN.get(heat, heat),
             "k_override": k_override,
-            "reason": "；".join(reasons)}
+            "reason": "；".join(reasons),
+            "trade_gate": "normal",
+            "t_enabled": True}
 
 
 # ============================================================================
@@ -500,11 +503,16 @@ def per_stock_decisions(regime: str, z_S: Optional[float], z_top3: float,
     if systemic_risk:
         sysrisk_hit = True
     if sysrisk_hit:
-        base["mode"], base["pos_factor"] = "hold", 0.0
+        base["mode"] = "short"
+        base["pos_factor"] = 0.0
+        base["trade_gate"] = "clear"
+        base["t_enabled"] = False
         base["reason"] += (f"；🚨清仓覆盖(z_S={float(z_S):+.2f}≤{p['sysrisk_z_S']}，"
-                           f"14:30当日判定当日生效)→全标的hold")
+                           f"14:30当日判定当日生效)→全标的清仓门控")
         base_rank = 1
     base["mode_cn"] = _MODE_CN.get(base["mode"], base["mode"])
+    base.setdefault("trade_gate", "normal")
+    base.setdefault("t_enabled", True)
 
     holdings = holdings if holdings is not None else _holdings()
     loss_streaks = load_loss_streaks(p)
@@ -524,36 +532,33 @@ def per_stock_decisions(regime: str, z_S: Optional[float], z_top3: float,
             if diverge_drop or diverge_ma5:
                 why = (f"前5日{float(feat['pct_5d']):+.1f}%≤{p['stock_diverge_drop_5d']}%" if diverge_drop
                        else f"连续{int(feat['below_ma5_days'])}日收<MA5≥{p['stock_diverge_below_ma5_days']}日")
-                if regime == "uni_down":
-                    mode, factor = "hold", 0.0
-                else:
-                    mode, factor = "short", min(factor, 1.0)
+                mode, factor = "short", min(factor, 1.0)
                 rank = 2
                 notes.append(f"个股背离否决({why})→禁正T")
 
-        # P3 昨日大跌否决：昨日跌幅≤阈值 → 禁 long 降 hold
+        # P3 昨日大跌否决：昨日跌幅≤阈值 → 禁 long
         if rank > 3 and mode == "long" and feat_ok \
                 and bool(p.get("enable_yesterday_crash_veto", True)) \
                 and feat.get("prev_day_pct") is not None \
                 and float(feat["prev_day_pct"]) <= float(p["yesterday_crash_pct"]):
-            mode, factor, rank = "hold", 0.0, 3
-            notes.append(f"昨日大跌否决(昨日{float(feat['prev_day_pct']):+.2f}%≤{p['yesterday_crash_pct']}%)→禁正T")
+            mode, factor, rank = "short", min(factor, 0.5), 3
+            notes.append(f"昨日大跌否决(昨日{float(feat['prev_day_pct']):+.2f}%≤{p['yesterday_crash_pct']}%)→切换反T")
 
-        # P4 昨日跌停/一字板（近似：昨日跌幅≤-9.8%）→ hold
+        # P4 昨日跌停/一字板（近似：昨日跌幅≤-9.8%）→ 清仓门控
         if rank > 4 and mode in ("long", "short") and feat_ok \
                 and feat.get("prev_day_pct") is not None \
                 and float(feat["prev_day_pct"]) <= float(p["yesterday_limit_pct"]):
-            mode, factor, rank = "hold", 0.0, 4
-            notes.append(f"昨日跌停/一字板(昨日{float(feat['prev_day_pct']):+.2f}%)→不做T")
+            factor, rank = 0.0, 4
+            notes.append(f"昨日跌停/一字板(昨日{float(feat['prev_day_pct']):+.2f}%)→清仓门控")
 
-        # P6 连亏熔断：同一标的连续 N 日做T亏损 → hold
+        # P6 连亏熔断：同一标的连续 N 日做T亏损 → 清仓门控
         ls = int(loss_streaks.get(code, 0) or 0)
         if rank > 6 and ls >= int(p["loss_streak_days"]):
-            mode, factor, rank = "hold", 0.0, 6
-            notes.append(f"连亏熔断(连续{ls}日做T亏损)→今日不做T")
+            factor, rank = 0.0, 6
+            notes.append(f"连亏熔断(连续{ls}日做T亏损)→今日清仓门控")
 
         # P7 高开不追（仅标注，不改 mode）
-        d = {"mode": mode, "mode_cn": _MODE_CN.get(mode, mode), "pos_factor": factor}
+        d = {"mode": mode, "mode_cn": _MODE_CN.get(mode, mode), "pos_factor": factor, "trade_gate": "normal", "t_enabled": True}
         if mode == "long" and feat_ok and feat.get("gap_pct") is not None \
                 and float(feat["gap_pct"]) > float(p["gap_up_no_chase_pct"]):
             d["gap_wait_vwap"] = True
@@ -567,6 +572,9 @@ def per_stock_decisions(regime: str, z_S: Optional[float], z_top3: float,
             d["stock_feat"] = {"gap_pct": feat.get("gap_pct"), "pct_5d": feat.get("pct_5d"),
                                "below_ma5_days": feat.get("below_ma5_days"),
                                "prev_day_pct": feat.get("prev_day_pct")}
+        if factor <= 0.0:
+            d["trade_gate"] = "clear"
+            d["t_enabled"] = False
         if d["mode"] == "short" and int(holding.get("base", 0) or 0) <= 0:
             d["reason"] += "；⚠️无底仓，反T不可执行"
         per_stock[code] = d
@@ -981,7 +989,7 @@ def save_sentiment_record(result: Dict[str, Any]) -> None:
 def build_sentiment_card(result: Dict[str, Any]) -> dict:
     decision = result.get("t_decision") or {}
     mode = decision.get("mode", "long")
-    template = {"long": "green", "short": "red", "hold": "blue"}.get(mode, "blue")
+    template = {"long": "green", "short": "red"}.get(mode, "blue")
     if result.get("systemic_risk"):
         template = "red"
 
@@ -1027,7 +1035,7 @@ def build_sentiment_card(result: Dict[str, Any]) -> dict:
 
     if result.get("systemic_risk"):
         sr_line = (f"🚨 **系统性风险预警**：z_S={float(result.get('z_S') or 0):+.2f}≤阈值"
-                   f" → **14:30 当日判定当日生效，全标的 hold**")
+                   f" → **14:30 当日判定当日生效，全标的清仓门控**")
         if result.get("systemic_confirmed"):
             sr_line += (f"；{' + '.join(result.get('systemic_reasons') or [])}"
                         f" → 建议尾盘启动清仓流程（qmt_trader.liquidate_all dry_run 清单，人工确认后执行）")

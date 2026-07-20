@@ -3,7 +3,7 @@
   "_last_updated": "2026-07-15",
   "_update_source": "持仓截图更新",
   "_auto_decision": {
-    "date": "2026-07-18",
+    "date": "2026-07-20",
     "regime": "uni_down",
     "regime_name": "单边下行",
     "z_top3": 0.0,
@@ -16,11 +16,11 @@
       "300364": "short",
       "300054": "short",
       "588170": "short",
-      "600176": "hold",
+      "600176": "short",
       "600481": "short",
       "603667": "short",
-      "000988": "hold",
-      "000988_B": "hold"
+      "000988": "short",
+      "000988_B": "short"
     },
     "source": "auto+manual"
   },
@@ -28,9 +28,9 @@
   "300364": "short",
   "300054": "short",
   "588170": "short",
-  "600176": "hold",
   "600481": "short",
   "603667": "short",
-  "000988": "hold",
-  "000988_B": "hold"
+  "600176": "short",
+  "000988": "short",
+  "000988_B": "short"
 }

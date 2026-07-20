@@ -61,7 +61,9 @@ class MultiTimeframeFetcher:
                 if age < self.cache_ttl_hours:
                     with open(cache_file, "r", encoding="utf-8") as f:
                         data = json.load(f)
-                    return pd.DataFrame(data)
+                    cached_df = pd.DataFrame(data)
+                    if cached_df is not None and not cached_df.empty:
+                        return cached_df
             except Exception:
                 pass
         
@@ -83,11 +85,12 @@ class MultiTimeframeFetcher:
         try:
             r = requests.get(self.BASE_URL, params={"param": param}, timeout=15, headers={"User-Agent": "Mozilla/5.0"})
             data = r.json()
-            bars = data.get("data", {}).get(qt_code, {}).get(period, [])
-            
+            node = data.get("data", {}).get(qt_code, {}) or {}
+            bars = node.get("qfqday") or node.get("day") or node.get(period) or []
+
             if not bars:
                 return pd.DataFrame()
-            
+
             # 解析腾讯格式 [date, open, close, high, low, volume]
             df = pd.DataFrame(bars, columns=["date", "open", "close", "high", "low", "volume"])
             for col in ["open", "close", "high", "low", "volume"]:
