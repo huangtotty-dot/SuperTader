@@ -204,7 +204,8 @@ class PositionSizer:
         # V1.27: 日线止损保底 — 取正常逻辑和止损量的较大值
         if stop_loss_qty > 0:
             result_qty = max(result_qty, stop_loss_qty)
-        return max(0, min(result_qty, net_qty))
+        available_qty = self._available_sell_qty(holding)
+        return max(0, min(result_qty, net_qty, available_qty))
 
     # ==================== 核心：买入份数计算 ====================
 
@@ -346,6 +347,15 @@ class PositionSizer:
         buys = self.virtual_trades[code].get("BUY_LOW", [])
         sells = self.virtual_trades[code].get("SELL_HIGH", [])
         return max(0, base_qty + sum(t.get("qty", 0) for t in buys) - sum(t.get("qty", 0) for t in sells))
+
+    def _available_sell_qty(self, holding: dict) -> int:
+        available = holding.get("available")
+        if available is not None:
+            try:
+                return max(0, int(available or 0))
+            except Exception:
+                return 0
+        return max(0, int(holding.get("qty") or holding.get("t_qty") or 0))
 
     def _calc_unrebuilt(self, code: str) -> int:
         """计算已卖出但未接回的量"""

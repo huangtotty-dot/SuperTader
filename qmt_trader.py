@@ -362,6 +362,13 @@ class QmtTrader:
                 return self._reject(code, side, qty, price, reason, f"买入须为 100 股整数倍: {qty}")
             if order_type == "limit" and (price is None or float(price) <= 0):
                 return self._reject(code, side, qty, price, reason, "限价单必须给出正价格")
+            if side == "sell":
+                available_qty = self._available_sell_qty(code)
+                if available_qty <= 0:
+                    return self._reject(code, side, qty, price, reason, "当前无可卖持仓")
+                if qty > available_qty:
+                    log.warning(f"⚠️  卖单数量被截断: {code} 请求 {qty}，可卖 {available_qty}")
+                    qty = available_qty
 
             est_price = self._estimate_price(code, side, price, order_type)
             est_value = round(qty * est_price, 2) if est_price else 0.0
@@ -399,6 +406,22 @@ class QmtTrader:
             slip = float(self.config.slippage or 0)
             base = base * (1 + slip) if side == "buy" else base * (1 - slip)
         return base
+
+    def _available_sell_qty(self, code: str) -> int:
+        if self.live and self.xt_trader and self.account:
+            try:
+                for p in (self.xt_trader.query_stock_positions(self.account) or []):
+                    if _pure_code(getattr(p, "stock_code", "")) == code:
+                        return max(0, int(getattr(p, "can_use_volume", 0) or getattr(p, "volume", 0) or 0))
+            except Exception:
+                pass
+        for key, h in _load_holdings().items():
+            if _pure_code(key) == code:
+                try:
+                    return max(0, int(h.get("available", h.get("qty", h.get("t_qty", 0))) or 0))
+                except Exception:
+                    return 0
+        return 0
 
     def _reject(self, code: str, side: str, qty: int, price: Optional[float],
                 reason: str, why: str) -> Dict[str, Any]:

@@ -250,7 +250,7 @@ def sentiment_log_dir() -> str:
     p = sentiment_params()
     if p.get("log_dir"):
         return str(p["log_dir"])
-    return os.path.join(_BASE_DIR, "logs")
+    return os.path.join(_BASE_DIR, "t_io", "logs")
 
 
 def sentiment_jsonl_path() -> str:
@@ -1127,10 +1127,15 @@ def _cli() -> None:
     import contextlib
     with contextlib.redirect_stdout(sys.stderr):
         result = compute_daily_sentiment(mode=args.mode, as_of=args.date)
-    print(json.dumps(result, ensure_ascii=False, indent=2, default=str))
-
+    # 先落盘再打印（避免 print 因 GBK 编码崩溃时丢数据）
     if not args.no_save:
         save_sentiment_record(result)
+    try:
+        sys.stdout.reconfigure(encoding='utf-8')
+    except Exception:
+        pass
+    print(json.dumps(result, ensure_ascii=False, indent=2, default=str))
+
     if not args.no_push and not args.no_save:
         payload = build_sentiment_card(result)
         _send_feishu_payload(

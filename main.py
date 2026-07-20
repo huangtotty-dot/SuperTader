@@ -1516,10 +1516,40 @@ def _auto_apply_t_mode(holdings, t_mode):
     print("=" * 60 + "\n")
 
 
+def _maybe_backfill_sentiment():
+    """启动时检查昨日 sentiment 数据是否存在，缺失则补算"""
+    try:
+        if 'load_sentiment_history' in globals():
+            hist = load_sentiment_history() or []
+        else:
+            hist = []
+        yesterday = (_now() - timedelta(days=1)).strftime("%Y-%m-%d")
+        has_yesterday = any(str(r.get("date")) == yesterday for r in hist if isinstance(r, dict))
+        if has_yesterday:
+            return
+        log.info(f"📡 缺失{sentiment_log_dir()}: {yesterday}热度记录，启动后台补算...")
+        if 'compute_daily_sentiment' in globals() and 'save_sentiment_record' in globals():
+            import threading
+            def _worker():
+                try:
+                    result = compute_daily_sentiment(mode="eod", as_of=yesterday)
+                    save_sentiment_record(result)
+                    log.info(f"✅ 热度补算完成: {yesterday} {result.get('regime_name')} z_S={result.get('z_S')} z_top3={result.get('z_top3')}")
+                except Exception as e:
+                    log.warning(f"⚠️ 热度补算失败: {str(e)[:150]}")
+            th = threading.Thread(target=_worker, name="backfill_sentiment", daemon=True)
+            th.start()
+    except Exception as e:
+        log.warning(f"⚠️ backfill_sentiment 异常: {str(e)[:100]}")
+
+
 def run_watch():
     global HOLDINGS, engine, T_MODE
     HOLDINGS = load_holdings()
     shared['HOLDINGS'] = HOLDINGS  # V1.12: 更新共享命名空间中的HOLDINGS，供signal_engine使用
+
+    # V3.1fix: 启动时补算昨日热度（如果缺失）
+    _maybe_backfill_sentiment()
 
     # V3.1: 基于昨日大盘热度+数决矩阵自动决定今日正T/反T，无需人工选择
     T_MODE = load_t_mode()

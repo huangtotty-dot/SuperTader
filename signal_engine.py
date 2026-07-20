@@ -502,15 +502,19 @@ class SignalEngine:
             self.buy_count_per_stock[code] = self.buy_count_per_stock.get(code, 0) + 1
             self.t_cycle_start_time.setdefault(code, _now())
             self.cycle_direction[code] = "buy"
+            if qty > 0:
+                bucket = VIRTUAL_TRADES.setdefault(code, {})
+                bucket.setdefault("BUY_LOW", []).append({"qty": qty, "ts": _now(), "action": action})
         elif action in ["SELL_HIGH", "PANIC_SELL"]:
             self.sell_count_per_stock[code] = self.sell_count_per_stock.get(code, 0) + 1
             self.cycle_direction[code] = "sell"
             self.post_sell_block_until[code] = _now() + timedelta(minutes=self._get_params(code)["post_sell_rebuild_minutes"])
+            if qty > 0:
+                bucket = VIRTUAL_TRADES.setdefault(code, {})
+                bucket.setdefault("SELL_HIGH", []).append({"qty": qty, "ts": _now(), "action": action})
             buys = VIRTUAL_TRADES.get(code, {}).get("BUY_LOW", [])
             sells = VIRTUAL_TRADES.get(code, {}).get("SELL_HIGH", [])
             net_qty = sum(t["qty"] for t in buys) - sum(t["qty"] for t in sells)
-            if qty > 0:
-                net_qty -= qty
             if net_qty <= 0 and code in self.t_cycle_start_time:
                 del self.t_cycle_start_time[code]
 
