@@ -19,19 +19,9 @@
     "account": "账户B",
     "pre_close": 23.310
   },
-  "300054": {
-    "name": "鼎龙股份",
-    "cost": 81.127,
-    "qty": 300,
-    "base": 300,
-    "t_qty": 300,
-    "type": "stock",
-    "account": "账户B",
-    "pre_close": 72.410
-  },
   "588170": {
     "name": "科创半导体ETF华夏",
-    "cost": 0.970,
+    "cost": 0.904,
     "qty": 15000,
     "base": 15000,
     "t_qty": 15000,
@@ -41,7 +31,7 @@
   },
   "600176": {
     "name": "中国巨石",
-    "cost": 52.328,
+    "cost": 51.769,
     "qty": 600,
     "base": 600,
     "t_qty": 600,
@@ -61,30 +51,30 @@
   },
   "603667": {
     "name": "五洲新春",
-    "cost": 60.409,
-    "qty": 400,
-    "base": 400,
-    "t_qty": 400,
+    "cost": 58.704,
+    "qty": 500,
+    "base": 500,
+    "t_qty": 500,
     "type": "stock",
     "account": "账户A",
     "pre_close": 54.07
   },
   "000988": {
     "name": "华工科技",
-    "cost": 153.866,
-    "qty": 800,
-    "base": 800,
-    "t_qty": 800,
+    "cost": 168.111,
+    "qty": 600,
+    "base": 600,
+    "t_qty": 600,
     "type": "stock",
     "account": "账户A",
     "pre_close": 117.62
   },
   "000988_B": {
     "name": "华工科技",
-    "cost": 151.224,
-    "qty": 400,
-    "base": 400,
-    "t_qty": 400,
+    "cost": 192.980,
+    "qty": 200,
+    "base": 200,
+    "t_qty": 200,
     "type": "stock",
     "account": "账户B",
     "pre_close": 117.62

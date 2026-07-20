@@ -2377,7 +2377,6 @@ class SignalEngine:
         index_temp_bucket = daily_ctx.get("index_temp_bucket", "neutral")
         index_score_delta = float(daily_ctx.get("index_score_delta", 0.0) or 0.0)
         index_regime = daily_ctx.get("index_regime", "range")
-        preopen_context = PREOPEN_CONTEXT if isinstance(PREOPEN_CONTEXT, PreOpenContext) else None
         if daily_status == "ok":
             if daily_gate == "risk" or daily_hard_breakdown:
                 buy_threshold += p["daily_risk_buy_threshold_penalty"]
