@@ -227,8 +227,10 @@ PARAMS = {
     "ema_slow_period": 21,
     "min_amplitude": 0.015,
     "min_profit_space": 0.010,
-    "commission_rate": 0.0015,
+    "commission_rate": 0.0010,
     "cooldown_minutes": 30,
+    # V1.27: 单股仓位上限（占总资金比例，超过此值触发强制卖出）
+    "max_single_position_pct": 0.30,
     "repeat_signal_gap_minutes": 60,
     "repeat_signal_price_move": 0.004,
     "repeat_signal_score_boost": 10,
@@ -1217,9 +1219,10 @@ SHORT_MODE_PARAMS = {
     "cooldown_minutes": 30,              # 冷却时间翻倍（15→30，减少频繁交易）
     "stand_down_min_amplitude": 0.015,   # 停手振幅提高至1.5%（0.008→0.015，反T需更大空间）
     "post_sell_rebuild_minutes": 20,     # 卖后重建等待延长至20分钟（8→20，防小跌就接）
-    "post_sell_rebuild_price_gap": 0.012, # 价格差距要求提高至1.2%（0.005→0.012）
-    "rsi_oversold": 30,                  # RSI超卖阈值更低（深跌才接，保持不变）
-    "rsi_overbought": 70,                # RSI超买阈值更低（更早卖出，保持不变）
+    "post_sell_rebuild_price_gap": 0.012,
+    "rsi_oversold": 30,
+    "rsi_overbought": 70,
+    "sell_repeat_block_minutes": 90,
 }
 
 # ==================== V3.0: 大盘热度×韭研TOP3 联动（daily_sentiment.py） ====================
