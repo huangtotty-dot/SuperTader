@@ -174,7 +174,9 @@ def _build_daily_context_from_df(code: str, df: pd.DataFrame, current_price: flo
             "daily_asof": str(work.iloc[-1]["date"]),
             "daily_price_ref": ref_price,
             "daily_prev_close": prev_close,
-            "daily_prev_low": float(prev["low"] or 0.0),
+            "daily_prev_high": float(today["high"] or 0.0),
+            "daily_prev_low": float(today["low"] or 0.0),
+            "daily_prev_close_real": float(today["close"] or 0.0),  # 最新交易日收盘
             "daily_day_ret": day_ret,
             "daily_prev_day_ret": prev_day_ret,
             "daily_ma5": ma5,
