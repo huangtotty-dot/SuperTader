@@ -228,6 +228,10 @@ DEFAULT_SENTIMENT_PARAMS: Dict[str, Any] = {
         "uni_down|cold": ["short", 0.5, "单边下行×偏冷→反T轻仓"],
         "uni_down|ice": ["long", 0.3, "单边下行×冰点→小仓正T，严禁追买"],
     },
+    # —— V1.28: 量化分数动态调仓 ——
+    "z_score_pos_factor_boost": True,
+    "z_score_sell_bias_threshold": -1.0,
+    "z_score_buy_cap_threshold": 1.5,
     # —— 数据源 ——
     "report_gen_dir": r"E:\04_实战资料\report_gen",
     "log_dir": None,               # None → env SENTIMENT_LOG_DIR > BASE_DIR/logs
@@ -328,6 +332,27 @@ def t_decision(regime: str, z_S: Optional[float] = None, z_top3: float = 0.0,
         tag = "K-down当日" if k_day_type == "k_down" else "K-down次日"
         reasons.append(f"{tag}→强制反T，仓位系数×0.5")
         k_override = True
+
+    # V1.28fix: 安全网 — 矩阵返回"hold"等非法mode时强制反T，防止不做T死锁
+    if mode not in ("long", "short"):
+        _orig = mode
+        mode = "short"
+        factor = max(float(factor), 0.3)
+        reasons.append(f"决策模式\"{_orig}\"非法→强制反T避险")
+
+    # V1.28: 量化分数动态调仓 — z_S 极端程度叠加到 pos_factor
+    if bool(p.get("z_score_pos_factor_boost", True)) and z_S is not None:
+        _z = float(z_S)
+        if regime == "uni_down" and mode == "short" and _z <= float(p.get("z_score_sell_bias_threshold", -1.0)):
+            _old = factor
+            factor = round(min(float(factor) * 1.3, 1.0), 2)
+            if factor > _old:
+                reasons.append(f"大盘极弱(z_S={_z:.1f}≤{p['z_score_sell_bias_threshold']})→反T仓位上修×{factor:.1f}")
+        if _z >= float(p.get("z_score_buy_cap_threshold", 1.5)):
+            _old = factor
+            factor = min(float(factor), 0.7)
+            if factor < _old:
+                reasons.append(f"市场过热(z_S={_z:.1f}≥{p['z_score_buy_cap_threshold']})→仓位限制≤0.7")
 
     return {"mode": mode, "mode_cn": _MODE_CN.get(mode, mode),
             "pos_factor": factor, "heat": heat, "heat_cn": _HEAT_CN.get(heat, heat),
