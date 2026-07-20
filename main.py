@@ -70,7 +70,7 @@ except Exception:
     shared['_log_enhancer'] = None
 
 # 按顺序加载模块：后面的模块可以引用前面的模块
-module_order = ['config', 'utils', 'data_fetcher', 'multi_timeframe_fetcher', 'signal_engine', 'preopen', 'index_regime', 'index_regime_intraday', 'market_regime', 'position_sizer', 'daily_sentiment']
+module_order = ['config', 'utils', 'data_fetcher', 'multi_timeframe_fetcher', 'signal_engine', 'preopen', 'support_resistance', 'index_regime', 'index_regime_intraday', 'market_regime', 'position_sizer', 'daily_sentiment']
 for mod_name in module_order:
     mod_path = _os.path.join(BASE_DIR, f"{mod_name}.py")
     if not _os.path.exists(mod_path):
@@ -717,10 +717,15 @@ def scan_once():
 
         _maybe_push_index_regime_morning(now)          # 09:26-09:31 早盘大盘基调（须在 <9:30 早退之前）
 
+        _maybe_push_pivot_report(now)                  # 09:25-09:30 支撑/压力位推送
+
         if dtime(14, 55) <= t <= dtime(15, 5):
             pass  # EOD复盘已移除（V2简化）
         _maybe_audit_closure(now)                      # 14:50-15:05 买卖闭环审计（每日一次，V3.0）
         _maybe_push_index_regime_eod(now)              # 14:30-14:55 尾盘大盘评分预判 mode="tail"（须在 >15:00 早退之前）
+
+        if dtime(14, 50) <= t <= dtime(15, 5):
+            pivot_audit(now)                           # 14:50-15:05 pivot 支撑/压力复盘
 
         if now.weekday() >= 5 or t < dtime(9, 30) or (dtime(11, 30) < t < dtime(13, 0)) or t > dtime(15, 0):
             if (_now() - _last_idle_log).total_seconds() >= PARAMS["idle_log_minutes"] * 60:

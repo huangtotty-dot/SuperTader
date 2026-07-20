@@ -582,3 +582,48 @@ def _ensure_preopen_context(force: bool = False) -> Optional[PreOpenContext]:
     except Exception as e:
         log.warning(f"⚠️  早盘解读生成失败: {str(e)[:120]}")
         return PREOPEN_CONTEXT
+
+
+# ==================== 支撑/压力位 9:25 推送 ====================
+
+_pivot_pushed_date = ""
+
+
+def _maybe_push_pivot_report(now: datetime) -> bool:
+    """9:25-9:30 推送支撑/压力位（每日一次）"""
+    global _pivot_pushed_date
+    today = get_today_str()
+    if _pivot_pushed_date == today:
+        return False
+    if not FEISHU_WEBHOOK:
+        return False
+    t = now.time()
+    if now.weekday() >= 5 or not (dtime(9, 25) <= t <= dtime(9, 30)):
+        return False
+
+    try:
+        holdings = load_holdings()
+        all_levels = calc_for_holdings(holdings)
+        if not all_levels:
+            log.info("📊 支撑/压力位：无持仓数据")
+            return False
+
+        text = format_pivot_text(all_levels, max_stocks=8)
+
+        card = {"config": {"wide_screen_mode": True},
+                "header": _feishu_card_header(f"📊 支撑/压力位 - {FEISHU_KEYWORD}", "blue"),
+                "elements": [_feishu_md_div(text)]}
+        payload = {"msg_type": "interactive", "card": card, "notify_type": 1}
+
+        ok = send_feishu_payload(
+            payload=payload,
+            success_log="✅ 支撑/压力位已推送飞书",
+            error_prefix="支撑/压力位飞书推送",
+        )
+        if ok:
+            _pivot_pushed_date = today
+            log.info(f"📊 支撑/压力位推送完成 ({len(all_levels)} 只)")
+        return ok
+    except Exception as e:
+        log.warning(f"⚠️  支撑/压力位推送异常: {str(e)[:120]}")
+        return False
