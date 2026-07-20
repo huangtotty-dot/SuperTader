@@ -39,48 +39,16 @@ class RegimeDetector:
         self.preopen_dir = preopen_dir or self.trace_dir
         self._cache = {}  # 按日期缓存的preopen数据
 
-    # ==================== 集合竞价识别（09:15-09:25） ====================
+    # ==================== 集合竞价识别（基于 open_gap 简化版） ====================
 
     def detect_from_preopen(self, code: str, date: str) -> tuple:
         """
-        基于集合竞价数据识别当天状态
+        基于集合竞价数据识别当天状态（V2 简化版：基于 open_gap）
 
         返回: (MarketRegime, reason_str)
         """
-        preopen_data = self._load_preopen(date)
-        if not preopen_data:
-            return MarketRegime.NORMAL, "无集合竞价数据"
-
-        # 提取该股票的集合竞价快照
-        snapshots = preopen_data.get("code_snapshots", {})
-        snap = snapshots.get(code, {})
-
-        auction_score = float(snap.get("auction_score", 0))
-        auction_tag = snap.get("auction_tag", "")
-        price = float(snap.get("price", 0))
-        volume = float(snap.get("volume", 0))
-        prev_close = float(snap.get("prev_close", 0))
-
-        # 识别规则1：竞价大幅高开但评分极低（诱多）
-        if prev_close > 0 and price > 0:
-            open_gap = (price - prev_close) / prev_close
-            # V1.14: 放宽重压识别条件（低开/高开1%+评分<-3即触发）
-            if open_gap > 0.01 and auction_score < -3:
-                return MarketRegime.HEAVY_SELL, f"竞价高开{open_gap*100:.1f}%但评分{auction_score:.0f}（诱多出货）"
-            if open_gap < -0.01 and auction_score < -3:
-                return MarketRegime.HEAVY_SELL, f"竞价低开{abs(open_gap)*100:.1f}%且评分{auction_score:.0f}（抛压沉重）"
-
-        # 识别规则2：竞价数据缺失但大盘评分极低
-        market_score = float(preopen_data.get("market_score", 50))
-        if market_score < 40 and auction_tag in ["stale_or_missing", "weak_open"]:
-            return MarketRegime.HEAVY_SELL, f"大盘评分{market_score:.0f}且个股竞价弱（情绪冰点）"
-
-        # 识别规则3：竞价成交量异常放大
-        if volume > 0 and prev_close > 0:
-            if auction_score > 8 and price > prev_close * 1.005:
-                return MarketRegime.BREAKOUT, f"竞价强势（评分{auction_score:.0f}）高开{open_gap*100:.1f}%"
-
-        return MarketRegime.NORMAL, "竞价无异常"
+        # 无竞价数据时的默认状态（由 detect() 回退到日线识别）
+        return MarketRegime.NORMAL, "无集合竞价数据（V2简化）"
 
     # ==================== 日线历史识别（出货模式） ====================
 
@@ -242,24 +210,15 @@ class RegimeDetector:
         return MarketRegime.NORMAL, "综合判断：正常状态"
 
     def _detect_from_preopen_data(self, code: str, preopen_data: dict) -> tuple:
-        """基于已传入的preopen_data识别（避免重复IO）"""
-        snapshots = preopen_data.get("code_snapshots", {})
-        snap = snapshots.get(code, {})
-        auction_score = float(snap.get("auction_score", 0))
-        auction_tag = snap.get("auction_tag", "")
-        price = float(snap.get("price", 0))
-        prev_close = float(snap.get("prev_close", 0))
+        """基于已传入的preopen_data识别（V2简化版：基于open_gap）"""
+        snapshots = preopen_data.get("code_snapshots", {}) if isinstance(preopen_data, dict) else {}
+        snap = snapshots.get(code, {}) if isinstance(snapshots, dict) else {}
+        open_gap = float(snap.get("open_gap", 0) or 0)
 
-        if prev_close > 0 and price > 0:
-            open_gap = (price - prev_close) / prev_close
-            if open_gap > 0.02 and auction_score < -5:
-                return MarketRegime.HEAVY_SELL, f"竞价高开{open_gap*100:.1f}%但评分{auction_score:.0f}（诱多出货）"
-            if open_gap < -0.02 and auction_score < -5:
-                return MarketRegime.HEAVY_SELL, f"竞价低开{abs(open_gap)*100:.1f}%且评分{auction_score:.0f}（抛压沉重）"
-
-        market_score = float(preopen_data.get("market_score", 50))
-        if market_score < 35 and auction_tag in ["stale_or_missing", "weak_open"]:
-            return MarketRegime.HEAVY_SELL, f"大盘评分{market_score:.0f}且个股竞价弱（情绪冰点）"
+        if open_gap < -0.02:
+            return MarketRegime.HEAVY_SELL, f"竞价低开{abs(open_gap)*100:.1f}%（抛压沉重）"
+        if open_gap > 0.02:
+            return MarketRegime.BREAKOUT, f"竞价高开{open_gap*100:.1f}%（强势开盘）"
 
         return MarketRegime.NORMAL, ""
 

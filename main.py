@@ -717,7 +717,8 @@ def scan_once():
 
         _maybe_push_index_regime_morning(now)          # 09:26-09:31 早盘大盘基调（须在 <9:30 早退之前）
 
-        if dtime(14, 55) <= t <= dtime(15, 5): log_eod_summary()
+        if dtime(14, 55) <= t <= dtime(15, 5):
+            pass  # EOD复盘已移除（V2简化）
         _maybe_audit_closure(now)                      # 14:50-15:05 买卖闭环审计（每日一次，V3.0）
         _maybe_push_index_regime_eod(now)              # 14:30-14:55 尾盘大盘评分预判 mode="tail"（须在 >15:00 早退之前）
 
@@ -1145,9 +1146,6 @@ def replay_today():
         replay_doc["stats"]["by_code"] = stats["by_code"]
         with open(out, "w", encoding="utf-8") as f:
             json.dump(replay_doc, f, ensure_ascii=False, indent=2)
-    else:
-        log.info("回放未产生按标的统计，自动学习跳过")
-    _apply_replay_learning(today)
 
 
 def tushare_replay():
@@ -1634,24 +1632,13 @@ def run_watch():
     if FEISHU_WEBHOOK:
         log.info(f"飞书Webhook: {FEISHU_WEBHOOK[:55]}...")
 
-    # 【2026-06-12 加仓策略】显示在启动日志
-    log.info("═" * 70)
-    log.info("【2026-06-12 加仓策略执行指南】")
-    log.info("  1️⃣ 中国巨石 600176 — ❌ 不追 (已涨5.62%, 资金不足)")
-    log.info("  2️⃣ 科创50ETF 588000 — ⚡ 分批加仓 (先加¥15,000)")
-    log.info("     └─ 第一批: ¥15,000 (约8,200份)")
-    log.info("     └─ 第二批: ¥15,000 (等待盘中回落)")
-    log.info("  3️⃣ 中信银行 601998 — ✅ 按计划加 (¥15,000, 约1,900股)")
-    log.info("  4️⃣ 特变电工 600089 — ⚡ 加仓 (¥25,000, 约1,090股)")
-    log.info("═" * 70)
+    cleanup_expired_minute_cache()
 
     if SYS_ALERT_AVAILABLE:
         init_alert(enabled=True)
-        log.info("🔊 系统高级报警音效已成功【全自动挂载】！准备执行听声辨位！")
+        log.info("🔊 系统报警音效已挂载")
     else:
-        log.warning("⚠️ 目录下未检测到 system_alert_v17.3.py，高级报警音效静默禁用。")
-
-    cleanup_expired_minute_cache()
+        log.warning("⚠️ system_alert_v17.3.py 未检测到，报警音效禁用")
     if should_run_startup_self_test():
         send_startup_self_test()
     log.info(f"⏱ 采用顺序轮询模式：每轮扫描结束后再等待 {PARAMS['poll_interval']} 秒（V1.8 确认型收敛）")

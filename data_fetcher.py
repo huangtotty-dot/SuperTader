@@ -552,6 +552,10 @@ def _strategy_memory_for_code(code: str) -> Dict[str, Any]:
     return base
 
 
+def _starvation_state_file() -> str:
+    return os.path.join(T_IO_DIR, "buy_starvation_state.json")
+
+
 def load_starvation_state() -> Dict[str, dict]:
     path = _starvation_state_file()
     if not os.path.exists(path):
