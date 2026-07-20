@@ -199,6 +199,7 @@ _now = BUNDLE._now
 
 # local runtime state may be mutated by replay
 SIM_NOW = shared.get("SIM_NOW")
+T_MODE: Dict[str, str] = {}
 BACKTEST_DAY_CACHE: Dict[str, Dict[str, Any]] = {}
 INDEX_REGIME_BACKTEST_CACHE: Dict[str, Dict[str, Any]] = {}
 

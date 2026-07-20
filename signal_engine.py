@@ -518,6 +518,13 @@ class SignalEngine:
             if net_qty <= 0 and code in self.t_cycle_start_time:
                 del self.t_cycle_start_time[code]
 
+        # V1.28: 每次记录交易后持久化 VIRTUAL_TRADES，防止重启后丢失
+        if qty > 0:
+            try:
+                save_virtual_trades(VIRTUAL_TRADES)
+            except Exception:
+                pass
+
     def _virtual_net_qty(self, code: str, holding: dict) -> int:
         buys = VIRTUAL_TRADES.get(code, {}).get("BUY_LOW", [])
         sells = VIRTUAL_TRADES.get(code, {}).get("SELL_HIGH", [])
@@ -2727,6 +2734,15 @@ class SignalEngine:
             buy_fast_path_gap = max(p["sell_fast_path_min_gap"], 18)
             buy_fast_path_protected = buy_score >= buy_threshold + p["buy_priority_margin"] and (buy_score - sell_score) >= p["buy_priority_margin"]
             # V1.15: 早盘防过早触发（09:30-9:40 首次卖出需今日涨幅>=2%，除非最优卖点）
+            # V1.28fix: 大盘极弱(uni_down+score≤-30+冰点/清仓)时动态降低morning_no_sell_until
+            if index_regime_status == "ok" and index_regime == "uni_down":
+                _idx_score = float(daily_ctx.get("index_score", 0) or 0)
+                _idx_temp = daily_ctx.get("index_temp_bucket", "neutral")
+                if _idx_score <= -30 and (_idx_temp in ("freeze", "clear") or index_circuit_state in ("reduce", "clear")):
+                    p = dict(p)
+                    p["morning_no_sell_until"] = 930  # 09:30=等效不设保护
+                    diag["uni_down_morning_guard_removed"] = True
+                    diag["uni_down_idx_score"] = round(_idx_score, 1)
             morning_sell_guard = False
             if t_val < p.get("morning_no_sell_until", 940) and sell_today_count == 0 and today_ret < p.get("morning_no_sell_min_ret", 0.02):
                 morning_sell_guard = True
@@ -2735,7 +2751,6 @@ class SignalEngine:
             if morning_sell_guard and is_deep_loss_stop_loss:
                 morning_sell_guard = False
                 diag["deep_loss_bypass_morning_guard"] = True
-                # 移除阻塞记录，避免诊断信息误导
                 if "morning_first_sell_guard" in diag.get("sell_block_reasons", []):
                     diag["sell_block_reasons"].remove("morning_first_sell_guard")
             # V1.27fix: 大幅低开直接绕过（>4% gap-down，深套直接止损，不等待反弹确认）

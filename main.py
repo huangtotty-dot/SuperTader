@@ -574,6 +574,37 @@ def _maybe_audit_closure(now: datetime) -> None:
                 problems.append(
                     f"• {name}({code}) 持仓 qty={qty} 与 base={base} 不一致（差 {qty_diff:+d}）→ 请核对 holdings.json")
 
+        # V1.28: 收盘自动同步 holdings.json（未接回/未卖出 → 更新仓位）
+        holdings_updated = False
+        for d in details:
+            if d["unrebuilt"] > 0 or d["unclosed_buy"] > 0:
+                code = d["code"]
+                holding = HOLDINGS.get(code)
+                if holding is None:
+                    continue
+                old_qty = int(holding.get("qty", 0))
+                old_t_qty = int(holding.get("t_qty", 0) or old_qty)
+                delta = d["unclosed_buy"] - d["unrebuilt"]  # 正净值=买入未卖出(增仓), 负净值=卖出未接回(减仓)
+                new_qty = max(0, old_qty + delta)
+                new_t_qty = max(0, old_t_qty + delta)
+                holding["qty"] = new_qty
+                holding["t_qty"] = new_t_qty
+                holding["base"] = new_qty
+                log.info(f"📝 收盘同步 {d['name']}({code}): qty {old_qty}→{new_qty}, t_qty {old_t_qty}→{new_t_qty} (delta={delta:+d})")
+                holdings_updated = True
+        if holdings_updated:
+            try:
+                with open(HOLDINGS_FILE, "w", encoding="utf-8") as f:
+                    json.dump(HOLDINGS, f, ensure_ascii=False, indent=2)
+                log.info(f"✅ holdings.json 已更新（共 {len(HOLDINGS)} 只）")
+            except Exception as e:
+                log.warning(f"⚠️ holdings.json 写入失败: {str(e)[:80]}")
+            # 收盘同步后清空 VIRTUAL_TRADES
+            VIRTUAL_TRADES.clear()
+            save_virtual_trades(VIRTUAL_TRADES)
+            shared['VIRTUAL_TRADES'] = VIRTUAL_TRADES
+            log.info("🔄 VIRTUAL_TRADES 已清空，准备下一交易日")
+
         record = {"date": today, "time": now.strftime("%H:%M:%S"),
                   "ok": not problems, "problems": problems, "details": details}
         try:
@@ -707,7 +738,32 @@ def scan_once():
         panel_rows = []
         minute_issue_stats = {}
 
-        for code, holding in HOLDINGS.items():
+        # V1.28: 暴跌模式优先生成跌幅最大标的的信号
+        _crash_prioritized = False
+        try:
+            _idx_score = float(DAILY_CONTEXT_CACHE.get("index_score", 0) or 0)
+        except Exception:
+            _idx_score = 0.0
+        if _idx_score <= -30:
+            _codes_with_decline = []
+            for _c, _h in HOLDINGS.items():
+                _dec = DAILY_DECISION_STATS.get(_c) or {}
+                _lp = float(_dec.get("last_price") or 0)
+                _pc = float(_h.get("pre_close") or 0)
+                if _pc > 0 and _lp > 0:
+                    _decline = (_lp - _pc) / _pc
+                else:
+                    _decline = 0.0
+                _codes_with_decline.append((_decline, _c, _h))
+            _codes_with_decline.sort(key=lambda x: x[0])  # 跌幅最大(最负)的排最前
+            HOLDINGS_SORTED = [(c, h) for _, c, h in _codes_with_decline]
+            _crash_prioritized = True
+            if _scan_count % 4 == 1:
+                log.info(f"📉 暴跌优先扫描模式(指数{_idx_score:.0f}分)：按跌幅降序扫描")
+        else:
+            HOLDINGS_SORTED = list(HOLDINGS.items())
+
+        for code, holding in HOLDINGS_SORTED:
             _ensure_ai_review_stats(code, holding)
             dec = _ensure_daily_decision_stats(code, holding)
 
@@ -1547,6 +1603,18 @@ def run_watch():
     global HOLDINGS, engine, T_MODE
     HOLDINGS = load_holdings()
     shared['HOLDINGS'] = HOLDINGS  # V1.12: 更新共享命名空间中的HOLDINGS，供signal_engine使用
+
+    # V1.28: 启动时加载持久化的 VIRTUAL_TRADES，防止重启后盘中交易记录丢失
+    loaded_vt = load_virtual_trades()
+    if loaded_vt:
+        VIRTUAL_TRADES.clear()
+        VIRTUAL_TRADES.update(loaded_vt)
+        shared['VIRTUAL_TRADES'] = VIRTUAL_TRADES
+        total_sells = sum(len(v.get("SELL_HIGH", [])) for v in loaded_vt.values())
+        total_buys = sum(len(v.get("BUY_LOW", [])) for v in loaded_vt.values())
+        log.info(f"🔄 已恢复 VIRTUAL_TRADES: {len(loaded_vt)} 只股票, {total_sells} 笔卖出, {total_buys} 笔买入")
+    else:
+        log.info("🔄 VIRTUAL_TRADES: 无历史记录，全新开始")
 
     # V3.1fix: 启动时补算昨日热度（如果缺失）
     _maybe_backfill_sentiment()

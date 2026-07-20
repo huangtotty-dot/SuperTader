@@ -43,6 +43,7 @@ PREOPEN_DIR = os.path.join(T_IO_DIR, "preopen")
 CONFIG_FILE = os.path.join(BASE_DIR, "config.json")
 TRACE_DIR = os.path.join(T_IO_DIR, "traces")
 WATCHLIST_FILE = os.path.join(BASE_DIR, "watchlist.json")
+VIRTUAL_TRADES_FILE = os.path.join(T_IO_DIR, "virtual_trades.json")
 
 for d in [T_IO_DIR, LOG_DIR, CACHE_DIR, SNAPSHOT_DIR, TRACE_DIR, PREOPEN_DIR]:
     if not os.path.exists(d):
@@ -196,6 +197,46 @@ def chunk_list(items: List[Any], size: int):
     size = max(1, int(size or 1))
     for i in range(0, len(items), size):
         yield items[i:i + size]
+
+
+# ==================== VIRTUAL_TRADES 持久化 ====================
+
+def load_virtual_trades() -> Dict[str, Dict[str, list]]:
+    """从文件加载虚拟交易记录。若非当日数据，自动重置（每日清零）。"""
+    try:
+        if not os.path.exists(VIRTUAL_TRADES_FILE):
+            return {}
+        with open(VIRTUAL_TRADES_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        if not isinstance(data, dict):
+            return {}
+        saved_date = data.get("_date", "")
+        today = get_today_str()
+        if saved_date != today:
+            log.info(f"🔄 VIRTUAL_TRADES 日期 {saved_date} != 今日 {today}，自动重置")
+            return {}
+        raw = data.get("trades", {})
+        if not isinstance(raw, dict):
+            return {}
+        return raw
+    except Exception as e:
+        log.warning(f"⚠️  VIRTUAL_TRADES 加载失败: {str(e)[:80]}")
+        return {}
+
+
+def save_virtual_trades(data: dict) -> None:
+    """将虚拟交易记录持久化到文件，附带日期标记。"""
+    try:
+        os.makedirs(os.path.dirname(VIRTUAL_TRADES_FILE), exist_ok=True)
+        payload = {
+            "_date": get_today_str(),
+            "trades": data,
+        }
+        with open(VIRTUAL_TRADES_FILE, "w", encoding="utf-8") as f:
+            json.dump(payload, f, ensure_ascii=False, indent=2, default=str)
+    except Exception as e:
+        log.warning(f"⚠️  VIRTUAL_TRADES 保存失败: {str(e)[:80]}")
+
 
 # ==================== 【高级声音报警引擎动态挂载】 ====================
 SYS_ALERT_AVAILABLE = False
@@ -514,7 +555,7 @@ STOCK_PARAMS = {
         "vol_ratio_confirm": 1.8,            # 放量确认倍数1.8
         "stock_qty_base_pct": 0.30,          # 单笔基础仓位30%（胜率67%可重仓）
         "stock_qty_strong_pct": 0.50,        # 强信号仓位50%
-        "morning_no_sell_until": 1000,       # 10:00前禁止卖出（早抛晚接回测亏钱）
+        "morning_no_sell_until": 1000,       # 10:00前禁止卖出（早抛晚接回测亏钱）；V1.28: uni_down≤-30分时被signal_engine动态绕过
         "morning_no_sell_min_ret": 0.030,    # 早盘卖出门槛提高到3%（仅极端情况才卖）
         "rsi_overbought": 75,                # RSI超买阈值恢复常规（不鼓励早盘卖）
         "rsi_oversold": 32,                  # 超卖阈值降低（深V时更积极买入）
@@ -574,6 +615,48 @@ STOCK_PARAMS = {
         # 止盈参数（回测驱动：ETF最优止盈3%）
         "take_profit_pct": 0.030,             # 持仓涨3%即止盈（回测最优）
         "take_profit_time_after": 1000,       # 10:00后启动止盈监控
+    },
+    "600176": {  # 中国巨石 — 高波动深跌型（日均振幅6-10%，成交2亿+）
+        "min_profit_space": 0.012,            # 最小盈利空间1.2%（高波动需要更大空间）
+        "vol_ratio_confirm": 1.5,             # 放量确认倍数1.5
+        "stock_qty_base_pct": 0.25,           # 单笔基础仓位25%（波动大，控制风险）
+        "stock_qty_strong_pct": 0.40,         # 强信号仓位40%
+        "morning_no_sell_until": 950,         # 9:50即可卖出（波动大早盘有机会）
+        "morning_no_sell_min_ret": 0.015,     # 早盘卖出门槛1.5%
+        "rsi_overbought": 72,                 # RSI超买阈值降低（高波动尽早锁定利润）
+        "rsi_oversold": 30,                   # 超卖阈值
+        "sell_confirm_min_factors": 2,        # 卖出确认因子2
+        "buy_confirm_min_score": 20,          # 买入门槛
+        "open_dip_decline_threshold": -0.012, # 开盘急跌阈值-1.2%
+        "open_dip_buy_penalty": 20,
+        "awaiting_buyback_vwap_gap": 0.985,   # VWAP下方1.5%接回（高波动需要更大偏离）
+        "max_buy_times_per_stock": 2,
+        "max_sell_times_per_stock": 3,        # 高波动允许更多卖出机会
+        "max_t_cycles_per_stock": 4,
+        "cooldown_minutes": 20,
+        "daily_trade_limit": 3,
+        "stand_down_min_amplitude": 0.018,    # 停手振幅1.8%（高波动型）
+    },
+    "603667": {  # 五洲新春 — 中等波动区间型（日均振幅4-9%，成交2000万）
+        "min_profit_space": 0.010,            # 最小盈利空间1.0%
+        "vol_ratio_confirm": 1.3,             # 放量确认倍数1.3
+        "stock_qty_base_pct": 0.30,           # 单笔基础仓位30%
+        "stock_qty_strong_pct": 0.50,         # 强信号仓位50%
+        "morning_no_sell_until": 945,         # 9:45即可卖出（区间型早盘冲高适合高抛）
+        "morning_no_sell_min_ret": 0.020,     # 早盘卖出门槛2.0%
+        "rsi_overbought": 75,
+        "rsi_oversold": 32,
+        "sell_confirm_min_factors": 2,
+        "buy_confirm_min_score": 18,
+        "open_dip_decline_threshold": -0.015,
+        "open_dip_buy_penalty": 20,
+        "awaiting_buyback_vwap_gap": 0.990,   # VWAP下方1.0%接回
+        "max_buy_times_per_stock": 3,
+        "max_sell_times_per_stock": 3,
+        "max_t_cycles_per_stock": 4,
+        "cooldown_minutes": 15,
+        "daily_trade_limit": 3,
+        "stand_down_min_amplitude": 0.012,    # 停手振幅1.2%
     },
 }
 
@@ -1272,8 +1355,12 @@ SENTIMENT_PARAMS = {
         "uni_down|overheat": ["short", 0.5, "单边下行×过热→反T轻仓"],
         "uni_down|hot": ["short", 1.0, "单边下行×偏热→反T标准仓"],
         "uni_down|cold": ["short", 0.5, "单边下行×偏冷→反T轻仓"],
-        "uni_down|ice": ["hold", 0.0, "单边下行×冰点→观望不做T(仅恐慌急杀允许极小仓正T)"],
+        "uni_down|ice": ["short", 1.0, "单边下行×冰点→反T标准仓，先卖后买"],
     },
+    # —— V1.28: 量化分数动态调仓（z_S 维度，叠加在矩阵输出之上）——
+    "z_score_pos_factor_boost": True,      # 是否启用 z_S 分数动态调仓
+    "z_score_sell_bias_threshold": -1.0,   # z_S ≤ 此值 → uni_down反T仓位×1.3
+    "z_score_buy_cap_threshold": 1.5,      # z_S ≥ 此值 → 非uni_down仓位限制≤0.7
     # —— 数据源与落盘 ——
     "report_gen_dir": r"E:\04_实战资料\report_gen",
     "log_dir": None,                   # None → env SENTIMENT_LOG_DIR > BASE_DIR/logs
