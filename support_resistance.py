@@ -22,6 +22,16 @@ def calc_pivot_levels(code: str, holding: dict, daily_ctx: dict) -> Dict[str, An
     y_low = float(daily_ctx.get("daily_prev_low", 0) or 0)
     y_close = float(daily_ctx.get("daily_prev_close_real", 0) or 0)
 
+    # 降级回退：当 daily_ctx 获取失败时用 pre_close 近似估算
+    if y_high <= 0 or y_low <= 0 or y_close <= 0:
+        fallback_ref = float(holding.get("pre_close", 0) or daily_ctx.get("daily_prev_close", 0) or 0)
+        if fallback_ref > 0 and y_close <= 0:
+            y_close = fallback_ref
+        if fallback_ref > 0 and y_high <= 0:
+            y_high = round(fallback_ref * 1.02, 2)  # 2% 估算振幅
+        if fallback_ref > 0 and y_low <= 0:
+            y_low = round(fallback_ref * 0.98, 2)
+
     if y_high <= 0 or y_low <= 0 or y_close <= 0:
         return {"code": code, "name": name, "ref_price": price}
 

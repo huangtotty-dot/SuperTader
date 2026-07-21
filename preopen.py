@@ -508,15 +508,26 @@ def _preopen_hot_theme_text(context: PreOpenContext, limit: int = 3) -> str:
 
 # ==================== Feishu 推送函数 ====================
 
-def _send_preopen_feishu(context: PreOpenContext) -> bool:
+def _send_preopen_feishu(context: PreOpenContext, force_push: bool = False) -> bool:
+    """推送早盘竞价总览。只在 9:20 后（数据可信窗口）推送，且每日仅一次。
+
+    force_push：仅启动自检等场景绕过时间窗口检查，但仍受 data_pending 与去重保护。
+    """
     global _preopen_pushed_date, _preopen_overview_last_push_at
     today = get_today_str()
     if _preopen_pushed_date == today or not FEISHU_WEBHOOK:
         return False
     if context.market_bias == "data_pending":
         return False  # 无有效数据不推送
+    if not force_push:
+        # 9:20 前竞价数据不可信（可撤单阶段），不发总览
+        if datetime.now().time() < dtime(9, 20):
+            return False
 
     top20 = context.top20_volume_analysis if isinstance(context.top20_volume_analysis, dict) else {}
+    # 数据质量门控：前 20 名全部 0 涨跌 → 视为无效数据，不发
+    if top20.get("total_up", 0) + top20.get("total_down", 0) == 0:
+        return False
     top20_up = top20.get("total_up", 0)
     top20_down = top20.get("total_down", 0)
     top20_bias = top20.get("bias", "neutral")
@@ -602,7 +613,8 @@ def _ensure_preopen_context(force: bool = False) -> Optional[PreOpenContext]:
         _preopen_logged_date = today
         _record_preopen_trace(PREOPEN_CONTEXT)
         log.info(_format_preopen_brief(PREOPEN_CONTEXT))
-        if force or _preopen_pushed_date != today:
+        # 推送由 _preopen_pushed_date 控制（每日一次），force 只控制数据刷新
+        if _preopen_pushed_date != today:
             _send_preopen_feishu(PREOPEN_CONTEXT)
         return PREOPEN_CONTEXT
     except Exception as e:
