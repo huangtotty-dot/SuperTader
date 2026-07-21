@@ -574,29 +574,29 @@ def _maybe_audit_closure(now: datetime) -> None:
                 problems.append(
                     f"• {name}({code}) 持仓 qty={qty} 与 base={base} 不一致（差 {qty_diff:+d}）→ 请核对 holdings.json")
 
-        # V1.28: 收盘自动同步 holdings.json（未接回/未卖出 → 更新仓位）
+        # V1.28: 收盘自动同步 holdings.json + 释放冻结仓位
         holdings_updated = False
         for d in details:
-            if d["unrebuilt"] > 0 or d["unclosed_buy"] > 0:
-                code = d["code"]
-                holding = HOLDINGS.get(code)
-                if holding is None:
-                    continue
-                old_qty = int(holding.get("qty", 0))
-                old_t_qty = int(holding.get("t_qty", 0) or old_qty)
-                delta = d["unclosed_buy"] - d["unrebuilt"]  # 正净值=买入未卖出(增仓), 负净值=卖出未接回(减仓)
-                new_qty = max(0, old_qty + delta)
-                new_t_qty = max(0, old_t_qty + delta)
-                holding["qty"] = new_qty
-                holding["t_qty"] = new_t_qty
-                holding["base"] = new_qty
-                log.info(f"📝 收盘同步 {d['name']}({code}): qty {old_qty}→{new_qty}, t_qty {old_t_qty}→{new_t_qty} (delta={delta:+d})")
+            code = d["code"]
+            holding = HOLDINGS.get(code)
+            if holding is None:
+                continue
+            old_qty = int(holding.get("qty", 0))
+            old_t_qty = int(holding.get("t_qty", 0) or old_qty)
+            delta = d["unclosed_buy"] - d["unrebuilt"]
+            new_qty = max(0, old_qty + delta)
+            holding["qty"] = new_qty
+            holding["t_qty"] = new_qty  # 释放冻结：t_qty = qty
+            holding["base"] = new_qty
+            if delta != 0 or old_t_qty != new_qty:
+                log.info(f"📝 收盘同步 {d['name']}({code}): "
+                         f"qty {old_qty}→{new_qty}, t_qty {old_t_qty}→{new_qty} (delta={delta:+d}, 冻结已释放)")
                 holdings_updated = True
         if holdings_updated:
             try:
                 with open(HOLDINGS_FILE, "w", encoding="utf-8") as f:
                     json.dump(HOLDINGS, f, ensure_ascii=False, indent=2)
-                log.info(f"✅ holdings.json 已更新（共 {len(HOLDINGS)} 只）")
+                log.info(f"✅ holdings.json 已更新（共 {len(HOLDINGS)} 只），冻结仓位已释放")
             except Exception as e:
                 log.warning(f"⚠️ holdings.json 写入失败: {str(e)[:80]}")
             # 收盘同步后清空 VIRTUAL_TRADES

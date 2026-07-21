@@ -231,6 +231,14 @@ IR_DEFAULT_PARAMS: Dict[str, Any] = {
     "streak_late_day": 20,            # |streak|>=20 → 晚期警示（不再加分，R1 惩罚加倍）
     "late_penalty_mult": 2.0,         # 晚期警示下 R1 扣减比例倍数（0.5×2=1.0 → 清零）
     "r1_half_factor": 0.5,            # R1：streak 内收破 MA5 → 当日累积分扣减比例
+    # —— 止跌退出（站上 MA5 + 阳线确认 → 趋势切换，优先于分数恢复）——
+    "uni_down_exit_above_ma5": True,  # uni_down 中收盘站上 MA5 且至少 1 根阳线 → 切 range
+    # —— 首次站上 MA5 恢复加分（deep streak 止跌初期 low-buffer 加分，弥补 above_ma5_days>=3 高阈值空窗）——
+    "ma5_recover_streak_min": -5,     # 最小 |streak| 才触发恢复（< -5 即 deep streak 才算）
+    "ma5_recover_bonus_base": 5.0,    # 恢复基础加分
+    "ma5_recover_bonus_streak": 0.3,  # 每单位 |streak| 额外加分系数
+    "ma5_recover_bonus_pos20": 0.12,  # 每单位 pos20 额外加分系数（价格从谷底回升越多加越多）
+    "ma5_recover_bonus_cap": 15.0,    # 恢复加分封顶
     # —— R0 震荡三元组压缩（研究中震荡段 100% 命中 / 趋势段 0% 误判）——
     "r0_cross_min": 3,                # 近20日 MA5/MA10 交叉次数下限
     "r0_vol_max": 1.0,                # 量比 vol_MA5/vol_MA20 上限（缩量）
@@ -312,7 +320,7 @@ IR_DEFAULT_PARAMS: Dict[str, Any] = {
     # —— 数据与 IO ——
     "index_symbol_sh": "sh000001", "index_symbol_sz": "sz399001",
     "kline_count_sh": 900, "kline_count_sz": 450,
-    "http_timeout": 15, "http_retry": 2, "http_retry_sleep": 1.0,
+    "http_timeout": 15, "http_retry": 4, "http_retry_sleep": 2.0,
     "state_dir": None,                               # None → 默认 <BASE_DIR|E:\06_T>\t_io\index_regime
     "min_bars": 150,                                 # 趋势指标所需最少日线数（不足则逐项降级）
 }
@@ -632,14 +640,18 @@ def _ir_http_get_json(url: str, p: Dict[str, Any]) -> Optional[dict]:
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
         "Referer": "https://finance.qq.com/",
     }
-    for attempt in range(max(1, int(p["http_retry"]))):
+    max_retry = max(1, int(p["http_retry"]))
+    for attempt in range(max_retry):
         try:
             r = requests.get(url, headers=headers, timeout=int(p["http_timeout"]))
             r.raise_for_status()
             return r.json()
         except Exception as e:
-            _ir_log.info(f"[index_regime] http 重试{attempt + 1}/{p['http_retry']}: {type(e).__name__}")
-            if attempt + 1 < int(p["http_retry"]):
+            is_last = attempt + 1 >= max_retry
+            if is_last:
+                _ir_log.warning(f"[index_regime] http 全部{max_retry}次重试失败，最后错误: {type(e).__name__}")
+            else:
+                _ir_log.debug(f"[index_regime] http 重试{attempt + 1}/{max_retry}: {type(e).__name__}")
                 time.sleep(float(p["http_retry_sleep"]))
     return None
 
@@ -786,13 +798,18 @@ def _ir_fetch_spot_breadth(p: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         return {"up": up, "down": down, "flat": flat,
                 "up_ratio": up / (up + down), "source": "spot_em"}
 
-    for attempt in range(max(1, int(p["http_retry"]))):
+    max_retry = max(1, int(p["http_retry"]))
+    base_sleep = float(p["http_retry_sleep"])
+    for attempt in range(max_retry):
         rec, err = _ir_call_with_timeout(_call, float(p["http_timeout"]))
         if err is None:
             return rec
-        _ir_log.info(f"[index_regime] spot_em 重试{attempt + 1}/{p['http_retry']}: {type(err).__name__}")
-        if attempt + 1 < int(p["http_retry"]):
-            time.sleep(float(p["http_retry_sleep"]))
+        is_last = attempt + 1 >= max_retry
+        if is_last:
+            _ir_log.warning(f"[index_regime] spot_em 全部{max_retry}次重试失败，最后错误: {type(err).__name__}")
+        else:
+            _ir_log.debug(f"[index_regime] spot_em 重试{attempt + 1}/{max_retry}: {type(err).__name__}")
+            time.sleep(base_sleep * (attempt + 1))  # 指数退避
     return None
 
 
@@ -1090,6 +1107,7 @@ def _ir_streak_features(df: pd.DataFrame, p: Optional[Dict[str, Any]] = None) ->
                            "close": None, "above_ma5_days": None, "below_ma5_days": None,
                            "above_ma20_days": None, "below_ma20_days": None,
                            "above_ma60_days": None, "below_ma60_days": None,
+                           "up_days": None, "down_days": None,
                            "touch_ma20": False, "touch_ma60": False,
                            "break_ma20": False, "break_ma60": False}
     try:
@@ -1158,6 +1176,8 @@ def _ir_streak_features(df: pd.DataFrame, p: Optional[Dict[str, Any]] = None) ->
                 out["below_ma60_days"] = _tail_run(close < ma60, lambda x: bool(x))
                 out["full_above_ma5_days"] = _tail_run(low > ma5, lambda x: bool(x))
                 out["full_below_ma5_days"] = _tail_run(high < ma5, lambda x: bool(x))
+                out["up_days"] = _tail_run(close > close.shift(1), lambda x: bool(x))
+                out["down_days"] = _tail_run(close < close.shift(1), lambda x: bool(x))
                 prev_ma20 = float(ma20.iloc[-2]) if n >= 21 and not np.isnan(ma20.iloc[-2]) else np.nan
                 prev_ma60 = float(ma60.iloc[-2]) if n >= 61 and not np.isnan(ma60.iloc[-2]) else np.nan
                 if not np.isnan(prev_ma20):
@@ -2066,6 +2086,13 @@ def _ir_step_regime(prev_regime: IndexRegime, s_today: float, s_prev: Optional[f
         return IndexRegime.RANGE, f"exit_up(S={s_today:.1f}<{exit_:.0f})"
     if prev_regime == IndexRegime.UNI_DOWN and s_today > -exit_:
         return IndexRegime.RANGE, f"exit_down(S={s_today:.1f}>-{exit_:.0f})"
+    # 1.4) 止跌退出（uni_down 中收盘站上 MA5 + 至少 1 根阳线 → 切 range；
+    #      连跌后"close > MA5"是价格行为最直接的止跌证据，结合阳线确认防假反弹；
+    #      优于纯数阳线天数 — 避免弱势反弹（收盘仍在 MA5 下）误判为趋势逆转）
+    _above5 = int(feat.get("above_ma5_days") or 0)
+    _updays = int(feat.get("up_days") or 0)
+    if prev_regime == IndexRegime.UNI_DOWN and bool(p.get("uni_down_exit_above_ma5", True)) and _above5 >= 1 and _updays >= 1:
+        return IndexRegime.RANGE, f"stabilize_exit(above_ma5={_above5},up_days={_updays})"
     # 1.5) V2.1 K-up 当日快速入场（跳过连续 2 日确认）
     if prev_regime == IndexRegime.RANGE and key_day_type == "k_up" and s_today >= enter:
         return IndexRegime.UNI_UP, f"k_up_enter(S={s_today:.1f}>={enter:.0f})"
@@ -2432,11 +2459,28 @@ class _IndexRegimeEngine:
         if (feat.get("above_ma5_days") or 0) >= int(p.get("ma5_persist_days", 3)):
             if s_final < 0:
                 s_final += max(4.0, abs(structure_score) * 0.5)
+        # 首次站上 MA5 快速恢复：deep streak 止跌初期 low-buffer 加分（above_ma5_days=1~2 间的空窗）
+        _streak_r = int(feat.get("streak") or 0)
+        _rm_min = int(p.get("ma5_recover_streak_min", -5))
+        if _streak_r <= _rm_min and (feat.get("above_ma5_days") or 0) >= 1 \
+                and (feat.get("above_ma5_days") or 0) < int(p.get("ma5_persist_days", 3)):
+            if s_final < 0:
+                _rb_b = float(p.get("ma5_recover_bonus_base", 5.0))
+                _rb_s = float(p.get("ma5_recover_bonus_streak", 0.3))
+                _rb_p = float(p.get("ma5_recover_bonus_pos20", 0.12))
+                _rb_c = float(p.get("ma5_recover_bonus_cap", 15.0))
+                _recover_bonus = min(_rb_c, _rb_b + abs(_streak_r) * _rb_s + (feat.get("pos20") or 0) * _rb_p)
+                s_final += _recover_bonus
         new_regime, note = _ir_step_regime(prev_regime, s_final,
                                            s_prev if prev_adjacent else None, p, feat,
                                            key_day_type=k_type, sharp_dir=sharp_dir,
                                            score_delta=score_delta)
         days_in_regime = prev_days + 1 if (new_regime == prev_regime and prev_adjacent) else 1
+
+        # stabilize_exit → 清除空头锚点（退出 uni_down 时清理锚点状态，防止污染后续 range 期的分数）
+        if note.startswith("stabilize_exit"):
+            k_anchor = _ir_default_k_anchor()
+            kctx["anchor40"] = None
 
         gate = _ir_gate_advice(new_regime, detail.get("qvix", {}), pools)
         structure_trigger = float(p.get("structure_trigger", 10.0))
@@ -2466,6 +2510,8 @@ class _IndexRegimeEngine:
             fired_rules.append("R1")
         if note.startswith("r2_"):
             fired_rules.append("R2")
+        if note.startswith("stabilize_exit"):
+            fired_rules.append("STABILIZE_EXIT")
         if detail.get("ma_streak", {}).get("late_warning"):
             fired_rules.append("LATE")
         # V2.2 锐化规则：SHARP_UP/DOWN（该侧存在突破档或量能确认且得分主导）+ SHARP_TRIGGER
@@ -2658,6 +2704,26 @@ def _ir_cli() -> None:
         print(f"规则触发    : {ctx.get('detail', {}).get('fired_rules')}")
         print(f"降级项      : {ctx.get('degraded')}")
         print(f"gate_advice : {ctx.get('gate_advice')}")
+
+    # eod 模式落盘 sentiment_daily.csv（供 main.py/复盘工具消费）
+    if args.mode == "eod":
+        try:
+            from daily_sentiment import save_sentiment_record  # 延迟导入避免循环
+            _dt = (ctx.get("detail") or {}).get("limit_pool") or {}
+            _kd = (ctx.get("detail") or {}).get("key_day") or {}
+            _dc = int(_dt.get("dt_count") or 0)
+            rec = {
+                "date": ctx.get("date"), "regime": ctx.get("regime"),
+                "regime_name": ctx.get("regime_name"), "score_S": ctx.get("score"),
+                "z_S": None, "top3_avg": None, "z_top3": None, "top3_names": [],
+                "k_day_type": _kd.get("type") or "",
+                "index_pct": None, "dt_count": _dc,
+                "systemic_risk": _dc > 30,
+                "decision_summary": ctx.get("gate_advice", ""),
+            }
+            save_sentiment_record(rec)
+        except Exception:
+            pass
 
 
 if __name__ == "__main__":
