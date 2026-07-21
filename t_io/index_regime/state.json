@@ -1,11 +1,7 @@
 {
-  "last_regime": "uni_down",
-  "days_in_regime": 4,
+  "last_regime": "range",
+  "days_in_regime": 1,
   "score_history": [
-    {
-      "date": "2026-05-14",
-      "S": 18.6053
-    },
     {
       "date": "2026-05-15",
       "S": 17.3636
@@ -41,9 +37,13 @@
     {
       "date": "2026-07-20",
       "S": -51.8198
+    },
+    {
+      "date": "2026-07-21",
+      "S": -43.1246
     }
   ],
-  "last_date": "2026-07-20",
+  "last_date": "2026-07-21",
   "history": [
     {
       "date": "2026-03-31",
@@ -1032,13 +1032,39 @@
         "trigger_date": null,
         "regime_at_trigger": null
       }
+    },
+    {
+      "date": "2026-07-21",
+      "S": -43.1246,
+      "sadj": -61.9853,
+      "regime": "range",
+      "days_in_regime": 1,
+      "k_anchor": {
+        "active": false,
+        "below_days": 0,
+        "recover_days": 0,
+        "start_date": null
+      },
+      "k_up": {
+        "active": false,
+        "boost": 0,
+        "start_date": null
+      },
+      "sharp": {
+        "active": false,
+        "value": 0.0,
+        "age": 0,
+        "direction": 0,
+        "trigger_date": null,
+        "regime_at_trigger": null
+      }
     }
   ],
   "k_anchor": {
-    "active": true,
-    "below_days": 9,
+    "active": false,
+    "below_days": 0,
     "recover_days": 0,
-    "start_date": "2026-05-14"
+    "start_date": null
   },
   "k_up": {
     "active": false,

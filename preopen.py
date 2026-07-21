@@ -49,6 +49,9 @@ _preopen_monitor_last_push_at = None
 _preopen_monitor_push_count = 0
 _preopen_monitor_date = ""
 _eod_logged_date = ""
+_last_idle_log = datetime.min
+_scan_count = 0
+_scan_lock = False
 
 
 # ==================== PreOpenEngine ====================
@@ -229,12 +232,28 @@ class PreOpenEngine:
                 "prev_close": prev_close,
             }
 
-        # 3. 市场评分 = Top20涨家占比（清晰透明）
+        # 3. 盘前（9:30前）无有效市场数据 → 返回等待状态
         top20_up = top20.get("total_up", 0)
         top20_down = top20.get("total_down", 0)
-        market_score = top20_up / max(1, top20_up + top20_down) * 100
+        if top20_up + top20_down == 0:
+            return PreOpenContext(
+                market_score=50.0, market_bias="data_pending",
+                breadth={"total_codes": max(1, len(self.holdings)),
+                         "etf_count": sum(1 for h in self.holdings.values() if h.get("type") == "etf"),
+                         "stock_count": max(0, len(self.holdings) - sum(1 for h in self.holdings.values() if h.get("type") == "etf")),
+                         "advance_decline": market_snapshot.get("advance_decline", {}),
+                         "risk_flag": "unknown", "market_open": False},
+                session_note="等待9:30开盘后获取市场数据",
+                generated_at=_now().strftime("%Y-%m-%d %H:%M:%S"),
+                source=market_snapshot.get("source", "watchlist"),
+                market_snapshot=market_snapshot, code_snapshots=code_snapshots,
+                top20_volume_analysis=top20,
+            )
 
-        # 4. 偏向判定
+        # 4. 市场评分 = Top20涨家占比
+        market_score = top20_up / (top20_up + top20_down) * 100
+
+        # 5. 偏向判定
         if market_score >= 65:
             market_bias = "risk_on"
         elif market_score >= 45:
@@ -242,7 +261,6 @@ class PreOpenEngine:
         else:
             market_bias = "risk_off"
 
-        # 5. 简短判断
         session_note = f"竞价额Top20中涨{top20_up}家/跌{top20_down}家"
 
         auction_summary = {
@@ -261,7 +279,7 @@ class PreOpenEngine:
                 "total_codes": total,
                 "etf_count": etf_count,
                 "stock_count": stock_count,
-                "advance_decline": adv,
+                "advance_decline": market_snapshot.get("advance_decline", {}) if isinstance(market_snapshot, dict) else {},
                 "hot_theme": market_snapshot.get("hot_theme", []),
                 "hot_theme_text": "、".join(market_snapshot.get("hot_theme", [])[:3])
                     if isinstance(market_snapshot.get("hot_theme"), list) else "",
@@ -402,7 +420,8 @@ def _feishu_card_header(title: str, template: str) -> dict:
 
 
 def _is_preopen_monitor_window(now: datetime) -> bool:
-    return now.weekday() < 5 and dtime(9, 15) <= now.time() < dtime(9, 25)
+    """9:20-9:25 不可撤单时段，数据真实可信"""
+    return now.weekday() < 5 and dtime(9, 20) <= now.time() < dtime(9, 25)
 
 
 def _format_code_names(codes: List[str], limit: int = 4) -> str:
@@ -494,6 +513,8 @@ def _send_preopen_feishu(context: PreOpenContext) -> bool:
     today = get_today_str()
     if _preopen_pushed_date == today or not FEISHU_WEBHOOK:
         return False
+    if context.market_bias == "data_pending":
+        return False  # 无有效数据不推送
 
     top20 = context.top20_volume_analysis if isinstance(context.top20_volume_analysis, dict) else {}
     top20_up = top20.get("total_up", 0)
@@ -535,13 +556,14 @@ def _send_preopen_monitor_feishu(context: PreOpenContext, now: Optional[datetime
     now = now or _now()
     if not FEISHU_WEBHOOK or not _is_preopen_monitor_window(now):
         return False
-    if _preopen_monitor_push_count >= 5:
+    if _preopen_monitor_push_count >= 2:
         return False
-    if _preopen_monitor_last_push_at is not None and (now - _preopen_monitor_last_push_at).total_seconds() < 60:
+    if _preopen_monitor_last_push_at is not None and (now - _preopen_monitor_last_push_at).total_seconds() < 120:
         return False
 
+    pt = _preopen_monitor_push_count + 1
     elements = [_feishu_md_div(
-        f"{_preopen_action_label(context)} | {context.market_score:.0f}分 | {now.strftime('%H:%M')}"
+        f"竞价观察中 {now.strftime('%H:%M')} 第{pt}/2次"
     )]
 
     card = {"config": {"wide_screen_mode": True},
@@ -564,7 +586,11 @@ def _ensure_preopen_context(force: bool = False) -> Optional[PreOpenContext]:
     global PREOPEN_CONTEXT, SESSION_CONTEXT, _preopen_logged_date
     today = get_today_str()
     if not force and PREOPEN_CONTEXT is not None and _preopen_logged_date == today:
-        return PREOPEN_CONTEXT
+        # 缓存为 data_pending 且已过 9:30 → 刷新
+        if PREOPEN_CONTEXT.market_bias == "data_pending" and dtime(9, 30) <= datetime.now().time():
+            pass  # 继续执行刷新
+        else:
+            return PREOPEN_CONTEXT
     try:
         PREOPEN_CONTEXT = build_preopen_context()
         SESSION_CONTEXT = {
