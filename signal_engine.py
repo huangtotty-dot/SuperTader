@@ -365,14 +365,15 @@ class SignalEngine:
             "buy_score": buy_score, "sell_score": sell_score,
             "buy_threshold": buy_threshold, "sell_threshold": sell_threshold,
             "decision": sig.action if sig else "HOLD",
+            "buy_factors": {d["指标"]: d.get("加分", 0) for d in buy_details},
+            "sell_factors": {d["指标"]: d.get("加分", 0) for d in sell_details},
             "engine": "v2_final",
         })
         return buy_score, sell_score, sig
 
 
 # ====================================================================
-# 阶段一重构: FeatureExtractor / RiskManager / ScoringEngine
-# 物理拆解 evaluate() 为三层流水线，行为不变，职责分离
+# V2 Engine: FeatureExtractor → RiskManager → ScoringEngine → Signal
 # ====================================================================
 
 class FeatureExtractor:
