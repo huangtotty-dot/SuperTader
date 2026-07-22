@@ -364,6 +364,47 @@ def send_morning_alert(code, name, alert_level, triggered_rules, morning_stats):
 _INDEX_INTRADAY_LAST_FETCH_TS = 0.0   # 分时数据拉取节流（至多 300 秒一次）
 _index_intraday_alert_cache: Dict[str, float] = {}  # 同 tag 60 分钟不重复推
 
+# VWAP 实时快照缓存（akshare stock_zh_a_spot_em 成交额/成交量，每 60s 刷新一次）
+_SPOT_VWAP_CACHE: Dict[str, float] = {}  # code -> 实时 VWAP
+_LAST_SPOT_VWAP_REFRESH = 0.0
+
+
+def _refresh_spot_vwap_cache() -> None:
+    """拉取 akshare 全市场实时快照，提取持仓股的真实 VWAP（成交额/成交量）。
+
+    akshare stock_zh_a_spot_em 每次返回全市场 ~5000 只，一次请求即可更新所有持仓。
+    VWAP = 成交额 / 成交量（交易所官方口径），比腾讯分钟线自算更准确。
+    """
+    global _LAST_SPOT_VWAP_REFRESH, _SPOT_VWAP_CACHE
+    now_ts = time.time()
+    if now_ts - _LAST_SPOT_VWAP_REFRESH < 60:
+        return
+    _LAST_SPOT_VWAP_REFRESH = now_ts
+    try:
+        import akshare as ak
+        import pandas as pd
+        spot = ak.stock_zh_a_spot_em()
+        if spot is None or spot.empty:
+            return
+        codes_col = "代码"
+        amt_col = "成交额"
+        vol_col = "成交量"
+        if codes_col not in spot.columns or amt_col not in spot.columns or vol_col not in spot.columns:
+            return
+        spot[vol_col] = pd.to_numeric(spot[vol_col], errors="coerce").fillna(0)
+        spot[amt_col] = pd.to_numeric(spot[amt_col], errors="coerce").fillna(0)
+        mask = (spot[vol_col] > 0) & (spot[amt_col] > 0)
+        cache = {}
+        for _, row in spot[mask].iterrows():
+            c = str(row[codes_col]).strip()
+            v = float(row[vol_col])
+            a = float(row[amt_col])
+            cache[c] = round(a / v, 2)
+        _SPOT_VWAP_CACHE = cache
+        log.debug(f"📡 VWAP 实时缓存刷新: {len(cache)} 只")
+    except Exception as e:
+        log.debug(f"VWAP 缓存刷新失败: {str(e)[:80]}")
+
 _IR_GATE_ADVICE_CN = {
     "trend_up_hold": "单边上涨：正T优先、买入门控放宽、减少卖飞",
     "defensive_t": "单边下行：防守做T、买入收紧、禁止追跌",
@@ -864,6 +905,13 @@ def scan_once():
                     continue
 
                 df = add_indicators(df)
+                # VWAP 精度修正：有实时快照 VWAP 时覆盖分钟线自算的最后一格
+                _refresh_spot_vwap_cache()
+                api_code = clean_code(code)
+                spot_vwap = _SPOT_VWAP_CACHE.get(api_code)
+                if spot_vwap and spot_vwap > 0:
+                    df.loc[df.index[-1], "vwap"] = spot_vwap
+
                 price = float(df.iloc[-1]["close"]) if "close" in df.columns else 0.0
                 vwap = float(df.iloc[-1]["vwap"]) if "vwap" in df.columns else price
                 amp = float(df.iloc[-1]["day_amplitude"]) if "day_amplitude" in df.columns else 0.0
@@ -1043,8 +1091,9 @@ def scan_once():
 
         if _scan_count % 4 == 1:
             lines = [f"\n📊 护城河防御面板 第{_scan_count}轮\n" + "─"*70]
+            lines.append(f"{'标的':<16}{'现价':>8}{'均价(VWAP)':>10}{'振幅':>8} {'多买/空卖评分':>13}  {'状态'}")
             for r in panel_rows:
-                lines.append(f"{r[0]:<16}{r[1]:>8}{r[2]:>10}{r[3]:>8} {r[4]:>10}  {r[5]:<8}")
+                lines.append(f"{r[0]:<16}{r[1]:>8}{r[2]:>10}{r[3]:>8} {r[4]:>13}  {r[5]:<8}")
             log.info("\n".join(lines))
     finally:
         _scan_lock = False

@@ -923,7 +923,13 @@ def add_indicators(df: pd.DataFrame) -> pd.DataFrame:
                 parsed_time = pd.Timestamp.now().normalize() + (parsed_hm - parsed_hm.dt.normalize())
     df["date"] = parsed_time.dt.date
 
-    df["vwap"] = df.groupby("date")["tp_vol"].cumsum() / df.groupby("date")["volume"].cumsum()
+    # VWAP：优先用实际成交额 / 成交量（腾讯分钟线 volume 单位为"手"=100股，
+    # amount 为元，故 volume×100 换算为股，使 VWAP 量纲正确）；
+    # amount 列缺失或全为 NaN 时回退到 typical_price × volume 估算
+    if "amount" in df.columns and df["amount"].notna().sum() > 0:
+        df["vwap"] = df.groupby("date")["amount"].cumsum() / (df.groupby("date")["volume"].cumsum() * 100.0)
+    else:
+        df["vwap"] = df.groupby("date")["tp_vol"].cumsum() / df.groupby("date")["volume"].cumsum()
     df["vwap"] = df["vwap"].ffill().fillna(df["close"])
     df["vwap_dev"] = (c - df["vwap"]) / df["vwap"].replace(0, np.nan)
 
