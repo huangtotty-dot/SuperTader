@@ -9,6 +9,221 @@ try:
 except Exception:
     _log_enhancer = None
 
+import numpy as np
+import pandas as pd
+from typing import Dict, Any, List, Optional
+from datetime import datetime, timedelta
+
+# ======== 独立模式回退依赖 ========
+if 'get_today_str' not in globals():
+    def get_today_str(): return datetime.now().strftime("%Y-%m-%d")
+if '_now' not in globals():
+    def _now(): return datetime.now()
+if 'PARAMS' not in globals():
+    PARAMS = {"rsi_period":14,
+              "bb_period":20,
+              "bb_std":2,
+              "ema_fast_period":3,
+              "ema_slow_period":6,
+              "min_amplitude":0.002,
+              "trend_today_ret_threshold":0.03,
+              "rsi_overbought":78,
+              "rsi_oversold":35,
+              "macd_strong_threshold":0.2,
+              "macd_strong_boost":25,
+              "vol_ratio_confirm":1.5,
+              "vol_confirm_boost":15,
+              "rsi_15m_oversold":35,
+              "min_15min_bars":3,
+              "range_pos_low_threshold":0.3,
+              "range_pos_high_threshold":0.85,
+              "buy_confirm_min_score":25,
+              "min_profit_space":0.008,
+              "cooldown_minutes":5,
+              "repeat_signal_gap_minutes":5,
+              "repeat_signal_price_move":0.003,
+              "repeat_signal_score_boost":10,
+              "sell_repeat_block_minutes":10,
+              "post_sell_rebuild_minutes":10,
+              "post_sell_rebuild_price_gap":0.005,
+              "post_sell_rebuild_score_gap":8,
+              "post_sell_rebuild_min_seconds":120,
+              "post_sell_rebuild_buy_threshold_penalty":15,
+              "post_sell_rebuild_weak_gate_discount":3,
+              "post_sell_rebuild_relax_gap":4,
+              "post_sell_rebuild_relax_factors":1,
+              "stand_down_score_gap":8,
+              "stand_down_flat_range_gap":0.005,
+              "market_state_threshold_bias":3,
+              "etf_stand_down_gap":0.003,
+              "daily_support_buy_boost":5,
+              "daily_trend_buy_boost":3,
+              "daily_breakdown_buy_penalty":15,
+              "daily_breakdown_sell_boost":8,
+              "daily_downtrend_buy_penalty":10,
+              "daily_overheat_buy_penalty":5,
+              "daily_overheat_sell_boost":8,
+              "daily_overheat_buy_threshold_penalty":5,
+              "daily_support_buy_threshold_relief":3,
+              "daily_risk_buy_threshold_penalty":10,
+              "buy_confirm_min_factors":3,
+              "buy_confirm_min_seconds":30,
+              "buy_rebound_min_score_gap":5,
+              "sell_confirm_min_factors":3,
+              "sell_confirm_min_seconds":30,
+              "buy_starvation_days":5,
+              "buy_starvation_relax_factors":1,
+              "buy_starvation_relax_gap":3,
+              "buy_starvation_relax_seconds":10,
+              "max_buy_times_per_stock":5,
+              "max_sell_times_per_stock":5,
+              "max_t_cycles_per_stock":8,
+              "stock_min_trade_unit":100,
+              "etf_min_trade_unit":100,
+              "etf_threshold_cap":38,
+              "sell_holding_min_minutes":10,
+              "sell_holding_strict_minutes":30,
+              "sell_score_boost_holding":5,
+              "sell_score_boost_eod":8,
+              "sell_momentum_bonus":6,
+              "buy_priority_margin":8,
+              "etf_qty_strong_pct":0.25,
+              "etf_qty_base_pct":0.15,
+              "etf_qty_weak_pct":0.08,
+              "stock_qty_strong_pct":0.4,
+              "stock_qty_base_pct":0.3,
+              "stock_qty_weak_pct":0.2,
+              "stock_first_add_strong_pct":0.3,
+              "stock_first_add_pct":0.2,
+              "stock_first_add_weak_pct":0.1,
+              "stock_rebuild_strong_pct":0.8,
+              "stock_rebuild_base_pct":0.5,
+              "stock_rebuild_weak_pct":0.3,
+              "buy_soft_margin":8,
+              "sell_fast_path_min_gap":18,
+              "morning_no_sell_until":940,
+              "morning_no_sell_min_ret":0.02,
+              "hard_sell_threshold_cap":80,
+              "hard_buy_threshold_cap":80,
+              "awaiting_buyback_ttl_minutes":120,
+              "awaiting_buyback_price_gap":0.003,
+              "awaiting_buyback_score_boost":10,
+              "awaiting_buyback_score_boost_weak":5,
+              "awaiting_buyback_threshold_relax":5,
+              "awaiting_buyback_threshold_relax_weak":3,
+              "awaiting_buyback_vwap_gap":0.003,
+              "awaiting_buyback_rsi_strong":45,
+              "awaiting_buyback_rsi_weak":50,
+              "peak_decline_pct_threshold":0.01,
+              "peak_decline_min_minutes":3,
+              "peak_decline_penalty":5,
+              "double_top_pullback_threshold":0.015,
+              "double_top_min_gap_minutes":30,
+              "double_top_price_proximity":0.995,
+              "double_top_rsi_threshold":75,
+              "double_top_vol_shrink_threshold":0.75,
+              "profit_guard_sell_boost":15,
+              "profit_guard_buy_penalty":10,
+              "profit_guard_tight_profit_max":0.03,
+              "profit_guard_tight_gap_max":0.015,
+              "min_sell_profit_space":0.005,
+              "open_dip_buy_penalty":25,
+              "open_dip_max_mins":15,
+              "daily_trade_limit":10,
+              "breakdown_gap_threshold":0.005,
+              "breakdown_buy_block":True,
+              "big_drop_bounce_threshold":-0.05,
+              "big_drop_bounce_sell_boost":10,
+              "big_drop_bounce_buy_penalty":5,
+              "bb_band_breakout_penalty":0,
+              "ma5_deviation_sell_boost":0,
+              "surge_shadow_divergence_boost":0,
+              "high_buy_score_bypass":False,
+              "high_buy_score_threshold":80,
+              "high_buy_score_vwap_gap":0.02,
+              "etf_buy_score_boost":5,
+              "etf_sell_score_boost":3,
+              "downtrend_sell_boost":15,
+              "downtrend_sell_threshold":-10,
+              "commission_rate":0.00015,
+              "optimal_sell_boost":8,
+              "optimal_sell_range_pos":0.95,
+              "optimal_sell_rsi":85,
+              "optimal_sell_bb_pct":0.9,
+              "optimal_sell_today_ret":0.02,
+              "bullish_reversal_min_pct":0.01,
+              "bullish_reversal_body_ratio":0.6,
+              "bullish_reversal_vol_multiplier":1.0,
+              "bullish_reversal_engulf":0.995,
+              "buy_signal_price_move":0.005,
+              "buy_signal_score_boost":20,
+              "sell_signal_price_move":0.005,
+              "sell_signal_score_boost":20,
+              "add_pos_signal_price_move":0.005,
+              "add_pos_signal_score_boost":20}
+if 'MINUTE_FETCH_DETAIL' not in globals(): MINUTE_FETCH_DETAIL = {}
+if 'MINUTE_FETCH_STATUS' not in globals(): MINUTE_FETCH_STATUS = {}
+if 'DAILY_CONTEXT_CACHE' not in globals(): DAILY_CONTEXT_CACHE = {}
+if 'HOLDINGS' not in globals(): HOLDINGS = {}
+if 'VIRTUAL_TRADES' not in globals(): VIRTUAL_TRADES = {}
+if 'SIGNAL_OUTCOME_TRACKER' not in globals(): SIGNAL_OUTCOME_TRACKER = {}
+if 'T_MODE' not in globals(): T_MODE = {}
+if 'SHORT_MODE_PARAMS' not in globals(): SHORT_MODE_PARAMS = {}
+if 'STOCK_PARAMS' not in globals(): STOCK_PARAMS = {}
+if 'ETF_T0_PARAMS' not in globals(): ETF_T0_PARAMS = {}
+if 'MORNING_ALERT_PARAMS' not in globals(): MORNING_ALERT_PARAMS = {}
+if 'DAILY_DECISION_STATS' not in globals(): DAILY_DECISION_STATS = {}
+if 'MultiTimeframeFetcher' not in globals(): MultiTimeframeFetcher = None
+if '_resolve_benchmark_snapshot' not in globals():
+    def _resolve_benchmark_snapshot(c,h): return {}
+if '_default_daily_context' not in globals():
+    def _default_daily_context(c,s="",r=""): return {"daily_status":s,"daily_reason":r,"daily_buy_t_ok":False}
+if '_calc_ps_levels' not in globals():
+    def _calc_ps_levels(p,d): return {}
+if '_strategy_memory_for_code' not in globals():
+    def _strategy_memory_for_code(c): return {}
+if '_append_jsonl' not in globals():
+    def _append_jsonl(*a,**kw): return None
+if '_trace_path' not in globals():
+    def _trace_path(n,d=None): return f"/tmp/{n}"
+if '_buy_soft_support_count' not in globals():
+    def _buy_soft_support_count(*a): return 0
+if '_special_loss_threshold_adjustments' not in globals():
+    def _special_loss_threshold_adjustments(*a):
+        if len(a) >= 6: return (a[2], a[3], a[4], a[5])
+        return (35, 35, 0, 0)
+if 'load_starvation_state' not in globals():
+    def load_starvation_state(): return {}
+if 'send_morning_alert' not in globals():
+    def send_morning_alert(*a,**kw): return None
+if 'notify_alert_cleared' not in globals():
+    def notify_alert_cleared(*a,**kw): return None
+if 'resample_to_15min' not in globals():
+    def resample_to_15min(df): return pd.DataFrame()
+if 'add_15min_indicators' not in globals():
+    def add_15min_indicators(df): return pd.DataFrame()
+if 'resample_to_5min' not in globals():
+    def resample_to_5min(df): return pd.DataFrame()
+if 'add_5min_indicators' not in globals():
+    def add_5min_indicators(df): return pd.DataFrame()
+if 'fetch_minute_bar' not in globals():
+    def fetch_minute_bar(*a, **kw): return pd.DataFrame()
+if 'add_indicators' not in globals():
+    def add_indicators(df): return df
+if 'Signal' not in globals():
+    from dataclasses import dataclass, field
+    from typing import List, Dict, Any
+    @dataclass
+    class Signal:
+        code: str=''; name: str=''; action: str=''; price: float=0.0; score: float=0.0
+        reasons: List[str]=field(default_factory=list)
+        details: List[Dict[str,Any]]=field(default_factory=list)
+        indicators: Dict[str,float]=field(default_factory=dict)
+        factors: Dict[str,Any]=field(default_factory=dict)
+        ts: Any=None
+        cycle_id: str=''; cycle_action_count: int=0; hold_qty: int=0
+# ==========================================================
+
 class SignalEngine:
     def __init__(self):
         self.buy_cooldown: Dict[str, datetime] = {}
@@ -604,7 +819,7 @@ class SignalEngine:
             return "trend_down"
         return "range_bound"
 
-    def _dynamic_threshold(self, side: str, price: float, vwap: float, rsi: float, vol_ratio: float, holding: dict, market_state: str, is_strong_pullback: bool = False, code: str = "") -> int:
+    def _dynamic_threshold(self, side: str, price: float, vwap: float, rsi: float, vol_ratio: float, holding: dict, market_state: str, is_strong_pullback: bool = False, code: str = "", day_amplitude: float = 0.03) -> int:
         memory = _strategy_memory_for_code(code)
         p = self._get_params(code)
         is_etf = holding.get("type") == "etf"
@@ -652,6 +867,9 @@ class SignalEngine:
         # V1.12: ETF动态阈值上限，防止惩罚叠加导致无法触发
         if is_etf:
             base = min(base, p.get("etf_threshold_cap", 38))
+        # V1.27: 波动率自适应缩放
+        volatility_mult = max(0.7, min(1.3, day_amplitude / 0.03))
+        base = int(base * volatility_mult)
         return max(35, min(60, base))
 
     def evaluate(self, code, name, df, holding, daily_ctx=None):
@@ -842,18 +1060,7 @@ class SignalEngine:
         higher_low_detected, higher_low_detail = self._check_higher_low_support(code, df, price, vwap)
         indicators["higher_low_support_detected"] = higher_low_detected
         indicators["higher_low_support_detail"] = higher_low_detail
-        if higher_low_detected and effective_alert >= 1:
-            # 承接确认：直接清除预警（因为低点抬高证明早盘并非单边下跌）
-            effective_alert = 0
-            # 同时标记为已纠正，防止后续再次触发
-            mas = self.morning_alert_state.get(code, {})
-            if mas.get("level", 0) >= 1:
-                mas["corrected"] = True
-                mas["correction_reason"] = "低点抬高支撑确认"
-                mas["corrected_at"] = t_val
-                self.morning_alert_state[code] = mas
-            indicators["morning_alert_level"] = 0
-            indicators["morning_alert_downgrade_reason"] = "低点抬高支撑确认，承接有力，清除预警"
+
 
         # V1.20: 早盘卖出确认门槛调整
         # 个股9:30-9:40适当降低（给冲高机会发育时间），但ETF不降低甚至提高
@@ -1013,14 +1220,13 @@ class SignalEngine:
                 vol_ok = last_5m["volume"] >= prev4_vol_mean * vol_threshold if prev4_vol_mean > 0 else True
                 
                 # 放宽触发：前4根>=2根阴线 + (高点严格下降 或 高点整体高于当前) + 当前收阳/十字星 + 价<VWAP + 量不极端萎缩
-                if (current_bullish and vr_bearish_count >= 2 and 
-                    (vr_high_declining or high_declining_loose) and 
+                if (current_bullish and (vr_high_declining or high_declining_loose) and 
                     price_below_vwap and vol_ok):
                     is_volume_reversal = True
                 
                 # V1.22: 大阳线反包确认 — 更严格的抄底信号
                 # 要求：前4根>=2根阴线 + 高点下降 + 当前大阳线 + 放量 + 反包前高
-                if (vr_bearish_count >= 2 and (vr_high_declining or high_declining_loose) and
+                if ((vr_high_declining or high_declining_loose) and
                     price_below_vwap and prev4_vol_mean > 0):
                     # 大阳线判定
                     _5m_pct = (last_5m["close"] - last_5m["open"]) / last_5m["open"] if last_5m["open"] > 0 else 0
@@ -1085,14 +1291,9 @@ class SignalEngine:
         daily_overheated = bool(daily_ctx.get("daily_overheated", False))
         daily_pullback_support = bool(daily_ctx.get("daily_pullback_support", False))
         daily_near_support = bool(daily_ctx.get("daily_near_support", False))
-        # V1.8fix: 当日线数据不可用时，用 VWAP 偏离度作为替代确认，避免硬阻断所有低吸
-        # V1.17修正: 当5分钟量能反转信号确认时，直接允许买入（无需日线确认）
+        # 当日线数据不可用时，仅 5分钟量能反转信号可绕过
         if not daily_buy_t_ok and daily_status != "ok":
-            vwap_deviation = (vwap - price) / vwap if vwap else 0.0
-            if vwap_deviation > 0.005 and mom5 > -0.005 and not daily_hard_breakdown:
-                daily_buy_t_ok = True  # 降级：价格低于 VWAP 0.5% 以上且未加速下跌，允许低吸
-                daily_buy_t_relaxed = daily_buy_t_ok and daily_ma5_state == "above_ma5_trend"
-            elif is_volume_reversal:
+            if is_volume_reversal:
                 # V1.17: 缩量止跌+放量反攻是强低吸信号，无需日线确认
                 daily_buy_t_ok = True
                 daily_buy_t_relaxed = False
@@ -1267,10 +1468,10 @@ class SignalEngine:
 
         sell_details, buy_details = [], []
         # V1.11: 早盘冲高窗口优化 - 09:30-09:35为机会窗口(+8)，09:36-09:45为观察期(0)
-        if 1000 <= t_val <= 1045 or 1400 <= t_val <= 1445:
-            time_score = 15
-        elif 930 <= t_val <= 935:
+        if 1400 <= t_val <= 1445:
             time_score = 8
+        elif 930 <= t_val <= 935:
+            time_score = 5
         elif 936 <= t_val <= 945:
             time_score = 0
         else:
@@ -1278,16 +1479,16 @@ class SignalEngine:
         sell_score = buy_score = time_score
         required_profit_buy = p["min_profit_space"] * 1.5 if rsi < 15 else p["min_profit_space"]
         buy_profit_space = (vwap - price) / price if price > 0 else 0.0
-        if buy_profit_space > 0:
-            buy_score += 12
-            buy_details.append({"指标": "回归空间", "当前": f"+{buy_profit_space*100:.2f}%", "解读": "现价低于均价", "加分": 12})
-        if buy_profit_space > required_profit_buy:
+        vwap_dev_atr = float(last["vwap_dev_atr"]) if "vwap_dev_atr" in last and pd.notna(last.get("vwap_dev_atr")) else (buy_profit_space * 100)
+        if buy_profit_space > 0.01 or vwap_dev_atr < -1.0:
             buy_score += 15
-            buy_details.append({"指标": "盈利空间", "当前": f"+{buy_profit_space*100:.2f}%", "解读": "距离均价回归空间足", "加分": 15})
-        # V1.8fix: 新增 VWAP 深度偏离加分，直接奖励充分低吸
-        if buy_profit_space > 0.01:
-            buy_score += 5
-            buy_details.append({"指标": "VWAP深度偏离", "当前": f"+{buy_profit_space*100:.2f}%", "解读": "价格低于均价1%以上，深度低吸", "加分": 5})
+            buy_details.append({"指标": "VWAP回归空间", "当前": f"+{buy_profit_space*100:.2f}%", "解读": "深度偏离均价，强力回归空间", "加分": 15})
+        elif buy_profit_space > required_profit_buy:
+            buy_score += 12
+            buy_details.append({"指标": "VWAP回归空间", "当前": f"+{buy_profit_space*100:.2f}%", "解读": "低于均价，回归空间充足", "加分": 12})
+        elif buy_profit_space > 0:
+            buy_score += 8
+            buy_details.append({"指标": "VWAP回归空间", "当前": f"+{buy_profit_space*100:.2f}%", "解读": "略低于均价，轻度回归空间", "加分": 8})
         # V1.11: 下午回落接回因子 - 13:00-14:30回落到VWAP下方且RSI超卖
         had_afternoon_pullback = False
         if 1300 <= t_val <= 1430 and buy_profit_space > 0.005 and rsi <= p["rsi_oversold"]:
@@ -1300,18 +1501,13 @@ class SignalEngine:
         if bb_pct <= 0.15:
             buy_score += 8
             buy_details.append({"指标": "布林偏下", "当前": f"{bb_pct:.2f}", "阈值": "≤0.15", "加分": 8})
-        if buy_profit_space > 0 and rsi <= p["rsi_oversold"] and mom5 < 0:
-            buy_score -= 4
-            buy_details.append({"指标": "回落未确认", "当前": f"{mom5*100:.2f}%", "阈值": "5分钟仍未转正", "加分": -4})
         if buy_profit_space > 0 and range_pos > 0.35:
             buy_score -= 2
             buy_details.append({"指标": "低位不够深", "当前": f"{range_pos:.2f}", "阈值": "≤0.35", "加分": -2})
         if macd_hist > prev_macd_hist and macd_hist < 0:
-            buy_score += 15
-            buy_details.append({"指标": "MACD拐头", "当前": f"{macd_hist:.4f}", "阈值": "负区抬头", "加分": 15})
-            if abs(macd_hist) > p["macd_strong_threshold"]:
-                buy_score += p["macd_strong_boost"]
-                buy_details.append({"指标": "MACD强拐头", "当前": f"{macd_hist:.4f}", "阈值": f">{PARAMS['macd_strong_threshold']}", "加分": PARAMS["macd_strong_boost"]})
+            boost = 15 if abs(macd_hist) > p["macd_strong_threshold"] else 8
+            buy_score += boost
+            buy_details.append({"指标": "MACD拐头", "当前": f"{macd_hist:.4f}", "阈值": "负区抬头", "加分": boost})
         if vol_ratio >= p["vol_ratio_confirm"]:
             buy_score += p["vol_confirm_boost"]
             buy_details.append({"指标": "量能确认", "当前": f"{vol_ratio:.2f}", "阈值": f"≥{PARAMS['vol_ratio_confirm']}", "加分": PARAMS["vol_confirm_boost"]})
@@ -1383,8 +1579,8 @@ class SignalEngine:
             buy_details.append({"指标": "强势突破", "当前": f"{price:.2f}", "解读": "突破前高并放量，提示顺势加仓", "加分": 20})
 
         # V1.14fix: buy_threshold 提前定义，避免第670行支撑位加分时未绑定
-        buy_threshold = self._dynamic_threshold("buy", price, vwap, rsi, vol_ratio, holding, market_state, is_strong_pullback, code)
-        sell_threshold = self._dynamic_threshold("sell", price, vwap, rsi, vol_ratio, holding, market_state, is_strong_pullback, code)
+        buy_threshold = self._dynamic_threshold("buy", price, vwap, rsi, vol_ratio, holding, market_state, is_strong_pullback, code, day_amplitude)
+        sell_threshold = self._dynamic_threshold("sell", price, vwap, rsi, vol_ratio, holding, market_state, is_strong_pullback, code, day_amplitude)
 
         # V1.13: 15分钟线低吸因子 — 下跌动能衰竭 + 强支撑确认
         if not df_15min.empty and len(df_15min) >= PARAMS.get("min_15min_bars", 3):
@@ -1407,19 +1603,7 @@ class SignalEngine:
         # V1.17: 5分钟线缩量止跌+放量反攻 — 基于7月6日反馈
         # V1.22修正: 只有大阳线反包确认时才给予高加分（防止开盘急跌时半山腰买入）
         if not df_5min.empty and len(df_5min) >= 5:
-            if is_strong_bullish_reversal:
-                boost = PARAMS.get("volume_reversal_boost", 18)
-                buy_score += boost
-                buy_details.append({
-                    "指标": "5分大阳线反包",
-                    "当前": f"涨幅{indicators.get('bullish_reversal_pct', 0)*100:.1f}%/实体占比{indicators.get('bullish_reversal_body', 0)*100:.0f}%",
-                    "解读": "5分钟放量下跌后出现大阳线反包，资金确认抄底，低吸窗口（7月8日反馈）",
-                    "加分": boost,
-                })
-                # 大阳线反包信号出现时，适当降低买入阈值
-                buy_threshold -= 15
-                buy_details.append({"指标": "反包门槛放宽", "当前": f"阈值{buy_threshold:.0f}", "解读": "5分钟大阳线反包确认，降低买入门槛", "加分": 0})
-            elif is_volume_reversal:
+            if is_volume_reversal:
                 # 小阳线/十字星反转：仅给予小加分，不放宽门槛
                 buy_score += 8
                 buy_details.append({
@@ -1476,18 +1660,18 @@ class SignalEngine:
             buy_score += 8
             buy_details.append({"指标": "尾盘拉升", "当前": f"{price:.2f}>{vwap*1.005:.2f}", "解读": "尾盘放量拉升，强势信号", "加分": 8})
         
-        # 3. MA_BOUNCE_BUY: 均线回踩支撑买入（6月9日案例：13:10回踩均线）
-        if vwap > 0 and price <= vwap * 1.005 and price >= vwap * 0.99 and mom5 < 0 and mom5 > -0.005 and buy_profit_space > 0:
+        # 3. MA_BOUNCE_BUY: 均线回踩支撑买入
+        if vwap > 0 and price <= vwap * 1.003 and price >= vwap * 0.99 and mom5 < 0 and mom5 > -0.005:
             buy_score += 10
             buy_details.append({"指标": "均线回踩", "当前": f"{price:.2f}≈{vwap:.2f}", "解读": "回踩均价线未跌破，支撑有效，低吸", "加分": 10})
         
-        # 4. VWAP_BREAK_PULLBACK: 均线突破后回踩买入（6月22日案例：13:29均线突破回踩）
+        # 4. VWAP_BREAK_PULLBACK: 均线突破后回踩买入
         vwap_broken = False
         if current_idx_b >= 10 and vwap > 0:
             recent_highs = df.iloc[max(0, current_idx_b - 60):current_idx_b]["high"].astype(float)
             if len(recent_highs) > 0:
                 vwap_broken = any(h > vwap * 1.005 for h in recent_highs)
-        if vwap_broken and price <= vwap * 1.005 and price >= vwap * 0.99 and mom5 > -0.005 and buy_profit_space > 0:
+        if vwap_broken and price <= vwap * 1.003 and price >= vwap * 0.99 and mom5 > -0.005:
             buy_score += 12
             buy_details.append({"指标": "均线上破回踩", "当前": f"{price:.2f}≈{vwap:.2f}", "解读": "曾突破VWAP后回踩，低吸确认", "加分": 12})
         
@@ -1511,9 +1695,12 @@ class SignalEngine:
 
         required_profit_sell = p["min_profit_space"] * 1.5 if rsi > 85 else p["min_profit_space"]
         sell_profit_space = (price - vwap) / vwap if vwap else 0.0
-        if sell_profit_space > 0:
-            sell_score += 15
-            sell_details.append({"指标": "回吐空间", "当前": f"+{sell_profit_space*100:.2f}%", "解读": "现价高于均价", "加分": 15})
+        if sell_profit_space > required_profit_sell:
+            sell_score += 18
+            sell_details.append({"指标": "VWAP溢价空间", "当前": f"+{sell_profit_space*100:.2f}%", "解读": "高于均价且盈利空间充足", "加分": 18})
+        elif sell_profit_space > 0:
+            sell_score += 12
+            sell_details.append({"指标": "VWAP溢价空间", "当前": f"+{sell_profit_space*100:.2f}%", "解读": "现价高于均价", "加分": 12})
         # V1.11: 早盘冲高因子 - 开盘后5分钟内快速拉升，优先高抛
         had_morning_surge = False
         if 930 <= t_val <= 935 and today_ret > 0.006 and price > vwap * 1.005:
@@ -1521,9 +1708,6 @@ class SignalEngine:
             sell_score += surge_strength
             sell_details.append({"指标": "早盘冲高", "当前": f"+{today_ret*100:.2f}%", "解读": "开盘后急速拉升，建议高抛做T", "加分": surge_strength})
             had_morning_surge = True
-        if sell_profit_space > required_profit_sell:
-            sell_score += 15
-            sell_details.append({"指标": "盈利空间", "当前": f"+{sell_profit_space*100:.2f}%", "解读": "覆盖手续费并获利", "加分": 15})
         if not is_strong_trend:
             if rsi >= p["rsi_overbought"]:
                 sell_score += 15
@@ -1645,8 +1829,7 @@ class SignalEngine:
         if strong_chop:
             diag["strong_chop_detected"] = True
 
-        # V1.20: ETF早盘观察倍数
-        etf_obs_mult = 2.0 if (is_etf and t_val < 1000) else 1.0
+        # ETF与个股统一观察时间（V1.27 删除早盘翻倍）
 
         # V1.26fix: 提前计算持仓盈亏，供所有场景化卖出因子使用（避免深套时误触发高抛）
         cost = float(holding.get("cost", 0) or 0)
@@ -1664,18 +1847,13 @@ class SignalEngine:
                           price <= today_open * 1.005)
         gap_bounce_cancel = strong_chop or (price > today_open * 1.002)  # 反弹突破开盘价则取消
         gap_bounce_confirmed, gap_bounce_diag = self._check_scenario_factor(
-            code, "GAP_BOUNCE20", gap_bounce_met, observation_minutes=2,
-            lock_minutes=15, etf_observation_multiplier=etf_obs_mult,
+            code, "GAP_BOUNCE20", gap_bounce_met, observation_minutes=1,
+            lock_minutes=15,
             cancel_condition=gap_bounce_cancel
         )
         if gap_bounce_confirmed:
-            if is_deep_loss:
-                # V1.26fix: 深套时不应"高抛"，避免割肉误导
-                sell_score -= 25
-                sell_details.append({"指标": "低开反弹(深套抑制)", "当前": f"低{open_gap*100:.2f}%后回弹{(price-open_low)/open_low*100:.2f}%", "解读": f"深套{profit_pct*100:.1f}%：早盘反弹是减亏机会，但非做T高抛，抑制卖出防止割肉", "加分": -25})
-            else:
-                sell_score += 20
-                sell_details.append({"指标": "低开反弹", "当前": f"低{open_gap*100:.2f}%后回弹{(price-open_low)/open_low*100:.2f}%", "解读": "集合竞价弱势，早盘反弹即高抛机会", "加分": 20})
+            sell_score += 20
+            sell_details.append({"指标": "低开反弹", "当前": f"低{open_gap*100:.2f}%后回弹{(price-open_low)/open_low*100:.2f}%", "解读": "集合竞价弱势，早盘反弹即高抛机会", "加分": 20})
 
         # 2. SPIKE30: 开盘冲高回落（V1.20: 需观察3分钟确认，强势震荡抑制）
         spike_met = (minutes_since_open <= 30 and day_high_so_far > today_open * 1.005
@@ -1688,17 +1866,13 @@ class SignalEngine:
             if recent_5_high == float(df.iloc[current_idx]["high"]):
                 spike_met = False  # ETF仍在创新高，不进入观察
         spike_confirmed, spike_diag = self._check_scenario_factor(
-            code, "SPIKE30", spike_met, observation_minutes=3,
-            lock_minutes=30, etf_observation_multiplier=etf_obs_mult,
+            code, "SPIKE30", spike_met, observation_minutes=1,
+            lock_minutes=15,
             cancel_condition=spike_cancel
         )
         if spike_confirmed:
-            if is_deep_loss:
-                sell_score -= 25
-                sell_details.append({"指标": "开盘冲高回落(深套抑制)", "当前": f"高{day_high_so_far:.2f}→现{price:.2f}", "解读": f"深套{profit_pct*100:.1f}%：开盘冲高回落非做T高抛机会，抑制防止割肉", "加分": -25})
-            else:
-                sell_score += 20
-                sell_details.append({"指标": "开盘冲高回落", "当前": f"高{day_high_so_far:.2f}→现{price:.2f}", "解读": "开盘后30分钟内冲高即回落，建议全部卖出", "加分": 20})
+            sell_score += 20
+            sell_details.append({"指标": "开盘冲高回落", "当前": f"高{day_high_so_far:.2f}→现{price:.2f}", "解读": "开盘后30分钟内冲高即回落，建议全部卖出", "加分": 20})
 
         # 3. FADE15: 冲顶动量衰竭（V1.20: 需观察2分钟确认）
         near_high = day_high_so_far > 0 and (day_high_so_far - price) / day_high_so_far < 0.003
@@ -1706,17 +1880,13 @@ class SignalEngine:
         # 动量重新加速则取消
         fade_cancel = (rate3 > prev_rate3 * 0.8) or strong_chop
         fade_confirmed, fade_diag = self._check_scenario_factor(
-            code, "FADE15", fade_met, observation_minutes=2,
-            lock_minutes=20, etf_observation_multiplier=etf_obs_mult,
+            code, "FADE15", fade_met, observation_minutes=1,
+            lock_minutes=10,
             cancel_condition=fade_cancel
         )
         if fade_confirmed:
-            if is_deep_loss:
-                sell_score -= 20
-                sell_details.append({"指标": "冲顶衰竭(深套抑制)", "当前": f"3分涨幅{rate3*100:.2f}%<{prev_rate3*100:.2f}%*0.5", "解读": f"深套{profit_pct*100:.1f}%：冲顶衰竭非做T高抛机会，抑制防止割肉", "加分": -20})
-            else:
-                sell_score += 15
-                sell_details.append({"指标": "冲顶衰竭", "当前": f"3分涨幅{rate3*100:.2f}%<{prev_rate3*100:.2f}%*0.5", "解读": "接近日内新高但动量明显放缓，预判冲顶", "加分": 15})
+            sell_score += 15
+            sell_details.append({"指标": "冲顶衰竭", "当前": f"3分涨幅{rate3*100:.2f}%<{prev_rate3*100:.2f}%*0.5", "解读": "接近日内新高但动量明显放缓，预判冲顶", "加分": 15})
 
         # 4. WEAK_REBOUND_SELL: 低开弱反弹避险（V1.20: 需观察2分钟确认）
         weak_reb_sell_met = (minutes_since_open <= 20 and open_gap < -0.005 and amplitude_gate
@@ -1725,22 +1895,17 @@ class SignalEngine:
         # 反弹力度增强到1%以上则取消
         weak_reb_sell_cancel = (today_open > 0 and (price - today_open) / today_open >= 0.01) or strong_chop
         weak_reb_sell_confirmed, weak_reb_sell_diag = self._check_scenario_factor(
-            code, "WEAK_REBOUND_SELL", weak_reb_sell_met, observation_minutes=2,
-            lock_minutes=20, etf_observation_multiplier=etf_obs_mult,
+            code, "WEAK_REBOUND_SELL", weak_reb_sell_met, observation_minutes=1,
+            lock_minutes=10,
             cancel_condition=weak_reb_sell_cancel
         )
         if weak_reb_sell_confirmed:
-            if is_deep_loss:
-                sell_score -= 20
-                sell_details.append({"指标": "低开弱反弹(深套抑制)", "当前": f"低{open_gap*100:.2f}%后反弹{(price-today_open)/today_open*100:.2f}%<1%", "解读": f"深套{profit_pct*100:.1f}%：低开弱反弹非做T高抛机会，抑制防止割肉", "加分": -20})
-            else:
-                sell_score += 15
-                sell_details.append({"指标": "低开弱反弹", "当前": f"低{open_gap*100:.2f}%后反弹{(price-today_open)/today_open*100:.2f}%<1%", "解读": "低开弱反弹，力度不足，建议避险卖出", "加分": 15})
+            sell_score += 15
+            sell_details.append({"指标": "低开弱反弹", "当前": f"低{open_gap*100:.2f}%后反弹{(price-today_open)/today_open*100:.2f}%<1%", "解读": "低开弱反弹，力度不足，建议避险卖出", "加分": 15})
 
         # V1.20: 开盘下杀后反弹无力/假突破（观察→确认→锁定）
         # 核心：开盘后迅速下杀，之后反弹但无力突破前收盘价/无法站稳，反弹高点是最佳止损点
         # 不是逐分钟加分，而是累积确认
-        is_deep_loss_stop_loss = False
         if minutes_since_open <= 30:
             morning_low_so_far = float(df.iloc[:current_idx + 1]["low"].min()) if current_idx >= 0 else today_open
             morning_high_so_far = float(df.iloc[:current_idx + 1]["high"].max()) if current_idx >= 0 else today_open
@@ -1760,11 +1925,10 @@ class SignalEngine:
             weak_reb_met = weak_reb_a_met or weak_reb_b_met
             # 价格突破前收盘价且站稳则取消
             weak_reb_cancel = (price > pre_close and price > vwap) or strong_chop
-            # ETF早盘：观察期加倍
-            weak_reb_obs = 2 if not is_etf else (4 if t_val < 1000 else 2)
+            weak_reb_obs = 1
             weak_reb_confirmed, weak_reb_diag = self._check_scenario_factor(
                 code, "WEAK_REBOUND", weak_reb_met, observation_minutes=weak_reb_obs,
-                lock_minutes=30, etf_observation_multiplier=1.0,  # 已手动处理ETF
+                lock_minutes=15,
                 cancel_condition=weak_reb_cancel
             )
             if weak_reb_confirmed:
@@ -1796,17 +1960,13 @@ class SignalEngine:
         ma_pressure_met = (open_gap < -0.01 and price > vwap * 0.995 and price < vwap * 1.005 and amplitude_gate)
         ma_pressure_cancel = strong_chop or (price > vwap * 1.005)  # 突破均线则取消
         ma_pressure_confirmed, ma_pressure_diag = self._check_scenario_factor(
-            code, "MA_PRESSURE", ma_pressure_met, observation_minutes=2,
-            lock_minutes=15, etf_observation_multiplier=etf_obs_mult,
+            code, "MA_PRESSURE", ma_pressure_met, observation_minutes=1,
+            lock_minutes=10,
             cancel_condition=ma_pressure_cancel
         )
         if ma_pressure_confirmed:
-            if is_deep_loss:
-                sell_score -= 15
-                sell_details.append({"指标": "均线压制(深套抑制)", "当前": f"低{open_gap*100:.2f}%→均{vwap:.2f}未突破", "解读": f"深套{profit_pct*100:.1f}%：均线压制非做T高抛机会，抑制防止割肉", "加分": -15})
-            else:
-                sell_score += 12
-                sell_details.append({"指标": "均线压制", "当前": f"低{open_gap*100:.2f}%→均{vwap:.2f}未突破", "解读": "低开冲高到均价线即遇阻，抛压明显，卖出", "加分": 12})
+            sell_score += 12
+            sell_details.append({"指标": "均线压制", "当前": f"低{open_gap*100:.2f}%→均{vwap:.2f}未突破", "解读": "低开冲高到均价线即遇阻，抛压明显", "加分": 12})
 
         # 6. LIMIT_UP_BLOCK: 涨停抑制
         if limit_up_triggered:
@@ -2313,6 +2473,10 @@ class SignalEngine:
         # V1.14: 日内弱势盘中禁买 — 价格低于均价，14:30前禁止低吸
         if price < vwap and t_val < 1430:
             buy_limit_reason = "价格低于均价，14:30前禁止买入"
+        # 大盘盘中预警阻断
+        _alerts = daily_ctx.get("intraday_alerts", []) if isinstance(daily_ctx, dict) else []
+        if any(a.get("tag") in ("I1","I5") and a.get("level")=="warn" for a in _alerts):
+            buy_limit_reason = "大盘盘中预警，禁止买入"
         sell_limit_reason = "" if can_sell_today else f"已达当日卖出上限{p['max_sell_times_per_stock']}次"
         net_qty = self._virtual_net_qty(code, holding)
         last_state = self.last_signal_state.get(code, {})
@@ -2573,11 +2737,9 @@ class SignalEngine:
         # V1.19: 早盘（10:00前）要求更高幅度
         if t_val < 1000:
             min_sell_profit_space = max(min_sell_profit_space, 0.008)
-        if sell_profit_space < min_sell_profit_space and not is_optimal_sell and not is_deep_loss:
+        if sell_profit_space < min_sell_profit_space and not is_optimal_sell:
             sell_score -= 30  # V1.19: 从-25加大到-30
             sell_details.append({"指标": "幅度不足过滤", "当前": f"{sell_profit_space*100:.2f}%<{min_sell_profit_space*100:.2f}%", "解读": "冲高幅度太小，非有效高抛点", "加分": -30})
-        elif is_deep_loss and sell_profit_space < min_sell_profit_space:
-            sell_details.append({"指标": "深套止损豁免", "当前": f"亏损{profit_pct*100:.1f}%/{sell_profit_space*100:.2f}%", "解读": "深套股票反弹高点，优先止损，豁免幅度过滤", "加分": 0})
         
         # V1.15: 最优卖点绕过重复信号检查（避免在最高点被 redundant 封锁）
         if hold_qty > 0 and self._is_redundant_signal(code, "SELL_HIGH", price, sell_score):
@@ -2648,24 +2810,13 @@ class SignalEngine:
         # 3. 45度下降 + 全天均线下 → 弱势阴跌，不可低吸，冲高即跑（特变电工/拓维信息）
         # 优先级：45度下降+均线上下窜 > 弱势震荡（前者覆盖后者）
         if is_steep_decline:
-            if is_vwap_crossing and price_below_vwap_ratio < 0.80:
-                # 45度下降 + 均线上下窜：震荡洗盘，反弹有力（如华工科技13:09/江丰电子13:17）
-                # V1.19fix: 增加 price_below_vwap_ratio < 0.80 条件，避免特变电工/拓维信息型"全天均线下"被误判为可低吸
-                buy_threshold -= 25  # V1.19: 从-20加大到-25，确保震荡低点能触发
-                buy_score += 20      # V1.19: 从+15加大到+20，双重保障
-                # V1.21fix: 强势震荡中不鼓励"45度洗盘可高抛"，避免过早卖出
-                if not strong_chop:
-                    sell_score += 8
-                    sell_details.append({"指标": "45度洗盘可高抛", "当前": f"斜率{slope_pct_per_min:.2f}%/穿越{vwap_cross_count}次", "解读": "震荡区间内高抛也可做T", "加分": 0})
-                buy_details.append({"指标": "45度洗盘可低吸", "当前": f"斜率{slope_pct_per_min:.2f}%/穿越{vwap_cross_count}次/均下{price_below_vwap_ratio*100:.0f}%", "解读": "45度下降但均线上下窜，反弹有力，可低吸（华工科技/江丰电子型）", "加分": 20})
-            else:
-                # 45度下降 + 全天均线下（或cross很少）：弱势阴跌（如特变电工/拓维信息）
-                buy_threshold += 30  # V1.19: 从+25提高到+30，彻底封死买入
-                buy_score = min(buy_score, 45)  # V1.19: 从50降到45，更严格
-                sell_score += 18     # V1.19: 从+15提高到+18，鼓励冲高离场
-                sell_threshold -= 10  # V1.19: 从-8降到-10，保本即走
-                buy_details.append({"指标": "45度阴跌禁买", "当前": f"斜率{slope_pct_per_min:.2f}%/穿越{vwap_cross_count}次/均下{price_below_vwap_ratio*100:.0f}%", "解读": "45度下降且全天均线下方，主力无意拉升，不可低吸", "加分": 0})
-                sell_details.append({"指标": "45度阴跌鼓励卖出", "当前": f"斜率{slope_pct_per_min:.2f}%", "解读": "弱势阴跌中冲高保本即跑", "加分": 0})
+            # 45度阴跌，不论是否穿越VWAP，统一封杀买入
+            buy_threshold += 30
+            buy_score = min(buy_score, 45)  # V1.19: 从50降到45，更严格
+            sell_score += 18     # V1.19: 从+15提高到+18，鼓励冲高离场
+            sell_threshold -= 10  # V1.19: 从-8降到-10，保本即走
+            buy_details.append({"指标": "45度阴跌禁买", "当前": f"斜率{slope_pct_per_min:.2f}%/穿越{vwap_cross_count}次/均下{price_below_vwap_ratio*100:.0f}%", "解读": "45度下降且全天均线下方，主力无意拉升，不可低吸", "加分": 0})
+            sell_details.append({"指标": "45度阴跌鼓励卖出", "当前": f"斜率{slope_pct_per_min:.2f}%", "解读": "弱势阴跌中冲高保本即跑", "加分": 0})
         elif is_weak_oscillation:
             # 弱势震荡（非45度下降+均线上下窜）：大幅抑制买入，降低卖出门槛
             if t_val < 1430:
@@ -2692,17 +2843,11 @@ class SignalEngine:
         sell_threshold = min(sell_threshold, p.get("hard_sell_threshold_cap", 80))
         buy_threshold = min(buy_threshold, p.get("hard_buy_threshold_cap", 80))
 
-        # V1.23fix: 强势上涨最终抑制（所有加分完成后）
-        # 前置抑制后，后续加分（MA压力/成本保护/冲高背离等）可能抵消抑制效果
-        # 最终抑制作为最后一道防线：强势上涨中完全封锁卖出信号
-        if is_strong_uptrend:
-            # 大幅提高卖出阈值，确保强势上涨中不触发卖出
-            sell_threshold += 120
-            sell_details.append({"指标": "强势上涨最终封锁", "当前": f"MA5>MA10>MA20/反弹>3%/价>VWAP", "解读": "强势上涨最终防线：前置抑制后后续加分可能抵消，最终封锁确保强势上升通道中不应卖出", "加分": 0})
+
         # 前置抑制后，后续加分（MA压力/成本保护/冲高背离等）可能抵消抑制效果
         # 最终抑制作为最后一道防线：强势上涨中完全封锁非必要的卖出信号
-        if is_strong_uptrend and not is_optimal_sell and not is_deep_loss:
-            # 大幅提高卖出阈值，确保强势上涨中不触发卖出（除非最优卖点或深套止损）
+        if is_strong_uptrend and not is_optimal_sell:
+            # 大幅提高卖出阈值，确保强势上涨中不触发卖出（除非最优卖点）
             sell_threshold += 120
             sell_details.append({"指标": "强势上涨最终封锁", "当前": f"MA5>MA10>MA20/反弹>3%/价>VWAP", "解读": "强势上涨最终防线：前置抑制后后续加分可能抵消，最终封锁确保不应卖出的强势形态被完全抑制", "加分": 0})
 
@@ -2742,13 +2887,8 @@ class SignalEngine:
                 morning_sell_guard = True
                 diag.setdefault("sell_block_reasons", []).append("morning_first_sell_guard")
             # V1.19fix: 深套股票在开盘反弹无力/假突破时，绕过早盘首次卖出保护
-            if morning_sell_guard and is_deep_loss_stop_loss:
-                morning_sell_guard = False
-                diag["deep_loss_bypass_morning_guard"] = True
-                if "morning_first_sell_guard" in diag.get("sell_block_reasons", []):
-                    diag["sell_block_reasons"].remove("morning_first_sell_guard")
-            # V1.27fix: 大幅低开直接绕过（>4% gap-down，深套直接止损，不等待反弹确认）
-            if morning_sell_guard and is_deep_loss and t_val < p.get("morning_no_sell_until", 940) and today_ret < -0.04:
+            # 大幅低开直接绕过（>4% gap-down，不等反弹确认）
+            if morning_sell_guard and today_ret < -0.04:
                 morning_sell_guard = False
                 diag["gap_down_bypass_morning_guard"] = True
                 if "morning_first_sell_guard" in diag.get("sell_block_reasons", []):
@@ -2798,47 +2938,6 @@ class SignalEngine:
                     "expires": _now() + timedelta(minutes=p.get("awaiting_buyback_ttl_minutes", 120)),
                     "sell_vwap": vwap,
                 }
-            # V1.14: 开盘急跌旁路买入 — 开盘后5分钟内，跌幅>2%，触及支撑位，直接买入
-            elif is_open_dip_support and can_buy_more and not self._in_cooldown(code, "BUY_LOW") and (not post_sell_block_active or post_sell_rebuild_allowed):
-                diag["buy_candidate"] = True
-                diag["priority_path"] = "buy_open_dip_path"
-                reasons = ["开盘急跌旁路"]
-                if nearest_support:
-                    reasons.append(f"触及{nearest_support[0]}({nearest_support[1]:.2f})")
-                # 旁路买入评分：固定60分（确保触发）
-                bypass_score = 60
-                buy_details.append({"指标": "开盘急跌旁路", "当前": f"跌{today_ret*100:.1f}%", "解读": open_dip_reason, "加分": 0})
-                buy_details.append({"指标": "触发阈值", "当前": f"{bypass_score:.0f}", "阈值": "旁路", "加分": 0})
-                sig = Signal(code, name, "BUY_LOW", price, bypass_score, reasons, buy_details, indicators, {
-                    "side": "buy",
-                    "threshold": buy_threshold,
-                    "time_score": time_score,
-                    "buy_score": bypass_score,
-                    "sell_score": sell_score,
-                    "buy_factors": buy_factor_map,
-                    "sell_factors": sell_factor_map,
-                    "is_dead_water": is_dead_water,
-                    "is_strong_trend": is_strong_trend,
-                    "today_ret": today_ret,
-                    "day_amplitude": day_amplitude,
-                    "market_state": market_state,
-                    "benchmark_state": benchmark_state,
-                    "benchmark_gate": benchmark_gate,
-                    "benchmark_reason": benchmark_reason,
-                    "buy_limit_reason": buy_limit_reason,
-                    "hold_qty": hold_qty,
-                    "net_qty": net_qty,
-                    "cycle_count": cycle_count,
-                    "entry_kind": "open_dip_support",
-                    "open_dip_support": True,
-                    "nearest_support": indicators.get("nearest_support_name", ""),
-                    "support_level": indicators.get("nearest_support_level", 0),
-                }, cycle_id=code, cycle_action_count=cycle_count, hold_qty=hold_qty)
-                # V1.21: 买入后清除等待低吸状态
-                if code in self.awaiting_buyback:
-                    del self.awaiting_buyback[code]
-            # V1.25: 早盘预警门控 — Level 2禁止买入，Level 1只做减仓
-            # V1.26: 反T模式下反转逻辑：早盘弱势时鼓励卖出，买入仍然受限
             elif effective_alert >= 2:
                 if is_short_mode:
                     # 反T+早盘弱势 = 绝佳卖出时机，降低卖出门槛

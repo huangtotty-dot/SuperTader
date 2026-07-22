@@ -38,7 +38,7 @@ class PositionSizer:
             p = {**p, **p.get("ETF_T0_PARAMS", {})}
         return p
 
-    # ==================== V1.27: 日线止损 + 仓位上限 ====================
+    # ==================== 仓位上限 ====================
 
     def _current_price(self, holding: dict, index_ctx: dict, signal_price: float = 0.0) -> float:
         """估算当前价：优先用信号价，其次用前收×(1+日内涨跌幅)"""
@@ -50,62 +50,25 @@ class PositionSizer:
             return prev_close * (1 + day_ret)
         return 0.0
 
-    def _loss_pct(self, current_price: float, holding: dict) -> float:
-        """累计亏损率（基于持仓成本）"""
-        cost = float(holding.get("cost") or 0)
-        if cost <= 0 or current_price <= 0:
-            return 0.0
-        return (current_price - cost) / cost
-
-    def _check_daily_stop_loss(self, code: str, holding: dict, index_ctx: dict,
-                                current_price: float = 0.0) -> int:
-        """日线止损检查。返回 >0 时强制卖出对应数量，覆盖正常仓位计算。"""
-        price = self._current_price(holding, index_ctx, current_price)
-        loss_pct = self._loss_pct(price, holding)
-        net_qty = self._virtual_net_qty(code, holding)
-        if net_qty <= 0:
-            return 0
-
-        hard_breakdown = bool(index_ctx.get("daily_hard_breakdown", False))
-        breakdown_risk = bool(index_ctx.get("daily_breakdown_risk", False))
-        min_unit = 100
-
-        # P0: 累计亏损 > 25% → 强制清仓（不做T了，全部卖出止损）
-        if loss_pct <= -0.25:
-            return net_qty
-
-        # P1: 日线硬破位（跌破MA60 3.5%）→ 强制卖出 50%
-        if hard_breakdown:
-            half = max(min_unit, (net_qty * 0.5 // min_unit) * min_unit)
-            return half
-
-        # P2: 日线破位风险 + 累计亏损 > 15% → 强制卖出 30%
-        if breakdown_risk and loss_pct <= -0.15:
-            pct_sell = 0.30
-            qty = max(min_unit, (net_qty * pct_sell // min_unit) * min_unit)
-            return qty
-
-        return 0
-
     def _check_position_limit(self, code: str, holding: dict, index_ctx: dict,
-                               current_price: float = 0.0) -> int:
-        """单股仓位上限检查。返回超过上限的股数（需卖出部分）。"""
+                               current_price: float = 0.0, total_equity: float = 0.0) -> int:
+        """单股仓位上限检查。返回超过上限的股数（需卖出部分）。
+
+        total_equity: 账户总资产（由上层 Risk Manager / SESSION_CONTEXT 传入）。
+                     为 0 时跳过仓位上限检查（不阻断交易）。
+        """
         price = self._current_price(holding, index_ctx, current_price)
         max_pct = float(self.params.get("max_single_position_pct", 0.30) or 0.30)
-        if max_pct >= 1.0:
+        if max_pct >= 1.0 or total_equity <= 0:
             return 0
 
-        # 估算总资金 = 本股（cost×qty）÷ 本股占比（保守用 1/max_pct）
         cost = float(holding.get("cost") or 0)
         qty = int(holding.get("qty") or 0)
         if cost <= 0 or qty <= 0 or price <= 0:
             return 0
         market_value = price * qty
-        estimated_total = market_value / max_pct
-        if estimated_total <= 0:
-            return 0
-        max_value = estimated_total * max_pct
-        excess_value = market_value - max_value
+        max_allowed = total_equity * max_pct
+        excess_value = market_value - max_allowed
         if excess_value <= 0:
             return 0
         excess_qty = int(excess_value / price) if price > 0 else 0
@@ -116,7 +79,7 @@ class PositionSizer:
     def calc_sell_qty(self, code: str, holding: dict, regime,
                       sig_score: float, threshold: float,
                       used_sells: int = 0, index_ctx: dict = None,
-                      current_price: float = 0.0) -> int:
+                      current_price: float = 0.0, total_equity: float = 0.0) -> int:
         """
         计算卖出股数
 
@@ -142,11 +105,8 @@ class PositionSizer:
 
         index_ctx = index_ctx or {}
 
-        # V1.27: 日线止损检查（得到最低止损量，后续与正常逻辑取最大值）
-        stop_loss_qty = self._check_daily_stop_loss(code, holding, index_ctx, current_price)
-
-        # V1.27: 仓位上限检查（超出上限的部分强制卖出）
-        excess_pos_limit = self._check_position_limit(code, holding, index_ctx, current_price)
+        # 仓位上限检查（超出上限的部分强制卖出）
+        excess_pos_limit = self._check_position_limit(code, holding, index_ctx, current_price, total_equity)
 
         is_etf = holding.get("type") == "etf"
         p = self._effective_params(code, holding)
@@ -201,9 +161,6 @@ class PositionSizer:
             else:
                 result_qty = self._calc_etf_sell_qty(p, net_qty, strength, used_sells) if is_etf else self._calc_stock_sell_qty(p, net_qty, strength, used_sells)
 
-        # V1.27: 日线止损保底 — 取正常逻辑和止损量的较大值
-        if stop_loss_qty > 0:
-            result_qty = max(result_qty, stop_loss_qty)
         available_qty = self._available_sell_qty(holding)
         return max(0, min(result_qty, net_qty, available_qty))
 
@@ -211,7 +168,7 @@ class PositionSizer:
 
     def calc_buy_qty(self, code: str, holding: dict, regime,
                      sig_score: float, threshold: float, index_ctx: dict = None,
-                     current_price: float = 0.0) -> int:
+                     current_price: float = 0.0, total_equity: float = 0.0) -> int:
         """
         计算买入股数
 
@@ -234,7 +191,7 @@ class PositionSizer:
         index_ctx = index_ctx or {}
 
         # V1.27: 仓位上限 → 如果已超上限，禁止继续买入
-        excess_pos = self._check_position_limit(code, holding, index_ctx, current_price)
+        excess_pos = self._check_position_limit(code, holding, index_ctx, current_price, total_equity)
         if excess_pos > 0:
             return 0
 
@@ -381,16 +338,16 @@ def get_sizer(params: dict = None, virtual_trades: dict = None) -> PositionSizer
 
 def calc_sell_qty(code: str, holding: dict, regime, sig_score: float, threshold: float,
                   used_sells: int = 0, params: dict = None, virtual_trades: dict = None, index_ctx: dict = None,
-                  current_price: float = 0.0) -> int:
+                  current_price: float = 0.0, total_equity: float = 0.0) -> int:
     """便捷函数：计算卖出股数"""
-    return get_sizer(params, virtual_trades).calc_sell_qty(code, holding, regime, sig_score, threshold, used_sells, index_ctx=index_ctx, current_price=current_price)
+    return get_sizer(params, virtual_trades).calc_sell_qty(code, holding, regime, sig_score, threshold, used_sells, index_ctx=index_ctx, current_price=current_price, total_equity=total_equity)
 
 
 def calc_buy_qty(code: str, holding: dict, regime, sig_score: float, threshold: float,
                  params: dict = None, virtual_trades: dict = None, index_ctx: dict = None,
-                 current_price: float = 0.0) -> int:
+                 current_price: float = 0.0, total_equity: float = 0.0) -> int:
     """便捷函数：计算买入股数"""
-    return get_sizer(params, virtual_trades).calc_buy_qty(code, holding, regime, sig_score, threshold, index_ctx=index_ctx, current_price=current_price)
+    return get_sizer(params, virtual_trades).calc_buy_qty(code, holding, regime, sig_score, threshold, index_ctx=index_ctx, current_price=current_price, total_equity=total_equity)
 
 
 def get_trade_summary(code: str, virtual_trades: dict = None) -> dict:
