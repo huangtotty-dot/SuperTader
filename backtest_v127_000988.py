@@ -218,7 +218,11 @@ class Runner:
                 dc=self._dctx(ds)
                 if self.mode=="test" and ictx: dc["index_regime"]=ictx.get("regime","range")
                 if alerts: dc["intraday_alerts"]=alerts
-                try: bs,ss_s,sig=eng.evaluate(CODE,NAME,ss,h,daily_ctx=dc)
+                try:
+                    if self.mode=="test":
+                        bs,ss_s,sig=eng.evaluate_v2(CODE,NAME,ss,h,daily_ctx=dc)
+                    else:
+                        bs,ss_s,sig=eng.evaluate(CODE,NAME,ss,h,daily_ctx=dc)
                 except Exception: continue
                 if self.mode=="test" and alerts and sig is None and bs>=45:
                     tags=[a.get("tag") for a in alerts if a.get("tag")in("I1","I5")]
