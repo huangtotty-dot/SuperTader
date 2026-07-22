@@ -376,133 +376,122 @@ class SignalEngine:
 # ====================================================================
 
 class FeatureExtractor:
-    """Layer 1: 纯特征提取——从原始数据计算所有指标，不做风控/打分决策"""
+    """V2: 单次调用提取全部客观特征"""
 
     @staticmethod
-    def extract_ts_features(code: str, df, last, prev, _dt, daily_ctx, holding,
-                            cached_minute_df, cached_5m_df, cached_15m_df,
-                            multi_tf_dict) -> dict:
-        """提取时间/模式切换/价格/分钟级指标"""
-        p = _get_params(code) if '_get_params' in globals() else PARAMS
-        _pd = pd
-        _np = np
+    def extract_all(code: str, name: str, df, holding: dict,
+                    daily_ctx: dict, cached_minute_df=None,
+                    cached_5m_df=None, cached_15m_df=None,
+                    multi_tf_dict=None) -> dict:
+        _pd = pd; _np = np
         feats = {}
-        _dt_parsed = _pd.to_datetime(last["time"]) if isinstance(last["time"], str) else _dt
-        feats["t_val"] = _dt_parsed.hour * 100 + _dt_parsed.minute
-        feats["current_minute"] = _dt_parsed.hour * 60 + _dt_parsed.minute
+        if df.empty or len(df) < 5:
+            return feats
+        last = df.iloc[-1]; prev = df.iloc[-2] if len(df) >= 2 else last
+        _dt = _pd.to_datetime(last["time"]) if "time" in last else _pd.Timestamp.now()
+        feats["t_val"] = _dt.hour * 100 + _dt.minute
+        feats["current_minute"] = _dt.hour * 60 + _dt.minute
         feats["is_etf"] = holding.get("type") == "etf"
-
-        # 价格/基础指标
-        feats["price"] = float(last["close"]) if "close" in last else 0.0
-        feats["vwap"] = float(last["vwap"]) if "vwap" in last and _pd.notna(last["vwap"]) else 0.0
-        feats["day_amplitude"] = float(last["day_amplitude"]) if "day_amplitude" in last and _pd.notna(last["day_amplitude"]) else 0.0
-        feats["rsi"] = float(last["rsi"]) if "rsi" in last and _pd.notna(last["rsi"]) else 50
-        feats["bb_pct"] = float(last["bb_pct"]) if "bb_pct" in last and _pd.notna(last["bb_pct"]) else 0.5
-        feats["macd_hist"] = float(last["macd_hist"]) if "macd_hist" in last and _pd.notna(last["macd_hist"]) else 0.0
-        feats["prev_macd_hist"] = float(prev["macd_hist"]) if "macd_hist" in prev and _pd.notna(prev["macd_hist"]) else 0.0
-        feats["ema_spread"] = float(last["ema_spread"]) if "ema_spread" in last and _pd.notna(last["ema_spread"]) else 0.0
-        feats["prev_ema_spread"] = float(prev["ema_spread"]) if "ema_spread" in prev and _pd.notna(prev["ema_spread"]) else 0.0
-        feats["range_pos"] = float(last["range_pos"]) if "range_pos" in last and _pd.notna(last["range_pos"]) else 0.5
-        feats["vol_ratio"] = float(last["vol_ratio"]) if "vol_ratio" in last and _pd.notna(last["vol_ratio"]) else 1.0
-        feats["mom5"] = float(last["mom5"]) if "mom5" in last and _pd.notna(last["mom5"]) else 0.0
-        feats["lower_shadow"] = float(last["lower_shadow"]) if "lower_shadow" in last and _pd.notna(last["lower_shadow"]) else 0.0
-        feats["upper_shadow"] = float(last["upper_shadow"]) if "upper_shadow" in last and _pd.notna(last["upper_shadow"]) else 0.0
-
-        # upper_shadow近似修复
-        if feats["upper_shadow"] <= 0.01 and len(df) >= 5:
-            recent_5 = df.iloc[-5:]
-            recent_high = float(recent_5["high"].max())
-            recent_low = float(recent_5["low"].min())
-            if recent_high > feats["price"] * 1.001 and recent_high > recent_low:
-                approx = (recent_high - feats["price"]) / (recent_high - recent_low)
-                if approx > feats["upper_shadow"]:
-                    feats["upper_shadow"] = approx
-                    feats["upper_shadow_approx"] = True
-
-        # VWAP偏差
-        vwap = feats["vwap"]
-        price = feats["price"]
+        price = float(last.get("close", 0)); vwap = float(last.get("vwap", 0) or 0)
+        feats["price"] = price; feats["vwap"] = vwap
+        feats["day_amplitude"] = float(last.get("day_amplitude", 0) or 0)
+        feats["rsi"] = float(last.get("rsi", 50) or 50)
+        feats["bb_pct"] = float(last.get("bb_pct", 0.5) or 0.5)
+        feats["macd_hist"] = float(last.get("macd_hist", 0) or 0)
+        feats["prev_macd_hist"] = float(prev.get("macd_hist", 0) or 0)
+        feats["ema_spread"] = float(last.get("ema_spread", 0) or 0)
+        feats["prev_ema_spread"] = float(prev.get("ema_spread", 0) or 0)
+        feats["range_pos"] = float(last.get("range_pos", 0.5) or 0.5)
+        feats["vol_ratio"] = float(last.get("vol_ratio", 1.0) or 1.0)
+        feats["mom5"] = float(last.get("mom5", 0) or 0)
+        feats["lower_shadow"] = float(last.get("lower_shadow", 0) or 0)
+        feats["upper_shadow"] = float(last.get("upper_shadow", 0) or 0)
+        # ATR
+        if len(df) >= 14:
+            atr_v = df["high"].sub(df["low"]).abs().rolling(14, min_periods=1).mean()
+            feats["atr"] = float(atr_v.iloc[-1] / price) if price > 0 else 0.02
+        else:
+            feats["atr"] = 0.02
+        atr = max(feats["atr"], 0.002)
         feats["buy_profit_space"] = (vwap - price) / price if price > 0 else 0.0
         feats["sell_profit_space"] = (price - vwap) / vwap if vwap else 0.0
-        feats["vwap_dev_atr"] = float(last["vwap_dev_atr"]) if "vwap_dev_atr" in last and _pd.notna(last.get("vwap_dev_atr")) else (feats["buy_profit_space"] * 100)
-
-        # 今日涨跌/开盘缺口
+        feats["vwap_dev_atr_ratio"] = feats["buy_profit_space"] / atr if atr > 0 else 0
+        # today ret
         if isinstance(cached_minute_df, _pd.DataFrame) and not cached_minute_df.empty:
             day_rows = cached_minute_df[cached_minute_df["date"] == last["date"]]
-            today_open = float(day_rows.iloc[0]["open"])
+            today_open = float(day_rows.iloc[0]["open"]) if not day_rows.empty else price
         else:
-            today_open = float(df[df["date"] == last["date"]].iloc[0]["open"])
-        feats["today_open"] = today_open
+            today_df = df[df["date"] == last["date"]]
+            today_open = float(today_df.iloc[0]["open"]) if not today_df.empty else price
         h_hold = HOLDINGS.get(code, {}) if 'HOLDINGS' in globals() else {}
         pre_close = h_hold.get("pre_close", today_open)
-        feats["pre_close"] = pre_close
+        feats["today_open"] = today_open; feats["pre_close"] = pre_close
         feats["today_ret"] = (price - pre_close) / pre_close if pre_close > 0 else 0.0
         feats["open_gap"] = (today_open - pre_close) / pre_close if pre_close > 0 else 0.0
-        feats["prev_high"] = float(last["prev_high"]) if "prev_high" in last and _pd.notna(last["prev_high"]) else price
-
-        # 强趋势/强回踩
-        feats["is_strong_trend"] = (feats["today_ret"] > 0.035) and (price >= feats["prev_high"] * 0.99) and (feats["vol_ratio"] > 1.2)
-        feats["is_strong_pullback"] = feats["is_strong_trend"] and abs((price - vwap) / vwap) < 0.005 if vwap else False
-
-        # Market state
-        from_self = locals().get('self')
-        if from_self and hasattr(from_self, '_classify_market_state'):
-            feats["market_state"] = from_self._classify_market_state(
-                feats["today_ret"], price, vwap, feats["vol_ratio"],
-                feats["day_amplitude"], feats["ema_spread"], code)
-        else:
-            feats["market_state"] = "range_bound"
-        return feats
-
-    @staticmethod
-    def extract_daily_context(daily_ctx: dict) -> dict:
-        """从 daily_ctx 提取所有日线相关特征"""
-        feats = {}
+        feats["prev_high"] = float(last.get("prev_high", 0) or price)
+        feats["is_strong_trend"] = (feats["today_ret"] > 2 * atr) and (price >= feats["prev_high"] * 0.99) and (feats["vol_ratio"] > 1.2)
+        feats["is_strong_pullback"] = feats["is_strong_trend"] and abs((price - vwap) / vwap) < 0.5 * atr if vwap else False
+        cost = float(holding.get("cost", 0) or 0)
+        feats["hold_qty"] = int(holding.get("t_qty") or holding.get("qty") or 0)
+        feats["profit_pct"] = (price - cost) / cost if cost > 0 else 0
+        feats["is_deep_loss"] = cost > 0 and feats["profit_pct"] < -5 * atr
+        # daily ctx
         dc = daily_ctx if isinstance(daily_ctx, dict) else {}
-        feats["daily_status"] = dc.get("daily_status", "unknown")
-        feats["daily_gate"] = dc.get("daily_gate", "neutral")
-        feats["daily_trend_bg"] = dc.get("daily_trend_bg", "unknown")
-        feats["daily_ma5"] = float(dc.get("daily_ma5", 0.0) or 0.0)
-        feats["daily_ma5_slope"] = float(dc.get("daily_ma5_slope", 0.0) or 0.0)
-        feats["daily_above_ma5"] = bool(dc.get("daily_above_ma5", False))
-        feats["daily_ma5_gap"] = float(dc.get("daily_ma5_gap", 0.0) or 0.0)
-        feats["daily_ma5_state"] = str(dc.get("daily_ma5_state", "unknown") or "unknown")
-        feats["daily_ma10"] = float(dc.get("daily_ma10", 0.0) or 0.0)
-        feats["daily_ma20"] = float(dc.get("daily_ma20", 0.0) or 0.0)
-        feats["daily_ma30"] = float(dc.get("daily_ma30", 0.0) or 0.0)
-        feats["daily_ma60"] = float(dc.get("daily_ma60", 0.0) or 0.0)
-        feats["daily_ma120"] = float(dc.get("daily_ma120", 0.0) or 0.0)
-        feats["daily_ma150"] = float(dc.get("daily_ma150", 0.0) or 0.0)
-        feats["daily_ma180"] = float(dc.get("daily_ma180", 0.0) or 0.0)
-        feats["daily_ma250"] = float(dc.get("daily_ma250", 0.0) or 0.0)
-        feats["daily_ma365"] = float(dc.get("daily_ma365", 0.0) or 0.0)
+        for k in ["daily_status", "daily_gate", "daily_trend_bg", "daily_ma5_state",
+                   "daily_support_name", "index_regime"]:
+            feats[k] = dc.get(k, "unknown")
+        for n in [5, 10, 20, 30, 60, 120]:
+            feats[f"daily_ma{n}"] = float(dc.get(f"daily_ma{n}", 0) or 0)
+        feats["daily_ma5_slope"] = float(dc.get("daily_ma5_slope", 0) or 0)
+        feats["daily_above_ma5"] = feats["daily_ma5"] > 0 and price >= feats["daily_ma5"]
+        feats["daily_buy_t_ok"] = dc.get("daily_status") == "ok" and feats["daily_ma5"] > 0 and feats["daily_ma5_state"] in {"near_ma5_chop", "above_ma5_trend"}
         feats["daily_breakdown_risk"] = bool(dc.get("daily_breakdown_risk", False))
-        feats["daily_hard_breakdown"] = bool(dc.get("daily_hard_breakdown", False))
         feats["daily_overheated"] = bool(dc.get("daily_overheated", False))
         feats["daily_pullback_support"] = bool(dc.get("daily_pullback_support", False))
-        feats["daily_near_support"] = bool(dc.get("daily_near_support", False))
-        feats["daily_support_gap"] = float(dc.get("daily_support_gap", 0.0) or 0.0)
-        feats["daily_support_name"] = dc.get("daily_support_name", "")
-        feats["daily_support_level"] = float(dc.get("daily_support_level", 0.0) or 0.0)
-        feats["daily_prev_day_ret"] = float(dc.get("daily_prev_day_ret", 0.0) or 0.0)
-        feats["daily_bb_lower"] = float(dc.get("daily_bb_lower", 0.0) or 0.0)
-        feats["daily_buy_t_ok"] = feats["daily_status"] == "ok" and feats["daily_ma5"] > 0 and feats["daily_ma5_state"] in {"near_ma5_chop", "above_ma5_trend"}
-        feats["daily_buy_t_relaxed"] = feats["daily_buy_t_ok"] and feats["daily_ma5_state"] == "above_ma5_trend"
-        feats["daily_sell_t_preferred"] = feats["daily_ma5_state"] == "below_ma5_weak"
-        # 大盘联动状态
-        feats["index_regime_status"] = dc.get("index_regime_status", "missing")
-        feats["index_circuit_state"] = dc.get("index_circuit_state", "normal")
-        feats["index_gate_advice"] = dc.get("index_gate_advice", "normal_t")
-        feats["index_pos_factor"] = float(dc.get("index_pos_factor", 1.0) or 1.0)
-        feats["index_temp_bucket"] = dc.get("index_temp_bucket", "neutral")
-        feats["index_score_delta"] = float(dc.get("index_score_delta", 0.0) or 0.0)
-        feats["index_regime"] = dc.get("index_regime", "range")
-        # Benchmark
         feats["benchmark_gate"] = dc.get("benchmark_gate", "neutral")
-        feats["benchmark_state"] = dc.get("benchmark_state", "unknown")
+        for k in ["index_regime_status", "index_circuit_state", "index_gate_advice", "index_temp_bucket"]:
+            feats[k] = dc.get(k, "normal")
+        # 15min/5min features (ATR自适应)
+        _f15_f = FeatureExtractorV2.extract_15min_features(df, cached_15m_df, price, vwap, atr=atr)
+        for k, v in _f15_f.items():
+            feats[f"f15_{k}"] = v
+        _f5_f = FeatureExtractorV2.extract_5min_features(df, cached_5m_df, price, vwap, atr=atr)
+        for k, v in _f5_f.items():
+            feats[f"f5_{k}"] = v
+        _v19 = FeatureExtractorV2.extract_v19_oscillation(df, price, vwap, feats["open_gap"], feats["today_ret"])
+        for k, v in _v19.items():
+            feats[k] = v
+        # ---- 强多头趋势检测（防卖飞） ----
+        feats["is_strong_uptrend"] = False
+        if not feats.get("is_etf") and len(df) >= 20 and price > 0:
+            c5 = df["close"].tail(5).mean(); c10 = df["close"].tail(10).mean(); c20 = df["close"].tail(20).mean()
+            ma_ok = c5 >= c10 * 0.995 and c10 >= c20 * 0.995
+            day_low = float(df["low"].iloc[:len(df)].min())
+            rebound = (price - day_low) / day_low if day_low > 0 else 0
+            feats["is_strong_uptrend"] = ma_ok and rebound > 3 * atr and price > vwap * 1.005
+        # ---- 双顶检测 ----
+        feats["is_double_top"] = False
+        if len(df) >= 10:
+            high_sofar = float(df["high"].max()) if not df.empty else price
+            peak_gap = (high_sofar - price) / high_sofar if high_sofar > 0 else 0
+            if 0 < peak_gap < 0.005:
+                peak_idx = int(df["high"].to_numpy().argmax()) if len(df) > 0 else len(df) - 1
+                low_after = float(df.iloc[peak_idx:len(df)]["low"].min()) if peak_idx < len(df) else price
+                had_pullback = low_after <= high_sofar * 0.995
+                rate3 = (price - float(df.iloc[-3]["close"])) / float(df.iloc[-3]["close"]) if len(df) >= 3 and float(df.iloc[-3]["close"]) > 0 else 0
+                mom_weak = rate3 < 0.003 or (len(df) >= 2 and price <= float(df.iloc[-2]["close"]))
+                if had_pullback and mom_weak:
+                    feats["is_double_top"] = True
+        # ---- 开盘急跌无反包（禁买入） ----
+        feats["is_gap_down_no_reversal"] = False
+        current_idx = len(df) - 1
+        if current_idx <= 15 and not feats.get("f5_is_strong_bullish_reversal", False):
+            mom2_5m = feats.get("f5_mom2_5m", 0)
+            if mom2_5m < -0.005:
+                feats["is_gap_down_no_reversal"] = True
         return feats
 
-    @staticmethod
+
     def extract_15min_features(df, _cached_15m=None, price: float = 0, vwap: float = 0,
                                min_15min_bars: int = 3, _df_15min=None,
                                atr: float = 0.02) -> dict:
@@ -550,7 +539,6 @@ class FeatureExtractor:
                     feats["multi_bottom_15m"] = low_count >= 2
         return feats
 
-    @staticmethod
     def extract_5min_features(df, _cached_5m=None, price: float = 0, vwap: float = 0,
                               bullish_params: dict = None, _df_5min=None,
                               atr: float = 0.02) -> dict:
@@ -628,7 +616,6 @@ class FeatureExtractor:
             feats["monthly_pos"] = multi_tf_dict.get("monthly_position", "")
         return feats
 
-    @staticmethod
     def extract_v19_oscillation(df, price: float, vwap: float, open_gap: float,
                                  today_ret: float) -> dict:
         """V1.19 弱势震荡/45度斜率/均线穿越检测"""
@@ -666,354 +653,6 @@ class FeatureExtractor:
             feats["is_vwap_crossing"] = cross_count >= 2
         return feats
 
-    @staticmethod
-    def extract_multi_support(df, daily_ctx: dict, support_level_15m: float,
-                               price: float) -> dict:
-        """多维度支撑位识别"""
-        feats = {"support_levels": [], "nearest_support": None, "is_near_any_support": False}
-        prev_day_low = float(daily_ctx.get("prev_low", 0)) or float(daily_ctx.get("daily_prev_low", 0))
-        if prev_day_low <= 0 and "date" in df.columns and len(df) > 1:
-            dates = df["date"].unique()
-            if len(dates) >= 2:
-                pd_df = df[df["date"] == dates[-2]]
-                if not pd_df.empty:
-                    prev_day_low = float(pd_df["low"].min())
-        daily_ma20 = float(daily_ctx.get("daily_ma20", 0) or 0)
-        daily_ma30 = float(daily_ctx.get("daily_ma30", 0) or 0)
-        sl15 = support_level_15m
-        levels = []
-        for sname, slevel in [("昨日低点", prev_day_low), ("MA20", daily_ma20),
-                              ("MA30", daily_ma30), ("15分低点", sl15)]:
-            if slevel > 0 and price > 0:
-                gap = abs(price - slevel) / slevel
-                if gap < 0.01:
-                    levels.append((sname, slevel, gap))
-        levels.sort(key=lambda x: x[2])
-        feats["support_levels"] = levels
-        feats["nearest_support"] = levels[0] if levels else None
-        feats["is_near_any_support"] = levels and levels[0] is not None
-        return feats
-
-    @staticmethod
-    def calc_open_dip_support(t_val: int, today_ret: float, is_near_any_support: bool,
-                               nearest_support: tuple) -> tuple:
-        """开盘急跌旁路判断"""
-        if 930 <= t_val <= 935 and today_ret < -0.02 and is_near_any_support and nearest_support:
-            return True, f"开盘后急跌{today_ret*100:.1f}%，触及{nearest_support[0]}({nearest_support[1]:.2f})"
-        return False, ""
-
-    @staticmethod
-    def calc_ma_support(daily_ma5: float, daily_ma10: float, daily_ma5_slope: float,
-                         price: float, vwap: float, df) -> tuple:
-        """均线支撑确认检测"""
-        ma_support = None
-        boost = 0
-        if daily_ma5 > 0 and price >= daily_ma5 * 0.99 and daily_ma5_slope > 0:
-            today_high = float(df["high"].max()) if not df.empty else price
-            had_pb = today_high > price * 1.01
-            if price <= vwap and had_pb:
-                boost = 12
-                ma_support = {"name": "MA5", "level": daily_ma5, "type": "support_confirmed", "pullback": had_pb}
-        elif daily_ma10 > 0 and price >= daily_ma10 * 0.99 and daily_ma10 > daily_ma5 and price < daily_ma5 * 0.995:
-            today_high = float(df["high"].max()) if not df.empty else price
-            had_pb = today_high > price * 1.01
-            if price <= vwap and had_pb:
-                boost = 10
-                ma_support = {"name": "MA10", "level": daily_ma10, "type": "support_confirmed", "pullback": had_pb}
-        return ma_support, boost
-
-    @staticmethod
-    def calc_ma_resistance(code: str, daily_ctx: dict, price: float, vwap: float,
-                            today_ret: float, mom5: float, upper_shadow: float,
-                            df, holding: dict) -> dict:
-        """多均线压力计算"""
-        is_etf = holding.get("type") == "etf"
-        daily_ma_values = {
-            "MA5": float(daily_ctx.get("daily_ma5", 0) or 0),
-            "MA10": float(daily_ctx.get("daily_ma10", 0) or 0),
-            "MA20": float(daily_ctx.get("daily_ma20", 0) or 0),
-            "MA30": float(daily_ctx.get("daily_ma30", 0) or 0),
-            "MA60": float(daily_ctx.get("daily_ma60", 0) or 0),
-            "MA120": float(daily_ctx.get("daily_ma120", 0) or 0),
-            "MA150": float(daily_ctx.get("daily_ma150", 0) or 0),
-            "MA180": float(daily_ctx.get("daily_ma180", 0) or 0),
-            "MA250": float(daily_ctx.get("daily_ma250", 0) or 0),
-            "MA365": float(daily_ctx.get("daily_ma365", 0) or 0),
-        }
-        pressure_mas = []
-        for mn, mv in daily_ma_values.items():
-            if mv <= 0 or not (price > mv * 0.95 and price < mv * 1.05):
-                continue
-            ma_gap = (price - mv) / mv
-            is_p = False
-            ptype = ""
-            if ma_gap < 0 and abs(ma_gap) < 0.025 and (today_ret > 0.005 or mom5 > 0):
-                is_p = True; ptype = "approaching"
-            elif ma_gap >= 0 and ma_gap < 0.02 and mom5 < 0:
-                is_p = True; ptype = "breach_stall"
-            elif abs(ma_gap) < 0.015 and upper_shadow > 0.3:
-                is_p = True; ptype = "upper_shadow"
-            if is_p:
-                pressure_mas.append({"name": mn, "level": mv, "gap_pct": ma_gap, "type": ptype})
-        pressure_count = len(pressure_mas)
-        result = {"pressure_mas": pressure_mas, "pressure_count": pressure_count, "boost": 0}
-        if pressure_count < 1:
-            return result
-        levels = [p["level"] for p in pressure_mas]
-        mx = max(levels); mn = min(levels)
-        cluster_span = (mx - mn) / mx if mx > 0 else 999
-        is_cluster = cluster_span < 0.05
-        # ETF门控
-        if is_etf:
-            if pressure_count == 1 or (pressure_count == 2 and not is_cluster):
-                return result
-        shock_fail_boost = 0
-        if len(df) >= 10 and levels:
-            pu = mx * 1.01; pl = mn * 0.99
-            recent_df = df.tail(15) if len(df) >= 15 else df
-            touch_c = sum(1 for h in recent_df["high"] if pl <= float(h) <= pu)
-            curr_below = price < pl
-            if touch_c >= 3 and curr_below: shock_fail_boost = 12
-            elif touch_c >= 2 and curr_below: shock_fail_boost = 8
-            elif touch_c >= 1 and curr_below: shock_fail_boost = 5
-        base_boost = 12 if pressure_count == 1 else (18 if pressure_count == 2 else 22)
-        cluster_boost = 8 if is_cluster else 0
-        result["boost"] = base_boost + cluster_boost + shock_fail_boost
-        result["is_cluster"] = is_cluster
-        result["shock_fail_boost"] = shock_fail_boost
-        return result
-
-
-class RiskManager:
-    """Layer 2: 风控守门员——检查是否应该阻断交易"""
-
-    @staticmethod
-    def check_buy_limits(buy_today_count: int, sell_today_count: int,
-                          max_buy: int, max_sell: int) -> dict:
-        """检查当日交易次数限制"""
-        result = {}
-        result["can_buy_more"] = buy_today_count < max_buy
-        result["can_sell_today"] = sell_today_count < max_sell
-        result["buy_limit_reason"] = ""
-        if buy_today_count >= max_buy:
-            result["buy_limit_reason"] = f"已达当日买入上限{max_buy}次"
-        result["sell_limit_reason"] = ""
-        if sell_today_count >= max_sell:
-            result["sell_limit_reason"] = f"已达当日卖出上限{max_sell}次"
-        return result
-
-    @staticmethod
-    def check_stand_down(code: str, holding: dict, df, buy_score: float,
-                          sell_score: float, market_state: str, can_sell: bool,
-                          today_ret: float, minutes_since_open: int) -> tuple:
-        """检查是否应停手（委托给SignalEngine._should_stand_down）"""
-        from_self = None
-        for f in dir():
-            if isinstance(f, SignalEngine):
-                from_self = f; break
-        # 使用全局 SignalEngine 实例方法
-        return False, ""
-
-    @staticmethod
-    def check_intraday_alerts(daily_ctx: dict) -> tuple:
-        """检查大盘盘中预警"""
-        alerts = daily_ctx.get("intraday_alerts", []) if isinstance(daily_ctx, dict) else []
-        has_i1_i5 = any(a.get("tag") in ("I1", "I5") and a.get("level") == "warn" for a in alerts)
-        return has_i1_i5, alerts
-
-    @staticmethod
-    def check_morning_alert_block(morning_alert_state: dict, code: str,
-                                   t_val: int, is_short_mode: bool) -> dict:
-        """检查早盘预警阻断"""
-        mas = morning_alert_state.get(code, {})
-        effective_alert = mas.get("level", 0)
-        if mas.get("corrected", False):
-            effective_alert = 0
-        return {"effective_alert": effective_alert}
-
-
-class ScoringEngine:
-    """Layer 3: 作战指挥部——评分+阈值+信号生成"""
-
-    @staticmethod
-    def time_score(t_val: int) -> int:
-        """时间加分"""
-        if 1400 <= t_val <= 1445: return 8
-        if 930 <= t_val <= 935: return 5
-        return 0
-
-    @staticmethod
-    def score_vwap_buy(buy_profit_space: float, vwap_dev_atr: float,
-                        required_profit_buy: float) -> tuple:
-        """VWAP回归空间加分"""
-        details = []
-        score = 0
-        if buy_profit_space > 0.01 or vwap_dev_atr < -1.0:
-            score = 15
-            details.append({"指标": "VWAP回归空间", "当前": f"+{buy_profit_space*100:.2f}%", "解读": "深度偏离均价，强力回归空间", "加分": 15})
-        elif buy_profit_space > required_profit_buy:
-            score = 12
-            details.append({"指标": "VWAP回归空间", "当前": f"+{buy_profit_space*100:.2f}%", "解读": "低于均价，回归空间充足", "加分": 12})
-        elif buy_profit_space > 0:
-            score = 8
-            details.append({"指标": "VWAP回归空间", "当前": f"+{buy_profit_space*100:.2f}%", "解读": "略低于均价，轻度回归空间", "加分": 8})
-        return score, details
-
-    @staticmethod
-    def score_vwap_sell(sell_profit_space: float, required_profit_sell: float) -> tuple:
-        """VWAP溢价空间卖出加分"""
-        details = []
-        score = 0
-        if sell_profit_space > required_profit_sell:
-            score = 18
-            details.append({"指标": "VWAP溢价空间", "当前": f"+{sell_profit_space*100:.2f}%", "解读": "高于均价且盈利空间充足", "加分": 18})
-        elif sell_profit_space > 0:
-            score = 12
-            details.append({"指标": "VWAP溢价空间", "当前": f"+{sell_profit_space*100:.2f}%", "解读": "现价高于均价", "加分": 12})
-        return score, details
-
-
-# ====================================================================
-# V2 Pipeline: ATR-自适应 + 三层流水线
-# FeatureExtractor → RiskManager → ScoringEngine → Signal
-# ====================================================================
-
-PARAMS_V2 = {
-    "vwap_buy_atr_mult": -1.5,
-    "vwap_sell_atr_mult": 1.2,
-    "rsi_oversold_atr_adj": True,
-    "buy_score_atr_smooth": 50,
-    "sell_score_atr_smooth": 50,
-    "trend_strength_atr_mult": 2.0,
-    "stop_loss_atr_mult": 2.5,
-    "take_profit_atr_mult": 3.0,
-    "min_score_continuous": True,
-    "factor_weight_vwap": 0.30,
-    "factor_weight_rsi": 0.20,
-    "factor_weight_macd": 0.15,
-    "factor_weight_volume": 0.15,
-    "factor_weight_position": 0.10,
-    "factor_weight_time": 0.10,
-    "max_score_raw": 100,
-}
-
-
-class FeatureExtractorV2:
-    """V2: 单次调用提取全部客观特征"""
-
-    @staticmethod
-    def extract_all(code: str, name: str, df, holding: dict,
-                    daily_ctx: dict, cached_minute_df=None,
-                    cached_5m_df=None, cached_15m_df=None,
-                    multi_tf_dict=None) -> dict:
-        _pd = pd; _np = np
-        feats = {}
-        if df.empty or len(df) < 5:
-            return feats
-        last = df.iloc[-1]; prev = df.iloc[-2] if len(df) >= 2 else last
-        _dt = _pd.to_datetime(last["time"]) if "time" in last else _pd.Timestamp.now()
-        feats["t_val"] = _dt.hour * 100 + _dt.minute
-        feats["current_minute"] = _dt.hour * 60 + _dt.minute
-        feats["is_etf"] = holding.get("type") == "etf"
-        price = float(last.get("close", 0)); vwap = float(last.get("vwap", 0) or 0)
-        feats["price"] = price; feats["vwap"] = vwap
-        feats["day_amplitude"] = float(last.get("day_amplitude", 0) or 0)
-        feats["rsi"] = float(last.get("rsi", 50) or 50)
-        feats["bb_pct"] = float(last.get("bb_pct", 0.5) or 0.5)
-        feats["macd_hist"] = float(last.get("macd_hist", 0) or 0)
-        feats["prev_macd_hist"] = float(prev.get("macd_hist", 0) or 0)
-        feats["ema_spread"] = float(last.get("ema_spread", 0) or 0)
-        feats["prev_ema_spread"] = float(prev.get("ema_spread", 0) or 0)
-        feats["range_pos"] = float(last.get("range_pos", 0.5) or 0.5)
-        feats["vol_ratio"] = float(last.get("vol_ratio", 1.0) or 1.0)
-        feats["mom5"] = float(last.get("mom5", 0) or 0)
-        feats["lower_shadow"] = float(last.get("lower_shadow", 0) or 0)
-        feats["upper_shadow"] = float(last.get("upper_shadow", 0) or 0)
-        # ATR
-        if len(df) >= 14:
-            atr_v = df["high"].sub(df["low"]).abs().rolling(14, min_periods=1).mean()
-            feats["atr"] = float(atr_v.iloc[-1] / price) if price > 0 else 0.02
-        else:
-            feats["atr"] = 0.02
-        atr = max(feats["atr"], 0.002)
-        feats["buy_profit_space"] = (vwap - price) / price if price > 0 else 0.0
-        feats["sell_profit_space"] = (price - vwap) / vwap if vwap else 0.0
-        feats["vwap_dev_atr_ratio"] = feats["buy_profit_space"] / atr if atr > 0 else 0
-        # today ret
-        if isinstance(cached_minute_df, _pd.DataFrame) and not cached_minute_df.empty:
-            day_rows = cached_minute_df[cached_minute_df["date"] == last["date"]]
-            today_open = float(day_rows.iloc[0]["open"]) if not day_rows.empty else price
-        else:
-            today_df = df[df["date"] == last["date"]]
-            today_open = float(today_df.iloc[0]["open"]) if not today_df.empty else price
-        h_hold = HOLDINGS.get(code, {}) if 'HOLDINGS' in globals() else {}
-        pre_close = h_hold.get("pre_close", today_open)
-        feats["today_open"] = today_open; feats["pre_close"] = pre_close
-        feats["today_ret"] = (price - pre_close) / pre_close if pre_close > 0 else 0.0
-        feats["open_gap"] = (today_open - pre_close) / pre_close if pre_close > 0 else 0.0
-        feats["prev_high"] = float(last.get("prev_high", 0) or price)
-        feats["is_strong_trend"] = (feats["today_ret"] > 2 * atr) and (price >= feats["prev_high"] * 0.99) and (feats["vol_ratio"] > 1.2)
-        feats["is_strong_pullback"] = feats["is_strong_trend"] and abs((price - vwap) / vwap) < 0.5 * atr if vwap else False
-        cost = float(holding.get("cost", 0) or 0)
-        feats["hold_qty"] = int(holding.get("t_qty") or holding.get("qty") or 0)
-        feats["profit_pct"] = (price - cost) / cost if cost > 0 else 0
-        feats["is_deep_loss"] = cost > 0 and feats["profit_pct"] < -5 * atr
-        # daily ctx
-        dc = daily_ctx if isinstance(daily_ctx, dict) else {}
-        for k in ["daily_status", "daily_gate", "daily_trend_bg", "daily_ma5_state",
-                   "daily_support_name", "index_regime"]:
-            feats[k] = dc.get(k, "unknown")
-        for n in [5, 10, 20, 30, 60, 120]:
-            feats[f"daily_ma{n}"] = float(dc.get(f"daily_ma{n}", 0) or 0)
-        feats["daily_ma5_slope"] = float(dc.get("daily_ma5_slope", 0) or 0)
-        feats["daily_above_ma5"] = feats["daily_ma5"] > 0 and price >= feats["daily_ma5"]
-        feats["daily_buy_t_ok"] = dc.get("daily_status") == "ok" and feats["daily_ma5"] > 0 and feats["daily_ma5_state"] in {"near_ma5_chop", "above_ma5_trend"}
-        feats["daily_breakdown_risk"] = bool(dc.get("daily_breakdown_risk", False))
-        feats["daily_overheated"] = bool(dc.get("daily_overheated", False))
-        feats["daily_pullback_support"] = bool(dc.get("daily_pullback_support", False))
-        feats["benchmark_gate"] = dc.get("benchmark_gate", "neutral")
-        for k in ["index_regime_status", "index_circuit_state", "index_gate_advice", "index_temp_bucket"]:
-            feats[k] = dc.get(k, "normal")
-        # 15min/5min features (ATR自适应)
-        _f15_f = FeatureExtractor.extract_15min_features(df, cached_15m_df, price, vwap, atr=atr)
-        for k, v in _f15_f.items():
-            feats[f"f15_{k}"] = v
-        _f5_f = FeatureExtractor.extract_5min_features(df, cached_5m_df, price, vwap, atr=atr)
-        for k, v in _f5_f.items():
-            feats[f"f5_{k}"] = v
-        _v19 = FeatureExtractor.extract_v19_oscillation(df, price, vwap, feats["open_gap"], feats["today_ret"])
-        for k, v in _v19.items():
-            feats[k] = v
-        # ---- 强多头趋势检测（防卖飞） ----
-        feats["is_strong_uptrend"] = False
-        if not feats.get("is_etf") and len(df) >= 20 and price > 0:
-            c5 = df["close"].tail(5).mean(); c10 = df["close"].tail(10).mean(); c20 = df["close"].tail(20).mean()
-            ma_ok = c5 >= c10 * 0.995 and c10 >= c20 * 0.995
-            day_low = float(df["low"].iloc[:len(df)].min())
-            rebound = (price - day_low) / day_low if day_low > 0 else 0
-            feats["is_strong_uptrend"] = ma_ok and rebound > 3 * atr and price > vwap * 1.005
-        # ---- 双顶检测 ----
-        feats["is_double_top"] = False
-        if len(df) >= 10:
-            high_sofar = float(df["high"].max()) if not df.empty else price
-            peak_gap = (high_sofar - price) / high_sofar if high_sofar > 0 else 0
-            if 0 < peak_gap < 0.005:
-                peak_idx = int(df["high"].to_numpy().argmax()) if len(df) > 0 else len(df) - 1
-                low_after = float(df.iloc[peak_idx:len(df)]["low"].min()) if peak_idx < len(df) else price
-                had_pullback = low_after <= high_sofar * 0.995
-                rate3 = (price - float(df.iloc[-3]["close"])) / float(df.iloc[-3]["close"]) if len(df) >= 3 and float(df.iloc[-3]["close"]) > 0 else 0
-                mom_weak = rate3 < 0.003 or (len(df) >= 2 and price <= float(df.iloc[-2]["close"]))
-                if had_pullback and mom_weak:
-                    feats["is_double_top"] = True
-        # ---- 开盘急跌无反包（禁买入） ----
-        feats["is_gap_down_no_reversal"] = False
-        current_idx = len(df) - 1
-        if current_idx <= 15 and not feats.get("f5_is_strong_bullish_reversal", False):
-            mom2_5m = feats.get("f5_mom2_5m", 0)
-            if mom2_5m < -0.005:
-                feats["is_gap_down_no_reversal"] = True
-        return feats
-
 
 class RiskManagerV2:
     """V2: 一票否决守门员 — 关键防线完全体"""
@@ -1049,6 +688,28 @@ class RiskManagerV2:
             result["buy_block"].append("daily_overheated")
 
         return result
+
+
+PARAMS_V2 = {
+    "vwap_buy_atr_mult": -1.5,
+    "vwap_sell_atr_mult": 1.2,
+    "rsi_oversold_atr_adj": True,
+    "buy_score_atr_smooth": 50,
+    "sell_score_atr_smooth": 50,
+    "trend_strength_atr_mult": 2.0,
+    "stop_loss_atr_mult": 2.5,
+    "take_profit_atr_mult": 3.0,
+    "min_score_continuous": True,
+    "factor_weight_vwap": 0.25,
+    "factor_weight_rsi": 0.15,
+    "factor_weight_macd": 0.10,
+    "factor_weight_volume": 0.10,
+    "factor_weight_position": 0.10,
+    "factor_weight_ema": 0.05,
+    "factor_weight_pattern": 0.25,
+    "factor_weight_time": 0.00,
+    "max_score_raw": 100,
+}
 
 
 class ScoringEngineV2:
@@ -1166,18 +827,24 @@ class ScoringEngineV2:
         s = ScoringEngineV2._weighted_factor_score(raw, "factor_weight_position", p=p)
         score += s; d and details.append(d[0] | {"加分": round(s, 1)})
         raw, d = ScoringEngineV2.score_ema_improve(feats)
-        s = raw * 4; score += s; d and details.append(d[0] | {"加分": round(s, 1)})
-        # Binary adders
-        if feats.get("f15_kinetic_exhaustion"):
-            details.append({"指标": "15分动能衰竭", "加分": 10}); score += 10
-        if feats.get("f15_near_15m_support"):
-            details.append({"指标": "15分强支撑", "加分": 8}); score += 8
-        if feats.get("f15_multi_bottom_15m"):
-            details.append({"指标": "15分多重底", "加分": 6}); score += 6
+        s = ScoringEngineV2._weighted_factor_score(raw, "factor_weight_ema", p=p); score += s; d and details.append(d[0] | {"加分": round(s, 1)})
+        # ---- 形态因子 (Pattern Factor, 通过 factor_weight_pattern 加权) ----
+        _pattern_raw = 0.0
+        _pnames = []
         if feats.get("f5_is_strong_bullish_reversal"):
-            details.append({"指标": "5分大阳线反包", "加分": 20}); score += 20
-        elif feats.get("f5_is_volume_reversal"):
-            details.append({"指标": "5分弱企稳", "加分": 8}); score += 8
+            _pattern_raw = max(_pattern_raw, 1.0); _pnames.append("5分大阳线反包")
+        if feats.get("f5_is_volume_reversal") and _pattern_raw < 0.7:
+            _pattern_raw = max(_pattern_raw, 0.7); _pnames.append("5分弱企稳")
+        if feats.get("f15_kinetic_exhaustion"):
+            _pattern_raw = max(_pattern_raw, 0.6); _pnames.append("15分动能衰竭")
+        if feats.get("f15_near_15m_support"):
+            _pattern_raw = max(_pattern_raw, 0.5); _pnames.append("15分强支撑")
+        if feats.get("f15_multi_bottom_15m"):
+            _pattern_raw = max(_pattern_raw, 0.4); _pnames.append("15分多重底")
+        _s_pattern = ScoringEngineV2._weighted_factor_score(_pattern_raw, "factor_weight_pattern", p=p)
+        score += _s_pattern
+        if _pnames:
+            details.append({"指标": "形态组合(" + "/".join(_pnames) + ")", "强度": round(_pattern_raw, 2), "加分": round(_s_pattern, 1)})
         return round(score, 1), details
 
     @staticmethod
@@ -1199,7 +866,7 @@ class ScoringEngineV2:
         s = ScoringEngineV2._weighted_factor_score(raw, "factor_weight_position", p=p)
         score += s; d and details.append(d[0] | {"加分": round(s, 1)})
         raw, d = ScoringEngineV2.score_ema_weaken(feats)
-        s = raw * 4; score += s; d and details.append(d[0] | {"加分": round(s, 1)})
+        s = ScoringEngineV2._weighted_factor_score(raw, "factor_weight_ema", p=p); score += s; d and details.append(d[0] | {"加分": round(s, 1)})
         # Daily context binary adders
         if feats.get("daily_breakdown_risk"):
             details.append({"指标": "日线破位风险", "加分": 8}); score += 8
