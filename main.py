@@ -362,6 +362,7 @@ def send_morning_alert(code, name, alert_level, triggered_rules, morning_stats):
 # ==================== 大盘态势判定钩子（index_regime 日线 + 分时预警） ====================
 
 _INDEX_INTRADAY_LAST_FETCH_TS = 0.0   # 分时数据拉取节流（至多 300 秒一次）
+_index_intraday_alert_cache: Dict[str, float] = {}  # 同 tag 60 分钟不重复推
 
 _IR_GATE_ADVICE_CN = {
     "trend_up_hold": "单边上涨：正T优先、买入门控放宽、减少卖飞",
@@ -612,6 +613,12 @@ def _maybe_audit_closure(now: datetime) -> None:
         except Exception:
             pass
 
+        # 15:00 推送当日做T收益明细飞书卡
+        try:
+            _push_daily_pnl_feishu(record, today)
+        except Exception as e:
+            log.debug(f"pnl 推送异常（已吞）: {str(e)[:80]}")
+
         if problems:
             lines = [f"**日期**：{today}（14:50 闭环审计）", ""] + problems \
                   + ["", "请尾盘手动处理，确保卖出=接回、qty=base 闭环。"]
@@ -627,6 +634,51 @@ def _maybe_audit_closure(now: datetime) -> None:
             log.info(f"✅ 闭环审计通过（{len(details)} 只：卖出=接回，qty=base）")
     except Exception as e:
         log.warning(f"⚠️ 闭环审计钩子异常（已吞掉，不影响主循环）: {str(e)[:120]}")
+
+
+def _push_daily_pnl_feishu(record: dict, date_str: str) -> None:
+    """15:00 推送当日做T收益明细飞书卡（基于闭环审计数据）"""
+    if not FEISHU_WEBHOOK:
+        return
+    details = record.get("details") or []
+    traded = [d for d in details if d.get("sold", 0) > 0 or d.get("bought", 0) > 0]
+    if not traded and not record.get("problems"):
+        log.info("📊 做T收益：今日无交易，跳过推送")
+        return
+
+    total_pnl = sum(d.get("est_pnl", 0) for d in details)
+    total_fees = sum((d.get("sold", 0) * d.get("ref_price", 0)
+                      + d.get("bought", 0) * d.get("ref_price", 0)) * 0.00025
+                     for d in traded)
+    total_trades = sum(d.get("sold", 0) for d in details) + sum(d.get("bought", 0) for d in details)
+
+    lines = [f"📅 {date_str} 做T收益明细"]
+    if record.get("problems"):
+        lines.append("⚠️ **闭环异常**：")
+        lines.extend(record["problems"])
+        lines.append("")
+    lines.append(f"| 标的 | 买卖(股) | 预估盈亏 |")
+    lines.append(f"|------|----------|----------|")
+    for d in details:
+        if d.get("sold", 0) == 0 and d.get("bought", 0) == 0:
+            continue
+        pnl = d.get("est_pnl", 0)
+        pnl_str = f"{pnl:+.0f}" if abs(pnl) >= 1 else f"{pnl:+.2f}"
+        lines.append(f"| {d['name']}({d['code']}) | 卖{d['sold']}/买{d['bought']} | {pnl_str} |")
+    lines.append(f"| **合计** | **{total_trades}股** | **{total_pnl:+.0f}** |")
+    if len(details) > len(traded):
+        idle = len(details) - len(traded)
+        lines.append(f"\n*无交易的持仓：{idle}只*")
+
+    card = {"config": {"wide_screen_mode": True},
+            "header": _feishu_card_header(f"📊 做T收益明细 - {FEISHU_KEYWORD}",
+                                          "red" if total_pnl < 0 else "green"),
+            "elements": [_feishu_md_div(x) for x in lines]}
+    send_feishu_payload(
+        payload={"msg_type": "interactive", "card": card, "notify_type": 1},
+        success_log=f"✅ 做T收益明细已推送（{len(traded)}只有交易，合计{total_pnl:+.0f}）",
+        error_prefix="做T收益明细推送",
+    )
 
 
 def _maybe_check_index_intraday_alert(now: datetime) -> None:
@@ -1421,14 +1473,28 @@ def _auto_t_mode_suggestion() -> dict:
                 regime=out["regime"], z_S=out["z_S"], z_top3=out["z_top3"],
                 overheat_streak=out["overheat_streak"], k_day_type=None,
                 prev_k_down=out["prev_k_down"], uni_down_days=out["uni_down_days"])
-        # 昨日触发系统性风险 → 今日保持清仓门控，不再落为 hold
+        # 昨日触发系统性风险 → 根据今日实际大盘态分级处理
         if out.get("systemic_risk") and isinstance(out.get("decision"), dict):
-            out["decision"]["mode"] = "short"
-            out["decision"]["mode_cn"] = "反T"
-            out["decision"]["pos_factor"] = 0.0
-            out["decision"]["trade_gate"] = "clear"
-            out["decision"]["t_enabled"] = False
-            out["decision"]["reason"] = str(out["decision"].get("reason", "")) + "；昨日系统性风险→今日清仓门控"
+            today_regime = out.get("regime", "range")
+            if today_regime == "uni_down":
+                # 大盘仍处单边下行 → 保持清仓门控（昨日风险未解除）
+                out["decision"]["mode"] = "short"
+                out["decision"]["mode_cn"] = "反T"
+                out["decision"]["pos_factor"] = 0.0
+                out["decision"]["trade_gate"] = "clear"
+                out["decision"]["t_enabled"] = False
+                out["decision"]["reason"] = str(out["decision"].get("reason", "")) + "；昨日系统性风险+今日仍uni_down→清仓门控"
+            elif today_regime == "range":
+                # 大盘已恢复震荡 → 风险缓和，仍反T但允许轻仓操作（不零封）
+                out["decision"]["mode"] = "short"
+                out["decision"]["mode_cn"] = "反T"
+                out["decision"]["pos_factor"] = min(out["decision"].get("pos_factor", 0.3), 0.3)
+                out["decision"]["trade_gate"] = "normal"
+                out["decision"]["t_enabled"] = True
+                out["decision"]["reason"] = str(out["decision"].get("reason", "")) + "；昨日系统性风险但今日已转range→反T轻仓"
+            else:
+                # 大盘已转好 → 不触发风控，尊重矩阵结论
+                out["systemic_risk"] = False
     except Exception as e:
         log.warning(f"⚠️ 自动建议计算异常（按默认正T兜底）: {str(e)[:120]}")
     return out

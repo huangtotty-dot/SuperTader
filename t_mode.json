@@ -3,23 +3,20 @@
   "_last_updated": "2026-07-15",
   "_update_source": "持仓截图更新",
   "_auto_decision": {
-    "date": "2026-07-21",
-    "regime": "uni_down",
-    "regime_name": "单边下行",
-    "z_top3": -1.466,
-    "basis_date": "2026-07-20",
+    "date": "2026-07-22",
+    "regime": "range",
+    "regime_name": "横盘震荡",
+    "z_top3": 0.0,
+    "basis_date": "2026-07-21",
     "matrix_mode": "short",
-    "pos_factor": 1.0,
-    "reason": "单边下行×冰点→反T标准仓，先卖后买",
+    "pos_factor": 0.0,
+    "reason": "震荡×偏热→正T标准仓；🚨清仓覆盖(z_S=N/A≤-1.5，14:30当日判定当日生效)→全标的清仓门控；昨日系统性风险但今日已转range→反T轻仓",
     "per_stock": {
-      "300153": "short",
-      "300364": "short",
       "588170": "short",
       "600176": "short",
       "600481": "short",
       "603667": "short",
-      "000988": "short",
-      "000988_B": "short"
+      "000988": "short"
     },
     "source": "auto_v3.1"
   },

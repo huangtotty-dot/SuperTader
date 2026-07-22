@@ -1,0 +1,237 @@
+09:05:22 [INFO] 🔄 VIRTUAL_TRADES 日期 2026-07-21 != 今日 2026-07-22，自动重置
+09:05:22 [INFO] 🔄 VIRTUAL_TRADES: 无历史记录，全新开始
+09:05:32 [WARNING] ⚠️ 个股级决策异常（回退市场级）: float() argument must be a string or a real number, not 'NoneType'
+09:05:33 [INFO] ✅ 当日T策略卡已推送: 反T
+09:08:43 [INFO] 竞价额Top20：涨0/跌0
+评分=50分 → 观察
+09:08:43 [INFO] ========= 做T终极护城河防御版 (V1.26 正T/反T模式切换版) 启动 =========
+09:08:43 [INFO] 飞书推送: ✓ 已启用
+09:08:43 [INFO] 飞书关键词: 做T猎手预警
+09:08:43 [INFO] 飞书Webhook: https://open.feishu.cn/open-apis/bot/v2/hook/e8018470-e...
+09:08:43 [INFO] 🧹 清理过期分钟线缓存 8 个
+09:08:43 [INFO] 🔊 系统报警音效已挂载
+09:08:44 [INFO] ✅ 启动自检飞书消息已成功送达
+09:08:45 [INFO] 🔔 已触发急促报警
+09:08:45 [INFO] ⏱ 采用顺序轮询模式：每轮扫描结束后再等待 15 秒（V1.8 确认型收敛）
+09:08:45 [INFO] ⏸ 非交易时段，进入低频保活
+09:09:38 [INFO] 已停止盯盘
+09:13:39 [INFO] 🔄 VIRTUAL_TRADES 日期 2026-07-21 != 今日 2026-07-22，自动重置
+09:13:39 [INFO] 🔄 VIRTUAL_TRADES: 无历史记录，全新开始
+09:13:48 [WARNING] ⚠️ 个股级决策异常（回退市场级）: float() argument must be a string or a real number, not 'NoneType'
+09:16:50 [INFO] 竞价额Top20：涨0/跌0
+评分=50分 → 观察
+09:16:50 [INFO] ========= 做T终极护城河防御版 (V1.26 正T/反T模式切换版) 启动 =========
+09:16:50 [INFO] 飞书推送: ✓ 已启用
+09:16:50 [INFO] 飞书关键词: 做T猎手预警
+09:16:50 [INFO] 飞书Webhook: https://open.feishu.cn/open-apis/bot/v2/hook/e8018470-e...
+09:16:50 [INFO] 🔊 系统报警音效已挂载
+09:16:51 [INFO] ✅ 启动自检飞书消息已成功送达
+09:16:52 [INFO] 🔔 已触发急促报警
+09:16:52 [INFO] ⏱ 采用顺序轮询模式：每轮扫描结束后再等待 15 秒（V1.8 确认型收敛）
+09:16:52 [INFO] ⏸ 非交易时段，进入低频保活
+09:23:04 [INFO] 竞价额Top20：涨0/跌0
+评分=50分 → 观察
+09:23:05 [INFO] ✅ 竞价监控已推送飞书
+09:23:05 [INFO] 📡 盘前集合竞价监控已刷新
+09:26:16 [INFO] 竞价额Top20：涨11/跌8
+评分=58分 → 观察
+09:26:17 [INFO] ✅ 早盘竞价分析已推送飞书
+09:26:17 [INFO] ✅ 竞价监控已推送飞书
+09:26:17 [INFO] 📡 盘前集合竞价监控已刷新
+09:26:33 [INFO] ✅ 早盘大盘基调已推送: 横盘震荡 S=-46.6 (mode=morning)
+09:26:34 [INFO] ✅ 支撑/压力位已推送飞书
+09:26:34 [INFO] 📊 支撑/压力位推送完成 (5 只)
+09:30:04 [INFO] 🫀 扫描心跳 第1轮开始
+09:30:05 [WARNING] ⚠️ 个股级决策异常（回退市场级）: float() argument must be a string or a real number, not 'NoneType'
+09:30:06 [WARNING] ⚠️ 个股级决策异常（回退市场级）: float() argument must be a string or a real number, not 'NoneType'
+09:30:07 [WARNING] ⚠️ 个股级决策异常（回退市场级）: float() argument must be a string or a real number, not 'NoneType'
+09:30:08 [WARNING] ⚠️ 个股级决策异常（回退市场级）: float() argument must be a string or a real number, not 'NoneType'
+09:30:09 [WARNING] ⚠️ 个股级决策异常（回退市场级）: float() argument must be a string or a real number, not 'NoneType'
+09:30:09 [INFO] 
+📊 护城河防御面板 第1轮
+──────────────────────────────────────────────────────────────────────
+科创半导体ETF华夏(588170)    1.02      1.02    0.0%      多0/空0  无波待涨    
+中国巨石(600176)       42.62     42.73    0.5%      多0/空0  无波待涨    
+双良节能(600481)        3.73      3.73    0.0%      多0/空0  无波待涨    
+五洲新春(603667)       54.50     54.50    0.0%      多0/空0  无波待涨    
+华工科技(000988)      113.87    113.63    0.6%      多0/空0  无波待涨    
+09:30:24 [INFO] 🫀 扫描心跳 第2轮开始
+09:30:24 [WARNING] ⚠️ 个股级决策异常（回退市场级）: float() argument must be a string or a real number, not 'NoneType'
+09:30:25 [WARNING] ⚠️ 个股级决策异常（回退市场级）: float() argument must be a string or a real number, not 'NoneType'
+09:30:25 [WARNING] ⚠️ 个股级决策异常（回退市场级）: float() argument must be a string or a real number, not 'NoneType'
+09:30:26 [WARNING] ⚠️ 个股级决策异常（回退市场级）: float() argument must be a string or a real number, not 'NoneType'
+09:30:26 [WARNING] ⚠️ 个股级决策异常（回退市场级）: float() argument must be a string or a real number, not 'NoneType'
+09:30:41 [INFO] 🫀 扫描心跳 第3轮开始
+09:30:42 [WARNING] ⚠️ 个股级决策异常（回退市场级）: float() argument must be a string or a real number, not 'NoneType'
+09:30:42 [WARNING] ⚠️ 个股级决策异常（回退市场级）: float() argument must be a string or a real number, not 'NoneType'
+09:30:43 [WARNING] ⚠️ 个股级决策异常（回退市场级）: float() argument must be a string or a real number, not 'NoneType'
+09:30:43 [WARNING] ⚠️ 个股级决策异常（回退市场级）: float() argument must be a string or a real number, not 'NoneType'
+09:30:44 [WARNING] ⚠️ 个股级决策异常（回退市场级）: float() argument must be a string or a real number, not 'NoneType'
+09:30:59 [INFO] 🫀 扫描心跳 第4轮开始
+09:30:59 [WARNING] ⚠️ 个股级决策异常（回退市场级）: float() argument must be a string or a real number, not 'NoneType'
+09:31:00 [WARNING] ⚠️ 个股级决策异常（回退市场级）: float() argument must be a string or a real number, not 'NoneType'
+09:31:01 [WARNING] ⚠️ 个股级决策异常（回退市场级）: float() argument must be a string or a real number, not 'NoneType'
+09:31:01 [WARNING] ⚠️ 个股级决策异常（回退市场级）: float() argument must be a string or a real number, not 'NoneType'
+09:31:02 [WARNING] ⚠️ 个股级决策异常（回退市场级）: float() argument must be a string or a real number, not 'NoneType'
+09:31:17 [INFO] 🫀 扫描心跳 第5轮开始
+09:31:17 [WARNING] ⚠️ 个股级决策异常（回退市场级）: float() argument must be a string or a real number, not 'NoneType'
+09:31:18 [WARNING] ⚠️ 个股级决策异常（回退市场级）: float() argument must be a string or a real number, not 'NoneType'
+09:31:18 [WARNING] ⚠️ 个股级决策异常（回退市场级）: float() argument must be a string or a real number, not 'NoneType'
+09:31:19 [WARNING] ⚠️ 个股级决策异常（回退市场级）: float() argument must be a string or a real number, not 'NoneType'
+09:31:19 [WARNING] ⚠️ 个股级决策异常（回退市场级）: float() argument must be a string or a real number, not 'NoneType'
+09:31:19 [INFO] 
+📊 护城河防御面板 第5轮
+──────────────────────────────────────────────────────────────────────
+科创半导体ETF华夏(588170)    1.02      1.02    0.0%      多0/空0  无波待涨    
+中国巨石(600176)       42.62     42.73    0.5%      多0/空0  无波待涨    
+双良节能(600481)        3.73      3.73    0.0%      多0/空0  无波待涨    
+五洲新春(603667)       54.50     54.50    0.0%      多0/空0  无波待涨    
+华工科技(000988)      113.87    113.63    0.6%      多0/空0  无波待涨    
+09:31:34 [INFO] 🫀 扫描心跳 第6轮开始
+09:31:35 [WARNING] ⚠️ 个股级决策异常（回退市场级）: float() argument must be a string or a real number, not 'NoneType'
+09:31:35 [WARNING] ⚠️ 个股级决策异常（回退市场级）: float() argument must be a string or a real number, not 'NoneType'
+09:31:36 [WARNING] ⚠️ 个股级决策异常（回退市场级）: float() argument must be a string or a real number, not 'NoneType'
+09:31:37 [WARNING] ⚠️ 个股级决策异常（回退市场级）: float() argument must be a string or a real number, not 'NoneType'
+09:31:37 [WARNING] ⚠️ 个股级决策异常（回退市场级）: float() argument must be a string or a real number, not 'NoneType'
+09:31:52 [INFO] 🫀 扫描心跳 第7轮开始
+09:31:53 [WARNING] ⚠️ 个股级决策异常（回退市场级）: float() argument must be a string or a real number, not 'NoneType'
+09:31:53 [WARNING] ⚠️ 个股级决策异常（回退市场级）: float() argument must be a string or a real number, not 'NoneType'
+09:31:54 [WARNING] ⚠️ 个股级决策异常（回退市场级）: float() argument must be a string or a real number, not 'NoneType'
+09:31:54 [WARNING] ⚠️ 个股级决策异常（回退市场级）: float() argument must be a string or a real number, not 'NoneType'
+09:31:55 [WARNING] ⚠️ 个股级决策异常（回退市场级）: float() argument must be a string or a real number, not 'NoneType'
+09:32:10 [INFO] 🫀 扫描心跳 第8轮开始
+09:32:10 [WARNING] ⚠️ 个股级决策异常（回退市场级）: float() argument must be a string or a real number, not 'NoneType'
+09:32:11 [WARNING] ⚠️ 个股级决策异常（回退市场级）: float() argument must be a string or a real number, not 'NoneType'
+09:32:12 [WARNING] ⚠️ 个股级决策异常（回退市场级）: float() argument must be a string or a real number, not 'NoneType'
+09:32:12 [WARNING] ⚠️ 个股级决策异常（回退市场级）: float() argument must be a string or a real number, not 'NoneType'
+09:32:13 [WARNING] ⚠️ 个股级决策异常（回退市场级）: float() argument must be a string or a real number, not 'NoneType'
+09:32:28 [INFO] 🫀 扫描心跳 第9轮开始
+09:32:28 [WARNING] ⚠️ 个股级决策异常（回退市场级）: float() argument must be a string or a real number, not 'NoneType'
+09:32:29 [WARNING] ⚠️ 个股级决策异常（回退市场级）: float() argument must be a string or a real number, not 'NoneType'
+09:32:29 [WARNING] ⚠️ 个股级决策异常（回退市场级）: float() argument must be a string or a real number, not 'NoneType'
+09:32:30 [WARNING] ⚠️ 个股级决策异常（回退市场级）: float() argument must be a string or a real number, not 'NoneType'
+09:32:30 [WARNING] ⚠️ 个股级决策异常（回退市场级）: float() argument must be a string or a real number, not 'NoneType'
+09:32:30 [INFO] 
+📊 护城河防御面板 第9轮
+──────────────────────────────────────────────────────────────────────
+科创半导体ETF华夏(588170)    1.02      1.02    0.0%      多0/空0  无波待涨    
+中国巨石(600176)       42.62     42.73    0.5%      多0/空0  无波待涨    
+双良节能(600481)        3.73      3.73    0.0%      多0/空0  无波待涨    
+五洲新春(603667)       54.50     54.50    0.0%      多0/空0  无波待涨    
+华工科技(000988)      113.87    113.63    0.6%      多0/空0  无波待涨    
+09:32:45 [INFO] 🫀 扫描心跳 第10轮开始
+09:32:46 [WARNING] ⚠️ 个股级决策异常（回退市场级）: float() argument must be a string or a real number, not 'NoneType'
+09:32:46 [WARNING] ⚠️ 个股级决策异常（回退市场级）: float() argument must be a string or a real number, not 'NoneType'
+09:32:47 [WARNING] ⚠️ 个股级决策异常（回退市场级）: float() argument must be a string or a real number, not 'NoneType'
+09:32:47 [WARNING] ⚠️ 个股级决策异常（回退市场级）: float() argument must be a string or a real number, not 'NoneType'
+09:32:48 [WARNING] ⚠️ 个股级决策异常（回退市场级）: float() argument must be a string or a real number, not 'NoneType'
+09:33:03 [INFO] 🫀 扫描心跳 第11轮开始
+09:33:04 [WARNING] ⚠️ 个股级决策异常（回退市场级）: float() argument must be a string or a real number, not 'NoneType'
+09:33:04 [WARNING] ⚠️ 个股级决策异常（回退市场级）: float() argument must be a string or a real number, not 'NoneType'
+09:33:05 [WARNING] ⚠️ 个股级决策异常（回退市场级）: float() argument must be a string or a real number, not 'NoneType'
+09:33:05 [WARNING] ⚠️ 个股级决策异常（回退市场级）: float() argument must be a string or a real number, not 'NoneType'
+09:33:06 [WARNING] ⚠️ 个股级决策异常（回退市场级）: float() argument must be a string or a real number, not 'NoneType'
+09:33:21 [INFO] 🫀 扫描心跳 第12轮开始
+09:33:22 [WARNING] ⚠️ 个股级决策异常（回退市场级）: float() argument must be a string or a real number, not 'NoneType'
+09:33:25 [WARNING] ⚠️ 个股级决策异常（回退市场级）: float() argument must be a string or a real number, not 'NoneType'
+09:33:29 [WARNING] ⚠️ 个股级决策异常（回退市场级）: float() argument must be a string or a real number, not 'NoneType'
+09:33:32 [INFO] 🎯 600481 市场状态: normal | 综合判断：正常状态
+09:33:32 [INFO] 📊 动态份数 600481: 状态=normal 信号强度50/阈值50, 建议交易1400股/份 (100%)
+09:33:32 [INFO] 📉 600481 卖出信号得分50分，低于10:00前阈值75分，静默处理（不推送飞书）
+09:33:33 [WARNING] ⚠️ 个股级决策异常（回退市场级）: float() argument must be a string or a real number, not 'NoneType'
+09:33:36 [WARNING] ⚠️ 个股级决策异常（回退市场级）: float() argument must be a string or a real number, not 'NoneType'
+09:33:38 [INFO] 🎯 000988 市场状态: normal | 综合判断：正常状态
+09:33:38 [INFO] 📊 动态份数 000988: 状态=normal 信号强度60/阈值52, 建议交易200股/份 (100%)
+09:33:38 [INFO] 📉 000988 卖出信号得分60分，低于10:00前阈值75分，静默处理（不推送飞书）
+09:33:53 [INFO] 🫀 扫描心跳 第13轮开始
+09:33:54 [WARNING] ⚠️ 个股级决策异常（回退市场级）: float() argument must be a string or a real number, not 'NoneType'
+09:33:56 [WARNING] ⚠️ 个股级决策异常（回退市场级）: float() argument must be a string or a real number, not 'NoneType'
+09:33:59 [WARNING] ⚠️ 个股级决策异常（回退市场级）: float() argument must be a string or a real number, not 'NoneType'
+09:34:01 [WARNING] ⚠️ 个股级决策异常（回退市场级）: float() argument must be a string or a real number, not 'NoneType'
+09:34:04 [INFO] 🎯 603667 市场状态: normal | 综合判断：正常状态
+09:34:04 [INFO] 📊 动态份数 603667: 状态=normal 信号强度65/阈值53, 建议交易200股/份 (50%)
+09:34:04 [INFO] 📉 603667 卖出信号得分65分，低于10:00前阈值75分，静默处理（不推送飞书）
+09:34:04 [WARNING] ⚠️ 个股级决策异常（回退市场级）: float() argument must be a string or a real number, not 'NoneType'
+09:34:07 [INFO] 
+📊 护城河防御面板 第13轮
+──────────────────────────────────────────────────────────────────────
+科创半导体ETF华夏(588170)    1.04      1.04    2.6%   多-37/空36  停手:价格低于均价，14:30前禁止买入
+中国巨石(600176)       43.48     43.29    1.5%    多-7/空40  停手:高位但无明确优势
+双良节能(600481)        3.74      3.74    0.8% 多-7/空-1012  无波待涨    
+五洲新春(603667)       54.58     54.64    0.6%     多1/空65  停手:价格低于均价，14:30前禁止买入|PANIC_SELL
+华工科技(000988)      116.36    116.10    3.6% 多-10/空-1012  停手:买卖都不够强
+09:34:22 [INFO] 🫀 扫描心跳 第14轮开始
+09:34:23 [WARNING] ⚠️ 个股级决策异常（回退市场级）: float() argument must be a string or a real number, not 'NoneType'
+09:34:25 [WARNING] ⚠️ 个股级决策异常（回退市场级）: float() argument must be a string or a real number, not 'NoneType'
+09:34:28 [WARNING] ⚠️ 个股级决策异常（回退市场级）: float() argument must be a string or a real number, not 'NoneType'
+09:34:30 [WARNING] ⚠️ 个股级决策异常（回退市场级）: float() argument must be a string or a real number, not 'NoneType'
+09:34:33 [WARNING] ⚠️ 个股级决策异常（回退市场级）: float() argument must be a string or a real number, not 'NoneType'
+09:34:50 [INFO] 🫀 扫描心跳 第15轮开始
+09:34:50 [WARNING] ⚠️ 个股级决策异常（回退市场级）: float() argument must be a string or a real number, not 'NoneType'
+09:34:52 [INFO] 🎯 588170 市场状态: normal | 综合判断：正常状态
+09:34:52 [INFO] 📊 动态份数 588170: 状态=normal 信号强度61/阈值38, 建议交易600股/份 (30%)
+09:34:52 [INFO] 📉 588170 卖出信号得分61分，低于10:00前阈值75分，静默处理（不推送飞书）
+09:34:52 [WARNING] ⚠️ 个股级决策异常（回退市场级）: float() argument must be a string or a real number, not 'NoneType'
+09:34:55 [WARNING] ⚠️ 个股级决策异常（回退市场级）: float() argument must be a string or a real number, not 'NoneType'
+09:34:57 [WARNING] ⚠️ 个股级决策异常（回退市场级）: float() argument must be a string or a real number, not 'NoneType'
+09:34:59 [WARNING] ⚠️ 个股级决策异常（回退市场级）: float() argument must be a string or a real number, not 'NoneType'
+09:35:17 [INFO] 🫀 扫描心跳 第16轮开始
+09:35:23 [WARNING] ⚠️ 个股级决策异常（回退市场级）: float() argument must be a string or a real number, not 'NoneType'
+09:35:25 [WARNING] ⚠️ 个股级决策异常（回退市场级）: float() argument must be a string or a real number, not 'NoneType'
+09:35:28 [WARNING] ⚠️ 个股级决策异常（回退市场级）: float() argument must be a string or a real number, not 'NoneType'
+09:35:30 [WARNING] ⚠️ 个股级决策异常（回退市场级）: float() argument must be a string or a real number, not 'NoneType'
+09:35:33 [WARNING] ⚠️ 个股级决策异常（回退市场级）: float() argument must be a string or a real number, not 'NoneType'
+09:35:44 [INFO] 已停止盯盘
+09:35:48 [INFO] 🔄 已恢复 VIRTUAL_TRADES: 4 只股票, 4 笔卖出, 0 笔买入
+09:41:04 [INFO] 竞价额Top20：涨0/跌0
+评分=50分 → 观察
+09:41:04 [INFO] ========= 做T终极护城河防御版 (V1.26 正T/反T模式切换版) 启动 =========
+09:41:04 [INFO] 飞书推送: ✓ 已启用
+09:41:04 [INFO] 飞书关键词: 做T猎手预警
+09:41:04 [INFO] 飞书Webhook: https://open.feishu.cn/open-apis/bot/v2/hook/e8018470-e...
+09:41:04 [INFO] 🔊 系统报警音效已挂载
+09:45:17 [INFO] 竞价额Top20：涨13/跌7
+评分=65分 → 进攻
+09:45:17 [INFO] ✅ 早盘竞价分析已推送飞书
+09:45:18 [INFO] ✅ 启动自检飞书消息已成功送达
+09:45:20 [INFO] 🔔 已触发急促报警
+09:45:20 [INFO] ⏱ 采用顺序轮询模式：每轮扫描结束后再等待 15 秒（V1.8 确认型收敛）
+09:45:20 [INFO] 🫀 扫描心跳 第1轮开始
+09:45:55 [INFO] 
+📊 护城河防御面板 第1轮
+──────────────────────────────────────────────────────────────────────
+科创半导体ETF华夏(588170)    1.05      1.05    4.0%    多-11/空5  停手:买卖都不够强
+中国巨石(600176)       42.95     42.71    4.0%    多-4/空25  停手:买卖都不够强
+双良节能(600481)        3.81      3.78    2.7% 多-18/空-991  停手:买卖都不够强
+五洲新春(603667)       54.84     54.50    2.0%     多3/空28  停手:买卖都不够强
+华工科技(000988)      117.00    116.37    4.0% 多-22/空-1004  停手:买卖都不够强
+09:46:10 [INFO] 🫀 扫描心跳 第2轮开始
+09:46:49 [INFO] 🫀 扫描心跳 第3轮开始
+09:47:28 [INFO] 🫀 扫描心跳 第4轮开始
+09:47:33 [INFO] 🎯 588170 市场状态: normal | 综合判断：正常状态
+09:47:33 [INFO] 📊 动态份数 588170: 状态=normal 信号强度42/阈值38, 建议交易200股/份 (10%)
+09:47:33 [INFO] 📉 588170 卖出信号得分42分，低于10:00前阈值75分，静默处理（不推送飞书）
+09:48:11 [INFO] 🫀 扫描心跳 第5轮开始
+09:48:40 [INFO] 已停止盯盘
+09:48:45 [INFO] 🔄 已恢复 VIRTUAL_TRADES: 4 只股票, 5 笔卖出, 0 笔买入
+09:53:29 [INFO] 竞价额Top20：涨14/跌6
+评分=70分 → 进攻
+09:53:30 [INFO] ✅ 早盘竞价分析已推送飞书
+09:53:30 [INFO] ========= 做T终极护城河防御版 (V1.26 正T/反T模式切换版) 启动 =========
+09:53:30 [INFO] 飞书推送: ✓ 已启用
+09:53:30 [INFO] 飞书关键词: 做T猎手预警
+09:53:30 [INFO] 飞书Webhook: https://open.feishu.cn/open-apis/bot/v2/hook/e8018470-e...
+09:53:30 [INFO] 🔊 系统报警音效已挂载
+09:53:31 [INFO] ✅ 启动自检飞书消息已成功送达
+09:53:32 [INFO] 🔔 已触发急促报警
+09:53:32 [INFO] ⏱ 采用顺序轮询模式：每轮扫描结束后再等待 15 秒（V1.8 确认型收敛）
+09:53:32 [INFO] 🫀 扫描心跳 第1轮开始
+09:53:32 [ERROR] ❌ 盯盘主循环异常: name '_maybe_check_index_intraday_alert' is not defined
+Traceback (most recent call last):
+  File "E:\06_T\main.py", line 1716, in run_watch
+    scan_once()
+  File "E:\06_T\main.py", line 786, in scan_once
+    _maybe_check_index_intraday_alert(now)         # 09:35-14:55 大盘分时预警（300s 节流）
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+NameError: name '_maybe_check_index_intraday_alert' is not defined
+
