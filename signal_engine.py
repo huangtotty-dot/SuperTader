@@ -1097,154 +1097,44 @@ class SignalEngine:
                     upper_shadow = upper_shadow_approx
                     diag["upper_shadow_approx"] = True
 
-        # ==================== 15分钟线分析（低吸优化 V1.13） ====================
+        # ==================== 15分钟线分析（FeatureExtractor） ====================
         if isinstance(cached_15m_df, pd.DataFrame) and not cached_15m_df.empty:
-            cutoff_15m = pd.to_datetime(last["time"]).floor("15min")
-            df_15min = cached_15m_df[cached_15m_df["time"] <= cutoff_15m].copy()
+            _cut_15m = pd.to_datetime(last["time"]).floor("15min")
+            df_15min = cached_15m_df[cached_15m_df["time"] <= _cut_15m].copy()
         else:
             df_15min = resample_to_15min(df)
             df_15min = add_15min_indicators(df_15min)
+        _f15 = FeatureExtractor.extract_15min_features(df, cached_15m_df, price, vwap, PARAMS.get("min_15min_bars", 3), _df_15min=df_15min)
+        rsi_15m = _f15["rsi_15m"]
+        macd_hist_15m = _f15["macd_hist_15m"]
+        prev_macd_hist_15m = _f15["prev_macd_hist_15m"]
+        ema_spread_15m = _f15["ema_spread_15m"]
+        prev_ema_spread_15m = _f15["prev_ema_spread_15m"]
+        vol_ratio_15m = _f15["vol_ratio_15m"]
+        mom2_15m = _f15["mom2_15m"]
+        is_kinetic_exhaustion = _f15["kinetic_exhaustion"]
+        is_near_15m_support = _f15["near_15m_support"]
+        is_multi_bottom_15m = _f15["multi_bottom_15m"]
+        support_level_15m = _f15["support_level_15m"]
 
-        # 15分钟指标默认值
-        rsi_15m = 50.0
-        macd_hist_15m = 0.0
-        prev_macd_hist_15m = 0.0
-        ema_spread_15m = 0.0
-        prev_ema_spread_15m = 0.0
-        vol_ratio_15m = 1.0
-        mom2_15m = 0.0
-        is_kinetic_exhaustion = False
-        is_near_15m_support = False
-        is_multi_bottom_15m = False
-        support_level_15m = 0.0
-
-        if not df_15min.empty and len(df_15min) >= PARAMS.get("min_15min_bars", 3):
-            last_15m = df_15min.iloc[-1]
-            prev_15m = df_15min.iloc[-2] if len(df_15min) >= 2 else last_15m
-
-            rsi_15m = float(last_15m["rsi_15m"]) if pd.notna(last_15m.get("rsi_15m")) else 50.0
-            macd_hist_15m = float(last_15m["macd_hist_15m"]) if pd.notna(last_15m.get("macd_hist_15m")) else 0.0
-            prev_macd_hist_15m = float(prev_15m["macd_hist_15m"]) if pd.notna(prev_15m.get("macd_hist_15m")) else 0.0
-            ema_spread_15m = float(last_15m["ema_spread_15m"]) if pd.notna(last_15m.get("ema_spread_15m")) else 0.0
-            prev_ema_spread_15m = float(prev_15m["ema_spread_15m"]) if pd.notna(prev_15m.get("ema_spread_15m")) else 0.0
-            vol_ratio_15m = float(last_15m["vol_ratio_15m"]) if pd.notna(last_15m.get("vol_ratio_15m")) else 1.0
-            mom2_15m = float(last_15m["mom2_15m"]) if pd.notna(last_15m.get("mom2_15m")) else 0.0
-
-            # 下跌动能衰竭：MACD负区拐头 + 跌幅收敛 + 缩量
-            is_kinetic_exhaustion = (
-                macd_hist_15m > prev_macd_hist_15m and
-                macd_hist_15m < 0 and
-                mom2_15m > -0.015 and
-                vol_ratio_15m < 1.3
-            )
-
-            # 15分钟强支撑：最近4根15分钟线低点（约1小时）
-            if len(df_15min) >= 4:
-                recent_lows = df_15min["low"].tail(4).values
-                support_level_15m = float(np.min(recent_lows)) if len(recent_lows) > 0 else 0.0
-                if support_level_15m > 0:
-                    # 当前价格接近支撑（±0.3%）
-                    is_near_15m_support = (
-                        price <= support_level_15m * 1.003 and
-                        price >= support_level_15m * 0.995
-                    )
-                    # 多重底：最近4根中多次测试同一支撑
-                    low_count = sum(
-                        1 for low_val in recent_lows
-                        if abs(float(low_val) - support_level_15m) / support_level_15m < 0.003
-                    )
-                    is_multi_bottom_15m = low_count >= 2
-
-        # V1.14: 5分钟线分析 — 低吸时确认量能缩量 + 企稳反转
+        # ==================== 5分钟线分析（FeatureExtractor） ====================
         if isinstance(cached_5m_df, pd.DataFrame) and not cached_5m_df.empty:
-            cutoff_5m = pd.to_datetime(last["time"]).floor("5min")
-            df_5min = cached_5m_df[cached_5m_df["time"] <= cutoff_5m].copy()
+            _cut_5m = pd.to_datetime(last["time"]).floor("5min")
+            df_5min = cached_5m_df[cached_5m_df["time"] <= _cut_5m].copy()
         else:
             df_5min = resample_to_5min(df)
             df_5min = add_5min_indicators(df_5min)
-        
-        # 5分钟指标默认值
-        vol_ratio_5m = 1.0
-        mom2_5m = 0.0
-        macd_hist_5m = 0.0
-        prev_macd_hist_5m = 0.0
-        is_low_rising_5m = False
-        is_stop_falling_5m = False
-        is_volume_reversal = False  # V1.19fix: 确保始终有定义
-        # V1.22fix: 在5分钟K线检查前初始化，防止df_5min不足5根时未定义
-        is_strong_bullish_reversal = False
-        
-        if not df_5min.empty and len(df_5min) >= 3:
-            last_5m = df_5min.iloc[-1]
-            prev_5m = df_5min.iloc[-2] if len(df_5min) >= 2 else last_5m
-            
-            vol_ratio_5m = float(last_5m["vol_ratio_5m"]) if pd.notna(last_5m.get("vol_ratio_5m")) else 1.0
-            mom2_5m = float(last_5m["mom2_5m"]) if pd.notna(last_5m.get("mom2_5m")) else 0.0
-            macd_hist_5m = float(last_5m["macd_hist_5m"]) if pd.notna(last_5m.get("macd_hist_5m")) else 0.0
-            prev_macd_hist_5m = float(prev_5m["macd_hist_5m"]) if pd.notna(prev_5m.get("macd_hist_5m")) else 0.0
-            is_low_rising_5m = bool(last_5m.get("low_rising_5m", False))
-            is_stop_falling_5m = bool(last_5m.get("stop_falling_5m", False))
-            
-            # V1.17: 缩量止跌+放量反攻检测 — 基于用户7月6日反馈
-            # 放宽版：前4根中至少2根阴线，整体高点呈下降或震荡，当前收阳/十字星，价<VWAP，量不极端萎缩
-            is_volume_reversal = False
-            vr_bearish_count = 0
-            vr_high_declining = False
-            # V1.22: 大阳线反包确认（7月8日反馈）— 严格版：放量下杀后必须出现大阳线才能确认抄底
-            is_strong_bullish_reversal = False
-            if len(df_5min) >= 5:
-                prev4 = df_5min.iloc[-5:-1]  # 前4根5分钟K线
-                # 前4根中阴线数量（close < open）
-                vr_bearish_count = sum(1 for _, r in prev4.iterrows() if r["close"] < r["open"])
-                # 高点是否整体下降（前4根最高点 > 当前K线高点，或逐步降低）
-                highs = [r["high"] for _, r in prev4.iterrows()]
-                prev4_high = max(highs) if highs else 0
-                current_high = last_5m["high"]
-                # 条件1：逐步降低（允许0.3%的波动）
-                vr_high_declining = all(highs[i] <= highs[i-1] * 1.003 for i in range(1, len(highs)))
-                # 条件2：前4根整体高点高于当前K线高点（确认下降趋势）
-                # 修复：只要前4根的最高点 > 当前K线的高点（允许0.1%误差）即可
-                high_declining_loose = prev4_high > current_high * 0.999 if current_high > 0 else False
-                # 当前K线是否收阳线/十字星（close >= open，或十字星允许微小偏差）
-                current_bullish = last_5m["close"] >= last_5m["open"] * 0.9995
-                # 价格是否低于VWAP（低吸确认）
-                price_below_vwap = price < vwap * 0.995 if vwap else False
-                # 成交量条件：不极端萎缩
-                # 十字星/阳线区分：十字星（close≈open）时量条件更宽松
-                prev4_volumes = [r["volume"] for _, r in prev4.iterrows()]
-                prev4_vol_mean = sum(prev4_volumes) / len(prev4_volumes) if prev4_volumes else 0
-                is_doji = abs(last_5m["close"] - last_5m["open"]) / last_5m["open"] < 0.001 if last_5m["open"] > 0 else False
-                # 十字星：当前量 >= 前4根均量的15%（放量下跌后十字星，量自然萎缩但不到极端）
-                # 阳线：当前量 >= 前4根均量的50%（缩量后放量反攻）
-                vol_threshold = 0.15 if is_doji else 0.50
-                vol_ok = last_5m["volume"] >= prev4_vol_mean * vol_threshold if prev4_vol_mean > 0 else True
-                
-                # 放宽触发：前4根>=2根阴线 + (高点严格下降 或 高点整体高于当前) + 当前收阳/十字星 + 价<VWAP + 量不极端萎缩
-                if (current_bullish and (vr_high_declining or high_declining_loose) and 
-                    price_below_vwap and vol_ok):
-                    is_volume_reversal = True
-                
-                # V1.22: 大阳线反包确认 — 更严格的抄底信号
-                # 要求：前4根>=2根阴线 + 高点下降 + 当前大阳线 + 放量 + 反包前高
-                if ((vr_high_declining or high_declining_loose) and
-                    price_below_vwap and prev4_vol_mean > 0):
-                    # 大阳线判定
-                    _5m_pct = (last_5m["close"] - last_5m["open"]) / last_5m["open"] if last_5m["open"] > 0 else 0
-                    _5m_amplitude = (last_5m["high"] - last_5m["low"]) / last_5m["low"] if last_5m["low"] > 0 else 0
-                    _5m_body = abs(last_5m["close"] - last_5m["open"]) / last_5m["low"] if last_5m["low"] > 0 else 0
-                    _is_big_bullish = (
-                        last_5m["close"] > last_5m["open"]  # 真阳线，非十字星
-                        and _5m_pct >= p.get("bullish_reversal_min_pct", 0.01)  # 涨幅>=1%
-                        and (_5m_body / (_5m_amplitude + 1e-9)) >= p.get("bullish_reversal_body_ratio", 0.60)  # 实体饱满
-                        and last_5m["volume"] >= prev4_vol_mean * p.get("bullish_reversal_vol_multiplier", 1.0)  # 放量
-                        and last_5m["close"] >= prev4_high * p.get("bullish_reversal_engulf", 0.995)  # 反包前高
-                    )
-                    if _is_big_bullish:
-                        is_strong_bullish_reversal = True
-                        indicators["is_strong_bullish_reversal"] = True
-                        indicators["bullish_reversal_pct"] = _5m_pct
-                        indicators["bullish_reversal_body"] = _5m_body / (_5m_amplitude + 1e-9)
-        
+        _f5 = FeatureExtractor.extract_5min_features(df, cached_5m_df, price, vwap, p, _df_5min=df_5min)
+        vol_ratio_5m = _f5["vol_ratio_5m"]
+        mom2_5m = _f5["mom2_5m"]
+        macd_hist_5m = _f5["macd_hist_5m"]
+        prev_macd_hist_5m = _f5["prev_macd_hist_5m"]
+        is_low_rising_5m = _f5["is_low_rising_5m"]
+        is_stop_falling_5m = _f5["is_stop_falling_5m"]
+        is_volume_reversal = _f5["is_volume_reversal"]
+        is_strong_bullish_reversal = _f5["is_strong_bullish_reversal"]
+        if is_strong_bullish_reversal:
+            indicators["is_strong_bullish_reversal"] = True
         if isinstance(cached_minute_df, pd.DataFrame) and not cached_minute_df.empty:
             day_rows = cached_minute_df[cached_minute_df["date"] == last["date"]]
             today_open = float(day_rows.iloc[0]["open"])
@@ -1349,61 +1239,22 @@ class SignalEngine:
             "pressure_support": diag.get("pressure_support", {}),
         }
 
-        # ==================== V1.19: 弱势震荡/45度斜率/均线穿越检测 ====================
-        # 基于用户7月7日反馈：区分"均线上下窜可做T" vs "全天均线下不可低吸"
-        # V1.19: 检测窗口从90分钟扩展到120分钟，更准确地识别长期趋势
-        # 增加穿越噪声过滤（0.15%），避免价格贴VWAP时的虚假穿越
-        is_weak_oscillation = False
-        is_steep_decline = False
-        is_vwap_crossing = False
-        vwap_cross_count = 0
-        price_below_vwap_ratio = 0.0
-        slope_pct_per_min = 0.0
-        
-        if len(df) >= 120:
-            recent_df = df.iloc[-120:].copy()
-            prices = recent_df["close"].astype(float).values
-            vwaps = recent_df["vwap"].astype(float).values
-            
-            # 1. 弱势震荡：价格低于VWAP的比例
-            below_vwap_count = sum(1 for p, v in zip(prices, vwaps) if v > 0 and p < v)
-            price_below_vwap_ratio = below_vwap_count / len(prices) if len(prices) > 0 else 0.0
-            
-            # 2. 均线穿越检测：价格穿越VWAP的次数（带噪声过滤0.3%）
-            cross_noise_pct = 0.003
-            for i in range(1, len(prices)):
-                prev_above = vwaps[i-1] > 0 and prices[i-1] >= vwaps[i-1] * (1 + cross_noise_pct)
-                curr_above = vwaps[i] > 0 and prices[i] >= vwaps[i] * (1 + cross_noise_pct)
-                if prev_above != curr_above:
-                    # 额外确认穿越幅度（至少0.3%）
-                    cross_dist = abs(prices[i] - vwaps[i]) / vwaps[i] if vwaps[i] > 0 else 0
-                    if cross_dist >= 0.003:
-                        vwap_cross_count += 1
-            
-            # 3. 45度斜率检测：线性回归（120分钟窗口）
-            x = np.arange(len(prices))
-            if len(prices) >= 5 and np.std(prices) > 0.001:
-                slope, intercept = np.polyfit(x, prices, 1)
-                # 斜率转换为每120分钟百分比
-                mean_price = np.mean(prices)
-                slope_pct_per_min = (slope * len(prices)) / mean_price * 100 if mean_price > 0 else 0
-                is_steep_decline = slope_pct_per_min < -0.12  # 120分钟跌超0.12%视为45度下降
-            
-            # 4. 弱势震荡判定：平开或低开 + 80%时间在均线下 + 今日涨幅<1%
-            is_weak_open = abs(open_gap) <= 0.005 or open_gap < 0
-            is_weak_oscillation = is_weak_open and price_below_vwap_ratio > 0.80 and today_ret < 0.01
-            
-            # 5. 均线上下窜判定：穿越VWAP >= 2次（120分钟窗口）
-            is_vwap_crossing = vwap_cross_count >= 2
-        
+        # ==================== V1.19: 弱势震荡/45度斜率/均线穿越检测（FeatureExtractor） ====================
+        _f19 = FeatureExtractor.extract_v19_oscillation(df, price, vwap, open_gap, today_ret)
+        is_weak_oscillation = _f19["is_weak_oscillation"]
+        is_steep_decline = _f19["is_steep_decline"]
+        is_vwap_crossing = _f19["is_vwap_crossing"]
+        vwap_cross_count = _f19["vwap_cross_count"]
+        price_below_vwap_ratio = _f19["price_below_vwap_ratio"]
+        slope_pct_per_min = _f19["slope_pct_per_min"]
+
         indicators["v1_18_weak_oscillation"] = is_weak_oscillation
         indicators["v1_18_steep_decline"] = is_steep_decline
         indicators["v1_18_vwap_crossing"] = is_vwap_crossing
         indicators["v1_18_vwap_cross_count"] = vwap_cross_count
         indicators["v1_18_below_vwap_ratio"] = round(price_below_vwap_ratio, 2)
         indicators["v1_18_slope_pct"] = round(slope_pct_per_min, 3)
-        
-        # 同时保存到 diagnostics 供调试
+
         diag["v1_18_weak_oscillation"] = is_weak_oscillation
         diag["v1_18_steep_decline"] = is_steep_decline
         diag["v1_18_vwap_crossing"] = is_vwap_crossing
@@ -1467,28 +1318,13 @@ class SignalEngine:
         indicators["open_dip_reason"] = open_dip_reason
 
         sell_details, buy_details = [], []
-        # V1.11: 早盘冲高窗口优化 - 09:30-09:35为机会窗口(+8)，09:36-09:45为观察期(0)
-        if 1400 <= t_val <= 1445:
-            time_score = 8
-        elif 930 <= t_val <= 935:
-            time_score = 5
-        elif 936 <= t_val <= 945:
-            time_score = 0
-        else:
-            time_score = 0
+        time_score = ScoringEngine.time_score(t_val)
         sell_score = buy_score = time_score
         required_profit_buy = p["min_profit_space"] * 1.5 if rsi < 15 else p["min_profit_space"]
         buy_profit_space = (vwap - price) / price if price > 0 else 0.0
         vwap_dev_atr = float(last["vwap_dev_atr"]) if "vwap_dev_atr" in last and pd.notna(last.get("vwap_dev_atr")) else (buy_profit_space * 100)
-        if buy_profit_space > 0.01 or vwap_dev_atr < -1.0:
-            buy_score += 15
-            buy_details.append({"指标": "VWAP回归空间", "当前": f"+{buy_profit_space*100:.2f}%", "解读": "深度偏离均价，强力回归空间", "加分": 15})
-        elif buy_profit_space > required_profit_buy:
-            buy_score += 12
-            buy_details.append({"指标": "VWAP回归空间", "当前": f"+{buy_profit_space*100:.2f}%", "解读": "低于均价，回归空间充足", "加分": 12})
-        elif buy_profit_space > 0:
-            buy_score += 8
-            buy_details.append({"指标": "VWAP回归空间", "当前": f"+{buy_profit_space*100:.2f}%", "解读": "略低于均价，轻度回归空间", "加分": 8})
+        _vb_score, _vb_details = ScoringEngine.score_vwap_buy(buy_profit_space, vwap_dev_atr, required_profit_buy)
+        buy_score += _vb_score; buy_details.extend(_vb_details)
         # V1.11: 下午回落接回因子 - 13:00-14:30回落到VWAP下方且RSI超卖
         had_afternoon_pullback = False
         if 1300 <= t_val <= 1430 and buy_profit_space > 0.005 and rsi <= p["rsi_oversold"]:
@@ -1602,16 +1438,15 @@ class SignalEngine:
         
         # V1.17: 5分钟线缩量止跌+放量反攻 — 基于7月6日反馈
         # V1.22修正: 只有大阳线反包确认时才给予高加分（防止开盘急跌时半山腰买入）
-        if not df_5min.empty and len(df_5min) >= 5:
-            if is_volume_reversal:
-                # 小阳线/十字星反转：仅给予小加分，不放宽门槛
-                buy_score += 8
-                buy_details.append({
-                    "指标": "5分弱企稳",
-                    "当前": f"前4阴{vr_bearish_count}根/高点{'↓' if vr_high_declining else '震荡'}",
-                    "解读": "5分钟级别弱企稳，但无大阳线反包确认，谨慎对待",
-                    "加分": 8,
-                })
+        if is_volume_reversal:
+            # 小阳线/十字星反转：仅给予小加分，不放宽门槛
+            buy_score += 8
+            buy_details.append({
+                "指标": "5分弱企稳",
+                "当前": f"前4阴{_f5.get('vr_bearish_count', 0)}根/高点{'↓' if _f5.get('vr_high_declining', False) else '震荡'}",
+                "解读": "5分钟级别弱企稳，但无大阳线反包确认，谨慎对待",
+                "加分": 8,
+            })
 
         # V1.26: 低点抬高支撑确认加分 — 华工科技 07-14 反馈
         # 从高点下跌>4%后，低点抬高说明承接有力，并非单边下跌，给予买入加分
@@ -1695,12 +1530,8 @@ class SignalEngine:
 
         required_profit_sell = p["min_profit_space"] * 1.5 if rsi > 85 else p["min_profit_space"]
         sell_profit_space = (price - vwap) / vwap if vwap else 0.0
-        if sell_profit_space > required_profit_sell:
-            sell_score += 18
-            sell_details.append({"指标": "VWAP溢价空间", "当前": f"+{sell_profit_space*100:.2f}%", "解读": "高于均价且盈利空间充足", "加分": 18})
-        elif sell_profit_space > 0:
-            sell_score += 12
-            sell_details.append({"指标": "VWAP溢价空间", "当前": f"+{sell_profit_space*100:.2f}%", "解读": "现价高于均价", "加分": 12})
+        _vs_score, _vs_details = ScoringEngine.score_vwap_sell(sell_profit_space, required_profit_sell)
+        sell_score += _vs_score; sell_details.extend(_vs_details)
         # V1.11: 早盘冲高因子 - 开盘后5分钟内快速拉升，优先高抛
         had_morning_surge = False
         if 930 <= t_val <= 935 and today_ret > 0.006 and price > vwap * 1.005:
@@ -3462,6 +3293,897 @@ class SignalEngine:
                 _append_jsonl(out_path, item)
             SIGNAL_OUTCOME_TRACKER[code] = []
         return buy_score, sell_score, sig
+
+    # ---- V2 evaluate: 薄协调层 ----
+    def evaluate_v2(self, code, name, df, holding, daily_ctx=None):
+        if df.empty or len(df) < 5:
+            return 0, 0, None
+        minute_status = MINUTE_FETCH_STATUS.get(code, "unknown")
+        if minute_status not in {"ok", "cache_hit"}:
+            return 0, 0, None
+        self._reset_daily_state_if_needed()
+        daily_ctx = daily_ctx if isinstance(daily_ctx, dict) else _default_daily_context(code)
+        cached_minute = cached_15m = cached_5m = None
+        try:
+            bc = globals().get("BACKTEST_DAY_CACHE", {})
+            if isinstance(bc, dict):
+                k = str(pd.to_datetime(df.iloc[-1]["time"]).strftime("%Y-%m-%d"))
+                c = bc.get(k, {})
+                if isinstance(c, dict):
+                    cached_minute = c.get("minute_indicators")
+                    cached_15m = c.get("resample_15m")
+                    cached_5m = c.get("resample_5m")
+        except Exception:
+            pass
+        feats = FeatureExtractorV2.extract_all(code, name, df, holding, daily_ctx,
+                                               cached_minute, cached_5m, cached_15m)
+        buy_score, buy_details = ScoringEngineV2.calc_buy_score(feats)
+        sell_score, sell_details = ScoringEngineV2.calc_sell_score(feats)
+        # V2: 静态基准阈值 — 分数已通过ATR+Sigmoid自适应，阈值不再跳变
+        buy_threshold = 42.0; sell_threshold = 42.0
+        price = feats.get("price", 0); hold_qty = feats.get("hold_qty", 0)
+        # V2风控阻断
+        risk = RiskManagerV2.check_all(feats)
+        risk_buy_block = risk.get("buy_block", [])
+        risk_sell_block = risk.get("sell_block", [])
+        base_can_buy = (len(risk_buy_block) == 0 and feats.get("daily_buy_t_ok", False)
+                        and not self._in_cooldown(code, "BUY_LOW"))
+        base_can_sell = (len(risk_sell_block) == 0 and hold_qty > 0
+                         and not self._in_cooldown(code, "SELL_HIGH"))
+        sig = None
+        can_sell = base_can_sell and sell_score >= sell_threshold and sell_score > buy_score
+        can_buy = base_can_buy and buy_score >= buy_threshold and buy_score > sell_score
+        if can_sell and sell_score > buy_score:
+            sig = Signal(code, name, "SELL_HIGH", price, sell_score, [d["指标"] for d in sell_details], sell_details, {}, {})
+        elif can_buy:
+            sig = Signal(code, name, "BUY_LOW", price, buy_score, [d["指标"] for d in buy_details], buy_details, {}, {})
+        _append_jsonl(_trace_path("decision_trace"), {
+            "scan_time": _now().strftime("%Y-%m-%d %H:%M:%S"),
+            "code": code, "name": name,
+            "price": price, "vwap": feats.get("vwap", 0), "rsi": feats.get("rsi", 50),
+            "buy_score": buy_score, "sell_score": sell_score,
+            "buy_threshold": buy_threshold, "sell_threshold": sell_threshold,
+            "decision": sig.action if sig else "HOLD",
+            "engine": "v2",
+        })
+        return buy_score, sell_score, sig
+
+
+# ====================================================================
+# 阶段一重构: FeatureExtractor / RiskManager / ScoringEngine
+# 物理拆解 evaluate() 为三层流水线，行为不变，职责分离
+# ====================================================================
+
+class FeatureExtractor:
+    """Layer 1: 纯特征提取——从原始数据计算所有指标，不做风控/打分决策"""
+
+    @staticmethod
+    def extract_ts_features(code: str, df, last, prev, _dt, daily_ctx, holding,
+                            cached_minute_df, cached_5m_df, cached_15m_df,
+                            multi_tf_dict) -> dict:
+        """提取时间/模式切换/价格/分钟级指标"""
+        p = _get_params(code) if '_get_params' in globals() else PARAMS
+        _pd = pd
+        _np = np
+        feats = {}
+        _dt_parsed = _pd.to_datetime(last["time"]) if isinstance(last["time"], str) else _dt
+        feats["t_val"] = _dt_parsed.hour * 100 + _dt_parsed.minute
+        feats["current_minute"] = _dt_parsed.hour * 60 + _dt_parsed.minute
+        feats["is_etf"] = holding.get("type") == "etf"
+
+        # 价格/基础指标
+        feats["price"] = float(last["close"]) if "close" in last else 0.0
+        feats["vwap"] = float(last["vwap"]) if "vwap" in last and _pd.notna(last["vwap"]) else 0.0
+        feats["day_amplitude"] = float(last["day_amplitude"]) if "day_amplitude" in last and _pd.notna(last["day_amplitude"]) else 0.0
+        feats["rsi"] = float(last["rsi"]) if "rsi" in last and _pd.notna(last["rsi"]) else 50
+        feats["bb_pct"] = float(last["bb_pct"]) if "bb_pct" in last and _pd.notna(last["bb_pct"]) else 0.5
+        feats["macd_hist"] = float(last["macd_hist"]) if "macd_hist" in last and _pd.notna(last["macd_hist"]) else 0.0
+        feats["prev_macd_hist"] = float(prev["macd_hist"]) if "macd_hist" in prev and _pd.notna(prev["macd_hist"]) else 0.0
+        feats["ema_spread"] = float(last["ema_spread"]) if "ema_spread" in last and _pd.notna(last["ema_spread"]) else 0.0
+        feats["prev_ema_spread"] = float(prev["ema_spread"]) if "ema_spread" in prev and _pd.notna(prev["ema_spread"]) else 0.0
+        feats["range_pos"] = float(last["range_pos"]) if "range_pos" in last and _pd.notna(last["range_pos"]) else 0.5
+        feats["vol_ratio"] = float(last["vol_ratio"]) if "vol_ratio" in last and _pd.notna(last["vol_ratio"]) else 1.0
+        feats["mom5"] = float(last["mom5"]) if "mom5" in last and _pd.notna(last["mom5"]) else 0.0
+        feats["lower_shadow"] = float(last["lower_shadow"]) if "lower_shadow" in last and _pd.notna(last["lower_shadow"]) else 0.0
+        feats["upper_shadow"] = float(last["upper_shadow"]) if "upper_shadow" in last and _pd.notna(last["upper_shadow"]) else 0.0
+
+        # upper_shadow近似修复
+        if feats["upper_shadow"] <= 0.01 and len(df) >= 5:
+            recent_5 = df.iloc[-5:]
+            recent_high = float(recent_5["high"].max())
+            recent_low = float(recent_5["low"].min())
+            if recent_high > feats["price"] * 1.001 and recent_high > recent_low:
+                approx = (recent_high - feats["price"]) / (recent_high - recent_low)
+                if approx > feats["upper_shadow"]:
+                    feats["upper_shadow"] = approx
+                    feats["upper_shadow_approx"] = True
+
+        # VWAP偏差
+        vwap = feats["vwap"]
+        price = feats["price"]
+        feats["buy_profit_space"] = (vwap - price) / price if price > 0 else 0.0
+        feats["sell_profit_space"] = (price - vwap) / vwap if vwap else 0.0
+        feats["vwap_dev_atr"] = float(last["vwap_dev_atr"]) if "vwap_dev_atr" in last and _pd.notna(last.get("vwap_dev_atr")) else (feats["buy_profit_space"] * 100)
+
+        # 今日涨跌/开盘缺口
+        if isinstance(cached_minute_df, _pd.DataFrame) and not cached_minute_df.empty:
+            day_rows = cached_minute_df[cached_minute_df["date"] == last["date"]]
+            today_open = float(day_rows.iloc[0]["open"])
+        else:
+            today_open = float(df[df["date"] == last["date"]].iloc[0]["open"])
+        feats["today_open"] = today_open
+        h_hold = HOLDINGS.get(code, {}) if 'HOLDINGS' in globals() else {}
+        pre_close = h_hold.get("pre_close", today_open)
+        feats["pre_close"] = pre_close
+        feats["today_ret"] = (price - pre_close) / pre_close if pre_close > 0 else 0.0
+        feats["open_gap"] = (today_open - pre_close) / pre_close if pre_close > 0 else 0.0
+        feats["prev_high"] = float(last["prev_high"]) if "prev_high" in last and _pd.notna(last["prev_high"]) else price
+
+        # 强趋势/强回踩
+        feats["is_strong_trend"] = (feats["today_ret"] > 0.035) and (price >= feats["prev_high"] * 0.99) and (feats["vol_ratio"] > 1.2)
+        feats["is_strong_pullback"] = feats["is_strong_trend"] and abs((price - vwap) / vwap) < 0.005 if vwap else False
+
+        # Market state
+        from_self = locals().get('self')
+        if from_self and hasattr(from_self, '_classify_market_state'):
+            feats["market_state"] = from_self._classify_market_state(
+                feats["today_ret"], price, vwap, feats["vol_ratio"],
+                feats["day_amplitude"], feats["ema_spread"], code)
+        else:
+            feats["market_state"] = "range_bound"
+        return feats
+
+    @staticmethod
+    def extract_daily_context(daily_ctx: dict) -> dict:
+        """从 daily_ctx 提取所有日线相关特征"""
+        feats = {}
+        dc = daily_ctx if isinstance(daily_ctx, dict) else {}
+        feats["daily_status"] = dc.get("daily_status", "unknown")
+        feats["daily_gate"] = dc.get("daily_gate", "neutral")
+        feats["daily_trend_bg"] = dc.get("daily_trend_bg", "unknown")
+        feats["daily_ma5"] = float(dc.get("daily_ma5", 0.0) or 0.0)
+        feats["daily_ma5_slope"] = float(dc.get("daily_ma5_slope", 0.0) or 0.0)
+        feats["daily_above_ma5"] = bool(dc.get("daily_above_ma5", False))
+        feats["daily_ma5_gap"] = float(dc.get("daily_ma5_gap", 0.0) or 0.0)
+        feats["daily_ma5_state"] = str(dc.get("daily_ma5_state", "unknown") or "unknown")
+        feats["daily_ma10"] = float(dc.get("daily_ma10", 0.0) or 0.0)
+        feats["daily_ma20"] = float(dc.get("daily_ma20", 0.0) or 0.0)
+        feats["daily_ma30"] = float(dc.get("daily_ma30", 0.0) or 0.0)
+        feats["daily_ma60"] = float(dc.get("daily_ma60", 0.0) or 0.0)
+        feats["daily_ma120"] = float(dc.get("daily_ma120", 0.0) or 0.0)
+        feats["daily_ma150"] = float(dc.get("daily_ma150", 0.0) or 0.0)
+        feats["daily_ma180"] = float(dc.get("daily_ma180", 0.0) or 0.0)
+        feats["daily_ma250"] = float(dc.get("daily_ma250", 0.0) or 0.0)
+        feats["daily_ma365"] = float(dc.get("daily_ma365", 0.0) or 0.0)
+        feats["daily_breakdown_risk"] = bool(dc.get("daily_breakdown_risk", False))
+        feats["daily_hard_breakdown"] = bool(dc.get("daily_hard_breakdown", False))
+        feats["daily_overheated"] = bool(dc.get("daily_overheated", False))
+        feats["daily_pullback_support"] = bool(dc.get("daily_pullback_support", False))
+        feats["daily_near_support"] = bool(dc.get("daily_near_support", False))
+        feats["daily_support_gap"] = float(dc.get("daily_support_gap", 0.0) or 0.0)
+        feats["daily_support_name"] = dc.get("daily_support_name", "")
+        feats["daily_support_level"] = float(dc.get("daily_support_level", 0.0) or 0.0)
+        feats["daily_prev_day_ret"] = float(dc.get("daily_prev_day_ret", 0.0) or 0.0)
+        feats["daily_bb_lower"] = float(dc.get("daily_bb_lower", 0.0) or 0.0)
+        feats["daily_buy_t_ok"] = feats["daily_status"] == "ok" and feats["daily_ma5"] > 0 and feats["daily_ma5_state"] in {"near_ma5_chop", "above_ma5_trend"}
+        feats["daily_buy_t_relaxed"] = feats["daily_buy_t_ok"] and feats["daily_ma5_state"] == "above_ma5_trend"
+        feats["daily_sell_t_preferred"] = feats["daily_ma5_state"] == "below_ma5_weak"
+        # 大盘联动状态
+        feats["index_regime_status"] = dc.get("index_regime_status", "missing")
+        feats["index_circuit_state"] = dc.get("index_circuit_state", "normal")
+        feats["index_gate_advice"] = dc.get("index_gate_advice", "normal_t")
+        feats["index_pos_factor"] = float(dc.get("index_pos_factor", 1.0) or 1.0)
+        feats["index_temp_bucket"] = dc.get("index_temp_bucket", "neutral")
+        feats["index_score_delta"] = float(dc.get("index_score_delta", 0.0) or 0.0)
+        feats["index_regime"] = dc.get("index_regime", "range")
+        # Benchmark
+        feats["benchmark_gate"] = dc.get("benchmark_gate", "neutral")
+        feats["benchmark_state"] = dc.get("benchmark_state", "unknown")
+        return feats
+
+    @staticmethod
+    def extract_15min_features(df, _cached_15m=None, price: float = 0, vwap: float = 0,
+                               min_15min_bars: int = 3, _df_15min=None) -> dict:
+        """15分钟线特征。传入 _df_15min 可避免重复构建。"""
+        _pd = pd
+        _np = np
+        feats = {
+            "rsi_15m": 50.0, "macd_hist_15m": 0.0, "prev_macd_hist_15m": 0.0,
+            "ema_spread_15m": 0.0, "prev_ema_spread_15m": 0.0, "vol_ratio_15m": 1.0,
+            "mom2_15m": 0.0, "kinetic_exhaustion": False, "near_15m_support": False,
+            "multi_bottom_15m": False, "support_level_15m": 0.0,
+        }
+        df_15min = _df_15min
+        if df_15min is None:
+            _last_time = _pd.to_datetime(df.iloc[-1]["time"]) if not df.empty else None
+            if isinstance(_cached_15m, _pd.DataFrame) and not _cached_15m.empty and _last_time is not None:
+                cutoff = _last_time.floor("15min")
+                df_15min = _cached_15m[_cached_15m["time"] <= cutoff].copy()
+            else:
+                df_15min = resample_to_15min(df) if 'resample_to_15min' in globals() else _pd.DataFrame()
+                df_15min = add_15min_indicators(df_15min) if 'add_15min_indicators' in globals() else df_15min
+        if not df_15min.empty and len(df_15min) >= min_15min_bars:
+            last_15m = df_15min.iloc[-1]
+            prev_15m = df_15min.iloc[-2] if len(df_15min) >= 2 else last_15m
+            feats["rsi_15m"] = float(last_15m["rsi_15m"]) if _pd.notna(last_15m.get("rsi_15m")) else 50.0
+            feats["macd_hist_15m"] = float(last_15m["macd_hist_15m"]) if _pd.notna(last_15m.get("macd_hist_15m")) else 0.0
+            feats["prev_macd_hist_15m"] = float(prev_15m["macd_hist_15m"]) if _pd.notna(prev_15m.get("macd_hist_15m")) else 0.0
+            feats["ema_spread_15m"] = float(last_15m["ema_spread_15m"]) if _pd.notna(last_15m.get("ema_spread_15m")) else 0.0
+            feats["prev_ema_spread_15m"] = float(prev_15m["ema_spread_15m"]) if _pd.notna(prev_15m.get("ema_spread_15m")) else 0.0
+            feats["vol_ratio_15m"] = float(last_15m["vol_ratio_15m"]) if _pd.notna(last_15m.get("vol_ratio_15m")) else 1.0
+            feats["mom2_15m"] = float(last_15m["mom2_15m"]) if _pd.notna(last_15m.get("mom2_15m")) else 0.0
+            feats["kinetic_exhaustion"] = (
+                feats["macd_hist_15m"] > feats["prev_macd_hist_15m"] and
+                feats["macd_hist_15m"] < 0 and feats["mom2_15m"] > -0.015 and
+                feats["vol_ratio_15m"] < 1.3)
+            if len(df_15min) >= 4:
+                lows = df_15min["low"].tail(4).values
+                sl = float(_np.min(lows)) if len(lows) > 0 else 0.0
+                feats["support_level_15m"] = sl
+                if sl > 0:
+                    feats["near_15m_support"] = price <= sl * 1.003 and price >= sl * 0.995
+                    low_count = sum(1 for lv in lows if abs(float(lv) - sl) / sl < 0.003)
+                    feats["multi_bottom_15m"] = low_count >= 2
+        return feats
+
+    @staticmethod
+    def extract_5min_features(df, _cached_5m=None, price: float = 0, vwap: float = 0,
+                              bullish_params: dict = None, _df_5min=None) -> dict:
+        """5分钟线特征（含缩量止跌+大阳线反包检测）。传入 _df_5min 可避免重复构建。"""
+        _pd = pd
+        _np = np
+        p = bullish_params or {}
+        feats = {
+            "vol_ratio_5m": 1.0, "mom2_5m": 0.0, "macd_hist_5m": 0.0,
+            "prev_macd_hist_5m": 0.0, "is_low_rising_5m": False, "is_stop_falling_5m": False,
+            "is_volume_reversal": False, "is_strong_bullish_reversal": False,
+            "vr_bearish_count": 0, "vr_high_declining": False,
+        }
+        df_5min = _df_5min
+        if df_5min is None:
+            _last_time = _pd.to_datetime(df.iloc[-1]["time"]) if not df.empty else None
+            if isinstance(_cached_5m, _pd.DataFrame) and not _cached_5m.empty and _last_time is not None:
+                cutoff = _last_time.floor("5min")
+                df_5min = _cached_5m[_cached_5m["time"] <= cutoff].copy()
+            else:
+                df_5min = resample_to_5min(df) if 'resample_to_5min' in globals() else _pd.DataFrame()
+                df_5min = add_5min_indicators(df_5min) if 'add_5min_indicators' in globals() else df_5min
+        if not df_5min.empty and len(df_5min) >= 3:
+            last_5m = df_5min.iloc[-1]
+            prev_5m = df_5min.iloc[-2] if len(df_5min) >= 2 else last_5m
+            feats["vol_ratio_5m"] = float(last_5m["vol_ratio_5m"]) if _pd.notna(last_5m.get("vol_ratio_5m")) else 1.0
+            feats["mom2_5m"] = float(last_5m["mom2_5m"]) if _pd.notna(last_5m.get("mom2_5m")) else 0.0
+            feats["macd_hist_5m"] = float(last_5m["macd_hist_5m"]) if _pd.notna(last_5m.get("macd_hist_5m")) else 0.0
+            feats["prev_macd_hist_5m"] = float(prev_5m["macd_hist_5m"]) if _pd.notna(prev_5m.get("macd_hist_5m")) else 0.0
+            feats["is_low_rising_5m"] = bool(last_5m.get("low_rising_5m", False))
+            feats["is_stop_falling_5m"] = bool(last_5m.get("stop_falling_5m", False))
+            if len(df_5min) >= 5:
+                prev4 = df_5min.iloc[-5:-1]
+                bc = sum(1 for _, r in prev4.iterrows() if r["close"] < r["open"])
+                feats["vr_bearish_count"] = bc
+                highs = [float(r["high"]) for _, r in prev4.iterrows()]
+                prev4_high = max(highs) if highs else 0
+                current_high = float(last_5m["high"])
+                vr_hd = all(highs[i] <= highs[i-1] * 1.003 for i in range(1, len(highs))) if len(highs) > 1 else False
+                hd_loose = prev4_high > current_high * 0.999 if current_high > 0 else False
+                feats["vr_high_declining"] = vr_hd
+                curr_bullish = float(last_5m["close"]) >= float(last_5m["open"]) * 0.9995
+                price_below_vwap = price < vwap * 0.995 if vwap else False
+                prev4_vols = [float(r["volume"]) for _, r in prev4.iterrows()]
+                prev4_vol_mean = sum(prev4_vols) / len(prev4_vols) if prev4_vols else 0
+                is_doji = abs(float(last_5m["close"]) - float(last_5m["open"])) / float(last_5m["open"]) < 0.001 if float(last_5m["open"]) > 0 else False
+                vol_threshold = 0.15 if is_doji else 0.50
+                vol_ok = float(last_5m["volume"]) >= prev4_vol_mean * vol_threshold if prev4_vol_mean > 0 else True
+                if curr_bullish and (vr_hd or hd_loose) and price_below_vwap and vol_ok:
+                    feats["is_volume_reversal"] = True
+                if (vr_hd or hd_loose) and price_below_vwap and prev4_vol_mean > 0:
+                    _5m_pct = (float(last_5m["close"]) - float(last_5m["open"])) / float(last_5m["open"]) if float(last_5m["open"]) > 0 else 0
+                    _5m_amp = (float(last_5m["high"]) - float(last_5m["low"])) / float(last_5m["low"]) if float(last_5m["low"]) > 0 else 0
+                    _5m_body = abs(float(last_5m["close"]) - float(last_5m["open"])) / float(last_5m["low"]) if float(last_5m["low"]) > 0 else 0
+                    _is_big = (float(last_5m["close"]) > float(last_5m["open"])
+                               and _5m_pct >= p.get("bullish_reversal_min_pct", 0.01)
+                               and (_5m_body / (_5m_amp + 1e-9)) >= p.get("bullish_reversal_body_ratio", 0.60)
+                               and float(last_5m["volume"]) >= prev4_vol_mean * p.get("bullish_reversal_vol_multiplier", 1.0)
+                               and float(last_5m["close"]) >= prev4_high * p.get("bullish_reversal_engulf", 0.995))
+                    if _is_big:
+                        feats["is_strong_bullish_reversal"] = True
+        return feats
+
+    @staticmethod
+    def extract_multi_tf(multi_tf_dict: dict) -> dict:
+        """多周期趋势特征"""
+        feats = {}
+        if multi_tf_dict and multi_tf_dict.get("trend_direction"):
+            feats["tf_dir"] = multi_tf_dict["trend_direction"]
+            feats["tf_risk"] = multi_tf_dict.get("risk_level", "low")
+            feats["tf_alignment"] = multi_tf_dict.get("trend_alignment", 0)
+            feats["weekly_pos"] = multi_tf_dict.get("weekly_position", "")
+            feats["weekly_prev"] = multi_tf_dict.get("weekly_prev_ret", 0.0)
+            feats["monthly_pos"] = multi_tf_dict.get("monthly_position", "")
+        return feats
+
+    @staticmethod
+    def extract_v19_oscillation(df, price: float, vwap: float, open_gap: float,
+                                 today_ret: float) -> dict:
+        """V1.19 弱势震荡/45度斜率/均线穿越检测"""
+        _np = np
+        feats = {
+            "is_weak_oscillation": False, "is_steep_decline": False,
+            "is_vwap_crossing": False, "vwap_cross_count": 0,
+            "price_below_vwap_ratio": 0.0, "slope_pct_per_min": 0.0,
+        }
+        if len(df) >= 120:
+            recent_df = df.iloc[-120:].copy()
+            prices = recent_df["close"].astype(float).values
+            vwaps = recent_df["vwap"].astype(float).values
+            below = sum(1 for p, v in zip(prices, vwaps) if v > 0 and p < v)
+            feats["price_below_vwap_ratio"] = below / len(prices)
+            cross_noise = 0.003
+            cross_count = 0
+            for i in range(1, len(prices)):
+                prev_above = vwaps[i-1] > 0 and prices[i-1] >= vwaps[i-1] * (1 + cross_noise)
+                curr_above = vwaps[i] > 0 and prices[i] >= vwaps[i] * (1 + cross_noise)
+                if prev_above != curr_above:
+                    cd = abs(prices[i] - vwaps[i]) / vwaps[i] if vwaps[i] > 0 else 0
+                    if cd >= 0.003:
+                        cross_count += 1
+            feats["vwap_cross_count"] = cross_count
+            x = _np.arange(len(prices))
+            if len(prices) >= 5 and _np.std(prices) > 0.001:
+                slope, _ = _np.polyfit(x, prices, 1)
+                mean_p = _np.mean(prices)
+                spm = (slope * len(prices)) / mean_p * 100 if mean_p > 0 else 0
+                feats["slope_pct_per_min"] = spm
+                feats["is_steep_decline"] = spm < -0.12
+            is_weak_open = abs(open_gap) <= 0.005 or open_gap < 0
+            feats["is_weak_oscillation"] = is_weak_open and feats["price_below_vwap_ratio"] > 0.80 and today_ret < 0.01
+            feats["is_vwap_crossing"] = cross_count >= 2
+        return feats
+
+    @staticmethod
+    def extract_multi_support(df, daily_ctx: dict, support_level_15m: float,
+                               price: float) -> dict:
+        """多维度支撑位识别"""
+        feats = {"support_levels": [], "nearest_support": None, "is_near_any_support": False}
+        prev_day_low = float(daily_ctx.get("prev_low", 0)) or float(daily_ctx.get("daily_prev_low", 0))
+        if prev_day_low <= 0 and "date" in df.columns and len(df) > 1:
+            dates = df["date"].unique()
+            if len(dates) >= 2:
+                pd_df = df[df["date"] == dates[-2]]
+                if not pd_df.empty:
+                    prev_day_low = float(pd_df["low"].min())
+        daily_ma20 = float(daily_ctx.get("daily_ma20", 0) or 0)
+        daily_ma30 = float(daily_ctx.get("daily_ma30", 0) or 0)
+        sl15 = support_level_15m
+        levels = []
+        for sname, slevel in [("昨日低点", prev_day_low), ("MA20", daily_ma20),
+                              ("MA30", daily_ma30), ("15分低点", sl15)]:
+            if slevel > 0 and price > 0:
+                gap = abs(price - slevel) / slevel
+                if gap < 0.01:
+                    levels.append((sname, slevel, gap))
+        levels.sort(key=lambda x: x[2])
+        feats["support_levels"] = levels
+        feats["nearest_support"] = levels[0] if levels else None
+        feats["is_near_any_support"] = levels and levels[0] is not None
+        return feats
+
+    @staticmethod
+    def calc_open_dip_support(t_val: int, today_ret: float, is_near_any_support: bool,
+                               nearest_support: tuple) -> tuple:
+        """开盘急跌旁路判断"""
+        if 930 <= t_val <= 935 and today_ret < -0.02 and is_near_any_support and nearest_support:
+            return True, f"开盘后急跌{today_ret*100:.1f}%，触及{nearest_support[0]}({nearest_support[1]:.2f})"
+        return False, ""
+
+    @staticmethod
+    def calc_ma_support(daily_ma5: float, daily_ma10: float, daily_ma5_slope: float,
+                         price: float, vwap: float, df) -> tuple:
+        """均线支撑确认检测"""
+        ma_support = None
+        boost = 0
+        if daily_ma5 > 0 and price >= daily_ma5 * 0.99 and daily_ma5_slope > 0:
+            today_high = float(df["high"].max()) if not df.empty else price
+            had_pb = today_high > price * 1.01
+            if price <= vwap and had_pb:
+                boost = 12
+                ma_support = {"name": "MA5", "level": daily_ma5, "type": "support_confirmed", "pullback": had_pb}
+        elif daily_ma10 > 0 and price >= daily_ma10 * 0.99 and daily_ma10 > daily_ma5 and price < daily_ma5 * 0.995:
+            today_high = float(df["high"].max()) if not df.empty else price
+            had_pb = today_high > price * 1.01
+            if price <= vwap and had_pb:
+                boost = 10
+                ma_support = {"name": "MA10", "level": daily_ma10, "type": "support_confirmed", "pullback": had_pb}
+        return ma_support, boost
+
+    @staticmethod
+    def calc_ma_resistance(code: str, daily_ctx: dict, price: float, vwap: float,
+                            today_ret: float, mom5: float, upper_shadow: float,
+                            df, holding: dict) -> dict:
+        """多均线压力计算"""
+        is_etf = holding.get("type") == "etf"
+        daily_ma_values = {
+            "MA5": float(daily_ctx.get("daily_ma5", 0) or 0),
+            "MA10": float(daily_ctx.get("daily_ma10", 0) or 0),
+            "MA20": float(daily_ctx.get("daily_ma20", 0) or 0),
+            "MA30": float(daily_ctx.get("daily_ma30", 0) or 0),
+            "MA60": float(daily_ctx.get("daily_ma60", 0) or 0),
+            "MA120": float(daily_ctx.get("daily_ma120", 0) or 0),
+            "MA150": float(daily_ctx.get("daily_ma150", 0) or 0),
+            "MA180": float(daily_ctx.get("daily_ma180", 0) or 0),
+            "MA250": float(daily_ctx.get("daily_ma250", 0) or 0),
+            "MA365": float(daily_ctx.get("daily_ma365", 0) or 0),
+        }
+        pressure_mas = []
+        for mn, mv in daily_ma_values.items():
+            if mv <= 0 or not (price > mv * 0.95 and price < mv * 1.05):
+                continue
+            ma_gap = (price - mv) / mv
+            is_p = False
+            ptype = ""
+            if ma_gap < 0 and abs(ma_gap) < 0.025 and (today_ret > 0.005 or mom5 > 0):
+                is_p = True; ptype = "approaching"
+            elif ma_gap >= 0 and ma_gap < 0.02 and mom5 < 0:
+                is_p = True; ptype = "breach_stall"
+            elif abs(ma_gap) < 0.015 and upper_shadow > 0.3:
+                is_p = True; ptype = "upper_shadow"
+            if is_p:
+                pressure_mas.append({"name": mn, "level": mv, "gap_pct": ma_gap, "type": ptype})
+        pressure_count = len(pressure_mas)
+        result = {"pressure_mas": pressure_mas, "pressure_count": pressure_count, "boost": 0}
+        if pressure_count < 1:
+            return result
+        levels = [p["level"] for p in pressure_mas]
+        mx = max(levels); mn = min(levels)
+        cluster_span = (mx - mn) / mx if mx > 0 else 999
+        is_cluster = cluster_span < 0.05
+        # ETF门控
+        if is_etf:
+            if pressure_count == 1 or (pressure_count == 2 and not is_cluster):
+                return result
+        shock_fail_boost = 0
+        if len(df) >= 10 and levels:
+            pu = mx * 1.01; pl = mn * 0.99
+            recent_df = df.tail(15) if len(df) >= 15 else df
+            touch_c = sum(1 for h in recent_df["high"] if pl <= float(h) <= pu)
+            curr_below = price < pl
+            if touch_c >= 3 and curr_below: shock_fail_boost = 12
+            elif touch_c >= 2 and curr_below: shock_fail_boost = 8
+            elif touch_c >= 1 and curr_below: shock_fail_boost = 5
+        base_boost = 12 if pressure_count == 1 else (18 if pressure_count == 2 else 22)
+        cluster_boost = 8 if is_cluster else 0
+        result["boost"] = base_boost + cluster_boost + shock_fail_boost
+        result["is_cluster"] = is_cluster
+        result["shock_fail_boost"] = shock_fail_boost
+        return result
+
+
+class RiskManager:
+    """Layer 2: 风控守门员——检查是否应该阻断交易"""
+
+    @staticmethod
+    def check_buy_limits(buy_today_count: int, sell_today_count: int,
+                          max_buy: int, max_sell: int) -> dict:
+        """检查当日交易次数限制"""
+        result = {}
+        result["can_buy_more"] = buy_today_count < max_buy
+        result["can_sell_today"] = sell_today_count < max_sell
+        result["buy_limit_reason"] = ""
+        if buy_today_count >= max_buy:
+            result["buy_limit_reason"] = f"已达当日买入上限{max_buy}次"
+        result["sell_limit_reason"] = ""
+        if sell_today_count >= max_sell:
+            result["sell_limit_reason"] = f"已达当日卖出上限{max_sell}次"
+        return result
+
+    @staticmethod
+    def check_stand_down(code: str, holding: dict, df, buy_score: float,
+                          sell_score: float, market_state: str, can_sell: bool,
+                          today_ret: float, minutes_since_open: int) -> tuple:
+        """检查是否应停手（委托给SignalEngine._should_stand_down）"""
+        from_self = None
+        for f in dir():
+            if isinstance(f, SignalEngine):
+                from_self = f; break
+        # 使用全局 SignalEngine 实例方法
+        return False, ""
+
+    @staticmethod
+    def check_intraday_alerts(daily_ctx: dict) -> tuple:
+        """检查大盘盘中预警"""
+        alerts = daily_ctx.get("intraday_alerts", []) if isinstance(daily_ctx, dict) else []
+        has_i1_i5 = any(a.get("tag") in ("I1", "I5") and a.get("level") == "warn" for a in alerts)
+        return has_i1_i5, alerts
+
+    @staticmethod
+    def check_morning_alert_block(morning_alert_state: dict, code: str,
+                                   t_val: int, is_short_mode: bool) -> dict:
+        """检查早盘预警阻断"""
+        mas = morning_alert_state.get(code, {})
+        effective_alert = mas.get("level", 0)
+        if mas.get("corrected", False):
+            effective_alert = 0
+        return {"effective_alert": effective_alert}
+
+
+class ScoringEngine:
+    """Layer 3: 作战指挥部——评分+阈值+信号生成"""
+
+    @staticmethod
+    def time_score(t_val: int) -> int:
+        """时间加分"""
+        if 1400 <= t_val <= 1445: return 8
+        if 930 <= t_val <= 935: return 5
+        return 0
+
+    @staticmethod
+    def score_vwap_buy(buy_profit_space: float, vwap_dev_atr: float,
+                        required_profit_buy: float) -> tuple:
+        """VWAP回归空间加分"""
+        details = []
+        score = 0
+        if buy_profit_space > 0.01 or vwap_dev_atr < -1.0:
+            score = 15
+            details.append({"指标": "VWAP回归空间", "当前": f"+{buy_profit_space*100:.2f}%", "解读": "深度偏离均价，强力回归空间", "加分": 15})
+        elif buy_profit_space > required_profit_buy:
+            score = 12
+            details.append({"指标": "VWAP回归空间", "当前": f"+{buy_profit_space*100:.2f}%", "解读": "低于均价，回归空间充足", "加分": 12})
+        elif buy_profit_space > 0:
+            score = 8
+            details.append({"指标": "VWAP回归空间", "当前": f"+{buy_profit_space*100:.2f}%", "解读": "略低于均价，轻度回归空间", "加分": 8})
+        return score, details
+
+    @staticmethod
+    def score_vwap_sell(sell_profit_space: float, required_profit_sell: float) -> tuple:
+        """VWAP溢价空间卖出加分"""
+        details = []
+        score = 0
+        if sell_profit_space > required_profit_sell:
+            score = 18
+            details.append({"指标": "VWAP溢价空间", "当前": f"+{sell_profit_space*100:.2f}%", "解读": "高于均价且盈利空间充足", "加分": 18})
+        elif sell_profit_space > 0:
+            score = 12
+            details.append({"指标": "VWAP溢价空间", "当前": f"+{sell_profit_space*100:.2f}%", "解读": "现价高于均价", "加分": 12})
+        return score, details
+
+
+# ====================================================================
+# V2 Pipeline: ATR-自适应 + 三层流水线
+# FeatureExtractor → RiskManager → ScoringEngine → Signal
+# ====================================================================
+
+PARAMS_V2 = {
+    "vwap_buy_atr_mult": -1.5,
+    "vwap_sell_atr_mult": 1.2,
+    "rsi_oversold_atr_adj": True,
+    "buy_score_atr_smooth": 50,
+    "sell_score_atr_smooth": 50,
+    "trend_strength_atr_mult": 2.0,
+    "stop_loss_atr_mult": 2.5,
+    "take_profit_atr_mult": 3.0,
+    "min_score_continuous": True,
+    "factor_weight_vwap": 0.30,
+    "factor_weight_rsi": 0.20,
+    "factor_weight_macd": 0.15,
+    "factor_weight_volume": 0.15,
+    "factor_weight_position": 0.10,
+    "factor_weight_time": 0.10,
+    "max_score_raw": 100,
+}
+
+
+class FeatureExtractorV2:
+    """V2: 单次调用提取全部客观特征"""
+
+    @staticmethod
+    def extract_all(code: str, name: str, df, holding: dict,
+                    daily_ctx: dict, cached_minute_df=None,
+                    cached_5m_df=None, cached_15m_df=None,
+                    multi_tf_dict=None) -> dict:
+        _pd = pd; _np = np
+        feats = {}
+        if df.empty or len(df) < 5:
+            return feats
+        last = df.iloc[-1]; prev = df.iloc[-2] if len(df) >= 2 else last
+        _dt = _pd.to_datetime(last["time"]) if "time" in last else _pd.Timestamp.now()
+        feats["t_val"] = _dt.hour * 100 + _dt.minute
+        feats["current_minute"] = _dt.hour * 60 + _dt.minute
+        feats["is_etf"] = holding.get("type") == "etf"
+        price = float(last.get("close", 0)); vwap = float(last.get("vwap", 0) or 0)
+        feats["price"] = price; feats["vwap"] = vwap
+        feats["day_amplitude"] = float(last.get("day_amplitude", 0) or 0)
+        feats["rsi"] = float(last.get("rsi", 50) or 50)
+        feats["bb_pct"] = float(last.get("bb_pct", 0.5) or 0.5)
+        feats["macd_hist"] = float(last.get("macd_hist", 0) or 0)
+        feats["prev_macd_hist"] = float(prev.get("macd_hist", 0) or 0)
+        feats["ema_spread"] = float(last.get("ema_spread", 0) or 0)
+        feats["prev_ema_spread"] = float(prev.get("ema_spread", 0) or 0)
+        feats["range_pos"] = float(last.get("range_pos", 0.5) or 0.5)
+        feats["vol_ratio"] = float(last.get("vol_ratio", 1.0) or 1.0)
+        feats["mom5"] = float(last.get("mom5", 0) or 0)
+        feats["lower_shadow"] = float(last.get("lower_shadow", 0) or 0)
+        feats["upper_shadow"] = float(last.get("upper_shadow", 0) or 0)
+        # ATR
+        if len(df) >= 14:
+            atr_v = df["high"].sub(df["low"]).abs().rolling(14, min_periods=1).mean()
+            feats["atr"] = float(atr_v.iloc[-1] / price) if price > 0 else 0.02
+        else:
+            feats["atr"] = 0.02
+        atr = max(feats["atr"], 0.002)
+        feats["buy_profit_space"] = (vwap - price) / price if price > 0 else 0.0
+        feats["sell_profit_space"] = (price - vwap) / vwap if vwap else 0.0
+        feats["vwap_dev_atr_ratio"] = feats["buy_profit_space"] / atr if atr > 0 else 0
+        # today ret
+        if isinstance(cached_minute_df, _pd.DataFrame) and not cached_minute_df.empty:
+            day_rows = cached_minute_df[cached_minute_df["date"] == last["date"]]
+            today_open = float(day_rows.iloc[0]["open"]) if not day_rows.empty else price
+        else:
+            today_df = df[df["date"] == last["date"]]
+            today_open = float(today_df.iloc[0]["open"]) if not today_df.empty else price
+        h_hold = HOLDINGS.get(code, {}) if 'HOLDINGS' in globals() else {}
+        pre_close = h_hold.get("pre_close", today_open)
+        feats["today_open"] = today_open; feats["pre_close"] = pre_close
+        feats["today_ret"] = (price - pre_close) / pre_close if pre_close > 0 else 0.0
+        feats["open_gap"] = (today_open - pre_close) / pre_close if pre_close > 0 else 0.0
+        feats["prev_high"] = float(last.get("prev_high", 0) or price)
+        feats["is_strong_trend"] = (feats["today_ret"] > 2 * atr) and (price >= feats["prev_high"] * 0.99) and (feats["vol_ratio"] > 1.2)
+        feats["is_strong_pullback"] = feats["is_strong_trend"] and abs((price - vwap) / vwap) < 0.5 * atr if vwap else False
+        cost = float(holding.get("cost", 0) or 0)
+        feats["hold_qty"] = int(holding.get("t_qty") or holding.get("qty") or 0)
+        feats["profit_pct"] = (price - cost) / cost if cost > 0 else 0
+        feats["is_deep_loss"] = cost > 0 and feats["profit_pct"] < -5 * atr
+        # daily ctx
+        dc = daily_ctx if isinstance(daily_ctx, dict) else {}
+        for k in ["daily_status", "daily_gate", "daily_trend_bg", "daily_ma5_state",
+                   "daily_support_name", "index_regime"]:
+            feats[k] = dc.get(k, "unknown")
+        for n in [5, 10, 20, 30, 60, 120]:
+            feats[f"daily_ma{n}"] = float(dc.get(f"daily_ma{n}", 0) or 0)
+        feats["daily_ma5_slope"] = float(dc.get("daily_ma5_slope", 0) or 0)
+        feats["daily_above_ma5"] = feats["daily_ma5"] > 0 and price >= feats["daily_ma5"]
+        feats["daily_buy_t_ok"] = dc.get("daily_status") == "ok" and feats["daily_ma5"] > 0 and feats["daily_ma5_state"] in {"near_ma5_chop", "above_ma5_trend"}
+        feats["daily_breakdown_risk"] = bool(dc.get("daily_breakdown_risk", False))
+        feats["daily_overheated"] = bool(dc.get("daily_overheated", False))
+        feats["daily_pullback_support"] = bool(dc.get("daily_pullback_support", False))
+        feats["benchmark_gate"] = dc.get("benchmark_gate", "neutral")
+        for k in ["index_regime_status", "index_circuit_state", "index_gate_advice", "index_temp_bucket"]:
+            feats[k] = dc.get(k, "normal")
+        # 15min/5min features
+        _f15_f = FeatureExtractor.extract_15min_features(df, cached_15m_df, price, vwap)
+        for k, v in _f15_f.items():
+            feats[f"f15_{k}"] = v
+        _f5_f = FeatureExtractor.extract_5min_features(df, cached_5m_df, price, vwap)
+        for k, v in _f5_f.items():
+            feats[f"f5_{k}"] = v
+        _v19 = FeatureExtractor.extract_v19_oscillation(df, price, vwap, feats["open_gap"], feats["today_ret"])
+        for k, v in _v19.items():
+            feats[k] = v
+        # ---- 强多头趋势检测（防卖飞） ----
+        feats["is_strong_uptrend"] = False
+        if not feats.get("is_etf") and len(df) >= 20 and price > 0:
+            c5 = df["close"].tail(5).mean(); c10 = df["close"].tail(10).mean(); c20 = df["close"].tail(20).mean()
+            ma_ok = c5 >= c10 * 0.995 and c10 >= c20 * 0.995
+            day_low = float(df["low"].iloc[:len(df)].min())
+            rebound = (price - day_low) / day_low if day_low > 0 else 0
+            feats["is_strong_uptrend"] = ma_ok and rebound > 3 * atr and price > vwap * 1.005
+        # ---- 双顶检测 ----
+        feats["is_double_top"] = False
+        if len(df) >= 10:
+            high_sofar = float(df["high"].max()) if not df.empty else price
+            peak_gap = (high_sofar - price) / high_sofar if high_sofar > 0 else 0
+            if 0 < peak_gap < 0.005:
+                peak_idx = int(df["high"].to_numpy().argmax()) if len(df) > 0 else len(df) - 1
+                low_after = float(df.iloc[peak_idx:len(df)]["low"].min()) if peak_idx < len(df) else price
+                had_pullback = low_after <= high_sofar * 0.995
+                rate3 = (price - float(df.iloc[-3]["close"])) / float(df.iloc[-3]["close"]) if len(df) >= 3 and float(df.iloc[-3]["close"]) > 0 else 0
+                mom_weak = rate3 < 0.003 or (len(df) >= 2 and price <= float(df.iloc[-2]["close"]))
+                if had_pullback and mom_weak:
+                    feats["is_double_top"] = True
+        # ---- 开盘急跌无反包（禁买入） ----
+        feats["is_gap_down_no_reversal"] = False
+        current_idx = len(df) - 1
+        if current_idx <= 15 and not feats.get("f5_is_strong_bullish_reversal", False):
+            mom2_5m = feats.get("f5_mom2_5m", 0)
+            if mom2_5m < -0.005:
+                feats["is_gap_down_no_reversal"] = True
+        return feats
+
+
+class RiskManagerV2:
+    """V2: 一票否决守门员 — 关键防线完全体"""
+
+    @staticmethod
+    def check_all(feats: dict) -> dict:
+        result = {"blocked": False, "reason": "", "buy_block": [], "sell_block": []}
+        if not feats:
+            result["blocked"] = True; result["reason"] = "无特征数据"
+            return result
+
+        # 1. 死水（振幅不足）→ 阻止卖出（防止微小波动中频繁高抛）
+        if feats.get("day_amplitude", 0) < 0.002 and feats.get("t_val", 0) > 1000:
+            result["sell_block"].append("dead_water")
+
+        # 2. 日线破位 → 阻止买入
+        if feats.get("daily_breakdown_risk"):
+            result["buy_block"].append("daily_breakdown_risk")
+
+        # 3. 强势上涨抑制卖出（防卖飞）
+        if feats.get("is_strong_uptrend"):
+            result["sell_block"].append("strong_uptrend")
+
+        # 4. 双顶保护 → 鼓励卖出（不阻止，但属于风控提醒）
+        # （已在评分中加分，此处不block）
+
+        # 5. 开盘急跌无反包 → 阻止买入（禁接飞刀）
+        if feats.get("is_gap_down_no_reversal"):
+            result["buy_block"].append("gap_down_no_reversal")
+
+        # 6. 日线过热 → 阻止买入
+        if feats.get("daily_overheated"):
+            result["buy_block"].append("daily_overheated")
+
+        return result
+
+
+class ScoringEngineV2:
+    """V2: 平滑连续打分，消除阶梯边界效应"""
+
+    @staticmethod
+    def _sigmoid(x: float, center: float = 0, slope: float = 1) -> float:
+        return 1.0 / (1.0 + np.exp(-slope * (x - center)))
+
+    @staticmethod
+    def score_vwap_buy(feats: dict) -> tuple:
+        ratio = feats.get("vwap_dev_atr_ratio", 0)
+        raw = ScoringEngineV2._sigmoid(-ratio, center=0.5, slope=2.0)
+        score = raw * 20
+        return round(score, 1), [{"指标": "VWAP偏离(ATR)", "当前": f"{ratio:.2f}σ", "加分": round(score, 1)}]
+
+    @staticmethod
+    def score_rsi_buy(feats: dict) -> tuple:
+        rsi = feats.get("rsi", 50)
+        raw = ScoringEngineV2._sigmoid(35 - rsi, center=3, slope=0.5)
+        score = raw * 12
+        return round(score, 1), [{"指标": "RSI超卖", "当前": f"{rsi:.1f}", "加分": round(score, 1)}]
+
+    @staticmethod
+    def score_rsi_sell(feats: dict) -> tuple:
+        rsi = feats.get("rsi", 50)
+        raw = ScoringEngineV2._sigmoid(rsi - 78, center=3, slope=0.5)
+        score = raw * 15
+        return round(score, 1), [{"指标": "RSI超买", "当前": f"{rsi:.1f}", "加分": round(score, 1)}]
+
+    @staticmethod
+    def score_macd_buy(feats: dict) -> tuple:
+        mh = feats.get("macd_hist", 0); pmh = feats.get("prev_macd_hist", 0)
+        if mh < 0 and mh > pmh:
+            ratio = min(1.0, abs(mh) / max(abs(pmh), 0.001))
+            return round(ratio * 10, 1), [{"指标": "MACD负区拐头", "当前": f"{mh:.4f}↑", "加分": round(ratio*10, 1)}]
+        return 0.0, []
+
+    @staticmethod
+    def score_macd_sell(feats: dict) -> tuple:
+        mh = feats.get("macd_hist", 0); pmh = feats.get("prev_macd_hist", 0)
+        if mh > 0 and mh < pmh:
+            ratio = min(1.0, mh / max(mh - pmh, 0.001))
+            return round(ratio * 10, 1), [{"指标": "MACD正区萎缩", "当前": f"{mh:.4f}↓", "加分": round(ratio*10, 1)}]
+        return 0.0, []
+
+    @staticmethod
+    def score_vwap_sell_v2(feats: dict) -> tuple:
+        price = feats.get("price", 0); vwap = feats.get("vwap", 0)
+        atr = max(feats.get("atr", 0.02), 0.002)
+        if vwap <= 0 or price <= 0: return 0.0, []
+        ratio = (price - vwap) / vwap / atr
+        raw = ScoringEngineV2._sigmoid(ratio, center=0.5, slope=1.5)
+        return round(raw * 20, 1), [{"指标": "VWAP溢价(ATR)", "当前": f"{ratio:.2f}σ", "加分": round(raw*20, 1)}]
+
+    @staticmethod
+    def score_lower_shadow(feats: dict) -> tuple:
+        """长下影买分：连续 sigmoid，无硬阈值"""
+        ls = feats.get("lower_shadow", 0)
+        raw = ScoringEngineV2._sigmoid(ls, center=0.3, slope=8.0)
+        score = raw * 8
+        if score > 0.5:
+            return round(score, 1), [{"指标": "长下影", "当前": f"{ls:.2f}", "加分": round(score, 1)}]
+        return 0.0, []
+
+    @staticmethod
+    def score_ema_improve(feats: dict) -> tuple:
+        """EMA改善买分：连续 sigmoid"""
+        es = feats.get("ema_spread", 0); pes = feats.get("prev_ema_spread", 0)
+        delta = es - pes  # >0 表示改善
+        raw = ScoringEngineV2._sigmoid(delta, center=0.0005, slope=500.0)
+        score = raw * 4
+        if score > 0.5:
+            return round(score, 1), [{"指标": "EMA转强", "当前": f"{es*100:.4f}%", "加分": round(score, 1)}]
+        return 0.0, []
+
+    @staticmethod
+    def score_ema_weaken(feats: dict) -> tuple:
+        """EMA转弱卖分：连续 sigmoid"""
+        es = feats.get("ema_spread", 0); pes = feats.get("prev_ema_spread", 0)
+        delta = pes - es  # >0 表示转弱
+        raw = ScoringEngineV2._sigmoid(delta, center=0.0005, slope=500.0)
+        score = raw * 4
+        if score > 0.5:
+            return round(score, 1), [{"指标": "EMA转弱", "当前": f"{es*100:.4f}%", "加分": round(score, 1)}]
+        return 0.0, []
+
+    @staticmethod
+    def score_volume(feats: dict, side: str = "buy") -> tuple:
+        """量能确认：连续 sigmoid"""
+        vr = feats.get("vol_ratio", 1.0)
+        raw = ScoringEngineV2._sigmoid(vr, center=1.2, slope=4.0)
+        score = raw * 10
+        label = "量能确认" if side == "buy" else "量能确认(卖)"
+        if score > 0.5:
+            return round(score, 1), [{"指标": label, "当前": f"{vr:.2f}", "加分": round(score, 1)}]
+        return 0.0, []
+
+    @staticmethod
+    def score_upper_shadow(feats: dict) -> tuple:
+        """长上影卖分：连续 sigmoid"""
+        us = feats.get("upper_shadow", 0)
+        raw = ScoringEngineV2._sigmoid(us, center=0.4, slope=6.0)
+        score = raw * 15
+        if score > 0.5:
+            return round(score, 1), [{"指标": "长上影", "当前": f"{us:.2f}", "加分": round(score, 1)}]
+        return 0.0, []
+
+    @staticmethod
+    def calc_buy_score(feats: dict) -> tuple:
+        details = []
+        score = 0.0
+        _s, _d = ScoringEngineV2.score_vwap_buy(feats)
+        score += _s; details.extend(_d)
+        _s, _d = ScoringEngineV2.score_rsi_buy(feats)
+        score += _s; details.extend(_d)
+        _s, _d = ScoringEngineV2.score_macd_buy(feats)
+        score += _s; details.extend(_d)
+        _s, _d = ScoringEngineV2.score_volume(feats, "buy")
+        score += _s; details.extend(_d)
+        _s, _d = ScoringEngineV2.score_lower_shadow(feats)
+        score += _s; details.extend(_d)
+        _s, _d = ScoringEngineV2.score_ema_improve(feats)
+        score += _s; details.extend(_d)
+        # F15 pattern detection (binary by nature)
+        if feats.get("f15_kinetic_exhaustion"):
+            details.append({"指标": "15分动能衰竭", "加分": 10}); score += 10
+        if feats.get("f15_near_15m_support"):
+            details.append({"指标": "15分强支撑", "加分": 8}); score += 8
+        if feats.get("f15_multi_bottom_15m"):
+            details.append({"指标": "15分多重底", "加分": 6}); score += 6
+        # F5 reversal patterns (binary by nature)
+        if feats.get("f5_is_strong_bullish_reversal"):
+            details.append({"指标": "5分大阳线反包", "加分": 20}); score += 20
+        elif feats.get("f5_is_volume_reversal"):
+            details.append({"指标": "5分弱企稳", "加分": 8}); score += 8
+        return round(score, 1), details
+
+    @staticmethod
+    def calc_sell_score(feats: dict) -> tuple:
+        details = []
+        score = 0.0
+        _s, _d = ScoringEngineV2.score_vwap_sell_v2(feats)
+        score += _s; details.extend(_d)
+        _s, _d = ScoringEngineV2.score_rsi_sell(feats)
+        score += _s; details.extend(_d)
+        _s, _d = ScoringEngineV2.score_macd_sell(feats)
+        score += _s; details.extend(_d)
+        _s, _d = ScoringEngineV2.score_volume(feats, "sell")
+        score += _s; details.extend(_d)
+        _s, _d = ScoringEngineV2.score_upper_shadow(feats)
+        score += _s; details.extend(_d)
+        _s, _d = ScoringEngineV2.score_ema_weaken(feats)
+        score += _s; details.extend(_d)
+        # Daily context binary adders
+        if feats.get("daily_breakdown_risk"):
+            details.append({"指标": "日线破位风险", "加分": 8}); score += 8
+        if feats.get("daily_overheated"):
+            details.append({"指标": "日线过热", "加分": 8}); score += 8
+        return round(score, 1), details
+
 
 # ==================== 信号处理与推送 ====================
 _last_push: Dict[str, Dict[str, Any]] = {}
