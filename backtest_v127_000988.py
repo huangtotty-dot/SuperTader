@@ -90,6 +90,11 @@ class Portfolio:
     def buy(self,ds,ts,price,qty,reason,score=0):
         cost=price*qty; fee=cost*CM
         if self.cash<cost+fee: return False
+        # 仓位上限：持仓市值 ≤ 总资产 × 0.60
+        total_value = self.cash + self.holdings * price
+        new_value = price * qty
+        single_pct = new_value / max(total_value, 1)
+        if single_pct > 0.60: return False
         self.cash-=cost+fee; self.holdings+=qty; self.ib+=qty
         self.trades.append({"date":ds,"time":ts,"side":"BUY","price":round(price,2),"qty":qty,"fee":round(fee,2)})
         return True
@@ -120,9 +125,11 @@ def _metrics(nav_log):
 class Runner:
     def __init__(self,mode="test"): self.mode=mode; self.port=Portfolio(); self._daily=None; self._smin=None; self._imin=None; self._dates=[]
     def load(self):
-        print(f"  加载 {self.start}~{self.end}"); self._daily=_tcent("sh000001",self.end,800)
+        print(f"  加载 {self.start}~{self.end}")
+        # 个股日线（用于均线计算和状态翻译）
         d="".join(c for c in CODE if c.isdigit())[:6]; s=f"sz{d}"if d.startswith(("0","3"))else f"sh{d}"
         sd=_tcent(s,self.end,600)
+        self._daily=sd
         if sd is not None and len(sd)>0: self._dates=sorted(sd[(sd["date"]>=self.start)&(sd["date"]<=self.end)]["date"].tolist())
         if not self._dates: print("  [警告] 无交易日"); return False
         print(f"  {len(self._dates)} 天"); self._smin=_tsmin(CODE,self.start,self.end,"个股")
@@ -137,15 +144,35 @@ class Runner:
         if dd is not None and len(dd)>=20:
             try:
                 t=dd.iloc[-1]; p=dd.iloc[-2] if len(dd)>=2 else t
-                ctx["daily_prev_close"]=float(p.get("close",0)or 0); ctx["daily_day_ret"]=(float(t["close"])-ctx["daily_prev_close"])/ctx["daily_prev_close"]if ctx["daily_prev_close"]else 0
+                ctx["daily_prev_close"]=float(p.get("close",0)or 0)
+                ctx["daily_day_ret"]=(float(t["close"])-ctx["daily_prev_close"])/ctx["daily_prev_close"]if ctx["daily_prev_close"]else 0
                 for n in [5,10,20,60]: ctx[f"daily_ma{n}"]=float(t.get(f"ma{n}",0)or 0)
-                if ctx["daily_ma5"]>0: ctx["daily_above_ma5"]=float(t["close"])>=ctx["daily_ma5"]
+                if ctx["daily_ma5"]>0:
+                    ctx["daily_above_ma5"]=float(t["close"])>=ctx["daily_ma5"]
+                    ctx["daily_status"]="ok"
+                    if ctx["daily_above_ma5"]:
+                        ctx["daily_ma5_state"]="above_ma5_trend" if ctx["daily_ma5"]>ctx["daily_ma10"] else "near_ma5_chop"
+                        ctx["daily_trend_bg"]="bull"
+                    else:
+                        ctx["daily_ma5_state"]="below_ma5_weak"
+                        ctx["daily_trend_bg"]="bear"
             except: pass
         return ctx
     def run(self,start="2025-06-01",end="2026-07-20"):
         self.start=start; self.end=end
         if not self.load(): return self.port
         import signal_engine as _se; _se.MINUTE_FETCH_STATUS[CODE]="ok"; _se.STOCK_PARAMS.clear()
+        _se.STOCK_PARAMS[CODE] = {"buy_confirm_min_score":15,"min_profit_space":0.003,"sell_holding_min_minutes":5,"sell_holding_strict_minutes":15,"sell_score_boost_holding":2,"hard_sell_threshold_cap":200,"hard_buy_threshold_cap":80}
+        # Override signal_engine logging to backtest output directory (Test group only)
+        # decision_trace.jsonl + shadow_signals.jsonl will contain buy_score, buy_threshold,
+        # buy_block_reasons, priority_path for analyzing why 华工科技 missed dip-buy triggers
+        if self.mode == "test":
+            os.makedirs(_OUT, exist_ok=True)
+            _se._trace_path = lambda kind, day=None: os.path.join(_OUT, f"{kind}.jsonl")
+            _se._result_trace_path = lambda day=None: os.path.join(_OUT, "signal_outcome.jsonl")
+            _se._append_jsonl = lambda p, r: (
+                lambda f: (f.write(json.dumps(r, ensure_ascii=False, default=str) + "\n"), f.close())
+            )(open(p, "a", encoding="utf-8"))
         _se.PARAMS.update({"min_amplitude":0.002,"rsi_oversold":35,"rsi_overbought":78,"vol_confirm_boost":10,"vol_ratio_confirm":1.2,"macd_strong_threshold":0.2,"macd_strong_boost":25,"min_profit_space":0.008,"buy_confirm_min_score":25,"range_pos_low_threshold":0.3,"range_pos_high_threshold":0.85,"sell_holding_min_minutes":10,"sell_holding_strict_minutes":30,"sell_score_boost_holding":5,"sell_score_boost_eod":8,"sell_momentum_bonus":6})
         eng=_se.SignalEngine(); _start_t=_tm.time(); ie=None
         if self.mode=="test":
@@ -165,7 +192,8 @@ class Runner:
             elapsed=_tm.time()-_start_t; eta=elapsed/(di+1)*(total-di-1) if total>0 and di>=0 else 0
             if di%20==0 or di==total-1: print(f"  [{di}/{total}] {ds} | 耗时{elapsed/60:.0f}分 预计剩{eta/60:.0f}分")
             sm=_dm(self._smin,ds)
-            if sm.empty: continue; sm=_addi(sm)
+            if sm.empty: continue
+            sm=_addi(sm)
             if sm.empty or len(sm)<=1: continue
             ictx=None
             if ie:
@@ -264,6 +292,67 @@ def gen_report(all_m,od,all_p):
                 lines.append("- 胜率: "+str(wr)+"%("+str(len(w_))+"/"+str(len(p.cycles))+")")
                 lines.append("- 盈亏比: "+str(pf))
             lines.append("- 大盘阻断: "+str(len(p.blocked))+"次"); lines.append("")
+    # ==================== 信号错过分析 (decision_trace + shadow_signals) ====================
+    dt_path=os.path.join(od,"decision_trace.jsonl"); ss_path=os.path.join(od,"shadow_signals.jsonl")
+    if os.path.exists(dt_path) or os.path.exists(ss_path):
+        lines.append("## 3. 信号错过分析"); lines.append("")
+        if os.path.exists(dt_path):
+            try:
+                _dts=[]; _f=open(dt_path,"r",encoding="utf-8")
+                for _l in _f:
+                    _l=_l.strip()
+                    if _l: _dts.append(json.loads(_l))
+                _f.close()
+            except: _dts=[]
+            if _dts:
+                # 近miss买入信号：buy_score >= buy_threshold - 5 但被block
+                _buy_near=[r for r in _dts if r.get("decision")!="BUY_LOW" and r.get("buy_score",0)>=r.get("buy_threshold",99)-5]
+                _blocked=[r for r in _buy_near if r.get("buy_block_reasons")]
+                if _blocked:
+                    lines.append(f"### 3a. 买入近miss分析 (buy_score ≥ threshold-5)")
+                    lines.append(f"共 {len(_blocked)} 次近miss记录，按日期top-20：")
+                    lines.append("")
+                    lines.append("| 时间 | buy_score | buy_threshold | 差 | 阻断原因 | priority_path |")
+                    lines.append("|------|-----------|---------------|-----|----------|--------------|")
+                    for _r in sorted(_blocked,key=lambda x:x.get("buy_score",0)-x.get("buy_threshold",99),reverse=True)[:20]:
+                        _gap=_r.get("buy_score",0)-_r.get("buy_threshold",99)
+                        _br=",".join(_r.get("buy_block_reasons",[])or[])
+                        lines.append(f"| {_r.get('scan_time','')[:16]} | {_r.get('buy_score','')} | {_r.get('buy_threshold','')} | {_gap:+.0f} | {_br} | {_r.get('priority_path','hold')} |")
+                    lines.append("")
+                # 统计阻断原因出现次数
+                _all_reasons={}
+                for _r in _dts:
+                    for _br in (_r.get("buy_block_reasons") or []):
+                        _all_reasons[_br]=_all_reasons.get(_br,0)+1
+                if _all_reasons:
+                    lines.append("**阻断原因统计（全部决策记录）**：")
+                    for _reason,_cnt in sorted(_all_reasons.items(),key=lambda x:-x[1]):
+                        lines.append(f"- {_reason}: {_cnt}次")
+                    lines.append("")
+        if os.path.exists(ss_path):
+            try:
+                _sss=[]; _f2=open(ss_path,"r",encoding="utf-8")
+                for _l2 in _f2:
+                    _l2=_l2.strip()
+                    if _l2: _sss.append(json.loads(_l2))
+                _f2.close()
+            except: _sss=[]
+            if _sss:
+                lines.append("### 3b. 影子信号分析 (距离阈值4分以内)")
+                lines.append(f"共 {len(_sss)} 条影子信号（已触发信号的近miss记录）")
+                _by_side={}
+                for _r in _sss:
+                    _side=_r.get("best_signal_type","buy")
+                    _by_side.setdefault(_side,[]).append(_r)
+                for _side in ["buy","sell"]:
+                    _sl=_by_side.get(_side,[])
+                    if not _sl: continue
+                    _dists=[max(0,_r.get(f"distance_to_{_side}_threshold",4)) for _r in _sl]
+                    _avg_dist=sum(_dists)/len(_dists) if _dists else 0
+                    _pct_within_2=sum(1 for d in _dists if d<=2)/len(_dists)*100 if _dists else 0
+                    _label="买入" if _side=="buy" else "卖出"
+                    lines.append(f"- {_label}影子信号: {len(_sl)}次 | 均距阈值 {_avg_dist:.1f}分 | 距≤2分占比 {_pct_within_2:.0f}%")
+                lines.append("")
     path=os.path.join(od,"report.md")
     with open(path,"w",encoding="utf-8") as f: f.write("\n".join(lines))
     print("  [报告] MD -> "+path)
