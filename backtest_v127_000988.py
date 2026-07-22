@@ -34,6 +34,8 @@ def _tcent(sym,end,cnt=600):
         for n in [5,10,20,60]: df[f"ma{n}"]=df["close"].rolling(n).mean()
         return df
     except: return None
+# suppress tushare request logs
+import logging as _lg; _lg.getLogger('tushare').setLevel(_lg.ERROR)
 def _tsmin(code,start,end,label=""):
     d="".join(c for c in code if c.isdigit())[:6]; tc=f"{d}.{'SZ' if d.startswith(('0','3')) else 'SH'}"
     pro=_ts(); all_df=[]; cur=datetime.strptime(start,"%Y-%m-%d"); ed=datetime.strptime(end,"%Y-%m-%d")
@@ -147,7 +149,16 @@ class Runner:
         _se.PARAMS.update({"min_amplitude":0.002,"rsi_oversold":35,"rsi_overbought":78,"vol_confirm_boost":10,"vol_ratio_confirm":1.2,"macd_strong_threshold":0.2,"macd_strong_boost":25,"min_profit_space":0.008,"buy_confirm_min_score":25,"range_pos_low_threshold":0.3,"range_pos_high_threshold":0.85,"sell_holding_min_minutes":10,"sell_holding_strict_minutes":30,"sell_score_boost_holding":5,"sell_score_boost_eod":8,"sell_momentum_bonus":6})
         eng=_se.SignalEngine(); _start_t=_tm.time(); ie=None
         if self.mode=="test":
-            try: from index_regime import _IndexRegimeEngine as _IRE; ie=_IRE
+            try:
+                from index_regime import _IndexRegimeEngine as _IRE
+                ie=_IRE
+                # import 后立即压制 index_regime 的 logger
+                import logging as _lg
+                _ir = _lg.getLogger('index_regime')
+                _ir.setLevel(_lg.ERROR)
+                for _h in _ir.handlers: _ir.removeHandler(_h)
+                _ir.handlers.clear()
+                _ir.addHandler(_lg.NullHandler())
             except: print("  [警告] index_regime 不可用")
         total=len(self._dates)
         for di,ds in enumerate(self._dates):
