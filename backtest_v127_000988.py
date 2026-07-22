@@ -161,8 +161,8 @@ class Runner:
     def run(self,start="2025-06-01",end="2026-07-20"):
         self.start=start; self.end=end
         if not self.load(): return self.port
-        import signal_engine as _se; _se.MINUTE_FETCH_STATUS[CODE]="ok"; _se.STOCK_PARAMS.clear()
-        _se.STOCK_PARAMS[CODE] = {"buy_confirm_min_score":15,"min_profit_space":0.003,"sell_holding_min_minutes":5,"sell_holding_strict_minutes":15,"sell_score_boost_holding":2,"hard_sell_threshold_cap":200,"hard_buy_threshold_cap":80}
+        import signal_engine as _se; _se.MINUTE_FETCH_STATUS[CODE]="ok"
+        # V2: STOCK_PARAMS per-stock tuning removed (ATR自适应替代)
         # Override signal_engine logging to backtest output directory (Test group only)
         # decision_trace.jsonl + shadow_signals.jsonl will contain buy_score, buy_threshold,
         # buy_block_reasons, priority_path for analyzing why 华工科技 missed dip-buy triggers
@@ -218,11 +218,7 @@ class Runner:
                 dc=self._dctx(ds)
                 if self.mode=="test" and ictx: dc["index_regime"]=ictx.get("regime","range")
                 if alerts: dc["intraday_alerts"]=alerts
-                try:
-                    if self.mode=="test":
-                        bs,ss_s,sig=eng.evaluate_v2(CODE,NAME,ss,h,daily_ctx=dc)
-                    else:
-                        bs,ss_s,sig=eng.evaluate(CODE,NAME,ss,h,daily_ctx=dc)
+                try: bs,ss_s,sig=eng.evaluate(CODE,NAME,ss,h,daily_ctx=dc)
                 except Exception: continue
                 if self.mode=="test" and alerts and sig is None and bs>=45:
                     tags=[a.get("tag") for a in alerts if a.get("tag")in("I1","I5")]
