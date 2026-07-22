@@ -1,7 +1,19 @@
 {
-  "last_regime": "uni_up",
-  "days_in_regime": 3,
+  "last_regime": "range",
+  "days_in_regime": 4,
   "score_history": [
+    {
+      "date": "2026-07-15",
+      "S": -59.1107
+    },
+    {
+      "date": "2026-07-16",
+      "S": -55.6019
+    },
+    {
+      "date": "2026-07-17",
+      "S": -56.1154
+    },
     {
       "date": "2026-07-20",
       "S": -51.8198
@@ -29,100 +41,10 @@
     {
       "date": "2025-06-04",
       "S": 15.0304
-    },
-    {
-      "date": "2025-06-05",
-      "S": 25.5922
-    },
-    {
-      "date": "2025-06-06",
-      "S": 27.2351
-    },
-    {
-      "date": "2025-06-09",
-      "S": 30.6382
     }
   ],
-  "last_date": "2025-06-09",
+  "last_date": "2025-06-04",
   "history": [
-    {
-      "date": "2026-04-10",
-      "S": 1.1888,
-      "sadj": -0.841,
-      "regime": "uni_up",
-      "days_in_regime": 1,
-      "k_anchor": {
-        "active": false,
-        "below_days": 0,
-        "recover_days": 0,
-        "start_date": null
-      },
-      "k_up": {
-        "active": true,
-        "boost": 9,
-        "start_date": "2026-04-08"
-      },
-      "sharp": {
-        "active": false,
-        "value": 0.0,
-        "age": 0,
-        "direction": 0,
-        "trigger_date": null,
-        "regime_at_trigger": null
-      }
-    },
-    {
-      "date": "2026-04-13",
-      "S": -3.3292,
-      "sadj": 0.1529,
-      "regime": "range",
-      "days_in_regime": 1,
-      "k_anchor": {
-        "active": false,
-        "below_days": 0,
-        "recover_days": 0,
-        "start_date": null
-      },
-      "k_up": {
-        "active": true,
-        "boost": 9,
-        "start_date": "2026-04-08"
-      },
-      "sharp": {
-        "active": false,
-        "value": 0.0,
-        "age": 0,
-        "direction": 0,
-        "trigger_date": null,
-        "regime_at_trigger": null
-      }
-    },
-    {
-      "date": "2026-04-14",
-      "S": -0.2469,
-      "sadj": 10.8354,
-      "regime": "uni_down",
-      "days_in_regime": 1,
-      "k_anchor": {
-        "active": false,
-        "below_days": 0,
-        "recover_days": 0,
-        "start_date": null
-      },
-      "k_up": {
-        "active": true,
-        "boost": 9,
-        "start_date": "2026-04-08"
-      },
-      "sharp": {
-        "active": false,
-        "value": 0.0,
-        "age": 0,
-        "direction": 0,
-        "trigger_date": null,
-        "regime_at_trigger": null
-      }
-    },
     {
       "date": "2026-04-15",
       "S": 1.5876,
@@ -987,84 +909,6 @@
       "sadj": 17.3829,
       "regime": "range",
       "days_in_regime": 4,
-      "k_anchor": {
-        "active": false,
-        "below_days": 0,
-        "recover_days": 0,
-        "start_date": null
-      },
-      "k_up": {
-        "active": false,
-        "boost": 0,
-        "start_date": null
-      },
-      "sharp": {
-        "active": false,
-        "value": 0.0,
-        "age": 0,
-        "direction": 0,
-        "trigger_date": null,
-        "regime_at_trigger": null
-      }
-    },
-    {
-      "date": "2025-06-05",
-      "S": 25.5922,
-      "sadj": 36.1541,
-      "regime": "uni_up",
-      "days_in_regime": 1,
-      "k_anchor": {
-        "active": false,
-        "below_days": 0,
-        "recover_days": 0,
-        "start_date": null
-      },
-      "k_up": {
-        "active": false,
-        "boost": 0,
-        "start_date": null
-      },
-      "sharp": {
-        "active": false,
-        "value": 0.0,
-        "age": 0,
-        "direction": 0,
-        "trigger_date": null,
-        "regime_at_trigger": null
-      }
-    },
-    {
-      "date": "2025-06-06",
-      "S": 27.2351,
-      "sadj": 28.878,
-      "regime": "uni_up",
-      "days_in_regime": 2,
-      "k_anchor": {
-        "active": false,
-        "below_days": 0,
-        "recover_days": 0,
-        "start_date": null
-      },
-      "k_up": {
-        "active": false,
-        "boost": 0,
-        "start_date": null
-      },
-      "sharp": {
-        "active": false,
-        "value": 0.0,
-        "age": 0,
-        "direction": 0,
-        "trigger_date": null,
-        "regime_at_trigger": null
-      }
-    },
-    {
-      "date": "2025-06-09",
-      "S": 30.6382,
-      "sadj": 34.0412,
-      "regime": "uni_up",
-      "days_in_regime": 3,
       "k_anchor": {
         "active": false,
         "below_days": 0,
