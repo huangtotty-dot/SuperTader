@@ -997,10 +997,12 @@ class FeatureExtractor:
 
     @staticmethod
     def extract_15min_features(df, _cached_15m=None, price: float = 0, vwap: float = 0,
-                               min_15min_bars: int = 3, _df_15min=None) -> dict:
-        """15分钟线特征。传入 _df_15min 可避免重复构建。"""
+                               min_15min_bars: int = 3, _df_15min=None,
+                               atr: float = 0.02) -> dict:
+        """15分钟线特征。传入 _df_15min 可避免重复构建。atr用于相对阈值。"""
         _pd = pd
         _np = np
+        atr_r = max(atr, 0.002)
         feats = {
             "rsi_15m": 50.0, "macd_hist_15m": 0.0, "prev_macd_hist_15m": 0.0,
             "ema_spread_15m": 0.0, "prev_ema_spread_15m": 0.0, "vol_ratio_15m": 1.0,
@@ -1028,25 +1030,28 @@ class FeatureExtractor:
             feats["mom2_15m"] = float(last_15m["mom2_15m"]) if _pd.notna(last_15m.get("mom2_15m")) else 0.0
             feats["kinetic_exhaustion"] = (
                 feats["macd_hist_15m"] > feats["prev_macd_hist_15m"] and
-                feats["macd_hist_15m"] < 0 and feats["mom2_15m"] > -0.015 and
+                feats["macd_hist_15m"] < 0 and feats["mom2_15m"] > -0.75 * atr_r and
                 feats["vol_ratio_15m"] < 1.3)
             if len(df_15min) >= 4:
                 lows = df_15min["low"].tail(4).values
                 sl = float(_np.min(lows)) if len(lows) > 0 else 0.0
                 feats["support_level_15m"] = sl
                 if sl > 0:
-                    feats["near_15m_support"] = price <= sl * 1.003 and price >= sl * 0.995
-                    low_count = sum(1 for lv in lows if abs(float(lv) - sl) / sl < 0.003)
+                    support_gap = atr_r * 0.3
+                    feats["near_15m_support"] = price <= sl * (1 + support_gap) and price >= sl * (1 - support_gap * 0.5)
+                    low_count = sum(1 for lv in lows if abs(float(lv) - sl) / sl < support_gap)
                     feats["multi_bottom_15m"] = low_count >= 2
         return feats
 
     @staticmethod
     def extract_5min_features(df, _cached_5m=None, price: float = 0, vwap: float = 0,
-                              bullish_params: dict = None, _df_5min=None) -> dict:
+                              bullish_params: dict = None, _df_5min=None,
+                              atr: float = 0.02) -> dict:
         """5分钟线特征（含缩量止跌+大阳线反包检测）。传入 _df_5min 可避免重复构建。"""
         _pd = pd
         _np = np
         p = bullish_params or {}
+        atr_r = max(atr, 0.002)
         feats = {
             "vol_ratio_5m": 1.0, "mom2_5m": 0.0, "macd_hist_5m": 0.0,
             "prev_macd_hist_5m": 0.0, "is_low_rising_5m": False, "is_stop_falling_5m": False,
@@ -1078,11 +1083,11 @@ class FeatureExtractor:
                 highs = [float(r["high"]) for _, r in prev4.iterrows()]
                 prev4_high = max(highs) if highs else 0
                 current_high = float(last_5m["high"])
-                vr_hd = all(highs[i] <= highs[i-1] * 1.003 for i in range(1, len(highs))) if len(highs) > 1 else False
-                hd_loose = prev4_high > current_high * 0.999 if current_high > 0 else False
+                vr_hd = all(highs[i] <= highs[i-1] * (1 + atr_r * 0.15) for i in range(1, len(highs))) if len(highs) > 1 else False
+                hd_loose = prev4_high > current_high * (1 - atr_r * 0.05) if current_high > 0 else False
                 feats["vr_high_declining"] = vr_hd
                 curr_bullish = float(last_5m["close"]) >= float(last_5m["open"]) * 0.9995
-                price_below_vwap = price < vwap * 0.995 if vwap else False
+                price_below_vwap = price < vwap * (1 - atr_r * 0.25) if vwap else False
                 prev4_vols = [float(r["volume"]) for _, r in prev4.iterrows()]
                 prev4_vol_mean = sum(prev4_vols) / len(prev4_vols) if prev4_vols else 0
                 is_doji = abs(float(last_5m["close"]) - float(last_5m["open"])) / float(last_5m["open"]) < 0.001 if float(last_5m["open"]) > 0 else False
@@ -1462,11 +1467,11 @@ class FeatureExtractorV2:
         feats["benchmark_gate"] = dc.get("benchmark_gate", "neutral")
         for k in ["index_regime_status", "index_circuit_state", "index_gate_advice", "index_temp_bucket"]:
             feats[k] = dc.get(k, "normal")
-        # 15min/5min features
-        _f15_f = FeatureExtractor.extract_15min_features(df, cached_15m_df, price, vwap)
+        # 15min/5min features (ATR自适应)
+        _f15_f = FeatureExtractor.extract_15min_features(df, cached_15m_df, price, vwap, atr=atr)
         for k, v in _f15_f.items():
             feats[f"f15_{k}"] = v
-        _f5_f = FeatureExtractor.extract_5min_features(df, cached_5m_df, price, vwap)
+        _f5_f = FeatureExtractor.extract_5min_features(df, cached_5m_df, price, vwap, atr=atr)
         for k, v in _f5_f.items():
             feats[f"f5_{k}"] = v
         _v19 = FeatureExtractor.extract_v19_oscillation(df, price, vwap, feats["open_gap"], feats["today_ret"])
@@ -1540,7 +1545,15 @@ class RiskManagerV2:
 
 
 class ScoringEngineV2:
-    """V2: 平滑连续打分，消除阶梯边界效应"""
+    """V2: 因子打分引擎
+    每个 score_xxx 方法返回 (raw_signal, details):
+      - raw_signal: 0.0~1.0 的标准化信号强度 (sigmoid输出)
+      - details: 诊断信息列表
+    calc_buy_score / calc_sell_score 使用 PARAMS_V2 权重聚合:
+      final = sum(raw * 100 * weight) + binary_adders
+    """
+
+    PARAMS_V2_factors = {k: v for k, v in PARAMS_V2.items() if k.startswith("factor_weight_")}
 
     @staticmethod
     def _sigmoid(x: float, center: float = 0, slope: float = 1) -> float:
@@ -1550,29 +1563,26 @@ class ScoringEngineV2:
     def score_vwap_buy(feats: dict) -> tuple:
         ratio = feats.get("vwap_dev_atr_ratio", 0)
         raw = ScoringEngineV2._sigmoid(-ratio, center=0.5, slope=2.0)
-        score = raw * 20
-        return round(score, 1), [{"指标": "VWAP偏离(ATR)", "当前": f"{ratio:.2f}σ", "加分": round(score, 1)}]
+        return raw, [{"指标": "VWAP偏离(ATR)", "当前": f"{ratio:.2f}σ", "强度": round(raw, 3)}]
 
     @staticmethod
     def score_rsi_buy(feats: dict) -> tuple:
         rsi = feats.get("rsi", 50)
         raw = ScoringEngineV2._sigmoid(35 - rsi, center=3, slope=0.5)
-        score = raw * 12
-        return round(score, 1), [{"指标": "RSI超卖", "当前": f"{rsi:.1f}", "加分": round(score, 1)}]
+        return raw, [{"指标": "RSI超卖", "当前": f"{rsi:.1f}", "强度": round(raw, 3)}]
 
     @staticmethod
     def score_rsi_sell(feats: dict) -> tuple:
         rsi = feats.get("rsi", 50)
         raw = ScoringEngineV2._sigmoid(rsi - 78, center=3, slope=0.5)
-        score = raw * 15
-        return round(score, 1), [{"指标": "RSI超买", "当前": f"{rsi:.1f}", "加分": round(score, 1)}]
+        return raw, [{"指标": "RSI超买", "当前": f"{rsi:.1f}", "强度": round(raw, 3)}]
 
     @staticmethod
     def score_macd_buy(feats: dict) -> tuple:
         mh = feats.get("macd_hist", 0); pmh = feats.get("prev_macd_hist", 0)
         if mh < 0 and mh > pmh:
             ratio = min(1.0, abs(mh) / max(abs(pmh), 0.001))
-            return round(ratio * 10, 1), [{"指标": "MACD负区拐头", "当前": f"{mh:.4f}↑", "加分": round(ratio*10, 1)}]
+            return ratio, [{"指标": "MACD负区拐头", "当前": f"{mh:.4f}↑", "强度": round(ratio, 3)}]
         return 0.0, []
 
     @staticmethod
@@ -1580,95 +1590,93 @@ class ScoringEngineV2:
         mh = feats.get("macd_hist", 0); pmh = feats.get("prev_macd_hist", 0)
         if mh > 0 and mh < pmh:
             ratio = min(1.0, mh / max(mh - pmh, 0.001))
-            return round(ratio * 10, 1), [{"指标": "MACD正区萎缩", "当前": f"{mh:.4f}↓", "加分": round(ratio*10, 1)}]
+            return ratio, [{"指标": "MACD正区萎缩", "当前": f"{mh:.4f}↓", "强度": round(ratio, 3)}]
         return 0.0, []
 
     @staticmethod
-    def score_vwap_sell_v2(feats: dict) -> tuple:
+    def score_vwap_sell(feats: dict) -> tuple:
         price = feats.get("price", 0); vwap = feats.get("vwap", 0)
         atr = max(feats.get("atr", 0.02), 0.002)
         if vwap <= 0 or price <= 0: return 0.0, []
         ratio = (price - vwap) / vwap / atr
         raw = ScoringEngineV2._sigmoid(ratio, center=0.5, slope=1.5)
-        return round(raw * 20, 1), [{"指标": "VWAP溢价(ATR)", "当前": f"{ratio:.2f}σ", "加分": round(raw*20, 1)}]
+        return raw, [{"指标": "VWAP溢价(ATR)", "当前": f"{ratio:.2f}σ", "强度": round(raw, 3)}]
 
     @staticmethod
     def score_lower_shadow(feats: dict) -> tuple:
-        """长下影买分：连续 sigmoid，无硬阈值"""
         ls = feats.get("lower_shadow", 0)
         raw = ScoringEngineV2._sigmoid(ls, center=0.3, slope=8.0)
-        score = raw * 8
-        if score > 0.5:
-            return round(score, 1), [{"指标": "长下影", "当前": f"{ls:.2f}", "加分": round(score, 1)}]
-        return 0.0, []
+        return raw, [{"指标": "长下影", "当前": f"{ls:.2f}", "强度": round(raw, 3)}] if raw > 0.05 else (0.0, [])
 
     @staticmethod
     def score_ema_improve(feats: dict) -> tuple:
-        """EMA改善买分：连续 sigmoid"""
         es = feats.get("ema_spread", 0); pes = feats.get("prev_ema_spread", 0)
-        delta = es - pes  # >0 表示改善
+        delta = es - pes
         raw = ScoringEngineV2._sigmoid(delta, center=0.0005, slope=500.0)
-        score = raw * 4
-        if score > 0.5:
-            return round(score, 1), [{"指标": "EMA转强", "当前": f"{es*100:.4f}%", "加分": round(score, 1)}]
-        return 0.0, []
+        return raw, [{"指标": "EMA转强", "当前": f"{es*100:.4f}%", "强度": round(raw, 3)}] if raw > 0.05 else (0.0, [])
 
     @staticmethod
     def score_ema_weaken(feats: dict) -> tuple:
-        """EMA转弱卖分：连续 sigmoid"""
         es = feats.get("ema_spread", 0); pes = feats.get("prev_ema_spread", 0)
-        delta = pes - es  # >0 表示转弱
+        delta = pes - es
         raw = ScoringEngineV2._sigmoid(delta, center=0.0005, slope=500.0)
-        score = raw * 4
-        if score > 0.5:
-            return round(score, 1), [{"指标": "EMA转弱", "当前": f"{es*100:.4f}%", "加分": round(score, 1)}]
-        return 0.0, []
+        return raw, [{"指标": "EMA转弱", "当前": f"{es*100:.4f}%", "强度": round(raw, 3)}] if raw > 0.05 else (0.0, [])
 
     @staticmethod
-    def score_volume(feats: dict, side: str = "buy") -> tuple:
-        """量能确认：连续 sigmoid"""
+    def score_volume(feats: dict) -> tuple:
         vr = feats.get("vol_ratio", 1.0)
         raw = ScoringEngineV2._sigmoid(vr, center=1.2, slope=4.0)
-        score = raw * 10
-        label = "量能确认" if side == "buy" else "量能确认(卖)"
-        if score > 0.5:
-            return round(score, 1), [{"指标": label, "当前": f"{vr:.2f}", "加分": round(score, 1)}]
-        return 0.0, []
+        return raw, [{"指标": "量能确认", "当前": f"{vr:.2f}", "强度": round(raw, 3)}] if raw > 0.05 else (0.0, [])
 
     @staticmethod
     def score_upper_shadow(feats: dict) -> tuple:
-        """长上影卖分：连续 sigmoid"""
         us = feats.get("upper_shadow", 0)
         raw = ScoringEngineV2._sigmoid(us, center=0.4, slope=6.0)
-        score = raw * 15
-        if score > 0.5:
-            return round(score, 1), [{"指标": "长上影", "当前": f"{us:.2f}", "加分": round(score, 1)}]
-        return 0.0, []
+        return raw, [{"指标": "长上影", "当前": f"{us:.2f}", "强度": round(raw, 3)}] if raw > 0.05 else (0.0, [])
+
+    @staticmethod
+    def _weighted_factor_score(raw: float, weight_key: str, w_mult: float = 1.0) -> float:
+        """raw(0~1) × 100 × PARAMS_V2权重"""
+        w = PARAMS_V2.get(weight_key, 0.10)
+        return raw * 100 * w * w_mult
 
     @staticmethod
     def calc_buy_score(feats: dict) -> tuple:
         details = []
         score = 0.0
-        _s, _d = ScoringEngineV2.score_vwap_buy(feats)
-        score += _s; details.extend(_d)
-        _s, _d = ScoringEngineV2.score_rsi_buy(feats)
-        score += _s; details.extend(_d)
-        _s, _d = ScoringEngineV2.score_macd_buy(feats)
-        score += _s; details.extend(_d)
-        _s, _d = ScoringEngineV2.score_volume(feats, "buy")
-        score += _s; details.extend(_d)
-        _s, _d = ScoringEngineV2.score_lower_shadow(feats)
-        score += _s; details.extend(_d)
-        _s, _d = ScoringEngineV2.score_ema_improve(feats)
-        score += _s; details.extend(_d)
-        # F15 pattern detection (binary by nature)
+
+        # ---- 加权因子 (raw × 100 × weight) ----
+        raw, d = ScoringEngineV2.score_vwap_buy(feats)
+        s = ScoringEngineV2._weighted_factor_score(raw, "factor_weight_vwap")
+        score += s; d and details.append(d[0] | {"加分": round(s, 1)})
+
+        raw, d = ScoringEngineV2.score_rsi_buy(feats)
+        s = ScoringEngineV2._weighted_factor_score(raw, "factor_weight_rsi")
+        score += s; d and details.append(d[0] | {"加分": round(s, 1)})
+
+        raw, d = ScoringEngineV2.score_macd_buy(feats)
+        s = ScoringEngineV2._weighted_factor_score(raw, "factor_weight_macd")
+        score += s; d and details.append(d[0] | {"加分": round(s, 1)})
+
+        raw, d = ScoringEngineV2.score_volume(feats)
+        s = ScoringEngineV2._weighted_factor_score(raw, "factor_weight_volume")
+        score += s; d and details.append(d[0] | {"加分": round(s, 1)})
+
+        raw, d = ScoringEngineV2.score_lower_shadow(feats)
+        s = ScoringEngineV2._weighted_factor_score(raw, "factor_weight_position")
+        score += s; d and details.append(d[0] | {"加分": round(s, 1)})
+
+        raw, d = ScoringEngineV2.score_ema_improve(feats)
+        s = raw * 4  # EMA改善低权重固定加分
+        score += s; d and details.append(d[0] | {"加分": round(s, 1)})
+
+        # ---- 二值模式加分 (不受权重衰减) ----
         if feats.get("f15_kinetic_exhaustion"):
             details.append({"指标": "15分动能衰竭", "加分": 10}); score += 10
         if feats.get("f15_near_15m_support"):
             details.append({"指标": "15分强支撑", "加分": 8}); score += 8
         if feats.get("f15_multi_bottom_15m"):
             details.append({"指标": "15分多重底", "加分": 6}); score += 6
-        # F5 reversal patterns (binary by nature)
         if feats.get("f5_is_strong_bullish_reversal"):
             details.append({"指标": "5分大阳线反包", "加分": 20}); score += 20
         elif feats.get("f5_is_volume_reversal"):
@@ -1679,18 +1687,31 @@ class ScoringEngineV2:
     def calc_sell_score(feats: dict) -> tuple:
         details = []
         score = 0.0
-        _s, _d = ScoringEngineV2.score_vwap_sell_v2(feats)
-        score += _s; details.extend(_d)
-        _s, _d = ScoringEngineV2.score_rsi_sell(feats)
-        score += _s; details.extend(_d)
-        _s, _d = ScoringEngineV2.score_macd_sell(feats)
-        score += _s; details.extend(_d)
-        _s, _d = ScoringEngineV2.score_volume(feats, "sell")
-        score += _s; details.extend(_d)
-        _s, _d = ScoringEngineV2.score_upper_shadow(feats)
-        score += _s; details.extend(_d)
-        _s, _d = ScoringEngineV2.score_ema_weaken(feats)
-        score += _s; details.extend(_d)
+
+        raw, d = ScoringEngineV2.score_vwap_sell(feats)
+        s = ScoringEngineV2._weighted_factor_score(raw, "factor_weight_vwap")
+        score += s; d and details.append(d[0] | {"加分": round(s, 1)})
+
+        raw, d = ScoringEngineV2.score_rsi_sell(feats)
+        s = ScoringEngineV2._weighted_factor_score(raw, "factor_weight_rsi")
+        score += s; d and details.append(d[0] | {"加分": round(s, 1)})
+
+        raw, d = ScoringEngineV2.score_macd_sell(feats)
+        s = ScoringEngineV2._weighted_factor_score(raw, "factor_weight_macd")
+        score += s; d and details.append(d[0] | {"加分": round(s, 1)})
+
+        raw, d = ScoringEngineV2.score_volume(feats)
+        s = ScoringEngineV2._weighted_factor_score(raw, "factor_weight_volume")
+        score += s; d and details.append(d[0] | {"加分": round(s, 1)})
+
+        raw, d = ScoringEngineV2.score_upper_shadow(feats)
+        s = ScoringEngineV2._weighted_factor_score(raw, "factor_weight_position")
+        score += s; d and details.append(d[0] | {"加分": round(s, 1)})
+
+        raw, d = ScoringEngineV2.score_ema_weaken(feats)
+        s = raw * 4
+        score += s; d and details.append(d[0] | {"加分": round(s, 1)})
+
         # Daily context binary adders
         if feats.get("daily_breakdown_risk"):
             details.append({"指标": "日线破位风险", "加分": 8}); score += 8
