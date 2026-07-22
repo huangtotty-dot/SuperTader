@@ -34,9 +34,10 @@ def _tcent(sym,end,cnt=600):
         for n in [5,10,20,60]: df[f"ma{n}"]=df["close"].rolling(n).mean()
         return df
     except: return None
-def _tsmin(code,start,end):
+def _tsmin(code,start,end,label=""):
     d="".join(c for c in code if c.isdigit())[:6]; tc=f"{d}.{'SZ' if d.startswith(('0','3')) else 'SH'}"
     pro=_ts(); all_df=[]; cur=datetime.strptime(start,"%Y-%m-%d"); ed=datetime.strptime(end,"%Y-%m-%d")
+    total_days=(ed-cur).days+1; fetched=0; _last_pct=-1
     while cur<=ed:
         ce=min(cur+timedelta(days=6),ed); s=cur.strftime("%Y-%m-%d 09:00:00"); e=ce.strftime("%Y-%m-%d 15:30:00")
         try:
@@ -49,7 +50,10 @@ def _tsmin(code,start,end):
                 df["volume"]=pd.to_numeric(df["volume"],errors="coerce").fillna(0); df["amount"]=pd.to_numeric(df["amount"],errors="coerce").fillna(0)
                 all_df.append(df)
         except: pass
-        cur=ce+timedelta(days=1); _tm.sleep(0.3)
+        cur=ce+timedelta(days=1); fetched+=min(6,(ed-cur).days+1); _tm.sleep(0.3)
+        if label:
+            _pct=int(fetched/total_days*100)
+            if _pct>_last_pct: _last_pct=_pct; print(f"   [数据] {label}: {_pct}% ({cur.strftime('%m-%d')})")
     if not all_df: return pd.DataFrame()
     return pd.concat(all_df,ignore_index=True).drop_duplicates(subset=["time"]).sort_values("time").reset_index(drop=True)
 def _dm(mdf,ds):
@@ -119,10 +123,10 @@ class Runner:
         sd=_tcent(s,self.end,600)
         if sd is not None and len(sd)>0: self._dates=sorted(sd[(sd["date"]>=self.start)&(sd["date"]<=self.end)]["date"].tolist())
         if not self._dates: print("  [警告] 无交易日"); return False
-        print(f"  {len(self._dates)} 天"); self._smin=_tsmin(CODE,self.start,self.end)
+        print(f"  {len(self._dates)} 天"); self._smin=_tsmin(CODE,self.start,self.end,"个股")
         if self._smin is None or self._smin.empty: print("  [警告] 分钟空"); return False
-        print(f"  {len(self._smin)} 行, {self._smin['time'].dt.date.nunique()} 天")
-        if self.mode=="test": self._imin=_tsmin("sh000001",self.start,self.end)
+        print(f"  [数据] 个股分钟: {len(self._smin)} 行, {self._smin['time'].dt.date.nunique()} 天")
+        if self.mode=="test": print("   [数据] 加载大盘分钟..."); self._imin=_tsmin("sh000001",self.start,self.end,"大盘")
         return True
     def _dctx(self,ds):
         ctx=dict.fromkeys(["daily_status","daily_gate","daily_trend_bg","daily_ma5_state","daily_support_name","index_regime","index_circuit_state","index_gate_advice"],"")
@@ -141,13 +145,14 @@ class Runner:
         if not self.load(): return self.port
         import signal_engine as _se; _se.MINUTE_FETCH_STATUS[CODE]="ok"; _se.STOCK_PARAMS.clear()
         _se.PARAMS.update({"min_amplitude":0.002,"rsi_oversold":35,"rsi_overbought":78,"vol_confirm_boost":10,"vol_ratio_confirm":1.2,"macd_strong_threshold":0.2,"macd_strong_boost":25,"min_profit_space":0.008,"buy_confirm_min_score":25,"range_pos_low_threshold":0.3,"range_pos_high_threshold":0.85,"sell_holding_min_minutes":10,"sell_holding_strict_minutes":30,"sell_score_boost_holding":5,"sell_score_boost_eod":8,"sell_momentum_bonus":6})
-        eng=_se.SignalEngine(); ie=None
+        eng=_se.SignalEngine(); _start_t=_tm.time(); ie=None
         if self.mode=="test":
             try: from index_regime import _IndexRegimeEngine as _IRE; ie=_IRE
             except: print("  [警告] index_regime 不可用")
         total=len(self._dates)
         for di,ds in enumerate(self._dates):
-            if di%20==0: print(f"  进度: {di}/{total} ({ds})")
+            elapsed=_tm.time()-_start_t; eta=elapsed/(di+1)*(total-di-1) if total>0 and di>=0 else 0
+            if di%20==0 or di==total-1: print(f"  [{di}/{total}] {ds} | 耗时{elapsed/60:.0f}分 预计剩{eta/60:.0f}分")
             sm=_dm(self._smin,ds)
             if sm.empty: continue; sm=_addi(sm)
             if sm.empty or len(sm)<=1: continue
