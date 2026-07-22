@@ -222,7 +222,7 @@ if 'Signal' not in globals():
 # ==========================================================
 
 class SignalEngine:
-    def __init__(self):
+    def __init__(self, params_v2: dict = None):
         self.buy_cooldown: Dict[str, datetime] = {}
         self.sell_cooldown: Dict[str, datetime] = {}
         self.buy_count_per_stock: Dict[str, int] = {}
@@ -243,80 +243,8 @@ class SignalEngine:
         self.scenario_factor_state: Dict[str, Dict[str, Dict[str, Any]]] = {}
         # V1.25: 早盘预警状态机（基于近两年数据训练）
         self.morning_alert_state: Dict[str, Dict[str, Any]] = {}
-
-    def _calc_etf_qty(self, code: str, holding: dict, action: str, sig_score: float, threshold: float) -> int:
-        """V1.12: ETF动态份数计算 - 利益最大化原则
-        
-        核心逻辑:
-        1. 根据信号强度（score - threshold 差值）决定仓位比例
-        2. 根据剩余可交易次数均分剩余仓位
-        3. 确保最小交易单位（100份）
-        4. 确保不超过当前可买/可卖额度
-        
-        Returns:
-            建议交易份数（整数，100的倍数）
-        """
-        if not self._is_etf(code):
-            return int(holding.get("t_qty", 0) or holding.get("qty", 0) or 0)
-        
-        p = self._get_params(code)
-        total_t_qty = int(holding.get("t_qty", 0) or holding.get("qty", 0) or 0)
-        if total_t_qty <= 0:
-            return 0
-        
-        # 计算已用/剩余次数
-        max_cycles = p.get("max_t_cycles_per_stock", 8)
-        used_buys = self.buy_count_per_stock.get(code, 0)
-        used_sells = self.sell_count_per_stock.get(code, 0)
-        
-        if action in ["BUY_LOW", "ADD_POS"]:
-            remaining = max(1, p.get("max_buy_times_per_stock", 5) - used_buys)
-        else:
-            remaining = max(1, p.get("max_sell_times_per_stock", 5) - used_sells)
-        
-        # 信号强度因子
-        signal_strength = sig_score - threshold
-        if signal_strength >= 10:
-            strength_pct = p.get("etf_qty_strong_pct", 0.25)
-        elif signal_strength >= 5:
-            strength_pct = p.get("etf_qty_base_pct", 0.15)
-        else:
-            strength_pct = p.get("etf_qty_weak_pct", 0.08)
-        
-        # 基础份数 = 总仓位 * 强度比例
-        base_qty = int(total_t_qty * strength_pct)
-        
-        # 根据剩余次数调整（剩余次数越少，每次越大）
-        remaining_factor = min(2.0, 1.0 + (3 - remaining) * 0.3) if remaining <= 3 else 1.0
-        qty = int(base_qty * remaining_factor)
-        
-        # 最小交易单位（100份）
-        min_unit = p.get("etf_min_trade_unit", 100)
-        qty = max(min_unit, (qty // min_unit) * min_unit)
-        
-        # 确保不超过当前可交易额度
-        net_qty = self._virtual_net_qty(code, holding)
-        if action in ["BUY_LOW", "ADD_POS"]:
-            # 买入不能超过剩余可买额度（总T仓 - 当前虚拟净持仓）
-            max_buyable = max(0, total_t_qty - net_qty)
-            qty = min(qty, max_buyable)
-        else:
-            # 卖出不能超过当前虚拟净持仓
-            qty = min(qty, net_qty)
-        
-        # 再次对齐最小单位
-        qty = (qty // min_unit) * min_unit
-        
-        return max(0, qty)
-
-    def _is_etf(self, code: str) -> bool:
-        """判断指定代码是否为ETF类型"""
-        h = HOLDINGS.get(code, {})
-        return h.get("type") == "etf"
-
-    def _get_params(self, code: str) -> dict:
-        """V2: 统一返回 PARAMS，STOCK_PARAMS/ETF_T0_PARAMS 已移除（ATR自适应替代）"""
-        return PARAMS
+        # V2: 可传入自定义权重参数，默认 PARAMS_V2（支持 HPO 多进程调参）
+        self.params_v2 = params_v2 or PARAMS_V2
 
     def _reset_daily_state_if_needed(self):
         today = get_today_str()
@@ -332,361 +260,14 @@ class SignalEngine:
             self.awaiting_buyback = {}
             self.daily_realized_loss_monitor = 0.0
             self.diagnostics = {}
-            self.scenario_factor_state = {}
             self.peak_tracker = {}
-            self.morning_alert_state = {}  # V1.25: 重置早盘预警状态
+            self.morning_alert_state = {}
             self.state_reset_date = today
-
-    # V1.25: 早盘特征计算与预警检查
-    def _calc_morning_features_and_alert(self, code: str, df: pd.DataFrame, t_val: int) -> tuple[int, list, dict]:
-        """
-        计算早盘特征并检查是否触发预警
-        Returns: (alert_level, triggered_rules, morning_stats)
-        alert_level: 0=正常, 1=谨慎, 2=禁止买入
-        """
-        alert_cfg = MORNING_ALERT_PARAMS.get(code)
-        if not alert_cfg or not alert_cfg.get("alert_enabled"):
-            return 0, [], {}
-        if t_val > alert_cfg.get("alert_window_end", 1000):
-            return 0, [], {}
-
-        # 计算早盘特征（9:30-当前）
-        today_df = df[df["date"] == df.iloc[-1]["date"]].copy()
-        if len(today_df) < 5:
-            return 0, [], {}
-
-        open_price = float(today_df.iloc[0]["open"])
-        current_price = float(today_df.iloc[-1]["close"])
-        high_so_far = float(today_df["high"].max())
-        low_so_far = float(today_df["low"].min())
-
-        # 开盘5/10/30分钟价格
-        bar_5 = today_df.iloc[4] if len(today_df) >= 5 else today_df.iloc[-1]
-        bar_10 = today_df.iloc[9] if len(today_df) >= 10 else today_df.iloc[-1]
-        bar_30 = today_df.iloc[29] if len(today_df) >= 30 else today_df.iloc[-1]
-        p5 = float(bar_5["close"])
-        p10 = float(bar_10["close"])
-        p30 = float(bar_30["close"])
-
-        open_5min_ret = (p5 - open_price) / open_price if open_price > 0 else 0
-        open_10min_ret = (p10 - open_price) / open_price if open_price > 0 else 0
-        open_30min_ret = (p30 - open_price) / open_price if open_price > 0 else 0
-        max_gain_after_open = (high_so_far - open_price) / open_price if open_price > 0 else 0
-
-        # VWAP特征
-        vwap_series = today_df["vwap"].astype(float)
-        below_vwap = (today_df["close"].astype(float) < vwap_series).sum()
-        below_vwap_ratio = below_vwap / len(today_df) if len(today_df) > 0 else 0
-
-        # 连续阴线
-        bearish = (today_df["close"] < today_df["open"]).astype(int)
-        consecutive_bearish = 0
-        for i in range(len(bearish)):
-            if bearish.iloc[-(i+1)] == 1:
-                consecutive_bearish += 1
-            else:
-                break
-
-        # 价格斜率（近10分钟线性回归）
-        recent = today_df.iloc[-10:].copy()
-        if len(recent) >= 3:
-            x = np.arange(len(recent))
-            y = recent["close"].astype(float).values
-            slope = np.polyfit(x, y, 1)[0] / open_price if open_price > 0 else 0
-        else:
-            slope = 0
-
-        morning_stats = {
-            "open_5min_ret": round(open_5min_ret * 100, 2),
-            "open_10min_ret": round(open_10min_ret * 100, 2),
-            "open_30min_ret": round(open_30min_ret * 100, 2),
-            "max_gain_after_open": round(max_gain_after_open * 100, 2),
-            "below_vwap_ratio": round(below_vwap_ratio * 100, 2),
-            "consecutive_bearish": consecutive_bearish,
-            "price_slope": round(slope * 100, 4),
-        }
-
-        # 检查Level 2规则
-        triggered_rules = []
-        alert_level = 0
-        for rule in alert_cfg.get("level_2_rules", []):
-            cond = rule.get("condition", {})
-            hit = True
-            for key, threshold in cond.items():
-                val = morning_stats.get(key)
-                if val is None:
-                    hit = False
-                    break
-                if key in ["consecutive_bearish_bars", "consecutive_bearish"]:
-                    if val < threshold:
-                        hit = False
-                        break
-                else:
-                    if val > threshold:  # 如max_gain_after_open > threshold
-                        hit = False
-                        break
-            if hit:
-                triggered_rules.append(rule)
-                alert_level = 2
-
-        # 检查Level 1规则（仅在未触发L2时）
-        if alert_level < 2:
-            for rule in alert_cfg.get("level_1_rules", []):
-                cond = rule.get("condition", {})
-                hit = True
-                for key, threshold in cond.items():
-                    val = morning_stats.get(key)
-                    if val is None:
-                        hit = False
-                        break
-                    if key in ["consecutive_bearish_bars", "consecutive_bearish"]:
-                        if val < threshold:
-                            hit = False
-                            break
-                    else:
-                        if val > threshold:
-                            hit = False
-                            break
-                if hit:
-                    triggered_rules.append(rule)
-                    alert_level = max(alert_level, 1)
-
-        return alert_level, triggered_rules, morning_stats
-
-    # V1.25: 早盘误判纠正检查
-    def _check_morning_correction(self, code: str, df: pd.DataFrame, t_val: int) -> tuple[bool, str]:
-        """
-        检查是否满足纠正条件，解除Level 2
-        Returns: (corrected, reason)
-        """
-        corr_cfg = CORRECTION_PARAMS.get(code)
-        if not corr_cfg or not corr_cfg.get("correction_enabled"):
-            return False, ""
-        if t_val < corr_cfg.get("earliest_correction_time", 1130):
-            return False, "未到最早纠正时间"
-
-        today_df = df[df["date"] == df.iloc[-1]["date"]].copy()
-        if len(today_df) < 10:
-            return False, ""
-
-        current_price = float(today_df.iloc[-1]["close"])
-        vwap = float(today_df.iloc[-1]["vwap"])
-        open_price = float(today_df.iloc[0]["open"])
-
-        # 检查各纠正规则
-        for rule in corr_cfg.get("correction_rules", []):
-            cond = rule.get("condition", {})
-            hit = True
-            reason_parts = []
-
-            # 规则：午后30分钟涨>0%
-            if "afternoon_30min_ret" in cond:
-                # 找13:00后的数据
-                pm_df = today_df[today_df["time"] >= pd.Timestamp("13:00").time()]
-                if len(pm_df) >= 5:
-                    pm_open = float(pm_df.iloc[0]["close"])
-                    pm_now = float(pm_df.iloc[-1]["close"])
-                    pm_ret = (pm_now - pm_open) / pm_open if pm_open > 0 else 0
-                    if pm_ret < cond["afternoon_30min_ret"]:
-                        hit = False
-                    else:
-                        reason_parts.append(f"午后涨{pm_ret*100:.1f}%")
-                else:
-                    hit = False
-
-            # 规则：13:30价格回到VWAP上方
-            if "price_above_vwap_1330" in cond:
-                bar_1330 = today_df[(today_df["time"] >= pd.Timestamp("13:30").time()) &
-                                    (today_df["time"] <= pd.Timestamp("13:32").time())]
-                if len(bar_1330) > 0:
-                    p1330 = float(bar_1330.iloc[0]["close"])
-                    v1330 = float(bar_1330.iloc[0]["vwap"])
-                    if p1330 <= v1330:
-                        hit = False
-                    else:
-                        reason_parts.append("13:30>VWAP")
-                else:
-                    hit = False
-
-            # 规则：11:30前连续阳线≥3根
-            if "bullish_1130_count" in cond:
-                am_df = today_df[today_df["time"] <= pd.Timestamp("11:30").time()]
-                bullish = (am_df["close"] > am_df["open"]).astype(int)
-                max_bullish = 0
-                curr = 0
-                for b in bullish:
-                    if b == 1:
-                        curr += 1
-                        max_bullish = max(max_bullish, curr)
-                    else:
-                        curr = 0
-                if max_bullish < cond["bullish_1130_count"]:
-                    hit = False
-                else:
-                    reason_parts.append(f"连续阳线{max_bullish}根")
-
-            if hit:
-                return True, f"{rule['name']}: {'+'.join(reason_parts)}"
-
-        return False, ""
-
-    # V1.26: 低点抬高支撑确认检测（华工科技 07-14 反馈）
-    def _check_higher_low_support(self, code: str, df: pd.DataFrame, price: float, vwap: float) -> tuple[bool, dict]:
-        """
-        检测"低点抬高支撑确认"信号
-        条件：
-        1. 从日内高点下跌 > 4%
-        2. 最近低点 > 前一个低点（低点抬高）
-        3. 价格低于 VWAP（低吸确认）
-        4. 时间窗口：10:00-14:00（避免开盘/尾盘噪音）
-        
-        Returns: (detected, detail_dict)
-        """
-        if df.empty or len(df) < 10:
-            return False, {}
-        
-        today_df = df[df["date"] == df.iloc[-1]["date"]].copy()
-        if len(today_df) < 10:
-            return False, {}
-        
-        # 时间窗口过滤（10:00-14:00）
-        last_time = pd.to_datetime(today_df.iloc[-1]["time"])
-        t_val = last_time.hour * 100 + last_time.minute
-        if t_val < 1000 or t_val > 1400:
-            return False, {}
-        
-        # 计算日内高点和当前跌幅
-        day_high = float(today_df["high"].max())
-        drop_from_high = (day_high - price) / day_high if day_high > 0 else 0
-        
-        # 跌幅必须 > 4%
-        if drop_from_high < 0.04:
-            return False, {}
-        
-        # 检查低点抬高：将最近10根 lows 分为前后两半，后半最低 > 前半最低 → 低点抬高
-        recent_lows = today_df.iloc[-10:]["low"].astype(float).values
-        if len(recent_lows) < 5:
-            return False, {}
-        
-        mid = len(recent_lows) // 2
-        first_half_low = float(np.min(recent_lows[:mid])) if mid > 0 else 0.0
-        second_half_low = float(np.min(recent_lows[mid:])) if mid > 0 else 0.0
-        
-        # 后半最低必须明显高于前半最低（>0.1%）
-        if second_half_low <= first_half_low * 1.001:
-            return False, {}
-        
-        # 价格低于 VWAP（确保是低吸点）
-        if vwap > 0 and price >= vwap * 0.995:
-            return False, {}
-        
-        return True, {
-            "day_high": day_high,
-            "drop_from_high": drop_from_high,
-            "prev_low": first_half_low,
-            "curr_low": second_half_low,
-            "low_raise_pct": (second_half_low - first_half_low) / first_half_low if first_half_low > 0 else 0,
-        }
-
-    def _check_scenario_factor(self, code: str, factor: str, condition_met: bool,
-                               observation_minutes: int, lock_minutes: int,
-                               etf_observation_multiplier: float = 1.0,
-                               cancel_condition: bool = False) -> tuple[bool, str]:
-        """
-        场景因子"观察→确认→锁定"状态机
-        Returns: (confirmed, diag_msg)
-        - confirmed: 是否本次确认加分
-        - diag_msg: 诊断信息（用于 sell_details）
-        """
-        now = _now()
-        stock_state = self.scenario_factor_state.setdefault(code, {})
-        factor_state = stock_state.setdefault(factor, {})
-        
-        # 计算实际观察分钟（ETF早盘加倍）
-        actual_obs = int(observation_minutes * etf_observation_multiplier)
-        
-        # 检查解锁：锁定超时
-        if factor_state.get("locked", False):
-            locked_at = factor_state.get("locked_at")
-            elapsed = (now - locked_at).total_seconds() / 60 if locked_at else 0
-            if elapsed >= lock_minutes:
-                factor_state["locked"] = False
-                factor_state["observing"] = False
-                factor_state["observed_minutes"] = 0
-                factor_state["confirmed"] = False
-            else:
-                return False, f"【{factor}】已锁定，剩余{lock_minutes - elapsed:.0f}分钟"
-        
-        # 取消条件：走势改善，重置观察
-        if cancel_condition and factor_state.get("observing", False):
-            factor_state["observing"] = False
-            factor_state["observed_minutes"] = 0
-            return False, f"【{factor}】观察取消（条件改善）"
-        
-        if not condition_met:
-            # 条件不满足，重置观察（仅当正在观察时）
-            if factor_state.get("observing", False):
-                factor_state["observing"] = False
-                factor_state["observed_minutes"] = 0
-            return False, ""
-        
-        # 条件满足
-        if not factor_state.get("observing", False):
-            factor_state["observing"] = True
-            factor_state["observed_minutes"] = 1
-            factor_state["observed_at"] = now
-            factor_state["confirmed"] = False
-            return False, f"【{factor}】开始观察（1/{actual_obs}分钟）"
-        
-        # 已在观察中
-        factor_state["observed_minutes"] = factor_state.get("observed_minutes", 0) + 1
-        observed = factor_state["observed_minutes"]
-        
-        if observed >= actual_obs:
-            factor_state["confirmed"] = True
-            factor_state["locked"] = True
-            factor_state["locked_at"] = now
-            factor_state["observing"] = False
-            return True, f"【{factor}】观察{observed}分钟后确认"
-        
-        return False, f"【{factor}】观察中（{observed}/{actual_obs}分钟）"
-
-    def _is_strong_chop(self, df: pd.DataFrame, current_idx: int, price: float, vwap: float) -> bool:
-        """
-        V1.20: 强势震荡检测
-        价格在VWAP上方反复波动、低点抬高、振幅受控 → 抑制场景化卖出
-        华工科技 0707 案例：09:34-09:52 在均线上方反复波动，实为强势震荡
-        """
-        if current_idx < 8:
-            return False
-        recent = df.iloc[max(0, current_idx - 8):current_idx + 1]
-        close_vals = recent["close"].astype(float)
-        low_vals = recent["low"].astype(float)
-        high_vals = recent["high"].astype(float)
-        
-        # 65%以上时间在VWAP上方
-        above_vwap = (close_vals > vwap * 0.995).sum()
-        if above_vwap / len(close_vals) < 0.65:
-            return False
-        
-        # 最近5根低点连续抬高
-        lows_5 = low_vals.tail(5).values
-        if len(lows_5) < 5 or not all(lows_5[i+1] > lows_5[i] for i in range(len(lows_5)-1)):
-            return False
-        
-        # 振幅控制（<2.5%）
-        high_max = float(high_vals.max())
-        low_min = float(low_vals.min())
-        if low_min <= 0 or (high_max - low_min) / low_min > 0.025:
-            return False
-        
-        return True
 
     def _in_cooldown(self, code: str, action: str) -> bool:
         cd_dict = self.sell_cooldown if "SELL" in action else self.buy_cooldown
         last = cd_dict.get(code)
-        p = self._get_params(code)
-        return bool(last) and (_now() - last).total_seconds() < p["cooldown_minutes"] * 60
+        return bool(last) and (_now() - last).total_seconds() < PARAMS["cooldown_minutes"] * 60
 
     def record_signal(self, code: str, action: str, price: float, score: float):
         snapshot = self.last_signal_state.setdefault(code, {})
@@ -712,7 +293,7 @@ class SignalEngine:
         elif action in ["SELL_HIGH", "PANIC_SELL"]:
             self.sell_count_per_stock[code] = self.sell_count_per_stock.get(code, 0) + 1
             self.cycle_direction[code] = "sell"
-            self.post_sell_block_until[code] = _now() + timedelta(minutes=self._get_params(code)["post_sell_rebuild_minutes"])
+            self.post_sell_block_until[code] = _now() + timedelta(minutes=PARAMS["post_sell_rebuild_minutes"])
             if qty > 0:
                 bucket = VIRTUAL_TRADES.setdefault(code, {})
                 bucket.setdefault("SELL_HIGH", []).append({"qty": qty, "ts": _now(), "action": action})
@@ -721,8 +302,6 @@ class SignalEngine:
             net_qty = sum(t["qty"] for t in buys) - sum(t["qty"] for t in sells)
             if net_qty <= 0 and code in self.t_cycle_start_time:
                 del self.t_cycle_start_time[code]
-
-        # V1.28: 每次记录交易后持久化 VIRTUAL_TRADES，防止重启后丢失
         if qty > 0:
             try:
                 save_virtual_trades(VIRTUAL_TRADES)
@@ -735,80 +314,6 @@ class SignalEngine:
         base_qty = int(holding.get("t_qty") or holding.get("qty") or 0)
         return max(0, base_qty + sum(t["qty"] for t in buys) - sum(t["qty"] for t in sells))
 
-    def _is_redundant_signal(self, code: str, action: str, price: float, score: float) -> bool:
-        p = self._get_params(code)
-        if action in ["SELL_HIGH", "PANIC_SELL"]:
-            last_trade = self.last_trade_state.get(code, {})
-            last_action = last_trade.get("action")
-            last_ts = last_trade.get("ts")
-            if last_action in ["SELL_HIGH", "PANIC_SELL"] and isinstance(last_ts, datetime):
-                elapsed = (_now() - last_ts).total_seconds() / 60
-                if elapsed < p["sell_repeat_block_minutes"]:
-                    return True
-        snapshot = self.last_signal_state.get(code)
-        if not snapshot:
-            return False
-        if snapshot.get("action") != action:
-            return False
-        last_ts = snapshot.get("ts")
-        if not isinstance(last_ts, datetime):
-            return False
-        elapsed = (_now() - last_ts).total_seconds() / 60
-        if elapsed >= p["repeat_signal_gap_minutes"]:
-            return False
-        last_price = float(snapshot.get("price") or 0)
-        price_move = abs(price - last_price) / last_price if last_price else 1.0
-        last_score = float(snapshot.get("score") or 0)
-        if price_move < p["repeat_signal_price_move"] and score <= last_score + p["repeat_signal_score_boost"]:
-            return True
-        return False
-
-    def _should_stand_down(self, code: str, holding: dict, df: pd.DataFrame, buy_score: float, sell_score: float, market_state: str, can_sell: bool, today_ret: float = 0.0, minutes_since_open: int = 0) -> tuple[bool, str]:
-        if df.empty:
-            return True, "分钟数据为空"
-        p = self._get_params(code)
-        if market_state == "dead_water":
-            # V1.19: 早盘30分钟内，若已出现明显下跌（>0.5%），不阻塞信号，允许弱势反弹卖出
-            if minutes_since_open <= 30 and today_ret < -0.005:
-                return False, ""
-            # V1.21fix: 死水中如果sell_score足够高或buy_score足够高，不阻塞（允许华工科技型振幅小但应做T的情况）
-            if sell_score >= 45 or buy_score >= 35:
-                return False, ""
-            return True, "日内波动过低"
-        last = df.iloc[-1]
-        vwap = float(last["vwap"]) if pd.notna(last["vwap"]) else 0.0
-        price = float(last["close"]) if pd.notna(last["close"]) else 0.0
-        range_pos = float(last["range_pos"]) if pd.notna(last["range_pos"]) else 0.5
-        gap = abs(price - vwap) / vwap if vwap else 0.0
-        if not can_sell and buy_score < 28:
-            return True, "无可卖仓且买点不强"
-        if can_sell and buy_score < 28 and sell_score < 35:
-            return True, "买卖都不够强"
-        if market_state == "range_bound" and gap < p["stand_down_flat_range_gap"] and abs(buy_score - sell_score) < p["stand_down_score_gap"]:
-            return True, "震荡贴均且分差不大"
-        if holding.get("type") != "etf" and range_pos > 0.85 and sell_score < 45 and buy_score < 45:
-            return True, "高位但无明确优势"
-        # V1.12: ETF停手条件大幅放宽，允许ETF在更小的波动下交易
-        if holding.get("type") == "etf" and gap < p["etf_stand_down_gap"] and buy_score < 38 and sell_score < 38:
-            return True, "ETF波动不足"
-        # V1.24: 科泰电源高buy_score绕过 — 回测发现buy_score>100但无大阳线反包被stand_down阻断
-        if p.get("high_buy_score_bypass", False) and buy_score >= p.get("high_buy_score_threshold", 100):
-            vwap_deviation = (vwap - price) / vwap if vwap else 0.0
-            if vwap_deviation >= p.get("high_buy_score_vwap_gap", 0.02):
-                return False, ""
-        return False, ""
-
-    def _classify_market_state(self, today_ret: float, price: float, vwap: float, vol_ratio: float, day_amplitude: float, ema_spread: float, code: str = "") -> str:
-        p = self._get_params(code)
-        if day_amplitude < p["min_amplitude"]:
-            return "dead_water"
-        if today_ret >= p["trend_today_ret_threshold"] and price >= vwap and ema_spread >= 0 and vol_ratio >= 1.1:
-            return "trend_up"
-        if today_ret <= -p["trend_today_ret_threshold"] and price <= vwap and ema_spread <= 0:
-            return "trend_down"
-        return "range_bound"
-
-    # ---- V2 evaluate ----
     def evaluate(self, code, name, df, holding, daily_ctx=None):
         if df.empty or len(df) < 5:
             return 0, 0, None
@@ -831,16 +336,18 @@ class SignalEngine:
             pass
         feats = FeatureExtractorV2.extract_all(code, name, df, holding, daily_ctx,
                                                cached_minute, cached_5m, cached_15m)
-        buy_score, buy_details = ScoringEngineV2.calc_buy_score(feats)
-        sell_score, sell_details = ScoringEngineV2.calc_sell_score(feats)
+        buy_score, buy_details = ScoringEngineV2.calc_buy_score(feats, self.params_v2)
+        sell_score, sell_details = ScoringEngineV2.calc_sell_score(feats, self.params_v2)
         # V2: 静态基准阈值 — 分数已通过ATR+Sigmoid自适应，阈值不再跳变
         buy_threshold = 42.0; sell_threshold = 42.0
         price = feats.get("price", 0); hold_qty = feats.get("hold_qty", 0)
-        # V2风控阻断
+        # V2风控阻断 + 左侧抄底豁免（5分钟强反转可绕过日线封锁）
         risk = RiskManagerV2.check_all(feats)
         risk_buy_block = risk.get("buy_block", [])
         risk_sell_block = risk.get("sell_block", [])
-        base_can_buy = (len(risk_buy_block) == 0 and feats.get("daily_buy_t_ok", False)
+        can_bypass_daily = feats.get("f5_is_strong_bullish_reversal", False) or feats.get("f5_is_volume_reversal", False)
+        is_daily_ok = feats.get("daily_buy_t_ok", False) or can_bypass_daily
+        base_can_buy = (len(risk_buy_block) == 0 and is_daily_ok
                         and not self._in_cooldown(code, "BUY_LOW"))
         base_can_sell = (len(risk_sell_block) == 0 and hold_qty > 0
                          and not self._in_cooldown(code, "SELL_HIGH"))
@@ -1553,8 +1060,6 @@ class ScoringEngineV2:
       final = sum(raw * 100 * weight) + binary_adders
     """
 
-    PARAMS_V2_factors = {k: v for k, v in PARAMS_V2.items() if k.startswith("factor_weight_")}
-
     @staticmethod
     def _sigmoid(x: float, center: float = 0, slope: float = 1) -> float:
         return 1.0 / (1.0 + np.exp(-slope * (x - center)))
@@ -1635,42 +1140,34 @@ class ScoringEngineV2:
         return raw, [{"指标": "长上影", "当前": f"{us:.2f}", "强度": round(raw, 3)}] if raw > 0.05 else (0.0, [])
 
     @staticmethod
-    def _weighted_factor_score(raw: float, weight_key: str, w_mult: float = 1.0) -> float:
-        """raw(0~1) × 100 × PARAMS_V2权重"""
-        w = PARAMS_V2.get(weight_key, 0.10)
+    def _weighted_factor_score(raw: float, weight_key: str, w_mult: float = 1.0,
+                                 p: dict = None) -> float:
+        """raw(0~1) × 100 × 权重。p 来自实例的 params_v2，默认 PARAMS_V2。"""
+        w = (p or PARAMS_V2).get(weight_key, 0.10)
         return raw * 100 * w * w_mult
 
     @staticmethod
-    def calc_buy_score(feats: dict) -> tuple:
-        details = []
-        score = 0.0
-
-        # ---- 加权因子 (raw × 100 × weight) ----
+    def calc_buy_score(feats: dict, p: dict = None) -> tuple:
+        """p: 可选权重参数，来自 SignalEngine.params_v2。默认 PARAMS_V2。"""
+        details = []; score = 0.0
         raw, d = ScoringEngineV2.score_vwap_buy(feats)
-        s = ScoringEngineV2._weighted_factor_score(raw, "factor_weight_vwap")
+        s = ScoringEngineV2._weighted_factor_score(raw, "factor_weight_vwap", p=p)
         score += s; d and details.append(d[0] | {"加分": round(s, 1)})
-
         raw, d = ScoringEngineV2.score_rsi_buy(feats)
-        s = ScoringEngineV2._weighted_factor_score(raw, "factor_weight_rsi")
+        s = ScoringEngineV2._weighted_factor_score(raw, "factor_weight_rsi", p=p)
         score += s; d and details.append(d[0] | {"加分": round(s, 1)})
-
         raw, d = ScoringEngineV2.score_macd_buy(feats)
-        s = ScoringEngineV2._weighted_factor_score(raw, "factor_weight_macd")
+        s = ScoringEngineV2._weighted_factor_score(raw, "factor_weight_macd", p=p)
         score += s; d and details.append(d[0] | {"加分": round(s, 1)})
-
         raw, d = ScoringEngineV2.score_volume(feats)
-        s = ScoringEngineV2._weighted_factor_score(raw, "factor_weight_volume")
+        s = ScoringEngineV2._weighted_factor_score(raw, "factor_weight_volume", p=p)
         score += s; d and details.append(d[0] | {"加分": round(s, 1)})
-
         raw, d = ScoringEngineV2.score_lower_shadow(feats)
-        s = ScoringEngineV2._weighted_factor_score(raw, "factor_weight_position")
+        s = ScoringEngineV2._weighted_factor_score(raw, "factor_weight_position", p=p)
         score += s; d and details.append(d[0] | {"加分": round(s, 1)})
-
         raw, d = ScoringEngineV2.score_ema_improve(feats)
-        s = raw * 4  # EMA改善低权重固定加分
-        score += s; d and details.append(d[0] | {"加分": round(s, 1)})
-
-        # ---- 二值模式加分 (不受权重衰减) ----
+        s = raw * 4; score += s; d and details.append(d[0] | {"加分": round(s, 1)})
+        # Binary adders
         if feats.get("f15_kinetic_exhaustion"):
             details.append({"指标": "15分动能衰竭", "加分": 10}); score += 10
         if feats.get("f15_near_15m_support"):
@@ -1684,34 +1181,25 @@ class ScoringEngineV2:
         return round(score, 1), details
 
     @staticmethod
-    def calc_sell_score(feats: dict) -> tuple:
-        details = []
-        score = 0.0
-
+    def calc_sell_score(feats: dict, p: dict = None) -> tuple:
+        details = []; score = 0.0
         raw, d = ScoringEngineV2.score_vwap_sell(feats)
-        s = ScoringEngineV2._weighted_factor_score(raw, "factor_weight_vwap")
+        s = ScoringEngineV2._weighted_factor_score(raw, "factor_weight_vwap", p=p)
         score += s; d and details.append(d[0] | {"加分": round(s, 1)})
-
         raw, d = ScoringEngineV2.score_rsi_sell(feats)
-        s = ScoringEngineV2._weighted_factor_score(raw, "factor_weight_rsi")
+        s = ScoringEngineV2._weighted_factor_score(raw, "factor_weight_rsi", p=p)
         score += s; d and details.append(d[0] | {"加分": round(s, 1)})
-
         raw, d = ScoringEngineV2.score_macd_sell(feats)
-        s = ScoringEngineV2._weighted_factor_score(raw, "factor_weight_macd")
+        s = ScoringEngineV2._weighted_factor_score(raw, "factor_weight_macd", p=p)
         score += s; d and details.append(d[0] | {"加分": round(s, 1)})
-
         raw, d = ScoringEngineV2.score_volume(feats)
-        s = ScoringEngineV2._weighted_factor_score(raw, "factor_weight_volume")
+        s = ScoringEngineV2._weighted_factor_score(raw, "factor_weight_volume", p=p)
         score += s; d and details.append(d[0] | {"加分": round(s, 1)})
-
         raw, d = ScoringEngineV2.score_upper_shadow(feats)
-        s = ScoringEngineV2._weighted_factor_score(raw, "factor_weight_position")
+        s = ScoringEngineV2._weighted_factor_score(raw, "factor_weight_position", p=p)
         score += s; d and details.append(d[0] | {"加分": round(s, 1)})
-
         raw, d = ScoringEngineV2.score_ema_weaken(feats)
-        s = raw * 4
-        score += s; d and details.append(d[0] | {"加分": round(s, 1)})
-
+        s = raw * 4; score += s; d and details.append(d[0] | {"加分": round(s, 1)})
         # Daily context binary adders
         if feats.get("daily_breakdown_risk"):
             details.append({"指标": "日线破位风险", "加分": 8}); score += 8
