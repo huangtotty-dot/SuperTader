@@ -932,6 +932,9 @@ def add_indicators(df: pd.DataFrame) -> pd.DataFrame:
         df["vwap"] = df.groupby("date")["tp_vol"].cumsum() / df.groupby("date")["volume"].cumsum()
     df["vwap"] = df["vwap"].ffill().fillna(df["close"])
     df["vwap_dev"] = (c - df["vwap"]) / df["vwap"].replace(0, np.nan)
+    # V1.27: ATR(14) 归一化 VWAP 偏离度
+    _atr_14 = df["high"].sub(df["low"]).abs().rolling(14, min_periods=1).mean()
+    df["vwap_dev_atr"] = df["vwap_dev"] / (_atr_14 / df["close"]).replace(0, np.nan)
 
     day_high = df.groupby("date")["high"].transform("max")
     day_low = df.groupby("date")["low"].transform("min")

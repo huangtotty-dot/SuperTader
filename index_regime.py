@@ -241,7 +241,7 @@ IR_DEFAULT_PARAMS: Dict[str, Any] = {
     "ma5_recover_bonus_cap": 15.0,    # 恢复加分封顶
     # —— R0 震荡三元组压缩（研究中震荡段 100% 命中 / 趋势段 0% 误判）——
     "r0_cross_min": 3,                # 近20日 MA5/MA10 交叉次数下限
-    "r0_vol_max": 1.0,                # 量比 vol_MA5/vol_MA20 上限（缩量）
+    "r0_vol_max": 1.15,                # 量比 vol_MA5/vol_MA20 上限（缩量）
     "r0_pos_lo": 15.0, "r0_pos_hi": 65.0,   # 20日价格区间位置带
     "r0_factor": 0.6,                 # 命中 → 总分 ×0.6
     # —— V2.1 K-day 关键日跃迁（校准自 sh000001_daily_features.csv，2026-07-18）——
@@ -1570,14 +1570,25 @@ def _ir_sharp_eval(df: pd.DataFrame, feat: Dict[str, Any],
         # —— 均线状态侧（0~8）【默认补全】——
         ma_u = ma_d = 0
         if ma5 is not None and ma10 is not None:
+            # V2.2.5: 加入 0.2% 容差，避免暴力反弹刚触及均线时漏分
+            _ma5_t = ma5 * 0.998
+            _ma10_t = ma10 * 0.998
             if c > ma5:
                 ma_u += int(p["sharp_ma5"])
+            elif c > _ma5_t:
+                ma_u += int(p["sharp_ma5"]) // 2  # 触及附近给半额分
             if c > ma10:
                 ma_u += int(p["sharp_ma10"])
+            elif c > _ma10_t:
+                ma_u += int(p["sharp_ma10"]) // 2
             if c < ma5:
                 ma_d += int(p["sharp_ma5"])
+            elif c < ma5 * 1.002:
+                ma_d += int(p["sharp_ma5"]) // 2
             if c < ma10:
                 ma_d += int(p["sharp_ma10"])
+            elif c < ma10 * 1.002:
+                ma_d += int(p["sharp_ma10"]) // 2
 
         up = bo_u + cc_u + gap_u_sc + vol_sc + ma_u   # 【V2.2.2 C5】档内子项(收破cc/竞价gap)计入聚合
         dn = bo_d + cc_d + gap_d_sc + vol_sc + ma_d   # 【V2.2.2 C5】对称修复（原误只用档基分 bo，波动侧实际封顶 5/规格 9）
@@ -1920,7 +1931,7 @@ def _ir_score_qvix(df: pd.DataFrame, p: Dict[str, Any]) -> Tuple[float, Dict[str
     score = 0.0
     rule = "neutral"
     if pct > float(p["qvix_panic_pct"]) and ret20 < float(p["qvix_panic_ret20"]):
-        score, rule = 40.0, "panic_rebound"            # 恐慌 + 急跌 → 反弹修正 +40
+        score, rule = -30.0, "panic_capitulation"     # 恐慌 + 急跌 → 恐慌加剧，维持负面评价
     elif pct < float(p["qvix_low_pct"]) and 0.0 < ret20 < 0.10:
         score, rule = 20.0, "low_vol_grind_up"         # 低波慢牛 +20
     detail = {"score": _ir_f(score, 2), "qvix_pct_3y": _ir_f(pct, 3),
@@ -2072,10 +2083,16 @@ def _ir_step_regime(prev_regime: IndexRegime, s_today: float, s_prev: Optional[f
         p.get("full_above_ma5_confirm_days", 2)
     )
     if bool(p.get("struct_hard_before_r2", True)):
-        if prev_regime != IndexRegime.UNI_DOWN and hard_down_ma60_slope:
-            return IndexRegime.UNI_DOWN, "struct_down_ma60_ma5_slope"
-        if prev_regime != IndexRegime.UNI_UP and hard_up_full_ma5 and s_today >= -enter:
-            return IndexRegime.UNI_UP, f"struct_up_full_ma5(full_above5={full_above5_days})"
+        if hard_down_ma60_slope:
+            if prev_regime == IndexRegime.UNI_UP:
+                return IndexRegime.RANGE, "struct_down_ma60_ma5_slope_to_range"
+            elif prev_regime == IndexRegime.RANGE:
+                return IndexRegime.UNI_DOWN, "struct_down_ma60_ma5_slope"
+        if hard_up_full_ma5 and s_today >= -enter:
+            if prev_regime == IndexRegime.UNI_DOWN:
+                return IndexRegime.RANGE, f"struct_up_full_ma5_to_range(full_above5={full_above5_days})"
+            elif prev_regime == IndexRegime.RANGE:
+                return IndexRegime.UNI_UP, f"struct_up_full_ma5(full_above5={full_above5_days})"
     # 1) R2 破位快速通道（当日生效）
     if prev_regime == IndexRegime.UNI_UP and close is not None and ma10 is not None and close < ma10:
         return IndexRegime.RANGE, f"r2_exit_up(close={close}<MA10={ma10})"
@@ -2450,15 +2467,6 @@ class _IndexRegimeEngine:
 
         structure_detail = detail.get("structure", {}) or {}
         structure_score = float(structure_detail.get("score") or 0.0)
-        if feat.get("break_ma60") or (feat.get("below_ma60_days") or 0) >= 2:
-            if s_final > 0:
-                s_final -= max(8.0, abs(structure_score))
-        if feat.get("break_ma20") or (feat.get("below_ma20_days") or 0) >= int(p.get("ma5_persist_days", 3)):
-            if s_final > -10:
-                s_final -= max(4.0, abs(structure_score) * 0.5)
-        if (feat.get("above_ma5_days") or 0) >= int(p.get("ma5_persist_days", 3)):
-            if s_final < 0:
-                s_final += max(4.0, abs(structure_score) * 0.5)
         # 首次站上 MA5 快速恢复：deep streak 止跌初期 low-buffer 加分（above_ma5_days=1~2 间的空窗）
         _streak_r = int(feat.get("streak") or 0)
         _rm_min = int(p.get("ma5_recover_streak_min", -5))

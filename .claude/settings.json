@@ -10,7 +10,9 @@
       "Skill(run)",
       "Skill(run:*)",
       "Bash(python index_regime_backtest.py --start 2026-02-03 --end 2026-07-17 --calendar bdays)",
-      "Bash(python tushare_range_backtest.py --help)"
+      "Bash(python tushare_range_backtest.py --help)",
+      "Bash(python)",
+      "Bash(python -c \"import py_compile; py_compile.compile\\('signal_engine.py', doraise=True\\); print\\('Syntax OK'\\)\")"
     ]
   }
 }
