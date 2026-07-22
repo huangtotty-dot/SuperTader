@@ -1265,11 +1265,6 @@ class SignalEngine:
         indicators["is_open_dip_support"] = is_open_dip_support
         indicators["open_dip_reason"] = open_dip_reason
 
-        is_diving = (mom5 < -0.015) and (vol_ratio > 2.0)
-        if is_diving and not self._in_cooldown(code, "PANIC_SELL"):
-            details = [{"指标": "巨量跳水", "当前": f"5分钟跌{mom5*100:.2f}%", "阈值": "<-1.5%", "解读": "资金突发性踩踏出逃", "加分": 100}]
-            return 0, 100, Signal(code, name, "PANIC_SELL", price, 100, ["资金踩踏出逃"], details, indicators)
-
         sell_details, buy_details = [], []
         # V1.11: 早盘冲高窗口优化 - 09:30-09:35为机会窗口(+8)，09:36-09:45为观察期(0)
         if 1000 <= t_val <= 1045 or 1400 <= t_val <= 1445:
@@ -2769,16 +2764,8 @@ class SignalEngine:
                     sell_details.append({"指标": "触发阈值", "当前": f"{sell_score:.0f}", "阈值": f">={sell_threshold}", "加分": 0})
                     diag["sell_candidate"] = True
                     diag["priority_path"] = "sell_observe_path"
-                    # V1.26fix: 最终防线 — 深套股票禁止生成 SELL_HIGH，强制转为 PANIC_SELL（止损而非高抛）
-                    if is_deep_loss:
-                        action = "PANIC_SELL"
-                        entry_kind = "panic_sell_deep_loss_guard"
-                        reasons = ["深套止损最终防线"] + reasons
-                        sell_details.append({"指标": "🚨深套止损防线", "当前": f"亏损{profit_pct*100:.1f}%", "解读": "深套股票禁止高抛，强制转为止损信号", "加分": 0})
-                        diag["deep_loss_seh_to_panic_guard"] = True
-                    else:
-                        action = "SELL_HIGH"
-                        entry_kind = "sell_high"
+                    action = "SELL_HIGH"
+                    entry_kind = "sell_high"
                     sig = Signal(code, name, action, price, sell_score, reasons, sell_details, indicators, {
                     "side": "sell",
                     "threshold": sell_threshold,
@@ -3384,8 +3371,8 @@ def _signal_push_limits(action: str) -> tuple[float, float]:
         return PARAMS["add_pos_signal_price_move"], PARAMS["add_pos_signal_score_boost"]
     if action == "SELL_HIGH":
         return PARAMS["sell_signal_price_move"], PARAMS["sell_signal_score_boost"]
-    if action == "PANIC_SELL":
-        return PARAMS["panic_sell_signal_price_move"], PARAMS["panic_sell_signal_score_boost"]
+    if action == "PANIC_SELL":   # 保留做兜底，代码中已不再生成此信号
+        return PARAMS.get("panic_sell_signal_price_move", 0.005), PARAMS.get("panic_sell_signal_score_boost", 20)
     return PARAMS["buy_signal_price_move"], PARAMS["buy_signal_score_boost"]
 
 

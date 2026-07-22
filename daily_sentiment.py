@@ -370,41 +370,82 @@ def t_decision(regime: str, z_S: Optional[float] = None, z_top3: float = 0.0,
 def stock_daily_features(code: str, date_str: Optional[str] = None) -> Dict[str, Any]:
     """个股日线特征：前5日累计涨幅%、连续收盘<MA5天数、当日竞价高开%、最新收盘。
 
-    数据源：腾讯 fqkline 前复权日线（含当日 forming bar），单股单请求，仅对持仓股调用。
+    数据源：腾讯 fqkline 前复权日线（含当日 forming bar），超时做 1 次重试；
+    重试仍失败 → akshare 日线兜底。单股单请求，仅对持仓股调用。
     """
     out = {"ok": False, "code": code, "date": None, "close": None, "open": None,
            "prev_close": None, "gap_pct": None, "pct_5d": None, "below_ma5_days": 0,
            "prev_day_pct": None}
-    try:
-        # 持仓键可能带账户后缀（如 000988_B），取数字部分构造行情 symbol
-        digits = "".join(ch for ch in str(code) if ch.isdigit())[:6]
-        if len(digits) != 6:
-            return out
-        symbol = ("sh" if digits.startswith(("5", "6", "9")) else "sz") + digits
-        end = date_str or _now_fn().strftime("%Y-%m-%d")
-        end_dt = datetime.strptime(end, "%Y-%m-%d")
-        start = (end_dt - timedelta(days=60)).strftime("%Y-%m-%d")
-        url = (f"https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?"
-               f"param={symbol},day,{start},{end},40,qfq")
-        req = urllib.request.Request(url, headers={
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-            "Referer": "https://finance.qq.com/",
-        })
-        with urllib.request.urlopen(req, timeout=10) as resp:
-            js = json.loads(resp.read().decode("utf-8", errors="ignore"))
-        node = (js.get("data") or {}).get(symbol) or {}
-        if not isinstance(node, dict):
-            return out
-        rows = node.get("qfqday") or node.get("day") or []
-        bars = []
-        for r in rows:
+    digits = "".join(ch for ch in str(code) if ch.isdigit())[:6]
+    if len(digits) != 6:
+        return out
+
+    def _parse_bars(bars_raw: list) -> list:
+        """从腾讯原始行列表解析为 {date,open,close} dict 列表"""
+        result = []
+        for r in bars_raw:
             if isinstance(r, (list, tuple)) and len(r) >= 3:
                 try:
-                    bars.append({"date": str(r[0])[:10], "open": float(r[1]), "close": float(r[2])})
+                    result.append({"date": str(r[0])[:10], "open": float(r[1]), "close": float(r[2])})
                 except Exception:
                     continue
-        if len(bars) < 7:
-            return out
+        return result
+
+    bars: list = []
+    end = date_str or _now_fn().strftime("%Y-%m-%d")
+    end_dt = datetime.strptime(end, "%Y-%m-%d")
+    start = (end_dt - timedelta(days=60)).strftime("%Y-%m-%d")
+
+    # 1) 腾讯源（最多重试 1 次）
+    symbol = ("sh" if digits.startswith(("5", "6", "9")) else "sz") + digits
+    for attempt in range(2):
+        try:
+            url = (f"https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?"
+                   f"param={symbol},day,{start},{end},40,qfq")
+            req = urllib.request.Request(url, headers={
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+                "Referer": "https://finance.qq.com/",
+            })
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                js = json.loads(resp.read().decode("utf-8", errors="ignore"))
+            node = (js.get("data") or {}).get(symbol) or {}
+            rows = node.get("qfqday") or node.get("day") or [] if isinstance(node, dict) else []
+            bars = _parse_bars(rows)
+            if len(bars) >= 7:
+                break
+            bars = []
+        except Exception as e:
+            _log.debug(f"[stock_feat] 腾讯 {code} {'重试' if attempt==0 else '放弃'}: {str(e)[:60]}")
+            if attempt == 0:
+                _time_mod.sleep(0.3)
+
+    # 2) 腾讯失败 → akshare 兜底
+    if len(bars) < 7:
+        try:
+            import akshare as ak
+            api_code = digits
+            ak_start = (end_dt - timedelta(days=180)).strftime("%Y%m%d")
+            ak_end = end_dt.strftime("%Y%m%d")
+            df = ak.stock_zh_a_hist(symbol=api_code, period="daily",
+                                     start_date=ak_start, end_date=ak_end, adjust="qfq")
+            if df is not None and not df.empty:
+                _dates = df["日期"].astype(str).str.slice(0, 10).tolist()
+                _open_raw, _close_raw = df["开盘"].tolist(), df["收盘"].tolist()
+                for di, oi, ci in zip(_dates, _open_raw, _close_raw):
+                    try:
+                        o, c = float(oi), float(ci)
+                        bars.append({"date": di, "open": o, "close": c})
+                    except Exception:
+                        continue
+                bars.sort(key=lambda x: x["date"])
+                _log.info(f"[stock_feat] {code} 腾讯超时，akshare 兜底成功({len(bars)}条)")
+        except Exception as e2:
+            _log.debug(f"[stock_feat] akshare {code} 兜底也失败: {str(e2)[:60]}")
+
+    if len(bars) < 7:
+        return out
+
+    try:
         idx = len(bars) - 1
         if date_str:
             for i, b in enumerate(bars):
@@ -419,13 +460,10 @@ def stock_daily_features(code: str, date_str: Optional[str] = None) -> Dict[str,
         if prev and prev["close"] > 0:
             out["prev_close"] = prev["close"]
             out["gap_pct"] = round((cur["open"] / prev["close"] - 1.0) * 100.0, 2)
-        # 昨日涨跌幅%（P3/P4 否决数据源）：前一交易日 bar 相对其前收
         if idx >= 2 and prev and bars[idx - 2]["close"] > 0:
             out["prev_day_pct"] = round((prev["close"] / bars[idx - 2]["close"] - 1.0) * 100.0, 2)
-        # 前5日累计涨幅（当日收盘 vs 5日前收盘）
         if idx >= 5 and bars[idx - 5]["close"] > 0:
             out["pct_5d"] = round((cur["close"] / bars[idx - 5]["close"] - 1.0) * 100.0, 2)
-        # 连续收盘 <MA5 天数（含当日，MA5=当日及前4日收盘均值）
         streak = 0
         for i in range(idx, 3, -1):
             ma5 = sum(bars[j]["close"] for j in range(i - 4, i + 1)) / 5.0
@@ -436,7 +474,7 @@ def stock_daily_features(code: str, date_str: Optional[str] = None) -> Dict[str,
         out["below_ma5_days"] = streak
         out["ok"] = True
     except Exception as e:
-        _log.warning(f"⚠️  个股日线特征获取失败 {code}: {str(e)[:80]}")
+        _log.warning(f"⚠️  个股日线特征计算异常 {code}: {str(e)[:80]}")
     return out
 
 
@@ -532,7 +570,8 @@ def per_stock_decisions(regime: str, z_S: Optional[float], z_top3: float,
         base["pos_factor"] = 0.0
         base["trade_gate"] = "clear"
         base["t_enabled"] = False
-        base["reason"] += (f"；🚨清仓覆盖(z_S={float(z_S):+.2f}≤{p['sysrisk_z_S']}，"
+        z_s_str = f"{float(z_S):+.2f}" if z_S is not None else "N/A"
+        base["reason"] += (f"；🚨清仓覆盖(z_S={z_s_str}≤{p['sysrisk_z_S']}，"
                            f"14:30当日判定当日生效)→全标的清仓门控")
         base_rank = 1
     base["mode_cn"] = _MODE_CN.get(base["mode"], base["mode"])
