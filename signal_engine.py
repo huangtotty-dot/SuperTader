@@ -450,6 +450,7 @@ class FeatureExtractor:
         feats["daily_overheated"] = bool(dc.get("daily_overheated", False))
         feats["daily_pullback_support"] = bool(dc.get("daily_pullback_support", False))
         feats["benchmark_gate"] = dc.get("benchmark_gate", "neutral")
+        feats["intraday_alerts"] = dc.get("intraday_alerts", [])
         for k in ["index_regime_status", "index_circuit_state", "index_gate_advice", "index_temp_bucket"]:
             feats[k] = dc.get(k, "normal")
         # 15min/5min features (ATR自适应)
@@ -688,6 +689,16 @@ class RiskManager:
         if feats.get("daily_overheated"):
             result["buy_block"].append("daily_overheated")
 
+        # 7. 大盘单边下行 → 绝对禁止任何买入（接飞刀熔断）
+        index_regime = feats.get("index_regime", "range")
+        if index_regime == "uni_down":
+            result["buy_block"].append("index_uni_down_clearance")
+
+        # 8. 盘中分时崩盘预警 → 紧急冻结买入
+        for alert in (feats.get("intraday_alerts") or []):
+            if alert.get("tag") in ("I1", "I4"):
+                result["buy_block"].append(f"intraday_panic_{alert.get('tag')}")
+
         return result
 
 
@@ -701,13 +712,14 @@ FACTOR_WEIGHTS = {
     "stop_loss_atr_mult": 2.5,
     "take_profit_atr_mult": 3.0,
     "min_score_continuous": True,
-    "factor_weight_vwap": 0.25,
-    "factor_weight_rsi": 0.15,
-    "factor_weight_macd": 0.10,
-    "factor_weight_volume": 0.10,
-    "factor_weight_position": 0.10,
-    "factor_weight_ema": 0.05,
-    "factor_weight_pattern": 0.25,
+    "factor_weight_vwap": 0.20,
+    "factor_weight_rsi": 0.12,
+    "factor_weight_macd": 0.08,
+    "factor_weight_volume": 0.08,
+    "factor_weight_position": 0.08,
+    "factor_weight_ema": 0.04,
+    "factor_weight_pattern": 0.20,
+    "factor_weight_index_regime": 0.20,
     "factor_weight_time": 0.00,
     "max_score_raw": 100,
 }
@@ -809,6 +821,19 @@ class ScoringEngine:
         return raw * 100 * w * w_mult
 
     @staticmethod
+    def score_index_regime(feats: dict, side: str = "buy") -> float:
+        """大盘态势因子：输出 0~1 标准化信号强度
+        uni_down: sell=1.0(清仓), buy=0.0(停止买入)
+        uni_up:   sell=0.2(防卖飞), buy=1.0(顺势)
+        range:    均为 0.5(标准作战)"""
+        regime = feats.get("index_regime", "range")
+        if regime == "uni_down":
+            return 1.0 if side == "sell" else 0.0
+        if regime == "uni_up":
+            return 0.2 if side == "sell" else 1.0
+        return 0.5  # range / 其他
+
+    @staticmethod
     def calc_buy_score(feats: dict, p: dict = None) -> tuple:
         """p: 可选权重参数，来自 SignalEngine.factor_weights。默认 FACTOR_WEIGHTS。"""
         details = []; score = 0.0
@@ -829,6 +854,13 @@ class ScoringEngine:
         score += s; d and details.append(d[0] | {"加分": round(s, 1)})
         raw, d = ScoringEngine.score_ema_improve(feats)
         s = ScoringEngine._weighted_factor_score(raw, "factor_weight_ema", p=p); score += s; d and details.append(d[0] | {"加分": round(s, 1)})
+        # ---- 大盘态势因子 ----
+        raw = ScoringEngine.score_index_regime(feats, "buy")
+        s = ScoringEngine._weighted_factor_score(raw, "factor_weight_index_regime", p=p)
+        score += s
+        if raw != 0.5:
+            regime = feats.get("index_regime", "range")
+            details.append({"指标": f"大盘态势({regime})", "强度": round(raw, 2), "加分": round(s, 1)})
         # ---- 形态因子 (Pattern Factor, 通过 factor_weight_pattern 加权) ----
         _pattern_raw = 0.0
         _pnames = []
@@ -868,6 +900,13 @@ class ScoringEngine:
         score += s; d and details.append(d[0] | {"加分": round(s, 1)})
         raw, d = ScoringEngine.score_ema_weaken(feats)
         s = ScoringEngine._weighted_factor_score(raw, "factor_weight_ema", p=p); score += s; d and details.append(d[0] | {"加分": round(s, 1)})
+        # ---- 大盘态势因子 (卖出端) ----
+        raw = ScoringEngine.score_index_regime(feats, "sell")
+        s = ScoringEngine._weighted_factor_score(raw, "factor_weight_index_regime", p=p)
+        score += s
+        if raw != 0.5:
+            regime = feats.get("index_regime", "range")
+            details.append({"指标": f"大盘态势({regime})", "强度": round(raw, 2), "加分": round(s, 1)})
         # ---- 卖出端形态因子 (Pattern Factor) ----
         _pattern_raw = 0.0
         _pnames = []
