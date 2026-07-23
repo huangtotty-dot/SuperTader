@@ -1,0 +1,17 @@
+{
+  "best_params": {
+    "vwap_buy_deviation": -0.03,
+    "take_profit_pct": 0.02,
+    "buy_confirm_min_score": 17
+  },
+  "train_metrics": {
+    "win_rate": 0.6667,
+    "total_pnl": 1382.58,
+    "n_trades": 3,
+    "annualized_return": -0.3132,
+    "max_drawdown": -0.0891,
+    "composite_score": -234.2774
+  },
+  "test_metrics": {},
+  "generated_at": "2026-07-23 16:30:29"
+}
