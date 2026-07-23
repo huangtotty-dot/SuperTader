@@ -162,10 +162,7 @@ class Runner:
         self.start=start; self.end=end
         if not self.load(): return self.port
         import signal_engine as _se; _se.MINUTE_FETCH_STATUS[CODE]="ok"
-        # V2: STOCK_PARAMS per-stock tuning removed (ATR自适应替代)
         # Override signal_engine logging to backtest output directory (Test group only)
-        # decision_trace.jsonl + shadow_signals.jsonl will contain buy_score, buy_threshold,
-        # buy_block_reasons, priority_path for analyzing why 华工科技 missed dip-buy triggers
         if self.mode == "test":
             os.makedirs(_OUT, exist_ok=True)
             _se._trace_path = lambda kind, day=None: os.path.join(_OUT, f"{kind}.jsonl")
@@ -174,6 +171,15 @@ class Runner:
                 lambda f: (f.write(json.dumps(r, ensure_ascii=False, default=str) + "\n"), f.close())
             )(open(p, "a", encoding="utf-8"))
         _se.PARAMS.update({"min_amplitude":0.002,"rsi_oversold":35,"rsi_overbought":78,"vol_confirm_boost":10,"vol_ratio_confirm":1.2,"macd_strong_threshold":0.2,"macd_strong_boost":25,"min_profit_space":0.008,"buy_confirm_min_score":25,"range_pos_low_threshold":0.3,"range_pos_high_threshold":0.85,"sell_holding_min_minutes":10,"sell_holding_strict_minutes":30,"sell_score_boost_holding":5,"sell_score_boost_eod":8,"sell_momentum_bonus":6})
+        # V1.28: 加载 config.py 中的个股专属参数覆盖 (000988 已回测定制)
+        try:
+            from config import STOCK_PARAMS
+            _sp = STOCK_PARAMS.get(CODE, {})
+            if _sp:
+                _se.PARAMS.update(_sp)
+                print(f"  [参数] 已应用 {CODE} 专属参数覆盖: {len(_sp)} 项")
+        except ImportError:
+            pass
         eng=_se.SignalEngine(); _start_t=_tm.time(); ie=None
         if self.mode=="test":
             try:

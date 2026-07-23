@@ -101,8 +101,11 @@ if 'PARAMS' not in globals():
               "stock_rebuild_weak_pct":0.3,
               "buy_soft_margin":8,
               "sell_fast_path_min_gap":18,
-              "morning_no_sell_until":940,
-              "morning_no_sell_min_ret":0.02,
+              "morning_no_sell_until":1000,
+              "morning_no_sell_min_ret":0.03,
+              "vwap_buy_deviation":-0.020,
+              "take_profit_pct":0.010,
+              "take_profit_time_after":1000,
               "hard_sell_threshold_cap":80,
               "hard_buy_threshold_cap":80,
               "awaiting_buyback_ttl_minutes":120,
@@ -314,6 +317,94 @@ class SignalEngine:
         base_qty = int(holding.get("t_qty") or holding.get("qty") or 0)
         return max(0, base_qty + sum(t["qty"] for t in buys) - sum(t["qty"] for t in sells))
 
+    def _check_morning_alert(self, code, df, feats):
+        """V1.28: 早盘单边下行预警检测 (10:00触发, 每天一次)
+        Level 2 → 全天禁止买入
+        Level 1 → 提高买入门槛, 仅允许深V
+        """
+        today = get_today_str()
+        alert_state = self.morning_alert_state.get(code, {})
+        if alert_state.get("date") == today and alert_state.get("checked", False):
+            return
+        t_val = feats.get("t_val", 0)
+        if t_val < PARAMS.get("morning_no_sell_until", 1000):
+            return
+        if alert_state.get("date") != today:
+            self.morning_alert_state[code] = {"date": today}
+        # 计算早盘特征 (开盘~10:00)
+        try:
+            _pd_loc = pd
+            _morning = df[df["time"] < _pd_loc.Timestamp(today + " 10:00:00")]
+            if _morning.empty or len(_morning) < 5:
+                self.morning_alert_state[code].update({"checked": True, "level": 0})
+                return
+            first = _morning.iloc[0]
+            last_m = _morning.iloc[-1]
+            open_p = float(first.get("open", feats.get("today_open", 0)))
+            if open_p <= 0:
+                self.morning_alert_state[code].update({"checked": True, "level": 0})
+                return
+            open_30min_ret = (float(last_m["close"]) - open_p) / open_p
+            max_gain_after_open = (float(_morning["high"].max()) - open_p) / open_p
+            max_loss_after_open = (float(_morning["low"].min()) - open_p) / open_p
+            # 5分钟/10分钟开盘涨幅
+            _p5 = _morning[_morning["time"] < _pd_loc.Timestamp(today + " 09:35:00")]
+            _p10 = _morning[_morning["time"] < _pd_loc.Timestamp(today + " 09:40:00")]
+            open_5min_ret = (float(_p5.iloc[-1]["close"]) - open_p) / open_p if len(_p5) >= 3 else 0
+            open_10min_ret = (float(_p10.iloc[-1]["close"]) - open_p) / open_p if len(_p10) >= 5 else 0
+        except Exception:
+            self.morning_alert_state[code].update({"checked": True, "level": 0})
+            return
+        # 读取MORNING_ALERT_PARAMS
+        try:
+            from config import MORNING_ALERT_PARAMS
+        except ImportError:
+            self.morning_alert_state[code].update({"checked": True, "level": 0})
+            return
+        cfg = MORNING_ALERT_PARAMS.get(code, {})
+        if not cfg or not cfg.get("alert_enabled", False):
+            self.morning_alert_state[code].update({"checked": True, "level": 0})
+            return
+        # 检查Level 2 (最严格, 全天禁止买入)
+        for rule in cfg.get("level_2_rules", []):
+            cond = rule.get("condition", {})
+            match = True
+            for k, v in cond.items():
+                val = locals().get(k, None)
+                if val is None:
+                    match = False
+                    break
+                if k in ("open_30min_ret", "open_5min_ret", "open_10min_ret", "max_gain_after_open", "max_loss_after_open"):
+                    if val > v:
+                        match = False
+                        break
+            if match:
+                self.morning_alert_state[code].update({
+                    "checked": True, "level": 2,
+                    "rules": [rule.get("name", "L2")]
+                })
+                return
+        # 检查Level 1 (提高买入门槛)
+        for rule in cfg.get("level_1_rules", []):
+            cond = rule.get("condition", {})
+            match = True
+            for k, v in cond.items():
+                val = locals().get(k, None)
+                if val is None:
+                    match = False
+                    break
+                if k in ("open_30min_ret", "open_5min_ret", "open_10min_ret", "max_gain_after_open", "max_loss_after_open"):
+                    if val > v:
+                        match = False
+                        break
+            if match:
+                self.morning_alert_state[code].update({
+                    "checked": True, "level": 1,
+                    "rules": [rule.get("name", "L1")]
+                })
+                return
+        self.morning_alert_state[code].update({"checked": True, "level": 0})
+
     def evaluate(self, code, name, df, holding, daily_ctx=None):
         if df.empty or len(df) < 5:
             return 0, 0, None
@@ -343,14 +434,44 @@ class SignalEngine:
         price = feats.get("price", 0); hold_qty = feats.get("hold_qty", 0)
         # 风控阻断 + 左侧抄底豁免（5分钟强反转可绕过日线封锁）
         risk = RiskManager.check_all(feats)
-        risk_buy_block = risk.get("buy_block", [])
-        risk_sell_block = risk.get("sell_block", [])
+        risk_buy_block = risk.get("buy_block", [])[:]  # 副本防止污染
+        risk_sell_block = risk.get("sell_block", [])[:]
+        t_val = feats.get("t_val", 0)
+        # ===== V1.28: 早盘保护 — morning_no_sell_until =====
+        _msu = PARAMS.get("morning_no_sell_until", 1000)
+        _msr = PARAMS.get("morning_no_sell_min_ret", 0.03)
+        if hold_qty > 0 and t_val < _msu and feats.get("today_ret", 0) < _msr:
+            risk_sell_block.append("morning_no_sell")
+        # ===== V1.28: VWAP偏离买入门槛 — 无底仓时禁止在非深V位置买入 =====
+        _vbd = PARAMS.get("vwap_buy_deviation", -0.020)
+        _vwap = feats.get("vwap", 0)
+        if price > 0 and _vwap > 0 and t_val >= 930 and hold_qty <= 0:
+            _vdev = (price - _vwap) / _vwap
+            if _vdev > _vbd:
+                risk_buy_block.append("vwap_not_dip_enough")
+        # ===== V1.28: 早盘单边下行预警 =====
+        self._check_morning_alert(code, df, feats)
+        _malert = self.morning_alert_state.get(code, {})
+        if _malert.get("level") == 2:
+            risk_buy_block.append("morning_alert_L2")
+        elif _malert.get("level") == 1:
+            # Level 1: 降低买入阈值 + 仅允许深V买入
+            buy_threshold = buy_threshold + 8.0  # 提高买入门槛
+            if price > 0 and _vwap > 0:
+                _vdev_l1 = (price - _vwap) / _vwap
+                if _vdev_l1 > -0.015:
+                    risk_buy_block.append("morning_alert_L1_not_dip")
         can_bypass_daily = feats.get("f5_is_strong_bullish_reversal", False) or feats.get("f5_is_volume_reversal", False)
         is_daily_ok = feats.get("daily_buy_t_ok", False) or can_bypass_daily
         base_can_buy = (len(risk_buy_block) == 0 and is_daily_ok
                         and not self._in_cooldown(code, "BUY_LOW"))
         base_can_sell = (len(risk_sell_block) == 0 and hold_qty > 0
                          and not self._in_cooldown(code, "SELL_HIGH"))
+        # ===== V1.28: 止盈监控 (take_profit_pct) =====
+        _tp = PARAMS.get("take_profit_pct", 0.010)
+        _tpa = PARAMS.get("take_profit_time_after", 1000)
+        if hold_qty > 0 and t_val >= _tpa and feats.get("profit_pct", 0) >= _tp:
+            sell_score += 30.0  # 大幅boost确保触发止盈
         sig = None
         can_sell = base_can_sell and sell_score >= sell_threshold and sell_score > buy_score
         can_buy = base_can_buy and buy_score >= buy_threshold and buy_score > sell_score
@@ -788,33 +909,33 @@ class ScoringEngine:
     def score_lower_shadow(feats: dict) -> tuple:
         ls = feats.get("lower_shadow", 0)
         raw = ScoringEngine._sigmoid(ls, center=0.3, slope=8.0)
-        return raw, [{"指标": "长下影", "当前": f"{ls:.2f}", "强度": round(raw, 3)}] if raw > 0.05 else (0.0, [])
+        return raw, [{"指标": "长下影", "当前": f"{ls:.2f}", "强度": round(raw, 3)}] if raw > 0.05 else []
 
     @staticmethod
     def score_ema_improve(feats: dict) -> tuple:
         es = feats.get("ema_spread", 0); pes = feats.get("prev_ema_spread", 0)
         delta = es - pes
         raw = ScoringEngine._sigmoid(delta, center=0.0005, slope=500.0)
-        return raw, [{"指标": "EMA转强", "当前": f"{es*100:.4f}%", "强度": round(raw, 3)}] if raw > 0.05 else (0.0, [])
+        return raw, [{"指标": "EMA转强", "当前": f"{es*100:.4f}%", "强度": round(raw, 3)}] if raw > 0.05 else []
 
     @staticmethod
     def score_ema_weaken(feats: dict) -> tuple:
         es = feats.get("ema_spread", 0); pes = feats.get("prev_ema_spread", 0)
         delta = pes - es
         raw = ScoringEngine._sigmoid(delta, center=0.0005, slope=500.0)
-        return raw, [{"指标": "EMA转弱", "当前": f"{es*100:.4f}%", "强度": round(raw, 3)}] if raw > 0.05 else (0.0, [])
+        return raw, [{"指标": "EMA转弱", "当前": f"{es*100:.4f}%", "强度": round(raw, 3)}] if raw > 0.05 else []
 
     @staticmethod
     def score_volume(feats: dict) -> tuple:
         vr = feats.get("vol_ratio", 1.0)
         raw = ScoringEngine._sigmoid(vr, center=1.2, slope=4.0)
-        return raw, [{"指标": "量能确认", "当前": f"{vr:.2f}", "强度": round(raw, 3)}] if raw > 0.05 else (0.0, [])
+        return raw, [{"指标": "量能确认", "当前": f"{vr:.2f}", "强度": round(raw, 3)}] if raw > 0.05 else []
 
     @staticmethod
     def score_upper_shadow(feats: dict) -> tuple:
         us = feats.get("upper_shadow", 0)
         raw = ScoringEngine._sigmoid(us, center=0.4, slope=6.0)
-        return raw, [{"指标": "长上影", "当前": f"{us:.2f}", "强度": round(raw, 3)}] if raw > 0.05 else (0.0, [])
+        return raw, [{"指标": "长上影", "当前": f"{us:.2f}", "强度": round(raw, 3)}] if raw > 0.05 else []
 
     @staticmethod
     def _weighted_factor_score(raw: float, weight_key: str, w_mult: float = 1.0,
