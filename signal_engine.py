@@ -736,7 +736,10 @@ class ScoringEngine:
 
     @staticmethod
     def _sigmoid(x: float, center: float = 0, slope: float = 1) -> float:
-        return 1.0 / (1.0 + np.exp(-slope * (x - center)))
+        z = -slope * (x - center)
+        if z > 100: return 0.0  # np.exp(>100) → inf
+        if z < -100: return 1.0
+        return 1.0 / (1.0 + np.exp(z))
 
     @staticmethod
     def score_vwap_buy(feats: dict) -> tuple:

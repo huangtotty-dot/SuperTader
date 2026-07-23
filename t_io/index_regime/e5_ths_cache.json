@@ -1078,5 +1078,15 @@
   "zb_rate": 0.5084,
   "seal_rate": 0.49162011173184356,
   "source": "ths_limit_up_pool"
+ },
+ "20260723": {
+  "date": "20260723",
+  "zt_count": 50,
+  "dt_count": 1,
+  "zb_count": 14,
+  "zt_touched": 64,
+  "zb_rate": 0.2188,
+  "seal_rate": 0.78125,
+  "source": "ths_limit_up_pool"
  }
 }
