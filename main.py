@@ -3,7 +3,8 @@
 做T盯盘脚本主入口（拆分版）
 通过共享命名空间加载所有模块，确保原始代码中的跨函数引用无需修改。
 """
-import sys, os
+import sys, os, io
+sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
 
 # 确保运行路径
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -12,18 +13,23 @@ if BASE_DIR not in sys.path:
 
 # 预加载所有必要的第三方库到共享命名空间
 import os as _os, sys as _sys, json as _json, time as _time, logging as _logging, traceback as _traceback, importlib.util as _importlib_util
+import urllib.request as _urllib_request
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, time as dtime
 from typing import Dict, List, Optional, Any
 import numpy as np, pandas as pd, requests, urllib.request, urllib.error
 
 # 代理修复（与 config.py 保持一致）
-_os.environ['http_proxy'] = ''
-_os.environ['https_proxy'] = ''
-_os.environ['HTTP_PROXY'] = ''
-_os.environ['HTTPS_PROXY'] = ''
-_os.environ['ALL_PROXY'] = ''
-_os.environ['all_proxy'] = ''
+for _k in ['http_proxy','https_proxy','HTTP_PROXY','HTTPS_PROXY','ALL_PROXY','all_proxy']:
+    _os.environ.pop(_k, None)
+_os.environ['NO_PROXY'] = '*'; _os.environ['no_proxy'] = '*'
+# 强制 urllib 全局无代理
+_urllib_request.install_opener(_urllib_request.build_opener(_urllib_request.ProxyHandler({})))
+# 强制 requests 全局无代理（trust_env=False 覆盖 Windows IE 系统代理）
+import requests as _mreq
+_MREQ_SESSION = _mreq.Session(); _MREQ_SESSION.trust_env = False
+_mreq.post = lambda url, **kw: _MREQ_SESSION.request('POST', url, **kw)
+_mreq.get = lambda url, **kw: _MREQ_SESSION.request('GET', url, **kw)
 
 # 共享命名空间：所有模块在此空间中执行，共享所有变量和函数
 shared = {
