@@ -1,0 +1,173 @@
+09:22:59 [INFO] 🔄 VIRTUAL_TRADES 日期 2026-07-22 != 今日 2026-07-23，自动重置
+09:22:59 [INFO] 🔄 VIRTUAL_TRADES: 无历史记录，全新开始
+09:23:04 [WARNING] [index_regime] http 全部2次重试失败，最后错误: ProxyError
+09:23:06 [INFO] [index_regime] akshare sh000001 日线失败: ProxyError
+09:23:41 [WARNING] ⚠️  当日T策略卡推送第1次发送异常，准备重试: HTTPSConnectionPool(host='open.feishu.cn', port=443): Max retries exceeded with url: /open-apis/bot/
+09:24:34 [INFO] 竞价额Top20：涨0/跌0
+评分=50分 → 观察
+09:24:34 [INFO] ========= 做T终极护城河防御版 (V1.26 正T/反T模式切换版) 启动 =========
+09:24:34 [INFO] 飞书推送: ✓ 已启用
+09:24:34 [INFO] 飞书关键词: 做T猎手预警
+09:24:34 [INFO] 飞书Webhook: https://open.feishu.cn/open-apis/bot/v2/hook/e8018470-e...
+09:24:34 [INFO] 🧹 清理过期分钟线缓存 5 个
+09:24:34 [INFO] 🔊 系统报警音效已挂载
+09:24:36 [WARNING] ⚠️  启动自检飞书推送第1次发送异常，准备重试: HTTPSConnectionPool(host='open.feishu.cn', port=443): Max retries exceeded with url: /open-apis/bot/
+09:24:36 [INFO] ⏱ 采用顺序轮询模式：每轮扫描结束后再等待 15 秒（V1.8 确认型收敛）
+09:25:03 [INFO] 竞价额Top20：涨0/跌0
+评分=50分 → 观察
+09:25:05 [WARNING] ⚠️  竞价监控飞书推送第1次发送异常，准备重试: HTTPSConnectionPool(host='open.feishu.cn', port=443): Max retries exceeded with url: /open-apis/bot/
+09:25:05 [INFO] 📡 盘前集合竞价监控已刷新
+09:25:22 [WARNING] ⚠️  支撑/压力位飞书推送第1次发送异常，准备重试: HTTPSConnectionPool(host='open.feishu.cn', port=443): Max retries exceeded with url: /open-apis/bot/
+09:25:39 [WARNING] ⚠️  支撑/压力位飞书推送第1次发送异常，准备重试: HTTPSConnectionPool(host='open.feishu.cn', port=443): Max retries exceeded with url: /open-apis/bot/
+09:25:56 [WARNING] ⚠️  支撑/压力位飞书推送第1次发送异常，准备重试: HTTPSConnectionPool(host='open.feishu.cn', port=443): Max retries exceeded with url: /open-apis/bot/
+09:26:13 [WARNING] ⚠️  早盘大盘基调推送第1次发送异常，准备重试: HTTPSConnectionPool(host='open.feishu.cn', port=443): Max retries exceeded with url: /open-apis/bot/
+09:26:15 [WARNING] ⚠️  支撑/压力位飞书推送第1次发送异常，准备重试: HTTPSConnectionPool(host='open.feishu.cn', port=443): Max retries exceeded with url: /open-apis/bot/
+09:26:32 [WARNING] ⚠️  支撑/压力位飞书推送第1次发送异常，准备重试: HTTPSConnectionPool(host='open.feishu.cn', port=443): Max retries exceeded with url: /open-apis/bot/
+09:26:45 [INFO] 已停止盯盘
+09:33:42 [INFO] 🔄 VIRTUAL_TRADES 日期 2026-07-22 != 今日 2026-07-23，自动重置
+09:33:42 [INFO] 🔄 VIRTUAL_TRADES: 无历史记录，全新开始
+09:33:47 [WARNING] [index_regime] http 全部2次重试失败，最后错误: ProxyError
+09:33:49 [INFO] [index_regime] akshare sh000001 日线失败: ProxyError
+09:35:14 [INFO] 竞价额Top20：涨0/跌0
+评分=50分 → 观察
+09:35:14 [INFO] ========= 做T终极护城河防御版 (V1.26 正T/反T模式切换版) 启动 =========
+09:35:14 [INFO] 飞书推送: ✓ 已启用
+09:35:14 [INFO] 飞书关键词: 做T猎手预警
+09:35:14 [INFO] 飞书Webhook: https://open.feishu.cn/open-apis/bot/v2/hook/e8018470-e...
+09:35:14 [INFO] 🔊 系统报警音效已挂载
+09:35:40 [INFO] 竞价额Top20：涨0/跌0
+评分=50分 → 观察
+09:35:42 [WARNING] ⚠️  启动自检飞书推送第1次发送异常，准备重试: HTTPSConnectionPool(host='open.feishu.cn', port=443): Max retries exceeded with url: /open-apis/bot/
+09:35:42 [INFO] ⏱ 采用顺序轮询模式：每轮扫描结束后再等待 15 秒（V1.8 确认型收敛）
+09:35:42 [INFO] 🫀 扫描心跳 第1轮开始
+09:35:51 [WARNING] ⚠️ 大盘分时预警钩子异常（已吞掉，不影响主循环）: live 通道全部失败: live:akshare_sina_failed(ProxyError: HTTPSConnectionPool(host='quotes.sina.cn', port=443): Max retries exce
+09:36:18 [INFO] 竞价额Top20：涨0/跌0
+评分=50分 → 观察
+09:36:26 [WARNING] ⚠️  588170 分钟线获取失败[network_error]: 网络错误: <urlopen error [WinError 10061] 由于目标计算机积极拒绝，无法连接。>
+09:36:26 [WARNING] ⚠️  科创半导体ETF华夏(588170) 分钟线为空 [网络错误:网络错误: <urlopen err]
+09:36:34 [WARNING] ⚠️  600176 分钟线获取失败[network_error]: 网络错误: <urlopen error [WinError 10061] 由于目标计算机积极拒绝，无法连接。>
+09:36:34 [WARNING] ⚠️  中国巨石(600176) 分钟线为空 [网络错误:网络错误: <urlopen err]
+09:36:43 [WARNING] ⚠️  600481 分钟线获取失败[network_error]: 网络错误: <urlopen error [WinError 10061] 由于目标计算机积极拒绝，无法连接。>
+09:36:43 [WARNING] ⚠️  双良节能(600481) 分钟线为空 [网络错误:网络错误: <urlopen err]
+09:36:51 [WARNING] ⚠️  603667 分钟线获取失败[network_error]: 网络错误: <urlopen error [WinError 10061] 由于目标计算机积极拒绝，无法连接。>
+09:36:51 [WARNING] ⚠️  五洲新春(603667) 分钟线为空 [网络错误:网络错误: <urlopen err]
+09:36:59 [WARNING] ⚠️  000988 分钟线获取失败[network_error]: 网络错误: <urlopen error [WinError 10061] 由于目标计算机积极拒绝，无法连接。>
+09:36:59 [WARNING] ⚠️  华工科技(000988) 分钟线为空 [网络错误:网络错误: <urlopen err]
+09:36:59 [INFO] 
+📊 护城河防御面板 第1轮
+──────────────────────────────────────────────────────────────────────
+标的                    现价  均价(VWAP)      振幅       多买/空卖评分  状态
+科创半导体ETF华夏(588170)       -         -       -             -  分钟线断流(网络错误:网络错误: <urlopen err)
+中国巨石(600176)           -         -       -             -  分钟线断流(网络错误:网络错误: <urlopen err)
+双良节能(600481)           -         -       -             -  分钟线断流(网络错误:网络错误: <urlopen err)
+五洲新春(603667)           -         -       -             -  分钟线断流(网络错误:网络错误: <urlopen err)
+华工科技(000988)           -         -       -             -  分钟线断流(网络错误:网络错误: <urlopen err)
+09:37:14 [INFO] 🫀 扫描心跳 第2轮开始
+09:37:41 [INFO] 竞价额Top20：涨0/跌0
+评分=50分 → 观察
+09:37:49 [WARNING] ⚠️  588170 分钟线获取失败[network_error]: 网络错误: <urlopen error [WinError 10061] 由于目标计算机积极拒绝，无法连接。>
+09:37:49 [WARNING] ⚠️  科创半导体ETF华夏(588170) 分钟线为空 [网络错误:网络错误: <urlopen err]
+09:37:57 [WARNING] ⚠️  600176 分钟线获取失败[network_error]: 网络错误: <urlopen error [WinError 10061] 由于目标计算机积极拒绝，无法连接。>
+09:37:57 [WARNING] ⚠️  中国巨石(600176) 分钟线为空 [网络错误:网络错误: <urlopen err]
+09:38:03 [INFO] 已停止盯盘
+09:38:07 [INFO] 🔄 VIRTUAL_TRADES 日期 2026-07-22 != 今日 2026-07-23，自动重置
+09:38:07 [INFO] 🔄 VIRTUAL_TRADES: 无历史记录，全新开始
+09:38:12 [WARNING] [index_regime] http 全部2次重试失败，最后错误: ProxyError
+09:38:14 [INFO] [index_regime] akshare sh000001 日线失败: ProxyError
+09:39:39 [INFO] 竞价额Top20：涨0/跌0
+评分=50分 → 观察
+09:39:39 [INFO] ========= 做T终极护城河防御版 (V1.26 正T/反T模式切换版) 启动 =========
+09:39:39 [INFO] 飞书推送: ✓ 已启用
+09:39:39 [INFO] 飞书关键词: 做T猎手预警
+09:39:39 [INFO] 飞书Webhook: https://open.feishu.cn/open-apis/bot/v2/hook/e8018470-e...
+09:39:39 [INFO] 🔊 系统报警音效已挂载
+09:40:05 [INFO] 竞价额Top20：涨0/跌0
+评分=50分 → 观察
+09:40:07 [WARNING] ⚠️  启动自检飞书推送第1次发送异常，准备重试: HTTPSConnectionPool(host='open.feishu.cn', port=443): Max retries exceeded with url: /open-apis/bot/
+09:40:07 [INFO] ⏱ 采用顺序轮询模式：每轮扫描结束后再等待 15 秒（V1.8 确认型收敛）
+09:40:07 [INFO] 🫀 扫描心跳 第1轮开始
+09:40:17 [WARNING] ⚠️ 大盘分时预警钩子异常（已吞掉，不影响主循环）: live 通道全部失败: live:akshare_sina_failed(ProxyError: HTTPSConnectionPool(host='quotes.sina.cn', port=443): Max retries exce
+09:40:42 [INFO] 竞价额Top20：涨0/跌0
+评分=50分 → 观察
+09:40:50 [WARNING] ⚠️  588170 分钟线获取失败[network_error]: 网络错误: <urlopen error [WinError 10061] 由于目标计算机积极拒绝，无法连接。>
+09:40:50 [WARNING] ⚠️  科创半导体ETF华夏(588170) 分钟线为空 [网络错误:网络错误: <urlopen err]
+09:40:58 [WARNING] ⚠️  600176 分钟线获取失败[network_error]: 网络错误: <urlopen error [WinError 10061] 由于目标计算机积极拒绝，无法连接。>
+09:40:58 [WARNING] ⚠️  中国巨石(600176) 分钟线为空 [网络错误:网络错误: <urlopen err]
+09:41:07 [WARNING] ⚠️  600481 分钟线获取失败[network_error]: 网络错误: <urlopen error [WinError 10061] 由于目标计算机积极拒绝，无法连接。>
+09:41:07 [WARNING] ⚠️  双良节能(600481) 分钟线为空 [网络错误:网络错误: <urlopen err]
+09:41:12 [INFO] 已停止盯盘
+09:45:16 [INFO] 🔄 VIRTUAL_TRADES 日期 2026-07-22 != 今日 2026-07-23，自动重置
+09:45:16 [INFO] 🔄 VIRTUAL_TRADES: 无历史记录，全新开始
+09:45:21 [WARNING] [index_regime] http 全部2次重试失败，最后错误: ProxyError
+09:45:23 [INFO] [index_regime] akshare sh000001 日线失败: ProxyError
+09:46:16 [INFO] 竞价额Top20：涨0/跌0
+评分=50分 → 观察
+09:46:16 [INFO] ========= 做T终极护城河防御版 (V1.26 正T/反T模式切换版) 启动 =========
+09:46:16 [INFO] 飞书推送: ✓ 已启用
+09:46:16 [INFO] 飞书关键词: 做T猎手预警
+09:46:16 [INFO] 飞书Webhook: https://open.feishu.cn/open-apis/bot/v2/hook/e8018470-e...
+09:46:16 [INFO] 🔊 系统报警音效已挂载
+09:46:42 [INFO] 竞价额Top20：涨0/跌0
+评分=50分 → 观察
+09:46:44 [WARNING] ⚠️  启动自检飞书推送第1次发送异常，准备重试: HTTPSConnectionPool(host='open.feishu.cn', port=443): Max retries exceeded with url: /open-apis/bot/
+09:46:44 [INFO] ⏱ 采用顺序轮询模式：每轮扫描结束后再等待 15 秒（V1.8 确认型收敛）
+09:46:44 [INFO] 🫀 扫描心跳 第1轮开始
+09:47:16 [INFO] 竞价额Top20：涨0/跌0
+评分=50分 → 观察
+09:47:39 [INFO] 🎯 000988 市场状态: normal | 综合判断：正常状态
+09:47:39 [INFO] 🛑 大盘熔断/仓控阻断 000988: normal / data_unavailable
+09:47:39 [INFO] 📉 000988 卖出信号得分43分，低于10:00前阈值75分，静默处理（不推送飞书）
+09:47:39 [INFO] 🛑 000988 受大盘熔断/仓控阻断，跳过交易记录
+09:47:39 [INFO] 
+📊 护城河防御面板 第1轮
+──────────────────────────────────────────────────────────────────────
+标的                    现价  均价(VWAP)      振幅       多买/空卖评分  状态
+科创半导体ETF华夏(588170)    1.01      1.02    2.6%   多23.5/空16.1  无信号     
+中国巨石(600176)       39.53     39.41    3.5%   多33.0/空32.7  弱机会     
+双良节能(600481)        3.81      3.80    1.6%   多35.3/空37.5  弱机会     
+五洲新春(603667)       52.43     52.29    1.8%   多32.2/空31.6  弱机会     
+华工科技(000988)      115.77    113.67    3.5%   多36.6/空42.8  弱机会|SELL_HIGH
+09:47:54 [INFO] 🫀 扫描心跳 第2轮开始
+09:48:19 [INFO] 竞价额Top20：涨0/跌0
+评分=50分 → 观察
+09:48:41 [INFO] 🎯 000988 市场状态: normal | 综合判断：正常状态
+09:48:41 [INFO] 🛑 大盘熔断/仓控阻断 000988: normal / data_unavailable
+09:48:41 [INFO] 📉 000988 卖出信号得分43分，低于10:00前阈值75分，静默处理（不推送飞书）
+09:48:41 [INFO] 🛑 000988 受大盘熔断/仓控阻断，跳过交易记录
+09:48:56 [INFO] 🫀 扫描心跳 第3轮开始
+09:49:23 [INFO] 竞价额Top20：涨0/跌0
+评分=50分 → 观察
+09:49:43 [INFO] 🔄 VIRTUAL_TRADES 日期 2026-07-22 != 今日 2026-07-23，自动重置
+09:49:43 [INFO] 🔄 VIRTUAL_TRADES: 无历史记录，全新开始
+09:49:51 [INFO] 🎯 000988 市场状态: normal | 综合判断：正常状态
+09:49:51 [INFO] 🛑 大盘熔断/仓控阻断 000988: normal / data_unavailable
+09:49:51 [INFO] 📉 000988 卖出信号得分43分，低于10:00前阈值75分，静默处理（不推送飞书）
+09:49:51 [INFO] 🛑 000988 受大盘熔断/仓控阻断，跳过交易记录
+09:49:59 [INFO] 🔄 VIRTUAL_TRADES 日期 2026-07-22 != 今日 2026-07-23，自动重置
+09:49:59 [INFO] 🔄 VIRTUAL_TRADES: 无历史记录，全新开始
+09:50:06 [INFO] 🫀 扫描心跳 第4轮开始
+09:50:32 [INFO] 竞价额Top20：涨0/跌0
+评分=50分 → 观察
+09:51:11 [INFO] 🫀 扫描心跳 第5轮开始
+09:51:13 [INFO] 🔄 VIRTUAL_TRADES 日期 2026-07-22 != 今日 2026-07-23，自动重置
+09:51:13 [INFO] 🔄 VIRTUAL_TRADES: 无历史记录，全新开始
+09:51:37 [INFO] 竞价额Top20：涨0/跌0
+评分=50分 → 观察
+09:52:03 [INFO] 
+📊 护城河防御面板 第5轮
+──────────────────────────────────────────────────────────────────────
+标的                    现价  均价(VWAP)      振幅       多买/空卖评分  状态
+科创半导体ETF华夏(588170)    1.01      1.02    2.6%   多27.6/空15.9  弱机会     
+中国巨石(600176)       40.15     39.44    3.7%   多36.3/空35.5  弱机会     
+双良节能(600481)        3.83      3.80    1.9%   多37.1/空41.4  弱机会     
+五洲新春(603667)       52.94     52.31    1.8%   多35.9/空35.4  弱机会     
+华工科技(000988)      115.65    113.78    3.5%   多36.0/空44.0  弱机会     
+09:52:18 [INFO] 🫀 扫描心跳 第6轮开始
+09:52:50 [INFO] 竞价额Top20：涨0/跌0
+评分=50分 → 观察
+09:52:53 [INFO] 🔄 VIRTUAL_TRADES 日期 2026-07-22 != 今日 2026-07-23，自动重置
+09:52:53 [INFO] 🔄 VIRTUAL_TRADES: 无历史记录，全新开始
+09:53:27 [INFO] 🫀 扫描心跳 第7轮开始
+09:53:53 [INFO] 竞价额Top20：涨0/跌0
+评分=50分 → 观察
+09:54:31 [INFO] 🫀 扫描心跳 第8轮开始

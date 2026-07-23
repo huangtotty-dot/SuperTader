@@ -14,14 +14,26 @@ import traceback
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, time as dtime
 from typing import Dict, List, Optional, Any
+import urllib.request
 
-# ==================== 代理终极修复 (强制直连) ====================
-os.environ['http_proxy'] = ''
-os.environ['https_proxy'] = ''
-os.environ['HTTP_PROXY'] = ''
-os.environ['HTTPS_PROXY'] = ''
-os.environ['ALL_PROXY'] = ''
-os.environ['all_proxy'] = ''
+# ==================== 彻底禁用所有代理 (无论环境变量还是 Windows 系统代理) ====================
+for _k in ['http_proxy','https_proxy','HTTP_PROXY','HTTPS_PROXY','ALL_PROXY','all_proxy',
+            'no_proxy','NO_PROXY']:
+    os.environ.pop(_k, None)
+os.environ['NO_PROXY'] = '*'
+os.environ['no_proxy'] = '*'
+# 强制 urllib 全局无代理
+urllib.request.install_opener(urllib.request.build_opener(urllib.request.ProxyHandler({})))
+# 创建全局 requests Session（trust_env=False 彻底禁用代理检测，覆盖 Windows IE 系统代理）
+import requests as _req
+_REQ_SESSION = _req.Session()
+_REQ_SESSION.trust_env = False
+_req.post = lambda url, **kw: _REQ_SESSION.request('POST', url, **kw)
+_req.get = lambda url, **kw: _REQ_SESSION.request('GET', url, **kw)
+# 同步给后续 import requests 的引用
+import sys as _sys
+_sys.modules['requests'].post = _req.post
+_sys.modules['requests'].get = _req.get
 
 import akshare as ak
 import numpy as np
