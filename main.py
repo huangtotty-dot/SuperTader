@@ -405,7 +405,7 @@ def _refresh_spot_vwap_cache() -> None:
             c = str(row[codes_col]).strip()
             v = float(row[vol_col])
             a = float(row[amt_col])
-            cache[c] = round(a / v, 2)
+            cache[c] = round(a / (v * 100), 2)  # 成交量单位是"手"(×100股)，还原为股
         _SPOT_VWAP_CACHE = cache
         log.debug(f"📡 VWAP 实时缓存刷新: {len(cache)} 只")
     except Exception as e:
