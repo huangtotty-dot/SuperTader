@@ -565,8 +565,7 @@ def _maybe_push_index_regime_eod(now: datetime) -> None:
         log.warning(f"⚠️ 尾盘大盘评分预判钩子异常（已吞掉，不影响主循环）: {str(e)[:120]}")
 
 
-def _maybe_audit_closure(now: datetime) -> None:
-    _daily_pnl_push_date = ""  # 日期字符串，防重复
+_daily_pnl_push_date = ""  # 模块级：14:59推送防重复
 
 def _maybe_push_daily_pnl_summary(now: datetime) -> None:
     """V1.29: 14:59-15:01 每日一次 收益汇总推送。
