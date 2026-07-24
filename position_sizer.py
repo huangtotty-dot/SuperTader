@@ -162,7 +162,14 @@ class PositionSizer:
                 result_qty = self._calc_etf_sell_qty(p, net_qty, strength, used_sells) if is_etf else self._calc_stock_sell_qty(p, net_qty, strength, used_sells)
 
         available_qty = self._available_sell_qty(holding)
-        return max(0, min(result_qty, net_qty, available_qty))
+        # V1.30: 底仓地板钳制 —— 保留 base×sell_floor_ratio 不可卖（防卖穿底仓）
+        try:
+            _base_qty = int(holding.get("base") or holding.get("t_qty") or holding.get("qty") or 0)
+            _floor_qty = int(_base_qty * float(p.get("sell_floor_ratio", 0.5)))
+            _sell_cap = max(0, net_qty - _floor_qty)
+        except Exception:
+            _sell_cap = net_qty
+        return max(0, min(result_qty, net_qty, available_qty, _sell_cap))
 
     # ==================== 核心：买入份数计算 ====================
 

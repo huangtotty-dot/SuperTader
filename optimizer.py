@@ -25,6 +25,13 @@ from typing import Any, Dict, List, Optional, Tuple
 import numpy as np
 import pandas as pd
 
+# V1.30b: 托管 Python 无 akshare —— 内置 mock，使 config.py 顶层 import 与
+# 数据下载兜底路径不再炸掉整个 trial（真实数据全部来自本地缓存）
+class _MockAkshare:
+    def __getattr__(self, name):
+        return lambda *args, **kwargs: pd.DataFrame()
+sys.modules.setdefault('akshare', _MockAkshare())
+
 BASE_DIR = Path(__file__).resolve().parent
 CACHE_DIR = BASE_DIR / "t_io" / "cache" / "tushare_mins"
 OUT_DIR = BASE_DIR / "t_io" / "optimizer"
@@ -116,7 +123,8 @@ def _download_and_cache(code: str, date: str) -> pd.DataFrame:
 
 
 def _load_cached(code: str, date: str) -> pd.DataFrame:
-    """从缓存加载含指标的分钟数据，缺失时下载。"""
+    """从缓存加载含指标的分钟数据，缺失时下载。
+    V1.30: 下载失败（节假日/无网络/无tushare）按空数据处理，不再让单日缺失炸掉整个 trial。"""
     cache_path = CACHE_DIR / code / f"{date}.csv"
     if cache_path.exists():
         df = pd.read_csv(cache_path)
@@ -124,7 +132,10 @@ def _load_cached(code: str, date: str) -> pd.DataFrame:
         df = df.sort_values("time").reset_index(drop=True)
         if not df.empty and "vwap" in df.columns and len(df) >= 25:
             return df
-    return _download_and_cache(code, date)
+    try:
+        return _download_and_cache(code, date)
+    except Exception:
+        return pd.DataFrame()
 
 
 def _ensure_trading_dates(code: str, start: str, end: str) -> List[str]:
@@ -173,23 +184,74 @@ def _load_prev_day_close(date_str: str) -> Optional[float]:
     return _PREV_CLOSE_INDEX[all_dates[-1]]
 
 
+_REGIME_TRACE_CACHE: Dict[str, str] = {}
+
+def _regime_for_date(date_str: str) -> str:
+    """V1.30: 按日期解析 index_regime —— 取 date_str 之前最近一个有轨迹的交易日的
+    收盘最终判定（与 V1.30 实盘"盘中锁定日线状态机"语义一致，无未来函数）；
+    无轨迹覆盖的历史期返回 range。"""
+    if date_str in _REGIME_TRACE_CACHE:
+        return _REGIME_TRACE_CACHE[date_str]
+    regime = "range"
+    try:
+        tdir = BASE_DIR / "t_io" / "index_regime" / "traces"
+        if tdir.exists():
+            files = sorted(f for f in tdir.glob("index_regime_*.jsonl")
+                           if f.stem.replace("index_regime_", "") < date_str)
+            if files:
+                last = None
+                for line in files[-1].read_text(encoding="utf-8").strip().splitlines():
+                    if line.strip():
+                        last = json.loads(line)
+                if last and last.get("regime"):
+                    regime = str(last["regime"])
+    except Exception:
+        pass
+    _REGIME_TRACE_CACHE[date_str] = regime
+    return regime
+
+
+def _ma_from_index(date_str: str, n: int) -> float:
+    """用缓存收盘价索引计算截至前一交易日的 N 日均线（无未来函数）。"""
+    dates = sorted(d for d in _PREV_CLOSE_INDEX.keys() if d < date_str)
+    if not dates:
+        return 0.0
+    vals = [_PREV_CLOSE_INDEX[d] for d in dates[-n:]]
+    return sum(vals) / len(vals) if vals else 0.0
+
+
 def _build_daily_context(date_str: str) -> Dict[str, Any]:
-    """用前一交易日收盘价构建日线上下文。
+    """用前一交易日及更早的数据构建日线上下文。
 
     绝不使用当日任何分钟数据，杜绝未来函数泄露。
-    若无可用的前一日数据，返回宽松默认值。
+    V1.30 修复：不再返回恒宽松默认值（恒 range/恒 bull 导致评分分布与实盘脱节、
+    回测长期 0 成交），改为基于真实历史收盘计算均线/破位/过热/regime。
     """
     prev_close = _load_prev_day_close(date_str)
+    if prev_close:
+        ma5 = _ma_from_index(date_str, 5)
+        ma10 = _ma_from_index(date_str, 10)
+        ma20 = _ma_from_index(date_str, 20)
+        above_ma5 = prev_close >= ma5 if ma5 > 0 else True
+        ma5_state = "above_ma5_trend" if above_ma5 else "below_ma5"
+        # 破位：前收显著跌破 MA20；过热：前收显著高于 MA20
+        breakdown = bool(ma20 > 0 and prev_close < ma20 * 0.97)
+        overheated = bool(ma20 > 0 and prev_close > ma20 * 1.15)
+        trend_bg = "bull" if (ma5 >= ma10 >= ma20 > 0) else ("bear" if (0 < ma5 <= ma10 <= ma20) else "chop")
+    else:
+        ma5 = ma10 = ma20 = 0
+        above_ma5, ma5_state, breakdown, overheated, trend_bg = True, "above_ma5_trend", False, False, "bull"
     return {
         "daily_status": "ok", "daily_gate": "normal",
-        "daily_buy_t_ok": True, "daily_trend_bg": "bull",
-        "daily_ma5_state": "above_ma5_trend", "daily_above_ma5": True,
-        "daily_ma5": prev_close or 0,
-        "daily_ma10": prev_close or 0,
-        "daily_ma20": prev_close or 0,
-        "daily_breakdown_risk": False, "daily_overheated": False,
+        "daily_buy_t_ok": True,
+        "daily_trend_bg": trend_bg,
+        "daily_ma5_state": ma5_state, "daily_above_ma5": above_ma5,
+        "daily_ma5": ma5 or (prev_close or 0),
+        "daily_ma10": ma10 or (prev_close or 0),
+        "daily_ma20": ma20 or (prev_close or 0),
+        "daily_breakdown_risk": breakdown, "daily_overheated": overheated,
         "daily_pullback_support": False,
-        "index_regime": "range", "index_regime_status": "normal",
+        "index_regime": _regime_for_date(date_str), "index_regime_status": "normal",
         "index_circuit_state": "normal", "index_gate_advice": "normal_t",
         "index_temp_bucket": "neutral",
         "intraday_alerts": [], "benchmark_gate": "neutral",
@@ -212,6 +274,7 @@ def _run_single_backtest(code: str, params: Dict[str, Any], start: str, end: str
     _se.PARAMS.update(STOCK_PARAMS.get(code, {}))
     _se.PARAMS.update(params)
     _se.MINUTE_FETCH_STATUS[code] = "ok"
+    _se.PERSIST_INTRADAY_STATE = False   # V1.30: 回测不写实盘盘中状态文件
 
     # ===== 修复：清空全局状态，杜绝跨 Trial 污染 =====
     _se.VIRTUAL_TRADES.clear()
@@ -226,10 +289,17 @@ def _run_single_backtest(code: str, params: Dict[str, Any], start: str, end: str
     trading_dates = [d.strftime("%Y-%m-%d") for d in pd.bdate_range(start, end)]
     all_trades: List[Dict] = []
     nav_records: List[Dict] = []
+    # V1.30: 诊断计数 —— 区分"引擎无信号 / 信号被推送阈值过滤 / 仓控0股 / 异常"
+    n_signals = 0      # 引擎层产生的信号（score≥42 且通过仲裁）
+    n_pushed = 0       # 通过推送阈值（模拟实盘推送）
+    n_blocked_qty = 0  # 仓控 0 股被阻断
+    n_exceptions = 0
+    first_exc = ""
 
     cash = INITIAL_CAPITAL
     base_holdings = 1000
     intraday_buy_qty = 0
+    unmatched_pnl = 0.0  # V1.30b: 未配对成交的盯市盈亏
 
     # 逐日回放
     for ds in trading_dates:
@@ -242,6 +312,8 @@ def _run_single_backtest(code: str, params: Dict[str, Any], start: str, end: str
         engine.buy_count_per_stock[code] = 0
         engine.sell_count_per_stock[code] = 0
         engine.post_sell_block_until[code] = None
+        # V1.30: 虚拟成交账按日清空（与实盘每日重置一致，修复跨日累积污染仓位计算）
+        _se.VIRTUAL_TRADES.clear()
 
         day_buys: List[tuple] = []  # (price, qty)
         day_sells: List[tuple] = []  # (price, qty)
@@ -261,12 +333,19 @@ def _run_single_backtest(code: str, params: Dict[str, Any], start: str, end: str
         bc = 0  # 当日买入计数
         for i in range(25, len(minute_df), step):
             sub_df = minute_df.iloc[:i + 1].copy()
+            # V1.30: 注入模拟时间（冷却/TTL 在模拟时间轴上流逝）
+            _se.SIM_NOW = pd.Timestamp(minute_df.iloc[i]["time"]).to_pydatetime()
             try:
                 buy_score, sell_score, sig = engine.evaluate(code, "华工科技", sub_df, holding, daily_ctx=daily_ctx)
-            except Exception:
+            except Exception as e:
+                # V1.30: 异常计数（原为静默吞掉，曾掩盖回测故障）
+                n_exceptions += 1
+                if not first_exc:
+                    first_exc = f"{type(e).__name__}: {e}"
                 continue
             if sig is None:
                 continue
+            n_signals += 1
 
             # ===== 推送阈值过滤（模拟 main.py 实盘逻辑） =====
             _t_dt = pd.Timestamp(minute_df.iloc[i]["time"])
@@ -279,11 +358,12 @@ def _run_single_backtest(code: str, params: Dict[str, Any], start: str, end: str
                 _nth = params.get("notify_sell_early_threshold", 75)
             if sig.score < _nth:
                 continue  # 低于推送阈值，模拟实盘中静默处理
+            n_pushed += 1
 
             cp = float(minute_df.iloc[i]["close"])
 
             # ===== V1.29: PositionSizer 动态计算交易股数 =====
-            # V1.29: 动态仓位 = max(base_sizer_qty, FIXED_QTY)
+            # V1.30: 仓控 0 股 = 不成交（与修复后实盘一致；移除 fallback=200 的掩盖逻辑）
             actual_qty = base_holdings + intraday_buy_qty
             _h = holding.copy()
             _h["t_qty"] = actual_qty
@@ -291,7 +371,9 @@ def _run_single_backtest(code: str, params: Dict[str, Any], start: str, end: str
             if sig.action in ("BUY_LOW", "ADD_POS") and bc < MAX_BUYS:
                 buy_qty = sizer.calc_buy_qty(code, _h, None, sig.score, 42.0)
                 if buy_qty <= 0:
-                    buy_qty = 200  # fallback
+                    n_blocked_qty += 1
+                    engine.record_signal(code, sig.action, cp, sig.score)
+                    continue
                 buy_qty = max(100, (buy_qty // 100) * 100)
                 buy_px = cp + SLIPPAGE
                 cost = buy_px * buy_qty * (1 + COMMISSION)
@@ -301,12 +383,14 @@ def _run_single_backtest(code: str, params: Dict[str, Any], start: str, end: str
                     intraday_buy_qty += buy_qty
                     bc += 1
                     engine.record_signal(code, sig.action, cp, sig.score)
-                    engine.record_trade_action(code, "BUY_LOW", buy_qty)
+                    engine.record_trade_action(code, "BUY_LOW", buy_qty, price=cp)
             elif sig.action == "SELL_HIGH":
                 sellable = base_holdings + intraday_buy_qty
                 sell_qty = sizer.calc_sell_qty(code, _h, None, sig.score, 42.0, bc)
                 if sell_qty <= 0:
-                    sell_qty = min(200, sellable)  # fallback: max 200
+                    n_blocked_qty += 1
+                    engine.record_signal(code, sig.action, cp, sig.score)
+                    continue
                 sell_qty = max(100, (sell_qty // 100) * 100)
                 sell_qty = min(sell_qty, sellable)
                 if sell_qty >= 100:
@@ -321,7 +405,7 @@ def _run_single_backtest(code: str, params: Dict[str, Any], start: str, end: str
                         intraday_buy_qty = 0
                         base_holdings -= remaining
                     engine.record_signal(code, sig.action, cp, sig.score)
-                    engine.record_trade_action(code, "SELL_HIGH", sell_qty)
+                    engine.record_trade_action(code, "SELL_HIGH", sell_qty, price=cp)
 
         # T0 闭环配对：当日买入与卖出配对（使用实际交易量）
         n_cycles = min(len(day_buys), len(day_sells))
@@ -342,13 +426,28 @@ def _run_single_backtest(code: str, params: Dict[str, Any], start: str, end: str
 
         # ===== 修复：日末不再强复位底仓，让真实持仓带入次日 =====
         close_px = float(minute_df.iloc[-1]["close"])
+        # V1.30b: 未配对动作按当日收盘盯市（卖在高处=正贡献），供无闭环期的弱评分使用
+        for sp, sqty in day_sells[n_cycles:]:
+            unmatched_pnl += (sp - close_px) * sqty
+        for bp, bqty in day_buys[n_cycles:]:
+            unmatched_pnl += (close_px - bp) * bqty
         total_holdings = base_holdings + intraday_buy_qty
         nav = cash + total_holdings * close_px
         nav_records.append({"date": ds, "nav": round(nav, 2)})
 
     if not all_trades:
-        return {"win_rate": 0, "total_pnl": 0, "n_trades": 0,
-                "annualized_return": 0, "max_drawdown": 0, "composite_score": -9999.0}
+        # V1.30b: 无闭环不再一律 -9999 —— 有推送/成交动作的 trial 用未配对盯市盈亏给弱分，
+        # 让寻优在温和市（买分天然够不到推送阈、闭环稀少）仍有梯度可循；
+        # 完全无动作（信号层就没有输出）才保留 -9999。
+        if n_pushed > 0 or n_signals > 0:
+            weak = -100.0 + max(-50.0, min(50.0, unmatched_pnl / 1000.0))
+        else:
+            weak = -9999.0
+        return {"win_rate": 0, "total_pnl": round(unmatched_pnl, 2), "n_trades": 0,
+                "annualized_return": 0, "max_drawdown": 0, "composite_score": round(weak, 4),
+                "n_signals": n_signals, "n_pushed": n_pushed,
+                "n_blocked_qty": n_blocked_qty, "n_exceptions": n_exceptions,
+                "first_exc": first_exc}
 
     # 计算指标
     n_trades = len(all_trades)
@@ -388,6 +487,9 @@ def _run_single_backtest(code: str, params: Dict[str, Any], start: str, end: str
         "annualized_return": round(annualized_ret, 4),
         "max_drawdown": round(max_dd, 4),
         "composite_score": round(composite, 4),
+        "n_signals": n_signals, "n_pushed": n_pushed,
+        "n_blocked_qty": n_blocked_qty, "n_exceptions": n_exceptions,
+        "first_exc": first_exc,
     }
 
 

@@ -369,6 +369,10 @@ def send_morning_alert(code, name, alert_level, triggered_rules, morning_stats):
 
 _INDEX_INTRADAY_LAST_FETCH_TS = 0.0   # 分时数据拉取节流（至多 300 秒一次）
 _index_intraday_alert_cache: Dict[str, float] = {}  # 同 tag 60 分钟不重复推
+# V1.30: 盘中预警活动状态（注入引擎 feats["intraday_alerts"]，使 RiskManager I1/I4 买入冻结生效）
+_INDEX_INTRADAY_ACTIVE_ALERTS: list = []
+_INDEX_INTRADAY_ACTIVE_TS: float = 0.0
+_BUY_FUSE_NOTIFY_DATE: str = ""   # 买入熔断飞书明示（每日一次）
 
 # VWAP 实时快照缓存（akshare stock_zh_a_spot_em 成交额/成交量，每 60s 刷新一次）
 _SPOT_VWAP_CACHE: Dict[str, float] = {}  # code -> 实时 VWAP
@@ -736,16 +740,29 @@ def _maybe_audit_closure(now: datetime) -> None:
             vt = VIRTUAL_TRADES.get(code) or {}
             sold = sum(tr.get("qty", 0) for tr in vt.get("SELL_HIGH", []))
             bought = sum(tr.get("qty", 0) for tr in vt.get("BUY_LOW", []))
-            sell_amt = sum(tr.get("qty", 0) * tr.get("price", 0) for tr in vt.get("SELL_HIGH", []))
-            buy_amt = sum(tr.get("qty", 0) * tr.get("price", 0) for tr in vt.get("BUY_LOW", []))
             unrebuilt = max(0, sold - bought)                # 反T/高抛卖出未接回
             unclosed_buy = max(0, bought - sold)             # 正T买入未卖出
+            # V1.30: 价格字段完整性守卫 —— 缺 price/price<=0 的历史记录不进入利润公式
+            # （07-24 事故：V1.29 之前记录无 price 字段，avg_buy=0 把卖出成交额全额记成利润 +13018）
+            _sells_all = vt.get("SELL_HIGH", [])
+            _buys_all = vt.get("BUY_LOW", [])
+            valid_sells = [tr for tr in _sells_all if float(tr.get("price", 0) or 0) > 0]
+            valid_buys = [tr for tr in _buys_all if float(tr.get("price", 0) or 0) > 0]
+            n_price_missing = (len(_sells_all) - len(valid_sells)) + (len(_buys_all) - len(valid_buys))
+            vsold = sum(tr.get("qty", 0) for tr in valid_sells)
+            vbought = sum(tr.get("qty", 0) for tr in valid_buys)
+            sell_amt = sum(tr.get("qty", 0) * tr.get("price", 0) for tr in valid_sells)
+            buy_amt = sum(tr.get("qty", 0) * tr.get("price", 0) for tr in valid_buys)
             # V2c 数据源：当日做T估算盈亏（撮合对口径：min(卖,买) 量的价差 - 双边费用）
-            matched = min(sold, bought)
-            avg_sell = sell_amt / sold if sold else 0.0
-            avg_buy = buy_amt / bought if bought else 0.0
+            matched = min(vsold, vbought)
+            avg_sell = sell_amt / vsold if vsold else 0.0
+            avg_buy = buy_amt / vbought if vbought else 0.0
             fees = (buy_amt + sell_amt) * commission_rate
-            est_pnl = round(matched * (avg_sell - avg_buy) - fees, 2) if (sold or bought) else 0.0
+            est_pnl = round(matched * (avg_sell - avg_buy) - fees, 2) if (vsold or vbought) else 0.0
+            if n_price_missing:
+                problems.append(
+                    f"• {name}({code}) {n_price_missing} 条虚拟记录缺价格字段，"
+                    f"已隔离不计入利润（旧版本数据损坏）")
             qty = int(holding.get("qty", 0) or 0)
             base = int(holding.get("base", 0) or 0)
             qty_diff = qty - base
@@ -771,8 +788,35 @@ def _maybe_audit_closure(now: datetime) -> None:
                     f"• {name}({code}) 持仓 qty={qty} 与 base={base} 不一致（差 {qty_diff:+d}）→ 请核对 holdings.json")
 
         # V1.28: 收盘自动同步 holdings.json + 释放冻结仓位
-        holdings_updated = False
+        # V1.30: 同步前校验 —— 虚拟记录价格/数量字段完整性；不合格则跳过同步并告警，
+        # 防止幽灵交易被固化为次日底仓（07-24 曾把静默信号的虚拟卖出直接写进 holdings.json）
+        _sync_violations = []
         for d in details:
+            _vt = VIRTUAL_TRADES.get(d["code"]) or {}
+            for tr in (_vt.get("SELL_HIGH", []) + _vt.get("BUY_LOW", [])):
+                if int(tr.get("qty", 0) or 0) <= 0 or float(tr.get("price", 0) or 0) <= 0:
+                    _sync_violations.append(f"{d['code']}:{tr.get('action','?')} qty={tr.get('qty')} price={tr.get('price')}")
+        holdings_updated = False
+        if _sync_violations:
+            log.warning(f"⚠️ 收盘同步校验失败（{len(_sync_violations)} 条记录缺价格/数量），"
+                        f"跳过 holdings.json 同步: {_sync_violations[:5]}")
+            problems.append(f"• 收盘同步校验失败：{len(_sync_violations)} 条虚拟记录缺价格/数量，"
+                            f"holdings.json 未同步，请人工核对")
+            try:
+                send_feishu_payload(
+                    payload={"msg_type": "interactive", "card": {
+                        "config": {"wide_screen_mode": True},
+                        "header": _feishu_card_header(f"⚠️ 收盘同步校验失败 - {FEISHU_KEYWORD}", "orange"),
+                        "elements": [_feishu_md_div(
+                            f"{len(_sync_violations)} 条虚拟成交记录缺价格/数量字段，holdings.json **未同步**。\n"
+                            + "\n".join(f"• {v}" for v in _sync_violations[:8]))]},
+                        "notify_type": 1},
+                    success_log="✅ 收盘同步校验失败告警已推送",
+                    error_prefix="收盘同步告警推送",
+                )
+            except Exception:
+                pass
+        for d in ([] if _sync_violations else details):
             code = d["code"]
             holding = HOLDINGS.get(code)
             if holding is None:
@@ -905,6 +949,13 @@ def _maybe_check_index_intraday_alert(now: datetime) -> None:
             daily_score=float(INDEX_REGIME_CONTEXT.get("score") or 0.0),
         )
         alerts = result.get("alerts") or []
+        # V1.30: 维护活动预警状态（供引擎 RiskManager 消费），45 分钟未刷新自动过期
+        global _INDEX_INTRADAY_ACTIVE_ALERTS, _INDEX_INTRADAY_ACTIVE_TS
+        if alerts:
+            _INDEX_INTRADAY_ACTIVE_ALERTS = list(alerts)
+            _INDEX_INTRADAY_ACTIVE_TS = now_ts
+        elif _INDEX_INTRADAY_ACTIVE_ALERTS and now_ts - _INDEX_INTRADAY_ACTIVE_TS > 2700:
+            _INDEX_INTRADAY_ACTIVE_ALERTS = []
         if not alerts:
             return
         # 同 tag 60 分钟内不重复推
@@ -944,7 +995,7 @@ def _maybe_check_index_intraday_alert(now: datetime) -> None:
 # ==================== 主循环函数（从原始 t_trader_v1.10.py lines 4970-5363 提取） ====================
 
 def scan_once():
-    global _last_idle_log, _scan_count, _scan_lock
+    global _last_idle_log, _scan_count, _scan_lock, _BUY_FUSE_NOTIFY_DATE
     if _scan_lock:
         log.warning("⚠️ 上一轮扫描仍在进行，跳过本轮触发")
         return
@@ -1087,6 +1138,34 @@ def scan_once():
 
                 can_t = holding.get("t_qty", 0) > 0
                 daily_ctx = get_daily_context(code, holding, current_price=price)
+                # V1.30: 盘中分时预警注入引擎特征（RiskManager 的 I1/I4 买入冻结此前从未真正生效）
+                try:
+                    if _INDEX_INTRADAY_ACTIVE_ALERTS:
+                        daily_ctx["intraday_alerts"] = [
+                            {"tag": a.get("tag"), "level": a.get("level"), "msg": a.get("msg")}
+                            for a in _INDEX_INTRADAY_ACTIVE_ALERTS
+                        ]
+                except Exception:
+                    pass
+                # V1.30: 买入熔断飞书明示（每日一次）—— uni_down 日"仅卖不买"不再沉默
+                try:
+                    if (str(daily_ctx.get("index_regime", "")) == "uni_down"
+                            and _BUY_FUSE_NOTIFY_DATE != now.strftime("%Y-%m-%d")):
+                        _BUY_FUSE_NOTIFY_DATE = now.strftime("%Y-%m-%d")
+                        send_feishu_payload(
+                            payload={"msg_type": "interactive", "card": {
+                                "config": {"wide_screen_mode": True},
+                                "header": _feishu_card_header(f"🧊 买入熔断 - {FEISHU_KEYWORD}", "red"),
+                                "elements": [_feishu_md_div(
+                                    f"大盘态势：**单边下行**（S={float(daily_ctx.get('index_score', 0) or 0):.1f}）\n"
+                                    "今日买入端已熔断（index_uni_down_clearance），仅卖不买。\n"
+                                    "盘中反弹由分时预警（I1~I5）监控，解除以收盘后日线状态机为准。")]},
+                                "notify_type": 1},
+                            success_log="✅ 买入熔断明示已推送（uni_down）",
+                            error_prefix="买入熔断推送",
+                        )
+                except Exception as _e:
+                    log.debug(f"买入熔断明示异常（已吞掉）: {_e}")
                 dec["daily_status"] = daily_ctx.get("daily_status", "unknown")
                 dec["last_daily_gate"] = daily_ctx.get("daily_gate", "neutral")
                 dec["last_daily_trend_bg"] = daily_ctx.get("daily_trend_bg", "unknown")
@@ -1111,8 +1190,17 @@ def scan_once():
                 st["最大振幅"] = max(st["最大振幅"], amp)
 
                 best_score = max(buy_score, sell_score)
+                # V1.30: 熔断显性化 —— 买入被风控硬否决时面板直接显示原因，不再呈现"分够却HOLD"的假矛盾
+                _last_dec = engine.last_decision.get(code, {}) if hasattr(engine, "last_decision") else {}
+                _dec_reason = str(_last_dec.get("reason", ""))
                 if dec.get("last_stand_down_reason"):
                     stat = f"停手:{dec.get('last_stand_down_reason')}"
+                elif _dec_reason.startswith("HOLD_BUY_BLOCKED:index_uni_down_clearance"):
+                    stat = "停手:买入熔断(单边下行)"
+                elif _dec_reason.startswith("HOLD_BUY_BLOCKED:"):
+                    stat = f"停手:买入熔断({_dec_reason.split(':', 1)[1][:20]})"
+                elif _dec_reason == "HOLD_SELL_PRIORITY":
+                    stat = "停手:卖压压制(卖分>买分)"
                 elif engine.cycle_count.get(code, 0) >= PARAMS["max_t_cycles_per_stock"]:
                     stat = "停手:当日轮次已满"
                 elif dec.get("last_buy_limit_reason"):
@@ -1224,20 +1312,45 @@ def scan_once():
                         else:
                             notify_threshold = _sp.get("notify_sell_threshold") or PARAMS.get("notify_sell_early_threshold", 75)
                     
-                    if sig.score >= notify_threshold:
+                    # V1.30: 推送-仓控-冷却联动重构（复盘 2026-07-24 问题修复）
+                    # 1) 轮次上限真实生效（此前仅面板显示"停手"，信号照推）
+                    # 2) 仓控0股信号不推送（原逻辑推送+不设冷却 → 同一分钟线重复轰炸，如600481三连推）
+                    # 3) 静默信号不写入虚拟成交账（原逻辑照记账 → 幽灵交易污染收益审计与仓位计算）
+                    # 4) 静默信号改写 shadow_signals（恢复 07-23 引擎重写时丢失的复盘数据）
+                    pushed = sig.score >= notify_threshold
+                    if pushed and sig.action in ["SELL_HIGH", "PANIC_SELL"]:
+                        if engine.cycle_count.get(code, 0) >= PARAMS["max_t_cycles_per_stock"]:
+                            pushed = False
+                            log.info(f"🛑 {code} 当日轮次已满({PARAMS['max_t_cycles_per_stock']})，"
+                                     f"卖出信号{sig.score:.0f}分不再推送")
+                    if pushed and sig.hold_qty > 0:
                         notify(sig, holding)
-                        # V1.29 修正：仅在真正推送/执行时计入 cycle_count
                         if sig.action in ["SELL_HIGH", "PANIC_SELL"]:
-                            engine.cycle_count[code] = engine.cycle_count.get(code, 0) + 1
+                            engine.incr_cycle(code)
+                        engine.record_signal(code, sig.action, sig.price, sig.score)
+                        engine.record_trade_action(code, sig.action, sig.hold_qty, price=sig.price)
+                    elif pushed:
+                        log.info(f"🛑 {code} {sig.action}信号达标({sig.score:.0f}分)但仓控可交易量为0，"
+                                 f"不推送（仅设冷却防重复）")
+                        engine.record_signal(code, sig.action, sig.price, sig.score)
                     else:
                         action_type = "买入" if sig.action in ["BUY_LOW", "ADD_POS"] else "卖出"
                         time_window = "10:00前" if t < dtime(10, 0) else "10:00后"
                         log.info(f"📉 {code} {action_type}信号得分{sig.score:.0f}分，低于{time_window}阈值{notify_threshold}分，静默处理（不推送飞书）")
-                    if sig.hold_qty > 0:
-                        engine.record_signal(code, sig.action, sig.price, sig.score)
-                        engine.record_trade_action(code, sig.action, sig.hold_qty)
-                    else:
-                        log.info(f"🛑 {code} 受大盘熔断/仓控阻断，跳过交易记录")
+                        try:
+                            _sp2 = STOCK_PARAMS.get(code, {})
+                            _nb = _sp2.get("notify_buy_threshold") or PARAMS.get("notify_buy_threshold", 68)
+                            _ns = _sp2.get("notify_sell_threshold") or PARAMS.get("notify_sell_threshold", 65)
+                            write_shadow_signal(
+                                code, holding.get("name", code), sig.price,
+                                float(sig.indicators.get("vwap", sig.price) or sig.price),
+                                buy_score, sell_score, _nb, _ns,
+                                "低于推送阈值静默",
+                                extra={"action": sig.action,
+                                       "decision_reason": engine.last_decision.get(code, {}).get("reason", "")},
+                            )
+                        except Exception:
+                            pass
 
                 # V1.14: 尾盘强制平仓已删除（用户反馈不需要）
 

@@ -246,7 +246,20 @@ def _attach_index_regime_context(ctx: Dict[str, Any], code: str, as_of: Optional
         return ctx
 
     target_date = as_of or get_today_str()
+    # V1.30: 盘中锁定日线状态机 —— 交易时段内禁止用不完整日线K线重算日线regime，
+    # 统一沿用最近一个完整交易日的判定（mode="morning" 自动对齐到今日之前）；
+    # 收盘后（>=15:05）才用当日完整K线以 eod 模式更新。
+    # 盘中响应改由 index_regime_intraday 分时预警（I1~I5，注入 feats["intraday_alerts"]）承担，
+    # 消除 range↔uni_down 盘中抖动（2026-07-24 曾导致买入熔断反复开关、±20分因子跳变）。
     mode = "eod"
+    try:
+        if as_of is None and PARAMS.get("index_regime_intraday_lock", True):
+            from datetime import time as _dtime
+            _n = _now()
+            if _n.weekday() < 5 and _n.time() < _dtime(15, 5):
+                mode = "morning"
+    except Exception:
+        pass
     try:
         from index_regime import detect_index_regime, get_regime_position_factor, index_regime_name
         regime, score, ir_ctx = detect_index_regime(as_of=target_date, force=False, mode=mode)

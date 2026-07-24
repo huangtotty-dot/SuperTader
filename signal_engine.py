@@ -251,10 +251,14 @@ class SignalEngine:
         self.scenario_factor_state: Dict[str, Dict[str, Dict[str, Any]]] = {}
         # V1.25: 早盘预警状态机（基于近两年数据训练）
         self.morning_alert_state: Dict[str, Dict[str, Any]] = {}
+        # V1.30: 决策原因码缓存（供面板/日报展示熔断等原因）
+        self.last_decision: Dict[str, Dict[str, Any]] = {}
         # 可传入自定义权重参数，默认 FACTOR_WEIGHTS（支持 HPO 多进程调参）
         self.factor_weights = factor_weights or FACTOR_WEIGHTS
         # V1.29: 从 VIRTUAL_TRADES 恢复闭环追踪状态（重启后不丢）
         self._recover_tracking_from_trades()
+        # V1.30: 恢复轮次/次数/冷却等盘中状态（重启后不清零）
+        self._load_intraday_state()
 
     def _recover_tracking_from_trades(self):
         """V1.29: 从持久化的 VIRTUAL_TRADES 恢复闭环追踪状态。
@@ -318,7 +322,63 @@ class SignalEngine:
     def _in_cooldown(self, code: str, action: str) -> bool:
         cd_dict = self.sell_cooldown if "SELL" in action else self.buy_cooldown
         last = cd_dict.get(code)
-        return bool(last) and (_now() - last).total_seconds() < PARAMS["cooldown_minutes"] * 60
+        return bool(last) and (_engine_now() - last).total_seconds() < PARAMS["cooldown_minutes"] * 60
+
+    # ===== V1.30: 盘中状态持久化（轮次/次数/冷却，重启后不清零）=====
+    def _intraday_state_path(self) -> str:
+        try:
+            from config import T_IO_DIR
+            return _os_mod.path.join(T_IO_DIR, "intraday_state.json")
+        except Exception:
+            return "intraday_state.json"
+
+    def _persist_intraday_state(self):
+        if not PERSIST_INTRADAY_STATE:
+            return
+        try:
+            import json as _j
+            data = {
+                "date": get_today_str(),
+                "cycle_count": dict(self.cycle_count),
+                "buy_count": dict(self.buy_count_per_stock),
+                "sell_count": dict(self.sell_count_per_stock),
+                "buy_cooldown": {k: v.isoformat() for k, v in self.buy_cooldown.items() if v},
+                "sell_cooldown": {k: v.isoformat() for k, v in self.sell_cooldown.items() if v},
+            }
+            with open(self._intraday_state_path(), "w", encoding="utf-8") as f:
+                _j.dump(data, f, ensure_ascii=False, indent=2)
+        except Exception:
+            pass
+
+    def _load_intraday_state(self):
+        if not PERSIST_INTRADAY_STATE:
+            return
+        try:
+            import json as _j
+            p = self._intraday_state_path()
+            if not _os_mod.path.exists(p):
+                return
+            with open(p, "r", encoding="utf-8") as f:
+                data = _j.load(f)
+            if data.get("date") != get_today_str():
+                return
+            self.cycle_count.update({k: int(v) for k, v in (data.get("cycle_count") or {}).items()})
+            self.buy_count_per_stock.update({k: int(v) for k, v in (data.get("buy_count") or {}).items()})
+            self.sell_count_per_stock.update({k: int(v) for k, v in (data.get("sell_count") or {}).items()})
+            for k, v in (data.get("buy_cooldown") or {}).items():
+                try: self.buy_cooldown[k] = datetime.fromisoformat(v)
+                except Exception: pass
+            for k, v in (data.get("sell_cooldown") or {}).items():
+                try: self.sell_cooldown[k] = datetime.fromisoformat(v)
+                except Exception: pass
+        except Exception:
+            pass
+
+    def incr_cycle(self, code: str):
+        """V1.30: 轮次计数 + 持久化（替代 main.py 直接自增，防重启清零）"""
+        self._reset_daily_state_if_needed()
+        self.cycle_count[code] = self.cycle_count.get(code, 0) + 1
+        self._persist_intraday_state()
 
     def record_signal(self, code: str, action: str, price: float, score: float):
         snapshot = self.last_signal_state.setdefault(code, {})
@@ -328,12 +388,16 @@ class SignalEngine:
         snapshot["ts"] = _now()
         self._last_sig_price = price  # V1.29: 供 record_trade_action 建立接回追踪
         if "SELL" in action:
-            self.sell_cooldown[code] = _now()
+            self.sell_cooldown[code] = _engine_now()
         else:
-            self.buy_cooldown[code] = _now()
+            self.buy_cooldown[code] = _engine_now()
+        self._persist_intraday_state()  # V1.30
 
-    def record_trade_action(self, code: str, action: str, qty: int = 0):
+    def record_trade_action(self, code: str, action: str, qty: int = 0, price: float = 0.0):
         self._reset_daily_state_if_needed()
+        # V1.30: 价格守卫 —— 优先用调用方传入的信号价，杜绝 price 缺失/为0的账面记录
+        if price and float(price) > 0:
+            self._last_sig_price = float(price)
         self.last_trade_state[code] = {"action": action, "qty": qty, "ts": _now()}
         if action in ["BUY_LOW", "ADD_POS"]:
             self.buy_count_per_stock[code] = self.buy_count_per_stock.get(code, 0) + 1
@@ -393,6 +457,7 @@ class SignalEngine:
                 save_virtual_trades(VIRTUAL_TRADES)
             except Exception:
                 pass
+        self._persist_intraday_state()  # V1.30
 
     def _virtual_net_qty(self, code: str, holding: dict) -> int:
         buys = VIRTUAL_TRADES.get(code, {}).get("BUY_LOW", [])
@@ -548,7 +613,7 @@ class SignalEngine:
         ab = self.awaiting_buyback.get(code)
         if ab and ab.get("sell_price", 0) > 0 and price > 0:
             # 检查 TTL 是否过期
-            elapsed = (_now() - ab["sell_time"]).total_seconds() / 60
+            elapsed = (_engine_now() - ab["sell_time"]).total_seconds() / 60
             if elapsed > ab["ttl"]:
                 self.awaiting_buyback.pop(code, None)  # 过期清理
             else:
@@ -563,6 +628,16 @@ class SignalEngine:
                     buy_score += boost
                     buy_details.append({"指标": "接回追踪(微利)", "当前": f"折{discount:.1%}", "加分": round(boost, 1)})
                 buy_threshold -= PARAMS.get("awaiting_buyback_threshold_relax", 5)
+
+        # ===== V1.30: 卖出端保护 —— 底仓地板 + 卖出次数上限（防卖穿底仓）=====
+        _net_qty = self._virtual_net_qty(code, holding)
+        _base_qty = int(holding.get("base") or holding.get("t_qty") or holding.get("qty") or 0)
+        _floor_qty = int(_base_qty * float(_sp_param(code, "sell_floor_ratio", 0.5)))
+        if hold_qty > 0 and _floor_qty > 0 and _net_qty <= _floor_qty:
+            risk_sell_block.append(f"sell_floor_protect(余{_net_qty}≤地板{_floor_qty})")
+        _max_sells = int(_sp_param(code, "max_sell_times_per_stock", 3))
+        if self.sell_count_per_stock.get(code, 0) >= _max_sells:
+            risk_sell_block.append(f"max_sell_times({self.sell_count_per_stock.get(code, 0)}>={_max_sells})")
 
         can_bypass_daily = feats.get("f5_is_strong_bullish_reversal", False) or feats.get("f5_is_volume_reversal", False)
         is_daily_ok = feats.get("daily_buy_t_ok", False) or can_bypass_daily
@@ -596,10 +671,34 @@ class SignalEngine:
         sig = None
         can_sell = base_can_sell and sell_score >= sell_threshold and sell_score > buy_score
         can_buy = base_can_buy and buy_score >= buy_threshold and buy_score > sell_score
+        # ===== V1.30: 决策原因码 —— HOLD 细分可区分，消除"买分超阈值却 HOLD"的假矛盾 =====
         if can_sell and sell_score > buy_score:
             sig = Signal(code, name, "SELL_HIGH", price, sell_score, [d["指标"] for d in sell_details], sell_details, {}, {})
+            decision_reason = "SELL_HIGH"
         elif can_buy:
             sig = Signal(code, name, "BUY_LOW", price, buy_score, [d["指标"] for d in buy_details], buy_details, {}, {})
+            decision_reason = "BUY_LOW"
+        else:
+            _buy_worthy = buy_score >= buy_threshold and buy_score > sell_score
+            _sell_worthy = sell_score >= sell_threshold and sell_score > buy_score
+            if _buy_worthy and risk_buy_block:
+                decision_reason = "HOLD_BUY_BLOCKED:" + "|".join(risk_buy_block)
+            elif _buy_worthy and not is_daily_ok:
+                decision_reason = "HOLD_BUY_BLOCKED:daily_gate"
+            elif _buy_worthy:
+                decision_reason = "HOLD_BUY_COOLDOWN"
+            elif _sell_worthy and risk_sell_block:
+                decision_reason = "HOLD_SELL_BLOCKED:" + "|".join(risk_sell_block)
+            elif _sell_worthy:
+                decision_reason = "HOLD_SELL_COOLDOWN"
+            elif buy_score >= buy_threshold and sell_score > buy_score:
+                decision_reason = "HOLD_SELL_PRIORITY"   # 买达阈但卖分更高，被卖出优先仲裁压制
+            else:
+                decision_reason = "HOLD_BELOW_THRESHOLD"
+        self.last_decision[code] = {
+            "reason": decision_reason, "ts": _now(),
+            "buy_block": list(risk_buy_block), "sell_block": list(risk_sell_block),
+        }
         _append_jsonl(_trace_path("decision_trace"), {
             "scan_time": _now().strftime("%Y-%m-%d %H:%M:%S"),
             "code": code, "name": name,
@@ -607,6 +706,8 @@ class SignalEngine:
             "buy_score": buy_score, "sell_score": sell_score,
             "buy_threshold": buy_threshold, "sell_threshold": sell_threshold,
             "decision": sig.action if sig else "HOLD",
+            "decision_reason": decision_reason,
+            "buy_block": list(risk_buy_block), "sell_block": list(risk_sell_block),
             "buy_factors": {d["指标"]: d.get("加分", 0) for d in buy_details},
             "sell_factors": {d["指标"]: d.get("加分", 0) for d in sell_details},
             "engine": "v2_final",
@@ -965,6 +1066,62 @@ FACTOR_WEIGHTS = {
     "factor_weight_time": 0.00,
     "max_score_raw": 100,
 }
+
+
+def _sp_param(code: str, key: str, default=None):
+    """V1.30: 个股专属参数 > 全局 PARAMS > default（与 main.py 推送阈值双层管理同构）"""
+    try:
+        from config import STOCK_PARAMS
+        v = STOCK_PARAMS.get(code, {}).get(key)
+        if v is not None:
+            return v
+    except Exception:
+        pass
+    try:
+        v = PARAMS.get(key)
+        if v is not None:
+            return v
+    except Exception:
+        pass
+    return default
+
+
+# ===== V1.30: 回测时间注入 =====
+# 实盘用真实时钟；回测/回放把 SIM_NOW 设为当前 K 线时间，
+# 使冷却/TTL 等时间逻辑在模拟时间轴上正确流逝（否则第一笔交易的真实时钟冷却会封死整个回测期）。
+SIM_NOW = None
+PERSIST_INTRADAY_STATE = True   # 回测/回放置 False，避免污染实盘盘中状态文件
+
+def _engine_now():
+    return SIM_NOW if SIM_NOW is not None else _now()
+
+
+def write_shadow_signal(code: str, name: str, price: float, vwap: float,
+                        buy_score: float, sell_score: float,
+                        buy_threshold: float, sell_threshold: float,
+                        miss_reason: str, extra: dict = None):
+    """V1.30: 恢复 shadow_signals —— 记录"引擎已产生信号但低于推送阈值被静默"的信号。
+    格式与 daily_review.py 读取方兼容（scan_time/code/name/*_score/*_threshold/
+    distance_to_*_threshold/best_signal_type/best_signal_score/miss_reason）。"""
+    try:
+        rec = {
+            "scan_time": _now().strftime("%Y-%m-%d %H:%M:%S"),
+            "code": code, "name": name,
+            "buy_score": round(float(buy_score), 1),
+            "sell_score": round(float(sell_score), 1),
+            "buy_threshold": buy_threshold, "sell_threshold": sell_threshold,
+            "current_price": price, "vwap": vwap,
+            "distance_to_buy_threshold": round(float(buy_threshold) - float(buy_score), 1),
+            "distance_to_sell_threshold": round(float(sell_threshold) - float(sell_score), 1),
+            "best_signal_type": "buy" if buy_score >= sell_score else "sell",
+            "best_signal_score": round(max(float(buy_score), float(sell_score)), 1),
+            "miss_reason": miss_reason,
+        }
+        if extra:
+            rec.update(extra)
+        _append_jsonl(_trace_path("shadow_signals"), rec)
+    except Exception:
+        pass
 
 
 class ScoringEngine:
