@@ -543,8 +543,8 @@ STOCK_PARAMS = {
     },
     "600481": {  # 双良节能
         "liquidity_multiplier": 1.2,          # 流动性乘数1.2（日均11515万）
-        "stock_qty_base_pct": 0.35,           # 单笔基础仓位35%
-        "stock_qty_strong_pct": 0.50,         # 强信号仓位50%
+        "stock_qty_base_pct": 0.39,           # 单笔基础仓位35%
+        "stock_qty_strong_pct": 0.27,         # 强信号仓位50%
         "morning_no_sell_until": 935,         # 9:35即可卖出
         "morning_no_sell_min_ret": 0.015,     # 早盘卖出门槛1.5%
         "sell_confirm_min_factors": 2,        # 卖出确认因子2
@@ -564,14 +564,16 @@ STOCK_PARAMS = {
         "vwap_buy_deviation": -0.0161,        # Optuna寻优：100trial CS=1630
         "take_profit_pct": 0.0148,            # Optuna寻优：100trial CS=1630
         "notify_sell_threshold": 62, "notify_buy_threshold": 43,
+        "stock_rebuild_strong_pct": 0.98,
+        "stock_first_add_pct": 0.34
     },
     "000988": {  # 华工科技 — VWAP深V低吸型（2026-07-23 Optuna寻优修正版）
         # 寻优结果：2025-11-25~2026-06-30 训练集，Trial#15 综合得分111.44
         # vwap=-0.0181 / tp=0.0188 / score=27 → 7笔/胜率57.1%/PnL+863/年化12.94%
         "min_profit_space": 0.010,           # 最小盈利空间1.0%
         "vol_ratio_confirm": 1.8,            # 放量确认倍数1.8
-        "stock_qty_base_pct": 0.30,          # 单笔基础仓位30%
-        "stock_qty_strong_pct": 0.50,        # 强信号仓位50%
+        "stock_qty_base_pct": 0.3,          # 单笔基础仓位30%
+        "stock_qty_strong_pct": 0.29,        # 强信号仓位50%
         "morning_no_sell_until": 1000,       # 10:00前禁止卖出
         "morning_no_sell_min_ret": 0.030,    # 早盘卖出门槛3%
         "rsi_overbought": 75,                # RSI超买阈值
@@ -601,6 +603,8 @@ STOCK_PARAMS = {
         "take_profit_pct": 0.0212,            # 持仓涨2.12%即止盈（Optuna寻优：100trial CS=851）
         "take_profit_time_after": 1000,       # 10:00后启动止盈监控
         # V1.29: 推送阈值（可被 optimizer 单独寻优调整）
+                "stock_rebuild_strong_pct": 0.59,
+                "stock_first_add_pct": 0.27,
         "notify_sell_threshold": 63,
         "notify_buy_threshold": 43,
     },
@@ -609,8 +613,8 @@ STOCK_PARAMS = {
         # 回测最优：偏离-0.5%买入 + 3%止盈，49笔/胜率63.3%/总收益15.80%/夏普0.765
         "min_profit_space": 0.008,            # 最小盈利空间0.8%（振幅大但需给空间）
         "vol_ratio_confirm": 1.2,             # ETF放量确认倍数1.2
-        "stock_qty_base_pct": 0.25,           # 单笔基础仓位25%（交易频繁，分散）
-        "stock_qty_strong_pct": 0.40,         # 强信号仓位40%
+        "stock_qty_base_pct": 0.15,           # 单笔基础仓位25%（交易频繁，分散）
+        "stock_qty_strong_pct": 0.25,         # 强信号仓位40%
         "morning_no_sell_until": 1000,        # 10:00前禁止卖出（ETF偏强，早抛亏钱）
         "morning_no_sell_min_ret": 0.035,     # 早盘卖出门槛3.5%（极高，几乎不卖）
         "rsi_overbought": 78,                 # RSI超买阈值提高（偏强不轻易卖）
@@ -636,12 +640,14 @@ STOCK_PARAMS = {
         "take_profit_pct": 0.0206,             # 持仓涨3%即止盈（回测最优）
         "take_profit_time_after": 1000,       # 10:00后启动止盈监控
         "notify_sell_threshold": 67, "notify_buy_threshold": 40,
+        "stock_rebuild_strong_pct": 0.5,
+        "stock_first_add_pct": 0.1
     },
     "600176": {  # 中国巨石 — 高波动深跌型（日均振幅6-10%，成交2亿+）
         "min_profit_space": 0.012,            # 最小盈利空间1.2%（高波动需要更大空间）
         "vol_ratio_confirm": 1.5,             # 放量确认倍数1.5
-        "stock_qty_base_pct": 0.25,           # 单笔基础仓位25%（波动大，控制风险）
-        "stock_qty_strong_pct": 0.40,         # 强信号仓位40%
+        "stock_qty_base_pct": 0.34,           # 单笔基础仓位25%（波动大，控制风险）
+        "stock_qty_strong_pct": 0.59,         # 强信号仓位40%
         "morning_no_sell_until": 950,         # 9:50即可卖出（波动大早盘有机会）
         "morning_no_sell_min_ret": 0.015,     # 早盘卖出门槛1.5%
         "rsi_overbought": 72,                 # RSI超买阈值降低（高波动尽早锁定利润）
@@ -659,13 +665,15 @@ STOCK_PARAMS = {
         "stand_down_min_amplitude": 0.018,    # 停手振幅1.8%（高波动型）
         "vwap_buy_deviation": -0.0173,        # Optuna寻优：100trial CS=434
         "take_profit_pct": 0.0211,            # Optuna寻优：100trial CS=434
+                "stock_rebuild_strong_pct": 0.97,
+                "stock_first_add_pct": 0.37,
         "notify_sell_threshold": 51, "notify_buy_threshold": 40,
     },
     "603667": {  # 五洲新春 — 中等波动区间型（日均振幅4-9%，成交2000万）
         "min_profit_space": 0.010,            # 最小盈利空间1.0%
         "vol_ratio_confirm": 1.3,             # 放量确认倍数1.3
-        "stock_qty_base_pct": 0.30,           # 单笔基础仓位30%
-        "stock_qty_strong_pct": 0.50,         # 强信号仓位50%
+        "stock_qty_base_pct": 0.28,           # 单笔基础仓位30%
+        "stock_qty_strong_pct": 0.37,         # 强信号仓位50%
         "morning_no_sell_until": 945,         # 9:45即可卖出（区间型早盘冲高适合高抛）
         "morning_no_sell_min_ret": 0.020,     # 早盘卖出门槛2.0%
         "rsi_overbought": 75,
@@ -683,6 +691,8 @@ STOCK_PARAMS = {
         "stand_down_min_amplitude": 0.012,    # 停手振幅1.2%
         "vwap_buy_deviation": -0.0276,        # Optuna寻优：100trial CS=498
         "take_profit_pct": 0.0200,            # Optuna寻优：100trial CS=498
+                "stock_rebuild_strong_pct": 0.75,
+                "stock_first_add_pct": 0.21,
         "notify_sell_threshold": 64, "notify_buy_threshold": 40,
     },
 }
