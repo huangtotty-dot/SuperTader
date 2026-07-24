@@ -3,20 +3,20 @@
   "_last_updated": "2026-07-15",
   "_update_source": "持仓截图更新",
   "_auto_decision": {
-    "date": "2026-07-23",
+    "date": "2026-07-24",
     "regime": "range",
     "regime_name": "横盘震荡",
-    "z_top3": -1.06,
-    "basis_date": "2026-07-22",
+    "z_top3": -1.09,
+    "basis_date": "2026-07-23",
     "matrix_mode": "long",
     "pos_factor": 1.2,
     "reason": "震荡×冰点→正T加仓(B1区低吸)",
     "per_stock": {
       "588170": "short",
       "600176": "short",
-      "600481": "short",
+      "600481": "long",
       "603667": "short",
-      "000988": "long"
+      "000988": "short"
     },
     "source": "auto_v3.1"
   },
@@ -24,8 +24,8 @@
   "300364": "short",
   "588170": "short",
   "600176": "short",
-  "600481": "short",
+  "600481": "long",
   "603667": "short",
-  "000988": "long",
+  "000988": "short",
   "000988_B": "long"
 }

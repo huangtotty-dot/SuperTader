@@ -31,11 +31,11 @@ OUT_DIR = BASE_DIR / "t_io" / "optimizer"
 OUT_DIR.mkdir(parents=True, exist_ok=True)
 
 # ── 默认参数 ────────────────────────────────────────────────
-DEFAULT_CODE = "000988"
 INITIAL_CAPITAL = 200000.0
 FIXED_QTY = 200         # 每笔固定股数
 MAX_BUYS = 3
 MAX_SELLS = 3
+STEP = 3                # 分钟评估步长（3=每3分钟评估一次，≈3倍提速）
 COMMISSION = 0.00015
 STAMP_TAX = 0.0005
 SLIPPAGE = 0.01
@@ -44,12 +44,16 @@ PARAM_DEFAULTS = {
     "vwap_buy_deviation": -0.020,
     "take_profit_pct": 0.010,
     "buy_confirm_min_score": 18,
+    "notify_sell_threshold": 65,
+    "notify_buy_threshold": 68,
 }
 
 PARAM_SPACE = {
     "vwap_buy_deviation": {"low": -0.035, "high": -0.015, "default": -0.020, "label": "VWAP偏离买入阈值"},
     "take_profit_pct": {"low": 0.005, "high": 0.025, "default": 0.010, "label": "止盈比例"},
     "buy_confirm_min_score": {"low": 15, "high": 30, "default": 18, "label": "买入确认最低分"},
+    "notify_sell_threshold": {"low": 40, "high": 70, "default": 65, "label": "卖出推送阈值"},
+    "notify_buy_threshold": {"low": 40, "high": 70, "default": 68, "label": "买入推送阈值"},
 }
 
 TRAIN_DATES = ("2025-06-01", "2026-03-31")
@@ -58,6 +62,7 @@ TUSHARE_TOKEN = "9d15f39266cbbf8a1e5efa1525d7a4d4d1dbc62ec8cbce167d642def"
 
 CSV_FIELDS = [
     "trial_no", "vwap_buy_deviation", "take_profit_pct", "buy_confirm_min_score",
+    "notify_sell_threshold", "notify_buy_threshold",
     "train_win_rate", "train_total_pnl", "train_n_trades",
     "train_max_drawdown", "train_annualized_return", "train_composite_score",
     "test_win_rate", "test_total_pnl", "test_n_trades",
@@ -106,13 +111,13 @@ def _load_cached(code: str, date: str) -> pd.DataFrame:
     return _download_and_cache(code, date)
 
 
-def _ensure_trading_dates(start: str, end: str) -> List[str]:
+def _ensure_trading_dates(code: str, start: str, end: str) -> List[str]:
     """获取交易日列表并预热缓存。"""
     dates = [d.strftime("%Y-%m-%d") for d in pd.bdate_range(start, end)]
-    print(f"  [数据] {start}~{end}: {len(dates)} 个交易日，检查缓存...")
+    print(f"  [数据] {code} {start}~{end}: {len(dates)} 个交易日，检查缓存...")
     cached = 0
     for d in dates:
-        p = CACHE_DIR / DEFAULT_CODE / f"{d}.csv"
+        p = CACHE_DIR / code / f"{d}.csv"
         if p.exists():
             df = pd.read_csv(p)
             if not df.empty and "vwap" in df.columns:
@@ -121,36 +126,62 @@ def _ensure_trading_dates(start: str, end: str) -> List[str]:
     return dates
 
 
-def _build_daily_context_from_minute(minute_df: pd.DataFrame) -> Dict[str, Any]:
-    """从分钟数据构建简化日线上下文（不含日线MA，但让 daily_buy_t_ok=True）。"""
-    if minute_df.empty:
-        return {}
-    last = minute_df.iloc[-1]
+# ── 日线上下文（无未来函数版） ──────────────────────────────
+# 预加载所有可用日期的收盘价，避免逐个读文件的性能问题
+_PREV_CLOSE_INDEX: Dict[str, float] = {}
+
+def _build_prev_close_index(code: str) -> None:
+    """扫描缓存目录，建立 {date: close} 索引。"""
+    if _PREV_CLOSE_INDEX:
+        return
+    cache_dir = CACHE_DIR / code
+    if not cache_dir.exists():
+        return
+    for f in sorted(cache_dir.glob("*.csv")):
+        date = f.stem
+        try:
+            df = pd.read_csv(f)
+            if not df.empty and "close" in df.columns:
+                _PREV_CLOSE_INDEX[date] = float(df.iloc[-1]["close"])
+        except Exception:
+            continue
+    print(f"  [数据] 预处理 {len(_PREV_CLOSE_INDEX)} 天收盘价索引")
+
+
+def _load_prev_day_close(date_str: str) -> Optional[float]:
+    """取前一交易日收盘价（从内存索引查找，不读文件）。"""
+    all_dates = sorted(d for d in _PREV_CLOSE_INDEX.keys() if d < date_str)
+    if not all_dates:
+        return None
+    # 取最近的前一日（最后一个小于 date_str 的日期）
+    return _PREV_CLOSE_INDEX[all_dates[-1]]
+
+
+def _build_daily_context(date_str: str) -> Dict[str, Any]:
+    """用前一交易日收盘价构建日线上下文。
+
+    绝不使用当日任何分钟数据，杜绝未来函数泄露。
+    若无可用的前一日数据，返回宽松默认值。
+    """
+    prev_close = _load_prev_day_close(date_str)
     return {
-        "daily_status": "ok",
-        "daily_gate": "normal",
-        "daily_buy_t_ok": True,
-        "daily_trend_bg": "bull",
-        "daily_ma5_state": "above_ma5_trend",
-        "daily_above_ma5": True,
-        "daily_ma5": float(last.get("close", 0)),
-        "daily_ma10": float(last.get("close", 0)),
-        "daily_ma20": float(last.get("close", 0)),
-        "daily_breakdown_risk": False,
-        "daily_overheated": False,
+        "daily_status": "ok", "daily_gate": "normal",
+        "daily_buy_t_ok": True, "daily_trend_bg": "bull",
+        "daily_ma5_state": "above_ma5_trend", "daily_above_ma5": True,
+        "daily_ma5": prev_close or 0,
+        "daily_ma10": prev_close or 0,
+        "daily_ma20": prev_close or 0,
+        "daily_breakdown_risk": False, "daily_overheated": False,
         "daily_pullback_support": False,
-        "index_regime": "range",
-        "index_regime_status": "normal",
-        "index_circuit_state": "normal",
-        "index_gate_advice": "normal_t",
+        "index_regime": "range", "index_regime_status": "normal",
+        "index_circuit_state": "normal", "index_gate_advice": "normal_t",
         "index_temp_bucket": "neutral",
-        "intraday_alerts": [],
-        "benchmark_gate": "neutral",
+        "intraday_alerts": [], "benchmark_gate": "neutral",
     }
 
 
 # ── 简版回测 ────────────────────────────────────────────────
-def _run_single_backtest(params: Dict[str, Any], start: str, end: str) -> Dict[str, Any]:
+def _run_single_backtest(code: str, params: Dict[str, Any], start: str, end: str, step: int = 3) -> Dict[str, Any]:
     """用自定义参数跑一次回测，返回指标字典。
 
     1. 按交易日遍历
@@ -162,12 +193,14 @@ def _run_single_backtest(params: Dict[str, Any], start: str, end: str) -> Dict[s
     # 加载 signal_engine 并注入参数 + STOCK_PARAMS
     import signal_engine as _se
     from config import STOCK_PARAMS
-    code = DEFAULT_CODE
     _se.PARAMS.update(STOCK_PARAMS.get(code, {}))
     _se.PARAMS.update(params)
     _se.MINUTE_FETCH_STATUS[code] = "ok"
 
-    # OPTIMIZE: SignalEngine 支持自定义 factor_weights 参数
+    # ===== 修复：清空全局状态，杜绝跨 Trial 污染 =====
+    _se.VIRTUAL_TRADES.clear()
+    _se.HOLDINGS.clear()
+
     engine = _se.SignalEngine()
 
     trading_dates = [d.strftime("%Y-%m-%d") for d in pd.bdate_range(start, end)]
@@ -175,8 +208,8 @@ def _run_single_backtest(params: Dict[str, Any], start: str, end: str) -> Dict[s
     nav_records: List[Dict] = []
 
     cash = INITIAL_CAPITAL
-    holdings = 1000  # 固定底仓
-    base_holdings = 1000
+    base_holdings = 1000  # 初始底仓
+    intraday_buy_qty = 0  # 日内累计买入股数
 
     # 逐日回放
     for ds in trading_dates:
@@ -193,17 +226,20 @@ def _run_single_backtest(params: Dict[str, Any], start: str, end: str) -> Dict[s
         day_buys: List[float] = []  # 当日买入价格
         day_sells: List[float] = []  # 当日卖出价格
 
-        daily_ctx = _build_daily_context_from_minute(minute_df)
+        # ===== 修复：日线上下文基于前一日数据，杜绝未来函数 =====
+        daily_ctx = _build_daily_context(ds)
+
         pre_close = float(minute_df.iloc[0].get("prev_close", minute_df.iloc[0]["close"]))
+        hold_qty = base_holdings + intraday_buy_qty  # 实际可卖数量
         holding = {
             "name": "华工科技", "code": code,
             "cost": float(minute_df.iloc[0]["close"]),
-            "qty": holdings, "t_qty": holdings,
+            "qty": hold_qty, "t_qty": hold_qty,
             "type": "stock", "pre_close": pre_close,
         }
 
-        bc, sc = 0, 0  # 当日买/卖计数
-        for i in range(25, len(minute_df)):
+        bc = 0  # 当日买入计数
+        for i in range(25, len(minute_df), step):
             sub_df = minute_df.iloc[:i + 1].copy()
             try:
                 buy_score, sell_score, sig = engine.evaluate(code, "华工科技", sub_df, holding, daily_ctx=daily_ctx)
@@ -212,8 +248,19 @@ def _run_single_backtest(params: Dict[str, Any], start: str, end: str) -> Dict[s
             if sig is None:
                 continue
 
+            # ===== 推送阈值过滤（模拟 main.py 实盘逻辑） =====
+            _t_dt = pd.Timestamp(minute_df.iloc[i]["time"])
+            t_val = _t_dt.hour * 100 + _t_dt.minute
+            if sig.action in ("BUY_LOW", "ADD_POS"):
+                _nth = params.get("notify_buy_threshold", 68)
+            elif t_val >= 1000:
+                _nth = params.get("notify_sell_threshold", 65)
+            else:
+                _nth = params.get("notify_sell_early_threshold", 75)
+            if sig.score < _nth:
+                continue  # 低于推送阈值，模拟实盘中静默处理
+
             cp = float(minute_df.iloc[i]["close"])
-            ct = str(minute_df.iloc[i]["time"])
 
             if sig.action in ("BUY_LOW", "ADD_POS") and bc < MAX_BUYS:
                 buy_px = cp + SLIPPAGE
@@ -221,18 +268,28 @@ def _run_single_backtest(params: Dict[str, Any], start: str, end: str) -> Dict[s
                 if cash >= cost:
                     cash -= cost
                     day_buys.append(buy_px)
+                    # ===== 修复：买入必须增加可卖持仓 =====
+                    intraday_buy_qty += FIXED_QTY
                     bc += 1
                     engine.record_trade_action(code, "BUY_LOW", 0)
-            elif sig.action == "SELL_HIGH" and sc < MAX_SELLS and holdings >= FIXED_QTY:
-                sell_px = cp - SLIPPAGE
-                proceeds = sell_px * FIXED_QTY * (1 - COMMISSION - STAMP_TAX)
-                cash += proceeds
-                holdings -= FIXED_QTY
-                day_sells.append(sell_px)
-                sc += 1
-                engine.record_trade_action(code, "SELL_HIGH", 0)
+            elif sig.action == "SELL_HIGH":
+                # 可卖 = 底仓 + 日内买入
+                sellable = base_holdings + intraday_buy_qty
+                if sellable >= FIXED_QTY:
+                    sell_px = cp - SLIPPAGE
+                    proceeds = sell_px * FIXED_QTY * (1 - COMMISSION - STAMP_TAX)
+                    cash += proceeds
+                    day_sells.append(sell_px)
+                    # 优先从日内买入中扣减，不足再扣底仓
+                    if intraday_buy_qty >= FIXED_QTY:
+                        intraday_buy_qty -= FIXED_QTY
+                    else:
+                        remaining = FIXED_QTY - intraday_buy_qty
+                        intraday_buy_qty = 0
+                        base_holdings -= remaining  # 实际减少底仓（隔夜敞口减小）
+                    engine.record_trade_action(code, "SELL_HIGH", 0)
 
-        # T0 闭环配对：依次配对当日买入和卖出的前 min(len(buys), len(sells)) 对
+        # T0 闭环配对：当日买入与卖出配对
         n_cycles = min(len(day_buys), len(day_sells))
         for j in range(n_cycles):
             bp = day_buys[j]
@@ -245,15 +302,13 @@ def _run_single_backtest(params: Dict[str, Any], start: str, end: str) -> Dict[s
                 "net_pnl": round(net, 2),
                 "qty": FIXED_QTY,
             })
-            # 恢复底仓：T0 卖出后补回底仓
-            holdings += FIXED_QTY
+            # 配对后当日T0买入对应的持仓清空，base_holdings不变
+            # intraday_buy_qty 已经在卖出时扣减过了
 
-        # 日末恢复底仓
-        end_holdings = holdings
-        end_cash = cash
-
+        # ===== 修复：日末不再强复位底仓，让真实持仓带入次日 =====
         close_px = float(minute_df.iloc[-1]["close"])
-        nav = end_cash + end_holdings * close_px
+        total_holdings = base_holdings + intraday_buy_qty
+        nav = cash + total_holdings * close_px
         nav_records.append({"date": ds, "nav": round(nav, 2)})
 
     if not all_trades:
@@ -265,7 +320,6 @@ def _run_single_backtest(params: Dict[str, Any], start: str, end: str) -> Dict[s
     winning = [t for t in all_trades if t["net_pnl"] > 0]
     win_rate = len(winning) / n_trades
 
-    # 从 nav_records 计算
     if len(nav_records) >= 3:
         df = pd.DataFrame(nav_records)
         first_nav = float(df.iloc[0]["nav"])
@@ -282,16 +336,19 @@ def _run_single_backtest(params: Dict[str, Any], start: str, end: str) -> Dict[s
         annualized_ret = 0
         max_dd = 0
 
-    total_pnl = sum(t["net_pnl"] for t in all_trades)
     mdd_abs = abs(max_dd) if max_dd < 0 else 0.01
-    composite = (annualized_ret / mdd_abs) * (win_rate * 100)
 
-    if n_trades < 3:
-        composite = -1000.0
+    # ===== 修复：对数交易频次惩罚（期望年化 ≥30 笔） =====
+    import math
+    n_days_actual = max(len(nav_records), 1)
+    annualized_trades = n_trades * (252.0 / n_days_actual)
+    # 软惩罚：低于30笔/年时压降得分；高于30笔时趋于1
+    trade_penalty = math.log(min(annualized_trades, 60) + 1) / math.log(31)
+    composite = (annualized_ret / mdd_abs) * (win_rate * 100) * max(trade_penalty, 0.05)
 
     return {
         "win_rate": round(win_rate, 4),
-        "total_pnl": round(total_pnl, 2),
+        "total_pnl": round(sum(t["net_pnl"] for t in all_trades), 2),
         "n_trades": n_trades,
         "annualized_return": round(annualized_ret, 4),
         "max_drawdown": round(max_dd, 4),
@@ -300,15 +357,15 @@ def _run_single_backtest(params: Dict[str, Any], start: str, end: str) -> Dict[s
 
 
 # ── 单次 Trial ──────────────────────────────────────────────
-def _run_trial(trial_params: Dict[str, Any], start: str, end: str,
-               trial_no: int = 0) -> Tuple[Dict[str, Any], float]:
+def _run_trial(code: str, trial_params: Dict[str, Any], start: str, end: str,
+               trial_no: int = 0, step: int = 3) -> Tuple[Dict[str, Any], float]:
     """运行一次 trial，返回 (metrics, composite_score)。"""
     # 备份原始 PARAMS
     import signal_engine as _se
     saved = {k: _se.PARAMS.get(k) for k in trial_params}
 
     try:
-        metrics = _run_single_backtest(trial_params, start, end)
+        metrics = _run_single_backtest(code, trial_params, start, end, step=step)
         composite = metrics["composite_score"]
     except Exception as e:
         print(f"  [trial {trial_no}] FAILED: {type(e).__name__}: {e}")
@@ -326,7 +383,7 @@ def _run_trial(trial_params: Dict[str, Any], start: str, end: str,
 
 
 # ── Optuna ──────────────────────────────────────────────────
-def run_optuna(n_trials: int, start: str, end: str) -> Tuple[Dict[str, Any], List[Dict]]:
+def run_optuna(code: str, n_trials: int, start: str, end: str, step: int = 3) -> Tuple[Dict[str, Any], List[Dict]]:
     import optuna
     results: List[Dict] = []
 
@@ -335,9 +392,11 @@ def run_optuna(n_trials: int, start: str, end: str) -> Tuple[Dict[str, Any], Lis
             "vwap_buy_deviation": trial.suggest_float("vwap_buy_deviation", -0.035, -0.015),
             "take_profit_pct": trial.suggest_float("take_profit_pct", 0.005, 0.025),
             "buy_confirm_min_score": trial.suggest_int("buy_confirm_min_score", 15, 30),
+            "notify_sell_threshold": trial.suggest_int("notify_sell_threshold", 40, 70),
+            "notify_buy_threshold": trial.suggest_int("notify_buy_threshold", 40, 70),
         }
         t0 = time.time()
-        metrics, composite = _run_trial(params, start, end, trial.number)
+        metrics, composite = _run_trial(code, params, start, end, trial.number, step=step)
         elapsed = round(time.time() - t0, 1)
 
         row = {"trial_no": trial.number, **params,
@@ -357,23 +416,26 @@ def run_optuna(n_trials: int, start: str, end: str) -> Tuple[Dict[str, Any], Lis
     study = optuna.create_study(direction="maximize",
                                 sampler=optuna.samplers.TPESampler(seed=42, n_startup_trials=10))
     study.optimize(objective, n_trials=n_trials, show_progress_bar=True)
-    print(f"\n[Optuna] 最佳 composite_score = {study.best_value:.4f}, params = {study.best_params}")
-    return study.best_params, results
+    bp = study.best_params if study.best_params else PARAM_DEFAULTS.copy()
+    print(f"\n[Optuna] 最佳 composite_score = {study.best_value:.4f}, params = {bp}")
+    return bp, results
 
 
 # ── 快速随机搜索 ────────────────────────────────────────────
-def run_quick(n_trials: int, start: str, end: str) -> Tuple[Dict, List]:
+def run_quick(code: str, n_trials: int, start: str, end: str, step: int = 3) -> Tuple[Dict, List]:
     import random
     results = []
     best_params = {}
     best_score = -9999.0
-    print(f"\n[快速搜索] {n_trials} 次随机采样...")
+    print(f"\n[快速搜索] {code} {n_trials} 次随机采样...")
     for i in range(n_trials):
         params = {"vwap_buy_deviation": round(random.uniform(-0.035, -0.015), 3),
                    "take_profit_pct": round(random.uniform(0.005, 0.025), 3),
-                   "buy_confirm_min_score": random.randint(15, 30)}
+                   "buy_confirm_min_score": random.randint(15, 30),
+                   "notify_sell_threshold": random.randint(40, 70),
+                   "notify_buy_threshold": random.randint(40, 70)}
         t0 = time.time()
-        metrics, composite = _run_trial(params, start, end, i)
+        metrics, composite = _run_trial(code, params, start, end, i, step=step)
         elapsed = round(time.time() - t0, 1)
         print(f"  [{i}] vwap={params['vwap_buy_deviation']:.3f} tp={params['take_profit_pct']:.3f} "
               f"score={params['buy_confirm_min_score']} → composite={composite:.2f} "
@@ -392,17 +454,19 @@ def run_quick(n_trials: int, start: str, end: str) -> Tuple[Dict, List]:
         _append_csv_row(row)
         if composite > best_score:
             best_score, best_params = composite, params.copy()
+    if not best_params:
+        best_params = PARAM_DEFAULTS.copy()
     print(f"\n[快速搜索] 完成. best={best_score:.4f}, params={best_params}")
     return best_params, results
 
 
 # ── 网格搜索 ────────────────────────────────────────────────
-def run_grid(start: str, end: str) -> Tuple[Dict, List]:
+def run_grid(code: str, start: str, end: str, step: int = 3) -> Tuple[Dict, List]:
     vwap_vals = [round(x, 3) for x in np.arange(-0.035, -0.010, 0.005)]
     tp_vals = [round(x, 3) for x in np.arange(0.005, 0.030, 0.005)]
     score_vals = list(range(15, 33, 3))
     total = len(vwap_vals) * len(tp_vals) * len(score_vals)
-    print(f"\n[网格搜索] {total} 种组合 ({len(vwap_vals)}×{len(tp_vals)}×{len(score_vals)})")
+    print(f"\n[网格搜索] {code} {total} 种组合 ({len(vwap_vals)}×{len(tp_vals)}×{len(score_vals)})")
 
     results = []
     best_params, best_score = {}, -9999.0
@@ -410,9 +474,10 @@ def run_grid(start: str, end: str) -> Tuple[Dict, List]:
     for v in vwap_vals:
         for tp in tp_vals:
             for sc in score_vals:
-                params = {"vwap_buy_deviation": v, "take_profit_pct": tp, "buy_confirm_min_score": sc}
+                params = {"vwap_buy_deviation": v, "take_profit_pct": tp, "buy_confirm_min_score": sc,
+                           "notify_sell_threshold": 65, "notify_buy_threshold": 68}
                 t0 = time.time()
-                metrics, composite = _run_trial(params, start, end, idx)
+                metrics, composite = _run_trial(code, params, start, end, idx, step=step)
                 elapsed = round(time.time() - t0, 1)
                 if idx % 15 == 0:
                     print(f"  [{idx}/{total}] vwap={v:.3f} tp={tp:.3f} sc={sc} → composite={composite:.2f} "
@@ -432,19 +497,64 @@ def run_grid(start: str, end: str) -> Tuple[Dict, List]:
                 if composite > best_score:
                     best_score, best_params = composite, params.copy()
                 idx += 1
+    if not best_params:
+        best_params = PARAM_DEFAULTS.copy()
     print(f"\n[网格搜索] 完成. best={best_score:.4f}, params={best_params}")
     return best_params, results
 
 
 # ── 验证报告 ────────────────────────────────────────────────
-def run_validation(params: Dict, start: str, end: str) -> Dict:
-    print(f"\n[样本外验证] {start} ~ {end}")
-    metrics, _ = _run_trial(params, start, end, -1)
-    print(f"  → wr={metrics['win_rate']:.2%} pnl={metrics['total_pnl']:+.0f} "
-          f"trades={metrics['n_trades']} dd={metrics['max_drawdown']:.2%} "
-          f"ann_ret={metrics['annualized_return']:.2%} composite={metrics['composite_score']:.2f}")
-    return metrics
+def run_neighborhood_test(code: str, best_params: Dict[str, Any],
+                          test_start: str, test_end: str, step: int = 3) -> Dict[str, Any]:
+    """邻域稳定性测试：对最优参数 ±5% 浮动，在测试集上验证。
 
+    返回：
+      - "stable": True/False — 邻域平均得分不低于最优得分的 70%
+      - "best_composite": 最优参数得分
+      - "neighbors": 各邻居的得分列表
+      - "avg_neighbor": 邻域平均得分
+    """
+    import copy
+    neighbor_scores = []
+    neighbor_details = []
+
+    for key, delta in [("vwap_buy_deviation", 0.05), ("take_profit_pct", 0.05), ("buy_confirm_min_score", 1)]:
+        for direction in [-1, 1]:
+            neighbor = copy.deepcopy(best_params)
+            if isinstance(best_params.get(key), int):
+                val = best_params[key] + direction * delta
+                neighbor[key] = int(round(val))
+            else:
+                val = best_params[key] * (1 + direction * delta)
+                neighbor[key] = round(val, 4)
+
+            # 边界约束
+            space = PARAM_SPACE.get(key)
+            if space:
+                neighbor[key] = max(space["low"], min(space["high"], neighbor[key]))
+
+            if neighbor[key] == best_params[key]:
+                continue
+
+            metrics, _ = _run_trial(code, neighbor, test_start, test_end, -10, step=step)
+            cs = metrics.get("composite_score", -9999)
+            neighbor_scores.append(cs)
+            neighbor_details.append({"param": key, "value": neighbor[key], "composite": cs})
+
+    best_cs = 0
+    # 重算最优参数在测试集的得分
+    best_metrics, _ = _run_trial(code, best_params, test_start, test_end, -11, step=step)
+    best_cs = best_metrics.get("composite_score", 0)
+
+    avg_neighbor = np.mean(neighbor_scores) if neighbor_scores else 0
+    stable = best_cs > 0 and avg_neighbor > best_cs * 0.7
+
+    return {
+        "stable": stable,
+        "best_composite": best_cs,
+        "neighbors": neighbor_details,
+        "avg_neighbor": round(float(avg_neighbor), 4),
+    }
 
 def _init_csv():
     if not _results_csv.exists():
@@ -471,11 +581,11 @@ def _save_best(train_params, train_metrics, test_metrics):
     print(f"[结果] -> {_best_json}")
 
 
-def generate_report(best_params, train_metrics, test_metrics, method):
+def generate_report(code, best_params, train_metrics, test_metrics, method, neighborhood=None):
     report_path = OUT_DIR / "optimizer_report.md"
     lines = [
         "# 参数寻优报告", "",
-        f"- 标的: {DEFAULT_CODE}",
+        f"- 标的: {code}",
         f"- 方法: {method}",
         f"- 生成时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", "",
         "## 1. 参数搜索空间", "",
@@ -506,13 +616,27 @@ def generate_report(best_params, train_metrics, test_metrics, method):
                    f"{'✅ 通过' if ratio >= 0.6 else '⚠️ 警告'}: "
                    f"测试/训练得分比 {ratio:.2%} ({'≥60% ✅' if ratio >= 0.6 else '<60% ❌'})"]
 
+    # 邻域稳定性测试
+    nh = neighborhood
+    if nh and nh.get("neighbors"):
+        lines += ["", "## 4. 邻域稳定性测试", "",
+                   "| 参数 | 方向 | 值 | 综合得分 |",
+                   "|------|------|-----|----------|"]
+        for n in nh["neighbors"]:
+            direction_label = "+" if n["value"] > best_params.get(n["param"], 0) else "-"
+            lines.append(f"| {n['param']} | {direction_label}5% | {n['value']} | {n['composite']:.2f} |")
+        lines += ["", f"**最优参数测试集得分**: {nh['best_composite']:.2f}",
+                   f"**邻域平均得分**: {nh['avg_neighbor']:.2f}",
+                   f"**判定**: {'✅ 稳定 — 邻域平均≥最优的70%' if nh.get('stable') else '❌ 不稳定 — 参数孤岛风险，实盘需谨慎'}",
+                   ""]
+
     report_path.write_text("\n".join(lines), encoding="utf-8")
     print(f"[报告] {report_path}")
 
 
 def main():
     ap = argparse.ArgumentParser(description="华工科技 000988 参数寻优系统")
-    ap.add_argument("--code", default=DEFAULT_CODE)
+    ap.add_argument("--code", default="000988", help="股票代码，默认 000988")
     ap.add_argument("--method", default="optuna", choices=["optuna", "grid", "quick"])
     ap.add_argument("--trials", type=int, default=200)
     ap.add_argument("--start-train", default=TRAIN_DATES[0])
@@ -521,54 +645,62 @@ def main():
     ap.add_argument("--end-test", default=TEST_DATES[1])
     ap.add_argument("--no-validate", action="store_true")
     ap.add_argument("--resume", action="store_true")
+    ap.add_argument("--step", type=int, default=3, help="分钟评估步长（默认3，每3分钟评估一次）")
     args = ap.parse_args()
 
     print("=" * 55, "\n  参数寻优系统", "=" * 55, sep="\n")
     print(f"  标的: {args.code}  方法: {args.method}  训练: {args.start_train}~{args.end_train}")
 
-    if not args.resume and _results_csv.exists():
-        _results_csv.unlink()
-        print("[初始化] 已重置 CSV")
-
-    # 预热数据
-    _ensure_trading_dates(args.start_train, args.end_train)
+    # 预热前一日收盘价索引（杜绝未来函数中读文件耗时）
+    _build_prev_close_index(args.code)
+    _ensure_trading_dates(args.code, args.start_train, args.end_train)
     if not args.no_validate:
-        _ensure_trading_dates(args.start_test, args.end_test)
+        _ensure_trading_dates(args.code, args.start_test, args.end_test)
 
-    # 基线
     print("\n[基线] 默认参数...")
-    base_metrics, _ = _run_trial(PARAM_DEFAULTS, args.start_train, args.end_train, -2)
+    base_metrics, _ = _run_trial(args.code, PARAM_DEFAULTS, args.start_train, args.end_train, -2, step=args.step)
     print(f"  wr={base_metrics['win_rate']:.2%} trades={base_metrics['n_trades']} "
           f"dd={base_metrics['max_drawdown']:.2%} composite={base_metrics['composite_score']:.2f}")
 
     # 寻优
     if args.method == "optuna":
-        best_params, _ = run_optuna(args.trials, args.start_train, args.end_train)
+        best_params, _ = run_optuna(args.code, args.trials, args.start_train, args.end_train, step=args.step)
     elif args.method == "grid":
-        best_params, _ = run_grid(args.start_train, args.end_train)
+        best_params, _ = run_grid(args.code, args.start_train, args.end_train, step=args.step)
     else:
-        best_params, _ = run_quick(args.trials, args.start_train, args.end_train)
+        best_params, _ = run_quick(args.code, args.trials, args.start_train, args.end_train, step=args.step)
 
     # 最佳参数训练集重算
     print("\n[最优参数] 训练集...")
-    train_metrics, _ = _run_trial(best_params, args.start_train, args.end_train, -3)
+    train_metrics, _ = _run_trial(args.code, best_params, args.start_train, args.end_train, -3, step=args.step)
 
     # 样本外验证
     test_metrics = {}
+    neighborhood_result = None
     if not args.no_validate:
-        test_metrics = run_validation(best_params, args.start_test, args.end_test)
+        test_metrics, _ = _run_trial(args.code, best_params, args.start_test, args.end_test, -5, step=args.step)
         print("\n[基准对比] 默认参数在测试集...")
-        def_test, _ = _run_trial(PARAM_DEFAULTS, args.start_test, args.end_test, -4)
+        def_test, _ = _run_trial(args.code, PARAM_DEFAULTS, args.start_test, args.end_test, -4, step=args.step)
         print(f"  默认: wr={def_test['win_rate']:.2%} pnl={def_test['total_pnl']:+.0f} "
               f"composite={def_test['composite_score']:.2f}")
 
         tc, tsc = train_metrics.get("composite_score", 0), test_metrics.get("composite_score", 0)
         if tc > 0 and tsc > 0:
             print(f"\n[过拟合] 训练={tc:.2f} 测试={tsc:.2f} 比={tsc/tc:.2%} "
-                  f"{'✅通过' if tsc/tc>=0.6 else '⚠️有风险'}")
+                  f"{'[通过]' if tsc/tc>=0.6 else '[有风险]'}")
+
+        # 邻域稳定性测试
+        print("\n[邻域稳定性测试] 最优参数 ±5% 摇动...")
+        neighborhood_result = run_neighborhood_test(args.code, best_params, args.start_test, args.end_test, step=args.step)
+        if neighborhood_result["neighbors"]:
+            print(f"  最优: {neighborhood_result['best_composite']:.2f}")
+            print(f"  邻域平均: {neighborhood_result['avg_neighbor']:.2f}")
+            for n in neighborhood_result["neighbors"]:
+                print(f"    {n['param']}={n['value']} → composite={n['composite']:.2f}")
+            print(f"  判定: {'[稳定]' if neighborhood_result['stable'] else '[不稳定 孤岛参数风险]'}")
 
     _save_best(best_params, train_metrics, test_metrics)
-    generate_report(best_params, train_metrics, test_metrics, args.method)
+    generate_report(args.code, best_params, train_metrics, test_metrics, args.method, neighborhood=neighborhood_result)
 
     print("\n" + "=" * 55, "  寻优完成", "=" * 55, sep="\n")
     for k, v in best_params.items():

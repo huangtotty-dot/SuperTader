@@ -566,6 +566,149 @@ def _maybe_push_index_regime_eod(now: datetime) -> None:
 
 
 def _maybe_audit_closure(now: datetime) -> None:
+    _daily_pnl_push_date = ""  # 日期字符串，防重复
+
+def _maybe_push_daily_pnl_summary(now: datetime) -> None:
+    """V1.29: 14:59-15:01 每日一次 收益汇总推送。
+    逐股计算当日浮动盈亏 + 做T实盈 + 总资产，推飞书卡片。
+    """
+    global _daily_pnl_push_date
+    try:
+        t = now.time()
+        if now.weekday() >= 5 or not (dtime(14, 59) <= t <= dtime(15, 1)):
+            return
+        today = now.strftime("%Y-%m-%d")
+        if _daily_pnl_push_date == today:
+            return
+        _daily_pnl_push_date = today
+
+        if not HOLDINGS:
+            return
+
+        rows = []
+        stock_records = []  # for JSONL logging
+        total_t0_pnl = 0.0
+        total_value = 0.0
+        total_cost_value = 0.0
+        commission_rate = float(PARAMS.get("commission_rate", 0.00015) or 0.00015)
+
+        for code, holding in sorted(HOLDINGS.items()):
+            name = holding.get("name", code)
+            qty = int(holding.get("qty", 0) or 0)
+            cost = float(holding.get("cost", 0) or 0)
+            pre_close = float(holding.get("pre_close", 0) or 0)
+
+            # 当前价：从扫描缓存取
+            dec = DAILY_DECISION_STATS.get(code) or {}
+            price = float(dec.get("last_price") or 0) or pre_close
+
+            # 当日浮动盈亏
+            day_pnl = (price - pre_close) * qty if pre_close > 0 else 0.0
+            day_pct = (price / pre_close - 1) * 100 if pre_close > 0 else 0.0
+
+            # 持仓市值
+            mkt_val = price * qty
+            cost_val = cost * qty
+            total_value += mkt_val
+            total_cost_value += cost_val
+
+            # 做T实盈（从 VIRTUAL_TRADES 汇总）
+            vt = VIRTUAL_TRADES.get(code) or {}
+            sold = sum(tr.get("qty", 0) * tr.get("price", 0) for tr in vt.get("SELL_HIGH", []))
+            bought = sum(tr.get("qty", 0) * tr.get("price", 0) for tr in vt.get("BUY_LOW", []))
+            matched = min(
+                sum(tr.get("qty", 0) for tr in vt.get("SELL_HIGH", [])),
+                sum(tr.get("qty", 0) for tr in vt.get("BUY_LOW", [])),
+            )
+            avg_s = sold / max(matched, 1)
+            avg_b = bought / max(matched, 1)
+            t0_pnl = round(matched * (avg_s - avg_b) - (sold + bought) * commission_rate, 2)
+            total_t0_pnl += t0_pnl
+
+            arrow = "🔴" if day_pnl < 0 else ("🟢" if day_pnl > 0 else "⚪")
+            stock_records.append({
+                "code": code, "name": name, "qty": qty, "price": round(price, 2),
+                "day_pnl": round(day_pnl, 2), "day_pct": round(day_pct, 2),
+                "mkt_val": round(mkt_val, 0), "t0_pnl": t0_pnl,
+            })
+            rows.append({
+                "name": f"{arrow} {name}({code})",
+                "qty": qty,
+                "price": round(price, 2),
+                "day_pnl": round(day_pnl, 2),
+                "day_pct": round(day_pct, 2),
+                "mkt_val": round(mkt_val, 0),
+                "t0_pnl": t0_pnl,
+            })
+
+        total_day_pnl = total_value - sum(
+            (float(h.get("pre_close", 0) or 0) * int(h.get("qty", 0) or 0))
+            for h in HOLDINGS.values()
+        )
+        total_pct = (total_value / max(total_cost_value, 1) - 1) * 100
+
+        # 构建飞书卡片
+        lines = [
+            f"📊 **{today} 当日收益汇总**",
+            "",
+            "| 标的 | 持仓 | 现价 | 日盈亏 | 日涨跌 | T0实盈 |",
+            "|------|------|------|--------|--------|--------|",
+        ]
+        for r in rows:
+            lines.append(
+                f"| {r['name']} | {r['qty']}股 | {r['price']} | {r['day_pnl']:+.0f} | {r['day_pct']:+.2f}% | {r['t0_pnl']:+.0f} |"
+            )
+        lines += [
+            "",
+            f"💰 **总持仓市值**: {total_value:,.0f} 元",
+            f"📈 **总成本市值**: {total_cost_value:,.0f} 元",
+            f"📊 **持仓总盈亏**: {total_value - total_cost_value:+,.0f} 元 ({total_pct:+.2f}%)",
+            f"🔄 **今日做T实盈**: {total_t0_pnl:+,.0f} 元",
+        ]
+
+        card = {
+            "msg_type": "interactive",
+            "card": {
+                "header": {
+                    "title": {"tag": "plain_text", "content": f"📊 {today} 收益汇总"},
+                    "template": "red" if total_day_pnl < 0 else "green",
+                },
+                "elements": [
+                    {"tag": "markdown", "content": "\n".join(lines)},
+                    {"tag": "hr"},
+                    {"tag": "note", "elements": [{"tag": "plain_text", "content": "⏰ 14:59 自动推送 · 数据基于最新扫描价"}]},
+                ],
+            },
+        }
+        send_feishu_payload(
+            card,
+            success_log=f"✅ 14:59 收益汇总已推送: 持仓{total_value:,.0f} T0实盈{total_t0_pnl:+.0f}",
+            error_prefix="收益汇总推送",
+        )
+
+        # V1.29: 同时写 JSONL 日志供复盘
+        _pnl_log_dir = _os.path.join(BASE_DIR, "t_io", "logs")
+        _os.makedirs(_pnl_log_dir, exist_ok=True)
+        _pnl_log_path = _os.path.join(_pnl_log_dir, "daily_pnl.jsonl")
+        _pnl_record = {
+            "date": today,
+            "pushed_at": now.strftime("%Y-%m-%d %H:%M:%S"),
+            "total_value": round(total_value, 2),
+            "total_cost": round(total_cost_value, 2),
+            "total_pnl": round(total_value - total_cost_value, 2),
+            "total_pnl_pct": round(total_pct, 2),
+            "day_pnl_float": round(total_day_pnl, 2),
+            "t0_realized": round(total_t0_pnl, 2),
+            "stocks": stock_records,
+        }
+        with open(_pnl_log_path, "a", encoding="utf-8") as f:
+            f.write(_json.dumps(_pnl_record, ensure_ascii=False) + "\n")
+        log.info(f"📝 收益汇总已写入日志: {_pnl_log_path}")
+
+    except Exception as e:
+        log.warning(f"⚠️ 收益汇总推送异常（已吞掉，不影响主循环）: {str(e)[:120]}")
+
+def _maybe_audit_closure(now: datetime) -> None:
     """V3.0: 14:50-15:05 每日一次 买卖闭环审计
     逐股核对：VIRTUAL_TRADES 卖出 vs 接回（未接回>0 → 告警行 + 建议尾盘接回价）、
     正T买入未卖出、holdings qty vs base 一致性；有异常推飞书红卡，无异常落日志；
@@ -820,6 +963,7 @@ def scan_once():
 
         if dtime(14, 55) <= t <= dtime(15, 5):
             pass  # EOD复盘已移除（V2简化）
+        _maybe_push_daily_pnl_summary(now)             # 14:59-15:01 每日收益汇总推送（每日一次，V1.29）
         _maybe_audit_closure(now)                      # 14:50-15:05 买卖闭环审计（每日一次，V3.0）
         _maybe_push_index_regime_eod(now)              # 14:30-14:55 尾盘大盘评分预判 mode="tail"（须在 >15:00 早退之前）
 
@@ -1061,22 +1205,25 @@ def scan_once():
                         log.warning(f"⚠️  动态份数计算失败 {code}: {e}")
                     
                     # 3. 信号分数门槛 + 通知
-                    # 早盘加时：9:30-10:00 设 75 分门槛，10:00 后 65 分
-                    # 低吸额外：无论什么时间都 68 分
-                    # V1.27fix: 大幅低开(>4%)时降低早盘门槛，确保暴跌通知送达
+                    # V1.29: 推送阈值从硬编码改为 PARAMS + 个股STOCK_PARAMS 双层管理
+                    # 个股专属值 > 全局PARAMS > 硬编码默认值
+                    _sp = STOCK_PARAMS.get(code, {})
                     today_ret_snap = daily_ctx.get("daily_day_ret", 0.0)
                     if sig.action in ["BUY_LOW", "ADD_POS"]:
-                        notify_threshold = 68
+                        notify_threshold = _sp.get("notify_buy_threshold") or PARAMS.get("notify_buy_threshold", 68)
                     else:
                         if t >= dtime(10, 0):
-                            notify_threshold = 65
+                            notify_threshold = _sp.get("notify_sell_threshold") or PARAMS.get("notify_sell_threshold", 65)
                         elif today_ret_snap < -0.04 and sig.action in ("PANIC_SELL", "SELL_HIGH"):
-                            notify_threshold = 60
+                            notify_threshold = PARAMS.get("notify_sell_panic_threshold", 60)
                         else:
-                            notify_threshold = 75
+                            notify_threshold = _sp.get("notify_sell_threshold") or PARAMS.get("notify_sell_early_threshold", 75)
                     
                     if sig.score >= notify_threshold:
                         notify(sig, holding)
+                        # V1.29 修正：仅在真正推送/执行时计入 cycle_count
+                        if sig.action in ["SELL_HIGH", "PANIC_SELL"]:
+                            engine.cycle_count[code] = engine.cycle_count.get(code, 0) + 1
                     else:
                         action_type = "买入" if sig.action in ["BUY_LOW", "ADD_POS"] else "卖出"
                         time_window = "10:00前" if t < dtime(10, 0) else "10:00后"
@@ -1086,8 +1233,6 @@ def scan_once():
                         engine.record_trade_action(code, sig.action, sig.hold_qty)
                     else:
                         log.info(f"🛑 {code} 受大盘熔断/仓控阻断，跳过交易记录")
-                    if sig.action in ["SELL_HIGH", "PANIC_SELL"]:
-                        engine.cycle_count[code] = engine.cycle_count.get(code, 0) + 1
 
                 # V1.14: 尾盘强制平仓已删除（用户反馈不需要）
 

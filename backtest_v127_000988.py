@@ -5,9 +5,9 @@ from datetime import datetime, timedelta
 import numpy as np, pandas as pd
 
 TUSHARE_TOKEN = "9d15f39266cbbf8a1e5efa1525d7a4d4d1dbc62ec8cbce167d642def"
-CODE = "000988"; NAME = "华工科技"
-FQ = 200; MB = 3; MS = 3; IH = 1000; IC = 50000.0; CM=0.00015; ST=0.0005; SL=0.01
-_OUT = os.path.join(os.path.dirname(__file__),"t_io","backtests","v127_000988")
+CODE = "000988"; NAME = "华工科技"; FQ = 200; MB = 3; MS = 3
+IH = 1000; IC = 50000.0; CM = 0.00015; ST = 0.0005; SL = 0.01
+_OUT = os.path.join(os.path.dirname(__file__), "t_io", "backtests", "v127_default")
 _ts_pro = None
 def _ts():
     global _ts_pro
@@ -363,9 +363,19 @@ def gen_report(all_m,od,all_p):
     with open(path,"w",encoding="utf-8") as f: f.write("\n".join(lines))
     print("  [报告] MD -> "+path)
 def main():
-    ap=argparse.ArgumentParser(); ap.add_argument("--start",default="2025-06-01"); ap.add_argument("--end",default="2026-07-20")
-    ap.add_argument("--engine",default="all",choices=["hold","control","test","all"]); args=ap.parse_args(); all_m={}; all_p={}
-    for mode in ["hold","control","test"]:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--start", default="2025-06-01")
+    ap.add_argument("--end", default="2026-07-20")
+    ap.add_argument("--code", default="000988")
+    ap.add_argument("--name", default="")
+    ap.add_argument("--engine", default="all", choices=["hold", "control", "test", "all"])
+    args = ap.parse_args()
+    global CODE, NAME, _OUT
+    CODE = args.code
+    NAME = args.name or CODE
+    _OUT = os.path.join(os.path.dirname(__file__), "t_io", "backtests", f"v127_{CODE}")
+    all_m = {}; all_p = {}
+    for mode in ["hold", "control", "test"]:
         if args.engine not in ("all",mode): continue
         print(f"\n>>> 运行 {mode}")
         r=Runner(mode); port=r.run(args.start,args.end); all_p[mode]=port
