@@ -612,10 +612,15 @@ def _maybe_push_daily_pnl_summary(now: datetime) -> None:
             total_value += mkt_val
             total_cost_value += cost_val
 
-            # 做T实盈（从 VIRTUAL_TRADES 汇总）
+            # 做T实盈（已配对部分，使用实际成交价）
             vt = VIRTUAL_TRADES.get(code) or {}
-            sold = sum(tr.get("qty", 0) * tr.get("price", 0) for tr in vt.get("SELL_HIGH", []))
-            bought = sum(tr.get("qty", 0) * tr.get("price", 0) for tr in vt.get("BUY_LOW", []))
+            sell_qty_tot = sum(tr.get("qty", 0) for tr in vt.get("SELL_HIGH", []))
+            buy_qty_tot = sum(tr.get("qty", 0) for tr in vt.get("BUY_LOW", []))
+            sold = sum(tr.get("qty", 0) * max(tr.get("price", 0), 0) for tr in vt.get("SELL_HIGH", []))
+            bought = sum(tr.get("qty", 0) * max(tr.get("price", 0), 0) for tr in vt.get("BUY_LOW", []))
+            matched = min(sell_qty_tot, buy_qty_tot)
+            avg_s = sold / max(sell_qty_tot, 1)
+            avg_b = bought / max(buy_qty_tot, 1)
             matched = min(
                 sum(tr.get("qty", 0) for tr in vt.get("SELL_HIGH", [])),
                 sum(tr.get("qty", 0) for tr in vt.get("BUY_LOW", [])),
@@ -641,29 +646,30 @@ def _maybe_push_daily_pnl_summary(now: datetime) -> None:
                 "t0_pnl": t0_pnl,
             })
 
-        total_day_pnl = total_value - sum(
-            (float(h.get("pre_close", 0) or 0) * int(h.get("qty", 0) or 0))
-            for h in HOLDINGS.values()
+        total_day_float = sum(
+            (float(dec.get("last_price") or h.get("pre_close", 0) or 0) - float(h.get("pre_close", 0) or 0))
+            * int(h.get("qty", 0) or 0)
+            for code, h in HOLDINGS.items()
+            for dec in [DAILY_DECISION_STATS.get(code) or {}]
         )
-        total_pct = (total_value / max(total_cost_value, 1) - 1) * 100
 
-        # 构建飞书卡片
+        # 构建飞书卡片 — 区分浮动盈亏与做T实盈
         lines = [
             f"📊 **{today} 当日收益汇总**",
             "",
-            "| 标的 | 持仓 | 现价 | 日盈亏 | 日涨跌 | T0实盈 |",
-            "|------|------|------|--------|--------|--------|",
+            f"| 标的 | 持仓 | 现价 | 浮动盈亏 | 涨跌 | T0实盈 |",
+            f"|------|------|------|----------|------|--------|",
         ]
         for r in rows:
             lines.append(
-                f"| {r['name']} | {r['qty']}股 | {r['price']} | {r['day_pnl']:+.0f} | {r['day_pct']:+.2f}% | {r['t0_pnl']:+.0f} |"
+                f"| {r['name']} | {r['qty']}股 | {r['price']} | {r['day_pnl']:+,.0f} | {r['day_pct']:+.2f}% | {r['t0_pnl']:+,.0f} |"
             )
         lines += [
             "",
-            f"💰 **总持仓市值**: {total_value:,.0f} 元",
-            f"📈 **总成本市值**: {total_cost_value:,.0f} 元",
-            f"📊 **持仓总盈亏**: {total_value - total_cost_value:+,.0f} 元 ({total_pct:+.2f}%)",
-            f"🔄 **今日做T实盈**: {total_t0_pnl:+,.0f} 元",
+            f"📈 **持仓浮动盈亏**: {total_day_float:+,.0f} 元（现价相对昨收）",
+            f"🔄 **今日做T实盈**: {total_t0_pnl:+,.0f} 元（已配对买卖差价，扣费后）",
+            f"💰 **持仓总市值**: {total_value:,.0f} 元",
+            f"📊 **今日总收益**: {total_day_float + total_t0_pnl:+,.0f} 元（浮动+T0）",
         ]
 
         card = {
