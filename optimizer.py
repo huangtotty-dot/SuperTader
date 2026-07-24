@@ -46,6 +46,10 @@ PARAM_DEFAULTS = {
     "buy_confirm_min_score": 18,
     "notify_sell_threshold": 65,
     "notify_buy_threshold": 68,
+    "stock_qty_strong_pct": 0.40,
+    "stock_qty_base_pct": 0.30,
+    "stock_rebuild_strong_pct": 0.80,
+    "stock_first_add_pct": 0.20,
 }
 
 PARAM_SPACE = {
@@ -54,6 +58,10 @@ PARAM_SPACE = {
     "buy_confirm_min_score": {"low": 15, "high": 30, "default": 18, "label": "买入确认最低分"},
     "notify_sell_threshold": {"low": 40, "high": 70, "default": 65, "label": "卖出推送阈值"},
     "notify_buy_threshold": {"low": 40, "high": 70, "default": 68, "label": "买入推送阈值"},
+    "stock_qty_strong_pct": {"low": 0.25, "high": 0.60, "default": 0.40, "label": "强信号卖出比例"},
+    "stock_qty_base_pct": {"low": 0.15, "high": 0.40, "default": 0.30, "label": "中等信号卖出比例"},
+    "stock_rebuild_strong_pct": {"low": 0.50, "high": 1.00, "default": 0.80, "label": "强信号接回比例"},
+    "stock_first_add_pct": {"low": 0.10, "high": 0.40, "default": 0.20, "label": "首次加仓比例"},
 }
 
 TRAIN_DATES = ("2025-06-01", "2026-03-31")
@@ -63,6 +71,8 @@ TUSHARE_TOKEN = "9d15f39266cbbf8a1e5efa1525d7a4d4d1dbc62ec8cbce167d642def"
 CSV_FIELDS = [
     "trial_no", "vwap_buy_deviation", "take_profit_pct", "buy_confirm_min_score",
     "notify_sell_threshold", "notify_buy_threshold",
+    "stock_qty_strong_pct", "stock_qty_base_pct",
+    "stock_rebuild_strong_pct", "stock_first_add_pct",
     "train_win_rate", "train_total_pnl", "train_n_trades",
     "train_max_drawdown", "train_annualized_return", "train_composite_score",
     "test_win_rate", "test_total_pnl", "test_n_trades",
@@ -203,13 +213,17 @@ def _run_single_backtest(code: str, params: Dict[str, Any], start: str, end: str
 
     engine = _se.SignalEngine()
 
+    # V1.29: 集成 PositionSizer 动态仓位计算
+    from position_sizer import PositionSizer
+    sizer = PositionSizer(params=params, virtual_trades=_se.VIRTUAL_TRADES)
+
     trading_dates = [d.strftime("%Y-%m-%d") for d in pd.bdate_range(start, end)]
-    all_trades: List[Dict] = []  # 完成的T0闭环
+    all_trades: List[Dict] = []
     nav_records: List[Dict] = []
 
     cash = INITIAL_CAPITAL
-    base_holdings = 1000  # 初始底仓
-    intraday_buy_qty = 0  # 日内累计买入股数
+    base_holdings = 1000
+    intraday_buy_qty = 0
 
     # 逐日回放
     for ds in trading_dates:
@@ -223,8 +237,8 @@ def _run_single_backtest(code: str, params: Dict[str, Any], start: str, end: str
         engine.sell_count_per_stock[code] = 0
         engine.post_sell_block_until[code] = None
 
-        day_buys: List[float] = []  # 当日买入价格
-        day_sells: List[float] = []  # 当日卖出价格
+        day_buys: List[tuple] = []  # (price, qty)
+        day_sells: List[tuple] = []  # (price, qty)
 
         # ===== 修复：日线上下文基于前一日数据，杜绝未来函数 =====
         daily_ctx = _build_daily_context(ds)
@@ -262,45 +276,60 @@ def _run_single_backtest(code: str, params: Dict[str, Any], start: str, end: str
 
             cp = float(minute_df.iloc[i]["close"])
 
+            # ===== V1.29: PositionSizer 动态计算交易股数 =====
+            # V1.29: 动态仓位 = max(base_sizer_qty, FIXED_QTY)
+            actual_qty = base_holdings + intraday_buy_qty
+            _h = holding.copy()
+            _h["t_qty"] = actual_qty
+            _h["qty"] = actual_qty
             if sig.action in ("BUY_LOW", "ADD_POS") and bc < MAX_BUYS:
+                buy_qty = sizer.calc_buy_qty(code, _h, None, sig.score, 42.0)
+                if buy_qty <= 0:
+                    buy_qty = 200  # fallback
+                buy_qty = max(100, (buy_qty // 100) * 100)
                 buy_px = cp + SLIPPAGE
-                cost = buy_px * FIXED_QTY * (1 + COMMISSION)
+                cost = buy_px * buy_qty * (1 + COMMISSION)
                 if cash >= cost:
                     cash -= cost
-                    day_buys.append(buy_px)
-                    # ===== 修复：买入必须增加可卖持仓 =====
-                    intraday_buy_qty += FIXED_QTY
+                    day_buys.append((buy_px, buy_qty))
+                    intraday_buy_qty += buy_qty
                     bc += 1
-                    engine.record_trade_action(code, "BUY_LOW", 0)
+                    engine.record_signal(code, sig.action, cp, sig.score)
+                    engine.record_trade_action(code, "BUY_LOW", buy_qty)
             elif sig.action == "SELL_HIGH":
-                # 可卖 = 底仓 + 日内买入
                 sellable = base_holdings + intraday_buy_qty
-                if sellable >= FIXED_QTY:
+                sell_qty = sizer.calc_sell_qty(code, _h, None, sig.score, 42.0, bc)
+                if sell_qty <= 0:
+                    sell_qty = min(200, sellable)  # fallback: max 200
+                sell_qty = max(100, (sell_qty // 100) * 100)
+                sell_qty = min(sell_qty, sellable)
+                if sell_qty >= 100:
                     sell_px = cp - SLIPPAGE
-                    proceeds = sell_px * FIXED_QTY * (1 - COMMISSION - STAMP_TAX)
+                    proceeds = sell_px * sell_qty * (1 - COMMISSION - STAMP_TAX)
                     cash += proceeds
-                    day_sells.append(sell_px)
-                    # 优先从日内买入中扣减，不足再扣底仓
-                    if intraday_buy_qty >= FIXED_QTY:
-                        intraday_buy_qty -= FIXED_QTY
+                    day_sells.append((sell_px, sell_qty))
+                    if intraday_buy_qty >= sell_qty:
+                        intraday_buy_qty -= sell_qty
                     else:
-                        remaining = FIXED_QTY - intraday_buy_qty
+                        remaining = sell_qty - intraday_buy_qty
                         intraday_buy_qty = 0
-                        base_holdings -= remaining  # 实际减少底仓（隔夜敞口减小）
-                    engine.record_trade_action(code, "SELL_HIGH", 0)
+                        base_holdings -= remaining
+                    engine.record_signal(code, sig.action, cp, sig.score)
+                    engine.record_trade_action(code, "SELL_HIGH", sell_qty)
 
-        # T0 闭环配对：当日买入与卖出配对
+        # T0 闭环配对：当日买入与卖出配对（使用实际交易量）
         n_cycles = min(len(day_buys), len(day_sells))
         for j in range(n_cycles):
-            bp = day_buys[j]
-            sp = day_sells[j]
-            net = (sp - bp) * FIXED_QTY - bp * FIXED_QTY * COMMISSION - sp * FIXED_QTY * (COMMISSION + STAMP_TAX)
+            bp, bq = day_buys[j]
+            sp, sq = day_sells[j]
+            match_qty = min(bq, sq)
+            net = (sp - bp) * match_qty - bp * match_qty * COMMISSION - sp * match_qty * (COMMISSION + STAMP_TAX)
             all_trades.append({
                 "date": ds,
                 "buy_price": round(bp, 2),
                 "sell_price": round(sp, 2),
                 "net_pnl": round(net, 2),
-                "qty": FIXED_QTY,
+                "qty": match_qty,
             })
             # 配对后当日T0买入对应的持仓清空，base_holdings不变
             # intraday_buy_qty 已经在卖出时扣减过了
@@ -394,6 +423,10 @@ def run_optuna(code: str, n_trials: int, start: str, end: str, step: int = 3) ->
             "buy_confirm_min_score": trial.suggest_int("buy_confirm_min_score", 15, 30),
             "notify_sell_threshold": trial.suggest_int("notify_sell_threshold", 40, 70),
             "notify_buy_threshold": trial.suggest_int("notify_buy_threshold", 40, 70),
+            "stock_qty_strong_pct": trial.suggest_float("stock_qty_strong_pct", 0.25, 0.60),
+            "stock_qty_base_pct": trial.suggest_float("stock_qty_base_pct", 0.15, 0.40),
+            "stock_rebuild_strong_pct": trial.suggest_float("stock_rebuild_strong_pct", 0.50, 1.00),
+            "stock_first_add_pct": trial.suggest_float("stock_first_add_pct", 0.10, 0.40),
         }
         t0 = time.time()
         metrics, composite = _run_trial(code, params, start, end, trial.number, step=step)
@@ -433,7 +466,11 @@ def run_quick(code: str, n_trials: int, start: str, end: str, step: int = 3) -> 
                    "take_profit_pct": round(random.uniform(0.005, 0.025), 3),
                    "buy_confirm_min_score": random.randint(15, 30),
                    "notify_sell_threshold": random.randint(40, 70),
-                   "notify_buy_threshold": random.randint(40, 70)}
+                   "notify_buy_threshold": random.randint(40, 70),
+                   "stock_qty_strong_pct": round(random.uniform(0.25, 0.60), 2),
+                   "stock_qty_base_pct": round(random.uniform(0.15, 0.40), 2),
+                   "stock_rebuild_strong_pct": round(random.uniform(0.50, 1.00), 2),
+                   "stock_first_add_pct": round(random.uniform(0.10, 0.40), 2)}
         t0 = time.time()
         metrics, composite = _run_trial(code, params, start, end, i, step=step)
         elapsed = round(time.time() - t0, 1)
@@ -475,7 +512,9 @@ def run_grid(code: str, start: str, end: str, step: int = 3) -> Tuple[Dict, List
         for tp in tp_vals:
             for sc in score_vals:
                 params = {"vwap_buy_deviation": v, "take_profit_pct": tp, "buy_confirm_min_score": sc,
-                           "notify_sell_threshold": 65, "notify_buy_threshold": 68}
+                           "notify_sell_threshold": 65, "notify_buy_threshold": 68,
+                           "stock_qty_strong_pct": 0.40, "stock_qty_base_pct": 0.30,
+                           "stock_rebuild_strong_pct": 0.80, "stock_first_add_pct": 0.20}
                 t0 = time.time()
                 metrics, composite = _run_trial(code, params, start, end, idx, step=step)
                 elapsed = round(time.time() - t0, 1)

@@ -81,42 +81,43 @@ def run_one(code, name):
             t = pd.Timestamp(df.iloc[i]["time"])
             t_val = t.hour * 100 + t.minute
 
-            # Threshold filter (match main.py)
             if sig.action in ("BUY_LOW", "ADD_POS"):
-                nth = sp.get("notify_buy_threshold", 68)
+                nth = _se.PARAMS.get("notify_buy_threshold", 68)
             elif t_val >= 1000:
-                nth = sp.get("notify_sell_threshold", 65)
-            elif t_val < 1000 and sig.action == "SELL_HIGH":
-                nth = sp.get("notify_sell_early_threshold", 75)
+                nth = _se.PARAMS.get("notify_sell_threshold", 65)
             else:
-                nth = 65
+                nth = _se.PARAMS.get("notify_sell_early_threshold", 75)
             if sig.score < nth:
                 continue
 
+            # V1.29: 回测使用固定 200 股（sizer 集成见 optimizer.py）
+            FQ = 200
             if sig.action in ("BUY_LOW", "ADD_POS") and bc < 3:
-                cost_trade = (cp + 0.01) * 200 * 1.00015
+                cost_trade = (cp + 0.01) * FQ * 1.00015
                 if cash >= cost_trade:
                     cash -= cost_trade
-                    day_buys.append(cp)
-                    intraday_buy_qty += 200
+                    day_buys.append((cp, FQ))
+                    intraday_buy_qty += FQ
                     bc += 1
             elif sig.action == "SELL_HIGH":
                 sellable = base_holdings + intraday_buy_qty
-                if sellable >= 200:
-                    proceeds = (cp - 0.01) * 200 * (1 - 0.00015 - 0.0005)
+                if sellable >= FQ:
+                    proceeds = (cp - 0.01) * FQ * (1 - 0.00015 - 0.0005)
                     cash += proceeds
-                    day_sells.append(cp)
-                    if intraday_buy_qty >= 200:
-                        intraday_buy_qty -= 200
+                    day_sells.append((cp, FQ))
+                    if intraday_buy_qty >= FQ:
+                        intraday_buy_qty -= FQ
                     else:
-                        remaining = 200 - intraday_buy_qty
+                        remaining = FQ - intraday_buy_qty
                         intraday_buy_qty = 0
                         base_holdings -= remaining
 
-        # Pair trades (record PnL, no holdings restore needed - T0 self-balancing)
         for j in range(min(len(day_buys), len(day_sells))):
-            net = (day_sells[j] - day_buys[j]) * 200 - day_buys[j]*200*0.00015 - day_sells[j]*200*(0.00015+0.0005)
-            all_trades.append({"date": ds, "net": round(net, 2)})
+            bp, bq = day_buys[j]
+            sp, sq = day_sells[j]
+            mq = min(bq, sq)
+            net = (sp - bp) * mq - bp * mq * 0.00015 - sp * mq * (0.00015 + 0.0005)
+            all_trades.append({"date": ds, "net": round(net, 2), "qty": mq})
 
         total_holdings = base_holdings + intraday_buy_qty
         close = float(df.iloc[-1]["close"])
