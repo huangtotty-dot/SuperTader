@@ -269,7 +269,7 @@ class SignalEngine:
             if total_sold > total_bought:
                 # 有未接回的卖出 → 建立接回追踪
                 last_sell = max(sells, key=lambda t: str(t.get("ts", ""))) if sells else None
-                if last_sell:
+                if last_sell and float(last_sell.get("price", 0) or 0) > 0:
                     _gap = PARAMS.get("awaiting_buyback_vwap_gap", 0.975)
                     if _gap < 0.1:
                         _gap = 1.0 - _gap
@@ -285,7 +285,7 @@ class SignalEngine:
             elif total_bought > total_sold:
                 # 有未卖出的买入 → 建立高抛追踪
                 last_buy = max(buys, key=lambda t: str(t.get("ts", ""))) if buys else None
-                if last_buy:
+                if last_buy and float(last_buy.get("price", 0) or 0) > 0:
                     tp = PARAMS.get("take_profit_pct", 0.010)
                     _bp = float(last_buy.get("price", 0) or 0)
                     self.pending_sells[code] = {
@@ -546,7 +546,7 @@ class SignalEngine:
                     risk_buy_block.append("morning_alert_L1_not_dip")
         # ===== V1.29: 卖出→接回闭环 — 主动寻找低吸买回机会 =====
         ab = self.awaiting_buyback.get(code)
-        if ab and price > 0:
+        if ab and ab.get("sell_price", 0) > 0 and price > 0:
             # 检查 TTL 是否过期
             elapsed = (_now() - ab["sell_time"]).total_seconds() / 60
             if elapsed > ab["ttl"]:
@@ -554,15 +554,14 @@ class SignalEngine:
             else:
                 # 价格低于卖出价时，激进入买入
                 discount = (ab["sell_price"] - price) / ab["sell_price"]
-                if discount > 0.005:  # 比卖出价低 0.5% 以上
+                if discount > 0.005:
                     boost = PARAMS.get("awaiting_buyback_score_boost", 10)
                     buy_score += boost
                     buy_details.append({"指标": "接回追踪(已卖待接)", "当前": f"卖{ab['sell_price']:.2f}现{price:.2f}折{discount:.1%}", "加分": round(boost, 1)})
-                elif discount > 0.001:  # 微利接回
+                elif discount > 0.001:
                     boost = PARAMS.get("awaiting_buyback_score_boost_weak", 5)
                     buy_score += boost
                     buy_details.append({"指标": "接回追踪(微利)", "当前": f"折{discount:.1%}", "加分": round(boost, 1)})
-                # 降低买入门槛
                 buy_threshold -= PARAMS.get("awaiting_buyback_threshold_relax", 5)
 
         can_bypass_daily = feats.get("f5_is_strong_bullish_reversal", False) or feats.get("f5_is_volume_reversal", False)
@@ -578,7 +577,7 @@ class SignalEngine:
             sell_score += 30.0  # 大幅boost确保触发止盈
         # ===== V1.29: 买入→高抛闭环 — 主动寻找止盈卖点 =====
         ps = self.pending_sells.get(code)
-        if ps and price > 0 and hold_qty > 0:
+        if ps and ps.get("buy_price", 0) > 0 and price > 0 and hold_qty > 0:
             profit = (price - ps["buy_price"]) / ps["buy_price"]
             if profit >= _tp:
                 boost = 15.0
