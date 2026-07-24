@@ -83,6 +83,12 @@ CSV_FIELDS = [
 _results_csv = OUT_DIR / "optimizer_results.csv"
 _best_json = OUT_DIR / "best_params.json"
 
+def _set_per_stock_paths(code: str):
+    """每个股票独立的输出文件，避免并行训练时互相覆盖。"""
+    global _results_csv, _best_json
+    _results_csv = OUT_DIR / f"optimizer_results_{code}.csv"
+    _best_json = OUT_DIR / f"best_params_{code}.json"
+
 
 # ── 数据加载 ────────────────────────────────────────────────
 def _download_and_cache(code: str, date: str) -> pd.DataFrame:
@@ -690,7 +696,7 @@ def main():
     print("=" * 55, "\n  参数寻优系统", "=" * 55, sep="\n")
     print(f"  标的: {args.code}  方法: {args.method}  训练: {args.start_train}~{args.end_train}")
 
-    # 预热前一日收盘价索引（杜绝未来函数中读文件耗时）
+    _set_per_stock_paths(args.code)
     _build_prev_close_index(args.code)
     _ensure_trading_dates(args.code, args.start_train, args.end_train)
     if not args.no_validate:
