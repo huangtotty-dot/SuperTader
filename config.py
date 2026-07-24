@@ -284,6 +284,10 @@ PARAMS = {
     "min_profit_space": 0.010,
     "commission_rate": 0.0010,
     "cooldown_minutes": 30,
+    # V1.30: 卖出端保护 —— 底仓地板比例（base×ratio 不可卖，防卖穿底仓）
+    "sell_floor_ratio": 0.5,
+    # V1.30: 盘中锁定日线状态机（盘中用最近完整交易日的regime，消除盘中抖动）
+    "index_regime_intraday_lock": True,
     # V1.27: 单股仓位上限（占总资金比例，超过此值触发强制卖出）
     "max_single_position_pct": 0.30,
     "repeat_signal_gap_minutes": 60,
