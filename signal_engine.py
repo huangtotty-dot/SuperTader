@@ -580,9 +580,19 @@ class SignalEngine:
         if ps and ps.get("buy_price", 0) > 0 and price > 0 and hold_qty > 0:
             profit = (price - ps["buy_price"]) / ps["buy_price"]
             if profit >= _tp:
-                boost = 15.0
+                boost = 25.0  # 止盈：强推卖出
                 sell_score += boost
-                sell_details.append({"指标": "高抛追踪(已买待卖)", "当前": f"买{ps['buy_price']:.2f}现{price:.2f}盈{profit:.1%}", "加分": round(boost, 1)})
+                sell_details.append({"指标": "高抛追踪(止盈)", "当前": f"买{ps['buy_price']:.2f}现{price:.2f}盈{profit:.1%}", "加分": round(boost, 1)})
+                self.pending_sells.pop(code, None)  # 闭环完成
+            elif profit <= -0.03:  # V1.29: 止损 — 跌超3%强制卖出
+                boost = 20.0
+                sell_score += boost
+                sell_details.append({"指标": "止损追踪(已买待割)", "当前": f"买{ps['buy_price']:.2f}现{price:.2f}亏{profit:.1%}", "加分": round(boost, 1)})
+                self.pending_sells.pop(code, None)  # 止损完成，清除追踪
+            elif profit <= -0.015:  # 轻度亏损预警
+                boost = 8.0
+                sell_score += boost
+                sell_details.append({"指标": "止损预警(浅亏)", "当前": f"买{ps['buy_price']:.2f}现{price:.2f}亏{profit:.1%}", "加分": round(boost, 1)})
         sig = None
         can_sell = base_can_sell and sell_score >= sell_threshold and sell_score > buy_score
         can_buy = base_can_buy and buy_score >= buy_threshold and buy_score > sell_score
