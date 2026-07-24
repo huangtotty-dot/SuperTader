@@ -106,6 +106,10 @@ if 'PARAMS' not in globals():
               "vwap_buy_deviation":-0.020,
               "take_profit_pct":0.010,
               "take_profit_time_after":1000,
+              "notify_buy_threshold":68,
+              "notify_sell_threshold":65,
+              "notify_sell_early_threshold":75,
+              "notify_sell_panic_threshold":60,
               "hard_sell_threshold_cap":80,
               "hard_buy_threshold_cap":80,
               "awaiting_buyback_ttl_minutes":120,
@@ -114,7 +118,7 @@ if 'PARAMS' not in globals():
               "awaiting_buyback_score_boost_weak":5,
               "awaiting_buyback_threshold_relax":5,
               "awaiting_buyback_threshold_relax_weak":3,
-              "awaiting_buyback_vwap_gap":0.003,
+              "awaiting_buyback_vwap_gap":0.975,
               "awaiting_buyback_rsi_strong":45,
               "awaiting_buyback_rsi_weak":50,
               "peak_decline_pct_threshold":0.01,
@@ -238,6 +242,7 @@ class SignalEngine:
         self.cycle_direction: Dict[str, str] = {}
         self.post_sell_block_until: Dict[str, datetime] = {}
         self.awaiting_buyback: Dict[str, Dict[str, Any]] = {}
+        self.pending_sells: Dict[str, Dict[str, Any]] = {}  # V1.29: 买入→高抛追踪
         # V1.21: 日内高点确认延迟状态（避免抖动误判）
         self.peak_tracker: Dict[str, Dict[str, Any]] = {}
         self.daily_realized_loss_monitor = 0.0
@@ -248,6 +253,48 @@ class SignalEngine:
         self.morning_alert_state: Dict[str, Dict[str, Any]] = {}
         # 可传入自定义权重参数，默认 FACTOR_WEIGHTS（支持 HPO 多进程调参）
         self.factor_weights = factor_weights or FACTOR_WEIGHTS
+        # V1.29: 从 VIRTUAL_TRADES 恢复闭环追踪状态（重启后不丢）
+        self._recover_tracking_from_trades()
+
+    def _recover_tracking_from_trades(self):
+        """V1.29: 从持久化的 VIRTUAL_TRADES 恢复闭环追踪状态。
+        程序重启后，根据未配对的买卖还原 awaiting_buyback / pending_sells。
+        """
+        vt = VIRTUAL_TRADES if 'VIRTUAL_TRADES' in globals() else {}
+        for code, actions in vt.items():
+            sells = actions.get("SELL_HIGH", [])
+            buys = actions.get("BUY_LOW", [])
+            total_sold = sum(t.get("qty", 0) for t in sells)
+            total_bought = sum(t.get("qty", 0) for t in buys)
+            if total_sold > total_bought:
+                # 有未接回的卖出 → 建立接回追踪
+                last_sell = max(sells, key=lambda t: str(t.get("ts", ""))) if sells else None
+                if last_sell:
+                    _gap = PARAMS.get("awaiting_buyback_vwap_gap", 0.975)
+                    if _gap < 0.1:
+                        _gap = 1.0 - _gap
+                    _sp = float(last_sell.get("price", 0) or 0)
+                    self.awaiting_buyback[code] = {
+                        "sell_price": _sp if _sp > 0 else 0,
+                        "sell_time": _now(),
+                        "qty": total_sold - total_bought,
+                        "target_price": round(_sp * _gap, 2) if _sp > 0 else 0,
+                        "ttl": PARAMS.get("awaiting_buyback_ttl_minutes", 120),
+                        "recovered": True,
+                    }
+            elif total_bought > total_sold:
+                # 有未卖出的买入 → 建立高抛追踪
+                last_buy = max(buys, key=lambda t: str(t.get("ts", ""))) if buys else None
+                if last_buy:
+                    tp = PARAMS.get("take_profit_pct", 0.010)
+                    _bp = float(last_buy.get("price", 0) or 0)
+                    self.pending_sells[code] = {
+                        "buy_price": _bp if _bp > 0 else 0,
+                        "buy_time": _now(),
+                        "qty": total_bought - total_sold,
+                        "target_price": round(_bp * (1 + tp), 2) if _bp > 0 else 0,
+                        "recovered": True,
+                    }
 
     def _reset_daily_state_if_needed(self):
         today = get_today_str()
@@ -261,6 +308,7 @@ class SignalEngine:
             self.cycle_direction = {}
             self.post_sell_block_until = {}
             self.awaiting_buyback = {}
+            self.pending_sells = {}
             self.daily_realized_loss_monitor = 0.0
             self.diagnostics = {}
             self.peak_tracker = {}
@@ -278,6 +326,7 @@ class SignalEngine:
         snapshot["price"] = price
         snapshot["score"] = score
         snapshot["ts"] = _now()
+        self._last_sig_price = price  # V1.29: 供 record_trade_action 建立接回追踪
         if "SELL" in action:
             self.sell_cooldown[code] = _now()
         else:
@@ -292,14 +341,48 @@ class SignalEngine:
             self.cycle_direction[code] = "buy"
             if qty > 0:
                 bucket = VIRTUAL_TRADES.setdefault(code, {})
-                bucket.setdefault("BUY_LOW", []).append({"qty": qty, "ts": _now(), "action": action})
+                _px = float(getattr(self, '_last_sig_price', 0) or 0)
+                bucket.setdefault("BUY_LOW", []).append({"qty": qty, "ts": _now(), "action": action, "price": _px})
+                # V1.29: 买入后检查是否完成接回闭环
+                ab = self.awaiting_buyback.get(code)
+                if ab:
+                    total_bought = sum(t.get("qty", 0) for t in bucket.get("BUY_LOW", []))
+                    if total_bought >= ab.get("qty", 0):
+                        self.awaiting_buyback.pop(code, None)  # 闭环完成
+                # V1.29: 买入后建立高抛追踪
+                price = float(getattr(self, '_last_sig_price', 0) or 0)
+                if price > 0:
+                    tp = PARAMS.get("take_profit_pct", 0.010)
+                    self.pending_sells[code] = {
+                        "buy_price": price, "buy_time": _now(), "qty": qty,
+                        "target_price": price * (1 + tp),
+                    }
         elif action in ["SELL_HIGH", "PANIC_SELL"]:
             self.sell_count_per_stock[code] = self.sell_count_per_stock.get(code, 0) + 1
             self.cycle_direction[code] = "sell"
             self.post_sell_block_until[code] = _now() + timedelta(minutes=PARAMS["post_sell_rebuild_minutes"])
             if qty > 0:
                 bucket = VIRTUAL_TRADES.setdefault(code, {})
-                bucket.setdefault("SELL_HIGH", []).append({"qty": qty, "ts": _now(), "action": action})
+                _px = float(getattr(self, '_last_sig_price', 0) or 0)
+                bucket.setdefault("SELL_HIGH", []).append({"qty": qty, "ts": _now(), "action": action, "price": _px})
+                # V1.29: 建立接回追踪 — 卖出后主动寻找低吸机会
+                price = float(getattr(self, '_last_sig_price', 0) or 0)
+                if price > 0:
+                    # awaiting_buyback_vwap_gap: 乘数（如0.975=低于卖价2.5%接回），兼容百分比（0.003→0.997）
+                    _gap = PARAMS.get("awaiting_buyback_vwap_gap", 0.975)
+                    if _gap < 0.1:  # 百分比格式，转乘数
+                        _gap = 1.0 - _gap
+                    self.awaiting_buyback[code] = {
+                        "sell_price": price, "sell_time": _now(), "qty": qty,
+                        "target_price": round(price * _gap, 2),
+                        "ttl": PARAMS.get("awaiting_buyback_ttl_minutes", 120),
+                    }
+                # V1.29: 卖出后检查是否完成高抛闭环
+                ps = self.pending_sells.get(code)
+                if ps:
+                    total_sold = sum(t.get("qty", 0) for t in bucket.get("SELL_HIGH", []))
+                    if total_sold >= ps.get("qty", 0):
+                        self.pending_sells.pop(code, None)  # 闭环完成
             buys = VIRTUAL_TRADES.get(code, {}).get("BUY_LOW", [])
             sells = VIRTUAL_TRADES.get(code, {}).get("SELL_HIGH", [])
             net_qty = sum(t["qty"] for t in buys) - sum(t["qty"] for t in sells)
@@ -461,6 +544,27 @@ class SignalEngine:
                 _vdev_l1 = (price - _vwap) / _vwap
                 if _vdev_l1 > -0.015:
                     risk_buy_block.append("morning_alert_L1_not_dip")
+        # ===== V1.29: 卖出→接回闭环 — 主动寻找低吸买回机会 =====
+        ab = self.awaiting_buyback.get(code)
+        if ab and price > 0:
+            # 检查 TTL 是否过期
+            elapsed = (_now() - ab["sell_time"]).total_seconds() / 60
+            if elapsed > ab["ttl"]:
+                self.awaiting_buyback.pop(code, None)  # 过期清理
+            else:
+                # 价格低于卖出价时，激进入买入
+                discount = (ab["sell_price"] - price) / ab["sell_price"]
+                if discount > 0.005:  # 比卖出价低 0.5% 以上
+                    boost = PARAMS.get("awaiting_buyback_score_boost", 10)
+                    buy_score += boost
+                    buy_details.append({"指标": "接回追踪(已卖待接)", "当前": f"卖{ab['sell_price']:.2f}现{price:.2f}折{discount:.1%}", "加分": round(boost, 1)})
+                elif discount > 0.001:  # 微利接回
+                    boost = PARAMS.get("awaiting_buyback_score_boost_weak", 5)
+                    buy_score += boost
+                    buy_details.append({"指标": "接回追踪(微利)", "当前": f"折{discount:.1%}", "加分": round(boost, 1)})
+                # 降低买入门槛
+                buy_threshold -= PARAMS.get("awaiting_buyback_threshold_relax", 5)
+
         can_bypass_daily = feats.get("f5_is_strong_bullish_reversal", False) or feats.get("f5_is_volume_reversal", False)
         is_daily_ok = feats.get("daily_buy_t_ok", False) or can_bypass_daily
         base_can_buy = (len(risk_buy_block) == 0 and is_daily_ok
@@ -472,6 +576,14 @@ class SignalEngine:
         _tpa = PARAMS.get("take_profit_time_after", 1000)
         if hold_qty > 0 and t_val >= _tpa and feats.get("profit_pct", 0) >= _tp:
             sell_score += 30.0  # 大幅boost确保触发止盈
+        # ===== V1.29: 买入→高抛闭环 — 主动寻找止盈卖点 =====
+        ps = self.pending_sells.get(code)
+        if ps and price > 0 and hold_qty > 0:
+            profit = (price - ps["buy_price"]) / ps["buy_price"]
+            if profit >= _tp:
+                boost = 15.0
+                sell_score += boost
+                sell_details.append({"指标": "高抛追踪(已买待卖)", "当前": f"买{ps['buy_price']:.2f}现{price:.2f}盈{profit:.1%}", "加分": round(boost, 1)})
         sig = None
         can_sell = base_can_sell and sell_score >= sell_threshold and sell_score > buy_score
         can_buy = base_can_buy and buy_score >= buy_threshold and buy_score > sell_score

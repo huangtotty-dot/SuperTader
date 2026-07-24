@@ -1,8 +1,15 @@
 # 信号引擎（signal_engine）设计文档
 
-a> 版本：V1.27　日期：2026-07-22
-> 文件：`E:\06_T\signal_engine.py`（~214KB, 3400+ 行）
+a> 版本：V1.29　日期：2026-07-24
+> 文件：`E:\06_T\signal_engine.py`
 > 所属系统：做T量化系统（t_trader 体系）
+
+### V1.29 更新日志
+
+| 版本 | 日期 | 变更 |
+|------|------|------|
+| V1.29 | 2026-07-24 | 推送阈值 PARAMS 参数化；个股级阈值覆盖；optimizer 5维寻优；**闭环机制**：awaiting_buyback（卖出后主动找接回）+ pending_sells（买入后主动找止盈）；修复 awaiting_buyback_vwap_gap 参数单位不一致 |
+| V1.28 | 2026-07-23 | VWAP偏离门控/早盘保护/止盈监控/早盘预警/scoring优先级bug修复 |
 
 ---
 

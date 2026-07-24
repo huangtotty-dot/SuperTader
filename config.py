@@ -106,9 +106,9 @@ def send_feishu_payload(payload: dict, success_log: str, error_prefix: str, trig
         return False
 
     last_error = None
-    for attempt in range(1):
+    for attempt in range(3):
         try:
-            response = requests.post(FEISHU_WEBHOOK, json=payload, timeout=8)
+            response = requests.post(FEISHU_WEBHOOK, json=payload, timeout=10)
             response.raise_for_status()
             result = response.json()
             if isinstance(result, dict) and result.get("code", 0) != 0:
@@ -124,10 +124,12 @@ def send_feishu_payload(payload: dict, success_log: str, error_prefix: str, trig
             return True
         except Exception as e:
             last_error = e
-            if attempt == 0:
-                log.warning(f"⚠️  {error_prefix}第1次发送异常，准备重试: {str(e)[:100]}")
+            wait = (attempt + 1) * 2
+            if attempt < 2:
+                log.warning(f"⚠️  {error_prefix}第{attempt+1}次发送失败，{wait}秒后重试: {str(e)[:80]}")
+                time.sleep(wait)
             else:
-                log.error(f"❌ {error_prefix}发送异常: {str(e)[:120]}")
+                log.error(f"❌ {error_prefix}3次重试均失败: {str(e)[:120]}")
     return False
 
 
@@ -547,7 +549,7 @@ STOCK_PARAMS = {
         "morning_no_sell_min_ret": 0.015,     # 早盘卖出门槛1.5%
         "sell_confirm_min_factors": 2,        # 卖出确认因子2
         "sell_confirm_min_seconds": 20,
-        "buy_confirm_min_score": 22,          # 买入确认最低分22（胜率97.5%）
+        "buy_confirm_min_score": 24,          # 买入确认最低分22（胜率97.5%）
         "open_dip_buy_penalty": 15,
         "post_sell_rebuild_minutes": 8,       # 卖后重建等待8分钟
         "min_profit_space": 0.008,            # V1.25: 最小盈利空间0.8%（原0.6%过于接近成本线）
@@ -558,43 +560,49 @@ STOCK_PARAMS = {
         # V1.24: 回测优化 — 倒T信号增强（下跌趋势中早盘高抛）
         # V1.25: 近半年回测优化 — downtrend_sell_threshold从2.0%降至1.5%，覆盖更多中度下跌日
         "downtrend_sell_boost": 10,           # 下跌趋势中卖出额外加分
-        "downtrend_sell_threshold": 0.015,     # V1.25: 当日跌幅>1.5%触发（原2.0%漏掉12天，覆盖率25%→44%）
+        "downtrend_sell_threshold": 0.015,     # V1.25: 当日跌幅>1.5%触发
+        "vwap_buy_deviation": -0.0161,        # Optuna寻优：100trial CS=1630
+        "take_profit_pct": 0.0148,            # Optuna寻优：100trial CS=1630
+        "notify_sell_threshold": 62, "notify_buy_threshold": 43,
     },
-    "000988": {  # 华工科技 — VWAP深V低吸型（2026-07-14 回测修正版）
-        # ⚠️ 回测结论：早抛晚接/倒T 全部负收益！唯一正收益策略为 VWAP深V低吸
-        # 回测最优：偏离-2.5%买入 + 1%止盈，31笔/胜率67.7%/总收益8.25%/夏普3.61
-        "min_profit_space": 0.010,           # 最小盈利空间1.0%（匹配回测1%止盈）
+    "000988": {  # 华工科技 — VWAP深V低吸型（2026-07-23 Optuna寻优修正版）
+        # 寻优结果：2025-11-25~2026-06-30 训练集，Trial#15 综合得分111.44
+        # vwap=-0.0181 / tp=0.0188 / score=27 → 7笔/胜率57.1%/PnL+863/年化12.94%
+        "min_profit_space": 0.010,           # 最小盈利空间1.0%
         "vol_ratio_confirm": 1.8,            # 放量确认倍数1.8
-        "stock_qty_base_pct": 0.30,          # 单笔基础仓位30%（胜率67%可重仓）
+        "stock_qty_base_pct": 0.30,          # 单笔基础仓位30%
         "stock_qty_strong_pct": 0.50,        # 强信号仓位50%
-        "morning_no_sell_until": 1000,       # 10:00前禁止卖出（早抛晚接回测亏钱）；V1.28: uni_down≤-30分时被signal_engine动态绕过
-        "morning_no_sell_min_ret": 0.030,    # 早盘卖出门槛提高到3%（仅极端情况才卖）
-        "rsi_overbought": 75,                # RSI超买阈值恢复常规（不鼓励早盘卖）
-        "rsi_oversold": 32,                  # 超卖阈值降低（深V时更积极买入）
-        "open_dip_decline_threshold": -0.015, # 开盘急跌阈值-1.5%（更深才触发）
-        "open_dip_buy_penalty": 10,          # 开盘急跌惩罚降低（允许抄底）
-        "awaiting_buyback_vwap_gap": 0.975,   # 低于VWAP 2.5%接回（匹配回测最优偏离）
-        "awaiting_buyback_score_boost": 25,   # 深V时买入加分加大
+        "morning_no_sell_until": 1000,       # 10:00前禁止卖出
+        "morning_no_sell_min_ret": 0.030,    # 早盘卖出门槛3%
+        "rsi_overbought": 75,                # RSI超买阈值
+        "rsi_oversold": 32,                  # 超卖阈值
+        "open_dip_decline_threshold": -0.015, # 开盘急跌阈值-1.5%
+        "open_dip_buy_penalty": 10,          # 开盘急跌惩罚
+        "awaiting_buyback_vwap_gap": 0.975,   # 低于VWAP 2.5%接回
+        "awaiting_buyback_score_boost": 25,   # 深V时买入加分
         "max_buy_times_per_stock": 3,        # 允许更多买入机会（VWAP低吸可多次触发）
         "max_sell_times_per_stock": 2,       # 减少卖出（早抛策略已证伪）
         "max_t_cycles_per_stock": 4,
         "cooldown_minutes": 25,
         "sell_holding_min_minutes": 15,
         "stand_down_min_amplitude": 0.015,    # 停手振幅1.5%
-        "buy_confirm_min_score": 18,          # 买入门槛降低（深V时积极）
+        "buy_confirm_min_score": 16,          # 买入确认最低分（Optuna寻优：18→27，胜率57.1%）
         "bullish_reversal_min_pct": 0.006,    # 大阳线反包确认阈值0.6%（更容易触发）
         "bullish_reversal_body_ratio": 0.50,  # 实体占比50%
         "bullish_reversal_vol_multiplier": 0.7, # 放量倍数0.7（更容易确认）
-        "vwap_buy_deviation": -0.020,         # VWAP偏离-2%时积极买入（回测-2.5%最优，取-2%平衡）
+        "vwap_buy_deviation": -0.022,          # VWAP偏离买入阈值（Optuna寻优：100trial CS=851）
         "high_buy_score_bypass": True,        # 高分绕过stand_down（深V时不错过）
         "high_buy_score_threshold": 90,
         "high_buy_score_vwap_gap": 0.018,     # 低于VWAP 1.8%且高分时允许买入
         "daily_trade_limit": 3,
         "min_profit_per_t": 0.006,            # 单笔最低利润0.6%
         "max_micro_profit_per_day": 3,
-        # 止盈参数（回测驱动：华工最优止盈1%）
-        "take_profit_pct": 0.010,             # 持仓涨1%即止盈（回测最优）
+        # 止盈参数（Optuna寻优：1%→1.88%，匹配VWAP浅偏离策略）
+        "take_profit_pct": 0.0212,            # 持仓涨2.12%即止盈（Optuna寻优：100trial CS=851）
         "take_profit_time_after": 1000,       # 10:00后启动止盈监控
+        # V1.29: 推送阈值（可被 optimizer 单独寻优调整）
+        "notify_sell_threshold": 63,
+        "notify_buy_threshold": 43,
     },
     "588170": {  # 科创芯片ETF — VWAP深V低吸型（2026-07-14 回测修正版）
         # ⚠️ 回测结论：早抛晚接/倒T 全部负收益！唯一正收益策略为 VWAP深V低吸
@@ -615,8 +623,8 @@ STOCK_PARAMS = {
         "cooldown_minutes": 10,               # ETF冷却时间短（交易频率高）
         "sell_holding_min_minutes": 10,
         "stand_down_min_amplitude": 0.008,
-        "buy_confirm_min_score": 16,          # 买入门槛降低（偏离-0.5%即积极）
-        "vwap_buy_deviation": -0.005,         # 低于VWAP 0.5%即买入（回测最优）
+        "buy_confirm_min_score": 30,          # 买入门槛降低（偏离-0.5%即积极）
+        "vwap_buy_deviation": -0.0313,         # 低于VWAP 0.5%即买入（回测最优）
         "vwap_sell_deviation": 0.020,         # 高于VWAP 2%才考虑卖出（偏强）
         "open_dip_decline_threshold": -0.012,  # 开盘急跌-1.2%触发抄底
         "open_dip_buy_boost": 20,             # 开盘急跌买入加分加大
@@ -625,8 +633,9 @@ STOCK_PARAMS = {
         "daily_trade_limit": 4,              # 每日最多4次（交易频率高）
         "min_profit_per_t": 0.005,
         # 止盈参数（回测驱动：ETF最优止盈3%）
-        "take_profit_pct": 0.030,             # 持仓涨3%即止盈（回测最优）
+        "take_profit_pct": 0.0206,             # 持仓涨3%即止盈（回测最优）
         "take_profit_time_after": 1000,       # 10:00后启动止盈监控
+        "notify_sell_threshold": 67, "notify_buy_threshold": 40,
     },
     "600176": {  # 中国巨石 — 高波动深跌型（日均振幅6-10%，成交2亿+）
         "min_profit_space": 0.012,            # 最小盈利空间1.2%（高波动需要更大空间）
@@ -648,6 +657,9 @@ STOCK_PARAMS = {
         "cooldown_minutes": 20,
         "daily_trade_limit": 3,
         "stand_down_min_amplitude": 0.018,    # 停手振幅1.8%（高波动型）
+        "vwap_buy_deviation": -0.0173,        # Optuna寻优：100trial CS=434
+        "take_profit_pct": 0.0211,            # Optuna寻优：100trial CS=434
+        "notify_sell_threshold": 51, "notify_buy_threshold": 40,
     },
     "603667": {  # 五洲新春 — 中等波动区间型（日均振幅4-9%，成交2000万）
         "min_profit_space": 0.010,            # 最小盈利空间1.0%
@@ -659,7 +671,7 @@ STOCK_PARAMS = {
         "rsi_overbought": 75,
         "rsi_oversold": 32,
         "sell_confirm_min_factors": 2,
-        "buy_confirm_min_score": 18,
+        "buy_confirm_min_score": 19,
         "open_dip_decline_threshold": -0.015,
         "open_dip_buy_penalty": 20,
         "awaiting_buyback_vwap_gap": 0.990,   # VWAP下方1.0%接回
@@ -669,6 +681,9 @@ STOCK_PARAMS = {
         "cooldown_minutes": 15,
         "daily_trade_limit": 3,
         "stand_down_min_amplitude": 0.012,    # 停手振幅1.2%
+        "vwap_buy_deviation": -0.0276,        # Optuna寻优：100trial CS=498
+        "take_profit_pct": 0.0200,            # Optuna寻优：100trial CS=498
+        "notify_sell_threshold": 64, "notify_buy_threshold": 40,
     },
 }
 
@@ -1308,7 +1323,7 @@ SHORT_MODE_PARAMS = {
     "awaiting_buyback_threshold_relax": 5,  # 门槛放松降至5（15→5，深跌才触发）
     "awaiting_buyback_vwap_gap": 0.985,  # 严格低于VWAP 1.5%才接回（1.005→0.985，最关键修正）
     "buy_confirm_min_score": 35,         # 买入门槛进一步提高（30→35，只接深跌）
-    "vwap_buy_deviation": -0.025,        # 低于VWAP 2.5%才考虑接回（保持不变）
+    "vwap_buy_deviation": -0.0276,        # 低于VWAP 2.5%才考虑接回（保持不变）
     "max_buy_times_per_stock": 2,        # 减少买入次数（保持不变）
     "max_sell_times_per_stock": 2,       # 卖出次数减至2（3→2，每笔必须严格接回）
     "cooldown_minutes": 30,              # 冷却时间翻倍（15→30，减少频繁交易）
