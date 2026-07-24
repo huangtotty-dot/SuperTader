@@ -714,6 +714,25 @@ def _maybe_push_daily_pnl_summary(now: datetime) -> None:
             f.write(_json.dumps(_pnl_record, ensure_ascii=False) + "\n")
         log.info(f"📝 收益汇总已写入日志: {_pnl_log_path}")
 
+        # V1.30: 收盘自动更新 holdings.json 的 pre_close 为当日收盘价
+        _updated = False
+        if HOLDINGS_FILE and _os.path.exists(HOLDINGS_FILE):
+            try:
+                with open(HOLDINGS_FILE, "r", encoding="utf-8") as f:
+                    _hdata = _json.load(f)
+                for code, h in _hdata.items():
+                    dec = DAILY_DECISION_STATS.get(code) or {}
+                    _cp = float(dec.get("last_price") or 0)
+                    if _cp > 0:
+                        h["pre_close"] = _cp
+                        _updated = True
+                if _updated:
+                    with open(HOLDINGS_FILE, "w", encoding="utf-8") as f:
+                        _json.dump(_hdata, f, ensure_ascii=False, indent=2)
+                    log.info(f"📝 pre_close 已更新为当日收盘价")
+            except Exception as e:
+                log.warning(f"⚠️ pre_close 更新失败: {str(e)[:80]}")
+
     except Exception as e:
         log.warning(f"⚠️ 收益汇总推送异常（已吞掉，不影响主循环）: {str(e)[:120]}")
 
