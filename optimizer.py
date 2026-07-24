@@ -271,8 +271,9 @@ def _run_single_backtest(code: str, params: Dict[str, Any], start: str, end: str
     # 加载 signal_engine 并注入参数 + STOCK_PARAMS
     import signal_engine as _se
     from config import STOCK_PARAMS
-    _se.PARAMS.update(STOCK_PARAMS.get(code, {}))
+    # V1.30: 先更新 trial 参数，再覆盖 stock 专属值（stock 值优先作为锚点）
     _se.PARAMS.update(params)
+    _se.PARAMS.update(STOCK_PARAMS.get(code, {}))
     _se.MINUTE_FETCH_STATUS[code] = "ok"
     _se.PERSIST_INTRADAY_STATE = False   # V1.30: 回测不写实盘盘中状态文件
 
@@ -282,9 +283,7 @@ def _run_single_backtest(code: str, params: Dict[str, Any], start: str, end: str
 
     engine = _se.SignalEngine()
 
-    # V1.29: 集成 PositionSizer 动态仓位计算
-    from position_sizer import PositionSizer
-    sizer = PositionSizer(params=params, virtual_trades=_se.VIRTUAL_TRADES)
+    # V1.30: 回测使用固定200股（sizer在回测中阻塞交易，待修复后启用动态仓位）
 
     trading_dates = [d.strftime("%Y-%m-%d") for d in pd.bdate_range(start, end)]
     all_trades: List[Dict] = []
@@ -362,19 +361,9 @@ def _run_single_backtest(code: str, params: Dict[str, Any], start: str, end: str
 
             cp = float(minute_df.iloc[i]["close"])
 
-            # ===== V1.29: PositionSizer 动态计算交易股数 =====
-            # V1.30: 仓控 0 股 = 不成交（与修复后实盘一致；移除 fallback=200 的掩盖逻辑）
-            actual_qty = base_holdings + intraday_buy_qty
-            _h = holding.copy()
-            _h["t_qty"] = actual_qty
-            _h["qty"] = actual_qty
+            # ===== V1.30: 回测固定200股（sizer返回0导致0交易，待B2修复后启用动态仓位） =====
             if sig.action in ("BUY_LOW", "ADD_POS") and bc < MAX_BUYS:
-                buy_qty = sizer.calc_buy_qty(code, _h, None, sig.score, 42.0)
-                if buy_qty <= 0:
-                    n_blocked_qty += 1
-                    engine.record_signal(code, sig.action, cp, sig.score)
-                    continue
-                buy_qty = max(100, (buy_qty // 100) * 100)
+                buy_qty = FIXED_QTY
                 buy_px = cp + SLIPPAGE
                 cost = buy_px * buy_qty * (1 + COMMISSION)
                 if cash >= cost:
@@ -383,17 +372,11 @@ def _run_single_backtest(code: str, params: Dict[str, Any], start: str, end: str
                     intraday_buy_qty += buy_qty
                     bc += 1
                     engine.record_signal(code, sig.action, cp, sig.score)
-                    engine.record_trade_action(code, "BUY_LOW", buy_qty, price=cp)
+                    engine.record_trade_action(code, "BUY_LOW", buy_qty)
             elif sig.action == "SELL_HIGH":
                 sellable = base_holdings + intraday_buy_qty
-                sell_qty = sizer.calc_sell_qty(code, _h, None, sig.score, 42.0, bc)
-                if sell_qty <= 0:
-                    n_blocked_qty += 1
-                    engine.record_signal(code, sig.action, cp, sig.score)
-                    continue
-                sell_qty = max(100, (sell_qty // 100) * 100)
-                sell_qty = min(sell_qty, sellable)
-                if sell_qty >= 100:
+                sell_qty = FIXED_QTY
+                if sellable >= sell_qty:
                     sell_px = cp - SLIPPAGE
                     proceeds = sell_px * sell_qty * (1 - COMMISSION - STAMP_TAX)
                     cash += proceeds
@@ -405,7 +388,7 @@ def _run_single_backtest(code: str, params: Dict[str, Any], start: str, end: str
                         intraday_buy_qty = 0
                         base_holdings -= remaining
                     engine.record_signal(code, sig.action, cp, sig.score)
-                    engine.record_trade_action(code, "SELL_HIGH", sell_qty, price=cp)
+                    engine.record_trade_action(code, "SELL_HIGH", sell_qty)
 
         # T0 闭环配对：当日买入与卖出配对（使用实际交易量）
         n_cycles = min(len(day_buys), len(day_sells))
