@@ -1,0 +1,4 @@
+t_io/backtests/
+t_io/cache/
+t_io/replay/
+__pycache__/
