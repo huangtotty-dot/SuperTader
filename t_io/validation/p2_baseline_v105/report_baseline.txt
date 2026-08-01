@@ -1,0 +1,5 @@
+=== BACKTEST REPORT (baseline) ===
+Codes: 000988,588170,600176,600481,603667
+Period: 2026-06-22 ~ 2026-07-24
+Signals: 47  WIN=24 FAIL=22 VOID=1
+Win rate: 52.2%
