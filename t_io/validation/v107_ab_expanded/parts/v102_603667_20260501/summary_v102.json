@@ -1,0 +1,58 @@
+{
+  "total": 0,
+  "wins": 0,
+  "fails": 0,
+  "voids": 0,
+  "unsettled": 0,
+  "win_rate": 0,
+  "daily_stats": {
+    "2026-05-06": {
+      "signals": 0,
+      "wins": 0,
+      "fails": 0,
+      "voids": 0
+    },
+    "2026-05-07": {
+      "signals": 0,
+      "wins": 0,
+      "fails": 0,
+      "voids": 0
+    },
+    "2026-05-08": {
+      "signals": 0,
+      "wins": 0,
+      "fails": 0,
+      "voids": 0
+    }
+  },
+  "ab_mode": "v102",
+  "p1_metrics": {
+    "per_stock": {
+      "603667": {
+        "bull_match": 1,
+        "bear_match": 0,
+        "bull_total": 2,
+        "bear_total": 0,
+        "neutral_segments": 4,
+        "total_segments": 9,
+        "neutral_minutes_est": 78,
+        "total_minutes_est": 978,
+        "strong_bull_correct": 0,
+        "strong_bull_total": 0,
+        "strong_bear_correct": 0,
+        "strong_bear_total": 0,
+        "reversal_detected": 0,
+        "reversal_total": 0
+      }
+    },
+    "bull_consistency": 0.5,
+    "bear_consistency": null,
+    "overall_consistency": 0.5,
+    "neutral_ratio": 0.08,
+    "bias_ratio": null,
+    "sample_days_bull": 2,
+    "sample_days_bear": 0,
+    "strong_bull_accuracy": null,
+    "strong_bear_accuracy": null
+  }
+}
