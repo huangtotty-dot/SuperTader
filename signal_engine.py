@@ -145,7 +145,7 @@ class SignalEngine:
                 # 有未卖出的买入 → 建立高抛追踪
                 last_buy = max(buys, key=lambda t: str(t.get("ts", ""))) if buys else None
                 if last_buy and float(last_buy.get("price", 0) or 0) > 0:
-                    tp = PARAMS.get("take_profit_pct", 0.010)
+                    tp = _sp_param(code, "take_profit_pct", 0.010)  # V3.0fix N2
                     _bp = float(last_buy.get("price", 0) or 0)
                     self.pending_sells[code] = {
                         "buy_price": _bp if _bp > 0 else 0,
@@ -280,7 +280,7 @@ class SignalEngine:
                 # V1.29: 买入后建立高抛追踪
                 price = float(getattr(self, '_last_sig_price', 0) or 0)
                 if price > 0:
-                    tp = PARAMS.get("take_profit_pct", 0.010)
+                    tp = _sp_param(code, "take_profit_pct", 0.010)  # V3.0fix N2
                     self.pending_sells[code] = {
                         "buy_price": price, "buy_time": _now(), "qty": qty,
                         "target_price": price * (1 + tp),
@@ -463,7 +463,16 @@ class SignalEngine:
                         if not _df_5m.empty:
                             # 新边界：更新趋势状态机（一次，不会重复）
                             if code not in self.trend_regimes:
-                                self.trend_regimes[code] = TrendRegime()
+                                # V3.0fix N1: 从 config PARAMS + STOCK_PARAMS 合并趋势层参数
+                                _trend_params = {
+                                    "rsi_oversold_5m": _sp_param(code, "rsi_oversold_5m", 32),
+                                    "rsi_overbought_5m": _sp_param(code, "rsi_overbought_5m", 68),
+                                    "rsi_reversal_min_delta": _sp_param(code, "rsi_reversal_min_delta", 2.0),
+                                    "trend_bb_slope_flat": _sp_param(code, "trend_bb_slope_flat", 0.0005),
+                                    "trend_bb_width_expand": _sp_param(code, "trend_bb_width_expand", 1.05),
+                                    "trend_debounce_bars": _sp_param(code, "trend_debounce_bars", 2),
+                                } if TrendRegime else {}
+                                self.trend_regimes[code] = TrendRegime(params=_trend_params) if TrendRegime else None
                             tr = self.trend_regimes[code]
                             state, conf = tr.update(_df_5m)
                             _trend_feats = {
@@ -510,7 +519,7 @@ class SignalEngine:
         if hold_qty > 0 and t_val < _msu and feats.get("today_ret", 0) < _msr:
             risk_sell_block.append("morning_no_sell")
         # ===== V1.28: VWAP偏离买入门槛 — 无底仓时禁止在非深V位置买入 =====
-        _vbd = PARAMS.get("vwap_buy_deviation", -0.020)
+        _vbd = _sp_param(code, "vwap_buy_deviation", -0.020)  # V3.0fix N3
         _vwap = feats.get("vwap", 0)
         if price > 0 and _vwap > 0 and t_val >= 930 and hold_qty <= 0:
             _vdev = (price - _vwap) / _vwap
@@ -587,8 +596,8 @@ class SignalEngine:
             if _t_mode_str in ("short", "long"):
                 buy_score, sell_score = tr.apply_t_mode(_t_mode_str, buy_score, sell_score)
         # ===== V1.28: 止盈监控 (take_profit_pct) =====
-        _tp = PARAMS.get("take_profit_pct", 0.010)
-        _tpa = PARAMS.get("take_profit_time_after", 1000)
+        _tp = _sp_param(code, "take_profit_pct", 0.010)   # V3.0fix N2
+        _tpa = _sp_param(code, "take_profit_time_after", 1000)  # V3.0fix N2
         if hold_qty > 0 and t_val >= _tpa and feats.get("profit_pct", 0) >= _tp:
             sell_score += 30.0  # 大幅boost确保触发止盈
         # ===== V1.29: 买入→高抛闭环 — 主动寻找止盈卖点 =====
@@ -741,7 +750,17 @@ class FeatureExtractor:
         _f15_f = FeatureExtractor.extract_15min_features(df, cached_15m_df, price, vwap, atr=atr)
         for k, v in _f15_f.items():
             feats[f"f15_{k}"] = v
-        _f5_f = FeatureExtractor.extract_5min_features(df, cached_5m_df, price, vwap, atr=atr)
+        # V3.0fix N4: 从 STOCK_PARAMS 提取个股反包参数传入
+        _bullish_params = {}
+        if 'STOCK_PARAMS' in globals():
+            _sp = STOCK_PARAMS.get(code, {})
+            for _k in ["bullish_reversal_min_pct", "bullish_reversal_body_ratio",
+                        "bullish_reversal_vol_multiplier", "bullish_reversal_engulf"]:
+                if _k in _sp:
+                    _bullish_params[_k] = _sp[_k]
+        _f5_f = FeatureExtractor.extract_5min_features(df, cached_5m_df, price, vwap,
+                                                         bullish_params=_bullish_params if _bullish_params else None,
+                                                         atr=atr)
         for k, v in _f5_f.items():
             feats[f"f5_{k}"] = v
         # V1.19 oscillation features removed in V3.0 (6 dead features, replaced by 5-min MACD trend)
