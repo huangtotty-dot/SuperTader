@@ -199,7 +199,16 @@ def compute_p1_metrics(trend_timelines: dict, day_bars: dict) -> dict:
             if tm <= am_cutoff and s != "NEUTRAL":
                 am_states.append(s)
         states = am_states if am_states else [s for _, s, _ in timeline if s != "NEUTRAL"]
-        dominant = max(set(states), key=states.count) if states else "NEUTRAL"
+        # X1: 确定化众数 — 按出现顺序计数，平局保留最先出现的状态
+        # （原 max(set(...), key=count) 依赖 str hash 随机化，平局日结果跨进程不稳定）
+        if states:
+            _cnt = {}
+            for _s in states:
+                _cnt[_s] = _cnt.get(_s, 0) + 1
+            _best = max(_cnt.values())
+            dominant = next(_s for _s in states if _cnt[_s] == _best)
+        else:
+            dominant = "NEUTRAL"
 
         if dtype == "bull_day" and dominant in ("BULL", "STRONG_BULL"):
             ps["bull_match"] += 1
