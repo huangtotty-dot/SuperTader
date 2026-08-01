@@ -2558,5 +2558,45 @@
   "zb_rate": 0.1121,
   "seal_rate": 0.8879310344827587,
   "source": "ths_limit_up_pool"
+ },
+ "20260728": {
+  "date": "20260728",
+  "zt_count": 58,
+  "dt_count": 51,
+  "zb_count": 20,
+  "zt_touched": 78,
+  "zb_rate": 0.2564,
+  "seal_rate": 0.7435897435897436,
+  "source": "ths_limit_up_pool"
+ },
+ "20260729": {
+  "date": "20260729",
+  "zt_count": 77,
+  "dt_count": 10,
+  "zb_count": 15,
+  "zt_touched": 92,
+  "zb_rate": 0.163,
+  "seal_rate": 0.8369565217391305,
+  "source": "ths_limit_up_pool"
+ },
+ "20260730": {
+  "date": "20260730",
+  "zt_count": 51,
+  "dt_count": 64,
+  "zb_count": 19,
+  "zt_touched": 70,
+  "zb_rate": 0.2714,
+  "seal_rate": 0.7285714285714285,
+  "source": "ths_limit_up_pool"
+ },
+ "20260731": {
+  "date": "20260731",
+  "zt_count": 103,
+  "dt_count": 0,
+  "zb_count": 98,
+  "zt_touched": 201,
+  "zb_rate": 0.4876,
+  "seal_rate": 0.5124378109452736,
+  "source": "ths_limit_up_pool"
  }
 }
