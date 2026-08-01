@@ -494,6 +494,11 @@ def run_backtest(codes: list, date_range: list, holdings_map: dict,
                 _nth_buy = _sp.get("notify_buy_threshold") or PARAMS.get("notify_buy_threshold", 68)
                 _nth_sell_early = PARAMS.get("notify_sell_early_threshold", 75)
                 _nth_sell = _sp.get("notify_sell_threshold") or PARAMS.get("notify_sell_threshold", 65)
+                # X9: 记录阈值阶梯实验环境变量覆盖（仅验证用途，不改默认值）
+                if os.environ.get("T_NOTIFY_SELL"):
+                    _nth_sell = float(os.environ["T_NOTIFY_SELL"])
+                if os.environ.get("T_NOTIFY_SELL_EARLY"):
+                    _nth_sell_early = float(os.environ["T_NOTIFY_SELL_EARLY"])
                 if sig.action in ("BUY_LOW", "ADD_POS"):
                     _nth = _nth_buy
                 elif hhmm < 1000:
