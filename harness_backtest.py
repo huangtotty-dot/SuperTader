@@ -231,6 +231,63 @@ def compute_p1_metrics(trend_timelines: dict, day_bars: dict) -> dict:
     }
 
 
+def compute_closed_loop(signals: list, holdings_map: dict) -> dict:
+    """R4: T闭环配对 — FIFO配对 + 费用 + 净收益"""
+    from collections import deque
+    commission = 0.00015
+    stamp_tax = 0.0005  # 卖出侧印花税
+    per_stock = {}
+    for sig in signals:
+        code = sig["code"]
+        if code not in per_stock:
+            per_stock[code] = {"long_positions": deque(), "short_positions": deque(),
+                               "closed_pairs": [], "net_pnl": 0.0, "open_long": 0, "open_short": 0}
+
+    for sig in sorted(signals, key=lambda s: s["ts"]):
+        code = sig["code"]
+        ps = per_stock[code]
+        action = sig["action"]
+        price = sig["price"]
+        qty = sig.get("qty", 100)
+        is_etf = holdings_map.get(code, {}).get("type") == "etf"
+
+        if action in ("BUY_LOW", "ADD_POS"):
+            # 先检查是否有反T（short）卖单等接回
+            if ps["short_positions"]:
+                sell_entry = ps["short_positions"].popleft()
+                pnl = (sell_entry["price"] - price) * qty
+                fee = price * qty * (commission + stamp_tax) + sell_entry["price"] * qty * commission
+                ps["net_pnl"] += pnl - fee
+                ps["closed_pairs"].append({"type": "short_close", "sell_ts": sell_entry["ts"],
+                    "buy_ts": sig["ts"], "sell_price": sell_entry["price"],
+                    "buy_price": price, "pnl": round(pnl - fee, 2)})
+            else:
+                ps["long_positions"].append({"ts": sig["ts"], "price": price, "qty": qty})
+                ps["open_long"] += qty
+        elif action == "SELL_HIGH":
+            if ps["long_positions"]:
+                buy_entry = ps["long_positions"].popleft()
+                pnl = (price - buy_entry["price"]) * qty
+                fee = buy_entry["price"] * qty * commission + price * qty * (commission + stamp_tax)
+                ps["net_pnl"] += pnl - fee
+                ps["closed_pairs"].append({"type": "long_close", "buy_ts": buy_entry["ts"],
+                    "sell_ts": sig["ts"], "buy_price": buy_entry["price"],
+                    "sell_price": price, "pnl": round(pnl - fee, 2)})
+            else:
+                ps["short_positions"].append({"ts": sig["ts"], "price": price, "qty": qty})
+                ps["open_short"] += qty
+
+    total_pnl = sum(ps["net_pnl"] for ps in per_stock.values())
+    total_closed = sum(len(ps["closed_pairs"]) for ps in per_stock.values())
+    return {"per_stock": {c: {"net_pnl": round(p["net_pnl"], 2),
+                               "closed": len(p["closed_pairs"]),
+                               "open_long": p["open_long"],
+                               "open_short": p["open_short"]}
+                          for c, p in per_stock.items()},
+            "total_net_pnl": round(total_pnl, 2),
+            "total_closed_pairs": total_closed}
+
+
 def settle_signal(sig_action: str, sig_price: float, future_bars: pd.DataFrame,
                   win_pct: float = 0.005) -> tuple:
     """§1.1 信号结算算法（回测器与实盘日志共用同一实现）。
@@ -410,11 +467,28 @@ def run_backtest(codes: list, date_range: list, holdings_map: dict,
                     engine._last_signal_seg = {}
                 engine._last_signal_seg[_seg_key] = bt
 
-                # 触发冷却（与实盘同语义）
+                # R2: 回测簿记对齐 — record_signal冷却 + record_trade_action闭环
                 try:
                     engine.record_signal(code, sig.action, price, float(sig.score))
                 except Exception:
                     pass
+                # 动态份数 + 记录交易动作（触发 pending_sells/awaiting_buyback）
+                _merged_params = {**PARAMS, **STOCK_PARAMS.get(code, {})}
+                _calc_qty = shared.get('calc_buy_qty') if sig.action in ("BUY_LOW", "ADD_POS") else shared.get('calc_sell_qty')
+                _qty = 0
+                if _calc_qty:
+                    try:
+                        _qty = _calc_qty(code, holding, None, float(sig.score), 42.0,
+                                         params=_merged_params, virtual_trades=VIRTUAL_TRADES,
+                                         index_ctx=daily_ctx, current_price=price)
+                        _qty = int(_qty or 0)
+                    except Exception:
+                        _qty = 0
+                if _qty > 0:
+                    try:
+                        engine.record_trade_action(code, sig.action, _qty, price=price)
+                    except Exception:
+                        pass
 
                 signal_rec = {
                     "ts": bt.strftime("%Y-%m-%d %H:%M:%S"),
@@ -473,11 +547,14 @@ def run_backtest(codes: list, date_range: list, holdings_map: dict,
 
     # P1: 日型分类 + 趋势方向一致率
     p1_metrics = compute_p1_metrics(trend_timelines, day_bars_cache)
+    # R4: T闭环配对
+    closed_loop = compute_closed_loop(all_signals, holdings_map)
 
     return {
         "signals": all_signals,
         "trend_timelines": trend_timelines,
         "p1_metrics": p1_metrics,
+        "closed_loop": closed_loop,
         "summary": {
             "total": len(all_signals), "wins": wins, "fails": fails, "voids": voids,
             "unsettled": unsettled,
@@ -555,6 +632,15 @@ def main():
         sbea = p1.get("strong_bear_accuracy")
         print(f"STRONG_BEAR accuracy: {sbea:.1%}" if sbea is not None else "STRONG_BEAR acc: N/A")
         print(f"Sample: {p1.get('sample_days_bull', 0)} bull + {p1.get('sample_days_bear', 0)} bear")
+
+    # R4: T闭环
+    cl = result.get("closed_loop", {})
+    if cl:
+        print(f"\n=== T CLOSED LOOP ({args.ab}) ===")
+        print(f"Total net PnL: {cl.get('total_net_pnl', 0):.2f}")
+        print(f"Closed pairs: {cl.get('total_closed_pairs', 0)}")
+        for c, p in sorted((cl.get("per_stock") or {}).items()):
+            print(f"  {c}: PnL={p['net_pnl']:.2f} closed={p['closed']} open_long={p['open_long']} open_short={p['open_short']}")
 
     # 写入信号
     signals_path = out_dir / f"signals_{args.ab}.jsonl"
