@@ -226,7 +226,7 @@ DEFAULT_SENTIMENT_PARAMS: Dict[str, Any] = {
         "uni_down|overheat": ["short", 0.5, "单边下行×过热→反T轻仓"],
         "uni_down|hot": ["short", 1.0, "单边下行×偏热→反T标准仓"],
         "uni_down|cold": ["short", 0.5, "单边下行×偏冷→反T轻仓"],
-        "uni_down|ice": ["long", 0.3, "单边下行×冰点→小仓正T，严禁追买"],
+        "uni_down|ice": ["short", 1.0, "单边下行×冰点→反T标准仓，先卖后买 (v1.0.3 P0-B拍板)"],
     },
     # —— V1.28: 量化分数动态调仓 ——
     "z_score_pos_factor_boost": True,
