@@ -329,7 +329,7 @@ class SignalEngine:
         base_qty = int(holding.get("t_qty") or holding.get("qty") or 0)
         return max(0, base_qty + sum(t["qty"] for t in buys) - sum(t["qty"] for t in sells))
 
-    def _check_morning_alert(self, code, df, feats):
+    def _check_morning_alert(self, code, name, df, feats):
         """V1.28: 早盘单边下行预警检测 (10:00触发, 每天一次)
         Level 2 → 全天禁止买入
         Level 1 → 提高买入门槛, 仅允许深V
@@ -395,6 +395,11 @@ class SignalEngine:
                     "checked": True, "level": 2,
                     "rules": [rule.get("name", "L2")]
                 })
+                # V3.0fix P0-A5: 推送红色预警卡片
+                if 'send_morning_alert' in globals():
+                    try: send_morning_alert(code, name, 2, [rule.get("name", "L2")],
+                        {"open_30min_ret": open_30min_ret, "max_gain": max_gain_after_open})
+                    except Exception: pass
                 return
         # 检查Level 1 (提高买入门槛)
         for rule in cfg.get("level_1_rules", []):
@@ -414,8 +419,18 @@ class SignalEngine:
                     "checked": True, "level": 1,
                     "rules": [rule.get("name", "L1")]
                 })
+                # V3.0fix P0-A5: 推送黄色预警卡片
+                if 'send_morning_alert' in globals():
+                    try: send_morning_alert(code, name, 1, [rule.get("name", "L1")],
+                        {"open_30min_ret": open_30min_ret, "max_gain": max_gain_after_open})
+                    except Exception: pass
                 return
+        _was_alerted = self.morning_alert_state.get(code, {}).get("level", 0) > 0
         self.morning_alert_state[code].update({"checked": True, "level": 0})
+        # V3.0fix P0-A5: 预警清除推送
+        if _was_alerted and 'notify_alert_cleared' in globals():
+            try: notify_alert_cleared(code, name, "预警解除", {"reason": "条件不再满足"})
+            except Exception: pass
 
     def evaluate(self, code, name, df, holding, daily_ctx=None):
         if df.empty or len(df) < 5:
@@ -526,7 +541,7 @@ class SignalEngine:
             if _vdev > _vbd:
                 risk_buy_block.append("vwap_not_dip_enough")
         # ===== V1.28: 早盘单边下行预警 =====
-        self._check_morning_alert(code, df, feats)
+        self._check_morning_alert(code, name, df, feats)
         _malert = self.morning_alert_state.get(code, {})
         if _malert.get("level") == 2:
             risk_buy_block.append("morning_alert_L2")
