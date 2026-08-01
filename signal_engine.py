@@ -1,173 +1,33 @@
 # V1.11: 日志增强模块导入
 import sys as _sys
 import os as _os_mod
-_06t_dir = _os_mod.path.dirname(_os_mod.path.dirname(_os_mod.path.abspath(__file__)))
+# V3.0fix: __file__ = E:\06_T\signal_engine.py → dirname = E:\06_T
+_06t_dir = _os_mod.path.dirname(_os_mod.path.abspath(__file__))
 if _06t_dir not in _sys.path:
     _sys.path.insert(0, _06t_dir)
-try:
-    import log_enhancer as _log_enhancer
-except Exception:
-    _log_enhancer = None
 
 import numpy as np
 import pandas as pd
 from typing import Dict, Any, List, Optional
 from datetime import datetime, timedelta
 
+# === V3.0: 显式导入，替代 exec() 共享命名空间 ===
+try:
+    from config import PARAMS, STOCK_PARAMS, PUSH_THROTTLE_SECONDS
+except ImportError:
+    PARAMS = {}; STOCK_PARAMS = {}; PUSH_THROTTLE_SECONDS = 300
+
+try:
+    from trend_regime import TrendRegime, TrendState
+except ImportError:
+    TrendRegime = None; TrendState = None
+
 # ======== 独立模式回退依赖 ========
 if 'get_today_str' not in globals():
     def get_today_str(): return datetime.now().strftime("%Y-%m-%d")
 if '_now' not in globals():
     def _now(): return datetime.now()
-if 'PARAMS' not in globals():
-    PARAMS = {"rsi_period":14,
-              "bb_period":20,
-              "bb_std":2,
-              "ema_fast_period":3,
-              "ema_slow_period":6,
-              "min_amplitude":0.002,
-              "trend_today_ret_threshold":0.03,
-              "rsi_overbought":78,
-              "rsi_oversold":35,
-              "macd_strong_threshold":0.2,
-              "macd_strong_boost":25,
-              "vol_ratio_confirm":1.5,
-              "vol_confirm_boost":15,
-              "rsi_15m_oversold":35,
-              "min_15min_bars":3,
-              "range_pos_low_threshold":0.3,
-              "range_pos_high_threshold":0.85,
-              "buy_confirm_min_score":25,
-              "min_profit_space":0.008,
-              "cooldown_minutes":5,
-              "repeat_signal_gap_minutes":5,
-              "repeat_signal_price_move":0.003,
-              "repeat_signal_score_boost":10,
-              "sell_repeat_block_minutes":10,
-              "post_sell_rebuild_minutes":10,
-              "post_sell_rebuild_price_gap":0.005,
-              "post_sell_rebuild_score_gap":8,
-              "post_sell_rebuild_min_seconds":120,
-              "post_sell_rebuild_buy_threshold_penalty":15,
-              "post_sell_rebuild_weak_gate_discount":3,
-              "post_sell_rebuild_relax_gap":4,
-              "post_sell_rebuild_relax_factors":1,
-              "stand_down_score_gap":8,
-              "stand_down_flat_range_gap":0.005,
-              "market_state_threshold_bias":3,
-              "etf_stand_down_gap":0.003,
-              "daily_support_buy_boost":5,
-              "daily_trend_buy_boost":3,
-              "daily_breakdown_buy_penalty":15,
-              "daily_breakdown_sell_boost":8,
-              "daily_downtrend_buy_penalty":10,
-              "daily_overheat_buy_penalty":5,
-              "daily_overheat_sell_boost":8,
-              "daily_overheat_buy_threshold_penalty":5,
-              "daily_support_buy_threshold_relief":3,
-              "daily_risk_buy_threshold_penalty":10,
-              "buy_confirm_min_factors":3,
-              "buy_confirm_min_seconds":30,
-              "buy_rebound_min_score_gap":5,
-              "sell_confirm_min_factors":3,
-              "sell_confirm_min_seconds":30,
-              "buy_starvation_days":5,
-              "buy_starvation_relax_factors":1,
-              "buy_starvation_relax_gap":3,
-              "buy_starvation_relax_seconds":10,
-              "max_buy_times_per_stock":5,
-              "max_sell_times_per_stock":5,
-              "max_t_cycles_per_stock":8,
-              "stock_min_trade_unit":100,
-              "etf_min_trade_unit":100,
-              "etf_threshold_cap":38,
-              "sell_holding_min_minutes":10,
-              "sell_holding_strict_minutes":30,
-              "sell_score_boost_holding":5,
-              "sell_score_boost_eod":8,
-              "sell_momentum_bonus":6,
-              "buy_priority_margin":8,
-              "etf_qty_strong_pct":0.25,
-              "etf_qty_base_pct":0.15,
-              "etf_qty_weak_pct":0.08,
-              "stock_qty_strong_pct":0.4,
-              "stock_qty_base_pct":0.3,
-              "stock_qty_weak_pct":0.2,
-              "stock_first_add_strong_pct":0.3,
-              "stock_first_add_pct":0.2,
-              "stock_first_add_weak_pct":0.1,
-              "stock_rebuild_strong_pct":0.8,
-              "stock_rebuild_base_pct":0.5,
-              "stock_rebuild_weak_pct":0.3,
-              "buy_soft_margin":8,
-              "sell_fast_path_min_gap":18,
-              "morning_no_sell_until":1000,
-              "morning_no_sell_min_ret":0.03,
-              "vwap_buy_deviation":-0.020,
-              "take_profit_pct":0.010,
-              "take_profit_time_after":1000,
-              "notify_buy_threshold":68,
-              "notify_sell_threshold":65,
-              "notify_sell_early_threshold":75,
-              "notify_sell_panic_threshold":60,
-              "hard_sell_threshold_cap":80,
-              "hard_buy_threshold_cap":80,
-              "awaiting_buyback_ttl_minutes":120,
-              "awaiting_buyback_price_gap":0.003,
-              "awaiting_buyback_score_boost":10,
-              "awaiting_buyback_score_boost_weak":5,
-              "awaiting_buyback_threshold_relax":5,
-              "awaiting_buyback_threshold_relax_weak":3,
-              "awaiting_buyback_vwap_gap":0.975,
-              "awaiting_buyback_rsi_strong":45,
-              "awaiting_buyback_rsi_weak":50,
-              "peak_decline_pct_threshold":0.01,
-              "peak_decline_min_minutes":3,
-              "peak_decline_penalty":5,
-              "double_top_pullback_threshold":0.015,
-              "double_top_min_gap_minutes":30,
-              "double_top_price_proximity":0.995,
-              "double_top_rsi_threshold":75,
-              "double_top_vol_shrink_threshold":0.75,
-              "profit_guard_sell_boost":15,
-              "profit_guard_buy_penalty":10,
-              "profit_guard_tight_profit_max":0.03,
-              "profit_guard_tight_gap_max":0.015,
-              "min_sell_profit_space":0.005,
-              "open_dip_buy_penalty":25,
-              "open_dip_max_mins":15,
-              "daily_trade_limit":10,
-              "breakdown_gap_threshold":0.005,
-              "breakdown_buy_block":True,
-              "big_drop_bounce_threshold":-0.05,
-              "big_drop_bounce_sell_boost":10,
-              "big_drop_bounce_buy_penalty":5,
-              "bb_band_breakout_penalty":0,
-              "ma5_deviation_sell_boost":0,
-              "surge_shadow_divergence_boost":0,
-              "high_buy_score_bypass":False,
-              "high_buy_score_threshold":80,
-              "high_buy_score_vwap_gap":0.02,
-              "etf_buy_score_boost":5,
-              "etf_sell_score_boost":3,
-              "downtrend_sell_boost":15,
-              "downtrend_sell_threshold":-10,
-              "commission_rate":0.00015,
-              "optimal_sell_boost":8,
-              "optimal_sell_range_pos":0.95,
-              "optimal_sell_rsi":85,
-              "optimal_sell_bb_pct":0.9,
-              "optimal_sell_today_ret":0.02,
-              "bullish_reversal_min_pct":0.01,
-              "bullish_reversal_body_ratio":0.6,
-              "bullish_reversal_vol_multiplier":1.0,
-              "bullish_reversal_engulf":0.995,
-              "buy_signal_price_move":0.005,
-              "buy_signal_score_boost":20,
-              "sell_signal_price_move":0.005,
-              "sell_signal_score_boost":20,
-              "add_pos_signal_price_move":0.005,
-              "add_pos_signal_score_boost":20}
+# PARAMS now exclusively from config.py (stub removed — dual-copy drift fixed in V3.0)
 if 'MINUTE_FETCH_DETAIL' not in globals(): MINUTE_FETCH_DETAIL = {}
 if 'MINUTE_FETCH_STATUS' not in globals(): MINUTE_FETCH_STATUS = {}
 if 'DAILY_CONTEXT_CACHE' not in globals(): DAILY_CONTEXT_CACHE = {}
@@ -175,7 +35,6 @@ if 'HOLDINGS' not in globals(): HOLDINGS = {}
 if 'VIRTUAL_TRADES' not in globals(): VIRTUAL_TRADES = {}
 if 'SIGNAL_OUTCOME_TRACKER' not in globals(): SIGNAL_OUTCOME_TRACKER = {}
 if 'T_MODE' not in globals(): T_MODE = {}
-if 'SHORT_MODE_PARAMS' not in globals(): SHORT_MODE_PARAMS = {}
 if 'DAILY_DECISION_STATS' not in globals(): DAILY_DECISION_STATS = {}
 if 'MultiTimeframeFetcher' not in globals(): MultiTimeframeFetcher = None
 if '_resolve_benchmark_snapshot' not in globals():
@@ -203,13 +62,9 @@ if 'send_morning_alert' not in globals():
 if 'notify_alert_cleared' not in globals():
     def notify_alert_cleared(*a,**kw): return None
 if 'resample_to_15min' not in globals():
-    def resample_to_15min(df): return pd.DataFrame()
-if 'add_15min_indicators' not in globals():
-    def add_15min_indicators(df): return pd.DataFrame()
+    from indicators import resample_to_15min, add_15min_indicators
 if 'resample_to_5min' not in globals():
-    def resample_to_5min(df): return pd.DataFrame()
-if 'add_5min_indicators' not in globals():
-    def add_5min_indicators(df): return pd.DataFrame()
+    from indicators import resample_to_5min, add_5min_indicators
 if 'fetch_minute_bar' not in globals():
     def fetch_minute_bar(*a, **kw): return pd.DataFrame()
 if 'add_indicators' not in globals():
@@ -243,14 +98,14 @@ class SignalEngine:
         self.post_sell_block_until: Dict[str, datetime] = {}
         self.awaiting_buyback: Dict[str, Dict[str, Any]] = {}
         self.pending_sells: Dict[str, Dict[str, Any]] = {}  # V1.29: 买入→高抛追踪
-        # V1.21: 日内高点确认延迟状态（避免抖动误判）
-        self.peak_tracker: Dict[str, Dict[str, Any]] = {}
         self.daily_realized_loss_monitor = 0.0
-        self.diagnostics: Dict[str, Dict[str, Any]] = {}
-        # V1.20: 场景因子观察-确认-锁定状态机（解决逐分钟重复触发问题）
-        self.scenario_factor_state: Dict[str, Dict[str, Dict[str, Any]]] = {}
+        # V1.20/V1.21 dead states removed in V3.0 (peak_tracker, diagnostics, scenario_factor_state)
         # V1.25: 早盘预警状态机（基于近两年数据训练）
         self.morning_alert_state: Dict[str, Dict[str, Any]] = {}
+        # V3.0: 5分钟趋势状态机（每个持仓独立实例，重启从盘中状态恢复）
+        self.trend_regimes: Dict[str, "TrendRegime"] = {} if TrendRegime else {}
+        # V3.0: 5分钟 DataFrame 缓存（仅在5分钟边界重算，避免15s轮询×N只持仓的浪费）
+        self._5min_cache: Dict[str, tuple] = {}  # code → (last_boundary_ts, df_5min)
         # V1.30: 决策原因码缓存（供面板/日报展示熔断等原因）
         self.last_decision: Dict[str, Dict[str, Any]] = {}
         # 可传入自定义权重参数，默认 FACTOR_WEIGHTS（支持 HPO 多进程调参）
@@ -290,7 +145,7 @@ class SignalEngine:
                 # 有未卖出的买入 → 建立高抛追踪
                 last_buy = max(buys, key=lambda t: str(t.get("ts", ""))) if buys else None
                 if last_buy and float(last_buy.get("price", 0) or 0) > 0:
-                    tp = PARAMS.get("take_profit_pct", 0.010)
+                    tp = _sp_param(code, "take_profit_pct", 0.010)  # V3.0fix N2
                     _bp = float(last_buy.get("price", 0) or 0)
                     self.pending_sells[code] = {
                         "buy_price": _bp if _bp > 0 else 0,
@@ -314,9 +169,9 @@ class SignalEngine:
             self.awaiting_buyback = {}
             self.pending_sells = {}
             self.daily_realized_loss_monitor = 0.0
-            self.diagnostics = {}
-            self.peak_tracker = {}
             self.morning_alert_state = {}
+            self._5min_cache = {}       # V3.0: 5分钟缓存每日重置
+            self.trend_regimes = {}     # V3.0: 趋势状态机每日重置（开盘从头累积）
             self.state_reset_date = today
 
     def _in_cooldown(self, code: str, action: str) -> bool:
@@ -344,6 +199,8 @@ class SignalEngine:
                 "sell_count": dict(self.sell_count_per_stock),
                 "buy_cooldown": {k: v.isoformat() for k, v in self.buy_cooldown.items() if v},
                 "sell_cooldown": {k: v.isoformat() for k, v in self.sell_cooldown.items() if v},
+                # V3.0: 5分钟趋势状态持久化
+                "trend_regimes": {k: v.to_dict() for k, v in self.trend_regimes.items()} if TrendRegime else {},
             }
             with open(self._intraday_state_path(), "w", encoding="utf-8") as f:
                 _j.dump(data, f, ensure_ascii=False, indent=2)
@@ -371,6 +228,13 @@ class SignalEngine:
             for k, v in (data.get("sell_cooldown") or {}).items():
                 try: self.sell_cooldown[k] = datetime.fromisoformat(v)
                 except Exception: pass
+            # V3.0: 恢复5分钟趋势状态
+            if TrendRegime and data.get("trend_regimes"):
+                for code, tr_data in data["trend_regimes"].items():
+                    try:
+                        self.trend_regimes[code] = TrendRegime.from_dict(tr_data)
+                    except Exception:
+                        pass
         except Exception:
             pass
 
@@ -416,7 +280,7 @@ class SignalEngine:
                 # V1.29: 买入后建立高抛追踪
                 price = float(getattr(self, '_last_sig_price', 0) or 0)
                 if price > 0:
-                    tp = PARAMS.get("take_profit_pct", 0.010)
+                    tp = _sp_param(code, "take_profit_pct", 0.010)  # V3.0fix N2
                     self.pending_sells[code] = {
                         "buy_price": price, "buy_time": _now(), "qty": qty,
                         "target_price": price * (1 + tp),
@@ -465,7 +329,7 @@ class SignalEngine:
         base_qty = int(holding.get("t_qty") or holding.get("qty") or 0)
         return max(0, base_qty + sum(t["qty"] for t in buys) - sum(t["qty"] for t in sells))
 
-    def _check_morning_alert(self, code, df, feats):
+    def _check_morning_alert(self, code, name, df, feats):
         """V1.28: 早盘单边下行预警检测 (10:00触发, 每天一次)
         Level 2 → 全天禁止买入
         Level 1 → 提高买入门槛, 仅允许深V
@@ -531,6 +395,11 @@ class SignalEngine:
                     "checked": True, "level": 2,
                     "rules": [rule.get("name", "L2")]
                 })
+                # V3.0fix P0-A5: 推送红色预警卡片
+                if 'send_morning_alert' in globals():
+                    try: send_morning_alert(code, name, 2, [rule.get("name", "L2")],
+                        {"open_30min_ret": open_30min_ret, "max_gain": max_gain_after_open})
+                    except Exception: pass
                 return
         # 检查Level 1 (提高买入门槛)
         for rule in cfg.get("level_1_rules", []):
@@ -550,8 +419,18 @@ class SignalEngine:
                     "checked": True, "level": 1,
                     "rules": [rule.get("name", "L1")]
                 })
+                # V3.0fix P0-A5: 推送黄色预警卡片
+                if 'send_morning_alert' in globals():
+                    try: send_morning_alert(code, name, 1, [rule.get("name", "L1")],
+                        {"open_30min_ret": open_30min_ret, "max_gain": max_gain_after_open})
+                    except Exception: pass
                 return
+        _was_alerted = self.morning_alert_state.get(code, {}).get("level", 0) > 0
         self.morning_alert_state[code].update({"checked": True, "level": 0})
+        # V3.0fix P0-A5: 预警清除推送
+        if _was_alerted and 'notify_alert_cleared' in globals():
+            try: notify_alert_cleared(code, name, "预警解除", {"reason": "条件不再满足"})
+            except Exception: pass
 
     def evaluate(self, code, name, df, holding, daily_ctx=None):
         if df.empty or len(df) < 5:
@@ -575,6 +454,70 @@ class SignalEngine:
             pass
         feats = FeatureExtractor.extract_all(code, name, df, holding, daily_ctx,
                                                cached_minute, cached_5m, cached_15m)
+        # ===== V3.0: 5分钟趋势状态机更新（在评分前注入趋势层信息）=====
+        if TrendRegime is not None and len(df) >= 5:
+            try:
+                _df_5m = None
+                _trend_feats = None  # 缓存：同一边界内复用趋势层输出
+                # 回测模式：使用预计算的 cached_5m
+                if isinstance(cached_5m, pd.DataFrame) and not cached_5m.empty:
+                    _last_t = pd.to_datetime(df.iloc[-1]["time"])
+                    _cutoff = _last_t.floor("5min")
+                    _df_5m = cached_5m[cached_5m["time"] <= _cutoff].copy()
+                else:
+                    # 实盘模式：仅在5分钟边界重算 + 趋势状态机仅边界更新
+                    _now_ts = pd.to_datetime(df.iloc[-1]["time"])
+                    _boundary = _now_ts.floor("5min")
+                    _cache_entry = self._5min_cache.get(code)
+                    if _cache_entry and _cache_entry[0] == _boundary:
+                        _df_5m = _cache_entry[1]  # 缓存命中
+                        _trend_feats = _cache_entry[2] if len(_cache_entry) > 2 else None
+                    else:
+                        _df_5m = resample_to_5min(df) if 'resample_to_5min' in globals() else pd.DataFrame()
+                        _df_5m = add_5min_indicators(_df_5m) if 'add_5min_indicators' in globals() else _df_5m
+                        if not _df_5m.empty:
+                            # 新边界：更新趋势状态机（一次，不会重复）
+                            if code not in self.trend_regimes:
+                                # V3.0fix N1: 从 config PARAMS + STOCK_PARAMS 合并趋势层参数
+                                _trend_params = {
+                                    "rsi_oversold_5m": _sp_param(code, "rsi_oversold_5m", 32),
+                                    "rsi_overbought_5m": _sp_param(code, "rsi_overbought_5m", 68),
+                                    "rsi_reversal_min_delta": _sp_param(code, "rsi_reversal_min_delta", 2.0),
+                                    "trend_bb_slope_flat": _sp_param(code, "trend_bb_slope_flat", 0.0005),
+                                    "trend_bb_width_expand": _sp_param(code, "trend_bb_width_expand", 1.05),
+                                    "trend_debounce_bars": _sp_param(code, "trend_debounce_bars", 2),
+                                } if TrendRegime else {}
+                                self.trend_regimes[code] = TrendRegime(params=_trend_params) if TrendRegime else None
+                            tr = self.trend_regimes[code]
+                            state, conf = tr.update(_df_5m)
+                            _trend_feats = {
+                                "trend_state": state.value,
+                                "trend_confidence": conf,
+                                "rsi5_buy_trigger": tr.rsi_buy_trigger,
+                                "rsi5_sell_trigger": tr.rsi_sell_trigger,
+                                "rsi_5m": tr._last_rsi,
+                                "dif_5m": tr._last_dif,
+                                "dea_5m": tr._last_dea,
+                            }
+                            self._5min_cache[code] = (_boundary, _df_5m, _trend_feats)
+                # 应用趋势层输出到 feats
+                if _trend_feats is None and code in self.trend_regimes:
+                    # 缓存命中但有 trend_regime 实例：回退读最后已知状态
+                    tr = self.trend_regimes[code]
+                    _trend_feats = {
+                        "trend_state": tr.state.value,
+                        "trend_confidence": tr.confidence,
+                        "rsi5_buy_trigger": tr.rsi_buy_trigger,
+                        "rsi5_sell_trigger": tr.rsi_sell_trigger,
+                        "rsi_5m": tr._last_rsi,
+                        "dif_5m": tr._last_dif,
+                        "dea_5m": tr._last_dea,
+                    }
+                if _trend_feats:
+                    for k, v in _trend_feats.items():
+                        feats[k] = v
+            except Exception:
+                pass  # 趋势层失败不阻断主流程
         buy_score, buy_details = ScoringEngine.calc_buy_score(feats, self.factor_weights)
         sell_score, sell_details = ScoringEngine.calc_sell_score(feats, self.factor_weights)
         # 静态基准阈值 — 分数已通过ATR+Sigmoid自适应，阈值不再跳变
@@ -591,14 +534,14 @@ class SignalEngine:
         if hold_qty > 0 and t_val < _msu and feats.get("today_ret", 0) < _msr:
             risk_sell_block.append("morning_no_sell")
         # ===== V1.28: VWAP偏离买入门槛 — 无底仓时禁止在非深V位置买入 =====
-        _vbd = PARAMS.get("vwap_buy_deviation", -0.020)
+        _vbd = _sp_param(code, "vwap_buy_deviation", -0.020)  # V3.0fix N3
         _vwap = feats.get("vwap", 0)
         if price > 0 and _vwap > 0 and t_val >= 930 and hold_qty <= 0:
             _vdev = (price - _vwap) / _vwap
             if _vdev > _vbd:
                 risk_buy_block.append("vwap_not_dip_enough")
         # ===== V1.28: 早盘单边下行预警 =====
-        self._check_morning_alert(code, df, feats)
+        self._check_morning_alert(code, name, df, feats)
         _malert = self.morning_alert_state.get(code, {})
         if _malert.get("level") == 2:
             risk_buy_block.append("morning_alert_L2")
@@ -645,9 +588,31 @@ class SignalEngine:
                         and not self._in_cooldown(code, "BUY_LOW"))
         base_can_sell = (len(risk_sell_block) == 0 and hold_qty > 0
                          and not self._in_cooldown(code, "SELL_HIGH"))
+        # ===== V3.0: 5分钟趋势方向门控 + T_MODE 适配 =====
+        _trend_state = feats.get("trend_state", "NEUTRAL")
+        # V3.0fix: 读取真正的 t_mode（daily_ctx["t_mode"] > 全局 T_MODE > "long"）
+        _t_mode_from_ctx = daily_ctx.get("t_mode", "") if isinstance(daily_ctx, dict) else ""
+        _t_mode = feats.get("t_mode", _t_mode_from_ctx or T_MODE.get(code, "long") if 'T_MODE' in globals() else "long")
+        if TrendRegime is not None and code in self.trend_regimes:
+            tr = self.trend_regimes[code]
+            # 方向门控：抑制逆势信号
+            _buy_mult = tr.buy_gate_multiplier()
+            _sell_mult = tr.sell_gate_multiplier()
+            if _buy_mult < 1.0:
+                buy_score *= _buy_mult
+                buy_details.append({"指标": f"趋势门控({_trend_state})", "当前": f"买入×{_buy_mult}", "加分": 0})
+                buy_threshold += tr.buy_threshold_penalty()
+            if _sell_mult < 1.0:
+                sell_score *= _sell_mult
+                sell_details.append({"指标": f"趋势门控({_trend_state})", "当前": f"卖出×{_sell_mult}", "加分": 0})
+                sell_threshold += tr.sell_threshold_penalty()
+            # T_MODE 方向适配
+            _t_mode_str = str(_t_mode or "long")
+            if _t_mode_str in ("short", "long"):
+                buy_score, sell_score = tr.apply_t_mode(_t_mode_str, buy_score, sell_score)
         # ===== V1.28: 止盈监控 (take_profit_pct) =====
-        _tp = PARAMS.get("take_profit_pct", 0.010)
-        _tpa = PARAMS.get("take_profit_time_after", 1000)
+        _tp = _sp_param(code, "take_profit_pct", 0.010)   # V3.0fix N2
+        _tpa = _sp_param(code, "take_profit_time_after", 1000)  # V3.0fix N2
         if hold_qty > 0 and t_val >= _tpa and feats.get("profit_pct", 0) >= _tp:
             sell_score += 30.0  # 大幅boost确保触发止盈
         # ===== V1.29: 买入→高抛闭环 — 主动寻找止盈卖点 =====
@@ -800,12 +765,20 @@ class FeatureExtractor:
         _f15_f = FeatureExtractor.extract_15min_features(df, cached_15m_df, price, vwap, atr=atr)
         for k, v in _f15_f.items():
             feats[f"f15_{k}"] = v
-        _f5_f = FeatureExtractor.extract_5min_features(df, cached_5m_df, price, vwap, atr=atr)
+        # V3.0fix N4: 从 STOCK_PARAMS 提取个股反包参数传入
+        _bullish_params = {}
+        if 'STOCK_PARAMS' in globals():
+            _sp = STOCK_PARAMS.get(code, {})
+            for _k in ["bullish_reversal_min_pct", "bullish_reversal_body_ratio",
+                        "bullish_reversal_vol_multiplier", "bullish_reversal_engulf"]:
+                if _k in _sp:
+                    _bullish_params[_k] = _sp[_k]
+        _f5_f = FeatureExtractor.extract_5min_features(df, cached_5m_df, price, vwap,
+                                                         bullish_params=_bullish_params if _bullish_params else None,
+                                                         atr=atr)
         for k, v in _f5_f.items():
             feats[f"f5_{k}"] = v
-        _v19 = FeatureExtractor.extract_v19_oscillation(df, price, vwap, feats["open_gap"], feats["today_ret"])
-        for k, v in _v19.items():
-            feats[k] = v
+        # V1.19 oscillation features removed in V3.0 (6 dead features, replaced by 5-min MACD trend)
         # ---- 强多头趋势检测（防卖飞） ----
         feats["is_strong_uptrend"] = False
         if not feats.get("is_etf") and len(df) >= 20 and price > 0:
@@ -887,16 +860,24 @@ class FeatureExtractor:
     def extract_5min_features(df, _cached_5m=None, price: float = 0, vwap: float = 0,
                               bullish_params: dict = None, _df_5min=None,
                               atr: float = 0.02) -> dict:
-        """5分钟线特征（含缩量止跌+大阳线反包检测）。传入 _df_5min 可避免重复构建。"""
+        """5分钟线特征（含缩量止跌+大阳线反包检测 + V3.0 MACD/BOLL/RSI）。
+        传入 _df_5min 可避免重复构建。"""
         _pd = pd
         _np = np
         p = bullish_params or {}
         atr_r = max(atr, 0.002)
         feats = {
+            # 旧字段（兼容 V1.17/V1.22 — 读取 fast MACD(6,13,5) 保持历史行为）
             "vol_ratio_5m": 1.0, "mom2_5m": 0.0, "macd_hist_5m": 0.0,
             "prev_macd_hist_5m": 0.0, "is_low_rising_5m": False, "is_stop_falling_5m": False,
             "is_volume_reversal": False, "is_strong_bullish_reversal": False,
             "vr_bearish_count": 0, "vr_high_declining": False,
+            # V3.0 新字段：标准 MACD(12,26,9) + BOLL(20,2) + RSI(14)
+            "dif_5m": 0.0, "dea_5m": 0.0,          # MACD 趋势方向
+            "bb_mid_5m": 0.0, "bb_width_5m": 0.0, "bb_pct_5m": 0.5,  # BOLL
+            "rsi_5m": 50.0,                           # 5分钟 RSI
+            "trend_state": "NEUTRAL", "trend_confidence": 0.0,
+            "rsi5_buy_trigger": False, "rsi5_sell_trigger": False,
         }
         df_5min = _df_5min
         if df_5min is None:
@@ -912,10 +893,18 @@ class FeatureExtractor:
             prev_5m = df_5min.iloc[-2] if len(df_5min) >= 2 else last_5m
             feats["vol_ratio_5m"] = float(last_5m["vol_ratio_5m"]) if _pd.notna(last_5m.get("vol_ratio_5m")) else 1.0
             feats["mom2_5m"] = float(last_5m["mom2_5m"]) if _pd.notna(last_5m.get("mom2_5m")) else 0.0
-            feats["macd_hist_5m"] = float(last_5m["macd_hist_5m"]) if _pd.notna(last_5m.get("macd_hist_5m")) else 0.0
-            feats["prev_macd_hist_5m"] = float(prev_5m["macd_hist_5m"]) if _pd.notna(prev_5m.get("macd_hist_5m")) else 0.0
+            # V1.17兼容：旧MACD(6,13,5)柱状体 → macd_hist_5m_fast
+            feats["macd_hist_5m"] = float(last_5m["macd_hist_5m_fast"]) if _pd.notna(last_5m.get("macd_hist_5m_fast")) else 0.0
+            feats["prev_macd_hist_5m"] = float(prev_5m["macd_hist_5m_fast"]) if _pd.notna(prev_5m.get("macd_hist_5m_fast")) else 0.0
             feats["is_low_rising_5m"] = bool(last_5m.get("low_rising_5m", False))
             feats["is_stop_falling_5m"] = bool(last_5m.get("stop_falling_5m", False))
+            # V3.0: 提取标准 5分钟 MACD/BOLL/RSI
+            feats["dif_5m"] = float(last_5m["dif_5m"]) if _pd.notna(last_5m.get("dif_5m")) else 0.0
+            feats["dea_5m"] = float(last_5m["dea_5m"]) if _pd.notna(last_5m.get("dea_5m")) else 0.0
+            feats["bb_mid_5m"] = float(last_5m["bb_mid_5m"]) if _pd.notna(last_5m.get("bb_mid_5m")) else 0.0
+            feats["bb_width_5m"] = float(last_5m["bb_width_5m"]) if _pd.notna(last_5m.get("bb_width_5m")) else 0.0
+            feats["bb_pct_5m"] = float(last_5m["bb_pct_5m"]) if _pd.notna(last_5m.get("bb_pct_5m")) else 0.5
+            feats["rsi_5m"] = float(last_5m["rsi_5m"]) if _pd.notna(last_5m.get("rsi_5m")) else 50.0
             if len(df_5min) >= 5:
                 prev4 = df_5min.iloc[-5:-1]
                 bc = sum(1 for _, r in prev4.iterrows() if r["close"] < r["open"])
@@ -961,42 +950,7 @@ class FeatureExtractor:
             feats["monthly_pos"] = multi_tf_dict.get("monthly_position", "")
         return feats
 
-    def extract_v19_oscillation(df, price: float, vwap: float, open_gap: float,
-                                 today_ret: float) -> dict:
-        """V1.19 弱势震荡/45度斜率/均线穿越检测"""
-        _np = np
-        feats = {
-            "is_weak_oscillation": False, "is_steep_decline": False,
-            "is_vwap_crossing": False, "vwap_cross_count": 0,
-            "price_below_vwap_ratio": 0.0, "slope_pct_per_min": 0.0,
-        }
-        if len(df) >= 120:
-            recent_df = df.iloc[-120:].copy()
-            prices = recent_df["close"].astype(float).values
-            vwaps = recent_df["vwap"].astype(float).values
-            below = sum(1 for p, v in zip(prices, vwaps) if v > 0 and p < v)
-            feats["price_below_vwap_ratio"] = below / len(prices)
-            cross_noise = 0.003
-            cross_count = 0
-            for i in range(1, len(prices)):
-                prev_above = vwaps[i-1] > 0 and prices[i-1] >= vwaps[i-1] * (1 + cross_noise)
-                curr_above = vwaps[i] > 0 and prices[i] >= vwaps[i] * (1 + cross_noise)
-                if prev_above != curr_above:
-                    cd = abs(prices[i] - vwaps[i]) / vwaps[i] if vwaps[i] > 0 else 0
-                    if cd >= 0.003:
-                        cross_count += 1
-            feats["vwap_cross_count"] = cross_count
-            x = _np.arange(len(prices))
-            if len(prices) >= 5 and _np.std(prices) > 0.001:
-                slope, _ = _np.polyfit(x, prices, 1)
-                mean_p = _np.mean(prices)
-                spm = (slope * len(prices)) / mean_p * 100 if mean_p > 0 else 0
-                feats["slope_pct_per_min"] = spm
-                feats["is_steep_decline"] = spm < -0.12
-            is_weak_open = abs(open_gap) <= 0.005 or open_gap < 0
-            feats["is_weak_oscillation"] = is_weak_open and feats["price_below_vwap_ratio"] > 0.80 and today_ret < 0.01
-            feats["is_vwap_crossing"] = cross_count >= 2
-        return feats
+# extract_v19_oscillation removed in V3.0 — 6 dead features replaced by 5-min MACD trend_regime
 
 
 class RiskManager:
@@ -1046,24 +1000,18 @@ class RiskManager:
 
 
 FACTOR_WEIGHTS = {
-    "vwap_buy_atr_mult": -1.5,
-    "vwap_sell_atr_mult": 1.2,
-    "rsi_oversold_atr_adj": True,
-    "buy_score_atr_smooth": 50,
-    "sell_score_atr_smooth": 50,
-    "trend_strength_atr_mult": 2.0,
-    "stop_loss_atr_mult": 2.5,
-    "take_profit_atr_mult": 3.0,
-    "min_score_continuous": True,
-    "factor_weight_vwap": 0.20,
-    "factor_weight_rsi": 0.12,
+    # —— V3.0: 权重重平衡（新增 5m_trend + 5m_rsi）——
+    "factor_weight_vwap": 0.15,          # 曾 0.20
+    "factor_weight_rsi": 0.04,           # 曾 0.12（1分钟RSI降权，让位给5分钟RSI）
     "factor_weight_macd": 0.08,
     "factor_weight_volume": 0.08,
     "factor_weight_position": 0.08,
     "factor_weight_ema": 0.04,
-    "factor_weight_pattern": 0.20,
-    "factor_weight_index_regime": 0.20,
-    "factor_weight_time": 0.00,
+    "factor_weight_pattern": 0.13,       # 曾 0.20
+    "factor_weight_index_regime": 0.15,  # 曾 0.20
+    "factor_weight_5m_trend": 0.15,      # V3.0 新增：5分钟MACD趋势方向
+    "factor_weight_5m_rsi": 0.10,        # V3.0 新增：5分钟RSI择时触发
+    # —— 配置常量（非权重，保留兼容）——
     "max_score_raw": 100,
 }
 
@@ -1215,6 +1163,85 @@ class ScoringEngine:
         raw = ScoringEngine._sigmoid(us, center=0.4, slope=6.0)
         return raw, [{"指标": "长上影", "当前": f"{us:.2f}", "强度": round(raw, 3)}] if raw > 0.05 else []
 
+    # ── V3.0: 5分钟趋势层评分 ──
+
+    @staticmethod
+    def score_5m_trend_buy(feats: dict) -> tuple:
+        """5分钟 MACD 趋势方向 — 买入端：多头区顺势买入加分"""
+        trend = feats.get("trend_state", "NEUTRAL")
+        conf = feats.get("trend_confidence", 0.0)
+        dif = feats.get("dif_5m", 0.0)
+        dea = feats.get("dea_5m", 0.0)
+        # BULL/STRONG_BULL → 顺势买入加分；NEUTRAL → 中性；BEAR → 扣分
+        if trend == "STRONG_BULL":
+            raw = 0.9 + 0.1 * conf
+            detail = f"DIF{dif:.4f}/DEA{dea:.4f} 强势多头"
+        elif trend == "BULL":
+            raw = 0.6 + 0.2 * conf
+            detail = f"DIF{dif:.4f}/DEA{dea:.4f} 多头"
+        elif trend == "NEUTRAL":
+            raw = 0.5
+            detail = "趋势中性"
+        elif trend == "BEAR":
+            raw = 0.2
+            detail = "逆势(空头区买入)"
+        else:  # STRONG_BEAR
+            raw = 0.05
+            detail = "强逆势(强空头区买入)"
+        return raw, [{"指标": "5分趋势(买)", "当前": detail, "强度": round(raw, 3)}]
+
+    @staticmethod
+    def score_5m_trend_sell(feats: dict) -> tuple:
+        """5分钟 MACD 趋势方向 — 卖出端：空头区顺势卖出加分"""
+        trend = feats.get("trend_state", "NEUTRAL")
+        conf = feats.get("trend_confidence", 0.0)
+        dif = feats.get("dif_5m", 0.0)
+        dea = feats.get("dea_5m", 0.0)
+        if trend == "STRONG_BEAR":
+            raw = 0.9 + 0.1 * conf
+            detail = f"DIF{dif:.4f}/DEA{dea:.4f} 强势空头"
+        elif trend == "BEAR":
+            raw = 0.6 + 0.2 * conf
+            detail = f"DIF{dif:.4f}/DEA{dea:.4f} 空头"
+        elif trend == "NEUTRAL":
+            raw = 0.5
+            detail = "趋势中性"
+        elif trend == "BULL":
+            raw = 0.2
+            detail = "逆势(多头区卖出)"
+        else:  # STRONG_BULL
+            raw = 0.05
+            detail = "强逆势(强多头区卖出)"
+        return raw, [{"指标": "5分趋势(卖)", "当前": detail, "强度": round(raw, 3)}]
+
+    @staticmethod
+    def score_5m_rsi_buy(feats: dict) -> tuple:
+        """5分钟 RSI 择时 — 买入端：超卖回升触发"""
+        rsi5 = feats.get("rsi_5m", 50.0)
+        triggered = feats.get("rsi5_buy_trigger", False)
+        if triggered:
+            # 超卖回升 = 高置信度买入信号
+            raw = ScoringEngine._sigmoid(35 - rsi5, center=5, slope=0.3)
+            return raw, [{"指标": "5分RSI超卖回升", "当前": f"{rsi5:.1f}", "强度": round(raw, 3)}]
+        elif rsi5 < 40:
+            # 接近超卖但未触发
+            raw = ScoringEngine._sigmoid(40 - rsi5, center=8, slope=0.3)
+            return raw, [{"指标": "5分RSI偏低", "当前": f"{rsi5:.1f}", "强度": round(raw, 3)}] if raw > 0.05 else []
+        return 0.0, []
+
+    @staticmethod
+    def score_5m_rsi_sell(feats: dict) -> tuple:
+        """5分钟 RSI 择时 — 卖出端：超买回落触发"""
+        rsi5 = feats.get("rsi_5m", 50.0)
+        triggered = feats.get("rsi5_sell_trigger", False)
+        if triggered:
+            raw = ScoringEngine._sigmoid(rsi5 - 65, center=5, slope=0.3)
+            return raw, [{"指标": "5分RSI超买回落", "当前": f"{rsi5:.1f}", "强度": round(raw, 3)}]
+        elif rsi5 > 60:
+            raw = ScoringEngine._sigmoid(rsi5 - 60, center=8, slope=0.3)
+            return raw, [{"指标": "5分RSI偏高", "当前": f"{rsi5:.1f}", "强度": round(raw, 3)}] if raw > 0.05 else []
+        return 0.0, []
+
     @staticmethod
     def _weighted_factor_score(raw: float, weight_key: str, w_mult: float = 1.0,
                                  p: dict = None) -> float:
@@ -1256,6 +1283,13 @@ class ScoringEngine:
         score += s; d and details.append(d[0] | {"加分": round(s, 1)})
         raw, d = ScoringEngine.score_ema_improve(feats)
         s = ScoringEngine._weighted_factor_score(raw, "factor_weight_ema", p=p); score += s; d and details.append(d[0] | {"加分": round(s, 1)})
+        # ---- V3.0: 5分钟趋势层因子 (买入端) ----
+        raw, d = ScoringEngine.score_5m_trend_buy(feats)
+        s = ScoringEngine._weighted_factor_score(raw, "factor_weight_5m_trend", p=p)
+        score += s; d and details.append(d[0] | {"加分": round(s, 1)})
+        raw, d = ScoringEngine.score_5m_rsi_buy(feats)
+        s = ScoringEngine._weighted_factor_score(raw, "factor_weight_5m_rsi", p=p)
+        score += s; d and details.append(d[0] | {"加分": round(s, 1)})
         # ---- 大盘态势因子 ----
         raw = ScoringEngine.score_index_regime(feats, "buy")
         s = ScoringEngine._weighted_factor_score(raw, "factor_weight_index_regime", p=p)
@@ -1302,6 +1336,13 @@ class ScoringEngine:
         score += s; d and details.append(d[0] | {"加分": round(s, 1)})
         raw, d = ScoringEngine.score_ema_weaken(feats)
         s = ScoringEngine._weighted_factor_score(raw, "factor_weight_ema", p=p); score += s; d and details.append(d[0] | {"加分": round(s, 1)})
+        # ---- V3.0: 5分钟趋势层因子 (卖出端) ----
+        raw, d = ScoringEngine.score_5m_trend_sell(feats)
+        s = ScoringEngine._weighted_factor_score(raw, "factor_weight_5m_trend", p=p)
+        score += s; d and details.append(d[0] | {"加分": round(s, 1)})
+        raw, d = ScoringEngine.score_5m_rsi_sell(feats)
+        s = ScoringEngine._weighted_factor_score(raw, "factor_weight_5m_rsi", p=p)
+        score += s; d and details.append(d[0] | {"加分": round(s, 1)})
         # ---- 大盘态势因子 (卖出端) ----
         raw = ScoringEngine.score_index_regime(feats, "sell")
         s = ScoringEngine._weighted_factor_score(raw, "factor_weight_index_regime", p=p)
@@ -1335,28 +1376,7 @@ def _signal_push_limits(action: str) -> tuple[float, float]:
     return PARAMS["buy_signal_price_move"], PARAMS["buy_signal_score_boost"]
 
 
-def _should_push(key: str, sig: Optional[Signal] = None) -> bool:
-    now = _now()
-    last = _last_push.get(key)
-    if last:
-        last_ts = last.get("ts")
-        elapsed = (now - last_ts).total_seconds() if isinstance(last_ts, datetime) else PUSH_THROTTLE_SECONDS
-        if elapsed < PUSH_THROTTLE_SECONDS:
-            if sig is not None:
-                last_score = float(last.get("score", 0) or 0)
-                last_price = float(last.get("price", 0) or 0)
-                score_gap = abs(float(sig.score or 0) - last_score)
-                price_move = abs(float(sig.price or 0) - last_price) / last_price if last_price else 1.0
-                price_threshold, score_threshold = _signal_push_limits(sig.action)
-                if score_gap >= score_threshold or price_move >= price_threshold:
-                    _last_push[key] = {"ts": now, "score": float(sig.score or 0), "price": float(sig.price or 0)}
-                    return True
-            log.info(f"⏭️  {key} 推送节流，{max(0, int(PUSH_THROTTLE_SECONDS - elapsed))}s 后可再发")
-            return False
-    _last_push[key] = {"ts": now, "score": float(getattr(sig, 'score', 0) or 0), "price": float(getattr(sig, 'price', 0) or 0)}
-    return True
-
-
+# _should_push removed in V3.0 (dead function — push throttling handled in main.py notify())
 # ==================== 集合竞价驱动做T优化 ====================
 
 

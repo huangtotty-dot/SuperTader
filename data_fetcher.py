@@ -1,3 +1,19 @@
+# === V3.0: 显式导入，替代 exec() 共享命名空间 ===
+import numpy as np
+import pandas as pd
+import json
+import os
+import time
+import logging
+from typing import Dict, List, Optional, Any
+from datetime import datetime, timedelta, time as dtime
+from dataclasses import dataclass, field
+
+try:
+    from config import PARAMS, STOCK_PARAMS, CACHE_DIR
+except ImportError:
+    PARAMS = {}; STOCK_PARAMS = {}; CACHE_DIR = "./cache"
+
 def clean_code(code: str) -> str:
     """去除 _A/_B 等账户后缀，返回纯数字代码供数据接口使用"""
     if not code:
