@@ -4,7 +4,7 @@ trend_regime.py — V3.0 5分钟趋势状态机 + RSI 择时触发器
 
 三层信号架构的核心模块（第二层：趋势层）。
 消费 indicators.py 的 5分钟 MACD/BOLL/RSI 输出，产生：
-  1. trend_state ∈ {STRONG_BULL, BULL, NEUTRAL, BEAR, STRONG_BEAR}
+  1. trend_state ∈ {BULL, NEUTRAL, BEAR} (v1.0.4 五档降三档, STRONG准确率2-4%废弃)
   2. trend_confidence ∈ [0, 1]
   3. rsi_buy_trigger / rsi_sell_trigger — 择时事件
 

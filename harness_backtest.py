@@ -168,15 +168,37 @@ def compute_p1_metrics(trend_timelines: dict, day_bars: dict) -> dict:
 
         ps = per_stock[code]
 
-        # NEUTRAL 按段数和时长（相邻5分钟边界 = 5分钟）
-        neutral_segs = sum(1 for _, s, _ in timeline if s == "NEUTRAL")
-        ps["neutral_segments"] += neutral_segs
-        ps["total_segments"] += len(timeline)
-        ps["neutral_minutes_est"] += neutral_segs * 5
-        ps["total_minutes_est"] += len(timeline) * 5
+        # W3: NEUTRAL真实时长（相邻转移时间差，最后一个状态延续到15:00收盘）
+        for i, (t_str, s, _) in enumerate(timeline):
+            try:
+                t_mins = int(t_str[:2]) * 60 + int(t_str[3:5])
+            except Exception:
+                t_mins = 0
+            if i + 1 < len(timeline):
+                try:
+                    next_t = int(timeline[i+1][0][:2]) * 60 + int(timeline[i+1][0][3:5])
+                except Exception:
+                    next_t = t_mins + 5
+            else:
+                next_t = 15 * 60  # 收盘15:00
+            duration = max(next_t - t_mins, 1)
+            ps["total_segments"] += 1
+            if s == "NEUTRAL":
+                ps["neutral_segments"] += 1
+                ps["neutral_minutes_est"] += duration
+            ps["total_minutes_est"] += duration
 
-        # 当日主要趋势状态（全天非NEUTRAL众数 — P1问的是"系统方向判对了吗"）
-        states = [s for _, s, _ in timeline if s != "NEUTRAL"]
+        # W3: 午盘前众数判定趋势（去前视）；若午盘全NEUTRAL回退全天
+        am_cutoff = 11 * 60 + 30
+        am_states = []
+        for t_str, s, _ in timeline:
+            try:
+                tm = int(t_str[:2]) * 60 + int(t_str[3:5])
+            except Exception:
+                tm = 0
+            if tm <= am_cutoff and s != "NEUTRAL":
+                am_states.append(s)
+        states = am_states if am_states else [s for _, s, _ in timeline if s != "NEUTRAL"]
         dominant = max(set(states), key=states.count) if states else "NEUTRAL"
 
         if dtype == "bull_day" and dominant in ("BULL", "STRONG_BULL"):
@@ -232,10 +254,10 @@ def compute_p1_metrics(trend_timelines: dict, day_bars: dict) -> dict:
 
 
 def compute_closed_loop(signals: list, holdings_map: dict) -> dict:
-    """R4: T闭环配对 — FIFO配对 + 费用 + 净收益"""
+    """W2修正: T闭环 — 当日FIFO配对 + 印花税记卖出腿 + qty入信号"""
     from collections import deque
     commission = 0.00015
-    stamp_tax = 0.0005  # 卖出侧印花税
+    stamp_tax = 0.0005  # 卖出侧印花税（仅卖出腿）
     per_stock = {}
     for sig in signals:
         code = sig["code"]
@@ -243,39 +265,56 @@ def compute_closed_loop(signals: list, holdings_map: dict) -> dict:
             per_stock[code] = {"long_positions": deque(), "short_positions": deque(),
                                "closed_pairs": [], "net_pnl": 0.0, "open_long": 0, "open_short": 0}
 
-    for sig in sorted(signals, key=lambda s: s["ts"]):
-        code = sig["code"]
-        ps = per_stock[code]
-        action = sig["action"]
-        price = sig["price"]
-        qty = sig.get("qty", 100)
-        is_etf = holdings_map.get(code, {}).get("type") == "etf"
+    # 按日期分组，当日FIFO配对
+    by_date = {}
+    for sig in signals:
+        d = sig["ts"][:10]
+        by_date.setdefault(d, []).append(sig)
 
-        if action in ("BUY_LOW", "ADD_POS"):
-            # 先检查是否有反T（short）卖单等接回
-            if ps["short_positions"]:
-                sell_entry = ps["short_positions"].popleft()
-                pnl = (sell_entry["price"] - price) * qty
-                fee = price * qty * (commission + stamp_tax) + sell_entry["price"] * qty * commission
-                ps["net_pnl"] += pnl - fee
-                ps["closed_pairs"].append({"type": "short_close", "sell_ts": sell_entry["ts"],
-                    "buy_ts": sig["ts"], "sell_price": sell_entry["price"],
-                    "buy_price": price, "pnl": round(pnl - fee, 2)})
-            else:
-                ps["long_positions"].append({"ts": sig["ts"], "price": price, "qty": qty})
-                ps["open_long"] += qty
-        elif action == "SELL_HIGH":
-            if ps["long_positions"]:
-                buy_entry = ps["long_positions"].popleft()
-                pnl = (price - buy_entry["price"]) * qty
-                fee = buy_entry["price"] * qty * commission + price * qty * (commission + stamp_tax)
-                ps["net_pnl"] += pnl - fee
-                ps["closed_pairs"].append({"type": "long_close", "buy_ts": buy_entry["ts"],
-                    "sell_ts": sig["ts"], "buy_price": buy_entry["price"],
-                    "sell_price": price, "pnl": round(pnl - fee, 2)})
-            else:
-                ps["short_positions"].append({"ts": sig["ts"], "price": price, "qty": qty})
-                ps["open_short"] += qty
+    for date_str, day_sigs in sorted(by_date.items()):
+        day_positions = {}  # per-code daily positions, reset each day
+        for sig in sorted(day_sigs, key=lambda s: s["ts"]):
+            code = sig["code"]
+            if code not in day_positions:
+                day_positions[code] = {"long": deque(), "short": deque()}
+            dp = day_positions[code]
+            ps = per_stock[code]
+            action = sig["action"]
+            price = sig["price"]
+            qty = sig.get("qty", 100)
+
+            if action in ("BUY_LOW", "ADD_POS"):
+                if dp["short"]:
+                    sell_entry = dp["short"].popleft()
+                    pnl = (sell_entry["price"] - price) * qty
+                    fee = sell_entry["price"] * qty * (commission + stamp_tax) + price * qty * commission
+                    ps["net_pnl"] += pnl - fee
+                    ps["closed_pairs"].append({"type": "short_close", "date": date_str,
+                        "sell_ts": sell_entry["ts"], "buy_ts": sig["ts"],
+                        "sell_price": sell_entry["price"], "buy_price": price,
+                        "qty": qty, "pnl": round(pnl - fee, 2)})
+                else:
+                    dp["long"].append({"ts": sig["ts"], "price": price, "qty": qty})
+            elif action == "SELL_HIGH":
+                if dp["long"]:
+                    buy_entry = dp["long"].popleft()
+                    pnl = (price - buy_entry["price"]) * qty
+                    fee = buy_entry["price"] * qty * commission + price * qty * (commission + stamp_tax)
+                    ps["net_pnl"] += pnl - fee
+                    ps["closed_pairs"].append({"type": "long_close", "date": date_str,
+                        "buy_ts": buy_entry["ts"], "sell_ts": sig["ts"],
+                        "buy_price": buy_entry["price"], "sell_price": price,
+                        "qty": qty, "pnl": round(pnl - fee, 2)})
+                else:
+                    dp["short"].append({"ts": sig["ts"], "price": price, "qty": qty})
+
+        # 当日未配对计入 open
+        for code, dp in day_positions.items():
+            ps = per_stock[code]
+            for e in dp["long"]:
+                ps["open_long"] += e["qty"]
+            for e in dp["short"]:
+                ps["open_short"] += e["qty"]
 
     total_pnl = sum(ps["net_pnl"] for ps in per_stock.values())
     total_closed = sum(len(ps["closed_pairs"]) for ps in per_stock.values())
@@ -493,7 +532,7 @@ def run_backtest(codes: list, date_range: list, holdings_map: dict,
                 signal_rec = {
                     "ts": bt.strftime("%Y-%m-%d %H:%M:%S"),
                     "code": code, "name": holding.get("name", code),
-                    "action": sig.action, "price": price,
+                    "action": sig.action, "price": price, "qty": _qty,
                     "buy_score": round(float(buy_score), 1),
                     "sell_score": round(float(sell_score), 1),
                     "threshold": _nth,
