@@ -284,15 +284,17 @@ def run_backtest(codes: list, date_range: list, holdings_map: dict,
             for code, sp in override_params["STOCK_PARAMS"].items():
                 STOCK_PARAMS.setdefault(code, {}).update(sp)
 
+    # 基线模式：完全关闭趋势层
+    if ab_mode == "baseline":
+        shared['TrendRegime'] = None  # 必须 BEFORE SignalEngine() 创建
+        shared['FACTOR_WEIGHTS']["factor_weight_5m_trend"] = 0.0
+        shared['FACTOR_WEIGHTS']["factor_weight_5m_rsi"] = 0.0
+
     engine = shared['SignalEngine']()
     add_indicators = shared['add_indicators']
 
-    # 基线模式：完全关闭趋势层（TrendRegime=None 跳过整个趋势块）
     if ab_mode == "baseline":
-        shared['TrendRegime'] = None  # 让 evaluate() 的 if TrendRegime is not None 失败
         engine.factor_weights = dict(shared.get('FACTOR_WEIGHTS', {}))
-        engine.factor_weights["factor_weight_5m_trend"] = 0.0
-        engine.factor_weights["factor_weight_5m_rsi"] = 0.0
 
     all_signals = []
     daily_stats = {}
