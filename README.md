@@ -25,8 +25,8 @@
 | `indicators.py` | **新** 统一指标计算（1/5/15分钟） | 从 data_fetcher 拆分 + 新增标准 5分钟指标 |
 | `signal_engine.py` | 评分引擎（FeatureExtractor + ScoringEngine + RiskManager） | 集成趋势层评分+方向门控+T_MODE |
 | `config.py` | 全局参数 + STOCK_PARAMS + 飞书推送 | 删除 SHORT_MODE_PARAMS |
-| `data_fetcher.py` | 数据获取（腾讯 ifzq + 缓存） | 精简（指标计算迁至 indicators.py） |
-| `main.py` | 主循环 + scan_once 编排 | 删除死参考 |
+| `data_fetcher.py` | 数据获取（腾讯 ifzq + 缓存） | 指标函数由 indicators.py 在 exec 链中覆盖 |
+| `main.py` | 主循环 + scan_once 编排 | 新增 indicators 到 module_order |
 
 ### 5分钟指标（indicators.py）
 

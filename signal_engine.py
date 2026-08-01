@@ -1,7 +1,8 @@
 # V1.11: 日志增强模块导入
 import sys as _sys
 import os as _os_mod
-_06t_dir = _os_mod.path.dirname(_os_mod.path.dirname(_os_mod.path.abspath(__file__)))
+# V3.0fix: __file__ = E:\06_T\signal_engine.py → dirname = E:\06_T
+_06t_dir = _os_mod.path.dirname(_os_mod.path.abspath(__file__))
 if _06t_dir not in _sys.path:
     _sys.path.insert(0, _06t_dir)
 
@@ -61,13 +62,9 @@ if 'send_morning_alert' not in globals():
 if 'notify_alert_cleared' not in globals():
     def notify_alert_cleared(*a,**kw): return None
 if 'resample_to_15min' not in globals():
-    def resample_to_15min(df): return pd.DataFrame()
-if 'add_15min_indicators' not in globals():
-    def add_15min_indicators(df): return pd.DataFrame()
+    from indicators import resample_to_15min, add_15min_indicators
 if 'resample_to_5min' not in globals():
-    def resample_to_5min(df): return pd.DataFrame()
-if 'add_5min_indicators' not in globals():
-    def add_5min_indicators(df): return pd.DataFrame()
+    from indicators import resample_to_5min, add_5min_indicators
 if 'fetch_minute_bar' not in globals():
     def fetch_minute_bar(*a, **kw): return pd.DataFrame()
 if 'add_indicators' not in globals():
@@ -174,6 +171,7 @@ class SignalEngine:
             self.daily_realized_loss_monitor = 0.0
             self.morning_alert_state = {}
             self._5min_cache = {}       # V3.0: 5分钟缓存每日重置
+            self.trend_regimes = {}     # V3.0: 趋势状态机每日重置（开盘从头累积）
             self.state_reset_date = today
 
     def _in_cooldown(self, code: str, action: str) -> bool:
@@ -201,6 +199,8 @@ class SignalEngine:
                 "sell_count": dict(self.sell_count_per_stock),
                 "buy_cooldown": {k: v.isoformat() for k, v in self.buy_cooldown.items() if v},
                 "sell_cooldown": {k: v.isoformat() for k, v in self.sell_cooldown.items() if v},
+                # V3.0: 5分钟趋势状态持久化
+                "trend_regimes": {k: v.to_dict() for k, v in self.trend_regimes.items()} if TrendRegime else {},
             }
             with open(self._intraday_state_path(), "w", encoding="utf-8") as f:
                 _j.dump(data, f, ensure_ascii=False, indent=2)
@@ -228,6 +228,13 @@ class SignalEngine:
             for k, v in (data.get("sell_cooldown") or {}).items():
                 try: self.sell_cooldown[k] = datetime.fromisoformat(v)
                 except Exception: pass
+            # V3.0: 恢复5分钟趋势状态
+            if TrendRegime and data.get("trend_regimes"):
+                for code, tr_data in data["trend_regimes"].items():
+                    try:
+                        self.trend_regimes[code] = TrendRegime.from_dict(tr_data)
+                    except Exception:
+                        pass
         except Exception:
             pass
 
@@ -436,32 +443,55 @@ class SignalEngine:
         if TrendRegime is not None and len(df) >= 5:
             try:
                 _df_5m = None
+                _trend_feats = None  # 缓存：同一边界内复用趋势层输出
                 # 回测模式：使用预计算的 cached_5m
                 if isinstance(cached_5m, pd.DataFrame) and not cached_5m.empty:
                     _last_t = pd.to_datetime(df.iloc[-1]["time"])
                     _cutoff = _last_t.floor("5min")
                     _df_5m = cached_5m[cached_5m["time"] <= _cutoff].copy()
                 else:
-                    # 实盘模式：仅在5分钟边界重算（缓存提速）
+                    # 实盘模式：仅在5分钟边界重算 + 趋势状态机仅边界更新
                     _now_ts = pd.to_datetime(df.iloc[-1]["time"])
                     _boundary = _now_ts.floor("5min")
                     _cache_entry = self._5min_cache.get(code)
                     if _cache_entry and _cache_entry[0] == _boundary:
                         _df_5m = _cache_entry[1]  # 缓存命中
+                        _trend_feats = _cache_entry[2] if len(_cache_entry) > 2 else None
                     else:
                         _df_5m = resample_to_5min(df) if 'resample_to_5min' in globals() else pd.DataFrame()
                         _df_5m = add_5min_indicators(_df_5m) if 'add_5min_indicators' in globals() else _df_5m
                         if not _df_5m.empty:
-                            self._5min_cache[code] = (_boundary, _df_5m)
-                if not _df_5m.empty and len(_df_5m) >= 5:
-                    if code not in self.trend_regimes:
-                        self.trend_regimes[code] = TrendRegime()
+                            # 新边界：更新趋势状态机（一次，不会重复）
+                            if code not in self.trend_regimes:
+                                self.trend_regimes[code] = TrendRegime()
+                            tr = self.trend_regimes[code]
+                            state, conf = tr.update(_df_5m)
+                            _trend_feats = {
+                                "trend_state": state.value,
+                                "trend_confidence": conf,
+                                "rsi5_buy_trigger": tr.rsi_buy_trigger,
+                                "rsi5_sell_trigger": tr.rsi_sell_trigger,
+                                "rsi_5m": tr._last_rsi,
+                                "dif_5m": tr._last_dif,
+                                "dea_5m": tr._last_dea,
+                            }
+                            self._5min_cache[code] = (_boundary, _df_5m, _trend_feats)
+                # 应用趋势层输出到 feats
+                if _trend_feats is None and code in self.trend_regimes:
+                    # 缓存命中但有 trend_regime 实例：回退读最后已知状态
                     tr = self.trend_regimes[code]
-                    state, conf = tr.update(_df_5m)
-                    feats["trend_state"] = state.value
-                    feats["trend_confidence"] = conf
-                    feats["rsi5_buy_trigger"] = tr.rsi_buy_trigger
-                    feats["rsi5_sell_trigger"] = tr.rsi_sell_trigger
+                    _trend_feats = {
+                        "trend_state": tr.state.value,
+                        "trend_confidence": tr.confidence,
+                        "rsi5_buy_trigger": tr.rsi_buy_trigger,
+                        "rsi5_sell_trigger": tr.rsi_sell_trigger,
+                        "rsi_5m": tr._last_rsi,
+                        "dif_5m": tr._last_dif,
+                        "dea_5m": tr._last_dea,
+                    }
+                if _trend_feats:
+                    for k, v in _trend_feats.items():
+                        feats[k] = v
             except Exception:
                 pass  # 趋势层失败不阻断主流程
         buy_score, buy_details = ScoringEngine.calc_buy_score(feats, self.factor_weights)
@@ -536,7 +566,9 @@ class SignalEngine:
                          and not self._in_cooldown(code, "SELL_HIGH"))
         # ===== V3.0: 5分钟趋势方向门控 + T_MODE 适配 =====
         _trend_state = feats.get("trend_state", "NEUTRAL")
-        _t_mode = feats.get("t_mode", daily_ctx.get("trade_gate", "long") if isinstance(daily_ctx, dict) else "long")
+        # V3.0fix: 读取真正的 t_mode（daily_ctx["t_mode"] > 全局 T_MODE > "long"）
+        _t_mode_from_ctx = daily_ctx.get("t_mode", "") if isinstance(daily_ctx, dict) else ""
+        _t_mode = feats.get("t_mode", _t_mode_from_ctx or T_MODE.get(code, "long") if 'T_MODE' in globals() else "long")
         if TrendRegime is not None and code in self.trend_regimes:
             tr = self.trend_regimes[code]
             # 方向门控：抑制逆势信号
@@ -801,7 +833,7 @@ class FeatureExtractor:
         p = bullish_params or {}
         atr_r = max(atr, 0.002)
         feats = {
-            # 旧字段（兼容 V1.17/V1.22）
+            # 旧字段（兼容 V1.17/V1.22 — 读取 fast MACD(6,13,5) 保持历史行为）
             "vol_ratio_5m": 1.0, "mom2_5m": 0.0, "macd_hist_5m": 0.0,
             "prev_macd_hist_5m": 0.0, "is_low_rising_5m": False, "is_stop_falling_5m": False,
             "is_volume_reversal": False, "is_strong_bullish_reversal": False,
@@ -827,8 +859,9 @@ class FeatureExtractor:
             prev_5m = df_5min.iloc[-2] if len(df_5min) >= 2 else last_5m
             feats["vol_ratio_5m"] = float(last_5m["vol_ratio_5m"]) if _pd.notna(last_5m.get("vol_ratio_5m")) else 1.0
             feats["mom2_5m"] = float(last_5m["mom2_5m"]) if _pd.notna(last_5m.get("mom2_5m")) else 0.0
-            feats["macd_hist_5m"] = float(last_5m["macd_hist_5m"]) if _pd.notna(last_5m.get("macd_hist_5m")) else 0.0
-            feats["prev_macd_hist_5m"] = float(prev_5m["macd_hist_5m"]) if _pd.notna(prev_5m.get("macd_hist_5m")) else 0.0
+            # V1.17兼容：旧MACD(6,13,5)柱状体 → macd_hist_5m_fast
+            feats["macd_hist_5m"] = float(last_5m["macd_hist_5m_fast"]) if _pd.notna(last_5m.get("macd_hist_5m_fast")) else 0.0
+            feats["prev_macd_hist_5m"] = float(prev_5m["macd_hist_5m_fast"]) if _pd.notna(prev_5m.get("macd_hist_5m_fast")) else 0.0
             feats["is_low_rising_5m"] = bool(last_5m.get("low_rising_5m", False))
             feats["is_stop_falling_5m"] = bool(last_5m.get("stop_falling_5m", False))
             # V3.0: 提取标准 5分钟 MACD/BOLL/RSI
