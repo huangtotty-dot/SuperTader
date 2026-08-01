@@ -118,6 +118,104 @@ def load_snapshots(code: str, date_str: str) -> pd.DataFrame:
         return pd.DataFrame()
 
 
+def classify_day_type(df: pd.DataFrame) -> str:
+    """§3.1 客观日型分类。df: 当日1分钟K线（OHLCV，无需指标）"""
+    if df.empty or len(df) < 30:
+        return "unknown"
+    open_p = float(df.iloc[0]["open"])
+    close_p = float(df.iloc[-1]["close"])
+    day_ret = (close_p - open_p) / open_p if open_p > 0 else 0
+    day_high = float(df["high"].max())
+    day_low = float(df["low"].min())
+    day_range = (day_high - day_low) / open_p if open_p > 0 else 0
+    # 均价线上方时间占比（用 (H+L)/2 近似）
+    mid_prices = [(float(r["high"]) + float(r["low"])) / 2 for _, r in df.iterrows()]
+    avg_price = sum(mid_prices) / len(mid_prices) if mid_prices else open_p
+    above_ratio = sum(1 for mp in mid_prices if mp > avg_price) / len(mid_prices)
+    # 开盘1小时方向 vs 收盘方向
+    end_1h = df.iloc[0]["time"] + pd.Timedelta(hours=1)
+    first_hour = df[df["time"] <= end_1h]
+    fh_open = float(first_hour.iloc[0]["open"]) if not first_hour.empty else open_p
+    fh_close = float(first_hour.iloc[-1]["close"]) if not first_hour.empty else open_p
+    fh_ret = (fh_close - fh_open) / fh_open if fh_open > 0 else 0
+    reversed_dir = (fh_ret > 0.003 and day_ret < -0.005) or (fh_ret < -0.003 and day_ret > 0.005)
+
+    if day_ret >= 0.01 and above_ratio >= 0.55:
+        return "bull_day"
+    elif day_ret <= -0.01 and above_ratio <= 0.45:
+        return "bear_day"
+    elif reversed_dir and abs(day_ret) >= 0.008:
+        return "reversal_day"
+    else:
+        return "chop_day"
+
+
+def compute_p1_metrics(trend_timelines: dict, day_bars: dict) -> dict:
+    """§3.2 P1 趋势方向指标。day_bars: {date_str: {code: df}}"""
+    per_stock = {}
+    for tkey, timeline in trend_timelines.items():
+        date_str, code = tkey.split(":", 1)
+        if not timeline:
+            continue
+        if code not in per_stock:
+            per_stock[code] = {"bull_match": 0, "bear_match": 0, "bull_total": 0, "bear_total": 0,
+                               "neutral_minutes": 0, "total_minutes": 0,
+                               "strong_bull_correct": 0, "strong_bull_total": 0,
+                               "strong_bear_correct": 0, "strong_bear_total": 0}
+
+        # 当日主要趋势状态（众数，排除NEUTRAL）
+        states = [s for _, s, _ in timeline if s != "NEUTRAL"]
+        dominant = max(set(states), key=states.count) if states else "NEUTRAL"
+
+        # 日型判定
+        df = day_bars.get(date_str, {}).get(code)
+        if df is not None and not df.empty:
+            dtype = classify_day_type(df)
+        else:
+            dtype = "unknown"
+
+        # 一致率计算
+        ps = per_stock[code]
+        neutral_count = sum(1 for _, s, _ in timeline if s == "NEUTRAL")
+        ps["neutral_minutes"] += neutral_count
+        ps["total_minutes"] += len(timeline)
+
+        if dtype == "bull_day" and dominant in ("BULL", "STRONG_BULL"):
+            ps["bull_match"] += 1
+        if dtype == "bull_day":
+            ps["bull_total"] += 1
+        if dtype == "bear_day" and dominant in ("BEAR", "STRONG_BEAR"):
+            ps["bear_match"] += 1
+        if dtype == "bear_day":
+            ps["bear_total"] += 1
+
+        # STRONG 档准确率：STRONG_BULL 后 30 分钟是否上涨
+        for i, (t, s, _) in enumerate(timeline):
+            if s == "STRONG_BULL":
+                ps["strong_bull_total"] += 1
+            elif s == "STRONG_BEAR":
+                ps["strong_bear_total"] += 1
+
+    # 汇总
+    total_bull = sum(ps["bull_total"] for ps in per_stock.values())
+    total_bull_match = sum(ps["bull_match"] for ps in per_stock.values())
+    total_bear = sum(ps["bear_total"] for ps in per_stock.values())
+    total_bear_match = sum(ps["bear_match"] for ps in per_stock.values())
+    total_neutral = sum(ps["neutral_minutes"] for ps in per_stock.values())
+    total_all = sum(ps["total_minutes"] for ps in per_stock.values())
+
+    return {
+        "per_stock": per_stock,
+        "bull_consistency": round(total_bull_match / total_bull, 3) if total_bull > 0 else None,
+        "bear_consistency": round(total_bear_match / total_bear, 3) if total_bear > 0 else None,
+        "overall_consistency": round((total_bull_match + total_bear_match) / (total_bull + total_bear), 3) if (total_bull + total_bear) > 0 else None,
+        "neutral_ratio": round(total_neutral / total_all, 3) if total_all > 0 else None,
+        "bias_ratio": round(total_bull / total_bear, 3) if total_bear > 0 else None,
+        "sample_days_bull": total_bull,
+        "sample_days_bear": total_bear,
+    }
+
+
 def settle_signal(sig_action: str, sig_price: float, future_bars: pd.DataFrame,
                   win_pct: float = 0.005) -> tuple:
     """§1.1 信号结算算法（回测器与实盘日志共用同一实现）。
@@ -198,6 +296,9 @@ def run_backtest(codes: list, date_range: list, holdings_map: dict,
 
     all_signals = []
     daily_stats = {}
+    # P1: per-day trend timelines
+    trend_timelines = {}  # {f"{date_str}:{code}": [(time, state, conf), ...]}
+    day_bars_cache = {}   # {date_str: {code: df}}
 
     for date_str in date_range:
         day_signals = []
@@ -210,39 +311,57 @@ def run_backtest(codes: list, date_range: list, holdings_map: dict,
         if not day_bars:
             continue
 
+        day_bars_cache[date_str] = day_bars
+
         # 合并所有股票的分钟时间点
         all_times = set()
         for df in day_bars.values():
             all_times.update(df["time"].tolist())
         bar_times = sorted(all_times)
 
+        # 预计算每只股票全天指标（避免每分钟重复计算 — 10x 提速）
+        day_indicators = {}
+        for code in codes:
+            if code in day_bars:
+                day_indicators[code] = add_indicators(day_bars[code].copy())
+
         for bt in bar_times:
             shared['SIM_NOW'] = bt.to_pydatetime()
             hhmm = bt.hour * 100 + bt.minute
-            # 只看交易时段
             if hhmm < 930 or (hhmm > 1130 and hhmm < 1300) or hhmm > 1500:
                 continue
 
             for code in codes:
-                if code not in day_bars:
+                if code not in day_indicators:
                     continue
-                dfc = day_bars[code]
-                sub = dfc[dfc["time"] <= bt].copy()
+                df_full = day_indicators[code]
+                sub = df_full[df_full["time"] <= bt]
                 if len(sub) < 5:
                     continue
-                df_ind = add_indicators(sub)
-                price = float(df_ind.iloc[-1]["close"])
+                price = float(sub.iloc[-1]["close"])
                 holding = holdings_map.get(code, {"name": code, "cost": price,
                             "qty": 0, "base": 0, "t_qty": 0, "type": "stock"})
                 daily_ctx = {"daily_status": "ok", "daily_buy_t_ok": True,
                              "index_regime": "range", "intraday_alerts": []}
 
+                # P1: 记录趋势状态（每分钟最后已知状态）
+                _tkey = f"{date_str}:{code}"
+                if _tkey not in trend_timelines:
+                    trend_timelines[_tkey] = []
                 try:
                     buy_score, sell_score, sig = engine.evaluate(
-                        code, holding.get("name", code), df_ind,
+                        code, holding.get("name", code), sub,
                         holding, daily_ctx=daily_ctx)
                 except Exception as e:
                     continue
+
+                # P1: 记录每5分钟边界的趋势状态（去重：同状态不重复记）
+                if code in engine.trend_regimes:
+                    tr = engine.trend_regimes[code]
+                    _ts = tr.state.value
+                    _tl = trend_timelines[_tkey]
+                    if not _tl or _tl[-1][1] != _ts:
+                        _tl.append((bt.strftime("%H:%M"), _ts, round(tr.confidence, 3)))
 
                 if sig is None or sig.action not in ("BUY_LOW", "ADD_POS", "SELL_HIGH"):
                     continue
@@ -301,8 +420,13 @@ def run_backtest(codes: list, date_range: list, holdings_map: dict,
     total_decided = wins + fails
     win_rate = wins / total_decided if total_decided > 0 else 0
 
+    # P1: 日型分类 + 趋势方向一致率
+    p1_metrics = compute_p1_metrics(trend_timelines, day_bars_cache)
+
     return {
         "signals": all_signals,
+        "trend_timelines": trend_timelines,
+        "p1_metrics": p1_metrics,
         "summary": {
             "total": len(all_signals), "wins": wins, "fails": fails, "voids": voids,
             "win_rate": round(win_rate, 4),
@@ -357,21 +481,43 @@ def main():
                           out_dir=out_dir)
 
     s = result["summary"]
-    print(f"\n=== SUMMARY ({args.ab}) ===")
+    print(f"\n=== SIGNALS ({args.ab}) ===")
     print(f"Signals: {s['total']}  WIN={s['wins']} FAIL={s['fails']} VOID={s['voids']}")
     print(f"Win rate: {s['win_rate']:.1%} (decided: {s['wins']+s['fails']})")
     if s['total'] > 0:
         print(f"Void rate: {s['void_rate']:.1%}")
 
-    # 写入输出
+    # P1 metrics
+    p1 = result.get("p1_metrics", {})
+    if p1:
+        print(f"\n=== P1 TREND DIRECTION ({args.ab}) ===")
+        oc = p1.get("overall_consistency")
+        print(f"Direction consistency: {oc:.1%}" if oc is not None else "Direction consistency: N/A (no bull/bear days)")
+        bc = p1.get("bull_consistency")
+        print(f"  Bull day match: {bc:.1%}" if bc is not None else "  Bull day match: N/A")
+        bec = p1.get("bear_consistency")
+        print(f"  Bear day match: {bec:.1%}" if bec is not None else "  Bear day match: N/A")
+        nr = p1.get('neutral_ratio')
+        print(f"NEUTRAL ratio: {nr:.1%}" if nr is not None else "NEUTRAL ratio: N/A")
+        bias = p1.get("bias_ratio")
+        print(f"Bias (BULL/BEAR days): {bias:.2f}" if bias else "Bias: N/A")
+        print(f"Sample: {p1.get('sample_days_bull', 0)} bull days + {p1.get('sample_days_bear', 0)} bear days")
+
+    # 写入信号
     signals_path = out_dir / f"signals_{args.ab}.jsonl"
     with open(signals_path, 'w', encoding='utf-8') as f:
         for sig in result["signals"]:
             f.write(json.dumps(sig, ensure_ascii=False, default=str) + "\n")
 
+    # 写入趋势时间线
+    tl_path = out_dir / f"trend_timeline_{args.ab}.jsonl"
+    with open(tl_path, 'w', encoding='utf-8') as f:
+        for tkey, tl in result.get("trend_timelines", {}).items():
+            f.write(json.dumps({"key": tkey, "timeline": tl}, ensure_ascii=False) + "\n")
+
     summary_path = out_dir / f"summary_{args.ab}.json"
     with open(summary_path, 'w', encoding='utf-8') as f:
-        json.dump(s, f, ensure_ascii=False, indent=2, default=str)
+        json.dump({**s, "p1_metrics": p1}, f, ensure_ascii=False, indent=2, default=str)
 
     txt_path = out_dir / f"report_{args.ab}.txt"
     with open(txt_path, 'w', encoding='ascii', errors='replace') as f:
@@ -380,11 +526,12 @@ def main():
         f.write(f"Period: {args.start} ~ {args.end}\n")
         f.write(f"Signals: {s['total']}  WIN={s['wins']} FAIL={s['fails']} VOID={s['voids']}\n")
         f.write(f"Win rate: {s['win_rate']:.1%}\n")
+        if oc is not None:
+            f.write(f"\nP1 Trend Direction:\n")
+            f.write(f"  Consistency: {oc:.1%}\n")
+            f.write(f"  NEUTRAL ratio: {p1.get('neutral_ratio', 0):.1%}\n")
 
     print(f"\nOutput: {out_dir}")
-    print(f"  {signals_path}")
-    print(f"  {summary_path}")
-    print(f"  {txt_path}")
 
 
 if __name__ == "__main__":
