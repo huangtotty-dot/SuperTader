@@ -1,0 +1,24 @@
+000988: copied 0/62 tushare-seg files
+000988 2026-06-04~2026-06-28: rows=3856 written_so_far=8
+000988 2026-06-29~2026-07-23: rows=4579 written_so_far=27
+000988 2026-07-24~2026-07-24: rows=241 written_so_far=28
+000988: snapshot-seg written=28/28 missing=0
+588170: copied 65/65 tushare-seg files
+588170 2026-06-22~2026-07-16: rows=4579 written_so_far=19
+588170 2026-07-17~2026-07-24: rows=1446 written_so_far=25
+588170: snapshot-seg written=25/25 missing=0
+600176: copied 69/69 tushare-seg files
+600176 2026-06-12~2026-07-06: rows=3856 written_so_far=13
+600176 2026-07-07~2026-07-24: rows=3374 written_so_far=21
+600176: snapshot-seg written=21/21 missing=0
+600481: copied 55/55 tushare-seg files
+600481 2026-05-27~2026-06-20: rows=4097 written_so_far=15
+600481 2026-06-21~2026-07-15: rows=4338 written_so_far=28
+600481 2026-07-16~2026-07-24: rows=1687 written_so_far=35
+600481: snapshot-seg written=35/35 missing=0
+603667: copied 52/52 tushare-seg files
+603667 2026-05-22~2026-06-15: rows=4097 written_so_far=16
+603667 2026-06-16~2026-07-10: rows=4338 written_so_far=28
+603667 2026-07-11~2026-07-24: rows=2410 written_so_far=38
+603667: snapshot-seg written=38/38 missing=0
+TOTAL: fetched=147 copied=241

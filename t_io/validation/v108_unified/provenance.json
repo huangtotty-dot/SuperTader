@@ -1,0 +1,42 @@
+{
+ "baseline_000988": {
+  "unified": 9,
+  "expanded_reuse": 12
+ },
+ "baseline_588170": {
+  "unified": 6,
+  "expanded_reuse": 15
+ },
+ "baseline_600176": {
+  "unified": 8,
+  "expanded_reuse": 13
+ },
+ "baseline_600481": {
+  "unified": 10,
+  "expanded_reuse": 11
+ },
+ "baseline_603667": {
+  "unified": 11,
+  "expanded_reuse": 10
+ },
+ "v102_000988": {
+  "unified": 9,
+  "expanded_reuse": 12
+ },
+ "v102_588170": {
+  "unified": 6,
+  "expanded_reuse": 15
+ },
+ "v102_600176": {
+  "unified": 8,
+  "expanded_reuse": 13
+ },
+ "v102_600481": {
+  "unified": 10,
+  "expanded_reuse": 11
+ },
+ "v102_603667": {
+  "unified": 11,
+  "expanded_reuse": 10
+ }
+}
