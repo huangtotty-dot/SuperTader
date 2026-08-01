@@ -25,7 +25,8 @@ import numpy as np
 import pandas as pd
 
 BASE_DIR = Path(__file__).resolve().parent
-SNAPSHOT_DIR = BASE_DIR / "t_io" / "minute_snapshots"
+# 数据源可用环境变量 T_SNAPSHOT_DIR 切换（默认原腾讯快照目录；统一口径复测指向 minute_snapshots_ts）
+SNAPSHOT_DIR = Path(os.environ.get("T_SNAPSHOT_DIR", str(BASE_DIR / "t_io" / "minute_snapshots")))
 
 
 def load_shared() -> dict:
