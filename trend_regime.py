@@ -162,29 +162,17 @@ class TrendRegime:
         else:
             base_state = TrendState.BEAR  # 偏空
 
-        # 6. BOLL 辅助确认（升级/降级 STRONG 档 / NEUTRAL）
-        mid_rising = self._bb_mid_slope > p["trend_bb_slope_flat"]
-        mid_falling = self._bb_mid_slope < -p["trend_bb_slope_flat"]
-        width_expanding = self._bb_width_ratio > p["trend_bb_width_expand"]
-        width_contracting = self._bb_width_ratio < p["trend_bb_width_contract"]
-
-        if base_state == TrendState.BULL and mid_rising and width_expanding:
-            candidate_state = TrendState.STRONG_BULL
-            candidate_conf = min(1.0, 0.6 + 0.2 * (1 if mid_rising else 0) + 0.2 * (1 if width_expanding else 0))
-        elif base_state == TrendState.BEAR and mid_falling and width_expanding:
-            candidate_state = TrendState.STRONG_BEAR
-            candidate_conf = min(1.0, 0.6 + 0.2 * (1 if mid_falling else 0) + 0.2 * (1 if width_expanding else 0))
-        elif base_state == TrendState.BULL:
+        # 6. V1.0.4: 五档降三档 — STRONG准确率2-4%无信息量，统一用BULL/BEAR/NEUTRAL
+        # STRONG_{BULL,BEAR} 保留枚举但不再由判定逻辑产生；门控改为统一 ×0.6
+        if base_state == TrendState.BULL:
             candidate_state = TrendState.BULL
-            candidate_conf = 0.55 + 0.15 * (1 if mid_rising else 0)
+            candidate_conf = 0.55
         elif base_state == TrendState.BEAR:
             candidate_state = TrendState.BEAR
-            candidate_conf = 0.55 + 0.15 * (1 if mid_falling else 0)
+            candidate_conf = 0.55
         else:
-            # NEUTRAL：中轨走平 + 带宽收窄 → 高置信度 NEUTRAL
             candidate_state = TrendState.NEUTRAL
-            mid_flat = not mid_rising and not mid_falling
-            candidate_conf = 0.5 + 0.3 * (1 if (mid_flat and width_contracting) else 0)
+            candidate_conf = 0.5
 
         # 7. 防抖：状态切换需连续 N 根 K 线确认
         debounce = p["trend_debounce_bars"]
@@ -242,41 +230,26 @@ class TrendRegime:
     # ── 方向门控 ──
 
     def buy_gate_multiplier(self) -> float:
-        """返回买入分数乘数（趋势方向门控）
-
-        STRONG_BEAR: 0.3 — 大幅抑制逆势买入
-        BEAR:        0.6 — 适度抑制
-        NEUTRAL:     1.0 — 双向放行
-        BULL:        1.0 — 顺势买入
-        STRONG_BULL: 1.0 — 顺势买入（无抑制）
-        """
-        if self._current_state == TrendState.STRONG_BEAR:
-            return 0.3
-        elif self._current_state == TrendState.BEAR:
+        """V1.0.4 三档门控: BEAR买×0.6, 其余×1.0"""
+        if self._current_state == TrendState.BEAR:
             return 0.6
         return 1.0
 
     def buy_threshold_penalty(self) -> float:
-        """返回买入阈值惩罚分（提高买入门槛）"""
-        if self._current_state == TrendState.STRONG_BEAR:
-            return 12.0
-        elif self._current_state == TrendState.BEAR:
+        """V1.0.4: BEAR买门槛+6"""
+        if self._current_state == TrendState.BEAR:
             return 6.0
         return 0.0
 
     def sell_gate_multiplier(self) -> float:
-        """返回卖出分数乘数"""
-        if self._current_state == TrendState.STRONG_BULL:
-            return 0.3
-        elif self._current_state == TrendState.BULL:
+        """V1.0.4 三档门控: BULL卖×0.6, 其余×1.0"""
+        if self._current_state == TrendState.BULL:
             return 0.6
         return 1.0
 
     def sell_threshold_penalty(self) -> float:
-        """返回卖出阈值惩罚分（提高卖出门槛）"""
-        if self._current_state == TrendState.STRONG_BULL:
-            return 12.0
-        elif self._current_state == TrendState.BULL:
+        """V1.0.4: BULL卖门槛+6"""
+        if self._current_state == TrendState.BULL:
             return 6.0
         return 0.0
 
