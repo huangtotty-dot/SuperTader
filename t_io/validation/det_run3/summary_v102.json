@@ -1,0 +1,40 @@
+{
+  "total": 8,
+  "wins": 2,
+  "fails": 6,
+  "voids": 0,
+  "win_rate": 0.25,
+  "void_rate": 0.0,
+  "daily_stats": {
+    "2026-07-10": {
+      "signals": 8,
+      "wins": 2,
+      "fails": 6,
+      "voids": 0
+    }
+  },
+  "ab_mode": "v102",
+  "p1_metrics": {
+    "per_stock": {
+      "000988": {
+        "bull_match": 0,
+        "bear_match": 0,
+        "bull_total": 0,
+        "bear_total": 0,
+        "neutral_minutes": 1,
+        "total_minutes": 10,
+        "strong_bull_correct": 0,
+        "strong_bull_total": 0,
+        "strong_bear_correct": 0,
+        "strong_bear_total": 4
+      }
+    },
+    "bull_consistency": null,
+    "bear_consistency": null,
+    "overall_consistency": null,
+    "neutral_ratio": 0.1,
+    "bias_ratio": null,
+    "sample_days_bull": 0,
+    "sample_days_bear": 0
+  }
+}

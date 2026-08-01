@@ -1,0 +1,254 @@
+{
+  "total": 98,
+  "wins": 47,
+  "fails": 49,
+  "voids": 2,
+  "unsettled": 0,
+  "win_rate": 0.4896,
+  "daily_stats": {
+    "2026-06-22": {
+      "signals": 6,
+      "wins": 5,
+      "fails": 1,
+      "voids": 0
+    },
+    "2026-06-23": {
+      "signals": 7,
+      "wins": 3,
+      "fails": 4,
+      "voids": 0
+    },
+    "2026-06-24": {
+      "signals": 4,
+      "wins": 2,
+      "fails": 1,
+      "voids": 1
+    },
+    "2026-06-25": {
+      "signals": 4,
+      "wins": 3,
+      "fails": 1,
+      "voids": 0
+    },
+    "2026-06-26": {
+      "signals": 7,
+      "wins": 4,
+      "fails": 3,
+      "voids": 0
+    },
+    "2026-06-29": {
+      "signals": 10,
+      "wins": 5,
+      "fails": 5,
+      "voids": 0
+    },
+    "2026-06-30": {
+      "signals": 5,
+      "wins": 1,
+      "fails": 4,
+      "voids": 0
+    },
+    "2026-07-01": {
+      "signals": 7,
+      "wins": 2,
+      "fails": 5,
+      "voids": 0
+    },
+    "2026-07-02": {
+      "signals": 6,
+      "wins": 2,
+      "fails": 4,
+      "voids": 0
+    },
+    "2026-07-03": {
+      "signals": 4,
+      "wins": 2,
+      "fails": 2,
+      "voids": 0
+    },
+    "2026-07-06": {
+      "signals": 0,
+      "wins": 0,
+      "fails": 0,
+      "voids": 0
+    },
+    "2026-07-07": {
+      "signals": 3,
+      "wins": 1,
+      "fails": 2,
+      "voids": 0
+    },
+    "2026-07-08": {
+      "signals": 0,
+      "wins": 0,
+      "fails": 0,
+      "voids": 0
+    },
+    "2026-07-09": {
+      "signals": 1,
+      "wins": 0,
+      "fails": 1,
+      "voids": 0
+    },
+    "2026-07-10": {
+      "signals": 1,
+      "wins": 1,
+      "fails": 0,
+      "voids": 0
+    },
+    "2026-07-13": {
+      "signals": 3,
+      "wins": 2,
+      "fails": 1,
+      "voids": 0
+    },
+    "2026-07-14": {
+      "signals": 2,
+      "wins": 2,
+      "fails": 0,
+      "voids": 0
+    },
+    "2026-07-15": {
+      "signals": 2,
+      "wins": 1,
+      "fails": 0,
+      "voids": 1
+    },
+    "2026-07-16": {
+      "signals": 6,
+      "wins": 2,
+      "fails": 4,
+      "voids": 0
+    },
+    "2026-07-17": {
+      "signals": 4,
+      "wins": 1,
+      "fails": 3,
+      "voids": 0
+    },
+    "2026-07-20": {
+      "signals": 2,
+      "wins": 1,
+      "fails": 1,
+      "voids": 0
+    },
+    "2026-07-21": {
+      "signals": 3,
+      "wins": 0,
+      "fails": 3,
+      "voids": 0
+    },
+    "2026-07-22": {
+      "signals": 4,
+      "wins": 2,
+      "fails": 2,
+      "voids": 0
+    },
+    "2026-07-23": {
+      "signals": 3,
+      "wins": 3,
+      "fails": 0,
+      "voids": 0
+    },
+    "2026-07-24": {
+      "signals": 4,
+      "wins": 2,
+      "fails": 2,
+      "voids": 0
+    }
+  },
+  "ab_mode": "v102",
+  "p1_metrics": {
+    "per_stock": {
+      "000988": {
+        "bull_match": 3,
+        "bear_match": 6,
+        "bull_total": 4,
+        "bear_total": 6,
+        "neutral_segments": 38,
+        "total_segments": 96,
+        "neutral_minutes_est": 190,
+        "total_minutes_est": 480,
+        "strong_bull_correct": 0,
+        "strong_bull_total": 0,
+        "strong_bear_correct": 0,
+        "strong_bear_total": 0,
+        "reversal_detected": 0,
+        "reversal_total": 4
+      },
+      "588170": {
+        "bull_match": 3,
+        "bear_match": 2,
+        "bull_total": 4,
+        "bear_total": 2,
+        "neutral_segments": 35,
+        "total_segments": 93,
+        "neutral_minutes_est": 175,
+        "total_minutes_est": 465,
+        "strong_bull_correct": 0,
+        "strong_bull_total": 0,
+        "strong_bear_correct": 0,
+        "strong_bear_total": 0,
+        "reversal_detected": 0,
+        "reversal_total": 6
+      },
+      "600176": {
+        "bull_match": 1,
+        "bear_match": 2,
+        "bull_total": 1,
+        "bear_total": 2,
+        "neutral_segments": 23,
+        "total_segments": 59,
+        "neutral_minutes_est": 115,
+        "total_minutes_est": 295,
+        "strong_bull_correct": 0,
+        "strong_bull_total": 0,
+        "strong_bear_correct": 0,
+        "strong_bear_total": 0,
+        "reversal_detected": 0,
+        "reversal_total": 5
+      },
+      "600481": {
+        "bull_match": 2,
+        "bear_match": 6,
+        "bull_total": 2,
+        "bear_total": 6,
+        "neutral_segments": 32,
+        "total_segments": 68,
+        "neutral_minutes_est": 160,
+        "total_minutes_est": 340,
+        "strong_bull_correct": 0,
+        "strong_bull_total": 0,
+        "strong_bear_correct": 0,
+        "strong_bear_total": 0,
+        "reversal_detected": 0,
+        "reversal_total": 3
+      },
+      "603667": {
+        "bull_match": 0,
+        "bear_match": 3,
+        "bull_total": 2,
+        "bear_total": 3,
+        "neutral_segments": 29,
+        "total_segments": 72,
+        "neutral_minutes_est": 145,
+        "total_minutes_est": 360,
+        "strong_bull_correct": 0,
+        "strong_bull_total": 0,
+        "strong_bear_correct": 0,
+        "strong_bear_total": 0,
+        "reversal_detected": 0,
+        "reversal_total": 5
+      }
+    },
+    "bull_consistency": 0.692,
+    "bear_consistency": 1.0,
+    "overall_consistency": 0.875,
+    "neutral_ratio": 0.405,
+    "bias_ratio": 0.684,
+    "sample_days_bull": 13,
+    "sample_days_bear": 19,
+    "strong_bull_accuracy": null,
+    "strong_bear_accuracy": null
+  }
+}

@@ -271,432 +271,140 @@ except Exception:
     pass # 挂载失败不影响主程序运行
 
 # ==================== 【做T核心风控参数 V1.8】 ====================
+# V3.0 P0-D: PARAMS 精简 — 从 214 键删至 ~55 键（V1.x 死机制残留全清）
+# 保留键均经全库 grep 验证有活跃消费端；详见 doc/v1.0.2_config参数审计报告.md
 PARAMS = {
+    # —— 指标周期 ——
     "poll_interval": 15,
     "rsi_period": 6,
-    "rsi_overbought": 78,
-    "rsi_oversold": 35,
     "bb_period": 20,
     "bb_std": 2.0,
     "ema_fast_period": 8,
     "ema_slow_period": 21,
+    # —— V3.0 5分钟趋势层 ——
+    "rsi_period_5m": 14,
+    "rsi_oversold_5m": 32,
+    "rsi_overbought_5m": 68,
+    "trend_bb_slope_flat": 0.0005,
+    "trend_bb_width_expand": 1.05,
+    "trend_debounce_bars": 2,
+    # —— 风控 ——
     "min_amplitude": 0.015,
     "min_profit_space": 0.010,
+    "min_sell_profit_space": 0.005,
     "commission_rate": 0.0010,
     "cooldown_minutes": 30,
-    # V1.30: 卖出端保护 —— 底仓地板比例（base×ratio 不可卖，防卖穿底仓）
     "sell_floor_ratio": 0.5,
-    # V1.30: 盘中锁定日线状态机（盘中用最近完整交易日的regime，消除盘中抖动）
     "index_regime_intraday_lock": True,
-    # V1.27: 单股仓位上限（占总资金比例，超过此值触发强制卖出）
     "max_single_position_pct": 0.30,
-    "repeat_signal_gap_minutes": 60,
-    "repeat_signal_price_move": 0.004,
-    "repeat_signal_score_boost": 10,
-    "buy_signal_price_move": 0.004,
-    "buy_signal_score_boost": 4,
-    "add_pos_signal_price_move": 0.003,
-    "add_pos_signal_score_boost": 3,
-    "sell_repeat_block_minutes": 60,
-    "sell_signal_price_move": 0.003,
-    "sell_signal_score_boost": 4,
-    "panic_sell_signal_price_move": 0.002,
-    "panic_sell_signal_score_boost": 2,
-    "stand_down_min_amplitude": 0.010,
-    "stand_down_flat_range_gap": 0.0015,
-    "stand_down_score_gap": 10,
-    "idle_log_minutes": 10,
-    "scan_timeout_seconds": 12,
-    "cache_ttl_seconds": 180,
-    "cache_cleanup_limit": 200,
-    "vol_ratio_confirm": 1.5,
-    "vol_confirm_boost": 3,
-    "macd_strong_threshold": 0.0008,
-    "macd_strong_boost": 3,
     "max_buy_times_per_stock": 1,
     "max_sell_times_per_stock": 3,
-    "max_holding_minutes": 30,
-    "sell_score_boost_holding": 1,
-    "sell_holding_min_minutes": 20,
-    "sell_holding_strict_minutes": 35,
-    "sell_score_boost_eod": 8,
-    "sell_momentum_drop_threshold": 0.002,
-    "sell_momentum_bonus": 8,
-    "buy_confirm_min_seconds": 30,
-    "buy_confirm_min_factors": 1,
-    "buy_confirm_min_score": 25,
-    "buy_rebound_min_score_gap": 4,
-    "buy_priority_margin": 2,
-    "buy_soft_margin": 2,
-    "buy_soft_min_support_factors": 1,
-    "buy_starvation_days": 3,
-    "buy_starvation_relax_seconds": 25,
-    "buy_starvation_relax_factors": 2,
-    "buy_starvation_relax_gap": 2,
-    "buy_starvation_relax_ttl_days": 2,
-    "sell_fast_path_min_gap": 20,
-    "post_sell_rebuild_min_seconds": 30,
-    "post_sell_rebuild_buy_threshold_penalty": 2,
-    "post_sell_rebuild_relax_gap": 4,
-    "post_sell_rebuild_relax_factors": 3,
-    "post_sell_rebuild_weak_gate_discount": 0.5,
-    "sell_confirm_min_factors": 3,
-    "sell_confirm_min_seconds": 30,
-    "max_t_cycles_per_stock": 4,
-    "post_sell_rebuild_minutes": 12,
-    "post_sell_rebuild_price_gap": 0.003,
-    "post_sell_rebuild_score_gap": 6,
-    # V1.21: 高抛后低吸闭环参数
+    # —— 早盘 + VWAP + 止盈 ——
+    "morning_no_sell_until": 940,
+    "morning_no_sell_min_ret": 0.02,
+    "vwap_buy_deviation": -0.020,
+    "take_profit_pct": 0.010,
+    "take_profit_time_after": 1000,
+    # —— 高抛低吸闭环 ——
     "awaiting_buyback_ttl_minutes": 240,
-    "awaiting_buyback_score_boost": 15,  # V1.21fix: 从10提高到15
-    "awaiting_buyback_score_boost_weak": 8,  # V1.21fix: 从5提高到8
-    "awaiting_buyback_threshold_relax": 10,  # V1.21fix: 从5提高到10
-    "awaiting_buyback_threshold_relax_weak": 5,  # V1.21fix: 从3提高到5,
-    "awaiting_buyback_price_gap": 0.003,
-    "awaiting_buyback_vwap_gap": 0.998,
-    "awaiting_buyback_rsi_strong": 45,
-    "awaiting_buyback_rsi_weak": 50,
-    # V1.21: 高点确认延迟参数
-    "peak_decline_pct_threshold": 0.01,
-    "peak_decline_min_minutes": 3,
-    "peak_decline_penalty": 5,
-    # V1.21: 双顶保护增强参数
-    "double_top_pullback_threshold": 0.015,
-    "double_top_min_gap_minutes": 30,
-    "double_top_vol_shrink_threshold": 0.75,
-    "double_top_rsi_threshold": 75,
-    "double_top_price_proximity": 0.995,
-    "trend_today_ret_threshold": 0.025,
-    "trend_vwap_dev_threshold": 0.004,
-    "market_state_threshold_bias": 3,
-    "range_pos_low_threshold": 0.18,
-    "range_pos_high_threshold": 0.85,
-    "daily_context_enabled": True,
-    "daily_cache_ttl_seconds": 1800,
-    "daily_context_min_rows": 65,
-    # V1.27: 大盘态势温度 / 仓位熔断
-    "index_regime_context_enabled": True,
-    "index_temp_hot_score": 25.0,
-    "index_temp_cold_score": -15.0,
-    "index_temp_freeze_score": -25.0,
-    "index_temp_clear_score": -40.0,
-    "index_deterioration_delta": -10.0,
-    "index_deterioration_days": 2,
-    "index_stabilize_score": -10.0,
-    "index_stabilize_days": 2,
-    "index_pos_factor_uni_down": 0.6,
-    "index_pos_factor_range": 1.0,
-    "index_pos_factor_uni_up": 1.1,
-    "index_pos_factor_cold": 0.6,
-    "index_pos_factor_reduce": 0.4,
-    "index_pos_factor_clear": 0.0,
-    "index_defensive_buy_penalty": 8,
-    "index_freeze_buy_penalty": 100,
-    "index_defensive_sell_relief": 3,
-    "index_reduce_sell_boost": 10,
-    "index_clear_sell_boost": 100,
-    "daily_ma_support_gap": 0.025,
+    "awaiting_buyback_score_boost": 15,
+    "awaiting_buyback_score_boost_weak": 8,
+    "awaiting_buyback_threshold_relax": 10,
+    # —— 大跌/破位/急跌保护 ——
+    "big_drop_bounce_threshold": -0.05,
+    "big_drop_bounce_sell_boost": 10,
+    "big_drop_bounce_buy_penalty": 5,
+    "breakdown_gap_threshold": 0.005,
+    "breakdown_buy_block": True,
+    "open_dip_max_mins": 15,
+    "open_dip_buy_penalty": 25,
+    # —— 通知阈值 ——
+    "notify_buy_threshold": 68,
+    "notify_sell_threshold": 65,
+    "notify_sell_early_threshold": 75,
+    "notify_sell_panic_threshold": 60,
+    "hard_sell_threshold_cap": 80,
+    "hard_buy_threshold_cap": 80,
+    "sell_fast_path_min_gap": 20,
+    # —— 信号推送限流 ——
+    "buy_signal_price_move": 0.004,
+    "buy_signal_score_boost": 4,
+    "sell_signal_price_move": 0.003,
+    "sell_signal_score_boost": 4,
+    "add_pos_signal_price_move": 0.003,
+    "add_pos_signal_score_boost": 3,
+    "panic_sell_signal_price_move": 0.002,
+    "panic_sell_signal_score_boost": 2,
+    # —— 仓位（position_sizer 消费） ——
+    "stock_qty_base_pct": 0.30,
+    "stock_qty_strong_pct": 0.40,
+    "stock_qty_weak_pct": 0.20,
+    "stock_rebuild_base_pct": 0.50,
+    "stock_rebuild_strong_pct": 0.80,
+    "stock_rebuild_weak_pct": 0.30,
+    "stock_first_add_pct": 0.20,
+    "stock_first_add_strong_pct": 0.30,
+    "stock_first_add_weak_pct": 0.10,
+    "stock_min_trade_unit": 100,
+    "etf_qty_strong_pct": 0.25,
+    "etf_qty_base_pct": 0.15,
+    "etf_qty_weak_pct": 0.08,
+    "buy_soft_margin": 2,
+    # —— 其他 ——
+    "idle_log_minutes": 10,
+    "cache_ttl_seconds": 180,
     "daily_ma_support_loose_gap": 0.04,
-    "daily_ma_breakdown_gap": 0.015,
-    "daily_ma_hard_breakdown_gap": 0.035,
-    "daily_overheat_ma10_gap": 0.08,
-    "daily_overheat_ma20_gap": 0.12,
-    "daily_overheat_day_ret": 0.065,
-    "daily_support_buy_boost": 6,
-    "daily_base_buy_boost": 3,
-    "daily_trend_buy_boost": 2,
-    "daily_overheat_buy_penalty": 8,
-    "daily_breakdown_buy_penalty": 10,
-    "daily_downtrend_buy_penalty": 5,
-    "daily_breakdown_sell_boost": 7,
-    "daily_overheat_sell_boost": 4,
-    "daily_risk_buy_threshold_penalty": 8,
-    "daily_overheat_buy_threshold_penalty": 6,
-    "daily_support_buy_threshold_relief": 2,
-    "profit_guard_open_gap_threshold": 0.005,   # 低开触发幅度（绝对值），0.5%
-    "profit_guard_profit_max": 0.04,            # 微盈区间上限，4%浮盈以内激活
-    "profit_guard_profit_min": 0.0,             # 微盈区间下限，仅浮盈时保护
-    "profit_guard_minutes_end": 600,            # 护利窗口结束，10:00 = 600分钟
-    "profit_guard_buy_threshold_add": 15,       # buy_threshold 惩罚点数
-    "profit_guard_buy_score_penalty": 8,        # buy_score 直接扣分
-    "auction_weak_surge_range_pos": 0.72,       # 弱势冲高触发：日内区间位置阈值
-    "auction_weak_surge_ret_threshold": 0.015,  # 弱势冲高触发：今日涨幅阈值
-    "auction_weak_surge_vwap_gap": 0.008,       # 弱势冲高触发：需高于VWAP的幅度
-    "auction_weak_low_range_pos": 0.25,         # 弱势低位买回：日内区间位置阈值
-    "auction_weak_low_ret_threshold": -0.005,   # 弱势低位买回：今日跌幅阈值
-    "auction_weak_max_sell_alerts": 2,          # 每日最多冲高卖出提醒次数
-    "auction_weak_max_buy_alerts": 2,           # 每日最多低位买回提醒次数
-    "min_profit_space": 0.008,                  # 最小盈利空间，从0.010降至0.008（2026-06-18 relaxed策略）
-    "etf_t_qty_multiplier": 1.5,                # ETF T仓位倍数（2026-06-18）
-    "force_close_time": "14:50",                # 强制日内平仓时间（2026-06-18）
-    "force_close_min_profit_pct": 0.003,        # 强制平仓最低利润要求（2026-06-18）
-    # V1.14: 华工科技 0701 教训改进参数（成本逼近 / 盘口背离 / 压力区 / 大跌反抽）
-    "profit_guard_tight_profit_max": 0.03,       # 成本逼近：利润<3%视为微利逼近
-    "profit_guard_tight_gap_max": 0.015,         # 成本逼近：价格与成本差距<1.5%视为逼近
-    "profit_guard_sell_boost": 15,               # 成本逼近时卖出额外加分
-    "profit_guard_buy_penalty": 10,              # 成本逼近时买入门槛惩罚
-    "surge_shadow_divergence_boost": 12,          # 冲高+长上影/量能背离加分
-    "bb_band_breakout_penalty": 8,               # 突破布林上轨压力区惩罚
-    "ma5_deviation_sell_boost": 10,              # 远离MA5（>5%）卖出加分
-    "big_drop_bounce_threshold": -0.05,        # 前日大跌阈值（-5%）
-    "big_drop_bounce_sell_boost": 10,           # 大跌后反抽卖出加分
-    "big_drop_bounce_buy_penalty": 5,            # 大跌后反抽买入门槛惩罚
-    # V1.14: 个股动态份数与高抛低吸组合拳参数（market_regime + position_sizer 新架构）
-    "stock_qty_base_pct": 0.30,        # 个股中信号首次卖出比例（总T仓30%）
-    "stock_qty_strong_pct": 0.40,    # 个股强信号首次卖出比例（总T仓40%）
-    "stock_qty_weak_pct": 0.20,      # 个股弱信号首次卖出比例（总T仓20%）
-    "stock_rebuild_base_pct": 0.50,  # 卖后重建基础接回比例（未接回量50%）
-    "stock_rebuild_strong_pct": 0.80,# 卖后重建强信号接回比例（80%）
-    "stock_rebuild_weak_pct": 0.30,  # 卖后重建弱信号接回比例（30%）
-    "stock_min_trade_unit": 100,     # 个股最小交易单位（100股）
-    "stock_first_add_pct": 0.20,     # 从未卖出过，首次买入比例（总T仓20%）
-    "stock_first_add_strong_pct": 0.30,# 从未卖出过，强信号首次买入比例
-    "stock_first_add_weak_pct": 0.10, # 从未卖出过，弱信号首次买入比例
-    "stock_rebuild_tight_pct": 0.30, # 重压模式下接回比例（只接回30%）
-    # V1.15: 理想高抛点优化参数（阈值保护 / 最优卖点 / 早盘防过早触发）
-    "hard_sell_threshold_cap": 80,               # 卖出阈值硬性上限（防止被叠加到143+）
-    "hard_buy_threshold_cap": 80,                # 买入阈值硬性上限
-    "min_sell_profit_space": 0.005,              # V1.19: 最小卖出幅度过滤（幅度<0.5%不触发高抛）
-    "optimal_sell_range_pos": 0.95,              # 最优卖点：range_pos >= 0.95
-    "optimal_sell_rsi": 85,                      # 最优卖点：RSI >= 85
-    "optimal_sell_bb_pct": 0.90,                 # 最优卖点：BB_pct >= 0.90
-    "optimal_sell_today_ret": 0.02,              # 最优卖点：今日涨幅 >= 2%
-    "optimal_sell_threshold_relief": 10,         # 最优卖点：降低卖出阈值
-    "optimal_sell_boost": 8,                     # 最优卖点：额外加分
-    "optimal_sell_bypass_redundant": True,       # 最优卖点：绕过重复信号检查
-    "optimal_sell_bypass_repeat_block": True,    # 最优卖点：绕过卖出重复封锁
-    "morning_no_sell_until_minute": 10,          # 早盘前N分钟禁止首次卖出（给价格发育时间）
-    "morning_no_sell_min_ret": 0.02,             # 早盘首次卖出需今日涨幅>=此值
-    "morning_no_sell_until": 940,                # 早盘禁止卖出截止时间（9:40）
-    # V1.13: 15分钟线低吸参数
-    "min_15min_bars": 3,                        # 15分钟线最少需要几根
-    "rsi_15m_oversold": 35,                     # 15分钟RSI超卖阈值
-    "macd_15m_exhaustion_threshold": -0.001,    # 15分钟MACD衰竭阈值（负区柱状体小于此值）
-    "kinetic_exhaustion_boost": 10,             # 下跌动能衰竭加分
-    "support_15m_boost": 8,                     # 15分钟强支撑加分
-    "multi_bottom_15m_boost": 6,                # 15分钟多重底加分
-    "ema_15m_improve_boost": 3,                 # 15分钟EMA改善加分
-    # V1.17: 5分钟线缩量止跌+放量反转参数（7月6日反馈）
-    "volume_reversal_boost": 28,                 # 5分钟量能反转信号加分
-    # V1.22: 5分钟大阳线反包确认参数（7月8日反馈）
-    "bullish_reversal_min_pct": 0.01,            # 5分钟K线最低涨幅（1%，大阳线）
-    "bullish_reversal_body_ratio": 0.60,         # 实体占振幅最低比例（60%）
-    "bullish_reversal_vol_multiplier": 1.0,      # 成交量相对前4根均量最低倍数（放量）
-    "bullish_reversal_engulf": 0.995,            # 当前close >= 前4根high * 0.995（反包确认）
-    "open_dip_max_mins": 15,                     # 开盘后多少分钟内视为开盘急跌窗口
-    "open_dip_decline_threshold": -0.015,         # 开盘急跌阈值（5分钟跌1.5%）
-    "open_dip_buy_penalty": 25,                  # 开盘急跌无反包时买入惩罚
-    "etf_stand_down_gap": 0.003,                 # ETF停手gap默认值（会被ETF_T0_PARAMS覆盖）
 }
 
 # 个股专属参数覆盖（基于近90日分钟数据统计回测定制）
 # 科泰电源 300153：反转最强、流动性最差、尾盘低点概率最高
+# V3.0 P0-D: STOCK_PARAMS 精简 — 仅保留有 _sp_param 消费端的键（含 N2/N3/N4 修复后生效的）
 STOCK_PARAMS = {
-    "300153": {  # 科泰电源
-        "min_profit_space": 0.010,           # 最小盈利空间1.0%（滑点高）
-        "vol_ratio_confirm": 2.0,            # 放量确认倍数2.0
-        "stock_qty_base_pct": 0.20,          # 单笔基础仓位20%
-        "stock_qty_strong_pct": 0.30,        # 强信号仓位30%
-        "morning_no_sell_until": 935,        # 9:35即可卖出
-        "morning_no_sell_min_ret": 0.015,    # 早盘卖出门槛1.5%
-        "rsi_overbought": 75,
-        "open_dip_decline_threshold": -0.012, # 开盘急跌阈值-1.2%
-        "open_dip_buy_penalty": 20,
-        "awaiting_buyback_vwap_gap": 0.992,   # 低于VWAP 0.8%接回
-        "awaiting_buyback_score_boost": 18,
-        "max_buy_times_per_stock": 2,
-        "max_t_cycles_per_stock": 3,
-        "cooldown_minutes": 25,
-        "sell_holding_min_minutes": 15,
-        "stand_down_min_amplitude": 0.012,
-        "buy_confirm_min_score": 22,          # 买入确认最低分22（信号稀缺）
-        # V1.24: 回测优化 — 大阳线反包确认太严格（1%），科泰小步回调无法触发
-        "bullish_reversal_min_pct": 0.005,    # 5分钟大阳线反包确认阈值从1%降至0.5%
-        "bullish_reversal_body_ratio": 0.55,   # 实体占比从60%降至55%
-        "bullish_reversal_vol_multiplier": 0.8, # 放量倍数从1.0降至0.8
-        # V1.24: 回测优化 — 高buy_score但无大阳线时允许小步抄底
-        "high_buy_score_bypass": True,         # 当buy_score>100且价格低于VWAP 2%时允许绕过stand_down
-        "high_buy_score_threshold": 100,
-        "high_buy_score_vwap_gap": 0.02,
-    },
-    "300364": {  # 中文在线
-        "morning_no_sell_min_ret": 0.015,     # 早盘卖出门槛1.5%
-        "rsi_overbought": 75,
-        "morning_buy_threshold": 75,          # 开盘低吸评分阈值75（探底回升仅30.9%）
-        "vwap_buy_deviation": -0.018,         # VWAP偏离买入阈值-1.8%
-        "rsi_oversold": 35,
-        "vol_ratio_confirm": 1.3,             # 量比阈值1.3（假放量更多）
-        "stand_down_min_amplitude": 0.012,
-        "awaiting_buyback_vwap_gap": 0.995,   # 尾盘接回略紧（尾盘机会13.6%）
-        "max_down_streak_tolerance": 2,       # 连跌容忍2天（最大连跌8天）
-        "sell_confirm_min_factors": 2,        # 卖出确认因子2（冲高回落50.6%）
-        "post_sell_rebuild_minutes": 10,
-        # V1.25: 近半年回测优化 — min_profit_space=1.0%完全封杀策略B（86笔全部被过滤），回调至0.9%
-        "min_profit_space": 0.009,            # 最小盈利空间从1.0%回调到0.9%（策略A=1.0%，策略B=0.8%）
-        "min_profit_space_strategy_a": 0.010,  # 策略A（早盘高抛）保持1.0%
-        "min_profit_space_strategy_b": 0.008,  # 策略B（开盘低走反弹）放宽至0.8%
-        # V1.24: 回测优化 — 大跌日禁止抄底（日线破位风险）
-        "breakdown_buy_block": True,           # 日线破位时禁止买入
-        # V1.25: 近半年回测优化 — breakdown_gap_threshold从1.5%放宽至2.0%，减少高波动误杀
-        "breakdown_gap_threshold": 0.020,     # 跌破前低2.0%视为破位（原1.5%过严，38天触发误杀多）
-        # V1.24: 回测优化 — 每日交易次数上限，防止过度交易
-        "daily_trade_limit": 2,              # 每日最多2次完整T（买入+卖出）
-        # V1.24: 回测优化 — 微利保护机制
-        "min_profit_per_t": 0.005,           # 单笔做T最低利润0.5%，低于此计微利
-        "max_micro_profit_per_day": 3,       # 每日最多3次微利，超过暂停该股票
-    },
     "600481": {  # 双良节能
-        "liquidity_multiplier": 1.2,          # 流动性乘数1.2（日均11515万）
-        "stock_qty_base_pct": 0.39,           # 单笔基础仓位35%
-        "stock_qty_strong_pct": 0.27,         # 强信号仓位50%
-        "morning_no_sell_until": 935,         # 9:35即可卖出
-        "morning_no_sell_min_ret": 0.015,     # 早盘卖出门槛1.5%
-        "sell_confirm_min_factors": 2,        # 卖出确认因子2
-        "sell_confirm_min_seconds": 20,
-        "buy_confirm_min_score": 24,          # 买入确认最低分22（胜率97.5%）
-        "open_dip_buy_penalty": 15,
-        "post_sell_rebuild_minutes": 8,       # 卖后重建等待8分钟
-        "min_profit_space": 0.008,            # V1.25: 最小盈利空间0.8%（原0.6%过于接近成本线）
-        "stand_down_min_amplitude": 0.015,    # 停手振幅门槛1.5%
-        "awaiting_buyback_vwap_gap": 0.995,   # V1.25: 尾盘接回放宽至0.5%（原0.997=0.3%过严，易空仓过夜）
-        # V1.24: 回测优化 — 双良做T效果最佳，允许更积极操作
-        "bullish_reversal_min_pct": 0.008,    # 大阳线确认阈值0.8%（波动大，可适当提高）
-        # V1.24: 回测优化 — 倒T信号增强（下跌趋势中早盘高抛）
-        # V1.25: 近半年回测优化 — downtrend_sell_threshold从2.0%降至1.5%，覆盖更多中度下跌日
-        "downtrend_sell_boost": 10,           # 下跌趋势中卖出额外加分
-        "downtrend_sell_threshold": 0.015,     # V1.25: 当日跌幅>1.5%触发
-        "vwap_buy_deviation": -0.0161,        # Optuna寻优：100trial CS=1630
-        "take_profit_pct": 0.0148,            # Optuna寻优：100trial CS=1630
+        "stock_qty_base_pct": 0.39, "stock_qty_strong_pct": 0.27,
+        "stock_rebuild_strong_pct": 0.98, "stock_first_add_pct": 0.34,
+        "vwap_buy_deviation": -0.0161,         # N3 Optuna CS=1630
+        "take_profit_pct": 0.0148,             # N2 Optuna CS=1630
+        "take_profit_time_after": 1000,
+        "bullish_reversal_min_pct": 0.008,     # N4
         "notify_sell_threshold": 62, "notify_buy_threshold": 43,
-        "stock_rebuild_strong_pct": 0.98,
-        "stock_first_add_pct": 0.34
     },
-    "000988": {  # 华工科技 — VWAP深V低吸型（2026-07-23 Optuna寻优修正版）
-        # 寻优结果：2025-11-25~2026-06-30 训练集，Trial#15 综合得分111.44
-        # vwap=-0.0181 / tp=0.0188 / score=27 → 7笔/胜率57.1%/PnL+863/年化12.94%
-        "min_profit_space": 0.010,           # 最小盈利空间1.0%
-        "vol_ratio_confirm": 1.8,            # 放量确认倍数1.8
-        "stock_qty_base_pct": 0.3,          # 单笔基础仓位30%
-        "stock_qty_strong_pct": 0.29,        # 强信号仓位50%
-        "morning_no_sell_until": 1000,       # 10:00前禁止卖出
-        "morning_no_sell_min_ret": 0.030,    # 早盘卖出门槛3%
-        "rsi_overbought": 75,                # RSI超买阈值
-        "rsi_oversold": 32,                  # 超卖阈值
-        "open_dip_decline_threshold": -0.015, # 开盘急跌阈值-1.5%
-        "open_dip_buy_penalty": 10,          # 开盘急跌惩罚
-        "awaiting_buyback_vwap_gap": 0.975,   # 低于VWAP 2.5%接回
-        "awaiting_buyback_score_boost": 25,   # 深V时买入加分
-        "max_buy_times_per_stock": 3,        # 允许更多买入机会（VWAP低吸可多次触发）
-        "max_sell_times_per_stock": 2,       # 减少卖出（早抛策略已证伪）
-        "max_t_cycles_per_stock": 4,
-        "cooldown_minutes": 25,
-        "sell_holding_min_minutes": 15,
-        "stand_down_min_amplitude": 0.015,    # 停手振幅1.5%
-        "buy_confirm_min_score": 16,          # 买入确认最低分（Optuna寻优：18→27，胜率57.1%）
-        "bullish_reversal_min_pct": 0.006,    # 大阳线反包确认阈值0.6%（更容易触发）
-        "bullish_reversal_body_ratio": 0.50,  # 实体占比50%
-        "bullish_reversal_vol_multiplier": 0.7, # 放量倍数0.7（更容易确认）
-        "vwap_buy_deviation": -0.022,          # VWAP偏离买入阈值（Optuna寻优：100trial CS=851）
-        "high_buy_score_bypass": True,        # 高分绕过stand_down（深V时不错过）
-        "high_buy_score_threshold": 90,
-        "high_buy_score_vwap_gap": 0.018,     # 低于VWAP 1.8%且高分时允许买入
-        "daily_trade_limit": 3,
-        "min_profit_per_t": 0.006,            # 单笔最低利润0.6%
-        "max_micro_profit_per_day": 3,
-        # 止盈参数（Optuna寻优：1%→1.88%，匹配VWAP浅偏离策略）
-        "take_profit_pct": 0.0212,            # 持仓涨2.12%即止盈（Optuna寻优：100trial CS=851）
-        "take_profit_time_after": 1000,       # 10:00后启动止盈监控
-        # V1.29: 推送阈值（可被 optimizer 单独寻优调整）
-                "stock_rebuild_strong_pct": 0.59,
-                "stock_first_add_pct": 0.27,
-        "notify_sell_threshold": 63,
-        "notify_buy_threshold": 43,
+    "000988": {  # 华工科技
+        "stock_qty_base_pct": 0.30, "stock_qty_strong_pct": 0.29,
+        "stock_rebuild_strong_pct": 0.59, "stock_first_add_pct": 0.27,
+        "max_sell_times_per_stock": 2,
+        "vwap_buy_deviation": -0.022,          # N3 Optuna CS=851
+        "take_profit_pct": 0.0212,             # N2 Optuna CS=851
+        "take_profit_time_after": 1000,
+        "bullish_reversal_min_pct": 0.006,     # N4
+        "bullish_reversal_body_ratio": 0.50,
+        "bullish_reversal_vol_multiplier": 0.7,
+        "notify_sell_threshold": 63, "notify_buy_threshold": 43,
     },
-    "588170": {  # 科创芯片ETF — VWAP深V低吸型（2026-07-14 回测修正版）
-        # ⚠️ 回测结论：早抛晚接/倒T 全部负收益！唯一正收益策略为 VWAP深V低吸
-        # 回测最优：偏离-0.5%买入 + 3%止盈，49笔/胜率63.3%/总收益15.80%/夏普0.765
-        "min_profit_space": 0.008,            # 最小盈利空间0.8%（振幅大但需给空间）
-        "vol_ratio_confirm": 1.2,             # ETF放量确认倍数1.2
-        "stock_qty_base_pct": 0.15,           # 单笔基础仓位25%（交易频繁，分散）
-        "stock_qty_strong_pct": 0.25,         # 强信号仓位40%
-        "morning_no_sell_until": 1000,        # 10:00前禁止卖出（ETF偏强，早抛亏钱）
-        "morning_no_sell_min_ret": 0.035,     # 早盘卖出门槛3.5%（极高，几乎不卖）
-        "rsi_overbought": 78,                 # RSI超买阈值提高（偏强不轻易卖）
-        "rsi_oversold": 38,                   # 超卖阈值
-        "awaiting_buyback_vwap_gap": 0.995,   # VWAP下方0.5%接回
-        "awaiting_buyback_score_boost": 12,
-        "max_buy_times_per_stock": 4,         # 允许更多买入（ETF偏离触发频繁）
-        "max_sell_times_per_stock": 2,        # 减少卖出
-        "max_t_cycles_per_stock": 5,
-        "cooldown_minutes": 10,               # ETF冷却时间短（交易频率高）
-        "sell_holding_min_minutes": 10,
-        "stand_down_min_amplitude": 0.008,
-        "buy_confirm_min_score": 30,          # 买入门槛降低（偏离-0.5%即积极）
-        "vwap_buy_deviation": -0.0313,         # 低于VWAP 0.5%即买入（回测最优）
-        "vwap_sell_deviation": 0.020,         # 高于VWAP 2%才考虑卖出（偏强）
-        "open_dip_decline_threshold": -0.012,  # 开盘急跌-1.2%触发抄底
-        "open_dip_buy_boost": 20,             # 开盘急跌买入加分加大
-        "force_close_time": "14:55",
-        "force_close_min_profit_pct": 0.005,
-        "daily_trade_limit": 4,              # 每日最多4次（交易频率高）
-        "min_profit_per_t": 0.005,
-        # 止盈参数（回测驱动：ETF最优止盈3%）
-        "take_profit_pct": 0.0206,             # 持仓涨3%即止盈（回测最优）
-        "take_profit_time_after": 1000,       # 10:00后启动止盈监控
+    "588170": {  # 科创芯片ETF
+        "stock_qty_base_pct": 0.15, "stock_qty_strong_pct": 0.25,
+        "stock_rebuild_strong_pct": 0.50, "stock_first_add_pct": 0.10,
+        "max_sell_times_per_stock": 2,
+        "vwap_buy_deviation": -0.0313,         # N3
+        "take_profit_pct": 0.0206,             # N2
+        "take_profit_time_after": 1000,
         "notify_sell_threshold": 67, "notify_buy_threshold": 40,
-        "stock_rebuild_strong_pct": 0.5,
-        "stock_first_add_pct": 0.1
     },
-    "600176": {  # 中国巨石 — 高波动深跌型（日均振幅6-10%，成交2亿+）
-        "min_profit_space": 0.012,            # 最小盈利空间1.2%（高波动需要更大空间）
-        "vol_ratio_confirm": 1.5,             # 放量确认倍数1.5
-        "stock_qty_base_pct": 0.34,           # 单笔基础仓位25%（波动大，控制风险）
-        "stock_qty_strong_pct": 0.59,         # 强信号仓位40%
-        "morning_no_sell_until": 950,         # 9:50即可卖出（波动大早盘有机会）
-        "morning_no_sell_min_ret": 0.015,     # 早盘卖出门槛1.5%
-        "rsi_overbought": 72,                 # RSI超买阈值降低（高波动尽早锁定利润）
-        "rsi_oversold": 30,                   # 超卖阈值
-        "sell_confirm_min_factors": 2,        # 卖出确认因子2
-        "buy_confirm_min_score": 20,          # 买入门槛
-        "open_dip_decline_threshold": -0.012, # 开盘急跌阈值-1.2%
-        "open_dip_buy_penalty": 20,
-        "awaiting_buyback_vwap_gap": 0.985,   # VWAP下方1.5%接回（高波动需要更大偏离）
-        "max_buy_times_per_stock": 2,
-        "max_sell_times_per_stock": 3,        # 高波动允许更多卖出机会
-        "max_t_cycles_per_stock": 4,
-        "cooldown_minutes": 20,
-        "daily_trade_limit": 3,
-        "stand_down_min_amplitude": 0.018,    # 停手振幅1.8%（高波动型）
-        "vwap_buy_deviation": -0.0173,        # Optuna寻优：100trial CS=434
-        "take_profit_pct": 0.0211,            # Optuna寻优：100trial CS=434
-                "stock_rebuild_strong_pct": 0.97,
-                "stock_first_add_pct": 0.37,
+    "600176": {  # 中国巨石
+        "stock_qty_base_pct": 0.34, "stock_qty_strong_pct": 0.59,
+        "stock_rebuild_strong_pct": 0.97, "stock_first_add_pct": 0.37,
+        "max_sell_times_per_stock": 3,
+        "vwap_buy_deviation": -0.0173,         # N3 Optuna CS=434
+        "take_profit_pct": 0.0211,             # N2 Optuna CS=434
+        "take_profit_time_after": 1000,
         "notify_sell_threshold": 51, "notify_buy_threshold": 40,
     },
-    "603667": {  # 五洲新春 — 中等波动区间型（日均振幅4-9%，成交2000万）
-        "min_profit_space": 0.010,            # 最小盈利空间1.0%
-        "vol_ratio_confirm": 1.3,             # 放量确认倍数1.3
-        "stock_qty_base_pct": 0.28,           # 单笔基础仓位30%
-        "stock_qty_strong_pct": 0.37,         # 强信号仓位50%
-        "morning_no_sell_until": 945,         # 9:45即可卖出（区间型早盘冲高适合高抛）
-        "morning_no_sell_min_ret": 0.020,     # 早盘卖出门槛2.0%
-        "rsi_overbought": 75,
-        "rsi_oversold": 32,
-        "sell_confirm_min_factors": 2,
-        "buy_confirm_min_score": 19,
-        "open_dip_decline_threshold": -0.015,
-        "open_dip_buy_penalty": 20,
-        "awaiting_buyback_vwap_gap": 0.990,   # VWAP下方1.0%接回
-        "max_buy_times_per_stock": 3,
-        "max_sell_times_per_stock": 3,
-        "max_t_cycles_per_stock": 4,
-        "cooldown_minutes": 15,
-        "daily_trade_limit": 3,
-        "stand_down_min_amplitude": 0.012,    # 停手振幅1.2%
-        "vwap_buy_deviation": -0.0276,        # Optuna寻优：100trial CS=498
-        "take_profit_pct": 0.0200,            # Optuna寻优：100trial CS=498
-                "stock_rebuild_strong_pct": 0.75,
-                "stock_first_add_pct": 0.21,
+    "603667": {  # 五洲新春
+        "stock_qty_base_pct": 0.28, "stock_qty_strong_pct": 0.37,
+        "stock_rebuild_strong_pct": 0.75, "stock_first_add_pct": 0.21,
+        "vwap_buy_deviation": -0.0276,         # N3 Optuna CS=498
+        "take_profit_pct": 0.0200,             # N2 Optuna CS=498
+        "take_profit_time_after": 1000,
         "notify_sell_threshold": 64, "notify_buy_threshold": 40,
     },
 }
@@ -715,111 +423,21 @@ STOCK_PARAMS = {
 # Level 0 → ✅ 正常执行VWAP深V低吸策略
 # 飞书推送格式见 notify() 函数中的 alert_card 模板
 MORNING_ALERT_PARAMS = {
-    # ===== 科泰电源 300153 =====
-    # 单边下行日：62天/468天(13.2%)，平均跌幅-4.37%，最大-13.45%
-    "300153": {
-        "alert_enabled": True,
-        "alert_window_end": 1000,
-        "level_2_rules": [
-            {
-                "name": "无反弹+价格斜率极陡",
-                "desc": "开盘后最高涨幅≤0.24% 且 30分钟价格斜率≤-5.18",
-                "precision": 1.00, "recall": 0.081,
-                "condition": {"max_gain_after_open": 0.0024, "price_slope_30min": -5.18},
-            },
-            {
-                "name": "无反弹+价格斜率陡",
-                "desc": "开盘后最高涨幅≤0.62% 且 30分钟价格斜率≤-5.18",
-                "precision": 0.909, "recall": 0.161,
-                "condition": {"max_gain_after_open": 0.0062, "price_slope_30min": -5.18},
-            },
-        ],
-        "level_1_rules": [
-            {
-                "name": "【主】开盘30分钟大跌",
-                "desc": "开盘30分钟涨幅≤-1.00%（核心阈值，覆盖最广）",
-                "precision": 0.55, "recall": 0.75,
-                "condition": {"open_30min_ret": -0.010},
-            },
-            {
-                "name": "开盘30分钟暴跌+无反弹",
-                "desc": "开盘30分钟涨幅≤-1.52% 且 开盘后最高涨幅≤0.24%",
-                "precision": 0.769, "recall": 0.323,
-                "condition": {"open_30min_ret": -0.0152, "max_gain_after_open": 0.0024},
-            },
-            {
-                "name": "VWAP下行+无反弹",
-                "desc": "VWAP斜率≤-1.78 且 开盘后最高涨幅≤0.38%",
-                "precision": 0.750, "recall": 0.339,
-                "condition": {"vwap_slope": -1.78, "max_gain_after_open": 0.0038},
-            },
-        ],
-    },
-    # ===== 中文在线 300364 =====
-    # 单边下行日：60天/412天(14.6%)，平均跌幅-3.48%，最大-8.55%
-    "300364": {
-        "alert_enabled": True,
-        "alert_window_end": 1000,
-        "level_2_rules": [
-            {
-                "name": "开盘5分钟暴跌+连续阴线",
-                "desc": "开盘5分钟涨幅≤-2.0% 且 连续阴线≥3根",
-                "precision": 0.60, "recall": 0.15,
-                "condition": {"open_5min_ret": -0.020, "consecutive_bearish": 3},
-            },
-        ],
-        "level_1_rules": [
-            {
-                "name": "【主】开盘30分钟大跌",
-                "desc": "开盘30分钟涨幅≤-1.00%（核心阈值）",
-                "precision": 0.55, "recall": 0.70,
-                "condition": {"open_30min_ret": -0.010},
-            },
-            {
-                "name": "开盘5分钟大跌+连续阴线",
-                "desc": "开盘5分钟涨幅≤-1.0% 且 连续阴线≥3根",
-                "precision": 0.571, "recall": 0.333,
-                "condition": {"open_5min_ret": -0.010, "consecutive_bearish": 3},
-            },
-            {
-                "name": "开盘5分钟暴跌+连续阴线",
-                "desc": "开盘5分钟涨幅≤-2.0% 且 连续阴线≥2根",
-                "precision": 0.562, "recall": 0.15,
-                "condition": {"open_5min_ret": -0.020, "consecutive_bearish": 2},
-            },
-        ],
-    },
+    # V3.0fix: 300153 (科泰电源) + 300364 (中文在线) 已不在持仓，MORNING_ALERT 整段删除
     # ===== 双良节能 600481 =====
     # 单边下行日：74天/374天(19.8%)，平均跌幅-3.55%，最大-9.05%
     "600481": {
         "alert_enabled": True,
         "alert_window_end": 1000,
-        "level_2_rules": [
-            {
-                "name": "无反弹+VWAP深偏离",
-                "desc": "开盘后最高涨幅<0.33% 且 10:00 VWAP偏离<-1.13%",
-                "precision": 1.00, "recall": 0.108,
-                "condition": {"max_gain_after_open": 0.0033, "deviation_vwap_1000": -0.0113},
-            },
-        ],
+        # V3.0fix: 删除含 deviation_vwap_1000 的规则（无测量逻辑）
+        "level_2_rules": [],
+        # V3.0fix: 删除含 deviation_vwap_1000 的规则（无测量逻辑）
         "level_1_rules": [
             {
                 "name": "【主】开盘30分钟大跌",
                 "desc": "开盘30分钟涨幅≤-1.00%（核心阈值）",
                 "precision": 0.55, "recall": 0.72,
                 "condition": {"open_30min_ret": -0.010},
-            },
-            {
-                "name": "无反弹+VWAP偏离",
-                "desc": "开盘后最高涨幅<0.33% 且 10:00 VWAP偏离<-0.55%",
-                "precision": 0.885, "recall": 0.311,
-                "condition": {"max_gain_after_open": 0.0033, "deviation_vwap_1000": -0.0055},
-            },
-            {
-                "name": "无反弹+VWAP弱偏离",
-                "desc": "开盘后最高涨幅<0.33% 且 10:00 VWAP偏离<-0.79%",
-                "precision": 0.941, "recall": 0.216,
-                "condition": {"max_gain_after_open": 0.0033, "deviation_vwap_1000": -0.0079},
             },
         ],
     },
@@ -862,20 +480,8 @@ MORNING_ALERT_PARAMS = {
     "588170": {
         "alert_enabled": True,
         "alert_window_end": 1000,
-        "level_2_rules": [
-            {
-                "name": "无反弹+价格斜率负",
-                "desc": "开盘后最高涨幅<0.45% 且 30分钟价格斜率<-0.027",
-                "precision": 0.917, "recall": 0.423,
-                "condition": {"max_gain_after_open": 0.0045, "price_slope_30min": -0.027},
-            },
-            {
-                "name": "无反弹+价格斜率负(严格)",
-                "desc": "开盘后最高涨幅<0.28% 且 30分钟价格斜率<-0.027",
-                "precision": 0.889, "recall": 0.308,
-                "condition": {"max_gain_after_open": 0.0028, "price_slope_30min": -0.027},
-            },
-        ],
+        # V3.0fix: 删除含 price_slope_30min 的规则（无测量逻辑）
+        "level_2_rules": [],
         "level_1_rules": [
             {
                 "name": "【主】开盘30分钟大跌",
@@ -899,157 +505,7 @@ MORNING_ALERT_PARAMS = {
     },
 }
 
-# ==================== 早盘误判纠正参数（2026-07-14 基于近两年数据） ====================
-# 核心发现：
-#   - 华工科技/科泰电源/中文在线 纠正成功率<25%，不建议启用
-#   - 科创芯片ETF 纠正成功率57%，最早11:30可解除
-#   - 双良节能 纠正成功率75%但样本少，谨慎启用
-# 
-# 纠正逻辑：早盘触发Level 2后，持续监控午盘/尾盘特征
-# 若满足纠正条件 → 解除Level 2，恢复VWAP深V低吸策略
-# 若不满足 → 保持Level 2至收盘
-CORRECTION_PARAMS = {
-    "000988": {
-        "correction_enabled": False,
-        "earliest_correction_time": 1400,
-        "note": "纠正成功率仅14.8%，保持Level 2禁买至收盘",
-    },
-    "588170": {
-        "correction_enabled": True,
-        "earliest_correction_time": 1130,
-        "correction_rules": [
-            {
-                "name": "午后VWAP回归",
-                "desc": "13:30价格回到VWAP上方 AND 午后30分钟涨>0%",
-                "precision": 1.0, "recall": 0.75,
-                "condition": {"price_above_vwap_1330": True, "afternoon_30min_ret": 0.0},
-            },
-            {
-                "name": "午后强势反弹",
-                "desc": "午后30分钟涨>0.5%",
-                "precision": 1.0, "recall": 0.5,
-                "condition": {"afternoon_30min_ret": 0.005},
-            },
-            {
-                "name": "早盘尾盘接力",
-                "desc": "11:30前连续阳线≥3根",
-                "precision": 0.667, "recall": 1.0,
-                "condition": {"bullish_1130_count": 3},
-            },
-        ],
-    },
-    "300153": {
-        "correction_enabled": False,
-        "earliest_correction_time": 1400,
-        "note": "纠正成功率仅20.4%，保持Level 2禁买至收盘",
-    },
-    "300364": {
-        "correction_enabled": False,
-        "earliest_correction_time": 1400,
-        "note": "样本不足，待补充数据后评估",
-    },
-    "600481": {
-        "correction_enabled": True,
-        "earliest_correction_time": 1130,
-        "correction_rules": [
-            {
-                "name": "早盘尾盘接力",
-                "desc": "11:30前连续阳线≥3根",
-                "precision": 0.667, "recall": 0.667,
-                "condition": {"bullish_1130_count": 3},
-            },
-        ],
-        "note": "样本较少，建议谨慎启用并持续跟踪",
-    },
-}
-
-# ETF T+0 高频多笔参数覆盖（科创50ETF 588000 专用）
-# 用于全天多笔T+0摊薄成本
-ETF_T0_PARAMS = {
-    "max_buy_times_per_stock": 5,
-    "max_sell_times_per_stock": 5,
-    "max_t_cycles_per_stock": 8,
-    "cooldown_minutes": 8,
-    "post_sell_rebuild_minutes": 3,
-    "min_amplitude": 0.004,
-    "min_profit_space": 0.003,
-    "sell_holding_min_minutes": 5,
-    "sell_holding_strict_minutes": 8,
-    "repeat_signal_gap_minutes": 12,
-    "sell_repeat_block_minutes": 12,
-    "buy_confirm_min_seconds": 20,
-    "sell_confirm_min_seconds": 20,
-    "stand_down_flat_range_gap": 0.0006,
-    "stand_down_score_gap": 4,
-    "vol_ratio_confirm": 1.2,
-    "buy_confirm_min_score": 22,
-    "buy_confirm_min_factors": 1,
-    "sell_confirm_min_factors": 2,
-    "post_sell_rebuild_price_gap": 0.004,
-    "post_sell_rebuild_score_gap": 3,
-    "post_sell_rebuild_relax_gap": 2,
-    "post_sell_rebuild_relax_factors": 2,
-    # V1.21: ETF双顶保护参数（比个股更宽松）
-    "double_top_pullback_threshold": 0.008,
-    "double_top_min_gap_minutes": 30,
-    "double_top_vol_shrink_threshold": 0.75,
-    "double_top_rsi_threshold": 75,
-    "double_top_price_proximity": 0.995,
-    "buy_soft_margin": 2,
-    "buy_priority_margin": 1,
-    "sell_fast_path_min_gap": 10,
-    "buy_starvation_days": 2,
-    "buy_starvation_relax_seconds": 15,
-    "buy_starvation_relax_factors": 1,
-    "buy_starvation_relax_gap": 1,
-    "sell_score_boost_holding": 2,
-    "sell_score_boost_eod": 6,
-    "sell_momentum_bonus": 6,
-    "macd_strong_threshold": 0.0005,
-    "macd_strong_boost": 2,
-    "vol_confirm_boost": 3,
-    "range_pos_low_threshold": 0.12,
-    "range_pos_high_threshold": 0.85,
-    "trend_today_ret_threshold": 0.015,
-    "market_state_threshold_bias": 2,
-    "commission_rate": 0.0010,
-    "post_sell_rebuild_buy_threshold_penalty": 1,
-    "post_sell_rebuild_weak_gate_discount": 0.3,
-    "profit_guard_minutes_end": 540,
-    "profit_guard_buy_threshold_add": 6,
-    "profit_guard_buy_score_penalty": 3,
-    "force_close_time": "14:55",
-    "force_close_min_profit_pct": 0.002,
-    "rsi_overbought": 75,
-    "rsi_oversold": 40,
-    # V1.12: ETF动态份数与阈值控制参数
-    "etf_threshold_cap": 38,            # ETF买卖阈值硬性上限，防止惩罚叠加导致无法触发
-    "etf_stand_down_gap": 0.0015,     # ETF停手gap阈值，从0.003放宽到0.0015
-    "etf_buy_score_boost": 5,          # ETF买入额外加分
-    "etf_sell_score_boost": 3,         # ETF卖出额外加分
-    "etf_min_trade_unit": 100,         # ETF最小交易单位（1手=100份）
-    "etf_qty_base_pct": 0.15,          # ETF单笔基础仓位比例（总仓位的15%）
-    "etf_qty_strong_pct": 0.25,        # ETF强信号仓位比例（总仓位的25%）
-    "etf_qty_weak_pct": 0.08,          # ETF弱信号仓位比例（总仓位的8%）
-    # V1.13: ETF 15分钟线低吸参数（ETF波动小，阈值更宽松）
-    "min_15min_bars": 2,                        # ETF 15分钟线最少需要几根（更宽松）
-    "rsi_15m_oversold": 38,                     # ETF 15分钟RSI超卖阈值（更宽松）
-    "macd_15m_exhaustion_threshold": -0.0008,   # ETF 15分钟MACD衰竭阈值
-    "kinetic_exhaustion_boost": 8,              # ETF 下跌动能衰竭加分
-    "support_15m_boost": 6,                     # ETF 15分钟强支撑加分
-    "multi_bottom_15m_boost": 5,                # ETF 15分钟多重底加分
-    "ema_15m_improve_boost": 2,                 # ETF 15分钟EMA改善加分
-    # V1.17: ETF 5分钟线缩量止跌+放量反转参数
-    "volume_reversal_boost": 20,                 # ETF 5分钟量能反转信号加分（ETF更宽松）
-    # V1.22: ETF 5分钟大阳线反包确认参数（7月8日反馈）
-    "bullish_reversal_min_pct": 0.008,           # ETF 5分钟K线最低涨幅（0.8%，ETF波动小）
-    "bullish_reversal_body_ratio": 0.55,         # ETF 实体占振幅最低比例（55%）
-    "bullish_reversal_vol_multiplier": 0.8,      # ETF 成交量相对前4根均量最低倍数
-    "bullish_reversal_engulf": 0.995,            # 当前close >= 前4根high * 0.995（反包确认）
-    "open_dip_max_mins": 15,                     # ETF 开盘后多少分钟内视为开盘急跌窗口
-    "open_dip_decline_threshold": -0.012,         # ETF 开盘急跌阈值（5分钟跌1.2%）
-    "open_dip_buy_penalty": 20,                  # ETF 开盘急跌无反包时买入惩罚
-}
+# V3.0fix: CORRECTION_PARAMS + ETF_T0_PARAMS 删除（零消费，整段死字典）
 
 # ==================== 大盘态势判定参数（index_regime.py 日线核心 V2.2.4） ====================
 # index_regime.py 的 _ir_params() 通过 globals().get("INDEX_REGIME_PARAMS") 合并本 dict
@@ -1196,20 +652,7 @@ INDEX_REGIME_PARAMS = {
     "http_retry_sleep": 1.0,       # 重试间隔（秒）
 }
 
-# ==================== 大盘分时预警参数（index_regime_intraday.py） ====================
-# 注意：index_regime_intraday.py 无宿主合并机制，直接读模块内 IRI_DEFAULT_PARAMS；
-# 本 dict 由 main.py 盘中分时预警钩子在调用前合并进 IRI_DEFAULT_PARAMS 后生效。
-INDEX_INTRADAY_PARAMS = {
-    "window_minutes": 30,          # I1/I2 急涨急跌回看窗口（分钟）
-    "i1_drop_pct": -0.8,           # I1 急跌阈值（%），近30分钟跌幅 <= 此值 → warn
-    "i2_rise_pct": 0.8,            # I2 急涨阈值（%），近30分钟涨幅 >= 此值 → info
-    "daily_low_lookback": 20,      # I3 盘中破位：日线最低价回看天数
-    "i4_conflict_pct": 1.5,        # I4 日线态势与盘中反向波动冲突阈值（%）
-    "i5_tail_time": "14:30",       # I5 尾盘异动起始时刻（HH:MM，含）
-    "i5_tail_move_pct": 0.5,       # I5 尾盘单向波动阈值（%）
-    "http_timeout": 10,            # 分时数据 HTTP 超时（秒）
-    "http_retry": 1,               # 分时数据每通道失败额外重试次数
-}
+# V3.0fix: INDEX_INTRADAY_PARAMS 删除（9键全部与模块默认值相同，main.py 本就 merge，效果不变）
 
 # ==================== 日志双写配置 ====================
 log = logging.getLogger("做T助手")
@@ -1321,33 +764,7 @@ def save_t_mode(t_mode: Dict[str, str]):
 #   2. 提高买入门槛（只接回深跌）
 #   3. 取消"价格低于VWAP禁买"限制（反T需要在低位接回）
 #   4. 早盘允许卖出（反T的核心是早盘先卖）
-# V1.26fix: SHORT_MODE_PARAMS 优化（基于 2026-07-13 华工科技反T回测分析）
-# 核心优化方向：
-#   1. 收紧接回条件 — awaiting_buyback_vwap_gap 从 1.005→0.985（必须低于VWAP 1.5%）
-#   2. 延长等待时间 — post_sell_rebuild_minutes 8→20, cooldown_minutes 15→30
-#   3. 提高买入门槛 — buy_confirm_min_score 30→35, stand_down_min_amplitude 0.8%→1.5%
-#   4. 恢复持仓纪律 — sell_holding_min_minutes 5→30（反T买入后不急于卖出）
-#   5. 删除冗余 — take_profit_pct/take_profit_time_after 在 signal_engine 中无消费逻辑
-SHORT_MODE_PARAMS = {
-    "morning_no_sell_until": 930,        # 早盘不禁卖（9:30即可卖）
-    "morning_no_sell_min_ret": -0.999,   # 弱势时绝对允许卖出（负值确保不触发涨幅保护）
-    "sell_holding_min_minutes": 30,      # 反T买入后至少持有30分钟（给足够利润空间）
-    "sell_holding_strict_minutes": 35,   # 严格持仓时间恢复至35分钟
-    "awaiting_buyback_score_boost": 8,   # 接回加分大幅降低（20→8，抑制过早接回）
-    "awaiting_buyback_threshold_relax": 5,  # 门槛放松降至5（15→5，深跌才触发）
-    "awaiting_buyback_vwap_gap": 0.985,  # 严格低于VWAP 1.5%才接回（1.005→0.985，最关键修正）
-    "buy_confirm_min_score": 35,         # 买入门槛进一步提高（30→35，只接深跌）
-    "vwap_buy_deviation": -0.0276,        # 低于VWAP 2.5%才考虑接回（保持不变）
-    "max_buy_times_per_stock": 2,        # 减少买入次数（保持不变）
-    "max_sell_times_per_stock": 2,       # 卖出次数减至2（3→2，每笔必须严格接回）
-    "cooldown_minutes": 30,              # 冷却时间翻倍（15→30，减少频繁交易）
-    "stand_down_min_amplitude": 0.015,   # 停手振幅提高至1.5%（0.008→0.015，反T需更大空间）
-    "post_sell_rebuild_minutes": 20,     # 卖后重建等待延长至20分钟（8→20，防小跌就接）
-    "post_sell_rebuild_price_gap": 0.012,
-    "rsi_oversold": 30,
-    "rsi_overbought": 70,
-    "sell_repeat_block_minutes": 90,
-}
+# V1.26fix: SHORT_MODE_PARAMS removed in V3.0 (no consumers — dead config block)
 
 # ==================== V3.0: 大盘热度×韭研TOP3 联动（daily_sentiment.py） ====================
 # daily_sentiment.py 的 sentiment_params() 通过 globals().get("SENTIMENT_PARAMS") 合并本 dict

@@ -15,7 +15,14 @@
       "Bash(python -c \"import py_compile; py_compile.compile\\('signal_engine.py', doraise=True\\); print\\('Syntax OK'\\)\")",
       "Bash(python backtest_v127_000988.py --start 2026-06-02 --end 2026-06-02 --engine control)",
       "Bash(git add *)",
-      "Bash(git commit *)"
+      "Bash(git commit *)",
+      "Bash(git stash *)",
+      "Bash(git push *)",
+      "Read(//c/Users/Lenovo/.goldminer3/projects/d56bed6c-87ca-11f1-97f7-98fa9b8df5e7/**)",
+      "WebFetch(domain:www.myquant.cn)"
+    ],
+    "additionalDirectories": [
+      "C:\\Users\\Lenovo\\.goldminer3\\projects\\d56bed6c-87ca-11f1-97f7-98fa9b8df5e7"
     ]
   }
 }

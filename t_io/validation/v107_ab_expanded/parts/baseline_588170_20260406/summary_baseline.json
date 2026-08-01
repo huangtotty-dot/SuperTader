@@ -1,0 +1,47 @@
+{
+  "total": 8,
+  "wins": 4,
+  "fails": 3,
+  "voids": 1,
+  "unsettled": 0,
+  "win_rate": 0.5714,
+  "daily_stats": {
+    "2026-04-07": {
+      "signals": 2,
+      "wins": 1,
+      "fails": 1,
+      "voids": 0
+    },
+    "2026-04-08": {
+      "signals": 2,
+      "wins": 0,
+      "fails": 1,
+      "voids": 1
+    },
+    "2026-04-09": {
+      "signals": 2,
+      "wins": 1,
+      "fails": 1,
+      "voids": 0
+    },
+    "2026-04-10": {
+      "signals": 2,
+      "wins": 2,
+      "fails": 0,
+      "voids": 0
+    }
+  },
+  "ab_mode": "baseline",
+  "p1_metrics": {
+    "per_stock": {},
+    "bull_consistency": null,
+    "bear_consistency": null,
+    "overall_consistency": null,
+    "neutral_ratio": null,
+    "bias_ratio": null,
+    "sample_days_bull": 0,
+    "sample_days_bear": 0,
+    "strong_bull_accuracy": null,
+    "strong_bear_accuracy": null
+  }
+}

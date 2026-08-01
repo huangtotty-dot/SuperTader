@@ -1,0 +1,404 @@
+{
+  "baseline": {
+    "total": {
+      "n": 334,
+      "win": 156,
+      "settled": 301,
+      "wr": 0.5183
+    },
+    "actions": {
+      "SELL_HIGH": 334
+    },
+    "density": {
+      "000988": 0.0,
+      "588170": 1.756,
+      "600176": 0.178,
+      "600481": 0.844,
+      "603667": 0.933
+    },
+    "per_code": {
+      "000988": {
+        "all": {
+          "n": 0,
+          "win": 0,
+          "settled": 0,
+          "wr": null
+        },
+        "buy": {
+          "n": 0,
+          "win": 0,
+          "settled": 0,
+          "wr": null
+        },
+        "sell": {
+          "n": 0,
+          "win": 0,
+          "settled": 0,
+          "wr": null
+        }
+      },
+      "588170": {
+        "all": {
+          "n": 158,
+          "win": 95,
+          "settled": 152,
+          "wr": 0.625
+        },
+        "buy": {
+          "n": 0,
+          "win": 0,
+          "settled": 0,
+          "wr": null
+        },
+        "sell": {
+          "n": 158,
+          "win": 95,
+          "settled": 152,
+          "wr": 0.625
+        }
+      },
+      "600176": {
+        "all": {
+          "n": 16,
+          "win": 6,
+          "settled": 16,
+          "wr": 0.375
+        },
+        "buy": {
+          "n": 0,
+          "win": 0,
+          "settled": 0,
+          "wr": null
+        },
+        "sell": {
+          "n": 16,
+          "win": 6,
+          "settled": 16,
+          "wr": 0.375
+        }
+      },
+      "600481": {
+        "all": {
+          "n": 76,
+          "win": 23,
+          "settled": 62,
+          "wr": 0.371
+        },
+        "buy": {
+          "n": 0,
+          "win": 0,
+          "settled": 0,
+          "wr": null
+        },
+        "sell": {
+          "n": 76,
+          "win": 23,
+          "settled": 62,
+          "wr": 0.371
+        }
+      },
+      "603667": {
+        "all": {
+          "n": 84,
+          "win": 32,
+          "settled": 71,
+          "wr": 0.4507
+        },
+        "buy": {
+          "n": 0,
+          "win": 0,
+          "settled": 0,
+          "wr": null
+        },
+        "sell": {
+          "n": 84,
+          "win": 32,
+          "settled": 71,
+          "wr": 0.4507
+        }
+      }
+    },
+    "closed_loop_pairs": 0,
+    "closed_loop_pnl": 0.0,
+    "p1": {
+      "per_stock": {},
+      "bull_consistency": null,
+      "bear_consistency": null,
+      "overall_consistency": null,
+      "neutral_ratio": null,
+      "bias_ratio": null,
+      "sample_days_bull": 0,
+      "sample_days_bear": 0,
+      "strong_bull_accuracy": null,
+      "strong_bear_accuracy": null
+    }
+  },
+  "v102": {
+    "total": {
+      "n": 329,
+      "win": 158,
+      "settled": 291,
+      "wr": 0.543
+    },
+    "actions": {
+      "SELL_HIGH": 227,
+      "BUY_LOW": 102
+    },
+    "density": {
+      "000988": 0.189,
+      "588170": 1.144,
+      "600176": 0.367,
+      "600481": 0.844,
+      "603667": 1.111
+    },
+    "per_code": {
+      "000988": {
+        "all": {
+          "n": 17,
+          "win": 9,
+          "settled": 17,
+          "wr": 0.5294
+        },
+        "buy": {
+          "n": 17,
+          "win": 9,
+          "settled": 17,
+          "wr": 0.5294
+        },
+        "sell": {
+          "n": 0,
+          "win": 0,
+          "settled": 0,
+          "wr": null
+        }
+      },
+      "588170": {
+        "all": {
+          "n": 103,
+          "win": 68,
+          "settled": 98,
+          "wr": 0.6939
+        },
+        "buy": {
+          "n": 16,
+          "win": 10,
+          "settled": 16,
+          "wr": 0.625
+        },
+        "sell": {
+          "n": 87,
+          "win": 58,
+          "settled": 82,
+          "wr": 0.7073
+        }
+      },
+      "600176": {
+        "all": {
+          "n": 33,
+          "win": 12,
+          "settled": 33,
+          "wr": 0.3636
+        },
+        "buy": {
+          "n": 18,
+          "win": 8,
+          "settled": 18,
+          "wr": 0.4444
+        },
+        "sell": {
+          "n": 15,
+          "win": 4,
+          "settled": 15,
+          "wr": 0.2667
+        }
+      },
+      "600481": {
+        "all": {
+          "n": 76,
+          "win": 28,
+          "settled": 64,
+          "wr": 0.4375
+        },
+        "buy": {
+          "n": 17,
+          "win": 8,
+          "settled": 15,
+          "wr": 0.5333
+        },
+        "sell": {
+          "n": 59,
+          "win": 20,
+          "settled": 49,
+          "wr": 0.4082
+        }
+      },
+      "603667": {
+        "all": {
+          "n": 100,
+          "win": 41,
+          "settled": 79,
+          "wr": 0.519
+        },
+        "buy": {
+          "n": 34,
+          "win": 19,
+          "settled": 33,
+          "wr": 0.5758
+        },
+        "sell": {
+          "n": 66,
+          "win": 22,
+          "settled": 46,
+          "wr": 0.4783
+        }
+      }
+    },
+    "closed_loop_pairs": 15,
+    "closed_loop_pnl": 633.85,
+    "p1": {
+      "per_stock": {
+        "000988": {
+          "bull_match": 12,
+          "bear_match": 10,
+          "bull_total": 15,
+          "bear_total": 16,
+          "neutral_segments": 139,
+          "total_segments": 326,
+          "neutral_minutes_est": 2616,
+          "total_minutes_est": 29343,
+          "strong_bull_correct": 0,
+          "strong_bull_total": 0,
+          "strong_bear_correct": 0,
+          "strong_bear_total": 0,
+          "reversal_detected": 0,
+          "reversal_total": 11
+        },
+        "588170": {
+          "bull_match": 15,
+          "bear_match": 7,
+          "bull_total": 20,
+          "bear_total": 7,
+          "neutral_segments": 140,
+          "total_segments": 322,
+          "neutral_minutes_est": 3136,
+          "total_minutes_est": 29340,
+          "strong_bull_correct": 0,
+          "strong_bull_total": 0,
+          "strong_bear_correct": 0,
+          "strong_bear_total": 0,
+          "reversal_detected": 0,
+          "reversal_total": 14
+        },
+        "600176": {
+          "bull_match": 13,
+          "bear_match": 7,
+          "bull_total": 16,
+          "bear_total": 9,
+          "neutral_segments": 130,
+          "total_segments": 303,
+          "neutral_minutes_est": 2956,
+          "total_minutes_est": 29343,
+          "strong_bull_correct": 0,
+          "strong_bull_total": 0,
+          "strong_bear_correct": 0,
+          "strong_bear_total": 0,
+          "reversal_detected": 0,
+          "reversal_total": 14
+        },
+        "600481": {
+          "bull_match": 8,
+          "bear_match": 14,
+          "bull_total": 8,
+          "bear_total": 20,
+          "neutral_segments": 150,
+          "total_segments": 319,
+          "neutral_minutes_est": 2860,
+          "total_minutes_est": 29343,
+          "strong_bull_correct": 0,
+          "strong_bull_total": 0,
+          "strong_bear_correct": 0,
+          "strong_bear_total": 0,
+          "reversal_detected": 0,
+          "reversal_total": 11
+        },
+        "603667": {
+          "bull_match": 12,
+          "bear_match": 10,
+          "bull_total": 19,
+          "bear_total": 13,
+          "neutral_segments": 142,
+          "total_segments": 322,
+          "neutral_minutes_est": 3063,
+          "total_minutes_est": 29343,
+          "strong_bull_correct": 0,
+          "strong_bull_total": 0,
+          "strong_bear_correct": 0,
+          "strong_bear_total": 0,
+          "reversal_detected": 0,
+          "reversal_total": 13
+        }
+      },
+      "bull_consistency": 0.769,
+      "bear_consistency": 0.738,
+      "overall_consistency": 0.755,
+      "neutral_ratio": 0.1,
+      "bias_ratio": 1.2,
+      "sample_days_bull": 78,
+      "sample_days_bear": 65,
+      "strong_bull_accuracy": null,
+      "strong_bear_accuracy": null
+    }
+  },
+  "churn": {
+    "common_n": 48,
+    "common_wr_baseline": {
+      "n": 48,
+      "win": 15,
+      "settled": 39,
+      "wr": 0.3846
+    },
+    "common_wr_v102": {
+      "n": 48,
+      "win": 15,
+      "settled": 39,
+      "wr": 0.3846
+    },
+    "only_baseline": {
+      "n": 286,
+      "win": 141,
+      "settled": 262,
+      "wr": 0.5382
+    },
+    "only_v102": {
+      "n": 281,
+      "win": 143,
+      "settled": 252,
+      "wr": 0.5675
+    },
+    "intercept_fail_share": 0.4231
+  },
+  "fisher": {
+    "overall": {
+      "baseline": [
+        156,
+        301
+      ],
+      "v102": [
+        158,
+        291
+      ],
+      "p": 0.5649
+    },
+    "sell_side": {
+      "baseline": [
+        156,
+        301
+      ],
+      "v102": [
+        104,
+        192
+      ],
+      "p": 0.6442
+    }
+  }
+}
