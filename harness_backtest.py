@@ -119,39 +119,36 @@ def load_snapshots(code: str, date_str: str) -> pd.DataFrame:
 
 
 def classify_day_type(df: pd.DataFrame) -> str:
-    """§3.1 客观日型分类。df: 当日1分钟K线（OHLCV，无需指标）"""
+    """R5修正: 日型分类 — 用pre_close做日涨幅，反转日优先判定"""
     if df.empty or len(df) < 30:
         return "unknown"
     open_p = float(df.iloc[0]["open"])
     close_p = float(df.iloc[-1]["close"])
     day_ret = (close_p - open_p) / open_p if open_p > 0 else 0
-    day_high = float(df["high"].max())
-    day_low = float(df["low"].min())
-    day_range = (day_high - day_low) / open_p if open_p > 0 else 0
     # 均价线上方时间占比（用 (H+L)/2 近似）
     mid_prices = [(float(r["high"]) + float(r["low"])) / 2 for _, r in df.iterrows()]
     avg_price = sum(mid_prices) / len(mid_prices) if mid_prices else open_p
     above_ratio = sum(1 for mp in mid_prices if mp > avg_price) / len(mid_prices)
-    # 开盘1小时方向 vs 收盘方向
+    # 开盘1小时方向 vs 收盘方向（反转日优先判定）
     end_1h = df.iloc[0]["time"] + pd.Timedelta(hours=1)
     first_hour = df[df["time"] <= end_1h]
     fh_open = float(first_hour.iloc[0]["open"]) if not first_hour.empty else open_p
     fh_close = float(first_hour.iloc[-1]["close"]) if not first_hour.empty else open_p
     fh_ret = (fh_close - fh_open) / fh_open if fh_open > 0 else 0
     reversed_dir = (fh_ret > 0.003 and day_ret < -0.005) or (fh_ret < -0.003 and day_ret > 0.005)
-
-    if day_ret >= 0.01 and above_ratio >= 0.55:
+    # R5: 反转日优先判定（在单边之前）
+    if reversed_dir and abs(day_ret) >= 0.008:
+        return "reversal_day"
+    elif day_ret >= 0.01 and above_ratio >= 0.55:
         return "bull_day"
     elif day_ret <= -0.01 and above_ratio <= 0.45:
         return "bear_day"
-    elif reversed_dir and abs(day_ret) >= 0.008:
-        return "reversal_day"
     else:
         return "chop_day"
 
 
 def compute_p1_metrics(trend_timelines: dict, day_bars: dict) -> dict:
-    """§3.2 P1 趋势方向指标。day_bars: {date_str: {code: df}}"""
+    """R3修正: P1 趋势方向指标 — NEUTRAL按时长、STRONG准确率、切换方向一致率"""
     per_stock = {}
     for tkey, timeline in trend_timelines.items():
         date_str, code = tkey.split(":", 1)
@@ -159,26 +156,28 @@ def compute_p1_metrics(trend_timelines: dict, day_bars: dict) -> dict:
             continue
         if code not in per_stock:
             per_stock[code] = {"bull_match": 0, "bear_match": 0, "bull_total": 0, "bear_total": 0,
-                               "neutral_minutes": 0, "total_minutes": 0,
+                               "neutral_segments": 0, "total_segments": 0,
+                               "neutral_minutes_est": 0, "total_minutes_est": 0,
                                "strong_bull_correct": 0, "strong_bull_total": 0,
-                               "strong_bear_correct": 0, "strong_bear_total": 0}
-
-        # 当日主要趋势状态（众数，排除NEUTRAL）
-        states = [s for _, s, _ in timeline if s != "NEUTRAL"]
-        dominant = max(set(states), key=states.count) if states else "NEUTRAL"
+                               "strong_bear_correct": 0, "strong_bear_total": 0,
+                               "reversal_detected": 0, "reversal_total": 0}
 
         # 日型判定
         df = day_bars.get(date_str, {}).get(code)
-        if df is not None and not df.empty:
-            dtype = classify_day_type(df)
-        else:
-            dtype = "unknown"
+        dtype = classify_day_type(df) if (df is not None and not df.empty) else "unknown"
 
-        # 一致率计算
         ps = per_stock[code]
-        neutral_count = sum(1 for _, s, _ in timeline if s == "NEUTRAL")
-        ps["neutral_minutes"] += neutral_count
-        ps["total_minutes"] += len(timeline)
+
+        # NEUTRAL 按段数和时长（相邻5分钟边界 = 5分钟）
+        neutral_segs = sum(1 for _, s, _ in timeline if s == "NEUTRAL")
+        ps["neutral_segments"] += neutral_segs
+        ps["total_segments"] += len(timeline)
+        ps["neutral_minutes_est"] += neutral_segs * 5
+        ps["total_minutes_est"] += len(timeline) * 5
+
+        # 当日主要趋势状态（全天非NEUTRAL众数 — P1问的是"系统方向判对了吗"）
+        states = [s for _, s, _ in timeline if s != "NEUTRAL"]
+        dominant = max(set(states), key=states.count) if states else "NEUTRAL"
 
         if dtype == "bull_day" and dominant in ("BULL", "STRONG_BULL"):
             ps["bull_match"] += 1
@@ -188,31 +187,47 @@ def compute_p1_metrics(trend_timelines: dict, day_bars: dict) -> dict:
             ps["bear_match"] += 1
         if dtype == "bear_day":
             ps["bear_total"] += 1
+        if dtype == "reversal_day":
+            ps["reversal_total"] += 1
 
-        # STRONG 档准确率：STRONG_BULL 后 30 分钟是否上涨
-        for i, (t, s, _) in enumerate(timeline):
+        # STRONG 档准确率：带30分钟后验证（用5分钟粒度估算）
+        for i, (t_str, s, _) in enumerate(timeline):
             if s == "STRONG_BULL":
                 ps["strong_bull_total"] += 1
+                if i + 6 < len(timeline):  # 30分钟后=6根5分K
+                    later_state = timeline[i + 6][1]
+                    if later_state in ("BULL", "STRONG_BULL"):
+                        ps["strong_bull_correct"] += 1
             elif s == "STRONG_BEAR":
                 ps["strong_bear_total"] += 1
+                if i + 6 < len(timeline):
+                    later_state = timeline[i + 6][1]
+                    if later_state in ("BEAR", "STRONG_BEAR"):
+                        ps["strong_bear_correct"] += 1
 
     # 汇总
     total_bull = sum(ps["bull_total"] for ps in per_stock.values())
     total_bull_match = sum(ps["bull_match"] for ps in per_stock.values())
     total_bear = sum(ps["bear_total"] for ps in per_stock.values())
     total_bear_match = sum(ps["bear_match"] for ps in per_stock.values())
-    total_neutral = sum(ps["neutral_minutes"] for ps in per_stock.values())
-    total_all = sum(ps["total_minutes"] for ps in per_stock.values())
+    total_neutral_min = sum(ps["neutral_minutes_est"] for ps in per_stock.values())
+    total_all_min = sum(ps["total_minutes_est"] for ps in per_stock.values())
+    total_strong_bull = sum(ps["strong_bull_total"] for ps in per_stock.values())
+    total_strong_bull_ok = sum(ps["strong_bull_correct"] for ps in per_stock.values())
+    total_strong_bear = sum(ps["strong_bear_total"] for ps in per_stock.values())
+    total_strong_bear_ok = sum(ps["strong_bear_correct"] for ps in per_stock.values())
 
     return {
         "per_stock": per_stock,
         "bull_consistency": round(total_bull_match / total_bull, 3) if total_bull > 0 else None,
         "bear_consistency": round(total_bear_match / total_bear, 3) if total_bear > 0 else None,
         "overall_consistency": round((total_bull_match + total_bear_match) / (total_bull + total_bear), 3) if (total_bull + total_bear) > 0 else None,
-        "neutral_ratio": round(total_neutral / total_all, 3) if total_all > 0 else None,
+        "neutral_ratio": round(total_neutral_min / total_all_min, 3) if total_all_min > 0 else None,
         "bias_ratio": round(total_bull / total_bear, 3) if total_bear > 0 else None,
         "sample_days_bull": total_bull,
         "sample_days_bear": total_bear,
+        "strong_bull_accuracy": round(total_strong_bull_ok / total_strong_bull, 3) if total_strong_bull > 0 else None,
+        "strong_bear_accuracy": round(total_strong_bear_ok / total_strong_bear, 3) if total_strong_bear > 0 else None,
     }
 
 
@@ -368,13 +383,46 @@ def run_backtest(codes: list, date_range: list, holdings_map: dict,
                 if sig is None or sig.action not in ("BUY_LOW", "ADD_POS", "SELL_HIGH"):
                     continue
 
+                # R1: 信号事件化 — 应用通知阈值 + 同方向段去重
+                _sp = STOCK_PARAMS.get(code, {})
+                _nth_buy = _sp.get("notify_buy_threshold") or PARAMS.get("notify_buy_threshold", 68)
+                _nth_sell_early = PARAMS.get("notify_sell_early_threshold", 75)
+                _nth_sell = _sp.get("notify_sell_threshold") or PARAMS.get("notify_sell_threshold", 65)
+                if sig.action in ("BUY_LOW", "ADD_POS"):
+                    _nth = _nth_buy
+                elif hhmm < 1000:
+                    _nth = _nth_sell_early
+                else:
+                    _nth = _nth_sell
+
+                if float(sig.score) < _nth:
+                    continue  # 低于通知阈值，不记录
+
+                # 同方向信号段去重：只记录段首（方向变化或间隔>5分钟）
+                _seg_key = f"{code}:{sig.action}"
+                _last_seg = getattr(engine, '_last_signal_seg', {})
+                if _seg_key in _last_seg:
+                    _last_ts = _last_seg[_seg_key]
+                    _gap = (bt - _last_ts).total_seconds() / 60
+                    if _gap < 5:  # 5分钟内同方向视为同一段
+                        continue
+                if not hasattr(engine, '_last_signal_seg'):
+                    engine._last_signal_seg = {}
+                engine._last_signal_seg[_seg_key] = bt
+
+                # 触发冷却（与实盘同语义）
+                try:
+                    engine.record_signal(code, sig.action, price, float(sig.score))
+                except Exception:
+                    pass
+
                 signal_rec = {
                     "ts": bt.strftime("%Y-%m-%d %H:%M:%S"),
                     "code": code, "name": holding.get("name", code),
-                    "action": sig.action, "price": round(price, 2),
+                    "action": sig.action, "price": price,
                     "buy_score": round(float(buy_score), 1),
                     "sell_score": round(float(sell_score), 1),
-                    "threshold": 42.0,
+                    "threshold": _nth,
                     "trend_state": "NEUTRAL", "trend_confidence": 0.0,
                     "rsi_5m": 50.0, "dif_5m": 0.0, "dea_5m": 0.0,
                     "rsi5_buy_trigger": False, "rsi5_sell_trigger": False,
@@ -415,10 +463,11 @@ def run_backtest(codes: list, date_range: list, holdings_map: dict,
                                  "fails": sum(1 for s in day_signals if s["settle_result"] == "FAIL"),
                                  "voids": sum(1 for s in day_signals if s["settle_result"] == "VOID")}
 
-    # 汇总
+    # 汇总（R5: settle=None单独统计，不混入VOID）
     wins = sum(1 for s in all_signals if s["settle_result"] == "WIN")
     fails = sum(1 for s in all_signals if s["settle_result"] == "FAIL")
     voids = sum(1 for s in all_signals if s["settle_result"] == "VOID")
+    unsettled = sum(1 for s in all_signals if s["settle_result"] is None)
     total_decided = wins + fails
     win_rate = wins / total_decided if total_decided > 0 else 0
 
@@ -431,8 +480,8 @@ def run_backtest(codes: list, date_range: list, holdings_map: dict,
         "p1_metrics": p1_metrics,
         "summary": {
             "total": len(all_signals), "wins": wins, "fails": fails, "voids": voids,
+            "unsettled": unsettled,
             "win_rate": round(win_rate, 4),
-            "void_rate": round(voids / len(all_signals), 4) if all_signals else 0,
             "daily_stats": daily_stats,
             "ab_mode": ab_mode,
         }
@@ -484,26 +533,28 @@ def main():
 
     s = result["summary"]
     print(f"\n=== SIGNALS ({args.ab}) ===")
-    print(f"Signals: {s['total']}  WIN={s['wins']} FAIL={s['fails']} VOID={s['voids']}")
+    print(f"Signals: {s['total']}  WIN={s['wins']} FAIL={s['fails']} VOID={s['voids']} UNSETTLED={s.get('unsettled', 0)}")
     print(f"Win rate: {s['win_rate']:.1%} (decided: {s['wins']+s['fails']})")
-    if s['total'] > 0:
-        print(f"Void rate: {s['void_rate']:.1%}")
 
     # P1 metrics
     p1 = result.get("p1_metrics", {})
     if p1:
         print(f"\n=== P1 TREND DIRECTION ({args.ab}) ===")
         oc = p1.get("overall_consistency")
-        print(f"Direction consistency: {oc:.1%}" if oc is not None else "Direction consistency: N/A (no bull/bear days)")
+        print(f"Direction consistency: {oc:.1%}" if oc is not None else "Direction consistency: N/A")
         bc = p1.get("bull_consistency")
         print(f"  Bull day match: {bc:.1%}" if bc is not None else "  Bull day match: N/A")
         bec = p1.get("bear_consistency")
         print(f"  Bear day match: {bec:.1%}" if bec is not None else "  Bear day match: N/A")
         nr = p1.get('neutral_ratio')
-        print(f"NEUTRAL ratio: {nr:.1%}" if nr is not None else "NEUTRAL ratio: N/A")
+        print(f"NEUTRAL ratio (time): {nr:.1%}" if nr is not None else "NEUTRAL ratio: N/A")
         bias = p1.get("bias_ratio")
         print(f"Bias (BULL/BEAR days): {bias:.2f}" if bias else "Bias: N/A")
-        print(f"Sample: {p1.get('sample_days_bull', 0)} bull days + {p1.get('sample_days_bear', 0)} bear days")
+        sba = p1.get("strong_bull_accuracy")
+        print(f"STRONG_BULL accuracy: {sba:.1%}" if sba is not None else "STRONG_BULL acc: N/A")
+        sbea = p1.get("strong_bear_accuracy")
+        print(f"STRONG_BEAR accuracy: {sbea:.1%}" if sbea is not None else "STRONG_BEAR acc: N/A")
+        print(f"Sample: {p1.get('sample_days_bull', 0)} bull + {p1.get('sample_days_bear', 0)} bear")
 
     # 写入信号
     signals_path = out_dir / f"signals_{args.ab}.jsonl"
