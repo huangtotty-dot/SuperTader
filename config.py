@@ -1321,33 +1321,7 @@ def save_t_mode(t_mode: Dict[str, str]):
 #   2. 提高买入门槛（只接回深跌）
 #   3. 取消"价格低于VWAP禁买"限制（反T需要在低位接回）
 #   4. 早盘允许卖出（反T的核心是早盘先卖）
-# V1.26fix: SHORT_MODE_PARAMS 优化（基于 2026-07-13 华工科技反T回测分析）
-# 核心优化方向：
-#   1. 收紧接回条件 — awaiting_buyback_vwap_gap 从 1.005→0.985（必须低于VWAP 1.5%）
-#   2. 延长等待时间 — post_sell_rebuild_minutes 8→20, cooldown_minutes 15→30
-#   3. 提高买入门槛 — buy_confirm_min_score 30→35, stand_down_min_amplitude 0.8%→1.5%
-#   4. 恢复持仓纪律 — sell_holding_min_minutes 5→30（反T买入后不急于卖出）
-#   5. 删除冗余 — take_profit_pct/take_profit_time_after 在 signal_engine 中无消费逻辑
-SHORT_MODE_PARAMS = {
-    "morning_no_sell_until": 930,        # 早盘不禁卖（9:30即可卖）
-    "morning_no_sell_min_ret": -0.999,   # 弱势时绝对允许卖出（负值确保不触发涨幅保护）
-    "sell_holding_min_minutes": 30,      # 反T买入后至少持有30分钟（给足够利润空间）
-    "sell_holding_strict_minutes": 35,   # 严格持仓时间恢复至35分钟
-    "awaiting_buyback_score_boost": 8,   # 接回加分大幅降低（20→8，抑制过早接回）
-    "awaiting_buyback_threshold_relax": 5,  # 门槛放松降至5（15→5，深跌才触发）
-    "awaiting_buyback_vwap_gap": 0.985,  # 严格低于VWAP 1.5%才接回（1.005→0.985，最关键修正）
-    "buy_confirm_min_score": 35,         # 买入门槛进一步提高（30→35，只接深跌）
-    "vwap_buy_deviation": -0.0276,        # 低于VWAP 2.5%才考虑接回（保持不变）
-    "max_buy_times_per_stock": 2,        # 减少买入次数（保持不变）
-    "max_sell_times_per_stock": 2,       # 卖出次数减至2（3→2，每笔必须严格接回）
-    "cooldown_minutes": 30,              # 冷却时间翻倍（15→30，减少频繁交易）
-    "stand_down_min_amplitude": 0.015,   # 停手振幅提高至1.5%（0.008→0.015，反T需更大空间）
-    "post_sell_rebuild_minutes": 20,     # 卖后重建等待延长至20分钟（8→20，防小跌就接）
-    "post_sell_rebuild_price_gap": 0.012,
-    "rsi_oversold": 30,
-    "rsi_overbought": 70,
-    "sell_repeat_block_minutes": 90,
-}
+# V1.26fix: SHORT_MODE_PARAMS removed in V3.0 (no consumers — dead config block)
 
 # ==================== V3.0: 大盘热度×韭研TOP3 联动（daily_sentiment.py） ====================
 # daily_sentiment.py 的 sentiment_params() 通过 globals().get("SENTIMENT_PARAMS") 合并本 dict

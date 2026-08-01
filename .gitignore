@@ -2,3 +2,8 @@ t_io/backtests/
 t_io/cache/
 t_io/replay/
 __pycache__/
+*.pyc
+node_modules/
+t_io/logs/*.log
+t_io/gm_bridge/events_*.jsonl
+t_io/gm_bridge/heartbeat_*.jsonl
