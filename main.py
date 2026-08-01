@@ -76,7 +76,7 @@ except Exception:
     shared['_log_enhancer'] = None
 
 # 按顺序加载模块：后面的模块可以引用前面的模块
-module_order = ['config', 'utils', 'data_fetcher', 'multi_timeframe_fetcher', 'signal_engine', 'preopen', 'support_resistance', 'index_regime', 'index_regime_intraday', 'market_regime', 'position_sizer', 'daily_sentiment']
+module_order = ['config', 'utils', 'data_fetcher', 'indicators', 'multi_timeframe_fetcher', 'signal_engine', 'preopen', 'support_resistance', 'index_regime', 'index_regime_intraday', 'market_regime', 'position_sizer', 'daily_sentiment']
 for mod_name in module_order:
     mod_path = _os.path.join(BASE_DIR, f"{mod_name}.py")
     if not _os.path.exists(mod_path):

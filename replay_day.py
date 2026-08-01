@@ -79,7 +79,7 @@ def load_shared() -> dict:
         'np': np, 'pd': pd, 'requests': requests, 'urllib': urllib,
         'urllib.request': urllib.request, 'urllib.error': urllib.error,
     })
-    for mod_name in ['config', 'utils', 'data_fetcher', 'multi_timeframe_fetcher', 'signal_engine', 'position_sizer']:
+    for mod_name in ['config', 'utils', 'data_fetcher', 'indicators', 'multi_timeframe_fetcher', 'signal_engine', 'position_sizer']:
         mod_path = BASE_DIR / f"{mod_name}.py"
         with open(mod_path, 'r', encoding='utf-8') as f:
             code = f.read()

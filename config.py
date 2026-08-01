@@ -278,6 +278,13 @@ PARAMS = {
     "rsi_oversold": 35,
     "bb_period": 20,
     "bb_std": 2.0,
+    # V3.0: 5分钟趋势层参数
+    "rsi_period_5m": 14,              # 5分钟RSI周期
+    "rsi_oversold_5m": 32,             # 5分钟RSI超卖阈值
+    "rsi_overbought_5m": 68,           # 5分钟RSI超买阈值
+    "trend_bb_slope_flat": 0.0005,     # BOLL中轨斜率 < 此值视为"走平"
+    "trend_bb_width_expand": 1.05,     # 带宽扩张比
+    "trend_debounce_bars": 2,          # 趋势切换确认所需K线数
     "ema_fast_period": 8,
     "ema_slow_period": 21,
     "min_amplitude": 0.015,
@@ -720,20 +727,8 @@ MORNING_ALERT_PARAMS = {
     "300153": {
         "alert_enabled": True,
         "alert_window_end": 1000,
-        "level_2_rules": [
-            {
-                "name": "无反弹+价格斜率极陡",
-                "desc": "开盘后最高涨幅≤0.24% 且 30分钟价格斜率≤-5.18",
-                "precision": 1.00, "recall": 0.081,
-                "condition": {"max_gain_after_open": 0.0024, "price_slope_30min": -5.18},
-            },
-            {
-                "name": "无反弹+价格斜率陡",
-                "desc": "开盘后最高涨幅≤0.62% 且 30分钟价格斜率≤-5.18",
-                "precision": 0.909, "recall": 0.161,
-                "condition": {"max_gain_after_open": 0.0062, "price_slope_30min": -5.18},
-            },
-        ],
+        # V3.0fix: 删除含 price_slope_30min/vwap_slope 的规则（condition key 无测量逻辑，连坐同规则内其他 key）
+        "level_2_rules": [],
         "level_1_rules": [
             {
                 "name": "【主】开盘30分钟大跌",
@@ -746,12 +741,6 @@ MORNING_ALERT_PARAMS = {
                 "desc": "开盘30分钟涨幅≤-1.52% 且 开盘后最高涨幅≤0.24%",
                 "precision": 0.769, "recall": 0.323,
                 "condition": {"open_30min_ret": -0.0152, "max_gain_after_open": 0.0024},
-            },
-            {
-                "name": "VWAP下行+无反弹",
-                "desc": "VWAP斜率≤-1.78 且 开盘后最高涨幅≤0.38%",
-                "precision": 0.750, "recall": 0.339,
-                "condition": {"vwap_slope": -1.78, "max_gain_after_open": 0.0038},
             },
         ],
     },
@@ -794,32 +783,15 @@ MORNING_ALERT_PARAMS = {
     "600481": {
         "alert_enabled": True,
         "alert_window_end": 1000,
-        "level_2_rules": [
-            {
-                "name": "无反弹+VWAP深偏离",
-                "desc": "开盘后最高涨幅<0.33% 且 10:00 VWAP偏离<-1.13%",
-                "precision": 1.00, "recall": 0.108,
-                "condition": {"max_gain_after_open": 0.0033, "deviation_vwap_1000": -0.0113},
-            },
-        ],
+        # V3.0fix: 删除含 deviation_vwap_1000 的规则（无测量逻辑）
+        "level_2_rules": [],
+        # V3.0fix: 删除含 deviation_vwap_1000 的规则（无测量逻辑）
         "level_1_rules": [
             {
                 "name": "【主】开盘30分钟大跌",
                 "desc": "开盘30分钟涨幅≤-1.00%（核心阈值）",
                 "precision": 0.55, "recall": 0.72,
                 "condition": {"open_30min_ret": -0.010},
-            },
-            {
-                "name": "无反弹+VWAP偏离",
-                "desc": "开盘后最高涨幅<0.33% 且 10:00 VWAP偏离<-0.55%",
-                "precision": 0.885, "recall": 0.311,
-                "condition": {"max_gain_after_open": 0.0033, "deviation_vwap_1000": -0.0055},
-            },
-            {
-                "name": "无反弹+VWAP弱偏离",
-                "desc": "开盘后最高涨幅<0.33% 且 10:00 VWAP偏离<-0.79%",
-                "precision": 0.941, "recall": 0.216,
-                "condition": {"max_gain_after_open": 0.0033, "deviation_vwap_1000": -0.0079},
             },
         ],
     },
@@ -862,20 +834,8 @@ MORNING_ALERT_PARAMS = {
     "588170": {
         "alert_enabled": True,
         "alert_window_end": 1000,
-        "level_2_rules": [
-            {
-                "name": "无反弹+价格斜率负",
-                "desc": "开盘后最高涨幅<0.45% 且 30分钟价格斜率<-0.027",
-                "precision": 0.917, "recall": 0.423,
-                "condition": {"max_gain_after_open": 0.0045, "price_slope_30min": -0.027},
-            },
-            {
-                "name": "无反弹+价格斜率负(严格)",
-                "desc": "开盘后最高涨幅<0.28% 且 30分钟价格斜率<-0.027",
-                "precision": 0.889, "recall": 0.308,
-                "condition": {"max_gain_after_open": 0.0028, "price_slope_30min": -0.027},
-            },
-        ],
+        # V3.0fix: 删除含 price_slope_30min 的规则（无测量逻辑）
+        "level_2_rules": [],
         "level_1_rules": [
             {
                 "name": "【主】开盘30分钟大跌",
