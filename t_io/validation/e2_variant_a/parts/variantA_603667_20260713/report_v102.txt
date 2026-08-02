@@ -1,0 +1,5 @@
+=== BACKTEST REPORT (v102) ===
+Codes: 603667
+Period: 2026-07-13 ~ 2026-07-17
+Signals: 2  WIN=0 FAIL=2 VOID=0
+Win rate: 0.0%

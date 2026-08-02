@@ -1,0 +1,70 @@
+{
+  "total": 2,
+  "wins": 0,
+  "fails": 2,
+  "voids": 0,
+  "unsettled": 0,
+  "win_rate": 0.0,
+  "daily_stats": {
+    "2026-03-16": {
+      "signals": 2,
+      "wins": 0,
+      "fails": 2,
+      "voids": 0
+    },
+    "2026-03-17": {
+      "signals": 0,
+      "wins": 0,
+      "fails": 0,
+      "voids": 0
+    },
+    "2026-03-18": {
+      "signals": 0,
+      "wins": 0,
+      "fails": 0,
+      "voids": 0
+    },
+    "2026-03-19": {
+      "signals": 0,
+      "wins": 0,
+      "fails": 0,
+      "voids": 0
+    },
+    "2026-03-20": {
+      "signals": 0,
+      "wins": 0,
+      "fails": 0,
+      "voids": 0
+    }
+  },
+  "ab_mode": "v102",
+  "p1_metrics": {
+    "per_stock": {
+      "600176": {
+        "bull_match": 0,
+        "bear_match": 0,
+        "bull_total": 0,
+        "bear_total": 0,
+        "neutral_segments": 9,
+        "total_segments": 22,
+        "neutral_minutes_est": 235,
+        "total_minutes_est": 1630,
+        "strong_bull_correct": 0,
+        "strong_bull_total": 0,
+        "strong_bear_correct": 0,
+        "strong_bear_total": 0,
+        "reversal_detected": 0,
+        "reversal_total": 1
+      }
+    },
+    "bull_consistency": null,
+    "bear_consistency": null,
+    "overall_consistency": null,
+    "neutral_ratio": 0.144,
+    "bias_ratio": null,
+    "sample_days_bull": 0,
+    "sample_days_bear": 0,
+    "strong_bull_accuracy": null,
+    "strong_bear_accuracy": null
+  }
+}

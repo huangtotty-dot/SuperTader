@@ -1,0 +1,5 @@
+=== BACKTEST REPORT (v102) ===
+Codes: 600176
+Period: 2026-05-18 ~ 2026-05-22
+Signals: 11  WIN=5 FAIL=5 VOID=1
+Win rate: 50.0%
