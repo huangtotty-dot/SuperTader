@@ -521,7 +521,8 @@ class SignalEngine:
         buy_score, buy_details = ScoringEngine.calc_buy_score(feats, self.factor_weights)
         sell_score, sell_details = ScoringEngine.calc_sell_score(feats, self.factor_weights)
         # 静态基准阈值 — 分数已通过ATR+Sigmoid自适应，阈值不再跳变
-        buy_threshold = 42.0; sell_threshold = 42.0
+        # E1: 买阈基线软消费(生产默认42不变) — harness 经 T_BUY_BONUS_MIN_SCORE 注入 PARAMS["engine_buy_threshold_base"]
+        buy_threshold = float(PARAMS.get("engine_buy_threshold_base", 42.0)); sell_threshold = 42.0
         price = feats.get("price", 0); hold_qty = feats.get("hold_qty", 0)
         # 风控阻断 + 左侧抄底豁免（5分钟强反转可绕过日线封锁）
         risk = RiskManager.check_all(feats)

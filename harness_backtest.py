@@ -450,6 +450,10 @@ def run_backtest(codes: list, date_range: list, holdings_map: dict,
     if os.environ.get("T_GATE_VARIANT_A") == "1":
         PARAMS["daily_gate_allow_below_ma5_rebound"] = True
 
+    # E1: 引擎买阈基线注入(验证用途, 默认42不变) — 引擎软消费 PARAMS["engine_buy_threshold_base"](signal_engine.py:524)
+    if os.environ.get("T_BUY_BONUS_MIN_SCORE"):
+        PARAMS["engine_buy_threshold_base"] = float(os.environ["T_BUY_BONUS_MIN_SCORE"])
+
     if override_params:
         if "PARAMS" in override_params:
             PARAMS.update(override_params["PARAMS"])
@@ -546,6 +550,9 @@ def run_backtest(codes: list, date_range: list, holdings_map: dict,
                 _nth_sell_early = PARAMS.get("notify_sell_early_threshold", 75)
                 _nth_sell = _sp.get("notify_sell_threshold") or PARAMS.get("notify_sell_threshold", 65)
                 # X9: 记录阈值阶梯实验环境变量覆盖（仅验证用途，不改默认值）
+                # E1: 买侧通知阈覆盖（默认个股40/43逻辑不变，对齐引擎降阈档）
+                if os.environ.get("T_NOTIFY_BUY"):
+                    _nth_buy = float(os.environ["T_NOTIFY_BUY"])
                 if os.environ.get("T_NOTIFY_SELL"):
                     _nth_sell = float(os.environ["T_NOTIFY_SELL"])
                 if os.environ.get("T_NOTIFY_SELL_EARLY"):
