@@ -735,7 +735,13 @@ class FeatureExtractor:
             feats[f"daily_ma{n}"] = float(dc.get(f"daily_ma{n}", 0) or 0)
         feats["daily_ma5_slope"] = float(dc.get("daily_ma5_slope", 0) or 0)
         feats["daily_above_ma5"] = feats["daily_ma5"] > 0 and price >= feats["daily_ma5"]
-        feats["daily_buy_t_ok"] = dc.get("daily_status") == "ok" and feats["daily_ma5"] > 0 and feats["daily_ma5_state"] in {"near_ma5_chop", "above_ma5_trend"}
+        # v1.1.1: 变体A开关(默认关, 软消费无KeyError) — below_ma5_weak且ma5_slope>=0 视为回升放行
+        # 依据: t_io/validation/e2_daily_gate/E2门控量化报告.md §3(wr 0.4764/量+37%/阴跌不恶化)
+        _st = feats["daily_ma5_state"]
+        _state_ok = _st in {"near_ma5_chop", "above_ma5_trend"} or (
+            PARAMS.get("daily_gate_allow_below_ma5_rebound", False)
+            and _st == "below_ma5_weak" and feats["daily_ma5_slope"] >= 0)
+        feats["daily_buy_t_ok"] = dc.get("daily_status") == "ok" and feats["daily_ma5"] > 0 and _state_ok
         feats["daily_breakdown_risk"] = bool(dc.get("daily_breakdown_risk", False))
         feats["daily_overheated"] = bool(dc.get("daily_overheated", False))
         feats["daily_pullback_support"] = bool(dc.get("daily_pullback_support", False))

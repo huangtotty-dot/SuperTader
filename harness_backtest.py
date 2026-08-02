@@ -27,6 +27,54 @@ import pandas as pd
 BASE_DIR = Path(__file__).resolve().parent
 # 数据源可用环境变量 T_SNAPSHOT_DIR 切换（默认原腾讯快照目录；统一口径复测指向 minute_snapshots_ts）
 SNAPSHOT_DIR = Path(os.environ.get("T_SNAPSHOT_DIR", str(BASE_DIR / "t_io" / "minute_snapshots")))
+# v1.1.1: E2 日上下文注入 — 预热期分钟库(MA60 预热)目录，默认指向 e2_daily_gate/minute_snapshots_pre
+PRE_SNAPSHOT_DIR = Path(os.environ.get("T_PRE_SNAPSHOT_DIR", str(BASE_DIR / "t_io" / "validation" / "e2_daily_gate" / "minute_snapshots_pre")))
+# v1.1.1: 默认开启真实日上下文(键修复后世界); T_DAILY_CTX=0 回退旧硬编码(死门控, 用于门控自身 A/B)
+DAILY_CTX_ENABLED = os.environ.get("T_DAILY_CTX", "1") != "0"
+
+_LEGACY_DAILY_CTX = {"daily_status": "ok", "daily_buy_t_ok": True,
+                     "index_regime": "range", "intraday_alerts": []}
+
+_daily_rows_cache: dict = {}
+
+def _daily_rows(code: str) -> dict:
+    """聚合分钟快照为日线 {date: row}(预热期+样本期)。缓存每股一次。"""
+    if code not in _daily_rows_cache:
+        rows = {}
+        for root in (PRE_SNAPSHOT_DIR, SNAPSHOT_DIR):
+            for fp in root.glob(f"*/*/{code}_*.json"):
+                try:
+                    d = json.load(open(fp, encoding="utf-8"))
+                except Exception:
+                    continue
+                bars = d.get("bars") or []
+                if not bars:
+                    continue
+                rows[d["date"]] = {"date": d["date"], "open": bars[0]["open"],
+                                   "close": bars[-1]["close"],
+                                   "high": max(b["high"] for b in bars),
+                                   "low": min(b["low"] for b in bars),
+                                   "volume": sum(b.get("volume", 0) for b in bars),
+                                   "amount": sum(b.get("amount", 0) for b in bars)}
+        _daily_rows_cache[code] = rows
+    return _daily_rows_cache[code]
+
+def build_daily_ctx(shared: dict, code: str, date_str: str, price: float) -> dict:
+    """v1.1.1: 生产同源日上下文(无前视: 仅用 date_str 之前日线; ref_price=当前tick价)。
+    离线无基准指数分钟线, index_regime 固定 'range'(与原 harness 口径一致)。"""
+    if not DAILY_CTX_ENABLED:
+        return dict(_LEGACY_DAILY_CTX)
+    rows = _daily_rows(code)
+    prior = [rows[d] for d in sorted(rows) if d < date_str]
+    if len(prior) < 10:
+        return dict(_LEGACY_DAILY_CTX)
+    try:
+        ctx = shared["_build_daily_context_from_df"](code, pd.DataFrame(prior), current_price=price)
+    except Exception:
+        return dict(_LEGACY_DAILY_CTX)
+    ctx["index_regime"] = "range"
+    ctx.setdefault("intraday_alerts", [])
+    return ctx
 
 
 def load_shared() -> dict:
@@ -398,6 +446,10 @@ def run_backtest(codes: list, date_range: list, holdings_map: dict,
             shared['FACTOR_WEIGHTS']["factor_weight_5m_trend"] = 0.0
             shared['FACTOR_WEIGHTS']["factor_weight_5m_rsi"] = 0.0
 
+    # v1.1.1: 变体A实验开关(默认关) — T_GATE_VARIANT_A=1 时 below_ma5_weak且slope>=0 放行
+    if os.environ.get("T_GATE_VARIANT_A") == "1":
+        PARAMS["daily_gate_allow_below_ma5_rebound"] = True
+
     if override_params:
         if "PARAMS" in override_params:
             PARAMS.update(override_params["PARAMS"])
@@ -464,8 +516,7 @@ def run_backtest(codes: list, date_range: list, holdings_map: dict,
                 price = float(sub.iloc[-1]["close"])
                 holding = holdings_map.get(code, {"name": code, "cost": price,
                             "qty": 0, "base": 0, "t_qty": 0, "type": "stock"})
-                daily_ctx = {"daily_status": "ok", "daily_buy_t_ok": True,
-                             "index_regime": "range", "intraday_alerts": []}
+                daily_ctx = build_daily_ctx(shared, code, date_str, price)
 
                 # P1: 记录趋势状态（每分钟最后已知状态）
                 _tkey = f"{date_str}:{code}"
