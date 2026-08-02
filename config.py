@@ -362,6 +362,17 @@ PARAMS = {
     "idle_log_minutes": 10,
     "cache_ttl_seconds": 180,
     "daily_ma_support_loose_gap": 0.04,
+    # —— v1.1.1: P0 键修复 —— 以下 8 键被 data_fetcher.py 以 PARAMS["..."] 硬消费但从未定义，
+    #    导致 get_daily_context 必抛 KeyError 被吞(status="error")、daily_gate 全场景锁死。
+    #    语义从未在生产运行过，取值为按消费逻辑与邻近参数量级确定的设计意图默认值（待 E2 后续校准）。
+    "daily_context_min_rows": 66,        # data_fetcher.py:64/72 — 日线上下文最少行数(MA60+6日斜率需≥66; 生产拉180日约120行)
+    "daily_cache_ttl_seconds": 1800,     # data_fetcher.py:381 — 日上下文缓存TTL(盘中30分钟刷新, ref_price随tick更新)
+    "daily_ma_breakdown_gap": 0.03,      # data_fetcher.py:157/160 — 破位风险: 现价跌破MA20/MA30达3% → buy_block(daily_breakdown_risk)
+    "daily_ma_hard_breakdown_gap": 0.05, # data_fetcher.py:142/161 — 硬破位: 现价跌破MA60达5%且MA60下行 → trend_bg=weak_breakdown
+    "daily_overheat_ma10_gap": 0.05,     # data_fetcher.py:163 — 过热: 现价超MA10达5% → buy_block(daily_overheated)
+    "daily_overheat_ma20_gap": 0.08,     # data_fetcher.py:165 — 过热: 现价超MA20达8%
+    "daily_overheat_day_ret": 0.05,      # data_fetcher.py:167 — 过热: 单日涨幅>5%且超MA10达4%
+    "trend_today_ret_threshold": 0.008,  # data_fetcher.py:497/499 — 基准盘中趋势判定阈值(trend_up/down, 参照min_amplitude=0.015同量级)
 }
 
 # 个股专属参数覆盖（基于近90日分钟数据统计回测定制）
