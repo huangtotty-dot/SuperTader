@@ -1,0 +1,5 @@
+=== BACKTEST REPORT (baseline) ===
+Codes: 600176
+Period: 2026-07-20 ~ 2026-07-24
+Signals: 2  WIN=0 FAIL=0 VOID=2
+Win rate: 0.0%

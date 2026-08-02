@@ -1,0 +1,5 @@
+=== BACKTEST REPORT (baseline) ===
+Codes: 603667
+Period: 2026-03-30 ~ 2026-03-31
+Signals: 2  WIN=0 FAIL=1 VOID=1
+Win rate: 0.0%

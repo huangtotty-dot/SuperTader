@@ -1,0 +1,53 @@
+{
+  "total": 2,
+  "wins": 2,
+  "fails": 0,
+  "voids": 0,
+  "unsettled": 0,
+  "win_rate": 1.0,
+  "daily_stats": {
+    "2026-03-16": {
+      "signals": 0,
+      "wins": 0,
+      "fails": 0,
+      "voids": 0
+    },
+    "2026-03-17": {
+      "signals": 2,
+      "wins": 2,
+      "fails": 0,
+      "voids": 0
+    },
+    "2026-03-18": {
+      "signals": 0,
+      "wins": 0,
+      "fails": 0,
+      "voids": 0
+    },
+    "2026-03-19": {
+      "signals": 0,
+      "wins": 0,
+      "fails": 0,
+      "voids": 0
+    },
+    "2026-03-20": {
+      "signals": 0,
+      "wins": 0,
+      "fails": 0,
+      "voids": 0
+    }
+  },
+  "ab_mode": "baseline",
+  "p1_metrics": {
+    "per_stock": {},
+    "bull_consistency": null,
+    "bear_consistency": null,
+    "overall_consistency": null,
+    "neutral_ratio": null,
+    "bias_ratio": null,
+    "sample_days_bull": 0,
+    "sample_days_bear": 0,
+    "strong_bull_accuracy": null,
+    "strong_bear_accuracy": null
+  }
+}
