@@ -1,0 +1,337 @@
+START TH=55/65 remaining=210 at 00:47:36
+baseline 000988 2026-03-16~2026-03-20 ok_retry_empty 225s
+baseline 000988 2026-03-23~2026-03-27 ok_retry_empty 225s
+baseline 000988 2026-03-30~2026-03-31 ok_retry_empty 116s
+baseline 000988 2026-04-01~2026-04-03 ok_retry_empty 159s
+baseline 000988 2026-04-06~2026-04-10 ok_retry_empty 196s
+BUDGET_OUT dispatched=5/210
+BATCH_DONE ok=5 fail=0 remaining=205 elapsed=225s
+START TH=55/65 remaining=205 at 00:51:37
+baseline 000988 2026-04-13~2026-04-17 ok_retry_empty 241s
+baseline 000988 2026-04-20~2026-04-24 ok_retry_empty 240s
+baseline 000988 2026-04-27~2026-04-30 ok_retry_empty 206s
+baseline 000988 2026-05-01~2026-05-08 ok_retry_empty 164s
+baseline 000988 2026-05-11~2026-05-15 ok_retry_empty 240s
+BUDGET_OUT dispatched=5/205
+BATCH_DONE ok=5 fail=0 remaining=200 elapsed=241s
+START TH=55/65 remaining=200 at 00:55:44
+baseline 000988 2026-05-18~2026-05-22 ok_retry_empty 248s
+baseline 000988 2026-05-25~2026-05-29 ok_retry_empty 248s
+baseline 000988 2026-06-01~2026-06-05 ok_retry_empty 248s
+baseline 000988 2026-06-08~2026-06-12 ok_retry_empty 247s
+baseline 000988 2026-06-15~2026-06-19 ok_retry_empty 209s
+BUDGET_OUT dispatched=5/200
+BATCH_DONE ok=5 fail=0 remaining=195 elapsed=248s
+START TH=55/65 remaining=195 at 00:59:58
+baseline 000988 2026-06-22~2026-06-26 ok_retry_empty 226s
+baseline 000988 2026-06-29~2026-06-30 ok_retry_empty 109s
+baseline 000988 2026-07-01~2026-07-03 ok_retry_empty 152s
+baseline 000988 2026-07-06~2026-07-10 ok_retry_empty 225s
+baseline 000988 2026-07-13~2026-07-17 ok_retry_empty 226s
+BUDGET_OUT dispatched=5/195
+BATCH_DONE ok=5 fail=0 remaining=190 elapsed=226s
+START TH=55/65 remaining=190 at 01:03:50
+baseline 000988 2026-07-20~2026-07-24 ok_retry_empty 177s
+baseline 588170 2026-03-16~2026-03-20 ok 110s
+baseline 588170 2026-03-23~2026-03-27 ok 110s
+baseline 588170 2026-03-30~2026-03-31 ok 53s
+baseline 588170 2026-04-01~2026-04-03 ok 73s
+BUDGET_OUT dispatched=5/190
+BATCH_DONE ok=5 fail=0 remaining=185 elapsed=177s
+START TH=55/65 remaining=185 at 01:06:58
+baseline 588170 2026-04-06~2026-04-10 ok 97s
+baseline 588170 2026-04-13~2026-04-17 ok 113s
+baseline 588170 2026-04-20~2026-04-24 ok 112s
+baseline 588170 2026-04-27~2026-04-30 ok 98s
+baseline 588170 2026-05-01~2026-05-08 ok 76s
+BUDGET_OUT dispatched=5/185
+BATCH_DONE ok=5 fail=0 remaining=180 elapsed=113s
+START TH=55/65 remaining=180 at 01:09:23
+baseline 588170 2026-05-11~2026-05-15 ok 125s
+baseline 588170 2026-05-18~2026-05-22 ok 124s
+baseline 588170 2026-05-25~2026-05-29 ok 125s
+baseline 588170 2026-06-01~2026-06-05 ok 125s
+baseline 588170 2026-06-08~2026-06-12 ok 126s
+BUDGET_OUT dispatched=5/180
+BATCH_DONE ok=5 fail=0 remaining=175 elapsed=126s
+START TH=55/65 remaining=175 at 01:11:37
+baseline 588170 2026-06-15~2026-06-19 ok 93s
+baseline 588170 2026-06-22~2026-06-26 ok 108s
+baseline 588170 2026-06-29~2026-06-30 ok 54s
+baseline 588170 2026-07-01~2026-07-03 ok 74s
+baseline 588170 2026-07-06~2026-07-10 ok 108s
+BUDGET_OUT dispatched=5/175
+BATCH_DONE ok=5 fail=0 remaining=170 elapsed=108s
+START TH=55/65 remaining=170 at 01:13:32
+baseline 588170 2026-07-13~2026-07-17 ok 122s
+baseline 588170 2026-07-20~2026-07-24 ok 123s
+baseline 600176 2026-03-16~2026-03-20 ok_retry_empty 204s
+baseline 600176 2026-03-23~2026-03-27 ok_retry_empty 204s
+baseline 600176 2026-03-30~2026-03-31 ok_retry_empty 107s
+BUDGET_OUT dispatched=5/170
+BATCH_DONE ok=5 fail=0 remaining=165 elapsed=204s
+START TH=55/65 remaining=165 at 01:17:02
+baseline 600176 2026-04-01~2026-04-03 ok_retry_empty 158s
+baseline 600176 2026-04-06~2026-04-10 ok_retry_empty 199s
+baseline 600176 2026-04-13~2026-04-17 ok_retry_empty 234s
+baseline 600176 2026-04-20~2026-04-24 ok_retry_empty 233s
+baseline 600176 2026-04-27~2026-04-30 ok_retry_empty 199s
+BUDGET_OUT dispatched=5/165
+BATCH_DONE ok=5 fail=0 remaining=160 elapsed=234s
+START TH=55/65 remaining=160 at 01:21:15
+baseline 600176 2026-05-01~2026-05-08 ok_retry_empty 159s
+baseline 600176 2026-05-11~2026-05-15 ok_retry_empty 243s
+baseline 600176 2026-05-18~2026-05-22 ok_retry_empty 243s
+baseline 600176 2026-05-25~2026-05-29 ok_retry_empty 243s
+baseline 600176 2026-06-01~2026-06-05 ok_retry_empty 242s
+BUDGET_OUT dispatched=5/160
+BATCH_DONE ok=5 fail=0 remaining=155 elapsed=243s
+START TH=55/65 remaining=155 at 01:25:26
+baseline 600176 2026-06-08~2026-06-12 ok_retry_empty 189s
+baseline 600176 2026-06-15~2026-06-19 ok_retry_empty 163s
+baseline 600176 2026-06-22~2026-06-26 ok 112s
+baseline 600176 2026-06-29~2026-06-30 ok 53s
+baseline 600176 2026-07-01~2026-07-03 ok 74s
+BUDGET_OUT dispatched=5/155
+BATCH_DONE ok=5 fail=0 remaining=150 elapsed=189s
+START TH=55/65 remaining=150 at 01:28:41
+baseline 600176 2026-07-06~2026-07-10 ok_retry_empty 221s
+baseline 600176 2026-07-13~2026-07-17 ok_retry_empty 221s
+baseline 600176 2026-07-20~2026-07-24 ok_retry_empty 221s
+baseline 600481 2026-03-16~2026-03-20 ok 126s
+baseline 600481 2026-03-23~2026-03-27 ok 127s
+BUDGET_OUT dispatched=5/150
+BATCH_DONE ok=5 fail=0 remaining=145 elapsed=221s
+START TH=55/65 remaining=145 at 01:32:28
+baseline 600481 2026-03-30~2026-03-31 ok 54s
+baseline 600481 2026-04-01~2026-04-03 ok 75s
+baseline 600481 2026-04-06~2026-04-10 ok 95s
+baseline 600481 2026-04-13~2026-04-17 ok 109s
+baseline 600481 2026-04-20~2026-04-24 ok 109s
+BUDGET_OUT dispatched=5/145
+BATCH_DONE ok=5 fail=0 remaining=140 elapsed=109s
+START TH=55/65 remaining=140 at 01:34:23
+baseline 600481 2026-04-27~2026-04-30 ok_retry_empty 161s
+baseline 600481 2026-05-01~2026-05-08 ok 78s
+baseline 600481 2026-05-11~2026-05-15 ok 121s
+baseline 600481 2026-05-18~2026-05-22 ok 121s
+baseline 600481 2026-05-25~2026-05-29 ok 120s
+BUDGET_OUT dispatched=5/140
+BATCH_DONE ok=5 fail=0 remaining=135 elapsed=161s
+START TH=55/65 remaining=135 at 01:37:12
+baseline 600481 2026-06-01~2026-06-05 ok_retry_empty 231s
+baseline 600481 2026-06-08~2026-06-12 ok_retry_empty 230s
+baseline 600481 2026-06-15~2026-06-19 ok_retry_empty 197s
+baseline 600481 2026-06-22~2026-06-26 ok_retry_empty 231s
+baseline 600481 2026-06-29~2026-06-30 ok_retry_empty 111s
+BUDGET_OUT dispatched=5/135
+BATCH_DONE ok=5 fail=0 remaining=130 elapsed=231s
+START TH=55/65 remaining=130 at 01:41:10
+baseline 600481 2026-07-01~2026-07-03 ok_retry_empty 152s
+baseline 600481 2026-07-06~2026-07-10 ok_retry_empty 225s
+baseline 600481 2026-07-13~2026-07-17 ok_retry_empty 225s
+baseline 600481 2026-07-20~2026-07-24 ok_retry_empty 227s
+baseline 603667 2026-03-16~2026-03-20 ok 125s
+BUDGET_OUT dispatched=5/130
+BATCH_DONE ok=5 fail=0 remaining=125 elapsed=227s
+START TH=55/65 remaining=125 at 01:45:26
+START TH=55/65 remaining=125 at 01:47:05
+baseline 603667 2026-03-23~2026-03-27 ok 112s
+baseline 603667 2026-03-30~2026-03-31 ok 55s
+baseline 603667 2026-04-01~2026-04-03 ok 76s
+baseline 603667 2026-04-06~2026-04-10 ok 96s
+baseline 603667 2026-04-13~2026-04-17 ok 112s
+BUDGET_OUT dispatched=5/125
+BATCH_DONE ok=5 fail=0 remaining=120 elapsed=112s
+START TH=55/65 remaining=120 at 01:49:26
+baseline 603667 2026-04-20~2026-04-24 ok 127s
+baseline 603667 2026-04-27~2026-04-30 ok 106s
+baseline 603667 2026-05-01~2026-05-08 ok_retry_empty 144s
+baseline 603667 2026-05-11~2026-05-15 ok 127s
+baseline 603667 2026-05-18~2026-05-22 ok 127s
+BUDGET_OUT dispatched=5/120
+BATCH_DONE ok=5 fail=0 remaining=115 elapsed=144s
+START TH=55/65 remaining=115 at 01:51:56
+baseline 603667 2026-05-25~2026-05-29 ok 131s
+baseline 603667 2026-06-01~2026-06-05 ok 129s
+baseline 603667 2026-06-08~2026-06-12 ok 129s
+baseline 603667 2026-06-15~2026-06-19 ok_retry_empty 172s
+baseline 603667 2026-06-22~2026-06-26 ok 130s
+BUDGET_OUT dispatched=5/115
+BATCH_DONE ok=5 fail=0 remaining=110 elapsed=172s
+START TH=55/65 remaining=110 at 01:54:55
+baseline 603667 2026-06-29~2026-06-30 ok_retry_empty 108s
+baseline 603667 2026-07-01~2026-07-03 ok 80s
+baseline 603667 2026-07-06~2026-07-10 ok 122s
+baseline 603667 2026-07-13~2026-07-17 ok_retry_empty 204s
+baseline 603667 2026-07-20~2026-07-24 ok_retry_empty 205s
+BUDGET_OUT dispatched=5/110
+BATCH_DONE ok=5 fail=0 remaining=105 elapsed=205s
+START TH=55/65 remaining=105 at 01:58:27
+v102 000988 2026-03-16~2026-03-20 ok_retry_empty 248s
+v102 000988 2026-03-23~2026-03-27 ok_retry_empty 248s
+v102 000988 2026-03-30~2026-03-31 ok_retry_empty 123s
+v102 000988 2026-04-01~2026-04-03 ok_retry_empty 170s
+v102 000988 2026-04-06~2026-04-10 ok_retry_empty 213s
+BUDGET_OUT dispatched=5/105
+BATCH_DONE ok=5 fail=0 remaining=100 elapsed=248s
+START TH=55/65 remaining=100 at 02:02:42
+v102 000988 2026-04-13~2026-04-17 ok_retry_empty 269s
+v102 000988 2026-04-20~2026-04-24 ok_retry_empty 270s
+v102 000988 2026-04-27~2026-04-30 ok_retry_empty 227s
+v102 000988 2026-05-01~2026-05-08 ok_retry_empty 182s
+v102 000988 2026-05-11~2026-05-15 ok_retry_empty 269s
+BUDGET_OUT dispatched=5/100
+BATCH_DONE ok=5 fail=0 remaining=95 elapsed=270s
+START TH=55/65 remaining=95 at 02:07:19
+v102 000988 2026-05-18~2026-05-22 ok_retry_empty 292s
+v102 000988 2026-05-25~2026-05-29 ok_retry_empty 293s
+v102 000988 2026-06-01~2026-06-05 ok_retry_empty 292s
+v102 000988 2026-06-08~2026-06-12 ok_retry_empty 292s
+v102 000988 2026-06-15~2026-06-19 ok_retry_empty 245s
+BUDGET_OUT dispatched=5/95
+BATCH_DONE ok=5 fail=0 remaining=90 elapsed=293s
+START TH=55/65 remaining=90 at 02:12:19
+v102 000988 2026-06-22~2026-06-26 ok_retry_empty 255s
+v102 000988 2026-06-29~2026-06-30 ok_retry_empty 125s
+v102 000988 2026-07-01~2026-07-03 ok_retry_empty 172s
+v102 000988 2026-07-06~2026-07-10 ok_retry_empty 256s
+v102 000988 2026-07-13~2026-07-17 ok_retry_empty 256s
+BUDGET_OUT dispatched=5/90
+BATCH_DONE ok=5 fail=0 remaining=85 elapsed=256s
+START TH=55/65 remaining=85 at 02:16:41
+v102 000988 2026-07-20~2026-07-24 ok_retry_empty 203s
+v102 588170 2026-03-16~2026-03-20 ok 127s
+v102 588170 2026-03-23~2026-03-27 ok 128s
+v102 588170 2026-03-30~2026-03-31 ok 60s
+v102 588170 2026-04-01~2026-04-03 ok 85s
+BUDGET_OUT dispatched=5/85
+BATCH_DONE ok=5 fail=0 remaining=80 elapsed=203s
+START TH=55/65 remaining=80 at 02:20:23
+v102 588170 2026-04-06~2026-04-10 ok 112s
+v102 588170 2026-04-13~2026-04-17 ok 132s
+v102 588170 2026-04-20~2026-04-24 ok 131s
+v102 588170 2026-04-27~2026-04-30 ok 114s
+v102 588170 2026-05-01~2026-05-08 ok 88s
+BUDGET_OUT dispatched=5/80
+BATCH_DONE ok=5 fail=0 remaining=75 elapsed=132s
+START TH=55/65 remaining=75 at 02:22:53
+v102 588170 2026-05-11~2026-05-15 ok 144s
+v102 588170 2026-05-18~2026-05-22 ok 143s
+v102 588170 2026-05-25~2026-05-29 ok 143s
+v102 588170 2026-06-01~2026-06-05 ok 142s
+v102 588170 2026-06-08~2026-06-12 ok 142s
+BUDGET_OUT dispatched=5/75
+BATCH_DONE ok=5 fail=0 remaining=70 elapsed=144s
+START TH=55/65 remaining=70 at 02:25:23
+v102 588170 2026-06-15~2026-06-19 ok 105s
+v102 588170 2026-06-22~2026-06-26 ok 122s
+v102 588170 2026-06-29~2026-06-30 ok 60s
+v102 588170 2026-07-01~2026-07-03 ok 84s
+v102 588170 2026-07-06~2026-07-10 ok 122s
+BUDGET_OUT dispatched=5/70
+BATCH_DONE ok=5 fail=0 remaining=65 elapsed=122s
+START TH=55/65 remaining=65 at 02:27:31
+v102 588170 2026-07-13~2026-07-17 ok 141s
+v102 588170 2026-07-20~2026-07-24 ok 141s
+v102 600176 2026-03-16~2026-03-20 ok_retry_empty 236s
+v102 600176 2026-03-23~2026-03-27 ok_retry_empty 236s
+v102 600176 2026-03-30~2026-03-31 ok_retry_empty 126s
+BUDGET_OUT dispatched=5/65
+BATCH_DONE ok=5 fail=0 remaining=60 elapsed=236s
+START TH=55/65 remaining=60 at 02:31:37
+v102 600176 2026-04-01~2026-04-03 ok_retry_empty 178s
+v102 600176 2026-04-06~2026-04-10 ok_retry_empty 226s
+v102 600176 2026-04-13~2026-04-17 ok_retry_empty 262s
+v102 600176 2026-04-20~2026-04-24 ok_retry_empty 261s
+v102 600176 2026-04-27~2026-04-30 ok_retry_empty 226s
+BUDGET_OUT dispatched=5/60
+BATCH_DONE ok=5 fail=0 remaining=55 elapsed=262s
+START TH=55/65 remaining=55 at 02:36:08
+v102 600176 2026-05-01~2026-05-08 ok_retry_empty 182s
+v102 600176 2026-05-11~2026-05-15 ok_retry_empty 276s
+v102 600176 2026-05-18~2026-05-22 ok_retry_empty 276s
+v102 600176 2026-05-25~2026-05-29 ok_retry_empty 276s
+v102 600176 2026-06-01~2026-06-05 ok_retry_empty 277s
+BUDGET_OUT dispatched=5/55
+BATCH_DONE ok=5 fail=0 remaining=50 elapsed=277s
+START TH=55/65 remaining=50 at 02:40:52
+v102 600176 2026-06-08~2026-06-12 ok_retry_empty 213s
+v102 600176 2026-06-15~2026-06-19 ok_retry_empty 184s
+v102 600176 2026-06-22~2026-06-26 ok 127s
+v102 600176 2026-06-29~2026-06-30 ok 60s
+v102 600176 2026-07-01~2026-07-03 ok 84s
+BUDGET_OUT dispatched=5/50
+BATCH_DONE ok=5 fail=0 remaining=45 elapsed=213s
+START TH=55/65 remaining=45 at 02:44:44
+START TH=55/65 remaining=45 at 02:47:49
+v102 600176 2026-07-06~2026-07-10 ok_retry_empty 253s
+v102 600176 2026-07-13~2026-07-17 ok_retry_empty 252s
+v102 600176 2026-07-20~2026-07-24 ok_retry_empty 252s
+v102 600481 2026-03-16~2026-03-20 ok 144s
+v102 600481 2026-03-23~2026-03-27 ok 145s
+BUDGET_OUT dispatched=5/45
+BATCH_DONE ok=5 fail=0 remaining=40 elapsed=253s
+START TH=55/65 remaining=40 at 02:52:08
+v102 600481 2026-03-30~2026-03-31 ok 61s
+v102 600481 2026-04-01~2026-04-03 ok 85s
+v102 600481 2026-04-06~2026-04-10 ok 107s
+v102 600481 2026-04-13~2026-04-17 ok 124s
+v102 600481 2026-04-20~2026-04-24 ok 124s
+BUDGET_OUT dispatched=5/40
+BATCH_DONE ok=5 fail=0 remaining=35 elapsed=124s
+START TH=55/65 remaining=35 at 02:54:19
+v102 600481 2026-04-27~2026-04-30 ok_retry_empty 184s
+v102 600481 2026-05-01~2026-05-08 ok 88s
+v102 600481 2026-05-11~2026-05-15 ok 137s
+v102 600481 2026-05-18~2026-05-22 ok 137s
+v102 600481 2026-05-25~2026-05-29 ok 137s
+BUDGET_OUT dispatched=5/35
+BATCH_DONE ok=5 fail=0 remaining=30 elapsed=184s
+START TH=55/65 remaining=30 at 02:57:30
+v102 600481 2026-06-01~2026-06-05 ok_retry_empty 260s
+v102 600481 2026-06-08~2026-06-12 ok_retry_empty 259s
+v102 600481 2026-06-15~2026-06-19 ok_retry_empty 219s
+v102 600481 2026-06-22~2026-06-26 ok_retry_empty 260s
+v102 600481 2026-06-29~2026-06-30 ok_retry_empty 121s
+BUDGET_OUT dispatched=5/30
+BATCH_DONE ok=5 fail=0 remaining=25 elapsed=260s
+START TH=55/65 remaining=25 at 03:01:57
+v102 600481 2026-07-01~2026-07-03 ok_retry_empty 176s
+v102 600481 2026-07-06~2026-07-10 ok_retry_empty 259s
+v102 600481 2026-07-13~2026-07-17 ok_retry_empty 260s
+v102 600481 2026-07-20~2026-07-24 ok_retry_empty 260s
+v102 603667 2026-03-16~2026-03-20 ok 145s
+BUDGET_OUT dispatched=5/25
+BATCH_DONE ok=5 fail=0 remaining=20 elapsed=260s
+START TH=55/65 remaining=20 at 03:06:23
+v102 603667 2026-03-23~2026-03-27 ok 125s
+v102 603667 2026-03-30~2026-03-31 ok 61s
+v102 603667 2026-04-01~2026-04-03 ok 86s
+v102 603667 2026-04-06~2026-04-10 ok 106s
+v102 603667 2026-04-13~2026-04-17 ok 124s
+BUDGET_OUT dispatched=5/20
+BATCH_DONE ok=5 fail=0 remaining=15 elapsed=125s
+START TH=55/65 remaining=15 at 03:08:35
+v102 603667 2026-04-20~2026-04-24 ok 138s
+v102 603667 2026-04-27~2026-04-30 ok 114s
+v102 603667 2026-05-01~2026-05-08 ok_retry_empty 156s
+v102 603667 2026-05-11~2026-05-15 ok 138s
+v102 603667 2026-05-18~2026-05-22 ok 138s
+BUDGET_OUT dispatched=5/15
+BATCH_DONE ok=5 fail=0 remaining=10 elapsed=156s
+START TH=55/65 remaining=10 at 03:11:17
+v102 603667 2026-05-25~2026-05-29 ok 143s
+v102 603667 2026-06-01~2026-06-05 ok 144s
+v102 603667 2026-06-08~2026-06-12 ok 143s
+v102 603667 2026-06-15~2026-06-19 ok_retry_empty 190s
+v102 603667 2026-06-22~2026-06-26 ok 144s
+BUDGET_OUT dispatched=5/10
+BATCH_DONE ok=5 fail=0 remaining=5 elapsed=190s
+START TH=55/65 remaining=5 at 03:14:42
+v102 603667 2026-06-29~2026-06-30 ok_retry_empty 126s
+v102 603667 2026-07-01~2026-07-03 ok_retry_empty 170s
+v102 603667 2026-07-06~2026-07-10 ok 143s
+v102 603667 2026-07-13~2026-07-17 ok_retry_empty 244s
+v102 603667 2026-07-20~2026-07-24 ok_retry_empty 244s
+BATCH_DONE ok=5 fail=0 remaining=0 elapsed=244s

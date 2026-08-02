@@ -1,0 +1,594 @@
+{
+  "total": 374,
+  "wins": 170,
+  "fails": 170,
+  "voids": 34,
+  "unsettled": 0,
+  "win_rate": 0.5,
+  "daily_stats": {
+    "2026-03-16": {
+      "signals": 3,
+      "wins": 1,
+      "fails": 2,
+      "voids": 0
+    },
+    "2026-03-17": {
+      "signals": 3,
+      "wins": 2,
+      "fails": 1,
+      "voids": 0
+    },
+    "2026-03-18": {
+      "signals": 1,
+      "wins": 0,
+      "fails": 1,
+      "voids": 0
+    },
+    "2026-03-19": {
+      "signals": 3,
+      "wins": 0,
+      "fails": 1,
+      "voids": 2
+    },
+    "2026-03-20": {
+      "signals": 3,
+      "wins": 1,
+      "fails": 1,
+      "voids": 1
+    },
+    "2026-03-23": {
+      "signals": 3,
+      "wins": 1,
+      "fails": 2,
+      "voids": 0
+    },
+    "2026-03-24": {
+      "signals": 3,
+      "wins": 2,
+      "fails": 1,
+      "voids": 0
+    },
+    "2026-03-25": {
+      "signals": 0,
+      "wins": 0,
+      "fails": 0,
+      "voids": 0
+    },
+    "2026-03-26": {
+      "signals": 3,
+      "wins": 3,
+      "fails": 0,
+      "voids": 0
+    },
+    "2026-03-27": {
+      "signals": 0,
+      "wins": 0,
+      "fails": 0,
+      "voids": 0
+    },
+    "2026-03-30": {
+      "signals": 0,
+      "wins": 0,
+      "fails": 0,
+      "voids": 0
+    },
+    "2026-03-31": {
+      "signals": 3,
+      "wins": 0,
+      "fails": 2,
+      "voids": 1
+    },
+    "2026-04-01": {
+      "signals": 2,
+      "wins": 1,
+      "fails": 1,
+      "voids": 0
+    },
+    "2026-04-02": {
+      "signals": 3,
+      "wins": 1,
+      "fails": 1,
+      "voids": 1
+    },
+    "2026-04-03": {
+      "signals": 3,
+      "wins": 1,
+      "fails": 1,
+      "voids": 1
+    },
+    "2026-04-07": {
+      "signals": 3,
+      "wins": 2,
+      "fails": 0,
+      "voids": 1
+    },
+    "2026-04-08": {
+      "signals": 0,
+      "wins": 0,
+      "fails": 0,
+      "voids": 0
+    },
+    "2026-04-09": {
+      "signals": 2,
+      "wins": 0,
+      "fails": 1,
+      "voids": 1
+    },
+    "2026-04-10": {
+      "signals": 0,
+      "wins": 0,
+      "fails": 0,
+      "voids": 0
+    },
+    "2026-04-13": {
+      "signals": 2,
+      "wins": 0,
+      "fails": 1,
+      "voids": 1
+    },
+    "2026-04-14": {
+      "signals": 0,
+      "wins": 0,
+      "fails": 0,
+      "voids": 0
+    },
+    "2026-04-15": {
+      "signals": 3,
+      "wins": 0,
+      "fails": 2,
+      "voids": 1
+    },
+    "2026-04-16": {
+      "signals": 3,
+      "wins": 1,
+      "fails": 1,
+      "voids": 1
+    },
+    "2026-04-17": {
+      "signals": 0,
+      "wins": 0,
+      "fails": 0,
+      "voids": 0
+    },
+    "2026-04-20": {
+      "signals": 3,
+      "wins": 0,
+      "fails": 1,
+      "voids": 2
+    },
+    "2026-04-21": {
+      "signals": 0,
+      "wins": 0,
+      "fails": 0,
+      "voids": 0
+    },
+    "2026-04-22": {
+      "signals": 1,
+      "wins": 0,
+      "fails": 1,
+      "voids": 0
+    },
+    "2026-04-23": {
+      "signals": 3,
+      "wins": 1,
+      "fails": 2,
+      "voids": 0
+    },
+    "2026-04-24": {
+      "signals": 3,
+      "wins": 0,
+      "fails": 3,
+      "voids": 0
+    },
+    "2026-04-27": {
+      "signals": 0,
+      "wins": 0,
+      "fails": 0,
+      "voids": 0
+    },
+    "2026-04-28": {
+      "signals": 3,
+      "wins": 2,
+      "fails": 1,
+      "voids": 0
+    },
+    "2026-04-29": {
+      "signals": 0,
+      "wins": 0,
+      "fails": 0,
+      "voids": 0
+    },
+    "2026-04-30": {
+      "signals": 0,
+      "wins": 0,
+      "fails": 0,
+      "voids": 0
+    },
+    "2026-05-06": {
+      "signals": 0,
+      "wins": 0,
+      "fails": 0,
+      "voids": 0
+    },
+    "2026-05-07": {
+      "signals": 0,
+      "wins": 0,
+      "fails": 0,
+      "voids": 0
+    },
+    "2026-05-08": {
+      "signals": 0,
+      "wins": 0,
+      "fails": 0,
+      "voids": 0
+    },
+    "2026-05-11": {
+      "signals": 0,
+      "wins": 0,
+      "fails": 0,
+      "voids": 0
+    },
+    "2026-05-12": {
+      "signals": 0,
+      "wins": 0,
+      "fails": 0,
+      "voids": 0
+    },
+    "2026-05-13": {
+      "signals": 0,
+      "wins": 0,
+      "fails": 0,
+      "voids": 0
+    },
+    "2026-05-14": {
+      "signals": 1,
+      "wins": 0,
+      "fails": 1,
+      "voids": 0
+    },
+    "2026-05-15": {
+      "signals": 0,
+      "wins": 0,
+      "fails": 0,
+      "voids": 0
+    },
+    "2026-05-18": {
+      "signals": 0,
+      "wins": 0,
+      "fails": 0,
+      "voids": 0
+    },
+    "2026-05-19": {
+      "signals": 3,
+      "wins": 0,
+      "fails": 3,
+      "voids": 0
+    },
+    "2026-05-20": {
+      "signals": 1,
+      "wins": 0,
+      "fails": 1,
+      "voids": 0
+    },
+    "2026-05-21": {
+      "signals": 1,
+      "wins": 0,
+      "fails": 1,
+      "voids": 0
+    },
+    "2026-05-22": {
+      "signals": 0,
+      "wins": 0,
+      "fails": 0,
+      "voids": 0
+    },
+    "2026-05-25": {
+      "signals": 1,
+      "wins": 0,
+      "fails": 1,
+      "voids": 0
+    },
+    "2026-05-26": {
+      "signals": 3,
+      "wins": 1,
+      "fails": 2,
+      "voids": 0
+    },
+    "2026-05-27": {
+      "signals": 3,
+      "wins": 2,
+      "fails": 1,
+      "voids": 0
+    },
+    "2026-05-28": {
+      "signals": 1,
+      "wins": 0,
+      "fails": 1,
+      "voids": 0
+    },
+    "2026-05-29": {
+      "signals": 3,
+      "wins": 1,
+      "fails": 2,
+      "voids": 0
+    },
+    "2026-06-01": {
+      "signals": 3,
+      "wins": 2,
+      "fails": 1,
+      "voids": 0
+    },
+    "2026-06-02": {
+      "signals": 1,
+      "wins": 0,
+      "fails": 0,
+      "voids": 1
+    },
+    "2026-06-03": {
+      "signals": 0,
+      "wins": 0,
+      "fails": 0,
+      "voids": 0
+    },
+    "2026-06-04": {
+      "signals": 0,
+      "wins": 0,
+      "fails": 0,
+      "voids": 0
+    },
+    "2026-06-05": {
+      "signals": 1,
+      "wins": 0,
+      "fails": 1,
+      "voids": 0
+    },
+    "2026-06-08": {
+      "signals": 0,
+      "wins": 0,
+      "fails": 0,
+      "voids": 0
+    },
+    "2026-06-09": {
+      "signals": 2,
+      "wins": 1,
+      "fails": 1,
+      "voids": 0
+    },
+    "2026-06-10": {
+      "signals": 3,
+      "wins": 1,
+      "fails": 2,
+      "voids": 0
+    },
+    "2026-06-11": {
+      "signals": 0,
+      "wins": 0,
+      "fails": 0,
+      "voids": 0
+    },
+    "2026-06-12": {
+      "signals": 3,
+      "wins": 3,
+      "fails": 0,
+      "voids": 0
+    },
+    "2026-06-15": {
+      "signals": 0,
+      "wins": 0,
+      "fails": 0,
+      "voids": 0
+    },
+    "2026-06-16": {
+      "signals": 0,
+      "wins": 0,
+      "fails": 0,
+      "voids": 0
+    },
+    "2026-06-17": {
+      "signals": 0,
+      "wins": 0,
+      "fails": 0,
+      "voids": 0
+    },
+    "2026-06-18": {
+      "signals": 0,
+      "wins": 0,
+      "fails": 0,
+      "voids": 0
+    },
+    "2026-06-22": {
+      "signals": 3,
+      "wins": 2,
+      "fails": 1,
+      "voids": 0
+    },
+    "2026-06-23": {
+      "signals": 1,
+      "wins": 0,
+      "fails": 0,
+      "voids": 1
+    },
+    "2026-06-24": {
+      "signals": 0,
+      "wins": 0,
+      "fails": 0,
+      "voids": 0
+    },
+    "2026-06-25": {
+      "signals": 3,
+      "wins": 1,
+      "fails": 2,
+      "voids": 0
+    },
+    "2026-06-26": {
+      "signals": 0,
+      "wins": 0,
+      "fails": 0,
+      "voids": 0
+    },
+    "2026-06-29": {
+      "signals": 0,
+      "wins": 0,
+      "fails": 0,
+      "voids": 0
+    },
+    "2026-06-30": {
+      "signals": 0,
+      "wins": 0,
+      "fails": 0,
+      "voids": 0
+    },
+    "2026-07-01": {
+      "signals": 1,
+      "wins": 0,
+      "fails": 1,
+      "voids": 0
+    },
+    "2026-07-02": {
+      "signals": 0,
+      "wins": 0,
+      "fails": 0,
+      "voids": 0
+    },
+    "2026-07-03": {
+      "signals": 0,
+      "wins": 0,
+      "fails": 0,
+      "voids": 0
+    },
+    "2026-07-06": {
+      "signals": 1,
+      "wins": 1,
+      "fails": 0,
+      "voids": 0
+    },
+    "2026-07-07": {
+      "signals": 3,
+      "wins": 1,
+      "fails": 2,
+      "voids": 0
+    },
+    "2026-07-08": {
+      "signals": 0,
+      "wins": 0,
+      "fails": 0,
+      "voids": 0
+    },
+    "2026-07-09": {
+      "signals": 0,
+      "wins": 0,
+      "fails": 0,
+      "voids": 0
+    },
+    "2026-07-10": {
+      "signals": 0,
+      "wins": 0,
+      "fails": 0,
+      "voids": 0
+    },
+    "2026-07-13": {
+      "signals": 0,
+      "wins": 0,
+      "fails": 0,
+      "voids": 0
+    },
+    "2026-07-14": {
+      "signals": 0,
+      "wins": 0,
+      "fails": 0,
+      "voids": 0
+    },
+    "2026-07-15": {
+      "signals": 0,
+      "wins": 0,
+      "fails": 0,
+      "voids": 0
+    },
+    "2026-07-16": {
+      "signals": 0,
+      "wins": 0,
+      "fails": 0,
+      "voids": 0
+    },
+    "2026-07-17": {
+      "signals": 0,
+      "wins": 0,
+      "fails": 0,
+      "voids": 0
+    },
+    "2026-07-20": {
+      "signals": 0,
+      "wins": 0,
+      "fails": 0,
+      "voids": 0
+    },
+    "2026-07-21": {
+      "signals": 0,
+      "wins": 0,
+      "fails": 0,
+      "voids": 0
+    },
+    "2026-07-22": {
+      "signals": 0,
+      "wins": 0,
+      "fails": 0,
+      "voids": 0
+    },
+    "2026-07-23": {
+      "signals": 0,
+      "wins": 0,
+      "fails": 0,
+      "voids": 0
+    },
+    "2026-07-24": {
+      "signals": 0,
+      "wins": 0,
+      "fails": 0,
+      "voids": 0
+    }
+  },
+  "ab_mode": "baseline",
+  "p1_metrics": {
+    "per_stock": {},
+    "bull_consistency": null,
+    "bear_consistency": null,
+    "overall_consistency": null,
+    "neutral_ratio": null,
+    "bias_ratio": null,
+    "sample_days_bull": 0,
+    "sample_days_bear": 0,
+    "strong_bull_accuracy": null,
+    "strong_bear_accuracy": null
+  },
+  "closed_loop": {
+    "per_stock": {
+      "600481": {
+        "net_pnl": 0.0,
+        "closed": 0,
+        "open_long": 0,
+        "open_short": 23400
+      },
+      "603667": {
+        "net_pnl": 0.0,
+        "closed": 0,
+        "open_long": 0,
+        "open_short": 10100
+      },
+      "588170": {
+        "net_pnl": 0.0,
+        "closed": 0,
+        "open_long": 0,
+        "open_short": 234000
+      },
+      "600176": {
+        "net_pnl": 0.0,
+        "closed": 0,
+        "open_long": 0,
+        "open_short": 1500
+      }
+    },
+    "total_net_pnl": 0.0,
+    "total_closed_pairs": 0
+  },
+  "data_source": "tushare_unified(minute_snapshots_ts)"
+}
