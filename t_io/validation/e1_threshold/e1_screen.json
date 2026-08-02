@@ -1,0 +1,1139 @@
+{
+  "meta": {
+    "purpose": "E1 引擎买阈阶梯离线筛查 — 选决赛档进全管线",
+    "baseline": "control(e2_variant_a, 仅键修复新基线): 买126 wr0.5044 / 卖326 wr0.4667 / 闭环41对 +221.31 / 阴跌日买wr {\"n\": 17, \"wr\": 0.2941}",
+    "candidate_rule": "bs>=T+(trace_bth-42) AND bs>ss AND 门控开(or实测BUY_LOW bypass) AND buy_block==[] AND 记录层notify(a=个股43/40, b=T) AND 5min段去重; 引擎30min冷却",
+    "two_layer_coupling": "引擎降阈后仍受记录层 notify_buy_threshold(000988/600481=43, 余=40)过滤: 变体a(引擎-only)对43阈股零增益区间[43,42)=空集; 变体b(对齐notify=T)才有密度增益",
+    "unmodelable": "卖侧不变(非对称变体, 仲裁看分数不看阈值); 状态机二阶挤压(接回-5/止盈轨迹)离线不可建模, E2变体A已验证阈值类变更离线→实测可迁移(误差0.24pp)",
+    "qty_approx": "增量买入 qty=每股正qty中位(000988实测全为0→缺省100), 闭环PnL为近似",
+    "stock_days": 450,
+    "sample_dates": "2026-03-16~2026-07-24",
+    "ticks": 100805
+  },
+  "control_baseline": {
+    "buy_n": 126,
+    "buy_wr": 0.5044,
+    "sell_n": 326,
+    "sell_wr": 0.4667,
+    "closed_pairs": 41,
+    "closed_pnl": 221.31,
+    "bear_day_buy": {
+      "n": 17,
+      "wr": 0.2941
+    },
+    "density_per_stock_day": 0.28
+  },
+  "self_check": {
+    "target": 126,
+    "offline": 126,
+    "deviation": 0.0,
+    "pass": true,
+    "note": "偏差来源: 门控离线复算 vs 生产注入日上下文(E2已验证误差0.24pp); f5 bypass仅保守放行实测已知; 状态机二阶效应(接回/止盈轨迹随新买入改变)不可离线建模"
+  },
+  "variants": {
+    "T42a": {
+      "buys": {
+        "n": 126,
+        "wins": 54,
+        "fails": 56,
+        "voids": 16,
+        "wr": 0.4909
+      },
+      "density_per_stock_day": 0.28,
+      "by_code": {
+        "000988": {
+          "n": 71,
+          "wins": 27,
+          "fails": 36,
+          "voids": 8,
+          "wr": 0.4286
+        },
+        "588170": {
+          "n": 20,
+          "wins": 13,
+          "fails": 4,
+          "voids": 3,
+          "wr": 0.7647
+        },
+        "600176": {
+          "n": 16,
+          "wins": 7,
+          "fails": 7,
+          "voids": 2,
+          "wr": 0.5
+        },
+        "600481": {
+          "n": 3,
+          "wins": 1,
+          "fails": 2,
+          "voids": 0,
+          "wr": 0.3333
+        },
+        "603667": {
+          "n": 16,
+          "wins": 6,
+          "fails": 7,
+          "voids": 3,
+          "wr": 0.4615
+        }
+      },
+      "by_dtype": {
+        "bull_day": {
+          "n": 28,
+          "wins": 12,
+          "fails": 9,
+          "voids": 7,
+          "wr": 0.5714
+        },
+        "bear_day": {
+          "n": 17,
+          "wins": 5,
+          "fails": 12,
+          "voids": 0,
+          "wr": 0.2941
+        },
+        "reversal_day": {
+          "n": 10,
+          "wins": 7,
+          "fails": 3,
+          "voids": 0,
+          "wr": 0.7
+        },
+        "chop_day": {
+          "n": 71,
+          "wins": 30,
+          "fails": 32,
+          "voids": 9,
+          "wr": 0.4839
+        },
+        "unknown": {
+          "n": 0,
+          "wins": 0,
+          "fails": 0,
+          "voids": 0,
+          "wr": null
+        }
+      },
+      "bear_day_buy": {
+        "n": 17,
+        "wins": 5,
+        "fails": 12,
+        "voids": 0,
+        "wr": 0.2941
+      },
+      "vs_control": {
+        "overlap": 126,
+        "incremental": 0,
+        "incremental_settle": {
+          "n": 0,
+          "wins": 0,
+          "fails": 0,
+          "voids": 0,
+          "wr": null
+        }
+      },
+      "closed_loop_est": {
+        "pairs": 41,
+        "pnl": 221.31,
+        "per_stock": {
+          "588170": {
+            "net_pnl": 280.49,
+            "closed": 17,
+            "open_long": 1300,
+            "open_short": 36700
+          },
+          "603667": {
+            "net_pnl": 264.53,
+            "closed": 15,
+            "open_long": 100,
+            "open_short": 3800
+          },
+          "600481": {
+            "net_pnl": -20.7,
+            "closed": 3,
+            "open_long": 0,
+            "open_short": 14200
+          },
+          "600176": {
+            "net_pnl": -303.01,
+            "closed": 2,
+            "open_long": 300,
+            "open_short": 2850
+          },
+          "000988": {
+            "net_pnl": 0.0,
+            "closed": 4,
+            "open_long": 0,
+            "open_short": 0
+          }
+        }
+      }
+    },
+    "T42b": {
+      "buys": {
+        "n": 130,
+        "wins": 56,
+        "fails": 57,
+        "voids": 17,
+        "wr": 0.4956
+      },
+      "density_per_stock_day": 0.289,
+      "by_code": {
+        "000988": {
+          "n": 73,
+          "wins": 28,
+          "fails": 36,
+          "voids": 9,
+          "wr": 0.4375
+        },
+        "588170": {
+          "n": 20,
+          "wins": 13,
+          "fails": 4,
+          "voids": 3,
+          "wr": 0.7647
+        },
+        "600176": {
+          "n": 16,
+          "wins": 7,
+          "fails": 7,
+          "voids": 2,
+          "wr": 0.5
+        },
+        "600481": {
+          "n": 5,
+          "wins": 2,
+          "fails": 3,
+          "voids": 0,
+          "wr": 0.4
+        },
+        "603667": {
+          "n": 16,
+          "wins": 6,
+          "fails": 7,
+          "voids": 3,
+          "wr": 0.4615
+        }
+      },
+      "by_dtype": {
+        "bull_day": {
+          "n": 30,
+          "wins": 13,
+          "fails": 10,
+          "voids": 7,
+          "wr": 0.5652
+        },
+        "bear_day": {
+          "n": 18,
+          "wins": 5,
+          "fails": 13,
+          "voids": 0,
+          "wr": 0.2778
+        },
+        "reversal_day": {
+          "n": 10,
+          "wins": 7,
+          "fails": 2,
+          "voids": 1,
+          "wr": 0.7778
+        },
+        "chop_day": {
+          "n": 72,
+          "wins": 31,
+          "fails": 32,
+          "voids": 9,
+          "wr": 0.4921
+        },
+        "unknown": {
+          "n": 0,
+          "wins": 0,
+          "fails": 0,
+          "voids": 0,
+          "wr": null
+        }
+      },
+      "bear_day_buy": {
+        "n": 18,
+        "wins": 5,
+        "fails": 13,
+        "voids": 0,
+        "wr": 0.2778
+      },
+      "vs_control": {
+        "overlap": 114,
+        "incremental": 16,
+        "incremental_settle": {
+          "n": 16,
+          "wins": 7,
+          "fails": 5,
+          "voids": 4,
+          "wr": 0.5833
+        }
+      },
+      "closed_loop_est": {
+        "pairs": 41,
+        "pnl": 221.31,
+        "per_stock": {
+          "588170": {
+            "net_pnl": 280.49,
+            "closed": 17,
+            "open_long": 1300,
+            "open_short": 36700
+          },
+          "603667": {
+            "net_pnl": 264.53,
+            "closed": 15,
+            "open_long": 100,
+            "open_short": 3800
+          },
+          "600481": {
+            "net_pnl": -20.7,
+            "closed": 3,
+            "open_long": 800,
+            "open_short": 14200
+          },
+          "600176": {
+            "net_pnl": -303.01,
+            "closed": 2,
+            "open_long": 300,
+            "open_short": 2850
+          },
+          "000988": {
+            "net_pnl": 0.0,
+            "closed": 4,
+            "open_long": 1300,
+            "open_short": 0
+          }
+        }
+      }
+    },
+    "T38a": {
+      "buys": {
+        "n": 128,
+        "wins": 53,
+        "fails": 60,
+        "voids": 15,
+        "wr": 0.469
+      },
+      "density_per_stock_day": 0.284,
+      "by_code": {
+        "000988": {
+          "n": 71,
+          "wins": 27,
+          "fails": 36,
+          "voids": 8,
+          "wr": 0.4286
+        },
+        "588170": {
+          "n": 21,
+          "wins": 13,
+          "fails": 5,
+          "voids": 3,
+          "wr": 0.7222
+        },
+        "600176": {
+          "n": 17,
+          "wins": 7,
+          "fails": 9,
+          "voids": 1,
+          "wr": 0.4375
+        },
+        "600481": {
+          "n": 3,
+          "wins": 1,
+          "fails": 2,
+          "voids": 0,
+          "wr": 0.3333
+        },
+        "603667": {
+          "n": 16,
+          "wins": 5,
+          "fails": 8,
+          "voids": 3,
+          "wr": 0.3846
+        }
+      },
+      "by_dtype": {
+        "bull_day": {
+          "n": 29,
+          "wins": 11,
+          "fails": 12,
+          "voids": 6,
+          "wr": 0.4783
+        },
+        "bear_day": {
+          "n": 17,
+          "wins": 5,
+          "fails": 12,
+          "voids": 0,
+          "wr": 0.2941
+        },
+        "reversal_day": {
+          "n": 10,
+          "wins": 7,
+          "fails": 3,
+          "voids": 0,
+          "wr": 0.7
+        },
+        "chop_day": {
+          "n": 72,
+          "wins": 30,
+          "fails": 33,
+          "voids": 9,
+          "wr": 0.4762
+        },
+        "unknown": {
+          "n": 0,
+          "wins": 0,
+          "fails": 0,
+          "voids": 0,
+          "wr": null
+        }
+      },
+      "bear_day_buy": {
+        "n": 17,
+        "wins": 5,
+        "fails": 12,
+        "voids": 0,
+        "wr": 0.2941
+      },
+      "vs_control": {
+        "overlap": 116,
+        "incremental": 12,
+        "incremental_settle": {
+          "n": 12,
+          "wins": 5,
+          "fails": 7,
+          "voids": 0,
+          "wr": 0.4167
+        }
+      },
+      "closed_loop_est": {
+        "pairs": 44,
+        "pnl": 273.13,
+        "per_stock": {
+          "588170": {
+            "net_pnl": 393.87,
+            "closed": 19,
+            "open_long": 1600,
+            "open_short": 34700
+          },
+          "603667": {
+            "net_pnl": 202.98,
+            "closed": 16,
+            "open_long": 300,
+            "open_short": 3700
+          },
+          "600481": {
+            "net_pnl": -20.7,
+            "closed": 3,
+            "open_long": 0,
+            "open_short": 14200
+          },
+          "600176": {
+            "net_pnl": -303.01,
+            "closed": 2,
+            "open_long": 900,
+            "open_short": 2850
+          },
+          "000988": {
+            "net_pnl": 0.0,
+            "closed": 4,
+            "open_long": 0,
+            "open_short": 0
+          }
+        }
+      }
+    },
+    "T38b": {
+      "buys": {
+        "n": 142,
+        "wins": 59,
+        "fails": 67,
+        "voids": 16,
+        "wr": 0.4683
+      },
+      "density_per_stock_day": 0.316,
+      "by_code": {
+        "000988": {
+          "n": 81,
+          "wins": 31,
+          "fails": 41,
+          "voids": 9,
+          "wr": 0.4306
+        },
+        "588170": {
+          "n": 22,
+          "wins": 13,
+          "fails": 6,
+          "voids": 3,
+          "wr": 0.6842
+        },
+        "600176": {
+          "n": 18,
+          "wins": 8,
+          "fails": 9,
+          "voids": 1,
+          "wr": 0.4706
+        },
+        "600481": {
+          "n": 5,
+          "wins": 2,
+          "fails": 3,
+          "voids": 0,
+          "wr": 0.4
+        },
+        "603667": {
+          "n": 16,
+          "wins": 5,
+          "fails": 8,
+          "voids": 3,
+          "wr": 0.3846
+        }
+      },
+      "by_dtype": {
+        "bull_day": {
+          "n": 33,
+          "wins": 13,
+          "fails": 14,
+          "voids": 6,
+          "wr": 0.4815
+        },
+        "bear_day": {
+          "n": 19,
+          "wins": 7,
+          "fails": 12,
+          "voids": 0,
+          "wr": 0.3684
+        },
+        "reversal_day": {
+          "n": 11,
+          "wins": 6,
+          "fails": 4,
+          "voids": 1,
+          "wr": 0.6
+        },
+        "chop_day": {
+          "n": 79,
+          "wins": 33,
+          "fails": 37,
+          "voids": 9,
+          "wr": 0.4714
+        },
+        "unknown": {
+          "n": 0,
+          "wins": 0,
+          "fails": 0,
+          "voids": 0,
+          "wr": null
+        }
+      },
+      "bear_day_buy": {
+        "n": 19,
+        "wins": 7,
+        "fails": 12,
+        "voids": 0,
+        "wr": 0.3684
+      },
+      "vs_control": {
+        "overlap": 87,
+        "incremental": 55,
+        "incremental_settle": {
+          "n": 55,
+          "wins": 23,
+          "fails": 27,
+          "voids": 5,
+          "wr": 0.46
+        }
+      },
+      "closed_loop_est": {
+        "pairs": 47,
+        "pnl": 588.42,
+        "per_stock": {
+          "588170": {
+            "net_pnl": 420.68,
+            "closed": 20,
+            "open_long": 1600,
+            "open_short": 34200
+          },
+          "603667": {
+            "net_pnl": 202.98,
+            "closed": 16,
+            "open_long": 300,
+            "open_short": 3700
+          },
+          "600481": {
+            "net_pnl": -23.22,
+            "closed": 4,
+            "open_long": 800,
+            "open_short": 13900
+          },
+          "600176": {
+            "net_pnl": -244.0,
+            "closed": 2,
+            "open_long": 1400,
+            "open_short": 2850
+          },
+          "000988": {
+            "net_pnl": 231.99,
+            "closed": 5,
+            "open_long": 3100,
+            "open_short": 0
+          }
+        }
+      }
+    },
+    "T36a": {
+      "buys": {
+        "n": 128,
+        "wins": 53,
+        "fails": 60,
+        "voids": 15,
+        "wr": 0.469
+      },
+      "density_per_stock_day": 0.284,
+      "by_code": {
+        "000988": {
+          "n": 71,
+          "wins": 27,
+          "fails": 36,
+          "voids": 8,
+          "wr": 0.4286
+        },
+        "588170": {
+          "n": 21,
+          "wins": 13,
+          "fails": 5,
+          "voids": 3,
+          "wr": 0.7222
+        },
+        "600176": {
+          "n": 17,
+          "wins": 7,
+          "fails": 9,
+          "voids": 1,
+          "wr": 0.4375
+        },
+        "600481": {
+          "n": 3,
+          "wins": 1,
+          "fails": 2,
+          "voids": 0,
+          "wr": 0.3333
+        },
+        "603667": {
+          "n": 16,
+          "wins": 5,
+          "fails": 8,
+          "voids": 3,
+          "wr": 0.3846
+        }
+      },
+      "by_dtype": {
+        "bull_day": {
+          "n": 29,
+          "wins": 11,
+          "fails": 12,
+          "voids": 6,
+          "wr": 0.4783
+        },
+        "bear_day": {
+          "n": 17,
+          "wins": 5,
+          "fails": 12,
+          "voids": 0,
+          "wr": 0.2941
+        },
+        "reversal_day": {
+          "n": 10,
+          "wins": 7,
+          "fails": 3,
+          "voids": 0,
+          "wr": 0.7
+        },
+        "chop_day": {
+          "n": 72,
+          "wins": 30,
+          "fails": 33,
+          "voids": 9,
+          "wr": 0.4762
+        },
+        "unknown": {
+          "n": 0,
+          "wins": 0,
+          "fails": 0,
+          "voids": 0,
+          "wr": null
+        }
+      },
+      "bear_day_buy": {
+        "n": 17,
+        "wins": 5,
+        "fails": 12,
+        "voids": 0,
+        "wr": 0.2941
+      },
+      "vs_control": {
+        "overlap": 116,
+        "incremental": 12,
+        "incremental_settle": {
+          "n": 12,
+          "wins": 5,
+          "fails": 7,
+          "voids": 0,
+          "wr": 0.4167
+        }
+      },
+      "closed_loop_est": {
+        "pairs": 44,
+        "pnl": 273.13,
+        "per_stock": {
+          "588170": {
+            "net_pnl": 393.87,
+            "closed": 19,
+            "open_long": 1600,
+            "open_short": 34700
+          },
+          "603667": {
+            "net_pnl": 202.98,
+            "closed": 16,
+            "open_long": 300,
+            "open_short": 3700
+          },
+          "600481": {
+            "net_pnl": -20.7,
+            "closed": 3,
+            "open_long": 0,
+            "open_short": 14200
+          },
+          "600176": {
+            "net_pnl": -303.01,
+            "closed": 2,
+            "open_long": 900,
+            "open_short": 2850
+          },
+          "000988": {
+            "net_pnl": 0.0,
+            "closed": 4,
+            "open_long": 0,
+            "open_short": 0
+          }
+        }
+      }
+    },
+    "T36b": {
+      "buys": {
+        "n": 144,
+        "wins": 63,
+        "fails": 65,
+        "voids": 16,
+        "wr": 0.4922
+      },
+      "density_per_stock_day": 0.32,
+      "by_code": {
+        "000988": {
+          "n": 81,
+          "wins": 33,
+          "fails": 39,
+          "voids": 9,
+          "wr": 0.4583
+        },
+        "588170": {
+          "n": 23,
+          "wins": 12,
+          "fails": 8,
+          "voids": 3,
+          "wr": 0.6
+        },
+        "600176": {
+          "n": 19,
+          "wins": 10,
+          "fails": 8,
+          "voids": 1,
+          "wr": 0.5556
+        },
+        "600481": {
+          "n": 5,
+          "wins": 2,
+          "fails": 3,
+          "voids": 0,
+          "wr": 0.4
+        },
+        "603667": {
+          "n": 16,
+          "wins": 6,
+          "fails": 7,
+          "voids": 3,
+          "wr": 0.4615
+        }
+      },
+      "by_dtype": {
+        "bull_day": {
+          "n": 35,
+          "wins": 14,
+          "fails": 15,
+          "voids": 6,
+          "wr": 0.4828
+        },
+        "bear_day": {
+          "n": 19,
+          "wins": 7,
+          "fails": 12,
+          "voids": 0,
+          "wr": 0.3684
+        },
+        "reversal_day": {
+          "n": 11,
+          "wins": 7,
+          "fails": 3,
+          "voids": 1,
+          "wr": 0.7
+        },
+        "chop_day": {
+          "n": 79,
+          "wins": 35,
+          "fails": 35,
+          "voids": 9,
+          "wr": 0.5
+        },
+        "unknown": {
+          "n": 0,
+          "wins": 0,
+          "fails": 0,
+          "voids": 0,
+          "wr": null
+        }
+      },
+      "bear_day_buy": {
+        "n": 19,
+        "wins": 7,
+        "fails": 12,
+        "voids": 0,
+        "wr": 0.3684
+      },
+      "vs_control": {
+        "overlap": 81,
+        "incremental": 63,
+        "incremental_settle": {
+          "n": 63,
+          "wins": 29,
+          "fails": 29,
+          "voids": 5,
+          "wr": 0.5
+        }
+      },
+      "closed_loop_est": {
+        "pairs": 47,
+        "pnl": 442.4,
+        "per_stock": {
+          "588170": {
+            "net_pnl": 415.68,
+            "closed": 20,
+            "open_long": 2500,
+            "open_short": 34200
+          },
+          "603667": {
+            "net_pnl": 26.95,
+            "closed": 16,
+            "open_long": 500,
+            "open_short": 3700
+          },
+          "600481": {
+            "net_pnl": -23.22,
+            "closed": 4,
+            "open_long": 800,
+            "open_short": 13900
+          },
+          "600176": {
+            "net_pnl": -209.0,
+            "closed": 2,
+            "open_long": 1500,
+            "open_short": 2850
+          },
+          "000988": {
+            "net_pnl": 231.99,
+            "closed": 5,
+            "open_long": 3400,
+            "open_short": 0
+          }
+        }
+      }
+    },
+    "T30a": {
+      "buys": {
+        "n": 128,
+        "wins": 53,
+        "fails": 60,
+        "voids": 15,
+        "wr": 0.469
+      },
+      "density_per_stock_day": 0.284,
+      "by_code": {
+        "000988": {
+          "n": 71,
+          "wins": 27,
+          "fails": 36,
+          "voids": 8,
+          "wr": 0.4286
+        },
+        "588170": {
+          "n": 21,
+          "wins": 13,
+          "fails": 5,
+          "voids": 3,
+          "wr": 0.7222
+        },
+        "600176": {
+          "n": 17,
+          "wins": 7,
+          "fails": 9,
+          "voids": 1,
+          "wr": 0.4375
+        },
+        "600481": {
+          "n": 3,
+          "wins": 1,
+          "fails": 2,
+          "voids": 0,
+          "wr": 0.3333
+        },
+        "603667": {
+          "n": 16,
+          "wins": 5,
+          "fails": 8,
+          "voids": 3,
+          "wr": 0.3846
+        }
+      },
+      "by_dtype": {
+        "bull_day": {
+          "n": 29,
+          "wins": 11,
+          "fails": 12,
+          "voids": 6,
+          "wr": 0.4783
+        },
+        "bear_day": {
+          "n": 17,
+          "wins": 5,
+          "fails": 12,
+          "voids": 0,
+          "wr": 0.2941
+        },
+        "reversal_day": {
+          "n": 10,
+          "wins": 7,
+          "fails": 3,
+          "voids": 0,
+          "wr": 0.7
+        },
+        "chop_day": {
+          "n": 72,
+          "wins": 30,
+          "fails": 33,
+          "voids": 9,
+          "wr": 0.4762
+        },
+        "unknown": {
+          "n": 0,
+          "wins": 0,
+          "fails": 0,
+          "voids": 0,
+          "wr": null
+        }
+      },
+      "bear_day_buy": {
+        "n": 17,
+        "wins": 5,
+        "fails": 12,
+        "voids": 0,
+        "wr": 0.2941
+      },
+      "vs_control": {
+        "overlap": 116,
+        "incremental": 12,
+        "incremental_settle": {
+          "n": 12,
+          "wins": 5,
+          "fails": 7,
+          "voids": 0,
+          "wr": 0.4167
+        }
+      },
+      "closed_loop_est": {
+        "pairs": 44,
+        "pnl": 273.13,
+        "per_stock": {
+          "588170": {
+            "net_pnl": 393.87,
+            "closed": 19,
+            "open_long": 1600,
+            "open_short": 34700
+          },
+          "603667": {
+            "net_pnl": 202.98,
+            "closed": 16,
+            "open_long": 300,
+            "open_short": 3700
+          },
+          "600481": {
+            "net_pnl": -20.7,
+            "closed": 3,
+            "open_long": 0,
+            "open_short": 14200
+          },
+          "600176": {
+            "net_pnl": -303.01,
+            "closed": 2,
+            "open_long": 900,
+            "open_short": 2850
+          },
+          "000988": {
+            "net_pnl": 0.0,
+            "closed": 4,
+            "open_long": 0,
+            "open_short": 0
+          }
+        }
+      }
+    },
+    "T30b": {
+      "buys": {
+        "n": 149,
+        "wins": 67,
+        "fails": 66,
+        "voids": 16,
+        "wr": 0.5038
+      },
+      "density_per_stock_day": 0.331,
+      "by_code": {
+        "000988": {
+          "n": 84,
+          "wins": 35,
+          "fails": 40,
+          "voids": 9,
+          "wr": 0.4667
+        },
+        "588170": {
+          "n": 23,
+          "wins": 12,
+          "fails": 8,
+          "voids": 3,
+          "wr": 0.6
+        },
+        "600176": {
+          "n": 20,
+          "wins": 11,
+          "fails": 8,
+          "voids": 1,
+          "wr": 0.5789
+        },
+        "600481": {
+          "n": 5,
+          "wins": 2,
+          "fails": 3,
+          "voids": 0,
+          "wr": 0.4
+        },
+        "603667": {
+          "n": 17,
+          "wins": 7,
+          "fails": 7,
+          "voids": 3,
+          "wr": 0.5
+        }
+      },
+      "by_dtype": {
+        "bull_day": {
+          "n": 37,
+          "wins": 16,
+          "fails": 15,
+          "voids": 6,
+          "wr": 0.5161
+        },
+        "bear_day": {
+          "n": 19,
+          "wins": 6,
+          "fails": 13,
+          "voids": 0,
+          "wr": 0.3158
+        },
+        "reversal_day": {
+          "n": 11,
+          "wins": 9,
+          "fails": 1,
+          "voids": 1,
+          "wr": 0.9
+        },
+        "chop_day": {
+          "n": 82,
+          "wins": 36,
+          "fails": 37,
+          "voids": 9,
+          "wr": 0.4932
+        },
+        "unknown": {
+          "n": 0,
+          "wins": 0,
+          "fails": 0,
+          "voids": 0,
+          "wr": null
+        }
+      },
+      "bear_day_buy": {
+        "n": 19,
+        "wins": 6,
+        "fails": 13,
+        "voids": 0,
+        "wr": 0.3158
+      },
+      "vs_control": {
+        "overlap": 76,
+        "incremental": 73,
+        "incremental_settle": {
+          "n": 73,
+          "wins": 35,
+          "fails": 33,
+          "voids": 5,
+          "wr": 0.5147
+        }
+      },
+      "closed_loop_est": {
+        "pairs": 47,
+        "pnl": 363.49,
+        "per_stock": {
+          "588170": {
+            "net_pnl": 399.77,
+            "closed": 20,
+            "open_long": 3000,
+            "open_short": 34200
+          },
+          "603667": {
+            "net_pnl": -36.06,
+            "closed": 16,
+            "open_long": 600,
+            "open_short": 3700
+          },
+          "600481": {
+            "net_pnl": -23.22,
+            "closed": 4,
+            "open_long": 800,
+            "open_short": 13900
+          },
+          "600176": {
+            "net_pnl": -209.0,
+            "closed": 2,
+            "open_long": 1600,
+            "open_short": 2850
+          },
+          "000988": {
+            "net_pnl": 231.99,
+            "closed": 5,
+            "open_long": 4100,
+            "open_short": 0
+          }
+        }
+      }
+    }
+  }
+}
