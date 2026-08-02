@@ -25,8 +25,8 @@ SEGS = [("2026-03-16", "2026-03-20"), ("2026-03-23", "2026-03-27"), ("2026-03-30
         ("2026-07-06", "2026-07-10"), ("2026-07-13", "2026-07-17"), ("2026-07-20", "2026-07-24")]
 GROUPS = {"T36b": {"T_BUY_BONUS_MIN_SCORE": "36", "T_NOTIFY_BUY": "36"},
           "T30b": {"T_BUY_BONUS_MIN_SCORE": "30", "T_NOTIFY_BUY": "30"}}
-BUDGET = 150
-WORKERS = 5
+BUDGET = 100
+WORKERS = 7
 PY = sys.executable
 
 def tasks():
