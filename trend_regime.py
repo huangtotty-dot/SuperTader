@@ -228,6 +228,9 @@ class TrendRegime:
         )
 
     # ── 方向门控 ──
+    # v1.1.0 §3.5 降级: 以下门控/T_MODE 方法已全部退出生产调用（signal_engine 不再消费），
+    # 本类降级为【信息层专用】：仅 trend_state/confidence/rsi5 trigger 等状态输出
+    # 用于 feats 展示层与日志分析。保留方法仅为兼容，逻辑冻结勿再接入评分/门控。
 
     def buy_gate_multiplier(self) -> float:
         """V1.0.4 三档门控: BEAR买×0.6, 其余×1.0"""

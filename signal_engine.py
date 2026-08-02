@@ -588,28 +588,10 @@ class SignalEngine:
                         and not self._in_cooldown(code, "BUY_LOW"))
         base_can_sell = (len(risk_sell_block) == 0 and hold_qty > 0
                          and not self._in_cooldown(code, "SELL_HIGH"))
-        # ===== V3.0: 5分钟趋势方向门控 + T_MODE 适配 =====
-        _trend_state = feats.get("trend_state", "NEUTRAL")
-        # V3.0fix: 读取真正的 t_mode（daily_ctx["t_mode"] > 全局 T_MODE > "long"）
-        _t_mode_from_ctx = daily_ctx.get("t_mode", "") if isinstance(daily_ctx, dict) else ""
-        _t_mode = feats.get("t_mode", _t_mode_from_ctx or T_MODE.get(code, "long") if 'T_MODE' in globals() else "long")
-        if TrendRegime is not None and code in self.trend_regimes:
-            tr = self.trend_regimes[code]
-            # 方向门控：抑制逆势信号
-            _buy_mult = tr.buy_gate_multiplier()
-            _sell_mult = tr.sell_gate_multiplier()
-            if _buy_mult < 1.0:
-                buy_score *= _buy_mult
-                buy_details.append({"指标": f"趋势门控({_trend_state})", "当前": f"买入×{_buy_mult}", "加分": 0})
-                buy_threshold += tr.buy_threshold_penalty()
-            if _sell_mult < 1.0:
-                sell_score *= _sell_mult
-                sell_details.append({"指标": f"趋势门控({_trend_state})", "当前": f"卖出×{_sell_mult}", "加分": 0})
-                sell_threshold += tr.sell_threshold_penalty()
-            # T_MODE 方向适配
-            _t_mode_str = str(_t_mode or "long")
-            if _t_mode_str in ("short", "long"):
-                buy_score, sell_score = tr.apply_t_mode(_t_mode_str, buy_score, sell_score)
+        # ===== v1.1.0: §3.5 趋势层降级 — 方向门控/阈值惩罚/T_MODE 适配全部关闭 =====
+        # TrendRegime 仍计算并写入 feats(trend_state/confidence/rsi5 等)，降级为纯信息层
+        # （飞书展示+日志分析+5m_rsi trigger 数据源），不再影响评分/门控/仲裁。
+        # 依据: doc/趋势层去留决策报告.md v4（拦截不可修复的结构性结论 + 降级拍板）
         # ===== V1.28: 止盈监控 (take_profit_pct) =====
         _tp = _sp_param(code, "take_profit_pct", 0.010)   # V3.0fix N2
         _tpa = _sp_param(code, "take_profit_time_after", 1000)  # V3.0fix N2
@@ -1000,17 +982,17 @@ class RiskManager:
 
 
 FACTOR_WEIGHTS = {
-    # —— V3.0: 权重重平衡（新增 5m_trend + 5m_rsi）——
-    "factor_weight_vwap": 0.15,          # 曾 0.20
+    # —— v1.1.0: §3.5 趋势层降级 — 5m_trend 权重置零退出评分，匀出的 0.15 回补 1分钟体系 ——
+    "factor_weight_vwap": 0.20,          # v1.1.0: 0.15→0.20 (+0.05，回补自 5m_trend)
     "factor_weight_rsi": 0.04,           # 曾 0.12（1分钟RSI降权，让位给5分钟RSI）
     "factor_weight_macd": 0.08,
     "factor_weight_volume": 0.08,
     "factor_weight_position": 0.08,
     "factor_weight_ema": 0.04,
-    "factor_weight_pattern": 0.13,       # 曾 0.20
-    "factor_weight_index_regime": 0.15,  # 曾 0.20
-    "factor_weight_5m_trend": 0.15,      # V3.0 新增：5分钟MACD趋势方向
-    "factor_weight_5m_rsi": 0.10,        # V3.0 新增：5分钟RSI择时触发
+    "factor_weight_pattern": 0.18,       # v1.1.0: 0.13→0.18 (+0.05，回补自 5m_trend)
+    "factor_weight_index_regime": 0.20,  # v1.1.0: 0.15→0.20 (+0.05，回补自 5m_trend)
+    "factor_weight_5m_trend": 0.0,       # v1.1.0: 降级置零（四轮审核+三轮复测证伪，doc/趋势层去留决策报告.md v4）
+    "factor_weight_5m_rsi": 0.10,        # §3.5 明确保留：5分钟RSI择时触发
     # —— 配置常量（非权重，保留兼容）——
     "max_score_raw": 100,
 }
@@ -1163,56 +1145,7 @@ class ScoringEngine:
         raw = ScoringEngine._sigmoid(us, center=0.4, slope=6.0)
         return raw, [{"指标": "长上影", "当前": f"{us:.2f}", "强度": round(raw, 3)}] if raw > 0.05 else []
 
-    # ── V3.0: 5分钟趋势层评分 ──
-
-    @staticmethod
-    def score_5m_trend_buy(feats: dict) -> tuple:
-        """5分钟 MACD 趋势方向 — 买入端：多头区顺势买入加分"""
-        trend = feats.get("trend_state", "NEUTRAL")
-        conf = feats.get("trend_confidence", 0.0)
-        dif = feats.get("dif_5m", 0.0)
-        dea = feats.get("dea_5m", 0.0)
-        # BULL/STRONG_BULL → 顺势买入加分；NEUTRAL → 中性；BEAR → 扣分
-        if trend == "STRONG_BULL":
-            raw = 0.9 + 0.1 * conf
-            detail = f"DIF{dif:.4f}/DEA{dea:.4f} 强势多头"
-        elif trend == "BULL":
-            raw = 0.6 + 0.2 * conf
-            detail = f"DIF{dif:.4f}/DEA{dea:.4f} 多头"
-        elif trend == "NEUTRAL":
-            raw = 0.5
-            detail = "趋势中性"
-        elif trend == "BEAR":
-            raw = 0.2
-            detail = "逆势(空头区买入)"
-        else:  # STRONG_BEAR
-            raw = 0.05
-            detail = "强逆势(强空头区买入)"
-        return raw, [{"指标": "5分趋势(买)", "当前": detail, "强度": round(raw, 3)}]
-
-    @staticmethod
-    def score_5m_trend_sell(feats: dict) -> tuple:
-        """5分钟 MACD 趋势方向 — 卖出端：空头区顺势卖出加分"""
-        trend = feats.get("trend_state", "NEUTRAL")
-        conf = feats.get("trend_confidence", 0.0)
-        dif = feats.get("dif_5m", 0.0)
-        dea = feats.get("dea_5m", 0.0)
-        if trend == "STRONG_BEAR":
-            raw = 0.9 + 0.1 * conf
-            detail = f"DIF{dif:.4f}/DEA{dea:.4f} 强势空头"
-        elif trend == "BEAR":
-            raw = 0.6 + 0.2 * conf
-            detail = f"DIF{dif:.4f}/DEA{dea:.4f} 空头"
-        elif trend == "NEUTRAL":
-            raw = 0.5
-            detail = "趋势中性"
-        elif trend == "BULL":
-            raw = 0.2
-            detail = "逆势(多头区卖出)"
-        else:  # STRONG_BULL
-            raw = 0.05
-            detail = "强逆势(强多头区卖出)"
-        return raw, [{"指标": "5分趋势(卖)", "当前": detail, "强度": round(raw, 3)}]
+    # ── v1.1.0: score_5m_trend_buy/sell 已随 §3.5 降级整体移除（含 STRONG_BULL/STRONG_BEAR 死分支）──
 
     @staticmethod
     def score_5m_rsi_buy(feats: dict) -> tuple:
@@ -1283,10 +1216,7 @@ class ScoringEngine:
         score += s; d and details.append(d[0] | {"加分": round(s, 1)})
         raw, d = ScoringEngine.score_ema_improve(feats)
         s = ScoringEngine._weighted_factor_score(raw, "factor_weight_ema", p=p); score += s; d and details.append(d[0] | {"加分": round(s, 1)})
-        # ---- V3.0: 5分钟趋势层因子 (买入端) ----
-        raw, d = ScoringEngine.score_5m_trend_buy(feats)
-        s = ScoringEngine._weighted_factor_score(raw, "factor_weight_5m_trend", p=p)
-        score += s; d and details.append(d[0] | {"加分": round(s, 1)})
+        # ---- v1.1.0: 5m_trend 因子已随降级移除（权重置零+调用清理）；保留 5m_rsi ----
         raw, d = ScoringEngine.score_5m_rsi_buy(feats)
         s = ScoringEngine._weighted_factor_score(raw, "factor_weight_5m_rsi", p=p)
         score += s; d and details.append(d[0] | {"加分": round(s, 1)})
@@ -1336,10 +1266,7 @@ class ScoringEngine:
         score += s; d and details.append(d[0] | {"加分": round(s, 1)})
         raw, d = ScoringEngine.score_ema_weaken(feats)
         s = ScoringEngine._weighted_factor_score(raw, "factor_weight_ema", p=p); score += s; d and details.append(d[0] | {"加分": round(s, 1)})
-        # ---- V3.0: 5分钟趋势层因子 (卖出端) ----
-        raw, d = ScoringEngine.score_5m_trend_sell(feats)
-        s = ScoringEngine._weighted_factor_score(raw, "factor_weight_5m_trend", p=p)
-        score += s; d and details.append(d[0] | {"加分": round(s, 1)})
+        # ---- v1.1.0: 5m_trend 因子已随降级移除（权重置零+调用清理）；保留 5m_rsi ----
         raw, d = ScoringEngine.score_5m_rsi_sell(feats)
         s = ScoringEngine._weighted_factor_score(raw, "factor_weight_5m_rsi", p=p)
         score += s; d and details.append(d[0] | {"加分": round(s, 1)})
