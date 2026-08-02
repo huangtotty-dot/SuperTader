@@ -1,0 +1,435 @@
+{
+  "meta": {
+    "blocked_ticks": 23500,
+    "cooldown_min": 30,
+    "key_missing_finding": "daily_context_min_rows等7键未定义→生产get_daily_context必抛KeyError被吞→daily_status=error→生产门控恒锁死; harness硬编码缺字段同效",
+    "daily_bars": "预热期分钟聚合(2025-11-10起)+样本期, 截至前一交易日无前视",
+    "subcondition_truth": "修复后 daily_status==ok 与 daily_ma5>0 恒真(数据充足), 门控全部判别力=ma5_state"
+  },
+  "gate_open_rate": {
+    "by_code": {
+      "000988": {
+        "below_ma5_weak": 12522,
+        "near_ma5_chop": 2743,
+        "above_ma5_trend": 5143
+      },
+      "588170": {
+        "below_ma5_weak": 7947,
+        "near_ma5_chop": 3348,
+        "above_ma5_trend": 9299
+      },
+      "600176": {
+        "below_ma5_weak": 10416,
+        "near_ma5_chop": 1441,
+        "above_ma5_trend": 8512
+      },
+      "600481": {
+        "below_ma5_weak": 14625,
+        "near_ma5_chop": 2797,
+        "above_ma5_trend": 1945
+      },
+      "603667": {
+        "below_ma5_weak": 13185,
+        "near_ma5_chop": 3272,
+        "above_ma5_trend": 4198
+      }
+    },
+    "open_rate_by_code": {
+      "000988": 0.3864,
+      "588170": 0.6141,
+      "600176": 0.4886,
+      "600481": 0.2448,
+      "603667": 0.3617
+    },
+    "open_rate_by_daytype": {
+      "chop_day": 0.4591,
+      "bull_day": 0.5098,
+      "reversal_day": 0.3047,
+      "bear_day": 0.2992
+    }
+  },
+  "variant_summary": {
+    "repaired_gate(现状修复)": {
+      "ALL": {
+        "n": 616,
+        "void": 80,
+        "wr": 0.487
+      },
+      "by_state": {
+        "near_ma5_chop": {
+          "n": 214,
+          "void": 25,
+          "wr": 0.5
+        },
+        "above_ma5_trend": {
+          "n": 402,
+          "void": 55,
+          "wr": 0.4801
+        },
+        "below_ma5_weak": {
+          "n": 0,
+          "void": 0,
+          "wr": null
+        },
+        "unknown": {
+          "n": 0,
+          "void": 0,
+          "wr": null
+        }
+      },
+      "by_dtype": {
+        "bull_day": {
+          "n": 93,
+          "void": 15,
+          "wr": 0.5269
+        },
+        "bear_day": {
+          "n": 87,
+          "void": 8,
+          "wr": 0.3333
+        },
+        "reversal_day": {
+          "n": 65,
+          "void": 9,
+          "wr": 0.4923
+        },
+        "chop_day": {
+          "n": 371,
+          "void": 48,
+          "wr": 0.5121
+        },
+        "unknown": {
+          "n": 0,
+          "void": 0,
+          "wr": null
+        }
+      },
+      "by_code": {
+        "000988": {
+          "n": 194,
+          "void": 30,
+          "wr": 0.4691
+        },
+        "588170": {
+          "n": 62,
+          "void": 5,
+          "wr": 0.6129
+        },
+        "600176": {
+          "n": 252,
+          "void": 32,
+          "wr": 0.4643
+        },
+        "600481": {
+          "n": 53,
+          "void": 6,
+          "wr": 0.434
+        },
+        "603667": {
+          "n": 55,
+          "void": 7,
+          "wr": 0.5636
+        }
+      }
+    },
+    "A_弱中回升放行": {
+      "ALL": {
+        "n": 846,
+        "void": 110,
+        "wr": 0.4764
+      },
+      "by_state": {
+        "near_ma5_chop": {
+          "n": 196,
+          "void": 25,
+          "wr": 0.4898
+        },
+        "above_ma5_trend": {
+          "n": 401,
+          "void": 55,
+          "wr": 0.4813
+        },
+        "below_ma5_weak": {
+          "n": 249,
+          "void": 30,
+          "wr": 0.4578
+        },
+        "unknown": {
+          "n": 0,
+          "void": 0,
+          "wr": null
+        }
+      },
+      "by_dtype": {
+        "bull_day": {
+          "n": 118,
+          "void": 16,
+          "wr": 0.5254
+        },
+        "bear_day": {
+          "n": 141,
+          "void": 16,
+          "wr": 0.3404
+        },
+        "reversal_day": {
+          "n": 93,
+          "void": 12,
+          "wr": 0.5269
+        },
+        "chop_day": {
+          "n": 494,
+          "void": 66,
+          "wr": 0.4939
+        },
+        "unknown": {
+          "n": 0,
+          "void": 0,
+          "wr": null
+        }
+      },
+      "by_code": {
+        "000988": {
+          "n": 263,
+          "void": 42,
+          "wr": 0.4639
+        },
+        "588170": {
+          "n": 71,
+          "void": 5,
+          "wr": 0.5915
+        },
+        "600176": {
+          "n": 335,
+          "void": 43,
+          "wr": 0.4627
+        },
+        "600481": {
+          "n": 86,
+          "void": 10,
+          "wr": 0.4186
+        },
+        "603667": {
+          "n": 91,
+          "void": 10,
+          "wr": 0.5275
+        }
+      }
+    },
+    "B_深跌bypass(-2%&分>=55)": {
+      "ALL": {
+        "n": 866,
+        "void": 118,
+        "wr": 0.4446
+      },
+      "by_state": {
+        "near_ma5_chop": {
+          "n": 207,
+          "void": 25,
+          "wr": 0.5024
+        },
+        "above_ma5_trend": {
+          "n": 401,
+          "void": 55,
+          "wr": 0.4813
+        },
+        "below_ma5_weak": {
+          "n": 258,
+          "void": 38,
+          "wr": 0.3411
+        },
+        "unknown": {
+          "n": 0,
+          "void": 0,
+          "wr": null
+        }
+      },
+      "by_dtype": {
+        "bull_day": {
+          "n": 96,
+          "void": 15,
+          "wr": 0.5312
+        },
+        "bear_day": {
+          "n": 159,
+          "void": 22,
+          "wr": 0.3019
+        },
+        "reversal_day": {
+          "n": 117,
+          "void": 13,
+          "wr": 0.4615
+        },
+        "chop_day": {
+          "n": 494,
+          "void": 68,
+          "wr": 0.4696
+        },
+        "unknown": {
+          "n": 0,
+          "void": 0,
+          "wr": null
+        }
+      },
+      "by_code": {
+        "000988": {
+          "n": 240,
+          "void": 38,
+          "wr": 0.4417
+        },
+        "588170": {
+          "n": 77,
+          "void": 5,
+          "wr": 0.5714
+        },
+        "600176": {
+          "n": 343,
+          "void": 48,
+          "wr": 0.4344
+        },
+        "600481": {
+          "n": 98,
+          "void": 13,
+          "wr": 0.3878
+        },
+        "603667": {
+          "n": 108,
+          "void": 14,
+          "wr": 0.4444
+        }
+      }
+    },
+    "C_完全移除": {
+      "ALL": {
+        "n": 1523,
+        "void": 201,
+        "wr": 0.4478
+      },
+      "by_state": {
+        "near_ma5_chop": {
+          "n": 173,
+          "void": 22,
+          "wr": 0.4509
+        },
+        "above_ma5_trend": {
+          "n": 401,
+          "void": 55,
+          "wr": 0.4813
+        },
+        "below_ma5_weak": {
+          "n": 949,
+          "void": 124,
+          "wr": 0.4331
+        },
+        "unknown": {
+          "n": 0,
+          "void": 0,
+          "wr": null
+        }
+      },
+      "by_dtype": {
+        "bull_day": {
+          "n": 185,
+          "void": 28,
+          "wr": 0.5243
+        },
+        "bear_day": {
+          "n": 238,
+          "void": 34,
+          "wr": 0.3613
+        },
+        "reversal_day": {
+          "n": 251,
+          "void": 25,
+          "wr": 0.498
+        },
+        "chop_day": {
+          "n": 849,
+          "void": 114,
+          "wr": 0.4405
+        },
+        "unknown": {
+          "n": 0,
+          "void": 0,
+          "wr": null
+        }
+      },
+      "by_code": {
+        "000988": {
+          "n": 420,
+          "void": 61,
+          "wr": 0.4476
+        },
+        "588170": {
+          "n": 103,
+          "void": 5,
+          "wr": 0.5631
+        },
+        "600176": {
+          "n": 538,
+          "void": 72,
+          "wr": 0.448
+        },
+        "600481": {
+          "n": 240,
+          "void": 41,
+          "wr": 0.3667
+        },
+        "603667": {
+          "n": 222,
+          "void": 22,
+          "wr": 0.482
+        }
+      }
+    }
+  },
+  "risk": {
+    "repaired_gate(现状修复)": {
+      "bear_day": {
+        "n": 87,
+        "wr": 0.3333,
+        "max_consec_fail": 10
+      },
+      "000988_深跌日(≤-2%)": {
+        "n": 37,
+        "wr": 0.3784,
+        "max_consec_fail": 5
+      }
+    },
+    "A_弱中回升放行": {
+      "bear_day": {
+        "n": 141,
+        "wr": 0.3404,
+        "max_consec_fail": 6
+      },
+      "000988_深跌日(≤-2%)": {
+        "n": 71,
+        "wr": 0.3944,
+        "max_consec_fail": 6
+      }
+    },
+    "B_深跌bypass(-2%&分>=55)": {
+      "bear_day": {
+        "n": 159,
+        "wr": 0.3019,
+        "max_consec_fail": 9
+      },
+      "000988_深跌日(≤-2%)": {
+        "n": 83,
+        "wr": 0.3494,
+        "max_consec_fail": 4
+      }
+    },
+    "C_完全移除": {
+      "bear_day": {
+        "n": 238,
+        "wr": 0.3613,
+        "max_consec_fail": 12
+      },
+      "000988_深跌日(≤-2%)": {
+        "n": 106,
+        "wr": 0.4057,
+        "max_consec_fail": 6
+      }
+    }
+  }
+}
