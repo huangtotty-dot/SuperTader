@@ -27,7 +27,7 @@ import numpy as np
 import pandas as pd
 
 BASE_DIR = Path(__file__).resolve().parent
-REPLAY_DATE = "2026-07-24"
+REPLAY_DATE = "2026-07-08"  # v1.1.0 验收: 降级后兼容性回放日(原 2026-07-24 缓存缺失)
 CODES = ["588170", "600176", "600481", "603667", "000988"]
 
 # 07-24 开盘持仓（实盘早盘真实状态；pre_close 为实盘当时的陈旧值，两个版本保持一致输入）
