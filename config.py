@@ -319,13 +319,21 @@ PARAMS = {
     "open_dip_max_mins": 15,
     "open_dip_buy_penalty": 25,
     # —— 通知阈值 ——
+    # v1.1.0 X9 阈值阶梯实测采纳 t55 档（两组胜率+2.1~2.8pp、密度双升、无单股恶化，
+    # 依据 t_io/validation/v109_threshold/阈值阶梯报告.md）；买侧 68 未实验不动
     "notify_buy_threshold": 68,
-    "notify_sell_threshold": 65,
-    "notify_sell_early_threshold": 75,
-    "notify_sell_panic_threshold": 60,
+    "notify_sell_threshold": 55,          # v1.1.0: 65→55
+    "notify_sell_early_threshold": 65,    # v1.1.0: 75→65（保持早盘+10梯度）
+    "notify_sell_panic_threshold": 50,    # v1.1.0: 60→50（防倒挂：panic档须低于正常档55）
     "hard_sell_threshold_cap": 80,
     "hard_buy_threshold_cap": 80,
     "sell_fast_path_min_gap": 20,
+    # v1.1.0 补定义: V1.30 轮次上限被 main.py:1223/1341 以 PARAMS["max_t_cycles_per_stock"] 消费
+    # 但从未在 config 定义(首个达标卖出信号即 KeyError 的潜伏崩溃); 默认值与 position_sizer.py:289 一致
+    "max_t_cycles_per_stock": 8,
+    # v1.1.0 补定义: 与上同批 P0-D 误删 — signal_engine.py:291 消费(卖出后重建封锁分钟数);
+    # 恢复 P0-D 清理前全局值 3(个股原 10/12 已随 STOCK_PARAMS 清理退役)
+    "post_sell_rebuild_minutes": 3,
     # —— 信号推送限流 ——
     "buy_signal_price_move": 0.004,
     "buy_signal_score_boost": 4,
@@ -367,7 +375,7 @@ STOCK_PARAMS = {
         "take_profit_pct": 0.0148,             # N2 Optuna CS=1630
         "take_profit_time_after": 1000,
         "bullish_reversal_min_pct": 0.008,     # N4
-        "notify_sell_threshold": 62, "notify_buy_threshold": 43,
+        "notify_sell_threshold": 55, "notify_buy_threshold": 43,  # v1.1.0: sell 62→55 对齐t55档
     },
     "000988": {  # 华工科技
         "stock_qty_base_pct": 0.30, "stock_qty_strong_pct": 0.29,
@@ -379,7 +387,7 @@ STOCK_PARAMS = {
         "bullish_reversal_min_pct": 0.006,     # N4
         "bullish_reversal_body_ratio": 0.50,
         "bullish_reversal_vol_multiplier": 0.7,
-        "notify_sell_threshold": 63, "notify_buy_threshold": 43,
+        "notify_sell_threshold": 55, "notify_buy_threshold": 43,  # v1.1.0: sell 63→55 对齐t55档
     },
     "588170": {  # 科创芯片ETF
         "stock_qty_base_pct": 0.15, "stock_qty_strong_pct": 0.25,
@@ -388,7 +396,7 @@ STOCK_PARAMS = {
         "vwap_buy_deviation": -0.0313,         # N3
         "take_profit_pct": 0.0206,             # N2
         "take_profit_time_after": 1000,
-        "notify_sell_threshold": 67, "notify_buy_threshold": 40,
+        "notify_sell_threshold": 55, "notify_buy_threshold": 40,  # v1.1.0: sell 67→55 对齐t55档
     },
     "600176": {  # 中国巨石
         "stock_qty_base_pct": 0.34, "stock_qty_strong_pct": 0.59,
@@ -405,7 +413,7 @@ STOCK_PARAMS = {
         "vwap_buy_deviation": -0.0276,         # N3 Optuna CS=498
         "take_profit_pct": 0.0200,             # N2 Optuna CS=498
         "take_profit_time_after": 1000,
-        "notify_sell_threshold": 64, "notify_buy_threshold": 40,
+        "notify_sell_threshold": 55, "notify_buy_threshold": 40,  # v1.1.0: sell 64→55 对齐t55档
     },
 }
 
