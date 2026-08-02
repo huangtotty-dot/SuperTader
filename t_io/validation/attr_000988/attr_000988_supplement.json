@@ -1,0 +1,112 @@
+{
+  "phantom_booking": {
+    "finding": "000988 买卖信号全部 qty=0(幻影簿记): control 买71/71 qty=0, 卖114/114 qty=0",
+    "root_chain": "stock_qty_base_pct=0.30/strong=0.29(config.py:396) x t_qty=300 = 87~90股 < min_unit=100(position_sizer.py:284) → 卖 sizing 恒0 → record_trade_action 不触发(harness_backtest.py:592) → 虚拟净仓恒300(position_sizer.py:306) → 买 max_buyable=0(position_sizer.py:195) → 买 sizing 恒0 → awaiting_buyback/pending_sells 从未激活 → 接回追踪因子 0 条(池 11 条) → 闭环 PnL 贡献恒 0.00",
+    "closed_pairs_000988": {
+      "control": {
+        "pairs": 4,
+        "net": 0.0
+      },
+      "T36b": {
+        "pairs": 5,
+        "net": 0.0
+      },
+      "T30b": {
+        "pairs": 5,
+        "net": 0.0
+      }
+    },
+    "implication": "一切000988买侧处置在幻影簿记下闭环PnL不变(+252.98); T30b破闸②的PnL差额全部来自池内pair重排(avg_loss -35.71→-38.86), 非000988实亏"
+  },
+  "option_D_unfreeze_approx": {
+    "method": "000988全部信号qty:=100重算闭环(粗略上限, 序列相关, 未计浮仓)",
+    "control": {
+      "pairs": 4,
+      "wins": 4,
+      "net": 1347.35
+    },
+    "T36b": {
+      "pairs": 5,
+      "wins": 5,
+      "net": 1486.21
+    },
+    "T30b": {
+      "pairs": 5,
+      "wins": 5,
+      "net": 1486.21
+    },
+    "conservative_expectancy": "按settle wr 0.4583+对称±0.5%/0.4%毛期望≈+0.01%/信号, 扣费≈打平~微亏; 解冻须捆绑质量门"
+  },
+  "options_E": [
+    {
+      "label": "E: 000988禁bull日买入",
+      "buy_n": 126,
+      "buy_wr": 0.5169,
+      "pairs": 47,
+      "pnl": 252.98,
+      "bear_wr": 0.3684,
+      "density": 0.28
+    },
+    {
+      "label": "E2: 000988只做bear+reversal日买",
+      "buy_n": 80,
+      "buy_wr": 0.5467,
+      "pairs": 46,
+      "pnl": 252.98,
+      "bear_wr": 0.3684,
+      "density": 0.178
+    },
+    {
+      "label": "E3: 000988禁bull日+买阈40",
+      "buy_n": 118,
+      "buy_wr": 0.5182,
+      "pairs": 47,
+      "pnl": 252.98,
+      "bear_wr": 0.3333,
+      "density": 0.262
+    }
+  ],
+  "dtype_buy_wr_000988": {
+    "control": {
+      "bull_day": {
+        "n": 11,
+        "wr": 0.4545
+      },
+      "bear_day": {
+        "n": 10,
+        "wr": 0.3
+      },
+      "reversal_day": {
+        "n": 5,
+        "wr": 0.8
+      },
+      "chop_day": {
+        "n": 37,
+        "wr": 0.4054
+      }
+    },
+    "T36b": {
+      "bull_day": {
+        "n": 13,
+        "wr": 0.3846
+      },
+      "bear_day": {
+        "n": 11,
+        "wr": 0.4545
+      },
+      "reversal_day": {
+        "n": 5,
+        "wr": 0.6
+      },
+      "chop_day": {
+        "n": 43,
+        "wr": 0.4651
+      }
+    }
+  },
+  "pool_bear_wr_T36b": {
+    "n": 8,
+    "wr": 0.25,
+    "note": "池(除000988)阴跌日买wr仅0.25, 000988阴跌日买0.4545反而是其最佳segment之一"
+  }
+}
