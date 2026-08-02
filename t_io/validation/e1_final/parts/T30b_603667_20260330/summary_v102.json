@@ -1,0 +1,52 @@
+{
+  "total": 2,
+  "wins": 1,
+  "fails": 0,
+  "voids": 1,
+  "unsettled": 0,
+  "win_rate": 1.0,
+  "daily_stats": {
+    "2026-03-30": {
+      "signals": 1,
+      "wins": 1,
+      "fails": 0,
+      "voids": 0
+    },
+    "2026-03-31": {
+      "signals": 1,
+      "wins": 0,
+      "fails": 0,
+      "voids": 1
+    }
+  },
+  "ab_mode": "v102",
+  "p1_metrics": {
+    "per_stock": {
+      "603667": {
+        "bull_match": 1,
+        "bear_match": 0,
+        "bull_total": 1,
+        "bear_total": 0,
+        "neutral_segments": 4,
+        "total_segments": 8,
+        "neutral_minutes_est": 87,
+        "total_minutes_est": 652,
+        "strong_bull_correct": 0,
+        "strong_bull_total": 0,
+        "strong_bear_correct": 0,
+        "strong_bear_total": 0,
+        "reversal_detected": 0,
+        "reversal_total": 1
+      }
+    },
+    "bull_consistency": 1.0,
+    "bear_consistency": null,
+    "overall_consistency": 1.0,
+    "neutral_ratio": 0.133,
+    "bias_ratio": null,
+    "sample_days_bull": 1,
+    "sample_days_bear": 0,
+    "strong_bull_accuracy": null,
+    "strong_bear_accuracy": null
+  }
+}

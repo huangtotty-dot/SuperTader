@@ -1,0 +1,9 @@
+=== BACKTEST REPORT (v102) ===
+Codes: 600176
+Period: 2026-06-08 ~ 2026-06-12
+Signals: 5  WIN=4 FAIL=1 VOID=0
+Win rate: 80.0%
+
+P1 Trend Direction:
+  Consistency: 66.7%
+  NEUTRAL ratio: 10.1%
