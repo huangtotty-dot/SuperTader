@@ -321,6 +321,10 @@ PARAMS = {
     # —— 通知阈值 ——
     # v1.1.0 X9 阈值阶梯实测采纳 t55 档（两组胜率+2.1~2.8pp、密度双升、无单股恶化，
     # 依据 t_io/validation/v109_threshold/阈值阶梯报告.md）；买侧 68 未实验不动
+    # E1 采纳（2026-08-02, t_io/validation/e1_final + doc/E1决赛档AB报告_20260802.md）:
+    # 引擎买阈基线 42→36（signal_engine.py 软消费本键）；T36b 全管线五闸门全过——
+    # 买 144/wr 50.38%、闭环 47 对/+252.98、卖侧 −0.29pp、阴跌日买 wr 0.368、买密度 0.320/股日
+    "engine_buy_threshold_base": 36.0,      # E1 采纳: 42→36（T36b 档）
     "notify_buy_threshold": 68,
     "notify_sell_threshold": 55,          # v1.1.0: 65→55
     "notify_sell_early_threshold": 65,    # v1.1.0: 75→65（保持早盘+10梯度）
@@ -386,7 +390,7 @@ STOCK_PARAMS = {
         "take_profit_pct": 0.0148,             # N2 Optuna CS=1630
         "take_profit_time_after": 1000,
         "bullish_reversal_min_pct": 0.008,     # N4
-        "notify_sell_threshold": 55, "notify_buy_threshold": 43,  # v1.1.0: sell 62→55 对齐t55档
+        "notify_sell_threshold": 55, "notify_buy_threshold": 36,  # v1.1.0: sell 62→55 对齐t55档; E1采纳: buy 43→36 对齐引擎T36b档
     },
     "000988": {  # 华工科技
         "stock_qty_base_pct": 0.30, "stock_qty_strong_pct": 0.29,
@@ -398,7 +402,7 @@ STOCK_PARAMS = {
         "bullish_reversal_min_pct": 0.006,     # N4
         "bullish_reversal_body_ratio": 0.50,
         "bullish_reversal_vol_multiplier": 0.7,
-        "notify_sell_threshold": 55, "notify_buy_threshold": 43,  # v1.1.0: sell 63→55 对齐t55档
+        "notify_sell_threshold": 55, "notify_buy_threshold": 36,  # v1.1.0: sell 63→55 对齐t55档; E1采纳: buy 43→36 对齐引擎T36b档
     },
     "588170": {  # 科创芯片ETF
         "stock_qty_base_pct": 0.15, "stock_qty_strong_pct": 0.25,
@@ -407,7 +411,7 @@ STOCK_PARAMS = {
         "vwap_buy_deviation": -0.0313,         # N3
         "take_profit_pct": 0.0206,             # N2
         "take_profit_time_after": 1000,
-        "notify_sell_threshold": 55, "notify_buy_threshold": 40,  # v1.1.0: sell 67→55 对齐t55档
+        "notify_sell_threshold": 55, "notify_buy_threshold": 36,  # v1.1.0: sell 67→55 对齐t55档; E1采纳: buy 40→36 对齐引擎T36b档
     },
     "600176": {  # 中国巨石
         "stock_qty_base_pct": 0.34, "stock_qty_strong_pct": 0.59,
@@ -416,7 +420,7 @@ STOCK_PARAMS = {
         "vwap_buy_deviation": -0.0173,         # N3 Optuna CS=434
         "take_profit_pct": 0.0211,             # N2 Optuna CS=434
         "take_profit_time_after": 1000,
-        "notify_sell_threshold": 51, "notify_buy_threshold": 40,
+        "notify_sell_threshold": 51, "notify_buy_threshold": 36,  # E1采纳: buy 40→36 对齐引擎T36b档
     },
     "603667": {  # 五洲新春
         "stock_qty_base_pct": 0.28, "stock_qty_strong_pct": 0.37,
@@ -424,7 +428,7 @@ STOCK_PARAMS = {
         "vwap_buy_deviation": -0.0276,         # N3 Optuna CS=498
         "take_profit_pct": 0.0200,             # N2 Optuna CS=498
         "take_profit_time_after": 1000,
-        "notify_sell_threshold": 55, "notify_buy_threshold": 40,  # v1.1.0: sell 64→55 对齐t55档
+        "notify_sell_threshold": 55, "notify_buy_threshold": 36,  # v1.1.0: sell 64→55 对齐t55档; E1采纳: buy 40→36 对齐引擎T36b档
     },
 }
 
