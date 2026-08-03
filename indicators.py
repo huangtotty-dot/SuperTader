@@ -34,7 +34,9 @@ def add_indicators(df: pd.DataFrame) -> pd.DataFrame:
     gain = delta.clip(lower=0).rolling(rsi_period, min_periods=1).mean()
     loss = -delta.clip(upper=0).rolling(rsi_period, min_periods=1).mean()
     rs = gain / loss.replace(0, np.nan)
-    df["rsi"] = 100 - 100 / (1 + rs)
+    # V1.1.2 修复（bug fix，非调优，C 语义）：0/0 钉平窗（gain==0 & loss==0）除零产生 NaN
+    # → 填 50 中性；纯上涨窗（loss==0 & gain>0）保持 NaN 与现网一致；预热 leading NaN 不变
+    df["rsi"] = (100 - 100 / (1 + rs)).mask((gain == 0) & (loss == 0), 50.0)
 
     # BOLL(20, 2.0)
     bb_period = PARAMS.get("bb_period", 20)
@@ -191,7 +193,9 @@ def add_5min_indicators(df_5min: pd.DataFrame) -> pd.DataFrame:
     gain = delta.clip(lower=0).rolling(rsi_period, min_periods=1).mean()
     loss = -delta.clip(upper=0).rolling(rsi_period, min_periods=1).mean()
     rs = gain / loss.replace(0, np.nan)
-    df_5min["rsi_5m"] = 100 - 100 / (1 + rs)
+    # V1.1.2 修复（bug fix，非调优，C 语义）：0/0 钉平窗填 50 中性；
+    # 纯上涨窗保持 NaN 与现网一致；预热 leading NaN 不变
+    df_5min["rsi_5m"] = (100 - 100 / (1 + rs)).mask((gain == 0) & (loss == 0), 50.0)
 
     # ── 企稳信号（V1.26 遗留，保留）──
     df_5min["low_5m"] = l
@@ -239,7 +243,9 @@ def add_15min_indicators(df_15min: pd.DataFrame) -> pd.DataFrame:
     gain = delta.clip(lower=0).rolling(6, min_periods=1).mean()
     loss = (-delta.clip(upper=0)).rolling(6, min_periods=1).mean()
     rs = gain / loss.replace(0, np.nan)
-    df_15min["rsi_15m"] = 100 - 100 / (1 + rs)
+    # V1.1.2 修复（bug fix，非调优，C 语义）：0/0 钉平窗填 50 中性；
+    # 纯上涨窗保持 NaN 与现网一致；预热 leading NaN 不变
+    df_15min["rsi_15m"] = (100 - 100 / (1 + rs)).mask((gain == 0) & (loss == 0), 50.0)
 
     # MACD(12, 26, 9)
     exp1 = c.ewm(span=12, adjust=False).mean()
