@@ -1,4 +1,8 @@
 # V1.11: 日志增强模块导入
+# V1.1.2 (2026-08-04, 修复类非调优): RSI NaN 兜底 C 语义上线 — indicators.py/data_fetcher.py
+#   共 5 处 RSI 计算点修复 0/0 钉平窗除零 NaN（填 50 中性；纯上涨窗保持 NaN 与现网一致；
+#   预热 leading NaN 不变）。本文件零代码变更，仅登记版本；参数/阈值/权重零调整。
+#   回归证据: t_io/validation/rsi_nan_guard/regression_report_2026-08-03.md
 import sys as _sys
 import os as _os_mod
 # V3.0fix: __file__ = E:\06_T\signal_engine.py → dirname = E:\06_T

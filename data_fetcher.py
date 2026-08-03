@@ -919,7 +919,9 @@ def add_indicators(df: pd.DataFrame) -> pd.DataFrame:
     gain = delta.clip(lower=0).rolling(PARAMS["rsi_period"], min_periods=1).mean()
     loss = -delta.clip(upper=0).rolling(PARAMS["rsi_period"], min_periods=1).mean()
     rs = gain / loss.replace(0, np.nan)
-    df["rsi"] = 100 - 100 / (1 + rs)
+    # V1.1.2 修复（bug fix，非调优，C 语义）：0/0 钉平窗填 50 中性；
+    # 纯上涨窗保持 NaN 与现网一致；预热 leading NaN 不变
+    df["rsi"] = (100 - 100 / (1 + rs)).mask((gain == 0) & (loss == 0), 50.0)
 
     ma = c.rolling(PARAMS["bb_period"], min_periods=1).mean()
     sd = c.rolling(PARAMS["bb_period"], min_periods=1).std()
@@ -1030,7 +1032,9 @@ def add_15min_indicators(df_15min: pd.DataFrame) -> pd.DataFrame:
     gain = delta.clip(lower=0).rolling(6, min_periods=1).mean()
     loss = (-delta.clip(upper=0)).rolling(6, min_periods=1).mean()
     rs = gain / loss.replace(0, np.nan)
-    df_15min["rsi_15m"] = 100 - 100 / (1 + rs)
+    # V1.1.2 修复（bug fix，非调优，C 语义）：0/0 钉平窗填 50 中性；
+    # 纯上涨窗保持 NaN 与现网一致；预热 leading NaN 不变
+    df_15min["rsi_15m"] = (100 - 100 / (1 + rs)).mask((gain == 0) & (loss == 0), 50.0)
 
     # 15分钟MACD
     exp1 = c.ewm(span=12, adjust=False).mean()
