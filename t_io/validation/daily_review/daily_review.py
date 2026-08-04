@@ -388,6 +388,28 @@ def kpi_report_md():
     return "\n".join(L)
 
 report_fp = BASE / f"doc/每日复盘/{DATE}_复盘.md"
+
+# --- 日复盘报告追加/替换「系统阶段看板」段（幂等：标记内替换；单一事实源 stage_board.json） ---
+def stage_board_md():
+    fp = OUT / "stage_board.json"
+    if not fp.exists():
+        return ""
+    board = json.loads(fp.read_text(encoding="utf-8"))
+    zones = board.get("_meta", {}).get("zones", ["已验收", "观察中", "优化管线中", "待启动"])
+    upd = board.get("_meta", {}).get("updated", DATE)
+    L = ["", "<!-- 阶段看板:begin -->", "",
+         f"## 系统阶段看板（截至 {upd}；数据源 stage_board.json，阶段变更只在验收事件时由周/月复盘维护）", ""]
+    for zone in zones:
+        items = [s for s in board.get("stages", []) if s.get("zone") == zone]
+        if not items:
+            continue
+        L += [f"**{zone}（{len(items)}）**", "", "| 事项 | since | 备注 |", "|---|---|---|"]
+        for s in items:
+            L.append(f"| {s.get('name','')} | {s.get('since','')} | {s.get('note','')} |")
+        L.append("")
+    L += ["<!-- 阶段看板:end -->", ""]
+    return "\n".join(L)
+
 if report_fp.exists():
     txt = report_fp.read_text(encoding="utf-8")
     if "<!-- KPI日快照:begin -->" in txt:
@@ -397,6 +419,15 @@ if report_fp.exists():
                      txt, flags=re.S)
     else:
         txt = txt.rstrip() + "\n" + kpi_report_md()
+    sb = stage_board_md()
+    if sb:
+        if "<!-- 阶段看板:begin -->" in txt:
+            txt = re.sub(r"<!-- 阶段看板:begin -->.*?<!-- 阶段看板:end -->",
+                         sb.strip().replace("\n\n<!-- 阶段看板:end -->", "\n<!-- 阶段看板:end -->")
+                         .replace("<!-- 阶段看板:begin -->\n\n", "<!-- 阶段看板:begin -->\n"),
+                         txt, flags=re.S)
+        else:
+            txt = txt.rstrip() + "\n" + sb
     report_fp.write_text(txt, encoding="utf-8")
 
 # ---------- 输出 ----------
