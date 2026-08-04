@@ -1,0 +1,124 @@
+{
+  "date": "2026-08-04",
+  "cycle_count": {
+    "588170": 1,
+    "300364": 1,
+    "600176": 1,
+    "002639": 1,
+    "000988": 1
+  },
+  "buy_count": {},
+  "sell_count": {
+    "588170": 1,
+    "300364": 1,
+    "600176": 1,
+    "002639": 1,
+    "000988": 1
+  },
+  "buy_cooldown": {},
+  "sell_cooldown": {
+    "588170": "2026-08-04T14:31:56.338541",
+    "300364": "2026-08-04T10:00:36.282872",
+    "600176": "2026-08-04T10:04:19.060819",
+    "002639": "2026-08-04T10:08:06.419264",
+    "000988": "2026-08-04T10:10:12.065373"
+  },
+  "trend_regimes": {
+    "588170": {
+      "state": "BULL",
+      "confidence": 0.55,
+      "pending_state": null,
+      "pending_bars": 0,
+      "last_dif": 0.005556515979049492,
+      "last_dea": 0.007164844458903915,
+      "last_rsi": 57.14285714285714,
+      "prev_rsi": 58.82352941176471,
+      "bb_mid_slope": 0.0011531841652322509,
+      "bb_width_ratio": 0.6800372310015326
+    },
+    "600176": {
+      "state": "BULL",
+      "confidence": 0.55,
+      "pending_state": null,
+      "pending_bars": 0,
+      "last_dif": 0.221115093805075,
+      "last_dea": 0.2897030306094862,
+      "last_rsi": 56.291390728476664,
+      "prev_rsi": 58.27338129496379,
+      "bb_mid_slope": 0.0010495289515729427,
+      "bb_width_ratio": 0.6618742718707283
+    },
+    "600481": {
+      "state": "BULL",
+      "confidence": 0.55,
+      "pending_state": null,
+      "pending_bars": 0,
+      "last_dif": 0.006347510958644165,
+      "last_dea": 0.007837962647413876,
+      "last_rsi": 58.33333333333364,
+      "prev_rsi": 58.33333333333364,
+      "bb_mid_slope": 2.3134759976825803e-05,
+      "bb_width_ratio": 1.0191230136799059
+    },
+    "603667": {
+      "state": "BULL",
+      "confidence": 0.55,
+      "pending_state": null,
+      "pending_bars": 0,
+      "last_dif": 0.188759371623199,
+      "last_dea": 0.22030585353725052,
+      "last_rsi": 64.99999999999997,
+      "prev_rsi": 59.70149253731349,
+      "bb_mid_slope": 0.0004082980851276266,
+      "bb_width_ratio": 0.8777092146630279
+    },
+    "000988": {
+      "state": "BULL",
+      "confidence": 0.55,
+      "pending_state": null,
+      "pending_bars": 0,
+      "last_dif": 0.6584404606994383,
+      "last_dea": 0.7987466019834684,
+      "last_rsi": 63.63636363636363,
+      "prev_rsi": 62.37113402061867,
+      "bb_mid_slope": 0.0010962755441640084,
+      "bb_width_ratio": 0.7091315529619046
+    },
+    "002639": {
+      "state": "BULL",
+      "confidence": 0.55,
+      "pending_state": null,
+      "pending_bars": 0,
+      "last_dif": 0.040148782010543727,
+      "last_dea": 0.051469689489771056,
+      "last_rsi": 60.00000000000007,
+      "prev_rsi": 57.44680851063824,
+      "bb_mid_slope": 0.00027529791166851653,
+      "bb_width_ratio": 0.9302435550618011
+    },
+    "300153": {
+      "state": "BULL",
+      "confidence": 0.55,
+      "pending_state": null,
+      "pending_bars": 0,
+      "last_dif": 0.05278337584694981,
+      "last_dea": 0.07676981751288225,
+      "last_rsi": 52.77777777777775,
+      "prev_rsi": 44.11764705882359,
+      "bb_mid_slope": 0.000208323469532665,
+      "bb_width_ratio": 0.8110292399193471
+    },
+    "300364": {
+      "state": "BULL",
+      "confidence": 0.55,
+      "pending_state": null,
+      "pending_bars": 0,
+      "last_dif": 0.09976938723431417,
+      "last_dea": 0.11924841972788476,
+      "last_rsi": 62.04819277108435,
+      "prev_rsi": 58.479532163742746,
+      "bb_mid_slope": 0.00021860721600749092,
+      "bb_width_ratio": 1.0124012038365247
+    }
+  }
+}

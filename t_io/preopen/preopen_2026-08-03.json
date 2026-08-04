@@ -1,0 +1,368 @@
+{
+  "market_score": 15.0,
+  "market_bias": "risk_off",
+  "breadth": {
+    "total_codes": 5,
+    "etf_count": 1,
+    "stock_count": 4,
+    "advance_decline": {
+      "up": 1771,
+      "down": 3052,
+      "flat": 711
+    },
+    "hot_theme": [
+      "N聚仁",
+      "欣天科技",
+      "富瀚微",
+      "恒银科技",
+      "传智教育"
+    ],
+    "hot_theme_text": "N聚仁、欣天科技、富瀚微",
+    "risk_flag": "risk_off",
+    "market_open": false,
+    "auction_summary": {
+      "top20_bias": "strong_bearish",
+      "top20_up": 3,
+      "top20_down": 17,
+      "holdings_bullish": 0,
+      "holdings_bearish": 0,
+      "source_ts": "2026-08-03 09:25:55"
+    }
+  },
+  "session_note": "竞价额Top20中涨3家/跌17家",
+  "generated_at": "2026-08-03 09:25:55",
+  "source": "spot",
+  "market_snapshot": {
+    "source": "spot",
+    "market_open": false,
+    "index_trend": "positive",
+    "advance_decline": {
+      "up": 1771,
+      "down": 3052,
+      "flat": 711
+    },
+    "hot_theme": [
+      "N聚仁",
+      "欣天科技",
+      "富瀚微",
+      "恒银科技",
+      "传智教育"
+    ],
+    "risk_flag": "risk_off",
+    "market_sentence": "涨1771 / 跌3052 / 平711",
+    "top20_volume_analysis": {
+      "total_up": 3,
+      "total_down": 17,
+      "total_flat": 0,
+      "top_gainers": [],
+      "top_volume_stocks": [
+        {
+          "code": "sh688825",
+          "name": "长鑫科技",
+          "change_pct": -2.71,
+          "volume": 664965794.0
+        },
+        {
+          "code": "sz300308",
+          "name": "中际旭创",
+          "change_pct": -1.22,
+          "volume": 531319338.0
+        },
+        {
+          "code": "sh603986",
+          "name": "兆易创新",
+          "change_pct": -3.45,
+          "volume": 421584794.0
+        },
+        {
+          "code": "sz300058",
+          "name": "蓝色光标",
+          "change_pct": -0.7,
+          "volume": 341508462.0
+        },
+        {
+          "code": "sz002131",
+          "name": "利欧股份",
+          "change_pct": 7.08,
+          "volume": 284950500.0
+        },
+        {
+          "code": "sz001309",
+          "name": "德明利",
+          "change_pct": -3.1,
+          "volume": 231960217.0
+        },
+        {
+          "code": "sz002354",
+          "name": "天娱数科",
+          "change_pct": 9.98,
+          "volume": 225113400.0
+        },
+        {
+          "code": "sz300502",
+          "name": "新易盛",
+          "change_pct": -1.54,
+          "volume": 168852680.0
+        },
+        {
+          "code": "sz002384",
+          "name": "东山精密",
+          "change_pct": -3.79,
+          "volume": 168217500.0
+        },
+        {
+          "code": "sz000636",
+          "name": "风华高科",
+          "change_pct": -2.74,
+          "volume": 166680000.0
+        },
+        {
+          "code": "sz000725",
+          "name": "京东方Ａ",
+          "change_pct": -1.27,
+          "volume": 162549447.0
+        },
+        {
+          "code": "sz000938",
+          "name": "紫光股份",
+          "change_pct": -1.18,
+          "volume": 159535650.0
+        },
+        {
+          "code": "sh603629",
+          "name": "利通电子",
+          "change_pct": 5.87,
+          "volume": 151437967.0
+        },
+        {
+          "code": "sh688766",
+          "name": "普冉股份",
+          "change_pct": -3.48,
+          "volume": 144548797.0
+        },
+        {
+          "code": "sh688111",
+          "name": "金山办公",
+          "change_pct": -1.5,
+          "volume": 131630302.0
+        },
+        {
+          "code": "sh600176",
+          "name": "中国巨石",
+          "change_pct": -2.54,
+          "volume": 126968002.0
+        },
+        {
+          "code": "sh600667",
+          "name": "太极实业",
+          "change_pct": -2.9,
+          "volume": 123292973.0
+        },
+        {
+          "code": "sz002156",
+          "name": "通富微电",
+          "change_pct": -2.94,
+          "volume": 119727530.0
+        },
+        {
+          "code": "sh600487",
+          "name": "亨通光电",
+          "change_pct": -0.63,
+          "volume": 119285799.0
+        },
+        {
+          "code": "sh688012",
+          "name": "中微公司",
+          "change_pct": -1.03,
+          "volume": 119141689.0
+        }
+      ],
+      "sectors": [],
+      "bias": "strong_bearish",
+      "note": "Top20竞价量：涨3/跌17/平0，偏向strong_bearish"
+    }
+  },
+  "code_snapshots": {
+    "588170": {
+      "code": "588170",
+      "name": "科创半导体ETF华夏",
+      "open_gap": 0.0,
+      "direction": "neutral",
+      "prev_close": 0.0
+    },
+    "600176": {
+      "code": "600176",
+      "name": "中国巨石",
+      "open_gap": 0.0,
+      "direction": "neutral",
+      "prev_close": 0.0
+    },
+    "600481": {
+      "code": "600481",
+      "name": "双良节能",
+      "open_gap": 0.0,
+      "direction": "neutral",
+      "prev_close": 0.0
+    },
+    "603667": {
+      "code": "603667",
+      "name": "五洲新春",
+      "open_gap": 0.0,
+      "direction": "neutral",
+      "prev_close": 0.0
+    },
+    "000988": {
+      "code": "000988",
+      "name": "华工科技",
+      "open_gap": 0.0,
+      "direction": "neutral",
+      "prev_close": 0.0
+    }
+  },
+  "auction_summary": {
+    "top20_bias": "strong_bearish",
+    "top20_up": 3,
+    "top20_down": 17,
+    "holdings_bullish": 0,
+    "holdings_bearish": 0,
+    "source_ts": "2026-08-03 09:25:55"
+  },
+  "top20_volume_analysis": {
+    "total_up": 3,
+    "total_down": 17,
+    "total_flat": 0,
+    "top_gainers": [],
+    "top_volume_stocks": [
+      {
+        "code": "sh688825",
+        "name": "长鑫科技",
+        "change_pct": -2.71,
+        "volume": 664965794.0
+      },
+      {
+        "code": "sz300308",
+        "name": "中际旭创",
+        "change_pct": -1.22,
+        "volume": 531319338.0
+      },
+      {
+        "code": "sh603986",
+        "name": "兆易创新",
+        "change_pct": -3.45,
+        "volume": 421584794.0
+      },
+      {
+        "code": "sz300058",
+        "name": "蓝色光标",
+        "change_pct": -0.7,
+        "volume": 341508462.0
+      },
+      {
+        "code": "sz002131",
+        "name": "利欧股份",
+        "change_pct": 7.08,
+        "volume": 284950500.0
+      },
+      {
+        "code": "sz001309",
+        "name": "德明利",
+        "change_pct": -3.1,
+        "volume": 231960217.0
+      },
+      {
+        "code": "sz002354",
+        "name": "天娱数科",
+        "change_pct": 9.98,
+        "volume": 225113400.0
+      },
+      {
+        "code": "sz300502",
+        "name": "新易盛",
+        "change_pct": -1.54,
+        "volume": 168852680.0
+      },
+      {
+        "code": "sz002384",
+        "name": "东山精密",
+        "change_pct": -3.79,
+        "volume": 168217500.0
+      },
+      {
+        "code": "sz000636",
+        "name": "风华高科",
+        "change_pct": -2.74,
+        "volume": 166680000.0
+      },
+      {
+        "code": "sz000725",
+        "name": "京东方Ａ",
+        "change_pct": -1.27,
+        "volume": 162549447.0
+      },
+      {
+        "code": "sz000938",
+        "name": "紫光股份",
+        "change_pct": -1.18,
+        "volume": 159535650.0
+      },
+      {
+        "code": "sh603629",
+        "name": "利通电子",
+        "change_pct": 5.87,
+        "volume": 151437967.0
+      },
+      {
+        "code": "sh688766",
+        "name": "普冉股份",
+        "change_pct": -3.48,
+        "volume": 144548797.0
+      },
+      {
+        "code": "sh688111",
+        "name": "金山办公",
+        "change_pct": -1.5,
+        "volume": 131630302.0
+      },
+      {
+        "code": "sh600176",
+        "name": "中国巨石",
+        "change_pct": -2.54,
+        "volume": 126968002.0
+      },
+      {
+        "code": "sh600667",
+        "name": "太极实业",
+        "change_pct": -2.9,
+        "volume": 123292973.0
+      },
+      {
+        "code": "sz002156",
+        "name": "通富微电",
+        "change_pct": -2.94,
+        "volume": 119727530.0
+      },
+      {
+        "code": "sh600487",
+        "name": "亨通光电",
+        "change_pct": -0.63,
+        "volume": 119285799.0
+      },
+      {
+        "code": "sh688012",
+        "name": "中微公司",
+        "change_pct": -1.03,
+        "volume": 119141689.0
+      }
+    ],
+    "sectors": [],
+    "bias": "strong_bearish",
+    "note": "Top20竞价量：涨3/跌17/平0，偏向strong_bearish"
+  },
+  "theme_rank": [],
+  "focus_codes": [],
+  "active_codes": [],
+  "watch_codes": [],
+  "blocked_codes": [],
+  "favored_sectors": [],
+  "weak_sectors": []
+}

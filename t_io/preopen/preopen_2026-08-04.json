@@ -1,0 +1,389 @@
+{
+  "market_score": 94.73684210526315,
+  "market_bias": "risk_on",
+  "breadth": {
+    "total_codes": 8,
+    "etf_count": 1,
+    "stock_count": 7,
+    "advance_decline": {
+      "up": 0,
+      "down": 0,
+      "flat": 5535
+    },
+    "hot_theme": [
+      "安徽凤凰",
+      "宝鼎科技",
+      "通达股份",
+      "亚威股份",
+      "巨人网络"
+    ],
+    "hot_theme_text": "安徽凤凰、宝鼎科技、通达股份",
+    "risk_flag": "neutral",
+    "market_open": false,
+    "auction_summary": {
+      "top20_bias": "strong_bullish",
+      "top20_up": 18,
+      "top20_down": 1,
+      "holdings_bullish": 0,
+      "holdings_bearish": 0,
+      "source_ts": "2026-08-04 09:25:17"
+    }
+  },
+  "session_note": "竞价额Top20中涨18家/跌1家",
+  "generated_at": "2026-08-04 09:25:17",
+  "source": "spot",
+  "market_snapshot": {
+    "source": "spot",
+    "market_open": false,
+    "index_trend": "negative",
+    "advance_decline": {
+      "up": 0,
+      "down": 0,
+      "flat": 5535
+    },
+    "hot_theme": [
+      "安徽凤凰",
+      "宝鼎科技",
+      "通达股份",
+      "亚威股份",
+      "巨人网络"
+    ],
+    "risk_flag": "neutral",
+    "market_sentence": "涨0 / 跌0 / 平5535",
+    "top20_volume_analysis": {
+      "total_up": 18,
+      "total_down": 1,
+      "total_flat": 1,
+      "top_gainers": [],
+      "top_volume_stocks": [
+        {
+          "code": "sz300308",
+          "name": "中际旭创",
+          "change_pct": 4.0,
+          "volume": 534578000.0
+        },
+        {
+          "code": "sz001232",
+          "name": "N嘉立创",
+          "change_pct": 177.47,
+          "volume": 334373392.0
+        },
+        {
+          "code": "sh688825",
+          "name": "长鑫科技",
+          "change_pct": 0.0,
+          "volume": 313720440.0
+        },
+        {
+          "code": "sz300502",
+          "name": "新易盛",
+          "change_pct": 3.71,
+          "volume": 276647600.0
+        },
+        {
+          "code": "sh603986",
+          "name": "兆易创新",
+          "change_pct": 0.36,
+          "volume": 268667344.0
+        },
+        {
+          "code": "sz002131",
+          "name": "利欧股份",
+          "change_pct": 2.92,
+          "volume": 229253429.0
+        },
+        {
+          "code": "sz300394",
+          "name": "天孚通信",
+          "change_pct": 5.23,
+          "volume": 186066412.0
+        },
+        {
+          "code": "sz300058",
+          "name": "蓝色光标",
+          "change_pct": 0.68,
+          "volume": 168860443.0
+        },
+        {
+          "code": "sz002384",
+          "name": "东山精密",
+          "change_pct": 3.56,
+          "volume": 143327868.0
+        },
+        {
+          "code": "sz300857",
+          "name": "协创数据",
+          "change_pct": 5.45,
+          "volume": 129886982.0
+        },
+        {
+          "code": "sz003032",
+          "name": "传智教育",
+          "change_pct": 9.91,
+          "volume": 113602485.0
+        },
+        {
+          "code": "sh600396",
+          "name": "华电辽能",
+          "change_pct": 3.16,
+          "volume": 111905600.0
+        },
+        {
+          "code": "sz002827",
+          "name": "高争民爆",
+          "change_pct": 10.01,
+          "volume": 107520067.0
+        },
+        {
+          "code": "sz300750",
+          "name": "宁德时代",
+          "change_pct": 0.15,
+          "volume": 101925800.0
+        },
+        {
+          "code": "sz002354",
+          "name": "天娱数科",
+          "change_pct": 1.68,
+          "volume": 100216359.0
+        },
+        {
+          "code": "sz002428",
+          "name": "云南锗业",
+          "change_pct": 3.88,
+          "volume": 97667458.0
+        },
+        {
+          "code": "sz000815",
+          "name": "美利云",
+          "change_pct": 7.78,
+          "volume": 96775542.0
+        },
+        {
+          "code": "sz001309",
+          "name": "德明利",
+          "change_pct": 0.87,
+          "volume": 95007969.0
+        },
+        {
+          "code": "sh603629",
+          "name": "利通电子",
+          "change_pct": 7.81,
+          "volume": 94013883.0
+        },
+        {
+          "code": "sz000636",
+          "name": "风华高科",
+          "change_pct": -3.75,
+          "volume": 92967172.0
+        }
+      ],
+      "sectors": [],
+      "bias": "strong_bullish",
+      "note": "Top20竞价量：涨18/跌1/平1，偏向strong_bullish"
+    }
+  },
+  "code_snapshots": {
+    "588170": {
+      "code": "588170",
+      "name": "科创半导体ETF华夏",
+      "open_gap": 0.0,
+      "direction": "neutral",
+      "prev_close": 0.0
+    },
+    "600176": {
+      "code": "600176",
+      "name": "中国巨石",
+      "open_gap": 0.0,
+      "direction": "neutral",
+      "prev_close": 0.0
+    },
+    "600481": {
+      "code": "600481",
+      "name": "双良节能",
+      "open_gap": 0.0,
+      "direction": "neutral",
+      "prev_close": 0.0
+    },
+    "603667": {
+      "code": "603667",
+      "name": "五洲新春",
+      "open_gap": 0.0,
+      "direction": "neutral",
+      "prev_close": 0.0
+    },
+    "000988": {
+      "code": "000988",
+      "name": "华工科技",
+      "open_gap": 0.0,
+      "direction": "neutral",
+      "prev_close": 0.0
+    },
+    "002639": {
+      "code": "002639",
+      "name": "雪人集团",
+      "open_gap": 0.0,
+      "direction": "neutral",
+      "prev_close": 0.0
+    },
+    "300153": {
+      "code": "300153",
+      "name": "科泰电源",
+      "open_gap": 0.0,
+      "direction": "neutral",
+      "prev_close": 0.0
+    },
+    "300364": {
+      "code": "300364",
+      "name": "中文在线",
+      "open_gap": 0.0,
+      "direction": "neutral",
+      "prev_close": 0.0
+    }
+  },
+  "auction_summary": {
+    "top20_bias": "strong_bullish",
+    "top20_up": 18,
+    "top20_down": 1,
+    "holdings_bullish": 0,
+    "holdings_bearish": 0,
+    "source_ts": "2026-08-04 09:25:17"
+  },
+  "top20_volume_analysis": {
+    "total_up": 18,
+    "total_down": 1,
+    "total_flat": 1,
+    "top_gainers": [],
+    "top_volume_stocks": [
+      {
+        "code": "sz300308",
+        "name": "中际旭创",
+        "change_pct": 4.0,
+        "volume": 534578000.0
+      },
+      {
+        "code": "sz001232",
+        "name": "N嘉立创",
+        "change_pct": 177.47,
+        "volume": 334373392.0
+      },
+      {
+        "code": "sh688825",
+        "name": "长鑫科技",
+        "change_pct": 0.0,
+        "volume": 313720440.0
+      },
+      {
+        "code": "sz300502",
+        "name": "新易盛",
+        "change_pct": 3.71,
+        "volume": 276647600.0
+      },
+      {
+        "code": "sh603986",
+        "name": "兆易创新",
+        "change_pct": 0.36,
+        "volume": 268667344.0
+      },
+      {
+        "code": "sz002131",
+        "name": "利欧股份",
+        "change_pct": 2.92,
+        "volume": 229253429.0
+      },
+      {
+        "code": "sz300394",
+        "name": "天孚通信",
+        "change_pct": 5.23,
+        "volume": 186066412.0
+      },
+      {
+        "code": "sz300058",
+        "name": "蓝色光标",
+        "change_pct": 0.68,
+        "volume": 168860443.0
+      },
+      {
+        "code": "sz002384",
+        "name": "东山精密",
+        "change_pct": 3.56,
+        "volume": 143327868.0
+      },
+      {
+        "code": "sz300857",
+        "name": "协创数据",
+        "change_pct": 5.45,
+        "volume": 129886982.0
+      },
+      {
+        "code": "sz003032",
+        "name": "传智教育",
+        "change_pct": 9.91,
+        "volume": 113602485.0
+      },
+      {
+        "code": "sh600396",
+        "name": "华电辽能",
+        "change_pct": 3.16,
+        "volume": 111905600.0
+      },
+      {
+        "code": "sz002827",
+        "name": "高争民爆",
+        "change_pct": 10.01,
+        "volume": 107520067.0
+      },
+      {
+        "code": "sz300750",
+        "name": "宁德时代",
+        "change_pct": 0.15,
+        "volume": 101925800.0
+      },
+      {
+        "code": "sz002354",
+        "name": "天娱数科",
+        "change_pct": 1.68,
+        "volume": 100216359.0
+      },
+      {
+        "code": "sz002428",
+        "name": "云南锗业",
+        "change_pct": 3.88,
+        "volume": 97667458.0
+      },
+      {
+        "code": "sz000815",
+        "name": "美利云",
+        "change_pct": 7.78,
+        "volume": 96775542.0
+      },
+      {
+        "code": "sz001309",
+        "name": "德明利",
+        "change_pct": 0.87,
+        "volume": 95007969.0
+      },
+      {
+        "code": "sh603629",
+        "name": "利通电子",
+        "change_pct": 7.81,
+        "volume": 94013883.0
+      },
+      {
+        "code": "sz000636",
+        "name": "风华高科",
+        "change_pct": -3.75,
+        "volume": 92967172.0
+      }
+    ],
+    "sectors": [],
+    "bias": "strong_bullish",
+    "note": "Top20竞价量：涨18/跌1/平1，偏向strong_bullish"
+  },
+  "theme_rank": [],
+  "focus_codes": [],
+  "active_codes": [],
+  "watch_codes": [],
+  "blocked_codes": [],
+  "favored_sectors": [],
+  "weak_sectors": []
+}
