@@ -1,0 +1,31 @@
+{
+  "_meta": {
+    "description": "系统阶段登记表（单一事实源）。daily_review.py 每次运行读取本表并注入日复盘报告「系统阶段看板」段。阶段变更只在验收事件发生时由周/月复盘维护，日常报告自动反映。",
+    "zones": ["已验收", "观察中", "优化管线中", "待启动"],
+    "updated": "2026-08-04",
+    "updated_by": "08-04 日复盘（首版设立）"
+  },
+  "stages": [
+    {"name": "趋势层5分钟判定（已降级纯信息层）", "zone": "已验收", "since": "V3.0", "evidence": "v3.0-5min-signal-refactor 分支；trend_regime.py", "note": "只做信息注入，不参与门控"},
+    {"name": "t55 卖阈档", "zone": "已验收", "since": "E1 决赛", "evidence": "E1 管线验证采纳", "note": "卖出通知阈值 55"},
+    {"name": "E1 T36b 买阈 36 档", "zone": "已验收", "since": "2026-07", "evidence": "commit f54a2e4（引擎 36+notify 36 双阈一致）", "note": "engine_buy_threshold_base=36"},
+    {"name": "E2 键修复（真实日上下文）", "zone": "已验收", "since": "v1.1.1", "evidence": "harness_backtest DAILY_CTX_ENABLED 默认开启", "note": "修复后世界为默认口径"},
+    {"name": "V1.1.2 RSI NaN 兜底（C 语义）", "zone": "已验收", "since": "2026-08-04", "evidence": "commit 5334244；t_io/validation/rsi_nan_guard/", "note": "0/0 钉平窗填 50 中性；08-04 实盘首日生效确认（尾盘钉平 NaN=0）"},
+    {"name": "持仓双账户对账", "zone": "已验收", "since": "2026-08-04", "evidence": "commit 0a0e388", "note": "8 只池；holdings 快照归档机制 t_io/state/"},
+    {"name": "三层复盘体系 + KPI 日快照采集", "zone": "已验收", "since": "2026-08-03", "evidence": "commit 23f31fd；日/周/月清单", "note": "K1-K5 机读输出，喂周复盘 §1.5"},
+
+    {"name": "K4 买 wr 0.15 偏离（标黄）", "zone": "观察中", "since": "2026-08-03", "evidence": "kpi_2026-08-03.json / kpi_2026-08-04.json", "note": "vs 回测基线 0.50 偏离 −35pp；第 2 天窗口未动（0 买信号日顺延）；非调参触发"},
+    {"name": "588170 底仓漂移/未接回", "zone": "观察中", "since": "2026-08-03", "evidence": "closure_audit 08-03/08-04；08-04 复盘 ⑩-1", "note": "用户意图已明确（提示接回，非认可减仓）→ 已转 P1 候选（优化管线中）"},
+    {"name": "新标的首周（002639/300153/300364）", "zone": "观察中", "since": "2026-08-04", "evidence": "08-04 复盘 ⑦-3", "note": "首日画像已建；观察首周信号质量与 sizing"},
+    {"name": "300364 sizing 买卖侧口径", "zone": "观察中", "since": "2026-08-04", "evidence": "08-04 复盘 ⑩-2", "note": "卖侧 100 股正常成交，买侧冻结线不同；待口径文档对齐"},
+    {"name": "创业板 20cm 结算阈值", "zone": "观察中", "since": "2026-08-04", "evidence": "08-04 复盘 ⑩-4", "note": "30tick ±0.4~0.5% 对高波动股偏窄；周复盘可考虑 ATR 分档"},
+    {"name": "000988 解冻后买侧验证", "zone": "观察中", "since": "2026-08-04", "evidence": "§5 #1 关闭（卖侧实证）；08-05 盯盘 #2", "note": "等首个买信号 qty>0 实证"},
+
+    {"name": "P1 接回与买入熔断解耦 + 未接回接回提示告警", "zone": "优化管线中", "since": "2026-08-04", "evidence": "08-04 复盘 ⑩-1；用户意图 08-04 拍板", "note": "P1 候选：周六首个周复盘走验证管线（离线筛查→全管线→预注册闸门）；工程实现不得提前"},
+    {"name": "B 类语义（纯上涨窗 RSI=100）+ #690 NaN 层", "zone": "优化管线中", "since": "2026-08-04", "evidence": "08-03 复盘候选 #5/#6", "note": "需 90 日管线 A/B；会激活超买卖压因子"},
+    {"name": "000988 E 方案（bull 日禁买）", "zone": "优化管线中", "since": "2026-08-02", "evidence": "归因专项 D+E；§5 #2", "note": "待批准验证"},
+    {"name": "阴跌日买 wr 洼地", "zone": "优化管线中", "since": "E1 决赛", "evidence": "§5 #4；池 0.368", "note": "000988 阴跌 0.4545 反优质，不可一刀切"},
+    {"name": "RSI trigger 边际区分度", "zone": "优化管线中", "since": "指引 V1.6", "evidence": "§5 #6", "note": "周度专项候选"},
+    {"name": "trend_state 飞书卡片产品化", "zone": "优化管线中", "since": "指引 V1.6", "evidence": "§5 #7", "note": "周度专项候选"}
+  ]
+}
