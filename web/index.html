@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>做T复盘决策看板</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <span class="brand-icon">📊</span>
+    <span class="brand-title">做T复盘决策看板</span>
+    <span id="dateTag" class="date-tag"></span>
+  </div>
+  <div class="controls">
+    <label class="lbl">日期
+      <select id="dateSelect"></select>
+    </label>
+    <button id="refreshBtn" title="手动刷新">刷新</button>
+    <label class="lbl toggle">
+      <input type="checkbox" id="autoPoll" checked> 自动刷新
+    </label>
+    <span id="status" class="status"></span>
+  </div>
+</header>
+
+<nav class="anchor-nav">
+  <a href="#kpi">KPI</a>
+  <a href="#chart">图表</a>
+  <a href="#positions">持仓对照</a>
+  <a href="#settle">信号结算</a>
+  <a href="#shadow">近阈·仓控</a>
+  <a href="#position-builder">建仓扫描</a>
+  <a href="#add-watch">加仓观察</a>
+  <a href="#stage-board">阶段看板</a>
+  <a href="#report">复盘报告</a>
+</nav>
+
+<main>
+  <section class="section" id="kpi">
+    <h2>KPI 日快照</h2>
+    <div id="kpiCards" class="kpi-grid"></div>
+  </section>
+
+  <section class="section" id="chart">
+    <h2>当日信号概览 · K4 跨日胜率</h2>
+    <div class="chart-grid">
+      <div class="card">
+        <div class="card-title">各股买卖信号数</div>
+        <div id="signalBar" class="chart-body"></div>
+      </div>
+      <div class="card">
+        <div class="card-title">K4 滚动胜率（近若干日）</div>
+        <div id="k4Trend" class="chart-body"></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="positions">
+    <h2>持仓对照（当前 vs 快照）</h2>
+    <div id="positionsBody"></div>
+  </section>
+
+  <section class="section" id="settle">
+    <h2>盘中信号结算</h2>
+    <div id="settleBody"></div>
+  </section>
+
+  <section class="section" id="shadow">
+    <h2>shadow 近阈 · 仓控与推送</h2>
+    <div id="shadowBody"></div>
+  </section>
+
+  <section class="section" id="position-builder">
+    <h2>建仓信号扫描</h2>
+    <div id="pbBody"></div>
+  </section>
+
+  <section class="section" id="add-watch">
+    <h2>加仓观察（回踩支撑）</h2>
+    <div id="addWatchBody"></div>
+  </section>
+
+  <section class="section" id="stage-board">
+    <h2>系统阶段看板</h2>
+    <div id="stageBoardBody"></div>
+  </section>
+
+  <section class="section" id="report">
+    <h2>每日复盘报告</h2>
+    <div id="reportBody" class="markdown-body"></div>
+  </section>
+</main>
+
+<footer class="footer">做T实盘系统 · 盘后复盘决策看板 · 数据只读</footer>
+
+<script src="vendor/marked.min.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

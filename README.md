@@ -65,9 +65,12 @@
 
 ```bash
 cd E:\06_T
-python main.py          # 实盘盯盘
+python main.py          # 实盘盯盘（自动拉起桌面 GUI 看板；--no-gui 禁用）
+python t_gui.py         # 仅打开盘后复盘决策看板（不盯盘）
 python replay_day.py    # 单日回放（07-24）
 ```
+
+> **GUI 看板**：`main.py` 默认以子进程启动 `t_gui.py`（pywebview 桌面壳，只读盘上 JSON/JSONL 数据，失败不影响盯盘）。`python main.py --no-gui` 可禁用。GUI 也可单独运行：`python t_gui.py`（依赖 WebView2 Runtime，缺失时回退 mshtml）。
 
 ## 三、配置文件
 

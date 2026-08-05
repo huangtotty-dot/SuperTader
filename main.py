@@ -2146,10 +2146,50 @@ def run_watch():
         log.error(f"❌ 盯盘主循环异常: {e}\n{traceback.format_exc()}")
 
 
+# ---------- GUI 看板集成 ----------
+# 运行盯盘时默认以子进程拉起桌面 GUI 看板（t_gui.py）。
+# 原因：pywebview 必须在主线程运行，而盯盘主循环已占用主线程，只能子进程隔离。
+# GUI 只读盘上 JSON/JSONL 数据，与盯盘进程天然解耦，失败不影响盯盘。
+_GUI_PROC = None
+
+
+def _launch_gui():
+    global _GUI_PROC
+    if "--no-gui" in sys.argv:
+        log.info("🖥 GUI 看板: 已通过 --no-gui 禁用")
+        return
+    try:
+        import subprocess
+        gui_path = os.path.join(BASE_DIR, "t_gui.py")
+        flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+        _GUI_PROC = subprocess.Popen(
+            [sys.executable, gui_path],
+            cwd=BASE_DIR,
+            creationflags=flags,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        log.info(f"🖥 GUI 看板: 已启动 (pid={_GUI_PROC.pid})，盯盘结束将自动关闭；如需禁用加 --no-gui")
+    except Exception as e:
+        log.warning(f"🖥 GUI 看板启动失败（不影响盯盘）: {e}")
+
+
+def _close_gui():
+    if _GUI_PROC and _GUI_PROC.poll() is None:
+        try:
+            _GUI_PROC.terminate()
+            log.info("🖥 GUI 看板: 已随盯盘结束关闭")
+        except Exception:
+            pass
+
+
 if __name__ == "__main__":
+    import atexit
+    atexit.register(_close_gui)
     if len(sys.argv) > 1 and sys.argv[1] == "--replay-today":
         replay_today()
     elif len(sys.argv) > 1 and sys.argv[1] == "--tushare-replay":
         tushare_replay()
     else:
+        _launch_gui()
         run_watch()
