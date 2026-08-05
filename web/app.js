@@ -86,8 +86,11 @@ async function loadAndRender(date, silent) {
     if (isToday) {
       await refreshLive(true);       // 立即拉一次 live + console
       startLivePoll();               // 10s 实时
+      startSignalPoll();             // 5s 信号检测 + 报警
+      ensureAudio();                 // 尝试解锁音频
     } else {
       stopLivePoll();
+      stopSignalPoll();
       renderLive(null, false);       // 显示"非今日"
       consoleBuf = []; consoleOffset = 0; consoleDate = null;
     }
@@ -372,6 +375,98 @@ function renderLive(live, isToday) {
   // 绑定 console 过滤切换
   const keyOnly = document.getElementById("consoleKeyOnly");
   if (keyOnly) keyOnly.addEventListener("change", () => reflowConsole());
+}
+
+/* ================= 报警音 + 闪烁横幅 ================= */
+let audioCtx = null;
+function ensureAudio() {
+  try {
+    if (!audioCtx) {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (AC) audioCtx = new AC();
+    }
+    if (audioCtx && audioCtx.state === "suspended") audioCtx.resume();
+  } catch (e) { /* 无音频环境静默 */ }
+  return audioCtx;
+}
+
+function beepTone(ctx, freq, when, dur) {
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  osc.type = "square";
+  osc.frequency.value = freq;
+  gain.gain.setValueAtTime(0.25, when);
+  gain.gain.exponentialRampToValueAtTime(0.001, when + dur);
+  osc.connect(gain); gain.connect(ctx.destination);
+  osc.start(when); osc.stop(when + dur + 0.02);
+}
+
+function playAlert(decision) {
+  try {
+    const sw = document.getElementById("alertSound");
+    if (sw && !sw.checked) return;   // 报警音开关关闭
+    const ctx = ensureAudio();
+    if (!ctx) return;
+    const t0 = ctx.currentTime + 0.02;
+    if (decision === "PANIC_SELL") {      // 五连最长促音（660Hz）
+      for (let i = 0; i < 5; i++) beepTone(ctx, 660, t0 + i * 0.2, 0.14);
+    } else if (decision === "SELL_HIGH") { // 高频三连（880Hz）
+      for (let i = 0; i < 3; i++) beepTone(ctx, 880, t0 + i * 0.2, 0.12);
+    } else {                               // 买入/加仓 低频三连（440Hz）
+      for (let i = 0; i < 3; i++) beepTone(ctx, 440, t0 + i * 0.2, 0.12);
+    }
+  } catch (e) { /* 音频异常不影响横幅 */ }
+}
+
+const DEC_CN = { SELL_HIGH: "卖出", BUY_LOW: "买入", ADD_POS: "加仓", PANIC_SELL: "恐慌卖" };
+const DEC_ICON = { SELL_HIGH: "🔴", BUY_LOW: "🟢", ADD_POS: "🔵", PANIC_SELL: "⛔" };
+
+function pushAlert(s) {
+  const banner = document.getElementById("alertBanner");
+  if (!banner) return;
+  banner.style.display = "flex";
+  const time = (s.scan_time || "").slice(11, 19) || "";
+  const item = document.createElement("div");
+  item.className = "alert-item";
+  const label = DEC_CN[s.decision] || s.decision;
+  item.innerHTML = `
+    <span>${DEC_ICON[s.decision] || "🔔"} ${label}信号 ${esc(s.name || s.code || "")}(${esc(s.code || "")})
+    <span style="font-size:16px">${fmt(s.score, 1)}分</span> @ ${fmt(s.price, 3)} ${time}</span>
+    <button class="close-btn" title="关闭">×</button>`;
+  item.querySelector(".close-btn").addEventListener("click", () => {
+    item.classList.add("fading");
+    setTimeout(() => { item.remove(); if (!banner.children.length) banner.style.display = "none"; }, 800);
+  });
+  banner.appendChild(item);
+  // 10s 自动淡出
+  setTimeout(() => {
+    if (item.isConnected) {
+      item.classList.add("fading");
+      setTimeout(() => { item.remove(); if (!banner.children.length) banner.style.display = "none"; }, 800);
+    }
+  }, 10000);
+  // 报警音（方向区分）
+  playAlert(s.decision);
+}
+
+/* ================= 增量信号轮询 ================= */
+let sigTimer = null;
+function startSignalPoll() {
+  stopSignalPoll();
+  sigTimer = setInterval(pollSignals, 5000);
+}
+function stopSignalPoll() {
+  if (sigTimer) { clearInterval(sigTimer); sigTimer = null; }
+}
+async function pollSignals() {
+  const date = state.date;
+  if (!date) return;
+  try {
+    const r = await apiCall("poll_new_signals", date);
+    if (r && !r.baseline && r.signals && r.signals.length) {
+      r.signals.forEach(pushAlert);
+    }
+  } catch (e) { /* 静默 */ }
 }
 
 let consoleBuf = [];     // 全量行缓存
@@ -881,12 +976,15 @@ async function init() {
   autoPoll.addEventListener("change", () => {
     if (autoPoll.checked) {
       startPoll();
-      if (state.date === todayStr()) startLivePoll();
+      if (state.date === todayStr()) { startLivePoll(); startSignalPoll(); }
     } else {
       stopPoll();
       stopLivePoll();
+      stopSignalPoll();
     }
   });
+  // 首次用户交互解锁音频（autoplay 政策兜底）
+  document.addEventListener("pointerdown", () => ensureAudio(), { once: true });
 
   let dates;
   try {

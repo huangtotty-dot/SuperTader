@@ -250,6 +250,31 @@ th.num { text-align: right; }
 .regime-chip-live { font-size: 11px; font-weight: 700; padding: 1px 8px; border-radius: 3px; }
 .cool-tag { color: var(--yellow-soft); font-family: var(--mono); font-size: 11px; }
 
+/* ---------- 报警横幅 ---------- */
+.alert-banner {
+  position: fixed; top: 108px; left: 50%; transform: translateX(-50%);
+  z-index: 200; display: flex; flex-direction: column; gap: 8px;
+  max-width: 90vw; min-width: 320px;
+}
+.alert-item {
+  background: var(--red); color: #fff; font-weight: 700; font-size: 14px;
+  padding: 10px 16px; border-radius: 8px; box-shadow: 0 4px 16px rgba(0,0,0,.5);
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  animation: alertBlink .6s ease-in-out infinite;
+  font-family: var(--mono);
+}
+.alert-item.fading { opacity: 0; transition: opacity .8s; }
+.alert-item .close-btn {
+  cursor: pointer; background: rgba(255,255,255,.2); border: none; color: #fff;
+  font-size: 12px; width: 20px; height: 20px; border-radius: 50%;
+  line-height: 1; flex: none;
+}
+.alert-item .close-btn:hover { background: rgba(255,255,255,.4); }
+@keyframes alertBlink {
+  0%, 100% { background: var(--red); }
+  50% { background: #b91c1c; box-shadow: 0 0 18px rgba(248,81,73,.8); }
+}
+
 /* ---------- 底部 ---------- */
 .footer {
   text-align: center; color: var(--text-faint); font-size: 12px;
