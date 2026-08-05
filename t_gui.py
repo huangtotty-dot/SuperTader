@@ -19,6 +19,7 @@ import json
 import math
 import sys
 from collections import Counter
+from datetime import datetime
 from pathlib import Path
 
 # Windows 终端 UTF-8 修复（避免 GBK 乱码）
@@ -35,6 +36,9 @@ STATE_DIR = BASE / "t_io" / "state"
 REPORT_DIR = BASE / "doc" / "每日复盘"
 HOLDINGS = BASE / "holdings.json"
 T_MODE = BASE / "t_mode.json"
+IDX_REGIME = BASE / "t_io" / "index_regime"
+LOGS_DIR = BASE / "t_io" / "logs"
+INTRADAY_STATE = BASE / "t_io" / "intraday_state.json"
 
 # 内置名称映射（数据缺失 code 时兜底；可由 holdings/add_watch/trace 补充）
 NAMES = {
@@ -84,6 +88,7 @@ class Api:
             stem = p.stem
             if stem.startswith("daily_review_") and len(stem) == len("daily_review_") + 10:
                 dates.add(stem[len("daily_review_"):])
+        dates.add(datetime.now().strftime("%Y-%m-%d"))  # 今天盘中可能尚无 daily_review，仍可选（实时模式）
         return sorted(dates, reverse=True)
 
     # ---------- 单日完整载荷 ----------
@@ -95,8 +100,21 @@ class Api:
             date = dates[0]
 
         out = {"date": date}
+        today = datetime.now().strftime("%Y-%m-%d")
         dr_path = OUT / f"daily_review_{date}.json"
         if not dr_path.exists():
+            # 今天盘中可能尚无 daily_review，返回部分载荷供实时模式用
+            if date == today:
+                out.update({
+                    "sig_stat": {}, "shadow": {"total": None, "near": {}},
+                    "qty_freeze": {}, "closed_loop": {}, "audit_problems": None,
+                    "settle": {}, "add_watch": {}, "watch": {}, "kpi": {},
+                    "positions": self._load_positions(date, {}),
+                    "position_builder": self._agg_position_builder(date),
+                    "stage_board": self._load_stage_board(),
+                    "report_md": "", "name_map": {},
+                })
+                return _clean(out)
             return {"date": date, "error": f"无 {date} 复盘数据"}
 
         try:
@@ -161,6 +179,154 @@ class Api:
                 "sell_n": sell.get("n"),
             })
         return _clean(pts)
+
+    # ---------- 大盘趋势打分 ----------
+    def load_market_score(self, date=None):
+        """跨日 S 打分曲线 + 当日盘中曲线。"""
+        out = {"history": [], "intraday": []}
+        state = _load_json(IDX_REGIME / "state.json", {})
+        hist = state.get("history") or state.get("score_history") or []
+        if state.get("history"):
+            out["history"] = [
+                {"date": h.get("date"), "S": h.get("S"), "sadj": h.get("sadj"),
+                 "regime": h.get("regime")}
+                for h in state["history"][-20:]
+            ]
+        else:
+            out["history"] = [
+                {"date": h.get("date"), "S": h.get("S"), "regime": None}
+                for h in hist
+            ]
+        out["last_regime"] = state.get("last_regime")
+        out["days_in_regime"] = state.get("days_in_regime")
+
+        # 当日盘中曲线（jsonl 逐行容错）
+        if date:
+            fp = IDX_REGIME / "traces" / f"index_regime_{date}.jsonl"
+            if fp.exists():
+                for line in open(fp, encoding="utf-8"):
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        r = json.loads(line)
+                    except Exception:
+                        continue
+                    out["intraday"].append({
+                        "ts": r.get("ts"), "time": (r.get("ts") or "")[-8:],
+                        "score": r.get("score"), "regime": r.get("regime"),
+                        "regime_name": r.get("regime_name"),
+                    })
+        return _clean(out)
+
+    # ---------- 持仓成本历史 ----------
+    def load_cost_history(self):
+        """读全部 holdings 快照，按股按日聚合 cost。"""
+        dates, stocks = [], {}
+        for fp in sorted(STATE_DIR.glob("holdings_*.json")):
+            d = fp.stem.replace("holdings_", "")
+            try:
+                snap = json.loads(open(fp, encoding="utf-8").read())
+            except Exception:
+                continue
+            if not snap:
+                continue
+            dates.append(d)
+            for code, info in snap.items():
+                if not isinstance(info, dict):
+                    continue
+                cost = info.get("cost")
+                if cost is None:
+                    continue
+                st = stocks.setdefault(code, {"name": info.get("name", code), "points": []})
+                st["points"].append({"date": d, "cost": float(cost)})
+        return _clean({"dates": dates, "stocks": stocks})
+
+    # ---------- 实时 console ----------
+    KEY_LINE_WORDS = ["推送", "信号", "拦截", "阻断", "熔断", "告警", "建仓",
+                      "策略卡", "竞价", "接回", "WARNING", "ERROR", "异常",
+                      "熔断/仓控", "急跌", "追涨"]
+    NOISE_LINE_WORDS = ["扫描心跳", "缓存", "数据更新完成", "poll", "网络重试"]
+
+    def load_console(self, date, since=0):
+        """增量读日志。since=字节偏移，返回新增行+新偏移。"""
+        fp = LOGS_DIR / f"t_trader_sys_{date}.log"
+        out = {"lines": [], "offset": since, "exists": fp.exists(), "eof": True}
+        if not fp.exists():
+            return out
+        try:
+            size = fp.stat().st_size
+            if size < since:
+                since = 0  # 日志轮转/重建
+            with open(fp, encoding="utf-8", errors="replace") as f:
+                f.seek(since)
+                data = f.read()
+            out["offset"] = size
+            out["eof"] = size == 0 or data == "" or data.endswith("\n")
+            for line in data.splitlines():
+                if not line.strip():
+                    continue
+                out["lines"].append(self._parse_log_line(line))
+        except Exception:
+            pass
+        return out
+
+    @staticmethod
+    def _parse_log_line(line):
+        """HH:MM:SS [LEVEL] msg  →  {t, level, msg}。"""
+        t, level, msg = "", "", line
+        try:
+            if len(line) >= 8 and line[2] == ":" and line[5] == ":":
+                t = line[:8]
+                rest = line[8:].strip()
+                if rest.startswith("[") and "]" in rest:
+                    level, msg = rest[1:rest.index("]")], rest[rest.index("]") + 1:].strip()
+                else:
+                    msg = rest
+        except Exception:
+            pass
+        return {"t": t, "level": level, "msg": msg,
+                "key": Api._is_key_line(line)}
+
+    @staticmethod
+    def _is_key_line(line):
+        for w in Api.KEY_LINE_WORDS:
+            if w in line:
+                return True
+        for w in Api.NOISE_LINE_WORDS:
+            if w in line:
+                return False
+        return False
+
+    # ---------- 盘中实时载荷（仅今天） ----------
+    def load_live(self, date):
+        """decision_trace 尾部 + intraday_state + 大盘盘中尾部。"""
+        out = {"signals": [], "intraday_state": {}, "market_intraday": []}
+
+        fp = TRACES / f"decision_trace_{date}.jsonl"
+        if fp.exists():
+            rows = []
+            for line in open(fp, encoding="utf-8"):
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    rows.append(json.loads(line))
+                except Exception:
+                    continue
+            # 取尾部最多 20 条非 HOLD + 补足 HOLD 到 20
+            non_hold = [r for r in rows if r.get("decision") not in ("HOLD", None)]
+            tail = (non_hold + [r for r in rows if r.get("decision") in ("HOLD", None)])[-20:]
+            out["signals"] = [{
+                "scan_time": r.get("scan_time"), "code": r.get("code"),
+                "name": r.get("name"), "price": r.get("price"),
+                "buy_score": r.get("buy_score"), "sell_score": r.get("sell_score"),
+                "decision": r.get("decision"), "reason": r.get("decision_reason"),
+            } for r in tail]
+
+        out["intraday_state"] = _load_json(INTRADAY_STATE, {})
+        out["market_intraday"] = self.load_market_score(date).get("intraday", [])
+        return _clean(out)
 
     # ---------- 内部聚合 ----------
     def _load_stage_board(self):
