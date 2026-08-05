@@ -1,0 +1,394 @@
+{
+  "_comment": "待买入/加仓清单（19只）— position_builder.py 扫描后更新信号状态和建议仓位。in_holdings=true 表示已在 holdings.json 中。买入确认后手动加入 holdings.json。",
+  "total_capital": 300000,
+  "max_per_stock_pct": 0.2,
+  "stocks": {
+    "000988": {
+      "name": "华工科技",
+      "type": "stock",
+      "in_holdings": true,
+      "added_at": "2026-08-05",
+      "status": "monitoring",
+      "suggested_qty": 500,
+      "suggested_price": 100.22,
+      "capital_required": 50110.0,
+      "last_check_date": "2026-08-05",
+      "composite_score": 20,
+      "signal_history": [
+        {
+          "date": "2026-08-05",
+          "score": 20,
+          "verdict": "weak",
+          "price": 100.22
+        }
+      ],
+      "criteria_met": {
+        "macd_golden": false,
+        "boll_mid_support": true,
+        "rsi_healthy": false,
+        "volume_shrink": false,
+        "support_retest": false
+      }
+    },
+    "002176": {
+      "name": "江特电机",
+      "type": "stock",
+      "in_holdings": false,
+      "added_at": "2026-08-05",
+      "status": "monitoring",
+      "suggested_qty": 0,
+      "suggested_price": 0,
+      "capital_required": 0,
+      "last_check_date": null,
+      "composite_score": 0,
+      "signal_history": [],
+      "criteria_met": {
+        "macd_golden": false,
+        "boll_mid_support": false,
+        "rsi_healthy": false,
+        "volume_shrink": false,
+        "support_retest": false
+      }
+    },
+    "002202": {
+      "name": "金风科技",
+      "type": "stock",
+      "in_holdings": false,
+      "added_at": "2026-08-05",
+      "status": "monitoring",
+      "suggested_qty": 0,
+      "suggested_price": 0,
+      "capital_required": 0,
+      "last_check_date": null,
+      "composite_score": 0,
+      "signal_history": [],
+      "criteria_met": {
+        "macd_golden": false,
+        "boll_mid_support": false,
+        "rsi_healthy": false,
+        "volume_shrink": false,
+        "support_retest": false
+      }
+    },
+    "002261": {
+      "name": "拓维信息",
+      "type": "stock",
+      "in_holdings": false,
+      "added_at": "2026-08-05",
+      "status": "monitoring",
+      "suggested_qty": 0,
+      "suggested_price": 0,
+      "capital_required": 0,
+      "last_check_date": null,
+      "composite_score": 0,
+      "signal_history": [],
+      "criteria_met": {
+        "macd_golden": false,
+        "boll_mid_support": false,
+        "rsi_healthy": false,
+        "volume_shrink": false,
+        "support_retest": false
+      }
+    },
+    "002451": {
+      "name": "摩恩电气",
+      "type": "stock",
+      "in_holdings": false,
+      "added_at": "2026-08-05",
+      "status": "monitoring",
+      "suggested_qty": 0,
+      "suggested_price": 0,
+      "capital_required": 0,
+      "last_check_date": null,
+      "composite_score": 0,
+      "signal_history": [],
+      "criteria_met": {
+        "macd_golden": false,
+        "boll_mid_support": false,
+        "rsi_healthy": false,
+        "volume_shrink": false,
+        "support_retest": false
+      }
+    },
+    "002536": {
+      "name": "飞龙股份",
+      "type": "stock",
+      "in_holdings": false,
+      "added_at": "2026-08-05",
+      "status": "monitoring",
+      "suggested_qty": 0,
+      "suggested_price": 0,
+      "capital_required": 0,
+      "last_check_date": null,
+      "composite_score": 0,
+      "signal_history": [],
+      "criteria_met": {
+        "macd_golden": false,
+        "boll_mid_support": false,
+        "rsi_healthy": false,
+        "volume_shrink": false,
+        "support_retest": false
+      }
+    },
+    "002600": {
+      "name": "领益智造",
+      "type": "stock",
+      "in_holdings": false,
+      "added_at": "2026-08-05",
+      "status": "monitoring",
+      "suggested_qty": 0,
+      "suggested_price": 0,
+      "capital_required": 0,
+      "last_check_date": null,
+      "composite_score": 0,
+      "signal_history": [],
+      "criteria_met": {
+        "macd_golden": false,
+        "boll_mid_support": false,
+        "rsi_healthy": false,
+        "volume_shrink": false,
+        "support_retest": false
+      }
+    },
+    "002639": {
+      "name": "雪人集团",
+      "type": "stock",
+      "in_holdings": true,
+      "added_at": "2026-08-05",
+      "status": "monitoring",
+      "suggested_qty": 0,
+      "suggested_price": 0,
+      "capital_required": 0,
+      "last_check_date": null,
+      "composite_score": 0,
+      "signal_history": [],
+      "criteria_met": {
+        "macd_golden": false,
+        "boll_mid_support": false,
+        "rsi_healthy": false,
+        "volume_shrink": false,
+        "support_retest": false
+      }
+    },
+    "300054": {
+      "name": "鼎龙股份",
+      "type": "stock",
+      "in_holdings": false,
+      "added_at": "2026-08-05",
+      "status": "monitoring",
+      "suggested_qty": 0,
+      "suggested_price": 0,
+      "capital_required": 0,
+      "last_check_date": null,
+      "composite_score": 0,
+      "signal_history": [],
+      "criteria_met": {
+        "macd_golden": false,
+        "boll_mid_support": false,
+        "rsi_healthy": false,
+        "volume_shrink": false,
+        "support_retest": false
+      }
+    },
+    "300058": {
+      "name": "蓝色光标",
+      "type": "stock",
+      "in_holdings": false,
+      "added_at": "2026-08-05",
+      "status": "monitoring",
+      "suggested_qty": 0,
+      "suggested_price": 0,
+      "capital_required": 0,
+      "last_check_date": null,
+      "composite_score": 0,
+      "signal_history": [],
+      "criteria_met": {
+        "macd_golden": false,
+        "boll_mid_support": false,
+        "rsi_healthy": false,
+        "volume_shrink": false,
+        "support_retest": false
+      }
+    },
+    "300153": {
+      "name": "科泰电源",
+      "type": "stock",
+      "in_holdings": true,
+      "added_at": "2026-08-05",
+      "status": "monitoring",
+      "suggested_qty": 0,
+      "suggested_price": 0,
+      "capital_required": 0,
+      "last_check_date": null,
+      "composite_score": 0,
+      "signal_history": [],
+      "criteria_met": {
+        "macd_golden": false,
+        "boll_mid_support": false,
+        "rsi_healthy": false,
+        "volume_shrink": false,
+        "support_retest": false
+      }
+    },
+    "300364": {
+      "name": "中文在线",
+      "type": "stock",
+      "in_holdings": false,
+      "added_at": "2026-08-05",
+      "status": "monitoring",
+      "suggested_qty": 0,
+      "suggested_price": 0,
+      "capital_required": 0,
+      "last_check_date": null,
+      "composite_score": 0,
+      "signal_history": [],
+      "criteria_met": {
+        "macd_golden": false,
+        "boll_mid_support": false,
+        "rsi_healthy": false,
+        "volume_shrink": false,
+        "support_retest": false
+      }
+    },
+    "300456": {
+      "name": "赛微电子",
+      "type": "stock",
+      "in_holdings": false,
+      "added_at": "2026-08-05",
+      "status": "monitoring",
+      "suggested_qty": 0,
+      "suggested_price": 0,
+      "capital_required": 0,
+      "last_check_date": null,
+      "composite_score": 0,
+      "signal_history": [],
+      "criteria_met": {
+        "macd_golden": false,
+        "boll_mid_support": false,
+        "rsi_healthy": false,
+        "volume_shrink": false,
+        "support_retest": false
+      }
+    },
+    "588170": {
+      "name": "科创半导体ETF华夏",
+      "type": "etf",
+      "in_holdings": true,
+      "added_at": "2026-08-05",
+      "status": "monitoring",
+      "suggested_qty": 0,
+      "suggested_price": 0,
+      "capital_required": 0,
+      "last_check_date": null,
+      "composite_score": 0,
+      "signal_history": [],
+      "criteria_met": {
+        "macd_golden": false,
+        "boll_mid_support": false,
+        "rsi_healthy": false,
+        "volume_shrink": false,
+        "support_retest": false
+      }
+    },
+    "600089": {
+      "name": "特变电工",
+      "type": "stock",
+      "in_holdings": false,
+      "added_at": "2026-08-05",
+      "status": "monitoring",
+      "suggested_qty": 0,
+      "suggested_price": 0,
+      "capital_required": 0,
+      "last_check_date": null,
+      "composite_score": 0,
+      "signal_history": [],
+      "criteria_met": {
+        "macd_golden": false,
+        "boll_mid_support": false,
+        "rsi_healthy": false,
+        "volume_shrink": false,
+        "support_retest": false
+      }
+    },
+    "600481": {
+      "name": "双良节能",
+      "type": "stock",
+      "in_holdings": true,
+      "added_at": "2026-08-05",
+      "status": "monitoring",
+      "suggested_qty": 0,
+      "suggested_price": 0,
+      "capital_required": 0,
+      "last_check_date": null,
+      "composite_score": 0,
+      "signal_history": [],
+      "criteria_met": {
+        "macd_golden": false,
+        "boll_mid_support": false,
+        "rsi_healthy": false,
+        "volume_shrink": false,
+        "support_retest": false
+      }
+    },
+    "600584": {
+      "name": "长电科技",
+      "type": "stock",
+      "in_holdings": false,
+      "added_at": "2026-08-05",
+      "status": "monitoring",
+      "suggested_qty": 0,
+      "suggested_price": 0,
+      "capital_required": 0,
+      "last_check_date": null,
+      "composite_score": 0,
+      "signal_history": [],
+      "criteria_met": {
+        "macd_golden": false,
+        "boll_mid_support": false,
+        "rsi_healthy": false,
+        "volume_shrink": false,
+        "support_retest": false
+      }
+    },
+    "600977": {
+      "name": "中国电影",
+      "type": "stock",
+      "in_holdings": false,
+      "added_at": "2026-08-05",
+      "status": "monitoring",
+      "suggested_qty": 0,
+      "suggested_price": 0,
+      "capital_required": 0,
+      "last_check_date": null,
+      "composite_score": 0,
+      "signal_history": [],
+      "criteria_met": {
+        "macd_golden": false,
+        "boll_mid_support": false,
+        "rsi_healthy": false,
+        "volume_shrink": false,
+        "support_retest": false
+      }
+    },
+    "603667": {
+      "name": "五洲新春",
+      "type": "stock",
+      "in_holdings": true,
+      "added_at": "2026-08-05",
+      "status": "monitoring",
+      "suggested_qty": 0,
+      "suggested_price": 0,
+      "capital_required": 0,
+      "last_check_date": null,
+      "composite_score": 0,
+      "signal_history": [],
+      "criteria_met": {
+        "macd_golden": false,
+        "boll_mid_support": false,
+        "rsi_healthy": false,
+        "volume_shrink": false,
+        "support_retest": false
+      }
+    }
+  }
+}
