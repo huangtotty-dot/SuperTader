@@ -20,6 +20,60 @@
           "score": 20,
           "verdict": "weak",
           "price": 100.22
+        },
+        {
+          "date": "2026-08-05",
+          "score": 20,
+          "verdict": "weak",
+          "price": 100.22
+        },
+        {
+          "date": "2026-08-05",
+          "score": 20,
+          "verdict": "weak",
+          "price": 100.22
+        },
+        {
+          "date": "2026-08-05",
+          "score": 20,
+          "verdict": "weak",
+          "price": 100.22
+        },
+        {
+          "date": "2026-08-05",
+          "score": 20,
+          "verdict": "weak",
+          "price": 100.22
+        },
+        {
+          "date": "2026-08-05",
+          "score": 20,
+          "verdict": "weak",
+          "price": 100.22
+        },
+        {
+          "date": "2026-08-05",
+          "score": 20,
+          "verdict": "weak",
+          "price": 100.22
+        },
+        {
+          "date": "2026-08-05",
+          "score": 20,
+          "verdict": "weak",
+          "price": 100.22
+        },
+        {
+          "date": "2026-08-05",
+          "score": 20,
+          "verdict": "weak",
+          "price": 100.22
+        },
+        {
+          "date": "2026-08-05",
+          "score": 20,
+          "verdict": "weak",
+          "price": 100.22
         }
       ],
       "criteria_met": {
@@ -37,18 +91,55 @@
       "added_at": "2026-08-05",
       "status": "monitoring",
       "suggested_qty": 0,
-      "suggested_price": 0,
-      "capital_required": 0,
+      "suggested_price": 0.0,
+      "capital_required": 0.0,
       "last_check_date": null,
       "composite_score": 0,
-      "signal_history": [],
-      "criteria_met": {
-        "macd_golden": false,
-        "boll_mid_support": false,
-        "rsi_healthy": false,
-        "volume_shrink": false,
-        "support_retest": false
-      }
+      "signal_history": [
+        {
+          "date": null,
+          "score": 0,
+          "verdict": "insufficient_data",
+          "price": null
+        },
+        {
+          "date": null,
+          "score": 0,
+          "verdict": "insufficient_data",
+          "price": null
+        },
+        {
+          "date": null,
+          "score": 0,
+          "verdict": "insufficient_data",
+          "price": null
+        },
+        {
+          "date": null,
+          "score": 0,
+          "verdict": "insufficient_data",
+          "price": null
+        },
+        {
+          "date": null,
+          "score": 0,
+          "verdict": "insufficient_data",
+          "price": null
+        },
+        {
+          "date": null,
+          "score": 0,
+          "verdict": "insufficient_data",
+          "price": null
+        },
+        {
+          "date": null,
+          "score": 0,
+          "verdict": "insufficient_data",
+          "price": null
+        }
+      ],
+      "criteria_met": {}
     },
     "002202": {
       "name": "金风科技",
@@ -57,18 +148,55 @@
       "added_at": "2026-08-05",
       "status": "monitoring",
       "suggested_qty": 0,
-      "suggested_price": 0,
-      "capital_required": 0,
+      "suggested_price": 0.0,
+      "capital_required": 0.0,
       "last_check_date": null,
       "composite_score": 0,
-      "signal_history": [],
-      "criteria_met": {
-        "macd_golden": false,
-        "boll_mid_support": false,
-        "rsi_healthy": false,
-        "volume_shrink": false,
-        "support_retest": false
-      }
+      "signal_history": [
+        {
+          "date": null,
+          "score": 0,
+          "verdict": "insufficient_data",
+          "price": null
+        },
+        {
+          "date": null,
+          "score": 0,
+          "verdict": "insufficient_data",
+          "price": null
+        },
+        {
+          "date": null,
+          "score": 0,
+          "verdict": "insufficient_data",
+          "price": null
+        },
+        {
+          "date": null,
+          "score": 0,
+          "verdict": "insufficient_data",
+          "price": null
+        },
+        {
+          "date": null,
+          "score": 0,
+          "verdict": "insufficient_data",
+          "price": null
+        },
+        {
+          "date": null,
+          "score": 0,
+          "verdict": "insufficient_data",
+          "price": null
+        },
+        {
+          "date": null,
+          "score": 0,
+          "verdict": "insufficient_data",
+          "price": null
+        }
+      ],
+      "criteria_met": {}
     },
     "002261": {
       "name": "拓维信息",
@@ -77,18 +205,55 @@
       "added_at": "2026-08-05",
       "status": "monitoring",
       "suggested_qty": 0,
-      "suggested_price": 0,
-      "capital_required": 0,
+      "suggested_price": 0.0,
+      "capital_required": 0.0,
       "last_check_date": null,
       "composite_score": 0,
-      "signal_history": [],
-      "criteria_met": {
-        "macd_golden": false,
-        "boll_mid_support": false,
-        "rsi_healthy": false,
-        "volume_shrink": false,
-        "support_retest": false
-      }
+      "signal_history": [
+        {
+          "date": null,
+          "score": 0,
+          "verdict": "insufficient_data",
+          "price": null
+        },
+        {
+          "date": null,
+          "score": 0,
+          "verdict": "insufficient_data",
+          "price": null
+        },
+        {
+          "date": null,
+          "score": 0,
+          "verdict": "insufficient_data",
+          "price": null
+        },
+        {
+          "date": null,
+          "score": 0,
+          "verdict": "insufficient_data",
+          "price": null
+        },
+        {
+          "date": null,
+          "score": 0,
+          "verdict": "insufficient_data",
+          "price": null
+        },
+        {
+          "date": null,
+          "score": 0,
+          "verdict": "insufficient_data",
+          "price": null
+        },
+        {
+          "date": null,
+          "score": 0,
+          "verdict": "insufficient_data",
+          "price": null
+        }
+      ],
+      "criteria_met": {}
     },
     "002451": {
       "name": "摩恩电气",
@@ -97,18 +262,55 @@
       "added_at": "2026-08-05",
       "status": "monitoring",
       "suggested_qty": 0,
-      "suggested_price": 0,
-      "capital_required": 0,
+      "suggested_price": 0.0,
+      "capital_required": 0.0,
       "last_check_date": null,
       "composite_score": 0,
-      "signal_history": [],
-      "criteria_met": {
-        "macd_golden": false,
-        "boll_mid_support": false,
-        "rsi_healthy": false,
-        "volume_shrink": false,
-        "support_retest": false
-      }
+      "signal_history": [
+        {
+          "date": null,
+          "score": 0,
+          "verdict": "insufficient_data",
+          "price": null
+        },
+        {
+          "date": null,
+          "score": 0,
+          "verdict": "insufficient_data",
+          "price": null
+        },
+        {
+          "date": null,
+          "score": 0,
+          "verdict": "insufficient_data",
+          "price": null
+        },
+        {
+          "date": null,
+          "score": 0,
+          "verdict": "insufficient_data",
+          "price": null
+        },
+        {
+          "date": null,
+          "score": 0,
+          "verdict": "insufficient_data",
+          "price": null
+        },
+        {
+          "date": null,
+          "score": 0,
+          "verdict": "insufficient_data",
+          "price": null
+        },
+        {
+          "date": null,
+          "score": 0,
+          "verdict": "insufficient_data",
+          "price": null
+        }
+      ],
+      "criteria_met": {}
     },
     "002536": {
       "name": "飞龙股份",
@@ -117,18 +319,55 @@
       "added_at": "2026-08-05",
       "status": "monitoring",
       "suggested_qty": 0,
-      "suggested_price": 0,
-      "capital_required": 0,
+      "suggested_price": 0.0,
+      "capital_required": 0.0,
       "last_check_date": null,
       "composite_score": 0,
-      "signal_history": [],
-      "criteria_met": {
-        "macd_golden": false,
-        "boll_mid_support": false,
-        "rsi_healthy": false,
-        "volume_shrink": false,
-        "support_retest": false
-      }
+      "signal_history": [
+        {
+          "date": null,
+          "score": 0,
+          "verdict": "insufficient_data",
+          "price": null
+        },
+        {
+          "date": null,
+          "score": 0,
+          "verdict": "insufficient_data",
+          "price": null
+        },
+        {
+          "date": null,
+          "score": 0,
+          "verdict": "insufficient_data",
+          "price": null
+        },
+        {
+          "date": null,
+          "score": 0,
+          "verdict": "insufficient_data",
+          "price": null
+        },
+        {
+          "date": null,
+          "score": 0,
+          "verdict": "insufficient_data",
+          "price": null
+        },
+        {
+          "date": null,
+          "score": 0,
+          "verdict": "insufficient_data",
+          "price": null
+        },
+        {
+          "date": null,
+          "score": 0,
+          "verdict": "insufficient_data",
+          "price": null
+        }
+      ],
+      "criteria_met": {}
     },
     "002600": {
       "name": "领益智造",
@@ -137,18 +376,55 @@
       "added_at": "2026-08-05",
       "status": "monitoring",
       "suggested_qty": 0,
-      "suggested_price": 0,
-      "capital_required": 0,
+      "suggested_price": 0.0,
+      "capital_required": 0.0,
       "last_check_date": null,
       "composite_score": 0,
-      "signal_history": [],
-      "criteria_met": {
-        "macd_golden": false,
-        "boll_mid_support": false,
-        "rsi_healthy": false,
-        "volume_shrink": false,
-        "support_retest": false
-      }
+      "signal_history": [
+        {
+          "date": null,
+          "score": 0,
+          "verdict": "insufficient_data",
+          "price": null
+        },
+        {
+          "date": null,
+          "score": 0,
+          "verdict": "insufficient_data",
+          "price": null
+        },
+        {
+          "date": null,
+          "score": 0,
+          "verdict": "insufficient_data",
+          "price": null
+        },
+        {
+          "date": null,
+          "score": 0,
+          "verdict": "insufficient_data",
+          "price": null
+        },
+        {
+          "date": null,
+          "score": 0,
+          "verdict": "insufficient_data",
+          "price": null
+        },
+        {
+          "date": null,
+          "score": 0,
+          "verdict": "insufficient_data",
+          "price": null
+        },
+        {
+          "date": null,
+          "score": 0,
+          "verdict": "insufficient_data",
+          "price": null
+        }
+      ],
+      "criteria_met": {}
     },
     "002639": {
       "name": "雪人集团",
@@ -156,16 +432,59 @@
       "in_holdings": true,
       "added_at": "2026-08-05",
       "status": "monitoring",
-      "suggested_qty": 0,
-      "suggested_price": 0,
-      "capital_required": 0,
-      "last_check_date": null,
-      "composite_score": 0,
-      "signal_history": [],
+      "suggested_qty": 4600,
+      "suggested_price": 12.87,
+      "capital_required": 59202.0,
+      "last_check_date": "2026-08-05",
+      "composite_score": 40,
+      "signal_history": [
+        {
+          "date": "2026-08-05",
+          "score": 40,
+          "verdict": "approaching",
+          "price": 12.87
+        },
+        {
+          "date": "2026-08-05",
+          "score": 40,
+          "verdict": "approaching",
+          "price": 12.87
+        },
+        {
+          "date": "2026-08-05",
+          "score": 40,
+          "verdict": "approaching",
+          "price": 12.87
+        },
+        {
+          "date": "2026-08-05",
+          "score": 40,
+          "verdict": "approaching",
+          "price": 12.87
+        },
+        {
+          "date": "2026-08-05",
+          "score": 40,
+          "verdict": "approaching",
+          "price": 12.87
+        },
+        {
+          "date": "2026-08-05",
+          "score": 40,
+          "verdict": "approaching",
+          "price": 12.87
+        },
+        {
+          "date": "2026-08-05",
+          "score": 40,
+          "verdict": "approaching",
+          "price": 12.87
+        }
+      ],
       "criteria_met": {
-        "macd_golden": false,
+        "macd_golden": true,
         "boll_mid_support": false,
-        "rsi_healthy": false,
+        "rsi_healthy": true,
         "volume_shrink": false,
         "support_retest": false
       }
@@ -177,18 +496,55 @@
       "added_at": "2026-08-05",
       "status": "monitoring",
       "suggested_qty": 0,
-      "suggested_price": 0,
-      "capital_required": 0,
+      "suggested_price": 0.0,
+      "capital_required": 0.0,
       "last_check_date": null,
       "composite_score": 0,
-      "signal_history": [],
-      "criteria_met": {
-        "macd_golden": false,
-        "boll_mid_support": false,
-        "rsi_healthy": false,
-        "volume_shrink": false,
-        "support_retest": false
-      }
+      "signal_history": [
+        {
+          "date": null,
+          "score": 0,
+          "verdict": "insufficient_data",
+          "price": null
+        },
+        {
+          "date": null,
+          "score": 0,
+          "verdict": "insufficient_data",
+          "price": null
+        },
+        {
+          "date": null,
+          "score": 0,
+          "verdict": "insufficient_data",
+          "price": null
+        },
+        {
+          "date": null,
+          "score": 0,
+          "verdict": "insufficient_data",
+          "price": null
+        },
+        {
+          "date": null,
+          "score": 0,
+          "verdict": "insufficient_data",
+          "price": null
+        },
+        {
+          "date": null,
+          "score": 0,
+          "verdict": "insufficient_data",
+          "price": null
+        },
+        {
+          "date": null,
+          "score": 0,
+          "verdict": "insufficient_data",
+          "price": null
+        }
+      ],
+      "criteria_met": {}
     },
     "300058": {
       "name": "蓝色光标",
@@ -197,18 +553,55 @@
       "added_at": "2026-08-05",
       "status": "monitoring",
       "suggested_qty": 0,
-      "suggested_price": 0,
-      "capital_required": 0,
+      "suggested_price": 0.0,
+      "capital_required": 0.0,
       "last_check_date": null,
       "composite_score": 0,
-      "signal_history": [],
-      "criteria_met": {
-        "macd_golden": false,
-        "boll_mid_support": false,
-        "rsi_healthy": false,
-        "volume_shrink": false,
-        "support_retest": false
-      }
+      "signal_history": [
+        {
+          "date": null,
+          "score": 0,
+          "verdict": "insufficient_data",
+          "price": null
+        },
+        {
+          "date": null,
+          "score": 0,
+          "verdict": "insufficient_data",
+          "price": null
+        },
+        {
+          "date": null,
+          "score": 0,
+          "verdict": "insufficient_data",
+          "price": null
+        },
+        {
+          "date": null,
+          "score": 0,
+          "verdict": "insufficient_data",
+          "price": null
+        },
+        {
+          "date": null,
+          "score": 0,
+          "verdict": "insufficient_data",
+          "price": null
+        },
+        {
+          "date": null,
+          "score": 0,
+          "verdict": "insufficient_data",
+          "price": null
+        },
+        {
+          "date": null,
+          "score": 0,
+          "verdict": "insufficient_data",
+          "price": null
+        }
+      ],
+      "criteria_met": {}
     },
     "300153": {
       "name": "科泰电源",
@@ -216,18 +609,61 @@
       "in_holdings": true,
       "added_at": "2026-08-05",
       "status": "monitoring",
-      "suggested_qty": 0,
-      "suggested_price": 0,
-      "capital_required": 0,
-      "last_check_date": null,
-      "composite_score": 0,
-      "signal_history": [],
+      "suggested_qty": 2700,
+      "suggested_price": 21.62,
+      "capital_required": 58374.0,
+      "last_check_date": "2026-08-05",
+      "composite_score": 60,
+      "signal_history": [
+        {
+          "date": "2026-08-05",
+          "score": 60,
+          "verdict": "approaching",
+          "price": 21.62
+        },
+        {
+          "date": "2026-08-05",
+          "score": 60,
+          "verdict": "approaching",
+          "price": 21.62
+        },
+        {
+          "date": "2026-08-05",
+          "score": 60,
+          "verdict": "approaching",
+          "price": 21.62
+        },
+        {
+          "date": "2026-08-05",
+          "score": 60,
+          "verdict": "approaching",
+          "price": 21.62
+        },
+        {
+          "date": "2026-08-05",
+          "score": 60,
+          "verdict": "approaching",
+          "price": 21.62
+        },
+        {
+          "date": "2026-08-05",
+          "score": 60,
+          "verdict": "approaching",
+          "price": 21.62
+        },
+        {
+          "date": "2026-08-05",
+          "score": 60,
+          "verdict": "approaching",
+          "price": 21.62
+        }
+      ],
       "criteria_met": {
         "macd_golden": false,
-        "boll_mid_support": false,
-        "rsi_healthy": false,
+        "boll_mid_support": true,
+        "rsi_healthy": true,
         "volume_shrink": false,
-        "support_retest": false
+        "support_retest": true
       }
     },
     "300364": {
@@ -237,18 +673,55 @@
       "added_at": "2026-08-05",
       "status": "monitoring",
       "suggested_qty": 0,
-      "suggested_price": 0,
-      "capital_required": 0,
+      "suggested_price": 0.0,
+      "capital_required": 0.0,
       "last_check_date": null,
       "composite_score": 0,
-      "signal_history": [],
-      "criteria_met": {
-        "macd_golden": false,
-        "boll_mid_support": false,
-        "rsi_healthy": false,
-        "volume_shrink": false,
-        "support_retest": false
-      }
+      "signal_history": [
+        {
+          "date": null,
+          "score": 0,
+          "verdict": "insufficient_data",
+          "price": null
+        },
+        {
+          "date": null,
+          "score": 0,
+          "verdict": "insufficient_data",
+          "price": null
+        },
+        {
+          "date": null,
+          "score": 0,
+          "verdict": "insufficient_data",
+          "price": null
+        },
+        {
+          "date": null,
+          "score": 0,
+          "verdict": "insufficient_data",
+          "price": null
+        },
+        {
+          "date": null,
+          "score": 0,
+          "verdict": "insufficient_data",
+          "price": null
+        },
+        {
+          "date": null,
+          "score": 0,
+          "verdict": "insufficient_data",
+          "price": null
+        },
+        {
+          "date": null,
+          "score": 0,
+          "verdict": "insufficient_data",
+          "price": null
+        }
+      ],
+      "criteria_met": {}
     },
     "300456": {
       "name": "赛微电子",
@@ -257,18 +730,55 @@
       "added_at": "2026-08-05",
       "status": "monitoring",
       "suggested_qty": 0,
-      "suggested_price": 0,
-      "capital_required": 0,
+      "suggested_price": 0.0,
+      "capital_required": 0.0,
       "last_check_date": null,
       "composite_score": 0,
-      "signal_history": [],
-      "criteria_met": {
-        "macd_golden": false,
-        "boll_mid_support": false,
-        "rsi_healthy": false,
-        "volume_shrink": false,
-        "support_retest": false
-      }
+      "signal_history": [
+        {
+          "date": null,
+          "score": 0,
+          "verdict": "insufficient_data",
+          "price": null
+        },
+        {
+          "date": null,
+          "score": 0,
+          "verdict": "insufficient_data",
+          "price": null
+        },
+        {
+          "date": null,
+          "score": 0,
+          "verdict": "insufficient_data",
+          "price": null
+        },
+        {
+          "date": null,
+          "score": 0,
+          "verdict": "insufficient_data",
+          "price": null
+        },
+        {
+          "date": null,
+          "score": 0,
+          "verdict": "insufficient_data",
+          "price": null
+        },
+        {
+          "date": null,
+          "score": 0,
+          "verdict": "insufficient_data",
+          "price": null
+        },
+        {
+          "date": null,
+          "score": 0,
+          "verdict": "insufficient_data",
+          "price": null
+        }
+      ],
+      "criteria_met": {}
     },
     "588170": {
       "name": "科创半导体ETF华夏",
@@ -276,16 +786,59 @@
       "in_holdings": true,
       "added_at": "2026-08-05",
       "status": "monitoring",
-      "suggested_qty": 0,
-      "suggested_price": 0,
-      "capital_required": 0,
-      "last_check_date": null,
-      "composite_score": 0,
-      "signal_history": [],
+      "suggested_qty": 63500,
+      "suggested_price": 0.944,
+      "capital_required": 59944.0,
+      "last_check_date": "2026-08-05",
+      "composite_score": 40,
+      "signal_history": [
+        {
+          "date": "2026-08-05",
+          "score": 40,
+          "verdict": "approaching",
+          "price": 0.944
+        },
+        {
+          "date": "2026-08-05",
+          "score": 40,
+          "verdict": "approaching",
+          "price": 0.944
+        },
+        {
+          "date": "2026-08-05",
+          "score": 40,
+          "verdict": "approaching",
+          "price": 0.944
+        },
+        {
+          "date": "2026-08-05",
+          "score": 40,
+          "verdict": "approaching",
+          "price": 0.944
+        },
+        {
+          "date": "2026-08-05",
+          "score": 40,
+          "verdict": "approaching",
+          "price": 0.944
+        },
+        {
+          "date": "2026-08-05",
+          "score": 40,
+          "verdict": "approaching",
+          "price": 0.944
+        },
+        {
+          "date": "2026-08-05",
+          "score": 40,
+          "verdict": "approaching",
+          "price": 0.944
+        }
+      ],
       "criteria_met": {
         "macd_golden": false,
-        "boll_mid_support": false,
-        "rsi_healthy": false,
+        "boll_mid_support": true,
+        "rsi_healthy": true,
         "volume_shrink": false,
         "support_retest": false
       }
@@ -297,18 +850,55 @@
       "added_at": "2026-08-05",
       "status": "monitoring",
       "suggested_qty": 0,
-      "suggested_price": 0,
-      "capital_required": 0,
+      "suggested_price": 0.0,
+      "capital_required": 0.0,
       "last_check_date": null,
       "composite_score": 0,
-      "signal_history": [],
-      "criteria_met": {
-        "macd_golden": false,
-        "boll_mid_support": false,
-        "rsi_healthy": false,
-        "volume_shrink": false,
-        "support_retest": false
-      }
+      "signal_history": [
+        {
+          "date": null,
+          "score": 0,
+          "verdict": "insufficient_data",
+          "price": null
+        },
+        {
+          "date": null,
+          "score": 0,
+          "verdict": "insufficient_data",
+          "price": null
+        },
+        {
+          "date": null,
+          "score": 0,
+          "verdict": "insufficient_data",
+          "price": null
+        },
+        {
+          "date": null,
+          "score": 0,
+          "verdict": "insufficient_data",
+          "price": null
+        },
+        {
+          "date": null,
+          "score": 0,
+          "verdict": "insufficient_data",
+          "price": null
+        },
+        {
+          "date": null,
+          "score": 0,
+          "verdict": "insufficient_data",
+          "price": null
+        },
+        {
+          "date": null,
+          "score": 0,
+          "verdict": "insufficient_data",
+          "price": null
+        }
+      ],
+      "criteria_met": {}
     },
     "600481": {
       "name": "双良节能",
@@ -316,18 +906,61 @@
       "in_holdings": true,
       "added_at": "2026-08-05",
       "status": "monitoring",
-      "suggested_qty": 0,
-      "suggested_price": 0,
-      "capital_required": 0,
-      "last_check_date": null,
-      "composite_score": 0,
-      "signal_history": [],
+      "suggested_qty": 13700,
+      "suggested_price": 4.35,
+      "capital_required": 59595.0,
+      "last_check_date": "2026-08-05",
+      "composite_score": 60,
+      "signal_history": [
+        {
+          "date": "2026-08-05",
+          "score": 60,
+          "verdict": "approaching",
+          "price": 4.35
+        },
+        {
+          "date": "2026-08-05",
+          "score": 60,
+          "verdict": "approaching",
+          "price": 4.35
+        },
+        {
+          "date": "2026-08-05",
+          "score": 60,
+          "verdict": "approaching",
+          "price": 4.35
+        },
+        {
+          "date": "2026-08-05",
+          "score": 60,
+          "verdict": "approaching",
+          "price": 4.35
+        },
+        {
+          "date": "2026-08-05",
+          "score": 60,
+          "verdict": "approaching",
+          "price": 4.35
+        },
+        {
+          "date": "2026-08-05",
+          "score": 60,
+          "verdict": "approaching",
+          "price": 4.35
+        },
+        {
+          "date": "2026-08-05",
+          "score": 60,
+          "verdict": "approaching",
+          "price": 4.35
+        }
+      ],
       "criteria_met": {
-        "macd_golden": false,
+        "macd_golden": true,
         "boll_mid_support": false,
-        "rsi_healthy": false,
+        "rsi_healthy": true,
         "volume_shrink": false,
-        "support_retest": false
+        "support_retest": true
       }
     },
     "600584": {
@@ -337,18 +970,55 @@
       "added_at": "2026-08-05",
       "status": "monitoring",
       "suggested_qty": 0,
-      "suggested_price": 0,
-      "capital_required": 0,
+      "suggested_price": 0.0,
+      "capital_required": 0.0,
       "last_check_date": null,
       "composite_score": 0,
-      "signal_history": [],
-      "criteria_met": {
-        "macd_golden": false,
-        "boll_mid_support": false,
-        "rsi_healthy": false,
-        "volume_shrink": false,
-        "support_retest": false
-      }
+      "signal_history": [
+        {
+          "date": null,
+          "score": 0,
+          "verdict": "insufficient_data",
+          "price": null
+        },
+        {
+          "date": null,
+          "score": 0,
+          "verdict": "insufficient_data",
+          "price": null
+        },
+        {
+          "date": null,
+          "score": 0,
+          "verdict": "insufficient_data",
+          "price": null
+        },
+        {
+          "date": null,
+          "score": 0,
+          "verdict": "insufficient_data",
+          "price": null
+        },
+        {
+          "date": null,
+          "score": 0,
+          "verdict": "insufficient_data",
+          "price": null
+        },
+        {
+          "date": null,
+          "score": 0,
+          "verdict": "insufficient_data",
+          "price": null
+        },
+        {
+          "date": null,
+          "score": 0,
+          "verdict": "insufficient_data",
+          "price": null
+        }
+      ],
+      "criteria_met": {}
     },
     "600977": {
       "name": "中国电影",
@@ -357,18 +1027,55 @@
       "added_at": "2026-08-05",
       "status": "monitoring",
       "suggested_qty": 0,
-      "suggested_price": 0,
-      "capital_required": 0,
+      "suggested_price": 0.0,
+      "capital_required": 0.0,
       "last_check_date": null,
       "composite_score": 0,
-      "signal_history": [],
-      "criteria_met": {
-        "macd_golden": false,
-        "boll_mid_support": false,
-        "rsi_healthy": false,
-        "volume_shrink": false,
-        "support_retest": false
-      }
+      "signal_history": [
+        {
+          "date": null,
+          "score": 0,
+          "verdict": "insufficient_data",
+          "price": null
+        },
+        {
+          "date": null,
+          "score": 0,
+          "verdict": "insufficient_data",
+          "price": null
+        },
+        {
+          "date": null,
+          "score": 0,
+          "verdict": "insufficient_data",
+          "price": null
+        },
+        {
+          "date": null,
+          "score": 0,
+          "verdict": "insufficient_data",
+          "price": null
+        },
+        {
+          "date": null,
+          "score": 0,
+          "verdict": "insufficient_data",
+          "price": null
+        },
+        {
+          "date": null,
+          "score": 0,
+          "verdict": "insufficient_data",
+          "price": null
+        },
+        {
+          "date": null,
+          "score": 0,
+          "verdict": "insufficient_data",
+          "price": null
+        }
+      ],
+      "criteria_met": {}
     },
     "603667": {
       "name": "五洲新春",
@@ -376,18 +1083,61 @@
       "in_holdings": true,
       "added_at": "2026-08-05",
       "status": "monitoring",
-      "suggested_qty": 0,
-      "suggested_price": 0,
-      "capital_required": 0,
-      "last_check_date": null,
-      "composite_score": 0,
-      "signal_history": [],
+      "suggested_qty": 1000,
+      "suggested_price": 54.96,
+      "capital_required": 54960.0,
+      "last_check_date": "2026-08-05",
+      "composite_score": 60,
+      "signal_history": [
+        {
+          "date": "2026-08-05",
+          "score": 60,
+          "verdict": "approaching",
+          "price": 54.96
+        },
+        {
+          "date": "2026-08-05",
+          "score": 60,
+          "verdict": "approaching",
+          "price": 54.96
+        },
+        {
+          "date": "2026-08-05",
+          "score": 60,
+          "verdict": "approaching",
+          "price": 54.96
+        },
+        {
+          "date": "2026-08-05",
+          "score": 60,
+          "verdict": "approaching",
+          "price": 54.96
+        },
+        {
+          "date": "2026-08-05",
+          "score": 60,
+          "verdict": "approaching",
+          "price": 54.96
+        },
+        {
+          "date": "2026-08-05",
+          "score": 60,
+          "verdict": "approaching",
+          "price": 54.96
+        },
+        {
+          "date": "2026-08-05",
+          "score": 60,
+          "verdict": "approaching",
+          "price": 54.96
+        }
+      ],
       "criteria_met": {
         "macd_golden": false,
-        "boll_mid_support": false,
-        "rsi_healthy": false,
+        "boll_mid_support": true,
+        "rsi_healthy": true,
         "volume_shrink": false,
-        "support_retest": false
+        "support_retest": true
       }
     }
   }

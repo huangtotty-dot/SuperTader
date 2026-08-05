@@ -6,44 +6,8 @@
     "prev": null
   },
   "K1_closed_pnl": {
-    "total_est_pnl": 1.47,
-    "by_code": {
-      "588170": {
-        "sold": 1300,
-        "bought": 500,
-        "unrebuilt": 800,
-        "est_pnl": 1.47,
-        "qty_diff": 0
-      },
-      "600176": {
-        "sold": 0,
-        "bought": 0,
-        "unrebuilt": 0,
-        "est_pnl": 0.0,
-        "qty_diff": 0
-      },
-      "600481": {
-        "sold": 0,
-        "bought": 0,
-        "unrebuilt": 0,
-        "est_pnl": 0.0,
-        "qty_diff": 0
-      },
-      "603667": {
-        "sold": 0,
-        "bought": 0,
-        "unrebuilt": 0,
-        "est_pnl": 0.0,
-        "qty_diff": 0
-      },
-      "000988": {
-        "sold": 0,
-        "bought": 0,
-        "unrebuilt": 0,
-        "est_pnl": 0.0,
-        "qty_diff": 0
-      }
-    },
+    "total_est_pnl": null,
+    "by_code": {},
     "source": "t_io/logs/closure_audit.jsonl"
   },
   "K2_cost_change": {
@@ -74,6 +38,21 @@
         "cost_now": 60.867,
         "cost_prev": null,
         "delta": null
+      },
+      "002639": {
+        "cost_now": null,
+        "cost_prev": null,
+        "delta": null
+      },
+      "300153": {
+        "cost_now": null,
+        "cost_prev": null,
+        "delta": null
+      },
+      "300364": {
+        "cost_now": null,
+        "cost_prev": null,
+        "delta": null
       }
     },
     "snapshot": "t_io\\state\\holdings_2026-08-03.json"
@@ -86,27 +65,15 @@
         "t_qty_prev": null,
         "drift": 0,
         "attribution": "无漂移",
-        "audit": {
-          "sold": 0,
-          "bought": 0,
-          "unrebuilt": 0,
-          "est_pnl": 0.0,
-          "qty_diff": 0
-        },
+        "audit": null,
         "source": "eod_sync（无同步记录=无漂移）"
       },
       "588170": {
         "t_qty_now": 3200,
         "t_qty_prev": null,
         "drift": -800,
-        "attribution": "未接回（卖1300/接回500，800股未接回）",
-        "audit": {
-          "sold": 1300,
-          "bought": 500,
-          "unrebuilt": 800,
-          "est_pnl": 1.47,
-          "qty_diff": 0
-        },
+        "attribution": "需人工确认",
+        "audit": null,
         "source": "eod_sync+closure_audit"
       },
       "600176": {
@@ -114,13 +81,7 @@
         "t_qty_prev": null,
         "drift": 0,
         "attribution": "无漂移",
-        "audit": {
-          "sold": 0,
-          "bought": 0,
-          "unrebuilt": 0,
-          "est_pnl": 0.0,
-          "qty_diff": 0
-        },
+        "audit": null,
         "source": "eod_sync（无同步记录=无漂移）"
       },
       "600481": {
@@ -128,13 +89,7 @@
         "t_qty_prev": null,
         "drift": 0,
         "attribution": "无漂移",
-        "audit": {
-          "sold": 0,
-          "bought": 0,
-          "unrebuilt": 0,
-          "est_pnl": 0.0,
-          "qty_diff": 0
-        },
+        "audit": null,
         "source": "eod_sync（无同步记录=无漂移）"
       },
       "603667": {
@@ -142,13 +97,31 @@
         "t_qty_prev": null,
         "drift": 0,
         "attribution": "无漂移",
-        "audit": {
-          "sold": 0,
-          "bought": 0,
-          "unrebuilt": 0,
-          "est_pnl": 0.0,
-          "qty_diff": 0
-        },
+        "audit": null,
+        "source": "eod_sync（无同步记录=无漂移）"
+      },
+      "002639": {
+        "t_qty_now": null,
+        "t_qty_prev": null,
+        "drift": 0,
+        "attribution": "无漂移",
+        "audit": null,
+        "source": "eod_sync（无同步记录=无漂移）"
+      },
+      "300153": {
+        "t_qty_now": null,
+        "t_qty_prev": null,
+        "drift": 0,
+        "attribution": "无漂移",
+        "audit": null,
+        "source": "eod_sync（无同步记录=无漂移）"
+      },
+      "300364": {
+        "t_qty_now": null,
+        "t_qty_prev": null,
+        "drift": 0,
+        "attribution": "无漂移",
+        "audit": null,
         "source": "eod_sync（无同步记录=无漂移）"
       }
     },

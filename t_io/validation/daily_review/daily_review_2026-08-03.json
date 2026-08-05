@@ -111,6 +111,39 @@
       "振幅%": 1.67,
       "day_type": "chop_day",
       "above_avg_ratio": 0.59
+    },
+    "002639": {
+      "ticks": 0,
+      "nan_ticks": 0,
+      "buy_signals": 0,
+      "sell_signals": 0,
+      "buy_first_last": null,
+      "sell_first_last": null,
+      "max_buy_score": null,
+      "max_sell_score": null,
+      "day_type": "unknown"
+    },
+    "300153": {
+      "ticks": 0,
+      "nan_ticks": 0,
+      "buy_signals": 0,
+      "sell_signals": 0,
+      "buy_first_last": null,
+      "sell_first_last": null,
+      "max_buy_score": null,
+      "max_sell_score": null,
+      "day_type": "unknown"
+    },
+    "300364": {
+      "ticks": 0,
+      "nan_ticks": 0,
+      "buy_signals": 0,
+      "sell_signals": 0,
+      "buy_first_last": null,
+      "sell_first_last": null,
+      "max_buy_score": null,
+      "max_sell_score": null,
+      "day_type": "unknown"
     }
   },
   "shadow_total": 333,
@@ -247,46 +280,8 @@
       }
     ]
   },
-  "closed_loop": {
-    "588170": {
-      "sold": 1300,
-      "bought": 500,
-      "unrebuilt": 800,
-      "est_pnl": 1.47,
-      "qty_diff": 0
-    },
-    "600176": {
-      "sold": 0,
-      "bought": 0,
-      "unrebuilt": 0,
-      "est_pnl": 0.0,
-      "qty_diff": 0
-    },
-    "600481": {
-      "sold": 0,
-      "bought": 0,
-      "unrebuilt": 0,
-      "est_pnl": 0.0,
-      "qty_diff": 0
-    },
-    "603667": {
-      "sold": 0,
-      "bought": 0,
-      "unrebuilt": 0,
-      "est_pnl": 0.0,
-      "qty_diff": 0
-    },
-    "000988": {
-      "sold": 0,
-      "bought": 0,
-      "unrebuilt": 0,
-      "est_pnl": 0.0,
-      "qty_diff": 0
-    }
-  },
-  "audit_problems": [
-    "• 科创半导体ETF华夏(588170) 已卖 1300 / 未接回 **800** → 建议尾盘接回价 ≈0.85（参考价下方0.8%）"
-  ],
+  "closed_loop": {},
+  "audit_problems": null,
   "settle": {
     "rows": [
       {
@@ -3501,6 +3496,48 @@
           "fails": 0,
           "wr": null
         }
+      },
+      "002639": {
+        "BUY_LOW": {
+          "n": 0,
+          "wins": 0,
+          "fails": 0,
+          "wr": null
+        },
+        "SELL_HIGH": {
+          "n": 0,
+          "wins": 0,
+          "fails": 0,
+          "wr": null
+        }
+      },
+      "300153": {
+        "BUY_LOW": {
+          "n": 0,
+          "wins": 0,
+          "fails": 0,
+          "wr": null
+        },
+        "SELL_HIGH": {
+          "n": 0,
+          "wins": 0,
+          "fails": 0,
+          "wr": null
+        }
+      },
+      "300364": {
+        "BUY_LOW": {
+          "n": 0,
+          "wins": 0,
+          "fails": 0,
+          "wr": null
+        },
+        "SELL_HIGH": {
+          "n": 0,
+          "wins": 0,
+          "fails": 0,
+          "wr": null
+        }
       }
     }
   },
@@ -3512,44 +3549,8 @@
       "prev": null
     },
     "K1_closed_pnl": {
-      "total_est_pnl": 1.47,
-      "by_code": {
-        "588170": {
-          "sold": 1300,
-          "bought": 500,
-          "unrebuilt": 800,
-          "est_pnl": 1.47,
-          "qty_diff": 0
-        },
-        "600176": {
-          "sold": 0,
-          "bought": 0,
-          "unrebuilt": 0,
-          "est_pnl": 0.0,
-          "qty_diff": 0
-        },
-        "600481": {
-          "sold": 0,
-          "bought": 0,
-          "unrebuilt": 0,
-          "est_pnl": 0.0,
-          "qty_diff": 0
-        },
-        "603667": {
-          "sold": 0,
-          "bought": 0,
-          "unrebuilt": 0,
-          "est_pnl": 0.0,
-          "qty_diff": 0
-        },
-        "000988": {
-          "sold": 0,
-          "bought": 0,
-          "unrebuilt": 0,
-          "est_pnl": 0.0,
-          "qty_diff": 0
-        }
-      },
+      "total_est_pnl": null,
+      "by_code": {},
       "source": "t_io/logs/closure_audit.jsonl"
     },
     "K2_cost_change": {
@@ -3580,6 +3581,21 @@
           "cost_now": 60.867,
           "cost_prev": null,
           "delta": null
+        },
+        "002639": {
+          "cost_now": null,
+          "cost_prev": null,
+          "delta": null
+        },
+        "300153": {
+          "cost_now": null,
+          "cost_prev": null,
+          "delta": null
+        },
+        "300364": {
+          "cost_now": null,
+          "cost_prev": null,
+          "delta": null
         }
       },
       "snapshot": "t_io\\state\\holdings_2026-08-03.json"
@@ -3592,27 +3608,15 @@
           "t_qty_prev": null,
           "drift": 0,
           "attribution": "无漂移",
-          "audit": {
-            "sold": 0,
-            "bought": 0,
-            "unrebuilt": 0,
-            "est_pnl": 0.0,
-            "qty_diff": 0
-          },
+          "audit": null,
           "source": "eod_sync（无同步记录=无漂移）"
         },
         "588170": {
           "t_qty_now": 3200,
           "t_qty_prev": null,
           "drift": -800,
-          "attribution": "未接回（卖1300/接回500，800股未接回）",
-          "audit": {
-            "sold": 1300,
-            "bought": 500,
-            "unrebuilt": 800,
-            "est_pnl": 1.47,
-            "qty_diff": 0
-          },
+          "attribution": "需人工确认",
+          "audit": null,
           "source": "eod_sync+closure_audit"
         },
         "600176": {
@@ -3620,13 +3624,7 @@
           "t_qty_prev": null,
           "drift": 0,
           "attribution": "无漂移",
-          "audit": {
-            "sold": 0,
-            "bought": 0,
-            "unrebuilt": 0,
-            "est_pnl": 0.0,
-            "qty_diff": 0
-          },
+          "audit": null,
           "source": "eod_sync（无同步记录=无漂移）"
         },
         "600481": {
@@ -3634,13 +3632,7 @@
           "t_qty_prev": null,
           "drift": 0,
           "attribution": "无漂移",
-          "audit": {
-            "sold": 0,
-            "bought": 0,
-            "unrebuilt": 0,
-            "est_pnl": 0.0,
-            "qty_diff": 0
-          },
+          "audit": null,
           "source": "eod_sync（无同步记录=无漂移）"
         },
         "603667": {
@@ -3648,13 +3640,31 @@
           "t_qty_prev": null,
           "drift": 0,
           "attribution": "无漂移",
-          "audit": {
-            "sold": 0,
-            "bought": 0,
-            "unrebuilt": 0,
-            "est_pnl": 0.0,
-            "qty_diff": 0
-          },
+          "audit": null,
+          "source": "eod_sync（无同步记录=无漂移）"
+        },
+        "002639": {
+          "t_qty_now": null,
+          "t_qty_prev": null,
+          "drift": 0,
+          "attribution": "无漂移",
+          "audit": null,
+          "source": "eod_sync（无同步记录=无漂移）"
+        },
+        "300153": {
+          "t_qty_now": null,
+          "t_qty_prev": null,
+          "drift": 0,
+          "attribution": "无漂移",
+          "audit": null,
+          "source": "eod_sync（无同步记录=无漂移）"
+        },
+        "300364": {
+          "t_qty_now": null,
+          "t_qty_prev": null,
+          "drift": 0,
+          "attribution": "无漂移",
+          "audit": null,
           "source": "eod_sync（无同步记录=无漂移）"
         }
       },
@@ -3940,17 +3950,132 @@
       "source": "t_io/logs 仓控可交易量为0"
     }
   },
+  "add_watch": {
+    "000988": {
+      "name": "华工科技",
+      "day_low": 92.44,
+      "close": 93.1,
+      "vwap": 93.9585,
+      "daily_rows": 81,
+      "supports": {
+        "MA10": 101.342,
+        "MA20": 118.5305,
+        "MA60": 145.0811,
+        "近20日低点": 95.83,
+        "日内VWAP": 93.9585
+      },
+      "events": [],
+      "near": [
+        {
+          "level": "日内VWAP",
+          "support": 93.9585,
+          "dist%": -1.62,
+          "type": "刺穿破位"
+        }
+      ]
+    },
+    "588170": {
+      "name": "科创半导体ETF华夏",
+      "day_low": 0.829,
+      "close": 0.829,
+      "vwap": 0.8612,
+      "daily_rows": 81,
+      "supports": {
+        "MA10": 0.947,
+        "MA20": 1.0356,
+        "MA60": 0.9959,
+        "近20日低点": 0.882,
+        "日内VWAP": 0.8612
+      },
+      "events": [],
+      "near": []
+    },
+    "600176": {
+      "name": "中国巨石",
+      "day_low": 34.06,
+      "close": 34.06,
+      "vwap": 35.2022,
+      "daily_rows": 81,
+      "supports": {
+        "MA10": 37.675,
+        "MA20": 43.0725,
+        "MA60": 46.7242,
+        "近20日低点": 36.73,
+        "日内VWAP": 35.2022
+      },
+      "events": [],
+      "near": []
+    },
+    "600481": {
+      "name": "双良节能",
+      "day_low": 4.13,
+      "close": 4.29,
+      "vwap": 4.1899,
+      "daily_rows": 81,
+      "supports": {
+        "MA10": 4.064,
+        "MA20": 4.0765,
+        "MA60": 5.0097,
+        "近20日低点": 3.78,
+        "日内VWAP": 4.1899
+      },
+      "events": [],
+      "near": [
+        {
+          "level": "MA10",
+          "support": 4.064,
+          "dist%": 1.62,
+          "type": "临近未触"
+        },
+        {
+          "level": "MA20",
+          "support": 4.0765,
+          "dist%": 1.31,
+          "type": "临近未触"
+        },
+        {
+          "level": "日内VWAP",
+          "support": 4.1899,
+          "dist%": -1.43,
+          "type": "刺穿收回"
+        }
+      ]
+    },
+    "603667": {
+      "name": "五洲新春",
+      "day_low": 53.0,
+      "close": 53.69,
+      "vwap": 53.5201,
+      "daily_rows": 81,
+      "supports": {
+        "MA10": 51.806,
+        "MA20": 54.569,
+        "MA60": 66.1508,
+        "近20日低点": 50.28,
+        "日内VWAP": 53.5201
+      },
+      "events": [],
+      "near": [
+        {
+          "level": "MA20",
+          "support": 54.569,
+          "dist%": -2.88,
+          "type": "刺穿破位"
+        },
+        {
+          "level": "日内VWAP",
+          "support": 53.5201,
+          "dist%": -0.97,
+          "type": "刺穿收回"
+        }
+      ]
+    }
+  },
   "watch": {
     "#1_000988_qty冻结": {
       "suppressed_qty0": 4,
       "pushed": [],
-      "audit": {
-        "sold": 0,
-        "bought": 0,
-        "unrebuilt": 0,
-        "est_pnl": 0.0,
-        "qty_diff": 0
-      },
+      "audit": null,
       "note": "实盘当日其买信号被仓控0拦截次数; audit sold/bought=0 表示无成交"
     },
     "#2_000988_bull日买入": {
