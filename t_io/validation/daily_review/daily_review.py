@@ -502,6 +502,65 @@ def add_watch_md():
     L += ["", "<!-- 加仓观察:end -->", ""]
     return "\n".join(L)
 
+# ---------- 9. 建仓信号扫描（§1 第1步·user 2026-08-05 新增；读取 position_builder 日志） ----------
+def position_builder_md():
+    trace_fp = BASE / f"t_io/traces/position_builder_{DATE}.jsonl"
+    if not trace_fp.exists():
+        return ""
+
+    entries = []
+    for line in open(trace_fp, encoding="utf-8"):
+        try:
+            entries.append(json.loads(line))
+        except Exception:
+            continue
+    if not entries:
+        return ""
+
+    # 按股票聚合：取当日最高分
+    best = {}
+    scan_times = set()
+    for e in entries:
+        code = e["code"]
+        scan_times.add(e.get("scan_time", "")[:16])  # 精确到分钟
+        if code not in best or e["composite_score"] > best[code]["composite_score"]:
+            best[code] = e
+
+    n_intraday = sum(1 for e in entries if e.get("scan_type") == "intraday")
+    n_eod = sum(1 for e in entries if e.get("scan_type") == "eod")
+    sorted_best = sorted(best.values(), key=lambda e: -e["composite_score"])
+
+    L = ["", "<!-- 建仓扫描:begin -->", "",
+         f"## 建仓信号扫描（{DATE}，position_builder 日志聚合）", "",
+         f"- 当日扫描: 盘中 **{n_intraday // max(1, len(best))}** 轮 / 盘后 **{min(n_eod // max(1, len(best)), 1)}** 次",
+         f"- 候选股: **{len(best)}** 只（有快照数据的纳入统计）",
+         ""]
+
+    signals = [e for e in sorted_best if e["verdict"] == "signal"]
+    approaching = [e for e in sorted_best if e["verdict"] == "approaching"]
+    if signals:
+        L.append(f"🔴 **满足建仓条件（≥70）: {len(signals)} 只**")
+        for e in signals:
+            cond_str = " ".join("●" if e["conditions"].get(k) else "○" for k in
+                                ["macd_golden", "boll_mid_support", "rsi_healthy", "volume_shrink", "support_retest"])
+            L.append(f"  - {e['code']} {e['name']}: 得分 **{e['composite_score']}** "
+                     f"价 {e.get('price')} 建议 {e.get('suggested_qty', 0)}股  {cond_str}")
+        L.append("")
+
+    if approaching:
+        L.append(f"🟡 **接近条件（40-60）: {len(approaching)} 只**")
+        for e in approaching[:6]:  # 最多显示 6 只
+            cond_str = " ".join("●" if e["conditions"].get(k) else "○" for k in
+                                ["macd_golden", "boll_mid_support", "rsi_healthy", "volume_shrink", "support_retest"])
+            L.append(f"  - {e['code']} {e['name']}: 得分 **{e['composite_score']}** "
+                     f"价 {e.get('price')}  {cond_str}")
+        L.append("")
+
+    L.append("●=通过  ○=未通过  (MACD/BOLL/RSI/量/支撑)")
+    L += ["", "<!-- 建仓扫描:end -->", ""]
+    return "\n".join(L)
+
+
 if report_fp.exists():
     txt = report_fp.read_text(encoding="utf-8")
     if "<!-- KPI日快照:begin -->" in txt:
@@ -528,6 +587,15 @@ if report_fp.exists():
                      txt, flags=re.S)
     else:
         txt = txt.rstrip() + "\n" + aw
+    pb = position_builder_md()
+    if pb:
+        if "<!-- 建仓扫描:begin -->" in txt:
+            txt = re.sub(r"<!-- 建仓扫描:begin -->.*?<!-- 建仓扫描:end -->",
+                         pb.strip().replace("\n\n<!-- 建仓扫描:end -->", "\n<!-- 建仓扫描:end -->")
+                         .replace("<!-- 建仓扫描:begin -->\n\n", "<!-- 建仓扫描:begin -->\n"),
+                         txt, flags=re.S)
+        else:
+            txt = txt.rstrip() + "\n" + pb
     report_fp.write_text(txt, encoding="utf-8")
 
 # ---------- 输出 ----------

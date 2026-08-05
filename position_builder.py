@@ -52,6 +52,15 @@ except Exception:
 
 WATCHLIST_FILE = BASE / "watchlist_buy.json"
 SNAPSHOT_DIR = BASE / "t_io" / "minute_snapshots"
+TRACE_DIR = BASE / "t_io" / "traces"
+TRACE_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def _write_trace_line(entry: dict, date_str: str):
+    """追加一行 JSONL 到当日建仓扫描日志。"""
+    fp = TRACE_DIR / f"position_builder_{date_str}.jsonl"
+    with open(fp, "a", encoding="utf-8") as f:
+        f.write(json.dumps(entry, ensure_ascii=False) + "\n")
 
 
 # ============================================================
@@ -604,8 +613,9 @@ def print_report(results: list):
 
 def run_position_scan(date_str: str = None, capital: float = None,
                       no_feishu: bool = False, target_code: str = None,
-                      silent: bool = False) -> list:
+                      silent: bool = False, scan_type: str = "manual") -> list:
     """执行一次建仓信号扫描，返回结果列表。
+    scan_type: 'intraday' (盘中) / 'eod' (盘后) / 'manual' (手动)
     当 silent=True 时只记录日志不打印报告（供 main.py 定时调用）。
     """
     if not WATCHLIST_FILE.exists():
@@ -660,6 +670,26 @@ def run_position_scan(date_str: str = None, capital: float = None,
                     print(f"  => 飞书推送已发送")
                 elif not no_feishu and not _FEISHU_AVAILABLE:
                     print(f"  => 飞书 Webhook 未配置，跳过推送")
+
+    # 写入结构化日志（供 daily_review.py 消费）
+    scan_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    log_date = date_str or datetime.now().strftime("%Y-%m-%d")
+    for r in results:
+        _write_trace_line({
+            "scan_time": scan_time,
+            "scan_type": scan_type,
+            "code": r["code"],
+            "name": r["name"],
+            "price": _py_type(r.get("latest_price")),
+            "composite_score": int(r["composite_score"]),
+            "verdict": str(r["verdict"]),
+            "in_holdings": bool(watchlist.get("stocks", {}).get(r["code"], {}).get("in_holdings", False)),
+            "conditions": {k: bool(v["passed"]) for k, v in r.get("conditions", {}).items()},
+            "suggested_qty": int((r.get("position") or {}).get("suggested_qty", 0)),
+            "suggested_price": _py_type((r.get("position") or {}).get("suggested_price", 0)),
+            "capital_required": _py_type((r.get("position") or {}).get("capital_required", 0)),
+            "errors": [str(e) for e in r.get("errors", [])],
+        }, log_date)
 
     # 保存更新后的 watchlist
     with open(WATCHLIST_FILE, "w", encoding="utf-8") as f:
