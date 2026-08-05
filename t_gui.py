@@ -712,8 +712,12 @@ class Api:
         t_mode = {k: v for k, v in t_mode_raw.items() if not k.startswith("_")}
         auto = t_mode_raw.get("_auto_decision") or {}
 
+        accounts = {}
+        if isinstance(current, dict) and "_accounts" in current:
+            accounts = current["_accounts"]
         return {
             "current": current,
+            "accounts": accounts,
             "snapshot_today": snap_today,
             "snapshot_prev": snap_prev,
             "prev_date": prev_date,

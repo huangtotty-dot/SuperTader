@@ -3,121 +3,144 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>做T复盘决策看板</title>
+<title>做T决策看板</title>
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
 <header class="topbar">
-  <div class="brand">
-    <span class="brand-icon">📊</span>
-    <span class="brand-title">做T决策看板</span>
-    <span id="dateTag" class="date-tag"></span>
-  </div>
-  <div class="controls">
-    <label class="lbl">日期
-      <select id="dateSelect"></select>
-    </label>
-    <button id="refreshBtn" title="手动刷新">刷新</button>
-    <label class="lbl toggle">
-      <input type="checkbox" id="autoPoll" checked> 自动刷新
-    </label>
-    <label class="lbl toggle" title="买卖信号时播放急促报警音">
-      <input type="checkbox" id="alertSound" checked> 报警音
-    </label>
+  <span class="brand-title">做T决策看板</span>
+  <span id="dateTag" class="date-tag"></span>
+  <div class="topbar-right">
     <span id="liveTag" class="live-tag" style="display:none"></span>
+    <select id="dateSelect" class="date-sel"></select>
+    <button id="refreshBtn" class="mini-btn" title="手动刷新">刷新</button>
     <span id="status" class="status"></span>
   </div>
 </header>
-<div id="alertBanner" class="alert-banner" style="display:none"></div>
-<div id="quoteBar" class="quote-bar"></div>
 
-<nav class="anchor-nav">
-  <a href="#quotes">行情</a>
-  <a href="#kpi">KPI</a>
-  <a href="#chart">图表</a>
-  <a href="#live">盘中实时</a>
-  <a href="#positions">持仓</a>
-  <a href="#settle">结算</a>
-  <a href="#shadow">近阈·仓控</a>
-  <a href="#position-builder">建仓</a>
-  <a href="#add-watch">加仓</a>
-  <a href="#stage-board">阶段看板</a>
+<div id="alertBanner" class="alert-banner" style="display:none"></div>
+
+<nav class="sidebar">
+  <div class="sidebar-nav">
+    <div class="sidebar-item active" data-tab="overview">
+      <span class="sidebar-icon">📊</span><span>概览仪表盘</span>
+    </div>
+    <div class="sidebar-item" data-tab="charts">
+      <span class="sidebar-icon">📈</span><span>图表分析</span>
+    </div>
+    <div class="sidebar-item" data-tab="signals">
+      <span class="sidebar-icon">⚡</span><span>信号与交易</span>
+    </div>
+    <div class="sidebar-item" data-tab="archive">
+      <span class="sidebar-icon">📁</span><span>归档与结算</span>
+    </div>
+  </div>
+  <div class="sidebar-summary" id="sidebarSummary">
+    <div class="sum-row"><span class="sum-label">总市值</span><span class="sum-val" id="sumValue">—</span></div>
+    <div class="sum-row"><span class="sum-label">总资金</span><span class="sum-val" id="sumCapital">—</span></div>
+    <div class="sum-row"><span class="sum-label">仓位占比</span><span class="sum-val" id="sumPos">—</span></div>
+    <div class="sum-row"><span class="sum-label">总浮亏</span><span class="sum-val" id="sumUnreal">—</span></div>
+    <div class="sum-row"><span class="sum-label">总实亏</span><span class="sum-val" id="sumRealLoss">—</span></div>
+  </div>
+  <div class="sidebar-controls">
+    <label class="sidebar-ctl">
+      <input type="checkbox" id="alertSound" checked> 报警音
+    </label>
+    <label class="sidebar-ctl">
+      <input type="checkbox" id="autoPoll" checked> 自动刷新
+    </label>
+  </div>
 </nav>
 
-<main>
-  <section class="section" id="quotes">
-    <h2>持仓行情</h2>
-    <div id="quotesBody" class="card"></div>
-  </section>
+<main class="content">
 
-  <section class="section" id="kpi">
-    <h2>KPI 日快照</h2>
-    <div id="kpiCards" class="kpi-grid"></div>
-  </section>
+  <!-- ====== Tab 1: 概览仪表盘 ====== -->
+  <div class="tab-page active" id="tab-overview">
+    <div class="section" id="quotes">
+      <h2>持仓行情</h2>
+      <div id="quoteBar" class="quote-bar"></div>
+      <div id="quotesBody" class="card"></div>
+    </div>
 
-  <section class="section" id="chart">
-    <h2>图表分析</h2>
-    <div class="chart-grid2">
-      <div class="card">
-        <div class="card-title">大盘跨日 S 打分</div>
-        <div id="echMarket" class="echart"></div>
-      </div>
-      <div class="card">
-        <div class="card-title">今日盘中 S 变化</div>
-        <div id="echIntraday" class="echart"></div>
-      </div>
-      <div class="card">
-        <div class="card-title">持仓成本趋势 <button class="mini-btn" id="calibBtn">✎ 校准成本</button></div>
-        <div id="echCost" class="echart"></div>
-        <div id="costMatrix" style="margin-top:10px"></div>
-      </div>
-      <div class="card">
-        <div class="card-title">各股买卖信号数</div>
-        <div id="echSignal" class="echart"></div>
-      </div>
-      <div class="card">
-        <div class="card-title">K4 滚动胜率</div>
-        <div id="echK4" class="echart"></div>
+    <div class="section">
+      <h2>KPI 日快照</h2>
+      <div id="kpiCards" class="kpi-grid"></div>
+    </div>
+
+    <div class="section">
+      <h2>图表速览</h2>
+      <div class="overview-grid">
+        <div class="card"><div class="card-title">大盘跨日 S</div><div id="echMarket" class="echart ech-sm"></div></div>
+        <div class="card"><div class="card-title">持仓成本趋势</div><div id="echCost" class="echart ech-sm"></div></div>
+        <div class="card"><div class="card-title">各股信号数</div><div id="echSignal" class="echart ech-sm"></div></div>
+        <div class="card"><div class="card-title">K4 胜率</div><div id="echK4" class="echart ech-sm"></div></div>
       </div>
     </div>
-  </section>
 
-  <section class="section" id="live">
-    <h2>盘中实时</h2>
-    <div id="liveBody">
-      <div class="empty">非今日日期或尚无盘中数据</div>
+    <div class="section" id="live-preview">
+      <h2>盘中实时概览</h2>
+      <div id="livePreview"></div>
     </div>
-  </section>
+  </div>
 
-  <section class="section" id="positions">
-    <h2>持仓对照（当前 vs 快照）</h2>
-    <div id="positionsBody"></div>
-  </section>
+  <!-- ====== Tab 2: 图表分析 ====== -->
+  <div class="tab-page" id="tab-charts">
+    <div class="section">
+      <h2>大盘趋势</h2>
+      <div class="chart-grid2">
+        <div class="card"><div class="card-title">跨日 S 打分</div><div id="echMarketFull" class="echart"></div></div>
+        <div class="card"><div class="card-title">今日盘中 S</div><div id="echIntraday" class="echart"></div></div>
+      </div>
+    </div>
+    <div class="section">
+      <h2>持仓成本 <button class="mini-btn" id="calibBtn">✎ 校准</button></h2>
+      <div class="card"><div id="echCostFull" class="echart"></div><div id="costMatrix" style="margin-top:10px"></div></div>
+    </div>
+    <div class="section">
+      <h2>信号与胜率</h2>
+      <div class="chart-grid2">
+        <div class="card"><div class="card-title">各股买卖信号数</div><div id="echSignalFull" class="echart"></div></div>
+        <div class="card"><div class="card-title">K4 滚动胜率</div><div id="echK4Full" class="echart"></div></div>
+      </div>
+    </div>
+  </div>
 
-  <section class="section" id="settle">
-    <h2>盘中信号结算</h2>
-    <div id="settleBody"></div>
-  </section>
+  <!-- ====== Tab 3: 信号与交易 ====== -->
+  <div class="tab-page" id="tab-signals">
+    <div class="section" id="live">
+      <h2>盘中实时</h2>
+      <div id="liveBody"><div class="empty">非今日日期或尚无盘中数据</div></div>
+    </div>
+    <div class="section" id="shadow">
+      <h2>shadow 近阈 · 仓控与推送</h2>
+      <div id="shadowBody"></div>
+    </div>
+    <div class="section" id="position-builder">
+      <h2>建仓信号扫描</h2>
+      <div id="pbBody"></div>
+    </div>
+    <div class="section" id="add-watch">
+      <h2>加仓观察（回踩支撑）</h2>
+      <div id="addWatchBody"></div>
+    </div>
+  </div>
 
-  <section class="section" id="shadow">
-    <h2>shadow 近阈 · 仓控与推送</h2>
-    <div id="shadowBody"></div>
-  </section>
+  <!-- ====== Tab 4: 归档与结算 ====== -->
+  <div class="tab-page" id="tab-archive">
+    <div class="section" id="positions">
+      <h2>持仓对照（当前 vs 快照）</h2>
+      <div id="positionsBody"></div>
+    </div>
+    <div class="section" id="settle">
+      <h2>盘中信号结算</h2>
+      <div id="settleBody"></div>
+    </div>
+    <div class="section" id="stage-board">
+      <h2>系统阶段看板</h2>
+      <div id="stageBoardBody"></div>
+    </div>
+  </div>
 
-  <section class="section" id="position-builder">
-    <h2>建仓信号扫描</h2>
-    <div id="pbBody"></div>
-  </section>
-
-  <section class="section" id="add-watch">
-    <h2>加仓观察（回踩支撑）</h2>
-    <div id="addWatchBody"></div>
-  </section>
-
-  <section class="section" id="stage-board">
-    <h2>系统阶段看板</h2>
-    <div id="stageBoardBody"></div>
-  </section>
 </main>
 
 <!-- 成本校准 modal -->
@@ -138,8 +161,6 @@
     </div>
   </div>
 </div>
-
-<footer class="footer">做T实盘系统 · 决策看板 · 数据只读</footer>
 
 <script src="vendor/echarts.min.js"></script>
 <script src="app.js"></script>

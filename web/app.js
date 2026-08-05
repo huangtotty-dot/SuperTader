@@ -69,6 +69,11 @@ async function loadAndRender(date, silent) {
     }
     state.date = payload.date;
     state.payload = payload;
+    // 侧栏持仓数据（含 _accounts + 各股 realized_loss）
+    sideHoldings = (payload.positions && payload.positions.current) || {};
+    if ((payload.positions && payload.positions.accounts) && !sideHoldings._accounts) {
+      sideHoldings._accounts = payload.positions.accounts;
+    }
     renderAll(payload);
 
     // 行情条 + 大盘趋势 + 成本历史（静态，一次拉取）
@@ -157,6 +162,7 @@ function echRender(id, opt) {
   if (!inst) {
     const el = document.getElementById(id);
     if (!el) return;
+    // 不可见时也 init（ECharts 容错零宽），切换 tab 时 resize
     inst = echarts.init(el);
     echInstances[id] = inst;
   }
@@ -166,6 +172,19 @@ function echClear(id) {
   const el = document.getElementById(id);
   if (el) el.innerHTML = '<div class="empty">无数据</div>';
   if (echInstances[id]) { echInstances[id].dispose(); delete echInstances[id]; }
+}
+// 渲染到概览(ech-sm)和图表tab(Full)两个容器
+function tabEch(baseId, opt) {
+  echRender(baseId, opt);
+  echRender(baseId + "Full", opt);
+}
+function tabClear(baseId) {
+  echClear(baseId);
+  echClear(baseId + "Full");
+}
+// tab 切换时 resize 所有 ECharts
+function resizeAllEch() {
+  Object.values(echInstances).forEach(i => i.resize());
 }
 window.addEventListener("resize", () => {
   Object.values(echInstances).forEach(i => i.resize());
@@ -190,19 +209,13 @@ const ECH_BASE = {
 /* ---- 大盘趋势打分 ---- */
 function renderMarket(ms) {
   if (!ms || ((!ms.history || !ms.history.length) && (!ms.intraday || !ms.intraday.length))) {
-    echClear("echMarket"); echClear("echIntraday");
+    tabClear("echMarket"); echClear("echIntraday");
     return;
-  }
-  // 更新卡片标题含大盘状态
-  const card = document.getElementById("echMarket");
-  if (card) {
-    const t = card.closest(".card").querySelector(".card-title");
-    if (t && ms.last_regime) t.textContent = `大盘跨日 S 打分 · ${ms.last_regime}${ms.days_in_regime ? " " + ms.days_in_regime + "天" : ""}`;
   }
   // 跨日 S
   const hist = ms.history || [];
   if (hist.length >= 2) {
-    echRender("echMarket", {
+    tabEch("echMarket", {
       ...ECH_BASE,
       xAxis: { ...ECH_BASE.xAxis, type: "category", data: hist.map(h => h.date.slice(5)) },
       yAxis: { ...ECH_BASE.yAxis },
@@ -220,7 +233,7 @@ function renderMarket(ms) {
           lineStyle: { color: "rgba(139,148,158,.5)", width: 1, type: "dashed" }, symbol: "none" },
       ],
     });
-  } else echClear("echMarket");
+  } else tabClear("echMarket");
 
   // 今日盘中 S
   const iday = ms.intraday || [];
@@ -265,7 +278,7 @@ function renderCost(ch) {
         }),
       };
     });
-    echRender("echCost", {
+    tabEch("echCost", {
       ...ECH_BASE,
       legend: { type: "scroll", textStyle: { color: "#8b949e", fontSize: 10 }, top: 0 },
       xAxis: { ...ECH_BASE.xAxis, type: "category", data: dates.map(d => d.slice(5)) },
@@ -282,7 +295,7 @@ function renderCost(ch) {
       }},
       series,
     });
-  } else echClear("echCost");
+  } else tabClear("echCost");
 
   // 成本矩阵
   const mtx = document.getElementById("costMatrix");
@@ -315,6 +328,8 @@ function renderLive(live, isToday) {
   if (!isToday) {
     el.innerHTML = '<div class="empty">选择今天（' + state.date + '）查看盘中实时数据</div>';
     tag.style.display = "none";
+    const prev = document.getElementById("livePreview");
+    if (prev) prev.innerHTML = '<div class="empty">仅今日可用盘中实时数据</div>';
     return;
   }
   tag.style.display = "";
@@ -393,6 +408,26 @@ function renderLive(live, isToday) {
   // 绑定 console 过滤切换
   const keyOnly = document.getElementById("consoleKeyOnly");
   if (keyOnly) keyOnly.addEventListener("change", () => reflowConsole());
+
+  // 概览仪表盘简版
+  const prev = document.getElementById("livePreview");
+  if (prev) {
+    const sigs = live.signals || [];
+    const nonHolds = sigs.filter(s => s.decision !== "HOLD").slice(0, 5);
+    const trends = (live.intraday_state || {}).trend_regimes || {};
+    const buys = Object.values(trends).filter(t => (t.state || "").includes("BULL")).length;
+    const bears = Object.values(trends).filter(t => (t.state || "").includes("BEAR")).length;
+    prev.innerHTML = (isToday
+      ? `<div class="card" style="margin-bottom:8px;padding:8px 12px">
+          <span class="cell-dim">趋势: </span><span class="up">${buys}只偏多</span>
+          <span class="cell-dim"> / </span><span class="down">${bears}只偏空</span>
+          <span class="cell-dim"> · 最近信号: </span>
+          ${nonHolds.length ? nonHolds.map(s =>
+            `<span class="badge signal">${esc(s.decision)} ${esc(s.code)} ${fmt(s.buy_score||s.sell_score,0)}分</span>`).join(" ")
+            : '<span class="cell-dim">无</span>'}
+        </div>`
+      : ""); // 历史日留空（在 renderLive 主调用时已被 if(!isToday) 直接返回填充"非今日日期"）
+  }
 }
 
 /* ================= 报警音 + 闪烁横幅 ================= */
@@ -618,12 +653,12 @@ function renderKPI(kpi) {
 /* ---- ② 图表 ---- */
 function renderSignalBar(sigStat, nameMap) {
   const codes = Object.keys(sigStat || {});
-  if (!codes.length) { echClear("echSignal"); return; }
+  if (!codes.length) { tabClear("echSignal"); return; }
   codes.sort((a, b) =>
     ((sigStat[b].sell_signals || 0) + (sigStat[b].buy_signals || 0))
     - ((sigStat[a].sell_signals || 0) + (sigStat[a].buy_signals || 0)));
   const names = codes.map(c => (nameMap || {})[c] || c);
-  echRender("echSignal", {
+  tabEch("echSignal", {
     ...ECH_BASE,
     grid: { left: 90, right: 40, top: 20, bottom: 26 },
     xAxis: { type: "value", axisLabel: { color: "#8b949e", fontSize: 10 }, splitLine: { lineStyle: { color: "rgba(139,148,158,.15)" } } },
@@ -641,8 +676,8 @@ function renderSignalBar(sigStat, nameMap) {
 }
 
 function renderK4Trend(points) {
-  if (!points || !points.length) { echClear("echK4"); return; }
-  echRender("echK4", {
+  if (!points || !points.length) { tabClear("echK4"); return; }
+  tabEch("echK4", {
     ...ECH_BASE,
     yAxis: { ...ECH_BASE.yAxis, min: 0, max: 1, axisLabel: { color: "#8b949e", fontSize: 10, formatter: v => Math.round(v * 100) + "%" } },
     xAxis: { ...ECH_BASE.xAxis, type: "category", data: points.map(p => p.date.slice(5)) },
@@ -997,6 +1032,7 @@ function renderQuotes(q, market) {
       总盈亏 <b class="num ${sumCls}">${tp >= 0 ? "+" : ""}${fmt(tp, 0)}（${sumPct}）</b>
     </div>` : "";
 
+  updateSidebarSummary(q.quotes);
   if (bar) bar.innerHTML = cells + srcBadge;
   if (body) body.innerHTML = `<div class="quote-cell" style="margin:0">${cells}</div>${srcBadge}${summaryHtml}
     <div class="cell-dim" style="font-size:11px;margin-top:6px">现价/涨跌来自腾讯实时行情 · 本=持仓成本 · 浮盈%=(现价-成本)/成本 · 盘中每 10s 刷新 · 持仓每日快照自动写入 t_io/state/holdings_daily_今日.json</div>`;
@@ -1059,6 +1095,49 @@ async function saveCalib() {
   }).catch(() => {});
 }
 
+/* ================= Tab 切换 ================= */
+function switchTab(tab) {
+  document.querySelectorAll(".tab-page").forEach(p => p.classList.remove("active"));
+  document.querySelectorAll(".sidebar-item").forEach(s => s.classList.remove("active"));
+  const page = document.getElementById("tab-" + tab);
+  const sideItem = document.querySelector(`.sidebar-item[data-tab="${tab}"]`);
+  if (page) page.classList.add("active");
+  if (sideItem) sideItem.classList.add("active");
+  // 延迟 resize 让 tab 的 display:block 先生效
+  setTimeout(resizeAllEch, 80);
+}
+
+/* ================= 侧栏汇总 ================= */
+let sideHoldings = null;  // {_accounts, stocks: {code: {qty,cost,name,realized_loss}}}
+
+function updateSidebarSummary(quotes) {
+  if (!quotes || !quotes.length) return;
+  let tv = 0, tc = 0, trl = 0, totalCap = 0;
+  const accounts = (sideHoldings && sideHoldings._accounts) ? sideHoldings._accounts : {};
+  quotes.forEach(x => {
+    const qty = x.qty || 0;
+    if (x.price && x.cost) {
+      tv += x.price * qty;
+      tc += x.cost * qty;
+    }
+  });
+  // 实亏从 holdings.json 汇总
+  Object.values(sideHoldings || {}).forEach(info => {
+    if (typeof info === "object" && info.realized_loss !== undefined) {
+      trl += info.realized_loss || 0;
+    }
+  });
+  Object.values(accounts).forEach(a => {
+    totalCap += (a.total_capital || 0);
+  });
+  const pnl = tv - tc;
+  document.getElementById("sumValue").textContent = tv ? fmt(tv, 0) : "—";
+  document.getElementById("sumCapital").textContent = totalCap ? fmt(totalCap, 0) : "未设置";
+  document.getElementById("sumPos").textContent = totalCap ? Math.round(tv / totalCap * 100) + "%" : "—";
+  document.getElementById("sumUnreal").innerHTML = `<span class="${clsOf(pnl)}">${pnl >= 0 ? "+" : ""}${fmt(pnl, 0)}</span>`;
+  document.getElementById("sumRealLoss").innerHTML = trl ? `<span class="${trl > 0 ? 'down' : 'neutral'}">${fmt(trl, 0)}</span>` : `<span class="neutral">0</span>`;
+}
+
 /* ================= 初始化 ================= */
 const dateSelect = document.getElementById("dateSelect");
 const refreshBtn = document.getElementById("refreshBtn");
@@ -1089,6 +1168,14 @@ function startLivePoll() {
 }
 
 async function init() {
+  // 侧栏 tab 切换
+  document.querySelectorAll(".sidebar-item[data-tab]").forEach(si => {
+    si.addEventListener("click", () => {
+      switchTab(si.dataset.tab);
+      // 图表 tab：切过去时初始化未渲染的 ECharts（首次 lazy init）
+      if (si.dataset.tab === "charts") setTimeout(resizeAllEch, 120);
+    });
+  });
   dateSelect.addEventListener("change", () => {
     if (dateSelect.value) loadAndRender(dateSelect.value, false);
   });
