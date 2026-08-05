@@ -13,14 +13,7 @@ from datetime import datetime, timedelta, time as dtime
 from typing import Dict, List, Optional, Any
 import json
 import os
-import sys as _sys
-
-try:
-    from auction_analyzer import analyze_auction
-except ImportError:
-    analyze_auction = None
-
-# ==================== PreOpenContext 数据结构 ====================
+# V3: analyze_auction + format_auction_feishu 由 auction_analyzer.py exec 加载提供（globals）
 
 @dataclass
 class PreOpenContext:
@@ -280,11 +273,12 @@ class PreOpenEngine:
             "source_ts": _now().strftime("%Y-%m-%d %H:%M:%S"),
         }
 
-        # V3: 竞价三层分析（指数+板块+持仓）
+        # V3: 竞价三层分析（指数+板块+持仓）— 从 exec globals 取
         auction_result = {}
-        if analyze_auction:
+        _analyze = globals().get("analyze_auction")
+        if _analyze:
             try:
-                auction_result = analyze_auction(self.holdings)
+                auction_result = _analyze(self.holdings)
                 _sig_count = len(auction_result.get("auction_signals", []))
                 _bias = auction_result.get("market_bias", "?")
                 session_note = f"{session_note} | 指数{_bias} | 持仓{_sig_count}股竞价完毕"
@@ -559,9 +553,9 @@ def _send_preopen_feishu(context: PreOpenContext, force_push: bool = False) -> b
     auction_result = context.auction_result if isinstance(context.auction_result, dict) else {}
     if auction_result.get("auction_signals"):
         try:
-            from auction_analyzer import format_auction_feishu
-            elements = format_auction_feishu(auction_result)
-        except ImportError:
+            _fmt = globals().get("format_auction_feishu")
+            elements = _fmt(auction_result) if _fmt else []
+        except Exception:
             elements = []
     else:
         elements = []
