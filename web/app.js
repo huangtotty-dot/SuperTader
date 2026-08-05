@@ -71,9 +71,10 @@ async function loadAndRender(date, silent) {
     state.payload = payload;
     renderAll(payload);
 
-    // 大盘趋势 + 成本历史（静态，一次拉取）
+    // 行情条 + 大盘趋势 + 成本历史（静态，一次拉取）
+    apiCall("load_quotes").then(q => renderQuotes(q || {}, null)).catch(() => {});
     apiCall("load_market_score", date).then(ms => renderMarket(ms || {})).catch(() => {});
-    apiCall("load_cost_history").then(ch => renderCost(ch || {})).catch(() => {});
+    apiCall("load_cost_history").then(ch => { state.costHistory = ch || {}; renderCost(ch || {}); }).catch(() => {});
 
     // K4 跨日趋势
     apiCall("kpi_trend", 10).then(pts => {
@@ -113,6 +114,13 @@ async function refreshLive(reset) {
     const live = await apiCall("load_live", date);
     renderLive(live, date === todayStr());
 
+    // 实时行情条（10s 刷新）
+    apiCall("load_quotes").then(q => renderQuotes(q || {}, null)).catch(() => {});
+    // 今日盘中 S 曲线刷新
+    if (live.market_intraday && live.market_intraday.length) {
+      apiCall("load_market_score", date).then(ms => renderMarket(ms || {})).catch(() => {});
+    }
+
     // console 增量拉取（reset=true 时从头读）
     const since = reset ? 0 : consoleOffset;
     const c = await apiCall("load_console", date, since);
@@ -138,156 +146,166 @@ function renderAll(p) {
   renderPB(p.position_builder);
   renderAddWatch(p.add_watch);
   renderStageBoard(p.stage_board);
-  renderReport(p.report_md);
 }
+
+/* ---- ECharts 辅助 ---- */
+const echarts = window.echarts;
+const echInstances = {};
+function echRender(id, opt) {
+  if (!echarts) return;
+  let inst = echInstances[id];
+  if (!inst) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    inst = echarts.init(el);
+    echInstances[id] = inst;
+  }
+  inst.setOption(opt, { notMerge: true });
+}
+function echClear(id) {
+  const el = document.getElementById(id);
+  if (el) el.innerHTML = '<div class="empty">无数据</div>';
+  if (echInstances[id]) { echInstances[id].dispose(); delete echInstances[id]; }
+}
+window.addEventListener("resize", () => {
+  Object.values(echInstances).forEach(i => i.resize());
+});
+const ECH_BASE = {
+  backgroundColor: "transparent",
+  textStyle: { color: "#8b949e" },
+  grid: { left: 48, right: 20, top: 30, bottom: 34 },
+  tooltip: { backgroundColor: "#161b22", borderColor: "#30363d", textStyle: { color: "#c9d1d9", fontSize: 12 } },
+  xAxis: {
+    axisLine: { lineStyle: { color: "#30363d" } },
+    axisLabel: { color: "#8b949e", fontSize: 10 },
+    axisTick: { show: false },
+  },
+  yAxis: {
+    axisLine: { show: false },
+    axisLabel: { color: "#8b949e", fontSize: 10 },
+    splitLine: { lineStyle: { color: "rgba(139,148,158,.15)" } },
+  },
+};
 
 /* ---- 大盘趋势打分 ---- */
 function renderMarket(ms) {
-  const el = document.getElementById("marketBody");
-  if (!ms || (!ms.history || !ms.history.length) && (!ms.intraday || !ms.intraday.length)) {
-    el.innerHTML = '<div class="empty">无大盘趋势数据</div>';
+  if (!ms || ((!ms.history || !ms.history.length) && (!ms.intraday || !ms.intraday.length))) {
+    echClear("echMarket"); echClear("echIntraday");
     return;
   }
-  let chips = "";
-  if (ms.last_regime) {
-    chips += `<span class="score-chip">大盘状态: <span class="regime-chip regime-${clsOf(ms.last_regime, "uni_up", "uni_down") === "down" ? "uni_down" : (ms.last_regime === "range" ? "range" : "uni_up")}">${esc(ms.last_regime)}</span></span>`;
+  // 更新卡片标题含大盘状态
+  const card = document.getElementById("echMarket");
+  if (card) {
+    const t = card.closest(".card").querySelector(".card-title");
+    if (t && ms.last_regime) t.textContent = `大盘跨日 S 打分 · ${ms.last_regime}${ms.days_in_regime ? " " + ms.days_in_regime + "天" : ""}`;
   }
-  if (ms.days_in_regime) chips += `<span class="score-chip">持续 ${ms.days_in_regime} 天</span>`;
-
-  // 跨日 S 曲线（history）
-  let histHtml = "";
+  // 跨日 S
   const hist = ms.history || [];
   if (hist.length >= 2) {
-    histHtml = lineChart(hist, {
-      x: h => h.date, y: h => h.S, yLabel: "S打分",
-      color: h => (h.regime === "uni_up" ? "#f85149" : h.regime === "uni_down" ? "#3fb950" : h.regime === "range" ? "#d29922" : "#58a6ff"),
-      xLabel: h => h.date.slice(5), title: h => `${h.date}  S=${fmt(h.S, 1)}  ${h.regime || ""}`,
+    echRender("echMarket", {
+      ...ECH_BASE,
+      xAxis: { ...ECH_BASE.xAxis, type: "category", data: hist.map(h => h.date.slice(5)) },
+      yAxis: { ...ECH_BASE.yAxis },
+      tooltip: { ...ECH_BASE.tooltip, trigger: "axis", formatter: p => {
+        const i = p[0].dataIndex, h = hist[i];
+        return `${h.date}<br/>S=${fmt(h.S, 1)}${h.sadj != null ? ` · sadj=${fmt(h.sadj, 1)}` : ""}<br/>regime=${h.regime || "—"}`;
+      }},
+      series: [
+        { name: "S", type: "line", data: hist.map(h => h.S), symbol: "circle", symbolSize: 5,
+          lineStyle: { color: "#58a6ff", width: 2 }, itemStyle: { color: p => {
+            const r = hist[p.dataIndex].regime;
+            return r === "uni_up" ? "#f85149" : r === "uni_down" ? "#3fb950" : r === "range" ? "#d29922" : "#58a6ff";
+          }} },
+        { name: "Sadj", type: "line", data: hist.map(h => h.sadj != null ? h.sadj : null),
+          lineStyle: { color: "rgba(139,148,158,.5)", width: 1, type: "dashed" }, symbol: "none" },
+      ],
     });
-  } else {
-    histHtml = '<div class="empty">跨日历史不足 2 点</div>';
-  }
+  } else echClear("echMarket");
 
-  // 今日盘中曲线（intraday）
-  let intradayHtml = "";
+  // 今日盘中 S
   const iday = ms.intraday || [];
   if (iday.length >= 2) {
-    intradayHtml = `<div class="card-title" style="margin-top:12px">今日盘中 S 变化（${iday.length} 点）</div>` +
-      lineChart(iday, {
-        x: p => p.time, y: p => p.score, yLabel: "S",
-        color: p => (p.regime === "uni_up" ? "#f85149" : p.regime === "uni_down" ? "#3fb950" : "#58a6ff"),
-        xLabel: p => (p.time || "").slice(0, 5), title: p => `${p.ts}  S=${fmt(p.score, 1)}  ${p.regime_name || ""}`,
-      });
-  } else if (iday.length === 1) {
-    intradayHtml = `<div class="card-title" style="margin-top:12px">今日盘中：${esc(iday[0].ts)} S=${fmt(iday[0].score, 1)}</div>`;
+    echRender("echIntraday", {
+      ...ECH_BASE,
+      xAxis: { ...ECH_BASE.xAxis, type: "category", data: iday.map(p => (p.time || "").slice(0, 5)) },
+      yAxis: { ...ECH_BASE.yAxis },
+      tooltip: { ...ECH_BASE.tooltip, trigger: "axis", formatter: p => {
+        const i = p[0].dataIndex, d = iday[i];
+        return `${d.ts}<br/>S=${fmt(d.score, 1)}<br/>${d.regime_name || ""}`;
+      }},
+      series: [{ name: "盘中S", type: "line", data: iday.map(p => p.score), smooth: true,
+        symbol: "circle", symbolSize: 4, lineStyle: { color: "#58a6ff", width: 2 },
+        areaStyle: { color: "rgba(88,166,255,.15)" } }],
+    });
+  } else {
+    echClear("echIntraday");
   }
-
-  el.innerHTML = `
-    <div class="card">
-      ${chips}
-      <div class="card-title" style="margin-top:8px">跨日 S 打分（state.json history）</div>
-      ${histHtml}
-      ${intradayHtml}
-      <div class="cell-dim" style="font-size:11px;margin-top:8px">S 为大盘态势打分（正=偏多 / 负=偏空）；选中今天时曲线随盘中 10s 刷新</div>
-    </div>`;
 }
 
 /* ---- 持仓成本变化 ---- */
 function renderCost(ch) {
-  const el = document.getElementById("costBody");
-  if (!ch || !ch.dates || !ch.dates.length) {
-    el.innerHTML = '<div class="empty">无持仓成本历史（t_io/state 无快照）</div>';
-    return;
-  }
-  const dates = ch.dates;
-  const stocks = ch.stocks || {};
+  const dates = (ch && ch.dates) || [];
+  const stocks = (ch && ch.stocks) || {};
   const codes = Object.keys(stocks);
-
-  // 折线（每股一条，最多 8 只）
   const palette = ["#58a6ff", "#f85149", "#3fb950", "#d29922", "#bc8cff", "#39c5cf", "#ff7b72", "#7ee787"];
   const codeColor = {};
   codes.forEach((c, i) => codeColor[c] = palette[i % palette.length]);
 
-  let chartHtml = "";
+  // ECharts 成本多线
   if (codes.length && dates.length >= 2) {
-    const W = 720, H = 260, pad = 44, padT = 12, padB = 26;
-    const iw = W - pad * 2, ih = H - padT - padB;
-    const allCosts = codes.flatMap(c => stocks[c].points.map(p => p.cost));
-    const minC = Math.min(...allCosts), maxC = Math.max(...allCosts);
-    const span = (maxC - minC) || 1;
-    const xs = dates.map((_, i) => pad + (dates.length === 1 ? iw / 2 : i / (dates.length - 1) * iw));
-    const yOf = v => padT + (1 - (v - minC) / span) * ih;
-    let g = "";
-    [minC + span * .25, minC + span * .5, minC + span * .75].forEach(v => {
-      const y = yOf(v);
-      g += `<line x1="${pad}" y1="${y}" x2="${W - pad}" y2="${y}" stroke="rgba(139,148,158,.15)"/>`;
-      g += `<text x="${pad - 6}" y="${y + 3}" fill="#8b949e" font-size="9" text-anchor="end">${fmt(v, 1)}</text>`;
-    });
-    const xl = dates.map((d, i) => `<text x="${xs[i]}" y="${H - 8}" fill="#8b949e" font-size="9" text-anchor="middle">${esc(d.slice(5))}</text>`).join("");
-    const lines = codes.map(code => {
+    const series = codes.map(code => {
       const st = stocks[code];
-      const pts = dates.map((d, i) => {
-        const p = st.points.find(x => x.date === d);
-        return p ? `${xs[i]},${yOf(p.cost)}` : "";
-      }).filter(Boolean);
-      if (pts.length < 1) return "";
-      const dots = st.points.map(p => {
-        const i = dates.indexOf(p.date);
-        return `<circle cx="${xs[i]}" cy="${yOf(p.cost)}" r="3" fill="${codeColor[code]}"><title>${esc(st.name)} ${p.date} ${fmt(p.cost, 3)}</title></circle>`;
-      }).join("");
-      return `<polyline points="${pts.join(" ")}" fill="none" stroke="${codeColor[code]}" stroke-width="2" opacity=".9"/>${dots}`;
-    }).join("");
-    const legend = codes.map(code =>
-      `<span style="margin-right:12px;font-size:12px;color:var(--text-dim)"><span class="dot" style="background:${codeColor[code]}"></span>${esc(stocks[code].name || code)}</span>`).join("");
-    chartHtml = `<div class="legend">${legend}</div>
-      <svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;">${g}${xl}${lines}</svg>`;
-  } else {
-    chartHtml = '<div class="empty">快照天数不足 2 天，仅看矩阵</div>';
-  }
+      return {
+        name: (st.name || code), type: "line", symbol: "circle", symbolSize: 5,
+        itemStyle: { color: codeColor[code], borderWidth: 0 },
+        lineStyle: { color: codeColor[code], width: 2 },
+        data: dates.map(d => {
+          const pt = st.points.find(x => x.date === d);
+          return pt ? pt.cost : null;
+        }),
+      };
+    });
+    echRender("echCost", {
+      ...ECH_BASE,
+      legend: { type: "scroll", textStyle: { color: "#8b949e", fontSize: 10 }, top: 0 },
+      xAxis: { ...ECH_BASE.xAxis, type: "category", data: dates.map(d => d.slice(5)) },
+      yAxis: { ...ECH_BASE.yAxis },
+      tooltip: { ...ECH_BASE.tooltip, trigger: "axis", formatter: params => {
+        const d = dates[params[0].dataIndex];
+        let html = `<b>${d}</b>`;
+        params.forEach(p => {
+          const code = codes[p.seriesIndex] || "";
+          const pt = (stocks[code] || {}).points.find(x => x.date === d);
+          html += `<br/>${p.marker}${p.seriesName}: ${fmt(p.value, 3)}${pt && pt.src ? ` <span style="color:#58a6ff">${pt.src}</span>` : ""}`;
+        });
+        return html;
+      }},
+      series,
+    });
+  } else echClear("echCost");
 
-  // 成本矩阵表
+  // 成本矩阵
+  const mtx = document.getElementById("costMatrix");
+  if (!mtx) return;
+  if (!codes.length || !dates.length) {
+    mtx.innerHTML = '<div class="empty">无持仓成本历史（t_io/state 无快照）</div>';
+    return;
+  }
   const head = `<tr><th>股票</th>${dates.map(d => `<th class="num">${esc(d.slice(5))}</th>`).join("")}</tr>`;
   const rows = codes.map(code => {
     const st = stocks[code];
     return `<tr><td>${esc(st.name || code)} <span class="mono cell-dim">${esc(code)}</span></td>` +
       dates.map(d => {
         const p = st.points.find(x => x.date === d);
-        return `<td class="num">${p ? fmt(p.cost, 3) : '<span class="cell-dim">—</span>'}</td>`;
+        if (!p) return `<td class="num cell-dim">—</td>`;
+        const badge = p.src === "人工校准"
+          ? `<span class="calib-badge 人工校准">✎校准</span>` : "";
+        return `<td class="num">${fmt(p.cost, 3)}${badge}</td>`;
       }).join("") + `</tr>`;
   }).join("");
-
-  el.innerHTML = `
-    <div class="card">
-      ${chartHtml}
-      <div class="card-title" style="margin-top:14px">成本矩阵（每日收盘快照，随复盘累积）</div>
-      <table><thead>${head}</thead><tbody>${rows}</tbody></table>
-    </div>`;
-}
-
-/* 通用 SVG 折线 */
-function lineChart(points, o) {
-  const W = 720, H = 240, pad = 44, padT = 12, padB = 26;
-  const iw = W - pad * 2, ih = H - padT - padB;
-  const vals = points.map(o.y).filter(v => v !== null && v !== undefined);
-  if (!vals.length) return '<div class="empty">无有效数值</div>';
-  const minV = Math.min(...vals), maxV = Math.max(...vals);
-  const span = (maxV - minV) || 1;
-  const padY = span * .15;
-  const yMin = minV - padY, yMax = maxV + padY;
-  const xs = points.map((p, i) => pad + (points.length === 1 ? iw / 2 : i / (points.length - 1) * iw));
-  const yOf = v => padT + (1 - (v - yMin) / (yMax - yMin)) * ih;
-  let g = "";
-  for (let f = .25; f <= .75; f += .25) {
-    const v = yMin + (yMax - yMin) * f;
-    const y = yOf(v);
-    g += `<line x1="${pad}" y1="${y}" x2="${W - pad}" y2="${y}" stroke="rgba(139,148,158,.15)"/>`;
-    g += `<text x="${pad - 6}" y="${y + 3}" fill="#8b949e" font-size="9" text-anchor="end">${fmt(v, 1)}</text>`;
-  }
-  const line = points.map((p, i) => `${xs[i]},${yOf(o.y(p))}`).join(" ");
-  const dots = points.map((p, i) =>
-    `<circle cx="${xs[i]}" cy="${yOf(o.y(p))}" r="3" fill="${o.color(p)}"><title>${esc(o.title ? o.title(p) : "")}</title></circle>`).join("");
-  const xl = points.map((p, i) =>
-    `<text x="${xs[i]}" y="${H - 8}" fill="#8b949e" font-size="9" text-anchor="middle" transform="${points.length > 18 ? 'rotate(-45,' + xs[i] + ',' + (H - 8) + ')' : ''}">${esc(o.xLabel(p))}</text>`).join("");
-  return `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;min-height:${H}px;">${g}${xl}<polyline points="${line}" fill="none" stroke="#58a6ff" stroke-width="2"/>${dots}</svg>`;
+  mtx.innerHTML = `
+    <div class="card-title" style="margin-top:8px">成本矩阵（✎校准=人工确认 · 其余=收盘快照）</div>
+    <table><thead>${head}</thead><tbody>${rows}</tbody></table>`;
 }
 
 /* ---- 盘中实时 ---- */
@@ -577,61 +595,54 @@ function renderKPI(kpi) {
 
 /* ---- ② 图表 ---- */
 function renderSignalBar(sigStat, nameMap) {
-  const el = document.getElementById("signalBar");
   const codes = Object.keys(sigStat || {});
-  if (!codes.length) { el.innerHTML = '<div class="empty">无数据</div>'; return; }
-  const maxVal = Math.max(1, ...codes.map(c =>
-    Math.max(sigStat[c].buy_signals || 0, sigStat[c].sell_signals || 0)));
-  el.innerHTML = codes.map(code => {
-    const s = sigStat[code];
-    const b = s.buy_signals || 0, sl = s.sell_signals || 0;
-    const nm = (nameMap || {})[code] || code;
-    return `
-      <div class="bar-row">
-        <div class="bar-label" title="${esc(code)}">${esc(nm)}</div>
-        <div style="display:flex;gap:4px;align-items:center;">
-          <div class="bar-track" style="flex:${b + 1};" title="买入信号 ${b}"><div class="bar-fill buy" style="width:${b / maxVal * 100}%;"><span class="cnt">${b}</span></div></div>
-          <div class="bar-track" style="flex:${sl + 1};" title="卖出信号 ${sl}"><div class="bar-fill sell" style="width:${sl / maxVal * 100}%;"><span class="cnt">${sl}</span></div></div>
-        </div>
-      </div>`;
-  }).join("") + `<div class="cell-dim" style="font-size:11px;margin-top:6px">绿=买入信号数 · 红=卖出信号数</div>`;
+  if (!codes.length) { echClear("echSignal"); return; }
+  codes.sort((a, b) =>
+    ((sigStat[b].sell_signals || 0) + (sigStat[b].buy_signals || 0))
+    - ((sigStat[a].sell_signals || 0) + (sigStat[a].buy_signals || 0)));
+  const names = codes.map(c => (nameMap || {})[c] || c);
+  echRender("echSignal", {
+    ...ECH_BASE,
+    grid: { left: 90, right: 40, top: 20, bottom: 26 },
+    xAxis: { type: "value", axisLabel: { color: "#8b949e", fontSize: 10 }, splitLine: { lineStyle: { color: "rgba(139,148,158,.15)" } } },
+    yAxis: { type: "category", data: names, axisLine: { lineStyle: { color: "#30363d" } }, axisLabel: { color: "#8b949e", fontSize: 10 } },
+    tooltip: { ...ECH_BASE.tooltip, trigger: "axis", axisPointer: { type: "shadow" } },
+    series: [
+      { name: "买入", type: "bar", data: codes.map(c => sigStat[c].buy_signals || 0),
+        itemStyle: { color: "#3fb950", borderRadius: [0, 3, 3, 0] },
+        label: { show: true, position: "right", color: "#8b949e", fontSize: 10 } },
+      { name: "卖出", type: "bar", data: codes.map(c => sigStat[c].sell_signals || 0),
+        itemStyle: { color: "#f85149", borderRadius: [0, 3, 3, 0] },
+        label: { show: true, position: "right", color: "#8b949e", fontSize: 10 } },
+    ],
+  });
 }
 
 function renderK4Trend(points) {
-  const el = document.getElementById("k4Trend");
-  if (!points || !points.length) {
-    el.innerHTML = '<div class="empty">无跨日数据</div>';
-    return;
-  }
-  const W = 420, H = 180, pad = 30, padT = 14, padB = 24;
-  const iw = W - pad * 2, ih = H - padT - padB;
-  const n = points.length;
-  const xs = points.map((_, i) => pad + (n === 1 ? iw / 2 : i / (n - 1) * iw));
-  const yOf = wr => padT + (1 - (wr == null ? 0 : wr)) * ih;
-
-  let g = "";
-  [0, 0.25, 0.5, 0.75, 1].forEach(v => {
-    const y = yOf(v);
-    g += `<line x1="${pad}" y1="${y}" x2="${W - pad}" y2="${y}" stroke="rgba(139,148,158,.18)" stroke-dasharray="2,4"/>`;
-    g += `<text x="${pad - 6}" y="${y + 3}" fill="#8b949e" font-size="9" text-anchor="end">${Math.round(v * 100)}%</text>`;
+  if (!points || !points.length) { echClear("echK4"); return; }
+  echRender("echK4", {
+    ...ECH_BASE,
+    yAxis: { ...ECH_BASE.yAxis, min: 0, max: 1, axisLabel: { color: "#8b949e", fontSize: 10, formatter: v => Math.round(v * 100) + "%" } },
+    xAxis: { ...ECH_BASE.xAxis, type: "category", data: points.map(p => p.date.slice(5)) },
+    tooltip: { ...ECH_BASE.tooltip, trigger: "axis", formatter: params => {
+      const p = points[params[0].dataIndex];
+      let html = `<b>${p.date}</b>`;
+      params.forEach(x => {
+        const wr = x.seriesName === "买胜率" ? p.buy_wr : p.sell_wr;
+        const n = x.seriesName === "买胜率" ? p.buy_n : p.sell_n;
+        html += `<br/>${x.marker}${x.seriesName}: ${wr == null ? "—" : Math.round(wr * 100) + "%"} (n=${n || 0})`;
+      });
+      return html;
+    }},
+    series: [
+      { name: "买胜率", type: "line", data: points.map(p => p.buy_wr), symbol: "circle", symbolSize: 5,
+        lineStyle: { color: "#3fb950", width: 2 }, itemStyle: { color: "#3fb950" },
+        markLine: { silent: true, symbol: "none", lineStyle: { color: "rgba(139,148,158,.4)", type: "dashed" },
+          data: [{ yAxis: 0.5, label: { formatter: "50%", color: "#8b949e", fontSize: 9 } }] } },
+      { name: "卖胜率", type: "line", data: points.map(p => p.sell_wr), symbol: "circle", symbolSize: 5,
+        lineStyle: { color: "#f85149", width: 2 }, itemStyle: { color: "#f85149" } },
+    ],
   });
-  const xl = points.map((p, i) =>
-    `<text x="${xs[i]}" y="${H - 6}" fill="#8b949e" font-size="9" text-anchor="middle">${esc(p.date.slice(5))}</text>`).join("");
-  const buyLine = points.map((p, i) => `${xs[i]},${yOf(p.buy_wr)}`).join(" ");
-  const sellLine = points.map((p, i) => `${xs[i]},${yOf(p.sell_wr)}`).join(" ");
-  const buyDots = points.map((p, i) => `<circle cx="${xs[i]}" cy="${yOf(p.buy_wr)}" r="3" fill="#3fb950"><title>${esc(p.date)} 买 ${p.buy_wr == null ? "—" : Math.round(p.buy_wr * 100) + "%"}</title></circle>`).join("");
-  const sellDots = points.map((p, i) => `<circle cx="${xs[i]}" cy="${yOf(p.sell_wr)}" r="3" fill="#f85149"><title>${esc(p.date)} 卖 ${p.sell_wr == null ? "—" : Math.round(p.sell_wr * 100) + "%"}</title></circle>`).join("");
-
-  el.innerHTML = `
-    <div class="legend">
-      <span><span class="dot" style="background:#3fb950"></span>买胜率</span>
-      <span><span class="dot" style="background:#f85149"></span>卖胜率</span>
-    </div>
-    <svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;min-height:200px;">
-      ${g}${xl}
-      <polyline points="${buyLine}" fill="none" stroke="#3fb950" stroke-width="2"/>${buyDots}
-      <polyline points="${sellLine}" fill="none" stroke="#f85149" stroke-width="2"/>${sellDots}
-    </svg>`;
 }
 
 /* ---- ③ 持仓对照 ---- */
@@ -922,18 +933,89 @@ function renderStageBoard(stages) {
     </div>`).join("") + `</div>`;
 }
 
-/* ---- ⑨ 复盘报告 ---- */
-function renderReport(md) {
-  const el = document.getElementById("reportBody");
-  if (!md) {
-    el.innerHTML = '<div class="empty">当日无复盘报告</div>';
+/* ---- 行情条 ---- */
+function renderQuotes(q, market) {
+  const bar = document.getElementById("quoteBar");
+  const body = document.getElementById("quotesBody");
+  if (!q || !q.quotes || !q.quotes.length) {
+    if (bar) bar.innerHTML = "";
+    if (body) body.innerHTML = '<div class="empty">无持仓行情</div>';
     return;
   }
-  if (window.marked && window.marked.parse) {
-    el.innerHTML = window.marked.parse(md);
-  } else {
-    el.innerHTML = `<pre>${esc(md)}</pre>`;
+  const srcBadge = q.source === "live"
+    ? `<span class="quote-src">${esc(q.ts)}</span>`
+    : `<span class="quote-src warn">离线/回退昨收</span>`;
+  const cells = q.quotes.map(x => {
+    const chgCls = clsOf(x.change);
+    const pnlTxt = x.pnl_pct == null ? "—" : `${x.pnl_pct >= 0 ? "+" : ""}${fmt(x.pnl_pct, 1)}%`;
+    return `<span class="quote-cell">
+      <span class="q-name">${esc(x.name)}</span><span class="q-code">${esc(x.code)}</span>
+      <span class="q-price ${chgCls}">${fmt(x.price, 3)}</span>
+      <span class="q-chg ${chgCls}">${x.change >= 0 ? "+" : ""}${fmt(x.change, 2)} ${x.change_pct >= 0 ? "+" : ""}${fmt(x.change_pct, 2)}%</span>
+      <span class="q-cost">本 ${fmt(x.cost, 3)}</span>
+      <span class="q-pnl ${clsOf(x.pnl_pct)}">${pnlTxt}</span>
+    </span>`;
+  }).join("");
+  if (bar) bar.innerHTML = cells + srcBadge;
+  if (body) body.innerHTML = `<div class="quote-cell" style="margin:0">${cells}</div>${srcBadge}
+    <div class="cell-dim" style="font-size:11px;margin-top:6px">现价/涨跌来自腾讯实时行情 · 本=持仓成本 · 浮盈%=(现价-成本)/成本 · 盘中每 10s 刷新</div>`;
+}
+
+/* ---- 成本校准 modal ---- */
+let costCalibData = null;  // {stocks, effective_today}
+
+function openCalibModal(ch) {
+  const modal = document.getElementById("calibModal");
+  if (!modal) return;
+  costCalibData = ch;
+  document.getElementById("calibDate").textContent = "(" + todayStr() + ")";
+  const codes = Object.keys((ch && ch.stocks) || {});
+  const tbody = modal.querySelector("#calibTable tbody");
+  tbody.innerHTML = codes.map(code => {
+    const st = ch.stocks[code];
+    const eff = (ch.effective_today || {})[code];
+    const snap = st.points.length ? st.points[st.points.length - 1].cost : "";
+    const srcBadge = eff && eff.src === "人工校准"
+      ? `<span class="calib-badge 人工校准">人工校准</span>`
+      : `<span class="calib-badge 快照">快照</span>`;
+    return `<tr>
+      <td>${esc(st.name || code)} <span class="mono cell-dim">${esc(code)}</span></td>
+      <td class="num">${fmt(snap, 3)}</td>
+      <td><input type="number" step="0.001" data-code="${esc(code)}" value="${eff ? eff.cost : ""}" placeholder="${fmt(snap, 3)}"></td>
+      <td>${srcBadge}</td>
+    </tr>`;
+  }).join("");
+  modal.style.display = "flex";
+}
+
+function closeCalibModal() {
+  const modal = document.getElementById("calibModal");
+  if (modal) modal.style.display = "none";
+}
+
+async function saveCalib() {
+  const modal = document.getElementById("calibModal");
+  const costs = {};
+  modal.querySelectorAll("#calibTable tbody input[data-code]").forEach(inp => {
+    const v = inp.value.trim();
+    if (v !== "") {
+      const n = parseFloat(v);
+      if (!isNaN(n) && n > 0) costs[inp.dataset.code] = n;
+    }
+  });
+  if (!Object.keys(costs).length) { closeCalibModal(); return; }
+  try {
+    const r = await apiCall("save_cost_calibration", todayStr(), costs);
+    statusEl(r.ok ? "成本校准已保存" : "保存失败: " + (r.error || ""), r.ok ? "ok" : "err");
+  } catch (e) {
+    statusEl("保存失败: " + e.message, "err");
   }
+  closeCalibModal();
+  // 刷新成本曲线
+  apiCall("load_cost_history").then(ch => {
+    state.costHistory = ch || {};
+    renderCost(ch || {});
+  }).catch(() => {});
 }
 
 /* ================= 初始化 ================= */
@@ -966,12 +1048,25 @@ function startLivePoll() {
 }
 
 async function init() {
-  // marked 兜底：vendor 缺失时不影响其它区块
   dateSelect.addEventListener("change", () => {
     if (dateSelect.value) loadAndRender(dateSelect.value, false);
   });
   refreshBtn.addEventListener("click", () => {
     if (dateSelect.value) loadAndRender(dateSelect.value, false);
+  });
+  // 成本校准按钮
+  const calibBtn = document.getElementById("calibBtn");
+  if (calibBtn) calibBtn.addEventListener("click", () => {
+    if (!state.costHistory) {
+      apiCall("load_cost_history").then(ch => { state.costHistory = ch || {}; openCalibModal(ch || {}); }).catch(() => {});
+    } else openCalibModal(state.costHistory);
+  });
+  const calibClose = document.getElementById("calibClose");
+  if (calibClose) calibClose.addEventListener("click", closeCalibModal);
+  const calibSave = document.getElementById("calibSave");
+  if (calibSave) calibSave.addEventListener("click", saveCalib);
+  document.getElementById("calibModal").addEventListener("click", e => {
+    if (e.target.id === "calibModal") closeCalibModal();
   });
   autoPoll.addEventListener("change", () => {
     if (autoPoll.checked) {

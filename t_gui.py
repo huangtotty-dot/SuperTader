@@ -33,7 +33,6 @@ BASE = Path(r"E:\06_T")
 OUT = BASE / "t_io" / "validation" / "daily_review"
 TRACES = BASE / "t_io" / "traces"
 STATE_DIR = BASE / "t_io" / "state"
-REPORT_DIR = BASE / "doc" / "每日复盘"
 HOLDINGS = BASE / "holdings.json"
 T_MODE = BASE / "t_mode.json"
 IDX_REGIME = BASE / "t_io" / "index_regime"
@@ -144,14 +143,6 @@ class Api:
         out["position_builder"] = self._agg_position_builder(date)
         out["stage_board"] = self._load_stage_board()
 
-        md_fp = REPORT_DIR / f"{date}_复盘.md"
-        out["report_md"] = ""
-        if md_fp.exists():
-            try:
-                out["report_md"] = open(md_fp, encoding="utf-8").read()
-            except Exception:
-                pass
-
         out["name_map"] = self._build_name_map(
             out["sig_stat"], out["add_watch"], out["position_builder"], out["positions"]["current"]
         )
@@ -223,8 +214,10 @@ class Api:
 
     # ---------- 持仓成本历史 ----------
     def load_cost_history(self):
-        """读全部 holdings 快照，按股按日聚合 cost。"""
+        """读全部 holdings 快照 + 人工校准文件，按股按日聚合 cost。
+        校准优先（src=人工校准），否则快照值（src=快照）。"""
         dates, stocks = [], {}
+        calib = _load_json(STATE_DIR / "cost_calibration.json", {}).get("calibrations", {})
         for fp in sorted(STATE_DIR.glob("holdings_*.json")):
             d = fp.stem.replace("holdings_", "")
             try:
@@ -234,15 +227,131 @@ class Api:
             if not snap:
                 continue
             dates.append(d)
+            calib_day = calib.get(d, {})
             for code, info in snap.items():
                 if not isinstance(info, dict):
                     continue
                 cost = info.get("cost")
                 if cost is None:
                     continue
+                src = "快照"
+                if code in calib_day and calib_day[code] is not None:
+                    cost = float(calib_day[code])
+                    src = "人工校准"
                 st = stocks.setdefault(code, {"name": info.get("name", code), "points": []})
-                st["points"].append({"date": d, "cost": float(cost)})
-        return _clean({"dates": dates, "stocks": stocks})
+                st["points"].append({"date": d, "cost": float(cost), "src": src})
+
+        # 今日有效成本（校准优先，否则当前 holdings）供预填
+        today = datetime.now().strftime("%Y-%m-%d")
+        cur = _load_json(HOLDINGS, {})
+        effective = {}
+        calib_today = calib.get(today, {})
+        for code, info in cur.items():
+            if not isinstance(info, dict):
+                continue
+            if code in calib_today and calib_today[code] is not None:
+                effective[code] = {"cost": float(calib_today[code]), "src": "人工校准"}
+            elif info.get("cost") is not None:
+                effective[code] = {"cost": float(info["cost"]), "src": "快照"}
+        return _clean({"dates": dates, "stocks": stocks,
+                       "effective_today": effective,
+                       "calibrated_dates": sorted(calib.keys())})
+
+    def save_cost_calibration(self, date, costs):
+        """保存人工校准成本（date → {code: cost}），原子写。"""
+        fp = STATE_DIR / "cost_calibration.json"
+        data = _load_json(fp, {})
+        if not isinstance(data, dict) or "calibrations" not in data:
+            data = {"version": 1, "calibrations": {}}
+        calib = data.setdefault("calibrations", {})
+        day = calib.setdefault(date, {})
+        if isinstance(costs, dict):
+            for code, cost in costs.items():
+                try:
+                    val = float(cost)
+                except (TypeError, ValueError):
+                    continue
+                day[code] = val if val > 0 else None
+        data["updated_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        try:
+            tmp = fp.with_suffix(".tmp")
+            with open(tmp, "w", encoding="utf-8") as f:
+                json.dump(data, f, ensure_ascii=False, indent=2)
+            tmp.replace(fp)
+            return {"ok": True, "updated_at": data["updated_at"]}
+        except Exception as e:
+            return {"ok": False, "error": str(e)}
+
+    # ---------- 实时行情（顶部行情条） ----------
+    def load_quotes(self):
+        """拉腾讯实时行情（持仓），失败回退 pre_close。"""
+        cur = _load_json(HOLDINGS, {})
+        out = {"source": "fallback", "ts": None, "quotes": []}
+        if not cur:
+            return out
+        symbols = {}
+        for code in cur:
+            symbols[code] = ("sh" + code if code[0] in "56" else "sz" + code)
+        try:
+            import os as _os
+            import urllib.request as _ur
+            for _k in ["http_proxy", "https_proxy", "HTTP_PROXY", "HTTPS_PROXY",
+                       "ALL_PROXY", "all_proxy"]:
+                _os.environ.pop(_k, None)
+            _os.environ["NO_PROXY"] = "*"
+            url = "https://qt.gtimg.cn/q=" + ",".join(symbols.values())
+            req = _ur.Request(url, headers={"User-Agent": "Mozilla/5.0",
+                                            "Referer": "https://gu.qq.com/"})
+            data = _ur.urlopen(req, timeout=4).read().decode("gbk", errors="replace")
+        except Exception:
+            data = ""
+
+        ts = datetime.now().strftime("%H:%M:%S")
+        out["ts"] = ts
+        if not data or "~" not in data:
+            # 回退：用 pre_close
+            out["source"] = "fallback"
+            for code, info in cur.items():
+                if not isinstance(info, dict):
+                    continue
+                pc = info.get("pre_close") or 0
+                out["quotes"].append({
+                    "code": code, "name": info.get("name", code),
+                    "price": pc, "pre_close": pc, "change": 0.0, "change_pct": 0.0,
+                    "cost": info.get("cost"), "pnl_pct": None, "offline": True,
+                })
+            return out
+
+        out["source"] = "live"
+        for line in data.splitlines():
+            line = line.strip()
+            if "=" not in line or '"' not in line:
+                continue
+            sym = line.split("=")[0].replace("v_", "").strip()
+            body = line[line.index('"') + 1: line.rindex('"')]
+            f = body.split("~")
+            if len(f) < 40:
+                continue
+            code = f[2]
+            if code not in cur or not isinstance(cur[code], dict):
+                continue
+            info = cur[code]
+            try:
+                price = float(f[3])
+                pre_close = float(f[4])
+                change = float(f[31]) if f[31] else 0.0
+                change_pct = float(f[32]) if f[32] else 0.0
+            except (ValueError, IndexError):
+                continue
+            cost = info.get("cost")
+            pnl = (price / cost - 1) * 100 if cost else None
+            out["quotes"].append({
+                "code": code, "name": info.get("name", code) or f[1],
+                "price": price, "pre_close": pre_close, "change": change,
+                "change_pct": change_pct, "cost": cost, "pnl_pct": pnl,
+                "offline": False,
+            })
+        return _clean(out)
 
     # ---------- 实时 console ----------
     KEY_LINE_WORDS = ["推送", "信号", "拦截", "阻断", "熔断", "告警", "建仓",
