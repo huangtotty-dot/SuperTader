@@ -19,7 +19,9 @@
       "Bash(git stash *)",
       "Bash(git push *)",
       "Read(//c/Users/Lenovo/.goldminer3/projects/d56bed6c-87ca-11f1-97f7-98fa9b8df5e7/**)",
-      "WebFetch(domain:www.myquant.cn)"
+      "WebFetch(domain:www.myquant.cn)",
+      "Bash(git commit -m 'data: 实盘运行时数据归档 \\(08-03 ~ 08-04\\) *)",
+      "Bash(git tag *)"
     ],
     "additionalDirectories": [
       "C:\\Users\\Lenovo\\.goldminer3\\projects\\d56bed6c-87ca-11f1-97f7-98fa9b8df5e7"

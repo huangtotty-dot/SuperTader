@@ -3,7 +3,7 @@
     "description": "系统阶段登记表（单一事实源）。daily_review.py 每次运行读取本表并注入日复盘报告「系统阶段看板」段。阶段变更只在验收事件发生时由周/月复盘维护，日常报告自动反映。",
     "zones": ["已验收", "观察中", "优化管线中", "待启动"],
     "updated": "2026-08-05",
-    "updated_by": "08-05 晨间 reconcile 登记（虚拟账本分叉 + sizing 冻结）"
+    "updated_by": "08-05 晨间 reconcile 登记（虚拟账本分叉 + sizing 冻结）；08-05 #10 纯底仓处置（已验收区新增）"
   },
   "stages": [
     {"name": "趋势层5分钟判定（已降级纯信息层）", "zone": "已验收", "since": "V3.0", "evidence": "v3.0-5min-signal-refactor 分支；trend_regime.py", "note": "只做信息注入，不参与门控"},
@@ -13,6 +13,7 @@
     {"name": "V1.1.2 RSI NaN 兜底（C 语义）", "zone": "已验收", "since": "2026-08-04", "evidence": "commit 5334244；t_io/validation/rsi_nan_guard/", "note": "0/0 钉平窗填 50 中性；08-04 实盘首日生效确认（尾盘钉平 NaN=0）"},
     {"name": "持仓双账户对账", "zone": "已验收", "since": "2026-08-04", "evidence": "commit 0a0e388", "note": "8 只池；holdings 快照归档机制 t_io/state/"},
     {"name": "三层复盘体系 + KPI 日快照采集", "zone": "已验收", "since": "2026-08-03", "evidence": "commit 23f31fd；日/周/月清单", "note": "K1-K5 机读输出，喂周复盘 §1.5"},
+    {"name": "002639/603667 纯底仓化（不做T）", "zone": "已验收", "since": "2026-08-05", "evidence": "用户拍板；holdings.json t_qty=0；清单 §5 #10 关闭", "note": "持股不动、系统不做T，双边信号 qty 恒 0；消除 002639 半截冻结态；恢复 T 需重评估 base_pct 走管线"},
 
     {"name": "K4 买 wr 0.15 偏离（标黄）", "zone": "观察中", "since": "2026-08-03", "evidence": "kpi_2026-08-03.json / kpi_2026-08-04.json", "note": "vs 回测基线 0.50 偏离 −35pp；第 2 天窗口未动（0 买信号日顺延）；非调参触发"},
     {"name": "588170 底仓漂移/未接回", "zone": "观察中", "since": "2026-08-03", "evidence": "closure_audit 08-03/08-04；08-04 复盘 ⑩-1", "note": "用户意图已明确（提示接回，非认可减仓）→ 已转 P1 候选（优化管线中）"},
