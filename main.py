@@ -611,7 +611,7 @@ def _maybe_run_position_builder_intraday(now: datetime) -> None:
         _position_builder_intraday_pushed.clear()
 
     try:
-        results = _run_position_scan(date_str=today, silent=True)
+        results = _run_position_scan(date_str=today, silent=True, scan_type="intraday")
         for r in results:
             if r.get("verdict") == "signal" and r["code"] not in _position_builder_intraday_pushed:
                 _position_builder_intraday_pushed.add(r["code"])
@@ -633,7 +633,7 @@ def _maybe_run_position_builder(now: datetime) -> None:
         return
     _position_builder_push_date = today
     try:
-        results = _run_position_scan(date_str=today, silent=True)
+        results = _run_position_scan(date_str=today, silent=True, scan_type="eod")
         signals = [r for r in results if r.get("verdict") == "signal"]
         if signals:
             log.info(f"🏗️ 建仓信号扫描完成: {len(signals)} 只触发 signal, "
