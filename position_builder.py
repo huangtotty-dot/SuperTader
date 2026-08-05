@@ -407,6 +407,96 @@ def push_signal_feishu(result: dict, dry_run: bool = False) -> bool:
     )
 
 
+VERDICT_ICON = {"signal": "🔴", "approaching": "🟡", "weak": "⚪", "insufficient_data": "⬜"}
+
+
+def build_summary_card(results: list, date_str: str = "") -> dict:
+    """构建盘后建仓扫描汇总飞书卡片。"""
+    if not results:
+        return None
+
+    lines = [f"**建仓扫描汇总**  {date_str}", ""]
+
+    # 统计
+    signal_count = sum(1 for r in results if r.get("verdict") == "signal")
+    approaching_count = sum(1 for r in results if r.get("verdict") == "approaching")
+    weak_count = sum(1 for r in results if r.get("verdict") == "weak")
+    no_data_count = sum(1 for r in results if r.get("verdict") == "insufficient_data")
+
+    lines.append(f"🔴 满足条件: **{signal_count}** 只  |  🟡 接近: **{approaching_count}** 只  |  ⚪ 偏弱: **{weak_count}** 只  |  ⬜ 无数据: **{no_data_count}** 只")
+    lines.append("")
+
+    # 有数据的股票排序：signal > approaching > weak
+    scored = [r for r in results if r.get("verdict") != "insufficient_data"]
+    scored.sort(key=lambda r: -r.get("composite_score", 0))
+
+    if scored:
+        lines.append("**各股得分：**")
+        lines.append("")
+        for r in scored:
+            icon = VERDICT_ICON.get(r.get("verdict", ""), "⚪")
+            price = r.get("latest_price")
+            price_str = f"{price:.2f}" if isinstance(price, (int, float)) else "N/A"
+            pos = r.get("position") or {}
+            qty = pos.get("suggested_qty", 0)
+
+            # 条件通过情况
+            conds = r.get("conditions", {})
+            cond_parts = []
+            for key in ["macd_golden", "boll_mid_support", "rsi_healthy", "volume_shrink", "support_retest"]:
+                c = conds.get(key, {})
+                cond_parts.append("●" if c.get("passed") else "○")
+            cond_str = "".join(cond_parts)
+
+            lines.append(
+                f"{icon} **{r['code']}** {r['name']}  "
+                f"得分 **{r['composite_score']}**  "
+                f"价 {price_str}  "
+                f"建议 {qty}股  "
+                f"{cond_str}"
+            )
+
+    # 无数据股票简表
+    no_data_list = [r for r in results if r.get("verdict") == "insufficient_data"]
+    if no_data_list:
+        lines.append("")
+        lines.append(f"⬜ 无分钟数据（{len(no_data_list)} 只）：")
+        nd_codes = ", ".join(r["code"] for r in no_data_list)
+        lines.append(nd_codes)
+
+    lines.append("")
+    lines.append("●=通过  ○=未通过  (MACD/BOLL/RSI/量/支撑)")
+
+    markdown = "\n".join(lines)
+
+    return {
+        "msg_type": "interactive",
+        "card": {
+            "header": {
+                "template": "turquoise",
+                "title": {"tag": "plain_text", "content": f"📋 建仓扫描汇总 - {date_str}"},
+            },
+            "elements": [{"tag": "markdown", "content": markdown}],
+        },
+    }
+
+
+def push_summary_feishu(results: list, date_str: str = "", dry_run: bool = False) -> bool:
+    """推送盘后建仓汇总到飞书。"""
+    if not _FEISHU_AVAILABLE or not results:
+        return False
+    if dry_run:
+        return False
+    card = build_summary_card(results, date_str)
+    if card is None:
+        return False
+    return send_feishu_payload(
+        card,
+        success_log=f"建仓扫描汇总飞书推送成功: {len(results)} 只",
+        error_prefix="建仓扫描汇总飞书推送",
+    )
+
+
 def _py_type(v):
     """将 numpy 类型转换为 Python 原生类型，确保 JSON 可序列化。"""
     if isinstance(v, (np.bool_,)):

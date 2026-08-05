@@ -98,8 +98,10 @@ shared['__name__'] = '__main__'  # 恢复：main.py 尾部自身的 __main__ 启
 # ── 建仓信号扫描（收盘后自动执行）──
 try:
     from position_builder import run_position_scan as _run_position_scan
+    from position_builder import push_summary_feishu as _push_summary_feishu
 except Exception as _e:
     _run_position_scan = None
+    _push_summary_feishu = None
     print(f"[WARN] position_builder 加载失败（建仓扫描不可用）: {_e}")
 
 # 将共享命名空间中的关键变量暴露到当前模块的 globals，使 main.py 的代码可以运行
@@ -619,7 +621,7 @@ def _maybe_run_position_builder_intraday(now: datetime) -> None:
 
 
 def _maybe_run_position_builder(now: datetime) -> None:
-    """收盘后（15:05-15:15）每日一次建仓信号扫描。"""
+    """收盘后（15:05-15:15）每日一次建仓信号扫描 + 盘后汇总飞书推送。"""
     global _position_builder_push_date
     if _run_position_scan is None:
         return
@@ -638,6 +640,12 @@ def _maybe_run_position_builder(now: datetime) -> None:
                      f"{len(results) - len(signals)} 只未满足")
         else:
             log.info(f"🏗️ 建仓信号扫描完成: 0/{len(results)} 只触发 signal")
+
+        # 盘后汇总推送
+        if _push_summary_feishu and results:
+            _push_summary_feishu(results, date_str=today)
+            log.info(f"📋 建仓扫描汇总已推送")
+
     except Exception as e:
         log.warning(f"⚠️ 建仓信号扫描异常（已吞掉，不影响主循环）: {str(e)[:200]}")
 
