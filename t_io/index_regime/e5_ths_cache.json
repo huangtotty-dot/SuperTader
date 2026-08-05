@@ -2598,5 +2598,35 @@
   "zb_rate": 0.4876,
   "seal_rate": 0.5124378109452736,
   "source": "ths_limit_up_pool"
+ },
+ "20260804": {
+  "date": "20260804",
+  "zt_count": 137,
+  "dt_count": 0,
+  "zb_count": 15,
+  "zt_touched": 152,
+  "zb_rate": 0.0987,
+  "seal_rate": 0.9013157894736842,
+  "source": "ths_limit_up_pool"
+ },
+ "20260803": {
+  "date": "20260803",
+  "zt_count": 75,
+  "dt_count": 8,
+  "zb_count": 16,
+  "zt_touched": 91,
+  "zb_rate": 0.1758,
+  "seal_rate": 0.8241758241758241,
+  "source": "ths_limit_up_pool"
+ },
+ "20260805": {
+  "date": "20260805",
+  "zt_count": 99,
+  "dt_count": 1,
+  "zb_count": 43,
+  "zt_touched": 142,
+  "zb_rate": 0.3028,
+  "seal_rate": 0.6971830985915493,
+  "source": "ths_limit_up_pool"
  }
 }
