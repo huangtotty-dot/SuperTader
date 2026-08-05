@@ -298,6 +298,12 @@ th.num { text-align: right; }
 .quote-cell .q-cost { color: var(--text-dim); margin-right: 8px; }
 .quote-cell .q-pnl { font-weight: 700; }
 .quote-src { color: var(--text-faint); font-size: 11px; margin-left: 4px; }
+.quote-summary {
+  margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--border-soft);
+  color: var(--text-dim); font-size: 13px; font-family: var(--mono);
+  display: flex; gap: 24px; flex-wrap: wrap;
+}
+.quote-summary b { margin-left: 4px; }
 
 /* ---------- ECharts ---------- */
 .echart { width: 100%; height: 280px; }

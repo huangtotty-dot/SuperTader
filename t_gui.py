@@ -81,6 +81,8 @@ class Api:
         self._dates_cache = None
         # 增量信号轮询的内存态（webview.start() 期间存活）
         self._dt = {"date": None, "offset": 0, "seen": set()}
+        # 建仓/加仓信号增量轮询内存态
+        self._pos = {"date": None, "offset": 0, "seen": set()}
 
     # ---------- 日期发现 ----------
     def available_dates(self):
@@ -319,7 +321,10 @@ class Api:
                     "code": code, "name": info.get("name", code),
                     "price": pc, "pre_close": pc, "change": 0.0, "change_pct": 0.0,
                     "cost": info.get("cost"), "pnl_pct": None, "offline": True,
+                    "qty": info.get("qty", 0), "base": info.get("base", 0),
+                    "t_qty": info.get("t_qty", 0),
                 })
+            self._write_daily_holdings(out)
             return out
 
         out["source"] = "live"
@@ -350,8 +355,67 @@ class Api:
                 "price": price, "pre_close": pre_close, "change": change,
                 "change_pct": change_pct, "cost": cost, "pnl_pct": pnl,
                 "offline": False,
+                "qty": info.get("qty", 0), "base": info.get("base", 0),
+                "t_qty": info.get("t_qty", 0),
             })
+        self._write_daily_holdings(out)
         return _clean(out)
+
+    def save_daily_holdings(self):
+        """写今日持仓每日快照（含数量/成本/盈亏）。"""
+        return self._write_daily_holdings(self.load_quotes())
+
+    def _write_daily_holdings(self, q):
+        """数量/成本读用户每天更新的 holdings.json，盈亏按盘中实时价计算。"""
+        today = datetime.now().strftime("%Y-%m-%d")
+        fp = STATE_DIR / f"holdings_daily_{today}.json"
+        cur = _load_json(HOLDINGS, {})
+        rows = []
+        total_value = total_cost = total_pnl = 0.0
+        for qq in q.get("quotes", []):
+            code = qq.get("code")
+            info = cur.get(code, {})
+            if not isinstance(info, dict):
+                continue
+            qty = info.get("qty", 0)
+            cost = info.get("cost")
+            price = qq.get("price")
+            pnl_amt = None
+            if cost and price and qty:
+                pnl_amt = round((price - cost) * qty, 2)
+                total_value += price * qty
+                total_cost += cost * qty
+                total_pnl += (price - cost) * qty
+            rows.append({
+                "code": code, "name": qq.get("name", code),
+                "account": info.get("account", ""), "type": info.get("type", ""),
+                "qty": qty, "base": info.get("base", 0), "t_qty": info.get("t_qty", 0),
+                "cost": cost, "pre_close": info.get("pre_close"),
+                "price": price, "change_pct": qq.get("change_pct"),
+                "pnl_pct": qq.get("pnl_pct"), "pnl_amt": pnl_amt,
+                "offline": bool(qq.get("offline")),
+            })
+        summary = {
+            "total_value": round(total_value, 2) if total_value else None,
+            "total_cost": round(total_cost, 2) if total_cost else None,
+            "total_pnl": round(total_pnl, 2) if total_pnl else None,
+            "total_pnl_pct": round(total_pnl / total_cost * 100, 2) if total_cost else None,
+        }
+        data = {
+            "date": today,
+            "updated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "source": q.get("source", "fallback"),
+            "holdings": rows,
+            "summary": summary,
+        }
+        try:
+            tmp = fp.with_suffix(".tmp")
+            with open(tmp, "w", encoding="utf-8") as f:
+                json.dump(_clean(data), f, ensure_ascii=False, indent=2)
+            tmp.replace(fp)
+            return {"ok": True, "path": str(fp)}
+        except Exception as e:
+            return {"ok": False, "error": str(e)}
 
     # ---------- 实时 console ----------
     KEY_LINE_WORDS = ["推送", "信号", "拦截", "阻断", "熔断", "告警", "建仓",
@@ -498,6 +562,70 @@ class Api:
                 "code": r.get("code"), "name": r.get("name"),
                 "price": r.get("price"), "decision": r.get("decision"),
                 "score": score, "reason": r.get("decision_reason"),
+            })
+        return _clean(out)
+
+    # ---------- 建仓/加仓信号增量轮询 ----------
+    def poll_new_position_signals(self, date):
+        """增量读 position_builder，返回新增 signal（scan_type=intraday）。
+        in_holdings=true → 加仓，false → 建仓。首次/切日期/轮转只建基线。"""
+        out = {"signals": [], "baseline": True}
+        fp = TRACES / f"position_builder_{date}.jsonl"
+        if not fp.exists():
+            self._pos["date"] = None
+            self._pos["offset"] = 0
+            self._pos["seen"] = set()
+            return out
+        try:
+            size = fp.stat().st_size
+        except Exception:
+            return out
+
+        st = self._pos
+        if st["date"] != date or size < st["offset"]:
+            st["date"] = date
+            st["offset"] = size
+            st["seen"] = set()
+            return out
+        if size <= st["offset"]:
+            return {"signals": [], "baseline": False}
+
+        try:
+            with open(fp, encoding="utf-8", errors="replace") as f:
+                f.seek(st["offset"])
+                data = f.read()
+        except Exception:
+            return out
+        st["offset"] = size
+        out["baseline"] = False
+
+        for line in data.splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                r = json.loads(line)
+            except Exception:
+                continue
+            if r.get("scan_type") != "intraday" or r.get("verdict") != "signal":
+                continue
+            key = (r.get("scan_time"), r.get("code"))
+            if key in st["seen"]:
+                continue
+            st["seen"].add(key)
+            in_hold = bool(r.get("in_holdings"))
+            out["signals"].append({
+                "scan_time": r.get("scan_time"),
+                "code": r.get("code"), "name": r.get("name"),
+                "price": r.get("price"),
+                "composite_score": r.get("composite_score"),
+                "verdict": r.get("verdict"),
+                "in_holdings": in_hold,
+                "type": "加仓" if in_hold else "建仓",
+                "suggested_qty": (r.get("position") or {}).get("suggested_qty")
+                    if isinstance(r.get("position"), dict) else r.get("suggested_qty"),
+                "suggested_price": (r.get("position") or {}).get("suggested_price")
+                    if isinstance(r.get("position"), dict) else r.get("suggested_price"),
             })
         return _clean(out)
 
