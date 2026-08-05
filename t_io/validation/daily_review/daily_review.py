@@ -413,6 +413,95 @@ def stage_board_md():
     L += ["<!-- 阶段看板:end -->", ""]
     return "\n".join(L)
 
+# ---------- 8. 加仓观察（§1 第1步·重点考察点；分析-only，周六周复盘立项设计可改） ----------
+# 支撑位定义（观察期 v0）：
+#   MA10/MA20/MA60 = 腾讯 qfq 日线（web.ifzq.gtimg.cn fqkline，直连；akshare/eastmoney 在本机复盘环境 SSL 不可达）
+#   日内VWAP       = decision_trace 最后一个有效 tick 的 vwap（盘后定值）
+#   近20日平台低点  = 日线 low 的 20 日最小值
+# 回踩事件判定（v0）：日低 ≤ 支撑×1.005 记"触及"；收盘 ≥ 支撑=守住、收盘 < 支撑=破位；
+#   1.005 < 日低/支撑 ≤ 1.02 记"临近未触"（候选素材，不计事件）。
+import urllib.request as _urlreq
+
+def _tx_daily(code, n=80):
+    """腾讯 qfq 日线 [[date,open,close,high,low,...],...]；失败返回 []"""
+    mkt = ("sh" if code.startswith(("5", "6")) else "sz") + code
+    url = f"http://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param={mkt},day,,,{n},qfq"
+    try:
+        req = _urlreq.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+        d = json.loads(_urlreq.urlopen(req, timeout=15).read().decode())
+        node = d["data"][mkt]
+        return node.get("qfqday") or node.get("day") or []
+    except Exception:
+        return []
+
+add_watch = {}
+for c in CODES:
+    p = prof.get(c) or {}
+    if p.get("day_type") in (None, "unknown") or not fnum(p.get("low")):
+        continue
+    rows = _tx_daily(c)
+    closes = [float(r[2]) for r in rows]
+    lows_d = [float(r[3]) for r in rows]
+    vwap = None
+    for r in reversed(ticks[c]):
+        if fnum(r.get("vwap")):
+            vwap = round(float(r["vwap"]), 4)
+            break
+    sups = {}
+    if len(closes) >= 60:
+        sups["MA10"] = round(sum(closes[-10:]) / 10, 4)
+        sups["MA20"] = round(sum(closes[-20:]) / 20, 4)
+        sups["MA60"] = round(sum(closes[-60:]) / 60, 4)
+        sups["近20日低点"] = round(min(lows_d[-20:]), 4)
+    if vwap:
+        sups["日内VWAP"] = vwap
+    day_low, day_close = float(p["low"]), float(p["close"])
+    events, near = [], []
+    for lv, sv in sups.items():
+        if not sv:
+            continue
+        dist = (day_low / sv - 1) * 100   # 日低相对支撑的偏离%（负=刺穿）
+        if abs(dist) <= 0.5:
+            # 回踩事件（父代理口径：盘中最低价距支撑 ≤0.5%）
+            events.append({"level": lv, "support": sv, "day_low": day_low,
+                           "dist%": round(dist, 2),
+                           "status": "守住" if day_close >= sv else "破位"})
+        elif -3.0 <= dist < -0.5:
+            # 宽幅刺穿素材：日低刺穿支撑 0.5%~3%；收盘收回=刺穿收回，收盘在下=破位
+            near.append({"level": lv, "support": sv, "dist%": round(dist, 2),
+                         "type": "刺穿收回" if day_close >= sv else "刺穿破位"})
+        elif 0.5 < dist <= 2.0:
+            # 临近未触素材：日低在支撑上方 0.5%~2%
+            near.append({"level": lv, "support": sv, "dist%": round(dist, 2), "type": "临近未触"})
+        # |dist| > 3%：长期偏离（下跌趋势中 MA 悬于头顶），非回踩，不记录
+    add_watch[c] = {"name": NAMES[c], "day_low": day_low, "close": day_close, "vwap": vwap,
+                    "daily_rows": len(rows), "supports": sups, "events": events, "near": near}
+
+def add_watch_md():
+    n_hold = sum(1 for v in add_watch.values() for e in v["events"] if e["status"] == "守住")
+    n_break = sum(1 for v in add_watch.values() for e in v["events"] if e["status"] == "破位")
+    n_buy = sum(len([d for d in decisions[c] if d[1] == "BUY_LOW"]) for c in CODES)
+    L = ["", "<!-- 加仓观察:begin -->", "",
+         f"## 加仓观察（{DATE}，回踩事件扫描 v0 · 重点考察点，喂周六加仓逻辑设计）", ""]
+    L.append("> 支撑位口径 v0（周六立项设计可改）：MA10/MA20/MA60=腾讯 qfq 日线；日内VWAP=trace 尾盘定值；"
+             "近20日平台低点=日线 low 20 日最小。回踩事件=日低距支撑 ≤0.5%（守住=收盘≥支撑，破位=收盘<支撑）；"
+             "素材带：刺穿 0.5%~3%（收盘收回=刺穿收回/在下=刺穿破位）、临近未触（上方 0.5%~2%）；"
+             "偏离 >3% 属长期下方运行，非回踩不记录。")
+    L.append("")
+    L.append("| 代码 | 名称 | 日低 | 收盘 | 回踩事件（支撑@值，距%，守/破） | 素材（类型：支撑@值，距%） |")
+    L.append("|---|---|---|---|---|---|")
+    for c, v in add_watch.items():
+        ev = "；".join(f"{e['level']}@{e['support']}（{e['dist%']:+}%，{e['status']}）" for e in v["events"]) or "—"
+        nr = "；".join(f"{n['type']}:{n['level']}@{n['support']}（{n['dist%']:+}%）" for n in v["near"]) or "—"
+        L.append(f"| {c} | {v['name']} | {v['day_low']} | {v['close']} | {ev} | {nr} |")
+    if not add_watch:
+        L.append("| — | — | — | — | 当日无数据 | — |")
+    L.append("")
+    L.append(f"- 回踩事件合计 **{n_hold + n_break}** 起（守住 {n_hold} / 破位 {n_break}）；"
+             f"当日全池买入信号 **{n_buy}** 条（回踩位置买信号样本积累中）。")
+    L += ["", "<!-- 加仓观察:end -->", ""]
+    return "\n".join(L)
+
 if report_fp.exists():
     txt = report_fp.read_text(encoding="utf-8")
     if "<!-- KPI日快照:begin -->" in txt:
@@ -431,6 +520,14 @@ if report_fp.exists():
                          txt, flags=re.S)
         else:
             txt = txt.rstrip() + "\n" + sb
+    aw = add_watch_md()
+    if "<!-- 加仓观察:begin -->" in txt:
+        txt = re.sub(r"<!-- 加仓观察:begin -->.*?<!-- 加仓观察:end -->",
+                     aw.strip().replace("\n\n<!-- 加仓观察:end -->", "\n<!-- 加仓观察:end -->")
+                     .replace("<!-- 加仓观察:begin -->\n\n", "<!-- 加仓观察:begin -->\n"),
+                     txt, flags=re.S)
+    else:
+        txt = txt.rstrip() + "\n" + aw
     report_fp.write_text(txt, encoding="utf-8")
 
 # ---------- 输出 ----------
@@ -443,6 +540,7 @@ result = {"date": DATE, "sig_stat": sig_stat, "shadow_total": shadow_total,
           "closed_loop": closed, "audit_problems": audit_today["problems"] if audit_today else None,
           "settle": {"rows": settle_rows, "by_code": settle_by_code},
           "kpi": kpi,
+          "add_watch": add_watch,
           "watch": watch}
 with open(OUT / f"daily_review_{DATE}.json", "w", encoding="utf-8") as f:
     json.dump(result, f, ensure_ascii=False, indent=2, default=str)
