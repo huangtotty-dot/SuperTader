@@ -21,11 +21,15 @@
     <label class="lbl toggle">
       <input type="checkbox" id="autoPoll" checked> 自动刷新
     </label>
+    <span id="liveTag" class="live-tag" style="display:none"></span>
     <span id="status" class="status"></span>
   </div>
 </header>
 
 <nav class="anchor-nav">
+  <a href="#market">大盘趋势</a>
+  <a href="#cost">成本趋势</a>
+  <a href="#live">盘中实时</a>
   <a href="#kpi">KPI</a>
   <a href="#chart">图表</a>
   <a href="#positions">持仓对照</a>
@@ -38,6 +42,23 @@
 </nav>
 
 <main>
+  <section class="section" id="market">
+    <h2>大盘趋势打分</h2>
+    <div id="marketBody"></div>
+  </section>
+
+  <section class="section" id="cost">
+    <h2>持仓成本变化（每日快照）</h2>
+    <div id="costBody"></div>
+  </section>
+
+  <section class="section" id="live">
+    <h2>盘中实时</h2>
+    <div id="liveBody">
+      <div class="empty">非今日日期或尚无盘中数据</div>
+    </div>
+  </section>
+
   <section class="section" id="kpi">
     <h2>KPI 日快照</h2>
     <div id="kpiCards" class="kpi-grid"></div>

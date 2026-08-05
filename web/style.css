@@ -60,6 +60,13 @@ button:active { transform: translateY(1px); }
 .status { color: var(--text-faint); font-size: 12px; max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .status.err { color: var(--red); }
 .status.ok { color: var(--green); }
+.live-tag {
+  font-size: 12px; font-weight: 700; padding: 3px 10px; border-radius: 20px;
+  background: var(--red-bg); color: var(--red);
+  border: 1px solid rgba(248, 81, 73, .6);
+  animation: livePulse 1.6s ease-in-out infinite;
+}
+@keyframes livePulse { 0%,100% { opacity: 1; } 50% { opacity: .55; } }
 
 /* ---------- 锚点导航 ---------- */
 .anchor-nav {
@@ -207,6 +214,41 @@ th.num { text-align: right; }
 .event-破位 { color: var(--green); }
 .event-刺穿 { color: var(--yellow-soft); }
 .event-临近 { color: var(--text-dim); }
+
+/* ---------- 大盘趋势 / 成本趋势 ---------- */
+.score-chip {
+  display: inline-block; font-family: var(--mono); font-size: 12px;
+  background: var(--bg); border: 1px solid var(--border-soft);
+  border-radius: 4px; padding: 2px 8px; margin: 2px 4px 2px 0; color: var(--text);
+}
+.regime-chip { font-family: var(--mono); font-size: 11px; border-radius: 3px; padding: 1px 6px; margin-left: 4px; }
+.regime-uni_up   { color: var(--red);    background: var(--red-bg); }
+.regime-uni_down { color: var(--green);  background: var(--green-bg); }
+.regime-range    { color: var(--yellow-soft); background: var(--yellow-bg); }
+.regime-other    { color: var(--text-dim); background: var(--bg); border: 1px solid var(--border-soft); }
+
+/* ---------- 实时 console ---------- */
+.console-toggle { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; font-size: 12px; color: var(--text-dim); }
+.console-box {
+  background: #0a0e14; border: 1px solid var(--border-soft); border-radius: 8px;
+  padding: 8px 10px; height: 320px; overflow-y: auto;
+  font-family: var(--mono); font-size: 12px; line-height: 1.6; white-space: pre-wrap; word-break: break-all;
+}
+.console-line { display: block; }
+.console-line .ct { color: var(--text-faint); margin-right: 8px; }
+.console-line .clv { margin-right: 8px; font-weight: 700; }
+.console-line.lv-ERROR, .console-line.lv-ERROR .ct { color: var(--red); }
+.console-line.lv-WARNING, .console-line.lv-WARNING .ct { color: var(--yellow-soft); }
+.console-line.key { background: rgba(88, 166, 255, .06); }
+.console-meta { color: var(--text-faint); font-size: 11px; margin-bottom: 6px; }
+
+/* ---------- 实时信号流 ---------- */
+.live-signal-row.sig { background: var(--red-bg); }
+.live-signal-row.sig td { color: var(--red-soft); }
+.live-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+@media (max-width: 1100px) { .live-grid { grid-template-columns: 1fr; } }
+.regime-chip-live { font-size: 11px; font-weight: 700; padding: 1px 8px; border-radius: 3px; }
+.cool-tag { color: var(--yellow-soft); font-family: var(--mono); font-size: 11px; }
 
 /* ---------- 底部 ---------- */
 .footer {

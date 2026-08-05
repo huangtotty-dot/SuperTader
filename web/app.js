@@ -70,14 +70,58 @@ async function loadAndRender(date, silent) {
     state.date = payload.date;
     state.payload = payload;
     renderAll(payload);
-    // 异步拉 K4 跨日趋势
+
+    // 大盘趋势 + 成本历史（静态，一次拉取）
+    apiCall("load_market_score", date).then(ms => renderMarket(ms || {})).catch(() => {});
+    apiCall("load_cost_history").then(ch => renderCost(ch || {})).catch(() => {});
+
+    // K4 跨日趋势
     apiCall("kpi_trend", 10).then(pts => {
       state.trend = pts || [];
       renderK4Trend(pts || []);
     }).catch(() => {});
-    statusEl(`已加载 ${payload.date} · ${nowTime()}`, "ok");
+
+    // 今日则进入实时模式
+    const isToday = date === todayStr();
+    if (isToday) {
+      await refreshLive(true);       // 立即拉一次 live + console
+      startLivePoll();               // 10s 实时
+    } else {
+      stopLivePoll();
+      renderLive(null, false);       // 显示"非今日"
+      consoleBuf = []; consoleOffset = 0; consoleDate = null;
+    }
+    statusEl(`已加载 ${payload.date}${isToday ? " · 实时模式" : ""} · ${nowTime()}`, "ok");
   } catch (e) {
     statusEl("加载失败: " + e.message, "err");
+  }
+}
+
+function todayStr() {
+  const d = new Date();
+  const p = n => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
+
+async function refreshLive(reset) {
+  const date = state.date;
+  if (!date) return;
+  try {
+    const live = await apiCall("load_live", date);
+    renderLive(live, date === todayStr());
+
+    // console 增量拉取（reset=true 时从头读）
+    const since = reset ? 0 : consoleOffset;
+    const c = await apiCall("load_console", date, since);
+    if (reset) { consoleBuf = []; consoleOffset = 0; consoleDate = date; }
+    if (c.exists && c.lines && c.lines.length) {
+      consoleOffset = c.offset;
+      consoleDate = date;
+      const keyOnly = (document.getElementById("consoleKeyOnly") || {}).checked !== false;
+      appendConsole(c.lines, keyOnly);
+    }
+  } catch (e) {
+    // 静默：实时轮询失败不影响主界面
   }
 }
 
@@ -92,6 +136,273 @@ function renderAll(p) {
   renderAddWatch(p.add_watch);
   renderStageBoard(p.stage_board);
   renderReport(p.report_md);
+}
+
+/* ---- 大盘趋势打分 ---- */
+function renderMarket(ms) {
+  const el = document.getElementById("marketBody");
+  if (!ms || (!ms.history || !ms.history.length) && (!ms.intraday || !ms.intraday.length)) {
+    el.innerHTML = '<div class="empty">无大盘趋势数据</div>';
+    return;
+  }
+  let chips = "";
+  if (ms.last_regime) {
+    chips += `<span class="score-chip">大盘状态: <span class="regime-chip regime-${clsOf(ms.last_regime, "uni_up", "uni_down") === "down" ? "uni_down" : (ms.last_regime === "range" ? "range" : "uni_up")}">${esc(ms.last_regime)}</span></span>`;
+  }
+  if (ms.days_in_regime) chips += `<span class="score-chip">持续 ${ms.days_in_regime} 天</span>`;
+
+  // 跨日 S 曲线（history）
+  let histHtml = "";
+  const hist = ms.history || [];
+  if (hist.length >= 2) {
+    histHtml = lineChart(hist, {
+      x: h => h.date, y: h => h.S, yLabel: "S打分",
+      color: h => (h.regime === "uni_up" ? "#f85149" : h.regime === "uni_down" ? "#3fb950" : h.regime === "range" ? "#d29922" : "#58a6ff"),
+      xLabel: h => h.date.slice(5), title: h => `${h.date}  S=${fmt(h.S, 1)}  ${h.regime || ""}`,
+    });
+  } else {
+    histHtml = '<div class="empty">跨日历史不足 2 点</div>';
+  }
+
+  // 今日盘中曲线（intraday）
+  let intradayHtml = "";
+  const iday = ms.intraday || [];
+  if (iday.length >= 2) {
+    intradayHtml = `<div class="card-title" style="margin-top:12px">今日盘中 S 变化（${iday.length} 点）</div>` +
+      lineChart(iday, {
+        x: p => p.time, y: p => p.score, yLabel: "S",
+        color: p => (p.regime === "uni_up" ? "#f85149" : p.regime === "uni_down" ? "#3fb950" : "#58a6ff"),
+        xLabel: p => (p.time || "").slice(0, 5), title: p => `${p.ts}  S=${fmt(p.score, 1)}  ${p.regime_name || ""}`,
+      });
+  } else if (iday.length === 1) {
+    intradayHtml = `<div class="card-title" style="margin-top:12px">今日盘中：${esc(iday[0].ts)} S=${fmt(iday[0].score, 1)}</div>`;
+  }
+
+  el.innerHTML = `
+    <div class="card">
+      ${chips}
+      <div class="card-title" style="margin-top:8px">跨日 S 打分（state.json history）</div>
+      ${histHtml}
+      ${intradayHtml}
+      <div class="cell-dim" style="font-size:11px;margin-top:8px">S 为大盘态势打分（正=偏多 / 负=偏空）；选中今天时曲线随盘中 10s 刷新</div>
+    </div>`;
+}
+
+/* ---- 持仓成本变化 ---- */
+function renderCost(ch) {
+  const el = document.getElementById("costBody");
+  if (!ch || !ch.dates || !ch.dates.length) {
+    el.innerHTML = '<div class="empty">无持仓成本历史（t_io/state 无快照）</div>';
+    return;
+  }
+  const dates = ch.dates;
+  const stocks = ch.stocks || {};
+  const codes = Object.keys(stocks);
+
+  // 折线（每股一条，最多 8 只）
+  const palette = ["#58a6ff", "#f85149", "#3fb950", "#d29922", "#bc8cff", "#39c5cf", "#ff7b72", "#7ee787"];
+  const codeColor = {};
+  codes.forEach((c, i) => codeColor[c] = palette[i % palette.length]);
+
+  let chartHtml = "";
+  if (codes.length && dates.length >= 2) {
+    const W = 720, H = 260, pad = 44, padT = 12, padB = 26;
+    const iw = W - pad * 2, ih = H - padT - padB;
+    const allCosts = codes.flatMap(c => stocks[c].points.map(p => p.cost));
+    const minC = Math.min(...allCosts), maxC = Math.max(...allCosts);
+    const span = (maxC - minC) || 1;
+    const xs = dates.map((_, i) => pad + (dates.length === 1 ? iw / 2 : i / (dates.length - 1) * iw));
+    const yOf = v => padT + (1 - (v - minC) / span) * ih;
+    let g = "";
+    [minC + span * .25, minC + span * .5, minC + span * .75].forEach(v => {
+      const y = yOf(v);
+      g += `<line x1="${pad}" y1="${y}" x2="${W - pad}" y2="${y}" stroke="rgba(139,148,158,.15)"/>`;
+      g += `<text x="${pad - 6}" y="${y + 3}" fill="#8b949e" font-size="9" text-anchor="end">${fmt(v, 1)}</text>`;
+    });
+    const xl = dates.map((d, i) => `<text x="${xs[i]}" y="${H - 8}" fill="#8b949e" font-size="9" text-anchor="middle">${esc(d.slice(5))}</text>`).join("");
+    const lines = codes.map(code => {
+      const st = stocks[code];
+      const pts = dates.map((d, i) => {
+        const p = st.points.find(x => x.date === d);
+        return p ? `${xs[i]},${yOf(p.cost)}` : "";
+      }).filter(Boolean);
+      if (pts.length < 1) return "";
+      const dots = st.points.map(p => {
+        const i = dates.indexOf(p.date);
+        return `<circle cx="${xs[i]}" cy="${yOf(p.cost)}" r="3" fill="${codeColor[code]}"><title>${esc(st.name)} ${p.date} ${fmt(p.cost, 3)}</title></circle>`;
+      }).join("");
+      return `<polyline points="${pts.join(" ")}" fill="none" stroke="${codeColor[code]}" stroke-width="2" opacity=".9"/>${dots}`;
+    }).join("");
+    const legend = codes.map(code =>
+      `<span style="margin-right:12px;font-size:12px;color:var(--text-dim)"><span class="dot" style="background:${codeColor[code]}"></span>${esc(stocks[code].name || code)}</span>`).join("");
+    chartHtml = `<div class="legend">${legend}</div>
+      <svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;">${g}${xl}${lines}</svg>`;
+  } else {
+    chartHtml = '<div class="empty">快照天数不足 2 天，仅看矩阵</div>';
+  }
+
+  // 成本矩阵表
+  const head = `<tr><th>股票</th>${dates.map(d => `<th class="num">${esc(d.slice(5))}</th>`).join("")}</tr>`;
+  const rows = codes.map(code => {
+    const st = stocks[code];
+    return `<tr><td>${esc(st.name || code)} <span class="mono cell-dim">${esc(code)}</span></td>` +
+      dates.map(d => {
+        const p = st.points.find(x => x.date === d);
+        return `<td class="num">${p ? fmt(p.cost, 3) : '<span class="cell-dim">—</span>'}</td>`;
+      }).join("") + `</tr>`;
+  }).join("");
+
+  el.innerHTML = `
+    <div class="card">
+      ${chartHtml}
+      <div class="card-title" style="margin-top:14px">成本矩阵（每日收盘快照，随复盘累积）</div>
+      <table><thead>${head}</thead><tbody>${rows}</tbody></table>
+    </div>`;
+}
+
+/* 通用 SVG 折线 */
+function lineChart(points, o) {
+  const W = 720, H = 240, pad = 44, padT = 12, padB = 26;
+  const iw = W - pad * 2, ih = H - padT - padB;
+  const vals = points.map(o.y).filter(v => v !== null && v !== undefined);
+  if (!vals.length) return '<div class="empty">无有效数值</div>';
+  const minV = Math.min(...vals), maxV = Math.max(...vals);
+  const span = (maxV - minV) || 1;
+  const padY = span * .15;
+  const yMin = minV - padY, yMax = maxV + padY;
+  const xs = points.map((p, i) => pad + (points.length === 1 ? iw / 2 : i / (points.length - 1) * iw));
+  const yOf = v => padT + (1 - (v - yMin) / (yMax - yMin)) * ih;
+  let g = "";
+  for (let f = .25; f <= .75; f += .25) {
+    const v = yMin + (yMax - yMin) * f;
+    const y = yOf(v);
+    g += `<line x1="${pad}" y1="${y}" x2="${W - pad}" y2="${y}" stroke="rgba(139,148,158,.15)"/>`;
+    g += `<text x="${pad - 6}" y="${y + 3}" fill="#8b949e" font-size="9" text-anchor="end">${fmt(v, 1)}</text>`;
+  }
+  const line = points.map((p, i) => `${xs[i]},${yOf(o.y(p))}`).join(" ");
+  const dots = points.map((p, i) =>
+    `<circle cx="${xs[i]}" cy="${yOf(o.y(p))}" r="3" fill="${o.color(p)}"><title>${esc(o.title ? o.title(p) : "")}</title></circle>`).join("");
+  const xl = points.map((p, i) =>
+    `<text x="${xs[i]}" y="${H - 8}" fill="#8b949e" font-size="9" text-anchor="middle" transform="${points.length > 18 ? 'rotate(-45,' + xs[i] + ',' + (H - 8) + ')' : ''}">${esc(o.xLabel(p))}</text>`).join("");
+  return `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;min-height:${H}px;">${g}${xl}<polyline points="${line}" fill="none" stroke="#58a6ff" stroke-width="2"/>${dots}</svg>`;
+}
+
+/* ---- 盘中实时 ---- */
+function renderLive(live, isToday) {
+  const el = document.getElementById("liveBody");
+  const tag = document.getElementById("liveTag");
+  if (!isToday) {
+    el.innerHTML = '<div class="empty">选择今天（' + state.date + '）查看盘中实时数据</div>';
+    tag.style.display = "none";
+    return;
+  }
+  tag.style.display = "";
+  tag.textContent = "LIVE";
+
+  const liveState = live.intraday_state || {};
+  const trends = liveState.trend_regimes || {};
+  const cycle = liveState.cycle_count || {};
+  const buyCount = liveState.buy_count || {};
+  const sellCount = liveState.sell_count || {};
+  const buyCd = liveState.buy_cooldown || {};
+  const sellCd = liveState.sell_cooldown || {};
+
+  // 盘中状态卡
+  const trendCards = Object.keys(trends).map(code => {
+    const t = trends[code];
+    const st = t.state || "—";
+    const cls = st === "STRONG_BULL" || st === "BULL" ? "regime-uni_up"
+      : st === "STRONG_BEAR" || st === "BEAR" ? "regime-uni_down"
+      : "regime-range";
+    const bCnt = buyCount[code] || 0, sCnt = sellCount[code] || 0;
+    const bc = buyCd[code], sc = sellCd[code];
+    const cdTxt = [];
+    if (bc) cdTxt.push(`买冷却 <span class="cool-tag">${esc(String(bc).slice(11, 19) || bc)}</span>`);
+    if (sc) cdTxt.push(`卖冷却 <span class="cool-tag">${esc(String(sc).slice(11, 19) || sc)}</span>`);
+    return `
+      <div class="card" style="margin-bottom:8px;padding:10px 14px">
+        <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:6px">
+          <div><b>${esc(code)}</b> <span class="regime-chip-live ${cls}">${esc(st)}</span>
+            <span class="cell-dim">conf ${fmt(t.confidence, 2)} · RSI ${fmt(t.last_rsi, 0)}</span></div>
+          <div class="cell-dim mono">买×${bCnt} 卖×${sCnt} ${cdTxt.join(" ")}</div>
+        </div>
+      </div>`;
+  }).join("");
+
+  // 实时信号流
+  const signals = live.signals || [];
+  const sigRows = signals.map(s => {
+    const dec = s.decision || "HOLD";
+    const isSig = dec !== "HOLD";
+    return `
+      <tr class="${isSig ? "live-signal-row sig" : ""}">
+        <td class="mono">${esc((s.scan_time || "").slice(11, 19))}</td>
+        <td>${esc(s.name || s.code || "")} <span class="mono cell-dim">${esc(s.code || "")}</span></td>
+        <td class="num">${fmt(s.price, 3)}</td>
+        <td class="num ${clsOf((s.buy_score || 0) - 36)}">${fmt(s.buy_score, 1)}</td>
+        <td class="num ${clsOf((s.sell_score || 0) - 55)}">${fmt(s.sell_score, 1)}</td>
+        <td><span class="badge ${isSig ? "signal" : "chop"}">${esc(dec)}</span></td>
+        <td class="cell-dim" style="font-size:11px">${esc(s.reason || "")}</td>
+      </tr>`;
+  }).join("");
+
+  el.innerHTML = `
+    <div class="live-grid">
+      <div class="card">
+        <div class="card-title">盘中状态（intraday_state.json · 10s 刷新）</div>
+        ${trendCards || '<div class="empty">无趋势状态</div>'}
+      </div>
+      <div class="card">
+        <div class="card-title">实时信号流（decision_trace 尾部 20）· 信号 ${signals.filter(s => s.decision !== "HOLD").length} 条</div>
+        <table>
+          <thead><tr><th>时间</th><th>股票</th><th class="num">价</th><th class="num">买分</th><th class="num">卖分</th><th>决策</th><th>原因</th></tr></thead>
+          <tbody>${sigRows || '<tr><td colspan="7" class="empty">暂无信号（盘中数据写入中）</td></tr>'}</tbody>
+        </table>
+      </div>
+    </div>
+    <div class="card" style="margin-top:12px">
+      <div class="console-toggle">
+        <span>实时 Console</span>
+        <label><input type="checkbox" id="consoleKeyOnly" checked> 仅关键行</label>
+        <span class="console-meta" id="consoleMeta"></span>
+      </div>
+      <div class="console-box" id="consoleBox"></div>
+    </div>`;
+
+  // 绑定 console 过滤切换
+  const keyOnly = document.getElementById("consoleKeyOnly");
+  if (keyOnly) keyOnly.addEventListener("change", () => reflowConsole());
+}
+
+let consoleBuf = [];     // 全量行缓存
+let consoleOffset = 0;
+let consoleDate = null;
+
+function appendConsole(rows, isKeyOnly) {
+  consoleBuf.push(...rows);
+  // 只保留最近 1000 行防内存
+  if (consoleBuf.length > 1000) consoleBuf = consoleBuf.slice(-1000);
+  reflowConsole(isKeyOnly);
+}
+
+function reflowConsole(isKeyOnly) {
+  const box = document.getElementById("consoleBox");
+  if (!box) return;
+  const keyOnly = isKeyOnly !== undefined ? isKeyOnly
+    : (document.getElementById("consoleKeyOnly") || {}).checked;
+  const meta = document.getElementById("consoleMeta");
+  let shown = consoleBuf;
+  if (keyOnly) shown = shown.filter(l => l.key);
+  if (meta) meta.textContent = `显示 ${shown.length}/${consoleBuf.length} 行 · 偏移 ${consoleOffset}`;
+  const auto = box.scrollTop + box.clientHeight >= box.scrollHeight - 60;
+  box.innerHTML = shown.map(l => {
+    const lvCls = l.level ? "lv-" + l.level : "";
+    return `<span class="console-line ${lvCls} ${l.key ? "key" : ""}">` +
+      `<span class="ct">${esc(l.t)}</span>` +
+      (l.level ? `<span class="clv">[${esc(l.level)}]</span>` : "") +
+      esc(l.msg) + `</span>`;
+  }).join("");
+  if (auto) box.scrollTop = box.scrollHeight;
 }
 
 /* ---- ① KPI ---- */
@@ -534,7 +845,8 @@ function renderReport(md) {
 const dateSelect = document.getElementById("dateSelect");
 const refreshBtn = document.getElementById("refreshBtn");
 const autoPoll = document.getElementById("autoPoll");
-let pollTimer = null;
+let pollTimer = null;      // 60s 盘后轮询
+let liveTimer = null;      // 10s 盘中实时轮询
 
 function stopPoll() {
   if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
@@ -544,6 +856,18 @@ function startPoll() {
   pollTimer = setInterval(() => {
     if (state.date) loadAndRender(state.date, true);
   }, 60000);
+}
+function stopLivePoll() {
+  if (liveTimer) { clearInterval(liveTimer); liveTimer = null; }
+  document.getElementById("liveTag").style.display = "none";
+}
+function startLivePoll() {
+  stopLivePoll();
+  document.getElementById("liveTag").style.display = "";
+  document.getElementById("liveTag").textContent = "LIVE 10s";
+  liveTimer = setInterval(() => {
+    if (state.date) refreshLive(false);
+  }, 10000);
 }
 
 async function init() {
@@ -555,7 +879,13 @@ async function init() {
     if (dateSelect.value) loadAndRender(dateSelect.value, false);
   });
   autoPoll.addEventListener("change", () => {
-    autoPoll.checked ? startPoll() : stopPoll();
+    if (autoPoll.checked) {
+      startPoll();
+      if (state.date === todayStr()) startLivePoll();
+    } else {
+      stopPoll();
+      stopLivePoll();
+    }
   });
 
   let dates;
