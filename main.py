@@ -578,6 +578,44 @@ def _maybe_push_index_regime_eod(now: datetime) -> None:
 
 _daily_pnl_push_date = ""  # 模块级：14:59推送防重复
 _position_builder_push_date = ""  # 模块级：收盘后建仓扫描防重复
+_position_builder_intraday_last = None  # 盘中建仓扫描节流（datetime）
+_position_builder_intraday_pushed = set()  # 当日已推送的股票代码（防重复推送）
+
+
+def _maybe_run_position_builder_intraday(now: datetime) -> None:
+    """盘中实时建仓信号扫描（每 5 分钟，signal 股即时飞书推送，每只每天只推一次）。"""
+    global _position_builder_intraday_last, _position_builder_intraday_pushed
+    if _run_position_scan is None:
+        return
+    t = now.time()
+    # 仅交易时段: 9:45-11:30, 13:00-14:55（给指标足够的预热时间）
+    if now.weekday() >= 5:
+        return
+    in_morning = dtime(9, 45) <= t <= dtime(11, 30)
+    in_afternoon = dtime(13, 0) <= t <= dtime(14, 55)
+    if not (in_morning or in_afternoon):
+        return
+    # 节流：每 5 分钟最多跑一次
+    if _position_builder_intraday_last is not None:
+        if (now - _position_builder_intraday_last).total_seconds() < 300:
+            return
+    _position_builder_intraday_last = now
+
+    # 日期翻转时清空推送记录
+    today = now.strftime("%Y-%m-%d")
+    if not hasattr(_maybe_run_position_builder_intraday, "_date") or \
+       _maybe_run_position_builder_intraday._date != today:
+        _maybe_run_position_builder_intraday._date = today
+        _position_builder_intraday_pushed.clear()
+
+    try:
+        results = _run_position_scan(date_str=today, silent=True)
+        for r in results:
+            if r.get("verdict") == "signal" and r["code"] not in _position_builder_intraday_pushed:
+                _position_builder_intraday_pushed.add(r["code"])
+                log.info(f"🏗️ 盘中建仓信号触发: {r['code']} {r['name']} 得分={r['composite_score']}")
+    except Exception as e:
+        log.warning(f"⚠️ 盘中建仓扫描异常（已吞掉）: {str(e)[:200]}")
 
 
 def _maybe_run_position_builder(now: datetime) -> None:
@@ -1088,6 +1126,7 @@ def scan_once():
         log.info(f"🫀 扫描心跳 第{_scan_count + 1}轮开始")
 
         _maybe_check_index_intraday_alert(now)         # 09:35-14:55 大盘分时预警（300s 节流）
+        _maybe_run_position_builder_intraday(now)      # 09:45-14:55 盘中建仓信号扫描（每5分钟）
 
         if not HOLDINGS:
             return
