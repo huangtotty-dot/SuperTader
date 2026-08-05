@@ -419,18 +419,20 @@ function beepTone(ctx, freq, when, dur) {
   osc.start(when); osc.stop(when + dur + 0.02);
 }
 
-function playAlert(decision) {
+function playAlert(kind) {
   try {
     const sw = document.getElementById("alertSound");
     if (sw && !sw.checked) return;   // 报警音开关关闭
     const ctx = ensureAudio();
     if (!ctx) return;
     const t0 = ctx.currentTime + 0.02;
-    if (decision === "PANIC_SELL") {      // 五连最长促音（660Hz）
+    if (kind === "PANIC_SELL") {       // 五连最长促音（660Hz）
       for (let i = 0; i < 5; i++) beepTone(ctx, 660, t0 + i * 0.2, 0.14);
-    } else if (decision === "SELL_HIGH") { // 高频三连（880Hz）
+    } else if (kind === "SELL_HIGH") { // 高频三连（880Hz）
       for (let i = 0; i < 3; i++) beepTone(ctx, 880, t0 + i * 0.2, 0.12);
-    } else {                               // 买入/加仓 低频三连（440Hz）
+    } else if (kind === "JIANCANG") {  // 建仓 四连促音（520Hz）
+      for (let i = 0; i < 4; i++) beepTone(ctx, 520, t0 + i * 0.18, 0.14);
+    } else {                           // 买入/加仓 低频三连（440Hz）
       for (let i = 0; i < 3; i++) beepTone(ctx, 440, t0 + i * 0.2, 0.12);
     }
   } catch (e) { /* 音频异常不影响横幅 */ }
@@ -446,10 +448,24 @@ function pushAlert(s) {
   const time = (s.scan_time || "").slice(11, 19) || "";
   const item = document.createElement("div");
   item.className = "alert-item";
-  const label = DEC_CN[s.decision] || s.decision;
+  // 建仓/加仓信号：s.type ∈ {"建仓","加仓"}，用 score=composite_score；盘中信号用 decision
+  let icon, label, scoreTxt, extraTxt, alertKind;
+  if (s.type === "建仓" || s.type === "加仓") {
+    icon = s.type === "建仓" ? "🔵" : "🟡";
+    label = s.type;
+    alertKind = s.type === "建仓" ? "JIANCANG" : "JIACANG";
+    scoreTxt = `${fmt(s.composite_score, 0)}分`;
+    extraTxt = s.suggested_qty ? ` 建议 ${fmt(s.suggested_qty, 0)}股@${fmt(s.suggested_price, 3)}` : "";
+  } else {
+    icon = DEC_ICON[s.decision] || "🔔";
+    label = DEC_CN[s.decision] || s.decision;
+    alertKind = s.decision;
+    scoreTxt = `${fmt(s.score, 1)}分`;
+    extraTxt = "";
+  }
   item.innerHTML = `
-    <span>${DEC_ICON[s.decision] || "🔔"} ${label}信号 ${esc(s.name || s.code || "")}(${esc(s.code || "")})
-    <span style="font-size:16px">${fmt(s.score, 1)}分</span> @ ${fmt(s.price, 3)} ${time}</span>
+    <span>${icon} ${label}信号 ${esc(s.name || s.code || "")}(${esc(s.code || "")})
+    <span style="font-size:16px">${scoreTxt}</span> ${extraTxt} ${time}</span>
     <button class="close-btn" title="关闭">×</button>`;
   item.querySelector(".close-btn").addEventListener("click", () => {
     item.classList.add("fading");
@@ -464,7 +480,7 @@ function pushAlert(s) {
     }
   }, 10000);
   // 报警音（方向区分）
-  playAlert(s.decision);
+  playAlert(alertKind);
 }
 
 /* ================= 增量信号轮询 ================= */
@@ -480,9 +496,15 @@ async function pollSignals() {
   const date = state.date;
   if (!date) return;
   try {
+    // 盘中交易信号（decision_trace）
     const r = await apiCall("poll_new_signals", date);
     if (r && !r.baseline && r.signals && r.signals.length) {
       r.signals.forEach(pushAlert);
+    }
+    // 建仓/加仓信号（position_builder intraday signal）
+    const p = await apiCall("poll_new_position_signals", date);
+    if (p && !p.baseline && p.signals && p.signals.length) {
+      p.signals.forEach(pushAlert);
     }
   } catch (e) { /* 静默 */ }
 }
@@ -956,9 +978,28 @@ function renderQuotes(q, market) {
       <span class="q-pnl ${clsOf(x.pnl_pct)}">${pnlTxt}</span>
     </span>`;
   }).join("");
+  // 汇总（总市值/总成本/总盈亏）
+  let tv = 0, tc = 0, tp = 0, hasCost = false;
+  q.quotes.forEach(x => {
+    if (x.price && x.cost) {
+      tv += x.price * (x.qty || 0);
+      tc += x.cost * (x.qty || 0);
+      tp += (x.price - x.cost) * (x.qty || 0);
+      hasCost = true;
+    }
+  });
+  const sumCls = clsOf(tp);
+  const sumPct = tc ? `${tp >= 0 ? "+" : ""}${fmt(tp / tc * 100, 1)}%` : "—";
+  const summaryHtml = hasCost ? `
+    <div class="quote-summary">
+      总市值 <b class="num">${fmt(tv, 0)}</b>
+      总成本 <b class="num">${fmt(tc, 0)}</b>
+      总盈亏 <b class="num ${sumCls}">${tp >= 0 ? "+" : ""}${fmt(tp, 0)}（${sumPct}）</b>
+    </div>` : "";
+
   if (bar) bar.innerHTML = cells + srcBadge;
-  if (body) body.innerHTML = `<div class="quote-cell" style="margin:0">${cells}</div>${srcBadge}
-    <div class="cell-dim" style="font-size:11px;margin-top:6px">现价/涨跌来自腾讯实时行情 · 本=持仓成本 · 浮盈%=(现价-成本)/成本 · 盘中每 10s 刷新</div>`;
+  if (body) body.innerHTML = `<div class="quote-cell" style="margin:0">${cells}</div>${srcBadge}${summaryHtml}
+    <div class="cell-dim" style="font-size:11px;margin-top:6px">现价/涨跌来自腾讯实时行情 · 本=持仓成本 · 浮盈%=(现价-成本)/成本 · 盘中每 10s 刷新 · 持仓每日快照自动写入 t_io/state/holdings_daily_今日.json</div>`;
 }
 
 /* ---- 成本校准 modal ---- */
