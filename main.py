@@ -95,6 +95,13 @@ for mod_name in module_order:
         print(f"[OK] 模块已加载: {mod_name}.py")
 shared['__name__'] = '__main__'  # 恢复：main.py 尾部自身的 __main__ 启动守卫依赖该值
 
+# ── 建仓信号扫描（收盘后自动执行）──
+try:
+    from position_builder import run_position_scan as _run_position_scan
+except Exception as _e:
+    _run_position_scan = None
+    print(f"[WARN] position_builder 加载失败（建仓扫描不可用）: {_e}")
+
 # 将共享命名空间中的关键变量暴露到当前模块的 globals，使 main.py 的代码可以运行
 globals().update(shared)
 
@@ -570,6 +577,31 @@ def _maybe_push_index_regime_eod(now: datetime) -> None:
 
 
 _daily_pnl_push_date = ""  # 模块级：14:59推送防重复
+_position_builder_push_date = ""  # 模块级：收盘后建仓扫描防重复
+
+
+def _maybe_run_position_builder(now: datetime) -> None:
+    """收盘后（15:05-15:15）每日一次建仓信号扫描。"""
+    global _position_builder_push_date
+    if _run_position_scan is None:
+        return
+    today = now.strftime("%Y-%m-%d")
+    if _position_builder_push_date == today:
+        return
+    t = now.time()
+    if not (dtime(15, 5) <= t <= dtime(15, 15)):
+        return
+    _position_builder_push_date = today
+    try:
+        results = _run_position_scan(date_str=today, silent=True)
+        signals = [r for r in results if r.get("verdict") == "signal"]
+        if signals:
+            log.info(f"🏗️ 建仓信号扫描完成: {len(signals)} 只触发 signal, "
+                     f"{len(results) - len(signals)} 只未满足")
+        else:
+            log.info(f"🏗️ 建仓信号扫描完成: 0/{len(results)} 只触发 signal")
+    except Exception as e:
+        log.warning(f"⚠️ 建仓信号扫描异常（已吞掉，不影响主循环）: {str(e)[:200]}")
 
 def _maybe_push_daily_pnl_summary(now: datetime) -> None:
     """V1.29: 14:59-15:01 每日一次 收益汇总推送。
@@ -1044,6 +1076,8 @@ def scan_once():
 
         if dtime(14, 50) <= t <= dtime(15, 5):
             pivot_audit(now)                           # 14:50-15:05 pivot 支撑/压力复盘
+
+        _maybe_run_position_builder(now)                # 15:05-15:15 建仓信号扫描（每日一次）
 
         if now.weekday() >= 5 or t < dtime(9, 30) or (dtime(11, 30) < t < dtime(13, 0)) or t > dtime(15, 0):
             if (_now() - _last_idle_log).total_seconds() >= PARAMS["idle_log_minutes"] * 60:
