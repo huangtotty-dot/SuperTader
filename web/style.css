@@ -280,3 +280,59 @@ th.num { text-align: right; }
   text-align: center; color: var(--text-faint); font-size: 12px;
   padding: 20px; border-top: 1px solid var(--border-soft); margin-top: 30px;
 }
+
+/* ---------- 行情条 ---------- */
+.quote-bar {
+  position: sticky; top: 51px; z-index: 98;
+  background: var(--bg-soft); border-bottom: 1px solid var(--border-soft);
+  padding: 6px 14px; overflow-x: auto; white-space: nowrap;
+  font-size: 12px; font-family: var(--mono);
+}
+.quote-cell {
+  display: inline-block; margin-right: 22px; padding: 2px 4px;
+}
+.quote-cell .q-name { color: var(--text); margin-right: 6px; }
+.quote-cell .q-code { color: var(--text-faint); margin-right: 10px; }
+.quote-cell .q-price { font-size: 13px; font-weight: 700; margin-right: 8px; }
+.quote-cell .q-chg { margin-right: 8px; }
+.quote-cell .q-cost { color: var(--text-dim); margin-right: 8px; }
+.quote-cell .q-pnl { font-weight: 700; }
+.quote-src { color: var(--text-faint); font-size: 11px; margin-left: 4px; }
+
+/* ---------- ECharts ---------- */
+.echart { width: 100%; height: 280px; }
+.chart-grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+@media (max-width: 1100px) { .chart-grid2 { grid-template-columns: 1fr; } }
+
+/* ---------- 小按钮 ---------- */
+.mini-btn {
+  background: var(--bg); color: var(--accent); border: 1px solid var(--border);
+  border-radius: 5px; padding: 3px 10px; font-size: 12px; cursor: pointer; margin-left: 8px;
+}
+.mini-btn:hover { border-color: var(--accent); }
+.mini-btn.primary { background: var(--accent); color: #0d1117; border-color: var(--accent); font-weight: 700; }
+.mini-btn.primary:hover { filter: brightness(1.1); }
+
+/* ---------- 校准 modal ---------- */
+.modal-mask {
+  position: fixed; inset: 0; background: rgba(0,0,0,.6); z-index: 300;
+  display: flex; align-items: center; justify-content: center;
+}
+.modal {
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: 10px; width: 560px; max-width: 92vw; max-height: 82vh;
+  display: flex; flex-direction: column; overflow: hidden;
+}
+.modal-title {
+  font-size: 14px; font-weight: 700; padding: 14px 18px;
+  border-bottom: 1px solid var(--border-soft); display: flex; align-items: center; justify-content: space-between;
+}
+.modal-body { padding: 12px 18px; overflow-y: auto; }
+.modal-body table td input {
+  width: 110px; background: var(--bg); color: var(--text); border: 1px solid var(--border);
+  border-radius: 4px; padding: 4px 8px; font-family: var(--mono); text-align: right;
+}
+.modal-foot { padding: 12px 18px; border-top: 1px solid var(--border-soft); text-align: right; }
+.calib-badge { font-size: 11px; border-radius: 3px; padding: 1px 6px; margin-left: 4px; }
+.calib-badge.人工校准 { color: var(--accent); background: rgba(88,166,255,.12); }
+.calib-badge.快照 { color: var(--text-faint); background: var(--bg); }

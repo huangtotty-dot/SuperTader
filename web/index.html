@@ -10,7 +10,7 @@
 <header class="topbar">
   <div class="brand">
     <span class="brand-icon">📊</span>
-    <span class="brand-title">做T复盘决策看板</span>
+    <span class="brand-title">做T决策看板</span>
     <span id="dateTag" class="date-tag"></span>
   </div>
   <div class="controls">
@@ -29,38 +29,25 @@
   </div>
 </header>
 <div id="alertBanner" class="alert-banner" style="display:none"></div>
+<div id="quoteBar" class="quote-bar"></div>
 
 <nav class="anchor-nav">
-  <a href="#market">大盘趋势</a>
-  <a href="#cost">成本趋势</a>
-  <a href="#live">盘中实时</a>
+  <a href="#quotes">行情</a>
   <a href="#kpi">KPI</a>
   <a href="#chart">图表</a>
-  <a href="#positions">持仓对照</a>
-  <a href="#settle">信号结算</a>
+  <a href="#live">盘中实时</a>
+  <a href="#positions">持仓</a>
+  <a href="#settle">结算</a>
   <a href="#shadow">近阈·仓控</a>
-  <a href="#position-builder">建仓扫描</a>
-  <a href="#add-watch">加仓观察</a>
+  <a href="#position-builder">建仓</a>
+  <a href="#add-watch">加仓</a>
   <a href="#stage-board">阶段看板</a>
-  <a href="#report">复盘报告</a>
 </nav>
 
 <main>
-  <section class="section" id="market">
-    <h2>大盘趋势打分</h2>
-    <div id="marketBody"></div>
-  </section>
-
-  <section class="section" id="cost">
-    <h2>持仓成本变化（每日快照）</h2>
-    <div id="costBody"></div>
-  </section>
-
-  <section class="section" id="live">
-    <h2>盘中实时</h2>
-    <div id="liveBody">
-      <div class="empty">非今日日期或尚无盘中数据</div>
-    </div>
+  <section class="section" id="quotes">
+    <h2>持仓行情</h2>
+    <div id="quotesBody" class="card"></div>
   </section>
 
   <section class="section" id="kpi">
@@ -69,16 +56,36 @@
   </section>
 
   <section class="section" id="chart">
-    <h2>当日信号概览 · K4 跨日胜率</h2>
-    <div class="chart-grid">
+    <h2>图表分析</h2>
+    <div class="chart-grid2">
+      <div class="card">
+        <div class="card-title">大盘跨日 S 打分</div>
+        <div id="echMarket" class="echart"></div>
+      </div>
+      <div class="card">
+        <div class="card-title">今日盘中 S 变化</div>
+        <div id="echIntraday" class="echart"></div>
+      </div>
+      <div class="card">
+        <div class="card-title">持仓成本趋势 <button class="mini-btn" id="calibBtn">✎ 校准成本</button></div>
+        <div id="echCost" class="echart"></div>
+        <div id="costMatrix" style="margin-top:10px"></div>
+      </div>
       <div class="card">
         <div class="card-title">各股买卖信号数</div>
-        <div id="signalBar" class="chart-body"></div>
+        <div id="echSignal" class="echart"></div>
       </div>
       <div class="card">
-        <div class="card-title">K4 滚动胜率（近若干日）</div>
-        <div id="k4Trend" class="chart-body"></div>
+        <div class="card-title">K4 滚动胜率</div>
+        <div id="echK4" class="echart"></div>
       </div>
+    </div>
+  </section>
+
+  <section class="section" id="live">
+    <h2>盘中实时</h2>
+    <div id="liveBody">
+      <div class="empty">非今日日期或尚无盘中数据</div>
     </div>
   </section>
 
@@ -111,16 +118,30 @@
     <h2>系统阶段看板</h2>
     <div id="stageBoardBody"></div>
   </section>
-
-  <section class="section" id="report">
-    <h2>每日复盘报告</h2>
-    <div id="reportBody" class="markdown-body"></div>
-  </section>
 </main>
 
-<footer class="footer">做T实盘系统 · 盘后复盘决策看板 · 数据只读</footer>
+<!-- 成本校准 modal -->
+<div id="calibModal" class="modal-mask" style="display:none">
+  <div class="modal">
+    <div class="modal-title">校准持仓成本 <span class="cell-dim" id="calibDate"></span>
+      <button class="mini-btn" id="calibClose">×</button>
+    </div>
+    <div class="modal-body">
+      <table id="calibTable">
+        <thead><tr><th>股票</th><th class="num">快照成本</th><th class="num">校准成本</th><th>来源</th></tr></thead>
+        <tbody></tbody>
+      </table>
+      <p class="cell-dim" style="font-size:11px">填券商持仓页显示的真实成本，保存后成本曲线将优先使用校准值（✎ 标注）。留空表示该股不校准。</p>
+    </div>
+    <div class="modal-foot">
+      <button class="mini-btn primary" id="calibSave">保存校准</button>
+    </div>
+  </div>
+</div>
 
-<script src="vendor/marked.min.js"></script>
+<footer class="footer">做T实盘系统 · 决策看板 · 数据只读</footer>
+
+<script src="vendor/echarts.min.js"></script>
 <script src="app.js"></script>
 </body>
 </html>
