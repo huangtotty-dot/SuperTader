@@ -257,56 +257,54 @@ function renderMarket(ms) {
   }
 }
 
-/* ---- 持仓成本变化（迷你 sparkline + 数字） ---- */
-function sparkSVG(points, color, maxV, minV) {
-  const W = 80, H = 24, span = (maxV - minV) || 1;
-  const data = points.map(p => (p - minV) / span);
-  if (data.length < 2) return `<svg width="${W}" height="${H}" style="vertical-align:middle"><line x1="0" y1="${H/2}" x2="${W}" y2="${H/2}" stroke="rgba(139,148,158,.3)"/><circle cx="${W/2}" cy="${H/2}" r="2" fill="${color}"/></svg>`;
-  const pts = data.map((v, i) => `${i / (data.length - 1) * W},${H - 2 - v * (H - 4)}`).join(" ");
-  return `<svg width="${W}" height="${H}" style="vertical-align:middle"><polyline points="${pts}" fill="none" stroke="${color}" stroke-width="1.5"/></svg>`;
-}
-
+/* ---- 持仓成本变化（统一 % 变化曲线） ---- */
 function renderCost(ch) {
   const dates = (ch && ch.dates) || [];
   const stocks = (ch && ch.stocks) || {};
   const codes = Object.keys(stocks);
-  const palette = ["#58a6ff", "#f85149", "#3fb950", "#d29922", "#bc8cff", "#39c5cf", "#ff7b72", "#7ee787"];
+  const palette = ["#58a6ff","#f85149","#3fb950","#d29922","#bc8cff","#39c5cf","#ff7b72","#7ee787"];
   if (!codes.length) { tabClear("echCost"); document.getElementById("costMatrix").innerHTML = ""; return; }
 
-  // 清掉旧的 ECharts 多线图容器
-  tabClear("echCost");
+  // 统一 ECharts：每只股以首日为基准的 % 变化
+  if (dates.length >= 2) {
+    const series = codes.map((code, i) => {
+      const pts = stocks[code].points || [];
+      const baseline = pts[0] ? pts[0].cost : null;
+      const data = dates.map(d => {
+        const p = pts.find(x => x.date === d);
+        if (!p || !baseline) return null;
+        return parseFloat(((p.cost - baseline) / baseline * 100).toFixed(2));
+      });
+      return {
+        name: (stocks[code].name || code), type: "line", symbol: "circle",
+        symbolSize: 4, lineStyle: { color: palette[i % palette.length], width: 2 },
+        itemStyle: { color: palette[i % palette.length] },
+        data,
+      };
+    });
+    tabEch("echCost", {
+      ...ECH_BASE,
+      grid: { left: 50, right: 20, top: 40, bottom: 34 },
+      legend: { type: "scroll", textStyle: { color: "#8b949e", fontSize: 10 }, top: 4 },
+      xAxis: { ...ECH_BASE.xAxis, type: "category", data: dates.map(d => d.slice(5)) },
+      yAxis: { ...ECH_BASE.yAxis, name: "%", nameTextStyle: { color: "#8b949e", fontSize: 10 },
+        axisLabel: { color: "#8b949e", fontSize: 10, formatter: v => (v >= 0 ? "+" : "") + fmt(v, 1) + "%" } },
+      tooltip: { ...ECH_BASE.tooltip, trigger: "axis", formatter: params => {
+        const d = dates[params[0].dataIndex];
+        let html = `<b>${d}</b>`;
+        params.forEach(p => {
+          const code = codes[p.seriesIndex] || "";
+          const pt = (stocks[code] || {}).points.find(x => x.date === d);
+          html += `<br/>${p.marker}${p.seriesName}: ${p.value != null ? (p.value >= 0 ? "+" : "") + p.value.toFixed(1) + "%" : "—"}${pt && pt.src === "人工校准" ? " ✎校准" : ""}
+            <span style="color:#8b949e;font-size:10px"> 成本${pt ? fmt(pt.cost, 3) : "—"}</span>`;
+        });
+        return html;
+      }},
+      series,
+    });
+  } else tabClear("echCost");
 
-  // 每股迷你 sparkline 卡
-  let allVals = [];
-  codes.forEach(code => stocks[code].points.forEach(p => allVals.push(p.cost)));
-  const maxV = Math.max(...allVals), minV = Math.min(...allVals);
-
-  const cards = codes.map((code, i) => {
-    const st = stocks[code];
-    const pts = st.points || [];
-    const vals = pts.map(p => p.cost);
-    const latest = pts[pts.length - 1];
-    const first = pts[0];
-    const delta = latest && first ? ((latest.cost - first.cost) / first.cost * 100) : null;
-    const deltaCls = delta == null ? "neutral" : clsOf(delta);
-    const srcBadge = latest && latest.src === "人工校准"
-      ? `<span class="calib-badge 人工校准">✎</span>` : "";
-    const color = palette[i % palette.length];
-    return `<div class="cost-card">
-      <div class="cc-top">
-        <span class="cc-name">${esc(st.name || code)}</span>
-        <span class="mono cell-dim" style="font-size:10px">${esc(code)}</span>
-        ${srcBadge}
-      </div>
-      <div class="cc-val">${latest ? fmt(latest.cost, 3) : "—"}</div>
-      <div class="cc-delta">
-        ${sparkSVG(vals, color, maxV, minV)}
-        <span class="${deltaCls} mono" style="font-size:11px">${delta == null ? "—" : (delta >= 0 ? "+" : "") + fmt(delta, 1) + "%"}</span>
-      </div>
-    </div>`;
-  }).join("");
-
-  // 成本矩阵（保留在 costMatrix）—— 长周期适配
+  // 成本矩阵（保留）
   const mtx = document.getElementById("costMatrix");
   if (mtx && dates.length) {
     const longPeriod = dates.length > 30;
@@ -325,10 +323,10 @@ function renderCost(ch) {
     }).join("");
     const scrollWrap = dates.length > 30 ? 'style="overflow-x:auto;max-width:100%"' : "";
     mtx.innerHTML = `
-      <div class="card-title" style="margin-top:10px">成本矩阵（✎校准=人工确认 · 其余=快照）<button class="mini-btn" id="calibBtn2">✎ 校准成本</button></div>
-      <div class="cell-dim" style="font-size:10px;margin-bottom:4px">数据自 ${esc(dates[0])} 起（共${dates.length}天），持续累积中 · 超过30天切换月视图</div>
+      <div class="card-title" style="margin-top:10px">成本矩阵（✎校准=人工确认 · 其余=快照 · 曲线=相对基准日变化%）
+        <button class="mini-btn" id="calibBtn2">✎ 校准成本</button></div>
+      <div class="cell-dim" style="font-size:10px;margin-bottom:4px">数据自 ${esc(dates[0])} 起（共${dates.length}天），持续累积中 · >30天切换月视图</div>
       <div ${scrollWrap}><table><thead>${head}</thead><tbody>${rows}</tbody></table></div>`;
-    // 二级校准按钮
     const cb2 = document.getElementById("calibBtn2");
     if (cb2) cb2.addEventListener("click", () => {
       if (!state.costHistory) {

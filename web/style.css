@@ -149,17 +149,6 @@ tr:hover td { background: rgba(88,166,255,.03); }
 .echart { width: 100%; height: 280px; }
 .ech-sm { height: 200px; }
 
-/* 成本迷你图 */
-.cost-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
-.cost-card {
-  background: var(--bg-card); border: 1px solid var(--border-soft); border-radius: 8px;
-  padding: 10px 12px; transition: border-color .2s;
-}
-.cost-card:hover { border-color: var(--accent); }
-.cc-top { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
-.cc-name { font-weight: 700; font-size: 12px; }
-.cc-val { font-size: 20px; font-weight: 700; font-family: var(--mono); margin-bottom: 6px; }
-.cc-delta { display: flex; align-items: center; gap: 8px; }
 
 /* ===== 盘中实时 ===== */
 .live-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
