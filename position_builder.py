@@ -509,6 +509,79 @@ def print_report(results: list):
 
 
 # ============================================================
+# 核心入口（CLI 和 main.py 共用）
+# ============================================================
+
+def run_position_scan(date_str: str = None, capital: float = None,
+                      no_feishu: bool = False, target_code: str = None,
+                      silent: bool = False) -> list:
+    """执行一次建仓信号扫描，返回结果列表。
+    当 silent=True 时只记录日志不打印报告（供 main.py 定时调用）。
+    """
+    if not WATCHLIST_FILE.exists():
+        if not silent:
+            print(f"[ERROR] 未找到 {WATCHLIST_FILE}，请先创建待买入清单")
+        return []
+
+    with open(WATCHLIST_FILE, "r", encoding="utf-8") as f:
+        watchlist = json.load(f)
+
+    total_capital = capital or watchlist.get("total_capital", 300000)
+    max_pct = watchlist.get("max_per_stock_pct", 0.2)
+
+    stocks = watchlist.get("stocks", {})
+    if not stocks:
+        if not silent:
+            print("[ERROR] watchlist_buy.json 中无候选股票，请先添加")
+        return []
+
+    # 过滤
+    if target_code:
+        if target_code in stocks:
+            stocks = {target_code: stocks[target_code]}
+        else:
+            if not silent:
+                print(f"[ERROR] {target_code} 不在 watchlist_buy.json 中")
+            return []
+    else:
+        stocks = {k: v for k, v in stocks.items()
+                  if v.get("status") in ("monitoring", "signal")
+                  and not k.startswith("_example")}
+
+    if not stocks:
+        if not silent:
+            print("没有需要扫描的股票（status=monitoring/signal）")
+        return []
+
+    results = []
+    signal_count = 0
+    for code, info in stocks.items():
+        if not silent:
+            print(f"扫描 {code} {info.get('name', '')}...")
+        r = scan_stock(code, info, date_str, total_capital, max_pct)
+        results.append(r)
+        update_watchlist(r, watchlist)
+
+        if r["verdict"] == "signal":
+            signal_count += 1
+            pushed = push_signal_feishu(r, dry_run=no_feishu)
+            if not silent:
+                if pushed:
+                    print(f"  => 飞书推送已发送")
+                elif not no_feishu and not _FEISHU_AVAILABLE:
+                    print(f"  => 飞书 Webhook 未配置，跳过推送")
+
+    # 保存更新后的 watchlist
+    with open(WATCHLIST_FILE, "w", encoding="utf-8") as f:
+        json.dump(watchlist, f, ensure_ascii=False, indent=2)
+
+    if not silent:
+        print_report(results)
+
+    return results
+
+
+# ============================================================
 # CLI
 # ============================================================
 
@@ -520,63 +593,13 @@ def main():
     parser.add_argument("--no-feishu", action="store_true", help="禁用飞书推送（仅控制台输出）")
     args = parser.parse_args()
 
-    # 加载 watchlist
-    if not WATCHLIST_FILE.exists():
-        print(f"[ERROR] 未找到 {WATCHLIST_FILE}，请先创建待买入清单")
-        sys.exit(1)
-
-    with open(WATCHLIST_FILE, "r", encoding="utf-8") as f:
-        watchlist = json.load(f)
-
-    total_capital = args.capital or watchlist.get("total_capital", 300000)
-    max_pct = watchlist.get("max_per_stock_pct", 0.2)
-
-    stocks = watchlist.get("stocks", {})
-    if not stocks:
-        print("[ERROR] watchlist_buy.json 中无候选股票，请先添加")
-        sys.exit(1)
-
-    # 过滤
-    if args.code:
-        if args.code in stocks:
-            stocks = {args.code: stocks[args.code]}
-        else:
-            print(f"[ERROR] {args.code} 不在 watchlist_buy.json 中")
-            sys.exit(1)
-    else:
-        # 只扫描 monitoring 和 signal 状态
-        stocks = {k: v for k, v in stocks.items()
-                  if v.get("status") in ("monitoring", "signal")
-                  and not k.startswith("_example")}
-
-    if not stocks:
-        print("没有需要扫描的股票（status=monitoring/signal）")
-        sys.exit(0)
-
-    # 扫描
-    results = []
-    signal_count = 0
-    for code, info in stocks.items():
-        print(f"扫描 {code} {info.get('name', '')}...")
-        r = scan_stock(code, info, args.date, total_capital, max_pct)
-        results.append(r)
-        update_watchlist(r, watchlist)
-
-        # 触发飞书推送
-        if r["verdict"] == "signal":
-            signal_count += 1
-            pushed = push_signal_feishu(r, dry_run=args.no_feishu)
-            if pushed:
-                print(f"  => 飞书推送已发送")
-            elif not args.no_feishu and not _FEISHU_AVAILABLE:
-                print(f"  => 飞书 Webhook 未配置，跳过推送")
-
-    # 保存更新后的 watchlist
-    with open(WATCHLIST_FILE, "w", encoding="utf-8") as f:
-        json.dump(watchlist, f, ensure_ascii=False, indent=2)
-
-    # 输出报告
-    print_report(results)
+    run_position_scan(
+        date_str=args.date,
+        capital=args.capital,
+        no_feishu=args.no_feishu,
+        target_code=args.code,
+        silent=False,
+    )
 
 
 if __name__ == "__main__":
