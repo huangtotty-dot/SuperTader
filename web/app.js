@@ -255,70 +255,88 @@ function renderMarket(ms) {
   }
 }
 
-/* ---- 持仓成本变化 ---- */
+/* ---- 持仓成本变化（迷你 sparkline + 数字） ---- */
+function sparkSVG(points, color, maxV, minV) {
+  const W = 80, H = 24, span = (maxV - minV) || 1;
+  const data = points.map(p => (p - minV) / span);
+  if (data.length < 2) return `<svg width="${W}" height="${H}" style="vertical-align:middle"><line x1="0" y1="${H/2}" x2="${W}" y2="${H/2}" stroke="rgba(139,148,158,.3)"/><circle cx="${W/2}" cy="${H/2}" r="2" fill="${color}"/></svg>`;
+  const pts = data.map((v, i) => `${i / (data.length - 1) * W},${H - 2 - v * (H - 4)}`).join(" ");
+  return `<svg width="${W}" height="${H}" style="vertical-align:middle"><polyline points="${pts}" fill="none" stroke="${color}" stroke-width="1.5"/></svg>`;
+}
+
 function renderCost(ch) {
   const dates = (ch && ch.dates) || [];
   const stocks = (ch && ch.stocks) || {};
   const codes = Object.keys(stocks);
   const palette = ["#58a6ff", "#f85149", "#3fb950", "#d29922", "#bc8cff", "#39c5cf", "#ff7b72", "#7ee787"];
-  const codeColor = {};
-  codes.forEach((c, i) => codeColor[c] = palette[i % palette.length]);
+  if (!codes.length) { tabClear("echCost"); document.getElementById("costMatrix").innerHTML = ""; return; }
 
-  // ECharts 成本多线
-  if (codes.length && dates.length >= 2) {
-    const series = codes.map(code => {
-      const st = stocks[code];
-      return {
-        name: (st.name || code), type: "line", symbol: "circle", symbolSize: 5,
-        itemStyle: { color: codeColor[code], borderWidth: 0 },
-        lineStyle: { color: codeColor[code], width: 2 },
-        data: dates.map(d => {
-          const pt = st.points.find(x => x.date === d);
-          return pt ? pt.cost : null;
-        }),
-      };
-    });
-    tabEch("echCost", {
-      ...ECH_BASE,
-      legend: { type: "scroll", textStyle: { color: "#8b949e", fontSize: 10 }, top: 0 },
-      xAxis: { ...ECH_BASE.xAxis, type: "category", data: dates.map(d => d.slice(5)) },
-      yAxis: { ...ECH_BASE.yAxis },
-      tooltip: { ...ECH_BASE.tooltip, trigger: "axis", formatter: params => {
-        const d = dates[params[0].dataIndex];
-        let html = `<b>${d}</b>`;
-        params.forEach(p => {
-          const code = codes[p.seriesIndex] || "";
-          const pt = (stocks[code] || {}).points.find(x => x.date === d);
-          html += `<br/>${p.marker}${p.seriesName}: ${fmt(p.value, 3)}${pt && pt.src ? ` <span style="color:#58a6ff">${pt.src}</span>` : ""}`;
-        });
-        return html;
-      }},
-      series,
-    });
-  } else tabClear("echCost");
+  // 清掉旧的 ECharts 多线图容器
+  tabClear("echCost");
 
-  // 成本矩阵
-  const mtx = document.getElementById("costMatrix");
-  if (!mtx) return;
-  if (!codes.length || !dates.length) {
-    mtx.innerHTML = '<div class="empty">无持仓成本历史（t_io/state 无快照）</div>';
-    return;
-  }
-  const head = `<tr><th>股票</th>${dates.map(d => `<th class="num">${esc(d.slice(5))}</th>`).join("")}</tr>`;
-  const rows = codes.map(code => {
+  // 每股迷你 sparkline 卡
+  let allVals = [];
+  codes.forEach(code => stocks[code].points.forEach(p => allVals.push(p.cost)));
+  const maxV = Math.max(...allVals), minV = Math.min(...allVals);
+
+  const cards = codes.map((code, i) => {
     const st = stocks[code];
-    return `<tr><td>${esc(st.name || code)} <span class="mono cell-dim">${esc(code)}</span></td>` +
-      dates.map(d => {
-        const p = st.points.find(x => x.date === d);
-        if (!p) return `<td class="num cell-dim">—</td>`;
-        const badge = p.src === "人工校准"
-          ? `<span class="calib-badge 人工校准">✎校准</span>` : "";
-        return `<td class="num">${fmt(p.cost, 3)}${badge}</td>`;
-      }).join("") + `</tr>`;
+    const pts = st.points || [];
+    const vals = pts.map(p => p.cost);
+    const latest = pts[pts.length - 1];
+    const first = pts[0];
+    const delta = latest && first ? ((latest.cost - first.cost) / first.cost * 100) : null;
+    const deltaCls = delta == null ? "neutral" : clsOf(delta);
+    const srcBadge = latest && latest.src === "人工校准"
+      ? `<span class="calib-badge 人工校准">✎</span>` : "";
+    const color = palette[i % palette.length];
+    return `<div class="cost-card">
+      <div class="cc-top">
+        <span class="cc-name">${esc(st.name || code)}</span>
+        <span class="mono cell-dim" style="font-size:10px">${esc(code)}</span>
+        ${srcBadge}
+      </div>
+      <div class="cc-val">${latest ? fmt(latest.cost, 3) : "—"}</div>
+      <div class="cc-delta">
+        ${sparkSVG(vals, color, maxV, minV)}
+        <span class="${deltaCls} mono" style="font-size:11px">${delta == null ? "—" : (delta >= 0 ? "+" : "") + fmt(delta, 1) + "%"}</span>
+      </div>
+    </div>`;
   }).join("");
-  mtx.innerHTML = `
-    <div class="card-title" style="margin-top:8px">成本矩阵（✎校准=人工确认 · 其余=收盘快照）</div>
-    <table><thead>${head}</thead><tbody>${rows}</tbody></table>`;
+
+  // 成本矩阵（保留在 costMatrix）
+  const mtx = document.getElementById("costMatrix");
+  if (mtx && dates.length) {
+    const head = `<tr><th>股票</th>${dates.map(d => `<th class="num">${esc(d.slice(5))}</th>`).join("")}</tr>`;
+    const rows = codes.map(code => {
+      const st = stocks[code];
+      return `<tr><td>${esc(st.name || code)} <span class="mono cell-dim">${esc(code)}</span></td>` +
+        dates.map(d => {
+          const p = st.points.find(x => x.date === d);
+          if (!p) return `<td class="num cell-dim">—</td>`;
+          const badge = p.src === "人工校准"
+            ? `<span class="calib-badge 人工校准">✎</span>` : "";
+          return `<td class="num">${fmt(p.cost, 3)}${badge}</td>`;
+        }).join("") + `</tr>`;
+    }).join("");
+    mtx.innerHTML = `
+      <div class="card-title" style="margin-top:10px">成本矩阵（✎校准=人工确认 · 其余=快照累计 · 迷你图=成本变化方向）<button class="mini-btn" id="calibBtn2">✎ 校准成本</button></div>
+      <table><thead>${head}</thead><tbody>${rows}</tbody></table>`;
+    // 二级校准按钮
+    const cb2 = document.getElementById("calibBtn2");
+    if (cb2) cb2.addEventListener("click", () => {
+      if (!state.costHistory) {
+        apiCall("load_cost_history").then(ch2 => { state.costHistory = ch2 || {}; openCalibModal(ch2 || {}); }).catch(() => {});
+      } else openCalibModal(state.costHistory);
+    });
+  }
+
+  // 输出：概览 tab 用 echCost 容器 + 图表 tab 用 echCostFull 容器
+  const c1 = document.getElementById("echCost");
+  const c2 = document.getElementById("echCostFull");
+  const html = `<div class="cost-grid">${cards}</div>`;
+  if (c1) c1.innerHTML = html;
+  if (c2) c2.innerHTML = html;
 }
 
 /* ---- 盘中实时 ---- */
@@ -677,27 +695,46 @@ function renderSignalBar(sigStat, nameMap) {
 
 function renderK4Trend(points) {
   if (!points || !points.length) { tabClear("echK4"); return; }
+  const latest = points[points.length - 1];
+  const buyWr = latest.buy_wr == null ? 0 : Math.round(latest.buy_wr * 100);
+  const sellWr = latest.sell_wr == null ? 0 : Math.round(latest.sell_wr * 100);
+  const buyN = latest.buy_n || 0, sellN = latest.sell_n || 0;
+  const buyCls = buyWr < 30 ? "#d29922" : buyWr >= 50 ? "#3fb950" : "#f85149";
+  const sellCls = sellWr >= 50 ? "#3fb950" : sellWr < 30 ? "#d29922" : "#f85149";
+
+  // 仪表盘用的颜色段：0-30红 30-50黄 50-100绿
+  const levelColors = [[.3, "#f85149"], [.5, "#d29922"], [1, "#3fb950"]];
+  const gaugeBase = {
+    type: "gauge", startAngle: 200, endAngle: -20, min: 0, max: 100, splitNumber: 5,
+    radius: "90%",
+    progress: { show: true, width: 10, roundCap: true },
+    axisLine: { lineStyle: { width: 10, color: [levelColors] } },
+    axisTick: { show: false }, splitLine: { show: false },
+    axisLabel: { show: true, distance: -2, color: "#8b949e", fontSize: 9 },
+    anchor: { show: false },
+    title: { offsetCenter: [0, "80%"], color: "#8b949e", fontSize: 11 },
+    detail: { offsetCenter: [0, "55%"], valueAnimation: true, color: "#c9d1d9",
+      fontSize: 20, fontFamily: "Consolas, monospace", formatter: "{value}%" },
+  };
+
   tabEch("echK4", {
-    ...ECH_BASE,
-    yAxis: { ...ECH_BASE.yAxis, min: 0, max: 1, axisLabel: { color: "#8b949e", fontSize: 10, formatter: v => Math.round(v * 100) + "%" } },
-    xAxis: { ...ECH_BASE.xAxis, type: "category", data: points.map(p => p.date.slice(5)) },
-    tooltip: { ...ECH_BASE.tooltip, trigger: "axis", formatter: params => {
-      const p = points[params[0].dataIndex];
-      let html = `<b>${p.date}</b>`;
-      params.forEach(x => {
-        const wr = x.seriesName === "买胜率" ? p.buy_wr : p.sell_wr;
-        const n = x.seriesName === "买胜率" ? p.buy_n : p.sell_n;
-        html += `<br/>${x.marker}${x.seriesName}: ${wr == null ? "—" : Math.round(wr * 100) + "%"} (n=${n || 0})`;
-      });
-      return html;
-    }},
+    backgroundColor: "transparent",
     series: [
-      { name: "买胜率", type: "line", data: points.map(p => p.buy_wr), symbol: "circle", symbolSize: 5,
-        lineStyle: { color: "#3fb950", width: 2 }, itemStyle: { color: "#3fb950" },
-        markLine: { silent: true, symbol: "none", lineStyle: { color: "rgba(139,148,158,.4)", type: "dashed" },
-          data: [{ yAxis: 0.5, label: { formatter: "50%", color: "#8b949e", fontSize: 9 } }] } },
-      { name: "卖胜率", type: "line", data: points.map(p => p.sell_wr), symbol: "circle", symbolSize: 5,
-        lineStyle: { color: "#f85149", width: 2 }, itemStyle: { color: "#f85149" } },
+      { ...gaugeBase, center: ["22%", "55%"], data: [{ value: buyWr, name: "做T买胜率" }],
+        progress: { show: true, width: 10, roundCap: true, itemStyle: { color: buyCls } },
+        detail: { ...gaugeBase.detail, offsetCenter: [0, "50%"], color: buyCls },
+        title: { ...gaugeBase.title, offsetCenter: [0, "82%"] },
+      },
+      { ...gaugeBase, center: ["78%", "55%"], data: [{ value: sellWr, name: "做T卖胜率" }],
+        progress: { show: true, width: 10, roundCap: true, itemStyle: { color: sellCls } },
+        detail: { ...gaugeBase.detail, offsetCenter: [0, "50%"], color: sellCls },
+        title: { ...gaugeBase.title, offsetCenter: [0, "82%"] },
+      },
+    ],
+    graphic: [
+      { type: "text", left: "center", top: "88%",
+        style: { text: `近20笔滚动 · 买 ${latest.buy_wr == null ? "—" : buyWr + "%"}(${buyN}笔) · 卖 ${latest.sell_wr == null ? "—" : sellWr + "%"}(${sellN}笔)`,
+          fill: "#8b949e", fontSize: 11, textAlign: "center" } },
     ],
   });
 }
@@ -990,7 +1027,7 @@ function renderStageBoard(stages) {
     </div>`).join("") + `</div>`;
 }
 
-/* ---- 行情条 ---- */
+/* ---- 行情条（卡片网格） ---- */
 function renderQuotes(q, market) {
   const bar = document.getElementById("quoteBar");
   const body = document.getElementById("quotesBody");
@@ -1002,40 +1039,50 @@ function renderQuotes(q, market) {
   const srcBadge = q.source === "live"
     ? `<span class="quote-src">${esc(q.ts)}</span>`
     : `<span class="quote-src warn">离线/回退昨收</span>`;
-  const cells = q.quotes.map(x => {
+
+  // 卡片网格
+  const cards = q.quotes.map(x => {
     const chgCls = clsOf(x.change);
     const pnlTxt = x.pnl_pct == null ? "—" : `${x.pnl_pct >= 0 ? "+" : ""}${fmt(x.pnl_pct, 1)}%`;
-    return `<span class="quote-cell">
-      <span class="q-name">${esc(x.name)}</span><span class="q-code">${esc(x.code)}</span>
-      <span class="q-price ${chgCls}">${fmt(x.price, 3)}</span>
-      <span class="q-chg ${chgCls}">${x.change >= 0 ? "+" : ""}${fmt(x.change, 2)} ${x.change_pct >= 0 ? "+" : ""}${fmt(x.change_pct, 2)}%</span>
-      <span class="q-cost">本 ${fmt(x.cost, 3)}</span>
-      <span class="q-pnl ${clsOf(x.pnl_pct)}">${pnlTxt}</span>
-    </span>`;
+    const pnlCls = clsOf(x.pnl_pct);
+    const pnlAmt = x.price && x.cost && x.qty ? (x.price - x.cost) * x.qty : null;
+    const pnlAmtTxt = pnlAmt == null ? "—" : `${pnlAmt >= 0 ? "+" : ""}${fmt(pnlAmt, 0)}`;
+    return `<div class="quote-card">
+      <div class="qc-top">
+        <span class="qc-name">${esc(x.name)}</span>
+        <span class="qc-code mono">${esc(x.code)}</span>
+      </div>
+      <div class="qc-price ${chgCls}">${fmt(x.price, 3)}</div>
+      <div class="qc-chg ${chgCls}">${x.change >= 0 ? "+" : ""}${fmt(x.change, 2)} ${x.change_pct >= 0 ? "+" : ""}${fmt(x.change_pct, 2)}%</div>
+      <div class="qc-meta">
+        <span>成本 <b class="mono">${fmt(x.cost, 3)}</b></span>
+        <span>浮盈 <b class="${pnlCls}">${pnlTxt}</b> <span class="mono cell-dim">${pnlAmtTxt}</span></span>
+      </div>
+    </div>`;
   }).join("");
-  // 汇总（总市值/总成本/总盈亏）
-  let tv = 0, tc = 0, tp = 0, hasCost = false;
+
+  // 汇总
+  let tv = 0, tc = 0, tp = 0;
   q.quotes.forEach(x => {
     if (x.price && x.cost) {
       tv += x.price * (x.qty || 0);
       tc += x.cost * (x.qty || 0);
       tp += (x.price - x.cost) * (x.qty || 0);
-      hasCost = true;
     }
   });
   const sumCls = clsOf(tp);
   const sumPct = tc ? `${tp >= 0 ? "+" : ""}${fmt(tp / tc * 100, 1)}%` : "—";
-  const summaryHtml = hasCost ? `
-    <div class="quote-summary">
+  const html = `<div class="quote-grid">${cards}</div>
+    <div class="quote-summary" style="margin-top:10px">
       总市值 <b class="num">${fmt(tv, 0)}</b>
       总成本 <b class="num">${fmt(tc, 0)}</b>
       总盈亏 <b class="num ${sumCls}">${tp >= 0 ? "+" : ""}${fmt(tp, 0)}（${sumPct}）</b>
-    </div>` : "";
+    </div>
+    <div class="cell-dim" style="font-size:11px;margin-top:6px">腾讯实时行情 · 盘中每10s刷新${srcBadge}</div>`;
 
   updateSidebarSummary(q.quotes);
-  if (bar) bar.innerHTML = cells + srcBadge;
-  if (body) body.innerHTML = `<div class="quote-cell" style="margin:0">${cells}</div>${srcBadge}${summaryHtml}
-    <div class="cell-dim" style="font-size:11px;margin-top:6px">现价/涨跌来自腾讯实时行情 · 本=持仓成本 · 浮盈%=(现价-成本)/成本 · 盘中每 10s 刷新 · 持仓每日快照自动写入 t_io/state/holdings_daily_今日.json</div>`;
+  if (bar) bar.innerHTML = srcBadge;
+  if (body) body.innerHTML = html;
 }
 
 /* ---- 成本校准 modal ---- */

@@ -85,24 +85,26 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font: 14px
 }
 
 /* ===== 行情条 ===== */
-.quote-bar {
-  background: var(--bg-soft); border: 1px solid var(--border-soft); border-radius: 6px;
-  padding: 6px 12px; overflow-x: auto; white-space: nowrap;
-  font-size: 12px; font-family: var(--mono); margin-bottom: 8px;
-}
-.quote-cell { display: inline-block; margin-right: 18px; padding: 2px 0; }
-.quote-cell .q-name { color: var(--text); margin-right: 4px; }
-.quote-cell .q-code { color: var(--text-faint); margin-right: 8px; }
-.quote-cell .q-price { font-size: 13px; font-weight: 700; margin-right: 6px; }
-.quote-cell .q-chg { margin-right: 6px; }
-.quote-cell .q-cost { color: var(--text-dim); margin-right: 6px; }
-.quote-cell .q-pnl { font-weight: 700; }
 .quote-src { color: var(--text-faint); font-size: 11px; margin-left: 4px; }
 .quote-summary {
-  margin-top: 6px; padding-top: 6px; border-top: 1px dashed var(--border-soft);
+  padding-top: 8px; border-top: 1px dashed var(--border-soft);
   color: var(--text-dim); font-size: 13px; font-family: var(--mono);
   display: flex; gap: 20px; flex-wrap: wrap;
 }
+/* 行情卡片网格 */
+.quote-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 10px; }
+.quote-card {
+  background: var(--bg-card); border: 1px solid var(--border-soft); border-radius: 8px;
+  padding: 12px 14px; transition: border-color .2s;
+}
+.quote-card:hover { border-color: var(--accent); }
+.qc-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+.qc-name { font-weight: 700; font-size: 13px; }
+.qc-code { color: var(--text-faint); font-size: 10px; }
+.qc-price { font-size: 22px; font-weight: 700; font-family: var(--mono); margin-bottom: 4px; }
+.qc-chg { font-size: 13px; font-family: var(--mono); margin-bottom: 8px; }
+.qc-meta { display: flex; flex-direction: column; gap: 3px; font-size: 11px; color: var(--text-dim); }
+.qc-meta b { font-size: 12px; }
 
 /* ===== 卡片 / 表格 / 徽章（复用之前的精简版） ===== */
 .card { background: var(--bg-card); border: 1px solid var(--border-soft); border-radius: 8px; padding: 12px 14px; }
@@ -146,6 +148,18 @@ tr:hover td { background: rgba(88,166,255,.03); }
 /* ===== ECharts ===== */
 .echart { width: 100%; height: 280px; }
 .ech-sm { height: 200px; }
+
+/* 成本迷你图 */
+.cost-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+.cost-card {
+  background: var(--bg-card); border: 1px solid var(--border-soft); border-radius: 8px;
+  padding: 10px 12px; transition: border-color .2s;
+}
+.cost-card:hover { border-color: var(--accent); }
+.cc-top { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
+.cc-name { font-weight: 700; font-size: 12px; }
+.cc-val { font-size: 20px; font-weight: 700; font-family: var(--mono); margin-bottom: 6px; }
+.cc-delta { display: flex; align-items: center; gap: 8px; }
 
 /* ===== 盘中实时 ===== */
 .live-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
