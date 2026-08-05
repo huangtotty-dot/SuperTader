@@ -21,10 +21,14 @@
     <label class="lbl toggle">
       <input type="checkbox" id="autoPoll" checked> 自动刷新
     </label>
+    <label class="lbl toggle" title="买卖信号时播放急促报警音">
+      <input type="checkbox" id="alertSound" checked> 报警音
+    </label>
     <span id="liveTag" class="live-tag" style="display:none"></span>
     <span id="status" class="status"></span>
   </div>
 </header>
+<div id="alertBanner" class="alert-banner" style="display:none"></div>
 
 <nav class="anchor-nav">
   <a href="#market">大盘趋势</a>

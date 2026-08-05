@@ -80,6 +80,8 @@ class Api:
 
     def __init__(self):
         self._dates_cache = None
+        # 增量信号轮询的内存态（webview.start() 期间存活）
+        self._dt = {"date": None, "offset": 0, "seen": set()}
 
     # ---------- 日期发现 ----------
     def available_dates(self):
@@ -326,6 +328,68 @@ class Api:
 
         out["intraday_state"] = _load_json(INTRADAY_STATE, {})
         out["market_intraday"] = self.load_market_score(date).get("intraday", [])
+        return _clean(out)
+
+    # ---------- 增量信号轮询（报警用） ----------
+    SIGNAL_TYPES = ("BUY_LOW", "SELL_HIGH", "ADD_POS", "PANIC_SELL")
+
+    def poll_new_signals(self, date):
+        """增量读 decision_trace，返回自上次调用以来的新信号（非 HOLD）。
+        首次调用建立基线不报警；文件轮转自动重置基线。"""
+        out = {"signals": [], "baseline": True}
+        fp = TRACES / f"decision_trace_{date}.jsonl"
+        if not fp.exists():
+            self._dt["date"] = None
+            self._dt["offset"] = 0
+            self._dt["seen"] = set()
+            return out
+        try:
+            size = fp.stat().st_size
+        except Exception:
+            return out
+
+        st = self._dt
+        if st["date"] != date or size < st["offset"]:
+            # 首次/切日期/文件轮转：建立基线（offset=当前末尾，旧行不重复处理）
+            st["date"] = date
+            st["offset"] = size
+            st["seen"] = set()
+            return out
+
+        if size <= st["offset"]:
+            return {"signals": [], "baseline": False}
+
+        try:
+            with open(fp, encoding="utf-8", errors="replace") as f:
+                f.seek(st["offset"])
+                data = f.read()
+        except Exception:
+            return out
+        st["offset"] = size
+        out["baseline"] = False
+
+        for line in data.splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                r = json.loads(line)
+            except Exception:
+                continue
+            if r.get("decision") not in self.SIGNAL_TYPES:
+                continue
+            key = (r.get("scan_time"), r.get("code"), r.get("decision"))
+            if key in st["seen"]:
+                continue
+            st["seen"].add(key)
+            score = (r.get("buy_score") if r.get("decision") in ("BUY_LOW", "ADD_POS")
+                     else r.get("sell_score"))
+            out["signals"].append({
+                "scan_time": r.get("scan_time"),
+                "code": r.get("code"), "name": r.get("name"),
+                "price": r.get("price"), "decision": r.get("decision"),
+                "score": score, "reason": r.get("decision_reason"),
+            })
         return _clean(out)
 
     # ---------- 内部聚合 ----------
