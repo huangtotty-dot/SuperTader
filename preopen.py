@@ -13,16 +13,24 @@ from datetime import datetime, timedelta, time as dtime
 from typing import Dict, List, Optional, Any
 import json
 import os
+import sys as _sys
+
+try:
+    from auction_analyzer import analyze_auction
+except ImportError:
+    analyze_auction = None
 
 # ==================== PreOpenContext 数据结构 ====================
 
 @dataclass
 class PreOpenContext:
-    """早盘集合竞价分析结论（V2 简化版）"""
+    """早盘集合竞价分析结论（V3 竞价增强版）"""
     market_score: float = 0.0
     market_bias: str = "unknown"
     breadth: Dict[str, Any] = field(default_factory=dict)
     session_note: str = ""
+    # V3 竞价三层分析
+    auction_result: Dict[str, Any] = field(default_factory=dict)
     generated_at: str = ""
     source: str = "offline"
     market_snapshot: Dict[str, Any] = field(default_factory=dict)
@@ -272,7 +280,19 @@ class PreOpenEngine:
             "source_ts": _now().strftime("%Y-%m-%d %H:%M:%S"),
         }
 
+        # V3: 竞价三层分析（指数+板块+持仓）
+        auction_result = {}
+        if analyze_auction:
+            try:
+                auction_result = analyze_auction(self.holdings)
+                _sig_count = len(auction_result.get("auction_signals", []))
+                _bias = auction_result.get("market_bias", "?")
+                session_note = f"{session_note} | 指数{_bias} | 持仓{_sig_count}股竞价完毕"
+            except Exception:
+                pass
+
         return PreOpenContext(
+            auction_result=auction_result,
             market_score=market_score,
             market_bias=market_bias,
             breadth={
@@ -535,20 +555,36 @@ def _send_preopen_feishu(context: PreOpenContext, force_push: bool = False) -> b
     action = _preopen_action_label(context)
     template = _preopen_card_template(context)
 
-    lines = [f"{action}"]
-    lines.append(f"竞价额TOP6")
-    for s in volume_stocks:
-        pct = s.get("change_pct", 0)
-        tag = "🔴" if pct < 0 else "🟢"
-        lines.append(f" {tag}{s.get('name','')} {pct:+.1f}%")
-    lines.append(f"涨{top20_up}家/跌{top20_down}家")
-    lines.append(top20_bias)
+    # V3: 优先使用竞价三层分析格式
+    auction_result = context.auction_result if isinstance(context.auction_result, dict) else {}
+    if auction_result.get("auction_signals"):
+        try:
+            from auction_analyzer import format_auction_feishu
+            elements = format_auction_feishu(auction_result)
+        except ImportError:
+            elements = []
+    else:
+        elements = []
 
-    text = "\n".join(lines)
-
-    card = {"config": {"wide_screen_mode": True},
-            "header": _feishu_card_header(f"📊 早盘竞价 - {FEISHU_KEYWORD}", template),
-            "elements": [_feishu_md_div(text)]}
+    if elements:
+        # V3 新格式：竞价三层分析卡片
+        card = {"config": {"wide_screen_mode": True},
+                "header": _feishu_card_header(f"📊 早盘竞价 - {FEISHU_KEYWORD}", template),
+                "elements": elements}
+    else:
+        # V2 旧格式（兜底）
+        lines = [f"{action}"]
+        lines.append(f"竞价额TOP6")
+        for s in volume_stocks:
+            pct = s.get("change_pct", 0)
+            tag = "🔴" if pct < 0 else "🟢"
+            lines.append(f" {tag}{s.get('name','')} {pct:+.1f}%")
+        lines.append(f"涨{top20_up}家/跌{top20_down}家")
+        lines.append(top20_bias)
+        text = "\n".join(lines)
+        card = {"config": {"wide_screen_mode": True},
+                "header": _feishu_card_header(f"📊 早盘竞价 - {FEISHU_KEYWORD}", template),
+                "elements": [_feishu_md_div(text)]}
     payload = {"msg_type": "interactive", "card": card, "notify_type": 1}
 
     ok = send_feishu_payload(
