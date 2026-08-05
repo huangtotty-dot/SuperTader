@@ -2,62 +2,62 @@
   "588170": {
     "name": "科创半导体ETF华夏",
     "cost": 0.937,
-    "qty": 7200,
-    "base": 7200,
-    "t_qty": 7200,
+    "qty": 12000,
+    "base": 12000,
+    "t_qty": 12000,
     "type": "etf",
     "account": "账户A",
-    "pre_close": 0.829
+    "pre_close": 0.865
   },
   "600176": {
     "name": "中国巨石",
     "cost": 55.903,
-    "qty": 300,
-    "base": 300,
-    "t_qty": 300,
-    "type": "stock",
-    "account": "账户A",
-    "pre_close": 34.06
-  },
-  "600481": {
-    "name": "双良节能",
-    "cost": 6.028,
-    "qty": 1400,
-    "base": 1400,
-    "t_qty": 1400,
-    "type": "stock",
-    "account": "账户A",
-    "pre_close": 4.29
-  },
-  "603667": {
-    "name": "五洲新春",
-    "cost": 56.172,
     "qty": 500,
     "base": 500,
     "t_qty": 500,
     "type": "stock",
     "account": "账户A",
-    "pre_close": 53.7
+    "pre_close": 36.19
+  },
+  "600481": {
+    "name": "双良节能",
+    "cost": 7.786,
+    "qty": 700,
+    "base": 700,
+    "t_qty": 700,
+    "type": "stock",
+    "account": "账户A",
+    "pre_close": 4.33
+  },
+  "603667": {
+    "name": "五洲新春",
+    "cost": 66.349,
+    "qty": 100,
+    "base": 100,
+    "t_qty": 100,
+    "type": "stock",
+    "account": "账户A",
+    "pre_close": 54.45
   },
   "000988": {
     "name": "华工科技",
     "cost": 231.454,
+    "qty": 400,
+    "base": 400,
+    "t_qty": 400,
+    "type": "stock",
+    "account": "账户A+账户B",
+    "pre_close": 100.65
+  },
+  "002639": {
+    "name": "雪人集团",
+    "cost": 12.048,
     "qty": 300,
     "base": 300,
     "t_qty": 300,
     "type": "stock",
-    "account": "账户A+账户B",
-    "pre_close": 93.17
-  },
-  "002639": {
-    "name": "雪人集团",
-    "cost": 12.425,
-    "qty": 600,
-    "base": 600,
-    "t_qty": 600,
-    "type": "stock",
     "account": "账户B",
-    "pre_close": 12.61
+    "pre_close": 12.78
   },
   "300153": {
     "name": "科泰电源",
@@ -67,16 +67,6 @@
     "t_qty": 400,
     "type": "stock",
     "account": "账户B",
-    "pre_close": 20.33
-  },
-  "300364": {
-    "name": "中文在线",
-    "cost": 24.151,
-    "qty": 100,
-    "base": 100,
-    "t_qty": 100,
-    "type": "stock",
-    "account": "账户B",
-    "pre_close": 24.34
+    "pre_close": 21.11
   }
 }
