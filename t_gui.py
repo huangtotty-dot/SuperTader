@@ -446,6 +446,40 @@ class Api:
             pass
         return out
 
+    # ---------- 做T闭环盈亏（K1） ----------
+    def load_trade_pnl(self, date):
+        """读 closure_audit.jsonl 当天行，聚合 est_pnl（系统报警产生的做T闭环盈亏）。"""
+        out = {"total_pnl": None, "by_code": {}, "source": "closure_audit", "note": ""}
+        fp = LOGS_DIR / "closure_audit.jsonl"
+        if not fp.exists():
+            out["note"] = "closure_audit.jsonl 不存在"
+            return out
+        for line in open(fp, encoding="utf-8"):
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                r = json.loads(line)
+            except Exception:
+                continue
+            if r.get("date") != date:
+                continue
+            total = 0.0
+            for d in r.get("details", []):
+                code = d.get("code")
+                pnl = d.get("est_pnl", 0) or 0
+                sold = d.get("sold", 0) or 0
+                bought = d.get("bought", 0) or 0
+                out["by_code"][code] = {"pnl": round(pnl, 2), "sold": sold, "bought": bought}
+                total += pnl
+            out["total_pnl"] = round(total, 2) if total else 0.0
+            out["source"] = "closure_audit"
+            if not out["by_code"]:
+                out["note"] = "当日无成交闭环"
+            return _clean(out)
+        out["note"] = "当日无 closure_audit 记录"
+        return _clean(out)
+
     @staticmethod
     def _parse_log_line(line):
         """HH:MM:SS [LEVEL] msg  →  {t, level, msg}。"""

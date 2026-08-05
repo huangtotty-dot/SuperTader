@@ -76,6 +76,8 @@ async function loadAndRender(date, silent) {
     }
     renderAll(payload);
 
+    // K1 做T盈亏（独立于 daily_review，读 closure_audit）
+    apiCall("load_trade_pnl", date).then(tp => renderKPI(payload.kpi, tp || {})).catch(() => {});
     // 行情条 + 大盘趋势 + 成本历史（静态，一次拉取）
     apiCall("load_quotes").then(q => renderQuotes(q || {}, null)).catch(() => {});
     apiCall("load_market_score", date).then(ms => renderMarket(ms || {})).catch(() => {});
@@ -142,8 +144,8 @@ async function refreshLive(reset) {
 }
 
 /* ================= 各区块渲染 ================= */
-function renderAll(p) {
-  renderKPI(p.kpi);
+function renderAll(p, tradePnl) {
+  renderKPI(p.kpi, tradePnl);
   renderSignalBar(p.sig_stat, p.name_map);
   renderPositions(p.positions, p.name_map);
   renderSettle(p.settle, p.sig_stat, p.name_map);
@@ -304,10 +306,12 @@ function renderCost(ch) {
     </div>`;
   }).join("");
 
-  // 成本矩阵（保留在 costMatrix）
+  // 成本矩阵（保留在 costMatrix）—— 长周期适配
   const mtx = document.getElementById("costMatrix");
   if (mtx && dates.length) {
-    const head = `<tr><th>股票</th>${dates.map(d => `<th class="num">${esc(d.slice(5))}</th>`).join("")}</tr>`;
+    const longPeriod = dates.length > 30;
+    const dateLabel = d => longPeriod ? (d.slice(0, 7).replace("-", "月") + "月") : d.slice(5);
+    const head = `<tr><th>股票</th>${dates.map(d => `<th class="num">${esc(dateLabel(d))}</th>`).join("")}</tr>`;
     const rows = codes.map(code => {
       const st = stocks[code];
       return `<tr><td>${esc(st.name || code)} <span class="mono cell-dim">${esc(code)}</span></td>` +
@@ -319,9 +323,11 @@ function renderCost(ch) {
           return `<td class="num">${fmt(p.cost, 3)}${badge}</td>`;
         }).join("") + `</tr>`;
     }).join("");
+    const scrollWrap = dates.length > 30 ? 'style="overflow-x:auto;max-width:100%"' : "";
     mtx.innerHTML = `
-      <div class="card-title" style="margin-top:10px">成本矩阵（✎校准=人工确认 · 其余=快照累计 · 迷你图=成本变化方向）<button class="mini-btn" id="calibBtn2">✎ 校准成本</button></div>
-      <table><thead>${head}</thead><tbody>${rows}</tbody></table>`;
+      <div class="card-title" style="margin-top:10px">成本矩阵（✎校准=人工确认 · 其余=快照）<button class="mini-btn" id="calibBtn2">✎ 校准成本</button></div>
+      <div class="cell-dim" style="font-size:10px;margin-bottom:4px">数据自 ${esc(dates[0])} 起（共${dates.length}天），持续累积中 · 超过30天切换月视图</div>
+      <div ${scrollWrap}><table><thead>${head}</thead><tbody>${rows}</tbody></table></div>`;
     // 二级校准按钮
     const cb2 = document.getElementById("calibBtn2");
     if (cb2) cb2.addEventListener("click", () => {
@@ -594,31 +600,36 @@ function reflowConsole(isKeyOnly) {
 }
 
 /* ---- ① KPI ---- */
-function renderKPI(kpi) {
+function renderKPI(kpi, tradePnl) {
   const el = document.getElementById("kpiCards");
   if (!kpi || Object.keys(kpi).length === 0) {
     el.innerHTML = '<div class="empty">无 KPI 数据</div>';
     return;
   }
-  const K1 = kpi.K1_closed_pnl || {};
   const K2 = kpi.K2_cost_change || {};
   const K3 = kpi.K3_base_drift || {};
   const K4 = kpi.K4_rolling_wr || {};
   const K5 = kpi.K5_qty0_suppressed || {};
 
-  // K1
-  const pnl = K1.total_est_pnl;
-  const k1Val = pnl === null || pnl === undefined
+  // K1：做T闭环盈亏（优先用 tradePnl，回退到 kpi 内嵌 K1）
+  const K1 = kpi.K1_closed_pnl || {};
+  const tp = tradePnl || {};
+  const totalPnl = tp.total_pnl != null ? tp.total_pnl : K1.total_est_pnl;
+  const byCode = (tp.by_code && Object.keys(tp.by_code).length) ? tp.by_code : K1.by_code || {};
+  const pnlCls = clsOf(totalPnl);
+  const k1Val = totalPnl == null
     ? `<span class="neutral">无闭环</span>`
-    : `<span class="${clsOf(pnl)}">${fmt(pnl)}</span>`;
-  const k1Sub = pnl !== null && pnl !== undefined && K1.by_code && Object.keys(K1.by_code).length
-    ? Object.entries(K1.by_code).map(([c, v]) => `${c}: ${fmt(v)}`).join(" · ")
-    : (K1.source ? "" : "当日 0 闭环");
+    : totalPnl === 0
+      ? `<span class="neutral">0</span>`
+      : `<span class="${pnlCls}">${totalPnl >= 0 ? "+" : ""}${fmt(totalPnl, 0)}</span>`;
+  const k1Sub = Object.keys(byCode).length
+    ? Object.entries(byCode).map(([c, v]) => `${c}: ${v.pnl != null ? (v.pnl >= 0 ? "+" : "") + fmt(v.pnl, 0) : "—"}`).join(" · ")
+    : tp.note || K1.source || "当日 0 闭环";
   const k1Card = `
     <div class="kpi-card">
-      <div class="kpi-label"><span>K1 闭环净盈亏</span></div>
+      <div class="kpi-label"><span>K1 做T盈亏</span><span class="flag">${tp.source || "快照"}</span></div>
       <div class="kpi-value">${k1Val}</div>
-      <div class="kpi-sub">${esc(k1Sub || "")}</div>
+      <div class="kpi-sub">${esc(k1Sub)}</div>
     </div>`;
 
   // K2
@@ -702,39 +713,33 @@ function renderK4Trend(points) {
   const buyCls = buyWr < 30 ? "#d29922" : buyWr >= 50 ? "#3fb950" : "#f85149";
   const sellCls = sellWr >= 50 ? "#3fb950" : sellWr < 30 ? "#d29922" : "#f85149";
 
-  // 仪表盘用的颜色段：0-30红 30-50黄 50-100绿
   const levelColors = [[.3, "#f85149"], [.5, "#d29922"], [1, "#3fb950"]];
-  const gaugeBase = {
-    type: "gauge", startAngle: 200, endAngle: -20, min: 0, max: 100, splitNumber: 5,
-    radius: "90%",
-    progress: { show: true, width: 10, roundCap: true },
-    axisLine: { lineStyle: { width: 10, color: [levelColors] } },
+  const mkGauge = (value, name, color, cy) => ({
+    type: "gauge", center: ["50%", cy], radius: "72%",
+    startAngle: 210, endAngle: -30, min: 0, max: 100, splitNumber: 5,
+    progress: { show: true, width: 8, roundCap: true, itemStyle: { color } },
+    axisLine: { lineStyle: { width: 8, color: [levelColors] } },
     axisTick: { show: false }, splitLine: { show: false },
-    axisLabel: { show: true, distance: -2, color: "#8b949e", fontSize: 9 },
+    axisLabel: { show: true, distance: -2, color: "#8b949e", fontSize: 8 },
     anchor: { show: false },
-    title: { offsetCenter: [0, "80%"], color: "#8b949e", fontSize: 11 },
-    detail: { offsetCenter: [0, "55%"], valueAnimation: true, color: "#c9d1d9",
-      fontSize: 20, fontFamily: "Consolas, monospace", formatter: "{value}%" },
-  };
+    title: { offsetCenter: [0, "78%"], color: "#8b949e", fontSize: 11 },
+    detail: { offsetCenter: [0, "52%"], valueAnimation: true, color,
+      fontSize: 16, fontFamily: "Consolas, monospace", formatter: "{value}%" },
+    data: [{ value, name }],
+  });
 
   tabEch("echK4", {
     backgroundColor: "transparent",
     series: [
-      { ...gaugeBase, center: ["22%", "55%"], data: [{ value: buyWr, name: "做T买胜率" }],
-        progress: { show: true, width: 10, roundCap: true, itemStyle: { color: buyCls } },
-        detail: { ...gaugeBase.detail, offsetCenter: [0, "50%"], color: buyCls },
-        title: { ...gaugeBase.title, offsetCenter: [0, "82%"] },
-      },
-      { ...gaugeBase, center: ["78%", "55%"], data: [{ value: sellWr, name: "做T卖胜率" }],
-        progress: { show: true, width: 10, roundCap: true, itemStyle: { color: sellCls } },
-        detail: { ...gaugeBase.detail, offsetCenter: [0, "50%"], color: sellCls },
-        title: { ...gaugeBase.title, offsetCenter: [0, "82%"] },
-      },
+      mkGauge(buyWr, "买信号胜率", buyCls, "28%"),
+      mkGauge(sellWr, "卖信号胜率", sellCls, "72%"),
     ],
     graphic: [
-      { type: "text", left: "center", top: "88%",
-        style: { text: `近20笔滚动 · 买 ${latest.buy_wr == null ? "—" : buyWr + "%"}(${buyN}笔) · 卖 ${latest.sell_wr == null ? "—" : sellWr + "%"}(${sellN}笔)`,
-          fill: "#8b949e", fontSize: 11, textAlign: "center" } },
+      { type: "text", left: "center", top: "5%",
+        style: { text: "做T买卖胜率", fill: "#c9d1d9", fontSize: 12, fontWeight: "bold", textAlign: "center" } },
+      { type: "text", left: "center", bottom: 8,
+        style: { text: `近20笔滚动 · 买${buyWr}%(${buyN}笔) · 卖${sellWr}%(${sellN}笔) · 买信号≥50%为优 · 卖信号≥50%为优`,
+          fill: "#8b949e", fontSize: 10, textAlign: "center" } },
     ],
   });
 }
