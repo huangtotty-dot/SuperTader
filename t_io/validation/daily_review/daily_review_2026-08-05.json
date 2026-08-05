@@ -1,0 +1,2497 @@
+{
+  "date": "2026-08-05",
+  "sig_stat": {
+    "000988": {
+      "ticks": 158,
+      "nan_ticks": 6,
+      "buy_signals": 0,
+      "sell_signals": 15,
+      "buy_first_last": null,
+      "sell_first_last": [
+        "09:45",
+        "10:43"
+      ],
+      "max_buy_score": 58.8,
+      "max_sell_score": 71.0,
+      "open": 96.09,
+      "close": 100.22,
+      "high": 102.4,
+      "low": 93.81,
+      "day_ret%": 4.3,
+      "振幅%": 8.94,
+      "day_type": "bull_day",
+      "above_avg_ratio": 0.551
+    },
+    "588170": {
+      "ticks": 158,
+      "nan_ticks": 6,
+      "buy_signals": 0,
+      "sell_signals": 80,
+      "buy_first_last": null,
+      "sell_first_last": [
+        "09:38",
+        "13:01"
+      ],
+      "max_buy_score": 61.0,
+      "max_sell_score": 85.2,
+      "open": 0.89,
+      "close": 0.944,
+      "high": 0.962,
+      "low": 0.887,
+      "day_ret%": 6.07,
+      "振幅%": 8.43,
+      "day_type": "chop_day",
+      "above_avg_ratio": 0.405
+    },
+    "600176": {
+      "ticks": 158,
+      "nan_ticks": 5,
+      "buy_signals": 0,
+      "sell_signals": 20,
+      "buy_first_last": null,
+      "sell_first_last": [
+        "09:38",
+        "10:22"
+      ],
+      "max_buy_score": 54.4,
+      "max_sell_score": 69.5,
+      "open": 36.63,
+      "close": 39.31,
+      "high": 39.81,
+      "low": 36.63,
+      "day_ret%": 7.32,
+      "振幅%": 8.68,
+      "day_type": "chop_day",
+      "above_avg_ratio": 0.462
+    },
+    "600481": {
+      "ticks": 158,
+      "nan_ticks": 11,
+      "buy_signals": 0,
+      "sell_signals": 25,
+      "buy_first_last": null,
+      "sell_first_last": [
+        "10:16",
+        "13:24"
+      ],
+      "max_buy_score": 49.9,
+      "max_sell_score": 65.1,
+      "open": 4.33,
+      "close": 4.35,
+      "high": 4.39,
+      "low": 4.3,
+      "day_ret%": 0.46,
+      "振幅%": 2.08,
+      "day_type": "chop_day",
+      "above_avg_ratio": 0.5
+    },
+    "603667": {
+      "ticks": 158,
+      "nan_ticks": 0,
+      "buy_signals": 0,
+      "sell_signals": 21,
+      "buy_first_last": null,
+      "sell_first_last": [
+        "09:54",
+        "14:54"
+      ],
+      "max_buy_score": 49.5,
+      "max_sell_score": 69.9,
+      "open": 54.71,
+      "close": 54.96,
+      "high": 55.39,
+      "low": 54.48,
+      "day_ret%": 0.46,
+      "振幅%": 1.66,
+      "day_type": "chop_day",
+      "above_avg_ratio": 0.532
+    },
+    "002639": {
+      "ticks": 158,
+      "nan_ticks": 1,
+      "buy_signals": 0,
+      "sell_signals": 7,
+      "buy_first_last": null,
+      "sell_first_last": [
+        "09:45",
+        "10:33"
+      ],
+      "max_buy_score": 47.6,
+      "max_sell_score": 90.3,
+      "open": 12.73,
+      "close": 12.87,
+      "high": 12.95,
+      "low": 12.72,
+      "day_ret%": 1.1,
+      "振幅%": 1.81,
+      "day_type": "bull_day",
+      "above_avg_ratio": 0.671
+    },
+    "300153": {
+      "ticks": 157,
+      "nan_ticks": 5,
+      "buy_signals": 0,
+      "sell_signals": 16,
+      "buy_first_last": null,
+      "sell_first_last": [
+        "09:44",
+        "10:00"
+      ],
+      "max_buy_score": 49.4,
+      "max_sell_score": 66.7,
+      "open": 21.23,
+      "close": 21.62,
+      "high": 21.64,
+      "low": 21.23,
+      "day_ret%": 1.84,
+      "振幅%": 1.93,
+      "day_type": "chop_day",
+      "above_avg_ratio": 0.471
+    },
+    "300364": {
+      "ticks": 0,
+      "nan_ticks": 0,
+      "buy_signals": 0,
+      "sell_signals": 0,
+      "buy_first_last": null,
+      "sell_first_last": null,
+      "max_buy_score": null,
+      "max_sell_score": null,
+      "day_type": "unknown"
+    }
+  },
+  "shadow_total": 176,
+  "shadow_near_±3": {
+    "000988": [
+      {
+        "action": "SELL_HIGH",
+        "miss_reason": "低于推送阈值静默",
+        "n": 9,
+        "span": "09:45~10:13",
+        "min_dist": 0.2
+      }
+    ],
+    "588170": [
+      {
+        "action": "SELL_HIGH",
+        "miss_reason": "低于推送阈值静默",
+        "n": 58,
+        "span": "09:38~11:18",
+        "min_dist": 0.1
+      }
+    ],
+    "600176": [
+      {
+        "action": "SELL_HIGH",
+        "miss_reason": "低于推送阈值静默",
+        "n": 15,
+        "span": "09:38~10:16",
+        "min_dist": 0.3
+      }
+    ],
+    "600481": [
+      {
+        "action": "SELL_HIGH",
+        "miss_reason": "低于推送阈值静默",
+        "n": 19,
+        "span": "10:16~13:24",
+        "min_dist": 0.9
+      }
+    ],
+    "603667": [
+      {
+        "action": "SELL_HIGH",
+        "miss_reason": "低于推送阈值静默",
+        "n": 7,
+        "span": "10:36~14:54",
+        "min_dist": 1.5
+      }
+    ]
+  },
+  "qty_freeze": {
+    "suppressed": {
+      "603667": [
+        {
+          "ts": "10:00:58",
+          "action": "SELL_HIGH",
+          "score": 60
+        },
+        {
+          "ts": "10:40:32",
+          "action": "SELL_HIGH",
+          "score": 61
+        },
+        {
+          "ts": "13:57:19",
+          "action": "SELL_HIGH",
+          "score": 59
+        }
+      ]
+    },
+    "silent_sell": {
+      "000988": {
+        "n": 15,
+        "max_score": 51
+      },
+      "588170": {
+        "n": 78,
+        "max_score": 49
+      },
+      "600176": {
+        "n": 20,
+        "max_score": 46
+      },
+      "600481": {
+        "n": 25,
+        "max_score": 52
+      },
+      "603667": {
+        "n": 18,
+        "max_score": 51
+      },
+      "002639": {
+        "n": 5,
+        "max_score": 44
+      },
+      "300153": {
+        "n": 15,
+        "max_score": 58
+      }
+    },
+    "pushes": [
+      {
+        "ts": "10:00:35",
+        "code": "300153",
+        "action": "SELL_HIGH"
+      },
+      {
+        "ts": "10:01:04",
+        "code": "002639",
+        "action": "SELL_HIGH"
+      },
+      {
+        "ts": "10:33:48",
+        "code": "002639",
+        "action": "SELL_HIGH"
+      },
+      {
+        "ts": "11:29:12",
+        "code": "588170",
+        "action": "SELL_HIGH"
+      },
+      {
+        "ts": "13:01:33",
+        "code": "588170",
+        "action": "SELL_HIGH"
+      }
+    ],
+    "eod_sync": []
+  },
+  "closed_loop": {},
+  "audit_problems": null,
+  "settle": {
+    "rows": [
+      {
+        "code": "000988",
+        "ts": "09:45",
+        "action": "SELL_HIGH",
+        "score": 44.3,
+        "price": 97.22,
+        "res": "FAIL",
+        "day_type": "bull_day"
+      },
+      {
+        "code": "000988",
+        "ts": "09:46",
+        "action": "SELL_HIGH",
+        "score": 44.3,
+        "price": 97.22,
+        "res": "FAIL",
+        "day_type": "bull_day"
+      },
+      {
+        "code": "000988",
+        "ts": "09:46",
+        "action": "SELL_HIGH",
+        "score": 44.3,
+        "price": 97.22,
+        "res": "FAIL",
+        "day_type": "bull_day"
+      },
+      {
+        "code": "000988",
+        "ts": "09:47",
+        "action": "SELL_HIGH",
+        "score": 44.3,
+        "price": 97.22,
+        "res": "FAIL",
+        "day_type": "bull_day"
+      },
+      {
+        "code": "000988",
+        "ts": "09:47",
+        "action": "SELL_HIGH",
+        "score": 44.3,
+        "price": 97.22,
+        "res": "FAIL",
+        "day_type": "bull_day"
+      },
+      {
+        "code": "000988",
+        "ts": "10:10",
+        "action": "SELL_HIGH",
+        "score": 51.0,
+        "price": 96.23,
+        "res": "WIN",
+        "day_type": "bull_day"
+      },
+      {
+        "code": "000988",
+        "ts": "10:11",
+        "action": "SELL_HIGH",
+        "score": 51.0,
+        "price": 96.23,
+        "res": "WIN",
+        "day_type": "bull_day"
+      },
+      {
+        "code": "000988",
+        "ts": "10:12",
+        "action": "SELL_HIGH",
+        "score": 51.0,
+        "price": 96.23,
+        "res": "WIN",
+        "day_type": "bull_day"
+      },
+      {
+        "code": "000988",
+        "ts": "10:13",
+        "action": "SELL_HIGH",
+        "score": 51.0,
+        "price": 96.23,
+        "res": "WIN",
+        "day_type": "bull_day"
+      },
+      {
+        "code": "000988",
+        "ts": "10:40",
+        "action": "SELL_HIGH",
+        "score": 51.4,
+        "price": 95.97,
+        "res": "FAIL",
+        "day_type": "bull_day"
+      },
+      {
+        "code": "000988",
+        "ts": "10:41",
+        "action": "SELL_HIGH",
+        "score": 51.4,
+        "price": 95.97,
+        "res": "FAIL",
+        "day_type": "bull_day"
+      },
+      {
+        "code": "000988",
+        "ts": "10:41",
+        "action": "SELL_HIGH",
+        "score": 51.4,
+        "price": 95.97,
+        "res": "FAIL",
+        "day_type": "bull_day"
+      },
+      {
+        "code": "000988",
+        "ts": "10:42",
+        "action": "SELL_HIGH",
+        "score": 51.4,
+        "price": 95.97,
+        "res": "FAIL",
+        "day_type": "bull_day"
+      },
+      {
+        "code": "000988",
+        "ts": "10:42",
+        "action": "SELL_HIGH",
+        "score": 51.4,
+        "price": 95.97,
+        "res": "FAIL",
+        "day_type": "bull_day"
+      },
+      {
+        "code": "000988",
+        "ts": "10:43",
+        "action": "SELL_HIGH",
+        "score": 51.4,
+        "price": 95.97,
+        "res": "FAIL",
+        "day_type": "bull_day"
+      },
+      {
+        "code": "588170",
+        "ts": "09:38",
+        "action": "SELL_HIGH",
+        "score": 46.8,
+        "price": 0.901,
+        "res": "FAIL",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "588170",
+        "ts": "09:38",
+        "action": "SELL_HIGH",
+        "score": 46.8,
+        "price": 0.901,
+        "res": "FAIL",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "588170",
+        "ts": "09:39",
+        "action": "SELL_HIGH",
+        "score": 46.8,
+        "price": 0.901,
+        "res": "FAIL",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "588170",
+        "ts": "09:40",
+        "action": "SELL_HIGH",
+        "score": 46.8,
+        "price": 0.901,
+        "res": "FAIL",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "588170",
+        "ts": "09:40",
+        "action": "SELL_HIGH",
+        "score": 46.8,
+        "price": 0.901,
+        "res": "FAIL",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "588170",
+        "ts": "09:41",
+        "action": "SELL_HIGH",
+        "score": 46.7,
+        "price": 0.912,
+        "res": "WIN",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "588170",
+        "ts": "09:42",
+        "action": "SELL_HIGH",
+        "score": 46.7,
+        "price": 0.912,
+        "res": "WIN",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "588170",
+        "ts": "09:43",
+        "action": "SELL_HIGH",
+        "score": 46.7,
+        "price": 0.912,
+        "res": "WIN",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "588170",
+        "ts": "09:43",
+        "action": "SELL_HIGH",
+        "score": 46.7,
+        "price": 0.912,
+        "res": "WIN",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "588170",
+        "ts": "09:44",
+        "action": "SELL_HIGH",
+        "score": 46.7,
+        "price": 0.912,
+        "res": "WIN",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "588170",
+        "ts": "09:45",
+        "action": "SELL_HIGH",
+        "score": 45.2,
+        "price": 0.907,
+        "res": "FAIL",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "588170",
+        "ts": "09:45",
+        "action": "SELL_HIGH",
+        "score": 45.2,
+        "price": 0.907,
+        "res": "FAIL",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "588170",
+        "ts": "09:46",
+        "action": "SELL_HIGH",
+        "score": 45.2,
+        "price": 0.907,
+        "res": "FAIL",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "588170",
+        "ts": "09:47",
+        "action": "SELL_HIGH",
+        "score": 45.2,
+        "price": 0.907,
+        "res": "FAIL",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "588170",
+        "ts": "09:47",
+        "action": "SELL_HIGH",
+        "score": 45.2,
+        "price": 0.907,
+        "res": "FAIL",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "588170",
+        "ts": "09:48",
+        "action": "SELL_HIGH",
+        "score": 43.5,
+        "price": 0.913,
+        "res": "WIN",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "588170",
+        "ts": "09:49",
+        "action": "SELL_HIGH",
+        "score": 43.5,
+        "price": 0.913,
+        "res": "WIN",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "588170",
+        "ts": "09:49",
+        "action": "SELL_HIGH",
+        "score": 43.5,
+        "price": 0.913,
+        "res": "WIN",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "588170",
+        "ts": "09:50",
+        "action": "SELL_HIGH",
+        "score": 43.5,
+        "price": 0.913,
+        "res": "WIN",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "588170",
+        "ts": "09:50",
+        "action": "SELL_HIGH",
+        "score": 43.5,
+        "price": 0.913,
+        "res": "WIN",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "588170",
+        "ts": "09:51",
+        "action": "SELL_HIGH",
+        "score": 46.7,
+        "price": 0.907,
+        "res": "FAIL",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "588170",
+        "ts": "09:52",
+        "action": "SELL_HIGH",
+        "score": 46.7,
+        "price": 0.907,
+        "res": "FAIL",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "588170",
+        "ts": "09:52",
+        "action": "SELL_HIGH",
+        "score": 46.7,
+        "price": 0.907,
+        "res": "FAIL",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "588170",
+        "ts": "09:53",
+        "action": "SELL_HIGH",
+        "score": 46.7,
+        "price": 0.907,
+        "res": "FAIL",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "588170",
+        "ts": "09:53",
+        "action": "SELL_HIGH",
+        "score": 46.7,
+        "price": 0.907,
+        "res": "FAIL",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "588170",
+        "ts": "09:54",
+        "action": "SELL_HIGH",
+        "score": 46.2,
+        "price": 0.907,
+        "res": "FAIL",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "588170",
+        "ts": "09:55",
+        "action": "SELL_HIGH",
+        "score": 46.2,
+        "price": 0.907,
+        "res": "FAIL",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "588170",
+        "ts": "09:55",
+        "action": "SELL_HIGH",
+        "score": 46.2,
+        "price": 0.907,
+        "res": "FAIL",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "588170",
+        "ts": "09:56",
+        "action": "SELL_HIGH",
+        "score": 46.2,
+        "price": 0.907,
+        "res": "FAIL",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "588170",
+        "ts": "09:57",
+        "action": "SELL_HIGH",
+        "score": 46.2,
+        "price": 0.907,
+        "res": "FAIL",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "588170",
+        "ts": "09:57",
+        "action": "SELL_HIGH",
+        "score": 45.2,
+        "price": 0.912,
+        "res": "WIN",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "588170",
+        "ts": "09:58",
+        "action": "SELL_HIGH",
+        "score": 45.2,
+        "price": 0.912,
+        "res": "WIN",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "588170",
+        "ts": "09:59",
+        "action": "SELL_HIGH",
+        "score": 45.2,
+        "price": 0.912,
+        "res": "WIN",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "588170",
+        "ts": "09:59",
+        "action": "SELL_HIGH",
+        "score": 45.2,
+        "price": 0.912,
+        "res": "WIN",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "588170",
+        "ts": "10:00",
+        "action": "SELL_HIGH",
+        "score": 45.2,
+        "price": 0.912,
+        "res": "WIN",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "588170",
+        "ts": "10:00",
+        "action": "SELL_HIGH",
+        "score": 45.4,
+        "price": 0.906,
+        "res": "WIN",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "588170",
+        "ts": "10:01",
+        "action": "SELL_HIGH",
+        "score": 45.4,
+        "price": 0.906,
+        "res": "WIN",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "588170",
+        "ts": "10:02",
+        "action": "SELL_HIGH",
+        "score": 45.4,
+        "price": 0.906,
+        "res": "WIN",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "588170",
+        "ts": "10:02",
+        "action": "SELL_HIGH",
+        "score": 45.4,
+        "price": 0.906,
+        "res": "WIN",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "588170",
+        "ts": "10:03",
+        "action": "SELL_HIGH",
+        "score": 45.4,
+        "price": 0.906,
+        "res": "WIN",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "588170",
+        "ts": "10:04",
+        "action": "SELL_HIGH",
+        "score": 45.2,
+        "price": 0.909,
+        "res": "WIN",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "588170",
+        "ts": "10:05",
+        "action": "SELL_HIGH",
+        "score": 45.2,
+        "price": 0.909,
+        "res": "WIN",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "588170",
+        "ts": "10:05",
+        "action": "SELL_HIGH",
+        "score": 45.2,
+        "price": 0.909,
+        "res": "WIN",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "588170",
+        "ts": "10:06",
+        "action": "SELL_HIGH",
+        "score": 45.2,
+        "price": 0.909,
+        "res": "WIN",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "588170",
+        "ts": "10:06",
+        "action": "SELL_HIGH",
+        "score": 45.2,
+        "price": 0.909,
+        "res": "WIN",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "588170",
+        "ts": "10:07",
+        "action": "SELL_HIGH",
+        "score": 45.5,
+        "price": 0.904,
+        "res": "WIN",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "588170",
+        "ts": "10:08",
+        "action": "SELL_HIGH",
+        "score": 45.5,
+        "price": 0.904,
+        "res": "WIN",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "588170",
+        "ts": "10:08",
+        "action": "SELL_HIGH",
+        "score": 45.5,
+        "price": 0.904,
+        "res": "WIN",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "588170",
+        "ts": "10:09",
+        "action": "SELL_HIGH",
+        "score": 45.5,
+        "price": 0.904,
+        "res": "WIN",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "588170",
+        "ts": "10:09",
+        "action": "SELL_HIGH",
+        "score": 45.5,
+        "price": 0.904,
+        "res": "WIN",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "588170",
+        "ts": "10:30",
+        "action": "SELL_HIGH",
+        "score": 47.4,
+        "price": 0.913,
+        "res": "FAIL",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "588170",
+        "ts": "10:30",
+        "action": "SELL_HIGH",
+        "score": 47.4,
+        "price": 0.913,
+        "res": "FAIL",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "588170",
+        "ts": "10:31",
+        "action": "SELL_HIGH",
+        "score": 47.4,
+        "price": 0.913,
+        "res": "FAIL",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "588170",
+        "ts": "10:31",
+        "action": "SELL_HIGH",
+        "score": 47.4,
+        "price": 0.913,
+        "res": "FAIL",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "588170",
+        "ts": "10:32",
+        "action": "SELL_HIGH",
+        "score": 47.4,
+        "price": 0.913,
+        "res": "FAIL",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "588170",
+        "ts": "10:36",
+        "action": "SELL_HIGH",
+        "score": 44.9,
+        "price": 0.918,
+        "res": "FAIL",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "588170",
+        "ts": "10:37",
+        "action": "SELL_HIGH",
+        "score": 44.9,
+        "price": 0.918,
+        "res": "FAIL",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "588170",
+        "ts": "10:37",
+        "action": "SELL_HIGH",
+        "score": 44.9,
+        "price": 0.918,
+        "res": "FAIL",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "588170",
+        "ts": "10:38",
+        "action": "SELL_HIGH",
+        "score": 44.9,
+        "price": 0.918,
+        "res": "FAIL",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "588170",
+        "ts": "10:39",
+        "action": "SELL_HIGH",
+        "score": 44.9,
+        "price": 0.918,
+        "res": "FAIL",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "588170",
+        "ts": "10:39",
+        "action": "SELL_HIGH",
+        "score": 44.9,
+        "price": 0.918,
+        "res": "FAIL",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "588170",
+        "ts": "10:40",
+        "action": "SELL_HIGH",
+        "score": 49.3,
+        "price": 0.918,
+        "res": "FAIL",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "588170",
+        "ts": "10:40",
+        "action": "SELL_HIGH",
+        "score": 49.3,
+        "price": 0.918,
+        "res": "FAIL",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "588170",
+        "ts": "10:41",
+        "action": "SELL_HIGH",
+        "score": 49.3,
+        "price": 0.918,
+        "res": "FAIL",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "588170",
+        "ts": "10:42",
+        "action": "SELL_HIGH",
+        "score": 49.3,
+        "price": 0.918,
+        "res": "FAIL",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "588170",
+        "ts": "10:42",
+        "action": "SELL_HIGH",
+        "score": 49.3,
+        "price": 0.918,
+        "res": "FAIL",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "588170",
+        "ts": "10:43",
+        "action": "SELL_HIGH",
+        "score": 44.1,
+        "price": 0.926,
+        "res": "FAIL",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "588170",
+        "ts": "10:43",
+        "action": "SELL_HIGH",
+        "score": 44.1,
+        "price": 0.926,
+        "res": "FAIL",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "588170",
+        "ts": "10:44",
+        "action": "SELL_HIGH",
+        "score": 44.1,
+        "price": 0.926,
+        "res": "FAIL",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "588170",
+        "ts": "10:45",
+        "action": "SELL_HIGH",
+        "score": 44.1,
+        "price": 0.926,
+        "res": "FAIL",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "588170",
+        "ts": "10:45",
+        "action": "SELL_HIGH",
+        "score": 44.1,
+        "price": 0.926,
+        "res": "FAIL",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "588170",
+        "ts": "10:46",
+        "action": "SELL_HIGH",
+        "score": 47.1,
+        "price": 0.928,
+        "res": "FAIL",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "588170",
+        "ts": "10:47",
+        "action": "SELL_HIGH",
+        "score": 47.1,
+        "price": 0.928,
+        "res": "FAIL",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "588170",
+        "ts": "10:47",
+        "action": "SELL_HIGH",
+        "score": 47.1,
+        "price": 0.928,
+        "res": "FAIL",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "588170",
+        "ts": "10:48",
+        "action": "SELL_HIGH",
+        "score": 47.1,
+        "price": 0.928,
+        "res": "FAIL",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "588170",
+        "ts": "10:48",
+        "action": "SELL_HIGH",
+        "score": 47.1,
+        "price": 0.928,
+        "res": "FAIL",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "588170",
+        "ts": "10:49",
+        "action": "SELL_HIGH",
+        "score": 47.1,
+        "price": 0.928,
+        "res": "FAIL",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "588170",
+        "ts": "11:18",
+        "action": "SELL_HIGH",
+        "score": 46.7,
+        "price": 0.947,
+        "res": "WIN",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "588170",
+        "ts": "11:29",
+        "action": "SELL_HIGH",
+        "score": 63.1,
+        "price": 0.95,
+        "res": "WIN",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "588170",
+        "ts": "13:01",
+        "action": "SELL_HIGH",
+        "score": 63.0,
+        "price": 0.95,
+        "res": "WIN",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "600176",
+        "ts": "09:38",
+        "action": "SELL_HIGH",
+        "score": 45.4,
+        "price": 37.2,
+        "res": "FAIL",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "600176",
+        "ts": "09:38",
+        "action": "SELL_HIGH",
+        "score": 45.4,
+        "price": 37.2,
+        "res": "FAIL",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "600176",
+        "ts": "09:39",
+        "action": "SELL_HIGH",
+        "score": 45.4,
+        "price": 37.2,
+        "res": "FAIL",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "600176",
+        "ts": "09:40",
+        "action": "SELL_HIGH",
+        "score": 45.4,
+        "price": 37.2,
+        "res": "FAIL",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "600176",
+        "ts": "09:40",
+        "action": "SELL_HIGH",
+        "score": 45.4,
+        "price": 37.2,
+        "res": "FAIL",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "600176",
+        "ts": "09:45",
+        "action": "SELL_HIGH",
+        "score": 45.0,
+        "price": 37.63,
+        "res": "FAIL",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "600176",
+        "ts": "09:45",
+        "action": "SELL_HIGH",
+        "score": 45.0,
+        "price": 37.63,
+        "res": "FAIL",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "600176",
+        "ts": "09:46",
+        "action": "SELL_HIGH",
+        "score": 45.0,
+        "price": 37.63,
+        "res": "FAIL",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "600176",
+        "ts": "09:47",
+        "action": "SELL_HIGH",
+        "score": 45.0,
+        "price": 37.63,
+        "res": "FAIL",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "600176",
+        "ts": "09:47",
+        "action": "SELL_HIGH",
+        "score": 45.0,
+        "price": 37.63,
+        "res": "FAIL",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "600176",
+        "ts": "10:13",
+        "action": "SELL_HIGH",
+        "score": 46.0,
+        "price": 37.76,
+        "res": "FAIL",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "600176",
+        "ts": "10:14",
+        "action": "SELL_HIGH",
+        "score": 46.0,
+        "price": 37.76,
+        "res": "FAIL",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "600176",
+        "ts": "10:14",
+        "action": "SELL_HIGH",
+        "score": 46.0,
+        "price": 37.76,
+        "res": "FAIL",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "600176",
+        "ts": "10:15",
+        "action": "SELL_HIGH",
+        "score": 46.0,
+        "price": 37.76,
+        "res": "FAIL",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "600176",
+        "ts": "10:16",
+        "action": "SELL_HIGH",
+        "score": 46.0,
+        "price": 37.76,
+        "res": "FAIL",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "600176",
+        "ts": "10:20",
+        "action": "SELL_HIGH",
+        "score": 42.9,
+        "price": 38.03,
+        "res": "FAIL",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "600176",
+        "ts": "10:20",
+        "action": "SELL_HIGH",
+        "score": 42.9,
+        "price": 38.03,
+        "res": "FAIL",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "600176",
+        "ts": "10:21",
+        "action": "SELL_HIGH",
+        "score": 42.9,
+        "price": 38.03,
+        "res": "FAIL",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "600176",
+        "ts": "10:22",
+        "action": "SELL_HIGH",
+        "score": 42.9,
+        "price": 38.03,
+        "res": "FAIL",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "600176",
+        "ts": "10:22",
+        "action": "SELL_HIGH",
+        "score": 42.9,
+        "price": 38.03,
+        "res": "FAIL",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "600481",
+        "ts": "10:16",
+        "action": "SELL_HIGH",
+        "score": 51.5,
+        "price": 4.36,
+        "res": "FAIL",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "600481",
+        "ts": "10:17",
+        "action": "SELL_HIGH",
+        "score": 51.5,
+        "price": 4.36,
+        "res": "FAIL",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "600481",
+        "ts": "10:17",
+        "action": "SELL_HIGH",
+        "score": 51.5,
+        "price": 4.36,
+        "res": "FAIL",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "600481",
+        "ts": "10:18",
+        "action": "SELL_HIGH",
+        "score": 51.5,
+        "price": 4.36,
+        "res": "FAIL",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "600481",
+        "ts": "10:19",
+        "action": "SELL_HIGH",
+        "score": 51.5,
+        "price": 4.36,
+        "res": "FAIL",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "600481",
+        "ts": "10:50",
+        "action": "SELL_HIGH",
+        "score": 48.0,
+        "price": 4.36,
+        "res": "VOID",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "600481",
+        "ts": "10:50",
+        "action": "SELL_HIGH",
+        "score": 48.0,
+        "price": 4.36,
+        "res": "VOID",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "600481",
+        "ts": "10:51",
+        "action": "SELL_HIGH",
+        "score": 48.0,
+        "price": 4.36,
+        "res": "VOID",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "600481",
+        "ts": "10:51",
+        "action": "SELL_HIGH",
+        "score": 48.0,
+        "price": 4.36,
+        "res": "VOID",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "600481",
+        "ts": "10:52",
+        "action": "SELL_HIGH",
+        "score": 48.0,
+        "price": 4.36,
+        "res": "VOID",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "600481",
+        "ts": "10:53",
+        "action": "SELL_HIGH",
+        "score": 47.9,
+        "price": 4.36,
+        "res": "WIN",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "600481",
+        "ts": "10:54",
+        "action": "SELL_HIGH",
+        "score": 47.9,
+        "price": 4.36,
+        "res": "WIN",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "600481",
+        "ts": "10:54",
+        "action": "SELL_HIGH",
+        "score": 47.9,
+        "price": 4.36,
+        "res": "WIN",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "600481",
+        "ts": "10:55",
+        "action": "SELL_HIGH",
+        "score": 47.9,
+        "price": 4.36,
+        "res": "WIN",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "600481",
+        "ts": "10:55",
+        "action": "SELL_HIGH",
+        "score": 47.9,
+        "price": 4.36,
+        "res": "WIN",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "600481",
+        "ts": "11:03",
+        "action": "SELL_HIGH",
+        "score": 46.5,
+        "price": 4.36,
+        "res": "WIN",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "600481",
+        "ts": "11:03",
+        "action": "SELL_HIGH",
+        "score": 46.5,
+        "price": 4.36,
+        "res": "WIN",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "600481",
+        "ts": "11:04",
+        "action": "SELL_HIGH",
+        "score": 46.5,
+        "price": 4.36,
+        "res": "WIN",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "600481",
+        "ts": "11:05",
+        "action": "SELL_HIGH",
+        "score": 46.5,
+        "price": 4.36,
+        "res": "WIN",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "600481",
+        "ts": "11:05",
+        "action": "SELL_HIGH",
+        "score": 46.5,
+        "price": 4.36,
+        "res": "WIN",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "600481",
+        "ts": "11:11",
+        "action": "SELL_HIGH",
+        "score": 52.4,
+        "price": 4.36,
+        "res": "WIN",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "600481",
+        "ts": "11:21",
+        "action": "SELL_HIGH",
+        "score": 45.2,
+        "price": 4.36,
+        "res": "WIN",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "600481",
+        "ts": "13:04",
+        "action": "SELL_HIGH",
+        "score": 48.1,
+        "price": 4.37,
+        "res": "WIN",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "600481",
+        "ts": "13:14",
+        "action": "SELL_HIGH",
+        "score": 43.8,
+        "price": 4.36,
+        "res": "WIN",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "600481",
+        "ts": "13:24",
+        "action": "SELL_HIGH",
+        "score": 43.8,
+        "price": 4.36,
+        "res": "WIN",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "603667",
+        "ts": "09:54",
+        "action": "SELL_HIGH",
+        "score": 50.6,
+        "price": 54.78,
+        "res": "FAIL",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "603667",
+        "ts": "09:55",
+        "action": "SELL_HIGH",
+        "score": 50.6,
+        "price": 54.78,
+        "res": "FAIL",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "603667",
+        "ts": "09:56",
+        "action": "SELL_HIGH",
+        "score": 50.6,
+        "price": 54.78,
+        "res": "FAIL",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "603667",
+        "ts": "09:56",
+        "action": "SELL_HIGH",
+        "score": 50.6,
+        "price": 54.78,
+        "res": "FAIL",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "603667",
+        "ts": "09:57",
+        "action": "SELL_HIGH",
+        "score": 50.6,
+        "price": 54.78,
+        "res": "FAIL",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "603667",
+        "ts": "10:00",
+        "action": "SELL_HIGH",
+        "score": 59.5,
+        "price": 54.9,
+        "res": "WIN",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "603667",
+        "ts": "10:33",
+        "action": "SELL_HIGH",
+        "score": 44.7,
+        "price": 54.81,
+        "res": "VOID",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "603667",
+        "ts": "10:34",
+        "action": "SELL_HIGH",
+        "score": 44.7,
+        "price": 54.81,
+        "res": "VOID",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "603667",
+        "ts": "10:34",
+        "action": "SELL_HIGH",
+        "score": 44.7,
+        "price": 54.81,
+        "res": "VOID",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "603667",
+        "ts": "10:35",
+        "action": "SELL_HIGH",
+        "score": 44.7,
+        "price": 54.81,
+        "res": "VOID",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "603667",
+        "ts": "10:36",
+        "action": "SELL_HIGH",
+        "score": 44.7,
+        "price": 54.81,
+        "res": "VOID",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "603667",
+        "ts": "10:36",
+        "action": "SELL_HIGH",
+        "score": 51.4,
+        "price": 54.96,
+        "res": "VOID",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "603667",
+        "ts": "10:37",
+        "action": "SELL_HIGH",
+        "score": 51.4,
+        "price": 54.96,
+        "res": "VOID",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "603667",
+        "ts": "10:38",
+        "action": "SELL_HIGH",
+        "score": 51.4,
+        "price": 54.96,
+        "res": "VOID",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "603667",
+        "ts": "10:38",
+        "action": "SELL_HIGH",
+        "score": 51.4,
+        "price": 54.96,
+        "res": "VOID",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "603667",
+        "ts": "10:39",
+        "action": "SELL_HIGH",
+        "score": 51.4,
+        "price": 54.96,
+        "res": "VOID",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "603667",
+        "ts": "10:39",
+        "action": "SELL_HIGH",
+        "score": 51.4,
+        "price": 54.96,
+        "res": "VOID",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "603667",
+        "ts": "10:40",
+        "action": "SELL_HIGH",
+        "score": 61.0,
+        "price": 55.0,
+        "res": "VOID",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "603667",
+        "ts": "13:57",
+        "action": "SELL_HIGH",
+        "score": 59.1,
+        "price": 55.15,
+        "res": "WIN",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "603667",
+        "ts": "14:42",
+        "action": "SELL_HIGH",
+        "score": 45.7,
+        "price": 54.83,
+        "res": "VOID",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "603667",
+        "ts": "14:54",
+        "action": "SELL_HIGH",
+        "score": 45.4,
+        "price": 54.96,
+        "res": "VOID",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "002639",
+        "ts": "09:45",
+        "action": "SELL_HIGH",
+        "score": 44.5,
+        "price": 12.84,
+        "res": "FAIL",
+        "day_type": "bull_day"
+      },
+      {
+        "code": "002639",
+        "ts": "09:46",
+        "action": "SELL_HIGH",
+        "score": 44.5,
+        "price": 12.84,
+        "res": "FAIL",
+        "day_type": "bull_day"
+      },
+      {
+        "code": "002639",
+        "ts": "09:46",
+        "action": "SELL_HIGH",
+        "score": 44.5,
+        "price": 12.84,
+        "res": "FAIL",
+        "day_type": "bull_day"
+      },
+      {
+        "code": "002639",
+        "ts": "09:47",
+        "action": "SELL_HIGH",
+        "score": 44.5,
+        "price": 12.84,
+        "res": "FAIL",
+        "day_type": "bull_day"
+      },
+      {
+        "code": "002639",
+        "ts": "09:47",
+        "action": "SELL_HIGH",
+        "score": 44.5,
+        "price": 12.84,
+        "res": "FAIL",
+        "day_type": "bull_day"
+      },
+      {
+        "code": "002639",
+        "ts": "10:01",
+        "action": "SELL_HIGH",
+        "score": 57.7,
+        "price": 12.8,
+        "res": "VOID",
+        "day_type": "bull_day"
+      },
+      {
+        "code": "002639",
+        "ts": "10:33",
+        "action": "SELL_HIGH",
+        "score": 79.1,
+        "price": 12.85,
+        "res": "VOID",
+        "day_type": "bull_day"
+      },
+      {
+        "code": "300153",
+        "ts": "09:44",
+        "action": "SELL_HIGH",
+        "score": 44.4,
+        "price": 21.33,
+        "res": "VOID",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "300153",
+        "ts": "09:45",
+        "action": "SELL_HIGH",
+        "score": 44.4,
+        "price": 21.33,
+        "res": "VOID",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "300153",
+        "ts": "09:46",
+        "action": "SELL_HIGH",
+        "score": 44.4,
+        "price": 21.33,
+        "res": "VOID",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "300153",
+        "ts": "09:46",
+        "action": "SELL_HIGH",
+        "score": 44.4,
+        "price": 21.33,
+        "res": "VOID",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "300153",
+        "ts": "09:47",
+        "action": "SELL_HIGH",
+        "score": 44.4,
+        "price": 21.33,
+        "res": "VOID",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "300153",
+        "ts": "09:47",
+        "action": "SELL_HIGH",
+        "score": 43.7,
+        "price": 21.37,
+        "res": "VOID",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "300153",
+        "ts": "09:48",
+        "action": "SELL_HIGH",
+        "score": 43.7,
+        "price": 21.37,
+        "res": "VOID",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "300153",
+        "ts": "09:49",
+        "action": "SELL_HIGH",
+        "score": 43.7,
+        "price": 21.37,
+        "res": "VOID",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "300153",
+        "ts": "09:50",
+        "action": "SELL_HIGH",
+        "score": 43.7,
+        "price": 21.37,
+        "res": "VOID",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "300153",
+        "ts": "09:50",
+        "action": "SELL_HIGH",
+        "score": 43.7,
+        "price": 21.37,
+        "res": "VOID",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "300153",
+        "ts": "09:57",
+        "action": "SELL_HIGH",
+        "score": 58.3,
+        "price": 21.31,
+        "res": "VOID",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "300153",
+        "ts": "09:57",
+        "action": "SELL_HIGH",
+        "score": 58.3,
+        "price": 21.31,
+        "res": "VOID",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "300153",
+        "ts": "09:58",
+        "action": "SELL_HIGH",
+        "score": 58.3,
+        "price": 21.31,
+        "res": "VOID",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "300153",
+        "ts": "09:59",
+        "action": "SELL_HIGH",
+        "score": 58.3,
+        "price": 21.31,
+        "res": "VOID",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "300153",
+        "ts": "09:59",
+        "action": "SELL_HIGH",
+        "score": 58.3,
+        "price": 21.31,
+        "res": "VOID",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "300153",
+        "ts": "10:00",
+        "action": "SELL_HIGH",
+        "score": 55.8,
+        "price": 21.3,
+        "res": "VOID",
+        "day_type": "chop_day"
+      }
+    ],
+    "by_code": {
+      "000988": {
+        "BUY_LOW": {
+          "n": 0,
+          "wins": 0,
+          "fails": 0,
+          "wr": null
+        },
+        "SELL_HIGH": {
+          "n": 15,
+          "wins": 4,
+          "fails": 11,
+          "wr": 0.2667
+        }
+      },
+      "588170": {
+        "BUY_LOW": {
+          "n": 0,
+          "wins": 0,
+          "fails": 0,
+          "wr": null
+        },
+        "SELL_HIGH": {
+          "n": 80,
+          "wins": 33,
+          "fails": 47,
+          "wr": 0.4125
+        }
+      },
+      "600176": {
+        "BUY_LOW": {
+          "n": 0,
+          "wins": 0,
+          "fails": 0,
+          "wr": null
+        },
+        "SELL_HIGH": {
+          "n": 20,
+          "wins": 0,
+          "fails": 20,
+          "wr": 0.0
+        }
+      },
+      "600481": {
+        "BUY_LOW": {
+          "n": 0,
+          "wins": 0,
+          "fails": 0,
+          "wr": null
+        },
+        "SELL_HIGH": {
+          "n": 25,
+          "wins": 15,
+          "fails": 5,
+          "wr": 0.75
+        }
+      },
+      "603667": {
+        "BUY_LOW": {
+          "n": 0,
+          "wins": 0,
+          "fails": 0,
+          "wr": null
+        },
+        "SELL_HIGH": {
+          "n": 21,
+          "wins": 2,
+          "fails": 5,
+          "wr": 0.2857
+        }
+      },
+      "002639": {
+        "BUY_LOW": {
+          "n": 0,
+          "wins": 0,
+          "fails": 0,
+          "wr": null
+        },
+        "SELL_HIGH": {
+          "n": 7,
+          "wins": 0,
+          "fails": 5,
+          "wr": 0.0
+        }
+      },
+      "300153": {
+        "BUY_LOW": {
+          "n": 0,
+          "wins": 0,
+          "fails": 0,
+          "wr": null
+        },
+        "SELL_HIGH": {
+          "n": 16,
+          "wins": 0,
+          "fails": 0,
+          "wr": null
+        }
+      },
+      "300364": {
+        "BUY_LOW": {
+          "n": 0,
+          "wins": 0,
+          "fails": 0,
+          "wr": null
+        },
+        "SELL_HIGH": {
+          "n": 0,
+          "wins": 0,
+          "fails": 0,
+          "wr": null
+        }
+      }
+    }
+  },
+  "kpi": {
+    "date": "2026-08-05",
+    "snapshot": {
+      "file": "t_io\\state\\holdings_2026-08-05.json",
+      "created_now": false,
+      "prev": "t_io\\state\\holdings_2026-08-04.json"
+    },
+    "K1_closed_pnl": {
+      "total_est_pnl": null,
+      "by_code": {},
+      "source": "t_io/logs/closure_audit.jsonl"
+    },
+    "K2_cost_change": {
+      "baseline": false,
+      "note": "对照 2026-08-04",
+      "by_code": {
+        "000988": {
+          "cost_now": 231.454,
+          "cost_prev": 231.454,
+          "delta": 0.0
+        },
+        "588170": {
+          "cost_now": 0.937,
+          "cost_prev": 0.937,
+          "delta": 0.0
+        },
+        "600176": {
+          "cost_now": 55.903,
+          "cost_prev": 55.903,
+          "delta": 0.0
+        },
+        "600481": {
+          "cost_now": 7.786,
+          "cost_prev": 6.028,
+          "delta": 1.758
+        },
+        "603667": {
+          "cost_now": 66.349,
+          "cost_prev": 56.172,
+          "delta": 10.177
+        },
+        "002639": {
+          "cost_now": 12.048,
+          "cost_prev": 12.425,
+          "delta": -0.377
+        },
+        "300153": {
+          "cost_now": 22.045,
+          "cost_prev": 22.045,
+          "delta": 0.0
+        },
+        "300364": {
+          "cost_now": null,
+          "cost_prev": 24.151,
+          "delta": null
+        }
+      },
+      "snapshot": "t_io\\state\\holdings_2026-08-05.json"
+    },
+    "K3_base_drift": {
+      "baseline": false,
+      "by_code": {
+        "000988": {
+          "t_qty_now": 400,
+          "t_qty_prev": 300,
+          "drift": 100,
+          "attribution": "需人工确认",
+          "audit": null,
+          "source": "snapshot_diff"
+        },
+        "588170": {
+          "t_qty_now": 12000,
+          "t_qty_prev": 7200,
+          "drift": 4800,
+          "attribution": "需人工确认",
+          "audit": null,
+          "source": "snapshot_diff"
+        },
+        "600176": {
+          "t_qty_now": 500,
+          "t_qty_prev": 300,
+          "drift": 200,
+          "attribution": "需人工确认",
+          "audit": null,
+          "source": "snapshot_diff"
+        },
+        "600481": {
+          "t_qty_now": 700,
+          "t_qty_prev": 1400,
+          "drift": -700,
+          "attribution": "需人工确认",
+          "audit": null,
+          "source": "snapshot_diff"
+        },
+        "603667": {
+          "t_qty_now": 100,
+          "t_qty_prev": 500,
+          "drift": -400,
+          "attribution": "需人工确认",
+          "audit": null,
+          "source": "snapshot_diff"
+        },
+        "002639": {
+          "t_qty_now": 300,
+          "t_qty_prev": 600,
+          "drift": -300,
+          "attribution": "需人工确认",
+          "audit": null,
+          "source": "snapshot_diff"
+        },
+        "300153": {
+          "t_qty_now": 400,
+          "t_qty_prev": 400,
+          "drift": 0,
+          "attribution": "无漂移",
+          "audit": null,
+          "source": "snapshot_diff"
+        },
+        "300364": {
+          "t_qty_now": null,
+          "t_qty_prev": 100,
+          "drift": -100,
+          "attribution": "需人工确认",
+          "audit": null,
+          "source": "snapshot_diff"
+        }
+      },
+      "drift_total": 3600
+    },
+    "K4_rolling_wr": {
+      "buy": {
+        "n": 20,
+        "wins": 3,
+        "fails": 17,
+        "wr": 0.15,
+        "window": 20,
+        "short": false,
+        "note": "满窗",
+        "events_tail": [
+          {
+            "date": "2026-07-22",
+            "code": "588170",
+            "ts": "2026-07-22 13:28:13",
+            "res": "FAIL"
+          },
+          {
+            "date": "2026-07-22",
+            "code": "000988",
+            "ts": "2026-07-22 13:53:08",
+            "res": "FAIL"
+          },
+          {
+            "date": "2026-07-22",
+            "code": "000988",
+            "ts": "2026-07-22 14:30:02",
+            "res": "FAIL"
+          },
+          {
+            "date": "2026-07-23",
+            "code": "588170",
+            "ts": "2026-07-23 13:57:17",
+            "res": "FAIL"
+          },
+          {
+            "date": "2026-07-24",
+            "code": "600481",
+            "ts": "2026-07-24 10:17:00",
+            "res": "FAIL"
+          },
+          {
+            "date": "2026-07-24",
+            "code": "600481",
+            "ts": "2026-07-24 10:17:49",
+            "res": "FAIL"
+          },
+          {
+            "date": "2026-07-24",
+            "code": "600481",
+            "ts": "2026-07-24 10:18:56",
+            "res": "FAIL"
+          },
+          {
+            "date": "2026-07-24",
+            "code": "603667",
+            "ts": "2026-07-24 10:20:20",
+            "res": "FAIL"
+          },
+          {
+            "date": "2026-07-24",
+            "code": "600176",
+            "ts": "2026-07-24 10:41:36",
+            "res": "FAIL"
+          },
+          {
+            "date": "2026-07-24",
+            "code": "000988",
+            "ts": "2026-07-24 10:41:54",
+            "res": "WIN"
+          },
+          {
+            "date": "2026-08-03",
+            "code": "588170",
+            "ts": "2026-08-03 09:49:45",
+            "res": "FAIL"
+          },
+          {
+            "date": "2026-08-03",
+            "code": "600176",
+            "ts": "2026-08-03 09:49:47",
+            "res": "FAIL"
+          },
+          {
+            "date": "2026-08-03",
+            "code": "600481",
+            "ts": "2026-08-03 09:49:49",
+            "res": "WIN"
+          },
+          {
+            "date": "2026-08-03",
+            "code": "000988",
+            "ts": "2026-08-03 09:49:52",
+            "res": "FAIL"
+          },
+          {
+            "date": "2026-08-03",
+            "code": "603667",
+            "ts": "2026-08-03 10:06:15",
+            "res": "FAIL"
+          },
+          {
+            "date": "2026-08-03",
+            "code": "600176",
+            "ts": "2026-08-03 10:20:04",
+            "res": "FAIL"
+          },
+          {
+            "date": "2026-08-03",
+            "code": "000988",
+            "ts": "2026-08-03 10:20:09",
+            "res": "FAIL"
+          },
+          {
+            "date": "2026-08-03",
+            "code": "600176",
+            "ts": "2026-08-03 13:19:44",
+            "res": "FAIL"
+          },
+          {
+            "date": "2026-08-03",
+            "code": "588170",
+            "ts": "2026-08-03 13:59:28",
+            "res": "FAIL"
+          },
+          {
+            "date": "2026-08-03",
+            "code": "000988",
+            "ts": "2026-08-03 14:13:20",
+            "res": "WIN"
+          }
+        ]
+      },
+      "sell": {
+        "n": 20,
+        "wins": 19,
+        "fails": 1,
+        "wr": 0.95,
+        "window": 20,
+        "short": false,
+        "note": "满窗",
+        "events_tail": [
+          {
+            "date": "2026-08-05",
+            "code": "588170",
+            "ts": "2026-08-05 10:49:26",
+            "res": "FAIL"
+          },
+          {
+            "date": "2026-08-05",
+            "code": "600481",
+            "ts": "2026-08-05 10:53:15",
+            "res": "WIN"
+          },
+          {
+            "date": "2026-08-05",
+            "code": "600481",
+            "ts": "2026-08-05 10:54:04",
+            "res": "WIN"
+          },
+          {
+            "date": "2026-08-05",
+            "code": "600481",
+            "ts": "2026-08-05 10:54:35",
+            "res": "WIN"
+          },
+          {
+            "date": "2026-08-05",
+            "code": "600481",
+            "ts": "2026-08-05 10:55:12",
+            "res": "WIN"
+          },
+          {
+            "date": "2026-08-05",
+            "code": "600481",
+            "ts": "2026-08-05 10:55:43",
+            "res": "WIN"
+          },
+          {
+            "date": "2026-08-05",
+            "code": "600481",
+            "ts": "2026-08-05 11:03:02",
+            "res": "WIN"
+          },
+          {
+            "date": "2026-08-05",
+            "code": "600481",
+            "ts": "2026-08-05 11:03:31",
+            "res": "WIN"
+          },
+          {
+            "date": "2026-08-05",
+            "code": "600481",
+            "ts": "2026-08-05 11:04:41",
+            "res": "WIN"
+          },
+          {
+            "date": "2026-08-05",
+            "code": "600481",
+            "ts": "2026-08-05 11:05:27",
+            "res": "WIN"
+          },
+          {
+            "date": "2026-08-05",
+            "code": "600481",
+            "ts": "2026-08-05 11:05:56",
+            "res": "WIN"
+          },
+          {
+            "date": "2026-08-05",
+            "code": "600481",
+            "ts": "2026-08-05 11:11:51",
+            "res": "WIN"
+          },
+          {
+            "date": "2026-08-05",
+            "code": "588170",
+            "ts": "2026-08-05 11:18:55",
+            "res": "WIN"
+          },
+          {
+            "date": "2026-08-05",
+            "code": "600481",
+            "ts": "2026-08-05 11:21:48",
+            "res": "WIN"
+          },
+          {
+            "date": "2026-08-05",
+            "code": "588170",
+            "ts": "2026-08-05 11:29:11",
+            "res": "WIN"
+          },
+          {
+            "date": "2026-08-05",
+            "code": "588170",
+            "ts": "2026-08-05 13:01:32",
+            "res": "WIN"
+          },
+          {
+            "date": "2026-08-05",
+            "code": "600481",
+            "ts": "2026-08-05 13:04:16",
+            "res": "WIN"
+          },
+          {
+            "date": "2026-08-05",
+            "code": "600481",
+            "ts": "2026-08-05 13:14:27",
+            "res": "WIN"
+          },
+          {
+            "date": "2026-08-05",
+            "code": "600481",
+            "ts": "2026-08-05 13:24:47",
+            "res": "WIN"
+          },
+          {
+            "date": "2026-08-05",
+            "code": "603667",
+            "ts": "2026-08-05 13:57:19",
+            "res": "WIN"
+          }
+        ]
+      },
+      "days_covered": [
+        "2026-07-13",
+        "2026-08-05"
+      ]
+    },
+    "K5_qty0_suppressed": {
+      "total": 3,
+      "by_code": {
+        "603667": 3
+      },
+      "source": "t_io/logs 仓控可交易量为0"
+    }
+  },
+  "watch": {
+    "#1_000988_qty冻结": {
+      "suppressed_qty0": 0,
+      "pushed": [],
+      "audit": null,
+      "note": "实盘当日其买信号被仓控0拦截次数; audit sold/bought=0 表示无成交"
+    },
+    "#2_000988_bull日买入": {
+      "day_type": "bull_day",
+      "buy_signals": 0,
+      "note": "D+E未上线, bull日买入应仍触发"
+    },
+    "#3_588170_买wr": {
+      "n": 0,
+      "wins": 0,
+      "fails": 0,
+      "wr": null
+    },
+    "#4_阴跌日股": {},
+    "#5_000988信号占比": {
+      "n": 15,
+      "total": 184,
+      "ratio": 0.0815,
+      "alert": false
+    }
+  }
+}

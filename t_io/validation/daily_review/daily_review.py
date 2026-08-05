@@ -368,7 +368,10 @@ def kpi_report_md():
     L.append("| KPI | 值 | 明细 |")
     L.append("|-----|-----|------|")
     k1s = "；".join(f"{c} {v['est_pnl']:+.2f}" for c, v in k1["by_code"].items() if v["est_pnl"]) or "全日无成交"
-    L.append(f"| K1 闭环净盈亏 | **{k1['total_est_pnl']:+.2f}** | {k1s} |")
+    if k1["total_est_pnl"] is None:
+        L.append(f"| K1 闭环净盈亏 | 无（当日 0 闭环） | {k1s} |")
+    else:
+        L.append(f"| K1 闭环净盈亏 | **{k1['total_est_pnl']:+.2f}** | {k1s} |")
     if k2["baseline"]:
         L.append(f"| K2 持仓成本变化 | 基线日 | 无前日快照，仅建档："
                  + "；".join(f"{c} cost={v['cost_now']}" for c, v in k2["by_code"].items()) + " |")
