@@ -34,7 +34,7 @@
     "cost": 66.349,
     "qty": 100,
     "base": 100,
-    "t_qty": 100,
+    "t_qty": 0,
     "type": "stock",
     "account": "账户B",
     "pre_close": 55.0
@@ -64,7 +64,7 @@
     "cost": 11.69,
     "qty": 200,
     "base": 200,
-    "t_qty": 200,
+    "t_qty": 0,
     "type": "stock",
     "account": "账户A",
     "pre_close": 12.87

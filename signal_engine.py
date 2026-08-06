@@ -3,6 +3,11 @@
 #   共 5 处 RSI 计算点修复 0/0 钉平窗除零 NaN（填 50 中性；纯上涨窗保持 NaN 与现网一致；
 #   预热 leading NaN 不变）。本文件零代码变更，仅登记版本；参数/阈值/权重零调整。
 #   回归证据: t_io/validation/rsi_nan_guard/regression_report_2026-08-03.md
+# V1.1.3 (2026-08-06, 修复类非调优): 收盘同步 t_qty 只减不增不变量 — holdings_sync.py/main.py
+#   旧 eod_sync `t_qty=qty` 无条件释放冻结，今日 14:50:25 复活 002639/603667 纯底仓(t_qty=0)，
+#   致 14:50:45 002639 误推 SELL_HIGH + 幻影卖出持久化。修复后 t_qty 增加只能来自晨间截图 reconcile。
+#   本文件零代码变更，仅登记版本；参数/阈值/权重零调整。
+#   回归证据: t_io/validation/test_holdings_sync_invariant.py（当日数据重放全绿）
 import sys as _sys
 import os as _os_mod
 # V3.0fix: __file__ = E:\06_T\signal_engine.py → dirname = E:\06_T

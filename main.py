@@ -918,16 +918,21 @@ def _maybe_audit_closure(now: datetime) -> None:
             holding = HOLDINGS.get(code)
             if holding is None:
                 continue
+            # V1.1.3 (2026-08-06, 修复类): t_qty 只减不增不变量（holdings_sync.apply_eod_sync）——
+            # t_qty 增加只能来自晨间截图 reconcile（人工）；纯底仓 t_qty=0 天然持久，sync 不得复活。
+            # 事故：旧逻辑 t_qty=qty 无条件"释放冻结"，今日 14:50:25 复活 002639/603667 纯底仓，
+            # 致 14:50:45 002639 误推 SELL_HIGH + 幻影卖出持久化。
+            from holdings_sync import apply_eod_sync
             old_qty = int(holding.get("qty", 0))
-            old_t_qty = int(holding.get("t_qty", 0) or old_qty)
-            delta = d["unclosed_buy"] - d["unrebuilt"]
-            new_qty = max(0, old_qty + delta)
+            old_t_qty = int(holding["t_qty"]) if "t_qty" in holding else old_qty
+            new_qty, new_t_qty, new_base, delta, _changed = apply_eod_sync(
+                holding, d["unclosed_buy"], d["unrebuilt"])
             holding["qty"] = new_qty
-            holding["t_qty"] = new_qty  # 释放冻结：t_qty = qty
-            holding["base"] = new_qty
-            if delta != 0 or old_t_qty != new_qty:
+            holding["t_qty"] = new_t_qty  # 只减不增（V1.1.3）；增加只能来自晨间 reconcile
+            holding["base"] = new_base
+            if delta != 0 or old_t_qty != new_t_qty:
                 log.info(f"📝 收盘同步 {d['name']}({code}): "
-                         f"qty {old_qty}→{new_qty}, t_qty {old_t_qty}→{new_qty} (delta={delta:+d}, 冻结已释放)")
+                         f"qty {old_qty}→{new_qty}, t_qty {old_t_qty}→{new_t_qty} (delta={delta:+d}, t_qty只减不增)")
                 holdings_updated = True
         if holdings_updated:
             try:
