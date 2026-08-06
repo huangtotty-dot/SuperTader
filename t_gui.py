@@ -731,6 +731,8 @@ class Api:
             # 支撑/压力位（基于日线）
             levels = self._calc_support_resistance(daily)
             out["levels"] = levels
+            # 箱体检测（基于日线）
+            out["boxes"] = self._detect_boxes(daily)
             out["current_price"] = round(float(daily["close"].iloc[-1]), 3)
             out["available"] = True
         except Exception as e:
@@ -738,6 +740,65 @@ class Api:
             return out
 
         return _clean(out)
+
+    def _detect_boxes(self, daily):
+        """检测箱体（无趋势震荡区间）：滑动窗口线性回归斜率≈0 的连续段。
+        返回 [{start, end, low, high, center, days}] 按时间正序。"""
+        import numpy as np
+        d = daily
+        closes = d["close"].values
+        highs = d["high"].values
+        lows = d["low"].values
+        dates = d["date"].values
+        n = len(d)
+        if n < 40:
+            return []
+
+        WIN, STEP = 40, 5
+        box_flags = np.zeros(n, dtype=bool)
+        # 每个窗口：收盘价线性回归斜率归一化 |slope/price| 小 + 区间振幅收窄 → 箱体候选
+        for start in range(0, n - WIN + 1, STEP):
+            seg = closes[start:start + WIN]
+            x = np.arange(WIN)
+            slope = np.polyfit(x, seg, 1)[0]
+            rel_slope = abs(slope) / (seg.mean() or 1e-9)  # 每根K线的相对斜率
+            # 箱体判定：近40天几乎水平（斜率 < 0.15%/天）+ 高低点分布集中
+            if rel_slope < 0.0015:
+                box_flags[start:start + WIN] = True
+
+        # 合并连续 box_flags → 箱体段
+        boxes = []
+        i = 0
+        while i < n:
+            if not box_flags[i]:
+                i += 1
+                continue
+            j = i
+            while j < n and box_flags[j]:
+                j += 1
+            seg_len = j - i
+            if seg_len >= 20:  # 至少 20 天
+                seg_high = float(highs[i:j].max())
+                seg_low = float(lows[i:j].min())
+                seg_close = closes[i:j]
+                # 箱体区间宽度（相对）合理：≥2% 才有意义，≤25% 才是"箱"不是"大通道"
+                width_pct = (seg_high - seg_low) / (seg_close.mean() or 1e-9) * 100
+                if 2.0 <= width_pct <= 25.0:
+                    s = dates[i].strftime("%Y-%m-%d") if hasattr(dates[i], "strftime") else str(dates[i])[:10]
+                    e = dates[j - 1].strftime("%Y-%m-%d") if hasattr(dates[j-1], "strftime") else str(dates[j-1])[:10]
+                    boxes.append({
+                        "start": s,
+                        "end": e,
+                        "low": round(seg_low, 3),
+                        "high": round(seg_high, 3),
+                        "center": round(float(seg_close.mean()), 3),
+                        "days": seg_len,
+                    })
+            i = j
+
+        # 只保留最近 3 个箱体，按时间正序
+        boxes = boxes[-3:]
+        return boxes
 
     def _calc_support_resistance(self, daily):
         """pivot + MA20/60 + 前高低 + 量密集区 → 支撑/压力列表（带强度）。"""
