@@ -33,6 +33,7 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font: 14px
   animation: livePulse 1.6s ease-in-out infinite;
 }
 @keyframes livePulse { 0%,100%{opacity:1} 50%{opacity:.55} }
+.live-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: #3fb950; animation: livePulse 1.6s ease-in-out infinite; vertical-align: middle; margin-right: 2px; }
 
 /* ===== 报警横幅 ===== */
 .alert-banner {

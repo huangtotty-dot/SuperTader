@@ -997,10 +997,12 @@ function renderPB(pb) {
   }).join("");
 
   const c = k => counts[k] ? `<span class="badge ${k === "signal" ? "signal" : k === "approaching" ? "approach" : "weak"}">${k}: ${counts[k]}</span>` : "";
+  const refreshed = pb.refreshed_at ? `<span class="live-dot"></span> ${esc(pb.refreshed_at)}` : "";
   el.innerHTML = `
     <div class="card">
-      <div style="display:flex;gap:8px;margin-bottom:6px;flex-wrap:wrap;">
+      <div style="display:flex;gap:8px;margin-bottom:6px;flex-wrap:wrap;align-items:center">
         ${c("signal")}${c("approaching")}${c("weak")}${c("insufficient_data")}
+        <span class="cell-dim mono" style="font-size:10px;margin-left:auto" title="盘中每10s自动刷新">${refreshed}</span>
       </div>
       ${pb.note ? `<div class="cell-dim" style="font-size:11px;margin-bottom:6px">⚠ ${esc(pb.note)}</div>` : ""}
       <table>
@@ -1040,9 +1042,14 @@ function renderAddWatch(aw) {
   const bar = (cnt, cls, label) =>
     cnt > 0 ? `<span class="aw-bar-seg ${cls}" style="width:${(cnt/total*100).toFixed(1)}%" title="${label}: ${cnt}/${total}">${cnt}</span>` : "";
 
+  const now = nowTime();
+  window._awLastRefresh = now;
   const summaryHtml = `
     <div class="card" style="margin-bottom:10px;padding:10px 14px">
-      <div class="cell-dim" style="margin-bottom:6px">回踩支撑满足程度（共 ${total} 只）</div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+        <span class="cell-dim">回踩支撑满足程度（共 ${total} 只）</span>
+        <span class="cell-dim mono" style="font-size:10px" title="随盘中实时数据自动刷新"><span class="live-dot"></span> ${now}</span>
+      </div>
       <div class="aw-bar">
         ${bar(holdCnt, "aw-hold", "守住支撑")}
         ${bar(breakCnt, "aw-break", "破位")}

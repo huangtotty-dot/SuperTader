@@ -881,7 +881,9 @@ class Api:
     # ---------- 轻量 PB 刷新（盘中实时） ----------
     def refresh_pb(self, date):
         """仅重读 position_builder jsonl 并返回聚合结果（不触发其他重载）。"""
-        return self._agg_position_builder(date)
+        result = self._agg_position_builder(date)
+        result["refreshed_at"] = datetime.now().strftime("%H:%M:%S")
+        return result
 
     # ---------- 内部聚合 ----------
     def _load_stage_board(self):
