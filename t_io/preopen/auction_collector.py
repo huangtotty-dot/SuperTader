@@ -196,6 +196,11 @@ def do_backfill(date):
             open_px = s.get("open")
             vol, amt = fetch_minute_first_bar(code)
             src = "qt快照今开 + 分钟09:30首根"
+            if vol is None:  # 网络分钟接口静默失败 → 本地分钟快照兜底（08-06 实盘触发）
+                bars = _local_minute_bars(code, date)
+                if bars:
+                    vol, amt = bars[0][5], bars[0][6]
+                    src = "qt快照今开 + 本地分钟快照09:30首根(网络接口失败兜底)"
         else:
             bars = _local_minute_bars(code, date)
             if bars:
