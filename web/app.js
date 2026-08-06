@@ -135,6 +135,9 @@ async function refreshLive(reset) {
       const keyOnly = (document.getElementById("consoleKeyOnly") || {}).checked !== false;
       appendConsole(c.lines, keyOnly);
     }
+
+    // 建仓/加仓扫描表实时刷新（position_builder 盘中每5分钟有新数据）
+    apiCall("refresh_pb", date).then(pb => renderPB(pb || {})).catch(() => {});
   } catch (e) {
     // 静默：实时轮询失败不影响主界面
   }
@@ -392,15 +395,18 @@ function renderLive(live, isToday) {
   const sigRows = signals.map(s => {
     const dec = s.decision || "HOLD";
     const isSig = dec !== "HOLD";
+    const isNear = s.near && !isSig;  // 近阈但未触发
+    const nearInfo = isNear
+      ? `距买阈${fmt((s.buy_threshold||0)-(s.buy_score||0),0)}/卖阈${fmt((s.sell_threshold||0)-(s.sell_score||0),0)}` : "";
     return `
-      <tr class="${isSig ? "live-signal-row sig" : ""}">
+      <tr class="${isSig ? "live-signal-row sig" : isNear ? "live-signal-row near" : ""}">
         <td class="mono">${esc((s.scan_time || "").slice(11, 19))}</td>
         <td>${esc(s.name || s.code || "")} <span class="mono cell-dim">${esc(s.code || "")}</span></td>
         <td class="num">${fmt(s.price, 3)}</td>
-        <td class="num ${clsOf((s.buy_score || 0) - 36)}">${fmt(s.buy_score, 1)}</td>
-        <td class="num ${clsOf((s.sell_score || 0) - 55)}">${fmt(s.sell_score, 1)}</td>
-        <td><span class="badge ${isSig ? "signal" : "chop"}">${esc(dec)}</span></td>
-        <td class="cell-dim" style="font-size:11px">${esc(s.reason || "")}</td>
+        <td class="num ${clsOf((s.buy_score || 0) - (s.buy_threshold || 36))}">${fmt(s.buy_score, 1)}</td>
+        <td class="num ${clsOf((s.sell_score || 0) - (s.sell_threshold || 55))}">${fmt(s.sell_score, 1)}</td>
+        <td><span class="badge ${isSig ? "signal" : isNear ? "approach" : "chop"}">${isNear ? "接近" : esc(dec)}</span></td>
+        <td class="cell-dim" style="font-size:11px">${esc(nearInfo || s.reason || "")}</td>
       </tr>`;
   }).join("");
 
@@ -946,12 +952,15 @@ function renderPB(pb) {
       conds[k] ? `<span class="on">●</span>` : `<span class="off">○</span>`).join("");
     const condTitle = Object.keys(condLabels).map(k =>
       `${condLabels[k]}:${conds[k] ? "通过" : "未过"}`).join(" · ");
+    const metCount = Object.values(conds).filter(Boolean).length;
+    const metCls = metCount >= 4 ? "up" : metCount >= 2 ? "warn" : "cell-dim";
     return `
       <tr>
         <td>${esc(r.name || "")} <span class="mono cell-dim">${esc(r.code || "")}</span>
           ${r.in_holdings ? `<span class="badge hold">持仓</span>` : ""}</td>
         <td>${verdictBadge(r.verdict)}</td>
         <td class="num"><b>${r.composite_score}</b></td>
+        <td class="num ${metCls}"><b>${metCount}/5</b></td>
         <td class="num">${fmt(r.price)}</td>
         <td><span class="cond" title="${esc(condTitle)}">${condStr}</span></td>
         <td class="num">${fmt(r.suggested_qty, 0)}</td>
@@ -969,13 +978,13 @@ function renderPB(pb) {
       </div>
       <table>
         <thead><tr>
-          <th>股票</th><th>判定</th><th class="num">得分</th><th class="num">价</th>
+          <th>股票</th><th>判定</th><th class="num">得分</th><th class="num">通过</th><th class="num">价</th>
           <th title="MACD/BOLL/RSI/缩量/支撑">五条件</th>
           <th class="num">建议股数</th><th class="num">建议价</th><th class="num">所需资金</th><th>扫描</th>
         </tr></thead>
         <tbody>${rows || '<tr><td colspan="9" class="empty">无扫描结果</td></tr>'}</tbody>
       </table>
-      <div class="cell-dim" style="font-size:11px;margin-top:8px">●=通过 ○=未通过 · 五条件顺序：${Object.values(condLabels).join(" / ")} · 每条件 20 分，≥70 signal</div>
+      <div class="cell-dim" style="font-size:11px;margin-top:8px">●=通过 ○=未通过 · 五条件：${Object.values(condLabels).join(" / ")} · 每条件 20 分，≥70 signal · 盘中每10s刷新</div>
     </div>`;
 }
 

@@ -160,6 +160,8 @@ tr:hover td { background: rgba(88,166,255,.03); }
 .cool-tag { color: var(--yellow-soft); font-family: var(--mono); font-size: 10px; }
 .live-signal-row.sig { background: var(--red-bg); }
 .live-signal-row.sig td { color: var(--red-soft); }
+.live-signal-row.near { background: var(--yellow-bg); }
+.live-signal-row.near td { color: var(--yellow-soft); }
 .console-toggle { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; font-size: 12px; color: var(--text-dim); }
 .console-box { background: #0a0e14; border: 1px solid var(--border-soft); border-radius: 6px; padding: 6px 8px; height: 280px; overflow-y: auto; font-family: var(--mono); font-size: 11px; line-height: 1.55; white-space: pre-wrap; word-break: break-all; }
 .console-line .ct { color: var(--text-faint); margin-right: 8px; }

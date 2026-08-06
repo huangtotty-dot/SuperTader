@@ -557,15 +557,27 @@ class Api:
                     rows.append(json.loads(line))
                 except Exception:
                     continue
-            # 取尾部最多 20 条非 HOLD + 补足 HOLD 到 20
+            # 取尾部：非 HOLD 优先 + 近阈 HOLD（差 5 分内）+ 普通 HOLD 补足到 20
             non_hold = [r for r in rows if r.get("decision") not in ("HOLD", None)]
-            tail = (non_hold + [r for r in rows if r.get("decision") in ("HOLD", None)])[-20:]
-            out["signals"] = [{
-                "scan_time": r.get("scan_time"), "code": r.get("code"),
-                "name": r.get("name"), "price": r.get("price"),
-                "buy_score": r.get("buy_score"), "sell_score": r.get("sell_score"),
-                "decision": r.get("decision"), "reason": r.get("decision_reason"),
-            } for r in tail]
+            near_hold = [
+                r for r in rows if r.get("decision") == "HOLD"
+                and ((r.get("buy_score") or 0) >= (r.get("buy_threshold") or 99) - 5
+                     or (r.get("sell_score") or 0) >= (r.get("sell_threshold") or 99) - 5)
+            ]
+            tail = (non_hold + near_hold + [r for r in rows if r.get("decision") == "HOLD"])[-20:]
+            def _sig(r):
+                bs = r.get("buy_score") or 0; ss = r.get("sell_score") or 0
+                bt = r.get("buy_threshold") or 99; st = r.get("sell_threshold") or 99
+                near = r.get("decision") == "HOLD" and (bs >= bt - 5 or ss >= st - 5)
+                return {
+                    "scan_time": r.get("scan_time"), "code": r.get("code"),
+                    "name": r.get("name"), "price": r.get("price"),
+                    "buy_score": bs, "sell_score": ss, "decision": r.get("decision"),
+                    "reason": r.get("decision_reason"),
+                    "buy_threshold": bt, "sell_threshold": st,
+                    "near": near,
+                }
+            out["signals"] = [_sig(r) for r in tail]
 
         out["intraday_state"] = _load_json(INTRADAY_STATE, {})
         out["market_intraday"] = self.load_market_score(date).get("intraday", [])
@@ -696,6 +708,11 @@ class Api:
                     if isinstance(r.get("position"), dict) else r.get("suggested_price"),
             })
         return _clean(out)
+
+    # ---------- 轻量 PB 刷新（盘中实时） ----------
+    def refresh_pb(self, date):
+        """仅重读 position_builder jsonl 并返回聚合结果（不触发其他重载）。"""
+        return self._agg_position_builder(date)
 
     # ---------- 内部聚合 ----------
     def _load_stage_board(self):
