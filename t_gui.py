@@ -729,8 +729,8 @@ class Api:
                     top5_list.append({
                         "category": category,
                         "stocks": [{"name": t.get("名称", ""), "code": t.get("代码", ""),
-                                    "score": int(t.get("总得分", 0) or 0),
-                                    "change_pct": round(float(t.get("涨跌幅", 0) or 0), 2)}
+                                    "score": int(float(t.get("总得分", 0) or 0) if str(t.get("总得分")) != "nan" else 0),
+                                    "change_pct": round(float(t.get("涨跌幅", 0) or 0), 2) if str(t.get("涨跌幅")) not in ("nan", "None", "") else 0.0}
                                    for t in (t5 or [])[:5]],
                     })
 
@@ -781,16 +781,24 @@ class Api:
                         d6 = sm.get("D6潜在突破5日", 0) or 0
                         d9 = sm.get("D9活跃程度", 0) or 0
                         total = sm.get("总得分", 0) or 0
+                        try: total = int(float(total))
+                        except: total = 0
+                        try: d5 = int(float(d5))
+                        except: d5 = 0
+                        try: d6 = int(float(d6))
+                        except: d6 = 0
+                        try: d9 = int(float(d9))
+                        except: d9 = 0
                         stocks.append({
                             "name": d.get("名称", ""), "code": code,
-                            "score": int(total), "d5": int(d5), "d6": int(d6), "d9": int(d9),
-                            "change_pct": round(float(d.get("涨跌幅", 0) or 0), 2),
-                            "limit_up": int(d.get("涨停", 0) or 0),
+                            "score": total, "d5": d5, "d6": d6, "d9": d9,
+                            "change_pct": round(float(d.get("涨跌幅", 0) or 0), 2) if str(d.get("涨跌幅")) not in ("nan", "None", "") else 0.0,
+                            "limit_up": int(float(d.get("涨停", 0) or 0)) if str(d.get("涨停")) not in ("nan", "None", "") else 0,
                         })
                     stocks.sort(key=lambda x: -x["score"])
                     sector_stocks[category] = stocks
             except Exception:
-                pass
+                pass  # 个股明细非致命
 
             # 3) 生成排名表 + 注入热度/趋势/股票数
             sum_cols, sum_rows = df_to_rows(df_summary)
