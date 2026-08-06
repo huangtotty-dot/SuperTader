@@ -588,62 +588,63 @@ class Api:
 
     # ---------- 增量信号轮询（报警用） ----------
     SIGNAL_TYPES = ("BUY_LOW", "SELL_HIGH", "ADD_POS", "PANIC_SELL")
+    # 飞书同款通知阈值（与 config.py PARAMS 对齐：notify_buy=68, sell=55, sell_early=65）
+    NOTIFY_BUY = 68
+    NOTIFY_SELL = 55
+    NOTIFY_SELL_EARLY = 65
 
     def poll_new_signals(self, date):
-        """增量读 decision_trace，返回自上次调用以来的新信号（非 HOLD）。
-        首次调用建立基线不报警；文件轮转自动重置基线。"""
+        """增量读 decision_trace，仅返回飞书同款通知阈值以上的新信号。
+        与 main.py scan_once 推送逻辑对齐：score >= notify_threshold 才报警。"""
         out = {"signals": [], "baseline": True}
         fp = TRACES / f"decision_trace_{date}.jsonl"
         if not fp.exists():
-            self._dt["date"] = None
-            self._dt["offset"] = 0
-            self._dt["seen"] = set()
+            self._dt["date"] = None; self._dt["offset"] = 0; self._dt["seen"] = set()
             return out
-        try:
-            size = fp.stat().st_size
-        except Exception:
-            return out
+        try: size = fp.stat().st_size
+        except Exception: return out
 
         st = self._dt
         if st["date"] != date or size < st["offset"]:
-            # 首次/切日期/文件轮转：建立基线（offset=当前末尾，旧行不重复处理）
-            st["date"] = date
-            st["offset"] = size
-            st["seen"] = set()
+            st["date"] = date; st["offset"] = size; st["seen"] = set()
             return out
-
         if size <= st["offset"]:
             return {"signals": [], "baseline": False}
 
         try:
             with open(fp, encoding="utf-8", errors="replace") as f:
-                f.seek(st["offset"])
-                data = f.read()
-        except Exception:
-            return out
-        st["offset"] = size
-        out["baseline"] = False
+                f.seek(st["offset"]); data = f.read()
+        except Exception: return out
+        st["offset"] = size; out["baseline"] = False
 
         for line in data.splitlines():
             line = line.strip()
-            if not line:
-                continue
-            try:
-                r = json.loads(line)
-            except Exception:
-                continue
-            if r.get("decision") not in self.SIGNAL_TYPES:
-                continue
+            if not line: continue
+            try: r = json.loads(line)
+            except Exception: continue
+            if r.get("decision") not in self.SIGNAL_TYPES: continue
             key = (r.get("scan_time"), r.get("code"), r.get("decision"))
-            if key in st["seen"]:
-                continue
-            st["seen"].add(key)
+            if key in st["seen"]: continue
             score = (r.get("buy_score") if r.get("decision") in ("BUY_LOW", "ADD_POS")
                      else r.get("sell_score"))
+            if score is None: continue
+            dec = r.get("decision", "")
+            # 飞书同款通知阈值过滤
+            if dec in ("BUY_LOW", "ADD_POS"):
+                if score < self.NOTIFY_BUY: continue
+            else:
+                ts = r.get("scan_time", "") or ""
+                hour = 9
+                if ts and len(ts) >= 13:
+                    try: hour = int(ts[11:13])
+                    except Exception: pass
+                threshold = self.NOTIFY_SELL_EARLY if hour < 10 else self.NOTIFY_SELL
+                if score < threshold: continue
+
+            st["seen"].add(key)
             out["signals"].append({
-                "scan_time": r.get("scan_time"),
-                "code": r.get("code"), "name": r.get("name"),
-                "price": r.get("price"), "decision": r.get("decision"),
+                "scan_time": ts, "code": r.get("code"), "name": r.get("name"),
+                "price": r.get("price"), "decision": dec,
                 "score": score, "reason": r.get("decision_reason"),
             })
         return _clean(out)
