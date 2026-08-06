@@ -57,7 +57,9 @@ COND_LABELS = {
 
 
 PREOPEN_DIR = BASE / "t_io" / "preopen"
-HUNTER_DIR = Path(r"E:\stock_hunter")
+HUNTER_DIR = BASE / "stock_hunter"
+if str(BASE) not in sys.path:
+    sys.path.insert(0, str(BASE))  # stock_hunter 模块在 stock_hunter/ 下导入
 if str(HUNTER_DIR) not in sys.path:
     sys.path.insert(0, str(HUNTER_DIR))
 

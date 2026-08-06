@@ -7,3 +7,8 @@ node_modules/
 t_io/logs/*.log
 t_io/gm_bridge/events_*.jsonl
 t_io/gm_bridge/heartbeat_*.jsonl
+stock_hunter/data/
+stock_hunter/watchlist_jiuyan.json
+stock_hunter/config.json
+stock_hunter/__pycache__/
+stock_hunter/output/
