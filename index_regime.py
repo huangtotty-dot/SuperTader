@@ -320,7 +320,7 @@ IR_DEFAULT_PARAMS: Dict[str, Any] = {
     # —— 数据与 IO ——
     "index_symbol_sh": "sh000001", "index_symbol_sz": "sz399001",
     "kline_count_sh": 900, "kline_count_sz": 450,
-    "http_timeout": 15, "http_retry": 4, "http_retry_sleep": 2.0,
+    "http_timeout": 8, "http_retry": 2, "http_retry_sleep": 1.0,
     "state_dir": None,                               # None → 默认 <BASE_DIR|E:\06_T>\t_io\index_regime
     "min_bars": 150,                                 # 趋势指标所需最少日线数（不足则逐项降级）
 }
