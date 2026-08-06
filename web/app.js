@@ -75,7 +75,8 @@ async function loadAndRender(date, silent) {
 
     // K1 做T盈亏（独立于 daily_review，读 closure_audit）
     apiCall("load_trade_pnl", date).then(tp => renderKPI(payload.kpi, tp || {})).catch(() => {});
-    // 行情条 + 大盘趋势 + 成本历史（静态，一次拉取）
+    // 集合竞价 + 行情条 + 大盘趋势 + 成本历史（静态，一次拉取）
+    apiCall("load_auction", date).then(a => renderAuction(a || {})).catch(() => {});
     apiCall("load_quotes").then(q => renderQuotes(q || {}, null)).catch(() => {});
     apiCall("load_market_score", date).then(ms => renderMarket(ms || {})).catch(() => {});
     apiCall("load_cost_history").then(ch => { state.costHistory = ch || {}; renderCost(ch || {}); }).catch(() => {});
@@ -1046,6 +1047,52 @@ function renderStageBoard(stages) {
           ${it.note ? `<div class="zone-note">${esc(it.note)}</div>` : ""}
         </div>`).join("")}
     </div>`).join("") + `</div>`;
+}
+
+/* ---- 集合竞价 ---- */
+function renderAuction(a) {
+  const el = document.getElementById("auctionBody");
+  if (!a || !a.available) {
+    el.innerHTML = '<div class="empty">当日无集合竞价数据（采集器待运行或历史日未回填）</div>';
+    return;
+  }
+  const rows = a.rows || {};
+  const codes = Object.keys(rows);
+  if (!codes.length) { el.innerHTML = '<div class="empty">无竞价数据</div>'; return; }
+  // 按竞价涨跌排序
+  codes.sort((a, b) => (rows[b].pct || 0) - (rows[a].pct || 0));
+
+  const tableRows = codes.map(code => {
+    const r = rows[code];
+    const pctCls = clsOf(r.pct);
+    const volTxt = r.vol_vs_yday != null
+      ? `${r.vol_vs_yday.toFixed(1)}%` : (r.vol_hand != null ? `${fmt(r.vol_hand, 0)}手` : "—");
+    return `<tr>
+      <td>${esc(r.name || code)} <span class="mono cell-dim">${esc(code)}</span></td>
+      <td class="num ${pctCls}"><b>${r.pct >= 0 ? "+" : ""}${fmt(r.pct, 2)}%</b></td>
+      <td class="num">${fmt(r.price, 3)}</td>
+      <td class="num">${fmt(r.pre_close, 3)}</td>
+      <td class="num mono">${volTxt}</td>
+    </tr>`;
+  }).join("");
+
+  const biasCls = a.bias === "偏多" ? "up" : a.bias === "偏空" ? "down" : "warn";
+  const gapsWarn = a.has_gaps ? `<span class="warn">⚠ 缺失时段: ${(a.gaps || []).join(", ")}</span>` : "";
+
+  el.innerHTML = `
+    <div class="card">
+      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:8px">
+        <span>竞价基调: <b class="${biasCls}">${a.bias}</b></span>
+        <span class="cell-dim">池同向率: <b class="up">${a.same_dir.up}↑</b> / <b class="down">${a.same_dir.down}↓</b> / ${a.same_dir.flat}平</span>
+        <span class="cell-dim mono">${esc(a.slot_used || "")}</span>
+        ${gapsWarn}
+      </div>
+      <table>
+        <thead><tr><th>股票</th><th class="num">竞价涨跌</th><th class="num">竞价价</th><th class="num">昨收</th><th class="num">竞价量/昨量</th></tr></thead>
+        <tbody>${tableRows}</tbody>
+      </table>
+      <div class="cell-dim" style="font-size:10px;margin-top:4px">竞价量/昨量=竞价成交量÷昨日全天成交量；09:20/09:22轨迹待采集器上线后补齐</div>
+    </div>`;
 }
 
 /* ---- 行情条（卡片网格） ---- */

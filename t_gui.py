@@ -56,6 +56,9 @@ COND_LABELS = {
 }
 
 
+PREOPEN_DIR = BASE / "t_io" / "preopen"
+
+
 def _clean(obj):
     """递归清洗为 JSON 可序列化类型：nan/inf -> None，numpy 标量 -> 原生。"""
     if isinstance(obj, float):
@@ -507,6 +510,55 @@ class Api:
             return _clean(out)
         out["note"] = "当日无 closure_audit 记录"
         return _clean(out)
+
+    # ---------- 集合竞价信息层 ----------
+    def load_auction(self, date):
+        """读 t_io/preopen/auction_{date}.json，聚合并返回竞价摘要。"""
+        fp = PREOPEN_DIR / f"auction_{date}.json"
+        if not fp.exists():
+            return {"date": date, "available": False}
+        try:
+            d = json.loads(open(fp, encoding="utf-8").read())
+        except Exception:
+            return {"date": date, "available": False}
+
+        # 取最接近开盘的快照（优先 09:25，其次 09:28，否则第一个）
+        snaps = d.get("snapshots", {})
+        slot = snaps.get("09:25") or snaps.get("09:28")
+        if not slot and isinstance(snaps, dict):
+            slot = list(snaps.values())[0] if snaps else None
+
+        rows = {}
+        same_dir = {"up": 0, "down": 0, "flat": 0}
+        if slot and isinstance(slot, dict):
+            for code, r in (slot.get("rows") or {}).items():
+                pct = r.get("pct_vs_preclose", 0) or 0
+                price = r.get("auction_price") or r.get("open_approx")
+                vol_vs_yday = r.get("auction_vol_vs_yday")
+                rows[code] = {
+                    "name": r.get("name", code),
+                    "price": price,
+                    "pre_close": r.get("pre_close"),
+                    "pct": round(pct, 2),
+                    "vol_hand": r.get("auction_vol_hand") or r.get("auction_vol_hand_approx"),
+                    "amount_wan": r.get("amount_wan") or r.get("auction_amount_approx"),
+                    "vol_vs_yday": round(vol_vs_yday * 100, 2) if vol_vs_yday is not None else None,
+                    "yday_vol": r.get("yday_total_vol_hand"),
+                }
+                if pct > 0.5: same_dir["up"] += 1
+                elif pct < -0.3: same_dir["down"] += 1
+                else: same_dir["flat"] += 1
+
+        total = sum(same_dir.values()) or 1
+        bias = "偏多" if same_dir["up"] >= total * .6 else ("偏空" if same_dir["down"] >= total * .6 else "中性")
+        gaps = d.get("gaps", [])
+        return _clean({
+            "date": date, "available": True,
+            "slot_used": slot.get("ts") if isinstance(slot, dict) else None,
+            "rows": rows,
+            "same_dir": same_dir, "bias": bias, "total_stocks": total,
+            "gaps": gaps, "has_gaps": len(gaps) > 0,
+        })
 
     # ---------- 独立配置（账户总资金+已实现亏损） ----------
     def load_portfolio_config(self):
