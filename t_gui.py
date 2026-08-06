@@ -748,6 +748,7 @@ class Api:
 
         out["intraday_state"] = _load_json(INTRADAY_STATE, {})
         out["market_intraday"] = self.load_market_score(date).get("intraday", [])
+        out["add_watch"] = self.compute_add_watch(date)
         return _clean(out)
 
     # ---------- 增量信号轮询（报警用） ----------

@@ -126,6 +126,22 @@ async function refreshLive(reset) {
       apiCall("load_market_score", date).then(ms => renderMarket(ms || {})).catch(() => {});
     }
 
+    // 加仓条件全满足检测（与飞书推送无关，纯 GUI 报警）
+    const aw = live.add_watch || (state.payload && state.payload.add_watch) || {};
+    const allMet = Object.entries(aw).filter(([, v]) => v.met_count >= (v.conditions || []).length);
+    if (allMet.length && !window._awAlerted) window._awAlerted = {};
+    allMet.forEach(([code, v]) => {
+      const key = date + "_" + code;
+      if (!window._awAlerted[key]) {
+        window._awAlerted[key] = true;
+        pushAlert({
+          scan_time: nowTime(), code, name: v.name, type: "加仓条件",
+          decision: "JIACANG_COND", composite_score: v.met_count * 25,
+          suggested_qty: null, suggested_price: null,
+        });
+      }
+    });
+
     // console 增量拉取（reset=true 时从头读）
     const since = reset ? 0 : consoleOffset;
     const c = await apiCall("load_console", date, since);
@@ -514,10 +530,10 @@ function pushAlert(s) {
   item.className = "alert-item";
   // 建仓/加仓信号：s.type ∈ {"建仓","加仓"}，用 score=composite_score；盘中信号用 decision
   let icon, label, scoreTxt, extraTxt, alertKind;
-  if (s.type === "建仓" || s.type === "加仓") {
-    icon = s.type === "建仓" ? "🔵" : "🟡";
+  if (s.type === "建仓" || s.type === "加仓" || s.type === "加仓条件") {
+    icon = s.type === "建仓" ? "🔵" : s.type === "加仓条件" ? "✅" : "🟡";
     label = s.type;
-    alertKind = s.type === "建仓" ? "JIANCANG" : "JIACANG";
+    alertKind = s.type === "建仓" ? "JIANCANG" : s.type === "加仓条件" ? "JIACANG" : "JIACANG";
     scoreTxt = `${fmt(s.composite_score, 0)}分`;
     extraTxt = s.suggested_qty ? ` 建议 ${fmt(s.suggested_qty, 0)}股@${fmt(s.suggested_price, 3)}` : "";
   } else {
