@@ -221,6 +221,8 @@ class Api:
         dates, stocks = [], {}
         calib = _load_json(STATE_DIR / "cost_calibration.json", {}).get("calibrations", {})
         for fp in sorted(STATE_DIR.glob("holdings_*.json")):
+            if "holdings_daily" in fp.stem:
+                continue  # 跳过 holdings_daily_* 文件（结构不同）
             d = fp.stem.replace("holdings_", "")
             try:
                 snap = json.loads(open(fp, encoding="utf-8").read())
@@ -241,7 +243,13 @@ class Api:
                     cost = float(calib_day[code])
                     src = "人工校准"
                 st = stocks.setdefault(code, {"name": info.get("name", code), "points": []})
-                st["points"].append({"date": d, "cost": float(cost), "src": src})
+                qty = info.get("qty", 0) or 0
+                pc = info.get("pre_close") or 0
+                pnl_amt = round((pc - float(cost)) * qty, 2) if (pc and qty) else None
+                pnl_pct = round((pc / float(cost) - 1) * 100, 2) if (pc and float(cost)) else None
+                st["points"].append({"date": d, "cost": float(cost), "src": src,
+                                     "pnl_amt": pnl_amt, "pnl_pct": pnl_pct,
+                                     "qty": qty, "pre_close": pc})
 
         # 今日有效成本（校准优先，否则当前 holdings）供预填
         today = datetime.now().strftime("%Y-%m-%d")
