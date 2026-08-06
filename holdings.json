@@ -1,18 +1,13 @@
 {
-  "_accounts": {
-    "账户A": {"total_capital": 0},
-    "账户B": {"total_capital": 0}
-  },
   "588170": {
     "name": "科创半导体ETF华夏",
-    "cost": 0.937,
-    "qty": 12000,
-    "base": 12000,
-    "t_qty": 12000,
+    "cost": 0.931,
+    "qty": 6000,
+    "base": 6000,
+    "t_qty": 6000,
     "type": "etf",
     "account": "账户A",
-    "pre_close": 0.865,
-    "realized_loss": 0
+    "pre_close": 0.949
   },
   "600176": {
     "name": "中国巨石",
@@ -22,19 +17,17 @@
     "t_qty": 500,
     "type": "stock",
     "account": "账户A",
-    "pre_close": 36.19,
-    "realized_loss": 0
+    "pre_close": 39.28
   },
   "600481": {
     "name": "双良节能",
-    "cost": 7.786,
-    "qty": 700,
-    "base": 700,
-    "t_qty": 700,
+    "cost": 12.4,
+    "qty": 300,
+    "base": 300,
+    "t_qty": 300,
     "type": "stock",
     "account": "账户A",
-    "pre_close": 4.33,
-    "realized_loss": 0
+    "pre_close": 4.35
   },
   "603667": {
     "name": "五洲新春",
@@ -44,40 +37,36 @@
     "t_qty": 0,
     "type": "stock",
     "account": "账户A",
-    "pre_close": 54.45,
-    "realized_loss": 0
+    "pre_close": 55.0
   },
   "000988": {
     "name": "华工科技",
-    "cost": 231.454,
-    "qty": 400,
-    "base": 400,
-    "t_qty": 400,
+    "cost": 363.402,
+    "qty": 200,
+    "base": 200,
+    "t_qty": 200,
     "type": "stock",
     "account": "账户A+账户B",
-    "pre_close": 100.65,
-    "realized_loss": 0
+    "pre_close": 100.43
   },
   "002639": {
     "name": "雪人集团",
-    "cost": 12.048,
-    "qty": 300,
-    "base": 300,
+    "cost": 11.69,
+    "qty": 200,
+    "base": 200,
     "t_qty": 0,
     "type": "stock",
     "account": "账户B",
-    "pre_close": 12.78,
-    "realized_loss": 0
+    "pre_close": 12.87
   },
   "300153": {
     "name": "科泰电源",
-    "cost": 22.045,
-    "qty": 400,
-    "base": 400,
-    "t_qty": 400,
+    "cost": 22.31,
+    "qty": 300,
+    "base": 300,
+    "t_qty": 300,
     "type": "stock",
     "account": "账户B",
-    "pre_close": 21.11,
-    "realized_loss": 0
+    "pre_close": 21.6
   }
 }
