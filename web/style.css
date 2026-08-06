@@ -205,6 +205,16 @@ tr:hover td { background: rgba(88,166,255,.03); }
 .mini-btn.primary { background: var(--accent); color: #0d1117; border-color: var(--accent); font-weight: 700; }
 .mini-btn.primary:hover { filter: brightness(1.1); }
 .support-chip { display: inline-block; font-size: 11px; font-family: var(--mono); background: var(--bg); border: 1px solid var(--border-soft); border-radius: 4px; padding: 1px 5px; margin: 2px 3px 2px 0; color: var(--text-dim); }
+/* 加仓观察进度条 */
+.aw-bar { display: flex; height: 22px; border-radius: 4px; overflow: hidden; background: var(--bg); }
+.aw-bar-seg { display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; color: #fff; transition: width .3s; min-width: 0; }
+.aw-bar-seg.aw-hold { background: #3fb950; }
+.aw-bar-seg.aw-break { background: #f85149; }
+.aw-bar-seg.aw-near { background: #d29922; }
+.aw-bar-seg.aw-none { background: #30363d; color: var(--text-faint); }
+.aw-dot { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 3px; vertical-align: middle; }
+.aw-dot.hold { background: #3fb950; } .aw-dot.break { background: #f85149; }
+.aw-dot.near { background: #d29922; } .aw-dot.none { background: #484f58; }
 .freeze-row td { background: var(--red-bg); }
 .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 @media (max-width: 1100px) { .cols { grid-template-columns: 1fr; } }

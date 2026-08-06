@@ -1020,17 +1020,26 @@ function renderAddWatch(aw) {
     if (!hasHold && !hasBreak && (w.near || []).length > 0) nearCnt++;
     if (!hasHold && !hasBreak && !(w.near || []).length) noEventCnt++;
   });
+  const total = codes.length;
+  const bar = (cnt, cls, label) =>
+    cnt > 0 ? `<span class="aw-bar-seg ${cls}" style="width:${(cnt/total*100).toFixed(1)}%" title="${label}: ${cnt}/${total}">${cnt}</span>` : "";
 
   const summaryHtml = `
     <div class="card" style="margin-bottom:10px;padding:10px 14px">
-      <div style="display:flex;gap:18px;flex-wrap:wrap;align-items:center">
-        <span class="cell-dim">条件满足程度</span>
-        <span><b class="up">${holdCnt}</b> 只守住支撑</span>
-        <span><b class="down">${breakCnt}</b> 只破位</span>
-        <span><b class="warn">${nearCnt}</b> 只近阈未触</span>
-        <span><b class="cell-dim">${noEventCnt}</b> 只无事件</span>
+      <div class="cell-dim" style="margin-bottom:6px">回踩支撑满足程度（共 ${total} 只）</div>
+      <div class="aw-bar">
+        ${bar(holdCnt, "aw-hold", "守住支撑")}
+        ${bar(breakCnt, "aw-break", "破位")}
+        ${bar(nearCnt, "aw-near", "近阈未触")}
+        ${bar(noEventCnt, "aw-none", "无事件")}
       </div>
-      <div class="cell-dim" style="font-size:10px;margin-top:4px">守住=日低触及支撑且收盘站回 · 破位=触及后收盘跌破 · 近阈=距支撑0.5-3% · 回踩支撑不破是加仓前提</div>
+      <div style="display:flex;gap:14px;margin-top:6px;font-size:11px">
+        <span><span class="aw-dot hold"></span>守住 ${holdCnt}只</span>
+        <span><span class="aw-dot break"></span>破位 ${breakCnt}只</span>
+        <span><span class="aw-dot near"></span>近阈 ${nearCnt}只</span>
+        <span><span class="aw-dot none"></span>无事件 ${noEventCnt}只</span>
+      </div>
+      <div class="cell-dim" style="font-size:10px;margin-top:4px">回踩支撑不破是加仓前提 · 守住=触及支撑且收盘站回 · 盘中实时计算</div>
     </div>`;
 
   const cards = codes.map(code => {
