@@ -591,14 +591,23 @@ function reflowConsole(isKeyOnly) {
   const meta = document.getElementById("consoleMeta");
   let shown = consoleBuf;
   if (keyOnly) shown = shown.filter(l => l.key);
-  if (meta) meta.textContent = `显示 ${shown.length}/${consoleBuf.length} 行 · 偏移 ${consoleOffset}`;
-  const auto = box.scrollTop + box.clientHeight >= box.scrollHeight - 60;
+  if (meta) meta.textContent = `显示 ${shown.length}/${consoleBuf.length} 行`;
+  const auto = box.scrollTop + box.clientHeight >= box.scrollHeight - 40;
+
+  // 卡片流：时间左列 + 级别芯片 + 消息内容，关键行左色条
   box.innerHTML = shown.map(l => {
-    const lvCls = l.level ? "lv-" + l.level : "";
-    return `<span class="console-line ${lvCls} ${l.key ? "key" : ""}">` +
-      `<span class="ct">${esc(l.t)}</span>` +
-      (l.level ? `<span class="clv">[${esc(l.level)}]</span>` : "") +
-      esc(l.msg) + `</span>`;
+    const lv = l.level || "";
+    const lvCls = lv === "ERROR" ? "clv-err" : lv === "WARNING" ? "clv-warn" : "";
+    const keyCls = l.key ? "con-key" : "con-noise";
+    // 截断长消息（>120字符），hover 展开
+    const msgText = l.msg || "";
+    const truncated = msgText.length > 120;
+    const displayMsg = truncated ? msgText.slice(0, 120) + "…" : msgText;
+    return `<div class="con-line ${keyCls} ${lvCls}">
+      <span class="con-time">${esc(l.t)}</span>
+      ${lv ? `<span class="con-lv ${lvCls}">${esc(lv)}</span>` : ""}
+      <span class="con-msg"${truncated ? ` title="${esc(msgText)}"` : ""}>${esc(displayMsg)}</span>
+    </div>`;
   }).join("");
   if (auto) box.scrollTop = box.scrollHeight;
 }
