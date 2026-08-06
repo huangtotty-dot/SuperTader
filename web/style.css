@@ -163,12 +163,17 @@ tr:hover td { background: rgba(88,166,255,.03); }
 .live-signal-row.near { background: var(--yellow-bg); }
 .live-signal-row.near td { color: var(--yellow-soft); }
 .console-toggle { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; font-size: 12px; color: var(--text-dim); }
-.console-box { background: #0a0e14; border: 1px solid var(--border-soft); border-radius: 6px; padding: 6px 8px; height: 280px; overflow-y: auto; font-family: var(--mono); font-size: 11px; line-height: 1.55; white-space: pre-wrap; word-break: break-all; }
-.console-line .ct { color: var(--text-faint); margin-right: 8px; }
-.console-line .clv { margin-right: 8px; font-weight: 700; }
-.console-line.lv-ERROR { color: var(--red); }
-.console-line.lv-WARNING { color: var(--yellow-soft); }
-.console-line.key { background: rgba(88,166,255,.04); }
+.console-box { background: #0a0e14; border: 1px solid var(--border-soft); border-radius: 6px; padding: 4px 6px; height: 280px; overflow-y: auto; font-family: var(--mono); font-size: 11px; line-height: 1.45; }
+.con-line { display: flex; align-items: baseline; gap: 6px; padding: 3px 6px; border-left: 3px solid transparent; border-radius: 0 4px 4px 0; margin: 1px 0; }
+.con-line.con-key { border-left-color: var(--accent); background: rgba(88,166,255,.04); }
+.con-line.con-noise { opacity: .55; font-size: 10.5px; }
+.con-line.con-noise .con-msg { color: var(--text-faint); }
+.con-time { color: var(--text-faint); min-width: 52px; flex: none; font-size: 10.5px; }
+.con-lv { font-size: 9.5px; font-weight: 700; padding: 0 4px; border-radius: 3px; min-width: 44px; text-align: center; flex: none; }
+.con-lv.clv-err { color: #fff; background: var(--red); }
+.con-lv.clv-warn { color: #0d1117; background: var(--yellow-soft); }
+.con-line:not(.clv-err):not(.clv-warn) .con-lv { color: var(--text-faint); background: var(--bg); }
+.con-msg { flex: 1; min-width: 0; word-break: break-word; }
 .console-meta { color: var(--text-faint); font-size: 10px; }
 
 /* ===== 阶段看板 / 加仓 ===== */
