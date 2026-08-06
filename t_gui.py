@@ -814,6 +814,26 @@ class Api:
                 row["趋势"] = trend_str
             sum_cols = ["排名", "板块", "平均分", "涨停数", "热度", "趋势", "前三强", "股票数"]
 
+            # 4) 概念得分趋势（近14天热度+均分）
+            concept_trends = {}
+            try:
+                from modules.heat_tracker import load_history as load_heat_history
+                heat_hist = load_heat_history()
+                all_dates = sorted(heat_hist.keys())[-14:]
+                for cat in set(r["板块"] for r in sum_rows):
+                    pts = []
+                    for d in all_dates:
+                        items = heat_hist.get(d, [])
+                        hit = next((s for s in items if s["板块"] == cat), None)
+                        pts.append({
+                            "date": d[4:],  # MMDD
+                            "heat": hit.get("热度分") if hit else None,
+                            "avg": hit.get("平均分") if hit else None,
+                        })
+                    concept_trends[cat] = pts
+            except Exception:
+                pass
+
             out["available"] = True
             out["pool_size"] = len(codes)
             out["summary_cols"] = sum_cols
@@ -821,6 +841,7 @@ class Api:
             out["top5"] = top5_list
             out["heat_trends"] = heat_trends
             out["sector_stocks"] = sector_stocks
+            out["concept_trends"] = concept_trends
             out["refreshed_at"] = datetime.now().strftime("%H:%M:%S")
         except Exception as e:
             out["error"] = f"排名生成失败: {e}"
@@ -1083,9 +1104,9 @@ class Api:
             })
         return _clean(out)
 
-    # ---------- 加入建仓股池 ----------
+    # ---------- 建仓股池增删 ----------
     def add_to_watchlist(self, code, name):
-        """将股票加入 watchlist_buy.json（status=monitoring）。已存在则更新 status。"""
+        """将股票加入 watchlist_buy.json（status=monitoring）。"""
         fp = BASE / "watchlist_buy.json"
         wl = _load_json(fp, {"stocks": {}, "total_capital": 300000, "max_per_stock_pct": 0.2})
         stocks = wl.setdefault("stocks", {})
@@ -1102,6 +1123,23 @@ class Api:
             return {"ok": True, "code": code}
         except Exception as e:
             return {"ok": False, "error": str(e)}
+
+    def remove_from_watchlist(self, code):
+        """从 watchlist_buy.json 删除股票。"""
+        fp = BASE / "watchlist_buy.json"
+        wl = _load_json(fp, {})
+        stocks = wl.get("stocks", {})
+        if code in stocks:
+            del stocks[code]
+            try:
+                tmp = fp.with_suffix(".tmp")
+                with open(tmp, "w", encoding="utf-8") as f:
+                    json.dump(wl, f, ensure_ascii=False, indent=2)
+                tmp.replace(fp)
+                return {"ok": True, "code": code}
+            except Exception as e:
+                return {"ok": False, "error": str(e)}
+        return {"ok": False, "error": "股票不在股池中"}
 
     # ---------- 轻量 PB 刷新（盘中实时） ----------
     def refresh_pb(self, date):
