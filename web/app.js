@@ -1197,17 +1197,16 @@ function renderHunter(h) {
   }
 
   const sumRows = h.summary_rows || [];
-  const ht = h.heat_trends || {};
-  const ss = h.sector_stocks || {};
+    const ss = h.sector_stocks || {};
 
   // Sheet1: 可展开行
   const sumBody = sumRows.map((r, i) => {
     const category = r["板块"] || "";
-    const heatInfo = ht[category] || {};
-    const trendIcon = heatInfo.trend || "";
-    const prevHeat = heatInfo.prev_heat != null ? `${heatInfo.prev_heat}` : "—";
-    const heatChange = heatInfo.heat != null && heatInfo.prev_heat != null
-      ? heatInfo.heat - heatInfo.prev_heat : null;
+    const heatInfo = {}; // unused
+    const trendRaw = r["趋势"] || "";
+    const trendIcon = (trendRaw.match(/[🔥📈➡️📉🧊]/) || [""])[0];
+    const trendNum = (trendRaw.match(/[+-]?\d+/) || [""])[0];
+    const heatChange = trendNum !== "" ? parseInt(trendNum) : null;
     const heatCls = heatChange != null ? (heatChange > 5 ? "up" : heatChange < -5 ? "down" : "warn") : "cell-dim";
 
     const stocks = ss[category] || [];
@@ -1232,18 +1231,41 @@ function renderHunter(h) {
       </tr>`;
     }).join("");
 
+    const rank = i + 1;
+    const medal = rank === 1 ? "🥇" : rank === 2 ? "🥈" : rank === 3 ? "🥉" : "";
+    const scoreVal = r["平均分"] || 0;
+    const scorePct = Math.min(100, Math.max(0, scoreVal));
+    const scoreCls = scoreVal >= 70 ? "h-hot" : scoreVal >= 40 ? "h-warm" : "h-cool";
+    const barW = Math.max(2, scorePct);
+
+    const heatVal = r["热度"] != null ? r["热度"] : 0;
+    const heatBarW = Math.max(2, Math.min(100, heatVal));
+
     return `<tbody class="h-sector-group">
       <tr class="h-main-row" onclick="this.nextElementSibling.classList.toggle('open')" style="cursor:pointer">
-        <td class="num mono">${r["排名"] || i+1}</td>
-        <td><b>${esc(category)}</b> <span class="cell-dim">${r["细分数量"]||""}个细分</span>
-          ${d5Hits > 0 ? ` <span class="badge signal">D5:${d5Hits}</span>` : ""}
-          ${d6Hits > 0 ? ` <span class="badge approach">D6:${d6Hits}</span>` : ""}
+        <td class="num mono" style="font-size:14px;font-weight:700">${medal || rank}</td>
+        <td>
+          <div class="h-name">${esc(category)}</div>
+          <div class="h-sub">${r["细分数量"]||0}个细分 · ${r["股票数"]||(ss[category]||[]).length||0}只
+            ${d5Hits > 0 ? ` · <b class="up">D5×${d5Hits}</b>` : ""}
+            ${d6Hits > 0 ? ` · <b class="warn">D6×${d6Hits}</b>` : ""}
+          </div>
         </td>
-        <td class="num ${(r["平均分"]||0) >= 70 ? 'up' : (r["平均分"]||0) >= 40 ? 'warn' : 'cell-dim'}"><b>${fmt(r["平均分"], 1)}</b></td>
+        <td style="width:140px">
+          <div class="h-score-big ${scoreCls}">${fmt(scoreVal, 1)}<span class="h-score-unit">分</span></div>
+          <div class="h-bar-track"><div class="h-bar-fill ${scoreCls}" style="width:${barW}%"></div></div>
+        </td>
         <td class="num">${r["涨停数"]||0}</td>
-        <td class="num mono"><span class="${heatCls}">${heatInfo.heat != null ? fmt(heatInfo.heat, 0) : "—"}</span></td>
-        <td class="mono cell-dim" style="font-size:10px">${trendIcon} ${heatChange != null ? (heatChange>=0?'+':'')+fmt(heatChange,0) : '—'}</td>
-        <td class="cell-dim" style="font-size:11px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(r["前三强"]||'')}">${esc(r["前三强"]||'')}</td>
+        <td style="width:100px">
+          <div class="h-heat-val ${heatCls}">${heatVal > 0 ? fmt(heatVal, 0) : "—"}</div>
+          <div class="h-bar-track h-bar-sm"><div class="h-bar-fill ${heatCls}" style="width:${heatBarW}%"></div></div>
+        </td>
+        <td style="min-width:70px">
+          <span class="h-trend-badge ${heatChange != null ? (heatChange > 0 ? 'h-trend-up' : heatChange < 0 ? 'h-trend-down' : 'h-trend-flat') : 'h-trend-flat'}">
+            ${trendIcon || '—'} ${heatChange != null ? (heatChange>=0?'+':'')+fmt(heatChange,0) : ''}
+          </span>
+        </td>
+        <td class="cell-dim" style="font-size:11px;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(r["前三强"]||'')}">${esc(r["前三强"]||'—')}</td>
       </tr>
       <tr class="h-expand-wrap"><td colspan="7" style="padding:0">
         <div class="h-expand">
