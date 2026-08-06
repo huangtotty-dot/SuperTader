@@ -27,8 +27,8 @@ function dayTypeBadge(t) {
   return `<span class="badge ${cls}">${esc(label)}</span>`;
 }
 function verdictBadge(v) {
-  const map = { signal: "signal", approaching: "approach", weak: "weak", insufficient_data: "nodata" };
-  const label = { signal: "signal", approaching: "approaching", weak: "weak", insufficient_data: "无数据" }[v] || v;
+  const map = { signal: "signal", approaching: "approach", weak: "weak", insufficient_data: "nodata", pending: "nodata" };
+  const label = { signal: "signal", approaching: "approaching", weak: "weak", insufficient_data: "无数据", pending: "等待扫描" }[v] || v;
   return `<span class="badge ${map[v] || 'weak'}">${esc(label)}</span>`;
 }
 function wrCell(w) {
@@ -1028,7 +1028,7 @@ function renderPB(pb) {
         <span class="cell-dim mono" style="font-size:10px;margin-left:auto" title="盘中每10s自动刷新">${refreshed}</span>
       </div>
       ${pb.note ? `<div class="cell-dim" style="font-size:11px;margin-bottom:6px">⚠ ${esc(pb.note)}</div>` : ""}
-  ${pb.progress ? `<div class="cell-dim" style="font-size:10px;margin-bottom:6px">扫描进度: <b>${pb.progress.scanned}/${pb.progress.total_candidates}</b> 只 · 在线拉取 <b>${pb.progress.online_fetched}</b> 只 · 无数据 <b class="warn">${pb.progress.no_data}</b> 只</div>` : ""}
+  ${pb.progress ? `<div class="cell-dim" style="font-size:10px;margin-bottom:6px">扫描进度: <b>${pb.progress.scanned}/${pb.progress.total_candidates}</b> 只已扫${pb.progress.pending ? ` · <b class="warn">${pb.progress.pending}</b> 只待扫描` : ''} · 在线拉取 <b>${pb.progress.online_fetched}</b> 只 · 无数据 <b class="warn">${pb.progress.no_data}</b> 只</div>` : ""}
       <table>
         <thead><tr>
           <th>股票</th><th>判定</th><th class="num">得分</th><th class="num">通过</th><th class="num">价</th>
