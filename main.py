@@ -2123,11 +2123,9 @@ def run_watch():
 
     cleanup_expired_minute_cache()
 
-    if SYS_ALERT_AVAILABLE:
-        init_alert(enabled=True)
-        log.info("🔊 系统报警音效已挂载")
-    else:
-        log.warning("⚠️ system_alert_v17.3.py 未检测到，报警音效禁用")
+    # 报警音已由 GUI 看板统一接管（Web Audio，方向区分），此处仅信息提示
+    if not SYS_ALERT_AVAILABLE:
+        log.info("🖥 报警音由 GUI 看板接管（Web Audio），无需 system_alert 模块")
     if should_run_startup_self_test():
         send_startup_self_test()
     log.info(f"⏱ 采用顺序轮询模式：每轮扫描结束后再等待 {PARAMS['poll_interval']} 秒（V1.8 确认型收敛）")
