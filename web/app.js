@@ -1156,6 +1156,131 @@ function renderStageBoard(stages) {
     </div>`).join("") + `</div>`;
 }
 
+/* ---- 个股技术分析弹窗 ---- */
+let stockChartData = null;
+let stockChartPeriod = "daily";
+let stockChartInst = null;
+const MA_COLORS = ["#e6c07b", "#56b4e9", "#e91e63", "#9b59b6", "#2ecc71", "#f39c12", "#3498db"];
+
+async function openStockChart(code, name) {
+  const modal = document.getElementById("stockModal");
+  if (!modal) return;
+  modal.style.display = "flex";
+  document.getElementById("stockModalTitle").textContent = `${name} (${code}) 技术分析`;
+  document.getElementById("stockChart").innerHTML = '<div class="empty">加载中...</div>';
+  try {
+    const d = await apiCall("load_stock_chart", code);
+    if (!d.available) {
+      document.getElementById("stockChart").innerHTML = `<div class="empty">${esc(d.error || '无数据')}</div>`;
+      return;
+    }
+    stockChartData = d;
+    stockChartPeriod = "daily";
+    renderStockSummary(d);
+    renderStockChart();
+  } catch (e) {
+    document.getElementById("stockChart").innerHTML = `<div class="empty">加载失败: ${esc(e.message)}</div>`;
+  }
+}
+function closeStockChart() {
+  document.getElementById("stockModal").style.display = "none";
+  if (stockChartInst) { stockChartInst.dispose(); stockChartInst = null; }
+}
+function switchStockPeriod(p) {
+  stockChartPeriod = p;
+  document.querySelectorAll(".stock-tab").forEach(t =>
+    t.classList.toggle("active", t.dataset.period === p));
+  renderStockChart();
+}
+function renderStockSummary(d) {
+  const cur = d.current_price;
+  const sup = d.levels.supports, res = d.levels.resistances;
+  const supTxt = sup.map(s => `<b class="down">${s.price}</b>`).join(" / ") || "—";
+  const resTxt = res.map(r => `<b class="up">${r.price}</b>`).join(" / ") || "—";
+  document.getElementById("stockSummary").innerHTML = `
+    <span class="ss-item">当前价: <b class="mono">${fmt(cur, 3)}</b></span>
+    <span class="ss-item">压力: ${resTxt}</span>
+    <span class="ss-item">支撑: ${supTxt}</span>
+    <span class="ss-item cell-dim" style="font-size:11px">双击日/周/月切换 · 拖动下方滑块缩放</span>`;
+}
+function renderStockChart() {
+  const data = stockChartData;
+  if (!data) return;
+  const period = data.period_data[stockChartPeriod];
+  const levels = data.levels;
+  const cur = data.current_price;
+
+  // markLine: 支撑/压力
+  const supportLines = levels.supports.map(s => ({
+    yAxis: s.price, lineStyle: { color: "#3fb950", type: "dashed", width: 1.5 },
+    label: { formatter: `S ${s.price} ★`.repeat(s.strength), color: "#3fb950", fontSize: 10 },
+  }));
+  const resistanceLines = levels.resistances.map(r => ({
+    yAxis: r.price, lineStyle: { color: "#f85149", type: "dashed", width: 1.5 },
+    label: { formatter: `R ${r.price} ★`.repeat(r.strength), color: "#f85149", fontSize: 10 },
+  }));
+  const currentLine = { yAxis: cur, lineStyle: { color: "#e3b341", width: 1.5, type: "solid" },
+    label: { formatter: `现价 ${cur}`, color: "#e3b341", fontSize: 10 } };
+
+  const maSeries = period.ma.map((maArr, i) => ({
+    name: `MA${[5,10,20,30,60,180,365][i]}`, type: "line", data: maArr, symbol: "none",
+    lineStyle: { width: 1, color: MA_COLORS[i] }, connectNulls: true,
+  }));
+
+  if (stockChartInst) { stockChartInst.dispose(); stockChartInst = null; }
+  const el = document.getElementById("stockChart");
+  stockChartInst = echarts.init(el);
+
+  stockChartInst.setOption({
+    backgroundColor: "transparent",
+    animation: false,
+    legend: { top: 0, textStyle: { color: "#8b949e", fontSize: 10 }, type: "scroll" },
+    tooltip: { trigger: "axis", axisPointer: { type: "cross" }, backgroundColor: "#161b22",
+      borderColor: "#30363d", textStyle: { color: "#c9d1d9", fontSize: 11 } },
+    axisPointer: { link: [{ xAxisIndex: "all" }] },
+    grid: [
+      { left: 60, right: 20, top: 34, height: "52%" },
+      { left: 60, right: 20, top: "66%", height: "12%" },  // MACD
+      { left: 60, right: 20, top: "80%", height: "12%" },  // RSI
+    ],
+    xAxis: [
+      { type: "category", data: period.dates, gridIndex: 0, axisLine: { lineStyle: { color: "#30363d" } },
+        axisLabel: { color: "#8b949e", fontSize: 9 } },
+      { type: "category", data: period.dates, gridIndex: 1, axisLabel: { show: false }, axisLine: { lineStyle: { color: "#30363d" } } },
+      { type: "category", data: period.dates, gridIndex: 2, axisLabel: { color: "#8b949e", fontSize: 9 }, axisLine: { lineStyle: { color: "#30363d" } } },
+    ],
+    yAxis: [
+      { scale: true, gridIndex: 0, axisLabel: { color: "#8b949e", fontSize: 9 },
+        splitLine: { lineStyle: { color: "rgba(139,148,158,.12)" } } },
+      { scale: true, gridIndex: 1, axisLabel: { show: false }, splitLine: { show: false } },
+      { min: 0, max: 100, gridIndex: 2, axisLabel: { color: "#8b949e", fontSize: 9 }, splitLine: { show: false } },
+    ],
+    dataZoom: [
+      { type: "inside", xAxisIndex: [0, 1, 2], start: 55, end: 100 },
+      { type: "slider", xAxisIndex: [0, 1, 2], bottom: 0, height: 18, start: 55, end: 100 },
+    ],
+    series: [
+      { name: "K线", type: "candlestick", data: period.ohlc, xAxisIndex: 0, yAxisIndex: 0,
+        itemStyle: { color: "#f85149", color0: "#3fb950", borderColor: "#f85149", borderColor0: "#3fb950" },
+        markLine: { symbol: "none", data: [...resistanceLines, ...supportLines, currentLine],
+          label: { position: "insideEndTop" } } },
+      ...maSeries.map(s => ({ ...s, xAxisIndex: 0, yAxisIndex: 0 })),
+      { name: "成交量", type: "bar", data: period.volume, xAxisIndex: 0, yAxisIndex: 0,
+        itemStyle: { color: "rgba(88,166,255,.35)" }, barWidth: "60%" },
+      { name: "MACD-DIF", type: "line", data: period.macd.dif, xAxisIndex: 1, yAxisIndex: 1,
+        symbol: "none", lineStyle: { color: "#58a6ff", width: 1 } },
+      { name: "MACD-DEA", type: "line", data: period.macd.dea, xAxisIndex: 1, yAxisIndex: 1,
+        symbol: "none", lineStyle: { color: "#f85149", width: 1 } },
+      { name: "MACD柱", type: "bar", data: period.macd.hist, xAxisIndex: 1, yAxisIndex: 1,
+        itemStyle: { color: p => p.value >= 0 ? "#f85149" : "#3fb950" } },
+      { name: "RSI", type: "line", data: period.rsi, xAxisIndex: 2, yAxisIndex: 2,
+        symbol: "none", lineStyle: { color: "#bc8cff", width: 1 },
+        markLine: { symbol: "none", data: [{ yAxis: 30, lineStyle: { color: "rgba(139,148,158,.4)", type: "dashed" } },
+          { yAxis: 70, lineStyle: { color: "rgba(139,148,158,.4)", type: "dashed" } }] } },
+    ],
+  });
+}
+
 /* ---- 选股猎手 ---- */
 let hunterLoaded = false;
 async function addToWatchlist(code, name, btn) {
@@ -1245,9 +1370,9 @@ function renderHunter(h) {
     const stockRows = stocks.slice(0, 15).map(s => {
       const d5Cls = s.d5 >= 8 ? "up" : s.d5 >= 5 ? "warn" : s.d5 > 0 ? "cell-dim" : "";
       const d6Cls = s.d6 >= 8 ? "up" : s.d6 >= 5 ? "warn" : s.d6 > 0 ? "cell-dim" : "";
-      return `<tr class="h-expand-row">
-        <td class="mono cell-dim">${esc(s.code)}</td>
-        <td>${esc(s.name)} <button class="mini-btn" style="font-size:10px;padding:0 5px"
+      return `<tr class="h-expand-row" ondblclick="openStockChart('${esc(s.code)}','${esc(s.name)}')">
+        <td class="mono cell-dim" title="双击看技术分析">${esc(s.code)}</td>
+        <td title="双击看技术分析">${esc(s.name)} <button class="mini-btn" style="font-size:10px;padding:0 5px"
           onclick="event.stopPropagation();addToWatchlist('${esc(s.code)}','${esc(s.name)}',this)"
           title="加入建仓股池监控买点">+股池</button></td>
         <td class="num ${s.score >= 70 ? 'up' : s.score >= 50 ? 'warn' : 'cell-dim'}"><b>${s.score}</b></td>

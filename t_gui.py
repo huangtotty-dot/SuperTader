@@ -631,6 +631,172 @@ class Api:
         out["_progress"] = {"total_holdings": total, "snapshots_ok": ok, "snapshots_miss": total - ok}
         return _clean(out)
 
+    # ---------- 个股技术分析弹窗 ----------
+    def load_stock_chart(self, code):
+        """拉 400 根日线 → 7 条 MA + MACD/RSI/BOLL → resample 周/月 → 支撑压力。"""
+        out = {"code": code, "name": code, "available": False, "error": ""}
+        import os as _os, urllib.request as _ur
+        for _k in ["http_proxy", "https_proxy", "HTTP_PROXY", "HTTPS_PROXY",
+                   "ALL_PROXY", "all_proxy"]:
+            _os.environ.pop(_k, None)
+        _os.environ["NO_PROXY"] = "*"
+
+        symbol = ("sh" + code if code[0] in "56" else "sz" + code)
+        try:
+            url = f"https://ifzq.gtimg.cn/appstock/app/fqkline/get?param={symbol},day,,,400,qfq"
+            req = _ur.Request(url, headers={"User-Agent": "Mozilla/5.0",
+                                            "Referer": "https://finance.qq.com/"})
+            raw = _ur.urlopen(req, timeout=10).read().decode("utf-8", errors="ignore")
+            data = json.loads(raw)
+        except Exception as e:
+            out["error"] = f"拉取日线失败: {e}"
+            return out
+
+        try:
+            stock_data = data.get("data", {}).get(symbol)
+            kline = stock_data.get("day") or stock_data.get("qfqday") or []
+            rows = []
+            for item in kline:
+                if isinstance(item, list) and len(item) >= 6:
+                    rows.append({
+                        "date": item[0], "open": float(item[1]), "close": float(item[2]),
+                        "high": float(item[3]), "low": float(item[4]), "volume": float(item[5]),
+                    })
+            if not rows:
+                out["error"] = "无日线数据"
+                return out
+            out["name"] = stock_data.get("qt", {}).get(symbol, [None, code])[1] or code
+        except Exception as e:
+            out["error"] = f"解析日线失败: {e}"
+            return out
+
+        try:
+            import pandas as pd
+            df = pd.DataFrame(rows)
+            df["date"] = pd.to_datetime(df["date"])
+            df = df.sort_values("date").reset_index(drop=True)
+
+            def calc_ma_and_indicators(d):
+                d = d.copy()
+                for n in (5, 10, 20, 30, 60, 180, 365):
+                    d[f"ma{n}"] = d["close"].rolling(n).mean()
+                # MACD
+                ema12 = d["close"].ewm(span=12, adjust=False).mean()
+                ema26 = d["close"].ewm(span=26, adjust=False).mean()
+                d["dif"] = ema12 - ema26
+                d["dea"] = d["dif"].ewm(span=9, adjust=False).mean()
+                d["macd_hist"] = (d["dif"] - d["dea"]) * 2
+                # RSI(14)
+                delta = d["close"].diff()
+                gain = delta.clip(lower=0).rolling(14).mean()
+                loss = (-delta.clip(upper=0)).rolling(14).mean()
+                rs = gain / loss.replace(0, float("nan"))
+                d["rsi"] = 100 - 100 / (1 + rs)
+                # BOLL(20,2)
+                d["boll_mid"] = d["close"].rolling(20).mean()
+                d["boll_std"] = d["close"].rolling(20).std()
+                d["boll_up"] = d["boll_mid"] + 2 * d["boll_std"]
+                d["boll_dn"] = d["boll_mid"] - 2 * d["boll_std"]
+                return d
+
+            daily = calc_ma_and_indicators(df)
+            weekly = calc_ma_and_indicators(df.resample("W-FRI", on="date").agg(
+                {"open": "first", "high": "max", "low": "min", "close": "last", "volume": "sum"}).dropna().reset_index())
+            monthly = calc_ma_and_indicators(df.resample("M", on="date").agg(
+                {"open": "first", "high": "max", "low": "min", "close": "last", "volume": "sum"}).dropna().reset_index())
+
+            def to_series(d):
+                return {
+                    "dates": [x.strftime("%Y-%m-%d") for x in d["date"]],
+                    "ohlc": [[round(o, 3), round(c, 3), round(l, 3), round(h, 3)]
+                             for o, c, l, h in zip(d["open"], d["close"], d["low"], d["high"])],
+                    "volume": [round(float(v), 0) for v in d["volume"]],
+                    "ma": [[round(x, 3) if not pd.isna(x) else None for x in d[f"ma{n}"]]
+                           for n in (5, 10, 20, 30, 60, 180, 365)],
+                    "macd": {"dif": [round(x, 3) if not pd.isna(x) else None for x in d["dif"]],
+                             "dea": [round(x, 3) if not pd.isna(x) else None for x in d["dea"]],
+                             "hist": [round(x, 3) if not pd.isna(x) else None for x in d["macd_hist"]]},
+                    "rsi": [round(x, 1) if not pd.isna(x) else None for x in d["rsi"]],
+                    "boll": {"mid": [round(x, 3) if not pd.isna(x) else None for x in d["boll_mid"]],
+                             "up": [round(x, 3) if not pd.isna(x) else None for x in d["boll_up"]],
+                             "dn": [round(x, 3) if not pd.isna(x) else None for x in d["boll_dn"]]},
+                }
+
+            out["period_data"] = {
+                "daily": to_series(daily),
+                "weekly": to_series(weekly),
+                "monthly": to_series(monthly),
+            }
+
+            # 支撑/压力位（基于日线）
+            levels = self._calc_support_resistance(daily)
+            out["levels"] = levels
+            out["current_price"] = round(float(daily["close"].iloc[-1]), 3)
+            out["available"] = True
+        except Exception as e:
+            out["error"] = f"计算失败: {e}"
+            return out
+
+        return _clean(out)
+
+    def _calc_support_resistance(self, daily):
+        """pivot + MA20/60 + 前高低 + 量密集区 → 支撑/压力列表（带强度）。"""
+        import pandas as pd
+        d = daily
+        last_close = float(d["close"].iloc[-1])
+        H, L, C = float(d["high"].iloc[-1]), float(d["low"].iloc[-1]), last_close
+        PP = (H + L + C) / 3
+        levels = {"supports": [], "resistances": []}
+
+        def add(levels, price, label, strength, kind):
+            if price <= 0 or price is None: return
+            price = round(float(price), 2)
+            item = {"price": price, "label": label, "strength": strength}
+            if kind == "sup":
+                levels["supports"].append(item)
+            else:
+                levels["resistances"].append(item)
+
+        # pivot 中枢
+        add(levels, 2 * PP - H, "R1·中枢", 2, "res")
+        add(levels, 2 * PP - L, "S1·中枢", 2, "sup")
+        # 均线 MA20/60
+        ma20 = float(d["ma20"].iloc[-1]) if not pd.isna(d["ma20"].iloc[-1]) else None
+        ma60 = float(d["ma60"].iloc[-1]) if not pd.isna(d["ma60"].iloc[-1]) else None
+        if ma20: add(levels, ma20, "MA20", 3 if ma20 < last_close else 2, "sup" if ma20 < last_close else "res")
+        if ma60: add(levels, ma60, "MA60", 3 if ma60 < last_close else 2, "sup" if ma60 < last_close else "res")
+        # 前高/前低（120日局部极值）
+        recent = d.tail(120)
+        for idx in range(5, len(recent) - 1):
+            r = recent.iloc[idx]
+            is_high = r["high"] == recent.iloc[max(0,idx-3):idx+4]["high"].max() and r["high"] > last_close
+            is_low = r["low"] == recent.iloc[max(0,idx-3):idx+4]["low"].min() and r["low"] < last_close
+            if is_high: add(levels, r["high"], "前高", 2, "res")
+            if is_low: add(levels, r["low"], "前低", 2, "sup")
+        # 量密集区
+        top_vol = d.nlargest(10, "volume")
+        for _, r in top_vol.iterrows():
+            p = float(r["close"])
+            if p > last_close * 1.02: add(levels, p, "量密集", 3, "res")
+            elif p < last_close * 0.98: add(levels, p, "量密集", 3, "sup")
+
+        # 去重 + 排序 + 只保留合理距离
+        for kind, key in (("sup", "supports"), ("res", "resistances")):
+            seen = {}
+            for item in levels[key]:
+                price = item["price"]
+                if price in seen:
+                    if item["strength"] > seen[price]["strength"]:
+                        seen[price] = item
+                else:
+                    seen[price] = item
+            levels[key] = sorted(seen.values(), key=lambda x: -x["strength"])
+        levels["supports"] = sorted(levels["supports"], key=lambda x: -x["price"])
+        levels["resistances"] = sorted(levels["resistances"], key=lambda x: x["price"])
+        levels["supports"] = levels["supports"][:5]
+        levels["resistances"] = levels["resistances"][:5]
+        return levels
+
     # ---------- 选股猎手（概念评分，与 Excel 报告一致） ----------
     def load_hunter(self, date=None):
         """运行 stock_hunter 打分管线，返回 DataLoader 原生产出的表格数据。

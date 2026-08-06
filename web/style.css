@@ -199,6 +199,14 @@ tr:hover td { background: rgba(88,166,255,.03); }
 .modal-body { padding: 10px 16px; overflow-y: auto; }
 .modal-body td input { width: 100px; background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 4px; padding: 3px 6px; font-family: var(--mono); text-align: right; }
 .modal-foot { padding: 10px 16px; border-top: 1px solid var(--border-soft); text-align: right; }
+/* 个股技术分析弹窗 */
+.modal-lg { width: 90vw; max-width: 1200px; height: 85vh; }
+.stock-summary { padding: 8px 16px; font-size: 13px; border-bottom: 1px solid var(--border-soft); display: flex; gap: 20px; flex-wrap: wrap; }
+.stock-summary .ss-item { display: flex; align-items: center; gap: 4px; }
+.stock-tabs { display: flex; gap: 4px; padding: 8px 16px 0; }
+.stock-tab { background: var(--bg); color: var(--text-dim); border: 1px solid var(--border); border-radius: 5px 5px 0 0; padding: 6px 16px; font-size: 13px; cursor: pointer; }
+.stock-tab.active { background: var(--bg-card); color: var(--accent); border-bottom: 2px solid var(--accent); font-weight: 700; }
+.stock-chart { height: calc(85vh - 130px) !important; }
 .calib-badge { font-size: 10px; border-radius: 3px; padding: 1px 5px; margin-left: 3px; }
 .calib-badge.人工校准 { color: var(--accent); background: rgba(88,166,255,.12); }
 .calib-badge.快照 { color: var(--text-faint); background: var(--bg); }
