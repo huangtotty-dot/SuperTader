@@ -1155,44 +1155,41 @@ class Api:
 
     def _agg_position_builder(self, date):
         fp = TRACES / f"position_builder_{date}.jsonl"
-        empty = {"has_data": False, "counts": {}, "by_code": {}, "rows": [],
-                 "cond_labels": COND_LABELS, "note": ""}
-        if not fp.exists():
-            return empty
+        wl = _load_json(BASE / "watchlist_buy.json", {})
+        wl_stocks = wl.get("stocks", {})
+        holdings = _load_json(HOLDINGS, {})
+        empty = {"has_data": True, "counts": {}, "by_code": {}, "rows": [],
+                 "cond_labels": COND_LABELS, "note": "", "progress": {}}
 
         verdicts = Counter()
         by_code = {}
-        try:
-            lines = open(fp, encoding="utf-8").read().splitlines()
-        except Exception:
-            return empty
-
-        for line in lines:
-            line = line.strip()
-            if not line:
-                continue
+        scanned_codes = set()
+        if fp.exists():
             try:
-                r = json.loads(line)
+                lines = open(fp, encoding="utf-8").read().splitlines()
             except Exception:
-                continue
-            code = r.get("code")
-            if not code:
-                continue
-            verdicts[r.get("verdict", "")] += 1
-            st = r.get("scan_type", "manual")
-            bucket = by_code.setdefault(code, {}).setdefault(
-                st, {"latest": None, "best": None, "scans": 0}
-            )
-            bucket["scans"] += 1
-            score = r.get("composite_score") or 0
-            if bucket["latest"] is None or (r.get("scan_time") or "") > (
-                bucket["latest"].get("scan_time") or ""
-            ):
-                bucket["latest"] = r
-            if bucket["best"] is None or score > (bucket["best"].get("composite_score") or 0):
-                bucket["best"] = r
+                lines = []
+            for line in lines:
+                line = line.strip()
+                if not line: continue
+                try: r = json.loads(line)
+                except Exception: continue
+                code = r.get("code")
+                if not code: continue
+                scanned_codes.add(code)
+                verdicts[r.get("verdict", "")] += 1
+                st = r.get("scan_type", "manual")
+                bucket = by_code.setdefault(code, {}).setdefault(
+                    st, {"latest": None, "best": None, "scans": 0})
+                bucket["scans"] += 1
+                score = r.get("composite_score") or 0
+                if bucket["latest"] is None or (r.get("scan_time") or "") > (
+                    bucket["latest"].get("scan_time") or ""):
+                    bucket["latest"] = r
+                if bucket["best"] is None or score > (bucket["best"].get("composite_score") or 0):
+                    bucket["best"] = r
 
-        # 每 code 一行：eod best 优先，其次 intraday best
+        # 扫描过的：正常聚合
         rows = []
         for code, rec in by_code.items():
             eod = (rec.get("eod") or {}).get("best")
@@ -1202,19 +1199,39 @@ class Api:
             row["_intraday_best_score"] = (intraday or {}).get("composite_score")
             row["_scans"] = sum(v.get("scans", 0) for v in rec.values())
             rows.append(row)
-        rows.sort(key=lambda x: -(x.get("composite_score") or 0))
-        no_data_count = verdicts.get("insufficient_data", 0)
-        note = (f"含 {no_data_count} 只无分钟快照（不在持仓中，待采集器收集数据）"
-                if no_data_count else "")
 
-        total_candidates = sum(1 for k in by_code)
-        online_ok = sum(1 for k in by_code
-                        if by_code[k].get("eod") or by_code[k].get("intraday"))
+        # 未扫描的 watchlist 股票：作为"等待扫描"添加
+        pending = 0
+        for code, info in wl_stocks.items():
+            if not isinstance(info, dict): continue
+            if code in scanned_codes: continue
+            if info.get("status") not in ("monitoring", "signal", None): continue
+            in_hold = code in holdings and isinstance(holdings.get(code), dict)
+            rows.append({
+                "code": code, "name": info.get("name", code),
+                "verdict": "pending", "composite_score": 0,
+                "conditions": {},
+                "suggested_qty": 0, "suggested_price": 0, "capital_required": 0,
+                "in_holdings": in_hold, "scan_type": "等待扫描",
+                "_scans": 0,
+            })
+            pending += 1
+
+        rows.sort(key=lambda x: -(x.get("composite_score") or 0))
+        verdicts["pending"] = pending
+        no_data_count = verdicts.get("insufficient_data", 0)
+        note_parts = []
+        if no_data_count: note_parts.append(f"{no_data_count}只无快照")
+        if pending: note_parts.append(f"{pending}只等待首次扫描")
+        note = " · ".join(note_parts) if note_parts else ""
+
+        total = len(wl_stocks)
         progress = {
-            "total_candidates": total_candidates,
-            "scanned": total_candidates,
-            "online_fetched": online_ok,
+            "total_candidates": total,
+            "scanned": len(scanned_codes),
+            "online_fetched": sum(1 for k in by_code if by_code[k].get("eod") or by_code[k].get("intraday")),
             "no_data": no_data_count,
+            "pending": pending,
         }
         return {
             "has_data": True,
