@@ -163,6 +163,23 @@
 
 </main>
 
+<!-- 个股技术分析 modal -->
+<div id="stockModal" class="modal-mask" style="display:none">
+  <div class="modal modal-lg">
+    <div class="modal-title">
+      <span id="stockModalTitle">个股技术分析</span>
+      <button class="mini-btn" onclick="closeStockChart()">×</button>
+    </div>
+    <div id="stockSummary" class="stock-summary"></div>
+    <div class="stock-tabs">
+      <button class="stock-tab active" data-period="daily" onclick="switchStockPeriod('daily')">日K</button>
+      <button class="stock-tab" data-period="weekly" onclick="switchStockPeriod('weekly')">周K</button>
+      <button class="stock-tab" data-period="monthly" onclick="switchStockPeriod('monthly')">月K</button>
+    </div>
+    <div id="stockChart" class="echart stock-chart"></div>
+  </div>
+</div>
+
 <!-- 成本校准 modal -->
 <div id="calibModal" class="modal-mask" style="display:none">
   <div class="modal">
