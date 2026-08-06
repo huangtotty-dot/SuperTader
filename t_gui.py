@@ -115,7 +115,8 @@ class Api:
                 out.update({
                     "sig_stat": {}, "shadow": {"total": None, "near": {}},
                     "qty_freeze": {}, "closed_loop": {}, "audit_problems": None,
-                    "settle": {}, "add_watch": {}, "watch": {}, "kpi": {},
+                    "settle": {}, "watch": {}, "kpi": {},
+                    "add_watch": self.compute_add_watch(date),
                     "positions": self._load_positions(date, {}),
                     "position_builder": self._agg_position_builder(date),
                     "stage_board": self._load_stage_board(),
@@ -137,6 +138,9 @@ class Api:
         out["audit_problems"] = dr.get("audit_problems")
         out["settle"] = dr.get("settle", {})
         out["add_watch"] = dr.get("add_watch", {})
+        # 加仓观察为空时（如今天盘中无 daily_review）→ 实时计算
+        if not out["add_watch"]:
+            out["add_watch"] = self.compute_add_watch(date)
         out["watch"] = dr.get("watch", {})
 
         # KPI：优先独立文件，缺失时回退到日复盘内嵌 kpi
@@ -509,6 +513,85 @@ class Api:
                 out["note"] = "当日无成交闭环"
             return _clean(out)
         out["note"] = "当日无 closure_audit 记录"
+        return _clean(out)
+
+    # ---------- 加仓观察（实时计算，不依赖 daily_review） ----------
+    def compute_add_watch(self, date):
+        """从分钟快照+最新价实时计算支撑位距离，返回 add_watch 同结构数据。
+        替代 daily_review 收盘后才生成的静态 add_watch。"""
+        out = {}
+        cur = _load_json(HOLDINGS, {})
+        if not cur:
+            return out
+
+        # 先尝试加载当前快照获取 daily_context（含 MA 支撑位）
+        for code in cur:
+            if not isinstance(cur[code], dict):
+                continue
+            # 找分钟快照
+            ym = datetime.strptime(date, "%Y-%m-%d").strftime("%Y/%m") if len(date) == 10 else datetime.now().strftime("%Y/%m")
+            snap_dir = SNAPSHOT_DIR = BASE / "t_io" / "minute_snapshots" / ym
+            snap_fp = snap_dir / f"{code}_{date}.json"
+            if not snap_fp.exists():
+                # 尝试带后缀
+                candidates = list(snap_dir.glob(f"{code}*{date}.json"))
+                snap_fp = candidates[0] if candidates else None
+            if not snap_fp or not snap_fp.exists():
+                continue
+
+            try:
+                snap = json.loads(open(snap_fp, encoding="utf-8").read())
+            except Exception:
+                continue
+
+            daily_ctx = snap.get("daily_context", {}) if isinstance(snap, dict) else {}
+            bars = snap.get("bars", []) if isinstance(snap, dict) else (snap if isinstance(snap, list) else [])
+
+            # 日高低收
+            prices = [float(b.get("close", 0)) for b in bars if b.get("close")]
+            if not prices:
+                continue
+            day_low = min(prices)
+            day_close = prices[-1]
+            vwap_val = daily_ctx.get("last_vwap") or daily_ctx.get("daily_support_level")
+
+            # 支撑位
+            supports = {}
+            for key, label in [("daily_ma5", "MA5"), ("daily_ma10", "MA10"),
+                               ("daily_ma20", "MA20"), ("daily_ma60", "MA60")]:
+                val = daily_ctx.get(key)
+                if val and not (isinstance(val, float) and math.isnan(val)):
+                    supports[label] = float(val)
+            # 近20日低点
+            low20 = daily_ctx.get("daily_20d_low") or daily_ctx.get("daily_support_level")
+            if low20 and not (isinstance(low20, float) and math.isnan(low20)):
+                supports["近20日低点"] = float(low20)
+            if vwap_val and not (isinstance(vwap_val, float) and math.isnan(vwap_val)):
+                supports["日内VWAP"] = float(vwap_val)
+
+            # 回踩事件：日低距支撑 ≤0.5% 记"触及"
+            events, near = [], []
+            for label, level in supports.items():
+                dist = (day_low - level) / level * 100 if level else 0
+                abs_dist = abs(dist)
+                if abs_dist <= 0.5:
+                    status = "守住" if day_close >= level else "破位"
+                    events.append({"level": label, "support": round(level, 3),
+                                   "dist%": round(dist, 2), "status": status})
+                elif abs_dist <= 3:
+                    stype = "刺穿收回" if (day_low < level and day_close >= level) else \
+                            ("刺穿破位" if day_low < level else "临近未触")
+                    near.append({"level": label, "support": round(level, 3),
+                                 "dist%": round(dist, 2), "type": stype})
+
+            out[code] = {
+                "name": cur[code].get("name", code),
+                "day_low": round(day_low, 3), "close": round(day_close, 3),
+                "vwap": round(float(vwap_val), 3) if vwap_val else None,
+                "supports": {k: round(v, 3) for k, v in supports.items()},
+                "events": events, "near": near,
+            }
+
         return _clean(out)
 
     # ---------- 集合竞价信息层 ----------
