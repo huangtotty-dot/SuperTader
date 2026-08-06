@@ -972,6 +972,28 @@ function renderPB(pb) {
   }
   const counts = pb.counts || {};
   const condLabels = pb.cond_labels || {};
+
+  // 前后对比 → 变化文字
+  const prev = window._pbLast || {};
+  const currSig = (pb.rows || []).filter(r => r.verdict === "signal").map(r => r.code).sort().join(",");
+  const currApp = (pb.rows || []).filter(r => r.verdict === "approaching").map(r => r.code).sort().join(",");
+  window._pbLast = { sig: currSig, app: currApp, ts: pb.refreshed_at || "" };
+  let delta = "";
+  if (prev.sig !== undefined && prev.sig !== currSig) {
+    const prevS = (prev.sig || "").split(",").filter(Boolean);
+    const currS = currSig.split(",").filter(Boolean);
+    const added = currS.filter(c => !prevS.includes(c));
+    const removed = prevS.filter(c => !currS.includes(c));
+    if (added.length) delta += ` 🆕 新增signal: ${added.join(",")}`;
+    if (removed.length) delta += ` ⬇ 退出signal: ${removed.join(",")}`;
+  }
+  if (!delta && prev.app !== undefined && prev.app !== currApp) {
+    const prevA = (prev.app || "").split(",").filter(Boolean);
+    const currA = currApp.split(",").filter(Boolean);
+    const moved = currA.filter(c => !prevA.includes(c)).length + prevA.filter(c => !currA.includes(c)).length;
+    if (moved) delta = ` 📊 approaching 变动 ${moved} 只`;
+  }
+  if (!delta && prev.sig !== undefined) delta = " ✓ 无变化";
   const rows = (pb.rows || []).map(r => {
     const conds = r.conditions || {};
     const condStr = Object.keys(condLabels).map(k =>
@@ -997,7 +1019,7 @@ function renderPB(pb) {
   }).join("");
 
   const c = k => counts[k] ? `<span class="badge ${k === "signal" ? "signal" : k === "approaching" ? "approach" : "weak"}">${k}: ${counts[k]}</span>` : "";
-  const refreshed = pb.refreshed_at ? `<span class="live-dot"></span> ${esc(pb.refreshed_at)}` : "";
+  const refreshed = pb.refreshed_at ? `<span class="live-dot"></span> ${esc(pb.refreshed_at)}${delta ? ` <span class="aw-delta">${delta}</span>` : ""}` : "";
   el.innerHTML = `
     <div class="card">
       <div style="display:flex;gap:8px;margin-bottom:6px;flex-wrap:wrap;align-items:center">
@@ -1027,6 +1049,22 @@ function renderAddWatch(aw) {
     return;
   }
 
+  // 前后对比
+  const currMet = codes.map(c => (aw[c] || {}).met_count || 0).join("");
+  const prevMet = (window._awLast || {}).met || "";
+  window._awLast = { met: currMet, ts: nowTime() };
+  let awDelta = "";
+  if (prevMet && prevMet !== currMet) {
+    const changed = codes.filter((c, i) => (aw[c] || {}).met_count !== parseInt(prevMet[i] || "0"));
+    if (changed.length) {
+      const ups = changed.filter(c => (aw[c] || {}).met_count > parseInt(prevMet[codes.indexOf(c)] || "0"));
+      const downs = changed.filter(c => (aw[c] || {}).met_count < parseInt(prevMet[codes.indexOf(c)] || "0"));
+      if (ups.length) awDelta += ` 🟢 ${ups.join(",")} 条件改善`;
+      if (downs.length) awDelta += ` 🔴 ${downs.join(",")} 条件退化`;
+    }
+  }
+  if (!awDelta && prevMet) awDelta = " ✓ 无变化";
+
   // 汇总统计
   let holdCnt = 0, breakCnt = 0, nearCnt = 0, noEventCnt = 0;
   codes.forEach(code => {
@@ -1049,7 +1087,7 @@ function renderAddWatch(aw) {
     <div class="card" style="margin-bottom:10px;padding:10px 14px">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
         <span class="cell-dim">回踩支撑满足程度（共 ${total} 只）</span>
-        <span class="cell-dim mono" style="font-size:10px" title="随盘中实时数据自动刷新"><span class="live-dot"></span> ${now}</span>
+        <span class="cell-dim mono" style="font-size:10px" title="随盘中实时数据自动刷新"><span class="live-dot"></span> ${now}${awDelta ? ` <span class="aw-delta">${awDelta}</span>` : ""}</span>
       </div>
       <div class="aw-bar">
         ${bar(holdCnt, "aw-hold", "守住支撑")}
