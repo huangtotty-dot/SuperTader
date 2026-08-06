@@ -742,121 +742,184 @@ class Api:
         return _clean(out)
 
     def _detect_boxes(self, daily):
-        """检测箱体（无趋势震荡区间）：滑动窗口线性回归斜率≈0 的连续段。
-        返回 [{start, end, low, high, center, days}] 按时间正序。"""
+        """检测箱体：全历史滑窗 → 置信分排序，现价箱体/刚突破优先。
+        分位数(88/12)定义边界，多次触及验证，置信分=触及+横盘+适中宽度。"""
         import numpy as np
         d = daily
-        closes = d["close"].values
-        highs = d["high"].values
-        lows = d["low"].values
-        dates = d["date"].values
-        n = len(d)
-        if n < 40:
+        if len(d) < 30:
             return []
 
-        WIN, STEP = 40, 5
-        box_flags = np.zeros(n, dtype=bool)
-        # 每个窗口：收盘价线性回归斜率归一化 |slope/price| 小 + 区间振幅收窄 → 箱体候选
-        for start in range(0, n - WIN + 1, STEP):
+        recent = d.tail(150).reset_index(drop=True)
+        closes = recent["close"].values
+        highs = recent["high"].values
+        lows = recent["low"].values
+        dates = recent["date"].values
+        n = len(recent)
+        last_close = float(closes[-1])
+        last_date = dates[-1]
+
+        WIN = 30
+        # 滑窗收集候选箱体（用区间位置唯一标识，避免重复）
+        boxes = {}
+        for start in range(0, n - WIN + 1, 3):
             seg = closes[start:start + WIN]
-            x = np.arange(WIN)
-            slope = np.polyfit(x, seg, 1)[0]
-            rel_slope = abs(slope) / (seg.mean() or 1e-9)  # 每根K线的相对斜率
-            # 箱体判定：近40天几乎水平（斜率 < 0.15%/天）+ 高低点分布集中
-            if rel_slope < 0.0015:
-                box_flags[start:start + WIN] = True
+            slope = np.polyfit(np.arange(WIN), seg, 1)[0]
+            rel_slope = abs(slope) / (seg.mean() or 1e-9)
+            up = float(np.percentile(highs[start:start + WIN], 88))
+            dn = float(np.percentile(lows[start:start + WIN], 12))
+            up_touch = int(np.sum(highs[start:start + WIN] >= up * 0.992))
+            dn_touch = int(np.sum(lows[start:start + WIN] <= dn * 1.008))
+            width_pct = (up - dn) / (seg.mean() or 1e-9) * 100
+            # 候选：横盘(斜率<0.5%/天) + 宽度3-22% + 双边触及≥2
+            if rel_slope < 0.005 and 3.0 <= width_pct <= 22.0 and up_touch >= 2 and dn_touch >= 2:
+                key = (round(up, 3), round(dn, 3))
+                # 置信分：触及次数 + 横盘度 + 宽度适中
+                conf = (up_touch + dn_touch) * 1.5 + max(0, 1 - rel_slope / 0.005) * 3 + (1 if 5 <= width_pct <= 15 else 0)
+                if key not in boxes or conf > boxes[key]["conf"]:
+                    s = dates[start].strftime("%Y-%m-%d") if hasattr(dates[start], "strftime") else str(dates[start])[:10]
+                    e = dates[start + WIN - 1].strftime("%Y-%m-%d") if hasattr(dates[start+WIN-1], "strftime") else str(dates[start+WIN-1])[:10]
+                    boxes[key] = {"start": s, "end": e, "low": round(dn, 3), "high": round(up, 3),
+                                  "touches": (up_touch, dn_touch), "width": round(width_pct, 1),
+                                  "conf": round(conf, 1), "rel": 0}
 
-        # 合并连续 box_flags → 箱体段
-        boxes = []
-        i = 0
-        while i < n:
-            if not box_flags[i]:
-                i += 1
-                continue
-            j = i
-            while j < n and box_flags[j]:
-                j += 1
-            seg_len = j - i
-            if seg_len >= 20:  # 至少 20 天
-                seg_high = float(highs[i:j].max())
-                seg_low = float(lows[i:j].min())
-                seg_close = closes[i:j]
-                # 箱体区间宽度（相对）合理：≥2% 才有意义，≤25% 才是"箱"不是"大通道"
-                width_pct = (seg_high - seg_low) / (seg_close.mean() or 1e-9) * 100
-                if 2.0 <= width_pct <= 25.0:
-                    s = dates[i].strftime("%Y-%m-%d") if hasattr(dates[i], "strftime") else str(dates[i])[:10]
-                    e = dates[j - 1].strftime("%Y-%m-%d") if hasattr(dates[j-1], "strftime") else str(dates[j-1])[:10]
-                    boxes.append({
-                        "start": s,
-                        "end": e,
-                        "low": round(seg_low, 3),
-                        "high": round(seg_high, 3),
-                        "center": round(float(seg_close.mean()), 3),
-                        "days": seg_len,
-                    })
-            i = j
+        # 关联现价关系 + 刚突破判定（箱体 end 距今 ≤20 天 且现价在上方 <15% 算"刚突破"）
+        result = []
+        today_days = 999
+        try:
+            today_days = int(pd.Timestamp(last_date).timestamp() / 86400 - pd.Timestamp(dates[0]).timestamp() / 86400)
+        except Exception:
+            pass
+        for key, b in boxes.items():
+            end_date = b["end"]
+            try:
+                end_dt = pd.Timestamp(end_date)
+                days_since = int((pd.Timestamp(last_date) - end_dt).days)
+            except Exception:
+                days_since = 999
+            if b["low"] <= last_close <= b["high"]:
+                b["rel"] = 0  # 现价在箱体内
+            elif last_close > b["high"] and days_since <= 20 and (last_close - b["high"]) / b["high"] < 0.15:
+                b["rel"] = 1  # 刚突破上方
+            elif last_close > b["high"]:
+                b["rel"] = -1  # 上方历史箱体
+            else:
+                b["rel"] = -2  # 下方历史箱体
+            # 距现价距离（用于排序）
+            b["dist"] = abs(b["center"] if "center" in b else (b["high"] + b["low"]) / 2 - last_close)
+            result.append(b)
 
-        # 只保留最近 3 个箱体，按时间正序
-        boxes = boxes[-3:]
-        return boxes
+        # 合并重叠箱体（价格区间重叠>50% + 时间重叠 → 同一箱体；日期用字典序比较）
+        def overlap(a, b):
+            price_overlap = min(a["high"], b["high"]) - max(a["low"], b["low"])
+            price_span = min(a["high"] - a["low"], b["high"] - b["low"])
+            t_overlap = a["end"] > b["start"] and b["end"] > a["start"]
+            return price_overlap > price_span * 0.5 and t_overlap
+
+        merged = []
+        for b in result:
+            hit = None
+            for m in merged:
+                if overlap(m, b):
+                    hit = m
+                    break
+            if hit:
+                hit["low"] = min(hit["low"], b["low"])
+                hit["high"] = max(hit["high"], b["high"])
+                hit["start"] = min(hit["start"], b["start"])
+                hit["end"] = max(hit["end"], b["end"])
+                hit["conf"] = round(hit["conf"] + b["conf"], 1)
+                hit["touches"] = (max(hit["touches"][0], b["touches"][0]), max(hit["touches"][1], b["touches"][1]))
+            else:
+                merged.append(dict(b))
+
+        # 重算 rel + center
+        for b in merged:
+            b["center"] = round((b["high"] + b["low"]) / 2, 3)
+            if b["low"] <= last_close <= b["high"]:
+                b["rel"] = 0
+            elif last_close > b["high"]:
+                b["rel"] = -1
+            else:
+                b["rel"] = -2
+
+        # 排序：现价箱体(rel=0) > 刚突破 > 上方历史 > 下方历史；再按置信分
+        merged.sort(key=lambda b: (
+            0 if b["rel"] == 0 else 1 if b["rel"] == -1 else 2,
+            -b["conf"]))
+        return merged[:3]
 
     def _calc_support_resistance(self, daily):
-        """pivot + MA20/60 + 前高低 + 量密集区 → 支撑/压力列表（带强度）。"""
+        """按现价强制分类 + 聚类合并 + 强度排序 → 每个方向保留最重要的 3 个。"""
         import pandas as pd
         d = daily
         last_close = float(d["close"].iloc[-1])
         H, L, C = float(d["high"].iloc[-1]), float(d["low"].iloc[-1]), last_close
         PP = (H + L + C) / 3
-        levels = {"supports": [], "resistances": []}
+        candidates = []  # (price, label, strength)
 
-        def add(levels, price, label, strength, kind):
-            if price <= 0 or price is None: return
-            price = round(float(price), 2)
-            item = {"price": price, "label": label, "strength": strength}
-            if kind == "sup":
-                levels["supports"].append(item)
-            else:
-                levels["resistances"].append(item)
+        def add(price, label, strength):
+            if not price or price <= 0 or price is None: return
+            candidates.append((round(float(price), 2), label, strength))
 
-        # pivot 中枢
-        add(levels, 2 * PP - H, "R1·中枢", 2, "res")
-        add(levels, 2 * PP - L, "S1·中枢", 2, "sup")
-        # 均线 MA20/60
-        ma20 = float(d["ma20"].iloc[-1]) if not pd.isna(d["ma20"].iloc[-1]) else None
-        ma60 = float(d["ma60"].iloc[-1]) if not pd.isna(d["ma60"].iloc[-1]) else None
-        if ma20: add(levels, ma20, "MA20", 3 if ma20 < last_close else 2, "sup" if ma20 < last_close else "res")
-        if ma60: add(levels, ma60, "MA60", 3 if ma60 < last_close else 2, "sup" if ma60 < last_close else "res")
+        # pivot 中枢（注意: R1=2PP-L 才是上方压力, S1=2PP-H 是下方支撑, 但都可能失效）
+        add(2 * PP - L, "R1中枢", 2)
+        add(2 * PP - H, "S1中枢", 2)
+        # 均线（近价均线更有效）
+        for n, label, base_strength in ((20, "MA20", 2), (60, "MA60", 2), (180, "MA180", 1)):
+            val = d[f"ma{n}"].iloc[-1]
+            if not pd.isna(val):
+                add(float(val), label, base_strength)
         # 前高/前低（120日局部极值）
         recent = d.tail(120)
         for idx in range(5, len(recent) - 1):
             r = recent.iloc[idx]
-            is_high = r["high"] == recent.iloc[max(0,idx-3):idx+4]["high"].max() and r["high"] > last_close
-            is_low = r["low"] == recent.iloc[max(0,idx-3):idx+4]["low"].min() and r["low"] < last_close
-            if is_high: add(levels, r["high"], "前高", 2, "res")
-            if is_low: add(levels, r["low"], "前低", 2, "sup")
-        # 量密集区
-        top_vol = d.nlargest(10, "volume")
+            win = recent.iloc[max(0, idx - 3):idx + 4]
+            if r["high"] == win["high"].max() and float(r["high"]) > 0:
+                add(float(r["high"]), "前高", 2)
+            if r["low"] == win["low"].min() and float(r["low"]) > 0:
+                add(float(r["low"]), "前低", 2)
+        # 量密集区（成交量大的价位，参考性强）
+        top_vol = d.nlargest(8, "volume")
         for _, r in top_vol.iterrows():
-            p = float(r["close"])
-            if p > last_close * 1.02: add(levels, p, "量密集", 3, "res")
-            elif p < last_close * 0.98: add(levels, p, "量密集", 3, "sup")
+            add(float(r["close"]), "量密集", 3)
 
-        # 去重 + 排序 + 只保留合理距离
-        for kind, key in (("sup", "supports"), ("res", "resistances")):
-            seen = {}
-            for item in levels[key]:
-                price = item["price"]
-                if price in seen:
-                    if item["strength"] > seen[price]["strength"]:
-                        seen[price] = item
+        # 1) 按现价强制分类 + 过滤太近的
+        sep = last_close * 0.003  # 0.3% 内忽略
+        sup_cand = [(p, l, s) for p, l, s in candidates if p < last_close - sep]
+        res_cand = [(p, l, s) for p, l, s in candidates if p > last_close + sep]
+
+        # 2) 聚类合并：价格差 <1.5% 的归一组，取强度最高 + 距现价最近的代表
+        def cluster(items):
+            items = sorted(items, key=lambda x: x[0])
+            groups = []
+            for p, l, s in items:
+                if groups and abs(p - groups[-1][0]) / groups[-1][0] < 0.015:
+                    gp, gl, gs = groups[-1]
+                    new_s = max(s, gs)
+                    rep_p = p if abs(p - last_close) < abs(gp - last_close) else gp
+                    groups[-1] = (rep_p, gl if gs >= s else l, new_s)
                 else:
-                    seen[price] = item
-            levels[key] = sorted(seen.values(), key=lambda x: -x["strength"])
-        levels["supports"] = sorted(levels["supports"], key=lambda x: -x["price"])
-        levels["resistances"] = sorted(levels["resistances"], key=lambda x: x["price"])
-        levels["supports"] = levels["supports"][:5]
-        levels["resistances"] = levels["resistances"][:5]
-        return levels
+                    groups.append((p, l, s))
+            return groups
+
+        sup_cand = cluster(sup_cand)
+        res_cand = cluster(res_cand)
+
+        # 3) 强度 = 原始强度 + 距现价近的加成（近的更有参考价值）
+        def score(item):
+            p, l, s = item
+            dist_pct = abs(p - last_close) / last_close * 100
+            near_bonus = max(0, 3 - dist_pct * 0.15)  # 距现价越近加分越多
+            return s * 0.6 + near_bonus
+
+        sup_cand.sort(key=score, reverse=True)
+        res_cand.sort(key=score, reverse=True)
+
+        def fmt(items):
+            return [{"price": p, "label": l, "strength": s}
+                    for p, l, s in items[:3]]
+
+        return {"supports": fmt(sup_cand), "resistances": fmt(res_cand)}
 
     # ---------- 选股猎手（概念评分，与 Excel 报告一致） ----------
     def load_hunter(self, date=None):
