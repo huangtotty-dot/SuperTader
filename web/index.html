@@ -171,10 +171,18 @@
       <button class="mini-btn" onclick="closeStockChart()">×</button>
     </div>
     <div id="stockSummary" class="stock-summary"></div>
-    <div class="stock-tabs">
-      <button class="stock-tab active" data-period="daily" onclick="switchStockPeriod('daily')">日K</button>
-      <button class="stock-tab" data-period="weekly" onclick="switchStockPeriod('weekly')">周K</button>
-      <button class="stock-tab" data-period="monthly" onclick="switchStockPeriod('monthly')">月K</button>
+    <div class="stock-toolbar">
+      <div class="stock-tabs">
+        <button class="stock-tab active" data-period="daily" onclick="switchStockPeriod('daily')">日K</button>
+        <button class="stock-tab" data-period="weekly" onclick="switchStockPeriod('weekly')">周K</button>
+        <button class="stock-tab" data-period="monthly" onclick="switchStockPeriod('monthly')">月K</button>
+      </div>
+      <div class="stock-toggles">
+        <label class="toggle-item"><input type="checkbox" id="tgLevels" checked onchange="renderStockChart()"> 支撑压力</label>
+        <label class="toggle-item"><input type="checkbox" id="tgBoxes" checked onchange="renderStockChart()"> 箱体</label>
+        <label class="toggle-item"><input type="checkbox" id="tgChannel" checked onchange="renderStockChart()"> 通道</label>
+        <label class="toggle-item"><input type="checkbox" id="tgMA" checked onchange="renderStockChart()"> 均线</label>
+      </div>
     </div>
     <div id="stockChart" class="echart stock-chart"></div>
   </div>

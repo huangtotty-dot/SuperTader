@@ -1228,6 +1228,11 @@ function renderStockChart() {
   const period = data.period_data[stockChartPeriod];
   const levels = data.levels;
   const cur = data.current_price;
+  // 显示开关
+  const showLevels = (document.getElementById("tgLevels") || {}).checked !== false;
+  const showBoxes = (document.getElementById("tgBoxes") || {}).checked !== false;
+  const showChannel = (document.getElementById("tgChannel") || {}).checked !== false;
+  const showMA = (document.getElementById("tgMA") || {}).checked !== false;
 
   // markLine: 支撑/压力 — 去重降密度 + 精简标签
   function dedupeLines(items) {
@@ -1312,22 +1317,22 @@ function renderStockChart() {
     series: [
       { name: "K线", type: "candlestick", data: period.ohlc, xAxisIndex: 0, yAxisIndex: 0,
         itemStyle: { color: "#f85149", color0: "#3fb950", borderColor: "#f85149", borderColor0: "#3fb950" },
-        markArea: boxAreas.length ? {
+        markArea: boxAreas.length && showBoxes ? {
           silent: true, data: boxAreas,
         } : undefined,
         markLine: { symbol: "none",
           data: [
-            ...(data.channel && data.channel.up_line.length ? [{
+            ...(showChannel && data.channel && data.channel.up_line.length ? [{
               xAxis: 0, yAxis: data.channel.up_line[0],
               lineStyle: { color: data.channel.direction === "up" ? "#f85149" : "#3fb950",
                 width: 1.5, type: "solid" },
-              label: { formatter: data.channel.direction === "up" ? "通道上轨(上行)" : "通道上轨(下行)",
-                color: data.channel.direction === "up" ? "#f85149" : "#3fb950", fontSize: 9,
-                position: "insideEndTop" },
+              label: { formatter: data.channel.direction === "up" ? "↗ 上行通道" : "↘ 下行通道",
+                color: data.channel.direction === "up" ? "#f85149" : "#3fb950", fontSize: 10,
+                position: "insideEndTop", fontWeight: "bold" },
             }, {
               xAxis: period.dates.length - 1, yAxis: data.channel.up_line[1],
             }] : []),
-            ...(data.channel && data.channel.dn_line.length ? [{
+            ...(showChannel && data.channel && data.channel.dn_line.length ? [{
               xAxis: 0, yAxis: data.channel.dn_line[0],
               lineStyle: { color: data.channel.direction === "up" ? "#f85149" : "#3fb950",
                 width: 1.5, type: "dashed" },
@@ -1336,10 +1341,10 @@ function renderStockChart() {
             }, {
               xAxis: period.dates.length - 1, yAxis: data.channel.dn_line[1],
             }] : []),
-            ...resistanceLines, ...supportLines, currentLine,
+            ...(showLevels ? [...resistanceLines, ...supportLines] : []), currentLine,
           ],
           label: { position: "insideEndTop" } } },
-      ...maSeries.map(s => ({ ...s, xAxisIndex: 0, yAxisIndex: 0 })),
+      ...(showMA ? maSeries.map(s => ({ ...s, xAxisIndex: 0, yAxisIndex: 0 })) : []),
       // BOLL 叠加主图
       { name: "BOLL中", type: "line", data: period.boll.mid, xAxisIndex: 0, yAxisIndex: 0, symbol: "none",
         lineStyle: { color: "rgba(139,148,158,.5)", width: 1 } },
