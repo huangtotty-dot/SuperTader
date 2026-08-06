@@ -1,0 +1,51 @@
+{
+  "version": "v8.0",
+  "report_date": "YYYY-MM-DD",
+  "base_dir": "./",
+  "output_dir": "output",
+  "template_dir": "templates",
+  "data_dir": "data",
+
+  "data_source": {
+    "type": "watchlist_json",
+    "file": "watchlist_jiuyan.json",
+    "read_from": "script_dir"
+  },
+
+  "style": {
+    "header_bg": "4472C4",
+    "header_font": "FFFFFF",
+    "separator_bg": "E2EFDA",
+    "title_bg": "4472C4",
+    "title_font": "FFFFFF"
+  },
+
+  "scoring": {
+    "top5_normalize_base": 10,
+    "dimensions": ["D1强势形态且新高", "D2强势形态", "D4首板资金池", "D5潜在突破10日", "D6潜在突破5日", "D7持续性", "D8情绪分数", "D9活跃程度", "大成交额额外加分"],
+    "concept_bonus_enabled": true,
+    "min_score_for_pool": 60
+  },
+
+  "ranking": {
+    "top5_count": 5,
+    "max_same_sector_in_top5": 2,
+    "top5_sector_diversity_min": 3,
+    "sector_sort_keys": ["涨停家数", "成交额", "细分数量"]
+  },
+
+  "sheets": {
+    "summary": "1-概念总排名",
+    "detail": "2-详细个股排名",
+    "top5": "3-TOP5",
+    "sectors_auto": true,
+    "sectors": ["PCB", "光通信-CPO", "半导体", "电池", "先进封装", "光刻机", "AI玻璃基板", "军工信息化"]
+  },
+
+  "validation": {
+    "top5_must_have_exact_count": 5,
+    "header_color_must_be": "4472C4",
+    "top5_sector_diversity_min": 3,
+    "cross_checks": ["code_name_match", "score_consistency", "top5_parseable", "header_color", "top5_row_count"]
+  }
+}
