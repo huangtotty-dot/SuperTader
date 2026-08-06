@@ -1182,36 +1182,82 @@ function renderHunter(h) {
     el.innerHTML = `<div class="empty">选股猎手数据不可用${h && h.error ? ': ' + esc(h.error) : ''}</div>`;
     return;
   }
-  const summary = h.summary || [];
-  const cards = summary.map((row, i) => {
-    const top5 = (row.top5 || []).map((t, j) =>
-      `<span class="h-top-item" title="${esc(t.name)}${t.change_pct != null ? ' 涨跌'+fmt(t.change_pct,1)+'%' : ''}">
-        <span class="mono cell-dim">${esc(t.code)}</span> ${esc(t.name || t.code)}
-        <span class="h-score ${t.score >= 70 ? 'up' : t.score >= 50 ? 'warn' : 'cell-dim'}">${fmt(t.score, 0)}</span>
-      </span>`).join("");
 
-    return `<div class="card" style="margin-bottom:8px;padding:10px 14px">
-      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
-        <div>
-          <span class="cell-dim mono" style="font-size:10px">#${i + 1}</span>
-          <b>${esc(row.concept)}</b>
-          <span class="cell-dim" style="font-size:11px">${row.stock_count}只 · 均分${fmt(row.avg_score, 1)}</span>
-        </div>
-        <span class="cell-dim mono" style="font-size:10px">代表: ${esc(row.top_stock || '—')}</span>
-      </div>
-      <div class="h-top5">${top5}</div>
-    </div>`;
+  // Sheet1: 概念总排名 (Excel 同款表)
+  const sumCols = h.summary_cols || [];
+  const sumRows = h.summary_rows || [];
+  const sumHead = sumCols.map(c => `<th>${esc(c)}</th>`).join("");
+  const sumBody = sumRows.map((r, i) => {
+    const cells = sumCols.map(c => {
+      const v = r[c];
+      if (v == null) return '<td class="cell-dim">—</td>';
+      // 排名列特殊样式
+      if (c === "排名") return `<td class="num mono">${v}</td>`;
+      // 板块列加粗
+      if (c === "板块") return `<td><b>${esc(String(v))}</b></td>`;
+      // 数字列
+      if (typeof v === "number") return `<td class="num mono">${fmt(v, 1)}</td>`;
+      return `<td>${esc(String(v))}</td>`;
+    }).join("");
+    return `<tr>${cells}</tr>`;
   }).join("");
+
+  // Sheet2: 概念排名 (详细)
+  const detCols = h.detail_cols || [];
+  const detRows = h.detail_rows || [];
+  const detHead = detCols.map(c => `<th>${esc(c)}</th>`).join("");
+  const detBody = detRows.map(r => {
+    const cells = detCols.map(c => {
+      const v = r[c];
+      if (v == null) return '<td class="cell-dim">—</td>';
+      if (c === "概念") return `<td><b>${esc(String(v))}</b></td>`;
+      if (typeof v === "number") return `<td class="num mono">${fmt(v, 1)}</td>`;
+      return `<td>${esc(String(v))}</td>`;
+    }).join("");
+    return `<tr>${cells}</tr>`;
+  }).join("");
+
+  // Sheet3: TOP5
+  const top5 = h.top5 || [];
+  const top5Html = top5.map(t => `
+    <div class="card" style="margin-bottom:6px;padding:8px 12px">
+      <div style="font-weight:700;margin-bottom:4px">${esc(t.category)} <span class="cell-dim">(${t.stocks.length}只)</span></div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        ${(t.stocks || []).map((s, i) =>
+          `<span class="h-top-item">
+            <span class="mono cell-dim">#${i+1}</span>
+            <span class="mono">${esc(s.code)}</span> ${esc(s.name)}
+            <span class="h-score ${s.score >= 70 ? 'up' : s.score >= 50 ? 'warn' : 'cell-dim'}">${s.score}分</span>
+            ${s.change_pct != null ? `<span class="${clsOf(s.change_pct)} mono" style="font-size:10px">${s.change_pct>=0?'+':''}${fmt(s.change_pct,1)}%</span>` : ''}
+          </span>`).join("")}
+      </div>
+    </div>`).join("");
 
   el.innerHTML = `
     <div class="cell-dim" style="margin-bottom:8px;display:flex;gap:16px;flex-wrap:wrap">
       <span>打分池: <b>${h.pool_size}</b> 只</span>
-      <span>已评分: <b>${h.scored_count}</b> 只</span>
-      <span>概念数: <b>${h.concept_count}</b> 个</span>
+      <span>概念: <b>${sumRows.length}</b> 个</span>
       <span class="mono"><span class="live-dot"></span> ${esc(h.refreshed_at || '')}</span>
     </div>
-    ${cards}
-    <div class="cell-dim" style="font-size:10px;margin-top:6px">数据源: stock_hunter (韭研概念打分) · 点击标签页自动加载 · 概念按均分降序</div>`;
+
+    <div class="section"><h2>概念总排名（Sheet 1）</h2>
+    <div class="card" style="overflow-x:auto"><table class="h-table">
+      <thead><tr>${sumHead}</tr></thead>
+      <tbody>${sumBody}</tbody>
+    </table></div></div>
+
+    ${detRows.length ? `
+    <div class="section"><h2>概念排名明细（Sheet 2）</h2>
+    <div class="card" style="overflow-x:auto"><table class="h-table">
+      <thead><tr>${detHead}</tr></thead>
+      <tbody>${detBody}</tbody>
+    </table></div></div>` : ""}
+
+    ${top5.length ? `
+    <div class="section"><h2>各板块 TOP5（Sheet 3）</h2>
+    ${top5Html}</div>` : ""}
+
+    <div class="cell-dim" style="font-size:10px;margin-top:6px">数据源: stock_hunter (韭研概念打分) · 与 Excel 报告同结构</div>`;
 }
 
 /* ---- 集合竞价 ---- */
