@@ -743,8 +743,21 @@ class Api:
                     rows.append({str(c): (None if isinstance(row[c], float) and np.isnan(row[c]) else row[c]) for c in cols})
                 return cols, rows
 
-            sum_cols, sum_rows = df_to_rows(df_summary)
-            det_cols, det_rows = df_to_rows(df_detail)
+            # 给 summary 加股票数（从 sector_stocks 取）
+            for row in sum_rows:
+                cat = row.get("板块", "")
+                row["股票数"] = len(sector_stocks.get(cat, []))
+            # 重排: 排名 | 板块 | 平均分 | 涨停数 | 热度 | 趋势 | 前三强
+            sum_cols = ["排名", "板块", "平均分", "涨停数", "热度", "趋势", "前三强"]
+            sum_rows = [{c: r.get(c, r.get({"热度": "heat"}.get(c, c)))
+                         for c in sum_cols} for r in sum_rows]
+            # 热度/趋势从 heat_trends 注入
+            for r in sum_rows:
+                cat = r.get("板块", "")
+                ht = heat_trends.get(cat, {})
+                r["热度"] = ht.get("heat")
+                r["趋势"] = (ht.get("trend") or "") + (" " + ("+" + str(int(ht["heat"] - ht["prev_heat"])) if ht.get("heat") is not None and ht.get("prev_heat") is not None else ""))
+                r["股票数"] = ht.get("stock_count") or len(sector_stocks.get(cat, []))
 
             # 板块热度趋势（对比前一日）
             heat_trends = {}
