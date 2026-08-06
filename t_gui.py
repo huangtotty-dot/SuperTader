@@ -728,11 +728,13 @@ class Api:
                 "monthly": to_series(monthly),
             }
 
-            # 支撑/压力位（基于日线）
+                # 支撑/压力位（基于日线）
             levels = self._calc_support_resistance(daily)
             out["levels"] = levels
             # 箱体检测（基于日线）
             out["boxes"] = self._detect_boxes(daily)
+            # 通道检测（基于日线）
+            out["channel"] = self._detect_channel(daily)
             out["current_price"] = round(float(daily["close"].iloc[-1]), 3)
             out["available"] = True
         except Exception as e:
@@ -848,6 +850,39 @@ class Api:
             -b["conf"]))
         return merged[:3]
 
+    def _detect_channel(self, daily):
+        """检测上行/下行通道：最近 40 日高点/低点线性回归 → 上下轨。
+        斜率>0 上行通道，<0 下行通道。返回双轨线端点 + 方向。"""
+        import numpy as np
+        d = daily
+        if len(d) < 25:
+            return {"direction": "flat", "slope": 0, "up_line": [], "dn_line": []}
+        recent = d.tail(40).reset_index(drop=True)
+        n = len(recent)
+        x = np.arange(n)
+        highs = recent["high"].values
+        lows = recent["low"].values
+
+        def regline(vals):
+            slope, intercept = np.polyfit(x, vals, 1)
+            return slope, intercept, slope * (n - 1) + intercept
+
+        up_slope, up_i, up_end = regline(highs)
+        dn_slope, dn_i, dn_end = regline(lows)
+
+        slope = (up_slope + dn_slope) / 2
+        # 归一化斜率：每日变化 / 均价，>0.15%/天 = 上行
+        avg_price = float(recent["close"].mean()) or 1e-9
+        norm_slope = slope / avg_price
+        direction = "up" if norm_slope > 0.0015 else ("down" if norm_slope < -0.0015 else "flat")
+
+        return {
+            "direction": direction,
+            "slope": round(float(slope), 4),
+            "up_line": [round(float(up_i), 3), round(float(up_end), 3)],
+            "dn_line": [round(float(dn_i), 3), round(float(dn_end), 3)],
+        }
+
     def _calc_support_resistance(self, daily):
         """按现价强制分类 + 聚类合并 + 强度排序 → 每个方向保留最重要的 3 个。"""
         import pandas as pd
@@ -916,8 +951,12 @@ class Api:
         res_cand.sort(key=score, reverse=True)
 
         def fmt(items):
-            return [{"price": p, "label": l, "strength": s}
-                    for p, l, s in items[:3]]
+            # 每方向只保留 score 最高的 1 个（最重要）
+            if not items:
+                return []
+            best = max(items, key=lambda it: score(it))
+            p, l, s = best
+            return [{"price": p, "label": l, "strength": s}]
 
         return {"supports": fmt(sup_cand), "resistances": fmt(res_cand)}
 
