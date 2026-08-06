@@ -1003,7 +1003,7 @@ function renderPB(pb) {
     const metCount = Object.values(conds).filter(Boolean).length;
     const metCls = metCount >= 4 ? "up" : metCount >= 2 ? "warn" : "cell-dim";
     return `
-      <tr id="pb-row-${esc(r.code || '')}">
+      <tr id="pb-row-${esc(r.code || '')}" ondblclick="openStockChart('${esc(r.code||'')}','${esc(r.name||r.code||'')}')" style="cursor:pointer" title="双击看K线">
         <td>${esc(r.name || "")} <span class="mono cell-dim">${esc(r.code || "")}</span>
           ${r.in_holdings ? `<span class="badge hold">持仓</span>` : ""}</td>
         <td>${verdictBadge(r.verdict)}</td>
@@ -1215,17 +1215,26 @@ function renderStockChart() {
   const levels = data.levels;
   const cur = data.current_price;
 
-  // markLine: 支撑/压力
-  const supportLines = levels.supports.map(s => ({
-    yAxis: s.price, lineStyle: { color: "#3fb950", type: "dashed", width: 1.5 },
-    label: { formatter: `S ${s.price} ★`.repeat(s.strength), color: "#3fb950", fontSize: 10 },
-  }));
-  const resistanceLines = levels.resistances.map(r => ({
-    yAxis: r.price, lineStyle: { color: "#f85149", type: "dashed", width: 1.5 },
-    label: { formatter: `R ${r.price} ★`.repeat(r.strength), color: "#f85149", fontSize: 10 },
-  }));
-  const currentLine = { yAxis: cur, lineStyle: { color: "#e3b341", width: 1.5, type: "solid" },
-    label: { formatter: `现价 ${cur}`, color: "#e3b341", fontSize: 10 } };
+  // markLine: 支撑/压力 — 去重降密度 + 精简标签
+  function dedupeLines(items) {
+    const seen = {};
+    return items.filter(it => {
+      const k = Math.round(it.yAxis * 100);
+      if (seen[k]) return false;
+      seen[k] = true;
+      return true;
+    }).slice(0, 5);  // 最多 5 条，避免线太密集
+  }
+  const supportLines = dedupeLines(levels.supports.map(s => ({
+    yAxis: s.price, lineStyle: { color: "#3fb950", type: "dashed", width: 1 },
+    label: { formatter: `${s.price}`, color: "#3fb950", fontSize: 9, position: "insideEndBottom" },
+  })));
+  const resistanceLines = dedupeLines(levels.resistances.map(r => ({
+    yAxis: r.price, lineStyle: { color: "#f85149", type: "dashed", width: 1 },
+    label: { formatter: `${r.price}`, color: "#f85149", fontSize: 9, position: "insideEndTop" },
+  })));
+  const currentLine = { yAxis: cur, lineStyle: { color: "#e3b341", width: 1, type: "solid" },
+    label: { formatter: `${cur}`, color: "#e3b341", fontSize: 9, position: "insideEndTop" } };
 
   // 箱体标注（半透明矩形）
   const boxes = data.boxes || [];
@@ -1259,25 +1268,29 @@ function renderStockChart() {
       borderColor: "#30363d", textStyle: { color: "#c9d1d9", fontSize: 11 } },
     axisPointer: { link: [{ xAxisIndex: "all" }] },
     grid: [
-      { left: 60, right: 20, top: 34, height: "52%" },
-      { left: 60, right: 20, top: "66%", height: "12%" },  // MACD
-      { left: 60, right: 20, top: "80%", height: "12%" },  // RSI
+      { left: 60, right: 20, top: 34, height: "44%" },   // 主图: K线+MA+BOLL+支撑压力+箱体
+      { left: 60, right: 20, top: "52%", height: "10%" }, // 成交量(独立窗口)
+      { left: 60, right: 20, top: "64%", height: "11%" }, // MACD
+      { left: 60, right: 20, top: "77%", height: "11%" }, // RSI
     ],
     xAxis: [
       { type: "category", data: period.dates, gridIndex: 0, axisLine: { lineStyle: { color: "#30363d" } },
-        axisLabel: { color: "#8b949e", fontSize: 9 } },
+        axisLabel: { show: false } },
       { type: "category", data: period.dates, gridIndex: 1, axisLabel: { show: false }, axisLine: { lineStyle: { color: "#30363d" } } },
-      { type: "category", data: period.dates, gridIndex: 2, axisLabel: { color: "#8b949e", fontSize: 9 }, axisLine: { lineStyle: { color: "#30363d" } } },
+      { type: "category", data: period.dates, gridIndex: 2, axisLabel: { show: false }, axisLine: { lineStyle: { color: "#30363d" } } },
+      { type: "category", data: period.dates, gridIndex: 3, axisLabel: { color: "#8b949e", fontSize: 9 }, axisLine: { lineStyle: { color: "#30363d" } } },
     ],
     yAxis: [
       { scale: true, gridIndex: 0, axisLabel: { color: "#8b949e", fontSize: 9 },
         splitLine: { lineStyle: { color: "rgba(139,148,158,.12)" } } },
-      { scale: true, gridIndex: 1, axisLabel: { show: false }, splitLine: { show: false } },
-      { min: 0, max: 100, gridIndex: 2, axisLabel: { color: "#8b949e", fontSize: 9 }, splitLine: { show: false } },
+      { scale: true, gridIndex: 1, axisLabel: { color: "#8b949e", fontSize: 9 },
+        splitLine: { show: false }, axisLabel: { show: false } },
+      { scale: true, gridIndex: 2, axisLabel: { show: false }, splitLine: { show: false } },
+      { min: 0, max: 100, gridIndex: 3, axisLabel: { color: "#8b949e", fontSize: 9 }, splitLine: { show: false } },
     ],
     dataZoom: [
-      { type: "inside", xAxisIndex: [0, 1, 2], start: 55, end: 100 },
-      { type: "slider", xAxisIndex: [0, 1, 2], bottom: 0, height: 18, start: 55, end: 100 },
+      { type: "inside", xAxisIndex: [0, 1, 2, 3], start: 55, end: 100 },
+      { type: "slider", xAxisIndex: [0, 1, 2, 3], bottom: 0, height: 18, start: 55, end: 100 },
     ],
     series: [
       { name: "K线", type: "candlestick", data: period.ohlc, xAxisIndex: 0, yAxisIndex: 0,
@@ -1289,15 +1302,25 @@ function renderStockChart() {
         markLine: { symbol: "none", data: [...resistanceLines, ...supportLines, currentLine],
           label: { position: "insideEndTop" } } },
       ...maSeries.map(s => ({ ...s, xAxisIndex: 0, yAxisIndex: 0 })),
-      { name: "成交量", type: "bar", data: period.volume, xAxisIndex: 0, yAxisIndex: 0,
+      // BOLL 叠加主图
+      { name: "BOLL中", type: "line", data: period.boll.mid, xAxisIndex: 0, yAxisIndex: 0, symbol: "none",
+        lineStyle: { color: "rgba(139,148,158,.5)", width: 1 } },
+      { name: "BOLL上", type: "line", data: period.boll.up, xAxisIndex: 0, yAxisIndex: 0, symbol: "none",
+        lineStyle: { color: "rgba(139,148,158,.3)", width: 1 } },
+      { name: "BOLL下", type: "line", data: period.boll.dn, xAxisIndex: 0, yAxisIndex: 0, symbol: "none",
+        lineStyle: { color: "rgba(139,148,158,.3)", width: 1 } },
+      // 成交量独立窗口
+      { name: "成交量", type: "bar", data: period.volume, xAxisIndex: 1, yAxisIndex: 1,
         itemStyle: { color: "rgba(88,166,255,.35)" }, barWidth: "60%" },
-      { name: "MACD-DIF", type: "line", data: period.macd.dif, xAxisIndex: 1, yAxisIndex: 1,
+      // MACD 窗口
+      { name: "MACD-DIF", type: "line", data: period.macd.dif, xAxisIndex: 2, yAxisIndex: 2,
         symbol: "none", lineStyle: { color: "#58a6ff", width: 1 } },
-      { name: "MACD-DEA", type: "line", data: period.macd.dea, xAxisIndex: 1, yAxisIndex: 1,
+      { name: "MACD-DEA", type: "line", data: period.macd.dea, xAxisIndex: 2, yAxisIndex: 2,
         symbol: "none", lineStyle: { color: "#f85149", width: 1 } },
-      { name: "MACD柱", type: "bar", data: period.macd.hist, xAxisIndex: 1, yAxisIndex: 1,
+      { name: "MACD柱", type: "bar", data: period.macd.hist, xAxisIndex: 2, yAxisIndex: 2,
         itemStyle: { color: p => p.value >= 0 ? "#f85149" : "#3fb950" } },
-      { name: "RSI", type: "line", data: period.rsi, xAxisIndex: 2, yAxisIndex: 2,
+      // RSI 窗口
+      { name: "RSI", type: "line", data: period.rsi, xAxisIndex: 3, yAxisIndex: 3,
         symbol: "none", lineStyle: { color: "#bc8cff", width: 1 },
         markLine: { symbol: "none", data: [{ yAxis: 30, lineStyle: { color: "rgba(139,148,158,.4)", type: "dashed" } },
           { yAxis: 70, lineStyle: { color: "rgba(139,148,158,.4)", type: "dashed" } }] } },
