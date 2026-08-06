@@ -1044,22 +1044,29 @@ function renderAddWatch(aw) {
 
   const cards = codes.map(code => {
     const w = aw[code];
-    const supports = w.supports || {};
-    const chips = Object.entries(supports).map(([k, v]) =>
-      `<span class="support-chip" title="${esc(k)}">${esc(k)} ${fmt(v, 3)}</span>`).join("");
-    const events = (w.events || []).map(e =>
-      `<span class="badge event-${e.status || ""}">${esc(e.status || "")}·${esc(e.level || "")}@${fmt(e.support, 3)}（距${fmt(e["dist%"], 2)}%）</span>`).join(" ") || "—";
-    const near = (w.near || []).map(n =>
-      `<span class="badge event-${n.type === "刺穿破位" ? "破位" : n.type === "刺穿收回" ? "刺穿" : n.type === "临近未触" ? "临近" : ""}">${esc(n.type || "")}·${esc(n.level || "")}@${fmt(n.support, 3)}（${fmt(n["dist%"], 2)}%）</span>`).join(" ") || "—";
+    const conds = w.conditions || [];
+    const met = w.met_count || 0;
+    const totalConds = conds.length || 4;
+    const metPct = totalConds ? met / totalConds * 100 : 0;
+    const metCls = metPct >= 75 ? "up" : metPct >= 50 ? "warn" : "down";
+
+    const condRows = conds.map(c =>
+      `<div class="aw-cond ${c.met ? "met" : "wait"}" title="${esc(c.detail)}">
+        <span class="aw-cond-icon">${c.met ? "✓" : "○"}</span>
+        <span>${esc(c.name)}</span>
+        <span class="aw-cond-detail">${esc(c.detail)}</span>
+      </div>`).join("");
+
     return `
-      <div class="card" style="margin-bottom:10px">
-        <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:8px">
-          <div><b>${esc(w.name || code)}</b> <span class="mono cell-dim">${esc(code)}</span></div>
-          <div class="cell-dim mono">日低 ${fmt(w.day_low, 3)} · 收 ${fmt(w.close, 3)} · VWAP ${fmt(w.vwap, 3)}</div>
+      <div class="card" style="margin-bottom:10px;padding:12px 14px">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:8px">
+          <div>
+            <b>${esc(w.name || code)}</b> <span class="mono cell-dim">${esc(code)}</span>
+            <span class="aw-score ${metCls}">${met}/${totalConds} 条件满足</span>
+          </div>
+          <div class="cell-dim mono" style="font-size:11px">低${fmt(w.day_low, 3)} 收${fmt(w.close, 3)} VWAP${fmt(w.vwap, 3)}</div>
         </div>
-        <div style="margin-bottom:6px"><span class="cell-dim">支撑位：</span>${chips}</div>
-        <div style="margin-bottom:4px"><span class="cell-dim">回踩事件：</span>${events}</div>
-        <div><span class="cell-dim">素材：</span>${near}</div>
+        <div class="aw-cond-list">${condRows}</div>
       </div>`;
   }).join("");
   el.innerHTML = summaryHtml + cards;

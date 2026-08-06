@@ -584,12 +584,41 @@ class Api:
                     near.append({"level": label, "support": round(level, 3),
                                  "dist%": round(dist, 2), "type": stype})
 
+            # 加仓条件判定
+            conditions = []
+            # 条件1: 回踩支撑（日低距任意支撑 ≤2%）
+            min_dist = min(
+                (abs((day_low - lv) / lv * 100) for lv in supports.values() if lv > 0),
+                default=100)
+            nearest_name = min(
+                ((abs((day_low - lv) / lv * 100), k) for k, lv in supports.items() if lv > 0),
+                default=(100, ""))[1]
+            retest_ok = min_dist <= 2.0
+            conditions.append({"name": "回踩支撑", "met": retest_ok,
+                               "detail": f"日低{day_low:.2f}距{nearest_name} {min_dist:.1f}%" if retest_ok else f"日低距最近支撑{nearest_name} {min_dist:.1f}%（需≤2%）"})
+            # 条件2: 支撑守住（有回踩事件且收盘≥支撑）
+            hold_ok = any(e["status"] == "守住" for e in events)
+            conditions.append({"name": "支撑守住", "met": hold_ok,
+                               "detail": "收盘≥支撑位" if hold_ok else ("触及但收盘跌破" if any(e["status"] == "破位" for e in events) else "未触发回踩")})
+            # 条件3: 收盘高于MA5（短线不弱）
+            ma5 = supports.get("MA5")
+            above_ma5 = ma5 and day_close > ma5
+            conditions.append({"name": "收盘>MA5", "met": bool(above_ma5),
+                               "detail": f"收{day_close:.2f}>MA5 {ma5:.2f}" if above_ma5 else f"收{day_close:.2f}≤MA5 {ma5:.2f}" if ma5 else "无MA5数据"})
+            # 条件4: VWAP确认（收盘>VWAP 或 近VWAP）
+            vwap_f = float(vwap_val) if vwap_val else 0
+            near_vwap = vwap_f and abs((day_close - vwap_f) / vwap_f * 100) <= 1.5
+            conditions.append({"name": "VWAP确认", "met": bool(near_vwap),
+                               "detail": f"收{day_close:.2f}距VWAP {vwap_f:.2f} {abs((day_close-vwap_f)/vwap_f*100):.1f}%" if vwap_f else "无VWAP"})
+
+            met_count = sum(1 for c in conditions if c["met"])
             out[code] = {
                 "name": cur[code].get("name", code),
                 "day_low": round(day_low, 3), "close": round(day_close, 3),
                 "vwap": round(float(vwap_val), 3) if vwap_val else None,
                 "supports": {k: round(v, 3) for k, v in supports.items()},
                 "events": events, "near": near,
+                "conditions": conditions, "met_count": met_count,
             }
 
         return _clean(out)

@@ -215,6 +215,18 @@ tr:hover td { background: rgba(88,166,255,.03); }
 .aw-dot { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 3px; vertical-align: middle; }
 .aw-dot.hold { background: #3fb950; } .aw-dot.break { background: #f85149; }
 .aw-dot.near { background: #d29922; } .aw-dot.none { background: #484f58; }
+/* 加仓条件 checklist */
+.aw-score { display: inline-block; margin-left: 10px; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 10px; }
+.aw-score.up { color: #3fb950; background: rgba(63,185,80,.12); }
+.aw-score.warn { color: #d29922; background: rgba(210,153,34,.12); }
+.aw-score.down { color: #f85149; background: rgba(248,81,73,.12); }
+.aw-cond-list { display: grid; grid-template-columns: 1fr 1fr; gap: 5px 12px; }
+@media (max-width: 800px) { .aw-cond-list { grid-template-columns: 1fr; } }
+.aw-cond { display: flex; align-items: center; gap: 6px; font-size: 12px; padding: 3px 6px; border-radius: 4px; }
+.aw-cond.met { color: #3fb950; background: rgba(63,185,80,.06); }
+.aw-cond.wait { color: var(--text-dim); }
+.aw-cond-icon { font-weight: 700; font-size: 13px; width: 16px; }
+.aw-cond-detail { font-size: 10px; color: var(--text-faint); margin-left: auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 160px; }
 .freeze-row td { background: var(--red-bg); }
 .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 @media (max-width: 1100px) { .cols { grid-template-columns: 1fr; } }
