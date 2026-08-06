@@ -102,11 +102,65 @@ def find_latest_snapshot(code: str, date_str: str = None) -> tuple:
 
 
 def load_snapshot_df(code: str, date_str: str = None) -> tuple:
-    """加载快照为 DataFrame + daily_context。返回 (df, daily_ctx_dict, snap_date)。"""
+    """加载快照为 DataFrame + daily_context。返回 (df, daily_ctx_dict, snap_date)。
+    快照缺失时尝试在线拉取腾讯分钟线。"""
     fp, snap_date = find_latest_snapshot(code, date_str)
-    if fp is None:
+    if fp is not None:
+        return _parse_snapshot_file(fp, snap_date)
+
+    # 快照缺失 → 在线拉取（仅当天或昨天，历史日腾讯接口无分钟数据）
+    target = date_str or datetime.now().strftime("%Y-%m-%d")
+    today = datetime.now().strftime("%Y-%m-%d")
+    yesterday = (datetime.now() - pd.Timedelta(days=1)).strftime("%Y-%m-%d")
+    if target not in (today, yesterday):
         return pd.DataFrame(), {}, None
 
+    import urllib.request as _ur, os as _os
+    for _k in ["http_proxy", "https_proxy", "HTTP_PROXY", "HTTPS_PROXY",
+               "ALL_PROXY", "all_proxy"]:
+        _os.environ.pop(_k, None)
+    _os.environ["NO_PROXY"] = "*"
+    symbol = ("sh" + code if code[0] in "56" else "sz" + code)
+    try:
+        url = f"https://ifzq.gtimg.cn/appstock/app/minute/query?code={symbol}"
+        req = _ur.Request(url, headers={
+            "User-Agent": "Mozilla/5.0", "Referer": "https://gu.qq.com/"})
+        raw = _ur.urlopen(req, timeout=8).read().decode("utf-8", errors="replace")
+        data = json.loads(raw)
+    except Exception:
+        return pd.DataFrame(), {}, None
+
+    symbol_data = data.get("data", {}).get(symbol) or {}
+    minute_arr = symbol_data.get("data", {}).get("data") or []
+    if not minute_arr:
+        return pd.DataFrame(), {}, None
+
+    # 日期来自返回数据（格式YYYYMMDD）
+    raw_date = symbol_data.get("data", {}).get("date", "")
+    use_date = f"{raw_date[:4]}-{raw_date[4:6]}-{raw_date[6:8]}" if len(raw_date) >= 8 else (date_str or datetime.now().strftime("%Y-%m-%d"))
+
+    rows = []
+    for b in minute_arr:
+        parts = str(b).split()
+        if len(parts) < 2:
+            continue
+        t = use_date + " " + parts[0][:2] + ":" + parts[0][2:4]
+        price = float(parts[1]) if len(parts) > 1 else 0
+        vol = float(parts[2]) if len(parts) > 2 else 0
+        amt = float(parts[3]) if len(parts) > 3 else 0
+        rows.append({"time": t, "open": price, "high": price,
+                     "low": price, "close": price, "volume": vol, "amount": amt})
+
+    df = pd.DataFrame(rows)
+    if not df.empty:
+        df["time"] = pd.to_datetime(df["time"], errors="coerce")
+        df = df.sort_values("time").reset_index(drop=True)
+    # online fetch 无 daily_context
+    return df, {}, use_date
+
+
+def _parse_snapshot_file(fp: Path, snap_date: str) -> tuple:
+    """解析本地分钟快照 JSON 为 DataFrame。"""
     with open(fp, "r", encoding="utf-8") as f:
         data = json.load(f)
 
