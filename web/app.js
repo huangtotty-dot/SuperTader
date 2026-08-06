@@ -1157,6 +1157,19 @@ function renderStageBoard(stages) {
 
 /* ---- 选股猎手 ---- */
 let hunterLoaded = false;
+async function addToWatchlist(code, name, btn) {
+  try {
+    const r = await apiCall("add_to_watchlist", code, name);
+    if (r && r.ok) {
+      if (btn) { btn.textContent = "✓已加"; btn.style.color = "#3fb950"; btn.style.borderColor = "#3fb950"; }
+      statusEl(`${esc(code)} ${esc(name)} 已加入建仓股池`, "ok");
+    } else {
+      statusEl(`加入失败: ${r ? r.error : '未知'}`, "err");
+    }
+  } catch (e) {
+    statusEl(`加入失败: ${e.message}`, "err");
+  }
+}
 let hunterRunning = false;
 async function loadHunter(force) {
   if (!force && hunterLoaded) return;
@@ -1207,7 +1220,9 @@ function renderHunter(h) {
       const d6Cls = s.d6 >= 8 ? "up" : s.d6 >= 5 ? "warn" : s.d6 > 0 ? "cell-dim" : "";
       return `<tr class="h-expand-row">
         <td class="mono cell-dim">${esc(s.code)}</td>
-        <td>${esc(s.name)}</td>
+        <td>${esc(s.name)} <button class="mini-btn" style="font-size:10px;padding:0 5px"
+          onclick="event.stopPropagation();addToWatchlist('${esc(s.code)}','${esc(s.name)}',this)"
+          title="加入建仓股池监控买点">+股池</button></td>
         <td class="num ${s.score >= 70 ? 'up' : s.score >= 50 ? 'warn' : 'cell-dim'}"><b>${s.score}</b></td>
         <td class="num ${d5Cls}">${s.d5 || "—"}</td>
         <td class="num ${d6Cls}">${s.d6 || "—"}</td>
