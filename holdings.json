@@ -6,7 +6,7 @@
     "base": 6000,
     "t_qty": 6000,
     "type": "etf",
-    "account": "账户A",
+    "account": "账户B",
     "pre_close": 0.949
   },
   "600176": {
@@ -16,17 +16,17 @@
     "base": 500,
     "t_qty": 500,
     "type": "stock",
-    "account": "账户A",
+    "account": "账户B",
     "pre_close": 39.28
   },
   "600481": {
     "name": "双良节能",
-    "cost": 12.4,
+    "cost": 12.400,
     "qty": 300,
     "base": 300,
     "t_qty": 300,
     "type": "stock",
-    "account": "账户A",
+    "account": "账户B",
     "pre_close": 4.35
   },
   "603667": {
@@ -36,37 +36,47 @@
     "base": 100,
     "t_qty": 0,
     "type": "stock",
-    "account": "账户A",
+    "account": "账户B",
     "pre_close": 55.0
   },
   "000988": {
     "name": "华工科技",
-    "cost": 363.402,
-    "qty": 200,
-    "base": 200,
-    "t_qty": 200,
+    "cost": 160.332,
+    "qty": 100,
+    "base": 100,
+    "t_qty": 100,
     "type": "stock",
-    "account": "账户A+账户B",
+    "account": "账户A",
+    "pre_close": 100.43
+  },
+  "000988_B": {
+    "name": "华工科技",
+    "cost": 566.471,
+    "qty": 100,
+    "base": 100,
+    "t_qty": 100,
+    "type": "stock",
+    "account": "账户B",
     "pre_close": 100.43
   },
   "002639": {
     "name": "雪人集团",
-    "cost": 11.69,
+    "cost": 11.690,
     "qty": 200,
     "base": 200,
     "t_qty": 0,
     "type": "stock",
-    "account": "账户B",
+    "account": "账户A",
     "pre_close": 12.87
   },
   "300153": {
     "name": "科泰电源",
-    "cost": 22.31,
+    "cost": 22.310,
     "qty": 300,
     "base": 300,
     "t_qty": 300,
     "type": "stock",
-    "account": "账户B",
-    "pre_close": 21.6
+    "account": "账户A",
+    "pre_close": 21.60
   }
 }

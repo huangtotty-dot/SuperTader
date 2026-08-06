@@ -302,9 +302,15 @@ class Api:
         out = {"source": "fallback", "ts": None, "quotes": []}
         if not cur:
             return out
+        def _to_symbol(c):
+            """600176→sh600176, 000988→sz000988。后缀 _B 等剥离。"""
+            base = c.split("_")[0]
+            return ("sh" + base if base[0] in "56" else "sz" + base)
         symbols = {}
         for code in cur:
-            symbols[code] = ("sh" + code if code[0] in "56" else "sz" + code)
+            sym = _to_symbol(code)
+            if sym not in symbols.values():  # 同一只股票（如 000988/000988_B）只请求一次
+                symbols[code] = sym
         try:
             import os as _os
             import urllib.request as _ur
@@ -339,33 +345,41 @@ class Api:
             return out
 
         out["source"] = "live"
+        # 1) 解析 API → {base_code: {price,pre_close,change,change_pct}}
+        px = {}
         for line in data.splitlines():
             line = line.strip()
             if "=" not in line or '"' not in line:
                 continue
-            sym = line.split("=")[0].replace("v_", "").strip()
             body = line[line.index('"') + 1: line.rindex('"')]
             f = body.split("~")
             if len(f) < 40:
                 continue
-            code = f[2]
-            if code not in cur or not isinstance(cur[code], dict):
-                continue
-            info = cur[code]
+            base = f[2]
             try:
-                price = float(f[3])
-                pre_close = float(f[4])
-                change = float(f[31]) if f[31] else 0.0
-                change_pct = float(f[32]) if f[32] else 0.0
+                px[base] = {
+                    "price": float(f[3]), "pre_close": float(f[4]),
+                    "change": float(f[31]) if f[31] else 0.0,
+                    "change_pct": float(f[32]) if f[32] else 0.0,
+                }
             except (ValueError, IndexError):
                 continue
+
+        # 2) 按 holdings 条目驱动 → 每个条目用自己的 code/cost/qty，查同一个 base 的价格
+        for code, info in cur.items():
+            if not isinstance(info, dict):
+                continue
+            base = code.split("_")[0]    # 000988_B → 000988
+            p = px.get(base)
+            if p is None:
+                continue
             cost = info.get("cost")
-            pnl = (price / cost - 1) * 100 if cost else None
+            pnl = (p["price"] / cost - 1) * 100 if cost else None
             out["quotes"].append({
-                "code": code, "name": info.get("name", code) or f[1],
-                "price": price, "pre_close": pre_close, "change": change,
-                "change_pct": change_pct, "cost": cost, "pnl_pct": pnl,
-                "offline": False,
+                "code": code, "name": info.get("name", code),
+                "price": p["price"], "pre_close": p["pre_close"],
+                "change": p["change"], "change_pct": p["change_pct"],
+                "cost": cost, "pnl_pct": pnl, "offline": False,
                 "qty": info.get("qty", 0), "base": info.get("base", 0),
                 "t_qty": info.get("t_qty", 0),
             })
