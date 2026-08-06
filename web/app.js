@@ -257,7 +257,7 @@ function renderMarket(ms) {
   }
 }
 
-/* ---- 持仓成本变化（统一 % 变化曲线） ---- */
+/* ---- 持仓收益趋势 ---- */
 function renderCost(ch) {
   const dates = (ch && ch.dates) || [];
   const stocks = (ch && ch.stocks) || {};
@@ -265,38 +265,42 @@ function renderCost(ch) {
   const palette = ["#58a6ff","#f85149","#3fb950","#d29922","#bc8cff","#39c5cf","#ff7b72","#7ee787"];
   if (!codes.length) { tabClear("echCost"); document.getElementById("costMatrix").innerHTML = ""; return; }
 
-  // 统一 ECharts：每只股以首日为基准的 % 变化
+  // 收益趋势图：每股 P&L 金额（元）
   if (dates.length >= 2) {
     const series = codes.map((code, i) => {
       const pts = stocks[code].points || [];
-      const baseline = pts[0] ? pts[0].cost : null;
       const data = dates.map(d => {
         const p = pts.find(x => x.date === d);
-        if (!p || !baseline) return null;
-        return parseFloat(((p.cost - baseline) / baseline * 100).toFixed(2));
+        return p ? p.pnl_amt : null;
       });
+      // 只画有点的股票
+      if (data.every(v => v == null)) return null;
       return {
         name: (stocks[code].name || code), type: "line", symbol: "circle",
         symbolSize: 4, lineStyle: { color: palette[i % palette.length], width: 2 },
         itemStyle: { color: palette[i % palette.length] },
         data,
       };
-    });
+    }).filter(Boolean);
+
     tabEch("echCost", {
       ...ECH_BASE,
-      grid: { left: 50, right: 20, top: 40, bottom: 34 },
+      grid: { left: 56, right: 20, top: 40, bottom: 34 },
       legend: { type: "scroll", textStyle: { color: "#8b949e", fontSize: 10 }, top: 4 },
       xAxis: { ...ECH_BASE.xAxis, type: "category", data: dates.map(d => d.slice(5)) },
-      yAxis: { ...ECH_BASE.yAxis, name: "%", nameTextStyle: { color: "#8b949e", fontSize: 10 },
-        axisLabel: { color: "#8b949e", fontSize: 10, formatter: v => (v >= 0 ? "+" : "") + fmt(v, 1) + "%" } },
+      yAxis: { ...ECH_BASE.yAxis, name: "元", nameTextStyle: { color: "#8b949e", fontSize: 10 },
+        axisLabel: { color: "#8b949e", fontSize: 10, formatter: v => (v >= 0 ? "+" : "") + fmt(v, 0) } },
       tooltip: { ...ECH_BASE.tooltip, trigger: "axis", formatter: params => {
         const d = dates[params[0].dataIndex];
         let html = `<b>${d}</b>`;
         params.forEach(p => {
           const code = codes[p.seriesIndex] || "";
           const pt = (stocks[code] || {}).points.find(x => x.date === d);
-          html += `<br/>${p.marker}${p.seriesName}: ${p.value != null ? (p.value >= 0 ? "+" : "") + p.value.toFixed(1) + "%" : "—"}${pt && pt.src === "人工校准" ? " ✎校准" : ""}
-            <span style="color:#8b949e;font-size:10px"> 成本${pt ? fmt(pt.cost, 3) : "—"}</span>`;
+          if (!pt) { html += `<br/>${p.marker}${p.seriesName}: —`; return; }
+          const pnl = pt.pnl_amt, pct = pt.pnl_pct;
+          const cls = pnl == null ? "" : (pnl >= 0 ? "color:#f85149" : "color:#3fb950");
+          html += `<br/>${p.marker}${p.seriesName}: <span style="${cls}">${pnl != null ? (pnl >= 0 ? "+" : "") + fmt(pnl, 0) : "—"}</span>
+            <span style="color:#8b949e;font-size:10px">${pct != null ? (pct >= 0 ? "+" : "") + fmt(pct, 1) + "%" : "—"} · 本${fmt(pt.cost, 3)} · ${pt.qty}股${pt.src === "人工校准" ? " ✎校准" : ""}</span>`;
         });
         return html;
       }},
@@ -316,15 +320,14 @@ function renderCost(ch) {
         dates.map(d => {
           const p = st.points.find(x => x.date === d);
           if (!p) return `<td class="num cell-dim">—</td>`;
-          const badge = p.src === "人工校准"
-            ? `<span class="calib-badge 人工校准">✎</span>` : "";
-          return `<td class="num">${fmt(p.cost, 3)}${badge}</td>`;
+          const pnl = p.pnl_amt;
+          const pnlCls = pnl == null ? "" : (pnl >= 0 ? "up" : "down");
+          return `<td class="num"><span class="${pnlCls}">${pnl != null ? (pnl >= 0 ? "+" : "") + fmt(pnl, 0) : "—"}</span></td>`;
         }).join("") + `</tr>`;
     }).join("");
     const scrollWrap = dates.length > 30 ? 'style="overflow-x:auto;max-width:100%"' : "";
     mtx.innerHTML = `
-      <div class="card-title" style="margin-top:10px">成本矩阵（✎校准=人工确认 · 其余=快照 · 曲线=相对基准日变化%）
-        <button class="mini-btn" id="calibBtn2">✎ 校准成本</button></div>
+      <div class="card-title" style="margin-top:10px">收益矩阵（浮盈/浮亏=昨收价×股数−成本×股数）<button class="mini-btn" id="calibBtn2">✎ 校准成本</button></div>
       <div class="cell-dim" style="font-size:10px;margin-bottom:4px">数据自 ${esc(dates[0])} 起（共${dates.length}天），持续累积中 · >30天切换月视图</div>
       <div ${scrollWrap}><table><thead>${head}</thead><tbody>${rows}</tbody></table></div>`;
     const cb2 = document.getElementById("calibBtn2");
