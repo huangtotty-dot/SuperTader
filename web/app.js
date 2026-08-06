@@ -1003,7 +1003,7 @@ function renderPB(pb) {
     const metCount = Object.values(conds).filter(Boolean).length;
     const metCls = metCount >= 4 ? "up" : metCount >= 2 ? "warn" : "cell-dim";
     return `
-      <tr>
+      <tr id="pb-row-${esc(r.code || '')}">
         <td>${esc(r.name || "")} <span class="mono cell-dim">${esc(r.code || "")}</span>
           ${r.in_holdings ? `<span class="badge hold">持仓</span>` : ""}</td>
         <td>${verdictBadge(r.verdict)}</td>
@@ -1015,6 +1015,7 @@ function renderPB(pb) {
         <td class="num">${fmt(r.suggested_price)}</td>
         <td class="num">${fmt(r.capital_required, 0)}</td>
         <td class="cell-dim">${esc(r.scan_type || "")}${r._scans > 1 ? `×${r._scans}` : ""}</td>
+        <td>${!r.in_holdings ? `<button class="mini-btn" style="font-size:10px;padding:0 5px;color:#f85149" onclick="removeFromWatchlist('${esc(r.code||'')}',document.getElementById('pb-row-${esc(r.code||'')}'))" title="从股池移除">✕</button>` : ""}</td>
       </tr>`;
   }).join("");
 
@@ -1032,7 +1033,7 @@ function renderPB(pb) {
         <thead><tr>
           <th>股票</th><th>判定</th><th class="num">得分</th><th class="num">通过</th><th class="num">价</th>
           <th title="MACD/BOLL/RSI/缩量/支撑">五条件</th>
-          <th class="num">建议股数</th><th class="num">建议价</th><th class="num">所需资金</th><th>扫描</th>
+          <th class="num">建议股数</th><th class="num">建议价</th><th class="num">所需资金</th><th>扫描</th><th></th>
         </tr></thead>
         <tbody>${rows || '<tr><td colspan="9" class="empty">无扫描结果</td></tr>'}</tbody>
       </table>
@@ -1163,11 +1164,27 @@ async function addToWatchlist(code, name, btn) {
     if (r && r.ok) {
       if (btn) { btn.textContent = "✓已加"; btn.style.color = "#3fb950"; btn.style.borderColor = "#3fb950"; }
       statusEl(`${esc(code)} ${esc(name)} 已加入建仓股池`, "ok");
+      // 自动刷新建仓扫描表
+      if (state.date) apiCall("refresh_pb", state.date).then(pb => renderPB(pb || {})).catch(() => {});
     } else {
       statusEl(`加入失败: ${r ? r.error : '未知'}`, "err");
     }
   } catch (e) {
     statusEl(`加入失败: ${e.message}`, "err");
+  }
+}
+async function removeFromWatchlist(code, rowEl) {
+  try {
+    const r = await apiCall("remove_from_watchlist", code);
+    if (r && r.ok) {
+      if (rowEl) rowEl.remove();
+      statusEl(`${esc(code)} 已从建仓股池移除`, "ok");
+      if (state.date) apiCall("refresh_pb", state.date).then(pb => renderPB(pb || {})).catch(() => {});
+    } else {
+      statusEl(`移除失败: ${r ? r.error : '未知'}`, "err");
+    }
+  } catch (e) {
+    statusEl(`移除失败: ${e.message}`, "err");
   }
 }
 let hunterRunning = false;
@@ -1198,6 +1215,17 @@ function renderHunter(h) {
 
   const sumRows = h.summary_rows || [];
     const ss = h.sector_stocks || {};
+    const trends = h.concept_trends || {};
+    function trendSpark(pts, key, color) {
+      if (!pts || pts.length < 2) return '<span class="cell-dim">—</span>';
+      const vals = pts.map(p => p[key]).filter(v => v != null);
+      if (vals.length < 2) return '<span class="cell-dim">—</span>';
+      const W = 60, H = 20, minV = Math.min(...vals), maxV = Math.max(...vals), span = (maxV - minV) || 1;
+      const xs = vals.map((_, i) => i / (vals.length - 1) * W);
+      const ys = vals.map(v => H - 2 - (v - minV) / span * (H - 4));
+      const line = xs.map((x, i) => x + ',' + ys[i]).join(' ');
+      return '<svg width="' + W + '" height="' + H + '" style="vertical-align:middle"><polyline points="' + line + '" fill="none" stroke="' + color + '" stroke-width="1.5"/></svg>';
+    }
 
   // Sheet1: 可展开行
   const sumBody = sumRows.map((r, i) => {
@@ -1257,7 +1285,7 @@ function renderHunter(h) {
         </td>
         <td class="num">${r["涨停数"]||0}</td>
         <td style="width:100px">
-          <div class="h-heat-val ${heatCls}">${heatVal > 0 ? fmt(heatVal, 0) : "—"}</div>
+          <span class="mono cell-dim" style="font-size:10px">${trendSpark(trends[category]||[], 'heat', '#d29922')}</span><div class="h-heat-val ${heatCls}">${heatVal > 0 ? fmt(heatVal, 0) : "—"}</div>
           <div class="h-bar-track h-bar-sm"><div class="h-bar-fill ${heatCls}" style="width:${heatBarW}%"></div></div>
         </td>
         <td style="min-width:70px">
