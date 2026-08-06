@@ -1004,9 +1004,35 @@ function renderAddWatch(aw) {
   const el = document.getElementById("addWatchBody");
   const codes = Object.keys(aw || {});
   if (!codes.length) {
-    el.innerHTML = '<div class="empty">无加仓观察数据</div>';
+    el.innerHTML = '<div class="empty">无加仓观察数据（盘中实时计算，需分钟快照；历史日依赖 daily_review）</div>';
     return;
   }
+
+  // 汇总统计
+  let holdCnt = 0, breakCnt = 0, nearCnt = 0, noEventCnt = 0;
+  codes.forEach(code => {
+    const w = aw[code];
+    const evts = w.events || [];
+    const hasHold = evts.some(e => e.status === "守住");
+    const hasBreak = evts.some(e => e.status === "破位");
+    if (hasHold) holdCnt++;
+    if (hasBreak) breakCnt++;
+    if (!hasHold && !hasBreak && (w.near || []).length > 0) nearCnt++;
+    if (!hasHold && !hasBreak && !(w.near || []).length) noEventCnt++;
+  });
+
+  const summaryHtml = `
+    <div class="card" style="margin-bottom:10px;padding:10px 14px">
+      <div style="display:flex;gap:18px;flex-wrap:wrap;align-items:center">
+        <span class="cell-dim">条件满足程度</span>
+        <span><b class="up">${holdCnt}</b> 只守住支撑</span>
+        <span><b class="down">${breakCnt}</b> 只破位</span>
+        <span><b class="warn">${nearCnt}</b> 只近阈未触</span>
+        <span><b class="cell-dim">${noEventCnt}</b> 只无事件</span>
+      </div>
+      <div class="cell-dim" style="font-size:10px;margin-top:4px">守住=日低触及支撑且收盘站回 · 破位=触及后收盘跌破 · 近阈=距支撑0.5-3% · 回踩支撑不破是加仓前提</div>
+    </div>`;
+
   const cards = codes.map(code => {
     const w = aw[code];
     const supports = w.supports || {};
@@ -1027,7 +1053,7 @@ function renderAddWatch(aw) {
         <div><span class="cell-dim">素材：</span>${near}</div>
       </div>`;
   }).join("");
-  el.innerHTML = cards;
+  el.innerHTML = summaryHtml + cards;
 }
 
 /* ---- ⑧ 阶段看板 ---- */
