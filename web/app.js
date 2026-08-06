@@ -983,9 +983,10 @@ function renderPB(pb) {
   const c = k => counts[k] ? `<span class="badge ${k === "signal" ? "signal" : k === "approaching" ? "approach" : "weak"}">${k}: ${counts[k]}</span>` : "";
   el.innerHTML = `
     <div class="card">
-      <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;">
+      <div style="display:flex;gap:8px;margin-bottom:6px;flex-wrap:wrap;">
         ${c("signal")}${c("approaching")}${c("weak")}${c("insufficient_data")}
       </div>
+      ${pb.note ? `<div class="cell-dim" style="font-size:11px;margin-bottom:6px">⚠ ${esc(pb.note)}</div>` : ""}
       <table>
         <thead><tr>
           <th>股票</th><th>判定</th><th class="num">得分</th><th class="num">通过</th><th class="num">价</th>

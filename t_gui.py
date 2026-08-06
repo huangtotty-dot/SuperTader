@@ -777,7 +777,8 @@ class Api:
 
     def _agg_position_builder(self, date):
         fp = TRACES / f"position_builder_{date}.jsonl"
-        empty = {"has_data": False, "counts": {}, "by_code": {}, "rows": [], "cond_labels": COND_LABELS}
+        empty = {"has_data": False, "counts": {}, "by_code": {}, "rows": [],
+                 "cond_labels": COND_LABELS, "note": ""}
         if not fp.exists():
             return empty
 
@@ -824,6 +825,9 @@ class Api:
             row["_scans"] = sum(v.get("scans", 0) for v in rec.values())
             rows.append(row)
         rows.sort(key=lambda x: -(x.get("composite_score") or 0))
+        no_data_count = verdicts.get("insufficient_data", 0)
+        note = (f"含 {no_data_count} 只无分钟快照（不在持仓中，待采集器收集数据）"
+                if no_data_count else "")
 
         return {
             "has_data": True,
@@ -831,6 +835,7 @@ class Api:
             "by_code": by_code,
             "rows": rows,
             "cond_labels": COND_LABELS,
+            "note": note,
         }
 
     def _load_positions(self, date, kpi):

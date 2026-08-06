@@ -154,7 +154,7 @@ def notify(sig, holding):
         
         # 建议交易股数
         hold_qty = int(sig.hold_qty or 0)
-        total_t = int(holding.get("t_qty", 0) or holding.get("qty", 0) or 0)
+        total_t = int(holding.get("t_qty", 0))  # 纯底仓(t_qty=0)不应用qty回退
         
         advice = f"建议{action_cn} {hold_qty} 股/份"
         
@@ -1388,7 +1388,7 @@ def scan_once():
                             )
                         if dynamic_qty > 0:
                             sig.hold_qty = dynamic_qty
-                            total_t = int(holding.get("t_qty", 0) or holding.get("qty", 0) or 0)
+                            total_t = int(holding.get("t_qty", 0))  # 纯底仓(t_qty=0)不应用qty回退
                             pct = dynamic_qty / total_t * 100 if total_t > 0 else 0
                             log.info(f"📊 动态份数 {code}: 状态={regime.value if regime else 'normal'} 信号强度{sig.score:.0f}/阈值{threshold:.0f}, 建议交易{dynamic_qty}股/份 ({pct:.0f}%)")
                         else:

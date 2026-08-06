@@ -330,7 +330,7 @@ class SignalEngine:
     def _virtual_net_qty(self, code: str, holding: dict) -> int:
         buys = VIRTUAL_TRADES.get(code, {}).get("BUY_LOW", [])
         sells = VIRTUAL_TRADES.get(code, {}).get("SELL_HIGH", [])
-        base_qty = int(holding.get("t_qty") or holding.get("qty") or 0)
+        base_qty = int(holding.get("t_qty") or 0)  # 纯底仓(t_qty=0)不应用qty回退
         return max(0, base_qty + sum(t["qty"] for t in buys) - sum(t["qty"] for t in sells))
 
     def _check_morning_alert(self, code, name, df, feats):
@@ -579,7 +579,7 @@ class SignalEngine:
 
         # ===== V1.30: 卖出端保护 —— 底仓地板 + 卖出次数上限（防卖穿底仓）=====
         _net_qty = self._virtual_net_qty(code, holding)
-        _base_qty = int(holding.get("base") or holding.get("t_qty") or holding.get("qty") or 0)
+        _base_qty = int(holding.get("base") or holding.get("t_qty") or 0)
         _floor_qty = int(_base_qty * float(_sp_param(code, "sell_floor_ratio", 0.5)))
         if hold_qty > 0 and _floor_qty > 0 and _net_qty <= _floor_qty:
             risk_sell_block.append(f"sell_floor_protect(余{_net_qty}≤地板{_floor_qty})")
@@ -728,7 +728,7 @@ class FeatureExtractor:
         feats["is_strong_trend"] = (feats["today_ret"] > 2 * atr) and (price >= feats["prev_high"] * 0.99) and (feats["vol_ratio"] > 1.2)
         feats["is_strong_pullback"] = feats["is_strong_trend"] and abs((price - vwap) / vwap) < 0.5 * atr if vwap else False
         cost = float(holding.get("cost", 0) or 0)
-        feats["hold_qty"] = int(holding.get("t_qty") or holding.get("qty") or 0)
+        feats["hold_qty"] = int(holding.get("t_qty") or 0)  # 纯底仓(t_qty=0)不应用qty回退
         feats["profit_pct"] = (price - cost) / cost if cost > 0 else 0
         feats["is_deep_loss"] = cost > 0 and feats["profit_pct"] < -5 * atr
         # daily ctx
