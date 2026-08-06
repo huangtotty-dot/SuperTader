@@ -1160,31 +1160,41 @@ function renderStageBoard(stages) {
 let stockChartData = null;
 let stockChartPeriod = "daily";
 let stockChartInst = null;
+let stockChartTimer = null;
+let stockChartCode = null;
+let stockChartName = "";
 const MA_COLORS = ["#e6c07b", "#56b4e9", "#e91e63", "#9b59b6", "#2ecc71", "#f39c12", "#3498db"];
+
+async function loadStockChartNow() {
+  if (!stockChartCode) return;
+  try {
+    const d = await apiCall("load_stock_chart", stockChartCode);
+    if (d && d.available) {
+      stockChartData = d;
+      renderStockSummary(d);
+      renderStockChart();
+    }
+  } catch (e) { /* 静默 */ }
+}
 
 async function openStockChart(code, name) {
   const modal = document.getElementById("stockModal");
   if (!modal) return;
   modal.style.display = "flex";
+  stockChartCode = code;
+  stockChartName = name;
   document.getElementById("stockModalTitle").textContent = `${name} (${code}) 技术分析`;
   document.getElementById("stockChart").innerHTML = '<div class="empty">加载中...</div>';
-  try {
-    const d = await apiCall("load_stock_chart", code);
-    if (!d.available) {
-      document.getElementById("stockChart").innerHTML = `<div class="empty">${esc(d.error || '无数据')}</div>`;
-      return;
-    }
-    stockChartData = d;
-    stockChartPeriod = "daily";
-    renderStockSummary(d);
-    renderStockChart();
-  } catch (e) {
-    document.getElementById("stockChart").innerHTML = `<div class="empty">加载失败: ${esc(e.message)}</div>`;
-  }
+  // 10s 实时刷新
+  if (stockChartTimer) clearInterval(stockChartTimer);
+  stockChartTimer = setInterval(loadStockChartNow, 10000);
+  await loadStockChartNow();
 }
 function closeStockChart() {
   document.getElementById("stockModal").style.display = "none";
   if (stockChartInst) { stockChartInst.dispose(); stockChartInst = null; }
+  if (stockChartTimer) { clearInterval(stockChartTimer); stockChartTimer = null; }
+  stockChartCode = null;
 }
 function switchStockPeriod(p) {
   stockChartPeriod = p;
@@ -1201,12 +1211,16 @@ function renderStockSummary(d) {
   const boxTxt = boxes.length
     ? boxes.map(b => `<b class="${b.rel === 0 ? 'warn' : 'cell-dim'}">${b.low}~${b.high}${b.rel === 0 ? '(当前)' : ''}</b>`).join(" · ")
     : "<span class='cell-dim'>无</span>";
+  const ch = d.channel || {};
+  const chTxt = ch.direction === "up" ? `<b class="up">上行 ↗</b>`
+    : ch.direction === "down" ? `<b class="down">下行 ↘</b>` : `<span class="cell-dim">震荡 →</span>`;
   document.getElementById("stockSummary").innerHTML = `
     <span class="ss-item">当前价: <b class="mono">${fmt(cur, 3)}</b></span>
-    <span class="ss-item">压力: ${resTxt}</span>
-    <span class="ss-item">支撑: ${supTxt}</span>
+    <span class="ss-item">通道: ${chTxt}</span>
+    <span class="ss-item">关键压力: ${resTxt}</span>
+    <span class="ss-item">关键支撑: ${supTxt}</span>
     <span class="ss-item">箱体: ${boxTxt}</span>
-    <span class="ss-item cell-dim" style="font-size:11px">日/周/月切换 · 拖动滑块缩放</span>`;
+    <span class="ss-item cell-dim mono" style="font-size:10px">10s实时更新 · <span class="live-dot"></span>${nowTime()}</span>`;
 }
 function renderStockChart() {
   const data = stockChartData;
@@ -1301,7 +1315,29 @@ function renderStockChart() {
         markArea: boxAreas.length ? {
           silent: true, data: boxAreas,
         } : undefined,
-        markLine: { symbol: "none", data: [...resistanceLines, ...supportLines, currentLine],
+        markLine: { symbol: "none",
+          data: [
+            ...(data.channel && data.channel.up_line.length ? [{
+              xAxis: 0, yAxis: data.channel.up_line[0],
+              lineStyle: { color: data.channel.direction === "up" ? "#f85149" : "#3fb950",
+                width: 1.5, type: "solid" },
+              label: { formatter: data.channel.direction === "up" ? "通道上轨(上行)" : "通道上轨(下行)",
+                color: data.channel.direction === "up" ? "#f85149" : "#3fb950", fontSize: 9,
+                position: "insideEndTop" },
+            }, {
+              xAxis: period.dates.length - 1, yAxis: data.channel.up_line[1],
+            }] : []),
+            ...(data.channel && data.channel.dn_line.length ? [{
+              xAxis: 0, yAxis: data.channel.dn_line[0],
+              lineStyle: { color: data.channel.direction === "up" ? "#f85149" : "#3fb950",
+                width: 1.5, type: "dashed" },
+              label: { formatter: "下轨", color: data.channel.direction === "up" ? "#f85149" : "#3fb950",
+                fontSize: 9, position: "insideEndBottom" },
+            }, {
+              xAxis: period.dates.length - 1, yAxis: data.channel.dn_line[1],
+            }] : []),
+            ...resistanceLines, ...supportLines, currentLine,
+          ],
           label: { position: "insideEndTop" } } },
       ...maSeries.map(s => ({ ...s, xAxisIndex: 0, yAxisIndex: 0 })),
       // BOLL 叠加主图
