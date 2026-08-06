@@ -1155,6 +1155,58 @@ function renderStageBoard(stages) {
     </div>`).join("") + `</div>`;
 }
 
+/* ---- 选股猎手 ---- */
+let hunterLoaded = false;
+async function loadHunter() {
+  if (hunterLoaded) return;
+  const el = document.getElementById("hunterBody");
+  el.innerHTML = '<div class="empty">正在加载选股猎手数据...</div>';
+  try {
+    const h = await apiCall("load_hunter", state.date || todayStr());
+    renderHunter(h);
+    hunterLoaded = true;
+  } catch (e) {
+    el.innerHTML = `<div class="empty">加载失败: ${esc(e.message)}</div>`;
+  }
+}
+function renderHunter(h) {
+  const el = document.getElementById("hunterBody");
+  if (!h || !h.available) {
+    el.innerHTML = `<div class="empty">选股猎手数据不可用${h && h.error ? ': ' + esc(h.error) : ''}</div>`;
+    return;
+  }
+  const summary = h.summary || [];
+  const cards = summary.map((row, i) => {
+    const top5 = (row.top5 || []).map((t, j) =>
+      `<span class="h-top-item" title="${esc(t.name)}${t.change_pct != null ? ' 涨跌'+fmt(t.change_pct,1)+'%' : ''}">
+        <span class="mono cell-dim">${esc(t.code)}</span> ${esc(t.name || t.code)}
+        <span class="h-score ${t.score >= 70 ? 'up' : t.score >= 50 ? 'warn' : 'cell-dim'}">${fmt(t.score, 0)}</span>
+      </span>`).join("");
+
+    return `<div class="card" style="margin-bottom:8px;padding:10px 14px">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+        <div>
+          <span class="cell-dim mono" style="font-size:10px">#${i + 1}</span>
+          <b>${esc(row.concept)}</b>
+          <span class="cell-dim" style="font-size:11px">${row.stock_count}只 · 均分${fmt(row.avg_score, 1)}</span>
+        </div>
+        <span class="cell-dim mono" style="font-size:10px">代表: ${esc(row.top_stock || '—')}</span>
+      </div>
+      <div class="h-top5">${top5}</div>
+    </div>`;
+  }).join("");
+
+  el.innerHTML = `
+    <div class="cell-dim" style="margin-bottom:8px;display:flex;gap:16px;flex-wrap:wrap">
+      <span>打分池: <b>${h.pool_size}</b> 只</span>
+      <span>已评分: <b>${h.scored_count}</b> 只</span>
+      <span>概念数: <b>${h.concept_count}</b> 个</span>
+      <span class="mono"><span class="live-dot"></span> ${esc(h.refreshed_at || '')}</span>
+    </div>
+    ${cards}
+    <div class="cell-dim" style="font-size:10px;margin-top:6px">数据源: stock_hunter (韭研概念打分) · 点击标签页自动加载 · 概念按均分降序</div>`;
+}
+
 /* ---- 集合竞价 ---- */
 function renderAuction(a) {
   const el = document.getElementById("auctionBody");
@@ -1326,6 +1378,8 @@ function switchTab(tab) {
   if (sideItem) sideItem.classList.add("active");
   // 延迟 resize 让 tab 的 display:block 先生效
   setTimeout(resizeAllEch, 80);
+  // 切到选股猎手时自动加载
+  if (tab === "hunter") loadHunter();
 }
 
 /* ================= 侧栏汇总 ================= */

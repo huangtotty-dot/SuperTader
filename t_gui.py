@@ -57,6 +57,9 @@ COND_LABELS = {
 
 
 PREOPEN_DIR = BASE / "t_io" / "preopen"
+HUNTER_DIR = Path(r"E:\stock_hunter")
+if str(HUNTER_DIR) not in sys.path:
+    sys.path.insert(0, str(HUNTER_DIR))
 
 
 def _clean(obj):
@@ -624,6 +627,115 @@ class Api:
         total = len([c for c in cur if isinstance(cur.get(c), dict)])
         ok = len(out)
         out["_progress"] = {"total_holdings": total, "snapshots_ok": ok, "snapshots_miss": total - ok}
+        return _clean(out)
+
+    # ---------- 选股猎手（概念评分） ----------
+    def load_hunter(self, date=None):
+        """调用 stock_hunter 打分管线，返回概念排名+TOP5+板块明细。"""
+        if not date:
+            date = datetime.now().strftime("%Y-%m-%d")
+        out = {"date": date, "available": False, "error": ""}
+        try:
+            import pandas as pd
+            from modules.data_loader import DataLoader as HLoader
+            from modules.market_data import MarketDataFetcher
+            from modules.scorer import ConceptScorer
+            from modules.ranker import Top5Ranker, SectorRanker, DetailRanker
+        except Exception as e:
+            out["error"] = f"stock_hunter 模块加载失败: {e}"
+            return out
+
+        try:
+            cfg_path = HUNTER_DIR / "config.json"
+            if not cfg_path.exists():
+                out["error"] = "stock_hunter/config.json 不存在"
+                return out
+            with open(cfg_path, encoding="utf-8") as f:
+                hunter_cfg = json.load(f)
+        except Exception as e:
+            out["error"] = f"加载 stock_hunter 配置失败: {e}"
+            return out
+
+        try:
+            # 1. 加载 watchlist
+            loader = HLoader(config=hunter_cfg)
+            watchlist = loader.load_watchlist()
+            if watchlist is None or watchlist.empty:
+                out["error"] = "watchlist_jiuyan.json 加载为空"
+                return out
+
+            # 2. 过滤有概念的股票
+            df_pool = watchlist[watchlist["韭研概念"].str.strip().ne("")].copy()
+            codes = list(dict.fromkeys(df_pool["代码"].astype(str).tolist()))
+
+            # 3. 获取行情
+            st_codes = set()
+            if "名称" in watchlist.columns:
+                st_mask = watchlist["名称"].str.startswith(("*ST", "ST", "SST", "S*ST")).fillna(False)
+                st_codes = set(watchlist.loc[st_mask, "代码"].astype(str).tolist())
+            fetcher = MarketDataFetcher(
+                data_dir=str(HUNTER_DIR / "data"), st_codes=st_codes)
+            market_df = fetcher.fetch_for_date(codes, date)
+            if "名称" in (market_df.columns if not market_df.empty else []):
+                market_df = market_df.drop(columns=["名称"])
+            if not market_df.empty:
+                watchlist = watchlist.merge(market_df, on="代码", how="left")
+                loader.set_watchlist(watchlist)
+        except Exception as e:
+            out["error"] = f"数据加载/行情获取失败: {e}"
+            return out
+
+        try:
+            # 4. 打分
+            dims = hunter_cfg.get("scoring", {}).get("dimensions", [])
+            scorer = ConceptScorer(dimensions=dims if dims else None)
+            stock_list = []
+            for _, row in df_pool.iterrows():
+                s = row.to_dict()
+                s.setdefault("涨停", int(row.get("涨停", 0)) if pd.notna(row.get("涨停")) else 0)
+                s.setdefault("连板天数", 0)
+                s.setdefault("暗线概念数", len(str(s.get("韭研概念", "")).split("_")))
+                stock_list.append(s)
+            scored = scorer.compute_batch(stock_list)
+
+            # 5. 排名
+            top5_ranker = Top5Ranker()
+            sector_ranker = SectorRanker()
+
+            # 按概念聚类
+            concept_map = {}
+            for s in scored:
+                for concept in str(s.get("韭研概念", "")).split("_"):
+                    concept = concept.strip()
+                    if not concept:
+                        continue
+                    concept_map.setdefault(concept, []).append(s)
+
+            summary_rows = []
+            for concept, stocks in concept_map.items():
+                top5 = top5_ranker.select(stocks)
+                avg_score = sum(x.get("总得分", 0) for x in stocks) / len(stocks) if stocks else 0
+                summary_rows.append({
+                    "concept": concept, "stock_count": len(stocks),
+                    "top_stock": (top5[0].get("名称", "") if top5 else (stocks[0].get("名称", "") if stocks else "")),
+                    "avg_score": round(avg_score, 1),
+                    "top5": [{"name": t.get("名称", ""), "code": t.get("代码", ""),
+                              "score": round(t.get("总得分", 0), 1),
+                              "change_pct": round(t.get("涨跌幅", 0) or 0, 2)}
+                             for t in (top5 or [])[:5]],
+                })
+            summary_rows.sort(key=lambda x: -(x["avg_score"] or 0))
+
+            out["available"] = True
+            out["pool_size"] = len(codes)
+            out["scored_count"] = len(scored)
+            out["concept_count"] = len(summary_rows)
+            out["summary"] = summary_rows[:30]  # TOP 30 概念
+            out["refreshed_at"] = datetime.now().strftime("%H:%M:%S")
+        except Exception as e:
+            out["error"] = f"打分/排名失败: {e}"
+            return out
+
         return _clean(out)
 
     # ---------- 集合竞价信息层 ----------
