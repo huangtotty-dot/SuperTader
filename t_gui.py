@@ -742,13 +742,61 @@ class Api:
             sum_cols, sum_rows = df_to_rows(df_summary)
             det_cols, det_rows = df_to_rows(df_detail)
 
+            # 板块热度趋势（对比前一日）
+            heat_trends = {}
+            try:
+                from modules.heat_tracker import load_history as load_heat_history
+                heat_hist = load_heat_history()
+                today_k = date.replace("-", "")
+                dates_sorted = sorted(heat_hist.keys())
+                prev_k = dates_sorted[-2] if len(dates_sorted) >= 2 and dates_sorted[-1] == today_k else (
+                    dates_sorted[-1] if dates_sorted and dates_sorted[-1] < today_k else None)
+                today_heat = {s["板块"]: s for s in heat_hist.get(today_k, [])}
+                prev_heat = {s["板块"]: s for s in heat_hist.get(prev_k, [])} if prev_k else {}
+                for name, t in today_heat.items():
+                    p = prev_heat.get(name, {})
+                    heat_trends[name] = {
+                        "heat": t.get("热度分"), "trend": t.get("趋势", ""),
+                        "prev_heat": p.get("热度分"), "prev_trend": p.get("趋势", ""),
+                        "stock_count": t.get("股票数量"), "up_pct": t.get("上涨家数占比%"),
+                        "limit_up": t.get("涨停数"), "vol_ratio": t.get("成交额放大倍数"),
+                    }
+            except Exception:
+                pass
+
+            # 板块→个股明细（D5/D6 异常信息）
+            sector_stocks = {}
+            try:
+                for category in sorted(df_pool["韭研分类"].unique()):
+                    if not category: continue
+                    cat_df = df_pool[df_pool["韭研分类"] == category]
+                    stocks = []
+                    for _, row in cat_df.iterrows():
+                        d = row.to_dict()
+                        code = str(d.get("代码", ""))
+                        sm = score_map.get(code, {}) or {}
+                        d5 = sm.get("D5潜在突破10日", 0) or 0
+                        d6 = sm.get("D6潜在突破5日", 0) or 0
+                        d9 = sm.get("D9活跃程度", 0) or 0
+                        total = sm.get("总得分", 0) or 0
+                        stocks.append({
+                            "name": d.get("名称", ""), "code": code,
+                            "score": int(total), "d5": int(d5), "d6": int(d6), "d9": int(d9),
+                            "change_pct": round(float(d.get("涨跌幅", 0) or 0), 2),
+                            "limit_up": int(d.get("涨停", 0) or 0),
+                        })
+                    stocks.sort(key=lambda x: -x["score"])
+                    sector_stocks[category] = stocks
+            except Exception:
+                pass
+
             out["available"] = True
             out["pool_size"] = len(codes)
             out["summary_cols"] = sum_cols
             out["summary_rows"] = sum_rows
-            out["detail_cols"] = det_cols
-            out["detail_rows"] = det_rows
             out["top5"] = top5_list
+            out["heat_trends"] = heat_trends
+            out["sector_stocks"] = sector_stocks
             out["refreshed_at"] = datetime.now().strftime("%H:%M:%S")
         except Exception as e:
             out["error"] = f"排名生成失败: {e}"

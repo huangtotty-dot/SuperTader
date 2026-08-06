@@ -1183,55 +1183,68 @@ function renderHunter(h) {
     return;
   }
 
-  // Sheet1: 概念总排名 (Excel 同款表)
-  const sumCols = h.summary_cols || [];
   const sumRows = h.summary_rows || [];
-  const sumHead = sumCols.map(c => `<th>${esc(c)}</th>`).join("");
+  const ht = h.heat_trends || {};
+  const ss = h.sector_stocks || {};
+
+  // Sheet1: 可展开行
   const sumBody = sumRows.map((r, i) => {
-    const cells = sumCols.map(c => {
-      const v = r[c];
-      if (v == null) return '<td class="cell-dim">—</td>';
-      // 排名列特殊样式
-      if (c === "排名") return `<td class="num mono">${v}</td>`;
-      // 板块列加粗
-      if (c === "板块") return `<td><b>${esc(String(v))}</b></td>`;
-      // 数字列
-      if (typeof v === "number") return `<td class="num mono">${fmt(v, 1)}</td>`;
-      return `<td>${esc(String(v))}</td>`;
-    }).join("");
-    return `<tr>${cells}</tr>`;
-  }).join("");
+    const category = r["板块"] || "";
+    const heatInfo = ht[category] || {};
+    const trendIcon = heatInfo.trend || "";
+    const prevHeat = heatInfo.prev_heat != null ? `${heatInfo.prev_heat}` : "—";
+    const heatChange = heatInfo.heat != null && heatInfo.prev_heat != null
+      ? heatInfo.heat - heatInfo.prev_heat : null;
+    const heatCls = heatChange != null ? (heatChange > 5 ? "up" : heatChange < -5 ? "down" : "warn") : "cell-dim";
 
-  // Sheet2: 概念排名 (详细)
-  const detCols = h.detail_cols || [];
-  const detRows = h.detail_rows || [];
-  const detHead = detCols.map(c => `<th>${esc(c)}</th>`).join("");
-  const detBody = detRows.map(r => {
-    const cells = detCols.map(c => {
-      const v = r[c];
-      if (v == null) return '<td class="cell-dim">—</td>';
-      if (c === "概念") return `<td><b>${esc(String(v))}</b></td>`;
-      if (typeof v === "number") return `<td class="num mono">${fmt(v, 1)}</td>`;
-      return `<td>${esc(String(v))}</td>`;
-    }).join("");
-    return `<tr>${cells}</tr>`;
-  }).join("");
+    const stocks = ss[category] || [];
+    const d5Hits = stocks.filter(s => s.d5 > 0).length;
+    const d6Hits = stocks.filter(s => s.d6 > 0).length;
 
-  // Sheet3: TOP5
-  const top5 = h.top5 || [];
-  const top5Html = top5.map(t => `
-    <div class="card" style="margin-bottom:6px;padding:8px 12px">
-      <div style="font-weight:700;margin-bottom:4px">${esc(t.category)} <span class="cell-dim">(${t.stocks.length}只)</span></div>
-      <div style="display:flex;gap:10px;flex-wrap:wrap">
-        ${(t.stocks || []).map((s, i) =>
-          `<span class="h-top-item">
-            <span class="mono cell-dim">#${i+1}</span>
-            <span class="mono">${esc(s.code)}</span> ${esc(s.name)}
-            <span class="h-score ${s.score >= 70 ? 'up' : s.score >= 50 ? 'warn' : 'cell-dim'}">${s.score}分</span>
-            ${s.change_pct != null ? `<span class="${clsOf(s.change_pct)} mono" style="font-size:10px">${s.change_pct>=0?'+':''}${fmt(s.change_pct,1)}%</span>` : ''}
-          </span>`).join("")}
-      </div>
-    </div>`).join("");
+    // 展开的个股明细
+    const stockRows = stocks.slice(0, 15).map(s => {
+      const d5Cls = s.d5 >= 8 ? "up" : s.d5 >= 5 ? "warn" : s.d5 > 0 ? "cell-dim" : "";
+      const d6Cls = s.d6 >= 8 ? "up" : s.d6 >= 5 ? "warn" : s.d6 > 0 ? "cell-dim" : "";
+      return `<tr class="h-expand-row">
+        <td class="mono cell-dim">${esc(s.code)}</td>
+        <td>${esc(s.name)}</td>
+        <td class="num ${s.score >= 70 ? 'up' : s.score >= 50 ? 'warn' : 'cell-dim'}"><b>${s.score}</b></td>
+        <td class="num ${d5Cls}">${s.d5 || "—"}</td>
+        <td class="num ${d6Cls}">${s.d6 || "—"}</td>
+        <td class="num">${s.d9 || "—"}</td>
+        <td class="num ${clsOf(s.change_pct)}">${s.change_pct >= 0 ? '+' : ''}${fmt(s.change_pct, 1)}%</td>
+        <td>${s.limit_up ? '<span class="badge signal">涨停</span>' : ''}</td>
+      </tr>`;
+    }).join("");
+
+    return `<tbody class="h-sector-group">
+      <tr class="h-main-row" onclick="this.nextElementSibling.classList.toggle('open')" style="cursor:pointer">
+        <td class="num mono">${r["排名"] || i+1}</td>
+        <td><b>${esc(category)}</b> <span class="cell-dim">${r["细分数量"]||""}个细分</span>
+          ${d5Hits > 0 ? ` <span class="badge signal">D5:${d5Hits}</span>` : ""}
+          ${d6Hits > 0 ? ` <span class="badge approach">D6:${d6Hits}</span>` : ""}
+        </td>
+        <td class="num ${(r["平均分"]||0) >= 70 ? 'up' : (r["平均分"]||0) >= 40 ? 'warn' : 'cell-dim'}"><b>${fmt(r["平均分"], 1)}</b></td>
+        <td class="num">${r["涨停数"]||0}</td>
+        <td class="num mono"><span class="${heatCls}">${heatInfo.heat != null ? fmt(heatInfo.heat, 0) : "—"}</span></td>
+        <td class="mono cell-dim" style="font-size:10px">${trendIcon} ${heatChange != null ? (heatChange>=0?'+':'')+fmt(heatChange,0) : '—'}</td>
+        <td class="cell-dim" style="font-size:11px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(r["前三强"]||'')}">${esc(r["前三强"]||'')}</td>
+      </tr>
+      <tr class="h-expand-wrap"><td colspan="7" style="padding:0">
+        <div class="h-expand">
+          <table><thead><tr>
+            <th>代码</th><th>名称</th><th class="num">得分</th>
+            <th class="num" title="潜在突破10日">D5</th>
+            <th class="num" title="潜在突破5日">D6</th>
+            <th class="num">D9</th>
+            <th class="num">涨跌</th><th>状态</th>
+          </tr></thead>
+          <tbody>${stockRows}</tbody></table>
+          <div class="cell-dim" style="font-size:10px;margin-top:3px">D5=潜在突破10日(≥8强) · D6=潜在突破5日(≥8强) · D9=活跃程度 · 点击行收起</div>
+        </div>
+      </td></tr>
+    </tbody>`;
+  }).join("");
 
   el.innerHTML = `
     <div class="cell-dim" style="margin-bottom:8px;display:flex;gap:16px;flex-wrap:wrap">
@@ -1240,24 +1253,16 @@ function renderHunter(h) {
       <span class="mono"><span class="live-dot"></span> ${esc(h.refreshed_at || '')}</span>
     </div>
 
-    <div class="section"><h2>概念总排名（Sheet 1）</h2>
-    <div class="card" style="overflow-x:auto"><table class="h-table">
-      <thead><tr>${sumHead}</tr></thead>
-      <tbody>${sumBody}</tbody>
-    </table></div></div>
+    <div class="card" style="overflow-x:auto">
+    <table class="h-table">
+      <thead><tr>
+        <th class="num">#</th><th>板块</th><th class="num">均分</th><th class="num">涨停</th>
+        <th class="num">热度</th><th>趋势</th><th>前三强</th>
+      </tr></thead>
+      ${sumBody}
+    </table></div>
 
-    ${detRows.length ? `
-    <div class="section"><h2>概念排名明细（Sheet 2）</h2>
-    <div class="card" style="overflow-x:auto"><table class="h-table">
-      <thead><tr>${detHead}</tr></thead>
-      <tbody>${detBody}</tbody>
-    </table></div></div>` : ""}
-
-    ${top5.length ? `
-    <div class="section"><h2>各板块 TOP5（Sheet 3）</h2>
-    ${top5Html}</div>` : ""}
-
-    <div class="cell-dim" style="font-size:10px;margin-top:6px">数据源: stock_hunter (韭研概念打分) · 与 Excel 报告同结构</div>`;
+    <div class="cell-dim" style="font-size:10px;margin-top:6px">数据源: stock_hunter (韭研概念打分) · 点击板块展开个股明细(D5/D6异常) · 热度趋势vs前日</div>`;
 }
 
 /* ---- 集合竞价 ---- */
