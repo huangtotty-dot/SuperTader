@@ -38,6 +38,7 @@ T_MODE = BASE / "t_mode.json"
 IDX_REGIME = BASE / "t_io" / "index_regime"
 LOGS_DIR = BASE / "t_io" / "logs"
 INTRADAY_STATE = BASE / "t_io" / "intraday_state.json"
+PORTFOLIO = STATE_DIR / "portfolio_config.json"
 
 # 内置名称映射（数据缺失 code 时兜底；可由 holdings/add_watch/trace 补充）
 NAMES = {
@@ -115,6 +116,7 @@ class Api:
                     "positions": self._load_positions(date, {}),
                     "position_builder": self._agg_position_builder(date),
                     "stage_board": self._load_stage_board(),
+                    "portfolio_config": self.load_portfolio_config(),
                     "report_md": "", "name_map": {},
                 })
                 return _clean(out)
@@ -145,6 +147,7 @@ class Api:
         out["position_builder"] = self._agg_position_builder(date)
         out["stage_board"] = self._load_stage_board()
 
+        out["portfolio_config"] = self.load_portfolio_config()
         out["name_map"] = self._build_name_map(
             out["sig_stat"], out["add_watch"], out["position_builder"], out["positions"]["current"]
         )
@@ -488,6 +491,15 @@ class Api:
         out["note"] = "当日无 closure_audit 记录"
         return _clean(out)
 
+    # ---------- 独立配置（账户总资金+已实现亏损） ----------
+    def load_portfolio_config(self):
+        """读 t_io/state/portfolio_config.json（独立于 holdings.json，用户更新持仓不会覆盖）。"""
+        data = _load_json(PORTFOLIO, {})
+        return _clean({
+            "accounts": data.get("accounts", {}),
+            "realized_loss": data.get("realized_loss", {}),
+        })
+
     @staticmethod
     def _parse_log_line(line):
         """HH:MM:SS [LEVEL] msg  →  {t, level, msg}。"""
@@ -754,9 +766,9 @@ class Api:
         t_mode = {k: v for k, v in t_mode_raw.items() if not k.startswith("_")}
         auto = t_mode_raw.get("_auto_decision") or {}
 
-        accounts = {}
-        if isinstance(current, dict) and "_accounts" in current:
-            accounts = current["_accounts"]
+        # 从独立配置文件读（不再依赖 holdings.json）
+        pcfg = _load_json(PORTFOLIO, {})
+        accounts = pcfg.get("accounts", {})
         return {
             "current": current,
             "accounts": accounts,

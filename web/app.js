@@ -69,11 +69,8 @@ async function loadAndRender(date, silent) {
     }
     state.date = payload.date;
     state.payload = payload;
-    // 侧栏持仓数据（含 _accounts + 各股 realized_loss）
-    sideHoldings = (payload.positions && payload.positions.current) || {};
-    if ((payload.positions && payload.positions.accounts) && !sideHoldings._accounts) {
-      sideHoldings._accounts = payload.positions.accounts;
-    }
+    // 独立配置（账户总资金+已实现亏损），不随 holdings.json 更新丢失
+    portfolioCfg = (payload.portfolio_config) || { accounts: {}, realized_loss: {} };
     renderAll(payload);
 
     // K1 做T盈亏（独立于 daily_review，读 closure_audit）
@@ -1161,24 +1158,20 @@ function switchTab(tab) {
 }
 
 /* ================= 侧栏汇总 ================= */
-let sideHoldings = null;  // {_accounts, stocks: {code: {qty,cost,name,realized_loss}}}
+let portfolioCfg = { accounts: {}, realized_loss: {} };  // 独立配置文件
 
 function updateSidebarSummary(quotes) {
   if (!quotes || !quotes.length) return;
   let tv = 0, tc = 0, trl = 0, totalCap = 0;
-  const accounts = (sideHoldings && sideHoldings._accounts) ? sideHoldings._accounts : {};
+  const accounts = portfolioCfg.accounts || {};
+  const rl = portfolioCfg.realized_loss || {};
   quotes.forEach(x => {
     const qty = x.qty || 0;
     if (x.price && x.cost) {
       tv += x.price * qty;
       tc += x.cost * qty;
     }
-  });
-  // 实亏从 holdings.json 汇总
-  Object.values(sideHoldings || {}).forEach(info => {
-    if (typeof info === "object" && info.realized_loss !== undefined) {
-      trl += info.realized_loss || 0;
-    }
+    trl += rl[x.code] || 0;
   });
   Object.values(accounts).forEach(a => {
     totalCap += (a.total_capital || 0);
