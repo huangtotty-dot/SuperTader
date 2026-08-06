@@ -1157,10 +1157,15 @@ function renderStageBoard(stages) {
 
 /* ---- 选股猎手 ---- */
 let hunterLoaded = false;
-async function loadHunter() {
-  if (hunterLoaded) return;
+let hunterRunning = false;
+async function loadHunter(force) {
+  if (!force && hunterLoaded) return;
+  if (hunterRunning) return;
   const el = document.getElementById("hunterBody");
-  el.innerHTML = '<div class="empty">正在加载选股猎手数据...</div>';
+  const btn = document.getElementById("hunterRunBtn");
+  hunterRunning = true;
+  if (btn) { btn.disabled = true; btn.textContent = "⏳ 运行中..."; }
+  el.innerHTML = '<div class="empty">⏳ 正在拉取行情+概念打分（约 40-60 秒，1200+ 只股票）...</div>';
   try {
     const h = await apiCall("load_hunter", state.date || todayStr());
     renderHunter(h);
@@ -1168,6 +1173,8 @@ async function loadHunter() {
   } catch (e) {
     el.innerHTML = `<div class="empty">加载失败: ${esc(e.message)}</div>`;
   }
+  hunterRunning = false;
+  if (btn) { btn.disabled = false; btn.textContent = "🔄 刷新数据"; }
 }
 function renderHunter(h) {
   const el = document.getElementById("hunterBody");
@@ -1378,8 +1385,7 @@ function switchTab(tab) {
   if (sideItem) sideItem.classList.add("active");
   // 延迟 resize 让 tab 的 display:block 先生效
   setTimeout(resizeAllEch, 80);
-  // 切到选股猎手时自动加载
-  if (tab === "hunter") loadHunter();
+  // 切到选股猎手：已加载则显示，否则提示点击按钮
 }
 
 /* ================= 侧栏汇总 ================= */
@@ -1453,6 +1459,9 @@ async function init() {
   refreshBtn.addEventListener("click", () => {
     if (dateSelect.value) loadAndRender(dateSelect.value, false);
   });
+  // 选股猎手运行按钮
+  const hunterBtn = document.getElementById("hunterRunBtn");
+  if (hunterBtn) hunterBtn.addEventListener("click", () => loadHunter(true));
   // 成本校准按钮
   const calibBtn = document.getElementById("calibBtn");
   if (calibBtn) calibBtn.addEventListener("click", () => {
