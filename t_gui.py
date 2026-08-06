@@ -680,7 +680,10 @@ class Api:
                     market_df = market_df.drop(columns=["名称"])
                 watchlist = watchlist.merge(market_df, on="代码", how="left")
                 loader.set_watchlist(watchlist)
+                # 用含行情数据的 watchlist 重建 pool
+                df_pool = watchlist[watchlist["韭研概念"].str.strip().ne("")].copy()
 
+            # 打分（含行情数据的 pool）
             dims = hunter_cfg.get("scoring", {}).get("dimensions", [])
             scorer = ConceptScorer(dimensions=dims if dims else None)
             stock_list = []
@@ -695,8 +698,9 @@ class Api:
             for col in ["总得分", "涨停", "D1强势形态且新高", "D2强势形态",
                         "D4首板资金池", "D5潜在突破10日", "D6潜在突破5日",
                         "D7持续性", "D8情绪分数", "D9活跃程度", "大成交额额外加分"]:
-                watchlist[col] = watchlist["代码"].map(lambda x: score_map.get(str(x), {}).get(col, 0))
-            loader.set_watchlist(watchlist)
+                watchlist[col] = watchlist["代码"].map(
+                    lambda x, c=col: score_map.get(str(x), {}).get(c, 0))
+            loader.set_watchlist(watchlist)  # ← 关键：评分写入后必须回传
         except Exception as e:
             out["error"] = f"数据/评分失败: {e}"
             return out
@@ -1058,6 +1062,26 @@ class Api:
                     if isinstance(r.get("position"), dict) else r.get("suggested_price"),
             })
         return _clean(out)
+
+    # ---------- 加入建仓股池 ----------
+    def add_to_watchlist(self, code, name):
+        """将股票加入 watchlist_buy.json（status=monitoring）。已存在则更新 status。"""
+        fp = BASE / "watchlist_buy.json"
+        wl = _load_json(fp, {"stocks": {}, "total_capital": 300000, "max_per_stock_pct": 0.2})
+        stocks = wl.setdefault("stocks", {})
+        if code in stocks:
+            stocks[code]["status"] = "monitoring"
+        else:
+            stocks[code] = {"name": name, "status": "monitoring", "composite_score": 0,
+                            "criteria_met": {}, "suggested_qty": 0, "in_holdings": False}
+        try:
+            tmp = fp.with_suffix(".tmp")
+            with open(tmp, "w", encoding="utf-8") as f:
+                json.dump(wl, f, ensure_ascii=False, indent=2)
+            tmp.replace(fp)
+            return {"ok": True, "code": code}
+        except Exception as e:
+            return {"ok": False, "error": str(e)}
 
     # ---------- 轻量 PB 刷新（盘中实时） ----------
     def refresh_pb(self, date):
