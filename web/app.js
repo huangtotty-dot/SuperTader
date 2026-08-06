@@ -1005,6 +1005,7 @@ function renderPB(pb) {
         <span class="cell-dim mono" style="font-size:10px;margin-left:auto" title="盘中每10s自动刷新">${refreshed}</span>
       </div>
       ${pb.note ? `<div class="cell-dim" style="font-size:11px;margin-bottom:6px">⚠ ${esc(pb.note)}</div>` : ""}
+  ${pb.progress ? `<div class="cell-dim" style="font-size:10px;margin-bottom:6px">扫描进度: <b>${pb.progress.scanned}/${pb.progress.total_candidates}</b> 只 · 在线拉取 <b>${pb.progress.online_fetched}</b> 只 · 无数据 <b class="warn">${pb.progress.no_data}</b> 只</div>` : ""}
       <table>
         <thead><tr>
           <th>股票</th><th>判定</th><th class="num">得分</th><th class="num">通过</th><th class="num">价</th>
@@ -1063,6 +1064,7 @@ function renderAddWatch(aw) {
         <span><span class="aw-dot none"></span>无事件 ${noEventCnt}只</span>
       </div>
       <div class="cell-dim" style="font-size:10px;margin-top:4px">回踩支撑不破是加仓前提 · 守住=触及支撑且收盘站回 · 盘中实时计算</div>
+      ${aw._progress ? `<div class="cell-dim" style="font-size:10px;margin-top:2px">快照覆盖: <b>${aw._progress.snapshots_ok}/${aw._progress.total_holdings}</b> 只${aw._progress.snapshots_miss > 0 ? ` · <span class="warn">${aw._progress.snapshots_miss} 只缺快照</span>` : ""}</div>` : ""}
     </div>`;
 
   const cards = codes.map(code => {

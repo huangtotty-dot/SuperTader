@@ -621,6 +621,9 @@ class Api:
                 "conditions": conditions, "met_count": met_count,
             }
 
+        total = len([c for c in cur if isinstance(cur.get(c), dict)])
+        ok = len(out)
+        out["_progress"] = {"total_holdings": total, "snapshots_ok": ok, "snapshots_miss": total - ok}
         return _clean(out)
 
     # ---------- 集合竞价信息层 ----------
@@ -944,6 +947,15 @@ class Api:
         note = (f"含 {no_data_count} 只无分钟快照（不在持仓中，待采集器收集数据）"
                 if no_data_count else "")
 
+        total_candidates = sum(1 for k in by_code)
+        online_ok = sum(1 for k in by_code
+                        if by_code[k].get("eod") or by_code[k].get("intraday"))
+        progress = {
+            "total_candidates": total_candidates,
+            "scanned": total_candidates,
+            "online_fetched": online_ok,
+            "no_data": no_data_count,
+        }
         return {
             "has_data": True,
             "counts": dict(verdicts),
@@ -951,6 +963,7 @@ class Api:
             "rows": rows,
             "cond_labels": COND_LABELS,
             "note": note,
+            "progress": progress,
         }
 
     def _load_positions(self, date, kpi):
