@@ -221,7 +221,14 @@ tr:hover td { background: rgba(88,166,255,.03); }
 .h-top5 { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
 .h-top-item { font-size: 11px; background: var(--bg); border: 1px solid var(--border-soft); border-radius: 4px; padding: 2px 8px; white-space: nowrap; }
 .h-score { font-family: var(--mono); font-weight: 700; margin-left: 4px; }
-.h-table { font-size: 12px; }
+.h-table { font-size: 12px; width: 100%; }
+.h-main-row:hover { background: rgba(88,166,255,.06); }
+.h-expand-wrap { display: none; }
+.h-expand-wrap.open { display: table-row; }
+.h-expand { padding: 6px 8px 6px 24px; background: rgba(13,17,23,.5); border-top: 1px solid var(--border-soft); }
+.h-expand table { width: 100%; }
+.h-expand-row { font-size: 11px; }
+.h-expand-row:hover { background: rgba(88,166,255,.04); }
 
 /* 加仓条件 checklist */
 .aw-score { display: inline-block; margin-left: 10px; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 10px; }
