@@ -1197,11 +1197,16 @@ function renderStockSummary(d) {
   const sup = d.levels.supports, res = d.levels.resistances;
   const supTxt = sup.map(s => `<b class="down">${s.price}</b>`).join(" / ") || "—";
   const resTxt = res.map(r => `<b class="up">${r.price}</b>`).join(" / ") || "—";
+  const boxes = d.boxes || [];
+  const boxTxt = boxes.length
+    ? boxes.map(b => `<b class="warn">${b.low}~${b.high}</b>`).join(" · ")
+    : "<span class='cell-dim'>无</span>";
   document.getElementById("stockSummary").innerHTML = `
     <span class="ss-item">当前价: <b class="mono">${fmt(cur, 3)}</b></span>
     <span class="ss-item">压力: ${resTxt}</span>
     <span class="ss-item">支撑: ${supTxt}</span>
-    <span class="ss-item cell-dim" style="font-size:11px">双击日/周/月切换 · 拖动下方滑块缩放</span>`;
+    <span class="ss-item">箱体: ${boxTxt}</span>
+    <span class="ss-item cell-dim" style="font-size:11px">日/周/月切换 · 拖动滑块缩放</span>`;
 }
 function renderStockChart() {
   const data = stockChartData;
@@ -1221,6 +1226,21 @@ function renderStockChart() {
   }));
   const currentLine = { yAxis: cur, lineStyle: { color: "#e3b341", width: 1.5, type: "solid" },
     label: { formatter: `现价 ${cur}`, color: "#e3b341", fontSize: 10 } };
+
+  // 箱体标注（半透明矩形）
+  const boxes = data.boxes || [];
+  const boxIdx = period.dates;  // 当前周期的日期数组
+  const boxAreas = boxes
+    .filter(b => b.low && b.high)
+    .map(b => {
+      const i0 = boxIdx.indexOf(b.start);
+      const i1 = boxIdx.indexOf(b.end);
+      if (i0 < 0 || i1 < 0) return null;
+      return [{ name: `箱体 ${fmt(b.low, 2)}~${fmt(b.high, 2)} (${b.days}天)`,
+                xAxis: i0, yAxis: b.low },
+              { xAxis: i1, yAxis: b.high }];
+    })
+    .filter(Boolean);
 
   const maSeries = period.ma.map((maArr, i) => ({
     name: `MA${[5,10,20,30,60,180,365][i]}`, type: "line", data: maArr, symbol: "none",
@@ -1262,6 +1282,10 @@ function renderStockChart() {
     series: [
       { name: "K线", type: "candlestick", data: period.ohlc, xAxisIndex: 0, yAxisIndex: 0,
         itemStyle: { color: "#f85149", color0: "#3fb950", borderColor: "#f85149", borderColor0: "#3fb950" },
+        markArea: boxAreas.length ? {
+          silent: true, itemStyle: { color: "rgba(210,153,34,.14)", borderColor: "#d29922",
+            borderWidth: 1, borderType: "dashed" }, data: boxAreas,
+        } : undefined,
         markLine: { symbol: "none", data: [...resistanceLines, ...supportLines, currentLine],
           label: { position: "insideEndTop" } } },
       ...maSeries.map(s => ({ ...s, xAxisIndex: 0, yAxisIndex: 0 })),
