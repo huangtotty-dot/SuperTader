@@ -1,6 +1,6 @@
 {
   "date": "2026-08-06",
-  "updated_at": "2026-08-06 15:39:34",
+  "updated_at": "2026-08-06 16:33:18",
   "source": "live",
   "holdings": [
     {
@@ -58,7 +58,7 @@
       "type": "stock",
       "qty": 100,
       "base": 100,
-      "t_qty": 100,
+      "t_qty": 0,
       "cost": 66.349,
       "pre_close": 55.0,
       "price": 55.13,
@@ -106,7 +106,7 @@
       "type": "stock",
       "qty": 200,
       "base": 200,
-      "t_qty": 200,
+      "t_qty": 0,
       "cost": 11.69,
       "pre_close": 12.87,
       "price": 12.64,
