@@ -766,17 +766,36 @@ class Api:
                     div["vol"] = True
             div["count"] = sum(1 for v in div.values() if v)
 
-            # 综合建议
-            if ob["count"] >= 2 or div["count"] >= 1:
-                advice = "⚠ 不宜追高建仓"
+            # 趋势方向（通道下行=风险因子）
+            ch = (h.get("channel") or {})
+            trend_down = ch.get("direction") == "down"
+            trend_up = ch.get("direction") == "up"
+
+            # 风险提醒建议（超买/顶背离/趋势下行 → 提示减仓回避，非建仓建议）
+            if div["count"] >= 1:
+                risk = "高"
+                advice = "🚨 顶背离风险：警惕见顶回落，建议减仓/回避"
+            elif ob["count"] >= 2:
+                risk = "高"
+                advice = "⚠ 严重超买：短期高位风险，不建议追高，注意回落"
+            elif ob["count"] == 1 and trend_down:
+                risk = "中"
+                advice = "⚠ 超买+趋势下行：偏空，反弹减仓"
             elif ob["count"] == 1:
-                advice = "观察，可能回调"
+                risk = "中"
+                advice = "⚠ 轻微超买：注意短线回调"
+            elif trend_down:
+                risk = "中"
+                advice = "⚠ 趋势下行：不追高，反弹减仓"
             else:
-                advice = "✓ 可考虑建仓（无超买/背离）"
+                risk = "低"
+                advice = "✓ 无超买无下行：风险较低，持有/关注"
 
             out["stocks"].append({
                 "code": code, "name": info.get("name", code),
                 "price": cur_close,
+                "trend": ch.get("direction", "flat"),
+                "risk": risk,
                 "overbought": {"rsi": round(cur_rsi, 1), "kdj": round(cur_j, 1),
                                "cci": round(cur_cci, 1), "boll": bool(ob["boll"]), "count": ob["count"]},
                 "divergence": div,
