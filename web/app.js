@@ -987,6 +987,11 @@ function renderPB(pb) {
   const condLabels = pb.cond_labels || {};
   // 突破箱体列（第一优先级）
   const boxKey = "box_breakout";
+  // 开盘预热提示：今天 09:30-09:45 期间 5 分钟线不足
+  const now = new Date();
+  const inWarmup = state.date === todayStr() &&
+    (now.getHours() === 9 && now.getMinutes() < 45);
+  window._pbWarmup = inWarmup;
 
   // 前后对比 → 变化文字
   const prev = window._pbLast || {};
@@ -1046,6 +1051,7 @@ function renderPB(pb) {
         <span class="cell-dim mono" style="font-size:10px;margin-left:auto" title="盘中每10s自动刷新">${refreshed}</span>
       </div>
       ${pb.note ? `<div class="cell-dim" style="font-size:11px;margin-bottom:6px">⚠ ${esc(pb.note)}</div>` : ""}
+      ${inWarmup ? `<div class="warmup-banner">⏳ 开盘预热中：5分钟K线累积中（需≥3根），09:45 后出完整信号</div>` : ""}
   ${pb.progress ? `<div class="cell-dim" style="font-size:10px;margin-bottom:6px">扫描进度: <b>${pb.progress.scanned}/${pb.progress.total_candidates}</b> 只已扫${pb.progress.pending ? ` · <b class="warn">${pb.progress.pending}</b> 只待扫描` : ''} · 在线拉取 <b>${pb.progress.online_fetched}</b> 只 · 无数据 <b class="warn">${pb.progress.no_data}</b> 只</div>` : ""}
       <table>
         <thead><tr>
