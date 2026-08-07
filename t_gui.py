@@ -143,8 +143,10 @@ class Api:
         out["audit_problems"] = dr.get("audit_problems")
         out["settle"] = dr.get("settle", {})
         out["add_watch"] = dr.get("add_watch", {})
-        # 加仓观察为空时（如今天盘中无 daily_review）→ 实时计算
-        if not out["add_watch"]:
+        # 加仓观察为空 或 缺 conditions（突破箱体条件）→ 实时计算
+        dr_aw = out["add_watch"]
+        if not dr_aw or not any(
+            isinstance(v, dict) and "conditions" in v for v in dr_aw.values()):
             out["add_watch"] = self.compute_add_watch(date)
         out["watch"] = dr.get("watch", {})
 
@@ -591,6 +593,11 @@ class Api:
 
             # 加仓条件判定
             conditions = []
+            # 条件0（第一优先级）: 突破箱体上沿
+            bx = self.check_box_breakout(code)
+            conditions.append({"name": "突破箱体", "met": bool(bx.get("broken")),
+                               "detail": (f"突破箱体上沿 {bx.get('box',{}).get('high')}，超出{bx.get('pct_above')}%"
+                                          if bx.get("broken") else "未突破箱体")})
             # 条件1: 回踩支撑（日低距任意支撑 ≤2%）
             min_dist = min(
                 (abs((day_low - lv) / lv * 100) for lv in supports.values() if lv > 0),
@@ -617,6 +624,9 @@ class Api:
                                "detail": f"收{day_close:.2f}距VWAP {vwap_f:.2f} {abs((day_close-vwap_f)/vwap_f*100):.1f}%" if vwap_f else "无VWAP"})
 
             met_count = sum(1 for c in conditions if c["met"])
+            # 突破箱体 = 第一优先级：满足直接满
+            if conditions[0]["met"]:
+                met_count = len(conditions)
             out[code] = {
                 "name": cur[code].get("name", code),
                 "day_low": round(day_low, 3), "close": round(day_close, 3),
@@ -630,6 +640,29 @@ class Api:
         ok = len(out)
         out["_progress"] = {"total_holdings": total, "snapshots_ok": ok, "snapshots_miss": total - ok}
         return _clean(out)
+
+    # ---------- 突破箱体判定（建仓+加仓共用） ----------
+    def check_box_breakout(self, code):
+        """判定个股是否突破最近箱体上沿。返回 {broken, box, price, pct_above}。"""
+        h = self.load_stock_chart(code)
+        if not h.get("available"):
+            return {"broken": False, "error": h.get("error", "")}
+        cur = h.get("current_price")
+        boxes = h.get("boxes", [])
+        # 找上沿 < 现价 且 距现价最近的箱体（刚突破的最上方箱体）
+        below_boxes = [b for b in boxes if b["high"] < cur]
+        if not below_boxes:
+            return {"broken": False, "price": cur}
+        # 距现价最近的 = high 最大（最贴近现价的突破箱体）
+        box = max(below_boxes, key=lambda b: b["high"])
+        pct_above = (cur - box["high"]) / box["high"] * 100 if box["high"] else 0
+        # 突破 = 超出上沿 0.3%~25%（刚突破或突破后回踩站稳）
+        if pct_above > 25 or pct_above < 0.3:
+            return {"broken": False, "price": cur,
+                    "near_box": {"low": box["low"], "high": box["high"]},
+                    "pct_above": round(pct_above, 2), "reason": "已远离箱体" if pct_above > 25 else "未达突破阈值"}
+        return {"broken": True, "box": {"low": box["low"], "high": box["high"]},
+                "price": cur, "pct_above": round(pct_above, 2)}
 
     # ---------- 个股技术分析弹窗 ----------
     def load_stock_chart(self, code):

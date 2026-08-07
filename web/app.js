@@ -972,6 +972,8 @@ function renderPB(pb) {
   }
   const counts = pb.counts || {};
   const condLabels = pb.cond_labels || {};
+  // 突破箱体列（第一优先级）
+  const boxKey = "box_breakout";
 
   // 前后对比 → 变化文字
   const prev = window._pbLast || {};
@@ -1000,6 +1002,8 @@ function renderPB(pb) {
       conds[k] ? `<span class="on">●</span>` : `<span class="off">○</span>`).join("");
     const condTitle = Object.keys(condLabels).map(k =>
       `${condLabels[k]}:${conds[k] ? "通过" : "未过"}`).join(" · ");
+    const boxMet = conds[boxKey] || false;
+    const boxStr = boxMet ? `<span class="badge signal">🚀突破</span>` : `<span class="off">—</span>`;
     const metCount = Object.values(conds).filter(Boolean).length;
     const metCls = metCount >= 4 ? "up" : metCount >= 2 ? "warn" : "cell-dim";
     return `
@@ -1010,6 +1014,7 @@ function renderPB(pb) {
         <td class="num"><b>${r.composite_score}</b></td>
         <td class="num ${metCls}"><b>${metCount}/5</b></td>
         <td class="num">${fmt(r.price)}</td>
+        <td style="text-align:center">${boxStr}</td>
         <td><span class="cond" title="${esc(condTitle)}">${condStr}</span></td>
         <td class="num">${fmt(r.suggested_qty, 0)}</td>
         <td class="num">${fmt(r.suggested_price)}</td>
@@ -1032,6 +1037,7 @@ function renderPB(pb) {
       <table>
         <thead><tr>
           <th>股票</th><th>判定</th><th class="num">得分</th><th class="num">通过</th><th class="num">价</th>
+          <th title="突破箱体=第一优先级">突破</th>
           <th title="MACD/BOLL/RSI/缩量/支撑">五条件</th>
           <th class="num">建议股数</th><th class="num">建议价</th><th class="num">所需资金</th><th>扫描</th><th></th>
         </tr></thead>
@@ -1189,6 +1195,10 @@ async function openStockChart(code, name) {
   if (stockChartTimer) clearInterval(stockChartTimer);
   stockChartTimer = setInterval(loadStockChartNow, 10000);
   await loadStockChartNow();
+}
+function toggleChartHelp() {
+  const el = document.getElementById("chartHelp");
+  el.style.display = el.style.display === "none" ? "block" : "none";
 }
 function toggleMaxStockChart() {
   const modal = document.getElementById("stockModal");
