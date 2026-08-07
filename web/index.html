@@ -124,7 +124,13 @@
       <div id="shadowBody"></div>
     </div>
     <div class="section" id="position-builder">
-      <h2>建仓信号扫描</h2>
+      <h2>建仓信号扫描
+        <span style="display:inline-flex;align-items:center;gap:6px;margin-left:12px;font-weight:400;font-size:12px">
+          <input type="text" id="pbSearchCode" class="mini-input" placeholder="代码(如 600519)" style="width:110px">
+          <input type="text" id="pbSearchName" class="mini-input" placeholder="名称(可选)" style="width:90px">
+          <button class="mini-btn primary" onclick="addNewWatchlist()">+ 添加</button>
+        </span>
+      </h2>
       <div id="pbBody"></div>
     </div>
     <div class="section" id="add-watch">

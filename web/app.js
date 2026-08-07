@@ -1484,6 +1484,26 @@ async function showSectorHistory(sector) {
     body.innerHTML = `<div class="empty">加载失败: ${esc(e.message)}</div>`;
   }
 }
+async function addNewWatchlist() {
+  const code = document.getElementById("pbSearchCode").value.trim();
+  const name = document.getElementById("pbSearchName").value.trim();
+  if (!code) { statusEl("请输入股票代码", "err"); return; }
+  if (!/^\d{6}$/.test(code)) { statusEl("代码格式应为6位数字", "err"); return; }
+  // 若名称空则尝试自动取
+  let finalName = name;
+  if (!finalName) {
+    try {
+      const r = await apiCall("search_stock", code);
+      const hit = (r.results || []).find(x => x.code === code);
+      if (hit) finalName = hit.name;
+    } catch (e) { /* 静默 */ }
+  }
+  const ok = await addToWatchlist(code, finalName || code, null);
+  if (ok) {
+    document.getElementById("pbSearchCode").value = "";
+    document.getElementById("pbSearchName").value = "";
+  }
+}
 async function addToWatchlist(code, name, btn) {
   try {
     const r = await apiCall("add_to_watchlist", code, name);
