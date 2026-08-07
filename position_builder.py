@@ -41,6 +41,7 @@ sys.path.insert(0, str(BASE))
 
 from indicators import resample_to_5min, add_5min_indicators
 
+
 # ── 飞书推送（可选，Webhook 未配置时静默跳过）──
 try:
     from config import send_feishu_payload, FEISHU_WEBHOOK, FEISHU_KEYWORD
@@ -193,6 +194,123 @@ def _parse_snapshot_file(fp: Path, snap_date: str) -> tuple:
         df["time"] = pd.to_datetime(df["time"], errors="coerce")
         df = df.sort_values("time").reset_index(drop=True)
     return df, daily_ctx, snap_date
+
+
+# ============================================================
+# 突破箱体检测（第一优先级条件）
+# ============================================================
+
+def fetch_daily_kline(code: str) -> pd.DataFrame:
+    """拉腾讯日线（前复权）。返回 {date, open, close, high, low, volume}。"""
+    import urllib.request as _ur, os as _os
+    for _k in ["http_proxy", "https_proxy", "HTTP_PROXY", "HTTPS_PROXY",
+               "ALL_PROXY", "all_proxy"]:
+        _os.environ.pop(_k, None)
+    _os.environ["NO_PROXY"] = "*"
+    symbol = ("sh" + code if code[0] in "56" else "sz" + code)
+    try:
+        url = f"https://ifzq.gtimg.cn/appstock/app/fqkline/get?param={symbol},day,,,150,qfq"
+        req = _ur.Request(url, headers={"User-Agent": "Mozilla/5.0",
+                                        "Referer": "https://finance.qq.com/"})
+        raw = _ur.urlopen(req, timeout=8).read().decode("utf-8", errors="ignore")
+        data = json.loads(raw)
+        kline = data.get("data", {}).get(symbol, {}).get("day") or \
+                data.get("data", {}).get(symbol, {}).get("qfqday") or []
+        rows = [{"date": i[0], "open": float(i[1]), "close": float(i[2]),
+                 "high": float(i[3]), "low": float(i[4]), "volume": float(i[5])}
+                for i in kline if len(i) >= 6]
+        return pd.DataFrame(rows)
+    except Exception:
+        return pd.DataFrame()
+
+
+def _detect_boxes_simple(df: pd.DataFrame, n_keep: int = 3) -> list:
+    """简化滑窗箱体检测（与 t_gui._detect_boxes 同思路）：近150日滑窗30天，
+    分位数(88/12)边界 + 触及验证 + 重叠合并。返回 [{low, high, rel}]。"""
+    import numpy as np
+    if df.empty or len(df) < 30:
+        return []
+    recent = df.tail(150).reset_index(drop=True)
+    closes = recent["close"].values
+    highs = recent["high"].values
+    lows = recent["low"].values
+    n = len(recent)
+    last_close = float(closes[-1])
+    WIN = 30
+    box_flags = np.zeros(n, dtype=bool)
+    for start in range(0, n - WIN + 1, 3):
+        seg = closes[start:start + WIN]
+        slope = np.polyfit(np.arange(WIN), seg, 1)[0]
+        rel_slope = abs(slope) / (seg.mean() or 1e-9)
+        up = float(np.percentile(highs[start:start + WIN], 88))
+        dn = float(np.percentile(lows[start:start + WIN], 12))
+        up_touch = int(np.sum(highs[start:start + WIN] >= up * 0.992))
+        dn_touch = int(np.sum(lows[start:start + WIN] <= dn * 1.008))
+        w = (up - dn) / (seg.mean() or 1e-9) * 100
+        if rel_slope < 0.005 and 3.0 <= w <= 22.0 and up_touch >= 2 and dn_touch >= 2:
+            box_flags[start:start + WIN] = True
+
+    boxes = {}
+    i = 0
+    while i < n:
+        if not box_flags[i]:
+            i += 1
+            continue
+        j = i
+        while j < n and box_flags[j]:
+            j += 1
+        if j - i >= 20:
+            up = float(np.percentile(highs[i:j], 88))
+            dn = float(np.percentile(lows[i:j], 12))
+            up_touch = int(np.sum(highs[i:j] >= up * 0.992))
+            dn_touch = int(np.sum(lows[i:j] <= dn * 1.008))
+            w = (up - dn) / (closes[i:j].mean() or 1e-9) * 100
+            if 3.0 <= w <= 22.0 and up_touch >= 2 and dn_touch >= 2:
+                boxes[(round(up, 3), round(dn, 3))] = {"low": round(dn, 3), "high": round(up, 3)}
+        i = j
+
+    # 合并重叠
+    result = list(boxes.values())
+    merged = []
+    for b in result:
+        hit = next((m for m in merged if
+                    min(b["high"], m["high"]) - max(b["low"], m["low"]) > min(b["high"]-b["low"], m["high"]-m["low"]) * 0.5), None)
+        if hit:
+            hit["low"] = min(hit["low"], b["low"])
+            hit["high"] = max(hit["high"], b["high"])
+        else:
+            merged.append(dict(b))
+
+    # 关联现价
+    for b in merged:
+        if b["low"] <= last_close <= b["high"]:
+            b["rel"] = 0
+        elif last_close > b["high"]:
+            b["rel"] = -1
+        else:
+            b["rel"] = -2
+    # 当前箱体优先，然后按 high 排序（就近）
+    merged.sort(key=lambda b: (0 if b["rel"] == 0 else 1, -b["high"]))
+    return merged[:n_keep]
+
+
+def check_box_breakout(code: str, price: float = None) -> dict:
+    """判定是否突破最近箱体上沿。返回 {broken, box, price, pct_above}。"""
+    df = fetch_daily_kline(code)
+    if df.empty or len(df) < 30:
+        return {"broken": False, "error": "无日线"}
+    cur = float(price) if price else float(df["close"].iloc[-1])
+    boxes = _detect_boxes_simple(df)
+    below = [b for b in boxes if b["high"] < cur]
+    if not below:
+        return {"broken": False, "price": round(cur, 3)}
+    box = max(below, key=lambda b: b["high"])
+    pct_above = (cur - box["high"]) / box["high"] * 100 if box["high"] else 0
+    if 0.3 <= pct_above <= 25:
+        return {"broken": True, "box": box, "price": round(cur, 3),
+                "pct_above": round(pct_above, 2)}
+    return {"broken": False, "price": round(cur, 3),
+            "near_box": box, "pct_above": round(pct_above, 2)}
 
 
 # ============================================================
@@ -365,7 +483,13 @@ def scan_stock(code: str, stock_info: dict, date_str: str = None,
         return result
     df_5min = add_5min_indicators(df_5min)
 
-    # 检查五个条件
+    # 突破箱体（第一优先级）
+    bx = check_box_breakout(code, result["latest_price"])
+    box_passed = bx.get("broken", False)
+    box_detail = (f"突破箱体上沿 {bx['box']['high']}，超出 {bx['pct_above']}%"
+                  if box_passed else "未突破箱体")
+
+    # 检查五个条件（box_breakout 独立，不叠加评分）
     conditions = {
         "macd_golden": check_macd_golden(df_5min),
         "boll_mid_support": check_boll_mid_support(df_5min),
@@ -376,10 +500,13 @@ def scan_stock(code: str, stock_info: dict, date_str: str = None,
     result["conditions"] = {
         k: {"passed": v[0], "detail": v[1]} for k, v in conditions.items()
     }
+    result["conditions"]["box_breakout"] = {"passed": box_passed, "detail": box_detail}
     result["composite_score"] = compute_score(conditions)
 
-    # 判定
-    if result["composite_score"] >= 70:
+    # 判定：突破箱体 = 第一优先级，直接 signal
+    if box_passed:
+        result["verdict"] = "signal"
+    elif result["composite_score"] >= 70:
         result["verdict"] = "signal"
     elif result["composite_score"] >= 40:
         result["verdict"] = "approaching"

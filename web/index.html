@@ -185,7 +185,22 @@
         <label class="toggle-item"><input type="checkbox" id="tgBoxes" checked onchange="renderStockChart()"> 箱体</label>
         <label class="toggle-item"><input type="checkbox" id="tgChannel" checked onchange="renderStockChart()"> 通道</label>
         <label class="toggle-item"><input type="checkbox" id="tgMA" checked onchange="renderStockChart()"> 均线</label>
+        <button class="mini-btn" onclick="toggleChartHelp()" title="上行/下行区域使用说明">?</button>
       </div>
+    </div>
+    <div id="chartHelp" class="chart-help" style="display:none">
+      <div class="help-sec"><b class="up">【上行区域】↗ 上轨实线 + 红色色带</b>
+        · 现价在通道内(位置中等)：持股待涨，回踩中轨/下轨低吸<br>
+        · 现价贴近上轨(位置&gt;80%)：短线高位，注意压力，不追高<br>
+        · 突破上轨(位置&gt;100%)：强势加速，可跟，但设止损</div>
+      <div class="help-sec"><b class="down">【下行区域】↘ 下轨虚线 + 绿色色带</b>
+        · 现价在通道内：空头排列，反弹到上轨/均线减仓，不抄底<br>
+        · 现价贴近下轨(位置&lt;20%)：可能超跌，但趋势向下，等反转<br>
+        · 跌破下轨：加速下跌，坚决回避</div>
+      <div class="help-sec"><b class="warn">【箱体突破】🚀</b>
+        · 现价向上突破最近箱体上沿 → 第一优先级买入信号(报买入)<br>
+        · 箱体上沿变支撑，回踩不破可加仓<br>
+        · 现价跌破箱体下沿 → 减仓/回避</div>
     </div>
     <div id="stockChart" class="echart stock-chart"></div>
   </div>
