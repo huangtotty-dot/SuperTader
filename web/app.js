@@ -1190,6 +1190,20 @@ async function openStockChart(code, name) {
   stockChartTimer = setInterval(loadStockChartNow, 10000);
   await loadStockChartNow();
 }
+function toggleMaxStockChart() {
+  const modal = document.getElementById("stockModal");
+  const box = modal.querySelector(".modal");
+  const isMax = box.classList.contains("modal-max");
+  if (isMax) {
+    box.classList.remove("modal-max");
+  } else {
+    box.classList.add("modal-max");
+  }
+  // 最大化后 resize 图表
+  setTimeout(() => {
+    if (stockChartInst) stockChartInst.resize();
+  }, 60);
+}
 function closeStockChart() {
   document.getElementById("stockModal").style.display = "none";
   if (stockChartInst) { stockChartInst.dispose(); stockChartInst = null; }

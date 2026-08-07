@@ -168,7 +168,10 @@
   <div class="modal modal-lg">
     <div class="modal-title">
       <span id="stockModalTitle">个股技术分析</span>
-      <button class="mini-btn" onclick="closeStockChart()">×</button>
+      <div style="display:flex;gap:6px">
+        <button class="mini-btn" onclick="toggleMaxStockChart()">⛶</button>
+        <button class="mini-btn" onclick="closeStockChart()">×</button>
+      </div>
     </div>
     <div id="stockSummary" class="stock-summary"></div>
     <div class="stock-toolbar">
