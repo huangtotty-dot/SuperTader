@@ -1476,8 +1476,8 @@ class Api:
         norm = slope / (rc.mean() or 1e-9)
         trend = "up" if norm > 0.0015 else ("down" if norm < -0.0015 else "flat")
 
-        # 轻量箱体：近60日 88/12 分位（快速，标签够用）
-        r60 = df.tail(60)
+        # 箱体：近365日 88/12 分位（本地缓存数据，拉365日不再慢）
+        r60 = df.tail(365)
         box_high = float(np.percentile(r60["high"], 88))
         box_low = float(np.percentile(r60["low"], 12))
         in_box = box_low <= cur <= box_high
