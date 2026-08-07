@@ -1433,9 +1433,35 @@ class Api:
                     "趋势": s.get("趋势", ""),
                     "前三强": "",
                 })
+            # 板块→成分股（从 watchlist_jiuyan.json 静态筛选，非实时价）
+            sector_stocks = {}
+            try:
+                jy = _load_json(BASE / "watchlist_jiuyan.json", {})
+                for code, info in jy.items():
+                    if not isinstance(info, dict):
+                        continue
+                    concepts = str(info.get("jiuyan_concept", "") or info.get("概念", ""))
+                    nm = info.get("name", info.get("名称", code))
+                    # 概念按分隔符拆开（_, |, / 等）
+                    concept_parts = [c.strip() for c in concepts.replace("|", "_").replace("/", "_").split("_") if c.strip()]
+                    for s in items:
+                        sector = s.get("板块", "")
+                        if not sector:
+                            continue
+                        matched = any(sector == p or sector in p or p in sector
+                                      for p in concept_parts if len(p) >= 2)
+                        if matched:
+                            sector_stocks.setdefault(sector, []).append(
+                                {"code": code, "name": nm, "score": 0, "d5": 0, "d6": 0,
+                                 "d9": 0, "change_pct": 0, "limit_up": 0})
+                            break
+            except Exception:
+                pass
+
             out["available"] = True
             out["summary_cols"] = ["排名", "板块", "股票数量", "平均分", "涨停数", "热度", "趋势", "前三强"]
             out["summary_rows"] = rows
+            out["sector_stocks"] = sector_stocks
             out["is_history"] = True
             out["refreshed_at"] = date
             return _clean(out)
