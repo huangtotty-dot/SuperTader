@@ -1453,6 +1453,142 @@ class Api:
             for t in threads: t.join(timeout=20)
         return _clean({"trends": result})
 
+    # ---------- 个股技术标签引擎 ----------
+    def _stock_tags_one(self, code):
+        """单只股票技术标签。返回 {trend, box_pos, tags:[{label,color}]}。"""
+        import numpy as np
+        import pandas as pd
+        from position_builder import fetch_daily_kline
+        from position_builder import _detect_boxes_simple
+        df = fetch_daily_kline(code)
+        if df.empty or len(df) < 30:
+            return {"trend": "flat", "tags": []}
+        closes = df["close"].values
+        highs = df["high"].values
+        lows = df["low"].values
+        volumes = df["volume"].values
+        cur = float(closes[-1])
+        n = len(closes)
+
+        # 通道方向
+        recent = df.tail(40)
+        rc = recent["close"].values
+        slope = np.polyfit(np.arange(len(rc)), rc, 1)[0]
+        norm = slope / (rc.mean() or 1e-9)
+        trend = "up" if norm > 0.0015 else ("down" if norm < -0.0015 else "flat")
+
+        # 简化箱体
+        boxes = _detect_boxes_simple(df)
+        cur_box = next((b for b in boxes if b.get("rel") == 0), None)
+        near_box = boxes[0] if boxes else None
+
+        tags = []
+        # 箱体位置 + 突破/跌破
+        if cur_box:
+            lo, hi = cur_box["low"], cur_box["high"]
+            if hi > lo:
+                pos = (cur - lo) / (hi - lo)
+                if pos > 0.85:
+                    tags.append({"label": "箱体上沿", "color": "up"})
+                elif pos < 0.15:
+                    tags.append({"label": "箱体下沿", "color": "down"})
+                else:
+                    tags.append({"label": "箱体内部", "color": "neutral"})
+                if cur > hi:
+                    pct = (cur - hi) / hi * 100
+                    if pct <= 8:
+                        tags.append({"label": "向上突破", "color": "up"})
+                elif cur < lo:
+                    tags.append({"label": "跌破下沿", "color": "down"})
+        elif near_box and cur > near_box["high"] and (cur - near_box["high"]) / near_box["high"] <= 0.08:
+            tags.append({"label": "向上突破", "color": "up"})
+
+        # 筑底/筑顶（近20日横盘）
+        win = closes[-20:]
+        win_vol = volumes[-20:]
+        vol_shrink = win_vol.mean() < (volumes[-60:-20].mean() or 1e9) * 0.8 if len(volumes) >= 60 else False
+        price_flat = (max(win) - min(win)) / (win.mean() or 1e-9) < 0.10
+        if price_flat and trend == "flat":
+            if cur_box and cur < (cur_box["low"] + cur_box["high"]) / 2:
+                tags.append({"label": "筑底" if vol_shrink else "筑底中", "color": "neutral"})
+            elif cur_box and cur > (cur_box["low"] + cur_box["high"]) / 2:
+                tags.append({"label": "筑顶", "color": "warn"})
+
+        # 背离（近60日局部高低点）
+        win_idx = range(max(2, n - 60), n)
+        idxs = list(win_idx)
+        price_peaks = []
+        price_troughs = []
+        for i in range(2, len(idxs) - 2):
+            idx = idxs[i]
+            if highs[idx] >= highs[idx - 1] and highs[idx] >= highs[idx - 2] and \
+               highs[idx] >= highs[idx + 1] and highs[idx] >= highs[idx + 2]:
+                price_peaks.append(idx)
+            if lows[idx] <= lows[idx - 1] and lows[idx] <= lows[idx - 2] and \
+               lows[idx] <= lows[idx + 1] and lows[idx] <= lows[idx + 2]:
+                price_troughs.append(idx)
+        # MACD
+        ema12 = pd.Series(closes).ewm(span=12, adjust=False).mean()
+        ema26 = pd.Series(closes).ewm(span=26, adjust=False).mean()
+        dif = (ema12 - ema26).values
+        # RSI
+        delta = pd.Series(closes).diff()
+        gain = delta.clip(lower=0).rolling(14).mean()
+        loss = (-delta.clip(upper=0)).rolling(14).mean()
+        rs = gain / loss.replace(0, np.nan)
+        rsi = (100 - 100 / (1 + rs)).values
+        # 顶背离
+        if len(price_peaks) >= 2:
+            p2, p1 = price_peaks[-2], price_peaks[-1]
+            if highs[p1] > highs[p2] and dif[p1] < dif[p2]:
+                tags.append({"label": "顶背离", "color": "warn"})
+        # 底背离
+        if len(price_troughs) >= 2:
+            t2, t1 = price_troughs[-2], price_troughs[-1]
+            if lows[t1] < lows[t2] and dif[t1] > dif[t2]:
+                tags.append({"label": "底背离", "color": "neutral"})
+
+        # 超买/超卖
+        cur_rsi = rsi[-1] if not np.isnan(rsi[-1]) else 50
+        if cur_rsi > 70:
+            tags.append({"label": "超买", "color": "warn"})
+        elif cur_rsi < 30:
+            tags.append({"label": "超卖", "color": "neutral"})
+
+        # 通道标签（放最前）
+        trend_label = {"up": {"label": "上行", "color": "up"},
+                       "down": {"label": "下行", "color": "down"},
+                       "flat": {"label": "震荡", "color": "neutral"}}[trend]
+        tags.insert(0, trend_label)
+
+        box_pos = None
+        if cur_box and cur_box["high"] > cur_box["low"]:
+            box_pos = round((cur - cur_box["low"]) / (cur_box["high"] - cur_box["low"]), 2)
+        return {"trend": trend, "box_pos": box_pos, "tags": tags[:6]}
+
+    def load_stock_tags_batch(self, codes):
+        """批量拉技术标签（分批并发）。返回 {code: {trend, box_pos, tags}}。"""
+        import threading
+        codes = [str(c) for c in (codes or []) if c]
+        result = {}
+        lock = threading.Lock()
+
+        def work(code):
+            try:
+                r = self._stock_tags_one(code)
+                with lock:
+                    result[code] = r
+            except Exception:
+                with lock:
+                    result[code] = {"trend": "flat", "tags": []}
+
+        for i in range(0, len(codes), 30):
+            batch = codes[i:i + 30]
+            threads = [threading.Thread(target=work, args=(c,), daemon=True) for c in batch]
+            for t in threads: t.start()
+            for t in threads: t.join(timeout=25)
+        return _clean({"tags": result})
+
     # ---------- 选股猎手历史 ----------
     def available_hunter_dates(self):
         """返回 stock_hunter history 里所有日期（降序）。"""

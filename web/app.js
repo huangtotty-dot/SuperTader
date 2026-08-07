@@ -1456,6 +1456,20 @@ function trendBadge(t) {
   if (t === "down") return `<span class="badge t-short" title="下行通道">下行↘</span>`;
   return `<span class="badge chop">震荡→</span>`;
 }
+// 技术标签徽章
+function tagBadge(t) {
+  const colorMap = {
+    up: "t-long", down: "t-short", warn: "approach", neutral: "chop",
+  };
+  const iconMap = {
+    "上行": "↗", "下行": "↘", "震荡": "→",
+    "箱体上沿": "🟠", "箱体下沿": "🔵", "箱体内部": "⚪",
+    "向上突破": "🚀", "跌破下沿": "⚠️", "筑底": "🧱", "筑顶": "⛰️",
+    "顶背离": "⛔", "底背离": "✅", "超买": "⚠", "超卖": "📉",
+  };
+  const icon = iconMap[t.label] || "";
+  return `<span class="badge ${colorMap[t.color] || "chop"}" title="${esc(t.label)}">${icon}${esc(t.label)}</span>`;
+}
 // 板块分页翻页
 function hunterPage(category, dir) {
   if (!window._hunterPage) window._hunterPage = {};
@@ -1479,17 +1493,18 @@ async function toggleSectorExpand(tr, category) {
   if (!codes.length) return;
   const stageEl = tbody.querySelector(".h-stage-badge");
   try {
-    const r = await apiCall("load_channel_batch", codes);
-    const trends = (r && r.trends) || {};
-    // 更新展开行通道列
+    const r = await apiCall("load_stock_tags_batch", codes);
+    const tagsMap = (r && r.tags) || {};
+    // 更新展开行标签列
     wrap.querySelectorAll(".h-expand-row").forEach(row => {
       const code = row.querySelector("td").textContent.trim();
-      if (trends[code]) {
-        row.querySelectorAll("td")[2].innerHTML = trendBadge(trends[code]);
+      const info = tagsMap[code];
+      if (info && info.tags) {
+        row.querySelectorAll("td")[2].innerHTML = info.tags.map(t => tagBadge(t)).join(" ");
       }
     });
-    // 板块阶段判定
-    const vals = codes.map(c => trends[c]).filter(Boolean);
+    // 板块阶段判定（用 trend）
+    const vals = Object.values(tagsMap).map(x => x && x.trend).filter(Boolean);
     const up = vals.filter(v => v === "up").length;
     const down = vals.filter(v => v === "down").length;
     if (vals.length >= 5) {
@@ -1701,7 +1716,9 @@ function renderHunter(h) {
     const stockRows = paged.map(s => {
       const d5Cls = s.d5 >= 8 ? "up" : s.d5 >= 5 ? "warn" : s.d5 > 0 ? "cell-dim" : "";
       const d6Cls = s.d6 >= 8 ? "up" : s.d6 >= 5 ? "warn" : s.d6 > 0 ? "cell-dim" : "";
-      const trendTxt = s.trend ? trendBadge(s.trend) : '<span class="cell-dim" style="font-size:10px">…</span>';
+      const trendTxt = s.tags && s.tags.length
+        ? s.tags.map(t => tagBadge(t)).join(" ")
+        : '<span class="cell-dim" style="font-size:10px">…</span>';
       return `<tr class="h-expand-row" ondblclick="openStockChart('${esc(s.code)}','${esc(s.name)}')">
         <td class="mono cell-dim" title="双击看技术分析">${esc(s.code)}</td>
         <td title="双击看技术分析">${esc(s.name)} <button class="mini-btn" style="font-size:10px;padding:0 5px"
@@ -1764,7 +1781,7 @@ function renderHunter(h) {
       <tr class="h-expand-wrap"><td colspan="8" style="padding:0">
         <div class="h-expand">
           <table><thead><tr>
-            <th>代码</th><th>名称</th><th>通道</th><th class="num">得分</th>
+            <th>代码</th><th>名称</th><th>技术标签</th><th class="num">得分</th>
             <th class="num" title="潜在突破10日">D5</th>
             <th class="num" title="潜在突破5日">D6</th>
             <th class="num">D9</th>
