@@ -2023,9 +2023,23 @@ class Api:
 
     # ---------- 轻量 PB 刷新（盘中实时） ----------
     def refresh_pb(self, date):
-        """仅重读 position_builder jsonl 并返回聚合结果（不触发其他重载）。"""
+        """仅重读 position_builder jsonl 并返回聚合结果 + 个股技术标签。"""
         result = self._agg_position_builder(date)
         result["refreshed_at"] = datetime.now().strftime("%H:%M:%S")
+        # 批量个股技术标签
+        try:
+            codes = [r.get("code") for r in result.get("rows", []) if r.get("code")]
+            if codes:
+                tag_res = self.load_stock_tags_batch(codes)
+                tags_map = tag_res.get("tags", {})
+                for r in result.get("rows", []):
+                    code = r.get("code")
+                    info = tags_map.get(code, {})
+                    if info:
+                        r["tags"] = info.get("tags", [])
+                        r["trend"] = info.get("trend")
+        except Exception:
+            pass
         return result
 
     # ---------- 内部聚合 ----------
