@@ -1063,28 +1063,36 @@ class Api:
             else:
                 merged.append(dict(b))
 
-        # 重算 rel + center + days
+        # 重算 rel + center + days + 近期有效性
+        import datetime as _dt
+        now_dt = _dt.datetime.now()
+        recent_valid = []
         for b in merged:
             b["center"] = round((b["high"] + b["low"]) / 2, 3)
             try:
-                import datetime as _dt
                 s = _dt.datetime.strptime(b["start"][:10], "%Y-%m-%d")
                 e = _dt.datetime.strptime(b["end"][:10], "%Y-%m-%d")
                 b["days"] = (e - s).days
+                b["days_since_end"] = (now_dt - e).days
             except Exception:
                 b["days"] = 0
+                b["days_since_end"] = 999
+            # 只保留近期箱体（结束距今 ≤45 天），远历史箱体无参考意义
+            if b["days_since_end"] > 45:
+                continue
             if b["low"] <= last_close <= b["high"]:
                 b["rel"] = 0
             elif last_close > b["high"]:
                 b["rel"] = -1
             else:
                 b["rel"] = -2
+            recent_valid.append(b)
 
         # 排序：现价箱体(rel=0) > 刚突破 > 上方历史 > 下方历史；再按置信分
-        merged.sort(key=lambda b: (
+        recent_valid.sort(key=lambda b: (
             0 if b["rel"] == 0 else 1 if b["rel"] == -1 else 2,
             -b["conf"]))
-        return merged[:3]
+        return recent_valid[:3]
 
     def _detect_channel(self, daily):
         """检测上行/下行通道：最近 40 日高点/低点线性回归 → 上下轨。
