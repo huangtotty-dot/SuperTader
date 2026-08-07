@@ -295,22 +295,23 @@ def _detect_boxes_simple(df: pd.DataFrame, n_keep: int = 3) -> list:
 
 
 def check_box_breakout(code: str, price: float = None) -> dict:
-    """判定是否突破最近箱体上沿。返回 {broken, box, price, pct_above}。"""
+    """判定是否突破当前箱体上沿（只认 rel=0 当前箱体）。返回 {broken, box, price, pct_above}。"""
     df = fetch_daily_kline(code)
     if df.empty or len(df) < 30:
         return {"broken": False, "error": "无日线"}
     cur = float(price) if price else float(df["close"].iloc[-1])
     boxes = _detect_boxes_simple(df)
-    below = [b for b in boxes if b["high"] < cur]
-    if not below:
-        return {"broken": False, "price": round(cur, 3)}
-    box = max(below, key=lambda b: b["high"])
-    pct_above = (cur - box["high"]) / box["high"] * 100 if box["high"] else 0
-    if 0.3 <= pct_above <= 25:
-        return {"broken": True, "box": box, "price": round(cur, 3),
-                "pct_above": round(pct_above, 2)}
-    return {"broken": False, "price": round(cur, 3),
-            "near_box": box, "pct_above": round(pct_above, 2)}
+    cur_boxes = [b for b in boxes if b.get("rel") == 0]
+    for box in cur_boxes:
+        if cur > box["high"]:
+            pct_above = (cur - box["high"]) / box["high"] * 100 if box["high"] else 0
+            if 0.3 <= pct_above <= 8:
+                return {"broken": True, "box": box, "price": round(cur, 3),
+                        "pct_above": round(pct_above, 2)}
+            return {"broken": False, "price": round(cur, 3),
+                    "near_box": box, "pct_above": round(pct_above, 2),
+                    "reason": "已远离当前箱体" if pct_above > 8 else "未达突破阈值"}
+    return {"broken": False, "price": round(cur, 3)}
 
 
 # ============================================================
