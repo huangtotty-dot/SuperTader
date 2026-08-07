@@ -1476,13 +1476,10 @@ class Api:
         norm = slope / (rc.mean() or 1e-9)
         trend = "up" if norm > 0.0015 else ("down" if norm < -0.0015 else "flat")
 
-        # 箱体：近365日 88/12 分位（本地缓存数据，拉365日不再慢）
-        r60 = df.tail(365)
-        box_high = float(np.percentile(r60["high"], 88))
-        box_low = float(np.percentile(r60["low"], 12))
-        in_box = box_low <= cur <= box_high
-        cur_box = {"low": box_low, "high": box_high, "rel": 0 if in_box else (-1 if cur > box_high else -2)}
-        near_box = cur_box
+        # 精密箱体（365日滑窗+斜率+触及验证+重叠合并）
+        boxes = self._detect_boxes(df)
+        cur_box = next((b for b in boxes if b.get("rel") == 0), None)
+        near_box = boxes[0] if boxes else None
 
         tags = []
         # 箱体位置 + 突破/跌破
