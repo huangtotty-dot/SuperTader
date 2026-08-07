@@ -119,8 +119,21 @@ async function refreshLive(reset) {
     const live = await apiCall("load_live", date);
     renderLive(live, date === todayStr());
 
-    // 实时行情条（10s 刷新）
-    apiCall("load_quotes").then(q => renderQuotes(q || {}, null)).catch(() => {});
+    // 实时行情条（10s 刷新）+ 存 quotes 供 PB 价格更新
+    apiCall("load_quotes").then(q => {
+      renderQuotes(q || {}, null);
+      state.quotes = (q && q.quotes) || [];
+      if (state.payload) {
+        // PB 表价格实时更新
+        const pbRows = state.payload.position_builder;
+        if (pbRows && pbRows.rows) {
+          const pxMap = {};
+          state.quotes.forEach(x => pxMap[x.code] = x.price);
+          pbRows.rows.forEach(r => { if (pxMap[r.code] != null) r.price = pxMap[r.code]; });
+          renderPB(pbRows);
+        }
+      }
+    }).catch(() => {});
     // 今日盘中 S 曲线刷新
     if (live.market_intraday && live.market_intraday.length) {
       apiCall("load_market_score", date).then(ms => renderMarket(ms || {})).catch(() => {});
