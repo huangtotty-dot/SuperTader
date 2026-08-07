@@ -2,9 +2,9 @@
   "588170": {
     "name": "科创半导体ETF华夏",
     "cost": 0.95,
-    "qty": 12000,
-    "base": 12000,
-    "t_qty": 12000,
+    "qty": 6000,
+    "base": 6000,
+    "t_qty": 6000,
     "type": "etf",
     "account": "账户A",
     "pre_close": 0.977
