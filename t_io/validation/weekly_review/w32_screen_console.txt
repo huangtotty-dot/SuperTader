@@ -1,0 +1,80 @@
+ticks: 106650, dates: 90 (2026-03-16~2026-07-24), stock_days: 450
+daytype census: Counter({'chop_day': 245, 'bull_day': 76, 'bear_day': 66, 'reversal_day': 63})
+SC1 control 复现: {'buy_n': 144, 'sell_n': 330, 'buy_wr': 0.5038, 'sell_wr': 0.4638, 'cl_pairs': 47, 'cl_pnl': 252.98, 'pass': True}
+
+== C1 接回解耦 ==
+接回激活且被拦 tick: 1054（含其他 block 7）→ 纯绕过集 1047 → ma5门控保守剔除 381 → 候选池 666
+{
+ "activated_blocked_ticks": 1054,
+ "with_other_blocks": 7,
+ "clean_bypass_set": 1047,
+ "ma5_gate_excluded": 381,
+ "pool": 666,
+ "below_notify_36": 0,
+ "recorded": 50,
+ "settle": {
+  "n": 50,
+  "wins": 20,
+  "fails": 26,
+  "wr": 0.4348
+ },
+ "by_dtype": {
+  "bull_day": {
+   "n": 2,
+   "wins": 1,
+   "fails": 0,
+   "wr": 1.0
+  },
+  "bear_day": {
+   "n": 15,
+   "wins": 6,
+   "fails": 8,
+   "wr": 0.4286
+  },
+  "reversal_day": {
+   "n": 0,
+   "wins": 0,
+   "fails": 0,
+   "wr": null
+  },
+  "chop_day": {
+   "n": 33,
+   "wins": 13,
+   "fails": 18,
+   "wr": 0.4194
+  },
+  "unknown": {
+   "n": 0,
+   "wins": 0,
+   "fails": 0,
+   "wr": null
+  }
+ },
+ "overlap_control_buy": 0,
+ "buyback_completion_proxy": 50,
+ "density_total_buy": 0.431,
+ "max_per_code_day": 7,
+ "closed_loop": {
+  "pairs": 69,
+  "pnl": 715.15,
+  "d_pairs": 22,
+  "d_pnl": 462.17
+ }
+}
+
+== C2 卖侧 bull 日 ==
+control 卖基线: {'all': {'n': 330, 'wins': 141, 'fails': 163, 'wr': 0.4638}, 'bull': {'n': 28, 'wins': 16, 'fails': 11, 'wr': 0.5926}, 'nonbull': {'n': 302, 'wins': 125, 'fails': 152, 'wr': 0.4513}, 'bull_share': 0.0848}
+T+5a_engine_only {"note": "引擎 42→47 < notify 51/55，记录层不变 → 信号零变化", "dropped": 0}
+T+10a_engine_only {"note": "引擎 42→52 < notify 51/55，记录层不变 → 信号零变化", "dropped": 0}
+T+5b {"variant": "T+5b", "dropped": 11, "dropped_wr": {"n": 11, "wins": 6, "fails": 4, "wr": 0.6}, "kept_all": {"n": 319, "wins": 135, "fails": 159, "wr": 0.4592}, "kept_bull": {"n": 17, "wins": 10, "fails": 7, "wr": 0.5882}, "kept_nonbull": {"n": 302, "wins": 125, "fails": 152, "wr": 0.4513}, "sell_density": 0.709, "closed_loop": {"pairs": 47, "pnl": 252.98, "d_pairs": 0, "d_pnl": 0.0}}
+T+10b {"variant": "T+10b", "dropped": 14, "dropped_wr": {"n": 14, "wins": 7, "fails": 6, "wr": 0.5385}, "kept_all": {"n": 316, "wins": 134, "fails": 157, "wr": 0.4605}, "kept_bull": {"n": 14, "wins": 9, "fails": 5, "wr": 0.6429}, "kept_nonbull": {"n": 302, "wins": 125, "fails": 152, "wr": 0.4513}, "sell_density": 0.702, "closed_loop": {"pairs": 47, "pnl": 252.98, "d_pairs": 0, "d_pnl": 0.0}}
+G {"variant": "G", "dropped": 4, "dropped_wr": {"n": 4, "wins": 2, "fails": 2, "wr": 0.5}, "kept_all": {"n": 326, "wins": 139, "fails": 161, "wr": 0.4633}, "kept_bull": {"n": 24, "wins": 14, "fails": 9, "wr": 0.6087}, "kept_nonbull": {"n": 302, "wins": 125, "fails": 152, "wr": 0.4513}, "sell_density": 0.724, "closed_loop": {"pairs": 47, "pnl": 252.98, "d_pairs": 0, "d_pnl": 0.0}}
+
+== C6 B 类语义 ==
+盲 tick: 5845，涉及 416 股日
+C6 base_b_1m: {"flips_recorded": 1143, "settle": {"n": 1143, "wins": 385, "fails": 439, "wr": 0.4672}, "bull_day": {"n": 222, "wins": 50, "fails": 88, "wr": 0.3623}, "buy_flips_recorded": 87, "buy_settle": {"n": 87, "wins": 24, "fails": 42, "wr": 0.3636}, "density_add": 2.54, "x_c2": {"suppressed_by_T+5b": 25, "suppressed_by_T+10b": 47}}
+C6 base_b_both: {"flips_recorded": 1165, "settle": {"n": 1165, "wins": 389, "fails": 451, "wr": 0.4631}, "bull_day": {"n": 231, "wins": 50, "fails": 92, "wr": 0.3521}, "buy_flips_recorded": 85, "buy_settle": {"n": 85, "wins": 23, "fails": 41, "wr": 0.3594}, "density_add": 2.589, "x_c2": {"suppressed_by_T+5b": 25, "suppressed_by_T+10b": 47}}
+C6 base_a_1m: {"flips_recorded": 1198, "settle": {"n": 1198, "wins": 431, "fails": 501, "wr": 0.4624}, "bull_day": {"n": 218, "wins": 54, "fails": 96, "wr": 0.36}, "buy_flips_recorded": 34, "buy_settle": {"n": 34, "wins": 10, "fails": 16, "wr": 0.3846}, "density_add": 2.662, "x_c2": {"suppressed_by_T+5b": 12, "suppressed_by_T+10b": 31}}
+C6 base_a_both: {"flips_recorded": 1221, "settle": {"n": 1221, "wins": 437, "fails": 515, "wr": 0.459}, "bull_day": {"n": 225, "wins": 54, "fails": 101, "wr": 0.3484}, "buy_flips_recorded": 34, "buy_settle": {"n": 34, "wins": 10, "fails": 16, "wr": 0.3846}, "density_add": 2.713, "x_c2": {"suppressed_by_T+5b": 12, "suppressed_by_T+10b": 31}}
+
+JSON written: E:\06_T\t_io\validation\weekly_review\w32_screen.json

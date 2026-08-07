@@ -758,7 +758,7 @@ def _maybe_push_daily_pnl_summary(now: datetime) -> None:
             "card": {
                 "header": {
                     "title": {"tag": "plain_text", "content": f"📊 {today} 收益汇总"},
-                    "template": "red" if total_day_pnl < 0 else "green",
+                    "template": "red" if total_day_float < 0 else "green",
                 },
                 "elements": [
                     {"tag": "markdown", "content": "\n".join(lines)},
@@ -783,8 +783,8 @@ def _maybe_push_daily_pnl_summary(now: datetime) -> None:
             "total_value": round(total_value, 2),
             "total_cost": round(total_cost_value, 2),
             "total_pnl": round(total_value - total_cost_value, 2),
-            "total_pnl_pct": round(total_pct, 2),
-            "day_pnl_float": round(total_day_pnl, 2),
+            "total_pnl_pct": round((total_value - total_cost_value) / total_cost_value * 100 if total_cost_value > 0 else 0.0, 2),
+            "day_pnl_float": round(total_day_float, 2),
             "t0_realized": round(total_t0_pnl, 2),
             "stocks": stock_records,
         }
