@@ -672,6 +672,116 @@ class Api:
         # 无当前箱体或现价在箱体内 → 未突破
         return {"broken": False, "price": cur}
 
+    # ---------- 持仓日线超买/顶背离体检 ----------
+    def load_ob_analysis(self, date=None):
+        """每只持仓：日线超买指标(RSI/KDJ-J/CCI/BOLL) + 顶背离(MACD/RSI/KDJ/量价) + 建仓建议。"""
+        import numpy as np
+        import pandas as pd
+        cur = _load_json(HOLDINGS, {})
+        out = {"stocks": []}
+
+        for code, info in cur.items():
+            if not isinstance(info, dict) or code.startswith("_"):
+                continue
+            base_code = code.split("_")[0]  # 000988_B → 000988
+            h = self.load_stock_chart(base_code)
+            if not h.get("available"):
+                out["stocks"].append({"code": code, "name": info.get("name", code),
+                                      "error": h.get("error", "无数据")})
+                continue
+            d = h["period_data"]["daily"]
+            closes = [x[1] for x in d["ohlc"]]
+            highs = [x[3] for x in d["ohlc"]]
+            lows = [x[2] for x in d["ohlc"]]
+            volumes = d["volume"]
+            rsi = d["rsi"]
+            dif = d["macd"]["dif"]
+            boll_up = d["boll"]["up"]
+            n = len(closes)
+            if n < 30:
+                continue
+
+            # KDJ(9,3,3)
+            k_arr, d_arr, j_arr = [50.0], [50.0], [50.0]
+            for i in range(1, n):
+                hh = max(highs[max(0, i - 8):i + 1])
+                ll = min(lows[max(0, i - 8):i + 1])
+                rsv = (closes[i] - ll) / (hh - ll) * 100 if hh != ll else 50
+                k = 2 / 3 * k_arr[-1] + 1 / 3 * rsv
+                dd = 2 / 3 * d_arr[-1] + 1 / 3 * k
+                k_arr.append(k); d_arr.append(dd); j_arr.append(3 * k - 2 * dd)
+
+            # CCI(14)
+            cci_arr = []
+            for i in range(n):
+                if i < 13:
+                    cci_arr.append(None); continue
+                tp = (highs[i] + lows[i] + closes[i]) / 3
+                ma_tp = sum((highs[j] + lows[j] + closes[j]) / 3
+                            for j in range(i - 13, i + 1)) / 14
+                md = sum(abs((highs[j] + lows[j] + closes[j]) / 3 - ma_tp)
+                         for j in range(i - 13, i + 1)) / 14
+                cci_arr.append((tp - ma_tp) / (0.015 * md) if md else 0)
+
+            # 当前超买状态
+            cur_rsi = rsi[-1] if rsi and rsi[-1] is not None else 0
+            cur_j = j_arr[-1]
+            cur_cci = cci_arr[-1] or 0
+            cur_close = closes[-1]
+            cur_boll = boll_up[-1] if boll_up and boll_up[-1] is not None else 0
+            ob = {
+                "rsi": bool(cur_rsi > 70),
+                "kdj": bool(cur_j > 100),
+                "cci": bool(cur_cci > 100),
+                "boll": bool(cur_boll and cur_close > cur_boll),
+            }
+            ob["count"] = sum(1 for v in ob.values() if v)
+
+            # 顶背离检测（近60日）
+            div = {"macd": False, "rsi": False, "kdj": False, "vol": False}
+            win = range(max(2, n - 60), n)
+            # 找近60日两个局部价格高点
+            highs_list = list(win)
+            price_peaks = []
+            for i in range(2, len(win) - 2):
+                idx = list(win)[i]
+                if highs[idx] >= highs[idx - 1] and highs[idx] >= highs[idx - 2] and \
+                   highs[idx] >= highs[idx + 1] and highs[idx] >= highs[idx + 2]:
+                    price_peaks.append(idx)
+            if len(price_peaks) >= 2:
+                p2, p1 = price_peaks[-2], price_peaks[-1]
+                # MACD 顶背离: 价创新高 但 DIF 未创新高
+                if highs[p1] > highs[p2] and dif[p1] is not None and dif[p2] is not None and dif[p1] < dif[p2]:
+                    div["macd"] = True
+                # RSI 顶背离
+                if highs[p1] > highs[p2] and rsi[p1] is not None and rsi[p2] is not None and rsi[p1] < rsi[p2]:
+                    div["rsi"] = True
+                # KDJ 顶背离
+                if highs[p1] > highs[p2] and j_arr[p1] < j_arr[p2]:
+                    div["kdj"] = True
+                # 量价背离: 价新高 量萎缩
+                if highs[p1] > highs[p2] and volumes[p1] < volumes[p2] * 0.9:
+                    div["vol"] = True
+            div["count"] = sum(1 for v in div.values() if v)
+
+            # 综合建议
+            if ob["count"] >= 2 or div["count"] >= 1:
+                advice = "⚠ 不宜追高建仓"
+            elif ob["count"] == 1:
+                advice = "观察，可能回调"
+            else:
+                advice = "✓ 可考虑建仓（无超买/背离）"
+
+            out["stocks"].append({
+                "code": code, "name": info.get("name", code),
+                "price": cur_close,
+                "overbought": {"rsi": round(cur_rsi, 1), "kdj": round(cur_j, 1),
+                               "cci": round(cur_cci, 1), "boll": bool(ob["boll"]), "count": ob["count"]},
+                "divergence": div,
+                "advice": advice,
+            })
+        return _clean(out)
+
     # ---------- 个股技术分析弹窗 ----------
     def load_stock_chart(self, code):
         """拉 400 根日线 → 7 条 MA + MACD/RSI/BOLL → resample 周/月 → 支撑压力。"""
