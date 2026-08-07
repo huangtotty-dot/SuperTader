@@ -1,333 +1,35 @@
 {
-  "market_score": 75.0,
-  "market_bias": "risk_on",
+  "market_score": 50.0,
+  "market_bias": "data_pending",
   "breadth": {
     "total_codes": 8,
     "etf_count": 1,
     "stock_count": 7,
-    "advance_decline": {
-      "up": 866,
-      "down": 4606,
-      "flat": 66
-    },
-    "hot_theme": [
-      "N展芯",
-      "锴威特",
-      "宏昌科技",
-      "一博科技",
-      "英特科技"
-    ],
-    "hot_theme_text": "N展芯、锴威特、宏昌科技",
-    "risk_flag": "risk_off",
-    "market_open": false,
-    "auction_summary": {
-      "top20_bias": "strong_bullish",
-      "top20_up": 15,
-      "top20_down": 5,
-      "holdings_bullish": 0,
-      "holdings_bearish": 0,
-      "source_ts": "2026-08-07 09:45:20"
-    }
+    "advance_decline": "unknown",
+    "risk_flag": "unknown",
+    "market_open": false
   },
-  "session_note": "竞价额Top20中涨15家/跌5家 | 指数neutral | 持仓8股竞价完毕",
-  "auction_result": {
-    "index_signals": [
-      {
-        "code": "000001",
-        "name": "上证指数",
-        "prev_close": 3900.35,
-        "current": 3889.58,
-        "change_pct": -0.28
-      },
-      {
-        "code": "000688",
-        "name": "科创50",
-        "prev_close": 1701.29,
-        "current": 1698.03,
-        "change_pct": -0.19
-      },
-      {
-        "code": "000300",
-        "name": "沪深300",
-        "prev_close": 4651.31,
-        "current": 4655.6,
-        "change_pct": 0.09
-      }
-    ],
-    "market_bias": "neutral",
-    "sector_top5": [],
-    "auction_signals": [
-      {
-        "code": "588170",
-        "name": "科创半导体ETF华夏",
-        "change_pct": 0.0,
-        "amount_wan": 0.0,
-        "vol_ratio": 1.0,
-        "sector_tags": [],
-        "sector_heat_label": "",
-        "action": "正常",
-        "confidence": "中"
-      },
-      {
-        "code": "600176",
-        "name": "中国巨石",
-        "change_pct": 0.0,
-        "amount_wan": 0.0,
-        "vol_ratio": 1.0,
-        "sector_tags": [
-          "玻璃玻纤",
-          "PCB概念",
-          "2026一季报预增",
-          "风电"
-        ],
-        "sector_heat_label": "",
-        "action": "正常",
-        "confidence": "中"
-      },
-      {
-        "code": "600481",
-        "name": "双良节能",
-        "change_pct": 0.0,
-        "amount_wan": 0.0,
-        "vol_ratio": 1.0,
-        "sector_tags": [
-          "光伏设备",
-          "硅能源",
-          "DeepSeek概念",
-          "工业互联网"
-        ],
-        "sector_heat_label": "",
-        "action": "正常",
-        "confidence": "中"
-      },
-      {
-        "code": "603667",
-        "name": "五洲新春",
-        "change_pct": 0.0,
-        "amount_wan": 0.0,
-        "vol_ratio": 1.0,
-        "sector_tags": [
-          "通用设备",
-          "减速器",
-          "人形机器人",
-          "汽车热管理"
-        ],
-        "sector_heat_label": "",
-        "action": "正常",
-        "confidence": "中"
-      },
-      {
-        "code": "000988",
-        "name": "华工科技",
-        "change_pct": 0.0,
-        "amount_wan": 0.0,
-        "vol_ratio": 1.0,
-        "sector_tags": [
-          "自动化设备",
-          "共封装光学(CPO)",
-          "F5G概念",
-          "铜缆高速连接"
-        ],
-        "sector_heat_label": "",
-        "action": "正常",
-        "confidence": "中"
-      },
-      {
-        "code": "000988",
-        "name": "华工科技",
-        "change_pct": 0.0,
-        "amount_wan": 0.0,
-        "vol_ratio": 1.0,
-        "sector_tags": [
-          "自动化设备",
-          "共封装光学(CPO)",
-          "F5G概念",
-          "铜缆高速连接"
-        ],
-        "sector_heat_label": "",
-        "action": "正常",
-        "confidence": "中"
-      },
-      {
-        "code": "002639",
-        "name": "雪人集团",
-        "change_pct": 0.0,
-        "amount_wan": 0.0,
-        "vol_ratio": 1.0,
-        "sector_tags": [
-          "通用设备制造业"
-        ],
-        "sector_heat_label": "",
-        "action": "正常",
-        "confidence": "中"
-      },
-      {
-        "code": "300153",
-        "name": "科泰电源",
-        "change_pct": 0.0,
-        "amount_wan": 0.0,
-        "vol_ratio": 1.0,
-        "sector_tags": [
-          "数据中心(AIDC)",
-          "阿里巴巴概念",
-          "腾讯概念"
-        ],
-        "sector_heat_label": "",
-        "action": "正常",
-        "confidence": "中"
-      }
-    ]
-  },
-  "generated_at": "2026-08-07 09:45:35",
-  "source": "spot",
+  "session_note": "等待9:30开盘后获取市场数据",
+  "auction_result": {},
+  "generated_at": "2026-08-07 16:50:25",
+  "source": "watchlist",
   "market_snapshot": {
-    "source": "spot",
+    "source": "watchlist",
     "market_open": false,
-    "index_trend": "positive",
-    "advance_decline": {
-      "up": 866,
-      "down": 4606,
-      "flat": 66
-    },
-    "hot_theme": [
-      "N展芯",
-      "锴威特",
-      "宏昌科技",
-      "一博科技",
-      "英特科技"
-    ],
-    "risk_flag": "risk_off",
-    "market_sentence": "涨866 / 跌4606 / 平66",
+    "index_trend": "unknown",
+    "advance_decline": "unknown",
+    "hot_theme": [],
+    "risk_flag": "unknown",
+    "market_sentence": "市场快照不足，按名单结构解读",
     "top20_volume_analysis": {
-      "total_up": 15,
-      "total_down": 5,
+      "total_up": 0,
+      "total_down": 0,
       "total_flat": 0,
       "top_gainers": [],
-      "top_volume_stocks": [
-        {
-          "code": "sz300308",
-          "name": "中际旭创",
-          "change_pct": 2.06,
-          "volume": 8123621507.0
-        },
-        {
-          "code": "sh603986",
-          "name": "兆易创新",
-          "change_pct": 2.93,
-          "volume": 7929255160.0
-        },
-        {
-          "code": "sh688825",
-          "name": "长鑫科技",
-          "change_pct": -2.87,
-          "volume": 5074177759.0
-        },
-        {
-          "code": "sz002428",
-          "name": "云南锗业",
-          "change_pct": 5.97,
-          "volume": 4902958023.0
-        },
-        {
-          "code": "sz300476",
-          "name": "胜宏科技",
-          "change_pct": 5.56,
-          "volume": 4612481474.0
-        },
-        {
-          "code": "sz002281",
-          "name": "光迅科技",
-          "change_pct": 5.6,
-          "volume": 4106724106.0
-        },
-        {
-          "code": "sz300502",
-          "name": "新易盛",
-          "change_pct": 1.54,
-          "volume": 4015082452.0
-        },
-        {
-          "code": "sz002384",
-          "name": "东山精密",
-          "change_pct": 2.84,
-          "volume": 3820739667.0
-        },
-        {
-          "code": "sh600584",
-          "name": "长电科技",
-          "change_pct": -1.59,
-          "volume": 3464402039.0
-        },
-        {
-          "code": "sz000657",
-          "name": "中钨高新",
-          "change_pct": 1.2,
-          "volume": 3297787425.0
-        },
-        {
-          "code": "sz002407",
-          "name": "多氟多",
-          "change_pct": -1.88,
-          "volume": 3236798432.0
-        },
-        {
-          "code": "sz300394",
-          "name": "天孚通信",
-          "change_pct": 1.71,
-          "volume": 2915862111.0
-        },
-        {
-          "code": "sh600206",
-          "name": "有研新材",
-          "change_pct": 6.49,
-          "volume": 2881230362.0
-        },
-        {
-          "code": "sh603259",
-          "name": "药明康德",
-          "change_pct": 3.37,
-          "volume": 2877652670.0
-        },
-        {
-          "code": "sh600183",
-          "name": "生益科技",
-          "change_pct": 4.62,
-          "volume": 2724375635.0
-        },
-        {
-          "code": "sh688256",
-          "name": "寒武纪",
-          "change_pct": -1.11,
-          "volume": 2346871456.0
-        },
-        {
-          "code": "sz300017",
-          "name": "网宿科技",
-          "change_pct": 5.77,
-          "volume": 2317094296.0
-        },
-        {
-          "code": "sh600487",
-          "name": "亨通光电",
-          "change_pct": 0.39,
-          "volume": 2308546271.0
-        },
-        {
-          "code": "sz300285",
-          "name": "国瓷材料",
-          "change_pct": -2.69,
-          "volume": 2293133913.0
-        },
-        {
-          "code": "sh603799",
-          "name": "华友钴业",
-          "change_pct": 2.83,
-          "volume": 2290937651.0
-        }
-      ],
+      "top_volume_stocks": [],
       "sectors": [],
-      "bias": "strong_bullish",
-      "note": "Top20竞价量：涨15/跌5/平0，偏向strong_bullish"
+      "bias": "neutral",
+      "note": "无法获取市场快照"
     }
   },
   "code_snapshots": {
@@ -336,21 +38,21 @@
       "name": "科创半导体ETF华夏",
       "open_gap": 0.0,
       "direction": "neutral",
-      "prev_close": 0.977
+      "prev_close": 0.0
     },
     "600176": {
       "code": "600176",
       "name": "中国巨石",
       "open_gap": 0.0,
       "direction": "neutral",
-      "prev_close": 40.78
+      "prev_close": 0.0
     },
     "600481": {
       "code": "600481",
       "name": "双良节能",
       "open_gap": 0.0,
       "direction": "neutral",
-      "prev_close": 4.32
+      "prev_close": 0.0
     },
     "603667": {
       "code": "603667",
@@ -364,14 +66,14 @@
       "name": "华工科技",
       "open_gap": 0.0,
       "direction": "neutral",
-      "prev_close": 103.01
+      "prev_close": 0.0
     },
     "000988_B": {
       "code": "000988_B",
       "name": "华工科技",
       "open_gap": 0.0,
       "direction": "neutral",
-      "prev_close": 103.01
+      "prev_close": 0.0
     },
     "002639": {
       "code": "002639",
@@ -385,147 +87,19 @@
       "name": "科泰电源",
       "open_gap": 0.0,
       "direction": "neutral",
-      "prev_close": 21.35
+      "prev_close": 0.0
     }
   },
-  "auction_summary": {
-    "top20_bias": "strong_bullish",
-    "top20_up": 15,
-    "top20_down": 5,
-    "holdings_bullish": 0,
-    "holdings_bearish": 0,
-    "source_ts": "2026-08-07 09:45:20"
-  },
+  "auction_summary": {},
   "top20_volume_analysis": {
-    "total_up": 15,
-    "total_down": 5,
+    "total_up": 0,
+    "total_down": 0,
     "total_flat": 0,
     "top_gainers": [],
-    "top_volume_stocks": [
-      {
-        "code": "sz300308",
-        "name": "中际旭创",
-        "change_pct": 2.06,
-        "volume": 8123621507.0
-      },
-      {
-        "code": "sh603986",
-        "name": "兆易创新",
-        "change_pct": 2.93,
-        "volume": 7929255160.0
-      },
-      {
-        "code": "sh688825",
-        "name": "长鑫科技",
-        "change_pct": -2.87,
-        "volume": 5074177759.0
-      },
-      {
-        "code": "sz002428",
-        "name": "云南锗业",
-        "change_pct": 5.97,
-        "volume": 4902958023.0
-      },
-      {
-        "code": "sz300476",
-        "name": "胜宏科技",
-        "change_pct": 5.56,
-        "volume": 4612481474.0
-      },
-      {
-        "code": "sz002281",
-        "name": "光迅科技",
-        "change_pct": 5.6,
-        "volume": 4106724106.0
-      },
-      {
-        "code": "sz300502",
-        "name": "新易盛",
-        "change_pct": 1.54,
-        "volume": 4015082452.0
-      },
-      {
-        "code": "sz002384",
-        "name": "东山精密",
-        "change_pct": 2.84,
-        "volume": 3820739667.0
-      },
-      {
-        "code": "sh600584",
-        "name": "长电科技",
-        "change_pct": -1.59,
-        "volume": 3464402039.0
-      },
-      {
-        "code": "sz000657",
-        "name": "中钨高新",
-        "change_pct": 1.2,
-        "volume": 3297787425.0
-      },
-      {
-        "code": "sz002407",
-        "name": "多氟多",
-        "change_pct": -1.88,
-        "volume": 3236798432.0
-      },
-      {
-        "code": "sz300394",
-        "name": "天孚通信",
-        "change_pct": 1.71,
-        "volume": 2915862111.0
-      },
-      {
-        "code": "sh600206",
-        "name": "有研新材",
-        "change_pct": 6.49,
-        "volume": 2881230362.0
-      },
-      {
-        "code": "sh603259",
-        "name": "药明康德",
-        "change_pct": 3.37,
-        "volume": 2877652670.0
-      },
-      {
-        "code": "sh600183",
-        "name": "生益科技",
-        "change_pct": 4.62,
-        "volume": 2724375635.0
-      },
-      {
-        "code": "sh688256",
-        "name": "寒武纪",
-        "change_pct": -1.11,
-        "volume": 2346871456.0
-      },
-      {
-        "code": "sz300017",
-        "name": "网宿科技",
-        "change_pct": 5.77,
-        "volume": 2317094296.0
-      },
-      {
-        "code": "sh600487",
-        "name": "亨通光电",
-        "change_pct": 0.39,
-        "volume": 2308546271.0
-      },
-      {
-        "code": "sz300285",
-        "name": "国瓷材料",
-        "change_pct": -2.69,
-        "volume": 2293133913.0
-      },
-      {
-        "code": "sh603799",
-        "name": "华友钴业",
-        "change_pct": 2.83,
-        "volume": 2290937651.0
-      }
-    ],
+    "top_volume_stocks": [],
     "sectors": [],
-    "bias": "strong_bullish",
-    "note": "Top20竞价量：涨15/跌5/平0，偏向strong_bullish"
+    "bias": "neutral",
+    "note": "无法获取市场快照"
   },
   "theme_rank": [],
   "focus_codes": [],

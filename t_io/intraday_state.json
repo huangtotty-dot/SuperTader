@@ -8,7 +8,8 @@
     "588170": 2
   },
   "buy_cooldown": {
-    "600481": "2026-08-07T10:19:42.865532"
+    "600481": "2026-08-07T10:19:42.865532",
+    "000988": "2026-08-07T14:24:39.880214"
   },
   "sell_cooldown": {
     "588170": "2026-08-07T10:31:03.586297"
@@ -19,96 +20,96 @@
       "confidence": 0.55,
       "pending_state": null,
       "pending_bars": 0,
-      "last_dif": 0.004530030333481205,
-      "last_dea": 0.0018601011793788161,
-      "last_rsi": 67.85714285714292,
-      "prev_rsi": 73.33333333333327,
-      "bb_mid_slope": 0.001597470894528229,
-      "bb_width_ratio": 1.313098230851956
+      "last_dif": 0.0025157804502484726,
+      "last_dea": 0.0033620490349848967,
+      "last_rsi": 53.846153846153754,
+      "prev_rsi": 51.85185185185176,
+      "bb_mid_slope": 0.0006231927410509112,
+      "bb_width_ratio": 0.8266526892870767
     },
     "600176": {
       "state": "BULL",
       "confidence": 0.55,
       "pending_state": null,
       "pending_bars": 0,
-      "last_dif": 0.4825730662751653,
-      "last_dea": 0.3145656841635008,
-      "last_rsi": 79.17981072555213,
-      "prev_rsi": 75.83081570996984,
-      "bb_mid_slope": 0.0023108046200684966,
-      "bb_width_ratio": 1.1860435820781299
+      "last_dif": 0.1863716788384906,
+      "last_dea": 0.3749538540601049,
+      "last_rsi": 26.7441860465117,
+      "prev_rsi": 29.651162790697583,
+      "bb_mid_slope": 0.0009603000655262286,
+      "bb_width_ratio": 0.7011226859421081
     },
     "600481": {
-      "state": "BEAR",
-      "confidence": 0.55,
-      "pending_state": null,
-      "pending_bars": 0,
-      "last_dif": -0.02230858016492565,
-      "last_dea": -0.01694499249249772,
-      "last_rsi": 26.31578947368429,
-      "prev_rsi": 23.52941176470607,
-      "bb_mid_slope": -0.0006606606606607611,
-      "bb_width_ratio": 1.0903203391498568
-    },
-    "603667": {
-      "state": "BEAR",
-      "confidence": 0.55,
-      "pending_state": null,
-      "pending_bars": 0,
-      "last_dif": -0.12243814060386171,
-      "last_dea": -0.12612896642526278,
-      "last_rsi": 35.789473684210535,
-      "prev_rsi": 34.87179487179493,
-      "bb_mid_slope": 0.0001498545177301767,
-      "bb_width_ratio": 0.8931518024577848
-    },
-    "000988": {
       "state": "BULL",
       "confidence": 0.55,
       "pending_state": null,
       "pending_bars": 0,
-      "last_dif": 0.3156553152625321,
-      "last_dea": 0.06405694798444721,
-      "last_rsi": 56.511891279728225,
-      "prev_rsi": 55.227272727272734,
-      "bb_mid_slope": 0.0014516814738982254,
-      "bb_width_ratio": 1.0782500747749606
+      "last_dif": 0.004023170551640476,
+      "last_dea": 0.004944440964511533,
+      "last_rsi": 44.44444444444444,
+      "prev_rsi": 44.44444444444444,
+      "bb_mid_slope": 5.7636887608016555e-05,
+      "bb_width_ratio": 0.6429299274216029
+    },
+    "603667": {
+      "state": "BULL",
+      "confidence": 0.55,
+      "pending_state": null,
+      "pending_bars": 0,
+      "last_dif": 0.039458859847862016,
+      "last_dea": 0.048094857484754824,
+      "last_rsi": 49.46236559139796,
+      "prev_rsi": 47.115384615384485,
+      "bb_mid_slope": 0.0002795621098343426,
+      "bb_width_ratio": 0.5566838602249977
+    },
+    "000988": {
+      "state": "BEAR",
+      "confidence": 0.55,
+      "pending_state": null,
+      "pending_bars": 0,
+      "last_dif": -0.2199912118251035,
+      "last_dea": 0.05554000444913071,
+      "last_rsi": 35.19736842105256,
+      "prev_rsi": 39.512195121951294,
+      "bb_mid_slope": -0.00015196434897729515,
+      "bb_width_ratio": 1.103657650729189
     },
     "000988_B": {
       "state": "BULL",
       "confidence": 0.55,
-      "pending_state": null,
-      "pending_bars": 0,
-      "last_dif": 0.310071269678474,
-      "last_dea": 0.06294013886763558,
-      "last_rsi": 56.16438356164382,
-      "prev_rsi": 55.227272727272734,
-      "bb_mid_slope": 0.0014415901459740512,
-      "bb_width_ratio": 1.0740635839016788
+      "pending_state": "BEAR",
+      "pending_bars": 1,
+      "last_dif": -0.12308848311329257,
+      "last_dea": 0.12394417603905407,
+      "last_rsi": 39.44805194805199,
+      "prev_rsi": 40.63545150501671,
+      "bb_mid_slope": -6.757921915719306e-05,
+      "bb_width_ratio": 1.0709601508102804
     },
     "002639": {
-      "state": "BEAR",
+      "state": "BULL",
       "confidence": 0.55,
       "pending_state": null,
       "pending_bars": 0,
-      "last_dif": -0.03186112383249373,
-      "last_dea": -0.022826244411661027,
-      "last_rsi": 25.925925925926393,
-      "prev_rsi": 24.0000000000002,
-      "bb_mid_slope": -0.00038303387860913685,
-      "bb_width_ratio": 1.094339577714121
+      "last_dif": 0.01077162022534317,
+      "last_dea": 0.013515082626801903,
+      "last_rsi": 43.750000000000135,
+      "prev_rsi": 47.058823529411825,
+      "bb_mid_slope": 0.00019958486348379623,
+      "bb_width_ratio": 0.5582162083453395
     },
     "300153": {
-      "state": "BEAR",
+      "state": "BULL",
       "confidence": 0.55,
       "pending_state": null,
       "pending_bars": 0,
-      "last_dif": -0.040773254467687536,
-      "last_dea": -0.03571436741710106,
-      "last_rsi": 37.33333333333331,
-      "prev_rsi": 38.35616438356159,
-      "bb_mid_slope": -3.047591183932533e-06,
-      "bb_width_ratio": 0.9040709391955962
+      "last_dif": 0.08027677821987922,
+      "last_dea": 0.08633070028344189,
+      "last_rsi": 57.37704918032782,
+      "prev_rsi": 60.6557377049179,
+      "bb_mid_slope": 0.0007308985615541759,
+      "bb_width_ratio": 0.7522704047120868
     }
   }
 }
