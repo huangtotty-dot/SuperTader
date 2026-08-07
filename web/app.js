@@ -1343,9 +1343,9 @@ function renderStockChart() {
       if (i0 < 0 || i1 < 0) return null;
       const isCur = b.rel === 0;
       const tag = isCur ? "当前箱体" : (b.rel === -1 ? "上方箱体" : "下方箱体");
-      return [{ name: `${tag} ${fmt(b.low, 2)}~${fmt(b.high, 2)} (${b.days}天, ${b.touches ? b.touches[0] + "触" + b.touches[1] : ""})`,
-                xAxis: i0, yAxis: b.low, itemStyle: { color: isCur ? "rgba(210,153,34,.18)" : "rgba(139,148,158,.08)",
-                  borderColor: isCur ? "#d29922" : "#484f58", borderWidth: 1, borderType: isCur ? "solid" : "dashed" } },
+      return [{ name: `${tag} ${fmt(b.low, 2)}~${fmt(b.high, 2)} (${b.days || ""}天)`,
+                xAxis: i0, yAxis: b.low, itemStyle: { color: isCur ? "rgba(210,153,34,.35)" : "rgba(139,148,158,.12)",
+                  borderColor: isCur ? "#d29922" : "#484f58", borderWidth: isCur ? 2 : 1, borderType: isCur ? "solid" : "dashed" } },
               { xAxis: i1, yAxis: b.high }];
     })
     .filter(Boolean);
@@ -1358,6 +1358,7 @@ function renderStockChart() {
   if (stockChartInst) { stockChartInst.dispose(); stockChartInst = null; }
   const el = document.getElementById("stockChart");
   stockChartInst = echarts.init(el);
+  window.stockChartInst = stockChartInst;  // 暴露供调试/检查
 
   stockChartInst.setOption({
     backgroundColor: "transparent",
@@ -1492,9 +1493,9 @@ async function toggleSectorExpand(tr, category) {
   if (!wrap.classList.contains("open")) return;
   // 找该板块成分股代码
   const tbody = tr.parentElement;
-  const sectorData = (window._hunterSectors || {})[category] || {};
-  const stocks = sectorData.stocks || [];
-  const codes = stocks.map(s => s.code);
+  const sectorStocks = (window._hunterSectors || {})[category] || [];
+  const stocks = sectorStocks || [];
+  const codes = (stocks || []).map(s => s.code);
   if (!codes.length) return;
   const stageEl = tbody.querySelector(".h-stage-badge");
   try {

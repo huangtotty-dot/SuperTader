@@ -1063,9 +1063,16 @@ class Api:
             else:
                 merged.append(dict(b))
 
-        # 重算 rel + center
+        # 重算 rel + center + days
         for b in merged:
             b["center"] = round((b["high"] + b["low"]) / 2, 3)
+            try:
+                import datetime as _dt
+                s = _dt.datetime.strptime(b["start"][:10], "%Y-%m-%d")
+                e = _dt.datetime.strptime(b["end"][:10], "%Y-%m-%d")
+                b["days"] = (e - s).days
+            except Exception:
+                b["days"] = 0
             if b["low"] <= last_close <= b["high"]:
                 b["rel"] = 0
             elif last_close > b["high"]:
