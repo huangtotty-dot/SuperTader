@@ -1214,9 +1214,11 @@ function renderStockSummary(d) {
   const ch = d.channel || {};
   const chTxt = ch.direction === "up" ? `<b class="up">上行 ↗</b>`
     : ch.direction === "down" ? `<b class="down">下行 ↘</b>` : `<span class="cell-dim">震荡 →</span>`;
+  const chDesc = ch.direction === "flat" ? ""
+    : `<span class="cell-dim" style="font-size:11px">${ch.direction === "up" ? "上行" : "下行"}通道 斜率${ch.norm_slope_pct != null ? (ch.norm_slope_pct >= 0 ? '+' : '') + fmt(ch.norm_slope_pct, 2) : '—'}%/日 · 40日${ch.ret_40d >= 0 ? '+' : ''}${fmt(ch.ret_40d, 1)}% · 现价位于通道${ch.pos_pct != null ? fmt(ch.pos_pct, 0) : '—'}%</span>`;
   document.getElementById("stockSummary").innerHTML = `
     <span class="ss-item">当前价: <b class="mono">${fmt(cur, 3)}</b></span>
-    <span class="ss-item">通道: ${chTxt}</span>
+    <span class="ss-item">通道: ${chTxt} ${chDesc}</span>
     <span class="ss-item">关键压力: ${resTxt}</span>
     <span class="ss-item">关键支撑: ${supTxt}</span>
     <span class="ss-item">箱体: ${boxTxt}</span>
@@ -1322,28 +1324,34 @@ function renderStockChart() {
         } : undefined,
         markLine: { symbol: "none",
           data: [
-            ...(showChannel && data.channel && data.channel.up_line.length ? [{
-              xAxis: 0, yAxis: data.channel.up_line[0],
-              lineStyle: { color: data.channel.direction === "up" ? "#f85149" : "#3fb950",
-                width: 1.5, type: "solid" },
-              label: { formatter: data.channel.direction === "up" ? "↗ 上行通道" : "↘ 下行通道",
-                color: data.channel.direction === "up" ? "#f85149" : "#3fb950", fontSize: 10,
-                position: "insideEndTop", fontWeight: "bold" },
-            }, {
-              xAxis: period.dates.length - 1, yAxis: data.channel.up_line[1],
-            }] : []),
-            ...(showChannel && data.channel && data.channel.dn_line.length ? [{
-              xAxis: 0, yAxis: data.channel.dn_line[0],
-              lineStyle: { color: data.channel.direction === "up" ? "#f85149" : "#3fb950",
-                width: 1.5, type: "dashed" },
-              label: { formatter: "下轨", color: data.channel.direction === "up" ? "#f85149" : "#3fb950",
-                fontSize: 9, position: "insideEndBottom" },
-            }, {
-              xAxis: period.dates.length - 1, yAxis: data.channel.dn_line[1],
-            }] : []),
             ...(showLevels ? [...resistanceLines, ...supportLines] : []), currentLine,
           ],
           label: { position: "insideEndTop" } } },
+      // 通道色带：上轨/下轨 line（全轴数据）+ markArea 填充
+      ...(showChannel && data.channel && data.channel.up_line.length ? [{
+        name: "通道上轨", type: "line", xAxisIndex: 0, yAxisIndex: 0, symbol: "none",
+        data: period.dates.map((_, i) => {
+          const t = i / (period.dates.length - 1 || 1);
+          return +(data.channel.up_line[0] + (data.channel.up_line[1] - data.channel.up_line[0]) * t).toFixed(3);
+        }),
+        lineStyle: { color: data.channel.direction === "up" ? "#f85149" : "#3fb950",
+          width: 1.5, type: "solid" },
+        markArea: { silent: true, data: [[{
+          yAxis: data.channel.up_line[0], xAxis: 0,
+          name: data.channel.direction === "up" ? "↗ 上行通道" : "↘ 下行通道",
+          itemStyle: { color: data.channel.direction === "up" ? "rgba(248,81,73,.10)" : "rgba(63,185,80,.10)",
+            borderColor: data.channel.direction === "up" ? "rgba(248,81,73,.4)" : "rgba(63,185,80,.4)",
+            borderWidth: 1, borderType: "solid" },
+        }, { yAxis: data.channel.dn_line[0], xAxis: period.dates.length - 1 }]] },
+      }, {
+        name: "通道下轨", type: "line", xAxisIndex: 0, yAxisIndex: 0, symbol: "none",
+        data: period.dates.map((_, i) => {
+          const t = i / (period.dates.length - 1 || 1);
+          return +(data.channel.dn_line[0] + (data.channel.dn_line[1] - data.channel.dn_line[0]) * t).toFixed(3);
+        }),
+        lineStyle: { color: data.channel.direction === "up" ? "#f85149" : "#3fb950",
+          width: 1, type: "dashed" },
+      }] : []),
       ...(showMA ? maSeries.map(s => ({ ...s, xAxisIndex: 0, yAxisIndex: 0 })) : []),
       // BOLL 叠加主图
       { name: "BOLL中", type: "line", data: period.boll.mid, xAxisIndex: 0, yAxisIndex: 0, symbol: "none",
