@@ -10,113 +10,11 @@
       "added_at": "2026-08-05",
       "status": "monitoring",
       "suggested_qty": 500,
-      "suggested_price": 102.99,
-      "capital_required": 51495.0,
-      "last_check_date": "2026-08-06",
+      "suggested_price": 107.24,
+      "capital_required": 53620.0,
+      "last_check_date": "2026-08-07",
       "composite_score": 20,
       "signal_history": [
-        {
-          "date": "2026-08-06",
-          "score": 0,
-          "verdict": "weak",
-          "price": 102.65
-        },
-        {
-          "date": "2026-08-06",
-          "score": 0,
-          "verdict": "weak",
-          "price": 102.65
-        },
-        {
-          "date": "2026-08-06",
-          "score": 20,
-          "verdict": "weak",
-          "price": 104.01
-        },
-        {
-          "date": "2026-08-06",
-          "score": 20,
-          "verdict": "weak",
-          "price": 102.7
-        },
-        {
-          "date": "2026-08-06",
-          "score": 0,
-          "verdict": "weak",
-          "price": 103.1
-        },
-        {
-          "date": "2026-08-06",
-          "score": 0,
-          "verdict": "weak",
-          "price": 102.34
-        },
-        {
-          "date": "2026-08-06",
-          "score": 0,
-          "verdict": "weak",
-          "price": 102.2
-        },
-        {
-          "date": "2026-08-06",
-          "score": 40,
-          "verdict": "approaching",
-          "price": 102.58
-        },
-        {
-          "date": "2026-08-06",
-          "score": 40,
-          "verdict": "approaching",
-          "price": 102.41
-        },
-        {
-          "date": "2026-08-06",
-          "score": 40,
-          "verdict": "approaching",
-          "price": 102.38
-        },
-        {
-          "date": "2026-08-06",
-          "score": 20,
-          "verdict": "weak",
-          "price": 101.91
-        },
-        {
-          "date": "2026-08-06",
-          "score": 0,
-          "verdict": "weak",
-          "price": 101.35
-        },
-        {
-          "date": "2026-08-06",
-          "score": 0,
-          "verdict": "weak",
-          "price": 101.45
-        },
-        {
-          "date": "2026-08-06",
-          "score": 0,
-          "verdict": "weak",
-          "price": 101.84
-        },
-        {
-          "date": "2026-08-06",
-          "score": 40,
-          "verdict": "approaching",
-          "price": 102.36
-        },
-        {
-          "date": "2026-08-06",
-          "score": 40,
-          "verdict": "approaching",
-          "price": 102.48
-        },
-        {
-          "date": "2026-08-06",
-          "score": 40,
-          "verdict": "approaching",
-          "price": 102.6
-        },
         {
           "date": "2026-08-06",
           "score": 40,
@@ -134,6 +32,108 @@
           "score": 20,
           "verdict": "weak",
           "price": 102.99
+        },
+        {
+          "date": "2026-08-07",
+          "score": 0,
+          "verdict": "insufficient_data",
+          "price": 106.94
+        },
+        {
+          "date": "2026-08-07",
+          "score": 0,
+          "verdict": "insufficient_data",
+          "price": 105.57
+        },
+        {
+          "date": "2026-08-07",
+          "score": 0,
+          "verdict": "weak",
+          "price": 104.4
+        },
+        {
+          "date": "2026-08-07",
+          "score": 20,
+          "verdict": "weak",
+          "price": 104.11
+        },
+        {
+          "date": "2026-08-07",
+          "score": 20,
+          "verdict": "weak",
+          "price": 104.89
+        },
+        {
+          "date": "2026-08-07",
+          "score": 40,
+          "verdict": "approaching",
+          "price": 105.1
+        },
+        {
+          "date": "2026-08-07",
+          "score": 20,
+          "verdict": "weak",
+          "price": 106.0
+        },
+        {
+          "date": "2026-08-07",
+          "score": 40,
+          "verdict": "approaching",
+          "price": 107.05
+        },
+        {
+          "date": "2026-08-07",
+          "score": 40,
+          "verdict": "approaching",
+          "price": 107.32
+        },
+        {
+          "date": "2026-08-07",
+          "score": 40,
+          "verdict": "approaching",
+          "price": 107.5
+        },
+        {
+          "date": "2026-08-07",
+          "score": 40,
+          "verdict": "approaching",
+          "price": 107.0
+        },
+        {
+          "date": "2026-08-07",
+          "score": 40,
+          "verdict": "approaching",
+          "price": 107.31
+        },
+        {
+          "date": "2026-08-07",
+          "score": 40,
+          "verdict": "approaching",
+          "price": 108.03
+        },
+        {
+          "date": "2026-08-07",
+          "score": 20,
+          "verdict": "weak",
+          "price": 108.41
+        },
+        {
+          "date": "2026-08-07",
+          "score": 20,
+          "verdict": "weak",
+          "price": 107.85
+        },
+        {
+          "date": "2026-08-07",
+          "score": 20,
+          "verdict": "weak",
+          "price": 107.21
+        },
+        {
+          "date": "2026-08-07",
+          "score": 20,
+          "verdict": "weak",
+          "price": 107.24
         }
       ],
       "criteria_met": {
@@ -141,7 +141,8 @@
         "boll_mid_support": false,
         "rsi_healthy": false,
         "volume_shrink": false,
-        "support_retest": false
+        "support_retest": false,
+        "box_breakout": false
       }
     },
     "002176": {
@@ -150,139 +151,140 @@
       "in_holdings": false,
       "added_at": "2026-08-05",
       "status": "monitoring",
-      "suggested_qty": 6400,
-      "suggested_price": 9.3,
-      "capital_required": 59520.0,
-      "last_check_date": "2026-08-06",
-      "composite_score": 20,
+      "suggested_qty": 6500,
+      "suggested_price": 9.22,
+      "capital_required": 59930.0,
+      "last_check_date": "2026-08-07",
+      "composite_score": 60,
       "signal_history": [
         {
           "date": "2026-08-06",
-          "score": 0,
-          "verdict": "weak",
-          "price": 9.3
-        },
-        {
-          "date": "2026-08-06",
-          "score": 0,
-          "verdict": "weak",
-          "price": 9.3
+          "score": 40,
+          "verdict": "approaching",
+          "price": 9.27
         },
         {
           "date": "2026-08-06",
           "score": 40,
           "verdict": "approaching",
+          "price": 9.27
+        },
+        {
+          "date": "2026-08-06",
+          "score": 20,
+          "verdict": "weak",
+          "price": 9.3
+        },
+        {
+          "date": "2026-08-07",
+          "score": 0,
+          "verdict": "insufficient_data",
           "price": 9.32
         },
         {
-          "date": "2026-08-06",
-          "score": 20,
-          "verdict": "weak",
-          "price": 9.28
+          "date": "2026-08-07",
+          "score": 0,
+          "verdict": "insufficient_data",
+          "price": 9.29
         },
         {
-          "date": "2026-08-06",
+          "date": "2026-08-07",
           "score": 0,
           "verdict": "weak",
-          "price": 9.22
+          "price": 9.11
         },
         {
-          "date": "2026-08-06",
+          "date": "2026-08-07",
           "score": 0,
           "verdict": "weak",
+          "price": 9.12
+        },
+        {
+          "date": "2026-08-07",
+          "score": 40,
+          "verdict": "approaching",
+          "price": 9.19
+        },
+        {
+          "date": "2026-08-07",
+          "score": 40,
+          "verdict": "approaching",
+          "price": 9.2
+        },
+        {
+          "date": "2026-08-07",
+          "score": 40,
+          "verdict": "approaching",
           "price": 9.23
         },
         {
-          "date": "2026-08-06",
+          "date": "2026-08-07",
           "score": 40,
           "verdict": "approaching",
-          "price": 9.26
+          "price": 9.21
         },
         {
-          "date": "2026-08-06",
+          "date": "2026-08-07",
           "score": 40,
           "verdict": "approaching",
-          "price": 9.28
+          "price": 9.17
         },
         {
-          "date": "2026-08-06",
+          "date": "2026-08-07",
+          "score": 40,
+          "verdict": "approaching",
+          "price": 9.18
+        },
+        {
+          "date": "2026-08-07",
+          "score": 40,
+          "verdict": "approaching",
+          "price": 9.19
+        },
+        {
+          "date": "2026-08-07",
           "score": 60,
           "verdict": "approaching",
-          "price": 9.28
+          "price": 9.23
         },
         {
-          "date": "2026-08-06",
+          "date": "2026-08-07",
           "score": 60,
           "verdict": "approaching",
-          "price": 9.28
+          "price": 9.2
         },
         {
-          "date": "2026-08-06",
+          "date": "2026-08-07",
           "score": 60,
           "verdict": "approaching",
-          "price": 9.26
+          "price": 9.18
         },
         {
-          "date": "2026-08-06",
+          "date": "2026-08-07",
           "score": 60,
           "verdict": "approaching",
-          "price": 9.26
+          "price": 9.21
         },
         {
-          "date": "2026-08-06",
+          "date": "2026-08-07",
           "score": 40,
           "verdict": "approaching",
-          "price": 9.26
+          "price": 9.21
         },
         {
-          "date": "2026-08-06",
+          "date": "2026-08-07",
           "score": 60,
           "verdict": "approaching",
-          "price": 9.28
-        },
-        {
-          "date": "2026-08-06",
-          "score": 60,
-          "verdict": "approaching",
-          "price": 9.28
-        },
-        {
-          "date": "2026-08-06",
-          "score": 40,
-          "verdict": "approaching",
-          "price": 9.28
-        },
-        {
-          "date": "2026-08-06",
-          "score": 40,
-          "verdict": "approaching",
-          "price": 9.28
-        },
-        {
-          "date": "2026-08-06",
-          "score": 40,
-          "verdict": "approaching",
-          "price": 9.27
-        },
-        {
-          "date": "2026-08-06",
-          "score": 40,
-          "verdict": "approaching",
-          "price": 9.27
-        },
-        {
-          "date": "2026-08-06",
-          "score": 20,
-          "verdict": "weak",
-          "price": 9.3
+          "price": 9.22
         }
       ],
       "criteria_met": {
         "macd_golden": true,
-        "boll_mid_support": false,
-        "rsi_healthy": false,
+        "boll_mid_support": true,
+        "rsi_healthy": true,
         "volume_shrink": false,
-        "support_retest": false
+        "support_retest": false,
+        "box_breakout": false
       }
     },
     "002202": {
@@ -292,113 +294,11 @@
       "added_at": "2026-08-05",
       "status": "monitoring",
       "suggested_qty": 2800,
-      "suggested_price": 20.76,
-      "capital_required": 58128.0,
-      "last_check_date": "2026-08-06",
-      "composite_score": 20,
+      "suggested_price": 21.4,
+      "capital_required": 59920.0,
+      "last_check_date": "2026-08-07",
+      "composite_score": 60,
       "signal_history": [
-        {
-          "date": "2026-08-06",
-          "score": 0,
-          "verdict": "weak",
-          "price": 20.71
-        },
-        {
-          "date": "2026-08-06",
-          "score": 0,
-          "verdict": "weak",
-          "price": 20.66
-        },
-        {
-          "date": "2026-08-06",
-          "score": 20,
-          "verdict": "weak",
-          "price": 20.72
-        },
-        {
-          "date": "2026-08-06",
-          "score": 0,
-          "verdict": "weak",
-          "price": 20.61
-        },
-        {
-          "date": "2026-08-06",
-          "score": 0,
-          "verdict": "weak",
-          "price": 20.46
-        },
-        {
-          "date": "2026-08-06",
-          "score": 0,
-          "verdict": "weak",
-          "price": 20.39
-        },
-        {
-          "date": "2026-08-06",
-          "score": 0,
-          "verdict": "weak",
-          "price": 20.51
-        },
-        {
-          "date": "2026-08-06",
-          "score": 40,
-          "verdict": "approaching",
-          "price": 20.54
-        },
-        {
-          "date": "2026-08-06",
-          "score": 40,
-          "verdict": "approaching",
-          "price": 20.58
-        },
-        {
-          "date": "2026-08-06",
-          "score": 60,
-          "verdict": "approaching",
-          "price": 20.64
-        },
-        {
-          "date": "2026-08-06",
-          "score": 60,
-          "verdict": "approaching",
-          "price": 20.61
-        },
-        {
-          "date": "2026-08-06",
-          "score": 60,
-          "verdict": "approaching",
-          "price": 20.6
-        },
-        {
-          "date": "2026-08-06",
-          "score": 60,
-          "verdict": "approaching",
-          "price": 20.57
-        },
-        {
-          "date": "2026-08-06",
-          "score": 40,
-          "verdict": "approaching",
-          "price": 20.68
-        },
-        {
-          "date": "2026-08-06",
-          "score": 20,
-          "verdict": "weak",
-          "price": 20.69
-        },
-        {
-          "date": "2026-08-06",
-          "score": 20,
-          "verdict": "weak",
-          "price": 20.72
-        },
-        {
-          "date": "2026-08-06",
-          "score": 20,
-          "verdict": "weak",
-          "price": 20.73
-        },
         {
           "date": "2026-08-06",
           "score": 20,
@@ -416,14 +316,117 @@
           "score": 20,
           "verdict": "weak",
           "price": 20.76
+        },
+        {
+          "date": "2026-08-07",
+          "score": 0,
+          "verdict": "insufficient_data",
+          "price": 20.78
+        },
+        {
+          "date": "2026-08-07",
+          "score": 0,
+          "verdict": "insufficient_data",
+          "price": 21.19
+        },
+        {
+          "date": "2026-08-07",
+          "score": 40,
+          "verdict": "approaching",
+          "price": 21.13
+        },
+        {
+          "date": "2026-08-07",
+          "score": 20,
+          "verdict": "weak",
+          "price": 21.53
+        },
+        {
+          "date": "2026-08-07",
+          "score": 40,
+          "verdict": "approaching",
+          "price": 21.31
+        },
+        {
+          "date": "2026-08-07",
+          "score": 20,
+          "verdict": "weak",
+          "price": 21.39
+        },
+        {
+          "date": "2026-08-07",
+          "score": 20,
+          "verdict": "weak",
+          "price": 21.41
+        },
+        {
+          "date": "2026-08-07",
+          "score": 40,
+          "verdict": "approaching",
+          "price": 21.36
+        },
+        {
+          "date": "2026-08-07",
+          "score": 40,
+          "verdict": "approaching",
+          "price": 21.39
+        },
+        {
+          "date": "2026-08-07",
+          "score": 40,
+          "verdict": "approaching",
+          "price": 21.39
+        },
+        {
+          "date": "2026-08-07",
+          "score": 40,
+          "verdict": "approaching",
+          "price": 21.39
+        },
+        {
+          "date": "2026-08-07",
+          "score": 40,
+          "verdict": "approaching",
+          "price": 21.4
+        },
+        {
+          "date": "2026-08-07",
+          "score": 20,
+          "verdict": "weak",
+          "price": 21.52
+        },
+        {
+          "date": "2026-08-07",
+          "score": 20,
+          "verdict": "weak",
+          "price": 21.49
+        },
+        {
+          "date": "2026-08-07",
+          "score": 20,
+          "verdict": "weak",
+          "price": 21.6
+        },
+        {
+          "date": "2026-08-07",
+          "score": 40,
+          "verdict": "approaching",
+          "price": 21.48
+        },
+        {
+          "date": "2026-08-07",
+          "score": 60,
+          "verdict": "approaching",
+          "price": 21.4
         }
       ],
       "criteria_met": {
         "macd_golden": true,
-        "boll_mid_support": false,
-        "rsi_healthy": false,
+        "boll_mid_support": true,
+        "rsi_healthy": true,
         "volume_shrink": false,
-        "support_retest": false
+        "support_retest": false,
+        "box_breakout": false
       }
     },
     "002261": {
@@ -432,114 +435,12 @@
       "in_holdings": false,
       "added_at": "2026-08-05",
       "status": "monitoring",
-      "suggested_qty": 2100,
-      "suggested_price": 27.4,
-      "capital_required": 57540.0,
-      "last_check_date": "2026-08-06",
-      "composite_score": 20,
+      "suggested_qty": 2200,
+      "suggested_price": 26.94,
+      "capital_required": 59268.0,
+      "last_check_date": "2026-08-07",
+      "composite_score": 40,
       "signal_history": [
-        {
-          "date": "2026-08-06",
-          "score": 0,
-          "verdict": "weak",
-          "price": 27.37
-        },
-        {
-          "date": "2026-08-06",
-          "score": 0,
-          "verdict": "weak",
-          "price": 27.4
-        },
-        {
-          "date": "2026-08-06",
-          "score": 0,
-          "verdict": "weak",
-          "price": 27.31
-        },
-        {
-          "date": "2026-08-06",
-          "score": 0,
-          "verdict": "weak",
-          "price": 27.3
-        },
-        {
-          "date": "2026-08-06",
-          "score": 0,
-          "verdict": "weak",
-          "price": 27.15
-        },
-        {
-          "date": "2026-08-06",
-          "score": 0,
-          "verdict": "weak",
-          "price": 27.04
-        },
-        {
-          "date": "2026-08-06",
-          "score": 0,
-          "verdict": "weak",
-          "price": 27.18
-        },
-        {
-          "date": "2026-08-06",
-          "score": 40,
-          "verdict": "approaching",
-          "price": 27.25
-        },
-        {
-          "date": "2026-08-06",
-          "score": 40,
-          "verdict": "approaching",
-          "price": 27.22
-        },
-        {
-          "date": "2026-08-06",
-          "score": 60,
-          "verdict": "approaching",
-          "price": 27.22
-        },
-        {
-          "date": "2026-08-06",
-          "score": 60,
-          "verdict": "approaching",
-          "price": 27.19
-        },
-        {
-          "date": "2026-08-06",
-          "score": 40,
-          "verdict": "approaching",
-          "price": 27.19
-        },
-        {
-          "date": "2026-08-06",
-          "score": 60,
-          "verdict": "approaching",
-          "price": 27.18
-        },
-        {
-          "date": "2026-08-06",
-          "score": 60,
-          "verdict": "approaching",
-          "price": 27.28
-        },
-        {
-          "date": "2026-08-06",
-          "score": 60,
-          "verdict": "approaching",
-          "price": 27.3
-        },
-        {
-          "date": "2026-08-06",
-          "score": 20,
-          "verdict": "weak",
-          "price": 27.34
-        },
-        {
-          "date": "2026-08-06",
-          "score": 20,
-          "verdict": "weak",
-          "price": 27.34
-        },
         {
           "date": "2026-08-06",
           "score": 20,
@@ -557,14 +458,117 @@
           "score": 20,
           "verdict": "weak",
           "price": 27.4
+        },
+        {
+          "date": "2026-08-07",
+          "score": 0,
+          "verdict": "insufficient_data",
+          "price": 27.37
+        },
+        {
+          "date": "2026-08-07",
+          "score": 0,
+          "verdict": "insufficient_data",
+          "price": 27.08
+        },
+        {
+          "date": "2026-08-07",
+          "score": 0,
+          "verdict": "weak",
+          "price": 26.75
+        },
+        {
+          "date": "2026-08-07",
+          "score": 0,
+          "verdict": "weak",
+          "price": 26.78
+        },
+        {
+          "date": "2026-08-07",
+          "score": 20,
+          "verdict": "weak",
+          "price": 26.81
+        },
+        {
+          "date": "2026-08-07",
+          "score": 20,
+          "verdict": "weak",
+          "price": 26.94
+        },
+        {
+          "date": "2026-08-07",
+          "score": 20,
+          "verdict": "weak",
+          "price": 26.89
+        },
+        {
+          "date": "2026-08-07",
+          "score": 20,
+          "verdict": "weak",
+          "price": 26.89
+        },
+        {
+          "date": "2026-08-07",
+          "score": 20,
+          "verdict": "weak",
+          "price": 26.94
+        },
+        {
+          "date": "2026-08-07",
+          "score": 20,
+          "verdict": "weak",
+          "price": 26.91
+        },
+        {
+          "date": "2026-08-07",
+          "score": 20,
+          "verdict": "weak",
+          "price": 26.84
+        },
+        {
+          "date": "2026-08-07",
+          "score": 40,
+          "verdict": "approaching",
+          "price": 26.91
+        },
+        {
+          "date": "2026-08-07",
+          "score": 60,
+          "verdict": "approaching",
+          "price": 26.95
+        },
+        {
+          "date": "2026-08-07",
+          "score": 60,
+          "verdict": "approaching",
+          "price": 26.89
+        },
+        {
+          "date": "2026-08-07",
+          "score": 60,
+          "verdict": "approaching",
+          "price": 26.9
+        },
+        {
+          "date": "2026-08-07",
+          "score": 40,
+          "verdict": "approaching",
+          "price": 26.95
+        },
+        {
+          "date": "2026-08-07",
+          "score": 40,
+          "verdict": "approaching",
+          "price": 26.94
         }
       ],
       "criteria_met": {
         "macd_golden": true,
-        "boll_mid_support": false,
+        "boll_mid_support": true,
         "rsi_healthy": false,
         "volume_shrink": false,
-        "support_retest": false
+        "support_retest": false,
+        "box_breakout": false
       }
     },
     "002451": {
@@ -573,114 +577,12 @@
       "in_holdings": false,
       "added_at": "2026-08-05",
       "status": "monitoring",
-      "suggested_qty": 8100,
-      "suggested_price": 7.34,
-      "capital_required": 59454.0,
-      "last_check_date": "2026-08-06",
-      "composite_score": 20,
+      "suggested_qty": 8400,
+      "suggested_price": 7.14,
+      "capital_required": 59976.0,
+      "last_check_date": "2026-08-07",
+      "composite_score": 40,
       "signal_history": [
-        {
-          "date": "2026-08-06",
-          "score": 0,
-          "verdict": "weak",
-          "price": 7.24
-        },
-        {
-          "date": "2026-08-06",
-          "score": 0,
-          "verdict": "weak",
-          "price": 7.25
-        },
-        {
-          "date": "2026-08-06",
-          "score": 40,
-          "verdict": "approaching",
-          "price": 7.28
-        },
-        {
-          "date": "2026-08-06",
-          "score": 40,
-          "verdict": "approaching",
-          "price": 7.27
-        },
-        {
-          "date": "2026-08-06",
-          "score": 0,
-          "verdict": "weak",
-          "price": 7.23
-        },
-        {
-          "date": "2026-08-06",
-          "score": 0,
-          "verdict": "weak",
-          "price": 7.22
-        },
-        {
-          "date": "2026-08-06",
-          "score": 0,
-          "verdict": "weak",
-          "price": 7.23
-        },
-        {
-          "date": "2026-08-06",
-          "score": 40,
-          "verdict": "approaching",
-          "price": 7.24
-        },
-        {
-          "date": "2026-08-06",
-          "score": 60,
-          "verdict": "approaching",
-          "price": 7.26
-        },
-        {
-          "date": "2026-08-06",
-          "score": 60,
-          "verdict": "approaching",
-          "price": 7.25
-        },
-        {
-          "date": "2026-08-06",
-          "score": 60,
-          "verdict": "approaching",
-          "price": 7.25
-        },
-        {
-          "date": "2026-08-06",
-          "score": 40,
-          "verdict": "approaching",
-          "price": 7.26
-        },
-        {
-          "date": "2026-08-06",
-          "score": 40,
-          "verdict": "approaching",
-          "price": 7.26
-        },
-        {
-          "date": "2026-08-06",
-          "score": 40,
-          "verdict": "approaching",
-          "price": 7.28
-        },
-        {
-          "date": "2026-08-06",
-          "score": 40,
-          "verdict": "approaching",
-          "price": 7.28
-        },
-        {
-          "date": "2026-08-06",
-          "score": 20,
-          "verdict": "weak",
-          "price": 7.3
-        },
-        {
-          "date": "2026-08-06",
-          "score": 20,
-          "verdict": "weak",
-          "price": 7.3
-        },
         {
           "date": "2026-08-06",
           "score": 20,
@@ -698,14 +600,117 @@
           "score": 20,
           "verdict": "weak",
           "price": 7.34
+        },
+        {
+          "date": "2026-08-07",
+          "score": 0,
+          "verdict": "insufficient_data",
+          "price": 7.25
+        },
+        {
+          "date": "2026-08-07",
+          "score": 0,
+          "verdict": "insufficient_data",
+          "price": 7.23
+        },
+        {
+          "date": "2026-08-07",
+          "score": 0,
+          "verdict": "weak",
+          "price": 7.15
+        },
+        {
+          "date": "2026-08-07",
+          "score": 20,
+          "verdict": "weak",
+          "price": 7.18
+        },
+        {
+          "date": "2026-08-07",
+          "score": 20,
+          "verdict": "weak",
+          "price": 7.17
+        },
+        {
+          "date": "2026-08-07",
+          "score": 20,
+          "verdict": "weak",
+          "price": 7.19
+        },
+        {
+          "date": "2026-08-07",
+          "score": 20,
+          "verdict": "weak",
+          "price": 7.19
+        },
+        {
+          "date": "2026-08-07",
+          "score": 20,
+          "verdict": "weak",
+          "price": 7.17
+        },
+        {
+          "date": "2026-08-07",
+          "score": 20,
+          "verdict": "weak",
+          "price": 7.16
+        },
+        {
+          "date": "2026-08-07",
+          "score": 0,
+          "verdict": "weak",
+          "price": 7.14
+        },
+        {
+          "date": "2026-08-07",
+          "score": 0,
+          "verdict": "weak",
+          "price": 7.12
+        },
+        {
+          "date": "2026-08-07",
+          "score": 20,
+          "verdict": "weak",
+          "price": 7.15
+        },
+        {
+          "date": "2026-08-07",
+          "score": 0,
+          "verdict": "weak",
+          "price": 7.14
+        },
+        {
+          "date": "2026-08-07",
+          "score": 20,
+          "verdict": "weak",
+          "price": 7.13
+        },
+        {
+          "date": "2026-08-07",
+          "score": 20,
+          "verdict": "weak",
+          "price": 7.13
+        },
+        {
+          "date": "2026-08-07",
+          "score": 40,
+          "verdict": "approaching",
+          "price": 7.14
+        },
+        {
+          "date": "2026-08-07",
+          "score": 40,
+          "verdict": "approaching",
+          "price": 7.14
         }
       ],
       "criteria_met": {
-        "macd_golden": true,
-        "boll_mid_support": false,
-        "rsi_healthy": false,
+        "macd_golden": false,
+        "boll_mid_support": true,
+        "rsi_healthy": true,
         "volume_shrink": false,
-        "support_retest": false
+        "support_retest": false,
+        "box_breakout": false
       }
     },
     "002536": {
@@ -715,113 +720,11 @@
       "added_at": "2026-08-05",
       "status": "monitoring",
       "suggested_qty": 1500,
-      "suggested_price": 37.85,
-      "capital_required": 56775.0,
-      "last_check_date": "2026-08-06",
+      "suggested_price": 39.25,
+      "capital_required": 58875.0,
+      "last_check_date": "2026-08-07",
       "composite_score": 20,
       "signal_history": [
-        {
-          "date": "2026-08-06",
-          "score": 40,
-          "verdict": "approaching",
-          "price": 37.84
-        },
-        {
-          "date": "2026-08-06",
-          "score": 20,
-          "verdict": "weak",
-          "price": 38.16
-        },
-        {
-          "date": "2026-08-06",
-          "score": 40,
-          "verdict": "approaching",
-          "price": 38.02
-        },
-        {
-          "date": "2026-08-06",
-          "score": 40,
-          "verdict": "approaching",
-          "price": 37.95
-        },
-        {
-          "date": "2026-08-06",
-          "score": 0,
-          "verdict": "weak",
-          "price": 37.51
-        },
-        {
-          "date": "2026-08-06",
-          "score": 20,
-          "verdict": "weak",
-          "price": 37.29
-        },
-        {
-          "date": "2026-08-06",
-          "score": 20,
-          "verdict": "weak",
-          "price": 37.5
-        },
-        {
-          "date": "2026-08-06",
-          "score": 20,
-          "verdict": "weak",
-          "price": 37.44
-        },
-        {
-          "date": "2026-08-06",
-          "score": 20,
-          "verdict": "weak",
-          "price": 37.35
-        },
-        {
-          "date": "2026-08-06",
-          "score": 20,
-          "verdict": "weak",
-          "price": 37.39
-        },
-        {
-          "date": "2026-08-06",
-          "score": 20,
-          "verdict": "weak",
-          "price": 37.41
-        },
-        {
-          "date": "2026-08-06",
-          "score": 0,
-          "verdict": "weak",
-          "price": 37.37
-        },
-        {
-          "date": "2026-08-06",
-          "score": 0,
-          "verdict": "weak",
-          "price": 37.32
-        },
-        {
-          "date": "2026-08-06",
-          "score": 20,
-          "verdict": "weak",
-          "price": 37.46
-        },
-        {
-          "date": "2026-08-06",
-          "score": 40,
-          "verdict": "approaching",
-          "price": 37.62
-        },
-        {
-          "date": "2026-08-06",
-          "score": 20,
-          "verdict": "weak",
-          "price": 37.82
-        },
-        {
-          "date": "2026-08-06",
-          "score": 60,
-          "verdict": "approaching",
-          "price": 37.72
-        },
         {
           "date": "2026-08-06",
           "score": 20,
@@ -839,6 +742,108 @@
           "score": 20,
           "verdict": "weak",
           "price": 37.85
+        },
+        {
+          "date": "2026-08-07",
+          "score": 0,
+          "verdict": "insufficient_data",
+          "price": 38.36
+        },
+        {
+          "date": "2026-08-07",
+          "score": 0,
+          "verdict": "insufficient_data",
+          "price": 38.78
+        },
+        {
+          "date": "2026-08-07",
+          "score": 40,
+          "verdict": "approaching",
+          "price": 38.02
+        },
+        {
+          "date": "2026-08-07",
+          "score": 40,
+          "verdict": "approaching",
+          "price": 38.36
+        },
+        {
+          "date": "2026-08-07",
+          "score": 60,
+          "verdict": "approaching",
+          "price": 38.46
+        },
+        {
+          "date": "2026-08-07",
+          "score": 20,
+          "verdict": "weak",
+          "price": 38.9
+        },
+        {
+          "date": "2026-08-07",
+          "score": 20,
+          "verdict": "weak",
+          "price": 39.36
+        },
+        {
+          "date": "2026-08-07",
+          "score": 20,
+          "verdict": "weak",
+          "price": 39.4
+        },
+        {
+          "date": "2026-08-07",
+          "score": 20,
+          "verdict": "weak",
+          "price": 39.79
+        },
+        {
+          "date": "2026-08-07",
+          "score": 20,
+          "verdict": "weak",
+          "price": 39.85
+        },
+        {
+          "date": "2026-08-07",
+          "score": 20,
+          "verdict": "weak",
+          "price": 39.53
+        },
+        {
+          "date": "2026-08-07",
+          "score": 20,
+          "verdict": "weak",
+          "price": 39.57
+        },
+        {
+          "date": "2026-08-07",
+          "score": 20,
+          "verdict": "weak",
+          "price": 39.87
+        },
+        {
+          "date": "2026-08-07",
+          "score": 40,
+          "verdict": "approaching",
+          "price": 39.58
+        },
+        {
+          "date": "2026-08-07",
+          "score": 20,
+          "verdict": "weak",
+          "price": 39.66
+        },
+        {
+          "date": "2026-08-07",
+          "score": 20,
+          "verdict": "weak",
+          "price": 39.39
+        },
+        {
+          "date": "2026-08-07",
+          "score": 20,
+          "verdict": "weak",
+          "price": 39.25
         }
       ],
       "criteria_met": {
@@ -846,7 +851,8 @@
         "boll_mid_support": false,
         "rsi_healthy": false,
         "volume_shrink": false,
-        "support_retest": false
+        "support_retest": false,
+        "box_breakout": false
       }
     },
     "002600": {
@@ -856,138 +862,139 @@
       "added_at": "2026-08-05",
       "status": "monitoring",
       "suggested_qty": 4700,
-      "suggested_price": 12.74,
-      "capital_required": 59878.0,
-      "last_check_date": "2026-08-06",
-      "composite_score": 20,
+      "suggested_price": 12.68,
+      "capital_required": 59596.0,
+      "last_check_date": "2026-08-07",
+      "composite_score": 60,
       "signal_history": [
         {
           "date": "2026-08-06",
-          "score": 0,
-          "verdict": "weak",
-          "price": 12.72
-        },
-        {
-          "date": "2026-08-06",
-          "score": 0,
-          "verdict": "weak",
-          "price": 12.74
-        },
-        {
-          "date": "2026-08-06",
-          "score": 0,
-          "verdict": "weak",
-          "price": 12.72
-        },
-        {
-          "date": "2026-08-06",
-          "score": 0,
-          "verdict": "weak",
-          "price": 12.71
-        },
-        {
-          "date": "2026-08-06",
-          "score": 0,
-          "verdict": "weak",
-          "price": 12.66
-        },
-        {
-          "date": "2026-08-06",
-          "score": 0,
-          "verdict": "weak",
-          "price": 12.64
-        },
-        {
-          "date": "2026-08-06",
-          "score": 0,
-          "verdict": "weak",
-          "price": 12.68
-        },
-        {
-          "date": "2026-08-06",
-          "score": 40,
+          "score": 60,
           "verdict": "approaching",
           "price": 12.7
         },
         {
           "date": "2026-08-06",
-          "score": 40,
-          "verdict": "approaching",
-          "price": 12.69
-        },
-        {
-          "date": "2026-08-06",
-          "score": 40,
-          "verdict": "approaching",
-          "price": 12.69
-        },
-        {
-          "date": "2026-08-06",
           "score": 20,
           "verdict": "weak",
-          "price": 12.66
-        },
-        {
-          "date": "2026-08-06",
-          "score": 20,
-          "verdict": "weak",
-          "price": 12.67
-        },
-        {
-          "date": "2026-08-06",
-          "score": 40,
-          "verdict": "approaching",
-          "price": 12.66
-        },
-        {
-          "date": "2026-08-06",
-          "score": 60,
-          "verdict": "approaching",
           "price": 12.71
         },
         {
           "date": "2026-08-06",
-          "score": 40,
-          "verdict": "approaching",
-          "price": 12.72
+          "score": 20,
+          "verdict": "weak",
+          "price": 12.74
         },
         {
-          "date": "2026-08-06",
+          "date": "2026-08-07",
+          "score": 0,
+          "verdict": "insufficient_data",
+          "price": 12.79
+        },
+        {
+          "date": "2026-08-07",
+          "score": 0,
+          "verdict": "insufficient_data",
+          "price": 12.76
+        },
+        {
+          "date": "2026-08-07",
+          "score": 0,
+          "verdict": "weak",
+          "price": 12.53
+        },
+        {
+          "date": "2026-08-07",
+          "score": 0,
+          "verdict": "weak",
+          "price": 12.57
+        },
+        {
+          "date": "2026-08-07",
+          "score": 20,
+          "verdict": "weak",
+          "price": 12.66
+        },
+        {
+          "date": "2026-08-07",
+          "score": 40,
+          "verdict": "approaching",
+          "price": 12.69
+        },
+        {
+          "date": "2026-08-07",
+          "score": 20,
+          "verdict": "weak",
+          "price": 12.66
+        },
+        {
+          "date": "2026-08-07",
+          "score": 40,
+          "verdict": "approaching",
+          "price": 12.69
+        },
+        {
+          "date": "2026-08-07",
+          "score": 40,
+          "verdict": "approaching",
+          "price": 12.69
+        },
+        {
+          "date": "2026-08-07",
           "score": 20,
           "verdict": "weak",
           "price": 12.73
         },
         {
-          "date": "2026-08-06",
+          "date": "2026-08-07",
+          "score": 60,
+          "verdict": "approaching",
+          "price": 12.66
+        },
+        {
+          "date": "2026-08-07",
+          "score": 60,
+          "verdict": "approaching",
+          "price": 12.66
+        },
+        {
+          "date": "2026-08-07",
           "score": 60,
           "verdict": "approaching",
           "price": 12.71
         },
         {
-          "date": "2026-08-06",
+          "date": "2026-08-07",
           "score": 60,
+          "verdict": "approaching",
+          "price": 12.67
+        },
+        {
+          "date": "2026-08-07",
+          "score": 60,
+          "verdict": "approaching",
+          "price": 12.69
+        },
+        {
+          "date": "2026-08-07",
+          "score": 40,
           "verdict": "approaching",
           "price": 12.7
         },
         {
-          "date": "2026-08-06",
-          "score": 20,
-          "verdict": "weak",
-          "price": 12.71
-        },
-        {
-          "date": "2026-08-06",
-          "score": 20,
-          "verdict": "weak",
-          "price": 12.74
+          "date": "2026-08-07",
+          "score": 60,
+          "verdict": "approaching",
+          "price": 12.68
         }
       ],
       "criteria_met": {
         "macd_golden": true,
-        "boll_mid_support": false,
-        "rsi_healthy": false,
+        "boll_mid_support": true,
+        "rsi_healthy": true,
         "volume_shrink": false,
-        "support_retest": false
+        "support_retest": false,
+        "box_breakout": false
       }
     },
     "002639": {
@@ -996,114 +1003,12 @@
       "in_holdings": true,
       "added_at": "2026-08-05",
       "status": "monitoring",
-      "suggested_qty": 4700,
-      "suggested_price": 12.64,
-      "capital_required": 59408.0,
-      "last_check_date": "2026-08-06",
-      "composite_score": 20,
+      "suggested_qty": 4800,
+      "suggested_price": 12.45,
+      "capital_required": 59760.0,
+      "last_check_date": "2026-08-07",
+      "composite_score": 60,
       "signal_history": [
-        {
-          "date": "2026-08-06",
-          "score": 0,
-          "verdict": "weak",
-          "price": 12.57
-        },
-        {
-          "date": "2026-08-06",
-          "score": 0,
-          "verdict": "weak",
-          "price": 12.57
-        },
-        {
-          "date": "2026-08-06",
-          "score": 20,
-          "verdict": "weak",
-          "price": 12.6
-        },
-        {
-          "date": "2026-08-06",
-          "score": 40,
-          "verdict": "approaching",
-          "price": 12.58
-        },
-        {
-          "date": "2026-08-06",
-          "score": 40,
-          "verdict": "approaching",
-          "price": 12.58
-        },
-        {
-          "date": "2026-08-06",
-          "score": 20,
-          "verdict": "weak",
-          "price": 12.52
-        },
-        {
-          "date": "2026-08-06",
-          "score": 20,
-          "verdict": "weak",
-          "price": 12.52
-        },
-        {
-          "date": "2026-08-06",
-          "score": 40,
-          "verdict": "approaching",
-          "price": 12.57
-        },
-        {
-          "date": "2026-08-06",
-          "score": 60,
-          "verdict": "approaching",
-          "price": 12.59
-        },
-        {
-          "date": "2026-08-06",
-          "score": 60,
-          "verdict": "approaching",
-          "price": 12.59
-        },
-        {
-          "date": "2026-08-06",
-          "score": 60,
-          "verdict": "approaching",
-          "price": 12.57
-        },
-        {
-          "date": "2026-08-06",
-          "score": 60,
-          "verdict": "approaching",
-          "price": 12.56
-        },
-        {
-          "date": "2026-08-06",
-          "score": 40,
-          "verdict": "approaching",
-          "price": 12.6
-        },
-        {
-          "date": "2026-08-06",
-          "score": 40,
-          "verdict": "approaching",
-          "price": 12.63
-        },
-        {
-          "date": "2026-08-06",
-          "score": 20,
-          "verdict": "weak",
-          "price": 12.63
-        },
-        {
-          "date": "2026-08-06",
-          "score": 20,
-          "verdict": "weak",
-          "price": 12.63
-        },
-        {
-          "date": "2026-08-06",
-          "score": 20,
-          "verdict": "weak",
-          "price": 12.64
-        },
         {
           "date": "2026-08-06",
           "score": 20,
@@ -1121,14 +1026,117 @@
           "score": 20,
           "verdict": "weak",
           "price": 12.64
+        },
+        {
+          "date": "2026-08-07",
+          "score": 0,
+          "verdict": "insufficient_data",
+          "price": 12.5
+        },
+        {
+          "date": "2026-08-07",
+          "score": 0,
+          "verdict": "insufficient_data",
+          "price": 12.51
+        },
+        {
+          "date": "2026-08-07",
+          "score": 0,
+          "verdict": "weak",
+          "price": 12.45
+        },
+        {
+          "date": "2026-08-07",
+          "score": 0,
+          "verdict": "weak",
+          "price": 12.41
+        },
+        {
+          "date": "2026-08-07",
+          "score": 20,
+          "verdict": "weak",
+          "price": 12.43
+        },
+        {
+          "date": "2026-08-07",
+          "score": 20,
+          "verdict": "weak",
+          "price": 12.42
+        },
+        {
+          "date": "2026-08-07",
+          "score": 20,
+          "verdict": "weak",
+          "price": 12.44
+        },
+        {
+          "date": "2026-08-07",
+          "score": 0,
+          "verdict": "weak",
+          "price": 12.41
+        },
+        {
+          "date": "2026-08-07",
+          "score": 20,
+          "verdict": "weak",
+          "price": 12.42
+        },
+        {
+          "date": "2026-08-07",
+          "score": 0,
+          "verdict": "weak",
+          "price": 12.39
+        },
+        {
+          "date": "2026-08-07",
+          "score": 0,
+          "verdict": "weak",
+          "price": 12.38
+        },
+        {
+          "date": "2026-08-07",
+          "score": 0,
+          "verdict": "weak",
+          "price": 12.38
+        },
+        {
+          "date": "2026-08-07",
+          "score": 20,
+          "verdict": "weak",
+          "price": 12.41
+        },
+        {
+          "date": "2026-08-07",
+          "score": 20,
+          "verdict": "weak",
+          "price": 12.4
+        },
+        {
+          "date": "2026-08-07",
+          "score": 40,
+          "verdict": "approaching",
+          "price": 12.43
+        },
+        {
+          "date": "2026-08-07",
+          "score": 20,
+          "verdict": "weak",
+          "price": 12.46
+        },
+        {
+          "date": "2026-08-07",
+          "score": 60,
+          "verdict": "approaching",
+          "price": 12.45
         }
       ],
       "criteria_met": {
         "macd_golden": true,
-        "boll_mid_support": false,
-        "rsi_healthy": false,
+        "boll_mid_support": true,
+        "rsi_healthy": true,
         "volume_shrink": false,
-        "support_retest": false
+        "support_retest": false,
+        "box_breakout": false
       }
     },
     "300054": {
@@ -1138,113 +1146,11 @@
       "added_at": "2026-08-05",
       "status": "monitoring",
       "suggested_qty": 700,
-      "suggested_price": 76.8,
-      "capital_required": 53760.0,
-      "last_check_date": "2026-08-06",
-      "composite_score": 20,
+      "suggested_price": 77.94,
+      "capital_required": 54558.0,
+      "last_check_date": "2026-08-07",
+      "composite_score": 40,
       "signal_history": [
-        {
-          "date": "2026-08-06",
-          "score": 20,
-          "verdict": "weak",
-          "price": 76.0
-        },
-        {
-          "date": "2026-08-06",
-          "score": 40,
-          "verdict": "approaching",
-          "price": 76.17
-        },
-        {
-          "date": "2026-08-06",
-          "score": 20,
-          "verdict": "weak",
-          "price": 76.16
-        },
-        {
-          "date": "2026-08-06",
-          "score": 40,
-          "verdict": "approaching",
-          "price": 76.29
-        },
-        {
-          "date": "2026-08-06",
-          "score": 0,
-          "verdict": "weak",
-          "price": 75.86
-        },
-        {
-          "date": "2026-08-06",
-          "score": 0,
-          "verdict": "weak",
-          "price": 75.32
-        },
-        {
-          "date": "2026-08-06",
-          "score": 40,
-          "verdict": "approaching",
-          "price": 76.02
-        },
-        {
-          "date": "2026-08-06",
-          "score": 40,
-          "verdict": "approaching",
-          "price": 75.87
-        },
-        {
-          "date": "2026-08-06",
-          "score": 40,
-          "verdict": "approaching",
-          "price": 75.79
-        },
-        {
-          "date": "2026-08-06",
-          "score": 40,
-          "verdict": "approaching",
-          "price": 75.87
-        },
-        {
-          "date": "2026-08-06",
-          "score": 20,
-          "verdict": "weak",
-          "price": 75.36
-        },
-        {
-          "date": "2026-08-06",
-          "score": 0,
-          "verdict": "weak",
-          "price": 75.41
-        },
-        {
-          "date": "2026-08-06",
-          "score": 0,
-          "verdict": "weak",
-          "price": 75.21
-        },
-        {
-          "date": "2026-08-06",
-          "score": 20,
-          "verdict": "weak",
-          "price": 75.54
-        },
-        {
-          "date": "2026-08-06",
-          "score": 40,
-          "verdict": "approaching",
-          "price": 75.78
-        },
-        {
-          "date": "2026-08-06",
-          "score": 20,
-          "verdict": "weak",
-          "price": 76.37
-        },
-        {
-          "date": "2026-08-06",
-          "score": 20,
-          "verdict": "weak",
-          "price": 76.4
-        },
         {
           "date": "2026-08-06",
           "score": 20,
@@ -1262,14 +1168,117 @@
           "score": 20,
           "verdict": "weak",
           "price": 76.8
+        },
+        {
+          "date": "2026-08-07",
+          "score": 0,
+          "verdict": "insufficient_data",
+          "price": 77.85
+        },
+        {
+          "date": "2026-08-07",
+          "score": 0,
+          "verdict": "insufficient_data",
+          "price": 77.88
+        },
+        {
+          "date": "2026-08-07",
+          "score": 20,
+          "verdict": "weak",
+          "price": 77.67
+        },
+        {
+          "date": "2026-08-07",
+          "score": 20,
+          "verdict": "weak",
+          "price": 77.2
+        },
+        {
+          "date": "2026-08-07",
+          "score": 20,
+          "verdict": "weak",
+          "price": 77.45
+        },
+        {
+          "date": "2026-08-07",
+          "score": 40,
+          "verdict": "approaching",
+          "price": 77.95
+        },
+        {
+          "date": "2026-08-07",
+          "score": 20,
+          "verdict": "weak",
+          "price": 78.01
+        },
+        {
+          "date": "2026-08-07",
+          "score": 40,
+          "verdict": "approaching",
+          "price": 78.5
+        },
+        {
+          "date": "2026-08-07",
+          "score": 40,
+          "verdict": "approaching",
+          "price": 78.7
+        },
+        {
+          "date": "2026-08-07",
+          "score": 40,
+          "verdict": "approaching",
+          "price": 78.68
+        },
+        {
+          "date": "2026-08-07",
+          "score": 40,
+          "verdict": "approaching",
+          "price": 78.65
+        },
+        {
+          "date": "2026-08-07",
+          "score": 40,
+          "verdict": "approaching",
+          "price": 78.66
+        },
+        {
+          "date": "2026-08-07",
+          "score": 20,
+          "verdict": "weak",
+          "price": 79.07
+        },
+        {
+          "date": "2026-08-07",
+          "score": 20,
+          "verdict": "weak",
+          "price": 78.76
+        },
+        {
+          "date": "2026-08-07",
+          "score": 20,
+          "verdict": "weak",
+          "price": 78.86
+        },
+        {
+          "date": "2026-08-07",
+          "score": 40,
+          "verdict": "approaching",
+          "price": 78.35
+        },
+        {
+          "date": "2026-08-07",
+          "score": 40,
+          "verdict": "approaching",
+          "price": 77.94
         }
       ],
       "criteria_met": {
         "macd_golden": true,
-        "boll_mid_support": false,
+        "boll_mid_support": true,
         "rsi_healthy": false,
         "volume_shrink": false,
-        "support_retest": false
+        "support_retest": false,
+        "box_breakout": false
       }
     },
     "300058": {
@@ -1279,113 +1288,11 @@
       "added_at": "2026-08-05",
       "status": "monitoring",
       "suggested_qty": 3900,
-      "suggested_price": 15.34,
-      "capital_required": 59826.0,
-      "last_check_date": "2026-08-06",
+      "suggested_price": 15.18,
+      "capital_required": 59202.0,
+      "last_check_date": "2026-08-07",
       "composite_score": 20,
       "signal_history": [
-        {
-          "date": "2026-08-06",
-          "score": 20,
-          "verdict": "weak",
-          "price": 15.21
-        },
-        {
-          "date": "2026-08-06",
-          "score": 0,
-          "verdict": "weak",
-          "price": 15.18
-        },
-        {
-          "date": "2026-08-06",
-          "score": 0,
-          "verdict": "weak",
-          "price": 15.1
-        },
-        {
-          "date": "2026-08-06",
-          "score": 0,
-          "verdict": "weak",
-          "price": 15.03
-        },
-        {
-          "date": "2026-08-06",
-          "score": 0,
-          "verdict": "weak",
-          "price": 14.93
-        },
-        {
-          "date": "2026-08-06",
-          "score": 0,
-          "verdict": "weak",
-          "price": 14.92
-        },
-        {
-          "date": "2026-08-06",
-          "score": 0,
-          "verdict": "weak",
-          "price": 15.0
-        },
-        {
-          "date": "2026-08-06",
-          "score": 40,
-          "verdict": "approaching",
-          "price": 15.21
-        },
-        {
-          "date": "2026-08-06",
-          "score": 60,
-          "verdict": "approaching",
-          "price": 15.12
-        },
-        {
-          "date": "2026-08-06",
-          "score": 60,
-          "verdict": "approaching",
-          "price": 15.12
-        },
-        {
-          "date": "2026-08-06",
-          "score": 60,
-          "verdict": "approaching",
-          "price": 15.07
-        },
-        {
-          "date": "2026-08-06",
-          "score": 60,
-          "verdict": "approaching",
-          "price": 15.06
-        },
-        {
-          "date": "2026-08-06",
-          "score": 60,
-          "verdict": "approaching",
-          "price": 15.06
-        },
-        {
-          "date": "2026-08-06",
-          "score": 20,
-          "verdict": "weak",
-          "price": 15.17
-        },
-        {
-          "date": "2026-08-06",
-          "score": 40,
-          "verdict": "approaching",
-          "price": 15.15
-        },
-        {
-          "date": "2026-08-06",
-          "score": 20,
-          "verdict": "weak",
-          "price": 15.19
-        },
-        {
-          "date": "2026-08-06",
-          "score": 20,
-          "verdict": "weak",
-          "price": 15.17
-        },
         {
           "date": "2026-08-06",
           "score": 20,
@@ -1403,6 +1310,108 @@
           "score": 20,
           "verdict": "weak",
           "price": 15.34
+        },
+        {
+          "date": "2026-08-07",
+          "score": 0,
+          "verdict": "insufficient_data",
+          "price": 15.13
+        },
+        {
+          "date": "2026-08-07",
+          "score": 0,
+          "verdict": "insufficient_data",
+          "price": 14.94
+        },
+        {
+          "date": "2026-08-07",
+          "score": 0,
+          "verdict": "weak",
+          "price": 14.75
+        },
+        {
+          "date": "2026-08-07",
+          "score": 20,
+          "verdict": "weak",
+          "price": 14.76
+        },
+        {
+          "date": "2026-08-07",
+          "score": 20,
+          "verdict": "weak",
+          "price": 14.78
+        },
+        {
+          "date": "2026-08-07",
+          "score": 20,
+          "verdict": "weak",
+          "price": 14.78
+        },
+        {
+          "date": "2026-08-07",
+          "score": 20,
+          "verdict": "weak",
+          "price": 14.78
+        },
+        {
+          "date": "2026-08-07",
+          "score": 20,
+          "verdict": "weak",
+          "price": 14.77
+        },
+        {
+          "date": "2026-08-07",
+          "score": 40,
+          "verdict": "approaching",
+          "price": 14.87
+        },
+        {
+          "date": "2026-08-07",
+          "score": 20,
+          "verdict": "weak",
+          "price": 14.9
+        },
+        {
+          "date": "2026-08-07",
+          "score": 60,
+          "verdict": "approaching",
+          "price": 14.84
+        },
+        {
+          "date": "2026-08-07",
+          "score": 40,
+          "verdict": "approaching",
+          "price": 15.0
+        },
+        {
+          "date": "2026-08-07",
+          "score": 40,
+          "verdict": "approaching",
+          "price": 14.97
+        },
+        {
+          "date": "2026-08-07",
+          "score": 40,
+          "verdict": "approaching",
+          "price": 14.95
+        },
+        {
+          "date": "2026-08-07",
+          "score": 20,
+          "verdict": "weak",
+          "price": 14.99
+        },
+        {
+          "date": "2026-08-07",
+          "score": 20,
+          "verdict": "weak",
+          "price": 15.23
+        },
+        {
+          "date": "2026-08-07",
+          "score": 20,
+          "verdict": "weak",
+          "price": 15.18
         }
       ],
       "criteria_met": {
@@ -1410,7 +1419,8 @@
         "boll_mid_support": false,
         "rsi_healthy": false,
         "volume_shrink": false,
-        "support_retest": false
+        "support_retest": false,
+        "box_breakout": false
       }
     },
     "300153": {
@@ -1420,113 +1430,11 @@
       "added_at": "2026-08-05",
       "status": "monitoring",
       "suggested_qty": 2800,
-      "suggested_price": 21.34,
-      "capital_required": 59752.0,
-      "last_check_date": "2026-08-06",
-      "composite_score": 20,
+      "suggested_price": 21.07,
+      "capital_required": 58996.0,
+      "last_check_date": "2026-08-07",
+      "composite_score": 60,
       "signal_history": [
-        {
-          "date": "2026-08-06",
-          "score": 0,
-          "verdict": "weak",
-          "price": 21.34
-        },
-        {
-          "date": "2026-08-06",
-          "score": 0,
-          "verdict": "weak",
-          "price": 21.34
-        },
-        {
-          "date": "2026-08-06",
-          "score": 0,
-          "verdict": "weak",
-          "price": 21.33
-        },
-        {
-          "date": "2026-08-06",
-          "score": 0,
-          "verdict": "weak",
-          "price": 21.24
-        },
-        {
-          "date": "2026-08-06",
-          "score": 0,
-          "verdict": "weak",
-          "price": 21.26
-        },
-        {
-          "date": "2026-08-06",
-          "score": 0,
-          "verdict": "weak",
-          "price": 21.14
-        },
-        {
-          "date": "2026-08-06",
-          "score": 0,
-          "verdict": "weak",
-          "price": 21.19
-        },
-        {
-          "date": "2026-08-06",
-          "score": 40,
-          "verdict": "approaching",
-          "price": 21.27
-        },
-        {
-          "date": "2026-08-06",
-          "score": 40,
-          "verdict": "approaching",
-          "price": 21.28
-        },
-        {
-          "date": "2026-08-06",
-          "score": 40,
-          "verdict": "approaching",
-          "price": 21.29
-        },
-        {
-          "date": "2026-08-06",
-          "score": 20,
-          "verdict": "weak",
-          "price": 21.21
-        },
-        {
-          "date": "2026-08-06",
-          "score": 0,
-          "verdict": "weak",
-          "price": 21.19
-        },
-        {
-          "date": "2026-08-06",
-          "score": 60,
-          "verdict": "approaching",
-          "price": 21.23
-        },
-        {
-          "date": "2026-08-06",
-          "score": 60,
-          "verdict": "approaching",
-          "price": 21.29
-        },
-        {
-          "date": "2026-08-06",
-          "score": 20,
-          "verdict": "weak",
-          "price": 21.37
-        },
-        {
-          "date": "2026-08-06",
-          "score": 20,
-          "verdict": "weak",
-          "price": 21.37
-        },
-        {
-          "date": "2026-08-06",
-          "score": 20,
-          "verdict": "weak",
-          "price": 21.37
-        },
         {
           "date": "2026-08-06",
           "score": 20,
@@ -1544,14 +1452,117 @@
           "score": 20,
           "verdict": "weak",
           "price": 21.34
+        },
+        {
+          "date": "2026-08-07",
+          "score": 0,
+          "verdict": "insufficient_data",
+          "price": 21.23
+        },
+        {
+          "date": "2026-08-07",
+          "score": 0,
+          "verdict": "insufficient_data",
+          "price": 21.16
+        },
+        {
+          "date": "2026-08-07",
+          "score": 0,
+          "verdict": "weak",
+          "price": 21.06
+        },
+        {
+          "date": "2026-08-07",
+          "score": 20,
+          "verdict": "weak",
+          "price": 20.94
+        },
+        {
+          "date": "2026-08-07",
+          "score": 40,
+          "verdict": "approaching",
+          "price": 20.96
+        },
+        {
+          "date": "2026-08-07",
+          "score": 40,
+          "verdict": "approaching",
+          "price": 20.98
+        },
+        {
+          "date": "2026-08-07",
+          "score": 60,
+          "verdict": "approaching",
+          "price": 21.04
+        },
+        {
+          "date": "2026-08-07",
+          "score": 60,
+          "verdict": "approaching",
+          "price": 21.03
+        },
+        {
+          "date": "2026-08-07",
+          "score": 40,
+          "verdict": "approaching",
+          "price": 21.02
+        },
+        {
+          "date": "2026-08-07",
+          "score": 40,
+          "verdict": "approaching",
+          "price": 21.03
+        },
+        {
+          "date": "2026-08-07",
+          "score": 40,
+          "verdict": "approaching",
+          "price": 21.0
+        },
+        {
+          "date": "2026-08-07",
+          "score": 40,
+          "verdict": "approaching",
+          "price": 21.06
+        },
+        {
+          "date": "2026-08-07",
+          "score": 40,
+          "verdict": "approaching",
+          "price": 21.13
+        },
+        {
+          "date": "2026-08-07",
+          "score": 60,
+          "verdict": "approaching",
+          "price": 21.09
+        },
+        {
+          "date": "2026-08-07",
+          "score": 60,
+          "verdict": "approaching",
+          "price": 21.07
+        },
+        {
+          "date": "2026-08-07",
+          "score": 40,
+          "verdict": "approaching",
+          "price": 21.09
+        },
+        {
+          "date": "2026-08-07",
+          "score": 60,
+          "verdict": "approaching",
+          "price": 21.07
         }
       ],
       "criteria_met": {
         "macd_golden": true,
-        "boll_mid_support": false,
-        "rsi_healthy": false,
+        "boll_mid_support": true,
+        "rsi_healthy": true,
         "volume_shrink": false,
-        "support_retest": false
+        "support_retest": false,
+        "box_breakout": false
       }
     },
     "300364": {
@@ -1560,114 +1571,12 @@
       "in_holdings": false,
       "added_at": "2026-08-05",
       "status": "monitoring",
-      "suggested_qty": 2300,
-      "suggested_price": 25.22,
-      "capital_required": 58006.0,
-      "last_check_date": "2026-08-06",
+      "suggested_qty": 2400,
+      "suggested_price": 24.73,
+      "capital_required": 59352.0,
+      "last_check_date": "2026-08-07",
       "composite_score": 20,
       "signal_history": [
-        {
-          "date": "2026-08-06",
-          "score": 0,
-          "verdict": "weak",
-          "price": 25.56
-        },
-        {
-          "date": "2026-08-06",
-          "score": 0,
-          "verdict": "weak",
-          "price": 25.51
-        },
-        {
-          "date": "2026-08-06",
-          "score": 0,
-          "verdict": "weak",
-          "price": 25.39
-        },
-        {
-          "date": "2026-08-06",
-          "score": 0,
-          "verdict": "weak",
-          "price": 25.36
-        },
-        {
-          "date": "2026-08-06",
-          "score": 0,
-          "verdict": "weak",
-          "price": 24.97
-        },
-        {
-          "date": "2026-08-06",
-          "score": 0,
-          "verdict": "weak",
-          "price": 24.94
-        },
-        {
-          "date": "2026-08-06",
-          "score": 0,
-          "verdict": "weak",
-          "price": 25.05
-        },
-        {
-          "date": "2026-08-06",
-          "score": 20,
-          "verdict": "weak",
-          "price": 25.2
-        },
-        {
-          "date": "2026-08-06",
-          "score": 0,
-          "verdict": "weak",
-          "price": 25.0
-        },
-        {
-          "date": "2026-08-06",
-          "score": 0,
-          "verdict": "weak",
-          "price": 24.99
-        },
-        {
-          "date": "2026-08-06",
-          "score": 0,
-          "verdict": "weak",
-          "price": 24.95
-        },
-        {
-          "date": "2026-08-06",
-          "score": 0,
-          "verdict": "weak",
-          "price": 24.95
-        },
-        {
-          "date": "2026-08-06",
-          "score": 40,
-          "verdict": "approaching",
-          "price": 25.03
-        },
-        {
-          "date": "2026-08-06",
-          "score": 60,
-          "verdict": "approaching",
-          "price": 25.17
-        },
-        {
-          "date": "2026-08-06",
-          "score": 60,
-          "verdict": "approaching",
-          "price": 25.13
-        },
-        {
-          "date": "2026-08-06",
-          "score": 40,
-          "verdict": "approaching",
-          "price": 25.2
-        },
-        {
-          "date": "2026-08-06",
-          "score": 60,
-          "verdict": "approaching",
-          "price": 25.14
-        },
         {
           "date": "2026-08-06",
           "score": 60,
@@ -1685,6 +1594,108 @@
           "score": 20,
           "verdict": "weak",
           "price": 25.22
+        },
+        {
+          "date": "2026-08-07",
+          "score": 0,
+          "verdict": "insufficient_data",
+          "price": 24.85
+        },
+        {
+          "date": "2026-08-07",
+          "score": 0,
+          "verdict": "insufficient_data",
+          "price": 24.73
+        },
+        {
+          "date": "2026-08-07",
+          "score": 0,
+          "verdict": "weak",
+          "price": 24.43
+        },
+        {
+          "date": "2026-08-07",
+          "score": 0,
+          "verdict": "weak",
+          "price": 24.3
+        },
+        {
+          "date": "2026-08-07",
+          "score": 20,
+          "verdict": "weak",
+          "price": 24.39
+        },
+        {
+          "date": "2026-08-07",
+          "score": 20,
+          "verdict": "weak",
+          "price": 24.43
+        },
+        {
+          "date": "2026-08-07",
+          "score": 20,
+          "verdict": "weak",
+          "price": 24.38
+        },
+        {
+          "date": "2026-08-07",
+          "score": 20,
+          "verdict": "weak",
+          "price": 24.34
+        },
+        {
+          "date": "2026-08-07",
+          "score": 40,
+          "verdict": "approaching",
+          "price": 24.52
+        },
+        {
+          "date": "2026-08-07",
+          "score": 40,
+          "verdict": "approaching",
+          "price": 24.59
+        },
+        {
+          "date": "2026-08-07",
+          "score": 40,
+          "verdict": "approaching",
+          "price": 24.5
+        },
+        {
+          "date": "2026-08-07",
+          "score": 40,
+          "verdict": "approaching",
+          "price": 24.66
+        },
+        {
+          "date": "2026-08-07",
+          "score": 60,
+          "verdict": "approaching",
+          "price": 24.62
+        },
+        {
+          "date": "2026-08-07",
+          "score": 40,
+          "verdict": "approaching",
+          "price": 24.68
+        },
+        {
+          "date": "2026-08-07",
+          "score": 60,
+          "verdict": "approaching",
+          "price": 24.61
+        },
+        {
+          "date": "2026-08-07",
+          "score": 20,
+          "verdict": "weak",
+          "price": 24.75
+        },
+        {
+          "date": "2026-08-07",
+          "score": 20,
+          "verdict": "weak",
+          "price": 24.73
         }
       ],
       "criteria_met": {
@@ -1692,7 +1703,8 @@
         "boll_mid_support": false,
         "rsi_healthy": false,
         "volume_shrink": false,
-        "support_retest": false
+        "support_retest": false,
+        "box_breakout": false
       }
     },
     "300456": {
@@ -1701,114 +1713,12 @@
       "in_holdings": false,
       "added_at": "2026-08-05",
       "status": "monitoring",
-      "suggested_qty": 1900,
-      "suggested_price": 31.49,
-      "capital_required": 59831.0,
-      "last_check_date": "2026-08-06",
-      "composite_score": 20,
+      "suggested_qty": 1800,
+      "suggested_price": 31.66,
+      "capital_required": 56988.0,
+      "last_check_date": "2026-08-07",
+      "composite_score": 40,
       "signal_history": [
-        {
-          "date": "2026-08-06",
-          "score": 0,
-          "verdict": "weak",
-          "price": 31.39
-        },
-        {
-          "date": "2026-08-06",
-          "score": 0,
-          "verdict": "weak",
-          "price": 31.45
-        },
-        {
-          "date": "2026-08-06",
-          "score": 20,
-          "verdict": "weak",
-          "price": 31.41
-        },
-        {
-          "date": "2026-08-06",
-          "score": 0,
-          "verdict": "weak",
-          "price": 31.41
-        },
-        {
-          "date": "2026-08-06",
-          "score": 0,
-          "verdict": "weak",
-          "price": 31.17
-        },
-        {
-          "date": "2026-08-06",
-          "score": 0,
-          "verdict": "weak",
-          "price": 31.06
-        },
-        {
-          "date": "2026-08-06",
-          "score": 0,
-          "verdict": "weak",
-          "price": 31.22
-        },
-        {
-          "date": "2026-08-06",
-          "score": 0,
-          "verdict": "weak",
-          "price": 31.21
-        },
-        {
-          "date": "2026-08-06",
-          "score": 20,
-          "verdict": "weak",
-          "price": 31.13
-        },
-        {
-          "date": "2026-08-06",
-          "score": 20,
-          "verdict": "weak",
-          "price": 31.15
-        },
-        {
-          "date": "2026-08-06",
-          "score": 0,
-          "verdict": "weak",
-          "price": 31.06
-        },
-        {
-          "date": "2026-08-06",
-          "score": 0,
-          "verdict": "weak",
-          "price": 31.04
-        },
-        {
-          "date": "2026-08-06",
-          "score": 0,
-          "verdict": "weak",
-          "price": 31.04
-        },
-        {
-          "date": "2026-08-06",
-          "score": 40,
-          "verdict": "approaching",
-          "price": 31.24
-        },
-        {
-          "date": "2026-08-06",
-          "score": 60,
-          "verdict": "approaching",
-          "price": 31.3
-        },
-        {
-          "date": "2026-08-06",
-          "score": 20,
-          "verdict": "weak",
-          "price": 31.43
-        },
-        {
-          "date": "2026-08-06",
-          "score": 20,
-          "verdict": "weak",
-          "price": 31.43
-        },
         {
           "date": "2026-08-06",
           "score": 20,
@@ -1826,14 +1736,117 @@
           "score": 20,
           "verdict": "weak",
           "price": 31.49
+        },
+        {
+          "date": "2026-08-07",
+          "score": 0,
+          "verdict": "insufficient_data",
+          "price": 31.52
+        },
+        {
+          "date": "2026-08-07",
+          "score": 0,
+          "verdict": "insufficient_data",
+          "price": 31.46
+        },
+        {
+          "date": "2026-08-07",
+          "score": 0,
+          "verdict": "weak",
+          "price": 31.14
+        },
+        {
+          "date": "2026-08-07",
+          "score": 40,
+          "verdict": "approaching",
+          "price": 31.31
+        },
+        {
+          "date": "2026-08-07",
+          "score": 40,
+          "verdict": "approaching",
+          "price": 31.41
+        },
+        {
+          "date": "2026-08-07",
+          "score": 20,
+          "verdict": "weak",
+          "price": 31.62
+        },
+        {
+          "date": "2026-08-07",
+          "score": 40,
+          "verdict": "approaching",
+          "price": 31.67
+        },
+        {
+          "date": "2026-08-07",
+          "score": 20,
+          "verdict": "weak",
+          "price": 31.71
+        },
+        {
+          "date": "2026-08-07",
+          "score": 20,
+          "verdict": "weak",
+          "price": 31.84
+        },
+        {
+          "date": "2026-08-07",
+          "score": 20,
+          "verdict": "weak",
+          "price": 32.02
+        },
+        {
+          "date": "2026-08-07",
+          "score": 20,
+          "verdict": "weak",
+          "price": 31.84
+        },
+        {
+          "date": "2026-08-07",
+          "score": 20,
+          "verdict": "weak",
+          "price": 31.86
+        },
+        {
+          "date": "2026-08-07",
+          "score": 20,
+          "verdict": "weak",
+          "price": 31.94
+        },
+        {
+          "date": "2026-08-07",
+          "score": 60,
+          "verdict": "approaching",
+          "price": 31.85
+        },
+        {
+          "date": "2026-08-07",
+          "score": 20,
+          "verdict": "weak",
+          "price": 31.88
+        },
+        {
+          "date": "2026-08-07",
+          "score": 40,
+          "verdict": "approaching",
+          "price": 31.7
+        },
+        {
+          "date": "2026-08-07",
+          "score": 40,
+          "verdict": "approaching",
+          "price": 31.66
         }
       ],
       "criteria_met": {
         "macd_golden": true,
-        "boll_mid_support": false,
+        "boll_mid_support": true,
         "rsi_healthy": false,
         "volume_shrink": false,
-        "support_retest": false
+        "support_retest": false,
+        "box_breakout": false
       }
     },
     "588170": {
@@ -1842,101 +1855,23 @@
       "in_holdings": true,
       "added_at": "2026-08-05",
       "status": "monitoring",
-      "suggested_qty": 61300,
-      "suggested_price": 0.978,
-      "capital_required": 59951.4,
-      "last_check_date": "2026-08-06",
-      "composite_score": 20,
+      "suggested_qty": 60000,
+      "suggested_price": 0.999,
+      "capital_required": 59940.0,
+      "last_check_date": "2026-08-07",
+      "composite_score": 40,
       "signal_history": [
         {
           "date": "2026-08-06",
-          "score": 20,
-          "verdict": "weak",
-          "price": 0.96
-        },
-        {
-          "date": "2026-08-06",
-          "score": 20,
-          "verdict": "weak",
-          "price": 0.96
-        },
-        {
-          "date": "2026-08-06",
           "score": 40,
           "verdict": "approaching",
-          "price": 0.972
-        },
-        {
-          "date": "2026-08-06",
-          "score": 40,
-          "verdict": "approaching",
-          "price": 0.969
-        },
-        {
-          "date": "2026-08-06",
-          "score": 40,
-          "verdict": "approaching",
-          "price": 0.974
-        },
-        {
-          "date": "2026-08-06",
-          "score": 0,
-          "verdict": "weak",
-          "price": 0.966
+          "price": 0.975
         },
         {
           "date": "2026-08-06",
           "score": 20,
           "verdict": "weak",
-          "price": 0.966
-        },
-        {
-          "date": "2026-08-06",
-          "score": 40,
-          "verdict": "approaching",
-          "price": 0.967
-        },
-        {
-          "date": "2026-08-06",
-          "score": 40,
-          "verdict": "approaching",
-          "price": 0.969
-        },
-        {
-          "date": "2026-08-06",
-          "score": 40,
-          "verdict": "approaching",
-          "price": 0.968
-        },
-        {
-          "date": "2026-08-06",
-          "score": 20,
-          "verdict": "weak",
-          "price": 0.964
-        },
-        {
-          "date": "2026-08-06",
-          "score": 0,
-          "verdict": "weak",
-          "price": 0.957
-        },
-        {
-          "date": "2026-08-06",
-          "score": 0,
-          "verdict": "weak",
-          "price": 0.958
-        },
-        {
-          "date": "2026-08-06",
-          "score": 20,
-          "verdict": "weak",
-          "price": 0.961
-        },
-        {
-          "date": "2026-08-06",
-          "score": 20,
-          "verdict": "weak",
-          "price": 0.972
+          "price": 0.975
         },
         {
           "date": "2026-08-06",
@@ -1945,36 +1880,115 @@
           "price": 0.978
         },
         {
-          "date": "2026-08-06",
-          "score": 40,
-          "verdict": "approaching",
+          "date": "2026-08-07",
+          "score": 0,
+          "verdict": "insufficient_data",
+          "price": 0.979
+        },
+        {
+          "date": "2026-08-07",
+          "score": 0,
+          "verdict": "insufficient_data",
+          "price": 0.978
+        },
+        {
+          "date": "2026-08-07",
+          "score": 0,
+          "verdict": "weak",
+          "price": 0.977
+        },
+        {
+          "date": "2026-08-07",
+          "score": 20,
+          "verdict": "weak",
           "price": 0.976
         },
         {
-          "date": "2026-08-06",
+          "date": "2026-08-07",
+          "score": 20,
+          "verdict": "weak",
+          "price": 0.974
+        },
+        {
+          "date": "2026-08-07",
+          "score": 20,
+          "verdict": "weak",
+          "price": 0.984
+        },
+        {
+          "date": "2026-08-07",
+          "score": 20,
+          "verdict": "weak",
+          "price": 0.99
+        },
+        {
+          "date": "2026-08-07",
+          "score": 20,
+          "verdict": "weak",
+          "price": 0.992
+        },
+        {
+          "date": "2026-08-07",
+          "score": 20,
+          "verdict": "weak",
+          "price": 1.0
+        },
+        {
+          "date": "2026-08-07",
+          "score": 20,
+          "verdict": "weak",
+          "price": 0.998
+        },
+        {
+          "date": "2026-08-07",
+          "score": 60,
+          "verdict": "approaching",
+          "price": 0.994
+        },
+        {
+          "date": "2026-08-07",
+          "score": 20,
+          "verdict": "weak",
+          "price": 1.002
+        },
+        {
+          "date": "2026-08-07",
+          "score": 20,
+          "verdict": "weak",
+          "price": 1.006
+        },
+        {
+          "date": "2026-08-07",
+          "score": 20,
+          "verdict": "weak",
+          "price": 1.008
+        },
+        {
+          "date": "2026-08-07",
+          "score": 20,
+          "verdict": "weak",
+          "price": 1.007
+        },
+        {
+          "date": "2026-08-07",
+          "score": 20,
+          "verdict": "weak",
+          "price": 1.005
+        },
+        {
+          "date": "2026-08-07",
           "score": 40,
           "verdict": "approaching",
-          "price": 0.975
-        },
-        {
-          "date": "2026-08-06",
-          "score": 20,
-          "verdict": "weak",
-          "price": 0.975
-        },
-        {
-          "date": "2026-08-06",
-          "score": 20,
-          "verdict": "weak",
-          "price": 0.978
+          "price": 0.999
         }
       ],
       "criteria_met": {
         "macd_golden": true,
-        "boll_mid_support": false,
+        "boll_mid_support": true,
         "rsi_healthy": false,
         "volume_shrink": false,
-        "support_retest": false
+        "support_retest": false,
+        "box_breakout": false
       }
     },
     "600089": {
@@ -1986,44 +2000,20 @@
       "suggested_qty": 2800,
       "suggested_price": 21.18,
       "capital_required": 59304.0,
-      "last_check_date": "2026-08-06",
-      "composite_score": 60,
+      "last_check_date": "2026-08-07",
+      "composite_score": 40,
       "signal_history": [
         {
           "date": "2026-08-06",
-          "score": 0,
-          "verdict": "weak",
+          "score": 60,
+          "verdict": "approaching",
           "price": 21.2
         },
         {
           "date": "2026-08-06",
-          "score": 0,
-          "verdict": "weak",
-          "price": 21.19
-        },
-        {
-          "date": "2026-08-06",
-          "score": 0,
-          "verdict": "weak",
-          "price": 21.17
-        },
-        {
-          "date": "2026-08-06",
-          "score": 0,
-          "verdict": "weak",
-          "price": 21.16
-        },
-        {
-          "date": "2026-08-06",
-          "score": 0,
-          "verdict": "weak",
-          "price": 21.12
-        },
-        {
-          "date": "2026-08-06",
-          "score": 20,
-          "verdict": "weak",
-          "price": 21.14
+          "score": 40,
+          "verdict": "approaching",
+          "price": 21.2
         },
         {
           "date": "2026-08-06",
@@ -2032,90 +2022,115 @@
           "price": 21.18
         },
         {
-          "date": "2026-08-06",
+          "date": "2026-08-07",
+          "score": 0,
+          "verdict": "insufficient_data",
+          "price": 21.13
+        },
+        {
+          "date": "2026-08-07",
+          "score": 0,
+          "verdict": "insufficient_data",
+          "price": 21.33
+        },
+        {
+          "date": "2026-08-07",
+          "score": 20,
+          "verdict": "weak",
+          "price": 21.1
+        },
+        {
+          "date": "2026-08-07",
           "score": 40,
           "verdict": "approaching",
           "price": 21.19
         },
         {
-          "date": "2026-08-06",
-          "score": 20,
-          "verdict": "weak",
-          "price": 21.22
-        },
-        {
-          "date": "2026-08-06",
-          "score": 20,
-          "verdict": "weak",
-          "price": 21.24
-        },
-        {
-          "date": "2026-08-06",
+          "date": "2026-08-07",
           "score": 40,
           "verdict": "approaching",
           "price": 21.21
         },
         {
-          "date": "2026-08-06",
+          "date": "2026-08-07",
           "score": 40,
           "verdict": "approaching",
-          "price": 21.22
+          "price": 21.18
         },
         {
-          "date": "2026-08-06",
+          "date": "2026-08-07",
+          "score": 20,
+          "verdict": "weak",
+          "price": 21.15
+        },
+        {
+          "date": "2026-08-07",
+          "score": 20,
+          "verdict": "weak",
+          "price": 21.12
+        },
+        {
+          "date": "2026-08-07",
+          "score": 20,
+          "verdict": "weak",
+          "price": 21.12
+        },
+        {
+          "date": "2026-08-07",
+          "score": 20,
+          "verdict": "weak",
+          "price": 21.13
+        },
+        {
+          "date": "2026-08-07",
+          "score": 20,
+          "verdict": "weak",
+          "price": 21.1
+        },
+        {
+          "date": "2026-08-07",
           "score": 40,
           "verdict": "approaching",
-          "price": 21.22
+          "price": 21.18
         },
         {
-          "date": "2026-08-06",
-          "score": 20,
-          "verdict": "weak",
-          "price": 21.24
-        },
-        {
-          "date": "2026-08-06",
-          "score": 20,
-          "verdict": "weak",
-          "price": 21.23
-        },
-        {
-          "date": "2026-08-06",
-          "score": 20,
-          "verdict": "weak",
-          "price": 21.23
-        },
-        {
-          "date": "2026-08-06",
+          "date": "2026-08-07",
           "score": 40,
-          "verdict": "approaching",
-          "price": 21.22
-        },
-        {
-          "date": "2026-08-06",
-          "score": 60,
           "verdict": "approaching",
           "price": 21.2
         },
         {
-          "date": "2026-08-06",
-          "score": 40,
+          "date": "2026-08-07",
+          "score": 60,
           "verdict": "approaching",
-          "price": 21.2
+          "price": 21.16
         },
         {
-          "date": "2026-08-06",
+          "date": "2026-08-07",
           "score": 60,
+          "verdict": "approaching",
+          "price": 21.16
+        },
+        {
+          "date": "2026-08-07",
+          "score": 60,
+          "verdict": "approaching",
+          "price": 21.16
+        },
+        {
+          "date": "2026-08-07",
+          "score": 40,
           "verdict": "approaching",
           "price": 21.18
         }
       ],
       "criteria_met": {
-        "macd_golden": true,
+        "macd_golden": false,
         "boll_mid_support": true,
         "rsi_healthy": true,
         "volume_shrink": false,
-        "support_retest": false
+        "support_retest": false,
+        "box_breakout": false
       }
     },
     "600481": {
@@ -2124,114 +2139,12 @@
       "in_holdings": true,
       "added_at": "2026-08-05",
       "status": "monitoring",
-      "suggested_qty": 13800,
-      "suggested_price": 4.33,
-      "capital_required": 59754.0,
-      "last_check_date": "2026-08-06",
-      "composite_score": 20,
+      "suggested_qty": 14000,
+      "suggested_price": 4.28,
+      "capital_required": 59920.0,
+      "last_check_date": "2026-08-07",
+      "composite_score": 60,
       "signal_history": [
-        {
-          "date": "2026-08-06",
-          "score": 0,
-          "verdict": "weak",
-          "price": 4.28
-        },
-        {
-          "date": "2026-08-06",
-          "score": 0,
-          "verdict": "weak",
-          "price": 4.28
-        },
-        {
-          "date": "2026-08-06",
-          "score": 40,
-          "verdict": "approaching",
-          "price": 4.28
-        },
-        {
-          "date": "2026-08-06",
-          "score": 20,
-          "verdict": "weak",
-          "price": 4.27
-        },
-        {
-          "date": "2026-08-06",
-          "score": 20,
-          "verdict": "weak",
-          "price": 4.27
-        },
-        {
-          "date": "2026-08-06",
-          "score": 20,
-          "verdict": "weak",
-          "price": 4.26
-        },
-        {
-          "date": "2026-08-06",
-          "score": 0,
-          "verdict": "weak",
-          "price": 4.26
-        },
-        {
-          "date": "2026-08-06",
-          "score": 40,
-          "verdict": "approaching",
-          "price": 4.29
-        },
-        {
-          "date": "2026-08-06",
-          "score": 60,
-          "verdict": "approaching",
-          "price": 4.28
-        },
-        {
-          "date": "2026-08-06",
-          "score": 20,
-          "verdict": "weak",
-          "price": 4.3
-        },
-        {
-          "date": "2026-08-06",
-          "score": 40,
-          "verdict": "approaching",
-          "price": 4.29
-        },
-        {
-          "date": "2026-08-06",
-          "score": 40,
-          "verdict": "approaching",
-          "price": 4.29
-        },
-        {
-          "date": "2026-08-06",
-          "score": 40,
-          "verdict": "approaching",
-          "price": 4.29
-        },
-        {
-          "date": "2026-08-06",
-          "score": 20,
-          "verdict": "weak",
-          "price": 4.31
-        },
-        {
-          "date": "2026-08-06",
-          "score": 20,
-          "verdict": "weak",
-          "price": 4.31
-        },
-        {
-          "date": "2026-08-06",
-          "score": 20,
-          "verdict": "weak",
-          "price": 4.32
-        },
-        {
-          "date": "2026-08-06",
-          "score": 20,
-          "verdict": "weak",
-          "price": 4.32
-        },
         {
           "date": "2026-08-06",
           "score": 20,
@@ -2249,14 +2162,117 @@
           "score": 20,
           "verdict": "weak",
           "price": 4.33
+        },
+        {
+          "date": "2026-08-07",
+          "score": 0,
+          "verdict": "insufficient_data",
+          "price": 4.36
+        },
+        {
+          "date": "2026-08-07",
+          "score": 0,
+          "verdict": "insufficient_data",
+          "price": 4.31
+        },
+        {
+          "date": "2026-08-07",
+          "score": 20,
+          "verdict": "weak",
+          "price": 4.3
+        },
+        {
+          "date": "2026-08-07",
+          "score": 20,
+          "verdict": "weak",
+          "price": 4.28
+        },
+        {
+          "date": "2026-08-07",
+          "score": 40,
+          "verdict": "approaching",
+          "price": 4.29
+        },
+        {
+          "date": "2026-08-07",
+          "score": 40,
+          "verdict": "approaching",
+          "price": 4.29
+        },
+        {
+          "date": "2026-08-07",
+          "score": 60,
+          "verdict": "approaching",
+          "price": 4.33
+        },
+        {
+          "date": "2026-08-07",
+          "score": 40,
+          "verdict": "approaching",
+          "price": 4.3
+        },
+        {
+          "date": "2026-08-07",
+          "score": 40,
+          "verdict": "approaching",
+          "price": 4.29
+        },
+        {
+          "date": "2026-08-07",
+          "score": 20,
+          "verdict": "weak",
+          "price": 4.27
+        },
+        {
+          "date": "2026-08-07",
+          "score": 20,
+          "verdict": "weak",
+          "price": 4.27
+        },
+        {
+          "date": "2026-08-07",
+          "score": 40,
+          "verdict": "approaching",
+          "price": 4.28
+        },
+        {
+          "date": "2026-08-07",
+          "score": 20,
+          "verdict": "weak",
+          "price": 4.27
+        },
+        {
+          "date": "2026-08-07",
+          "score": 40,
+          "verdict": "approaching",
+          "price": 4.28
+        },
+        {
+          "date": "2026-08-07",
+          "score": 40,
+          "verdict": "approaching",
+          "price": 4.28
+        },
+        {
+          "date": "2026-08-07",
+          "score": 40,
+          "verdict": "approaching",
+          "price": 4.28
+        },
+        {
+          "date": "2026-08-07",
+          "score": 60,
+          "verdict": "approaching",
+          "price": 4.28
         }
       ],
       "criteria_met": {
         "macd_golden": true,
-        "boll_mid_support": false,
-        "rsi_healthy": false,
+        "boll_mid_support": true,
+        "rsi_healthy": true,
         "volume_shrink": false,
-        "support_retest": false
+        "support_retest": false,
+        "box_breakout": false
       }
     },
     "600584": {
@@ -2266,113 +2282,11 @@
       "added_at": "2026-08-05",
       "status": "monitoring",
       "suggested_qty": 700,
-      "suggested_price": 75.87,
-      "capital_required": 53109.0,
-      "last_check_date": "2026-08-06",
+      "suggested_price": 76.93,
+      "capital_required": 53851.0,
+      "last_check_date": "2026-08-07",
       "composite_score": 20,
       "signal_history": [
-        {
-          "date": "2026-08-06",
-          "score": 20,
-          "verdict": "weak",
-          "price": 74.1
-        },
-        {
-          "date": "2026-08-06",
-          "score": 20,
-          "verdict": "weak",
-          "price": 74.26
-        },
-        {
-          "date": "2026-08-06",
-          "score": 20,
-          "verdict": "weak",
-          "price": 73.69
-        },
-        {
-          "date": "2026-08-06",
-          "score": 20,
-          "verdict": "weak",
-          "price": 73.85
-        },
-        {
-          "date": "2026-08-06",
-          "score": 0,
-          "verdict": "weak",
-          "price": 73.44
-        },
-        {
-          "date": "2026-08-06",
-          "score": 20,
-          "verdict": "weak",
-          "price": 73.8
-        },
-        {
-          "date": "2026-08-06",
-          "score": 40,
-          "verdict": "approaching",
-          "price": 74.65
-        },
-        {
-          "date": "2026-08-06",
-          "score": 40,
-          "verdict": "approaching",
-          "price": 74.48
-        },
-        {
-          "date": "2026-08-06",
-          "score": 40,
-          "verdict": "approaching",
-          "price": 74.11
-        },
-        {
-          "date": "2026-08-06",
-          "score": 40,
-          "verdict": "approaching",
-          "price": 74.35
-        },
-        {
-          "date": "2026-08-06",
-          "score": 40,
-          "verdict": "approaching",
-          "price": 73.81
-        },
-        {
-          "date": "2026-08-06",
-          "score": 40,
-          "verdict": "approaching",
-          "price": 73.8
-        },
-        {
-          "date": "2026-08-06",
-          "score": 20,
-          "verdict": "weak",
-          "price": 73.71
-        },
-        {
-          "date": "2026-08-06",
-          "score": 0,
-          "verdict": "weak",
-          "price": 74.35
-        },
-        {
-          "date": "2026-08-06",
-          "score": 0,
-          "verdict": "weak",
-          "price": 74.52
-        },
-        {
-          "date": "2026-08-06",
-          "score": 0,
-          "verdict": "weak",
-          "price": 74.88
-        },
-        {
-          "date": "2026-08-06",
-          "score": 20,
-          "verdict": "weak",
-          "price": 75.31
-        },
         {
           "date": "2026-08-06",
           "score": 20,
@@ -2390,6 +2304,108 @@
           "score": 20,
           "verdict": "weak",
           "price": 75.87
+        },
+        {
+          "date": "2026-08-07",
+          "score": 0,
+          "verdict": "insufficient_data",
+          "price": 76.11
+        },
+        {
+          "date": "2026-08-07",
+          "score": 0,
+          "verdict": "insufficient_data",
+          "price": 75.55
+        },
+        {
+          "date": "2026-08-07",
+          "score": 0,
+          "verdict": "weak",
+          "price": 74.76
+        },
+        {
+          "date": "2026-08-07",
+          "score": 40,
+          "verdict": "approaching",
+          "price": 75.17
+        },
+        {
+          "date": "2026-08-07",
+          "score": 0,
+          "verdict": "weak",
+          "price": 75.82
+        },
+        {
+          "date": "2026-08-07",
+          "score": 40,
+          "verdict": "approaching",
+          "price": 75.8
+        },
+        {
+          "date": "2026-08-07",
+          "score": 40,
+          "verdict": "approaching",
+          "price": 75.93
+        },
+        {
+          "date": "2026-08-07",
+          "score": 20,
+          "verdict": "weak",
+          "price": 76.65
+        },
+        {
+          "date": "2026-08-07",
+          "score": 20,
+          "verdict": "weak",
+          "price": 76.93
+        },
+        {
+          "date": "2026-08-07",
+          "score": 20,
+          "verdict": "weak",
+          "price": 76.75
+        },
+        {
+          "date": "2026-08-07",
+          "score": 20,
+          "verdict": "weak",
+          "price": 76.9
+        },
+        {
+          "date": "2026-08-07",
+          "score": 20,
+          "verdict": "weak",
+          "price": 77.59
+        },
+        {
+          "date": "2026-08-07",
+          "score": 20,
+          "verdict": "weak",
+          "price": 78.28
+        },
+        {
+          "date": "2026-08-07",
+          "score": 20,
+          "verdict": "weak",
+          "price": 77.56
+        },
+        {
+          "date": "2026-08-07",
+          "score": 20,
+          "verdict": "weak",
+          "price": 78.0
+        },
+        {
+          "date": "2026-08-07",
+          "score": 20,
+          "verdict": "weak",
+          "price": 77.26
+        },
+        {
+          "date": "2026-08-07",
+          "score": 20,
+          "verdict": "weak",
+          "price": 76.93
         }
       ],
       "criteria_met": {
@@ -2397,7 +2413,8 @@
         "boll_mid_support": false,
         "rsi_healthy": false,
         "volume_shrink": false,
-        "support_retest": false
+        "support_retest": false,
+        "box_breakout": false
       }
     },
     "600977": {
@@ -2406,139 +2423,140 @@
       "in_holdings": false,
       "added_at": "2026-08-05",
       "status": "monitoring",
-      "suggested_qty": 4700,
-      "suggested_price": 12.6,
-      "capital_required": 59220.0,
-      "last_check_date": "2026-08-06",
-      "composite_score": 20,
+      "suggested_qty": 4800,
+      "suggested_price": 12.5,
+      "capital_required": 60000.0,
+      "last_check_date": "2026-08-07",
+      "composite_score": 40,
       "signal_history": [
         {
           "date": "2026-08-06",
-          "score": 60,
+          "score": 40,
           "verdict": "approaching",
-          "price": 12.63
+          "price": 12.55
         },
         {
           "date": "2026-08-06",
           "score": 40,
           "verdict": "approaching",
+          "price": 12.55
+        },
+        {
+          "date": "2026-08-06",
+          "score": 20,
+          "verdict": "weak",
           "price": 12.6
         },
         {
-          "date": "2026-08-06",
-          "score": 20,
-          "verdict": "weak",
-          "price": 12.53
-        },
-        {
-          "date": "2026-08-06",
-          "score": 20,
-          "verdict": "weak",
-          "price": 12.53
-        },
-        {
-          "date": "2026-08-06",
-          "score": 20,
-          "verdict": "weak",
-          "price": 12.5
-        },
-        {
-          "date": "2026-08-06",
+          "date": "2026-08-07",
           "score": 0,
-          "verdict": "weak",
-          "price": 12.5
+          "verdict": "insufficient_data",
+          "price": 12.47
         },
         {
-          "date": "2026-08-06",
+          "date": "2026-08-07",
           "score": 0,
-          "verdict": "weak",
+          "verdict": "insufficient_data",
           "price": 12.51
         },
         {
-          "date": "2026-08-06",
-          "score": 60,
-          "verdict": "approaching",
-          "price": 12.54
-        },
-        {
-          "date": "2026-08-06",
-          "score": 60,
-          "verdict": "approaching",
-          "price": 12.52
-        },
-        {
-          "date": "2026-08-06",
+          "date": "2026-08-07",
           "score": 40,
           "verdict": "approaching",
-          "price": 12.52
+          "price": 12.42
         },
         {
-          "date": "2026-08-06",
+          "date": "2026-08-07",
+          "score": 60,
+          "verdict": "approaching",
+          "price": 12.45
+        },
+        {
+          "date": "2026-08-07",
           "score": 20,
           "verdict": "weak",
           "price": 12.5
         },
         {
-          "date": "2026-08-06",
-          "score": 60,
-          "verdict": "approaching",
-          "price": 12.52
-        },
-        {
-          "date": "2026-08-06",
-          "score": 60,
-          "verdict": "approaching",
-          "price": 12.54
-        },
-        {
-          "date": "2026-08-06",
-          "score": 60,
-          "verdict": "approaching",
-          "price": 12.56
-        },
-        {
-          "date": "2026-08-06",
+          "date": "2026-08-07",
           "score": 40,
           "verdict": "approaching",
-          "price": 12.56
+          "price": 12.53
         },
         {
-          "date": "2026-08-06",
-          "score": 20,
-          "verdict": "weak",
-          "price": 12.57
-        },
-        {
-          "date": "2026-08-06",
-          "score": 20,
-          "verdict": "weak",
-          "price": 12.56
-        },
-        {
-          "date": "2026-08-06",
+          "date": "2026-08-07",
           "score": 40,
           "verdict": "approaching",
+          "price": 12.51
+        },
+        {
+          "date": "2026-08-07",
+          "score": 40,
+          "verdict": "approaching",
+          "price": 12.51
+        },
+        {
+          "date": "2026-08-07",
+          "score": 20,
+          "verdict": "weak",
           "price": 12.55
         },
         {
-          "date": "2026-08-06",
-          "score": 40,
+          "date": "2026-08-07",
+          "score": 60,
           "verdict": "approaching",
-          "price": 12.55
+          "price": 12.49
         },
         {
-          "date": "2026-08-06",
+          "date": "2026-08-07",
+          "score": 60,
+          "verdict": "approaching",
+          "price": 12.46
+        },
+        {
+          "date": "2026-08-07",
+          "score": 40,
+          "verdict": "approaching",
+          "price": 12.46
+        },
+        {
+          "date": "2026-08-07",
+          "score": 40,
+          "verdict": "approaching",
+          "price": 12.45
+        },
+        {
+          "date": "2026-08-07",
+          "score": 40,
+          "verdict": "approaching",
+          "price": 12.46
+        },
+        {
+          "date": "2026-08-07",
           "score": 20,
           "verdict": "weak",
-          "price": 12.6
+          "price": 12.42
+        },
+        {
+          "date": "2026-08-07",
+          "score": 40,
+          "verdict": "approaching",
+          "price": 12.49
+        },
+        {
+          "date": "2026-08-07",
+          "score": 40,
+          "verdict": "approaching",
+          "price": 12.5
         }
       ],
       "criteria_met": {
-        "macd_golden": true,
-        "boll_mid_support": false,
-        "rsi_healthy": false,
+        "macd_golden": false,
+        "boll_mid_support": true,
+        "rsi_healthy": true,
         "volume_shrink": false,
-        "support_retest": false
+        "support_retest": false,
+        "box_breakout": false
       }
     },
     "603667": {
@@ -2546,115 +2564,13 @@
       "type": "stock",
       "in_holdings": true,
       "added_at": "2026-08-05",
-      "status": "monitoring",
+      "status": "signal",
       "suggested_qty": 1000,
-      "suggested_price": 55.14,
-      "capital_required": 55140.0,
-      "last_check_date": "2026-08-06",
-      "composite_score": 20,
+      "suggested_price": 54.99,
+      "capital_required": 54990.0,
+      "last_check_date": "2026-08-07",
+      "composite_score": 40,
       "signal_history": [
-        {
-          "date": "2026-08-06",
-          "score": 20,
-          "verdict": "weak",
-          "price": 55.15
-        },
-        {
-          "date": "2026-08-06",
-          "score": 20,
-          "verdict": "weak",
-          "price": 55.15
-        },
-        {
-          "date": "2026-08-06",
-          "score": 20,
-          "verdict": "weak",
-          "price": 55.18
-        },
-        {
-          "date": "2026-08-06",
-          "score": 0,
-          "verdict": "weak",
-          "price": 54.98
-        },
-        {
-          "date": "2026-08-06",
-          "score": 0,
-          "verdict": "weak",
-          "price": 55.12
-        },
-        {
-          "date": "2026-08-06",
-          "score": 0,
-          "verdict": "weak",
-          "price": 54.8
-        },
-        {
-          "date": "2026-08-06",
-          "score": 0,
-          "verdict": "weak",
-          "price": 54.74
-        },
-        {
-          "date": "2026-08-06",
-          "score": 20,
-          "verdict": "weak",
-          "price": 54.9
-        },
-        {
-          "date": "2026-08-06",
-          "score": 40,
-          "verdict": "approaching",
-          "price": 54.95
-        },
-        {
-          "date": "2026-08-06",
-          "score": 40,
-          "verdict": "approaching",
-          "price": 54.92
-        },
-        {
-          "date": "2026-08-06",
-          "score": 20,
-          "verdict": "weak",
-          "price": 54.77
-        },
-        {
-          "date": "2026-08-06",
-          "score": 0,
-          "verdict": "weak",
-          "price": 54.67
-        },
-        {
-          "date": "2026-08-06",
-          "score": 0,
-          "verdict": "weak",
-          "price": 54.75
-        },
-        {
-          "date": "2026-08-06",
-          "score": 40,
-          "verdict": "approaching",
-          "price": 54.88
-        },
-        {
-          "date": "2026-08-06",
-          "score": 60,
-          "verdict": "approaching",
-          "price": 54.92
-        },
-        {
-          "date": "2026-08-06",
-          "score": 60,
-          "verdict": "approaching",
-          "price": 55.0
-        },
-        {
-          "date": "2026-08-06",
-          "score": 60,
-          "verdict": "approaching",
-          "price": 55.0
-        },
         {
           "date": "2026-08-06",
           "score": 60,
@@ -2672,14 +2588,117 @@
           "score": 20,
           "verdict": "weak",
           "price": 55.14
+        },
+        {
+          "date": "2026-08-07",
+          "score": 0,
+          "verdict": "insufficient_data",
+          "price": 55.18
+        },
+        {
+          "date": "2026-08-07",
+          "score": 0,
+          "verdict": "insufficient_data",
+          "price": 55.0
+        },
+        {
+          "date": "2026-08-07",
+          "score": 20,
+          "verdict": "weak",
+          "price": 55.17
+        },
+        {
+          "date": "2026-08-07",
+          "score": 0,
+          "verdict": "weak",
+          "price": 54.6
+        },
+        {
+          "date": "2026-08-07",
+          "score": 20,
+          "verdict": "weak",
+          "price": 54.8
+        },
+        {
+          "date": "2026-08-07",
+          "score": 20,
+          "verdict": "weak",
+          "price": 54.77
+        },
+        {
+          "date": "2026-08-07",
+          "score": 20,
+          "verdict": "weak",
+          "price": 54.94
+        },
+        {
+          "date": "2026-08-07",
+          "score": 20,
+          "verdict": "weak",
+          "price": 55.19
+        },
+        {
+          "date": "2026-08-07",
+          "score": 60,
+          "verdict": "approaching",
+          "price": 55.13
+        },
+        {
+          "date": "2026-08-07",
+          "score": 60,
+          "verdict": "approaching",
+          "price": 55.06
+        },
+        {
+          "date": "2026-08-07",
+          "score": 60,
+          "verdict": "approaching",
+          "price": 54.85
+        },
+        {
+          "date": "2026-08-07",
+          "score": 80,
+          "verdict": "signal",
+          "price": 55.01
+        },
+        {
+          "date": "2026-08-07",
+          "score": 80,
+          "verdict": "signal",
+          "price": 55.01
+        },
+        {
+          "date": "2026-08-07",
+          "score": 80,
+          "verdict": "signal",
+          "price": 55.03
+        },
+        {
+          "date": "2026-08-07",
+          "score": 60,
+          "verdict": "approaching",
+          "price": 54.96
+        },
+        {
+          "date": "2026-08-07",
+          "score": 40,
+          "verdict": "approaching",
+          "price": 54.95
+        },
+        {
+          "date": "2026-08-07",
+          "score": 40,
+          "verdict": "approaching",
+          "price": 54.99
         }
       ],
       "criteria_met": {
         "macd_golden": true,
-        "boll_mid_support": false,
+        "boll_mid_support": true,
         "rsi_healthy": false,
         "volume_shrink": false,
-        "support_retest": false
+        "support_retest": false,
+        "box_breakout": false
       }
     }
   }
