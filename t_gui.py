@@ -311,8 +311,14 @@ class Api:
 
     # ---------- 实时行情（顶部行情条） ----------
     def load_quotes(self):
-        """拉腾讯实时行情（持仓），失败回退 pre_close。"""
-        cur = _load_json(HOLDINGS, {})
+        """拉腾讯实时行情（持仓 + watchlist 候选股），失败回退 pre_close。"""
+        cur = dict(_load_json(HOLDINGS, {}))
+        # 合并 watchlist_buy 候选股（非持仓的也拉，供建仓表实时价）
+        wl = _load_json(BASE / "watchlist_buy.json", {})
+        for code, info in (wl.get("stocks", {}) or {}).items():
+            if code not in cur and isinstance(info, dict):
+                cur[code] = {"name": info.get("name", code), "qty": 0, "cost": None,
+                             "pre_close": 0, "in_watchlist": True}
         out = {"source": "fallback", "ts": None, "quotes": []}
         if not cur:
             return out

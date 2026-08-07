@@ -590,10 +590,10 @@ def _maybe_run_position_builder_intraday(now: datetime) -> None:
     if _run_position_scan is None:
         return
     t = now.time()
-    # 仅交易时段: 9:45-11:30, 13:00-14:55（给指标足够的预热时间）
+    # 仅交易时段: 9:30-11:30, 13:00-14:55（09:30 开盘即扫，竞价期间9:15-9:25无分钟线不扫）
     if now.weekday() >= 5:
         return
-    in_morning = dtime(9, 45) <= t <= dtime(11, 30)
+    in_morning = dtime(9, 30) <= t <= dtime(11, 30)
     in_afternoon = dtime(13, 0) <= t <= dtime(14, 55)
     if not (in_morning or in_afternoon):
         return
