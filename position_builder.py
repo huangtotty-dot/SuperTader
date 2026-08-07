@@ -200,16 +200,38 @@ def _parse_snapshot_file(fp: Path, snap_date: str) -> tuple:
 # 突破箱体检测（第一优先级条件）
 # ============================================================
 
+_DAILY_CACHE_DIR = BASE / "t_io" / "cache" / "daily_kline"
+
+
 def fetch_daily_kline(code: str) -> pd.DataFrame:
-    """拉腾讯日线（前复权）。返回 {date, open, close, high, low, volume}。"""
+    """拉腾讯日线（前复权，365天），带本地缓存（每日更新）。
+    返回 {date, open, close, high, low, volume}。"""
     import urllib.request as _ur, os as _os
+    from datetime import datetime as _dt
+    code = str(code)
+    # 本地缓存路径
+    try:
+        _DAILY_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        cache_fp = _DAILY_CACHE_DIR / f"{code}.json"
+    except Exception:
+        cache_fp = None
+
+    # 本地有缓存且日期是今天 → 直接用
+    if cache_fp and cache_fp.exists():
+        try:
+            cached = json.loads(cache_fp.read_text(encoding="utf-8"))
+            if cached.get("date") == _dt.now().strftime("%Y-%m-%d") and cached.get("rows"):
+                return pd.DataFrame(cached["rows"])
+        except Exception:
+            pass
+
     for _k in ["http_proxy", "https_proxy", "HTTP_PROXY", "HTTPS_PROXY",
                "ALL_PROXY", "all_proxy"]:
         _os.environ.pop(_k, None)
     _os.environ["NO_PROXY"] = "*"
     symbol = ("sh" + code if code[0] in "56" else "sz" + code)
     try:
-        url = f"https://ifzq.gtimg.cn/appstock/app/fqkline/get?param={symbol},day,,,150,qfq"
+        url = f"https://ifzq.gtimg.cn/appstock/app/fqkline/get?param={symbol},day,,,365,qfq"
         req = _ur.Request(url, headers={"User-Agent": "Mozilla/5.0",
                                         "Referer": "https://finance.qq.com/"})
         raw = _ur.urlopen(req, timeout=8).read().decode("utf-8", errors="ignore")
@@ -219,8 +241,24 @@ def fetch_daily_kline(code: str) -> pd.DataFrame:
         rows = [{"date": i[0], "open": float(i[1]), "close": float(i[2]),
                  "high": float(i[3]), "low": float(i[4]), "volume": float(i[5])}
                 for i in kline if len(i) >= 6]
+        # 写缓存（每日）
+        if cache_fp and rows:
+            try:
+                cache_fp.write_text(json.dumps(
+                    {"date": _dt.now().strftime("%Y-%m-%d"), "rows": rows},
+                    ensure_ascii=False), encoding="utf-8")
+            except Exception:
+                pass
         return pd.DataFrame(rows)
     except Exception:
+        # 网络失败时回退旧缓存
+        if cache_fp and cache_fp.exists():
+            try:
+                cached = json.loads(cache_fp.read_text(encoding="utf-8"))
+                if cached.get("rows"):
+                    return pd.DataFrame(cached["rows"])
+            except Exception:
+                pass
         return pd.DataFrame()
 
 
