@@ -1222,6 +1222,70 @@ class Api:
 
         return _clean(out)
 
+    # ---------- 选股猎手历史 ----------
+    def available_hunter_dates(self):
+        """返回 stock_hunter history 里所有日期（降序）。"""
+        try:
+            from modules.heat_tracker import load_history as load_heat_history
+            hist = load_heat_history()
+            dates = sorted(hist.keys(), reverse=True)
+            return [{"date": d[:4] + "-" + d[4:6] + "-" + d[6:8]} for d in dates]
+        except Exception:
+            return []
+
+    def load_hunter_history(self, date):
+        """秒级读 history 快照（不重新拉行情）。date=YYYY-MM-DD。"""
+        out = {"date": date, "available": False, "error": ""}
+        try:
+            from modules.heat_tracker import load_history as load_heat_history
+            hist = load_heat_history()
+            key = date.replace("-", "")
+            items = hist.get(key, [])
+            if not items:
+                out["error"] = "该日期无历史数据"
+                return out
+            rows = []
+            for i, s in enumerate(items):
+                rows.append({
+                    "排名": i + 1,
+                    "板块": s.get("板块", ""),
+                    "股票数量": s.get("股票数量", 0),
+                    "平均分": s.get("平均分", 0),
+                    "涨停数": s.get("涨停数", 0),
+                    "热度": s.get("热度分"),
+                    "趋势": s.get("趋势", ""),
+                    "前三强": "",
+                })
+            out["available"] = True
+            out["summary_cols"] = ["排名", "板块", "股票数量", "平均分", "涨停数", "热度", "趋势", "前三强"]
+            out["summary_rows"] = rows
+            out["is_history"] = True
+            out["refreshed_at"] = date
+            return _clean(out)
+        except Exception as e:
+            out["error"] = f"读取历史失败: {e}"
+            return out
+
+    def sector_history(self, sector):
+        """板块历史：近 N 日该板块的热度/均分/涨停/股票数趋势。"""
+        try:
+            from modules.heat_tracker import load_history as load_heat_history
+            hist = load_heat_history()
+            points = []
+            for d in sorted(hist.keys()):
+                hit = next((s for s in hist.get(d, []) if s.get("板块") == sector), None)
+                if hit:
+                    points.append({
+                        "date": d[4:6] + "-" + d[6:8],
+                        "heat": hit.get("热度分"),
+                        "avg": hit.get("平均分"),
+                        "limit_up": hit.get("涨停数"),
+                        "count": hit.get("股票数量"),
+                    })
+            return _clean({"sector": sector, "points": points[-30:]})
+        except Exception as e:
+            return {"sector": sector, "error": str(e), "points": []}
+
     # ---------- 集合竞价信息层 ----------
     def load_auction(self, date):
         """读 t_io/preopen/auction_{date}.json，聚合并返回竞价摘要。"""

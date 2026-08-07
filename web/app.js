@@ -1405,6 +1405,66 @@ function renderStockChart() {
 
 /* ---- 选股猎手 ---- */
 let hunterLoaded = false;
+let hunterHistoryDates = [];
+
+async function initHunterDates() {
+  const sel = document.getElementById("hunterDate");
+  if (!sel) return;
+  try {
+    const dates = await apiCall("available_hunter_dates");
+    hunterHistoryDates = dates || [];
+    sel.innerHTML = '<option value="">最新</option>' +
+      hunterHistoryDates.map(d => `<option value="${d.date}">${d.date}</option>`).join("");
+    sel.addEventListener("change", () => {
+      if (sel.value) loadHunterHistory(sel.value);
+    });
+  } catch (e) { /* 静默 */ }
+}
+
+async function loadHunterHistory(date) {
+  const el = document.getElementById("hunterBody");
+  const btn = document.getElementById("hunterRunBtn");
+  el.innerHTML = '<div class="empty">加载历史数据...</div>';
+  try {
+    const h = await apiCall("load_hunter_history", date);
+    if (h.available) {
+      renderHunter(h, true);
+      hunterLoaded = true;
+      statusEl(`已加载 ${date} 历史概念排名`, "ok");
+    } else {
+      el.innerHTML = `<div class="empty">${esc(h.error || '无数据')}</div>`;
+    }
+  } catch (e) {
+    el.innerHTML = `<div class="empty">加载失败: ${esc(e.message)}</div>`;
+  }
+}
+async function showSectorHistory(sector) {
+  const overlay = document.createElement("div");
+  overlay.className = "modal-mask";
+  overlay.innerHTML = `<div class="modal" style="width:520px;max-height:80vh">
+    <div class="modal-title"><span>${esc(sector)} · 板块历史</span>
+      <button class="mini-btn" onclick="this.closest('.modal-mask').remove()">×</button></div>
+    <div class="modal-body" style="font-size:12px">加载中...</div>
+  </div>`;
+  document.body.appendChild(overlay);
+  const body = overlay.querySelector(".modal-body");
+  try {
+    const sh = await apiCall("sector_history", sector);
+    const pts = sh.points || [];
+    body.innerHTML = pts.length
+      ? `<table class="h-table"><thead><tr><th>日期</th><th class="num">热度</th><th class="num">均分</th><th class="num">涨停</th><th class="num">股票数</th></tr></thead>
+         <tbody>${pts.map(p => `<tr>
+           <td class="mono">${esc(p.date)}</td>
+           <td class="num ${p.heat >= 60 ? 'up' : p.heat >= 40 ? 'warn' : 'cell-dim'}">${fmt(p.heat, 1)}</td>
+           <td class="num">${fmt(p.avg, 2)}</td>
+           <td class="num">${p.limit_up || 0}</td>
+           <td class="num">${p.count || 0}</td>
+         </tr>`).join("")}</tbody></table>`
+      : '<div class="empty">该板块无历史数据</div>';
+  } catch (e) {
+    body.innerHTML = `<div class="empty">加载失败: ${esc(e.message)}</div>`;
+  }
+}
 async function addToWatchlist(code, name, btn) {
   try {
     const r = await apiCall("add_to_watchlist", code, name);
@@ -1520,7 +1580,10 @@ function renderHunter(h) {
       <tr class="h-main-row" onclick="this.nextElementSibling.classList.toggle('open')" style="cursor:pointer">
         <td class="num mono" style="font-size:14px;font-weight:700">${medal || rank}</td>
         <td>
-          <div class="h-name">${esc(category)}</div>
+          <div class="h-name">${esc(category)}
+            <a href="#" onclick="event.stopPropagation();showSectorHistory('${esc(category)}');return false;"
+               title="查看板块历史情况" style="text-decoration:none;color:var(--accent)">🔗</a>
+          </div>
           <div class="h-sub">${r["细分数量"]||0}个细分 · ${r["股票数"]||(ss[category]||[]).length||0}只
             ${d5Hits > 0 ? ` · <b class="up">D5×${d5Hits}</b>` : ""}
             ${d6Hits > 0 ? ` · <b class="warn">D6×${d6Hits}</b>` : ""}
@@ -1822,9 +1885,10 @@ async function init() {
   refreshBtn.addEventListener("click", () => {
     if (dateSelect.value) loadAndRender(dateSelect.value, false);
   });
-  // 选股猎手运行按钮
+  // 选股猎手运行按钮 + 历史日期下拉
   const hunterBtn = document.getElementById("hunterRunBtn");
   if (hunterBtn) hunterBtn.addEventListener("click", () => loadHunter(true));
+  initHunterDates();
   // 成本校准按钮
   const calibBtn = document.getElementById("calibBtn");
   if (calibBtn) calibBtn.addEventListener("click", () => {
