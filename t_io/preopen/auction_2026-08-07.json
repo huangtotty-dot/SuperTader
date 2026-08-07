@@ -1,0 +1,95 @@
+{
+  "date": "2026-08-07",
+  "codes": [
+    "588170",
+    "600176",
+    "600481",
+    "603667",
+    "000988",
+    "002639",
+    "300153"
+  ],
+  "snapshots": {
+    "09:25": {
+      "ts": "2026-08-07 15:54:58",
+      "source": "backfill: qt快照今开 + 本地分钟快照09:30首根(网络接口失败兜底)",
+      "note": "9:20/9:22 轨迹无落盘，采集器上线后次日补齐",
+      "rows": {
+        "588170": {
+          "name": "科创半导体ETF华夏",
+          "open_approx": 0.97,
+          "pre_close": 0.977,
+          "pct_vs_preclose": -0.72,
+          "auction_vol_hand_approx": 415209.0,
+          "auction_amount_approx": 40275273.43,
+          "yday_total_vol_hand": 97735303.0,
+          "auction_vol_vs_yday": 0.0042
+        },
+        "600176": {
+          "name": "中国巨石",
+          "open_approx": 40.66,
+          "pre_close": 40.78,
+          "pct_vs_preclose": -0.29,
+          "auction_vol_hand_approx": 11655.0,
+          "auction_amount_approx": 47389230.2,
+          "yday_total_vol_hand": 3328705.0,
+          "auction_vol_vs_yday": 0.0035
+        },
+        "600481": {
+          "name": "双良节能",
+          "open_approx": 4.33,
+          "pre_close": 4.32,
+          "pct_vs_preclose": 0.23,
+          "auction_vol_hand_approx": 2301.0,
+          "auction_amount_approx": 996333.0,
+          "yday_total_vol_hand": 466130.0,
+          "auction_vol_vs_yday": 0.0049
+        },
+        "603667": {
+          "name": "五洲新春",
+          "open_approx": 55.6,
+          "pre_close": 55.13,
+          "pct_vs_preclose": 0.85,
+          "auction_vol_hand_approx": 823.0,
+          "auction_amount_approx": 4575880.0,
+          "yday_total_vol_hand": 169077.0,
+          "auction_vol_vs_yday": 0.0049
+        },
+        "000988": {
+          "name": "华工科技",
+          "open_approx": 105.0,
+          "pre_close": 103.01,
+          "pct_vs_preclose": 1.93,
+          "auction_vol_hand_approx": 4419.0,
+          "auction_amount_approx": 46399500.0,
+          "yday_total_vol_hand": 804350.0,
+          "auction_vol_vs_yday": 0.0055
+        },
+        "002639": {
+          "name": "雪人集团",
+          "open_approx": 12.62,
+          "pre_close": 12.64,
+          "pct_vs_preclose": -0.16,
+          "auction_vol_hand_approx": 1141.0,
+          "auction_amount_approx": 1439942.0,
+          "yday_total_vol_hand": 459380.0,
+          "auction_vol_vs_yday": 0.0025
+        },
+        "300153": {
+          "name": "科泰电源",
+          "open_approx": 21.3,
+          "pre_close": 21.35,
+          "pct_vs_preclose": -0.23,
+          "auction_vol_hand_approx": 48.0,
+          "auction_amount_approx": 102240.0,
+          "yday_total_vol_hand": 72983.0,
+          "auction_vol_vs_yday": 0.0007
+        }
+      }
+    }
+  },
+  "gaps": [
+    "09:20",
+    "09:22"
+  ]
+}

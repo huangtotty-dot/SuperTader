@@ -1,0 +1,1587 @@
+{
+  "date": "2026-08-07",
+  "sig_stat": {
+    "000988": {
+      "ticks": 335,
+      "nan_ticks": 15,
+      "buy_signals": 1,
+      "sell_signals": 10,
+      "buy_first_last": [
+        "14:24",
+        "14:24"
+      ],
+      "sell_first_last": [
+        "10:03",
+        "11:15"
+      ],
+      "max_buy_score": 49.8,
+      "max_sell_score": 63.2,
+      "open": 106.85,
+      "close": 106.6,
+      "high": 108.44,
+      "low": 103.44,
+      "day_ret%": -0.23,
+      "振幅%": 4.68,
+      "day_type": "chop_day",
+      "above_avg_ratio": 0.576
+    },
+    "588170": {
+      "ticks": 330,
+      "nan_ticks": 5,
+      "buy_signals": 0,
+      "sell_signals": 7,
+      "buy_first_last": null,
+      "sell_first_last": [
+        "09:57",
+        "10:31"
+      ],
+      "max_buy_score": 58.9,
+      "max_sell_score": 98.6,
+      "open": 0.978,
+      "close": 1.01,
+      "high": 1.013,
+      "low": 0.969,
+      "day_ret%": 3.27,
+      "振幅%": 4.5,
+      "day_type": "bull_day",
+      "above_avg_ratio": 0.6
+    },
+    "600176": {
+      "ticks": 335,
+      "nan_ticks": 5,
+      "buy_signals": 0,
+      "sell_signals": 0,
+      "buy_first_last": null,
+      "sell_first_last": null,
+      "max_buy_score": 56.2,
+      "max_sell_score": 72.0,
+      "open": 41.3,
+      "close": 44.25,
+      "high": 44.81,
+      "low": 40.73,
+      "day_ret%": 7.14,
+      "振幅%": 9.88,
+      "day_type": "bull_day",
+      "above_avg_ratio": 0.561
+    },
+    "600481": {
+      "ticks": 335,
+      "nan_ticks": 19,
+      "buy_signals": 2,
+      "sell_signals": 10,
+      "buy_first_last": [
+        "09:49",
+        "10:19"
+      ],
+      "sell_first_last": [
+        "11:25",
+        "13:03"
+      ],
+      "max_buy_score": 49.8,
+      "max_sell_score": 50.1,
+      "open": 4.36,
+      "close": 4.35,
+      "high": 4.38,
+      "low": 4.26,
+      "day_ret%": -0.23,
+      "振幅%": 2.75,
+      "day_type": "chop_day",
+      "above_avg_ratio": 0.606
+    },
+    "603667": {
+      "ticks": 335,
+      "nan_ticks": 5,
+      "buy_signals": 0,
+      "sell_signals": 0,
+      "buy_first_last": null,
+      "sell_first_last": null,
+      "max_buy_score": 48.6,
+      "max_sell_score": 49.3,
+      "open": 55.38,
+      "close": 55.63,
+      "high": 55.66,
+      "low": 54.6,
+      "day_ret%": 0.45,
+      "振幅%": 1.91,
+      "day_type": "chop_day",
+      "above_avg_ratio": 0.49
+    },
+    "002639": {
+      "ticks": 335,
+      "nan_ticks": 28,
+      "buy_signals": 0,
+      "sell_signals": 0,
+      "buy_first_last": null,
+      "sell_first_last": null,
+      "max_buy_score": 48.2,
+      "max_sell_score": 51.0,
+      "open": 12.52,
+      "close": 12.52,
+      "high": 12.56,
+      "low": 12.38,
+      "day_ret%": 0.0,
+      "振幅%": 1.44,
+      "day_type": "chop_day",
+      "above_avg_ratio": 0.606
+    },
+    "300153": {
+      "ticks": 335,
+      "nan_ticks": 0,
+      "buy_signals": 20,
+      "sell_signals": 0,
+      "buy_first_last": [
+        "09:49",
+        "10:06"
+      ],
+      "sell_first_last": null,
+      "max_buy_score": 48.7,
+      "max_sell_score": 53.8,
+      "open": 21.17,
+      "close": 21.54,
+      "high": 21.61,
+      "low": 20.94,
+      "day_ret%": 1.75,
+      "振幅%": 3.16,
+      "day_type": "reversal_day",
+      "above_avg_ratio": 0.531
+    },
+    "300364": {
+      "ticks": 0,
+      "nan_ticks": 0,
+      "buy_signals": 0,
+      "sell_signals": 0,
+      "buy_first_last": null,
+      "sell_first_last": null,
+      "max_buy_score": null,
+      "max_sell_score": null,
+      "day_type": "unknown"
+    }
+  },
+  "shadow_total": 65,
+  "shadow_near_±3": {
+    "000988": [
+      {
+        "action": "SELL_HIGH",
+        "miss_reason": "低于推送阈值静默",
+        "n": 5,
+        "span": "11:12~11:15",
+        "min_dist": 2.1
+      }
+    ],
+    "588170": [
+      {
+        "action": "SELL_HIGH",
+        "miss_reason": "低于推送阈值静默",
+        "n": 5,
+        "span": "09:57~09:59",
+        "min_dist": 1.0
+      }
+    ],
+    "600481": [
+      {
+        "action": "SELL_HIGH",
+        "miss_reason": "低于推送阈值静默",
+        "n": 5,
+        "span": "11:25~11:28",
+        "min_dist": 1.7
+      }
+    ]
+  },
+  "qty_freeze": {
+    "suppressed": {
+      "000988": [
+        {
+          "ts": "14:24:39",
+          "action": "BUY_LOW",
+          "score": 42
+        }
+      ],
+      "600481": [
+        {
+          "ts": "09:49:25",
+          "action": "BUY_LOW",
+          "score": 50
+        },
+        {
+          "ts": "10:19:42",
+          "action": "BUY_LOW",
+          "score": 46
+        }
+      ]
+    },
+    "silent_sell": {
+      "000988": {
+        "n": 10,
+        "max_score": 53
+      },
+      "588170": {
+        "n": 5,
+        "max_score": 51
+      },
+      "600481": {
+        "n": 10,
+        "max_score": 50
+      }
+    },
+    "pushes": [
+      {
+        "ts": "10:00:24",
+        "code": "588170",
+        "action": "SELL_HIGH"
+      },
+      {
+        "ts": "10:31:03",
+        "code": "588170",
+        "action": "SELL_HIGH"
+      }
+    ],
+    "eod_sync": [
+      {
+        "code": "588170",
+        "qty_from": 12000,
+        "qty_to": 6000
+      }
+    ]
+  },
+  "closed_loop": {
+    "588170": {
+      "sold": 6000,
+      "bought": 0,
+      "unrebuilt": 6000,
+      "est_pnl": -5.95,
+      "qty_diff": 0
+    },
+    "600176": {
+      "sold": 0,
+      "bought": 0,
+      "unrebuilt": 0,
+      "est_pnl": 0.0,
+      "qty_diff": 0
+    },
+    "600481": {
+      "sold": 0,
+      "bought": 0,
+      "unrebuilt": 0,
+      "est_pnl": 0.0,
+      "qty_diff": 0
+    },
+    "603667": {
+      "sold": 0,
+      "bought": 0,
+      "unrebuilt": 0,
+      "est_pnl": 0.0,
+      "qty_diff": 0
+    },
+    "000988": {
+      "sold": 0,
+      "bought": 0,
+      "unrebuilt": 0,
+      "est_pnl": 0.0,
+      "qty_diff": 0
+    },
+    "000988_B": {
+      "sold": 0,
+      "bought": 0,
+      "unrebuilt": 0,
+      "est_pnl": 0.0,
+      "qty_diff": 0
+    },
+    "002639": {
+      "sold": 0,
+      "bought": 0,
+      "unrebuilt": 0,
+      "est_pnl": 0.0,
+      "qty_diff": 0
+    },
+    "300153": {
+      "sold": 0,
+      "bought": 0,
+      "unrebuilt": 0,
+      "est_pnl": 0.0,
+      "qty_diff": 0
+    }
+  },
+  "audit_problems": [
+    "• 科创半导体ETF华夏(588170) 已卖 6000 / 未接回 **6000** → 建议尾盘接回价 ≈0.98（参考价下方0.8%）"
+  ],
+  "settle": {
+    "rows": [
+      {
+        "code": "000988",
+        "ts": "10:03",
+        "action": "SELL_HIGH",
+        "score": 42.3,
+        "price": 104.87,
+        "res": "FAIL",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "000988",
+        "ts": "10:04",
+        "action": "SELL_HIGH",
+        "score": 42.3,
+        "price": 104.87,
+        "res": "FAIL",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "000988",
+        "ts": "10:04",
+        "action": "SELL_HIGH",
+        "score": 42.3,
+        "price": 104.87,
+        "res": "FAIL",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "000988",
+        "ts": "10:05",
+        "action": "SELL_HIGH",
+        "score": 42.3,
+        "price": 104.87,
+        "res": "FAIL",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "000988",
+        "ts": "10:05",
+        "action": "SELL_HIGH",
+        "score": 42.3,
+        "price": 104.87,
+        "res": "FAIL",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "000988",
+        "ts": "11:12",
+        "action": "SELL_HIGH",
+        "score": 52.9,
+        "price": 106.22,
+        "res": "FAIL",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "000988",
+        "ts": "11:13",
+        "action": "SELL_HIGH",
+        "score": 52.9,
+        "price": 106.22,
+        "res": "FAIL",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "000988",
+        "ts": "11:14",
+        "action": "SELL_HIGH",
+        "score": 52.9,
+        "price": 106.22,
+        "res": "FAIL",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "000988",
+        "ts": "11:14",
+        "action": "SELL_HIGH",
+        "score": 52.9,
+        "price": 106.22,
+        "res": "FAIL",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "000988",
+        "ts": "11:15",
+        "action": "SELL_HIGH",
+        "score": 52.9,
+        "price": 106.22,
+        "res": "FAIL",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "000988",
+        "ts": "14:24",
+        "action": "BUY_LOW",
+        "score": 41.9,
+        "price": 105.57,
+        "res": "FAIL",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "588170",
+        "ts": "09:57",
+        "action": "SELL_HIGH",
+        "score": 51.2,
+        "price": 0.981,
+        "res": "FAIL",
+        "day_type": "bull_day"
+      },
+      {
+        "code": "588170",
+        "ts": "09:57",
+        "action": "SELL_HIGH",
+        "score": 51.2,
+        "price": 0.981,
+        "res": "FAIL",
+        "day_type": "bull_day"
+      },
+      {
+        "code": "588170",
+        "ts": "09:58",
+        "action": "SELL_HIGH",
+        "score": 51.2,
+        "price": 0.981,
+        "res": "FAIL",
+        "day_type": "bull_day"
+      },
+      {
+        "code": "588170",
+        "ts": "09:59",
+        "action": "SELL_HIGH",
+        "score": 51.2,
+        "price": 0.981,
+        "res": "FAIL",
+        "day_type": "bull_day"
+      },
+      {
+        "code": "588170",
+        "ts": "09:59",
+        "action": "SELL_HIGH",
+        "score": 51.2,
+        "price": 0.981,
+        "res": "FAIL",
+        "day_type": "bull_day"
+      },
+      {
+        "code": "588170",
+        "ts": "10:00",
+        "action": "SELL_HIGH",
+        "score": 85.7,
+        "price": 0.984,
+        "res": "FAIL",
+        "day_type": "bull_day"
+      },
+      {
+        "code": "588170",
+        "ts": "10:31",
+        "action": "SELL_HIGH",
+        "score": 68.5,
+        "price": 1.004,
+        "res": "FAIL",
+        "day_type": "bull_day"
+      },
+      {
+        "code": "600481",
+        "ts": "09:49",
+        "action": "BUY_LOW",
+        "score": 49.8,
+        "price": 4.28,
+        "res": "WIN",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "600481",
+        "ts": "10:19",
+        "action": "BUY_LOW",
+        "score": 45.8,
+        "price": 4.28,
+        "res": "VOID",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "600481",
+        "ts": "11:25",
+        "action": "SELL_HIGH",
+        "score": 50.1,
+        "price": 4.35,
+        "res": "VOID",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "600481",
+        "ts": "11:26",
+        "action": "SELL_HIGH",
+        "score": 50.1,
+        "price": 4.35,
+        "res": "VOID",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "600481",
+        "ts": "11:27",
+        "action": "SELL_HIGH",
+        "score": 50.1,
+        "price": 4.35,
+        "res": "VOID",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "600481",
+        "ts": "11:27",
+        "action": "SELL_HIGH",
+        "score": 50.1,
+        "price": 4.35,
+        "res": "VOID",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "600481",
+        "ts": "11:28",
+        "action": "SELL_HIGH",
+        "score": 50.1,
+        "price": 4.35,
+        "res": "VOID",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "600481",
+        "ts": "13:00",
+        "action": "SELL_HIGH",
+        "score": 43.1,
+        "price": 4.35,
+        "res": "VOID",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "600481",
+        "ts": "13:01",
+        "action": "SELL_HIGH",
+        "score": 43.1,
+        "price": 4.35,
+        "res": "VOID",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "600481",
+        "ts": "13:02",
+        "action": "SELL_HIGH",
+        "score": 43.1,
+        "price": 4.35,
+        "res": "VOID",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "600481",
+        "ts": "13:02",
+        "action": "SELL_HIGH",
+        "score": 43.1,
+        "price": 4.35,
+        "res": "VOID",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "600481",
+        "ts": "13:03",
+        "action": "SELL_HIGH",
+        "score": 43.1,
+        "price": 4.35,
+        "res": "VOID",
+        "day_type": "chop_day"
+      },
+      {
+        "code": "300153",
+        "ts": "09:49",
+        "action": "BUY_LOW",
+        "score": 48.7,
+        "price": 20.94,
+        "res": "WIN",
+        "day_type": "reversal_day"
+      },
+      {
+        "code": "300153",
+        "ts": "09:50",
+        "action": "BUY_LOW",
+        "score": 48.7,
+        "price": 20.94,
+        "res": "WIN",
+        "day_type": "reversal_day"
+      },
+      {
+        "code": "300153",
+        "ts": "09:51",
+        "action": "BUY_LOW",
+        "score": 48.7,
+        "price": 20.94,
+        "res": "WIN",
+        "day_type": "reversal_day"
+      },
+      {
+        "code": "300153",
+        "ts": "09:51",
+        "action": "BUY_LOW",
+        "score": 48.7,
+        "price": 20.94,
+        "res": "WIN",
+        "day_type": "reversal_day"
+      },
+      {
+        "code": "300153",
+        "ts": "09:52",
+        "action": "BUY_LOW",
+        "score": 48.7,
+        "price": 20.94,
+        "res": "WIN",
+        "day_type": "reversal_day"
+      },
+      {
+        "code": "300153",
+        "ts": "09:53",
+        "action": "BUY_LOW",
+        "score": 38.5,
+        "price": 21.0,
+        "res": "VOID",
+        "day_type": "reversal_day"
+      },
+      {
+        "code": "300153",
+        "ts": "09:53",
+        "action": "BUY_LOW",
+        "score": 38.5,
+        "price": 21.0,
+        "res": "VOID",
+        "day_type": "reversal_day"
+      },
+      {
+        "code": "300153",
+        "ts": "09:54",
+        "action": "BUY_LOW",
+        "score": 38.5,
+        "price": 21.0,
+        "res": "VOID",
+        "day_type": "reversal_day"
+      },
+      {
+        "code": "300153",
+        "ts": "09:55",
+        "action": "BUY_LOW",
+        "score": 38.5,
+        "price": 21.0,
+        "res": "VOID",
+        "day_type": "reversal_day"
+      },
+      {
+        "code": "300153",
+        "ts": "09:56",
+        "action": "BUY_LOW",
+        "score": 38.5,
+        "price": 21.0,
+        "res": "VOID",
+        "day_type": "reversal_day"
+      },
+      {
+        "code": "300153",
+        "ts": "09:56",
+        "action": "BUY_LOW",
+        "score": 38.2,
+        "price": 20.96,
+        "res": "VOID",
+        "day_type": "reversal_day"
+      },
+      {
+        "code": "300153",
+        "ts": "09:57",
+        "action": "BUY_LOW",
+        "score": 38.2,
+        "price": 20.96,
+        "res": "VOID",
+        "day_type": "reversal_day"
+      },
+      {
+        "code": "300153",
+        "ts": "09:58",
+        "action": "BUY_LOW",
+        "score": 38.2,
+        "price": 20.96,
+        "res": "VOID",
+        "day_type": "reversal_day"
+      },
+      {
+        "code": "300153",
+        "ts": "09:58",
+        "action": "BUY_LOW",
+        "score": 38.2,
+        "price": 20.96,
+        "res": "VOID",
+        "day_type": "reversal_day"
+      },
+      {
+        "code": "300153",
+        "ts": "09:59",
+        "action": "BUY_LOW",
+        "score": 38.2,
+        "price": 20.96,
+        "res": "VOID",
+        "day_type": "reversal_day"
+      },
+      {
+        "code": "300153",
+        "ts": "10:03",
+        "action": "BUY_LOW",
+        "score": 38.3,
+        "price": 21.06,
+        "res": "VOID",
+        "day_type": "reversal_day"
+      },
+      {
+        "code": "300153",
+        "ts": "10:04",
+        "action": "BUY_LOW",
+        "score": 38.3,
+        "price": 21.06,
+        "res": "VOID",
+        "day_type": "reversal_day"
+      },
+      {
+        "code": "300153",
+        "ts": "10:04",
+        "action": "BUY_LOW",
+        "score": 38.3,
+        "price": 21.06,
+        "res": "VOID",
+        "day_type": "reversal_day"
+      },
+      {
+        "code": "300153",
+        "ts": "10:05",
+        "action": "BUY_LOW",
+        "score": 38.3,
+        "price": 21.06,
+        "res": "VOID",
+        "day_type": "reversal_day"
+      },
+      {
+        "code": "300153",
+        "ts": "10:06",
+        "action": "BUY_LOW",
+        "score": 38.3,
+        "price": 21.06,
+        "res": "VOID",
+        "day_type": "reversal_day"
+      }
+    ],
+    "by_code": {
+      "000988": {
+        "BUY_LOW": {
+          "n": 1,
+          "wins": 0,
+          "fails": 1,
+          "wr": 0.0
+        },
+        "SELL_HIGH": {
+          "n": 10,
+          "wins": 0,
+          "fails": 10,
+          "wr": 0.0
+        }
+      },
+      "588170": {
+        "BUY_LOW": {
+          "n": 0,
+          "wins": 0,
+          "fails": 0,
+          "wr": null
+        },
+        "SELL_HIGH": {
+          "n": 7,
+          "wins": 0,
+          "fails": 7,
+          "wr": 0.0
+        }
+      },
+      "600176": {
+        "BUY_LOW": {
+          "n": 0,
+          "wins": 0,
+          "fails": 0,
+          "wr": null
+        },
+        "SELL_HIGH": {
+          "n": 0,
+          "wins": 0,
+          "fails": 0,
+          "wr": null
+        }
+      },
+      "600481": {
+        "BUY_LOW": {
+          "n": 2,
+          "wins": 1,
+          "fails": 0,
+          "wr": 1.0
+        },
+        "SELL_HIGH": {
+          "n": 10,
+          "wins": 0,
+          "fails": 0,
+          "wr": null
+        }
+      },
+      "603667": {
+        "BUY_LOW": {
+          "n": 0,
+          "wins": 0,
+          "fails": 0,
+          "wr": null
+        },
+        "SELL_HIGH": {
+          "n": 0,
+          "wins": 0,
+          "fails": 0,
+          "wr": null
+        }
+      },
+      "002639": {
+        "BUY_LOW": {
+          "n": 0,
+          "wins": 0,
+          "fails": 0,
+          "wr": null
+        },
+        "SELL_HIGH": {
+          "n": 0,
+          "wins": 0,
+          "fails": 0,
+          "wr": null
+        }
+      },
+      "300153": {
+        "BUY_LOW": {
+          "n": 20,
+          "wins": 5,
+          "fails": 0,
+          "wr": 1.0
+        },
+        "SELL_HIGH": {
+          "n": 0,
+          "wins": 0,
+          "fails": 0,
+          "wr": null
+        }
+      },
+      "300364": {
+        "BUY_LOW": {
+          "n": 0,
+          "wins": 0,
+          "fails": 0,
+          "wr": null
+        },
+        "SELL_HIGH": {
+          "n": 0,
+          "wins": 0,
+          "fails": 0,
+          "wr": null
+        }
+      }
+    }
+  },
+  "kpi": {
+    "date": "2026-08-07",
+    "snapshot": {
+      "file": "t_io\\state\\holdings_2026-08-07.json",
+      "created_now": true,
+      "prev": "t_io\\state\\holdings_2026-08-06.json"
+    },
+    "K1_closed_pnl": {
+      "total_est_pnl": -5.95,
+      "by_code": {
+        "588170": {
+          "sold": 6000,
+          "bought": 0,
+          "unrebuilt": 6000,
+          "est_pnl": -5.95,
+          "qty_diff": 0
+        },
+        "600176": {
+          "sold": 0,
+          "bought": 0,
+          "unrebuilt": 0,
+          "est_pnl": 0.0,
+          "qty_diff": 0
+        },
+        "600481": {
+          "sold": 0,
+          "bought": 0,
+          "unrebuilt": 0,
+          "est_pnl": 0.0,
+          "qty_diff": 0
+        },
+        "603667": {
+          "sold": 0,
+          "bought": 0,
+          "unrebuilt": 0,
+          "est_pnl": 0.0,
+          "qty_diff": 0
+        },
+        "000988": {
+          "sold": 0,
+          "bought": 0,
+          "unrebuilt": 0,
+          "est_pnl": 0.0,
+          "qty_diff": 0
+        },
+        "000988_B": {
+          "sold": 0,
+          "bought": 0,
+          "unrebuilt": 0,
+          "est_pnl": 0.0,
+          "qty_diff": 0
+        },
+        "002639": {
+          "sold": 0,
+          "bought": 0,
+          "unrebuilt": 0,
+          "est_pnl": 0.0,
+          "qty_diff": 0
+        },
+        "300153": {
+          "sold": 0,
+          "bought": 0,
+          "unrebuilt": 0,
+          "est_pnl": 0.0,
+          "qty_diff": 0
+        }
+      },
+      "source": "t_io/logs/closure_audit.jsonl"
+    },
+    "K2_cost_change": {
+      "baseline": false,
+      "note": "对照 2026-08-06",
+      "by_code": {
+        "000988": {
+          "cost_now": 334.451,
+          "cost_prev": 160.332,
+          "delta": 174.119
+        },
+        "588170": {
+          "cost_now": 0.95,
+          "cost_prev": 0.931,
+          "delta": 0.019
+        },
+        "600176": {
+          "cost_now": 55.744,
+          "cost_prev": 55.903,
+          "delta": -0.159
+        },
+        "600481": {
+          "cost_now": 12.4,
+          "cost_prev": 12.4,
+          "delta": 0.0
+        },
+        "603667": {
+          "cost_now": 58.793,
+          "cost_prev": 66.349,
+          "delta": -7.556
+        },
+        "002639": {
+          "cost_now": 10.807,
+          "cost_prev": 11.69,
+          "delta": -0.883
+        },
+        "300153": {
+          "cost_now": 22.31,
+          "cost_prev": 22.31,
+          "delta": 0.0
+        },
+        "300364": {
+          "cost_now": null,
+          "cost_prev": null,
+          "delta": null
+        }
+      },
+      "snapshot": "t_io\\state\\holdings_2026-08-07.json"
+    },
+    "K3_base_drift": {
+      "baseline": false,
+      "by_code": {
+        "000988": {
+          "t_qty_now": 200,
+          "t_qty_prev": 100,
+          "drift": 100,
+          "attribution": "需人工确认",
+          "audit": {
+            "sold": 0,
+            "bought": 0,
+            "unrebuilt": 0,
+            "est_pnl": 0.0,
+            "qty_diff": 0
+          },
+          "source": "snapshot_diff"
+        },
+        "588170": {
+          "t_qty_now": 6000,
+          "t_qty_prev": 3600,
+          "drift": 2400,
+          "attribution": "需人工确认",
+          "audit": {
+            "sold": 6000,
+            "bought": 0,
+            "unrebuilt": 6000,
+            "est_pnl": -5.95,
+            "qty_diff": 0
+          },
+          "source": "snapshot_diff"
+        },
+        "600176": {
+          "t_qty_now": 500,
+          "t_qty_prev": 500,
+          "drift": 0,
+          "attribution": "无漂移",
+          "audit": {
+            "sold": 0,
+            "bought": 0,
+            "unrebuilt": 0,
+            "est_pnl": 0.0,
+            "qty_diff": 0
+          },
+          "source": "snapshot_diff"
+        },
+        "600481": {
+          "t_qty_now": 300,
+          "t_qty_prev": 200,
+          "drift": 100,
+          "attribution": "需人工确认",
+          "audit": {
+            "sold": 0,
+            "bought": 0,
+            "unrebuilt": 0,
+            "est_pnl": 0.0,
+            "qty_diff": 0
+          },
+          "source": "snapshot_diff"
+        },
+        "603667": {
+          "t_qty_now": 300,
+          "t_qty_prev": 100,
+          "drift": 200,
+          "attribution": "需人工确认",
+          "audit": {
+            "sold": 0,
+            "bought": 0,
+            "unrebuilt": 0,
+            "est_pnl": 0.0,
+            "qty_diff": 0
+          },
+          "source": "snapshot_diff"
+        },
+        "002639": {
+          "t_qty_now": 100,
+          "t_qty_prev": 200,
+          "drift": -100,
+          "attribution": "需人工确认",
+          "audit": {
+            "sold": 0,
+            "bought": 0,
+            "unrebuilt": 0,
+            "est_pnl": 0.0,
+            "qty_diff": 0
+          },
+          "source": "snapshot_diff"
+        },
+        "300153": {
+          "t_qty_now": 300,
+          "t_qty_prev": 200,
+          "drift": 100,
+          "attribution": "需人工确认",
+          "audit": {
+            "sold": 0,
+            "bought": 0,
+            "unrebuilt": 0,
+            "est_pnl": 0.0,
+            "qty_diff": 0
+          },
+          "source": "snapshot_diff"
+        },
+        "300364": {
+          "t_qty_now": null,
+          "t_qty_prev": null,
+          "drift": 0,
+          "attribution": "无漂移",
+          "audit": null,
+          "source": "snapshot_diff"
+        }
+      },
+      "drift_total": 2800
+    },
+    "K4_rolling_wr": {
+      "buy": {
+        "n": 20,
+        "wins": 8,
+        "fails": 12,
+        "wr": 0.4,
+        "window": 20,
+        "short": false,
+        "note": "满窗",
+        "events_tail": [
+          {
+            "date": "2026-08-03",
+            "code": "600481",
+            "ts": "2026-08-03 09:49:49",
+            "res": "WIN"
+          },
+          {
+            "date": "2026-08-03",
+            "code": "000988",
+            "ts": "2026-08-03 09:49:52",
+            "res": "FAIL"
+          },
+          {
+            "date": "2026-08-03",
+            "code": "603667",
+            "ts": "2026-08-03 10:06:15",
+            "res": "FAIL"
+          },
+          {
+            "date": "2026-08-03",
+            "code": "600176",
+            "ts": "2026-08-03 10:20:04",
+            "res": "FAIL"
+          },
+          {
+            "date": "2026-08-03",
+            "code": "000988",
+            "ts": "2026-08-03 10:20:09",
+            "res": "FAIL"
+          },
+          {
+            "date": "2026-08-03",
+            "code": "600176",
+            "ts": "2026-08-03 13:19:44",
+            "res": "FAIL"
+          },
+          {
+            "date": "2026-08-03",
+            "code": "588170",
+            "ts": "2026-08-03 13:59:28",
+            "res": "FAIL"
+          },
+          {
+            "date": "2026-08-03",
+            "code": "000988",
+            "ts": "2026-08-03 14:13:20",
+            "res": "WIN"
+          },
+          {
+            "date": "2026-08-07",
+            "code": "600481",
+            "ts": "2026-08-07 09:49:25",
+            "res": "WIN"
+          },
+          {
+            "date": "2026-08-07",
+            "code": "300153",
+            "ts": "2026-08-07 09:49:38",
+            "res": "WIN"
+          },
+          {
+            "date": "2026-08-07",
+            "code": "300153",
+            "ts": "2026-08-07 09:50:12",
+            "res": "WIN"
+          },
+          {
+            "date": "2026-08-07",
+            "code": "300153",
+            "ts": "2026-08-07 09:51:04",
+            "res": "WIN"
+          },
+          {
+            "date": "2026-08-07",
+            "code": "300153",
+            "ts": "2026-08-07 09:51:53",
+            "res": "WIN"
+          },
+          {
+            "date": "2026-08-07",
+            "code": "300153",
+            "ts": "2026-08-07 09:52:28",
+            "res": "WIN"
+          },
+          {
+            "date": "2026-08-07",
+            "code": "000988",
+            "ts": "2026-08-07 14:24:39",
+            "res": "FAIL"
+          },
+          {
+            "date": "2026-08-07",
+            "code": "000988_B",
+            "ts": "2026-08-07 14:24:42",
+            "res": "FAIL"
+          },
+          {
+            "date": "2026-08-07",
+            "code": "000988_B",
+            "ts": "2026-08-07 14:25:25",
+            "res": "FAIL"
+          },
+          {
+            "date": "2026-08-07",
+            "code": "000988_B",
+            "ts": "2026-08-07 14:26:02",
+            "res": "FAIL"
+          },
+          {
+            "date": "2026-08-07",
+            "code": "000988_B",
+            "ts": "2026-08-07 14:26:45",
+            "res": "FAIL"
+          },
+          {
+            "date": "2026-08-07",
+            "code": "000988_B",
+            "ts": "2026-08-07 14:27:27",
+            "res": "FAIL"
+          }
+        ]
+      },
+      "sell": {
+        "n": 20,
+        "wins": 0,
+        "fails": 20,
+        "wr": 0.0,
+        "window": 20,
+        "short": false,
+        "note": "满窗",
+        "events_tail": [
+          {
+            "date": "2026-08-07",
+            "code": "000988_B",
+            "ts": "2026-08-07 10:03:31",
+            "res": "FAIL"
+          },
+          {
+            "date": "2026-08-07",
+            "code": "000988",
+            "ts": "2026-08-07 10:04:09",
+            "res": "FAIL"
+          },
+          {
+            "date": "2026-08-07",
+            "code": "000988_B",
+            "ts": "2026-08-07 10:04:11",
+            "res": "FAIL"
+          },
+          {
+            "date": "2026-08-07",
+            "code": "000988",
+            "ts": "2026-08-07 10:04:43",
+            "res": "FAIL"
+          },
+          {
+            "date": "2026-08-07",
+            "code": "000988_B",
+            "ts": "2026-08-07 10:04:45",
+            "res": "FAIL"
+          },
+          {
+            "date": "2026-08-07",
+            "code": "000988",
+            "ts": "2026-08-07 10:05:24",
+            "res": "FAIL"
+          },
+          {
+            "date": "2026-08-07",
+            "code": "000988_B",
+            "ts": "2026-08-07 10:05:26",
+            "res": "FAIL"
+          },
+          {
+            "date": "2026-08-07",
+            "code": "000988",
+            "ts": "2026-08-07 10:05:58",
+            "res": "FAIL"
+          },
+          {
+            "date": "2026-08-07",
+            "code": "000988_B",
+            "ts": "2026-08-07 10:06:00",
+            "res": "FAIL"
+          },
+          {
+            "date": "2026-08-07",
+            "code": "588170",
+            "ts": "2026-08-07 10:31:02",
+            "res": "FAIL"
+          },
+          {
+            "date": "2026-08-07",
+            "code": "000988",
+            "ts": "2026-08-07 11:12:59",
+            "res": "FAIL"
+          },
+          {
+            "date": "2026-08-07",
+            "code": "000988_B",
+            "ts": "2026-08-07 11:13:08",
+            "res": "FAIL"
+          },
+          {
+            "date": "2026-08-07",
+            "code": "000988",
+            "ts": "2026-08-07 11:13:42",
+            "res": "FAIL"
+          },
+          {
+            "date": "2026-08-07",
+            "code": "000988_B",
+            "ts": "2026-08-07 11:13:45",
+            "res": "FAIL"
+          },
+          {
+            "date": "2026-08-07",
+            "code": "000988",
+            "ts": "2026-08-07 11:14:21",
+            "res": "FAIL"
+          },
+          {
+            "date": "2026-08-07",
+            "code": "000988_B",
+            "ts": "2026-08-07 11:14:24",
+            "res": "FAIL"
+          },
+          {
+            "date": "2026-08-07",
+            "code": "000988",
+            "ts": "2026-08-07 11:14:56",
+            "res": "FAIL"
+          },
+          {
+            "date": "2026-08-07",
+            "code": "000988_B",
+            "ts": "2026-08-07 11:14:58",
+            "res": "FAIL"
+          },
+          {
+            "date": "2026-08-07",
+            "code": "000988",
+            "ts": "2026-08-07 11:15:35",
+            "res": "FAIL"
+          },
+          {
+            "date": "2026-08-07",
+            "code": "000988_B",
+            "ts": "2026-08-07 11:15:37",
+            "res": "FAIL"
+          }
+        ]
+      },
+      "days_covered": [
+        "2026-07-13",
+        "2026-08-07"
+      ]
+    },
+    "K5_qty0_suppressed": {
+      "total": 3,
+      "by_code": {
+        "000988": 1,
+        "600481": 2
+      },
+      "source": "t_io/logs 仓控可交易量为0"
+    }
+  },
+  "add_watch": {
+    "000988": {
+      "name": "华工科技",
+      "day_low": 103.44,
+      "close": 106.6,
+      "vwap": 106.2327,
+      "daily_rows": 81,
+      "supports": {
+        "MA10": 100.293,
+        "MA20": 113.1575,
+        "MA60": 143.9245,
+        "近20日低点": 95.83,
+        "日内VWAP": 106.2327
+      },
+      "events": [],
+      "near": [
+        {
+          "level": "日内VWAP",
+          "support": 106.2327,
+          "dist%": -2.63,
+          "type": "刺穿收回"
+        }
+      ]
+    },
+    "588170": {
+      "name": "科创半导体ETF华夏",
+      "day_low": 0.969,
+      "close": 1.01,
+      "vwap": 0.9903,
+      "daily_rows": 81,
+      "supports": {
+        "MA10": 0.9473,
+        "MA20": 1.001,
+        "MA60": 1.0035,
+        "近20日低点": 0.882,
+        "日内VWAP": 0.9903
+      },
+      "events": [],
+      "near": [
+        {
+          "level": "日内VWAP",
+          "support": 0.9903,
+          "dist%": -2.15,
+          "type": "刺穿收回"
+        }
+      ]
+    },
+    "600176": {
+      "name": "中国巨石",
+      "day_low": 40.73,
+      "close": 44.25,
+      "vwap": 42.6939,
+      "daily_rows": 81,
+      "supports": {
+        "MA10": 38.621,
+        "MA20": 41.6105,
+        "MA60": 46.8878,
+        "近20日低点": 36.73,
+        "日内VWAP": 42.6939
+      },
+      "events": [],
+      "near": [
+        {
+          "level": "MA20",
+          "support": 41.6105,
+          "dist%": -2.12,
+          "type": "刺穿收回"
+        }
+      ]
+    },
+    "600481": {
+      "name": "双良节能",
+      "day_low": 4.26,
+      "close": 4.35,
+      "vwap": 4.3288,
+      "daily_rows": 81,
+      "supports": {
+        "MA10": 4.154,
+        "MA20": 4.063,
+        "MA60": 4.9325,
+        "近20日低点": 3.78,
+        "日内VWAP": 4.3288
+      },
+      "events": [],
+      "near": [
+        {
+          "level": "日内VWAP",
+          "support": 4.3288,
+          "dist%": -1.59,
+          "type": "刺穿收回"
+        }
+      ]
+    },
+    "603667": {
+      "name": "五洲新春",
+      "day_low": 54.6,
+      "close": 55.63,
+      "vwap": 55.0657,
+      "daily_rows": 81,
+      "supports": {
+        "MA10": 52.691,
+        "MA20": 54.0495,
+        "MA60": 65.3617,
+        "近20日低点": 50.28,
+        "日内VWAP": 55.0657
+      },
+      "events": [],
+      "near": [
+        {
+          "level": "MA20",
+          "support": 54.0495,
+          "dist%": 1.02,
+          "type": "临近未触"
+        },
+        {
+          "level": "日内VWAP",
+          "support": 55.0657,
+          "dist%": -0.85,
+          "type": "刺穿收回"
+        }
+      ]
+    },
+    "002639": {
+      "name": "雪人集团",
+      "day_low": 12.38,
+      "close": 12.52,
+      "vwap": 12.4626,
+      "daily_rows": 81,
+      "supports": {
+        "MA10": 12.238,
+        "MA20": 11.821,
+        "MA60": 13.7293,
+        "近20日低点": 11.2,
+        "日内VWAP": 12.4626
+      },
+      "events": [],
+      "near": [
+        {
+          "level": "MA10",
+          "support": 12.238,
+          "dist%": 1.16,
+          "type": "临近未触"
+        },
+        {
+          "level": "日内VWAP",
+          "support": 12.4626,
+          "dist%": -0.66,
+          "type": "刺穿收回"
+        }
+      ]
+    },
+    "300153": {
+      "name": "科泰电源",
+      "day_low": 20.94,
+      "close": 21.54,
+      "vwap": 21.1606,
+      "daily_rows": 81,
+      "supports": {
+        "MA10": 20.467,
+        "MA20": 20.482,
+        "MA60": 23.8853,
+        "近20日低点": 19.91,
+        "日内VWAP": 21.1606
+      },
+      "events": [],
+      "near": [
+        {
+          "level": "日内VWAP",
+          "support": 21.1606,
+          "dist%": -1.04,
+          "type": "刺穿收回"
+        }
+      ]
+    }
+  },
+  "watch": {
+    "#1_000988_qty冻结": {
+      "suppressed_qty0": 1,
+      "pushed": [],
+      "audit": {
+        "sold": 0,
+        "bought": 0,
+        "unrebuilt": 0,
+        "est_pnl": 0.0,
+        "qty_diff": 0
+      },
+      "note": "实盘当日其买信号被仓控0拦截次数; audit sold/bought=0 表示无成交"
+    },
+    "#2_000988_bull日买入": {
+      "day_type": "chop_day",
+      "buy_signals": 1,
+      "note": "D+E未上线, bull日买入应仍触发"
+    },
+    "#3_588170_买wr": {
+      "n": 0,
+      "wins": 0,
+      "fails": 0,
+      "wr": null
+    },
+    "#4_阴跌日股": {},
+    "#5_000988信号占比": {
+      "n": 11,
+      "total": 50,
+      "ratio": 0.22,
+      "alert": false
+    }
+  }
+}
