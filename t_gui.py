@@ -1550,6 +1550,54 @@ class Api:
         return _clean(out)
 
     # ---------- 建仓股池增删 ----------
+    def search_stock(self, query):
+        """按代码或名称模糊搜索股票。返回匹配列表（最多10条）。"""
+        import urllib.request as _ur, os as _os
+        for _k in ["http_proxy", "https_proxy", "HTTP_PROXY", "HTTPS_PROXY",
+                   "ALL_PROXY", "all_proxy"]:
+            _os.environ.pop(_k, None)
+        _os.environ["NO_PROXY"] = "*"
+        query = (query or "").strip()
+        if not query:
+            return {"results": []}
+        results = []
+        # 1. 精确代码: 腾讯行情直接查
+        if query.isdigit() and len(query) == 6:
+            symbol = "sh" + query if query[0] in "56" else "sz" + query
+            try:
+                url = f"https://qt.gtimg.cn/q={symbol}"
+                req = _ur.Request(url, headers={"User-Agent": "Mozilla/5.0",
+                                                "Referer": "https://gu.qq.com/"})
+                raw = _ur.urlopen(req, timeout=5).read().decode("gbk", errors="replace")
+                if "~" in raw:
+                    f = raw.split('"')[1].split("~")
+                    if len(f) > 3:
+                        results.append({"code": query, "name": f[1]})
+            except Exception:
+                pass
+        # 2. 名称模糊: 从 watchlist_jiuyan.json 匹配（{code: {name,...}} 或 list）
+        if not results:
+            try:
+                jy = _load_json(BASE / "watchlist_jiuyan.json", {})
+                if isinstance(jy, dict):
+                    for code, info in jy.items():
+                        name = str(info.get("名称", "") if isinstance(info, dict) else "")
+                        if query in name or query in code:
+                            results.append({"code": code, "name": name})
+                            if len(results) >= 10:
+                                break
+                elif isinstance(jy, list):
+                    for s in jy[:800]:
+                        code = str(s.get("代码", ""))
+                        name = str(s.get("名称", ""))
+                        if query in name or query in code:
+                            results.append({"code": code, "name": name})
+                            if len(results) >= 10:
+                                break
+            except Exception:
+                pass
+        return _clean({"results": results})
+
     def add_to_watchlist(self, code, name):
         """将股票加入 watchlist_buy.json（status=monitoring）。"""
         fp = BASE / "watchlist_buy.json"
