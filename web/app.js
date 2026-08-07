@@ -1051,6 +1051,9 @@ function renderPB(pb) {
     const boxStr = boxMet ? `<span class="badge signal">🚀突破</span>` : `<span class="off">—</span>`;
     const metCount = Object.values(conds).filter(Boolean).length;
     const metCls = metCount >= 4 ? "up" : metCount >= 2 ? "warn" : "cell-dim";
+    const tagsTxt = r.tags && r.tags.length
+      ? r.tags.map(t => tagBadge(t)).join(" ")
+      : '<span class="cell-dim" style="font-size:10px">…</span>';
     return `
       <tr id="pb-row-${esc(r.code || '')}" ondblclick="openStockChart('${esc(r.code||'')}','${esc(r.name||r.code||'')}')" style="cursor:pointer" title="双击看K线">
         <td>${esc(r.name || "")} <span class="mono cell-dim">${esc(r.code || "")}</span>
@@ -1060,6 +1063,7 @@ function renderPB(pb) {
         <td class="num ${metCls}"><b>${metCount}/5</b></td>
         <td class="num">${fmt(r.price)}</td>
         <td style="text-align:center">${boxStr}</td>
+        <td style="max-width:220px;line-height:1.7">${tagsTxt}</td>
         <td><span class="cond" title="${esc(condTitle)}">${condStr}</span></td>
         <td class="num">${fmt(r.suggested_qty, 0)}</td>
         <td class="num">${fmt(r.suggested_price)}</td>
@@ -1084,6 +1088,7 @@ function renderPB(pb) {
         <thead><tr>
           <th>股票</th><th>判定</th><th class="num">得分</th><th class="num">通过</th><th class="num">价</th>
           <th title="突破箱体=第一优先级">突破</th>
+          <th title="通道/箱体/背离等技术形态">技术标签</th>
           <th title="MACD/BOLL/RSI/缩量/支撑">五条件</th>
           <th class="num">建议股数</th><th class="num">建议价</th><th class="num">所需资金</th><th>扫描</th><th></th>
         </tr></thead>
