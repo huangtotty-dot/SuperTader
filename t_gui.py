@@ -630,8 +630,8 @@ class Api:
                                "detail": f"收{day_close:.2f}距VWAP {vwap_f:.2f} {abs((day_close-vwap_f)/vwap_f*100):.1f}%" if vwap_f else "无VWAP"})
 
             met_count = sum(1 for c in conditions if c["met"])
-            # 突破箱体 = 第一优先级：满足直接满
-            if conditions[0]["met"]:
+            # 突破箱体 = 强加分项，但需至少2个其它条件满足才满（防单条件误报）
+            if conditions[0]["met"] and met_count >= 3:
                 met_count = len(conditions)
             out[code] = {
                 "name": cur[code].get("name", code),
@@ -649,26 +649,28 @@ class Api:
 
     # ---------- 突破箱体判定（建仓+加仓共用） ----------
     def check_box_breakout(self, code):
-        """判定个股是否突破最近箱体上沿。返回 {broken, box, price, pct_above}。"""
+        """判定是否突破当前箱体上沿（只认 rel=0 当前箱体，历史箱体不算）。
+        返回 {broken, box, price, pct_above}。"""
         h = self.load_stock_chart(code)
         if not h.get("available"):
             return {"broken": False, "error": h.get("error", "")}
         cur = h.get("current_price")
         boxes = h.get("boxes", [])
-        # 找上沿 < 现价 且 距现价最近的箱体（刚突破的最上方箱体）
-        below_boxes = [b for b in boxes if b["high"] < cur]
-        if not below_boxes:
-            return {"broken": False, "price": cur}
-        # 距现价最近的 = high 最大（最贴近现价的突破箱体）
-        box = max(below_boxes, key=lambda b: b["high"])
-        pct_above = (cur - box["high"]) / box["high"] * 100 if box["high"] else 0
-        # 突破 = 超出上沿 0.3%~25%（刚突破或突破后回踩站稳）
-        if pct_above > 25 or pct_above < 0.3:
-            return {"broken": False, "price": cur,
-                    "near_box": {"low": box["low"], "high": box["high"]},
-                    "pct_above": round(pct_above, 2), "reason": "已远离箱体" if pct_above > 25 else "未达突破阈值"}
-        return {"broken": True, "box": {"low": box["low"], "high": box["high"]},
-                "price": cur, "pct_above": round(pct_above, 2)}
+        # 只认当前箱体（rel=0，现价在箱体内或刚出界）
+        cur_boxes = [b for b in boxes if b.get("rel") == 0]
+        # 现价 > 当前箱体上沿 → 突破
+        for box in cur_boxes:
+            if cur > box["high"]:
+                pct_above = (cur - box["high"]) / box["high"] * 100 if box["high"] else 0
+                if 0.3 <= pct_above <= 8:
+                    return {"broken": True, "box": {"low": box["low"], "high": box["high"]},
+                            "price": cur, "pct_above": round(pct_above, 2)}
+                return {"broken": False, "price": cur,
+                        "near_box": {"low": box["low"], "high": box["high"]},
+                        "pct_above": round(pct_above, 2),
+                        "reason": "已远离当前箱体" if pct_above > 8 else "未达突破阈值"}
+        # 无当前箱体或现价在箱体内 → 未突破
+        return {"broken": False, "price": cur}
 
     # ---------- 个股技术分析弹窗 ----------
     def load_stock_chart(self, code):
