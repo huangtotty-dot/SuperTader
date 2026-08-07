@@ -92,6 +92,8 @@ class Api:
         self._dt = {"date": None, "offset": 0, "seen": set()}
         # 建仓/加仓信号增量轮询内存态
         self._pos = {"date": None, "offset": 0, "seen": set()}
+        # 顶背离报警去重：{date: set(codes)}
+        self._div_alerted = {}
 
     # ---------- 日期发现 ----------
     def available_dates(self):
@@ -781,6 +783,63 @@ class Api:
                 "advice": advice,
             })
         return _clean(out)
+
+    # ---------- 严重顶背离报警 ----------
+    def alert_severe_divergence(self, date=None):
+        """检测严重顶背离（≥2指标背离），每日每股只报一次，推送飞书。
+        返回 {alerts: [{code, name, price, div_types, message}]}。"""
+        if not date:
+            date = datetime.now().strftime("%Y-%m-%d")
+        today = date
+        ob = self.load_ob_analysis()
+        alerts = []
+        day_set = self._div_alerted.setdefault(today, set())
+
+        for s in ob.get("stocks", []):
+            if "error" in s:
+                continue
+            dv = s.get("divergence", {})
+            if dv.get("count", 0) < 2:
+                continue  # 非严重（<2 指标背离）
+            if s["code"] in day_set:
+                continue  # 当日已报过
+            day_set.add(s["code"])
+
+            div_types = []
+            if dv.get("macd"): div_types.append("MACD")
+            if dv.get("rsi"): div_types.append("RSI")
+            if dv.get("kdj"): div_types.append("KDJ")
+            if dv.get("vol"): div_types.append("量价")
+            message = (f"{s['name']} 严重顶背离! 现价{s['price']} "
+                       f"{'+'.join(div_types)}双背离, 价格创新高但指标未创新高, 注意回调风险")
+            alerts.append({
+                "code": s["code"], "name": s["name"], "price": s["price"],
+                "div_types": div_types, "message": message,
+            })
+
+            # 飞书推送
+            try:
+                from config import send_feishu_payload
+                div_txt = " + ".join(div_types)
+                card = {
+                    "msg_type": "interactive",
+                    "card": {
+                        "header": {"template": "red",
+                                   "title": {"tag": "plain_text", "content": "🚨 严重顶背离警报"}},
+                        "elements": [{"tag": "markdown", "content": (
+                            f"**{s['name']}（{s['code']}）** 现价 {s['price']}\n\n"
+                            f"**{div_txt} 双背离**\n\n"
+                            f"→ 价格创新高但指标未创新高，注意回调风险\n\n"
+                            f"⚠ 建议：不追高，警惕反转")}],
+                    },
+                }
+                send_feishu_payload(card,
+                                   success_log=f"严重顶背离飞书推送: {s['code']}",
+                                   error_prefix=f"顶背离推送({s['code']})")
+            except Exception:
+                pass
+
+        return _clean({"alerts": alerts})
 
     # ---------- 个股技术分析弹窗 ----------
     def load_stock_chart(self, code):

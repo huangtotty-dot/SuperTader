@@ -170,6 +170,8 @@ async function refreshLive(reset) {
 
     // 建仓/加仓扫描表实时刷新（position_builder 盘中每5分钟有新数据）
     apiCall("refresh_pb", date).then(pb => renderPB(pb || {})).catch(() => {});
+    // 严重顶背离报警（语音+声音+横幅）
+    pollDivergence();
   } catch (e) {
     // 静默：实时轮询失败不影响主界面
   }
@@ -503,6 +505,27 @@ function ensureAudio() {
   return audioCtx;
 }
 
+/* 严重顶背离报警 */
+async function pollDivergence() {
+  try {
+    const r = await apiCall("alert_severe_divergence");
+    const alerts = (r && r.alerts) || [];
+    alerts.forEach(a => {
+      // 语音报警
+      try {
+        if (window.speechSynthesis) {
+          const u = new SpeechSynthesisUtterance(a.message);
+          u.lang = "zh-CN"; u.rate = 0.9;
+          window.speechSynthesis.speak(u);
+        }
+      } catch (e) { /* 静默 */ }
+      // 横幅 + 声音
+      pushAlert({ decision: "DIVERGENCE", code: a.code, name: a.name,
+        price: a.price, score: 100, type: null, scan_time: nowTime(), message: a.message });
+    });
+  } catch (e) { /* 静默 */ }
+}
+
 function beepTone(ctx, freq, when, dur) {
   const osc = ctx.createOscillator();
   const gain = ctx.createGain();
@@ -521,7 +544,9 @@ function playAlert(kind) {
     const ctx = ensureAudio();
     if (!ctx) return;
     const t0 = ctx.currentTime + 0.02;
-    if (kind === "PANIC_SELL") {       // 五连最长促音（660Hz）
+    if (kind === "DIVERGENCE") {       // 顶背离: 六连急促音(520Hz)
+      for (let i = 0; i < 6; i++) beepTone(ctx, 520, t0 + i * 0.15, 0.12);
+    } else if (kind === "PANIC_SELL") {       // 五连最长促音（660Hz）
       for (let i = 0; i < 5; i++) beepTone(ctx, 660, t0 + i * 0.2, 0.14);
     } else if (kind === "SELL_HIGH") { // 高频三连（880Hz）
       for (let i = 0; i < 3; i++) beepTone(ctx, 880, t0 + i * 0.2, 0.12);
@@ -533,8 +558,8 @@ function playAlert(kind) {
   } catch (e) { /* 音频异常不影响横幅 */ }
 }
 
-const DEC_CN = { SELL_HIGH: "卖出", BUY_LOW: "买入", ADD_POS: "加仓", PANIC_SELL: "恐慌卖" };
-const DEC_ICON = { SELL_HIGH: "🔴", BUY_LOW: "🟢", ADD_POS: "🔵", PANIC_SELL: "⛔" };
+const DEC_CN = { SELL_HIGH: "卖出", BUY_LOW: "买入", ADD_POS: "加仓", PANIC_SELL: "恐慌卖", DIVERGENCE: "严重顶背离" };
+const DEC_ICON = { SELL_HIGH: "🔴", BUY_LOW: "🟢", ADD_POS: "🔵", PANIC_SELL: "⛔", DIVERGENCE: "🚨" };
 
 function pushAlert(s) {
   const banner = document.getElementById("alertBanner");
@@ -556,7 +581,7 @@ function pushAlert(s) {
     label = DEC_CN[s.decision] || s.decision;
     alertKind = s.decision;
     scoreTxt = `${fmt(s.score, 1)}分`;
-    extraTxt = "";
+    extraTxt = s.message ? ` <span style="font-size:12px">${esc(s.message)}</span>` : "";
   }
   item.innerHTML = `
     <span>${icon} ${label}信号 ${esc(s.name || s.code || "")}(${esc(s.code || "")})
