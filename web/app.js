@@ -77,6 +77,8 @@ async function loadAndRender(date, silent) {
     apiCall("load_trade_pnl", date).then(tp => renderKPI(payload.kpi, tp || {})).catch(() => {});
     // 集合竞价 + 行情条 + 大盘趋势 + 成本历史（静态，一次拉取）
     apiCall("load_auction", date).then(a => renderAuction(a || {})).catch(() => {});
+    // 持仓日线体检（超买/顶背离）
+    apiCall("load_ob_analysis").then(ob => renderOB(ob || {})).catch(() => {});
     apiCall("load_quotes").then(q => renderQuotes(q || {}, null)).catch(() => {});
     apiCall("load_market_score", date).then(ms => renderMarket(ms || {})).catch(() => {});
     apiCall("load_cost_history").then(ch => { state.costHistory = ch || {}; renderCost(ch || {}); }).catch(() => {});
@@ -1677,6 +1679,48 @@ function renderHunter(h) {
     </table></div>
 
     <div class="cell-dim" style="font-size:10px;margin-top:6px">数据源: stock_hunter (韭研概念打分) · 点击板块展开个股明细(D5/D6异常) · 热度趋势vs前日</div>`;
+}
+
+/* ---- 持仓日线体检 ---- */
+function renderOB(ob) {
+  const el = document.getElementById("obBody");
+  if (!ob || !ob.stocks || !ob.stocks.length) {
+    el.innerHTML = '<div class="empty">无持仓体检数据</div>';
+    return;
+  }
+  const rows = ob.stocks.map(s => {
+    if (s.error) return `<tr><td colspan="9" class="cell-dim">${esc(s.code)}: ${esc(s.error)}</td></tr>`;
+    const ob_ = s.overbought || {};
+    const dv = s.divergence || {};
+    const mark = (cond) => cond ? `<span class="badge signal">⚠</span>` : `<span class="badge chop">✓</span>`;
+    const advCls = s.advice.includes("不宜") ? "warn" : s.advice.includes("观察") ? "cell-dim" : "up";
+    const dvTxt = dv.count ? [
+      dv.macd ? "MACD" : "", dv.rsi ? "RSI" : "", dv.kdj ? "KDJ" : "", dv.vol ? "量价" : ""
+    ].filter(Boolean).join("/") : "无";
+    return `<tr ondblclick="openStockChart('${esc(s.code)}','${esc(s.name)}')" style="cursor:pointer" title="双击看K线">
+      <td>${esc(s.name)} <span class="mono cell-dim">${esc(s.code)}</span></td>
+      <td class="num">${fmt(s.price, 2)}</td>
+      <td class="num ${ob_.rsi ? 'up' : 'cell-dim'}">${fmt(ob_.rsi, 0)} ${mark(ob_.rsi)}</td>
+      <td class="num ${ob_.kdj ? 'up' : 'cell-dim'}">${fmt(ob_.kdj, 0)} ${mark(ob_.kdj)}</td>
+      <td class="num ${ob_.cci ? 'up' : 'cell-dim'}">${fmt(ob_.cci, 0)} ${mark(ob_.cci)}</td>
+      <td>${mark(ob_.boll)}</td>
+      <td class="${dv.count ? 'warn' : 'cell-dim'}">${dv.count ? dvTxt : "无"}</td>
+      <td><span class="${advCls}">${esc(s.advice)}</span></td>
+    </tr>`;
+  }).join("");
+  el.innerHTML = `
+    <div class="card" style="overflow-x:auto">
+      <table><thead><tr>
+        <th>股票</th><th class="num">现价</th>
+        <th class="num" title="RSI>70超买">RSI</th>
+        <th class="num" title="KDJ J>100超买">KDJ-J</th>
+        <th class="num" title="CCI>100超买">CCI</th>
+        <th title="收盘破BOLL上轨">BOLL</th>
+        <th title="MACD/RSI/KDJ/量价顶背离">顶背离</th>
+        <th>建仓建议</th>
+      </tr></thead><tbody>${rows}</tbody></table>
+      <div class="cell-dim" style="font-size:10px;margin-top:4px">日线指标 · RSI>70/J>100/CCI>100/破BOLL上轨=超买 · 超买≥2或顶背离→不宜追高 · 双击行看K线</div>
+    </div>`;
 }
 
 /* ---- 集合竞价 ---- */
