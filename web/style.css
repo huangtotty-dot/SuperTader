@@ -200,7 +200,8 @@ tr:hover td { background: rgba(88,166,255,.03); }
 .modal-body td input { width: 100px; background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 4px; padding: 3px 6px; font-family: var(--mono); text-align: right; }
 .modal-foot { padding: 10px 16px; border-top: 1px solid var(--border-soft); text-align: right; }
 /* 个股技术分析弹窗 */
-.modal-lg { width: 90vw; max-width: 1200px; height: 85vh; }
+.modal-lg { width: 90vw; max-width: 1200px; height: 85vh; max-height: 85vh; transition: all .25s ease; }
+.modal-lg.modal-max { width: 98vw; max-width: 98vw; height: 97vh; max-height: 97vh; }
 .stock-summary { padding: 8px 16px; font-size: 13px; border-bottom: 1px solid var(--border-soft); display: flex; gap: 20px; flex-wrap: wrap; }
 .stock-summary .ss-item { display: flex; align-items: center; gap: 4px; }
 .stock-tabs { display: flex; gap: 4px; padding: 8px 16px 0; }
@@ -210,7 +211,8 @@ tr:hover td { background: rgba(88,166,255,.03); }
 .stock-toggles { display: flex; gap: 12px; padding: 6px 0 8px; }
 .toggle-item { font-size: 12px; color: var(--text-dim); display: flex; align-items: center; gap: 4px; cursor: pointer; }
 .toggle-item input { accent-color: var(--accent); }
-.stock-chart { height: calc(85vh - 130px) !important; }
+.modal-lg { display: flex; flex-direction: column; }
+.stock-chart { flex: 1; min-height: 300px; }
 .calib-badge { font-size: 10px; border-radius: 3px; padding: 1px 5px; margin-left: 3px; }
 .calib-badge.人工校准 { color: var(--accent); background: rgba(88,166,255,.12); }
 .calib-badge.快照 { color: var(--text-faint); background: var(--bg); }
