@@ -1459,7 +1459,6 @@ class Api:
         import numpy as np
         import pandas as pd
         from position_builder import fetch_daily_kline
-        from position_builder import _detect_boxes_simple
         df = fetch_daily_kline(code)
         if df.empty or len(df) < 30:
             return {"trend": "flat", "tags": []}
@@ -1477,10 +1476,13 @@ class Api:
         norm = slope / (rc.mean() or 1e-9)
         trend = "up" if norm > 0.0015 else ("down" if norm < -0.0015 else "flat")
 
-        # 简化箱体
-        boxes = _detect_boxes_simple(df)
-        cur_box = next((b for b in boxes if b.get("rel") == 0), None)
-        near_box = boxes[0] if boxes else None
+        # 轻量箱体：近60日 88/12 分位（快速，标签够用）
+        r60 = df.tail(60)
+        box_high = float(np.percentile(r60["high"], 88))
+        box_low = float(np.percentile(r60["low"], 12))
+        in_box = box_low <= cur <= box_high
+        cur_box = {"low": box_low, "high": box_high, "rel": 0 if in_box else (-1 if cur > box_high else -2)}
+        near_box = cur_box
 
         tags = []
         # 箱体位置 + 突破/跌破
@@ -1567,26 +1569,18 @@ class Api:
         return {"trend": trend, "box_pos": box_pos, "tags": tags[:6]}
 
     def load_stock_tags_batch(self, codes):
-        """批量拉技术标签（分批并发）。返回 {code: {trend, box_pos, tags}}。"""
-        import threading
+        """批量拉技术标签（并发，ThreadPoolExecutor）。返回 {code: {trend, box_pos, tags}}。"""
+        from concurrent.futures import ThreadPoolExecutor, as_completed
         codes = [str(c) for c in (codes or []) if c]
         result = {}
-        lock = threading.Lock()
-
-        def work(code):
-            try:
-                r = self._stock_tags_one(code)
-                with lock:
-                    result[code] = r
-            except Exception:
-                with lock:
+        with ThreadPoolExecutor(max_workers=40) as ex:
+            futures = {ex.submit(self._stock_tags_one, c): c for c in codes}
+            for fut in as_completed(futures, timeout=40):
+                code = futures[fut]
+                try:
+                    result[code] = fut.result()
+                except Exception:
                     result[code] = {"trend": "flat", "tags": []}
-
-        for i in range(0, len(codes), 30):
-            batch = codes[i:i + 30]
-            threads = [threading.Thread(target=work, args=(c,), daemon=True) for c in batch]
-            for t in threads: t.start()
-            for t in threads: t.join(timeout=25)
         return _clean({"tags": result})
 
     # ---------- 选股猎手历史 ----------
