@@ -453,6 +453,9 @@ def run_backtest(codes: list, date_range: list, holdings_map: dict,
     # E1: 引擎买阈基线注入(验证用途, 默认42不变) — 引擎软消费 PARAMS["engine_buy_threshold_base"](signal_engine.py:524)
     if os.environ.get("T_BUY_BONUS_MIN_SCORE"):
         PARAMS["engine_buy_threshold_base"] = float(os.environ["T_BUY_BONUS_MIN_SCORE"])
+    # W32 C1-final: 接回解耦注入(验证用途, 默认关=生产行为不变) — 引擎软消费 PARAMS["buyback_bypass_gates"]
+    if os.environ.get("T_BUYBACK_BYPASS_GATES") == "1":
+        PARAMS["buyback_bypass_gates"] = True
 
     if override_params:
         if "PARAMS" in override_params:
@@ -697,8 +700,8 @@ def main():
         dates.append(dt.strftime("%Y-%m-%d"))
         dt += timedelta(days=1)
 
-    # 默认持仓映射（从 holdings.json 读取）
-    holdings_file = BASE_DIR / "holdings.json"
+    # 默认持仓映射（从 holdings.json 读取；W32: T_HOLDINGS_FILE 可注入历史快照，验证用途默认不变）
+    holdings_file = Path(os.environ.get("T_HOLDINGS_FILE", str(BASE_DIR / "holdings.json")))
     holdings_map = {}
     if holdings_file.exists():
         with open(holdings_file, 'r', encoding='utf-8') as f:

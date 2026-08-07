@@ -564,12 +564,14 @@ class SignalEngine:
                     risk_buy_block.append("morning_alert_L1_not_dip")
         # ===== V1.29: 卖出→接回闭环 — 主动寻找低吸买回机会 =====
         ab = self.awaiting_buyback.get(code)
+        _buyback_active = False
         if ab and ab.get("sell_price", 0) > 0 and price > 0:
             # 检查 TTL 是否过期
             elapsed = (_engine_now() - ab["sell_time"]).total_seconds() / 60
             if elapsed > ab["ttl"]:
                 self.awaiting_buyback.pop(code, None)  # 过期清理
             else:
+                _buyback_active = True
                 # 价格低于卖出价时，激进入买入
                 discount = (ab["sell_price"] - price) / ab["sell_price"]
                 if discount > 0.005:
@@ -581,6 +583,13 @@ class SignalEngine:
                     buy_score += boost
                     buy_details.append({"指标": "接回追踪(微利)", "当前": f"折{discount:.1%}", "加分": round(boost, 1)})
                 buy_threshold -= PARAMS.get("awaiting_buyback_threshold_relax", 5)
+
+        # ===== W32 C1-final: 接回与买侧门控解耦（验证开关软消费，默认关=生产行为不变）=====
+        # 依据: doc/每周复盘/2026-W32_周复盘.md §3.1/§3.4（离线 50 增量买/闭环 +22对 +462 近似；六闸门锁定）
+        # 白名单：仅 daily_overheated + index_uni_down_clearance 被绕过；其余门控全部保留
+        if _buyback_active and PARAMS.get("buyback_bypass_gates", False):
+            risk_buy_block = [b for b in risk_buy_block
+                              if b not in ("daily_overheated", "index_uni_down_clearance")]
 
         # ===== V1.30: 卖出端保护 —— 底仓地板 + 卖出次数上限（防卖穿底仓）=====
         _net_qty = self._virtual_net_qty(code, holding)
