@@ -1440,16 +1440,18 @@ class Api:
                 for code, info in jy.items():
                     if not isinstance(info, dict):
                         continue
+                    # sector 字段 + jiuyan_concept 字段双源匹配（覆盖更全）
                     concepts = str(info.get("jiuyan_concept", "") or info.get("概念", ""))
+                    sector_field = str(info.get("sector", ""))
                     nm = info.get("name", info.get("名称", code))
-                    # 概念按分隔符拆开（_, |, / 等）
-                    concept_parts = [c.strip() for c in concepts.replace("|", "_").replace("/", "_").split("_") if c.strip()]
+                    all_text = (sector_field + "_" + concepts).replace("|", "_").replace("/", "_")
+                    parts = [c.strip() for c in all_text.split("_") if c.strip() and len(c.strip()) >= 2]
                     for s in items:
                         sector = s.get("板块", "")
                         if not sector:
                             continue
                         matched = any(sector == p or sector in p or p in sector
-                                      for p in concept_parts if len(p) >= 2)
+                                      for p in parts)
                         if matched:
                             sector_stocks.setdefault(sector, []).append(
                                 {"code": code, "name": nm, "score": 0, "d5": 0, "d6": 0,
