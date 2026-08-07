@@ -1418,6 +1418,41 @@ class Api:
 
         return _clean(out)
 
+    # ---------- 批量通道标注（板块成分股） ----------
+    def load_channel_batch(self, codes):
+        """批量拉日线算通道方向（分批并发，支持全部成分股）。返回 {code: trend}。"""
+        import threading
+        from position_builder import fetch_daily_kline
+        codes = [str(c) for c in (codes or []) if c]
+        result = {}
+        lock = threading.Lock()
+
+        def work(code):
+            try:
+                df = fetch_daily_kline(code)
+                if df.empty or len(df) < 25:
+                    trend = "flat"
+                else:
+                    import numpy as np
+                    recent = df.tail(40)
+                    closes = recent["close"].values
+                    slope = np.polyfit(np.arange(len(closes)), closes, 1)[0]
+                    norm = slope / (closes.mean() or 1e-9)
+                    trend = "up" if norm > 0.0015 else ("down" if norm < -0.0015 else "flat")
+                with lock:
+                    result[code] = trend
+            except Exception:
+                with lock:
+                    result[code] = "flat"
+
+        # 分批并发（每批 30，避免太多线程）
+        for i in range(0, len(codes), 30):
+            batch = codes[i:i + 30]
+            threads = [threading.Thread(target=work, args=(c,), daemon=True) for c in batch]
+            for t in threads: t.start()
+            for t in threads: t.join(timeout=20)
+        return _clean({"trends": result})
+
     # ---------- 选股猎手历史 ----------
     def available_hunter_dates(self):
         """返回 stock_hunter history 里所有日期（降序）。"""
