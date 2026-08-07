@@ -1451,6 +1451,58 @@ function renderStockChart() {
 
 /* ---- 选股猎手 ---- */
 let hunterLoaded = false;
+function trendBadge(t) {
+  if (t === "up") return `<span class="badge t-long" title="上行通道">上行↗</span>`;
+  if (t === "down") return `<span class="badge t-short" title="下行通道">下行↘</span>`;
+  return `<span class="badge chop">震荡→</span>`;
+}
+// 板块分页翻页
+function hunterPage(category, dir) {
+  if (!window._hunterPage) window._hunterPage = {};
+  window._hunterPage[category] = (window._hunterPage[category] || 0) + dir;
+  // 重渲染整个猎手表
+  if (state.payload && state.payload.position_builder) {
+    const data = window._hunterData;
+    if (data) renderHunter(data);
+  }
+}
+// 展开板块：批量拉个股通道标注 + 算板块阶段
+async function toggleSectorExpand(tr, category) {
+  const wrap = tr.nextElementSibling;
+  wrap.classList.toggle("open");
+  if (!wrap.classList.contains("open")) return;
+  // 找该板块成分股代码
+  const tbody = tr.parentElement;
+  const sectorData = (window._hunterSectors || {})[category] || {};
+  const stocks = sectorData.stocks || [];
+  const codes = stocks.map(s => s.code);
+  if (!codes.length) return;
+  const stageEl = tbody.querySelector(".h-stage-badge");
+  try {
+    const r = await apiCall("load_channel_batch", codes);
+    const trends = (r && r.trends) || {};
+    // 更新展开行通道列
+    wrap.querySelectorAll(".h-expand-row").forEach(row => {
+      const code = row.querySelector("td").textContent.trim();
+      if (trends[code]) {
+        row.querySelectorAll("td")[2].innerHTML = trendBadge(trends[code]);
+      }
+    });
+    // 板块阶段判定
+    const vals = codes.map(c => trends[c]).filter(Boolean);
+    const up = vals.filter(v => v === "up").length;
+    const down = vals.filter(v => v === "down").length;
+    if (vals.length >= 5) {
+      const ratio = up / (up + down || 1);
+      const stage = ratio >= 0.6 ? '<span class="badge signal">🔥 强势上攻</span>'
+        : ratio >= 0.4 ? '<span class="badge approach">➡️ 分化震荡</span>'
+        : '<span class="badge t-short">📉 弱势下行</span>';
+      if (stageEl) stageEl.innerHTML = stage;
+    } else if (stageEl) {
+      stageEl.innerHTML = `<span class="cell-dim">样本少</span>`;
+    }
+  } catch (e) { /* 静默 */ }
+}
 let hunterHistoryDates = [];
 
 async function initHunterDates() {
@@ -1465,6 +1517,30 @@ async function initHunterDates() {
       if (sel.value) loadHunterHistory(sel.value);
     });
   } catch (e) { /* 静默 */ }
+}
+
+// 重新生成选中日期结果（拉行情+评分）
+async function regenerateHunter() {
+  const sel = document.getElementById("hunterDate");
+  const date = sel.value;
+  if (!date) { statusEl("请先选择日期", "err"); return; }
+  const btn = document.getElementById("hunterRegenBtn");
+  const el = document.getElementById("hunterBody");
+  if (btn) { btn.disabled = true; btn.textContent = "⏳ 重新生成中(约80s)..."; }
+  el.innerHTML = '<div class="empty">⏳ 正在重新生成该日结果（重新拉行情+评分，约80秒）...</div>';
+  try {
+    const h = await apiCall("load_hunter", date);
+    if (h && h.available) {
+      renderHunter(h, true);
+      hunterLoaded = true;
+      statusEl(`${date} 已重新生成`, "ok");
+    } else {
+      el.innerHTML = `<div class="empty">${esc((h && h.error) || '生成失败')}</div>`;
+    }
+  } catch (e) {
+    el.innerHTML = `<div class="empty">重新生成失败: ${esc(e.message)}</div>`;
+  }
+  if (btn) { btn.disabled = false; btn.textContent = "🔄 重新生成"; }
 }
 
 async function loadHunterHistory(date) {
@@ -1588,6 +1664,9 @@ function renderHunter(h) {
 
   const sumRows = h.summary_rows || [];
     const ss = h.sector_stocks || {};
+    // 存储板块成分股供展开标注/翻页
+    window._hunterSectors = ss || {};
+    window._hunterData = h;
     const trends = h.concept_trends || {};
     function trendSpark(pts, key, color) {
       if (!pts || pts.length < 2) return '<span class="cell-dim">—</span>';
@@ -1614,15 +1693,21 @@ function renderHunter(h) {
     const d5Hits = stocks.filter(s => s.d5 > 0).length;
     const d6Hits = stocks.filter(s => s.d6 > 0).length;
 
-    // 展开的个股明细
-    const stockRows = stocks.slice(0, 15).map(s => {
+    // 展开的个股明细（全部成分股，分页50）
+    const PAGE = 50;
+    const pageIdx = window._hunterPage && window._hunterPage[category] || 0;
+    const allStocks = stocks;
+    const paged = allStocks.slice(pageIdx * PAGE, (pageIdx + 1) * PAGE);
+    const stockRows = paged.map(s => {
       const d5Cls = s.d5 >= 8 ? "up" : s.d5 >= 5 ? "warn" : s.d5 > 0 ? "cell-dim" : "";
       const d6Cls = s.d6 >= 8 ? "up" : s.d6 >= 5 ? "warn" : s.d6 > 0 ? "cell-dim" : "";
+      const trendTxt = s.trend ? trendBadge(s.trend) : '<span class="cell-dim" style="font-size:10px">…</span>';
       return `<tr class="h-expand-row" ondblclick="openStockChart('${esc(s.code)}','${esc(s.name)}')">
         <td class="mono cell-dim" title="双击看技术分析">${esc(s.code)}</td>
         <td title="双击看技术分析">${esc(s.name)} <button class="mini-btn" style="font-size:10px;padding:0 5px"
           onclick="event.stopPropagation();addToWatchlist('${esc(s.code)}','${esc(s.name)}',this)"
           title="加入建仓股池监控买点">+股池</button></td>
+        <td>${trendTxt}</td>
         <td class="num ${s.score >= 70 ? 'up' : s.score >= 50 ? 'warn' : 'cell-dim'}"><b>${s.score}</b></td>
         <td class="num ${d5Cls}">${s.d5 || "—"}</td>
         <td class="num ${d6Cls}">${s.d6 || "—"}</td>
@@ -1631,6 +1716,10 @@ function renderHunter(h) {
         <td>${s.limit_up ? '<span class="badge signal">涨停</span>' : ''}</td>
       </tr>`;
     }).join("");
+    const pageInfo = allStocks.length > PAGE
+      ? `<div class="h-pager"><button class="mini-btn" onclick="hunterPage('${esc(category)}',-1)" ${pageIdx===0?'disabled':''}>←</button>
+         ${pageIdx + 1}/${Math.ceil(allStocks.length / PAGE)} 页（共${allStocks.length}只）
+         <button class="mini-btn" onclick="hunterPage('${esc(category)}',1)" ${(pageIdx+1)*PAGE>=allStocks.length?'disabled':''}>→</button></div>` : "";
 
     const rank = i + 1;
     const medal = rank === 1 ? "🥇" : rank === 2 ? "🥈" : rank === 3 ? "🥉" : "";
@@ -1642,8 +1731,8 @@ function renderHunter(h) {
     const heatVal = r["热度"] != null ? r["热度"] : 0;
     const heatBarW = Math.max(2, Math.min(100, heatVal));
 
-    return `<tbody class="h-sector-group">
-      <tr class="h-main-row" onclick="this.nextElementSibling.classList.toggle('open')" style="cursor:pointer">
+    return `<tbody class="h-sector-group" data-category="${esc(category)}">
+      <tr class="h-main-row" onclick="toggleSectorExpand(this,'${esc(category)}')" style="cursor:pointer">
         <td class="num mono" style="font-size:14px;font-weight:700">${medal || rank}</td>
         <td>
           <div class="h-name">${esc(category)}
@@ -1660,6 +1749,7 @@ function renderHunter(h) {
           <div class="h-bar-track"><div class="h-bar-fill ${scoreCls}" style="width:${barW}%"></div></div>
         </td>
         <td class="num">${r["涨停数"]||0}</td>
+        <td style="min-width:70px"><span class="h-stage-badge cell-dim">阶段…</span></td>
         <td style="width:100px">
           <span class="mono cell-dim" style="font-size:10px">${trendSpark(trends[category]||[], 'heat', '#d29922')}</span><div class="h-heat-val ${heatCls}">${heatVal > 0 ? fmt(heatVal, 0) : "—"}</div>
           <div class="h-bar-track h-bar-sm"><div class="h-bar-fill ${heatCls}" style="width:${heatBarW}%"></div></div>
@@ -1671,16 +1761,17 @@ function renderHunter(h) {
         </td>
         <td class="cell-dim" style="font-size:11px;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(r["前三强"]||'')}">${esc(r["前三强"]||'—')}</td>
       </tr>
-      <tr class="h-expand-wrap"><td colspan="7" style="padding:0">
+      <tr class="h-expand-wrap"><td colspan="8" style="padding:0">
         <div class="h-expand">
           <table><thead><tr>
-            <th>代码</th><th>名称</th><th class="num">得分</th>
+            <th>代码</th><th>名称</th><th>通道</th><th class="num">得分</th>
             <th class="num" title="潜在突破10日">D5</th>
             <th class="num" title="潜在突破5日">D6</th>
             <th class="num">D9</th>
             <th class="num">涨跌</th><th>状态</th>
           </tr></thead>
           <tbody>${stockRows}</tbody></table>
+          ${pageInfo}
           <div class="cell-dim" style="font-size:10px;margin-top:3px">D5=潜在突破10日(≥8强) · D6=潜在突破5日(≥8强) · D9=活跃程度 · 点击行收起</div>
         </div>
       </td></tr>
@@ -2001,6 +2092,8 @@ async function init() {
   // 选股猎手运行按钮 + 历史日期下拉
   const hunterBtn = document.getElementById("hunterRunBtn");
   if (hunterBtn) hunterBtn.addEventListener("click", () => loadHunter(true));
+  const hunterRegen = document.getElementById("hunterRegenBtn");
+  if (hunterRegen) hunterRegen.addEventListener("click", regenerateHunter);
   initHunterDates();
   // 成本校准按钮
   const calibBtn = document.getElementById("calibBtn");
