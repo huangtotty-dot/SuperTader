@@ -1714,37 +1714,42 @@ function renderOB(ob) {
     return;
   }
   const rows = ob.stocks.map(s => {
-    if (s.error) return `<tr><td colspan="9" class="cell-dim">${esc(s.code)}: ${esc(s.error)}</td></tr>`;
+    if (s.error) return `<tr><td colspan="10" class="cell-dim">${esc(s.code)}: ${esc(s.error)}</td></tr>`;
     const ob_ = s.overbought || {};
     const dv = s.divergence || {};
     const mark = (cond) => cond ? `<span class="badge signal">⚠</span>` : `<span class="badge chop">✓</span>`;
-    const advCls = s.advice.includes("不宜") ? "warn" : s.advice.includes("观察") ? "cell-dim" : "up";
+    const advCls = s.risk === "高" ? "up" : s.risk === "中" ? "warn" : "cell-dim";
+    const trendTxt = s.trend === "down" ? `<b class="down">下行↘</b>`
+      : s.trend === "up" ? `<b class="up">上行↗</b>` : `<span class="cell-dim">震荡→</span>`;
     const dvTxt = dv.count ? [
       dv.macd ? "MACD" : "", dv.rsi ? "RSI" : "", dv.kdj ? "KDJ" : "", dv.vol ? "量价" : ""
     ].filter(Boolean).join("/") : "无";
     return `<tr ondblclick="openStockChart('${esc(s.code)}','${esc(s.name)}')" style="cursor:pointer" title="双击看K线">
       <td>${esc(s.name)} <span class="mono cell-dim">${esc(s.code)}</span></td>
       <td class="num">${fmt(s.price, 2)}</td>
+      <td>${trendTxt}</td>
       <td class="num ${ob_.rsi ? 'up' : 'cell-dim'}">${fmt(ob_.rsi, 0)} ${mark(ob_.rsi)}</td>
       <td class="num ${ob_.kdj ? 'up' : 'cell-dim'}">${fmt(ob_.kdj, 0)} ${mark(ob_.kdj)}</td>
       <td class="num ${ob_.cci ? 'up' : 'cell-dim'}">${fmt(ob_.cci, 0)} ${mark(ob_.cci)}</td>
       <td>${mark(ob_.boll)}</td>
       <td class="${dv.count ? 'warn' : 'cell-dim'}">${dv.count ? dvTxt : "无"}</td>
+      <td class="num ${advCls}">${s.risk === "高" ? "高" : s.risk === "中" ? "中" : "低"}</td>
       <td><span class="${advCls}">${esc(s.advice)}</span></td>
     </tr>`;
   }).join("");
   el.innerHTML = `
     <div class="card" style="overflow-x:auto">
       <table><thead><tr>
-        <th>股票</th><th class="num">现价</th>
+        <th>股票</th><th class="num">现价</th><th>趋势</th>
         <th class="num" title="RSI>70超买">RSI</th>
         <th class="num" title="KDJ J>100超买">KDJ-J</th>
         <th class="num" title="CCI>100超买">CCI</th>
         <th title="收盘破BOLL上轨">BOLL</th>
         <th title="MACD/RSI/KDJ/量价顶背离">顶背离</th>
-        <th>建仓建议</th>
+        <th class="num">风险</th>
+        <th>风险提醒</th>
       </tr></thead><tbody>${rows}</tbody></table>
-      <div class="cell-dim" style="font-size:10px;margin-top:4px">日线指标 · RSI>70/J>100/CCI>100/破BOLL上轨=超买 · 超买≥2或顶背离→不宜追高 · 双击行看K线</div>
+      <div class="cell-dim" style="font-size:10px;margin-top:4px">目的：发现超买+趋势下行风险 → 提醒减仓/回避（非建仓建议） · 超买≥2或顶背离→高风险 · 双击行看K线</div>
     </div>`;
 }
 
