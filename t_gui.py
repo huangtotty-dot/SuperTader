@@ -876,11 +876,22 @@ class Api:
         norm_slope = slope / avg_price
         direction = "up" if norm_slope > 0.0015 else ("down" if norm_slope < -0.0015 else "flat")
 
+        # 趋势描述补充
+        start_price = float(recent["close"].iloc[0])
+        end_price = float(recent["close"].iloc[-1])
+        ret_40d = (end_price - start_price) / start_price * 100 if start_price else 0
+        # 现价在通道中的位置（0=下轨, 100=上轨）：用回归线在当前 x(n-1) 处的值
+        up_here, dn_here = up_end, dn_end
+        pos_pct = (end_price - dn_here) / (up_here - dn_here) * 100 if up_here != dn_here else 50
+
         return {
             "direction": direction,
             "slope": round(float(slope), 4),
+            "norm_slope_pct": round(norm_slope * 100, 3),
             "up_line": [round(float(up_i), 3), round(float(up_end), 3)],
             "dn_line": [round(float(dn_i), 3), round(float(dn_end), 3)],
+            "ret_40d": round(float(ret_40d), 1),
+            "pos_pct": round(max(0, min(100, float(pos_pct))), 0),
         }
 
     def _calc_support_resistance(self, daily):
