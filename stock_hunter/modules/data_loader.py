@@ -221,6 +221,7 @@ class DataLoader:
                 _change = best_stock.get("涨跌幅", 0)
                 best_score = int(0 if pd.isna(_change) else float(_change) * 10)
             else:
+                cat_df_sorted = cat_df.sort_values("名称", ascending=True).reset_index(drop=True)
                 best_stock = cat_df.iloc[0]
                 best_score = 10
 

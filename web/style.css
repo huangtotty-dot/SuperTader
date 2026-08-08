@@ -264,6 +264,9 @@ tr:hover td { background: rgba(88,166,255,.03); }
 .h-bar-fill.up { background: #f85149; }
 .h-bar-fill.down { background: #3fb950; }
 .h-bar-fill.warn { background: #d29922; }
+/* 突破箱体扫描进度 */
+.bk-scan { padding: 4px 2px; font-size: 13px; }
+.bk-scan-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 /* 热度 */
 .h-heat-val { font-family: var(--mono); font-size: 16px; font-weight: 700; }
 /* 趋势徽章 */
