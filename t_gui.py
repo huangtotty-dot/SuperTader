@@ -981,7 +981,9 @@ class Api:
             daily = calc_ma_and_indicators(df)
             weekly = calc_ma_and_indicators(df.resample("W-FRI", on="date").agg(
                 {"open": "first", "high": "max", "low": "min", "close": "last", "volume": "sum"}).dropna().reset_index())
-            monthly = calc_ma_and_indicators(df.resample("M", on="date").agg(
+            # 月线频率兼容：pandas≥2.2 用 "ME"，旧版用 "M"（否则 load_stock_chart 报"计算失败"）
+            _month_freq = "ME" if pd.__version__.split(".")[0] >= "2" and pd.__version__.split(".")[1] >= "2" else "M"
+            monthly = calc_ma_and_indicators(df.resample(_month_freq, on="date").agg(
                 {"open": "first", "high": "max", "low": "min", "close": "last", "volume": "sum"}).dropna().reset_index())
 
             def to_series(d):
