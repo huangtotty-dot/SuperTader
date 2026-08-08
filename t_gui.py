@@ -127,8 +127,17 @@ class Api:
             stem = p.stem
             if stem.startswith("daily_review_") and len(stem) == len("daily_review_") + 10:
                 dates.add(stem[len("daily_review_"):])
-        dates.add(datetime.now().strftime("%Y-%m-%d"))  # 今天盘中可能尚无 daily_review，仍可选（实时模式）
-        return sorted(dates, reverse=True)
+        today = datetime.now().strftime("%Y-%m-%d")
+        dates.add(today)  # 今天盘中可能尚无 daily_review，仍可选（实时模式）
+        ordered = sorted(dates, reverse=True)
+        # 今天若还没有任何盘后数据（daily_review / position_builder 均无），
+        # 挪到末尾，避免看板默认选中无数据的今天导致建仓/加仓显示空白。
+        if today in ordered and not (
+            (OUT / f"daily_review_{today}.json").exists()
+            or (TRACES / f"position_builder_{today}.jsonl").exists()):
+            ordered.remove(today)
+            ordered.append(today)
+        return ordered
 
     # ---------- 单日完整载荷 ----------
     def load_day(self, date=None):
