@@ -48,6 +48,13 @@ function nowTime() {
   const p = n => String(n).padStart(2, "0");
   return `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
 }
+// fix P0-2: 解析 scan_time（"YYYY-MM-DD HH:MM:SS" 或 ISO），返回距今秒数；无法解析返回 null
+function scanAgeSec(scanTime) {
+  if (!scanTime) return null;
+  const t = Date.parse(String(scanTime).replace(" ", "T"));
+  if (isNaN(t)) return null;
+  return (Date.now() - t) / 1000;
+}
 
 /* ================= 数据加载 ================= */
 let state = { date: null, payload: null, trend: [] };
@@ -114,11 +121,24 @@ function todayStr() {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
 }
 
+// fix P1-6: 实时轮询失败计数，连续失败 ≥3 次在状态栏红色告警，恢复后自动消除
+let liveFailCnt = 0, pbFailCnt = 0;
+function updateRefreshAlarm() {
+  const interrupted = liveFailCnt >= 3 || pbFailCnt >= 3;
+  if (interrupted) {
+    statusEl(`⚠ 实时刷新中断（live 连续失败 ${liveFailCnt} 次 / pb ${pbFailCnt} 次）· ${nowTime()}`, "err");
+  } else if (window._refreshAlarmWas) {
+    statusEl(`实时刷新已恢复 · ${nowTime()}`, "ok");
+  }
+  window._refreshAlarmWas = interrupted;
+}
+
 async function refreshLive(reset) {
   const date = state.date;
   if (!date) return;
   try {
     const live = await apiCall("load_live", date);
+    liveFailCnt = 0;   // fix P1-6: 主链路成功即清零
     renderLive(live, date === todayStr());
 
     // 实时行情条（10s 刷新）+ 存 quotes 供 PB 价格更新
@@ -143,7 +163,14 @@ async function refreshLive(reset) {
 
     // 加仓条件全满足检测（与飞书推送无关，纯 GUI 报警）
     const aw = live.add_watch || (state.payload && state.payload.add_watch) || {};
-    const allMet = Object.entries(aw).filter(([, v]) => v.met_count >= (v.conditions || []).length);
+    // fix P0-4: 满分告警需 box_boost（突破加成），或真实 met==total 且 not_applicable 为空（排除盘中占位改写）
+    const allMet = Object.entries(aw).filter(([code, v]) => {
+      if (code === "_progress" || !v) return false;
+      const conds = v.conditions || [];
+      const notApp = v.not_applicable || [];
+      const realFull = conds.length > 0 && (v.met_count || 0) >= conds.length && notApp.length === 0;
+      return v.box_boost === true || realFull;
+    });
     if (allMet.length && !window._awAlerted) window._awAlerted = {};
     allMet.forEach(([code, v]) => {
       const key = date + "_" + code;
@@ -169,11 +196,22 @@ async function refreshLive(reset) {
     }
 
     // 建仓/加仓扫描表实时刷新（position_builder 盘中每5分钟有新数据）
-    apiCall("refresh_pb", date).then(pb => renderPB(pb || {})).catch(() => {});
+    // fix P1-6: refresh_pb 成败纳入轮询告警计数
+    apiCall("refresh_pb", date).then(pb => {
+      pbFailCnt = 0;
+      renderPB(pb || {});
+      updateRefreshAlarm();
+    }).catch(() => {
+      pbFailCnt++;
+      updateRefreshAlarm();
+    });
     // 严重顶背离报警（语音+声音+横幅）
     pollDivergence();
+    updateRefreshAlarm();   // fix P1-6: 主链路成功后收敛告警状态
   } catch (e) {
-    // 静默：实时轮询失败不影响主界面
+    // fix P1-6: 实时轮询失败计数（仍不打断主界面），≥3 次状态栏红色告警
+    liveFailCnt++;
+    updateRefreshAlarm();
   }
 }
 
@@ -1043,24 +1081,38 @@ function renderPB(pb) {
   if (!delta && prev.sig !== undefined) delta = " ✓ 无变化";
   const rows = (pb.rows || []).map(r => {
     const conds = r.conditions || {};
-    const condStr = Object.keys(condLabels).map(k =>
-      conds[k] ? `<span class="on">●</span>` : `<span class="off">○</span>`).join("");
+    // fix P1-3: insufficient_data 行圆点区显示『—』而非 5 个空心圆
+    const isNoData = r.verdict === "insufficient_data";
+    const condStr = isNoData
+      ? `<span class="cell-dim">—</span>`
+      : Object.keys(condLabels).map(k =>
+          conds[k] ? `<span class="on">●</span>` : `<span class="off">○</span>`).join("");
     const condTitle = Object.keys(condLabels).map(k =>
       `${condLabels[k]}:${conds[k] ? "通过" : "未过"}`).join(" · ");
     const boxMet = conds[boxKey] || false;
     const boxStr = boxMet ? `<span class="badge signal">🚀突破</span>` : `<span class="off">—</span>`;
-    const metCount = Object.values(conds).filter(Boolean).length;
+    // fix P1-1: metCount 只数 condLabels 的 5 个键，box_breakout 已有独立列不计入
+    const metCount = Object.keys(condLabels).filter(k => conds[k]).length;
     const metCls = metCount >= 4 ? "up" : metCount >= 2 ? "warn" : "cell-dim";
+    // fix P1-3: 行内灰色小字显示 r.errors 首条（hover 看全部）
+    const errTxt = (r.errors && r.errors.length)
+      ? `<div class="cell-dim" style="font-size:10px;line-height:1.4" title="${esc(r.errors.join("；"))}">⚠ ${esc(r.errors[0])}</div>`
+      : "";
+    // fix P0-2: 展示每行 scan_time，距今 >10 分钟整行置灰并加『陈旧』标记
+    const ageSec = scanAgeSec(r.scan_time);
+    const isStale = ageSec !== null && ageSec > 600;
+    const scanTimeTxt = r.scan_time ? String(r.scan_time).slice(11, 19) : "";
+    const staleBadge = isStale ? ` <span class="badge nodata">陈旧</span>` : "";
     const tagsTxt = r.tags && r.tags.length
       ? r.tags.map(t => tagBadge(t)).join(" ")
       : '<span class="cell-dim" style="font-size:10px">…</span>';
     return `
-      <tr id="pb-row-${esc(r.code || '')}" ondblclick="openStockChart('${esc(r.code||'')}','${esc(r.name||r.code||'')}')" style="cursor:pointer" title="双击看K线">
+      <tr id="pb-row-${esc(r.code || '')}" ondblclick="openStockChart('${esc(r.code||'')}','${esc(r.name||r.code||'')}')" style="cursor:pointer;${isStale ? "opacity:.45;" : ""}" title="双击看K线${isStale ? "（数据陈旧，距今超过10分钟）" : ""}">
         <td>${esc(r.name || "")} <span class="mono cell-dim">${esc(r.code || "")}</span>
-          ${r.in_holdings ? `<span class="badge hold">持仓</span>` : ""}</td>
+          ${r.in_holdings ? `<span class="badge hold">持仓</span>` : ""}${errTxt}</td>
         <td>${verdictBadge(r.verdict)}</td>
         <td class="num"><b>${r.composite_score}</b></td>
-        <td class="num ${metCls}"><b>${metCount}/5</b></td>
+        <td class="num ${metCls}"><b>${isNoData ? "—" : metCount + "/5"}</b></td>
         <td class="num">${fmt(r.price)}</td>
         <td style="text-align:center">${boxStr}</td>
         <td style="max-width:220px;line-height:1.7">${tagsTxt}</td>
@@ -1068,22 +1120,27 @@ function renderPB(pb) {
         <td class="num">${fmt(r.suggested_qty, 0)}</td>
         <td class="num">${fmt(r.suggested_price)}</td>
         <td class="num">${fmt(r.capital_required, 0)}</td>
-        <td class="cell-dim">${esc(r.scan_type || "")}${r._scans > 1 ? `×${r._scans}` : ""}</td>
+        <td class="cell-dim">${esc(r.scan_type || "")}${r._scans > 1 ? `×${r._scans}` : ""}${scanTimeTxt ? ` <span class="mono">${esc(scanTimeTxt)}</span>` : ""}${staleBadge}</td>
         <td>${!r.in_holdings ? `<button class="mini-btn" style="font-size:10px;padding:0 5px;color:#f85149" onclick="removeFromWatchlist('${esc(r.code||'')}',document.getElementById('pb-row-${esc(r.code||'')}'))" title="从股池移除">✕</button>` : ""}</td>
       </tr>`;
   }).join("");
 
-  const c = k => counts[k] ? `<span class="badge ${k === "signal" ? "signal" : k === "approaching" ? "approach" : "weak"}">${k}: ${counts[k]}</span>` : "";
+  // fix P0-1: counts 已是按 code 去重的股票数，徽章统一『只』口径并加 tooltip
+  // fix P1-7: insufficient_data/pending 用独立灰色 nodata 徽章，不再落入 weak
+  const badgeClsOf = k => k === "signal" ? "signal" : k === "approaching" ? "approach"
+    : (k === "insufficient_data" || k === "pending") ? "nodata" : "weak";
+  const c = k => counts[k] ? `<span class="badge ${badgeClsOf(k)}" title="按股票数统计（按 code 去重）">${k}: ${counts[k]}只</span>` : "";
+  // fix P0-2: refreshed_at 语义为数据最后写入时间，直接展示
   const refreshed = pb.refreshed_at ? `<span class="live-dot"></span> ${esc(pb.refreshed_at)}${delta ? ` <span class="aw-delta">${delta}</span>` : ""}` : "";
   el.innerHTML = `
     <div class="card">
       <div style="display:flex;gap:8px;margin-bottom:6px;flex-wrap:wrap;align-items:center">
         ${c("signal")}${c("approaching")}${c("weak")}${c("insufficient_data")}
-        <span class="cell-dim mono" style="font-size:10px;margin-left:auto" title="盘中每10s自动刷新">${refreshed}</span>
+        <span class="cell-dim mono" style="font-size:10px;margin-left:auto" title="数据最后写入时间（前端盘中每10s拉取）">${refreshed}</span>
       </div>
       ${pb.note ? `<div class="cell-dim" style="font-size:11px;margin-bottom:6px">⚠ ${esc(pb.note)}</div>` : ""}
       ${inWarmup ? `<div class="warmup-banner">⏳ 开盘预热中：5分钟K线累积中（需≥3根），09:45 后出完整信号</div>` : ""}
-  ${pb.progress ? `<div class="cell-dim" style="font-size:10px;margin-bottom:6px">扫描进度: <b>${pb.progress.scanned}/${pb.progress.total_candidates}</b> 只已扫${pb.progress.pending ? ` · <b class="warn">${pb.progress.pending}</b> 只待扫描` : ''} · 在线拉取 <b>${pb.progress.online_fetched}</b> 只 · 无数据 <b class="warn">${pb.progress.no_data}</b> 只</div>` : ""}
+  ${pb.progress ? `<div class="cell-dim" style="font-size:10px;margin-bottom:6px">扫描进度: <b>${pb.progress.scanned}/${pb.progress.total_candidates}</b> 只已扫${pb.progress.pending ? ` · <b class="warn">${pb.progress.pending}</b> 只待扫描` : ''} · 已扫描 <b>${pb.progress.online_fetched}</b> 只 · 无数据 <b class="warn" title="insufficient_data：5分钟K线/快照不足，未参与条件判定">${pb.progress.no_data}</b> 只<span class="cell-dim">（K线/快照不足）</span></div>` : ""}
       <table>
         <thead><tr>
           <th>股票</th><th>判定</th><th class="num">得分</th><th class="num">通过</th><th class="num">价</th>
@@ -1094,34 +1151,38 @@ function renderPB(pb) {
         </tr></thead>
         <tbody>${rows || '<tr><td colspan="9" class="empty">无扫描结果</td></tr>'}</tbody>
       </table>
-      <div class="cell-dim" style="font-size:11px;margin-top:8px">●=通过 ○=未通过 · 五条件：${Object.values(condLabels).join(" / ")} · 每条件 20 分，≥70 signal · 盘中每10s刷新</div>
+      <div class="cell-dim" style="font-size:11px;margin-top:8px">●=通过 ○=未通过 · 五条件：${Object.values(condLabels).join(" / ")} · 每条件 20 分，≥80 且突破箱体→signal（突破另需≥40） · 盘中每10s刷新</div>
     </div>`;
+  // fix P1-2: 页脚文案与后端实际逻辑一致（≥80 且突破箱体→signal，突破另需≥40）
 }
 
 /* ---- ⑦ 加仓观察 ---- */
 function renderAddWatch(aw) {
   const el = document.getElementById("addWatchBody");
-  const codes = Object.keys(aw || {});
+  // fix P0-13 防护：过滤 `_progress` 等下划线伪股票键，避免混入卡片与『共 N 只』计数
+  const codes = Object.keys(aw || {}).filter(c => c[0] !== "_");
   if (!codes.length) {
     el.innerHTML = '<div class="empty">无加仓观察数据（盘中实时计算，需分钟快照；历史日依赖 daily_review）</div>';
     return;
   }
 
-  // 前后对比
-  const currMet = codes.map(c => (aw[c] || {}).met_count || 0).join("");
-  const prevMet = (window._awLast || {}).met || "";
-  window._awLast = { met: currMet, ts: nowTime() };
+  // fix P2-1: 前后对比改为按 code→met_count 字典 diff（原字符位置比对在列表变化/两位数时会错乱）
+  const currMap = {};
+  codes.forEach(c => { currMap[c] = (aw[c] || {}).met_count || 0; });
+  const prevMap = (window._awLast || {}).metMap || null;
+  window._awLast = { metMap: currMap, ts: nowTime() };
   let awDelta = "";
-  if (prevMet && prevMet !== currMet) {
-    const changed = codes.filter((c, i) => (aw[c] || {}).met_count !== parseInt(prevMet[i] || "0"));
-    if (changed.length) {
-      const ups = changed.filter(c => (aw[c] || {}).met_count > parseInt(prevMet[codes.indexOf(c)] || "0"));
-      const downs = changed.filter(c => (aw[c] || {}).met_count < parseInt(prevMet[codes.indexOf(c)] || "0"));
-      if (ups.length) awDelta += ` 🟢 ${ups.join(",")} 条件改善`;
-      if (downs.length) awDelta += ` 🔴 ${downs.join(",")} 条件退化`;
-    }
+  if (prevMap) {
+    const ups = [], downs = [];
+    codes.forEach(c => {
+      const p = prevMap[c];
+      if (p === undefined || p === currMap[c]) return;
+      (currMap[c] > p ? ups : downs).push(c);
+    });
+    if (ups.length) awDelta += ` 🟢 ${ups.join(",")} 条件改善`;
+    if (downs.length) awDelta += ` 🔴 ${downs.join(",")} 条件退化`;
   }
-  if (!awDelta && prevMet) awDelta = " ✓ 无变化";
+  if (!awDelta && prevMap) awDelta = " ✓ 无变化";
 
   // 汇总统计
   let holdCnt = 0, breakCnt = 0, nearCnt = 0, noEventCnt = 0;

@@ -453,10 +453,14 @@ def run_backtest(codes: list, date_range: list, holdings_map: dict,
     # E1: 引擎买阈基线注入(验证用途, 默认42不变) — 引擎软消费 PARAMS["engine_buy_threshold_base"](signal_engine.py:524)
     if os.environ.get("T_BUY_BONUS_MIN_SCORE"):
         PARAMS["engine_buy_threshold_base"] = float(os.environ["T_BUY_BONUS_MIN_SCORE"])
-    # W32 C1-final: 接回解耦注入(验证用途, 默认关=生产行为不变) — 引擎软消费 PARAMS["buyback_bypass_gates"]
+    # W32 C1-final: 接回解耦注入 — V1.2.0 起生产默认开（config.py PARAMS["buyback_bypass_gates"]=True）；
+    # env 保留用于回测对照："1"=强制开（旧实验口径兼容），"0"=显式关闭（复现 V1.1.x 旧世界）
     if os.environ.get("T_BUYBACK_BYPASS_GATES") == "1":
         PARAMS["buyback_bypass_gates"] = True
-    # W33 C1' 口径B: 全部买信号单股日限注入(验证用途, 默认关=生产行为不变) — 引擎软消费 PARAMS["buy_daily_cap"]
+    elif os.environ.get("T_BUYBACK_BYPASS_GATES") == "0":
+        PARAMS["buyback_bypass_gates"] = False
+    # W33 C1' 口径B: 全部买信号单股日限注入 — V1.2.0 起生产默认 7（config.py PARAMS["buy_daily_cap"]=7）；
+    # env 可显式覆盖做 A/B："0"=关闭（buy_daily_cap_reached 对 0 返回 False），"N"=自定义上限
     if os.environ.get("T_BUY_DAILY_CAP"):
         PARAMS["buy_daily_cap"] = int(os.environ["T_BUY_DAILY_CAP"])
 
