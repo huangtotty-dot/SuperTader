@@ -13,8 +13,20 @@ position_sizer.py — 动态仓位管理器（V1.14 新架构）
   通过共享命名空间中的 PositionSizer 类调用
 """
 
+import logging
 from typing import Dict, Any, Optional
 from market_regime import MarketRegime, should_clear_all, should_reduce
+
+log = logging.getLogger("做T助手")
+
+# fix P0-9(B4): 全量持仓引用（由 main.py 注入），供单股上限合并 A/B 双账户判定
+_ALL_HOLDINGS_REF: Optional[dict] = None
+
+
+def set_all_holdings(holdings: dict) -> None:
+    """fix P0-9(B4): 注入全量持仓引用，_check_position_limit 按底层代码合并 A/B 市值。"""
+    global _ALL_HOLDINGS_REF
+    _ALL_HOLDINGS_REF = holdings or {}
 
 
 class PositionSizer:
@@ -64,16 +76,35 @@ class PositionSizer:
 
         cost = float(holding.get("cost") or 0)
         qty = int(holding.get("qty") or 0)
-        if cost <= 0 or qty <= 0 or price <= 0:
+        if qty <= 0 or price <= 0:
+            return 0
+        if cost <= 0:
+            # fix P0-9(B7): cost 缺失导致上限检查静默失效，显式告警标注数据缺失
+            log.warning(f"⚠️ {code} 持仓 cost 缺失/非正(cost={cost})，单股上限检查跳过（数据缺失）")
             return 0
         market_value = price * qty
+        # fix P0-9(B4): 按底层代码（去掉 _B 后缀）合并 A/B 双账户持仓市值后再判定
+        base_code = str(code).split("_")[0]
+        for _c, _h in (_ALL_HOLDINGS_REF or {}).items():
+            if _c == code or str(_c).split("_")[0] != base_code:
+                continue
+            _q = int(_h.get("qty") or 0)
+            if _q <= 0:
+                continue
+            _p = self._current_price(_h, index_ctx, current_price)
+            if _p <= 0:
+                continue
+            market_value += _p * _q
         max_allowed = total_equity * max_pct
         excess_value = market_value - max_allowed
         if excess_value <= 0:
             return 0
         excess_qty = int(excess_value / price) if price > 0 else 0
         min_unit = 100
-        excess_qty = max(min_unit, (excess_qty // min_unit) * min_unit)
+        # fix P0-9(B5): 向上取整到整手；若放大后超过可卖净量则取净量向下整手
+        excess_qty = ((excess_qty + min_unit - 1) // min_unit) * min_unit
+        if excess_qty > qty:
+            excess_qty = (qty // min_unit) * min_unit
         return min(excess_qty, qty)
 
     def calc_sell_qty(self, code: str, holding: dict, regime,
@@ -95,7 +126,8 @@ class PositionSizer:
 
         返回: 建议卖出股数（整数，100的倍数）
         """
-        total_t = int(holding.get("t_qty", 0) or holding.get("qty", 0) or 0)
+        # fix P0-9(B3): 纯底仓口径——严格 t_qty，不回退 qty；t_qty=0 不卖（与 main.py 动态份数口径一致）
+        total_t = int(holding.get("t_qty", 0) or 0)
         if total_t <= 0:
             return 0
 
@@ -126,18 +158,30 @@ class PositionSizer:
                     min_unit = p.get("etf_min_trade_unit", 100)
                 else:
                     min_unit = p.get("stock_min_trade_unit", 100)
-                result_qty = max(min_unit, (excess_qty // min_unit) * min_unit)
+                # fix P0-9(B6): 向上取整到 min_unit；放大后超过可卖净量则取净量向下整手
+                result_qty = ((excess_qty + min_unit - 1) // min_unit) * min_unit
+                if result_qty > net_qty:
+                    result_qty = (net_qty // min_unit) * min_unit
             elif is_etf:
-                result_qty = max(p.get("etf_min_trade_unit", 100), (net_qty * 0.5 // p.get("etf_min_trade_unit", 100)) * p.get("etf_min_trade_unit", 100))
+                min_unit = p.get("etf_min_trade_unit", 100)
+                result_qty = max(min_unit, (net_qty * 0.5 // min_unit) * min_unit)
+                if result_qty > net_qty:  # fix P0-9(B6): 减半卖出 min_unit 放大后不超过可卖净量
+                    result_qty = (net_qty // min_unit) * min_unit
             else:
-                result_qty = max(p.get("stock_min_trade_unit", 100), (net_qty * 0.5 // p.get("stock_min_trade_unit", 100)) * p.get("stock_min_trade_unit", 100))
+                min_unit = p.get("stock_min_trade_unit", 100)
+                result_qty = max(min_unit, (net_qty * 0.5 // min_unit) * min_unit)
+                if result_qty > net_qty:  # fix P0-9(B6): 同上
+                    result_qty = (net_qty // min_unit) * min_unit
         elif index_state == "defensive":
             if excess_qty > 0:
                 if is_etf:
                     min_unit = p.get("etf_min_trade_unit", 100)
                 else:
                     min_unit = p.get("stock_min_trade_unit", 100)
-                result_qty = max(min_unit, (excess_qty // min_unit) * min_unit)
+                # fix P0-9(B6): 向上取整到 min_unit；放大后超过可卖净量则取净量向下整手
+                result_qty = ((excess_qty + min_unit - 1) // min_unit) * min_unit
+                if result_qty > net_qty:
+                    result_qty = (net_qty // min_unit) * min_unit
             else:
                 # fall through to normal sizing with tighter factor
                 if index_factor < 1.0 and excess_qty <= 0:
@@ -186,7 +230,8 @@ class PositionSizer:
 
         返回: 建议买入股数（整数，100的倍数）
         """
-        total_t = int(holding.get("t_qty", 0) or holding.get("qty", 0) or 0)
+        # fix P0-9(B3): 纯底仓口径——严格 t_qty，不回退 qty；t_qty=0 不买
+        total_t = int(holding.get("t_qty", 0) or 0)
         if total_t <= 0:
             return 0
 
@@ -243,6 +288,9 @@ class PositionSizer:
         # 确保不超过剩余可买额度
         qty = min(qty, max_buyable)
 
+        # fix P0-9(B2): 计算量为 0 时直接返回 0，禁止 max(min_unit,...) 让弱信号保底买一手（个股/ETF 统一）
+        if qty <= 0:
+            return 0
         # 最小交易单位
         min_unit = p.get("etf_min_trade_unit", 100) if is_etf else p.get("stock_min_trade_unit", 100)
         qty = max(min_unit, (qty // min_unit) * min_unit)
@@ -305,7 +353,8 @@ class PositionSizer:
 
     def _virtual_net_qty(self, code: str, holding: dict) -> int:
         """计算当前虚拟净持仓（可卖量）"""
-        base_qty = int(holding.get("t_qty") or holding.get("qty") or 0)
+        # fix P0-9(B3): 纯底仓口径——严格 t_qty，不再回退 qty
+        base_qty = int(holding.get("t_qty") or 0)
         if code not in self.virtual_trades:
             return base_qty
         buys = self.virtual_trades[code].get("BUY_LOW", [])

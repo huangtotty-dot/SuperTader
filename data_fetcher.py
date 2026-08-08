@@ -23,44 +23,116 @@ def clean_code(code: str) -> str:
     return code
 
 
-def _fetch_daily_bar(code: str, is_etf: bool = False, as_of: Optional[str] = None) -> pd.DataFrame:
+def _fnum(v, default: float = 0.0) -> float:
+    """fix D12: NaN 安全数值转换。NaN 是真值，`x or 0.0` 拦不住 NaN，
+    裸 float(nan) 写进 dict 会让 json.dump 产出非法 JSON。"""
     try:
-        import akshare as ak
-        api_code = clean_code(code)
-        end_date = (as_of or _now().strftime("%Y%m%d")).replace("-", "")
-        start_date = (_now() - timedelta(days=180)).strftime("%Y%m%d")
-        if is_etf:
-            for fn in ["fund_etf_hist_em", "fund_etf_hist_sina"]:
-                if hasattr(ak, fn):
-                    try:
-                        df = getattr(ak, fn)(symbol=api_code, period="daily", start_date=start_date, end_date=end_date, adjust="qfq")
-                        if isinstance(df, pd.DataFrame) and not df.empty:
-                            break
-                    except Exception:
-                        df = pd.DataFrame()
-                else:
-                    df = pd.DataFrame()
-        else:
+        f = float(v)
+    except (TypeError, ValueError):
+        return default
+    if f != f or f in (float("inf"), float("-inf")):  # NaN/inf
+        return default
+    return f
+
+
+def _fetch_daily_bar_tencent(api_code: str, count: int = 400) -> pd.DataFrame:
+    """fix D4: 腾讯 fqkline 前复权日线（与 position_builder.fetch_daily_kline 同源口径）。
+    ETF 日线主用此链路（工程内已验证 588170 有完整数据）；个股 akshare 失败时也作兜底。"""
+    market = "sh" if api_code.startswith(("5", "6", "9")) else "sz"
+    symbol = f"{market}{api_code}"
+    url = f"https://ifzq.gtimg.cn/appstock/app/fqkline/get?param={symbol},day,,,{count},qfq"
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        "Referer": "https://finance.qq.com/",
+    }
+    req = urllib.request.Request(url, headers=headers)
+    with urllib.request.urlopen(req, timeout=10) as response:
+        data = json.loads(response.read().decode("utf-8", errors="ignore"))
+    node = data.get("data", {}).get(symbol, {}) or {}
+    kline = node.get("qfqday") or node.get("day") or []
+    rows = []
+    for item in kline:
+        if not isinstance(item, (list, tuple)) or len(item) < 6:
+            continue
+        try:
+            amount = float(item[6]) if len(item) > 6 else np.nan
+        except (TypeError, ValueError):
+            amount = np.nan
+        rows.append({
+            "date": str(item[0])[:10],
+            "open": float(item[1]),
+            "close": float(item[2]),
+            "high": float(item[3]),
+            "low": float(item[4]),
+            "volume": float(item[5]),
+            "amount": amount,
+        })
+    return pd.DataFrame(rows)
+
+
+def _fetch_daily_bar(code: str, is_etf: bool = False, as_of: Optional[str] = None) -> tuple:
+    """拉取日线，返回 (DataFrame, 失败原因)。df 非空时原因为空串。
+
+    fix D4: ETF 日线改走腾讯 fqkline 主链路，删除签名错误的 sina 死兜底；
+    失败原因不再静默吞掉，由调用方写入 daily_status/daily_reason。
+    fix D12: 回溯窗口 180→400 天，使 MA120/MA250 有足够样本。"""
+    api_code = clean_code(code)
+    errors: List[str] = []
+    df = pd.DataFrame()
+    end_date = (as_of or _now().strftime("%Y%m%d")).replace("-", "")
+    start_date = (_now() - timedelta(days=400)).strftime("%Y%m%d")
+    if is_etf:
+        try:
+            df = _fetch_daily_bar_tencent(api_code)
+        except Exception as e:
+            errors.append(f"tencent:{str(e)[:60]}")
+            df = pd.DataFrame()
+        if df.empty:
+            try:
+                import akshare as ak
+                df = ak.fund_etf_hist_em(symbol=api_code, period="daily", start_date=start_date, end_date=end_date, adjust="qfq")
+            except Exception as e:
+                errors.append(f"akshare_em:{str(e)[:60]}")
+                df = pd.DataFrame()
+    else:
+        try:
+            import akshare as ak
             df = ak.stock_zh_a_hist(symbol=api_code, period="daily", start_date=start_date, end_date=end_date, adjust="qfq")
+        except Exception as e:
+            errors.append(f"akshare:{str(e)[:60]}")
+            df = pd.DataFrame()
         if df is None or df.empty:
-            return pd.DataFrame()
+            try:
+                df = _fetch_daily_bar_tencent(api_code)
+            except Exception as e:
+                errors.append(f"tencent:{str(e)[:60]}")
+                df = pd.DataFrame()
+    if df is None or df.empty:
+        return pd.DataFrame(), ";".join(errors) or "日线接口均无数据"
+    try:
         rename_map = {"日期": "date", "开盘": "open", "收盘": "close", "最高": "high", "最低": "low", "成交量": "volume", "成交额": "amount"}
         df = df.rename(columns=rename_map)
         keep_cols = [c for c in ["date", "open", "close", "high", "low", "volume", "amount"] if c in df.columns]
         if len(keep_cols) < 5:
-            return pd.DataFrame()
+            return pd.DataFrame(), f"日线字段缺失({','.join(df.columns)[:60]})"
         df = df[keep_cols].copy()
         df["date"] = df["date"].astype(str).str.slice(0, 10)
         for col in ["open", "close", "high", "low", "volume", "amount"]:
             if col in df.columns:
                 df[col] = pd.to_numeric(df[col], errors="coerce")
         df = df.dropna(subset=["date", "open", "close", "high", "low"]).sort_values("date").reset_index(drop=True)
-        return df
-    except Exception:
-        return pd.DataFrame()
+        # 腾讯链路无 end 参数，as_of 截断统一在此做
+        if as_of:
+            cut = str(as_of)[:10]
+            df = df[df["date"] <= cut].reset_index(drop=True)
+        if df.empty:
+            return pd.DataFrame(), "as_of 截断后无日线数据"
+        return df, ""
+    except Exception as e:
+        return pd.DataFrame(), f"日线清洗异常:{str(e)[:60]}"
 
 
-def _build_daily_context_from_df(code: str, df: pd.DataFrame, current_price: float = 0.0) -> Dict[str, Any]:
+def _build_daily_context_from_df(code: str, df: pd.DataFrame, current_price: float = 0.0, intraday_asof: Optional[str] = None) -> Dict[str, Any]:
     if df is None or df.empty or len(df) < PARAMS["daily_context_min_rows"]:
         return _default_daily_context(code, status="insufficient", reason=f"日线数据不足({0 if df is None else len(df)})")
     try:
@@ -69,6 +141,14 @@ def _build_daily_context_from_df(code: str, df: pd.DataFrame, current_price: flo
             if col in work.columns:
                 work[col] = pd.to_numeric(work[col], errors="coerce")
         work = work.dropna(subset=["date", "open", "close", "high", "low"]).reset_index(drop=True)
+        # fix P1-9: 盘中口径剔除当日未完成日线 bar，MA 与 daily_prev_* 一律基于昨日完整数据；
+        # intraday_asof 为空（盘后口径）时保留当日 bar，行为与修复前一致
+        intraday_dropped = False
+        if intraday_asof and len(work) >= 2:
+            cut = str(intraday_asof)[:10]
+            if str(work.iloc[-1]["date"])[:10] >= cut:
+                work = work.iloc[:-1].reset_index(drop=True)
+                intraday_dropped = True
         if work.empty or len(work) < PARAMS["daily_context_min_rows"]:
             return _default_daily_context(code, status="insufficient", reason="清洗后日线不足")
         work["ma5"] = work["close"].rolling(5).mean()
@@ -80,34 +160,32 @@ def _build_daily_context_from_df(code: str, df: pd.DataFrame, current_price: flo
         work["ma150"] = work["close"].rolling(150).mean()
         work["ma180"] = work["close"].rolling(180).mean()
         work["ma250"] = work["close"].rolling(250).mean()
-        work["ma365"] = work["close"].rolling(365).mean()
+        # fix D12: 删除 MA365 死特征（400 天窗口内恒 NaN，且 NaN 会产出非法 JSON）
         today = work.iloc[-1]
         prev = work.iloc[-2]
         prev_prev = work.iloc[-3] if len(work) >= 3 else None
-        ref_price = float(current_price or today["close"] or 0.0)
-        prev_close = float(prev["close"] or 0.0)
-        day_ret = (float(today["close"]) - prev_close) / prev_close if prev_close else 0.0
-        prev_day_ret = (float(prev["close"]) - float(prev_prev["close"])) / float(prev_prev["close"]) if prev_prev is not None else 0.0
-        ma5 = float(today["ma5"] or 0.0)
-        ma10 = float(today["ma10"] or 0.0)
-        ma20 = float(today["ma20"] or 0.0)
-        ma30 = float(today["ma30"] or 0.0)
-        ma60 = float(today["ma60"] or 0.0)
-        ma120 = float(today["ma120"] or 0.0)
-        ma150 = float(today["ma150"] or 0.0)
-        ma180 = float(today["ma180"] or 0.0)
-        ma250 = float(today["ma250"] or 0.0)
-        ma365 = float(today["ma365"] or 0.0)
-        ma5_prev = float(work.iloc[-6]["ma5"] or ma5) if len(work) >= 6 else ma5
-        ma10_prev = float(work.iloc[-6]["ma10"] or ma10) if len(work) >= 6 else ma10
-        ma20_prev = float(work.iloc[-6]["ma20"] or ma20) if len(work) >= 6 else ma20
-        ma30_prev = float(work.iloc[-6]["ma30"] or ma30) if len(work) >= 6 else ma30
-        ma60_prev = float(work.iloc[-6]["ma60"] or ma60) if len(work) >= 6 else ma60
-        ma120_prev = float(work.iloc[-6]["ma120"] or ma120) if len(work) >= 6 else ma120
-        ma150_prev = float(work.iloc[-6]["ma150"] or ma150) if len(work) >= 6 else ma150
-        ma180_prev = float(work.iloc[-6]["ma180"] or ma180) if len(work) >= 6 else ma180
-        ma250_prev = float(work.iloc[-6]["ma250"] or ma250) if len(work) >= 6 else ma250
-        ma365_prev = float(work.iloc[-6]["ma365"] or ma365) if len(work) >= 6 else ma365
+        ref_price = float(current_price or 0.0) or _fnum(today["close"])
+        prev_close = _fnum(prev["close"])
+        day_ret = (_fnum(today["close"]) - prev_close) / prev_close if prev_close else 0.0
+        prev_day_ret = (_fnum(prev["close"]) - _fnum(prev_prev["close"])) / _fnum(prev_prev["close"]) if prev_prev is not None and _fnum(prev_prev["close"]) else 0.0
+        ma5 = _fnum(today["ma5"])
+        ma10 = _fnum(today["ma10"])
+        ma20 = _fnum(today["ma20"])
+        ma30 = _fnum(today["ma30"])
+        ma60 = _fnum(today["ma60"])
+        ma120 = _fnum(today["ma120"])
+        ma150 = _fnum(today["ma150"])
+        ma180 = _fnum(today["ma180"])
+        ma250 = _fnum(today["ma250"])
+        ma5_prev = _fnum(work.iloc[-6]["ma5"], ma5) if len(work) >= 6 else ma5
+        ma10_prev = _fnum(work.iloc[-6]["ma10"], ma10) if len(work) >= 6 else ma10
+        ma20_prev = _fnum(work.iloc[-6]["ma20"], ma20) if len(work) >= 6 else ma20
+        ma30_prev = _fnum(work.iloc[-6]["ma30"], ma30) if len(work) >= 6 else ma30
+        ma60_prev = _fnum(work.iloc[-6]["ma60"], ma60) if len(work) >= 6 else ma60
+        ma120_prev = _fnum(work.iloc[-6]["ma120"], ma120) if len(work) >= 6 else ma120
+        ma150_prev = _fnum(work.iloc[-6]["ma150"], ma150) if len(work) >= 6 else ma150
+        ma180_prev = _fnum(work.iloc[-6]["ma180"], ma180) if len(work) >= 6 else ma180
+        ma250_prev = _fnum(work.iloc[-6]["ma250"], ma250) if len(work) >= 6 else ma250
         ma5_slope = (ma5 - ma5_prev) / ma5_prev if ma5_prev else 0.0
         ma10_slope = (ma10 - ma10_prev) / ma10_prev if ma10_prev else 0.0
         ma20_slope = (ma20 - ma20_prev) / ma20_prev if ma20_prev else 0.0
@@ -117,7 +195,6 @@ def _build_daily_context_from_df(code: str, df: pd.DataFrame, current_price: flo
         ma150_slope = (ma150 - ma150_prev) / ma150_prev if ma150_prev else 0.0
         ma180_slope = (ma180 - ma180_prev) / ma180_prev if ma180_prev else 0.0
         ma250_slope = (ma250 - ma250_prev) / ma250_prev if ma250_prev else 0.0
-        ma365_slope = (ma365 - ma365_prev) / ma365_prev if ma365_prev else 0.0
         gap_to_ma5 = abs(ref_price - ma5) / ma5 if ma5 else 999.0
         gap_to_ma10 = abs(ref_price - ma10) / ma10 if ma10 else 999.0
         gap_to_ma20 = abs(ref_price - ma20) / ma20 if ma20 else 999.0
@@ -127,9 +204,8 @@ def _build_daily_context_from_df(code: str, df: pd.DataFrame, current_price: flo
         gap_to_ma150 = abs(ref_price - ma150) / ma150 if ma150 else 999.0
         gap_to_ma180 = abs(ref_price - ma180) / ma180 if ma180 else 999.0
         gap_to_ma250 = abs(ref_price - ma250) / ma250 if ma250 else 999.0
-        gap_to_ma365 = abs(ref_price - ma365) / ma365 if ma365 else 999.0
         near_candidates = []
-        for level_name, level, gap in [("MA5", ma5, gap_to_ma5), ("MA10", ma10, gap_to_ma10), ("MA20", ma20, gap_to_ma20), ("MA30", ma30, gap_to_ma30), ("MA60", ma60, gap_to_ma60), ("MA120", ma120, gap_to_ma120), ("MA150", ma150, gap_to_ma150), ("MA180", ma180, gap_to_ma180), ("MA250", ma250, gap_to_ma250), ("MA365", ma365, gap_to_ma365)]:
+        for level_name, level, gap in [("MA5", ma5, gap_to_ma5), ("MA10", ma10, gap_to_ma10), ("MA20", ma20, gap_to_ma20), ("MA30", ma30, gap_to_ma30), ("MA60", ma60, gap_to_ma60), ("MA120", ma120, gap_to_ma120), ("MA150", ma150, gap_to_ma150), ("MA180", ma180, gap_to_ma180), ("MA250", ma250, gap_to_ma250)]:
             if level > 0 and gap <= PARAMS["daily_ma_support_loose_gap"]:
                 near_candidates.append((gap, level_name, level))
         near_candidates.sort(key=lambda x: (x[0], x[1]))
@@ -188,11 +264,14 @@ def _build_daily_context_from_df(code: str, df: pd.DataFrame, current_price: flo
             "daily_status": "ok",
             "daily_reason": "",
             "daily_asof": str(work.iloc[-1]["date"]),
+            # fix P1-9: 口径标识，intraday=盘中（已剔除当日未完成 bar），eod=盘后（含当日）
+            "daily_scope": "intraday" if intraday_asof else "eod",
             "daily_price_ref": ref_price,
-            "daily_prev_close": prev_close,
-            "daily_prev_high": float(today["high"] or 0.0),
-            "daily_prev_low": float(today["low"] or 0.0),
-            "daily_prev_close_real": float(today["close"] or 0.0),  # 最新交易日收盘
+            # fix P1-9: 盘中口径下 daily_prev_close 取昨日完整收盘（剔除当日 bar 后 iloc[-2] 已是前收，不能沿用）
+            "daily_prev_close": _fnum(today["close"]) if intraday_dropped else prev_close,
+            "daily_prev_high": _fnum(today["high"]),
+            "daily_prev_low": _fnum(today["low"]),
+            "daily_prev_close_real": _fnum(today["close"]),  # 最新完整交易日收盘
             "daily_day_ret": day_ret,
             "daily_prev_day_ret": prev_day_ret,
             "daily_ma5": ma5,
@@ -208,7 +287,6 @@ def _build_daily_context_from_df(code: str, df: pd.DataFrame, current_price: flo
             "daily_ma150": ma150,
             "daily_ma180": ma180,
             "daily_ma250": ma250,
-            "daily_ma365": ma365,
             "daily_ma10_slope": ma10_slope,
             "daily_ma20_slope": ma20_slope,
             "daily_ma30_slope": ma30_slope,
@@ -217,7 +295,6 @@ def _build_daily_context_from_df(code: str, df: pd.DataFrame, current_price: flo
             "daily_ma150_slope": ma150_slope,
             "daily_ma180_slope": ma180_slope,
             "daily_ma250_slope": ma250_slope,
-            "daily_ma365_slope": ma365_slope,
             "daily_trend_bg": trend_bg,
             "daily_gate": gate,
             "daily_support_name": support_name,
@@ -369,10 +446,23 @@ def _attach_index_regime_context(ctx: Dict[str, Any], code: str, as_of: Optional
     return ctx
 
 
-def get_daily_context(code: str, holding: dict, current_price: float = 0.0, as_of: Optional[str] = None) -> Dict[str, Any]:
+def get_daily_context(code: str, holding: dict, current_price: float = 0.0, as_of: Optional[str] = None, intraday: Optional[bool] = None) -> Dict[str, Any]:
+    """fix P1-9: 盘中/收盘两套口径，由 intraday 参数控制：
+    - intraday=True：剔除当日未完成日线 bar，MA 与 daily_prev_* 一律用昨日完整数据；
+    - intraday=False：含当日 bar（盘后口径，修复前行为）；
+    - intraday=None（默认，向后兼容）：自动判定——工作日 15:05 前且未指定 as_of 视为盘中。
+    调用端说明：main.py 快照写入、support_resistance pivot 等无需改代码，默认即正确口径；
+    盘后复盘/回放类调用若需含当日完整 bar，显式传 intraday=False。"""
     if not PARAMS.get("daily_context_enabled", True):
         return _default_daily_context(code, status="disabled", reason="参数关闭")
-    cache_key = f"{code}_{as_of or get_today_str()}"
+    if intraday is None:
+        intraday = False
+        if as_of is None:
+            _n = _now()
+            if _n.weekday() < 5 and _n.time() < dtime(15, 5):
+                intraday = True
+    # 口径不同缓存必须分开，避免盘中/盘后互相污染
+    cache_key = f"{code}_{as_of or get_today_str()}_{'i' if intraday else 'e'}"
     cached = DAILY_CONTEXT_CACHE.get(cache_key)
     if isinstance(cached, dict):
         ts = cached.get("ts")
@@ -381,11 +471,13 @@ def get_daily_context(code: str, holding: dict, current_price: float = 0.0, as_o
             if (_now() - ts).total_seconds() < PARAMS["daily_cache_ttl_seconds"]:
                 return ctx
     try:
-        df = _fetch_daily_bar(code, is_etf=holding.get("type") == "etf", as_of=as_of)
+        df, fetch_reason = _fetch_daily_bar(code, is_etf=holding.get("type") == "etf", as_of=as_of)
         if df.empty:
-            ctx = _default_daily_context(code, status="unavailable", reason="日线拉取为空")
+            # fix D4: 拉取失败原因透出到 daily_status/daily_reason，供界面展示，不再静默
+            ctx = _default_daily_context(code, status="unavailable", reason=fetch_reason or "日线拉取为空")
         else:
-            ctx = _build_daily_context_from_df(code, df, current_price=current_price)
+            ctx = _build_daily_context_from_df(code, df, current_price=current_price,
+                                               intraday_asof=(as_of or get_today_str()) if intraday else None)
         ctx = _attach_index_regime_context(ctx, code, as_of=as_of)
         DAILY_CONTEXT_CACHE[cache_key] = {"ts": _now(), "ctx": ctx}
         return ctx
@@ -703,7 +795,8 @@ def cleanup_expired_minute_cache():
                     os.remove(file_path)
                     removed += 1
             except Exception as e:
-                log.warning(f"⚠️  {label(code, holding)} 扫描异常: {str(e)[:120]}")
+                # fix D11: 原日志引用未定义的 code/holding 导致 NameError，改用 filename
+                log.warning(f"⚠️  清理分钟线缓存 {filename} 失败: {str(e)[:120]}")
                 continue
 
         if removed:

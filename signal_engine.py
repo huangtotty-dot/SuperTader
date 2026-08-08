@@ -8,6 +8,13 @@
 #   致 14:50:45 002639 误推 SELL_HIGH + 幻影卖出持久化。修复后 t_qty 增加只能来自晨间截图 reconcile。
 #   本文件零代码变更，仅登记版本；参数/阈值/权重零调整。
 #   回归证据: t_io/validation/test_holdings_sync_invariant.py（当日数据重放全绿）
+# V1.2.0 (2026-08-08, 用户拍板上线): C1' 口径B 采纳 — W33 全管线决赛六闸+2附加全过
+#   （t_io/validation/w32_c1p/C1P_FINAL.md；GATE_BREACH 的 C1 经"全部买信号单股日限7内置状态机"修复后采纳）
+#   ① config.py PARAMS["buyback_bypass_gates"]=True 生产默认开（接回激活 tick 绕过
+#      daily_overheated/index_uni_down_clearance，本文件 :615 软消费）
+#   ② config.py PARAMS["buy_daily_cap"]=7（record_signal 层计数，buy_daily_cap_reached 谓词；
+#      生产 main.py scan_once 与 harness 记录层双挂载点拦截）
+#   回归证据: t_io/validation/w32_c1p/（冒烟/复用/决赛产物）+ t_io/validation/test_v120_production_cap.py
 import sys as _sys
 import os as _os_mod
 # V3.0fix: __file__ = E:\06_T\signal_engine.py → dirname = E:\06_T

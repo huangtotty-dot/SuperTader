@@ -2700,6 +2700,14 @@
         "support_retest": false,
         "box_breakout": false
       }
+    },
+    "515120": {
+      "name": "创新药ETF广发",
+      "status": "monitoring",
+      "composite_score": 0,
+      "criteria_met": {},
+      "suggested_qty": 0,
+      "in_holdings": false
     }
   }
 }

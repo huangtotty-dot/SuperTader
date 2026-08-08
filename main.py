@@ -651,11 +651,59 @@ _daily_pnl_push_date = ""  # 模块级：14:59推送防重复
 _position_builder_push_date = ""  # 模块级：收盘后建仓扫描防重复
 _position_builder_intraday_last = None  # 盘中建仓扫描节流（datetime）
 _position_builder_intraday_pushed = set()  # 当日已推送的股票代码（防重复推送）
+_position_builder_eod_last_attempt = None  # eod 扫描失败重试节流（datetime）
+_position_builder_intraday_thread = None  # 盘中建仓扫描后台线程（fix P1-5）
+import threading as _threading
+_position_scan_lock = _threading.Lock()  # 盘中/收盘建仓扫描互斥（trace 写盘线程安全）
+_TOTAL_EQUITY_CACHE = {"ts": 0.0, "value": 0.0}  # fix P0-9(B1): total_equity 缓存
+
+
+def _compute_total_equity() -> float:
+    """fix P0-9(B1): 从 t_io/state/portfolio_config.json 计算账户总资产
+    （账户A现金+持仓市值 + 账户B现金+持仓市值）。
+    现金 ≈ total_capital - 持仓成本（忽略已实现盈亏/手续费）；持仓市值用快照最新价。
+    """
+    now_ts = time.time()
+    if _TOTAL_EQUITY_CACHE["value"] > 0 and now_ts - _TOTAL_EQUITY_CACHE["ts"] < 300:
+        return _TOTAL_EQUITY_CACHE["value"]
+    equity = 0.0
+    try:
+        fp = os.path.join(BASE_DIR, "t_io", "state", "portfolio_config.json")
+        with open(fp, encoding="utf-8") as f:
+            cfg = json.load(f)
+        capital_by_acct = {k: float((v or {}).get("total_capital") or 0)
+                           for k, v in (cfg.get("accounts") or {}).items()}
+        cost_by_acct = {k: 0.0 for k in capital_by_acct}
+        mv_by_acct = {k: 0.0 for k in capital_by_acct}
+        for _c, _h in (HOLDINGS or {}).items():
+            acct = _h.get("account") or "账户A"
+            if acct not in capital_by_acct:
+                continue
+            _q = int(_h.get("qty") or 0)
+            if _q <= 0:
+                continue
+            _cost = float(_h.get("cost") or 0)
+            _dec = DAILY_DECISION_STATS.get(_c) or {}
+            _price = float(_dec.get("last_price") or 0) or float(_h.get("pre_close") or 0) or _cost
+            cost_by_acct[acct] += _cost * _q
+            mv_by_acct[acct] += _price * _q
+        for acct, cap in capital_by_acct.items():
+            cash = max(0.0, cap - cost_by_acct.get(acct, 0.0))
+            equity += cash + mv_by_acct.get(acct, 0.0)
+    except Exception as e:
+        log.warning(f"⚠️ total_equity 计算失败（本轮单股上限检查跳过）: {str(e)[:120]}")
+        return 0.0
+    _TOTAL_EQUITY_CACHE["ts"] = now_ts
+    _TOTAL_EQUITY_CACHE["value"] = equity
+    return equity
 
 
 def _maybe_run_position_builder_intraday(now: datetime) -> None:
-    """盘中实时建仓信号扫描（每 5 分钟，signal 股即时飞书推送，每只每天只推一次）。"""
-    global _position_builder_intraday_last, _position_builder_intraday_pushed
+    """盘中实时建仓信号扫描（每 5 分钟，signal 股即时飞书推送，每只每天只推一次）。
+
+    fix P1-5: 扫描移入独立线程执行，避免阻塞做T主循环；与收盘档扫描互斥保证 trace 写盘线程安全。
+    """
+    global _position_builder_intraday_last, _position_builder_intraday_pushed, _position_builder_intraday_thread
     if _run_position_scan is None:
         return
     t = now.time()
@@ -670,6 +718,10 @@ def _maybe_run_position_builder_intraday(now: datetime) -> None:
     if _position_builder_intraday_last is not None:
         if (now - _position_builder_intraday_last).total_seconds() < 300:
             return
+    # fix P1-5: 上一轮扫描线程未结束则跳过本轮（不推进节流时间戳，下一轮重试）
+    if _position_builder_intraday_thread is not None and _position_builder_intraday_thread.is_alive():
+        log.debug("⏳ 上一轮盘中建仓扫描仍在进行，跳过本轮")
+        return
     _position_builder_intraday_last = now
 
     # 日期翻转时清空推送记录
@@ -679,36 +731,61 @@ def _maybe_run_position_builder_intraday(now: datetime) -> None:
         _maybe_run_position_builder_intraday._date = today
         _position_builder_intraday_pushed.clear()
 
-    try:
-        results = _run_position_scan(date_str=today, silent=True, scan_type="intraday")
-        for r in results:
-            if r.get("verdict") == "signal" and r["code"] not in _position_builder_intraday_pushed:
-                _position_builder_intraday_pushed.add(r["code"])
-                log.info(f"🏗️ 盘中建仓信号触发: {r['code']} {r['name']} 得分={r['composite_score']}")
-    except Exception as e:
-        log.warning(f"⚠️ 盘中建仓扫描异常（已吞掉）: {str(e)[:200]}")
+    def _scan_worker(day: str) -> None:
+        try:
+            # 与收盘档扫描互斥，保证 trace 写盘线程安全
+            with _position_scan_lock:
+                results = _run_position_scan(date_str=day, silent=True, scan_type="intraday")
+            for r in results:
+                if r.get("verdict") == "signal" and r["code"] not in _position_builder_intraday_pushed:
+                    _position_builder_intraday_pushed.add(r["code"])
+                    log.info(f"🏗️ 盘中建仓信号触发: {r['code']} {r['name']} 得分={r['composite_score']}")
+        except Exception as e:
+            log.warning(f"⚠️ 盘中建仓扫描异常（已吞掉）: {str(e)[:200]}")
+
+    _position_builder_intraday_thread = _threading.Thread(
+        target=_scan_worker, args=(today,), name="position-scan-intraday", daemon=True)
+    _position_builder_intraday_thread.start()
 
 
 def _maybe_run_position_builder(now: datetime) -> None:
-    """收盘后（15:05-15:15）每日一次建仓信号扫描 + 盘后汇总飞书推送。"""
-    global _position_builder_push_date
+    """收盘后（15:05 起）每日一次建仓信号扫描 + 盘后汇总飞书推送。
+
+    fix P0-15关联(收盘档断供): 原 15:05-15:15 硬窗口在进程休眠/重启时整日断供（08-07 复盘：
+    15:00:02 进入低频保活后进程疑似休眠，错过窗口；且异常时日期占位已写入导致当日不重试）。
+    改为 15:05 后任意时刻补扫一次（限交易日）；扫描成功才占位，失败 10 分钟后重试。
+    """
+    global _position_builder_push_date, _position_builder_eod_last_attempt
     if _run_position_scan is None:
+        return
+    if now.weekday() >= 5:  # fix: 周末不触发（原逻辑周末 15:05 也会扫）
         return
     today = now.strftime("%Y-%m-%d")
     if _position_builder_push_date == today:
         return
     t = now.time()
-    if not (dtime(15, 5) <= t <= dtime(15, 15)):
+    if t < dtime(15, 5):
         return
-    _position_builder_push_date = today
+    # 失败重试节流：10 分钟（防持续异常刷屏）
+    if _position_builder_eod_last_attempt is not None and \
+       (now - _position_builder_eod_last_attempt).total_seconds() < 600:
+        return
+    _position_builder_eod_last_attempt = now
+    _catchup = t > dtime(15, 15)  # 超过原窗口视为补扫（进程休眠/重启兜底）
+    # fix P1-5: 与盘中扫描线程互斥，保证 trace 写盘线程安全；带超时防盘中线程卡死拖住主循环
+    if not _position_scan_lock.acquire(timeout=120):
+        log.warning("⚠️ 建仓信号扫描等待盘中扫描释放锁超时，本轮跳过（下轮重试）")
+        return
     try:
         results = _run_position_scan(date_str=today, silent=True, scan_type="eod")
+        _position_builder_push_date = today  # 扫描成功才占位（原逻辑异常也占位 → 当日断供）
         signals = [r for r in results if r.get("verdict") == "signal"]
+        _tag = "（补扫）" if _catchup else ""
         if signals:
-            log.info(f"🏗️ 建仓信号扫描完成: {len(signals)} 只触发 signal, "
+            log.info(f"🏗️ 建仓信号扫描完成{_tag}: {len(signals)} 只触发 signal, "
                      f"{len(results) - len(signals)} 只未满足")
         else:
-            log.info(f"🏗️ 建仓信号扫描完成: 0/{len(results)} 只触发 signal")
+            log.info(f"🏗️ 建仓信号扫描完成{_tag}: 0/{len(results)} 只触发 signal")
 
         # 盘后汇总推送
         if _push_summary_feishu and results:
@@ -716,7 +793,9 @@ def _maybe_run_position_builder(now: datetime) -> None:
             log.info(f"📋 建仓扫描汇总已推送")
 
     except Exception as e:
-        log.warning(f"⚠️ 建仓信号扫描异常（已吞掉，不影响主循环）: {str(e)[:200]}")
+        log.warning(f"⚠️ 建仓信号扫描异常（已吞掉，10分钟后重试）: {str(e)[:200]}")
+    finally:
+        _position_scan_lock.release()
 
 def _maybe_push_daily_pnl_summary(now: datetime) -> None:
     """V1.29: 14:59-15:01 每日一次 收益汇总推送。
@@ -1439,9 +1518,11 @@ def scan_once():
                     
                     # 2. 动态份数计算（个股/ETF统一）
                     try:
-                        from position_sizer import calc_sell_qty, calc_buy_qty
+                        from position_sizer import calc_sell_qty, calc_buy_qty, set_all_holdings
+                        set_all_holdings(HOLDINGS)  # fix P0-9(B4): 注入全量持仓供单股上限 A/B 合并判定
                         threshold = float(sig.factors.get("threshold", 35))
                         cur_price = float(sig.price or 0)
+                        total_equity = _compute_total_equity()  # fix P0-9(B1): 单股上限所需真实总资产
                         if sig.action in ["SELL_HIGH", "PANIC_SELL"]:
                             dynamic_qty = calc_sell_qty(
                                 code, holding, regime,
@@ -1451,6 +1532,7 @@ def scan_once():
                                 virtual_trades=VIRTUAL_TRADES,
                                 index_ctx=daily_ctx,
                                 current_price=cur_price,
+                                total_equity=total_equity,
                             )
                         else:
                             dynamic_qty = calc_buy_qty(
@@ -1460,6 +1542,7 @@ def scan_once():
                                 virtual_trades=VIRTUAL_TRADES,
                                 index_ctx=daily_ctx,
                                 current_price=cur_price,
+                                total_equity=total_equity,
                             )
                         if dynamic_qty > 0:
                             sig.hold_qty = dynamic_qty
@@ -1498,6 +1581,24 @@ def scan_once():
                             pushed = False
                             log.info(f"🛑 {code} 当日轮次已满({PARAMS['max_t_cycles_per_stock']})，"
                                      f"卖出信号{sig.score:.0f}分不再推送")
+                    # V1.2.0: C1' 买信号单股日限（生产化，六闸全过采纳，2026-08-08 用户拍板）——记录层拦截：
+                    # 第 cap+1 条起不推送/不记录（无冷却/无簿记），状态机看到被 cap 后的世界（与 harness 决赛语义一致）；
+                    # cap 计数口径 = record_signal 层已记录买信号（engine.buy_recorded_today）
+                    if pushed and sig.action in ["BUY_LOW", "ADD_POS"] and engine.buy_daily_cap_reached(code):
+                        pushed = False
+                        log.info(f"🛑 {code} 当日买信号已达上限({PARAMS.get('buy_daily_cap')}条/股/日)，"
+                                 f"{sig.score:.0f}分{sig.action}信号被 cap 拦截（不推送不记录）")
+                        try:
+                            write_shadow_signal(
+                                code, holding.get("name", code), sig.price,
+                                float(sig.indicators.get("vwap", sig.price) or sig.price),
+                                buy_score, sell_score, notify_threshold, notify_threshold,
+                                "买信号日限cap拦截(V1.2.0)",
+                                extra={"action": sig.action,
+                                       "decision_reason": engine.last_decision.get(code, {}).get("reason", "")},
+                            )
+                        except Exception:
+                            pass
                     if pushed and sig.hold_qty > 0:
                         notify(sig, holding)
                         if sig.action in ["SELL_HIGH", "PANIC_SELL"]:
@@ -1839,7 +1940,7 @@ def tushare_replay():
     # 生成报告
     report_lines = []
     report_lines.append(f"# Tushare 复测报告 ({today})")
-    report_lines.append(f"## 版本: V1.19")
+    report_lines.append(f"## 版本: V1.2.0")
     report_lines.append(f"")
     report_lines.append(f"## 总信号统计")
     report_lines.append(f"- 总信号数: {len(results)}")

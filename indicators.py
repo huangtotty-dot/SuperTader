@@ -17,6 +17,15 @@ try:
 except ImportError:
     PARAMS = {}
 
+# fix P1-2: 5分钟指标预热阈值 — MACD(12,26,9)/BOLL(20,2)/RSI(14) 在 <20 根 5 分钟 K 线下不可靠，
+# 消费端（position_builder 等）应在预热期内将相关条件判为 passed=False 并标注「预热中(N根)」
+WARMUP_MIN_BARS_5M = 20
+
+
+def five_min_warmed_up(df_5min) -> bool:
+    """fix P1-2: 5分钟K线是否已完成指标预热（≥20根）。"""
+    return df_5min is not None and not df_5min.empty and len(df_5min) >= WARMUP_MIN_BARS_5M
+
 
 # ============================================================
 # 1分钟线指标（原有逻辑，从 data_fetcher.py 重构）

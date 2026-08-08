@@ -220,10 +220,21 @@ def _result_trace_path(day: Optional[str] = None) -> str:
     return os.path.join(TRACE_DIR, f"signal_outcome_{day}.jsonl")
 
 
+def _json_safe(obj):
+    """fix D12: 递归把 NaN/inf 转 None，避免 json.dump 产出非法 JSON"""
+    if isinstance(obj, dict):
+        return {k: _json_safe(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [_json_safe(v) for v in obj]
+    if isinstance(obj, float) and (obj != obj or obj in (float("inf"), float("-inf"))):
+        return None
+    return obj
+
+
 def _append_jsonl(path: str, record: dict) -> None:
     try:
         with open(path, "a", encoding="utf-8") as f:
-            f.write(json.dumps(record, ensure_ascii=False, default=str) + "\n")
+            f.write(json.dumps(_json_safe(record), ensure_ascii=False, default=str) + "\n")
     except Exception:
         pass
 
@@ -290,12 +301,21 @@ def _snapshot_write(code: str, holding: dict, df: pd.DataFrame, indicators: dict
     }
     tmp = path + ".tmp"
     with open(tmp, "w", encoding="utf-8") as f:
-        json.dump(rec, f, ensure_ascii=False)
+        json.dump(_json_safe(rec), f, ensure_ascii=False)  # fix D12: NaN→None
     os.replace(tmp, path)
 
 
 def _benchmark_meta_for_code(code: str) -> Dict[str, str]:
     code = str(code or "").strip()
+    # fix D10: ETF 按跟踪指数映射基准（原 588*/516* 等沪市 ETF 会落到默认的深证成指）
+    if code.startswith("588"):
+        return {"code": "sh000688", "name": "科创50", "market": "sh", "kind": "etf_star50"}
+    if code.startswith(("510", "511", "512", "513", "515", "516", "517", "518",
+                        "560", "561", "562", "563", "564", "565", "566", "567", "568", "569",
+                        "580", "581", "582", "583", "584", "585", "586", "587", "589")):
+        return {"code": "sh000001", "name": "上证指数", "market": "sh", "kind": "etf_sse"}
+    if code.startswith(("150", "151", "152", "153", "154", "155", "156", "157", "158", "159")):
+        return {"code": "sz399001", "name": "深证成指", "market": "sz", "kind": "etf_szse"}
     if code.startswith(("688", "689")):
         return {"code": "sh000688", "name": "科创50", "market": "sh", "kind": "star"}
     if code.startswith(("300", "301")):

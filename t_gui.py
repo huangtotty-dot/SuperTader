@@ -596,34 +596,58 @@ class Api:
             daily_ctx = snap.get("daily_context", {}) if isinstance(snap, dict) else {}
             bars = snap.get("bars", []) if isinstance(snap, dict) else (snap if isinstance(snap, list) else [])
 
-            # 日高低收
-            prices = [float(b.get("close", 0)) for b in bars if b.get("close")]
-            if not prices:
+            # fix P0-3: 日低改用 bars 的真实 low 最小值（分钟收盘价会丢下影线）；
+            # 15:00 前"收盘"实为盘中现价，打 is_intraday 标志，文案统一"现价(盘中暂定)"
+            closes = [float(b.get("close", 0)) for b in bars if b.get("close")]
+            lows = [float(b.get("low", 0)) for b in bars if b.get("low")]
+            if not closes:
                 continue
-            day_low = min(prices)
-            day_close = prices[-1]
-            vwap_val = daily_ctx.get("last_vwap") or daily_ctx.get("daily_support_level")
+            day_low = min(lows) if lows else min(closes)
+            day_close = closes[-1]
+            is_intraday = (date == datetime.now().strftime("%Y-%m-%d")
+                           and datetime.now().strftime("%H:%M") < "15:00")
+            px_word = "现" if is_intraday else "收"
+            sfx = "(盘中暂定)" if is_intraday else ""
+            # fix P2-16: ETF 标识，缺 MA/VWAP 时写"不适用(ETF)"
+            is_etf = str(cur[code].get("type", "")).lower() == "etf"
+            # fix P0-6/P1-8: VWAP 只读快照根级 last_vwap，缺失不回退 MA 冒充
+            vwap_raw = snap.get("last_vwap") if isinstance(snap, dict) else None
+            vwap_val = (float(vwap_raw) if vwap_raw
+                        and not (isinstance(vwap_raw, float) and math.isnan(vwap_raw)) else None)
 
             # 支撑位
-            supports = {}
+            raw_supports = {}
             for key, label in [("daily_ma5", "MA5"), ("daily_ma10", "MA10"),
                                ("daily_ma20", "MA20"), ("daily_ma60", "MA60")]:
                 val = daily_ctx.get(key)
                 if val and not (isinstance(val, float) and math.isnan(val)):
-                    supports[label] = float(val)
-            # 近20日低点
-            low20 = daily_ctx.get("daily_20d_low") or daily_ctx.get("daily_support_level")
+                    raw_supports[label] = float(val)
+            # 近20日低点（fix P1-8: daily_20d_low 无生产端，不再回退 daily_support_level 冒充）
+            low20 = daily_ctx.get("daily_20d_low")
             if low20 and not (isinstance(low20, float) and math.isnan(low20)):
-                supports["近20日低点"] = float(low20)
-            if vwap_val and not (isinstance(vwap_val, float) and math.isnan(vwap_val)):
-                supports["日内VWAP"] = float(vwap_val)
+                raw_supports["近20日低点"] = float(low20)
+            if vwap_val:
+                raw_supports["日内VWAP"] = float(vwap_val)
+            # fix P1-8: 同一价位(差<0.1%)多标签去重合并为一个标签，如 "MA20/日内VWAP"
+            supports = {}
+            for label, val in raw_supports.items():
+                hit = None
+                for k, v in supports.items():
+                    if v and abs(val - v) / v < 0.001:
+                        hit = k
+                        break
+                if hit is not None:
+                    if label not in hit.split("/"):
+                        supports[hit + "/" + label] = supports.pop(hit)
+                else:
+                    supports[label] = val
 
-            # 回踩事件：日低距支撑 ≤0.5% 记"触及"
+            # 回踩事件：fix P1-6 触及窗放宽到 ±1.0%，基于修复后的真实日低(bars low)判定
             events, near = [], []
             for label, level in supports.items():
                 dist = (day_low - level) / level * 100 if level else 0
                 abs_dist = abs(dist)
-                if abs_dist <= 0.5:
+                if abs_dist <= 1.0:
                     status = "守住" if day_close >= level else "破位"
                     events.append({"level": label, "support": round(level, 3),
                                    "dist%": round(dist, 2), "status": status})
@@ -650,28 +674,52 @@ class Api:
             retest_ok = min_dist <= 2.0
             conditions.append({"name": "回踩支撑", "met": retest_ok,
                                "detail": f"日低{day_low:.2f}距{nearest_name} {min_dist:.1f}%" if retest_ok else f"日低距最近支撑{nearest_name} {min_dist:.1f}%（需≤2%）"})
-            # 条件2: 支撑守住（有回踩事件且收盘≥支撑）
+            # fix P2-16: ETF 缺 MA/VWAP 的条件记入 not_applicable，不当作失败
+            not_applicable = []
+            # 条件2: 支撑守住（有回踩事件且收盘/现价≥支撑）
             hold_ok = any(e["status"] == "守住" for e in events)
             conditions.append({"name": "支撑守住", "met": hold_ok,
-                               "detail": "收盘≥支撑位" if hold_ok else ("触及但收盘跌破" if any(e["status"] == "破位" for e in events) else "未触发回踩")})
-            # 条件3: 收盘高于MA5（短线不弱）
-            ma5 = supports.get("MA5")
+                               "detail": (f"{px_word}≥支撑位{sfx}" if hold_ok else
+                                          (f"触及但{px_word}跌破{sfx}" if any(e["status"] == "破位" for e in events)
+                                           else "未触发回踩"))})
+            # 条件3: 收盘/现价高于MA5（短线不弱）
+            ma5 = raw_supports.get("MA5")
             above_ma5 = ma5 and day_close > ma5
-            conditions.append({"name": "收盘>MA5", "met": bool(above_ma5),
-                               "detail": f"收{day_close:.2f}>MA5 {ma5:.2f}" if above_ma5 else f"收{day_close:.2f}≤MA5 {ma5:.2f}" if ma5 else "无MA5数据"})
-            # 条件4: VWAP确认（收盘>VWAP 或 近VWAP）
+            # fix P0-3: MA5 若含当日未完成 bar 则在 detail 标注
+            ma5_note = "(MA5含当日未完成K线)" if (is_intraday and daily_ctx.get("daily_asof") == date) else ""
+            if not ma5:
+                if is_etf:
+                    d3 = "不适用(ETF)"
+                    not_applicable.append("收盘>MA5")
+                else:
+                    d3 = "无MA5数据"
+            else:
+                d3 = (f"{px_word}{day_close:.2f}>MA5 {ma5:.2f}{ma5_note}{sfx}" if above_ma5
+                      else f"{px_word}{day_close:.2f}≤MA5 {ma5:.2f}{ma5_note}{sfx}")
+            conditions.append({"name": "收盘>MA5", "met": bool(above_ma5), "detail": d3})
+            # 条件4: VWAP确认（收盘/现价近VWAP）
             vwap_f = float(vwap_val) if vwap_val else 0
             near_vwap = vwap_f and abs((day_close - vwap_f) / vwap_f * 100) <= 1.5
-            conditions.append({"name": "VWAP确认", "met": bool(near_vwap),
-                               "detail": f"收{day_close:.2f}距VWAP {vwap_f:.2f} {abs((day_close-vwap_f)/vwap_f*100):.1f}%" if vwap_f else "无VWAP"})
+            if not vwap_f:
+                # fix P0-6: 无真 VWAP 判 False，不回退 MA 冒充
+                if is_etf:
+                    d4 = "不适用(ETF)"
+                    not_applicable.append("VWAP确认")
+                else:
+                    d4 = "无VWAP"
+            else:
+                d4 = f"{px_word}{day_close:.2f}距VWAP {vwap_f:.2f} {abs((day_close-vwap_f)/vwap_f*100):.1f}%{sfx}"
+            conditions.append({"name": "VWAP确认", "met": bool(near_vwap), "detail": d4})
 
+            # fix P0-5: 删除 met_count 强制改写，恒等于真实勾选数；
+            # 突破箱体满足改为在 payload 打 box_boost 标志
             met_count = sum(1 for c in conditions if c["met"])
-            # 突破箱体 = 强加分项，但需至少2个其它条件满足才满（防单条件误报）
-            if conditions[0]["met"] and met_count >= 3:
-                met_count = len(conditions)
             out[code] = {
                 "name": cur[code].get("name", code),
                 "day_low": round(day_low, 3), "close": round(day_close, 3),
+                "is_intraday": bool(is_intraday),  # fix P0-3: True 时 close 实为现价
+                "box_boost": bool(conditions[0]["met"]),  # fix P0-5
+                "not_applicable": not_applicable,  # fix P2-16
                 "vwap": round(float(vwap_val), 3) if vwap_val else None,
                 "supports": {k: round(v, 3) for k, v in supports.items()},
                 "events": events, "near": near,
@@ -680,21 +728,37 @@ class Api:
 
         total = len([c for c in cur if isinstance(cur.get(c), dict)])
         ok = len(out)
+        # fix P1-10: _progress 为内部统计键，以 _ 前缀标识，前端按 _ 前缀过滤，不计入股票数
         out["_progress"] = {"total_holdings": total, "snapshots_ok": ok, "snapshots_miss": total - ok}
         return _clean(out)
 
     # ---------- 突破箱体判定（建仓+加仓共用） ----------
     def check_box_breakout(self, code):
-        """判定是否突破当前箱体上沿（只认 rel=0 当前箱体，历史箱体不算）。
+        """判定是否突破当前/刚突破箱体上沿（候选 rel=0 现价箱体 + rel=1 刚突破）。
         返回 {broken, box, price, pct_above}。"""
         h = self.load_stock_chart(code)
         if not h.get("available"):
             return {"broken": False, "error": h.get("error", "")}
-        cur = h.get("current_price")
+        # fix P0-4: 现价改用 load_quotes 实时报价（30秒缓存避免逐股重复拉网），失败回退日线收盘
+        now = datetime.now()
+        qc = getattr(self, "_box_quote_cache", None)
+        if not qc or (now - qc[0]).total_seconds() > 30:
+            px_map = {}
+            try:
+                for qq in self.load_quotes().get("quotes", []):
+                    if qq.get("price") and not qq.get("offline"):
+                        px_map[qq.get("code")] = float(qq["price"])
+            except Exception:
+                px_map = {}
+            qc = (now, px_map)
+            self._box_quote_cache = qc
+        cur = qc[1].get(code) or qc[1].get(code.split("_")[0]) or h.get("current_price")
+        if not cur:
+            return {"broken": False, "error": "无可用现价"}
         boxes = h.get("boxes", [])
-        # 只认当前箱体（rel=0，现价在箱体内或刚出界）
-        cur_boxes = [b for b in boxes if b.get("rel") == 0]
-        # 现价 > 当前箱体上沿 → 突破
+        # fix P0-4: 候选箱体纳入 rel==1（刚突破）；rel 判定基于日线收盘，与实时现价解耦
+        cur_boxes = [b for b in boxes if b.get("rel") in (0, 1)]
+        # 现价 > 候选箱体上沿 → 突破
         for box in cur_boxes:
             if cur > box["high"]:
                 pct_above = (cur - box["high"]) / box["high"] * 100 if box["high"] else 0
@@ -705,7 +769,7 @@ class Api:
                         "near_box": {"low": box["low"], "high": box["high"]},
                         "pct_above": round(pct_above, 2),
                         "reason": "已远离当前箱体" if pct_above > 8 else "未达突破阈值"}
-        # 无当前箱体或现价在箱体内 → 未突破
+        # 无候选箱体或现价在箱体内 → 未突破
         return {"broken": False, "price": cur}
 
     # ---------- 持仓日线超买/顶背离体检 ----------
@@ -2230,7 +2294,12 @@ class Api:
     def refresh_pb(self, date):
         """仅重读 position_builder jsonl 并返回聚合结果 + 个股技术标签。"""
         result = self._agg_position_builder(date)
-        result["refreshed_at"] = datetime.now().strftime("%H:%M:%S")
+        # fix P0-14: refreshed_at 改为 jsonl 最后写入时间（不再用服务器当前时间冒充"实时"）
+        try:
+            _pb_fp = TRACES / f"position_builder_{date}.jsonl"
+            result["refreshed_at"] = datetime.fromtimestamp(_pb_fp.stat().st_mtime).strftime("%H:%M:%S")
+        except Exception:
+            result["refreshed_at"] = ""
         # 批量个股技术标签
         try:
             codes = [r.get("code") for r in result.get("rows", []) if r.get("code")]
@@ -2263,6 +2332,7 @@ class Api:
         verdicts = Counter()
         by_code = {}
         scanned_codes = set()
+        latest_by_code = {}  # fix P0-13/P0-14: 每 code 最新一条扫描记录
         if fp.exists():
             try:
                 lines = open(fp, encoding="utf-8").read().splitlines()
@@ -2276,7 +2346,10 @@ class Api:
                 code = r.get("code")
                 if not code: continue
                 scanned_codes.add(code)
-                verdicts[r.get("verdict", "")] += 1
+                # fix P0-14: 跟踪每 code 最新记录（按 scan_time）
+                _prev = latest_by_code.get(code)
+                if _prev is None or (r.get("scan_time") or "") > (_prev.get("scan_time") or ""):
+                    latest_by_code[code] = r
                 st = r.get("scan_type", "manual")
                 bucket = by_code.setdefault(code, {}).setdefault(
                     st, {"latest": None, "best": None, "scans": 0})
@@ -2288,15 +2361,21 @@ class Api:
                 if bucket["best"] is None or score > (bucket["best"].get("composite_score") or 0):
                     bucket["best"] = r
 
+        # fix P0-13: counts 按 code 去重后统计各 code 最新 verdict 的股票数（不再是扫描记录行数）
+        for code, r in latest_by_code.items():
+            verdicts[r.get("verdict", "")] += 1
+
         # 扫描过的：正常聚合
         rows = []
         for code, rec in by_code.items():
-            eod = (rec.get("eod") or {}).get("best")
-            intraday = (rec.get("intraday") or {}).get("best")
-            row = dict(eod or intraday or {})
+            # fix P0-14: 行选择改为最新一条扫描记录（不再取当日最高分快照）
+            eod = (rec.get("eod") or {}).get("latest")
+            intraday = (rec.get("intraday") or {}).get("latest")
+            row = dict(latest_by_code.get(code) or eod or intraday or {})
             row["_eod_best_score"] = (eod or {}).get("composite_score")
             row["_intraday_best_score"] = (intraday or {}).get("composite_score")
             row["_scans"] = sum(v.get("scans", 0) for v in rec.values())
+            row.setdefault("scan_time", "")  # fix P0-14: 每行确保带 scan_time 字段
             rows.append(row)
 
         # 未扫描的 watchlist 股票：作为"等待扫描"添加
@@ -2312,6 +2391,7 @@ class Api:
                 "conditions": {},
                 "suggested_qty": 0, "suggested_price": 0, "capital_required": 0,
                 "in_holdings": in_hold, "scan_type": "等待扫描",
+                "scan_time": "",  # fix P0-14: 每行确保带 scan_time 字段
                 "_scans": 0,
             })
             pending += 1
@@ -2328,7 +2408,8 @@ class Api:
         progress = {
             "total_candidates": total,
             "scanned": len(scanned_codes),
-            "online_fetched": sum(1 for k in by_code if by_code[k].get("eod") or by_code[k].get("intraday")),
+            # fix P0-13: online_fetched 字段名保留，语义改为"当日已扫描股票数"（前端改标签）
+            "online_fetched": len(scanned_codes),
             "no_data": no_data_count,
             "pending": pending,
         }

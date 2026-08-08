@@ -39,7 +39,7 @@ import pandas as pd
 BASE = Path(r"E:\06_T")
 sys.path.insert(0, str(BASE))
 
-from indicators import resample_to_5min, add_5min_indicators
+from indicators import resample_to_5min, add_5min_indicators, WARMUP_MIN_BARS_5M
 
 
 # ── 飞书推送（可选，Webhook 未配置时静默跳过）──
@@ -62,6 +62,41 @@ def _write_trace_line(entry: dict, date_str: str):
     fp = TRACE_DIR / f"position_builder_{date_str}.jsonl"
     with open(fp, "a", encoding="utf-8") as f:
         f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+
+
+# fix P1-4: 飞书推送去重状态文件（(code, date) 当日 signal 只推一次）
+STATE_DIR = BASE / "t_io" / "state"
+PUSH_DEDUP_FILE = STATE_DIR / "position_signal_pushed.json"
+
+
+def _load_push_dedup() -> dict:
+    """读取推送去重状态 {date: [code, ...]}，失败时返回空。"""
+    try:
+        if PUSH_DEDUP_FILE.exists():
+            return json.loads(PUSH_DEDUP_FILE.read_text(encoding="utf-8"))
+    except Exception:
+        pass
+    return {}
+
+
+def _signal_already_pushed(code: str, date_str: str) -> bool:
+    """(code, date) 当日是否已推送过 signal。"""
+    return code in _load_push_dedup().get(date_str, [])
+
+
+def _mark_signal_pushed(code: str, date_str: str):
+    """记录 (code, date) 已推送，仅保留最近 15 个日期。"""
+    try:
+        STATE_DIR.mkdir(parents=True, exist_ok=True)
+        dedup = _load_push_dedup()
+        dedup.setdefault(date_str, [])
+        if code not in dedup[date_str]:
+            dedup[date_str].append(code)
+        dedup = {d: dedup[d] for d in sorted(dedup)[-15:]}
+        PUSH_DEDUP_FILE.write_text(
+            json.dumps(dedup, ensure_ascii=False, indent=2), encoding="utf-8")
+    except Exception:
+        pass
 
 
 # ============================================================
@@ -139,6 +174,10 @@ def load_snapshot_df(code: str, date_str: str = None) -> tuple:
     # 日期来自返回数据（格式YYYYMMDD）
     raw_date = symbol_data.get("data", {}).get("date", "")
     use_date = f"{raw_date[:4]}-{raw_date[4:6]}-{raw_date[6:8]}" if len(raw_date) >= 8 else (date_str or datetime.now().strftime("%Y-%m-%d"))
+
+    # fix P2-4: 校验响应数据日期与目标日期一致，不符视为无效数据（置 insufficient_data）
+    if use_date != target:
+        return pd.DataFrame(), {}, use_date
 
     rows = []
     for b in minute_arr:
@@ -221,7 +260,20 @@ def fetch_daily_kline(code: str) -> pd.DataFrame:
         try:
             cached = json.loads(cache_fp.read_text(encoding="utf-8"))
             if cached.get("date") == _dt.now().strftime("%Y-%m-%d") and cached.get("rows"):
-                return pd.DataFrame(cached["rows"])
+                rows = cached["rows"]
+                # fix P0-14: 缓存含当日未完成K线且距缓存时间超过15分钟 → 重新拉取（防盘中冻结）
+                _today = _dt.now().strftime("%Y-%m-%d")
+                _last_date = str(rows[-1].get("date", "")) if rows else ""
+                _saved_at = cached.get("saved_at")
+                try:
+                    _ts = _dt.strptime(_saved_at, "%Y-%m-%d %H:%M:%S") if _saved_at \
+                        else _dt.fromtimestamp(cache_fp.stat().st_mtime)
+                except Exception:
+                    _ts = _dt.fromtimestamp(cache_fp.stat().st_mtime)
+                _stale_intraday = (_last_date == _today
+                                   and (_dt.now() - _ts).total_seconds() > 15 * 60)
+                if not _stale_intraday:
+                    return pd.DataFrame(rows)
         except Exception:
             pass
 
@@ -244,8 +296,11 @@ def fetch_daily_kline(code: str) -> pd.DataFrame:
         # 写缓存（每日）
         if cache_fp and rows:
             try:
+                # fix P0-14: 记录 saved_at，供读取端判断盘中缓存是否超龄
                 cache_fp.write_text(json.dumps(
-                    {"date": _dt.now().strftime("%Y-%m-%d"), "rows": rows},
+                    {"date": _dt.now().strftime("%Y-%m-%d"),
+                     "saved_at": _dt.now().strftime("%Y-%m-%d %H:%M:%S"),
+                     "rows": rows},
                     ensure_ascii=False), encoding="utf-8")
             except Exception:
                 pass
@@ -346,9 +401,19 @@ def check_box_breakout(code: str, price: float = None) -> dict:
             if 0.3 <= pct_above <= 8:
                 return {"broken": True, "box": box, "price": round(cur, 3),
                         "pct_above": round(pct_above, 2)}
+            # fix P1-6: >8% 单独标注「强势突破」，不再静默 False
             return {"broken": False, "price": round(cur, 3),
                     "near_box": box, "pct_above": round(pct_above, 2),
-                    "reason": "已远离当前箱体" if pct_above > 8 else "未达突破阈值"}
+                    "reason": f"强势突破(>{pct_above:.1f}%)" if pct_above > 8 else "未达突破阈值"}
+    # fix P1-6: 无 rel=0 箱体时，检查现价站上最近 rel=-1 箱顶 0.3%~2% → 「突破后回踩」
+    prev_boxes = [b for b in boxes if b.get("rel") == -1]
+    if prev_boxes:
+        top_box = max(prev_boxes, key=lambda b: b["high"])
+        if top_box["high"] and cur > top_box["high"]:
+            pct_above = (cur - top_box["high"]) / top_box["high"] * 100
+            if 0.3 <= pct_above <= 2.0:
+                return {"broken": True, "box": top_box, "price": round(cur, 3),
+                        "pct_above": round(pct_above, 2), "reason": "突破后回踩"}
     return {"broken": False, "price": round(cur, 3)}
 
 
@@ -357,17 +422,25 @@ def check_box_breakout(code: str, price: float = None) -> dict:
 # ============================================================
 
 def check_macd_golden(df_5min: pd.DataFrame) -> tuple:
-    """MACD 多头: dif > dea 且 hist > 0，最近 3 根 ≥2 根满足。"""
+    """MACD 多头: dif > dea 且金叉发生在近 5 根内。"""
     if df_5min.empty or len(df_5min) < 3:
         return False, "数据不足（需≥3根5分钟K线）"
-    cols = ["dif_5m", "dea_5m", "macd_hist_5m"]
+    # fix P1-2: 指标预热期（<20根5分钟K线）统一判 False
+    if len(df_5min) < WARMUP_MIN_BARS_5M:
+        return False, f"预热中({len(df_5min)}根)"
+    cols = ["dif_5m", "dea_5m"]
     for c in cols:
         if c not in df_5min.columns:
             return False, f"缺少列 {c}"
-    recent = df_5min.tail(3)
-    count = ((recent["dif_5m"] > recent["dea_5m"]) & (recent["macd_hist_5m"] > 0)).sum()
-    passed = count >= 2
-    detail = f"近3根满足{count}/3（dif>dea & hist>0），阈≥2"
+    dif = df_5min["dif_5m"]
+    dea = df_5min["dea_5m"]
+    # fix P2-1: 去除与 dif>dea 数学等价的 hist>0 冗余半条件，改为「dif>dea 且近5根内有金叉」
+    above_now = bool(dif.iloc[-1] > dea.iloc[-1])
+    cross_up = (dif > dea) & (dif.shift(1) <= dea.shift(1))
+    golden_recent = bool(cross_up.tail(5).any())
+    passed = above_now and golden_recent
+    detail = (f"dif={'>' if above_now else '<='}dea，"
+              f"近5根金叉={'有' if golden_recent else '无'}（需 dif>dea 且近5根内金叉）")
     return passed, detail
 
 
@@ -375,6 +448,9 @@ def check_boll_mid_support(df_5min: pd.DataFrame) -> tuple:
     """BOLL 中轨支撑: bb_pct_5m 在 0.3~0.7 区间，带宽未极端扩张。"""
     if df_5min.empty or "bb_pct_5m" not in df_5min.columns:
         return False, "数据不足"
+    # fix P1-2: 指标预热期（<20根5分钟K线）统一判 False
+    if len(df_5min) < WARMUP_MIN_BARS_5M:
+        return False, f"预热中({len(df_5min)}根)"
     latest_bb = df_5min["bb_pct_5m"].iloc[-1]
     latest_width = df_5min.get("bb_width_5m", pd.Series([0])).iloc[-1]
     price = df_5min["close"].iloc[-1]
@@ -390,6 +466,9 @@ def check_rsi_healthy(df_5min: pd.DataFrame) -> tuple:
     """RSI 健康区间: 35~60。"""
     if df_5min.empty or "rsi_5m" not in df_5min.columns:
         return False, "数据不足"
+    # fix P1-2: 指标预热期（<20根5分钟K线）统一判 False
+    if len(df_5min) < WARMUP_MIN_BARS_5M:
+        return False, f"预热中({len(df_5min)}根)"
     rsi_val = df_5min["rsi_5m"].iloc[-1]
     if pd.isna(rsi_val):
         return False, "RSI=NaN（纯上涨窗，C语义设计内）"
@@ -398,19 +477,66 @@ def check_rsi_healthy(df_5min: pd.DataFrame) -> tuple:
     return passed, detail
 
 
-def check_volume_shrink(df_1min: pd.DataFrame) -> tuple:
-    """成交量缩量: 最近 30 分钟均量 < 前 60 分钟均量 × 0.8。"""
+def _prev_day_same_period_avg_vol(code: str, snap_date: str, df_1min: pd.DataFrame):
+    """fix P0-7: 取前一交易日快照中、与当日最近30分钟同时段（按时钟时间）的分钟均量。
+    无昨日快照或同时段无数据时返回 None。"""
+    if not code or not snap_date:
+        return None
+    try:
+        dt = datetime.strptime(snap_date, "%Y-%m-%d")
+    except Exception:
+        return None
+    ym_dir = SNAPSHOT_DIR / str(dt.year) / f"{dt.month:02d}"
+    if not ym_dir.is_dir():
+        return None
+    # 同目录下找日期早于 snap_date 的最新快照（兼容 _A/_B 后缀，优先无后缀文件）
+    cands = []
+    for p in ym_dir.glob(f"{code}_*.json"):
+        d = p.stem.split("_")[-1]
+        if len(d) == 10 and d[4] == "-" and d < snap_date:
+            cands.append((d, p))
+    if not cands:
+        return None
+    cands.sort(key=lambda x: (x[0], x[1].stem.count("_")))  # 最新日期优先，同日期无后缀优先
+    prev_fp = cands[-1][1]
+    try:
+        prev_df, _, _ = _parse_snapshot_file(prev_fp, cands[-1][0])
+    except Exception:
+        return None
+    if prev_df.empty:
+        return None
+    # 当日最近30根（≈30分钟）的时钟时间窗
+    win = df_1min["time"].tail(30)
+    t_start, t_end = win.iloc[0].time(), win.iloc[-1].time()
+    prev_tod = prev_df["time"].dt.time
+    seg = prev_df.loc[(prev_tod >= t_start) & (prev_tod <= t_end), "volume"]
+    if seg.empty or seg.mean() <= 0:
+        return None
+    return float(seg.mean())
+
+
+def check_volume_shrink(df_1min: pd.DataFrame, code: str = None, snap_date: str = None) -> tuple:
+    """成交量缩量: 最近 30 分钟均量 < 前 60 分钟均量 × 0.8。
+    返回 (passed, detail, insufficient) — insufficient=True 表示数据不足、不参与评分。"""
     if df_1min.empty or len(df_1min) < 30:
-        return False, "数据不足（需≥30根1分钟K线）"
+        return False, "数据不足（需≥30根1分钟K线）", True
     vol = df_1min["volume"]
     recent_vol = vol.tail(30).mean()
-    prior_vol = vol.iloc[-90:-30].mean() if len(vol) >= 90 else vol.iloc[:-30].mean()
+    if len(vol) >= 90:
+        prior_vol = vol.iloc[-90:-30].mean()
+        basis = "前60分"
+    else:
+        # fix P0-7: 11:00 前数据不足90根 → 改用昨日同时段均量做分母，避免开盘天量灌大分母恒真送分
+        prior_vol = _prev_day_same_period_avg_vol(code, snap_date, df_1min)
+        basis = "昨日同时段"
+        if prior_vol is None:
+            return False, f"数据不足（当日仅{len(vol)}根<90，无昨日同时段均量）", True
     if prior_vol <= 0:
-        return False, "前段成交量为0"
+        return False, "前段成交量为0", True
     ratio = recent_vol / prior_vol
     passed = ratio < 0.8
-    detail = f"近30分均量={recent_vol:.0f} / 前段均量={prior_vol:.0f} = {ratio:.2f}（需<0.8）"
-    return passed, detail
+    detail = f"近30分均量={recent_vol:.0f} / {basis}均量={prior_vol:.0f} = {ratio:.2f}（需<0.8）"
+    return passed, detail, False
 
 
 def check_support_retest(df_1min: pd.DataFrame, daily_ctx: dict) -> tuple:
@@ -439,27 +565,29 @@ def check_support_retest(df_1min: pd.DataFrame, daily_ctx: dict) -> tuple:
     if not supports:
         return False, "daily_context 无支撑位数据"
 
-    # 找最近的支撑位（价格上方最近的）
+    # fix P0-2: 只从现价下方的支撑中选最近者（现价低于支撑 0.5% 以上视为已破位，不参与回踩判定）
     nearest = None
     min_dist = float("inf")
     for label, level in supports:
         dist = (latest_price - level) / level
+        if dist < -0.005:
+            continue
         if abs(dist) < abs(min_dist):
             min_dist = dist
             nearest = (label, level, dist)
 
     if nearest is None:
-        return False, "无法确定支撑位"
+        return False, "现价下方无有效支撑（均已破位超0.5%）"
 
     label, level, dist = nearest
-    # 回踩判定：距离 ≤2% 且日最低价未明显破位（日低 > 支撑位 × 0.98）
+    # fix P0-2: 回踩判定窗口 -0.5% ≤ dist ≤ +2%（现价不得低于支撑0.5%以上），破位闸与窗口对齐
     dist_pct = dist * 100
-    near_support = abs(dist_pct) <= 2.0
-    not_broken = day_low > level * 0.98
+    near_support = -0.5 <= dist_pct <= 2.0
+    not_broken = day_low >= level * 0.995
     passed = near_support and not_broken
 
-    detail = (f"最近支撑={label}@{level:.3f}，距={dist_pct:+.2f}%（需≤2%）"
-              f"，日低={day_low:.3f}（破位阈={level*0.98:.3f}）")
+    detail = (f"最近支撑={label}@{level:.3f}，距={dist_pct:+.2f}%（需-0.5%~+2%）"
+              f"，日低={day_low:.3f}（破位阈={level*0.995:.3f}）")
     return passed, detail
 
 
@@ -468,16 +596,45 @@ def check_support_retest(df_1min: pd.DataFrame, daily_ctx: dict) -> tuple:
 # ============================================================
 
 def compute_score(conditions: dict) -> int:
-    """每满足一个条件 +20 分，满分 100。"""
-    return sum(20 for passed, _ in conditions.values() if passed)
+    """每满足一个条件 +20 分，满分 100。
+    fix P0-7: 数据不足的条件（如缩量预热期）返回 passed=False 并在 conditions 中标注
+    insufficient=True，不再恒真送分；得分分母保持 5 条件口径不变，前端可据此区分。"""
+    return sum(20 for passed, *_ in conditions.values() if passed)
+
+
+HOLDINGS_FILE = BASE / "holdings.json"
+_HOLDINGS_CACHE = {"mtime": None, "codes": set()}
+
+
+def _load_holding_codes() -> set:
+    """fix 仓位一刀切(A1-A6): 读取 holdings.json 的已持仓代码集合（剥离 _A/_B 账户后缀）。
+    按文件 mtime 缓存，避免逐股重复读盘；读取失败时返回空集合（不排除任何股）。"""
+    try:
+        mtime = HOLDINGS_FILE.stat().st_mtime
+        if _HOLDINGS_CACHE["mtime"] == mtime:
+            return _HOLDINGS_CACHE["codes"]
+        with open(HOLDINGS_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        codes = set()
+        for key in (data.keys() if isinstance(data, dict) else []):
+            base_code = str(key)
+            if base_code.endswith(("_A", "_B")):
+                base_code = base_code[:-2]
+            codes.add(base_code)
+        _HOLDINGS_CACHE["mtime"] = mtime
+        _HOLDINGS_CACHE["codes"] = codes
+        return codes
+    except Exception:
+        return set()
 
 
 def compute_position(latest_price: float, total_capital: float,
                      max_per_stock_pct: float) -> dict:
-    """计算建议股数（按手取整）。"""
+    """计算建议股数（按手取整，不足一手则为 0）。"""
     max_capital = total_capital * max_per_stock_pct
     raw_qty = math.floor(max_capital / latest_price / 100) * 100
-    raw_qty = max(raw_qty, 100)  # 最少 1 手
+    # fix 仓位一刀切(A1-A6): 不足一手不再保底买 100 股，置 0 避免弱信号/高价股超上限买入
+    raw_qty = max(raw_qty, 0)
     required = raw_qty * latest_price
     return {
         "suggested_qty": raw_qty,
@@ -503,11 +660,18 @@ def scan_stock(code: str, stock_info: dict, date_str: str = None,
         "composite_score": 0,
         "verdict": "insufficient_data",
         "position": None,
+        "note": None,
         "errors": [],
     }
 
     # 加载数据
     df_1min, daily_ctx, snap_date = load_snapshot_df(code, date_str)
+    # fix P1-7/P2-4: 快照（或在线数据）日期≠目标日期 → 强制 insufficient_data，防陈旧快照出 signal
+    target_date = date_str or datetime.now().strftime("%Y-%m-%d")
+    if snap_date and snap_date != target_date:
+        result["date"] = snap_date
+        result["errors"].append(f"快照陈旧({snap_date})")
+        return result
     if df_1min.empty:
         result["errors"].append("无分钟快照数据")
         return result
@@ -533,19 +697,24 @@ def scan_stock(code: str, stock_info: dict, date_str: str = None,
         "macd_golden": check_macd_golden(df_5min),
         "boll_mid_support": check_boll_mid_support(df_5min),
         "rsi_healthy": check_rsi_healthy(df_5min),
-        "volume_shrink": check_volume_shrink(df_1min),
+        "volume_shrink": check_volume_shrink(df_1min, code=code, snap_date=snap_date),
         "support_retest": check_support_retest(df_1min, daily_ctx),
     }
-    result["conditions"] = {
-        k: {"passed": v[0], "detail": v[1]} for k, v in conditions.items()
-    }
+    # fix P0-7: 数据不足的条件（三元组第三值）标注 insufficient，前端可区分「失败」与「无数据」
+    result["conditions"] = {}
+    for k, v in conditions.items():
+        cond = {"passed": v[0], "detail": v[1]}
+        if len(v) > 2 and v[2]:
+            cond["insufficient"] = True
+        result["conditions"][k] = cond
     result["conditions"]["box_breakout"] = {"passed": box_passed, "detail": box_detail}
     result["composite_score"] = compute_score(conditions)
 
-    # 判定：突破箱体 = 第一优先级，直接 signal
-    if box_passed:
+    # fix P0-1: box_breakout 不再直接判 signal，改为放行条件——
+    # 需 composite_score≥40 且 box_passed，或走 score≥70 常规路径
+    if result["composite_score"] >= 70:
         result["verdict"] = "signal"
-    elif result["composite_score"] >= 70:
+    elif box_passed and result["composite_score"] >= 40:
         result["verdict"] = "signal"
     elif result["composite_score"] >= 40:
         result["verdict"] = "approaching"
@@ -553,9 +722,16 @@ def scan_stock(code: str, stock_info: dict, date_str: str = None,
         result["verdict"] = "weak"
 
     # 仓位计算
-    result["position"] = compute_position(
-        result["latest_price"], total_capital, max_pct
-    )
+    # fix 仓位一刀切(A1-A6): 仅 verdict=signal 才出建仓建议；已持仓股不再给"建仓"建议（防重复建仓）
+    if result["verdict"] != "signal":
+        result["position"] = None
+    elif code in _load_holding_codes():
+        result["position"] = None
+        result["note"] = "已持仓，不出建仓建议（如需加仓请走加仓观察）"
+    else:
+        result["position"] = compute_position(
+            result["latest_price"], total_capital, max_pct
+        )
 
     return result
 
@@ -597,6 +773,11 @@ def build_signal_card(result: dict) -> dict:
         f"📅 日期：{result.get('date') or 'N/A'}",
         f"📊 综合得分：**{score}/100**",
         f"💵 最新价：{result.get('latest_price')}",
+    ]
+    # fix 仓位一刀切(A1-A6): 已持仓等无仓位建议的信号，卡片显式标注原因
+    if result.get("note"):
+        lines.append(f"📌 备注：{result['note']}")
+    lines += [
         "",
         "**条件检查：**",
         cond_text,
@@ -752,12 +933,17 @@ def update_watchlist(result: dict, watchlist: dict):
     stock["criteria_met"] = {
         k: bool(v["passed"]) for k, v in result.get("conditions", {}).items()
     }
+    # fix P2-2: 每次扫描按最新 verdict 重算 status，非 signal 时清除粘性状态
     if result["verdict"] == "signal":
         stock["status"] = "signal"
-    pos = result.get("position") or {}
-    stock["suggested_qty"] = int(pos.get("suggested_qty", 0))
-    stock["suggested_price"] = float(pos.get("suggested_price", 0))
-    stock["capital_required"] = float(pos.get("capital_required", 0))
+    elif stock.get("status") == "signal":
+        stock["status"] = "monitoring"
+    # fix P2-3: insufficient_data 时不覆写建议仓位字段，保留上次有效建议
+    if result["verdict"] != "insufficient_data":
+        pos = result.get("position") or {}
+        stock["suggested_qty"] = int(pos.get("suggested_qty", 0))
+        stock["suggested_price"] = float(pos.get("suggested_price", 0))
+        stock["capital_required"] = float(pos.get("capital_required", 0))
     # 追加信号历史
     hist_entry = {
         "date": result.get("date"),
@@ -808,6 +994,9 @@ def print_report(results: list):
             print(f"\n  仓位建议（单只上限 {pos.get('max_capital_per_stock','?'):,.0f}）:")
             print(f"    建议买入: {pos.get('suggested_qty',0)} 股 @ {pos.get('suggested_price','?')}")
             print(f"    所需资金: {pos.get('capital_required',0):,.0f}")
+        elif r.get("note"):
+            # fix 仓位一刀切(A1-A6): 已持仓等无仓位建议时显式说明
+            print(f"\n  [NOTE] {r['note']}")
 
     # 汇总
     signals = [r for r in results if r.get("verdict") == "signal"]
@@ -821,9 +1010,13 @@ def print_report(results: list):
         print(">>> 以下股票满足建仓条件，请人工确认后手动加入 holdings.json：")
         for r in signals:
             pos = r.get("position") or {}
-            print(f"  {r['code']} {r['name']}: "
-                  f"{pos.get('suggested_qty',0)}股 @ {pos.get('suggested_price','?')} "
-                  f"≈ {pos.get('capital_required',0):,.0f}")
+            if r.get("note"):
+                # fix 仓位一刀切(A1-A6): 已持仓 signal 只提示，不给买入量
+                print(f"  {r['code']} {r['name']}: {r['note']}")
+            else:
+                print(f"  {r['code']} {r['name']}: "
+                      f"{pos.get('suggested_qty',0)}股 @ {pos.get('suggested_price','?')} "
+                      f"≈ {pos.get('capital_required',0):,.0f}")
         print()
 
 
@@ -884,12 +1077,20 @@ def run_position_scan(date_str: str = None, capital: float = None,
 
         if r["verdict"] == "signal":
             signal_count += 1
-            pushed = push_signal_feishu(r, dry_run=no_feishu)
-            if not silent:
+            # fix P1-4: (code, date) 当日 signal 只推一次，防 5 分钟轮询刷屏
+            sig_date = r.get("date") or datetime.now().strftime("%Y-%m-%d")
+            if not no_feishu and _signal_already_pushed(code, sig_date):
+                if not silent:
+                    print(f"  => 今日已推送过 signal，跳过重复推送")
+            else:
+                pushed = push_signal_feishu(r, dry_run=no_feishu)
                 if pushed:
-                    print(f"  => 飞书推送已发送")
-                elif not no_feishu and not _FEISHU_AVAILABLE:
-                    print(f"  => 飞书 Webhook 未配置，跳过推送")
+                    _mark_signal_pushed(code, sig_date)
+                if not silent:
+                    if pushed:
+                        print(f"  => 飞书推送已发送")
+                    elif not no_feishu and not _FEISHU_AVAILABLE:
+                        print(f"  => 飞书 Webhook 未配置，跳过推送")
 
     # 写入结构化日志（供 daily_review.py 消费）
     scan_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")

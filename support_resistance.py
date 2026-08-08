@@ -23,14 +23,17 @@ def calc_pivot_levels(code: str, holding: dict, daily_ctx: dict) -> Dict[str, An
     y_close = float(daily_ctx.get("daily_prev_close_real", 0) or 0)
 
     # 降级回退：当 daily_ctx 获取失败时用 pre_close 近似估算
+    estimated = False  # fix P1-11: 编造振幅时必须带标识
     if y_high <= 0 or y_low <= 0 or y_close <= 0:
         fallback_ref = float(holding.get("pre_close", 0) or daily_ctx.get("daily_prev_close", 0) or 0)
         if fallback_ref > 0 and y_close <= 0:
             y_close = fallback_ref
         if fallback_ref > 0 and y_high <= 0:
             y_high = round(fallback_ref * 1.02, 2)  # 2% 估算振幅
+            estimated = True  # fix P1-11
         if fallback_ref > 0 and y_low <= 0:
             y_low = round(fallback_ref * 0.98, 2)
+            estimated = True  # fix P1-11
 
     if y_high <= 0 or y_low <= 0 or y_close <= 0:
         return {"code": code, "name": name, "ref_price": price}
@@ -52,6 +55,7 @@ def calc_pivot_levels(code: str, holding: dict, daily_ctx: dict) -> Dict[str, An
         "R1": r1,
         "S1": s1,
         "bias": bias,
+        "estimated": estimated,  # fix P1-11: 高/低为 2% 编造时置 True
     }
 
 
@@ -68,7 +72,9 @@ def format_pivot_text(all_levels: List[Dict[str, Any]], max_stocks: int = 8) -> 
         s1 = item["S1"]
         bias = item["bias"]
         lines.append(f"{name} {code}")
-        lines.append(f"中枢{pp}  压力{r1}  支撑{s1}  {bias}")
+        # fix P1-11: 估算振幅（2% 编造）时推送文案必须标注『估算』
+        est_mark = "  『估算』" if item.get("estimated") else ""
+        lines.append(f"中枢{pp}  压力{r1}  支撑{s1}  {bias}{est_mark}")
     return "\n".join(lines)
 
 
@@ -155,7 +161,8 @@ def pivot_audit(now: Optional[datetime] = None) -> str:
                 "date": today,
                 "code": code,
                 "name": holding.get("name", code),
-                "ref_price": round(ref_price, 2),
+                # fix P1-7: 原引用未定义的 ref_price 导致 NameError 整体静默失效，改用 levels 返回值
+                "ref_price": round(float(levels.get("ref_price", 0) or 0), 2),
                 "PP": pp,
                 "R1": r1,
                 "S1": s1,
@@ -174,7 +181,8 @@ def pivot_audit(now: Optional[datetime] = None) -> str:
                 )
 
         except Exception as e:
-            log.debug(f"⚠️  {code} pivot 审计异常: {str(e)[:80]}")
+            # fix P1-7: 审计异常从 debug 提到 warning，避免再次整体静默
+            log.warning(f"⚠️  {code} pivot 审计异常: {str(e)[:80]}")
             continue
 
     if not records:
