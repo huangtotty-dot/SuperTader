@@ -11,7 +11,7 @@
   },
   "session_note": "等待9:30开盘后获取市场数据",
   "auction_result": {},
-  "generated_at": "2026-08-07 21:56:11",
+  "generated_at": "2026-08-08 14:51:10",
   "source": "watchlist",
   "market_snapshot": {
     "source": "watchlist",
@@ -38,56 +38,56 @@
       "name": "科创半导体ETF华夏",
       "open_gap": 0.0,
       "direction": "neutral",
-      "prev_close": 0.0
+      "prev_close": 0.977
     },
     "600176": {
       "code": "600176",
       "name": "中国巨石",
       "open_gap": 0.0,
       "direction": "neutral",
-      "prev_close": 0.0
+      "prev_close": 40.78
     },
     "600481": {
       "code": "600481",
       "name": "双良节能",
       "open_gap": 0.0,
       "direction": "neutral",
-      "prev_close": 0.0
+      "prev_close": 4.32
     },
     "603667": {
       "code": "603667",
       "name": "五洲新春",
       "open_gap": 0.0,
       "direction": "neutral",
-      "prev_close": 0.0
+      "prev_close": 55.13
     },
     "000988": {
       "code": "000988",
       "name": "华工科技",
       "open_gap": 0.0,
       "direction": "neutral",
-      "prev_close": 0.0
+      "prev_close": 103.01
     },
     "000988_B": {
       "code": "000988_B",
       "name": "华工科技",
       "open_gap": 0.0,
       "direction": "neutral",
-      "prev_close": 0.0
+      "prev_close": 103.01
     },
     "002639": {
       "code": "002639",
       "name": "雪人集团",
       "open_gap": 0.0,
       "direction": "neutral",
-      "prev_close": 0.0
+      "prev_close": 12.64
     },
     "300153": {
       "code": "300153",
       "name": "科泰电源",
       "open_gap": 0.0,
       "direction": "neutral",
-      "prev_close": 0.0
+      "prev_close": 21.35
     }
   },
   "auction_summary": {},
