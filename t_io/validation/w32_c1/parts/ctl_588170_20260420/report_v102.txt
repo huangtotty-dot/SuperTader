@@ -1,0 +1,9 @@
+=== BACKTEST REPORT (v102) ===
+Codes: 588170
+Period: 2026-04-20 ~ 2026-04-24
+Signals: 17  WIN=10 FAIL=7 VOID=0
+Win rate: 58.8%
+
+P1 Trend Direction:
+  Consistency: 100.0%
+  NEUTRAL ratio: 9.2%

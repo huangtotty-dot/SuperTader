@@ -1,0 +1,132 @@
+{
+  "baseline_ctl": {
+    "buy": {
+      "n": 144,
+      "wins": 66,
+      "fails": 65,
+      "wr": 0.5038
+    },
+    "sell": 0.4638,
+    "cl": {
+      "pairs": 47,
+      "pnl": 252.98
+    },
+    "buy_density": 0.32
+  },
+  "variant_C1": {
+    "buy": {
+      "n": 197,
+      "wins": 92,
+      "fails": 91,
+      "wr": 0.5027
+    },
+    "sell": 0.4708,
+    "cl": {
+      "pairs": 99,
+      "pnl": 598.85
+    },
+    "buy_density": 0.438
+  },
+  "v112_drift_ctl_vs_t36b": {
+    "buy_n": {
+      "ctl": 144,
+      "t36b": 144
+    },
+    "buy_wr": {
+      "ctl": 0.5038,
+      "t36b": 0.5038
+    },
+    "sell_n": {
+      "ctl": 335,
+      "t36b": 330
+    },
+    "sell_wr": {
+      "ctl": 0.4638,
+      "t36b": 0.4638
+    },
+    "cl_pairs": {
+      "ctl": 47,
+      "t36b": 47
+    },
+    "cl_pnl": {
+      "ctl": 252.98,
+      "t36b": 252.98
+    }
+  },
+  "incremental": {
+    "incr_buys": 53,
+    "settle": {
+      "n": 53,
+      "wins": 26,
+      "fails": 26,
+      "wr": 0.5
+    },
+    "buyback_attr": 34,
+    "bear_incr": {
+      "n": 7,
+      "wins": 2,
+      "fails": 4,
+      "wr": 0.3333
+    }
+  },
+  "gates": {
+    "①总买wr>=0.4788": {
+      "value": {
+        "n": 197,
+        "wins": 92,
+        "fails": 91,
+        "wr": 0.5027
+      },
+      "pass": true
+    },
+    "②闭环>=47对且PnL>=+252.98": {
+      "value": {
+        "pairs": 99,
+        "pnl": 598.85
+      },
+      "pass": true
+    },
+    "③卖侧退化<=1pp": {
+      "value": {
+        "ctl": 0.4638,
+        "C1": 0.4708,
+        "delta": 0.007
+      },
+      "pass": true
+    },
+    "④阴跌日买wr>=0.30": {
+      "value": {
+        "n": 26,
+        "wins": 9,
+        "fails": 16,
+        "wr": 0.36
+      },
+      "pass": true
+    },
+    "⑤买密度∈[0.30,0.60]且单股<=7/日": {
+      "value": {
+        "density": 0.438,
+        "max_per_code_day": 8
+      },
+      "pass": false
+    },
+    "⑥白名单+bear日接回wr>=0.35": {
+      "value": {
+        "changed_to_buy_ticks": 53,
+        "violations": [],
+        "n_violations": 0,
+        "incr_buys": 53,
+        "buyback_attr": 34,
+        "nonbuyback_incr": 19,
+        "bear_buyback": {
+          "n": 6,
+          "wins": 2,
+          "fails": 3,
+          "wr": 0.4
+        }
+      },
+      "pass": true
+    }
+  },
+  "all_pass": false
+}
