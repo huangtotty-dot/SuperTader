@@ -497,6 +497,75 @@ def _build_index_regime_card(ctx: dict, title_prefix: str, switched: bool = Fals
     return {"msg_type": "interactive", "card": card, "notify_type": 1}
 
 
+# ---------- 竞价采集调度挂载（W32-B2，2026-08-08 用户拍板，周一 08-10 盘前必须生效）----------
+_AUCTION_COLLECT_STATE = {}  # 模块级：{slot/"_gap_warned": "YYYY-MM-DD"} 竞价采集防重复 + 断档告警防重复
+
+
+def _auction_slot_on_disk(date_str: str, slot: str) -> bool:
+    """t_io/preopen/auction_{date}.json 是否已落盘该 slot（供断档检查）。"""
+    try:
+        fp = os.path.join(BASE_DIR, "t_io", "preopen", f"auction_{date_str}.json")
+        if not os.path.exists(fp):
+            return False
+        with open(fp, "r", encoding="utf-8") as f:
+            return slot in (json.load(f).get("snapshots") or {})
+    except Exception:
+        return False
+
+
+def _launch_auction_collector(slot: str, today: str) -> None:
+    """子进程拉起 auction_collector.py --slot（fire-and-forget，仿 _launch_gui 隔离模式）。
+
+    采集器含网络 I/O（单请求 timeout=15s），子进程隔离保证采集失败/超时
+    不阻塞盘前主流程；stdout/stderr 追加到 t_io/preopen/logs/auction_collector_{date}.log
+    （断档可诊断，呼应 W32-B5 静默失败显式化方向）。"""
+    import subprocess
+    collector = os.path.join(BASE_DIR, "t_io", "preopen", "auction_collector.py")
+    log_dir = os.path.join(BASE_DIR, "t_io", "preopen", "logs")
+    os.makedirs(log_dir, exist_ok=True)
+    out_fp = open(os.path.join(log_dir, f"auction_collector_{today}.log"), "a", encoding="utf-8")
+    try:
+        flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+        proc = subprocess.Popen(
+            [sys.executable, collector, "--slot", slot, "--date", today],
+            cwd=BASE_DIR, creationflags=flags,
+            stdout=out_fp, stderr=subprocess.STDOUT,
+        )
+    finally:
+        out_fp.close()   # 子进程已持有句柄副本，父进程立即关闭
+    log.info(f"📸 竞价采集已触发: slot={slot} (pid={proc.pid}) → t_io/preopen/auction_{today}.json")
+
+
+def _maybe_collect_auction_snapshot(now: datetime) -> None:
+    """09:20/09:22 竞价快照采集调度（每日各一次，W32-B2 用户 2026-08-08 拍板挂载）。
+
+    窗口：09:20 slot=[09:20,09:22)，09:22 slot=[09:22,09:25)；先占位防重复（无论成败）。
+    断档显式化：09:26 后检查落盘（待最晚子进程收尾：09:24:59 启动 +15s 超时 → 09:26 检查不误报），
+    缺 slot 记 warning 一次——主程序晚于窗口启动或采集子进程失败均在此显式暴露，
+    盘后可用 auction_collector.py --backfill 回填 09:25 口径。
+    本次只动竞价挂载，不顺手改其他静默失败点。"""
+    try:
+        if now.weekday() >= 5:
+            return
+        t = now.time()
+        today = now.strftime("%Y-%m-%d")
+        windows = (("09:20", dtime(9, 20), dtime(9, 22)),
+                   ("09:22", dtime(9, 22), dtime(9, 25)))
+        for slot, start, end in windows:
+            if start <= t < end and _AUCTION_COLLECT_STATE.get(slot) != today:
+                _AUCTION_COLLECT_STATE[slot] = today       # 先占位防重复触发（无论成败）
+                _launch_auction_collector(slot, today)
+        # 断档检查（每日一次）
+        if t >= dtime(9, 26) and _AUCTION_COLLECT_STATE.get("_gap_warned") != today:
+            _AUCTION_COLLECT_STATE["_gap_warned"] = today
+            missing = [s for s, _, _ in windows if not _auction_slot_on_disk(today, s)]
+            if missing:
+                log.warning(f"⚠️ 竞价采集断档: {today} 缺 slot {missing}"
+                            f"（主程序晚于窗口启动或采集失败）；盘后可用 auction_collector.py --backfill 回填 09:25 口径")
+    except Exception as e:
+        log.warning(f"⚠️ 竞价采集钩子异常（已吞掉，不影响主循环）: {str(e)[:120]}")
+
+
 def _maybe_push_index_regime_morning(now: datetime) -> None:
     """09:26-09:31 早盘大盘基调推送（每日一次；须在 scan_once 的 <9:30 早退分支之前调用）
 
@@ -1115,6 +1184,7 @@ def scan_once():
                 log.info("📡 盘前集合竞价监控已刷新")
                 _last_idle_log = _now()
 
+        _maybe_collect_auction_snapshot(now)             # 09:20/09:22 竞价快照采集（每日各一次，W32-B2）
         _maybe_push_index_regime_morning(now)          # 09:26-09:31 早盘大盘基调（须在 <9:30 早退之前）
 
         _maybe_push_pivot_report(now)                  # 09:25-09:30 支撑/压力位推送
