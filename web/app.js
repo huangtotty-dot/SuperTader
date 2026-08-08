@@ -1554,6 +1554,8 @@ async function regenerateHunter() {
     if (h && h.available) {
       renderHunter(h, true);
       hunterLoaded = true;
+      // 仅重新生成"今日"时同步扫描突破箱体（历史日期后端也按最新日线扫，会误导）
+      if (!date || date === todayStr()) loadBreakoutStocks(true);
       statusEl(`${date} 已重新生成`, "ok");
     } else {
       el.innerHTML = `<div class="empty">${esc((h && h.error) || '生成失败')}</div>`;
@@ -1670,11 +1672,107 @@ async function loadHunter(force) {
     const h = await apiCall("load_hunter", state.date || todayStr());
     renderHunter(h);
     hunterLoaded = true;
+    // 突破箱体扫描（后台并行，后端当日缓存）
+    loadBreakoutStocks(true);
   } catch (e) {
     el.innerHTML = `<div class="empty">加载失败: ${esc(e.message)}</div>`;
   }
   hunterRunning = false;
   if (btn) { btn.disabled = false; btn.textContent = "🔄 刷新数据"; }
+}
+
+// ---- 突破箱体股票（单独拎出）----
+let breakoutLoaded = false;
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+async function loadBreakoutStocks(force) {
+  const body = document.getElementById("hunterBreakoutBody");
+  if (!body) return;
+  if (!force && breakoutLoaded) return;
+  const btn = document.getElementById("hunterBreakoutBtn");
+  if (btn) { btn.disabled = true; btn.textContent = "⏳ 扫描中..."; }
+  body.innerHTML = '<div class="empty">⏳ 准备扫描...</div>';
+  try {
+    const st = await apiCall("start_breakout_scan");
+    if (st.status === "done") {
+      renderBreakout(st);
+      breakoutLoaded = true;
+      if (btn) { btn.disabled = false; btn.textContent = "🔄 重新扫描"; }
+      return;
+    }
+    if (st.status === "error") {
+      body.innerHTML = `<div class="empty">扫描失败: ${esc(st.error || '未知')}</div>`;
+      if (btn) { btn.disabled = false; btn.textContent = "🔄 重新扫描"; }
+      return;
+    }
+    await pollBreakoutScan(body, btn);   // running → 轮询进度
+  } catch (e) {
+    const cur = document.getElementById("hunterBreakoutBody");
+    if (cur) cur.innerHTML = `<div class="empty">突破箱体扫描失败: ${esc(e.message)}</div>`;
+    if (btn) { btn.disabled = false; btn.textContent = "🔄 重新扫描"; }
+  }
+}
+async function pollBreakoutScan(body, btn) {
+  const t0 = Date.now();
+  const MAX = 300000; // 5 分钟兜底
+  while (Date.now() - t0 < MAX) {
+    await sleep(800);
+    if (!document.body.contains(body)) return;   // 标签已切换
+    let st;
+    try { st = await apiCall("get_breakout_scan"); } catch (e) { break; }
+    if (st.status === "done") {
+      renderBreakout(st);
+      breakoutLoaded = true;
+      if (btn) { btn.disabled = false; btn.textContent = "🔄 重新扫描"; }
+      return;
+    }
+    if (st.status === "error") {
+      body.innerHTML = `<div class="empty">扫描失败: ${esc(st.error || '未知')}</div>`;
+      if (btn) { btn.disabled = false; btn.textContent = "🔄 重新扫描"; }
+      return;
+    }
+    if (st.status === "running") {
+      const pct = st.total ? Math.max(2, Math.round(st.done / st.total * 100)) : 0;
+      const found = st.found || 0;
+      const preview = (st.stocks || []).slice(0, 5).map(x => esc(x.name)).join('、');
+      body.innerHTML = `
+        <div class="bk-scan">
+          <div class="bk-scan-row"><span>⏳ 突破箱体扫描中</span>
+            <span class="cell-dim mono">${st.done}/${st.total} 只 · ${pct}%</span></div>
+          <div class="h-bar-track" style="height:6px;margin-top:4px">
+            <div class="h-bar-fill up" style="width:${pct}%"></div></div>
+          <div class="bk-scan-row" style="margin-top:6px">
+            <span class="cell-dim">已发现 <b class="up">${found}</b> 只</span>
+            ${preview ? `<span class="cell-dim" style="margin-left:8px">${preview}${found > 5 ? '…' : ''}</span>` : ''}
+          </div>
+        </div>`;
+    }
+  }
+  body.innerHTML = '<div class="empty">扫描超时，请点击"重新扫描"重试</div>';
+  if (btn) { btn.disabled = false; btn.textContent = "🔄 重新扫描"; }
+}
+function renderBreakout(b) {
+  const body = document.getElementById("hunterBreakoutBody");
+  if (!body) return;
+  const stocks = (b && b.stocks) || [];
+  const meta = document.getElementById("hunterBreakoutMeta");
+  if (meta) meta.textContent = `· 共 ${stocks.length} 只`;
+  if (!stocks.length) {
+    body.innerHTML = '<div class="empty">今日池内暂无突破箱体的股票</div>';
+    return;
+  }
+  body.innerHTML = `<table class="h-table"><thead><tr>
+    <th>代码</th><th>名称</th><th class="num">现价</th><th>趋势</th><th>技术标签</th>
+  </tr></thead><tbody>
+  ${stocks.map(s => `<tr class="h-expand-row" ondblclick="openStockChart('${esc(s.code)}','${esc(s.name)}')">
+    <td class="mono cell-dim" title="双击看技术分析">${esc(s.code)}</td>
+    <td title="双击看技术分析">${esc(s.name)} <button class="mini-btn" style="font-size:10px;padding:0 5px"
+      onclick="event.stopPropagation();addToWatchlist('${esc(s.code)}','${esc(s.name)}',this)" title="加入建仓股池监控买点">+股池</button></td>
+    <td class="num">${s.price != null && s.price !== '' ? fmt(s.price, 2) : '—'}</td>
+    <td>${trendBadge(s.trend)}</td>
+    <td>${(s.tags || []).map(t => tagBadge(t)).join(" ")}</td>
+  </tr>`).join("")}
+  </tbody></table>
+  <div class="cell-dim" style="font-size:10px;margin-top:3px">双击看技术分析 · 加入建仓股池监控买点 · 当日缓存</div>`;
 }
 function renderHunter(h) {
   const el = document.getElementById("hunterBody");
@@ -1801,12 +1899,25 @@ function renderHunter(h) {
     </tbody>`;
   }).join("");
 
+  // 突破箱体扫描仅对"今日"数据有意义（后端按最新日线收盘扫描，当日缓存）
+  const isHistory = h.is_history || (h.date && h.date !== todayStr());
+  const breakoutCard = isHistory ? "" : `
+    <div class="card" style="margin-bottom:10px;padding:10px 14px">
+      <div class="card-title">🚀 突破箱体（现价向上突破最近箱体上沿 ≤8%）
+        <button class="mini-btn" id="hunterBreakoutBtn" style="margin-left:8px" onclick="loadBreakoutStocks(true)">🔄 重新扫描</button>
+        <span class="cell-dim" id="hunterBreakoutMeta" style="font-size:11px"></span>
+      </div>
+      <div id="hunterBreakoutBody"><div class="empty">点击"运行今日数据"后自动扫描突破箱体的股票</div></div>
+    </div>`;
+
   el.innerHTML = `
     <div class="cell-dim" style="margin-bottom:8px;display:flex;gap:16px;flex-wrap:wrap">
       <span>打分池: <b>${h.pool_size}</b> 只</span>
       <span>概念: <b>${sumRows.length}</b> 个</span>
       <span class="mono"><span class="live-dot"></span> ${esc(h.refreshed_at || '')}</span>
     </div>
+
+    ${breakoutCard}
 
     <div class="card" style="overflow-x:auto">
     <table class="h-table">

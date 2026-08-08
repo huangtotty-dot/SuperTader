@@ -1309,9 +1309,9 @@
     "primary_source": "legacy",
     "sector": "地面兵装Ⅱ/培育钻石/军民融合/军工",
     "sector_type": "legacy",
-    "updated_at": "2026-05-30 21:48:57",
-    "jiuyan_concept": "",
-    "jiuyan_category": ""
+    "updated_at": "2026-08-08 00:00:00",
+    "jiuyan_category1": "军工",
+    "jiuyan_concept1": "陆军"
   },
   "000520": {
     "business_summary": "干散货航运及港航物流服务业。",
@@ -1625,9 +1625,11 @@
     "primary_source": "legacy",
     "sector": "计算机、通信和其他电子设备制造业",
     "sector_type": "legacy",
-    "updated_at": "2026-06-17 12:42:30",
-    "jiuyan_concept": "国家队-航天科工",
-    "jiuyan_category": "商业航天"
+    "updated_at": "2026-08-08 00:00:00",
+    "jiuyan_category1": "商业航天",
+    "jiuyan_concept1": "国家队-航天科工",
+    "jiuyan_category2": "军工",
+    "jiuyan_concept2": "分支系统|国家队-航天科工"
   },
   "000548": {
     "business_summary": "主营道路运输业",
@@ -1793,9 +1795,9 @@
     "primary_source": "legacy",
     "sector": "计算机、通信和其他电子设备制造业",
     "sector_type": "legacy",
-    "updated_at": "2026-05-30 21:48:57",
-    "jiuyan_concept": "",
-    "jiuyan_category": ""
+    "updated_at": "2026-08-08 00:00:00",
+    "jiuyan_category1": "军工",
+    "jiuyan_concept1": "分支系统"
   },
   "000562": {
     "business_summary": "主营其他",
@@ -1949,9 +1951,9 @@
     "primary_source": "legacy",
     "sector": "计算机、通信和其他电子设备制造业",
     "sector_type": "legacy",
-    "updated_at": "2026-05-30 21:48:57",
-    "jiuyan_concept": "",
-    "jiuyan_category": ""
+    "updated_at": "2026-08-08 00:00:00",
+    "jiuyan_category1": "军工",
+    "jiuyan_concept1": "分支系统"
   },
   "000578": {
     "business_summary": "主营其他",
@@ -2375,9 +2377,9 @@
     "primary_source": "legacy",
     "sector": "汽车制造业",
     "sector_type": "legacy",
-    "updated_at": "2026-05-30 21:48:57",
-    "jiuyan_concept": "",
-    "jiuyan_category": ""
+    "updated_at": "2026-08-08 00:00:00",
+    "jiuyan_category1": "军工",
+    "jiuyan_concept1": "基础配套产品"
   },
   "000626": {
     "business_summary": "主营批发业",
@@ -3185,11 +3187,11 @@
     "primary_source": "legacy",
     "sector": "军工电子Ⅱ/超级电容/第三代半导体/共封装光学(CPO)",
     "sector_type": "legacy",
-    "updated_at": "2026-06-17 12:07:32",
-    "jiuyan_concept": "",
-    "jiuyan_category": "",
+    "updated_at": "2026-08-08 00:00:00",
     "jiuyan_category1": "PCB",
-    "jiuyan_concept1": "MLCC-AI领域"
+    "jiuyan_concept1": "MLCC-AI领域",
+    "jiuyan_category2": "军工",
+    "jiuyan_concept2": "AI领域MLCC|分支系统|导弹"
   },
   "000735": {
     "business_summary": "主营畜牧业",
@@ -3223,9 +3225,9 @@
     "primary_source": "legacy",
     "sector": "铁路、船舶、航空航天和其他运输设备制造业",
     "sector_type": "legacy",
-    "updated_at": "2026-05-30 21:48:57",
-    "jiuyan_concept": "",
-    "jiuyan_category": ""
+    "updated_at": "2026-08-08 00:00:00",
+    "jiuyan_category1": "军工",
+    "jiuyan_concept1": "空军"
   },
   "000739": {
     "business_summary": "主营医药制造业",
@@ -3427,9 +3429,9 @@
     "primary_source": "legacy",
     "sector": "铁路、船舶、航空航天和其他运输设备制造业",
     "sector_type": "legacy",
-    "updated_at": "2026-05-30 21:48:57",
-    "jiuyan_concept": "",
-    "jiuyan_category": ""
+    "updated_at": "2026-08-08 00:00:00",
+    "jiuyan_category1": "军工",
+    "jiuyan_concept1": "军贸|空军"
   },
   "000776": {
     "business_summary": "投资银行业务、财富管理业务、交易及机构业务和投资管理业务。",
@@ -4407,9 +4409,11 @@
     "primary_source": "legacy",
     "sector": "汽车制造业",
     "sector_type": "legacy",
-    "updated_at": "2026-06-17 12:42:30",
-    "jiuyan_concept": "国家队-航天科工",
-    "jiuyan_category": "商业航天"
+    "updated_at": "2026-08-08 00:00:00",
+    "jiuyan_category1": "商业航天",
+    "jiuyan_concept1": "国家队-航天科工",
+    "jiuyan_category2": "军工",
+    "jiuyan_concept2": "国家队-航天科工|火箭军"
   },
   "000902": {
     "business_summary": "主营化学原料和化学制品制造业",
@@ -5775,9 +5779,11 @@
     "primary_source": "legacy",
     "sector": "军工电子Ⅱ/6G概念/卫星导航/军工信息化",
     "sector_type": "legacy",
-    "updated_at": "2026-06-17 12:42:30",
-    "jiuyan_concept": "卫星-有效载荷-射频",
-    "jiuyan_category": "商业航天"
+    "updated_at": "2026-08-08 00:00:00",
+    "jiuyan_category1": "商业航天",
+    "jiuyan_concept1": "卫星-有效载荷-射频",
+    "jiuyan_category2": "军工",
+    "jiuyan_concept2": "卫星-有效载荷-射频|雷达"
   },
   "001277": {
     "business_summary": "主营金属制品、机械和设备修理业",
@@ -6921,9 +6927,11 @@
     "primary_source": "legacy",
     "sector": "军工电子Ⅱ/铜缆高速连接/共封装光学(CPO)/液冷服务器",
     "sector_type": "legacy",
-    "updated_at": "2026-06-17 12:42:30",
-    "jiuyan_concept": "国家队-航天科工",
-    "jiuyan_category": "商业航天"
+    "updated_at": "2026-08-08 00:00:00",
+    "jiuyan_category1": "商业航天",
+    "jiuyan_concept1": "国家队-航天科工",
+    "jiuyan_category2": "军工",
+    "jiuyan_concept2": "国家队-航天科工|导弹"
   },
   "002026": {
     "business_summary": "主营电气机械和器材制造业",
@@ -7221,9 +7229,11 @@
     "primary_source": "legacy",
     "sector": "半导体/存储芯片/汽车芯片/MCU芯片",
     "sector_type": "legacy",
-    "updated_at": "2026-06-24 11:21:37",
-    "jiuyan_concept": "存储芯片-DRAM-LPDDR",
-    "jiuyan_category": "半导体"
+    "updated_at": "2026-08-08 00:00:00",
+    "jiuyan_category1": "半导体",
+    "jiuyan_concept1": "存储芯片-DRAM-LPDDR",
+    "jiuyan_category2": "军工",
+    "jiuyan_concept2": "分支系统|存储芯片-DRAM-LPDDR"
   },
   "002050": {
     "business_summary": "制冷空调电器与汽车的零件部件组件的研发、生产与销售。",
@@ -7907,9 +7917,9 @@
     "primary_source": "legacy",
     "sector": "大飞机/成飞概念",
     "sector_type": "legacy",
-    "updated_at": "2026-05-30 21:48:57",
-    "jiuyan_concept": "",
-    "jiuyan_category": ""
+    "updated_at": "2026-08-08 00:00:00",
+    "jiuyan_category1": "军工",
+    "jiuyan_concept1": "分支系统"
   },
   "002112": {
     "business_summary": "主营电气机械和器材制造业",
@@ -8345,13 +8355,13 @@
     "primary_source": "legacy",
     "sector": "有色金属冶炼和压延加工业",
     "sector_type": "legacy",
-    "updated_at": "2026-05-30 21:48:57",
-    "jiuyan_concept": "",
-    "jiuyan_category": "",
+    "updated_at": "2026-08-08 00:00:00",
     "jiuyan_category1": "可控核聚变",
     "jiuyan_concept1": "第一壁产品-第一壁/包层",
     "jiuyan_category2": "商业航天",
-    "jiuyan_concept2": "spacex-供应商-航空合金"
+    "jiuyan_concept2": "spacex-供应商-航空合金",
+    "jiuyan_category3": "军工",
+    "jiuyan_concept3": "spacex-供应商-航空合金|导弹"
   },
   "002150": {
     "business_summary": "光伏储能设备、元器件以及金属制品的研发、生产及销售业务。",
@@ -8373,9 +8383,9 @@
     "primary_source": "legacy",
     "sector": "军工电子Ⅱ/军工信息化/卫星导航/商业航天",
     "sector_type": "legacy",
-    "updated_at": "2026-05-30 21:48:57",
-    "jiuyan_concept": "",
-    "jiuyan_category": ""
+    "updated_at": "2026-08-08 00:00:00",
+    "jiuyan_category1": "军工",
+    "jiuyan_concept1": "分支系统"
   },
   "002152": {
     "business_summary": "主营计算机、通信和其他电子设备制造业",
@@ -9141,9 +9151,9 @@
     "primary_source": "legacy",
     "sector": "光学光电子/光纤概念/共封装光学(CPO)/海峡两岸",
     "sector_type": "legacy",
-    "updated_at": "2026-05-30 21:48:57",
-    "jiuyan_concept": "",
-    "jiuyan_category": ""
+    "updated_at": "2026-08-08 00:00:00",
+    "jiuyan_category1": "军工",
+    "jiuyan_concept1": "分支系统"
   },
   "002223": {
     "business_summary": "主营专用设备制造业",
@@ -10443,9 +10453,9 @@
     "primary_source": "legacy",
     "sector": "金属制品业",
     "sector_type": "legacy",
-    "updated_at": "2026-05-30 21:48:57",
-    "jiuyan_concept": "",
-    "jiuyan_category": ""
+    "updated_at": "2026-08-08 00:00:00",
+    "jiuyan_category1": "军工",
+    "jiuyan_concept1": "军工材料"
   },
   "002343": {
     "business_summary": "主营广播、电视、电影和录音制作业",
@@ -10745,9 +10755,9 @@
     "primary_source": "legacy",
     "sector": "软件和信息技术服务业",
     "sector_type": "legacy",
-    "updated_at": "2026-05-30 21:48:57",
-    "jiuyan_concept": "",
-    "jiuyan_category": ""
+    "updated_at": "2026-08-08 00:00:00",
+    "jiuyan_category1": "军工",
+    "jiuyan_concept1": "分支系统"
   },
   "002369": {
     "business_summary": "主营计算机、通信和其他电子设备制造业",
@@ -10999,11 +11009,11 @@
     "primary_source": "legacy",
     "sector": "铁路、船舶、航空航天和其他运输设备制造业",
     "sector_type": "legacy",
-    "updated_at": "2026-05-30 21:48:57",
-    "jiuyan_concept": "",
-    "jiuyan_category": "",
+    "updated_at": "2026-08-08 00:00:00",
     "jiuyan_category1": "可控核聚变",
-    "jiuyan_concept1": "其他-绝缘材料"
+    "jiuyan_concept1": "其他-绝缘材料",
+    "jiuyan_category2": "军工",
+    "jiuyan_concept2": "空军"
   },
   "002390": {
     "business_summary": "主营批发业",
@@ -11311,9 +11321,9 @@
     "primary_source": "legacy",
     "sector": "军工电子Ⅱ/军民融合/毫米波雷达/商业航天",
     "sector_type": "legacy",
-    "updated_at": "2026-05-30 21:48:57",
-    "jiuyan_concept": "",
-    "jiuyan_category": ""
+    "updated_at": "2026-08-08 00:00:00",
+    "jiuyan_category1": "军工",
+    "jiuyan_concept1": "火箭军"
   },
   "002415": {
     "business_summary": "以智能物联为战略定位，视频技术为核心打造从研发，制造到营销的完整价值链。",
@@ -11901,9 +11911,11 @@
     "primary_source": "legacy",
     "sector": "军工电子Ⅱ/军工信息化/卫星导航/国产航母",
     "sector_type": "legacy",
-    "updated_at": "2026-06-17 12:42:30",
-    "jiuyan_concept": "卫星-地面设备-移动通信终端|卫星-测控系统",
-    "jiuyan_category": "商业航天"
+    "updated_at": "2026-08-08 00:00:00",
+    "jiuyan_category1": "商业航天",
+    "jiuyan_concept1": "卫星-地面设备-移动通信终端|卫星-测控系统",
+    "jiuyan_category2": "军工",
+    "jiuyan_concept2": "分支系统|卫星-地面设备-移动通信终端|卫星-测控系统"
   },
   "002466": {
     "business_summary": "硬岩型锂矿资源的开发、锂精矿生产销售以及锂化工产品的生产销售，为清洁能源的转型发展提供可持续、高质量的锂解决方案。",
@@ -12457,9 +12469,11 @@
     "primary_source": "legacy",
     "sector": "计算机、通信和其他电子设备制造业",
     "sector_type": "legacy",
-    "updated_at": "2026-06-17 12:42:30",
-    "jiuyan_concept": "卫星-组装制造",
-    "jiuyan_category": "商业航天"
+    "updated_at": "2026-08-08 00:00:00",
+    "jiuyan_category1": "商业航天",
+    "jiuyan_concept1": "卫星-组装制造",
+    "jiuyan_category2": "军工",
+    "jiuyan_concept2": "卫星-组装制造|陆军"
   },
   "002520": {
     "business_summary": "提供柔性线制造、系统集成、管控系统开发于一体的综合性智能制造装备。",
@@ -13553,9 +13567,9 @@
     "primary_source": "legacy",
     "sector": "航空装备Ⅱ/商业航天/军民融合/智能穿戴",
     "sector_type": "legacy",
-    "updated_at": "2026-05-30 21:48:57",
-    "jiuyan_concept": "",
-    "jiuyan_category": ""
+    "updated_at": "2026-08-08 00:00:00",
+    "jiuyan_category1": "军工",
+    "jiuyan_concept1": "军工材料"
   },
   "002626": {
     "business_summary": "主营食品制造业",
@@ -14785,9 +14799,11 @@
     "primary_source": "legacy",
     "sector": "自动化设备/人形机器人/新型工业化/工业母机",
     "sector_type": "legacy",
-    "updated_at": "2026-06-17 12:36:22",
-    "jiuyan_concept": "本体及应用",
-    "jiuyan_category": "机器人"
+    "updated_at": "2026-08-08 00:00:00",
+    "jiuyan_category1": "机器人",
+    "jiuyan_concept1": "本体及应用",
+    "jiuyan_category2": "军工",
+    "jiuyan_concept2": "军用机器人|本体及应用"
   },
   "002748": {
     "business_summary": "主营化学原料和化学制品制造业",
@@ -18051,9 +18067,9 @@
     "primary_source": "legacy",
     "sector": "铁路、船舶、航空航天和其他运输设备制造业",
     "sector_type": "legacy",
-    "updated_at": "2026-05-30 21:48:57",
-    "jiuyan_concept": "",
-    "jiuyan_category": ""
+    "updated_at": "2026-08-08 00:00:00",
+    "jiuyan_category1": "军工",
+    "jiuyan_concept1": "海军"
   },
   "300009": {
     "business_summary": "主营医药制造业",
@@ -18223,9 +18239,9 @@
     "primary_source": "legacy",
     "sector": "自动化设备/人形机器人/新型工业化",
     "sector_type": "legacy",
-    "updated_at": "2026-05-30 21:48:57",
-    "jiuyan_concept": "",
-    "jiuyan_category": ""
+    "updated_at": "2026-08-08 00:00:00",
+    "jiuyan_category1": "军工",
+    "jiuyan_concept1": "军用机器人"
   },
   "300025": {
     "business_summary": "主营软件和信息技术服务业",
@@ -18319,9 +18335,9 @@
     "primary_source": "legacy",
     "sector": "有色金属冶炼和压延加工业",
     "sector_type": "legacy",
-    "updated_at": "2026-05-30 21:48:57",
-    "jiuyan_concept": "",
-    "jiuyan_category": ""
+    "updated_at": "2026-08-08 00:00:00",
+    "jiuyan_category1": "军工",
+    "jiuyan_concept1": "军工材料"
   },
   "300035": {
     "business_summary": "主营计算机、通信和其他电子设备制造业",
@@ -19047,9 +19063,9 @@
     "primary_source": "legacy",
     "sector": "软件和信息技术服务业",
     "sector_type": "legacy",
-    "updated_at": "2026-05-30 21:48:57",
-    "jiuyan_concept": "",
-    "jiuyan_category": ""
+    "updated_at": "2026-08-08 00:00:00",
+    "jiuyan_category1": "军工",
+    "jiuyan_concept1": "分支系统"
   },
   "300102": {
     "business_summary": "主营计算机、通信和其他电子设备制造业",
@@ -22249,9 +22265,11 @@
     "primary_source": "legacy",
     "sector": "航空装备Ⅱ/PCB概念/光纤概念/OLED",
     "sector_type": "legacy",
-    "updated_at": "2026-05-30 21:48:57",
-    "jiuyan_concept": "电子布",
-    "jiuyan_category": "PCB"
+    "updated_at": "2026-08-08 00:00:00",
+    "jiuyan_category1": "PCB",
+    "jiuyan_concept1": "电子布",
+    "jiuyan_category2": "军工",
+    "jiuyan_concept2": "导弹|电子布"
   },
   "300397": {
     "business_summary": "在军民融合综合电子信息领域，拥有先进的技术、成熟的生产工艺",
@@ -24351,9 +24369,9 @@
     "primary_source": "legacy",
     "sector": "计算机、通信和其他电子设备制造业",
     "sector_type": "legacy",
-    "updated_at": "2026-05-30 21:48:57",
-    "jiuyan_concept": "",
-    "jiuyan_category": ""
+    "updated_at": "2026-08-08 00:00:00",
+    "jiuyan_category1": "军工",
+    "jiuyan_concept1": "空军"
   },
   "300582": {
     "business_summary": "主营计算机、通信和其他电子设备制造业",
@@ -24451,9 +24469,9 @@
     "primary_source": "legacy",
     "sector": "铁路、船舶、航空航天和其他运输设备制造业",
     "sector_type": "legacy",
-    "updated_at": "2026-05-30 21:48:57",
-    "jiuyan_concept": "",
-    "jiuyan_category": ""
+    "updated_at": "2026-08-08 00:00:00",
+    "jiuyan_category1": "军工",
+    "jiuyan_concept1": "海军"
   },
   "300590": {
     "business_summary": "主营计算机、通信和其他电子设备制造业",
@@ -24499,9 +24517,9 @@
     "primary_source": "legacy",
     "sector": "其他电源设备Ⅱ/5G/芯片概念/数据中心",
     "sector_type": "legacy",
-    "updated_at": "2026-05-30 21:48:57",
-    "jiuyan_concept": "",
-    "jiuyan_category": ""
+    "updated_at": "2026-08-08 00:00:00",
+    "jiuyan_category1": "军工",
+    "jiuyan_concept1": "分支系统"
   },
   "300595": {
     "business_summary": "主营专用设备制造业",
@@ -24903,9 +24921,9 @@
     "primary_source": "legacy",
     "sector": "通信设备/卫星导航/商业航天/无人机",
     "sector_type": "legacy",
-    "updated_at": "2026-05-30 21:48:57",
-    "jiuyan_concept": "",
-    "jiuyan_category": ""
+    "updated_at": "2026-08-08 00:00:00",
+    "jiuyan_category1": "军工",
+    "jiuyan_concept1": "分支系统"
   },
   "300628": {
     "business_summary": "设计、开发、生产、销售企业通信终端设备及相关技术咨询服务等。SIP话机市场占有率为全球第一",
@@ -25729,9 +25747,9 @@
     "primary_source": "legacy",
     "sector": "铁路、船舶、航空航天和其他运输设备制造业",
     "sector_type": "legacy",
-    "updated_at": "2026-05-30 21:48:57",
-    "jiuyan_concept": "",
-    "jiuyan_category": ""
+    "updated_at": "2026-08-08 00:00:00",
+    "jiuyan_category1": "军工",
+    "jiuyan_concept1": "基础配套产品"
   },
   "300697": {
     "business_summary": "主营有色金属冶炼和压延加工业",
@@ -25765,9 +25783,11 @@
     "primary_source": "legacy",
     "sector": "化学纤维制造业",
     "sector_type": "legacy",
-    "updated_at": "2026-05-30 21:48:57",
-    "jiuyan_concept": "太阳翼结构",
-    "jiuyan_category": "太空光伏"
+    "updated_at": "2026-08-08 00:00:00",
+    "jiuyan_category1": "太空光伏",
+    "jiuyan_concept1": "太阳翼结构",
+    "jiuyan_category2": "军工",
+    "jiuyan_concept2": "军工材料|太阳翼结构"
   },
   "300700": {
     "business_summary": "主营非金属矿物制品业",
@@ -26061,9 +26081,9 @@
     "primary_source": "legacy",
     "sector": "军工电子Ⅱ/共封装光学(CPO)/5G/超级电容",
     "sector_type": "legacy",
-    "updated_at": "2026-05-30 21:48:57",
-    "jiuyan_concept": "",
-    "jiuyan_category": ""
+    "updated_at": "2026-08-08 00:00:00",
+    "jiuyan_category1": "军工",
+    "jiuyan_concept1": "基础配套产品"
   },
   "300727": {
     "business_summary": "主营化学原料和化学制品制造业",
@@ -26599,9 +26619,11 @@
     "primary_source": "legacy",
     "sector": "铁路、船舶、航空航天和其他运输设备制造业",
     "sector_type": "legacy",
-    "updated_at": "2026-06-17 12:09:37",
-    "jiuyan_concept": "燃气轮机",
-    "jiuyan_category": "电力"
+    "updated_at": "2026-08-08 00:00:00",
+    "jiuyan_category1": "电力",
+    "jiuyan_concept1": "燃气轮机",
+    "jiuyan_category2": "军工",
+    "jiuyan_concept2": "基础配套产品|燃气轮机|空军"
   },
   "300776": {
     "business_summary": "激光精密微纳加工解决方案的设计及其配套设备的研发、生产和销售。",
@@ -26623,9 +26645,9 @@
     "primary_source": "legacy",
     "sector": "化学纤维制造业",
     "sector_type": "legacy",
-    "updated_at": "2026-05-30 21:48:57",
-    "jiuyan_concept": "",
-    "jiuyan_category": ""
+    "updated_at": "2026-08-08 00:00:00",
+    "jiuyan_category1": "军工",
+    "jiuyan_concept1": "军工材料"
   },
   "300778": {
     "business_summary": "主营专业技术服务业",
@@ -27007,9 +27029,9 @@
     "primary_source": "legacy",
     "sector": "软件和信息技术服务业",
     "sector_type": "legacy",
-    "updated_at": "2026-05-30 21:48:57",
-    "jiuyan_concept": "",
-    "jiuyan_category": ""
+    "updated_at": "2026-08-08 00:00:00",
+    "jiuyan_category1": "军工",
+    "jiuyan_concept1": "基础配套产品|海军"
   },
   "300811": {
     "business_summary": "主营金属新材料",
@@ -27555,9 +27577,9 @@
     "primary_source": "legacy",
     "sector": "有色金属冶炼和压延加工业",
     "sector_type": "legacy",
-    "updated_at": "2026-05-30 21:48:57",
-    "jiuyan_concept": "",
-    "jiuyan_category": ""
+    "updated_at": "2026-08-08 00:00:00",
+    "jiuyan_category1": "军工",
+    "jiuyan_concept1": "军工材料"
   },
   "300856": {
     "business_summary": "主营化学原料和化学制品制造业",
@@ -27787,9 +27809,9 @@
     "primary_source": "legacy",
     "sector": "专用设备制造业",
     "sector_type": "legacy",
-    "updated_at": "2026-05-30 21:48:57",
-    "jiuyan_concept": "",
-    "jiuyan_category": ""
+    "updated_at": "2026-08-08 00:00:00",
+    "jiuyan_category1": "军工",
+    "jiuyan_concept1": "基础配套产品"
   },
   "300876": {
     "business_summary": "主营化学纤维制造业",
@@ -32351,9 +32373,9 @@
     "primary_source": "legacy",
     "sector": "军工电子Ⅱ/军工信息化/核污染防治/军民融合",
     "sector_type": "legacy",
-    "updated_at": "2026-05-30 21:48:57",
-    "jiuyan_concept": "",
-    "jiuyan_category": ""
+    "updated_at": "2026-08-08 00:00:00",
+    "jiuyan_category1": "军工",
+    "jiuyan_concept1": "军工AI|分支系统"
   },
   "301303": {
     "business_summary": "主营仪器仪表制造业",
@@ -34845,9 +34867,9 @@
     "primary_source": "legacy",
     "sector": "汽车制造业",
     "sector_type": "legacy",
-    "updated_at": "2026-05-30 21:48:57",
-    "jiuyan_concept": "",
-    "jiuyan_category": ""
+    "updated_at": "2026-08-08 00:00:00",
+    "jiuyan_category1": "军工",
+    "jiuyan_concept1": "基础配套产品"
   },
   "600007": {
     "business_summary": "主营房地产业",
@@ -35203,9 +35225,11 @@
     "primary_source": "legacy",
     "sector": "铁路、船舶、航空航天和其他运输设备制造业",
     "sector_type": "legacy",
-    "updated_at": "2026-05-30 21:48:57",
-    "jiuyan_concept": "传感器",
-    "jiuyan_category": "机器人"
+    "updated_at": "2026-08-08 00:00:00",
+    "jiuyan_category1": "机器人",
+    "jiuyan_concept1": "传感器",
+    "jiuyan_category2": "军工",
+    "jiuyan_concept2": "传感器|空军"
   },
   "600039": {
     "business_summary": "主营土木工程建筑业",
@@ -36197,9 +36221,9 @@
     "primary_source": "legacy",
     "sector": "航海装备Ⅱ/中船系/国产航母/同花顺中特估100",
     "sector_type": "legacy",
-    "updated_at": "2026-05-30 21:48:57",
-    "jiuyan_concept": "",
-    "jiuyan_category": ""
+    "updated_at": "2026-08-08 00:00:00",
+    "jiuyan_category1": "军工",
+    "jiuyan_concept1": "海军"
   },
   "600151": {
     "business_summary": "主营汽车零部件",
@@ -36525,9 +36549,9 @@
     "primary_source": "legacy",
     "sector": "专用设备制造业",
     "sector_type": "legacy",
-    "updated_at": "2026-05-30 21:48:57",
-    "jiuyan_concept": "",
-    "jiuyan_category": ""
+    "updated_at": "2026-08-08 00:00:00",
+    "jiuyan_category1": "军工",
+    "jiuyan_concept1": "火箭军"
   },
   "600185": {
     "business_summary": "主营商务服务业",
@@ -37265,9 +37289,9 @@
     "primary_source": "legacy",
     "sector": "专用设备制造业",
     "sector_type": "legacy",
-    "updated_at": "2026-05-30 21:48:57",
-    "jiuyan_concept": "",
-    "jiuyan_category": ""
+    "updated_at": "2026-08-08 00:00:00",
+    "jiuyan_category1": "军工",
+    "jiuyan_concept1": "陆军"
   },
   "600263": {
     "business_summary": "主营其他",
@@ -37353,9 +37377,9 @@
     "primary_source": "legacy",
     "sector": "软件和信息技术服务业",
     "sector_type": "legacy",
-    "updated_at": "2026-05-30 21:48:57",
-    "jiuyan_concept": "",
-    "jiuyan_category": ""
+    "updated_at": "2026-08-08 00:00:00",
+    "jiuyan_category1": "军工",
+    "jiuyan_concept1": "分支系统"
   },
   "600272": {
     "business_summary": "主营批发业",
@@ -37781,9 +37805,9 @@
     "primary_source": "legacy",
     "sector": "铁路、船舶、航空航天和其他运输设备制造业",
     "sector_type": "legacy",
-    "updated_at": "2026-05-30 21:48:57",
-    "jiuyan_concept": "",
-    "jiuyan_category": ""
+    "updated_at": "2026-08-08 00:00:00",
+    "jiuyan_category1": "军工",
+    "jiuyan_concept1": "导弹|空军"
   },
   "600317": {
     "business_summary": "主营其他",
@@ -38033,9 +38057,11 @@
     "primary_source": "legacy",
     "sector": "通用设备制造业",
     "sector_type": "legacy",
-    "updated_at": "2026-06-17 12:42:30",
-    "jiuyan_concept": "国家队-航天科技|火箭-发动机",
-    "jiuyan_category": "商业航天"
+    "updated_at": "2026-08-08 00:00:00",
+    "jiuyan_category1": "商业航天",
+    "jiuyan_concept1": "国家队-航天科技|火箭-发动机",
+    "jiuyan_category2": "军工",
+    "jiuyan_concept2": "国家队-航天科技|火箭-发动机|火箭军"
   },
   "600345": {
     "business_summary": "智能化应用产品和解决方案、公安、应急及城运行业通信与指挥领域的自主产品的销售、系统集成和运营服务。",
@@ -38231,11 +38257,11 @@
     "primary_source": "legacy",
     "sector": "计算机、通信和其他电子设备制造业",
     "sector_type": "legacy",
-    "updated_at": "2026-05-30 21:48:57",
-    "jiuyan_concept": "",
-    "jiuyan_category": "",
+    "updated_at": "2026-08-08 00:00:00",
     "jiuyan_category1": "可控核聚变",
-    "jiuyan_concept1": "超导磁体-低温超导材料|超导磁体-超导磁体系统|偏滤器-偏滤器部件|加热系统-中性束注入|PF导管-PF导管系统|可控核聚变创新联合体成员"
+    "jiuyan_concept1": "超导磁体-低温超导材料|超导磁体-超导磁体系统|偏滤器-偏滤器部件|加热系统-中性束注入|PF导管-PF导管系统|可控核聚变创新联合体成员",
+    "jiuyan_category2": "军工",
+    "jiuyan_concept2": "分支系统"
   },
   "600366": {
     "business_summary": "主营非金属矿物制品业",
@@ -38305,9 +38331,9 @@
     "primary_source": "legacy",
     "sector": "铁路、船舶、航空航天和其他运输设备制造业",
     "sector_type": "legacy",
-    "updated_at": "2026-05-30 21:48:57",
-    "jiuyan_concept": "",
-    "jiuyan_category": ""
+    "updated_at": "2026-08-08 00:00:00",
+    "jiuyan_category1": "军工",
+    "jiuyan_concept1": "空军"
   },
   "600373": {
     "business_summary": "主营新闻和出版业",
@@ -38497,9 +38523,9 @@
     "primary_source": "legacy",
     "sector": "国产航母/航空发动机",
     "sector_type": "legacy",
-    "updated_at": "2026-05-30 21:48:57",
-    "jiuyan_concept": "",
-    "jiuyan_category": ""
+    "updated_at": "2026-08-08 00:00:00",
+    "jiuyan_category1": "军工",
+    "jiuyan_concept1": "空军"
   },
   "600392": {
     "business_summary": "稀土矿采选、冶炼分离、金属加工、稀土废料回收以及锆钛矿选矿业务。",
@@ -38571,9 +38597,9 @@
     "primary_source": "fallback",
     "sector": "其他",
     "sector_type": "fallback",
-    "updated_at": "2026-05-30 21:48:57",
-    "jiuyan_concept": "",
-    "jiuyan_category": ""
+    "updated_at": "2026-08-08 00:00:00",
+    "jiuyan_category1": "军工",
+    "jiuyan_concept1": "军工材料"
   },
   "600400": {
     "business_summary": "主营纺织服装、服饰业",
@@ -38699,9 +38725,9 @@
     "primary_source": "legacy",
     "sector": "电机Ⅱ/无人驾驶/高铁/军工",
     "sector_type": "legacy",
-    "updated_at": "2026-05-30 21:48:57",
-    "jiuyan_concept": "",
-    "jiuyan_category": ""
+    "updated_at": "2026-08-08 00:00:00",
+    "jiuyan_category1": "军工",
+    "jiuyan_concept1": "海军"
   },
   "600418": {
     "business_summary": "主营汽车制造业",
@@ -38831,9 +38857,9 @@
     "primary_source": "legacy",
     "sector": "计算机、通信和其他电子设备制造业",
     "sector_type": "legacy",
-    "updated_at": "2026-05-30 21:48:57",
-    "jiuyan_concept": "",
-    "jiuyan_category": ""
+    "updated_at": "2026-08-08 00:00:00",
+    "jiuyan_category1": "军工",
+    "jiuyan_concept1": "军贸|空军"
   },
   "600436": {
     "business_summary": "主营医药制造业",
@@ -38953,9 +38979,11 @@
     "primary_source": "fallback",
     "sector": "其他",
     "sector_type": "fallback",
-    "updated_at": "2026-05-30 21:48:57",
-    "jiuyan_concept": "spacex-潜在供应商-关键材料",
-    "jiuyan_category": "商业航天"
+    "updated_at": "2026-08-08 00:00:00",
+    "jiuyan_category1": "商业航天",
+    "jiuyan_concept1": "spacex-潜在供应商-关键材料",
+    "jiuyan_category2": "军工",
+    "jiuyan_concept2": "spacex-潜在供应商-关键材料|军工材料|导弹"
   },
   "600458": {
     "business_summary": "轨道交通、工业与工程、风力发电、汽车、高性能高分子材料等产业领域系列产品的研制、生产与销售。",
@@ -39177,9 +39205,9 @@
     "primary_source": "legacy",
     "sector": "其他电源设备Ⅱ/中船系/国产航母/数据中心",
     "sector_type": "legacy",
-    "updated_at": "2026-05-30 21:48:57",
-    "jiuyan_concept": "",
-    "jiuyan_category": ""
+    "updated_at": "2026-08-08 00:00:00",
+    "jiuyan_category1": "军工",
+    "jiuyan_concept1": "海军"
   },
   "600483": {
     "business_summary": "电力、热力生产和销售。",
@@ -39349,9 +39377,11 @@
     "primary_source": "legacy",
     "sector": "专用设备制造业",
     "sector_type": "legacy",
-    "updated_at": "2026-06-17 12:42:30",
-    "jiuyan_concept": "国家队-航天科工|火箭-燃料加注",
-    "jiuyan_category": "商业航天"
+    "updated_at": "2026-08-08 00:00:00",
+    "jiuyan_category1": "商业航天",
+    "jiuyan_concept1": "国家队-航天科工|火箭-燃料加注",
+    "jiuyan_category2": "军工",
+    "jiuyan_concept2": "国家队-航天科工|导弹|火箭-燃料加注"
   },
   "600502": {
     "business_summary": "主营土木工程建筑业",
@@ -39963,9 +39993,9 @@
     "primary_source": "legacy",
     "sector": "计算机、通信和其他电子设备制造业",
     "sector_type": "legacy",
-    "updated_at": "2026-05-30 21:48:57",
-    "jiuyan_concept": "",
-    "jiuyan_category": ""
+    "updated_at": "2026-08-08 00:00:00",
+    "jiuyan_category1": "军工",
+    "jiuyan_concept1": "火箭军|雷达"
   },
   "600563": {
     "business_summary": "薄膜电容器的研发、生产和销售。",
@@ -40245,9 +40275,9 @@
     "primary_source": "legacy",
     "sector": "军工电子Ⅱ/电力物联网/智能电网/太赫兹",
     "sector_type": "legacy",
-    "updated_at": "2026-05-30 21:48:57",
-    "jiuyan_concept": "",
-    "jiuyan_category": ""
+    "updated_at": "2026-08-08 00:00:00",
+    "jiuyan_category1": "军工",
+    "jiuyan_concept1": "陆军"
   },
   "600592": {
     "business_summary": "关节轴承、圆锥滚子轴承、齿轮/变速箱研发、生产与销售及部分生产性贸易。",
@@ -41233,9 +41263,9 @@
     "primary_source": "legacy",
     "sector": "中船系/国产航母",
     "sector_type": "legacy",
-    "updated_at": "2026-05-30 21:48:57",
-    "jiuyan_concept": "",
-    "jiuyan_category": ""
+    "updated_at": "2026-08-08 00:00:00",
+    "jiuyan_category1": "军工",
+    "jiuyan_concept1": "海军"
   },
   "600686": {
     "business_summary": "主营汽车制造业",
@@ -42021,9 +42051,9 @@
     "primary_source": "legacy",
     "sector": "铁路、船舶、航空航天和其他运输设备制造业",
     "sector_type": "legacy",
-    "updated_at": "2026-05-30 21:48:57",
-    "jiuyan_concept": "",
-    "jiuyan_category": ""
+    "updated_at": "2026-08-08 00:00:00",
+    "jiuyan_category1": "军工",
+    "jiuyan_concept1": "空军"
   },
   "600761": {
     "business_summary": "主营通用设备制造业",
@@ -42057,9 +42087,9 @@
     "primary_source": "legacy",
     "sector": "计算机、通信和其他电子设备制造业",
     "sector_type": "legacy",
-    "updated_at": "2026-05-30 21:48:57",
-    "jiuyan_concept": "",
-    "jiuyan_category": ""
+    "updated_at": "2026-08-08 00:00:00",
+    "jiuyan_category1": "军工",
+    "jiuyan_concept1": "基础配套产品|海军"
   },
   "600765": {
     "business_summary": "主营铁路、船舶、航空航天和其他运输设备制造业",
@@ -42069,9 +42099,9 @@
     "primary_source": "legacy",
     "sector": "铁路、船舶、航空航天和其他运输设备制造业",
     "sector_type": "legacy",
-    "updated_at": "2026-05-30 21:48:57",
-    "jiuyan_concept": "",
-    "jiuyan_category": ""
+    "updated_at": "2026-08-08 00:00:00",
+    "jiuyan_category1": "军工",
+    "jiuyan_concept1": "空军"
   },
   "600766": {
     "business_summary": "主营其他",
@@ -43117,9 +43147,9 @@
     "primary_source": "fallback",
     "sector": "其他",
     "sector_type": "fallback",
-    "updated_at": "2026-05-30 21:48:57",
-    "jiuyan_concept": "",
-    "jiuyan_category": ""
+    "updated_at": "2026-08-08 00:00:00",
+    "jiuyan_category1": "军工",
+    "jiuyan_concept1": "军工材料"
   },
   "600863": {
     "business_summary": "火力发电、供热为主，兼顾部分风力发电及煤炭业务。",
@@ -43467,9 +43497,9 @@
     "primary_source": "legacy",
     "sector": "铁路、船舶、航空航天和其他运输设备制造业",
     "sector_type": "legacy",
-    "updated_at": "2026-05-30 21:48:57",
-    "jiuyan_concept": "",
-    "jiuyan_category": ""
+    "updated_at": "2026-08-08 00:00:00",
+    "jiuyan_category1": "军工",
+    "jiuyan_concept1": "空军"
   },
   "600894": {
     "business_summary": "研发、设计、生产、安装、维修及保养电梯、自动扶梯、自动人行道等设备，设计和生产电梯电气零部件及相关电气产品、电梯导轨以及相关零配件，并提供物流配送等完整电梯产业链服务。",
@@ -43927,9 +43957,9 @@
     "primary_source": "legacy",
     "sector": "铁路、船舶、航空航天和其他运输设备制造业",
     "sector_type": "legacy",
-    "updated_at": "2026-05-30 21:48:57",
-    "jiuyan_concept": "",
-    "jiuyan_category": ""
+    "updated_at": "2026-08-08 00:00:00",
+    "jiuyan_category1": "军工",
+    "jiuyan_concept1": "陆军"
   },
   "600968": {
     "business_summary": "能源技术服务、低碳环保与数字化产业、能源物流服务产业。",
@@ -44171,9 +44201,9 @@
     "primary_source": "legacy",
     "sector": "计算机、通信和其他电子设备制造业",
     "sector_type": "legacy",
-    "updated_at": "2026-05-30 21:48:57",
-    "jiuyan_concept": "",
-    "jiuyan_category": ""
+    "updated_at": "2026-08-08 00:00:00",
+    "jiuyan_category1": "军工",
+    "jiuyan_concept1": "火箭军|雷达"
   },
   "600991": {
     "business_summary": "主营其他",
@@ -44195,9 +44225,9 @@
     "primary_source": "legacy",
     "sector": "金属制品业",
     "sector_type": "legacy",
-    "updated_at": "2026-05-30 21:48:57",
-    "jiuyan_concept": "",
-    "jiuyan_category": ""
+    "updated_at": "2026-08-08 00:00:00",
+    "jiuyan_category1": "军工",
+    "jiuyan_concept1": "军工材料"
   },
   "600993": {
     "business_summary": "主营医药制造业",
@@ -45869,9 +45899,9 @@
     "primary_source": "legacy",
     "sector": "金属制品业",
     "sector_type": "legacy",
-    "updated_at": "2026-05-30 21:48:57",
-    "jiuyan_concept": "",
-    "jiuyan_category": ""
+    "updated_at": "2026-08-08 00:00:00",
+    "jiuyan_category1": "军工",
+    "jiuyan_concept1": "陆军"
   },
   "601607": {
     "business_summary": "主营零售业",
@@ -46949,9 +46979,9 @@
     "primary_source": "fallback",
     "sector": "其他",
     "sector_type": "fallback",
-    "updated_at": "2026-05-30 21:48:57",
-    "jiuyan_concept": "",
-    "jiuyan_category": ""
+    "updated_at": "2026-08-08 00:00:00",
+    "jiuyan_category1": "军工",
+    "jiuyan_concept1": "海军"
   },
   "601990": {
     "business_summary": "主营资本市场服务",
@@ -52229,11 +52259,11 @@
     "primary_source": "legacy",
     "sector": "军工电子Ⅱ/超级电容/5G/商业航天",
     "sector_type": "legacy",
-    "updated_at": "2026-06-17 12:07:32",
-    "jiuyan_concept": "",
-    "jiuyan_category": "",
+    "updated_at": "2026-08-08 00:00:00",
     "jiuyan_category1": "PCB",
-    "jiuyan_concept1": "MLCC-AI领域"
+    "jiuyan_concept1": "MLCC-AI领域",
+    "jiuyan_category2": "军工",
+    "jiuyan_concept2": "AI领域MLCC|基础配套产品|导弹"
   },
   "603679": {
     "business_summary": "主营电气机械和器材制造业",
@@ -52535,9 +52565,9 @@
     "primary_source": "legacy",
     "sector": "计算机、通信和其他电子设备制造业",
     "sector_type": "legacy",
-    "updated_at": "2026-05-30 21:48:57",
-    "jiuyan_concept": "",
-    "jiuyan_category": ""
+    "updated_at": "2026-08-08 00:00:00",
+    "jiuyan_category1": "军工",
+    "jiuyan_concept1": "分支系统"
   },
   "603713": {
     "business_summary": "主营多式联运和运输代理业",
@@ -54695,9 +54725,11 @@
     "primary_source": "legacy",
     "sector": "航空装备Ⅱ/航空发动机/卫星导航/大飞机",
     "sector_type": "legacy",
-    "updated_at": "2026-06-17 12:42:30",
-    "jiuyan_concept": "spacex-潜在供应商-先进锻造|火箭-零部件",
-    "jiuyan_category": "商业航天"
+    "updated_at": "2026-08-08 00:00:00",
+    "jiuyan_category1": "商业航天",
+    "jiuyan_concept1": "spacex-潜在供应商-先进锻造|火箭-零部件",
+    "jiuyan_category2": "军工",
+    "jiuyan_concept2": "spacex-潜在供应商-先进锻造|火箭-零部件|空军"
   },
   "605128": {
     "business_summary": "业内领先的汽车零部件供应商，拥有较为完整的汽车座椅总成产品",
@@ -55605,9 +55637,9 @@
     "primary_source": "legacy",
     "sector": "军工电子Ⅱ/卫星导航/汽车芯片/商业航天",
     "sector_type": "legacy",
-    "updated_at": "2026-05-30 21:48:57",
-    "jiuyan_concept": "",
-    "jiuyan_category": ""
+    "updated_at": "2026-08-08 00:00:00",
+    "jiuyan_category1": "军工",
+    "jiuyan_concept1": "火箭军"
   },
   "688003": {
     "business_summary": "主营专用设备制造业",
@@ -55713,9 +55745,9 @@
     "primary_source": "legacy",
     "sector": "军工电子Ⅱ/军工信息化/军民融合/军工",
     "sector_type": "legacy",
-    "updated_at": "2026-05-30 21:48:57",
-    "jiuyan_concept": "",
-    "jiuyan_category": ""
+    "updated_at": "2026-08-08 00:00:00",
+    "jiuyan_category1": "军工",
+    "jiuyan_concept1": "火箭军"
   },
   "688012": {
     "business_summary": "主营半导体",
@@ -56265,9 +56297,9 @@
     "primary_source": "legacy",
     "sector": "铁路、船舶、航空航天和其他运输设备制造业",
     "sector_type": "legacy",
-    "updated_at": "2026-05-30 21:48:57",
-    "jiuyan_concept": "",
-    "jiuyan_category": ""
+    "updated_at": "2026-08-08 00:00:00",
+    "jiuyan_category1": "军工",
+    "jiuyan_concept1": "空军"
   },
   "688071": {
     "business_summary": "国内少数推出国际先进水平的汽车动力总成测试设备的自主创新企业",
@@ -56409,9 +56441,9 @@
     "primary_source": "legacy",
     "sector": "专用设备制造业",
     "sector_type": "legacy",
-    "updated_at": "2026-05-30 21:48:57",
-    "jiuyan_concept": "",
-    "jiuyan_category": ""
+    "updated_at": "2026-08-08 00:00:00",
+    "jiuyan_category1": "军工",
+    "jiuyan_concept1": "军用机器人"
   },
   "688085": {
     "business_summary": "主营专用设备制造业",
@@ -56849,11 +56881,11 @@
     "primary_source": "legacy",
     "sector": "航空装备Ⅱ/航空发动机/商业航天/大飞机",
     "sector_type": "legacy",
-    "updated_at": "2026-05-30 21:48:57",
-    "jiuyan_concept": "",
-    "jiuyan_category": "",
+    "updated_at": "2026-08-08 00:00:00",
     "jiuyan_category1": "可控核聚变",
-    "jiuyan_concept1": "超导磁体-低温超导材料|超导磁体-高温超导材料|可控核聚变创新联合体成员"
+    "jiuyan_concept1": "超导磁体-低温超导材料|超导磁体-高温超导材料|可控核聚变创新联合体成员",
+    "jiuyan_category2": "军工",
+    "jiuyan_concept2": "军工材料"
   },
   "688123": {
     "business_summary": "高性能、高品质集成电路产品的研发设计和销售，并提供应用解决方案和技术支持服务。",
@@ -58077,9 +58109,11 @@
     "primary_source": "legacy",
     "sector": "铁路、船舶、航空航天和其他运输设备制造业",
     "sector_type": "legacy",
-    "updated_at": "2026-06-17 12:09:37",
-    "jiuyan_concept": "燃气轮机",
-    "jiuyan_category": "电力"
+    "updated_at": "2026-08-08 00:00:00",
+    "jiuyan_category1": "电力",
+    "jiuyan_concept1": "燃气轮机",
+    "jiuyan_category2": "军工",
+    "jiuyan_concept2": "燃气轮机|空军"
   },
   "688244": {
     "business_summary": "主营软件和信息技术服务业",
@@ -58457,9 +58491,9 @@
     "primary_source": "fallback",
     "sector": "其他",
     "sector_type": "fallback",
-    "updated_at": "2026-05-30 21:48:57",
-    "jiuyan_concept": "",
-    "jiuyan_category": ""
+    "updated_at": "2026-08-08 00:00:00",
+    "jiuyan_category1": "军工",
+    "jiuyan_concept1": "军工材料"
   },
   "688282": {
     "business_summary": "主营计算机、通信和其他电子设备制造业",
@@ -58521,9 +58555,9 @@
     "primary_source": "legacy",
     "sector": "铁路、船舶、航空航天和其他运输设备制造业",
     "sector_type": "legacy",
-    "updated_at": "2026-05-30 21:48:57",
-    "jiuyan_concept": "",
-    "jiuyan_category": ""
+    "updated_at": "2026-08-08 00:00:00",
+    "jiuyan_category1": "军工",
+    "jiuyan_concept1": "空军"
   },
   "688288": {
     "business_summary": "主营计算机、通信和其他电子设备制造业",
@@ -58629,9 +58663,9 @@
     "primary_source": "legacy",
     "sector": "航空装备Ⅱ/军民融合/军工/央企国企改革",
     "sector_type": "legacy",
-    "updated_at": "2026-05-30 21:48:57",
-    "jiuyan_concept": "",
-    "jiuyan_category": ""
+    "updated_at": "2026-08-08 00:00:00",
+    "jiuyan_category1": "军工",
+    "jiuyan_concept1": "空军"
   },
   "688298": {
     "business_summary": "主营医药制造业",
@@ -59565,9 +59599,11 @@
     "primary_source": "legacy",
     "sector": "半导体/存储芯片/MCU芯片/汽车芯片",
     "sector_type": "legacy",
-    "updated_at": "2026-06-24 11:21:37",
-    "jiuyan_concept": "存储芯片-NANDFLASH",
-    "jiuyan_category": "半导体"
+    "updated_at": "2026-08-08 00:00:00",
+    "jiuyan_category1": "半导体",
+    "jiuyan_concept1": "存储芯片-NANDFLASH",
+    "jiuyan_category2": "军工",
+    "jiuyan_concept2": "分支系统|存储芯片-NANDFLASH"
   },
   "688386": {
     "business_summary": "主营橡胶和塑料制品业",
@@ -60723,9 +60759,9 @@
     "primary_source": "legacy",
     "sector": "计算机、通信和其他电子设备制造业",
     "sector_type": "legacy",
-    "updated_at": "2026-05-30 21:48:57",
-    "jiuyan_concept": "",
-    "jiuyan_category": ""
+    "updated_at": "2026-08-08 00:00:00",
+    "jiuyan_category1": "军工",
+    "jiuyan_concept1": "军贸"
   },
   "688553": {
     "business_summary": "主营医药制造业",
@@ -60891,9 +60927,11 @@
     "primary_source": "legacy",
     "sector": "软件和信息技术服务业",
     "sector_type": "legacy",
-    "updated_at": "2026-06-17 12:42:30",
-    "jiuyan_concept": "卫星-测控系统",
-    "jiuyan_category": "商业航天"
+    "updated_at": "2026-08-08 00:00:00",
+    "jiuyan_category1": "商业航天",
+    "jiuyan_concept1": "卫星-测控系统",
+    "jiuyan_category2": "军工",
+    "jiuyan_concept2": "军工AI|卫星-测控系统"
   },
   "688569": {
     "business_summary": "主营铁路、船舶、航空航天和其他运输设备制造业",
@@ -63005,10 +63043,12 @@
   },
   "688066": {
     "name": "航天宏图",
-    "jiuyan_concept": "卫星-有效载荷-遥感|卫星-运营",
-    "updated_at": "2026-06-17 12:44:07",
+    "updated_at": "2026-08-08 00:00:00",
     "added_at": "2026-06-17 12:44:07",
-    "jiuyan_category": "商业航天"
+    "jiuyan_category1": "商业航天",
+    "jiuyan_concept1": "卫星-有效载荷-遥感|卫星-运营",
+    "jiuyan_category2": "军工",
+    "jiuyan_concept2": "军工AI|卫星-有效载荷-遥感|卫星-运营"
   },
   "920169": {
     "name": "七丰精工",
@@ -63095,15 +63135,17 @@
   },
   "688270": {
     "name": "臻镭科技",
-    "jiuyan_concept": "卫星-有效载荷-射频",
-    "jiuyan_category": "商业航天",
     "business_summary": "",
     "concept_boards": [],
     "industry_boards": [],
     "primary_source": "jiuyan",
     "sector": "",
     "sector_type": "jiuyan",
-    "updated_at": ""
+    "updated_at": "2026-08-08 00:00:00",
+    "jiuyan_category1": "商业航天",
+    "jiuyan_concept1": "卫星-有效载荷-射频",
+    "jiuyan_category2": "军工",
+    "jiuyan_concept2": "卫星-有效载荷-射频|雷达"
   },
   "300123": {
     "name": "亚光科技",

@@ -64,6 +64,31 @@ if str(HUNTER_DIR) not in sys.path:
     sys.path.insert(0, str(HUNTER_DIR))
 
 
+def _jiuyan_concepts(info):
+    """合并股票记录的所有韭研概念（编号字段 jiuyan_concept1..9 + 旧普通字段）。
+    返回用 | 连接的去重字符串；无概念返回空串。"""
+    if not isinstance(info, dict):
+        return ""
+    parts = []
+    for i in range(1, 10):
+        v = info.get(f"jiuyan_concept{i}")
+        if v and str(v).strip():
+            parts.append(str(v).strip())
+    if not parts:
+        v = info.get("jiuyan_concept")
+        if v and str(v).strip():
+            parts.append(str(v).strip())
+    seen = set()
+    out = []
+    for p in parts:
+        for c in p.split("|"):
+            c = c.strip()
+            if c and c not in seen:
+                seen.add(c)
+                out.append(c)
+    return "|".join(out)
+
+
 def _clean(obj):
     """递归清洗为 JSON 可序列化类型：nan/inf -> None，numpy 标量 -> 原生。"""
     if isinstance(obj, float):
@@ -862,42 +887,67 @@ class Api:
 
     # ---------- 个股技术分析弹窗 ----------
     def load_stock_chart(self, code):
-        """拉 400 根日线 → 7 条 MA + MACD/RSI/BOLL → resample 周/月 → 支撑压力。"""
+        """日线(本地缓存秒回/网络兜底) → 7 条 MA + MACD/RSI/BOLL → resample 周/月 → 支撑压力。
+        内存缓存：同一股票当日结果复用，避免重复拉取与重算。"""
         out = {"code": code, "name": code, "available": False, "error": ""}
-        import os as _os, urllib.request as _ur
-        for _k in ["http_proxy", "https_proxy", "HTTP_PROXY", "HTTPS_PROXY",
-                   "ALL_PROXY", "all_proxy"]:
-            _os.environ.pop(_k, None)
-        _os.environ["NO_PROXY"] = "*"
+        if not hasattr(self, "_stock_chart_cache"):
+            self._stock_chart_cache = {}
+        cache_key = f"{datetime.now().strftime('%Y-%m-%d')}_{code}"
+        if cache_key in self._stock_chart_cache:
+            return self._stock_chart_cache[cache_key]
 
-        symbol = ("sh" + code if code[0] in "56" else "sz" + code)
+        # 优先本地日线缓存（当日秒回，无网络）；fetch_daily_kline 自带网络兜底+写缓存
+        rows = []
         try:
-            url = f"https://ifzq.gtimg.cn/appstock/app/fqkline/get?param={symbol},day,,,400,qfq"
-            req = _ur.Request(url, headers={"User-Agent": "Mozilla/5.0",
-                                            "Referer": "https://finance.qq.com/"})
-            raw = _ur.urlopen(req, timeout=10).read().decode("utf-8", errors="ignore")
-            data = json.loads(raw)
-        except Exception as e:
-            out["error"] = f"拉取日线失败: {e}"
-            return out
-
-        try:
-            stock_data = data.get("data", {}).get(symbol)
-            kline = stock_data.get("day") or stock_data.get("qfqday") or []
+            from position_builder import fetch_daily_kline
+            _df = fetch_daily_kline(code)
+            if not _df.empty:
+                for _r in _df.itertuples(index=False):
+                    rows.append({"date": str(_r.date), "open": float(_r.open),
+                                 "close": float(_r.close), "high": float(_r.high),
+                                 "low": float(_r.low), "volume": float(_r.volume)})
+        except Exception:
             rows = []
-            for item in kline:
-                if isinstance(item, list) and len(item) >= 6:
-                    rows.append({
-                        "date": item[0], "open": float(item[1]), "close": float(item[2]),
-                        "high": float(item[3]), "low": float(item[4]), "volume": float(item[5]),
-                    })
-            if not rows:
-                out["error"] = "无日线数据"
+
+        # 本地缓存不可用 → 走网络拉 400 根
+        if not rows:
+            import os as _os, urllib.request as _ur
+            for _k in ["http_proxy", "https_proxy", "HTTP_PROXY", "HTTPS_PROXY",
+                       "ALL_PROXY", "all_proxy"]:
+                _os.environ.pop(_k, None)
+            _os.environ["NO_PROXY"] = "*"
+
+            symbol = ("sh" + code if code[0] in "56" else "sz" + code)
+            try:
+                url = f"https://ifzq.gtimg.cn/appstock/app/fqkline/get?param={symbol},day,,,400,qfq"
+                req = _ur.Request(url, headers={"User-Agent": "Mozilla/5.0",
+                                                "Referer": "https://finance.qq.com/"})
+                raw = _ur.urlopen(req, timeout=10).read().decode("utf-8", errors="ignore")
+                data = json.loads(raw)
+                stock_data = data.get("data", {}).get(symbol)
+                kline = stock_data.get("day") or stock_data.get("qfqday") or []
+                for item in kline:
+                    if isinstance(item, list) and len(item) >= 6:
+                        rows.append({
+                            "date": item[0], "open": float(item[1]), "close": float(item[2]),
+                            "high": float(item[3]), "low": float(item[4]), "volume": float(item[5]),
+                        })
+                out["name"] = stock_data.get("qt", {}).get(symbol, [None, code])[1] or code
+            except Exception as e:
+                out["error"] = f"拉取日线失败: {e}"
                 return out
-            out["name"] = stock_data.get("qt", {}).get(symbol, [None, code])[1] or code
-        except Exception as e:
-            out["error"] = f"解析日线失败: {e}"
+
+        if not rows:
+            out["error"] = "无日线数据"
             return out
+        if out["name"] == code:
+            try:
+                jy = _load_json(BASE / "watchlist_jiuyan.json", {})
+                nm = (jy.get(code, {}) or {}).get("name", "") if isinstance(jy.get(code), dict) else ""
+                if nm:
+                    out["name"] = nm
+            except Exception:
+                pass
 
         try:
             import pandas as pd
@@ -970,7 +1020,9 @@ class Api:
             out["error"] = f"计算失败: {e}"
             return out
 
-        return _clean(out)
+        result = _clean(out)
+        self._stock_chart_cache[cache_key] = result
+        return result
 
     def _detect_boxes(self, daily):
         """检测箱体：全历史滑窗 → 置信分排序，现价箱体/刚突破优先。
@@ -990,17 +1042,30 @@ class Api:
         last_date = dates[-1]
 
         WIN = 30
+        # 向量化滑窗：分位数/斜率/触及全窗口一次算完（与逐窗循环结果一致，快 ~15x）
+        from numpy.lib.stride_tricks import sliding_window_view
+        wh = sliding_window_view(highs, WIN)
+        wl = sliding_window_view(lows, WIN)
+        wc = sliding_window_view(closes, WIN)
+        ups = np.percentile(wh, 88, axis=1)
+        dns = np.percentile(wl, 12, axis=1)
+        _xc = np.arange(WIN) - (WIN - 1) / 2.0
+        _denom = float(np.sum(_xc * _xc))
+        _slopes = (wc @ _xc) / _denom
+        _means = wc.mean(axis=1)
+        _rel_slopes = np.abs(_slopes) / np.where(_means == 0, 1e-9, _means)
+        _up_touches = np.sum(wh >= (ups * 0.992)[:, None], axis=1)
+        _dn_touches = np.sum(wl <= (dns * 1.008)[:, None], axis=1)
+        _widths = (ups - dns) / np.where(_means == 0, 1e-9, _means) * 100
         # 滑窗收集候选箱体（用区间位置唯一标识，避免重复）
         boxes = {}
         for start in range(0, n - WIN + 1, 3):
-            seg = closes[start:start + WIN]
-            slope = np.polyfit(np.arange(WIN), seg, 1)[0]
-            rel_slope = abs(slope) / (seg.mean() or 1e-9)
-            up = float(np.percentile(highs[start:start + WIN], 88))
-            dn = float(np.percentile(lows[start:start + WIN], 12))
-            up_touch = int(np.sum(highs[start:start + WIN] >= up * 0.992))
-            dn_touch = int(np.sum(lows[start:start + WIN] <= dn * 1.008))
-            width_pct = (up - dn) / (seg.mean() or 1e-9) * 100
+            up = float(ups[start])
+            dn = float(dns[start])
+            rel_slope = float(_rel_slopes[start])
+            up_touch = int(_up_touches[start])
+            dn_touch = int(_dn_touches[start])
+            width_pct = float(_widths[start])
             # 候选：横盘(斜率<0.5%/天) + 宽度3-22% + 双边触及≥2
             if rel_slope < 0.005 and 3.0 <= width_pct <= 22.0 and up_touch >= 2 and dn_touch >= 2:
                 key = (round(up, 3), round(dn, 3))
@@ -1578,7 +1643,7 @@ class Api:
         box_pos = None
         if cur_box and cur_box["high"] > cur_box["low"]:
             box_pos = round((cur - cur_box["low"]) / (cur_box["high"] - cur_box["low"]), 2)
-        return {"trend": trend, "box_pos": box_pos, "tags": tags[:6]}
+        return {"trend": trend, "box_pos": box_pos, "price": round(cur, 3), "tags": tags[:6]}
 
     def load_stock_tags_batch(self, codes):
         """批量拉技术标签（并发，ThreadPoolExecutor）。返回 {code: {trend, box_pos, tags}}。"""
@@ -1594,6 +1659,129 @@ class Api:
                 except Exception:
                     result[code] = {"trend": "flat", "tags": []}
         return _clean({"tags": result})
+
+    # ---------- 突破箱体股票聚合 ----------
+    def _breakout_pool_codes(self):
+        jy = _load_json(BASE / "watchlist_jiuyan.json", {})
+        return [c for c, i in jy.items()
+                if isinstance(i, dict) and c.isdigit()
+                and _jiuyan_concepts(i).strip()]
+
+    def _breakout_disk_path(self, today):
+        return BASE / "t_io" / "cache" / f"breakout_{today}.json"
+
+    def _scan_breakout(self, codes, state):
+        """分批算技术标签筛"向上突破"。state 非空时更新进度（done/total/found/stocks）。"""
+        jy = _load_json(BASE / "watchlist_jiuyan.json", {})
+        breakouts = []
+        for i in range(0, len(codes), 80):
+            batch = codes[i:i + 80]
+            r = self.load_stock_tags_batch(batch)
+            for code, info in (r.get("tags", {}) or {}).items():
+                if not info:
+                    continue
+                tags = info.get("tags", []) or []
+                if any(t.get("label") == "向上突破" for t in tags):
+                    nm = jy.get(code, {}).get("name", code) if isinstance(jy.get(code), dict) else code
+                    breakouts.append({
+                        "code": code, "name": nm,
+                        "price": info.get("price"),
+                        "trend": info.get("trend"),
+                        "tags": tags,
+                    })
+            if state is not None:
+                state["done"] = min(i + 80, len(codes))
+                state["found"] = len(breakouts)
+                state["stocks"] = list(breakouts)
+        breakouts.sort(key=lambda x: 0 if x["trend"] == "up" else 1)
+        return breakouts
+
+    def load_breakout_stocks(self):
+        """同步全量扫描突破箱体（前端走后端后台线程时用 start_breakout_scan）。
+        结果缓存到内存+磁盘（当日），避免重复扫描。"""
+        today = datetime.now().strftime("%Y-%m-%d")
+        cache_key = "breakout_" + today
+        if not hasattr(self, "_breakout_cache"):
+            self._breakout_cache = {}
+        if cache_key in self._breakout_cache:
+            return self._breakout_cache[cache_key]
+        disk_fp = self._breakout_disk_path(today)
+        if disk_fp.exists():
+            disk = _load_json(disk_fp, None)
+            if disk and isinstance(disk, dict) and "stocks" in disk:
+                self._breakout_cache[cache_key] = disk
+                return disk
+
+        codes = self._breakout_pool_codes()
+        if not codes:
+            return {"stocks": [], "count": 0}
+        breakouts = self._scan_breakout(codes, None)
+        result = _clean({"stocks": breakouts, "count": len(breakouts)})
+        self._breakout_cache[cache_key] = result
+        try:
+            disk_fp.write_text(json.dumps(result, ensure_ascii=False), encoding="utf-8")
+        except Exception:
+            pass
+        return result
+
+    def start_breakout_scan(self):
+        """启动后台突破扫描（幂等：内存/磁盘缓存命中→立即 done；扫描中→返回当前进度）。
+        返回 {status: idle|running|done|error, total, done, found, stocks, error?}。"""
+        today = datetime.now().strftime("%Y-%m-%d")
+        cache_key = "breakout_" + today
+        if not hasattr(self, "_breakout_cache"):
+            self._breakout_cache = {}
+        if cache_key in self._breakout_cache:
+            r = self._breakout_cache[cache_key]
+            return {"status": "done", "total": 0, "done": 0,
+                    "found": r.get("count", 0), "stocks": r.get("stocks", [])}
+        disk_fp = self._breakout_disk_path(today)
+        if disk_fp.exists():
+            disk = _load_json(disk_fp, None)
+            if disk and isinstance(disk, dict) and "stocks" in disk:
+                self._breakout_cache[cache_key] = disk
+                return {"status": "done", "total": 0, "done": 0,
+                        "found": disk.get("count", 0), "stocks": disk.get("stocks", [])}
+
+        cur = getattr(self, "_breakout_scan", None)
+        if cur and cur.get("status") == "running":
+            return cur
+
+        codes = self._breakout_pool_codes()
+        if not codes:
+            return {"status": "done", "total": 0, "done": 0, "found": 0, "stocks": []}
+        import threading
+        state = {"status": "running", "total": len(codes), "done": 0, "found": 0, "stocks": []}
+        self._breakout_scan = state
+
+        def run():
+            try:
+                breakouts = self._scan_breakout(codes, state)
+                result = _clean({"stocks": breakouts, "count": len(breakouts)})
+                self._breakout_cache[cache_key] = result
+                try:
+                    disk_fp.write_text(json.dumps(result, ensure_ascii=False), encoding="utf-8")
+                except Exception:
+                    pass
+                state.update({"status": "done", "done": len(codes), "found": len(breakouts), "stocks": breakouts})
+            except Exception as e:
+                state.update({"status": "error", "error": str(e)})
+
+        threading.Thread(target=run, daemon=True).start()
+        return state
+
+    def get_breakout_scan(self):
+        """轮询后台突破扫描进度。done 后返回完整结果（含磁盘/内存缓存命中）。"""
+        today = datetime.now().strftime("%Y-%m-%d")
+        cache_key = "breakout_" + today
+        if hasattr(self, "_breakout_cache") and cache_key in self._breakout_cache:
+            r = self._breakout_cache[cache_key]
+            return {"status": "done", "total": 0, "done": 0,
+                    "found": r.get("count", 0), "stocks": r.get("stocks", [])}
+        cur = getattr(self, "_breakout_scan", None)
+        if cur:
+            return cur
+        return {"status": "idle", "total": 0, "done": 0, "found": 0, "stocks": []}
 
     # ---------- 选股猎手历史 ----------
     def available_hunter_dates(self):
@@ -1636,8 +1824,8 @@ class Api:
                 for code, info in jy.items():
                     if not isinstance(info, dict):
                         continue
-                    # sector 字段 + jiuyan_concept 字段双源匹配（覆盖更全）
-                    concepts = str(info.get("jiuyan_concept", "") or info.get("概念", ""))
+                    # sector 字段 + 韭研概念（含编号字段）双源匹配（覆盖更全）
+                    concepts = _jiuyan_concepts(info) or str(info.get("概念", ""))
                     sector_field = str(info.get("sector", ""))
                     nm = info.get("name", info.get("名称", code))
                     all_text = (sector_field + "_" + concepts).replace("|", "_").replace("/", "_")
