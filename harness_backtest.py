@@ -456,6 +456,9 @@ def run_backtest(codes: list, date_range: list, holdings_map: dict,
     # W32 C1-final: 接回解耦注入(验证用途, 默认关=生产行为不变) — 引擎软消费 PARAMS["buyback_bypass_gates"]
     if os.environ.get("T_BUYBACK_BYPASS_GATES") == "1":
         PARAMS["buyback_bypass_gates"] = True
+    # W33 C1' 口径B: 全部买信号单股日限注入(验证用途, 默认关=生产行为不变) — 引擎软消费 PARAMS["buy_daily_cap"]
+    if os.environ.get("T_BUY_DAILY_CAP"):
+        PARAMS["buy_daily_cap"] = int(os.environ["T_BUY_DAILY_CAP"])
 
     if override_params:
         if "PARAMS" in override_params:
@@ -477,6 +480,7 @@ def run_backtest(codes: list, date_range: list, holdings_map: dict,
         engine.factor_weights = dict(shared.get('FACTOR_WEIGHTS', {}))
 
     all_signals = []
+    all_capped = []   # W33 C1': 被 cap 拦截的买信号（审计专用，不入 all_signals/daily_stats；cap 关时恒空）
     daily_stats = {}
     # P1: per-day trend timelines
     trend_timelines = {}  # {f"{date_str}:{code}": [(time, state, conf), ...]}
@@ -484,6 +488,7 @@ def run_backtest(codes: list, date_range: list, holdings_map: dict,
 
     for date_str in date_range:
         day_signals = []
+        day_capped = []   # W33 C1': 当日被 cap 信号
         day_bars = {}
         for code in codes:
             df = load_snapshots(code, date_str)
@@ -582,6 +587,23 @@ def run_backtest(codes: list, date_range: list, holdings_map: dict,
                     engine._last_signal_seg = {}
                 engine._last_signal_seg[_seg_key] = bt
 
+                # W33 C1' 口径B: 全部买信号单股日限（信号产生层拦截，默认关=生产行为不变）
+                # 段去重已消费该信号段；cap 命中则不记录——无冷却/无簿记/无落盘，
+                # 状态机看到被 cap 后的世界（二阶效应真实）；命中落 day_capped 供审计
+                if sig.action in ("BUY_LOW", "ADD_POS") and engine.buy_daily_cap_reached(code):
+                    day_capped.append({
+                        "ts": bt.strftime("%Y-%m-%d %H:%M:%S"),
+                        "code": code, "name": holding.get("name", code),
+                        "action": sig.action, "price": price,
+                        "buy_score": round(float(buy_score), 1),
+                        "sell_score": round(float(sell_score), 1),
+                        "threshold": _nth,
+                        "cap": int(PARAMS.get("buy_daily_cap", 0)),
+                        "capped_rank": engine.buy_recorded_today.get(code, 0) + 1,
+                        "settle_result": None, "settle_time": None,
+                    })
+                    continue
+
                 # R2: 回测簿记对齐 — record_signal冷却 + record_trade_action闭环
                 try:
                     engine.record_signal(code, sig.action, price, float(sig.score))
@@ -632,8 +654,8 @@ def run_backtest(codes: list, date_range: list, holdings_map: dict,
 
                 day_signals.append(signal_rec)
 
-        # 盘后结算：用当日K线回填 settle_result
-        for sig_rec in day_signals:
+        # 盘后结算：用当日K线回填 settle_result（C1': 被 cap 信号同口径结算，仅审计用途）
+        for sig_rec in day_signals + day_capped:
             code = sig_rec["code"]
             sig_ts = pd.Timestamp(sig_rec["ts"])
             if code in day_bars:
@@ -647,6 +669,7 @@ def run_backtest(codes: list, date_range: list, holdings_map: dict,
                     sig_rec["settle_time"] = settle_ts
 
         all_signals.extend(day_signals)
+        all_capped.extend(day_capped)   # W33 C1': cap 审计清单（cap 关时恒空）
         daily_stats[date_str] = {"signals": len(day_signals),
                                  "wins": sum(1 for s in day_signals if s["settle_result"] == "WIN"),
                                  "fails": sum(1 for s in day_signals if s["settle_result"] == "FAIL"),
@@ -667,6 +690,7 @@ def run_backtest(codes: list, date_range: list, holdings_map: dict,
 
     return {
         "signals": all_signals,
+        "capped_buys": all_capped,   # W33 C1': 被 cap 买信号审计清单（cap 关时恒空）
         "trend_timelines": trend_timelines,
         "p1_metrics": p1_metrics,
         "closed_loop": closed_loop,
@@ -762,6 +786,14 @@ def main():
     with open(signals_path, 'w', encoding='utf-8') as f:
         for sig in result["signals"]:
             f.write(json.dumps(sig, ensure_ascii=False, default=str) + "\n")
+
+    # W33 C1': cap 命中审计清单（仅 cap 开启且有命中时写——ctl 输出目录保持逐字节不变）
+    if result.get("capped_buys"):
+        capped_path = out_dir / f"capped_buys_{args.ab}.jsonl"
+        with open(capped_path, 'w', encoding='utf-8') as f:
+            for sig in result["capped_buys"]:
+                f.write(json.dumps(sig, ensure_ascii=False, default=str) + "\n")
+        print(f"Capped buys (audit): {len(result['capped_buys'])}")
 
     # 写入趋势时间线
     tl_path = out_dir / f"trend_timeline_{args.ab}.jsonl"

@@ -98,6 +98,9 @@ class SignalEngine:
         self.sell_cooldown: Dict[str, datetime] = {}
         self.buy_count_per_stock: Dict[str, int] = {}
         self.sell_count_per_stock: Dict[str, int] = {}
+        # C1' 口径B（W33 验证开关软消费，默认关）：record_signal 层当日已记录买信号计数
+        # （仅 PARAMS["buy_daily_cap"] 开启时递增；计数口径与 signals.jsonl 逐条对应）
+        self.buy_recorded_today: Dict[str, int] = {}
         self.state_reset_date = get_today_str()
         self.t_cycle_start_time: Dict[str, datetime] = {}
         self.last_signal_state: Dict[str, Dict[str, Any]] = {}
@@ -169,6 +172,7 @@ class SignalEngine:
         if self.state_reset_date != today:
             self.buy_count_per_stock = {}
             self.sell_count_per_stock = {}
+            self.buy_recorded_today = {}   # C1' 口径B：日限计数随日界重置
             self.t_cycle_start_time = {}
             self.last_signal_state = {}
             self.last_trade_state = {}
@@ -264,7 +268,21 @@ class SignalEngine:
             self.sell_cooldown[code] = _engine_now()
         else:
             self.buy_cooldown[code] = _engine_now()
+            # C1' 口径B（W33 软消费，默认关=零行为变化）：仅 cap 开启时计数已记录买信号
+            if PARAMS.get("buy_daily_cap"):
+                self.buy_recorded_today[code] = self.buy_recorded_today.get(code, 0) + 1
         self._persist_intraday_state()  # V1.30
+
+    def buy_daily_cap_reached(self, code: str) -> bool:
+        """C1' 口径B（W33 验证开关软消费，默认关=生产行为不变）：全部买信号单股日限判定。
+        计数口径 = record_signal 层已记录买信号数（与 signals.jsonl 逐条对应；
+        不分 ctl 原有/接回/二阶增量；卖信号不受限）。第 cap+1 条起返回 True。
+        依据: t_io/validation/w32_c1p/C1P_PREREG.md（用户 2026-08-08 拍板口径 B）"""
+        cap = PARAMS.get("buy_daily_cap")
+        if not cap:
+            return False
+        self._reset_daily_state_if_needed()
+        return self.buy_recorded_today.get(code, 0) >= int(cap)
 
     def record_trade_action(self, code: str, action: str, qty: int = 0, price: float = 0.0):
         self._reset_daily_state_if_needed()
