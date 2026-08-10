@@ -682,6 +682,9 @@ class Api:
 
             daily_ctx = snap.get("daily_context", {}) if isinstance(snap, dict) else {}
             bars = snap.get("bars", []) if isinstance(snap, dict) else (snap if isinstance(snap, list) else [])
+            # 补算日线指标（旧快照缺 daily_macd_golden/trend 等字段时，用日线现算）
+            if daily_ctx.get("daily_macd_golden") is None or not daily_ctx.get("daily_trend_bg"):
+                self._ensure_daily_ctx_indicators(code, daily_ctx)
 
             # fix P0-3: 日低改用 bars 的真实 low 最小值（分钟收盘价会丢下影线）；
             # 15:00 前"收盘"实为盘中现价，打 is_intraday 标志，文案统一"现价(盘中暂定)"
@@ -784,19 +787,18 @@ class Api:
                 d3 = (f"{px_word}{day_close:.2f}>MA5 {ma5:.2f}{ma5_note}{sfx}" if above_ma5
                       else f"{px_word}{day_close:.2f}≤MA5 {ma5:.2f}{ma5_note}{sfx}")
             conditions.append({"name": "收盘>MA5", "met": bool(above_ma5), "detail": d3})
-            # 条件4: VWAP确认（收盘/现价近VWAP）
-            vwap_f = float(vwap_val) if vwap_val else 0
-            near_vwap = vwap_f and abs((day_close - vwap_f) / vwap_f * 100) <= 1.5
-            if not vwap_f:
-                # fix P0-6: 无真 VWAP 判 False，不回退 MA 冒充
-                if is_etf:
-                    d4 = "不适用(ETF)"
-                    not_applicable.append("VWAP确认")
-                else:
-                    d4 = "无VWAP"
+            # 条件4: 日线趋势（替代原 VWAP 确认，日线下无 VWAP 概念）
+            # 满足：日线趋势非下行（trend_bg 不在下行集）或 日线 MACD 金叉
+            _tbg = str(daily_ctx.get("daily_trend_bg") or "")
+            _downtrend = _tbg in ("downtrend", "weak_breakdown")
+            _golden = bool(daily_ctx.get("daily_macd_golden"))
+            trend_ok = (not _downtrend) or _golden
+            if is_etf and not daily_ctx.get("daily_macd_golden") is not None and not _tbg:
+                d4 = "不适用(ETF)"
+                not_applicable.append("日线趋势")
             else:
-                d4 = f"{px_word}{day_close:.2f}距VWAP {vwap_f:.2f} {abs((day_close-vwap_f)/vwap_f*100):.1f}%{sfx}"
-            conditions.append({"name": "VWAP确认", "met": bool(near_vwap), "detail": d4})
+                d4 = f"日线趋势={_tbg or '未知'}，MACD金叉={'是' if _golden else '否'}（需非下行或金叉）"
+            conditions.append({"name": "日线趋势", "met": bool(trend_ok), "detail": d4})
 
             # fix P0-5: 删除 met_count 强制改写，恒等于真实勾选数；
             # 突破箱体满足改为在 payload 打 box_boost 标志
@@ -818,6 +820,39 @@ class Api:
         # fix P1-10: _progress 为内部统计键，以 _ 前缀标识，前端按 _ 前缀过滤，不计入股票数
         out["_progress"] = {"total_holdings": total, "snapshots_ok": ok, "snapshots_miss": total - ok}
         return _clean(out)
+
+    def _ensure_daily_ctx_indicators(self, code, daily_ctx):
+        """补算 daily_ctx 的日线 MACD/趋势字段（旧快照缺失时）。就地更新 daily_ctx。"""
+        try:
+            import pandas as pd
+            from position_builder import fetch_daily_kline
+            df = fetch_daily_kline(str(code).split("_")[0])
+            if df.empty or len(df) < 30:
+                return
+            c = df["close"].astype(float)
+            ema12 = c.ewm(span=12, adjust=False).mean()
+            ema26 = c.ewm(span=26, adjust=False).mean()
+            macd_dif = (ema12 - ema26).values
+            macd_dea = pd.Series(macd_dif).ewm(span=9, adjust=False).mean().values
+            s_dif, s_dea = pd.Series(macd_dif), pd.Series(macd_dea)
+            cross_up = (s_dif > s_dea) & (s_dif.shift(1) <= s_dea.shift(1))
+            daily_ctx["daily_macd_dif"] = float(macd_dif[-1])
+            daily_ctx["daily_macd_dea"] = float(macd_dea[-1])
+            daily_ctx["daily_macd_golden"] = bool(macd_dif[-1] > macd_dea[-1] and cross_up.tail(5).any())
+            # 趋势背景：用 MA 排列粗略推断（上行/下行/震荡）
+            ma5 = float(c.rolling(5).mean().iloc[-1])
+            ma20 = float(c.rolling(20).mean().iloc[-1])
+            ma60 = float(c.rolling(60).mean().iloc[-1]) if len(c) >= 60 else ma20
+            cur_px = float(c.iloc[-1])
+            if not daily_ctx.get("daily_trend_bg"):
+                if cur_px < ma60 and ma20 <= ma60:
+                    daily_ctx["daily_trend_bg"] = "downtrend"
+                elif ma5 > ma20 > ma60 and cur_px >= ma5:
+                    daily_ctx["daily_trend_bg"] = "uptrend"
+                else:
+                    daily_ctx["daily_trend_bg"] = "range"
+        except Exception:
+            pass
 
     # ---------- 突破箱体判定（建仓+加仓共用） ----------
     def check_box_breakout(self, code):

@@ -1149,7 +1149,7 @@ function renderPB(pb) {
           <th>股票</th><th>判定</th><th class="num">得分</th><th class="num">通过</th><th class="num">价</th>
           <th title="突破箱体=第一优先级">突破</th>
           <th title="通道/箱体/背离等技术形态">技术标签</th>
-          <th title="MACD/BOLL/RSI/缩量/支撑">五条件</th>
+          <th title="日线MACD/BOLL/RSI/缩量/支撑">五条件(日线)</th>
           <th class="num">建议股数</th><th class="num">建议价</th><th class="num">所需资金</th><th>扫描</th><th></th>
         </tr></thead>
         <tbody>${rows || '<tr><td colspan="9" class="empty">无扫描结果</td></tr>'}</tbody>

@@ -160,6 +160,22 @@ def _build_daily_context_from_df(code: str, df: pd.DataFrame, current_price: flo
         work["ma150"] = work["close"].rolling(150).mean()
         work["ma180"] = work["close"].rolling(180).mean()
         work["ma250"] = work["close"].rolling(250).mean()
+        # 日线 MACD(12,26,9) / RSI(14) / BOLL(20,2) / 量能（供建仓/加仓日线判断）
+        _ema12 = work["close"].ewm(span=12, adjust=False).mean()
+        _ema26 = work["close"].ewm(span=26, adjust=False).mean()
+        work["macd_dif"] = _ema12 - _ema26
+        work["macd_dea"] = work["macd_dif"].ewm(span=9, adjust=False).mean()
+        work["macd_hist"] = (work["macd_dif"] - work["macd_dea"]) * 2
+        _d = work["close"].diff()
+        _g = _d.clip(lower=0).rolling(14, min_periods=1).mean()
+        _l = (-_d.clip(upper=0)).rolling(14, min_periods=1).mean()
+        work["rsi"] = (100 - 100 / (1 + (_g / _l.replace(0, float("nan"))))).fillna(50.0)
+        work["boll_mid"] = work["close"].rolling(20).mean()
+        work["boll_std"] = work["close"].rolling(20).std()
+        work["boll_up"] = work["boll_mid"] + 2 * work["boll_std"]
+        work["boll_dn"] = work["boll_mid"] - 2 * work["boll_std"]
+        work["boll_pct"] = (work["close"] - work["boll_dn"]) / (work["boll_up"] - work["boll_dn"]).replace(0, float("nan"))
+        work["vol_ma5"] = work["volume"].rolling(5).mean()
         # fix D12: 删除 MA365 死特征（400 天窗口内恒 NaN，且 NaN 会产出非法 JSON）
         today = work.iloc[-1]
         prev = work.iloc[-2]
@@ -307,6 +323,17 @@ def _build_daily_context_from_df(code: str, df: pd.DataFrame, current_price: flo
             "daily_overheated": overheated,
             "daily_ma_clustered": ma_clustered,
             "daily_bull_aligned": bull_aligned,
+            # 日线 MACD/RSI/BOLL/量能（建仓/加仓日线判断）
+            "daily_macd_dif": _fnum(today["macd_dif"]),
+            "daily_macd_dea": _fnum(today["macd_dea"]),
+            "daily_macd_hist": _fnum(today["macd_hist"]),
+            "daily_macd_golden": bool(
+                (work["macd_dif"] > work["macd_dea"]).iloc[-1]
+                and ((work["macd_dif"] > work["macd_dea"]) & (work["macd_dif"].shift(1) <= work["macd_dea"].shift(1))).tail(5).any()),
+            "daily_rsi": _fnum(today["rsi"]),
+            "daily_boll_pct": _fnum(today["boll_pct"]),
+            "daily_vol_today": _fnum(today["volume"]),
+            "daily_vol_ma5": _fnum(today["vol_ma5"]),
         }
     except Exception as e:
         return _default_daily_context(code, status="error", reason=str(e)[:80])
