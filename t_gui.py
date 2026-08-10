@@ -2478,6 +2478,21 @@ class Api:
             "no_data": no_data_count,
             "pending": pending,
         }
+        # 技术标签：仅当天附加（当天日线缓存新鲜，批量秒回；历史日缓存过期会走网络，跳过避免拖慢）
+        if date == datetime.now().strftime("%Y-%m-%d"):
+            try:
+                codes = [r.get("code") for r in rows if r.get("code")]
+                if codes:
+                    tag_res = self.load_stock_tags_batch(codes)
+                    tags_map = tag_res.get("tags", {})
+                    for r in rows:
+                        info = tags_map.get(r.get("code"), {})
+                        if info:
+                            r["tags"] = info.get("tags", [])
+                            r["trend"] = info.get("trend")
+            except Exception:
+                pass
+
         return {
             "has_data": True,
             "counts": dict(verdicts),
