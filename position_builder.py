@@ -39,7 +39,7 @@ import pandas as pd
 BASE = Path(r"E:\06_T")
 sys.path.insert(0, str(BASE))
 
-from indicators import resample_to_5min, add_5min_indicators, WARMUP_MIN_BARS_5M
+from indicators import add_indicators  # noqa: F401  建仓已改日线，预留通用指标计算
 
 
 # ── 飞书推送（可选，Webhook 未配置时静默跳过）──
@@ -417,63 +417,91 @@ def check_box_breakout(code: str, price: float = None) -> dict:
     return {"broken": False, "price": round(cur, 3)}
 
 
+def _ensure_daily_indicators(daily_ctx: dict, code: str) -> dict:
+    """确保 daily_ctx 含日线 MACD/RSI/BOLL/量能字段。
+    旧快照（改版前生成）缺这些字段时，用 fetch_daily_kline 现算补齐。
+    返回补齐后的 daily_ctx（传入的 dict 被就地更新）。"""
+    if not isinstance(daily_ctx, dict):
+        daily_ctx = {}
+    if daily_ctx.get("daily_macd_golden") is not None:
+        return daily_ctx
+    try:
+        df = fetch_daily_kline(code)
+        if df.empty or len(df) < 30:
+            return daily_ctx
+        c = df["close"].astype(float)
+        ema12 = c.ewm(span=12, adjust=False).mean()
+        ema26 = c.ewm(span=26, adjust=False).mean()
+        macd_dif = (ema12 - ema26).values
+        macd_dea = pd.Series(macd_dif).ewm(span=9, adjust=False).mean().values
+        macd_hist = (macd_dif - macd_dea) * 2
+        d = c.diff()
+        g = d.clip(lower=0).rolling(14, min_periods=1).mean()
+        l = (-d.clip(upper=0)).rolling(14, min_periods=1).mean()
+        rsi = (100 - 100 / (1 + (g / l.replace(0, float("nan"))))).fillna(50.0)
+        boll_mid = c.rolling(20).mean()
+        boll_std = c.rolling(20).std()
+        boll_up = boll_mid + 2 * boll_std
+        boll_dn = boll_mid - 2 * boll_std
+        boll_pct = (c - boll_dn) / (boll_up - boll_dn).replace(0, float("nan"))
+        vol = df["volume"].astype(float)
+        vol_ma5 = vol.rolling(5).mean()
+        cross_up = (pd.Series(macd_dif) > pd.Series(macd_dea)) & (pd.Series(macd_dif).shift(1) <= pd.Series(macd_dea).shift(1))
+        daily_ctx["daily_macd_dif"] = float(macd_dif[-1])
+        daily_ctx["daily_macd_dea"] = float(macd_dea[-1])
+        daily_ctx["daily_macd_hist"] = float(macd_hist[-1])
+        daily_ctx["daily_macd_golden"] = bool(macd_dif[-1] > macd_dea[-1] and cross_up.tail(5).any())
+        daily_ctx["daily_rsi"] = float(rsi.iloc[-1])
+        daily_ctx["daily_boll_pct"] = float(boll_pct.iloc[-1]) if pd.notna(boll_pct.iloc[-1]) else None
+        daily_ctx["daily_vol_today"] = float(vol.iloc[-1])
+        daily_ctx["daily_vol_ma5"] = float(vol_ma5.iloc[-1]) if pd.notna(vol_ma5.iloc[-1]) else None
+        # 支撑位（daily_ctx 可能缺时补）
+        if not daily_ctx.get("daily_support_level"):
+            mav = c.rolling(20).mean().iloc[-1]
+            daily_ctx.setdefault("daily_support_level", float(mav) if pd.notna(mav) else 0.0)
+            daily_ctx.setdefault("daily_support_name", "MA20")
+        if not daily_ctx.get("daily_price_ref"):
+            daily_ctx["daily_price_ref"] = float(c.iloc[-1])
+    except Exception:
+        pass
+    return daily_ctx
+
+
 # ============================================================
 # 五个建仓条件
 # ============================================================
 
-def check_macd_golden(df_5min: pd.DataFrame) -> tuple:
-    """MACD 多头: dif > dea 且金叉发生在近 5 根内。"""
-    if df_5min.empty or len(df_5min) < 3:
-        return False, "数据不足（需≥3根5分钟K线）"
-    # fix P1-2: 指标预热期（<20根5分钟K线）统一判 False
-    if len(df_5min) < WARMUP_MIN_BARS_5M:
-        return False, f"预热中({len(df_5min)}根)"
-    cols = ["dif_5m", "dea_5m"]
-    for c in cols:
-        if c not in df_5min.columns:
-            return False, f"缺少列 {c}"
-    dif = df_5min["dif_5m"]
-    dea = df_5min["dea_5m"]
-    # fix P2-1: 去除与 dif>dea 数学等价的 hist>0 冗余半条件，改为「dif>dea 且近5根内有金叉」
-    above_now = bool(dif.iloc[-1] > dea.iloc[-1])
-    cross_up = (dif > dea) & (dif.shift(1) <= dea.shift(1))
-    golden_recent = bool(cross_up.tail(5).any())
-    passed = above_now and golden_recent
-    detail = (f"dif={'>' if above_now else '<='}dea，"
-              f"近5根金叉={'有' if golden_recent else '无'}（需 dif>dea 且近5根内金叉）")
+def check_macd_golden(daily_ctx: dict) -> tuple:
+    """日线 MACD 多头: dif > dea 且近 5 日有金叉。"""
+    golden = daily_ctx.get("daily_macd_golden")
+    if golden is None:
+        return False, "缺日线MACD数据", True
+    passed = bool(golden)
+    dif = daily_ctx.get("daily_macd_dif")
+    dea = daily_ctx.get("daily_macd_dea")
+    above = (dif is not None and dea is not None and dif > dea) if not isinstance(dif, bool) else True
+    detail = (f"日线dif{'>' if above else '<='}dea，近5日金叉={'有' if passed else '无'}"
+              f"（需日线dif>dea且近5日金叉）")
     return passed, detail
 
 
-def check_boll_mid_support(df_5min: pd.DataFrame) -> tuple:
-    """BOLL 中轨支撑: bb_pct_5m 在 0.3~0.7 区间，带宽未极端扩张。"""
-    if df_5min.empty or "bb_pct_5m" not in df_5min.columns:
-        return False, "数据不足"
-    # fix P1-2: 指标预热期（<20根5分钟K线）统一判 False
-    if len(df_5min) < WARMUP_MIN_BARS_5M:
-        return False, f"预热中({len(df_5min)}根)"
-    latest_bb = df_5min["bb_pct_5m"].iloc[-1]
-    latest_width = df_5min.get("bb_width_5m", pd.Series([0])).iloc[-1]
-    price = df_5min["close"].iloc[-1]
-    # 带宽极端扩张判定：width > 价格 × 5%
-    if latest_width > price * 0.05:
-        return False, f"BOLL 带宽极端扩张（{latest_width:.3f} > {price*0.05:.3f}）"
-    passed = 0.3 <= latest_bb <= 0.7
-    detail = f"bb_pct={latest_bb:.3f}（需0.3~0.7），带宽={latest_width:.3f}"
+def check_boll_mid_support(daily_ctx: dict) -> tuple:
+    """日线 BOLL 中轨支撑: bb_pct 在 0.3~0.7 区间。"""
+    bb_pct = daily_ctx.get("daily_boll_pct")
+    if bb_pct is None or (isinstance(bb_pct, float) and math.isnan(bb_pct)):
+        return False, "缺日线BOLL数据", True
+    passed = 0.3 <= float(bb_pct) <= 0.7
+    detail = f"日线bb_pct={float(bb_pct):.3f}（需0.3~0.7）"
     return passed, detail
 
 
-def check_rsi_healthy(df_5min: pd.DataFrame) -> tuple:
-    """RSI 健康区间: 35~60。"""
-    if df_5min.empty or "rsi_5m" not in df_5min.columns:
-        return False, "数据不足"
-    # fix P1-2: 指标预热期（<20根5分钟K线）统一判 False
-    if len(df_5min) < WARMUP_MIN_BARS_5M:
-        return False, f"预热中({len(df_5min)}根)"
-    rsi_val = df_5min["rsi_5m"].iloc[-1]
-    if pd.isna(rsi_val):
-        return False, "RSI=NaN（纯上涨窗，C语义设计内）"
-    passed = 35 <= rsi_val <= 60
-    detail = f"rsi_5m={rsi_val:.1f}（需35~60）"
+def check_rsi_healthy(daily_ctx: dict) -> tuple:
+    """日线 RSI 健康区间: 35~60。"""
+    rsi_val = daily_ctx.get("daily_rsi")
+    if rsi_val is None or (isinstance(rsi_val, float) and math.isnan(rsi_val)):
+        return False, "缺日线RSI数据", True
+    passed = 35 <= float(rsi_val) <= 60
+    detail = f"日线rsi={float(rsi_val):.1f}（需35~60）"
     return passed, detail
 
 
@@ -515,79 +543,40 @@ def _prev_day_same_period_avg_vol(code: str, snap_date: str, df_1min: pd.DataFra
     return float(seg.mean())
 
 
-def check_volume_shrink(df_1min: pd.DataFrame, code: str = None, snap_date: str = None) -> tuple:
-    """成交量缩量: 最近 30 分钟均量 < 前 60 分钟均量 × 0.8。
+def check_volume_shrink(daily_ctx: dict) -> tuple:
+    """日线缩量: 当日成交量 < 5 日均量 × 0.8。
     返回 (passed, detail, insufficient) — insufficient=True 表示数据不足、不参与评分。"""
-    if df_1min.empty or len(df_1min) < 30:
-        return False, "数据不足（需≥30根1分钟K线）", True
-    vol = df_1min["volume"]
-    recent_vol = vol.tail(30).mean()
-    if len(vol) >= 90:
-        prior_vol = vol.iloc[-90:-30].mean()
-        basis = "前60分"
-    else:
-        # fix P0-7: 11:00 前数据不足90根 → 改用昨日同时段均量做分母，避免开盘天量灌大分母恒真送分
-        prior_vol = _prev_day_same_period_avg_vol(code, snap_date, df_1min)
-        basis = "昨日同时段"
-        if prior_vol is None:
-            return False, f"数据不足（当日仅{len(vol)}根<90，无昨日同时段均量）", True
-    if prior_vol <= 0:
-        return False, "前段成交量为0", True
-    ratio = recent_vol / prior_vol
+    vol_today = daily_ctx.get("daily_vol_today")
+    vol_ma5 = daily_ctx.get("daily_vol_ma5")
+    if vol_today is None or vol_ma5 is None or vol_ma5 <= 0:
+        return False, "缺日线量能数据", True
+    ratio = float(vol_today) / float(vol_ma5)
     passed = ratio < 0.8
-    detail = f"近30分均量={recent_vol:.0f} / {basis}均量={prior_vol:.0f} = {ratio:.2f}（需<0.8）"
+    detail = f"日线量={float(vol_today):.0f} / 5日均量={float(vol_ma5):.0f} = {ratio:.2f}（需<0.8）"
     return passed, detail, False
 
 
-def check_support_retest(df_1min: pd.DataFrame, daily_ctx: dict) -> tuple:
-    """回踩支撑不破: 最新价距支撑位 ≤2% 且未破位。"""
-    if df_1min.empty:
-        return False, "无分钟数据"
+def check_support_retest(daily_ctx: dict, latest_price: float = None) -> tuple:
+    """日线回踩支撑不破: 最新价距支撑位 ≤2% 且未破位。
+    latest_price 缺省用 daily_price_ref（日线收盘/参考价）。"""
+    if latest_price is None:
+        latest_price = daily_ctx.get("daily_price_ref")
+    if latest_price is None or not latest_price:
+        return False, "无参考价", True
 
-    latest_price = df_1min["close"].iloc[-1]
-    day_low = df_1min["low"].min()
+    # 支撑位：daily_support_level（日线 MA 支撑，已在 daily_context 选出最近支撑）
+    level = daily_ctx.get("daily_support_level")
+    label = daily_ctx.get("daily_support_name") or "支撑"
+    if not level or level <= 0:
+        return False, "daily_context 无支撑位数据", True
 
-    # 从 daily_context 提取支撑位
-    supports = []
-    for key, label in [
-        ("daily_ma10", "MA10"), ("daily_ma20", "MA20"),
-        ("daily_ma60", "MA60"), ("daily_ma5", "MA5"),
-    ]:
-        val = daily_ctx.get(key)
-        if val and not (isinstance(val, float) and math.isnan(val)):
-            supports.append((label, float(val)))
-
-    # 日内 VWAP
-    vwap = daily_ctx.get("last_vwap") or daily_ctx.get("daily_support_level")
-    if vwap and not (isinstance(vwap, float) and math.isnan(vwap)):
-        supports.append(("VWAP", float(vwap)))
-
-    if not supports:
-        return False, "daily_context 无支撑位数据"
-
-    # fix P0-2: 只从现价下方的支撑中选最近者（现价低于支撑 0.5% 以上视为已破位，不参与回踩判定）
-    nearest = None
-    min_dist = float("inf")
-    for label, level in supports:
-        dist = (latest_price - level) / level
-        if dist < -0.005:
-            continue
-        if abs(dist) < abs(min_dist):
-            min_dist = dist
-            nearest = (label, level, dist)
-
-    if nearest is None:
-        return False, "现价下方无有效支撑（均已破位超0.5%）"
-
-    label, level, dist = nearest
-    # fix P0-2: 回踩判定窗口 -0.5% ≤ dist ≤ +2%（现价不得低于支撑0.5%以上），破位闸与窗口对齐
+    dist = (float(latest_price) - float(level)) / float(level)
     dist_pct = dist * 100
+    # fix P0-2: 回踩判定窗口 -0.5% ≤ dist ≤ +2%（现价不得低于支撑0.5%以上）
     near_support = -0.5 <= dist_pct <= 2.0
-    not_broken = day_low >= level * 0.995
-    passed = near_support and not_broken
-
-    detail = (f"最近支撑={label}@{level:.3f}，距={dist_pct:+.2f}%（需-0.5%~+2%）"
-              f"，日低={day_low:.3f}（破位阈={level*0.995:.3f}）")
+    passed = near_support
+    detail = (f"日线收盘/参考价={float(latest_price):.3f}，距支撑{label}@{float(level):.3f} "
+              f"={dist_pct:+.2f}%（需-0.5%~+2%）")
     return passed, detail
 
 
@@ -672,33 +661,30 @@ def scan_stock(code: str, stock_info: dict, date_str: str = None,
         result["date"] = snap_date
         result["errors"].append(f"快照陈旧({snap_date})")
         return result
-    if df_1min.empty:
-        result["errors"].append("无分钟快照数据")
+    # 日线判断需 daily_ctx；缺日线指标字段（旧快照）时用日线现算补齐
+    if not daily_ctx:
+        result["errors"].append("缺日线上下文")
         return result
+    _ensure_daily_indicators(daily_ctx, code)
 
     result["date"] = snap_date
-    result["latest_price"] = round(float(df_1min["close"].iloc[-1]), 3)
+    # 展示/箱体突破用实时价；日线五条件用 daily_price_ref（日线收盘/参考价）
+    live_price = round(float(df_1min["close"].iloc[-1]), 3) if not df_1min.empty else None
+    result["latest_price"] = live_price or round(float(daily_ctx.get("daily_price_ref") or 0), 3)
 
-    # 5 分钟聚合 + 指标
-    df_5min = resample_to_5min(df_1min)
-    if df_5min.empty or len(df_5min) < 3:
-        result["errors"].append("5分钟K线不足（需≥3根）")
-        return result
-    df_5min = add_5min_indicators(df_5min)
-
-    # 突破箱体（第一优先级）
+    # 突破箱体（第一优先级，用实时价判当前突破）
     bx = check_box_breakout(code, result["latest_price"])
     box_passed = bx.get("broken", False)
     box_detail = (f"突破箱体上沿 {bx['box']['high']}，超出 {bx['pct_above']}%"
                   if box_passed else "未突破箱体")
 
-    # 检查五个条件（box_breakout 独立，不叠加评分）
+    # 检查五个条件（全改日线，box_breakout 独立，不叠加评分）
     conditions = {
-        "macd_golden": check_macd_golden(df_5min),
-        "boll_mid_support": check_boll_mid_support(df_5min),
-        "rsi_healthy": check_rsi_healthy(df_5min),
-        "volume_shrink": check_volume_shrink(df_1min, code=code, snap_date=snap_date),
-        "support_retest": check_support_retest(df_1min, daily_ctx),
+        "macd_golden": check_macd_golden(daily_ctx),
+        "boll_mid_support": check_boll_mid_support(daily_ctx),
+        "rsi_healthy": check_rsi_healthy(daily_ctx),
+        "volume_shrink": check_volume_shrink(daily_ctx),
+        "support_retest": check_support_retest(daily_ctx),
     }
     # fix P0-7: 数据不足的条件（三元组第三值）标注 insufficient，前端可区分「失败」与「无数据」
     result["conditions"] = {}
