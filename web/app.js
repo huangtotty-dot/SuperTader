@@ -199,6 +199,9 @@ async function refreshLive(reset) {
     // fix P1-6: refresh_pb 成败纳入轮询告警计数
     apiCall("refresh_pb", date).then(pb => {
       pbFailCnt = 0;
+      // 关键：把带技术标签的结果合并回 state.payload，否则后续 load_quotes 路径
+      // 用无 tags 的旧 payload 重新 renderPB，会覆盖掉已显示的技术标签（一会有一会无）
+      if (pb && pb.rows && state.payload) state.payload.position_builder = pb;
       renderPB(pb || {});
       updateRefreshAlarm();
     }).catch(() => {
