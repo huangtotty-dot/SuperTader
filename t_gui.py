@@ -2504,6 +2504,20 @@ class Api:
             pass
         return result
 
+    def recompute_pb(self, date):
+        """盘后重跑建仓扫描 + 重算加仓观察。返回 {position_builder, add_watch}。
+        重跑用 eod 档、不推送飞书（避免重复打扰）；run_position_scan 会更新 watchlist_buy。"""
+        # 1) 重跑建仓扫描（eod 档）
+        try:
+            from position_builder import run_position_scan
+            run_position_scan(date_str=date, scan_type="eod", silent=True, no_feishu=True)
+        except Exception:
+            pass  # 扫描失败不阻断，add_watch 仍返回
+        # 2) 聚合新 trace（含技术标签）+ 重算加仓
+        pb = self.refresh_pb(date)
+        aw = self.compute_add_watch(date)
+        return _clean({"position_builder": pb, "add_watch": aw})
+
     # ---------- 内部聚合 ----------
     def _load_stage_board(self):
         sb = _load_json(OUT / "stage_board.json", {})
