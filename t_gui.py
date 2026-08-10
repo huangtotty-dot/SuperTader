@@ -269,14 +269,8 @@ class Api:
 
     # ---------- 主要指数概览 ----------
     def load_indices(self):
-        """拉主要指数实时行情 + 大盘 regime 状态，返回列表（点击可看K线）。"""
-        indices = [
-            {"symbol": "sh000001", "name": "上证指数"},
-            {"symbol": "sz399001", "name": "深证成指"},
-            {"symbol": "sz399006", "name": "创业板指"},
-            {"symbol": "sh000300", "name": "沪深300"},
-            {"symbol": "sh000905", "name": "中证500"},
-        ]
+        """拉主要指数实时行情 + 大盘 regime 状态，返回列表（点击可看K线）。
+        腾讯指数(sh/sz) + 东财特殊指数(em，如 A股平均股价 em47.800005)。"""
         out = {"ts": None, "indices": [], "regime": None, "days_in_regime": None}
         try:
             import os as _os
@@ -285,7 +279,17 @@ class Api:
                        "ALL_PROXY", "all_proxy"]:
                 _os.environ.pop(_k, None)
             _os.environ["NO_PROXY"] = "*"
-            url = "https://qt.gtimg.cn/q=" + ",".join(i["symbol"] for i in indices)
+            tx_indices = [
+                {"symbol": "sh000001", "name": "上证指数"},
+                {"symbol": "sz399001", "name": "深证成指"},
+                {"symbol": "sz399006", "name": "创业板指"},
+                {"symbol": "sh000300", "name": "沪深300"},
+                {"symbol": "sh000905", "name": "中证500"},
+                {"symbol": "sh000688", "name": "科创50"},
+                {"symbol": "sh000680", "name": "科创综指"},
+            ]
+            # 腾讯实时行情
+            url = "https://qt.gtimg.cn/q=" + ",".join(i["symbol"] for i in tx_indices)
             req = _ur.Request(url, headers={"User-Agent": "Mozilla/5.0",
                                             "Referer": "https://gu.qq.com/"})
             data = _ur.urlopen(req, timeout=4).read().decode("gbk", errors="replace")
@@ -306,7 +310,7 @@ class Api:
                     }
                 except (ValueError, IndexError):
                     continue
-            for i in indices:
+            for i in tx_indices:
                 base = i["symbol"][2:]
                 p = px.get(base)
                 if p:
@@ -315,6 +319,29 @@ class Api:
                         "price": p["price"], "change": p["change"],
                         "change_pct": p["change_pct"],
                     })
+            # 东财特殊指数（A股平均股价等腾讯无代码的；用 push2delay 延迟行情，较稳定）
+            em_list = [
+                {"secid": "47.800005", "name": "A股平均股价"},
+            ]
+            for em in em_list:
+                try:
+                    url_em = (f"https://push2delay.eastmoney.com/api/qt/stock/get?"
+                              f"secid={em['secid']}&fields=f43,f44,f45,f57,f58")
+                    req_em = _ur.Request(url_em, headers={"User-Agent": "Mozilla/5.0",
+                                                          "Referer": "https://quote.eastmoney.com/"})
+                    data_em = _ur.urlopen(req_em, timeout=5).read().decode("utf-8", errors="ignore")
+                    ed = (json.loads(data_em).get("data") or {})
+                    price = (ed.get("f43") or 0) / 100.0
+                    pre_close = (ed.get("f44") or 0) / 100.0
+                    if price and pre_close:
+                        chg = (price - pre_close) / pre_close * 100.0
+                        out["indices"].append({
+                            "symbol": "em" + em["secid"], "name": em["name"],
+                            "price": price, "change": price - pre_close,
+                            "change_pct": chg,
+                        })
+                except Exception:
+                    continue
             out["ts"] = datetime.now().strftime("%H:%M:%S")
         except Exception:
             pass
@@ -1029,14 +1056,29 @@ class Api:
         if cache_key in self._stock_chart_cache:
             return self._stock_chart_cache[cache_key]
 
+        # 东财标的(em前缀)磁盘缓存：K线静态(每日更新)，当日缓存避免东财接口重试
+        if str(code).startswith("em"):
+            try:
+                _em_cache = BASE / "t_io" / "cache" / f"em_kline_{str(code)[2:]}.json"
+                if _em_cache.exists():
+                    _c = _load_json(_em_cache, None)
+                    if _c and _c.get("date") == datetime.now().strftime("%Y-%m-%d") and _c.get("rows"):
+                        _cdf = pd.DataFrame(_c["rows"])
+                        _cdf["date"] = pd.to_datetime(_cdf["date"])
+                        out["name"] = _c.get("name") or code
+                        return self._build_chart_from_df(_cdf, out, code)
+            except Exception:
+                pass
+
         code_str = str(code)
-        # 带前缀(sx000000) → 指数/特殊标的；纯6位 → 股票
+        # em前缀 → 东财secid(如 em47.800005=A股平均股价)；sx000000 → 指数；纯6位 → 股票
+        is_em = code_str.startswith("em")
         is_index = code_str[:2] in ("sh", "sz", "bj") and code_str[2:].isdigit()
         symbol = code_str if is_index else ("sh" + code_str if code_str[0] in "56" else "sz" + code_str)
 
-        # 股票优先本地日线缓存（当日秒回）；指数无个股缓存，直接网络
+        # 股票优先本地日线缓存（当日秒回）；指数/东财无个股缓存，直接网络
         rows = []
-        if not is_index:
+        if not is_index and not is_em:
             try:
                 from position_builder import fetch_daily_kline
                 _df = fetch_daily_kline(code_str)
@@ -1056,24 +1098,61 @@ class Api:
                 _os.environ.pop(_k, None)
             _os.environ["NO_PROXY"] = "*"
 
-            try:
-                url = f"https://ifzq.gtimg.cn/appstock/app/fqkline/get?param={symbol},day,,,400,qfq"
-                req = _ur.Request(url, headers={"User-Agent": "Mozilla/5.0",
-                                                "Referer": "https://finance.qq.com/"})
-                raw = _ur.urlopen(req, timeout=10).read().decode("utf-8", errors="ignore")
-                data = json.loads(raw)
-                stock_data = data.get("data", {}).get(symbol)
-                kline = stock_data.get("day") or stock_data.get("qfqday") or []
-                for item in kline:
-                    if isinstance(item, list) and len(item) >= 6:
-                        rows.append({
-                            "date": item[0], "open": float(item[1]), "close": float(item[2]),
-                            "high": float(item[3]), "low": float(item[4]), "volume": float(item[5]),
-                        })
-                out["name"] = stock_data.get("qt", {}).get(symbol, [None, code])[1] or code
-            except Exception as e:
-                out["error"] = f"拉取日线失败: {e}"
-                return out
+            if is_em:
+                # 东财 secid (em47.800005 → 47.800005)，平均股价等腾讯无代码的标的
+                # push2his 间歇断连(风控)，重试 8 次，多数 3-6 次内成功
+                data = {}
+                rows = []
+                for _att in range(8):
+                    try:
+                        secid = code_str[2:]
+                        url = (f"https://push2his.eastmoney.com/api/qt/stock/kline/get?secid={secid}"
+                               f"&fields1=f1,f2,f3,f4,f5,f6&fields2=f51,f52,f53,f54,f55,f56,f57"
+                               f"&klt=101&fqt=1&beg=0&end=20500101&lmt=400")
+                        req = _ur.Request(url, headers={"User-Agent": "Mozilla/5.0",
+                                                        "Referer": "https://quote.eastmoney.com/"})
+                        raw = _ur.urlopen(req, timeout=10).read().decode("utf-8", errors="ignore")
+                        data = json.loads(raw)
+                        klines = (data.get("data") or {}).get("klines") or []
+                        if not klines:
+                            continue
+                        rows = []
+                        for item in klines:
+                            parts = item.split(",")
+                            if len(parts) >= 6:
+                                rows.append({
+                                    "date": parts[0], "open": float(parts[1]), "close": float(parts[2]),
+                                    "high": float(parts[3]), "low": float(parts[4]), "volume": float(parts[5]),
+                                })
+                        if rows:
+                            break
+                    except Exception:
+                        import time as _t
+                        _t.sleep(1)
+                if rows:
+                    out["name"] = (data.get("data") or {}).get("name") or code
+                elif not out["error"]:
+                    out["error"] = "东财拉取日线失败"
+                    return out
+            else:
+                try:
+                    url = f"https://ifzq.gtimg.cn/appstock/app/fqkline/get?param={symbol},day,,,400,qfq"
+                    req = _ur.Request(url, headers={"User-Agent": "Mozilla/5.0",
+                                                    "Referer": "https://finance.qq.com/"})
+                    raw = _ur.urlopen(req, timeout=10).read().decode("utf-8", errors="ignore")
+                    data = json.loads(raw)
+                    stock_data = data.get("data", {}).get(symbol)
+                    kline = stock_data.get("day") or stock_data.get("qfqday") or []
+                    for item in kline:
+                        if isinstance(item, list) and len(item) >= 6:
+                            rows.append({
+                                "date": item[0], "open": float(item[1]), "close": float(item[2]),
+                                "high": float(item[3]), "low": float(item[4]), "volume": float(item[5]),
+                            })
+                    out["name"] = stock_data.get("qt", {}).get(symbol, [None, code])[1] or code
+                except Exception as e:
+                    out["error"] = f"拉取日线失败: {e}"
+                    return out
 
         if not rows:
             out["error"] = "无日线数据"
@@ -1092,77 +1171,86 @@ class Api:
             df = pd.DataFrame(rows)
             df["date"] = pd.to_datetime(df["date"])
             df = df.sort_values("date").reset_index(drop=True)
-
-            def calc_ma_and_indicators(d):
-                d = d.copy()
-                for n in (5, 10, 20, 30, 60, 180, 365):
-                    d[f"ma{n}"] = d["close"].rolling(n).mean()
-                # MACD
-                ema12 = d["close"].ewm(span=12, adjust=False).mean()
-                ema26 = d["close"].ewm(span=26, adjust=False).mean()
-                d["dif"] = ema12 - ema26
-                d["dea"] = d["dif"].ewm(span=9, adjust=False).mean()
-                d["macd_hist"] = (d["dif"] - d["dea"]) * 2
-                # RSI(14)
-                delta = d["close"].diff()
-                gain = delta.clip(lower=0).rolling(14).mean()
-                loss = (-delta.clip(upper=0)).rolling(14).mean()
-                rs = gain / loss.replace(0, float("nan"))
-                d["rsi"] = 100 - 100 / (1 + rs)
-                # BOLL(20,2)
-                d["boll_mid"] = d["close"].rolling(20).mean()
-                d["boll_std"] = d["close"].rolling(20).std()
-                d["boll_up"] = d["boll_mid"] + 2 * d["boll_std"]
-                d["boll_dn"] = d["boll_mid"] - 2 * d["boll_std"]
-                return d
-
-            daily = calc_ma_and_indicators(df)
-            weekly = calc_ma_and_indicators(df.resample("W-FRI", on="date").agg(
-                {"open": "first", "high": "max", "low": "min", "close": "last", "volume": "sum"}).dropna().reset_index())
-            # 月线频率兼容：pandas≥2.2 用 "ME"，旧版用 "M"（否则 load_stock_chart 报"计算失败"）
-            _month_freq = "ME" if pd.__version__.split(".")[0] >= "2" and pd.__version__.split(".")[1] >= "2" else "M"
-            monthly = calc_ma_and_indicators(df.resample(_month_freq, on="date").agg(
-                {"open": "first", "high": "max", "low": "min", "close": "last", "volume": "sum"}).dropna().reset_index())
-
-            def to_series(d):
-                return {
-                    "dates": [x.strftime("%Y-%m-%d") for x in d["date"]],
-                    "ohlc": [[round(o, 3), round(c, 3), round(l, 3), round(h, 3)]
-                             for o, c, l, h in zip(d["open"], d["close"], d["low"], d["high"])],
-                    "volume": [round(float(v), 0) for v in d["volume"]],
-                    "ma": [[round(x, 3) if not pd.isna(x) else None for x in d[f"ma{n}"]]
-                           for n in (5, 10, 20, 30, 60, 180, 365)],
-                    "macd": {"dif": [round(x, 3) if not pd.isna(x) else None for x in d["dif"]],
-                             "dea": [round(x, 3) if not pd.isna(x) else None for x in d["dea"]],
-                             "hist": [round(x, 3) if not pd.isna(x) else None for x in d["macd_hist"]]},
-                    "rsi": [round(x, 1) if not pd.isna(x) else None for x in d["rsi"]],
-                    "boll": {"mid": [round(x, 3) if not pd.isna(x) else None for x in d["boll_mid"]],
-                             "up": [round(x, 3) if not pd.isna(x) else None for x in d["boll_up"]],
-                             "dn": [round(x, 3) if not pd.isna(x) else None for x in d["boll_dn"]]},
-                }
-
-            out["period_data"] = {
-                "daily": to_series(daily),
-                "weekly": to_series(weekly),
-                "monthly": to_series(monthly),
-            }
-
-                # 支撑/压力位（基于日线）
-            levels = self._calc_support_resistance(daily)
-            out["levels"] = levels
-            # 箱体检测（基于日线）
-            out["boxes"] = self._detect_boxes(daily)
-            # 通道检测（基于日线）
-            out["channel"] = self._detect_channel(daily)
-            out["current_price"] = round(float(daily["close"].iloc[-1]), 3)
-            out["available"] = True
+            out = self._build_chart_from_df(df, out, code)
         except Exception as e:
             out["error"] = f"计算失败: {e}"
             return out
 
         result = _clean(out)
+        # 东财标的写磁盘缓存（当日有效，避免后续东财接口重试）
+        if str(code).startswith("em") and result.get("available"):
+            try:
+                _em_cache = BASE / "t_io" / "cache" / f"em_kline_{str(code)[2:]}.json"
+                _em_cache.write_text(json.dumps({
+                    "date": datetime.now().strftime("%Y-%m-%d"),
+                    "name": result.get("name"),
+                    "rows": rows,
+                }, ensure_ascii=False), encoding="utf-8")
+            except Exception:
+                pass
         self._stock_chart_cache[cache_key] = result
         return result
+
+    def _build_chart_from_df(self, df, out, code):
+        """由日线 DataFrame 构建 K 线弹窗数据（MA/MACD/RSI/BOLL + 周/月 + 支撑箱体通道）。"""
+        import pandas as pd
+
+        def calc_ma_and_indicators(d):
+            d = d.copy()
+            for n in (5, 10, 20, 30, 60, 180, 365):
+                d[f"ma{n}"] = d["close"].rolling(n).mean()
+            ema12 = d["close"].ewm(span=12, adjust=False).mean()
+            ema26 = d["close"].ewm(span=26, adjust=False).mean()
+            d["dif"] = ema12 - ema26
+            d["dea"] = d["dif"].ewm(span=9, adjust=False).mean()
+            d["macd_hist"] = (d["dif"] - d["dea"]) * 2
+            delta = d["close"].diff()
+            gain = delta.clip(lower=0).rolling(14).mean()
+            loss = (-delta.clip(upper=0)).rolling(14).mean()
+            rs = gain / loss.replace(0, float("nan"))
+            d["rsi"] = 100 - 100 / (1 + rs)
+            d["boll_mid"] = d["close"].rolling(20).mean()
+            d["boll_std"] = d["close"].rolling(20).std()
+            d["boll_up"] = d["boll_mid"] + 2 * d["boll_std"]
+            d["boll_dn"] = d["boll_mid"] - 2 * d["boll_std"]
+            return d
+
+        daily = calc_ma_and_indicators(df)
+        weekly = calc_ma_and_indicators(df.resample("W-FRI", on="date").agg(
+            {"open": "first", "high": "max", "low": "min", "close": "last", "volume": "sum"}).dropna().reset_index())
+        # 月线频率兼容：pandas≥2.2 用 "ME"，旧版用 "M"
+        _month_freq = "ME" if pd.__version__.split(".")[0] >= "2" and pd.__version__.split(".")[1] >= "2" else "M"
+        monthly = calc_ma_and_indicators(df.resample(_month_freq, on="date").agg(
+            {"open": "first", "high": "max", "low": "min", "close": "last", "volume": "sum"}).dropna().reset_index())
+
+        def to_series(d):
+            return {
+                "dates": [x.strftime("%Y-%m-%d") for x in d["date"]],
+                "ohlc": [[round(o, 3), round(c, 3), round(l, 3), round(h, 3)]
+                         for o, c, l, h in zip(d["open"], d["close"], d["low"], d["high"])],
+                "volume": [round(float(v), 0) for v in d["volume"]],
+                "ma": [[round(x, 3) if not pd.isna(x) else None for x in d[f"ma{n}"]]
+                       for n in (5, 10, 20, 30, 60, 180, 365)],
+                "macd": {"dif": [round(x, 3) if not pd.isna(x) else None for x in d["dif"]],
+                         "dea": [round(x, 3) if not pd.isna(x) else None for x in d["dea"]],
+                         "hist": [round(x, 3) if not pd.isna(x) else None for x in d["macd_hist"]]},
+                "rsi": [round(x, 1) if not pd.isna(x) else None for x in d["rsi"]],
+                "boll": {"mid": [round(x, 3) if not pd.isna(x) else None for x in d["boll_mid"]],
+                         "up": [round(x, 3) if not pd.isna(x) else None for x in d["boll_up"]],
+                         "dn": [round(x, 3) if not pd.isna(x) else None for x in d["boll_dn"]]},
+            }
+
+        out["period_data"] = {
+            "daily": to_series(daily),
+            "weekly": to_series(weekly),
+            "monthly": to_series(monthly),
+        }
+        out["levels"] = self._calc_support_resistance(daily)
+        out["boxes"] = self._detect_boxes(daily)
+        out["channel"] = self._detect_channel(daily)
+        out["current_price"] = round(float(daily["close"].iloc[-1]), 3)
+        out["available"] = True
+        return out
 
     def _detect_boxes(self, daily):
         """检测箱体：全历史滑窗 → 置信分排序，现价箱体/刚突破优先。
