@@ -450,7 +450,7 @@ def _ensure_daily_indicators(daily_ctx: dict, code: str) -> dict:
         daily_ctx["daily_macd_dif"] = float(macd_dif[-1])
         daily_ctx["daily_macd_dea"] = float(macd_dea[-1])
         daily_ctx["daily_macd_hist"] = float(macd_hist[-1])
-        daily_ctx["daily_macd_golden"] = bool(macd_dif[-1] > macd_dea[-1] and cross_up.tail(5).any())
+        daily_ctx["daily_macd_golden"] = bool(cross_up.tail(5).any())
         daily_ctx["daily_rsi"] = float(rsi.iloc[-1])
         daily_ctx["daily_boll_pct"] = float(boll_pct.iloc[-1]) if pd.notna(boll_pct.iloc[-1]) else None
         daily_ctx["daily_vol_today"] = float(vol.iloc[-1])
@@ -472,16 +472,12 @@ def _ensure_daily_indicators(daily_ctx: dict, code: str) -> dict:
 # ============================================================
 
 def check_macd_golden(daily_ctx: dict) -> tuple:
-    """日线 MACD 多头: dif > dea 且近 5 日有金叉。"""
+    """日线 MACD 金叉: 近 5 日出现 DIF 上穿 DEA（不要求当前多头）。"""
     golden = daily_ctx.get("daily_macd_golden")
     if golden is None:
         return False, "缺日线MACD数据", True
     passed = bool(golden)
-    dif = daily_ctx.get("daily_macd_dif")
-    dea = daily_ctx.get("daily_macd_dea")
-    above = (dif is not None and dea is not None and dif > dea) if not isinstance(dif, bool) else True
-    detail = (f"日线dif{'>' if above else '<='}dea，近5日金叉={'有' if passed else '无'}"
-              f"（需日线dif>dea且近5日金叉）")
+    detail = f"近5日MACD金叉={'有' if passed else '无'}（需近5日出现金叉）"
     return passed, detail
 
 

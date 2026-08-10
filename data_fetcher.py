@@ -327,9 +327,9 @@ def _build_daily_context_from_df(code: str, df: pd.DataFrame, current_price: flo
             "daily_macd_dif": _fnum(today["macd_dif"]),
             "daily_macd_dea": _fnum(today["macd_dea"]),
             "daily_macd_hist": _fnum(today["macd_hist"]),
+            # 近5日出现MACD金叉(DIF上穿DEA)，不要求当前 dif>dea（多头状态）
             "daily_macd_golden": bool(
-                (work["macd_dif"] > work["macd_dea"]).iloc[-1]
-                and ((work["macd_dif"] > work["macd_dea"]) & (work["macd_dif"].shift(1) <= work["macd_dea"].shift(1))).tail(5).any()),
+                ((work["macd_dif"] > work["macd_dea"]) & (work["macd_dif"].shift(1) <= work["macd_dea"].shift(1))).tail(5).any()),
             "daily_rsi": _fnum(today["rsi"]),
             "daily_boll_pct": _fnum(today["boll_pct"]),
             "daily_vol_today": _fnum(today["volume"]),
