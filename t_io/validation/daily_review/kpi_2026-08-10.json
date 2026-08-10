@@ -1,0 +1,504 @@
+{
+  "date": "2026-08-10",
+  "snapshot": {
+    "file": "t_io\\state\\holdings_2026-08-10.json",
+    "created_now": true,
+    "prev": "t_io\\state\\holdings_2026-08-07.json"
+  },
+  "K1_closed_pnl": {
+    "total_est_pnl": -11.8,
+    "by_code": {
+      "588170": {
+        "sold": 3000,
+        "bought": 0,
+        "unrebuilt": 3000,
+        "est_pnl": -3.14,
+        "qty_diff": 0
+      },
+      "600176": {
+        "sold": 200,
+        "bought": 0,
+        "unrebuilt": 200,
+        "est_pnl": -8.66,
+        "qty_diff": 0
+      },
+      "600481": {
+        "sold": 0,
+        "bought": 0,
+        "unrebuilt": 0,
+        "est_pnl": 0.0,
+        "qty_diff": 0
+      },
+      "603667": {
+        "sold": 0,
+        "bought": 0,
+        "unrebuilt": 0,
+        "est_pnl": 0.0,
+        "qty_diff": 0
+      },
+      "000988": {
+        "sold": 0,
+        "bought": 0,
+        "unrebuilt": 0,
+        "est_pnl": 0.0,
+        "qty_diff": 0
+      },
+      "000988_B": {
+        "sold": 0,
+        "bought": 0,
+        "unrebuilt": 0,
+        "est_pnl": 0.0,
+        "qty_diff": 0
+      },
+      "002639": {
+        "sold": 0,
+        "bought": 0,
+        "unrebuilt": 0,
+        "est_pnl": 0.0,
+        "qty_diff": 0
+      },
+      "300153": {
+        "sold": 0,
+        "bought": 0,
+        "unrebuilt": 0,
+        "est_pnl": 0.0,
+        "qty_diff": 0
+      }
+    },
+    "source": "t_io/logs/closure_audit.jsonl"
+  },
+  "K2_cost_change": {
+    "baseline": false,
+    "note": "对照 2026-08-07",
+    "by_code": {
+      "000988": {
+        "cost_now": 331.504,
+        "cost_prev": 334.451,
+        "delta": -2.947
+      },
+      "588170": {
+        "cost_now": 0.896,
+        "cost_prev": 0.95,
+        "delta": -0.054
+      },
+      "600176": {
+        "cost_now": 55.744,
+        "cost_prev": 55.744,
+        "delta": 0.0
+      },
+      "600481": {
+        "cost_now": 12.4,
+        "cost_prev": 12.4,
+        "delta": 0.0
+      },
+      "603667": {
+        "cost_now": 58.639,
+        "cost_prev": 58.793,
+        "delta": -0.154
+      },
+      "002639": {
+        "cost_now": 10.807,
+        "cost_prev": 10.807,
+        "delta": 0.0
+      },
+      "300153": {
+        "cost_now": 22.826,
+        "cost_prev": 22.31,
+        "delta": 0.516
+      },
+      "300364": {
+        "cost_now": null,
+        "cost_prev": null,
+        "delta": null
+      }
+    },
+    "snapshot": "t_io\\state\\holdings_2026-08-10.json"
+  },
+  "K3_base_drift": {
+    "baseline": false,
+    "by_code": {
+      "000988": {
+        "t_qty_now": 200,
+        "t_qty_prev": 200,
+        "drift": 0,
+        "attribution": "无漂移",
+        "audit": {
+          "sold": 0,
+          "bought": 0,
+          "unrebuilt": 0,
+          "est_pnl": 0.0,
+          "qty_diff": 0
+        },
+        "source": "snapshot_diff"
+      },
+      "588170": {
+        "t_qty_now": 3000,
+        "t_qty_prev": 6000,
+        "drift": -3000,
+        "attribution": "未接回（卖3000/接回0，3000股未接回）",
+        "audit": {
+          "sold": 3000,
+          "bought": 0,
+          "unrebuilt": 3000,
+          "est_pnl": -3.14,
+          "qty_diff": 0
+        },
+        "source": "snapshot_diff"
+      },
+      "600176": {
+        "t_qty_now": 300,
+        "t_qty_prev": 500,
+        "drift": -200,
+        "attribution": "未接回（卖200/接回0，200股未接回）",
+        "audit": {
+          "sold": 200,
+          "bought": 0,
+          "unrebuilt": 200,
+          "est_pnl": -8.66,
+          "qty_diff": 0
+        },
+        "source": "snapshot_diff"
+      },
+      "600481": {
+        "t_qty_now": 300,
+        "t_qty_prev": 300,
+        "drift": 0,
+        "attribution": "无漂移",
+        "audit": {
+          "sold": 0,
+          "bought": 0,
+          "unrebuilt": 0,
+          "est_pnl": 0.0,
+          "qty_diff": 0
+        },
+        "source": "snapshot_diff"
+      },
+      "603667": {
+        "t_qty_now": 300,
+        "t_qty_prev": 300,
+        "drift": 0,
+        "attribution": "无漂移",
+        "audit": {
+          "sold": 0,
+          "bought": 0,
+          "unrebuilt": 0,
+          "est_pnl": 0.0,
+          "qty_diff": 0
+        },
+        "source": "snapshot_diff"
+      },
+      "002639": {
+        "t_qty_now": 100,
+        "t_qty_prev": 100,
+        "drift": 0,
+        "attribution": "无漂移",
+        "audit": {
+          "sold": 0,
+          "bought": 0,
+          "unrebuilt": 0,
+          "est_pnl": 0.0,
+          "qty_diff": 0
+        },
+        "source": "snapshot_diff"
+      },
+      "300153": {
+        "t_qty_now": 200,
+        "t_qty_prev": 300,
+        "drift": -100,
+        "attribution": "需人工确认",
+        "audit": {
+          "sold": 0,
+          "bought": 0,
+          "unrebuilt": 0,
+          "est_pnl": 0.0,
+          "qty_diff": 0
+        },
+        "source": "snapshot_diff"
+      },
+      "300364": {
+        "t_qty_now": null,
+        "t_qty_prev": null,
+        "drift": 0,
+        "attribution": "无漂移",
+        "audit": null,
+        "source": "snapshot_diff"
+      }
+    },
+    "drift_total": -3300
+  },
+  "K4_rolling_wr": {
+    "buy": {
+      "n": 20,
+      "wins": 1,
+      "fails": 19,
+      "wr": 0.05,
+      "window": 20,
+      "short": false,
+      "note": "满窗",
+      "events_tail": [
+        {
+          "date": "2026-08-10",
+          "code": "300153",
+          "ts": "2026-08-10 10:27:40",
+          "res": "FAIL"
+        },
+        {
+          "date": "2026-08-10",
+          "code": "300153",
+          "ts": "2026-08-10 10:28:49",
+          "res": "FAIL"
+        },
+        {
+          "date": "2026-08-10",
+          "code": "300153",
+          "ts": "2026-08-10 10:30:10",
+          "res": "FAIL"
+        },
+        {
+          "date": "2026-08-10",
+          "code": "300153",
+          "ts": "2026-08-10 10:31:23",
+          "res": "FAIL"
+        },
+        {
+          "date": "2026-08-10",
+          "code": "300153",
+          "ts": "2026-08-10 10:36:20",
+          "res": "FAIL"
+        },
+        {
+          "date": "2026-08-10",
+          "code": "300153",
+          "ts": "2026-08-10 10:37:01",
+          "res": "FAIL"
+        },
+        {
+          "date": "2026-08-10",
+          "code": "300153",
+          "ts": "2026-08-10 10:37:35",
+          "res": "FAIL"
+        },
+        {
+          "date": "2026-08-10",
+          "code": "600481",
+          "ts": "2026-08-10 10:38:21",
+          "res": "FAIL"
+        },
+        {
+          "date": "2026-08-10",
+          "code": "300153",
+          "ts": "2026-08-10 10:38:33",
+          "res": "FAIL"
+        },
+        {
+          "date": "2026-08-10",
+          "code": "300153",
+          "ts": "2026-08-10 10:39:23",
+          "res": "FAIL"
+        },
+        {
+          "date": "2026-08-10",
+          "code": "300153",
+          "ts": "2026-08-10 10:40:06",
+          "res": "FAIL"
+        },
+        {
+          "date": "2026-08-10",
+          "code": "300153",
+          "ts": "2026-08-10 10:40:41",
+          "res": "FAIL"
+        },
+        {
+          "date": "2026-08-10",
+          "code": "300153",
+          "ts": "2026-08-10 10:41:22",
+          "res": "FAIL"
+        },
+        {
+          "date": "2026-08-10",
+          "code": "300153",
+          "ts": "2026-08-10 10:41:56",
+          "res": "FAIL"
+        },
+        {
+          "date": "2026-08-10",
+          "code": "300153",
+          "ts": "2026-08-10 10:42:50",
+          "res": "FAIL"
+        },
+        {
+          "date": "2026-08-10",
+          "code": "300153",
+          "ts": "2026-08-10 10:43:30",
+          "res": "FAIL"
+        },
+        {
+          "date": "2026-08-10",
+          "code": "300153",
+          "ts": "2026-08-10 10:44:04",
+          "res": "FAIL"
+        },
+        {
+          "date": "2026-08-10",
+          "code": "300153",
+          "ts": "2026-08-10 10:44:48",
+          "res": "FAIL"
+        },
+        {
+          "date": "2026-08-10",
+          "code": "300153",
+          "ts": "2026-08-10 10:45:46",
+          "res": "FAIL"
+        },
+        {
+          "date": "2026-08-10",
+          "code": "600481",
+          "ts": "2026-08-10 13:34:28",
+          "res": "WIN"
+        }
+      ]
+    },
+    "sell": {
+      "n": 20,
+      "wins": 5,
+      "fails": 15,
+      "wr": 0.25,
+      "window": 20,
+      "short": false,
+      "note": "满窗",
+      "events_tail": [
+        {
+          "date": "2026-08-10",
+          "code": "600176",
+          "ts": "2026-08-10 14:12:32",
+          "res": "FAIL"
+        },
+        {
+          "date": "2026-08-10",
+          "code": "600176",
+          "ts": "2026-08-10 14:13:07",
+          "res": "FAIL"
+        },
+        {
+          "date": "2026-08-10",
+          "code": "600176",
+          "ts": "2026-08-10 14:14:02",
+          "res": "FAIL"
+        },
+        {
+          "date": "2026-08-10",
+          "code": "600176",
+          "ts": "2026-08-10 14:14:40",
+          "res": "WIN"
+        },
+        {
+          "date": "2026-08-10",
+          "code": "600176",
+          "ts": "2026-08-10 14:15:28",
+          "res": "WIN"
+        },
+        {
+          "date": "2026-08-10",
+          "code": "600176",
+          "ts": "2026-08-10 14:16:09",
+          "res": "WIN"
+        },
+        {
+          "date": "2026-08-10",
+          "code": "600176",
+          "ts": "2026-08-10 14:16:52",
+          "res": "WIN"
+        },
+        {
+          "date": "2026-08-10",
+          "code": "600176",
+          "ts": "2026-08-10 14:17:27",
+          "res": "WIN"
+        },
+        {
+          "date": "2026-08-10",
+          "code": "000988",
+          "ts": "2026-08-10 14:17:35",
+          "res": "FAIL"
+        },
+        {
+          "date": "2026-08-10",
+          "code": "000988_B",
+          "ts": "2026-08-10 14:17:38",
+          "res": "FAIL"
+        },
+        {
+          "date": "2026-08-10",
+          "code": "000988",
+          "ts": "2026-08-10 14:18:19",
+          "res": "FAIL"
+        },
+        {
+          "date": "2026-08-10",
+          "code": "000988_B",
+          "ts": "2026-08-10 14:18:22",
+          "res": "FAIL"
+        },
+        {
+          "date": "2026-08-10",
+          "code": "000988",
+          "ts": "2026-08-10 14:18:59",
+          "res": "FAIL"
+        },
+        {
+          "date": "2026-08-10",
+          "code": "000988_B",
+          "ts": "2026-08-10 14:19:20",
+          "res": "FAIL"
+        },
+        {
+          "date": "2026-08-10",
+          "code": "000988",
+          "ts": "2026-08-10 14:19:56",
+          "res": "FAIL"
+        },
+        {
+          "date": "2026-08-10",
+          "code": "000988_B",
+          "ts": "2026-08-10 14:19:59",
+          "res": "FAIL"
+        },
+        {
+          "date": "2026-08-10",
+          "code": "600176",
+          "ts": "2026-08-10 14:27:50",
+          "res": "FAIL"
+        },
+        {
+          "date": "2026-08-10",
+          "code": "600176",
+          "ts": "2026-08-10 14:28:40",
+          "res": "FAIL"
+        },
+        {
+          "date": "2026-08-10",
+          "code": "600176",
+          "ts": "2026-08-10 14:29:24",
+          "res": "FAIL"
+        },
+        {
+          "date": "2026-08-10",
+          "code": "600176",
+          "ts": "2026-08-10 14:30:00",
+          "res": "FAIL"
+        }
+      ]
+    },
+    "days_covered": [
+      "2026-07-13",
+      "2026-08-10"
+    ]
+  },
+  "K5_qty0_suppressed": {
+    "total": 7,
+    "by_code": {
+      "600481": 7
+    },
+    "source": "t_io/logs 仓控可交易量为0"
+  }
+}
