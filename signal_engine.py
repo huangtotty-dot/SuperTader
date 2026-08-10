@@ -618,10 +618,14 @@ class SignalEngine:
 
         # ===== V1.30: 卖出端保护 —— 底仓地板 + 卖出次数上限（防卖穿底仓）=====
         _net_qty = self._virtual_net_qty(code, holding)
-        _base_qty = int(holding.get("base") or holding.get("t_qty") or 0)
-        _floor_qty = int(_base_qty * float(_sp_param(code, "sell_floor_ratio", 0.5)))
-        if hold_qty > 0 and _floor_qty > 0 and _net_qty <= _floor_qty:
-            risk_sell_block.append(f"sell_floor_protect(余{_net_qty}≤地板{_floor_qty})")
+        # V1.2.1 (2026-08-11 用户拍板补充): "做T不用考虑底仓"覆盖引擎层——sell_floor_protect 闸接入
+        # PARAMS["sell_floor_enabled"]（默认 False=不压制，与 position_sizer 层同开关同语义；
+        # True=恢复 V1.30 原逻辑，harness T_SELL_FLOOR_ENABLED="1" 注入对照）
+        if PARAMS.get("sell_floor_enabled", False):
+            _base_qty = int(holding.get("base") or holding.get("t_qty") or 0)
+            _floor_qty = int(_base_qty * float(_sp_param(code, "sell_floor_ratio", 0.5)))
+            if hold_qty > 0 and _floor_qty > 0 and _net_qty <= _floor_qty:
+                risk_sell_block.append(f"sell_floor_protect(余{_net_qty}≤地板{_floor_qty})")
         _max_sells = int(_sp_param(code, "max_sell_times_per_stock", 3))
         if self.sell_count_per_stock.get(code, 0) >= _max_sells:
             risk_sell_block.append(f"max_sell_times({self.sell_count_per_stock.get(code, 0)}>={_max_sells})")
