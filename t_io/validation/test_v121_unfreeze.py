@@ -73,6 +73,45 @@ def run():
     s = PositionSizer(params={})
     check("t1000 弱卖=200（不变）", s.calc_sell_qty("000988", mk(1000), None, 40, 36), 200)
 
+    # ==================== 引擎层 sell_floor_protect 闸（V1.2.1 补充覆盖） ====================
+    import re
+    import textwrap
+
+    eng_src = (Path(__file__).resolve().parent.parent.parent / "signal_engine.py").read_text(encoding="utf-8")
+    check('引擎闸开关守卫存在且唯一',
+          eng_src.count('if PARAMS.get("sell_floor_enabled", False):'), 1)
+
+    # 从实源提取 V1.30 卖出端保护块（marker → _max_sells 行之前），桩执行验证开关语义
+    m = re.search(r"(        # ===== V1\.30: 卖出端保护.*?)\n        _max_sells", eng_src, re.S)
+    assert m, "V1.30 卖出端保护块提取失败"
+    snippet = textwrap.dedent(m.group(1))
+
+    class _Eng:
+        def __init__(self, net):
+            self._net = net
+
+        def _virtual_net_qty(self, code, holding):
+            return self._net
+
+    def _exec_gate(params, net, base=600, hold=300):
+        ns = {
+            "PARAMS": params,
+            "self": _Eng(net),
+            "code": "588170",
+            "_sp_param": lambda code, k, d: d,
+            "hold_qty": hold,
+            "holding": {"base": base, "t_qty": base},
+            "risk_sell_block": [],
+        }
+        exec(snippet, ns)  # noqa: S102
+        return ns["risk_sell_block"]
+
+    # net=300 ≤ floor=300：闸关(默认)=放行；闸开=压制；闸开但 net>floor=不压制（原语义保持）
+    check("引擎闸关(默认): 余300≤地板300 放行", _exec_gate({}, net=300), [])
+    blk = _exec_gate({"sell_floor_enabled": True}, net=300)
+    check("引擎闸开: 余300≤地板300 恢复压制", len([b for b in blk if b.startswith("sell_floor_protect")]), 1)
+    check("引擎闸开: 余400>地板300 不压制（原语义）", _exec_gate({"sell_floor_enabled": True}, net=400), [])
+
     print(f"PASS: V1.2.1 取消冻结回归全绿（{n}/n 项）")
 
 

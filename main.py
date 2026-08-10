@@ -1942,6 +1942,8 @@ def tushare_replay():
     report_lines.append(f"# Tushare 复测报告 ({today})")
     # V1.2.1 (2026-08-11 01:11 用户拍板): 取消 sizing 冻结——手动跟单场景信号达标即推送
     # （卖出保底100股 / 放开满仓买建议 / 底仓地板默认关 sell_floor_enabled=False；纯底仓 t_qty=0 与大盘熔断/防守风控保留）
+    # 补充（同日拍板覆盖引擎层）：signal_engine sell_floor_protect 闸接入同一 sell_floor_enabled 开关，
+    # 默认放开（原地板压制 tick 自此可出卖信号；轮次上限 max_sell_times 保留不动）
     report_lines.append(f"## 版本: V1.2.1")
     report_lines.append(f"")
     report_lines.append(f"## 总信号统计")
