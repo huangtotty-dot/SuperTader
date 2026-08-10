@@ -1257,6 +1257,35 @@ function renderAddWatch(aw) {
   el.innerHTML = summaryHtml + cards;
 }
 
+// ---- 盘后重跑：重新跑一遍建仓扫描+加仓观察（日线口径）----
+let pbRecomputeRunning = false;
+async function recomputePB() {
+  if (pbRecomputeRunning) return;
+  if (!state.date) return;
+  const btns = document.querySelectorAll(".recompute-pb-btn");
+  pbRecomputeRunning = true;
+  btns.forEach(b => { b.disabled = true; b.textContent = "⏳ 重跑中..."; });
+  statusEl("盘后重跑中（建仓扫描+加仓观察）...", "ok");
+  try {
+    const r = await apiCall("recompute_pb", state.date);
+    if (r && r.position_builder) {
+      renderPB(r.position_builder);
+      renderAddWatch(r.add_watch || {});
+      if (state.payload) {
+        state.payload.position_builder = r.position_builder;
+        state.payload.add_watch = r.add_watch;
+      }
+      statusEl("盘后重跑完成", "ok");
+    } else {
+      statusEl("重跑失败: 无返回", "err");
+    }
+  } catch (e) {
+    statusEl("重跑失败: " + e.message, "err");
+  }
+  pbRecomputeRunning = false;
+  btns.forEach(b => { b.disabled = false; b.textContent = "🔄 盘后重跑"; });
+}
+
 /* ---- ⑧ 阶段看板 ---- */
 function renderStageBoard(stages) {
   const el = document.getElementById("stageBoardBody");

@@ -134,11 +134,14 @@
           <input type="text" id="pbSearchName" class="mini-input" placeholder="名称(可选)" style="width:90px">
           <button class="mini-btn primary" onclick="addNewWatchlist()">+ 添加</button>
         </span>
+        <button class="mini-btn recompute-pb-btn" onclick="recomputePB()" title="盘后重新跑一遍建仓扫描+加仓观察（日线口径）">🔄 盘后重跑</button>
       </h2>
       <div id="pbBody"></div>
     </div>
     <div class="section" id="add-watch">
-      <h2>加仓观察（回踩支撑）</h2>
+      <h2>加仓观察（回踩支撑）
+        <button class="mini-btn recompute-pb-btn" onclick="recomputePB()" title="盘后重新跑一遍建仓扫描+加仓观察（日线口径）">🔄 盘后重跑</button>
+      </h2>
       <div id="addWatchBody"></div>
     </div>
   </div>

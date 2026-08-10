@@ -638,8 +638,10 @@ def compute_position(latest_price: float, total_capital: float,
 # ============================================================
 
 def scan_stock(code: str, stock_info: dict, date_str: str = None,
-               total_capital: float = 300000, max_pct: float = 0.2) -> dict:
-    """扫描单只股票，返回结果字典。"""
+               total_capital: float = 300000, max_pct: float = 0.2,
+               allow_stale: bool = False) -> dict:
+    """扫描单只股票，返回结果字典。
+    allow_stale=True 时允许分钟快照陈旧（盘后重跑，日线判断不依赖分钟快照）。"""
     result = {
         "code": code,
         "name": stock_info.get("name", code),
@@ -656,15 +658,15 @@ def scan_stock(code: str, stock_info: dict, date_str: str = None,
     # 加载数据
     df_1min, daily_ctx, snap_date = load_snapshot_df(code, date_str)
     # fix P1-7/P2-4: 快照（或在线数据）日期≠目标日期 → 强制 insufficient_data，防陈旧快照出 signal
+    # 盘后重跑(allow_stale=True)时允许陈旧：日线判断用 fetch_daily_kline 独立拉取，与分钟快照时间无关
     target_date = date_str or datetime.now().strftime("%Y-%m-%d")
-    if snap_date and snap_date != target_date:
+    if not allow_stale and snap_date and snap_date != target_date:
         result["date"] = snap_date
         result["errors"].append(f"快照陈旧({snap_date})")
         return result
-    # 日线判断需 daily_ctx；缺日线指标字段（旧快照）时用日线现算补齐
+    # 日线判断需 daily_ctx；无分钟快照的候选股用日线独立构建（盘后重跑依赖此路径）
     if not daily_ctx:
-        result["errors"].append("缺日线上下文")
-        return result
+        daily_ctx = {}
     _ensure_daily_indicators(daily_ctx, code)
 
     result["date"] = snap_date
@@ -1057,7 +1059,9 @@ def run_position_scan(date_str: str = None, capital: float = None,
     for code, info in stocks.items():
         if not silent:
             print(f"扫描 {code} {info.get('name', '')}...")
-        r = scan_stock(code, info, date_str, total_capital, max_pct)
+        # 盘后(eod)/手动(manual)重跑允许快照陈旧（日线判断独立拉取）
+        r = scan_stock(code, info, date_str, total_capital, max_pct,
+                       allow_stale=(scan_type in ("eod", "manual")))
         results.append(r)
         update_watchlist(r, watchlist)
 
