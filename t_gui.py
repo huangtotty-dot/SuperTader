@@ -48,7 +48,7 @@ NAMES = {
 }
 
 COND_LABELS = {
-    "macd_golden": "MACD多头",
+    "macd_golden": "MACD金叉",
     "boll_mid_support": "BOLL中轨",
     "rsi_healthy": "RSI健康",
     "volume_shrink": "缩量",
@@ -838,7 +838,7 @@ class Api:
             cross_up = (s_dif > s_dea) & (s_dif.shift(1) <= s_dea.shift(1))
             daily_ctx["daily_macd_dif"] = float(macd_dif[-1])
             daily_ctx["daily_macd_dea"] = float(macd_dea[-1])
-            daily_ctx["daily_macd_golden"] = bool(macd_dif[-1] > macd_dea[-1] and cross_up.tail(5).any())
+            daily_ctx["daily_macd_golden"] = bool(cross_up.tail(5).any())
             # 趋势背景：用 MA 排列粗略推断（上行/下行/震荡）
             ma5 = float(c.rolling(5).mean().iloc[-1])
             ma20 = float(c.rolling(20).mean().iloc[-1])
