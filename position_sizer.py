@@ -206,11 +206,15 @@ class PositionSizer:
                 result_qty = self._calc_etf_sell_qty(p, net_qty, strength, used_sells) if is_etf else self._calc_stock_sell_qty(p, net_qty, strength, used_sells)
 
         available_qty = self._available_sell_qty(holding)
-        # V1.30: 底仓地板钳制 —— 保留 base×sell_floor_ratio 不可卖（防卖穿底仓）
+        # V1.2.1 (2026-08-11 用户拍板): 底仓地板默认取消——"手动跟单场景，做T不用考虑底仓问题"；
+        # sell_floor_enabled=True 时恢复 V1.30 钳制（回测对照开关；sell_floor_ratio 参数保留）
         try:
-            _base_qty = int(holding.get("base") or holding.get("t_qty") or holding.get("qty") or 0)
-            _floor_qty = int(_base_qty * float(p.get("sell_floor_ratio", 0.5)))
-            _sell_cap = max(0, net_qty - _floor_qty)
+            if p.get("sell_floor_enabled", False):
+                _base_qty = int(holding.get("base") or holding.get("t_qty") or holding.get("qty") or 0)
+                _floor_qty = int(_base_qty * float(p.get("sell_floor_ratio", 0.5)))
+                _sell_cap = max(0, net_qty - _floor_qty)
+            else:
+                _sell_cap = net_qty
         except Exception:
             _sell_cap = net_qty
         return max(0, min(result_qty, net_qty, available_qty, _sell_cap))
@@ -236,9 +240,9 @@ class PositionSizer:
             return 0
 
         net_qty = self._virtual_net_qty(code, holding)
+        # V1.2.1 (2026-08-11 用户拍板): 满仓不再早退（原 max_buyable<=0 return 0 = 冻结链来源②）——
+        # 继续走 unrebuilt/first_add 计算，末端保底一手；是否跟单由人决定
         max_buyable = max(0, total_t - net_qty)
-        if max_buyable <= 0:
-            return 0
 
         index_ctx = index_ctx or {}
 
@@ -265,8 +269,8 @@ class PositionSizer:
             return 0
         target_cap = max(0, int(total_t * index_factor))
         max_buyable = min(max_buyable, max(0, target_cap - net_qty))
-        if max_buyable <= 0:
-            return 0
+        # V1.2.1: 此处不再因 max_buyable<=0 早退（同为满仓冻结链一环）；
+        # 大盘目标仓位仍作为数量上限参与下方 min(qty, max_buyable) 钳制（风控保留，冻结取消）
 
         if unrebuilt > 0:
             if is_etf:
@@ -288,11 +292,11 @@ class PositionSizer:
         # 确保不超过剩余可买额度
         qty = min(qty, max_buyable)
 
-        # fix P0-9(B2): 计算量为 0 时直接返回 0，禁止 max(min_unit,...) 让弱信号保底买一手（个股/ETF 统一）
-        if qty <= 0:
-            return 0
-        # 最小交易单位
+        # V1.2.1 (2026-08-11 用户拍板): 计算量<=0 时保底一手（原 fix P0-9(B2) 返回 0 = 冻结链；
+        # 手动跟单场景信号达标即给出可执行建议数量，个股/ETF 统一）
         min_unit = p.get("etf_min_trade_unit", 100) if is_etf else p.get("stock_min_trade_unit", 100)
+        if qty <= 0:
+            qty = min_unit
         qty = max(min_unit, (qty // min_unit) * min_unit)
 
         return max(0, qty)
@@ -329,7 +333,13 @@ class PositionSizer:
                 return 0
 
         qty = int(net_qty * pct)
-        return max(min_unit, (qty // min_unit) * min_unit) if qty >= min_unit else (net_qty if pct >= 1.0 else 0)
+        # V1.2.1 (2026-08-11 用户拍板): int(net×pct) 不足一手时保底 100 股（原: 返回 0 = 冻结链来源①）；
+        # pct>=1.0 清仓逻辑不变；used_sells>=2 弱信号 return 0（轮次停止，风控）保留
+        if pct >= 1.0:
+            return net_qty
+        if qty < min_unit:
+            return min(min_unit, net_qty) if net_qty > 0 else 0
+        return max(min_unit, (qty // min_unit) * min_unit)
 
     def _calc_etf_sell_qty(self, p: dict, net_qty: int, strength: float, used_sells: int) -> int:
         """ETF正常模式下的分批卖出（保持原有逻辑）"""

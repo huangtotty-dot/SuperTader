@@ -1940,7 +1940,9 @@ def tushare_replay():
     # 生成报告
     report_lines = []
     report_lines.append(f"# Tushare 复测报告 ({today})")
-    report_lines.append(f"## 版本: V1.2.0")
+    # V1.2.1 (2026-08-11 01:11 用户拍板): 取消 sizing 冻结——手动跟单场景信号达标即推送
+    # （卖出保底100股 / 放开满仓买建议 / 底仓地板默认关 sell_floor_enabled=False；纯底仓 t_qty=0 与大盘熔断/防守风控保留）
+    report_lines.append(f"## 版本: V1.2.1")
     report_lines.append(f"")
     report_lines.append(f"## 总信号统计")
     report_lines.append(f"- 总信号数: {len(results)}")

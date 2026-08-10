@@ -295,6 +295,9 @@ PARAMS = {
     "commission_rate": 0.0010,
     "cooldown_minutes": 30,
     "sell_floor_ratio": 0.5,
+    # V1.2.1 (2026-08-11 01:11 用户拍板): "手动跟单场景，取消冻结，做T不用考虑底仓问题"——
+    # 底仓地板默认不生效；True 时恢复 V1.30 钳制（position_sizer.py calc_sell_qty 软消费；harness T_SELL_FLOOR_ENABLED 可注入对照）
+    "sell_floor_enabled": False,
     "index_regime_intraday_lock": True,
     "max_single_position_pct": 0.30,
     "max_buy_times_per_stock": 1,
