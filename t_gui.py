@@ -267,6 +267,66 @@ class Api:
                     })
         return _clean(out)
 
+    # ---------- 主要指数概览 ----------
+    def load_indices(self):
+        """拉主要指数实时行情 + 大盘 regime 状态，返回列表（点击可看K线）。"""
+        indices = [
+            {"symbol": "sh000001", "name": "上证指数"},
+            {"symbol": "sz399001", "name": "深证成指"},
+            {"symbol": "sz399006", "name": "创业板指"},
+            {"symbol": "sh000300", "name": "沪深300"},
+            {"symbol": "sh000905", "name": "中证500"},
+        ]
+        out = {"ts": None, "indices": [], "regime": None, "days_in_regime": None}
+        try:
+            import os as _os
+            import urllib.request as _ur
+            for _k in ["http_proxy", "https_proxy", "HTTP_PROXY", "HTTPS_PROXY",
+                       "ALL_PROXY", "all_proxy"]:
+                _os.environ.pop(_k, None)
+            _os.environ["NO_PROXY"] = "*"
+            url = "https://qt.gtimg.cn/q=" + ",".join(i["symbol"] for i in indices)
+            req = _ur.Request(url, headers={"User-Agent": "Mozilla/5.0",
+                                            "Referer": "https://gu.qq.com/"})
+            data = _ur.urlopen(req, timeout=4).read().decode("gbk", errors="replace")
+            px = {}
+            for line in data.splitlines():
+                line = line.strip()
+                if "=" not in line or '"' not in line:
+                    continue
+                body = line[line.index('"') + 1: line.rindex('"')]
+                f = body.split("~")
+                if len(f) < 40:
+                    continue
+                try:
+                    px[f[2]] = {
+                        "price": float(f[3]), "pre_close": float(f[4]),
+                        "change": float(f[31]) if f[31] else 0.0,
+                        "change_pct": float(f[32]) if f[32] else 0.0,
+                    }
+                except (ValueError, IndexError):
+                    continue
+            for i in indices:
+                base = i["symbol"][2:]
+                p = px.get(base)
+                if p:
+                    out["indices"].append({
+                        "symbol": i["symbol"], "name": i["name"],
+                        "price": p["price"], "change": p["change"],
+                        "change_pct": p["change_pct"],
+                    })
+            out["ts"] = datetime.now().strftime("%H:%M:%S")
+        except Exception:
+            pass
+        # 大盘 regime 状态
+        try:
+            state = _load_json(IDX_REGIME / "state.json", {})
+            out["regime"] = state.get("last_regime")
+            out["days_in_regime"] = state.get("days_in_regime")
+        except Exception:
+            pass
+        return _clean(out)
+
     # ---------- 持仓成本历史 ----------
     def load_cost_history(self):
         """读全部 holdings 快照 + 人工校准文件，按股按日聚合 cost。
@@ -961,7 +1021,7 @@ class Api:
     # ---------- 个股技术分析弹窗 ----------
     def load_stock_chart(self, code):
         """日线(本地缓存秒回/网络兜底) → 7 条 MA + MACD/RSI/BOLL → resample 周/月 → 支撑压力。
-        内存缓存：同一股票当日结果复用，避免重复拉取与重算。"""
+        支持带前缀指数代码(sh000001/sz399001 等)。内存缓存：同一标的当日结果复用。"""
         out = {"code": code, "name": code, "available": False, "error": ""}
         if not hasattr(self, "_stock_chart_cache"):
             self._stock_chart_cache = {}
@@ -969,18 +1029,24 @@ class Api:
         if cache_key in self._stock_chart_cache:
             return self._stock_chart_cache[cache_key]
 
-        # 优先本地日线缓存（当日秒回，无网络）；fetch_daily_kline 自带网络兜底+写缓存
+        code_str = str(code)
+        # 带前缀(sx000000) → 指数/特殊标的；纯6位 → 股票
+        is_index = code_str[:2] in ("sh", "sz", "bj") and code_str[2:].isdigit()
+        symbol = code_str if is_index else ("sh" + code_str if code_str[0] in "56" else "sz" + code_str)
+
+        # 股票优先本地日线缓存（当日秒回）；指数无个股缓存，直接网络
         rows = []
-        try:
-            from position_builder import fetch_daily_kline
-            _df = fetch_daily_kline(code)
-            if not _df.empty:
-                for _r in _df.itertuples(index=False):
-                    rows.append({"date": str(_r.date), "open": float(_r.open),
-                                 "close": float(_r.close), "high": float(_r.high),
-                                 "low": float(_r.low), "volume": float(_r.volume)})
-        except Exception:
-            rows = []
+        if not is_index:
+            try:
+                from position_builder import fetch_daily_kline
+                _df = fetch_daily_kline(code_str)
+                if not _df.empty:
+                    for _r in _df.itertuples(index=False):
+                        rows.append({"date": str(_r.date), "open": float(_r.open),
+                                     "close": float(_r.close), "high": float(_r.high),
+                                     "low": float(_r.low), "volume": float(_r.volume)})
+            except Exception:
+                rows = []
 
         # 本地缓存不可用 → 走网络拉 400 根
         if not rows:
@@ -990,7 +1056,6 @@ class Api:
                 _os.environ.pop(_k, None)
             _os.environ["NO_PROXY"] = "*"
 
-            symbol = ("sh" + code if code[0] in "56" else "sz" + code)
             try:
                 url = f"https://ifzq.gtimg.cn/appstock/app/fqkline/get?param={symbol},day,,,400,qfq"
                 req = _ur.Request(url, headers={"User-Agent": "Mozilla/5.0",

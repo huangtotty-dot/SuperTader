@@ -1601,6 +1601,38 @@ async function initHunterDates() {
   } catch (e) { /* 静默 */ }
 }
 
+// ---- 主要指数概览（点击看K线，与个股一致）----
+async function loadIndices() {
+  const body = document.getElementById("indicesBody");
+  const meta = document.getElementById("indicesMeta");
+  if (!body) return;
+  try {
+    const d = await apiCall("load_indices");
+    const idx = (d && d.indices) || [];
+    if (!idx.length) {
+      body.innerHTML = '<div class="empty">指数行情不可用</div>';
+      return;
+    }
+    if (meta) meta.textContent = d.ts ? `更新于 ${d.ts}` : "";
+    const regimeTxt = d.regime ? (d.days_in_regime ? ` · 大盘 ${esc(d.regime)} 第${d.days_in_regime}天` : ` · 大盘 ${esc(d.regime)}`) : "";
+    body.innerHTML = `
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+        ${idx.map(i => {
+          const cls = i.change_pct > 0.05 ? "up" : i.change_pct < -0.05 ? "down" : "cell-dim";
+          return `<div class="idx-card" style="cursor:pointer;min-width:130px;text-align:center"
+              onclick="openStockChart('${i.symbol}','${esc(i.name)}')" title="点击查看K线">
+            <div style="font-size:13px;color:var(--text-dim)">${esc(i.name)}</div>
+            <div class="mono" style="font-size:16px;font-weight:700">${fmt(i.price, 2)}</div>
+            <div class="mono ${cls}" style="font-size:11px">${i.change_pct >= 0 ? '+' : ''}${fmt(i.change_pct, 2)}%</div>
+          </div>`;
+        }).join("")}
+        <span class="cell-dim" style="font-size:11px">${regimeTxt}</span>
+      </div>`;
+  } catch (e) {
+    body.innerHTML = `<div class="empty">指数加载失败: ${esc(e.message)}</div>`;
+  }
+}
+
 // 重新生成选中日期结果（拉行情+评分）
 async function regenerateHunter() {
   const sel = document.getElementById("hunterDate");
@@ -2290,6 +2322,8 @@ async function init() {
   const hunterRegen = document.getElementById("hunterRegenBtn");
   if (hunterRegen) hunterRegen.addEventListener("click", regenerateHunter);
   initHunterDates();
+  loadIndices();
+  setInterval(loadIndices, 60000);  // 指数行情每分钟刷新
   // 成本校准按钮
   const calibBtn = document.getElementById("calibBtn");
   if (calibBtn) calibBtn.addEventListener("click", () => {

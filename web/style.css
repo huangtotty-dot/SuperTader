@@ -110,6 +110,8 @@ html, body { height: 100%; background: var(--bg); color: var(--text); font: 14px
 
 /* ===== 卡片 / 表格 / 徽章（复用之前的精简版） ===== */
 .card { background: var(--bg-card); border: 1px solid var(--border-soft); border-radius: 8px; padding: 12px 14px; }
+.idx-card { background: var(--bg-card); border: 1px solid var(--border-soft); border-radius: 8px; padding: 8px 12px; transition: border-color .15s, transform .15s; }
+.idx-card:hover { border-color: var(--accent); transform: translateY(-1px); }
 .card-title { color: var(--text-dim); font-size: 12px; margin-bottom: 8px; }
 table { width: 100%; border-collapse: collapse; font-size: 12px; }
 th { text-align: left; color: var(--text-dim); font-weight: 600; padding: 5px 8px; border-bottom: 1px solid var(--border); white-space: nowrap; font-size: 11px; }
