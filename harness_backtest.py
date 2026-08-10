@@ -463,6 +463,12 @@ def run_backtest(codes: list, date_range: list, holdings_map: dict,
     # env 可显式覆盖做 A/B："0"=关闭（buy_daily_cap_reached 对 0 返回 False），"N"=自定义上限
     if os.environ.get("T_BUY_DAILY_CAP"):
         PARAMS["buy_daily_cap"] = int(os.environ["T_BUY_DAILY_CAP"])
+    # V1.2.1: 底仓地板开关注入 — 生产默认关（config.py PARAMS["sell_floor_enabled"]=False）；
+    # "1"=恢复 V1.30 钳制（复现旧世界对照），"0"=显式关闭
+    if os.environ.get("T_SELL_FLOOR_ENABLED") == "1":
+        PARAMS["sell_floor_enabled"] = True
+    elif os.environ.get("T_SELL_FLOOR_ENABLED") == "0":
+        PARAMS["sell_floor_enabled"] = False
 
     if override_params:
         if "PARAMS" in override_params:
