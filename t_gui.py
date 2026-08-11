@@ -2238,16 +2238,16 @@ class Api:
             base = str(code).split("_")[0]
             merged.setdefault(base, {"name": h.get("name", code), "codes": []})
             merged[base]["codes"].append((code, h))
-        rows = []
         default_pct = 0.30
         if config is not None:
             default_pct = config.PARAMS.get("stock_qty_base_pct", 0.30)
+        # 第一遍：收集各股原始比例 + 当前市值，归一化使总和=100%（目标市值总和=总资金）
+        raw = []
         for base, info in merged.items():
             sp = {}
             if config is not None:
                 sp = config.STOCK_PARAMS.get(base, {}) or {}
-            target_pct = sp.get("stock_qty_base_pct", default_pct)
-            target_val = total_capital * target_pct
+            raw_pct = sp.get("stock_qty_base_pct", default_pct)
             mkt_val = 0.0
             total_qty = 0
             cost_total = 0.0
@@ -2257,20 +2257,28 @@ class Api:
                 mkt_val += px * qty
                 total_qty += qty
                 cost_total += float(h.get("cost") or 0) * qty
-            pct = mkt_val / total_capital if total_capital else 0
-            gap_pct = (mkt_val / target_val - 1) if target_val else 0
+            raw.append({"base": base, "name": info["name"], "raw_pct": raw_pct,
+                        "mkt_val": mkt_val, "total_qty": total_qty,
+                        "cost": (cost_total / total_qty) if total_qty else 0})
+        ratio_sum = sum(r["raw_pct"] for r in raw) or 1.0
+        rows = []
+        for r in raw:
+            target_pct = r["raw_pct"] / ratio_sum  # 归一化：总和=100%
+            target_val = total_capital * target_pct
+            pct = r["mkt_val"] / total_capital if total_capital else 0
+            gap_pct = (r["mkt_val"] / target_val - 1) if target_val else 0
             rows.append({
-                "code": base, "name": info["name"],
-                "target_pct": round(target_pct, 2),
+                "code": r["base"], "name": r["name"],
+                "target_pct": round(target_pct, 4),
                 "target_val": round(target_val, 0),
-                "mkt_val": round(mkt_val, 0),
-                "total_qty": total_qty,
-                "price": round(mkt_val / total_qty, 3) if total_qty else 0,
+                "mkt_val": round(r["mkt_val"], 0),
+                "total_qty": r["total_qty"],
+                "price": round(r["mkt_val"] / r["total_qty"], 3) if r["total_qty"] else 0,
                 "pct": round(pct * 100, 1),
                 "gap_pct": round(gap_pct * 100, 1),
                 "over": gap_pct > 0.05,    # 超配 >5%
                 "under": gap_pct < -0.05,  # 欠配 >5%
-                "cost": round(cost_total / total_qty, 3) if total_qty else 0,
+                "cost": round(r["cost"], 3) if r["total_qty"] else 0,
             })
         rows.sort(key=lambda x: -x["pct"])
         return _clean({
