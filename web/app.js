@@ -58,6 +58,7 @@ function scanAgeSec(scanTime) {
 
 /* ================= 数据加载 ================= */
 let state = { date: null, payload: null, trend: [] };
+let userPinnedDate = false;   // 用户手动选了历史日期时置 true，防止自动切回今天覆盖用户选择
 
 async function apiCall(name, ...args) {
   if (!window.pywebview || !window.pywebview.api) {
@@ -2314,10 +2315,26 @@ let liveTimer = null;      // 10s 盘中实时轮询
 function stopPoll() {
   if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
 }
+async function maybeAutoSwitchToToday() {
+  // 启动时今天尚无盘后数据被挪到末尾、看板停在历史日时，一旦今天数据出现自动切回
+  if (userPinnedDate) return;                 // 用户手动固定了历史日，不强切
+  if (state.date === todayStr()) return;      // 已是今天
+  try {
+    const dates = await apiCall("available_dates");
+    if (dates && dates[0] === todayStr() && state.date !== todayStr()) {
+      statusEl("今日盘内数据已就绪，自动切到今天", "ok");
+      userPinnedDate = false;
+      await loadAndRender(todayStr(), true);  // 自动切回今天 → isToday=true → live 启动
+    }
+  } catch (e) { /* 静默 */ }
+}
 function startPoll() {
   stopPoll();
   pollTimer = setInterval(() => {
-    if (state.date) loadAndRender(state.date, true);
+    if (state.date) {
+      loadAndRender(state.date, true);
+      maybeAutoSwitchToToday();
+    }
   }, 60000);
 }
 function stopLivePoll() {
@@ -2343,7 +2360,11 @@ async function init() {
     });
   });
   dateSelect.addEventListener("change", () => {
-    if (dateSelect.value) loadAndRender(dateSelect.value, false);
+    if (dateSelect.value) {
+      // 用户手动选日期（非初始默认赋值）→ 记录，避免自动切回今天覆盖用户选择
+      if (dateSelect.value !== todayStr()) userPinnedDate = true;
+      loadAndRender(dateSelect.value, false);
+    }
   });
   refreshBtn.addEventListener("click", () => {
     if (dateSelect.value) loadAndRender(dateSelect.value, false);
@@ -2404,6 +2425,8 @@ async function init() {
 
   await loadAndRender(dates[0], false);
   startPoll();
+  // 启动时今天可能尚无数据导致停在历史日 → 立即检查一次，今天就绪则自动切回
+  maybeAutoSwitchToToday();
 }
 
 document.addEventListener("DOMContentLoaded", () => {
