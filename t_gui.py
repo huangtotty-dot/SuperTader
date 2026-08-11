@@ -1463,6 +1463,24 @@ class Api:
         norm_slope = slope / avg_price
         direction = "up" if norm_slope > 0.0015 else ("down" if norm_slope < -0.0015 else "flat")
 
+        # 通道方向反转检测：用更早的 40 日（第 40~80 根往前）回归，与当前方向对比
+        reversal = None
+        try:
+            if len(d) >= 80:
+                prev = d.iloc[-80:-40].reset_index(drop=True)
+                if len(prev) >= 25:
+                    px = np.arange(len(prev))
+                    ph = prev["high"].values
+                    pl = prev["low"].values
+                    p_slope, _ = np.polyfit(px, ph, 1)
+                    p_slope2, _ = np.polyfit(px, pl, 1)
+                    p_norm = (p_slope + p_slope2) / 2 / (float(prev["close"].mean()) or 1e-9)
+                    prev_dir = "up" if p_norm > 0.0015 else ("down" if p_norm < -0.0015 else "flat")
+                    if direction in ("up", "down") and prev_dir in ("up", "down") and direction != prev_dir:
+                        reversal = "up_to_down" if prev_dir == "up" else "down_to_up"
+        except Exception:
+            reversal = None
+
         # 趋势描述补充
         start_price = float(recent["close"].iloc[0])
         end_price = float(recent["close"].iloc[-1])
@@ -1479,6 +1497,7 @@ class Api:
             "dn_line": [round(float(dn_i), 3), round(float(dn_end), 3)],
             "ret_40d": round(float(ret_40d), 1),
             "pos_pct": round(max(0, min(100, float(pos_pct))), 0),
+            "reversal": reversal,   # up_to_down / down_to_up / None
         }
 
     def _calc_support_resistance(self, daily):
