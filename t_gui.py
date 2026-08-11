@@ -49,10 +49,10 @@ NAMES = {
 
 COND_LABELS = {
     "macd_golden": "MACD金叉",
-    "boll_mid_support": "BOLL中轨",
-    "rsi_healthy": "RSI健康",
+    "boll_lower": "BOLL下轨",
+    "rsi_oversold": "RSI超卖",
     "volume_shrink": "缩量",
-    "support_retest": "回踩支撑",
+    "m5_iceberg": "5分钟确认",
 }
 
 
@@ -747,68 +747,83 @@ class Api:
                     near.append({"level": label, "support": round(level, 3),
                                  "dist%": round(dist, 2), "type": stype})
 
-            # 加仓条件判定
-            conditions = []
-            # 条件0（第一优先级）: 突破箱体上沿
-            bx = self.check_box_breakout(code)
-            conditions.append({"name": "突破箱体", "met": bool(bx.get("broken")),
-                               "detail": (f"突破箱体上沿 {bx.get('box',{}).get('high')}，超出{bx.get('pct_above')}%"
-                                          if bx.get("broken") else "未突破箱体")})
-            # 条件1: 回踩支撑（日低距任意支撑 ≤2%）
-            min_dist = min(
-                (abs((day_low - lv) / lv * 100) for lv in supports.values() if lv > 0),
-                default=100)
-            nearest_name = min(
-                ((abs((day_low - lv) / lv * 100), k) for k, lv in supports.items() if lv > 0),
-                default=(100, ""))[1]
-            retest_ok = min_dist <= 2.0
-            conditions.append({"name": "回踩支撑", "met": retest_ok,
-                               "detail": f"日低{day_low:.2f}距{nearest_name} {min_dist:.1f}%" if retest_ok else f"日低距最近支撑{nearest_name} {min_dist:.1f}%（需≤2%）"})
-            # fix P2-16: ETF 缺 MA/VWAP 的条件记入 not_applicable，不当作失败
+            # ===== 加仓两组判定：左侧(冰点) + 右侧(突破箱体) =====
             not_applicable = []
-            # 条件2: 支撑守住（有回踩事件且收盘/现价≥支撑）
-            hold_ok = any(e["status"] == "守住" for e in events)
-            conditions.append({"name": "支撑守住", "met": hold_ok,
-                               "detail": (f"{px_word}≥支撑位{sfx}" if hold_ok else
-                                          (f"触及但{px_word}跌破{sfx}" if any(e["status"] == "破位" for e in events)
-                                           else "未触发回踩"))})
-            # 条件3: 收盘/现价高于MA5（短线不弱）
-            ma5 = raw_supports.get("MA5")
-            above_ma5 = ma5 and day_close > ma5
-            # fix P0-3: MA5 若含当日未完成 bar 则在 detail 标注
-            ma5_note = "(MA5含当日未完成K线)" if (is_intraday and daily_ctx.get("daily_asof") == date) else ""
-            if not ma5:
-                if is_etf:
-                    d3 = "不适用(ETF)"
-                    not_applicable.append("收盘>MA5")
-                else:
-                    d3 = "无MA5数据"
-            else:
-                d3 = (f"{px_word}{day_close:.2f}>MA5 {ma5:.2f}{ma5_note}{sfx}" if above_ma5
-                      else f"{px_word}{day_close:.2f}≤MA5 {ma5:.2f}{ma5_note}{sfx}")
-            conditions.append({"name": "收盘>MA5", "met": bool(above_ma5), "detail": d3})
-            # 条件4: 日线趋势（替代原 VWAP 确认，日线下无 VWAP 概念）
-            # 满足：日线趋势非下行（trend_bg 不在下行集）或 日线 MACD 金叉
-            _tbg = str(daily_ctx.get("daily_trend_bg") or "")
-            _downtrend = _tbg in ("downtrend", "weak_breakdown")
-            _golden = bool(daily_ctx.get("daily_macd_golden"))
-            trend_ok = (not _downtrend) or _golden
-            if is_etf and not daily_ctx.get("daily_macd_golden") is not None and not _tbg:
-                d4 = "不适用(ETF)"
-                not_applicable.append("日线趋势")
-            else:
-                d4 = f"日线趋势={_tbg or '未知'}，MACD金叉={'是' if _golden else '否'}（需非下行或金叉）"
-            conditions.append({"name": "日线趋势", "met": bool(trend_ok), "detail": d4})
+            # ---- 右侧加仓：突破箱体 ----
+            bx = self.check_box_breakout(code)
+            right_breakout = bool(bx.get("broken"))
+            right_detail = (f"突破箱体上沿 {bx.get('box',{}).get('high')}，超出{bx.get('pct_above')}%"
+                            if right_breakout else "未突破箱体")
 
-            # fix P0-5: 删除 met_count 强制改写，恒等于真实勾选数；
-            # 突破箱体满足改为在 payload 打 box_boost 标志
+            # ---- 左侧加仓：情绪冰点（日线4条件 + 5分钟确认）----
+            # 日线冰点
+            _mc_golden = bool(daily_ctx.get("daily_macd_golden"))
+            _mc_rsi = daily_ctx.get("daily_rsi")
+            _mc_boll = daily_ctx.get("daily_boll_pct")
+            _mc_vol = daily_ctx.get("daily_vol_today")
+            _mc_volma = daily_ctx.get("daily_vol_ma5")
+            d_macd = _mc_golden
+            d_rsi = (_mc_rsi is not None and not (isinstance(_mc_rsi, float) and math.isnan(_mc_rsi)) and float(_mc_rsi) < 30)
+            d_boll = (_mc_boll is not None and not (isinstance(_mc_boll, float) and math.isnan(_mc_boll)) and float(_mc_boll) <= 0.15)
+            d_shrink = (_mc_vol is not None and _mc_volma is not None and _mc_volma > 0 and float(_mc_vol) / float(_mc_volma) < 0.8)
+            daily_iceberg_hits = sum([d_macd, d_rsi, d_boll, d_shrink])
+            daily_iceberg = daily_iceberg_hits >= 3   # 日线冰点确认(≥3/4)
+
+            # 5分钟冰点确认（盘中快照有分钟数据时）
+            m5_iceberg = True
+            m5_note = "盘后(无分钟数据)"
+            if bars and len(bars) >= 30:
+                try:
+                    import pandas as _pd
+                    from position_builder import resample_to_5min, add_5min_indicators
+                    _df = _pd.DataFrame(bars)
+                    if "time" in _df.columns:
+                        _df["time"] = _pd.to_datetime(_df["time"], errors="coerce")
+                    _df5 = add_5min_indicators(resample_to_5min(_df))
+                    m5_hits = 0
+                    if "dif_5m" in _df5.columns and "dea_5m" in _df5.columns:
+                        _up = (_df5["dif_5m"] > _df5["dea_5m"]) & (_df5["dif_5m"].shift(1) <= _df5["dea_5m"].shift(1))
+                        if bool(_up.tail(5).any()): m5_hits += 1
+                    if "rsi_5m" in _df5.columns and not _pd.isna(_df5["rsi_5m"].iloc[-1]) and float(_df5["rsi_5m"].iloc[-1]) < 30:
+                        m5_hits += 1
+                    if "bb_pct_5m" in _df5.columns and float(_df5["bb_pct_5m"].iloc[-1]) <= 0.15:
+                        m5_hits += 1
+                    if "volume" in _df5.columns and len(_df5) >= 25:
+                        _recent = _df5["volume"].tail(5).mean()
+                        _prior = _df5["volume"].iloc[-25:-5].mean()
+                        if _prior > 0 and _recent / _prior < 0.8:
+                            m5_hits += 1
+                    m5_iceberg = m5_hits >= 3
+                    m5_note = f"5分钟冰点 {m5_hits}/4"
+                except Exception:
+                    m5_iceberg = True
+                    m5_note = "5分钟计算失败"
+
+            left_iceberg = daily_iceberg and m5_iceberg   # 左侧加仓 = 日线冰点 + 5分钟冰点
+
+            left_conditions = [
+                {"name": "MACD金叉", "met": d_macd,
+                 "detail": "日线MACD金叉=有" if d_macd else "日线MACD金叉=无"},
+                {"name": "RSI超卖", "met": d_rsi,
+                 "detail": f"日线RSI={float(_mc_rsi):.1f}" if d_rsi or (_mc_rsi is not None and not math.isnan(_mc_rsi)) else "日线RSI=无"},
+                {"name": "BOLL下轨", "met": d_boll,
+                 "detail": f"日线bb_pct={float(_mc_boll):.3f}" if d_boll or (_mc_boll is not None and not math.isnan(_mc_boll)) else "日线BOLL=无"},
+                {"name": "缩量", "met": d_shrink,
+                 "detail": "日线量<5日均量×0.8" if d_shrink else "日线量未缩"},
+                {"name": "5分钟确认", "met": bool(m5_iceberg), "detail": m5_note},
+            ]
+
+            conditions = left_conditions + [{"name": "右侧突破箱体", "met": right_breakout, "detail": right_detail}]
             met_count = sum(1 for c in conditions if c["met"])
             out[code] = {
                 "name": cur[code].get("name", code),
                 "day_low": round(day_low, 3), "close": round(day_close, 3),
                 "is_intraday": bool(is_intraday),  # fix P0-3: True 时 close 实为现价
-                "box_boost": bool(conditions[0]["met"]),  # fix P0-5
-                "not_applicable": not_applicable,  # fix P2-16
+                "box_boost": right_breakout,  # 右侧突破箱体
+                "left_iceberg": bool(left_iceberg),  # 左侧冰点(日线+5分钟)
+                "daily_iceberg": bool(daily_iceberg),
+                "right_breakout": right_breakout,
+                "not_applicable": not_applicable,
                 "vwap": round(float(vwap_val), 3) if vwap_val else None,
                 "supports": {k: round(v, 3) for k, v in supports.items()},
                 "events": events, "near": near,

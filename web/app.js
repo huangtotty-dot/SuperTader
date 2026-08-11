@@ -1236,23 +1236,38 @@ function renderAddWatch(aw) {
     const metPct = totalConds ? met / totalConds * 100 : 0;
     const metCls = metPct >= 75 ? "up" : metPct >= 50 ? "warn" : "down";
 
-    const condRows = conds.map(c =>
+    // 分组：左侧=冰点(4日线+5分钟确认)，右侧=突破箱体
+    const rightIdx = conds.findIndex(c => c.name === "右侧突破箱体");
+    const leftConds = rightIdx >= 0 ? conds.slice(0, rightIdx) : conds;
+    const rightConds = rightIdx >= 0 ? conds.slice(rightIdx) : [];
+    const condRow = c =>
       `<div class="aw-cond ${c.met ? "met" : "wait"}" title="${esc(c.detail)}">
         <span class="aw-cond-icon">${c.met ? "✓" : "○"}</span>
         <span>${esc(c.name)}</span>
         <span class="aw-cond-detail">${esc(c.detail)}</span>
-      </div>`).join("");
+      </div>`;
+    const leftRows = leftConds.map(condRow).join("");
+    const rightRows = rightConds.map(condRow).join("");
+
+    // 可加仓徽章：左侧冰点(日线+5分钟) 或 右侧突破箱体 任一满足
+    const canAdd = w.left_iceberg || w.right_breakout;
+    const addBadge = canAdd
+      ? `<span class="badge signal" style="margin-left:6px">🔼 可加仓</span>`
+      : "";
 
     return `
       <div class="card" style="margin-bottom:10px;padding:12px 14px">
         <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:8px">
           <div>
-            <b>${esc(w.name || code)}</b> <span class="mono cell-dim">${esc(code)}</span>
+            <b>${esc(w.name || code)}</b> <span class="mono cell-dim">${esc(code)}</span>${addBadge}
             <span class="aw-score ${metCls}">${met}/${totalConds} 条件满足</span>
           </div>
           <div class="cell-dim mono" style="font-size:11px">低${fmt(w.day_low, 3)} 收${fmt(w.close, 3)} VWAP${fmt(w.vwap, 3)}</div>
         </div>
-        <div class="aw-cond-list">${condRows}</div>
+        <div class="aw-group-title">左侧·情绪冰点</div>
+        <div class="aw-cond-list">${leftRows || '<div class="cell-dim" style="font-size:10px">无</div>'}</div>
+        ${rightRows ? `<div class="aw-group-title" style="margin-top:6px">右侧·突破箱体</div>
+        <div class="aw-cond-list">${rightRows}</div>` : ""}
       </div>`;
   }).join("");
   el.innerHTML = summaryHtml + cards;

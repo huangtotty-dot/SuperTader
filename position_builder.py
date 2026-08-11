@@ -39,7 +39,7 @@ import pandas as pd
 BASE = Path(r"E:\06_T")
 sys.path.insert(0, str(BASE))
 
-from indicators import add_indicators  # noqa: F401  建仓已改日线，预留通用指标计算
+from indicators import resample_to_5min, add_5min_indicators, add_indicators  # noqa: F401
 
 
 # ── 飞书推送（可选，Webhook 未配置时静默跳过）──
@@ -481,23 +481,23 @@ def check_macd_golden(daily_ctx: dict) -> tuple:
     return passed, detail
 
 
-def check_boll_mid_support(daily_ctx: dict) -> tuple:
-    """日线 BOLL 中轨支撑: bb_pct 在 0.3~0.7 区间。"""
+def check_boll_lower(daily_ctx: dict) -> tuple:
+    """日线 BOLL 接近/跌破下轨(情绪冰点): bb_pct ≤ 0.15。"""
     bb_pct = daily_ctx.get("daily_boll_pct")
     if bb_pct is None or (isinstance(bb_pct, float) and math.isnan(bb_pct)):
         return False, "缺日线BOLL数据", True
-    passed = 0.3 <= float(bb_pct) <= 0.7
-    detail = f"日线bb_pct={float(bb_pct):.3f}（需0.3~0.7）"
+    passed = float(bb_pct) <= 0.15
+    detail = f"日线bb_pct={float(bb_pct):.3f}（需≤0.15，接近/跌破下轨）"
     return passed, detail
 
 
-def check_rsi_healthy(daily_ctx: dict) -> tuple:
-    """日线 RSI 健康区间: 35~60。"""
+def check_rsi_oversold(daily_ctx: dict) -> tuple:
+    """日线 RSI 超卖(情绪冰点): RSI < 30。"""
     rsi_val = daily_ctx.get("daily_rsi")
     if rsi_val is None or (isinstance(rsi_val, float) and math.isnan(rsi_val)):
         return False, "缺日线RSI数据", True
-    passed = 35 <= float(rsi_val) <= 60
-    detail = f"日线rsi={float(rsi_val):.1f}（需35~60）"
+    passed = float(rsi_val) < 30
+    detail = f"日线rsi={float(rsi_val):.1f}（需<30，超卖）"
     return passed, detail
 
 
@@ -552,28 +552,61 @@ def check_volume_shrink(daily_ctx: dict) -> tuple:
     return passed, detail, False
 
 
-def check_support_retest(daily_ctx: dict, latest_price: float = None) -> tuple:
-    """日线回踩支撑不破: 最新价距支撑位 ≤2% 且未破位。
-    latest_price 缺省用 daily_price_ref（日线收盘/参考价）。"""
-    if latest_price is None:
-        latest_price = daily_ctx.get("daily_price_ref")
-    if latest_price is None or not latest_price:
-        return False, "无参考价", True
+# ============================================================
+# 5 分钟冰点条件（盘中择时，日线冰点确认后日内再确认）
+# ============================================================
 
-    # 支撑位：daily_support_level（日线 MA 支撑，已在 daily_context 选出最近支撑）
-    level = daily_ctx.get("daily_support_level")
-    label = daily_ctx.get("daily_support_name") or "支撑"
-    if not level or level <= 0:
-        return False, "daily_context 无支撑位数据", True
+def _m5_warm(df_5min, min_bars=20) -> bool:
+    return df_5min is not None and not df_5min.empty and len(df_5min) >= min_bars
 
-    dist = (float(latest_price) - float(level)) / float(level)
-    dist_pct = dist * 100
-    # fix P0-2: 回踩判定窗口 -0.5% ≤ dist ≤ +2%（现价不得低于支撑0.5%以上）
-    near_support = -0.5 <= dist_pct <= 2.0
-    passed = near_support
-    detail = (f"日线收盘/参考价={float(latest_price):.3f}，距支撑{label}@{float(level):.3f} "
-              f"={dist_pct:+.2f}%（需-0.5%~+2%）")
+
+def check_m5_macd_golden(df_5min) -> tuple:
+    """5分钟 MACD 金叉: 近5根 DIF 上穿 DEA。"""
+    if not _m5_warm(df_5min) or "dif_5m" not in df_5min.columns:
+        return False, "5分钟数据不足", True
+    dif = df_5min["dif_5m"]
+    dea = df_5min["dea_5m"]
+    cross_up = (dif > dea) & (dif.shift(1) <= dea.shift(1))
+    passed = bool(cross_up.tail(5).any())
+    detail = f"5分钟MACD金叉={'有' if passed else '无'}（近5根）"
     return passed, detail
+
+
+def check_m5_boll_lower(df_5min) -> tuple:
+    """5分钟 BOLL 接近/跌破下轨: bb_pct_5m ≤ 0.15。"""
+    if not _m5_warm(df_5min) or "bb_pct_5m" not in df_5min.columns:
+        return False, "5分钟BOLL数据不足", True
+    bb = float(df_5min["bb_pct_5m"].iloc[-1])
+    passed = bb <= 0.15
+    detail = f"5分钟bb_pct={bb:.3f}（需≤0.15，接近/跌破下轨）"
+    return passed, detail
+
+
+def check_m5_rsi_oversold(df_5min) -> tuple:
+    """5分钟 RSI 超卖: rsi_5m < 30。"""
+    if not _m5_warm(df_5min) or "rsi_5m" not in df_5min.columns:
+        return False, "5分钟RSI数据不足", True
+    rsi = df_5min["rsi_5m"].iloc[-1]
+    if pd.isna(rsi):
+        return False, "5分钟RSI=NaN", True
+    passed = float(rsi) < 30
+    detail = f"5分钟rsi={float(rsi):.1f}（需<30，超卖）"
+    return passed, detail
+
+
+def check_m5_volume_shrink(df_5min) -> tuple:
+    """5分钟缩量: 近5根均量 < 前20根均量 × 0.8。"""
+    if not _m5_warm(df_5min, min_bars=25) or "volume" not in df_5min.columns:
+        return False, "5分钟量能数据不足", True
+    vol = df_5min["volume"]
+    recent = vol.tail(5).mean()
+    prior = vol.iloc[-25:-5].mean()
+    if prior <= 0:
+        return False, "前段成交量为0", True
+    ratio = recent / prior
+    passed = ratio < 0.8
+    detail = f"5分钟量比={ratio:.2f}（近5根/前20根，需<0.8）"
+    return passed, detail, False
 
 
 # ============================================================
@@ -635,9 +668,10 @@ def compute_position(latest_price: float, total_capital: float,
 
 def scan_stock(code: str, stock_info: dict, date_str: str = None,
                total_capital: float = 300000, max_pct: float = 0.2,
-               allow_stale: bool = False) -> dict:
+               allow_stale: bool = False, scan_type: str = "manual") -> dict:
     """扫描单只股票，返回结果字典。
-    allow_stale=True 时允许分钟快照陈旧（盘后重跑，日线判断不依赖分钟快照）。"""
+    allow_stale=True 时允许分钟快照陈旧（盘后重跑，日线判断不依赖分钟快照）。
+    scan_type: 'intraday' 需日线+5分钟冰点两级；'eod'/'manual' 盘后只看日线冰点。"""
     result = {
         "code": code,
         "name": stock_info.get("name", code),
@@ -676,31 +710,58 @@ def scan_stock(code: str, stock_info: dict, date_str: str = None,
     box_detail = (f"突破箱体上沿 {bx['box']['high']}，超出 {bx['pct_above']}%"
                   if box_passed else "未突破箱体")
 
-    # 检查五个条件（全改日线，box_breakout 独立，不叠加评分）
-    conditions = {
+    # 日线冰点层（方向确认，情绪冰点4条件）
+    daily_conditions = {
         "macd_golden": check_macd_golden(daily_ctx),
-        "boll_mid_support": check_boll_mid_support(daily_ctx),
-        "rsi_healthy": check_rsi_healthy(daily_ctx),
+        "boll_lower": check_boll_lower(daily_ctx),
+        "rsi_oversold": check_rsi_oversold(daily_ctx),
         "volume_shrink": check_volume_shrink(daily_ctx),
-        "support_retest": check_support_retest(daily_ctx),
     }
-    # fix P0-7: 数据不足的条件（三元组第三值）标注 insufficient，前端可区分「失败」与「无数据」
+    daily_score = compute_score(daily_conditions)   # 满分80
+    daily_iceberg = daily_score >= 70               # 日线冰点确认(需接近全过)
+
+    # 5分钟冰点层（盘中择时：日线确认后日内再确认）
+    # 盘中(intraday)：需 5 分钟冰点确认；盘后(eod/manual)：只看日线，5 分钟层视为通过
+    m5_iceberg = True
+    m5_conditions = {}
+    if scan_type == "intraday" and not df_1min.empty and len(df_1min) >= 30:
+        df_5min = resample_to_5min(df_1min)
+        df_5min = add_5min_indicators(df_5min)
+        m5_conditions = {
+            "m5_macd_golden": check_m5_macd_golden(df_5min),
+            "m5_boll_lower": check_m5_boll_lower(df_5min),
+            "m5_rsi_oversold": check_m5_rsi_oversold(df_5min),
+            "m5_volume_shrink": check_m5_volume_shrink(df_5min),
+        }
+        m5_score = compute_score(m5_conditions)
+        m5_iceberg = m5_score >= 70
+
+    # 组装 conditions（日线4 + 5分钟4 + box_breakout），供前端展示
     result["conditions"] = {}
-    for k, v in conditions.items():
+    for k, v in daily_conditions.items():
+        cond = {"passed": v[0], "detail": v[1]}
+        if len(v) > 2 and v[2]:
+            cond["insufficient"] = True
+        result["conditions"][k] = cond
+    for k, v in m5_conditions.items():
         cond = {"passed": v[0], "detail": v[1]}
         if len(v) > 2 and v[2]:
             cond["insufficient"] = True
         result["conditions"][k] = cond
     result["conditions"]["box_breakout"] = {"passed": box_passed, "detail": box_detail}
-    result["composite_score"] = compute_score(conditions)
+    # 5分钟冰点汇总键（前端 COND_LABELS 展示）
+    result["conditions"]["m5_iceberg"] = {
+        "passed": m5_iceberg,
+        "detail": "5分钟冰点确认=通过" if m5_iceberg else "5分钟冰点确认=未过（盘后跳过）" if scan_type != "intraday" else "5分钟冰点确认=未过",
+    }
+    result["daily_iceberg"] = daily_iceberg
+    result["m5_iceberg"] = m5_iceberg
+    result["composite_score"] = daily_score
 
-    # fix P0-1: box_breakout 不再直接判 signal，改为放行条件——
-    # 需 composite_score≥40 且 box_passed，或走 score≥70 常规路径
-    if result["composite_score"] >= 70:
+    # verdict：signal = 日线冰点 + 5分钟冰点（两级都需，用户确认）；approaching=日线≥40
+    if daily_iceberg and m5_iceberg:
         result["verdict"] = "signal"
-    elif box_passed and result["composite_score"] >= 40:
-        result["verdict"] = "signal"
-    elif result["composite_score"] >= 40:
+    elif daily_score >= 40:
         result["verdict"] = "approaching"
     else:
         result["verdict"] = "weak"
@@ -725,11 +786,10 @@ def scan_stock(code: str, stock_info: dict, date_str: str = None,
 # ============================================================
 
 COND_LABELS = {
-    "macd_golden": "MACD多头",
-    "boll_mid_support": "BOLL中轨支撑",
-    "rsi_healthy": "RSI健康区间",
+    "macd_golden": "MACD金叉",
+    "boll_lower": "BOLL下轨",
+    "rsi_oversold": "RSI超卖",
     "volume_shrink": "成交量缩量",
-    "support_retest": "回踩支撑不破",
 }
 
 
@@ -1055,9 +1115,9 @@ def run_position_scan(date_str: str = None, capital: float = None,
     for code, info in stocks.items():
         if not silent:
             print(f"扫描 {code} {info.get('name', '')}...")
-        # 盘后(eod)/手动(manual)重跑允许快照陈旧（日线判断独立拉取）
+        # 盘后(eod)/手动(manual)重跑允许快照陈旧（日线判断独立拉取）；scan_type 传给 scan_stock
         r = scan_stock(code, info, date_str, total_capital, max_pct,
-                       allow_stale=(scan_type in ("eod", "manual")))
+                       allow_stale=(scan_type in ("eod", "manual")), scan_type=scan_type)
         results.append(r)
         update_watchlist(r, watchlist)
 
