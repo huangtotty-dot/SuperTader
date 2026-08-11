@@ -932,6 +932,11 @@ function renderPositionManager(pm) {
         : `<span class="badge chop">正常</span>`;
     const gapCls = r.gap_pct > 5 ? "down" : r.gap_pct < -5 ? "up" : "cell-dim";
     const pctCls = r.pct >= (r.target_pct * 100 * 0.9) ? "down" : "cell-dim";
+    // 分批加仓：欠配分3批(不足3手则2批/1批)
+    const batches = (r.add_batches || []);
+    const batchTxt = batches.length
+      ? batches.map((b, i) => `<span class="badge ${i === 0 ? 't-long' : 'chop'}" title="第${i + 1}次加仓">${i + 1}次 ${fmt(b, 0)}股</span>`).join(" ")
+      : (r.gap_qty < 0 ? '<span class="cell-dim">—</span>' : '<span class="cell-dim">已达标</span>');
     return `<tr>
       <td>${esc(r.name)} <span class="mono cell-dim">${esc(r.code)}</span></td>
       <td class="num">${fmt(r.total_qty, 0)}</td>
@@ -941,6 +946,7 @@ function renderPositionManager(pm) {
       <td class="num ${pctCls}">${fmt(r.pct, 1)}%</td>
       <td class="num ${gapCls}">${r.gap_pct >= 0 ? "+" : ""}${fmt(r.gap_pct, 1)}%<br>
         <span class="mono cell-dim" style="font-size:10px">${r.gap_qty > 0 ? "可加" : r.gap_qty < 0 ? "应减" : ""}${Math.abs(r.gap_qty || 0)}股</span></td>
+      <td style="min-width:130px">${batchTxt}</td>
       <td>${badge}</td>
     </tr>`;
   }).join("");
@@ -965,7 +971,8 @@ function renderPositionManager(pm) {
       <thead><tr>
         <th>股票</th><th class="num">股数</th><th class="num">现价</th>
         <th class="num">当前市值</th><th class="num">目标市值</th>
-        <th class="num">资金占比</th><th class="num" title="偏差百分比 + 折算股数(取整一手100股)">偏差(股)</th><th>状态</th>
+        <th class="num">资金占比</th><th class="num" title="偏差百分比 + 折算股数(取整一手100股)">偏差(股)</th>
+        <th class="num" title="欠配股数分3次加仓">分批加仓</th><th>状态</th>
       </tr></thead>
       <tbody>${rowsHtml}</tbody>
     </table>`;
