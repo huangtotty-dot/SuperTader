@@ -3,7 +3,7 @@
 
 覆盖：
 1. 600176（t_qty=300）弱卖档 → 100（原 0，int(300×0.2)=60<100 冻结）
-2. 600481（t_qty=300，满仓）买信号 → 100（原 0，max_buyable=0 早退冻结）
+2. 600481（t_qty=300，满仓）买信号 → 100（原 0，max_buyable=0 早退冻结；V1.2.2 起默认关，需 allow_full_position_buy=True）
 3. 000988（t_qty=100）卖出 → 100（原 0）
 4. 588170 ETF 买卖正常值不受影响（卖 700 / 接回买 200）
 5. 603667/002639（t_qty=0 纯底仓）买卖仍 0（08-05 战略拍板保留）
@@ -35,9 +35,9 @@ def run():
     s = PositionSizer(params={})
     check("600176 t300 弱卖→保底100", s.calc_sell_qty("600176", mk(300), None, 40, 36), 100)
 
-    # 2) 600481 满仓买放开（原 0）
-    s = PositionSizer(params={})
-    check("600481 t300 满仓买→保底100", s.calc_buy_qty("600481", mk(300), None, 40, 36), 100)
+    # 2) 600481 满仓买放开（原 0）；V1.2.2 起默认关，此处显式开开关验证 V1.2.1 行为保留
+    s = PositionSizer(params={"allow_full_position_buy": True})
+    check("600481 t300 满仓买→保底100（V1.2.2 开关开）", s.calc_buy_qty("600481", mk(300), None, 40, 36), 100)
 
     # 3) 000988 t100 卖出保底（原 0）
     s = PositionSizer(params={})
@@ -61,8 +61,8 @@ def run():
     s = PositionSizer(params={"sell_floor_enabled": True})
     check("地板开: t1000 三次强卖=500（V1.30 钳制）", s.calc_sell_qty("600176", mk(1000), None, 46, 36, used_sells=2), 500)
 
-    # 7) 熔断风控保留
-    s = PositionSizer(params={})
+    # 7) 熔断风控保留（非满仓持仓，确保走的是 clear 闸而非 V1.2.2 满仓早退）
+    s = PositionSizer(params={}, virtual_trades={"600481": {"SELL_HIGH": [{"qty": 100}], "BUY_LOW": []}})
     check("clear 熔断买=0（风控保留）",
           s.calc_buy_qty("600481", mk(300), None, 40, 36, index_ctx={"index_circuit_state": "clear"}), 0)
     s = PositionSizer(params={})
