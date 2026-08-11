@@ -240,9 +240,16 @@ class PositionSizer:
             return 0
 
         net_qty = self._virtual_net_qty(code, holding)
+        is_etf = holding.get("type") == "etf"
+        p = self._effective_params(code, holding)
         # V1.2.1 (2026-08-11 用户拍板): 满仓不再早退（原 max_buyable<=0 return 0 = 冻结链来源②）——
         # 继续走 unrebuilt/first_add 计算，末端保底一手；是否跟单由人决定
+        # V1.2.2 (2026-08-11 用户拍板): 满仓买入建议开关化——V1.2.1 放开后实盘暴露副作用
+        # （08-11 600481 满仓买×3 与卖单互抵），拍板"满仓保底买先不用保留"。
+        # allow_full_position_buy=False（默认）→ 恢复早退 return 0；True → 走 V1.2.1 保底一手。
         max_buyable = max(0, total_t - net_qty)
+        if max_buyable <= 0 and not p.get("allow_full_position_buy", False):
+            return 0
 
         index_ctx = index_ctx or {}
 
@@ -251,8 +258,6 @@ class PositionSizer:
         if excess_pos > 0:
             return 0
 
-        is_etf = holding.get("type") == "etf"
-        p = self._effective_params(code, holding)
         strength = sig_score - threshold
         index_state = str(index_ctx.get("index_circuit_state", "normal") or "normal")
         index_factor = float(index_ctx.get("index_pos_factor", 1.0) or 1.0)
@@ -271,6 +276,9 @@ class PositionSizer:
         max_buyable = min(max_buyable, max(0, target_cap - net_qty))
         # V1.2.1: 此处不再因 max_buyable<=0 早退（同为满仓冻结链一环）；
         # 大盘目标仓位仍作为数量上限参与下方 min(qty, max_buyable) 钳制（风控保留，冻结取消）
+        # V1.2.2: 大盘目标仓位钳到 0 视同"算不出可买量"——开关关（默认）同样早退；开关开走 V1.2.1 保底一手
+        if max_buyable <= 0 and not p.get("allow_full_position_buy", False):
+            return 0
 
         if unrebuilt > 0:
             if is_etf:

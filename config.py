@@ -298,6 +298,10 @@ PARAMS = {
     # V1.2.1 (2026-08-11 01:11 用户拍板): "手动跟单场景，取消冻结，做T不用考虑底仓问题"——
     # 底仓地板默认不生效；True 时恢复 V1.30 钳制（position_sizer.py calc_sell_qty 软消费；harness T_SELL_FLOOR_ENABLED 可注入对照）
     "sell_floor_enabled": False,
+    # V1.2.2 (2026-08-11 用户拍板): "满仓保底买先不用保留"——08-11 实盘 600481 满仓仍推 3 笔买入建议（与卖互抵）。
+    # False（默认）: max_buyable<=0（满仓或大盘目标仓位钳到 0）时 calc_buy_qty 返回 0，不产生买入建议（恢复 V1.2.0 早退语义）；
+    # True: 恢复 V1.2.1 满仓保底一手行为。仅影响"算不出可买量"场景；非满仓不足一手保底 100（V1.2.1）不受影响。
+    "allow_full_position_buy": False,
     "index_regime_intraday_lock": True,
     "max_single_position_pct": 0.30,
     "max_buy_times_per_stock": 1,
