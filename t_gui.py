@@ -2274,6 +2274,22 @@ class Api:
                 gap_qty = int(gap_val / px // 100) * 100   # 欠配=+可加，超配=-应减
             else:
                 gap_qty = 0
+            # 欠配股数三等分：每批整手(100股)，末批含余数
+            # 不足3手(<300股)时不强行分3批：>=200 分2批，否则1批
+            add_batches = []
+            if gap_qty > 0:
+                if gap_qty >= 300:
+                    batch = (gap_qty // 3 // 100) * 100
+                    add_batches = [batch, batch, gap_qty - 2 * batch]
+                    # 末批不足一手则并入第二批
+                    if add_batches[2] < 100:
+                        add_batches[1] += add_batches[2]
+                        add_batches = add_batches[:2]
+                elif gap_qty >= 200:
+                    half = gap_qty // 2 // 100 * 100
+                    add_batches = [half, gap_qty - half]
+                else:
+                    add_batches = [gap_qty]
             rows.append({
                 "code": r["base"], "name": r["name"],
                 "target_pct": round(target_pct, 4),
@@ -2284,6 +2300,7 @@ class Api:
                 "pct": round(pct * 100, 1),
                 "gap_pct": round(gap_pct * 100, 1),
                 "gap_qty": int(gap_qty),  # 偏差股数(取整到100股)：正值可加，负值应减
+                "add_batches": add_batches,  # 欠配分3批加仓的每批股数
                 "over": gap_pct > 0.05,    # 超配 >5%
                 "under": gap_pct < -0.05,  # 欠配 >5%
                 "cost": round(r["cost"], 3) if r["total_qty"] else 0,
