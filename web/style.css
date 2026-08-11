@@ -292,6 +292,7 @@ tr:hover td { background: rgba(88,166,255,.03); }
 .aw-cond-list { display: grid; grid-template-columns: 1fr 1fr; gap: 5px 12px; }
 @media (max-width: 800px) { .aw-cond-list { grid-template-columns: 1fr; } }
 .aw-cond { display: flex; align-items: center; gap: 6px; font-size: 12px; padding: 3px 6px; border-radius: 4px; }
+.aw-group-title { font-size: 11px; color: var(--text-dim); font-weight: 600; margin-bottom: 3px; }
 .aw-cond.met { color: #3fb950; background: rgba(63,185,80,.06); }
 .aw-cond.wait { color: var(--text-dim); }
 .aw-cond-icon { font-weight: 700; font-size: 13px; width: 16px; }
