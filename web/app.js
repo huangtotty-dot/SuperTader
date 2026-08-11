@@ -1599,12 +1599,15 @@ function renderStockChart() {
         lineStyle: { color: data.channel.direction === "up" ? "#3fb950" : "#f85149",
           width: 1.5, type: "solid" },
         markArea: { silent: true, data: [[{
-          yAxis: data.channel.up_line[0], xAxis: 0,
+          // 色带必须覆盖整段真实上下轨：上界=上轨线最大端值，下界=下轨线最小端值
+          yAxis: Math.max(data.channel.up_line[0], data.channel.up_line[1]),
+          xAxis: 0,
           name: data.channel.direction === "up" ? "↗ 上行通道" : "↘ 下行通道",
           itemStyle: { color: data.channel.direction === "up" ? "rgba(63,185,80,.10)" : "rgba(248,81,73,.10)",
             borderColor: data.channel.direction === "up" ? "rgba(63,185,80,.4)" : "rgba(248,81,73,.4)",
             borderWidth: 1, borderType: "solid" },
-        }, { yAxis: data.channel.dn_line[0], xAxis: period.dates.length - 1 }]] },
+        }, { yAxis: Math.min(data.channel.dn_line[0], data.channel.dn_line[1]),
+            xAxis: period.dates.length - 1 }]] },
       }, {
         name: "通道下轨", type: "line", xAxisIndex: 0, yAxisIndex: 0, symbol: "none",
         data: period.dates.map((_, i) => {
