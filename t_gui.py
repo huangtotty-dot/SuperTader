@@ -2211,6 +2211,75 @@ class Api:
             "realized_loss": data.get("realized_loss", {}),
         })
 
+    def load_position_manager(self):
+        """仓位管理器：每只持仓的目标/当前市值、资金占比、超配欠配。
+        目标比例 = STOCK_PARAMS 个股 stock_qty_base_pct 或 全局默认。"""
+        try:
+            import config
+        except Exception:
+            config = None
+        pcfg = _load_json(PORTFOLIO, {})
+        accounts = pcfg.get("accounts", {})
+        total_capital = sum(float(a.get("total_capital") or 0) for a in accounts.values())
+        cur = _load_json(HOLDINGS, {})
+        # 实时价
+        px_map = {}
+        try:
+            for q in self.load_quotes().get("quotes", []):
+                if q.get("price"):
+                    px_map[q.get("code")] = float(q["price"])
+        except Exception:
+            pass
+        # 按基础代码合并 A/B 双账户
+        merged = {}
+        for code, h in cur.items():
+            if not isinstance(h, dict):
+                continue
+            base = str(code).split("_")[0]
+            merged.setdefault(base, {"name": h.get("name", code), "codes": []})
+            merged[base]["codes"].append((code, h))
+        rows = []
+        default_pct = 0.30
+        if config is not None:
+            default_pct = config.PARAMS.get("stock_qty_base_pct", 0.30)
+        for base, info in merged.items():
+            sp = {}
+            if config is not None:
+                sp = config.STOCK_PARAMS.get(base, {}) or {}
+            target_pct = sp.get("stock_qty_base_pct", default_pct)
+            target_val = total_capital * target_pct
+            mkt_val = 0.0
+            total_qty = 0
+            cost_total = 0.0
+            for code, h in info["codes"]:
+                px = px_map.get(code) or px_map.get(base) or float(h.get("pre_close") or 0)
+                qty = int(h.get("qty") or 0)
+                mkt_val += px * qty
+                total_qty += qty
+                cost_total += float(h.get("cost") or 0) * qty
+            pct = mkt_val / total_capital if total_capital else 0
+            gap_pct = (mkt_val / target_val - 1) if target_val else 0
+            rows.append({
+                "code": base, "name": info["name"],
+                "target_pct": round(target_pct, 2),
+                "target_val": round(target_val, 0),
+                "mkt_val": round(mkt_val, 0),
+                "total_qty": total_qty,
+                "price": round(mkt_val / total_qty, 3) if total_qty else 0,
+                "pct": round(pct * 100, 1),
+                "gap_pct": round(gap_pct * 100, 1),
+                "over": gap_pct > 0.05,    # 超配 >5%
+                "under": gap_pct < -0.05,  # 欠配 >5%
+                "cost": round(cost_total / total_qty, 3) if total_qty else 0,
+            })
+        rows.sort(key=lambda x: -x["pct"])
+        return _clean({
+            "total_capital": round(total_capital, 0),
+            "rows": rows,
+            "sum_mkt": round(sum(r["mkt_val"] for r in rows), 0),
+            "sum_pct": round(sum(r["pct"] for r in rows), 1),
+        })
+
     @staticmethod
     def _parse_log_line(line):
         """HH:MM:SS [LEVEL] msg  →  {t, level, msg}。"""

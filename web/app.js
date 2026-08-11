@@ -88,6 +88,7 @@ async function loadAndRender(date, silent) {
     // 持仓日线体检（超买/顶背离）
     apiCall("load_ob_analysis").then(ob => renderOB(ob || {})).catch(() => {});
     apiCall("load_quotes").then(q => renderQuotes(q || {}, null)).catch(() => {});
+    apiCall("load_position_manager").then(pm => renderPositionManager(pm || {})).catch(() => {});
     apiCall("load_market_score", date).then(ms => renderMarket(ms || {})).catch(() => {});
     apiCall("load_cost_history").then(ch => { state.costHistory = ch || {}; renderCost(ch || {}); }).catch(() => {});
 
@@ -909,6 +910,64 @@ function renderPositions(pos, nameMap) {
         当前 holdings.json vs 前日快照（${esc(prevDate)}）· T模式来自 t_mode.json（正T=先买后卖 / 反T=先卖后买）
       </div>
     </div>`;
+}
+
+/* ---- 仓位管理器 ---- */
+function renderPositionManager(pm) {
+  const el = document.getElementById("positionManagerBody");
+  if (!el) return;
+  const rows = (pm && pm.rows) || [];
+  if (!rows.length) {
+    el.innerHTML = '<div class="empty">无持仓数据</div>';
+    return;
+  }
+  const totalCap = pm.total_capital || 0;
+  const sumMkt = pm.sum_mkt || 0;
+  const sumPct = pm.sum_pct || 0;
+  const rowsHtml = rows.map(r => {
+    const badge = r.over
+      ? `<span class="badge t-short">超配 应减</span>`
+      : r.under
+        ? `<span class="badge t-long">欠配 可加</span>`
+        : `<span class="badge chop">正常</span>`;
+    const gapCls = r.gap_pct > 5 ? "down" : r.gap_pct < -5 ? "up" : "cell-dim";
+    const pctCls = r.pct >= (r.target_pct * 100 * 0.9) ? "down" : "cell-dim";
+    return `<tr>
+      <td>${esc(r.name)} <span class="mono cell-dim">${esc(r.code)}</span></td>
+      <td class="num">${fmt(r.total_qty, 0)}</td>
+      <td class="num">${fmt(r.price, 2)}</td>
+      <td class="num">${fmt(r.mkt_val, 0)}</td>
+      <td class="num cell-dim">${fmt(r.target_val, 0)} (${(r.target_pct * 100).toFixed(0)}%)</td>
+      <td class="num ${pctCls}">${fmt(r.pct, 1)}%</td>
+      <td class="num ${gapCls}">${r.gap_pct >= 0 ? "+" : ""}${fmt(r.gap_pct, 1)}%</td>
+      <td>${badge}</td>
+    </tr>`;
+  }).join("");
+
+  // 总仓位进度条
+  const barW = Math.min(100, sumPct);
+  el.innerHTML = `
+    <div class="card" style="margin-bottom:10px;padding:10px 14px">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px">
+        <div style="display:flex;gap:16px;font-size:12px">
+          <span>总资金 <b class="mono">${fmt(totalCap, 0)}</b></span>
+          <span>总市值 <b class="mono">${fmt(sumMkt, 0)}</b></span>
+          <span>总仓位 <b class="mono ${sumPct >= 100 ? 'down' : ''}">${fmt(sumPct, 1)}%</b></span>
+        </div>
+        <span class="cell-dim mono" style="font-size:10px">目标=总资金×个股配比 · 数据随行情刷新</span>
+      </div>
+      <div class="h-bar-track" style="height:6px;margin-top:6px">
+        <div class="h-bar-fill ${sumPct >= 100 ? 'down' : 'up'}" style="width:${barW}%"></div>
+      </div>
+    </div>
+    <table class="h-table">
+      <thead><tr>
+        <th>股票</th><th class="num">股数</th><th class="num">现价</th>
+        <th class="num">当前市值</th><th class="num">目标市值</th>
+        <th class="num">资金占比</th><th class="num">偏差</th><th>状态</th>
+      </tr></thead>
+      <tbody>${rowsHtml}</tbody>
+    </table>`;
 }
 
 /* ---- ④ 信号结算 ---- */
