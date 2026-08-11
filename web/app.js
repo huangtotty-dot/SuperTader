@@ -1466,7 +1466,8 @@ function renderStockSummary(d) {
   const chTxt = ch.direction === "up" ? `<b class="up">上行 ↗</b>`
     : ch.direction === "down" ? `<b class="down">下行 ↘</b>` : `<span class="cell-dim">震荡 →</span>`;
   const chDesc = ch.direction === "flat" ? ""
-    : `<span class="cell-dim" style="font-size:11px">${ch.direction === "up" ? "上行" : "下行"}通道 斜率${ch.norm_slope_pct != null ? (ch.norm_slope_pct >= 0 ? '+' : '') + fmt(ch.norm_slope_pct, 2) : '—'}%/日 · 40日${ch.ret_40d >= 0 ? '+' : ''}${fmt(ch.ret_40d, 1)}% · 现价位于通道${ch.pos_pct != null ? fmt(ch.pos_pct, 0) : '—'}%</span>`;
+    : `<span class="cell-dim" style="font-size:11px">${ch.direction === "up" ? "上行" : "下行"}通道 斜率${ch.norm_slope_pct != null ? (ch.norm_slope_pct >= 0 ? '+' : '') + fmt(ch.norm_slope_pct, 2) : '—'}%/日 · 40日${ch.ret_40d >= 0 ? '+' : ''}${fmt(ch.ret_40d, 1)}% · 现价位于通道${ch.pos_pct != null ? fmt(ch.pos_pct, 0) : '—'}%</span>`
+      + (ch.reversal ? `<span class="badge signal" style="margin-left:6px">↺ 通道反转${ch.reversal === "up_to_down" ? " 上→下" : " 下→上"}</span>` : "")
   document.getElementById("stockSummary").innerHTML = `
     <span class="ss-item">当前价: <b class="mono">${fmt(cur, 3)}</b></span>
     <span class="ss-item">通道: ${chTxt} ${chDesc}</span>
@@ -1540,6 +1541,15 @@ function renderStockChart() {
     backgroundColor: "transparent",
     animation: false,
     legend: { top: 0, textStyle: { color: "#8b949e", fontSize: 10 }, type: "scroll" },
+    ...(data.channel && data.channel.direction !== "flat" ? { title: [{
+      text: (data.channel.direction === "up" ? "↗ 上行通道" : "↘ 下行通道")
+        + (data.channel.reversal ? "  ↺ 通道反转" : ""),
+      left: 6, top: 2,
+      textStyle: {
+        color: data.channel.direction === "up" ? "#3fb950" : "#f85149",
+        fontSize: 11, fontWeight: "bold",
+      },
+    }] } : {}),
     tooltip: { trigger: "axis", axisPointer: { type: "cross" }, backgroundColor: "#161b22",
       borderColor: "#30363d", textStyle: { color: "#c9d1d9", fontSize: 11 } },
     axisPointer: { link: [{ xAxisIndex: "all" }] },
@@ -1579,20 +1589,20 @@ function renderStockChart() {
             ...(showLevels ? [...resistanceLines, ...supportLines] : []), currentLine,
           ],
           label: { position: "insideEndTop" } } },
-      // 通道色带：上轨/下轨 line（全轴数据）+ markArea 填充
+      // 通道色带：上轨实线/下轨虚线 + 区域填充。红涨绿跌：上行=绿，下行=红
       ...(showChannel && data.channel && data.channel.up_line.length ? [{
         name: "通道上轨", type: "line", xAxisIndex: 0, yAxisIndex: 0, symbol: "none",
         data: period.dates.map((_, i) => {
           const t = i / (period.dates.length - 1 || 1);
           return +(data.channel.up_line[0] + (data.channel.up_line[1] - data.channel.up_line[0]) * t).toFixed(3);
         }),
-        lineStyle: { color: data.channel.direction === "up" ? "#f85149" : "#3fb950",
+        lineStyle: { color: data.channel.direction === "up" ? "#3fb950" : "#f85149",
           width: 1.5, type: "solid" },
         markArea: { silent: true, data: [[{
           yAxis: data.channel.up_line[0], xAxis: 0,
           name: data.channel.direction === "up" ? "↗ 上行通道" : "↘ 下行通道",
-          itemStyle: { color: data.channel.direction === "up" ? "rgba(248,81,73,.10)" : "rgba(63,185,80,.10)",
-            borderColor: data.channel.direction === "up" ? "rgba(248,81,73,.4)" : "rgba(63,185,80,.4)",
+          itemStyle: { color: data.channel.direction === "up" ? "rgba(63,185,80,.10)" : "rgba(248,81,73,.10)",
+            borderColor: data.channel.direction === "up" ? "rgba(63,185,80,.4)" : "rgba(248,81,73,.4)",
             borderWidth: 1, borderType: "solid" },
         }, { yAxis: data.channel.dn_line[0], xAxis: period.dates.length - 1 }]] },
       }, {
@@ -1601,7 +1611,7 @@ function renderStockChart() {
           const t = i / (period.dates.length - 1 || 1);
           return +(data.channel.dn_line[0] + (data.channel.dn_line[1] - data.channel.dn_line[0]) * t).toFixed(3);
         }),
-        lineStyle: { color: data.channel.direction === "up" ? "#f85149" : "#3fb950",
+        lineStyle: { color: data.channel.direction === "up" ? "#3fb950" : "#f85149",
           width: 1, type: "dashed" },
       }] : []),
       ...(showMA ? maSeries.map(s => ({ ...s, xAxisIndex: 0, yAxisIndex: 0 })) : []),
