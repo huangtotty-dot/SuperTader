@@ -2267,15 +2267,23 @@ class Api:
             target_val = total_capital * target_pct
             pct = r["mkt_val"] / total_capital if total_capital else 0
             gap_pct = (r["mkt_val"] / target_val - 1) if target_val else 0
+            # 偏差股数 = (目标市值 - 当前市值) / 股价，取整到一手(100股)，向下取整
+            px = (r["mkt_val"] / r["total_qty"]) if r["total_qty"] else 0
+            gap_val = target_val - r["mkt_val"]
+            if px > 0:
+                gap_qty = int(gap_val / px // 100) * 100   # 欠配=+可加，超配=-应减
+            else:
+                gap_qty = 0
             rows.append({
                 "code": r["base"], "name": r["name"],
                 "target_pct": round(target_pct, 4),
                 "target_val": round(target_val, 0),
                 "mkt_val": round(r["mkt_val"], 0),
                 "total_qty": r["total_qty"],
-                "price": round(r["mkt_val"] / r["total_qty"], 3) if r["total_qty"] else 0,
+                "price": round(px, 3) if r["total_qty"] else 0,
                 "pct": round(pct * 100, 1),
                 "gap_pct": round(gap_pct * 100, 1),
+                "gap_qty": int(gap_qty),  # 偏差股数(取整到100股)：正值可加，负值应减
                 "over": gap_pct > 0.05,    # 超配 >5%
                 "under": gap_pct < -0.05,  # 欠配 >5%
                 "cost": round(r["cost"], 3) if r["total_qty"] else 0,

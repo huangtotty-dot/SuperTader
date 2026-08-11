@@ -939,7 +939,8 @@ function renderPositionManager(pm) {
       <td class="num">${fmt(r.mkt_val, 0)}</td>
       <td class="num cell-dim">${fmt(r.target_val, 0)} (${(r.target_pct * 100).toFixed(0)}%)</td>
       <td class="num ${pctCls}">${fmt(r.pct, 1)}%</td>
-      <td class="num ${gapCls}">${r.gap_pct >= 0 ? "+" : ""}${fmt(r.gap_pct, 1)}%</td>
+      <td class="num ${gapCls}">${r.gap_pct >= 0 ? "+" : ""}${fmt(r.gap_pct, 1)}%<br>
+        <span class="mono cell-dim" style="font-size:10px">${r.gap_qty > 0 ? "可加" : r.gap_qty < 0 ? "应减" : ""}${Math.abs(r.gap_qty || 0)}股</span></td>
       <td>${badge}</td>
     </tr>`;
   }).join("");
@@ -964,7 +965,7 @@ function renderPositionManager(pm) {
       <thead><tr>
         <th>股票</th><th class="num">股数</th><th class="num">现价</th>
         <th class="num">当前市值</th><th class="num">目标市值</th>
-        <th class="num">资金占比</th><th class="num">偏差</th><th>状态</th>
+        <th class="num">资金占比</th><th class="num" title="偏差百分比 + 折算股数(取整一手100股)">偏差(股)</th><th>状态</th>
       </tr></thead>
       <tbody>${rowsHtml}</tbody>
     </table>`;
