@@ -3,14 +3,14 @@
   "_last_updated": "2026-08-04",
   "_update_source": "持仓截图更新(双账户): 新增002639默认short待用户确认; 300153/300364沿用short",
   "_auto_decision": {
-    "date": "2026-08-11",
-    "regime": "range",
-    "regime_name": "横盘震荡",
-    "z_top3": -0.573,
-    "basis_date": "2026-08-10",
+    "date": "2026-08-12",
+    "regime": "uni_up",
+    "regime_name": "单边上涨",
+    "z_top3": -0.94,
+    "basis_date": "2026-08-11",
     "matrix_mode": "long",
     "pos_factor": 1.0,
-    "reason": "震荡×偏冷→正T标准仓",
+    "reason": "单边上涨×偏冷→正T标准仓(B2区低吸)",
     "per_stock": {
       "588170": "long",
       "600176": "long",
@@ -18,7 +18,7 @@
       "603667": "long",
       "000988": "long",
       "000988_B": "long",
-      "002639": "long",
+      "002639": "short",
       "300153": "long"
     },
     "source": "auto_v3.1"
@@ -26,7 +26,7 @@
   "_accounts": "short",
   "300153": "long",
   "300364": "short",
-  "002639": "long",
+  "002639": "short",
   "588170": "long",
   "600176": "long",
   "600481": "long",

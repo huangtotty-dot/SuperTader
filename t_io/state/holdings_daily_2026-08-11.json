@@ -1,6 +1,6 @@
 {
   "date": "2026-08-11",
-  "updated_at": "2026-08-11 15:02:16",
+  "updated_at": "2026-08-11 20:06:12",
   "source": "live",
   "holdings": [
     {
@@ -8,15 +8,15 @@
       "name": "科创半导体ETF华夏",
       "account": "账户A",
       "type": "etf",
-      "qty": 2500,
-      "base": 2500,
-      "t_qty": 2500,
+      "qty": 6000,
+      "base": 6000,
+      "t_qty": 0,
       "cost": 0.889,
       "pre_close": 1.018,
       "price": 1.018,
       "change_pct": -2.96,
       "pnl_pct": 14.51068616422948,
-      "pnl_amt": 322.5,
+      "pnl_amt": 774.0,
       "offline": false
     },
     {
@@ -24,15 +24,15 @@
       "name": "中国巨石",
       "account": "账户A",
       "type": "stock",
-      "qty": 200,
-      "base": 200,
-      "t_qty": 200,
+      "qty": 300,
+      "base": 300,
+      "t_qty": 0,
       "cost": 63.093,
       "pre_close": 42.74,
       "price": 42.69,
       "change_pct": -1.36,
       "pnl_pct": -32.33797727164662,
-      "pnl_amt": -4080.6,
+      "pnl_amt": -6120.9,
       "offline": false
     },
     {
@@ -40,15 +40,15 @@
       "name": "双良节能",
       "account": "账户A",
       "type": "stock",
-      "qty": 500,
-      "base": 500,
-      "t_qty": 300,
+      "qty": 300,
+      "base": 300,
+      "t_qty": 0,
       "cost": 12.4,
       "pre_close": 4.39,
       "price": 4.39,
       "change_pct": 0.23,
       "pnl_pct": -64.59677419354838,
-      "pnl_amt": -4005.0,
+      "pnl_amt": -2403.0,
       "offline": false
     },
     {
@@ -72,15 +72,15 @@
       "name": "华工科技",
       "account": "账户A",
       "type": "stock",
-      "qty": 0,
-      "base": 0,
+      "qty": 100,
+      "base": 100,
       "t_qty": 0,
       "cost": 558.022,
       "pre_close": 103.74,
       "price": 103.8,
       "change_pct": 0.12,
       "pnl_pct": -81.39858285157217,
-      "pnl_amt": null,
+      "pnl_amt": -45422.2,
       "offline": false
     },
     {
@@ -88,15 +88,15 @@
       "name": "华工科技",
       "account": "账户B",
       "type": "stock",
-      "qty": 0,
-      "base": 0,
+      "qty": 100,
+      "base": 100,
       "t_qty": 0,
       "cost": 131.391,
       "pre_close": 103.74,
       "price": 103.8,
       "change_pct": 0.12,
       "pnl_pct": -20.999155193278074,
-      "pnl_amt": null,
+      "pnl_amt": -2759.1,
       "offline": false
     },
     {
@@ -120,15 +120,15 @@
       "name": "科泰电源",
       "account": "账户B",
       "type": "stock",
-      "qty": 100,
-      "base": 100,
-      "t_qty": 100,
+      "qty": 200,
+      "base": 200,
+      "t_qty": 0,
       "cost": 22.826,
       "pre_close": 21.8,
       "price": 21.75,
       "change_pct": -0.05,
       "pnl_pct": -4.713922719705598,
-      "pnl_amt": -107.6,
+      "pnl_amt": -215.2,
       "offline": false
     },
     {
@@ -501,9 +501,9 @@
     }
   ],
   "summary": {
-    "total_value": 33682.0,
-    "total_cost": 41996.1,
-    "total_pnl": -8314.1,
-    "total_pnl_pct": -19.8
+    "total_value": 63571.0,
+    "total_cost": 120160.8,
+    "total_pnl": -56589.8,
+    "total_pnl_pct": -47.1
   }
 }

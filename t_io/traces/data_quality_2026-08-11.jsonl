@@ -2762,3 +2762,83 @@
 {"fetch_time": "2026-08-11 15:02:10", "code": "000988_B", "source": "cache", "minute_status": "cache_hit", "raw_rows": 242, "parsed_rows": 242, "valid_rows": 242, "fetch_cost_ms": 3}
 {"fetch_time": "2026-08-11 15:02:10", "code": "002639", "source": "cache", "minute_status": "cache_hit", "raw_rows": 242, "parsed_rows": 242, "valid_rows": 242, "fetch_cost_ms": 2}
 {"fetch_time": "2026-08-11 15:02:10", "code": "300153", "source": "cache", "minute_status": "cache_hit", "raw_rows": 242, "parsed_rows": 242, "valid_rows": 242, "fetch_cost_ms": 4}
+{"fetch_time": "2026-08-11 15:02:25", "code": "588170", "source": "cache", "minute_status": "cache_hit", "raw_rows": 242, "parsed_rows": 242, "valid_rows": 242, "fetch_cost_ms": 6}
+{"fetch_time": "2026-08-11 15:02:26", "code": "600176", "source": "cache", "minute_status": "cache_hit", "raw_rows": 242, "parsed_rows": 242, "valid_rows": 242, "fetch_cost_ms": 4}
+{"fetch_time": "2026-08-11 15:02:26", "code": "600481", "source": "cache", "minute_status": "cache_hit", "raw_rows": 242, "parsed_rows": 242, "valid_rows": 242, "fetch_cost_ms": 3}
+{"fetch_time": "2026-08-11 15:02:26", "code": "603667", "source": "cache", "minute_status": "cache_hit", "raw_rows": 242, "parsed_rows": 242, "valid_rows": 242, "fetch_cost_ms": 4}
+{"fetch_time": "2026-08-11 15:02:26", "code": "000988", "source": "cache", "minute_status": "cache_hit", "raw_rows": 242, "parsed_rows": 242, "valid_rows": 242, "fetch_cost_ms": 4}
+{"fetch_time": "2026-08-11 15:02:26", "code": "000988_B", "source": "cache", "minute_status": "cache_hit", "raw_rows": 242, "parsed_rows": 242, "valid_rows": 242, "fetch_cost_ms": 4}
+{"fetch_time": "2026-08-11 15:02:26", "code": "002639", "source": "cache", "minute_status": "cache_hit", "raw_rows": 242, "parsed_rows": 242, "valid_rows": 242, "fetch_cost_ms": 5}
+{"fetch_time": "2026-08-11 15:02:26", "code": "300153", "source": "cache", "minute_status": "cache_hit", "raw_rows": 242, "parsed_rows": 242, "valid_rows": 242, "fetch_cost_ms": 4}
+{"fetch_time": "2026-08-11 15:02:41", "code": "588170", "source": "cache", "minute_status": "cache_hit", "raw_rows": 242, "parsed_rows": 242, "valid_rows": 242, "fetch_cost_ms": 10}
+{"fetch_time": "2026-08-11 15:02:41", "code": "600176", "source": "cache", "minute_status": "cache_hit", "raw_rows": 242, "parsed_rows": 242, "valid_rows": 242, "fetch_cost_ms": 5}
+{"fetch_time": "2026-08-11 15:02:41", "code": "600481", "source": "cache", "minute_status": "cache_hit", "raw_rows": 242, "parsed_rows": 242, "valid_rows": 242, "fetch_cost_ms": 8}
+{"fetch_time": "2026-08-11 15:02:41", "code": "603667", "source": "cache", "minute_status": "cache_hit", "raw_rows": 242, "parsed_rows": 242, "valid_rows": 242, "fetch_cost_ms": 7}
+{"fetch_time": "2026-08-11 15:02:41", "code": "000988", "source": "cache", "minute_status": "cache_hit", "raw_rows": 242, "parsed_rows": 242, "valid_rows": 242, "fetch_cost_ms": 8}
+{"fetch_time": "2026-08-11 15:02:41", "code": "000988_B", "source": "cache", "minute_status": "cache_hit", "raw_rows": 242, "parsed_rows": 242, "valid_rows": 242, "fetch_cost_ms": 7}
+{"fetch_time": "2026-08-11 15:02:41", "code": "002639", "source": "cache", "minute_status": "cache_hit", "raw_rows": 242, "parsed_rows": 242, "valid_rows": 242, "fetch_cost_ms": 9}
+{"fetch_time": "2026-08-11 15:02:42", "code": "300153", "source": "api", "minute_status": "ok", "raw_rows": 242, "parsed_rows": 242, "valid_rows": 242, "short_rows": 0, "type_rows": 0, "parse_fail_rows": 0, "derived_ohlc_rows": 242, "fetch_cost_ms": 240}
+{"fetch_time": "2026-08-11 15:02:57", "code": "588170", "source": "cache", "minute_status": "cache_hit", "raw_rows": 242, "parsed_rows": 242, "valid_rows": 242, "fetch_cost_ms": 1}
+{"fetch_time": "2026-08-11 15:02:57", "code": "600176", "source": "cache", "minute_status": "cache_hit", "raw_rows": 242, "parsed_rows": 242, "valid_rows": 242, "fetch_cost_ms": 3}
+{"fetch_time": "2026-08-11 15:02:57", "code": "600481", "source": "cache", "minute_status": "cache_hit", "raw_rows": 242, "parsed_rows": 242, "valid_rows": 242, "fetch_cost_ms": 4}
+{"fetch_time": "2026-08-11 15:02:58", "code": "603667", "source": "cache", "minute_status": "cache_hit", "raw_rows": 242, "parsed_rows": 242, "valid_rows": 242, "fetch_cost_ms": 4}
+{"fetch_time": "2026-08-11 15:02:59", "code": "000988", "source": "api", "minute_status": "ok", "raw_rows": 242, "parsed_rows": 242, "valid_rows": 242, "short_rows": 0, "type_rows": 0, "parse_fail_rows": 0, "derived_ohlc_rows": 242, "fetch_cost_ms": 194}
+{"fetch_time": "2026-08-11 15:02:59", "code": "000988_B", "source": "api", "minute_status": "ok", "raw_rows": 242, "parsed_rows": 242, "valid_rows": 242, "short_rows": 0, "type_rows": 0, "parse_fail_rows": 0, "derived_ohlc_rows": 242, "fetch_cost_ms": 198}
+{"fetch_time": "2026-08-11 15:02:59", "code": "002639", "source": "api", "minute_status": "ok", "raw_rows": 242, "parsed_rows": 242, "valid_rows": 242, "short_rows": 0, "type_rows": 0, "parse_fail_rows": 0, "derived_ohlc_rows": 242, "fetch_cost_ms": 208}
+{"fetch_time": "2026-08-11 15:02:59", "code": "300153", "source": "cache", "minute_status": "cache_hit", "raw_rows": 242, "parsed_rows": 242, "valid_rows": 242, "fetch_cost_ms": 5}
+{"fetch_time": "2026-08-11 15:03:14", "code": "588170", "source": "cache", "minute_status": "cache_hit", "raw_rows": 242, "parsed_rows": 242, "valid_rows": 242, "fetch_cost_ms": 2}
+{"fetch_time": "2026-08-11 15:03:14", "code": "600176", "source": "cache", "minute_status": "cache_hit", "raw_rows": 242, "parsed_rows": 242, "valid_rows": 242, "fetch_cost_ms": 3}
+{"fetch_time": "2026-08-11 15:03:14", "code": "600481", "source": "cache", "minute_status": "cache_hit", "raw_rows": 242, "parsed_rows": 242, "valid_rows": 242, "fetch_cost_ms": 2}
+{"fetch_time": "2026-08-11 15:03:14", "code": "603667", "source": "cache", "minute_status": "cache_hit", "raw_rows": 242, "parsed_rows": 242, "valid_rows": 242, "fetch_cost_ms": 2}
+{"fetch_time": "2026-08-11 15:03:14", "code": "000988", "source": "cache", "minute_status": "cache_hit", "raw_rows": 242, "parsed_rows": 242, "valid_rows": 242, "fetch_cost_ms": 2}
+{"fetch_time": "2026-08-11 15:03:15", "code": "000988_B", "source": "cache", "minute_status": "cache_hit", "raw_rows": 242, "parsed_rows": 242, "valid_rows": 242, "fetch_cost_ms": 2}
+{"fetch_time": "2026-08-11 15:03:16", "code": "002639", "source": "cache", "minute_status": "cache_hit", "raw_rows": 242, "parsed_rows": 242, "valid_rows": 242, "fetch_cost_ms": 4}
+{"fetch_time": "2026-08-11 15:03:17", "code": "300153", "source": "cache", "minute_status": "cache_hit", "raw_rows": 242, "parsed_rows": 242, "valid_rows": 242, "fetch_cost_ms": 2}
+{"fetch_time": "2026-08-11 15:03:32", "code": "588170", "source": "api", "minute_status": "ok", "raw_rows": 242, "parsed_rows": 242, "valid_rows": 242, "short_rows": 0, "type_rows": 0, "parse_fail_rows": 0, "derived_ohlc_rows": 242, "fetch_cost_ms": 196}
+{"fetch_time": "2026-08-11 15:03:32", "code": "600176", "source": "api", "minute_status": "ok", "raw_rows": 242, "parsed_rows": 242, "valid_rows": 242, "short_rows": 0, "type_rows": 0, "parse_fail_rows": 0, "derived_ohlc_rows": 242, "fetch_cost_ms": 229}
+{"fetch_time": "2026-08-11 15:03:32", "code": "600481", "source": "api", "minute_status": "ok", "raw_rows": 242, "parsed_rows": 242, "valid_rows": 242, "short_rows": 0, "type_rows": 0, "parse_fail_rows": 0, "derived_ohlc_rows": 242, "fetch_cost_ms": 190}
+{"fetch_time": "2026-08-11 15:03:33", "code": "603667", "source": "api", "minute_status": "ok", "raw_rows": 242, "parsed_rows": 242, "valid_rows": 242, "short_rows": 0, "type_rows": 0, "parse_fail_rows": 0, "derived_ohlc_rows": 242, "fetch_cost_ms": 198}
+{"fetch_time": "2026-08-11 15:03:33", "code": "000988", "source": "cache", "minute_status": "cache_hit", "raw_rows": 242, "parsed_rows": 242, "valid_rows": 242, "fetch_cost_ms": 3}
+{"fetch_time": "2026-08-11 15:03:33", "code": "000988_B", "source": "cache", "minute_status": "cache_hit", "raw_rows": 242, "parsed_rows": 242, "valid_rows": 242, "fetch_cost_ms": 1}
+{"fetch_time": "2026-08-11 15:03:33", "code": "002639", "source": "cache", "minute_status": "cache_hit", "raw_rows": 242, "parsed_rows": 242, "valid_rows": 242, "fetch_cost_ms": 2}
+{"fetch_time": "2026-08-11 15:03:33", "code": "300153", "source": "cache", "minute_status": "cache_hit", "raw_rows": 242, "parsed_rows": 242, "valid_rows": 242, "fetch_cost_ms": 2}
+{"fetch_time": "2026-08-11 15:03:48", "code": "588170", "source": "cache", "minute_status": "cache_hit", "raw_rows": 242, "parsed_rows": 242, "valid_rows": 242, "fetch_cost_ms": 2}
+{"fetch_time": "2026-08-11 15:03:48", "code": "600176", "source": "cache", "minute_status": "cache_hit", "raw_rows": 242, "parsed_rows": 242, "valid_rows": 242, "fetch_cost_ms": 2}
+{"fetch_time": "2026-08-11 15:03:48", "code": "600481", "source": "cache", "minute_status": "cache_hit", "raw_rows": 242, "parsed_rows": 242, "valid_rows": 242, "fetch_cost_ms": 3}
+{"fetch_time": "2026-08-11 15:03:48", "code": "603667", "source": "cache", "minute_status": "cache_hit", "raw_rows": 242, "parsed_rows": 242, "valid_rows": 242, "fetch_cost_ms": 2}
+{"fetch_time": "2026-08-11 15:03:48", "code": "000988", "source": "cache", "minute_status": "cache_hit", "raw_rows": 242, "parsed_rows": 242, "valid_rows": 242, "fetch_cost_ms": 2}
+{"fetch_time": "2026-08-11 15:03:48", "code": "000988_B", "source": "cache", "minute_status": "cache_hit", "raw_rows": 242, "parsed_rows": 242, "valid_rows": 242, "fetch_cost_ms": 2}
+{"fetch_time": "2026-08-11 15:03:48", "code": "002639", "source": "cache", "minute_status": "cache_hit", "raw_rows": 242, "parsed_rows": 242, "valid_rows": 242, "fetch_cost_ms": 3}
+{"fetch_time": "2026-08-11 15:03:48", "code": "300153", "source": "cache", "minute_status": "cache_hit", "raw_rows": 242, "parsed_rows": 242, "valid_rows": 242, "fetch_cost_ms": 3}
+{"fetch_time": "2026-08-11 15:04:03", "code": "588170", "source": "cache", "minute_status": "cache_hit", "raw_rows": 242, "parsed_rows": 242, "valid_rows": 242, "fetch_cost_ms": 2}
+{"fetch_time": "2026-08-11 15:04:03", "code": "600176", "source": "cache", "minute_status": "cache_hit", "raw_rows": 242, "parsed_rows": 242, "valid_rows": 242, "fetch_cost_ms": 3}
+{"fetch_time": "2026-08-11 15:04:03", "code": "600481", "source": "cache", "minute_status": "cache_hit", "raw_rows": 242, "parsed_rows": 242, "valid_rows": 242, "fetch_cost_ms": 2}
+{"fetch_time": "2026-08-11 15:04:03", "code": "603667", "source": "cache", "minute_status": "cache_hit", "raw_rows": 242, "parsed_rows": 242, "valid_rows": 242, "fetch_cost_ms": 2}
+{"fetch_time": "2026-08-11 15:04:03", "code": "000988", "source": "cache", "minute_status": "cache_hit", "raw_rows": 242, "parsed_rows": 242, "valid_rows": 242, "fetch_cost_ms": 3}
+{"fetch_time": "2026-08-11 15:04:03", "code": "000988_B", "source": "cache", "minute_status": "cache_hit", "raw_rows": 242, "parsed_rows": 242, "valid_rows": 242, "fetch_cost_ms": 5}
+{"fetch_time": "2026-08-11 15:04:03", "code": "002639", "source": "cache", "minute_status": "cache_hit", "raw_rows": 242, "parsed_rows": 242, "valid_rows": 242, "fetch_cost_ms": 2}
+{"fetch_time": "2026-08-11 15:04:03", "code": "300153", "source": "cache", "minute_status": "cache_hit", "raw_rows": 242, "parsed_rows": 242, "valid_rows": 242, "fetch_cost_ms": 3}
+{"fetch_time": "2026-08-11 15:04:18", "code": "588170", "source": "cache", "minute_status": "cache_hit", "raw_rows": 242, "parsed_rows": 242, "valid_rows": 242, "fetch_cost_ms": 3}
+{"fetch_time": "2026-08-11 15:04:18", "code": "600176", "source": "cache", "minute_status": "cache_hit", "raw_rows": 242, "parsed_rows": 242, "valid_rows": 242, "fetch_cost_ms": 4}
+{"fetch_time": "2026-08-11 15:04:18", "code": "600481", "source": "cache", "minute_status": "cache_hit", "raw_rows": 242, "parsed_rows": 242, "valid_rows": 242, "fetch_cost_ms": 3}
+{"fetch_time": "2026-08-11 15:04:18", "code": "603667", "source": "cache", "minute_status": "cache_hit", "raw_rows": 242, "parsed_rows": 242, "valid_rows": 242, "fetch_cost_ms": 5}
+{"fetch_time": "2026-08-11 15:04:18", "code": "000988", "source": "cache", "minute_status": "cache_hit", "raw_rows": 242, "parsed_rows": 242, "valid_rows": 242, "fetch_cost_ms": 5}
+{"fetch_time": "2026-08-11 15:04:18", "code": "000988_B", "source": "cache", "minute_status": "cache_hit", "raw_rows": 242, "parsed_rows": 242, "valid_rows": 242, "fetch_cost_ms": 2}
+{"fetch_time": "2026-08-11 15:04:18", "code": "002639", "source": "cache", "minute_status": "cache_hit", "raw_rows": 242, "parsed_rows": 242, "valid_rows": 242, "fetch_cost_ms": 3}
+{"fetch_time": "2026-08-11 15:04:18", "code": "300153", "source": "cache", "minute_status": "cache_hit", "raw_rows": 242, "parsed_rows": 242, "valid_rows": 242, "fetch_cost_ms": 4}
+{"fetch_time": "2026-08-11 15:04:33", "code": "588170", "source": "cache", "minute_status": "cache_hit", "raw_rows": 242, "parsed_rows": 242, "valid_rows": 242, "fetch_cost_ms": 3}
+{"fetch_time": "2026-08-11 15:04:33", "code": "600176", "source": "cache", "minute_status": "cache_hit", "raw_rows": 242, "parsed_rows": 242, "valid_rows": 242, "fetch_cost_ms": 3}
+{"fetch_time": "2026-08-11 15:04:33", "code": "600481", "source": "cache", "minute_status": "cache_hit", "raw_rows": 242, "parsed_rows": 242, "valid_rows": 242, "fetch_cost_ms": 3}
+{"fetch_time": "2026-08-11 15:04:33", "code": "603667", "source": "cache", "minute_status": "cache_hit", "raw_rows": 242, "parsed_rows": 242, "valid_rows": 242, "fetch_cost_ms": 6}
+{"fetch_time": "2026-08-11 15:04:33", "code": "000988", "source": "cache", "minute_status": "cache_hit", "raw_rows": 242, "parsed_rows": 242, "valid_rows": 242, "fetch_cost_ms": 5}
+{"fetch_time": "2026-08-11 15:04:33", "code": "000988_B", "source": "cache", "minute_status": "cache_hit", "raw_rows": 242, "parsed_rows": 242, "valid_rows": 242, "fetch_cost_ms": 5}
+{"fetch_time": "2026-08-11 15:04:33", "code": "002639", "source": "cache", "minute_status": "cache_hit", "raw_rows": 242, "parsed_rows": 242, "valid_rows": 242, "fetch_cost_ms": 3}
+{"fetch_time": "2026-08-11 15:04:33", "code": "300153", "source": "cache", "minute_status": "cache_hit", "raw_rows": 242, "parsed_rows": 242, "valid_rows": 242, "fetch_cost_ms": 6}
+{"fetch_time": "2026-08-11 15:04:48", "code": "588170", "source": "cache", "minute_status": "cache_hit", "raw_rows": 242, "parsed_rows": 242, "valid_rows": 242, "fetch_cost_ms": 9}
+{"fetch_time": "2026-08-11 15:04:48", "code": "600176", "source": "cache", "minute_status": "cache_hit", "raw_rows": 242, "parsed_rows": 242, "valid_rows": 242, "fetch_cost_ms": 5}
+{"fetch_time": "2026-08-11 15:04:48", "code": "600481", "source": "cache", "minute_status": "cache_hit", "raw_rows": 242, "parsed_rows": 242, "valid_rows": 242, "fetch_cost_ms": 7}
+{"fetch_time": "2026-08-11 15:04:48", "code": "603667", "source": "cache", "minute_status": "cache_hit", "raw_rows": 242, "parsed_rows": 242, "valid_rows": 242, "fetch_cost_ms": 6}
+{"fetch_time": "2026-08-11 15:04:48", "code": "000988", "source": "cache", "minute_status": "cache_hit", "raw_rows": 242, "parsed_rows": 242, "valid_rows": 242, "fetch_cost_ms": 5}
+{"fetch_time": "2026-08-11 15:04:48", "code": "000988_B", "source": "cache", "minute_status": "cache_hit", "raw_rows": 242, "parsed_rows": 242, "valid_rows": 242, "fetch_cost_ms": 7}
+{"fetch_time": "2026-08-11 15:04:48", "code": "002639", "source": "cache", "minute_status": "cache_hit", "raw_rows": 242, "parsed_rows": 242, "valid_rows": 242, "fetch_cost_ms": 5}
+{"fetch_time": "2026-08-11 15:04:48", "code": "300153", "source": "cache", "minute_status": "cache_hit", "raw_rows": 242, "parsed_rows": 242, "valid_rows": 242, "fetch_cost_ms": 7}
