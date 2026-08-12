@@ -25,7 +25,7 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 class MultiTimeframeFetcher:
     """多周期数据获取器：基于腾讯快照QT接口，获取日线/周线/月线数据"""
     
-    BASE_URL = "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get"
+    BASE_URL = "https://ifzq.gtimg.cn/appstock/app/fqkline/get"
     
     def __init__(self, cache_dir: str = None, cache_ttl_hours: int = 4):
         self.cache_dir = cache_dir or os.path.join(BASE_DIR, "t_io", "cache", "multi_tf")

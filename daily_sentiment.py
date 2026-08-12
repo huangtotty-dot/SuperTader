@@ -400,7 +400,7 @@ def stock_daily_features(code: str, date_str: Optional[str] = None) -> Dict[str,
     symbol = ("sh" if digits.startswith(("5", "6", "9")) else "sz") + digits
     for attempt in range(2):
         try:
-            url = (f"https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?"
+            url = (f"https://ifzq.gtimg.cn/appstock/app/fqkline/get?"
                    f"param={symbol},day,{start},{end},40,qfq")
             req = urllib.request.Request(url, headers={
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
@@ -438,7 +438,7 @@ def stock_daily_features(code: str, date_str: Optional[str] = None) -> Dict[str,
                     except Exception:
                         continue
                 bars.sort(key=lambda x: x["date"])
-                _log.info(f"[stock_feat] {code} 腾讯超时，akshare 兜底成功({len(bars)}条)")
+                _log.info(f"[stock_feat] {code} 腾讯失败/超时，akshare 兜底成功({len(bars)}条)")
         except Exception as e2:
             _log.debug(f"[stock_feat] akshare {code} 兜底也失败: {str(e2)[:60]}")
 
@@ -830,7 +830,7 @@ def fetch_index_pct_change(date_str: Optional[str] = None, symbol: str = "sh0000
         end = date_str or _now_fn().strftime("%Y-%m-%d")
         end_dt = datetime.strptime(end, "%Y-%m-%d")
         start = (end_dt - timedelta(days=20)).strftime("%Y-%m-%d")
-        url = (f"https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?"
+        url = (f"https://ifzq.gtimg.cn/appstock/app/fqkline/get?"
                f"param={symbol},day,{start},{end},10,qfq")
         req = urllib.request.Request(url, headers={
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
