@@ -65,7 +65,7 @@ def _mkt_code(code: str) -> str:
 def fetch_kline_tx(code: str, n: int = 60):
     """腾讯 qfq 日线 → [{'date','close',...}, ...]；失败返回 None（区分于空）"""
     mkt = code if code.startswith(("sh", "sz")) else _mkt_code(code)
-    url = (f"https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?"
+    url = (f"https://ifzq.gtimg.cn/appstock/app/fqkline/get?"
            f"param={mkt},day,,,{n},qfq")
     try:
         req = urllib.request.Request(url, headers=UA)
