@@ -1096,7 +1096,15 @@ class Api:
             self._stock_chart_cache = {}
         cache_key = f"{datetime.now().strftime('%Y-%m-%d')}_{code}"
         if cache_key in self._stock_chart_cache:
-            return self._stock_chart_cache[cache_key]
+            _ts, _res = self._stock_chart_cache[cache_key]
+            # fix P0-15: 盘前缓存的图缺今日K线(最后日期<今天)，或盘中超15分钟 → 重算，避免图停在昨日
+            _dates = _res.get("period_data", {}).get("daily", {}).get("dates") or []
+            _last = str(_dates[-1]) if _dates else ""
+            _now = datetime.now()
+            _today = _now.strftime("%Y-%m-%d")
+            _stale = (_last < _today) or (_last == _today and (_now - _ts).total_seconds() > 15 * 60)
+            if not _stale:
+                return _res
 
         # 东财标的(em前缀)磁盘缓存：K线静态(每日更新)，当日缓存避免东财接口重试
         if str(code).startswith("em"):
@@ -1230,7 +1238,7 @@ class Api:
                 }, ensure_ascii=False), encoding="utf-8")
             except Exception:
                 pass
-        self._stock_chart_cache[cache_key] = result
+        self._stock_chart_cache[cache_key] = (datetime.now(), result)
         return result
 
     def _build_chart_from_df(self, df, out, code):

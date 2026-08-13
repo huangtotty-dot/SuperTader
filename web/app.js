@@ -442,8 +442,6 @@ function renderLive(live, isToday) {
   const cycle = liveState.cycle_count || {};
   const buyCount = liveState.buy_count || {};
   const sellCount = liveState.sell_count || {};
-  const buyCd = liveState.buy_cooldown || {};
-  const sellCd = liveState.sell_cooldown || {};
 
   // 盘中状态卡
   const trendCards = Object.keys(trends).map(code => {
@@ -453,10 +451,7 @@ function renderLive(live, isToday) {
       : st === "STRONG_BEAR" || st === "BEAR" ? "regime-uni_down"
       : "regime-range";
     const bCnt = buyCount[code] || 0, sCnt = sellCount[code] || 0;
-    const bc = buyCd[code], sc = sellCd[code];
     const cdTxt = [];
-    if (bc) cdTxt.push(`买冷却 <span class="cool-tag">${esc(String(bc).slice(11, 19) || bc)}</span>`);
-    if (sc) cdTxt.push(`卖冷却 <span class="cool-tag">${esc(String(sc).slice(11, 19) || sc)}</span>`);
     return `
       <div class="card" style="margin-bottom:8px;padding:10px 14px">
         <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:6px">
@@ -1455,6 +1450,17 @@ function switchStockPeriod(p) {
 }
 function renderStockSummary(d) {
   const cur = d.current_price;
+  // 今日涨跌幅（日线最后一根 较 前一根）
+  const _dl = (d.period_data && d.period_data.daily.ohlc) || [];
+  const _n = _dl.length;
+  let _chgPct = null;
+  if (_n >= 2) {
+    const _prev = _dl[_n - 2][1];
+    if (_prev) _chgPct = (_dl[_n - 1][1] - _prev) / _prev * 100;
+  }
+  const _chgHtml = _chgPct != null
+    ? ` <b class="${_chgPct >= 0 ? 'up' : 'down'}">${_chgPct >= 0 ? '+' : ''}${fmt(_chgPct, 2)}%</b>`
+    : "";
   const sup = d.levels.supports, res = d.levels.resistances;
   const supTxt = sup.map(s => `<b class="down">${s.price}</b>`).join(" / ") || "—";
   const resTxt = res.map(r => `<b class="up">${r.price}</b>`).join(" / ") || "—";
@@ -1469,7 +1475,7 @@ function renderStockSummary(d) {
     : `<span class="cell-dim" style="font-size:11px">${ch.direction === "up" ? "上行" : "下行"}通道 斜率${ch.norm_slope_pct != null ? (ch.norm_slope_pct >= 0 ? '+' : '') + fmt(ch.norm_slope_pct, 2) : '—'}%/日 · 40日${ch.ret_40d >= 0 ? '+' : ''}${fmt(ch.ret_40d, 1)}% · 现价位于通道${ch.pos_pct != null ? fmt(ch.pos_pct, 0) : '—'}%</span>`
       + (ch.reversal ? `<span class="badge signal" style="margin-left:6px">↺ 通道反转${ch.reversal === "up_to_down" ? " 上→下" : " 下→上"}</span>` : "")
   document.getElementById("stockSummary").innerHTML = `
-    <span class="ss-item">当前价: <b class="mono">${fmt(cur, 3)}</b></span>
+    <span class="ss-item">当前价: <b class="mono">${fmt(cur, 3)}</b>${_chgHtml}</span>
     <span class="ss-item">通道: ${chTxt} ${chDesc}</span>
     <span class="ss-item">关键压力: ${resTxt}</span>
     <span class="ss-item">关键支撑: ${supTxt}</span>
@@ -1546,12 +1552,36 @@ function renderStockChart() {
         + (data.channel.reversal ? "  ↺ 通道反转" : ""),
       left: 6, top: 2,
       textStyle: {
-        color: data.channel.direction === "up" ? "#3fb950" : "#f85149",
+        color: data.channel.direction === "up" ? "#f85149" : "#3fb950",
         fontSize: 11, fontWeight: "bold",
       },
     }] } : {}),
     tooltip: { trigger: "axis", axisPointer: { type: "cross" }, backgroundColor: "#161b22",
-      borderColor: "#30363d", textStyle: { color: "#c9d1d9", fontSize: 11 } },
+      borderColor: "#30363d", textStyle: { color: "#c9d1d9", fontSize: 11 },
+      formatter: function (ps) {
+        const k = ps.find(p => p.seriesName === "K线");
+        if (!k) return "";
+        const i = k.dataIndex;
+        const ohlc = period.ohlc[i];
+        if (!ohlc) return "";
+        const o = ohlc[0], c = ohlc[1], lo = ohlc[2], hi = ohlc[3];
+        const prevC = i > 0 ? period.ohlc[i - 1][1] : null;
+        const chgPct = prevC ? (c - prevC) / prevC * 100 : null;
+        const up = chgPct != null && chgPct >= 0;
+        const col = up ? "#f85149" : "#3fb950";
+        const chgTxt = chgPct == null ? "—" : `${up ? "+" : ""}${chgPct.toFixed(2)}%`;
+        const vol = period.volume[i];
+        const volTxt = vol != null
+          ? (vol >= 1e8 ? (vol / 1e8).toFixed(2) + "亿" : (vol / 1e4).toFixed(2) + "万") : "—";
+        const maIdx = [5, 10, 20, 30, 60, 180, 365];
+        const maParts = (period.ma || []).map((arr, j) =>
+          arr[i] != null ? `${maIdx[j]}:${arr[i]}` : null).filter(Boolean);
+        let html = `<div style="font-weight:bold;margin-bottom:3px">${period.dates[i]}</div>`
+          + `<div>开 <b>${o}</b>　收 <b style="color:${col}">${c}</b>　涨跌 <b style="color:${col}">${chgTxt}</b></div>`
+          + `<div>高 <b>${hi}</b>　低 <b>${lo}</b>　量 <b>${volTxt}</b></div>`;
+        if (maParts.length) html += `<div style="color:#8b949e">${maParts.join("　")}</div>`;
+        return html;
+      } },
     axisPointer: { link: [{ xAxisIndex: "all" }] },
     grid: [
       { left: 60, right: 20, top: 34, height: "44%" },   // 主图: K线+MA+BOLL+支撑压力+箱体
@@ -1589,22 +1619,22 @@ function renderStockChart() {
             ...(showLevels ? [...resistanceLines, ...supportLines] : []), currentLine,
           ],
           label: { position: "insideEndTop" } } },
-      // 通道色带：上轨实线/下轨虚线 + 区域填充。红涨绿跌：上行=绿，下行=红
+      // 通道色带：上轨实线/下轨虚线 + 区域填充。红涨绿跌：上行=红，下行=绿
       ...(showChannel && data.channel && data.channel.up_line.length ? [{
         name: "通道上轨", type: "line", xAxisIndex: 0, yAxisIndex: 0, symbol: "none",
         data: period.dates.map((_, i) => {
           const t = i / (period.dates.length - 1 || 1);
           return +(data.channel.up_line[0] + (data.channel.up_line[1] - data.channel.up_line[0]) * t).toFixed(3);
         }),
-        lineStyle: { color: data.channel.direction === "up" ? "#3fb950" : "#f85149",
+        lineStyle: { color: data.channel.direction === "up" ? "#f85149" : "#3fb950",
           width: 1.5, type: "solid" },
         markArea: { silent: true, data: [[{
           // 色带必须覆盖整段真实上下轨：上界=上轨线最大端值，下界=下轨线最小端值
           yAxis: Math.max(data.channel.up_line[0], data.channel.up_line[1]),
           xAxis: 0,
           name: data.channel.direction === "up" ? "↗ 上行通道" : "↘ 下行通道",
-          itemStyle: { color: data.channel.direction === "up" ? "rgba(63,185,80,.10)" : "rgba(248,81,73,.10)",
-            borderColor: data.channel.direction === "up" ? "rgba(63,185,80,.4)" : "rgba(248,81,73,.4)",
+          itemStyle: { color: data.channel.direction === "up" ? "rgba(248,81,73,.10)" : "rgba(63,185,80,.10)",
+            borderColor: data.channel.direction === "up" ? "rgba(248,81,73,.4)" : "rgba(63,185,80,.4)",
             borderWidth: 1, borderType: "solid" },
         }, { yAxis: Math.min(data.channel.dn_line[0], data.channel.dn_line[1]),
             xAxis: period.dates.length - 1 }]] },
@@ -1614,7 +1644,7 @@ function renderStockChart() {
           const t = i / (period.dates.length - 1 || 1);
           return +(data.channel.dn_line[0] + (data.channel.dn_line[1] - data.channel.dn_line[0]) * t).toFixed(3);
         }),
-        lineStyle: { color: data.channel.direction === "up" ? "#3fb950" : "#f85149",
+        lineStyle: { color: data.channel.direction === "up" ? "#f85149" : "#3fb950",
           width: 1, type: "dashed" },
       }] : []),
       ...(showMA ? maSeries.map(s => ({ ...s, xAxisIndex: 0, yAxisIndex: 0 })) : []),

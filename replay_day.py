@@ -79,7 +79,7 @@ def load_shared() -> dict:
         'np': np, 'pd': pd, 'requests': requests, 'urllib': urllib,
         'urllib.request': urllib.request, 'urllib.error': urllib.error,
     })
-    for mod_name in ['config', 'utils', 'data_fetcher', 'indicators', 'multi_timeframe_fetcher', 'signal_engine', 'auction_analyzer', 'position_sizer']:
+    for mod_name in ['config', 'utils', 'data_fetcher', 'indicators', 'signal_engine', 'auction_analyzer', 'position_sizer']:
         mod_path = BASE_DIR / f"{mod_name}.py"
         with open(mod_path, 'r', encoding='utf-8') as f:
             code = f.read()
@@ -259,12 +259,8 @@ def main():
                 else:
                     blocked.append({**ev_base, "kind": "qty0_no_record"})
             else:
-                # ── 修复版 main.py 信号块（V1.30） ──
+                # ── 修复版 main.py 信号块（纯两点，轮次上限已移除） ──
                 pushed = sig.score >= nth
-                if pushed and sig.action in ("SELL_HIGH", "PANIC_SELL"):
-                    if engine.cycle_count.get(code, 0) >= PARAMS["max_t_cycles_per_stock"]:
-                        pushed = False
-                        blocked.append({**ev_base, "kind": "cycle_cap_block"})
                 if pushed and sig.hold_qty > 0:
                     pushes.append({**ev_base, "kind": "push"})
                     if sig.action in ("SELL_HIGH", "PANIC_SELL"):

@@ -422,20 +422,3 @@ def calc_buy_qty(code: str, holding: dict, regime, sig_score: float, threshold: 
                  current_price: float = 0.0, total_equity: float = 0.0) -> int:
     """便捷函数：计算买入股数"""
     return get_sizer(params, virtual_trades).calc_buy_qty(code, holding, regime, sig_score, threshold, index_ctx=index_ctx, current_price=current_price, total_equity=total_equity)
-
-
-def get_trade_summary(code: str, virtual_trades: dict = None) -> dict:
-    """获取交易摘要（用于飞书通知）"""
-    vt = virtual_trades or {}
-    sells = vt.get(code, {}).get("SELL_HIGH", [])
-    buys = vt.get(code, {}).get("BUY_LOW", [])
-    total_sold = sum(t.get("qty", 0) for t in sells)
-    total_bought = sum(t.get("qty", 0) for t in buys)
-    unrebuilt = max(0, total_sold - total_bought)
-    return {
-        "total_sold": total_sold,
-        "total_bought": total_bought,
-        "unrebuilt": unrebuilt,
-        "sell_count": len(sells),
-        "buy_count": len(buys),
-    }
