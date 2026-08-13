@@ -15,6 +15,12 @@
 #   ② config.py PARAMS["buy_daily_cap"]=7（record_signal 层计数，buy_daily_cap_reached 谓词；
 #      生产 main.py scan_once 与 harness 记录层双挂载点拦截）
 #   回归证据: t_io/validation/w32_c1p/（冒烟/复用/决赛产物）+ t_io/validation/test_v120_production_cap.py
+# 2026-08-13 纯两点改造 + 僵尸清理（V2 swing2pt）:
+#   ① 引擎降级为纯两点规则（bb_pct_5m 触轨 + rsi_5m_p6）；删除 ScoringEngine/FACTOR_WEIGHTS/RiskManager
+#      评分链；main.py 移除单股日限/轮次上限拦截（两点恒推送，仓控0股仅供参考不记账）。
+#   ② 删除闭环追踪（awaiting_buyback/pending_sells/_recover_tracking_from_trades）、30min 冷却
+#      （buy_cooldown/sell_cooldown/_engine_now）、接回解耦开关 buyback_bypass_gates（config/harness 同步清）。
+#   ③ 本文件死 fallback 桩与 utils/data_fetcher/market_regime/trend_regime/position_* 等死函数一并清除。
 import sys as _sys
 import os as _os_mod
 # V3.0fix: __file__ = E:\06_T\signal_engine.py → dirname = E:\06_T
@@ -52,27 +58,12 @@ if 'VIRTUAL_TRADES' not in globals(): VIRTUAL_TRADES = {}
 if 'SIGNAL_OUTCOME_TRACKER' not in globals(): SIGNAL_OUTCOME_TRACKER = {}
 if 'T_MODE' not in globals(): T_MODE = {}
 if 'DAILY_DECISION_STATS' not in globals(): DAILY_DECISION_STATS = {}
-if 'MultiTimeframeFetcher' not in globals(): MultiTimeframeFetcher = None
-if '_resolve_benchmark_snapshot' not in globals():
-    def _resolve_benchmark_snapshot(c,h): return {}
 if '_default_daily_context' not in globals():
     def _default_daily_context(c,s="",r=""): return {"daily_status":s,"daily_reason":r,"daily_buy_t_ok":False}
-if '_calc_ps_levels' not in globals():
-    def _calc_ps_levels(p,d): return {}
-if '_strategy_memory_for_code' not in globals():
-    def _strategy_memory_for_code(c): return {}
 if '_append_jsonl' not in globals():
     def _append_jsonl(*a,**kw): return None
 if '_trace_path' not in globals():
     def _trace_path(n,d=None): return f"/tmp/{n}"
-if '_buy_soft_support_count' not in globals():
-    def _buy_soft_support_count(*a): return 0
-if '_special_loss_threshold_adjustments' not in globals():
-    def _special_loss_threshold_adjustments(*a):
-        if len(a) >= 6: return (a[2], a[3], a[4], a[5])
-        return (35, 35, 0, 0)
-if 'load_starvation_state' not in globals():
-    def load_starvation_state(): return {}
 if 'send_morning_alert' not in globals():
     def send_morning_alert(*a,**kw): return None
 if 'notify_alert_cleared' not in globals():
@@ -100,9 +91,7 @@ if 'Signal' not in globals():
 # ==========================================================
 
 class SignalEngine:
-    def __init__(self, factor_weights: dict = None):
-        self.buy_cooldown: Dict[str, datetime] = {}
-        self.sell_cooldown: Dict[str, datetime] = {}
+    def __init__(self):
         self.buy_count_per_stock: Dict[str, int] = {}
         self.sell_count_per_stock: Dict[str, int] = {}
         # C1' 口径B（W33 验证开关软消费，默认关）：record_signal 层当日已记录买信号计数
@@ -115,8 +104,6 @@ class SignalEngine:
         self.cycle_count: Dict[str, int] = {}
         self.cycle_direction: Dict[str, str] = {}
         self.post_sell_block_until: Dict[str, datetime] = {}
-        self.awaiting_buyback: Dict[str, Dict[str, Any]] = {}
-        self.pending_sells: Dict[str, Dict[str, Any]] = {}  # V1.29: 买入→高抛追踪
         self.daily_realized_loss_monitor = 0.0
         # V1.20/V1.21 dead states removed in V3.0 (peak_tracker, diagnostics, scenario_factor_state)
         # V1.25: 早盘预警状态机（基于近两年数据训练）
@@ -127,52 +114,8 @@ class SignalEngine:
         self._5min_cache: Dict[str, tuple] = {}  # code → (last_boundary_ts, df_5min)
         # V1.30: 决策原因码缓存（供面板/日报展示熔断等原因）
         self.last_decision: Dict[str, Dict[str, Any]] = {}
-        # 可传入自定义权重参数，默认 FACTOR_WEIGHTS（支持 HPO 多进程调参）
-        self.factor_weights = factor_weights or FACTOR_WEIGHTS
-        # V1.29: 从 VIRTUAL_TRADES 恢复闭环追踪状态（重启后不丢）
-        self._recover_tracking_from_trades()
         # V1.30: 恢复轮次/次数/冷却等盘中状态（重启后不清零）
         self._load_intraday_state()
-
-    def _recover_tracking_from_trades(self):
-        """V1.29: 从持久化的 VIRTUAL_TRADES 恢复闭环追踪状态。
-        程序重启后，根据未配对的买卖还原 awaiting_buyback / pending_sells。
-        """
-        vt = VIRTUAL_TRADES if 'VIRTUAL_TRADES' in globals() else {}
-        for code, actions in vt.items():
-            sells = actions.get("SELL_HIGH", [])
-            buys = actions.get("BUY_LOW", [])
-            total_sold = sum(t.get("qty", 0) for t in sells)
-            total_bought = sum(t.get("qty", 0) for t in buys)
-            if total_sold > total_bought:
-                # 有未接回的卖出 → 建立接回追踪
-                last_sell = max(sells, key=lambda t: str(t.get("ts", ""))) if sells else None
-                if last_sell and float(last_sell.get("price", 0) or 0) > 0:
-                    _gap = PARAMS.get("awaiting_buyback_vwap_gap", 0.975)
-                    if _gap < 0.1:
-                        _gap = 1.0 - _gap
-                    _sp = float(last_sell.get("price", 0) or 0)
-                    self.awaiting_buyback[code] = {
-                        "sell_price": _sp if _sp > 0 else 0,
-                        "sell_time": _now(),
-                        "qty": total_sold - total_bought,
-                        "target_price": round(_sp * _gap, 2) if _sp > 0 else 0,
-                        "ttl": PARAMS.get("awaiting_buyback_ttl_minutes", 120),
-                        "recovered": True,
-                    }
-            elif total_bought > total_sold:
-                # 有未卖出的买入 → 建立高抛追踪
-                last_buy = max(buys, key=lambda t: str(t.get("ts", ""))) if buys else None
-                if last_buy and float(last_buy.get("price", 0) or 0) > 0:
-                    tp = _sp_param(code, "take_profit_pct", 0.010)  # V3.0fix N2
-                    _bp = float(last_buy.get("price", 0) or 0)
-                    self.pending_sells[code] = {
-                        "buy_price": _bp if _bp > 0 else 0,
-                        "buy_time": _now(),
-                        "qty": total_bought - total_sold,
-                        "target_price": round(_bp * (1 + tp), 2) if _bp > 0 else 0,
-                        "recovered": True,
-                    }
 
     def _reset_daily_state_if_needed(self):
         today = get_today_str()
@@ -186,18 +129,11 @@ class SignalEngine:
             self.cycle_count = {}
             self.cycle_direction = {}
             self.post_sell_block_until = {}
-            self.awaiting_buyback = {}
-            self.pending_sells = {}
             self.daily_realized_loss_monitor = 0.0
             self.morning_alert_state = {}
             self._5min_cache = {}       # V3.0: 5分钟缓存每日重置
             self.trend_regimes = {}     # V3.0: 趋势状态机每日重置（开盘从头累积）
             self.state_reset_date = today
-
-    def _in_cooldown(self, code: str, action: str) -> bool:
-        cd_dict = self.sell_cooldown if "SELL" in action else self.buy_cooldown
-        last = cd_dict.get(code)
-        return bool(last) and (_engine_now() - last).total_seconds() < PARAMS["cooldown_minutes"] * 60
 
     # ===== V1.30: 盘中状态持久化（轮次/次数/冷却，重启后不清零）=====
     def _intraday_state_path(self) -> str:
@@ -217,8 +153,6 @@ class SignalEngine:
                 "cycle_count": dict(self.cycle_count),
                 "buy_count": dict(self.buy_count_per_stock),
                 "sell_count": dict(self.sell_count_per_stock),
-                "buy_cooldown": {k: v.isoformat() for k, v in self.buy_cooldown.items() if v},
-                "sell_cooldown": {k: v.isoformat() for k, v in self.sell_cooldown.items() if v},
                 # V3.0: 5分钟趋势状态持久化
                 "trend_regimes": {k: v.to_dict() for k, v in self.trend_regimes.items()} if TrendRegime else {},
             }
@@ -242,12 +176,6 @@ class SignalEngine:
             self.cycle_count.update({k: int(v) for k, v in (data.get("cycle_count") or {}).items()})
             self.buy_count_per_stock.update({k: int(v) for k, v in (data.get("buy_count") or {}).items()})
             self.sell_count_per_stock.update({k: int(v) for k, v in (data.get("sell_count") or {}).items()})
-            for k, v in (data.get("buy_cooldown") or {}).items():
-                try: self.buy_cooldown[k] = datetime.fromisoformat(v)
-                except Exception: pass
-            for k, v in (data.get("sell_cooldown") or {}).items():
-                try: self.sell_cooldown[k] = datetime.fromisoformat(v)
-                except Exception: pass
             # V3.0: 恢复5分钟趋势状态
             if TrendRegime and data.get("trend_regimes"):
                 for code, tr_data in data["trend_regimes"].items():
@@ -270,14 +198,10 @@ class SignalEngine:
         snapshot["price"] = price
         snapshot["score"] = score
         snapshot["ts"] = _now()
-        self._last_sig_price = price  # V1.29: 供 record_trade_action 建立接回追踪
-        if "SELL" in action:
-            self.sell_cooldown[code] = _engine_now()
-        else:
-            self.buy_cooldown[code] = _engine_now()
-            # C1' 口径B（W33 软消费，默认关=零行为变化）：仅 cap 开启时计数已记录买信号
-            if PARAMS.get("buy_daily_cap"):
-                self.buy_recorded_today[code] = self.buy_recorded_today.get(code, 0) + 1
+        self._last_sig_price = price  # 供 record_trade_action 记录成交价
+        # C1' 口径B（W33 软消费，默认关=零行为变化）：仅 cap 开启时计数已记录买信号
+        if "SELL" not in action and PARAMS.get("buy_daily_cap"):
+            self.buy_recorded_today[code] = self.buy_recorded_today.get(code, 0) + 1
         self._persist_intraday_state()  # V1.30
 
     def buy_daily_cap_reached(self, code: str) -> bool:
@@ -305,20 +229,6 @@ class SignalEngine:
                 bucket = VIRTUAL_TRADES.setdefault(code, {})
                 _px = float(getattr(self, '_last_sig_price', 0) or 0)
                 bucket.setdefault("BUY_LOW", []).append({"qty": qty, "ts": _now(), "action": action, "price": _px})
-                # V1.29: 买入后检查是否完成接回闭环
-                ab = self.awaiting_buyback.get(code)
-                if ab:
-                    total_bought = sum(t.get("qty", 0) for t in bucket.get("BUY_LOW", []))
-                    if total_bought >= ab.get("qty", 0):
-                        self.awaiting_buyback.pop(code, None)  # 闭环完成
-                # V1.29: 买入后建立高抛追踪
-                price = float(getattr(self, '_last_sig_price', 0) or 0)
-                if price > 0:
-                    tp = _sp_param(code, "take_profit_pct", 0.010)  # V3.0fix N2
-                    self.pending_sells[code] = {
-                        "buy_price": price, "buy_time": _now(), "qty": qty,
-                        "target_price": price * (1 + tp),
-                    }
         elif action in ["SELL_HIGH", "PANIC_SELL"]:
             self.sell_count_per_stock[code] = self.sell_count_per_stock.get(code, 0) + 1
             self.cycle_direction[code] = "sell"
@@ -327,24 +237,6 @@ class SignalEngine:
                 bucket = VIRTUAL_TRADES.setdefault(code, {})
                 _px = float(getattr(self, '_last_sig_price', 0) or 0)
                 bucket.setdefault("SELL_HIGH", []).append({"qty": qty, "ts": _now(), "action": action, "price": _px})
-                # V1.29: 建立接回追踪 — 卖出后主动寻找低吸机会
-                price = float(getattr(self, '_last_sig_price', 0) or 0)
-                if price > 0:
-                    # awaiting_buyback_vwap_gap: 乘数（如0.975=低于卖价2.5%接回），兼容百分比（0.003→0.997）
-                    _gap = PARAMS.get("awaiting_buyback_vwap_gap", 0.975)
-                    if _gap < 0.1:  # 百分比格式，转乘数
-                        _gap = 1.0 - _gap
-                    self.awaiting_buyback[code] = {
-                        "sell_price": price, "sell_time": _now(), "qty": qty,
-                        "target_price": round(price * _gap, 2),
-                        "ttl": PARAMS.get("awaiting_buyback_ttl_minutes", 120),
-                    }
-                # V1.29: 卖出后检查是否完成高抛闭环
-                ps = self.pending_sells.get(code)
-                if ps:
-                    total_sold = sum(t.get("qty", 0) for t in bucket.get("SELL_HIGH", []))
-                    if total_sold >= ps.get("qty", 0):
-                        self.pending_sells.pop(code, None)  # 闭环完成
             buys = VIRTUAL_TRADES.get(code, {}).get("BUY_LOW", [])
             sells = VIRTUAL_TRADES.get(code, {}).get("SELL_HIGH", [])
             net_qty = sum(t["qty"] for t in buys) - sum(t["qty"] for t in sells)
@@ -356,12 +248,6 @@ class SignalEngine:
             except Exception:
                 pass
         self._persist_intraday_state()  # V1.30
-
-    def _virtual_net_qty(self, code: str, holding: dict) -> int:
-        buys = VIRTUAL_TRADES.get(code, {}).get("BUY_LOW", [])
-        sells = VIRTUAL_TRADES.get(code, {}).get("SELL_HIGH", [])
-        base_qty = int(holding.get("t_qty") or 0)  # 纯底仓(t_qty=0)不应用qty回退
-        return max(0, base_qty + sum(t["qty"] for t in buys) - sum(t["qty"] for t in sells))
 
     def _check_morning_alert(self, code, name, df, feats):
         """V1.28: 早盘单边下行预警检测 (10:00触发, 每天一次)
@@ -552,166 +438,79 @@ class SignalEngine:
                         feats[k] = v
             except Exception:
                 pass  # 趋势层失败不阻断主流程
-        buy_score, buy_details = ScoringEngine.calc_buy_score(feats, self.factor_weights)
-        sell_score, sell_details = ScoringEngine.calc_sell_score(feats, self.factor_weights)
-        # 静态基准阈值 — 分数已通过ATR+Sigmoid自适应，阈值不再跳变
-        # E1: 买阈基线软消费(生产默认42不变) — harness 经 T_BUY_BONUS_MIN_SCORE 注入 PARAMS["engine_buy_threshold_base"]
-        buy_threshold = float(PARAMS.get("engine_buy_threshold_base", 42.0)); sell_threshold = 42.0
-        price = feats.get("price", 0); hold_qty = feats.get("hold_qty", 0)
-        # 风控阻断 + 左侧抄底豁免（5分钟强反转可绕过日线封锁）
-        risk = RiskManager.check_all(feats)
-        risk_buy_block = risk.get("buy_block", [])[:]  # 副本防止污染
-        risk_sell_block = risk.get("sell_block", [])[:]
-        t_val = feats.get("t_val", 0)
-        # ===== V1.28: 早盘保护 — morning_no_sell_until =====
-        _msu = PARAMS.get("morning_no_sell_until", 1000)
-        _msr = PARAMS.get("morning_no_sell_min_ret", 0.03)
-        if hold_qty > 0 and t_val < _msu and feats.get("today_ret", 0) < _msr:
-            risk_sell_block.append("morning_no_sell")
-        # ===== V1.28: VWAP偏离买入门槛 — 无底仓时禁止在非深V位置买入 =====
-        _vbd = _sp_param(code, "vwap_buy_deviation", -0.020)  # V3.0fix N3
-        _vwap = feats.get("vwap", 0)
-        if price > 0 and _vwap > 0 and t_val >= 930 and hold_qty <= 0:
-            _vdev = (price - _vwap) / _vwap
-            if _vdev > _vbd:
-                risk_buy_block.append("vwap_not_dip_enough")
-        # ===== V1.28: 早盘单边下行预警 =====
-        self._check_morning_alert(code, name, df, feats)
-        _malert = self.morning_alert_state.get(code, {})
-        if _malert.get("level") == 2:
-            risk_buy_block.append("morning_alert_L2")
-        elif _malert.get("level") == 1:
-            # Level 1: 降低买入阈值 + 仅允许深V买入
-            buy_threshold = buy_threshold + 8.0  # 提高买入门槛
-            if price > 0 and _vwap > 0:
-                _vdev_l1 = (price - _vwap) / _vwap
-                if _vdev_l1 > -0.015:
-                    risk_buy_block.append("morning_alert_L1_not_dip")
-        # ===== V1.29: 卖出→接回闭环 — 主动寻找低吸买回机会 =====
-        ab = self.awaiting_buyback.get(code)
-        _buyback_active = False
-        if ab and ab.get("sell_price", 0) > 0 and price > 0:
-            # 检查 TTL 是否过期
-            elapsed = (_engine_now() - ab["sell_time"]).total_seconds() / 60
-            if elapsed > ab["ttl"]:
-                self.awaiting_buyback.pop(code, None)  # 过期清理
-            else:
-                _buyback_active = True
-                # 价格低于卖出价时，激进入买入
-                discount = (ab["sell_price"] - price) / ab["sell_price"]
-                if discount > 0.005:
-                    boost = PARAMS.get("awaiting_buyback_score_boost", 10)
-                    buy_score += boost
-                    buy_details.append({"指标": "接回追踪(已卖待接)", "当前": f"卖{ab['sell_price']:.2f}现{price:.2f}折{discount:.1%}", "加分": round(boost, 1)})
-                elif discount > 0.001:
-                    boost = PARAMS.get("awaiting_buyback_score_boost_weak", 5)
-                    buy_score += boost
-                    buy_details.append({"指标": "接回追踪(微利)", "当前": f"折{discount:.1%}", "加分": round(boost, 1)})
-                buy_threshold -= PARAMS.get("awaiting_buyback_threshold_relax", 5)
-
-        # ===== W32 C1-final: 接回与买侧门控解耦（验证开关软消费，默认关=生产行为不变）=====
-        # 依据: doc/每周复盘/2026-W32_周复盘.md §3.1/§3.4（离线 50 增量买/闭环 +22对 +462 近似；六闸门锁定）
-        # 白名单：仅 daily_overheated + index_uni_down_clearance 被绕过；其余门控全部保留
-        if _buyback_active and PARAMS.get("buyback_bypass_gates", False):
-            risk_buy_block = [b for b in risk_buy_block
-                              if b not in ("daily_overheated", "index_uni_down_clearance")]
-
-        # ===== V1.30: 卖出端保护 —— 底仓地板 + 卖出次数上限（防卖穿底仓）=====
-        _net_qty = self._virtual_net_qty(code, holding)
-        # V1.2.1 (2026-08-11 用户拍板补充): "做T不用考虑底仓"覆盖引擎层——sell_floor_protect 闸接入
-        # PARAMS["sell_floor_enabled"]（默认 False=不压制，与 position_sizer 层同开关同语义；
-        # True=恢复 V1.30 原逻辑，harness T_SELL_FLOOR_ENABLED="1" 注入对照）
-        if PARAMS.get("sell_floor_enabled", False):
-            _base_qty = int(holding.get("base") or holding.get("t_qty") or 0)
-            _floor_qty = int(_base_qty * float(_sp_param(code, "sell_floor_ratio", 0.5)))
-            if hold_qty > 0 and _floor_qty > 0 and _net_qty <= _floor_qty:
-                risk_sell_block.append(f"sell_floor_protect(余{_net_qty}≤地板{_floor_qty})")
-        _max_sells = int(_sp_param(code, "max_sell_times_per_stock", 3))
-        if self.sell_count_per_stock.get(code, 0) >= _max_sells:
-            risk_sell_block.append(f"max_sell_times({self.sell_count_per_stock.get(code, 0)}>={_max_sells})")
-
-        can_bypass_daily = feats.get("f5_is_strong_bullish_reversal", False) or feats.get("f5_is_volume_reversal", False)
-        is_daily_ok = feats.get("daily_buy_t_ok", False) or can_bypass_daily
-        base_can_buy = (len(risk_buy_block) == 0 and is_daily_ok
-                        and not self._in_cooldown(code, "BUY_LOW"))
-        base_can_sell = (len(risk_sell_block) == 0 and hold_qty > 0
-                         and not self._in_cooldown(code, "SELL_HIGH"))
-        # ===== v1.1.0: §3.5 趋势层降级 — 方向门控/阈值惩罚/T_MODE 适配全部关闭 =====
-        # TrendRegime 仍计算并写入 feats(trend_state/confidence/rsi5 等)，降级为纯信息层
-        # （飞书展示+日志分析+5m_rsi trigger 数据源），不再影响评分/门控/仲裁。
-        # 依据: doc/趋势层去留决策报告.md v4（拦截不可修复的结构性结论 + 降级拍板）
-        # ===== V1.28: 止盈监控 (take_profit_pct) =====
-        _tp = _sp_param(code, "take_profit_pct", 0.010)   # V3.0fix N2
-        _tpa = _sp_param(code, "take_profit_time_after", 1000)  # V3.0fix N2
-        if hold_qty > 0 and t_val >= _tpa and feats.get("profit_pct", 0) >= _tp:
-            sell_score += 30.0  # 大幅boost确保触发止盈
-        # ===== V1.29: 买入→高抛闭环 — 主动寻找止盈卖点 =====
-        ps = self.pending_sells.get(code)
-        if ps and ps.get("buy_price", 0) > 0 and price > 0 and hold_qty > 0:
-            profit = (price - ps["buy_price"]) / ps["buy_price"]
-            if profit >= _tp:
-                boost = 25.0  # 止盈：强推卖出
-                sell_score += boost
-                sell_details.append({"指标": "高抛追踪(止盈)", "当前": f"买{ps['buy_price']:.2f}现{price:.2f}盈{profit:.1%}", "加分": round(boost, 1)})
-                self.pending_sells.pop(code, None)  # 闭环完成
-            elif profit <= -0.03:  # V1.29: 止损 — 跌超3%强制卖出
-                boost = 20.0
-                sell_score += boost
-                sell_details.append({"指标": "止损追踪(已买待割)", "当前": f"买{ps['buy_price']:.2f}现{price:.2f}亏{profit:.1%}", "加分": round(boost, 1)})
-                self.pending_sells.pop(code, None)  # 止损完成，清除追踪
-            elif profit <= -0.015:  # 轻度亏损预警
-                boost = 8.0
-                sell_score += boost
-                sell_details.append({"指标": "止损预警(浅亏)", "当前": f"买{ps['buy_price']:.2f}现{price:.2f}亏{profit:.1%}", "加分": round(boost, 1)})
+        price = feats.get("price", 0)
+        hold_qty = feats.get("hold_qty", 0)
+        buy_score = 0.0
+        sell_score = 0.0
         sig = None
-        can_sell = base_can_sell and sell_score >= sell_threshold and sell_score > buy_score
-        can_buy = base_can_buy and buy_score >= buy_threshold and buy_score > sell_score
-        # ===== V1.30: 决策原因码 —— HOLD 细分可区分，消除"买分超阈值却 HOLD"的假矛盾 =====
-        if can_sell and sell_score > buy_score:
-            sig = Signal(code, name, "SELL_HIGH", price, sell_score, [d["指标"] for d in sell_details], sell_details, {}, {})
-            decision_reason = "SELL_HIGH"
-        elif can_buy:
-            sig = Signal(code, name, "BUY_LOW", price, buy_score, [d["指标"] for d in buy_details], buy_details, {}, {})
-            decision_reason = "BUY_LOW"
-        else:
-            _buy_worthy = buy_score >= buy_threshold and buy_score > sell_score
-            _sell_worthy = sell_score >= sell_threshold and sell_score > buy_score
-            if _buy_worthy and risk_buy_block:
-                decision_reason = "HOLD_BUY_BLOCKED:" + "|".join(risk_buy_block)
-            elif _buy_worthy and not is_daily_ok:
-                decision_reason = "HOLD_BUY_BLOCKED:daily_gate"
-            elif _buy_worthy:
-                decision_reason = "HOLD_BUY_COOLDOWN"
-            elif _sell_worthy and risk_sell_block:
-                decision_reason = "HOLD_SELL_BLOCKED:" + "|".join(risk_sell_block)
-            elif _sell_worthy:
-                decision_reason = "HOLD_SELL_COOLDOWN"
-            elif buy_score >= buy_threshold and sell_score > buy_score:
-                decision_reason = "HOLD_SELL_PRIORITY"   # 买达阈但卖分更高，被卖出优先仲裁压制
-            else:
-                decision_reason = "HOLD_BELOW_THRESHOLD"
+        decision_reason = "HOLD_NO_SWING"
+        # ===== 高抛低吸纯两点 (2026-08-13 用户拍板) =====
+        # 高抛: 5分收盘≥上轨(bb_pct_5m>=1.0) 且 5分RSI(6)>75
+        # 低吸: 5分收盘≤下轨(bb_pct_5m<=0.0) 且 5分RSI(6)<35
+        # 只参考这两点，其余条件(风控/闭环/冷却/限频)全部移除；决策新鲜重采样5分K
+        self._check_morning_alert(code, name, df, feats)  # 保留飞书早盘预警(纯通知，不再阻断)
+        try:
+            _df5 = resample_to_5min(df) if 'resample_to_5min' in globals() else pd.DataFrame()
+            if not _df5.empty:
+                _df5 = add_5min_indicators(_df5) if 'add_5min_indicators' in globals() else _df5
+            if not _df5.empty and len(_df5) >= int(PARAMS.get("swing_min_5m_bars", 13)):
+                _l5 = _df5.iloc[-1]
+                _bb = _l5.get("bb_pct_5m")
+                _rsi6 = _l5.get("rsi_5m_p6")
+                if _bb is not None and _rsi6 is not None and not (pd.isna(_bb) or pd.isna(_rsi6)):
+                    _bbv = float(_bb)
+                    _rv = float(_rsi6)
+                    _ind = {
+                        "vwap": feats.get("vwap", price),
+                        "today_ret": feats.get("today_ret", 0),
+                        "market_state": daily_ctx.get("daily_status", "unknown"),
+                        "entry_kind": "swing_bb_rsi",
+                    }
+                    _fac = {"threshold": 35.0, "entry_kind": "swing_bb_rsi"}
+                    if _bbv >= float(PARAMS.get("swing_bb_upper", 1.0)) and _rv > float(PARAMS.get("swing_sell_rsi", 75.0)):
+                        sell_score = 100.0
+                        _det = f"布林上轨(bb_pct={_bbv:.2f}) + RSI6超买({_rv:.1f})"
+                        sig = Signal(code, name, "SELL_HIGH", price, sell_score,
+                                     [_det], [{"指标": "高抛", "当前": _det, "加分": 100.0}],
+                                     _ind, dict(_fac))
+                        decision_reason = "SELL_HIGH"
+                    elif _bbv <= float(PARAMS.get("swing_bb_lower", 0.0)) and _rv < float(PARAMS.get("swing_buy_rsi", 35.0)):
+                        buy_score = 100.0
+                        _det = f"布林下轨(bb_pct={_bbv:.2f}) + RSI6超卖({_rv:.1f})"
+                        sig = Signal(code, name, "BUY_LOW", price, buy_score,
+                                     [_det], [{"指标": "低吸", "当前": _det, "加分": 100.0}],
+                                     _ind, dict(_fac))
+                        decision_reason = "BUY_LOW"
+        except Exception:
+            sig = None
+            buy_score = 0.0
+            sell_score = 0.0
+            decision_reason = "HOLD_NO_SWING"
+
+        _buy_factors = {d["指标"]: d.get("加分", 0) for d in (sig.details if sig and sig.action == "BUY_LOW" else [])}
+        _sell_factors = {d["指标"]: d.get("加分", 0) for d in (sig.details if sig and sig.action == "SELL_HIGH" else [])}
         self.last_decision[code] = {
             "reason": decision_reason, "ts": _now(),
-            "buy_block": list(risk_buy_block), "sell_block": list(risk_sell_block),
+            "buy_block": [], "sell_block": [],
         }
         _append_jsonl(_trace_path("decision_trace"), {
             "scan_time": _now().strftime("%Y-%m-%d %H:%M:%S"),
             "code": code, "name": name,
             "price": price, "vwap": feats.get("vwap", 0), "rsi": feats.get("rsi", 50),
             "buy_score": buy_score, "sell_score": sell_score,
-            "buy_threshold": buy_threshold, "sell_threshold": sell_threshold,
+            "buy_threshold": 100.0, "sell_threshold": 100.0,
             "decision": sig.action if sig else "HOLD",
             "decision_reason": decision_reason,
-            "buy_block": list(risk_buy_block), "sell_block": list(risk_sell_block),
-            "buy_factors": {d["指标"]: d.get("加分", 0) for d in buy_details},
-            "sell_factors": {d["指标"]: d.get("加分", 0) for d in sell_details},
-            "engine": "v2_final",
+            "buy_block": [], "sell_block": [],
+            "buy_factors": _buy_factors,
+            "sell_factors": _sell_factors,
+            "engine": "v2_swing2pt",
         })
         return buy_score, sell_score, sig
 
 
 # ====================================================================
-# V2 Engine: FeatureExtractor → RiskManager → ScoringEngine → Signal
+# V2 Engine: FeatureExtractor → Signal (纯两点规则)
 # ====================================================================
 
 class FeatureExtractor:
@@ -973,85 +772,6 @@ class FeatureExtractor:
                         feats["is_strong_bullish_reversal"] = True
         return feats
 
-    @staticmethod
-    def extract_multi_tf(multi_tf_dict: dict) -> dict:
-        """多周期趋势特征"""
-        feats = {}
-        if multi_tf_dict and multi_tf_dict.get("trend_direction"):
-            feats["tf_dir"] = multi_tf_dict["trend_direction"]
-            feats["tf_risk"] = multi_tf_dict.get("risk_level", "low")
-            feats["tf_alignment"] = multi_tf_dict.get("trend_alignment", 0)
-            feats["weekly_pos"] = multi_tf_dict.get("weekly_position", "")
-            feats["weekly_prev"] = multi_tf_dict.get("weekly_prev_ret", 0.0)
-            feats["monthly_pos"] = multi_tf_dict.get("monthly_position", "")
-        return feats
-
-# extract_v19_oscillation removed in V3.0 — 6 dead features replaced by 5-min MACD trend_regime
-
-
-class RiskManager:
-    """一票否决守门员 — 死水/破位/过热/急跌/强多头防卖飞"""
-
-    @staticmethod
-    def check_all(feats: dict) -> dict:
-        result = {"blocked": False, "reason": "", "buy_block": [], "sell_block": []}
-        if not feats:
-            result["blocked"] = True; result["reason"] = "无特征数据"
-            return result
-
-        # 1. 死水（振幅不足）→ 阻止卖出（防止微小波动中频繁高抛）
-        if feats.get("day_amplitude", 0) < 0.002 and feats.get("t_val", 0) > 1000:
-            result["sell_block"].append("dead_water")
-
-        # 2. 日线破位 → 阻止买入
-        if feats.get("daily_breakdown_risk"):
-            result["buy_block"].append("daily_breakdown_risk")
-
-        # 3. 强势上涨抑制卖出（防卖飞）
-        if feats.get("is_strong_uptrend"):
-            result["sell_block"].append("strong_uptrend")
-
-        # 4. 双顶保护 → 鼓励卖出（不阻止，但属于风控提醒）
-        # （已在评分中加分，此处不block）
-
-        # 5. 开盘急跌无反包 → 阻止买入（禁接飞刀）
-        if feats.get("is_gap_down_no_reversal"):
-            result["buy_block"].append("gap_down_no_reversal")
-
-        # 6. 日线过热 → 阻止买入
-        if feats.get("daily_overheated"):
-            result["buy_block"].append("daily_overheated")
-
-        # 7. 大盘单边下行 → 绝对禁止任何买入（接飞刀熔断）
-        index_regime = feats.get("index_regime", "range")
-        if index_regime == "uni_down":
-            result["buy_block"].append("index_uni_down_clearance")
-
-        # 8. 盘中分时崩盘预警 → 紧急冻结买入
-        for alert in (feats.get("intraday_alerts") or []):
-            if alert.get("tag") in ("I1", "I4"):
-                result["buy_block"].append(f"intraday_panic_{alert.get('tag')}")
-
-        return result
-
-
-FACTOR_WEIGHTS = {
-    # —— v1.1.0: §3.5 趋势层降级 — 5m_trend 权重置零退出评分，匀出的 0.15 回补 1分钟体系 ——
-    "factor_weight_vwap": 0.20,          # v1.1.0: 0.15→0.20 (+0.05，回补自 5m_trend)
-    "factor_weight_rsi": 0.04,           # 曾 0.12（1分钟RSI降权，让位给5分钟RSI）
-    "factor_weight_macd": 0.08,
-    "factor_weight_volume": 0.08,
-    "factor_weight_position": 0.08,
-    "factor_weight_ema": 0.04,
-    "factor_weight_pattern": 0.18,       # v1.1.0: 0.13→0.18 (+0.05，回补自 5m_trend)
-    "factor_weight_index_regime": 0.20,  # v1.1.0: 0.15→0.20 (+0.05，回补自 5m_trend)
-    "factor_weight_5m_trend": 0.0,       # v1.1.0: 降级置零（四轮审核+三轮复测证伪，doc/趋势层去留决策报告.md v4）
-    "factor_weight_5m_rsi": 0.10,        # §3.5 明确保留：5分钟RSI择时触发
-    # —— 配置常量（非权重，保留兼容）——
-    "max_score_raw": 100,
-}
-
-
 def _sp_param(code: str, key: str, default=None):
     """V1.30: 个股专属参数 > 全局 PARAMS > default（与 main.py 推送阈值双层管理同构）"""
     try:
@@ -1071,13 +791,9 @@ def _sp_param(code: str, key: str, default=None):
 
 
 # ===== V1.30: 回测时间注入 =====
-# 实盘用真实时钟；回测/回放把 SIM_NOW 设为当前 K 线时间，
-# 使冷却/TTL 等时间逻辑在模拟时间轴上正确流逝（否则第一笔交易的真实时钟冷却会封死整个回测期）。
+# 实盘用真实时钟；回测/回放把 SIM_NOW 设为当前 K 线时间，使 _now() 在模拟时间轴上正确流逝。
 SIM_NOW = None
 PERSIST_INTRADAY_STATE = True   # 回测/回放置 False，避免污染实盘盘中状态文件
-
-def _engine_now():
-    return SIM_NOW if SIM_NOW is not None else _now()
 
 
 def write_shadow_signal(code: str, name: str, price: float, vwap: float,
@@ -1108,272 +824,7 @@ def write_shadow_signal(code: str, name: str, price: float, vwap: float,
         pass
 
 
-class ScoringEngine:
-    """因子打分引擎
-    每个 score_xxx 方法返回 (raw_signal, details):
-      - raw_signal: 0.0~1.0 的标准化信号强度 (sigmoid输出)
-      - details: 诊断信息列表
-    calc_buy_score / calc_sell_score 使用 FACTOR_WEIGHTS 权重聚合:
-      final = sum(raw * 100 * weight) + binary_adders
-    """
-
-    @staticmethod
-    def _sigmoid(x: float, center: float = 0, slope: float = 1) -> float:
-        z = -slope * (x - center)
-        if z > 100: return 0.0  # np.exp(>100) → inf
-        if z < -100: return 1.0
-        return 1.0 / (1.0 + np.exp(z))
-
-    @staticmethod
-    def score_vwap_buy(feats: dict) -> tuple:
-        ratio = feats.get("vwap_dev_atr_ratio", 0)
-        raw = ScoringEngine._sigmoid(-ratio, center=0.5, slope=2.0)
-        return raw, [{"指标": "VWAP偏离(ATR)", "当前": f"{ratio:.2f}σ", "强度": round(raw, 3)}]
-
-    @staticmethod
-    def score_rsi_buy(feats: dict) -> tuple:
-        rsi = feats.get("rsi", 50)
-        raw = ScoringEngine._sigmoid(35 - rsi, center=3, slope=0.5)
-        return raw, [{"指标": "RSI超卖", "当前": f"{rsi:.1f}", "强度": round(raw, 3)}]
-
-    @staticmethod
-    def score_rsi_sell(feats: dict) -> tuple:
-        rsi = feats.get("rsi", 50)
-        raw = ScoringEngine._sigmoid(rsi - 78, center=3, slope=0.5)
-        return raw, [{"指标": "RSI超买", "当前": f"{rsi:.1f}", "强度": round(raw, 3)}]
-
-    @staticmethod
-    def score_macd_buy(feats: dict) -> tuple:
-        mh = feats.get("macd_hist", 0); pmh = feats.get("prev_macd_hist", 0)
-        if mh < 0 and mh > pmh:
-            ratio = min(1.0, abs(mh) / max(abs(pmh), 0.001))
-            return ratio, [{"指标": "MACD负区拐头", "当前": f"{mh:.4f}↑", "强度": round(ratio, 3)}]
-        return 0.0, []
-
-    @staticmethod
-    def score_macd_sell(feats: dict) -> tuple:
-        mh = feats.get("macd_hist", 0); pmh = feats.get("prev_macd_hist", 0)
-        if mh > 0 and mh < pmh:
-            ratio = min(1.0, mh / max(mh - pmh, 0.001))
-            return ratio, [{"指标": "MACD正区萎缩", "当前": f"{mh:.4f}↓", "强度": round(ratio, 3)}]
-        return 0.0, []
-
-    @staticmethod
-    def score_vwap_sell(feats: dict) -> tuple:
-        price = feats.get("price", 0); vwap = feats.get("vwap", 0)
-        atr = max(feats.get("atr", 0.02), 0.002)
-        if vwap <= 0 or price <= 0: return 0.0, []
-        ratio = (price - vwap) / vwap / atr
-        raw = ScoringEngine._sigmoid(ratio, center=0.5, slope=1.5)
-        return raw, [{"指标": "VWAP溢价(ATR)", "当前": f"{ratio:.2f}σ", "强度": round(raw, 3)}]
-
-    @staticmethod
-    def score_lower_shadow(feats: dict) -> tuple:
-        ls = feats.get("lower_shadow", 0)
-        raw = ScoringEngine._sigmoid(ls, center=0.3, slope=8.0)
-        return raw, [{"指标": "长下影", "当前": f"{ls:.2f}", "强度": round(raw, 3)}] if raw > 0.05 else []
-
-    @staticmethod
-    def score_ema_improve(feats: dict) -> tuple:
-        es = feats.get("ema_spread", 0); pes = feats.get("prev_ema_spread", 0)
-        delta = es - pes
-        raw = ScoringEngine._sigmoid(delta, center=0.0005, slope=500.0)
-        return raw, [{"指标": "EMA转强", "当前": f"{es*100:.4f}%", "强度": round(raw, 3)}] if raw > 0.05 else []
-
-    @staticmethod
-    def score_ema_weaken(feats: dict) -> tuple:
-        es = feats.get("ema_spread", 0); pes = feats.get("prev_ema_spread", 0)
-        delta = pes - es
-        raw = ScoringEngine._sigmoid(delta, center=0.0005, slope=500.0)
-        return raw, [{"指标": "EMA转弱", "当前": f"{es*100:.4f}%", "强度": round(raw, 3)}] if raw > 0.05 else []
-
-    @staticmethod
-    def score_volume(feats: dict) -> tuple:
-        vr = feats.get("vol_ratio", 1.0)
-        raw = ScoringEngine._sigmoid(vr, center=1.2, slope=4.0)
-        return raw, [{"指标": "量能确认", "当前": f"{vr:.2f}", "强度": round(raw, 3)}] if raw > 0.05 else []
-
-    @staticmethod
-    def score_upper_shadow(feats: dict) -> tuple:
-        us = feats.get("upper_shadow", 0)
-        raw = ScoringEngine._sigmoid(us, center=0.4, slope=6.0)
-        return raw, [{"指标": "长上影", "当前": f"{us:.2f}", "强度": round(raw, 3)}] if raw > 0.05 else []
-
-    # ── v1.1.0: score_5m_trend_buy/sell 已随 §3.5 降级整体移除（含 STRONG_BULL/STRONG_BEAR 死分支）──
-
-    @staticmethod
-    def score_5m_rsi_buy(feats: dict) -> tuple:
-        """5分钟 RSI 择时 — 买入端：超卖回升触发"""
-        rsi5 = feats.get("rsi_5m", 50.0)
-        triggered = feats.get("rsi5_buy_trigger", False)
-        if triggered:
-            # 超卖回升 = 高置信度买入信号
-            raw = ScoringEngine._sigmoid(35 - rsi5, center=5, slope=0.3)
-            return raw, [{"指标": "5分RSI超卖回升", "当前": f"{rsi5:.1f}", "强度": round(raw, 3)}]
-        elif rsi5 < 40:
-            # 接近超卖但未触发
-            raw = ScoringEngine._sigmoid(40 - rsi5, center=8, slope=0.3)
-            return raw, [{"指标": "5分RSI偏低", "当前": f"{rsi5:.1f}", "强度": round(raw, 3)}] if raw > 0.05 else []
-        return 0.0, []
-
-    @staticmethod
-    def score_5m_rsi_sell(feats: dict) -> tuple:
-        """5分钟 RSI 择时 — 卖出端：超买回落触发"""
-        rsi5 = feats.get("rsi_5m", 50.0)
-        triggered = feats.get("rsi5_sell_trigger", False)
-        if triggered:
-            raw = ScoringEngine._sigmoid(rsi5 - 65, center=5, slope=0.3)
-            return raw, [{"指标": "5分RSI超买回落", "当前": f"{rsi5:.1f}", "强度": round(raw, 3)}]
-        elif rsi5 > 60:
-            raw = ScoringEngine._sigmoid(rsi5 - 60, center=8, slope=0.3)
-            return raw, [{"指标": "5分RSI偏高", "当前": f"{rsi5:.1f}", "强度": round(raw, 3)}] if raw > 0.05 else []
-        return 0.0, []
-
-    @staticmethod
-    def _weighted_factor_score(raw: float, weight_key: str, w_mult: float = 1.0,
-                                 p: dict = None) -> float:
-        """raw(0~1) × 100 × 权重。p 来自实例的 factor_weights，默认 FACTOR_WEIGHTS。"""
-        w = (p or FACTOR_WEIGHTS).get(weight_key, 0.10)
-        return raw * 100 * w * w_mult
-
-    @staticmethod
-    def score_index_regime(feats: dict, side: str = "buy") -> float:
-        """大盘态势因子：输出 0~1 标准化信号强度
-        uni_down: sell=1.0(清仓), buy=0.0(停止买入)
-        uni_up:   sell=0.2(防卖飞), buy=1.0(顺势)
-        range:    均为 0.5(标准作战)"""
-        regime = feats.get("index_regime", "range")
-        if regime == "uni_down":
-            return 1.0 if side == "sell" else 0.0
-        if regime == "uni_up":
-            return 0.2 if side == "sell" else 1.0
-        return 0.5  # range / 其他
-
-    @staticmethod
-    def calc_buy_score(feats: dict, p: dict = None) -> tuple:
-        """p: 可选权重参数，来自 SignalEngine.factor_weights。默认 FACTOR_WEIGHTS。"""
-        details = []; score = 0.0
-        raw, d = ScoringEngine.score_vwap_buy(feats)
-        s = ScoringEngine._weighted_factor_score(raw, "factor_weight_vwap", p=p)
-        score += s; d and details.append(d[0] | {"加分": round(s, 1)})
-        raw, d = ScoringEngine.score_rsi_buy(feats)
-        s = ScoringEngine._weighted_factor_score(raw, "factor_weight_rsi", p=p)
-        score += s; d and details.append(d[0] | {"加分": round(s, 1)})
-        raw, d = ScoringEngine.score_macd_buy(feats)
-        s = ScoringEngine._weighted_factor_score(raw, "factor_weight_macd", p=p)
-        score += s; d and details.append(d[0] | {"加分": round(s, 1)})
-        raw, d = ScoringEngine.score_volume(feats)
-        s = ScoringEngine._weighted_factor_score(raw, "factor_weight_volume", p=p)
-        score += s; d and details.append(d[0] | {"加分": round(s, 1)})
-        raw, d = ScoringEngine.score_lower_shadow(feats)
-        s = ScoringEngine._weighted_factor_score(raw, "factor_weight_position", p=p)
-        score += s; d and details.append(d[0] | {"加分": round(s, 1)})
-        raw, d = ScoringEngine.score_ema_improve(feats)
-        s = ScoringEngine._weighted_factor_score(raw, "factor_weight_ema", p=p); score += s; d and details.append(d[0] | {"加分": round(s, 1)})
-        # ---- v1.1.0: 5m_trend 因子已随降级移除（权重置零+调用清理）；保留 5m_rsi ----
-        raw, d = ScoringEngine.score_5m_rsi_buy(feats)
-        s = ScoringEngine._weighted_factor_score(raw, "factor_weight_5m_rsi", p=p)
-        score += s; d and details.append(d[0] | {"加分": round(s, 1)})
-        # ---- 大盘态势因子 ----
-        raw = ScoringEngine.score_index_regime(feats, "buy")
-        s = ScoringEngine._weighted_factor_score(raw, "factor_weight_index_regime", p=p)
-        score += s
-        if raw != 0.5:
-            regime = feats.get("index_regime", "range")
-            details.append({"指标": f"大盘态势({regime})", "强度": round(raw, 2), "加分": round(s, 1)})
-        # ---- 形态因子 (Pattern Factor, 通过 factor_weight_pattern 加权) ----
-        _pattern_raw = 0.0
-        _pnames = []
-        if feats.get("f5_is_strong_bullish_reversal"):
-            _pattern_raw = max(_pattern_raw, 1.0); _pnames.append("5分大阳线反包")
-        if feats.get("f5_is_volume_reversal") and _pattern_raw < 0.7:
-            _pattern_raw = max(_pattern_raw, 0.7); _pnames.append("5分弱企稳")
-        if feats.get("f15_kinetic_exhaustion"):
-            _pattern_raw = max(_pattern_raw, 0.6); _pnames.append("15分动能衰竭")
-        if feats.get("f15_near_15m_support"):
-            _pattern_raw = max(_pattern_raw, 0.5); _pnames.append("15分强支撑")
-        if feats.get("f15_multi_bottom_15m"):
-            _pattern_raw = max(_pattern_raw, 0.4); _pnames.append("15分多重底")
-        _s_pattern = ScoringEngine._weighted_factor_score(_pattern_raw, "factor_weight_pattern", p=p)
-        score += _s_pattern
-        if _pnames:
-            details.append({"指标": "形态组合(" + "/".join(_pnames) + ")", "强度": round(_pattern_raw, 2), "加分": round(_s_pattern, 1)})
-        return round(score, 1), details
-
-    @staticmethod
-    def calc_sell_score(feats: dict, p: dict = None) -> tuple:
-        details = []; score = 0.0
-        raw, d = ScoringEngine.score_vwap_sell(feats)
-        s = ScoringEngine._weighted_factor_score(raw, "factor_weight_vwap", p=p)
-        score += s; d and details.append(d[0] | {"加分": round(s, 1)})
-        raw, d = ScoringEngine.score_rsi_sell(feats)
-        s = ScoringEngine._weighted_factor_score(raw, "factor_weight_rsi", p=p)
-        score += s; d and details.append(d[0] | {"加分": round(s, 1)})
-        raw, d = ScoringEngine.score_macd_sell(feats)
-        s = ScoringEngine._weighted_factor_score(raw, "factor_weight_macd", p=p)
-        score += s; d and details.append(d[0] | {"加分": round(s, 1)})
-        raw, d = ScoringEngine.score_volume(feats)
-        s = ScoringEngine._weighted_factor_score(raw, "factor_weight_volume", p=p)
-        score += s; d and details.append(d[0] | {"加分": round(s, 1)})
-        raw, d = ScoringEngine.score_upper_shadow(feats)
-        s = ScoringEngine._weighted_factor_score(raw, "factor_weight_position", p=p)
-        score += s; d and details.append(d[0] | {"加分": round(s, 1)})
-        raw, d = ScoringEngine.score_ema_weaken(feats)
-        s = ScoringEngine._weighted_factor_score(raw, "factor_weight_ema", p=p); score += s; d and details.append(d[0] | {"加分": round(s, 1)})
-        # ---- v1.1.0: 5m_trend 因子已随降级移除（权重置零+调用清理）；保留 5m_rsi ----
-        raw, d = ScoringEngine.score_5m_rsi_sell(feats)
-        s = ScoringEngine._weighted_factor_score(raw, "factor_weight_5m_rsi", p=p)
-        score += s; d and details.append(d[0] | {"加分": round(s, 1)})
-        # ---- 大盘态势因子 (卖出端) ----
-        raw = ScoringEngine.score_index_regime(feats, "sell")
-        s = ScoringEngine._weighted_factor_score(raw, "factor_weight_index_regime", p=p)
-        score += s
-        if raw != 0.5:
-            regime = feats.get("index_regime", "range")
-            details.append({"指标": f"大盘态势({regime})", "强度": round(raw, 2), "加分": round(s, 1)})
-        # ---- 卖出端形态因子 (Pattern Factor) ----
-        _pattern_raw = 0.0
-        _pnames = []
-        if feats.get("daily_breakdown_risk"):
-            _pattern_raw = max(_pattern_raw, 1.0); _pnames.append("日线破位风险")
-        if feats.get("daily_overheated"):
-            _pattern_raw = max(_pattern_raw, 0.8); _pnames.append("日线过热")
-        _s_pattern = ScoringEngine._weighted_factor_score(_pattern_raw, "factor_weight_pattern", p=p)
-        score += _s_pattern
-        if _pnames:
-            details.append({"指标": "卖出形态(" + "/".join(_pnames) + ")", "强度": round(_pattern_raw, 2), "加分": round(_s_pattern, 1)})
-        return round(score, 1), details
-
-
-# ==================== 信号处理与推送 ====================
-_last_push: Dict[str, Dict[str, Any]] = {}
-def _signal_push_limits(action: str) -> tuple[float, float]:
-    if action == "ADD_POS":
-        return PARAMS["add_pos_signal_price_move"], PARAMS["add_pos_signal_score_boost"]
-    if action == "SELL_HIGH":
-        return PARAMS["sell_signal_price_move"], PARAMS["sell_signal_score_boost"]
-    if action == "PANIC_SELL":   # 保留做兜底，代码中已不再生成此信号
-        return PARAMS.get("panic_sell_signal_price_move", 0.005), PARAMS.get("panic_sell_signal_score_boost", 20)
-    return PARAMS["buy_signal_price_move"], PARAMS["buy_signal_score_boost"]
-
-
-# _should_push removed in V3.0 (dead function — push throttling handled in main.py notify())
 # ==================== 集合竞价驱动做T优化 ====================
-
-
-def _clamp(value: float, lower: float, upper: float) -> float:
-    return max(lower, min(upper, value))
-
-
-def _safe_float(value: Any, default: float = 0.0) -> float:
-    try:
-        if value is None:
-            return default
-        if isinstance(value, str) and not value.strip():
-            return default
-        return float(value)
-    except Exception:
-        return default
 
 
 def _minute_status_label(status: str, detail: str = "") -> str:

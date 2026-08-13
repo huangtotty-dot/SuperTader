@@ -319,87 +319,6 @@ class PreOpenEngine:
             pass
 
 
-# ==================== 保留的跨模块辅助函数 ====================
-
-def _buy_soft_support_count(buy_momentum_ok: bool, buy_ema_ok: bool, buy_volume_ok: bool,
-                            buy_price_ok: bool, buy_gap_ok: bool, buy_detail_count_ok: bool,
-                            buy_time_ready: bool, buy_15m_ok: bool = True,
-                            buy_5m_ok: bool = True) -> int:
-    return sum([buy_momentum_ok, buy_ema_ok, buy_volume_ok, buy_price_ok,
-                buy_gap_ok, buy_detail_count_ok, buy_time_ready, buy_15m_ok, buy_5m_ok])
-
-
-def _special_low_buy_stage_rule(code: str, stage: str) -> str:
-    stage = str(stage or "").strip()
-    if code == "688102":
-        if stage == "open":
-            return "开盘看能否守住 VWAP 附近，不追第一波拉升。"
-        if stage == "intraday":
-            return "盘中等回踩不破、分时不创新低后再低吸。"
-        if stage == "eod":
-            return "尾盘若仍在 VWAP 附近反复且不破位，可小仓观察。"
-    if code == "601698":
-        if stage == "open":
-            return "开盘先看是否止跌，不抢反弹。"
-        if stage == "intraday":
-            return "盘中必须重新站稳 VWAP 附近，再考虑低吸。"
-        if stage == "eod":
-            return "尾盘只有确认止跌并靠近均价时才考虑。"
-    return ""
-
-
-def _special_loss_reduction_rule(code: str) -> str:
-    if code == "300364":
-        return "中文在线：优先等反弹减亏，不追弱反弹；只有重新站稳 VWAP 且分时转强才允许少量加仓。"
-    if code == "002639":
-        return "雪人集团：优先利用反弹减亏，弱势不补仓；只有放量站回 VWAP 并确认止跌后才允许低吸。"
-    return ""
-
-
-def _special_loss_reduction_stage_rule(code: str, stage: str) -> str:
-    stage = str(stage or "").strip()
-    if code == "300364":
-        if stage == "open":
-            return "开盘先看是否高开回落，优先等反弹减亏，不追开盘脉冲。"
-        if stage == "intraday":
-            return "盘中只在重新站稳 VWAP、分时转强时才考虑减亏或小补。"
-        if stage == "eod":
-            return "尾盘若仍弱于 VWAP，优先保留减亏思路，不做被动摊平。"
-    if code == "002639":
-        if stage == "open":
-            return "开盘先看承接，弱势不抢反弹，先等减亏窗口。"
-        if stage == "intraday":
-            return "盘中只有放量站回 VWAP 且止跌确认，才允许小仓修复。"
-        if stage == "eod":
-            return "尾盘若未收复均价，优先减亏思路，避免继续扩大浮亏。"
-    return ""
-
-
-def _special_loss_threshold_adjustments(code: str, action: str, buy_threshold: int,
-                                         sell_threshold: int, buy_score: float,
-                                         sell_score: float, price: float, vwap: float,
-                                         is_strong_pullback: bool) -> tuple:
-    if code == "300364":
-        if action in {"BUY_LOW", "ADD_POS"}:
-            buy_threshold += 4
-            if not is_strong_pullback:
-                buy_threshold += 2
-            buy_score -= 2
-        if action in {"SELL_HIGH", "PANIC_SELL"} or (vwap and price > vwap * 1.002):
-            sell_threshold = max(35, sell_threshold - 2)
-            sell_score += 3
-    elif code == "002639":
-        if action in {"BUY_LOW", "ADD_POS"}:
-            buy_threshold += 5
-            if not is_strong_pullback:
-                buy_threshold += 2
-            buy_score -= 3
-        if action in {"SELL_HIGH", "PANIC_SELL"} or (vwap and price > vwap * 1.0015):
-            sell_threshold = max(35, sell_threshold - 3)
-            sell_score += 4
-    return buy_threshold, sell_threshold, buy_score, sell_score
-
-
 # ==================== PreOpen 上下文管理 ====================
 
 def build_preopen_context() -> PreOpenContext:
@@ -438,38 +357,6 @@ def _is_preopen_monitor_window(now: datetime) -> bool:
     return now.weekday() < 5 and dtime(9, 20) <= now.time() < dtime(9, 25)
 
 
-def _format_code_names(codes: List[str], limit: int = 4) -> str:
-    names = []
-    for code in codes[:limit]:
-        holding = HOLDINGS.get(code, {}) if isinstance(HOLDINGS, dict) else {}
-        names.append(f"{holding.get('name', code)}({code})")
-    return "、".join(names) if names else "暂无"
-
-
-def _sort_codes_by_holding_priority(codes: List[str]) -> List[str]:
-    scored = []
-    for code in codes:
-        holding = HOLDINGS.get(code, {}) if isinstance(HOLDINGS, dict) else {}
-        qty = int(holding.get("qty", 0) or 0)
-        cost = float(holding.get("cost", 0) or 0)
-        score = qty * 10 + cost
-        scored.append((score, code))
-    scored.sort(reverse=True)
-    return [code for _, code in scored]
-
-
-def _rank_focus_codes(codes: List[str]) -> List[str]:
-    scored = []
-    for code in codes:
-        holding = HOLDINGS.get(code, {}) if isinstance(HOLDINGS, dict) else {}
-        qty = int(holding.get("qty", 0) or 0)
-        cost = float(holding.get("cost", 0) or 0)
-        score = qty + (cost * 0.1)
-        scored.append((score, code))
-    scored.sort(reverse=True)
-    return [code for _, code in scored]
-
-
 def _format_preopen_brief(context: PreOpenContext) -> str:
     top20 = context.top20_volume_analysis if isinstance(context.top20_volume_analysis, dict) else {}
     top20_up = top20.get("total_up", 0)
@@ -506,18 +393,6 @@ def _preopen_adv_counts(context: PreOpenContext) -> Dict[str, int]:
     if not isinstance(adv, dict):
         return {"up": 0, "down": 0, "flat": 0}
     return {"up": int(adv.get("up", 0) or 0), "down": int(adv.get("down", 0) or 0), "flat": int(adv.get("flat", 0) or 0)}
-
-
-def _preopen_adv_text(context: PreOpenContext) -> str:
-    adv = _preopen_adv_counts(context)
-    return f"涨{adv['up']} / 跌{adv['down']} / 平{adv['flat']}"
-
-
-def _preopen_hot_theme_text(context: PreOpenContext, limit: int = 3) -> str:
-    snapshot_hot = context.market_snapshot.get("hot_theme", []) if isinstance(context.market_snapshot, dict) else []
-    if isinstance(snapshot_hot, list) and snapshot_hot:
-        return "、".join([str(x) for x in snapshot_hot[:limit] if str(x).strip()]) or "暂无"
-    return _preopen_safe_breadth(context).get("hot_theme_text", "") or "暂无"
 
 
 # ==================== Feishu 推送函数 ====================

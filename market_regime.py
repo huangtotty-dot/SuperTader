@@ -15,10 +15,8 @@ market_regime.py — 市场状态识别器（V1.14 新架构）
 """
 
 from enum import Enum
-from typing import Dict, Any, List, Optional
+from typing import List
 from datetime import datetime, timedelta
-import json
-import os
 
 
 class MarketRegime(Enum):
@@ -33,11 +31,6 @@ class MarketRegime(Enum):
 
 class RegimeDetector:
     """市场状态识别器"""
-
-    def __init__(self, trace_dir: str = None, preopen_dir: str = None):
-        self.trace_dir = trace_dir or os.path.join(os.path.dirname(__file__), "t_io", "traces")
-        self.preopen_dir = preopen_dir or self.trace_dir
-        self._cache = {}  # 按日期缓存的preopen数据
 
     # ==================== 集合竞价识别（基于 open_gap 简化版） ====================
 
@@ -222,29 +215,6 @@ class RegimeDetector:
 
         return MarketRegime.NORMAL, ""
 
-    # ==================== 辅助方法 ====================
-
-    def _load_preopen(self, date: str) -> Optional[dict]:
-        """加载指定日期的preopen数据（取最新一条）"""
-        if date in self._cache:
-            return self._cache[date]
-
-        path = os.path.join(self.preopen_dir, f"preopen_trace_{date}.jsonl")
-        if not os.path.exists(path):
-            return None
-
-        try:
-            with open(path, "r", encoding="utf-8") as f:
-                lines = f.readlines()
-            if not lines:
-                return None
-            # 取最后一条（最新的）
-            data = json.loads(lines[-1].strip())
-            self._cache[date] = data
-            return data
-        except Exception:
-            return None
-
 
 # ==================== 便捷函数（供共享命名空间调用） ====================
 
@@ -267,19 +237,6 @@ def detect_regime(code: str, date: str, **kwargs) -> tuple:
         regime, reason = detect_regime("000988", "2026-07-01", daily_bars=[...], minute_bars=[...])
     """
     return get_detector().detect(code, date, **kwargs)
-
-
-def regime_name(regime) -> str:
-    """获取状态中文名（用于飞书通知）"""
-    names = {
-        MarketRegime.NORMAL: "正常",
-        MarketRegime.HEAVY_SELL: "⚠️ 集合竞价重压",
-        MarketRegime.DISTRIBUTION: "🔴 主力出货",
-        MarketRegime.MORNING_SURGE: "📉 早盘冲高回落",
-        MarketRegime.RECOVERY: "🟢 超跌反弹",
-        MarketRegime.BREAKOUT: "🚀 强势突破",
-    }
-    return names.get(regime, "未知")
 
 
 def should_clear_all(regime) -> bool:

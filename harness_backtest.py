@@ -105,7 +105,7 @@ def load_shared() -> dict:
         'np': np, 'pd': pd, 'requests': requests, 'urllib': urllib,
         'urllib.request': urllib.request, 'urllib.error': urllib.error,
     })
-    for mod_name in ['config', 'utils', 'data_fetcher', 'indicators', 'multi_timeframe_fetcher',
+    for mod_name in ['config', 'utils', 'data_fetcher', 'indicators',
                       'signal_engine', 'position_sizer']:
         mod_path = BASE_DIR / f"{mod_name}.py"
         with open(mod_path, 'r', encoding='utf-8') as f:
@@ -436,16 +436,6 @@ def run_backtest(codes: list, date_range: list, holdings_map: dict,
     shared['HOLDINGS'] = {c: dict(h) for c, h in holdings_map.items()}
     shared['VIRTUAL_TRADES'] = VIRTUAL_TRADES
 
-    # A/B 模式下的参数覆盖
-    if ab_mode == "baseline":
-        PARAMS["factor_weight_5m_trend"] = 0.0
-        PARAMS["factor_weight_5m_rsi"] = 0.0
-        # 门控全 1.0（在 TrendRegime 层面通过覆盖趋势状态实现）
-        # 简化：直接修改 FACTOR_WEIGHTS
-        if 'FACTOR_WEIGHTS' in shared:
-            shared['FACTOR_WEIGHTS']["factor_weight_5m_trend"] = 0.0
-            shared['FACTOR_WEIGHTS']["factor_weight_5m_rsi"] = 0.0
-
     # v1.1.1: 变体A实验开关(默认关) — T_GATE_VARIANT_A=1 时 below_ma5_weak且slope>=0 放行
     if os.environ.get("T_GATE_VARIANT_A") == "1":
         PARAMS["daily_gate_allow_below_ma5_rebound"] = True
@@ -453,12 +443,6 @@ def run_backtest(codes: list, date_range: list, holdings_map: dict,
     # E1: 引擎买阈基线注入(验证用途, 默认42不变) — 引擎软消费 PARAMS["engine_buy_threshold_base"](signal_engine.py:524)
     if os.environ.get("T_BUY_BONUS_MIN_SCORE"):
         PARAMS["engine_buy_threshold_base"] = float(os.environ["T_BUY_BONUS_MIN_SCORE"])
-    # W32 C1-final: 接回解耦注入 — V1.2.0 起生产默认开（config.py PARAMS["buyback_bypass_gates"]=True）；
-    # env 保留用于回测对照："1"=强制开（旧实验口径兼容），"0"=显式关闭（复现 V1.1.x 旧世界）
-    if os.environ.get("T_BUYBACK_BYPASS_GATES") == "1":
-        PARAMS["buyback_bypass_gates"] = True
-    elif os.environ.get("T_BUYBACK_BYPASS_GATES") == "0":
-        PARAMS["buyback_bypass_gates"] = False
     # W33 C1' 口径B: 全部买信号单股日限注入 — V1.2.0 起生产默认 7（config.py PARAMS["buy_daily_cap"]=7）；
     # env 可显式覆盖做 A/B："0"=关闭（buy_daily_cap_reached 对 0 返回 False），"N"=自定义上限
     if os.environ.get("T_BUY_DAILY_CAP"):
@@ -480,14 +464,9 @@ def run_backtest(codes: list, date_range: list, holdings_map: dict,
     # 基线模式：完全关闭趋势层
     if ab_mode == "baseline":
         shared['TrendRegime'] = None  # 必须 BEFORE SignalEngine() 创建
-        shared['FACTOR_WEIGHTS']["factor_weight_5m_trend"] = 0.0
-        shared['FACTOR_WEIGHTS']["factor_weight_5m_rsi"] = 0.0
 
     engine = shared['SignalEngine']()
     add_indicators = shared['add_indicators']
-
-    if ab_mode == "baseline":
-        engine.factor_weights = dict(shared.get('FACTOR_WEIGHTS', {}))
 
     all_signals = []
     all_capped = []   # W33 C1': 被 cap 拦截的买信号（审计专用，不入 all_signals/daily_stats；cap 关时恒空）
@@ -614,12 +593,12 @@ def run_backtest(codes: list, date_range: list, holdings_map: dict,
                     })
                     continue
 
-                # R2: 回测簿记对齐 — record_signal冷却 + record_trade_action闭环
+                # R2: 回测簿记对齐 — record_signal 计数 + record_trade_action 记账
                 try:
                     engine.record_signal(code, sig.action, price, float(sig.score))
                 except Exception:
                     pass
-                # 动态份数 + 记录交易动作（触发 pending_sells/awaiting_buyback）
+                # 动态份数 + 记录交易动作
                 _merged_params = {**PARAMS, **STOCK_PARAMS.get(code, {})}
                 _calc_qty = shared.get('calc_buy_qty') if sig.action in ("BUY_LOW", "ADD_POS") else shared.get('calc_sell_qty')
                 _qty = 0

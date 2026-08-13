@@ -290,10 +290,7 @@ PARAMS = {
     "trend_debounce_bars": 2,
     # —— 风控 ——
     "min_amplitude": 0.015,
-    "min_profit_space": 0.010,
-    "min_sell_profit_space": 0.005,
     "commission_rate": 0.0010,
-    "cooldown_minutes": 30,
     "sell_floor_ratio": 0.5,
     # V1.2.1 (2026-08-11 01:11 用户拍板): "手动跟单场景，取消冻结，做T不用考虑底仓问题"——
     # 底仓地板默认不生效；True 时恢复 V1.30 钳制（position_sizer.py calc_sell_qty 软消费；harness T_SELL_FLOOR_ENABLED 可注入对照）
@@ -304,36 +301,20 @@ PARAMS = {
     "allow_full_position_buy": False,
     "index_regime_intraday_lock": True,
     "max_single_position_pct": 0.30,
-    "max_buy_times_per_stock": 1,
     "max_sell_times_per_stock": 3,
-    # —— 早盘 + VWAP + 止盈 ——
+    # —— 早盘 ——
     "morning_no_sell_until": 940,
-    "morning_no_sell_min_ret": 0.02,
-    "vwap_buy_deviation": -0.020,
-    "take_profit_pct": 0.010,
-    "take_profit_time_after": 1000,
-    # —— 高抛低吸闭环 ——
-    "awaiting_buyback_ttl_minutes": 240,
-    "awaiting_buyback_score_boost": 15,
-    "awaiting_buyback_score_boost_weak": 8,
-    "awaiting_buyback_threshold_relax": 10,
-    # V1.2.0 (2026-08-08 用户拍板上线): C1' 口径B 采纳——W33 全管线决赛六闸+2附加全过
-    # （t_io/validation/w32_c1p/C1P_FINAL.md：买 194@0.5055 / 闭环 99 对 +598.85 / 密度 0.431 / max=7 / 审计 0 WIN 误杀）
-    # ① 接回解耦生产化: awaiting_buyback 激活 tick 买入判定默认绕过 {daily_overheated, index_uni_down_clearance}
-    #    （其余 buy_block/ma5 门控/30min 冷却/记录层 notify 全部保留；signal_engine.py 软消费本键；
-    #     harness T_BUYBACK_BYPASS_GATES="0" 可显式关闭做回测对照）
-    "buyback_bypass_gates": True,
-    # ② 全部买信号单股日限 7 内置状态机: record_signal 层计数，第 8 条起当日不再产生买入信号
-    #    （不分原有/接回/二阶；卖信号不受限；0/None=关闭；harness T_BUY_DAILY_CAP 可显式覆盖做 A/B）
+    # —— 高抛低吸纯两点 (2026-08-13 用户拍板: 只参考布林线触轨 + RSI 两点) ——
+    "rsi_period_5m_swing": 6,   # 5分钟RSI周期(专用列 rsi_5m_p6, 不动 rsi_5m(14))
+    "swing_sell_rsi": 75.0,     # 高抛: 5分RSI(6) > 75
+    "swing_buy_rsi": 35.0,      # 低吸: 5分RSI(6) < 35
+    "swing_bb_upper": 1.0,      # 高抛: 5分收盘 ≥ 上轨 (bb_pct_5m>=1.0)
+    "swing_bb_lower": 0.0,      # 低吸: 5分收盘 ≤ 下轨 (bb_pct_5m<=0.0)
+    "swing_min_5m_bars": 13,    # 预热: 至少13根5分K才开始判断
+    # V1.2.0 (2026-08-08 用户拍板上线): C1' 口径B — 全部买信号单股日限 7 内置状态机
+    # record_signal 层计数，第 8 条起当日不再产生买入信号（卖信号不受限；0/None=关闭；
+    # harness T_BUY_DAILY_CAP 可显式覆盖做 A/B）
     "buy_daily_cap": 7,
-    # —— 大跌/破位/急跌保护 ——
-    "big_drop_bounce_threshold": -0.05,
-    "big_drop_bounce_sell_boost": 10,
-    "big_drop_bounce_buy_penalty": 5,
-    "breakdown_gap_threshold": 0.005,
-    "breakdown_buy_block": True,
-    "open_dip_max_mins": 15,
-    "open_dip_buy_penalty": 25,
     # —— 通知阈值 ——
     # v1.1.0 X9 阈值阶梯实测采纳 t55 档（两组胜率+2.1~2.8pp、密度双升、无单股恶化，
     # 依据 t_io/validation/v109_threshold/阈值阶梯报告.md）；买侧 68 未实验不动
@@ -345,24 +326,12 @@ PARAMS = {
     "notify_sell_threshold": 55,          # v1.1.0: 65→55
     "notify_sell_early_threshold": 65,    # v1.1.0: 75→65（保持早盘+10梯度）
     "notify_sell_panic_threshold": 50,    # v1.1.0: 60→50（防倒挂：panic档须低于正常档55）
-    "hard_sell_threshold_cap": 80,
-    "hard_buy_threshold_cap": 80,
-    "sell_fast_path_min_gap": 20,
     # v1.1.0 补定义: V1.30 轮次上限被 main.py:1223/1341 以 PARAMS["max_t_cycles_per_stock"] 消费
     # 但从未在 config 定义(首个达标卖出信号即 KeyError 的潜伏崩溃); 默认值与 position_sizer.py:289 一致
     "max_t_cycles_per_stock": 8,
     # v1.1.0 补定义: 与上同批 P0-D 误删 — signal_engine.py:291 消费(卖出后重建封锁分钟数);
     # 恢复 P0-D 清理前全局值 3(个股原 10/12 已随 STOCK_PARAMS 清理退役)
     "post_sell_rebuild_minutes": 3,
-    # —— 信号推送限流 ——
-    "buy_signal_price_move": 0.004,
-    "buy_signal_score_boost": 4,
-    "sell_signal_price_move": 0.003,
-    "sell_signal_score_boost": 4,
-    "add_pos_signal_price_move": 0.003,
-    "add_pos_signal_score_boost": 3,
-    "panic_sell_signal_price_move": 0.002,
-    "panic_sell_signal_score_boost": 2,
     # —— 仓位（position_sizer 消费） ——
     "stock_qty_base_pct": 0.30,
     "stock_qty_strong_pct": 0.40,
@@ -377,7 +346,6 @@ PARAMS = {
     "etf_qty_strong_pct": 0.25,
     "etf_qty_base_pct": 0.15,
     "etf_qty_weak_pct": 0.08,
-    "buy_soft_margin": 2,
     # —— 其他 ——
     "idle_log_minutes": 10,
     "cache_ttl_seconds": 180,
@@ -397,14 +365,11 @@ PARAMS = {
 
 # 个股专属参数覆盖（基于近90日分钟数据统计回测定制）
 # 科泰电源 300153：反转最强、流动性最差、尾盘低点概率最高
-# V3.0 P0-D: STOCK_PARAMS 精简 — 仅保留有 _sp_param 消费端的键（含 N2/N3/N4 修复后生效的）
+# V3.0 P0-D: STOCK_PARAMS 精简 — 仅保留有 _sp_param 消费端的键（含 N3/N4 修复后生效的）
 STOCK_PARAMS = {
     "600481": {  # 双良节能
         "stock_qty_base_pct": 0.39, "stock_qty_strong_pct": 0.27,
         "stock_rebuild_strong_pct": 0.98, "stock_first_add_pct": 0.34,
-        "vwap_buy_deviation": -0.0161,         # N3 Optuna CS=1630
-        "take_profit_pct": 0.0148,             # N2 Optuna CS=1630
-        "take_profit_time_after": 1000,
         "bullish_reversal_min_pct": 0.008,     # N4
         "notify_sell_threshold": 55, "notify_buy_threshold": 36.0,  # v1.1.0: sell 62→55 对齐t55档; E1采纳: buy 43→36 对齐引擎T36b档
     },
@@ -412,9 +377,6 @@ STOCK_PARAMS = {
         "stock_qty_base_pct": 0.30, "stock_qty_strong_pct": 0.29,
         "stock_rebuild_strong_pct": 0.59, "stock_first_add_pct": 0.27,
         "max_sell_times_per_stock": 2,
-        "vwap_buy_deviation": -0.022,          # N3 Optuna CS=851
-        "take_profit_pct": 0.0212,             # N2 Optuna CS=851
-        "take_profit_time_after": 1000,
         "bullish_reversal_min_pct": 0.006,     # N4
         "bullish_reversal_body_ratio": 0.50,
         "bullish_reversal_vol_multiplier": 0.7,
@@ -424,26 +386,17 @@ STOCK_PARAMS = {
         "stock_qty_base_pct": 0.15, "stock_qty_strong_pct": 0.25,
         "stock_rebuild_strong_pct": 0.50, "stock_first_add_pct": 0.10,
         "max_sell_times_per_stock": 2,
-        "vwap_buy_deviation": -0.0313,         # N3
-        "take_profit_pct": 0.0206,             # N2
-        "take_profit_time_after": 1000,
         "notify_sell_threshold": 55, "notify_buy_threshold": 36.0,  # v1.1.0: sell 67→55 对齐t55档; E1采纳: buy 40→36 对齐引擎T36b档
     },
     "600176": {  # 中国巨石
         "stock_qty_base_pct": 0.34, "stock_qty_strong_pct": 0.59,
         "stock_rebuild_strong_pct": 0.97, "stock_first_add_pct": 0.37,
         "max_sell_times_per_stock": 3,
-        "vwap_buy_deviation": -0.0173,         # N3 Optuna CS=434
-        "take_profit_pct": 0.0211,             # N2 Optuna CS=434
-        "take_profit_time_after": 1000,
         "notify_sell_threshold": 51, "notify_buy_threshold": 36.0,  # E1采纳: buy 40→36 对齐引擎T36b档
     },
     "603667": {  # 五洲新春
         "stock_qty_base_pct": 0.28, "stock_qty_strong_pct": 0.37,
         "stock_rebuild_strong_pct": 0.75, "stock_first_add_pct": 0.21,
-        "vwap_buy_deviation": -0.0276,         # N3 Optuna CS=498
-        "take_profit_pct": 0.0200,             # N2 Optuna CS=498
-        "take_profit_time_after": 1000,
         "notify_sell_threshold": 55, "notify_buy_threshold": 36.0,  # v1.1.0: sell 64→55 对齐t55档; E1采纳: buy 40→36 对齐引擎T36b档
     },
 }
@@ -712,7 +665,6 @@ logging.getLogger("apscheduler").setLevel(logging.WARNING)
 
 # ==================== 全局状态与统计 ====================
 
-_name_cache: Dict[str, str] = {}
 HOLDINGS: Dict[str, dict] = {}
 STRATEGY_MEMORY: Dict[str, dict] = {}
 VIRTUAL_TRADES: Dict[str, Dict[str, list]] = {}

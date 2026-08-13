@@ -262,7 +262,9 @@ def fetch_daily_kline(code: str) -> pd.DataFrame:
             if cached.get("date") == _dt.now().strftime("%Y-%m-%d") and cached.get("rows"):
                 rows = cached["rows"]
                 # fix P0-14: 缓存含当日未完成K线且距缓存时间超过15分钟 → 重新拉取（防盘中冻结）
-                _today = _dt.now().strftime("%Y-%m-%d")
+                # fix P0-15: 盘前写入的缓存缺当日K线(_last_date<今天)，09:15后也重拉补今日K线
+                _now = _dt.now()
+                _today = _now.strftime("%Y-%m-%d")
                 _last_date = str(rows[-1].get("date", "")) if rows else ""
                 _saved_at = cached.get("saved_at")
                 try:
@@ -270,8 +272,9 @@ def fetch_daily_kline(code: str) -> pd.DataFrame:
                         else _dt.fromtimestamp(cache_fp.stat().st_mtime)
                 except Exception:
                     _ts = _dt.fromtimestamp(cache_fp.stat().st_mtime)
-                _stale_intraday = (_last_date == _today
-                                   and (_dt.now() - _ts).total_seconds() > 15 * 60)
+                _stale_intraday = ((_last_date < _today and _now.strftime("%H:%M") >= "09:15")
+                                   or (_last_date == _today
+                                       and (_now - _ts).total_seconds() > 15 * 60))
                 if not _stale_intraday:
                     return pd.DataFrame(rows)
         except Exception:
@@ -499,44 +502,6 @@ def check_rsi_oversold(daily_ctx: dict) -> tuple:
     passed = float(rsi_val) < 30
     detail = f"日线rsi={float(rsi_val):.1f}（需<30，超卖）"
     return passed, detail
-
-
-def _prev_day_same_period_avg_vol(code: str, snap_date: str, df_1min: pd.DataFrame):
-    """fix P0-7: 取前一交易日快照中、与当日最近30分钟同时段（按时钟时间）的分钟均量。
-    无昨日快照或同时段无数据时返回 None。"""
-    if not code or not snap_date:
-        return None
-    try:
-        dt = datetime.strptime(snap_date, "%Y-%m-%d")
-    except Exception:
-        return None
-    ym_dir = SNAPSHOT_DIR / str(dt.year) / f"{dt.month:02d}"
-    if not ym_dir.is_dir():
-        return None
-    # 同目录下找日期早于 snap_date 的最新快照（兼容 _A/_B 后缀，优先无后缀文件）
-    cands = []
-    for p in ym_dir.glob(f"{code}_*.json"):
-        d = p.stem.split("_")[-1]
-        if len(d) == 10 and d[4] == "-" and d < snap_date:
-            cands.append((d, p))
-    if not cands:
-        return None
-    cands.sort(key=lambda x: (x[0], x[1].stem.count("_")))  # 最新日期优先，同日期无后缀优先
-    prev_fp = cands[-1][1]
-    try:
-        prev_df, _, _ = _parse_snapshot_file(prev_fp, cands[-1][0])
-    except Exception:
-        return None
-    if prev_df.empty:
-        return None
-    # 当日最近30根（≈30分钟）的时钟时间窗
-    win = df_1min["time"].tail(30)
-    t_start, t_end = win.iloc[0].time(), win.iloc[-1].time()
-    prev_tod = prev_df["time"].dt.time
-    seg = prev_df.loc[(prev_tod >= t_start) & (prev_tod <= t_end), "volume"]
-    if seg.empty or seg.mean() <= 0:
-        return None
-    return float(seg.mean())
 
 
 def check_volume_shrink(daily_ctx: dict) -> tuple:

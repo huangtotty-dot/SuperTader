@@ -81,18 +81,6 @@ class TrendRegime:
     def confidence(self) -> float:
         return self._confidence
 
-    @property
-    def is_bullish(self) -> bool:
-        return self._current_state in (TrendState.BULL, TrendState.STRONG_BULL)
-
-    @property
-    def is_bearish(self) -> bool:
-        return self._current_state in (TrendState.BEAR, TrendState.STRONG_BEAR)
-
-    @property
-    def is_neutral(self) -> bool:
-        return self._current_state == TrendState.NEUTRAL
-
     # ── 核心判定逻辑 ──
 
     def update(self, df_5min: pd.DataFrame, now: datetime = None) -> Tuple[TrendState, float]:
@@ -226,63 +214,6 @@ class TrendRegime:
             and prev >= p["rsi_overbought_5m"]
             and (prev - rsi) >= p["rsi_reversal_min_delta"]
         )
-
-    # ── 方向门控 ──
-    # v1.1.0 §3.5 降级: 以下门控/T_MODE 方法已全部退出生产调用（signal_engine 不再消费），
-    # 本类降级为【信息层专用】：仅 trend_state/confidence/rsi5 trigger 等状态输出
-    # 用于 feats 展示层与日志分析。保留方法仅为兼容，逻辑冻结勿再接入评分/门控。
-
-    def buy_gate_multiplier(self) -> float:
-        """V1.0.4 三档门控: BEAR买×0.6, 其余×1.0"""
-        if self._current_state == TrendState.BEAR:
-            return 0.6
-        return 1.0
-
-    def buy_threshold_penalty(self) -> float:
-        """V1.0.4: BEAR买门槛+6"""
-        if self._current_state == TrendState.BEAR:
-            return 6.0
-        return 0.0
-
-    def sell_gate_multiplier(self) -> float:
-        """V1.0.4 三档门控: BULL卖×0.6, 其余×1.0"""
-        if self._current_state == TrendState.BULL:
-            return 0.6
-        return 1.0
-
-    def sell_threshold_penalty(self) -> float:
-        """V1.0.4: BULL卖门槛+6"""
-        if self._current_state == TrendState.BULL:
-            return 6.0
-        return 0.0
-
-    # ── T_MODE 方向适配 ──
-
-    def apply_t_mode(self, t_mode: str, buy_score: float, sell_score: float) -> Tuple[float, float]:
-        """根据 T 模式调整买卖分数。
-
-        正T (long)：优先找买点 → 卖点从严
-        反T (short)：优先找卖点 → 买点从严
-        """
-        if t_mode == "short":
-            # 反T：抑制买入，鼓励卖出
-            if self.is_bullish:
-                # 牛市+反T：卖点优先（降低卖出门槛）
-                sell_score *= 1.15
-                buy_score *= 0.7
-            elif self.is_bearish:
-                # 熊市+反T：顺势做空（正常反T）
-                pass  # 默认行为即可
-        elif t_mode == "long":
-            # 正T：抑制卖出，鼓励买入
-            if self.is_bearish:
-                # 熊市+正T：买点优先（降低买入门槛）
-                buy_score *= 1.15
-                sell_score *= 0.7
-            elif self.is_bullish:
-                # 牛市+正T：顺势做多（正常正T）
-                pass
-        return buy_score, sell_score
 
     # ── 持久化 ──
 

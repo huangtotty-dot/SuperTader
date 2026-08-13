@@ -68,15 +68,8 @@ try:
 except Exception:
     pass
 
-# V1.11: 日志增强模块导入，加入共享命名空间供 signal_engine 使用
-try:
-    import log_enhancer as _log_enhancer
-    shared['_log_enhancer'] = _log_enhancer
-except Exception:
-    shared['_log_enhancer'] = None
-
 # 按顺序加载模块：后面的模块可以引用前面的模块
-module_order = ['config', 'utils', 'data_fetcher', 'indicators', 'multi_timeframe_fetcher', 'signal_engine', 'auction_analyzer', 'preopen', 'support_resistance', 'index_regime', 'index_regime_intraday', 'market_regime', 'position_sizer', 'daily_sentiment']
+module_order = ['config', 'utils', 'data_fetcher', 'indicators', 'signal_engine', 'auction_analyzer', 'preopen', 'support_resistance', 'index_regime', 'index_regime_intraday', 'market_regime', 'position_sizer', 'daily_sentiment']
 for mod_name in module_order:
     mod_path = _os.path.join(BASE_DIR, f"{mod_name}.py")
     if not _os.path.exists(mod_path):
@@ -185,7 +178,9 @@ def notify(sig, holding):
             # 风险提醒
             if regime and regime in ["heavy_sell", "distribution"]:
                 advice += f"\n⚠️ 风险：当前处于主力出货/重压状态，不建议主动加仓，仅接回已卖出部分"
-        
+        if hold_qty <= 0:
+            advice += "\n⚠️ 仓控可交易量为0(无T仓/大盘熔断)，仅供参考不自动跟单"
+
         # 【V1.14 新增】支撑位与决策透明化
         support_info = ""
         nearest_support = sig.indicators.get("nearest_support")
@@ -378,10 +373,14 @@ def send_morning_alert(code, name, alert_level, triggered_rules, morning_stats):
 
 _INDEX_INTRADAY_LAST_FETCH_TS = 0.0   # 分时数据拉取节流（至多 300 秒一次）
 _index_intraday_alert_cache: Dict[str, float] = {}  # 同 tag 60 分钟不重复推
-# V1.30: 盘中预警活动状态（注入引擎 feats["intraday_alerts"]，使 RiskManager I1/I4 买入冻结生效）
+# V1.30: 盘中预警活动状态（注入引擎 feats["intraday_alerts"] 供展示/回溯）
 _INDEX_INTRADAY_ACTIVE_ALERTS: list = []
 _INDEX_INTRADAY_ACTIVE_TS: float = 0.0
 _BUY_FUSE_NOTIFY_DATE: str = ""   # 买入熔断飞书明示（每日一次）
+
+# 高抛低吸纯两点推送最小防重：同 (code, action, 5分钟桶) 每日只推一次
+_SWING_DEDUP_DATE: str = ""
+_SWING_PUSH_DEDUP: set = set()
 
 # VWAP 实时快照缓存（akshare stock_zh_a_spot_em 成交额/成交量，每 60s 刷新一次）
 _SPOT_VWAP_CACHE: Dict[str, float] = {}  # code -> 实时 VWAP
@@ -1199,7 +1198,7 @@ def _maybe_check_index_intraday_alert(now: datetime) -> None:
             daily_score=float(INDEX_REGIME_CONTEXT.get("score") or 0.0),
         )
         alerts = result.get("alerts") or []
-        # V1.30: 维护活动预警状态（供引擎 RiskManager 消费），45 分钟未刷新自动过期
+        # V1.30: 维护活动预警状态（注入 feats 供展示），45 分钟未刷新自动过期
         global _INDEX_INTRADAY_ACTIVE_ALERTS, _INDEX_INTRADAY_ACTIVE_TS
         if alerts:
             _INDEX_INTRADAY_ACTIVE_ALERTS = list(alerts)
@@ -1246,6 +1245,7 @@ def _maybe_check_index_intraday_alert(now: datetime) -> None:
 
 def scan_once():
     global _last_idle_log, _scan_count, _scan_lock, _BUY_FUSE_NOTIFY_DATE
+    global _SWING_DEDUP_DATE
     if _scan_lock:
         log.warning("⚠️ 上一轮扫描仍在进行，跳过本轮触发")
         return
@@ -1392,7 +1392,7 @@ def scan_once():
 
                 can_t = holding.get("t_qty", 0) > 0
                 daily_ctx = get_daily_context(code, holding, current_price=price)
-                # V1.30: 盘中分时预警注入引擎特征（RiskManager 的 I1/I4 买入冻结此前从未真正生效）
+                # V1.30: 盘中分时预警注入引擎特征（供展示/回溯）
                 try:
                     if _INDEX_INTRADAY_ACTIVE_ALERTS:
                         daily_ctx["intraday_alerts"] = [
@@ -1455,8 +1455,6 @@ def scan_once():
                     stat = f"停手:买入熔断({_dec_reason.split(':', 1)[1][:20]})"
                 elif _dec_reason == "HOLD_SELL_PRIORITY":
                     stat = "停手:卖压压制(卖分>买分)"
-                elif engine.cycle_count.get(code, 0) >= PARAMS["max_t_cycles_per_stock"]:
-                    stat = "停手:当日轮次已满"
                 elif dec.get("last_buy_limit_reason"):
                     stat = f"停手:{dec.get('last_buy_limit_reason')}"
                 elif amp < PARAMS['min_amplitude']:
@@ -1495,7 +1493,7 @@ def scan_once():
                     "entry_kind": sig.factors.get("entry_kind", "") if sig else "",
                 } if sig else None, daily_context=daily_ctx)
 
-                if sig and can_t:
+                if sig:
                     # V1.14: 新架构 — 市场状态识别 + 动态份数 + 高抛低吸组合拳
                     # 1. 识别当前市场状态
                     regime = None
@@ -1570,45 +1568,30 @@ def scan_once():
                         else:
                             notify_threshold = _sp.get("notify_sell_threshold") or PARAMS.get("notify_sell_early_threshold", 75)
                     
-                    # V1.30: 推送-仓控-冷却联动重构（复盘 2026-07-24 问题修复）
-                    # 1) 轮次上限真实生效（此前仅面板显示"停手"，信号照推）
-                    # 2) 仓控0股信号不推送（原逻辑推送+不设冷却 → 同一分钟线重复轰炸，如600481三连推）
-                    # 3) 静默信号不写入虚拟成交账（原逻辑照记账 → 幽灵交易污染收益审计与仓位计算）
-                    # 4) 静默信号改写 shadow_signals（恢复 07-23 引擎重写时丢失的复盘数据）
+                    # 高抛低吸纯两点 (2026-08-13): 两点满足即推送；仓控0股也推(仅供参考不记账)
                     pushed = sig.score >= notify_threshold
-                    if pushed and sig.action in ["SELL_HIGH", "PANIC_SELL"]:
-                        if engine.cycle_count.get(code, 0) >= PARAMS["max_t_cycles_per_stock"]:
+                    # 纯两点规则 (2026-08-13): 移除轮次上限/单股日限；score=100 恒过阈值 → 一定推送
+                    # 仅保留最小防重：同 (code, action, 5分钟桶) 每日只推一次
+                    if pushed:
+                        _today = now.strftime("%Y-%m-%d")
+                        if _SWING_DEDUP_DATE != _today:
+                            _SWING_DEDUP_DATE = _today
+                            _SWING_PUSH_DEDUP.clear()
+                        _dkey = (code, sig.action, t.hour * 12 + t.minute // 5)
+                        if _dkey in _SWING_PUSH_DEDUP:
                             pushed = False
-                            log.info(f"🛑 {code} 当日轮次已满({PARAMS['max_t_cycles_per_stock']})，"
-                                     f"卖出信号{sig.score:.0f}分不再推送")
-                    # V1.2.0: C1' 买信号单股日限（生产化，六闸全过采纳，2026-08-08 用户拍板）——记录层拦截：
-                    # 第 cap+1 条起不推送/不记录（无冷却/无簿记），状态机看到被 cap 后的世界（与 harness 决赛语义一致）；
-                    # cap 计数口径 = record_signal 层已记录买信号（engine.buy_recorded_today）
-                    if pushed and sig.action in ["BUY_LOW", "ADD_POS"] and engine.buy_daily_cap_reached(code):
-                        pushed = False
-                        log.info(f"🛑 {code} 当日买信号已达上限({PARAMS.get('buy_daily_cap')}条/股/日)，"
-                                 f"{sig.score:.0f}分{sig.action}信号被 cap 拦截（不推送不记录）")
-                        try:
-                            write_shadow_signal(
-                                code, holding.get("name", code), sig.price,
-                                float(sig.indicators.get("vwap", sig.price) or sig.price),
-                                buy_score, sell_score, notify_threshold, notify_threshold,
-                                "买信号日限cap拦截(V1.2.0)",
-                                extra={"action": sig.action,
-                                       "decision_reason": engine.last_decision.get(code, {}).get("reason", "")},
-                            )
-                        except Exception:
-                            pass
-                    if pushed and sig.hold_qty > 0:
+                        else:
+                            _SWING_PUSH_DEDUP.add(_dkey)
+                    if pushed:
                         notify(sig, holding)
                         if sig.action in ["SELL_HIGH", "PANIC_SELL"]:
                             engine.incr_cycle(code)
                         engine.record_signal(code, sig.action, sig.price, sig.score)
-                        engine.record_trade_action(code, sig.action, sig.hold_qty, price=sig.price)
-                    elif pushed:
-                        log.info(f"🛑 {code} {sig.action}信号达标({sig.score:.0f}分)但仓控可交易量为0，"
-                                 f"不推送（仅设冷却防重复）")
-                        engine.record_signal(code, sig.action, sig.price, sig.score)
+                        if sig.hold_qty > 0:
+                            engine.record_trade_action(code, sig.action, sig.hold_qty, price=sig.price)
+                        else:
+                            log.info(f"📡 {code} {sig.action}两点触发(score={sig.score:.0f})但仓控可交易量为0，"
+                                     f"已推送仅供参考(不记账)")
                     else:
                         action_type = "买入" if sig.action in ["BUY_LOW", "ADD_POS"] else "卖出"
                         time_window = "10:00前" if t < dtime(10, 0) else "10:00后"

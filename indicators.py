@@ -206,6 +206,14 @@ def add_5min_indicators(df_5min: pd.DataFrame) -> pd.DataFrame:
     # 纯上涨窗保持 NaN 与现网一致；预热 leading NaN 不变
     df_5min["rsi_5m"] = (100 - 100 / (1 + rs)).mask((gain == 0) & (loss == 0), 50.0)
 
+    # ── 高抛低吸专用: RSI(6) on 5-min（纯两点决策层，不影响 rsi_5m(14) 信息层）──
+    _swing_rsi_period = int(PARAMS.get("rsi_period_5m_swing", 6))
+    _d6 = c.diff()
+    _g6 = _d6.clip(lower=0).rolling(_swing_rsi_period, min_periods=1).mean()
+    _l6 = -_d6.clip(upper=0).rolling(_swing_rsi_period, min_periods=1).mean()
+    _rs6 = _g6 / _l6.replace(0, np.nan)
+    df_5min["rsi_5m_p6"] = (100 - 100 / (1 + _rs6)).mask((_g6 == 0) & (_l6 == 0), 50.0)
+
     # ── 企稳信号（V1.26 遗留，保留）──
     df_5min["low_5m"] = l
     df_5min["low_rising_5m"] = l > l.shift(1)

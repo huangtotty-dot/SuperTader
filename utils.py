@@ -166,39 +166,6 @@ def _default_trade_qty(holding: dict, sig: Optional["Signal"] = None) -> int:
     return 0
 
 
-def _signal_qty(record: dict, fallback_qty: int = 0) -> int:
-    try:
-        qty = int(record.get("qty", 0) or 0)
-    except Exception:
-        qty = 0
-    if qty > 0:
-        return qty
-    try:
-        hold_qty = int(record.get("hold_qty", 0) or 0)
-    except Exception:
-        hold_qty = 0
-    if hold_qty > 0:
-        return hold_qty
-    try:
-        net_qty = int(record.get("net_qty", 0) or 0)
-    except Exception:
-        net_qty = 0
-    if net_qty > 0:
-        return net_qty
-    return max(0, int(fallback_qty or 0))
-
-
-def _sum_signal_qty(signals: List[dict], fallback_qty: int = 0) -> int:
-    return sum(_signal_qty(item, fallback_qty) for item in signals)
-
-
-def _qty_weight(qty: int, base_qty: int) -> float:
-    qty = max(0, int(qty or 0))
-    base_qty = max(100, int(base_qty or 0))
-    weight = qty / base_qty if base_qty else 0.0
-    return float(_clamp(weight, 0.5, 3.0))
-
-
 def _snapshot_file(code: str, day: str) -> str:
     folder = os.path.join(SNAPSHOT_DIR, day[:4], day[5:7])
     os.makedirs(folder, exist_ok=True)
@@ -213,11 +180,6 @@ def _trace_path(kind: str, day: Optional[str] = None) -> str:
 def _preopen_path(day: Optional[str] = None) -> str:
     day = day or get_today_str()
     return os.path.join(PREOPEN_DIR, f"preopen_{day}.json")
-
-
-def _result_trace_path(day: Optional[str] = None) -> str:
-    day = day or get_today_str()
-    return os.path.join(TRACE_DIR, f"signal_outcome_{day}.jsonl")
 
 
 def _json_safe(obj):
@@ -237,25 +199,6 @@ def _append_jsonl(path: str, record: dict) -> None:
             f.write(json.dumps(_json_safe(record), ensure_ascii=False, default=str) + "\n")
     except Exception:
         pass
-
-
-def _register_signal_outcome(sig: "Signal", holding: dict) -> None:
-    SIGNAL_OUTCOME_TRACKER.setdefault(sig.code, []).append({
-        "signal_time": sig.ts,
-        "action": sig.action,
-        "signal_price": sig.price,
-        "signal_score": sig.score,
-        "vwap_at_signal": sig.indicators.get("vwap", sig.price),
-        "market_state": sig.indicators.get("market_state", "unknown"),
-        "benchmark_state": sig.indicators.get("benchmark_state", "unknown"),
-        "benchmark_gate": sig.indicators.get("benchmark_gate", "neutral"),
-        "qty": _default_trade_qty(holding, sig),
-        "hold_qty": int(sig.factors.get("hold_qty", holding.get("t_qty", 0)) or 0),
-        "name": sig.name,
-        "price_points": [],
-        "maturity_5m": False,
-        "maturity_15m": False,
-    })
 
 
 def _snapshot_write(code: str, holding: dict, df: pd.DataFrame, indicators: dict, signal: Optional[dict] = None, daily_context: Optional[dict] = None) -> None:
@@ -305,26 +248,6 @@ def _snapshot_write(code: str, holding: dict, df: pd.DataFrame, indicators: dict
     os.replace(tmp, path)
 
 
-def _benchmark_meta_for_code(code: str) -> Dict[str, str]:
-    code = str(code or "").strip()
-    # fix D10: ETF 按跟踪指数映射基准（原 588*/516* 等沪市 ETF 会落到默认的深证成指）
-    if code.startswith("588"):
-        return {"code": "sh000688", "name": "科创50", "market": "sh", "kind": "etf_star50"}
-    if code.startswith(("510", "511", "512", "513", "515", "516", "517", "518",
-                        "560", "561", "562", "563", "564", "565", "566", "567", "568", "569",
-                        "580", "581", "582", "583", "584", "585", "586", "587", "589")):
-        return {"code": "sh000001", "name": "上证指数", "market": "sh", "kind": "etf_sse"}
-    if code.startswith(("150", "151", "152", "153", "154", "155", "156", "157", "158", "159")):
-        return {"code": "sz399001", "name": "深证成指", "market": "sz", "kind": "etf_szse"}
-    if code.startswith(("688", "689")):
-        return {"code": "sh000688", "name": "科创50", "market": "sh", "kind": "star"}
-    if code.startswith(("300", "301")):
-        return {"code": "sz399006", "name": "创业板指", "market": "sz", "kind": "chi_next"}
-    if code.startswith(("60", "68", "90")):
-        return {"code": "sh000001", "name": "上证指数", "market": "sh", "kind": "sse"}
-    return {"code": "sz399001", "name": "深证成指", "market": "sz", "kind": "szse"}
-
-
 def _default_daily_context(code: str, status: str = "unavailable", reason: str = "") -> Dict[str, Any]:
     return {
         "daily_status": status,
@@ -366,96 +289,6 @@ def _default_daily_context(code: str, status: str = "unavailable", reason: str =
         "daily_low_10d": 0.0,
         "pre2_close": 0.0,
         "daily_ma150": 0.0,
-    }
-
-
-def _calc_ps_levels(price: float, daily_ctx: Dict[str, Any]) -> Dict[str, Any]:
-    """V1.24-R2: 计算压力位和支撑位
-
-    压力候选：近10日最高、前日收盘、MA5、MA10、MA20、MA30、MA60、MA150
-      只取 >= price 的候选，压力位 = min(这些候选) -> 最接近的阻力
-
-    支撑候选：近10日最低、前日收盘、MA5、MA10、MA20、MA30、MA60、MA150
-      只取 <= price 的候选，支撑位 = max(这些候选) -> 最接近的支撑
-
-    返回 dict 包含:
-      - pressure_name, pressure_level, pressure_gap
-      - support_name, support_level, support_gap
-      - is_major_pressure (是否为重要压力 -> 全部卖出)
-      - sell_qty_pct (50=部分卖出, 100=全部卖出)
-    """
-    ma_candidates = [
-        ("MA5", daily_ctx.get("daily_ma5", 0.0)),
-        ("MA10", daily_ctx.get("daily_ma10", 0.0)),
-        ("MA20", daily_ctx.get("daily_ma20", 0.0)),
-        ("MA30", daily_ctx.get("daily_ma30", 0.0)),
-        ("MA60", daily_ctx.get("daily_ma60", 0.0)),
-        ("MA150", daily_ctx.get("daily_ma150", 0.0)),
-    ]
-    valid_mas = [(name, val) for name, val in ma_candidates if val > 0]
-
-    high_10d = daily_ctx.get("daily_high_10d", 0.0)
-    low_10d = daily_ctx.get("daily_low_10d", 0.0)
-    pre2_close = daily_ctx.get("pre2_close", 0.0)
-
-    # 压力候选：所有 >= price 的值（均线不区分是否"上方"，直接加入）
-    pressure_candidates = []
-    if high_10d > 0:
-        pressure_candidates.append(("近10日最高", high_10d))
-    if pre2_close > 0:
-        pressure_candidates.append(("前日收盘", pre2_close))
-    for name, val in valid_mas:
-        pressure_candidates.append((name, val))
-
-    # 只保留 >= price 的，然后取最小值 = 最接近的阻力
-    pressure_candidates = [(n, v) for n, v in pressure_candidates if v >= price]
-    if pressure_candidates:
-        pressure_name, pressure_level = min(pressure_candidates, key=lambda x: x[1])
-    else:
-        pressure_name, pressure_level = "", 0.0
-
-    # 支撑候选：所有 <= price 的值
-    support_candidates = []
-    if low_10d > 0:
-        support_candidates.append(("近10日最低", low_10d))
-    if pre2_close > 0:
-        support_candidates.append(("前日收盘", pre2_close))
-    for name, val in valid_mas:
-        support_candidates.append((name, val))
-
-    # 只保留 <= price 的，然后取最大值 = 最接近的支撑
-    support_candidates = [(n, v) for n, v in support_candidates if v <= price]
-    if support_candidates:
-        support_name, support_level = max(support_candidates, key=lambda x: x[1])
-    else:
-        support_name, support_level = "", 0.0
-
-    pressure_gap = (pressure_level - price) / price if pressure_level > 0 and price > 0 else 0.0
-    support_gap = (price - support_level) / price if support_level > 0 and price > 0 else 0.0
-
-    # 判断压力重要性 -> 决定卖出比例
-    # 短期均线 (MA5/MA10) 压力 -> 部分卖出 (50%)
-    # 中期/长期/历史高点压力 -> 全部卖出 (100%)
-    is_major_pressure = False
-    sell_qty_pct = 100  # 默认全部卖出
-    if pressure_name in ("MA5", "MA10"):
-        is_major_pressure = False
-        sell_qty_pct = 50   # 部分卖出
-    elif pressure_name in ("MA20", "MA30", "MA60", "MA150", "近10日最高", "前日收盘"):
-        is_major_pressure = True
-        sell_qty_pct = 100  # 全部卖出
-
-    return {
-        "pressure_name": pressure_name,
-        "pressure_level": pressure_level,
-        "pressure_gap": pressure_gap,
-        "support_name": support_name,
-        "support_level": support_level,
-        "support_gap": support_gap,
-        "is_major_pressure": is_major_pressure,
-        "sell_qty_pct": sell_qty_pct,
-        "pressure_candidates": pressure_candidates,
-        "support_candidates": support_candidates,
     }
 
 
