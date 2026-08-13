@@ -1,35 +1,35 @@
 {
-  "market_score": 95.0,
+  "market_score": 75.0,
   "market_bias": "risk_on",
   "breadth": {
     "total_codes": 8,
     "etf_count": 1,
     "stock_count": 7,
     "advance_decline": {
-      "up": 4128,
-      "down": 1279,
-      "flat": 135
+      "up": 2272,
+      "down": 3099,
+      "flat": 171
     },
     "hot_theme": [
-      "N杰理",
-      "浩淼科技",
-      "盖世食品",
-      "炬光科技",
-      "长进光子"
+      "新赣江",
+      "立昂技术",
+      "博济医药",
+      "南模生物",
+      "近岸蛋白"
     ],
-    "hot_theme_text": "N杰理、浩淼科技、盖世食品",
-    "risk_flag": "risk_on",
+    "hot_theme_text": "新赣江、立昂技术、博济医药",
+    "risk_flag": "risk_off",
     "market_open": false,
     "auction_summary": {
       "top20_bias": "strong_bullish",
-      "top20_up": 19,
-      "top20_down": 1,
-      "holdings_bullish": 7,
+      "top20_up": 15,
+      "top20_down": 5,
+      "holdings_bullish": 0,
       "holdings_bearish": 0,
-      "source_ts": "2026-08-12 16:33:47"
+      "source_ts": "2026-08-13 13:49:35"
     }
   },
-  "session_note": "竞价额Top20中涨19家/跌1家 | 指数unknown | 持仓8股竞价完毕",
+  "session_note": "竞价额Top20中涨15家/跌5家 | 指数unknown | 持仓8股竞价完毕",
   "auction_result": {
     "index_signals": [],
     "market_bias": "unknown",
@@ -156,354 +156,354 @@
       }
     ]
   },
-  "generated_at": "2026-08-12 16:34:00",
+  "generated_at": "2026-08-13 13:49:49",
   "source": "spot",
   "market_snapshot": {
     "source": "spot",
     "market_open": false,
     "index_trend": "positive",
     "advance_decline": {
-      "up": 4128,
-      "down": 1279,
-      "flat": 135
+      "up": 2272,
+      "down": 3099,
+      "flat": 171
     },
     "hot_theme": [
-      "N杰理",
-      "浩淼科技",
-      "盖世食品",
-      "炬光科技",
-      "长进光子"
+      "新赣江",
+      "立昂技术",
+      "博济医药",
+      "南模生物",
+      "近岸蛋白"
     ],
-    "risk_flag": "risk_on",
-    "market_sentence": "涨4128 / 跌1279 / 平135",
+    "risk_flag": "risk_off",
+    "market_sentence": "涨2272 / 跌3099 / 平171",
     "top20_volume_analysis": {
-      "total_up": 19,
-      "total_down": 1,
+      "total_up": 15,
+      "total_down": 5,
       "total_flat": 0,
       "top_gainers": [],
       "top_volume_stocks": [
         {
           "code": "sz300308",
           "name": "中际旭创",
-          "change_pct": 3.84,
-          "volume": 28408443493.0
+          "change_pct": 1.85,
+          "volume": 21605164900.0
         },
         {
           "code": "sh688825",
           "name": "长鑫科技",
-          "change_pct": 6.19,
-          "volume": 27155743878.0
-        },
-        {
-          "code": "sz300502",
-          "name": "新易盛",
-          "change_pct": 3.11,
-          "volume": 18751553809.0
+          "change_pct": 0.47,
+          "volume": 20268794660.0
         },
         {
           "code": "sh603986",
           "name": "兆易创新",
-          "change_pct": 2.71,
-          "volume": 18748833166.0
+          "change_pct": 1.51,
+          "volume": 15569217642.0
         },
         {
-          "code": "sz002384",
-          "name": "东山精密",
-          "change_pct": 3.26,
-          "volume": 15704600958.0
+          "code": "sz300502",
+          "name": "新易盛",
+          "change_pct": 2.28,
+          "volume": 15068099109.0
         },
         {
           "code": "sz300394",
           "name": "天孚通信",
-          "change_pct": 7.89,
-          "volume": 12718552010.0
+          "change_pct": 9.03,
+          "volume": 13311032092.0
         },
         {
-          "code": "sz000636",
-          "name": "风华高科",
-          "change_pct": 1.0,
-          "volume": 11775791777.0
+          "code": "sz000938",
+          "name": "紫光股份",
+          "change_pct": 9.03,
+          "volume": 13032620303.0
         },
         {
-          "code": "sh688256",
-          "name": "寒武纪",
-          "change_pct": 1.35,
-          "volume": 11460557563.0
-        },
-        {
-          "code": "sz002428",
-          "name": "云南锗业",
-          "change_pct": 5.68,
-          "volume": 11204588955.0
+          "code": "sz002384",
+          "name": "东山精密",
+          "change_pct": 3.65,
+          "volume": 12984045980.0
         },
         {
           "code": "sz300476",
           "name": "胜宏科技",
-          "change_pct": 1.77,
-          "volume": 11038953803.0
+          "change_pct": -0.58,
+          "volume": 11542570165.0
+        },
+        {
+          "code": "sh688256",
+          "name": "寒武纪",
+          "change_pct": 2.41,
+          "volume": 11411153984.0
+        },
+        {
+          "code": "sz000977",
+          "name": "浪潮信息",
+          "change_pct": 7.25,
+          "volume": 9913915008.0
         },
         {
           "code": "sh600667",
           "name": "太极实业",
-          "change_pct": 7.12,
-          "volume": 11007104934.0
-        },
-        {
-          "code": "sh600183",
-          "name": "生益科技",
-          "change_pct": 5.86,
-          "volume": 10743291329.0
-        },
-        {
-          "code": "sh603259",
-          "name": "药明康德",
-          "change_pct": -0.73,
-          "volume": 10694051631.0
+          "change_pct": 4.36,
+          "volume": 9776105804.0
         },
         {
           "code": "sh600487",
           "name": "亨通光电",
-          "change_pct": 2.92,
-          "volume": 10351502294.0
+          "change_pct": -0.93,
+          "volume": 9719653597.0
         },
         {
-          "code": "sh688012",
-          "name": "中微公司",
-          "change_pct": 4.92,
-          "volume": 9901701101.0
+          "code": "sz300058",
+          "name": "蓝色光标",
+          "change_pct": -1.26,
+          "volume": 9517006003.0
+        },
+        {
+          "code": "sh603259",
+          "name": "药明康德",
+          "change_pct": 3.31,
+          "volume": 9139982926.0
+        },
+        {
+          "code": "sz000636",
+          "name": "风华高科",
+          "change_pct": -2.59,
+          "volume": 8935069033.0
+        },
+        {
+          "code": "sh600584",
+          "name": "长电科技",
+          "change_pct": 1.92,
+          "volume": 8919662762.0
+        },
+        {
+          "code": "sh600183",
+          "name": "生益科技",
+          "change_pct": 1.79,
+          "volume": 8665306663.0
         },
         {
           "code": "sz300285",
           "name": "国瓷材料",
-          "change_pct": 1.54,
-          "volume": 9493483419.0
+          "change_pct": -1.5,
+          "volume": 7967196099.0
+        },
+        {
+          "code": "sz002131",
+          "name": "利欧股份",
+          "change_pct": 2.72,
+          "volume": 7845170494.0
         },
         {
           "code": "sh688008",
           "name": "澜起科技",
-          "change_pct": 4.22,
-          "volume": 9439631630.0
-        },
-        {
-          "code": "sh600176",
-          "name": "中国巨石",
-          "change_pct": 1.45,
-          "volume": 9102683899.0
-        },
-        {
-          "code": "sz000063",
-          "name": "中兴通讯",
-          "change_pct": 4.09,
-          "volume": 8710747946.0
-        },
-        {
-          "code": "sz002281",
-          "name": "光迅科技",
-          "change_pct": 0.52,
-          "volume": 8609457034.0
+          "change_pct": 0.66,
+          "volume": 7795659127.0
         }
       ],
       "sectors": [],
       "bias": "strong_bullish",
-      "note": "Top20竞价量：涨19/跌1/平0，偏向strong_bullish"
+      "note": "Top20竞价量：涨15/跌5/平0，偏向strong_bullish"
     }
   },
   "code_snapshots": {
     "588170": {
       "code": "588170",
       "name": "科创半导体ETF华夏",
-      "open_gap": 0.019646365422396873,
-      "direction": "bullish",
-      "prev_close": 1.018
+      "open_gap": -0.0019230769230769247,
+      "direction": "neutral",
+      "prev_close": 1.04
     },
     "600176": {
       "code": "600176",
       "name": "中国巨石",
-      "open_gap": 0.013117826188803052,
-      "direction": "bullish",
-      "prev_close": 42.69
+      "open_gap": -0.0013853613484184316,
+      "direction": "neutral",
+      "prev_close": 43.31
     },
     "600481": {
       "code": "600481",
       "name": "双良节能",
-      "open_gap": 0.02505694760820053,
-      "direction": "bullish",
-      "prev_close": 4.39
+      "open_gap": 0.004464285714285619,
+      "direction": "neutral",
+      "prev_close": 4.48
     },
     "603667": {
       "code": "603667",
       "name": "五洲新春",
-      "open_gap": -0.0015895443306251555,
+      "open_gap": 0.00017692852087753026,
       "direction": "neutral",
-      "prev_close": 56.62
+      "prev_close": 56.52
     },
     "000988": {
       "code": "000988",
       "name": "华工科技",
-      "open_gap": 0.023795761078998064,
-      "direction": "bullish",
-      "prev_close": 103.8
+      "open_gap": -0.00047027840481562414,
+      "direction": "neutral",
+      "prev_close": 106.32
     },
     "000988_B": {
       "code": "000988_B",
       "name": "华工科技",
-      "open_gap": 0.023795761078998064,
-      "direction": "bullish",
-      "prev_close": 103.8
+      "open_gap": -0.00047027840481562414,
+      "direction": "neutral",
+      "prev_close": 106.32
     },
     "002639": {
       "code": "002639",
       "name": "雪人集团",
-      "open_gap": 0.005631536604987955,
-      "direction": "bullish",
-      "prev_close": 12.43
+      "open_gap": 0.0008006405124099109,
+      "direction": "neutral",
+      "prev_close": 12.49
     },
     "300153": {
       "code": "300153",
       "name": "科泰电源",
-      "open_gap": 0.029425287356321866,
-      "direction": "bullish",
-      "prev_close": 21.75
+      "open_gap": 0.0004468275245755837,
+      "direction": "neutral",
+      "prev_close": 22.38
     }
   },
   "auction_summary": {
     "top20_bias": "strong_bullish",
-    "top20_up": 19,
-    "top20_down": 1,
-    "holdings_bullish": 7,
+    "top20_up": 15,
+    "top20_down": 5,
+    "holdings_bullish": 0,
     "holdings_bearish": 0,
-    "source_ts": "2026-08-12 16:33:47"
+    "source_ts": "2026-08-13 13:49:35"
   },
   "top20_volume_analysis": {
-    "total_up": 19,
-    "total_down": 1,
+    "total_up": 15,
+    "total_down": 5,
     "total_flat": 0,
     "top_gainers": [],
     "top_volume_stocks": [
       {
         "code": "sz300308",
         "name": "中际旭创",
-        "change_pct": 3.84,
-        "volume": 28408443493.0
+        "change_pct": 1.85,
+        "volume": 21605164900.0
       },
       {
         "code": "sh688825",
         "name": "长鑫科技",
-        "change_pct": 6.19,
-        "volume": 27155743878.0
-      },
-      {
-        "code": "sz300502",
-        "name": "新易盛",
-        "change_pct": 3.11,
-        "volume": 18751553809.0
+        "change_pct": 0.47,
+        "volume": 20268794660.0
       },
       {
         "code": "sh603986",
         "name": "兆易创新",
-        "change_pct": 2.71,
-        "volume": 18748833166.0
+        "change_pct": 1.51,
+        "volume": 15569217642.0
       },
       {
-        "code": "sz002384",
-        "name": "东山精密",
-        "change_pct": 3.26,
-        "volume": 15704600958.0
+        "code": "sz300502",
+        "name": "新易盛",
+        "change_pct": 2.28,
+        "volume": 15068099109.0
       },
       {
         "code": "sz300394",
         "name": "天孚通信",
-        "change_pct": 7.89,
-        "volume": 12718552010.0
+        "change_pct": 9.03,
+        "volume": 13311032092.0
       },
       {
-        "code": "sz000636",
-        "name": "风华高科",
-        "change_pct": 1.0,
-        "volume": 11775791777.0
+        "code": "sz000938",
+        "name": "紫光股份",
+        "change_pct": 9.03,
+        "volume": 13032620303.0
       },
       {
-        "code": "sh688256",
-        "name": "寒武纪",
-        "change_pct": 1.35,
-        "volume": 11460557563.0
-      },
-      {
-        "code": "sz002428",
-        "name": "云南锗业",
-        "change_pct": 5.68,
-        "volume": 11204588955.0
+        "code": "sz002384",
+        "name": "东山精密",
+        "change_pct": 3.65,
+        "volume": 12984045980.0
       },
       {
         "code": "sz300476",
         "name": "胜宏科技",
-        "change_pct": 1.77,
-        "volume": 11038953803.0
+        "change_pct": -0.58,
+        "volume": 11542570165.0
+      },
+      {
+        "code": "sh688256",
+        "name": "寒武纪",
+        "change_pct": 2.41,
+        "volume": 11411153984.0
+      },
+      {
+        "code": "sz000977",
+        "name": "浪潮信息",
+        "change_pct": 7.25,
+        "volume": 9913915008.0
       },
       {
         "code": "sh600667",
         "name": "太极实业",
-        "change_pct": 7.12,
-        "volume": 11007104934.0
-      },
-      {
-        "code": "sh600183",
-        "name": "生益科技",
-        "change_pct": 5.86,
-        "volume": 10743291329.0
-      },
-      {
-        "code": "sh603259",
-        "name": "药明康德",
-        "change_pct": -0.73,
-        "volume": 10694051631.0
+        "change_pct": 4.36,
+        "volume": 9776105804.0
       },
       {
         "code": "sh600487",
         "name": "亨通光电",
-        "change_pct": 2.92,
-        "volume": 10351502294.0
+        "change_pct": -0.93,
+        "volume": 9719653597.0
       },
       {
-        "code": "sh688012",
-        "name": "中微公司",
-        "change_pct": 4.92,
-        "volume": 9901701101.0
+        "code": "sz300058",
+        "name": "蓝色光标",
+        "change_pct": -1.26,
+        "volume": 9517006003.0
+      },
+      {
+        "code": "sh603259",
+        "name": "药明康德",
+        "change_pct": 3.31,
+        "volume": 9139982926.0
+      },
+      {
+        "code": "sz000636",
+        "name": "风华高科",
+        "change_pct": -2.59,
+        "volume": 8935069033.0
+      },
+      {
+        "code": "sh600584",
+        "name": "长电科技",
+        "change_pct": 1.92,
+        "volume": 8919662762.0
+      },
+      {
+        "code": "sh600183",
+        "name": "生益科技",
+        "change_pct": 1.79,
+        "volume": 8665306663.0
       },
       {
         "code": "sz300285",
         "name": "国瓷材料",
-        "change_pct": 1.54,
-        "volume": 9493483419.0
+        "change_pct": -1.5,
+        "volume": 7967196099.0
+      },
+      {
+        "code": "sz002131",
+        "name": "利欧股份",
+        "change_pct": 2.72,
+        "volume": 7845170494.0
       },
       {
         "code": "sh688008",
         "name": "澜起科技",
-        "change_pct": 4.22,
-        "volume": 9439631630.0
-      },
-      {
-        "code": "sh600176",
-        "name": "中国巨石",
-        "change_pct": 1.45,
-        "volume": 9102683899.0
-      },
-      {
-        "code": "sz000063",
-        "name": "中兴通讯",
-        "change_pct": 4.09,
-        "volume": 8710747946.0
-      },
-      {
-        "code": "sz002281",
-        "name": "光迅科技",
-        "change_pct": 0.52,
-        "volume": 8609457034.0
+        "change_pct": 0.66,
+        "volume": 7795659127.0
       }
     ],
     "sectors": [],
     "bias": "strong_bullish",
-    "note": "Top20竞价量：涨19/跌1/平0，偏向strong_bullish"
+    "note": "Top20竞价量：涨15/跌5/平0，偏向strong_bullish"
   },
   "theme_rank": [],
   "focus_codes": [],

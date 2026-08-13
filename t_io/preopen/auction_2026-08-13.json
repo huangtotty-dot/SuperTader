@@ -1,0 +1,153 @@
+{
+  "date": "2026-08-13",
+  "codes": [
+    "588170",
+    "600176",
+    "600481",
+    "603667",
+    "000988",
+    "002639",
+    "300153"
+  ],
+  "snapshots": {
+    "09:20": {
+      "ts": "2026-08-13 09:21:03",
+      "source": "qt.gtimg.cn realtime",
+      "rows": {
+        "588170": {
+          "name": "科创半导体ETF华夏",
+          "auction_price": 1.059,
+          "pre_close": 1.04,
+          "pct_vs_preclose": 1.83,
+          "auction_vol_hand": 0.0,
+          "amount_wan": 0.0,
+          "src_ts": "20260813092101"
+        },
+        "600176": {
+          "name": "中国巨石",
+          "auction_price": 43.8,
+          "pre_close": 43.31,
+          "pct_vs_preclose": 1.13,
+          "auction_vol_hand": 0.0,
+          "amount_wan": 0.0,
+          "src_ts": "20260813092102"
+        },
+        "600481": {
+          "name": "双良节能",
+          "auction_price": 4.49,
+          "pre_close": 4.48,
+          "pct_vs_preclose": 0.22,
+          "auction_vol_hand": 0.0,
+          "amount_wan": 0.0,
+          "src_ts": "20260813092103"
+        },
+        "603667": {
+          "name": "五洲新春",
+          "auction_price": 56.01,
+          "pre_close": 56.52,
+          "pct_vs_preclose": -0.9,
+          "auction_vol_hand": 0.0,
+          "amount_wan": 0.0,
+          "src_ts": "20260813092102"
+        },
+        "000988": {
+          "name": "华工科技",
+          "auction_price": 108.15,
+          "pre_close": 106.32,
+          "pct_vs_preclose": 1.72,
+          "auction_vol_hand": 0.0,
+          "amount_wan": 0.0,
+          "src_ts": "20260813092054"
+        },
+        "002639": {
+          "name": "雪人集团",
+          "auction_price": 12.5,
+          "pre_close": 12.49,
+          "pct_vs_preclose": 0.08,
+          "auction_vol_hand": 0.0,
+          "amount_wan": 0.0,
+          "src_ts": "20260813092054"
+        },
+        "300153": {
+          "name": "科泰电源",
+          "auction_price": 22.14,
+          "pre_close": 22.38,
+          "pct_vs_preclose": -1.07,
+          "auction_vol_hand": 0.0,
+          "amount_wan": 0.0,
+          "src_ts": "20260813092045"
+        }
+      }
+    },
+    "09:22": {
+      "ts": "2026-08-13 09:23:25",
+      "source": "qt.gtimg.cn realtime",
+      "rows": {
+        "588170": {
+          "name": "科创半导体ETF华夏",
+          "auction_price": 1.06,
+          "pre_close": 1.04,
+          "pct_vs_preclose": 1.92,
+          "auction_vol_hand": 0.0,
+          "amount_wan": 0.0,
+          "src_ts": "20260813092322"
+        },
+        "600176": {
+          "name": "中国巨石",
+          "auction_price": 43.89,
+          "pre_close": 43.31,
+          "pct_vs_preclose": 1.34,
+          "auction_vol_hand": 0.0,
+          "amount_wan": 0.0,
+          "src_ts": "20260813092323"
+        },
+        "600481": {
+          "name": "双良节能",
+          "auction_price": 4.48,
+          "pre_close": 4.48,
+          "pct_vs_preclose": 0.0,
+          "auction_vol_hand": 0.0,
+          "amount_wan": 0.0,
+          "src_ts": "20260813092324"
+        },
+        "603667": {
+          "name": "五洲新春",
+          "auction_price": 56.01,
+          "pre_close": 56.52,
+          "pct_vs_preclose": -0.9,
+          "auction_vol_hand": 0.0,
+          "amount_wan": 0.0,
+          "src_ts": "20260813092323"
+        },
+        "000988": {
+          "name": "华工科技",
+          "auction_price": 108.2,
+          "pre_close": 106.32,
+          "pct_vs_preclose": 1.77,
+          "auction_vol_hand": 0.0,
+          "amount_wan": 0.0,
+          "src_ts": "20260813092318"
+        },
+        "002639": {
+          "name": "雪人集团",
+          "auction_price": 12.5,
+          "pre_close": 12.49,
+          "pct_vs_preclose": 0.08,
+          "auction_vol_hand": 0.0,
+          "amount_wan": 0.0,
+          "src_ts": "20260813092318"
+        },
+        "300153": {
+          "name": "科泰电源",
+          "auction_price": 22.14,
+          "pre_close": 22.38,
+          "pct_vs_preclose": -1.07,
+          "auction_vol_hand": 0.0,
+          "amount_wan": 0.0,
+          "src_ts": "20260813092318"
+        }
+      }
+    }
+  },
+  "gaps": []
+}
