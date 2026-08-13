@@ -236,10 +236,7 @@ hold_now = json.load(open(snap_fp, encoding="utf-8")) if snap_fp.exists() else {
 hold_prev = json.load(open(prev_fp, encoding="utf-8")) if prev_fp else {}
 k2_baseline = prev_fp is None
 
-# --- K1 当日闭环净盈亏（按股分解，复用 §4 closure_audit 当日数据） ---
-k1 = {"total_est_pnl": round(sum(v["est_pnl"] for v in closed.values()), 2) if closed else None,
-      "by_code": {c: dict(v) for c, v in closed.items()} if closed else {},
-      "source": "t_io/logs/closure_audit.jsonl"}
+# --- K1 已按 W33 G4 移除（做T闭环盈亏非加仓/建仓主轴） ---
 
 # --- K2 持仓成本变化（对照前一交易日快照；无快照=基线日） ---
 k2_by = {}
@@ -290,88 +287,22 @@ for c in CODES:
 k3 = {"baseline": k2_baseline, "by_code": k3_by,
       "drift_total": sum(v["drift"] for v in k3_by.values())}
 
-# --- K4 滚动 20 条买/卖胜率（decision_trace 向前回溯，close-only 结算口径同 §5） ---
-def _settle_in(rs, ts, action, price):
-    idx = next((i for i, r in enumerate(rs) if r["scan_time"] == ts), None)
-    if idx is None or price in (None, 0):
-        return "VOID"
-    for r in rs[idx + 1: idx + 31]:
-        p = float(r.get("price") or 0)
-        if p <= 0:
-            continue
-        if action == "BUY_LOW":
-            if p <= price * 0.996:
-                return "FAIL"
-            if p >= price * 1.005:
-                return "WIN"
-        else:
-            if p >= price * 1.004:
-                return "FAIL"
-            if p <= price * 0.995:
-                return "WIN"
-    return "VOID"
-
-def rolling_wr(date, window=20):
-    """最近 window 条已结算（WIN/FAIL）买/卖信号胜率；不足 window 如实给 n。"""
-    evts = {"BUY_LOW": [], "SELL_HIGH": []}
-    days = []
-    for fp in sorted((BASE / "t_io/traces").glob("decision_trace_*.jsonl")):
-        d = fp.stem.replace("decision_trace_", "")
-        if d > date:
-            continue
-        days.append(d)
-        rs_by = defaultdict(list)
-        decs = []
-        for line in open(fp, encoding="utf-8"):
-            r = json.loads(line)
-            c = r.get("code")
-            rs_by[c].append(r)
-            if r.get("decision") in ("BUY_LOW", "SELL_HIGH") and fnum(r.get("price")):
-                decs.append(r)
-        for r in decs:
-            res = _settle_in(rs_by[r["code"]], r["scan_time"], r["decision"], float(r["price"]))
-            if res in ("WIN", "FAIL"):
-                evts[r["decision"]].append({"date": d, "code": r["code"],
-                                            "ts": r["scan_time"], "res": res})
-    out = {}
-    for act, key in (("BUY_LOW", "buy"), ("SELL_HIGH", "sell")):
-        tail = evts[act][-window:]
-        w = sum(1 for e in tail if e["res"] == "WIN")
-        f = sum(1 for e in tail if e["res"] == "FAIL")
-        out[key] = {"n": len(tail), "wins": w, "fails": f,
-                    "wr": round(w / len(tail), 4) if tail else None,
-                    "window": window, "short": len(tail) < window,
-                    "note": f"n={len(tail)}<{window}，可得样本胜率" if len(tail) < window else "满窗",
-                    "events_tail": tail}
-    out["days_covered"] = [days[0], days[-1]] if days else []
-    return out
-
-k4 = rolling_wr(DATE)
-
-# --- K5 qty=0 冻结拦截数（按股，复用 §3 仓控拦截正则） ---
-k5 = {"total": sum(len(suppress.get(c, [])) for c in CODES),
-      "by_code": {c: len(suppress[c]) for c in CODES if suppress.get(c)},
-      "source": "t_io/logs 仓控可交易量为0"}
+# --- K4/K5 已按 W33 G4 移除（做T滚动胜率/qty=0拦截非加仓/建仓主轴） ---
 
 kpi = {"date": DATE,
        "snapshot": {"file": str(snap_fp.relative_to(BASE)) if snap_fp.exists() else None,
                     "created_now": snap_created,
                     "prev": str(prev_fp.relative_to(BASE)) if prev_fp else None},
-       "K1_closed_pnl": k1, "K2_cost_change": k2, "K3_base_drift": k3,
-       "K4_rolling_wr": k4, "K5_qty0_suppressed": k5}
+       "K2_cost_change": k2, "K3_base_drift": k3}
 with open(OUT / f"kpi_{DATE}.json", "w", encoding="utf-8") as f:
     json.dump(kpi, f, ensure_ascii=False, indent=2, default=str)
 
 # --- 日复盘报告追加/替换「KPI 日快照」段（幂等：标记内替换） ---
 def kpi_report_md():
-    L = ["", "<!-- KPI日快照:begin -->", "", f"## KPI 日快照（{DATE}，喂周复盘 §1.5）", ""]
+    # W33 G4 (V2.1 对齐): 移除做T质量段 K1 闭环盈亏 / K4 滚动胜率 / K5 拦截计数，保留 K2 成本/K3 底仓漂移
+    L = ["", "<!-- KPI日快照:begin -->", "", f"## 持仓准确性日快照（{DATE}，喂每日 Review §1）", ""]
     L.append("| KPI | 值 | 明细 |")
     L.append("|-----|-----|------|")
-    k1s = "；".join(f"{c} {v['est_pnl']:+.2f}" for c, v in k1["by_code"].items() if v["est_pnl"]) or "全日无成交"
-    if k1["total_est_pnl"] is None:
-        L.append(f"| K1 闭环净盈亏 | 无（当日 0 闭环） | {k1s} |")
-    else:
-        L.append(f"| K1 闭环净盈亏 | **{k1['total_est_pnl']:+.2f}** | {k1s} |")
     if k2["baseline"]:
         L.append(f"| K2 持仓成本变化 | 基线日 | 无前日快照，仅建档："
                  + "；".join(f"{c} cost={v['cost_now']}" for c, v in k2["by_code"].items()) + " |")
@@ -381,12 +312,6 @@ def kpi_report_md():
                             for c, v in k2["by_code"].items()) + " |")
     k3s = "；".join(f"{c} {v['drift']:+d}股 {v['attribution']}" for c, v in k3["by_code"].items() if v["drift"]) or "全仓无漂移"
     L.append(f"| K3 底仓漂移 | **{k3['drift_total']:+d}** | {k3s} |")
-    b, s = k4["buy"], k4["sell"]
-    L.append(f"| K4 滚动20条胜率 | 买 **{b['wr']}**（{b['wins']}W/{b['fails']}F，n={b['n']}{'，不满窗' if b['short'] else ''}）"
-             f" / 卖 **{s['wr']}**（{s['wins']}W/{s['fails']}F，n={s['n']}{'，不满窗' if s['short'] else ''}） | "
-             f"覆盖 {k4['days_covered']} |")
-    L.append(f"| K5 qty=0 拦截 | **{k5['total']}** | "
-             + "；".join(f"{c}×{n}" for c, n in k5["by_code"].items()) + " |")
     L += ["", "<!-- KPI日快照:end -->", ""]
     return "\n".join(L)
 
@@ -502,6 +427,37 @@ def add_watch_md():
     L += ["", "<!-- 加仓观察:end -->", ""]
     return "\n".join(L)
 
+# ---------- W33 G1/G4: sizing_advice 当日汇总段（读取 main.py 落盘，喂每日 Review §3 加仓逐笔） ----------
+def sizing_advice_md():
+    fp = BASE / f"t_io/traces/sizing_advice_{DATE}.jsonl"
+    if not fp.exists():
+        return ""
+    rows = []
+    for line in open(fp, encoding="utf-8"):
+        try:
+            rows.append(json.loads(line))
+        except Exception:
+            continue
+    if not rows:
+        return ""
+    act_cn = {"BUY_LOW": "低吸", "SELL_HIGH": "高抛", "ADD_POS": "加仓", "PANIC_SELL": "恐慌卖"}
+    L = ["", "<!-- sizing汇总:begin -->", "", f"## 加仓建议逐笔（{DATE}，sizing_advice 落盘）", ""]
+    L.append("| 时间 | 代码 | 动作 | 类型 | 建议价 | VWAP | 建议股数 | 推送 | 备注 |")
+    L.append("|---|---|---|---|---|---|---|---|---|")
+    for r in rows:
+        kind = {"rebuild": "接回", "first_add": "首加"}.get(r.get("buy_kind"), r.get("buy_kind") or "—")
+        L.append(f"| {str(r.get('ts',''))[11:19]} | {r['code']} | {act_cn.get(r.get('action'), r.get('action'))} "
+                 f"| {kind} | {r.get('price','')} | {r.get('vwap','')} | {r.get('suggested_qty','')} "
+                 f"| {'✅' if r.get('pushed') else '❌'} | {r.get('note') or '—'} |")
+    n_rebuild = sum(1 for r in rows if r.get("buy_kind") == "rebuild")
+    n_first = sum(1 for r in rows if r.get("buy_kind") == "first_add")
+    n_pushed = sum(1 for r in rows if r.get("pushed"))
+    L += ["", f"- sizing 调用 **{len(rows)}** 次（接回 {n_rebuild} / 首加 {n_first}；推送 {n_pushed} / 静默 {len(rows) - n_pushed}）。"
+             f"逐笔画像喂每日 Review §3 加仓质量跟踪（建议价 vs VWAP 判定买卖优劣）。",
+          "", "<!-- sizing汇总:end -->", ""]
+    return "\n".join(L)
+
+
 # ---------- 9. 建仓信号扫描（§1 第1步·user 2026-08-05 新增；读取 position_builder 日志） ----------
 def position_builder_md():
     trace_fp = BASE / f"t_io/traces/position_builder_{DATE}.jsonl"
@@ -536,27 +492,38 @@ def position_builder_md():
          f"- 候选股: **{len(best)}** 只（有快照数据的纳入统计）",
          ""]
 
+    # W33 A1: 双通道 8 键（与 position_builder.CHANNEL_COND_KEYS 同序）
+    _PB_COND_KEYS = ["c1_turn_confirm", "c1_boll_lower", "c1_volume_shrink", "c1_rsi_oversold",
+                     "c1_m5_iceberg", "c2_box_breakout", "c2_volume_confirm", "c2_trend_bull"]
+    _CH_TXT = {"iceberg": "🧊", "breakout": "🚀", "both": "🧊🚀"}
+
     signals = [e for e in sorted_best if e["verdict"] == "signal"]
     approaching = [e for e in sorted_best if e["verdict"] == "approaching"]
     if signals:
-        L.append(f"🔴 **满足建仓条件（≥70）: {len(signals)} 只**")
+        L.append(f"🔴 **满足建仓条件（双通道 signal）: {len(signals)} 只**")
         for e in signals:
-            cond_str = " ".join("●" if e["conditions"].get(k) else "○" for k in
-                                ["macd_golden", "boll_mid_support", "rsi_healthy", "volume_shrink", "support_retest"])
-            L.append(f"  - {e['code']} {e['name']}: 得分 **{e['composite_score']}** "
+            cond_str = " ".join("●" if e["conditions"].get(k) else "○" for k in _PB_COND_KEYS)
+            _ch = _CH_TXT.get(e.get("channel"), "—")
+            L.append(f"  - {e['code']} {e['name']}: 得分 **{e['composite_score']}** [{_ch}] "
                      f"价 {e.get('price')} 建议 {e.get('suggested_qty', 0)}股  {cond_str}")
         L.append("")
 
     if approaching:
-        L.append(f"🟡 **接近条件（40-60）: {len(approaching)} 只**")
+        L.append(f"🟡 **接近条件（approaching）: {len(approaching)} 只**")
+        # W33 G4: 缺口条件列（从 conditions 提取未过的计分条件，如"差缩量"）
+        _SCORED_CN = {"c1_turn_confirm": "转向", "c1_boll_lower": "BOLL", "c1_volume_shrink": "缩量",
+                      "c2_box_breakout": "突破", "c2_volume_confirm": "放量", "c2_trend_bull": "多头"}
         for e in approaching[:6]:  # 最多显示 6 只
-            cond_str = " ".join("●" if e["conditions"].get(k) else "○" for k in
-                                ["macd_golden", "boll_mid_support", "rsi_healthy", "volume_shrink", "support_retest"])
-            L.append(f"  - {e['code']} {e['name']}: 得分 **{e['composite_score']}** "
-                     f"价 {e.get('price')}  {cond_str}")
+            cond_str = " ".join("●" if e["conditions"].get(k) else "○" for k in _PB_COND_KEYS)
+            _ch = _CH_TXT.get(e.get("channel"), "—")
+            _ap = {"immediate": "即时", "intraday_pending": "待日内", "next_day_pending": "待次日"}.get(e.get("approach_status"), "")
+            _gap = "，".join(f"差{n}" for k, n in _SCORED_CN.items()
+                             if k in e["conditions"] and not e["conditions"][k]) or "—"
+            L.append(f"  - {e['code']} {e['name']}: 得分 **{e['composite_score']}** [{_ch}{('·' + _ap) if _ap else ''}] "
+                     f"价 {e.get('price')}  **缺口:{_gap}**  {cond_str}")
         L.append("")
 
-    L.append("●=通过  ○=未通过  (MACD/BOLL/RSI/量/支撑)")
+    L.append("●=通过  ○=未通过  (转向/BOLL/缩量/RSI/5分冰点/突破/放量/多头)")
     L += ["", "<!-- 建仓扫描:end -->", ""]
     return "\n".join(L)
 
@@ -596,6 +563,16 @@ if report_fp.exists():
                          txt, flags=re.S)
         else:
             txt = txt.rstrip() + "\n" + pb
+    # W33 G4: sizing_advice 当日汇总段
+    sa = sizing_advice_md()
+    if sa:
+        if "<!-- sizing汇总:begin -->" in txt:
+            txt = re.sub(r"<!-- sizing汇总:begin -->.*?<!-- sizing汇总:end -->",
+                         sa.strip().replace("\n\n<!-- sizing汇总:end -->", "\n<!-- sizing汇总:end -->")
+                         .replace("<!-- sizing汇总:begin -->\n\n", "<!-- sizing汇总:begin -->\n"),
+                         txt, flags=re.S)
+        else:
+            txt = txt.rstrip() + "\n" + sa
     report_fp.write_text(txt, encoding="utf-8")
 
 # ---------- 输出 ----------
@@ -622,12 +599,9 @@ print("shadow_near:", {c: len(v) for c, v in shadow_near.items()})
 print("suppressed:", {c: len(v) for c, v in suppress.items()}, "pushes:", pushes)
 print("silent_sell:", {c: (len(v), max((e['score'] for e in v), default=None)) for c, v in silent_sell.items() if v})
 print("closed:", closed)
-print("== KPI 日快照 ==")
-print(f"K1 闭环净盈亏: {k1['total_est_pnl']}  by_code:", {c: v['est_pnl'] for c, v in k1['by_code'].items()})
+print("== 持仓准确性快照 (W33 G4 口径) ==")
 print(f"K2 cost对照: {'基线日' if k2['baseline'] else k2['note']}  snapshot={kpi['snapshot']['file']} created={snap_created} prev={kpi['snapshot']['prev']}")
 print(f"K3 底仓漂移: total={k3['drift_total']:+d} ", {c: (v['drift'], v['attribution']) for c, v in k3['by_code'].items() if v['drift']})
-print(f"K4 滚动胜率: 买 n={k4['buy']['n']} wr={k4['buy']['wr']} / 卖 n={k4['sell']['n']} wr={k4['sell']['wr']}  覆盖{k4['days_covered']}")
-print(f"K5 qty=0拦截: total={k5['total']} ", k5['by_code'])
 print("KPI JSON:", OUT / f"kpi_{DATE}.json")
 print("settle_by_code:", json.dumps(settle_by_code, ensure_ascii=False))
 print("watch:", json.dumps(watch, ensure_ascii=False, default=str)[:600])

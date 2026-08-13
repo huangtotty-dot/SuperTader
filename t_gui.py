@@ -47,12 +47,11 @@ NAMES = {
     "300153": "科泰电源", "300364": "中文在线",
 }
 
+# W33 A1: 双通道 8 键标签（与 position_builder.CHANNEL_COND_KEYS 同序）
 COND_LABELS = {
-    "macd_golden": "MACD金叉",
-    "boll_lower": "BOLL下轨",
-    "rsi_oversold": "RSI超卖",
-    "volume_shrink": "缩量",
-    "m5_iceberg": "5分钟确认",
+    "c1_turn_confirm": "转向确认", "c1_boll_lower": "BOLL冰点", "c1_volume_shrink": "缩量止跌",
+    "c1_rsi_oversold": "RSI超卖", "c1_m5_iceberg": "5分钟冰点",
+    "c2_box_breakout": "突破箱体", "c2_volume_confirm": "放量确认", "c2_trend_bull": "趋势多头",
 }
 
 
@@ -747,19 +746,21 @@ class Api:
             right_detail = (f"突破箱体上沿 {bx.get('box',{}).get('high')}，超出{bx.get('pct_above')}%"
                             if right_breakout else "未突破箱体")
 
-            # ---- 左侧加仓：情绪冰点（日线4条件 + 5分钟确认）----
-            # 日线冰点
+            # ---- 左侧加仓：情绪冰点（W33 A1 判据 + 5分钟确认）----
+            # 日线冰点: 转向确认(金叉或站上MA5) AND BOLL冰点 AND 缩量；RSI 降展示层
             _mc_golden = bool(daily_ctx.get("daily_macd_golden"))
             _mc_rsi = daily_ctx.get("daily_rsi")
             _mc_boll = daily_ctx.get("daily_boll_pct")
             _mc_vol = daily_ctx.get("daily_vol_today")
             _mc_volma = daily_ctx.get("daily_vol_ma5")
-            d_macd = _mc_golden
-            d_rsi = (_mc_rsi is not None and not (isinstance(_mc_rsi, float) and math.isnan(_mc_rsi)) and float(_mc_rsi) < 30)
+            _mc_ma5 = daily_ctx.get("daily_ma5")
+            _mc_price = daily_ctx.get("daily_price_ref")
+            d_turn = _mc_golden or (_mc_ma5 is not None and _mc_price is not None
+                                    and float(_mc_ma5) > 0 and float(_mc_price) > float(_mc_ma5))
+            d_rsi = (_mc_rsi is not None and not (isinstance(_mc_rsi, float) and math.isnan(_mc_rsi)) and float(_mc_rsi) < 35)
             d_boll = (_mc_boll is not None and not (isinstance(_mc_boll, float) and math.isnan(_mc_boll)) and float(_mc_boll) <= 0.15)
             d_shrink = (_mc_vol is not None and _mc_volma is not None and _mc_volma > 0 and float(_mc_vol) / float(_mc_volma) < 0.8)
-            daily_iceberg_hits = sum([d_macd, d_rsi, d_boll, d_shrink])
-            daily_iceberg = daily_iceberg_hits >= 3   # 日线冰点确认(≥3/4)
+            daily_iceberg = d_turn and d_boll and d_shrink   # 转向 + 冰点2项全过（W33 冰点通道 signal 判据）
 
             # 5分钟冰点确认（盘中快照有分钟数据时）
             m5_iceberg = True
@@ -794,13 +795,13 @@ class Api:
             left_iceberg = daily_iceberg and m5_iceberg   # 左侧加仓 = 日线冰点 + 5分钟冰点
 
             left_conditions = [
-                {"name": "MACD金叉", "met": d_macd,
-                 "detail": "日线MACD金叉=有" if d_macd else "日线MACD金叉=无"},
-                {"name": "RSI超卖", "met": d_rsi,
+                {"name": "转向确认", "met": d_turn,
+                 "detail": "金叉或站上MA5=通过" if d_turn else "金叉/站上MA5=未过"},
+                {"name": "RSI超卖(展示)", "met": d_rsi,
                  "detail": f"日线RSI={float(_mc_rsi):.1f}" if d_rsi or (_mc_rsi is not None and not math.isnan(_mc_rsi)) else "日线RSI=无"},
-                {"name": "BOLL下轨", "met": d_boll,
+                {"name": "BOLL冰点", "met": d_boll,
                  "detail": f"日线bb_pct={float(_mc_boll):.3f}" if d_boll or (_mc_boll is not None and not math.isnan(_mc_boll)) else "日线BOLL=无"},
-                {"name": "缩量", "met": d_shrink,
+                {"name": "缩量止跌", "met": d_shrink,
                  "detail": "日线量<5日均量×0.8" if d_shrink else "日线量未缩"},
                 {"name": "5分钟确认", "met": bool(m5_iceberg), "detail": m5_note},
             ]
@@ -2279,51 +2280,14 @@ class Api:
             raw.append({"base": base, "name": info["name"], "raw_pct": raw_pct,
                         "mkt_val": mkt_val, "total_qty": total_qty,
                         "cost": (cost_total / total_qty) if total_qty else 0})
-        ratio_sum = sum(r["raw_pct"] for r in raw) or 1.0
+        # W33 A3: 归一化/欠配缺口/分批 抽到 config.build_position_gap 共享（避免 GUI/扫描器两处漂移）
+        _cost_map = {r["base"]: r["cost"] for r in raw}
+        gap_ctx = config.build_position_gap(total_capital, raw, default_pct) if config else None
         rows = []
-        for r in raw:
-            target_pct = r["raw_pct"] / ratio_sum  # 归一化：总和=100%
-            target_val = total_capital * target_pct
-            pct = r["mkt_val"] / total_capital if total_capital else 0
-            gap_pct = (r["mkt_val"] / target_val - 1) if target_val else 0
-            # 偏差股数 = (目标市值 - 当前市值) / 股价，取整到一手(100股)，向下取整
-            px = (r["mkt_val"] / r["total_qty"]) if r["total_qty"] else 0
-            gap_val = target_val - r["mkt_val"]
-            if px > 0:
-                gap_qty = int(gap_val / px // 100) * 100   # 欠配=+可加，超配=-应减
-            else:
-                gap_qty = 0
-            # 欠配股数三等分：每批整手(100股)，末批含余数
-            # 不足3手(<300股)时不强行分3批：>=200 分2批，否则1批
-            add_batches = []
-            if gap_qty > 0:
-                if gap_qty >= 300:
-                    batch = (gap_qty // 3 // 100) * 100
-                    add_batches = [batch, batch, gap_qty - 2 * batch]
-                    # 末批不足一手则并入第二批
-                    if add_batches[2] < 100:
-                        add_batches[1] += add_batches[2]
-                        add_batches = add_batches[:2]
-                elif gap_qty >= 200:
-                    half = gap_qty // 2 // 100 * 100
-                    add_batches = [half, gap_qty - half]
-                else:
-                    add_batches = [gap_qty]
-            rows.append({
-                "code": r["base"], "name": r["name"],
-                "target_pct": round(target_pct, 4),
-                "target_val": round(target_val, 0),
-                "mkt_val": round(r["mkt_val"], 0),
-                "total_qty": r["total_qty"],
-                "price": round(px, 3) if r["total_qty"] else 0,
-                "pct": round(pct * 100, 1),
-                "gap_pct": round(gap_pct * 100, 1),
-                "gap_qty": int(gap_qty),  # 偏差股数(取整到100股)：正值可加，负值应减
-                "add_batches": add_batches,  # 欠配分3批加仓的每批股数
-                "over": gap_pct > 0.05,    # 超配 >5%
-                "under": gap_pct < -0.05,  # 欠配 >5%
-                "cost": round(r["cost"], 3) if r["total_qty"] else 0,
-            })
+        for r in (gap_ctx["rows"] if gap_ctx else []):
+            row = dict(r)
+            row["cost"] = round(_cost_map.get(r["code"], 0), 3) if r.get("total_qty") else 0
+            rows.append(row)
         rows.sort(key=lambda x: -x["pct"])
         return _clean({
             "total_capital": round(total_capital, 0),
@@ -2613,6 +2577,38 @@ class Api:
             except Exception as e:
                 return {"ok": False, "error": str(e)}
         return {"ok": False, "error": "股票不在股池中"}
+
+    # ---------- W33 G3: 人工确认建仓（回写 signal_history，喂 forward_tracker） ----------
+    def confirm_position(self, code, price=None, qty=None):
+        """人工确认建仓 → signal_history 追加 {confirmed, confirm_price, confirm_time, confirm_qty}，
+        状态置 confirmed（不再重复出建仓建议）。forward_tracker 以 confirm_price 为基准算前瞻收益。"""
+        fp = BASE / "watchlist_buy.json"
+        wl = _load_json(fp, {})
+        stocks = wl.get("stocks", {})
+        if code not in stocks:
+            return {"ok": False, "error": "股票不在股池中"}
+        stock = stocks[code]
+        hist = stock.setdefault("signal_history", [])
+        confirm_price = float(price) if price else float(stock.get("suggested_price") or 0)
+        confirm_qty = int(qty) if qty else int(stock.get("suggested_qty") or 0)
+        entry = {
+            "date": datetime.now().strftime("%Y-%m-%d"),
+            "confirm_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "confirmed": True,
+            "confirm_price": confirm_price,
+            "confirm_qty": confirm_qty,
+            "source": "gui_confirm",
+        }
+        hist.append(entry)
+        stock["status"] = "confirmed"
+        try:
+            tmp = fp.with_suffix(".tmp")
+            with open(tmp, "w", encoding="utf-8") as f:
+                json.dump(wl, f, ensure_ascii=False, indent=2)
+            tmp.replace(fp)
+            return {"ok": True, "code": code, "entry": entry}
+        except Exception as e:
+            return {"ok": False, "error": str(e)}
 
     # ---------- 轻量 PB 刷新（盘中实时） ----------
     def refresh_pb(self, date):
