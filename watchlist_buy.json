@@ -19,48 +19,6 @@
           "date": "2026-08-13",
           "score": 40,
           "verdict": "approaching",
-          "price": 109.53
-        },
-        {
-          "date": "2026-08-13",
-          "score": 40,
-          "verdict": "approaching",
-          "price": 109.11
-        },
-        {
-          "date": "2026-08-13",
-          "score": 40,
-          "verdict": "approaching",
-          "price": 109.29
-        },
-        {
-          "date": "2026-08-13",
-          "score": 40,
-          "verdict": "approaching",
-          "price": 109.29
-        },
-        {
-          "date": "2026-08-13",
-          "score": 40,
-          "verdict": "approaching",
-          "price": 109.39
-        },
-        {
-          "date": "2026-08-13",
-          "score": 40,
-          "verdict": "approaching",
-          "price": 109.39
-        },
-        {
-          "date": "2026-08-13",
-          "score": 40,
-          "verdict": "approaching",
-          "price": 109.15
-        },
-        {
-          "date": "2026-08-13",
-          "score": 40,
-          "verdict": "approaching",
           "price": 108.7
         },
         {
@@ -134,15 +92,65 @@
           "score": 40,
           "verdict": "approaching",
           "price": 107.03
+        },
+        {
+          "date": "2026-08-13",
+          "score": 40,
+          "verdict": "approaching",
+          "price": 107.03
+        },
+        {
+          "date": "2026-08-13",
+          "score": 40,
+          "verdict": "approaching",
+          "price": 107.03
+        },
+        {
+          "date": "2026-08-13",
+          "score": 40,
+          "verdict": "approaching",
+          "price": 107.03
+        },
+        {
+          "date": "2026-08-13",
+          "score": 40,
+          "verdict": "approaching",
+          "price": 107.03
+        },
+        {
+          "date": "2026-08-13",
+          "score": 60,
+          "verdict": "approaching",
+          "channel": "iceberg",
+          "approach_status": "next_day_pending",
+          "price": 107.03
+        },
+        {
+          "date": "2026-08-13",
+          "score": 40,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 107.04
+        },
+        {
+          "date": "2026-08-13",
+          "score": 40,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 107.04
         }
       ],
       "criteria_met": {
-        "macd_golden": true,
-        "boll_lower": false,
-        "rsi_oversold": false,
-        "volume_shrink": true,
-        "box_breakout": false,
-        "m5_iceberg": true
+        "c1_turn_confirm": true,
+        "c1_boll_lower": false,
+        "c1_volume_shrink": false,
+        "c1_rsi_oversold": false,
+        "c1_m5_iceberg": false,
+        "c2_box_breakout": false,
+        "c2_volume_confirm": false,
+        "c2_trend_bull": true
       }
     },
     "002176": {
@@ -155,44 +163,8 @@
       "suggested_price": 0.0,
       "capital_required": 0.0,
       "last_check_date": "2026-08-13",
-      "composite_score": 0,
+      "composite_score": 40,
       "signal_history": [
-        {
-          "date": "2026-08-13",
-          "score": 0,
-          "verdict": "weak",
-          "price": 9.53
-        },
-        {
-          "date": "2026-08-13",
-          "score": 0,
-          "verdict": "weak",
-          "price": 9.53
-        },
-        {
-          "date": "2026-08-13",
-          "score": 0,
-          "verdict": "weak",
-          "price": 9.54
-        },
-        {
-          "date": "2026-08-13",
-          "score": 0,
-          "verdict": "weak",
-          "price": 9.54
-        },
-        {
-          "date": "2026-08-13",
-          "score": 0,
-          "verdict": "weak",
-          "price": 9.56
-        },
-        {
-          "date": "2026-08-13",
-          "score": 0,
-          "verdict": "weak",
-          "price": 9.57
-        },
         {
           "date": "2026-08-13",
           "score": 0,
@@ -276,15 +248,57 @@
           "score": 0,
           "verdict": "weak",
           "price": 9.47
+        },
+        {
+          "date": "2026-08-13",
+          "score": 0,
+          "verdict": "weak",
+          "price": 9.47
+        },
+        {
+          "date": "2026-08-13",
+          "score": 0,
+          "verdict": "weak",
+          "price": 9.47
+        },
+        {
+          "date": "2026-08-13",
+          "score": 0,
+          "verdict": "weak",
+          "price": 9.47
+        },
+        {
+          "date": "2026-08-13",
+          "score": 0,
+          "verdict": "weak",
+          "price": 9.47
+        },
+        {
+          "date": "2026-08-13",
+          "score": 40,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 9.47
+        },
+        {
+          "date": "2026-08-13",
+          "score": 40,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 9.47
         }
       ],
       "criteria_met": {
-        "macd_golden": false,
-        "boll_lower": false,
-        "rsi_oversold": false,
-        "volume_shrink": false,
-        "box_breakout": false,
-        "m5_iceberg": true
+        "c1_turn_confirm": true,
+        "c1_boll_lower": false,
+        "c1_volume_shrink": false,
+        "c1_rsi_oversold": false,
+        "c1_m5_iceberg": false,
+        "c2_box_breakout": false,
+        "c2_volume_confirm": false,
+        "c2_trend_bull": true
       }
     },
     "002202": {
@@ -297,44 +311,8 @@
       "suggested_price": 0.0,
       "capital_required": 0.0,
       "last_check_date": "2026-08-13",
-      "composite_score": 0,
+      "composite_score": 30,
       "signal_history": [
-        {
-          "date": "2026-08-13",
-          "score": 20,
-          "verdict": "weak",
-          "price": 21.01
-        },
-        {
-          "date": "2026-08-13",
-          "score": 20,
-          "verdict": "weak",
-          "price": 21.0
-        },
-        {
-          "date": "2026-08-13",
-          "score": 20,
-          "verdict": "weak",
-          "price": 21.02
-        },
-        {
-          "date": "2026-08-13",
-          "score": 20,
-          "verdict": "weak",
-          "price": 21.04
-        },
-        {
-          "date": "2026-08-13",
-          "score": 20,
-          "verdict": "weak",
-          "price": 21.04
-        },
-        {
-          "date": "2026-08-13",
-          "score": 20,
-          "verdict": "weak",
-          "price": 21.05
-        },
         {
           "date": "2026-08-13",
           "score": 20,
@@ -418,15 +396,57 @@
           "score": 0,
           "verdict": "weak",
           "price": 20.93
+        },
+        {
+          "date": "2026-08-13",
+          "score": 0,
+          "verdict": "weak",
+          "price": 20.93
+        },
+        {
+          "date": "2026-08-13",
+          "score": 0,
+          "verdict": "weak",
+          "price": 20.93
+        },
+        {
+          "date": "2026-08-13",
+          "score": 0,
+          "verdict": "weak",
+          "price": 20.93
+        },
+        {
+          "date": "2026-08-13",
+          "score": 0,
+          "verdict": "weak",
+          "price": 20.93
+        },
+        {
+          "date": "2026-08-13",
+          "score": 30,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 20.93
+        },
+        {
+          "date": "2026-08-13",
+          "score": 30,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 20.93
         }
       ],
       "criteria_met": {
-        "macd_golden": false,
-        "boll_lower": false,
-        "rsi_oversold": false,
-        "volume_shrink": false,
-        "box_breakout": false,
-        "m5_iceberg": true
+        "c1_turn_confirm": false,
+        "c1_boll_lower": false,
+        "c1_volume_shrink": false,
+        "c1_rsi_oversold": false,
+        "c1_m5_iceberg": false,
+        "c2_box_breakout": false,
+        "c2_volume_confirm": false,
+        "c2_trend_bull": true
       }
     },
     "002261": {
@@ -439,44 +459,8 @@
       "suggested_price": 0.0,
       "capital_required": 0.0,
       "last_check_date": "2026-08-13",
-      "composite_score": 0,
+      "composite_score": 30,
       "signal_history": [
-        {
-          "date": "2026-08-13",
-          "score": 0,
-          "verdict": "weak",
-          "price": 26.5
-        },
-        {
-          "date": "2026-08-13",
-          "score": 0,
-          "verdict": "weak",
-          "price": 26.46
-        },
-        {
-          "date": "2026-08-13",
-          "score": 0,
-          "verdict": "weak",
-          "price": 26.55
-        },
-        {
-          "date": "2026-08-13",
-          "score": 0,
-          "verdict": "weak",
-          "price": 26.55
-        },
-        {
-          "date": "2026-08-13",
-          "score": 0,
-          "verdict": "weak",
-          "price": 26.54
-        },
-        {
-          "date": "2026-08-13",
-          "score": 0,
-          "verdict": "weak",
-          "price": 26.53
-        },
         {
           "date": "2026-08-13",
           "score": 0,
@@ -560,15 +544,57 @@
           "score": 0,
           "verdict": "weak",
           "price": 26.15
+        },
+        {
+          "date": "2026-08-13",
+          "score": 0,
+          "verdict": "weak",
+          "price": 26.15
+        },
+        {
+          "date": "2026-08-13",
+          "score": 0,
+          "verdict": "weak",
+          "price": 26.15
+        },
+        {
+          "date": "2026-08-13",
+          "score": 0,
+          "verdict": "weak",
+          "price": 26.15
+        },
+        {
+          "date": "2026-08-13",
+          "score": 0,
+          "verdict": "weak",
+          "price": 26.15
+        },
+        {
+          "date": "2026-08-13",
+          "score": 30,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 26.15
+        },
+        {
+          "date": "2026-08-13",
+          "score": 30,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 26.15
         }
       ],
       "criteria_met": {
-        "macd_golden": false,
-        "boll_lower": false,
-        "rsi_oversold": false,
-        "volume_shrink": false,
-        "box_breakout": false,
-        "m5_iceberg": true
+        "c1_turn_confirm": false,
+        "c1_boll_lower": false,
+        "c1_volume_shrink": false,
+        "c1_rsi_oversold": false,
+        "c1_m5_iceberg": false,
+        "c2_box_breakout": false,
+        "c2_volume_confirm": false,
+        "c2_trend_bull": true
       }
     },
     "002451": {
@@ -581,44 +607,8 @@
       "suggested_price": 0.0,
       "capital_required": 0.0,
       "last_check_date": "2026-08-13",
-      "composite_score": 20,
+      "composite_score": 60,
       "signal_history": [
-        {
-          "date": "2026-08-13",
-          "score": 20,
-          "verdict": "weak",
-          "price": 7.51
-        },
-        {
-          "date": "2026-08-13",
-          "score": 20,
-          "verdict": "weak",
-          "price": 7.5
-        },
-        {
-          "date": "2026-08-13",
-          "score": 20,
-          "verdict": "weak",
-          "price": 7.51
-        },
-        {
-          "date": "2026-08-13",
-          "score": 20,
-          "verdict": "weak",
-          "price": 7.5
-        },
-        {
-          "date": "2026-08-13",
-          "score": 20,
-          "verdict": "weak",
-          "price": 7.51
-        },
-        {
-          "date": "2026-08-13",
-          "score": 20,
-          "verdict": "weak",
-          "price": 7.5
-        },
         {
           "date": "2026-08-13",
           "score": 20,
@@ -702,15 +692,57 @@
           "score": 20,
           "verdict": "weak",
           "price": 7.44
+        },
+        {
+          "date": "2026-08-13",
+          "score": 20,
+          "verdict": "weak",
+          "price": 7.44
+        },
+        {
+          "date": "2026-08-13",
+          "score": 20,
+          "verdict": "weak",
+          "price": 7.44
+        },
+        {
+          "date": "2026-08-13",
+          "score": 20,
+          "verdict": "weak",
+          "price": 7.44
+        },
+        {
+          "date": "2026-08-13",
+          "score": 20,
+          "verdict": "weak",
+          "price": 7.44
+        },
+        {
+          "date": "2026-08-13",
+          "score": 60,
+          "verdict": "approaching",
+          "channel": "iceberg",
+          "approach_status": "next_day_pending",
+          "price": 7.44
+        },
+        {
+          "date": "2026-08-13",
+          "score": 60,
+          "verdict": "approaching",
+          "channel": "iceberg",
+          "approach_status": "next_day_pending",
+          "price": 7.44
         }
       ],
       "criteria_met": {
-        "macd_golden": false,
-        "boll_lower": false,
-        "rsi_oversold": false,
-        "volume_shrink": true,
-        "box_breakout": false,
-        "m5_iceberg": true
+        "c1_turn_confirm": true,
+        "c1_boll_lower": false,
+        "c1_volume_shrink": true,
+        "c1_rsi_oversold": false,
+        "c1_m5_iceberg": false,
+        "c2_box_breakout": false,
+        "c2_volume_confirm": false,
+        "c2_trend_bull": true
       }
     },
     "002536": {
@@ -723,44 +755,8 @@
       "suggested_price": 0.0,
       "capital_required": 0.0,
       "last_check_date": "2026-08-13",
-      "composite_score": 20,
+      "composite_score": 40,
       "signal_history": [
-        {
-          "date": "2026-08-13",
-          "score": 40,
-          "verdict": "approaching",
-          "price": 42.71
-        },
-        {
-          "date": "2026-08-13",
-          "score": 40,
-          "verdict": "approaching",
-          "price": 42.63
-        },
-        {
-          "date": "2026-08-13",
-          "score": 20,
-          "verdict": "weak",
-          "price": 42.65
-        },
-        {
-          "date": "2026-08-13",
-          "score": 20,
-          "verdict": "weak",
-          "price": 42.75
-        },
-        {
-          "date": "2026-08-13",
-          "score": 20,
-          "verdict": "weak",
-          "price": 42.65
-        },
-        {
-          "date": "2026-08-13",
-          "score": 20,
-          "verdict": "weak",
-          "price": 42.63
-        },
         {
           "date": "2026-08-13",
           "score": 20,
@@ -844,15 +840,57 @@
           "score": 20,
           "verdict": "weak",
           "price": 41.65
+        },
+        {
+          "date": "2026-08-13",
+          "score": 20,
+          "verdict": "weak",
+          "price": 41.65
+        },
+        {
+          "date": "2026-08-13",
+          "score": 20,
+          "verdict": "weak",
+          "price": 41.65
+        },
+        {
+          "date": "2026-08-13",
+          "score": 20,
+          "verdict": "weak",
+          "price": 41.65
+        },
+        {
+          "date": "2026-08-13",
+          "score": 20,
+          "verdict": "weak",
+          "price": 41.65
+        },
+        {
+          "date": "2026-08-13",
+          "score": 40,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 41.65
+        },
+        {
+          "date": "2026-08-13",
+          "score": 40,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 41.65
         }
       ],
       "criteria_met": {
-        "macd_golden": true,
-        "boll_lower": false,
-        "rsi_oversold": false,
-        "volume_shrink": false,
-        "box_breakout": false,
-        "m5_iceberg": true
+        "c1_turn_confirm": true,
+        "c1_boll_lower": false,
+        "c1_volume_shrink": false,
+        "c1_rsi_oversold": false,
+        "c1_m5_iceberg": false,
+        "c2_box_breakout": false,
+        "c2_volume_confirm": false,
+        "c2_trend_bull": true
       }
     },
     "002639": {
@@ -865,44 +903,8 @@
       "suggested_price": 0.0,
       "capital_required": 0.0,
       "last_check_date": "2026-08-13",
-      "composite_score": 20,
+      "composite_score": 30,
       "signal_history": [
-        {
-          "date": "2026-08-13",
-          "score": 20,
-          "verdict": "weak",
-          "price": 12.39
-        },
-        {
-          "date": "2026-08-13",
-          "score": 20,
-          "verdict": "weak",
-          "price": 12.39
-        },
-        {
-          "date": "2026-08-13",
-          "score": 20,
-          "verdict": "weak",
-          "price": 12.38
-        },
-        {
-          "date": "2026-08-13",
-          "score": 20,
-          "verdict": "weak",
-          "price": 12.38
-        },
-        {
-          "date": "2026-08-13",
-          "score": 20,
-          "verdict": "weak",
-          "price": 12.37
-        },
-        {
-          "date": "2026-08-13",
-          "score": 20,
-          "verdict": "weak",
-          "price": 12.36
-        },
         {
           "date": "2026-08-13",
           "score": 20,
@@ -986,15 +988,57 @@
           "score": 20,
           "verdict": "weak",
           "price": 12.23
+        },
+        {
+          "date": "2026-08-13",
+          "score": 20,
+          "verdict": "weak",
+          "price": 12.23
+        },
+        {
+          "date": "2026-08-13",
+          "score": 20,
+          "verdict": "weak",
+          "price": 12.23
+        },
+        {
+          "date": "2026-08-13",
+          "score": 20,
+          "verdict": "weak",
+          "price": 12.23
+        },
+        {
+          "date": "2026-08-13",
+          "score": 20,
+          "verdict": "weak",
+          "price": 12.23
+        },
+        {
+          "date": "2026-08-13",
+          "score": 30,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 12.23
+        },
+        {
+          "date": "2026-08-13",
+          "score": 30,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 12.23
         }
       ],
       "criteria_met": {
-        "macd_golden": false,
-        "boll_lower": false,
-        "rsi_oversold": false,
-        "volume_shrink": true,
-        "box_breakout": false,
-        "m5_iceberg": true
+        "c1_turn_confirm": false,
+        "c1_boll_lower": false,
+        "c1_volume_shrink": false,
+        "c1_rsi_oversold": false,
+        "c1_m5_iceberg": false,
+        "c2_box_breakout": false,
+        "c2_volume_confirm": false,
+        "c2_trend_bull": true
       }
     },
     "300054": {
@@ -1007,44 +1051,8 @@
       "suggested_price": 0.0,
       "capital_required": 0.0,
       "last_check_date": "2026-08-13",
-      "composite_score": 0,
+      "composite_score": 30,
       "signal_history": [
-        {
-          "date": "2026-08-13",
-          "score": 20,
-          "verdict": "weak",
-          "price": 76.4
-        },
-        {
-          "date": "2026-08-13",
-          "score": 20,
-          "verdict": "weak",
-          "price": 76.41
-        },
-        {
-          "date": "2026-08-13",
-          "score": 20,
-          "verdict": "weak",
-          "price": 76.58
-        },
-        {
-          "date": "2026-08-13",
-          "score": 20,
-          "verdict": "weak",
-          "price": 76.73
-        },
-        {
-          "date": "2026-08-13",
-          "score": 20,
-          "verdict": "weak",
-          "price": 76.63
-        },
-        {
-          "date": "2026-08-13",
-          "score": 20,
-          "verdict": "weak",
-          "price": 76.59
-        },
         {
           "date": "2026-08-13",
           "score": 20,
@@ -1128,15 +1136,57 @@
           "score": 0,
           "verdict": "weak",
           "price": 74.92
+        },
+        {
+          "date": "2026-08-13",
+          "score": 0,
+          "verdict": "weak",
+          "price": 74.92
+        },
+        {
+          "date": "2026-08-13",
+          "score": 0,
+          "verdict": "weak",
+          "price": 74.92
+        },
+        {
+          "date": "2026-08-13",
+          "score": 0,
+          "verdict": "weak",
+          "price": 74.92
+        },
+        {
+          "date": "2026-08-13",
+          "score": 0,
+          "verdict": "weak",
+          "price": 74.92
+        },
+        {
+          "date": "2026-08-13",
+          "score": 30,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 74.92
+        },
+        {
+          "date": "2026-08-13",
+          "score": 30,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 74.92
         }
       ],
       "criteria_met": {
-        "macd_golden": false,
-        "boll_lower": false,
-        "rsi_oversold": false,
-        "volume_shrink": false,
-        "box_breakout": false,
-        "m5_iceberg": true
+        "c1_turn_confirm": false,
+        "c1_boll_lower": false,
+        "c1_volume_shrink": false,
+        "c1_rsi_oversold": false,
+        "c1_m5_iceberg": false,
+        "c2_box_breakout": false,
+        "c2_volume_confirm": false,
+        "c2_trend_bull": true
       }
     },
     "300058": {
@@ -1149,44 +1199,8 @@
       "suggested_price": 0.0,
       "capital_required": 0.0,
       "last_check_date": "2026-08-13",
-      "composite_score": 0,
+      "composite_score": 30,
       "signal_history": [
-        {
-          "date": "2026-08-13",
-          "score": 0,
-          "verdict": "weak",
-          "price": 15.59
-        },
-        {
-          "date": "2026-08-13",
-          "score": 0,
-          "verdict": "weak",
-          "price": 15.61
-        },
-        {
-          "date": "2026-08-13",
-          "score": 0,
-          "verdict": "weak",
-          "price": 15.67
-        },
-        {
-          "date": "2026-08-13",
-          "score": 0,
-          "verdict": "weak",
-          "price": 15.67
-        },
-        {
-          "date": "2026-08-13",
-          "score": 0,
-          "verdict": "weak",
-          "price": 15.65
-        },
-        {
-          "date": "2026-08-13",
-          "score": 0,
-          "verdict": "weak",
-          "price": 15.64
-        },
         {
           "date": "2026-08-13",
           "score": 0,
@@ -1270,15 +1284,57 @@
           "score": 0,
           "verdict": "weak",
           "price": 15.25
+        },
+        {
+          "date": "2026-08-13",
+          "score": 0,
+          "verdict": "weak",
+          "price": 15.25
+        },
+        {
+          "date": "2026-08-13",
+          "score": 0,
+          "verdict": "weak",
+          "price": 15.25
+        },
+        {
+          "date": "2026-08-13",
+          "score": 0,
+          "verdict": "weak",
+          "price": 15.25
+        },
+        {
+          "date": "2026-08-13",
+          "score": 0,
+          "verdict": "weak",
+          "price": 15.25
+        },
+        {
+          "date": "2026-08-13",
+          "score": 30,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 15.25
+        },
+        {
+          "date": "2026-08-13",
+          "score": 30,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 15.25
         }
       ],
       "criteria_met": {
-        "macd_golden": false,
-        "boll_lower": false,
-        "rsi_oversold": false,
-        "volume_shrink": false,
-        "box_breakout": false,
-        "m5_iceberg": true
+        "c1_turn_confirm": false,
+        "c1_boll_lower": false,
+        "c1_volume_shrink": false,
+        "c1_rsi_oversold": false,
+        "c1_m5_iceberg": false,
+        "c2_box_breakout": false,
+        "c2_volume_confirm": false,
+        "c2_trend_bull": true
       }
     },
     "300153": {
@@ -1291,44 +1347,8 @@
       "suggested_price": 0.0,
       "capital_required": 0.0,
       "last_check_date": "2026-08-13",
-      "composite_score": 0,
+      "composite_score": 40,
       "signal_history": [
-        {
-          "date": "2026-08-13",
-          "score": 0,
-          "verdict": "weak",
-          "price": 22.94
-        },
-        {
-          "date": "2026-08-13",
-          "score": 0,
-          "verdict": "weak",
-          "price": 22.86
-        },
-        {
-          "date": "2026-08-13",
-          "score": 0,
-          "verdict": "weak",
-          "price": 22.9
-        },
-        {
-          "date": "2026-08-13",
-          "score": 0,
-          "verdict": "weak",
-          "price": 22.9
-        },
-        {
-          "date": "2026-08-13",
-          "score": 0,
-          "verdict": "weak",
-          "price": 22.89
-        },
-        {
-          "date": "2026-08-13",
-          "score": 0,
-          "verdict": "weak",
-          "price": 22.89
-        },
         {
           "date": "2026-08-13",
           "score": 0,
@@ -1412,15 +1432,57 @@
           "score": 0,
           "verdict": "weak",
           "price": 22.57
+        },
+        {
+          "date": "2026-08-13",
+          "score": 0,
+          "verdict": "weak",
+          "price": 22.57
+        },
+        {
+          "date": "2026-08-13",
+          "score": 0,
+          "verdict": "weak",
+          "price": 22.57
+        },
+        {
+          "date": "2026-08-13",
+          "score": 0,
+          "verdict": "weak",
+          "price": 22.57
+        },
+        {
+          "date": "2026-08-13",
+          "score": 0,
+          "verdict": "weak",
+          "price": 22.57
+        },
+        {
+          "date": "2026-08-13",
+          "score": 40,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 22.57
+        },
+        {
+          "date": "2026-08-13",
+          "score": 40,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 22.57
         }
       ],
       "criteria_met": {
-        "macd_golden": false,
-        "boll_lower": false,
-        "rsi_oversold": false,
-        "volume_shrink": false,
-        "box_breakout": false,
-        "m5_iceberg": true
+        "c1_turn_confirm": true,
+        "c1_boll_lower": false,
+        "c1_volume_shrink": false,
+        "c1_rsi_oversold": false,
+        "c1_m5_iceberg": false,
+        "c2_box_breakout": false,
+        "c2_volume_confirm": false,
+        "c2_trend_bull": true
       }
     },
     "300364": {
@@ -1433,44 +1495,8 @@
       "suggested_price": 0.0,
       "capital_required": 0.0,
       "last_check_date": "2026-08-13",
-      "composite_score": 0,
+      "composite_score": 30,
       "signal_history": [
-        {
-          "date": "2026-08-13",
-          "score": 0,
-          "verdict": "weak",
-          "price": 25.27
-        },
-        {
-          "date": "2026-08-13",
-          "score": 0,
-          "verdict": "weak",
-          "price": 25.26
-        },
-        {
-          "date": "2026-08-13",
-          "score": 0,
-          "verdict": "weak",
-          "price": 25.31
-        },
-        {
-          "date": "2026-08-13",
-          "score": 0,
-          "verdict": "weak",
-          "price": 25.3
-        },
-        {
-          "date": "2026-08-13",
-          "score": 0,
-          "verdict": "weak",
-          "price": 25.28
-        },
-        {
-          "date": "2026-08-13",
-          "score": 0,
-          "verdict": "weak",
-          "price": 25.28
-        },
         {
           "date": "2026-08-13",
           "score": 0,
@@ -1554,15 +1580,57 @@
           "score": 0,
           "verdict": "weak",
           "price": 24.86
+        },
+        {
+          "date": "2026-08-13",
+          "score": 0,
+          "verdict": "weak",
+          "price": 24.86
+        },
+        {
+          "date": "2026-08-13",
+          "score": 0,
+          "verdict": "weak",
+          "price": 24.86
+        },
+        {
+          "date": "2026-08-13",
+          "score": 0,
+          "verdict": "weak",
+          "price": 24.86
+        },
+        {
+          "date": "2026-08-13",
+          "score": 0,
+          "verdict": "weak",
+          "price": 24.86
+        },
+        {
+          "date": "2026-08-13",
+          "score": 30,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 24.86
+        },
+        {
+          "date": "2026-08-13",
+          "score": 30,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 24.86
         }
       ],
       "criteria_met": {
-        "macd_golden": false,
-        "boll_lower": false,
-        "rsi_oversold": false,
-        "volume_shrink": false,
-        "box_breakout": false,
-        "m5_iceberg": true
+        "c1_turn_confirm": false,
+        "c1_boll_lower": false,
+        "c1_volume_shrink": false,
+        "c1_rsi_oversold": false,
+        "c1_m5_iceberg": false,
+        "c2_box_breakout": false,
+        "c2_volume_confirm": false,
+        "c2_trend_bull": true
       }
     },
     "300456": {
@@ -1575,44 +1643,8 @@
       "suggested_price": 0.0,
       "capital_required": 0.0,
       "last_check_date": "2026-08-13",
-      "composite_score": 0,
+      "composite_score": 30,
       "signal_history": [
-        {
-          "date": "2026-08-13",
-          "score": 20,
-          "verdict": "weak",
-          "price": 32.18
-        },
-        {
-          "date": "2026-08-13",
-          "score": 20,
-          "verdict": "weak",
-          "price": 32.2
-        },
-        {
-          "date": "2026-08-13",
-          "score": 20,
-          "verdict": "weak",
-          "price": 32.29
-        },
-        {
-          "date": "2026-08-13",
-          "score": 20,
-          "verdict": "weak",
-          "price": 32.33
-        },
-        {
-          "date": "2026-08-13",
-          "score": 20,
-          "verdict": "weak",
-          "price": 32.27
-        },
-        {
-          "date": "2026-08-13",
-          "score": 20,
-          "verdict": "weak",
-          "price": 32.25
-        },
         {
           "date": "2026-08-13",
           "score": 20,
@@ -1696,15 +1728,57 @@
           "score": 0,
           "verdict": "weak",
           "price": 31.57
+        },
+        {
+          "date": "2026-08-13",
+          "score": 0,
+          "verdict": "weak",
+          "price": 31.57
+        },
+        {
+          "date": "2026-08-13",
+          "score": 0,
+          "verdict": "weak",
+          "price": 31.57
+        },
+        {
+          "date": "2026-08-13",
+          "score": 0,
+          "verdict": "weak",
+          "price": 31.57
+        },
+        {
+          "date": "2026-08-13",
+          "score": 0,
+          "verdict": "weak",
+          "price": 31.57
+        },
+        {
+          "date": "2026-08-13",
+          "score": 30,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 31.57
+        },
+        {
+          "date": "2026-08-13",
+          "score": 30,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 31.57
         }
       ],
       "criteria_met": {
-        "macd_golden": false,
-        "boll_lower": false,
-        "rsi_oversold": false,
-        "volume_shrink": false,
-        "box_breakout": false,
-        "m5_iceberg": true
+        "c1_turn_confirm": false,
+        "c1_boll_lower": false,
+        "c1_volume_shrink": false,
+        "c1_rsi_oversold": false,
+        "c1_m5_iceberg": false,
+        "c2_box_breakout": false,
+        "c2_volume_confirm": false,
+        "c2_trend_bull": true
       }
     },
     "588170": {
@@ -1719,42 +1793,6 @@
       "last_check_date": "2026-08-13",
       "composite_score": 40,
       "signal_history": [
-        {
-          "date": "2026-08-13",
-          "score": 40,
-          "verdict": "approaching",
-          "price": 1.043
-        },
-        {
-          "date": "2026-08-13",
-          "score": 40,
-          "verdict": "approaching",
-          "price": 1.039
-        },
-        {
-          "date": "2026-08-13",
-          "score": 40,
-          "verdict": "approaching",
-          "price": 1.039
-        },
-        {
-          "date": "2026-08-13",
-          "score": 40,
-          "verdict": "approaching",
-          "price": 1.039
-        },
-        {
-          "date": "2026-08-13",
-          "score": 40,
-          "verdict": "approaching",
-          "price": 1.043
-        },
-        {
-          "date": "2026-08-13",
-          "score": 40,
-          "verdict": "approaching",
-          "price": 1.043
-        },
         {
           "date": "2026-08-13",
           "score": 40,
@@ -1838,15 +1876,57 @@
           "score": 40,
           "verdict": "approaching",
           "price": 1.011
+        },
+        {
+          "date": "2026-08-13",
+          "score": 40,
+          "verdict": "approaching",
+          "price": 1.011
+        },
+        {
+          "date": "2026-08-13",
+          "score": 40,
+          "verdict": "approaching",
+          "price": 1.011
+        },
+        {
+          "date": "2026-08-13",
+          "score": 40,
+          "verdict": "approaching",
+          "price": 1.011
+        },
+        {
+          "date": "2026-08-13",
+          "score": 40,
+          "verdict": "approaching",
+          "price": 1.011
+        },
+        {
+          "date": "2026-08-13",
+          "score": 40,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 1.01
+        },
+        {
+          "date": "2026-08-13",
+          "score": 40,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 1.01
         }
       ],
       "criteria_met": {
-        "macd_golden": true,
-        "boll_lower": false,
-        "rsi_oversold": false,
-        "volume_shrink": true,
-        "box_breakout": false,
-        "m5_iceberg": true
+        "c1_turn_confirm": true,
+        "c1_boll_lower": false,
+        "c1_volume_shrink": false,
+        "c1_rsi_oversold": false,
+        "c1_m5_iceberg": false,
+        "c2_box_breakout": false,
+        "c2_volume_confirm": false,
+        "c2_trend_bull": true
       }
     },
     "600089": {
@@ -1859,44 +1939,8 @@
       "suggested_price": 0.0,
       "capital_required": 0.0,
       "last_check_date": "2026-08-13",
-      "composite_score": 0,
+      "composite_score": 30,
       "signal_history": [
-        {
-          "date": "2026-08-13",
-          "score": 0,
-          "verdict": "weak",
-          "price": 21.26
-        },
-        {
-          "date": "2026-08-13",
-          "score": 0,
-          "verdict": "weak",
-          "price": 21.26
-        },
-        {
-          "date": "2026-08-13",
-          "score": 0,
-          "verdict": "weak",
-          "price": 21.25
-        },
-        {
-          "date": "2026-08-13",
-          "score": 0,
-          "verdict": "weak",
-          "price": 21.26
-        },
-        {
-          "date": "2026-08-13",
-          "score": 0,
-          "verdict": "weak",
-          "price": 21.25
-        },
-        {
-          "date": "2026-08-13",
-          "score": 0,
-          "verdict": "weak",
-          "price": 21.25
-        },
         {
           "date": "2026-08-13",
           "score": 0,
@@ -1980,15 +2024,57 @@
           "score": 0,
           "verdict": "weak",
           "price": 21.01
+        },
+        {
+          "date": "2026-08-13",
+          "score": 0,
+          "verdict": "weak",
+          "price": 21.01
+        },
+        {
+          "date": "2026-08-13",
+          "score": 0,
+          "verdict": "weak",
+          "price": 21.01
+        },
+        {
+          "date": "2026-08-13",
+          "score": 0,
+          "verdict": "weak",
+          "price": 21.01
+        },
+        {
+          "date": "2026-08-13",
+          "score": 0,
+          "verdict": "weak",
+          "price": 21.01
+        },
+        {
+          "date": "2026-08-13",
+          "score": 30,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 21.01
+        },
+        {
+          "date": "2026-08-13",
+          "score": 30,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 21.01
         }
       ],
       "criteria_met": {
-        "macd_golden": false,
-        "boll_lower": false,
-        "rsi_oversold": false,
-        "volume_shrink": false,
-        "box_breakout": false,
-        "m5_iceberg": true
+        "c1_turn_confirm": false,
+        "c1_boll_lower": false,
+        "c1_volume_shrink": false,
+        "c1_rsi_oversold": false,
+        "c1_m5_iceberg": false,
+        "c2_box_breakout": false,
+        "c2_volume_confirm": false,
+        "c2_trend_bull": true
       }
     },
     "600481": {
@@ -2001,44 +2087,8 @@
       "suggested_price": 0.0,
       "capital_required": 0.0,
       "last_check_date": "2026-08-13",
-      "composite_score": 0,
+      "composite_score": 30,
       "signal_history": [
-        {
-          "date": "2026-08-13",
-          "score": 0,
-          "verdict": "weak",
-          "price": 4.41
-        },
-        {
-          "date": "2026-08-13",
-          "score": 0,
-          "verdict": "weak",
-          "price": 4.4
-        },
-        {
-          "date": "2026-08-13",
-          "score": 0,
-          "verdict": "weak",
-          "price": 4.39
-        },
-        {
-          "date": "2026-08-13",
-          "score": 0,
-          "verdict": "weak",
-          "price": 4.39
-        },
-        {
-          "date": "2026-08-13",
-          "score": 0,
-          "verdict": "weak",
-          "price": 4.41
-        },
-        {
-          "date": "2026-08-13",
-          "score": 0,
-          "verdict": "weak",
-          "price": 4.41
-        },
         {
           "date": "2026-08-13",
           "score": 0,
@@ -2122,15 +2172,57 @@
           "score": 0,
           "verdict": "weak",
           "price": 4.35
+        },
+        {
+          "date": "2026-08-13",
+          "score": 0,
+          "verdict": "weak",
+          "price": 4.35
+        },
+        {
+          "date": "2026-08-13",
+          "score": 0,
+          "verdict": "weak",
+          "price": 4.35
+        },
+        {
+          "date": "2026-08-13",
+          "score": 0,
+          "verdict": "weak",
+          "price": 4.35
+        },
+        {
+          "date": "2026-08-13",
+          "score": 0,
+          "verdict": "weak",
+          "price": 4.35
+        },
+        {
+          "date": "2026-08-13",
+          "score": 30,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 4.35
+        },
+        {
+          "date": "2026-08-13",
+          "score": 30,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 4.35
         }
       ],
       "criteria_met": {
-        "macd_golden": false,
-        "boll_lower": false,
-        "rsi_oversold": false,
-        "volume_shrink": false,
-        "box_breakout": false,
-        "m5_iceberg": true
+        "c1_turn_confirm": false,
+        "c1_boll_lower": false,
+        "c1_volume_shrink": false,
+        "c1_rsi_oversold": false,
+        "c1_m5_iceberg": false,
+        "c2_box_breakout": false,
+        "c2_volume_confirm": false,
+        "c2_trend_bull": true
       }
     },
     "600584": {
@@ -2143,44 +2235,8 @@
       "suggested_price": 0.0,
       "capital_required": 0.0,
       "last_check_date": "2026-08-13",
-      "composite_score": 20,
+      "composite_score": 40,
       "signal_history": [
-        {
-          "date": "2026-08-13",
-          "score": 40,
-          "verdict": "approaching",
-          "price": 79.51
-        },
-        {
-          "date": "2026-08-13",
-          "score": 40,
-          "verdict": "approaching",
-          "price": 79.4
-        },
-        {
-          "date": "2026-08-13",
-          "score": 20,
-          "verdict": "weak",
-          "price": 79.81
-        },
-        {
-          "date": "2026-08-13",
-          "score": 20,
-          "verdict": "weak",
-          "price": 79.9
-        },
-        {
-          "date": "2026-08-13",
-          "score": 20,
-          "verdict": "weak",
-          "price": 79.7
-        },
-        {
-          "date": "2026-08-13",
-          "score": 20,
-          "verdict": "weak",
-          "price": 79.68
-        },
         {
           "date": "2026-08-13",
           "score": 20,
@@ -2264,15 +2320,57 @@
           "score": 20,
           "verdict": "weak",
           "price": 77.82
+        },
+        {
+          "date": "2026-08-13",
+          "score": 20,
+          "verdict": "weak",
+          "price": 77.82
+        },
+        {
+          "date": "2026-08-13",
+          "score": 20,
+          "verdict": "weak",
+          "price": 77.82
+        },
+        {
+          "date": "2026-08-13",
+          "score": 20,
+          "verdict": "weak",
+          "price": 77.82
+        },
+        {
+          "date": "2026-08-13",
+          "score": 20,
+          "verdict": "weak",
+          "price": 77.82
+        },
+        {
+          "date": "2026-08-13",
+          "score": 40,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 77.82
+        },
+        {
+          "date": "2026-08-13",
+          "score": 40,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 77.82
         }
       ],
       "criteria_met": {
-        "macd_golden": true,
-        "boll_lower": false,
-        "rsi_oversold": false,
-        "volume_shrink": false,
-        "box_breakout": false,
-        "m5_iceberg": true
+        "c1_turn_confirm": true,
+        "c1_boll_lower": false,
+        "c1_volume_shrink": false,
+        "c1_rsi_oversold": false,
+        "c1_m5_iceberg": false,
+        "c2_box_breakout": false,
+        "c2_volume_confirm": false,
+        "c2_trend_bull": true
       }
     },
     "600977": {
@@ -2285,44 +2383,8 @@
       "suggested_price": 0.0,
       "capital_required": 0.0,
       "last_check_date": "2026-08-13",
-      "composite_score": 0,
+      "composite_score": 30,
       "signal_history": [
-        {
-          "date": "2026-08-13",
-          "score": 20,
-          "verdict": "weak",
-          "price": 12.95
-        },
-        {
-          "date": "2026-08-13",
-          "score": 20,
-          "verdict": "weak",
-          "price": 12.96
-        },
-        {
-          "date": "2026-08-13",
-          "score": 20,
-          "verdict": "weak",
-          "price": 12.97
-        },
-        {
-          "date": "2026-08-13",
-          "score": 20,
-          "verdict": "weak",
-          "price": 12.95
-        },
-        {
-          "date": "2026-08-13",
-          "score": 20,
-          "verdict": "weak",
-          "price": 12.93
-        },
-        {
-          "date": "2026-08-13",
-          "score": 20,
-          "verdict": "weak",
-          "price": 12.92
-        },
         {
           "date": "2026-08-13",
           "score": 20,
@@ -2406,15 +2468,57 @@
           "score": 0,
           "verdict": "weak",
           "price": 12.77
+        },
+        {
+          "date": "2026-08-13",
+          "score": 0,
+          "verdict": "weak",
+          "price": 12.77
+        },
+        {
+          "date": "2026-08-13",
+          "score": 0,
+          "verdict": "weak",
+          "price": 12.77
+        },
+        {
+          "date": "2026-08-13",
+          "score": 0,
+          "verdict": "weak",
+          "price": 12.77
+        },
+        {
+          "date": "2026-08-13",
+          "score": 0,
+          "verdict": "weak",
+          "price": 12.77
+        },
+        {
+          "date": "2026-08-13",
+          "score": 30,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 12.77
+        },
+        {
+          "date": "2026-08-13",
+          "score": 30,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 12.77
         }
       ],
       "criteria_met": {
-        "macd_golden": false,
-        "boll_lower": false,
-        "rsi_oversold": false,
-        "volume_shrink": false,
-        "box_breakout": false,
-        "m5_iceberg": true
+        "c1_turn_confirm": false,
+        "c1_boll_lower": false,
+        "c1_volume_shrink": false,
+        "c1_rsi_oversold": false,
+        "c1_m5_iceberg": false,
+        "c2_box_breakout": false,
+        "c2_volume_confirm": false,
+        "c2_trend_bull": true
       }
     },
     "603667": {
@@ -2427,44 +2531,8 @@
       "suggested_price": 0.0,
       "capital_required": 0.0,
       "last_check_date": "2026-08-13",
-      "composite_score": 0,
+      "composite_score": 30,
       "signal_history": [
-        {
-          "date": "2026-08-13",
-          "score": 0,
-          "verdict": "weak",
-          "price": 56.69
-        },
-        {
-          "date": "2026-08-13",
-          "score": 0,
-          "verdict": "weak",
-          "price": 56.63
-        },
-        {
-          "date": "2026-08-13",
-          "score": 0,
-          "verdict": "weak",
-          "price": 56.66
-        },
-        {
-          "date": "2026-08-13",
-          "score": 0,
-          "verdict": "weak",
-          "price": 56.66
-        },
-        {
-          "date": "2026-08-13",
-          "score": 0,
-          "verdict": "weak",
-          "price": 56.78
-        },
-        {
-          "date": "2026-08-13",
-          "score": 0,
-          "verdict": "weak",
-          "price": 56.78
-        },
         {
           "date": "2026-08-13",
           "score": 0,
@@ -2548,69 +2616,77 @@
           "score": 0,
           "verdict": "weak",
           "price": 55.76
+        },
+        {
+          "date": "2026-08-13",
+          "score": 0,
+          "verdict": "weak",
+          "price": 55.76
+        },
+        {
+          "date": "2026-08-13",
+          "score": 0,
+          "verdict": "weak",
+          "price": 55.76
+        },
+        {
+          "date": "2026-08-13",
+          "score": 0,
+          "verdict": "weak",
+          "price": 55.76
+        },
+        {
+          "date": "2026-08-13",
+          "score": 0,
+          "verdict": "weak",
+          "price": 55.76
+        },
+        {
+          "date": "2026-08-13",
+          "score": 30,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 55.76
+        },
+        {
+          "date": "2026-08-13",
+          "score": 30,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 55.76
         }
       ],
       "criteria_met": {
-        "macd_golden": false,
-        "boll_lower": false,
-        "rsi_oversold": false,
-        "volume_shrink": false,
-        "box_breakout": false,
-        "m5_iceberg": true
+        "c1_turn_confirm": false,
+        "c1_boll_lower": false,
+        "c1_volume_shrink": false,
+        "c1_rsi_oversold": false,
+        "c1_m5_iceberg": false,
+        "c2_box_breakout": false,
+        "c2_volume_confirm": false,
+        "c2_trend_bull": true
       }
     },
     "515120": {
       "name": "创新药ETF广发",
       "status": "monitoring",
-      "composite_score": 20,
+      "composite_score": 40,
       "criteria_met": {
-        "macd_golden": true,
-        "boll_lower": false,
-        "rsi_oversold": false,
-        "volume_shrink": false,
-        "box_breakout": false,
-        "m5_iceberg": true
+        "c1_turn_confirm": true,
+        "c1_boll_lower": false,
+        "c1_volume_shrink": false,
+        "c1_rsi_oversold": false,
+        "c1_m5_iceberg": false,
+        "c2_box_breakout": false,
+        "c2_volume_confirm": false,
+        "c2_trend_bull": true
       },
       "suggested_qty": 0,
       "in_holdings": false,
       "last_check_date": "2026-08-13",
       "signal_history": [
-        {
-          "date": "2026-08-13",
-          "score": 40,
-          "verdict": "approaching",
-          "price": 0.701
-        },
-        {
-          "date": "2026-08-13",
-          "score": 40,
-          "verdict": "approaching",
-          "price": 0.701
-        },
-        {
-          "date": "2026-08-13",
-          "score": 40,
-          "verdict": "approaching",
-          "price": 0.702
-        },
-        {
-          "date": "2026-08-13",
-          "score": 40,
-          "verdict": "approaching",
-          "price": 0.703
-        },
-        {
-          "date": "2026-08-13",
-          "score": 40,
-          "verdict": "approaching",
-          "price": 0.703
-        },
-        {
-          "date": "2026-08-13",
-          "score": 40,
-          "verdict": "approaching",
-          "price": 0.703
-        },
         {
           "date": "2026-08-13",
           "score": 40,
@@ -2694,6 +2770,46 @@
           "score": 20,
           "verdict": "weak",
           "price": 0.695
+        },
+        {
+          "date": "2026-08-13",
+          "score": 20,
+          "verdict": "weak",
+          "price": 0.695
+        },
+        {
+          "date": "2026-08-13",
+          "score": 20,
+          "verdict": "weak",
+          "price": 0.695
+        },
+        {
+          "date": "2026-08-13",
+          "score": 20,
+          "verdict": "weak",
+          "price": 0.695
+        },
+        {
+          "date": "2026-08-13",
+          "score": 20,
+          "verdict": "weak",
+          "price": 0.695
+        },
+        {
+          "date": "2026-08-13",
+          "score": 40,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 0.695
+        },
+        {
+          "date": "2026-08-13",
+          "score": 40,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 0.695
         }
       ],
       "suggested_price": 0.0,
@@ -2702,14 +2818,16 @@
     "688008": {
       "name": "澜起科技",
       "status": "monitoring",
-      "composite_score": 20,
+      "composite_score": 40,
       "criteria_met": {
-        "macd_golden": true,
-        "boll_lower": false,
-        "rsi_oversold": false,
-        "volume_shrink": false,
-        "box_breakout": false,
-        "m5_iceberg": true
+        "c1_turn_confirm": true,
+        "c1_boll_lower": false,
+        "c1_volume_shrink": false,
+        "c1_rsi_oversold": false,
+        "c1_m5_iceberg": false,
+        "c2_box_breakout": false,
+        "c2_volume_confirm": false,
+        "c2_trend_bull": true
       },
       "suggested_qty": 0,
       "in_holdings": false,
@@ -2717,42 +2835,6 @@
       "suggested_price": 0.0,
       "capital_required": 0.0,
       "signal_history": [
-        {
-          "date": "2026-08-13",
-          "score": 20,
-          "verdict": "weak",
-          "price": 215.63
-        },
-        {
-          "date": "2026-08-13",
-          "score": 20,
-          "verdict": "weak",
-          "price": 216.02
-        },
-        {
-          "date": "2026-08-13",
-          "score": 20,
-          "verdict": "weak",
-          "price": 216.79
-        },
-        {
-          "date": "2026-08-13",
-          "score": 20,
-          "verdict": "weak",
-          "price": 217.05
-        },
-        {
-          "date": "2026-08-13",
-          "score": 20,
-          "verdict": "weak",
-          "price": 216.49
-        },
-        {
-          "date": "2026-08-13",
-          "score": 20,
-          "verdict": "weak",
-          "price": 216.4
-        },
         {
           "date": "2026-08-13",
           "score": 20,
@@ -2836,20 +2918,62 @@
           "score": 20,
           "verdict": "weak",
           "price": 210.22
+        },
+        {
+          "date": "2026-08-13",
+          "score": 20,
+          "verdict": "weak",
+          "price": 210.22
+        },
+        {
+          "date": "2026-08-13",
+          "score": 20,
+          "verdict": "weak",
+          "price": 210.22
+        },
+        {
+          "date": "2026-08-13",
+          "score": 20,
+          "verdict": "weak",
+          "price": 210.22
+        },
+        {
+          "date": "2026-08-13",
+          "score": 20,
+          "verdict": "weak",
+          "price": 210.22
+        },
+        {
+          "date": "2026-08-13",
+          "score": 40,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 210.22
+        },
+        {
+          "date": "2026-08-13",
+          "score": 40,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 210.22
         }
       ]
     },
     "000636": {
       "name": "风华高科",
       "status": "monitoring",
-      "composite_score": 0,
+      "composite_score": 30,
       "criteria_met": {
-        "macd_golden": false,
-        "boll_lower": false,
-        "rsi_oversold": false,
-        "volume_shrink": false,
-        "box_breakout": false,
-        "m5_iceberg": true
+        "c1_turn_confirm": false,
+        "c1_boll_lower": false,
+        "c1_volume_shrink": false,
+        "c1_rsi_oversold": false,
+        "c1_m5_iceberg": false,
+        "c2_box_breakout": false,
+        "c2_volume_confirm": false,
+        "c2_trend_bull": true
       },
       "suggested_qty": 0,
       "in_holdings": false,
@@ -2857,42 +2981,6 @@
       "suggested_price": 0.0,
       "capital_required": 0.0,
       "signal_history": [
-        {
-          "date": "2026-08-13",
-          "score": 20,
-          "verdict": "weak",
-          "price": 64.84
-        },
-        {
-          "date": "2026-08-13",
-          "score": 20,
-          "verdict": "weak",
-          "price": 64.96
-        },
-        {
-          "date": "2026-08-13",
-          "score": 20,
-          "verdict": "weak",
-          "price": 65.42
-        },
-        {
-          "date": "2026-08-13",
-          "score": 20,
-          "verdict": "weak",
-          "price": 65.25
-        },
-        {
-          "date": "2026-08-13",
-          "score": 20,
-          "verdict": "weak",
-          "price": 65.21
-        },
-        {
-          "date": "2026-08-13",
-          "score": 20,
-          "verdict": "weak",
-          "price": 65.14
-        },
         {
           "date": "2026-08-13",
           "score": 20,
@@ -2976,20 +3064,62 @@
           "score": 0,
           "verdict": "weak",
           "price": 62.02
+        },
+        {
+          "date": "2026-08-13",
+          "score": 0,
+          "verdict": "weak",
+          "price": 62.02
+        },
+        {
+          "date": "2026-08-13",
+          "score": 0,
+          "verdict": "weak",
+          "price": 62.02
+        },
+        {
+          "date": "2026-08-13",
+          "score": 0,
+          "verdict": "weak",
+          "price": 62.02
+        },
+        {
+          "date": "2026-08-13",
+          "score": 0,
+          "verdict": "weak",
+          "price": 62.02
+        },
+        {
+          "date": "2026-08-13",
+          "score": 30,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 62.02
+        },
+        {
+          "date": "2026-08-13",
+          "score": 30,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 62.02
         }
       ]
     },
     "301165": {
       "name": "锐捷网络",
       "status": "monitoring",
-      "composite_score": 20,
+      "composite_score": 40,
       "criteria_met": {
-        "macd_golden": true,
-        "boll_lower": false,
-        "rsi_oversold": false,
-        "volume_shrink": false,
-        "box_breakout": false,
-        "m5_iceberg": true
+        "c1_turn_confirm": true,
+        "c1_boll_lower": false,
+        "c1_volume_shrink": false,
+        "c1_rsi_oversold": false,
+        "c1_m5_iceberg": false,
+        "c2_box_breakout": false,
+        "c2_volume_confirm": false,
+        "c2_trend_bull": true
       },
       "suggested_qty": 0,
       "in_holdings": false,
@@ -2997,42 +3127,6 @@
       "suggested_price": 0.0,
       "capital_required": 0.0,
       "signal_history": [
-        {
-          "date": "2026-08-13",
-          "score": 20,
-          "verdict": "weak",
-          "price": 141.82
-        },
-        {
-          "date": "2026-08-13",
-          "score": 20,
-          "verdict": "weak",
-          "price": 141.64
-        },
-        {
-          "date": "2026-08-13",
-          "score": 20,
-          "verdict": "weak",
-          "price": 142.61
-        },
-        {
-          "date": "2026-08-13",
-          "score": 20,
-          "verdict": "weak",
-          "price": 142.91
-        },
-        {
-          "date": "2026-08-13",
-          "score": 20,
-          "verdict": "weak",
-          "price": 142.89
-        },
-        {
-          "date": "2026-08-13",
-          "score": 20,
-          "verdict": "weak",
-          "price": 142.5
-        },
         {
           "date": "2026-08-13",
           "score": 20,
@@ -3116,20 +3210,62 @@
           "score": 20,
           "verdict": "weak",
           "price": 143.3
+        },
+        {
+          "date": "2026-08-13",
+          "score": 20,
+          "verdict": "weak",
+          "price": 143.3
+        },
+        {
+          "date": "2026-08-13",
+          "score": 20,
+          "verdict": "weak",
+          "price": 143.3
+        },
+        {
+          "date": "2026-08-13",
+          "score": 20,
+          "verdict": "weak",
+          "price": 143.3
+        },
+        {
+          "date": "2026-08-13",
+          "score": 20,
+          "verdict": "weak",
+          "price": 143.3
+        },
+        {
+          "date": "2026-08-13",
+          "score": 40,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 143.3
+        },
+        {
+          "date": "2026-08-13",
+          "score": 40,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 143.3
         }
       ]
     },
     "300548": {
       "name": "长芯博创",
       "status": "monitoring",
-      "composite_score": 0,
+      "composite_score": 40,
       "criteria_met": {
-        "macd_golden": false,
-        "boll_lower": false,
-        "rsi_oversold": false,
-        "volume_shrink": false,
-        "box_breakout": false,
-        "m5_iceberg": true
+        "c1_turn_confirm": true,
+        "c1_boll_lower": false,
+        "c1_volume_shrink": false,
+        "c1_rsi_oversold": false,
+        "c1_m5_iceberg": false,
+        "c2_box_breakout": false,
+        "c2_volume_confirm": false,
+        "c2_trend_bull": true
       },
       "suggested_qty": 0,
       "in_holdings": false,
@@ -3137,42 +3273,6 @@
       "suggested_price": 0.0,
       "capital_required": 0.0,
       "signal_history": [
-        {
-          "date": "2026-08-13",
-          "score": 0,
-          "verdict": "weak",
-          "price": 184.44
-        },
-        {
-          "date": "2026-08-13",
-          "score": 0,
-          "verdict": "weak",
-          "price": 184.84
-        },
-        {
-          "date": "2026-08-13",
-          "score": 0,
-          "verdict": "weak",
-          "price": 184.86
-        },
-        {
-          "date": "2026-08-13",
-          "score": 0,
-          "verdict": "weak",
-          "price": 185.05
-        },
-        {
-          "date": "2026-08-13",
-          "score": 0,
-          "verdict": "weak",
-          "price": 184.77
-        },
-        {
-          "date": "2026-08-13",
-          "score": 0,
-          "verdict": "weak",
-          "price": 184.74
-        },
         {
           "date": "2026-08-13",
           "score": 0,
@@ -3256,20 +3356,62 @@
           "score": 0,
           "verdict": "weak",
           "price": 180.08
+        },
+        {
+          "date": "2026-08-13",
+          "score": 0,
+          "verdict": "weak",
+          "price": 180.08
+        },
+        {
+          "date": "2026-08-13",
+          "score": 0,
+          "verdict": "weak",
+          "price": 180.08
+        },
+        {
+          "date": "2026-08-13",
+          "score": 0,
+          "verdict": "weak",
+          "price": 180.08
+        },
+        {
+          "date": "2026-08-13",
+          "score": 0,
+          "verdict": "weak",
+          "price": 180.08
+        },
+        {
+          "date": "2026-08-13",
+          "score": 40,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 180.08
+        },
+        {
+          "date": "2026-08-13",
+          "score": 40,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 180.08
         }
       ]
     },
     "002409": {
       "name": "雅克科技",
       "status": "monitoring",
-      "composite_score": 20,
+      "composite_score": 40,
       "criteria_met": {
-        "macd_golden": true,
-        "boll_lower": false,
-        "rsi_oversold": false,
-        "volume_shrink": false,
-        "box_breakout": false,
-        "m5_iceberg": true
+        "c1_turn_confirm": true,
+        "c1_boll_lower": false,
+        "c1_volume_shrink": false,
+        "c1_rsi_oversold": false,
+        "c1_m5_iceberg": false,
+        "c2_box_breakout": false,
+        "c2_volume_confirm": false,
+        "c2_trend_bull": true
       },
       "suggested_qty": 0,
       "in_holdings": false,
@@ -3277,42 +3419,6 @@
       "suggested_price": 0.0,
       "capital_required": 0.0,
       "signal_history": [
-        {
-          "date": "2026-08-13",
-          "score": 40,
-          "verdict": "approaching",
-          "price": 153.01
-        },
-        {
-          "date": "2026-08-13",
-          "score": 40,
-          "verdict": "approaching",
-          "price": 152.98
-        },
-        {
-          "date": "2026-08-13",
-          "score": 20,
-          "verdict": "weak",
-          "price": 153.55
-        },
-        {
-          "date": "2026-08-13",
-          "score": 20,
-          "verdict": "weak",
-          "price": 153.63
-        },
-        {
-          "date": "2026-08-13",
-          "score": 20,
-          "verdict": "weak",
-          "price": 153.57
-        },
-        {
-          "date": "2026-08-13",
-          "score": 20,
-          "verdict": "weak",
-          "price": 153.57
-        },
         {
           "date": "2026-08-13",
           "score": 20,
@@ -3396,20 +3502,62 @@
           "score": 20,
           "verdict": "weak",
           "price": 149.5
+        },
+        {
+          "date": "2026-08-13",
+          "score": 20,
+          "verdict": "weak",
+          "price": 149.5
+        },
+        {
+          "date": "2026-08-13",
+          "score": 20,
+          "verdict": "weak",
+          "price": 149.5
+        },
+        {
+          "date": "2026-08-13",
+          "score": 20,
+          "verdict": "weak",
+          "price": 149.5
+        },
+        {
+          "date": "2026-08-13",
+          "score": 20,
+          "verdict": "weak",
+          "price": 149.5
+        },
+        {
+          "date": "2026-08-13",
+          "score": 40,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 149.5
+        },
+        {
+          "date": "2026-08-13",
+          "score": 40,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 149.5
         }
       ]
     },
     "300666": {
       "name": "江丰电子",
       "status": "monitoring",
-      "composite_score": 20,
+      "composite_score": 40,
       "criteria_met": {
-        "macd_golden": true,
-        "boll_lower": false,
-        "rsi_oversold": false,
-        "volume_shrink": false,
-        "box_breakout": false,
-        "m5_iceberg": true
+        "c1_turn_confirm": true,
+        "c1_boll_lower": false,
+        "c1_volume_shrink": false,
+        "c1_rsi_oversold": false,
+        "c1_m5_iceberg": false,
+        "c2_box_breakout": false,
+        "c2_volume_confirm": false,
+        "c2_trend_bull": true
       },
       "suggested_qty": 0,
       "in_holdings": false,
@@ -3417,42 +3565,6 @@
       "suggested_price": 0.0,
       "capital_required": 0.0,
       "signal_history": [
-        {
-          "date": "2026-08-13",
-          "score": 40,
-          "verdict": "approaching",
-          "price": 258.25
-        },
-        {
-          "date": "2026-08-13",
-          "score": 40,
-          "verdict": "approaching",
-          "price": 258.23
-        },
-        {
-          "date": "2026-08-13",
-          "score": 40,
-          "verdict": "approaching",
-          "price": 259.39
-        },
-        {
-          "date": "2026-08-13",
-          "score": 40,
-          "verdict": "approaching",
-          "price": 259.8
-        },
-        {
-          "date": "2026-08-13",
-          "score": 40,
-          "verdict": "approaching",
-          "price": 259.59
-        },
-        {
-          "date": "2026-08-13",
-          "score": 40,
-          "verdict": "approaching",
-          "price": 259.28
-        },
         {
           "date": "2026-08-13",
           "score": 40,
@@ -3536,20 +3648,62 @@
           "score": 20,
           "verdict": "weak",
           "price": 251.02
+        },
+        {
+          "date": "2026-08-13",
+          "score": 20,
+          "verdict": "weak",
+          "price": 251.02
+        },
+        {
+          "date": "2026-08-13",
+          "score": 20,
+          "verdict": "weak",
+          "price": 251.02
+        },
+        {
+          "date": "2026-08-13",
+          "score": 20,
+          "verdict": "weak",
+          "price": 251.02
+        },
+        {
+          "date": "2026-08-13",
+          "score": 20,
+          "verdict": "weak",
+          "price": 251.02
+        },
+        {
+          "date": "2026-08-13",
+          "score": 40,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 251.02
+        },
+        {
+          "date": "2026-08-13",
+          "score": 40,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 251.02
         }
       ]
     },
     "002407": {
       "name": "多氟多",
       "status": "monitoring",
-      "composite_score": 0,
+      "composite_score": 40,
       "criteria_met": {
-        "macd_golden": false,
-        "boll_lower": false,
-        "rsi_oversold": false,
-        "volume_shrink": false,
-        "box_breakout": false,
-        "m5_iceberg": true
+        "c1_turn_confirm": true,
+        "c1_boll_lower": false,
+        "c1_volume_shrink": false,
+        "c1_rsi_oversold": false,
+        "c1_m5_iceberg": false,
+        "c2_box_breakout": false,
+        "c2_volume_confirm": false,
+        "c2_trend_bull": true
       },
       "suggested_qty": 0,
       "in_holdings": false,
@@ -3557,42 +3711,6 @@
       "suggested_price": 0.0,
       "capital_required": 0.0,
       "signal_history": [
-        {
-          "date": "2026-08-13",
-          "score": 20,
-          "verdict": "weak",
-          "price": 38.27
-        },
-        {
-          "date": "2026-08-13",
-          "score": 20,
-          "verdict": "weak",
-          "price": 38.32
-        },
-        {
-          "date": "2026-08-13",
-          "score": 20,
-          "verdict": "weak",
-          "price": 38.32
-        },
-        {
-          "date": "2026-08-13",
-          "score": 20,
-          "verdict": "weak",
-          "price": 38.35
-        },
-        {
-          "date": "2026-08-13",
-          "score": 20,
-          "verdict": "weak",
-          "price": 38.69
-        },
-        {
-          "date": "2026-08-13",
-          "score": 20,
-          "verdict": "weak",
-          "price": 38.8
-        },
         {
           "date": "2026-08-13",
           "score": 20,
@@ -3676,20 +3794,62 @@
           "score": 0,
           "verdict": "weak",
           "price": 38.97
+        },
+        {
+          "date": "2026-08-13",
+          "score": 0,
+          "verdict": "weak",
+          "price": 38.97
+        },
+        {
+          "date": "2026-08-13",
+          "score": 0,
+          "verdict": "weak",
+          "price": 38.97
+        },
+        {
+          "date": "2026-08-13",
+          "score": 0,
+          "verdict": "weak",
+          "price": 38.97
+        },
+        {
+          "date": "2026-08-13",
+          "score": 0,
+          "verdict": "weak",
+          "price": 38.97
+        },
+        {
+          "date": "2026-08-13",
+          "score": 40,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 38.97
+        },
+        {
+          "date": "2026-08-13",
+          "score": 40,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 38.97
         }
       ]
     },
     "688102": {
       "name": "斯瑞新材",
       "status": "monitoring",
-      "composite_score": 0,
+      "composite_score": 40,
       "criteria_met": {
-        "macd_golden": false,
-        "boll_lower": false,
-        "rsi_oversold": false,
-        "volume_shrink": false,
-        "box_breakout": false,
-        "m5_iceberg": true
+        "c1_turn_confirm": true,
+        "c1_boll_lower": false,
+        "c1_volume_shrink": false,
+        "c1_rsi_oversold": false,
+        "c1_m5_iceberg": false,
+        "c2_box_breakout": false,
+        "c2_volume_confirm": false,
+        "c2_trend_bull": true
       },
       "suggested_qty": 0,
       "in_holdings": false,
@@ -3697,42 +3857,6 @@
       "suggested_price": 0.0,
       "capital_required": 0.0,
       "signal_history": [
-        {
-          "date": "2026-08-13",
-          "score": 20,
-          "verdict": "weak",
-          "price": 37.4
-        },
-        {
-          "date": "2026-08-13",
-          "score": 20,
-          "verdict": "weak",
-          "price": 37.3
-        },
-        {
-          "date": "2026-08-13",
-          "score": 20,
-          "verdict": "weak",
-          "price": 37.45
-        },
-        {
-          "date": "2026-08-13",
-          "score": 20,
-          "verdict": "weak",
-          "price": 37.45
-        },
-        {
-          "date": "2026-08-13",
-          "score": 20,
-          "verdict": "weak",
-          "price": 37.62
-        },
-        {
-          "date": "2026-08-13",
-          "score": 20,
-          "verdict": "weak",
-          "price": 37.61
-        },
         {
           "date": "2026-08-13",
           "score": 20,
@@ -3816,20 +3940,62 @@
           "score": 0,
           "verdict": "weak",
           "price": 37.17
+        },
+        {
+          "date": "2026-08-13",
+          "score": 0,
+          "verdict": "weak",
+          "price": 37.17
+        },
+        {
+          "date": "2026-08-13",
+          "score": 0,
+          "verdict": "weak",
+          "price": 37.17
+        },
+        {
+          "date": "2026-08-13",
+          "score": 0,
+          "verdict": "weak",
+          "price": 37.17
+        },
+        {
+          "date": "2026-08-13",
+          "score": 0,
+          "verdict": "weak",
+          "price": 37.17
+        },
+        {
+          "date": "2026-08-13",
+          "score": 40,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 37.17
+        },
+        {
+          "date": "2026-08-13",
+          "score": 40,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 37.17
         }
       ]
     },
     "603259": {
       "name": "药明康德",
       "status": "monitoring",
-      "composite_score": 0,
+      "composite_score": 40,
       "criteria_met": {
-        "macd_golden": false,
-        "boll_lower": false,
-        "rsi_oversold": false,
-        "volume_shrink": false,
-        "box_breakout": false,
-        "m5_iceberg": true
+        "c1_turn_confirm": true,
+        "c1_boll_lower": false,
+        "c1_volume_shrink": false,
+        "c1_rsi_oversold": false,
+        "c1_m5_iceberg": false,
+        "c2_box_breakout": false,
+        "c2_volume_confirm": false,
+        "c2_trend_bull": true
       },
       "suggested_qty": 0,
       "in_holdings": false,
@@ -3837,42 +4003,6 @@
       "suggested_price": 0.0,
       "capital_required": 0.0,
       "signal_history": [
-        {
-          "date": "2026-08-13",
-          "score": 20,
-          "verdict": "weak",
-          "price": 163.71
-        },
-        {
-          "date": "2026-08-13",
-          "score": 20,
-          "verdict": "weak",
-          "price": 163.72
-        },
-        {
-          "date": "2026-08-13",
-          "score": 20,
-          "verdict": "weak",
-          "price": 163.98
-        },
-        {
-          "date": "2026-08-13",
-          "score": 20,
-          "verdict": "weak",
-          "price": 164.03
-        },
-        {
-          "date": "2026-08-13",
-          "score": 20,
-          "verdict": "weak",
-          "price": 164.42
-        },
-        {
-          "date": "2026-08-13",
-          "score": 20,
-          "verdict": "weak",
-          "price": 164.32
-        },
         {
           "date": "2026-08-13",
           "score": 20,
@@ -3956,6 +4086,46 @@
           "score": 0,
           "verdict": "weak",
           "price": 162.33
+        },
+        {
+          "date": "2026-08-13",
+          "score": 0,
+          "verdict": "weak",
+          "price": 162.33
+        },
+        {
+          "date": "2026-08-13",
+          "score": 0,
+          "verdict": "weak",
+          "price": 162.33
+        },
+        {
+          "date": "2026-08-13",
+          "score": 0,
+          "verdict": "weak",
+          "price": 162.33
+        },
+        {
+          "date": "2026-08-13",
+          "score": 0,
+          "verdict": "weak",
+          "price": 162.33
+        },
+        {
+          "date": "2026-08-13",
+          "score": 40,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 162.33
+        },
+        {
+          "date": "2026-08-13",
+          "score": 40,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 162.33
         }
       ]
     },
@@ -3964,12 +4134,14 @@
       "status": "monitoring",
       "composite_score": 40,
       "criteria_met": {
-        "macd_golden": true,
-        "boll_lower": false,
-        "rsi_oversold": false,
-        "volume_shrink": true,
-        "box_breakout": false,
-        "m5_iceberg": true
+        "c1_turn_confirm": true,
+        "c1_boll_lower": false,
+        "c1_volume_shrink": false,
+        "c1_rsi_oversold": false,
+        "c1_m5_iceberg": false,
+        "c2_box_breakout": false,
+        "c2_volume_confirm": false,
+        "c2_trend_bull": true
       },
       "suggested_qty": 0,
       "in_holdings": false,
@@ -3977,42 +4149,6 @@
       "suggested_price": 0.0,
       "capital_required": 0.0,
       "signal_history": [
-        {
-          "date": "2026-08-13",
-          "score": 40,
-          "verdict": "approaching",
-          "price": 42.85
-        },
-        {
-          "date": "2026-08-13",
-          "score": 40,
-          "verdict": "approaching",
-          "price": 42.73
-        },
-        {
-          "date": "2026-08-13",
-          "score": 40,
-          "verdict": "approaching",
-          "price": 42.88
-        },
-        {
-          "date": "2026-08-13",
-          "score": 40,
-          "verdict": "approaching",
-          "price": 42.88
-        },
-        {
-          "date": "2026-08-13",
-          "score": 40,
-          "verdict": "approaching",
-          "price": 42.9
-        },
-        {
-          "date": "2026-08-13",
-          "score": 40,
-          "verdict": "approaching",
-          "price": 42.9
-        },
         {
           "date": "2026-08-13",
           "score": 40,
@@ -4096,20 +4232,62 @@
           "score": 40,
           "verdict": "approaching",
           "price": 41.91
+        },
+        {
+          "date": "2026-08-13",
+          "score": 40,
+          "verdict": "approaching",
+          "price": 41.91
+        },
+        {
+          "date": "2026-08-13",
+          "score": 40,
+          "verdict": "approaching",
+          "price": 41.91
+        },
+        {
+          "date": "2026-08-13",
+          "score": 40,
+          "verdict": "approaching",
+          "price": 41.91
+        },
+        {
+          "date": "2026-08-13",
+          "score": 40,
+          "verdict": "approaching",
+          "price": 41.91
+        },
+        {
+          "date": "2026-08-13",
+          "score": 40,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 41.9
+        },
+        {
+          "date": "2026-08-13",
+          "score": 40,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 41.9
         }
       ]
     },
     "688143": {
       "name": "长盈通",
       "status": "monitoring",
-      "composite_score": 0,
+      "composite_score": 40,
       "criteria_met": {
-        "macd_golden": false,
-        "boll_lower": false,
-        "rsi_oversold": false,
-        "volume_shrink": false,
-        "box_breakout": false,
-        "m5_iceberg": true
+        "c1_turn_confirm": true,
+        "c1_boll_lower": false,
+        "c1_volume_shrink": false,
+        "c1_rsi_oversold": false,
+        "c1_m5_iceberg": false,
+        "c2_box_breakout": false,
+        "c2_volume_confirm": false,
+        "c2_trend_bull": true
       },
       "suggested_qty": 0,
       "in_holdings": false,
@@ -4117,42 +4295,6 @@
       "suggested_price": 0.0,
       "capital_required": 0.0,
       "signal_history": [
-        {
-          "date": "2026-08-13",
-          "score": 0,
-          "verdict": "weak",
-          "price": 125.11
-        },
-        {
-          "date": "2026-08-13",
-          "score": 0,
-          "verdict": "weak",
-          "price": 125.1
-        },
-        {
-          "date": "2026-08-13",
-          "score": 0,
-          "verdict": "weak",
-          "price": 125.45
-        },
-        {
-          "date": "2026-08-13",
-          "score": 0,
-          "verdict": "weak",
-          "price": 126.05
-        },
-        {
-          "date": "2026-08-13",
-          "score": 0,
-          "verdict": "weak",
-          "price": 125.39
-        },
-        {
-          "date": "2026-08-13",
-          "score": 0,
-          "verdict": "weak",
-          "price": 125.15
-        },
         {
           "date": "2026-08-13",
           "score": 0,
@@ -4235,6 +4377,46 @@
           "date": "2026-08-13",
           "score": 0,
           "verdict": "weak",
+          "price": 121.87
+        },
+        {
+          "date": "2026-08-13",
+          "score": 0,
+          "verdict": "weak",
+          "price": 121.87
+        },
+        {
+          "date": "2026-08-13",
+          "score": 0,
+          "verdict": "weak",
+          "price": 121.87
+        },
+        {
+          "date": "2026-08-13",
+          "score": 0,
+          "verdict": "weak",
+          "price": 121.87
+        },
+        {
+          "date": "2026-08-13",
+          "score": 0,
+          "verdict": "weak",
+          "price": 121.87
+        },
+        {
+          "date": "2026-08-13",
+          "score": 40,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 121.87
+        },
+        {
+          "date": "2026-08-13",
+          "score": 40,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
           "price": 121.87
         }
       ]
