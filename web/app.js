@@ -1116,8 +1116,8 @@ function renderPB(pb) {
   }
   const counts = pb.counts || {};
   const condLabels = pb.cond_labels || {};
-  // 突破箱体列（第一优先级）
-  const boxKey = "box_breakout";
+  // 突破箱体列（第一优先级）— W33 A1: 键名改为 c2_box_breakout
+  const boxKey = "c2_box_breakout";
   // 开盘预热提示：今天 09:30-09:45 期间 5 分钟线不足
   const now = new Date();
   const inWarmup = state.date === todayStr() &&
@@ -1157,9 +1157,10 @@ function renderPB(pb) {
       `${condLabels[k]}:${conds[k] ? "通过" : "未过"}`).join(" · ");
     const boxMet = conds[boxKey] || false;
     const boxStr = boxMet ? `<span class="badge signal">🚀突破</span>` : `<span class="off">—</span>`;
-    // fix P1-1: metCount 只数 condLabels 的 5 个键，box_breakout 已有独立列不计入
-    const metCount = Object.keys(condLabels).filter(k => conds[k]).length;
-    const metCls = metCount >= 4 ? "up" : metCount >= 2 ? "warn" : "cell-dim";
+    // W33 A1: metCount 只数冰点评分键 3 个（转向/BOLL/缩量）→ "X/3"（RSI/5分冰点/突破列不计）
+    const iceKeys = ["c1_turn_confirm", "c1_boll_lower", "c1_volume_shrink"];
+    const metCount = iceKeys.filter(k => conds[k]).length;
+    const metCls = metCount >= 3 ? "up" : metCount >= 2 ? "warn" : "cell-dim";
     // fix P1-3: 行内灰色小字显示 r.errors 首条（hover 看全部）
     const errTxt = (r.errors && r.errors.length)
       ? `<div class="cell-dim" style="font-size:10px;line-height:1.4" title="${esc(r.errors.join("；"))}">⚠ ${esc(r.errors[0])}</div>`
@@ -1172,13 +1173,18 @@ function renderPB(pb) {
     const tagsTxt = r.tags && r.tags.length
       ? r.tags.map(t => tagBadge(t)).join(" ")
       : '<span class="cell-dim" style="font-size:10px">…</span>';
+    // W33 A1: 通道徽章 + 择时状态
+    const chTxt = r.channel === "both" ? "🧊🚀" : r.channel === "iceberg" ? "🧊" : r.channel === "breakout" ? "🚀" : "";
+    const chBadge = chTxt ? `<span class="badge" style="background:#3a3a5a;color:#ddd">${chTxt}</span>` : "";
+    const apTxt = r.approach_status === "immediate" ? "即时可建" : r.approach_status === "intraday_pending" ? "待日内确认" : r.approach_status === "next_day_pending" ? "待次日确认" : "";
+    const apBadge = apTxt ? `<span class="badge" style="background:#5a4a2a;color:#ffd98a">${apTxt}</span>` : "";
     return `
       <tr id="pb-row-${esc(r.code || '')}" ondblclick="openStockChart('${esc(r.code||'')}','${esc(r.name||r.code||'')}')" style="cursor:pointer;${isStale ? "opacity:.45;" : ""}" title="双击看K线${isStale ? "（数据陈旧，距今超过10分钟）" : ""}">
         <td>${esc(r.name || "")} <span class="mono cell-dim">${esc(r.code || "")}</span>
-          ${r.in_holdings ? `<span class="badge hold">持仓</span>` : ""}${errTxt}</td>
+          ${chBadge}${apBadge}${r.in_holdings ? `<span class="badge hold">持仓</span>` : ""}${errTxt}</td>
         <td>${verdictBadge(r.verdict)}</td>
         <td class="num"><b>${r.composite_score}</b></td>
-        <td class="num ${metCls}"><b>${isNoData ? "—" : metCount + "/5"}</b></td>
+        <td class="num ${metCls}"><b>${isNoData ? "—" : metCount + "/3"}</b></td>
         <td class="num">${fmt(r.price)}</td>
         <td style="text-align:center">${boxStr}</td>
         <td style="max-width:220px;line-height:1.7">${tagsTxt}</td>
@@ -1187,7 +1193,7 @@ function renderPB(pb) {
         <td class="num">${fmt(r.suggested_price)}</td>
         <td class="num">${fmt(r.capital_required, 0)}</td>
         <td class="cell-dim">${esc(r.scan_type || "")}${r._scans > 1 ? `×${r._scans}` : ""}${scanTimeTxt ? ` <span class="mono">${esc(scanTimeTxt)}</span>` : ""}${staleBadge}</td>
-        <td>${!r.in_holdings ? `<button class="mini-btn" style="font-size:10px;padding:0 5px;color:#f85149" onclick="removeFromWatchlist('${esc(r.code||'')}',document.getElementById('pb-row-${esc(r.code||'')}'))" title="从股池移除">✕</button>` : ""}</td>
+        <td>${!r.in_holdings ? `<button class="mini-btn" style="font-size:10px;padding:0 5px;color:#3fb950" onclick="confirmPosition('${esc(r.code||'')}',document.getElementById('pb-row-${esc(r.code||'')}'))" title="人工确认建仓（回写 signal_history）">✓确认</button><button class="mini-btn" style="font-size:10px;padding:0 5px;color:#f85149" onclick="removeFromWatchlist('${esc(r.code||'')}',document.getElementById('pb-row-${esc(r.code||'')}'))" title="从股池移除">✕</button>` : ""}</td>
       </tr>`;
   }).join("");
 
@@ -1896,6 +1902,23 @@ async function addToWatchlist(code, name, btn) {
     statusEl(`加入失败: ${e.message}`, "err");
   }
 }
+async function confirmPosition(code, rowEl) {
+  try {
+    const inp = prompt(`确认建仓 ${code}：输入确认价（回车用建议价）`);
+    const price = (inp !== null && inp.trim() !== "") ? parseFloat(inp) : null;
+    const r = await apiCall("confirm_position", code, price, null);
+    if (r && r.ok) {
+      statusEl(`${code} 已确认建仓 @${r.entry.confirm_price}×${r.entry.confirm_qty}（signal_history 已回写）`, "ok");
+      if (rowEl) rowEl.style.opacity = "0.5";
+      if (state.date) apiCall("refresh_pb", state.date).then(pb => renderPB(pb || {})).catch(() => {});
+    } else {
+      statusEl(`确认失败: ${r ? r.error : '未知'}`, "err");
+    }
+  } catch (e) {
+    statusEl(`确认失败: ${e.message}`, "err");
+  }
+}
+
 async function removeFromWatchlist(code, rowEl) {
   try {
     const r = await apiCall("remove_from_watchlist", code);

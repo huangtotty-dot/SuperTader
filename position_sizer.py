@@ -258,7 +258,9 @@ class PositionSizer:
         if excess_pos > 0:
             return 0
 
-        strength = sig_score - threshold
+        # W33 B2 (2026-08-13): strength 三档失效——V2 纯两点后 sig_score 恒=100、阈值 36 → strength 恒≥10，
+        # 永远走"强"档。简化为单档固定比例：个股 接回×0.60 / 首加×0.20；ETF 接回/首加×0.25。
+        # （strentth 计算删除；sig_score/threshold 参数保留签名兼容，harness/main 位置传参）
         index_state = str(index_ctx.get("index_circuit_state", "normal") or "normal")
         index_factor = float(index_ctx.get("index_pos_factor", 1.0) or 1.0)
 
@@ -281,20 +283,10 @@ class PositionSizer:
             return 0
 
         if unrebuilt > 0:
-            if is_etf:
-                pct = p.get("etf_qty_strong_pct", 0.25) if strength >= 10 else \
-                      (p.get("etf_qty_base_pct", 0.15) if strength >= 5 else p.get("etf_qty_weak_pct", 0.08))
-            else:
-                pct = p.get("stock_rebuild_strong_pct", 0.80) if strength >= 10 else \
-                      (p.get("stock_rebuild_base_pct", 0.50) if strength >= 5 else p.get("stock_rebuild_weak_pct", 0.30))
+            pct = p.get("etf_buy_qty_pct", 0.25) if is_etf else p.get("stock_rebuild_pct", 0.60)
             qty = int(unrebuilt * pct)
         else:
-            if is_etf:
-                pct = p.get("etf_qty_strong_pct", 0.25) if strength >= 10 else \
-                      (p.get("etf_qty_base_pct", 0.15) if strength >= 5 else p.get("etf_qty_weak_pct", 0.08))
-            else:
-                pct = p.get("stock_first_add_strong_pct", 0.30) if strength >= 10 else \
-                      (p.get("stock_first_add_pct", 0.20) if strength >= 5 else p.get("stock_first_add_weak_pct", 0.10))
+            pct = p.get("etf_buy_qty_pct", 0.25) if is_etf else p.get("stock_first_add_pct", 0.20)
             qty = int(total_t * pct)
 
         # 确保不超过剩余可买额度

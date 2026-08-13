@@ -79,19 +79,21 @@ def _load_push_dedup() -> dict:
     return {}
 
 
-def _signal_already_pushed(code: str, date_str: str) -> bool:
-    """(code, date) 当日是否已推送过 signal。"""
-    return code in _load_push_dedup().get(date_str, [])
+def _signal_already_pushed(code: str, date_str: str, channel: str = None) -> bool:
+    """(code, date, channel) 当日是否已推送过 signal。W33 A1: 去重键带通道，防同 code 第二通道被吞。"""
+    key = f"{code}:{channel or 'x'}"
+    return key in _load_push_dedup().get(date_str, [])
 
 
-def _mark_signal_pushed(code: str, date_str: str):
-    """记录 (code, date) 已推送，仅保留最近 15 个日期。"""
+def _mark_signal_pushed(code: str, date_str: str, channel: str = None):
+    """记录 (code, date, channel) 已推送，仅保留最近 15 个日期。"""
     try:
         STATE_DIR.mkdir(parents=True, exist_ok=True)
         dedup = _load_push_dedup()
         dedup.setdefault(date_str, [])
-        if code not in dedup[date_str]:
-            dedup[date_str].append(code)
+        key = f"{code}:{channel or 'x'}"
+        if key not in dedup[date_str]:
+            dedup[date_str].append(key)
         dedup = {d: dedup[d] for d in sorted(dedup)[-15:]}
         PUSH_DEDUP_FILE.write_text(
             json.dumps(dedup, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -390,33 +392,53 @@ def _detect_boxes_simple(df: pd.DataFrame, n_keep: int = 3) -> list:
     return merged[:n_keep]
 
 
-def check_box_breakout(code: str, price: float = None) -> dict:
-    """判定是否突破当前箱体上沿（只认 rel=0 当前箱体）。返回 {broken, box, price, pct_above}。"""
-    df = fetch_daily_kline(code)
-    if df.empty or len(df) < 30:
-        return {"broken": False, "error": "无日线"}
+def _box_raw_pct(df, price) -> dict:
+    """变体无关的箱体原始检测（离线重扫预计算用）：返回 {rel0:{high,pct_above}|None, rel1:{high,pct_above}|None}。"""
+    if df is None or df.empty or len(df) < 30:
+        return {"rel0": None, "rel1": None}
     cur = float(price) if price else float(df["close"].iloc[-1])
     boxes = _detect_boxes_simple(df)
-    cur_boxes = [b for b in boxes if b.get("rel") == 0]
-    for box in cur_boxes:
-        if cur > box["high"]:
-            pct_above = (cur - box["high"]) / box["high"] * 100 if box["high"] else 0
-            if 0.3 <= pct_above <= 8:
-                return {"broken": True, "box": box, "price": round(cur, 3),
-                        "pct_above": round(pct_above, 2)}
-            # fix P1-6: >8% 单独标注「强势突破」，不再静默 False
-            return {"broken": False, "price": round(cur, 3),
-                    "near_box": box, "pct_above": round(pct_above, 2),
-                    "reason": f"强势突破(>{pct_above:.1f}%)" if pct_above > 8 else "未达突破阈值"}
-    # fix P1-6: 无 rel=0 箱体时，检查现价站上最近 rel=-1 箱顶 0.3%~2% → 「突破后回踩」
-    prev_boxes = [b for b in boxes if b.get("rel") == -1]
-    if prev_boxes:
-        top_box = max(prev_boxes, key=lambda b: b["high"])
-        if top_box["high"] and cur > top_box["high"]:
-            pct_above = (cur - top_box["high"]) / top_box["high"] * 100
-            if 0.3 <= pct_above <= 2.0:
-                return {"broken": True, "box": top_box, "price": round(cur, 3),
-                        "pct_above": round(pct_above, 2), "reason": "突破后回踩"}
+    rel0 = None
+    for b in boxes:
+        if b.get("rel") == 0 and b.get("high") and cur > b["high"]:
+            rel0 = {"high": b["high"], "pct_above": (cur - b["high"]) / b["high"] * 100}
+            break
+    rel1 = None
+    prev = [b for b in boxes if b.get("rel") == -1]
+    if prev:
+        top = max(prev, key=lambda b: b["high"])
+        if top.get("high") and cur > top["high"]:
+            rel1 = {"high": top["high"], "pct_above": (cur - top["high"]) / top["high"] * 100}
+    return {"rel0": rel0, "rel1": rel1}
+
+
+def check_box_breakout(code: str, price: float = None, df=None,
+                       min_pct: float = 0.3, max_pct: float = 8.0,
+                       retest_max_pct: float = 2.0, _raw: dict = None) -> dict:
+    """判定是否突破当前箱体上沿（只认 rel=0 当前箱体）。返回 {broken, box, price, pct_above}。
+    W33 A4: df 可传入 as-of 日线切片（离线重扫用），缺省仍 fetch_daily_kline；
+    min_pct/max_pct/retest_max_pct 供离线调参；_raw 为 _box_raw_pct 预计算结果（调参变体间复用）。"""
+    if _raw is None:
+        if df is None:
+            df = fetch_daily_kline(code)
+        if df.empty or len(df) < 30:
+            return {"broken": False, "error": "无日线"}
+        _raw = _box_raw_pct(df, price)
+    cur = float(price) if price else 0.0
+    if _raw.get("rel0"):
+        pct_above = _raw["rel0"]["pct_above"]
+        if min_pct <= pct_above <= max_pct:
+            return {"broken": True, "box": {"high": _raw["rel0"]["high"]},
+                    "price": round(cur, 3), "pct_above": round(pct_above, 2)}
+        # fix P1-6: >max_pct 单独标注「强势突破」，不再静默 False
+        return {"broken": False, "price": round(cur, 3),
+                "near_box": {"high": _raw["rel0"]["high"]}, "pct_above": round(pct_above, 2),
+                "reason": f"强势突破(>{pct_above:.1f}%)" if pct_above > max_pct else "未达突破阈值"}
+    if _raw.get("rel1"):
+        pct_above = _raw["rel1"]["pct_above"]
+        if min_pct <= pct_above <= retest_max_pct:
+            return {"broken": True, "box": {"high": _raw["rel1"]["high"]},
+                    "price": round(cur, 3), "pct_above": round(pct_above, 2), "reason": "突破后回踩"}
     return {"broken": False, "price": round(cur, 3)}
 
 
@@ -426,7 +448,8 @@ def _ensure_daily_indicators(daily_ctx: dict, code: str) -> dict:
     返回补齐后的 daily_ctx（传入的 dict 被就地更新）。"""
     if not isinstance(daily_ctx, dict):
         daily_ctx = {}
-    if daily_ctx.get("daily_macd_golden") is not None:
+    # W33 A1: 双通道需 daily_ma5（转向确认站上MA5）；golden/ma5 任一缺失都需 fetch 补齐
+    if daily_ctx.get("daily_macd_golden") is not None and daily_ctx.get("daily_ma5") is not None:
         return daily_ctx
     try:
         df = fetch_daily_kline(code)
@@ -458,6 +481,9 @@ def _ensure_daily_indicators(daily_ctx: dict, code: str) -> dict:
         daily_ctx["daily_boll_pct"] = float(boll_pct.iloc[-1]) if pd.notna(boll_pct.iloc[-1]) else None
         daily_ctx["daily_vol_today"] = float(vol.iloc[-1])
         daily_ctx["daily_vol_ma5"] = float(vol_ma5.iloc[-1]) if pd.notna(vol_ma5.iloc[-1]) else None
+        # W33 A1: MA5（转向确认站上MA5 用）
+        _ma5 = c.rolling(5).mean().iloc[-1]
+        daily_ctx["daily_ma5"] = float(_ma5) if pd.notna(_ma5) else None
         # 支撑位（daily_ctx 可能缺时补）
         if not daily_ctx.get("daily_support_level"):
             mav = c.rolling(20).mean().iloc[-1]
@@ -484,37 +510,78 @@ def check_macd_golden(daily_ctx: dict) -> tuple:
     return passed, detail
 
 
-def check_boll_lower(daily_ctx: dict) -> tuple:
-    """日线 BOLL 接近/跌破下轨(情绪冰点): bb_pct ≤ 0.15。"""
+def check_boll_lower(daily_ctx: dict, max_pct: float = 0.15) -> tuple:
+    """日线 BOLL 接近/跌破下轨(情绪冰点): bb_pct ≤ max_pct。max_pct 供离线重扫调参。"""
     bb_pct = daily_ctx.get("daily_boll_pct")
     if bb_pct is None or (isinstance(bb_pct, float) and math.isnan(bb_pct)):
         return False, "缺日线BOLL数据", True
-    passed = float(bb_pct) <= 0.15
-    detail = f"日线bb_pct={float(bb_pct):.3f}（需≤0.15，接近/跌破下轨）"
+    passed = float(bb_pct) <= max_pct
+    detail = f"日线bb_pct={float(bb_pct):.3f}（需≤{max_pct}，接近/跌破下轨）"
     return passed, detail
 
 
 def check_rsi_oversold(daily_ctx: dict) -> tuple:
-    """日线 RSI 超卖(情绪冰点): RSI < 30。"""
+    """日线 RSI 超卖（W33 A1: 降为展示层，不计分）: RSI < 35。"""
     rsi_val = daily_ctx.get("daily_rsi")
     if rsi_val is None or (isinstance(rsi_val, float) and math.isnan(rsi_val)):
         return False, "缺日线RSI数据", True
-    passed = float(rsi_val) < 30
-    detail = f"日线rsi={float(rsi_val):.1f}（需<30，超卖）"
+    passed = float(rsi_val) < 35
+    detail = f"日线rsi={float(rsi_val):.1f}（展示层，<35）"
     return passed, detail
 
 
-def check_volume_shrink(daily_ctx: dict) -> tuple:
-    """日线缩量: 当日成交量 < 5 日均量 × 0.8。
+def check_volume_shrink(daily_ctx: dict, ratio_max: float = 0.8) -> tuple:
+    """日线缩量: 当日成交量 < 5 日均量 × ratio_max。ratio_max 供离线重扫调参。
     返回 (passed, detail, insufficient) — insufficient=True 表示数据不足、不参与评分。"""
     vol_today = daily_ctx.get("daily_vol_today")
     vol_ma5 = daily_ctx.get("daily_vol_ma5")
     if vol_today is None or vol_ma5 is None or vol_ma5 <= 0:
         return False, "缺日线量能数据", True
     ratio = float(vol_today) / float(vol_ma5)
-    passed = ratio < 0.8
-    detail = f"日线量={float(vol_today):.0f} / 5日均量={float(vol_ma5):.0f} = {ratio:.2f}（需<0.8）"
+    passed = ratio < ratio_max
+    detail = f"日线量={float(vol_today):.0f} / 5日均量={float(vol_ma5):.0f} = {ratio:.2f}（需<{ratio_max}）"
     return passed, detail, False
+
+
+# ============================================================
+# W33 A1 双通道判定条件（2026-08-13）
+# ============================================================
+
+def check_turn_confirm(daily_ctx: dict) -> tuple:
+    """W33 A1 冰点通道·转向确认（必要项，40分）: 近5日MACD金叉 或 收盘站上MA5（二选一即过）。"""
+    golden = daily_ctx.get("daily_macd_golden")
+    price_ref = daily_ctx.get("daily_price_ref")
+    ma5 = daily_ctx.get("daily_ma5")
+    if golden is None or price_ref is None or ma5 is None:
+        return False, "缺日线MACD/MA5数据", True
+    macd_ok = bool(golden)
+    ma5_ok = float(price_ref) > float(ma5)
+    passed = macd_ok or ma5_ok
+    detail = (f"转向确认={'通过' if passed else '未过'}（金叉={macd_ok} 站上MA5={ma5_ok}，需其一）")
+    return passed, detail
+
+
+def check_volume_confirm(daily_ctx: dict, ratio_min: float = 1.5) -> tuple:
+    """W33 A1 突破通道·放量确认（30分）: 当日量 > 5 日均量 × ratio_min（与冰点通道缩量方向相反）。"""
+    vol_today = daily_ctx.get("daily_vol_today")
+    vol_ma5 = daily_ctx.get("daily_vol_ma5")
+    if vol_today is None or vol_ma5 is None or vol_ma5 <= 0:
+        return False, "缺日线量能数据", True
+    ratio = float(vol_today) / float(vol_ma5)
+    passed = ratio > ratio_min
+    detail = f"日线量={float(vol_today):.0f} / 5日均量={float(vol_ma5):.0f} = {ratio:.2f}（需>{ratio_min}放量）"
+    return passed, detail
+
+
+def check_trend_bull(daily_ctx: dict) -> tuple:
+    """W33 A1 突破通道·趋势多头（30分）: 当前 DIF > DEA（当前多头态，非金叉事件）。"""
+    dif = daily_ctx.get("daily_macd_dif")
+    dea = daily_ctx.get("daily_macd_dea")
+    if dif is None or dea is None:
+        return False, "缺日线DIF/DEA数据", True
+    passed = float(dif) > float(dea)
+    detail = f"DIF={float(dif):.4f} / DEA={float(dea):.4f}（需DIF>DEA多头）"
+    return passed, detail
 
 
 # ============================================================
@@ -612,18 +679,187 @@ def _load_holding_codes() -> set:
 
 
 def compute_position(latest_price: float, total_capital: float,
-                     max_per_stock_pct: float) -> dict:
-    """计算建议股数（按手取整，不足一手则为 0）。"""
-    max_capital = total_capital * max_per_stock_pct
-    raw_qty = math.floor(max_capital / latest_price / 100) * 100
-    # fix 仓位一刀切(A1-A6): 不足一手不再保底买 100 股，置 0 避免弱信号/高价股超上限买入
-    raw_qty = max(raw_qty, 0)
+                     max_per_stock_pct: float, code: str = None,
+                     position_gap: dict = None) -> dict:
+    """计算建议股数（按手取整，不足一手则为 0）。
+
+    W33 A3: suggested_qty = min(欠配缺口股数, 总资金×个股目标比例÷价格÷3) 取整一手，
+    与仓位管理器"欠配分3次加仓"节奏一致。position_gap 由 config.build_position_gap 产出
+    （ratio_sum + rows）；无目标配置的候选股回落全局默认 0.30。
+    """
+    # 个股目标比例（STOCK_PARAMS stock_qty_base_pct 或全局 0.30，与仓位管理器同源）
+    raw_pct = 0.30
+    try:
+        from config import STOCK_PARAMS
+        raw_pct = float(STOCK_PARAMS.get(code, {}).get("stock_qty_base_pct", 0.30))
+    except Exception:
+        pass
+    ratio_sum = float(position_gap.get("ratio_sum")) if position_gap and position_gap.get("ratio_sum") else 1.0
+    target_pct = raw_pct / ratio_sum  # 归一化（未持仓候选回落全局默认，无 position_gap 时 ratio_sum=1 → target_pct=raw_pct）
+    target_val = total_capital * target_pct
+    if latest_price > 0:
+        gap_qty = int(target_val / latest_price // 100) * 100     # 欠配缺口（未持仓 mkt_val=0 → 全量目标）
+        batch_qty = int(target_val / latest_price / 3 // 100) * 100  # 分3次节奏的 1/3 批
+        raw_qty = max(min(gap_qty, batch_qty), 0)
+    else:
+        raw_qty = 0
     required = raw_qty * latest_price
     return {
         "suggested_qty": raw_qty,
         "suggested_price": round(latest_price, 3),
         "capital_required": round(required, 2),
-        "max_capital_per_stock": round(max_capital, 2),
+        "max_capital_per_stock": round(target_val, 2),
+    }
+
+
+# ============================================================
+# W33 A1 双通道判定（scan_stock 与 A4 离线重扫共用，单一真源）
+#
+# ⚠️ 验收状态（2026-08-14）：W33 A4 离线闸门未过（t_io/validation/w33_offline_rescan_report.md）——
+#   冰点/突破 3日胜率与假阳性均不达标，8 组参数变体全 FAIL。
+#   按 W33 纪律「破闸即放弃，不强行上线」：本判据为【参考级·未验收】，信号不得作为已验证建仓策略依赖。
+#   保持实现以便后续样本扩大/参数重构后重验；B2/J6/A3 为独立已验证项不受影响。
+# ============================================================
+
+# 双通道扁平条件键（固定顺序，前端圆点列/COND_LABELS 消费）
+CHANNEL_COND_KEYS = [
+    "c1_turn_confirm", "c1_boll_lower", "c1_volume_shrink", "c1_rsi_oversold",
+    "c1_m5_iceberg", "c2_box_breakout", "c2_volume_confirm", "c2_trend_bull",
+]
+CHANNEL_COND_LABELS = {
+    "c1_turn_confirm": "转向确认", "c1_boll_lower": "BOLL冰点", "c1_volume_shrink": "缩量止跌",
+    "c1_rsi_oversold": "RSI超卖(展示)", "c1_m5_iceberg": "5分钟冰点",
+    "c2_box_breakout": "突破箱体", "c2_volume_confirm": "放量确认", "c2_trend_bull": "趋势多头",
+}
+# 冰点评分键（转向40 + BOLL20 + 缩量20 = 80 signal / 60 approaching）
+C1_SCORED_KEYS = ("c1_turn_confirm", "c1_boll_lower", "c1_volume_shrink")
+# 突破评分键（箱体40 + 放量30 + 多头30 = signal≥70）
+C2_SCORED_KEYS = ("c2_box_breakout", "c2_volume_confirm", "c2_trend_bull")
+_ICE_WEIGHTS = {"c1_turn_confirm": 40, "c1_boll_lower": 20, "c1_volume_shrink": 20}
+_BREAK_WEIGHTS = {"c2_box_breakout": 40, "c2_volume_confirm": 30, "c2_trend_bull": 30}
+
+
+def eval_dual_channels(code: str, daily_ctx: dict, df_1min, scan_type: str, price,
+                       box_df=None, opts: dict = None):
+    """W33 A1+A2: 双通道建仓判定。返回 {
+      channels: {iceberg:{name,verdict,score,approach_status,conditions}, breakout:{...}},
+      channel, approach_status, conditions(8键扁平), composite_score }
+    通道一 冰点反转（左侧）: 转向确认(必要40) + BOLL冰点(20) + 缩量(20)；RSI<35 仅展示不计分。
+       signal = 转向+冰点2项全过(80)；approaching = 转向+冰点1项(60)。
+    通道二 突破跟随（右侧）: 突破箱体(40) + 放量>1.5(30) + DIF>DEA(30)；signal≥70 / approaching 40~69。
+    A2 口径: intraday 且 m5 冰点过 → 冰点 signal/即时可建；否则待日内确认；eod → 冰点恒 approaching/待次日盘中确认。
+    box_df: 离线重扫传入 as-of 日线切片（防箱体 look-ahead），缺省用实时全量 kline。
+    opts: 离线调参覆盖 {boll_ice_max, vol_shrink_ratio, vol_confirm_ratio, box_min_pct, box_max_pct,
+           breakout_signal_mode:"any"|"all"}（缺省=生产默认）。
+    """
+    daily_ctx = daily_ctx or {}
+    opts = opts or {}
+    c1 = {}
+    turn = check_turn_confirm(daily_ctx)
+    boll = check_boll_lower(daily_ctx, opts.get("boll_ice_max", 0.15))
+    shrink = check_volume_shrink(daily_ctx, opts.get("vol_shrink_ratio", 0.8))
+    rsi = check_rsi_oversold(daily_ctx)
+    c1["c1_turn_confirm"] = turn
+    c1["c1_boll_lower"] = boll
+    c1["c1_volume_shrink"] = shrink
+    c1["c1_rsi_oversold"] = rsi
+    turn_p = bool(turn[0]); boll_p = bool(boll[0]); shrink_p = bool(shrink[0])
+    ice_hits = int(boll_p) + int(shrink_p)
+
+    c2 = {}
+    bx = check_box_breakout(code, price, df=box_df,
+                            min_pct=opts.get("box_min_pct", 0.3),
+                            max_pct=opts.get("box_max_pct", 8.0),
+                            _raw=opts.get("_box_raw"))
+    box_passed = bool(bx.get("broken"))
+    box_detail = (f"突破箱体上沿 {bx.get('box', {}).get('high')}，超出 {bx.get('pct_above')}%"
+                  if box_passed else (f"{bx.get('reason')}（{bx.get('pct_above')}%）" if bx.get('reason') else "未突破箱体"))
+    volc = check_volume_confirm(daily_ctx, opts.get("vol_confirm_ratio", 1.5))
+    trend = check_trend_bull(daily_ctx)
+    c2["c2_box_breakout"] = (box_passed, box_detail)
+    c2["c2_volume_confirm"] = volc
+    c2["c2_trend_bull"] = trend
+
+    # 5 分钟冰点（intraday 择时层；eod 统一"待次日盘中确认"）
+    m5_iceberg = False
+    m5_detail = "待次日盘中确认" if scan_type != "intraday" else "待日内确认"
+    if scan_type == "intraday" and df_1min is not None and not df_1min.empty and len(df_1min) >= 30:
+        df_5min = resample_to_5min(df_1min)
+        df_5min = add_5min_indicators(df_5min)
+        m5_conditions = {
+            "m5_macd_golden": check_m5_macd_golden(df_5min),
+            "m5_boll_lower": check_m5_boll_lower(df_5min),
+            "m5_rsi_oversold": check_m5_rsi_oversold(df_5min),
+            "m5_volume_shrink": check_m5_volume_shrink(df_5min),
+        }
+        m5_score = compute_score(m5_conditions)
+        m5_iceberg = m5_score >= 70
+        m5_detail = f"5分钟冰点{'=通过' if m5_iceberg else f'={m5_score}/80未过'}"
+    c1["c1_m5_iceberg"] = (m5_iceberg, m5_detail)
+
+    # 通道一 verdict（须转向确认才够格）
+    c1_score = sum(_ICE_WEIGHTS[k] for k, p in ((k, c1[k][0]) for k in _ICE_WEIGHTS) if p)
+    c1_verdict = "weak"; c1_status = None
+    if turn_p and ice_hits == 2:
+        if scan_type == "intraday" and m5_iceberg:
+            c1_verdict = "signal"; c1_status = "immediate"
+        elif scan_type == "intraday":
+            c1_verdict = "approaching"; c1_status = "intraday_pending"
+        else:
+            c1_verdict = "approaching"; c1_status = "next_day_pending"
+    elif turn_p and ice_hits == 1:
+        c1_verdict = "approaching"
+        c1_status = "intraday_pending" if scan_type == "intraday" else "next_day_pending"
+
+    # 通道二 verdict（不受 scan_type 门控）
+    c2_score = sum(_BREAK_WEIGHTS[k] for k, p in ((k, c2[k][0]) for k in _BREAK_WEIGHTS) if p)
+    # opts breakout_signal_mode: "all"=箱体+放量+多头全过(100) 才 signal；缺省 "any"=箱体+其一(≥70)
+    c2_sig_min = 100 if opts.get("breakout_signal_mode") == "all" else 70
+    if c2_score >= c2_sig_min:
+        c2_verdict = "signal"
+    elif c2_score >= 40:
+        c2_verdict = "approaching"
+    else:
+        c2_verdict = "weak"
+
+    # 汇总
+    conditions = {}
+    for k in CHANNEL_COND_KEYS:
+        if k in c1:
+            v = c1[k]
+        elif k in c2:
+            v = c2[k]
+        else:
+            continue
+        cond = {"passed": bool(v[0]), "detail": v[1]}
+        if len(v) > 2 and v[2]:
+            cond["insufficient"] = True
+        conditions[k] = cond
+
+    iceberg_verdicts = {"signal": 3, "approaching": 2, "weak": 1}.get(c1_verdict, 0)
+    breakout_verdicts = {"signal": 3, "approaching": 2, "weak": 1}.get(c2_verdict, 0)
+    if iceberg_verdicts >= breakout_verdicts and iceberg_verdicts > 1:
+        channel = "iceberg" if iceberg_verdicts > breakout_verdicts else "both"
+        verdict = "signal" if c1_verdict == "signal" else "approaching"
+    elif breakout_verdicts > 1:
+        channel = "breakout"
+        verdict = "signal" if c2_verdict == "signal" else "approaching"
+    else:
+        channel = None; verdict = "weak"
+
+    return {
+        "channels": {
+            "iceberg": {"name": "冰点反转", "verdict": c1_verdict, "score": c1_score,
+                        "approach_status": c1_status,
+                        "conditions": {k: bool(conditions[k]["passed"]) for k in conditions if k.startswith("c1_")}},
+            "breakout": {"name": "突破跟随", "verdict": c2_verdict, "score": c2_score,
+                         "conditions": {k: bool(conditions[k]["passed"]) for k in conditions if k.startswith("c2_")}},
+        },
+        "channel": channel,
+        "verdict": verdict,
+        "approach_status": c1_status,
+        "conditions": conditions,
+        "composite_score": max(c1_score, c2_score),
     }
 
 
@@ -633,7 +869,8 @@ def compute_position(latest_price: float, total_capital: float,
 
 def scan_stock(code: str, stock_info: dict, date_str: str = None,
                total_capital: float = 300000, max_pct: float = 0.2,
-               allow_stale: bool = False, scan_type: str = "manual") -> dict:
+               allow_stale: bool = False, scan_type: str = "manual",
+               position_gap: dict = None) -> dict:
     """扫描单只股票，返回结果字典。
     allow_stale=True 时允许分钟快照陈旧（盘后重跑，日线判断不依赖分钟快照）。
     scan_type: 'intraday' 需日线+5分钟冰点两级；'eod'/'manual' 盘后只看日线冰点。"""
@@ -645,6 +882,9 @@ def scan_stock(code: str, stock_info: dict, date_str: str = None,
         "conditions": {},
         "composite_score": 0,
         "verdict": "insufficient_data",
+        "channel": None,          # W33 A1: 触发通道 iceberg/breakout/both/None
+        "approach_status": None,  # W33 A2: immediate/intraday_pending/next_day_pending
+        "channels": {},           # W33 A1: 双通道明细 {iceberg:{...}, breakout:{...}}
         "position": None,
         "note": None,
         "errors": [],
@@ -669,78 +909,33 @@ def scan_stock(code: str, stock_info: dict, date_str: str = None,
     live_price = round(float(df_1min["close"].iloc[-1]), 3) if not df_1min.empty else None
     result["latest_price"] = live_price or round(float(daily_ctx.get("daily_price_ref") or 0), 3)
 
-    # 突破箱体（第一优先级，用实时价判当前突破）
-    bx = check_box_breakout(code, result["latest_price"])
-    box_passed = bx.get("broken", False)
-    box_detail = (f"突破箱体上沿 {bx['box']['high']}，超出 {bx['pct_above']}%"
-                  if box_passed else "未突破箱体")
-
-    # 日线冰点层（方向确认，情绪冰点4条件）
-    daily_conditions = {
-        "macd_golden": check_macd_golden(daily_ctx),
-        "boll_lower": check_boll_lower(daily_ctx),
-        "rsi_oversold": check_rsi_oversold(daily_ctx),
-        "volume_shrink": check_volume_shrink(daily_ctx),
-    }
-    daily_score = compute_score(daily_conditions)   # 满分80
-    daily_iceberg = daily_score >= 70               # 日线冰点确认(需接近全过)
-
-    # 5分钟冰点层（盘中择时：日线确认后日内再确认）
-    # 盘中(intraday)：需 5 分钟冰点确认；盘后(eod/manual)：只看日线，5 分钟层视为通过
-    m5_iceberg = True
-    m5_conditions = {}
-    if scan_type == "intraday" and not df_1min.empty and len(df_1min) >= 30:
-        df_5min = resample_to_5min(df_1min)
-        df_5min = add_5min_indicators(df_5min)
-        m5_conditions = {
-            "m5_macd_golden": check_m5_macd_golden(df_5min),
-            "m5_boll_lower": check_m5_boll_lower(df_5min),
-            "m5_rsi_oversold": check_m5_rsi_oversold(df_5min),
-            "m5_volume_shrink": check_m5_volume_shrink(df_5min),
-        }
-        m5_score = compute_score(m5_conditions)
-        m5_iceberg = m5_score >= 70
-
-    # 组装 conditions（日线4 + 5分钟4 + box_breakout），供前端展示
-    result["conditions"] = {}
-    for k, v in daily_conditions.items():
-        cond = {"passed": v[0], "detail": v[1]}
-        if len(v) > 2 and v[2]:
-            cond["insufficient"] = True
-        result["conditions"][k] = cond
-    for k, v in m5_conditions.items():
-        cond = {"passed": v[0], "detail": v[1]}
-        if len(v) > 2 and v[2]:
-            cond["insufficient"] = True
-        result["conditions"][k] = cond
-    result["conditions"]["box_breakout"] = {"passed": box_passed, "detail": box_detail}
-    # 5分钟冰点汇总键（前端 COND_LABELS 展示）
-    result["conditions"]["m5_iceberg"] = {
-        "passed": m5_iceberg,
-        "detail": "5分钟冰点确认=通过" if m5_iceberg else "5分钟冰点确认=未过（盘后跳过）" if scan_type != "intraday" else "5分钟冰点确认=未过",
-    }
-    result["daily_iceberg"] = daily_iceberg
-    result["m5_iceberg"] = m5_iceberg
-    result["composite_score"] = daily_score
-
-    # verdict：signal = 日线冰点 + 5分钟冰点（两级都需，用户确认）；approaching=日线≥40
-    if daily_iceberg and m5_iceberg:
-        result["verdict"] = "signal"
-    elif daily_score >= 40:
-        result["verdict"] = "approaching"
-    else:
-        result["verdict"] = "weak"
+    # W33 A1+A2: 双通道判定（冰点反转 + 突破跟随），5 分钟层为择时加分项非闸门
+    dc = eval_dual_channels(code, daily_ctx, df_1min, scan_type, result["latest_price"])
+    result["channels"] = dc["channels"]
+    result["channel"] = dc["channel"]
+    result["approach_status"] = dc["approach_status"]
+    result["verdict"] = dc["verdict"]
+    result["composite_score"] = dc["composite_score"]
+    result["conditions"] = dc["conditions"]
 
     # 仓位计算
     # fix 仓位一刀切(A1-A6): 仅 verdict=signal 才出建仓建议；已持仓股不再给"建仓"建议（防重复建仓）
+    # W33 A3: 股数对齐仓位管理器（欠配缺口与分3次节奏）；欠配>5% 持仓股标注"欠配补仓候选"
     if result["verdict"] != "signal":
         result["position"] = None
     elif code in _load_holding_codes():
         result["position"] = None
-        result["note"] = "已持仓，不出建仓建议（如需加仓请走加仓观察）"
+        _gap_row = None
+        if position_gap:
+            _gap_row = next((x for x in position_gap.get("rows", []) if x.get("code") == code), None)
+        if _gap_row and _gap_row.get("under"):
+            result["note"] = f"欠配补仓候选（欠配 {_gap_row.get('gap_pct', 0):.1f}%），已持仓不出建仓建议"
+        else:
+            result["note"] = "已持仓，不出建仓建议（如需加仓请走加仓观察）"
     else:
         result["position"] = compute_position(
-            result["latest_price"], total_capital, max_pct
+            result["latest_price"], total_capital, max_pct,
+            code=code, position_gap=position_gap
         )
 
     return result
@@ -750,12 +945,8 @@ def scan_stock(code: str, stock_info: dict, date_str: str = None,
 # 飞书推送
 # ============================================================
 
-COND_LABELS = {
-    "macd_golden": "MACD金叉",
-    "boll_lower": "BOLL下轨",
-    "rsi_oversold": "RSI超卖",
-    "volume_shrink": "成交量缩量",
-}
+# W33 A1: 双通道 8 键标签（与 CHANNEL_COND_KEYS 同序，t_gui/web 圆点列消费）
+COND_LABELS = dict(CHANNEL_COND_LABELS)
 
 
 def build_signal_card(result: dict) -> dict:
@@ -776,11 +967,23 @@ def build_signal_card(result: dict) -> dict:
 
     cond_text = "\n".join(cond_lines)
 
+    # W33 A1: 通道标注 + 择时状态
+    _channel = result.get("channel")
+    _ch_name = ""
+    if _channel == "both":
+        _ch_name = "冰点反转 + 突破跟随"
+    elif _channel == "iceberg":
+        _ch_name = "冰点反转"
+    elif _channel == "breakout":
+        _ch_name = "突破跟随"
+    _status_txt = {"immediate": "即时可建", "intraday_pending": "待日内确认",
+                   "next_day_pending": "待次日盘中确认"}.get(result.get("approach_status"), "")
+
     lines = [
         f"**{name}（{code}）** 建仓信号触发",
         "",
         f"📅 日期：{result.get('date') or 'N/A'}",
-        f"📊 综合得分：**{score}/100**",
+        f"📊 综合得分：**{score}** ｜ 通道：**{_ch_name or '—'}**{f'｜{_status_txt}' if _status_txt else ''}",
         f"💵 最新价：{result.get('latest_price')}",
     ]
     # fix 仓位一刀切(A1-A6): 已持仓等无仓位建议的信号，卡片显式标注原因
@@ -843,6 +1046,14 @@ def build_summary_card(results: list, date_str: str = "") -> dict:
     no_data_count = sum(1 for r in results if r.get("verdict") == "insufficient_data")
 
     lines.append(f"🔴 满足条件: **{signal_count}** 只  |  🟡 接近: **{approaching_count}** 只  |  ⚪ 偏弱: **{weak_count}** 只  |  ⬜ 无数据: **{no_data_count}** 只")
+    # W33 A1: 双通道 signal 计数
+    _sig_ice = sum(1 for r in results if (r.get("channels") or {}).get("iceberg", {}).get("verdict") == "signal")
+    _sig_brk = sum(1 for r in results if (r.get("channels") or {}).get("breakout", {}).get("verdict") == "signal")
+    if _sig_ice or _sig_brk:
+        lines.append(f"　🧊冰点 {_sig_ice} 只 ｜ 🚀突破 {_sig_brk} 只")
+    if signal_count > 0:
+        # W33 A4 闸门未过（2026-08-14）→ 双通道为参考级，汇总卡明示
+        lines.append("> ⚠️ 双通道判据未过离线闸门（W33 A4），以下信号仅供研究参考，不作验收/跟单依据")
     lines.append("")
 
     # 有数据的股票排序：signal > approaching > weak
@@ -858,18 +1069,20 @@ def build_summary_card(results: list, date_str: str = "") -> dict:
             price_str = f"{price:.2f}" if isinstance(price, (int, float)) else "N/A"
             pos = r.get("position") or {}
             qty = pos.get("suggested_qty", 0)
+            _ch = r.get("channel")
+            _ch_txt = {"iceberg": "🧊", "breakout": "🚀", "both": "🧊🚀"}.get(_ch, "—")
 
-            # 条件通过情况
+            # 条件通过情况（W33 A1: 双通道 8 键圆点串）
             conds = r.get("conditions", {})
             cond_parts = []
-            for key in ["macd_golden", "boll_mid_support", "rsi_healthy", "volume_shrink", "support_retest"]:
+            for key in CHANNEL_COND_KEYS:
                 c = conds.get(key, {})
                 cond_parts.append("●" if c.get("passed") else "○")
             cond_str = "".join(cond_parts)
 
             lines.append(
                 f"{icon} **{r['code']}** {r['name']}  "
-                f"得分 **{r['composite_score']}**  "
+                f"[{_ch_txt}] 得分 **{r['composite_score']}**  "
                 f"价 {price_str}  "
                 f"建议 {qty}股  "
                 f"{cond_str}"
@@ -884,7 +1097,7 @@ def build_summary_card(results: list, date_str: str = "") -> dict:
         lines.append(nd_codes)
 
     lines.append("")
-    lines.append("●=通过  ○=未通过  (MACD/BOLL/RSI/量/支撑)")
+    lines.append("●=通过  ○=未通过  (转向/BOLL/缩量/RSI/5分冰点/突破/放量/多头)")
 
     markdown = "\n".join(lines)
 
@@ -953,11 +1166,13 @@ def update_watchlist(result: dict, watchlist: dict):
         stock["suggested_qty"] = int(pos.get("suggested_qty", 0))
         stock["suggested_price"] = float(pos.get("suggested_price", 0))
         stock["capital_required"] = float(pos.get("capital_required", 0))
-    # 追加信号历史
+    # 追加信号历史（W33 A1: 带通道/择时标注）
     hist_entry = {
         "date": result.get("date"),
         "score": int(result["composite_score"]),
         "verdict": str(result["verdict"]),
+        "channel": result.get("channel"),
+        "approach_status": result.get("approach_status"),
         "price": float(result.get("latest_price")) if result.get("latest_price") else None,
     }
     if "signal_history" not in stock:
@@ -976,10 +1191,13 @@ def print_report(results: list):
     for r in results:
         code = r["code"]
         name = r["name"]
+        _astat = r.get("approach_status")
         print(f"\n── {code} {name} ──")
         print(f"  日期: {r.get('date') or '无数据'}")
         print(f"  最新价: {r.get('latest_price') or 'N/A'}")
-        print(f"  综合得分: {r['composite_score']}/100  =>  {r['verdict']}")
+        print(f"  综合得分: {r['composite_score']}  =>  {r['verdict']}"
+              f"  通道: {r.get('channel') or '—'}"
+              f"{('  ' + str(_astat)) if _astat else ''}")
 
         if r.get("errors"):
             for e in r["errors"]:
@@ -987,16 +1205,12 @@ def print_report(results: list):
             continue
 
         print("\n  条件检查:")
-        for cond_key, cond_val in r.get("conditions", {}).items():
+        for cond_key in CHANNEL_COND_KEYS:
+            cond_val = r.get("conditions", {}).get(cond_key)
+            if cond_val is None:
+                continue
             icon = "[PASS]" if cond_val["passed"] else "[FAIL]"
-            labels = {
-                "macd_golden": "MACD多头",
-                "boll_mid_support": "BOLL中轨支撑",
-                "rsi_healthy": "RSI健康区间",
-                "volume_shrink": "成交量缩量",
-                "support_retest": "回踩支撑不破",
-            }
-            print(f"    {icon} {labels.get(cond_key, cond_key):12s}  {cond_val['detail']}")
+            print(f"    {icon} {CHANNEL_COND_LABELS.get(cond_key, cond_key):12s}  {cond_val['detail']}")
 
         pos = r.get("position") or {}
         if pos:
@@ -1033,6 +1247,45 @@ def print_report(results: list):
 # 核心入口（CLI 和 main.py 共用）
 # ============================================================
 
+def _build_holdings_gap(total_capital: float) -> dict:
+    """W33 A3: 由 holdings.json 构建仓位管理器欠配缺口（config.build_position_gap 同源口径）。
+    价格代理用 cost（恒可用）；mkt_val=Σ qty×cost。返回 {ratio_sum, rows} 或 None（无持仓/异常）。"""
+    try:
+        import config as _cfg
+    except Exception:
+        _cfg = None
+    try:
+        if not HOLDINGS_FILE.exists():
+            return None
+        with open(HOLDINGS_FILE, "r", encoding="utf-8") as f:
+            cur = json.load(f)
+        if not isinstance(cur, dict) or not cur:
+            return None
+        merged = {}
+        for code, h in cur.items():
+            if not isinstance(h, dict):
+                continue
+            base = str(code).split("_")[0]
+            merged.setdefault(base, {"name": h.get("name", code), "qty": 0, "cost": 0.0, "px_sum": 0.0})
+            qty = int(h.get("qty") or 0)
+            px = float(h.get("cost") or h.get("pre_close") or 0)
+            merged[base]["qty"] += qty
+            merged[base]["px_sum"] += px * qty
+        default_pct = 0.30
+        raw = []
+        for base, m in merged.items():
+            raw_pct = default_pct
+            if _cfg is not None:
+                raw_pct = float((_cfg.STOCK_PARAMS.get(base, {}) or {}).get("stock_qty_base_pct", default_pct))
+            raw.append({"code": base, "name": m["name"], "raw_pct": raw_pct,
+                        "mkt_val": m["px_sum"], "total_qty": m["qty"]})
+        if _cfg is None:
+            return None
+        return _cfg.build_position_gap(total_capital, raw, default_pct)
+    except Exception:
+        return None
+
+
 def run_position_scan(date_str: str = None, capital: float = None,
                       no_feishu: bool = False, target_code: str = None,
                       silent: bool = False, scan_type: str = "manual") -> list:
@@ -1050,6 +1303,8 @@ def run_position_scan(date_str: str = None, capital: float = None,
 
     total_capital = capital or watchlist.get("total_capital", 300000)
     max_pct = watchlist.get("max_per_stock_pct", 0.2)
+    # W33 A3: 构建一次持仓欠配缺口（欠配补仓候选标注 + 股数对齐），下传 scan_stock
+    position_gap = _build_holdings_gap(total_capital)
 
     stocks = watchlist.get("stocks", {})
     if not stocks:
@@ -1082,21 +1337,23 @@ def run_position_scan(date_str: str = None, capital: float = None,
             print(f"扫描 {code} {info.get('name', '')}...")
         # 盘后(eod)/手动(manual)重跑允许快照陈旧（日线判断独立拉取）；scan_type 传给 scan_stock
         r = scan_stock(code, info, date_str, total_capital, max_pct,
-                       allow_stale=(scan_type in ("eod", "manual")), scan_type=scan_type)
+                       allow_stale=(scan_type in ("eod", "manual")), scan_type=scan_type,
+                       position_gap=position_gap)
         results.append(r)
         update_watchlist(r, watchlist)
 
         if r["verdict"] == "signal":
             signal_count += 1
-            # fix P1-4: (code, date) 当日 signal 只推一次，防 5 分钟轮询刷屏
+            # fix P1-4: (code, date, channel) 当日 signal 只推一次，防 5 分钟轮询刷屏（W33 A1: 去重键带通道）
             sig_date = r.get("date") or datetime.now().strftime("%Y-%m-%d")
-            if not no_feishu and _signal_already_pushed(code, sig_date):
+            sig_channel = r.get("channel")
+            if not no_feishu and _signal_already_pushed(code, sig_date, sig_channel):
                 if not silent:
-                    print(f"  => 今日已推送过 signal，跳过重复推送")
+                    print(f"  => 今日已推送过该通道 signal，跳过重复推送")
             else:
                 pushed = push_signal_feishu(r, dry_run=no_feishu)
                 if pushed:
-                    _mark_signal_pushed(code, sig_date)
+                    _mark_signal_pushed(code, sig_date, sig_channel)
                 if not silent:
                     if pushed:
                         print(f"  => 飞书推送已发送")
@@ -1115,6 +1372,12 @@ def run_position_scan(date_str: str = None, capital: float = None,
             "price": _py_type(r.get("latest_price")),
             "composite_score": int(r["composite_score"]),
             "verdict": str(r["verdict"]),
+            "channel": r.get("channel"),
+            "approach_status": r.get("approach_status"),
+            "channels": {k: {"verdict": v.get("verdict"), "score": v.get("score"),
+                             "approach_status": v.get("approach_status"),
+                             "conditions": v.get("conditions", {})}
+                         for k, v in (r.get("channels") or {}).items()},
             "in_holdings": bool(watchlist.get("stocks", {}).get(r["code"], {}).get("in_holdings", False)),
             "conditions": {k: bool(v["passed"]) for k, v in r.get("conditions", {}).items()},
             "suggested_qty": int((r.get("position") or {}).get("suggested_qty", 0)),

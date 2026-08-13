@@ -180,6 +180,8 @@ def notify(sig, holding):
                 advice += f"\n⚠️ 风险：当前处于主力出货/重压状态，不建议主动加仓，仅接回已卖出部分"
         if hold_qty <= 0:
             advice += "\n⚠️ 仓控可交易量为0(无T仓/大盘熔断)，仅供参考不自动跟单"
+            # W33 J6 (2026-08-13 用户拍板选项甲): 满仓股两点触发照推，卡片标注满仓参考
+            advice += "\n🔒 满仓参考·可交易量0"
 
         # 【V1.14 新增】支撑位与决策透明化
         support_info = ""
@@ -1515,6 +1517,7 @@ def scan_once():
                         log.debug(f"⚠️  {code} 市场状态识别失败: {e}")
                     
                     # 2. 动态份数计算（个股/ETF统一）
+                    _advice = None  # W33 G1: sizing_advice 结构化落盘（买卖双侧）
                     try:
                         from position_sizer import calc_sell_qty, calc_buy_qty, set_all_holdings
                         set_all_holdings(HOLDINGS)  # fix P0-9(B4): 注入全量持仓供单股上限 A/B 合并判定
@@ -1550,6 +1553,24 @@ def scan_once():
                         else:
                             sig.hold_qty = 0
                             log.info(f"🛑 大盘熔断/仓控阻断 {code}: {daily_ctx.get('index_circuit_state', 'normal')} / {daily_ctx.get('index_gate_advice', 'normal_t')}")
+                        # W33 G1: 捕获 sizing 画像（pushed 待推送决策后回填）
+                        _vt = VIRTUAL_TRADES.get(code, {})
+                        _buy_sum = sum(t.get("qty", 0) for t in _vt.get("BUY_LOW", []))
+                        _sell_sum = sum(t.get("qty", 0) for t in _vt.get("SELL_HIGH", []))
+                        _net = max(0, int(holding.get("t_qty", 0)) + _buy_sum - _sell_sum)
+                        _unrebuilt = max(0, _sell_sum - _buy_sum)
+                        _advice = {
+                            "ts": _now().strftime("%Y-%m-%d %H:%M:%S"),
+                            "code": code, "name": holding.get("name", code),
+                            "action": sig.action,
+                            "price": cur_price,
+                            "vwap": float(sig.indicators.get("vwap", sig.price) or sig.price),
+                            "suggested_qty": dynamic_qty,
+                            "score": float(sig.score), "threshold": threshold,
+                            "t_qty": int(holding.get("t_qty", 0)),
+                            "net_qty": _net, "unrebuilt": _unrebuilt,
+                            "max_buyable": max(0, int(holding.get("t_qty", 0)) - _net),
+                        }
                     except Exception as e:
                         log.warning(f"⚠️  动态份数计算失败 {code}: {e}")
                     
@@ -1610,6 +1631,16 @@ def scan_once():
                             )
                         except Exception:
                             pass
+                    # W33 G1: sizing_advice 结构化落盘（每次 sizing 调用一行，喂每日 Review §3 加仓逐笔）
+                    if _advice is not None:
+                        try:
+                            _advice["pushed"] = bool(pushed)
+                            _advice["buy_kind"] = "rebuild" if _advice["unrebuilt"] > 0 else "first_add"
+                            if sig.hold_qty <= 0:
+                                _advice["note"] = "仓控可交易量为0(满仓/熔断)，仅供参考不记账"
+                            _append_jsonl(_trace_path("sizing_advice"), _advice)
+                        except Exception as _e:
+                            log.warning(f"⚠️  sizing_advice 落盘失败 {code}: {_e}")
 
                 # V1.14: 尾盘强制平仓已删除（用户反馈不需要）
 

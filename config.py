@@ -336,14 +336,12 @@ PARAMS = {
     "stock_qty_base_pct": 0.30,
     "stock_qty_strong_pct": 0.40,
     "stock_qty_weak_pct": 0.20,
-    "stock_rebuild_base_pct": 0.50,
-    "stock_rebuild_strong_pct": 0.80,
-    "stock_rebuild_weak_pct": 0.30,
-    "stock_first_add_pct": 0.20,
-    "stock_first_add_strong_pct": 0.30,
-    "stock_first_add_weak_pct": 0.10,
+    # W33 B2 (2026-08-13): strength 三档失效(V2 纯两点后恒"强"档) → 单档固定比例
+    "stock_rebuild_pct": 0.60,   # 接回单档
+    "stock_first_add_pct": 0.20, # 首加单档
+    "etf_buy_qty_pct": 0.25,     # ETF 接回/首加单档
     "stock_min_trade_unit": 100,
-    "etf_qty_strong_pct": 0.25,
+    "etf_qty_strong_pct": 0.25,  # 卖出侧 _calc_etf_sell_qty 在用
     "etf_qty_base_pct": 0.15,
     "etf_qty_weak_pct": 0.08,
     # —— 其他 ——
@@ -369,13 +367,11 @@ PARAMS = {
 STOCK_PARAMS = {
     "600481": {  # 双良节能
         "stock_qty_base_pct": 0.39, "stock_qty_strong_pct": 0.27,
-        "stock_rebuild_strong_pct": 0.98, "stock_first_add_pct": 0.34,
         "bullish_reversal_min_pct": 0.008,     # N4
         "notify_sell_threshold": 55, "notify_buy_threshold": 36.0,  # v1.1.0: sell 62→55 对齐t55档; E1采纳: buy 43→36 对齐引擎T36b档
     },
     "000988": {  # 华工科技
         "stock_qty_base_pct": 0.30, "stock_qty_strong_pct": 0.29,
-        "stock_rebuild_strong_pct": 0.59, "stock_first_add_pct": 0.27,
         "max_sell_times_per_stock": 2,
         "bullish_reversal_min_pct": 0.006,     # N4
         "bullish_reversal_body_ratio": 0.50,
@@ -384,19 +380,16 @@ STOCK_PARAMS = {
     },
     "588170": {  # 科创芯片ETF
         "stock_qty_base_pct": 0.15, "stock_qty_strong_pct": 0.25,
-        "stock_rebuild_strong_pct": 0.50, "stock_first_add_pct": 0.10,
         "max_sell_times_per_stock": 2,
         "notify_sell_threshold": 55, "notify_buy_threshold": 36.0,  # v1.1.0: sell 67→55 对齐t55档; E1采纳: buy 40→36 对齐引擎T36b档
     },
     "600176": {  # 中国巨石
         "stock_qty_base_pct": 0.34, "stock_qty_strong_pct": 0.59,
-        "stock_rebuild_strong_pct": 0.97, "stock_first_add_pct": 0.37,
         "max_sell_times_per_stock": 3,
         "notify_sell_threshold": 51, "notify_buy_threshold": 36.0,  # E1采纳: buy 40→36 对齐引擎T36b档
     },
     "603667": {  # 五洲新春
         "stock_qty_base_pct": 0.28, "stock_qty_strong_pct": 0.37,
-        "stock_rebuild_strong_pct": 0.75, "stock_first_add_pct": 0.21,
         "notify_sell_threshold": 55, "notify_buy_threshold": 36.0,  # v1.1.0: sell 64→55 对齐t55档; E1采纳: buy 40→36 对齐引擎T36b档
     },
 }
@@ -756,6 +749,66 @@ def save_t_mode(t_mode: Dict[str, str]):
 #   3. 取消"价格低于VWAP禁买"限制（反T需要在低位接回）
 #   4. 早盘允许卖出（反T的核心是早盘先卖）
 # V1.26fix: SHORT_MODE_PARAMS removed in V3.0 (no consumers — dead config block)
+
+# ==================== W33 A3: 仓位管理器共享计算（t_gui 与 position_builder 同源） ====================
+# 从 t_gui.load_position_manager 内联逻辑抽取，避免 GUI/建仓扫描两处实现漂移。
+
+def build_position_gap(total_capital: float, raw_list: list, default_pct: float = 0.30) -> dict:
+    """由各持仓的基础市值/目标比例计算归一化目标市值与欠配缺口。
+
+    raw_list: [{code, name, raw_pct, mkt_val, total_qty}]（A/B 双账户已按基础代码合并；
+               mkt_val=当前市值，total_qty=当前总股数，raw_pct=个股目标比例）
+    default_pct: raw_pct 缺失时回落的全局默认比例（PARAMS stock_qty_base_pct）。
+
+    返回 {ratio_sum, rows:[{code,name,target_pct,target_val,mkt_val,price,gap_pct,gap_qty,
+          add_batches,over,under}]} — 口径与 t_gui.load_position_manager 一致。
+    """
+    ratio_sum = sum(r.get("raw_pct", default_pct) for r in raw_list) or 1.0
+    rows = []
+    for r in raw_list:
+        raw_pct = r.get("raw_pct", default_pct)
+        target_pct = raw_pct / ratio_sum  # 归一化：总和=100%
+        target_val = total_capital * target_pct
+        mkt_val = float(r.get("mkt_val") or 0)
+        total_qty = int(r.get("total_qty") or 0)
+        pct = mkt_val / total_capital if total_capital else 0
+        gap_pct = (mkt_val / target_val - 1) if target_val else 0
+        px = (mkt_val / total_qty) if total_qty else 0
+        gap_val = target_val - mkt_val
+        if px > 0:
+            gap_qty = int(gap_val / px // 100) * 100  # 欠配=+可加，超配=-应减
+        else:
+            gap_qty = 0
+        # 欠配股数三等分：每批整手(100股)，末批含余数；不足3手不强分3批
+        add_batches = []
+        if gap_qty > 0:
+            if gap_qty >= 300:
+                batch = (gap_qty // 3 // 100) * 100
+                add_batches = [batch, batch, gap_qty - 2 * batch]
+                if add_batches[2] < 100:
+                    add_batches[1] += add_batches[2]
+                    add_batches = add_batches[:2]
+            elif gap_qty >= 200:
+                half = gap_qty // 2 // 100 * 100
+                add_batches = [half, gap_qty - half]
+            else:
+                add_batches = [gap_qty]
+        rows.append({
+            "code": r.get("code"), "name": r.get("name"),
+            "target_pct": round(target_pct, 4),
+            "target_val": round(target_val, 0),
+            "mkt_val": round(mkt_val, 0),
+            "total_qty": total_qty,
+            "price": round(px, 3) if total_qty else 0,
+            "pct": round(pct * 100, 1),
+            "gap_pct": round(gap_pct * 100, 1),
+            "gap_qty": int(gap_qty),
+            "add_batches": add_batches,
+            "over": gap_pct > 0.05,    # 超配 >5%
+            "under": gap_pct < -0.05,  # 欠配 >5%
+        })
+    return {"ratio_sum": ratio_sum, "rows": rows}
+
 
 # ==================== V3.0: 大盘热度×韭研TOP3 联动（daily_sentiment.py） ====================
 # daily_sentiment.py 的 sentiment_params() 通过 globals().get("SENTIMENT_PARAMS") 合并本 dict
