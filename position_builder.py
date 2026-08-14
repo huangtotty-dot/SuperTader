@@ -68,6 +68,13 @@ def _write_trace_line(entry: dict, date_str: str):
 STATE_DIR = BASE / "t_io" / "state"
 PUSH_DEDUP_FILE = STATE_DIR / "position_signal_pushed.json"
 
+# W33 A1 破闸回退 (2026-08-14 用户拍板"保留结构，仅观察不推"):
+#   w33_backtest.py 离线回测判建仓双通道破闸（突破通道全参数域负期望、
+#   冰点放宽验证段过拟合），按"破闸即放弃回退"纪律，顶层 signal 一律降级为
+#   approaching 观察，不再推飞书建仓卡片、不再出建仓建议。
+#   channels 明细仍保留原始通道 verdict（含 signal），供观察积累与后续复审。
+A1_BUILD_SIGNAL_GATED = True
+
 
 def _load_push_dedup() -> dict:
     """读取推送去重状态 {date: [code, ...]}，失败时返回空。"""
@@ -847,6 +854,13 @@ def eval_dual_channels(code: str, daily_ctx: dict, df_1min, scan_type: str, pric
     else:
         channel = None; verdict = "weak"
 
+    # W33 A1 破闸回退: 顶层 signal 降级为 approaching（仅观察不推），
+    # 原始通道 verdict 保留在 channels.*.verdict 供观察积累与后续复审。
+    gated_from = None
+    if A1_BUILD_SIGNAL_GATED and verdict == "signal":
+        gated_from = verdict
+        verdict = "approaching"
+
     return {
         "channels": {
             "iceberg": {"name": "冰点反转", "verdict": c1_verdict, "score": c1_score,
@@ -860,6 +874,8 @@ def eval_dual_channels(code: str, daily_ctx: dict, df_1min, scan_type: str, pric
         "approach_status": c1_status,
         "conditions": conditions,
         "composite_score": max(c1_score, c2_score),
+        "gated": A1_BUILD_SIGNAL_GATED and gated_from is not None,
+        "gated_from": gated_from,
     }
 
 
@@ -885,6 +901,8 @@ def scan_stock(code: str, stock_info: dict, date_str: str = None,
         "channel": None,          # W33 A1: 触发通道 iceberg/breakout/both/None
         "approach_status": None,  # W33 A2: immediate/intraday_pending/next_day_pending
         "channels": {},           # W33 A1: 双通道明细 {iceberg:{...}, breakout:{...}}
+        "gated": False,           # W33 A1 破闸: 顶层 signal 被降级为 approaching 标记
+        "gated_from": None,       # 被降级前的原始 verdict（signal）
         "position": None,
         "note": None,
         "errors": [],
@@ -917,6 +935,8 @@ def scan_stock(code: str, stock_info: dict, date_str: str = None,
     result["verdict"] = dc["verdict"]
     result["composite_score"] = dc["composite_score"]
     result["conditions"] = dc["conditions"]
+    result["gated"] = dc.get("gated", False)
+    result["gated_from"] = dc.get("gated_from")
 
     # 仓位计算
     # fix 仓位一刀切(A1-A6): 仅 verdict=signal 才出建仓建议；已持仓股不再给"建仓"建议（防重复建仓）
@@ -1374,6 +1394,8 @@ def run_position_scan(date_str: str = None, capital: float = None,
             "verdict": str(r["verdict"]),
             "channel": r.get("channel"),
             "approach_status": r.get("approach_status"),
+            "gated": bool(r.get("gated", False)),
+            "gated_from": r.get("gated_from"),
             "channels": {k: {"verdict": v.get("verdict"), "score": v.get("score"),
                              "approach_status": v.get("approach_status"),
                              "conditions": v.get("conditions", {})}
