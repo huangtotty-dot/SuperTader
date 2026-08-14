@@ -222,7 +222,7 @@ def add_assess(kdf_by_code):
     evs = _dedup_buys()
     n = len(evs)
     vwap_adv = sum(1 for e in evs if e["px"] < e["vwap"])
-    c1_w, c3_rets, break_ma = 0, [], 0
+    c1_w, c3_rets = 0, []
     n_c1, n_c3, n_brk = 0, 0, 0
     for e in evs:
         kdf = kdf_by_code.get(e["code"])
@@ -248,12 +248,11 @@ def add_assess(kdf_by_code):
         sup = ma20 if abs(e["px"] - ma20) <= abs(e["px"] - ma10) else ma10
         if c1 is not None and c1 < sup:
             n_brk += 1
-            break_ma += 1
     return {
         "n": n, "vwap_adv": vwap_adv / n if n else None,
         "c1_win": c1_w / n_c1 if n_c1 else None, "n_c1": n_c1,
         "c3_mean": float(np.mean(c3_rets)) if c3_rets else None, "n_c3": n_c3,
-        "break_rate": break_ma / n_brk if n_brk else None, "n_brk": n_brk,
+        "break_rate": n_brk / n_c1 if n_c1 else None, "n_brk": n_brk,
     }
 
 
