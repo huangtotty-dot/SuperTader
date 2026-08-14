@@ -1,6 +1,6 @@
 {
   "date": "2026-08-14",
-  "updated_at": "2026-08-14 00:52:01",
+  "updated_at": "2026-08-14 09:27:53",
   "source": "live",
   "holdings": [
     {
@@ -13,10 +13,10 @@
       "t_qty": 2000,
       "cost": 0.627,
       "pre_close": 1.01,
-      "price": 1.01,
-      "change_pct": -2.88,
-      "pnl_pct": 61.08452950558214,
-      "pnl_amt": 766.0,
+      "price": 1.02,
+      "change_pct": 0.99,
+      "pnl_pct": 62.67942583732058,
+      "pnl_amt": 786.0,
       "offline": false
     },
     {
@@ -29,10 +29,10 @@
       "t_qty": 300,
       "cost": 63.403,
       "pre_close": 41.9,
-      "price": 41.9,
-      "change_pct": -3.26,
-      "pnl_pct": -33.914798984275194,
-      "pnl_amt": -6450.9,
+      "price": 42.4,
+      "change_pct": 1.19,
+      "pnl_pct": -33.12619276690377,
+      "pnl_amt": -6300.9,
       "offline": false
     },
     {
@@ -46,7 +46,7 @@
       "cost": 28.216,
       "pre_close": 4.35,
       "price": 4.35,
-      "change_pct": -2.9,
+      "change_pct": 0.0,
       "pnl_pct": -84.58321519705132,
       "pnl_amt": -2386.6,
       "offline": false
@@ -61,10 +61,10 @@
       "t_qty": 0,
       "cost": 56.765,
       "pre_close": 55.76,
-      "price": 55.76,
-      "change_pct": -1.34,
-      "pnl_pct": -1.7704571478904252,
-      "pnl_amt": -301.5,
+      "price": 55.85,
+      "change_pct": 0.16,
+      "pnl_pct": -1.6119087465867987,
+      "pnl_amt": -274.5,
       "offline": false
     },
     {
@@ -77,10 +77,10 @@
       "t_qty": 200,
       "cost": 332.085,
       "pre_close": 107.04,
-      "price": 107.04,
-      "change_pct": 0.68,
-      "pnl_pct": -67.76728849541533,
-      "pnl_amt": -45009.0,
+      "price": 107.51,
+      "change_pct": 0.44,
+      "pnl_pct": -67.62575846545312,
+      "pnl_amt": -44915.0,
       "offline": false
     },
     {
@@ -93,10 +93,10 @@
       "t_qty": 100,
       "cost": 159.073,
       "pre_close": 107.04,
-      "price": 107.04,
-      "change_pct": 0.68,
-      "pnl_pct": -32.71013936997479,
-      "pnl_amt": -5203.3,
+      "price": 107.51,
+      "change_pct": 0.44,
+      "pnl_pct": -32.4146775379857,
+      "pnl_amt": -5156.3,
       "offline": false
     },
     {
@@ -110,7 +110,7 @@
       "cost": 10.807,
       "pre_close": 12.23,
       "price": 12.23,
-      "change_pct": -2.08,
+      "change_pct": 0.0,
       "pnl_pct": 13.167391505505698,
       "pnl_amt": 142.3,
       "offline": false
@@ -125,8 +125,8 @@
       "t_qty": 0,
       "cost": null,
       "pre_close": null,
-      "price": 9.47,
-      "change_pct": 0.74,
+      "price": 9.57,
+      "change_pct": 1.06,
       "pnl_pct": null,
       "pnl_amt": null,
       "offline": false
@@ -141,8 +141,8 @@
       "t_qty": 0,
       "cost": null,
       "pre_close": null,
-      "price": 20.93,
-      "change_pct": 2.4,
+      "price": 20.94,
+      "change_pct": 0.05,
       "pnl_pct": null,
       "pnl_amt": null,
       "offline": false
@@ -157,8 +157,8 @@
       "t_qty": 0,
       "cost": null,
       "pre_close": null,
-      "price": 26.15,
-      "change_pct": -0.46,
+      "price": 26.2,
+      "change_pct": 0.19,
       "pnl_pct": null,
       "pnl_amt": null,
       "offline": false
@@ -173,8 +173,8 @@
       "t_qty": 0,
       "cost": null,
       "pre_close": null,
-      "price": 7.44,
-      "change_pct": -1.2,
+      "price": 7.49,
+      "change_pct": 0.67,
       "pnl_pct": null,
       "pnl_amt": null,
       "offline": false
@@ -189,8 +189,8 @@
       "t_qty": 0,
       "cost": null,
       "pre_close": null,
-      "price": 41.65,
-      "change_pct": -2.8,
+      "price": 43.28,
+      "change_pct": 3.91,
       "pnl_pct": null,
       "pnl_amt": null,
       "offline": false
@@ -205,8 +205,8 @@
       "t_qty": 0,
       "cost": null,
       "pre_close": null,
-      "price": 74.92,
-      "change_pct": -3.43,
+      "price": 76.02,
+      "change_pct": 1.47,
       "pnl_pct": null,
       "pnl_amt": null,
       "offline": false
@@ -221,8 +221,8 @@
       "t_qty": 0,
       "cost": null,
       "pre_close": null,
-      "price": 15.25,
-      "change_pct": -4.03,
+      "price": 15.37,
+      "change_pct": 0.79,
       "pnl_pct": null,
       "pnl_amt": null,
       "offline": false
@@ -237,8 +237,8 @@
       "t_qty": 0,
       "cost": null,
       "pre_close": null,
-      "price": 22.57,
-      "change_pct": 0.85,
+      "price": 22.78,
+      "change_pct": 0.93,
       "pnl_pct": null,
       "pnl_amt": null,
       "offline": false
@@ -253,8 +253,8 @@
       "t_qty": 0,
       "cost": null,
       "pre_close": null,
-      "price": 24.86,
-      "change_pct": -2.05,
+      "price": 25.13,
+      "change_pct": 1.09,
       "pnl_pct": null,
       "pnl_amt": null,
       "offline": false
@@ -269,8 +269,8 @@
       "t_qty": 0,
       "cost": null,
       "pre_close": null,
-      "price": 31.57,
-      "change_pct": -3.49,
+      "price": 31.76,
+      "change_pct": 0.6,
       "pnl_pct": null,
       "pnl_amt": null,
       "offline": false
@@ -285,8 +285,8 @@
       "t_qty": 0,
       "cost": null,
       "pre_close": null,
-      "price": 21.01,
-      "change_pct": -1.55,
+      "price": 20.98,
+      "change_pct": -0.14,
       "pnl_pct": null,
       "pnl_amt": null,
       "offline": false
@@ -301,8 +301,8 @@
       "t_qty": 0,
       "cost": null,
       "pre_close": null,
-      "price": 77.82,
-      "change_pct": -0.46,
+      "price": 78.99,
+      "change_pct": 1.5,
       "pnl_pct": null,
       "pnl_amt": null,
       "offline": false
@@ -317,8 +317,8 @@
       "t_qty": 0,
       "cost": null,
       "pre_close": null,
-      "price": 12.77,
-      "change_pct": -3.55,
+      "price": 12.62,
+      "change_pct": -1.17,
       "pnl_pct": null,
       "pnl_amt": null,
       "offline": false
@@ -333,8 +333,8 @@
       "t_qty": 0,
       "cost": null,
       "pre_close": null,
-      "price": 0.695,
-      "change_pct": 1.02,
+      "price": 0.692,
+      "change_pct": -0.43,
       "pnl_pct": null,
       "pnl_amt": null,
       "offline": false
@@ -349,8 +349,8 @@
       "t_qty": 0,
       "cost": null,
       "pre_close": null,
-      "price": 210.22,
-      "change_pct": -2.42,
+      "price": 215.0,
+      "change_pct": 2.27,
       "pnl_pct": null,
       "pnl_amt": null,
       "offline": false
@@ -365,8 +365,8 @@
       "t_qty": 0,
       "cost": null,
       "pre_close": null,
-      "price": 62.02,
-      "change_pct": -6.75,
+      "price": 62.49,
+      "change_pct": 0.76,
       "pnl_pct": null,
       "pnl_amt": null,
       "offline": false
@@ -381,8 +381,8 @@
       "t_qty": 0,
       "cost": null,
       "pre_close": null,
-      "price": 143.3,
-      "change_pct": 13.52,
+      "price": 143.08,
+      "change_pct": -0.15,
       "pnl_pct": null,
       "pnl_amt": null,
       "offline": false
@@ -397,8 +397,8 @@
       "t_qty": 0,
       "cost": null,
       "pre_close": null,
-      "price": 180.08,
-      "change_pct": -0.5,
+      "price": 183.33,
+      "change_pct": 1.8,
       "pnl_pct": null,
       "pnl_amt": null,
       "offline": false
@@ -413,8 +413,8 @@
       "t_qty": 0,
       "cost": null,
       "pre_close": null,
-      "price": 149.5,
-      "change_pct": -3.67,
+      "price": 152.01,
+      "change_pct": 1.68,
       "pnl_pct": null,
       "pnl_amt": null,
       "offline": false
@@ -429,8 +429,8 @@
       "t_qty": 0,
       "cost": null,
       "pre_close": null,
-      "price": 251.02,
-      "change_pct": -4.93,
+      "price": 256.07,
+      "change_pct": 2.01,
       "pnl_pct": null,
       "pnl_amt": null,
       "offline": false
@@ -445,8 +445,8 @@
       "t_qty": 0,
       "cost": null,
       "pre_close": null,
-      "price": 38.97,
-      "change_pct": 4.2,
+      "price": 38.26,
+      "change_pct": -1.82,
       "pnl_pct": null,
       "pnl_amt": null,
       "offline": false
@@ -462,7 +462,7 @@
       "cost": null,
       "pre_close": null,
       "price": 37.17,
-      "change_pct": 3.36,
+      "change_pct": 0.0,
       "pnl_pct": null,
       "pnl_amt": null,
       "offline": false
@@ -477,8 +477,8 @@
       "t_qty": 0,
       "cost": null,
       "pre_close": null,
-      "price": 162.33,
-      "change_pct": 2.07,
+      "price": 160.5,
+      "change_pct": -1.13,
       "pnl_pct": null,
       "pnl_amt": null,
       "offline": false
@@ -493,17 +493,17 @@
       "t_qty": 0,
       "cost": null,
       "pre_close": null,
-      "price": 121.87,
-      "change_pct": 3.29,
+      "price": 123.51,
+      "change_pct": 1.35,
       "pnl_pct": null,
       "pnl_amt": null,
       "offline": false
     }
   ],
   "summary": {
-    "total_value": 65088.0,
+    "total_value": 65426.0,
     "total_cost": 123531.0,
-    "total_pnl": -58443.0,
-    "total_pnl_pct": -47.31
+    "total_pnl": -58105.0,
+    "total_pnl_pct": -47.04
   }
 }
