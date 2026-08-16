@@ -119,12 +119,18 @@ def _stock_features(code: str, date_str: str) -> dict:
     dif = e12 - e26
     dea = dif.ewm(span=9, adjust=False).mean()
     golden = bool(((dif > dea) & (dif.shift(1) <= dea.shift(1))).tail(5).any())
+    # RSI(14)（空头抄底超卖极值用）
+    _delta = c.diff()
+    _gain = _delta.clip(lower=0).rolling(14).mean()
+    _loss = (-_delta.clip(upper=0)).rolling(14).mean()
+    _rsi = float((100 - 100 / (1 + _gain / _loss.replace(0, float("nan")))).iloc[-1]) if _loss.iloc[-1] and _loss.iloc[-1] > 0 else 50.0
     return {
         "price": round(price, 3),
         "trend_multihead": bool(price > ma20 and price > ma60),
         "above_ma60": bool(price > ma60),
         "drawdown": round(price / rec_high - 1, 4) if rec_high > 0 else 0.0,
         "macd_golden_5d": golden,
+        "rsi": round(_rsi, 1),
         "ma20": round(ma20, 3), "ma60": round(ma60, 3),
     }
 
@@ -147,9 +153,13 @@ def timing_verdict(code: str, date_str: str = None) -> dict:
             reasons.append("MACD金叉近5日 ✓（加分）")
         go = cond and (f["macd_golden_5d"] or True)  # 金叉为加分非必要
     elif regime == "trend_dn":
-        # 空头趋势 → 抄底超跌
-        cond = f["drawdown"] < -0.10
-        reasons.append(f"空头趋势: 抄底(深回撤{'✓' if cond else '✗'} drawdown={f['drawdown']:.1%})")
+        # 空头趋势 → 抄底超跌极值（2026-08-16 实验：深回撤 + RSI<20 深度超卖，样本内/外一致提升）
+        _rsi_lim = float(p.get("trend_dn_rsi_max", 20))
+        _dd_ok = f["drawdown"] < -0.10
+        _rsi_ok = (f.get("rsi") or 50) < _rsi_lim
+        cond = _dd_ok and _rsi_ok
+        reasons.append(f"空头趋势: 抄底(深回撤{'✓' if _dd_ok else '✗'} + RSI极值{'✓' if _rsi_ok else '✗'} "
+                       f"rsi={f.get('rsi')} drawdown={f['drawdown']:.1%})")
         go = cond
     else:
         # 震荡 → 降频
