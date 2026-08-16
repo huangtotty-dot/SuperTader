@@ -1662,6 +1662,7 @@ class Api:
         try:
             import pandas as _pd
             from position_builder import _DAILY_CACHE_DIR
+            from config import ENTRY_TIMING_PARAMS as _ETP
             # 指数 regime（读指数日线缓存，零网络）
             regime_by_date = {}
             try:
@@ -1710,20 +1711,30 @@ class Api:
                     golden = bool(((dif > dea) & (dif.shift(1) <= dea.shift(1))).tail(5).any())
                     trend = bool(price > ma20 and price > ma60)
                     dd = price / rec_high - 1 if rec_high > 0 else 0.0
+                    # RSI(14)（空头抄底超卖极值，与 timing_gate 一致）
+                    _dlt = c.diff()
+                    _gn = _dlt.clip(lower=0).rolling(14).mean()
+                    _ls = (-_dlt.clip(upper=0)).rolling(14).mean()
+                    _rsi = float((100 - 100 / (1 + _gn / _ls.replace(0, float("nan")))).iloc[-1]) if _ls.iloc[-1] and _ls.iloc[-1] > 0 else 50.0
                     if _regime == "trend_up":
                         dd_ok = dd >= -0.03
+                        _dir_ok = True
+                        _rsi_ok = True
                     elif _regime == "trend_dn":
                         dd_ok = dd < -0.10
+                        _dir_ok = True
+                        _rsi_ok = _rsi < float(_ETP.get("trend_dn_rsi_max", 20))
                     else:
                         dd_ok = False
-                    _dir_ok = _regime in ("trend_up", "trend_dn")
+                        _dir_ok = False
+                        _rsi_ok = False
                     conds = {
                         "t_regime": _dir_ok,
                         "t_trend": trend,
                         "t_drawdown": dd_ok,
                         "t_golden": golden,
                     }
-                    go = (_dir_ok and trend and dd_ok) if _regime == "trend_up" else (_dir_ok and dd_ok)
+                    go = (_dir_ok and trend and dd_ok) if _regime == "trend_up" else (_dir_ok and dd_ok and _rsi_ok)
                     result[str(code)] = {
                         "go": bool(go),
                         "regime": _regime,

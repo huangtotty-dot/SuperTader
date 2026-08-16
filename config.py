@@ -729,6 +729,7 @@ ENTRY_TIMING_PARAMS = {
     "regime_ma60": True,      # 用指数 vs MA60 定市场状态
     "trend_up_drawdown_min": -0.03,   # 多头趋势：浅回撤阈值（追强）
     "trend_dn_drawdown_max": -0.10,   # 空头趋势：深回撤阈值（抄底）
+    "trend_dn_rsi_max": 20.0,         # 空头趋势：RSI(14) 深度超卖阈值（抄底超卖极值，2026-08-16 实验两时段稳健）
     "apply_to_add": True,     # 加仓侧也应用时机门控（NO-GO 时阻断加仓买入，降频）
     "add_block_rebuild": True,  # NO-GO 时是否也阻断"接回"(rebuild)；False=仅阻断首加
 }
