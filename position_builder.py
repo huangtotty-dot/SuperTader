@@ -36,7 +36,9 @@ import numpy as np
 import pandas as pd
 
 # ── 路径 ──
-BASE = Path(r"E:\06_T")
+# fix 2026-08-14: 原硬编码 E:\06_T 在非生产路径（如本仓库 checkout）下读不到 watchlist/holdings；
+# 改为自解析到模块所在目录，生产机仍解析到 E:\06_T，行为不变。
+BASE = Path(__file__).resolve().parent
 sys.path.insert(0, str(BASE))
 
 from indicators import resample_to_5min, add_5min_indicators, add_indicators  # noqa: F401
@@ -295,7 +297,7 @@ def fetch_daily_kline(code: str) -> pd.DataFrame:
     _os.environ["NO_PROXY"] = "*"
     symbol = ("sh" + code if code[0] in "56" else "sz" + code)
     try:
-        url = f"https://ifzq.gtimg.cn/appstock/app/fqkline/get?param={symbol},day,,,365,qfq"
+        url = f"https://ifzq.gtimg.cn/appstock/app/fqkline/get?param={symbol},day,,,800,qfq"
         req = _ur.Request(url, headers={"User-Agent": "Mozilla/5.0",
                                         "Referer": "https://finance.qq.com/"})
         raw = _ur.urlopen(req, timeout=8).read().decode("utf-8", errors="ignore")
@@ -938,6 +940,50 @@ def scan_stock(code: str, stock_info: dict, date_str: str = None,
     result["gated"] = dc.get("gated", False)
     result["gated_from"] = dc.get("gated_from")
 
+    # 方案A (2026-08-15 用户拍板): 建仓信号 = 时机门控 GO（替代永不触发的冰点双通道）。
+    # 时机判定：多头趋势→追强(多头结构+浅回撤≥-3%)；空头趋势→抄底(深回撤<-10%)；震荡→降频。
+    # 旧双通道结果保留在 result["channels"] 供参考，verdict/conditions 由时机判定驱动。
+    result["timing"] = {"regime": None, "go": None, "reason": "未启用"}
+    try:
+        from timing_gate import timing_verdict as _timing_verdict
+        from config import ENTRY_TIMING_PARAMS as _ETP
+        if _ETP.get("enabled", True):
+            _tv = _timing_verdict(code, target_date)
+            _f = _tv.get("features") or {}
+            _regime = _tv.get("regime", "range")
+            _dir_ok = _regime in ("trend_up", "trend_dn")
+            _trend = bool(_f.get("trend_multihead"))
+            _dd = float(_f.get("drawdown") or 0.0)
+            if _regime == "trend_up":
+                _dd_ok = _dd >= -0.03
+            elif _regime == "trend_dn":
+                _dd_ok = _dd < -0.10
+            else:
+                _dd_ok = False
+            _golden = bool(_f.get("macd_golden_5d"))
+            result["conditions"] = {
+                "t_regime": {"passed": _dir_ok, "detail": f"市场状态:{_regime}(需多头/空头非震荡)"},
+                "t_trend": {"passed": _trend, "detail": f"多头结构(价>MA20&MA60)={'是' if _trend else '否'}"},
+                "t_drawdown": {"passed": _dd_ok, "detail": f"回撤到位({_dd:+.1%}，{'多头≥-3%' if _regime=='trend_up' else '空头<-10%'})"},
+                "t_golden": {"passed": _golden, "detail": f"MACD金叉近5日={'是' if _golden else '否'}(加分)"},
+            }
+            _score = (30 if _dir_ok else 0) + (30 if _trend else 0) + (30 if _dd_ok else 0) + (10 if _golden else 0)
+            if _tv.get("go"):
+                _v = "signal"
+            elif _dir_ok and (_trend or _dd_ok):
+                _v = "approaching"
+            else:
+                _v = "weak"
+            result["verdict"] = _v
+            result["composite_score"] = _score
+            result["channel"] = None
+            result["approach_status"] = "immediate" if _v == "signal" else None
+            result["gated"] = False
+            result["gated_from"] = None
+            result["timing"] = {"regime": _regime, "go": _tv["go"], "reason": _tv["reason"]}
+    except Exception as _te:
+        pass  # timing_gate 故障时保留 W33 双通道判定
+
     # 仓位计算
     # fix 仓位一刀切(A1-A6): 仅 verdict=signal 才出建仓建议；已持仓股不再给"建仓"建议（防重复建仓）
     # W33 A3: 股数对齐仓位管理器（欠配缺口与分3次节奏）；欠配>5% 持仓股标注"欠配补仓候选"
@@ -965,8 +1011,17 @@ def scan_stock(code: str, stock_info: dict, date_str: str = None,
 # 飞书推送
 # ============================================================
 
-# W33 A1: 双通道 8 键标签（与 CHANNEL_COND_KEYS 同序，t_gui/web 圆点列消费）
-COND_LABELS = dict(CHANNEL_COND_LABELS)
+# 方案A (2026-08-15 用户拍板): 建仓信号改用时机门控 GO（替代永不触发的冰点双通道）。
+# GUI/圆点列/trace 消费的新条件标签（t_* 键），与 scan_stock 实际判定一致。
+TIMING_COND_LABELS = {
+    "t_regime": "市场有方向",
+    "t_trend": "多头结构",
+    "t_drawdown": "回撤到位",
+    "t_golden": "MACD金叉(加分)",
+}
+# W33 A1: 旧双通道 8 键标签（channels 参考保留，不再驱动建仓 verdict）
+COND_LABELS = dict(TIMING_COND_LABELS)
+_CHANNEL_COND_LABELS = dict(CHANNEL_COND_LABELS)
 
 
 def build_signal_card(result: dict) -> dict:
@@ -1092,10 +1147,10 @@ def build_summary_card(results: list, date_str: str = "") -> dict:
             _ch = r.get("channel")
             _ch_txt = {"iceberg": "🧊", "breakout": "🚀", "both": "🧊🚀"}.get(_ch, "—")
 
-            # 条件通过情况（W33 A1: 双通道 8 键圆点串）
+            # 条件通过情况（方案A: 时机 4 键圆点串）
             conds = r.get("conditions", {})
             cond_parts = []
-            for key in CHANNEL_COND_KEYS:
+            for key in COND_LABELS:
                 c = conds.get(key, {})
                 cond_parts.append("●" if c.get("passed") else "○")
             cond_str = "".join(cond_parts)
@@ -1146,6 +1201,247 @@ def push_summary_feishu(results: list, date_str: str = "", dry_run: bool = False
         card,
         success_log=f"建仓扫描汇总飞书推送成功: {len(results)} 只",
         error_prefix="建仓扫描汇总飞书推送",
+    )
+
+
+# ============================================================
+# 破5/10日线检测与飞书推送（2026-08-14 新增）
+# ============================================================
+
+MA_BREAK_STATE_FILE = STATE_DIR / "ma_break_pushed.json"
+
+
+def _load_ma_break_dedup() -> dict:
+    """读取破线推送去重状态 {date: [code,...]}，失败时返回空。"""
+    try:
+        if MA_BREAK_STATE_FILE.exists():
+            return json.loads(MA_BREAK_STATE_FILE.read_text(encoding="utf-8"))
+    except Exception:
+        pass
+    return {}
+
+
+def _mark_ma_break_pushed(code: str, date_str: str) -> None:
+    """记录 (code, date) 已推送破线提醒，仅保留最近 15 个日期。"""
+    try:
+        STATE_DIR.mkdir(parents=True, exist_ok=True)
+        dedup = _load_ma_break_dedup()
+        dedup.setdefault(date_str, [])
+        if code not in dedup[date_str]:
+            dedup[date_str].append(code)
+        dedup = {d: dedup[d] for d in sorted(dedup)[-15:]}
+        MA_BREAK_STATE_FILE.write_text(
+            json.dumps(dedup, ensure_ascii=False, indent=2), encoding="utf-8")
+    except Exception:
+        pass
+
+
+def check_ma_break(code: str, stock_info: dict = None, date_str: str = None,
+                   live_price: float = None) -> dict:
+    """检测单只股票是否刚跌破5日线/10日线（刚跌破事件）。
+
+    口径：昨收 >= 昨MA(N) 且 现价 < 今MA(N)，N∈{5,10}，逐线独立判定。
+    MA 基于腾讯 qfq 日线收盘（fetch_daily_kline），盘中最后一行是当日 forming bar。
+    实时价优先当日分钟快照，否则回退日线最后一根收盘。返回 dict；insufficient 非空表示无法判定。
+    """
+    code = str(code)
+    result = {
+        "code": code,
+        "name": (stock_info or {}).get("name") or code,
+        "price": None, "ma5": None, "ma10": None,
+        "prev_ma5": None, "prev_ma10": None, "prev_close": None,
+        "broke5": False, "broke10": False,
+        "below5": False, "below10": False,
+        "dev5_pct": None, "dev10_pct": None,
+        "is_holding": bool((stock_info or {}).get("is_holding", False)),
+        "insufficient": None,
+    }
+    df = fetch_daily_kline(code)
+    if df.empty or len(df) < 11:
+        result["insufficient"] = "日线不足11根"
+        return result
+    closes = df["close"].astype(float).values
+    target_date = date_str or datetime.now().strftime("%Y-%m-%d")
+    last_date = str(df["date"].iloc[-1])
+    has_today = last_date == target_date
+
+    # 实时价：优先当日分钟快照，否则日线最后一根收盘（仅当该根是当日 forming bar）
+    price = live_price
+    if price is None:
+        df_1min, _, snap_date = load_snapshot_df(code, date_str)
+        if not df_1min.empty and snap_date == target_date:
+            price = float(df_1min["close"].iloc[-1])
+    if price is None or price <= 0:
+        if has_today:
+            price = float(closes[-1])
+        else:
+            result["insufficient"] = "无当日实时价"
+            return result
+
+    # basis：截至昨日的收盘序列（今日 forming bar 不计入，MA 用实时价拼）
+    basis = closes[:-1] if has_today else closes
+    if len(basis) < 10:
+        result["insufficient"] = "历史日线不足10根"
+        return result
+    prev_close = float(basis[-1])
+    result["prev_close"] = prev_close
+
+    for period, ma_key, prev_key, broke_key, below_key, dev_key in (
+        (5, "ma5", "prev_ma5", "broke5", "below5", "dev5_pct"),
+        (10, "ma10", "prev_ma10", "broke10", "below10", "dev10_pct"),
+    ):
+        prev_ma = float(np.mean(basis[-period:]))
+        # 今MA = (最近 period-1 根截至昨日的收盘 + 实时价) / period
+        cur_ma = float((np.sum(basis[-(period - 1):]) + price) / period)
+        result[ma_key] = round(cur_ma, 3)
+        result[prev_key] = round(prev_ma, 3)
+        result[broke_key] = bool(prev_close >= prev_ma and price < cur_ma)
+        result[below_key] = bool(price < cur_ma)
+        result[dev_key] = round((price - cur_ma) / cur_ma * 100, 2) if cur_ma else None
+
+    result["price"] = round(price, 3)
+    return result
+
+
+def scan_ma_breaks(date_str: str = None, silent: bool = False) -> list:
+    """扫描候选池+持仓池，返回刚跌破5日线/10日线的事件列表。
+
+    池合并：watchlist_buy.json 中 status=monitoring 的候选股 + holdings.json 中 qty>0 的持仓，
+    按基础代码去重（_A/_B 账户后缀归一，持仓标记 is_holding）。"""
+    codes = {}
+
+    def _add(code, name, is_holding):
+        base = str(code).split("_")[0]
+        if base not in codes:
+            codes[base] = {"name": name, "is_holding": is_holding}
+        elif is_holding:
+            codes[base]["is_holding"] = True
+
+    try:
+        if WATCHLIST_FILE.exists():
+            with open(WATCHLIST_FILE, "r", encoding="utf-8") as f:
+                wl = json.load(f)
+            for code, info in (wl.get("stocks", {}) or {}).items():
+                if not isinstance(info, dict) or str(code).startswith("_example"):
+                    continue
+                if info.get("status") not in ("monitoring", "signal"):
+                    continue
+                _add(code, info.get("name") or code, False)
+    except Exception:
+        pass
+
+    try:
+        if HOLDINGS_FILE.exists():
+            with open(HOLDINGS_FILE, "r", encoding="utf-8") as f:
+                holdings = json.load(f)
+            for code, h in (holdings.items() if isinstance(holdings, dict) else []):
+                if not isinstance(h, dict) or int(h.get("qty") or 0) <= 0:
+                    continue
+                _add(code, h.get("name") or code, True)
+    except Exception:
+        pass
+
+    events = []
+    for code, info in codes.items():
+        r = check_ma_break(code, info, date_str)
+        if r is None or r.get("insufficient"):
+            if not silent and r and r.get("insufficient"):
+                print(f"  {code} {r.get('name', '')} 跳过: {r['insufficient']}")
+            continue
+        if not r.get("broke5") and not r.get("broke10"):
+            continue
+        if not silent:
+            tags = "".join(
+                t for t, broke in (("【破5日线】", r["broke5"]), ("【破10日线】", r["broke10"])) if broke)
+            hold = " [持仓]" if r["is_holding"] else ""
+            print(f"  {code} {r['name']}{hold} {tags} 现价{r['price']} "
+                  f"MA5={r['ma5']}({r['dev5_pct']:+.2f}%) MA10={r['ma10']}({r['dev10_pct']:+.2f}%)")
+        events.append(r)
+    return events
+
+
+def run_ma_break_alert(date_str: str = None, dry_run: bool = False, silent: bool = False) -> list:
+    """执行一次破5/10日线扫描，并按 (code, date) 当日去重推送飞书。
+
+    返回本次实际推送的 events。dry_run=True 只打印不推送（不写去重）；silent=True 不打印控制台明细。
+    供 main.py 盘中调度与 CLI --ma-break 共用。"""
+    events = scan_ma_breaks(date_str, silent=silent)
+    if not events:
+        if not silent:
+            print("破线扫描完成：今日无刚跌破5/10日线的股票")
+        return []
+    sig_date = date_str or datetime.now().strftime("%Y-%m-%d")
+    to_push = [e for e in events if e["code"] not in _load_ma_break_dedup().get(sig_date, [])]
+    if not to_push:
+        if not silent:
+            print(f"破线扫描完成：{len(events)} 只触发但当日均已推送过，跳过")
+        return []
+    pushed_ok = push_ma_break_feishu(to_push, date_str=sig_date, dry_run=dry_run)
+    if pushed_ok:
+        for e in to_push:
+            _mark_ma_break_pushed(e["code"], sig_date)
+        if not silent:
+            print(f"破线提醒已推送: {len(to_push)} 只")
+    elif not silent:
+        print(f"破线提醒推送未成功（dry_run={'是' if dry_run else '否'}），未写去重")
+    return to_push if pushed_ok else []
+
+
+def build_ma_break_card(events: list, date_str: str = "") -> dict:
+    """构建破5/10日线提醒飞书卡片。无事件返回 None。"""
+    if not events:
+        return None
+    lines = [
+        f"**破5/10日线提醒 · 可关注建仓**",
+        f"📅 {date_str or datetime.now().strftime('%Y-%m-%d')}（刚跌破事件，盘中实时）",
+        "",
+    ]
+    for r in events:
+        hold = " [持仓]" if r.get("is_holding") else ""
+        tags = " ".join(
+            t for t, broke in (("【破5日线】", r.get("broke5")), ("【破10日线】", r.get("broke10"))) if broke)
+        devs = []
+        if r.get("ma5"):
+            devs.append(f"MA5 {r['ma5']}({r['dev5_pct']:+.2f}%)")
+        if r.get("ma10"):
+            devs.append(f"MA10 {r['ma10']}({r['dev10_pct']:+.2f}%)")
+        lines.append(
+            f"🔻 **{r['code']}** {r['name']}{hold} {tags}\n"
+            f"　现价 {r['price']} ｜ {' ｜ '.join(devs)}"
+        )
+    lines += [
+        "",
+        "📌 候选股破线关注建仓时机；持仓股破线为补仓/加仓观察。",
+        "⚠️ 仅供参考，请人工确认后操作。",
+    ]
+    return {
+        "msg_type": "interactive",
+        "card": {
+            "header": {
+                "template": "red",
+                "title": {"tag": "plain_text", "content": "⚠️ 破5/10日线提醒 - 可关注建仓"},
+            },
+            "elements": [{"tag": "markdown", "content": "\n".join(lines)}],
+        },
+    }
+
+
+def push_ma_break_feishu(events: list, date_str: str = "", dry_run: bool = False) -> bool:
+    """推送破线提醒到飞书。返回是否成功。"""
+    if not events:
+        return False
+    if not _FEISHU_AVAILABLE:
+        return False
+    if dry_run:
+        print(f"  [DRY-RUN] 跳过飞书推送: {len(events)} 只破线股票")
+        return False
+    card = build_ma_break_card(events, date_str)
+    if card is None:
+        return False
+    return send_feishu_payload(
+        card,
+        success_log=f"破5/10日线提醒飞书推送成功: {len(events)} 只",
+        error_prefix="破5/10日线提醒飞书推送",
     )
 
 
@@ -1225,12 +1521,12 @@ def print_report(results: list):
             continue
 
         print("\n  条件检查:")
-        for cond_key in CHANNEL_COND_KEYS:
+        for cond_key in COND_LABELS:
             cond_val = r.get("conditions", {}).get(cond_key)
             if cond_val is None:
                 continue
             icon = "[PASS]" if cond_val["passed"] else "[FAIL]"
-            print(f"    {icon} {CHANNEL_COND_LABELS.get(cond_key, cond_key):12s}  {cond_val['detail']}")
+            print(f"    {icon} {COND_LABELS.get(cond_key, cond_key):12s}  {cond_val['detail']}")
 
         pos = r.get("position") or {}
         if pos:
@@ -1396,6 +1692,7 @@ def run_position_scan(date_str: str = None, capital: float = None,
             "approach_status": r.get("approach_status"),
             "gated": bool(r.get("gated", False)),
             "gated_from": r.get("gated_from"),
+            "timing": r.get("timing") or {"regime": None, "go": None, "reason": "未启用"},
             "channels": {k: {"verdict": v.get("verdict"), "score": v.get("score"),
                              "approach_status": v.get("approach_status"),
                              "conditions": v.get("conditions", {})}
@@ -1428,7 +1725,12 @@ def main():
     parser.add_argument("--date", default=None, help="指定日期 YYYY-MM-DD（默认最新）")
     parser.add_argument("--capital", type=float, default=None, help="覆盖总资金量")
     parser.add_argument("--no-feishu", action="store_true", help="禁用飞书推送（仅控制台输出）")
+    parser.add_argument("--ma-break", action="store_true", help="只跑破5/10日线扫描提醒（不跑建仓信号）")
     args = parser.parse_args()
+
+    if args.ma_break:
+        run_ma_break_alert(date_str=args.date, dry_run=args.no_feishu, silent=False)
+        return
 
     run_position_scan(
         date_str=args.date,

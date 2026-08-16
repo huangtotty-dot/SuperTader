@@ -4,6 +4,7 @@
     "enabled": true,
     "notify_on_signals": true,
     "notify_on_completion": true,
+    "notify_on_ma_break": true,
     "at_all_on_signal": true,
     "use_strong_notification": true,
     "relay_urgent_alarm_on_feishu": true,

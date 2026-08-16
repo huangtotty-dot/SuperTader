@@ -11,7 +11,7 @@ import argparse, json, math, re, shutil, sys
 from collections import Counter, defaultdict
 from pathlib import Path
 
-BASE = Path(r"E:\06_T")
+BASE = Path(__file__).resolve().parents[3]  # 自解析：本文件在 t_io/validation/daily_review/ 下，上级3级=仓库根（生产机=E:\06_T）
 CODES = ["000988", "588170", "600176", "600481", "603667", "002639", "300153", "300364"]
 NAMES = {"000988": "华工科技", "588170": "科创半导体ETF华夏", "600176": "中国巨石",
          "600481": "双良节能", "603667": "五洲新春", "002639": "雪人集团",
@@ -458,6 +458,110 @@ def sizing_advice_md():
     return "\n".join(L)
 
 
+# ---------- 指数5分钟共振段（2026-08-14 新增）：读 index_resonance trace，按门控分组算命中率 ----------
+def _time_to_sec(s):
+    """'HH:MM:SS' 或 'YYYY-MM-DD HH:MM:SS' → 当日秒数；失败返回 None。"""
+    try:
+        t = str(s).split(" ")[-1].split(".")[0].split(":")
+        return int(t[0]) * 3600 + int(t[1]) * 60 + int(t[2])
+    except Exception:
+        return None
+
+
+def _resonance_settle(code, ts, action, price):
+    """共振判定信号结算（口径与 settle 一致：+0.5%/-0.4%/30tick；按 ±90s 最近决策轨迹点对齐）。"""
+    rs = ticks.get(code, [])
+    t_sec = _time_to_sec(ts)
+    if t_sec is None or price in (None, 0):
+        return "VOID"
+    best = None
+    for i, r in enumerate(rs):
+        s = _time_to_sec(r.get("scan_time", ""))
+        if s is None or abs(s - t_sec) > 90:
+            continue
+        if best is None or abs(s - t_sec) < abs(_time_to_sec(rs[best]["scan_time"]) - t_sec):
+            best = i
+    if best is None:
+        return "VOID"
+    for r in rs[best + 1: best + 31]:
+        p = float(r["price"])
+        if action in ("BUY_LOW", "ADD_POS"):
+            if p <= price * 0.996:
+                return "FAIL"
+            if p >= price * 1.005:
+                return "WIN"
+        else:
+            if p >= price * 1.004:
+                return "FAIL"
+            if p <= price * 0.995:
+                return "WIN"
+    return "VOID"
+
+
+resonance_rows = []
+res_fp = BASE / f"t_io/traces/index_resonance_{DATE}.jsonl"
+if res_fp.exists():
+    for _line in open(res_fp, encoding="utf-8"):
+        try:
+            _r = json.loads(_line)
+        except Exception:
+            continue
+        _group = "data_missing" if _r.get("missing") else ("pass" if _r.get("gate_pass") else "block")
+        resonance_rows.append({
+            "ts": str(_r.get("scan_time", ""))[11:16], "code": _r.get("code"), "name": _r.get("name"),
+            "action": _r.get("action"), "price": _r.get("price"),
+            "group": _group, "gate": _r.get("gate", ""), "index_code": _r.get("index_code", ""),
+            "res": _resonance_settle(_r.get("code"), _r.get("scan_time", ""), _r.get("action"), _r.get("price")),
+        })
+
+
+def _resonance_group_stats(rows):
+    out = {}
+    for g in ("pass", "block", "data_missing"):
+        sub = [x for x in rows if x["group"] == g]
+        w = sum(1 for x in sub if x["res"] == "WIN")
+        f = sum(1 for x in sub if x["res"] == "FAIL")
+        out[g] = {"n": len(sub), "wins": w, "fails": f,
+                  "void": sum(1 for x in sub if x["res"] == "VOID"),
+                  "hit_rate": round(w / (w + f), 4) if (w + f) else None}
+    return out
+
+
+resonance_groups = _resonance_group_stats(resonance_rows)
+
+
+def _fmt_wr(v):
+    return "—" if v is None else f"{v:.2%}"
+
+
+def resonance_md():
+    if not resonance_rows:
+        return ""
+    g = resonance_groups
+    L = ["", "<!-- 指数共振:begin -->", "", f"## 指数5分钟共振过滤（{DATE}）", ""]
+    L.append(f"- 共振通过 **{g['pass']['n']}** 条（命中率 {_fmt_wr(g['pass']['hit_rate'])}）｜ "
+             f"共振拦截 **{g['block']['n']}** 条（命中率 {_fmt_wr(g['block']['hit_rate'])}）｜ "
+             f"数据缺失拦截 **{g['data_missing']['n']}** 条")
+    if g["pass"]["hit_rate"] is not None and g["block"]["hit_rate"] is not None:
+        gap = g["pass"]["hit_rate"] - g["block"]["hit_rate"]
+        if gap > 0.05:
+            verdict = "有效（通过组命中率更高，过滤出更优信号）"
+        elif gap < -0.05:
+            verdict = "有害（拦截组命中率反而更高，需放宽口径）"
+        else:
+            verdict = "暂无效（两组差异不大，继续积累样本）"
+        L.append(f"- 命中率差 = 通过 − 拦截 = **{gap:+.2%}** → 共振过滤**{verdict}**")
+        L.append("> 口径：+0.5%/-0.4%/30tick，与 settle 一致；样本 < 20 时结论仅供参考。")
+    L.append("")
+    L.append("| 时间 | 代码 | 动作 | 分组 | 指数 | 结算 |")
+    L.append("|---|---|---|---|---|---|")
+    for x in resonance_rows:
+        g_cn = {"pass": "共振通过", "block": "共振拦截", "data_missing": "数据缺失"}[x["group"]]
+        L.append(f"| {x['ts']} | {x['code']} | {x['action']} | {g_cn} | {x['index_code']} | {x['res']} |")
+    L += ["", "<!-- 指数共振:end -->", ""]
+    return "\n".join(L)
+
+
 # ---------- 9. 建仓信号扫描（§1 第1步·user 2026-08-05 新增；读取 position_builder 日志） ----------
 def position_builder_md():
     trace_fp = BASE / f"t_io/traces/position_builder_{DATE}.jsonl"
@@ -573,6 +677,16 @@ if report_fp.exists():
                          txt, flags=re.S)
         else:
             txt = txt.rstrip() + "\n" + sa
+    # 指数5分钟共振段（2026-08-14）
+    rs_md = resonance_md()
+    if rs_md:
+        if "<!-- 指数共振:begin -->" in txt:
+            txt = re.sub(r"<!-- 指数共振:begin -->.*?<!-- 指数共振:end -->",
+                         rs_md.strip().replace("\n\n<!-- 指数共振:end -->", "\n<!-- 指数共振:end -->")
+                         .replace("<!-- 指数共振:begin -->\n\n", "<!-- 指数共振:begin -->\n"),
+                         txt, flags=re.S)
+        else:
+            txt = txt.rstrip() + "\n" + rs_md
     report_fp.write_text(txt, encoding="utf-8")
 
 # ---------- 输出 ----------
@@ -586,7 +700,8 @@ result = {"date": DATE, "sig_stat": sig_stat, "shadow_total": shadow_total,
           "settle": {"rows": settle_rows, "by_code": settle_by_code},
           "kpi": kpi,
           "add_watch": add_watch,
-          "watch": watch}
+          "watch": watch,
+          "resonance": {"rows": resonance_rows, "groups": resonance_groups}}
 with open(OUT / f"daily_review_{DATE}.json", "w", encoding="utf-8") as f:
     json.dump(result, f, ensure_ascii=False, indent=2, default=str)
 

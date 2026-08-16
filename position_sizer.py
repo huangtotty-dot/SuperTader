@@ -282,6 +282,21 @@ class PositionSizer:
         if max_buyable <= 0 and not p.get("allow_full_position_buy", False):
             return 0
 
+        # 建仓/加仓时机判定（timing_gate，regime条件化：多头追强/空头抄底/震荡降频）
+        # 2026-08-15 接入加仓侧：NO-GO 时阻断加仓买入（降频），接回是否阻断由
+        # ENTRY_TIMING_PARAMS.add_block_rebuild 控制；时机模块故障不阻断交易
+        try:
+            from timing_gate import timing_verdict as _timing_verdict
+            from config import ENTRY_TIMING_PARAMS as _ETP
+            if _ETP.get("apply_to_add", True) and _ETP.get("enabled", True):
+                if not _timing_verdict(code, None).get("go", False):
+                    if unrebuilt > 0 and not _ETP.get("add_block_rebuild", True):
+                        pass  # 接回放行
+                    else:
+                        return 0
+        except Exception:
+            pass
+
         if unrebuilt > 0:
             pct = p.get("etf_buy_qty_pct", 0.25) if is_etf else p.get("stock_rebuild_pct", 0.60)
             qty = int(unrebuilt * pct)

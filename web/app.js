@@ -1152,13 +1152,14 @@ function renderPB(pb) {
     const condStr = isNoData
       ? `<span class="cell-dim">—</span>`
       : Object.keys(condLabels).map(k =>
-          conds[k] ? `<span class="on">●</span>` : `<span class="off">○</span>`).join("");
+          conds[k] === undefined ? `<span class="cell-dim">·</span>`
+            : conds[k] ? `<span class="on">●</span>` : `<span class="off">○</span>`).join("");
     const condTitle = Object.keys(condLabels).map(k =>
       `${condLabels[k]}:${conds[k] ? "通过" : "未过"}`).join(" · ");
     const boxMet = conds[boxKey] || false;
     const boxStr = boxMet ? `<span class="badge signal">🚀突破</span>` : `<span class="off">—</span>`;
-    // W33 A1: metCount 只数冰点评分键 3 个（转向/BOLL/缩量）→ "X/3"（RSI/5分冰点/突破列不计）
-    const iceKeys = ["c1_turn_confirm", "c1_boll_lower", "c1_volume_shrink"];
+    // 方案A (2026-08-15): 建仓条件=时机门控（市场有方向/多头结构/回撤到位）→ "X/3"（金叉为加分不计）
+    const iceKeys = ["t_regime", "t_trend", "t_drawdown"];
     const metCount = iceKeys.filter(k => conds[k]).length;
     const metCls = metCount >= 3 ? "up" : metCount >= 2 ? "warn" : "cell-dim";
     // fix P1-3: 行内灰色小字显示 r.errors 首条（hover 看全部）
@@ -1178,10 +1179,19 @@ function renderPB(pb) {
     const chBadge = chTxt ? `<span class="badge" style="background:#3a3a5a;color:#ddd">${chTxt}</span>` : "";
     const apTxt = r.approach_status === "immediate" ? "即时可建" : r.approach_status === "intraday_pending" ? "待日内确认" : r.approach_status === "next_day_pending" ? "待次日确认" : "";
     const apBadge = apTxt ? `<span class="badge" style="background:#5a4a2a;color:#ffd98a">${apTxt}</span>` : "";
+    // 建仓/加仓时机门控徽章（timing_gate: 多头追强/空头抄底/震荡降频）
+    const _tm = r.timing || {};
+    let tmBadge = "";
+    if (_tm.regime) {
+      const _regimeCn = {trend_up: "多头", trend_dn: "空头", range: "震荡"}[_tm.regime] || _tm.regime;
+      const _goCls = _tm.go ? "#1f6f3f" : "#7a2a2a";
+      const _goTxt = _tm.go ? "GO" : "NO-GO";
+      tmBadge = `<span class="badge" title="时机门控: ${esc(_tm.reason || "")}" style="background:${_goCls};color:#fff">${esc(_regimeCn)}·${_goTxt}</span>`;
+    }
     return `
       <tr id="pb-row-${esc(r.code || '')}" ondblclick="openStockChart('${esc(r.code||'')}','${esc(r.name||r.code||'')}')" style="cursor:pointer;${isStale ? "opacity:.45;" : ""}" title="双击看K线${isStale ? "（数据陈旧，距今超过10分钟）" : ""}">
         <td>${esc(r.name || "")} <span class="mono cell-dim">${esc(r.code || "")}</span>
-          ${chBadge}${apBadge}${r.in_holdings ? `<span class="badge hold">持仓</span>` : ""}${errTxt}</td>
+          ${chBadge}${apBadge}${tmBadge}${r.in_holdings ? `<span class="badge hold">持仓</span>` : ""}${errTxt}</td>
         <td>${verdictBadge(r.verdict)}</td>
         <td class="num"><b>${r.composite_score}</b></td>
         <td class="num ${metCls}"><b>${isNoData ? "—" : metCount + "/3"}</b></td>
@@ -1218,12 +1228,12 @@ function renderPB(pb) {
           <th>股票</th><th>判定</th><th class="num">得分</th><th class="num">通过</th><th class="num">价</th>
           <th title="突破箱体=第一优先级">突破</th>
           <th title="通道/箱体/背离等技术形态">技术标签</th>
-          <th title="日线MACD/BOLL/RSI/缩量/支撑">五条件(日线)</th>
+          <th title="时机门控：市场有方向/多头结构/回撤到位（GO→signal，震荡→降频）">时机条件</th>
           <th class="num">建议股数</th><th class="num">建议价</th><th class="num">所需资金</th><th>扫描</th><th></th>
         </tr></thead>
         <tbody>${rows || '<tr><td colspan="9" class="empty">无扫描结果</td></tr>'}</tbody>
       </table>
-      <div class="cell-dim" style="font-size:11px;margin-top:8px">●=通过 ○=未通过 · 五条件：${Object.values(condLabels).join(" / ")} · 每条件 20 分，≥80 且突破箱体→signal（突破另需≥40） · 盘中每10s刷新</div>
+      <div class="cell-dim" style="font-size:11px;margin-top:8px">●=通过 ○=未通过 · 时机条件：${Object.values(condLabels).join(" / ")} · GO(多头追强/空头抄底)→signal，震荡→降频 · 盘中每10s刷新</div>
     </div>`;
   // fix P1-2: 页脚文案与后端实际逻辑一致（≥80 且突破箱体→signal，突破另需≥40）
 }
@@ -1322,12 +1332,21 @@ function renderAddWatch(aw) {
     const addBadge = canAdd
       ? `<span class="badge signal" style="margin-left:6px">🔼 可加仓</span>`
       : "";
+    // 加仓时机门控徽章（timing_gate）
+    const _atm = w.timing || {};
+    let tmBadge = "";
+    if (_atm.regime) {
+      const _rc = {trend_up: "多头", trend_dn: "空头", range: "震荡"}[_atm.regime] || _atm.regime;
+      const _cls = _atm.go ? "#1f6f3f" : "#7a2a2a";
+      const _t = _atm.go ? "GO" : "NO-GO";
+      tmBadge = `<span class="badge" title="时机门控: ${esc(_atm.reason || "")}" style="background:${_cls};color:#fff;margin-left:6px">${esc(_rc)}·${_t}</span>`;
+    }
 
     return `
       <div class="card" style="margin-bottom:10px;padding:12px 14px">
         <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:8px">
           <div>
-            <b>${esc(w.name || code)}</b> <span class="mono cell-dim">${esc(code)}</span>${addBadge}
+            <b>${esc(w.name || code)}</b> <span class="mono cell-dim">${esc(code)}</span>${addBadge}${tmBadge}
             <span class="aw-score ${metCls}">${met}/${totalConds} 条件满足</span>
           </div>
           <div class="cell-dim mono" style="font-size:11px">低${fmt(w.day_low, 3)} 收${fmt(w.close, 3)} VWAP${fmt(w.vwap, 3)}</div>
@@ -1701,6 +1720,16 @@ function tagBadge(t) {
   const icon = iconMap[t.label] || "";
   return `<span class="badge ${colorMap[t.color] || "chop"}" title="${esc(t.label)}">${icon}${esc(t.label)}</span>`;
 }
+// 建仓信号符合度徽章（时机门控：市场有方向/多头结构/回撤到位/金叉加分；盘后计算，实盘盘中显示"—"）
+function buildBadge(s) {
+  if (s.build_go === undefined) return '<span class="cell-dim" title="实盘盘中不计算，盘后点击今日数据显示">—</span>';
+  const regimeCn = {trend_up: "多头", trend_dn: "空头", range: "震荡"}[s.build_regime] || (s.build_regime || "");
+  const metTxt = `${regimeCn}·符合${s.build_met}/4`;
+  if (s.build_go) {
+    return `<span class="badge" title="建仓符合度: ${esc(s.build_reason || "")}" style="background:#1f6f3f;color:#fff">${metTxt}·GO</span>`;
+  }
+  return `<span class="badge" title="建仓符合度: ${esc(s.build_reason || "")}" style="background:#5a5a6a;color:#ccc">${metTxt}</span>`;
+}
 // 板块分页翻页
 function hunterPage(category, dir) {
   if (!window._hunterPage) window._hunterPage = {};
@@ -1824,15 +1853,26 @@ async function regenerateHunter() {
 }
 
 async function loadHunterHistory(date) {
+  // 支持扫描任意日期：后台运行 + 进度条（热快照日期也走全量，带建仓符合度）
   const el = document.getElementById("hunterBody");
   const btn = document.getElementById("hunterRunBtn");
   el.innerHTML = '<div class="empty">加载历史数据...</div>';
   try {
-    const h = await apiCall("load_hunter_history", date);
+    await apiCall("run_hunter", date);
+    let p = await apiCall("hunter_progress");
+    renderHunterProgress(el, p);
+    let guard = 0;
+    while ((p.running || !p.ready) && guard < 600) {
+      await sleep(1000);
+      p = await apiCall("hunter_progress");
+      renderHunterProgress(el, p);
+      guard++;
+    }
+    const h = await apiCall("load_hunter", date);
     if (h.available) {
       renderHunter(h, true);
       hunterLoaded = true;
-      statusEl(`已加载 ${date} 历史概念排名`, "ok");
+      statusEl(`已加载 ${date} 选股猎手数据`, "ok");
     } else {
       el.innerHTML = `<div class="empty">${esc(h.error || '无数据')}</div>`;
     }
@@ -1934,6 +1974,32 @@ async function removeFromWatchlist(code, rowEl) {
   }
 }
 let hunterRunning = false;
+// 选股猎手运行进度条（轮询 hunter_progress）
+function renderHunterProgress(el, p) {
+  const total = p.total || 0;
+  const pct = total ? Math.min(100, Math.round(p.done / total * 100)) : 0;
+  const phase = p.phase || "准备中";
+  const pctTxt = total ? `${p.done}/${total} 只 (${pct}%)` : "进行中...";
+  // total=0（如缓存命中/阶段间）显示不确定进度条 + 阶段名，避免卡"准备中"
+  const barInner = total
+    ? `<div style="height:100%;width:${pct}%;background:#3a8f6a;border-radius:4px;transition:width .5s"></div>`
+    : `<div style="height:100%;width:40%;background:#3a8f6a;border-radius:4px;animation:hunterInd 1.2s infinite linear"></div>`;
+  el.innerHTML = `
+    <div style="padding:14px;max-width:520px;margin:0 auto">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <span>⏳ 选股猎手运行中：<b>${esc(phase)}</b></span>
+        <span class="mono cell-dim" style="font-size:11px">${pctTxt}</span>
+      </div>
+      <div style="height:8px;background:var(--bg2,#2a2a3a);border-radius:4px;overflow:hidden">
+        ${barInner}
+      </div>
+      <div class="cell-dim" style="font-size:10px;margin-top:6px">${esc(p.msg || "")}${p.running ? "（首次运行需拉取全量日线约2分钟，之后同日期秒级）" : ""}</div>
+    </div>`;
+}
+// 不确定进度条动画（total=0 阶段）
+const _hunterStyle = document.createElement("style");
+_hunterStyle.textContent = "@keyframes hunterInd{0%{transform:translateX(-100%)}100%{transform:translateX(300%)}}";
+document.head.appendChild(_hunterStyle);
 async function loadHunter(force) {
   if (!force && hunterLoaded) return;
   if (hunterRunning) return;
@@ -1941,9 +2007,20 @@ async function loadHunter(force) {
   const btn = document.getElementById("hunterRunBtn");
   hunterRunning = true;
   if (btn) { btn.disabled = true; btn.textContent = "⏳ 运行中..."; }
-  el.innerHTML = '<div class="empty">⏳ 正在拉取行情+概念打分（约 40-60 秒，1200+ 只股票）...</div>';
+  const date = state.date || todayStr();
   try {
-    const h = await apiCall("load_hunter", state.date || todayStr());
+    await apiCall("run_hunter", date);   // 后台启动，立即返回
+    // 轮询进度直至完成
+    let p = await apiCall("hunter_progress");
+    renderHunterProgress(el, p);
+    let guard = 0;
+    while ((p.running || !p.ready) && guard < 600) {  // 最多等 10 分钟
+      await sleep(1000);
+      p = await apiCall("hunter_progress");
+      renderHunterProgress(el, p);
+      guard++;
+    }
+    const h = await apiCall("load_hunter", date);
     renderHunter(h);
     hunterLoaded = true;
     // 突破箱体扫描（后台并行，后端当日缓存）
@@ -2109,6 +2186,7 @@ function renderHunter(h) {
         <td class="num">${s.d9 || "—"}</td>
         <td class="num ${clsOf(s.change_pct)}">${s.change_pct >= 0 ? '+' : ''}${fmt(s.change_pct, 1)}%</td>
         <td>${s.limit_up ? '<span class="badge signal">涨停</span>' : ''}</td>
+        <td>${buildBadge(s)}</td>
       </tr>`;
     }).join("");
     const pageInfo = allStocks.length > PAGE
@@ -2164,6 +2242,7 @@ function renderHunter(h) {
             <th class="num" title="潜在突破5日">D6</th>
             <th class="num">D9</th>
             <th class="num">涨跌</th><th>状态</th>
+            <th title="建仓信号符合度（时机门控：市场有方向/多头结构/回撤到位/金叉加分；盘后计算，GO=符合）">建仓</th>
           </tr></thead>
           <tbody>${stockRows}</tbody></table>
           ${pageInfo}

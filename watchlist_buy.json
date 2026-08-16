@@ -13,104 +13,8 @@
       "suggested_price": 0.0,
       "capital_required": 0.0,
       "last_check_date": "2026-08-14",
-      "composite_score": 40,
+      "composite_score": 0,
       "signal_history": [
-        {
-          "date": "2026-08-14",
-          "score": 40,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 107.83
-        },
-        {
-          "date": "2026-08-14",
-          "score": 40,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 107.49
-        },
-        {
-          "date": "2026-08-14",
-          "score": 40,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 107.25
-        },
-        {
-          "date": "2026-08-14",
-          "score": 40,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 107.98
-        },
-        {
-          "date": "2026-08-14",
-          "score": 40,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 108.58
-        },
-        {
-          "date": "2026-08-14",
-          "score": 40,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 109.1
-        },
-        {
-          "date": "2026-08-14",
-          "score": 40,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 109.37
-        },
-        {
-          "date": "2026-08-14",
-          "score": 40,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 109.68
-        },
-        {
-          "date": "2026-08-14",
-          "score": 40,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 109.49
-        },
-        {
-          "date": "2026-08-14",
-          "score": 40,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 109.33
-        },
-        {
-          "date": "2026-08-14",
-          "score": 40,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 109.45
-        },
-        {
-          "date": "2026-08-14",
-          "score": 40,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 109.36
-        },
         {
           "date": "2026-08-14",
           "score": 40,
@@ -174,17 +78,109 @@
           "channel": null,
           "approach_status": null,
           "price": 109.79
+        },
+        {
+          "date": "2026-08-14",
+          "score": 40,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 109.79
+        },
+        {
+          "date": "2026-08-14",
+          "score": 40,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 109.79
+        },
+        {
+          "date": "2026-08-14",
+          "score": 40,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 109.79
+        },
+        {
+          "date": "2026-08-14",
+          "score": 40,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 109.79
+        },
+        {
+          "date": "2026-08-14",
+          "score": 40,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 109.79
+        },
+        {
+          "date": "2026-08-14",
+          "score": 40,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 109.79
+        },
+        {
+          "date": "2026-08-14",
+          "score": 40,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 109.79
+        },
+        {
+          "date": "2026-08-14",
+          "score": 40,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 109.79
+        },
+        {
+          "date": "2026-08-14",
+          "score": 40,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 109.79
+        },
+        {
+          "date": "2026-08-14",
+          "score": 0,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 109.79
+        },
+        {
+          "date": "2026-08-14",
+          "score": 0,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 109.79
+        },
+        {
+          "date": "2026-08-14",
+          "score": 0,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 109.79
         }
       ],
       "criteria_met": {
-        "c1_turn_confirm": true,
-        "c1_boll_lower": false,
-        "c1_volume_shrink": false,
-        "c1_rsi_oversold": false,
-        "c1_m5_iceberg": false,
-        "c2_box_breakout": false,
-        "c2_volume_confirm": false,
-        "c2_trend_bull": true
+        "t_regime": false,
+        "t_trend": false,
+        "t_drawdown": false,
+        "t_golden": false
       }
     },
     "002176": {
@@ -197,74 +193,10 @@
       "suggested_price": 0.0,
       "capital_required": 0.0,
       "last_check_date": "2026-08-14",
-      "composite_score": 40,
+      "composite_score": 0,
       "signal_history": [
         {
           "date": "2026-08-14",
-          "score": 30,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 9.31
-        },
-        {
-          "date": "2026-08-14",
-          "score": 30,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 9.32
-        },
-        {
-          "date": "2026-08-14",
-          "score": 30,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 9.33
-        },
-        {
-          "date": "2026-08-14",
-          "score": 30,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 9.34
-        },
-        {
-          "date": "2026-08-14",
-          "score": 30,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 9.37
-        },
-        {
-          "date": "2026-08-14",
-          "score": 30,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 9.35
-        },
-        {
-          "date": "2026-08-14",
-          "score": 30,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 9.34
-        },
-        {
-          "date": "2026-08-14",
-          "score": 30,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 9.37
-        },
-        {
-          "date": "2026-08-14",
           "score": 40,
           "verdict": "weak",
           "channel": null,
@@ -354,6 +286,70 @@
         {
           "date": "2026-08-14",
           "score": 40,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 9.4
+        },
+        {
+          "date": "2026-08-14",
+          "score": 40,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 9.4
+        },
+        {
+          "date": "2026-08-14",
+          "score": 40,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 9.4
+        },
+        {
+          "date": "2026-08-14",
+          "score": 40,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 9.4
+        },
+        {
+          "date": "2026-08-14",
+          "score": 40,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 9.4
+        },
+        {
+          "date": "2026-08-14",
+          "score": 40,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 9.4
+        },
+        {
+          "date": "2026-08-14",
+          "score": 40,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 9.4
+        },
+        {
+          "date": "2026-08-14",
+          "score": 40,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 9.4
+        },
+        {
+          "date": "2026-08-14",
+          "score": 0,
           "verdict": "weak",
           "channel": null,
           "approach_status": null,
@@ -361,14 +357,10 @@
         }
       ],
       "criteria_met": {
-        "c1_turn_confirm": true,
-        "c1_boll_lower": false,
-        "c1_volume_shrink": false,
-        "c1_rsi_oversold": false,
-        "c1_m5_iceberg": false,
-        "c2_box_breakout": false,
-        "c2_volume_confirm": false,
-        "c2_trend_bull": true
+        "t_regime": false,
+        "t_trend": false,
+        "t_drawdown": false,
+        "t_golden": false
       }
     },
     "002202": {
@@ -380,73 +372,9 @@
       "suggested_qty": 0,
       "suggested_price": 0.0,
       "capital_required": 0.0,
-      "last_check_date": "2026-08-14",
-      "composite_score": 60,
+      "last_check_date": "2026-07-14",
+      "composite_score": 0,
       "signal_history": [
-        {
-          "date": "2026-08-14",
-          "score": 30,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 20.57
-        },
-        {
-          "date": "2026-08-14",
-          "score": 30,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 20.56
-        },
-        {
-          "date": "2026-08-14",
-          "score": 30,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 20.61
-        },
-        {
-          "date": "2026-08-14",
-          "score": 30,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 20.64
-        },
-        {
-          "date": "2026-08-14",
-          "score": 30,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 20.75
-        },
-        {
-          "date": "2026-08-14",
-          "score": 30,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 20.71
-        },
-        {
-          "date": "2026-08-14",
-          "score": 30,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 20.71
-        },
-        {
-          "date": "2026-08-14",
-          "score": 30,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 20.82
-        },
         {
           "date": "2026-08-14",
           "score": 60,
@@ -542,17 +470,77 @@
           "channel": "iceberg",
           "approach_status": "next_day_pending",
           "price": 20.93
+        },
+        {
+          "date": "2026-08-14",
+          "score": 60,
+          "verdict": "approaching",
+          "channel": "iceberg",
+          "approach_status": "next_day_pending",
+          "price": 20.93
+        },
+        {
+          "date": "2026-08-14",
+          "score": 60,
+          "verdict": "approaching",
+          "channel": "iceberg",
+          "approach_status": "next_day_pending",
+          "price": 20.93
+        },
+        {
+          "date": "2026-08-14",
+          "score": 60,
+          "verdict": "approaching",
+          "channel": "iceberg",
+          "approach_status": "next_day_pending",
+          "price": 20.93
+        },
+        {
+          "date": "2026-08-14",
+          "score": 60,
+          "verdict": "approaching",
+          "channel": "iceberg",
+          "approach_status": "next_day_pending",
+          "price": 20.93
+        },
+        {
+          "date": "2026-08-14",
+          "score": 60,
+          "verdict": "approaching",
+          "channel": "iceberg",
+          "approach_status": "next_day_pending",
+          "price": 20.93
+        },
+        {
+          "date": "2026-08-14",
+          "score": 60,
+          "verdict": "approaching",
+          "channel": "iceberg",
+          "approach_status": "next_day_pending",
+          "price": 20.93
+        },
+        {
+          "date": "2026-08-14",
+          "score": 60,
+          "verdict": "weak",
+          "channel": "iceberg",
+          "approach_status": "next_day_pending",
+          "price": 20.93
+        },
+        {
+          "date": "2026-07-14",
+          "score": 0,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 19.18
         }
       ],
       "criteria_met": {
-        "c1_turn_confirm": true,
-        "c1_boll_lower": false,
-        "c1_volume_shrink": true,
-        "c1_rsi_oversold": false,
-        "c1_m5_iceberg": false,
-        "c2_box_breakout": false,
-        "c2_volume_confirm": false,
-        "c2_trend_bull": true
+        "t_regime": false,
+        "t_trend": false,
+        "t_drawdown": false,
+        "t_golden": false
       }
     },
     "002261": {
@@ -564,73 +552,9 @@
       "suggested_qty": 0,
       "suggested_price": 0.0,
       "capital_required": 0.0,
-      "last_check_date": "2026-08-14",
-      "composite_score": 40,
+      "last_check_date": "2026-07-10",
+      "composite_score": 0,
       "signal_history": [
-        {
-          "date": "2026-08-14",
-          "score": 30,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 25.95
-        },
-        {
-          "date": "2026-08-14",
-          "score": 30,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 25.93
-        },
-        {
-          "date": "2026-08-14",
-          "score": 30,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 25.98
-        },
-        {
-          "date": "2026-08-14",
-          "score": 30,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 26.0
-        },
-        {
-          "date": "2026-08-14",
-          "score": 30,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 26.04
-        },
-        {
-          "date": "2026-08-14",
-          "score": 60,
-          "verdict": "approaching",
-          "channel": "iceberg",
-          "approach_status": "intraday_pending",
-          "price": 26.25
-        },
-        {
-          "date": "2026-08-14",
-          "score": 60,
-          "verdict": "approaching",
-          "channel": "iceberg",
-          "approach_status": "intraday_pending",
-          "price": 26.18
-        },
-        {
-          "date": "2026-08-14",
-          "score": 60,
-          "verdict": "approaching",
-          "channel": "iceberg",
-          "approach_status": "intraday_pending",
-          "price": 26.21
-        },
         {
           "date": "2026-08-14",
           "score": 60,
@@ -726,17 +650,77 @@
           "channel": null,
           "approach_status": null,
           "price": 26.44
+        },
+        {
+          "date": "2026-08-14",
+          "score": 40,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 26.44
+        },
+        {
+          "date": "2026-08-14",
+          "score": 40,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 26.44
+        },
+        {
+          "date": "2026-08-14",
+          "score": 40,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 26.44
+        },
+        {
+          "date": "2026-08-14",
+          "score": 40,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 26.44
+        },
+        {
+          "date": "2026-08-14",
+          "score": 40,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 26.44
+        },
+        {
+          "date": "2026-08-14",
+          "score": 40,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 26.44
+        },
+        {
+          "date": "2026-08-14",
+          "score": 40,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 26.44
+        },
+        {
+          "date": "2026-07-10",
+          "score": 0,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 32.07
         }
       ],
       "criteria_met": {
-        "c1_turn_confirm": true,
-        "c1_boll_lower": false,
-        "c1_volume_shrink": false,
-        "c1_rsi_oversold": false,
-        "c1_m5_iceberg": false,
-        "c2_box_breakout": false,
-        "c2_volume_confirm": false,
-        "c2_trend_bull": true
+        "t_regime": false,
+        "t_trend": false,
+        "t_drawdown": false,
+        "t_golden": false
       }
     },
     "002451": {
@@ -748,73 +732,9 @@
       "suggested_qty": 0,
       "suggested_price": 0.0,
       "capital_required": 0.0,
-      "last_check_date": "2026-08-14",
-      "composite_score": 30,
+      "last_check_date": "2026-07-03",
+      "composite_score": 0,
       "signal_history": [
-        {
-          "date": "2026-08-14",
-          "score": 30,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 7.33
-        },
-        {
-          "date": "2026-08-14",
-          "score": 30,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 7.33
-        },
-        {
-          "date": "2026-08-14",
-          "score": 30,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 7.35
-        },
-        {
-          "date": "2026-08-14",
-          "score": 30,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 7.34
-        },
-        {
-          "date": "2026-08-14",
-          "score": 30,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 7.35
-        },
-        {
-          "date": "2026-08-14",
-          "score": 30,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 7.35
-        },
-        {
-          "date": "2026-08-14",
-          "score": 30,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 7.37
-        },
-        {
-          "date": "2026-08-14",
-          "score": 30,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 7.37
-        },
         {
           "date": "2026-08-14",
           "score": 30,
@@ -910,17 +830,77 @@
           "channel": null,
           "approach_status": null,
           "price": 7.4
+        },
+        {
+          "date": "2026-08-14",
+          "score": 30,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 7.4
+        },
+        {
+          "date": "2026-08-14",
+          "score": 30,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 7.4
+        },
+        {
+          "date": "2026-08-14",
+          "score": 30,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 7.4
+        },
+        {
+          "date": "2026-08-14",
+          "score": 30,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 7.4
+        },
+        {
+          "date": "2026-08-14",
+          "score": 30,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 7.4
+        },
+        {
+          "date": "2026-08-14",
+          "score": 30,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 7.4
+        },
+        {
+          "date": "2026-08-14",
+          "score": 30,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 7.4
+        },
+        {
+          "date": "2026-07-03",
+          "score": 0,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 7.24
         }
       ],
       "criteria_met": {
-        "c1_turn_confirm": false,
-        "c1_boll_lower": false,
-        "c1_volume_shrink": true,
-        "c1_rsi_oversold": false,
-        "c1_m5_iceberg": false,
-        "c2_box_breakout": false,
-        "c2_volume_confirm": false,
-        "c2_trend_bull": true
+        "t_regime": false,
+        "t_trend": false,
+        "t_drawdown": false,
+        "t_golden": false
       }
     },
     "002536": {
@@ -932,73 +912,9 @@
       "suggested_qty": 0,
       "suggested_price": 0.0,
       "capital_required": 0.0,
-      "last_check_date": "2026-08-14",
-      "composite_score": 40,
+      "last_check_date": "2026-06-30",
+      "composite_score": 10,
       "signal_history": [
-        {
-          "date": "2026-08-14",
-          "score": 40,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 42.17
-        },
-        {
-          "date": "2026-08-14",
-          "score": 40,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 42.2
-        },
-        {
-          "date": "2026-08-14",
-          "score": 40,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 42.11
-        },
-        {
-          "date": "2026-08-14",
-          "score": 40,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 42.2
-        },
-        {
-          "date": "2026-08-14",
-          "score": 40,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 42.6
-        },
-        {
-          "date": "2026-08-14",
-          "score": 40,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 42.56
-        },
-        {
-          "date": "2026-08-14",
-          "score": 40,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 42.33
-        },
-        {
-          "date": "2026-08-14",
-          "score": 40,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 42.63
-        },
         {
           "date": "2026-08-14",
           "score": 40,
@@ -1094,17 +1010,77 @@
           "channel": null,
           "approach_status": null,
           "price": 42.6
+        },
+        {
+          "date": "2026-08-14",
+          "score": 40,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 42.6
+        },
+        {
+          "date": "2026-08-14",
+          "score": 40,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 42.6
+        },
+        {
+          "date": "2026-08-14",
+          "score": 40,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 42.6
+        },
+        {
+          "date": "2026-08-14",
+          "score": 40,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 42.6
+        },
+        {
+          "date": "2026-08-14",
+          "score": 40,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 42.6
+        },
+        {
+          "date": "2026-08-14",
+          "score": 40,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 42.6
+        },
+        {
+          "date": "2026-08-14",
+          "score": 40,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 42.6
+        },
+        {
+          "date": "2026-06-30",
+          "score": 10,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 47.3
         }
       ],
       "criteria_met": {
-        "c1_turn_confirm": true,
-        "c1_boll_lower": false,
-        "c1_volume_shrink": false,
-        "c1_rsi_oversold": false,
-        "c1_m5_iceberg": false,
-        "c2_box_breakout": false,
-        "c2_volume_confirm": false,
-        "c2_trend_bull": true
+        "t_regime": false,
+        "t_trend": false,
+        "t_drawdown": false,
+        "t_golden": true
       }
     },
     "002639": {
@@ -1117,72 +1093,8 @@
       "suggested_price": 0.0,
       "capital_required": 0.0,
       "last_check_date": "2026-08-14",
-      "composite_score": 30,
+      "composite_score": 0,
       "signal_history": [
-        {
-          "date": "2026-08-14",
-          "score": 30,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 12.06
-        },
-        {
-          "date": "2026-08-14",
-          "score": 30,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 12.04
-        },
-        {
-          "date": "2026-08-14",
-          "score": 30,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 12.04
-        },
-        {
-          "date": "2026-08-14",
-          "score": 30,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 12.1
-        },
-        {
-          "date": "2026-08-14",
-          "score": 30,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 12.1
-        },
-        {
-          "date": "2026-08-14",
-          "score": 30,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 12.13
-        },
-        {
-          "date": "2026-08-14",
-          "score": 30,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 12.11
-        },
-        {
-          "date": "2026-08-14",
-          "score": 30,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 12.14
-        },
         {
           "date": "2026-08-14",
           "score": 30,
@@ -1278,17 +1190,77 @@
           "channel": null,
           "approach_status": null,
           "price": 12.16
+        },
+        {
+          "date": "2026-08-14",
+          "score": 30,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 12.16
+        },
+        {
+          "date": "2026-08-14",
+          "score": 30,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 12.16
+        },
+        {
+          "date": "2026-08-14",
+          "score": 30,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 12.16
+        },
+        {
+          "date": "2026-08-14",
+          "score": 30,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 12.16
+        },
+        {
+          "date": "2026-08-14",
+          "score": 30,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 12.16
+        },
+        {
+          "date": "2026-08-14",
+          "score": 30,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 12.16
+        },
+        {
+          "date": "2026-08-14",
+          "score": 30,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 12.16
+        },
+        {
+          "date": "2026-08-14",
+          "score": 0,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 12.16
         }
       ],
       "criteria_met": {
-        "c1_turn_confirm": false,
-        "c1_boll_lower": false,
-        "c1_volume_shrink": false,
-        "c1_rsi_oversold": false,
-        "c1_m5_iceberg": false,
-        "c2_box_breakout": false,
-        "c2_volume_confirm": false,
-        "c2_trend_bull": true
+        "t_regime": false,
+        "t_trend": false,
+        "t_drawdown": false,
+        "t_golden": false
       }
     },
     "300054": {
@@ -1300,73 +1272,9 @@
       "suggested_qty": 0,
       "suggested_price": 0.0,
       "capital_required": 0.0,
-      "last_check_date": "2026-08-14",
-      "composite_score": 30,
+      "last_check_date": "2026-07-20",
+      "composite_score": 0,
       "signal_history": [
-        {
-          "date": "2026-08-14",
-          "score": 30,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 74.99
-        },
-        {
-          "date": "2026-08-14",
-          "score": 30,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 74.98
-        },
-        {
-          "date": "2026-08-14",
-          "score": 30,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 74.95
-        },
-        {
-          "date": "2026-08-14",
-          "score": 30,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 75.3
-        },
-        {
-          "date": "2026-08-14",
-          "score": 30,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 75.76
-        },
-        {
-          "date": "2026-08-14",
-          "score": 30,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 75.56
-        },
-        {
-          "date": "2026-08-14",
-          "score": 30,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 75.31
-        },
-        {
-          "date": "2026-08-14",
-          "score": 30,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 75.93
-        },
         {
           "date": "2026-08-14",
           "score": 30,
@@ -1462,17 +1370,77 @@
           "channel": null,
           "approach_status": null,
           "price": 76.14
+        },
+        {
+          "date": "2026-08-14",
+          "score": 30,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 76.14
+        },
+        {
+          "date": "2026-08-14",
+          "score": 30,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 76.14
+        },
+        {
+          "date": "2026-08-14",
+          "score": 30,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 76.14
+        },
+        {
+          "date": "2026-08-14",
+          "score": 30,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 76.14
+        },
+        {
+          "date": "2026-08-14",
+          "score": 30,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 76.14
+        },
+        {
+          "date": "2026-08-14",
+          "score": 30,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 76.14
+        },
+        {
+          "date": "2026-08-14",
+          "score": 30,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 76.14
+        },
+        {
+          "date": "2026-07-20",
+          "score": 0,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 65.74
         }
       ],
       "criteria_met": {
-        "c1_turn_confirm": false,
-        "c1_boll_lower": false,
-        "c1_volume_shrink": true,
-        "c1_rsi_oversold": false,
-        "c1_m5_iceberg": false,
-        "c2_box_breakout": false,
-        "c2_volume_confirm": false,
-        "c2_trend_bull": true
+        "t_regime": false,
+        "t_trend": false,
+        "t_drawdown": false,
+        "t_golden": false
       }
     },
     "300058": {
@@ -1487,70 +1455,6 @@
       "last_check_date": "2026-08-14",
       "composite_score": 30,
       "signal_history": [
-        {
-          "date": "2026-08-14",
-          "score": 30,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 14.84
-        },
-        {
-          "date": "2026-08-14",
-          "score": 30,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 14.84
-        },
-        {
-          "date": "2026-08-14",
-          "score": 30,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 14.89
-        },
-        {
-          "date": "2026-08-14",
-          "score": 30,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 14.89
-        },
-        {
-          "date": "2026-08-14",
-          "score": 30,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 15.0
-        },
-        {
-          "date": "2026-08-14",
-          "score": 30,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 14.96
-        },
-        {
-          "date": "2026-08-14",
-          "score": 30,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 14.99
-        },
-        {
-          "date": "2026-08-14",
-          "score": 30,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 15.05
-        },
         {
           "date": "2026-08-14",
           "score": 30,
@@ -1646,17 +1550,77 @@
           "channel": null,
           "approach_status": null,
           "price": 15.1
+        },
+        {
+          "date": "2026-08-14",
+          "score": 30,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 15.1
+        },
+        {
+          "date": "2026-08-14",
+          "score": 30,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 15.1
+        },
+        {
+          "date": "2026-08-14",
+          "score": 30,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 15.1
+        },
+        {
+          "date": "2026-08-14",
+          "score": 30,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 15.1
+        },
+        {
+          "date": "2026-08-14",
+          "score": 30,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 15.1
+        },
+        {
+          "date": "2026-08-14",
+          "score": 30,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 15.1
+        },
+        {
+          "date": "2026-08-14",
+          "score": 30,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 15.1
+        },
+        {
+          "date": "2026-08-14",
+          "score": 30,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 15.1
         }
       ],
       "criteria_met": {
-        "c1_turn_confirm": false,
-        "c1_boll_lower": false,
-        "c1_volume_shrink": false,
-        "c1_rsi_oversold": false,
-        "c1_m5_iceberg": false,
-        "c2_box_breakout": false,
-        "c2_volume_confirm": false,
-        "c2_trend_bull": true
+        "t_regime": false,
+        "t_trend": true,
+        "t_drawdown": false,
+        "t_golden": false
       }
     },
     "300153": {
@@ -1668,73 +1632,9 @@
       "suggested_qty": 0,
       "suggested_price": 0.0,
       "capital_required": 0.0,
-      "last_check_date": "2026-08-14",
-      "composite_score": 60,
+      "last_check_date": "2026-08-13",
+      "composite_score": 0,
       "signal_history": [
-        {
-          "date": "2026-08-14",
-          "score": 60,
-          "verdict": "approaching",
-          "channel": "iceberg",
-          "approach_status": "intraday_pending",
-          "price": 22.16
-        },
-        {
-          "date": "2026-08-14",
-          "score": 60,
-          "verdict": "approaching",
-          "channel": "iceberg",
-          "approach_status": "intraday_pending",
-          "price": 22.15
-        },
-        {
-          "date": "2026-08-14",
-          "score": 60,
-          "verdict": "approaching",
-          "channel": "iceberg",
-          "approach_status": "intraday_pending",
-          "price": 22.17
-        },
-        {
-          "date": "2026-08-14",
-          "score": 60,
-          "verdict": "approaching",
-          "channel": "iceberg",
-          "approach_status": "intraday_pending",
-          "price": 22.18
-        },
-        {
-          "date": "2026-08-14",
-          "score": 60,
-          "verdict": "approaching",
-          "channel": "iceberg",
-          "approach_status": "intraday_pending",
-          "price": 22.28
-        },
-        {
-          "date": "2026-08-14",
-          "score": 60,
-          "verdict": "approaching",
-          "channel": "iceberg",
-          "approach_status": "intraday_pending",
-          "price": 22.35
-        },
-        {
-          "date": "2026-08-14",
-          "score": 60,
-          "verdict": "approaching",
-          "channel": "iceberg",
-          "approach_status": "intraday_pending",
-          "price": 22.32
-        },
-        {
-          "date": "2026-08-14",
-          "score": 60,
-          "verdict": "approaching",
-          "channel": "iceberg",
-          "approach_status": "intraday_pending",
-          "price": 22.36
-        },
         {
           "date": "2026-08-14",
           "score": 60,
@@ -1830,17 +1730,77 @@
           "channel": "iceberg",
           "approach_status": "next_day_pending",
           "price": 22.43
+        },
+        {
+          "date": "2026-08-14",
+          "score": 60,
+          "verdict": "approaching",
+          "channel": "iceberg",
+          "approach_status": "next_day_pending",
+          "price": 22.43
+        },
+        {
+          "date": "2026-08-14",
+          "score": 60,
+          "verdict": "approaching",
+          "channel": "iceberg",
+          "approach_status": "next_day_pending",
+          "price": 22.43
+        },
+        {
+          "date": "2026-08-14",
+          "score": 60,
+          "verdict": "approaching",
+          "channel": "iceberg",
+          "approach_status": "next_day_pending",
+          "price": 22.43
+        },
+        {
+          "date": "2026-08-14",
+          "score": 60,
+          "verdict": "approaching",
+          "channel": "iceberg",
+          "approach_status": "next_day_pending",
+          "price": 22.43
+        },
+        {
+          "date": "2026-08-14",
+          "score": 60,
+          "verdict": "approaching",
+          "channel": "iceberg",
+          "approach_status": "next_day_pending",
+          "price": 22.43
+        },
+        {
+          "date": "2026-08-14",
+          "score": 60,
+          "verdict": "approaching",
+          "channel": "iceberg",
+          "approach_status": "next_day_pending",
+          "price": 22.43
+        },
+        {
+          "date": "2026-08-14",
+          "score": 60,
+          "verdict": "weak",
+          "channel": "iceberg",
+          "approach_status": "next_day_pending",
+          "price": 22.43
+        },
+        {
+          "date": "2026-08-13",
+          "score": 0,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 22.57
         }
       ],
       "criteria_met": {
-        "c1_turn_confirm": true,
-        "c1_boll_lower": false,
-        "c1_volume_shrink": true,
-        "c1_rsi_oversold": false,
-        "c1_m5_iceberg": false,
-        "c2_box_breakout": false,
-        "c2_volume_confirm": false,
-        "c2_trend_bull": true
+        "t_regime": false,
+        "t_trend": false,
+        "t_drawdown": false,
+        "t_golden": false
       }
     },
     "300364": {
@@ -1852,73 +1812,9 @@
       "suggested_qty": 0,
       "suggested_price": 0.0,
       "capital_required": 0.0,
-      "last_check_date": "2026-08-14",
+      "last_check_date": "2026-08-04",
       "composite_score": 30,
       "signal_history": [
-        {
-          "date": "2026-08-14",
-          "score": 30,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 24.18
-        },
-        {
-          "date": "2026-08-14",
-          "score": 30,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 24.14
-        },
-        {
-          "date": "2026-08-14",
-          "score": 30,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 24.2
-        },
-        {
-          "date": "2026-08-14",
-          "score": 30,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 24.18
-        },
-        {
-          "date": "2026-08-14",
-          "score": 30,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 24.35
-        },
-        {
-          "date": "2026-08-14",
-          "score": 30,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 24.32
-        },
-        {
-          "date": "2026-08-14",
-          "score": 30,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 24.33
-        },
-        {
-          "date": "2026-08-14",
-          "score": 30,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 24.44
-        },
         {
           "date": "2026-08-14",
           "score": 30,
@@ -2014,17 +1910,77 @@
           "channel": null,
           "approach_status": null,
           "price": 24.66
+        },
+        {
+          "date": "2026-08-14",
+          "score": 30,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 24.66
+        },
+        {
+          "date": "2026-08-14",
+          "score": 30,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 24.66
+        },
+        {
+          "date": "2026-08-14",
+          "score": 30,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 24.66
+        },
+        {
+          "date": "2026-08-14",
+          "score": 30,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 24.66
+        },
+        {
+          "date": "2026-08-14",
+          "score": 30,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 24.66
+        },
+        {
+          "date": "2026-08-14",
+          "score": 30,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 24.66
+        },
+        {
+          "date": "2026-08-14",
+          "score": 30,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 24.66
+        },
+        {
+          "date": "2026-08-04",
+          "score": 30,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 25.64
         }
       ],
       "criteria_met": {
-        "c1_turn_confirm": false,
-        "c1_boll_lower": false,
-        "c1_volume_shrink": false,
-        "c1_rsi_oversold": false,
-        "c1_m5_iceberg": false,
-        "c2_box_breakout": false,
-        "c2_volume_confirm": false,
-        "c2_trend_bull": true
+        "t_regime": false,
+        "t_trend": true,
+        "t_drawdown": false,
+        "t_golden": false
       }
     },
     "300456": {
@@ -2036,73 +1992,9 @@
       "suggested_qty": 0,
       "suggested_price": 0.0,
       "capital_required": 0.0,
-      "last_check_date": "2026-08-14",
-      "composite_score": 30,
+      "last_check_date": "2026-07-10",
+      "composite_score": 0,
       "signal_history": [
-        {
-          "date": "2026-08-14",
-          "score": 30,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 31.31
-        },
-        {
-          "date": "2026-08-14",
-          "score": 30,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 31.25
-        },
-        {
-          "date": "2026-08-14",
-          "score": 30,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 31.31
-        },
-        {
-          "date": "2026-08-14",
-          "score": 30,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 31.37
-        },
-        {
-          "date": "2026-08-14",
-          "score": 30,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 31.58
-        },
-        {
-          "date": "2026-08-14",
-          "score": 30,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 31.57
-        },
-        {
-          "date": "2026-08-14",
-          "score": 30,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 31.47
-        },
-        {
-          "date": "2026-08-14",
-          "score": 30,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 31.71
-        },
         {
           "date": "2026-08-14",
           "score": 30,
@@ -2198,17 +2090,77 @@
           "channel": null,
           "approach_status": null,
           "price": 31.72
+        },
+        {
+          "date": "2026-08-14",
+          "score": 30,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 31.72
+        },
+        {
+          "date": "2026-08-14",
+          "score": 30,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 31.72
+        },
+        {
+          "date": "2026-08-14",
+          "score": 30,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 31.72
+        },
+        {
+          "date": "2026-08-14",
+          "score": 30,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 31.72
+        },
+        {
+          "date": "2026-08-14",
+          "score": 30,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 31.72
+        },
+        {
+          "date": "2026-08-14",
+          "score": 30,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 31.72
+        },
+        {
+          "date": "2026-08-14",
+          "score": 30,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 31.72
+        },
+        {
+          "date": "2026-07-10",
+          "score": 0,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 40.8
         }
       ],
       "criteria_met": {
-        "c1_turn_confirm": false,
-        "c1_boll_lower": false,
-        "c1_volume_shrink": true,
-        "c1_rsi_oversold": false,
-        "c1_m5_iceberg": false,
-        "c2_box_breakout": false,
-        "c2_volume_confirm": false,
-        "c2_trend_bull": true
+        "t_regime": false,
+        "t_trend": false,
+        "t_drawdown": false,
+        "t_golden": false
       }
     },
     "588170": {
@@ -2223,70 +2175,6 @@
       "last_check_date": "2026-08-14",
       "composite_score": 40,
       "signal_history": [
-        {
-          "date": "2026-08-14",
-          "score": 40,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 1.009
-        },
-        {
-          "date": "2026-08-14",
-          "score": 40,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 1.002
-        },
-        {
-          "date": "2026-08-14",
-          "score": 40,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 0.999
-        },
-        {
-          "date": "2026-08-14",
-          "score": 40,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 1.007
-        },
-        {
-          "date": "2026-08-14",
-          "score": 40,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 1.01
-        },
-        {
-          "date": "2026-08-14",
-          "score": 40,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 1.013
-        },
-        {
-          "date": "2026-08-14",
-          "score": 40,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 1.01
-        },
-        {
-          "date": "2026-08-14",
-          "score": 40,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 1.011
-        },
         {
           "date": "2026-08-14",
           "score": 40,
@@ -2382,17 +2270,77 @@
           "channel": null,
           "approach_status": null,
           "price": 1.021
+        },
+        {
+          "date": "2026-08-14",
+          "score": 40,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 1.021
+        },
+        {
+          "date": "2026-08-14",
+          "score": 40,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 1.021
+        },
+        {
+          "date": "2026-08-14",
+          "score": 40,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 1.021
+        },
+        {
+          "date": "2026-08-14",
+          "score": 40,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 1.021
+        },
+        {
+          "date": "2026-08-14",
+          "score": 40,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 1.021
+        },
+        {
+          "date": "2026-08-14",
+          "score": 40,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 1.021
+        },
+        {
+          "date": "2026-08-14",
+          "score": 40,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 1.021
+        },
+        {
+          "date": "2026-08-14",
+          "score": 40,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 1.021
         }
       ],
       "criteria_met": {
-        "c1_turn_confirm": true,
-        "c1_boll_lower": false,
-        "c1_volume_shrink": false,
-        "c1_rsi_oversold": false,
-        "c1_m5_iceberg": false,
-        "c2_box_breakout": false,
-        "c2_volume_confirm": false,
-        "c2_trend_bull": true
+        "t_regime": false,
+        "t_trend": true,
+        "t_drawdown": false,
+        "t_golden": true
       }
     },
     "600089": {
@@ -2404,8 +2352,8 @@
       "suggested_qty": 0,
       "suggested_price": 0.0,
       "capital_required": 0.0,
-      "last_check_date": "2026-08-14",
-      "composite_score": 30,
+      "last_check_date": "2026-07-09",
+      "composite_score": 0,
       "signal_history": [
         {
           "date": "2026-08-14",
@@ -2413,70 +2361,6 @@
           "verdict": "weak",
           "channel": null,
           "approach_status": null,
-          "price": 20.72
-        },
-        {
-          "date": "2026-08-14",
-          "score": 30,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 20.72
-        },
-        {
-          "date": "2026-08-14",
-          "score": 30,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 20.75
-        },
-        {
-          "date": "2026-08-14",
-          "score": 30,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 20.77
-        },
-        {
-          "date": "2026-08-14",
-          "score": 30,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 20.79
-        },
-        {
-          "date": "2026-08-14",
-          "score": 30,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 20.77
-        },
-        {
-          "date": "2026-08-14",
-          "score": 30,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 20.78
-        },
-        {
-          "date": "2026-08-14",
-          "score": 30,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 20.82
-        },
-        {
-          "date": "2026-08-14",
-          "score": 30,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
           "price": 20.85
         },
         {
@@ -2566,17 +2450,77 @@
           "channel": null,
           "approach_status": null,
           "price": 20.87
+        },
+        {
+          "date": "2026-08-14",
+          "score": 30,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 20.87
+        },
+        {
+          "date": "2026-08-14",
+          "score": 30,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 20.87
+        },
+        {
+          "date": "2026-08-14",
+          "score": 30,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 20.87
+        },
+        {
+          "date": "2026-08-14",
+          "score": 30,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 20.87
+        },
+        {
+          "date": "2026-08-14",
+          "score": 30,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 20.87
+        },
+        {
+          "date": "2026-08-14",
+          "score": 30,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 20.87
+        },
+        {
+          "date": "2026-08-14",
+          "score": 30,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 20.87
+        },
+        {
+          "date": "2026-07-09",
+          "score": 0,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 20.05
         }
       ],
       "criteria_met": {
-        "c1_turn_confirm": false,
-        "c1_boll_lower": false,
-        "c1_volume_shrink": false,
-        "c1_rsi_oversold": false,
-        "c1_m5_iceberg": false,
-        "c2_box_breakout": false,
-        "c2_volume_confirm": false,
-        "c2_trend_bull": true
+        "t_regime": false,
+        "t_trend": false,
+        "t_drawdown": false,
+        "t_golden": false
       }
     },
     "600481": {
@@ -2589,72 +2533,8 @@
       "suggested_price": 0.0,
       "capital_required": 0.0,
       "last_check_date": "2026-08-14",
-      "composite_score": 30,
+      "composite_score": 0,
       "signal_history": [
-        {
-          "date": "2026-08-14",
-          "score": 30,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 4.32
-        },
-        {
-          "date": "2026-08-14",
-          "score": 30,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 4.29
-        },
-        {
-          "date": "2026-08-14",
-          "score": 30,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 4.3
-        },
-        {
-          "date": "2026-08-14",
-          "score": 30,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 4.31
-        },
-        {
-          "date": "2026-08-14",
-          "score": 30,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 4.32
-        },
-        {
-          "date": "2026-08-14",
-          "score": 30,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 4.32
-        },
-        {
-          "date": "2026-08-14",
-          "score": 30,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 4.32
-        },
-        {
-          "date": "2026-08-14",
-          "score": 30,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 4.34
-        },
         {
           "date": "2026-08-14",
           "score": 30,
@@ -2750,17 +2630,77 @@
           "channel": null,
           "approach_status": null,
           "price": 4.34
+        },
+        {
+          "date": "2026-08-14",
+          "score": 30,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 4.34
+        },
+        {
+          "date": "2026-08-14",
+          "score": 30,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 4.34
+        },
+        {
+          "date": "2026-08-14",
+          "score": 30,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 4.34
+        },
+        {
+          "date": "2026-08-14",
+          "score": 30,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 4.34
+        },
+        {
+          "date": "2026-08-14",
+          "score": 30,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 4.34
+        },
+        {
+          "date": "2026-08-14",
+          "score": 30,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 4.34
+        },
+        {
+          "date": "2026-08-14",
+          "score": 30,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 4.33
+        },
+        {
+          "date": "2026-08-14",
+          "score": 0,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 4.34
         }
       ],
       "criteria_met": {
-        "c1_turn_confirm": false,
-        "c1_boll_lower": false,
-        "c1_volume_shrink": false,
-        "c1_rsi_oversold": false,
-        "c1_m5_iceberg": false,
-        "c2_box_breakout": false,
-        "c2_volume_confirm": false,
-        "c2_trend_bull": true
+        "t_regime": false,
+        "t_trend": false,
+        "t_drawdown": false,
+        "t_golden": false
       }
     },
     "600584": {
@@ -2772,73 +2712,9 @@
       "suggested_qty": 0,
       "suggested_price": 0.0,
       "capital_required": 0.0,
-      "last_check_date": "2026-08-14",
-      "composite_score": 40,
+      "last_check_date": "2026-06-08",
+      "composite_score": 10,
       "signal_history": [
-        {
-          "date": "2026-08-14",
-          "score": 60,
-          "verdict": "approaching",
-          "channel": "iceberg",
-          "approach_status": "intraday_pending",
-          "price": 76.71
-        },
-        {
-          "date": "2026-08-14",
-          "score": 60,
-          "verdict": "approaching",
-          "channel": "iceberg",
-          "approach_status": "intraday_pending",
-          "price": 76.59
-        },
-        {
-          "date": "2026-08-14",
-          "score": 60,
-          "verdict": "approaching",
-          "channel": "iceberg",
-          "approach_status": "intraday_pending",
-          "price": 76.8
-        },
-        {
-          "date": "2026-08-14",
-          "score": 60,
-          "verdict": "approaching",
-          "channel": "iceberg",
-          "approach_status": "intraday_pending",
-          "price": 77.48
-        },
-        {
-          "date": "2026-08-14",
-          "score": 60,
-          "verdict": "approaching",
-          "channel": "iceberg",
-          "approach_status": "intraday_pending",
-          "price": 77.95
-        },
-        {
-          "date": "2026-08-14",
-          "score": 60,
-          "verdict": "approaching",
-          "channel": "iceberg",
-          "approach_status": "intraday_pending",
-          "price": 77.79
-        },
-        {
-          "date": "2026-08-14",
-          "score": 60,
-          "verdict": "approaching",
-          "channel": "iceberg",
-          "approach_status": "intraday_pending",
-          "price": 77.38
-        },
-        {
-          "date": "2026-08-14",
-          "score": 60,
-          "verdict": "approaching",
-          "channel": "iceberg",
-          "approach_status": "intraday_pending",
-          "price": 78.23
-        },
         {
           "date": "2026-08-14",
           "score": 60,
@@ -2934,17 +2810,77 @@
           "channel": null,
           "approach_status": null,
           "price": 78.71
+        },
+        {
+          "date": "2026-08-14",
+          "score": 40,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 78.71
+        },
+        {
+          "date": "2026-08-14",
+          "score": 40,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 78.71
+        },
+        {
+          "date": "2026-08-14",
+          "score": 40,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 78.71
+        },
+        {
+          "date": "2026-08-14",
+          "score": 40,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 78.71
+        },
+        {
+          "date": "2026-08-14",
+          "score": 40,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 78.71
+        },
+        {
+          "date": "2026-08-14",
+          "score": 40,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 78.71
+        },
+        {
+          "date": "2026-08-14",
+          "score": 40,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 78.71
+        },
+        {
+          "date": "2026-06-08",
+          "score": 10,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 70.45
         }
       ],
       "criteria_met": {
-        "c1_turn_confirm": true,
-        "c1_boll_lower": false,
-        "c1_volume_shrink": false,
-        "c1_rsi_oversold": false,
-        "c1_m5_iceberg": false,
-        "c2_box_breakout": false,
-        "c2_volume_confirm": false,
-        "c2_trend_bull": true
+        "t_regime": false,
+        "t_trend": false,
+        "t_drawdown": false,
+        "t_golden": true
       }
     },
     "600977": {
@@ -2957,72 +2893,8 @@
       "suggested_price": 0.0,
       "capital_required": 0.0,
       "last_check_date": "2026-08-14",
-      "composite_score": 30,
+      "composite_score": 0,
       "signal_history": [
-        {
-          "date": "2026-08-14",
-          "score": 30,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 12.29
-        },
-        {
-          "date": "2026-08-14",
-          "score": 30,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 12.28
-        },
-        {
-          "date": "2026-08-14",
-          "score": 30,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 12.3
-        },
-        {
-          "date": "2026-08-14",
-          "score": 30,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 12.29
-        },
-        {
-          "date": "2026-08-14",
-          "score": 30,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 12.32
-        },
-        {
-          "date": "2026-08-14",
-          "score": 30,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 12.31
-        },
-        {
-          "date": "2026-08-14",
-          "score": 30,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 12.34
-        },
-        {
-          "date": "2026-08-14",
-          "score": 30,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 12.33
-        },
         {
           "date": "2026-08-14",
           "score": 30,
@@ -3118,17 +2990,77 @@
           "channel": null,
           "approach_status": null,
           "price": 12.33
+        },
+        {
+          "date": "2026-08-14",
+          "score": 30,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 12.33
+        },
+        {
+          "date": "2026-08-14",
+          "score": 30,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 12.33
+        },
+        {
+          "date": "2026-08-14",
+          "score": 30,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 12.33
+        },
+        {
+          "date": "2026-08-14",
+          "score": 30,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 12.33
+        },
+        {
+          "date": "2026-08-14",
+          "score": 30,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 12.33
+        },
+        {
+          "date": "2026-08-14",
+          "score": 30,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 12.33
+        },
+        {
+          "date": "2026-08-14",
+          "score": 30,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 12.33
+        },
+        {
+          "date": "2026-08-14",
+          "score": 0,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 12.33
         }
       ],
       "criteria_met": {
-        "c1_turn_confirm": false,
-        "c1_boll_lower": false,
-        "c1_volume_shrink": true,
-        "c1_rsi_oversold": false,
-        "c1_m5_iceberg": false,
-        "c2_box_breakout": false,
-        "c2_volume_confirm": false,
-        "c2_trend_bull": true
+        "t_regime": false,
+        "t_trend": false,
+        "t_drawdown": false,
+        "t_golden": false
       }
     },
     "603667": {
@@ -3141,72 +3073,8 @@
       "suggested_price": 0.0,
       "capital_required": 0.0,
       "last_check_date": "2026-08-14",
-      "composite_score": 30,
+      "composite_score": 0,
       "signal_history": [
-        {
-          "date": "2026-08-14",
-          "score": 30,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 54.72
-        },
-        {
-          "date": "2026-08-14",
-          "score": 30,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 54.47
-        },
-        {
-          "date": "2026-08-14",
-          "score": 30,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 54.4
-        },
-        {
-          "date": "2026-08-14",
-          "score": 30,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 54.6
-        },
-        {
-          "date": "2026-08-14",
-          "score": 30,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 54.73
-        },
-        {
-          "date": "2026-08-14",
-          "score": 30,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 54.83
-        },
-        {
-          "date": "2026-08-14",
-          "score": 30,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 54.82
-        },
-        {
-          "date": "2026-08-14",
-          "score": 30,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 54.97
-        },
         {
           "date": "2026-08-14",
           "score": 30,
@@ -3302,101 +3170,93 @@
           "channel": null,
           "approach_status": null,
           "price": 55.27
+        },
+        {
+          "date": "2026-08-14",
+          "score": 30,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 55.27
+        },
+        {
+          "date": "2026-08-14",
+          "score": 30,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 55.27
+        },
+        {
+          "date": "2026-08-14",
+          "score": 30,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 55.27
+        },
+        {
+          "date": "2026-08-14",
+          "score": 30,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 55.27
+        },
+        {
+          "date": "2026-08-14",
+          "score": 30,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 55.27
+        },
+        {
+          "date": "2026-08-14",
+          "score": 30,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 55.27
+        },
+        {
+          "date": "2026-08-14",
+          "score": 30,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 55.2
+        },
+        {
+          "date": "2026-08-14",
+          "score": 0,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 55.27
         }
       ],
       "criteria_met": {
-        "c1_turn_confirm": false,
-        "c1_boll_lower": false,
-        "c1_volume_shrink": false,
-        "c1_rsi_oversold": false,
-        "c1_m5_iceberg": false,
-        "c2_box_breakout": false,
-        "c2_volume_confirm": false,
-        "c2_trend_bull": true
+        "t_regime": false,
+        "t_trend": false,
+        "t_drawdown": false,
+        "t_golden": false
       }
     },
     "515120": {
       "name": "创新药ETF广发",
       "status": "monitoring",
-      "composite_score": 60,
+      "composite_score": 40,
       "criteria_met": {
-        "c1_turn_confirm": true,
-        "c1_boll_lower": false,
-        "c1_volume_shrink": true,
-        "c1_rsi_oversold": false,
-        "c1_m5_iceberg": false,
-        "c2_box_breakout": false,
-        "c2_volume_confirm": false,
-        "c2_trend_bull": true
+        "t_regime": false,
+        "t_trend": true,
+        "t_drawdown": false,
+        "t_golden": true
       },
       "suggested_qty": 0,
       "in_holdings": false,
       "last_check_date": "2026-08-14",
       "signal_history": [
-        {
-          "date": "2026-08-14",
-          "score": 60,
-          "verdict": "approaching",
-          "channel": "iceberg",
-          "approach_status": "intraday_pending",
-          "price": 0.681
-        },
-        {
-          "date": "2026-08-14",
-          "score": 60,
-          "verdict": "approaching",
-          "channel": "iceberg",
-          "approach_status": "intraday_pending",
-          "price": 0.681
-        },
-        {
-          "date": "2026-08-14",
-          "score": 60,
-          "verdict": "approaching",
-          "channel": "iceberg",
-          "approach_status": "intraday_pending",
-          "price": 0.681
-        },
-        {
-          "date": "2026-08-14",
-          "score": 60,
-          "verdict": "approaching",
-          "channel": "iceberg",
-          "approach_status": "intraday_pending",
-          "price": 0.68
-        },
-        {
-          "date": "2026-08-14",
-          "score": 60,
-          "verdict": "approaching",
-          "channel": "iceberg",
-          "approach_status": "intraday_pending",
-          "price": 0.681
-        },
-        {
-          "date": "2026-08-14",
-          "score": 60,
-          "verdict": "approaching",
-          "channel": "iceberg",
-          "approach_status": "intraday_pending",
-          "price": 0.68
-        },
-        {
-          "date": "2026-08-14",
-          "score": 60,
-          "verdict": "approaching",
-          "channel": "iceberg",
-          "approach_status": "intraday_pending",
-          "price": 0.68
-        },
-        {
-          "date": "2026-08-14",
-          "score": 60,
-          "verdict": "approaching",
-          "channel": "iceberg",
-          "approach_status": "intraday_pending",
-          "price": 0.681
-        },
         {
           "date": "2026-08-14",
           "score": 60,
@@ -3492,6 +3352,70 @@
           "channel": "iceberg",
           "approach_status": "next_day_pending",
           "price": 0.688
+        },
+        {
+          "date": "2026-08-14",
+          "score": 60,
+          "verdict": "approaching",
+          "channel": "iceberg",
+          "approach_status": "next_day_pending",
+          "price": 0.688
+        },
+        {
+          "date": "2026-08-14",
+          "score": 60,
+          "verdict": "approaching",
+          "channel": "iceberg",
+          "approach_status": "next_day_pending",
+          "price": 0.688
+        },
+        {
+          "date": "2026-08-14",
+          "score": 60,
+          "verdict": "approaching",
+          "channel": "iceberg",
+          "approach_status": "next_day_pending",
+          "price": 0.688
+        },
+        {
+          "date": "2026-08-14",
+          "score": 60,
+          "verdict": "approaching",
+          "channel": "iceberg",
+          "approach_status": "next_day_pending",
+          "price": 0.688
+        },
+        {
+          "date": "2026-08-14",
+          "score": 60,
+          "verdict": "approaching",
+          "channel": "iceberg",
+          "approach_status": "next_day_pending",
+          "price": 0.688
+        },
+        {
+          "date": "2026-08-14",
+          "score": 60,
+          "verdict": "approaching",
+          "channel": "iceberg",
+          "approach_status": "next_day_pending",
+          "price": 0.688
+        },
+        {
+          "date": "2026-08-14",
+          "score": 60,
+          "verdict": "weak",
+          "channel": "iceberg",
+          "approach_status": "next_day_pending",
+          "price": 0.688
+        },
+        {
+          "date": "2026-08-14",
+          "score": 40,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 0.688
         }
       ],
       "suggested_price": 0.0,
@@ -3500,16 +3424,12 @@
     "688008": {
       "name": "澜起科技",
       "status": "monitoring",
-      "composite_score": 60,
+      "composite_score": 0,
       "criteria_met": {
-        "c1_turn_confirm": true,
-        "c1_boll_lower": false,
-        "c1_volume_shrink": true,
-        "c1_rsi_oversold": false,
-        "c1_m5_iceberg": false,
-        "c2_box_breakout": false,
-        "c2_volume_confirm": false,
-        "c2_trend_bull": true
+        "t_regime": false,
+        "t_trend": false,
+        "t_drawdown": false,
+        "t_golden": false
       },
       "suggested_qty": 0,
       "in_holdings": false,
@@ -3517,70 +3437,6 @@
       "suggested_price": 0.0,
       "capital_required": 0.0,
       "signal_history": [
-        {
-          "date": "2026-08-14",
-          "score": 60,
-          "verdict": "approaching",
-          "channel": "iceberg",
-          "approach_status": "intraday_pending",
-          "price": 210.64
-        },
-        {
-          "date": "2026-08-14",
-          "score": 60,
-          "verdict": "approaching",
-          "channel": "iceberg",
-          "approach_status": "intraday_pending",
-          "price": 210.51
-        },
-        {
-          "date": "2026-08-14",
-          "score": 60,
-          "verdict": "approaching",
-          "channel": "iceberg",
-          "approach_status": "intraday_pending",
-          "price": 210.8
-        },
-        {
-          "date": "2026-08-14",
-          "score": 60,
-          "verdict": "approaching",
-          "channel": "iceberg",
-          "approach_status": "intraday_pending",
-          "price": 211.1
-        },
-        {
-          "date": "2026-08-14",
-          "score": 60,
-          "verdict": "approaching",
-          "channel": "iceberg",
-          "approach_status": "intraday_pending",
-          "price": 212.57
-        },
-        {
-          "date": "2026-08-14",
-          "score": 60,
-          "verdict": "approaching",
-          "channel": "iceberg",
-          "approach_status": "intraday_pending",
-          "price": 211.95
-        },
-        {
-          "date": "2026-08-14",
-          "score": 60,
-          "verdict": "approaching",
-          "channel": "iceberg",
-          "approach_status": "intraday_pending",
-          "price": 211.4
-        },
-        {
-          "date": "2026-08-14",
-          "score": 60,
-          "verdict": "approaching",
-          "channel": "iceberg",
-          "approach_status": "intraday_pending",
-          "price": 212.87
-        },
         {
           "date": "2026-08-14",
           "score": 60,
@@ -3676,6 +3532,70 @@
           "channel": "iceberg",
           "approach_status": "next_day_pending",
           "price": 211.91
+        },
+        {
+          "date": "2026-08-14",
+          "score": 60,
+          "verdict": "approaching",
+          "channel": "iceberg",
+          "approach_status": "next_day_pending",
+          "price": 211.91
+        },
+        {
+          "date": "2026-08-14",
+          "score": 60,
+          "verdict": "approaching",
+          "channel": "iceberg",
+          "approach_status": "next_day_pending",
+          "price": 211.91
+        },
+        {
+          "date": "2026-08-14",
+          "score": 60,
+          "verdict": "approaching",
+          "channel": "iceberg",
+          "approach_status": "next_day_pending",
+          "price": 211.91
+        },
+        {
+          "date": "2026-08-14",
+          "score": 60,
+          "verdict": "approaching",
+          "channel": "iceberg",
+          "approach_status": "next_day_pending",
+          "price": 211.91
+        },
+        {
+          "date": "2026-08-14",
+          "score": 60,
+          "verdict": "approaching",
+          "channel": "iceberg",
+          "approach_status": "next_day_pending",
+          "price": 211.91
+        },
+        {
+          "date": "2026-08-14",
+          "score": 60,
+          "verdict": "approaching",
+          "channel": "iceberg",
+          "approach_status": "next_day_pending",
+          "price": 211.91
+        },
+        {
+          "date": "2026-08-14",
+          "score": 60,
+          "verdict": "weak",
+          "channel": "iceberg",
+          "approach_status": "next_day_pending",
+          "price": 211.91
+        },
+        {
+          "date": "2026-08-14",
+          "score": 0,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 211.91
         }
       ]
     },
@@ -3684,14 +3604,10 @@
       "status": "monitoring",
       "composite_score": 30,
       "criteria_met": {
-        "c1_turn_confirm": false,
-        "c1_boll_lower": false,
-        "c1_volume_shrink": true,
-        "c1_rsi_oversold": false,
-        "c1_m5_iceberg": false,
-        "c2_box_breakout": false,
-        "c2_volume_confirm": false,
-        "c2_trend_bull": true
+        "t_regime": false,
+        "t_trend": true,
+        "t_drawdown": false,
+        "t_golden": false
       },
       "suggested_qty": 0,
       "in_holdings": false,
@@ -3699,70 +3615,6 @@
       "suggested_price": 0.0,
       "capital_required": 0.0,
       "signal_history": [
-        {
-          "date": "2026-08-14",
-          "score": 30,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 61.82
-        },
-        {
-          "date": "2026-08-14",
-          "score": 30,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 61.72
-        },
-        {
-          "date": "2026-08-14",
-          "score": 30,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 62.04
-        },
-        {
-          "date": "2026-08-14",
-          "score": 30,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 62.06
-        },
-        {
-          "date": "2026-08-14",
-          "score": 30,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 62.76
-        },
-        {
-          "date": "2026-08-14",
-          "score": 30,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 62.4
-        },
-        {
-          "date": "2026-08-14",
-          "score": 30,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 62.28
-        },
-        {
-          "date": "2026-08-14",
-          "score": 30,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 62.66
-        },
         {
           "date": "2026-08-14",
           "score": 30,
@@ -3858,6 +3710,70 @@
           "channel": null,
           "approach_status": null,
           "price": 62.73
+        },
+        {
+          "date": "2026-08-14",
+          "score": 30,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 62.73
+        },
+        {
+          "date": "2026-08-14",
+          "score": 30,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 62.73
+        },
+        {
+          "date": "2026-08-14",
+          "score": 30,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 62.73
+        },
+        {
+          "date": "2026-08-14",
+          "score": 30,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 62.73
+        },
+        {
+          "date": "2026-08-14",
+          "score": 30,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 62.73
+        },
+        {
+          "date": "2026-08-14",
+          "score": 30,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 62.73
+        },
+        {
+          "date": "2026-08-14",
+          "score": 30,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 62.73
+        },
+        {
+          "date": "2026-08-14",
+          "score": 30,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 62.73
         }
       ]
     },
@@ -3866,14 +3782,10 @@
       "status": "monitoring",
       "composite_score": 40,
       "criteria_met": {
-        "c1_turn_confirm": true,
-        "c1_boll_lower": false,
-        "c1_volume_shrink": false,
-        "c1_rsi_oversold": false,
-        "c1_m5_iceberg": false,
-        "c2_box_breakout": false,
-        "c2_volume_confirm": false,
-        "c2_trend_bull": true
+        "t_regime": false,
+        "t_trend": true,
+        "t_drawdown": false,
+        "t_golden": true
       },
       "suggested_qty": 0,
       "in_holdings": false,
@@ -3881,70 +3793,6 @@
       "suggested_price": 0.0,
       "capital_required": 0.0,
       "signal_history": [
-        {
-          "date": "2026-08-14",
-          "score": 40,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 140.48
-        },
-        {
-          "date": "2026-08-14",
-          "score": 40,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 140.68
-        },
-        {
-          "date": "2026-08-14",
-          "score": 40,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 141.58
-        },
-        {
-          "date": "2026-08-14",
-          "score": 40,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 141.51
-        },
-        {
-          "date": "2026-08-14",
-          "score": 40,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 143.79
-        },
-        {
-          "date": "2026-08-14",
-          "score": 40,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 142.46
-        },
-        {
-          "date": "2026-08-14",
-          "score": 40,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 143.24
-        },
-        {
-          "date": "2026-08-14",
-          "score": 40,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 143.3
-        },
         {
           "date": "2026-08-14",
           "score": 40,
@@ -4040,93 +3888,89 @@
           "channel": null,
           "approach_status": null,
           "price": 143.9
+        },
+        {
+          "date": "2026-08-14",
+          "score": 40,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 143.9
+        },
+        {
+          "date": "2026-08-14",
+          "score": 40,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 143.9
+        },
+        {
+          "date": "2026-08-14",
+          "score": 40,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 143.9
+        },
+        {
+          "date": "2026-08-14",
+          "score": 40,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 143.9
+        },
+        {
+          "date": "2026-08-14",
+          "score": 40,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 143.9
+        },
+        {
+          "date": "2026-08-14",
+          "score": 40,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 143.9
+        },
+        {
+          "date": "2026-08-14",
+          "score": 40,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 143.9
+        },
+        {
+          "date": "2026-08-14",
+          "score": 40,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 143.9
         }
       ]
     },
     "300548": {
       "name": "长芯博创",
       "status": "monitoring",
-      "composite_score": 40,
+      "composite_score": 0,
       "criteria_met": {
-        "c1_turn_confirm": true,
-        "c1_boll_lower": false,
-        "c1_volume_shrink": false,
-        "c1_rsi_oversold": false,
-        "c1_m5_iceberg": false,
-        "c2_box_breakout": false,
-        "c2_volume_confirm": false,
-        "c2_trend_bull": true
+        "t_regime": false,
+        "t_trend": false,
+        "t_drawdown": false,
+        "t_golden": false
       },
       "suggested_qty": 0,
       "in_holdings": false,
-      "last_check_date": "2026-08-14",
+      "last_check_date": "2026-07-10",
       "suggested_price": 0.0,
       "capital_required": 0.0,
       "signal_history": [
-        {
-          "date": "2026-08-14",
-          "score": 60,
-          "verdict": "approaching",
-          "channel": "iceberg",
-          "approach_status": "intraday_pending",
-          "price": 189.65
-        },
-        {
-          "date": "2026-08-14",
-          "score": 60,
-          "verdict": "approaching",
-          "channel": "iceberg",
-          "approach_status": "intraday_pending",
-          "price": 188.65
-        },
-        {
-          "date": "2026-08-14",
-          "score": 60,
-          "verdict": "approaching",
-          "channel": "iceberg",
-          "approach_status": "intraday_pending",
-          "price": 189.18
-        },
-        {
-          "date": "2026-08-14",
-          "score": 60,
-          "verdict": "approaching",
-          "channel": "iceberg",
-          "approach_status": "intraday_pending",
-          "price": 191.34
-        },
-        {
-          "date": "2026-08-14",
-          "score": 60,
-          "verdict": "approaching",
-          "channel": "iceberg",
-          "approach_status": "intraday_pending",
-          "price": 193.48
-        },
-        {
-          "date": "2026-08-14",
-          "score": 40,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 192.93
-        },
-        {
-          "date": "2026-08-14",
-          "score": 40,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 192.19
-        },
-        {
-          "date": "2026-08-14",
-          "score": 40,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 194.32
-        },
         {
           "date": "2026-08-14",
           "score": 40,
@@ -4222,93 +4066,89 @@
           "channel": null,
           "approach_status": null,
           "price": 194.67
+        },
+        {
+          "date": "2026-08-14",
+          "score": 40,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 194.67
+        },
+        {
+          "date": "2026-08-14",
+          "score": 40,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 194.67
+        },
+        {
+          "date": "2026-08-14",
+          "score": 40,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 194.67
+        },
+        {
+          "date": "2026-08-14",
+          "score": 40,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 194.67
+        },
+        {
+          "date": "2026-08-14",
+          "score": 40,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 194.67
+        },
+        {
+          "date": "2026-08-14",
+          "score": 40,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 194.67
+        },
+        {
+          "date": "2026-08-14",
+          "score": 40,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 194.67
+        },
+        {
+          "date": "2026-07-10",
+          "score": 0,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 221.5
         }
       ]
     },
     "002409": {
       "name": "雅克科技",
       "status": "monitoring",
-      "composite_score": 60,
+      "composite_score": 10,
       "criteria_met": {
-        "c1_turn_confirm": true,
-        "c1_boll_lower": false,
-        "c1_volume_shrink": true,
-        "c1_rsi_oversold": false,
-        "c1_m5_iceberg": false,
-        "c2_box_breakout": false,
-        "c2_volume_confirm": false,
-        "c2_trend_bull": true
+        "t_regime": false,
+        "t_trend": false,
+        "t_drawdown": false,
+        "t_golden": true
       },
       "suggested_qty": 0,
       "in_holdings": false,
-      "last_check_date": "2026-08-14",
+      "last_check_date": "2026-06-18",
       "suggested_price": 0.0,
       "capital_required": 0.0,
       "signal_history": [
-        {
-          "date": "2026-08-14",
-          "score": 60,
-          "verdict": "approaching",
-          "channel": "iceberg",
-          "approach_status": "intraday_pending",
-          "price": 147.9
-        },
-        {
-          "date": "2026-08-14",
-          "score": 60,
-          "verdict": "approaching",
-          "channel": "iceberg",
-          "approach_status": "intraday_pending",
-          "price": 147.69
-        },
-        {
-          "date": "2026-08-14",
-          "score": 60,
-          "verdict": "approaching",
-          "channel": "iceberg",
-          "approach_status": "intraday_pending",
-          "price": 148.1
-        },
-        {
-          "date": "2026-08-14",
-          "score": 60,
-          "verdict": "approaching",
-          "channel": "iceberg",
-          "approach_status": "intraday_pending",
-          "price": 149.0
-        },
-        {
-          "date": "2026-08-14",
-          "score": 60,
-          "verdict": "approaching",
-          "channel": "iceberg",
-          "approach_status": "intraday_pending",
-          "price": 149.7
-        },
-        {
-          "date": "2026-08-14",
-          "score": 60,
-          "verdict": "approaching",
-          "channel": "iceberg",
-          "approach_status": "intraday_pending",
-          "price": 148.77
-        },
-        {
-          "date": "2026-08-14",
-          "score": 60,
-          "verdict": "approaching",
-          "channel": "iceberg",
-          "approach_status": "intraday_pending",
-          "price": 148.1
-        },
-        {
-          "date": "2026-08-14",
-          "score": 60,
-          "verdict": "approaching",
-          "channel": "iceberg",
-          "approach_status": "intraday_pending",
-          "price": 149.5
-        },
         {
           "date": "2026-08-14",
           "score": 60,
@@ -4404,93 +4244,89 @@
           "channel": "iceberg",
           "approach_status": "next_day_pending",
           "price": 151.22
+        },
+        {
+          "date": "2026-08-14",
+          "score": 60,
+          "verdict": "approaching",
+          "channel": "iceberg",
+          "approach_status": "next_day_pending",
+          "price": 151.22
+        },
+        {
+          "date": "2026-08-14",
+          "score": 60,
+          "verdict": "approaching",
+          "channel": "iceberg",
+          "approach_status": "next_day_pending",
+          "price": 151.22
+        },
+        {
+          "date": "2026-08-14",
+          "score": 60,
+          "verdict": "approaching",
+          "channel": "iceberg",
+          "approach_status": "next_day_pending",
+          "price": 151.22
+        },
+        {
+          "date": "2026-08-14",
+          "score": 60,
+          "verdict": "approaching",
+          "channel": "iceberg",
+          "approach_status": "next_day_pending",
+          "price": 151.22
+        },
+        {
+          "date": "2026-08-14",
+          "score": 60,
+          "verdict": "approaching",
+          "channel": "iceberg",
+          "approach_status": "next_day_pending",
+          "price": 151.22
+        },
+        {
+          "date": "2026-08-14",
+          "score": 60,
+          "verdict": "approaching",
+          "channel": "iceberg",
+          "approach_status": "next_day_pending",
+          "price": 151.22
+        },
+        {
+          "date": "2026-08-14",
+          "score": 60,
+          "verdict": "weak",
+          "channel": "iceberg",
+          "approach_status": "next_day_pending",
+          "price": 151.22
+        },
+        {
+          "date": "2026-06-18",
+          "score": 10,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 150.15
         }
       ]
     },
     "300666": {
       "name": "江丰电子",
       "status": "monitoring",
-      "composite_score": 30,
+      "composite_score": 0,
       "criteria_met": {
-        "c1_turn_confirm": false,
-        "c1_boll_lower": false,
-        "c1_volume_shrink": true,
-        "c1_rsi_oversold": false,
-        "c1_m5_iceberg": false,
-        "c2_box_breakout": false,
-        "c2_volume_confirm": false,
-        "c2_trend_bull": true
+        "t_regime": false,
+        "t_trend": false,
+        "t_drawdown": false,
+        "t_golden": false
       },
       "suggested_qty": 0,
       "in_holdings": false,
-      "last_check_date": "2026-08-14",
+      "last_check_date": "2026-07-10",
       "suggested_price": 0.0,
       "capital_required": 0.0,
       "signal_history": [
-        {
-          "date": "2026-08-14",
-          "score": 30,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 249.96
-        },
-        {
-          "date": "2026-08-14",
-          "score": 30,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 250.2
-        },
-        {
-          "date": "2026-08-14",
-          "score": 30,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 250.28
-        },
-        {
-          "date": "2026-08-14",
-          "score": 30,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 251.59
-        },
-        {
-          "date": "2026-08-14",
-          "score": 30,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 254.43
-        },
-        {
-          "date": "2026-08-14",
-          "score": 30,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 253.8
-        },
-        {
-          "date": "2026-08-14",
-          "score": 30,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 252.27
-        },
-        {
-          "date": "2026-08-14",
-          "score": 30,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 254.5
-        },
         {
           "date": "2026-08-14",
           "score": 30,
@@ -4586,93 +4422,89 @@
           "channel": null,
           "approach_status": null,
           "price": 255.9
+        },
+        {
+          "date": "2026-08-14",
+          "score": 30,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 255.9
+        },
+        {
+          "date": "2026-08-14",
+          "score": 30,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 255.9
+        },
+        {
+          "date": "2026-08-14",
+          "score": 30,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 255.9
+        },
+        {
+          "date": "2026-08-14",
+          "score": 30,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 255.9
+        },
+        {
+          "date": "2026-08-14",
+          "score": 30,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 255.9
+        },
+        {
+          "date": "2026-08-14",
+          "score": 30,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 255.9
+        },
+        {
+          "date": "2026-08-14",
+          "score": 30,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 255.9
+        },
+        {
+          "date": "2026-07-10",
+          "score": 0,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 340.77
         }
       ]
     },
     "002407": {
       "name": "多氟多",
       "status": "monitoring",
-      "composite_score": 40,
+      "composite_score": 30,
       "criteria_met": {
-        "c1_turn_confirm": true,
-        "c1_boll_lower": false,
-        "c1_volume_shrink": false,
-        "c1_rsi_oversold": false,
-        "c1_m5_iceberg": false,
-        "c2_box_breakout": false,
-        "c2_volume_confirm": false,
-        "c2_trend_bull": true
+        "t_regime": false,
+        "t_trend": true,
+        "t_drawdown": false,
+        "t_golden": false
       },
       "suggested_qty": 0,
       "in_holdings": false,
-      "last_check_date": "2026-08-14",
+      "last_check_date": "2026-06-11",
       "suggested_price": 0.0,
       "capital_required": 0.0,
       "signal_history": [
-        {
-          "date": "2026-08-14",
-          "score": 60,
-          "verdict": "approaching",
-          "channel": "iceberg",
-          "approach_status": "intraday_pending",
-          "price": 38.7
-        },
-        {
-          "date": "2026-08-14",
-          "score": 60,
-          "verdict": "approaching",
-          "channel": "iceberg",
-          "approach_status": "intraday_pending",
-          "price": 39.37
-        },
-        {
-          "date": "2026-08-14",
-          "score": 60,
-          "verdict": "approaching",
-          "channel": "iceberg",
-          "approach_status": "intraday_pending",
-          "price": 40.0
-        },
-        {
-          "date": "2026-08-14",
-          "score": 60,
-          "verdict": "approaching",
-          "channel": "iceberg",
-          "approach_status": "intraday_pending",
-          "price": 39.72
-        },
-        {
-          "date": "2026-08-14",
-          "score": 60,
-          "verdict": "approaching",
-          "channel": "iceberg",
-          "approach_status": "intraday_pending",
-          "price": 39.53
-        },
-        {
-          "date": "2026-08-14",
-          "score": 60,
-          "verdict": "approaching",
-          "channel": "iceberg",
-          "approach_status": "intraday_pending",
-          "price": 39.55
-        },
-        {
-          "date": "2026-08-14",
-          "score": 60,
-          "verdict": "approaching",
-          "channel": "iceberg",
-          "approach_status": "intraday_pending",
-          "price": 39.49
-        },
-        {
-          "date": "2026-08-14",
-          "score": 60,
-          "verdict": "approaching",
-          "channel": "iceberg",
-          "approach_status": "intraday_pending",
-          "price": 39.78
-        },
         {
           "date": "2026-08-14",
           "score": 60,
@@ -4768,93 +4600,89 @@
           "channel": null,
           "approach_status": null,
           "price": 39.16
+        },
+        {
+          "date": "2026-08-14",
+          "score": 40,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 39.16
+        },
+        {
+          "date": "2026-08-14",
+          "score": 40,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 39.16
+        },
+        {
+          "date": "2026-08-14",
+          "score": 40,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 39.16
+        },
+        {
+          "date": "2026-08-14",
+          "score": 40,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 39.16
+        },
+        {
+          "date": "2026-08-14",
+          "score": 40,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 39.16
+        },
+        {
+          "date": "2026-08-14",
+          "score": 40,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 39.16
+        },
+        {
+          "date": "2026-08-14",
+          "score": 40,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 39.16
+        },
+        {
+          "date": "2026-06-11",
+          "score": 30,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 38.19
         }
       ]
     },
     "688102": {
       "name": "斯瑞新材",
       "status": "monitoring",
-      "composite_score": 60,
+      "composite_score": 30,
       "criteria_met": {
-        "c1_turn_confirm": true,
-        "c1_boll_lower": false,
-        "c1_volume_shrink": true,
-        "c1_rsi_oversold": false,
-        "c1_m5_iceberg": false,
-        "c2_box_breakout": false,
-        "c2_volume_confirm": false,
-        "c2_trend_bull": true
+        "t_regime": false,
+        "t_trend": true,
+        "t_drawdown": false,
+        "t_golden": false
       },
       "suggested_qty": 0,
       "in_holdings": false,
-      "last_check_date": "2026-08-14",
+      "last_check_date": "2026-07-06",
       "suggested_price": 0.0,
       "capital_required": 0.0,
       "signal_history": [
-        {
-          "date": "2026-08-14",
-          "score": 60,
-          "verdict": "approaching",
-          "channel": "iceberg",
-          "approach_status": "intraday_pending",
-          "price": 37.2
-        },
-        {
-          "date": "2026-08-14",
-          "score": 60,
-          "verdict": "approaching",
-          "channel": "iceberg",
-          "approach_status": "intraday_pending",
-          "price": 37.22
-        },
-        {
-          "date": "2026-08-14",
-          "score": 60,
-          "verdict": "approaching",
-          "channel": "iceberg",
-          "approach_status": "intraday_pending",
-          "price": 37.33
-        },
-        {
-          "date": "2026-08-14",
-          "score": 60,
-          "verdict": "approaching",
-          "channel": "iceberg",
-          "approach_status": "intraday_pending",
-          "price": 37.32
-        },
-        {
-          "date": "2026-08-14",
-          "score": 60,
-          "verdict": "approaching",
-          "channel": "iceberg",
-          "approach_status": "intraday_pending",
-          "price": 37.54
-        },
-        {
-          "date": "2026-08-14",
-          "score": 60,
-          "verdict": "approaching",
-          "channel": "iceberg",
-          "approach_status": "intraday_pending",
-          "price": 37.43
-        },
-        {
-          "date": "2026-08-14",
-          "score": 60,
-          "verdict": "approaching",
-          "channel": "iceberg",
-          "approach_status": "intraday_pending",
-          "price": 37.47
-        },
-        {
-          "date": "2026-08-14",
-          "score": 60,
-          "verdict": "approaching",
-          "channel": "iceberg",
-          "approach_status": "intraday_pending",
-          "price": 37.96
-        },
         {
           "date": "2026-08-14",
           "score": 60,
@@ -4950,6 +4778,70 @@
           "channel": "iceberg",
           "approach_status": "next_day_pending",
           "price": 38.09
+        },
+        {
+          "date": "2026-08-14",
+          "score": 60,
+          "verdict": "approaching",
+          "channel": "iceberg",
+          "approach_status": "next_day_pending",
+          "price": 38.09
+        },
+        {
+          "date": "2026-08-14",
+          "score": 60,
+          "verdict": "approaching",
+          "channel": "iceberg",
+          "approach_status": "next_day_pending",
+          "price": 38.09
+        },
+        {
+          "date": "2026-08-14",
+          "score": 60,
+          "verdict": "approaching",
+          "channel": "iceberg",
+          "approach_status": "next_day_pending",
+          "price": 38.09
+        },
+        {
+          "date": "2026-08-14",
+          "score": 60,
+          "verdict": "approaching",
+          "channel": "iceberg",
+          "approach_status": "next_day_pending",
+          "price": 38.09
+        },
+        {
+          "date": "2026-08-14",
+          "score": 60,
+          "verdict": "approaching",
+          "channel": "iceberg",
+          "approach_status": "next_day_pending",
+          "price": 38.09
+        },
+        {
+          "date": "2026-08-14",
+          "score": 60,
+          "verdict": "approaching",
+          "channel": "iceberg",
+          "approach_status": "next_day_pending",
+          "price": 38.09
+        },
+        {
+          "date": "2026-08-14",
+          "score": 60,
+          "verdict": "weak",
+          "channel": "iceberg",
+          "approach_status": "next_day_pending",
+          "price": 38.09
+        },
+        {
+          "date": "2026-07-06",
+          "score": 30,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 42.1
         }
       ]
     },
@@ -4958,14 +4850,10 @@
       "status": "monitoring",
       "composite_score": 30,
       "criteria_met": {
-        "c1_turn_confirm": false,
-        "c1_boll_lower": false,
-        "c1_volume_shrink": true,
-        "c1_rsi_oversold": false,
-        "c1_m5_iceberg": false,
-        "c2_box_breakout": false,
-        "c2_volume_confirm": false,
-        "c2_trend_bull": true
+        "t_regime": false,
+        "t_trend": true,
+        "t_drawdown": false,
+        "t_golden": false
       },
       "suggested_qty": 0,
       "in_holdings": false,
@@ -4973,70 +4861,6 @@
       "suggested_price": 0.0,
       "capital_required": 0.0,
       "signal_history": [
-        {
-          "date": "2026-08-14",
-          "score": 30,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 158.37
-        },
-        {
-          "date": "2026-08-14",
-          "score": 30,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 157.91
-        },
-        {
-          "date": "2026-08-14",
-          "score": 30,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 158.21
-        },
-        {
-          "date": "2026-08-14",
-          "score": 30,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 158.17
-        },
-        {
-          "date": "2026-08-14",
-          "score": 30,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 158.37
-        },
-        {
-          "date": "2026-08-14",
-          "score": 30,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 158.12
-        },
-        {
-          "date": "2026-08-14",
-          "score": 30,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 157.58
-        },
-        {
-          "date": "2026-08-14",
-          "score": 30,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 158.54
-        },
         {
           "date": "2026-08-14",
           "score": 30,
@@ -5132,22 +4956,82 @@
           "channel": null,
           "approach_status": null,
           "price": 159.24
+        },
+        {
+          "date": "2026-08-14",
+          "score": 30,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 159.24
+        },
+        {
+          "date": "2026-08-14",
+          "score": 30,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 159.24
+        },
+        {
+          "date": "2026-08-14",
+          "score": 30,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 159.24
+        },
+        {
+          "date": "2026-08-14",
+          "score": 30,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 159.24
+        },
+        {
+          "date": "2026-08-14",
+          "score": 30,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 159.24
+        },
+        {
+          "date": "2026-08-14",
+          "score": 30,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 159.24
+        },
+        {
+          "date": "2026-08-14",
+          "score": 30,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 159.24
+        },
+        {
+          "date": "2026-08-14",
+          "score": 30,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 159.24
         }
       ]
     },
     "600176": {
       "name": "中国巨石",
       "status": "monitoring",
-      "composite_score": 40,
+      "composite_score": 0,
       "criteria_met": {
-        "c1_turn_confirm": true,
-        "c1_boll_lower": false,
-        "c1_volume_shrink": false,
-        "c1_rsi_oversold": false,
-        "c1_m5_iceberg": false,
-        "c2_box_breakout": false,
-        "c2_volume_confirm": false,
-        "c2_trend_bull": true
+        "t_regime": false,
+        "t_trend": false,
+        "t_drawdown": false,
+        "t_golden": false
       },
       "suggested_qty": 0,
       "in_holdings": false,
@@ -5155,70 +5039,6 @@
       "suggested_price": 0.0,
       "capital_required": 0.0,
       "signal_history": [
-        {
-          "date": "2026-08-14",
-          "score": 40,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 43.45
-        },
-        {
-          "date": "2026-08-14",
-          "score": 40,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 43.23
-        },
-        {
-          "date": "2026-08-14",
-          "score": 40,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 43.33
-        },
-        {
-          "date": "2026-08-14",
-          "score": 40,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 43.4
-        },
-        {
-          "date": "2026-08-14",
-          "score": 40,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 43.61
-        },
-        {
-          "date": "2026-08-14",
-          "score": 40,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 43.56
-        },
-        {
-          "date": "2026-08-14",
-          "score": 40,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 43.67
-        },
-        {
-          "date": "2026-08-14",
-          "score": 40,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 43.79
-        },
         {
           "date": "2026-08-14",
           "score": 40,
@@ -5314,22 +5134,82 @@
           "channel": null,
           "approach_status": null,
           "price": 44.35
+        },
+        {
+          "date": "2026-08-14",
+          "score": 40,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 44.35
+        },
+        {
+          "date": "2026-08-14",
+          "score": 40,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 44.35
+        },
+        {
+          "date": "2026-08-14",
+          "score": 40,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 44.35
+        },
+        {
+          "date": "2026-08-14",
+          "score": 40,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 44.35
+        },
+        {
+          "date": "2026-08-14",
+          "score": 40,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 44.35
+        },
+        {
+          "date": "2026-08-14",
+          "score": 40,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 44.35
+        },
+        {
+          "date": "2026-08-14",
+          "score": 40,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 44.39
+        },
+        {
+          "date": "2026-08-14",
+          "score": 0,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 44.35
         }
       ]
     },
     "688143": {
       "name": "长盈通",
       "status": "monitoring",
-      "composite_score": 40,
+      "composite_score": 0,
       "criteria_met": {
-        "c1_turn_confirm": true,
-        "c1_boll_lower": false,
-        "c1_volume_shrink": false,
-        "c1_rsi_oversold": false,
-        "c1_m5_iceberg": false,
-        "c2_box_breakout": false,
-        "c2_volume_confirm": false,
-        "c2_trend_bull": true
+        "t_regime": false,
+        "t_trend": false,
+        "t_drawdown": false,
+        "t_golden": false
       },
       "suggested_qty": 0,
       "in_holdings": false,
@@ -5337,70 +5217,6 @@
       "suggested_price": 0.0,
       "capital_required": 0.0,
       "signal_history": [
-        {
-          "date": "2026-08-14",
-          "score": 40,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 134.74
-        },
-        {
-          "date": "2026-08-14",
-          "score": 40,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 135.51
-        },
-        {
-          "date": "2026-08-14",
-          "score": 40,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 135.35
-        },
-        {
-          "date": "2026-08-14",
-          "score": 40,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 136.0
-        },
-        {
-          "date": "2026-08-14",
-          "score": 40,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 137.75
-        },
-        {
-          "date": "2026-08-14",
-          "score": 40,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 135.88
-        },
-        {
-          "date": "2026-08-14",
-          "score": 40,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 135.95
-        },
-        {
-          "date": "2026-08-14",
-          "score": 40,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 137.21
-        },
         {
           "date": "2026-08-14",
           "score": 40,
@@ -5496,6 +5312,70 @@
           "channel": null,
           "approach_status": null,
           "price": 140.0
+        },
+        {
+          "date": "2026-08-14",
+          "score": 40,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 140.0
+        },
+        {
+          "date": "2026-08-14",
+          "score": 40,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 140.0
+        },
+        {
+          "date": "2026-08-14",
+          "score": 40,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 140.0
+        },
+        {
+          "date": "2026-08-14",
+          "score": 40,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 140.0
+        },
+        {
+          "date": "2026-08-14",
+          "score": 40,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 140.0
+        },
+        {
+          "date": "2026-08-14",
+          "score": 40,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 140.0
+        },
+        {
+          "date": "2026-08-14",
+          "score": 40,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 140.0
+        },
+        {
+          "date": "2026-08-14",
+          "score": 0,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 140.0
         }
       ]
     },
@@ -5504,14 +5384,10 @@
       "status": "monitoring",
       "composite_score": 0,
       "criteria_met": {
-        "c1_turn_confirm": false,
-        "c1_boll_lower": false,
-        "c1_volume_shrink": false,
-        "c1_rsi_oversold": false,
-        "c1_m5_iceberg": false,
-        "c2_box_breakout": false,
-        "c2_volume_confirm": false,
-        "c2_trend_bull": false
+        "t_regime": false,
+        "t_trend": false,
+        "t_drawdown": false,
+        "t_golden": false
       },
       "suggested_qty": 0,
       "in_holdings": false,
@@ -5521,70 +5397,6 @@
       "signal_history": [
         {
           "date": "2026-08-14",
-          "score": 20,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 1.406
-        },
-        {
-          "date": "2026-08-14",
-          "score": 20,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 1.407
-        },
-        {
-          "date": "2026-08-14",
-          "score": 20,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 1.408
-        },
-        {
-          "date": "2026-08-14",
-          "score": 20,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 1.408
-        },
-        {
-          "date": "2026-08-14",
-          "score": 20,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 1.407
-        },
-        {
-          "date": "2026-08-14",
-          "score": 20,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 1.407
-        },
-        {
-          "date": "2026-08-14",
-          "score": 20,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 1.408
-        },
-        {
-          "date": "2026-08-14",
-          "score": 20,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 1.408
-        },
-        {
-          "date": "2026-08-14",
           "score": 0,
           "verdict": "weak",
           "channel": null,
@@ -5662,6 +5474,70 @@
           "channel": null,
           "approach_status": null,
           "price": 1.409
+        },
+        {
+          "date": "2026-08-14",
+          "score": 0,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 1.408
+        },
+        {
+          "date": "2026-08-14",
+          "score": 0,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 1.408
+        },
+        {
+          "date": "2026-08-14",
+          "score": 0,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 1.408
+        },
+        {
+          "date": "2026-08-14",
+          "score": 0,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 1.408
+        },
+        {
+          "date": "2026-08-14",
+          "score": 0,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 1.408
+        },
+        {
+          "date": "2026-08-14",
+          "score": 0,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 1.408
+        },
+        {
+          "date": "2026-08-14",
+          "score": 0,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 1.408
+        },
+        {
+          "date": "2026-08-14",
+          "score": 0,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 1.408
         },
         {
           "date": "2026-08-14",
@@ -5684,16 +5560,12 @@
     "601899": {
       "name": "紫金矿业",
       "status": "monitoring",
-      "composite_score": 20,
+      "composite_score": 0,
       "criteria_met": {
-        "c1_turn_confirm": false,
-        "c1_boll_lower": false,
-        "c1_volume_shrink": true,
-        "c1_rsi_oversold": false,
-        "c1_m5_iceberg": false,
-        "c2_box_breakout": false,
-        "c2_volume_confirm": false,
-        "c2_trend_bull": false
+        "t_regime": false,
+        "t_trend": false,
+        "t_drawdown": false,
+        "t_golden": false
       },
       "suggested_qty": 0,
       "in_holdings": false,
@@ -5701,70 +5573,6 @@
       "suggested_price": 0.0,
       "capital_required": 0.0,
       "signal_history": [
-        {
-          "date": "2026-08-14",
-          "score": 20,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 32.28
-        },
-        {
-          "date": "2026-08-14",
-          "score": 20,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 32.35
-        },
-        {
-          "date": "2026-08-14",
-          "score": 20,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 32.42
-        },
-        {
-          "date": "2026-08-14",
-          "score": 20,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 32.51
-        },
-        {
-          "date": "2026-08-14",
-          "score": 20,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 32.5
-        },
-        {
-          "date": "2026-08-14",
-          "score": 20,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 32.43
-        },
-        {
-          "date": "2026-08-14",
-          "score": 20,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 32.29
-        },
-        {
-          "date": "2026-08-14",
-          "score": 20,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 32.43
-        },
         {
           "date": "2026-08-14",
           "score": 20,
@@ -5860,6 +5668,70 @@
           "channel": null,
           "approach_status": null,
           "price": 32.53
+        },
+        {
+          "date": "2026-08-14",
+          "score": 20,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 32.53
+        },
+        {
+          "date": "2026-08-14",
+          "score": 20,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 32.53
+        },
+        {
+          "date": "2026-08-14",
+          "score": 20,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 32.53
+        },
+        {
+          "date": "2026-08-14",
+          "score": 20,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 32.53
+        },
+        {
+          "date": "2026-08-14",
+          "score": 20,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 32.53
+        },
+        {
+          "date": "2026-08-14",
+          "score": 20,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 32.53
+        },
+        {
+          "date": "2026-08-14",
+          "score": 20,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 32.53
+        },
+        {
+          "date": "2026-08-14",
+          "score": 0,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 32.53
         }
       ]
     },
@@ -5868,14 +5740,10 @@
       "status": "monitoring",
       "composite_score": 30,
       "criteria_met": {
-        "c1_turn_confirm": false,
-        "c1_boll_lower": false,
-        "c1_volume_shrink": true,
-        "c1_rsi_oversold": false,
-        "c1_m5_iceberg": false,
-        "c2_box_breakout": false,
-        "c2_volume_confirm": false,
-        "c2_trend_bull": true
+        "t_regime": false,
+        "t_trend": true,
+        "t_drawdown": false,
+        "t_golden": false
       },
       "suggested_qty": 0,
       "in_holdings": false,
@@ -5883,70 +5751,6 @@
       "suggested_price": 0.0,
       "capital_required": 0.0,
       "signal_history": [
-        {
-          "date": "2026-08-14",
-          "score": 30,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 17.3
-        },
-        {
-          "date": "2026-08-14",
-          "score": 30,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 17.4
-        },
-        {
-          "date": "2026-08-14",
-          "score": 30,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 17.46
-        },
-        {
-          "date": "2026-08-14",
-          "score": 30,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 17.45
-        },
-        {
-          "date": "2026-08-14",
-          "score": 30,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 17.44
-        },
-        {
-          "date": "2026-08-14",
-          "score": 30,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 17.39
-        },
-        {
-          "date": "2026-08-14",
-          "score": 30,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 17.4
-        },
-        {
-          "date": "2026-08-14",
-          "score": 30,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 17.51
-        },
         {
           "date": "2026-08-14",
           "score": 30,
@@ -6042,6 +5846,70 @@
           "channel": null,
           "approach_status": null,
           "price": 17.64
+        },
+        {
+          "date": "2026-08-14",
+          "score": 30,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 17.64
+        },
+        {
+          "date": "2026-08-14",
+          "score": 30,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 17.64
+        },
+        {
+          "date": "2026-08-14",
+          "score": 30,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 17.64
+        },
+        {
+          "date": "2026-08-14",
+          "score": 30,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 17.64
+        },
+        {
+          "date": "2026-08-14",
+          "score": 30,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 17.64
+        },
+        {
+          "date": "2026-08-14",
+          "score": 30,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 17.64
+        },
+        {
+          "date": "2026-08-14",
+          "score": 30,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 17.64
+        },
+        {
+          "date": "2026-08-14",
+          "score": 30,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 17.64
         }
       ]
     },
@@ -6050,14 +5918,10 @@
       "status": "monitoring",
       "composite_score": 30,
       "criteria_met": {
-        "c1_turn_confirm": false,
-        "c1_boll_lower": false,
-        "c1_volume_shrink": true,
-        "c1_rsi_oversold": false,
-        "c1_m5_iceberg": false,
-        "c2_box_breakout": false,
-        "c2_volume_confirm": false,
-        "c2_trend_bull": true
+        "t_regime": false,
+        "t_trend": true,
+        "t_drawdown": false,
+        "t_golden": false
       },
       "suggested_qty": 0,
       "in_holdings": false,
@@ -6065,70 +5929,6 @@
       "suggested_price": 0.0,
       "capital_required": 0.0,
       "signal_history": [
-        {
-          "date": "2026-08-14",
-          "score": 30,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 29.12
-        },
-        {
-          "date": "2026-08-14",
-          "score": 30,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 29.13
-        },
-        {
-          "date": "2026-08-14",
-          "score": 30,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 29.18
-        },
-        {
-          "date": "2026-08-14",
-          "score": 30,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 29.14
-        },
-        {
-          "date": "2026-08-14",
-          "score": 30,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 29.22
-        },
-        {
-          "date": "2026-08-14",
-          "score": 30,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 29.22
-        },
-        {
-          "date": "2026-08-14",
-          "score": 30,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 29.17
-        },
-        {
-          "date": "2026-08-14",
-          "score": 30,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 29.35
-        },
         {
           "date": "2026-08-14",
           "score": 30,
@@ -6224,22 +6024,82 @@
           "channel": null,
           "approach_status": null,
           "price": 29.34
+        },
+        {
+          "date": "2026-08-14",
+          "score": 30,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 29.34
+        },
+        {
+          "date": "2026-08-14",
+          "score": 30,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 29.34
+        },
+        {
+          "date": "2026-08-14",
+          "score": 30,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 29.34
+        },
+        {
+          "date": "2026-08-14",
+          "score": 30,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 29.34
+        },
+        {
+          "date": "2026-08-14",
+          "score": 30,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 29.34
+        },
+        {
+          "date": "2026-08-14",
+          "score": 30,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 29.34
+        },
+        {
+          "date": "2026-08-14",
+          "score": 30,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 29.34
+        },
+        {
+          "date": "2026-08-14",
+          "score": 30,
+          "verdict": "weak",
+          "channel": null,
+          "approach_status": null,
+          "price": 29.34
         }
       ]
     },
     "300017": {
       "name": "网宿科技",
       "status": "monitoring",
-      "composite_score": 60,
+      "composite_score": 30,
       "criteria_met": {
-        "c1_turn_confirm": true,
-        "c1_boll_lower": false,
-        "c1_volume_shrink": false,
-        "c1_rsi_oversold": false,
-        "c1_m5_iceberg": false,
-        "c2_box_breakout": false,
-        "c2_volume_confirm": true,
-        "c2_trend_bull": true
+        "t_regime": false,
+        "t_trend": true,
+        "t_drawdown": false,
+        "t_golden": false
       },
       "suggested_qty": 0,
       "in_holdings": false,
@@ -6247,70 +6107,6 @@
       "suggested_price": 0.0,
       "capital_required": 0.0,
       "signal_history": [
-        {
-          "date": "2026-08-14",
-          "score": 40,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 15.96
-        },
-        {
-          "date": "2026-08-14",
-          "score": 40,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 15.99
-        },
-        {
-          "date": "2026-08-14",
-          "score": 40,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 16.15
-        },
-        {
-          "date": "2026-08-14",
-          "score": 40,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 16.54
-        },
-        {
-          "date": "2026-08-14",
-          "score": 60,
-          "verdict": "approaching",
-          "channel": "breakout",
-          "approach_status": null,
-          "price": 16.55
-        },
-        {
-          "date": "2026-08-14",
-          "score": 60,
-          "verdict": "approaching",
-          "channel": "breakout",
-          "approach_status": null,
-          "price": 16.9
-        },
-        {
-          "date": "2026-08-14",
-          "score": 60,
-          "verdict": "approaching",
-          "channel": "breakout",
-          "approach_status": null,
-          "price": 16.87
-        },
-        {
-          "date": "2026-08-14",
-          "score": 60,
-          "verdict": "approaching",
-          "channel": "breakout",
-          "approach_status": null,
-          "price": 16.88
-        },
         {
           "date": "2026-08-14",
           "score": 60,
@@ -6404,6 +6200,70 @@
           "score": 60,
           "verdict": "approaching",
           "channel": "breakout",
+          "approach_status": null,
+          "price": 17.33
+        },
+        {
+          "date": "2026-08-14",
+          "score": 60,
+          "verdict": "approaching",
+          "channel": "breakout",
+          "approach_status": null,
+          "price": 17.33
+        },
+        {
+          "date": "2026-08-14",
+          "score": 60,
+          "verdict": "approaching",
+          "channel": "breakout",
+          "approach_status": null,
+          "price": 17.33
+        },
+        {
+          "date": "2026-08-14",
+          "score": 60,
+          "verdict": "approaching",
+          "channel": "breakout",
+          "approach_status": null,
+          "price": 17.33
+        },
+        {
+          "date": "2026-08-14",
+          "score": 60,
+          "verdict": "approaching",
+          "channel": "breakout",
+          "approach_status": null,
+          "price": 17.33
+        },
+        {
+          "date": "2026-08-14",
+          "score": 60,
+          "verdict": "approaching",
+          "channel": "breakout",
+          "approach_status": null,
+          "price": 17.33
+        },
+        {
+          "date": "2026-08-14",
+          "score": 60,
+          "verdict": "approaching",
+          "channel": "breakout",
+          "approach_status": null,
+          "price": 17.33
+        },
+        {
+          "date": "2026-08-14",
+          "score": 60,
+          "verdict": "weak",
+          "channel": "breakout",
+          "approach_status": null,
+          "price": 17.33
+        },
+        {
+          "date": "2026-08-14",
+          "score": 30,
+          "verdict": "weak",
+          "channel": null,
           "approach_status": null,
           "price": 17.33
         }

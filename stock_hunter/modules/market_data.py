@@ -16,11 +16,15 @@ from typing import List, Dict, Optional
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 
+# 2026-08-15: 拉取进度上报（供 t_gui 选股猎手前端轮询显示进度条）
+MARKET_PROGRESS = {"running": False, "phase": "", "done": 0, "total": 0, "msg": ""}
+
+
 class MarketDataFetcher:
     """行情数据统一获取器 —— 强制网络查询，不使用本地缓存"""
 
     MAX_CODES_PER_REQUEST = 200
-    HISTORICAL_WORKERS = 10  # 并发数，平衡速度和稳定性
+    HISTORICAL_WORKERS = 20  # 并发数，平衡速度和稳定性（2026-08-15: 10→20 加快首跑）
     HISTORICAL_RETRIES = 2
 
     def __init__(self, data_dir: str = None, st_codes: set = None):
@@ -32,10 +36,41 @@ class MarketDataFetcher:
         """
         统一获取历史K线数据（150天），因为评分规则需要150日历史数据
         如果目标日期数据不存在（如今天未收盘），自动使用最近交易日
+
+        fix 2026-08-15: 按日期缓存（market_{date}.csv）。盘后/历史日数据固定 → 复用缓存，
+        避免 1300+ 只 × 单只HTTP拉1000天日线的重复开销（首次约2-5分钟，后续秒级）。
+        盘中（当日 9:15-15:00）不读缓存、实时拉最新。
         """
+        from datetime import datetime as _dt
+        _now = _dt.now()
+        _is_today = date_str == _now.strftime("%Y-%m-%d")
+        _after_close = (_now.hour * 100 + _now.minute) >= 1500 or _now.weekday() >= 5
+        _use_cache = (not _is_today) or _after_close  # 历史日或盘后 → 复用缓存
+        cache_path = os.path.join(self.data_dir, f"market_{date_str.replace('-', '')}.csv")
+        if _use_cache and os.path.exists(cache_path):
+            try:
+                df = pd.read_csv(cache_path, dtype={"代码": str}, encoding="utf-8-sig")
+                if "代码" in df.columns:
+                    df = df[df["代码"].astype(str).isin([str(c) for c in codes])]
+                if len(df) > 0:
+                    print(f"  [CACHE] 复用 {date_str} 历史行情缓存 ({len(df)} 只，省去全量拉取)")
+                    return df
+            except Exception:
+                pass
         print(f"  [NET] 获取历史行情 {date_str} (腾讯K线 ifzq.gtimg.cn，{len(codes)} 只，150天)...")
-        df, failed = self._fetch_historical_tencent(codes, date_str)
+        MARKET_PROGRESS.update({"running": True, "phase": "拉取日线行情", "done": 0, "total": len(codes), "msg": ""})
+        try:
+            df, failed = self._fetch_historical_tencent(codes, date_str)
+        finally:
+            MARKET_PROGRESS.update({"running": False, "phase": "拉取完成", "done": len(codes), "total": len(codes)})
         self.last_failed = failed
+        if _use_cache and not df.empty:
+            try:
+                os.makedirs(self.data_dir, exist_ok=True)
+                df.to_csv(cache_path, index=False, encoding="utf-8-sig")
+                print(f"  [CACHE] 已缓存 {date_str} 历史行情 → {cache_path} ({len(df)} 只)")
+            except Exception:
+                pass
         return df
 
     def save_spot(self, df: pd.DataFrame, date_str: str):
@@ -513,6 +548,8 @@ class MarketDataFetcher:
                     results.append(result)
                 if i % 100 == 0:
                     print(f"     进度: {i}/{len(codes)} 只...")
+                if i % 20 == 0 or i == len(codes):
+                    MARKET_PROGRESS.update({"done": i, "total": len(codes), "msg": f"已拉取 {i}/{len(codes)} 只"})
                 time.sleep(0.05)  # 增加延迟避免被限流
 
         if failed:

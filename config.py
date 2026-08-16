@@ -290,7 +290,9 @@ PARAMS = {
     "trend_debounce_bars": 2,
     # —— 风控 ——
     "min_amplitude": 0.015,
-    "commission_rate": 0.0010,
+    # 2026-08-15 成本修正: 0.001(0.1%)→0.00025(万2.5)，A股散户实际佣金。
+    # 回测实证: 做T在真实成本下净EV≈-0.01%(接近盈亏平衡)，0.1%假设会高估亏损。
+    "commission_rate": 0.00025,
     "sell_floor_ratio": 0.5,
     # V1.2.1 (2026-08-11 01:11 用户拍板): "手动跟单场景，取消冻结，做T不用考虑底仓问题"——
     # 底仓地板默认不生效；True 时恢复 V1.30 钳制（position_sizer.py calc_sell_qty 软消费；harness T_SELL_FLOOR_ENABLED 可注入对照）
@@ -304,13 +306,21 @@ PARAMS = {
     "max_sell_times_per_stock": 3,
     # —— 早盘 ——
     "morning_no_sell_until": 940,
-    # —— 高抛低吸纯两点 (2026-08-13 用户拍板: 只参考布林线触轨 + RSI 两点) ——
+    # —— 高抛低吸纯两点 (2026-08-13 用户拍板: 布林线触轨 + 确认点) ——
     "rsi_period_5m_swing": 6,   # 5分钟RSI周期(专用列 rsi_5m_p6, 不动 rsi_5m(14))
+    # 2026-08-15 实验后回退: 15分MACD确认(macd15_bb5)修正未来函数后无效(44.4% vs 原45.9%)，
+    # 故默认 False 保持原 5分RSI 确认；True 仅供实验，不作为生产口径
+    "swing_macd15_dir": False,              # False=5分RSI确认(生产)；True=15分MACD方向(实验)
+    "swing_macd15_bb_upper": 0.85,          # 实验: 高抛 5分收盘 bb_pct_5m ≥ 0.85
+    "swing_macd15_bb_lower": 0.15,          # 实验: 低吸 5分收盘 bb_pct_5m ≤ 0.15
     "swing_sell_rsi": 75.0,     # 高抛: 5分RSI(6) > 75
     "swing_buy_rsi": 35.0,      # 低吸: 5分RSI(6) < 35
     "swing_bb_upper": 1.0,      # 高抛: 5分收盘 ≥ 上轨 (bb_pct_5m>=1.0)
     "swing_bb_lower": 0.0,      # 低吸: 5分收盘 ≤ 下轨 (bb_pct_5m<=0.0)
     "swing_min_5m_bars": 13,    # 预热: 至少13根5分K才开始判断
+    # 2026-08-15 因子实验实施: 高抛放量确认（样本内+6.0pp/样本外+6.4pp，稳健）
+    # 放量冲高(近5分钟量≥全天均量×该倍数)时高抛更可靠；0=关闭
+    "swing_sell_vol_ratio": 1.5,
     # V1.2.0 (2026-08-08 用户拍板上线): C1' 口径B — 全部买信号单股日限 7 内置状态机
     # record_signal 层计数，第 8 条起当日不再产生买入信号（卖信号不受限；0/None=关闭；
     # harness T_BUY_DAILY_CAP 可显式覆盖做 A/B）
@@ -685,6 +695,43 @@ INDEX_REGIME_CONTEXT: Dict[str, Any] = {}              # 最新大盘态势上�
 _index_regime_morning_pushed_date: Optional[str] = None  # 早盘基调推送每日去重
 _index_regime_eod_pushed_date: Optional[str] = None      # 收盘评分推送每日去重
 _index_intraday_alert_cache: Dict[str, float] = {}       # {预警tag: 上次推送时间戳}，同 tag 60 分钟内不重复推
+
+# ==================== 指数5分钟共振过滤（做T信号，2026-08-14 新增） ====================
+# 逻辑见 index_resonance.py；门控接在 main.py 信号推送前。
+INDEX_RESONANCE_PARAMS = {
+    "enabled": True,                # 总开关；False 时不拦截、仅落盘
+    # 门控口径: "index_ma5_dir"(指数5分钟MA5方向, 默认) / "contrarian"(反向) / "same_direction"(同向极值) / "non_contrary"(不逆势)
+    # 2026-08-15 修正未来函数后的诚实结论(35候选/1年, +0.5%/-0.4%/30tick, 无lookahead)：
+    #   index_ma5_dir(买需指数站上其5分钟MA5/卖需指数跌破其MA5) 放行49.6% vs 全池45.9% → 真实增益 +4.4pp
+    #   （此前报的 +20pp 系回测取了未收盘指数根的未来函数假象，已修正；数值以本注释为准）
+    #   contrarian 47.4%(+2.5pp)；15分钟MACD信号(macd15_bb5)修正后无效，已回退
+    "gate": "index_ma5_dir",
+    "fail_closed": True,            # 指数数据缺失/不足时拦截信号
+    # 同向极值（指数5分钟与个股同处极值区）
+    "buy_bb_max": 0.25,             # 低吸: 指数 bb_pct_5m <= buy_bb_max
+    "buy_rsi_max": 40.0,            # 低吸: 指数 rsi_6_5m <= buy_rsi_max
+    "sell_bb_min": 0.75,            # 高抛: 指数 bb_pct_5m >= sell_bb_min
+    "sell_rsi_min": 60.0,           # 高抛: 指数 rsi_6_5m >= sell_rsi_min
+    # 不逆势（指数未逆向于交易方向）
+    "buy_floor": -0.30,             # 低吸: 指数 bb_pct_5m >= buy_floor（未深破下轨）
+    "sell_floor": -0.20,            # 高抛: 指数 bb_pct_5m >= sell_floor（不在恐慌底）
+    "min_index_5m_bars": 5,         # 指数5分钟K线最少根数，不足视为数据不足
+}
+# 个股/ETF → 板块指数覆盖（分板默认之外显式指定）；值 = (index_code, index_name)
+INDEX_RESONANCE_MAP = {
+    "588170": ("sh000688", "科创50"),   # 科创半导体ETF → 科创50
+}
+
+# ==================== 建仓/加仓时机判定（timing_gate.py，2026-08-15 新增） ====================
+# 基于 W34 时机实验（17863行两时段）：多头趋势追强、空头趋势抄底、震荡降频。
+ENTRY_TIMING_PARAMS = {
+    "enabled": True,          # 总开关；False 时不参与建仓/加仓判定
+    "regime_ma60": True,      # 用指数 vs MA60 定市场状态
+    "trend_up_drawdown_min": -0.03,   # 多头趋势：浅回撤阈值（追强）
+    "trend_dn_drawdown_max": -0.10,   # 空头趋势：深回撤阈值（抄底）
+    "apply_to_add": True,     # 加仓侧也应用时机门控（NO-GO 时阻断加仓买入，降频）
+    "add_block_rebuild": True,  # NO-GO 时是否也阻断"接回"(rebuild)；False=仅阻断首加
+}
 
 # ==================== V1.26: T模式配置（正T/反T切换） ====================
 # long = 正T（先买后卖，默认）
