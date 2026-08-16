@@ -97,6 +97,51 @@ except Exception as _e:
     _push_summary_feishu = None
     print(f"[WARN] position_builder 加载失败（建仓扫描不可用）: {_e}")
 
+# ── 指数5分钟共振过滤（做T信号，2026-08-14 新增）──
+_RESONANCE_MODULE_OK = True
+try:
+    from index_resonance import compute_resonance as _compute_resonance
+    from index_resonance import write_resonance_trace as _write_resonance_trace
+except Exception as _e:
+    _RESONANCE_MODULE_OK = False
+    _compute_resonance = None
+    _write_resonance_trace = None
+    print(f"[WARN] index_resonance 加载失败（共振过滤不可用，信号按不过滤放行）: {_e}")
+
+
+def _resonance_gate(code, sig, now):
+    """指数5分钟共振门控。返回 (gate_pass, resonance_info)。
+
+    共振模块不可用/计算异常 → 降级放行（代码故障不阻断交易）；
+    指数数据缺失/不足 → 按 INDEX_RESONANCE_PARAMS.fail_closed 决定（默认拦截）。
+    每次计算都落盘 index_resonance trace（含被拦截的准信号），供复盘优化。
+    """
+    if not _RESONANCE_MODULE_OK or _compute_resonance is None:
+        return True, None
+    try:
+        _rp = INDEX_RESONANCE_PARAMS if isinstance(globals().get("INDEX_RESONANCE_PARAMS"), dict) else {}
+    except Exception:
+        _rp = {}
+    if not _rp.get("enabled", True):
+        return True, None
+    try:
+        r = _compute_resonance(code, sig.action, float(sig.price or 0), boundary_ts=now)
+    except Exception as e:
+        log.warning(f"⚠️ 共振计算异常（降级放行）: {code} {str(e)[:80]}")
+        return True, None
+    try:
+        _write_resonance_trace({
+            "scan_time": now.strftime("%Y-%m-%d %H:%M:%S"),
+            "code": code, "name": sig.name, "action": sig.action,
+            "price": float(sig.price or 0), "score": float(sig.score or 0),
+            **r,
+        })
+    except Exception:
+        pass
+    if r.get("missing") and not _rp.get("fail_closed", True):
+        return True, r  # fail-open：数据缺失放行
+    return bool(r.get("gate_pass")), r
+
 # 将共享命名空间中的关键变量暴露到当前模块的 globals，使 main.py 的代码可以运行
 globals().update(shared)
 
@@ -656,6 +701,8 @@ _position_builder_eod_last_attempt = None  # eod 扫描失败重试节流（date
 _position_builder_intraday_thread = None  # 盘中建仓扫描后台线程（fix P1-5）
 import threading as _threading
 _position_scan_lock = _threading.Lock()  # 盘中/收盘建仓扫描互斥（trace 写盘线程安全）
+_ma_break_last = None  # 破5/10日线报警节流（datetime，仿盘中建仓扫描）
+_ma_break_thread = None  # 破5/10日线报警后台线程
 _TOTAL_EQUITY_CACHE = {"ts": 0.0, "value": 0.0}  # fix P0-9(B1): total_equity 缓存
 
 
@@ -747,6 +794,69 @@ def _maybe_run_position_builder_intraday(now: datetime) -> None:
     _position_builder_intraday_thread = _threading.Thread(
         target=_scan_worker, args=(today,), name="position-scan-intraday", daemon=True)
     _position_builder_intraday_thread.start()
+
+
+def _ma_break_feishu_enabled() -> bool:
+    """读取 config.json 的 feishu.enabled + notify_on_ma_break 开关。"""
+    try:
+        runtime_config = load_runtime_config()
+        feishu_cfg = runtime_config.get("feishu", {}) if isinstance(runtime_config, dict) else {}
+        if not bool(feishu_cfg.get("enabled", True)):
+            return False
+        return bool(feishu_cfg.get("notify_on_ma_break", True))
+    except Exception:
+        return True
+
+
+def _maybe_run_ma_break_alert(now: datetime) -> None:
+    """盘中破5/10日线报警（每5分钟，刚跌破事件即飞书提醒建仓，每只每天只推一次）。
+
+    与盘中建仓扫描同节奏/同互斥锁；run_ma_break_alert 内部按 (code,date) 状态文件去重。
+    """
+    global _ma_break_last, _ma_break_thread
+    try:
+        if not _ma_break_feishu_enabled():
+            return
+    except Exception:
+        return
+    if _run_position_scan is None:  # position_builder 未加载时不可用
+        return
+    t = now.time()
+    if now.weekday() >= 5:
+        return
+    in_morning = dtime(9, 30) <= t <= dtime(11, 30)
+    in_afternoon = dtime(13, 0) <= t <= dtime(14, 55)
+    if not (in_morning or in_afternoon):
+        return
+    if _ma_break_last is not None:
+        if (now - _ma_break_last).total_seconds() < 300:
+            return
+    if _ma_break_thread is not None and _ma_break_thread.is_alive():
+        log.debug("⏳ 上一轮破线报警仍在进行，跳过本轮")
+        return
+    _ma_break_last = now
+
+    today = now.strftime("%Y-%m-%d")
+
+    def _worker(day: str) -> None:
+        try:
+            from position_builder import run_ma_break_alert as _run_ma_break_alert
+            if not _position_scan_lock.acquire(timeout=120):
+                log.warning("⚠️ 破线报警等待建仓扫描释放锁超时，本轮跳过（下轮重试）")
+                return
+            try:
+                pushed = _run_ma_break_alert(date_str=day, silent=True)
+            finally:
+                _position_scan_lock.release()
+            for e in pushed:
+                log.info(f"⚠️ 破5/10日线报警: {e['code']} {e['name']} "
+                         f"现价{e.get('price')} MA5={e.get('ma5')} MA10={e.get('ma10')}")
+        except Exception as ex:
+            log.warning(f"⚠️ 破线报警异常（已吞掉）: {str(ex)[:200]}")
+
+    _ma_break_thread = _threading.Thread(
+        target=_worker, args=(today,), name="ma-break-alert", daemon=True)
+    _ma_break_thread.start()
 
 
 def _maybe_run_position_builder(now: datetime) -> None:
@@ -1291,6 +1401,7 @@ def scan_once():
 
         _maybe_check_index_intraday_alert(now)         # 09:35-14:55 大盘分时预警（300s 节流）
         _maybe_run_position_builder_intraday(now)      # 09:45-14:55 盘中建仓信号扫描（每5分钟）
+        _maybe_run_ma_break_alert(now)                 # 09:30-14:55 盘中破5/10日线报警（每5分钟，提醒建仓）
 
         if not HOLDINGS:
             return
@@ -1603,6 +1714,26 @@ def scan_once():
                             pushed = False
                         else:
                             _SWING_PUSH_DEDUP.add(_dkey)
+                    # 指数5分钟共振门控（2026-08-14）：指数与个股同向才推送，否则整条信号作废
+                    _res_blocked = False
+                    if pushed:
+                        _gate_pass, _res = _resonance_gate(code, sig, now)
+                        if _res is not None:
+                            if _res.get("missing"):
+                                _res_status = "指数数据缺失" if not _gate_pass else "指数数据缺失放行"
+                            elif _gate_pass:
+                                _res_status = "共振通过"
+                            else:
+                                _res_status = f"共振拦截({_res.get('gate', '')})"
+                        else:
+                            _res_status = "共振放行(模块不可用)"
+                        dec["last_resonance_status"] = _res_status
+                        dec["last_resonance_gate"] = (_res or {}).get("gate", "")
+                        dec["last_resonance_index"] = (_res or {}).get("index_code", "")
+                        if not _gate_pass:
+                            _res_blocked = True
+                            pushed = False
+                            log.info(f"🚫 {code} {sig.action} 指数共振拦截（{_res_status}）: {(_res or {}).get('gate_reason', '')}")
                     if pushed:
                         notify(sig, holding)
                         if sig.action in ["SELL_HIGH", "PANIC_SELL"]:
@@ -1616,7 +1747,10 @@ def scan_once():
                     else:
                         action_type = "买入" if sig.action in ["BUY_LOW", "ADD_POS"] else "卖出"
                         time_window = "10:00前" if t < dtime(10, 0) else "10:00后"
-                        log.info(f"📉 {code} {action_type}信号得分{sig.score:.0f}分，低于{time_window}阈值{notify_threshold}分，静默处理（不推送飞书）")
+                        if _res_blocked:
+                            log.info(f"🚫 {code} {action_type}信号被指数共振拦截（非阈值不足），不推送")
+                        else:
+                            log.info(f"📉 {code} {action_type}信号得分{sig.score:.0f}分，低于{time_window}阈值{notify_threshold}分，静默处理（不推送飞书）")
                         try:
                             _sp2 = STOCK_PARAMS.get(code, {})
                             _nb = _sp2.get("notify_buy_threshold") or PARAMS.get("notify_buy_threshold", 68)

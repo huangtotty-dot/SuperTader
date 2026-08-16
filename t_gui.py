@@ -29,7 +29,7 @@ if sys.platform == "win32":
     except Exception:
         pass
 
-BASE = Path(r"E:\06_T")
+BASE = Path(__file__).resolve().parent  # 自解析：生产机 E:\06_T 与本机仓库位置均正确（与 position_builder/config 一致）
 OUT = BASE / "t_io" / "validation" / "daily_review"
 TRACES = BASE / "t_io" / "traces"
 STATE_DIR = BASE / "t_io" / "state"
@@ -48,10 +48,12 @@ NAMES = {
 }
 
 # W33 A1: 双通道 8 键标签（与 position_builder.CHANNEL_COND_KEYS 同序）
+# 方案A (2026-08-15): 建仓条件=时机门控，与 position_builder.COND_LABELS 一致
 COND_LABELS = {
-    "c1_turn_confirm": "转向确认", "c1_boll_lower": "BOLL冰点", "c1_volume_shrink": "缩量止跌",
-    "c1_rsi_oversold": "RSI超卖", "c1_m5_iceberg": "5分钟冰点",
-    "c2_box_breakout": "突破箱体", "c2_volume_confirm": "放量确认", "c2_trend_bull": "趋势多头",
+    "t_regime": "市场有方向",
+    "t_trend": "多头结构",
+    "t_drawdown": "回撤到位",
+    "t_golden": "MACD金叉(加分)",
 }
 
 
@@ -61,6 +63,10 @@ if str(BASE) not in sys.path:
     sys.path.insert(0, str(BASE))  # stock_hunter 模块在 stock_hunter/ 下导入
 if str(HUNTER_DIR) not in sys.path:
     sys.path.insert(0, str(HUNTER_DIR))
+
+# 2026-08-15: 选股猎手后台运行状态（进度条轮询用）。进度细节来自 market_data.MARKET_PROGRESS。
+import threading as _th
+HUNTER_RUN_STATE = {"date": None, "running": False, "result": None}
 
 
 def _jiuyan_concepts(info):
@@ -808,6 +814,14 @@ class Api:
 
             conditions = left_conditions + [{"name": "右侧突破箱体", "met": right_breakout, "detail": right_detail}]
             met_count = sum(1 for c in conditions if c["met"])
+            # 加仓时机判定（timing_gate: 多头追强/空头抄底/震荡降频）——仅供 GUI 展示加仓是否被时机门控
+            _tm = {}
+            try:
+                from timing_gate import timing_verdict as _timing_verdict
+                _g = _timing_verdict(str(code).split("_")[0], datetime.now().strftime("%Y-%m-%d"))
+                _tm = {"regime": _g["regime"], "go": _g["go"], "reason": _g["reason"]}
+            except Exception:
+                _tm = {}
             out[code] = {
                 "name": cur[code].get("name", code),
                 "day_low": round(day_low, 3), "close": round(day_close, 3),
@@ -821,6 +835,7 @@ class Api:
                 "supports": {k: round(v, 3) for k, v in supports.items()},
                 "events": events, "near": near,
                 "conditions": conditions, "met_count": met_count,
+                "timing": _tm,
             }
 
         total = len([c for c in cur if isinstance(cur.get(c), dict)])
@@ -1579,7 +1594,150 @@ class Api:
         return {"supports": fmt(sup_cand), "resistances": fmt(res_cand)}
 
     # ---------- 选股猎手（概念评分，与 Excel 报告一致） ----------
+    def run_hunter(self, date=None):
+        """后台运行选股猎手（拉取+评分），立即返回；前端轮询 hunter_progress 看进度。"""
+        date = date or datetime.now().strftime("%Y-%m-%d")
+        if HUNTER_RUN_STATE.get("running") and HUNTER_RUN_STATE.get("date") == date:
+            return {"started": True, "running": True, "date": date}
+        # 清除旧结果，防读到上一个日期的缓存
+        HUNTER_RUN_STATE["date"] = date
+        HUNTER_RUN_STATE["running"] = True
+        HUNTER_RUN_STATE["result"] = None
+        try:
+            from modules.market_data import MARKET_PROGRESS as _MP
+            _MP.update({"running": True, "phase": "准备", "done": 0, "total": 0, "msg": "启动中"})
+        except Exception:
+            pass
+
+        def _work():
+            try:
+                HUNTER_RUN_STATE["result"] = self._load_hunter_impl(date)
+            except Exception as e:
+                HUNTER_RUN_STATE["result"] = {"available": False, "error": f"选股猎手运行失败: {e}"}
+            finally:
+                HUNTER_RUN_STATE["running"] = False
+
+        _th.Thread(target=_work, daemon=True).start()
+        return {"started": True, "running": True, "date": date}
+
+    def hunter_progress(self):
+        """返回选股猎手运行进度（供前端进度条轮询）。"""
+        try:
+            from modules.market_data import MARKET_PROGRESS as _MP
+            mp = dict(_MP)
+        except Exception:
+            mp = {"running": False, "phase": "", "done": 0, "total": 0, "msg": ""}
+        return {
+            "running": bool(HUNTER_RUN_STATE.get("running")),
+            "ready": bool(HUNTER_RUN_STATE.get("result")),
+            "date": HUNTER_RUN_STATE.get("date"),
+            "phase": mp.get("phase", ""),
+            "done": int(mp.get("done") or 0),
+            "total": int(mp.get("total") or 0),
+            "msg": mp.get("msg", ""),
+        }
+
     def load_hunter(self, date=None):
+        """选股猎手数据。若有进行中的后台运行→返回 running；有该日期结果→返回；否则同步跑（兼容）。"""
+        date = date or datetime.now().strftime("%Y-%m-%d")
+        if HUNTER_RUN_STATE.get("running") and HUNTER_RUN_STATE.get("date") == date:
+            return {"available": False, "running": True}
+        if HUNTER_RUN_STATE.get("date") == date and HUNTER_RUN_STATE.get("result"):
+            return HUNTER_RUN_STATE["result"]
+        # 无后台运行（如历史视图直接调用）→ 同步执行
+        return self._load_hunter_impl(date)
+
+    def _hunter_build_conformance(self, codes, date):
+        """盘后计算各股建仓信号符合度（时机门控 GO：市场有方向/多头结构/回撤到位/金叉加分）。
+
+        实盘盘中（当日 9:15-15:00）跳过以省资源；盘后/周末/历史日点击运行时计算。
+        直接读 t_io/cache/daily_kline 日线缓存算特征（零网络，秒级；未缓存跳过显示"—"）。
+        返回 {code: {go, regime, met, conds:{t_*:bool}, reason}}。"""
+        today = datetime.now().strftime("%Y-%m-%d")
+        now = datetime.now()
+        _now_int = now.hour * 100 + now.minute
+        if date == today and 915 <= _now_int <= 1500 and now.weekday() < 5:
+            return {}  # 实盘盘中：省资源不计算
+        result = {}
+        try:
+            import pandas as _pd
+            from position_builder import _DAILY_CACHE_DIR
+            # 指数 regime（读指数日线缓存，零网络）
+            regime_by_date = {}
+            try:
+                _idx = json.loads((BASE / "t_io" / "cache" / "daily_kline" / "index_sh000001.json").read_text(encoding="utf-8")).get("rows", [])
+                _idx_df = _pd.DataFrame(_idx)
+                _idx_df["close"] = _pd.to_numeric(_idx_df["close"])
+                _idx_df["ma60"] = _idx_df["close"].rolling(60).mean()
+                _idx_df["date"] = _idx_df["date"].astype(str)
+                for _, _r in _idx_df.iterrows():
+                    if _r["close"] > _r["ma60"]:
+                        regime_by_date[str(_r["date"])] = "trend_up"
+                    elif _r["close"] < _r["ma60"] * 0.97:
+                        regime_by_date[str(_r["date"])] = "trend_dn"
+                    else:
+                        regime_by_date[str(_r["date"])] = "range"
+            except Exception:
+                pass
+            _regime = regime_by_date.get(str(date), "range")
+            for i, code in enumerate(codes):
+                if i % 50 == 0:
+                    try:
+                        from modules.market_data import MARKET_PROGRESS as _MP
+                        _MP.update({"done": i, "total": len(codes), "msg": f"计算建仓符合度 {i}/{len(codes)}"})
+                    except Exception:
+                        pass
+                _fp = _DAILY_CACHE_DIR / f"{str(code).split('_')[0]}.json"
+                if not _fp.exists():
+                    continue
+                try:
+                    rows = json.loads(_fp.read_text(encoding="utf-8")).get("rows", [])
+                    if len(rows) < 61:
+                        continue
+                    _sub = [r for r in rows if str(r.get("date", "")) <= str(date)]
+                    if len(_sub) < 61:
+                        continue
+                    c = _pd.Series([float(r["close"]) for r in _sub])
+                    h = _pd.Series([float(r["high"]) for r in _sub])
+                    price = float(c.iloc[-1])
+                    ma20 = float(c.rolling(20).mean().iloc[-1])
+                    ma60 = float(c.rolling(60).mean().iloc[-1])
+                    rec_high = float(h.tail(20).max())
+                    e12 = c.ewm(span=12, adjust=False).mean()
+                    e26 = c.ewm(span=26, adjust=False).mean()
+                    dif = e12 - e26
+                    dea = dif.ewm(span=9, adjust=False).mean()
+                    golden = bool(((dif > dea) & (dif.shift(1) <= dea.shift(1))).tail(5).any())
+                    trend = bool(price > ma20 and price > ma60)
+                    dd = price / rec_high - 1 if rec_high > 0 else 0.0
+                    if _regime == "trend_up":
+                        dd_ok = dd >= -0.03
+                    elif _regime == "trend_dn":
+                        dd_ok = dd < -0.10
+                    else:
+                        dd_ok = False
+                    _dir_ok = _regime in ("trend_up", "trend_dn")
+                    conds = {
+                        "t_regime": _dir_ok,
+                        "t_trend": trend,
+                        "t_drawdown": dd_ok,
+                        "t_golden": golden,
+                    }
+                    go = (_dir_ok and trend and dd_ok) if _regime == "trend_up" else (_dir_ok and dd_ok)
+                    result[str(code)] = {
+                        "go": bool(go),
+                        "regime": _regime,
+                        "met": sum(1 for v in conds.values() if v),
+                        "conds": conds,
+                        "reason": f"{_regime}: GO" if go else f"{_regime}: 降频",
+                    }
+                except Exception:
+                    continue
+        except Exception:
+            pass
+        return result
+
+    def _load_hunter_impl(self, date=None):
         """运行 stock_hunter 打分管线，返回 DataLoader 原生产出的表格数据。
         与 Excel 报告 Sheet 1/2/3 数据结构对齐。"""
         if not date:
@@ -1622,6 +1780,11 @@ class Api:
                 st_codes = set(watchlist.loc[st_mask, "代码"].astype(str).tolist())
             fetcher = MarketDataFetcher(data_dir=str(HUNTER_DIR / "data"), st_codes=st_codes)
             market_df = fetcher.fetch_for_date(codes, date)
+            try:
+                from modules.market_data import MARKET_PROGRESS as _MP
+                _MP.update({"phase": "概念打分", "msg": f"已拉取行情 {len(market_df)} 只，正在打分"})
+            except Exception:
+                pass
             if not market_df.empty:
                 if "名称" in market_df.columns:
                     market_df = market_df.drop(columns=["名称"])
@@ -1640,6 +1803,11 @@ class Api:
                 s.setdefault("连板天数", 0)
                 stock_list.append(s)
             scored = scorer.compute_batch(stock_list)
+            try:
+                from modules.market_data import MARKET_PROGRESS as _MP
+                _MP.update({"phase": "构建板块/个股明细", "msg": f"打分完成 {len(scored)} 只"})
+            except Exception:
+                pass
 
             score_map = {str(s.get("代码", "")): s for s in scored}
             for col in ["总得分", "涨停", "D1强势形态且新高", "D2强势形态",
@@ -1747,6 +1915,34 @@ class Api:
             except Exception:
                 pass  # 个股明细非致命
 
+            # 盘后建仓信号符合度注入（实盘盘中跳过省资源；盘后点击"今日数据"时显示）
+            try:
+                from modules.market_data import MARKET_PROGRESS as _MP
+                _MP.update({"phase": "计算建仓符合度", "done": 0, "total": len(codes), "msg": ""})
+            except Exception:
+                pass
+            try:
+                build_conf = self._hunter_build_conformance(codes, date)
+                if build_conf:
+                    for cat, stocks in sector_stocks.items():
+                        for s in stocks:
+                            c = build_conf.get(str(s.get("code", "")))
+                            if c:
+                                s["build_go"] = c["go"]
+                                s["build_regime"] = c["regime"]
+                                s["build_met"] = c["met"]
+                                s["build_conds"] = c["conds"]
+                                s["build_reason"] = c["reason"]
+            except Exception:
+                pass
+            # 建仓符合股靠前显示：GO(时机放行)优先 → 符合条件数 → 得分
+            for cat, stocks in sector_stocks.items():
+                stocks.sort(key=lambda s: (
+                    -(1 if s.get("build_go") else 0),
+                    -(s.get("build_met") or 0),
+                    -(s.get("score") or 0),
+                ))
+
             # 3) 生成排名表 + 注入热度/趋势/股票数
             sum_cols, sum_rows = df_to_rows(df_summary)
             for row in sum_rows:
@@ -1781,6 +1977,13 @@ class Api:
             except Exception:
                 pass
 
+            # 2026-08-16: 自动保存 heat history 快照（板块汇总），日期列表/历史视图随运行积累
+            try:
+                from modules.heat_tracker import save_daily_summary as _save_hs
+                _save_hs(date.replace("-", ""), list(sum_rows))
+            except Exception:
+                pass
+
             out["available"] = True
             out["pool_size"] = len(codes)
             out["summary_cols"] = sum_cols
@@ -1790,6 +1993,11 @@ class Api:
             out["sector_stocks"] = sector_stocks
             out["concept_trends"] = concept_trends
             out["refreshed_at"] = datetime.now().strftime("%H:%M:%S")
+            try:
+                from modules.market_data import MARKET_PROGRESS as _MP
+                _MP.update({"running": False, "phase": "完成", "done": 1, "total": 1, "msg": "选股猎手运行完成"})
+            except Exception:
+                pass
         except Exception as e:
             out["error"] = f"排名生成失败: {e}"
             return out
@@ -1931,6 +2139,14 @@ class Api:
             tags.append({"label": "超买", "color": "warn"})
         elif cur_rsi < 30:
             tags.append({"label": "超卖", "color": "neutral"})
+
+        # 破5日线/破10日线（现价处于均线下方）
+        _ma5_s = pd.Series(closes).rolling(5).mean()
+        _ma10_s = pd.Series(closes).rolling(10).mean()
+        if not np.isnan(_ma5_s.iloc[-1]) and cur < _ma5_s.iloc[-1]:
+            tags.append({"label": "破5日线", "color": "down"})
+        if not np.isnan(_ma10_s.iloc[-1]) and cur < _ma10_s.iloc[-1]:
+            tags.append({"label": "破10日线", "color": "down"})
 
         # 通道标签（放最前）
         trend_label = {"up": {"label": "上行", "color": "up"},
@@ -2083,17 +2299,24 @@ class Api:
 
     # ---------- 选股猎手历史 ----------
     def available_hunter_dates(self):
-        """返回 stock_hunter history 里所有日期（降序）。"""
+        """返回可选日期（降序）：heat history 日期 + 最近 120 个工作日，支持扫描任意日期。"""
+        dates = set()
         try:
             from modules.heat_tracker import load_history as load_heat_history
             hist = load_heat_history()
-            dates = sorted(hist.keys(), reverse=True)
-            return [{"date": d[:4] + "-" + d[4:6] + "-" + d[6:8]} for d in dates]
+            dates.update(hist.keys())
         except Exception:
-            return []
+            pass
+        from datetime import timedelta
+        _today = datetime.now().date()
+        for _i in range(120):
+            _d = _today - timedelta(days=_i)
+            if _d.weekday() < 5:
+                dates.add(_d.strftime("%Y%m%d"))
+        return [{"date": d[:4] + "-" + d[4:6] + "-" + d[6:8]} for d in sorted(dates, reverse=True)]
 
     def load_hunter_history(self, date):
-        """秒级读 history 快照（不重新拉行情）。date=YYYY-MM-DD。"""
+        """读指定日期选股猎手数据：heat history 快照（秒级）优先；非快照日期 → 全量运行（支持扫描任意日期）。"""
         out = {"date": date, "available": False, "error": ""}
         try:
             from modules.heat_tracker import load_history as load_heat_history
@@ -2101,8 +2324,8 @@ class Api:
             key = date.replace("-", "")
             items = hist.get(key, [])
             if not items:
-                out["error"] = "该日期无历史数据"
-                return out
+                # 2026-08-16: 非历史快照日期 → 全量运行（拉取该日行情+计算），支持任意日期扫描
+                return self._load_hunter_impl(date)
             rows = []
             for i, s in enumerate(items):
                 rows.append({

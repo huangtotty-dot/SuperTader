@@ -460,23 +460,51 @@ class SignalEngine:
                 if _bb is not None and _rsi6 is not None and not (pd.isna(_bb) or pd.isna(_rsi6)):
                     _bbv = float(_bb)
                     _rv = float(_rsi6)
+                    # 2026-08-15 实施: 确认点升级 — 用 15 分钟 MACD 方向替代 5 分 RSI
+                    # （实证 macd15_bb5: 样本内 58.8%/过滤后 73.9%，样本外 75.0%）
+                    _use_macd15 = bool(PARAMS.get("swing_macd15_dir", True))
+                    if _use_macd15:
+                        _bb_up = float(PARAMS.get("swing_macd15_bb_upper", 0.85))
+                        _bb_dn = float(PARAMS.get("swing_macd15_bb_lower", 0.15))
+                        _m15 = float(feats.get("f15_macd_hist_15m") or 0.0)
+                        _sell_ok = _m15 < 0   # 15分MACD死叉(dif<dea) → 高抛
+                        _buy_ok = _m15 > 0    # 15分MACD金叉(dif>dea) → 低吸
+                        _ck = f"15分MACD{'死叉' if _m15 < 0 else ('金叉' if _m15 > 0 else '0')}({_m15:.2f})"
+                        _kind = "swing_bb_macd15"
+                    else:
+                        _bb_up = float(PARAMS.get("swing_bb_upper", 1.0))
+                        _bb_dn = float(PARAMS.get("swing_bb_lower", 0.0))
+                        _sell_ok = _rv > float(PARAMS.get("swing_sell_rsi", 75.0))
+                        _buy_ok = _rv < float(PARAMS.get("swing_buy_rsi", 35.0))
+                        _ck = f"RSI6={_rv:.1f}"
+                        _kind = "swing_bb_rsi"
                     _ind = {
                         "vwap": feats.get("vwap", price),
                         "today_ret": feats.get("today_ret", 0),
                         "market_state": daily_ctx.get("daily_status", "unknown"),
-                        "entry_kind": "swing_bb_rsi",
+                        "entry_kind": _kind,
+                        "macd_hist_15m": feats.get("f15_macd_hist_15m", 0.0),
                     }
-                    _fac = {"threshold": 35.0, "entry_kind": "swing_bb_rsi"}
-                    if _bbv >= float(PARAMS.get("swing_bb_upper", 1.0)) and _rv > float(PARAMS.get("swing_sell_rsi", 75.0)):
+                    _fac = {"threshold": 35.0, "entry_kind": _kind}
+                    # 2026-08-15 因子实验实施: 高抛放量确认（样本内+6.0pp/样本外+6.4pp 稳健）
+                    _sell_vol_ratio = float(PARAMS.get("swing_sell_vol_ratio", 0) or 0)
+                    _sell_vol_ok, _sell_vol_txt = True, ""
+                    if _sell_vol_ratio > 0:
+                        _vol_5m = float(_l5.get("volume") or 0)
+                        _vol_avg = float(_df5["volume"].mean()) if len(_df5) > 0 else 0.0
+                        _vol_r = _vol_5m / _vol_avg if _vol_avg > 0 else 0.0
+                        _sell_vol_ok = _vol_r >= _sell_vol_ratio
+                        _sell_vol_txt = f" 量比{_vol_r:.1f}≥{_sell_vol_ratio}"
+                    if _bbv >= _bb_up and _sell_ok and _sell_vol_ok:
                         sell_score = 100.0
-                        _det = f"布林上轨(bb_pct={_bbv:.2f}) + RSI6超买({_rv:.1f})"
+                        _det = f"布林上轨(bb_pct={_bbv:.2f}) + {_ck}{_sell_vol_txt}"
                         sig = Signal(code, name, "SELL_HIGH", price, sell_score,
                                      [_det], [{"指标": "高抛", "当前": _det, "加分": 100.0}],
                                      _ind, dict(_fac))
                         decision_reason = "SELL_HIGH"
-                    elif _bbv <= float(PARAMS.get("swing_bb_lower", 0.0)) and _rv < float(PARAMS.get("swing_buy_rsi", 35.0)):
+                    elif _bbv <= _bb_dn and _buy_ok:
                         buy_score = 100.0
-                        _det = f"布林下轨(bb_pct={_bbv:.2f}) + RSI6超卖({_rv:.1f})"
+                        _det = f"布林下轨(bb_pct={_bbv:.2f}) + {_ck}"
                         sig = Signal(code, name, "BUY_LOW", price, buy_score,
                                      [_det], [{"指标": "低吸", "当前": _det, "加分": 100.0}],
                                      _ind, dict(_fac))
