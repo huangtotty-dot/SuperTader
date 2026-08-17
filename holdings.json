@@ -7,7 +7,7 @@
     "t_qty": 2000,
     "type": "etf",
     "account": "账户A",
-    "pre_close": 1.021
+    "pre_close": 1.078
   },
   "600176": {
     "name": "中国巨石",
@@ -17,7 +17,7 @@
     "t_qty": 300,
     "type": "stock",
     "account": "账户A",
-    "pre_close": 44.35
+    "pre_close": 46.27
   },
   "600481": {
     "name": "双良节能",
@@ -27,7 +27,7 @@
     "t_qty": 0,
     "type": "stock",
     "account": "账户A",
-    "pre_close": 4.34
+    "pre_close": 4.41
   },
   "603667": {
     "name": "五洲新春",
@@ -37,7 +37,7 @@
     "t_qty": 0,
     "type": "stock",
     "account": "账户A",
-    "pre_close": 55.27
+    "pre_close": 56.3
   },
   "000988": {
     "name": "华工科技",
@@ -47,7 +47,7 @@
     "t_qty": 7,
     "type": "stock",
     "account": "账户A",
-    "pre_close": 109.79
+    "pre_close": 113.64
   },
   "000988_B": {
     "name": "华工科技",
@@ -57,7 +57,7 @@
     "t_qty": 0,
     "type": "stock",
     "account": "账户B",
-    "pre_close": 109.79
+    "pre_close": 113.63
   },
   "002639": {
     "name": "雪人集团",
@@ -67,6 +67,6 @@
     "t_qty": 0,
     "type": "stock",
     "account": "账户B",
-    "pre_close": 12.16
+    "pre_close": 12.32
   }
 }
