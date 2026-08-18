@@ -1702,6 +1702,7 @@ def scan_once():
                     
                     # 高抛低吸纯两点 (2026-08-13): 两点满足即推送；仓控0股也推(仅供参考不记账)
                     pushed = sig.score >= notify_threshold
+                    _block_reason = None  # C13修复(2026-08-18): 记录真实拦截原因，供日志/shadow落盘
                     # 纯两点规则 (2026-08-13): 移除轮次上限/单股日限；score=100 恒过阈值 → 一定推送
                     # 仅保留最小防重：同 (code, action, 5分钟桶) 每日只推一次
                     if pushed:
@@ -1712,6 +1713,7 @@ def scan_once():
                         _dkey = (code, sig.action, t.hour * 12 + t.minute // 5)
                         if _dkey in _SWING_PUSH_DEDUP:
                             pushed = False
+                            _block_reason = "防重桶拦截（同股同向5分钟桶内已推）"
                         else:
                             _SWING_PUSH_DEDUP.add(_dkey)
                     # 指数5分钟共振门控（2026-08-14）：指数与个股同向才推送，否则整条信号作废
@@ -1747,9 +1749,15 @@ def scan_once():
                     else:
                         action_type = "买入" if sig.action in ["BUY_LOW", "ADD_POS"] else "卖出"
                         time_window = "10:00前" if t < dtime(10, 0) else "10:00后"
+                        # C13修复(2026-08-18): 日志与shadow miss_reason 写真实拦截原因（阈值/防重/共振三态）
                         if _res_blocked:
+                            _miss = f"指数共振拦截({(_res or {}).get('gate', '')})"
                             log.info(f"🚫 {code} {action_type}信号被指数共振拦截（非阈值不足），不推送")
+                        elif _block_reason:
+                            _miss = _block_reason
+                            log.info(f"🔁 {code} {action_type}信号得分{sig.score:.0f}分，{_block_reason}，不重复推送")
                         else:
+                            _miss = f"低于推送阈值静默（{time_window}阈值{notify_threshold}分）"
                             log.info(f"📉 {code} {action_type}信号得分{sig.score:.0f}分，低于{time_window}阈值{notify_threshold}分，静默处理（不推送飞书）")
                         try:
                             _sp2 = STOCK_PARAMS.get(code, {})
@@ -1759,7 +1767,7 @@ def scan_once():
                                 code, holding.get("name", code), sig.price,
                                 float(sig.indicators.get("vwap", sig.price) or sig.price),
                                 buy_score, sell_score, _nb, _ns,
-                                "低于推送阈值静默",
+                                _miss,
                                 extra={"action": sig.action,
                                        "decision_reason": engine.last_decision.get(code, {}).get("reason", "")},
                             )

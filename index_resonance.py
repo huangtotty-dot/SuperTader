@@ -189,10 +189,15 @@ def verdict_from_indicators(code: str, action: str, price: float,
         return verdict_from_indicators(code, action, price, ind, missing=True, reason="指数MA5数据不足")
     if is_buy:
         md_pass = float(close) >= float(ma5)
-        md_reason = f"指数价{float(close):.3f} vs 指数MA5 {float(ma5):.3f}（买需≥MA5，指数短趋势向上）"
+        # C14修复(2026-08-18): 文案反映实际方向，不再恒写"短趋势向上"
+        md_reason = (f"指数价{float(close):.3f} vs 指数MA5 {float(ma5):.3f}"
+                     f"（买需≥MA5；实际{'≥' if md_pass else '<'}MA5，"
+                     f"指数短趋势{'向上' if md_pass else '向下'}，{'满足' if md_pass else '不满足'}）")
     else:
         md_pass = float(close) <= float(ma5)
-        md_reason = f"指数价{float(close):.3f} vs 指数MA5 {float(ma5):.3f}（卖需≤MA5，指数短趋势向下）"
+        md_reason = (f"指数价{float(close):.3f} vs 指数MA5 {float(ma5):.3f}"
+                     f"（卖需≤MA5；实际{'≤' if md_pass else '>'}MA5，"
+                     f"指数短趋势{'向下' if md_pass else '向上'}，{'满足' if md_pass else '不满足'}）")
     gate = p.get("gate", "index_ma5_dir")
     if gate == "same_direction":
         gate_pass, gate_reason = sd_pass, sd_reason
