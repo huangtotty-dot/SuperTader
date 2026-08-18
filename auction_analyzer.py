@@ -359,6 +359,20 @@ def format_auction_feishu(result):
     sector_top5 = result.get("sector_top5", [])
     auction_signals = result.get("auction_signals", [])
 
+    # C17-2 修复(2026-08-18): 空壳闸门——全部持仓 amount=0/change=0（快照缺失或采集失败）时，
+    # 改推"数据缺失"，禁止以默认值输出"正常"（假正常推送比不推送更有害）
+    if not auction_signals:
+        elements.append({"tag": "div", "text": {
+            "content": "⚠️ **竞价数据缺失：无持仓竞价信号**（快照缺失或采集失败）", "tag": "lark_md"}})
+        return elements
+    if all(s.get("amount_wan", 0) <= 0 for s in auction_signals) and \
+       all(s.get("change_pct", 0) == 0 for s in auction_signals):
+        elements.append({"tag": "div", "text": {
+            "content": "⚠️ **竞价数据缺失，今日竞价分析不可用**\n"
+                       "> 全部持仓 amount=0/change=0（快照缺失或采集失败），请检查 auction_collector 日志。",
+            "tag": "lark_md"}})
+        return elements
+
     # 指数行
     if index_signals:
         idx_text = "  ".join(

@@ -19,7 +19,7 @@ import urllib.request
 from datetime import datetime
 from pathlib import Path
 
-BASE = Path(r"E:\06_T")
+BASE = Path(__file__).resolve().parents[2]  # C17-1 修复(2026-08-18): 自解析到项目根（t_io/preopen/ → 根），替代旧目录硬编码 E:\06_T
 PREOPEN_DIR = BASE / "t_io" / "preopen"
 HOLDINGS_FP = BASE / "holdings.json"
 
