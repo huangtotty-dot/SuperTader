@@ -242,10 +242,36 @@ def _snapshot_write(code: str, holding: dict, df: pd.DataFrame, indicators: dict
         "daily_context": daily_context or (existing.get("daily_context", {}) if isinstance(existing, dict) else {}),
         "bars": bars,
     }
-    tmp = path + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as f:
-        json.dump(_json_safe(rec), f, ensure_ascii=False)  # fix D12: NaN→None
-    os.replace(tmp, path)
+    # C19-1/2/3 修复(2026-08-18): 唯一 tmp 名 + os.replace 指数退避重试 + 故障隔离
+    # 案发：杀软/Windows 索引器定时扫描锁文件 → WinError 5；原 os.replace 无重试且异常上抛打断信号主流程。
+    tmp = f"{path}.{os.getpid()}.{int(time.time() * 1000)}.tmp"
+    try:
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(_json_safe(rec), f, ensure_ascii=False)  # fix D12: NaN→None
+    except Exception:
+        try:
+            os.remove(tmp)
+        except Exception:
+            pass
+        return  # C19-3: 写 tmp 失败自吞，不打断当轮信号扫描
+    for _attempt in range(5):  # 指数退避 0.2/0.4/0.8/1.6/3.2s，覆盖 AV 秒级锁窗
+        try:
+            os.replace(tmp, path)
+            return
+        except OSError:
+            if _attempt < 4:
+                time.sleep(0.2 * (2 ** _attempt))
+    # 重试耗尽：保留 tmp 供人工恢复，warning + 计数孤儿（数据不丢）
+    try:
+        _ORPHAN_TMP_COUNT = globals().get("_ORPHAN_TMP_COUNT", 0) + 1
+        globals()["_ORPHAN_TMP_COUNT"] = _ORPHAN_TMP_COUNT
+        _lg = globals().get("log")
+        if _lg is not None:
+            _lg.warning(f"⚠️ 快照写盘失败（保留 tmp 供恢复）: {tmp} → {path}；孤儿 tmp 累计 {_ORPHAN_TMP_COUNT}（C19 修复）")
+        else:
+            print(f"[WARN] 快照写盘失败（保留 tmp）: {tmp} → {path}", flush=True)
+    except Exception:
+        pass
 
 
 def _default_daily_context(code: str, status: str = "unavailable", reason: str = "") -> Dict[str, Any]:

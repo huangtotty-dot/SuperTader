@@ -608,6 +608,21 @@ def _maybe_collect_auction_snapshot(now: datetime) -> None:
             if missing:
                 log.warning(f"⚠️ 竞价采集断档: {today} 缺 slot {missing}"
                             f"（主程序晚于窗口启动或采集失败）；盘后可用 auction_collector.py --backfill 回填 09:25 口径")
+                # C17-3 修复(2026-08-18): 断档告警上飞书，数据缺失当场可见
+                try:
+                    send_feishu_payload({
+                        "msg_type": "interactive",
+                        "card": {
+                            "header": {"template": "red",
+                                       "title": {"tag": "plain_text", "content": f"⚠️ 竞价采集断档 - {FEISHU_SYSTEM_KEYWORD}"}},
+                            "elements": [{"tag": "markdown", "content": (
+                                f"**{today} 竞价采集断档**：缺 slot {missing}\n"
+                                f"> 主程序晚于窗口启动或采集子进程失败；今日竞价分析可能为空壳。\n"
+                                f"> 盘后可用 auction_collector.py --backfill 回填 09:25 口径。")}],
+                        },
+                    }, success_log=f"竞价断档飞书告警已发送: {missing}", error_prefix="竞价断档飞书告警")
+                except Exception as _ae:
+                    log.warning(f"⚠️ 竞价断档飞书告警发送失败: {str(_ae)[:80]}")
     except Exception as e:
         log.warning(f"⚠️ 竞价采集钩子异常（已吞掉，不影响主循环）: {str(e)[:120]}")
 

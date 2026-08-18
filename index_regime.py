@@ -342,7 +342,7 @@ def _ir_state_dir(p: Dict[str, Any]) -> str:
         return env
     if p.get("state_dir"):
         return p["state_dir"]
-    base = globals().get("BASE_DIR") or r"E:\06_T"
+    base = globals().get("BASE_DIR") or os.path.dirname(os.path.abspath(__file__))  # C17-1 修复(2026-08-18): 自解析替代 06_T
     return os.path.join(base, "t_io", "index_regime")
 
 
@@ -532,10 +532,17 @@ def _ir_save_state(d: str, st: Dict[str, Any]) -> None:
     try:
         os.makedirs(d, exist_ok=True)
         path = _ir_state_path(d)
-        tmp = path + ".tmp"
+        tmp = f"{path}.{os.getpid()}.{int(time.time() * 1000)}.tmp"  # C19 修复(2026-08-18): 唯一 tmp 名
         with open(tmp, "w", encoding="utf-8") as f:
             json.dump(st, f, ensure_ascii=False, indent=2, default=_ir_json_default)
-        os.replace(tmp, path)
+        for _a in range(5):  # C19 指数退避重试（覆盖杀软/索引器锁窗）
+            try:
+                os.replace(tmp, path)
+                return
+            except OSError:
+                if _a < 4:
+                    time.sleep(0.2 * (2 ** _a))
+        _ir_log.warning(f"[index_regime] state.json 写盘重试失败（保留 tmp 供恢复）: {tmp}")  # C19: 数据不丢
     except Exception as e:
         _ir_log.warning(f"[index_regime] state.json 写入失败: {e}")
 
