@@ -43,8 +43,13 @@ for line in open(trace_fp, encoding="utf-8"):
         decisions[c].append((r["scan_time"], d, bs if d == "BUY_LOW" else ss,
                              r.get("price"), r.get("buy_block") or [], r.get("sell_block") or []))
 
-def day_profile(rs):
-    """close-only 近似 classify_day_type(口径: harness_backtest.py:170-196)"""
+def day_profile(rs, prev_close=None):
+    """close-only 近似 classify_day_type(口径: harness_backtest.py:170-196)
+
+    C23修复(2026-08-19): 日ret% 保留"开→收"口径(harness 可比性)，
+    新增 day_ret_pc% = 相对前收的市场惯例口径——跳空日两者差异巨大
+    (08-19 600176 开收-4.3% vs 前收-9.86%)，复盘/水位线以后者为准。
+    """
     prices = [float(r["price"]) for r in rs if fnum(r.get("price"))]
     if len(prices) < 30:
         return {"day_type": "unknown"}
@@ -64,11 +69,32 @@ def day_profile(rs):
         dtype = "bear_day"
     else:
         dtype = "chop_day"
-    return {"open": round(o, 3), "close": round(cl, 3), "high": round(H, 3), "low": round(L, 3),
-            "day_ret%": round(day_ret * 100, 2), "振幅%": round((H - L) / o * 100, 2),
-            "day_type": dtype, "above_avg_ratio": round(above, 3)}
+    out = {"open": round(o, 3), "close": round(cl, 3), "high": round(H, 3), "low": round(L, 3),
+           "day_ret%": round(day_ret * 100, 2), "振幅%": round((H - L) / o * 100, 2),
+           "day_type": dtype, "above_avg_ratio": round(above, 3)}
+    if fnum(prev_close) and float(prev_close) > 0:
+        out["day_ret_pc%"] = round((cl / float(prev_close) - 1) * 100, 2)
+    return out
 
-prof = {c: day_profile(ticks[c]) for c in CODES}
+# C23: 前收优先取竞价采集(当日真实前收)，回退 holdings.json(eod_sync 滚动前有效)
+_prev_close_map = {}
+try:
+    _auc = json.load(open(BASE / f"t_io/preopen/auction_{DATE}.json", encoding="utf-8"))
+    for _slot, _snap in sorted((_auc.get("snapshots") or {}).items()):
+        for _c, _row in (_snap.get("rows") or {}).items():
+            if fnum(_row.get("pre_close")):
+                _prev_close_map.setdefault(_c, float(_row["pre_close"]))
+except Exception:
+    pass
+try:
+    _hold = json.load(open(BASE / "holdings.json", encoding="utf-8"))
+    for _c in CODES:
+        if _c not in _prev_close_map and fnum((_hold.get(_c) or {}).get("pre_close")):
+            _prev_close_map[_c] = float(_hold[_c]["pre_close"])
+except Exception:
+    pass
+
+prof = {c: day_profile(ticks[c], _prev_close_map.get(c)) for c in CODES}
 
 def valid_max(rs, key):
     vals = [r[key] for r in rs if fnum(r.get(key))]
@@ -709,7 +735,7 @@ print(f"== {DATE} 日复盘数据摘要 ==")
 for c in CODES:
     s = sig_stat[c]
     print(f"{c} {NAMES[c]}: 买{s['buy_signals']}/卖{s['sell_signals']} 买max{s['max_buy_score']} 卖max{s['max_sell_score']} "
-          f"振幅{s.get('振幅%')}% 日ret{s.get('day_ret%')}% {s['day_type']} nan={s['nan_ticks']}")
+          f"振幅{s.get('振幅%')}% 日ret{s.get('day_ret%')}%(开收) 日ret_pc{s.get('day_ret_pc%')}%(前收) {s['day_type']} nan={s['nan_ticks']}")
 print("shadow_near:", {c: len(v) for c, v in shadow_near.items()})
 print("suppressed:", {c: len(v) for c, v in suppress.items()}, "pushes:", pushes)
 print("silent_sell:", {c: (len(v), max((e['score'] for e in v), default=None)) for c, v in silent_sell.items() if v})
