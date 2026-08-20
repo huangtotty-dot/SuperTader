@@ -1,39 +1,39 @@
 {
   "588170": {
     "name": "科创半导体ETF华夏",
-    "cost": 0.627,
-    "qty": 2000,
-    "base": 2000,
-    "t_qty": 2000,
+    "cost": 0.207,
+    "qty": 1000,
+    "base": 1000,
+    "t_qty": 1000,
     "type": "etf",
     "account": "账户A",
-    "pre_close": 1.104
+    "pre_close": 1.022
   },
   "600176": {
     "name": "中国巨石",
-    "cost": 63.403,
-    "qty": 300,
-    "base": 300,
-    "t_qty": 300,
+    "cost": 105.521,
+    "qty": 100,
+    "base": 100,
+    "t_qty": 100,
     "type": "stock",
     "account": "账户A",
-    "pre_close": 44.91
+    "pre_close": 40.56
   },
   "600481": {
     "name": "双良节能",
     "cost": 28.216,
-    "qty": 0,
-    "base": 0,
+    "qty": 100,
+    "base": 100,
     "t_qty": 0,
     "type": "stock",
     "account": "账户A",
-    "pre_close": 4.41
+    "pre_close": 4.16
   },
   "603667": {
     "name": "五洲新春",
     "cost": 56.765,
-    "qty": 300,
-    "base": 300,
+    "qty": 0,
+    "base": 0,
     "t_qty": 0,
     "type": "stock",
     "account": "账户A",
@@ -41,13 +41,13 @@
   },
   "000988": {
     "name": "华工科技",
-    "cost": 332.085,
-    "qty": 7,
-    "base": 7,
+    "cost": 553.574,
+    "qty": 100,
+    "base": 100,
     "t_qty": 7,
     "type": "stock",
     "account": "账户A",
-    "pre_close": 111.94
+    "pre_close": 102.35
   },
   "000988_B": {
     "name": "华工科技",
@@ -57,7 +57,7 @@
     "t_qty": 0,
     "type": "stock",
     "account": "账户B",
-    "pre_close": 111.94
+    "pre_close": 102.35
   },
   "002639": {
     "name": "雪人集团",
@@ -67,6 +67,6 @@
     "t_qty": 0,
     "type": "stock",
     "account": "账户B",
-    "pre_close": 12.02
+    "pre_close": 11.39
   }
 }
