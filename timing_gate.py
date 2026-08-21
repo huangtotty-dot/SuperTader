@@ -21,6 +21,7 @@ import json
 import os
 import sys
 import urllib.request as _ur
+from datetime import datetime
 from pathlib import Path
 
 import numpy as np
@@ -46,6 +47,9 @@ except Exception:
 
 INDEX_CACHE = BASE / "t_io" / "cache" / "daily_kline" / "index_sh000001.json"
 
+# B-1(2026-08-21): 指数缓存日期校验——重拉失败回退旧缓存时置 True，随 _regime 返回供 trace 标记
+_STALE = {"index_cache_stale": False}
+
 
 def _params() -> dict:
     try:
@@ -56,45 +60,81 @@ def _params() -> dict:
 
 
 def _fetch_index_daily():
-    """上证指数日线（腾讯 qfq 800天，缓存）。返回 DataFrame(date, close)。"""
+    """上证指数日线（腾讯 qfq 800天，缓存）。返回 DataFrame(date, close)。
+
+    B-1(2026-08-21): 缓存日期校验——缓存最后日期<今天 且盘中(工作日≥09:15)时重拉，
+    避免"昨日收盘冒充今日"误判 regime（08-18 因缓存陈旧把唯一 trend_up 日误判 range 的根因）。
+    重拉失败回退旧缓存并置 index_cache_stale=True 供 trace 标记。
+    """
+    cached_rows = None
+    cache_date = None
     if INDEX_CACHE.exists():
         try:
             d = json.loads(INDEX_CACHE.read_text(encoding="utf-8"))
             if d.get("rows"):
-                return pd.DataFrame(d["rows"])
+                cached_rows = d["rows"]
+                cache_date = str(cached_rows[-1].get("date", ""))
         except Exception:
-            pass
+            cached_rows = None
+    today = datetime.now().strftime("%Y-%m-%d")
+    need_refresh = False
+    if cached_rows:
+        try:
+            _now = datetime.now()
+            need_refresh = (_now.weekday() < 5
+                            and _now.strftime("%H:%M") >= "09:15"
+                            and cache_date < today)
+        except Exception:
+            need_refresh = False
+    if cached_rows and not need_refresh:
+        return pd.DataFrame(cached_rows)
     for _k in ["http_proxy", "https_proxy", "HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "all_proxy"]:
         os.environ.pop(_k, None)
     os.environ["NO_PROXY"] = "*"
     url = "https://ifzq.gtimg.cn/appstock/app/fqkline/get?param=sh000001,day,,,800,qfq"
-    req = _ur.Request(url, headers={"User-Agent": "Mozilla/5.0", "Referer": "https://finance.qq.com/"})
-    raw = _ur.urlopen(req, timeout=10).read().decode("utf-8", errors="ignore")
-    data = json.loads(raw)
-    kline = data.get("data", {}).get("sh000001", {}).get("day") or \
-            data.get("data", {}).get("sh000001", {}).get("qfqday") or []
-    rows = [{"date": i[0], "close": float(i[2])} for i in kline if len(i) >= 3]
+    try:
+        req = _ur.Request(url, headers={"User-Agent": "Mozilla/5.0", "Referer": "https://finance.qq.com/"})
+        raw = _ur.urlopen(req, timeout=10).read().decode("utf-8", errors="ignore")
+        data = json.loads(raw)
+        kline = data.get("data", {}).get("sh000001", {}).get("day") or \
+                data.get("data", {}).get("sh000001", {}).get("qfqday") or []
+        rows = [{"date": i[0], "close": float(i[2])} for i in kline if len(i) >= 3]
+        if not rows:
+            raise ValueError("上证指数日线为空")
+    except Exception:
+        if cached_rows:  # B-1: 重拉失败回退旧缓存，标记 stale
+            _STALE["index_cache_stale"] = True
+            return pd.DataFrame(cached_rows)
+        raise
     INDEX_CACHE.parent.mkdir(parents=True, exist_ok=True)
     INDEX_CACHE.write_text(json.dumps({"rows": rows}, ensure_ascii=False), encoding="utf-8")
     return pd.DataFrame(rows)
 
 
 def _regime(date_str: str) -> dict:
-    """指数 vs MA60 的市场状态（多头趋势/空头趋势/震荡），无未来函数。"""
+    """指数 vs MA60 的市场状态（多头趋势/空头趋势/震荡），无未来函数。
+
+    B-3(2026-08-21): 多头加缓冲带 close>MA60*regime_up_buffer(默认1.005) 才 trend_up，
+    中间带(MA60*0.97 ~ MA60*1.005)归 range，防 08-17/18/19 razor 横跳。
+    B-1: 返回 index_cache_stale 标记供 trace。
+    """
     p = _params()
     idx = _fetch_index_daily()
     idx = idx[idx["date"].astype(str) <= str(date_str)]
     if len(idx) < 61:
-        return {"regime": "unknown", "close": None, "ma60": None}
+        return {"regime": "unknown", "close": None, "ma60": None,
+                "index_cache_stale": bool(_STALE["index_cache_stale"])}
     close = float(idx["close"].iloc[-1])
     ma60 = float(idx["close"].astype(float).rolling(60).mean().iloc[-1])
-    if close > ma60:
+    up_buffer = float(p.get("regime_up_buffer", 1.005))
+    if close > ma60 * up_buffer:
         regime = "trend_up"
     elif close < ma60 * 0.97:
         regime = "trend_dn"
     else:
         regime = "range"
-    return {"regime": regime, "close": close, "ma60": round(ma60, 3)}
+    return {"regime": regime, "close": close, "ma60": round(ma60, 3),
+            "ratio": round(close / ma60, 4), "index_cache_stale": bool(_STALE["index_cache_stale"])}
 
 
 def _stock_features(code: str, date_str: str) -> dict:

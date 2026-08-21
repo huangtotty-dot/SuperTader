@@ -974,7 +974,8 @@ def scan_stock(code: str, stock_info: dict, date_str: str = None,
             elif _regime == "trend_dn":
                 _dd_ok = _dd < -0.10
             else:
-                _dd_ok = False
+                # B-4(2026-08-21): range 市观察态回撤单独算——用多头口径 dd>=-3%(非硬编码 False)
+                _dd_ok = _dd >= -0.03
             _golden = bool(_f.get("macd_golden_5d"))
             result["conditions"] = {
                 "t_regime": {"passed": _dir_ok, "detail": f"市场状态:{_regime}(需多头/空头非震荡)"},
@@ -985,6 +986,10 @@ def scan_stock(code: str, stock_info: dict, date_str: str = None,
             _score = (30 if _dir_ok else 0) + (30 if _trend else 0) + (30 if _dd_ok else 0) + (10 if _golden else 0)
             if _tv.get("go"):
                 _v = "signal"
+            elif _regime == "range" and _trend and _dd_ok:
+                # B-4(2026-08-21): range 市观察态 watch_signal——多头结构+浅回撤，
+                # 只进 trace/C18 清单喂样本，不推飞书不出 position 建议
+                _v = "watch_signal"
             elif _dir_ok and (_trend or _dd_ok):
                 _v = "approaching"
             else:

@@ -492,14 +492,18 @@ def _index_regime_feishu_enabled() -> bool:
 def _build_index_regime_card(ctx: dict, title_prefix: str, switched: bool = False,
                              prev_regime: Optional[str] = None, as_of_note: str = "",
                              recent_days: Optional[list] = None,
-                             extra_lines: Optional[list] = None) -> dict:
+                             extra_lines: Optional[list] = None,
+                             regime_name_override: Optional[str] = None,
+                             banner_lines: Optional[list] = None) -> dict:
     """组装大盘态势飞书卡片：标题模板按状态选 green/red/blue，切换日加急红/绿
 
     recent_days：morning 模式 detail.recent_days（近3日 [{date,regime,score}]），
     以 "MM-DD regime score → ..." 序列展示；extra_lines：附加说明行（插在基准日期之后）。
+    B-2(2026-08-21)：regime_name_override 覆盖显示基调（C20 Level2 推"震荡观察"）；
+    banner_lines 追加在卡片顶部（Level1 黄条 / Level2 红条）。
     """
     regime = str(ctx.get("regime", "range"))
-    regime_name = ctx.get("regime_name") or index_regime_name(regime)
+    regime_name = regime_name_override or (ctx.get("regime_name") or index_regime_name(regime))
     score = float(ctx.get("score") or 0.0)
     trend_score = ctx.get("trend_score")
     env_score = ctx.get("env_score")
@@ -520,6 +524,9 @@ def _build_index_regime_card(ctx: dict, title_prefix: str, switched: bool = Fals
         f"**综合分 S**：{score:+.2f}（趋势T {trend_score} ／ 环境E {env_score}）",
         f"**基准日期**：{ctx.get('date', '-')}{as_of_note}",
     ]
+    if banner_lines:
+        for _bl in banner_lines:
+            lines.insert(0, _bl)
     if recent_days:
         seq = " → ".join(
             f"{str(r.get('date', '-'))[5:]} {r.get('regime', '-')} {float(r.get('score') or 0.0):+.1f}"
@@ -627,12 +634,91 @@ def _maybe_collect_auction_snapshot(now: datetime) -> None:
         log.warning(f"⚠️ 竞价采集钩子异常（已吞掉，不影响主循环）: {str(e)[:120]}")
 
 
+# B-2(2026-08-21): C20 竞价现实校验——"只纠乐观错，不纠悲观错"（悲观错成本少赚、乐观错成本实亏）
+_BULL_REGIMES = {"uni_up"}   # 看多类基调：单边上涨（index_regime 枚举 uni_up/range/uni_down）
+
+
+def _c20_auction_check(date_str: str) -> dict:
+    """C20 竞价现实校验（双条件与门版，评审通过）。
+    读当日 auction_{date}.json 最后 slot 持仓缺口中位数 + preopen_{date}.json auction_summary。
+    返回 {level, gap_med, top20_down_ratio, top20_missing, degraded_top20}。
+      level=0 不触发 / 1 Level1 降级标注(黄) / 2 Level2 推翻基调(红)
+      Top20 缺失(top20_status=empty 或 up+down=0)时退化为缺口单条件并标 degraded_top20。"""
+    try:
+        from config import C20_AUCTION_CHECK as _c20
+    except Exception:
+        _c20 = {"enabled": True, "l1_gap": -1.0, "l2_gap": -2.5,
+                "l1_top20_down_ratio": 0.60, "l2_top20_down_ratio": 0.75}
+    out = {"level": 0, "gap_med": None, "top20_down_ratio": None,
+           "top20_missing": True, "degraded_top20": False}
+    if not _c20.get("enabled", True):
+        return out
+    base = os.path.join(BASE_DIR, "t_io", "preopen")
+    # 1) 持仓缺口中位数（剔除 _B 重复行）——auction 最后 slot 的 pct_vs_preclose(百分比)
+    gap_med = None
+    try:
+        fp = os.path.join(base, f"auction_{date_str}.json")
+        if os.path.exists(fp):
+            j = json.load(open(fp, encoding="utf-8"))
+            snaps = j.get("snapshots") or {}
+            if snaps:
+                rows = (snaps[list(snaps.keys())[-1]].get("rows") or {})
+                vals = []
+                for _c, _v in rows.items():
+                    if str(_c).endswith("_B"):
+                        continue
+                    _p = (_v or {}).get("pct_vs_preclose")
+                    if _p is not None:
+                        vals.append(float(_p))
+                if vals:
+                    gap_med = float(np.median(vals))
+    except Exception:
+        gap_med = None
+    out["gap_med"] = gap_med
+    if gap_med is None:
+        return out
+    # 2) Top20 竞价跌占比
+    top20_down_ratio, top20_missing = None, True
+    try:
+        fp = os.path.join(base, f"preopen_{date_str}.json")
+        if os.path.exists(fp):
+            s = json.load(open(fp, encoding="utf-8")).get("auction_summary") or {}
+            up = float(s.get("top20_up") or 0)
+            dn = float(s.get("top20_down") or 0)
+            if s.get("top20_status") == "empty" or (up + dn) <= 0:
+                top20_missing = True
+            else:
+                top20_missing = False
+                top20_down_ratio = dn / (up + dn)
+    except Exception:
+        top20_missing = True
+    out["top20_down_ratio"] = top20_down_ratio
+    out["top20_missing"] = top20_missing
+    if top20_missing:
+        # 数据缺失降级：缺口单条件
+        out["degraded_top20"] = True
+        if gap_med <= _c20["l2_gap"]:
+            out["level"] = 2
+        elif gap_med <= _c20["l1_gap"]:
+            out["level"] = 1
+        return out
+    if top20_down_ratio is None:
+        return out
+    if gap_med <= _c20["l2_gap"] and top20_down_ratio >= _c20["l2_top20_down_ratio"]:
+        out["level"] = 2
+    elif gap_med <= _c20["l1_gap"] and top20_down_ratio >= _c20["l1_top20_down_ratio"]:
+        out["level"] = 1
+    return out
+
+
 def _maybe_push_index_regime_morning(now: datetime) -> None:
     """09:26-09:31 早盘大盘基调推送（每日一次；须在 scan_once 的 <9:30 早退分支之前调用）
 
     V2：调 detect_index_regime(mode="morning")，模块自动对齐到今天之前最近一个
     已完成交易日（基于其收盘判定），并输出 detail.recent_days 近3日
     [{date,regime,score}]；卡片注明 9:30-10:00 决策窗口主要参考前两日状态。
+    B-2(2026-08-21)：推送前做 C20 竞价现实校验——看多基调被 Level2 推翻时改"震荡观察"+红条，
+    Level1 加黄条；非看多基调不动作（只纠乐观错）。
     """
     global _index_regime_morning_pushed_date
     try:
@@ -649,15 +735,35 @@ def _maybe_push_index_regime_morning(now: datetime) -> None:
         # 保证评分基于昨日收盘（周一自动对齐到上周五），不受当日集合竞价 partial bar 影响
         regime, score, ctx = detect_index_regime(mode="morning")
         recent_days = (ctx.get("detail") or {}).get("recent_days") or []
+        # B-2: C20 竞价现实校验
+        _banner, _override_name = [], None
+        _check = _c20_auction_check(today)
+        if _check.get("level") and str(ctx.get("regime")) in _BULL_REGIMES:
+            _gm = _check.get("gap_med")
+            _gm_txt = f"{_gm:.2f}%" if _gm is not None else "?"
+            if _check.get("degraded_top20"):
+                _bt = "Top20缺失·单条件"
+            else:
+                _ratio = _check.get("top20_down_ratio")
+                _bt = f"Top20跌 {round((_ratio or 0) * 100)}%"
+            _msg = f"竞价现实与基调背离：持仓缺口 {_gm_txt}，{_bt}"
+            if _check["level"] >= 2:
+                _override_name = "震荡观察"
+                _banner.append(f"🔴 {_msg}")
+            else:
+                _banner.append(f"🟡 {_msg}")
         payload = _build_index_regime_card(
             ctx, "🧭 早盘大盘基调",
             as_of_note="（基于昨日收盘的判定）",
             recent_days=recent_days,
             extra_lines=["**决策提示**：9:30-10:00 决策窗口主要参考前两日状态"],
+            regime_name_override=_override_name,
+            banner_lines=_banner,
         )
         send_feishu_payload(
             payload=payload,
-            success_log=f"✅ 早盘大盘基调已推送: {ctx.get('regime_name')} S={ctx.get('score')} (mode=morning)",
+            success_log=f"✅ 早盘大盘基调已推送: {_override_name or ctx.get('regime_name')} S={ctx.get('score')} (mode=morning)"
+                        + (f" C20_level={_check.get('level')}" if _check.get("level") else ""),
             error_prefix="早盘大盘基调推送",
         )
     except Exception as e:

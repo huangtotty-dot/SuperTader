@@ -46,8 +46,9 @@ OUT_JSON = os.path.join(OUT_DIR, "signal_outcomes.json")
 OUT_MD = os.path.join(OUT_DIR, "signal_outcomes_summary.md")
 
 HORIZONS = (1, 3, 5)                      # T+N 持有期
-TRACKED_VERDICTS = ("signal", "approaching")   # 需要计算收益的 verdict
-ALL_VERDICTS = ("signal", "approaching", "weak")
+# B-4(2026-08-21): 加入 range 市观察态 watch_signal 累计样本（解决 0/20 样本不足）
+TRACKED_VERDICTS = ("signal", "approaching", "watch_signal")   # 需要计算收益的 verdict
+ALL_VERDICTS = ("signal", "approaching", "watch_signal", "weak")
 BENCHMARK_CODE = "sh000300"               # 沪深300
 MIN_SAMPLES_DEFAULT = 20
 TX_TIMEOUT = 12
