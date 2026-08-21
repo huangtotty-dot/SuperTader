@@ -13,6 +13,7 @@ from datetime import datetime, timedelta, time as dtime
 from typing import Dict, List, Optional, Any
 import json
 import os
+import time
 # V3: analyze_auction + format_auction_feishu 由 auction_analyzer.py exec 加载提供（globals）
 
 @dataclass
@@ -118,12 +119,32 @@ class PreOpenEngine:
         """
         提取早盘集合竞价成交量最大的20家公司，判定当日市场风向。
         9:20-9:25 期间用 akshare 全市场快照，按成交额降序取前20。
+        A-3(2026-08-21): 空返回时按 slot 重试 1 次(间隔20s)；仍空则标 top20_status=empty，
+        区分"真空"与"中性"(避免日志静默 涨0/跌0 误导)。
         """
         result = {
             "total_up": 0, "total_down": 0, "total_flat": 0,
             "top_gainers": [], "top_volume_stocks": [],
             "sectors": [], "bias": "neutral", "note": "",
         }
+        empty_reason = None
+        for attempt in range(2):
+            empty_reason = self._fetch_top20_attempt(result)
+            if empty_reason is None:
+                return result
+            if attempt == 0:
+                print(f"[A-3] Top20 竞价量获取失败({empty_reason})，20s 后重试")
+                try:
+                    time.sleep(20)
+                except Exception:
+                    pass
+        # 两次仍空 → 显式标注 top20_status=empty（B-2 读到 empty 时降级为单条件）
+        result["top20_status"] = "empty"
+        result["note"] = f"Top20 数据为空({empty_reason})"
+        return result
+
+    def _fetch_top20_attempt(self, result: Dict[str, Any]) -> Optional[str]:
+        """单次 Top20 竞价量抓取。成功返回 None；失败返回失败原因字符串。"""
         try:
             spot = pd.DataFrame()
             for fn in ["stock_zh_a_spot_em", "stock_zh_a_spot"]:
@@ -135,8 +156,7 @@ class PreOpenEngine:
                     except Exception:
                         continue
             if not isinstance(spot, pd.DataFrame) or spot.empty:
-                result["note"] = "无法获取市场快照"
-                return result
+                return "无法获取市场快照"
 
             vol_col = None
             for col in ["成交额", "amount", "成交金额", "turnover"]:
@@ -144,8 +164,7 @@ class PreOpenEngine:
                     vol_col = col
                     break
             if not vol_col:
-                result["note"] = "无成交额列"
-                return result
+                return "无成交额列"
 
             spot[vol_col] = pd.to_numeric(spot[vol_col], errors="coerce").fillna(0)
             spot["涨跌幅"] = pd.to_numeric(spot["涨跌幅"], errors="coerce").fillna(0)
@@ -185,12 +204,12 @@ class PreOpenEngine:
                     result["bias"] = "bearish"
 
             result["note"] = f"Top20竞价量：涨{up_count}/跌{down_count}/平{flat_count}，偏向{result['bias']}"
+            return None
 
         except Exception as e:
             result["note"] = f"Top20分析异常: {type(e).__name__}: {str(e)[:80]}"
             log.debug(f"⚠️  Top20竞价量分析失败: {str(e)[:120]}")
-
-        return result
+            return f"异常:{type(e).__name__}"
 
     # ----- 主评估方法（V2 简化版）-----
 
@@ -215,6 +234,7 @@ class PreOpenEngine:
             price = float(holding.get("pre_close", 0) or 0)
             daily_ctx = get_daily_context(code, holding or {}, current_price=price)
             prev_close = float(daily_ctx.get("daily_prev_close", 0) or 0)
+            # 注意口径：open_gap 为小数（0.0558 = 5.58%），不是百分比数值；7 月老文件 prev_close=0 导致 gap 恒 0 不可信
             open_gap = (price - prev_close) / prev_close if prev_close > 0 else 0.0
 
             direction = "neutral"
@@ -397,6 +417,36 @@ def _preopen_adv_counts(context: PreOpenContext) -> Dict[str, int]:
 
 # ==================== Feishu 推送函数 ====================
 
+def _writeback_auction_summary(context: PreOpenContext) -> None:
+    """A-2(2026-08-21): 竞价分析完成后将 auction_summary 合并回写 preopen_{date}.json。
+    读改写保留其他字段；文件不存在则新建最小结构。修复 08-19 auction_summary={} 缺值。"""
+    try:
+        summary = context.auction_summary if isinstance(context.auction_summary, dict) else {}
+        if not summary:
+            return
+        fp = _preopen_path()
+        data = {}
+        if os.path.exists(fp):
+            try:
+                data = json.load(open(fp, encoding="utf-8"))
+            except Exception:
+                data = {}
+        if not isinstance(data, dict):
+            data = {}
+        old = data.get("auction_summary") if isinstance(data.get("auction_summary"), dict) else {}
+        merged = dict(old)
+        for k in ("top20_bias", "top20_up", "top20_down",
+                  "holdings_bullish", "holdings_bearish", "source_ts"):
+            if summary.get(k) is not None:
+                merged[k] = summary[k]
+        data["auction_summary"] = merged
+        os.makedirs(os.path.dirname(fp), exist_ok=True)
+        with open(fp, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+    except Exception:
+        pass
+
+
 def _send_preopen_feishu(context: PreOpenContext, force_push: bool = False) -> bool:
     """推送早盘竞价总览。只在 9:20 后（数据可信窗口）推送，且每日仅一次。
 
@@ -464,6 +514,7 @@ def _send_preopen_feishu(context: PreOpenContext, force_push: bool = False) -> b
     if ok:
         _preopen_pushed_date = today
         _preopen_overview_last_push_at = _now()
+        _writeback_auction_summary(context)  # A-2: 竞价分析完成后回写 auction_summary
     return ok
 
 

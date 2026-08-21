@@ -39,6 +39,8 @@
 
 ## §2 收盘后采集（Agent 执行，~10 分钟）
 
+> 数据口径：`preopen_{date}.json` 的 `code_snapshots[code].open_gap` 为**小数**（0.0558=5.58%），非百分比数值；7 月老文件 `prev_close=0` 致 gap 恒 0 不可信。`auction_summary.top20_bias` 为字符串枚举（strong_bearish/bearish/neutral/bullish/strong_bullish）；`auction_*.json` 中 `pct_vs_preclose` 才是百分比。
+
 - [ ] 跑 `daily_review.py --date 今日`，注入数据段（加仓观察 / 建仓扫描 / 阶段看板）
 - [ ] 推送通道健康：今日加仓/建仓相关推送是否正常发出（条数、有无延迟丢失）——只查通道，不评信号质量
 - [ ] 异常扫描：崩溃/重启、数据缺口（腾讯超时 akshare 兜底次数）
