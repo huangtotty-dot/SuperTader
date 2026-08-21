@@ -675,7 +675,11 @@ def _load_holding_codes() -> set:
         with open(HOLDINGS_FILE, "r", encoding="utf-8") as f:
             data = json.load(f)
         codes = set()
-        for key in (data.keys() if isinstance(data, dict) else []):
+        for key, val in (data.items() if isinstance(data, dict) else []):
+            if not isinstance(val, dict):
+                continue
+            if not (val.get("qty") or 0):
+                continue  # fix 2026-08-20: 已清仓(qty=0)不算持仓
             base_code = str(key)
             if base_code.endswith(("_A", "_B")):
                 base_code = base_code[:-2]
@@ -923,6 +927,17 @@ def scan_stock(code: str, stock_info: dict, date_str: str = None,
     if not daily_ctx:
         daily_ctx = {}
     _ensure_daily_indicators(daily_ctx, code)
+
+    # 30/60分钟线背离检测（2026-08-19 新增）：tushare 多日数据；当日缓存；失败返回 {}
+    # 2026-08-19 验证后改为 detail 版（含连续标记），divergence 保留简版兼容前端/JSONL
+    result["divergence"] = {}
+    result["divergence_detail"] = {}
+    try:
+        from divergence import detect_minute_divergence_detail as _det_div
+        result["divergence_detail"] = _det_div(code)
+        result["divergence"] = {k: v["type"] for k, v in result["divergence_detail"].items()}
+    except Exception:
+        pass
 
     result["date"] = snap_date
     # 展示/箱体突破用实时价；日线五条件用 daily_price_ref（日线收盘/参考价）
@@ -1234,6 +1249,58 @@ def _mark_ma_break_pushed(code: str, date_str: str) -> None:
             json.dumps(dedup, ensure_ascii=False, indent=2), encoding="utf-8")
     except Exception:
         pass
+
+
+# ---------- 30/60分钟线背离推送（2026-08-19 新增）----------
+DIVERGENCE_STATE_FILE = STATE_DIR / "divergence_pushed.json"
+
+
+def _load_divergence_dedup() -> dict:
+    try:
+        if DIVERGENCE_STATE_FILE.exists():
+            return json.loads(DIVERGENCE_STATE_FILE.read_text(encoding="utf-8"))
+    except Exception:
+        pass
+    return {}
+
+
+def _mark_divergence_pushed(codes: list, date_str: str) -> None:
+    try:
+        STATE_DIR.mkdir(parents=True, exist_ok=True)
+        dedup = _load_divergence_dedup()
+        dedup.setdefault(date_str, [])
+        for c in codes:
+            if c not in dedup[date_str]:
+                dedup[date_str].append(c)
+        dedup = {d: dedup[d] for d in sorted(dedup)[-15:]}
+        DIVERGENCE_STATE_FILE.write_text(
+            json.dumps(dedup, ensure_ascii=False, indent=2), encoding="utf-8")
+    except Exception:
+        pass
+
+
+def _push_divergence_feishu(stocks: list, date_str: str, dry_run: bool = False) -> bool:
+    """推送 60分钟连续底背离参考提醒飞书卡片。stocks=[(code, name, [描述...])]。"""
+    if not stocks or not _FEISHU_AVAILABLE:
+        return False
+    if dry_run:
+        print(f"  [DRY-RUN] 跳过背离飞书推送: {len(stocks)} 只")
+        return False
+    lines = [f"**60分钟连续底背离参考**  {date_str}", ""]
+    for code, name, parts in stocks:
+        lines.append(f"🟢 **{name}（{code}）** {' ｜ '.join(parts)}")
+    lines += ["", "📌 依据180天验证：60分钟连续底背离命中率60%（样本40），单次背离无效；此为非买卖建议，结合大盘时机判断。"]
+    card = {
+        "msg_type": "interactive",
+        "card": {
+            "header": {"template": "green",
+                       "title": {"tag": "plain_text", "content": f"🟢 60分连续底背离 - {FEISHU_KEYWORD}"}},
+            "elements": [{"tag": "markdown", "content": "\n".join(lines)}],
+        },
+    }
+    return send_feishu_payload(
+        card, success_log=f"60分钟连续底背离飞书推送: {len(stocks)} 只",
+        error_prefix="60分钟连续底背离飞书推送")
 
 
 def check_ma_break(code: str, stock_info: dict = None, date_str: str = None,
@@ -1639,7 +1706,8 @@ def run_position_scan(date_str: str = None, capital: float = None,
     else:
         stocks = {k: v for k, v in stocks.items()
                   if v.get("status") in ("monitoring", "signal")
-                  and not k.startswith("_example")}
+                  and not k.startswith("_example")
+                  and v.get("status") != "archived"}  # A-5(2026-08-21): 排除 archived 停用股
 
     if not stocks:
         if not silent:
@@ -1693,11 +1761,14 @@ def run_position_scan(date_str: str = None, capital: float = None,
             "gated": bool(r.get("gated", False)),
             "gated_from": r.get("gated_from"),
             "timing": r.get("timing") or {"regime": None, "go": None, "reason": "未启用"},
+            "divergence": r.get("divergence") or {},
+            "divergence_detail": r.get("divergence_detail") or {},
             "channels": {k: {"verdict": v.get("verdict"), "score": v.get("score"),
                              "approach_status": v.get("approach_status"),
                              "conditions": v.get("conditions", {})}
                          for k, v in (r.get("channels") or {}).items()},
-            "in_holdings": bool(watchlist.get("stocks", {}).get(r["code"], {}).get("in_holdings", False)),
+            # fix 2026-08-20: in_holdings 实时对齐 holdings.json（不再读 watchlist 陈旧字段）
+            "in_holdings": r["code"] in _load_holding_codes(),
             "conditions": {k: bool(v["passed"]) for k, v in r.get("conditions", {}).items()},
             "suggested_qty": int((r.get("position") or {}).get("suggested_qty", 0)),
             "suggested_price": _py_type((r.get("position") or {}).get("suggested_price", 0)),
@@ -1708,6 +1779,29 @@ def run_position_scan(date_str: str = None, capital: float = None,
     # 保存更新后的 watchlist
     with open(WATCHLIST_FILE, "w", encoding="utf-8") as f:
         json.dump(watchlist, f, ensure_ascii=False, indent=2)
+
+    # 背离飞书提醒（2026-08-19 验证后收窄：仅 60min 连续底背离推送，顶背离不推）
+    # 依据：180 天验证单次背离命中率≈随机基线，仅 60min 连续底背离(+12.5pp, 样本40)可信
+    try:
+        _div_stocks = []
+        for r in results:
+            _dd = r.get("divergence_detail") or {}
+            _m60 = _dd.get("m60") or {}
+            if _m60.get("type") == "底背离" and _m60.get("consec"):
+                _div_stocks.append((r["code"], r.get("name", r["code"]), ["60分钟连续底背离"]))
+        if _div_stocks and not no_feishu:
+            _div_date = log_date
+            _dedup = _load_divergence_dedup()
+            _fresh = [x for x in _div_stocks if x[0] not in _dedup.get(_div_date, [])]
+            if _fresh:
+                if _push_divergence_feishu(_fresh, _div_date):
+                    _mark_divergence_pushed([x[0] for x in _fresh], _div_date)
+                    if not silent:
+                        print(f"背离提醒已推送: {len(_fresh)} 只")
+        elif _div_stocks and not silent:
+            print(f"背离检测: {len(_div_stocks)} 只（no_feishu 跳过推送）")
+    except Exception:
+        pass
 
     if not silent:
         print_report(results)
