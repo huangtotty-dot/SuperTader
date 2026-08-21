@@ -115,7 +115,16 @@ def _resonance_gate(code, sig, now):
     共振模块不可用/计算异常 → 降级放行（代码故障不阻断交易）；
     指数数据缺失/不足 → 按 INDEX_RESONANCE_PARAMS.fail_closed 决定（默认拦截）。
     每次计算都落盘 index_resonance trace（含被拦截的准信号），供复盘优化。
+    C-1(2026-08-21): 做T/接回意图分流——SELL_HIGH(日内了结)跳过共振门控直接放行，
+    卖侧不受指数 MA5 尺约束（08-19 破线日 0 卖出信号教训）。
     """
+    try:
+        from config import RESONANCE_GATE as _rg
+    except Exception:
+        _rg = {"enabled": True, "bypass_sell_high": True}
+    if (_rg.get("enabled", True) and _rg.get("bypass_sell_high", True)
+            and str(sig.action) == "SELL_HIGH"):
+        return True, {"bypass": "sell_high"}
     if not _RESONANCE_MODULE_OK or _compute_resonance is None:
         return True, None
     try:
@@ -144,6 +153,118 @@ def _resonance_gate(code, sig, now):
 
 # 将共享命名空间中的关键变量暴露到当前模块的 globals，使 main.py 的代码可以运行
 globals().update(shared)
+
+# ==================== C-2/C-3: 个股MA5闸 + 拦截可见性（2026-08-21） ====================
+def _below_ma5(code):
+    """个股日线最新收盘 < MA5（盘中用最新可得收盘，通常为昨日；docstring 注明边界）。
+    C-2(2026-08-21): 用户规则"破五日线只卖不买"系统化。数据缺失返回 None（不拦截）。"""
+    try:
+        from position_builder import fetch_daily_kline
+        df = fetch_daily_kline(code)
+        if df is None or df.empty or "close" not in df.columns or len(df) < 6:
+            return None
+        df = df.sort_values("date").reset_index(drop=True)
+        c = df["close"].astype(float)
+        return bool(float(c.iloc[-1]) < float(c.rolling(5).mean().iloc[-1]))
+    except Exception:
+        return None
+
+
+_INTERCEPT_STATE_FILE = os.path.join(BASE_DIR, "t_io", "state", "intercept_notice_pushed.json")
+
+
+def _push_intercept_notice(code, sig, now, reason):
+    """C-3(2026-08-21): 拦截可见性——被 C-1/C-2 拦截且原 score>=推送阈值，推低优飞书（非加急）。
+    每股每向每日最多 1 条，去重 json（参照 position_signal_pushed.json 模式）。"""
+    try:
+        if not FEISHU_WEBHOOK:
+            return
+        _today = now.strftime("%Y-%m-%d")
+        _st = {}
+        if os.path.exists(_INTERCEPT_STATE_FILE):
+            try:
+                _st = json.load(open(_INTERCEPT_STATE_FILE, encoding="utf-8"))
+            except Exception:
+                _st = {}
+        _key = f"{code}:{sig.action}"
+        if _key in (_st.get(_today) or {}):
+            return
+        _st.setdefault(_today, {})[_key] = True
+        os.makedirs(os.path.dirname(_INTERCEPT_STATE_FILE), exist_ok=True)
+        json.dump(_st, open(_INTERCEPT_STATE_FILE, "w", encoding="utf-8"),
+                  ensure_ascii=False, indent=2)
+        _acn = {"BUY_LOW": "买入", "SELL_HIGH": "卖出", "ADD_POS": "加仓",
+                "PANIC_SELL": "恐慌卖"}.get(sig.action, sig.action)
+        card = {
+            "msg_type": "interactive",
+            "card": {
+                "header": {"template": "blue",
+                           "title": {"tag": "plain_text", "content": f"🔕 信号已拦截 - {FEISHU_KEYWORD}"}},
+                "elements": [{"tag": "markdown", "content":
+                    f"🔕 **{sig.name}（{code}）** {_acn} score={sig.score:.0f} 已拦截（{reason}）"}],
+            },
+        }
+        send_feishu_payload(card, success_log=f"拦截可见性飞书: {code} {sig.action}",
+                            error_prefix="拦截可见性飞书")
+    except Exception:
+        pass
+
+
+_HIGH_OPEN_PUSHED = set()   # C-4: "YYYY-MM-DD:code" 当日去重
+
+
+def _high_open_spike_check(code, holding, df, preopen_context, now):
+    """C-4(2026-08-21): 高开急拉预警——open_gap>3%（preopen 小数口径）且自开盘冲高>2%。
+    仅 09:30-09:45 早盘段检查；每股每日 1 条。证据：08-18 600176 gap 4.2% 冲 47.06 无预警。"""
+    try:
+        if now.time() < dtime(9, 30) or now.time() > dtime(9, 45):
+            return
+        today = now.strftime("%Y-%m-%d")
+        key = f"{today}:{code}"
+        if key in _HIGH_OPEN_PUSHED or not FEISHU_WEBHOOK:
+            return
+        gap = None
+        if preopen_context is not None:
+            gap = ((preopen_context.code_snapshots or {}).get(code) or {}).get("open_gap")
+        if gap is None or not (gap > 0.03):
+            return
+        if df is None or df.empty or "open" not in df.columns:
+            return
+        df = df.copy()
+        open_px = float(df.iloc[0]["open"])
+        if open_px <= 0:
+            return
+        hi = float(df["high"].max()) if "high" in df.columns else open_px
+        spike = (hi - open_px) / open_px
+        if spike > 0.02:
+            _HIGH_OPEN_PUSHED.add(key)
+            _name = holding.get("name", code)
+            card = {
+                "msg_type": "interactive",
+                "card": {
+                    "header": _feishu_card_header(f"⚡ 高开急拉预警 - {FEISHU_KEYWORD}", "orange"),
+                    "elements": [{"tag": "markdown", "content":
+                        f"⚡ **{_name}（{code}）** gap {gap*100:.1f}%，10min 冲高 {spike*100:.1f}%，谨防冲高回落"}],
+                },
+            }
+            send_feishu_payload(card, success_log=f"高开急拉预警: {code}", error_prefix="高开急拉预警")
+    except Exception:
+        pass
+
+
+def _signal_whitelist(code, holding):
+    """C-5(2026-08-21): 信号评估白名单（C15+C25+C27 合并）。
+      qty==0 已清仓/零持仓 → 跳过全部评估与推送（C27：603667 清仓仍吃加急卖信号教训）；
+      t_qty==0 且 qty>0 纯底仓股 → 保留评估（日报展示）但跳过买/卖推送（C25：002639 一天 6 条买信号噪音）；
+      返回 {eval_buy, eval_sell, push}，集中一处便于以后调。"""
+    qty = int(holding.get("qty") or 0)
+    t_qty = int(holding.get("t_qty") or 0)
+    if qty <= 0:
+        return {"eval_buy": False, "eval_sell": False, "push": False}
+    if t_qty <= 0:
+        return {"eval_buy": True, "eval_sell": True, "push": False}
+    return {"eval_buy": True, "eval_sell": True, "push": True}
+
 
 # ==================== notify 信号通知（拆分后补充） ====================
 def notify(sig, holding):
@@ -1559,6 +1680,21 @@ def scan_once():
         for code, holding in HOLDINGS_SORTED:
             _ensure_ai_review_stats(code, holding)
             dec = _ensure_daily_decision_stats(code, holding)
+            # C-5(2026-08-21): 信号评估白名单——已清仓 qty=0 跳过信号评估，仅记 trace（C27）
+            _wl = _signal_whitelist(code, holding)
+            dec["_signal_whitelist"] = _wl
+            if not (_wl.get("eval_buy") or _wl.get("eval_sell")):
+                dec["last_status"] = "已清仓跳过(白名单)"
+                panel_rows.append([label(code, holding), "-", "-", "-", "-", "已清仓跳过"])
+                log.info(f"🚫 {label(code, holding)} qty=0 已清仓，跳过信号评估（C-5/C27）")
+                try:
+                    _append_jsonl(_trace_path("data_quality"), {
+                        "fetch_time": _now().strftime("%Y-%m-%d %H:%M:%S"),
+                        "code": code, "source": "scan_gate", "whitelist_skip": "qty0",
+                    })
+                except Exception:
+                    pass
+                continue
 
             try:
                 time.sleep(0.5)
@@ -1609,6 +1745,11 @@ def scan_once():
                 price = float(df.iloc[-1]["close"]) if "close" in df.columns else 0.0
                 vwap = float(df.iloc[-1]["vwap"]) if "vwap" in df.columns else price
                 amp = float(df.iloc[-1]["day_amplitude"]) if "day_amplitude" in df.columns else 0.0
+                # C-4(2026-08-21): 高开急拉预警（09:30-09:45，每股每日1条）
+                try:
+                    _high_open_spike_check(code, holding, df, preopen_context, now)
+                except Exception:
+                    pass
 
                 dec["last_price"] = price
                 dec["last_vwap"] = vwap
@@ -1838,11 +1979,14 @@ def scan_once():
                         else:
                             _SWING_PUSH_DEDUP.add(_dkey)
                     # 指数5分钟共振门控（2026-08-14）：指数与个股同向才推送，否则整条信号作废
+                    # C-1: SELL_HIGH 已在 _resonance_gate 内部按 RESONANCE_GATE.bypass_sell_high 跳过
                     _res_blocked = False
                     if pushed:
                         _gate_pass, _res = _resonance_gate(code, sig, now)
                         if _res is not None:
-                            if _res.get("missing"):
+                            if _res.get("bypass"):
+                                _res_status = "SELL_HIGH跳过共振(C-1)"
+                            elif _res.get("missing"):
                                 _res_status = "指数数据缺失" if not _gate_pass else "指数数据缺失放行"
                             elif _gate_pass:
                                 _res_status = "共振通过"
@@ -1857,6 +2001,30 @@ def scan_once():
                             _res_blocked = True
                             pushed = False
                             log.info(f"🚫 {code} {sig.action} 指数共振拦截（{_res_status}）: {(_res or {}).get('gate_reason', '')}")
+                    # C-2(2026-08-21): 个股MA5闸——破五日线只卖不买（用户规则系统化）；BUY_LOW 最新收盘<MA5 不推送
+                    _ma5_suppressed = False
+                    if pushed and sig.action == "BUY_LOW":
+                        try:
+                            if _below_ma5(code):
+                                _ma5_suppressed = True
+                                pushed = False
+                                _block_reason = "个股收盘<MA5(破线只卖不买)"
+                                log.info(f"🚫 {code} BUY_LOW 个股收盘<MA5(破线只卖不买)，不推送")
+                        except Exception:
+                            pass
+                    # C-3(2026-08-21): 拦截可见性——被拦截且原score>=推送阈值，推低优飞书（每股每向每日1条）
+                    if (_res_blocked or _ma5_suppressed) and sig.score >= notify_threshold:
+                        try:
+                            _push_intercept_notice(code, sig, now,
+                                                   _res_status if _res_blocked else "个股收盘<MA5")
+                        except Exception:
+                            pass
+                    # C-5(2026-08-21): 纯底仓股(t_qty=0)保留评估但跳过买/卖推送（C25）
+                    _wl = dec.get("_signal_whitelist") or {}
+                    if pushed and not _wl.get("push", True):
+                        pushed = False
+                        _block_reason = "纯底仓股(t_qty=0)跳过推送(白名单)"
+                        log.info(f"🚫 {code} {sig.action} 纯底仓股(t_qty=0)，跳过推送（C-5/C25）")
                     if pushed:
                         notify(sig, holding)
                         if sig.action in ["SELL_HIGH", "PANIC_SELL"]:
@@ -1874,6 +2042,9 @@ def scan_once():
                         if _res_blocked:
                             _miss = f"指数共振拦截({(_res or {}).get('gate', '')})"
                             log.info(f"🚫 {code} {action_type}信号被指数共振拦截（非阈值不足），不推送")
+                        elif _ma5_suppressed:
+                            _miss = "个股收盘<MA5(破线只卖不买)"
+                            log.info(f"🚫 {code} BUY_LOW 个股收盘<MA5(破线只卖不买)，不推送")
                         elif _block_reason:
                             _miss = _block_reason
                             log.info(f"🔁 {code} {action_type}信号得分{sig.score:.0f}分，{_block_reason}，不重复推送")

@@ -717,6 +717,14 @@ INDEX_RESONANCE_PARAMS = {
     "sell_floor": -0.20,            # 高抛: 指数 bb_pct_5m >= sell_floor（不在恐慌底）
     "min_index_5m_bars": 5,         # 指数5分钟K线最少根数，不足视为数据不足
 }
+
+# ==================== C-1: 做T/接回意图分流（2026-08-21 评审通过） ====================
+# SELL_HIGH(日内了结) 跳过指数共振门控直接放行——08-19 破线日全天 0 条卖出信号是真正缺口，
+# 卖侧不受指数 MA5 尺约束；BUY_LOW 维持共振门控 + C-2 个股 MA5 闸；接回/加仓维持门控不变。
+RESONANCE_GATE = {
+    "enabled": True,            # 总开关；False 时恢复旧行为（全部信号走共振门控）
+    "bypass_sell_high": True,   # SELL_HIGH 跳过共振门控
+}
 # 个股/ETF → 板块指数覆盖（分板默认之外显式指定）；值 = (index_code, index_name)
 INDEX_RESONANCE_MAP = {
     "588170": ("sh000688", "科创50"),   # 科创半导体ETF → 科创50
