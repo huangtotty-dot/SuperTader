@@ -372,17 +372,9 @@
       "suggested_qty": 0,
       "suggested_price": 0.0,
       "capital_required": 0.0,
-      "last_check_date": "2026-08-21",
-      "composite_score": 0,
+      "last_check_date": null,
+      "composite_score": 60,
       "signal_history": [
-        {
-          "date": "2026-08-21",
-          "score": 0,
-          "verdict": "weak",
-          "channel": null,
-          "approach_status": null,
-          "price": 19.02
-        },
         {
           "date": "2026-08-21",
           "score": 0,
@@ -534,12 +526,20 @@
           "channel": null,
           "approach_status": null,
           "price": 19.22
+        },
+        {
+          "date": null,
+          "score": 60,
+          "verdict": "watch_signal",
+          "channel": null,
+          "approach_status": null,
+          "price": 19.19
         }
       ],
       "criteria_met": {
         "t_regime": false,
-        "t_trend": false,
-        "t_drawdown": false,
+        "t_trend": true,
+        "t_drawdown": true,
         "t_golden": false
       }
     },

@@ -210,8 +210,6 @@ async function refreshLive(reset) {
       pbFailCnt++;
       updateRefreshAlarm();
     });
-    // 严重顶背离报警（语音+声音+横幅）
-    pollDivergence();
     updateRefreshAlarm();   // fix P1-6: 主链路成功后收敛告警状态
   } catch (e) {
     // fix P1-6: 实时轮询失败计数（仍不打断主界面），≥3 次状态栏红色告警
@@ -543,27 +541,6 @@ function ensureAudio() {
   return audioCtx;
 }
 
-/* 严重顶背离报警 */
-async function pollDivergence() {
-  try {
-    const r = await apiCall("alert_severe_divergence");
-    const alerts = (r && r.alerts) || [];
-    alerts.forEach(a => {
-      // 语音报警
-      try {
-        if (window.speechSynthesis) {
-          const u = new SpeechSynthesisUtterance(a.message);
-          u.lang = "zh-CN"; u.rate = 0.9;
-          window.speechSynthesis.speak(u);
-        }
-      } catch (e) { /* 静默 */ }
-      // 横幅 + 声音
-      pushAlert({ decision: "DIVERGENCE", code: a.code, name: a.name,
-        price: a.price, score: 100, type: null, scan_time: nowTime(), message: a.message });
-    });
-  } catch (e) { /* 静默 */ }
-}
-
 function beepTone(ctx, freq, when, dur) {
   const osc = ctx.createOscillator();
   const gain = ctx.createGain();
@@ -582,9 +559,7 @@ function playAlert(kind) {
     const ctx = ensureAudio();
     if (!ctx) return;
     const t0 = ctx.currentTime + 0.02;
-    if (kind === "DIVERGENCE") {       // 顶背离: 六连急促音(520Hz)
-      for (let i = 0; i < 6; i++) beepTone(ctx, 520, t0 + i * 0.15, 0.12);
-    } else if (kind === "PANIC_SELL") {       // 五连最长促音（660Hz）
+    if (kind === "PANIC_SELL") {       // 五连最长促音（660Hz）
       for (let i = 0; i < 5; i++) beepTone(ctx, 660, t0 + i * 0.2, 0.14);
     } else if (kind === "SELL_HIGH") { // 高频三连（880Hz）
       for (let i = 0; i < 3; i++) beepTone(ctx, 880, t0 + i * 0.2, 0.12);
@@ -596,8 +571,8 @@ function playAlert(kind) {
   } catch (e) { /* 音频异常不影响横幅 */ }
 }
 
-const DEC_CN = { SELL_HIGH: "卖出", BUY_LOW: "买入", ADD_POS: "加仓", PANIC_SELL: "恐慌卖", DIVERGENCE: "严重顶背离" };
-const DEC_ICON = { SELL_HIGH: "🔴", BUY_LOW: "🟢", ADD_POS: "🔵", PANIC_SELL: "⛔", DIVERGENCE: "🚨" };
+const DEC_CN = { SELL_HIGH: "卖出", BUY_LOW: "买入", ADD_POS: "加仓", PANIC_SELL: "恐慌卖" };
+const DEC_ICON = { SELL_HIGH: "🔴", BUY_LOW: "🟢", ADD_POS: "🔵", PANIC_SELL: "⛔" };
 
 function pushAlert(s) {
   const banner = document.getElementById("alertBanner");
@@ -856,7 +831,8 @@ function renderK4Trend(points) {
 function renderPositions(pos, nameMap) {
   const el = document.getElementById("positionsBody");
   const cur = (pos && pos.current) || {};
-  const codes = Object.keys(cur);
+  // fix 2026-08-20: 只显示有效持仓(qty>0)，已清仓的(qty=0)不进对照表
+  const codes = Object.keys(cur).filter(c => (cur[c] && (cur[c].qty || 0) > 0));
   if (!codes.length) {
     el.innerHTML = '<div class="empty">无持仓数据</div>';
     return;
@@ -1188,6 +1164,30 @@ function renderPB(pb) {
       const _goTxt = _tm.go ? "GO" : "NO-GO";
       tmBadge = `<span class="badge" title="时机门控: ${esc(_tm.reason || "")}" style="background:${_goCls};color:#fff">${esc(_regimeCn)}·${_goTxt}</span>`;
     }
+    // 30/60分钟线背离（2026-08-19 验证后收窄：仅 60min 连续底背离高亮，其余仅供参考）
+    const dv = r.divergence || {};
+    const dvd = r.divergence_detail || {};
+    const dvParts = ["m30", "m60"].map(k => {
+      const v = dv[k];
+      const dd = dvd[k];
+      if (!v) return "";
+      const freq = k === "m30" ? "30" : "60";
+      const icon = v === "顶背离" ? "⛔" : "✅";
+      const consec = !!(dd && dd.consec);
+      // 60分钟连续底背离：唯一验证有效的信号，高亮
+      if (k === "m60" && dd && dd.type === "底背离" && consec) {
+        return `<span class="badge t-long" title="60分钟连续底背离（180天验证：命中率60% vs 基线47%，样本40）">60分✅连续底</span>`;
+      }
+      // 其余连续背离：标注"连续"（信息性，验证命中率≈随机基线，仅供参考）
+      if (consec) {
+        const lbl = v === "顶背离" ? "连续顶" : "连续底";
+        return `<span class="badge" title="${k.toUpperCase()} ${v}（连续背离；验证：命中率≈随机基线，仅供参考）">${freq}分${icon}${lbl}</span>`;
+      }
+      return `<span class="badge" title="${k.toUpperCase()} ${v}（验证：命中率≈随机基线，仅供参考）">${freq}分${icon}</span>`;
+    }).filter(Boolean);
+    const dvCell = dvParts.length
+      ? `<td style="text-align:center">${dvParts.join(" ")}</td>`
+      : `<td class="cell-dim" style="text-align:center">—</td>`;
     return `
       <tr id="pb-row-${esc(r.code || '')}" ondblclick="openStockChart('${esc(r.code||'')}','${esc(r.name||r.code||'')}')" style="cursor:pointer;${isStale ? "opacity:.45;" : ""}" title="双击看K线${isStale ? "（数据陈旧，距今超过10分钟）" : ""}">
         <td>${esc(r.name || "")} <span class="mono cell-dim">${esc(r.code || "")}</span>
@@ -1199,6 +1199,7 @@ function renderPB(pb) {
         <td style="text-align:center">${boxStr}</td>
         <td style="max-width:220px;line-height:1.7">${tagsTxt}</td>
         <td><span class="cond" title="${esc(condTitle)}">${condStr}</span></td>
+        ${dvCell}
         <td class="num">${fmt(r.suggested_qty, 0)}</td>
         <td class="num">${fmt(r.suggested_price)}</td>
         <td class="num">${fmt(r.capital_required, 0)}</td>
@@ -1229,9 +1230,10 @@ function renderPB(pb) {
           <th title="突破箱体=第一优先级">突破</th>
           <th title="通道/箱体/背离等技术形态">技术标签</th>
           <th title="时机门控：市场有方向/多头结构/回撤到位（GO→signal，震荡→降频）">时机条件</th>
+          <th title="背离显示连续标记：60分连续底背离高亮（180天验证有区分度）；其余连续/单次背离命中率≈随机基线，仅供参考">背离</th>
           <th class="num">建议股数</th><th class="num">建议价</th><th class="num">所需资金</th><th>扫描</th><th></th>
         </tr></thead>
-        <tbody>${rows || '<tr><td colspan="9" class="empty">无扫描结果</td></tr>'}</tbody>
+        <tbody>${rows || '<tr><td colspan="14" class="empty">无扫描结果</td></tr>'}</tbody>
       </table>
       <div class="cell-dim" style="font-size:11px;margin-top:8px">●=通过 ○=未通过 · 时机条件：${Object.values(condLabels).join(" / ")} · GO(多头追强/空头抄底)→signal，震荡→降频 · 盘中每10s刷新</div>
     </div>`;
