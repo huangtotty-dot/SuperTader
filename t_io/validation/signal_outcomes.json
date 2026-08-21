@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-08-21 15:40:52",
+  "generated_at": "2026-08-21 15:59:12",
   "params": {
     "days": null,
     "min_samples": 20,
@@ -66,8 +66,34 @@
         }
       }
     },
+    "watch_signal": {
+      "samples": 1,
+      "horizons": {
+        "1": {
+          "n": 0,
+          "avg_ret": null,
+          "win_rate": null,
+          "beat_benchmark_rate": null,
+          "avg_max_drawdown": null
+        },
+        "3": {
+          "n": 0,
+          "avg_ret": null,
+          "win_rate": null,
+          "beat_benchmark_rate": null,
+          "avg_max_drawdown": null
+        },
+        "5": {
+          "n": 0,
+          "avg_ret": null,
+          "win_rate": null,
+          "beat_benchmark_rate": null,
+          "avg_max_drawdown": null
+        }
+      }
+    },
     "weak": {
-      "samples": 390,
+      "samples": 389,
       "horizons": {
         "1": {
           "n": 0,
@@ -952,11 +978,43 @@
       "code": "002202",
       "name": "金风科技",
       "date": "2026-08-21",
-      "scan_time": "2026-08-21 14:50:37",
-      "verdict": "weak",
-      "price": 19.22,
-      "score": 0,
-      "returns": null
+      "scan_time": "2026-08-21 15:50:41",
+      "verdict": "watch_signal",
+      "price": 19.19,
+      "score": 60,
+      "kline_source": "cache+tencent",
+      "returns": {
+        "1": {
+          "date": null,
+          "close": null,
+          "ret": null,
+          "status": "unavailable",
+          "reason": "目标交易日数据未到期或获取失败",
+          "max_drawdown": null,
+          "benchmark_ret": null,
+          "beat_benchmark": null
+        },
+        "3": {
+          "date": null,
+          "close": null,
+          "ret": null,
+          "status": "unavailable",
+          "reason": "目标交易日数据未到期或获取失败",
+          "max_drawdown": null,
+          "benchmark_ret": null,
+          "beat_benchmark": null
+        },
+        "5": {
+          "date": null,
+          "close": null,
+          "ret": null,
+          "status": "unavailable",
+          "reason": "目标交易日数据未到期或获取失败",
+          "max_drawdown": null,
+          "benchmark_ret": null,
+          "beat_benchmark": null
+        }
+      }
     },
     {
       "code": "002261",
