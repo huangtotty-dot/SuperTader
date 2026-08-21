@@ -747,3 +747,15 @@ print("KPI JSON:", OUT / f"kpi_{DATE}.json")
 print("settle_by_code:", json.dumps(settle_by_code, ensure_ascii=False))
 print("watch:", json.dumps(watch, ensure_ascii=False, default=str)[:600])
 print("JSON:", OUT / f"daily_review_{DATE}.json")
+
+# ---------- A-1: 每日结算信号前瞻（signal_outcomes.json），接入每日管线 ----------
+try:
+    import importlib.util as _ilu
+    _p = BASE / "t_io" / "validation" / "signal_outcome_tracker.py"
+    _spec = _ilu.spec_from_file_location("signal_outcome_tracker", _p)
+    _mod = _ilu.module_from_spec(_spec)
+    _spec.loader.exec_module(_mod)
+    _mod.run_settle(days=None)
+    print("[tracker] signal_outcomes 已结算（A-1，含退出侧 max_drawdown）")
+except Exception as _e:
+    print(f"[warn] signal_outcomes 结算失败: {_e}")

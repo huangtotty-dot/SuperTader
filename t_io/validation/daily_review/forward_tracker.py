@@ -14,7 +14,9 @@ import argparse
 import sys
 from pathlib import Path
 
-BASE = Path(r"E:\06_T")
+# fix 2026-08-21 (A-1): BASE 自解析，不再硬编码已失效的 E:\06_T
+# 文件位于 <root>/t_io/validation/daily_review/，上三级即项目根目录
+BASE = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(BASE))
 
 from position_builder import fetch_daily_kline  # noqa: E402

@@ -142,11 +142,16 @@ def calc_horizon_returns(rows, signal_date: str, entry_price):
         j = idx + h
         if j < len(dates):
             c = closes[dates[j]]
+            # 退出侧(A-1): 持有期内(信号日后第1..N个交易日)最低价相对入场价的最大浮亏
+            seg = rows[idx + 1:j + 1]
+            min_low = min((r["low"] for r in seg if r.get("low")), default=None) if seg else None
             res[h] = {"date": dates[j], "close": c,
-                      "ret": round(c / base - 1, 4), "status": "ok", "reason": ""}
+                      "ret": round(c / base - 1, 4), "status": "ok", "reason": "",
+                      "max_drawdown": round(min_low / base - 1, 4) if min_low else None}
         else:
             res[h] = {"date": None, "close": None, "ret": None,
-                      "status": "unavailable", "reason": "目标交易日数据未到期或获取失败"}
+                      "status": "unavailable", "reason": "目标交易日数据未到期或获取失败",
+                      "max_drawdown": None}
     return res
 
 
@@ -196,11 +201,14 @@ def summarize(records):
             beats = [r["returns"][str(h)]["beat_benchmark"] for r in group
                      if r.get("returns") and r["returns"][str(h)]["status"] == "ok"
                      and r["returns"][str(h)]["beat_benchmark"] is not None]
+            mdd = [r["returns"][str(h)]["max_drawdown"] for r in group
+                   if r.get("returns") and r["returns"][str(h)].get("max_drawdown") is not None]
             entry["horizons"][str(h)] = {
                 "n": len(rets),
                 "avg_ret": round(sum(rets) / len(rets), 4) if rets else None,
                 "win_rate": round(sum(1 for x in rets if x > 0) / len(rets), 4) if rets else None,
                 "beat_benchmark_rate": round(sum(1 for x in beats if x) / len(beats), 4) if beats else None,
+                "avg_max_drawdown": round(sum(mdd) / len(mdd), 4) if mdd else None,
             }
         summary[v] = entry
     return summary
@@ -224,14 +232,11 @@ def sample_sufficient(out_json_path: str = OUT_JSON,
 
 
 # ---------------------------------------------------------------- 主流程
-def main():
-    ap = argparse.ArgumentParser(description="建仓信号有效性追踪（T+1/T+3/T+5 对照）")
-    ap.add_argument("--days", type=int, default=None, help="只处理最近 N 个 trace 日（默认全部）")
-    ap.add_argument("--min-samples", type=int, default=MIN_SAMPLES_DEFAULT, help="样本充足阈值（默认 20）")
-    args = ap.parse_args()
-
+def run_settle(days=None, min_samples=MIN_SAMPLES_DEFAULT):
+    """可编程结算入口（A-1：供 daily_review 每日调用）。
+    读 position_builder trace 全量重算 signal_outcomes.json，含退出侧 max_drawdown。"""
     os.makedirs(OUT_DIR, exist_ok=True)
-    verdicts = load_final_verdicts(days=args.days)
+    verdicts = load_final_verdicts(days=days)
     print(f"[tracker] 最终 verdict 记录 {len(verdicts)} 条"
           f"（signal/approaching/weak 各 "
           f"{sum(1 for r in verdicts if r['verdict']=='signal')}/"
@@ -289,12 +294,13 @@ def main():
 
     payload = {
         "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        "params": {"days": args.days, "min_samples": args.min_samples,
+        "params": {"days": days, "min_samples": min_samples,
                    "horizons": list(HORIZONS), "benchmark": "沪深300(sh000300)"},
         "note": "入场价为 trace 内当时价格（盘中扫描时为现价）；"
-                "持有收益以信号日收盘为基准计算；unavailable=数据未到期或获取失败",
+                "持有收益以信号日收盘为基准计算；max_drawdown=持有期内最低价相对入场价最大浮亏；"
+                "unavailable=数据未到期或获取失败",
         "signal_verified_samples_t5": sig_verified,
-        "sample_sufficient": sig_verified >= args.min_samples,
+        "sample_sufficient": sig_verified >= min_samples,
         "summary": summary,
         "records": records,
     }
@@ -303,27 +309,37 @@ def main():
 
     # ---- markdown 汇总 ----
     L = ["# 建仓信号有效性追踪汇总", "",
-         f"生成时间：{payload['generated_at']}　基准：沪深300　样本充足阈值：{args.min_samples}", ""]
-    if sig_verified < args.min_samples:
+         f"生成时间：{payload['generated_at']}　基准：沪深300　样本充足阈值：{min_samples}", ""]
+    if sig_verified < min_samples:
         L += [f"> ⚠️ **样本不足，仅供 shadow 观察**（signal 的 T+5 已验证样本 "
-              f"{sig_verified}/{args.min_samples}）", ""]
-    L += ["| verdict | 样本数 | horizon | 有效n | 平均收益 | 胜率 | 跑赢基准率 |",
-          "|---|---|---|---|---|---|---|"]
+              f"{sig_verified}/{min_samples}）", ""]
+    L += ["| verdict | 样本数 | horizon | 有效n | 平均收益 | 胜率 | 跑赢基准率 | 平均最大浮亏 |",
+          "|---|---|---|---|---|---|---|---|"]
     for v in ALL_VERDICTS:
         s = summary[v]
         for h in HORIZONS:
             hz = s["horizons"][str(h)]
             fmt = lambda x: ("%.2f%%" % (x * 100)) if x is not None else "—"
             L.append(f"| {v} | {s['samples']} | T+{h} | {hz['n']} | "
-                     f"{fmt(hz['avg_ret'])} | {fmt(hz['win_rate'])} | {fmt(hz['beat_benchmark_rate'])} |")
+                     f"{fmt(hz['avg_ret'])} | {fmt(hz['win_rate'])} | "
+                     f"{fmt(hz['beat_benchmark_rate'])} | {fmt(hz['avg_max_drawdown'])} |")
     L += ["", f"明细机读文件：`t_io/validation/signal_outcomes.json`（{len(records)} 条记录）", ""]
     with open(OUT_MD, "w", encoding="utf-8") as f:
         f.write("\n".join(L))
 
     print(f"[tracker] 已写出 {OUT_JSON}")
     print(f"[tracker] 已写出 {OUT_MD}")
-    print(f"[tracker] signal T+5 已验证样本 {sig_verified}/{args.min_samples} → "
-          f"sample_sufficient={sig_verified >= args.min_samples}")
+    print(f"[tracker] signal T+5 已验证样本 {sig_verified}/{min_samples} → "
+          f"sample_sufficient={sig_verified >= min_samples}")
+    return payload
+
+
+def main():
+    ap = argparse.ArgumentParser(description="建仓信号有效性追踪（T+1/T+3/T+5 对照）")
+    ap.add_argument("--days", type=int, default=None, help="只处理最近 N 个 trace 日（默认全部）")
+    ap.add_argument("--min-samples", type=int, default=MIN_SAMPLES_DEFAULT, help="样本充足阈值（默认 20）")
+    args = ap.parse_args()
+    run_settle(days=args.days, min_samples=args.min_samples)
     return 0
 
 
