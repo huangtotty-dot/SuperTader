@@ -727,11 +727,25 @@ INDEX_RESONANCE_MAP = {
 ENTRY_TIMING_PARAMS = {
     "enabled": True,          # 总开关；False 时不参与建仓/加仓判定
     "regime_ma60": True,      # 用指数 vs MA60 定市场状态
+    "regime_up_buffer": 1.005,  # B-3(2026-08-21): 多头缓冲带 close>MA60*1.005 才 trend_up；中间带归 range，防 razor 横跳
     "trend_up_drawdown_min": -0.03,   # 多头趋势：浅回撤阈值（追强）
     "trend_dn_drawdown_max": -0.10,   # 空头趋势：深回撤阈值（抄底）
     "trend_dn_rsi_max": 20.0,         # 空头趋势：RSI(14) 深度超卖阈值（抄底超卖极值，2026-08-16 实验两时段稳健）
     "apply_to_add": True,     # 加仓侧也应用时机门控（NO-GO 时阻断加仓买入，降频）
     "add_block_rebuild": True,  # NO-GO 时是否也阻断"接回"(rebuild)；False=仅阻断首加
+}
+
+# ==================== B-2: C20 竞价现实校验（2026-08-21 评审通过，双条件与门） ====================
+# 09:26 基调推送前校验：持仓缺口(gap_med) 与 Top20 竞价跌占比 双条件，只纠"乐观错"不纠"悲观错"
+# Level1(降级标注黄条): gap_med<=l1_gap 且 top20跌占比>=l1_top20_down_ratio
+# Level2(推翻基调红条): gap_med<=l2_gap 且 top20跌占比>=l2_top20_down_ratio
+# Top20 缺失(top20_status=empty)时退化为缺口单条件，卡片标注"Top20缺失·单条件"
+C20_AUCTION_CHECK = {
+    "enabled": True,          # 总开关；False 时跳过竞价校验（回滚用）
+    "l1_gap": -1.0,           # Level1 持仓缺口中位数阈值(%)
+    "l2_gap": -2.5,           # Level2 持仓缺口中位数阈值(%)
+    "l1_top20_down_ratio": 0.60,  # Level1 Top20 跌家占比阈值
+    "l2_top20_down_ratio": 0.75,  # Level2 Top20 跌家占比阈值
 }
 
 # ==================== V1.26: T模式配置（正T/反T切换） ====================
