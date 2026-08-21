@@ -122,8 +122,6 @@ class Api:
         self._dt = {"date": None, "offset": 0, "seen": set()}
         # 建仓/加仓信号增量轮询内存态
         self._pos = {"date": None, "offset": 0, "seen": set()}
-        # 顶背离报警去重：{date: set(codes)}
-        self._div_alerted = {}
 
     # ---------- 日期发现 ----------
     def available_dates(self):
@@ -658,9 +656,11 @@ class Api:
             return out
 
         # 先尝试加载当前快照获取 daily_context（含 MA 支撑位）
-        for code in cur:
-            if not isinstance(cur[code], dict):
+        for code, info in cur.items():
+            if not isinstance(info, dict):
                 continue
+            if not (info.get("qty") or 0):
+                continue  # fix 2026-08-20: 已清仓(qty=0)不进加仓观察
             # 找分钟快照
             ym = datetime.strptime(date, "%Y-%m-%d").strftime("%Y/%m") if len(date) == 10 else datetime.now().strftime("%Y/%m")
             snap_dir = SNAPSHOT_DIR = BASE / "t_io" / "minute_snapshots" / ym
@@ -838,7 +838,7 @@ class Api:
                 "timing": _tm,
             }
 
-        total = len([c for c in cur if isinstance(cur.get(c), dict)])
+        total = len([c for c in cur if isinstance(cur.get(c), dict) and (cur.get(c, {}).get("qty") or 0) > 0])
         ok = len(out)
         # fix P1-10: _progress 为内部统计键，以 _ 前缀标识，前端按 _ 前缀过滤，不计入股票数
         out["_progress"] = {"total_holdings": total, "snapshots_ok": ok, "snapshots_miss": total - ok}
@@ -928,6 +928,8 @@ class Api:
         for code, info in cur.items():
             if not isinstance(info, dict) or code.startswith("_"):
                 continue
+            if not (info.get("qty") or 0):
+                continue  # fix 2026-08-20: 已清仓(qty=0)不进入持仓体检
             base_code = code.split("_")[0]  # 000988_B → 000988
             h = self.load_stock_chart(base_code)
             if not h.get("available"):
@@ -1048,60 +1050,13 @@ class Api:
 
     # ---------- 严重顶背离报警 ----------
     def alert_severe_divergence(self, date=None):
-        """检测严重顶背离（≥2指标背离），每日每股只报一次，推送飞书。
-        返回 {alerts: [{code, name, price, div_types, message}]}。"""
-        if not date:
-            date = datetime.now().strftime("%Y-%m-%d")
-        today = date
-        ob = self.load_ob_analysis()
-        alerts = []
-        day_set = self._div_alerted.setdefault(today, set())
+        """严重顶背离告警——已停用（2026-08-19）。
 
-        for s in ob.get("stocks", []):
-            if "error" in s:
-                continue
-            dv = s.get("divergence", {})
-            if dv.get("count", 0) < 2:
-                continue  # 非严重（<2 指标背离）
-            if s["code"] in day_set:
-                continue  # 当日已报过
-            day_set.add(s["code"])
-
-            div_types = []
-            if dv.get("macd"): div_types.append("MACD")
-            if dv.get("rsi"): div_types.append("RSI")
-            if dv.get("kdj"): div_types.append("KDJ")
-            if dv.get("vol"): div_types.append("量价")
-            message = (f"{s['name']} 严重顶背离! 现价{s['price']} "
-                       f"{'+'.join(div_types)}双背离, 价格创新高但指标未创新高, 注意回调风险")
-            alerts.append({
-                "code": s["code"], "name": s["name"], "price": s["price"],
-                "div_types": div_types, "message": message,
-            })
-
-            # 飞书推送
-            try:
-                from config import send_feishu_payload
-                div_txt = " + ".join(div_types)
-                card = {
-                    "msg_type": "interactive",
-                    "card": {
-                        "header": {"template": "red",
-                                   "title": {"tag": "plain_text", "content": "🚨 严重顶背离警报"}},
-                        "elements": [{"tag": "markdown", "content": (
-                            f"**{s['name']}（{s['code']}）** 现价 {s['price']}\n\n"
-                            f"**{div_txt} 双背离**\n\n"
-                            f"→ 价格创新高但指标未创新高，注意回调风险\n\n"
-                            f"⚠ 建议：不追高，警惕反转")}],
-                    },
-                }
-                send_feishu_payload(card,
-                                   success_log=f"严重顶背离飞书推送: {s['code']}",
-                                   error_prefix=f"顶背离推送({s['code']})")
-            except Exception:
-                pass
-
-        return _clean({"alerts": alerts})
+        极值后市确认验证（37只候选池、约3年、1819事件，见 t_io/validation/w35_divergence/
+        divergence_验证报告_daily.md）显示：count≥2 顶背离命中率53.4%反而低于无背离基线
+        57.8%，告警无区分度、会大量误报，故不再推送飞书/触发独立警报。
+        持仓体检表(load_ob_analysis)仍展示顶背离信息，供与超买/趋势组合参考。"""
+        return _clean({"alerts": [], "disabled": True})
 
     # ---------- 个股技术分析弹窗 ----------
     def load_stock_chart(self, code):
@@ -2511,6 +2466,8 @@ class Api:
                 mkt_val += px * qty
                 total_qty += qty
                 cost_total += float(h.get("cost") or 0) * qty
+            if total_qty <= 0:
+                continue  # fix 2026-08-20: 已清仓(base 全部 qty=0)不进仓位管理器
             raw.append({"base": base, "name": info["name"], "raw_pct": raw_pct,
                         "mkt_val": mkt_val, "total_qty": total_qty,
                         "cost": (cost_total / total_qty) if total_qty else 0})
@@ -2944,6 +2901,9 @@ class Api:
             row["_intraday_best_score"] = (intraday or {}).get("composite_score")
             row["_scans"] = sum(v.get("scans", 0) for v in rec.values())
             row.setdefault("scan_time", "")  # fix P0-14: 每行确保带 scan_time 字段
+            # fix 2026-08-20: in_holdings 实时对齐 holdings.json（qty>0 才算持仓，trace/watchlist 字段可能陈旧）
+            row["in_holdings"] = bool((holdings.get(code) or {}).get("qty") or 0) or \
+                bool((holdings.get(code.split("_")[0]) or {}).get("qty") or 0)
             rows.append(row)
 
         # 未扫描的 watchlist 股票：作为"等待扫描"添加
@@ -2952,7 +2912,9 @@ class Api:
             if not isinstance(info, dict): continue
             if code in scanned_codes: continue
             if info.get("status") not in ("monitoring", "signal", None): continue
-            in_hold = code in holdings and isinstance(holdings.get(code), dict)
+            # fix 2026-08-20: qty>0 才算持仓（已清仓的 holdings 记录不算）
+            in_hold = bool((holdings.get(code) or {}).get("qty") or 0) or \
+                bool((holdings.get(code.split("_")[0]) or {}).get("qty") or 0)
             rows.append({
                 "code": code, "name": info.get("name", code),
                 "verdict": "pending", "composite_score": 0,

@@ -1,94 +1,94 @@
 {
-  "date": "2026-08-17",
+  "date": "2026-08-21",
   "cycle_count": {
-    "600481": 2
+    "603667": 2
   },
   "buy_count": {},
   "sell_count": {},
   "trend_regimes": {
     "588170": {
-      "state": "BULL",
+      "state": "BEAR",
       "confidence": 0.55,
       "pending_state": null,
       "pending_bars": 0,
-      "last_dif": 0.008346378444504587,
-      "last_dea": 0.008762985015239862,
-      "last_rsi": 65.30612244897944,
-      "prev_rsi": 62.74509803921582,
-      "bb_mid_slope": 0.001267678917742688,
-      "bb_width_ratio": 0.8462602014435014
+      "last_dif": -0.0020328449844533303,
+      "last_dea": -0.0009902101161880733,
+      "last_rsi": 45.45454545454564,
+      "prev_rsi": 50.0,
+      "bb_mid_slope": -0.0008223360252119191,
+      "bb_width_ratio": 0.8292399812349873
     },
     "600176": {
       "state": "BULL",
       "confidence": 0.55,
       "pending_state": null,
       "pending_bars": 0,
-      "last_dif": 0.10556519898482009,
-      "last_dea": 0.11290173158661787,
-      "last_rsi": 62.06896551724133,
-      "prev_rsi": 60.18957345971567,
-      "bb_mid_slope": -9.656070304887382e-05,
-      "bb_width_ratio": 0.9004906237324071
+      "last_dif": 0.2034357101516875,
+      "last_dea": 0.2656061352272369,
+      "last_rsi": 60.47904191616765,
+      "prev_rsi": 66.43356643356616,
+      "bb_mid_slope": -2.6660526666674003e-05,
+      "bb_width_ratio": 0.8632390441020056
     },
     "600481": {
-      "state": "NEUTRAL",
-      "confidence": 0.5,
-      "pending_state": "BULL",
+      "state": "BULL",
+      "confidence": 0.55,
+      "pending_state": "NEUTRAL",
       "pending_bars": 1,
-      "last_dif": 0.0013650246962715329,
-      "last_dea": 9.644507098425321e-05,
-      "last_rsi": 63.63636363636393,
-      "prev_rsi": 54.545454545454476,
-      "bb_mid_slope": -0.00012594458438301858,
-      "bb_width_ratio": 0.819291441919534
+      "last_dif": -0.0016954708554406395,
+      "last_dea": 0.003466815058880255,
+      "last_rsi": 27.272727272727053,
+      "prev_rsi": 46.15384615384621,
+      "bb_mid_slope": -0.0004735969689794396,
+      "bb_width_ratio": 1.0884986419262637
     },
     "603667": {
       "state": "BULL",
       "confidence": 0.55,
       "pending_state": null,
       "pending_bars": 0,
-      "last_dif": 0.19527018514101968,
-      "last_dea": 0.11706433159222647,
-      "last_rsi": 79.71014492753595,
-      "prev_rsi": 67.33668341708528,
-      "bb_mid_slope": 0.000613491381260351,
-      "bb_width_ratio": 1.260947553713824
+      "last_dif": 0.3392428730804937,
+      "last_dea": 0.3278148592006722,
+      "last_rsi": 67.25146198830426,
+      "prev_rsi": 77.02127659574467,
+      "bb_mid_slope": 0.0010701333703254982,
+      "bb_width_ratio": 0.7733660600043758
     },
     "000988": {
       "state": "BULL",
       "confidence": 0.55,
       "pending_state": null,
       "pending_bars": 0,
-      "last_dif": 0.29288321808783735,
-      "last_dea": 0.22176706388339112,
-      "last_rsi": 67.55646817248467,
-      "prev_rsi": 62.04238921001928,
-      "bb_mid_slope": 0.0004998050088082366,
-      "bb_width_ratio": 0.9448233579116176
+      "last_dif": 0.19390860225632878,
+      "last_dea": 0.3391417464247704,
+      "last_rsi": 51.70278637770898,
+      "prev_rsi": 59.489051094890456,
+      "bb_mid_slope": -0.0003698176254705461,
+      "bb_width_ratio": 0.9318827494496384
     },
     "000988_B": {
       "state": "BULL",
       "confidence": 0.55,
       "pending_state": null,
       "pending_bars": 0,
-      "last_dif": 0.29687182207644014,
-      "last_dea": 0.22256478468111168,
-      "last_rsi": 67.88617886178866,
-      "prev_rsi": 62.16216216216223,
-      "bb_mid_slope": 0.0005042762627077896,
-      "bb_width_ratio": 0.9475871307037678
+      "last_dif": 0.19390860225632878,
+      "last_dea": 0.3391417464247704,
+      "last_rsi": 51.70278637770898,
+      "prev_rsi": 58.11320754716992,
+      "bb_mid_slope": -0.0003698176254705461,
+      "bb_width_ratio": 0.9318827494496384
     },
     "002639": {
       "state": "BULL",
       "confidence": 0.55,
       "pending_state": null,
       "pending_bars": 0,
-      "last_dif": 0.040654353387797215,
-      "last_dea": 0.03691446005775541,
-      "last_rsi": 77.27272727272702,
-      "prev_rsi": 77.27272727272702,
-      "bb_mid_slope": 0.0004049410994763173,
-      "bb_width_ratio": 1.0698411780600383
+      "last_dif": 0.032533325581068695,
+      "last_dea": 0.044637018677974566,
+      "last_rsi": 50.0,
+      "prev_rsi": 59.25925925925953,
+      "bb_mid_slope": -7.392911502516579e-05,
+      "bb_width_ratio": 0.7283697961930758
     }
   }
 }

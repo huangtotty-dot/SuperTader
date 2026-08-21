@@ -1,0 +1,78 @@
+{
+  "method": "极值后市确认",
+  "params": {
+    "K_DAYS": 3,
+    "R_PCT": 0.03,
+    "WARMUP": 40
+  },
+  "stocks": 37,
+  "agg": {
+    "30min": {
+      "top": {
+        "events": 102,
+        "hit": 23,
+        "rate": 0.22549019607843138,
+        "consec_events": 20,
+        "consec_hit": 5,
+        "consec_rate": 0.25
+      },
+      "bottom": {
+        "events": 58,
+        "hit": 31,
+        "rate": 0.5344827586206896,
+        "consec_events": 4,
+        "consec_hit": 3,
+        "consec_rate": 0.75
+      },
+      "base_top_rate": 0.23909531502423265,
+      "base_bot_rate": 0.40654205607476634,
+      "cov_top": 0.13450292397660818,
+      "cov_bot": 0.10616438356164383,
+      "top_fwd_ret": -0.0105,
+      "top_fwd_dd": -0.0511,
+      "bot_fwd_ret": 0.0923,
+      "bot_fwd_dd": 0.1272
+    },
+    "60min": {
+      "top": {
+        "events": 38,
+        "hit": 11,
+        "rate": 0.2894736842105263,
+        "consec_events": 8,
+        "consec_hit": 5,
+        "consec_rate": 0.625
+      },
+      "bottom": {
+        "events": 27,
+        "hit": 13,
+        "rate": 0.48148148148148145,
+        "consec_events": 5,
+        "consec_hit": 2,
+        "consec_rate": 0.4
+      },
+      "base_top_rate": 0.32661290322580644,
+      "base_bot_rate": 0.5650406504065041,
+      "cov_top": 0.11956521739130435,
+      "cov_bot": 0.08552631578947369,
+      "top_fwd_ret": -0.0036,
+      "top_fwd_dd": -0.0524,
+      "bot_fwd_ret": 0.0628,
+      "bot_fwd_dd": 0.1155
+    },
+    "resonance": {
+      "顶": {
+        "n30": 27,
+        "hit30": 5,
+        "n60": 27,
+        "hit60": 6
+      },
+      "底": {
+        "n30": 12,
+        "hit30": 5,
+        "n60": 12,
+        "hit60": 6
+      }
+    }
+  },
+  "generated_at": "2026-08-19 17:14:53"
+}
