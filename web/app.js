@@ -2564,13 +2564,48 @@ function renderRotation(m) {
   document.getElementById("rotTitle").textContent = `${ROT_VIEW_LABEL[rotState.view] || ""} | ${m.as_of} | ${m.market_state}`;
 }
 
+const ROT_RANK_COLS = ["行业名称", "活跃分", "1日涨幅", "3日涨幅", "5日涨幅", "相对强弱", "动量"];
+const ROT_RANK_TOP_COLS = ["行业名称", "5日涨幅", "活跃分", "相对强弱", "动量"];
+
+function showRotationSectorList(title, sectors, cols) {
+  /* 2026-08-22: KPI 数字双击查看明细——板块排名 / Top5 5日涨幅 */
+  const overlay = document.createElement("div");
+  overlay.className = "modal-mask";
+  overlay.innerHTML = `<div class="modal" style="width:600px;max-height:80vh">
+    <div class="modal-title"><span>${esc(title)}</span>
+      <button class="mini-btn" onclick="this.closest('.modal-mask').remove()">×</button></div>
+    <div class="modal-body" style="font-size:12px;overflow:auto">
+      ${sectors.length
+        ? `<table class="h-table"><thead><tr>${cols.map(c => `<th class="${typeof sectors[0][c] === "number" ? "num" : ""}">${esc(c)}</th>`).join("")}</tr></thead>
+           <tbody>${sectors.map(s => `<tr>${cols.map(c => `<td class="${typeof s[c] === "number" ? "num" : ""}">${rotCell(s[c], c)}</td>`).join("")}</tr>`).join("")}</tbody></table>`
+        : '<div class="empty">无数据</div>'}
+    </div>
+  </div>`;
+  document.body.appendChild(overlay);
+}
+
 function renderRotationKpi(m) {
   const grid = document.getElementById("rotKpi");
-  const entries = [["市场状态", m.market_state], ...Object.entries(m.summary || {})];
-  grid.innerHTML = entries.map(([k, v]) =>
-    `<div class="card" style="padding:8px 10px"><div class="card-title">${esc(k)}</div>` +
-    `<div class="num" style="font-size:15px;font-weight:700">${fmt(v, 2)}</div></div>`
+  const sf = m.sector_frame || [];
+  const byPhase = ph => sf.filter(x => x["阶段"] === ph)
+    .sort((a, b) => (b["活跃分"] || 0) - (a["活跃分"] || 0));
+  const top5 = () => sf.slice().sort((a, b) => (b["5日涨幅"] || 0) - (a["5日涨幅"] || 0)).slice(0, 5);
+  const clickHandlers = {
+    "领涨板块数": (v) => showRotationSectorList(`领涨板块排名（${v}）`, byPhase("领涨"), ROT_RANK_COLS),
+    "修复板块数": (v) => showRotationSectorList(`修复板块排名（${v}）`, byPhase("修复"), ROT_RANK_COLS),
+    "走弱板块数": (v) => showRotationSectorList(`走弱板块排名（${v}）`, byPhase("走弱"), ROT_RANK_COLS),
+    "退潮板块数": (v) => showRotationSectorList(`退潮板块排名（${v}）`, byPhase("退潮"), ROT_RANK_COLS),
+    "Top5平均5日涨幅": (v) => showRotationSectorList(`Top5 5日涨幅（均值 ${v}）`, top5(), ROT_RANK_TOP_COLS),
+  };
+  const entries = [["市场状态", m.market_state, null], ...Object.entries(m.summary || {}).map(([k, v]) => [k, v, clickHandlers[k] || null])];
+  grid.innerHTML = entries.map(([k, v, onClick], i) =>
+    `<div class="card" id="rotKpi-${i}" style="padding:8px 10px${onClick ? ";cursor:pointer" : ""}" ${onClick ? 'title="双击查看明细"' : ""}>
+      <div class="card-title">${esc(k)}</div>
+      <div class="num" style="font-size:15px;font-weight:700">${fmt(v, 2)}</div></div>`
   ).join("");
+  entries.forEach(([k, v, onClick], i) => {
+    if (onClick) grid.querySelector(`#rotKpi-${i}`).ondblclick = () => onClick(v);
+  });
 }
 
 function rotTooltip(p) {
@@ -2589,7 +2624,10 @@ function rotTooltip(p) {
 
 function renderRrgChart(m) {
   const el = document.getElementById("rotRrg");
-  if (!rotChart) rotChart = echarts.init(el);
+  if (!rotChart) {
+    rotChart = echarts.init(el);
+    echInstances["rotation"] = rotChart;   // fix: 注册到 echInstances，让 resizeAllEch/窗口resize 能处理
+  }
   const sectors = m.sector_frame || [];
   const trails = m.trail_frame || [];
   const phases = ["领涨", "修复", "走弱", "退潮"];
@@ -2599,7 +2637,11 @@ function renderRrgChart(m) {
   const scatterSeries = phases.map(ph => ({
     name: ph,
     type: "scatter",
-    symbolSize: s => Math.max(9, Math.min(42, (s["活跃分"] || 0) / 100 * 42)),
+    // fix 2026-08-22: symbolSize 参数是 echarts data item，须从 p.data.sector 取活跃分（原代码取 p["活跃分"] 恒 undefined → 点大小恒 9）
+    symbolSize: p => {
+      const act = p && p.data && p.data.sector ? (p.data.sector["活跃分"] || 0) : 0;
+      return Math.max(9, Math.min(42, act / 100 * 42));
+    },
     itemStyle: { color: ROT_PHASE_COLORS[ph], opacity: 0.85, borderColor: "#0d1117", borderWidth: 0.5 },
     label: { show: true, position: "right", fontSize: 10, color: "#d0d7de",
       formatter: p => topNames.has(p.data.name) ? p.data.name : "" },
