@@ -2494,6 +2494,202 @@ async function saveCalib() {
   }).catch(() => {});
 }
 
+/* ================= 板块轮动（移植自 sector-rotation-v2） ================= */
+const ROT_PHASE_COLORS = { "领涨": "#d62728", "修复": "#ff9f1c", "走弱": "#4c78a8", "退潮": "#2ca02c" };
+const ROT_VIEW_LABEL = { jiuyan: "韭研概念轮动", industry: "全市场行业轮动" };
+let rotState = { view: "jiuyan", date: null, tail: 18, data: null, table: "family" };
+let rotChart = null;
+let rotPollTimer = null;
+
+async function loadRotation(force) {
+  const statusEl2 = document.getElementById("rotStatus");
+  const wrap = document.getElementById("rotProgressWrap");
+  try {
+    if (force) rotState.date = null;   // 强制重新构建时重置日期，取最新
+    statusEl2.textContent = "加载中...";
+    const res = await apiCall("load_sector_rotation", rotState.date, rotState.view, rotState.tail);
+    if (res.status === "bootstrapping") {
+      statusEl2.textContent = "首次构建日线缓存（约几分钟），请稍候...";
+      wrap.style.display = "";
+      wrap.textContent = res.message || "";
+      pollRotationProgress();
+      return;
+    }
+    if (res.status === "error") {
+      statusEl2.textContent = "错误: " + (res.message || "");
+      return;
+    }
+    rotState.data = res;
+    renderRotation(res);
+    statusEl2.textContent = "";
+  } catch (e) {
+    statusEl2.textContent = "调用失败: " + e.message;
+  }
+}
+
+async function pollRotationProgress() {
+  if (rotPollTimer) return;
+  const statusEl2 = document.getElementById("rotStatus");
+  const wrap = document.getElementById("rotProgressWrap");
+  rotPollTimer = setInterval(async () => {
+    try {
+      const p = await apiCall("sector_rotation_progress");
+      if (p.error) statusEl2.textContent = "构建失败: " + p.error;
+      wrap.textContent = p.total ? `${p.phase} ${p.done}/${p.total}` : (p.phase || "构建中...");
+      if (!p.running) {
+        clearInterval(rotPollTimer);
+        rotPollTimer = null;
+        wrap.style.display = "none";
+        statusEl2.textContent = "";
+        await loadRotation(true);
+      }
+    } catch (e) { /* 静默 */ }
+  }, 1200);
+}
+
+function renderRotation(m) {
+  const dateSel = document.getElementById("rotDate");
+  if (dateSel.options.length === 0 || !rotState.date) {
+    dateSel.innerHTML = "";
+    (m.dates || []).slice().reverse().forEach(d => {
+      const o = document.createElement("option");
+      o.value = d; o.textContent = d;
+      dateSel.appendChild(o);
+    });
+    if (m.as_of) dateSel.value = m.as_of;
+  }
+  renderRotationKpi(m);
+  renderRrgChart(m);
+  renderRotationTable(m);
+  document.getElementById("rotTitle").textContent = `${ROT_VIEW_LABEL[rotState.view] || ""} | ${m.as_of} | ${m.market_state}`;
+}
+
+function renderRotationKpi(m) {
+  const grid = document.getElementById("rotKpi");
+  const entries = [["市场状态", m.market_state], ...Object.entries(m.summary || {})];
+  grid.innerHTML = entries.map(([k, v]) =>
+    `<div class="card" style="padding:8px 10px"><div class="card-title">${esc(k)}</div>` +
+    `<div class="num" style="font-size:15px;font-weight:700">${fmt(v, 2)}</div></div>`
+  ).join("");
+}
+
+function rotTooltip(p) {
+  const s = p.data && p.data.sector;
+  if (!s) return "";
+  const up = v => (v >= 0 ? "+" : "") + fmt(v, 2) + "%";
+  return [
+    `<b>${esc(s["行业名称"])}</b>`,
+    `阶段: ${s["阶段"]} · ${s["方向"]} · ${esc(s["题材地位"] || "")}`,
+    `活跃分: ${fmt(s["活跃分"], 1)} · 家族: ${esc(s["主线家族"] || "")}`,
+    `相对强弱: ${fmt(s["相对强弱"], 1)} · 动量: ${fmt(s["动量"], 1)}`,
+    `1日 ${up(s["1日涨幅"])} · 3日 ${up(s["3日涨幅"])} · 5日 ${up(s["5日涨幅"])}`,
+    `上涨占比: ${fmt((s["上涨占比"] || 0) * 100, 1)}% · 涨停: ${s["涨停数"]} · 成分: ${s["成分数"]}`,
+  ].join("<br>");
+}
+
+function renderRrgChart(m) {
+  const el = document.getElementById("rotRrg");
+  if (!rotChart) rotChart = echarts.init(el);
+  const sectors = m.sector_frame || [];
+  const trails = m.trail_frame || [];
+  const phases = ["领涨", "修复", "走弱", "退潮"];
+  const labelLimit = 14;
+  const topNames = new Set(sectors.slice(0, labelLimit).map(s => s["行业名称"]));
+
+  const scatterSeries = phases.map(ph => ({
+    name: ph,
+    type: "scatter",
+    symbolSize: s => Math.max(9, Math.min(42, (s["活跃分"] || 0) / 100 * 42)),
+    itemStyle: { color: ROT_PHASE_COLORS[ph], opacity: 0.85, borderColor: "#0d1117", borderWidth: 0.5 },
+    label: { show: true, position: "right", fontSize: 10, color: "#d0d7de",
+      formatter: p => topNames.has(p.data.name) ? p.data.name : "" },
+    emphasis: { focus: "series", label: { show: true, fontSize: 12, fontWeight: "bold" } },
+    data: sectors.filter(s => s["阶段"] === ph).map(s => ({
+      value: [s["相对强弱"], s["动量"]],
+      sector: s,
+      name: s["行业名称"],
+    })),
+  }));
+
+  const phaseBySector = {};
+  sectors.forEach(s => { phaseBySector[s["行业名称"]] = s["阶段"]; });
+  const trailTop = 10;
+  const trailNames = sectors.slice(0, trailTop).map(s => s["行业名称"]);
+  const trailSeries = trailNames.map(name => {
+    const pts = trails.filter(t => t["行业名称"] === name)
+      .sort((a, b) => (a["序号"] || 0) - (b["序号"] || 0))
+      .map(p => [p["相对强弱"], p["动量"]]);
+    if (pts.length < 2) return null;
+    return {
+      name: name + "轨迹",
+      type: "line",
+      data: pts,
+      showSymbol: false,
+      lineStyle: { color: ROT_PHASE_COLORS[phaseBySector[name]] || "#8899aa", width: 1.2, opacity: 0.35 },
+      tooltip: { show: false },
+      emphasis: { disabled: true },
+      silent: true,
+      legendHoverLink: false,
+    };
+  }).filter(Boolean);
+
+  rotChart.setOption({
+    backgroundColor: "transparent",
+    tooltip: { trigger: "item", backgroundColor: "#161b22", borderColor: "#30363d", textStyle: { color: "#e6edf3", fontSize: 12 }, formatter: rotTooltip },
+    legend: { top: 0, textStyle: { color: "#8b949e" }, data: phases },
+    grid: { left: 70, right: 50, top: 36, bottom: 44 },
+    xAxis: { name: "相对强弱", nameLocation: "middle", nameGap: 26, type: "value", scale: true,
+      axisLine: { onZero: true }, splitLine: { lineStyle: { color: "rgba(139,148,158,.18)" } } },
+    yAxis: { name: "动量", nameLocation: "middle", nameGap: 38, type: "value", scale: true,
+      axisLine: { onZero: true }, splitLine: { lineStyle: { color: "rgba(139,148,158,.18)" } } },
+    series: [...trailSeries, ...scatterSeries],
+  }, true);
+}
+
+function rotCell(v, col) {
+  if (v === null || v === undefined || v === "") return '<span class="cell-dim">—</span>';
+  if (col === "1日涨幅" || col === "3日涨幅" || col === "5日涨幅" || col === "5日涨幅均值") {
+    const n = Number(v);
+    return `<span class="num ${clsOf(n)}">${n >= 0 ? "+" : ""}${fmt(n, 2)}%</span>`;
+  }
+  if (col === "动量" || col === "相对强弱") {
+    const n = Number(v);
+    return `<span class="num ${clsOf(n)}">${fmt(n, 1)}</span>`;
+  }
+  if (typeof v === "number") return `<span class="num">${fmt(v, 1)}</span>`;
+  return `<span>${esc(v)}</span>`;
+}
+
+function rotTable(rows, cols) {
+  if (!rows || !rows.length) return '<div class="empty">暂无数据</div>';
+  const head = cols.map(c => `<th class="${typeof rows[0][c] === "number" ? "num" : ""}">${esc(c)}</th>`).join("");
+  const body = rows.map(r =>
+    `<tr>${cols.map(c => `<td>${rotCell(r[c], c)}</td>`).join("")}</tr>`).join("");
+  return `<table class="h-table"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>`;
+}
+
+function renderRotationTable(m) {
+  const el = document.getElementById("rotTables");
+  const sectors = m.sector_frame || [];
+  const tbl = rotState.table;
+  const mainCols = ["主线家族", "行业名称", "题材地位", "阶段", "方向", "活跃分", "1日涨幅", "3日涨幅", "5日涨幅", "涨停数"];
+  const fixCols = ["主线家族", "行业名称", "题材地位", "方向", "动量", "相对强弱", "3日涨幅", "5日涨幅"];
+  const downCols = ["主线家族", "行业名称", "题材地位", "阶段", "方向", "1日涨幅", "3日涨幅", "5日涨幅"];
+  let html = "";
+  if (tbl === "family") {
+    html = rotTable(m.family_frame || [], ["主线家族", "子题材数", "家族强度", "家族共振度", "个体活跃均分", "5日涨幅均值", "涨停数"]);
+  } else if (tbl === "main") {
+    html = rotTable(sectors.slice(0, 30), mainCols);
+  } else if (tbl === "fix") {
+    html = rotTable(sectors.filter(s => s["阶段"] === "修复").sort((a, b) => b["动量"] - a["动量"]).slice(0, 30), fixCols);
+  } else if (tbl === "down") {
+    html = rotTable(sectors.slice().sort((a, b) => a["5日涨幅"] - b["5日涨幅"]).slice(0, 35), downCols);
+  } else if (tbl === "leaders") {
+    html = rotTable(m.leaders_frame || [], ["行业名称", "类型", "排名", "股票名称", "展示"]);
+  }
+  el.innerHTML = html;
+}
+
 /* ================= Tab 切换 ================= */
 function switchTab(tab) {
   document.querySelectorAll(".tab-page").forEach(p => p.classList.remove("active"));
@@ -2586,6 +2782,8 @@ async function init() {
       switchTab(si.dataset.tab);
       // 图表 tab：切过去时初始化未渲染的 ECharts（首次 lazy init）
       if (si.dataset.tab === "charts") setTimeout(resizeAllEch, 120);
+      // 板块轮动 tab：首次进入懒加载
+      if (si.dataset.tab === "rotation" && !rotState.data) setTimeout(() => loadRotation(false), 120);
     });
   });
   dateSelect.addEventListener("change", () => {
@@ -2604,6 +2802,30 @@ async function init() {
   const hunterRegen = document.getElementById("hunterRegenBtn");
   if (hunterRegen) hunterRegen.addEventListener("click", regenerateHunter);
   initHunterDates();
+  // 板块轮动：事件绑定
+  const rotRunBtn = document.getElementById("rotRunBtn");
+  if (rotRunBtn) rotRunBtn.addEventListener("click", () => loadRotation(true));
+  const rotDateSel = document.getElementById("rotDate");
+  if (rotDateSel) rotDateSel.addEventListener("change", () => {
+    rotState.date = rotDateSel.value || null;
+    loadRotation(false);
+  });
+  const rotTail = document.getElementById("rotTail");
+  if (rotTail) {
+    rotTail.addEventListener("input", () => { document.getElementById("rotTailVal").textContent = rotTail.value; });
+    rotTail.addEventListener("change", () => { rotState.tail = Number(rotTail.value); loadRotation(false); });
+  }
+  document.querySelectorAll(".rot-view-btn").forEach(b => b.addEventListener("click", () => {
+    rotState.view = b.dataset.view;
+    document.querySelectorAll(".rot-view-btn").forEach(x => x.classList.toggle("primary", x === b));
+    rotState.data = null;
+    loadRotation(true);
+  }));
+  document.querySelectorAll(".rot-table-btn").forEach(b => b.addEventListener("click", () => {
+    rotState.table = b.dataset.tbl;
+    document.querySelectorAll(".rot-table-btn").forEach(x => x.classList.toggle("primary", x === b));
+    if (rotState.data) renderRotationTable(rotState.data);
+  }));
   loadIndices();
   setInterval(loadIndices, 60000);  // 指数行情每分钟刷新
   // 成本校准按钮

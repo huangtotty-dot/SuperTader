@@ -37,6 +37,9 @@
     <div class="sidebar-item" data-tab="hunter">
       <span class="sidebar-icon">🔍</span><span>选股猎手</span>
     </div>
+    <div class="sidebar-item" data-tab="rotation">
+      <span class="sidebar-icon">🧭</span><span>板块轮动</span>
+    </div>
   </div>
   <div class="sidebar-summary" id="sidebarSummary">
     <div class="sum-row"><span class="sum-label">总市值</span><span class="sum-val" id="sumValue">—</span></div>
@@ -184,6 +187,41 @@
     <div class="section" id="stage-board">
       <h2>系统阶段看板</h2>
       <div id="stageBoardBody"></div>
+    </div>
+  </div>
+
+  <!-- ====== Tab 6: 板块轮动 ====== -->
+  <div class="tab-page" id="tab-rotation">
+    <div class="section">
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
+        <div style="display:inline-flex;gap:4px">
+          <button class="mini-btn primary rot-view-btn" data-view="jiuyan">韭研概念轮动</button>
+          <button class="mini-btn rot-view-btn" data-view="industry">全市场行业轮动</button>
+        </div>
+        <select id="rotDate" class="mini-btn" title="选择交易日"></select>
+        <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text-dim)">轨迹回看
+          <input type="range" id="rotTail" min="8" max="35" value="18" style="width:100px">
+          <span id="rotTailVal" class="mono">18</span>
+        </label>
+        <button class="mini-btn primary" id="rotRunBtn">▶ 运行</button>
+        <span id="rotStatus" class="cell-dim" style="font-size:12px"></span>
+      </div>
+      <div id="rotProgressWrap" class="cell-dim" style="display:none;font-size:12px;margin-bottom:8px"></div>
+      <div id="rotKpi" class="kpi-grid" style="margin-bottom:10px"></div>
+      <div class="card">
+        <div class="card-title" id="rotTitle">板块轮动地图</div>
+        <div id="rotRrg" class="echart" style="height:560px"></div>
+      </div>
+    </div>
+    <div class="section">
+      <div style="display:flex;gap:6px;margin-bottom:8px">
+        <button class="mini-btn rot-table-btn primary" data-tbl="family">主线家族</button>
+        <button class="mini-btn rot-table-btn" data-tbl="main">主线榜</button>
+        <button class="mini-btn rot-table-btn" data-tbl="fix">修复榜</button>
+        <button class="mini-btn rot-table-btn" data-tbl="down">退潮榜</button>
+        <button class="mini-btn rot-table-btn" data-tbl="leaders">个股穿透</button>
+      </div>
+      <div id="rotTables" style="overflow-x:auto"></div>
     </div>
   </div>
 
