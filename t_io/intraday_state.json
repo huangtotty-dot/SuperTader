@@ -1,94 +1,22 @@
 {
-  "date": "2026-08-21",
-  "cycle_count": {
-    "603667": 2
+  "date": "2026-08-22",
+  "cycle_count": {},
+  "buy_count": {
+    "000988_B": 19
   },
-  "buy_count": {},
   "sell_count": {},
   "trend_regimes": {
-    "588170": {
+    "000988_B": {
       "state": "BEAR",
       "confidence": 0.55,
       "pending_state": null,
       "pending_bars": 0,
-      "last_dif": -0.0020328449844533303,
-      "last_dea": -0.0009902101161880733,
-      "last_rsi": 45.45454545454564,
-      "prev_rsi": 50.0,
-      "bb_mid_slope": -0.0008223360252119191,
-      "bb_width_ratio": 0.8292399812349873
-    },
-    "600176": {
-      "state": "BULL",
-      "confidence": 0.55,
-      "pending_state": null,
-      "pending_bars": 0,
-      "last_dif": 0.2034357101516875,
-      "last_dea": 0.2656061352272369,
-      "last_rsi": 60.47904191616765,
-      "prev_rsi": 66.43356643356616,
-      "bb_mid_slope": -2.6660526666674003e-05,
-      "bb_width_ratio": 0.8632390441020056
-    },
-    "600481": {
-      "state": "BULL",
-      "confidence": 0.55,
-      "pending_state": "NEUTRAL",
-      "pending_bars": 1,
-      "last_dif": -0.0016954708554406395,
-      "last_dea": 0.003466815058880255,
-      "last_rsi": 27.272727272727053,
-      "prev_rsi": 46.15384615384621,
-      "bb_mid_slope": -0.0004735969689794396,
-      "bb_width_ratio": 1.0884986419262637
-    },
-    "603667": {
-      "state": "BULL",
-      "confidence": 0.55,
-      "pending_state": null,
-      "pending_bars": 0,
-      "last_dif": 0.3392428730804937,
-      "last_dea": 0.3278148592006722,
-      "last_rsi": 67.25146198830426,
-      "prev_rsi": 77.02127659574467,
-      "bb_mid_slope": 0.0010701333703254982,
-      "bb_width_ratio": 0.7733660600043758
-    },
-    "000988": {
-      "state": "BULL",
-      "confidence": 0.55,
-      "pending_state": null,
-      "pending_bars": 0,
-      "last_dif": 0.19390860225632878,
-      "last_dea": 0.3391417464247704,
-      "last_rsi": 51.70278637770898,
-      "prev_rsi": 59.489051094890456,
-      "bb_mid_slope": -0.0003698176254705461,
-      "bb_width_ratio": 0.9318827494496384
-    },
-    "000988_B": {
-      "state": "BULL",
-      "confidence": 0.55,
-      "pending_state": null,
-      "pending_bars": 0,
-      "last_dif": 0.19390860225632878,
-      "last_dea": 0.3391417464247704,
-      "last_rsi": 51.70278637770898,
-      "prev_rsi": 58.11320754716992,
-      "bb_mid_slope": -0.0003698176254705461,
-      "bb_width_ratio": 0.9318827494496384
-    },
-    "002639": {
-      "state": "BULL",
-      "confidence": 0.55,
-      "pending_state": null,
-      "pending_bars": 0,
-      "last_dif": 0.032533325581068695,
-      "last_dea": 0.044637018677974566,
-      "last_rsi": 50.0,
-      "prev_rsi": 59.25925925925953,
-      "bb_mid_slope": -7.392911502516579e-05,
-      "bb_width_ratio": 0.7283697961930758
+      "last_dif": -1.2451286992777,
+      "last_dea": -1.003392861120549,
+      "last_rsi": 30.998851894374226,
+      "prev_rsi": 33.02752293577987,
+      "bb_mid_slope": -0.001141476523304237,
+      "bb_width_ratio": 1.4093248221539492
     }
   }
 }

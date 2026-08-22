@@ -98,15 +98,21 @@ except Exception as _e:
     print(f"[WARN] position_builder 加载失败（建仓扫描不可用）: {_e}")
 
 # ── 指数5分钟共振过滤（做T信号，2026-08-14 新增）──
+# 回测（--tushare-replay）不调 _resonance_gate，跳过导入避免其依赖链在本机间歇性挂起
 _RESONANCE_MODULE_OK = True
-try:
-    from index_resonance import compute_resonance as _compute_resonance
-    from index_resonance import write_resonance_trace as _write_resonance_trace
-except Exception as _e:
+if "--tushare-replay" in sys.argv:
     _RESONANCE_MODULE_OK = False
     _compute_resonance = None
     _write_resonance_trace = None
-    print(f"[WARN] index_resonance 加载失败（共振过滤不可用，信号按不过滤放行）: {_e}")
+else:
+    try:
+        from index_resonance import compute_resonance as _compute_resonance
+        from index_resonance import write_resonance_trace as _write_resonance_trace
+    except Exception as _e:
+        _RESONANCE_MODULE_OK = False
+        _compute_resonance = None
+        _write_resonance_trace = None
+        print(f"[WARN] index_resonance 加载失败（共振过滤不可用，信号按不过滤放行）: {_e}")
 
 
 def _resonance_gate(code, sig, now):
@@ -2247,9 +2253,9 @@ def replay_today():
             json.dump(replay_doc, f, ensure_ascii=False, indent=2)
 
 
-def tushare_replay():
+def tushare_replay(date_str=None):
     """
-    V1.19: 使用 Tushare 分钟数据复测今日表现
+    V1.19: 使用 Tushare 分钟数据复测今日表现（可指定历史日期）
     仅输出会触发飞书通知的信号（score >= notify_threshold）
     """
     import tushare as ts
@@ -2260,15 +2266,16 @@ def tushare_replay():
     global SIM_NOW, HOLDINGS, MINUTE_FETCH_STATUS, MINUTE_FETCH_DETAIL
     global DAILY_DECISION_STATS, AI_REVIEW_STATS, SIGNAL_OUTCOME_TRACKER, T_MODE
 
-    today = get_today_str()
+    today = date_str or get_today_str()
     HOLDINGS = load_holdings()
     shared['HOLDINGS'] = HOLDINGS  # V1.19: 更新共享命名空间中的HOLDINGS
     T_MODE = load_t_mode()
     shared['T_MODE'] = T_MODE
     holdings = HOLDINGS
-    
+
     results = []
-    
+    print(f"[replay] 日期={today} 持仓={len(holdings)} 只")
+
     for code, holding in holdings.items():
         # 转换代码为 tushare 格式（去除 _A/_B 等账户后缀）
         api_code = code.split("_")[0] if "_" in code else code
@@ -2276,10 +2283,11 @@ def tushare_replay():
             ts_code = f"{api_code}.SH"
         else:
             ts_code = f"{api_code}.SZ"
-        
+
+        print(f"[replay] {code} {holding.get('name', '')} 拉取 {ts_code} 分钟线...")
         try:
-            df = pro.stk_mins(ts_code=ts_code, freq='1min', 
-                              start_date=f"{today} 09:00:00", 
+            df = pro.stk_mins(ts_code=ts_code, freq='1min',
+                              start_date=f"{today} 09:00:00",
                               end_date=f"{today} 19:00:00")
             if df is None or df.empty:
                 print(f"[WARN] {code} 无分钟数据")
@@ -2287,6 +2295,7 @@ def tushare_replay():
         except Exception as e:
             print(f"[WARN] {code} 获取失败: {e}")
             continue
+        print(f"[replay] {code} 分钟线 {len(df)} 根，开始逐分钟模拟...")
         
         # 转换列名
         df = df.rename(columns={
@@ -2347,7 +2356,19 @@ def tushare_replay():
             
             # 获取 daily_ctx（简单版）
             daily_ctx = _default_daily_context(code)
-            _attach_dynamic_t_decision(code, state, daily_ctx, SIM_NOW)
+            # 回测不调 _attach_dynamic_t_decision：它内部会拉日线特征做网络调用，本机可能挂起
+            # 改为静态 T_MODE 注入（回测目的在信号引擎，不依赖当日大盘态）
+            _replay_t_mode = "long"
+            if isinstance(T_MODE, dict):
+                _replay_t_mode = T_MODE.get(code) or T_MODE.get(code.split("_")[0]) or "long"
+            if _replay_t_mode not in {"long", "short"}:
+                _replay_t_mode = "long"
+            daily_ctx["t_mode"] = _replay_t_mode
+            daily_ctx["effective_t_mode"] = _replay_t_mode
+            daily_ctx["t_mode_source"] = "replay_static"
+            daily_ctx["t_pos_factor"] = 1.0
+            daily_ctx["t_trade_gate"] = "normal"
+            daily_ctx["t_reason"] = "replay静态T模式"
 
             try:
                 buy_score, sell_score, sig = engine.evaluate(
@@ -2815,7 +2836,7 @@ if __name__ == "__main__":
     if len(sys.argv) > 1 and sys.argv[1] == "--replay-today":
         replay_today()
     elif len(sys.argv) > 1 and sys.argv[1] == "--tushare-replay":
-        tushare_replay()
+        tushare_replay(sys.argv[2] if len(sys.argv) > 2 else None)
     else:
         _launch_gui()
         run_watch()

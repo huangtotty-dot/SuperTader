@@ -26,7 +26,7 @@
       "top20_down": 3,
       "holdings_bullish": 0,
       "holdings_bearish": 0,
-      "source_ts": "2026-08-21 16:03:34"
+      "source_ts": "2026-08-22 09:10:21"
     }
   },
   "session_note": "竞价额Top20中涨17家/跌3家 | 指数unknown | 持仓7股竞价完毕",
@@ -141,7 +141,7 @@
       }
     ]
   },
-  "generated_at": "2026-08-21 16:03:46",
+  "generated_at": "2026-08-22 09:10:34",
   "source": "spot",
   "market_snapshot": {
     "source": "spot",
@@ -350,7 +350,7 @@
     "top20_down": 3,
     "holdings_bullish": 0,
     "holdings_bearish": 0,
-    "source_ts": "2026-08-21 16:03:34"
+    "source_ts": "2026-08-22 09:10:21"
   },
   "top20_volume_analysis": {
     "total_up": 17,

@@ -197,7 +197,7 @@ class MarketDataFetcher:
                 turnover_raw = ""
 
         try:
-            change_pct = float(fields[31] or 0)
+            change_pct = float(fields[32] or 0)   # 腾讯快照 [31]=涨跌额, [32]=涨跌幅
         except Exception:
             change_pct = 0.0
         try:
@@ -213,7 +213,7 @@ class MarketDataFetcher:
         except Exception:
             limit_up_price = 0.0
         try:
-            prev_close = float(fields[5] or 0)
+            prev_close = float(fields[4] or 0)   # 腾讯快照 [4]=昨收, [5]=今开
         except Exception:
             prev_close = 0.0
         try:
@@ -225,7 +225,7 @@ class MarketDataFetcher:
         except Exception:
             low = 0.0
         try:
-            open_price = float(fields[1] or 0)
+            open_price = float(fields[5] or 0)   # 腾讯快照 [1]=名称, [5]=今开
         except Exception:
             open_price = 0.0
 

@@ -67,6 +67,7 @@ if str(HUNTER_DIR) not in sys.path:
 # 2026-08-15: 选股猎手后台运行状态（进度条轮询用）。进度细节来自 market_data.MARKET_PROGRESS。
 import threading as _th
 HUNTER_RUN_STATE = {"date": None, "running": False, "result": None}
+ROTATION_RUN_STATE = {"running": False, "error": None}
 
 
 def _jiuyan_concepts(info):
@@ -2361,6 +2362,115 @@ class Api:
             return _clean({"sector": sector, "points": points[-30:]})
         except Exception as e:
             return {"sector": sector, "error": str(e), "points": []}
+
+    # ---------- 板块轮动（移植自 sector-rotation-v2） ----------
+
+    @staticmethod
+    def _rotation_df_to_rows(df):
+        """DataFrame → JSON 安全行列表。"""
+        if df is None or df.empty:
+            return []
+        import numpy as np
+        import pandas as pd
+        rows = []
+        for _, row in df.iterrows():
+            item = {}
+            for c in df.columns:
+                v = row[c]
+                if isinstance(v, (np.integer,)):
+                    v = int(v)
+                elif isinstance(v, (np.floating,)):
+                    v = float(v)
+                elif isinstance(v, np.bool_):
+                    v = bool(v)
+                elif isinstance(v, (pd.Timestamp, datetime)):
+                    v = str(v)
+                item[str(c)] = v
+            rows.append(item)
+        return _clean(rows)
+
+    def sector_rotation_dates(self):
+        """板块轮动可用交易日 + 缓存就绪状态。"""
+        try:
+            from sector_rotation import data_fetch as _df
+            dates = _df.available_dates()
+            ready, message = _df.cache_readiness()
+            return {"ready": ready, "dates": dates, "message": message}
+        except Exception as e:
+            return {"ready": False, "dates": [], "message": f"板块轮动初始化失败: {e}"}
+
+    def sector_rotation_progress(self):
+        """板块轮动日线缓存构建进度（供前端轮询）。"""
+        try:
+            from sector_rotation import data_fetch as _df
+            prog = dict(_df.ROTATION_PROGRESS)
+        except Exception:
+            prog = {"running": False, "phase": "", "done": 0, "total": 0, "msg": ""}
+        return {
+            "running": bool(ROTATION_RUN_STATE.get("running")) or bool(prog.get("running")),
+            "error": ROTATION_RUN_STATE.get("error"),
+            "phase": prog.get("phase", ""),
+            "done": int(prog.get("done") or 0),
+            "total": int(prog.get("total") or 0),
+            "msg": prog.get("msg", ""),
+        }
+
+    def _rotation_bootstrap_work(self, codes):
+        try:
+            from sector_rotation import data_fetch as _df
+            _df.bootstrap_daily_cache(codes)
+        except Exception as e:
+            ROTATION_RUN_STATE["error"] = str(e)
+        finally:
+            ROTATION_RUN_STATE["running"] = False
+
+    def _build_rotation(self, date, view, tail_days):
+        from sector_rotation import data_fetch as _df
+        from sector_rotation.engine import build_rotation_model
+        daily, industry, dates = _df.load_rotation_inputs(view, date)
+        if daily.empty:
+            raise ValueError("日线缓存为空，请先构建。")
+        if not date or date not in dates:
+            date = dates[-1]
+        model = build_rotation_model(
+            daily, industry,
+            as_of=date, tail_days=int(tail_days or 18),
+            include_growth_indices=(view == "industry"),
+        )
+        return {
+            "as_of": model.as_of,
+            "market_state": model.market_state,
+            "summary": _clean(model.summary),
+            "sector_frame": self._rotation_df_to_rows(model.sector_frame),
+            "trail_frame": self._rotation_df_to_rows(model.trail_frame),
+            "family_frame": self._rotation_df_to_rows(model.family_frame),
+            "leaders_frame": self._rotation_df_to_rows(model.leaders_frame),
+            "dates": dates,
+        }
+
+    def load_sector_rotation(self, date=None, view="industry", tail_days=18):
+        """板块轮动主入口。缓存未就绪 → 后台 bootstrap 并返回进度；就绪 → 返回轮动模型。"""
+        try:
+            from sector_rotation import data_fetch as _df
+            try:
+                _df.update_today_if_needed()   # 工作日收盘后自动补当日快照
+            except Exception:
+                pass
+            ready, message = _df.cache_readiness()
+            if not ready:
+                if not ROTATION_RUN_STATE.get("running") and not _df.ROTATION_PROGRESS.get("running"):
+                    ROTATION_RUN_STATE["running"] = True
+                    ROTATION_RUN_STATE["error"] = None
+                    codes = _df.full_market_codes()
+                    _th.Thread(target=self._rotation_bootstrap_work, args=(codes,), daemon=True).start()
+                return {"status": "bootstrapping", "message": message, "progress": self.sector_rotation_progress()}
+            try:
+                result = self._build_rotation(date, view, tail_days)
+            except Exception as e:
+                return {"status": "error", "message": str(e)}
+            return {"status": "ok", **result}
+        except Exception as e:
+            return {"status": "error", "message": str(e)}
 
     # ---------- 集合竞价信息层 ----------
     def load_auction(self, date):
