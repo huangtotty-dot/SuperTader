@@ -2828,7 +2828,8 @@ async function runDailyReview() {
       document.getElementById("llmModel").value.trim(),
       document.getElementById("llmApiKey").value.trim());
     if (r && r.status === "error") { showReviewError(r.message || "未知错误"); return; }
-    status.textContent = "复盘中（收集数据 + 调用模型，约 1-3 分钟）…";
+    window._reviewStart = Date.now();   // 等待计时起点
+    status.textContent = "复盘中（收集数据 + 调用模型）…";
     pollReviewProgress();
   } catch (e) {
     showReviewError("启动失败: " + e.message);
@@ -2846,6 +2847,15 @@ async function pollReviewProgress() {
       // 流式显示：数据收集阶段提示 + 模型输出过程（原始文本）
       if (p.output && el) {
         el.innerHTML = `<div style="white-space:pre-wrap;font-family:var(--mono);font-size:11px;color:var(--text);user-select:text">${esc(p.output)}</div>`;
+        // 模型是否已开始输出：检测"正在调用模型"之后是否有内容
+        const callIdx = p.output.lastIndexOf("正在调用模型");
+        const modelStarted = callIdx >= 0 && p.output.length > callIdx + 60;
+        if (!modelStarted && p.running) {
+          const wait = Math.round((Date.now() - (window._reviewStart || Date.now())) / 1000);
+          status.textContent = `模型请求已发送，等待响应…（已 ${wait}s）`;
+        } else if (p.running) {
+          status.textContent = "模型生成中…";
+        }
       }
       if (!p.running) {
         clearInterval(_reviewPoll); _reviewPoll = null;
