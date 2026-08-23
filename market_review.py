@@ -226,16 +226,18 @@ def build_deep_dive(date: str, cross: dict, on_progress=None) -> dict:
 
 
 # ---------------------------------------------------------------- 情绪/板块/个股附加数据
-def load_sector_brief_ths(date: str, limit: int = 40) -> dict:
+def load_sector_brief_ths(date: str, limit: int | None = None) -> dict:
     """同花顺概念板块强弱（2026-08-23，用户要求板块用同花顺概念）。
-    并发拉前 limit 个同花顺概念板块的当日涨跌幅，排序取强势/弱势。失败返回 {}。
+    并发拉同花顺概念板块(默认全部)的当日涨跌幅，排序取强势/弱势。失败返回 {}。
     名称去"概念"等后缀以对齐同花顺 App 显示。"""
     import time as _t
     try:
         import akshare as ak
         from concurrent.futures import ThreadPoolExecutor
         names = ak.stock_board_concept_name_ths()
-        pool = names["name"].astype(str).tolist()[:limit]
+        pool = names["name"].astype(str).tolist()
+        if limit:
+            pool = pool[:limit]
 
         def _clean(n):
             for suf in ("概念板块", "概念", "板块"):
@@ -261,12 +263,13 @@ def load_sector_brief_ths(date: str, limit: int = 40) -> dict:
 
     items = []
     try:
-        with ThreadPoolExecutor(max_workers=12) as ex:
+        with ThreadPoolExecutor(max_workers=15) as ex:
             for r in ex.map(_fetch, pool):
                 if r:
                     items.append(r)
     except Exception:
         pass
+    _log(f"概念板块拉取完成: 成功 {len(items)}/{len(pool)}")
     if len(items) < 3:
         _log(f"概念板块涨跌幅不足({len(items)})")
         return {}
