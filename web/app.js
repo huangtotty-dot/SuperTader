@@ -2802,6 +2802,84 @@ function renderMarkdown(md) {
   return `<div class="rv">${html.join("\n")}</div>`;
 }
 
+/* ===== 复盘可视化：解析横评表→条形图、关键位表→卡片（2026-08-23） ===== */
+function parseCrossTable(md) {
+  const lines = String(md).split("\n");
+  for (let i = 0; i < lines.length; i++) {
+    const l = lines[i].trim();
+    if (l.startsWith("|") && l.includes("指数") && l.includes("当日")) {
+      const rows = [];
+      let j = i + 1;
+      while (j < lines.length && lines[j].trim().startsWith("|")) {
+        const cells = lines[j].trim().replace(/^\||\|$/g, "").split("|").map(c => c.trim());
+        if (!cells.every(c => /^[-: ]+$/.test(c))) rows.push(cells);
+        j++;
+      }
+      if (rows.length >= 2) return rows;
+    }
+  }
+  return [];
+}
+
+function renderReviewCharts(md) {
+  const wrap = document.getElementById("reviewChartWrap");
+  if (!wrap) return;
+  const rows = parseCrossTable(md);
+  if (rows.length < 2) { wrap.style.display = "none"; return; }
+  const header = rows[0];
+  const iOf = n => header.indexOf(n);
+  const iChg = iOf("当日%"), i5 = iOf("近5日%"), iPos = iOf("20日位置");
+  const data = rows.slice(1).filter(r => r[0]);
+  const names = data.map(r => r[0]);
+  const num = (v, dflt) => { const n = parseFloat(String(v || "").replace(/[%+\s]/g, "")); return isNaN(n) ? dflt : n; };
+  const chg1 = data.map(r => num(r[iChg], 0));
+  const chg5 = data.map(r => num(r[i5], 0));
+  const pos = data.map(r => num(r[iPos], 50));
+
+  wrap.style.display = "";
+  let chart = echInstances["reviewChart"];
+  if (!chart) chart = echarts.init(document.getElementById("reviewChart"));
+  echInstances["reviewChart"] = chart;
+  const barColor = v => v >= 0 ? "#f85149" : "#3fb950";   // A股红涨绿跌
+  chart.setOption({
+    backgroundColor: "transparent",
+    tooltip: { trigger: "axis", axisPointer: { type: "shadow" }, backgroundColor: "#161b22", borderColor: "#30363d", textStyle: { color: "#c9d1d9", fontSize: 12 } },
+    legend: { top: 0, textStyle: { color: "#8b949e" }, data: ["当日%", "近5日%"] },
+    grid: { left: 82, right: 44, top: 30, bottom: 26 },
+    xAxis: { type: "value", axisLabel: { color: "#8b949e", fontSize: 10 }, splitLine: { lineStyle: { color: "rgba(139,148,158,.15)" } } },
+    yAxis: { type: "category", data: names, axisLabel: { color: "#8b949e", fontSize: 11 }, axisLine: { lineStyle: { color: "#30363d" } } },
+    series: [
+      { name: "当日%", type: "bar", barWidth: 9, data: chg1.map(v => ({ value: v, itemStyle: { color: barColor(v) } })), label: { show: true, position: "right", color: "#c9d1d9", fontSize: 10 } },
+      { name: "近5日%", type: "bar", barWidth: 9, data: chg5.map(v => ({ value: v, itemStyle: { color: "rgba(88,166,255,.75)" } })), label: { show: true, position: "right", color: "#8b949e", fontSize: 10 } },
+    ],
+  }, true);
+  chart.resize();
+  renderKeyLevels(md);
+}
+
+function renderKeyLevels(md) {
+  const el = document.getElementById("reviewKeyLevels");
+  if (!el) return;
+  const lines = String(md).split("\n");
+  let inTable = false, rows = [];
+  for (let i = 0; i < lines.length; i++) {
+    const l = lines[i].trim();
+    if (l.startsWith("|") && l.includes("类型") && l.includes("位置")) { inTable = true; continue; }
+    if (inTable && l.startsWith("|")) {
+      const cells = l.replace(/^\||\|$/g, "").split("|").map(c => c.trim());
+      if (!cells.every(c => /^[-: ]+$/.test(c)) && cells[0]) rows.push(cells);
+    } else if (inTable && rows.length) { break; }
+  }
+  if (!rows.length) { el.innerHTML = ""; return; }
+  const cards = rows.map(r => `<div style="flex:1;min-width:130px;padding:8px 10px;background:var(--bg-soft);border:1px solid var(--border);border-radius:6px">
+    <div style="font-size:11px;color:#d29922;font-weight:600">${esc(r[0])}</div>
+    <div style="font-size:15px;font-weight:700;color:#e6edf3;margin:3px 0;font-family:var(--mono)">${esc(r[1])}</div>
+    <div style="font-size:10px;color:var(--text-dim)">${esc(r[2] || "")}</div>
+  </div>`).join("");
+  el.innerHTML = `<div style="font-size:12px;font-weight:700;color:var(--accent);margin-bottom:6px">关键位一览</div>
+    <div style="display:flex;flex-wrap:wrap;gap:8px">${cards}</div>`;
+}
+
 async function renderDailyReview() {
   try {
     const cfg = await apiCall("get_llm_config");
@@ -2918,8 +2996,11 @@ async function refreshDailyReview() {
   try {
     const r = await apiCall("get_daily_review", date);
     if (r && r.exists) {
+      renderReviewCharts(r.text);        // 可视化图表（横评条形图 + 关键位卡片）
       el.innerHTML = renderMarkdown(r.text);
     } else {
+      const wrap = document.getElementById("reviewChartWrap");
+      if (wrap) wrap.style.display = "none";
       el.innerHTML = '<div class="empty">该日期暂无复盘结果，点「开始大盘复盘」生成</div>';
     }
   } catch (e) { el.innerHTML = '<div class="empty">加载失败</div>'; }
