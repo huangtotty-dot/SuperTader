@@ -2918,7 +2918,7 @@ function renderVibeCards(crossRows, extra) {
       ["系统性风险", emo.系统性风险 ? "有" : "无", emo.系统性风险 ? "var(--red)" : "var(--green)"],
     ];
     const cards = cells.map(([k, v, color]) =>
-      `<div class="rv-kpi"><div class="rv-kpi-k">${esc(k)}</div><div class="rv-kpi-v" style="${color ? `color:${color}` : ""}">${esc(String(v ?? "—"))}</div></div>`).join("");
+      `<div class="rv-kpi"><div class="rv-kpi-k">${esc(k)}</div><div class="rv-kpi-v" style="${color ? "color:" + color : ""}">${esc(String(v != null ? v : "—"))}</div></div>`).join("");
     parts.push(`<div class="rv-vibe-title">市场情绪</div><div class="rv-kpi-grid">${cards}</div>`);
   }
   // 3) 板块强弱
