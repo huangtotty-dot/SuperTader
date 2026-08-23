@@ -228,26 +228,34 @@ def build_deep_dive(date: str, cross: dict, on_progress=None) -> dict:
 # ---------------------------------------------------------------- 情绪/板块/个股附加数据
 def load_sector_brief_ths(date: str, limit: int = 40) -> dict:
     """同花顺概念板块强弱（2026-08-23，用户要求板块用同花顺概念）。
-    并发拉前 limit 个同花顺概念板块的当日涨跌幅，排序取强势/弱势。失败返回 {}。"""
+    并发拉前 limit 个同花顺概念板块的当日涨跌幅，排序取强势/弱势。失败返回 {}。
+    名称去"概念"等后缀以对齐同花顺 App 显示。"""
     import time as _t
     try:
         import akshare as ak
         from concurrent.futures import ThreadPoolExecutor
         names = ak.stock_board_concept_name_ths()
         pool = names["name"].astype(str).tolist()[:limit]
+
+        def _clean(n):
+            for suf in ("概念板块", "概念", "板块"):
+                if n.endswith(suf) and len(n) > len(suf):
+                    return n[: -len(suf)]
+            return n
+
         end = date.replace("-", "")
         start_dt = (datetime.strptime(date, "%Y-%m-%d") - timedelta(days=12)).strftime("%Y%m%d")
     except Exception as e:
         _log(f"概念板块列表失败: {str(e)[:80]}")
         return {}
 
-    def _fetch(n):
+    def _fetch(raw):
         try:
-            df = ak.stock_board_concept_index_ths(symbol=n, start_date=start_dt, end_date=end)
+            df = ak.stock_board_concept_index_ths(symbol=raw, start_date=start_dt, end_date=end)
             if df is None or len(df) < 2 or "收盘价" not in df.columns:
                 return None
             closes = df["收盘价"].astype(float).tolist()
-            return (str(n), round((closes[-1] / closes[-2] - 1) * 100, 2))
+            return (_clean(raw), round((closes[-1] / closes[-2] - 1) * 100, 2))
         except Exception:
             return None
 
