@@ -2796,6 +2796,14 @@ async function saveModelConfig() {
   statusEl(r && r.ok ? "模型配置已保存" : "保存失败", r && r.ok ? "ok" : "err");
 }
 
+function showReviewError(msg) {
+  /* 2026-08-23: 错误完整显示在结果区（可选中复制），status 只留短提示 */
+  const st = document.getElementById("reviewStatus");
+  if (st) st.textContent = "复盘失败（详见下方错误，可复制）";
+  const el = document.getElementById("reviewResult");
+  if (el) el.innerHTML = `<div style="color:#f85149;white-space:pre-wrap;word-break:break-all">❌ ${esc(msg || "未知错误")}</div>`;
+}
+
 async function runDailyReview() {
   const date = document.getElementById("reviewDate").value || new Date().toISOString().slice(0, 10);
   const status = document.getElementById("reviewStatus");
@@ -2805,11 +2813,11 @@ async function runDailyReview() {
       document.getElementById("llmBaseUrl").value.trim(),
       document.getElementById("llmModel").value.trim(),
       document.getElementById("llmApiKey").value.trim());
-    if (r && r.status === "error") { status.textContent = "错误: " + (r.message || ""); return; }
+    if (r && r.status === "error") { showReviewError(r.message || "未知错误"); return; }
     status.textContent = "复盘中（收集数据 + 调用模型，约 1-3 分钟）…";
     pollReviewProgress();
   } catch (e) {
-    status.textContent = "启动失败: " + e.message;
+    showReviewError("启动失败: " + e.message);
   }
 }
 
@@ -2819,7 +2827,7 @@ async function pollReviewProgress() {
   _reviewPoll = setInterval(async () => {
     try {
       const p = await apiCall("daily_review_progress");
-      if (p.error) { status.textContent = "复盘失败: " + p.error; clearInterval(_reviewPoll); _reviewPoll = null; return; }
+      if (p.error) { showReviewError(p.error); clearInterval(_reviewPoll); _reviewPoll = null; return; }
       if (!p.running) { clearInterval(_reviewPoll); _reviewPoll = null; status.textContent = "复盘完成"; await refreshDailyReview(); }
     } catch (e) { /* 静默 */ }
   }, 1500);
