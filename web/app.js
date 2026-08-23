@@ -2741,15 +2741,25 @@ const LLM_PROVIDER_BASE = {
 };
 
 function renderMarkdown(md) {
+  /* 2026-08-23: 美观化——标题层级/加粗斜体/代码/分隔线/表格(表头+斑马纹+数字右对齐) */
   if (!md) return '<div class="empty">无内容</div>';
+  const inline = (t) => esc(t)
+    .replace(/\*\*(.+?)\*\*/g, "<b>$1</b>")
+    .replace(/\*(.+?)\*/g, "<i>$1</i>")
+    .replace(/`(.+?)`/g, '<code class="rv-code">$1</code>');
   const lines = String(md).split("\n");
   const html = [];
   let tableRows = [];
   const flushTable = () => {
     if (!tableRows.length) return;
-    const rows = tableRows.map((cells, i) =>
-      `<tr>${cells.map(c => `<td${i === 0 ? ' style="font-weight:700"' : ""}>${esc(c.replace(/\*\*/g, ""))}</td>`).join("")}</tr>`).join("");
-    html.push(`<table class="h-table" style="font-size:11px"><tbody>${rows}</tbody></table>`);
+    const rows = tableRows.map((cells, i) => {
+      const tds = cells.map(c => {
+        const num = !isNaN(parseFloat(String(c).replace(/[%+−\-\s]/g, ""))) && c !== "";
+        return `<td${num ? ' class="num"' : ""}>${inline(c)}</td>`;
+      }).join("");
+      return `<tr${i === 0 ? ' class="rv-th"' : (i % 2 === 0 ? ' class="rv-alt"' : "")}>${tds}</tr>`;
+    }).join("");
+    html.push(`<table class="rv-table"><tbody>${rows}</tbody></table>`);
     tableRows = [];
   };
   lines.forEach(line => {
@@ -2760,14 +2770,18 @@ function renderMarkdown(md) {
       return;
     }
     flushTable();
-    if (t.startsWith("## ")) html.push(`<h3 style="margin:10px 0 4px;color:#58a6ff">${esc(t.slice(3))}</h3>`);
-    else if (t.startsWith("### ")) html.push(`<h4 style="margin:8px 0 4px;color:#79c0ff">${esc(t.slice(4))}</h4>`);
-    else if (t.startsWith("- ")) html.push(`<div style="padding-left:12px">• ${esc(t.slice(2))}</div>`);
-    else if (t) html.push(`<div>${esc(t)}</div>`);
-    else html.push("");
+    if (t === "---" || /^={3,}$/.test(t)) html.push('<hr class="rv-hr">');
+    else if (t.startsWith("#### ")) html.push(`<h5 class="rv-h5">${inline(t.slice(5))}</h5>`);
+    else if (t.startsWith("### ")) html.push(`<h4 class="rv-h4">${inline(t.slice(4))}</h4>`);
+    else if (t.startsWith("## ")) html.push(`<h3 class="rv-h3">${inline(t.slice(3))}</h3>`);
+    else if (t.startsWith("# ")) html.push(`<h2 class="rv-h2">${inline(t.slice(2))}</h2>`);
+    else if (t.startsWith("- ")) html.push(`<div class="rv-li">• ${inline(t.slice(2))}</div>`);
+    else if (/^\d+[\.、]/.test(t)) html.push(`<div class="rv-li">${inline(t)}</div>`);
+    else if (t) html.push(`<div class="rv-p">${inline(t)}</div>`);
+    else html.push('<div style="height:6px"></div>');
   });
   flushTable();
-  return html.join("\n");
+  return `<div class="rv">${html.join("\n")}</div>`;
 }
 
 async function renderDailyReview() {
