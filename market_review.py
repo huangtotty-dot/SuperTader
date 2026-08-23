@@ -238,7 +238,8 @@ def call_llm(prompt: str, cfg: dict) -> str:
         try:
             r = requests.post(url, json=payload, headers=headers, timeout=180)
             if r.status_code != 200:
-                raise RuntimeError(f"HTTP {r.status_code}: {r.text[:200]}")
+                detail = (r.text or "").strip().replace("\n", " ")[:120]
+                raise RuntimeError(f"HTTP {r.status_code} @ {url} (model={cfg.get('model')}): {detail}")
             data = r.json()
             return (data.get("choices") or [{}])[0].get("message", {}).get("content", "").strip()
         except Exception as e:
