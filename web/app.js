@@ -300,9 +300,9 @@ function renderMarket(ms) {
       }},
       series: [
         { name: "S", type: "line", data: hist.map(h => h.S), symbol: "circle", symbolSize: 5,
-          lineStyle: { color: "#58a6ff", width: 2 }, itemStyle: { color: p => {
+          lineStyle: { color: "#ff8c5a", width: 2 }, itemStyle: { color: p => {
             const r = hist[p.dataIndex].regime;
-            return r === "uni_up" ? "#f85149" : r === "uni_down" ? "#3fb950" : r === "range" ? "#d29922" : "#58a6ff";
+            return r === "uni_up" ? "#f85149" : r === "uni_down" ? "#3fb950" : r === "range" ? "#d29922" : "#ff8c5a";
           }} },
         { name: "Sadj", type: "line", data: hist.map(h => h.sadj != null ? h.sadj : null),
           lineStyle: { color: "rgba(139,148,158,.5)", width: 1, type: "dashed" }, symbol: "none" },
@@ -322,8 +322,8 @@ function renderMarket(ms) {
         return `${d.ts}<br/>S=${fmt(d.score, 1)}<br/>${d.regime_name || ""}`;
       }},
       series: [{ name: "盘中S", type: "line", data: iday.map(p => p.score), smooth: true,
-        symbol: "circle", symbolSize: 4, lineStyle: { color: "#58a6ff", width: 2 },
-        areaStyle: { color: "rgba(88,166,255,.15)" } }],
+        symbol: "circle", symbolSize: 4, lineStyle: { color: "#ff8c5a", width: 2 },
+        areaStyle: { color: "rgba(255,140,90,.15)" } }],
     });
   } else {
     echClear("echIntraday");
@@ -335,7 +335,7 @@ function renderCost(ch) {
   const dates = (ch && ch.dates) || [];
   const stocks = (ch && ch.stocks) || {};
   const codes = Object.keys(stocks);
-  const palette = ["#58a6ff","#f85149","#3fb950","#d29922","#bc8cff","#39c5cf","#ff7b72","#7ee787"];
+  const palette = ["#ff8c5a","#f85149","#3fb950","#d29922","#bc8cff","#39c5cf","#ff7b72","#7ee787"];
   if (!codes.length) { tabClear("echCost"); document.getElementById("costMatrix").innerHTML = ""; return; }
 
   // 收益趋势图：每股 P&L 金额（元）
@@ -1682,10 +1682,10 @@ function renderStockChart() {
         lineStyle: { color: "rgba(139,148,158,.3)", width: 1 } },
       // 成交量独立窗口
       { name: "成交量", type: "bar", data: period.volume, xAxisIndex: 1, yAxisIndex: 1,
-        itemStyle: { color: "rgba(88,166,255,.35)" }, barWidth: "60%" },
+        itemStyle: { color: "rgba(255,140,90,.35)" }, barWidth: "60%" },
       // MACD 窗口
       { name: "MACD-DIF", type: "line", data: period.macd.dif, xAxisIndex: 2, yAxisIndex: 2,
-        symbol: "none", lineStyle: { color: "#58a6ff", width: 1 } },
+        symbol: "none", lineStyle: { color: "#ff8c5a", width: 1 } },
       { name: "MACD-DEA", type: "line", data: period.macd.dea, xAxisIndex: 2, yAxisIndex: 2,
         symbol: "none", lineStyle: { color: "#f85149", width: 1 } },
       { name: "MACD柱", type: "bar", data: period.macd.hist, xAxisIndex: 2, yAxisIndex: 2,
@@ -2850,7 +2850,7 @@ function renderReviewCharts(md) {
     yAxis: { type: "category", data: names, axisLabel: { color: "#8b949e", fontSize: 11 }, axisLine: { lineStyle: { color: "#30363d" } } },
     series: [
       { name: "当日%", type: "bar", barWidth: 9, data: chg1.map(v => ({ value: v, itemStyle: { color: barColor(v) } })), label: { show: true, position: "right", color: "#c9d1d9", fontSize: 10 } },
-      { name: "近5日%", type: "bar", barWidth: 9, data: chg5.map(v => ({ value: v, itemStyle: { color: "rgba(88,166,255,.75)" } })), label: { show: true, position: "right", color: "#8b949e", fontSize: 10 } },
+      { name: "近5日%", type: "bar", barWidth: 9, data: chg5.map(v => ({ value: v, itemStyle: { color: "rgba(255,140,90,.75)" } })), label: { show: true, position: "right", color: "#8b949e", fontSize: 10 } },
     ],
   }, true);
   chart.resize();
