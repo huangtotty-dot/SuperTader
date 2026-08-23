@@ -229,7 +229,8 @@ def call_llm(prompt: str, cfg: dict) -> str:
     payload = {
         "model": cfg.get("model", ""),
         "messages": [{"role": "user", "content": prompt}],
-        "temperature": 0.4,
+        # 2026-08-23: Moonshot kimi-k3 只允许 temperature=1，用全兼容值 1（DeepSeek/OpenAI/Qwen 均接受）
+        "temperature": 1,
         "max_tokens": 4000,
         "stream": False,
     }
