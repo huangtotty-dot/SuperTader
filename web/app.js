@@ -2838,13 +2838,22 @@ async function runDailyReview() {
 async function pollReviewProgress() {
   if (_reviewPoll) return;
   const status = document.getElementById("reviewStatus");
+  const el = document.getElementById("reviewResult");
   _reviewPoll = setInterval(async () => {
     try {
       const p = await apiCall("daily_review_progress");
       if (p.error) { showReviewError(p.error); clearInterval(_reviewPoll); _reviewPoll = null; return; }
-      if (!p.running) { clearInterval(_reviewPoll); _reviewPoll = null; status.textContent = "复盘完成"; await refreshDailyReview(); }
+      // 流式显示：数据收集阶段提示 + 模型输出过程（原始文本）
+      if (p.output && el) {
+        el.innerHTML = `<div style="white-space:pre-wrap;font-family:var(--mono);font-size:11px;color:var(--text);user-select:text">${esc(p.output)}</div>`;
+      }
+      if (!p.running) {
+        clearInterval(_reviewPoll); _reviewPoll = null;
+        status.textContent = "复盘完成";
+        await refreshDailyReview();
+      }
     } catch (e) { /* 静默 */ }
-  }, 1500);
+  }, 800);
 }
 
 async function refreshDailyReview() {

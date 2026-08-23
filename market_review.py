@@ -251,6 +251,54 @@ def call_llm(prompt: str, cfg: dict) -> str:
     raise RuntimeError(f"模型调用失败(3次重试): {last_err}")
 
 
+def call_llm_stream(prompt: str, cfg: dict, on_token=None) -> str:
+    """OpenAI 兼容流式调用（2026-08-23）：模型输出逐 token 回调 on_token，返回完整文本。"""
+    import time as _t
+    import requests
+    base = (cfg.get("base_url") or "").rstrip("/")
+    url = base + "/chat/completions"
+    headers = {"Authorization": f"Bearer {cfg.get('api_key', '')}", "Content-Type": "application/json"}
+    payload = {
+        "model": cfg.get("model", ""),
+        "messages": [{"role": "user", "content": prompt}],
+        "temperature": 1,
+        "max_tokens": 4000,
+        "stream": True,
+    }
+    last_err = None
+    for attempt in range(3):
+        try:
+            with requests.post(url, json=payload, headers=headers, timeout=300, stream=True) as r:
+                if r.status_code != 200:
+                    detail = (r.text or "").strip().replace("\n", " ")[:120]
+                    raise RuntimeError(f"HTTP {r.status_code} @ {url} (model={cfg.get('model')}): {detail}")
+                parts = []
+                for line in r.iter_lines(decode_unicode=True):
+                    if not line:
+                        continue
+                    line = line.strip()
+                    if not line.startswith("data:"):
+                        continue
+                    data = line[5:].strip()
+                    if data == "[DONE]":
+                        break
+                    try:
+                        chunk = json.loads(data)
+                        delta = (chunk.get("choices") or [{}])[0].get("delta", {}).get("content", "")
+                        if delta:
+                            parts.append(delta)
+                            if on_token:
+                                on_token(delta)
+                    except Exception:
+                        pass
+                return "".join(parts)
+        except Exception as e:
+            last_err = e
+            if attempt < 2:
+                _t.sleep(2)
+    raise RuntimeError(f"模型调用失败(3次重试): {last_err}")
+
+
 def build_prompt(date: str, cross: dict, deep: dict) -> str:
     """组装：方法论全文 + 数据 JSON + 使用说明（方法论 §五）。"""
     method = METHODOLOGY.read_text(encoding="utf-8") if METHODOLOGY.exists() else ""
@@ -275,6 +323,26 @@ def run_market_review(date: str, cfg: dict) -> str:
     text = call_llm(prompt, cfg)
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     (OUT_DIR / f"market_review_{date}.md").write_text(text, encoding="utf-8")
+    return text
+
+
+def run_market_review_stream(date: str, cfg: dict, on_text=None) -> str:
+    """流式复盘（2026-08-23）：数据收集阶段与模型输出通过 on_text 逐步回调，供 GUI 实时显示。"""
+    def _emit(t):
+        if on_text:
+            on_text(t)
+
+    _emit("① 正在收集 6 指数日/周/月线…\n")
+    cross = build_cross_section(date)
+    _emit(f"② 6 指数横评完成（{len(cross.get('rows', []))} 只）；正在拉取深拆指数分钟线…\n")
+    deep = build_deep_dive(date, cross)
+    _emit(f"③ 数据收集完成，正在调用模型（{cfg.get('model')}）…\n\n")
+    prompt = build_prompt(date, cross, deep)
+
+    text = call_llm_stream(prompt, cfg, on_token=lambda t: _emit(t))
+    OUT_DIR.mkdir(parents=True, exist_ok=True)
+    (OUT_DIR / f"market_review_{date}.md").write_text(text, encoding="utf-8")
+    _emit("\n\n✅ 复盘完成")
     return text
 
 
