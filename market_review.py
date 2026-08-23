@@ -34,6 +34,17 @@ METHODOLOGY = BASE / "doc" / "大盘指数多周期复盘方法论.md"
 OUT_DIR = BASE / "t_io" / "validation" / "daily_review"
 MINUTE_FREQS = ("60min", "30min", "15min", "5min")
 MAX_DEEP = 3   # 深拆指数上限（双锚 + 触发项按强度取前 N），控 token
+LOG_FILE = BASE / "t_io" / "logs" / "market_review.log"
+
+
+def _log(msg: str) -> None:
+    """复盘过程日志（2026-08-23 排查用）：t_io/logs/market_review.log 追加。"""
+    try:
+        LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
+        with open(LOG_FILE, "a", encoding="utf-8") as f:
+            f.write(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] {msg}\n")
+    except Exception:
+        pass
 
 
 # ---------------------------------------------------------------- 数据获取
@@ -273,7 +284,8 @@ def call_llm_stream(prompt: str, cfg: dict, on_token=None, on_reasoning=None) ->
     import requests
     base = (cfg.get("base_url") or "").rstrip("/")
     url = base + "/chat/completions"
-    headers = {"Authorization": f"Bearer {cfg.get('api_key', '')}", "Content-Type": "application/json"}
+    headers = {"Authorization": f"Bearer {cfg.get('api_key', '')}", "Content-Type": "application/json",
+               "Accept": "text/event-stream"}
     payload = {
         "model": cfg.get("model", ""),
         "messages": [{"role": "user", "content": prompt}],
@@ -283,23 +295,33 @@ def call_llm_stream(prompt: str, cfg: dict, on_token=None, on_reasoning=None) ->
     _effort = (cfg.get("reasoning_effort") or "").strip()
     if _effort:
         payload["reasoning_effort"] = _effort
+    _log(f"call_llm_stream url={url} model={cfg.get('model')} effort={_effort or '(默认)'}")
     last_err = None
     for attempt in range(3):
         try:
             with requests.post(url, json=payload, headers=headers, timeout=300, stream=True) as r:
+                _log(f"  HTTP {r.status_code}")
                 if r.status_code != 200:
-                    detail = (r.text or "").strip().replace("\n", " ")[:120]
+                    detail = (r.text or "").strip().replace("\n", " ")[:200]
+                    _log(f"  错误响应: {detail}")
                     raise RuntimeError(f"HTTP {r.status_code} @ {url} (model={cfg.get('model')}): {detail}")
                 parts = []
                 reasoning_started = False
+                lines_seen = 0
+                content_chars = 0
+                first_data = ""
                 for line in r.iter_lines(decode_unicode=True):
                     if not line:
                         continue
                     line = line.strip()
                     if not line.startswith("data:"):
                         continue
+                    lines_seen += 1
+                    if lines_seen <= 3:
+                        first_data = (first_data + " " + line[:120]).strip()
                     data = line[5:].strip()
                     if data == "[DONE]":
+                        _log(f"  收到 [DONE]，lines={lines_seen} reasoning={reasoning_started} content_chars={content_chars}")
                         break
                     try:
                         chunk = json.loads(data)
@@ -307,18 +329,23 @@ def call_llm_stream(prompt: str, cfg: dict, on_token=None, on_reasoning=None) ->
                         reasoning = delta.get("reasoning_content")
                         if reasoning and not reasoning_started:
                             reasoning_started = True
+                            _log(f"  首次 reasoning_content @ line {lines_seen}")
                             if on_reasoning:
                                 on_reasoning()
                         content = delta.get("content")
                         if content:
+                            content_chars += len(content)
                             parts.append(content)
                             if on_token:
                                 on_token(content)
-                    except Exception:
-                        pass
+                    except Exception as _je:
+                        _log(f"  解析失败 line={lines_seen}: {line[:120]}")
+                if not parts:
+                    _log(f"  流式结束但无 content：lines={lines_seen} reasoning={reasoning_started} 首行={first_data[:200]}")
                 return "".join(parts)
         except Exception as e:
             last_err = e
+            _log(f"  attempt {attempt+1} 异常: {type(e).__name__}: {str(e)[:200]}")
             if attempt < 2:
                 _t.sleep(2)
     raise RuntimeError(f"模型调用失败(3次重试): {last_err}")
@@ -353,20 +380,27 @@ def run_market_review(date: str, cfg: dict) -> str:
 
 def run_market_review_stream(date: str, cfg: dict, on_text=None) -> str:
     """流式复盘（2026-08-23）：数据收集阶段与模型输出通过 on_text 逐步回调，供 GUI 实时显示。"""
+    import time as _t
     def _emit(t):
         if on_text:
             on_text(t)
 
+    _log(f"=== run_market_review_stream 开始 date={date} ===")
+    _t0 = _t.time()
     _emit("① 正在收集 6 指数日/周/月线…\n")
     cross = build_cross_section(date)
+    _log(f"横评完成 耗时{_t.time()-_t0:.1f}s rows={len(cross.get('rows', []))}")
     _emit(f"② 6 指数横评完成（{len(cross.get('rows', []))} 只）；正在拉取深拆指数分钟线…\n")
     deep = build_deep_dive(date, cross, on_progress=_emit)
+    _log(f"深拆完成 耗时{_t.time()-_t0:.1f}s indices={list(deep.keys())}")
     _emit(f"③ 数据收集完成，正在调用模型（{cfg.get('model')}）…\n\n")
     prompt = build_prompt(date, cross, deep)
+    _log(f"prompt 长度 {len(prompt)} 字符")
 
     def _on_reasoning():
         _emit("\n🧠 模型思考中…（推理模型先思考，请稍候）\n")
     text = call_llm_stream(prompt, cfg, on_token=lambda t: _emit(t), on_reasoning=_on_reasoning)
+    _log(f"模型输出完成 len={len(text)} 总耗时{_t.time()-_t0:.1f}s")
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     (OUT_DIR / f"market_review_{date}.md").write_text(text, encoding="utf-8")
     _emit("\n\n✅ 复盘完成")
