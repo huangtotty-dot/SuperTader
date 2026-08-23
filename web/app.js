@@ -2506,7 +2506,7 @@ async function loadRotation(force) {
   const wrap = document.getElementById("rotProgressWrap");
   try {
     if (force) rotState.date = null;   // 强制重新构建时重置日期，取最新
-    statusEl2.textContent = "加载中...";
+    statusEl2.textContent = "加载中...（首次约 10-20 秒，已缓存则秒回）";
     const res = await apiCall("load_sector_rotation", rotState.date, rotState.view, rotState.tail);
     if (res.status === "bootstrapping") {
       statusEl2.textContent = "首次构建日线缓存（约几分钟），请稍候...";
@@ -2732,6 +2732,115 @@ function renderRotationTable(m) {
   el.innerHTML = html;
 }
 
+/* ================= 每日大盘复盘（LLM，2026-08-23 新增） ================= */
+let _reviewPoll = null;
+const LLM_PROVIDER_BASE = {
+  deepseek: "https://api.deepseek.com",
+  qwen: "https://dashscope.aliyuncs.com/compatible-mode/v1",
+  openai: "https://api.openai.com/v1",
+  moonshot: "https://api.moonshot.cn/v1",
+  custom: "",
+};
+
+function renderMarkdown(md) {
+  if (!md) return '<div class="empty">无内容</div>';
+  const lines = String(md).split("\n");
+  const html = [];
+  let tableRows = [];
+  const flushTable = () => {
+    if (!tableRows.length) return;
+    const rows = tableRows.map((cells, i) =>
+      `<tr>${cells.map(c => `<td${i === 0 ? ' style="font-weight:700"' : ""}>${esc(c.replace(/\*\*/g, ""))}</td>`).join("")}</tr>`).join("");
+    html.push(`<table class="h-table" style="font-size:11px"><tbody>${rows}</tbody></table>`);
+    tableRows = [];
+  };
+  lines.forEach(line => {
+    const t = line.trim();
+    if (t.startsWith("|")) {
+      const cells = t.replace(/^\||\|$/g, "").split("|").map(c => c.trim());
+      if (!cells.every(c => /^[-: ]+$/.test(c))) tableRows.push(cells);
+      return;
+    }
+    flushTable();
+    if (t.startsWith("## ")) html.push(`<h3 style="margin:10px 0 4px;color:#58a6ff">${esc(t.slice(3))}</h3>`);
+    else if (t.startsWith("### ")) html.push(`<h4 style="margin:8px 0 4px;color:#79c0ff">${esc(t.slice(4))}</h4>`);
+    else if (t.startsWith("- ")) html.push(`<div style="padding-left:12px">• ${esc(t.slice(2))}</div>`);
+    else if (t) html.push(`<div>${esc(t)}</div>`);
+    else html.push("");
+  });
+  flushTable();
+  return html.join("\n");
+}
+
+async function renderDailyReview() {
+  try {
+    const cfg = await apiCall("get_llm_config");
+    if (cfg && cfg.base_url) document.getElementById("llmBaseUrl").value = cfg.base_url || "";
+    if (cfg && cfg.model) document.getElementById("llmModel").value = cfg.model || "";
+    if (cfg && cfg.api_key) document.getElementById("llmApiKey").value = cfg.api_key || "";
+  } catch (e) { /* 静默 */ }
+  const d = document.getElementById("reviewDate");
+  if (d && !d.value) d.value = new Date().toISOString().slice(0, 10);
+  refreshDailyReview();
+}
+
+function providerChanged() {
+  const p = document.getElementById("llmProvider").value;
+  if (p in LLM_PROVIDER_BASE) document.getElementById("llmBaseUrl").value = LLM_PROVIDER_BASE[p];
+}
+
+async function saveModelConfig() {
+  const base_url = document.getElementById("llmBaseUrl").value.trim();
+  const model = document.getElementById("llmModel").value.trim();
+  const api_key = document.getElementById("llmApiKey").value.trim();
+  if (!base_url || !model || !api_key) { statusEl("模型配置需填全 base_url / model / api_key", "err"); return; }
+  const r = await apiCall("save_llm_config", base_url, model, api_key);
+  statusEl(r && r.ok ? "模型配置已保存" : "保存失败", r && r.ok ? "ok" : "err");
+}
+
+async function runDailyReview() {
+  const date = document.getElementById("reviewDate").value;
+  const status = document.getElementById("reviewStatus");
+  status.textContent = "开始复盘…";
+  try {
+    const r = await apiCall("run_daily_review", date,
+      document.getElementById("llmBaseUrl").value.trim(),
+      document.getElementById("llmModel").value.trim(),
+      document.getElementById("llmApiKey").value.trim());
+    if (r && r.status === "error") { status.textContent = "错误: " + (r.message || ""); return; }
+    status.textContent = "复盘中（收集数据 + 调用模型，约 1-3 分钟）…";
+    pollReviewProgress();
+  } catch (e) {
+    status.textContent = "启动失败: " + e.message;
+  }
+}
+
+async function pollReviewProgress() {
+  if (_reviewPoll) return;
+  const status = document.getElementById("reviewStatus");
+  _reviewPoll = setInterval(async () => {
+    try {
+      const p = await apiCall("daily_review_progress");
+      if (p.error) { status.textContent = "复盘失败: " + p.error; clearInterval(_reviewPoll); _reviewPoll = null; return; }
+      if (!p.running) { clearInterval(_reviewPoll); _reviewPoll = null; status.textContent = "复盘完成"; await refreshDailyReview(); }
+    } catch (e) { /* 静默 */ }
+  }, 1500);
+}
+
+async function refreshDailyReview() {
+  const date = document.getElementById("reviewDate").value || new Date().toISOString().slice(0, 10);
+  const el = document.getElementById("reviewResult");
+  if (!el) return;
+  try {
+    const r = await apiCall("get_daily_review", date);
+    if (r && r.exists) {
+      el.innerHTML = renderMarkdown(r.text);
+    } else {
+      el.innerHTML = '<div class="empty">该日期暂无复盘结果，点「开始大盘复盘」生成</div>';
+    }
+  } catch (e) { el.innerHTML = '<div class="empty">加载失败</div>'; }
+}
+
 /* ================= Tab 切换 ================= */
 function switchTab(tab) {
   document.querySelectorAll(".tab-page").forEach(p => p.classList.remove("active"));
@@ -2742,7 +2851,8 @@ function switchTab(tab) {
   if (sideItem) sideItem.classList.add("active");
   // 延迟 resize 让 tab 的 display:block 先生效
   setTimeout(resizeAllEch, 80);
-  // 切到选股猎手：已加载则显示，否则提示点击按钮
+  // 切到每日复盘：懒加载模型配置 + 已有复盘
+  if (tab === "archive") renderDailyReview();
 }
 
 /* ================= 侧栏汇总 ================= */

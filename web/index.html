@@ -32,7 +32,7 @@
       <span class="sidebar-icon">⚡</span><span>信号与交易</span>
     </div>
     <div class="sidebar-item" data-tab="archive">
-      <span class="sidebar-icon">📁</span><span>归档与结算</span>
+      <span class="sidebar-icon">📋</span><span>每日复盘</span>
     </div>
     <div class="sidebar-item" data-tab="hunter">
       <span class="sidebar-icon">🔍</span><span>选股猎手</span>
@@ -174,8 +174,37 @@
     </div>
   </div>
 
-  <!-- ====== Tab 4: 归档与结算 ====== -->
+  <!-- ====== Tab 4: 每日复盘 ====== -->
   <div class="tab-page" id="tab-archive">
+    <div class="section" id="market-review">
+      <h2>每日大盘复盘（LLM）
+        <button class="mini-btn primary" onclick="runDailyReview()" title="收集指数多周期数据并调用模型复盘">▶ 开始大盘复盘</button>
+        <button class="mini-btn" onclick="refreshDailyReview()" title="读取已生成的复盘结果">🔄 刷新</button>
+      </h2>
+      <div class="card" style="padding:10px;margin-bottom:10px">
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+          <select id="llmProvider" class="mini-btn" onchange="providerChanged()" style="width:130px">
+            <option value="">选择服务商…</option>
+            <option value="deepseek">DeepSeek</option>
+            <option value="qwen">通义千问</option>
+            <option value="openai">OpenAI</option>
+            <option value="moonshot">Moonshot</option>
+            <option value="custom">自定义</option>
+          </select>
+          <input type="text" id="llmBaseUrl" class="mini-input" placeholder="base_url(如 https://api.deepseek.com)" style="width:260px">
+          <input type="text" id="llmModel" class="mini-input" placeholder="模型名(如 deepseek-chat)" style="width:150px">
+          <input type="password" id="llmApiKey" class="mini-input" placeholder="API key" style="width:180px">
+          <button class="mini-btn" onclick="saveModelConfig()">💾 保存</button>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;margin-top:8px">
+          <label class="cell-dim" style="font-size:11px">复盘日期</label>
+          <input type="date" id="reviewDate" class="mini-input" style="width:140px">
+          <span class="cell-dim" style="font-size:11px">数据：6指数横评 + 触发项/双锚多周期深拆（腾讯日/周/月线 + tushare 分钟线）</span>
+        </div>
+      </div>
+      <div id="reviewStatus" class="cell-dim" style="margin-bottom:8px"></div>
+      <div id="reviewResult" class="card" style="white-space:pre-wrap;font-size:12px;line-height:1.7;max-height:70vh;overflow:auto"></div>
+    </div>
     <div class="section" id="positions">
       <h2>持仓对照（当前 vs 快照）</h2>
       <div id="positionsBody"></div>

@@ -68,6 +68,11 @@ if str(HUNTER_DIR) not in sys.path:
 import threading as _th
 HUNTER_RUN_STATE = {"date": None, "running": False, "result": None}
 ROTATION_RUN_STATE = {"running": False, "error": None}
+# 2026-08-22: 板块轮动结果缓存（内存+磁盘）——build_rotation_model 约 15s，重复点击/切 view 秒回
+_ROTATION_CACHE_DIR = BASE / "t_io" / "cache" / "sector_rotation"
+_ROTATION_CACHE_MEM = {}
+# 2026-08-23: 每日大盘复盘（LLM）后台线程状态
+_REVIEW_RUN_STATE = {"running": False, "error": None}
 
 
 def _jiuyan_concepts(info):
@@ -2432,12 +2437,24 @@ class Api:
             raise ValueError("日线缓存为空，请先构建。")
         if not date or date not in dates:
             date = dates[-1]
+        _ckey = (view, str(date), int(tail_days or 18))
+        # 命中缓存（内存 → 磁盘），避免 build_rotation_model(~15s) 重复计算
+        _cached = _ROTATION_CACHE_MEM.get(_ckey)
+        if _cached is None:
+            try:
+                _fp = _ROTATION_CACHE_DIR / f"{_ckey[0]}_{_ckey[1]}_{_ckey[2]}.json"
+                if _fp.exists():
+                    _cached = json.loads(_fp.read_text(encoding="utf-8"))
+            except Exception:
+                _cached = None
+        if _cached is not None:
+            return _cached
         model = build_rotation_model(
             daily, industry,
             as_of=date, tail_days=int(tail_days or 18),
             include_growth_indices=(view == "industry"),
         )
-        return {
+        _result = {
             "as_of": model.as_of,
             "market_state": model.market_state,
             "summary": _clean(model.summary),
@@ -2447,6 +2464,14 @@ class Api:
             "leaders_frame": self._rotation_df_to_rows(model.leaders_frame),
             "dates": dates,
         }
+        try:
+            _ROTATION_CACHE_MEM[_ckey] = _result
+            _ROTATION_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+            (_ROTATION_CACHE_DIR / f"{_ckey[0]}_{_ckey[1]}_{_ckey[2]}.json").write_text(
+                json.dumps(_result, ensure_ascii=False), encoding="utf-8")
+        except Exception:
+            pass
+        return _result
 
     def load_sector_rotation(self, date=None, view="industry", tail_days=18):
         """板块轮动主入口。缓存未就绪 → 后台 bootstrap 并返回进度；就绪 → 返回轮动模型。"""
@@ -2471,6 +2496,51 @@ class Api:
             return {"status": "ok", **result}
         except Exception as e:
             return {"status": "error", "message": str(e)}
+
+    # ---------- 每日大盘复盘（LLM，2026-08-23 新增） ----------
+    def _review_bootstrap_work(self, date, cfg):
+        try:
+            from market_review import run_market_review
+            run_market_review(date, cfg)
+        except Exception as e:
+            _REVIEW_RUN_STATE["error"] = str(e)
+        finally:
+            _REVIEW_RUN_STATE["running"] = False
+
+    def get_llm_config(self):
+        from market_review import load_llm_config
+        return load_llm_config()
+
+    def save_llm_config(self, base_url, model, api_key):
+        from market_review import save_llm_config as _s
+        return _s(base_url, model, api_key)
+
+    def run_daily_review(self, date, base_url, model, api_key):
+        """大盘复盘（后台线程）。模型配置保存后即触发。返回 {status: running/error}。"""
+        try:
+            from market_review import save_llm_config
+        except Exception as e:
+            return {"status": "error", "message": f"market_review 加载失败: {e}"}
+        cfg = save_llm_config(base_url, model, api_key)
+        if not cfg.get("saved"):
+            return {"status": "error", "message": "模型配置不完整（base_url / model / api_key 必填）"}
+        if _REVIEW_RUN_STATE.get("running"):
+            return {"status": "running", "message": "已有复盘进行中"}
+        _REVIEW_RUN_STATE.update({"running": True, "error": None})
+        _th.Thread(target=self._review_bootstrap_work, args=(date, cfg), daemon=True).start()
+        return {"status": "running"}
+
+    def daily_review_progress(self):
+        return {"running": bool(_REVIEW_RUN_STATE.get("running")), "error": _REVIEW_RUN_STATE.get("error")}
+
+    def get_daily_review(self, date):
+        fp = BASE / "t_io" / "validation" / "daily_review" / f"market_review_{date}.md"
+        try:
+            if fp.exists():
+                return {"text": fp.read_text(encoding="utf-8"), "exists": True}
+        except Exception:
+            pass
+        return {"text": "", "exists": False}
 
     # ---------- 集合竞价信息层 ----------
     def load_auction(self, date):
