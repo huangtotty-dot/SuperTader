@@ -217,7 +217,8 @@ def save_llm_config(base_url: str, model: str, api_key: str) -> dict:
     cfg = {"base_url": (base_url or "").strip(), "model": (model or "").strip(), "api_key": (api_key or "").strip()}
     LLM_CONFIG.parent.mkdir(parents=True, exist_ok=True)
     LLM_CONFIG.write_text(json.dumps(cfg, ensure_ascii=False, indent=2), encoding="utf-8")
-    return {"ok": True, "saved": bool(cfg.get("base_url") and cfg.get("model") and cfg.get("api_key"))}
+    # 返回完整配置（含 base_url/model/api_key），供 run_daily_review 后台线程直接使用
+    return {"ok": True, "saved": bool(cfg.get("base_url") and cfg.get("model") and cfg.get("api_key")), **cfg}
 
 
 def call_llm(prompt: str, cfg: dict) -> str:
