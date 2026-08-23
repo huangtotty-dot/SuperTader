@@ -2500,8 +2500,11 @@ class Api:
     # ---------- 每日大盘复盘（LLM，2026-08-23 新增） ----------
     def _review_bootstrap_work(self, date, cfg):
         try:
-            from market_review import run_market_review
-            run_market_review(date, cfg)
+            from market_review import run_market_review_stream
+            _REVIEW_RUN_STATE["output"] = ""
+            def _on_text(t):
+                _REVIEW_RUN_STATE["output"] = (_REVIEW_RUN_STATE.get("output") or "") + t
+            run_market_review_stream(date, cfg, _on_text)
         except Exception as e:
             _REVIEW_RUN_STATE["error"] = str(e)
         finally:
@@ -2526,12 +2529,13 @@ class Api:
             return {"status": "error", "message": "模型配置不完整（base_url / model / api_key 必填）"}
         if _REVIEW_RUN_STATE.get("running"):
             return {"status": "running", "message": "已有复盘进行中"}
-        _REVIEW_RUN_STATE.update({"running": True, "error": None})
+        _REVIEW_RUN_STATE.update({"running": True, "error": None, "output": ""})
         _th.Thread(target=self._review_bootstrap_work, args=(date, cfg), daemon=True).start()
         return {"status": "running"}
 
     def daily_review_progress(self):
-        return {"running": bool(_REVIEW_RUN_STATE.get("running")), "error": _REVIEW_RUN_STATE.get("error")}
+        return {"running": bool(_REVIEW_RUN_STATE.get("running")), "error": _REVIEW_RUN_STATE.get("error"),
+                "output": _REVIEW_RUN_STATE.get("output") or ""}
 
     def get_daily_review(self, date):
         fp = BASE / "t_io" / "validation" / "daily_review" / f"market_review_{date}.md"
