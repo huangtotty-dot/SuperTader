@@ -266,8 +266,9 @@ def call_llm(prompt: str, cfg: dict) -> str:
     raise RuntimeError(f"模型调用失败(3次重试): {last_err}")
 
 
-def call_llm_stream(prompt: str, cfg: dict, on_token=None) -> str:
-    """OpenAI 兼容流式调用（2026-08-23）：模型输出逐 token 回调 on_token，返回完整文本。"""
+def call_llm_stream(prompt: str, cfg: dict, on_token=None, on_reasoning=None) -> str:
+    """OpenAI 兼容流式调用（2026-08-23）：content 逐 token 回调 on_token；思考过程(reasoning_content)
+    首次触发时回调 on_reasoning（K3 等推理模型先思考很久再输出 content，若不处理会看似无响应）。"""
     import time as _t
     import requests
     base = (cfg.get("base_url") or "").rstrip("/")
@@ -290,6 +291,7 @@ def call_llm_stream(prompt: str, cfg: dict, on_token=None) -> str:
                     detail = (r.text or "").strip().replace("\n", " ")[:120]
                     raise RuntimeError(f"HTTP {r.status_code} @ {url} (model={cfg.get('model')}): {detail}")
                 parts = []
+                reasoning_started = False
                 for line in r.iter_lines(decode_unicode=True):
                     if not line:
                         continue
@@ -301,11 +303,17 @@ def call_llm_stream(prompt: str, cfg: dict, on_token=None) -> str:
                         break
                     try:
                         chunk = json.loads(data)
-                        delta = (chunk.get("choices") or [{}])[0].get("delta", {}).get("content", "")
-                        if delta:
-                            parts.append(delta)
+                        delta = (chunk.get("choices") or [{}])[0].get("delta", {}) or {}
+                        reasoning = delta.get("reasoning_content")
+                        if reasoning and not reasoning_started:
+                            reasoning_started = True
+                            if on_reasoning:
+                                on_reasoning()
+                        content = delta.get("content")
+                        if content:
+                            parts.append(content)
                             if on_token:
-                                on_token(delta)
+                                on_token(content)
                     except Exception:
                         pass
                 return "".join(parts)
@@ -356,7 +364,9 @@ def run_market_review_stream(date: str, cfg: dict, on_text=None) -> str:
     _emit(f"③ 数据收集完成，正在调用模型（{cfg.get('model')}）…\n\n")
     prompt = build_prompt(date, cross, deep)
 
-    text = call_llm_stream(prompt, cfg, on_token=lambda t: _emit(t))
+    def _on_reasoning():
+        _emit("\n🧠 模型思考中…（推理模型先思考，请稍候）\n")
+    text = call_llm_stream(prompt, cfg, on_token=lambda t: _emit(t), on_reasoning=_on_reasoning)
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     (OUT_DIR / f"market_review_{date}.md").write_text(text, encoding="utf-8")
     _emit("\n\n✅ 复盘完成")
