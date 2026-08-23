@@ -2741,27 +2741,37 @@ const LLM_PROVIDER_BASE = {
 };
 
 function renderMarkdown(md) {
-  /* 2026-08-23: 美观化——标题层级/加粗斜体/代码/分隔线/表格(表头+斑马纹+数字右对齐) */
+  /* 2026-08-23: 可视化——标题层级/加粗/表格(表头+斑马纹+数字右对齐) + 一句话结论卡片 + 涨跌红绿 + 触发项琥珀 */
   if (!md) return '<div class="empty">无内容</div>';
   const inline = (t) => esc(t)
     .replace(/\*\*(.+?)\*\*/g, "<b>$1</b>")
     .replace(/\*(.+?)\*/g, "<i>$1</i>")
     .replace(/`(.+?)`/g, '<code class="rv-code">$1</code>');
+  const cellTd = (c, isHeader) => {
+    const txt = inline(c);
+    const s = String(c).trim();
+    let numCls = "", style = "";
+    const num = !isNaN(parseFloat(s.replace(/[%+−\-\s]/g, ""))) && s !== "";
+    if (num) numCls = "num";
+    if (!isHeader && /%/.test(s)) {                       // 涨跌幅：A股红涨绿跌
+      const n = parseFloat(s.replace(/[%,+\s]/g, ""));
+      if (!isNaN(n)) style = n > 0 ? "color:#f85149;font-weight:600" : n < 0 ? "color:#3fb950" : "";
+    } else if (!isHeader && /(破MA20|破MA60|量比|铁顶|铁底|分水岭|生命线|支撑|压力)/.test(s)) {
+      style = "color:#d29922;font-weight:500";             // 关键位/触发项：琥珀
+    }
+    return `<td${numCls ? ` class="${numCls}"` : ""}${style ? ` style="${style}"` : ""}>${txt}</td>`;
+  };
   const lines = String(md).split("\n");
   const html = [];
   let tableRows = [];
   const flushTable = () => {
     if (!tableRows.length) return;
-    const rows = tableRows.map((cells, i) => {
-      const tds = cells.map(c => {
-        const num = !isNaN(parseFloat(String(c).replace(/[%+−\-\s]/g, ""))) && c !== "";
-        return `<td${num ? ' class="num"' : ""}>${inline(c)}</td>`;
-      }).join("");
-      return `<tr${i === 0 ? ' class="rv-th"' : (i % 2 === 0 ? ' class="rv-alt"' : "")}>${tds}</tr>`;
-    }).join("");
+    const rows = tableRows.map((cells, i) =>
+      `<tr${i === 0 ? ' class="rv-th"' : (i % 2 === 0 ? ' class="rv-alt"' : "")}>${cells.map(c => cellTd(c, i === 0)).join("")}</tr>`).join("");
     html.push(`<table class="rv-table"><tbody>${rows}</tbody></table>`);
     tableRows = [];
   };
+  let conclusionPending = false;
   lines.forEach(line => {
     const t = line.trim();
     if (t.startsWith("|")) {
@@ -2771,6 +2781,14 @@ function renderMarkdown(md) {
     }
     flushTable();
     if (t === "---" || /^={3,}$/.test(t)) html.push('<hr class="rv-hr">');
+    else if (t.startsWith("## 0") || t.includes("一句话结论")) {
+      html.push(`<h3 class="rv-h3">${inline(t.replace(/^#+\s*/, ""))}</h3>`);
+      conclusionPending = true;
+    }
+    else if (conclusionPending && t) {                     // 一句话结论正文 → 醒目卡片
+      html.push(`<div class="rv-conclusion">${inline(t)}</div>`);
+      conclusionPending = false;
+    }
     else if (t.startsWith("#### ")) html.push(`<h5 class="rv-h5">${inline(t.slice(5))}</h5>`);
     else if (t.startsWith("### ")) html.push(`<h4 class="rv-h4">${inline(t.slice(4))}</h4>`);
     else if (t.startsWith("## ")) html.push(`<h3 class="rv-h3">${inline(t.slice(3))}</h3>`);
