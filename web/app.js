@@ -2821,10 +2821,13 @@ function parseCrossTable(md) {
   return [];
 }
 
-function renderReviewCharts(md) {
+function renderReviewCharts(md, meta) {
   const wrap = document.getElementById("reviewChartWrap");
   if (!wrap) return;
   const rows = parseCrossTable(md);
+  const crossRows = (meta && meta.cross && meta.cross.rows) || rows;
+  const extra = (meta && meta.extra) || {};
+  renderVibeCards(crossRows, extra);
   if (rows.length < 2) { wrap.style.display = "none"; return; }
   const header = rows[0];
   const iOf = n => header.indexOf(n);
@@ -2878,6 +2881,55 @@ function renderKeyLevels(md) {
   </div>`).join("");
   el.innerHTML = `<div style="font-size:12px;font-weight:700;color:var(--accent);margin-bottom:6px">关键位一览</div>
     <div style="display:flex;flex-wrap:wrap;gap:8px">${cards}</div>`;
+}
+
+/* 玻璃卡可视化：指数横评 / 市场情绪 / 板块强弱（参考 Vibe-Research，2026-08-23） */
+function renderVibeCards(crossRows, extra) {
+  const el = document.getElementById("reviewVibe");
+  if (!el) return;
+  const parts = [];
+  // 1) 指数横评卡（6 指数，Vibe 指数卡风格）
+  if (crossRows && crossRows.length >= 2) {
+    const header = crossRows[0];
+    const iOf = n => header.indexOf(n);
+    const iChg = iOf("当日%"), i5 = iOf("近5日%"), iPos = iOf("20日位置");
+    const numV = (v, d) => { const n = parseFloat(String(v || "").replace(/[%+\s]/g, "")); return isNaN(n) ? d : n; };
+    const cards = crossRows.slice(1).filter(r => r[0]).map(r => {
+      const chg = numV(r[iChg], 0), chg5 = numV(r[i5], 0), pos = numV(r[iPos], 50);
+      const c = chg > 0 ? "var(--red)" : chg < 0 ? "var(--green)" : "var(--text-dim)";
+      const c5 = chg5 > 0 ? "var(--red)" : chg5 < 0 ? "var(--green)" : "var(--text-dim)";
+      return `<div class="rv-idx"><div class="rv-idx-name">${esc(r[0])}</div>
+        <div class="rv-idx-price">${esc(r[1] || "—")}</div>
+        <div class="rv-idx-chg" style="color:${c}">${chg > 0 ? "+" : ""}${chg.toFixed(2)}%</div>
+        <div class="rv-idx-dim">5日 <span style="color:${c5}">${chg5 > 0 ? "+" : ""}${chg5.toFixed(2)}%</span> · 20日位${pos.toFixed(0)}%</div></div>`;
+    }).join("");
+    parts.push(`<div class="rv-vibe-title">指数横评</div><div class="rv-idx-grid">${cards}</div>`);
+  }
+  // 2) 市场情绪卡
+  const emo = extra.情绪 || {};
+  if (Object.keys(emo).length) {
+    const fmtPct = v => v == null ? "—" : (Math.round(v * 1000) / 10) + "%";
+    const cells = [
+      ["涨停", emo.涨停数, "var(--red)"],
+      ["跌停", emo.跌停数, "var(--green)"],
+      ["炸板率", emo.炸板率 != null ? fmtPct(emo.炸板率) : "—", "var(--yellow)"],
+      ["情绪分S", emo.情绪分S, "var(--accent)"],
+      ["题材TOP3", (emo.题材TOP3 || []).join(" / "), "var(--yellow)"],
+      ["系统性风险", emo.系统性风险 ? "有" : "无", emo.系统性风险 ? "var(--red)" : "var(--green)"],
+    ];
+    const cards = cells.map(([k, v, color]) =>
+      `<div class="rv-kpi"><div class="rv-kpi-k">${esc(k)}</div><div class="rv-kpi-v" style="${color ? `color:${color}` : ""}">${esc(String(v ?? "—"))}</div></div>`).join("");
+    parts.push(`<div class="rv-vibe-title">市场情绪</div><div class="rv-kpi-grid">${cards}</div>`);
+  }
+  // 3) 板块强弱
+  const sec = extra.板块 || {};
+  if (sec.强势TOP5 && sec.强势TOP5.length) {
+    const chip = ([n, v], hot) => `<span class="rv-chip ${hot ? "hot" : "cold"}">${esc(n)} ${v}</span>`;
+    parts.push(`<div class="rv-vibe-title">板块强弱</div>
+      <div><span class="rv-chip-label" style="color:var(--red)">强势</span> ${sec.强势TOP5.map(x => chip(x, true)).join(" ")}
+      <span class="rv-chip-label" style="color:var(--green)">弱势</span> ${(sec.弱势BOTTOM5 || []).map(x => chip(x, false)).join(" ")}</div>`);
+  }
+  el.innerHTML = parts.join("");
 }
 
 async function renderDailyReview() {
@@ -2996,7 +3048,7 @@ async function refreshDailyReview() {
   try {
     const r = await apiCall("get_daily_review", date);
     if (r && r.exists) {
-      renderReviewCharts(r.text);        // 可视化图表（横评条形图 + 关键位卡片）
+      renderReviewCharts(r.text, r.data || {});   // 可视化（玻璃卡 + 条形图 + 关键位）
       el.innerHTML = renderMarkdown(r.text);
     } else {
       const wrap = document.getElementById("reviewChartWrap");
