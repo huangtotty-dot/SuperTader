@@ -469,6 +469,13 @@ def run_market_review_stream(date: str, cfg: dict, on_text=None) -> str:
     _log(f"模型输出完成 len={len(text)} 总耗时{_t.time()-_t0:.1f}s")
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     (OUT_DIR / f"market_review_{date}.md").write_text(text, encoding="utf-8")
+    # 结构化数据存档（2026-08-23：前端可视化玻璃卡用——横评/情绪/板块）
+    try:
+        _meta = {"date": date, "cross": cross, "extra": extra}
+        (OUT_DIR / f"market_review_{date}.json").write_text(
+            json.dumps(_meta, ensure_ascii=False, default=str), encoding="utf-8")
+    except Exception:
+        pass
     _emit("\n\n✅ 复盘完成")
     return text
 

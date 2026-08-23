@@ -284,7 +284,24 @@ tr:hover td { background: rgba(243,93,43,.03); }
 .rv-table tr.rv-th td { background: var(--bg-soft); color: #e6edf3; font-weight: 700; border-color: var(--border); }
 .rv-table tr.rv-alt td { background: rgba(139, 148, 158, .06); }
 .rv-table td.num { text-align: right; font-variant-numeric: tabular-nums; font-family: var(--mono); }
-.rv-conclusion { background: rgba(88, 166, 255, .08); border-left: 3px solid var(--accent); padding: 8px 12px; margin: 8px 0; border-radius: 4px; font-size: 13px; color: #e6edf3; font-weight: 500; }
+.rv-conclusion { background: rgba(243, 93, 43, .08); border-left: 3px solid var(--accent); padding: 8px 12px; margin: 8px 0; border-radius: 4px; font-size: 13px; color: #e6edf3; font-weight: 500; }
+
+/* 每日复盘玻璃卡（Vibe 风格，2026-08-23） */
+.rv-vibe-title { font-size: 12px; font-weight: 700; color: var(--accent); margin: 10px 0 6px; }
+.rv-idx-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
+.rv-idx { background-image: linear-gradient(162deg, var(--glass-fill-top), var(--glass-fill-bot)); border: 1px solid var(--glass-stroke); border-radius: 12px; padding: 10px 12px; box-shadow: 0 8px 20px rgba(0,0,0,.3), inset 0 1px 0 var(--glass-hi); }
+.rv-idx-name { font-size: 11px; color: var(--text-dim); }
+.rv-idx-price { font-family: var(--mono); font-size: 17px; font-weight: 700; color: #f0f3f8; margin: 2px 0; }
+.rv-idx-chg { font-size: 13px; font-weight: 700; }
+.rv-idx-dim { font-size: 10px; color: var(--text-dim); margin-top: 2px; }
+.rv-kpi-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 8px; }
+.rv-kpi { background-image: linear-gradient(162deg, var(--glass-fill-top), var(--glass-fill-bot)); border: 1px solid var(--glass-stroke); border-radius: 12px; padding: 8px 10px; }
+.rv-kpi-k { font-size: 11px; color: var(--text-dim); }
+.rv-kpi-v { font-size: 15px; font-weight: 700; font-family: var(--mono); margin-top: 2px; color: #e6ecf4; }
+.rv-chip { display: inline-block; font-size: 11px; padding: 2px 8px; border-radius: 20px; margin: 2px 2px; border: 1px solid var(--border); }
+.rv-chip.hot { color: var(--red); border-color: rgba(243,93,43,.4); background: rgba(243,93,43,.1); }
+.rv-chip.cold { color: var(--green); border-color: rgba(63,191,114,.4); background: rgba(63,191,114,.1); }
+.rv-chip-label { font-size: 11px; font-weight: 700; margin-right: 4px; }
 .h-main-row { transition: background .15s; }
 .h-main-row:hover { background: rgba(243,93,43,.08); }
 .h-main-row td { padding: 10px 8px; border-bottom: 1px solid var(--border-soft); vertical-align: middle; }

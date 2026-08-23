@@ -2539,12 +2539,19 @@ class Api:
 
     def get_daily_review(self, date):
         fp = BASE / "t_io" / "validation" / "daily_review" / f"market_review_{date}.md"
+        data = {}
+        jp = BASE / "t_io" / "validation" / "daily_review" / f"market_review_{date}.json"
+        try:
+            if jp.exists():
+                data = json.loads(jp.read_text(encoding="utf-8"))
+        except Exception:
+            data = {}
         try:
             if fp.exists():
-                return {"text": fp.read_text(encoding="utf-8"), "exists": True}
+                return {"text": fp.read_text(encoding="utf-8"), "exists": True, "data": data}
         except Exception:
             pass
-        return {"text": "", "exists": False}
+        return {"text": "", "exists": False, "data": {}}
 
     def get_daily_review_list(self):
         """历史复盘日期列表（2026-08-23：存档翻看）。"""
