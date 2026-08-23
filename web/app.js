@@ -222,12 +222,10 @@ async function refreshLive(reset) {
 function renderAll(p, tradePnl) {
   renderKPI(p.kpi, tradePnl);
   renderSignalBar(p.sig_stat, p.name_map);
-  renderPositions(p.positions, p.name_map);
-  renderSettle(p.settle, p.sig_stat, p.name_map);
+  // 2026-08-23: 持仓对照/盘中结算/系统看板已从"每日复盘"tab移除
   renderShadow(p.shadow, p.qty_freeze);
   renderPB(p.position_builder);
   renderAddWatch(p.add_watch);
-  renderStageBoard(p.stage_board);
 }
 
 /* ---- ECharts 辅助 ---- */
@@ -2799,7 +2797,7 @@ async function saveModelConfig() {
 }
 
 async function runDailyReview() {
-  const date = document.getElementById("reviewDate").value;
+  const date = document.getElementById("reviewDate").value || new Date().toISOString().slice(0, 10);
   const status = document.getElementById("reviewStatus");
   status.textContent = "开始复盘…";
   try {
