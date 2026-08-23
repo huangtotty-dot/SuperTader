@@ -2790,6 +2790,7 @@ async function renderDailyReview() {
     if (cfg && cfg.base_url) document.getElementById("llmBaseUrl").value = cfg.base_url || "";
     if (cfg && cfg.model) document.getElementById("llmModel").value = cfg.model || "";
     if (cfg && cfg.api_key) document.getElementById("llmApiKey").value = cfg.api_key || "";
+    if (cfg && cfg.reasoning_effort) document.getElementById("llmEffort").value = cfg.reasoning_effort || "";
   } catch (e) { /* 静默 */ }
   const d = document.getElementById("reviewDate");
   if (d && !d.value) d.value = new Date().toISOString().slice(0, 10);
@@ -2805,8 +2806,9 @@ async function saveModelConfig() {
   const base_url = document.getElementById("llmBaseUrl").value.trim();
   const model = document.getElementById("llmModel").value.trim();
   const api_key = document.getElementById("llmApiKey").value.trim();
+  const effort = document.getElementById("llmEffort").value;
   if (!base_url || !model || !api_key) { statusEl("模型配置需填全 base_url / model / api_key", "err"); return; }
-  const r = await apiCall("save_llm_config", base_url, model, api_key);
+  const r = await apiCall("save_llm_config", base_url, model, api_key, effort);
   statusEl(r && r.ok ? "模型配置已保存" : "保存失败", r && r.ok ? "ok" : "err");
 }
 
@@ -2826,7 +2828,8 @@ async function runDailyReview() {
     const r = await apiCall("run_daily_review", date,
       document.getElementById("llmBaseUrl").value.trim(),
       document.getElementById("llmModel").value.trim(),
-      document.getElementById("llmApiKey").value.trim());
+      document.getElementById("llmApiKey").value.trim(),
+      document.getElementById("llmEffort").value);
     if (r && r.status === "error") { showReviewError(r.message || "未知错误"); return; }
     window._reviewStart = Date.now();   // 等待计时起点
     status.textContent = "复盘中（收集数据 + 调用模型）…";

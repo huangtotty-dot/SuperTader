@@ -192,7 +192,13 @@
             <option value="custom">自定义</option>
           </select>
           <input type="text" id="llmBaseUrl" class="mini-input" placeholder="base_url(如 https://api.deepseek.com)" style="width:260px">
-          <input type="text" id="llmModel" class="mini-input" placeholder="模型名(如 deepseek-chat)" style="width:150px">
+          <input type="text" id="llmModel" class="mini-input" placeholder="模型名(如 kimi-k3)" style="width:150px">
+          <select id="llmEffort" class="mini-btn" style="width:96px" title="推理强度(Kimi K3等用；高=质量更好但慢，低=快)">
+            <option value="">推理默认</option>
+            <option value="low">低(快)</option>
+            <option value="high">高</option>
+            <option value="max">最高(慢)</option>
+          </select>
           <input type="password" id="llmApiKey" class="mini-input" placeholder="API key" style="width:180px">
           <button class="mini-btn" onclick="saveModelConfig()">💾 保存</button>
         </div>

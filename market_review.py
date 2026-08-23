@@ -207,14 +207,17 @@ def build_deep_dive(date: str, cross: dict) -> dict:
 def load_llm_config() -> dict:
     try:
         if LLM_CONFIG.exists():
-            return json.loads(LLM_CONFIG.read_text(encoding="utf-8"))
+            cfg = json.loads(LLM_CONFIG.read_text(encoding="utf-8"))
+            cfg.setdefault("reasoning_effort", "")
+            return cfg
     except Exception:
         pass
-    return {"base_url": "", "model": "", "api_key": ""}
+    return {"base_url": "", "model": "", "api_key": "", "reasoning_effort": ""}
 
 
-def save_llm_config(base_url: str, model: str, api_key: str) -> dict:
-    cfg = {"base_url": (base_url or "").strip(), "model": (model or "").strip(), "api_key": (api_key or "").strip()}
+def save_llm_config(base_url: str, model: str, api_key: str, reasoning_effort: str = "") -> dict:
+    cfg = {"base_url": (base_url or "").strip(), "model": (model or "").strip(),
+           "api_key": (api_key or "").strip(), "reasoning_effort": (reasoning_effort or "").strip()}
     LLM_CONFIG.parent.mkdir(parents=True, exist_ok=True)
     LLM_CONFIG.write_text(json.dumps(cfg, ensure_ascii=False, indent=2), encoding="utf-8")
     # 返回完整配置（含 base_url/model/api_key），供 run_daily_review 后台线程直接使用
@@ -229,11 +232,12 @@ def call_llm(prompt: str, cfg: dict) -> str:
     payload = {
         "model": cfg.get("model", ""),
         "messages": [{"role": "user", "content": prompt}],
-        # 2026-08-23: Moonshot kimi-k3 只允许 temperature=1，用全兼容值 1（DeepSeek/OpenAI/Qwen 均接受）
-        "temperature": 1,
-        "max_tokens": 4000,
         "stream": False,
     }
+    # 2026-08-23: 按 Kimi 手册——K3 用顶层 reasoning_effort(low/high/max)，不传 temperature/max_tokens（各模型参数差异大）
+    _effort = (cfg.get("reasoning_effort") or "").strip()
+    if _effort:
+        payload["reasoning_effort"] = _effort
     last_err = None
     for attempt in range(3):
         try:
@@ -261,10 +265,12 @@ def call_llm_stream(prompt: str, cfg: dict, on_token=None) -> str:
     payload = {
         "model": cfg.get("model", ""),
         "messages": [{"role": "user", "content": prompt}],
-        "temperature": 1,
-        "max_tokens": 4000,
         "stream": True,
     }
+    # 2026-08-23: 按 Kimi 手册——K3 用顶层 reasoning_effort(low/high/max)，不传 temperature/max_tokens
+    _effort = (cfg.get("reasoning_effort") or "").strip()
+    if _effort:
+        payload["reasoning_effort"] = _effort
     last_err = None
     for attempt in range(3):
         try:
