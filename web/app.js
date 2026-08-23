@@ -2883,6 +2883,32 @@ function renderKeyLevels(md) {
     <div style="display:flex;flex-wrap:wrap;gap:8px">${cards}</div>`;
 }
 
+/* 复盘总结卡（2026-08-23）：一句话结论 + 操作含义要点，置顶醒目 */
+function renderSummary(md) {
+  const el = document.getElementById("reviewSummary");
+  if (!el) return;
+  const lines = String(md).split("\n");
+  let conclusion = "", inOp = false, opPoints = [];
+  for (let i = 0; i < lines.length; i++) {
+    const t = lines[i].trim();
+    if (/^##\s*0/.test(t) || t.includes("一句话结论")) {
+      for (let j = i + 1; j < lines.length; j++) {
+        const s = lines[j].trim();
+        if (!s) continue;
+        conclusion = s.replace(/\*\*/g, "");
+        break;
+      }
+    }
+    if (/^##\s*7/.test(t) || t.includes("操作含义")) inOp = true;
+    else if (/^##\s*/.test(t)) inOp = false;
+    if (inOp && t.startsWith("- ")) opPoints.push(t.slice(2).replace(/\*\*/g, ""));
+  }
+  let html = "";
+  if (conclusion) html += `<div class="rv-summary-concl">📌 ${esc(conclusion)}</div>`;
+  if (opPoints.length) html += `<div class="rv-summary-ops">${opPoints.slice(0, 4).map(p => `<div class="rv-summary-op">• ${esc(p)}</div>`).join("")}</div>`;
+  el.innerHTML = html ? `<div class="rv-summary">${html}</div>` : "";
+}
+
 /* 玻璃卡可视化：指数横评 / 市场情绪 / 板块强弱（参考 Vibe-Research，2026-08-23） */
 function renderVibeCards(crossRows, extra) {
   const el = document.getElementById("reviewVibe");
@@ -3048,6 +3074,7 @@ async function refreshDailyReview() {
   try {
     const r = await apiCall("get_daily_review", date);
     if (r && r.exists) {
+      renderSummary(r.text);                     // 复盘总结卡（置顶）
       renderReviewCharts(r.text, r.data || {});   // 可视化（玻璃卡 + 条形图 + 关键位）
       el.innerHTML = renderMarkdown(r.text);
     } else {
