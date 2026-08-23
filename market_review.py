@@ -353,7 +353,9 @@ def call_llm_stream(prompt: str, cfg: dict, on_token=None, on_reasoning=None) ->
             last_err = e
             _log(f"  attempt {attempt+1} 异常: {type(e).__name__}: {str(e)[:200]}")
             if attempt < 2:
-                _t.sleep(2)
+                # 2026-08-23: 429(engine overloaded)用递增长退避，普通错误短退避
+                _backoff = 8 if str(e).startswith("HTTP 429") else 2
+                _t.sleep(_backoff * (attempt + 1))
     raise RuntimeError(f"模型调用失败(3次重试): {last_err}")
 
 

@@ -262,6 +262,7 @@ tr:hover td { background: rgba(88,166,255,.03); }
 .rv-table tr.rv-th td { background: var(--bg-soft); color: #e6edf3; font-weight: 700; border-color: var(--border); }
 .rv-table tr.rv-alt td { background: rgba(139, 148, 158, .06); }
 .rv-table td.num { text-align: right; font-variant-numeric: tabular-nums; font-family: var(--mono); }
+.rv-conclusion { background: rgba(88, 166, 255, .08); border-left: 3px solid var(--accent); padding: 8px 12px; margin: 8px 0; border-radius: 4px; font-size: 13px; color: #e6edf3; font-weight: 500; }
 .h-main-row { transition: background .15s; }
 .h-main-row:hover { background: rgba(88,166,255,.08); }
 .h-main-row td { padding: 10px 8px; border-bottom: 1px solid var(--border-soft); vertical-align: middle; }
