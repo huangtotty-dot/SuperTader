@@ -2514,17 +2514,17 @@ class Api:
         from market_review import load_llm_config
         return load_llm_config()
 
-    def save_llm_config(self, base_url, model, api_key):
+    def save_llm_config(self, base_url, model, api_key, reasoning_effort=""):
         from market_review import save_llm_config as _s
-        return _s(base_url, model, api_key)
+        return _s(base_url, model, api_key, reasoning_effort)
 
-    def run_daily_review(self, date, base_url, model, api_key):
+    def run_daily_review(self, date, base_url, model, api_key, reasoning_effort=""):
         """大盘复盘（后台线程）。模型配置保存后即触发。返回 {status: running/error}。"""
         try:
             from market_review import save_llm_config
         except Exception as e:
             return {"status": "error", "message": f"market_review 加载失败: {e}"}
-        cfg = save_llm_config(base_url, model, api_key)
+        cfg = save_llm_config(base_url, model, api_key, reasoning_effort)
         if not cfg.get("saved"):
             return {"status": "error", "message": "模型配置不完整（base_url / model / api_key 必填）"}
         if _REVIEW_RUN_STATE.get("running"):
