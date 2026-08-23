@@ -225,6 +225,50 @@ def build_deep_dive(date: str, cross: dict, on_progress=None) -> dict:
     return out
 
 
+# ---------------------------------------------------------------- 情绪/板块/个股附加数据
+def load_market_extra(date: str) -> dict:
+    """情绪指标 + 板块强弱 + 持仓个股（2026-08-23 补充）。
+    数据源：sentiment_daily.jsonl（情绪分/题材/涨停跌停/系统性风险/持仓做T决策）+ breadth json（炸板）。"""
+    out = {"情绪": {}, "板块": {}, "持仓个股": {}}
+    sfp = BASE / "t_io" / "logs" / "sentiment_daily.jsonl"
+    if sfp.exists():
+        try:
+            for line in reversed(sfp.read_text(encoding="utf-8").splitlines()):
+                r = json.loads(line)
+                if r.get("date") != date:
+                    continue
+                out["情绪"] = {
+                    "情绪分S": r.get("score_S"), "z_S": r.get("z_S"),
+                    "大盘regime": r.get("regime_name"), "题材TOP3": r.get("top3_names"),
+                    "题材均分": r.get("top3_avg"), "涨停数": r.get("zt_count"),
+                    "跌停数": r.get("dt_count"), "系统性风险": r.get("systemic_risk"),
+                    "过热连续天数": r.get("overheat_streak"), "决策摘要": r.get("decision_summary"),
+                }
+                sa = r.get("sector_avgs") or {}
+                items = [(str(k), float(v["avg"])) for k, v in sa.items()
+                         if isinstance(v, dict) and v.get("avg") is not None]
+                items.sort(key=lambda x: -x[1])
+                out["板块"] = {"强势TOP5": items[:5],
+                              "弱势BOTTOM5": items[-5:] if len(items) >= 5 else items}
+                ps = r.get("per_stock") or {}
+                out["持仓个股"] = {
+                    str(k): {"做T模式": v.get("mode_cn"), "仓位因子": v.get("pos_factor"),
+                             "交易门": v.get("trade_gate"), "理由": str(v.get("reason"))[:120]}
+                    for k, v in ps.items() if isinstance(v, dict)}
+                break
+        except Exception:
+            pass
+    bfp = BASE / "t_io" / "index_regime" / f"breadth_{date}.json"
+    if bfp.exists():
+        try:
+            b = json.loads(bfp.read_text(encoding="utf-8"))
+            out["情绪"]["炸板数"] = b.get("zb_count")
+            out["情绪"]["炸板率"] = b.get("zb_rate")
+        except Exception:
+            pass
+    return out
+
+
 # ---------------------------------------------------------------- LLM
 def load_llm_config() -> dict:
     try:
@@ -359,10 +403,15 @@ def call_llm_stream(prompt: str, cfg: dict, on_token=None, on_reasoning=None) ->
     raise RuntimeError(f"模型调用失败(3次重试): {last_err}")
 
 
-def build_prompt(date: str, cross: dict, deep: dict) -> str:
-    """组装：方法论全文 + 数据 JSON + 使用说明（方法论 §五）。"""
+def build_prompt(date: str, cross: dict, deep: dict, extra: dict | None = None) -> str:
+    """组装：方法论全文 + 数据 JSON + 使用说明（方法论 §五）。
+    extra：情绪指标/板块强弱/持仓个股（2026-08-23 补充，模型需分析这三块）。"""
     method = METHODOLOGY.read_text(encoding="utf-8") if METHODOLOGY.exists() else ""
     data = {"日期": date, "指数横评": cross.get("rows", []), "深拆数据": deep}
+    if extra:
+        data["市场情绪指标"] = extra.get("情绪") or {}
+        data["板块强弱"] = extra.get("板块") or {}
+        data["持仓个股"] = extra.get("持仓个股") or {}
     usage = (
         "你是一名A股复盘分析师。请严格按照附件《大盘指数多周期复盘方法论》执行：\n"
         "1. 用我提供的行情数据（指数横评 + 触发项指数的多周期K线数据）进行复盘；\n"
@@ -370,7 +419,12 @@ def build_prompt(date: str, cross: dict, deep: dict) -> str:
         "3. 每个判断必须引用具体数据（价格、量能、均线值），不允许出现没有数据支撑的结论；\n"
         "4. 严格按'标准化输出模板'的六个部分输出（一句话结论/指数横评/深拆/共振结论/关键位表/次日推演/操作含义）；\n"
         "5. 数据缺失的周期直接说明'数据缺失'，禁止编造；\n"
-        "6. 复盘结论只做概率描述，不做确定性预测；推演剧本必须同时给出乐观与谨慎两套。"
+        "6. 复盘结论只做概率描述，不做确定性预测；推演剧本必须同时给出乐观与谨慎两套。\n"
+        "7. 额外三块分析（基于'市场情绪指标/板块强弱/持仓个股'数据）：\n"
+        "   (a) 市场情绪温度：涨停/跌停/炸板数、题材TOP3热度、情绪分S与z值、是否有系统性风险；\n"
+        "   (b) 板块轮动方向：强势/弱势行业TOP5，判断主线与补涨/退潮方向；\n"
+        "   (c) 持仓个股点评：各持仓做T模式与理由，结合指数/板块结论给出次日操作提示。\n"
+        "   上述三块可并入对应章节或在'操作含义'前单列'情绪·板块·个股速览'小节。"
     )
     return f"{method}\n\n===== 本轮行情数据 =====\n{json.dumps(data, ensure_ascii=False, default=str)}\n\n===== 复盘要求 =====\n{usage}"
 
@@ -379,7 +433,8 @@ def run_market_review(date: str, cfg: dict) -> str:
     """大盘复盘主入口：收集数据 → 组装提示词 → 调模型 → 落盘并返回 markdown。"""
     cross = build_cross_section(date)
     deep = build_deep_dive(date, cross)
-    prompt = build_prompt(date, cross, deep)
+    extra = load_market_extra(date)
+    prompt = build_prompt(date, cross, deep, extra)
     text = call_llm(prompt, cfg)
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     (OUT_DIR / f"market_review_{date}.md").write_text(text, encoding="utf-8")
@@ -401,8 +456,11 @@ def run_market_review_stream(date: str, cfg: dict, on_text=None) -> str:
     _emit(f"② 6 指数横评完成（{len(cross.get('rows', []))} 只）；正在拉取深拆指数分钟线…\n")
     deep = build_deep_dive(date, cross, on_progress=_emit)
     _log(f"深拆完成 耗时{_t.time()-_t0:.1f}s indices={list(deep.keys())}")
-    _emit(f"③ 数据收集完成，正在调用模型（{cfg.get('model')}）…\n\n")
-    prompt = build_prompt(date, cross, deep)
+    _emit("③ 正在读取市场情绪/板块/持仓数据…\n")
+    extra = load_market_extra(date)
+    _log(f"市场附加数据 情绪={bool(extra['情绪'])} 板块={bool(extra['板块'])} 个股={len(extra['持仓个股'])}")
+    _emit(f"④ 数据收集完成，正在调用模型（{cfg.get('model')}）…\n\n")
+    prompt = build_prompt(date, cross, deep, extra)
     _log(f"prompt 长度 {len(prompt)} 字符")
 
     def _on_reasoning():
