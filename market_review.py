@@ -93,10 +93,16 @@ def fetch_index_monthly(symbol: str, count: int = 36, end: str | None = None) ->
 
 
 def fetch_index_minutes(ts_code: str, freq: str, date: str) -> list:
-    """tushare stk_mins 指数分钟线（当日）。失败返回 []。"""
-    try:
+    """tushare stk_mins 指数分钟线（当日）。失败/超时返回 []。单次限时 20s（tushare 网络差时挂起重试曾卡数分钟）。"""
+    from concurrent.futures import ThreadPoolExecutor, TimeoutError as _FTO
+
+    def _fetch():
         from index_regime_intraday import _iri_fetch_stk_mins_one_day
-        df = _iri_fetch_stk_mins_one_day(ts_code, date, freq)
+        return _iri_fetch_stk_mins_one_day(ts_code, date, freq)
+
+    try:
+        with ThreadPoolExecutor(max_workers=1) as _ex:
+            df = _ex.submit(_fetch).result(timeout=20)
         if df is None or df.empty:
             return []
         out = []
@@ -162,9 +168,10 @@ def build_cross_section(date: str) -> dict:
 
 
 # ---------------------------------------------------------------- 深拆数据
-def build_deep_dive(date: str, cross: dict) -> dict:
+def build_deep_dive(date: str, cross: dict, on_progress=None) -> dict:
     """触发项 + 双锚（上证+最弱）的多周期 K 线数据。
-    控 token：双锚固定 + 触发项按强度取前 N，深拆总数 ≤ MAX_DEEP（默认3）。"""
+    控 token：双锚固定 + 触发项按强度取前 N，深拆总数 ≤ MAX_DEEP（默认3）。
+    on_progress: 逐指数/频率进度回调（2026-08-23 新增，供 GUI 显示卡在哪一步）。"""
     pool = {name: (symbol, ts_code) for symbol, ts_code, name in INDEX_POOL}
     triggered = [r for r in cross.get("rows", []) if "error" not in r and r.get("触发")]
 
@@ -189,11 +196,15 @@ def build_deep_dive(date: str, cross: dict) -> dict:
         if name not in pool:
             continue
         symbol, ts_code = pool[name]
+        if on_progress:
+            on_progress(f"   {name} 月/周/日线…\n")
         monthly = fetch_index_monthly(symbol, count=36, end=date)
         weekly = fetch_index_weekly(symbol, count=52, end=date)
         daily = [d for d in fetch_index_daily(symbol, count=60, end=date) if d["date"] <= date]
         minutes = {}
         for freq in MINUTE_FREQS:
+            if on_progress:
+                on_progress(f"   {name} {freq}…\n")
             m = fetch_index_minutes(ts_code, freq, date)
             if m:
                 minutes[freq] = m
@@ -341,7 +352,7 @@ def run_market_review_stream(date: str, cfg: dict, on_text=None) -> str:
     _emit("① 正在收集 6 指数日/周/月线…\n")
     cross = build_cross_section(date)
     _emit(f"② 6 指数横评完成（{len(cross.get('rows', []))} 只）；正在拉取深拆指数分钟线…\n")
-    deep = build_deep_dive(date, cross)
+    deep = build_deep_dive(date, cross, on_progress=_emit)
     _emit(f"③ 数据收集完成，正在调用模型（{cfg.get('model')}）…\n\n")
     prompt = build_prompt(date, cross, deep)
 
