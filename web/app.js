@@ -2916,16 +2916,21 @@ function renderVibeCards(crossRows, extra) {
   const parts = [];
   // 1) 指数横评卡（6 指数，Vibe 指数卡风格）
   if (crossRows && crossRows.length >= 2) {
-    const header = crossRows[0];
+    // 兼容两种格式：md解析(数组 [[h..],[r..]]) 或 meta.cross.rows(对象行 [{f:v}])
+    const isArr = Array.isArray(crossRows[0]);
+    const header = isArr ? crossRows[0] : Object.keys(crossRows[0]);
+    const rows = isArr ? crossRows.slice(1) : crossRows;
     const iOf = n => header.indexOf(n);
     const iChg = iOf("当日%"), i5 = iOf("近5日%"), iPos = iOf("20日位置");
+    const cell = (r, idx) => (Array.isArray(r) ? (idx >= 0 ? r[idx] : r[0]) : (idx >= 0 ? r[header[idx]] : r[header[0]]));
     const numV = (v, d) => { const n = parseFloat(String(v || "").replace(/[%+\s]/g, "")); return isNaN(n) ? d : n; };
-    const cards = crossRows.slice(1).filter(r => r[0]).map(r => {
-      const chg = numV(r[iChg], 0), chg5 = numV(r[i5], 0), pos = numV(r[iPos], 50);
+    const cards = rows.filter(r => cell(r, 0)).map(r => {
+      const name = cell(r, 0), price = cell(r, 1);
+      const chg = numV(cell(r, iChg), 0), chg5 = numV(cell(r, i5), 0), pos = numV(cell(r, iPos), 50);
       const c = chg > 0 ? "var(--red)" : chg < 0 ? "var(--green)" : "var(--text-dim)";
       const c5 = chg5 > 0 ? "var(--red)" : chg5 < 0 ? "var(--green)" : "var(--text-dim)";
-      return `<div class="rv-idx"><div class="rv-idx-name">${esc(r[0])}</div>
-        <div class="rv-idx-price">${esc(r[1] || "—")}</div>
+      return `<div class="rv-idx"><div class="rv-idx-name">${esc(name)}</div>
+        <div class="rv-idx-price">${esc(price || "—")}</div>
         <div class="rv-idx-chg" style="color:${c}">${chg > 0 ? "+" : ""}${chg.toFixed(2)}%</div>
         <div class="rv-idx-dim">5日 <span style="color:${c5}">${chg5 > 0 ? "+" : ""}${chg5.toFixed(2)}%</span> · 20日位${pos.toFixed(0)}%</div></div>`;
     }).join("");
