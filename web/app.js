@@ -2850,14 +2850,17 @@ async function pollReviewProgress() {
       // 流式显示：数据收集阶段提示 + 模型输出过程（原始文本）
       if (p.output && el) {
         el.innerHTML = `<div style="white-space:pre-wrap;font-family:var(--mono);font-size:11px;color:var(--text);user-select:text">${esc(p.output)}</div>`;
-        // 模型是否已开始输出：检测"正在调用模型"之后是否有内容
-        const callIdx = p.output.lastIndexOf("正在调用模型");
-        const modelStarted = callIdx >= 0 && p.output.length > callIdx + 60;
-        if (!modelStarted && p.running) {
+        if (p.running) {
           const wait = Math.round((Date.now() - (window._reviewStart || Date.now())) / 1000);
-          status.textContent = `模型请求已发送，等待响应…（已 ${wait}s）`;
-        } else if (p.running) {
-          status.textContent = "模型生成中…";
+          if (p.output.includes("🧠 模型思考中")) {
+            status.textContent = `模型思考中…（推理模型，已 ${wait}s）`;
+          } else {
+            // 模型是否已开始输出：检测"正在调用模型"之后是否有内容
+            const callIdx = p.output.lastIndexOf("正在调用模型");
+            const modelStarted = callIdx >= 0 && p.output.length > callIdx + 60;
+            if (!modelStarted) status.textContent = `模型请求已发送，等待响应…（已 ${wait}s）`;
+            else status.textContent = "模型生成中…";
+          }
         }
       }
       if (!p.running) {
