@@ -310,10 +310,16 @@ def call_llm_stream(prompt: str, cfg: dict, on_token=None, on_reasoning=None) ->
                 lines_seen = 0
                 content_chars = 0
                 first_data = ""
-                for line in r.iter_lines(decode_unicode=True):
+                # 2026-08-23: 用 bytes 模式 iter_lines() + 手动按行 decode("utf-8")——decode_unicode=True
+                # 会在 UTF-8 多字节字符跨 chunk 时切坏字节，导致 content 成 Latin-1 乱码（落盘双重编码 mojibake）
+                for line in r.iter_lines():
                     if not line:
                         continue
-                    line = line.strip()
+                    try:
+                        line = line.decode("utf-8").strip()
+                    except UnicodeDecodeError:
+                        lines_seen += 1
+                        continue
                     if not line.startswith("data:"):
                         continue
                     lines_seen += 1

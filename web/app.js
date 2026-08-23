@@ -2795,6 +2795,27 @@ async function renderDailyReview() {
   const d = document.getElementById("reviewDate");
   if (d && !d.value) d.value = new Date().toISOString().slice(0, 10);
   refreshDailyReview();
+  loadReviewHistory();
+}
+
+async function loadReviewHistory() {
+  /* 历史复盘存档列表（2026-08-23） */
+  try {
+    const r = await apiCall("get_daily_review_list");
+    const sel = document.getElementById("reviewHistory");
+    if (!sel || !r || !r.dates) return;
+    const current = sel.value;
+    sel.innerHTML = '<option value="">历史复盘…</option>'
+      + r.dates.slice().reverse().map(d => `<option value="${d}">${d}</option>`).join("");
+    if (current) sel.value = current;
+  } catch (e) { /* 静默 */ }
+}
+
+function loadReviewFromHistory() {
+  const v = document.getElementById("reviewHistory").value;
+  if (!v) return;
+  document.getElementById("reviewDate").value = v;
+  refreshDailyReview();
 }
 
 function providerChanged() {
@@ -2884,6 +2905,7 @@ async function refreshDailyReview() {
       el.innerHTML = '<div class="empty">该日期暂无复盘结果，点「开始大盘复盘」生成</div>';
     }
   } catch (e) { el.innerHTML = '<div class="empty">加载失败</div>'; }
+  loadReviewHistory();
 }
 
 /* ================= Tab 切换 ================= */

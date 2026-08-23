@@ -205,6 +205,9 @@
         <div style="display:flex;gap:8px;align-items:center;margin-top:8px">
           <label class="cell-dim" style="font-size:11px">复盘日期</label>
           <input type="date" id="reviewDate" class="mini-input" style="width:140px">
+          <select id="reviewHistory" class="mini-btn" style="width:130px" onchange="loadReviewFromHistory()" title="历史复盘存档">
+            <option value="">历史复盘…</option>
+          </select>
           <span class="cell-dim" style="font-size:11px">数据：6指数横评 + 触发项/双锚多周期深拆（腾讯日/周/月线 + tushare 分钟线）</span>
         </div>
       </div>

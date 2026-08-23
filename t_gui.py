@@ -2546,6 +2546,19 @@ class Api:
             pass
         return {"text": "", "exists": False}
 
+    def get_daily_review_list(self):
+        """历史复盘日期列表（2026-08-23：存档翻看）。"""
+        d = BASE / "t_io" / "validation" / "daily_review"
+        dates = []
+        try:
+            for fp in sorted(d.glob("market_review_*.md")):
+                st = fp.stem.replace("market_review_", "")
+                if st and len(st) == 10:
+                    dates.append(st)
+        except Exception:
+            pass
+        return {"dates": dates}
+
     # ---------- 集合竞价信息层 ----------
     def load_auction(self, date):
         """读 t_io/preopen/auction_{date}.json，聚合并返回竞价摘要。"""
