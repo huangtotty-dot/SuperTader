@@ -1,0 +1,147 @@
+{
+  "original": {
+    "total_trading_days": 18,
+    "total_signals": 2062,
+    "buy_signals": 966,
+    "sell_signals": 1096,
+    "blocked_signals": 0,
+    "by_stock": {
+      "588170": {
+        "signals": 864,
+        "buy": 0,
+        "sell": 0,
+        "blocked": 0,
+        "win_rate": 0,
+        "avg_return": 0,
+        "prices": []
+      },
+      "600176": {
+        "signals": 360,
+        "buy": 0,
+        "sell": 0,
+        "blocked": 0,
+        "win_rate": 0,
+        "avg_return": 0,
+        "prices": []
+      },
+      "600481": {
+        "signals": 309,
+        "buy": 0,
+        "sell": 0,
+        "blocked": 0,
+        "win_rate": 0,
+        "avg_return": 0,
+        "prices": []
+      },
+      "000988": {
+        "signals": 286,
+        "buy": 0,
+        "sell": 0,
+        "blocked": 0,
+        "win_rate": 0,
+        "avg_return": 0,
+        "prices": []
+      },
+      "603667": {
+        "signals": 129,
+        "buy": 0,
+        "sell": 0,
+        "blocked": 0,
+        "win_rate": 0,
+        "avg_return": 0,
+        "prices": []
+      },
+      "002639": {
+        "signals": 108,
+        "buy": 0,
+        "sell": 0,
+        "blocked": 0,
+        "win_rate": 0,
+        "avg_return": 0,
+        "prices": []
+      },
+      "515180": {
+        "signals": 6,
+        "buy": 0,
+        "sell": 0,
+        "blocked": 0,
+        "win_rate": 0,
+        "avg_return": 0,
+        "prices": []
+      }
+    }
+  },
+  "scheme_a": {
+    "total_trading_days": 18,
+    "total_signals": 2062,
+    "buy_signals": 966,
+    "sell_signals": 1096,
+    "blocked_signals": 0,
+    "recovered_signals": 0,
+    "by_stock": {
+      "588170": {
+        "signals": 864,
+        "buy": 0,
+        "sell": 0,
+        "blocked": 0,
+        "win_rate": 0,
+        "avg_return": 0,
+        "prices": []
+      },
+      "600176": {
+        "signals": 360,
+        "buy": 0,
+        "sell": 0,
+        "blocked": 0,
+        "win_rate": 0,
+        "avg_return": 0,
+        "prices": []
+      },
+      "600481": {
+        "signals": 309,
+        "buy": 0,
+        "sell": 0,
+        "blocked": 0,
+        "win_rate": 0,
+        "avg_return": 0,
+        "prices": []
+      },
+      "000988": {
+        "signals": 286,
+        "buy": 0,
+        "sell": 0,
+        "blocked": 0,
+        "win_rate": 0,
+        "avg_return": 0,
+        "prices": []
+      },
+      "603667": {
+        "signals": 129,
+        "buy": 0,
+        "sell": 0,
+        "blocked": 0,
+        "win_rate": 0,
+        "avg_return": 0,
+        "prices": []
+      },
+      "002639": {
+        "signals": 108,
+        "buy": 0,
+        "sell": 0,
+        "blocked": 0,
+        "win_rate": 0,
+        "avg_return": 0,
+        "prices": []
+      },
+      "515180": {
+        "signals": 6,
+        "buy": 0,
+        "sell": 0,
+        "blocked": 0,
+        "win_rate": 0,
+        "avg_return": 0,
+        "prices": []
+      }
+    }
+  }
+}

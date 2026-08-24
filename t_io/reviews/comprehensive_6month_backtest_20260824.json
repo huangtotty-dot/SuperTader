@@ -1,0 +1,331 @@
+{
+  "period": "2026-02-25 ~ 2026-08-24",
+  "summary": {
+    "total_signals_original": "51500",
+    "total_buy_original": "22465",
+    "total_recovered_by_a": 164,
+    "improvement_rate": "0.32%"
+  },
+  "by_stock": {
+    "000506.SZ": {
+      "original": {
+        "total_signals": "1656",
+        "buy_signals": "736",
+        "sell_signals": "920",
+        "blocked_resonance": 0,
+        "recovered_by_a": 0
+      },
+      "scheme_a_recovered": 0
+    },
+    "000547.SZ": {
+      "original": {
+        "total_signals": "1618",
+        "buy_signals": "637",
+        "sell_signals": "981",
+        "blocked_resonance": 0,
+        "recovered_by_a": 0
+      },
+      "scheme_a_recovered": 0
+    },
+    "000988.SZ": {
+      "original": {
+        "total_signals": "1727",
+        "buy_signals": "831",
+        "sell_signals": "896",
+        "blocked_resonance": 0,
+        "recovered_by_a": 0
+      },
+      "scheme_a_recovered": 0
+    },
+    "002176.SZ": {
+      "original": {
+        "total_signals": "1715",
+        "buy_signals": "656",
+        "sell_signals": "1059",
+        "blocked_resonance": 0,
+        "recovered_by_a": 0
+      },
+      "scheme_a_recovered": 0
+    },
+    "002202.SZ": {
+      "original": {
+        "total_signals": "1675",
+        "buy_signals": "713",
+        "sell_signals": "962",
+        "blocked_resonance": 0,
+        "recovered_by_a": 0
+      },
+      "scheme_a_recovered": 0
+    },
+    "002261.SZ": {
+      "original": {
+        "total_signals": "1665",
+        "buy_signals": "719",
+        "sell_signals": "946",
+        "blocked_resonance": 0,
+        "recovered_by_a": 0
+      },
+      "scheme_a_recovered": 0
+    },
+    "002451.SZ": {
+      "original": {
+        "total_signals": "1588",
+        "buy_signals": "698",
+        "sell_signals": "890",
+        "blocked_resonance": 0,
+        "recovered_by_a": 0
+      },
+      "scheme_a_recovered": 0
+    },
+    "002536.SZ": {
+      "original": {
+        "total_signals": "1587",
+        "buy_signals": "699",
+        "sell_signals": "888",
+        "blocked_resonance": 0,
+        "recovered_by_a": 0
+      },
+      "scheme_a_recovered": 0
+    },
+    "002639.SZ": {
+      "original": {
+        "total_signals": "1678",
+        "buy_signals": "699",
+        "sell_signals": "979",
+        "blocked_resonance": 0,
+        "recovered_by_a": 0
+      },
+      "scheme_a_recovered": 0
+    },
+    "159253.SZ": {
+      "original": {
+        "total_signals": "1590",
+        "buy_signals": "792",
+        "sell_signals": "798",
+        "blocked_resonance": 0,
+        "recovered_by_a": 0
+      },
+      "scheme_a_recovered": 0
+    },
+    "300054.SZ": {
+      "original": {
+        "total_signals": "1641",
+        "buy_signals": "744",
+        "sell_signals": "897",
+        "blocked_resonance": 0,
+        "recovered_by_a": 0
+      },
+      "scheme_a_recovered": 0
+    },
+    "300058.SZ": {
+      "original": {
+        "total_signals": "1734",
+        "buy_signals": "634",
+        "sell_signals": "1100",
+        "blocked_resonance": 0,
+        "recovered_by_a": 0
+      },
+      "scheme_a_recovered": 0
+    },
+    "300566.SZ": {
+      "original": {
+        "total_signals": "1628",
+        "buy_signals": "723",
+        "sell_signals": "905",
+        "blocked_resonance": 0,
+        "recovered_by_a": 0
+      },
+      "scheme_a_recovered": 0
+    },
+    "301165.SZ": {
+      "original": {
+        "total_signals": "1698",
+        "buy_signals": "751",
+        "sell_signals": "947",
+        "blocked_resonance": 0,
+        "recovered_by_a": 0
+      },
+      "scheme_a_recovered": 0
+    },
+    "301548.SZ": {
+      "original": {
+        "total_signals": "1670",
+        "buy_signals": "670",
+        "sell_signals": "1000",
+        "blocked_resonance": 0,
+        "recovered_by_a": 0
+      },
+      "scheme_a_recovered": 0
+    },
+    "515180.SH": {
+      "original": {
+        "total_signals": "1638",
+        "buy_signals": "817",
+        "sell_signals": "821",
+        "blocked_resonance": 0,
+        "recovered_by_a": 0
+      },
+      "scheme_a_recovered": 0
+    },
+    "588170.SH": {
+      "original": {
+        "total_signals": "1640",
+        "buy_signals": "824",
+        "sell_signals": "816",
+        "blocked_resonance": 0,
+        "recovered_by_a": 0
+      },
+      "scheme_a_recovered": 164
+    },
+    "600176.SH": {
+      "original": {
+        "total_signals": "1681",
+        "buy_signals": "769",
+        "sell_signals": "912",
+        "blocked_resonance": 0,
+        "recovered_by_a": 0
+      },
+      "scheme_a_recovered": 0
+    },
+    "600481.SH": {
+      "original": {
+        "total_signals": "1624",
+        "buy_signals": "680",
+        "sell_signals": "944",
+        "blocked_resonance": 0,
+        "recovered_by_a": 0
+      },
+      "scheme_a_recovered": 0
+    },
+    "600584.SH": {
+      "original": {
+        "total_signals": "1619",
+        "buy_signals": "721",
+        "sell_signals": "898",
+        "blocked_resonance": 0,
+        "recovered_by_a": 0
+      },
+      "scheme_a_recovered": 0
+    },
+    "600636.SH": {
+      "original": {
+        "total_signals": "586",
+        "buy_signals": "245",
+        "sell_signals": "341",
+        "blocked_resonance": 0,
+        "recovered_by_a": 0
+      },
+      "scheme_a_recovered": 0
+    },
+    "600722.SH": {
+      "original": {
+        "total_signals": "1505",
+        "buy_signals": "761",
+        "sell_signals": "744",
+        "blocked_resonance": 0,
+        "recovered_by_a": 0
+      },
+      "scheme_a_recovered": 0
+    },
+    "600889.SH": {
+      "original": {
+        "total_signals": "1601",
+        "buy_signals": "680",
+        "sell_signals": "921",
+        "blocked_resonance": 0,
+        "recovered_by_a": 0
+      },
+      "scheme_a_recovered": 0
+    },
+    "600977.SH": {
+      "original": {
+        "total_signals": "1630",
+        "buy_signals": "726",
+        "sell_signals": "904",
+        "blocked_resonance": 0,
+        "recovered_by_a": 0
+      },
+      "scheme_a_recovered": 0
+    },
+    "601318.SH": {
+      "original": {
+        "total_signals": "1685",
+        "buy_signals": "674",
+        "sell_signals": "1011",
+        "blocked_resonance": 0,
+        "recovered_by_a": 0
+      },
+      "scheme_a_recovered": 0
+    },
+    "601899.SH": {
+      "original": {
+        "total_signals": "1675",
+        "buy_signals": "669",
+        "sell_signals": "1006",
+        "blocked_resonance": 0,
+        "recovered_by_a": 0
+      },
+      "scheme_a_recovered": 0
+    },
+    "603259.SH": {
+      "original": {
+        "total_signals": "1603",
+        "buy_signals": "715",
+        "sell_signals": "888",
+        "blocked_resonance": 0,
+        "recovered_by_a": 0
+      },
+      "scheme_a_recovered": 0
+    },
+    "603667.SH": {
+      "original": {
+        "total_signals": "1674",
+        "buy_signals": "711",
+        "sell_signals": "963",
+        "blocked_resonance": 0,
+        "recovered_by_a": 0
+      },
+      "scheme_a_recovered": 0
+    },
+    "688008.SH": {
+      "original": {
+        "total_signals": "1674",
+        "buy_signals": "699",
+        "sell_signals": "975",
+        "blocked_resonance": 0,
+        "recovered_by_a": 0
+      },
+      "scheme_a_recovered": 0
+    },
+    "688092.SH": {
+      "original": {
+        "total_signals": "1580",
+        "buy_signals": "727",
+        "sell_signals": "853",
+        "blocked_resonance": 0,
+        "recovered_by_a": 0
+      },
+      "scheme_a_recovered": 0
+    },
+    "688125.SH": {
+      "original": {
+        "total_signals": "1591",
+        "buy_signals": "629",
+        "sell_signals": "962",
+        "blocked_resonance": 0,
+        "recovered_by_a": 0
+      },
+      "scheme_a_recovered": 0
+    },
+    "688127.SH": {
+      "original": {
+        "total_signals": "1624",
+        "buy_signals": "716",
+        "sell_signals": "908",
+        "blocked_resonance": 0,
+        "recovered_by_a": 0
+      },
+      "scheme_a_recovered": 0
+    }
+  }
+}

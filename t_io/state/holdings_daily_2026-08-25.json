@@ -1,6 +1,6 @@
 {
-  "date": "2026-08-24",
-  "updated_at": "2026-08-24 23:59:57",
+  "date": "2026-08-25",
+  "updated_at": "2026-08-25 00:44:45",
   "source": "live",
   "holdings": [
     {
@@ -671,6 +671,22 @@
       "pre_close": null,
       "price": 28.15,
       "change_pct": 0.68,
+      "pnl_pct": null,
+      "pnl_amt": null,
+      "offline": false
+    },
+    {
+      "code": "688037",
+      "name": "芯源微",
+      "account": "",
+      "type": "",
+      "qty": 0,
+      "base": 0,
+      "t_qty": 0,
+      "cost": null,
+      "pre_close": null,
+      "price": 366.95,
+      "change_pct": 0.12,
       "pnl_pct": null,
       "pnl_amt": null,
       "offline": false

@@ -5,22 +5,36 @@
     "total_codes": 4,
     "etf_count": 2,
     "stock_count": 2,
-    "advance_decline": "unknown",
+    "advance_decline": {
+      "up": 1460,
+      "down": 3964,
+      "flat": 124
+    },
     "risk_flag": "unknown",
     "market_open": false
   },
   "session_note": "等待9:30开盘后获取市场数据",
   "auction_result": {},
-  "generated_at": "2026-08-24 20:29:23",
-  "source": "watchlist",
+  "generated_at": "2026-08-25 00:41:14",
+  "source": "spot",
   "market_snapshot": {
-    "source": "watchlist",
+    "source": "spot",
     "market_open": false,
-    "index_trend": "unknown",
-    "advance_decline": "unknown",
-    "hot_theme": [],
-    "risk_flag": "unknown",
-    "market_sentence": "市场快照不足，按名单结构解读",
+    "index_trend": "positive",
+    "advance_decline": {
+      "up": 1460,
+      "down": 3964,
+      "flat": 124
+    },
+    "hot_theme": [
+      "天力锂能",
+      "天山生物",
+      "博科测试",
+      "耐科装备",
+      "武汉蓝电"
+    ],
+    "risk_flag": "risk_off",
+    "market_sentence": "涨1460 / 跌3964 / 平124",
     "top20_volume_analysis": {
       "total_up": 0,
       "total_down": 0,

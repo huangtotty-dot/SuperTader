@@ -1,0 +1,760 @@
+{
+  "timestamp": "2026-08-24T20:40:12.926357",
+  "sample": {
+    "stock": "588170.SH",
+    "period": "最近5天",
+    "completed": true
+  },
+  "estimate": {
+    "trading_days": 850,
+    "stocks": 41,
+    "total_bars": 8364000,
+    "estimated_time_hours": 145.20833333333334
+  },
+  "incremental": {
+    "stock": "588170.SH",
+    "period": "2026-02-25 ~ 2026-08-24",
+    "daily_count": 123,
+    "total_signals": 1640,
+    "daily_stats": [
+      {
+        "date": "2026-02-26",
+        "signals": 22,
+        "buy": 20,
+        "sell": 2
+      },
+      {
+        "date": "2026-02-27",
+        "signals": 9,
+        "buy": 4,
+        "sell": 5
+      },
+      {
+        "date": "2026-03-02",
+        "signals": 11,
+        "buy": 3,
+        "sell": 8
+      },
+      {
+        "date": "2026-03-03",
+        "signals": 18,
+        "buy": 0,
+        "sell": 18
+      },
+      {
+        "date": "2026-03-04",
+        "signals": 6,
+        "buy": 1,
+        "sell": 5
+      },
+      {
+        "date": "2026-03-05",
+        "signals": 17,
+        "buy": 1,
+        "sell": 16
+      },
+      {
+        "date": "2026-03-06",
+        "signals": 13,
+        "buy": 0,
+        "sell": 13
+      },
+      {
+        "date": "2026-03-09",
+        "signals": 20,
+        "buy": 16,
+        "sell": 4
+      },
+      {
+        "date": "2026-03-10",
+        "signals": 15,
+        "buy": 8,
+        "sell": 7
+      },
+      {
+        "date": "2026-03-11",
+        "signals": 11,
+        "buy": 0,
+        "sell": 11
+      },
+      {
+        "date": "2026-03-12",
+        "signals": 17,
+        "buy": 2,
+        "sell": 15
+      },
+      {
+        "date": "2026-03-13",
+        "signals": 9,
+        "buy": 2,
+        "sell": 7
+      },
+      {
+        "date": "2026-03-16",
+        "signals": 11,
+        "buy": 10,
+        "sell": 1
+      },
+      {
+        "date": "2026-03-17",
+        "signals": 16,
+        "buy": 1,
+        "sell": 15
+      },
+      {
+        "date": "2026-03-18",
+        "signals": 9,
+        "buy": 9,
+        "sell": 0
+      },
+      {
+        "date": "2026-03-19",
+        "signals": 6,
+        "buy": 2,
+        "sell": 4
+      },
+      {
+        "date": "2026-03-20",
+        "signals": 7,
+        "buy": 5,
+        "sell": 2
+      },
+      {
+        "date": "2026-03-23",
+        "signals": 18,
+        "buy": 1,
+        "sell": 17
+      },
+      {
+        "date": "2026-03-24",
+        "signals": 11,
+        "buy": 3,
+        "sell": 8
+      },
+      {
+        "date": "2026-03-25",
+        "signals": 15,
+        "buy": 4,
+        "sell": 11
+      },
+      {
+        "date": "2026-03-26",
+        "signals": 9,
+        "buy": 0,
+        "sell": 9
+      },
+      {
+        "date": "2026-03-27",
+        "signals": 23,
+        "buy": 21,
+        "sell": 2
+      },
+      {
+        "date": "2026-03-30",
+        "signals": 17,
+        "buy": 16,
+        "sell": 1
+      },
+      {
+        "date": "2026-03-31",
+        "signals": 14,
+        "buy": 0,
+        "sell": 14
+      },
+      {
+        "date": "2026-04-01",
+        "signals": 10,
+        "buy": 7,
+        "sell": 3
+      },
+      {
+        "date": "2026-04-02",
+        "signals": 21,
+        "buy": 0,
+        "sell": 21
+      },
+      {
+        "date": "2026-04-03",
+        "signals": 8,
+        "buy": 4,
+        "sell": 4
+      },
+      {
+        "date": "2026-04-07",
+        "signals": 8,
+        "buy": 3,
+        "sell": 5
+      },
+      {
+        "date": "2026-04-08",
+        "signals": 24,
+        "buy": 24,
+        "sell": 0
+      },
+      {
+        "date": "2026-04-09",
+        "signals": 15,
+        "buy": 5,
+        "sell": 10
+      },
+      {
+        "date": "2026-04-10",
+        "signals": 12,
+        "buy": 3,
+        "sell": 9
+      },
+      {
+        "date": "2026-04-13",
+        "signals": 14,
+        "buy": 2,
+        "sell": 12
+      },
+      {
+        "date": "2026-04-14",
+        "signals": 12,
+        "buy": 7,
+        "sell": 5
+      },
+      {
+        "date": "2026-04-15",
+        "signals": 8,
+        "buy": 1,
+        "sell": 7
+      },
+      {
+        "date": "2026-04-16",
+        "signals": 8,
+        "buy": 7,
+        "sell": 1
+      },
+      {
+        "date": "2026-04-17",
+        "signals": 11,
+        "buy": 4,
+        "sell": 7
+      },
+      {
+        "date": "2026-04-20",
+        "signals": 8,
+        "buy": 7,
+        "sell": 1
+      },
+      {
+        "date": "2026-04-21",
+        "signals": 14,
+        "buy": 13,
+        "sell": 1
+      },
+      {
+        "date": "2026-04-22",
+        "signals": 16,
+        "buy": 12,
+        "sell": 4
+      },
+      {
+        "date": "2026-04-23",
+        "signals": 15,
+        "buy": 5,
+        "sell": 10
+      },
+      {
+        "date": "2026-04-24",
+        "signals": 8,
+        "buy": 7,
+        "sell": 1
+      },
+      {
+        "date": "2026-04-27",
+        "signals": 21,
+        "buy": 21,
+        "sell": 0
+      },
+      {
+        "date": "2026-04-28",
+        "signals": 17,
+        "buy": 5,
+        "sell": 12
+      },
+      {
+        "date": "2026-04-29",
+        "signals": 9,
+        "buy": 9,
+        "sell": 0
+      },
+      {
+        "date": "2026-04-30",
+        "signals": 15,
+        "buy": 15,
+        "sell": 0
+      },
+      {
+        "date": "2026-05-06",
+        "signals": 15,
+        "buy": 3,
+        "sell": 12
+      },
+      {
+        "date": "2026-05-07",
+        "signals": 13,
+        "buy": 13,
+        "sell": 0
+      },
+      {
+        "date": "2026-05-08",
+        "signals": 11,
+        "buy": 6,
+        "sell": 5
+      },
+      {
+        "date": "2026-05-11",
+        "signals": 17,
+        "buy": 15,
+        "sell": 2
+      },
+      {
+        "date": "2026-05-12",
+        "signals": 16,
+        "buy": 9,
+        "sell": 7
+      },
+      {
+        "date": "2026-05-13",
+        "signals": 15,
+        "buy": 15,
+        "sell": 0
+      },
+      {
+        "date": "2026-05-14",
+        "signals": 9,
+        "buy": 5,
+        "sell": 4
+      },
+      {
+        "date": "2026-05-15",
+        "signals": 20,
+        "buy": 11,
+        "sell": 9
+      },
+      {
+        "date": "2026-05-18",
+        "signals": 13,
+        "buy": 1,
+        "sell": 12
+      },
+      {
+        "date": "2026-05-19",
+        "signals": 14,
+        "buy": 14,
+        "sell": 0
+      },
+      {
+        "date": "2026-05-20",
+        "signals": 14,
+        "buy": 12,
+        "sell": 2
+      },
+      {
+        "date": "2026-05-21",
+        "signals": 15,
+        "buy": 0,
+        "sell": 15
+      },
+      {
+        "date": "2026-05-22",
+        "signals": 16,
+        "buy": 12,
+        "sell": 4
+      },
+      {
+        "date": "2026-05-25",
+        "signals": 21,
+        "buy": 17,
+        "sell": 4
+      },
+      {
+        "date": "2026-05-26",
+        "signals": 9,
+        "buy": 0,
+        "sell": 9
+      },
+      {
+        "date": "2026-05-27",
+        "signals": 14,
+        "buy": 0,
+        "sell": 14
+      },
+      {
+        "date": "2026-05-28",
+        "signals": 11,
+        "buy": 9,
+        "sell": 2
+      },
+      {
+        "date": "2026-05-29",
+        "signals": 16,
+        "buy": 0,
+        "sell": 16
+      },
+      {
+        "date": "2026-06-01",
+        "signals": 14,
+        "buy": 1,
+        "sell": 13
+      },
+      {
+        "date": "2026-06-02",
+        "signals": 9,
+        "buy": 9,
+        "sell": 0
+      },
+      {
+        "date": "2026-06-03",
+        "signals": 14,
+        "buy": 10,
+        "sell": 4
+      },
+      {
+        "date": "2026-06-04",
+        "signals": 12,
+        "buy": 11,
+        "sell": 1
+      },
+      {
+        "date": "2026-06-05",
+        "signals": 16,
+        "buy": 4,
+        "sell": 12
+      },
+      {
+        "date": "2026-06-08",
+        "signals": 14,
+        "buy": 3,
+        "sell": 11
+      },
+      {
+        "date": "2026-06-09",
+        "signals": 24,
+        "buy": 24,
+        "sell": 0
+      },
+      {
+        "date": "2026-06-10",
+        "signals": 8,
+        "buy": 1,
+        "sell": 7
+      },
+      {
+        "date": "2026-06-11",
+        "signals": 9,
+        "buy": 7,
+        "sell": 2
+      },
+      {
+        "date": "2026-06-12",
+        "signals": 19,
+        "buy": 0,
+        "sell": 19
+      },
+      {
+        "date": "2026-06-15",
+        "signals": 11,
+        "buy": 11,
+        "sell": 0
+      },
+      {
+        "date": "2026-06-16",
+        "signals": 1,
+        "buy": 1,
+        "sell": 0
+      },
+      {
+        "date": "2026-06-17",
+        "signals": 17,
+        "buy": 17,
+        "sell": 0
+      },
+      {
+        "date": "2026-06-18",
+        "signals": 14,
+        "buy": 11,
+        "sell": 3
+      },
+      {
+        "date": "2026-06-22",
+        "signals": 11,
+        "buy": 4,
+        "sell": 7
+      },
+      {
+        "date": "2026-06-23",
+        "signals": 15,
+        "buy": 6,
+        "sell": 9
+      },
+      {
+        "date": "2026-06-24",
+        "signals": 16,
+        "buy": 15,
+        "sell": 1
+      },
+      {
+        "date": "2026-06-25",
+        "signals": 17,
+        "buy": 11,
+        "sell": 6
+      },
+      {
+        "date": "2026-06-26",
+        "signals": 13,
+        "buy": 12,
+        "sell": 1
+      },
+      {
+        "date": "2026-06-29",
+        "signals": 15,
+        "buy": 11,
+        "sell": 4
+      },
+      {
+        "date": "2026-06-30",
+        "signals": 15,
+        "buy": 12,
+        "sell": 3
+      },
+      {
+        "date": "2026-07-01",
+        "signals": 18,
+        "buy": 7,
+        "sell": 11
+      },
+      {
+        "date": "2026-07-02",
+        "signals": 20,
+        "buy": 2,
+        "sell": 18
+      },
+      {
+        "date": "2026-07-03",
+        "signals": 8,
+        "buy": 7,
+        "sell": 1
+      },
+      {
+        "date": "2026-07-06",
+        "signals": 12,
+        "buy": 7,
+        "sell": 5
+      },
+      {
+        "date": "2026-07-07",
+        "signals": 13,
+        "buy": 10,
+        "sell": 3
+      },
+      {
+        "date": "2026-07-08",
+        "signals": 19,
+        "buy": 14,
+        "sell": 5
+      },
+      {
+        "date": "2026-07-09",
+        "signals": 13,
+        "buy": 12,
+        "sell": 1
+      },
+      {
+        "date": "2026-07-10",
+        "signals": 16,
+        "buy": 0,
+        "sell": 16
+      },
+      {
+        "date": "2026-07-13",
+        "signals": 15,
+        "buy": 2,
+        "sell": 13
+      },
+      {
+        "date": "2026-07-14",
+        "signals": 9,
+        "buy": 5,
+        "sell": 4
+      },
+      {
+        "date": "2026-07-15",
+        "signals": 9,
+        "buy": 2,
+        "sell": 7
+      },
+      {
+        "date": "2026-07-16",
+        "signals": 17,
+        "buy": 2,
+        "sell": 15
+      },
+      {
+        "date": "2026-07-17",
+        "signals": 13,
+        "buy": 1,
+        "sell": 12
+      },
+      {
+        "date": "2026-07-20",
+        "signals": 16,
+        "buy": 0,
+        "sell": 16
+      },
+      {
+        "date": "2026-07-21",
+        "signals": 17,
+        "buy": 17,
+        "sell": 0
+      },
+      {
+        "date": "2026-07-22",
+        "signals": 10,
+        "buy": 2,
+        "sell": 8
+      },
+      {
+        "date": "2026-07-23",
+        "signals": 10,
+        "buy": 2,
+        "sell": 8
+      },
+      {
+        "date": "2026-07-24",
+        "signals": 10,
+        "buy": 7,
+        "sell": 3
+      },
+      {
+        "date": "2026-07-27",
+        "signals": 10,
+        "buy": 5,
+        "sell": 5
+      },
+      {
+        "date": "2026-07-28",
+        "signals": 19,
+        "buy": 1,
+        "sell": 18
+      },
+      {
+        "date": "2026-07-29",
+        "signals": 14,
+        "buy": 8,
+        "sell": 6
+      },
+      {
+        "date": "2026-07-30",
+        "signals": 14,
+        "buy": 4,
+        "sell": 10
+      },
+      {
+        "date": "2026-07-31",
+        "signals": 10,
+        "buy": 0,
+        "sell": 10
+      },
+      {
+        "date": "2026-08-03",
+        "signals": 13,
+        "buy": 2,
+        "sell": 11
+      },
+      {
+        "date": "2026-08-04",
+        "signals": 16,
+        "buy": 15,
+        "sell": 1
+      },
+      {
+        "date": "2026-08-05",
+        "signals": 15,
+        "buy": 15,
+        "sell": 0
+      },
+      {
+        "date": "2026-08-06",
+        "signals": 12,
+        "buy": 7,
+        "sell": 5
+      },
+      {
+        "date": "2026-08-07",
+        "signals": 12,
+        "buy": 12,
+        "sell": 0
+      },
+      {
+        "date": "2026-08-10",
+        "signals": 8,
+        "buy": 4,
+        "sell": 4
+      },
+      {
+        "date": "2026-08-11",
+        "signals": 15,
+        "buy": 7,
+        "sell": 8
+      },
+      {
+        "date": "2026-08-12",
+        "signals": 10,
+        "buy": 3,
+        "sell": 7
+      },
+      {
+        "date": "2026-08-13",
+        "signals": 8,
+        "buy": 3,
+        "sell": 5
+      },
+      {
+        "date": "2026-08-14",
+        "signals": 11,
+        "buy": 3,
+        "sell": 8
+      },
+      {
+        "date": "2026-08-17",
+        "signals": 19,
+        "buy": 18,
+        "sell": 1
+      },
+      {
+        "date": "2026-08-18",
+        "signals": 6,
+        "buy": 3,
+        "sell": 3
+      },
+      {
+        "date": "2026-08-19",
+        "signals": 13,
+        "buy": 1,
+        "sell": 12
+      },
+      {
+        "date": "2026-08-20",
+        "signals": 8,
+        "buy": 0,
+        "sell": 8
+      },
+      {
+        "date": "2026-08-21",
+        "signals": 10,
+        "buy": 1,
+        "sell": 9
+      },
+      {
+        "date": "2026-08-24",
+        "signals": 11,
+        "buy": 0,
+        "sell": 11
+      }
+    ]
+  }
+}
