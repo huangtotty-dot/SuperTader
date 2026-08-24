@@ -1266,7 +1266,9 @@ class Api:
         weekly = calc_ma_and_indicators(df.resample("W-FRI", on="date").agg(
             {"open": "first", "high": "max", "low": "min", "close": "last", "volume": "sum"}).dropna().reset_index())
         # 月线频率兼容：pandas≥2.2 用 "ME"，旧版用 "M"
-        _month_freq = "ME" if pd.__version__.split(".")[0] >= "2" and pd.__version__.split(".")[1] >= "2" else "M"
+        # 2026-08-24 fix: pandas 3.x 次版本为 0，原 split[1]>="2" 误判为旧 "M"(已移除)；用版本元组比较
+        _maj, _min = (int(x) for x in pd.__version__.split(".")[:2])
+        _month_freq = "ME" if (_maj, _min) >= (2, 2) else "M"
         monthly = calc_ma_and_indicators(df.resample(_month_freq, on="date").agg(
             {"open": "first", "high": "max", "low": "min", "close": "last", "volume": "sum"}).dropna().reset_index())
 
