@@ -153,8 +153,8 @@ def _tx_kline(symbol: str, period: str, count: int, end: str) -> list:
     start = (end_dt - timedelta(days=start_days)).strftime("%Y-%m-%d")
     url = (f"https://ifzq.gtimg.cn/appstock/app/fqkline/get?"
            f"param={symbol},{period},{start},{end},{count},qfq")
-    js = _http_json(url)
-    try:
+    try:  # 2026-08-24 fix: 腾讯超时/异常降级返回空，不让复盘卡死(timeout)
+        js = _http_json(url)
         node = js["data"][symbol]
         rows = node.get(f"qfq{period}") or node.get(period) or []
     except Exception:
@@ -175,16 +175,36 @@ def _tx_kline(symbol: str, period: str, count: int, end: str) -> list:
     return out
 
 
+INDEX_DAILY_CACHE = BASE / "t_io" / "cache" / "market_review_idx"
+
+
 def fetch_index_daily(symbol: str, count: int = 60, end: str | None = None) -> list:
-    return _tx_kline(symbol, "day", count, end or datetime.now().strftime("%Y-%m-%d"))
+    """指数日线（按 symbol+end 磁盘缓存，当日秒回，避免每次复盘网络拉）。"""
+    return _cached_kline(symbol, "day", count, end or datetime.now().strftime("%Y-%m-%d"))
+
+
+def _cached_kline(symbol: str, period: str, count: int, end: str) -> list:
+    fp = INDEX_DAILY_CACHE / f"{symbol}_{period}_{end}.json"
+    try:
+        if fp.exists():
+            return json.loads(fp.read_text(encoding="utf-8"))
+    except Exception:
+        pass
+    rows = _tx_kline(symbol, period, count, end)
+    try:
+        fp.parent.mkdir(parents=True, exist_ok=True)
+        fp.write_text(json.dumps(rows, ensure_ascii=False), encoding="utf-8")
+    except Exception:
+        pass
+    return rows
 
 
 def fetch_index_weekly(symbol: str, count: int = 52, end: str | None = None) -> list:
-    return _tx_kline(symbol, "week", count, end or datetime.now().strftime("%Y-%m-%d"))
+    return _cached_kline(symbol, "week", count, end or datetime.now().strftime("%Y-%m-%d"))
 
 
 def fetch_index_monthly(symbol: str, count: int = 36, end: str | None = None) -> list:
-    return _tx_kline(symbol, "month", count, end or datetime.now().strftime("%Y-%m-%d"))
+    return _cached_kline(symbol, "month", count, end or datetime.now().strftime("%Y-%m-%d"))
 
 
 def fetch_index_minutes(ts_code: str, freq: str, date: str) -> list:
