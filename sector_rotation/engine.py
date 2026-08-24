@@ -92,10 +92,14 @@ def _prepare_inputs(stock_daily: pd.DataFrame, stock_industry: pd.DataFrame, as_
 
 
 def _build_sector_daily(merged: pd.DataFrame) -> pd.DataFrame:
-    grouped = merged.groupby(["日期", "行业名称"], as_index=False).agg(
+    # 2026-08-22 性能: 原 lambda 纯 Python 聚合(32万行) 占 build ~8s；改为预计算 indicator + 原生聚合(C 实现)
+    df = merged.copy()
+    df["_up"] = (df["涨跌幅"] > 0).astype(int)
+    df["_lu"] = (df["涨跌幅"] >= 9.8).astype(int)
+    grouped = df.groupby(["日期", "行业名称"], as_index=False).agg(
         板块日涨幅=("涨跌幅", "mean"),
-        上涨占比=("涨跌幅", lambda s: float((s > 0).mean())),
-        涨停数=("涨跌幅", lambda s: int((s >= 9.8).sum())),
+        上涨占比=("_up", "mean"),
+        涨停数=("_lu", "sum"),
         成交额=("成交额", "sum"),
         成分数=("代码", "nunique"),
     )
@@ -303,15 +307,21 @@ def build_rotation_model(
     market_state, summary = _infer_market_state(sector_frame, family_frame)
 
     trail_dates = list(metric_dates[metric_dates <= as_of_ts])[-tail_days:]
+    # 2026-08-22 性能: 原 4068×(2~4次 .loc) 逐格访问极慢；改为每行一次 .loc[date] 再按列索引
     trail_records: list[dict[str, Any]] = []
     for order, date in enumerate(trail_dates, start=1):
+        _s_row = strength.loc[date]
+        _m_row = momentum.loc[date]
+        _date_str = pd.to_datetime(date).strftime("%Y-%m-%d")
         for sector in latest_strength.index:
+            _sv = _s_row[sector]
+            _mv = _m_row[sector]
             trail_records.append(
                 {
-                    "日期": pd.to_datetime(date).strftime("%Y-%m-%d"),
+                    "日期": _date_str,
                     "行业名称": sector,
-                    "相对强弱": float(strength.loc[date, sector]) if pd.notna(strength.loc[date, sector]) else 0.0,
-                    "动量": float(momentum.loc[date, sector]) if pd.notna(momentum.loc[date, sector]) else 0.0,
+                    "相对强弱": float(_sv) if pd.notna(_sv) else 0.0,
+                    "动量": float(_mv) if pd.notna(_mv) else 0.0,
                     "序号": order,
                 }
             )
