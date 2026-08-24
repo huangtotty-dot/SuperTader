@@ -568,6 +568,9 @@ _BUY_FUSE_NOTIFY_DATE: str = ""   # 买入熔断飞书明示（每日一次）
 _SWING_DEDUP_DATE: str = ""
 _SWING_PUSH_DEDUP: set = set()
 
+# 风险3修复(2026-08-24): 虚假信号监控系统
+_FALSE_SIGNAL_MONITOR = None
+
 # VWAP 实时快照缓存（akshare stock_zh_a_spot_em 成交额/成交量，每 60s 刷新一次）
 _SPOT_VWAP_CACHE: Dict[str, float] = {}  # code -> 实时 VWAP
 _LAST_SPOT_VWAP_REFRESH = 0.0
@@ -1989,19 +1992,34 @@ def scan_once():
                     # 高抛低吸纯两点 (2026-08-13): 两点满足即推送；仓控0股也推(仅供参考不记账)
                     pushed = sig.score >= notify_threshold
                     _block_reason = None  # C13修复(2026-08-18): 记录真实拦截原因，供日志/shadow落盘
+
+                    # 风险2修复(2026-08-24): stock_override禁用门控标的，跳过防重桶拦截
+                    _stock_override_enabled = True
+                    try:
+                        from config import INDEX_RESONANCE_STOCK_OVERRIDE
+                        _so = INDEX_RESONANCE_STOCK_OVERRIDE.get(code, {})
+                        if _so.get("enabled") is False:
+                            _stock_override_enabled = False
+                    except Exception:
+                        pass
+
                     # 纯两点规则 (2026-08-13): 移除轮次上限/单股日限；score=100 恒过阈值 → 一定推送
                     # 仅保留最小防重：同 (code, action, 5分钟桶) 每日只推一次
                     if pushed:
-                        _today = now.strftime("%Y-%m-%d")
-                        if _SWING_DEDUP_DATE != _today:
-                            _SWING_DEDUP_DATE = _today
-                            _SWING_PUSH_DEDUP.clear()
-                        _dkey = (code, sig.action, t.hour * 12 + t.minute // 5)
-                        if _dkey in _SWING_PUSH_DEDUP:
-                            pushed = False
-                            _block_reason = "防重桶拦截（同股同向5分钟桶内已推）"
+                        # 如果是stock_override禁用门控的标的，跳过防重桶检查
+                        if not _stock_override_enabled:
+                            _block_reason = "stock_override: 禁用门控标的跳过防重桶拦截"
                         else:
-                            _SWING_PUSH_DEDUP.add(_dkey)
+                            _today = now.strftime("%Y-%m-%d")
+                            if _SWING_DEDUP_DATE != _today:
+                                _SWING_DEDUP_DATE = _today
+                                _SWING_PUSH_DEDUP.clear()
+                            _dkey = (code, sig.action, t.hour * 12 + t.minute // 5)
+                            if _dkey in _SWING_PUSH_DEDUP:
+                                pushed = False
+                                _block_reason = "防重桶拦截（同股同向5分钟桶内已推）"
+                            else:
+                                _SWING_PUSH_DEDUP.add(_dkey)
                     # 指数5分钟共振门控（2026-08-14）：指数与个股同向才推送，否则整条信号作废
                     # C-1: SELL_HIGH 已在 _resonance_gate 内部按 RESONANCE_GATE.bypass_sell_high 跳过
                     _res_blocked = False
@@ -2059,6 +2077,14 @@ def scan_once():
                         else:
                             log.info(f"📡 {code} {sig.action}两点触发(score={sig.score:.0f})但仓控可交易量为0，"
                                      f"已推送仅供参考(不记账)")
+                        # 风险3修复(2026-08-24): 记录推送信号到虚假信号监控器
+                        try:
+                            if _stock_override_enabled is False:  # 仅记录stock_override禁用的标的
+                                from fake_signal_monitor import get_monitor
+                                m = get_monitor()
+                                m.record_signal(code, sig.price, sig.action, timestamp=now)
+                        except Exception:
+                            pass
                     else:
                         action_type = "买入" if sig.action in ["BUY_LOW", "ADD_POS"] else "卖出"
                         time_window = "10:00前" if t < dtime(10, 0) else "10:00后"
