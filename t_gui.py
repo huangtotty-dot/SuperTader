@@ -1102,6 +1102,16 @@ class Api:
         is_em = code_str.startswith("em")
         is_index = code_str[:2] in ("sh", "sz", "bj") and code_str[2:].isdigit()
         symbol = code_str if is_index else ("sh" + code_str if code_str[0] in "56" else "sz" + code_str)
+        # 2026-08-24: 指数/东财日线磁盘缓存（当日秒回，避免每次网络拉 400 根慢）
+        chart_cache_fp = BASE / "t_io" / "cache" / "stock_chart" / f"{code_str}.json"
+        if is_index or is_em:
+            try:
+                if chart_cache_fp.exists():
+                    _cc = json.loads(chart_cache_fp.read_text(encoding="utf-8"))
+                    if _cc.get("date") == datetime.now().strftime("%Y-%m-%d") and _cc.get("rows"):
+                        rows = _cc["rows"]
+            except Exception:
+                pass
 
         # 股票优先本地日线缓存（当日秒回）；指数/东财无个股缓存，直接网络
         rows = []
@@ -1180,6 +1190,16 @@ class Api:
                 except Exception as e:
                     out["error"] = f"拉取日线失败: {e}"
                     return out
+
+        # 2026-08-24: 网络拉取的指数/东财日线写磁盘缓存（当日，下次秒回）
+        if rows and (is_index or is_em):
+            try:
+                chart_cache_fp.parent.mkdir(parents=True, exist_ok=True)
+                chart_cache_fp.write_text(
+                    json.dumps({"date": datetime.now().strftime("%Y-%m-%d"), "rows": rows},
+                               ensure_ascii=False), encoding="utf-8")
+            except Exception:
+                pass
 
         if not rows:
             out["error"] = "无日线数据"
