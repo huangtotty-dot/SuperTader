@@ -1877,12 +1877,34 @@ class Api:
                 st_mask = watchlist["名称"].str.startswith(("*ST", "ST", "SST", "S*ST")).fillna(False)
                 st_codes = set(watchlist.loc[st_mask, "代码"].astype(str).tolist())
             fetcher = MarketDataFetcher(data_dir=str(HUNTER_DIR / "data"), st_codes=st_codes)
-            market_df = fetcher.fetch_for_date(codes, date)
+            # fix 2026-08-24: 行情拉取近乎全空 → 报错；2026-08-25: 腾讯限流多为瞬态，
+            # 不足阈值先整轮重试一次（5s 后），仍不足才报错，避免偶发限流整日断供
+            _min_ok = max(1, int(len(codes) * 0.01))
+            market_df = pd.DataFrame()
+            for _attempt in range(2):
+                market_df = fetcher.fetch_for_date(codes, date)
+                if len(market_df) >= _min_ok:
+                    break
+                if _attempt == 0:
+                    try:
+                        from modules.market_data import MARKET_PROGRESS as _MP
+                        _MP.update({"phase": f"行情拉取异常(仅{len(market_df)}只)，5s后整轮重试",
+                                    "done": 0, "total": 0, "msg": ""})
+                    except Exception:
+                        pass
+                    import time as _t
+                    _t.sleep(5)
             try:
                 from modules.market_data import MARKET_PROGRESS as _MP
-                _MP.update({"phase": "概念打分", "msg": f"已拉取行情 {len(market_df)} 只，正在打分"})
+                # done/total 归零 → 前端显示不确定进度条，避免继承拉取期的"100%"误导卡死观感
+                _MP.update({"phase": "概念打分", "done": 0, "total": 0, "msg": f"已拉取行情 {len(market_df)} 只，正在打分"})
             except Exception:
                 pass
+            if len(market_df) < _min_ok:
+                out["error"] = (f"行情拉取失败：仅获取 {len(market_df)}/{len(codes)} 只，无法评分。"
+                                f"多为腾讯接口限流/网络异常，请稍后重试。"
+                                f"若反复失败，可检查 stock_hunter/data/market_{date.replace('-', '')}.csv 缓存是否损坏。")
+                return out
             if not market_df.empty:
                 if "名称" in market_df.columns:
                     market_df = market_df.drop(columns=["名称"])
@@ -1903,7 +1925,7 @@ class Api:
             scored = scorer.compute_batch(stock_list)
             try:
                 from modules.market_data import MARKET_PROGRESS as _MP
-                _MP.update({"phase": "构建板块/个股明细", "msg": f"打分完成 {len(scored)} 只"})
+                _MP.update({"phase": "构建板块/个股明细", "done": 0, "total": 0, "msg": f"打分完成 {len(scored)} 只"})
             except Exception:
                 pass
 
@@ -2004,6 +2026,8 @@ class Api:
                         except: d9 = 0
                         stocks.append({
                             "name": d.get("名称", ""), "code": code,
+                            # 细分（韭研概念，| 分隔多分类）——供前端展开板块后按下一级分类分组
+                            "concepts": [c.strip() for c in str(d.get("韭研概念", "") or "").split("|") if c.strip()],
                             "score": total, "d5": d5, "d6": d6, "d9": d9,
                             "change_pct": round(float(d.get("涨跌幅", 0) or 0), 2) if str(d.get("涨跌幅")) not in ("nan", "None", "") else 0.0,
                             "limit_up": int(float(d.get("涨停", 0) or 0)) if str(d.get("涨停")) not in ("nan", "None", "") else 0,
@@ -2181,10 +2205,17 @@ class Api:
                     pct = (cur - hi) / hi * 100
                     if pct <= 8:
                         tags.append({"label": "向上突破", "color": "up"})
+                    else:
+                        # 高于箱体上沿 >8% → 已完全脱离箱体（区别于刚突破的"向上突破"）
+                        tags.append({"label": "完全突破", "color": "up"})
                 elif cur < lo:
                     tags.append({"label": "跌破下沿", "color": "down"})
-        elif near_box and cur > near_box["high"] and (cur - near_box["high"]) / near_box["high"] <= 0.08:
-            tags.append({"label": "向上突破", "color": "up"})
+        elif near_box and cur > near_box["high"]:
+            pct = (cur - near_box["high"]) / near_box["high"] * 100
+            if pct <= 8:
+                tags.append({"label": "向上突破", "color": "up"})
+            else:
+                tags.append({"label": "完全突破", "color": "up"})
 
         # 筑底/筑顶（近20日横盘）
         win = closes[-20:]
@@ -2457,7 +2488,9 @@ class Api:
                                       for p in parts)
                         if matched:
                             sector_stocks.setdefault(sector, []).append(
-                                {"code": code, "name": nm, "score": 0, "d5": 0, "d6": 0,
+                                {"code": code, "name": nm,
+                                 "concepts": [c.strip() for c in str(concepts).split("|") if c.strip()],
+                                 "score": 0, "d5": 0, "d6": 0,
                                  "d9": 0, "change_pct": 0, "limit_up": 0})
                             break
             except Exception:

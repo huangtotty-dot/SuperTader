@@ -344,6 +344,10 @@ tr:hover td { background: rgba(243,93,43,.03); }
 .h-expand table { width: 100%; }
 .h-expand-row { font-size: 11px; }
 .h-expand-row:hover { background: rgba(243,93,43,.04); }
+/* 板块展开后的细分分组头（板块 → 细分 → 个股） */
+.h-subgroup-head td { background: rgba(139,148,158,.08); border-top: 1px solid var(--border-soft); border-bottom: 1px solid var(--border-soft); padding: 4px 8px; font-size: 12px; }
+.h-subgroup-head:first-child td { border-top: none; }
+.h-subgroup-name { font-weight: 700; margin-right: 8px; color: var(--accent); }
 
 /* 加仓条件 checklist */
 .aw-score { display: inline-block; margin-left: 10px; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 10px; }
