@@ -706,7 +706,7 @@ INDEX_RESONANCE_PARAMS = {
     #   （此前报的 +20pp 系回测取了未收盘指数根的未来函数假象，已修正；数值以本注释为准）
     #   contrarian 47.4%(+2.5pp)；15分钟MACD信号(macd15_bb5)修正后无效，已回退
     "gate": "index_ma5_dir",
-    "fail_closed": True,            # 指数数据缺失/不足时拦截信号
+    "fail_closed": False,           # 指数数据缺失/不足时拦截信号 → 2026-08-24 复盘修正: 改为 False，数据缺失时降级放行（index_resonance 采集异常致全天 0 推送的教训）
     # 同向极值（指数5分钟与个股同处极值区）
     "buy_bb_max": 0.25,             # 低吸: 指数 bb_pct_5m <= buy_bb_max
     "buy_rsi_max": 40.0,            # 低吸: 指数 rsi_6_5m <= buy_rsi_max

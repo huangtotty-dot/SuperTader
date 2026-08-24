@@ -1,13 +1,13 @@
 {
   "515180": {
     "name": "红利ETF易方达",
-    "cost": 1.430,
+    "cost": 1.43,
     "qty": 14000,
     "base": 14000,
     "t_qty": 0,
     "type": "etf",
     "account": "账户A",
-    "pre_close": 1.433
+    "pre_close": 1.452
   },
   "588170": {
     "name": "科创半导体ETF华夏",
@@ -17,7 +17,7 @@
     "t_qty": 500,
     "type": "etf",
     "account": "账户B",
-    "pre_close": 1.012
+    "pre_close": 1.005
   },
   "600481": {
     "name": "双良节能",
@@ -27,7 +27,7 @@
     "t_qty": 0,
     "type": "stock",
     "account": "账户B",
-    "pre_close": 4.21
+    "pre_close": 4.2
   },
   "002639": {
     "name": "雪人集团",
@@ -37,6 +37,6 @@
     "t_qty": 0,
     "type": "stock",
     "account": "账户A",
-    "pre_close": 11.59
+    "pre_close": 11.45
   }
 }
