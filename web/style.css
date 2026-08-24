@@ -235,7 +235,7 @@ tr:hover td { background: rgba(243,93,43,.03); }
 .stock-toggles { display: flex; gap: 12px; padding: 6px 0 8px; }
 .toggle-item { font-size: 12px; color: var(--text-dim); display: flex; align-items: center; gap: 4px; cursor: pointer; }
 .toggle-item input { accent-color: var(--accent); }
-.chart-help { padding: 10px 16px; border-bottom: 1px solid var(--border-soft); background: rgba(13,17,23,.4); font-size: 12px; line-height: 1.7; }
+.chart-help { padding: 10px 16px; border-bottom: 1px solid var(--border-soft); background: rgba(244,246,250,.55); font-size: 12px; line-height: 1.7; }
 .help-sec { margin-bottom: 8px; }
 .modal-lg { display: flex; flex-direction: column; }
 .stock-chart { flex: 1; min-height: 300px; }
@@ -256,7 +256,7 @@ tr:hover td { background: rgba(243,93,43,.03); }
 .aw-bar-seg.aw-hold { background: #3fb950; }
 .aw-bar-seg.aw-break { background: #f85149; }
 .aw-bar-seg.aw-near { background: #d29922; }
-.aw-bar-seg.aw-none { background: #30363d; color: var(--text-faint); }
+.aw-bar-seg.aw-none { background: var(--border-soft); color: var(--text-faint); }
 .aw-dot { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 3px; vertical-align: middle; }
 .aw-dot.hold { background: #3fb950; } .aw-dot.break { background: #f85149; }
 .aw-dot.near { background: #d29922; } .aw-dot.none { background: #484f58; }
@@ -323,7 +323,7 @@ tr:hover td { background: rgba(243,93,43,.03); }
 .h-bar-fill { height: 100%; border-radius: 2px; transition: width .3s; }
 .h-bar-fill.h-hot { background: linear-gradient(90deg, #f85149, #ff7b72); }
 .h-bar-fill.h-warm { background: linear-gradient(90deg, #d29922, #e3b341); }
-.h-bar-fill.h-cool { background: linear-gradient(90deg, #484f58, #8b949e); }
+.h-bar-fill.h-cool { background: linear-gradient(90deg, #c8cdd4, #b0b6c0); }
 .h-bar-fill.up { background: #f85149; }
 .h-bar-fill.down { background: #3fb950; }
 .h-bar-fill.warn { background: #d29922; }
@@ -340,7 +340,7 @@ tr:hover td { background: rgba(243,93,43,.03); }
 /* 展开 */
 .h-expand-wrap { display: none; }
 .h-expand-wrap.open { display: table-row; }
-.h-expand { padding: 6px 8px 6px 24px; background: rgba(13,17,23,.5); border-top: 1px solid var(--border-soft); }
+.h-expand { padding: 6px 8px 6px 24px; background: rgba(244,246,250,.65); border-top: 1px solid var(--border-soft); }
 .h-expand table { width: 100%; }
 .h-expand-row { font-size: 11px; }
 .h-expand-row:hover { background: rgba(243,93,43,.04); }
