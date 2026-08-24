@@ -123,7 +123,19 @@ def _resonance_gate(code, sig, now):
     每次计算都落盘 index_resonance trace（含被拦截的准信号），供复盘优化。
     C-1(2026-08-21): 做T/接回意图分流——SELL_HIGH(日内了结)跳过共振门控直接放行，
     卖侧不受指数 MA5 尺约束（08-19 破线日 0 卖出信号教训）。
+    2026-08-24 方案A: 按标的启用/禁用共振门控
     """
+    # 2026-08-24 方案A: 检查该标的是否有分标的覆盖
+    try:
+        from config import INDEX_RESONANCE_STOCK_OVERRIDE as _irso
+        if isinstance(_irso, dict) and code in _irso:
+            _override = _irso[code]
+            if _override.get("enabled") is False:
+                # 该标的禁用共振门控，直接放行
+                return True, {"bypass": "stock_override_disabled"}
+    except Exception:
+        pass
+
     try:
         from config import RESONANCE_GATE as _rg
     except Exception:

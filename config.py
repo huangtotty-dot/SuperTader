@@ -379,6 +379,9 @@ STOCK_PARAMS = {
         "stock_qty_base_pct": 0.39, "stock_qty_strong_pct": 0.27,
         "bullish_reversal_min_pct": 0.008,     # N4
         "notify_sell_threshold": 55, "notify_buy_threshold": 36.0,  # v1.1.0: sell 62→55 对齐t55档; E1采纳: buy 43→36 对齐引擎T36b档
+        # 2026-08-24 方案A: 分标的做T门控优化
+        "allow_overheated_buy": False,         # 保守：不绕过过热门控
+        "allow_breakdown_buy": False,          # 保守：不绕过破位门控
     },
     "000988": {  # 华工科技
         "stock_qty_base_pct": 0.30, "stock_qty_strong_pct": 0.29,
@@ -387,20 +390,36 @@ STOCK_PARAMS = {
         "bullish_reversal_body_ratio": 0.50,
         "bullish_reversal_vol_multiplier": 0.7,
         "notify_sell_threshold": 55, "notify_buy_threshold": 36.0,  # v1.1.0: sell 63→55 对齐t55档; E1采纳: buy 43→36 对齐引擎T36b档
+        # 2026-08-24 方案A: 分标的做T门控优化
+        "allow_overheated_buy": False,         # 保守：不绕过过热门控
+        "breakdown_risk_threshold": 0.07,      # 放宽破位门控（从 3% 放宽到 7%）
     },
     "588170": {  # 科创芯片ETF
         "stock_qty_base_pct": 0.15, "stock_qty_strong_pct": 0.25,
         "max_sell_times_per_stock": 2,
         "notify_sell_threshold": 55, "notify_buy_threshold": 36.0,  # v1.1.0: sell 67→55 对齐t55档; E1采纳: buy 40→36 对齐引擎T36b档
+        # 2026-08-24 方案A: 分标的做T门控优化（ETF激进）
+        "allow_overheated_buy": True,          # 激进：绕过过热门控
+        "allow_breakdown_buy": True,           # 激进：绕过破位门控
+        "swing_buy_rsi": 40,                   # ETF激进参数：低吸点更浅（35→40）
+        "swing_bb_lower": 0.1,                 # ETF激进参数：下轨更高，提前触发（0.0→0.1）
     },
     "600176": {  # 中国巨石
         "stock_qty_base_pct": 0.34, "stock_qty_strong_pct": 0.59,
         "max_sell_times_per_stock": 3,
         "notify_sell_threshold": 51, "notify_buy_threshold": 36.0,  # E1采纳: buy 40→36 对齐引擎T36b档
+        # 2026-08-24 方案A: 分标的做T门控优化
+        "allow_overheated_buy": False,         # 保守：不绕过过热门控
+        "allow_breakdown_buy": False,          # 保守：不绕过破位门控
     },
     "603667": {  # 五洲新春
         "stock_qty_base_pct": 0.28, "stock_qty_strong_pct": 0.37,
         "notify_sell_threshold": 55, "notify_buy_threshold": 36.0,  # v1.1.0: sell 64→55 对齐t55档; E1采纳: buy 40→36 对齐引擎T36b档
+    },
+    "300153": {  # 科泰电源
+        # 2026-08-24 方案A: 分标的做T门控优化（波动大的个股适度放宽）
+        "allow_overheated_buy": True,          # 适度激进：绕过过热门控
+        "swing_buy_rsi": 38,                   # 个股激进参数：低吸点更浅（35→38）
     },
 }
 
@@ -726,8 +745,27 @@ RESONANCE_GATE = {
     "bypass_sell_high": True,   # SELL_HIGH 跳过共振门控
 }
 # 个股/ETF → 板块指数覆盖（分板默认之外显式指定）；值 = (index_code, index_name)
+# 2026-08-24 优化：添加标的级别的共振门控开关
 INDEX_RESONANCE_MAP = {
     "588170": ("sh000688", "科创50"),   # 科创半导体ETF → 科创50
+}
+
+# 2026-08-24 方案A: 分标的共振门控优化
+# 按标的启用/禁用 index_resonance 门控，或调整门控参数
+INDEX_RESONANCE_STOCK_OVERRIDE = {
+    "588170": {  # 科创半导体ETF - 激进：禁用门控，直接推送
+        "enabled": False,  # 禁用 index_resonance 门控，所有信号直接推送不过滤
+    },
+    "300153": {  # 科泰电源 - 激进：禁用门控
+        "enabled": False,
+    },
+    # 个股保守：保持默认门控或使用更严格的参数
+    "600481": {  # 双良节能 - 保守
+        # "enabled": True  # 使用全局默认
+    },
+    "000988": {  # 华工科技 - 保守
+        # "enabled": True  # 使用全局默认
+    },
 }
 
 # ==================== 建仓/加仓时机判定（timing_gate.py，2026-08-15 新增） ====================
