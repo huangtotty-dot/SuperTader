@@ -1503,6 +1503,41 @@ class Api:
         recent_valid.sort(key=lambda b: (
             0 if b["rel"] == 0 else 1 if b["rel"] == -1 else 2,
             -b["conf"]))
+
+        # P1改进：为K线图添加箱体质量评分信息
+        for b in recent_valid:
+            # 质量评分维度
+            width = b["width"]
+            touches = b["touches"]
+            days = b["days"]
+
+            # 宽度评级
+            if width < 5:
+                width_grade = "微"  # 微箱体，敏感但容易假突破
+            elif width < 15:
+                width_grade = "优"  # 正常箱体，最稳定
+            else:
+                width_grade = "宽"  # 宽幅箱体，波动大
+
+            # 触及质量评级（基于精确触及次数）
+            touch_quality = touches[0] + touches[1]
+            if touch_quality >= 6:
+                touch_grade = "极强"  # 4+次精确触及，非常稳定
+            elif touch_quality >= 4:
+                touch_grade = "强"    # 2-3次精确触及，较稳定
+            else:
+                touch_grade = "弱"    # 1次精确触及，可能噪音
+
+            # 综合质量评分（1-10分）
+            quality_score = (touch_quality * 1.5 + max(0, 15 - width) * 0.3 + max(0, 30 - days) * 0.1)
+            quality_score = min(10, max(1, round(quality_score, 1)))
+
+            b["width_grade"] = width_grade
+            b["touch_grade"] = touch_grade
+            b["quality_score"] = quality_score
+            # 用于K线图显示的关键字段
+            b["display"] = f"{width_grade}箱({width:.1f}%) 触及{touch_grade}({touch_quality}次) 质量{quality_score}/10"
+
         return recent_valid[:3]
 
     def _detect_channel(self, daily):
