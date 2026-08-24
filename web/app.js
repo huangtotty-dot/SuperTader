@@ -1318,17 +1318,30 @@ function renderAddWatch(aw) {
     const rightIdx = conds.findIndex(c => c.name === "右侧突破箱体");
     const leftConds = rightIdx >= 0 ? conds.slice(0, rightIdx) : conds;
     const rightConds = rightIdx >= 0 ? conds.slice(rightIdx) : [];
-    const condRow = c =>
-      `<div class="aw-cond ${c.met ? "met" : "wait"}" title="${esc(c.detail)}">
+    const condRow = c => {
+      // P2改进：为"右侧突破箱体"条件添加突破等级显示
+      let levelBadge = "";
+      if (c.name === "右侧突破箱体" && c.met && c.detail) {
+        // 从detail中提取突破等级信息（格式：突破箱体上沿XXX，超出X.XX%，等级:reliable）
+        const levelMatch = c.detail.match(/等级:(\w+)/);
+        if (levelMatch) {
+          const level = levelMatch[1];
+          const levelColor = level === "reliable" ? "#3fb950" : level === "strong" ? "#f85149" : "#e3b341";
+          levelBadge = `<span style="color:${levelColor};font-weight:bold;margin-left:4px">[${level}]</span>`;
+        }
+      }
+      return `<div class="aw-cond ${c.met ? "met" : "wait"}" title="${esc(c.detail)}">
         <span class="aw-cond-icon">${c.met ? "✓" : "○"}</span>
-        <span>${esc(c.name)}</span>
+        <span>${esc(c.name)}${levelBadge}</span>
         <span class="aw-cond-detail">${esc(c.detail)}</span>
       </div>`;
+    };
     const leftRows = leftConds.map(condRow).join("");
     const rightRows = rightConds.map(condRow).join("");
 
     // 可加仓徽章：左侧冰点(日线+5分钟) 或 右侧突破箱体 任一满足
-    const canAdd = w.left_iceberg || w.right_breakout;
+    // P2改进：过滤掉signal级的突破（只保留reliable/strong）
+    const canAdd = w.left_iceberg || (w.right_breakout && !w.right_detail.includes("等级:signal"));
     const addBadge = canAdd
       ? `<span class="badge signal" style="margin-left:6px">🔼 可加仓</span>`
       : "";
@@ -1540,7 +1553,8 @@ function renderStockChart() {
   const currentLine = { yAxis: cur, lineStyle: { color: "#e3b341", width: 1, type: "solid" },
     label: { formatter: `${cur}`, color: "#e3b341", fontSize: 9, position: "insideEndTop" } };
 
-  // 箱体标注（半透明矩形）：当前箱体橙色高亮，历史箱体灰色
+  // 箱体标注（半透明矩形）：根据质量评分着色 — P2前端适配
+  // 绿色:quality_score>=7 | 黄色:5-7 | 红色:<5(信号级) | 灰色:无评分(历史)
   const boxes = data.boxes || [];
   const boxIdx = period.dates;  // 当前周期的日期数组
   const boxAreas = boxes
@@ -1550,10 +1564,44 @@ function renderStockChart() {
       const i1 = boxIdx.indexOf(b.end);
       if (i0 < 0 || i1 < 0) return null;
       const isCur = b.rel === 0;
+
+      // P2前端适配：根据quality_score判定颜色
+      let boxColor, borderColor, borderWidth;
+      let qualityLabel = "";
+
+      if (b.quality_score !== undefined) {
+        // 有质量评分（新字段）
+        qualityLabel = ` [${b.quality_score.toFixed(1)}/10]`;
+        if (b.quality_score >= 7) {
+          // 绿色：高质量，非常可靠
+          boxColor = isCur ? "rgba(63, 185, 80, .35)" : "rgba(63, 185, 80, .15)";
+          borderColor = isCur ? "#3fb950" : "#238636";
+          borderWidth = isCur ? 2 : 1;
+        } else if (b.quality_score >= 5) {
+          // 黄色：中等质量，可参考
+          boxColor = isCur ? "rgba(227, 179, 65, .35)" : "rgba(227, 179, 65, .15)";
+          borderColor = isCur ? "#e3b341" : "#d29922";
+          borderWidth = isCur ? 2 : 1;
+        } else {
+          // 红色：低质量或信号级，谨慎
+          boxColor = isCur ? "rgba(248, 81, 73, .35)" : "rgba(248, 81, 73, .12)";
+          borderColor = isCur ? "#f85149" : "#da3633";
+          borderWidth = isCur ? 2 : 1;
+        }
+      } else {
+        // 无质量评分（历史数据兼容）
+        boxColor = isCur ? "rgba(210,153,34,.35)" : "rgba(139,148,158,.12)";
+        borderColor = isCur ? "#d29922" : "#484f58";
+        borderWidth = isCur ? 2 : 1;
+      }
+
+      // 显示标签：包含完整的质量信息
+      const displayLabel = b.display || `${fmt(b.low, 2)}~${fmt(b.high, 2)}`;
       const tag = isCur ? "当前箱体" : (b.rel === -1 ? "上方箱体" : "下方箱体");
-      return [{ name: `${tag} ${fmt(b.low, 2)}~${fmt(b.high, 2)} (${b.days || ""}天)`,
-                xAxis: i0, yAxis: b.low, itemStyle: { color: isCur ? "rgba(210,153,34,.35)" : "rgba(139,148,158,.12)",
-                  borderColor: isCur ? "#d29922" : "#484f58", borderWidth: isCur ? 2 : 1, borderType: isCur ? "solid" : "dashed" } },
+
+      return [{ name: `${tag} ${displayLabel} (${b.days || ""}天)${qualityLabel}`,
+                xAxis: i0, yAxis: b.low, itemStyle: { color: boxColor,
+                  borderColor: borderColor, borderWidth: borderWidth, borderType: isCur ? "solid" : "dashed" } },
               { xAxis: i1, yAxis: b.high }];
     })
     .filter(Boolean);
@@ -1605,7 +1653,31 @@ function renderStockChart() {
           + `<div>开 <b>${o}</b>　收 <b style="color:${col}">${c}</b>　涨跌 <b style="color:${col}">${chgTxt}</b></div>`
           + `<div>高 <b>${hi}</b>　低 <b>${lo}</b>　量 <b>${volTxt}</b></div>`;
         if (maParts.length) html += `<div style="color:#8b949e">${maParts.join("　")}</div>`;
+
+        // P2前端优化：显示当前日期所在的箱体质量信息
+        const curDate = period.dates[i];
+        const boxesAtDate = boxes.filter(b => {
+          try {
+            return curDate >= b.start && curDate <= b.end;
+          } catch (e) {
+            return false;
+          }
+        });
+
+        if (boxesAtDate.length > 0) {
+          html += `<div style="border-top:1px solid #30363d;margin-top:4px;padding-top:4px;color:#8b949e;font-size:10px">`;
+          boxesAtDate.forEach(b => {
+            const qs = b.quality_score !== undefined ? `质量${b.quality_score.toFixed(1)}/10` : "质量未知";
+            const wg = b.width_grade || "—";
+            const tg = b.touch_grade || "—";
+            const disp = b.display ? `${b.display}` : `${wg}箱 触及${tg}`;
+            html += `<div>📦 ${disp}</div>`;
+          });
+          html += `</div>`;
+        }
+
         return html;
+      } },
       } },
     axisPointer: { link: [{ xAxisIndex: "all" }] },
     grid: [
