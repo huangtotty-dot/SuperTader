@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
-评分计算模块 v10 — 标准版（8维 + 大成交额加分，不含D3）
-满分 = 8+6+3+2+1+5+6+3 = 34分，+3分 = 37分
+评分计算模块 v11 — 标准版+P2箱体突破质量维度
+满分 = 8+6+3+2+1+5+6+3+2+3 = 39分，+3分 = 42分
 
 打分标准：
   D1: 强势形态且新高（最高>近150日最高）- 8分
@@ -12,6 +12,7 @@
   D7: 持续性（当日二板及以上，连板>=2）- 5分
   D8: 情绪分数（当日一字板）- 6分
   D9: 活跃程度（近10日有涨停板）- 3分
+  D10: 箱体突破质量（P2新增，基于改进的check_box_breakout）- 2分
   大成交额: 当日成交额>=50亿，额外+3分
 """
 from abc import ABC, abstractmethod
@@ -127,6 +128,33 @@ class 大成交额Scorer(ScorerBase):
         return score, f"成交额={amount/1e8:.2f}亿 -> {score}分"
 
 
+class D10箱体突破质量Scorer(ScorerBase):
+    """P2新增：基于改进的check_box_breakout判定的质量评分"""
+    name = "D10箱体突破质量"
+
+    def compute(self, stock_data: dict) -> Tuple[int, str]:
+        # 突破等级字段（由GUI提供，基于P0改进的分级体系）
+        breakout_level = stock_data.get("breakout_level")  # signal/reliable/strong/None
+        quality_score = stock_data.get("box_quality_score", 0) or 0  # 1-10分
+
+        score = 0
+        detail = ""
+
+        if breakout_level == "strong":
+            score = 2  # 强势突破：高概率后续
+            detail = f"强势突破(质量{quality_score:.1f}/10) -> {score}分"
+        elif breakout_level == "reliable":
+            score = 1  # 可靠突破：推荐参考
+            detail = f"可靠突破(质量{quality_score:.1f}/10) -> {score}分"
+        elif breakout_level == "signal":
+            score = 0  # 信号级：低可靠，不加分
+            detail = f"信号级突破(质量{quality_score:.1f}/10，谨慎) -> {score}分"
+        else:
+            detail = "无箱体突破或突破不足0.5% -> 0分"
+
+        return score, detail
+
+
 class ConceptScorer:
     def __init__(self, dimensions: list = None):
         self.scorers = [
@@ -138,6 +166,7 @@ class ConceptScorer:
             D7持续性Scorer(),
             D8情绪分数Scorer(),
             D9活跃程度Scorer(),
+            D10箱体突破质量Scorer(),  # P2新增
             大成交额Scorer(),
         ]
         if dimensions:
