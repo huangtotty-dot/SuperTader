@@ -2752,29 +2752,51 @@ def _auto_apply_t_mode(holdings, t_mode):
     print("=" * 60 + "\n")
 
 
+def _launch_sentiment_backfill(date_str: str) -> None:
+    """子进程执行热度补算（daily_sentiment.py 独立 CLI：--mode eod --no-push）。
+
+    子进程隔离（仿 _launch_auction_collector）：补算链会触发 akshare 新浪/东财接口，
+    首次使用 py_mini_racer(V8) 初始化时若在后台线程执行会 FATAL 崩溃拖垮盯盘主进程
+    （2026-08-24 事故：partition_address_space Check failed），故强制独立进程，
+    V8/网络异常最多丢一个后台补算，不影响盯盘主循环。"""
+    import subprocess
+    script = os.path.join(BASE_DIR, "daily_sentiment.py")
+    log_dir = os.path.join(BASE_DIR, "t_io", "logs")
+    os.makedirs(log_dir, exist_ok=True)
+    out_fp = open(os.path.join(log_dir, f"sentiment_backfill_{date_str}.log"), "a", encoding="utf-8")
+    try:
+        flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+        proc = subprocess.Popen(
+            [sys.executable, script, "--date", date_str, "--mode", "eod", "--no-push"],
+            cwd=BASE_DIR, creationflags=flags,
+            stdout=out_fp, stderr=subprocess.STDOUT,
+        )
+    finally:
+        out_fp.close()   # 子进程已持有句柄副本，父进程立即关闭
+    log.info(f"📡 热度补算子进程已启动: {date_str} (pid={proc.pid}) → t_io/logs/sentiment_backfill_{date_str}.log")
+
+
 def _maybe_backfill_sentiment():
-    """启动时检查昨日 sentiment 数据是否存在，缺失则补算"""
+    """启动时检查最近一个交易日的 sentiment 数据是否存在，缺失则后台补算。
+
+    目标日 = 昨天起向前跳过周末（08-24 周一不会对周日 08-23 做无意义补算）。
+    补算在独立子进程执行（_launch_sentiment_backfill），避免主进程后台线程
+    首次初始化 akshare→py_mini_racer(V8) 崩溃连累盯盘主循环。"""
     try:
         if 'load_sentiment_history' in globals():
             hist = load_sentiment_history() or []
         else:
             hist = []
-        yesterday = (_now() - timedelta(days=1)).strftime("%Y-%m-%d")
-        has_yesterday = any(str(r.get("date")) == yesterday for r in hist if isinstance(r, dict))
-        if has_yesterday:
+        target = _now() - timedelta(days=1)
+        while target.weekday() >= 5:   # 跳过周末（简单交易日近似；节假日不影响进程安全）
+            target -= timedelta(days=1)
+        target_str = target.strftime("%Y-%m-%d")
+        has_target = any(str(r.get("date")) == target_str for r in hist if isinstance(r, dict))
+        if has_target:
             return
-        log.info(f"📡 缺失{sentiment_log_dir()}: {yesterday}热度记录，启动后台补算...")
+        log.info(f"📡 缺失{sentiment_log_dir()}: {target_str}热度记录，启动后台补算...")
         if 'compute_daily_sentiment' in globals() and 'save_sentiment_record' in globals():
-            import threading
-            def _worker():
-                try:
-                    result = compute_daily_sentiment(mode="eod", as_of=yesterday)
-                    save_sentiment_record(result)
-                    log.info(f"✅ 热度补算完成: {yesterday} {result.get('regime_name')} z_S={result.get('z_S')} z_top3={result.get('z_top3')}")
-                except Exception as e:
-                    log.warning(f"⚠️ 热度补算失败: {str(e)[:150]}")
-            th = threading.Thread(target=_worker, name="backfill_sentiment", daemon=True)
-            th.start()
+            _launch_sentiment_backfill(target_str)
     except Exception as e:
         log.warning(f"⚠️ backfill_sentiment 异常: {str(e)[:100]}")
 
