@@ -754,9 +754,11 @@ class Api:
             not_applicable = []
             # ---- 右侧加仓：突破箱体 ----
             bx = self.check_box_breakout(code)
-            right_breakout = bool(bx.get("broken"))
-            right_detail = (f"突破箱体上沿 {bx.get('box',{}).get('high')}，超出{bx.get('pct_above')}%"
-                            if right_breakout else "未突破箱体")
+            # P0修复：改为分级突破判定，仅"可靠级"及以上作为加仓条件
+            right_breakout = bx.get("level") in ("reliable", "strong")  # 排除signal级的误报
+            right_detail = (f"突破箱体上沿{bx.get('box',{}).get('high')}，"
+                           f"超出{bx.get('pct_above')}%，等级:{bx.get('level')}"
+                           if bx.get("broken") else "未突破箱体")
 
             # ---- 左侧加仓：情绪冰点（W33 A1 判据 + 5分钟确认）----
             # 日线冰点: 转向确认(金叉或站上MA5) AND BOLL冰点 AND 缩量；RSI 降展示层
@@ -885,11 +887,18 @@ class Api:
 
     # ---------- 突破箱体判定（建仓+加仓共用） ----------
     def check_box_breakout(self, code):
-        """判定是否突破当前/刚突破箱体上沿（候选 rel=0 现价箱体 + rel=1 刚突破）。
-        返回 {broken, box, price, pct_above}。"""
+        """判定是否突破当前/刚突破箱体上沿 + 分级突破质量。
+        返回 {broken, level, box, price, pct_above, confidence}。
+
+        突破等级（level）：
+          - signal: 信号级(0.5-1%)，敏感但低可靠，仅提示
+          - reliable: 可靠突破(1-3%)，需辅助确认，可作参考
+          - strong: 强势突破(3%+)，高概率后续，适合加仓
+          - far_away: 已远离>8%，看不出是否有效
+        """
         h = self.load_stock_chart(code)
         if not h.get("available"):
-            return {"broken": False, "error": h.get("error", "")}
+            return {"broken": False, "level": None, "error": h.get("error", "")}
         # fix P0-4: 现价改用 load_quotes 实时报价（30秒缓存避免逐股重复拉网），失败回退日线收盘
         now = datetime.now()
         qc = getattr(self, "_box_quote_cache", None)
@@ -905,23 +914,40 @@ class Api:
             self._box_quote_cache = qc
         cur = qc[1].get(code) or qc[1].get(code.split("_")[0]) or h.get("current_price")
         if not cur:
-            return {"broken": False, "error": "无可用现价"}
+            return {"broken": False, "level": None, "error": "无可用现价"}
         boxes = h.get("boxes", [])
         # fix P0-4: 候选箱体纳入 rel==1（刚突破）；rel 判定基于日线收盘，与实时现价解耦
         cur_boxes = [b for b in boxes if b.get("rel") in (0, 1)]
-        # 现价 > 候选箱体上沿 → 突破
+        # 现价 > 候选箱体上沿 → 判定突破级别
         for box in cur_boxes:
             if cur > box["high"]:
                 pct_above = (cur - box["high"]) / box["high"] * 100 if box["high"] else 0
-                if 0.3 <= pct_above <= 8:
-                    return {"broken": True, "box": {"low": box["low"], "high": box["high"]},
-                            "price": cur, "pct_above": round(pct_above, 2)}
-                return {"broken": False, "price": cur,
-                        "near_box": {"low": box["low"], "high": box["high"]},
-                        "pct_above": round(pct_above, 2),
-                        "reason": "已远离当前箱体" if pct_above > 8 else "未达突破阈值"}
+                # 根据突破幅度判定级别（box宽度作为质量权重）
+                box_width_pct = (box["high"] - box["low"]) / box["low"] * 100 if box["low"] else 0
+                # 宽度作为确信度：宽箱体(>10%)突破容差可更松，窄箱体(<5%)必须严格
+                confidence = min(100, max(10, box_width_pct))  # confidence: 10~100
+
+                if pct_above <= 0.5:
+                    level = None  # 未达突破阈值
+                elif pct_above <= 1:
+                    level = "signal"  # 信号级：敏感但易误报
+                elif pct_above <= 3:
+                    level = "reliable"  # 可靠突破：推荐用于加仓参考
+                elif pct_above <= 8:
+                    level = "strong"  # 强势突破：已形成上升趋势
+                else:
+                    level = "far_away"  # 已远离，无法判定是否有效
+
+                if level:
+                    return {"broken": True, "level": level, "box": {"low": box["low"], "high": box["high"]},
+                            "price": cur, "pct_above": round(pct_above, 2), "confidence": round(confidence, 0)}
+                else:
+                    return {"broken": False, "level": None, "price": cur,
+                            "near_box": {"low": box["low"], "high": box["high"]},
+                            "pct_above": round(pct_above, 2),
+                            "reason": "未达突破阈值(仅0.5%以下)"}
         # 无候选箱体或现价在箱体内 → 未突破
-        return {"broken": False, "price": cur}
+        return {"broken": False, "level": None, "price": cur}
 
     # ---------- 持仓日线超买/顶背离体检 ----------
     def load_ob_analysis(self, date=None):
@@ -1302,8 +1328,15 @@ class Api:
         return out
 
     def _detect_boxes(self, daily):
-        """检测箱体：全历史滑窗 → 置信分排序，现价箱体/刚突破优先。
-        分位数(88/12)定义边界，多次触及验证，置信分=触及+横盘+适中宽度。"""
+        """检测箱体（P1修复）：严格触及标准 + 优化置信分。
+        分位数(88/12)定义初期边界，严格触及验证，置信分=触及质量+时间持久度+宽度合理性。
+
+        P1修复内容：
+        1. 触及标准从松散(±0.8-8.8%)改为精确：必须在边界±0.5%内触及
+        2. 置信分权重调整：触及质量优先于触及次数
+        3. 宽度范围分类：<5%(微箱) 5-12%(正常) 12-22%(宽幅)，权重不同
+        4. 合并逻辑改进：避免过度合并历史箱体
+        """
         import numpy as np
         d = daily
         if len(d) < 30:
@@ -1331,8 +1364,9 @@ class Api:
         _slopes = (wc @ _xc) / _denom
         _means = wc.mean(axis=1)
         _rel_slopes = np.abs(_slopes) / np.where(_means == 0, 1e-9, _means)
-        _up_touches = np.sum(wh >= (ups * 0.992)[:, None], axis=1)
-        _dn_touches = np.sum(wl <= (dns * 1.008)[:, None], axis=1)
+        # P1修复：触及标准从±0.8-8.8%改为±0.5%(更精确)
+        _up_touches = np.sum(wh >= (ups * 0.995)[:, None], axis=1)  # 99.5% 以上算"精确触及"
+        _dn_touches = np.sum(wl <= (dns * 1.005)[:, None], axis=1)  # 100.5% 以下算"精确触及"
         _widths = (ups - dns) / np.where(_means == 0, 1e-9, _means) * 100
         # 滑窗收集候选箱体（用区间位置唯一标识，避免重复）
         boxes = {}
@@ -1343,11 +1377,21 @@ class Api:
             up_touch = int(_up_touches[start])
             dn_touch = int(_dn_touches[start])
             width_pct = float(_widths[start])
-            # 候选：横盘(斜率<0.5%/天) + 宽度3-22% + 双边触及≥2
-            if rel_slope < 0.005 and 3.0 <= width_pct <= 22.0 and up_touch >= 2 and dn_touch >= 2:
+            # P1修复：候选条件更严格 — 横盘<0.3%/天(rather than 0.5%) + 宽度3-22% + 双边精确触及≥2
+            if rel_slope < 0.003 and 3.0 <= width_pct <= 22.0 and up_touch >= 2 and dn_touch >= 2:
                 key = (round(up, 3), round(dn, 3))
-                # 置信分：触及次数 + 横盘度 + 宽度适中
-                conf = (up_touch + dn_touch) * 1.5 + max(0, 1 - rel_slope / 0.005) * 3 + (1 if 5 <= width_pct <= 15 else 0)
+                # P1修复：置信分优化 — 触及质量(precision)优先于触及次数
+                # 触及质量分 = (精确触及数 * 2)，其次是横盘度，最后是宽度适中
+                touch_quality = (up_touch + dn_touch) * 2.0  # 优先权最高
+                flatness = max(0, (0.003 - rel_slope) / 0.003) * 2.0  # 越横盘越好
+                # 宽度权重分化：正常箱体(5-15%)得分最高
+                if 5 <= width_pct <= 15:
+                    width_score = 1.5
+                elif 3 <= width_pct < 5 or 15 < width_pct <= 22:
+                    width_score = 0.5
+                else:
+                    width_score = 0
+                conf = touch_quality + flatness + width_score
                 if key not in boxes or conf > boxes[key]["conf"]:
                     s = dates[start].strftime("%Y-%m-%d") if hasattr(dates[start], "strftime") else str(dates[start])[:10]
                     e = dates[start + WIN - 1].strftime("%Y-%m-%d") if hasattr(dates[start+WIN-1], "strftime") else str(dates[start+WIN-1])[:10]
@@ -1355,7 +1399,8 @@ class Api:
                                   "touches": (up_touch, dn_touch), "width": round(width_pct, 1),
                                   "conf": round(conf, 1), "rel": 0}
 
-        # 关联现价关系 + 刚突破判定（箱体 end 距今 ≤20 天 且现价在上方 <15% 算"刚突破"）
+        # 关联现价关系 + 刚突破判定（改进）
+        # 刚突破的定义现在基于箱体宽度动态调整，而不是固定的20天+15%
         result = []
         today_days = 999
         try:
@@ -1369,9 +1414,22 @@ class Api:
                 days_since = int((pd.Timestamp(last_date) - end_dt).days)
             except Exception:
                 days_since = 999
+
+            # P1修复：刚突破判定改为动态，基于箱体宽度
+            width = b["width"]
+            if width < 5:
+                # 微箱体(宽度<5%)：突破后5天内+10%以内算"刚突破"
+                recently_broke = days_since <= 5 and (last_close - b["high"]) / b["high"] < 0.10 if b["high"] else False
+            elif width < 15:
+                # 正常箱体(5-15%)：突破后10天内+12%以内算"刚突破"
+                recently_broke = days_since <= 10 and (last_close - b["high"]) / b["high"] < 0.12 if b["high"] else False
+            else:
+                # 宽幅箱体(>15%)：突破后15天内+15%以内算"刚突破"
+                recently_broke = days_since <= 15 and (last_close - b["high"]) / b["high"] < 0.15 if b["high"] else False
+
             if b["low"] <= last_close <= b["high"]:
                 b["rel"] = 0  # 现价在箱体内
-            elif last_close > b["high"] and days_since <= 20 and (last_close - b["high"]) / b["high"] < 0.15:
+            elif last_close > b["high"] and recently_broke:
                 b["rel"] = 1  # 刚突破上方
             elif last_close > b["high"]:
                 b["rel"] = -1  # 上方历史箱体
@@ -1381,12 +1439,23 @@ class Api:
             b["dist"] = abs(b["center"] if "center" in b else (b["high"] + b["low"]) / 2 - last_close)
             result.append(b)
 
-        # 合并重叠箱体（价格区间重叠>50% + 时间重叠 → 同一箱体；日期用字典序比较）
+        # 合并重叠箱体（P1改进：更严格的重叠条件，避免过度合并）
         def overlap(a, b):
             price_overlap = min(a["high"], b["high"]) - max(a["low"], b["low"])
             price_span = min(a["high"] - a["low"], b["high"] - b["low"])
-            t_overlap = a["end"] > b["start"] and b["end"] > a["start"]
-            return price_overlap > price_span * 0.5 and t_overlap
+            # P1修复：价格重叠从>50%改为>80%（更严格，保留历史分阶段特征）
+            price_overlap_pct = price_overlap / max(price_span, 1e-9) if price_span > 0 else 0
+            # 时间重叠条件也更严格：不仅要有交集，还要至少重叠5天
+            try:
+                s1 = pd.Timestamp(a["start"])
+                e1 = pd.Timestamp(a["end"])
+                s2 = pd.Timestamp(b["start"])
+                e2 = pd.Timestamp(b["end"])
+                overlap_days = (min(e1, e2) - max(s1, s2)).days
+                t_overlap = overlap_days >= 5
+            except Exception:
+                t_overlap = a["end"] > b["start"] and b["end"] > a["start"]
+            return price_overlap_pct > 0.8 and t_overlap
 
         merged = []
         for b in result:
@@ -1430,7 +1499,7 @@ class Api:
                 b["rel"] = -2
             recent_valid.append(b)
 
-        # 排序：现价箱体(rel=0) > 刚突破 > 上方历史 > 下方历史；再按置信分
+        # 排序：现价箱体(rel=0) > 上方历史(rel=-1) > 下方历史(rel=-2)；再按置信分
         recent_valid.sort(key=lambda b: (
             0 if b["rel"] == 0 else 1 if b["rel"] == -1 else 2,
             -b["conf"]))
