@@ -1552,6 +1552,12 @@ def _maybe_check_index_intraday_alert(now: datetime) -> None:
         except Exception:
             pass
         minute_bars = fetch_index_minutes_live("sh000001")
+        # 2026-08-23: 大盘分时落盘缓存（供当日复盘直接用，绕过 tushare T-1 当日拿不到分钟）
+        try:
+            from market_review import save_daily_index_minutes as _save_idx_min
+            _save_idx_min()
+        except Exception:
+            pass
         result = detect_intraday_alert(
             minute_bars,
             daily_regime=str(INDEX_REGIME_CONTEXT.get("regime", "range")),
