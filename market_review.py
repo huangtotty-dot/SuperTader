@@ -99,18 +99,20 @@ def save_daily_index_minutes(date: str | None = None) -> None:
             return ts_code, {}
 
     cache = {"date": date, "updated_at": datetime.now().strftime("%H:%M:%S"), "indices": {}}
+    _ex = ThreadPoolExecutor(max_workers=6)
     try:
-        with ThreadPoolExecutor(max_workers=6) as ex:
-            futures = [ex.submit(_one, item) for item in INDEX_POOL]
-            for fut in futures:
-                try:
-                    ts_code, ind = fut.result(timeout=20)
-                    if ind:
-                        cache["indices"][ts_code] = ind
-                except Exception:
-                    continue
+        futures = [_ex.submit(_one, item) for item in INDEX_POOL]
+        for fut in futures:
+            try:
+                ts_code, ind = fut.result(timeout=20)
+                if ind:
+                    cache["indices"][ts_code] = ind
+            except Exception:
+                continue
     except Exception:
         pass
+    finally:
+        _ex.shutdown(wait=False)  # 不等待未完成线程（腾讯慢时 fetch 线程挂起，with 会卡死）
     try:
         MINUTE_CACHE_DIR.mkdir(parents=True, exist_ok=True)
         _minute_cache_fp(date).write_text(json.dumps(cache, ensure_ascii=False), encoding="utf-8")
@@ -221,9 +223,9 @@ def fetch_index_minutes(ts_code: str, freq: str, date: str) -> list:
         from index_regime_intraday import _iri_fetch_stk_mins_one_day
         return _iri_fetch_stk_mins_one_day(ts_code, date, freq)
 
+    _ex = ThreadPoolExecutor(max_workers=1)
     try:
-        with ThreadPoolExecutor(max_workers=1) as _ex:
-            df = _ex.submit(_fetch).result(timeout=20)
+        df = _ex.submit(_fetch).result(timeout=20)
         if df is None or df.empty:
             return []
         out = []
@@ -235,6 +237,8 @@ def fetch_index_minutes(ts_code: str, freq: str, date: str) -> list:
         return out
     except Exception:
         return []
+    finally:
+        _ex.shutdown(wait=False)  # 不等待未完成线程（tushare 慢时 with 会卡死）
 
 
 # ---------------------------------------------------------------- 横评表
@@ -635,8 +639,9 @@ def run_market_review_stream(date: str, cfg: dict, on_text=None) -> str:
     cross = build_cross_section(date)
     _log(f"横评完成 耗时{_t.time()-_t0:.1f}s rows={len(cross.get('rows', []))}")
     _emit(f"② 6 指数横评完成（{len(cross.get('rows', []))} 只）；正在准备深拆指数分钟线…\n")
-    # 当日复盘：先落盘大盘分时(绕过 tushare T-1 拿不到当日分钟的问题)，供深拆直接用
-    if date == datetime.now().strftime("%Y-%m-%d"):
+    # 当日复盘：大盘分时缓存已在监控时落盘则直接用（跳过刷新，避免腾讯慢卡死）；
+    # 缓存缺失（监控未运行）才拉取，且 save 内部总限时
+    if date == datetime.now().strftime("%Y-%m-%d") and not _minute_cache_fp(date).exists():
         _emit("  刷新当日大盘分时缓存…\n")
         save_daily_index_minutes(date)
     deep = build_deep_dive(date, cross, on_progress=_emit)
