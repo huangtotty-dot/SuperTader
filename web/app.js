@@ -40,6 +40,7 @@ function wrCell(w) {
 }
 function statusEl(msg, cls) {
   const el = document.getElementById("status");
+  if (!el) return;  // 防御：元素不存在时静默忽略
   el.className = "status " + (cls || "");
   el.textContent = msg;
 }
@@ -1678,7 +1679,6 @@ function renderStockChart() {
 
         return html;
       } },
-      } },
     axisPointer: { link: [{ xAxisIndex: "all" }] },
     grid: [
       { left: 60, right: 20, top: 34, height: "44%" },   // 主图: K线+MA+BOLL+支撑压力+箱体
@@ -1778,7 +1778,27 @@ function trendBadge(t) {
   if (t === "down") return `<span class="badge t-short" title="下行通道">下行↘</span>`;
   return `<span class="badge chop">震荡→</span>`;
 }
-// 技术标签徽章
+// 技术标签徽章（desc 悬停解释文案，与 t_gui._stock_tags_one 标签一一对应）
+const TAG_DESC = {
+  "上行": "近40日收盘斜率向上，处于上行通道（趋势偏多，回踩中轨/下轨可低吸）",
+  "下行": "近40日收盘斜率向下，处于下行通道（趋势偏空，反弹到上轨/均线减仓，不抄底）",
+  "震荡": "近40日收盘斜率平缓，横盘震荡（无明确方向，按箱体高抛低吸）",
+  "箱体上沿": "现价处于最近箱体上沿（位置>85%），接近突破点，注意压力",
+  "箱体下沿": "现价处于最近箱体下沿（位置<15%），接近支撑/跌破点",
+  "箱体内部": "现价在箱体中段运行，方向未定，箱体内高抛低吸",
+  "向上突破": "现价向上突破最近箱体上沿（≤8%），第一优先级买入信号(报买入)，回踩上沿不破可加仓",
+  "完全突破": "现价明显高于最近箱体上沿（>8%），已完全脱离箱体，突破确认强势（追高需设止损）",
+  "跌破下沿": "现价跌破最近箱体下沿，弱势信号，减仓/回避",
+  "筑底": "近20日横盘缩量、价格靠近箱体下沿，可能筑底，可关注低吸",
+  "筑底中": "近20日横盘、价格靠近箱体下沿，筑底进行中（尚未缩量确认）",
+  "筑顶": "近20日横盘、价格靠近箱体上沿，可能筑顶，警惕回落",
+  "顶背离": "价格创新高但MACD(DIF)走弱，上涨动能衰减，警惕回调（背离≠立刻反转）",
+  "底背离": "价格创新低但MACD(DIF)走强，下跌动能衰减，可能反弹（背离≠立刻反转）",
+  "超买": "RSI(14)>70，短期涨幅过大，追高风险高，等回踩",
+  "超卖": "RSI(14)<30，短期跌幅过大，可能有反弹，但趋势向下时不抢反弹",
+  "破5日线": "现价跌破5日均线（破五日线只卖不买）",
+  "破10日线": "现价跌破10日均线，中期走弱",
+};
 function tagBadge(t) {
   const colorMap = {
     up: "t-long", down: "t-short", warn: "approach", neutral: "chop",
@@ -1786,11 +1806,12 @@ function tagBadge(t) {
   const iconMap = {
     "上行": "↗", "下行": "↘", "震荡": "→",
     "箱体上沿": "🟠", "箱体下沿": "🔵", "箱体内部": "⚪",
-    "向上突破": "🚀", "跌破下沿": "⚠️", "筑底": "🧱", "筑顶": "⛰️",
+    "向上突破": "🚀", "完全突破": "🔺", "跌破下沿": "⚠️", "筑底": "🧱", "筑顶": "⛰️",
     "顶背离": "⛔", "底背离": "✅", "超买": "⚠", "超卖": "📉",
   };
   const icon = iconMap[t.label] || "";
-  return `<span class="badge ${colorMap[t.color] || "chop"}" title="${esc(t.label)}">${icon}${esc(t.label)}</span>`;
+  const desc = TAG_DESC[t.label] || t.label;
+  return `<span class="badge ${colorMap[t.color] || "chop"}" title="${esc(desc)}">${icon}${esc(t.label)}</span>`;
 }
 // 建仓信号符合度徽章（时机门控：市场有方向/多头结构/回撤到位/金叉加分；盘后计算，实盘盘中显示"—"）
 function buildBadge(s) {
@@ -1813,42 +1834,67 @@ function hunterPage(category, dir) {
   }
 }
 // 展开板块：批量拉个股通道标注 + 算板块阶段
-async function toggleSectorExpand(tr, category) {
-  const wrap = tr.nextElementSibling;
-  wrap.classList.toggle("open");
-  if (!wrap.classList.contains("open")) return;
-  // 找该板块成分股代码
-  const tbody = tr.parentElement;
-  const sectorStocks = (window._hunterSectors || {})[category] || [];
-  const stocks = sectorStocks || [];
+// 展开状态/标签缓存模块级保存——分页重渲染后自动恢复展开，避免跳页收起
+const hunterOpenSectors = new Set();
+const hunterTagsCache = {};
+
+async function loadSectorTags(category) {
+  if (hunterTagsCache[category]) return hunterTagsCache[category];
+  const stocks = (window._hunterSectors || {})[category] || [];
   const codes = (stocks || []).map(s => s.code);
-  if (!codes.length) return;
-  const stageEl = tbody.querySelector(".h-stage-badge");
+  if (!codes.length) return {};
   try {
     const r = await apiCall("load_stock_tags_batch", codes);
     const tagsMap = (r && r.tags) || {};
-    // 更新展开行标签列
-    wrap.querySelectorAll(".h-expand-row").forEach(row => {
-      const code = row.querySelector("td").textContent.trim();
-      const info = tagsMap[code];
-      if (info && info.tags) {
-        row.querySelectorAll("td")[2].innerHTML = info.tags.map(t => tagBadge(t)).join(" ");
-      }
-    });
-    // 板块阶段判定（用 trend）
-    const vals = Object.values(tagsMap).map(x => x && x.trend).filter(Boolean);
-    const up = vals.filter(v => v === "up").length;
-    const down = vals.filter(v => v === "down").length;
-    if (vals.length >= 5) {
-      const ratio = up / (up + down || 1);
-      const stage = ratio >= 0.6 ? '<span class="badge signal">🔥 强势上攻</span>'
-        : ratio >= 0.4 ? '<span class="badge approach">➡️ 分化震荡</span>'
-        : '<span class="badge t-short">📉 弱势下行</span>';
-      if (stageEl) stageEl.innerHTML = stage;
-    } else if (stageEl) {
-      stageEl.innerHTML = `<span class="cell-dim">样本少</span>`;
+    hunterTagsCache[category] = tagsMap;
+    // 标签到位后，若该板块仍展开则刷新当前可见行（分页跳页后也生效）
+    const el = document.getElementById("hunterBody");
+    if (el && hunterOpenSectors.has(category)) {
+      el.querySelectorAll("tbody.h-sector-group").forEach(tb => {
+        if (tb.getAttribute("data-category") === category) applySectorTags(tb, category);
+      });
     }
-  } catch (e) { /* 静默 */ }
+    return tagsMap;
+  } catch (e) { return {}; }
+}
+
+function applySectorTags(tbody, category) {
+  const wrap = tbody.querySelector(".h-expand-wrap");
+  const stageEl = tbody.querySelector(".h-stage-badge");
+  const tagsMap = hunterTagsCache[category] || {};
+  if (!wrap) return;
+  // 更新展开行标签列
+  wrap.querySelectorAll(".h-expand-row").forEach(row => {
+    const code = row.querySelector("td").textContent.trim();
+    const info = tagsMap[code];
+    if (info && info.tags) {
+      row.querySelectorAll("td")[2].innerHTML = info.tags.map(t => tagBadge(t)).join(" ");
+    }
+  });
+  // 板块阶段判定（用 trend）
+  const vals = Object.values(tagsMap).map(x => x && x.trend).filter(Boolean);
+  const up = vals.filter(v => v === "up").length;
+  const down = vals.filter(v => v === "down").length;
+  if (vals.length >= 5) {
+    const ratio = up / (up + down || 1);
+    const stage = ratio >= 0.6 ? '<span class="badge signal">🔥 强势上攻</span>'
+      : ratio >= 0.4 ? '<span class="badge approach">➡️ 分化震荡</span>'
+      : '<span class="badge t-short">📉 弱势下行</span>';
+    if (stageEl) stageEl.innerHTML = stage;
+  } else if (stageEl) {
+    stageEl.innerHTML = `<span class="cell-dim">样本少</span>`;
+  }
+}
+
+async function toggleSectorExpand(tr, category) {
+  const wrap = tr.nextElementSibling;
+  const opening = !wrap.classList.contains("open");
+  wrap.classList.toggle("open");
+  if (opening) hunterOpenSectors.add(category); else hunterOpenSectors.delete(category);
+  if (!opening) return;
+  const tbody = tr.parentElement;
+  await loadSectorTags(category);
+  applySectorTags(tbody, category);
 }
 let hunterHistoryDates = [];
 
@@ -1904,23 +1950,12 @@ async function regenerateHunter() {
   const date = sel.value;
   if (!date) { statusEl("请先选择日期", "err"); return; }
   const btn = document.getElementById("hunterRegenBtn");
-  const el = document.getElementById("hunterBody");
-  if (btn) { btn.disabled = true; btn.textContent = "⏳ 重新生成中(约80s)..."; }
-  el.innerHTML = '<div class="empty">⏳ 正在重新生成该日结果（重新拉行情+评分，约80秒）...</div>';
-  try {
-    const h = await apiCall("load_hunter", date);
-    if (h && h.available) {
-      renderHunter(h, true);
-      hunterLoaded = true;
-      // 仅重新生成"今日"时同步扫描突破箱体（历史日期后端也按最新日线扫，会误导）
-      if (!date || date === todayStr()) loadBreakoutStocks(true);
-      statusEl(`${date} 已重新生成`, "ok");
-    } else {
-      el.innerHTML = `<div class="empty">${esc((h && h.error) || '生成失败')}</div>`;
-    }
-  } catch (e) {
-    el.innerHTML = `<div class="empty">重新生成失败: ${esc(e.message)}</div>`;
-  }
+  if (btn) { btn.disabled = true; btn.textContent = "⏳ 重新生成中..."; }
+  // 走后台线程 + 进度条（复用 loadHunterHistory），避免同步阻塞桥线程；
+  // 拉取已加硬限时兜底（后端 420s 预算），卡死也能带结果/报错返回
+  await loadHunterHistory(date);
+  // 仅重新生成"今日"时同步扫描突破箱体（历史日期后端也按最新日线扫，会误导）
+  if (!date || date === todayStr()) loadBreakoutStocks(true);
   if (btn) { btn.disabled = false; btn.textContent = "🔄 重新生成"; }
 }
 
@@ -2235,12 +2270,12 @@ function renderHunter(h) {
     const d5Hits = stocks.filter(s => s.d5 > 0).length;
     const d6Hits = stocks.filter(s => s.d6 > 0).length;
 
-    // 展开的个股明细（全部成分股，分页50）
+    // 展开的个股明细（全部成分股，分页50），按细分（韭研概念）分组显示下一级分类
     const PAGE = 50;
     const pageIdx = window._hunterPage && window._hunterPage[category] || 0;
     const allStocks = stocks;
     const paged = allStocks.slice(pageIdx * PAGE, (pageIdx + 1) * PAGE);
-    const stockRows = paged.map(s => {
+    const hunterRow = s => {
       const d5Cls = s.d5 >= 8 ? "up" : s.d5 >= 5 ? "warn" : s.d5 > 0 ? "cell-dim" : "";
       const d6Cls = s.d6 >= 8 ? "up" : s.d6 >= 5 ? "warn" : s.d6 > 0 ? "cell-dim" : "";
       const trendTxt = s.tags && s.tags.length
@@ -2260,6 +2295,24 @@ function renderHunter(h) {
         <td>${s.limit_up ? '<span class="badge signal">涨停</span>' : ''}</td>
         <td>${buildBadge(s)}</td>
       </tr>`;
+    };
+    // 板块 → 细分（| 分隔多概念，多概念股在多个细分下重复出现）→ 个股
+    const subGroups = {};
+    for (const s of paged) {
+      const cons = (s.concepts && s.concepts.length) ? s.concepts : ["未分类"];
+      for (const c of cons) (subGroups[c] = subGroups[c] || []).push(s);
+    }
+    const groupKeys = Object.keys(subGroups)
+      .sort((a, b) => (subGroups[b].length - subGroups[a].length) || a.localeCompare(b));
+    const stockRows = groupKeys.map(gk => {
+      const gs = subGroups[gk];
+      const gAvg = Math.round(gs.reduce((a, s) => a + (s.score || 0), 0) / gs.length);
+      const gUp = gs.filter(s => s.limit_up).length;
+      const head = `<tr class="h-subgroup-head"><td colspan="10">
+        <span class="h-subgroup-name">📂 ${esc(gk)}</span>
+        <span class="cell-dim" style="font-size:10px">${gs.length}只 · 均分${gAvg}${gUp ? ` · 涨停${gUp}` : ""}</span>
+      </td></tr>`;
+      return head + gs.map(hunterRow).join("");
     }).join("");
     const pageInfo = allStocks.length > PAGE
       ? `<div class="h-pager"><button class="mini-btn" onclick="hunterPage('${esc(category)}',-1)" ${pageIdx===0?'disabled':''}>←</button>
@@ -2318,7 +2371,7 @@ function renderHunter(h) {
           </tr></thead>
           <tbody>${stockRows}</tbody></table>
           ${pageInfo}
-          <div class="cell-dim" style="font-size:10px;margin-top:3px">D5=潜在突破10日(≥8强) · D6=潜在突破5日(≥8强) · D9=活跃程度 · 点击行收起</div>
+          <div class="cell-dim" style="font-size:10px;margin-top:3px">D5=潜在突破10日(≥8强) · D6=潜在突破5日(≥8强) · D9=活跃程度 · 悬停技术标签看解释 · 点击行收起</div>
         </div>
       </td></tr>
     </tbody>`;
@@ -2354,6 +2407,18 @@ function renderHunter(h) {
     </table></div>
 
     <div class="cell-dim" style="font-size:10px;margin-top:6px">数据源: stock_hunter (韭研概念打分) · 点击板块展开个股明细(D5/D6异常) · 热度趋势vs前日</div>`;
+
+  // 分页/重渲染后恢复此前展开的板块（避免跳页收起），并重填已缓存的技术标签
+  if (hunterOpenSectors.size) {
+    el.querySelectorAll("tbody.h-sector-group").forEach(tb => {
+      const cat = tb.getAttribute("data-category");
+      if (hunterOpenSectors.has(cat)) {
+        const wrap = tb.querySelector(".h-expand-wrap");
+        if (wrap) wrap.classList.add("open");
+        applySectorTags(tb, cat);
+      }
+    });
+  }
 }
 
 /* ---- 持仓日线体检 ---- */
@@ -3205,9 +3270,7 @@ function updateSidebarSummary(quotes) {
 }
 
 /* ================= 初始化 ================= */
-const dateSelect = document.getElementById("dateSelect");
-const refreshBtn = document.getElementById("refreshBtn");
-const autoPoll = document.getElementById("autoPoll");
+let dateSelect, refreshBtn, autoPoll;
 let pollTimer = null;      // 60s 盘后轮询
 let liveTimer = null;      // 10s 盘中实时轮询
 
@@ -3250,6 +3313,16 @@ function startLivePoll() {
 }
 
 async function init() {
+  // 首先获取 DOM 元素（此时 DOM 已完全加载）
+  dateSelect = document.getElementById("dateSelect");
+  refreshBtn = document.getElementById("refreshBtn");
+  autoPoll = document.getElementById("autoPoll");
+
+  if (!dateSelect || !refreshBtn || !autoPoll) {
+    statusEl("⚠️ HTML 结构不完整（缺少关键元素），请检查 index.html", "err");
+    return;
+  }
+
   // 侧栏 tab 切换
   document.querySelectorAll(".sidebar-item[data-tab]").forEach(si => {
     si.addEventListener("click", () => {
@@ -3330,10 +3403,14 @@ async function init() {
   document.addEventListener("pointerdown", () => ensureAudio(), { once: true });
 
   let dates;
+  statusEl("初始化中...");
   try {
-    dates = await apiCall("available_dates");
+    const timeoutPromise = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error("available_dates 请求超时（后端未响应）")), 10000)
+    );
+    dates = await Promise.race([apiCall("available_dates"), timeoutPromise]);
   } catch (e) {
-    statusEl("无法连接后端：" + e.message + "（请用 python t_gui.py 启动）", "err");
+    statusEl("无法连接后端：" + e.message + "（请确保用 python t_gui.py 启动）", "err");
     return;
   }
   if (!dates || !dates.length) {
@@ -3356,6 +3433,7 @@ async function init() {
 
 document.addEventListener("DOMContentLoaded", () => {
   // pywebview 桥接脚本可能在 DOMContentLoaded 之后才注入，等待 pywebviewready / 轮询兜底
+  statusEl("尝试连接后端...");
   if (window.pywebview && window.pywebview.api) {
     init();
     return;
@@ -3367,5 +3445,17 @@ document.addEventListener("DOMContentLoaded", () => {
   };
   window.addEventListener("pywebviewready", doBoot);
   const t = setInterval(() => { doBoot(); if (booted) clearInterval(t); }, 250);
-  setTimeout(() => { if (!booted) { clearInterval(t); doBoot(); } }, 6000);
+  const timeout = setTimeout(() => {
+    if (!booted) {
+      clearInterval(t);
+      statusEl("⚠️ 后端连接失败（可能 t_gui.py 未启动或已崩溃，请检查进程）", "err");
+    }
+  }, 8000);
+  setTimeout(() => {
+    if (!booted) {
+      clearInterval(t);
+      clearTimeout(timeout);
+      doBoot();
+    }
+  }, 8000);
 });

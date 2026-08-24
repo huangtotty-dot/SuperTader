@@ -62,7 +62,8 @@ class MarketDataFetcher:
         try:
             df, failed = self._fetch_historical_tencent(codes, date_str)
         finally:
-            MARKET_PROGRESS.update({"running": False, "phase": "拉取完成", "done": len(codes), "total": len(codes)})
+            # 保留拉取循环的真实 done/total（超时部分拉取时不伪 100%）
+            MARKET_PROGRESS.update({"running": False, "phase": "拉取完成", "msg": "拉取完成"})
         self.last_failed = failed
         if _use_cache and not df.empty:
             try:
@@ -536,10 +537,18 @@ class MarketDataFetcher:
             return {"_error": code, "_msg": "all retries failed"}
 
         max_workers = min(self.HISTORICAL_WORKERS, len(codes))
-        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        # 硬限时兜底（2026-08-25）：个别 urllib 在 Windows 网络抖动时不遵守 timeout 会卡死，
+        # future.result() 无超时 + as_completed 等最后一个 future → 前端进度条卡"100%"永远无结果。
+        # 给整体预算，超时带部分结果返回，不让卡死拖住选股猎手。
+        _FETCH_BUDGET = 420.0  # 秒（< 前端 600s 轮询守卫）
+        executor = ThreadPoolExecutor(max_workers=max_workers)
+        try:
             future_to_code = {executor.submit(fetch_one, c): c for c in codes}
-            for i, future in enumerate(as_completed(future_to_code), 1):
-                result = future.result()
+            for i, future in enumerate(as_completed(future_to_code, timeout=_FETCH_BUDGET), 1):
+                try:
+                    result = future.result()
+                except Exception:
+                    result = None
                 if result is None:
                     continue
                 if "_error" in result:
@@ -551,6 +560,14 @@ class MarketDataFetcher:
                 if i % 20 == 0 or i == len(codes):
                     MARKET_PROGRESS.update({"done": i, "total": len(codes), "msg": f"已拉取 {i}/{len(codes)} 只"})
                 time.sleep(0.05)  # 增加延迟避免被限流
+        except TimeoutError:
+            # 整体预算超时：未完成 futures 的 code 记为失败，带部分结果继续
+            for fut, code in future_to_code.items():
+                if not fut.done():
+                    failed.append(code)
+            print(f"  [WARN] 拉取超时（>{_FETCH_BUDGET:.0f}s），返回部分结果 {len(results)}/{len(codes)} 只")
+        finally:
+            executor.shutdown(wait=False, cancel_futures=True)  # 不等卡死线程，由 urllib 超时自愈
 
         if failed:
             print(f"  [WARN] {len(failed)} 只获取失败（已跳过）: {', '.join(failed[:20])}{'...' if len(failed) > 20 else ''}")
