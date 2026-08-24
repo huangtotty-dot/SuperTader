@@ -42,15 +42,25 @@ def is_leader_recommendable(code: Any, name: Any = "") -> bool:
 
 
 def append_market_universe_columns(frame: pd.DataFrame) -> pd.DataFrame:
+    # 2026-08-22 性能: 32万行 map/listcomp 逐行调用极慢(占 build ~6s)；改为 pandas 向量化
     enriched = frame.copy()
-    enriched["证券板块"] = enriched["代码"].map(board_segment)
-    enriched["是否ST"] = enriched["名称"].map(is_st_name) if "名称" in enriched.columns else False
-    enriched["可推荐龙头"] = [
-        is_leader_recommendable(code, name)
-        for code, name in zip(enriched["代码"], enriched["名称"] if "名称" in enriched.columns else [""] * len(enriched))
-    ]
-    enriched["主板可推荐"] = [
-        is_main_board_tradable(code, name)
-        for code, name in zip(enriched["代码"], enriched["名称"] if "名称" in enriched.columns else [""] * len(enriched))
-    ]
+    codes = (enriched["代码"].astype(str)
+             .str.replace(r"\.0$", "", regex=True).str.strip().str.zfill(6))
+    enriched["代码"] = codes
+    seg = pd.Series("其他", index=codes.index)
+    for label, prefixes in (("创业板", CHINEXT_PREFIXES), ("科创板", STAR_PREFIXES),
+                            ("沪深主板", MAIN_BOARD_PREFIXES), ("北交所", BSE_PREFIXES)):
+        seg[codes.str.startswith(prefixes)] = label
+    enriched["证券板块"] = seg
+    if "名称" in enriched.columns:
+        names = (enriched["名称"].astype(str)
+                 .str.upper().str.replace("＊", "*", regex=False).str.strip())
+        is_st = names.str.contains("ST|退", regex=True, na=False)
+        enriched["是否ST"] = is_st
+        enriched["可推荐龙头"] = ~is_st
+        enriched["主板可推荐"] = (seg == "沪深主板") & ~is_st
+    else:
+        enriched["是否ST"] = False
+        enriched["可推荐龙头"] = True
+        enriched["主板可推荐"] = seg == "沪深主板"
     return enriched

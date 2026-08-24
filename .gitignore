@@ -13,3 +13,5 @@ stock_hunter/watchlist_jiuyan.json
 stock_hunter/config.json
 stock_hunter/__pycache__/
 stock_hunter/output/
+
+t_io/state/llm_config.json

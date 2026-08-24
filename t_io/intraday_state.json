@@ -1,22 +1,22 @@
 {
   "date": "2026-08-22",
   "cycle_count": {},
-  "buy_count": {
-    "000988_B": 19
+  "buy_count": {},
+  "sell_count": {
+    "002639": 4
   },
-  "sell_count": {},
   "trend_regimes": {
-    "000988_B": {
-      "state": "BEAR",
+    "002639": {
+      "state": "BULL",
       "confidence": 0.55,
       "pending_state": null,
       "pending_bars": 0,
-      "last_dif": -1.2451286992777,
-      "last_dea": -1.003392861120549,
-      "last_rsi": 30.998851894374226,
-      "prev_rsi": 33.02752293577987,
-      "bb_mid_slope": -0.001141476523304237,
-      "bb_width_ratio": 1.4093248221539492
+      "last_dif": 0.11467341313530532,
+      "last_dea": 0.09058316786953942,
+      "last_rsi": 73.3333333333333,
+      "prev_rsi": 72.00000000000014,
+      "bb_mid_slope": 0.0014397696368579343,
+      "bb_width_ratio": 1.745989584699713
     }
   }
 }

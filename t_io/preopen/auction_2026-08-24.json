@@ -1,0 +1,134 @@
+{
+  "date": "2026-08-24",
+  "codes": [
+    "588170",
+    "600176",
+    "600481",
+    "603667",
+    "000988",
+    "002639"
+  ],
+  "snapshots": {
+    "09:20": {
+      "ts": "2026-08-24 09:21:09",
+      "source": "qt.gtimg.cn realtime",
+      "rows": {
+        "588170": {
+          "name": "科创半导体ETF华夏",
+          "auction_price": 1.012,
+          "pre_close": 1.012,
+          "pct_vs_preclose": 0.0,
+          "auction_vol_hand": 0.0,
+          "amount_wan": 0.0,
+          "src_ts": "20260824092107"
+        },
+        "600176": {
+          "name": "中国巨石",
+          "auction_price": 42.3,
+          "pre_close": 42.04,
+          "pct_vs_preclose": 0.62,
+          "auction_vol_hand": 0.0,
+          "amount_wan": 0.0,
+          "src_ts": "20260824092108"
+        },
+        "600481": {
+          "name": "双良节能",
+          "auction_price": 4.22,
+          "pre_close": 4.21,
+          "pct_vs_preclose": 0.24,
+          "auction_vol_hand": 0.0,
+          "amount_wan": 0.0,
+          "src_ts": "20260824092108"
+        },
+        "603667": {
+          "name": "五洲新春",
+          "auction_price": 52.99,
+          "pre_close": 51.73,
+          "pct_vs_preclose": 2.44,
+          "auction_vol_hand": 0.0,
+          "amount_wan": 0.0,
+          "src_ts": "20260824092107"
+        },
+        "000988": {
+          "name": "华工科技",
+          "auction_price": 106.77,
+          "pre_close": 106.78,
+          "pct_vs_preclose": -0.01,
+          "auction_vol_hand": 0.0,
+          "amount_wan": 0.0,
+          "src_ts": "20260824092103"
+        },
+        "002639": {
+          "name": "雪人集团",
+          "auction_price": 11.57,
+          "pre_close": 11.59,
+          "pct_vs_preclose": -0.17,
+          "auction_vol_hand": 0.0,
+          "amount_wan": 0.0,
+          "src_ts": "20260824092103"
+        }
+      }
+    },
+    "09:22": {
+      "ts": "2026-08-24 09:23:10",
+      "source": "qt.gtimg.cn realtime",
+      "rows": {
+        "588170": {
+          "name": "科创半导体ETF华夏",
+          "auction_price": 1.006,
+          "pre_close": 1.012,
+          "pct_vs_preclose": -0.59,
+          "auction_vol_hand": 0.0,
+          "amount_wan": 0.0,
+          "src_ts": "20260824092307"
+        },
+        "600176": {
+          "name": "中国巨石",
+          "auction_price": 42.3,
+          "pre_close": 42.04,
+          "pct_vs_preclose": 0.62,
+          "auction_vol_hand": 0.0,
+          "amount_wan": 0.0,
+          "src_ts": "20260824092308"
+        },
+        "600481": {
+          "name": "双良节能",
+          "auction_price": 4.2,
+          "pre_close": 4.21,
+          "pct_vs_preclose": -0.24,
+          "auction_vol_hand": 0.0,
+          "amount_wan": 0.0,
+          "src_ts": "20260824092308"
+        },
+        "603667": {
+          "name": "五洲新春",
+          "auction_price": 52.38,
+          "pre_close": 51.73,
+          "pct_vs_preclose": 1.26,
+          "auction_vol_hand": 0.0,
+          "amount_wan": 0.0,
+          "src_ts": "20260824092307"
+        },
+        "000988": {
+          "name": "华工科技",
+          "auction_price": 106.77,
+          "pre_close": 106.78,
+          "pct_vs_preclose": -0.01,
+          "auction_vol_hand": 0.0,
+          "amount_wan": 0.0,
+          "src_ts": "20260824092309"
+        },
+        "002639": {
+          "name": "雪人集团",
+          "auction_price": 11.56,
+          "pre_close": 11.59,
+          "pct_vs_preclose": -0.26,
+          "auction_vol_hand": 0.0,
+          "amount_wan": 0.0,
+          "src_ts": "20260824092309"
+        }
+      }
+    }
+  },
+  "gaps": []
+}
