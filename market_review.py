@@ -17,6 +17,8 @@ import urllib.request
 from datetime import datetime, timedelta
 from pathlib import Path
 
+import pandas as pd
+
 BASE = Path(__file__).resolve().parent
 if str(BASE) not in sys.path:
     sys.path.insert(0, str(BASE))
@@ -45,6 +47,88 @@ def _log(msg: str) -> None:
             f.write(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] {msg}\n")
     except Exception:
         pass
+
+
+# ---------------------------------------------------------------- 大盘分时缓存（监控落盘，2026-08-23）
+MINUTE_CACHE_DIR = BASE / "t_io" / "index_regime"
+INDEX_MINUTE_CACHE_KEY = "minute_cache"          # minute_cache_{date}.json
+
+
+def _minute_cache_fp(date: str) -> Path:
+    return MINUTE_CACHE_DIR / f"{INDEX_MINUTE_CACHE_KEY}_{date}.json"
+
+
+def _resample_minutes(df, freq: str) -> list:
+    """1min DataFrame → freq 聚合 K 线（dict 列表，time 转字符串便于 json 缓存）。"""
+    try:
+        df = df.copy()
+        df["time"] = pd.to_datetime(df["time"])
+        df["_t"] = df["time"].dt.floor(freq)
+        g = df.groupby("_t").agg(open=("open", "first"), high=("high", "max"),
+                                 low=("low", "min"), close=("close", "last"),
+                                 volume=("volume", "sum"))
+        g = g.reset_index().rename(columns={"_t": "time"})
+        recs = g.to_dict(orient="records")
+        for r in recs:
+            r["time"] = str(r["time"])
+        return recs
+    except Exception:
+        return []
+
+
+def save_daily_index_minutes(date: str | None = None) -> None:
+    """大盘分时落盘（2026-08-23）：并发拉 6 指数当日 1min → 聚合 5/15/30/60 → 缓存，
+    供当日复盘直接使用（tushare 分钟只到 T-1，当日拉不到）。每指数 20s 超时跳过。"""
+    from concurrent.futures import ThreadPoolExecutor, TimeoutError as _FTO
+    date = date or datetime.now().strftime("%Y-%m-%d")
+
+    def _one(item):
+        symbol, ts_code, _name = item
+        try:
+            from index_regime_intraday import fetch_index_minutes_live
+            df = fetch_index_minutes_live(symbol)
+            if df is None or df.empty:
+                return ts_code, {}
+            ind = {}
+            for freq in MINUTE_FREQS:
+                r = _resample_minutes(df, freq)
+                if r:
+                    ind[freq] = r
+            return ts_code, ind
+        except Exception:
+            return ts_code, {}
+
+    cache = {"date": date, "updated_at": datetime.now().strftime("%H:%M:%S"), "indices": {}}
+    try:
+        with ThreadPoolExecutor(max_workers=6) as ex:
+            futures = [ex.submit(_one, item) for item in INDEX_POOL]
+            for fut in futures:
+                try:
+                    ts_code, ind = fut.result(timeout=20)
+                    if ind:
+                        cache["indices"][ts_code] = ind
+                except Exception:
+                    continue
+    except Exception:
+        pass
+    try:
+        MINUTE_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        _minute_cache_fp(date).write_text(json.dumps(cache, ensure_ascii=False), encoding="utf-8")
+    except Exception:
+        pass
+    _log(f"大盘分时落盘 {date}: {len(cache['indices'])} 指数")
+
+
+def load_index_minutes(date: str, ts_code: str, freq: str) -> list | None:
+    """读大盘分时缓存（监控落盘）；无则返回 None。"""
+    try:
+        fp = _minute_cache_fp(date)
+        if fp.exists():
+            c = json.loads(fp.read_text(encoding="utf-8"))
+            return (c.get("indices") or {}).get(ts_code, {}).get(freq) or None
+    except Exception:
+        pass
+    return None
 
 
 # ---------------------------------------------------------------- 数据获取
@@ -104,7 +188,13 @@ def fetch_index_monthly(symbol: str, count: int = 36, end: str | None = None) ->
 
 
 def fetch_index_minutes(ts_code: str, freq: str, date: str) -> list:
-    """tushare stk_mins 指数分钟线（当日）。失败/超时返回 []。单次限时 20s（tushare 网络差时挂起重试曾卡数分钟）。"""
+    """指数分钟线：优先读大盘分时缓存（监控落盘，当日可用）；无则 tushare（历史日/T-1）。
+    失败/超时返回 []。单次 tushare 限时 20s。"""
+    # 1) 本地大盘分时缓存（当日监控落盘，绕过 tushare T-1 限制）
+    cached = load_index_minutes(date, ts_code, freq)
+    if cached:
+        return cached
+    # 2) tushare 历史分钟（T-1 及更早）
     from concurrent.futures import ThreadPoolExecutor, TimeoutError as _FTO
 
     def _fetch():
@@ -229,8 +319,16 @@ def build_deep_dive(date: str, cross: dict, on_progress=None) -> dict:
 def load_sector_brief_ths(date: str, limit: int | None = None) -> dict:
     """同花顺概念板块强弱（2026-08-23，用户要求板块用同花顺概念）。
     并发拉同花顺概念板块(默认全部)的当日涨跌幅，排序取强势/弱势。失败返回 {}。
-    名称去"概念"等后缀以对齐同花顺 App 显示。"""
+    名称去"概念"等后缀以对齐同花顺 App 显示。按 date 缓存（当日只拉一次，避免每次复盘 1-2 分钟）。"""
     import time as _t
+    cache_fp = BASE / "t_io" / "cache" / f"ths_concept_{date}.json"
+    try:  # 读缓存
+        if cache_fp.exists():
+            r = json.loads(cache_fp.read_text(encoding="utf-8"))
+            if r.get("强势TOP5") and r.get("弱势BOTTOM5"):
+                return r
+    except Exception:
+        pass
     try:
         import akshare as ak
         from concurrent.futures import ThreadPoolExecutor
@@ -274,8 +372,14 @@ def load_sector_brief_ths(date: str, limit: int | None = None) -> dict:
         _log(f"概念板块涨跌幅不足({len(items)})")
         return {}
     items.sort(key=lambda x: -x[1])
+    result = {"强势TOP5": items[:5], "弱势BOTTOM5": items[-5:] if len(items) >= 5 else items}
+    try:  # 写缓存（当日只拉一次）
+        cache_fp.parent.mkdir(parents=True, exist_ok=True)
+        cache_fp.write_text(json.dumps(result, ensure_ascii=False), encoding="utf-8")
+    except Exception:
+        pass
     _log(f"同花顺概念板块: 强{items[:3]} 弱{items[-3:]}")
-    return {"强势TOP5": items[:5], "弱势BOTTOM5": items[-5:] if len(items) >= 5 else items}
+    return result
 
 
 def load_market_extra(date: str) -> dict:
@@ -510,7 +614,11 @@ def run_market_review_stream(date: str, cfg: dict, on_text=None) -> str:
     _emit("① 正在收集 6 指数日/周/月线…\n")
     cross = build_cross_section(date)
     _log(f"横评完成 耗时{_t.time()-_t0:.1f}s rows={len(cross.get('rows', []))}")
-    _emit(f"② 6 指数横评完成（{len(cross.get('rows', []))} 只）；正在拉取深拆指数分钟线…\n")
+    _emit(f"② 6 指数横评完成（{len(cross.get('rows', []))} 只）；正在准备深拆指数分钟线…\n")
+    # 当日复盘：先落盘大盘分时(绕过 tushare T-1 拿不到当日分钟的问题)，供深拆直接用
+    if date == datetime.now().strftime("%Y-%m-%d"):
+        _emit("  刷新当日大盘分时缓存…\n")
+        save_daily_index_minutes(date)
     deep = build_deep_dive(date, cross, on_progress=_emit)
     _log(f"深拆完成 耗时{_t.time()-_t0:.1f}s indices={list(deep.keys())}")
     _emit("③ 正在读取市场情绪/板块/持仓数据…\n")
