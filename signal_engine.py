@@ -517,6 +517,28 @@ class SignalEngine:
 
         _buy_factors = {d["指标"]: d.get("加分", 0) for d in (sig.details if sig and sig.action == "BUY_LOW" else [])}
         _sell_factors = {d["指标"]: d.get("加分", 0) for d in (sig.details if sig and sig.action == "SELL_HIGH" else [])}
+
+        # 2026-08-24 方案A: 分标的做T门控优化
+        # 纯两点信号已经生成（buy_score/sell_score/sig），现在检查是否需要应用分标的门控调整
+        # 注意：这里 sig 已经代表纯两点的决策，门控（daily_overheated等）仅在推送/GUI层应用
+        # 为了真正放宽门控，需要在推送前通知 main.py 这是一个"绕过门控"的信号
+        if sig and sig.action == "BUY_LOW":
+            _stock_param = {}
+            try:
+                from config import STOCK_PARAMS
+                _stock_param = STOCK_PARAMS.get(code, {})
+            except:
+                pass
+
+            # 标记该信号是否应该绕过某些门控，供 main.py/notify 层消费
+            if not hasattr(sig, 'override_gates'):
+                sig.override_gates = {}
+
+            if _stock_param.get("allow_overheated_buy", False):
+                sig.override_gates['daily_overheated'] = True
+            if _stock_param.get("allow_breakdown_buy", False):
+                sig.override_gates['daily_breakdown_risk'] = True
+
         self.last_decision[code] = {
             "reason": decision_reason, "ts": _now(),
             "buy_block": [], "sell_block": [],
