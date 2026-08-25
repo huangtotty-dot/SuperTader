@@ -1,0 +1,101 @@
+{
+  "date": "2026-08-26",
+  "generated_at": "2026-08-26 01:33:04",
+  "index_analysis": [
+    {
+      "code": "sh000001",
+      "name": "上证指数",
+      "gap_pct": 0.19,
+      "gap_level": "平开"
+    },
+    {
+      "code": "sh000688",
+      "name": "科创50",
+      "gap_pct": 0.14,
+      "gap_level": "平开"
+    },
+    {
+      "code": "sz399001",
+      "name": "深证成指",
+      "gap_pct": -0.35,
+      "gap_level": "平开"
+    }
+  ],
+  "market_mood": "中性",
+  "market_summary": "大盘平开-0.01%，情绪中性",
+  "holdings_diagnosis": [
+    {
+      "code": "515180",
+      "name": "红利ETF易方达",
+      "gap_pct": 0.0,
+      "gap_level": "平开",
+      "prices_9_20": null,
+      "prices_9_22": null,
+      "prices_9_24_30": null,
+      "trend_shape": "无法判断",
+      "yesterday_change_pct": 0.0,
+      "yesterday_label": "横盘",
+      "linkage_label": "无方向",
+      "vs_index": "同步",
+      "suggestion": "按盘中信号执行",
+      "confidence": "低",
+      "risk_tag": ""
+    },
+    {
+      "code": "588170",
+      "name": "科创半导体ETF华夏",
+      "gap_pct": 0.0,
+      "gap_level": "平开",
+      "prices_9_20": null,
+      "prices_9_22": null,
+      "prices_9_24_30": null,
+      "trend_shape": "无法判断",
+      "yesterday_change_pct": 0.0,
+      "yesterday_label": "横盘",
+      "linkage_label": "无方向",
+      "vs_index": "同步",
+      "suggestion": "按盘中信号执行",
+      "confidence": "低",
+      "risk_tag": ""
+    },
+    {
+      "code": "600481",
+      "name": "双良节能",
+      "gap_pct": 0.0,
+      "gap_level": "平开",
+      "prices_9_20": null,
+      "prices_9_22": null,
+      "prices_9_24_30": null,
+      "trend_shape": "无法判断",
+      "yesterday_change_pct": 0.0,
+      "yesterday_label": "横盘",
+      "linkage_label": "无方向",
+      "vs_index": "同步",
+      "suggestion": "按盘中信号执行",
+      "confidence": "低",
+      "risk_tag": ""
+    },
+    {
+      "code": "002639",
+      "name": "雪人集团",
+      "gap_pct": 0.0,
+      "gap_level": "平开",
+      "prices_9_20": null,
+      "prices_9_22": null,
+      "prices_9_24_30": null,
+      "trend_shape": "无法判断",
+      "yesterday_change_pct": 0.0,
+      "yesterday_label": "横盘",
+      "linkage_label": "无方向",
+      "vs_index": "同步",
+      "suggestion": "按盘中信号执行",
+      "confidence": "低",
+      "risk_tag": ""
+    }
+  ],
+  "bullish_count": 0,
+  "bearish_count": 0,
+  "neutral_count": 4,
+  "suggested_action": "观察",
+  "risk_alerts": []
+}

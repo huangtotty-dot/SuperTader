@@ -15,7 +15,9 @@ auction_analyzer.py — 集合竞价诊断分析引擎（Phase 1）
 """
 
 import json
+import os
 import sys
+import urllib.request
 from dataclasses import dataclass, field, asdict
 from datetime import datetime
 from pathlib import Path
@@ -53,6 +55,13 @@ AUCTION_PARAMS = {
         "大跌_threshold": -0.03,
     },
     "index_codes": ["sh000001", "sh000688", "sz399001"],
+}
+
+# 指数显示名称（腾讯快照可能返回简体名，缺失时兜底用）
+INDEX_META = {
+    "sh000001": "上证指数",
+    "sz399001": "深证成指",
+    "sh000688": "科创50",
 }
 
 
@@ -177,10 +186,10 @@ def _classify_gap_level(gap_pct: float) -> str:
         return "小幅高开"
     elif abs(gap_pct) <= AUCTION_PARAMS["gap_levels"]["平开"]:
         return "平开"
-    elif gap_pct < AUCTION_PARAMS["gap_levels"]["小幅低开"]:
+    elif gap_pct >= AUCTION_PARAMS["gap_levels"]["大幅低开"]:
         return "小幅低开"
     else:
-        return "小幅低开"
+        return "大幅低开"
 
 
 def _classify_yesterday(change_pct: float) -> str:
@@ -298,8 +307,134 @@ def _analyze_linkage(yesterday_label: str, gap_level: str) -> tuple:
         return ("无特殊联动", "按盘中信号执行", "", "低")
 
 
+# ============== 大盘指数竞价分析（方案 §2.3 / §4.4） ==============
+
+def _fetch_index_auction_live() -> List[IndexAuctionDiagnosis]:
+    """实时拉取大盘指数竞价快照（腾讯 qt.gtimg.cn，竞价时段字段[3]=虚拟匹配价）。
+    仅用于当日盘中分析；历史日期应从已采集数据读取（见 _get_index_auction_from_data）。"""
+    os.environ["NO_PROXY"] = "*"
+    os.environ["no_proxy"] = "*"
+    codes = AUCTION_PARAMS["index_codes"]
+    q = ",".join(codes)
+    try:
+        req = urllib.request.Request(
+            f"http://qt.gtimg.cn/q={q}", headers={"User-Agent": "Mozilla/5.0"}
+        )
+        txt = urllib.request.urlopen(req, timeout=12).read().decode("gbk", errors="ignore")
+    except Exception:
+        return []
+
+    out = []
+    for part in txt.strip().split(";"):
+        part = part.strip()
+        if not part or "=" not in part:
+            continue
+        key, _, payload = part.partition("=")
+        code = key.strip().lstrip("v_").lower()
+        f = payload.strip().strip('"').split("~")
+        if len(f) < 5:
+            continue
+
+        def _f(i):
+            try:
+                return float(f[i])
+            except Exception:
+                return None
+
+        price, pre_close = _f(3), _f(4)
+        if not price or not pre_close:
+            continue
+        gap_pct = (price - pre_close) / pre_close * 100
+        out.append(IndexAuctionDiagnosis(
+            code=code,
+            name=(f[1] if len(f) > 1 and f[1] else INDEX_META.get(code, code)),
+            gap_pct=round(gap_pct, 2),
+            gap_level=_classify_gap_level(gap_pct),
+        ))
+    return out
+
+
+def _get_index_auction_from_data(auction_data: dict) -> List[IndexAuctionDiagnosis]:
+    """从已采集的 auction_{date}.json 读取指数竞价快照（优先最新 slot 的 index_rows 节点）"""
+    snapshots = auction_data.get("snapshots") or {}
+    for slot in ("09:22", "09:20", "09:25"):
+        s = snapshots.get(slot) or {}
+        rows = s.get("index_rows") or {}
+        if not rows:
+            continue
+        out = []
+        for code, r in rows.items():
+            gap_pct = r.get("gap_pct")
+            if gap_pct is None:
+                price = r.get("auction_price") or r.get("price")
+                pre_close = r.get("pre_close")
+                gap_pct = (price - pre_close) / pre_close * 100 if price and pre_close else 0.0
+            gap_pct = float(gap_pct)
+            out.append(IndexAuctionDiagnosis(
+                code=code,
+                name=r.get("name") or INDEX_META.get(code, code),
+                gap_pct=round(gap_pct, 2),
+                gap_level=r.get("gap_level") or _classify_gap_level(gap_pct),
+            ))
+        return out
+    return []
+
+
+def analyze_index_auction(date: str, auction_data: dict) -> List[IndexAuctionDiagnosis]:
+    """大盘指数竞价分析。
+    优先使用已采集数据（保证历史日期口径正确）；当日且无采集数据时实时拉取。"""
+    result = _get_index_auction_from_data(auction_data)
+    if result:
+        return result
+    if date == datetime.now().strftime("%Y-%m-%d"):
+        return _fetch_index_auction_live()
+    return []
+
+
+def _compute_market_mood(index_list: List[IndexAuctionDiagnosis]) -> tuple:
+    """根据指数竞价缺口判断市场情绪 → (mood, summary)
+    平均缺口 >+0.5% 偏多 / <-0.5% 偏空 / 否则中性。"""
+    if not index_list:
+        return "中性", "指数竞价数据缺失"
+    gaps = [i.gap_pct for i in index_list if i.gap_pct is not None]
+    if not gaps:
+        return "中性", "指数竞价数据缺失"
+    mean_gap = sum(gaps) / len(gaps)
+    if mean_gap > 0.5:
+        mood = "偏多"
+    elif mean_gap < -0.5:
+        mood = "偏空"
+    else:
+        mood = "中性"
+    direction = "高开" if mean_gap > 0.3 else ("低开" if mean_gap < -0.3 else "平开")
+    summary = f"大盘{direction}{mean_gap:+.2f}%，情绪{mood}"
+    return mood, summary
+
+
+def _compute_vs_index(holding_gap_pct: float, index_list: List[IndexAuctionDiagnosis]) -> str:
+    """个股缺口 vs 大盘（优先上证）缺口 → 强于大盘/弱于大盘/同步"""
+    ref = None
+    for i in index_list:
+        if i.code in ("sh000001", "000001"):
+            ref = i.gap_pct
+            break
+    if ref is None:
+        refs = [i.gap_pct for i in index_list if i.gap_pct is not None]
+        if refs:
+            ref = sum(refs) / len(refs)
+    if ref is None:
+        return "同步"
+    diff = holding_gap_pct - ref
+    if diff > 0.5:
+        return "强于大盘"
+    if diff < -0.5:
+        return "弱于大盘"
+    return "同步"
+
+
 def analyze_holdings_auction(date: str, auction_data: dict,
-                            holdings_state: dict) -> List[HoldingAuctionDiagnosis]:
+                            holdings_state: dict,
+                            index_list: Optional[List[IndexAuctionDiagnosis]] = None) -> List[HoldingAuctionDiagnosis]:
     """分析所有持仓的竞价诊断"""
     results = []
     holdings = _get_holdings()
@@ -338,8 +473,8 @@ def analyze_holdings_auction(date: str, auction_data: dict,
             yesterday_label, gap_level
         )
 
-        # 大盘对比（暂时标为"同步"，后续集成指数分析）
-        vs_index = "同步"
+        # 大盘对比（个股缺口 vs 指数缺口）
+        vs_index = _compute_vs_index(gap_pct, index_list or [])
 
         diagnosis = HoldingAuctionDiagnosis(
             code=code_clean,
@@ -367,8 +502,12 @@ def generate_diagnosis_report(date: str) -> AuctionDiagnosisReport:
     auction_data = _get_auction_data(date)
     holdings_state = _get_holdings_state(date)
 
-    # 分析持仓竞价
-    holdings_diag = analyze_holdings_auction(date, auction_data, holdings_state)
+    # 大盘指数竞价分析
+    index_diag = analyze_index_auction(date, auction_data)
+    market_mood, market_summary = _compute_market_mood(index_diag)
+
+    # 分析持仓竞价（带大盘对比）
+    holdings_diag = analyze_holdings_auction(date, auction_data, holdings_state, index_diag)
 
     # 统计分布
     bullish_count = sum(1 for d in holdings_diag if d.gap_pct > 0.5)
@@ -396,14 +535,15 @@ def generate_diagnosis_report(date: str) -> AuctionDiagnosisReport:
     report = AuctionDiagnosisReport(
         date=date,
         generated_at=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        index_analysis=index_diag,
+        market_mood=market_mood,
+        market_summary=market_summary,
         holdings_diagnosis=holdings_diag,
         bullish_count=bullish_count,
         bearish_count=bearish_count,
         neutral_count=neutral_count,
         suggested_action=suggested_action,
         risk_alerts=risk_alerts,
-        market_mood="中性",  # 暂时固定，后续集成指数分析
-        market_summary="持仓竞价多空均衡"  # 暂时固定
     )
 
     return report
@@ -437,6 +577,9 @@ if __name__ == "__main__":
     report = analyze_and_save(today)
 
     print(f"✅ 竞价诊断报告已生成：{report.date}")
+    for idx in report.index_analysis:
+        print(f"   🌐 {idx.name}({idx.code}): {idx.gap_pct:+.2f}% [{idx.gap_level}]")
+    print(f"   情绪: {report.market_mood} | {report.market_summary}")
     print(f"   持仓高开: {report.bullish_count} | 平开: {report.neutral_count} | 低开: {report.bearish_count}")
     print(f"   策略建议: {report.suggested_action}")
     for alert in report.risk_alerts:

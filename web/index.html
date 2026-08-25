@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>做T决策看板</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="topbar">
+  <span class="brand-title">做T决策看板</span>
+  <span id="dateTag" class="date-tag"></span>
+  <div class="topbar-right">
+    <span id="liveTag" class="live-tag" style="display:none"></span>
+    <select id="dateSelect" class="date-sel"></select>
+    <button id="refreshBtn" class="mini-btn" title="手动刷新">刷新</button>
+    <span id="status" class="status"></span>
+  </div>
+</header>
+
+<div id="alertBanner" class="alert-banner" style="display:none"></div>
+
+<nav class="sidebar">
+  <div class="sidebar-nav">
+    <div class="sidebar-item active" data-tab="overview">
+      <span class="sidebar-icon">📊</span><span>概览仪表盘</span>
+    </div>
+    <div class="sidebar-item" data-tab="auction">
+      <span class="sidebar-icon">🌅</span><span>竞价诊断</span>
+    </div>
+    <div class="sidebar-item" data-tab="charts">
+      <span class="sidebar-icon">📈</span><span>图表分析</span>
+    </div>
+    <div class="sidebar-item" data-tab="signals">
+      <span class="sidebar-icon">⚡</span><span>信号与交易</span>
+    </div>
+    <div class="sidebar-item" data-tab="archive">
+      <span class="sidebar-icon">📋</span><span>每日复盘</span>
+    </div>
+    <div class="sidebar-item" data-tab="hunter">
+      <span class="sidebar-icon">🔍</span><span>选股猎手</span>
+    </div>
+    <div class="sidebar-item" data-tab="rotation">
+      <span class="sidebar-icon">🧭</span><span>板块轮动</span>
+    </div>
+  </div>
+  <div class="sidebar-summary" id="sidebarSummary">
+    <div class="sum-row"><span class="sum-label">总市值</span><span class="sum-val" id="sumValue">—</span></div>
+    <div class="sum-row"><span class="sum-label">总资金</span><span class="sum-val" id="sumCapital">—</span></div>
+    <div class="sum-row"><span class="sum-label">仓位占比</span><span class="sum-val" id="sumPos">—</span></div>
+    <div class="sum-row"><span class="sum-label">总浮亏</span><span class="sum-val" id="sumUnreal">—</span></div>
+    <div class="sum-row"><span class="sum-label">总实亏</span><span class="sum-val" id="sumRealLoss">—</span></div>
+  </div>
+  <div class="sidebar-controls">
+    <label class="sidebar-ctl">
+      <input type="checkbox" id="alertSound" checked> 报警音
+    </label>
+    <label class="sidebar-ctl">
+      <input type="checkbox" id="autoPoll" checked> 自动刷新
+    </label>
+  </div>
+</nav>
+
+<main class="content">
+
+  <!-- ====== Tab 1: 概览仪表盘 ====== -->
+  <div class="tab-page active" id="tab-overview">
+    <div class="section" id="quotes">
+      <h2>持仓行情</h2>
+      <div id="quoteBar" class="quote-bar"></div>
+      <div id="quotesBody" class="card"></div>
+    </div>
+
+    <div class="section">
+      <h2>KPI 日快照</h2>
+      <div id="kpiCards" class="kpi-grid"></div>
+    </div>
+
+    <div class="section" id="position-manager">
+      <h2>仓位管理器 <span class="cell-dim" style="font-size:12px;font-weight:normal">目标=总资金×个股比例 · 超配应减 / 欠配可加</span></h2>
+      <div id="positionManagerBody"></div>
+    </div>
+
+    <div class="section">
+      <h2>图表速览</h2>
+      <div class="overview-grid">
+        <div class="card"><div class="card-title">大盘跨日 S</div><div id="echMarket" class="echart ech-sm"></div></div>
+        <div class="card"><div class="card-title">持仓收益趋势</div><div id="echCost" class="echart ech-sm"></div></div>
+        <div class="card"><div class="card-title">各股信号数</div><div id="echSignal" class="echart ech-sm"></div></div>
+        <div class="card"><div class="card-title">K4 胜率</div><div id="echK4" class="echart ech-sm"></div></div>
+      </div>
+    </div>
+
+    <div class="section" id="live-preview">
+      <h2>盘中实时概览</h2>
+      <div id="livePreview"></div>
+    </div>
+  </div>
+
+  <!-- ====== Tab: 竞价诊断 ====== -->
+  <div class="tab-page" id="tab-auction">
+    <iframe src="auction_board.html" class="auction-frame" title="集合竞价诊断"></iframe>
+  </div>
+
+  <!-- ====== Tab 2: 图表分析 ====== -->
+  <div class="tab-page" id="tab-charts">
+    <div class="section">
+      <h2>大盘趋势</h2>
+      <div class="chart-grid2">
+        <div class="card"><div class="card-title">跨日 S 打分</div><div id="echMarketFull" class="echart"></div></div>
+        <div class="card"><div class="card-title">今日盘中 S</div><div id="echIntraday" class="echart"></div></div>
+      </div>
+    </div>
+    <div class="section">
+      <h2>持仓收益趋势 <button class="mini-btn" id="calibBtn">✎ 校准</button></h2>
+      <div class="card"><div id="echCostFull" class="echart"></div><div id="costMatrix" style="margin-top:10px"></div></div>
+    </div>
+    <div class="section">
+      <h2>信号与胜率</h2>
+      <div class="chart-grid2">
+        <div class="card"><div class="card-title">各股买卖信号数</div><div id="echSignalFull" class="echart"></div></div>
+        <div class="card"><div class="card-title">K4 滚动胜率</div><div id="echK4Full" class="echart"></div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ====== Tab 3: 信号与交易 ====== -->
+  <div class="tab-page" id="tab-signals">
+    <div class="section" id="surge-defense">
+      <!-- 冲高防御实时监控将在此渲染 -->
+      <div id="surge-defense-container"></div>
+    </div>
+    <div class="section" id="ob-analysis">
+      <h2>持仓日线风险体检（超买/顶背离 → 减仓提醒）</h2>
+      <div id="obBody"></div>
+    </div>
+    <div class="section" id="live">
+      <h2>盘中实时</h2>
+      <div id="liveBody"><div class="empty">非今日日期或尚无盘中数据</div></div>
+    </div>
+    <div class="section" id="shadow">
+      <h2>shadow 近阈 · 仓控与推送</h2>
+      <div id="shadowBody"></div>
+    </div>
+    <div class="section" id="position-builder">
+      <h2>建仓信号扫描
+        <span style="display:inline-flex;align-items:center;gap:6px;margin-left:12px;font-weight:400;font-size:12px">
+          <input type="text" id="pbSearchCode" class="mini-input" placeholder="代码(如 600519)" style="width:110px">
+          <input type="text" id="pbSearchName" class="mini-input" placeholder="名称(可选)" style="width:90px">
+          <button class="mini-btn primary" onclick="addNewWatchlist()">+ 添加</button>
+        </span>
+        <button class="mini-btn recompute-pb-btn" onclick="recomputePB()" title="盘后重新跑一遍建仓扫描+加仓观察（日线口径）">🔄 盘后重跑</button>
+      </h2>
+      <div id="pbBody"></div>
+    </div>
+    <div class="section" id="add-watch">
+      <h2>加仓观察（回踩支撑）
+        <button class="mini-btn recompute-pb-btn" onclick="recomputePB()" title="盘后重新跑一遍建仓扫描+加仓观察（日线口径）">🔄 盘后重跑</button>
+      </h2>
+      <div id="addWatchBody"></div>
+    </div>
+  </div>
+
+  <!-- ====== Tab 5: 选股猎手 ====== -->
+  <div class="tab-page" id="tab-hunter">
+    <div class="section">
+      <h2>主要指数
+        <span class="cell-dim" style="font-size:12px;font-weight:normal">点击查看K线 · <span class="mono" id="indicesMeta"></span></span>
+      </h2>
+      <div id="indicesBody" class="card" style="margin-bottom:12px">
+        <div class="empty">加载指数数据...</div>
+      </div>
+      <h2>概念评分排名
+        <select id="hunterDate" class="mini-btn" style="margin-left:12px" title="选择历史日期查看当时排名"></select>
+        <button class="mini-btn" id="hunterRegenBtn" style="margin-left:4px" title="重新生成选中日期的结果(拉行情+评分)">🔄 重新生成</button>
+        <button class="mini-btn primary" id="hunterRunBtn" style="margin-left:4px">▶ 运行今日数据</button>
+      </h2>
+      <div id="hunterBody">
+        <div class="empty">点击"运行今日数据"获取最新概念评分</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ====== Tab 4: 每日复盘 ====== -->
+  <div class="tab-page" id="tab-archive">
+    <div class="section" id="market-review">
+      <h2>每日大盘复盘（LLM）
+        <button class="mini-btn primary" onclick="runDailyReview()" title="收集指数多周期数据并调用模型复盘">▶ 开始大盘复盘</button>
+        <button class="mini-btn" onclick="refreshDailyReview()" title="读取已生成的复盘结果">🔄 刷新</button>
+      </h2>
+      <div class="card" style="padding:10px;margin-bottom:10px">
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+          <select id="llmProvider" class="mini-btn" onchange="providerChanged()" style="width:130px">
+            <option value="">选择服务商…</option>
+            <option value="deepseek">DeepSeek</option>
+            <option value="qwen">通义千问</option>
+            <option value="openai">OpenAI</option>
+            <option value="moonshot">Moonshot</option>
+            <option value="custom">自定义</option>
+          </select>
+          <input type="text" id="llmBaseUrl" class="mini-input" placeholder="base_url(如 https://api.deepseek.com)" style="width:260px">
+          <input type="text" id="llmModel" class="mini-input" placeholder="模型名(如 kimi-k3)" style="width:150px">
+          <select id="llmEffort" class="mini-btn" style="width:96px" title="推理强度(Kimi K3等用；高=质量更好但慢，低=快)">
+            <option value="">推理默认</option>
+            <option value="low">低(快)</option>
+            <option value="high">高</option>
+            <option value="max">最高(慢)</option>
+          </select>
+          <input type="password" id="llmApiKey" class="mini-input" placeholder="API key" style="width:180px">
+          <button class="mini-btn" onclick="saveModelConfig()">💾 保存</button>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;margin-top:8px">
+          <label class="cell-dim" style="font-size:11px">复盘日期</label>
+          <input type="date" id="reviewDate" class="mini-input" style="width:140px">
+          <select id="reviewHistory" class="mini-btn" style="width:130px" onchange="loadReviewFromHistory()" title="历史复盘存档">
+            <option value="">历史复盘…</option>
+          </select>
+          <span class="cell-dim" style="font-size:11px">数据：6指数横评 + 触发项/双锚多周期深拆（腾讯日/周/月线 + tushare 分钟线）</span>
+        </div>
+      </div>
+      <div id="reviewStatus" class="cell-dim" style="margin-bottom:8px;user-select:text"></div>
+      <div id="reviewChartWrap" style="display:none;margin-bottom:10px">
+        <div id="reviewSummary" style="margin-bottom:10px"></div>
+        <div id="reviewVibe" style="margin-bottom:10px"></div>
+        <div id="reviewChart" class="echart" style="height:280px"></div>
+        <div id="reviewKeyLevels" class="card" style="padding:10px;margin-top:8px"></div>
+      </div>
+      <div id="reviewResult" class="card" style="white-space:pre-wrap;font-size:12px;line-height:1.7;max-height:70vh;overflow:auto;user-select:text"></div>
+    </div>
+  </div>
+
+  <!-- ====== Tab 6: 板块轮动 ====== -->
+  <div class="tab-page" id="tab-rotation">
+    <div class="section">
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
+        <div style="display:inline-flex;gap:4px">
+          <button class="mini-btn primary rot-view-btn" data-view="jiuyan">韭研概念轮动</button>
+          <button class="mini-btn rot-view-btn" data-view="industry">全市场行业轮动</button>
+        </div>
+        <select id="rotDate" class="mini-btn" title="选择交易日"></select>
+        <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text-dim)">轨迹回看
+          <input type="range" id="rotTail" min="8" max="35" value="18" style="width:100px">
+          <span id="rotTailVal" class="mono">18</span>
+        </label>
+        <button class="mini-btn primary" id="rotRunBtn">▶ 运行</button>
+        <span id="rotStatus" class="cell-dim" style="font-size:12px"></span>
+      </div>
+      <div id="rotProgressWrap" class="cell-dim" style="display:none;font-size:12px;margin-bottom:8px"></div>
+      <div id="rotKpi" class="kpi-grid" style="margin-bottom:10px"></div>
+      <div class="card">
+        <div class="card-title" id="rotTitle">板块轮动地图</div>
+        <div id="rotRrg" class="echart" style="height:560px"></div>
+      </div>
+    </div>
+    <div class="section">
+      <div style="display:flex;gap:6px;margin-bottom:8px">
+        <button class="mini-btn rot-table-btn primary" data-tbl="family">主线家族</button>
+        <button class="mini-btn rot-table-btn" data-tbl="main">主线榜</button>
+        <button class="mini-btn rot-table-btn" data-tbl="fix">修复榜</button>
+        <button class="mini-btn rot-table-btn" data-tbl="down">退潮榜</button>
+        <button class="mini-btn rot-table-btn" data-tbl="leaders">个股穿透</button>
+      </div>
+      <div id="rotTables" style="overflow-x:auto"></div>
+    </div>
+  </div>
+
+</main>
+
+<!-- 个股技术分析 modal -->
+<div id="stockModal" class="modal-mask" style="display:none">
+  <div class="modal modal-lg">
+    <div class="modal-title">
+      <span id="stockModalTitle">个股技术分析</span>
+      <div style="display:flex;gap:6px">
+        <button class="mini-btn" onclick="toggleMaxStockChart()">⛶</button>
+        <button class="mini-btn" onclick="closeStockChart()">×</button>
+      </div>
+    </div>
+    <div id="stockSummary" class="stock-summary"></div>
+    <div class="stock-toolbar">
+      <div class="stock-tabs">
+        <button class="stock-tab active" data-period="daily" onclick="switchStockPeriod('daily')">日K</button>
+        <button class="stock-tab" data-period="weekly" onclick="switchStockPeriod('weekly')">周K</button>
+        <button class="stock-tab" data-period="monthly" onclick="switchStockPeriod('monthly')">月K</button>
+      </div>
+      <div class="stock-toggles">
+        <label class="toggle-item"><input type="checkbox" id="tgLevels" checked onchange="renderStockChart()"> 支撑压力</label>
+        <label class="toggle-item"><input type="checkbox" id="tgBoxes" checked onchange="renderStockChart()"> 箱体</label>
+        <label class="toggle-item"><input type="checkbox" id="tgChannel" checked onchange="renderStockChart()"> 通道</label>
+        <label class="toggle-item"><input type="checkbox" id="tgMA" checked onchange="renderStockChart()"> 均线</label>
+        <button class="mini-btn" onclick="toggleChartHelp()" title="上行/下行区域使用说明">?</button>
+      </div>
+    </div>
+    <div id="chartHelp" class="chart-help" style="display:none">
+      <div class="help-sec"><b class="up">【上行区域】↗ 上轨实线 + 红色色带</b>
+        · 现价在通道内(位置中等)：持股待涨，回踩中轨/下轨低吸<br>
+        · 现价贴近上轨(位置&gt;80%)：短线高位，注意压力，不追高<br>
+        · 突破上轨(位置&gt;100%)：强势加速，可跟，但设止损</div>
+      <div class="help-sec"><b class="down">【下行区域】↘ 下轨虚线 + 绿色色带</b>
+        · 现价在通道内：空头排列，反弹到上轨/均线减仓，不抄底<br>
+        · 现价贴近下轨(位置&lt;20%)：可能超跌，但趋势向下，等反转<br>
+        · 跌破下轨：加速下跌，坚决回避</div>
+      <div class="help-sec"><b class="warn">【箱体突破】🚀</b>
+        · 现价向上突破最近箱体上沿 → 第一优先级买入信号(报买入)<br>
+        · 箱体上沿变支撑，回踩不破可加仓<br>
+        · 现价跌破箱体下沿 → 减仓/回避</div>
+    </div>
+    <div id="stockChart" class="echart stock-chart"></div>
+  </div>
+</div>
+
+<!-- 成本校准 modal -->
+<div id="calibModal" class="modal-mask" style="display:none">
+  <div class="modal">
+    <div class="modal-title">校准持仓成本 <span class="cell-dim" id="calibDate"></span>
+      <button class="mini-btn" id="calibClose">×</button>
+    </div>
+    <div class="modal-body">
+      <table id="calibTable">
+        <thead><tr><th>股票</th><th class="num">快照成本</th><th class="num">校准成本</th><th>来源</th></tr></thead>
+        <tbody></tbody>
+      </table>
+      <p class="cell-dim" style="font-size:11px">填券商持仓页显示的真实成本，保存后成本曲线将优先使用校准值（✎ 标注）。留空表示该股不校准。</p>
+    </div>
+    <div class="modal-foot">
+      <button class="mini-btn primary" id="calibSave">保存校准</button>
+    </div>
+  </div>
+</div>
+
+<script src="vendor/echarts.min.js"></script>
+<script src="surge-defense-widget.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
