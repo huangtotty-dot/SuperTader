@@ -1220,6 +1220,91 @@ class Api:
         持仓体检表(load_ob_analysis)仍展示顶背离信息，供与超买/趋势组合参考。"""
         return _clean({"alerts": [], "disabled": True})
 
+    # ---------- 日内冲高防御系统 ----------
+    def load_intraday_surge_defense(self, date=None):
+        """实时监控holdings+watchlist的冲高风险。
+
+        返回:
+        {
+            "timestamp": "2026-08-25 14:30:00",
+            "holdings_alerts": [...],        # 持仓风险告警
+            "watchlist_alerts": [...],       # 监控风险告警
+            "critical_alerts": [...],        # 需立即处理的
+            "summary": {
+                "safe_count": int,
+                "warning_count": int,
+                "avoid_count": int,
+                "exit_count": int
+            }
+        }
+        """
+        out = {
+            "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "holdings_alerts": [],
+            "watchlist_alerts": [],
+            "critical_alerts": [],
+            "summary": {"safe_count": 0, "warning_count": 0, "avoid_count": 0, "exit_count": 0},
+            "available": False,
+            "error": ""
+        }
+
+        try:
+            from intraday_surge_monitor import monitor_surge_risks
+            result = monitor_surge_risks()
+
+            # 转换为前端需要的格式
+            out.update({
+                "timestamp": result.get("timestamp", out["timestamp"]),
+                "holdings_alerts": result.get("holdings_alerts", []),
+                "watchlist_alerts": result.get("watchlist_alerts", []),
+                "critical_alerts": result.get("critical_alerts", []),
+                "available": True
+            })
+
+            # 统计摘要
+            for alert in out["holdings_alerts"] + out["watchlist_alerts"]:
+                action = alert.get("action", "")
+                if action == "SAFE":
+                    out["summary"]["safe_count"] += 1
+                elif action == "WARNING":
+                    out["summary"]["warning_count"] += 1
+                elif action == "AVOID":
+                    out["summary"]["avoid_count"] += 1
+                elif action == "EXIT":
+                    out["summary"]["exit_count"] += 1
+
+        except ImportError:
+            out["error"] = "冲高防御模块未安装"
+        except Exception as e:
+            out["error"] = f"加载失败: {str(e)[:100]}"
+
+        return _clean(out)
+
+    def get_surge_defense_alert_level(self):
+        """返回当前最严重的告警等级 (normal|warning|critical)。用于UI顶部状态栏。"""
+        try:
+            result = self.load_intraday_surge_defense()
+
+            if not result.get("available"):
+                return "normal"
+
+            if result.get("critical_alerts"):
+                for alert in result["critical_alerts"]:
+                    if alert.get("action") == "EXIT":
+                        return "critical"
+                return "warning"
+
+            if result["summary"].get("exit_count", 0) > 0:
+                return "critical"
+            if result["summary"].get("avoid_count", 0) > 0:
+                return "warning"
+            if result["summary"].get("warning_count", 0) > 0:
+                return "warning"
+
+            return "normal"
+        except Exception:
+            return "normal"
+
     # ---------- 个股技术分析弹窗 ----------
     def load_stock_chart(self, code):
         """日线(本地缓存秒回/网络兜底) → 7 条 MA + MACD/RSI/BOLL → resample 周/月 → 支撑压力。
