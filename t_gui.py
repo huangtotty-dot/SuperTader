@@ -2998,6 +2998,17 @@ class Api:
             "gaps": gaps, "has_gaps": len(gaps) > 0,
         })
 
+    def get_auction_diagnosis(self, date=None):
+        """加载竞价诊断报告（auction_diagnosis_{date}.json）"""
+        date = date or get_today_str()
+        fp = PREOPEN_DIR / f"auction_diagnosis_{date}.json"
+        if not fp.exists():
+            return None
+        try:
+            return json.loads(fp.read_text(encoding="utf-8"))
+        except Exception:
+            return None
+
     # ---------- 独立配置（账户总资金+已实现亏损） ----------
     def load_portfolio_config(self):
         """读 t_io/state/portfolio_config.json（独立于 holdings.json，用户更新持仓不会覆盖）。"""
