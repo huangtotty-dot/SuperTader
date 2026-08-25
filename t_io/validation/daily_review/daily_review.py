@@ -376,7 +376,7 @@ import urllib.request as _urlreq
 def _tx_daily(code, n=80):
     """腾讯 qfq 日线 [[date,open,close,high,low,...],...]；失败返回 []"""
     mkt = ("sh" if code.startswith(("5", "6")) else "sz") + code
-    url = f"http://ifzq.gtimg.cn/appstock/app/fqkline/get?param={mkt},day,,,{n},qfq"
+    url = f"http://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param={mkt},day,,,{n},qfq"
     try:
         req = _urlreq.Request(url, headers={"User-Agent": "Mozilla/5.0"})
         d = json.loads(_urlreq.urlopen(req, timeout=15).read().decode())

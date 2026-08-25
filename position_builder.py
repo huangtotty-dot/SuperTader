@@ -41,7 +41,10 @@ import pandas as pd
 BASE = Path(__file__).resolve().parent
 sys.path.insert(0, str(BASE))
 
-from indicators import resample_to_5min, add_5min_indicators, add_indicators  # noqa: F401
+from indicators import (  # noqa: F401
+    resample_to_5min, add_5min_indicators, add_indicators,
+    resample_to_15min, add_15min_indicators,
+)
 
 
 # ── 飞书推送（可选，Webhook 未配置时静默跳过）──
@@ -297,7 +300,7 @@ def fetch_daily_kline(code: str) -> pd.DataFrame:
     _os.environ["NO_PROXY"] = "*"
     symbol = ("sh" + code if code[0] in "56" else "sz" + code)
     try:
-        url = f"https://ifzq.gtimg.cn/appstock/app/fqkline/get?param={symbol},day,,,800,qfq"
+        url = f"https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param={symbol},day,,,800,qfq"
         req = _ur.Request(url, headers={"User-Agent": "Mozilla/5.0",
                                         "Referer": "https://finance.qq.com/"})
         raw = _ur.urlopen(req, timeout=8).read().decode("utf-8", errors="ignore")
@@ -651,6 +654,135 @@ def check_m5_volume_shrink(df_5min) -> tuple:
 
 
 # ============================================================
+# 日内右侧买点确认（W35 2026-08-25 落地）
+#
+# 依据 w35_intraday_confirm_experiment 两年验证（2024-08~2026-08）：
+#   在时机门控 GO 的日子里，等日内右侧确认后成交 vs 收盘价成交——
+#   fwd1 两年均大幅改善（+0.9%→+1.4%），maxdd5 两年均变浅（回撤保护），
+#   日内平均让价为负（等确认不追贵）。fwd5 样本外打平（长期弹性有小代价），
+#   故做成「闸门 + 例外出口」：GO 且确认→signal；GO 未确认→approaching(待日内确认)，不丢弃。
+# 判据（与实验 find_confirm_entry 同口径，但取截止当前最新已收盘 15m bar，不回溯首个）：
+#   15m close > ema_fast_15m(EMA8) 且 vol_ratio_15m > vol_min 且 close >= 当日累计VWAP。
+# ============================================================
+
+def check_intraday_confirm(df_1min, vol_min: float = 1.2) -> tuple:
+    """当日盘中右侧买点确认。返回 (passed, detail, insufficient)。
+
+    无未来函数：只用截止最新一根【已收盘】15m bar 的数据；未收盘的当前根不参与。
+    df_1min 为当日 1 分钟线（intraday 快照）。数据不足时 insufficient=True（不视为未确认）。
+    """
+    if df_1min is None or df_1min.empty or len(df_1min) < 20:
+        return False, "日内分钟数据不足", True
+    d = df_1min.copy()
+    d["time"] = pd.to_datetime(d["time"], errors="coerce")
+    d = d.dropna(subset=["time"]).sort_values("time").reset_index(drop=True)
+    # 当日累计 VWAP（Σamount/Σvol；缺 amount 用 close*vol 代理）
+    if "amount" in d.columns and d["amount"].fillna(0).sum() > 0:
+        cum_amt = d["amount"].fillna(0).cumsum()
+    else:
+        cum_amt = (d["close"] * d["volume"].fillna(0)).cumsum()
+    cum_vol = d["volume"].fillna(0).cumsum().replace(0, np.nan)
+    d["vwap_cum"] = cum_amt / cum_vol
+
+    df15 = add_15min_indicators(resample_to_15min(d))
+    if df15 is None or df15.empty:
+        return False, "15分钟数据不足", True
+    df15 = df15.copy()
+    df15["time"] = pd.to_datetime(df15["time"], errors="coerce")
+    last_min_ts = d["time"].iloc[-1]
+    # 取最新一根【已收盘】15m bar（收盘时刻 <= 当日最新分钟+1min）
+    closed = df15[(df15["time"] + pd.Timedelta(minutes=15)) <= (last_min_ts + pd.Timedelta(minutes=1))]
+    if closed.empty:
+        return False, "尚无已收盘15分钟bar", True
+    bar = closed.iloc[-1]
+    c = bar.get("close")
+    ema8 = bar.get("ema_fast_15m")
+    volr = bar.get("vol_ratio_15m")
+    if any(pd.isna(x) for x in (c, ema8, volr)):
+        return False, "15分钟指标NaN", True
+    close_ts = bar["time"] + pd.Timedelta(minutes=15)
+    vw_rows = d[d["time"] <= close_ts]
+    vwap = float(vw_rows["vwap_cum"].iloc[-1]) if (not vw_rows.empty and pd.notna(vw_rows["vwap_cum"].iloc[-1])) else None
+    ema_ok = float(c) > float(ema8)
+    vol_ok = float(volr) > vol_min
+    vwap_ok = (vwap is None) or (float(c) >= vwap)
+    passed = ema_ok and vol_ok and vwap_ok
+    detail = (f"15分钟确认: 站上EMA8={ema_ok}(c={float(c):.3f}/ema8={float(ema8):.3f}) "
+              f"放量={vol_ok}(量比{float(volr):.2f}>{vol_min}) 站上VWAP={vwap_ok}"
+              f"{f'(vwap={vwap:.3f})' if vwap is not None else ''}")
+    return passed, detail, False
+
+
+# ============================================================
+# 卡点量化（GUI 直观化 2026-08-25）：不只显示"未过"，还算出"差多少"
+# ============================================================
+
+def build_blockers(regime, feats, dd, dir_ok, trend_ok, dd_ok, golden_ok,
+                   intraday_confirm=None, scan_type="manual") -> tuple:
+    """汇总所有未过的【必要条件】及其量化差距，返回 (block_reason, blockers)。
+
+    blockers: [{key, label, gap_txt, need, cur}]，按判定顺序（regime→trend→drawdown→日内确认）。
+    block_reason: 第一个卡住的必要条件的一句话（含差多少）。全部通过 → (None, [])。
+    金叉是加分项，不计入 blockers（不卡 signal）。
+    """
+    f = feats or {}
+    price = f.get("price")
+    ma20 = f.get("ma20")
+    ma60 = f.get("ma60")
+    blockers = []
+
+    # 1) 市场方向（regime 必须 trend_up/trend_dn）
+    if not dir_ok:
+        blockers.append({
+            "key": "t_regime", "label": "市场有方向",
+            "gap_txt": f"当前震荡市(指数在MA60±缓冲带内)，signal 结构性不可达",
+            "need": "指数站上MA60×1.005(多头) 或 跌破MA60×0.97(空头)", "cur": regime,
+        })
+
+    # 2) 多头结构（价 > MA20 且 > MA60）——仅多头趋势要求
+    if regime == "trend_up" and not trend_ok:
+        parts = []
+        if price is not None and ma20 and price <= ma20:
+            parts.append(f"距MA20差{(price/ma20-1)*100:+.2f}%")
+        if price is not None and ma60 and price <= ma60:
+            parts.append(f"距MA60差{(price/ma60-1)*100:+.2f}%")
+        blockers.append({
+            "key": "t_trend", "label": "多头结构",
+            "gap_txt": ("，".join(parts) if parts else "价未站上MA20/MA60"),
+            "need": "价同时站上MA20和MA60", "cur": f"价{price}",
+        })
+
+    # 3) 回撤到位
+    if not dd_ok:
+        if regime == "trend_dn":
+            need_txt = "深回撤<-10%"
+            gap = f"当前回撤{dd:+.1%}，距-10%还差{(dd-(-0.10))*100:+.1f}pp"
+        else:
+            need_txt = "浅回撤≥-3%"
+            gap = f"当前回撤{dd:+.1%}，距-3%还差{((-0.03)-dd)*100:+.1f}pp"
+        blockers.append({
+            "key": "t_drawdown", "label": "回撤到位",
+            "gap_txt": gap, "need": need_txt, "cur": f"{dd:+.1%}",
+        })
+
+    # 4) 日内右侧确认（仅 intraday 且前三项已过时才可能成为卡点）
+    if scan_type == "intraday" and dir_ok and (regime != "trend_up" or trend_ok) and dd_ok \
+            and intraday_confirm and not intraday_confirm.get("insufficient") \
+            and not intraday_confirm.get("passed"):
+        blockers.append({
+            "key": "intraday_confirm", "label": "日内确认",
+            "gap_txt": intraday_confirm.get("detail") or "15分钟右侧确认未过",
+            "need": "15m站上EMA8+放量+站上VWAP", "cur": "未确认",
+        })
+
+    block_reason = None
+    if blockers:
+        b0 = blockers[0]
+        block_reason = f"卡「{b0['label']}」：{b0['gap_txt']}"
+    return block_reason, blockers
+
+
+# ============================================================
 # 综合评分 & 仓位计算
 # ============================================================
 
@@ -903,12 +1035,17 @@ def scan_stock(code: str, stock_info: dict, date_str: str = None,
         "latest_price": None,
         "conditions": {},
         "composite_score": 0,
+        "score_ceiling": 100,     # P1(2026-08-25): 当前 regime 下 score 上限（range=70，signal 不可达）
+        "signal_reachable": True, # P1(2026-08-25): 当前 regime 下 signal 是否结构性可达
         "verdict": "insufficient_data",
         "channel": None,          # W33 A1: 触发通道 iceberg/breakout/both/None
         "approach_status": None,  # W33 A2: immediate/intraday_pending/next_day_pending
         "channels": {},           # W33 A1: 双通道明细 {iceberg:{...}, breakout:{...}}
         "gated": False,           # W33 A1 破闸: 顶层 signal 被降级为 approaching 标记
         "gated_from": None,       # 被降级前的原始 verdict（signal）
+        "intraday_confirm": None, # W35(2026-08-25): 日内右侧确认 {passed,detail,insufficient}（仅intraday go时）
+        "block_reason": None,     # GUI直观化(2026-08-25): 一句话卡点（第一个未过必要条件+差多少）
+        "blockers": [],           # GUI直观化(2026-08-25): 全部未过必要条件的差距清单
         "position": None,
         "note": None,
         "errors": [],
@@ -996,11 +1133,52 @@ def scan_stock(code: str, stock_info: dict, date_str: str = None,
                 _v = "weak"
             result["verdict"] = _v
             result["composite_score"] = _score
+            # P1(2026-08-25): verdict 与 score 脱钩修复。
+            #   signal 唯一来源是 go=true，而 go 要求 regime∈{trend_up,trend_dn}（timing_gate:go 定义）。
+            #   range 市 t_regime 恒 False → signal 结构性不可达，但 score 仍可达 70(trend30+dd30+golden10)，
+            #   在 0~100 隐含刻度下"70 分"看起来像"离 signal 一步之遥"，实为天花板。
+            #   显式给出：signal_reachable(当前 regime 下 signal 是否可能出现) 与
+            #   score_ceiling(当前 regime 下 score 的上限)，供 GUI/trace 诚实展示，不改 go/verdict 逻辑本身。
+            _signal_reachable = _dir_ok  # 仅 trend_up/trend_dn 时 signal 可达
+            _score_ceiling = 100 if _signal_reachable else 70  # range: t_regime 那 30 分锁死，上限 70
+            result["signal_reachable"] = bool(_signal_reachable)
+            result["score_ceiling"] = int(_score_ceiling)
             result["channel"] = None
             result["approach_status"] = "immediate" if _v == "signal" else None
             result["gated"] = False
             result["gated_from"] = None
             result["timing"] = {"regime": _regime, "go": _tv["go"], "reason": _tv["reason"]}
+
+            # W35(2026-08-25) 日内右侧确认闸门 + 例外出口（两年验证：回撤保护稳健，fwd5 样本外打平）。
+            #   仅 intraday 扫描且 go=true 时生效：确认通过→保持 signal(即时可建)；
+            #   未确认→降级 approaching + intraday_pending(待日内确认，不丢弃，收盘前/次日可再触发)。
+            #   eod/manual 拿不到当日完整分钟线，不套此闸门（维持原 signal，盘后不惩罚）。
+            result["intraday_confirm"] = None
+            if _ETP.get("intraday_confirm_gate", True) and _v == "signal" and scan_type == "intraday":
+                _cf_pass, _cf_detail, _cf_insuf = check_intraday_confirm(
+                    df_1min, vol_min=float(_ETP.get("intraday_confirm_vol_min", 1.2)))
+                result["intraday_confirm"] = {
+                    "passed": bool(_cf_pass), "detail": _cf_detail,
+                    "insufficient": bool(_cf_insuf),
+                }
+                if _cf_insuf:
+                    # 数据不足：不惩罚，维持 signal（与盘后同等对待），但标注待确认
+                    result["approach_status"] = "intraday_pending"
+                elif not _cf_pass:
+                    # GO 但日内未确认 → 降级观察，不出建仓建议
+                    result["verdict"] = "approaching"
+                    result["approach_status"] = "intraday_pending"
+
+            # GUI 直观化(2026-08-25)：算"卡在哪、差多少"。signal 时无卡点。
+            if result["verdict"] == "signal":
+                result["block_reason"] = None
+                result["blockers"] = []
+            else:
+                _br, _bk = build_blockers(_regime, _f, _dd, _dir_ok, _trend, _dd_ok, _golden,
+                                          intraday_confirm=result.get("intraday_confirm"),
+                                          scan_type=scan_type)
+                result["block_reason"] = _br
+                result["blockers"] = _bk
     except Exception as _te:
         pass  # timing_gate 故障时保留 W33 双通道判定
 
@@ -1760,11 +1938,16 @@ def run_position_scan(date_str: str = None, capital: float = None,
             "name": r["name"],
             "price": _py_type(r.get("latest_price")),
             "composite_score": int(r["composite_score"]),
+            "score_ceiling": int(r.get("score_ceiling", 100)),
+            "signal_reachable": bool(r.get("signal_reachable", True)),
             "verdict": str(r["verdict"]),
             "channel": r.get("channel"),
             "approach_status": r.get("approach_status"),
             "gated": bool(r.get("gated", False)),
             "gated_from": r.get("gated_from"),
+            "intraday_confirm": r.get("intraday_confirm"),
+            "block_reason": r.get("block_reason"),
+            "blockers": r.get("blockers") or [],
             "timing": r.get("timing") or {"regime": None, "go": None, "reason": "未启用"},
             "divergence": r.get("divergence") or {},
             "divergence_detail": r.get("divergence_detail") or {},

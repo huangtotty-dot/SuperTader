@@ -188,7 +188,7 @@
     "sector": "消费电子/存储芯片/先进封装/芯片概念",
     "sector_type": "legacy",
     "updated_at": "2026-06-24 11:21:37",
-    "jiuyan_concept": "存储芯片-封测-DRAM",
+    "jiuyan_concept": "存储芯片-封测",
     "jiuyan_category": "半导体"
   },
   "000024": {
@@ -296,7 +296,7 @@
     "sector": "专业工程/智谱AI/华为鲲鹏/数据安全",
     "sector_type": "legacy",
     "updated_at": "2026-06-24 11:21:37",
-    "jiuyan_concept": "半导体设备-洁净室项目工程",
+    "jiuyan_concept": "半导体设备",
     "jiuyan_category": "半导体"
   },
   "000033": {
@@ -320,7 +320,7 @@
     "sector": "IT服务Ⅱ/算力租赁/华为昇腾/东数西算(算力)",
     "sector_type": "legacy",
     "updated_at": "2026-05-30 21:48:57",
-    "jiuyan_concept": "SaaS软件与服务-税务",
+    "jiuyan_concept": "SaaS软件与服务",
     "jiuyan_category": "云计算"
   },
   "000035": {
@@ -524,10 +524,10 @@
     "sector": "通信设备/AI手机/汽车电子/6G概念",
     "sector_type": "legacy",
     "updated_at": "2026-06-24 11:21:37",
-    "jiuyan_concept": "算力芯片-DPU|算力芯片-GPU",
+    "jiuyan_concept": "算力芯片",
     "jiuyan_category": "半导体",
     "jiuyan_category1": "半导体",
-    "jiuyan_concept1": "算力芯片-DPU|算力芯片-GPU",
+    "jiuyan_concept1": "算力芯片",
     "jiuyan_category2": "液冷",
     "jiuyan_concept2": "液冷服务器"
   },
@@ -552,10 +552,10 @@
     "sector": "计算机设备/中国AI 50/AI PC/东数西算(算力)",
     "sector_type": "legacy",
     "updated_at": "2026-06-24 11:21:37",
-    "jiuyan_concept": "算力芯片-CPU",
+    "jiuyan_concept": "算力芯片",
     "jiuyan_category": "半导体",
     "jiuyan_category1": "半导体",
-    "jiuyan_concept1": "算力芯片-CPU",
+    "jiuyan_concept1": "算力芯片",
     "jiuyan_category2": "液冷",
     "jiuyan_concept2": "液冷服务器"
   },
@@ -700,10 +700,10 @@
     "sector": "电力/盐湖提锂/磷化工/小金属概念",
     "sector_type": "legacy",
     "updated_at": "2026-06-16 23:33:11",
-    "jiuyan_concept": "锂矿资源-锂辉石提锂",
+    "jiuyan_concept": "锂矿资源",
     "jiuyan_category": "锂电池",
     "jiuyan_category1": "电力",
-    "jiuyan_concept1": "电力运营-绿电"
+    "jiuyan_concept1": "电力运营"
   },
   "000156": {
     "business_summary": "主营电视广播Ⅱ",
@@ -774,7 +774,7 @@
     "sector": "炼化及贸易/环氧丙烷/煤化工概念/POE胶膜",
     "sector_type": "legacy",
     "updated_at": "2026-05-30 21:48:57",
-    "jiuyan_concept": "其他关键材料及设备-隔膜",
+    "jiuyan_concept": "其他关键材料及设备",
     "jiuyan_category": "锂电池"
   },
   "000333": {
@@ -786,7 +786,7 @@
     "sector": "白色家电/超级品牌/高股息精选/证金持股",
     "sector_type": "legacy",
     "updated_at": "2026-06-24 11:21:37",
-    "jiuyan_concept": "半导体设备-AMHS自动物料搬运系统",
+    "jiuyan_concept": "半导体设备",
     "jiuyan_category": "半导体"
   },
   "000338": {
@@ -813,13 +813,13 @@
     "jiuyan_concept": "",
     "jiuyan_category": "",
     "jiuyan_category1": "电力",
-    "jiuyan_concept1": "智能电网-输变配电-输电",
+    "jiuyan_concept1": "智能电网-输变配电",
     "jiuyan_category2": "电力",
-    "jiuyan_concept2": "智能电网-输变配电-配电",
+    "jiuyan_concept2": "智能电网-输变配电",
     "jiuyan_category3": "电力",
-    "jiuyan_concept3": "智能电网-用户侧-通信模块",
+    "jiuyan_concept3": "智能电网-用户侧",
     "jiuyan_category4": "可控核聚变",
-    "jiuyan_concept4": "电源-脉冲电源"
+    "jiuyan_concept4": "电源"
   },
   "000401": {
     "business_summary": "主营水泥",
@@ -902,7 +902,7 @@
     "sector": "金属铜/盐湖提锂/小金属概念",
     "sector_type": "legacy",
     "updated_at": "2026-06-16 23:33:11",
-    "jiuyan_concept": "锂矿资源-盐湖提锂",
+    "jiuyan_concept": "锂矿资源",
     "jiuyan_category": "锂电池"
   },
   "000409": {
@@ -1579,7 +1579,7 @@
     "jiuyan_concept": "",
     "jiuyan_category": "",
     "jiuyan_category1": "电力",
-    "jiuyan_concept1": "电力运营-火电"
+    "jiuyan_concept1": "电力运营"
   },
   "000544": {
     "business_summary": "主营水的生产和供应业",
@@ -1627,9 +1627,9 @@
     "sector_type": "legacy",
     "updated_at": "2026-08-08 00:00:00",
     "jiuyan_category1": "商业航天",
-    "jiuyan_concept1": "国家队-航天科工",
+    "jiuyan_concept1": "国家队",
     "jiuyan_category2": "军工",
-    "jiuyan_concept2": "分支系统|国家队-航天科工"
+    "jiuyan_concept2": "分支系统|国家队"
   },
   "000548": {
     "business_summary": "主营道路运输业",
@@ -1676,7 +1676,7 @@
     "sector": "专用设备制造业",
     "sector_type": "legacy",
     "updated_at": "2026-06-24 11:21:37",
-    "jiuyan_concept": "半导体设备-空气净化系统关键设备",
+    "jiuyan_concept": "半导体设备",
     "jiuyan_category": "半导体"
   },
   "000552": {
@@ -1904,7 +1904,7 @@
     "sector": "乡村振兴/农机",
     "sector_type": "legacy",
     "updated_at": "2026-05-30 21:48:57",
-    "jiuyan_concept": "其他关键材料及设备-隔膜",
+    "jiuyan_concept": "其他关键材料及设备",
     "jiuyan_category": "锂电池"
   },
   "000571": {
@@ -2173,7 +2173,7 @@
     "jiuyan_concept": "",
     "jiuyan_category": "",
     "jiuyan_category1": "电力",
-    "jiuyan_concept1": "电力运营-火电"
+    "jiuyan_concept1": "电力运营"
   },
   "000601": {
     "business_summary": "能源（电力、供热、供汽）、生态植物纤维制品、精密（智能）制造。",
@@ -2187,7 +2187,7 @@
     "jiuyan_concept": "",
     "jiuyan_category": "",
     "jiuyan_category1": "电力",
-    "jiuyan_concept1": "电力运营-绿电"
+    "jiuyan_concept1": "电力运营"
   },
   "000602": {
     "business_summary": "主营其他",
@@ -2477,7 +2477,7 @@
     "jiuyan_concept": "",
     "jiuyan_category": "",
     "jiuyan_category1": "PCB",
-    "jiuyan_concept1": "MLCC-AI领域"
+    "jiuyan_concept1": "MLCC"
   },
   "000637": {
     "business_summary": "主营化学原料和化学制品制造业",
@@ -2555,7 +2555,7 @@
     "jiuyan_category2": "PCB",
     "jiuyan_concept2": "钻针",
     "jiuyan_category3": "可控核聚变",
-    "jiuyan_concept3": "第一壁材料-钨材料"
+    "jiuyan_concept3": "第一壁材料"
   },
   "000659": {
     "business_summary": "主营其他",
@@ -2722,7 +2722,7 @@
     "sector": "塑料/芯片概念/液冷服务器/污水处理",
     "sector_type": "legacy",
     "updated_at": "2026-05-30 21:48:57",
-    "jiuyan_concept": "AI应用|字节生态-字节跳动生态",
+    "jiuyan_concept": "AI应用|字节生态",
     "jiuyan_category": "AI应用"
   },
   "000682": {
@@ -2737,11 +2737,11 @@
     "jiuyan_concept": "",
     "jiuyan_category": "",
     "jiuyan_category1": "电力",
-    "jiuyan_concept1": "智能电网-用户侧-智能调度",
+    "jiuyan_concept1": "智能电网-用户侧",
     "jiuyan_category2": "电力",
-    "jiuyan_concept2": "智能电网-虚拟电厂-技术支持",
+    "jiuyan_concept2": "智能电网-虚拟电厂",
     "jiuyan_category3": "电力",
-    "jiuyan_concept3": "智能电网-虚拟电厂-负荷聚合商"
+    "jiuyan_concept3": "智能电网-虚拟电厂"
   },
   "000683": {
     "business_summary": "主营化学原料和化学制品制造业",
@@ -3093,7 +3093,7 @@
     "jiuyan_concept": "",
     "jiuyan_category": "",
     "jiuyan_category1": "电力",
-    "jiuyan_concept1": "电力运营-其他"
+    "jiuyan_concept1": "电力运营"
   },
   "000723": {
     "business_summary": "主营石油、煤炭及其他燃料加工业",
@@ -3189,7 +3189,7 @@
     "sector_type": "legacy",
     "updated_at": "2026-08-08 00:00:00",
     "jiuyan_category1": "PCB",
-    "jiuyan_concept1": "MLCC-AI领域",
+    "jiuyan_concept1": "MLCC",
     "jiuyan_category2": "军工",
     "jiuyan_concept2": "AI领域MLCC|分支系统|导弹"
   },
@@ -3382,7 +3382,7 @@
     "sector": "冶钢原料/盐湖提锂/小金属概念/化肥",
     "sector_type": "legacy",
     "updated_at": "2026-06-16 23:33:11",
-    "jiuyan_concept": "锂矿资源-盐湖提锂",
+    "jiuyan_concept": "锂矿资源",
     "jiuyan_category": "锂电池"
   },
   "000763": {
@@ -3457,7 +3457,7 @@
     "jiuyan_concept": "",
     "jiuyan_category": "",
     "jiuyan_category1": "可控核聚变",
-    "jiuyan_concept1": "阀门-真空阀门|中核集团控股"
+    "jiuyan_concept1": "阀门|中核集团控股"
   },
   "000778": {
     "business_summary": "主营金属制品业",
@@ -3564,7 +3564,7 @@
     "sector": "医药制造业",
     "sector_type": "legacy",
     "updated_at": "2026-05-30 21:48:57",
-    "jiuyan_concept": "电解液-电解液添加剂",
+    "jiuyan_concept": "电解液",
     "jiuyan_category": "锂电池"
   },
   "000791": {
@@ -3579,7 +3579,7 @@
     "jiuyan_concept": "",
     "jiuyan_category": "",
     "jiuyan_category1": "电力",
-    "jiuyan_concept1": "电力运营-水电"
+    "jiuyan_concept1": "电力运营"
   },
   "000792": {
     "business_summary": "主营化学原料和化学制品制造业",
@@ -3590,7 +3590,7 @@
     "sector": "化学原料和化学制品制造业",
     "sector_type": "legacy",
     "updated_at": "2026-06-16 23:33:11",
-    "jiuyan_concept": "锂矿资源-盐湖提锂",
+    "jiuyan_concept": "锂矿资源",
     "jiuyan_category": "锂电池"
   },
   "000795": {
@@ -3722,7 +3722,7 @@
     "sector": "工业金属/电解铝/氧化铝",
     "sector_type": "legacy",
     "updated_at": "2026-06-16 23:33:11",
-    "jiuyan_concept": "其他关键材料及设备-铝箔",
+    "jiuyan_concept": "其他关键材料及设备",
     "jiuyan_category": "锂电池"
   },
   "000809": {
@@ -3763,7 +3763,7 @@
     "jiuyan_category1": "液冷",
     "jiuyan_concept1": "冷却塔|温控设备|压缩机|磁悬浮压缩机",
     "jiuyan_category2": "可控核聚变",
-    "jiuyan_concept2": "热管理/制冷-氦制冷系统|热管理/制冷-冷却系统"
+    "jiuyan_concept2": "热管理/制冷"
   },
   "000812": {
     "business_summary": "主营印刷和记录媒介复制业",
@@ -4091,7 +4091,7 @@
     "jiuyan_category1": "央企",
     "jiuyan_concept1": "",
     "jiuyan_category2": "电力",
-    "jiuyan_concept2": "电力运营-绿电"
+    "jiuyan_concept2": "电力运营"
   },
   "000863": {
     "business_summary": "主营房地产业",
@@ -4155,9 +4155,9 @@
     "jiuyan_category1": "央企",
     "jiuyan_concept1": "",
     "jiuyan_category2": "电力",
-    "jiuyan_concept2": "智能电网-虚拟电厂-负荷聚合商",
+    "jiuyan_concept2": "智能电网-虚拟电厂",
     "jiuyan_category3": "电力",
-    "jiuyan_concept3": "电力运营-绿电"
+    "jiuyan_concept3": "电力运营"
   },
   "000876": {
     "business_summary": "主营农副食品加工业",
@@ -4411,9 +4411,9 @@
     "sector_type": "legacy",
     "updated_at": "2026-08-08 00:00:00",
     "jiuyan_category1": "商业航天",
-    "jiuyan_concept1": "国家队-航天科工",
+    "jiuyan_concept1": "国家队",
     "jiuyan_category2": "军工",
-    "jiuyan_concept2": "国家队-航天科工|火箭军"
+    "jiuyan_concept2": "国家队|火箭军"
   },
   "000902": {
     "business_summary": "主营化学原料和化学制品制造业",
@@ -4520,7 +4520,7 @@
     "sector": "电信、广播电视和卫星传输服务",
     "sector_type": "legacy",
     "updated_at": "2026-05-30 21:48:57",
-    "jiuyan_concept": "智慧AI-参股|智慧AI-核心",
+    "jiuyan_concept": "智慧AI",
     "jiuyan_category": "AI应用"
   },
   "000919": {
@@ -4676,7 +4676,7 @@
     "sector": "工业金属/电解铝/煤炭概念",
     "sector_type": "legacy",
     "updated_at": "2026-06-16 23:33:11",
-    "jiuyan_concept": "其他关键材料及设备-铝箔",
+    "jiuyan_concept": "其他关键材料及设备",
     "jiuyan_category": "锂电池"
   },
   "000935": {
@@ -4901,7 +4901,7 @@
     "jiuyan_concept": "",
     "jiuyan_category": "",
     "jiuyan_category1": "可控核聚变",
-    "jiuyan_concept1": "第一壁材料-铍材料|其他-屏蔽材料"
+    "jiuyan_concept1": "第一壁材料|其他"
   },
   "000963": {
     "business_summary": "主营零售业",
@@ -4912,7 +4912,7 @@
     "sector": "零售业",
     "sector_type": "legacy",
     "updated_at": "2026-08-10 20:00:00",
-    "jiuyan_concept": "GLP-1减重降糖|自身免疫|医美",
+    "jiuyan_concept": "GLP|自身免疫|医美",
     "jiuyan_category": "创新药"
   },
   "000965": {
@@ -4977,7 +4977,7 @@
     "jiuyan_concept": "",
     "jiuyan_category": "",
     "jiuyan_category1": "可控核聚变",
-    "jiuyan_concept1": "第一壁产品-第一壁/包层|第一壁产品-钨铜复合材料|堆内结构件-第一壁组件|偏滤器-偏滤器部件|偏滤器-偏滤器材料|其他-屏蔽材料|可控核聚变创新联合体成员"
+    "jiuyan_concept1": "第一壁产品|堆内结构件|偏滤器|其他|可控核聚变创新联合体成员"
   },
   "000970": {
     "business_summary": "钕铁硼永磁材料的研发、生产和销售。中科院旗下，中国最大、全球第二大钕铁硼永磁材料生产企业",
@@ -5000,7 +5000,7 @@
     "sector": "橡胶和塑料制品业",
     "sector_type": "legacy",
     "updated_at": "2026-06-17 12:29:31",
-    "jiuyan_concept": "其他关键材料及设备-隔膜",
+    "jiuyan_concept": "其他关键材料及设备",
     "jiuyan_category": "锂电池"
   },
   "000975": {
@@ -5171,7 +5171,7 @@
     "jiuyan_concept": "",
     "jiuyan_category": "",
     "jiuyan_category1": "电力",
-    "jiuyan_concept1": "电力运营-水电"
+    "jiuyan_concept1": "电力运营"
   },
   "000995": {
     "business_summary": "主营酒、饮料和精制茶制造业",
@@ -5345,7 +5345,7 @@
     "jiuyan_concept": "",
     "jiuyan_category": "",
     "jiuyan_category1": "电力",
-    "jiuyan_concept1": "电力运营-绿电"
+    "jiuyan_concept1": "电力运营"
   },
   "001211": {
     "business_summary": "主营木材加工和木、竹、藤、棕、草制品业",
@@ -5488,7 +5488,7 @@
     "sector": "自动化设备/消费电子概念/PCB概念/专精特新",
     "sector_type": "legacy",
     "updated_at": "2026-05-30 21:48:57",
-    "jiuyan_concept": "其他关键材料及设备-隔膜",
+    "jiuyan_concept": "其他关键材料及设备",
     "jiuyan_category": "锂电池"
   },
   "001225": {
@@ -5697,7 +5697,7 @@
     "jiuyan_concept": "",
     "jiuyan_category": "",
     "jiuyan_category1": "电力",
-    "jiuyan_concept1": "电力运营-绿电"
+    "jiuyan_concept1": "电力运营"
   },
   "001259": {
     "business_summary": "厨房小家电与家居小家电系列产品研发、设计、生产与销售。",
@@ -5781,9 +5781,9 @@
     "sector_type": "legacy",
     "updated_at": "2026-08-08 00:00:00",
     "jiuyan_category1": "商业航天",
-    "jiuyan_concept1": "卫星-有效载荷-射频",
+    "jiuyan_concept1": "卫星-有效载荷",
     "jiuyan_category2": "军工",
-    "jiuyan_concept2": "卫星-有效载荷-射频|雷达"
+    "jiuyan_concept2": "卫星-有效载荷|雷达"
   },
   "001277": {
     "business_summary": "主营金属制品、机械和设备修理业",
@@ -5976,7 +5976,7 @@
     "sector": "石墨电极/锂电池概念",
     "sector_type": "legacy",
     "updated_at": "2026-06-17 12:29:31",
-    "jiuyan_concept": "负极及辅材-负极材料",
+    "jiuyan_concept": "负极及辅材",
     "jiuyan_category": "锂电池"
   },
   "001306": {
@@ -6012,7 +6012,7 @@
     "sector": "半导体/存储芯片/AI PC/中芯国际概念",
     "sector_type": "legacy",
     "updated_at": "2026-06-24 11:21:37",
-    "jiuyan_concept": "存储芯片-DRAM-DDR|存储芯片-DRAM-模组|存储芯片-SSD|存储芯片-主控芯片",
+    "jiuyan_concept": "存储芯片-DRAM|存储芯片",
     "jiuyan_category": "半导体"
   },
   "001311": {
@@ -6144,7 +6144,7 @@
     "sector": "铁路、船舶、航空航天和其他运输设备制造业",
     "sector_type": "legacy",
     "updated_at": "2026-05-30 21:48:57",
-    "jiuyan_concept": "其他-其他",
+    "jiuyan_concept": "其他",
     "jiuyan_category": "AI应用"
   },
   "001325": {
@@ -6423,7 +6423,7 @@
     "jiuyan_concept": "",
     "jiuyan_category": "",
     "jiuyan_category1": "电力",
-    "jiuyan_concept1": "电力运营-其他"
+    "jiuyan_concept1": "电力运营"
   },
   "001378": {
     "business_summary": "主营其他",
@@ -6446,7 +6446,7 @@
     "sector": "通用设备制造业",
     "sector_type": "legacy",
     "updated_at": "2026-06-17 12:42:30",
-    "jiuyan_concept": "火箭-零部件",
+    "jiuyan_concept": "火箭",
     "jiuyan_category": "商业航天"
   },
   "001380": {
@@ -6629,7 +6629,7 @@
     "jiuyan_concept": "",
     "jiuyan_category": "",
     "jiuyan_category1": "电力",
-    "jiuyan_concept1": "电力运营-火电"
+    "jiuyan_concept1": "电力运营"
   },
   "001914": {
     "business_summary": "主营房地产业",
@@ -6700,7 +6700,7 @@
     "sector": "化学原料和化学制品制造业",
     "sector_type": "legacy",
     "updated_at": "2026-05-30 21:48:57",
-    "jiuyan_concept": "电解液-电解液添加剂",
+    "jiuyan_concept": "电解液",
     "jiuyan_category": "锂电池"
   },
   "002006": {
@@ -6929,9 +6929,9 @@
     "sector_type": "legacy",
     "updated_at": "2026-08-08 00:00:00",
     "jiuyan_category1": "商业航天",
-    "jiuyan_concept1": "国家队-航天科工",
+    "jiuyan_concept1": "国家队",
     "jiuyan_category2": "军工",
-    "jiuyan_concept2": "国家队-航天科工|导弹"
+    "jiuyan_concept2": "国家队|导弹"
   },
   "002026": {
     "business_summary": "主营电气机械和器材制造业",
@@ -7107,7 +7107,7 @@
     "jiuyan_category1": "央企",
     "jiuyan_concept1": "",
     "jiuyan_category2": "电力",
-    "jiuyan_concept2": "电力运营-水电"
+    "jiuyan_concept2": "电力运营"
   },
   "002040": {
     "business_summary": "主营水上运输业",
@@ -7195,7 +7195,7 @@
     "jiuyan_category1": "机器人",
     "jiuyan_concept1": "丝杠设备",
     "jiuyan_category2": "商业航天",
-    "jiuyan_concept2": "火箭-零部件"
+    "jiuyan_concept2": "火箭"
   },
   "002047": {
     "business_summary": "主营建筑装饰、装修和其他建筑业",
@@ -7231,9 +7231,9 @@
     "sector_type": "legacy",
     "updated_at": "2026-08-08 00:00:00",
     "jiuyan_category1": "半导体",
-    "jiuyan_concept1": "存储芯片-DRAM-LPDDR",
+    "jiuyan_concept1": "存储芯片-DRAM",
     "jiuyan_category2": "军工",
-    "jiuyan_concept2": "分支系统|存储芯片-DRAM-LPDDR"
+    "jiuyan_concept2": "分支系统|存储芯片-DRAM"
   },
   "002050": {
     "business_summary": "制冷空调电器与汽车的零件部件组件的研发、生产与销售。",
@@ -7379,7 +7379,7 @@
     "jiuyan_concept": "",
     "jiuyan_category": "",
     "jiuyan_category1": "电力",
-    "jiuyan_concept1": "智能电网-用户侧-智能调度"
+    "jiuyan_concept1": "智能电网-用户侧"
   },
   "002064": {
     "business_summary": "氨纶纤维、聚氨酯原液、己二酸等聚氨酯制品材料的研发、生产与销售。",
@@ -7577,7 +7577,7 @@
     "jiuyan_concept": "",
     "jiuyan_category": "",
     "jiuyan_category1": "锂电池",
-    "jiuyan_concept1": "其他关键材料及设备-隔膜",
+    "jiuyan_concept1": "其他关键材料及设备",
     "jiuyan_category2": "PCB",
     "jiuyan_concept2": "电子布"
   },
@@ -7590,7 +7590,7 @@
     "sector": "装修装饰Ⅱ/新型城镇化/第三代半导体/光伏建筑一体化",
     "sector_type": "legacy",
     "updated_at": "2026-06-24 11:21:37",
-    "jiuyan_concept": "半导体设备-洁净室项目工程",
+    "jiuyan_concept": "半导体设备",
     "jiuyan_category": "半导体"
   },
   "002083": {
@@ -7602,7 +7602,7 @@
     "sector": "纺织业",
     "sector_type": "legacy",
     "updated_at": "2026-05-30 21:48:57",
-    "jiuyan_concept": "电解液-电解液添加剂",
+    "jiuyan_concept": "电解液",
     "jiuyan_category": "锂电池"
   },
   "002084": {
@@ -7662,7 +7662,7 @@
     "sector": "非金属矿物制品业",
     "sector_type": "legacy",
     "updated_at": "2026-05-30 21:48:57",
-    "jiuyan_concept": "spacex-供应商-陶瓷纤维-热管理",
+    "jiuyan_concept": "spacex-供应商-陶瓷纤维",
     "jiuyan_category": "商业航天"
   },
   "002089": {
@@ -7689,9 +7689,9 @@
     "jiuyan_concept": "",
     "jiuyan_category": "",
     "jiuyan_category1": "电力",
-    "jiuyan_concept1": "智能电网-输变配电-配电",
+    "jiuyan_concept1": "智能电网-输变配电",
     "jiuyan_category2": "电力",
-    "jiuyan_concept2": "智能电网-虚拟电厂-负荷聚合商"
+    "jiuyan_concept2": "智能电网-虚拟电厂"
   },
   "002091": {
     "business_summary": "主营批发业",
@@ -7702,7 +7702,7 @@
     "sector": "批发业",
     "sector_type": "legacy",
     "updated_at": "2026-05-30 21:48:57",
-    "jiuyan_concept": "电解液-电解液添加剂",
+    "jiuyan_concept": "电解液",
     "jiuyan_category": "锂电池"
   },
   "002092": {
@@ -7894,7 +7894,7 @@
     "sector": "其他",
     "sector_type": "fallback",
     "updated_at": "2026-06-17 12:29:31",
-    "jiuyan_concept": "其他关键材料及设备-隔膜",
+    "jiuyan_concept": "其他关键材料及设备",
     "jiuyan_category": "锂电池"
   },
   "002110": {
@@ -7954,7 +7954,7 @@
     "sector": "商务服务业",
     "sector_type": "legacy",
     "updated_at": "2026-06-17 12:42:30",
-    "jiuyan_concept": "卫星-运营",
+    "jiuyan_concept": "卫星",
     "jiuyan_category": "商业航天"
   },
   "002116": {
@@ -8017,11 +8017,11 @@
     "jiuyan_concept": "储能",
     "jiuyan_category": "电力",
     "jiuyan_category1": "电力",
-    "jiuyan_concept1": "电力设备-智能电表",
+    "jiuyan_concept1": "电力设备",
     "jiuyan_category2": "电力",
-    "jiuyan_concept2": "智能电网-用户侧-智能电表",
+    "jiuyan_concept2": "智能电网-用户侧",
     "jiuyan_category3": "电力",
-    "jiuyan_concept3": "智能电网-用户侧-通信模块"
+    "jiuyan_concept3": "智能电网-用户侧"
   },
   "002123": {
     "business_summary": "主营软件和信息技术服务业",
@@ -8056,7 +8056,7 @@
     "sector": "电池/小金属概念/钠离子电池/金属镍",
     "sector_type": "legacy",
     "updated_at": "2026-06-17 12:29:31",
-    "jiuyan_concept": "正极材料-磷酸铁",
+    "jiuyan_concept": "正极材料",
     "jiuyan_category": "锂电池"
   },
   "002126": {
@@ -8108,10 +8108,10 @@
     "sector": "光伏设备/TOPCON电池/BC电池/HJT电池",
     "sector_type": "legacy",
     "updated_at": "2026-06-24 11:21:37",
-    "jiuyan_concept": "半导体材料-硅片",
+    "jiuyan_concept": "半导体材料",
     "jiuyan_category": "半导体",
     "jiuyan_category1": "半导体",
-    "jiuyan_concept1": "半导体材料-硅片",
+    "jiuyan_concept1": "半导体材料",
     "jiuyan_category2": "太空光伏",
     "jiuyan_concept2": "太空光伏组件|马斯克走访企业"
   },
@@ -8139,7 +8139,7 @@
     "jiuyan_concept": "ai营销",
     "jiuyan_category": "AI应用",
     "jiuyan_category1": "商业航天",
-    "jiuyan_concept1": "spacex-参股",
+    "jiuyan_concept1": "spacex",
     "jiuyan_category2": "云计算",
     "jiuyan_concept2": "DeepSeek"
   },
@@ -8357,11 +8357,11 @@
     "sector_type": "legacy",
     "updated_at": "2026-08-08 00:00:00",
     "jiuyan_category1": "可控核聚变",
-    "jiuyan_concept1": "第一壁产品-第一壁/包层",
+    "jiuyan_concept1": "第一壁产品",
     "jiuyan_category2": "商业航天",
-    "jiuyan_concept2": "spacex-供应商-航空合金",
+    "jiuyan_concept2": "spacex-供应商",
     "jiuyan_category3": "军工",
-    "jiuyan_concept3": "spacex-供应商-航空合金|导弹"
+    "jiuyan_concept3": "spacex-供应商|导弹"
   },
   "002150": {
     "business_summary": "光伏储能设备、元器件以及金属制品的研发、生产及销售业务。",
@@ -8408,7 +8408,7 @@
     "sector": "软件和信息技术服务业",
     "sector_type": "legacy",
     "updated_at": "2026-05-30 21:48:57",
-    "jiuyan_concept": "SaaS软件与服务-垂直软件",
+    "jiuyan_concept": "SaaS软件与服务",
     "jiuyan_category": "云计算"
   },
   "002154": {
@@ -8444,7 +8444,7 @@
     "sector": "半导体/国家大基金持股/存储芯片/先进封装",
     "sector_type": "legacy",
     "updated_at": "2026-06-24 11:21:37",
-    "jiuyan_concept": "半导体材料-封装基板|存储芯片-封测-HBM",
+    "jiuyan_concept": "半导体材料|存储芯片-封测",
     "jiuyan_category": "半导体"
   },
   "002157": {
@@ -8471,7 +8471,7 @@
     "jiuyan_concept": "",
     "jiuyan_category": "",
     "jiuyan_category1": "可控核聚变",
-    "jiuyan_concept1": "真空室-真空泵|热管理/制冷-氦制冷系统|检测设备-真空检测",
+    "jiuyan_concept1": "真空室|热管理/制冷|检测设备",
     "jiuyan_category2": "液冷",
     "jiuyan_concept2": "压缩机|磁悬浮压缩机"
   },
@@ -8609,7 +8609,7 @@
     "jiuyan_concept": "",
     "jiuyan_category": "",
     "jiuyan_category1": "电力",
-    "jiuyan_concept1": "智能电网-虚拟电厂-负荷聚合商"
+    "jiuyan_concept1": "智能电网-虚拟电厂"
   },
   "002170": {
     "business_summary": "主营化学原料和化学制品制造业",
@@ -8685,7 +8685,7 @@
     "jiuyan_category1": "算力金属",
     "jiuyan_concept1": "镓",
     "jiuyan_category2": "锂电池",
-    "jiuyan_concept2": "锂矿资源-云母提锂"
+    "jiuyan_concept2": "锂矿资源"
   },
   "002177": {
     "business_summary": "主营专用设备制造业",
@@ -8876,7 +8876,7 @@
     "sector": "能源金属/锂电池概念/回购增持再贷款概念/比亚迪概念",
     "sector_type": "legacy",
     "updated_at": "2026-06-16 23:33:11",
-    "jiuyan_concept": "锂矿资源-锂辉石提锂",
+    "jiuyan_concept": "锂矿资源",
     "jiuyan_category": "锂电池"
   },
   "002194": {
@@ -8948,7 +8948,7 @@
     "sector": "通用设备制造业",
     "sector_type": "legacy",
     "updated_at": "2026-06-17 12:42:30",
-    "jiuyan_concept": "火箭-蓝箭火箭",
+    "jiuyan_concept": "火箭",
     "jiuyan_category": "商业航天"
   },
   "002203": {
@@ -9056,7 +9056,7 @@
     "sector": "半导体/存储芯片/汽车芯片/WiFi 6",
     "sector_type": "legacy",
     "updated_at": "2026-06-24 11:21:37",
-    "jiuyan_concept": "存储芯片-DRAM-DDR|存储芯片-DRAM-LPDDR|存储芯片-内存条",
+    "jiuyan_concept": "存储芯片-DRAM|存储芯片",
     "jiuyan_category": "半导体"
   },
   "002215": {
@@ -9236,7 +9236,7 @@
     "sector": "软件开发/ChatGPT概念/华为昇腾/互联网保险",
     "sector_type": "legacy",
     "updated_at": "2026-05-30 21:48:57",
-    "jiuyan_concept": "AI应用|微软生态-AI大模型",
+    "jiuyan_concept": "AI应用|微软生态",
     "jiuyan_category": "AI应用"
   },
   "002232": {
@@ -9344,7 +9344,7 @@
     "sector": "能源金属/盐湖提锂/小金属概念/固态电池",
     "sector_type": "legacy",
     "updated_at": "2026-06-16 23:33:11",
-    "jiuyan_concept": "锂矿资源-锂辉石提锂",
+    "jiuyan_concept": "锂矿资源",
     "jiuyan_category": "锂电池"
   },
   "002241": {
@@ -9407,7 +9407,7 @@
     "jiuyan_concept": "",
     "jiuyan_category": "",
     "jiuyan_category1": "商业航天",
-    "jiuyan_concept1": "spacex-供应商-Molicel电池|spacex-潜在供应商-电源能源",
+    "jiuyan_concept1": "spacex-供应商|spacex-潜在供应商",
     "jiuyan_category2": "HVDC",
     "jiuyan_concept2": "配套相关"
   },
@@ -9504,7 +9504,7 @@
     "sector": "化学纤维/光纤概念/锂电池概念/固态电池",
     "sector_type": "legacy",
     "updated_at": "2026-05-30 21:48:57",
-    "jiuyan_concept": "其他关键材料及设备-隔膜",
+    "jiuyan_concept": "其他关键材料及设备",
     "jiuyan_category": "锂电池"
   },
   "002255": {
@@ -10152,7 +10152,7 @@
     "sector": "互联网和相关服务",
     "sector_type": "legacy",
     "updated_at": "2026-05-30 21:48:57",
-    "jiuyan_concept": "SaaS软件与服务-其他",
+    "jiuyan_concept": "SaaS软件与服务",
     "jiuyan_category": "云计算"
   },
   "002316": {
@@ -10260,7 +10260,7 @@
     "sector": "化学原料和化学制品制造业",
     "sector_type": "legacy",
     "updated_at": "2026-06-16 23:33:11",
-    "jiuyan_concept": "电解液-六氟磷酸锂|电解液-双氟磺酰亚胺锂盐|电解液-电解液添加剂",
+    "jiuyan_concept": "电解液",
     "jiuyan_category": "锂电池"
   },
   "002327": {
@@ -10287,7 +10287,7 @@
     "jiuyan_concept": "",
     "jiuyan_category": "",
     "jiuyan_category1": "AI应用",
-    "jiuyan_concept1": "其他-其他",
+    "jiuyan_concept1": "其他",
     "jiuyan_category2": "液冷",
     "jiuyan_concept2": "其他"
   },
@@ -10377,7 +10377,7 @@
     "jiuyan_category1": "云计算",
     "jiuyan_concept1": "IaaS基础设施服务",
     "jiuyan_category2": "HVDC",
-    "jiuyan_concept2": "固态变压器SST-研发|高压直流电源HVDC"
+    "jiuyan_concept2": "固态变压器SST|高压直流电源HVDC"
   },
   "002336": {
     "business_summary": "主营其他",
@@ -10412,7 +10412,7 @@
     "sector": "仪器仪表制造业",
     "sector_type": "legacy",
     "updated_at": "2026-06-24 11:21:37",
-    "jiuyan_concept": "半导体设备-光刻机整机",
+    "jiuyan_concept": "半导体设备",
     "jiuyan_category": "半导体"
   },
   "002339": {
@@ -10427,11 +10427,11 @@
     "jiuyan_concept": "",
     "jiuyan_category": "",
     "jiuyan_category1": "电力",
-    "jiuyan_concept1": "智能电网-输变配电-变电",
+    "jiuyan_concept1": "智能电网-输变配电",
     "jiuyan_category2": "电力",
-    "jiuyan_concept2": "智能电网-用户侧-智能调度",
+    "jiuyan_concept2": "智能电网-用户侧",
     "jiuyan_category3": "电力",
-    "jiuyan_concept3": "智能电网-虚拟电厂-负荷聚合商"
+    "jiuyan_concept3": "智能电网-虚拟电厂"
   },
   "002340": {
     "business_summary": "主营废弃资源综合利用业",
@@ -10442,7 +10442,7 @@
     "sector": "废弃资源综合利用业",
     "sector_type": "legacy",
     "updated_at": "2026-06-17 12:29:31",
-    "jiuyan_concept": "正极材料-三元前驱",
+    "jiuyan_concept": "正极材料",
     "jiuyan_category": "锂电池"
   },
   "002342": {
@@ -10562,7 +10562,7 @@
     "sector": "计算机、通信和其他电子设备制造业",
     "sector_type": "legacy",
     "updated_at": "2026-05-30 21:48:57",
-    "jiuyan_concept": "AI应用|自研-自研",
+    "jiuyan_concept": "AI应用|自研",
     "jiuyan_category": "AI应用"
   },
   "002352": {
@@ -10706,10 +10706,10 @@
     "sector": "其他电源设备Ⅱ/中国AI 50/数据中心/东数西算(算力)",
     "sector_type": "legacy",
     "updated_at": "2026-05-30 21:48:57",
-    "jiuyan_concept": "固态变压器SST-研发|巴拿马电源|高压直流电源HVDC",
+    "jiuyan_concept": "固态变压器SST|巴拿马电源|高压直流电源HVDC",
     "jiuyan_category": "HVDC",
     "jiuyan_category1": "电力",
-    "jiuyan_concept1": "智能电网-虚拟电厂-技术支持"
+    "jiuyan_concept1": "智能电网-虚拟电厂"
   },
   "002365": {
     "business_summary": "主营医药制造业",
@@ -10792,7 +10792,7 @@
     "sector": "半导体/国家大基金持股/中芯国际概念/存储芯片",
     "sector_type": "legacy",
     "updated_at": "2026-06-24 11:21:37",
-    "jiuyan_concept": "半导体设备-薄膜沉积设备|半导体设备-蚀刻设备",
+    "jiuyan_concept": "半导体设备",
     "jiuyan_category": "半导体"
   },
   "002372": {
@@ -10903,7 +10903,7 @@
     "jiuyan_concept": "",
     "jiuyan_category": "",
     "jiuyan_category1": "电力",
-    "jiuyan_concept1": "智能电网-虚拟电厂-综合服务"
+    "jiuyan_concept1": "智能电网-虚拟电厂"
   },
   "002381": {
     "business_summary": "主营橡胶和塑料制品业",
@@ -11011,7 +11011,7 @@
     "sector_type": "legacy",
     "updated_at": "2026-08-08 00:00:00",
     "jiuyan_category1": "可控核聚变",
-    "jiuyan_concept1": "其他-绝缘材料",
+    "jiuyan_concept1": "其他",
     "jiuyan_category2": "军工",
     "jiuyan_concept2": "空军"
   },
@@ -11228,12 +11228,12 @@
     "sector": "化学原料和化学制品制造业",
     "sector_type": "legacy",
     "updated_at": "2026-06-24 11:21:37",
-    "jiuyan_concept": "半导体材料-湿电子化学品",
+    "jiuyan_concept": "半导体材料",
     "jiuyan_category": "半导体",
     "jiuyan_category1": "半导体",
-    "jiuyan_concept1": "半导体材料-湿电子化学品",
+    "jiuyan_concept1": "半导体材料",
     "jiuyan_category2": "半导体",
-    "jiuyan_concept2": "半导体材料-湿电子化学品"
+    "jiuyan_concept2": "半导体材料"
   },
   "002408": {
     "business_summary": "主营化学原料和化学制品制造业",
@@ -11256,10 +11256,10 @@
     "sector": "半导体/存储芯片/国家大基金持股/中芯国际概念",
     "sector_type": "legacy",
     "updated_at": "2026-06-24 11:21:37",
-    "jiuyan_concept": "半导体材料-电子特气|存储芯片-材料",
+    "jiuyan_concept": "半导体材料|存储芯片",
     "jiuyan_category": "半导体",
     "jiuyan_category1": "半导体",
-    "jiuyan_concept1": "半导体材料-电子特气|存储芯片-材料",
+    "jiuyan_concept1": "半导体材料|存储芯片",
     "jiuyan_category2": "PCB",
     "jiuyan_concept2": "硅微粉",
     "jiuyan_category3": "液冷",
@@ -11274,7 +11274,7 @@
     "sector": "软件和信息技术服务业",
     "sector_type": "legacy",
     "updated_at": "2026-05-30 21:48:57",
-    "jiuyan_concept": "SaaS软件与服务-垂直软件",
+    "jiuyan_concept": "SaaS软件与服务",
     "jiuyan_category": "云计算"
   },
   "002411": {
@@ -11310,7 +11310,7 @@
     "sector": "计算机、通信和其他电子设备制造业",
     "sector_type": "legacy",
     "updated_at": "2026-06-17 12:42:30",
-    "jiuyan_concept": "卫星-有效载荷-遥感",
+    "jiuyan_concept": "卫星-有效载荷",
     "jiuyan_category": "商业航天"
   },
   "002414": {
@@ -11485,7 +11485,7 @@
     "jiuyan_category1": "算力金属",
     "jiuyan_concept1": "锗",
     "jiuyan_category2": "光通信",
-    "jiuyan_concept2": "光材料-磷化铟",
+    "jiuyan_concept2": "光材料",
     "jiuyan_category3": "太空光伏",
     "jiuyan_concept3": "锗电池"
   },
@@ -11558,7 +11558,7 @@
     "sector": "元件/PCB概念/共封装光学(CPO)/先进封装",
     "sector_type": "legacy",
     "updated_at": "2026-06-24 11:21:37",
-    "jiuyan_concept": "半导体材料-封装基板",
+    "jiuyan_concept": "半导体材料",
     "jiuyan_category": "半导体"
   },
   "002437": {
@@ -11585,7 +11585,7 @@
     "jiuyan_concept": "",
     "jiuyan_category": "",
     "jiuyan_category1": "可控核聚变",
-    "jiuyan_concept1": "阀门-真空阀门|阀门-调节阀"
+    "jiuyan_concept1": "阀门"
   },
   "002439": {
     "business_summary": "主营软件和信息技术服务业",
@@ -11596,7 +11596,7 @@
     "sector": "软件和信息技术服务业",
     "sector_type": "legacy",
     "updated_at": "2026-05-30 21:48:57",
-    "jiuyan_concept": "SaaS软件与服务-云安全",
+    "jiuyan_concept": "SaaS软件与服务",
     "jiuyan_category": "云计算"
   },
   "002440": {
@@ -11680,7 +11680,7 @@
     "sector": "军工电子Ⅱ/军工信息化/卫星导航/太赫兹",
     "sector_type": "legacy",
     "updated_at": "2026-06-17 12:42:30",
-    "jiuyan_concept": "卫星-天线",
+    "jiuyan_concept": "卫星",
     "jiuyan_category": "商业航天"
   },
   "002447": {
@@ -11764,12 +11764,12 @@
     "sector": "化学原料和化学制品制造业",
     "sector_type": "legacy",
     "updated_at": "2026-06-24 11:21:37",
-    "jiuyan_concept": "半导体材料-光刻胶",
+    "jiuyan_concept": "半导体材料",
     "jiuyan_category": "半导体",
     "jiuyan_category1": "半导体",
-    "jiuyan_concept1": "半导体材料-光刻胶",
+    "jiuyan_concept1": "半导体材料",
     "jiuyan_category2": "半导体",
-    "jiuyan_concept2": "半导体材料-光刻胶"
+    "jiuyan_concept2": "半导体材料"
   },
   "002454": {
     "business_summary": "主营汽车制造业",
@@ -11852,7 +11852,7 @@
     "sector": "能源金属/盐湖提锂/金属钴/小金属概念",
     "sector_type": "legacy",
     "updated_at": "2026-06-17 12:29:31",
-    "jiuyan_concept": "锂矿资源-锂辉石提锂",
+    "jiuyan_concept": "锂矿资源",
     "jiuyan_category": "锂电池"
   },
   "002461": {
@@ -11913,9 +11913,9 @@
     "sector_type": "legacy",
     "updated_at": "2026-08-08 00:00:00",
     "jiuyan_category1": "商业航天",
-    "jiuyan_concept1": "卫星-地面设备-移动通信终端|卫星-测控系统",
+    "jiuyan_concept1": "卫星-地面设备|卫星",
     "jiuyan_category2": "军工",
-    "jiuyan_concept2": "分支系统|卫星-地面设备-移动通信终端|卫星-测控系统"
+    "jiuyan_concept2": "分支系统|卫星-地面设备|卫星"
   },
   "002466": {
     "business_summary": "硬岩型锂矿资源的开发、锂精矿生产销售以及锂化工产品的生产销售，为清洁能源的转型发展提供可持续、高质量的锂解决方案。",
@@ -11926,7 +11926,7 @@
     "sector": "能源金属/盐湖提锂/小金属概念",
     "sector_type": "legacy",
     "updated_at": "2026-06-16 23:33:11",
-    "jiuyan_concept": "锂矿资源-锂辉石提锂",
+    "jiuyan_concept": "锂矿资源",
     "jiuyan_category": "锂电池"
   },
   "002467": {
@@ -11986,7 +11986,7 @@
     "sector": "电网设备/航空发动机/大飞机/军民融合",
     "sector_type": "legacy",
     "updated_at": "2026-06-17 12:42:30",
-    "jiuyan_concept": "火箭-零部件",
+    "jiuyan_concept": "火箭",
     "jiuyan_category": "商业航天"
   },
   "002472": {
@@ -12278,7 +12278,7 @@
     "sector": "化学制品/固态电池/锂电池概念/宁德时代概念",
     "sector_type": "legacy",
     "updated_at": "2026-06-16 23:33:11",
-    "jiuyan_concept": "锂矿资源-锂辉石提锂",
+    "jiuyan_concept": "锂矿资源",
     "jiuyan_category": "锂电池"
   },
   "002498": {
@@ -12471,9 +12471,9 @@
     "sector_type": "legacy",
     "updated_at": "2026-08-08 00:00:00",
     "jiuyan_category1": "商业航天",
-    "jiuyan_concept1": "卫星-组装制造",
+    "jiuyan_concept1": "卫星",
     "jiuyan_category2": "军工",
-    "jiuyan_concept2": "卫星-组装制造|陆军"
+    "jiuyan_concept2": "卫星|陆军"
   },
   "002520": {
     "business_summary": "提供柔性线制造、系统集成、管控系统开发于一体的综合性智能制造装备。",
@@ -12568,7 +12568,7 @@
     "sector": "金属制品业",
     "sector_type": "legacy",
     "updated_at": "2026-05-30 21:48:57",
-    "jiuyan_concept": "华为生态-合作伙伴",
+    "jiuyan_concept": "华为生态",
     "jiuyan_category": "AI应用"
   },
   "002531": {
@@ -12760,7 +12760,7 @@
     "sector": "生态保护和环境治理业",
     "sector_type": "legacy",
     "updated_at": "2026-06-24 11:21:37",
-    "jiuyan_concept": "半导体材料-电子特气",
+    "jiuyan_concept": "半导体材料",
     "jiuyan_category": "半导体"
   },
   "002550": {
@@ -12832,7 +12832,7 @@
     "sector": "互联网和相关服务",
     "sector_type": "legacy",
     "updated_at": "2026-05-30 21:48:57",
-    "jiuyan_concept": "智慧AI-参股",
+    "jiuyan_concept": "智慧AI",
     "jiuyan_category": "AI应用"
   },
   "002556": {
@@ -13144,7 +13144,7 @@
     "sector": "计算机、通信和其他电子设备制造业",
     "sector_type": "legacy",
     "updated_at": "2026-06-17 12:42:30",
-    "jiuyan_concept": "卫星-地面设备-移动通信终端",
+    "jiuyan_concept": "卫星-地面设备",
     "jiuyan_category": "商业航天"
   },
   "002584": {
@@ -13288,7 +13288,7 @@
     "sector": "食品制造业",
     "sector_type": "legacy",
     "updated_at": "2026-06-17 12:29:31",
-    "jiuyan_concept": "电解液-电解液添加剂",
+    "jiuyan_concept": "电解液",
     "jiuyan_category": "锂电池"
   },
   "002599": {
@@ -13300,7 +13300,7 @@
     "sector": "印刷和记录媒介复制业",
     "sector_type": "legacy",
     "updated_at": "2026-05-30 21:48:57",
-    "jiuyan_concept": "字节生态-字节跳动生态",
+    "jiuyan_concept": "字节生态",
     "jiuyan_category": "AI应用"
   },
   "002600": {
@@ -13312,7 +13312,7 @@
     "sector": "消费电子/智能音箱/无线充电/无线耳机",
     "sector_type": "legacy",
     "updated_at": "2026-05-30 21:48:57",
-    "jiuyan_concept": "spacex-供应商-轻量化-热控-电源组件",
+    "jiuyan_concept": "spacex-供应商-轻量化-热控",
     "jiuyan_category": "商业航天"
   },
   "002601": {
@@ -13324,7 +13324,7 @@
     "sector": "化学原料和化学制品制造业",
     "sector_type": "legacy",
     "updated_at": "2026-06-16 23:33:11",
-    "jiuyan_concept": "正极材料-磷酸铁",
+    "jiuyan_concept": "正极材料",
     "jiuyan_category": "锂电池"
   },
   "002602": {
@@ -13387,7 +13387,7 @@
     "jiuyan_concept": "",
     "jiuyan_category": "",
     "jiuyan_category1": "电力",
-    "jiuyan_concept1": "电力设备-绝缘子"
+    "jiuyan_concept1": "电力设备"
   },
   "002607": {
     "business_summary": "主营教育",
@@ -13497,7 +13497,7 @@
     "jiuyan_concept": "",
     "jiuyan_category": "",
     "jiuyan_category1": "电力",
-    "jiuyan_concept1": "电力运营-其他"
+    "jiuyan_concept1": "电力运营"
   },
   "002617": {
     "business_summary": "碳化硅业务、登高机业务、光伏发电业务、漆包线业务。",
@@ -13715,7 +13715,7 @@
     "jiuyan_concept": "",
     "jiuyan_category": "",
     "jiuyan_category1": "可控核聚变",
-    "jiuyan_concept1": "热管理/制冷-氦制冷系统",
+    "jiuyan_concept1": "热管理/制冷",
     "jiuyan_category2": "液冷",
     "jiuyan_concept2": "压缩机|磁悬浮压缩机"
   },
@@ -13752,7 +13752,7 @@
     "sector": "软件和信息技术服务业",
     "sector_type": "legacy",
     "updated_at": "2026-05-30 21:48:57",
-    "jiuyan_concept": "甲骨文生态-合作伙伴",
+    "jiuyan_concept": "甲骨文生态",
     "jiuyan_category": "AI应用"
   },
   "002643": {
@@ -13860,7 +13860,7 @@
     "sector": "金属制品业",
     "sector_type": "legacy",
     "updated_at": "2026-06-24 11:21:37",
-    "jiuyan_concept": "半导体设备-洁净室项目工程",
+    "jiuyan_concept": "半导体设备",
     "jiuyan_category": "半导体"
   },
   "002653": {
@@ -14220,7 +14220,7 @@
     "sector": "通用设备制造业",
     "sector_type": "legacy",
     "updated_at": "2026-06-24 11:21:37",
-    "jiuyan_concept": "算力芯片-GPU",
+    "jiuyan_concept": "算力芯片",
     "jiuyan_category": "半导体"
   },
   "002686": {
@@ -14448,7 +14448,7 @@
     "sector": "电池/氟化工概念/钠离子电池/固态电池",
     "sector_type": "legacy",
     "updated_at": "2026-06-17 12:29:31",
-    "jiuyan_concept": "正极材料-磷酸铁|电解液-六氟磷酸锂|电解液-双氟磺酰亚胺锂盐|电解液-电解液添加剂",
+    "jiuyan_concept": "正极材料|电解液",
     "jiuyan_category": "锂电池"
   },
   "002711": {
@@ -14664,7 +14664,7 @@
     "sector": "化学原料和化学制品制造业",
     "sector_type": "legacy",
     "updated_at": "2026-06-17 12:29:31",
-    "jiuyan_concept": "电解液-电解液添加剂",
+    "jiuyan_concept": "电解液",
     "jiuyan_category": "锂电池"
   },
   "002735": {
@@ -14717,7 +14717,7 @@
     "jiuyan_category1": "算力金属",
     "jiuyan_concept1": "锗|镓",
     "jiuyan_category2": "锂电池",
-    "jiuyan_concept2": "锂矿资源-锂辉石提锂"
+    "jiuyan_concept2": "锂矿资源"
   },
   "002739": {
     "business_summary": "主营广播、电视、电影和录音制作业",
@@ -14814,7 +14814,7 @@
     "sector": "化学原料和化学制品制造业",
     "sector_type": "legacy",
     "updated_at": "2026-06-17 12:29:31",
-    "jiuyan_concept": "电解液-电解液添加剂",
+    "jiuyan_concept": "电解液",
     "jiuyan_category": "锂电池"
   },
   "002749": {
@@ -14903,7 +14903,7 @@
     "jiuyan_category1": "算力金属",
     "jiuyan_concept1": "镓",
     "jiuyan_category2": "锂电池",
-    "jiuyan_concept2": "锂矿资源-云母提锂"
+    "jiuyan_concept2": "锂矿资源"
   },
   "002757": {
     "business_summary": "主营算力租赁",
@@ -14938,7 +14938,7 @@
     "sector": "化学原料和化学制品制造业",
     "sector_type": "legacy",
     "updated_at": "2026-06-17 12:29:31",
-    "jiuyan_concept": "电解液-六氟磷酸锂|电解液-电解液添加剂",
+    "jiuyan_concept": "电解液",
     "jiuyan_category": "锂电池"
   },
   "002760": {
@@ -15274,7 +15274,7 @@
     "sector": "通信设备/6G概念/卫星导航/铜缆高速连接",
     "sector_type": "legacy",
     "updated_at": "2026-06-17 12:42:30",
-    "jiuyan_concept": "spacex-参股-MacroWiFi|卫星-天线",
+    "jiuyan_concept": "spacex-参股|卫星",
     "jiuyan_category": "商业航天"
   },
   "002793": {
@@ -15310,7 +15310,7 @@
     "sector": "通信设备/共封装光学(CPO)/6G概念/5G",
     "sector_type": "legacy",
     "updated_at": "2026-06-17 12:42:30",
-    "jiuyan_concept": "卫星-天线",
+    "jiuyan_concept": "卫星",
     "jiuyan_category": "商业航天"
   },
   "002797": {
@@ -15406,7 +15406,7 @@
     "sector": "计算机、通信和其他电子设备制造业",
     "sector_type": "legacy",
     "updated_at": "2026-06-16 23:33:11",
-    "jiuyan_concept": "正极材料-三元材料|正极材料-磷酸铁锂",
+    "jiuyan_concept": "正极材料",
     "jiuyan_category": "锂电池"
   },
   "002806": {
@@ -15478,7 +15478,7 @@
     "sector": "橡胶和塑料制品业",
     "sector_type": "legacy",
     "updated_at": "2026-06-17 12:29:31",
-    "jiuyan_concept": "其他关键材料及设备-隔膜",
+    "jiuyan_concept": "其他关键材料及设备",
     "jiuyan_category": "锂电池"
   },
   "002813": {
@@ -15653,7 +15653,7 @@
     "jiuyan_category1": "机器人",
     "jiuyan_concept1": "传感器",
     "jiuyan_category2": "商业航天",
-    "jiuyan_concept2": "卫星-地面设备-移动通信终端"
+    "jiuyan_concept2": "卫星-地面设备"
   },
   "002830": {
     "business_summary": "始终聚焦于建筑装饰和装修业务领域",
@@ -15801,7 +15801,7 @@
     "jiuyan_concept": "钨",
     "jiuyan_category": "算力金属",
     "jiuyan_category1": "可控核聚变",
-    "jiuyan_concept1": "第一壁产品-钨铜复合材料|第一壁材料-钨材料|偏滤器-偏滤器材料"
+    "jiuyan_concept1": "第一壁产品|第一壁材料|偏滤器"
   },
   "002843": {
     "business_summary": "“锯切+电源”双主业，双金属带锯条销量国内第一，全球前三",
@@ -15875,7 +15875,7 @@
     "jiuyan_concept": "",
     "jiuyan_category": "",
     "jiuyan_category1": "锂电池",
-    "jiuyan_concept1": "其他关键材料及设备-结构件",
+    "jiuyan_concept1": "其他关键材料及设备",
     "jiuyan_category2": "机器人",
     "jiuyan_concept2": "行星减速器"
   },
@@ -15963,7 +15963,7 @@
     "jiuyan_concept": "",
     "jiuyan_category": "",
     "jiuyan_category1": "PCB",
-    "jiuyan_concept1": "MLCC-离型膜"
+    "jiuyan_concept1": "MLCC"
   },
   "002860": {
     "business_summary": "国内冰箱与冷柜压缩机热保护器、起动器和密封接线柱骨干生产企业",
@@ -16037,7 +16037,7 @@
     "jiuyan_concept": "",
     "jiuyan_category": "",
     "jiuyan_category1": "商业航天",
-    "jiuyan_concept1": "spacex-潜在供应商-光伏电池",
+    "jiuyan_concept1": "spacex-潜在供应商",
     "jiuyan_category2": "太空光伏",
     "jiuyan_concept2": "太空光伏组件"
   },
@@ -16206,7 +16206,7 @@
     "sector": "通信设备/AI智能体/东数西算",
     "sector_type": "legacy",
     "updated_at": "2026-06-24 11:21:37",
-    "jiuyan_concept": "端侧ai芯片-物联网模组",
+    "jiuyan_concept": "端侧ai芯片",
     "jiuyan_category": "半导体"
   },
   "002882": {
@@ -16331,7 +16331,7 @@
     "jiuyan_category1": "机器人",
     "jiuyan_concept1": "电机",
     "jiuyan_category2": "AI应用",
-    "jiuyan_concept2": "微软生态-AI大模型"
+    "jiuyan_concept2": "微软生态"
   },
   "002893": {
     "business_summary": "主营电力、热力生产和供应业",
@@ -16345,7 +16345,7 @@
     "jiuyan_concept": "",
     "jiuyan_category": "",
     "jiuyan_category1": "电力",
-    "jiuyan_concept1": "电力运营-其他"
+    "jiuyan_concept1": "电力运营"
   },
   "002895": {
     "business_summary": "主营化学原料和化学制品制造业",
@@ -16562,7 +16562,7 @@
     "sector": "化学原料和化学制品制造业",
     "sector_type": "legacy",
     "updated_at": "2026-06-17 12:23:02",
-    "jiuyan_concept": "电解液-双氟磺酰亚胺锂盐|电解液-电解液添加剂",
+    "jiuyan_concept": "电解液",
     "jiuyan_category": "锂电池"
   },
   "002916": {
@@ -16574,10 +16574,10 @@
     "sector": "元件/PCB概念/富士康概念/先进封装",
     "sector_type": "legacy",
     "updated_at": "2026-06-24 11:21:37",
-    "jiuyan_concept": "半导体材料-封装基板",
+    "jiuyan_concept": "半导体材料",
     "jiuyan_category": "半导体",
     "jiuyan_category1": "半导体",
-    "jiuyan_concept1": "半导体材料-封装基板",
+    "jiuyan_concept1": "半导体材料",
     "jiuyan_category2": "PCB",
     "jiuyan_concept2": "AI服务器相关"
   },
@@ -16698,7 +16698,7 @@
     "sector": "电气机械和器材制造业",
     "sector_type": "legacy",
     "updated_at": "2026-05-30 21:48:57",
-    "jiuyan_concept": "固态变压器SST-研发",
+    "jiuyan_concept": "固态变压器SST",
     "jiuyan_category": "HVDC"
   },
   "002928": {
@@ -16770,7 +16770,7 @@
     "sector": "军工信息化/卫星导航",
     "sector_type": "legacy",
     "updated_at": "2026-06-17 12:42:30",
-    "jiuyan_concept": "卫星-有效载荷-时频",
+    "jiuyan_concept": "卫星-有效载荷",
     "jiuyan_category": "商业航天"
   },
   "002936": {
@@ -17166,7 +17166,7 @@
     "sector": "化学制品/氟化工概念/有机硅概念/天然气",
     "sector_type": "legacy",
     "updated_at": "2026-06-24 11:21:37",
-    "jiuyan_concept": "半导体材料-电子特气",
+    "jiuyan_concept": "半导体材料",
     "jiuyan_category": "半导体"
   },
   "002972": {
@@ -17312,7 +17312,7 @@
     "sector": "铁路、船舶、航空航天和其他运输设备制造业",
     "sector_type": "legacy",
     "updated_at": "2026-06-17 12:42:30",
-    "jiuyan_concept": "千帆星座|卫星-测试",
+    "jiuyan_concept": "千帆星座|卫星",
     "jiuyan_category": "商业航天"
   },
   "002986": {
@@ -17588,7 +17588,7 @@
     "sector": "航天装备Ⅱ/军民融合/商业航天/军工",
     "sector_type": "legacy",
     "updated_at": "2026-06-17 12:42:30",
-    "jiuyan_concept": "国家队-航天科技|火箭-固体火箭",
+    "jiuyan_concept": "国家队|火箭",
     "jiuyan_category": "商业航天"
   },
   "003010": {
@@ -17734,7 +17734,7 @@
     "sector": "化学原料和化学制品制造业",
     "sector_type": "legacy",
     "updated_at": "2026-05-30 21:48:57",
-    "jiuyan_concept": "其他关键材料及设备-隔膜",
+    "jiuyan_concept": "其他关键材料及设备",
     "jiuyan_category": "锂电池"
   },
   "003023": {
@@ -17830,7 +17830,7 @@
     "sector": "通信设备/共封装光学(CPO)/光刻机/第三代半导体",
     "sector_type": "legacy",
     "updated_at": "2026-06-24 11:21:37",
-    "jiuyan_concept": "半导体材料-封装基板",
+    "jiuyan_concept": "半导体材料",
     "jiuyan_category": "半导体"
   },
   "003033": {
@@ -17859,7 +17859,7 @@
     "jiuyan_category1": "央企",
     "jiuyan_concept1": "",
     "jiuyan_category2": "电力",
-    "jiuyan_concept2": "智能电网-虚拟电厂-负荷聚合商"
+    "jiuyan_concept2": "智能电网-虚拟电厂"
   },
   "003036": {
     "business_summary": "高端纺织机械装备的研发和制造。(电子布纺织机)",
@@ -17971,7 +17971,7 @@
     "jiuyan_category1": "央企",
     "jiuyan_concept1": "",
     "jiuyan_category2": "电力",
-    "jiuyan_concept2": "电力运营-核电",
+    "jiuyan_concept2": "电力运营",
     "jiuyan_category3": "可控核聚变",
     "jiuyan_concept3": "聚变更新"
   },
@@ -17984,7 +17984,7 @@
     "sector": "电网设备/高压快充/智能电网/虚拟电厂",
     "sector_type": "legacy",
     "updated_at": "2026-05-30 21:48:57",
-    "jiuyan_concept": "固态变压器SST-研发",
+    "jiuyan_concept": "固态变压器SST",
     "jiuyan_category": "HVDC"
   },
   "300002": {
@@ -18169,7 +18169,7 @@
     "jiuyan_category1": "液冷",
     "jiuyan_concept1": "浸没式液冷",
     "jiuyan_category2": "云计算",
-    "jiuyan_concept2": "IaaS基础设施服务|SaaS软件与服务-其他"
+    "jiuyan_concept2": "IaaS基础设施服务|SaaS软件与服务"
   },
   "300018": {
     "business_summary": "主营电气机械和器材制造业",
@@ -18348,7 +18348,7 @@
     "sector": "计算机、通信和其他电子设备制造业",
     "sector_type": "legacy",
     "updated_at": "2026-06-17 12:29:31",
-    "jiuyan_concept": "负极及辅材-负极材料",
+    "jiuyan_concept": "负极及辅材",
     "jiuyan_category": "锂电池"
   },
   "300036": {
@@ -18360,7 +18360,7 @@
     "sector": "软件和信息技术服务业",
     "sector_type": "legacy",
     "updated_at": "2026-05-30 21:48:57",
-    "jiuyan_concept": "SaaS软件与服务-垂直软件",
+    "jiuyan_concept": "SaaS软件与服务",
     "jiuyan_category": "云计算"
   },
   "300037": {
@@ -18372,12 +18372,12 @@
     "sector": "电池/钠离子电池/固态电池/氟化工概念",
     "sector_type": "legacy",
     "updated_at": "2026-06-24 11:21:37",
-    "jiuyan_concept": "半导体材料-湿电子化学品",
+    "jiuyan_concept": "半导体材料",
     "jiuyan_category": "半导体",
     "jiuyan_category1": "半导体",
-    "jiuyan_concept1": "半导体材料-湿电子化学品",
+    "jiuyan_concept1": "半导体材料",
     "jiuyan_category2": "半导体",
-    "jiuyan_concept2": "半导体材料-湿电子化学品"
+    "jiuyan_concept2": "半导体材料"
   },
   "300038": {
     "business_summary": "主营其他",
@@ -18415,9 +18415,9 @@
     "jiuyan_concept": "",
     "jiuyan_category": "",
     "jiuyan_category1": "电力",
-    "jiuyan_concept1": "电力设备-智能电表",
+    "jiuyan_concept1": "电力设备",
     "jiuyan_category2": "电力",
-    "jiuyan_concept2": "智能电网-虚拟电厂-综合服务"
+    "jiuyan_concept2": "智能电网-虚拟电厂"
   },
   "300041": {
     "business_summary": "主营化学原料和化学制品制造业",
@@ -18442,12 +18442,12 @@
     "sector": "计算机、通信和其他电子设备制造业",
     "sector_type": "legacy",
     "updated_at": "2026-06-24 11:21:37",
-    "jiuyan_concept": "存储芯片-DRAM-DDR|存储芯片-SSD",
+    "jiuyan_concept": "存储芯片-DRAM|存储芯片",
     "jiuyan_category": "半导体",
     "jiuyan_category1": "半导体",
-    "jiuyan_concept1": "存储芯片-DRAM-DDR|存储芯片-SSD",
+    "jiuyan_concept1": "存储芯片-DRAM|存储芯片",
     "jiuyan_category2": "半导体",
-    "jiuyan_concept2": "存储芯片-DRAM-DDR|存储芯片-SSD",
+    "jiuyan_concept2": "存储芯片-DRAM|存储芯片",
     "jiuyan_category3": "AI应用",
     "jiuyan_concept3": "AI应用"
   },
@@ -18472,7 +18472,7 @@
     "sector": "计算机、通信和其他电子设备制造业",
     "sector_type": "legacy",
     "updated_at": "2026-06-17 12:42:30",
-    "jiuyan_concept": "卫星-地面设备-移动通信终端",
+    "jiuyan_concept": "卫星-地面设备",
     "jiuyan_category": "商业航天"
   },
   "300046": {
@@ -18568,7 +18568,7 @@
     "sector": "半导体/卫星导航/商业航天/时空大数据",
     "sector_type": "legacy",
     "updated_at": "2026-06-17 12:42:30",
-    "jiuyan_concept": "卫星-控制系统",
+    "jiuyan_concept": "卫星",
     "jiuyan_category": "商业航天"
   },
   "300054": {
@@ -18580,7 +18580,7 @@
     "sector": "计算机、通信和其他电子设备制造业",
     "sector_type": "legacy",
     "updated_at": "2026-06-24 11:21:37",
-    "jiuyan_concept": "半导体材料-抛光材料",
+    "jiuyan_concept": "半导体材料",
     "jiuyan_category": "半导体"
   },
   "300055": {
@@ -18616,7 +18616,7 @@
     "sector": "工业金属/PET铜箔/固态电池",
     "sector_type": "legacy",
     "updated_at": "2026-06-16 23:33:11",
-    "jiuyan_concept": "其他关键材料及设备-铝箔",
+    "jiuyan_concept": "其他关键材料及设备",
     "jiuyan_category": "锂电池"
   },
   "300058": {
@@ -18628,7 +18628,7 @@
     "sector": "商务服务业",
     "sector_type": "legacy",
     "updated_at": "2026-05-30 21:48:57",
-    "jiuyan_concept": "Minimax-生态|ai营销|短剧",
+    "jiuyan_concept": "Minimax|ai营销|短剧",
     "jiuyan_category": "AI应用"
   },
   "300059": {
@@ -18703,7 +18703,7 @@
     "jiuyan_concept": "",
     "jiuyan_category": "",
     "jiuyan_category1": "商业航天",
-    "jiuyan_concept1": "火箭-回收",
+    "jiuyan_concept1": "火箭",
     "jiuyan_category2": "液冷",
     "jiuyan_concept2": "液冷服务器"
   },
@@ -18788,7 +18788,7 @@
     "sector": "电池/钠离子电池/固态电池/动力电池回收",
     "sector_type": "legacy",
     "updated_at": "2026-06-17 12:29:31",
-    "jiuyan_concept": "正极材料-三元材料",
+    "jiuyan_concept": "正极材料",
     "jiuyan_category": "锂电池"
   },
   "300074": {
@@ -18872,7 +18872,7 @@
     "sector": "化学原料和化学制品制造业",
     "sector_type": "legacy",
     "updated_at": "2026-06-17 12:29:31",
-    "jiuyan_concept": "电解液-电解液添加剂|电解液-电解液溶剂",
+    "jiuyan_concept": "电解液",
     "jiuyan_category": "锂电池"
   },
   "300083": {
@@ -19178,7 +19178,7 @@
     "sector": "医药制造业",
     "sector_type": "legacy",
     "updated_at": "2026-06-24 11:21:37",
-    "jiuyan_concept": "半导体材料-电子特气",
+    "jiuyan_concept": "半导体材料",
     "jiuyan_category": "半导体"
   },
   "300112": {
@@ -19229,7 +19229,7 @@
     "jiuyan_concept": "储能",
     "jiuyan_category": "电力",
     "jiuyan_category1": "商业航天",
-    "jiuyan_concept1": "spacex-潜在供应商-超薄p型HJT电池",
+    "jiuyan_concept1": "spacex-潜在供应商",
     "jiuyan_category2": "太空光伏",
     "jiuyan_concept2": "太空光伏组件"
   },
@@ -19266,7 +19266,7 @@
     "sector": "化学原料和化学制品制造业",
     "sector_type": "legacy",
     "updated_at": "2026-05-30 21:48:57",
-    "jiuyan_concept": "电解液-电解液添加剂",
+    "jiuyan_concept": "电解液",
     "jiuyan_category": "锂电池"
   },
   "300122": {
@@ -19338,7 +19338,7 @@
     "sector": "电气机械和器材制造业",
     "sector_type": "legacy",
     "updated_at": "2026-06-17 12:42:30",
-    "jiuyan_concept": "火箭-回收",
+    "jiuyan_concept": "火箭",
     "jiuyan_category": "商业航天"
   },
   "300130": {
@@ -19350,7 +19350,7 @@
     "sector": "计算机设备/数字货币/移动支付/电子身份证",
     "sector_type": "legacy",
     "updated_at": "2026-05-30 21:48:57",
-    "jiuyan_concept": "SaaS软件与服务-税务",
+    "jiuyan_concept": "SaaS软件与服务",
     "jiuyan_category": "云计算"
   },
   "300131": {
@@ -19422,7 +19422,7 @@
     "sector": "消费电子/同花顺果指数/6G概念/卫星导航",
     "sector_type": "legacy",
     "updated_at": "2026-06-17 12:42:30",
-    "jiuyan_concept": "spacex-参股-高性能连接器及线缆|卫星-天线",
+    "jiuyan_concept": "spacex-参股|卫星",
     "jiuyan_category": "商业航天"
   },
   "300137": {
@@ -19782,7 +19782,7 @@
     "sector": "软件和信息技术服务业",
     "sector_type": "legacy",
     "updated_at": "2026-05-30 21:48:57",
-    "jiuyan_concept": "字节生态-字节跳动生态",
+    "jiuyan_concept": "字节生态",
     "jiuyan_category": "AI应用"
   },
   "300171": {
@@ -19902,7 +19902,7 @@
     "sector": "影视院线/短剧游戏/AI视频/快手概念",
     "sector_type": "legacy",
     "updated_at": "2026-05-30 21:48:57",
-    "jiuyan_concept": "AI应用|微软生态-嫁接数据|短剧",
+    "jiuyan_concept": "AI应用|微软生态|短剧",
     "jiuyan_category": "AI应用"
   },
   "300183": {
@@ -19917,7 +19917,7 @@
     "jiuyan_concept": "",
     "jiuyan_category": "",
     "jiuyan_category1": "电力",
-    "jiuyan_concept1": "智能电网-用户侧-通信模块"
+    "jiuyan_concept1": "智能电网-用户侧"
   },
   "300184": {
     "business_summary": "主营其他电子Ⅱ",
@@ -20348,7 +20348,7 @@
     "sector": "半导体/存储芯片/汽车芯片/MCU芯片",
     "sector_type": "legacy",
     "updated_at": "2026-06-24 11:21:37",
-    "jiuyan_concept": "存储芯片-DRAM-DDR|存储芯片-DRAM-LPDDR|存储芯片-NANDFLASH|存储芯片-NORFLASH|存储芯片-SRAM",
+    "jiuyan_concept": "存储芯片-DRAM|存储芯片",
     "jiuyan_category": "半导体"
   },
   "300224": {
@@ -20372,7 +20372,7 @@
     "sector": "商务服务业",
     "sector_type": "legacy",
     "updated_at": "2026-05-30 21:48:57",
-    "jiuyan_concept": "Minimax-生态",
+    "jiuyan_concept": "Minimax",
     "jiuyan_category": "AI应用"
   },
   "300227": {
@@ -20396,7 +20396,7 @@
     "sector": "专用设备制造业",
     "sector_type": "legacy",
     "updated_at": "2026-06-17 12:42:30",
-    "jiuyan_concept": "火箭-燃料加注",
+    "jiuyan_concept": "火箭",
     "jiuyan_category": "商业航天"
   },
   "300229": {
@@ -20492,7 +20492,7 @@
     "sector": "电子化学品Ⅱ/中芯国际概念/光刻胶/先进封装",
     "sector_type": "legacy",
     "updated_at": "2026-06-24 11:21:37",
-    "jiuyan_concept": "半导体材料-光刻胶|半导体材料-湿电子化学品",
+    "jiuyan_concept": "半导体材料",
     "jiuyan_category": "半导体"
   },
   "300238": {
@@ -20615,9 +20615,9 @@
     "jiuyan_concept": "",
     "jiuyan_category": "",
     "jiuyan_category1": "AI应用",
-    "jiuyan_concept1": "自研-自研",
+    "jiuyan_concept1": "自研",
     "jiuyan_category2": "云计算",
-    "jiuyan_concept2": "SaaS软件与服务-其他"
+    "jiuyan_concept2": "SaaS软件与服务"
   },
   "300249": {
     "business_summary": "信息数据领域温控设备的研发、生产和销售。",
@@ -20640,7 +20640,7 @@
     "sector": "软件和信息技术服务业",
     "sector_type": "legacy",
     "updated_at": "2026-06-17 12:32:05",
-    "jiuyan_concept": "其他-其他",
+    "jiuyan_concept": "其他",
     "jiuyan_category": "AI应用"
   },
   "300251": {
@@ -20679,9 +20679,9 @@
     "jiuyan_concept": "",
     "jiuyan_category": "",
     "jiuyan_category1": "AI应用",
-    "jiuyan_concept1": "AI应用|Minimax-生态",
+    "jiuyan_concept1": "AI应用|Minimax",
     "jiuyan_category2": "云计算",
-    "jiuyan_concept2": "SaaS软件与服务-垂直软件"
+    "jiuyan_concept2": "SaaS软件与服务"
   },
   "300254": {
     "business_summary": "主营医药制造业",
@@ -20764,7 +20764,7 @@
     "sector": "包装印刷/光刻机/中芯国际概念/芯片概念",
     "sector_type": "legacy",
     "updated_at": "2026-06-24 11:21:37",
-    "jiuyan_concept": "半导体设备-清洗设备",
+    "jiuyan_concept": "半导体设备",
     "jiuyan_category": "半导体"
   },
   "300261": {
@@ -21004,7 +21004,7 @@
     "sector": "专用设备/碳中和/养老概念/可降解塑料",
     "sector_type": "legacy",
     "updated_at": "2026-05-30 21:48:57",
-    "jiuyan_concept": "其他关键材料及设备-隔膜",
+    "jiuyan_concept": "其他关键材料及设备",
     "jiuyan_category": "锂电池"
   },
   "300282": {
@@ -21057,7 +21057,7 @@
     "jiuyan_category1": "PCB",
     "jiuyan_concept1": "硅微粉",
     "jiuyan_category2": "PCB",
-    "jiuyan_concept2": "MLCC-陶瓷粉体"
+    "jiuyan_concept2": "MLCC"
   },
   "300286": {
     "business_summary": "主营电网设备",
@@ -21071,7 +21071,7 @@
     "jiuyan_concept": "",
     "jiuyan_category": "",
     "jiuyan_category1": "电力",
-    "jiuyan_concept1": "智能电网-虚拟电厂-综合服务"
+    "jiuyan_concept1": "智能电网-虚拟电厂"
   },
   "300287": {
     "business_summary": "主营软件和信息技术服务业",
@@ -21154,7 +21154,7 @@
     "sector": "专用设备/光刻机/新型工业化/工业母机",
     "sector_type": "legacy",
     "updated_at": "2026-06-24 11:21:37",
-    "jiuyan_concept": "半导体设备-清洗设备",
+    "jiuyan_concept": "半导体设备",
     "jiuyan_category": "半导体"
   },
   "300294": {
@@ -21238,7 +21238,7 @@
     "sector": "计算机设备/存储芯片/东数西算(算力)/云计算",
     "sector_type": "legacy",
     "updated_at": "2026-06-24 11:21:37",
-    "jiuyan_concept": "存储芯片-SSD",
+    "jiuyan_concept": "存储芯片",
     "jiuyan_category": "半导体"
   },
   "300303": {
@@ -21382,12 +21382,12 @@
     "sector": "光伏设备/BC电池/第三代半导体/存储芯片",
     "sector_type": "legacy",
     "updated_at": "2026-06-24 11:21:37",
-    "jiuyan_concept": "半导体材料-硅片",
+    "jiuyan_concept": "半导体材料",
     "jiuyan_category": "半导体",
     "jiuyan_category1": "半导体",
-    "jiuyan_concept1": "半导体材料-硅片",
+    "jiuyan_concept1": "半导体材料",
     "jiuyan_category2": "商业航天",
-    "jiuyan_concept2": "spacex-潜在供应商-光伏产业链",
+    "jiuyan_concept2": "spacex-潜在供应商",
     "jiuyan_category3": "太空光伏",
     "jiuyan_concept3": "太空光伏设备|马斯克走访企业"
   },
@@ -21403,7 +21403,7 @@
     "jiuyan_concept": "",
     "jiuyan_category": "",
     "jiuyan_category1": "电力",
-    "jiuyan_concept1": "智能电网-虚拟电厂-综合服务"
+    "jiuyan_concept1": "智能电网-虚拟电厂"
   },
   "300318": {
     "business_summary": "主营专用设备制造业",
@@ -21462,7 +21462,7 @@
     "sector": "消费电子/毫米波雷达/6G概念/WiFi 6",
     "sector_type": "legacy",
     "updated_at": "2026-06-17 12:42:30",
-    "jiuyan_concept": "卫星-天线",
+    "jiuyan_concept": "卫星",
     "jiuyan_category": "商业航天"
   },
   "300323": {
@@ -21642,7 +21642,7 @@
     "sector": "IT服务Ⅱ/华为欧拉/MLOps概念/ERP概念",
     "sector_type": "legacy",
     "updated_at": "2026-05-30 21:48:57",
-    "jiuyan_concept": "SaaS软件与服务-垂直软件",
+    "jiuyan_concept": "SaaS软件与服务",
     "jiuyan_category": "云计算"
   },
   "300340": {
@@ -21654,7 +21654,7 @@
     "sector": "计算机、通信和其他电子设备制造业",
     "sector_type": "legacy",
     "updated_at": "2026-06-17 12:29:31",
-    "jiuyan_concept": "其他材料及设备-生产设备|正极材料-钴酸锂",
+    "jiuyan_concept": "其他材料及设备|正极材料",
     "jiuyan_category": "锂电池"
   },
   "300341": {
@@ -21678,7 +21678,7 @@
     "sector": "家电零部件Ⅱ/太赫兹/军工信息化/军民融合",
     "sector_type": "legacy",
     "updated_at": "2026-06-17 12:42:30",
-    "jiuyan_concept": "spacex-潜在供应商-航天电子|千帆星座|卫星-控制系统",
+    "jiuyan_concept": "spacex-潜在供应商|千帆星座|卫星",
     "jiuyan_category": "商业航天"
   },
   "300344": {
@@ -21714,10 +21714,10 @@
     "sector": "电子化学品Ⅱ/光刻胶/中芯国际概念/存储芯片",
     "sector_type": "legacy",
     "updated_at": "2026-06-24 11:21:37",
-    "jiuyan_concept": "半导体材料-光刻胶|半导体材料-电子特气",
+    "jiuyan_concept": "半导体材料",
     "jiuyan_category": "半导体",
     "jiuyan_category1": "半导体",
-    "jiuyan_concept1": "半导体材料-光刻胶|半导体材料-电子特气",
+    "jiuyan_concept1": "半导体材料",
     "jiuyan_category2": "太空光伏",
     "jiuyan_concept2": "砷化镓电池"
   },
@@ -21877,9 +21877,9 @@
     "jiuyan_concept": "",
     "jiuyan_category": "",
     "jiuyan_category1": "电力",
-    "jiuyan_concept1": "电力设备-智能电表",
+    "jiuyan_concept1": "电力设备",
     "jiuyan_category2": "电力",
-    "jiuyan_concept2": "智能电网-用户侧-智能电表"
+    "jiuyan_concept2": "智能电网-用户侧"
   },
   "300362": {
     "business_summary": "主营其他",
@@ -21929,7 +21929,7 @@
     "jiuyan_concept": "",
     "jiuyan_category": "",
     "jiuyan_category1": "电力",
-    "jiuyan_concept1": "智能电网-用户侧-智能调度"
+    "jiuyan_concept1": "智能电网-用户侧"
   },
   "300367": {
     "business_summary": "主营其他",
@@ -22050,7 +22050,7 @@
     "sector": "其他电源设备Ⅱ/电力物联网/智能电网/柔性直流输电",
     "sector_type": "legacy",
     "updated_at": "2026-05-30 21:48:57",
-    "jiuyan_concept": "固态变压器SST-研发",
+    "jiuyan_concept": "固态变压器SST",
     "jiuyan_category": "HVDC"
   },
   "300377": {
@@ -22074,7 +22074,7 @@
     "sector": "软件开发/多模态AI/ChatGPT概念/数据安全",
     "sector_type": "legacy",
     "updated_at": "2026-05-30 21:48:57",
-    "jiuyan_concept": "SaaS软件与服务-其他",
+    "jiuyan_concept": "SaaS软件与服务",
     "jiuyan_category": "云计算"
   },
   "300379": {
@@ -22206,7 +22206,7 @@
     "sector": "电池/固态电池/小金属概念/2026一季报预增",
     "sector_type": "legacy",
     "updated_at": "2026-06-16 23:33:11",
-    "jiuyan_concept": "锂矿资源-锂辉石提锂",
+    "jiuyan_concept": "锂矿资源",
     "jiuyan_category": "锂电池"
   },
   "300391": {
@@ -22417,7 +22417,7 @@
     "jiuyan_category1": "光通信",
     "jiuyan_concept1": "MPO|插芯",
     "jiuyan_category2": "PCB",
-    "jiuyan_concept2": "MLCC-AI领域"
+    "jiuyan_concept2": "MLCC"
   },
   "300409": {
     "business_summary": "主营电池",
@@ -22512,7 +22512,7 @@
     "sector": "专业服务/先进封装/商业航天/汽车电子",
     "sector_type": "legacy",
     "updated_at": "2026-06-17 12:42:30",
-    "jiuyan_concept": "卫星-测试",
+    "jiuyan_concept": "卫星",
     "jiuyan_category": "商业航天"
   },
   "300417": {
@@ -22536,7 +22536,7 @@
     "sector": "互联网和相关服务",
     "sector_type": "legacy",
     "updated_at": "2026-05-30 21:48:57",
-    "jiuyan_concept": "AI应用|Minimax-生态|其他-其他|短剧",
+    "jiuyan_concept": "AI应用|Minimax|其他|短剧",
     "jiuyan_category": "AI应用"
   },
   "300420": {
@@ -22589,7 +22589,7 @@
     "jiuyan_concept": "",
     "jiuyan_category": "",
     "jiuyan_category1": "电力",
-    "jiuyan_concept1": "电力设备-变压器"
+    "jiuyan_concept1": "电力设备"
   },
   "300424": {
     "business_summary": "主营金属制品、机械和设备修理业",
@@ -22687,7 +22687,7 @@
     "jiuyan_concept": "",
     "jiuyan_category": "",
     "jiuyan_category1": "锂电池",
-    "jiuyan_concept1": "正极材料-磷酸铁锂",
+    "jiuyan_concept1": "正极材料",
     "jiuyan_category2": "机器人",
     "jiuyan_concept2": "谐波减速器"
   },
@@ -22703,7 +22703,7 @@
     "jiuyan_concept": "",
     "jiuyan_category": "",
     "jiuyan_category1": "商业航天",
-    "jiuyan_concept1": "spacex-潜在供应商-太阳能-UTG",
+    "jiuyan_concept1": "spacex-潜在供应商-太阳能",
     "jiuyan_category2": "太空光伏",
     "jiuyan_concept2": "太空光伏辅材"
   },
@@ -22803,7 +22803,7 @@
     "jiuyan_concept": "",
     "jiuyan_category": "",
     "jiuyan_category1": "可控核聚变",
-    "jiuyan_concept1": "真空室-真空泵"
+    "jiuyan_concept1": "真空室"
   },
   "300442": {
     "business_summary": "主营通信服务",
@@ -22855,7 +22855,7 @@
     "jiuyan_category1": "机器人",
     "jiuyan_concept1": "传感器",
     "jiuyan_category2": "商业航天",
-    "jiuyan_concept2": "spacex-潜在供应商-计量校准"
+    "jiuyan_concept2": "spacex-潜在供应商"
   },
   "300446": {
     "business_summary": "主营化学原料和化学制品制造业",
@@ -22917,7 +22917,7 @@
     "jiuyan_concept": "",
     "jiuyan_category": "",
     "jiuyan_category1": "锂电池",
-    "jiuyan_concept1": "其他关键材料及设备-生产设备",
+    "jiuyan_concept1": "其他关键材料及设备",
     "jiuyan_category2": "太空光伏",
     "jiuyan_concept2": "太空光伏设备"
   },
@@ -22966,7 +22966,7 @@
     "sector": "软件开发/云办公/数据安全/云计算",
     "sector_type": "legacy",
     "updated_at": "2026-05-30 21:48:57",
-    "jiuyan_concept": "SaaS软件与服务-云安全",
+    "jiuyan_concept": "SaaS软件与服务",
     "jiuyan_category": "云计算"
   },
   "300455": {
@@ -22978,7 +22978,7 @@
     "sector": "计算机、通信和其他电子设备制造业",
     "sector_type": "legacy",
     "updated_at": "2026-06-17 12:42:30",
-    "jiuyan_concept": "千帆星座|卫星-控制系统|卫星-测试|国家队-航天科技",
+    "jiuyan_concept": "千帆星座|卫星|国家队",
     "jiuyan_category": "商业航天"
   },
   "300456": {
@@ -23002,12 +23002,12 @@
     "sector": "电池/固态电池/锂电池概念/宁德时代概念",
     "sector_type": "legacy",
     "updated_at": "2026-06-24 11:21:37",
-    "jiuyan_concept": "半导体设备-光刻机整机",
+    "jiuyan_concept": "半导体设备",
     "jiuyan_category": "半导体",
     "jiuyan_category1": "半导体",
-    "jiuyan_concept1": "半导体设备-光刻机整机",
+    "jiuyan_concept1": "半导体设备",
     "jiuyan_category2": "半导体",
-    "jiuyan_concept2": "半导体设备-光刻机整机"
+    "jiuyan_concept2": "半导体设备"
   },
   "300458": {
     "business_summary": "智能应用处理器SoC、高性能模拟器件和无线互联芯片的研发与设计。",
@@ -23018,7 +23018,7 @@
     "sector": "半导体/MCU芯片/汽车芯片/存储芯片",
     "sector_type": "legacy",
     "updated_at": "2026-06-24 11:21:37",
-    "jiuyan_concept": "端侧ai芯片-高性能soc",
+    "jiuyan_concept": "端侧ai芯片",
     "jiuyan_category": "半导体"
   },
   "300459": {
@@ -23141,7 +23141,7 @@
     "jiuyan_concept": "",
     "jiuyan_category": "",
     "jiuyan_category1": "可控核聚变",
-    "jiuyan_concept1": "其他-密封件"
+    "jiuyan_concept1": "其他"
   },
   "300471": {
     "business_summary": "主营专用设备制造业",
@@ -23176,7 +23176,7 @@
     "sector": "军工电子Ⅱ/MCU芯片/国家大基金持股",
     "sector_type": "legacy",
     "updated_at": "2026-06-24 11:21:37",
-    "jiuyan_concept": "算力芯片-GPU",
+    "jiuyan_concept": "算力芯片",
     "jiuyan_category": "半导体"
   },
   "300475": {
@@ -23188,7 +23188,7 @@
     "sector": "其他电子Ⅱ/存储芯片/东数西算(算力)/数据中心(AIDC)",
     "sector_type": "legacy",
     "updated_at": "2026-06-24 11:21:37",
-    "jiuyan_concept": "存储芯片-内存条",
+    "jiuyan_concept": "存储芯片",
     "jiuyan_category": "半导体"
   },
   "300476": {
@@ -23224,7 +23224,7 @@
     "sector": "其他",
     "sector_type": "fallback",
     "updated_at": "2026-05-30 21:48:57",
-    "jiuyan_concept": "其他-其他",
+    "jiuyan_concept": "其他",
     "jiuyan_category": "AI应用"
   },
   "300480": {
@@ -23236,7 +23236,7 @@
     "sector": "专用设备/存储芯片/第三代半导体/芯片概念",
     "sector_type": "legacy",
     "updated_at": "2026-06-24 11:21:37",
-    "jiuyan_concept": "半导体设备-划片机",
+    "jiuyan_concept": "半导体设备",
     "jiuyan_category": "半导体"
   },
   "300481": {
@@ -23320,7 +23320,7 @@
     "sector": "塑料/盐湖提锂/金属镍/金属钴",
     "sector_type": "legacy",
     "updated_at": "2026-06-16 23:33:11",
-    "jiuyan_concept": "锂矿资源-盐湖提锂",
+    "jiuyan_concept": "锂矿资源",
     "jiuyan_category": "锂电池"
   },
   "300488": {
@@ -23359,7 +23359,7 @@
     "jiuyan_concept": "",
     "jiuyan_category": "",
     "jiuyan_category1": "电力",
-    "jiuyan_concept1": "智能电网-虚拟电厂-负荷聚合商"
+    "jiuyan_concept1": "智能电网-虚拟电厂"
   },
   "300491": {
     "business_summary": "能源功率变换产品、智能电网电源产品、定制类电源及检测业务",
@@ -23394,7 +23394,7 @@
     "sector": "批发业",
     "sector_type": "legacy",
     "updated_at": "2026-06-24 11:21:37",
-    "jiuyan_concept": "端侧ai芯片-低功耗soc",
+    "jiuyan_concept": "端侧ai芯片",
     "jiuyan_category": "半导体"
   },
   "300494": {
@@ -23430,7 +23430,7 @@
     "sector": "医药制造业",
     "sector_type": "legacy",
     "updated_at": "2026-05-30 21:48:57",
-    "jiuyan_concept": "电解液-电解液添加剂",
+    "jiuyan_concept": "电解液",
     "jiuyan_category": "锂电池"
   },
   "300498": {
@@ -23613,7 +23613,7 @@
     "jiuyan_concept": "",
     "jiuyan_category": "",
     "jiuyan_category1": "电力",
-    "jiuyan_concept1": "智能电网-虚拟电厂-负荷聚合商"
+    "jiuyan_concept1": "智能电网-虚拟电厂"
   },
   "300514": {
     "business_summary": "主营仪器仪表制造业",
@@ -23627,7 +23627,7 @@
     "jiuyan_concept": "",
     "jiuyan_category": "",
     "jiuyan_category1": "电力",
-    "jiuyan_concept1": "智能电网-用户侧-通信模块"
+    "jiuyan_concept1": "智能电网-用户侧"
   },
   "300515": {
     "business_summary": "主营仪器仪表制造业",
@@ -24070,7 +24070,7 @@
     "sector": "非金属矿物制品业",
     "sector_type": "legacy",
     "updated_at": "2026-06-24 11:21:37",
-    "jiuyan_concept": "半导体材料-硅片",
+    "jiuyan_concept": "半导体材料",
     "jiuyan_category": "半导体"
   },
   "300556": {
@@ -24214,7 +24214,7 @@
     "sector": "通用设备/国家大基金持股/中芯国际概念/存储芯片",
     "sector_type": "legacy",
     "updated_at": "2026-06-24 11:21:37",
-    "jiuyan_concept": "半导体设备-前道检测设备",
+    "jiuyan_concept": "半导体设备",
     "jiuyan_category": "半导体"
   },
   "300568": {
@@ -24226,7 +24226,7 @@
     "sector": "化学原料和化学制品制造业",
     "sector_type": "legacy",
     "updated_at": "2026-06-17 12:29:31",
-    "jiuyan_concept": "其他关键材料及设备-隔膜",
+    "jiuyan_concept": "其他关键材料及设备",
     "jiuyan_category": "锂电池"
   },
   "300569": {
@@ -24310,7 +24310,7 @@
     "sector": "电子化学品Ⅱ/OLED/光刻胶/第三代半导体",
     "sector_type": "legacy",
     "updated_at": "2026-06-24 11:21:37",
-    "jiuyan_concept": "半导体材料-光刻胶",
+    "jiuyan_concept": "半导体材料",
     "jiuyan_category": "半导体"
   },
   "300577": {
@@ -24433,7 +24433,7 @@
     "jiuyan_concept": "",
     "jiuyan_category": "",
     "jiuyan_category1": "锂电池",
-    "jiuyan_concept1": "其他关键材料及设备-隔膜",
+    "jiuyan_concept1": "其他关键材料及设备",
     "jiuyan_category2": "PCB",
     "jiuyan_concept2": "苊烯树脂"
   },
@@ -24638,12 +24638,12 @@
     "sector": "专用设备制造业",
     "sector_type": "legacy",
     "updated_at": "2026-06-24 11:21:37",
-    "jiuyan_concept": "半导体设备-测试设备",
+    "jiuyan_concept": "半导体设备",
     "jiuyan_category": "半导体",
     "jiuyan_category1": "半导体",
-    "jiuyan_concept1": "半导体设备-测试设备",
+    "jiuyan_concept1": "半导体设备",
     "jiuyan_category2": "商业航天",
-    "jiuyan_concept2": "spacex-供应商"
+    "jiuyan_concept2": "spacex"
   },
   "300605": {
     "business_summary": "主营软件和信息技术服务业",
@@ -24690,7 +24690,7 @@
     "sector": "软件和信息技术服务业",
     "sector_type": "legacy",
     "updated_at": "2026-05-30 21:48:57",
-    "jiuyan_concept": "华为生态-合作伙伴|自研-自研",
+    "jiuyan_concept": "华为生态|自研",
     "jiuyan_category": "AI应用"
   },
   "300609": {
@@ -24750,7 +24750,7 @@
     "sector": "半导体/汽车芯片/智能音箱/AI眼镜",
     "sector_type": "legacy",
     "updated_at": "2026-06-24 11:21:37",
-    "jiuyan_concept": "端侧ai芯片-高性能soc",
+    "jiuyan_concept": "端侧ai芯片",
     "jiuyan_category": "半导体"
   },
   "300614": {
@@ -24885,9 +24885,9 @@
     "jiuyan_concept": "",
     "jiuyan_category": "",
     "jiuyan_category1": "AI应用",
-    "jiuyan_concept1": "AI应用|Minimax-生态|自研-自研",
+    "jiuyan_concept1": "AI应用|Minimax|自研",
     "jiuyan_category2": "云计算",
-    "jiuyan_concept2": "SaaS软件与服务-其他"
+    "jiuyan_concept2": "SaaS软件与服务"
   },
   "300625": {
     "business_summary": "主营电气机械和器材制造业",
@@ -24970,7 +24970,7 @@
     "sector": "专用设备制造业",
     "sector_type": "legacy",
     "updated_at": "2026-06-16 23:33:11",
-    "jiuyan_concept": "锂矿资源-盐湖提锂",
+    "jiuyan_concept": "锂矿资源",
     "jiuyan_category": "锂电池"
   },
   "300632": {
@@ -25054,7 +25054,7 @@
     "sector": "计算机、通信和其他电子设备制造业",
     "sector_type": "legacy",
     "updated_at": "2026-06-24 11:21:37",
-    "jiuyan_concept": "端侧ai芯片-物联网模组",
+    "jiuyan_concept": "端侧ai芯片",
     "jiuyan_category": "半导体"
   },
   "300639": {
@@ -25246,7 +25246,7 @@
     "sector": "电子化学品Ⅱ/中芯国际概念/国家大基金持股/存储芯片",
     "sector_type": "legacy",
     "updated_at": "2026-06-24 11:21:37",
-    "jiuyan_concept": "半导体材料-光刻胶|半导体材料-湿电子化学品",
+    "jiuyan_concept": "半导体材料",
     "jiuyan_category": "半导体"
   },
   "300656": {
@@ -25378,7 +25378,7 @@
     "sector": "半导体/中芯国际概念/光刻机/存储芯片",
     "sector_type": "legacy",
     "updated_at": "2026-06-24 11:21:37",
-    "jiuyan_concept": "半导体材料-溅射靶材",
+    "jiuyan_concept": "半导体材料",
     "jiuyan_category": "半导体"
   },
   "300667": {
@@ -25450,7 +25450,7 @@
     "sector": "半导体/国家大基金持股/存储芯片/汽车芯片",
     "sector_type": "legacy",
     "updated_at": "2026-06-24 11:21:37",
-    "jiuyan_concept": "存储芯片-主控芯片|端侧ai芯片-高性能soc",
+    "jiuyan_concept": "存储芯片|端侧ai芯片",
     "jiuyan_category": "半导体"
   },
   "300673": {
@@ -25551,7 +25551,7 @@
     "jiuyan_category1": "机器人",
     "jiuyan_concept1": "其他",
     "jiuyan_category2": "商业航天",
-    "jiuyan_concept2": "千帆星座|卫星-组装制造",
+    "jiuyan_concept2": "千帆星座|卫星",
     "jiuyan_category3": "太空光伏",
     "jiuyan_concept3": "太阳翼结构"
   },
@@ -25579,9 +25579,9 @@
     "jiuyan_concept": "",
     "jiuyan_category": "",
     "jiuyan_category1": "电力",
-    "jiuyan_concept1": "智能电网-虚拟电厂-综合服务",
+    "jiuyan_concept1": "智能电网-虚拟电厂",
     "jiuyan_category2": "电力",
-    "jiuyan_concept2": "智能电网-虚拟电厂-负荷聚合商"
+    "jiuyan_concept2": "智能电网-虚拟电厂"
   },
   "300683": {
     "business_summary": "主营医药制造业",
@@ -25858,7 +25858,7 @@
     "sector": "半导体/存储芯片/PET铜箔/OLED",
     "sector_type": "legacy",
     "updated_at": "2026-06-24 11:21:37",
-    "jiuyan_concept": "半导体材料-溅射靶材",
+    "jiuyan_concept": "半导体材料",
     "jiuyan_category": "半导体"
   },
   "300707": {
@@ -25933,9 +25933,9 @@
     "jiuyan_concept": "",
     "jiuyan_category": "",
     "jiuyan_category1": "电力",
-    "jiuyan_concept1": "智能电网-输变配电-输电",
+    "jiuyan_concept1": "智能电网-输变配电",
     "jiuyan_category2": "电力",
-    "jiuyan_concept2": "电力建设-其他服务"
+    "jiuyan_concept2": "电力建设"
   },
   "300713": {
     "business_summary": "主营电气机械和器材制造业",
@@ -26118,7 +26118,7 @@
     "sector": "软件和信息技术服务业",
     "sector_type": "legacy",
     "updated_at": "2026-05-30 21:48:57",
-    "jiuyan_concept": "SaaS软件与服务-其他",
+    "jiuyan_concept": "SaaS软件与服务",
     "jiuyan_category": "云计算"
   },
   "300731": {
@@ -26349,7 +26349,7 @@
     "jiuyan_concept": "",
     "jiuyan_category": "",
     "jiuyan_category1": "商业航天",
-    "jiuyan_concept1": "spacex-潜在供应商-光伏装备",
+    "jiuyan_concept1": "spacex-潜在供应商",
     "jiuyan_category2": "太空光伏",
     "jiuyan_concept2": "太空光伏设备|特斯拉拟采购厂商"
   },
@@ -26415,7 +26415,7 @@
     "jiuyan_category1": "光通信",
     "jiuyan_concept1": "设备",
     "jiuyan_category2": "商业航天",
-    "jiuyan_concept2": "spacex-参股",
+    "jiuyan_concept2": "spacex",
     "jiuyan_category3": "太空光伏",
     "jiuyan_concept3": "太空光伏设备"
   },
@@ -26476,7 +26476,7 @@
     "sector": "军工电子Ⅱ/卫星导航/军工信息化",
     "sector_type": "legacy",
     "updated_at": "2026-06-17 12:42:30",
-    "jiuyan_concept": "千帆星座|卫星-有效载荷-通信",
+    "jiuyan_concept": "千帆星座|卫星-有效载荷",
     "jiuyan_category": "商业航天"
   },
   "300763": {
@@ -26548,7 +26548,7 @@
     "sector": "电池/磷化工/固态电池/锂电池概念",
     "sector_type": "legacy",
     "updated_at": "2026-06-16 23:33:11",
-    "jiuyan_concept": "正极材料-磷酸铁锂",
+    "jiuyan_concept": "正极材料",
     "jiuyan_category": "锂电池"
   },
   "300770": {
@@ -26754,7 +26754,7 @@
     "sector": "专用设备制造业",
     "sector_type": "legacy",
     "updated_at": "2026-06-24 11:21:37",
-    "jiuyan_concept": "半导体设备-清洗设备",
+    "jiuyan_concept": "半导体设备",
     "jiuyan_category": "半导体"
   },
   "300787": {
@@ -26922,7 +26922,7 @@
     "sector": "化学原料和化学制品制造业",
     "sector_type": "legacy",
     "updated_at": "2026-06-17 12:29:31",
-    "jiuyan_concept": "电解液-电解液添加剂",
+    "jiuyan_concept": "电解液",
     "jiuyan_category": "锂电池"
   },
   "300802": {
@@ -27054,7 +27054,7 @@
     "sector": "消费电子/共封装光学(CPO)/先进封装/第三代半导体",
     "sector_type": "legacy",
     "updated_at": "2026-05-30 21:48:57",
-    "jiuyan_concept": "其他-其他",
+    "jiuyan_concept": "其他",
     "jiuyan_category": "AI应用"
   },
   "300813": {
@@ -27273,7 +27273,7 @@
     "jiuyan_concept": "",
     "jiuyan_category": "",
     "jiuyan_category1": "电力",
-    "jiuyan_concept1": "智能电网-用户侧-智能调度"
+    "jiuyan_concept1": "智能电网-用户侧"
   },
   "300831": {
     "business_summary": "主营半导体",
@@ -27392,7 +27392,7 @@
     "sector": "纺织服装、服饰业",
     "sector_type": "legacy",
     "updated_at": "2026-05-30 21:48:57",
-    "jiuyan_concept": "华为生态-合作伙伴",
+    "jiuyan_concept": "华为生态",
     "jiuyan_category": "AI应用"
   },
   "300841": {
@@ -27469,7 +27469,7 @@
     "jiuyan_category1": "算力租赁",
     "jiuyan_concept1": "算力租赁",
     "jiuyan_category2": "AI应用",
-    "jiuyan_concept2": "智慧AI-算力",
+    "jiuyan_concept2": "智慧AI",
     "jiuyan_category3": "云计算",
     "jiuyan_concept3": "IaaS基础设施服务"
   },
@@ -27603,11 +27603,11 @@
     "sector_type": "legacy",
     "updated_at": "2026-06-24 11:21:37",
     "jiuyan_category": "半导体",
-    "jiuyan_concept": "存储芯片-HDD",
+    "jiuyan_concept": "存储芯片",
     "jiuyan_category1": "半导体",
-    "jiuyan_concept1": "存储芯片-HDD",
+    "jiuyan_concept1": "存储芯片",
     "jiuyan_category2": "半导体",
-    "jiuyan_concept2": "存储芯片-HDD"
+    "jiuyan_concept2": "存储芯片"
   },
   "300858": {
     "business_summary": "主营食品制造业",
@@ -27798,7 +27798,7 @@
     "sector": "多式联运和运输代理业",
     "sector_type": "legacy",
     "updated_at": "2026-06-24 11:21:37",
-    "jiuyan_concept": "半导体设备-AMHS自动物料搬运系统",
+    "jiuyan_concept": "半导体设备",
     "jiuyan_category": "半导体"
   },
   "300875": {
@@ -27873,11 +27873,11 @@
     "jiuyan_concept": "",
     "jiuyan_category": "",
     "jiuyan_category1": "电力",
-    "jiuyan_concept1": "电力设备-智能电表",
+    "jiuyan_concept1": "电力设备",
     "jiuyan_category2": "电力",
-    "jiuyan_concept2": "智能电网-用户侧-智能电表",
+    "jiuyan_concept2": "智能电网-用户侧",
     "jiuyan_category3": "电力",
-    "jiuyan_concept3": "智能电网-虚拟电厂-硬件供应"
+    "jiuyan_concept3": "智能电网-虚拟电厂"
   },
   "300881": {
     "business_summary": "主营金属制品业",
@@ -27905,9 +27905,9 @@
     "jiuyan_concept": "",
     "jiuyan_category": "",
     "jiuyan_category1": "电力",
-    "jiuyan_concept1": "电力设备-智能电表",
+    "jiuyan_concept1": "电力设备",
     "jiuyan_category2": "电力",
-    "jiuyan_concept2": "智能电网-虚拟电厂-硬件供应"
+    "jiuyan_concept2": "智能电网-虚拟电厂"
   },
   "300883": {
     "business_summary": "主营造纸和纸制品业",
@@ -28002,7 +28002,7 @@
     "sector": "石墨电极/钠离子电池",
     "sector_type": "legacy",
     "updated_at": "2026-06-17 12:29:31",
-    "jiuyan_concept": "负极及辅材-负极材料",
+    "jiuyan_concept": "负极及辅材",
     "jiuyan_category": "锂电池"
   },
   "300891": {
@@ -28338,7 +28338,7 @@
     "sector": "电池/盐湖提锂/金属钴/钠离子电池",
     "sector_type": "legacy",
     "updated_at": "2026-06-16 23:36:47",
-    "jiuyan_concept": "正极材料-三元前驱",
+    "jiuyan_concept": "正极材料",
     "jiuyan_category": "锂电池"
   },
   "300920": {
@@ -28713,7 +28713,7 @@
     "jiuyan_concept": "",
     "jiuyan_category": "",
     "jiuyan_category1": "锂电池",
-    "jiuyan_concept1": "其他关键材料及设备-生产设备|其他关键材料及设备-结构件",
+    "jiuyan_concept1": "其他关键材料及设备",
     "jiuyan_category2": "机器人",
     "jiuyan_concept2": "丝杠"
   },
@@ -29041,9 +29041,9 @@
     "jiuyan_concept": "",
     "jiuyan_category": "",
     "jiuyan_category1": "电力",
-    "jiuyan_concept1": "智能电网-虚拟电厂-负荷聚合商",
+    "jiuyan_concept1": "智能电网-虚拟电厂",
     "jiuyan_category2": "电力",
-    "jiuyan_concept2": "电力建设-其他服务"
+    "jiuyan_concept2": "电力建设"
   },
   "300983": {
     "business_summary": "主营专业技术服务业",
@@ -29143,7 +29143,7 @@
     "jiuyan_category1": "液冷",
     "jiuyan_concept1": "浸没式液冷",
     "jiuyan_category2": "可控核聚变",
-    "jiuyan_concept2": "热管理/制冷-冷却系统"
+    "jiuyan_concept2": "热管理/制冷"
   },
   "300991": {
     "business_summary": "主营计算机、通信和其他电子设备制造业",
@@ -29154,7 +29154,7 @@
     "sector": "计算机、通信和其他电子设备制造业",
     "sector_type": "legacy",
     "updated_at": "2026-06-24 11:21:37",
-    "jiuyan_concept": "存储芯片-连接器",
+    "jiuyan_concept": "存储芯片",
     "jiuyan_category": "半导体"
   },
   "300992": {
@@ -29327,7 +29327,7 @@
     "jiuyan_category1": "机器人",
     "jiuyan_concept1": "其他",
     "jiuyan_category2": "商业航天",
-    "jiuyan_concept2": "spacex-潜在供应商-航天结构件|火箭-回收"
+    "jiuyan_concept2": "spacex-潜在供应商|火箭"
   },
   "301006": {
     "business_summary": "主营其他",
@@ -29401,7 +29401,7 @@
     "jiuyan_concept": "",
     "jiuyan_category": "",
     "jiuyan_category1": "电力",
-    "jiuyan_concept1": "智能电网-用户侧-计量终端"
+    "jiuyan_concept1": "智能电网-用户侧"
   },
   "301012": {
     "business_summary": "主营其他",
@@ -29415,7 +29415,7 @@
     "jiuyan_concept": "算力租赁",
     "jiuyan_category": "算力租赁",
     "jiuyan_category1": "电力",
-    "jiuyan_concept1": "电力设备-变压器"
+    "jiuyan_concept1": "电力设备"
   },
   "301013": {
     "business_summary": "主营专用设备制造、MLCC(多层陶瓷电容器)等，国内移动智能终端检测领域行业较为领先",
@@ -29429,7 +29429,7 @@
     "jiuyan_concept": "",
     "jiuyan_category": "",
     "jiuyan_category1": "PCB",
-    "jiuyan_concept1": "MLCC-AI领域"
+    "jiuyan_concept1": "MLCC"
   },
   "301015": {
     "business_summary": "主营批发业",
@@ -30028,7 +30028,7 @@
     "sector": "化学原料和化学制品制造业",
     "sector_type": "legacy",
     "updated_at": "2026-06-17 12:29:31",
-    "jiuyan_concept": "电解液-电解液添加剂",
+    "jiuyan_concept": "电解液",
     "jiuyan_category": "锂电池"
   },
   "301070": {
@@ -30052,7 +30052,7 @@
     "sector": "非金属材料Ⅱ/培育钻石/第三代半导体/芯片概念",
     "sector_type": "legacy",
     "updated_at": "2026-05-30 21:48:57",
-    "jiuyan_concept": "spacex-供应商-陶瓷球",
+    "jiuyan_concept": "spacex-供应商",
     "jiuyan_category": "商业航天"
   },
   "301072": {
@@ -30280,7 +30280,7 @@
     "sector": "化学原料和化学制品制造业",
     "sector_type": "legacy",
     "updated_at": "2026-06-16 23:33:11",
-    "jiuyan_concept": "锂矿资源-盐湖提锂",
+    "jiuyan_concept": "锂矿资源",
     "jiuyan_category": "锂电池"
   },
   "301093": {
@@ -30544,7 +30544,7 @@
     "sector": "软件和信息技术服务业",
     "sector_type": "legacy",
     "updated_at": "2026-06-17 12:42:30",
-    "jiuyan_concept": "卫星-数管系统",
+    "jiuyan_concept": "卫星",
     "jiuyan_category": "商业航天"
   },
   "301118": {
@@ -30822,7 +30822,7 @@
     "sector": "电池/PET铜箔/固态电池/锂电池概念",
     "sector_type": "legacy",
     "updated_at": "2026-06-17 12:29:31",
-    "jiuyan_concept": "其他关键材料及设备-铜箔",
+    "jiuyan_concept": "其他关键材料及设备",
     "jiuyan_category": "锂电池"
   },
   "301151": {
@@ -30957,9 +30957,9 @@
     "jiuyan_concept": "",
     "jiuyan_category": "",
     "jiuyan_category1": "电力",
-    "jiuyan_concept1": "智能电网-虚拟电厂-技术支持",
+    "jiuyan_concept1": "智能电网-虚拟电厂",
     "jiuyan_category2": "电力",
-    "jiuyan_concept2": "智能电网-虚拟电厂-负荷聚合商"
+    "jiuyan_concept2": "智能电网-虚拟电厂"
   },
   "301163": {
     "business_summary": "主营金属制品业",
@@ -31141,7 +31141,7 @@
     "jiuyan_concept": "",
     "jiuyan_category": "",
     "jiuyan_category1": "电力",
-    "jiuyan_concept1": "智能电网-虚拟电厂-技术支持"
+    "jiuyan_concept1": "智能电网-虚拟电厂"
   },
   "301180": {
     "business_summary": "主营消费电子",
@@ -31551,7 +31551,7 @@
     "jiuyan_concept": "",
     "jiuyan_category": "",
     "jiuyan_category1": "锂电池",
-    "jiuyan_concept1": "其他关键材料及设备-铜箔",
+    "jiuyan_concept1": "其他关键材料及设备",
     "jiuyan_category2": "PCB",
     "jiuyan_concept2": "HVLP"
   },
@@ -31648,7 +31648,7 @@
     "sector": "电气机械和器材制造业",
     "sector_type": "legacy",
     "updated_at": "2026-06-24 11:21:37",
-    "jiuyan_concept": "半导体设备-空气净化系统关键设备",
+    "jiuyan_concept": "半导体设备",
     "jiuyan_category": "半导体"
   },
   "301227": {
@@ -31756,7 +31756,7 @@
     "sector": "建筑安装业",
     "sector_type": "legacy",
     "updated_at": "2026-06-24 11:21:37",
-    "jiuyan_concept": "半导体设备-洁净室项目工程",
+    "jiuyan_concept": "半导体设备",
     "jiuyan_category": "半导体"
   },
   "301236": {
@@ -31833,7 +31833,7 @@
     "jiuyan_category1": "算力租赁",
     "jiuyan_concept1": "算力租赁",
     "jiuyan_category2": "AI应用",
-    "jiuyan_concept2": "甲骨文生态-合作伙伴"
+    "jiuyan_concept2": "甲骨文生态"
   },
   "301251": {
     "business_summary": "主营计算机、通信和其他电子设备制造业",
@@ -32255,7 +32255,7 @@
     "jiuyan_concept": "",
     "jiuyan_category": "",
     "jiuyan_category1": "电力",
-    "jiuyan_concept1": "电力设备-变压器"
+    "jiuyan_concept1": "电力设备"
   },
   "301292": {
     "business_summary": "主营化学原料和化学制品制造业",
@@ -32266,7 +32266,7 @@
     "sector": "化学原料和化学制品制造业",
     "sector_type": "legacy",
     "updated_at": "2026-06-16 23:33:11",
-    "jiuyan_concept": "电解液-电解液添加剂|电解液-电解液溶剂",
+    "jiuyan_concept": "电解液",
     "jiuyan_category": "锂电池"
   },
   "301293": {
@@ -32314,7 +32314,7 @@
     "sector": "半导体/光刻机/中芯国际概念/富士康概念",
     "sector_type": "legacy",
     "updated_at": "2026-06-24 11:21:37",
-    "jiuyan_concept": "半导体设备-清洗设备",
+    "jiuyan_concept": "半导体设备",
     "jiuyan_category": "半导体"
   },
   "301298": {
@@ -32410,7 +32410,7 @@
     "sector": "专业服务/大飞机/卫星导航/军民融合",
     "sector_type": "legacy",
     "updated_at": "2026-06-17 12:42:30",
-    "jiuyan_concept": "卫星-测试",
+    "jiuyan_concept": "卫星",
     "jiuyan_category": "商业航天"
   },
   "301307": {
@@ -32434,7 +32434,7 @@
     "sector": "计算机、通信和其他电子设备制造业",
     "sector_type": "legacy",
     "updated_at": "2026-06-24 11:21:37",
-    "jiuyan_concept": "存储芯片-DRAM-DDR|存储芯片-DRAM-模组|存储芯片-NANDFLASH",
+    "jiuyan_concept": "存储芯片-DRAM|存储芯片",
     "jiuyan_category": "半导体"
   },
   "301309": {
@@ -32818,7 +32818,7 @@
     "sector": "化学原料和化学制品制造业",
     "sector_type": "legacy",
     "updated_at": "2026-06-17 12:29:31",
-    "jiuyan_concept": "负极及辅材-包覆材料",
+    "jiuyan_concept": "负极及辅材",
     "jiuyan_category": "锂电池"
   },
   "301353": {
@@ -32878,7 +32878,7 @@
     "sector": "电池/磷化工/动力电池回收/固态电池",
     "sector_type": "legacy",
     "updated_at": "2026-06-16 23:33:11",
-    "jiuyan_concept": "正极材料-磷酸铁锂",
+    "jiuyan_concept": "正极材料",
     "jiuyan_category": "锂电池"
   },
   "301359": {
@@ -32917,7 +32917,7 @@
     "jiuyan_concept": "",
     "jiuyan_category": "",
     "jiuyan_category1": "电力",
-    "jiuyan_concept1": "智能电网-虚拟电厂-硬件供应"
+    "jiuyan_concept1": "智能电网-虚拟电厂"
   },
   "301362": {
     "business_summary": "LED绿色照明灯具产品的研发、生产和销售。",
@@ -33000,7 +33000,7 @@
     "sector": "第三代半导体/芯片概念",
     "sector_type": "legacy",
     "updated_at": "2026-06-24 11:21:37",
-    "jiuyan_concept": "半导体设备-测试设备",
+    "jiuyan_concept": "半导体设备",
     "jiuyan_category": "半导体"
   },
   "301370": {
@@ -33159,7 +33159,7 @@
     "jiuyan_concept": "",
     "jiuyan_category": "",
     "jiuyan_category1": "电力",
-    "jiuyan_concept1": "智能电网-用户侧-外置断路器"
+    "jiuyan_concept1": "智能电网-用户侧"
   },
   "301387": {
     "business_summary": "消费电子防护性及功能性产品的研发、生产与销售。",
@@ -33518,12 +33518,12 @@
     "sector": "通信设备/富士康概念/MR(混合现实)/光纤概念",
     "sector_type": "legacy",
     "updated_at": "2026-06-24 11:21:37",
-    "jiuyan_concept": "算力芯片-DPU",
+    "jiuyan_concept": "算力芯片",
     "jiuyan_category": "半导体",
     "jiuyan_category1": "半导体",
-    "jiuyan_concept1": "算力芯片-DPU",
+    "jiuyan_concept1": "算力芯片",
     "jiuyan_category2": "半导体",
-    "jiuyan_concept2": "算力芯片-DPU"
+    "jiuyan_concept2": "算力芯片"
   },
   "301487": {
     "business_summary": "主营化学原料和化学制品制造业",
@@ -33534,7 +33534,7 @@
     "sector": "化学原料和化学制品制造业",
     "sector_type": "legacy",
     "updated_at": "2026-06-16 23:33:11",
-    "jiuyan_concept": "正极材料-钴酸锂",
+    "jiuyan_concept": "正极材料",
     "jiuyan_category": "锂电池"
   },
   "301488": {
@@ -33774,7 +33774,7 @@
     "sector": "计算机、通信和其他电子设备制造业",
     "sector_type": "legacy",
     "updated_at": "2026-06-17 12:42:30",
-    "jiuyan_concept": "千帆星座|火箭-零部件",
+    "jiuyan_concept": "千帆星座|火箭",
     "jiuyan_category": "商业航天"
   },
   "301518": {
@@ -33822,7 +33822,7 @@
     "sector": "金属制品业",
     "sector_type": "legacy",
     "updated_at": "2026-06-17 12:42:30",
-    "jiuyan_concept": "火箭-回收",
+    "jiuyan_concept": "火箭",
     "jiuyan_category": "商业航天"
   },
   "301525": {
@@ -33918,7 +33918,7 @@
     "sector": "半导体/汽车芯片/芯片概念/AI眼镜",
     "sector_type": "legacy",
     "updated_at": "2026-06-24 11:21:37",
-    "jiuyan_concept": "端侧ai芯片-高性能soc",
+    "jiuyan_concept": "端侧ai芯片",
     "jiuyan_category": "半导体"
   },
   "301538": {
@@ -34101,7 +34101,7 @@
     "jiuyan_concept": "",
     "jiuyan_category": "",
     "jiuyan_category1": "PCB",
-    "jiuyan_concept1": "MLCC-其他领域"
+    "jiuyan_concept1": "MLCC"
   },
   "301567": {
     "business_summary": "主营其他",
@@ -34268,7 +34268,7 @@
     "sector": "计算机、通信和其他电子设备制造业",
     "sector_type": "legacy",
     "updated_at": "2026-06-17 12:42:30",
-    "jiuyan_concept": "火箭-蓝箭火箭",
+    "jiuyan_concept": "火箭",
     "jiuyan_category": "商业航天"
   },
   "301590": {
@@ -34556,7 +34556,7 @@
     "sector": "专用设备制造业",
     "sector_type": "legacy",
     "updated_at": "2026-06-24 11:21:37",
-    "jiuyan_concept": "半导体设备-测试设备-探针台",
+    "jiuyan_concept": "半导体设备-测试设备",
     "jiuyan_category": "半导体"
   },
   "301630": {
@@ -34933,9 +34933,9 @@
     "jiuyan_category1": "央企",
     "jiuyan_concept1": "",
     "jiuyan_category2": "电力",
-    "jiuyan_concept2": "电力运营-绿电",
+    "jiuyan_concept2": "电力运营",
     "jiuyan_category3": "电力",
-    "jiuyan_concept3": "电力运营-火电"
+    "jiuyan_concept3": "电力运营"
   },
   "600012": {
     "business_summary": "主营道路运输业",
@@ -35035,7 +35035,7 @@
     "jiuyan_category1": "央企",
     "jiuyan_concept1": "",
     "jiuyan_category2": "电力",
-    "jiuyan_concept2": "电力运营-火电"
+    "jiuyan_concept2": "电力运营"
   },
   "600022": {
     "business_summary": "主营黑色金属冶炼和压延加工业",
@@ -35075,7 +35075,7 @@
     "jiuyan_category1": "央企",
     "jiuyan_concept1": "",
     "jiuyan_category2": "电力",
-    "jiuyan_concept2": "电力运营-水电"
+    "jiuyan_concept2": "电力运营"
   },
   "600026": {
     "business_summary": "主营水上运输业",
@@ -35103,9 +35103,9 @@
     "jiuyan_category1": "央企",
     "jiuyan_concept1": "",
     "jiuyan_category2": "电力",
-    "jiuyan_concept2": "电力运营-绿电",
+    "jiuyan_concept2": "电力运营",
     "jiuyan_category3": "电力",
-    "jiuyan_concept3": "电力运营-火电"
+    "jiuyan_concept3": "电力运营"
   },
   "600028": {
     "business_summary": "主营石油和天然气开采业",
@@ -35167,7 +35167,7 @@
     "jiuyan_concept": "",
     "jiuyan_category": "",
     "jiuyan_category1": "电力",
-    "jiuyan_concept1": "电力运营-绿电"
+    "jiuyan_concept1": "电力运营"
   },
   "600033": {
     "business_summary": "主营道路运输业",
@@ -35444,7 +35444,7 @@
     "sector": "电网设备/两轮车/创投/福建自贸区",
     "sector_type": "legacy",
     "updated_at": "2026-05-30 21:48:57",
-    "jiuyan_concept": "电解液-电解液添加剂",
+    "jiuyan_concept": "电解液",
     "jiuyan_category": "锂电池"
   },
   "600068": {
@@ -35627,7 +35627,7 @@
     "jiuyan_concept": "变压器（含SST）",
     "jiuyan_category": "电力",
     "jiuyan_category1": "电力",
-    "jiuyan_concept1": "智能电网-输变配电-变电"
+    "jiuyan_concept1": "智能电网-输变配电"
   },
   "600090": {
     "business_summary": "主营其他",
@@ -35698,7 +35698,7 @@
     "sector": "化学原料和化学制品制造业",
     "sector_type": "legacy",
     "updated_at": "2026-06-17 12:23:02",
-    "jiuyan_concept": "正极材料-磷酸铁",
+    "jiuyan_concept": "正极材料",
     "jiuyan_category": "锂电池"
   },
   "600097": {
@@ -35763,7 +35763,7 @@
     "jiuyan_category1": "央企",
     "jiuyan_concept1": "",
     "jiuyan_category2": "电力",
-    "jiuyan_concept2": "电力运营-水电"
+    "jiuyan_concept2": "电力运营"
   },
   "600102": {
     "business_summary": "主营其他",
@@ -35813,7 +35813,7 @@
     "jiuyan_concept": "光纤光缆|光芯片",
     "jiuyan_category": "光通信",
     "jiuyan_category1": "可控核聚变",
-    "jiuyan_concept1": "超导磁体-高温超导材料|电缆-超导电缆|可控核聚变创新联合体成员"
+    "jiuyan_concept1": "超导磁体|电缆|可控核聚变创新联合体成员"
   },
   "600106": {
     "business_summary": "主营道路运输业",
@@ -35863,7 +35863,7 @@
     "jiuyan_concept": "",
     "jiuyan_category": "",
     "jiuyan_category1": "锂电池",
-    "jiuyan_concept1": "其他关键材料及设备-铜箔",
+    "jiuyan_concept1": "其他关键材料及设备",
     "jiuyan_category2": "PCB",
     "jiuyan_concept2": "HVLP"
   },
@@ -35953,7 +35953,7 @@
     "jiuyan_concept": "",
     "jiuyan_category": "",
     "jiuyan_category1": "商业航天",
-    "jiuyan_concept1": "卫星-组装制造|国家队-航天科技",
+    "jiuyan_concept1": "卫星|国家队",
     "jiuyan_category2": "太空光伏",
     "jiuyan_concept2": "太阳翼结构"
   },
@@ -36077,7 +36077,7 @@
     "jiuyan_concept": "",
     "jiuyan_category": "",
     "jiuyan_category1": "电力",
-    "jiuyan_concept1": "智能电网-虚拟电厂-综合服务"
+    "jiuyan_concept1": "智能电网-虚拟电厂"
   },
   "600132": {
     "business_summary": "主营酒、饮料和精制茶制造业",
@@ -36211,7 +36211,7 @@
     "jiuyan_concept": "",
     "jiuyan_category": "",
     "jiuyan_category1": "电力",
-    "jiuyan_concept1": "电力运营-其他"
+    "jiuyan_concept1": "电力运营"
   },
   "600150": {
     "business_summary": "造船业务（军、民）、修船业务、海洋工程及机电设备等。",
@@ -36330,7 +36330,7 @@
     "sector": "化学原料和化学制品制造业",
     "sector_type": "legacy",
     "updated_at": "2026-06-17 12:23:02",
-    "jiuyan_concept": "正极材料-PVDF",
+    "jiuyan_concept": "正极材料",
     "jiuyan_category": "锂电池"
   },
   "600161": {
@@ -36369,7 +36369,7 @@
     "jiuyan_concept": "",
     "jiuyan_category": "",
     "jiuyan_category1": "电力",
-    "jiuyan_concept1": "电力运营-绿电"
+    "jiuyan_concept1": "电力运营"
   },
   "600166": {
     "business_summary": "车辆与移动装备、零部件、数字科技和商业生态。",
@@ -36658,7 +36658,7 @@
     "sector": "医药制造业",
     "sector_type": "legacy",
     "updated_at": "2026-08-10 20:00:00",
-    "jiuyan_concept": "CAR-T细胞治疗|创新药转型",
+    "jiuyan_concept": "CAR|创新药转型",
     "jiuyan_category": "创新药"
   },
   "600197": {
@@ -36766,7 +36766,7 @@
     "sector": "半导体/光纤概念/国家大基金持股/稀土永磁",
     "sector_type": "legacy",
     "updated_at": "2026-06-24 11:21:37",
-    "jiuyan_concept": "半导体材料-溅射靶材",
+    "jiuyan_concept": "半导体材料",
     "jiuyan_category": "半导体"
   },
   "600207": {
@@ -36903,7 +36903,7 @@
     "jiuyan_category1": "算力金属",
     "jiuyan_concept1": "锡",
     "jiuyan_category2": "锂电池",
-    "jiuyan_concept2": "其他关键材料及设备-铝箔"
+    "jiuyan_concept2": "其他关键材料及设备"
   },
   "600221": {
     "business_summary": "国际、国内（含港澳）航空客货邮运输业务；与航空运输相关的服务业务；航空旅游；机上供应品，航空器材，航空地面设备及零配件的生产；候机楼服务和经营；保险兼业代理服务（限人身意外险）。",
@@ -37075,7 +37075,7 @@
     "jiuyan_category1": "央企",
     "jiuyan_concept1": "",
     "jiuyan_category2": "电力",
-    "jiuyan_concept2": "电力运营-水电"
+    "jiuyan_concept2": "电力运营"
   },
   "600237": {
     "business_summary": "薄膜电容器及其薄膜材料的研发、生产和销售。",
@@ -37134,7 +37134,7 @@
     "sector": "房地产业",
     "sector_type": "legacy",
     "updated_at": "2026-06-24 11:21:37",
-    "jiuyan_concept": "算力芯片-GPU|算力芯片-PCIe交换芯片",
+    "jiuyan_concept": "算力芯片",
     "jiuyan_category": "半导体"
   },
   "600248": {
@@ -37341,9 +37341,9 @@
     "jiuyan_concept": "",
     "jiuyan_category": "",
     "jiuyan_category1": "电力",
-    "jiuyan_concept1": "智能电网-输变配电-变电",
+    "jiuyan_concept1": "智能电网-输变配电",
     "jiuyan_category2": "电力",
-    "jiuyan_concept2": "智能电网-虚拟电厂-负荷聚合商"
+    "jiuyan_concept2": "智能电网-虚拟电厂"
   },
   "600269": {
     "business_summary": "主营道路运输业",
@@ -37426,7 +37426,7 @@
     "sector": "医药制造业",
     "sector_type": "legacy",
     "updated_at": "2026-08-10 20:00:00",
-    "jiuyan_concept": "ADC|双特异性抗体|GLP-1多靶点|肿瘤免疫",
+    "jiuyan_concept": "ADC|双特异性抗体|GLP|肿瘤免疫",
     "jiuyan_category": "创新药"
   },
   "600278": {
@@ -37755,7 +37755,7 @@
     "jiuyan_concept": "",
     "jiuyan_category": "",
     "jiuyan_category1": "电力",
-    "jiuyan_concept1": "电力运营-其他"
+    "jiuyan_concept1": "电力运营"
   },
   "600312": {
     "business_summary": "中压、高压、超高压、特高压交直流开关设备研发制造、销售安装、检修服务。",
@@ -37769,9 +37769,9 @@
     "jiuyan_concept": "",
     "jiuyan_category": "",
     "jiuyan_category1": "电力",
-    "jiuyan_concept1": "智能电网-输变配电-输电",
+    "jiuyan_concept1": "智能电网-输变配电",
     "jiuyan_category2": "电力",
-    "jiuyan_concept2": "电力建设-EPC"
+    "jiuyan_concept2": "电力建设"
   },
   "600313": {
     "business_summary": "主营批发业",
@@ -37962,7 +37962,7 @@
     "sector": "电子化学品Ⅱ/第三代半导体/先进封装/PCB概念",
     "sector_type": "legacy",
     "updated_at": "2026-06-17 11:59:24",
-    "jiuyan_concept": "光材料-铌酸锂",
+    "jiuyan_concept": "光材料",
     "jiuyan_category": "光通信"
   },
   "600331": {
@@ -38034,7 +38034,7 @@
     "sector": "工业金属/盐湖提锂/金属锌/金属铅",
     "sector_type": "legacy",
     "updated_at": "2026-06-16 23:33:11",
-    "jiuyan_concept": "锂矿资源-盐湖提锂",
+    "jiuyan_concept": "锂矿资源",
     "jiuyan_category": "锂电池"
   },
   "600339": {
@@ -38059,9 +38059,9 @@
     "sector_type": "legacy",
     "updated_at": "2026-08-08 00:00:00",
     "jiuyan_category1": "商业航天",
-    "jiuyan_concept1": "国家队-航天科技|火箭-发动机",
+    "jiuyan_concept1": "国家队|火箭",
     "jiuyan_category2": "军工",
-    "jiuyan_concept2": "国家队-航天科技|火箭-发动机|火箭军"
+    "jiuyan_concept2": "国家队|火箭|火箭军"
   },
   "600345": {
     "business_summary": "智能化应用产品和解决方案、公安、应急及城运行业通信与指挥领域的自主产品的销售、系统集成和运营服务。",
@@ -38077,7 +38077,7 @@
     "jiuyan_category1": "光通信",
     "jiuyan_concept1": "光纤光缆",
     "jiuyan_category2": "商业航天",
-    "jiuyan_concept2": "千帆星座|卫星-地面设备-信关站"
+    "jiuyan_concept2": "千帆星座|卫星-地面设备"
   },
   "600346": {
     "business_summary": "主营化学原料和化学制品制造业",
@@ -38088,7 +38088,7 @@
     "sector": "化学原料和化学制品制造业",
     "sector_type": "legacy",
     "updated_at": "2026-05-30 21:48:57",
-    "jiuyan_concept": "其他关键材料及设备-隔膜",
+    "jiuyan_concept": "其他关键材料及设备",
     "jiuyan_category": "锂电池"
   },
   "600348": {
@@ -38259,7 +38259,7 @@
     "sector_type": "legacy",
     "updated_at": "2026-08-08 00:00:00",
     "jiuyan_category1": "可控核聚变",
-    "jiuyan_concept1": "超导磁体-低温超导材料|超导磁体-超导磁体系统|偏滤器-偏滤器部件|加热系统-中性束注入|PF导管-PF导管系统|可控核聚变创新联合体成员",
+    "jiuyan_concept1": "超导磁体|偏滤器|加热系统|PF导管|可控核聚变创新联合体成员",
     "jiuyan_category2": "军工",
     "jiuyan_concept2": "分支系统"
   },
@@ -38661,13 +38661,13 @@
     "jiuyan_concept": "",
     "jiuyan_category": "",
     "jiuyan_category1": "电力",
-    "jiuyan_concept1": "智能电网-输变配电-变电",
+    "jiuyan_concept1": "智能电网-输变配电",
     "jiuyan_category2": "电力",
-    "jiuyan_concept2": "智能电网-输变配电-配电",
+    "jiuyan_concept2": "智能电网-输变配电",
     "jiuyan_category3": "电力",
-    "jiuyan_concept3": "智能电网-虚拟电厂-技术支持",
+    "jiuyan_concept3": "智能电网-虚拟电厂",
     "jiuyan_category4": "可控核聚变",
-    "jiuyan_concept4": "电源-励磁电源"
+    "jiuyan_concept4": "电源"
   },
   "600408": {
     "business_summary": "主营型钢及焦炭，山西煤焦化产业重点基地",
@@ -38690,7 +38690,7 @@
     "sector": "其他",
     "sector_type": "fallback",
     "updated_at": "2026-05-30 21:48:57",
-    "jiuyan_concept": "电解液-电解液添加剂",
+    "jiuyan_concept": "电解液",
     "jiuyan_category": "锂电池"
   },
   "600410": {
@@ -38981,9 +38981,9 @@
     "sector_type": "fallback",
     "updated_at": "2026-08-08 00:00:00",
     "jiuyan_category1": "商业航天",
-    "jiuyan_concept1": "spacex-潜在供应商-关键材料",
+    "jiuyan_concept1": "spacex-潜在供应商",
     "jiuyan_category2": "军工",
-    "jiuyan_concept2": "spacex-潜在供应商-关键材料|军工材料|导弹"
+    "jiuyan_concept2": "spacex-潜在供应商|军工材料|导弹"
   },
   "600458": {
     "business_summary": "轨道交通、工业与工程、风力发电、汽车、高性能高分子材料等产业领域系列产品的研制、生产与销售。",
@@ -39083,7 +39083,7 @@
     "jiuyan_concept": "",
     "jiuyan_category": "",
     "jiuyan_category1": "可控核聚变",
-    "jiuyan_concept1": "超导磁体-低温超导材料|电源-脉冲电源|电源-励磁电源|电缆-超导电缆"
+    "jiuyan_concept1": "超导磁体|电源|电缆"
   },
   "600469": {
     "business_summary": "主营橡胶和塑料制品业",
@@ -39193,7 +39193,7 @@
     "jiuyan_concept": "",
     "jiuyan_category": "",
     "jiuyan_category1": "商业航天",
-    "jiuyan_concept1": "spacex-参股-大型热交换器",
+    "jiuyan_concept1": "spacex-参股",
     "jiuyan_category2": "太空光伏",
     "jiuyan_concept2": "太空光伏设备"
   },
@@ -39221,7 +39221,7 @@
     "jiuyan_concept": "",
     "jiuyan_category": "",
     "jiuyan_category1": "电力",
-    "jiuyan_concept1": "电力运营-核电"
+    "jiuyan_concept1": "电力运营"
   },
   "600486": {
     "business_summary": "主营化学原料和化学制品制造业",
@@ -39247,7 +39247,7 @@
     "jiuyan_concept": "光纤光缆",
     "jiuyan_category": "光通信",
     "jiuyan_category1": "可控核聚变",
-    "jiuyan_concept1": "电缆-特种电缆"
+    "jiuyan_concept1": "电缆"
   },
   "600488": {
     "business_summary": "主营医药制造业",
@@ -39354,7 +39354,7 @@
     "sector": "专用设备制造业",
     "sector_type": "legacy",
     "updated_at": "2026-06-17 12:29:31",
-    "jiuyan_concept": "锂矿资源-盐湖提锂",
+    "jiuyan_concept": "锂矿资源",
     "jiuyan_category": "锂电池"
   },
   "600500": {
@@ -39379,9 +39379,9 @@
     "sector_type": "legacy",
     "updated_at": "2026-08-08 00:00:00",
     "jiuyan_category1": "商业航天",
-    "jiuyan_concept1": "国家队-航天科工|火箭-燃料加注",
+    "jiuyan_concept1": "国家队|火箭",
     "jiuyan_category2": "军工",
-    "jiuyan_concept2": "国家队-航天科工|导弹|火箭-燃料加注"
+    "jiuyan_concept2": "国家队|导弹|火箭"
   },
   "600502": {
     "business_summary": "主营土木工程建筑业",
@@ -39421,7 +39421,7 @@
     "jiuyan_category1": "央企",
     "jiuyan_concept1": "",
     "jiuyan_category2": "电力",
-    "jiuyan_concept2": "电力运营-水电"
+    "jiuyan_concept2": "电力运营"
   },
   "600506": {
     "business_summary": "主营石油、煤炭及其他燃料加工业",
@@ -39588,7 +39588,7 @@
     "sector": "专用设备制造业",
     "sector_type": "legacy",
     "updated_at": "2026-06-24 11:21:37",
-    "jiuyan_concept": "半导体设备-塑封设备",
+    "jiuyan_concept": "半导体设备",
     "jiuyan_category": "半导体"
   },
   "600521": {
@@ -39845,9 +39845,9 @@
     "jiuyan_category1": "算力金属",
     "jiuyan_concept1": "锡",
     "jiuyan_category2": "锂电池",
-    "jiuyan_concept2": "正极材料-钴酸锂",
+    "jiuyan_concept2": "正极材料",
     "jiuyan_category3": "可控核聚变",
-    "jiuyan_concept3": "第一壁材料-钨材料"
+    "jiuyan_concept3": "第一壁材料"
   },
   "600550": {
     "business_summary": "主营电气机械和器材制造业",
@@ -40129,7 +40129,7 @@
     "jiuyan_concept": "",
     "jiuyan_category": "",
     "jiuyan_category1": "可控核聚变",
-    "jiuyan_concept1": "超导磁体-高温超导材料|电缆-超导电缆"
+    "jiuyan_concept1": "超导磁体|电缆"
   },
   "600578": {
     "business_summary": "生产、销售电力热力产品、电力设备运行，发电设备检测、修理、脱硫石膏销售。",
@@ -40200,7 +40200,7 @@
     "sector": "半导体/国家大基金持股/存储芯片/先进封装",
     "sector_type": "legacy",
     "updated_at": "2026-06-24 11:21:37",
-    "jiuyan_concept": "存储芯片-封测-HBM",
+    "jiuyan_concept": "存储芯片-封测",
     "jiuyan_category": "半导体"
   },
   "600585": {
@@ -40253,7 +40253,7 @@
     "jiuyan_category1": "AI应用",
     "jiuyan_concept1": "AI应用",
     "jiuyan_category2": "云计算",
-    "jiuyan_concept2": "SaaS软件与服务-管理、办公软件"
+    "jiuyan_concept2": "SaaS软件与服务"
   },
   "600589": {
     "business_summary": "为客户提供全面、优质的数据中心及算力专业解决方案，助力各行业客户实现数字化转型需求。",
@@ -40288,7 +40288,7 @@
     "sector": "通用设备/人形机器人/大飞机/军民融合",
     "sector_type": "legacy",
     "updated_at": "2026-06-17 12:42:30",
-    "jiuyan_concept": "火箭-零部件",
+    "jiuyan_concept": "火箭",
     "jiuyan_category": "商业航天"
   },
   "600593": {
@@ -40588,7 +40588,7 @@
     "sector": "家电零部件Ⅱ/光刻机/上海自贸区/上海国企改革",
     "sector_type": "legacy",
     "updated_at": "2026-06-24 11:21:37",
-    "jiuyan_concept": "半导体设备-光刻机整机",
+    "jiuyan_concept": "半导体设备",
     "jiuyan_category": "半导体"
   },
   "600620": {
@@ -40780,7 +40780,7 @@
     "sector": "电视广播Ⅱ/云游戏/虚拟现实/AI应用",
     "sector_type": "legacy",
     "updated_at": "2026-06-24 11:21:37",
-    "jiuyan_concept": "半导体设备-光刻机整机",
+    "jiuyan_concept": "半导体设备",
     "jiuyan_category": "半导体"
   },
   "600638": {
@@ -40828,7 +40828,7 @@
     "sector": "半导体/第三代半导体/存储芯片/芯片概念",
     "sector_type": "legacy",
     "updated_at": "2026-06-24 11:21:37",
-    "jiuyan_concept": "半导体设备-离子注入机",
+    "jiuyan_concept": "半导体设备",
     "jiuyan_category": "半导体"
   },
   "600642": {
@@ -40867,7 +40867,7 @@
     "jiuyan_concept": "",
     "jiuyan_category": "",
     "jiuyan_category1": "电力",
-    "jiuyan_concept1": "电力运营-水电"
+    "jiuyan_concept1": "电力运营"
   },
   "600645": {
     "business_summary": "主营医药制造业",
@@ -41118,7 +41118,7 @@
     "sector": "工程咨询服务Ⅱ/存储芯片/先进封装/OLED",
     "sector_type": "legacy",
     "updated_at": "2026-06-24 11:21:37",
-    "jiuyan_concept": "半导体设备-设计/总包|存储芯片-封测-NAND",
+    "jiuyan_concept": "半导体设备|存储芯片-封测",
     "jiuyan_category": "半导体"
   },
   "600668": {
@@ -41154,7 +41154,7 @@
     "sector": "综合Ⅱ/算力租赁/东数西算(算力)/数据中心(AIDC)",
     "sector_type": "legacy",
     "updated_at": "2026-06-24 11:21:37",
-    "jiuyan_concept": "其他关键材料及设备-铝箔",
+    "jiuyan_concept": "其他关键材料及设备",
     "jiuyan_category": "锂电池",
     "jiuyan_category1": "液冷",
     "jiuyan_concept1": "液冷模组"
@@ -41639,7 +41639,7 @@
     "jiuyan_concept": "",
     "jiuyan_category": "",
     "jiuyan_category1": "电力",
-    "jiuyan_concept1": "电力运营-其他"
+    "jiuyan_concept1": "电力运营"
   },
   "600720": {
     "business_summary": "主营专业技术服务业",
@@ -41909,7 +41909,7 @@
     "jiuyan_category1": "央企",
     "jiuyan_concept1": "",
     "jiuyan_category2": "电力",
-    "jiuyan_concept2": "电力运营-火电"
+    "jiuyan_concept2": "电力运营"
   },
   "600746": {
     "business_summary": "主营化学原料和化学制品制造业",
@@ -42064,7 +42064,7 @@
     "sector": "通用设备制造业",
     "sector_type": "legacy",
     "updated_at": "2026-05-30 21:48:57",
-    "jiuyan_concept": "spacex-供应商-导流板",
+    "jiuyan_concept": "spacex-供应商",
     "jiuyan_category": "商业航天"
   },
   "600763": {
@@ -42184,7 +42184,7 @@
     "sector": "房地产业",
     "sector_type": "legacy",
     "updated_at": "2026-06-16 23:33:11",
-    "jiuyan_concept": "锂矿资源-盐湖提锂",
+    "jiuyan_concept": "锂矿资源",
     "jiuyan_category": "锂电池"
   },
   "600774": {
@@ -42208,7 +42208,7 @@
     "sector": "计算机、通信和其他电子设备制造业",
     "sector_type": "legacy",
     "updated_at": "2026-06-17 12:42:30",
-    "jiuyan_concept": "卫星-地面设备-移动通信终端",
+    "jiuyan_concept": "卫星-地面设备",
     "jiuyan_category": "商业航天"
   },
   "600776": {
@@ -42429,7 +42429,7 @@
     "jiuyan_category1": "央企",
     "jiuyan_concept1": "",
     "jiuyan_category2": "电力",
-    "jiuyan_concept2": "电力运营-火电"
+    "jiuyan_concept2": "电力运营"
   },
   "600796": {
     "business_summary": "主营其他",
@@ -42848,7 +42848,7 @@
     "sector": "通用设备制造业",
     "sector_type": "legacy",
     "updated_at": "2026-06-24 11:21:37",
-    "jiuyan_concept": "半导体设备-光刻机整机",
+    "jiuyan_concept": "半导体设备",
     "jiuyan_category": "半导体"
   },
   "600837": {
@@ -43064,7 +43064,7 @@
     "sector": "专用设备制造业",
     "sector_type": "legacy",
     "updated_at": "2026-06-17 12:42:30",
-    "jiuyan_concept": "国家队-航天科工",
+    "jiuyan_concept": "国家队",
     "jiuyan_category": "商业航天"
   },
   "600856": {
@@ -43163,7 +43163,7 @@
     "jiuyan_concept": "",
     "jiuyan_category": "",
     "jiuyan_category1": "电力",
-    "jiuyan_concept1": "电力运营-火电"
+    "jiuyan_concept1": "电力运营"
   },
   "600864": {
     "business_summary": "主营其他",
@@ -43311,7 +43311,7 @@
     "jiuyan_category1": "电力",
     "jiuyan_concept1": "火电灵活性改造",
     "jiuyan_category2": "可控核聚变",
-    "jiuyan_concept2": "加热系统-射频加热|检测设备-等离子体诊断|聚变更新"
+    "jiuyan_concept2": "加热系统|检测设备|聚变更新"
   },
   "600876": {
     "business_summary": "主营非金属矿物制品业",
@@ -43349,7 +43349,7 @@
     "jiuyan_concept": "",
     "jiuyan_category": "",
     "jiuyan_category1": "商业航天",
-    "jiuyan_concept1": "卫星-数管系统|卫星-有效载荷-遥感|卫星-测控系统|国家队-航天科技",
+    "jiuyan_concept1": "卫星|卫星-有效载荷|国家队",
     "jiuyan_category2": "太空光伏",
     "jiuyan_concept2": "太阳翼结构"
   },
@@ -43410,7 +43410,7 @@
     "sector": "电池/钠离子电池/固态电池/金属镍",
     "sector_type": "legacy",
     "updated_at": "2026-06-17 12:29:31",
-    "jiuyan_concept": "负极及辅材-负极材料",
+    "jiuyan_concept": "负极及辅材",
     "jiuyan_category": "锂电池"
   },
   "600885": {
@@ -43439,7 +43439,7 @@
     "jiuyan_category1": "央企",
     "jiuyan_concept1": "",
     "jiuyan_category2": "电力",
-    "jiuyan_concept2": "电力运营-火电"
+    "jiuyan_concept2": "电力运营"
   },
   "600887": {
     "business_summary": "各类乳品及健康饮品的生产与销售。",
@@ -43522,12 +43522,12 @@
     "sector": "房地产业",
     "sector_type": "legacy",
     "updated_at": "2026-06-24 11:21:37",
-    "jiuyan_concept": "半导体设备-光刻机整机",
+    "jiuyan_concept": "半导体设备",
     "jiuyan_category": "半导体",
     "jiuyan_category1": "半导体",
-    "jiuyan_concept1": "半导体设备-光刻机整机",
+    "jiuyan_concept1": "半导体设备",
     "jiuyan_category2": "商业航天",
-    "jiuyan_concept2": "火箭-蓝箭火箭"
+    "jiuyan_concept2": "火箭"
   },
   "600896": {
     "business_summary": "主营其他",
@@ -43567,7 +43567,7 @@
     "jiuyan_category1": "央企",
     "jiuyan_concept1": "",
     "jiuyan_category2": "电力",
-    "jiuyan_concept2": "电力运营-水电"
+    "jiuyan_concept2": "电力运营"
   },
   "600901": {
     "business_summary": "主营货币金融服务",
@@ -43607,9 +43607,9 @@
     "jiuyan_category1": "央企",
     "jiuyan_concept1": "",
     "jiuyan_category2": "电力",
-    "jiuyan_concept2": "电力运营-绿电",
+    "jiuyan_concept2": "电力运营",
     "jiuyan_category3": "电力",
-    "jiuyan_concept3": "电力运营-水电"
+    "jiuyan_concept3": "电力运营"
   },
   "600906": {
     "business_summary": "主营期货概念",
@@ -43922,7 +43922,7 @@
     "sector": "酒、饮料和精制茶制造业",
     "sector_type": "legacy",
     "updated_at": "2026-06-24 11:21:37",
-    "jiuyan_concept": "半导体设备-设计/总包",
+    "jiuyan_concept": "半导体设备",
     "jiuyan_category": "半导体"
   },
   "600963": {
@@ -43985,7 +43985,7 @@
     "jiuyan_concept": "锡",
     "jiuyan_category": "算力金属",
     "jiuyan_category1": "电力",
-    "jiuyan_concept1": "电力运营-其他"
+    "jiuyan_concept1": "电力运营"
   },
   "600970": {
     "business_summary": "主营土木工程建筑业",
@@ -44071,7 +44071,7 @@
     "jiuyan_concept": "",
     "jiuyan_category": "",
     "jiuyan_category1": "电力",
-    "jiuyan_concept1": "电力运营-水电"
+    "jiuyan_concept1": "电力运营"
   },
   "600980": {
     "business_summary": "主营专用设备制造业",
@@ -44905,9 +44905,9 @@
     "jiuyan_concept": "变压器（含SST）",
     "jiuyan_category": "电力",
     "jiuyan_category1": "电力",
-    "jiuyan_concept1": "智能电网-输变配电-配电",
+    "jiuyan_concept1": "智能电网-输变配电",
     "jiuyan_category2": "电力",
-    "jiuyan_concept2": "智能电网-虚拟电厂-综合服务"
+    "jiuyan_concept2": "智能电网-虚拟电厂"
   },
   "601127": {
     "business_summary": "主营乘用车",
@@ -44942,7 +44942,7 @@
     "sector": "专业工程/中芯国际概念/存储芯片/柔性屏(折叠屏)",
     "sector_type": "legacy",
     "updated_at": "2026-06-24 11:21:37",
-    "jiuyan_concept": "半导体设备-洁净室项目工程",
+    "jiuyan_concept": "半导体设备",
     "jiuyan_category": "半导体"
   },
   "601136": {
@@ -45115,9 +45115,9 @@
     "jiuyan_concept": "变压器（含SST）",
     "jiuyan_category": "电力",
     "jiuyan_category1": "电力",
-    "jiuyan_concept1": "智能电网-输变配电-输电",
+    "jiuyan_concept1": "智能电网-输变配电",
     "jiuyan_category2": "可控核聚变",
-    "jiuyan_concept2": "电源-脉冲电源"
+    "jiuyan_concept2": "电源"
   },
   "601186": {
     "business_summary": "主营土木工程建筑业",
@@ -45203,7 +45203,7 @@
     "jiuyan_concept": "环氧树脂|碳氢树脂M9",
     "jiuyan_category": "PCB",
     "jiuyan_category1": "可控核聚变",
-    "jiuyan_concept1": "其他-绝缘材料"
+    "jiuyan_concept1": "其他"
   },
   "601211": {
     "business_summary": "财富管理业务、投资银行业务、机构与交易业务、投资管理业务和国际业务。",
@@ -45265,9 +45265,9 @@
     "jiuyan_concept": "",
     "jiuyan_category": "",
     "jiuyan_category1": "电力",
-    "jiuyan_concept1": "电力设备-智能电表",
+    "jiuyan_concept1": "电力设备",
     "jiuyan_category2": "电力",
-    "jiuyan_concept2": "智能电网-用户侧-通信模块"
+    "jiuyan_concept2": "智能电网-用户侧"
   },
   "601225": {
     "business_summary": "主营煤炭开采和洗选业",
@@ -45775,13 +45775,13 @@
     "jiuyan_concept": "变压器（含SST）|其他",
     "jiuyan_category": "电力",
     "jiuyan_category1": "电力",
-    "jiuyan_concept1": "电力设备-智能电表",
+    "jiuyan_concept1": "电力设备",
     "jiuyan_category2": "电力",
-    "jiuyan_concept2": "智能电网-用户侧-智能电表",
+    "jiuyan_concept2": "智能电网-用户侧",
     "jiuyan_category3": "电力",
-    "jiuyan_concept3": "智能电网-用户侧-计量终端",
+    "jiuyan_concept3": "智能电网-用户侧",
     "jiuyan_category4": "电力",
-    "jiuyan_concept4": "智能电网-用户侧-通信模块"
+    "jiuyan_concept4": "智能电网-用户侧"
   },
   "601568": {
     "business_summary": "主营化学原料和化学制品制造业",
@@ -46099,7 +46099,7 @@
     "jiuyan_category1": "央企",
     "jiuyan_concept1": "",
     "jiuyan_category2": "电力",
-    "jiuyan_concept2": "电力建设-EPC"
+    "jiuyan_concept2": "电力建设"
   },
   "601677": {
     "business_summary": "主营工业金属",
@@ -46182,7 +46182,7 @@
     "sector": "航天装备Ⅱ/商业航天/军工/6G概念",
     "sector_type": "legacy",
     "updated_at": "2026-06-17 12:42:30",
-    "jiuyan_concept": "卫星-运营|国家队-航天科技",
+    "jiuyan_concept": "卫星|国家队",
     "jiuyan_category": "商业航天"
   },
   "601699": {
@@ -46245,7 +46245,7 @@
     "jiuyan_concept": "",
     "jiuyan_category": "",
     "jiuyan_category2": "半导体",
-    "jiuyan_concept2": "半导体设备-光刻机整机"
+    "jiuyan_concept2": "半导体设备"
   },
   "601728": {
     "business_summary": "领先的大型全业务综合智能信息服务运营商，天翼云在全球运营商公有云IaaS中排名第一",
@@ -46537,9 +46537,9 @@
     "jiuyan_category1": "央企",
     "jiuyan_concept1": "",
     "jiuyan_category2": "电力",
-    "jiuyan_concept2": "智能电网-输变配电-输电",
+    "jiuyan_concept2": "智能电网-输变配电",
     "jiuyan_category3": "电力",
-    "jiuyan_concept3": "电力建设-EPC"
+    "jiuyan_concept3": "电力建设"
   },
   "601869": {
     "business_summary": "研究、开发、生产和销售光纤预制棒、光纤、光缆及相关产品。",
@@ -46577,7 +46577,7 @@
     "jiuyan_concept": "变压器（含SST）",
     "jiuyan_category": "电力",
     "jiuyan_category1": "电力",
-    "jiuyan_concept1": "智能电网-用户侧-外置断路器"
+    "jiuyan_concept1": "智能电网-用户侧"
   },
   "601878": {
     "business_summary": "主营资本市场服务",
@@ -46867,7 +46867,7 @@
     "jiuyan_concept": "",
     "jiuyan_category": "",
     "jiuyan_category1": "可控核聚变",
-    "jiuyan_concept1": "第一壁材料-钼材料"
+    "jiuyan_concept1": "第一壁材料"
   },
   "601963": {
     "business_summary": "主营货币金融服务",
@@ -46955,7 +46955,7 @@
     "jiuyan_category1": "央企",
     "jiuyan_concept1": "",
     "jiuyan_category2": "电力",
-    "jiuyan_concept2": "电力运营-核电",
+    "jiuyan_concept2": "电力运营",
     "jiuyan_category3": "可控核聚变",
     "jiuyan_concept3": "中核集团控股"
   },
@@ -47009,7 +47009,7 @@
     "jiuyan_category1": "央企",
     "jiuyan_concept1": "",
     "jiuyan_category2": "电力",
-    "jiuyan_concept2": "电力运营-火电"
+    "jiuyan_concept2": "电力运营"
   },
   "601992": {
     "business_summary": "主营其他",
@@ -47215,7 +47215,7 @@
     "jiuyan_concept": "",
     "jiuyan_category": "",
     "jiuyan_category1": "可控核聚变",
-    "jiuyan_concept1": "超导磁体-超导磁体系统|超导磁体-磁体支撑|堆内结构件-真空室壳体|堆内结构件-磁体支撑结构|真空室-真空室|PF导管-PF导管系统|可控核聚变创新联合体成员"
+    "jiuyan_concept1": "超导磁体|堆内结构件|真空室|PF导管|可控核聚变创新联合体成员"
   },
   "603012": {
     "business_summary": "主营专用设备制造业",
@@ -47286,7 +47286,7 @@
     "sector": "工程咨询服务Ⅱ/商业航天/建筑节能/独角兽概念",
     "sector_type": "legacy",
     "updated_at": "2026-06-17 12:42:30",
-    "jiuyan_concept": "火箭-回收",
+    "jiuyan_concept": "火箭",
     "jiuyan_category": "商业航天"
   },
   "603018": {
@@ -47376,7 +47376,7 @@
     "sector": "化学原料和化学制品制造业",
     "sector_type": "legacy",
     "updated_at": "2026-06-17 12:29:31",
-    "jiuyan_concept": "电解液-电解液添加剂|电解液-电解液溶剂",
+    "jiuyan_concept": "电解液",
     "jiuyan_category": "锂电池"
   },
   "603027": {
@@ -47448,7 +47448,7 @@
     "sector": "专用设备制造业",
     "sector_type": "legacy",
     "updated_at": "2026-06-16 23:33:11",
-    "jiuyan_concept": "其他关键材料及设备-生产设备",
+    "jiuyan_concept": "其他关键材料及设备",
     "jiuyan_category": "锂电池"
   },
   "603033": {
@@ -47736,7 +47736,7 @@
     "sector": "其他",
     "sector_type": "fallback",
     "updated_at": "2026-06-24 11:21:37",
-    "jiuyan_concept": "半导体设备-测试设备-分选机",
+    "jiuyan_concept": "半导体设备-测试设备",
     "jiuyan_category": "半导体"
   },
   "603062": {
@@ -47808,10 +47808,10 @@
     "sector": "计算机、通信和其他电子设备制造业",
     "sector_type": "legacy",
     "updated_at": "2026-06-24 11:21:37",
-    "jiuyan_concept": "端侧ai芯片-低功耗soc",
+    "jiuyan_concept": "端侧ai芯片",
     "jiuyan_category": "半导体",
     "jiuyan_category1": "半导体",
-    "jiuyan_concept1": "端侧ai芯片-低功耗soc",
+    "jiuyan_concept1": "端侧ai芯片",
     "jiuyan_category2": "AI应用",
     "jiuyan_concept2": "AI应用"
   },
@@ -47920,7 +47920,7 @@
     "sector": "电子化学品Ⅱ/存储芯片/中芯国际概念/光刻胶",
     "sector_type": "legacy",
     "updated_at": "2026-06-24 11:21:37",
-    "jiuyan_concept": "半导体材料-湿电子化学品",
+    "jiuyan_concept": "半导体材料",
     "jiuyan_category": "半导体"
   },
   "603079": {
@@ -48124,12 +48124,12 @@
     "sector": "电气机械和器材制造业",
     "sector_type": "legacy",
     "updated_at": "2026-05-30 21:48:57",
-    "jiuyan_concept": "固态变压器SST-研发",
+    "jiuyan_concept": "固态变压器SST",
     "jiuyan_category": "HVDC",
     "jiuyan_category1": "电力",
-    "jiuyan_concept1": "电力设备-变压器",
+    "jiuyan_concept1": "电力设备",
     "jiuyan_category2": "电力",
-    "jiuyan_concept2": "智能电网-输变配电-变电"
+    "jiuyan_concept2": "智能电网-输变配电"
   },
   "603098": {
     "business_summary": "主营建筑装饰、装修和其他建筑业",
@@ -48215,7 +48215,7 @@
     "jiuyan_concept": "",
     "jiuyan_category": "",
     "jiuyan_category1": "电力",
-    "jiuyan_concept1": "智能电网-虚拟电厂-综合服务"
+    "jiuyan_concept1": "智能电网-虚拟电厂"
   },
   "603106": {
     "business_summary": "主营计算机设备",
@@ -48514,7 +48514,7 @@
     "sector": "卫星导航/商业航天",
     "sector_type": "legacy",
     "updated_at": "2026-06-17 12:42:30",
-    "jiuyan_concept": "卫星-组装制造",
+    "jiuyan_concept": "卫星",
     "jiuyan_category": "商业航天"
   },
   "603132": {
@@ -48538,7 +48538,7 @@
     "sector": "其他",
     "sector_type": "fallback",
     "updated_at": "2026-05-30 21:48:57",
-    "jiuyan_concept": "其他关键材料及设备-隔膜",
+    "jiuyan_concept": "其他关键材料及设备",
     "jiuyan_category": "锂电池"
   },
   "603135": {
@@ -48754,7 +48754,7 @@
     "sector": "专业工程/中芯国际概念/芯片概念/富士康概念",
     "sector_type": "legacy",
     "updated_at": "2026-06-24 11:21:37",
-    "jiuyan_concept": "半导体设备-洁净室项目工程",
+    "jiuyan_concept": "半导体设备",
     "jiuyan_category": "半导体"
   },
   "603165": {
@@ -49270,7 +49270,7 @@
     "sector": "汽车零部件/一体化压铸/机器人概念/汽车拆解概念",
     "sector_type": "legacy",
     "updated_at": "2026-05-30 21:48:57",
-    "jiuyan_concept": "spacex-参股-微波放大器-基站放大器-滤波器",
+    "jiuyan_concept": "spacex-参股-微波放大器-基站放大器",
     "jiuyan_category": "商业航天"
   },
   "603212": {
@@ -49550,10 +49550,10 @@
     "sector": "通信设备/英伟达概念/移动支付/无人零售",
     "sector_type": "legacy",
     "updated_at": "2026-06-24 11:21:37",
-    "jiuyan_concept": "端侧ai芯片-物联网模组",
+    "jiuyan_concept": "端侧ai芯片",
     "jiuyan_category": "半导体",
     "jiuyan_category1": "半导体",
-    "jiuyan_concept1": "端侧ai芯片-物联网模组",
+    "jiuyan_concept1": "端侧ai芯片",
     "jiuyan_category2": "AI应用",
     "jiuyan_concept2": "AI应用"
   },
@@ -49674,7 +49674,7 @@
     "sector": "化学制品/有机硅概念/硅能源/石墨电极",
     "sector_type": "legacy",
     "updated_at": "2026-06-24 11:21:37",
-    "jiuyan_concept": "半导体材料-硅片",
+    "jiuyan_concept": "半导体材料",
     "jiuyan_category": "半导体"
   },
   "603262": {
@@ -49715,7 +49715,7 @@
     "jiuyan_category1": "商业航天",
     "jiuyan_concept1": "千帆星座",
     "jiuyan_category2": "PCB",
-    "jiuyan_concept2": "MLCC-AI领域"
+    "jiuyan_concept2": "MLCC"
   },
   "603268": {
     "business_summary": "船舶及高端装备的研发、生产和销售。",
@@ -49884,7 +49884,7 @@
     "sector": "自动化设备/存储芯片/芯片概念/PCB概念",
     "sector_type": "legacy",
     "updated_at": "2026-06-24 11:21:37",
-    "jiuyan_concept": "半导体设备-前道检测设备|存储芯片-设备",
+    "jiuyan_concept": "半导体设备|存储芯片",
     "jiuyan_category": "半导体"
   },
   "603284": {
@@ -50083,7 +50083,7 @@
     "jiuyan_category1": "机器人",
     "jiuyan_concept1": "其他",
     "jiuyan_category2": "商业航天",
-    "jiuyan_concept2": "spacex-供应商-相控阵底盘和支架|spacex-潜在供应商-相控阵底盘和支架|spacex-潜在供应商-航天结构件"
+    "jiuyan_concept2": "spacex-供应商|spacex-潜在供应商"
   },
   "603306": {
     "business_summary": "汽车被动安全部件的研发、生产、销售。",
@@ -50094,7 +50094,7 @@
     "sector": "汽车零部件/共封装光学(CPO)/芯片概念/光刻胶",
     "sector_type": "legacy",
     "updated_at": "2026-06-24 11:21:37",
-    "jiuyan_concept": "半导体材料-光刻胶",
+    "jiuyan_concept": "半导体材料",
     "jiuyan_category": "半导体"
   },
   "603307": {
@@ -50121,7 +50121,7 @@
     "jiuyan_concept": "燃气轮机",
     "jiuyan_category": "电力",
     "jiuyan_category1": "可控核聚变",
-    "jiuyan_concept1": "超导磁体-磁体支撑|堆内结构件-真空室壳体|堆内结构件-磁体支撑结构|真空室-真空室"
+    "jiuyan_concept1": "超导磁体|堆内结构件|真空室"
   },
   "603309": {
     "business_summary": "主营专用设备制造业",
@@ -50300,7 +50300,7 @@
     "sector": "环保设备Ⅱ/中芯国际概念/光刻胶/专精特新",
     "sector_type": "legacy",
     "updated_at": "2026-06-24 11:21:37",
-    "jiuyan_concept": "半导体设备-空气净化系统关键设备",
+    "jiuyan_concept": "半导体设备",
     "jiuyan_category": "半导体"
   },
   "603325": {
@@ -50768,7 +50768,7 @@
     "sector": "化学原料和化学制品制造业",
     "sector_type": "legacy",
     "updated_at": "2026-06-17 12:23:02",
-    "jiuyan_concept": "电解液-电解液添加剂",
+    "jiuyan_concept": "电解液",
     "jiuyan_category": "锂电池"
   },
   "603380": {
@@ -51047,7 +51047,7 @@
     "jiuyan_concept": "",
     "jiuyan_category": "",
     "jiuyan_category1": "电力",
-    "jiuyan_concept1": "智能电网-用户侧-智能电表"
+    "jiuyan_concept1": "智能电网-用户侧"
   },
   "603435": {
     "business_summary": "主营计算机、通信和其他电子设备制造业",
@@ -51397,7 +51397,7 @@
     "jiuyan_concept": "其他",
     "jiuyan_category": "电力",
     "jiuyan_category1": "电力",
-    "jiuyan_concept1": "电力设备-绝缘子"
+    "jiuyan_concept1": "电力设备"
   },
   "603533": {
     "business_summary": "主营互联网和相关服务",
@@ -51408,7 +51408,7 @@
     "sector": "互联网和相关服务",
     "sector_type": "legacy",
     "updated_at": "2026-05-30 21:48:57",
-    "jiuyan_concept": "AI应用|Minimax-生态|短剧",
+    "jiuyan_concept": "AI应用|Minimax|短剧",
     "jiuyan_category": "AI应用"
   },
   "603535": {
@@ -51471,11 +51471,11 @@
     "jiuyan_concept": "",
     "jiuyan_category": "",
     "jiuyan_category1": "电力",
-    "jiuyan_concept1": "电力设备-智能电表",
+    "jiuyan_concept1": "电力设备",
     "jiuyan_category2": "电力",
-    "jiuyan_concept2": "智能电网-用户侧-智能电表",
+    "jiuyan_concept2": "智能电网-用户侧",
     "jiuyan_category3": "电力",
-    "jiuyan_concept3": "智能电网-用户侧-通信模块"
+    "jiuyan_concept3": "智能电网-用户侧"
   },
   "603558": {
     "business_summary": "主营纺织服装、服饰业",
@@ -51690,7 +51690,7 @@
     "sector": "其他",
     "sector_type": "fallback",
     "updated_at": "2026-05-30 21:48:57",
-    "jiuyan_concept": "AI应用|Minimax-生态|ai营销|短剧",
+    "jiuyan_concept": "AI应用|Minimax|ai营销|短剧",
     "jiuyan_category": "AI应用"
   },
   "603599": {
@@ -51726,12 +51726,12 @@
     "sector": "玻璃玻纤/商业航天/大飞机/PM2.5",
     "sector_type": "legacy",
     "updated_at": "2026-06-24 11:21:37",
-    "jiuyan_concept": "半导体设备-空气净化系统关键设备",
+    "jiuyan_concept": "半导体设备",
     "jiuyan_category": "半导体",
     "jiuyan_category1": "半导体",
-    "jiuyan_concept1": "半导体设备-空气净化系统关键设备",
+    "jiuyan_concept1": "半导体设备",
     "jiuyan_category2": "商业航天",
-    "jiuyan_concept2": "spacex-参股-高性能高硅氧纤维"
+    "jiuyan_concept2": "spacex-参股"
   },
   "603602": {
     "business_summary": "主营其他",
@@ -51781,7 +51781,7 @@
     "jiuyan_concept": "",
     "jiuyan_category": "",
     "jiuyan_category1": "可控核聚变",
-    "jiuyan_concept1": "电缆-特种电缆"
+    "jiuyan_concept1": "电缆"
   },
   "603607": {
     "business_summary": "主营造纸和纸制品业",
@@ -52056,7 +52056,7 @@
     "sector": "化学原料和化学制品制造业",
     "sector_type": "legacy",
     "updated_at": "2026-06-24 11:21:37",
-    "jiuyan_concept": "半导体材料-光刻胶",
+    "jiuyan_concept": "半导体材料",
     "jiuyan_category": "半导体"
   },
   "603655": {
@@ -52116,7 +52116,7 @@
     "sector": "电池/石墨电极/钠离子电池/PVDF概念",
     "sector_type": "legacy",
     "updated_at": "2026-06-17 12:29:31",
-    "jiuyan_concept": "其他材料及设备-生产设备|其他材料及设备-隔膜|正极材料-PVDF|负极及辅材-负极材料",
+    "jiuyan_concept": "其他材料及设备|正极材料|负极及辅材",
     "jiuyan_category": "锂电池"
   },
   "603660": {
@@ -52261,7 +52261,7 @@
     "sector_type": "legacy",
     "updated_at": "2026-08-08 00:00:00",
     "jiuyan_category1": "PCB",
-    "jiuyan_concept1": "MLCC-AI领域",
+    "jiuyan_concept1": "MLCC",
     "jiuyan_category2": "军工",
     "jiuyan_concept2": "AI领域MLCC|基础配套产品|导弹"
   },
@@ -52274,7 +52274,7 @@
     "sector": "电气机械和器材制造业",
     "sector_type": "legacy",
     "updated_at": "2026-06-17 12:42:30",
-    "jiuyan_concept": "卫星-运营",
+    "jiuyan_concept": "卫星",
     "jiuyan_category": "商业航天"
   },
   "603680": {
@@ -52394,7 +52394,7 @@
     "sector": "半导体/中芯国际概念/存储芯片/先进封装",
     "sector_type": "legacy",
     "updated_at": "2026-06-24 11:21:37",
-    "jiuyan_concept": "半导体设备-清洗设备",
+    "jiuyan_concept": "半导体设备",
     "jiuyan_category": "半导体"
   },
   "603693": {
@@ -52409,7 +52409,7 @@
     "jiuyan_concept": "",
     "jiuyan_category": "",
     "jiuyan_category1": "电力",
-    "jiuyan_concept1": "电力运营-绿电"
+    "jiuyan_concept1": "电力运营"
   },
   "603696": {
     "business_summary": "主营食品制造业",
@@ -52459,7 +52459,7 @@
     "jiuyan_concept": "",
     "jiuyan_category": "",
     "jiuyan_category1": "可控核聚变",
-    "jiuyan_concept1": "阀门-真空阀门|阀门-调节阀"
+    "jiuyan_concept1": "阀门"
   },
   "603700": {
     "business_summary": "主营仪器仪表制造业",
@@ -52962,7 +52962,7 @@
     "sector": "有色金属冶炼和压延加工业",
     "sector_type": "legacy",
     "updated_at": "2026-06-16 23:33:11",
-    "jiuyan_concept": "正极材料-三元前驱",
+    "jiuyan_concept": "正极材料",
     "jiuyan_category": "锂电池"
   },
   "603800": {
@@ -52977,7 +52977,7 @@
     "jiuyan_concept": "",
     "jiuyan_category": "",
     "jiuyan_category1": "锂电池",
-    "jiuyan_concept1": "其他关键材料及设备-生产设备",
+    "jiuyan_concept1": "其他关键材料及设备",
     "jiuyan_category2": "PCB",
     "jiuyan_concept2": "曝光"
   },
@@ -53043,7 +53043,7 @@
     "jiuyan_category1": "机器人",
     "jiuyan_concept1": "行星减速器",
     "jiuyan_category2": "商业航天",
-    "jiuyan_concept2": "火箭-发动机"
+    "jiuyan_concept2": "火箭"
   },
   "603810": {
     "business_summary": "主营化学原料和化学制品制造业",
@@ -53054,7 +53054,7 @@
     "sector": "化学原料和化学制品制造业",
     "sector_type": "legacy",
     "updated_at": "2026-06-16 23:33:11",
-    "jiuyan_concept": "电解液-电解液溶剂",
+    "jiuyan_concept": "电解液",
     "jiuyan_category": "锂电池"
   },
   "603811": {
@@ -53275,7 +53275,7 @@
     "jiuyan_category1": "机器人",
     "jiuyan_concept1": "其他",
     "jiuyan_category2": "AI应用",
-    "jiuyan_concept2": "华为生态-合作伙伴"
+    "jiuyan_concept2": "华为生态"
   },
   "603860": {
     "business_summary": "主营专业技术服务业",
@@ -53334,7 +53334,7 @@
     "sector": "化学原料和化学制品制造业",
     "sector_type": "legacy",
     "updated_at": "2026-05-30 21:48:57",
-    "jiuyan_concept": "电解液-电解液添加剂",
+    "jiuyan_concept": "电解液",
     "jiuyan_category": "锂电池"
   },
   "603868": {
@@ -53370,7 +53370,7 @@
     "sector": "工业金属/钠离子电池/固态电池/锂电池概念",
     "sector_type": "legacy",
     "updated_at": "2026-06-16 23:36:47",
-    "jiuyan_concept": "其他关键材料及设备-铝箔",
+    "jiuyan_concept": "其他关键材料及设备",
     "jiuyan_category": "锂电池"
   },
   "603877": {
@@ -53538,7 +53538,7 @@
     "sector": "半导体/MCU芯片/中国AI 50/智能音箱",
     "sector_type": "legacy",
     "updated_at": "2026-06-24 11:21:37",
-    "jiuyan_concept": "端侧ai芯片-高性能soc",
+    "jiuyan_concept": "端侧ai芯片",
     "jiuyan_category": "半导体"
   },
   "603895": {
@@ -53646,7 +53646,7 @@
     "sector": "电池/磷化工/钠离子电池",
     "sector_type": "legacy",
     "updated_at": "2026-06-17 12:29:31",
-    "jiuyan_concept": "正极材料-磷酸铁锂",
+    "jiuyan_concept": "正极材料",
     "jiuyan_category": "锂电池"
   },
   "603908": {
@@ -53802,7 +53802,7 @@
     "sector": "专业工程/中芯国际概念/富士康概念/OLED",
     "sector_type": "legacy",
     "updated_at": "2026-06-24 11:21:37",
-    "jiuyan_concept": "半导体设备-洁净室项目工程",
+    "jiuyan_concept": "半导体设备",
     "jiuyan_category": "半导体"
   },
   "603931": {
@@ -53814,7 +53814,7 @@
     "sector": "化学原料和化学制品制造业",
     "sector_type": "legacy",
     "updated_at": "2026-06-24 11:21:37",
-    "jiuyan_concept": "半导体材料-湿电子化学品",
+    "jiuyan_concept": "半导体材料",
     "jiuyan_category": "半导体"
   },
   "603933": {
@@ -53862,7 +53862,7 @@
     "sector": "化学原料/光纤概念/存储芯片/芯片概念",
     "sector_type": "legacy",
     "updated_at": "2026-06-24 11:21:37",
-    "jiuyan_concept": "半导体材料-电子特气",
+    "jiuyan_concept": "半导体材料",
     "jiuyan_category": "半导体"
   },
   "603939": {
@@ -53886,7 +53886,7 @@
     "sector": "化学原料和化学制品制造业",
     "sector_type": "legacy",
     "updated_at": "2026-05-30 21:48:57",
-    "jiuyan_concept": "电解液-电解液添加剂",
+    "jiuyan_concept": "电解液",
     "jiuyan_category": "锂电池"
   },
   "603949": {
@@ -54126,7 +54126,7 @@
     "sector": "半导体/存储芯片/汽车芯片/MCU芯片",
     "sector_type": "legacy",
     "updated_at": "2026-06-24 11:21:37",
-    "jiuyan_concept": "存储芯片-DRAM-DDR|存储芯片-DRAM-LPDDR|存储芯片-NANDFLASH|存储芯片-NORFLASH",
+    "jiuyan_concept": "存储芯片-DRAM|存储芯片",
     "jiuyan_category": "半导体"
   },
   "603987": {
@@ -54213,7 +54213,7 @@
     "jiuyan_concept": "钨|铜",
     "jiuyan_category": "算力金属",
     "jiuyan_category1": "可控核聚变",
-    "jiuyan_concept1": "第一壁材料-钼材料"
+    "jiuyan_concept1": "第一壁材料"
   },
   "603995": {
     "business_summary": "主营黑色金属冶炼和压延加工业",
@@ -54371,7 +54371,7 @@
     "jiuyan_concept": "",
     "jiuyan_category": "",
     "jiuyan_category1": "电力",
-    "jiuyan_concept1": "电力运营-其他"
+    "jiuyan_concept1": "电力运营"
   },
   "605016": {
     "business_summary": "主营代糖概念",
@@ -54421,7 +54421,7 @@
     "jiuyan_concept": "",
     "jiuyan_category": "",
     "jiuyan_category1": "电力",
-    "jiuyan_concept1": "电力运营-其他"
+    "jiuyan_concept1": "电力运营"
   },
   "605033": {
     "business_summary": "主营化学原料和化学制品制造业",
@@ -54509,7 +54509,7 @@
     "jiuyan_concept": "",
     "jiuyan_category": "",
     "jiuyan_category1": "电力",
-    "jiuyan_concept1": "智能电网-用户侧-外置断路器"
+    "jiuyan_concept1": "智能电网-用户侧"
   },
   "605068": {
     "business_summary": "主营皮革、毛皮、羽毛及其制品和制鞋业",
@@ -54604,7 +54604,7 @@
     "sector": "燃气生产和供应业",
     "sector_type": "legacy",
     "updated_at": "2026-06-17 12:42:30",
-    "jiuyan_concept": "火箭-推进剂",
+    "jiuyan_concept": "火箭",
     "jiuyan_category": "商业航天"
   },
   "605098": {
@@ -54727,9 +54727,9 @@
     "sector_type": "legacy",
     "updated_at": "2026-08-08 00:00:00",
     "jiuyan_category1": "商业航天",
-    "jiuyan_concept1": "spacex-潜在供应商-先进锻造|火箭-零部件",
+    "jiuyan_concept1": "spacex-潜在供应商|火箭",
     "jiuyan_category2": "军工",
-    "jiuyan_concept2": "spacex-潜在供应商-先进锻造|火箭-零部件|空军"
+    "jiuyan_concept2": "spacex-潜在供应商|火箭|空军"
   },
   "605128": {
     "business_summary": "业内领先的汽车零部件供应商，拥有较为完整的汽车座椅总成产品",
@@ -54827,9 +54827,9 @@
     "jiuyan_concept": "",
     "jiuyan_category": "",
     "jiuyan_category1": "电力",
-    "jiuyan_concept1": "智能电网-虚拟电厂-综合服务",
+    "jiuyan_concept1": "智能电网-虚拟电厂",
     "jiuyan_category2": "电力",
-    "jiuyan_concept2": "电力运营-其他"
+    "jiuyan_concept2": "电力运营"
   },
   "605166": {
     "business_summary": "主营化学原料和化学制品制造业",
@@ -55116,7 +55116,7 @@
     "sector": "消费电子/5G/铜缆高速连接/华为概念",
     "sector_type": "legacy",
     "updated_at": "2026-05-30 21:48:57",
-    "jiuyan_concept": "甲骨文生态-合作伙伴",
+    "jiuyan_concept": "甲骨文生态",
     "jiuyan_category": "AI应用"
   },
   "605286": {
@@ -55385,7 +55385,7 @@
     "jiuyan_concept": "",
     "jiuyan_category": "",
     "jiuyan_category1": "PCB",
-    "jiuyan_concept1": "MLCC-镍粉",
+    "jiuyan_concept1": "MLCC",
     "jiuyan_category2": "太空光伏",
     "jiuyan_concept2": "太空光伏辅材"
   },
@@ -55674,7 +55674,7 @@
     "sector": "电池/钠离子电池/动力电池回收/固态电池",
     "sector_type": "legacy",
     "updated_at": "2026-06-17 12:29:31",
-    "jiuyan_concept": "正极材料-三元材料",
+    "jiuyan_concept": "正极材料",
     "jiuyan_category": "锂电池"
   },
   "688006": {
@@ -55710,7 +55710,7 @@
     "sector": "半导体/存储芯片/中芯国际概念/芯片概念",
     "sector_type": "legacy",
     "updated_at": "2026-06-24 11:21:37",
-    "jiuyan_concept": "存储芯片-互连芯片",
+    "jiuyan_concept": "存储芯片",
     "jiuyan_category": "半导体"
   },
   "688009": {
@@ -55758,7 +55758,7 @@
     "sector": "半导体/国家大基金持股/中芯国际概念/存储芯片",
     "sector_type": "legacy",
     "updated_at": "2026-06-24 11:21:37",
-    "jiuyan_concept": "半导体设备-薄膜沉积设备|半导体设备-蚀刻设备",
+    "jiuyan_concept": "半导体设备",
     "jiuyan_category": "半导体"
   },
   "688013": {
@@ -55818,7 +55818,7 @@
     "sector": "半导体/中国AI 50/星闪概念/MCU芯片",
     "sector_type": "legacy",
     "updated_at": "2026-06-24 11:21:37",
-    "jiuyan_concept": "端侧ai芯片-低功耗soc",
+    "jiuyan_concept": "端侧ai芯片",
     "jiuyan_category": "半导体"
   },
   "688019": {
@@ -55830,7 +55830,7 @@
     "sector": "电子化学品Ⅱ/中芯国际概念/存储芯片/光刻胶",
     "sector_type": "legacy",
     "updated_at": "2026-06-24 11:21:37",
-    "jiuyan_concept": "半导体材料-抛光材料|半导体材料-湿电子化学品",
+    "jiuyan_concept": "半导体材料",
     "jiuyan_category": "半导体"
   },
   "688020": {
@@ -55866,7 +55866,7 @@
     "sector": "其他",
     "sector_type": "fallback",
     "updated_at": "2026-05-30 21:48:57",
-    "jiuyan_concept": "SaaS软件与服务-云安全",
+    "jiuyan_concept": "SaaS软件与服务",
     "jiuyan_category": "云计算"
   },
   "688025": {
@@ -55950,7 +55950,7 @@
     "sector": "软件开发/MLOps概念/华为昇腾/数字水印",
     "sector_type": "legacy",
     "updated_at": "2026-05-30 21:48:57",
-    "jiuyan_concept": "数据中台服务商-数据中台",
+    "jiuyan_concept": "数据中台服务商",
     "jiuyan_category": "AI应用"
   },
   "688032": {
@@ -55998,7 +55998,7 @@
     "sector": "其他",
     "sector_type": "fallback",
     "updated_at": "2026-06-24 11:21:37",
-    "jiuyan_concept": "半导体设备-涂胶显影机|半导体设备-清洗设备",
+    "jiuyan_concept": "半导体设备",
     "jiuyan_category": "半导体"
   },
   "688038": {
@@ -56034,7 +56034,7 @@
     "sector": "半导体/中国AI 50/东数西算(算力)/芯片概念",
     "sector_type": "legacy",
     "updated_at": "2026-06-24 11:21:37",
-    "jiuyan_concept": "算力芯片-CPU|算力芯片-GPU",
+    "jiuyan_concept": "算力芯片",
     "jiuyan_category": "半导体"
   },
   "688045": {
@@ -56070,7 +56070,7 @@
     "sector": "半导体/汽车芯片/MCU芯片/东数西算(算力)",
     "sector_type": "legacy",
     "updated_at": "2026-06-24 11:21:37",
-    "jiuyan_concept": "算力芯片-CPU",
+    "jiuyan_concept": "算力芯片",
     "jiuyan_category": "半导体"
   },
   "688048": {
@@ -56094,7 +56094,7 @@
     "sector": "计算机、通信和其他电子设备制造业",
     "sector_type": "legacy",
     "updated_at": "2026-06-24 11:21:37",
-    "jiuyan_concept": "端侧ai芯片-低功耗soc",
+    "jiuyan_concept": "端侧ai芯片",
     "jiuyan_category": "半导体"
   },
   "688050": {
@@ -56322,7 +56322,7 @@
     "sector": "半导体/国家大基金持股/存储芯片/先进封装",
     "sector_type": "legacy",
     "updated_at": "2026-06-24 11:21:37",
-    "jiuyan_concept": "半导体设备-薄膜沉积设备",
+    "jiuyan_concept": "半导体设备",
     "jiuyan_category": "半导体"
   },
   "688073": {
@@ -56346,7 +56346,7 @@
     "sector": "医药制造业",
     "sector_type": "legacy",
     "updated_at": "2026-05-30 21:48:57",
-    "jiuyan_concept": "正极材料-磷酸铁|正极材料-磷酸铁锂",
+    "jiuyan_concept": "正极材料",
     "jiuyan_category": "锂电池"
   },
   "688077": {
@@ -56418,7 +56418,7 @@
     "sector": "半导体/存储芯片/先进封装/中芯国际概念",
     "sector_type": "legacy",
     "updated_at": "2026-06-24 11:21:37",
-    "jiuyan_concept": "半导体设备-清洗设备",
+    "jiuyan_concept": "半导体设备",
     "jiuyan_category": "半导体"
   },
   "688083": {
@@ -56610,7 +56610,7 @@
     "sector": "半导体/汽车芯片/WiFi 6/芯片概念",
     "sector_type": "legacy",
     "updated_at": "2026-06-24 11:21:37",
-    "jiuyan_concept": "端侧ai芯片-高性能soc",
+    "jiuyan_concept": "端侧ai芯片",
     "jiuyan_category": "半导体"
   },
   "688100": {
@@ -56625,7 +56625,7 @@
     "jiuyan_concept": "",
     "jiuyan_category": "",
     "jiuyan_category1": "电力",
-    "jiuyan_concept1": "智能电网-用户侧-智能电表"
+    "jiuyan_concept1": "智能电网-用户侧"
   },
   "688101": {
     "business_summary": "主营盐湖提锂",
@@ -56651,7 +56651,7 @@
     "jiuyan_concept": "",
     "jiuyan_category": "",
     "jiuyan_category2": "商业航天",
-    "jiuyan_concept2": "spacex-供应商-液体火箭发动机燃烧室|火箭-发动机|火箭-蓝箭火箭"
+    "jiuyan_concept2": "spacex-供应商|火箭"
   },
   "688103": {
     "business_summary": "主营其他电子Ⅱ",
@@ -56686,7 +56686,7 @@
     "sector": "化学原料和化学制品制造业",
     "sector_type": "legacy",
     "updated_at": "2026-06-24 11:21:37",
-    "jiuyan_concept": "半导体材料-电子特气",
+    "jiuyan_concept": "半导体材料",
     "jiuyan_category": "半导体"
   },
   "688107": {
@@ -56734,7 +56734,7 @@
     "sector": "半导体/汽车芯片/存储芯片/智能穿戴",
     "sector_type": "legacy",
     "updated_at": "2026-06-24 11:21:37",
-    "jiuyan_concept": "算力芯片-GPU",
+    "jiuyan_concept": "算力芯片",
     "jiuyan_category": "半导体"
   },
   "688111": {
@@ -56749,9 +56749,9 @@
     "jiuyan_concept": "",
     "jiuyan_category": "",
     "jiuyan_category1": "AI应用",
-    "jiuyan_concept1": "AI应用|Minimax-生态|微软生态-AI大模型|微软生态-独立知识图谱",
+    "jiuyan_concept1": "AI应用|Minimax|微软生态",
     "jiuyan_category2": "云计算",
-    "jiuyan_concept2": "SaaS软件与服务-管理、办公软件"
+    "jiuyan_concept2": "SaaS软件与服务"
   },
   "688112": {
     "business_summary": "通用电子测试测量仪器的研发、生产和销售。",
@@ -56834,7 +56834,7 @@
     "sector": "软件和信息技术服务业",
     "sector_type": "legacy",
     "updated_at": "2026-05-30 21:48:57",
-    "jiuyan_concept": "数据中台服务商-数据中台",
+    "jiuyan_concept": "数据中台服务商",
     "jiuyan_category": "AI应用"
   },
   "688119": {
@@ -56858,7 +56858,7 @@
     "sector": "半导体/中芯国际概念/存储芯片/先进封装",
     "sector_type": "legacy",
     "updated_at": "2026-06-24 11:21:37",
-    "jiuyan_concept": "半导体设备-化学机械抛光设备|半导体设备-清洗设备",
+    "jiuyan_concept": "半导体设备",
     "jiuyan_category": "半导体"
   },
   "688121": {
@@ -56883,7 +56883,7 @@
     "sector_type": "legacy",
     "updated_at": "2026-08-08 00:00:00",
     "jiuyan_category1": "可控核聚变",
-    "jiuyan_concept1": "超导磁体-低温超导材料|超导磁体-高温超导材料|可控核聚变创新联合体成员",
+    "jiuyan_concept1": "超导磁体|可控核聚变创新联合体成员",
     "jiuyan_category2": "军工",
     "jiuyan_concept2": "军工材料"
   },
@@ -56896,7 +56896,7 @@
     "sector": "半导体/存储芯片/汽车芯片/中芯国际概念",
     "sector_type": "legacy",
     "updated_at": "2026-06-24 11:21:37",
-    "jiuyan_concept": "存储芯片-EEPROM|存储芯片-NORFLASH",
+    "jiuyan_concept": "存储芯片",
     "jiuyan_category": "半导体"
   },
   "688125": {
@@ -56920,7 +56920,7 @@
     "sector": "半导体/国家大基金持股/中芯国际概念/存储芯片",
     "sector_type": "legacy",
     "updated_at": "2026-06-24 11:21:37",
-    "jiuyan_concept": "半导体材料-硅片",
+    "jiuyan_concept": "半导体材料",
     "jiuyan_category": "半导体"
   },
   "688127": {
@@ -57052,7 +57052,7 @@
     "sector": "其他",
     "sector_type": "fallback",
     "updated_at": "2026-06-24 11:21:37",
-    "jiuyan_concept": "半导体材料-光掩膜版",
+    "jiuyan_concept": "半导体材料",
     "jiuyan_category": "半导体"
   },
   "688139": {
@@ -57100,7 +57100,7 @@
     "sector": "电子化学品Ⅱ/光刻机/中船系/中芯国际概念",
     "sector_type": "legacy",
     "updated_at": "2026-05-30 21:48:57",
-    "jiuyan_concept": "电解液-电解液添加剂",
+    "jiuyan_concept": "电解液",
     "jiuyan_category": "锂电池"
   },
   "688147": {
@@ -57112,10 +57112,10 @@
     "sector": "半导体/中芯国际概念/存储芯片/先进封装",
     "sector_type": "legacy",
     "updated_at": "2026-06-24 11:21:37",
-    "jiuyan_concept": "半导体设备-薄膜沉积设备",
+    "jiuyan_concept": "半导体设备",
     "jiuyan_category": "半导体",
     "jiuyan_category1": "半导体",
-    "jiuyan_concept1": "半导体设备-薄膜沉积设备",
+    "jiuyan_concept1": "半导体设备",
     "jiuyan_category2": "太空光伏",
     "jiuyan_concept2": "太空光伏设备"
   },
@@ -57176,7 +57176,7 @@
     "sector": "计算机、通信和其他电子设备制造业",
     "sector_type": "legacy",
     "updated_at": "2026-06-17 12:42:30",
-    "jiuyan_concept": "卫星-地面设备-移动通信终端",
+    "jiuyan_concept": "卫星-地面设备",
     "jiuyan_category": "商业航天"
   },
   "688155": {
@@ -57308,7 +57308,7 @@
     "sector": "医药制造业",
     "sector_type": "legacy",
     "updated_at": "2026-08-10 20:00:00",
-    "jiuyan_concept": "GLP-1减重降糖",
+    "jiuyan_concept": "GLP",
     "jiuyan_category": "创新药"
   },
   "688167": {
@@ -57578,7 +57578,7 @@
     "sector": "金属新材料/无线充电/专精特新/新能源汽车",
     "sector_type": "legacy",
     "updated_at": "2026-05-30 21:48:57",
-    "jiuyan_concept": "固态变压器SST-材料",
+    "jiuyan_concept": "固态变压器SST",
     "jiuyan_category": "HVDC"
   },
   "688191": {
@@ -57686,7 +57686,7 @@
     "sector": "半导体/第三代半导体/芯片概念/专精特新",
     "sector_type": "legacy",
     "updated_at": "2026-06-24 11:21:37",
-    "jiuyan_concept": "半导体设备-测试设备",
+    "jiuyan_concept": "半导体设备",
     "jiuyan_category": "半导体"
   },
   "688202": {
@@ -57878,7 +57878,7 @@
     "sector": "橡胶和塑料制品业",
     "sector_type": "legacy",
     "updated_at": "2026-05-30 21:48:57",
-    "jiuyan_concept": "其他关键材料及设备-隔膜",
+    "jiuyan_concept": "其他关键材料及设备",
     "jiuyan_category": "锂电池"
   },
   "688220": {
@@ -57890,7 +57890,7 @@
     "sector": "半导体/汽车芯片/5G/存储芯片",
     "sector_type": "legacy",
     "updated_at": "2026-06-24 11:21:37",
-    "jiuyan_concept": "端侧ai芯片-高性能soc|算力芯片-ASIC",
+    "jiuyan_concept": "端侧ai芯片|算力芯片",
     "jiuyan_category": "半导体"
   },
   "688221": {
@@ -57974,12 +57974,12 @@
     "sector": "软件和信息技术服务业",
     "sector_type": "legacy",
     "updated_at": "2026-06-24 11:21:37",
-    "jiuyan_concept": "存储芯片-SSD",
+    "jiuyan_concept": "存储芯片",
     "jiuyan_category": "半导体",
     "jiuyan_category1": "半导体",
-    "jiuyan_concept1": "存储芯片-SSD",
+    "jiuyan_concept1": "存储芯片",
     "jiuyan_category2": "AI应用",
-    "jiuyan_concept2": "其他-其他"
+    "jiuyan_concept2": "其他"
   },
   "688229": {
     "business_summary": "为企业级客户的IT运维管理提供高质量、可落地的应用性能管理及可观测性解决方案。",
@@ -57990,7 +57990,7 @@
     "sector": "IT服务Ⅱ/数据安全/云计算/华为鲲鹏",
     "sector_type": "legacy",
     "updated_at": "2026-05-30 21:48:57",
-    "jiuyan_concept": "Minimax-生态",
+    "jiuyan_concept": "Minimax",
     "jiuyan_category": "AI应用"
   },
   "688230": {
@@ -58038,7 +58038,7 @@
     "sector": "半导体/存储芯片/第三代半导体/芯片概念",
     "sector_type": "legacy",
     "updated_at": "2026-06-24 11:21:37",
-    "jiuyan_concept": "半导体材料-硅片|半导体设备-蚀刻设备",
+    "jiuyan_concept": "半导体材料|半导体设备",
     "jiuyan_category": "半导体"
   },
   "688234": {
@@ -58165,7 +58165,7 @@
     "jiuyan_category1": "央企",
     "jiuyan_concept1": "",
     "jiuyan_category2": "电力",
-    "jiuyan_concept2": "智能电网-虚拟电厂-负荷聚合商"
+    "jiuyan_concept2": "智能电网-虚拟电厂"
   },
   "688249": {
     "business_summary": "12英寸晶圆代工业务及其配套服务。",
@@ -58236,7 +58236,7 @@
     "sector": "半导体/先进封装/汽车芯片/中国AI 50",
     "sector_type": "legacy",
     "updated_at": "2026-06-24 11:21:37",
-    "jiuyan_concept": "算力芯片-MLU",
+    "jiuyan_concept": "算力芯片",
     "jiuyan_category": "半导体"
   },
   "688257": {
@@ -58287,7 +58287,7 @@
     "jiuyan_concept": "",
     "jiuyan_category": "",
     "jiuyan_category1": "PCB",
-    "jiuyan_concept1": "MLCC-其他领域"
+    "jiuyan_concept1": "MLCC"
   },
   "688261": {
     "business_summary": "高性能功率器件研发与销售。",
@@ -58312,7 +58312,7 @@
     "sector": "半导体/汽车芯片/国家大基金持股/MCU芯片",
     "sector_type": "legacy",
     "updated_at": "2026-06-24 11:21:37",
-    "jiuyan_concept": "其他算力芯片|端侧ai芯片-高性能soc|算力芯片-GPU",
+    "jiuyan_concept": "其他算力芯片|端侧ai芯片|算力芯片",
     "jiuyan_category": "半导体"
   },
   "688265": {
@@ -58360,7 +58360,7 @@
     "sector": "电子化学品Ⅱ/氟化工概念/俄乌冲突概念/光刻机",
     "sector_type": "legacy",
     "updated_at": "2026-06-24 11:21:37",
-    "jiuyan_concept": "半导体材料-电子特气",
+    "jiuyan_concept": "半导体材料",
     "jiuyan_category": "半导体"
   },
   "688269": {
@@ -58545,7 +58545,7 @@
     "jiuyan_category1": "机器人",
     "jiuyan_concept1": "传感器",
     "jiuyan_category2": "AI应用",
-    "jiuyan_concept2": "其他-其他"
+    "jiuyan_concept2": "其他"
   },
   "688287": {
     "business_summary": "主营铁路、船舶、航空航天和其他运输设备制造业",
@@ -58688,7 +58688,7 @@
     "sector": "橡胶和塑料制品业",
     "sector_type": "legacy",
     "updated_at": "2026-06-17 12:29:31",
-    "jiuyan_concept": "其他关键材料及设备-隔膜",
+    "jiuyan_concept": "其他关键材料及设备",
     "jiuyan_category": "锂电池"
   },
   "688300": {
@@ -58700,10 +58700,10 @@
     "sector": "非金属材料Ⅱ/先进封装/存储芯片/芯片概念",
     "sector_type": "legacy",
     "updated_at": "2026-06-24 11:21:37",
-    "jiuyan_concept": "存储芯片-材料",
+    "jiuyan_concept": "存储芯片",
     "jiuyan_category": "半导体",
     "jiuyan_category1": "半导体",
-    "jiuyan_concept1": "存储芯片-材料",
+    "jiuyan_concept1": "存储芯片",
     "jiuyan_category2": "PCB",
     "jiuyan_concept2": "硅微粉"
   },
@@ -58824,7 +58824,7 @@
     "sector": "计算机、通信和其他电子设备制造业",
     "sector_type": "legacy",
     "updated_at": "2026-06-17 12:42:30",
-    "jiuyan_concept": "卫星-地面设备-信关站",
+    "jiuyan_concept": "卫星-地面设备",
     "jiuyan_category": "商业航天"
   },
   "688312": {
@@ -58884,7 +58884,7 @@
     "sector": "互联网和相关服务",
     "sector_type": "legacy",
     "updated_at": "2026-05-30 21:48:57",
-    "jiuyan_concept": "智慧AI-算力",
+    "jiuyan_concept": "智慧AI",
     "jiuyan_category": "AI应用"
   },
   "688317": {
@@ -59009,7 +59009,7 @@
     "jiuyan_category1": "机器人",
     "jiuyan_concept1": "传感器",
     "jiuyan_category2": "AI应用",
-    "jiuyan_concept2": "微软生态-AI大模型|自研-自研"
+    "jiuyan_concept2": "微软生态|自研"
   },
   "688328": {
     "business_summary": "平板显示模组类设备、半导体类设备及智能装备核心零部件的设计、研发、生产与销售。",
@@ -59068,7 +59068,7 @@
     "sector": "半导体/AI眼镜/智能音箱/星闪概念",
     "sector_type": "legacy",
     "updated_at": "2026-06-24 11:21:37",
-    "jiuyan_concept": "端侧ai芯片-低功耗soc",
+    "jiuyan_concept": "端侧ai芯片",
     "jiuyan_category": "半导体"
   },
   "688333": {
@@ -59080,7 +59080,7 @@
     "sector": "通用设备/卫星导航/商业航天/航空发动机",
     "sector_type": "legacy",
     "updated_at": "2026-06-17 12:42:30",
-    "jiuyan_concept": "spacex-潜在供应商-制造工艺|火箭-回收",
+    "jiuyan_concept": "spacex-潜在供应商|火箭",
     "jiuyan_category": "商业航天"
   },
   "688334": {
@@ -59260,7 +59260,7 @@
     "sector": "其他",
     "sector_type": "fallback",
     "updated_at": "2026-06-17 12:29:31",
-    "jiuyan_concept": "电解液-电解液添加剂",
+    "jiuyan_concept": "电解液",
     "jiuyan_category": "锂电池"
   },
   "688355": {
@@ -59344,7 +59344,7 @@
     "sector": "半导体/国家大基金持股/中芯国际概念/存储芯片",
     "sector_type": "legacy",
     "updated_at": "2026-06-24 11:21:37",
-    "jiuyan_concept": "半导体设备-前道检测设备",
+    "jiuyan_concept": "半导体设备",
     "jiuyan_category": "半导体"
   },
   "688362": {
@@ -59431,9 +59431,9 @@
     "jiuyan_concept": "",
     "jiuyan_category": "",
     "jiuyan_category1": "AI应用",
-    "jiuyan_concept1": "自研-自研",
+    "jiuyan_concept1": "自研",
     "jiuyan_category2": "云计算",
-    "jiuyan_concept2": "SaaS软件与服务-其他"
+    "jiuyan_concept2": "SaaS软件与服务"
   },
   "688370": {
     "business_summary": "主营生态保护和环境治理业",
@@ -59492,7 +59492,7 @@
     "sector": "计算机、通信和其他电子设备制造业",
     "sector_type": "legacy",
     "updated_at": "2026-06-17 12:42:30",
-    "jiuyan_concept": "卫星-有效载荷-射频",
+    "jiuyan_concept": "卫星-有效载荷",
     "jiuyan_category": "商业航天"
   },
   "688376": {
@@ -59504,7 +59504,7 @@
     "sector": "专用设备制造业",
     "sector_type": "legacy",
     "updated_at": "2026-06-24 11:21:37",
-    "jiuyan_concept": "半导体设备-空气净化系统关键设备",
+    "jiuyan_concept": "半导体设备",
     "jiuyan_category": "半导体"
   },
   "688377": {
@@ -59588,7 +59588,7 @@
     "sector": "专用设备/MicroLED概念/MiniLED/先进封装",
     "sector_type": "legacy",
     "updated_at": "2026-06-24 11:21:37",
-    "jiuyan_concept": "半导体设备-固晶设备",
+    "jiuyan_concept": "半导体设备",
     "jiuyan_category": "半导体"
   },
   "688385": {
@@ -59601,9 +59601,9 @@
     "sector_type": "legacy",
     "updated_at": "2026-08-08 00:00:00",
     "jiuyan_category1": "半导体",
-    "jiuyan_concept1": "存储芯片-NANDFLASH",
+    "jiuyan_concept1": "存储芯片",
     "jiuyan_category2": "军工",
-    "jiuyan_concept2": "分支系统|存储芯片-NANDFLASH"
+    "jiuyan_concept2": "分支系统|存储芯片"
   },
   "688386": {
     "business_summary": "主营橡胶和塑料制品业",
@@ -59626,7 +59626,7 @@
     "sector": "通信设备/卫星导航/6G概念/商业航天",
     "sector_type": "legacy",
     "updated_at": "2026-06-17 12:44:07",
-    "jiuyan_concept": "卫星-有效载荷-通信",
+    "jiuyan_concept": "卫星-有效载荷",
     "jiuyan_category": "商业航天"
   },
   "688388": {
@@ -59641,7 +59641,7 @@
     "jiuyan_concept": "",
     "jiuyan_category": "",
     "jiuyan_category1": "锂电池",
-    "jiuyan_concept1": "其他关键材料及设备-铜箔",
+    "jiuyan_concept1": "其他关键材料及设备",
     "jiuyan_category2": "PCB",
     "jiuyan_concept2": "HVLP"
   },
@@ -59690,12 +59690,12 @@
     "sector": "电池/先进封装/芯片概念/PET铜箔",
     "sector_type": "legacy",
     "updated_at": "2026-06-24 11:21:37",
-    "jiuyan_concept": "半导体设备-前道检测设备",
+    "jiuyan_concept": "半导体设备",
     "jiuyan_category": "半导体",
     "jiuyan_category1": "半导体",
-    "jiuyan_concept1": "半导体设备-前道检测设备",
+    "jiuyan_concept1": "半导体设备",
     "jiuyan_category2": "半导体",
-    "jiuyan_concept2": "半导体设备-前道检测设备"
+    "jiuyan_concept2": "半导体设备"
   },
   "688393": {
     "business_summary": "主营医药制造业",
@@ -59773,7 +59773,7 @@
     "jiuyan_category1": "机器人",
     "jiuyan_concept1": "传感器",
     "jiuyan_category2": "AI应用",
-    "jiuyan_concept2": "智慧AI-参股"
+    "jiuyan_concept2": "智慧AI"
   },
   "688401": {
     "business_summary": "主营半导体",
@@ -59784,7 +59784,7 @@
     "sector": "半导体/先进封装/MiniLED/OLED",
     "sector_type": "legacy",
     "updated_at": "2026-06-24 11:21:37",
-    "jiuyan_concept": "半导体材料-光掩膜版",
+    "jiuyan_concept": "半导体材料",
     "jiuyan_category": "半导体"
   },
   "688403": {
@@ -59856,7 +59856,7 @@
     "sector": "半导体/存储芯片/MCU芯片/中芯国际概念",
     "sector_type": "legacy",
     "updated_at": "2026-06-24 11:21:37",
-    "jiuyan_concept": "存储芯片-DRAM-DDR|存储芯片-NORFLASH",
+    "jiuyan_concept": "存储芯片-DRAM|存储芯片",
     "jiuyan_category": "半导体"
   },
   "688418": {
@@ -59868,7 +59868,7 @@
     "sector": "计算机、通信和其他电子设备制造业",
     "sector_type": "legacy",
     "updated_at": "2026-06-17 12:42:30",
-    "jiuyan_concept": "卫星-地面设备-信关站",
+    "jiuyan_concept": "卫星-地面设备",
     "jiuyan_category": "商业航天"
   },
   "688419": {
@@ -59880,7 +59880,7 @@
     "sector": "专用设备/存储芯片/先进封装/芯片概念",
     "sector_type": "legacy",
     "updated_at": "2026-06-24 11:21:37",
-    "jiuyan_concept": "半导体设备-塑封设备|存储芯片-设备",
+    "jiuyan_concept": "半导体设备|存储芯片",
     "jiuyan_category": "半导体"
   },
   "688420": {
@@ -60024,7 +60024,7 @@
     "sector": "半导体/存储芯片/汽车芯片/芯片概念",
     "sector_type": "legacy",
     "updated_at": "2026-06-24 11:21:37",
-    "jiuyan_concept": "存储芯片-主控芯片",
+    "jiuyan_concept": "存储芯片",
     "jiuyan_category": "半导体"
   },
   "688450": {
@@ -60266,7 +60266,7 @@
     "sector": "专用设备制造业",
     "sector_type": "legacy",
     "updated_at": "2026-06-17 12:29:31",
-    "jiuyan_concept": "其他关键材料及设备-生产设备",
+    "jiuyan_concept": "其他关键材料及设备",
     "jiuyan_category": "锂电池"
   },
   "688500": {
@@ -60316,7 +60316,7 @@
     "sector": "光伏设备/BC电池/光刻胶/OLED",
     "sector_type": "legacy",
     "updated_at": "2026-06-24 11:21:37",
-    "jiuyan_concept": "半导体材料-光掩膜版",
+    "jiuyan_concept": "半导体材料",
     "jiuyan_category": "半导体"
   },
   "688505": {
@@ -60448,12 +60448,12 @@
     "sector": "专用设备制造业",
     "sector_type": "legacy",
     "updated_at": "2026-06-24 11:21:37",
-    "jiuyan_concept": "半导体设备-封装设备-其他",
+    "jiuyan_concept": "半导体设备-封装设备",
     "jiuyan_category": "半导体",
     "jiuyan_category1": "半导体",
-    "jiuyan_concept1": "半导体设备-封装设备-其他",
+    "jiuyan_concept1": "半导体设备-封装设备",
     "jiuyan_category2": "商业航天",
-    "jiuyan_concept2": "spacex-潜在供应商-储能-硅钛矿",
+    "jiuyan_concept2": "spacex-潜在供应商-储能",
     "jiuyan_category3": "太空光伏",
     "jiuyan_concept3": "太空光伏设备",
     "jiuyan_category4": "液冷",
@@ -60480,7 +60480,7 @@
     "sector": "自动化设备/先进封装/共封装光学(CPO)/MicroLED概念",
     "sector_type": "legacy",
     "updated_at": "2026-06-17 12:29:31",
-    "jiuyan_concept": "其他关键材料及设备-生产设备",
+    "jiuyan_concept": "其他关键材料及设备",
     "jiuyan_category": "锂电池"
   },
   "688519": {
@@ -60516,7 +60516,7 @@
     "sector": "半导体/国家大基金持股/汽车芯片/AI手机",
     "sector_type": "legacy",
     "updated_at": "2026-06-24 11:21:37",
-    "jiuyan_concept": "端侧ai芯片-ip|算力芯片-ASIC",
+    "jiuyan_concept": "端侧ai芯片|算力芯片",
     "jiuyan_category": "半导体"
   },
   "688522": {
@@ -60543,7 +60543,7 @@
     "jiuyan_concept": "",
     "jiuyan_category": "",
     "jiuyan_category1": "商业航天",
-    "jiuyan_concept1": "卫星-地面设备-信关站",
+    "jiuyan_concept1": "卫星-地面设备",
     "jiuyan_category2": "太空光伏",
     "jiuyan_concept2": "太阳翼结构"
   },
@@ -60556,7 +60556,7 @@
     "sector": "半导体/存储芯片/先进封装",
     "sector_type": "legacy",
     "updated_at": "2026-06-24 11:21:37",
-    "jiuyan_concept": "存储芯片-DRAM-DDR|存储芯片-DRAM-LPDDR|存储芯片-DRAM-模组|存储芯片-SSD|存储芯片-封测-DRAM|存储芯片-封测-NAND",
+    "jiuyan_concept": "存储芯片-DRAM|存储芯片|存储芯片-封测",
     "jiuyan_category": "半导体"
   },
   "688526": {
@@ -60640,7 +60640,7 @@
     "sector": "半导体/存储芯片/先进封装/汽车芯片",
     "sector_type": "legacy",
     "updated_at": "2026-06-24 11:21:37",
-    "jiuyan_concept": "半导体材料-环氧塑封料",
+    "jiuyan_concept": "半导体材料",
     "jiuyan_category": "半导体"
   },
   "688536": {
@@ -60676,7 +60676,7 @@
     "sector": "计算机、通信和其他电子设备制造业",
     "sector_type": "legacy",
     "updated_at": "2026-06-17 12:42:30",
-    "jiuyan_concept": "火箭-发动机",
+    "jiuyan_concept": "火箭",
     "jiuyan_category": "商业航天"
   },
   "688543": {
@@ -60700,7 +60700,7 @@
     "sector": "电子化学品Ⅱ/国家大基金持股/存储芯片/中芯国际概念",
     "sector_type": "legacy",
     "updated_at": "2026-06-24 11:21:37",
-    "jiuyan_concept": "半导体材料-湿电子化学品",
+    "jiuyan_concept": "半导体材料",
     "jiuyan_category": "半导体"
   },
   "688548": {
@@ -60736,7 +60736,7 @@
     "sector": "化学原料和化学制品制造业",
     "sector_type": "legacy",
     "updated_at": "2026-05-30 21:48:57",
-    "jiuyan_concept": "电解液-电解液添加剂",
+    "jiuyan_concept": "电解液",
     "jiuyan_category": "锂电池"
   },
   "688551": {
@@ -60832,7 +60832,7 @@
     "sector": "自动化设备/富士康概念/PCB概念/苹果概念",
     "sector_type": "legacy",
     "updated_at": "2026-06-17 12:29:31",
-    "jiuyan_concept": "其他关键材料及设备-生产设备",
+    "jiuyan_concept": "其他关键材料及设备",
     "jiuyan_category": "锂电池"
   },
   "688560": {
@@ -60856,7 +60856,7 @@
     "sector": "软件和信息技术服务业",
     "sector_type": "legacy",
     "updated_at": "2026-05-30 21:48:57",
-    "jiuyan_concept": "SaaS软件与服务-云安全",
+    "jiuyan_concept": "SaaS软件与服务",
     "jiuyan_category": "云计算"
   },
   "688562": {
@@ -60929,9 +60929,9 @@
     "sector_type": "legacy",
     "updated_at": "2026-08-08 00:00:00",
     "jiuyan_category1": "商业航天",
-    "jiuyan_concept1": "卫星-测控系统",
+    "jiuyan_concept1": "卫星",
     "jiuyan_category2": "军工",
-    "jiuyan_concept2": "军工AI|卫星-测控系统"
+    "jiuyan_concept2": "军工AI|卫星"
   },
   "688569": {
     "business_summary": "主营铁路、船舶、航空航天和其他运输设备制造业",
@@ -61170,7 +61170,7 @@
     "sector": "计算机、通信和其他电子设备制造业",
     "sector_type": "legacy",
     "updated_at": "2026-06-24 11:21:37",
-    "jiuyan_concept": "端侧ai芯片-低功耗soc",
+    "jiuyan_concept": "端侧ai芯片",
     "jiuyan_category": "半导体"
   },
   "688592": {
@@ -61206,7 +61206,7 @@
     "sector": "半导体/汽车芯片/MCU芯片/芯片概念",
     "sector_type": "legacy",
     "updated_at": "2026-06-24 11:21:37",
-    "jiuyan_concept": "端侧ai芯片-低功耗soc",
+    "jiuyan_concept": "端侧ai芯片",
     "jiuyan_category": "半导体"
   },
   "688596": {
@@ -61233,7 +61233,7 @@
     "jiuyan_concept": "",
     "jiuyan_category": "",
     "jiuyan_category1": "电力",
-    "jiuyan_concept1": "智能电网-用户侧-计量终端"
+    "jiuyan_concept1": "智能电网-用户侧"
   },
   "688598": {
     "business_summary": "主营非金属矿物制品业",
@@ -61292,7 +61292,7 @@
     "sector": "其他",
     "sector_type": "fallback",
     "updated_at": "2026-06-16 23:33:11",
-    "jiuyan_concept": "电解液-双氟磺酰亚胺锂盐|电解液-电解液添加剂",
+    "jiuyan_concept": "电解液",
     "jiuyan_category": "锂电池"
   },
   "688603": {
@@ -61316,7 +61316,7 @@
     "sector": "其他",
     "sector_type": "fallback",
     "updated_at": "2026-06-24 11:21:37",
-    "jiuyan_concept": "半导体设备-薄膜沉积设备|半导体设备-蚀刻设备",
+    "jiuyan_concept": "半导体设备",
     "jiuyan_category": "半导体"
   },
   "688606": {
@@ -61352,7 +61352,7 @@
     "sector": "半导体/语音技术/智能音箱/星闪概念",
     "sector_type": "legacy",
     "updated_at": "2026-06-24 11:21:37",
-    "jiuyan_concept": "端侧ai芯片-低功耗soc",
+    "jiuyan_concept": "端侧ai芯片",
     "jiuyan_category": "半导体"
   },
   "688609": {
@@ -61376,12 +61376,12 @@
     "sector": "通用设备/MiniLED/PCB概念/AI眼镜",
     "sector_type": "legacy",
     "updated_at": "2026-06-24 11:21:37",
-    "jiuyan_concept": "半导体设备-前道检测设备",
+    "jiuyan_concept": "半导体设备",
     "jiuyan_category": "半导体",
     "jiuyan_category1": "半导体",
-    "jiuyan_concept1": "半导体设备-前道检测设备",
+    "jiuyan_concept1": "半导体设备",
     "jiuyan_category2": "商业航天",
-    "jiuyan_concept2": "spacex-潜在供应商-光伏检测"
+    "jiuyan_concept2": "spacex-潜在供应商"
   },
   "688611": {
     "business_summary": "主营电网设备",
@@ -61443,7 +61443,7 @@
     "jiuyan_concept": "",
     "jiuyan_category": "",
     "jiuyan_category1": "电力",
-    "jiuyan_concept1": "电力设备-智能电表"
+    "jiuyan_concept1": "电力设备"
   },
   "688617": {
     "business_summary": "主营医疗器械",
@@ -61490,7 +61490,7 @@
     "sector": "其他",
     "sector_type": "fallback",
     "updated_at": "2026-06-24 11:21:37",
-    "jiuyan_concept": "端侧ai芯片-低功耗soc",
+    "jiuyan_concept": "端侧ai芯片",
     "jiuyan_category": "半导体"
   },
   "688621": {
@@ -61550,7 +61550,7 @@
     "sector": "专用设备/存储芯片/OLED/芯片概念",
     "sector_type": "legacy",
     "updated_at": "2026-06-24 11:21:37",
-    "jiuyan_concept": "存储芯片-设备",
+    "jiuyan_concept": "存储芯片",
     "jiuyan_category": "半导体"
   },
   "688628": {
@@ -61586,10 +61586,10 @@
     "sector": "专用设备/PCB概念/先进封装/光刻机",
     "sector_type": "legacy",
     "updated_at": "2026-06-24 11:21:37",
-    "jiuyan_concept": "半导体设备-光刻机整机",
+    "jiuyan_concept": "半导体设备",
     "jiuyan_category": "半导体",
     "jiuyan_category1": "半导体",
-    "jiuyan_concept1": "半导体设备-光刻机整机",
+    "jiuyan_concept1": "半导体设备",
     "jiuyan_category2": "PCB",
     "jiuyan_concept2": "曝光"
   },
@@ -61782,7 +61782,7 @@
     "sector": "通用设备制造业",
     "sector_type": "legacy",
     "updated_at": "2026-06-24 11:21:37",
-    "jiuyan_concept": "半导体设备-光刻机整机",
+    "jiuyan_concept": "半导体设备",
     "jiuyan_category": "半导体"
   },
   "688661": {
@@ -61794,7 +61794,7 @@
     "sector": "消费电子/芯片概念/消费电子概念/专精特新",
     "sector_type": "legacy",
     "updated_at": "2026-06-24 11:21:37",
-    "jiuyan_concept": "半导体材料-封装基板|半导体设备-测试设备-探针台",
+    "jiuyan_concept": "半导体材料|半导体设备-测试设备",
     "jiuyan_category": "半导体"
   },
   "688662": {
@@ -61818,7 +61818,7 @@
     "sector": "其他",
     "sector_type": "fallback",
     "updated_at": "2026-05-30 21:48:57",
-    "jiuyan_concept": "固态变压器SST-研发",
+    "jiuyan_concept": "固态变压器SST",
     "jiuyan_category": "HVDC"
   },
   "688665": {
@@ -61830,7 +61830,7 @@
     "sector": "计算机、通信和其他电子设备制造业",
     "sector_type": "legacy",
     "updated_at": "2026-06-24 11:21:37",
-    "jiuyan_concept": "半导体设备-其他",
+    "jiuyan_concept": "半导体设备",
     "jiuyan_category": "半导体"
   },
   "688667": {
@@ -61905,7 +61905,7 @@
     "jiuyan_concept": "变压器（含SST）",
     "jiuyan_category": "电力",
     "jiuyan_category1": "电力",
-    "jiuyan_concept1": "智能电网-输变配电-配电"
+    "jiuyan_concept1": "智能电网-输变配电"
   },
   "688677": {
     "business_summary": "医用内窥镜器械和光学产品的研发、制造、销售和服务。",
@@ -61976,7 +61976,7 @@
     "sector": "软件和信息技术服务业",
     "sector_type": "legacy",
     "updated_at": "2026-06-17 12:42:30",
-    "jiuyan_concept": "卫星-有效载荷-射频",
+    "jiuyan_concept": "卫星-有效载荷",
     "jiuyan_category": "商业航天"
   },
   "688683": {
@@ -62060,7 +62060,7 @@
     "sector": "半导体/汽车芯片/MCU芯片/存储芯片",
     "sector_type": "legacy",
     "updated_at": "2026-06-24 11:21:37",
-    "jiuyan_concept": "算力芯片-ASIC",
+    "jiuyan_concept": "算力芯片",
     "jiuyan_category": "半导体"
   },
   "688692": {
@@ -62161,7 +62161,7 @@
     "jiuyan_concept": "",
     "jiuyan_category": "",
     "jiuyan_category1": "锂电池",
-    "jiuyan_concept1": "其他关键材料及设备-生产设备",
+    "jiuyan_concept1": "其他关键材料及设备",
     "jiuyan_category2": "PCB",
     "jiuyan_concept2": "电镀"
   },
@@ -62222,7 +62222,7 @@
     "sector": "计算机、通信和其他电子设备制造业",
     "sector_type": "legacy",
     "updated_at": "2026-06-24 11:21:37",
-    "jiuyan_concept": "存储芯片-DRAM-DDR",
+    "jiuyan_concept": "存储芯片-DRAM",
     "jiuyan_category": "半导体"
   },
   "688710": {
@@ -62296,7 +62296,7 @@
     "sector": "专用设备制造业",
     "sector_type": "legacy",
     "updated_at": "2026-06-16 23:33:11",
-    "jiuyan_concept": "锂矿资源-盐湖提锂",
+    "jiuyan_concept": "锂矿资源",
     "jiuyan_category": "锂电池"
   },
   "688719": {
@@ -62392,7 +62392,7 @@
     "sector": "半导体/中芯国际概念/存储芯片",
     "sector_type": "legacy",
     "updated_at": "2026-06-24 11:21:37",
-    "jiuyan_concept": "半导体设备-清洗设备",
+    "jiuyan_concept": "半导体设备",
     "jiuyan_category": "半导体"
   },
   "688733": {
@@ -62512,7 +62512,7 @@
     "sector": "半导体/存储芯片/MCU芯片/芯片概念",
     "sector_type": "legacy",
     "updated_at": "2026-06-24 11:21:37",
-    "jiuyan_concept": "存储芯片-EEPROM|存储芯片-NORFLASH",
+    "jiuyan_concept": "存储芯片",
     "jiuyan_category": "半导体"
   },
   "688767": {
@@ -62575,9 +62575,9 @@
     "jiuyan_concept": "",
     "jiuyan_category": "",
     "jiuyan_category1": "可控核聚变",
-    "jiuyan_concept1": "超导磁体-超导磁体系统|第一壁产品-第一壁/包层|堆内结构件-真空室壳体|堆内结构件-第一壁组件|偏滤器-偏滤器部件|真空室-真空室|加热系统-中性束注入|加热系统-射频加热|检测设备-等离子体诊断|可控核聚变创新联合体成员",
+    "jiuyan_concept1": "超导磁体|第一壁产品|堆内结构件|偏滤器|真空室|加热系统|检测设备|可控核聚变创新联合体成员",
     "jiuyan_category2": "商业航天",
-    "jiuyan_concept2": "卫星-有效载荷-射频"
+    "jiuyan_concept2": "卫星-有效载荷"
   },
   "688777": {
     "business_summary": "流程工业自动化、数字化、智能化。",
@@ -62612,7 +62612,7 @@
     "sector": "计算机、通信和其他电子设备制造业",
     "sector_type": "legacy",
     "updated_at": "2026-06-17 12:29:31",
-    "jiuyan_concept": "正极材料-三元材料",
+    "jiuyan_concept": "正极材料",
     "jiuyan_category": "锂电池"
   },
   "688781": {
@@ -62732,7 +62732,7 @@
     "sector": "半导体/科创次新股/芯片概念/注册制次新股",
     "sector_type": "legacy",
     "updated_at": "2026-06-24 11:21:37",
-    "jiuyan_concept": "算力芯片-GPU",
+    "jiuyan_concept": "算力芯片",
     "jiuyan_category": "半导体"
   },
   "688796": {
@@ -62792,7 +62792,7 @@
     "sector": "半导体/科创次新股/先进封装/芯片概念",
     "sector_type": "legacy",
     "updated_at": "2026-06-24 11:21:37",
-    "jiuyan_concept": "算力芯片-GPU",
+    "jiuyan_concept": "算力芯片",
     "jiuyan_category": "半导体"
   },
   "688805": {
@@ -63036,7 +63036,7 @@
   },
   "300366": {
     "name": "创意信息",
-    "jiuyan_concept": "卫星-有效载荷-通信",
+    "jiuyan_concept": "卫星-有效载荷",
     "updated_at": "2026-06-17 12:44:07",
     "added_at": "2026-06-17 12:44:07",
     "jiuyan_category": "商业航天"
@@ -63046,9 +63046,9 @@
     "updated_at": "2026-08-08 00:00:00",
     "added_at": "2026-06-17 12:44:07",
     "jiuyan_category1": "商业航天",
-    "jiuyan_concept1": "卫星-有效载荷-遥感|卫星-运营",
+    "jiuyan_concept1": "卫星-有效载荷|卫星",
     "jiuyan_category2": "军工",
-    "jiuyan_concept2": "军工AI|卫星-有效载荷-遥感|卫星-运营"
+    "jiuyan_concept2": "军工AI|卫星-有效载荷|卫星"
   },
   "920169": {
     "name": "七丰精工",
@@ -63143,13 +63143,13 @@
     "sector_type": "jiuyan",
     "updated_at": "2026-08-08 00:00:00",
     "jiuyan_category1": "商业航天",
-    "jiuyan_concept1": "卫星-有效载荷-射频",
+    "jiuyan_concept1": "卫星-有效载荷",
     "jiuyan_category2": "军工",
-    "jiuyan_concept2": "卫星-有效载荷-射频|雷达"
+    "jiuyan_concept2": "卫星-有效载荷|雷达"
   },
   "300123": {
     "name": "亚光科技",
-    "jiuyan_concept": "卫星-有效载荷-射频",
+    "jiuyan_concept": "卫星-有效载荷",
     "jiuyan_category": "商业航天",
     "business_summary": "",
     "concept_boards": [],
@@ -63161,7 +63161,7 @@
   },
   "002512": {
     "name": "达华智能",
-    "jiuyan_concept": "卫星-运营",
+    "jiuyan_concept": "卫星",
     "jiuyan_category": "商业航天",
     "business_summary": "",
     "concept_boards": [],
@@ -63173,7 +63173,7 @@
   },
   "002667": {
     "name": "威领股份",
-    "jiuyan_concept": "锂矿资源-云母提锂",
+    "jiuyan_concept": "锂矿资源",
     "jiuyan_category": "锂电池",
     "business_summary": "",
     "concept_boards": [],
@@ -63185,7 +63185,7 @@
   },
   "830809": {
     "name": "安达科技",
-    "jiuyan_concept": "正极材料-磷酸铁锂",
+    "jiuyan_concept": "正极材料",
     "jiuyan_category": "锂电池",
     "business_summary": "",
     "concept_boards": [],
@@ -63197,7 +63197,7 @@
   },
   "835185": {
     "name": "贝特瑞",
-    "jiuyan_concept": "正极材料-三元材料|负极及辅材-负极材料",
+    "jiuyan_concept": "正极材料|负极及辅材",
     "jiuyan_category": "锂电池",
     "business_summary": "",
     "concept_boards": [],
@@ -63209,7 +63209,7 @@
   },
   "300343": {
     "name": "联创股份",
-    "jiuyan_concept": "正极材料-PVDF",
+    "jiuyan_concept": "正极材料",
     "jiuyan_category": "锂电池",
     "business_summary": "",
     "concept_boards": [],
@@ -63221,7 +63221,7 @@
   },
   "002288": {
     "name": "超华科技",
-    "jiuyan_concept": "其他关键材料及设备-铜箔",
+    "jiuyan_concept": "其他关键材料及设备",
     "jiuyan_category": "锂电池",
     "business_summary": "",
     "concept_boards": [],
@@ -63233,7 +63233,7 @@
   },
   "002076": {
     "name": "星光股份",
-    "jiuyan_concept": "其他关键材料及设备-生产设备",
+    "jiuyan_concept": "其他关键材料及设备",
     "jiuyan_category": "锂电池",
     "business_summary": "",
     "concept_boards": [],
@@ -63245,7 +63245,7 @@
   },
   "06682": {
     "name": "第四范式",
-    "jiuyan_concept": "数据中台服务商-数据中台",
+    "jiuyan_concept": "数据中台服务商",
     "jiuyan_category": "AI应用",
     "business_summary": "",
     "concept_boards": [],
@@ -63257,7 +63257,7 @@
   },
   "300010": {
     "name": "豆神教育",
-    "jiuyan_concept": "AI应用|智慧AI-参股|智慧AI-核心",
+    "jiuyan_concept": "AI应用|智慧AI",
     "jiuyan_category": "AI应用",
     "business_summary": "",
     "concept_boards": [],
@@ -63269,7 +63269,7 @@
   },
   "002122": {
     "name": "汇洲智能",
-    "jiuyan_concept": "Minimax-生态|短剧",
+    "jiuyan_concept": "Minimax|短剧",
     "jiuyan_category": "AI应用",
     "business_summary": "",
     "concept_boards": [],
@@ -63281,7 +63281,7 @@
   },
   "300081": {
     "name": "恒信东方",
-    "jiuyan_concept": "Minimax-生态",
+    "jiuyan_concept": "Minimax",
     "jiuyan_category": "AI应用",
     "business_summary": "",
     "concept_boards": [],
@@ -63293,7 +63293,7 @@
   },
   "300352": {
     "name": "北信源",
-    "jiuyan_concept": "Minimax-生态",
+    "jiuyan_concept": "Minimax",
     "jiuyan_category": "AI应用",
     "business_summary": "",
     "concept_boards": [],
@@ -63486,7 +63486,7 @@
   "835425": {
     "name": "科润智控",
     "jiuyan_category": "HVDC",
-    "jiuyan_concept": "北交所|固态变压器SST-研发",
+    "jiuyan_concept": "北交所|固态变压器SST",
     "business_summary": "",
     "sector": "",
     "sector_type": "jiuyan",

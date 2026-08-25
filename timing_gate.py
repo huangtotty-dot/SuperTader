@@ -91,7 +91,7 @@ def _fetch_index_daily():
     for _k in ["http_proxy", "https_proxy", "HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "all_proxy"]:
         os.environ.pop(_k, None)
     os.environ["NO_PROXY"] = "*"
-    url = "https://ifzq.gtimg.cn/appstock/app/fqkline/get?param=sh000001,day,,,800,qfq"
+    url = "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param=sh000001,day,,,800,qfq"
     try:
         req = _ur.Request(url, headers={"User-Agent": "Mozilla/5.0", "Referer": "https://finance.qq.com/"})
         raw = _ur.urlopen(req, timeout=10).read().decode("utf-8", errors="ignore")
@@ -191,7 +191,11 @@ def timing_verdict(code: str, date_str: str = None) -> dict:
         reasons.append(f"多头趋势: 追强(多头{'✓' if f['trend_multihead'] else '✗'}+浅回撤{'✓' if f['drawdown']>=-0.03 else '✗'})")
         if f["macd_golden_5d"]:
             reasons.append("MACD金叉近5日 ✓（加分）")
-        go = cond and (f["macd_golden_5d"] or True)  # 金叉为加分非必要
+        # P1(2026-08-25): 原写法 `cond and (macd_golden_5d or True)`——`or True` 恒真，
+        #   金叉对 go 零影响，是误导性死逻辑（既非必要项也未真正加分，只进 score 那 10 分，
+        #   而 score 不参与 verdict）。此处明确：追强 go 判据 = 多头结构 + 浅回撤，金叉不参与 go。
+        #   金叉的加分仅体现在 position_builder 的 composite_score，语义与此一致。
+        go = cond
     elif regime == "trend_dn":
         # 空头趋势 → 抄底超跌极值（2026-08-16 实验：深回撤 + RSI<20 深度超卖，样本内/外一致提升）
         _rsi_lim = float(p.get("trend_dn_rsi_max", 20))

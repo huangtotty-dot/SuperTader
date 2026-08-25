@@ -57,7 +57,7 @@ def _fetch_index_daily():
     for _k in ["http_proxy", "https_proxy", "HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "all_proxy"]:
         _os.environ.pop(_k, None)
     _os.environ["NO_PROXY"] = "*"
-    url = "https://ifzq.gtimg.cn/appstock/app/fqkline/get?param=sh000001,day,,,800,qfq"
+    url = "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param=sh000001,day,,,800,qfq"
     req = _ur.Request(url, headers={"User-Agent": "Mozilla/5.0", "Referer": "https://finance.qq.com/"})
     raw = _ur.urlopen(req, timeout=10).read().decode("utf-8", errors="ignore")
     data = json.loads(raw)

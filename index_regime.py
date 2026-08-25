@@ -692,7 +692,7 @@ def _ir_fetch_index_daily_tx(symbol: str, end_date: str, count: int, p: Dict[str
     """腾讯 fqkline（主源）。行格式 [date, open, close, high, low, volume, (amount), ...]"""
     end_dt = datetime.strptime(end_date, "%Y-%m-%d")
     start = (end_dt - timedelta(days=int(count * 1.6) + 40)).strftime("%Y-%m-%d")
-    url = (f"https://ifzq.gtimg.cn/appstock/app/fqkline/get?"
+    url = (f"https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?"
            f"param={symbol},day,{start},{end_date},{count},qfq")
     js = _ir_http_get_json(url, p)
     if not js:

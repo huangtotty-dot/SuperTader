@@ -82,7 +82,7 @@ def fetch_minute_first_bar(code):
 
 def fetch_yday_vol(code):
     """腾讯 qfq 日线昨日总成交量（手）"""
-    url = f"http://ifzq.gtimg.cn/appstock/app/fqkline/get?param={mkt_code(code)},day,,,10,qfq"
+    url = f"http://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param={mkt_code(code)},day,,,10,qfq"
     try:
         req = urllib.request.Request(url, headers=UA)
         d = json.loads(urllib.request.urlopen(req, timeout=15).read().decode())

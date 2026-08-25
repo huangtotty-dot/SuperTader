@@ -297,7 +297,8 @@ class MarketDataFetcher:
                 try:
                     market = "sh" if code.startswith(("6", "5", "9")) else "sz"
                     symbol = f"{market}{code}"
-                    url = f"https://ifzq.gtimg.cn/appstock/app/fqkline/get?param={symbol},day,,,1000,qfq"
+                    # 2026-08-25: ifzq.gtimg.cn 返回 HTTP 501 拦截，切 web.ifzq.gtimg.cn（同格式数据）
+                    url = f"https://web.web.ifzq.gtimg.cn/appstock/app/fqkline/get?param={symbol},day,,,1000,qfq"
                     headers = {
                         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
                         'Referer': 'https://finance.qq.com/'

@@ -15,7 +15,7 @@ for k in ("http_proxy", "https_proxy", "HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY",
 
 def close_of(code):
     sym = ("sh" + code if code[0] in "56" else "sz" + code)
-    url = f"https://ifzq.gtimg.cn/appstock/app/fqkline/get?param={sym},day,,,5,qfq"
+    url = f"https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param={sym},day,,,5,qfq"
     req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0",
                                                "Referer": "https://finance.qq.com/"})
     d = json.loads(urllib.request.urlopen(req, timeout=10).read().decode())

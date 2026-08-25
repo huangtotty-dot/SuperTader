@@ -151,7 +151,7 @@ def _parse_qt_line(line: str):
 def fetch_stock_history(code: str, days: int = BOOTSTRAP_CALENDAR_DAYS) -> pd.DataFrame:
     """腾讯历史日线（ifzq.gtimg.cn fqkline qfq），返回 日期/收盘/涨跌幅/成交额（按日期升序）。"""
     symbol = _qt_symbol(code)
-    url = f"https://ifzq.gtimg.cn/appstock/app/fqkline/get?param={symbol},day,,,{days},qfq"
+    url = f"https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param={symbol},day,,,{days},qfq"
     try:
         data = json.loads(_http_get(url))
     except Exception:
