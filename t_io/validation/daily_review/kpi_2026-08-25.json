@@ -1,0 +1,143 @@
+{
+  "date": "2026-08-25",
+  "snapshot": {
+    "file": "t_io\\state\\holdings_2026-08-25.json",
+    "created_now": true,
+    "prev": "t_io\\state\\holdings_2026-08-21.json"
+  },
+  "K2_cost_change": {
+    "baseline": false,
+    "note": "对照 2026-08-21",
+    "by_code": {
+      "000988": {
+        "cost_now": null,
+        "cost_prev": 553.574,
+        "delta": null
+      },
+      "588170": {
+        "cost_now": 0.478,
+        "cost_prev": 0.207,
+        "delta": 0.271
+      },
+      "600176": {
+        "cost_now": null,
+        "cost_prev": 105.521,
+        "delta": null
+      },
+      "600481": {
+        "cost_now": 28.216,
+        "cost_prev": 28.216,
+        "delta": 0.0
+      },
+      "603667": {
+        "cost_now": null,
+        "cost_prev": 56.765,
+        "delta": null
+      },
+      "002639": {
+        "cost_now": 10.807,
+        "cost_prev": 10.807,
+        "delta": 0.0
+      },
+      "300153": {
+        "cost_now": null,
+        "cost_prev": null,
+        "delta": null
+      },
+      "300364": {
+        "cost_now": null,
+        "cost_prev": null,
+        "delta": null
+      }
+    },
+    "snapshot": "t_io\\state\\holdings_2026-08-25.json"
+  },
+  "K3_base_drift": {
+    "baseline": false,
+    "by_code": {
+      "000988": {
+        "t_qty_now": null,
+        "t_qty_prev": 7,
+        "drift": -7,
+        "attribution": "需人工确认",
+        "audit": null,
+        "source": "snapshot_diff"
+      },
+      "588170": {
+        "t_qty_now": 500,
+        "t_qty_prev": 1000,
+        "drift": -500,
+        "attribution": "需人工确认",
+        "audit": {
+          "sold": 0,
+          "bought": 0,
+          "unrebuilt": 0,
+          "est_pnl": 0.0,
+          "qty_diff": 500
+        },
+        "source": "snapshot_diff"
+      },
+      "600176": {
+        "t_qty_now": null,
+        "t_qty_prev": 100,
+        "drift": -100,
+        "attribution": "需人工确认",
+        "audit": null,
+        "source": "snapshot_diff"
+      },
+      "600481": {
+        "t_qty_now": 100,
+        "t_qty_prev": 100,
+        "drift": 0,
+        "attribution": "无漂移",
+        "audit": {
+          "sold": 0,
+          "bought": 0,
+          "unrebuilt": 0,
+          "est_pnl": 0.0,
+          "qty_diff": 0
+        },
+        "source": "snapshot_diff"
+      },
+      "603667": {
+        "t_qty_now": null,
+        "t_qty_prev": 0,
+        "drift": 0,
+        "attribution": "无漂移",
+        "audit": null,
+        "source": "snapshot_diff"
+      },
+      "002639": {
+        "t_qty_now": 100,
+        "t_qty_prev": 100,
+        "drift": 0,
+        "attribution": "无漂移",
+        "audit": {
+          "sold": 0,
+          "bought": 0,
+          "unrebuilt": 0,
+          "est_pnl": 0.0,
+          "qty_diff": 0
+        },
+        "source": "snapshot_diff"
+      },
+      "300153": {
+        "t_qty_now": null,
+        "t_qty_prev": null,
+        "drift": 0,
+        "attribution": "无漂移",
+        "audit": null,
+        "source": "snapshot_diff"
+      },
+      "300364": {
+        "t_qty_now": null,
+        "t_qty_prev": null,
+        "drift": 0,
+        "attribution": "无漂移",
+        "audit": null,
+        "source": "snapshot_diff"
+      }
+    },
+    "drift_total": -607
+  }
+}
