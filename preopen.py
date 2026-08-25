@@ -44,16 +44,18 @@ class PreOpenContext:
 # ==================== 模块级状态变量 ====================
 PREOPEN_CONTEXT = None
 SESSION_CONTEXT = {}
-_preopen_pushed_date = ""
 _preopen_logged_date = ""
-_preopen_overview_last_push_at = None
-_preopen_monitor_last_push_at = None
-_preopen_monitor_push_count = 0
-_preopen_monitor_date = ""
 _eod_logged_date = ""
 _last_idle_log = datetime.min
 _scan_count = 0
 _scan_lock = False
+
+# 已移除的变量（飞书推送已禁用）:
+# - _preopen_pushed_date（推送状态控制，已无用）
+# - _preopen_overview_last_push_at（推送时间戳，已无用）
+# - _preopen_monitor_last_push_at（推送时间戳，已无用）
+# - _preopen_monitor_push_count（推送计数，已无用）
+# - _preopen_monitor_date（推送日期，已无用）
 
 
 # ==================== PreOpenEngine ====================
@@ -350,41 +352,9 @@ def build_preopen_context() -> PreOpenContext:
     return context
 
 
-def _preopen_action_label(context: PreOpenContext) -> str:
-    """评分=Top20涨家占比, >=65偏多, <=40偏空"""
-    if context.market_score >= 65:
-        return "进攻"
-    if context.market_score <= 40:
-        return "回避"
-    return "观察"
-
-
-def _preopen_card_template(context: PreOpenContext) -> str:
-    action = _preopen_action_label(context)
-    if action == "进攻":
-        return "green"
-    if action == "回避":
-        return "red"
-    return "blue"
-
-
-def _feishu_card_header(title: str, template: str) -> dict:
-    return {"template": template, "title": {"tag": "plain_text", "content": title}}
-
-
 def _is_preopen_monitor_window(now: datetime) -> bool:
     """9:20-9:25 不可撤单时段，数据真实可信"""
     return now.weekday() < 5 and dtime(9, 20) <= now.time() < dtime(9, 25)
-
-
-def _format_preopen_brief(context: PreOpenContext) -> str:
-    top20 = context.top20_volume_analysis if isinstance(context.top20_volume_analysis, dict) else {}
-    top20_up = top20.get("total_up", 0)
-    top20_down = top20.get("total_down", 0)
-    return (
-        f"竞价额Top20：涨{top20_up}/跌{top20_down}\n"
-        f"评分={context.market_score:.0f}分 → {_preopen_action_label(context)}"
-    )
 
 
 def _record_preopen_trace(context: PreOpenContext) -> None:
@@ -394,30 +364,25 @@ def _record_preopen_trace(context: PreOpenContext) -> None:
         pass
 
 
-# ==================== Feishu 卡片辅助函数 ====================
+# ==================== Feishu 卡片辅助函数（支撑/压力位推送用） ====================
+
+def _feishu_card_header(title: str, template: str) -> dict:
+    return {"template": template, "title": {"tag": "plain_text", "content": title}}
+
 
 def _feishu_md_div(content: str) -> dict:
     return {"tag": "div", "text": {"content": content, "tag": "lark_md"}}
 
 
-def _feishu_hr() -> dict:
-    return {"tag": "hr"}
-
-
-def _preopen_safe_breadth(context: PreOpenContext) -> Dict[str, Any]:
-    return context.breadth if isinstance(context.breadth, dict) else {}
-
-
-def _preopen_adv_counts(context: PreOpenContext) -> Dict[str, int]:
-    adv = _preopen_safe_breadth(context).get("advance_decline", {})
-    if not isinstance(adv, dict):
-        return {"up": 0, "down": 0, "flat": 0}
-    return {"up": int(adv.get("up", 0) or 0), "down": int(adv.get("down", 0) or 0), "flat": int(adv.get("flat", 0) or 0)}
-
-
-# ==================== Feishu 推送函数 ====================
-
-def _writeback_auction_summary(context: PreOpenContext) -> None:
+# ==================== 已删除的集合竞价飞书推送相关函数（2026-08-26） ====================
+# 以下函数已删除，因为集合竞价推送已禁用，改为 UI 面板显示：
+# - _preopen_action_label() → 飞书卡片标签，已无用
+# - _preopen_card_template() → 飞书卡片配色，已无用
+# - _format_preopen_brief() → 飞书推送文本格式，已无用
+# - _feishu_hr() → 飞书分割线，已无用
+# - _preopen_safe_breadth() → 飞书数据处理，已无用
+# - _preopen_adv_counts() → 飞书涨跌统计，已无用
+# - _writeback_auction_summary() → 飞书推送前的回写，已无用
     """A-2(2026-08-21): 竞价分析完成后将 auction_summary 合并回写 preopen_{date}.json。
     读改写保留其他字段；文件不存在则新建最小结构。修复 08-19 auction_summary={} 缺值。"""
     try:
@@ -448,105 +413,18 @@ def _writeback_auction_summary(context: PreOpenContext) -> None:
 
 
 def _send_preopen_feishu(context: PreOpenContext, force_push: bool = False) -> bool:
-    """推送早盘竞价总览。只在 9:20 后（数据可信窗口）推送，且每日仅一次。
-
-    force_push：仅启动自检等场景绕过时间窗口检查，但仍受 data_pending 与去重保护。
+    """已禁用：竞价诊断改为 UI 面板显示（auction_analyzer.py 生成）
+    保留函数签名用于向后兼容，但不执行飞书推送。
     """
-    global _preopen_pushed_date, _preopen_overview_last_push_at
-    today = get_today_str()
-    if _preopen_pushed_date == today or not FEISHU_WEBHOOK:
-        return False
-    if context.market_bias == "data_pending":
-        return False  # 无有效数据不推送
-    if not force_push:
-        # 9:20 前竞价数据不可信（可撤单阶段），不发总览
-        if datetime.now().time() < dtime(9, 20):
-            return False
-
-    top20 = context.top20_volume_analysis if isinstance(context.top20_volume_analysis, dict) else {}
-    # 数据质量门控：前 20 名全部 0 涨跌 → 视为无效数据，不发
-    if top20.get("total_up", 0) + top20.get("total_down", 0) == 0:
-        return False
-    top20_up = top20.get("total_up", 0)
-    top20_down = top20.get("total_down", 0)
-    top20_bias = top20.get("bias", "neutral")
-    volume_stocks = top20.get("top_volume_stocks", [])[:6]
-    action = _preopen_action_label(context)
-    template = _preopen_card_template(context)
-
-    # V3: 优先使用竞价三层分析格式
-    auction_result = context.auction_result if isinstance(context.auction_result, dict) else {}
-    if auction_result.get("auction_signals"):
-        try:
-            _fmt = globals().get("format_auction_feishu")
-            elements = _fmt(auction_result) if _fmt else []
-        except Exception:
-            elements = []
-    else:
-        elements = []
-
-    if elements:
-        # V3 新格式：竞价三层分析卡片
-        card = {"config": {"wide_screen_mode": True},
-                "header": _feishu_card_header(f"📊 早盘竞价 - {FEISHU_KEYWORD}", template),
-                "elements": elements}
-    else:
-        # V2 旧格式（兜底）
-        lines = [f"{action}"]
-        lines.append(f"竞价额TOP6")
-        for s in volume_stocks:
-            pct = s.get("change_pct", 0)
-            tag = "🔴" if pct < 0 else "🟢"
-            lines.append(f" {tag}{s.get('name','')} {pct:+.1f}%")
-        lines.append(f"涨{top20_up}家/跌{top20_down}家")
-        lines.append(top20_bias)
-        text = "\n".join(lines)
-        card = {"config": {"wide_screen_mode": True},
-                "header": _feishu_card_header(f"📊 早盘竞价 - {FEISHU_KEYWORD}", template),
-                "elements": [_feishu_md_div(text)]}
-    payload = {"msg_type": "interactive", "card": card, "notify_type": 1}
-
-    ok = send_feishu_payload(
-        payload=payload,
-        success_log="✅ 早盘竞价分析已推送飞书",
-        error_prefix="早盘竞价分析飞书推送",
-    )
-    if ok:
-        _preopen_pushed_date = today
-        _preopen_overview_last_push_at = _now()
-        _writeback_auction_summary(context)  # A-2: 竞价分析完成后回写 auction_summary
-    return ok
+    return False
 
 
 def _send_preopen_monitor_feishu(context: PreOpenContext, now: Optional[datetime] = None) -> bool:
-    global _preopen_monitor_last_push_at, _preopen_monitor_push_count
-    now = now or _now()
-    if not FEISHU_WEBHOOK or not _is_preopen_monitor_window(now):
-        return False
-    if _preopen_monitor_push_count >= 2:
-        return False
-    if _preopen_monitor_last_push_at is not None and (now - _preopen_monitor_last_push_at).total_seconds() < 120:
-        return False
+    """已禁用：竞价观察中推送（方案 §4.1 取消无意义推送）
+    改为在 9:24:45 由 auction_analyzer 生成完整诊断报告。
+    """
+    return False
 
-    pt = _preopen_monitor_push_count + 1
-    elements = [_feishu_md_div(
-        f"竞价观察中 {now.strftime('%H:%M')} 第{pt}/2次"
-    )]
-
-    card = {"config": {"wide_screen_mode": True},
-            "header": _feishu_card_header(f"📊 竞价监控 - {FEISHU_KEYWORD}", _preopen_card_template(context)),
-            "elements": elements}
-    payload = {"msg_type": "interactive", "card": card, "notify_type": 1}
-
-    ok = send_feishu_payload(
-        payload=payload,
-        success_log="✅ 竞价监控已推送飞书",
-        error_prefix="竞价监控飞书推送",
-    )
-    if ok:
-        _preopen_monitor_last_push_at = now
-        _preopen_monitor_push_count += 1
-    return ok
 
 
 def _ensure_preopen_context(force: bool = False) -> Optional[PreOpenContext]:
@@ -568,10 +446,8 @@ def _ensure_preopen_context(force: bool = False) -> Optional[PreOpenContext]:
         }
         _preopen_logged_date = today
         _record_preopen_trace(PREOPEN_CONTEXT)
-        log.info(_format_preopen_brief(PREOPEN_CONTEXT))
-        # 推送由 _preopen_pushed_date 控制（每日一次），force 只控制数据刷新
-        if _preopen_pushed_date != today:
-            _send_preopen_feishu(PREOPEN_CONTEXT)
+        # 早盘竞价分析已改为 UI 面板显示（9:24:45 由 auction_analyzer 生成诊断报告）
+        log.info(f"📊 早盘竞价分析完成（评分 {PREOPEN_CONTEXT.market_score:.0f} 分）")
         return PREOPEN_CONTEXT
     except Exception as e:
         log.warning(f"⚠️  早盘解读生成失败: {str(e)[:120]}")

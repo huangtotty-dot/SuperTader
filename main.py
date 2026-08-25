@@ -1768,10 +1768,22 @@ def scan_once():
         if _is_preopen_monitor_window(now):
             preopen_context = _ensure_preopen_context(force=True)
             if preopen_context is not None:
+                # 已禁用飞书推送 → 改为 UI 面板展示（auction_analyzer 在 9:24:45 生成诊断）
                 _send_preopen_monitor_feishu(preopen_context, now=now)
             if (_now() - _last_idle_log).total_seconds() >= 120:
                 log.info("📡 盘前集合竞价监控已刷新")
                 _last_idle_log = _now()
+
+            # 9:24:45 生成集合竞价诊断报告（供 UI 面板显示）
+            t_now = now.time()
+            if dtime(9, 24, 40) <= t_now <= dtime(9, 24, 50):
+                try:
+                    from auction_analyzer import analyze_and_save
+                    today_str = now.strftime("%Y-%m-%d")
+                    report = analyze_and_save(today_str)
+                    log.info(f"✅ 集合竞价诊断报告已生成（{report.suggested_action}）")
+                except Exception as e:
+                    log.warning(f"⚠️ 集合竞价诊断生成失败: {e}")
 
         _maybe_collect_auction_snapshot(now)             # 09:20/09:22 竞价快照采集（每日各一次，W32-B2）
         _maybe_push_index_regime_morning(now)          # 09:26-09:31 早盘大盘基调（须在 <9:30 早退之前）
