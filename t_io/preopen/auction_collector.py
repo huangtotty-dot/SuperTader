@@ -28,6 +28,42 @@ os.environ["no_proxy"] = "*"
 
 UA = {"User-Agent": "Mozilla/5.0"}
 
+# 大盘指数竞价采集（方案 §6 Phase1：sh000001 上证 / sh000688 科创50 / sz399001 深证成指）
+AUCTION_INDEX_CODES = ["sh000001", "sh000688", "sz399001"]
+
+
+def fetch_index_snapshot():
+    """腾讯 qt.gtimg.cn 指数竞价快照 → {code: {name, auction_price, pre_close, gap_pct}}
+    竞价时段字段[3]=虚拟匹配价，字段[4]=昨收；与 fetch_qt_snapshot 同源同口径。"""
+    q = ",".join(AUCTION_INDEX_CODES)
+    req = urllib.request.Request(f"http://qt.gtimg.cn/q={q}", headers=UA)
+    txt = urllib.request.urlopen(req, timeout=15).read().decode("gbk", errors="ignore")
+    out = {}
+    for part in txt.strip().split(";"):
+        part = part.strip()
+        if not part or "=" not in part:
+            continue
+        key, _, payload = part.partition("=")
+        code = key.strip().lstrip("v_").lower()
+        f = payload.strip().strip('"').split("~")
+        if len(f) < 5:
+            continue
+
+        def _f(i):
+            try:
+                return float(f[i])
+            except Exception:
+                return None
+
+        price, pc = _f(3), _f(4)
+        out[code] = {
+            "name": (f[1] if len(f) > 1 and f[1] else code),
+            "auction_price": price,
+            "pre_close": pc,
+            "gap_pct": round((price - pc) / pc * 100, 2) if price and pc else None,
+        }
+    return out
+
 
 def mkt_code(code: str) -> str:
     return ("sh" if code.startswith(("5", "6")) else "sz") + code
@@ -151,10 +187,17 @@ def do_slot(date, slot):
             "auction_vol_hand": s["vol_hand"], "amount_wan": s["amount_wan"],
             "src_ts": s["ts_raw"],
         }
+    # 大盘指数竞价快照（供 auction_analyzer 指数分析）
+    index_rows = {}
+    try:
+        index_rows = fetch_index_snapshot()
+    except Exception as e:
+        print(f"[slot {slot}] index snapshot failed: {e}")
     data["snapshots"][slot] = {"ts": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                               "source": "qt.gtimg.cn realtime", "rows": rows}
+                               "source": "qt.gtimg.cn realtime", "rows": rows,
+                               "index_rows": index_rows}
     save(fp, data)
-    print(f"[slot {slot}] {len(rows)} codes -> {fp}")
+    print(f"[slot {slot}] {len(rows)} codes, {len(index_rows)} indexes -> {fp}")
 
 
 def _local_minute_bars(code, date):

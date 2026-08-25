@@ -12,27 +12,30 @@
         }
 
         :root {
-            --primary: #1e88e5;
-            --success: #43a047;
-            --danger: #e53935;
-            --warning: #fb8c00;
-            --info: #00acc1;
-            --bg-dark: #0d1117;
-            --bg-card: #161b22;
-            --text-primary: #e6edf3;
-            --text-secondary: #8b949e;
-            --border: #30363d;
-            --accent-up: #28a745;
-            --accent-down: #dc3545;
-            --accent-neutral: #6c757d;
+            --bg: #f4f6fa;
+            --bg-soft: #eaeef4;
+            --bg-card: #ffffff;
+            --border: #d3d9e3;
+            --border-soft: #e4e8ef;
+            --text: #1f2937;
+            --text-dim: #6b7280;
+            --accent: #e8531f;
+            --red: #e8531f;
+            --green: #229652;
+            --gray: #6b7280;
         }
 
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif;
-            background: var(--bg-dark);
-            color: var(--text-primary);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", sans-serif;
+            background-color: var(--bg);
+            background-image:
+                radial-gradient(900px 520px at 12% -10%, rgba(232, 83, 31, .06), transparent 60%),
+                radial-gradient(820px 620px at 108% 112%, rgba(80, 120, 190, .05), transparent 55%);
+            background-attachment: fixed;
+            color: var(--text);
             line-height: 1.6;
             padding: 16px;
+            min-height: 100vh;
         }
 
         .container {
@@ -46,8 +49,8 @@
             align-items: center;
             justify-content: space-between;
             margin-bottom: 20px;
-            padding-bottom: 16px;
-            border-bottom: 2px solid var(--border);
+            padding-bottom: 14px;
+            border-bottom: 2px solid var(--border-soft);
         }
 
         .header-title {
@@ -59,15 +62,17 @@
         .header-title h2 {
             font-size: 20px;
             font-weight: 700;
-            background: linear-gradient(135deg, #00d4ff, #0099ff);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
+            color: var(--accent);
+        }
+
+        .header-subtitle {
+            font-size: 11px;
+            color: var(--text-dim);
         }
 
         .header-time {
             font-size: 12px;
-            color: var(--text-secondary);
+            color: var(--text-dim);
         }
 
         /* 摘要卡片 */
@@ -75,64 +80,148 @@
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
             gap: 12px;
-            margin-bottom: 20px;
+            margin-bottom: 22px;
         }
 
         .summary-card {
             background: var(--bg-card);
-            border: 1px solid var(--border);
-            border-radius: 6px;
+            border: 1px solid var(--border-soft);
+            border-radius: 10px;
             padding: 14px;
             text-align: center;
-            transition: all 0.3s ease;
+            box-shadow: 0 1px 3px rgba(31, 41, 55, .05);
+            transition: all .2s ease;
         }
 
         .summary-card:hover {
-            border-color: var(--primary);
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(30, 136, 229, 0.1);
+            border-color: rgba(232, 83, 31, .4);
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(232, 83, 31, .08);
         }
 
         .summary-label {
             font-size: 11px;
-            color: var(--text-secondary);
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
+            color: var(--text-dim);
+            letter-spacing: .5px;
             margin-bottom: 6px;
         }
 
         .summary-value {
             font-size: 24px;
             font-weight: 700;
-            margin-bottom: 4px;
         }
 
-        .summary-card.up .summary-value {
-            color: var(--accent-up);
+        .summary-card.up .summary-value { color: var(--red); }
+        .summary-card.down .summary-value { color: var(--green); }
+        .summary-card.neutral .summary-value { color: var(--gray); }
+
+        /* 区块标题 */
+        .section {
+            margin-bottom: 26px;
         }
 
-        .summary-card.down .summary-value {
-            color: var(--accent-down);
+        .section-title {
+            font-size: 15px;
+            font-weight: 700;
+            color: var(--text);
+            margin-bottom: 14px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid rgba(232, 83, 31, .35);
+            display: flex;
+            align-items: center;
+            gap: 8px;
         }
 
-        .summary-card.neutral .summary-value {
-            color: var(--accent-neutral);
+        .section-title::before {
+            content: '';
+            display: inline-block;
+            width: 4px;
+            height: 15px;
+            background: var(--accent);
+            border-radius: 2px;
         }
 
-        /* 持仓卡片网格 */
+        /* 大盘竞价 */
+        .index-cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 12px;
+            margin-bottom: 12px;
+        }
+
+        .index-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-soft);
+            border-radius: 8px;
+            padding: 14px;
+            text-align: center;
+            box-shadow: 0 1px 3px rgba(31, 41, 55, .05);
+        }
+
+        .index-card-name {
+            font-size: 12px;
+            color: var(--text-dim);
+            margin-bottom: 8px;
+        }
+
+        .index-card-gap {
+            font-size: 20px;
+            font-weight: 700;
+            margin-bottom: 6px;
+        }
+
+        .index-card-gap.up { color: var(--red); }
+        .index-card-gap.down { color: var(--green); }
+
+        .index-card-level {
+            font-size: 11px;
+            color: var(--text-dim);
+            background: var(--bg-soft);
+            padding: 3px 8px;
+            border-radius: 4px;
+            display: inline-block;
+        }
+
+        .market-mood {
+            background: var(--bg-card);
+            border: 1px solid var(--border-soft);
+            border-radius: 8px;
+            padding: 14px 16px;
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            box-shadow: 0 1px 3px rgba(31, 41, 55, .05);
+        }
+
+        .mood-label {
+            font-size: 12px;
+            color: var(--text-dim);
+        }
+
+        .mood-value {
+            font-size: 18px;
+            font-weight: 700;
+        }
+
+        .mood-value.up { color: var(--red); }
+        .mood-value.down { color: var(--green); }
+        .mood-value.neutral { color: var(--gray); }
+
+        /* 持仓竞价一览 */
         .holdings-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-            gap: 12px;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 14px;
         }
 
         .holding-card {
             background: var(--bg-card);
-            border: 1px solid var(--border);
-            border-radius: 6px;
-            padding: 14px;
-            transition: all 0.3s ease;
+            border: 1px solid var(--border-soft);
+            border-radius: 10px;
+            padding: 16px;
+            box-shadow: 0 1px 3px rgba(31, 41, 55, .05);
             position: relative;
+            transition: all .2s ease;
         }
 
         .holding-card::before {
@@ -141,114 +230,212 @@
             top: 0;
             left: 0;
             right: 0;
-            height: 2px;
-            border-radius: 6px 6px 0 0;
+            height: 3px;
+            border-radius: 10px 10px 0 0;
         }
 
         .holding-card.bullish::before {
-            background: linear-gradient(90deg, var(--accent-up), rgba(40, 167, 69, 0.3));
+            background: linear-gradient(90deg, var(--red), rgba(232, 83, 31, .25));
         }
 
         .holding-card.bearish::before {
-            background: linear-gradient(90deg, var(--accent-down), rgba(220, 53, 69, 0.3));
+            background: linear-gradient(90deg, var(--green), rgba(34, 150, 82, .25));
         }
 
         .holding-card.neutral::before {
-            background: linear-gradient(90deg, var(--accent-neutral), rgba(108, 117, 125, 0.3));
+            background: linear-gradient(90deg, var(--gray), rgba(107, 114, 128, .25));
         }
 
         .holding-card:hover {
-            border-color: var(--primary);
-            transform: translateY(-2px);
-            box-shadow: 0 8px 20px rgba(30, 136, 229, 0.1);
+            border-color: rgba(232, 83, 31, .35);
+            box-shadow: 0 6px 16px rgba(31, 41, 55, .08);
+        }
+
+        .holding-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 10px;
         }
 
         .holding-code {
-            font-size: 10px;
-            color: var(--text-secondary);
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            margin-bottom: 4px;
+            font-size: 11px;
+            color: var(--text-dim);
+            font-weight: 600;
+            letter-spacing: .5px;
         }
 
         .holding-name {
-            font-size: 13px;
+            font-size: 14px;
             font-weight: 700;
-            color: var(--text-primary);
-            margin-bottom: 6px;
-            line-height: 1.3;
+            color: var(--text);
+            margin: 2px 0 0;
         }
 
         .holding-gap {
-            font-size: 18px;
+            font-size: 20px;
             font-weight: 700;
-            margin-bottom: 8px;
         }
 
-        .holding-gap.up {
-            color: var(--accent-up);
-        }
-
-        .holding-gap.down {
-            color: var(--accent-down);
-        }
-
-        .holding-gap.flat {
-            color: var(--accent-neutral);
-        }
+        .holding-gap.up { color: var(--red); }
+        .holding-gap.down { color: var(--green); }
+        .holding-gap.flat { color: var(--gray); }
 
         .holding-meta {
             display: flex;
             justify-content: space-between;
-            font-size: 10px;
-            color: var(--text-secondary);
-            margin-bottom: 8px;
-            padding-bottom: 8px;
-            border-bottom: 1px solid var(--border);
+            align-items: center;
+            font-size: 11px;
+            color: var(--text-dim);
+            margin-bottom: 10px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid var(--border-soft);
         }
 
         .holding-trend {
-            background: rgba(0, 172, 193, 0.1);
-            color: var(--info);
-            padding: 2px 6px;
-            border-radius: 3px;
-            font-size: 10px;
+            background: rgba(232, 83, 31, .08);
+            color: var(--accent);
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 600;
+        }
+
+        .holding-linkage {
+            background: var(--bg);
+            border: 1px solid var(--border-soft);
+            border-radius: 6px;
+            padding: 10px;
+            margin-bottom: 10px;
+            font-size: 12px;
+        }
+
+        .linkage-risk {
+            font-weight: 700;
+            margin-bottom: 4px;
+        }
+
+        .linkage-risk.high-risk { color: var(--red); }
+        .linkage-risk.opportunity { color: var(--green); }
+        .linkage-risk.plain { color: var(--text); }
+
+        .linkage-detail {
+            font-size: 11px;
+            color: var(--text-dim);
         }
 
         .holding-suggestion {
-            background: rgba(30, 136, 229, 0.05);
-            border-left: 2px solid var(--info);
-            padding: 8px;
-            border-radius: 3px;
-            font-size: 11px;
-            line-height: 1.4;
-            color: var(--info);
+            background: rgba(232, 83, 31, .05);
+            border-left: 3px solid var(--accent);
+            border-radius: 4px;
+            padding: 10px 12px;
+            margin-bottom: 10px;
         }
 
+        .suggestion-title {
+            font-size: 10px;
+            color: var(--text-dim);
+            letter-spacing: .5px;
+            margin-bottom: 4px;
+        }
+
+        .suggestion-text {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--text);
+            line-height: 1.5;
+        }
+
+        .holding-confidence {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 11px;
+        }
+
+        .confidence-label {
+            color: var(--text-dim);
+        }
+
+        .confidence-value {
+            background: rgba(232, 83, 31, .1);
+            color: var(--accent);
+            padding: 3px 10px;
+            border-radius: 4px;
+            font-weight: 600;
+        }
+
+        /* 风险提示 */
+        .risk-section {
+            background: var(--bg-card);
+            border: 1px solid var(--border-soft);
+            border-radius: 10px;
+            padding: 16px;
+            box-shadow: 0 1px 3px rgba(31, 41, 55, .05);
+        }
+
+        .risk-alert {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 11px 12px;
+            background: var(--bg);
+            border-radius: 6px;
+            margin-bottom: 8px;
+            font-size: 13px;
+        }
+
+        .risk-alert:last-child {
+            margin-bottom: 0;
+        }
+
+        .risk-icon {
+            font-size: 17px;
+            flex-shrink: 0;
+        }
+
+        /* 加载 / 无数据 */
         .no-data {
             background: var(--bg-card);
             border: 1px dashed var(--border);
-            border-radius: 6px;
-            padding: 32px;
+            border-radius: 10px;
+            padding: 40px 20px;
             text-align: center;
-            color: var(--text-secondary);
+            color: var(--text-dim);
+        }
+
+        .no-data-icon {
+            font-size: 40px;
+            margin-bottom: 12px;
+        }
+
+        .no-data-text {
+            font-size: 14px;
+            margin-bottom: 6px;
+            color: var(--text);
+        }
+
+        .no-data-hint {
+            font-size: 12px;
+            color: var(--text-dim);
         }
 
         .loading {
             text-align: center;
-            padding: 32px;
-            color: var(--text-secondary);
+            padding: 40px;
+            color: var(--text-dim);
         }
 
         .spinner {
             display: inline-block;
-            width: 16px;
-            height: 16px;
+            width: 18px;
+            height: 18px;
             border: 2px solid var(--border);
-            border-top-color: var(--primary);
+            border-top-color: var(--accent);
             border-radius: 50%;
-            animation: spin 0.8s linear infinite;
+            animation: spin .8s linear infinite;
             margin-right: 8px;
+            vertical-align: -3px;
         }
 
         @keyframes spin {
@@ -256,18 +443,12 @@
         }
 
         .fade-in {
-            animation: fadeIn 0.3s ease-in;
+            animation: fadeIn .3s ease-in;
         }
 
         @keyframes fadeIn {
-            from {
-                opacity: 0;
-                transform: translateY(10px);
-            }
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
+            from { opacity: 0; transform: translateY(8px); }
+            to { opacity: 1; transform: translateY(0); }
         }
 
         /* 响应式 */
@@ -298,6 +479,7 @@
         <div class="header">
             <div class="header-title">
                 <h2>📊 竞价诊断</h2>
+                <span class="header-subtitle">做T猎手决策看板</span>
             </div>
             <div class="header-time" id="current-time">加载中...</div>
         </div>
@@ -307,748 +489,43 @@
             <!-- 动态生成 -->
         </div>
 
-        <!-- 持仓诊断 -->
-        <div class="holdings-grid" id="holdings-grid">
-            <!-- 动态生成 -->
+        <!-- 大盘竞价 -->
+        <div class="section" id="index-section" style="display:none;">
+            <div class="section-title">🌐 大盘竞价</div>
+            <div class="index-cards" id="index-cards">
+                <!-- 动态生成 -->
+            </div>
+            <div class="market-mood">
+                <span class="mood-label">市场情绪</span>
+                <span class="mood-value" id="mood-value">中性</span>
+            </div>
+        </div>
+
+        <!-- 持仓竞价一览 -->
+        <div class="section">
+            <div class="section-title">📈 持仓竞价一览</div>
+            <div class="holdings-grid" id="holdings-grid">
+                <!-- 动态生成 -->
+            </div>
+        </div>
+
+        <!-- 风险提示 -->
+        <div class="risk-section" id="risk-section" style="display:none;">
+            <div class="section-title">⚡ 风险提示</div>
+            <div id="risk-alerts-container">
+                <!-- 动态生成 -->
+            </div>
         </div>
 
         <!-- 加载状态 -->
-        <div id="loading-state" style="display: none;">
+        <div id="loading-state" style="display:none;">
             <div class="loading">
                 <span class="spinner"></span>正在加载诊断数据...
             </div>
         </div>
 
         <!-- 无数据提示 -->
-        <div id="no-data-state" style="display: none;">
-            <div class="no-data">
-                <div style="font-size: 32px; margin-bottom: 12px;">📭</div>
-                <div>暂无竞价诊断数据</div>
-                <div style="font-size: 11px; margin-top: 8px;">请等待 9:25 后获取今日竞价信息</div>
-            </div>
-        </div>
-    </div>
-
-    <script>
-        // 实时时钟
-        function updateClock() {
-            const now = new Date();
-            const h = String(now.getHours()).padStart(2, '0');
-            const m = String(now.getMinutes()).padStart(2, '0');
-            const s = String(now.getSeconds()).padStart(2, '0');
-            document.getElementById('current-time').textContent = `${h}:${m}:${s}`;
-        }
-        updateClock();
-        setInterval(updateClock, 1000);
-
-        // 颜色映射
-        function getGapClass(gap) {
-            if (gap > 0.5) return 'up';
-            if (gap < -0.5) return 'down';
-            return 'flat';
-        }
-
-        function getGapSign(gap) {
-            return gap > 0 ? `+${gap.toFixed(2)}%` : `${gap.toFixed(2)}%`;
-        }
-
-        // 构建摘要卡片
-        function buildSummaryCards(report) {
-            const grid = document.getElementById('summary-grid');
-            grid.innerHTML = '';
-
-            const cards = [
-                { label: '高开', value: report.bullish_count, class: report.bullish_count > 0 ? 'up' : 'neutral' },
-                { label: '平开', value: report.neutral_count, class: 'neutral' },
-                { label: '低开', value: report.bearish_count, class: report.bearish_count > 0 ? 'down' : 'neutral' },
-                { label: '策略', value: report.suggested_action, class: report.suggested_action === '进攻' ? 'up' : (report.suggested_action === '回避' ? 'down' : 'neutral') }
-            ];
-
-            cards.forEach(card => {
-                const html = `
-                    <div class="summary-card ${card.class} fade-in">
-                        <div class="summary-label">${card.label}</div>
-                        <div class="summary-value">${card.value}</div>
-                    </div>
-                `;
-                grid.insertAdjacentHTML('beforeend', html);
-            });
-        }
-
-        // 构建持仓卡片
-        function buildHoldingCards(holdings) {
-            const grid = document.getElementById('holdings-grid');
-            grid.innerHTML = '';
-
-            if (!holdings || holdings.length === 0) {
-                document.getElementById('no-data-state').style.display = 'block';
-                return;
-            }
-
-            holdings.forEach(h => {
-                const cardClass = h.gap_pct > 0.5 ? 'bullish' : (h.gap_pct < -0.5 ? 'bearish' : 'neutral');
-                const gapClass = getGapClass(h.gap_pct);
-
-                const html = `
-                    <div class="holding-card ${cardClass} fade-in">
-                        <div class="holding-code">${h.code}</div>
-                        <div class="holding-name">${h.name}</div>
-                        <div class="holding-gap ${gapClass}">${getGapSign(h.gap_pct)}</div>
-
-                        <div class="holding-meta">
-                            <span>${h.gap_level}</span>
-                            <span class="holding-trend">${h.trend_shape}</span>
-                        </div>
-
-                        <div class="holding-suggestion">
-                            ${h.suggestion}
-                        </div>
-                    </div>
-                `;
-                grid.insertAdjacentHTML('beforeend', html);
-            });
-        }
-
-        // 加载数据
-        async function loadData() {
-            const loadingState = document.getElementById('loading-state');
-            const noDataState = document.getElementById('no-data-state');
-            const summaryGrid = document.getElementById('summary-grid');
-
-            loadingState.style.display = 'block';
-            noDataState.style.display = 'none';
-            summaryGrid.innerHTML = '';
-
-            try {
-                // 优先通过 pywebview API 加载
-                if (window.pywebview && window.pywebview.api) {
-                    const report = await window.pywebview.api.get_auction_diagnosis();
-                    if (report && report.holdings_diagnosis && report.holdings_diagnosis.length > 0) {
-                        buildSummaryCards(report);
-                        buildHoldingCards(report.holdings_diagnosis);
-                        loadingState.style.display = 'none';
-                        return;
-                    }
-                }
-
-                // 降级方案：从本地 JSON 加载
-                const today = new Date().toISOString().split('T')[0];
-                const response = await fetch(`../t_io/preopen/auction_diagnosis_${today}.json`);
-                if (response.ok) {
-                    const report = await response.json();
-                    if (report.holdings_diagnosis && report.holdings_diagnosis.length > 0) {
-                        buildSummaryCards(report);
-                        buildHoldingCards(report.holdings_diagnosis);
-                        loadingState.style.display = 'none';
-                        return;
-                    }
-                }
-
-                loadingState.style.display = 'none';
-                noDataState.style.display = 'block';
-            } catch (error) {
-                console.error('加载失败:', error);
-                loadingState.style.display = 'none';
-                noDataState.style.display = 'block';
-            }
-        }
-
-        // 初始加载 + 定时刷新（30秒）
-        loadData();
-        setInterval(loadData, 30000);
-    </script>
-</body>
-</html>
-
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
-        :root {
-            --primary: #1e88e5;
-            --success: #43a047;
-            --danger: #e53935;
-            --warning: #fb8c00;
-            --info: #00acc1;
-            --secondary: #90a4ae;
-            --bg-dark: #0d1117;
-            --bg-card: #161b22;
-            --text-primary: #e6edf3;
-            --text-secondary: #8b949e;
-            --border: #30363d;
-            --accent-up: #28a745;
-            --accent-down: #dc3545;
-            --accent-neutral: #6c757d;
-        }
-
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif;
-            background: linear-gradient(135deg, var(--bg-dark) 0%, #0a0f14 100%);
-            color: var(--text-primary);
-            line-height: 1.6;
-            min-height: 100vh;
-            overflow-x: hidden;
-        }
-
-        .container {
-            max-width: 1400px;
-            margin: 0 auto;
-            padding: 24px;
-        }
-
-        /* ============ 头部标题 ============ */
-        .header {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            margin-bottom: 32px;
-            padding-bottom: 20px;
-            border-bottom: 2px solid var(--border);
-        }
-
-        .header-title {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-        }
-
-        .header-title h1 {
-            font-size: 28px;
-            font-weight: 700;
-            background: linear-gradient(135deg, #00d4ff, #0099ff);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-        }
-
-        .header-subtitle {
-            font-size: 12px;
-            color: var(--text-secondary);
-            margin-top: 4px;
-        }
-
-        .header-time {
-            font-size: 13px;
-            color: var(--text-secondary);
-        }
-
-        /* ============ 策略摘要卡片 ============ */
-        .summary-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 16px;
-            margin-bottom: 28px;
-        }
-
-        .summary-card {
-            background: var(--bg-card);
-            border: 1px solid var(--border);
-            border-radius: 8px;
-            padding: 20px;
-            text-align: center;
-            transition: all 0.3s ease;
-            position: relative;
-            overflow: hidden;
-        }
-
-        .summary-card::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            height: 3px;
-            background: linear-gradient(90deg, currentColor, transparent);
-        }
-
-        .summary-card:hover {
-            border-color: var(--primary);
-            transform: translateY(-2px);
-            box-shadow: 0 8px 24px rgba(30, 136, 229, 0.1);
-        }
-
-        .summary-card.up .summary-card::before {
-            background: linear-gradient(90deg, var(--accent-up), transparent);
-        }
-
-        .summary-card.down .summary-card::before {
-            background: linear-gradient(90deg, var(--accent-down), transparent);
-        }
-
-        .summary-card.neutral .summary-card::before {
-            background: linear-gradient(90deg, var(--accent-neutral), transparent);
-        }
-
-        .summary-label {
-            font-size: 12px;
-            color: var(--text-secondary);
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            margin-bottom: 8px;
-        }
-
-        .summary-value {
-            font-size: 32px;
-            font-weight: 700;
-            margin-bottom: 8px;
-        }
-
-        .summary-card.up .summary-value {
-            color: var(--accent-up);
-        }
-
-        .summary-card.down .summary-value {
-            color: var(--accent-down);
-        }
-
-        .summary-card.neutral .summary-value {
-            color: var(--accent-neutral);
-        }
-
-        .summary-subtitle {
-            font-size: 11px;
-            color: var(--text-secondary);
-        }
-
-        /* ============ 大盘竞价分析 ============ */
-        .section {
-            margin-bottom: 32px;
-        }
-
-        .section-title {
-            font-size: 16px;
-            font-weight: 700;
-            color: var(--text-primary);
-            margin-bottom: 16px;
-            padding-bottom: 12px;
-            border-bottom: 2px solid var(--primary);
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-
-        .section-title::before {
-            content: '';
-            display: inline-block;
-            width: 4px;
-            height: 16px;
-            background: var(--primary);
-            border-radius: 2px;
-        }
-
-        .index-cards {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-            gap: 12px;
-            margin-bottom: 16px;
-        }
-
-        .index-card {
-            background: var(--bg-card);
-            border: 1px solid var(--border);
-            border-radius: 6px;
-            padding: 16px;
-            text-align: center;
-        }
-
-        .index-card-name {
-            font-size: 12px;
-            color: var(--text-secondary);
-            margin-bottom: 8px;
-        }
-
-        .index-card-gap {
-            font-size: 20px;
-            font-weight: 700;
-            margin-bottom: 6px;
-        }
-
-        .index-card-gap.up {
-            color: var(--accent-up);
-        }
-
-        .index-card-gap.down {
-            color: var(--accent-down);
-        }
-
-        .index-card-level {
-            font-size: 11px;
-            color: var(--text-secondary);
-            background: rgba(255, 255, 255, 0.05);
-            padding: 4px 8px;
-            border-radius: 4px;
-            display: inline-block;
-        }
-
-        .market-mood {
-            background: var(--bg-card);
-            border: 1px solid var(--border);
-            border-radius: 6px;
-            padding: 16px;
-            margin-bottom: 16px;
-        }
-
-        .mood-label {
-            font-size: 12px;
-            color: var(--text-secondary);
-            margin-bottom: 8px;
-        }
-
-        .mood-value {
-            font-size: 18px;
-            font-weight: 700;
-            color: var(--info);
-        }
-
-        /* ============ 持仓竞价诊断 ============ */
-        .holdings-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-            gap: 16px;
-        }
-
-        .holding-card {
-            background: var(--bg-card);
-            border: 1px solid var(--border);
-            border-radius: 8px;
-            padding: 18px;
-            transition: all 0.3s ease;
-            position: relative;
-        }
-
-        .holding-card::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            height: 3px;
-            border-radius: 8px 8px 0 0;
-        }
-
-        .holding-card.bullish::before {
-            background: linear-gradient(90deg, var(--accent-up), rgba(40, 167, 69, 0.3));
-        }
-
-        .holding-card.bearish::before {
-            background: linear-gradient(90deg, var(--accent-down), rgba(220, 53, 69, 0.3));
-        }
-
-        .holding-card.neutral::before {
-            background: linear-gradient(90deg, var(--accent-neutral), rgba(108, 117, 125, 0.3));
-        }
-
-        .holding-card:hover {
-            border-color: var(--primary);
-            transform: translateY(-4px);
-            box-shadow: 0 12px 32px rgba(30, 136, 229, 0.15);
-        }
-
-        .holding-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: flex-start;
-            margin-bottom: 12px;
-        }
-
-        .holding-code {
-            font-size: 11px;
-            color: var(--text-secondary);
-            font-weight: 600;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-        }
-
-        .holding-name {
-            font-size: 14px;
-            font-weight: 700;
-            color: var(--text-primary);
-            margin: 4px 0 8px 0;
-        }
-
-        .holding-gap {
-            font-size: 20px;
-            font-weight: 700;
-        }
-
-        .holding-gap.up {
-            color: var(--accent-up);
-        }
-
-        .holding-gap.down {
-            color: var(--accent-down);
-        }
-
-        .holding-gap.flat {
-            color: var(--accent-neutral);
-        }
-
-        .holding-meta {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            font-size: 11px;
-            color: var(--text-secondary);
-            margin-bottom: 12px;
-            padding-bottom: 12px;
-            border-bottom: 1px solid var(--border);
-        }
-
-        .holding-trend {
-            background: rgba(30, 136, 229, 0.1);
-            color: var(--info);
-            padding: 4px 8px;
-            border-radius: 4px;
-            font-size: 11px;
-            font-weight: 600;
-        }
-
-        .holding-linkage {
-            background: var(--bg-dark);
-            border: 1px solid var(--border);
-            border-radius: 6px;
-            padding: 10px;
-            margin-bottom: 12px;
-            font-size: 12px;
-        }
-
-        .linkage-risk {
-            font-weight: 700;
-            margin-bottom: 4px;
-        }
-
-        .linkage-risk.high-risk {
-            color: var(--accent-down);
-        }
-
-        .linkage-risk.opportunity {
-            color: var(--accent-up);
-        }
-
-        .linkage-detail {
-            font-size: 11px;
-            color: var(--text-secondary);
-        }
-
-        .holding-suggestion {
-            background: linear-gradient(135deg, rgba(30, 136, 229, 0.1), rgba(0, 172, 193, 0.05));
-            border-left: 3px solid var(--info);
-            border-radius: 4px;
-            padding: 12px;
-            margin-bottom: 10px;
-        }
-
-        .suggestion-title {
-            font-size: 11px;
-            color: var(--text-secondary);
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            margin-bottom: 4px;
-        }
-
-        .suggestion-text {
-            font-size: 13px;
-            font-weight: 600;
-            color: var(--info);
-            line-height: 1.5;
-        }
-
-        .holding-confidence {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            font-size: 11px;
-        }
-
-        .confidence-label {
-            color: var(--text-secondary);
-        }
-
-        .confidence-value {
-            background: rgba(30, 136, 229, 0.2);
-            color: var(--info);
-            padding: 3px 8px;
-            border-radius: 4px;
-            font-weight: 600;
-        }
-
-        /* ============ 风险提示 ============ */
-        .risk-section {
-            margin-top: 28px;
-            background: var(--bg-card);
-            border: 2px solid var(--border);
-            border-radius: 8px;
-            padding: 16px;
-        }
-
-        .risk-alert {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            padding: 12px;
-            background: rgba(255, 255, 255, 0.03);
-            border-radius: 6px;
-            margin-bottom: 8px;
-            font-size: 13px;
-        }
-
-        .risk-alert:last-child {
-            margin-bottom: 0;
-        }
-
-        .risk-icon {
-            font-size: 18px;
-            flex-shrink: 0;
-        }
-
-        /* ============ 无数据提示 ============ */
-        .no-data {
-            background: var(--bg-card);
-            border: 1px dashed var(--border);
-            border-radius: 8px;
-            padding: 48px 20px;
-            text-align: center;
-            color: var(--text-secondary);
-        }
-
-        .no-data-icon {
-            font-size: 48px;
-            margin-bottom: 16px;
-        }
-
-        .no-data-text {
-            font-size: 14px;
-            margin-bottom: 8px;
-        }
-
-        .no-data-hint {
-            font-size: 12px;
-            color: var(--text-secondary);
-        }
-
-        /* ============ 加载动画 ============ */
-        .loading {
-            display: inline-block;
-            width: 20px;
-            height: 20px;
-            border: 3px solid var(--border);
-            border-top-color: var(--info);
-            border-radius: 50%;
-            animation: spin 0.8s linear infinite;
-        }
-
-        @keyframes spin {
-            to { transform: rotate(360deg); }
-        }
-
-        /* ============ 响应式设计 ============ */
-        @media (max-width: 768px) {
-            .container {
-                padding: 16px;
-            }
-
-            .header-title h1 {
-                font-size: 20px;
-            }
-
-            .summary-grid {
-                grid-template-columns: 1fr;
-            }
-
-            .holdings-grid {
-                grid-template-columns: 1fr;
-            }
-
-            .holding-card {
-                padding: 14px;
-            }
-        }
-
-        /* ============ 动画和过渡 ============ */
-        .fade-in {
-            animation: fadeIn 0.5s ease-in;
-        }
-
-        @keyframes fadeIn {
-            from {
-                opacity: 0;
-                transform: translateY(10px);
-            }
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
-        }
-
-        .pulse {
-            animation: pulse 2s ease-in-out infinite;
-        }
-
-        @keyframes pulse {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.7; }
-        }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <!-- 头部 -->
-        <div class="header">
-            <div class="header-title">
-                <h1>📊 竞价诊断</h1>
-                <div>
-                    <div class="header-subtitle">做T猎手决策看板</div>
-                    <div class="header-time" id="current-time">正在加载...</div>
-                </div>
-            </div>
-        </div>
-
-        <!-- 加载状态 -->
-        <div id="loading-state" style="text-align: center; padding: 48px; display: none;">
-            <div class="loading" style="margin: 0 auto 16px;"></div>
-            <p style="color: var(--text-secondary);">正在分析竞价数据...</p>
-        </div>
-
-        <!-- 主内容 -->
-        <div id="main-content" style="display: none;">
-            <!-- 策略摘要 -->
-            <div class="summary-grid" id="summary-grid">
-                <!-- 动态生成 -->
-            </div>
-
-            <!-- 大盘竞价分析 -->
-            <div class="section" id="index-section" style="display: none;">
-                <div class="section-title">🌐 大盘竞价</div>
-                <div class="index-cards" id="index-cards">
-                    <!-- 动态生成 -->
-                </div>
-                <div class="market-mood" id="market-mood">
-                    <div class="mood-label">市场情绪</div>
-                    <div class="mood-value" id="mood-value">中性</div>
-                </div>
-            </div>
-
-            <!-- 持仓竞价诊断 -->
-            <div class="section">
-                <div class="section-title">📈 持仓竞价一览</div>
-                <div class="holdings-grid" id="holdings-grid">
-                    <!-- 动态生成 -->
-                </div>
-            </div>
-
-            <!-- 风险提示 -->
-            <div class="risk-section" id="risk-section" style="display: none;">
-                <div class="section-title">⚡ 风险提示</div>
-                <div id="risk-alerts-container">
-                    <!-- 动态生成 -->
-                </div>
-            </div>
-        </div>
-
-        <!-- 无数据提示 -->
-        <div id="no-data-state" style="display: none;">
+        <div id="no-data-state" style="display:none;">
             <div class="no-data">
                 <div class="no-data-icon">📭</div>
                 <div class="no-data-text">暂无竞价诊断数据</div>
@@ -1058,25 +535,17 @@
     </div>
 
     <script>
-        const BASE_URL = '/api';
-
-        // 格式化时间
-        function formatTime(date) {
-            const h = String(date.getHours()).padStart(2, '0');
-            const m = String(date.getMinutes()).padStart(2, '0');
-            const s = String(date.getSeconds()).padStart(2, '0');
-            return `${h}:${m}:${s}`;
-        }
-
         // 实时时钟
         function updateClock() {
             const now = new Date();
-            document.getElementById('current-time').textContent = formatTime(now);
+            const p = n => String(n).padStart(2, '0');
+            document.getElementById('current-time').textContent =
+                `${p(now.getHours())}:${p(now.getMinutes())}:${p(now.getSeconds())}`;
         }
         updateClock();
         setInterval(updateClock, 1000);
 
-        // 颜色映射
+        // 颜色映射（A股：红涨绿跌）
         function getGapClass(gap) {
             if (gap > 0.5) return 'up';
             if (gap < -0.5) return 'down';
@@ -1087,91 +556,114 @@
             return gap > 0 ? `+${gap.toFixed(2)}%` : `${gap.toFixed(2)}%`;
         }
 
-        // 构建摘要卡片
+        // 构建摘要卡片（高开/平开/低开/策略建议）
         function buildSummaryCards(report) {
-            const summaryGrid = document.getElementById('summary-grid');
-            summaryGrid.innerHTML = '';
+            const grid = document.getElementById('summary-grid');
+            grid.innerHTML = '';
 
             const cards = [
-                {
-                    label: '高开',
-                    value: report.bullish_count,
-                    class: report.bullish_count > 0 ? 'up' : 'neutral'
-                },
-                {
-                    label: '平开',
-                    value: report.neutral_count,
-                    class: 'neutral'
-                },
-                {
-                    label: '低开',
-                    value: report.bearish_count,
-                    class: report.bearish_count > 0 ? 'down' : 'neutral'
-                },
-                {
-                    label: '策略建议',
-                    value: report.suggested_action,
-                    class: report.suggested_action === '进攻' ? 'up' : (report.suggested_action === '回避' ? 'down' : 'neutral')
-                }
+                { label: '高开', value: report.bullish_count, cls: report.bullish_count > 0 ? 'up' : 'neutral' },
+                { label: '平开', value: report.neutral_count, cls: 'neutral' },
+                { label: '低开', value: report.bearish_count, cls: report.bearish_count > 0 ? 'down' : 'neutral' },
+                { label: '策略', value: report.suggested_action,
+                  cls: report.suggested_action === '进攻' ? 'up' : (report.suggested_action === '回避' ? 'down' : 'neutral') }
             ];
 
             cards.forEach(card => {
                 const html = `
-                    <div class="summary-card ${card.class} fade-in">
+                    <div class="summary-card ${card.cls} fade-in">
                         <div class="summary-label">${card.label}</div>
-                        <div class="summary-value">${card.value}</div>
+                        <div class="summary-value">${card.value || '—'}</div>
                     </div>
                 `;
-                summaryGrid.insertAdjacentHTML('beforeend', html);
+                grid.insertAdjacentHTML('beforeend', html);
             });
         }
 
-        // 构建持仓诊断卡片
+        // 构建大盘竞价（指数卡片 + 市场情绪）；无指数数据时隐藏整块
+        function buildIndexCards(report) {
+            const section = document.getElementById('index-section');
+            const idxList = report.index_analysis || [];
+
+            if (!idxList.length) {
+                section.style.display = 'none';
+                return;
+            }
+
+            const grid = document.getElementById('index-cards');
+            grid.innerHTML = '';
+            idxList.forEach(idx => {
+                const gapCls = getGapClass(idx.gap_pct);
+                const html = `
+                    <div class="index-card fade-in">
+                        <div class="index-card-name">${idx.name || idx.code}</div>
+                        <div class="index-card-gap ${gapCls}">${getGapSign(idx.gap_pct)}</div>
+                        <div><span class="index-card-level">${idx.gap_level}</span></div>
+                    </div>
+                `;
+                grid.insertAdjacentHTML('beforeend', html);
+            });
+
+            const moodEl = document.getElementById('mood-value');
+            const mood = report.market_mood || '中性';
+            moodEl.textContent = mood;
+            moodEl.className = 'mood-value ' + (mood === '偏多' ? 'up' : mood === '偏空' ? 'down' : 'neutral');
+
+            section.style.display = 'block';
+        }
+
+        // 构建持仓竞价一览卡片
         function buildHoldingCards(holdings) {
             const grid = document.getElementById('holdings-grid');
             grid.innerHTML = '';
 
-            if (!holdings || holdings.length === 0) {
-                grid.innerHTML = '<div class="no-data" style="grid-column: 1/-1;"><div class="no-data-text">暂无持仓数据</div></div>';
-                return;
-            }
+            if (!holdings || holdings.length === 0) return;
 
-            holdings.forEach((holding, idx) => {
-                const cardClass = holding.gap_pct > 0.5 ? 'bullish' : (holding.gap_pct < -0.5 ? 'bearish' : 'neutral');
-                const gapClass = getGapClass(holding.gap_pct);
+            holdings.forEach(h => {
+                const cardClass = h.gap_pct > 0.5 ? 'bullish' : (h.gap_pct < -0.5 ? 'bearish' : 'neutral');
+                const gapCls = getGapClass(h.gap_pct);
+
+                // 联动判定（高危/机会/普通）
+                const riskTxt = [h.risk_tag, h.linkage_label].filter(Boolean).join(' ');
+                let linkCls = 'plain';
+                if ((h.risk_tag || '').includes('高危')) linkCls = 'high-risk';
+                else if ((h.risk_tag || '').includes('机会')) linkCls = 'opportunity';
+                const linkHtml = riskTxt
+                    ? `<div class="linkage-risk ${linkCls}">${riskTxt}</div>` : '';
+
+                const ydayTxt = h.yesterday_label === '横盘'
+                    ? '昨日横盘'
+                    : `昨日${h.yesterday_label || '—'}(${h.yesterday_change_pct == null ? '—' : h.yesterday_change_pct.toFixed(2) + '%'})`;
+                const vsIdx = h.vs_index ? ` · ${h.vs_index}` : '';
 
                 const html = `
                     <div class="holding-card ${cardClass} fade-in">
                         <div class="holding-header">
                             <div>
-                                <div class="holding-code">${holding.code}</div>
-                                <div class="holding-name">${holding.name}</div>
+                                <div class="holding-code">${h.code}</div>
+                                <div class="holding-name">${h.name || h.code}</div>
                             </div>
-                            <div class="holding-gap ${gapClass}">${getGapSign(holding.gap_pct)}</div>
+                            <div class="holding-gap ${gapCls}">${getGapSign(h.gap_pct)}</div>
                         </div>
 
                         <div class="holding-meta">
-                            <span>${holding.gap_level}</span>
-                            <span class="holding-trend">${holding.trend_shape}</span>
+                            <span>${h.gap_level}</span>
+                            <span class="holding-trend">${h.trend_shape || '—'}</span>
                         </div>
 
                         <div class="holding-linkage">
-                            <div class="linkage-risk ${holding.risk_tag.includes('高危') ? 'high-risk' : (holding.risk_tag.includes('机会') ? 'opportunity' : '')}">
-                                ${holding.risk_tag} ${holding.linkage_label}
-                            </div>
-                            <div class="linkage-detail">
-                                ${holding.yesterday_label === '横盘' ? '昨日横盘' : `昨日${holding.yesterday_label}(${holding.yesterday_change_pct.toFixed(2)}%)`}
-                            </div>
+                            ${linkHtml}
+                            <div class="linkage-detail">${ydayTxt}${vsIdx}</div>
                         </div>
 
                         <div class="holding-suggestion">
                             <div class="suggestion-title">做T建议</div>
-                            <div class="suggestion-text">${holding.suggestion}</div>
+                            <div class="suggestion-text">${h.suggestion || '—'}</div>
                         </div>
 
                         <div class="holding-confidence">
                             <span class="confidence-label">置信度</span>
-                            <span class="confidence-value">${holding.confidence}</span>
+                            <span class="confidence-value">${h.confidence || '—'}</span>
                         </div>
                     </div>
                 `;
@@ -1179,21 +671,21 @@
             });
         }
 
-        // 构建风险提示
+        // 构建风险提示；无风险时隐藏
         function buildRiskAlerts(report) {
-            const container = document.getElementById('risk-alerts-container');
             const section = document.getElementById('risk-section');
+            const container = document.getElementById('risk-alerts-container');
+            const alerts = report.risk_alerts || [];
 
-            if (!report.risk_alerts || report.risk_alerts.length === 0) {
+            if (!alerts.length) {
                 section.style.display = 'none';
                 return;
             }
 
             section.style.display = 'block';
             container.innerHTML = '';
-
-            report.risk_alerts.forEach(alert => {
-                const icon = alert.includes('⚠️') ? '⚠️' : '💪';
+            alerts.forEach(alert => {
+                const icon = String(alert).includes('⚠️') ? '⚠️' : (String(alert).includes('💪') ? '💪' : '·');
                 const html = `
                     <div class="risk-alert fade-in">
                         <span class="risk-icon">${icon}</span>
@@ -1204,58 +696,77 @@
             });
         }
 
+        // 嵌入式场景：本面板被 GUI 主页面 iframe 承载时，iframe 内没有 pywebview.api（仅在顶层注入），
+        // 通过 postMessage 请求父页面代为调用 get_auction_diagnosis() 并把结果传回。
+        function requestReportFromParent() {
+            return new Promise((resolve) => {
+                if (!window.parent || window.parent === window) { resolve(null); return; }
+                let done = false;
+                const finish = (report) => {
+                    if (done) return;
+                    done = true;
+                    window.removeEventListener('message', onMsg);
+                    clearTimeout(timer);
+                    resolve(report);
+                };
+                const onMsg = (e) => {
+                    if (e.data && e.data.type === 'auction-response') finish(e.data.report || null);
+                };
+                const timer = setTimeout(() => finish(null), 8000);
+                window.addEventListener('message', onMsg);
+                window.parent.postMessage({ type: 'auction-request' }, '*');
+            });
+        }
+
         // 加载并展示数据
-        async function loadDiagnosisData() {
+        async function loadData() {
             const loadingState = document.getElementById('loading-state');
-            const mainContent = document.getElementById('main-content');
             const noDataState = document.getElementById('no-data-state');
+            const summaryGrid = document.getElementById('summary-grid');
 
             loadingState.style.display = 'block';
-            mainContent.style.display = 'none';
             noDataState.style.display = 'none';
+            summaryGrid.innerHTML = '';
 
+            let report = null;
             try {
-                // 尝试通过 pywebview API 加载
+                // 1) 独立打开时（本页即顶层）：直接通过 pywebview API 加载
                 if (window.pywebview && window.pywebview.api) {
-                    const report = await window.pywebview.api.get_auction_diagnosis();
-                    if (report && report.holdings_diagnosis && report.holdings_diagnosis.length > 0) {
-                        buildSummaryCards(report);
-                        buildHoldingCards(report.holdings_diagnosis);
-                        buildRiskAlerts(report);
-                        loadingState.style.display = 'none';
-                        mainContent.style.display = 'block';
-                        return;
-                    }
-                } else {
-                    // 降级方案：从本地 JSON 加载
+                    report = await window.pywebview.api.get_auction_diagnosis();
+                }
+                // 2) 嵌入 GUI 主页面时：请求父页面代为获取
+                if (!report) report = await requestReportFromParent();
+            } catch (error) {
+                console.error('API 加载失败:', error);
+                report = null;
+            }
+
+            // 3) 均失败时降级：从本地 JSON 加载
+            if (!report || !report.holdings_diagnosis) {
+                try {
                     const today = new Date().toISOString().split('T')[0];
                     const response = await fetch(`../t_io/preopen/auction_diagnosis_${today}.json`);
-                    if (response.ok) {
-                        const report = await response.json();
-                        if (report.holdings_diagnosis && report.holdings_diagnosis.length > 0) {
-                            buildSummaryCards(report);
-                            buildHoldingCards(report.holdings_diagnosis);
-                            buildRiskAlerts(report);
-                            loadingState.style.display = 'none';
-                            mainContent.style.display = 'block';
-                            return;
-                        }
-                    }
+                    if (response.ok) report = await response.json();
+                } catch (error) {
+                    console.error('本地 JSON 加载失败:', error);
                 }
+            }
 
-                // 无数据
-                loadingState.style.display = 'none';
-                noDataState.style.display = 'block';
-            } catch (error) {
-                console.error('加载诊断数据失败:', error);
-                loadingState.style.display = 'none';
+            loadingState.style.display = 'none';
+
+            if (report && report.holdings_diagnosis && report.holdings_diagnosis.length > 0) {
+                buildSummaryCards(report);
+                buildIndexCards(report);
+                buildHoldingCards(report.holdings_diagnosis);
+                buildRiskAlerts(report);
+            } else {
                 noDataState.style.display = 'block';
             }
         }
 
-        // 初始加载 + 定时刷新（每 30 秒）
-        loadDiagnosisData();
-        setInterval(loadDiagnosisData, 30000);
+        // 初始加载 + 定时刷新（30秒）
+        loadData();
+        setInterval(loadData, 30000);
     </script>
 </body>
 </html>
