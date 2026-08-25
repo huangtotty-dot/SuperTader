@@ -1,0 +1,23 @@
+---
+# 双通道建仓配置
+
+# 双通道参数
+dual_channel:
+  channel1:
+    name: "ice_point_reversal"
+    weight: 0.6
+    min_score: 0.7
+
+  channel2:
+    name: "breakout_follow"
+    weight: 0.4
+    min_score: 0.6
+
+# 综合评分阈值
+combined_score_threshold: 0.65
+
+# 建仓条件
+can_build_when:
+  market_confidence: 0.7
+  signal_strength: 0.8
+  no_risk_event: true

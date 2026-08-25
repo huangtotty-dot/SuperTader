@@ -1,0 +1,30 @@
+---
+# 系统数据获取配置
+
+data_fetch:
+  interval: 1  # 秒
+  timeout: 30
+  retries: 3
+  retry_delay: 1
+
+  # 数据源
+  sources:
+    - type: "akshare"
+      priority: 1
+      timeout: 10
+
+    - type: "local_cache"
+      priority: 2
+      timeout: 5
+
+# 缓存配置
+cache:
+  enabled: true
+  ttl: 300  # 5分钟
+  max_size: 10000  # 最大条目数
+
+# 快照配置
+snapshots:
+  enabled: true
+  interval: 60  # 每分钟保存一次
+  retention: 7  # 保留7天
