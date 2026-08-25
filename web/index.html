@@ -123,6 +123,10 @@
 
   <!-- ====== Tab 3: 信号与交易 ====== -->
   <div class="tab-page" id="tab-signals">
+    <div class="section" id="surge-defense">
+      <!-- 冲高防御实时监控将在此渲染 -->
+      <div id="surge-defense-container"></div>
+    </div>
     <div class="section" id="ob-analysis">
       <h2>持仓日线风险体检（超买/顶背离 → 减仓提醒）</h2>
       <div id="obBody"></div>
@@ -322,6 +326,7 @@
 </div>
 
 <script src="vendor/echarts.min.js"></script>
+<script src="surge-defense-widget.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

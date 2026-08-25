@@ -366,3 +366,278 @@ tr:hover td { background: rgba(243,93,43,.03); }
 .freeze-row td { background: var(--red-bg); }
 .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 @media (max-width: 1100px) { .cols { grid-template-columns: 1fr; } }
+
+/* ===== 冲高防御监控组件 ===== */
+.surge-defense-panel {
+  background: var(--bg-card);
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  padding: 12px;
+  margin: 10px 0;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+}
+
+.panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.panel-header h3 {
+  font-size: 14px;
+  font-weight: 600;
+  margin: 0;
+}
+
+.panel-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.panel-check {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+}
+
+.panel-check input {
+  margin: 0;
+  width: 14px;
+  height: 14px;
+}
+
+.panel-time {
+  font-family: var(--mono);
+  color: var(--text-dim);
+  font-size: 11px;
+  min-width: 50px;
+  text-align: right;
+}
+
+/* 统计摘要 */
+.surge-summary {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.surge-stat {
+  padding: 10px 8px;
+  border-radius: 6px;
+  text-align: center;
+  font-size: 12px;
+}
+
+.surge-stat.safe {
+  background: var(--green-bg);
+  border: 1px solid var(--green-soft);
+}
+
+.surge-stat.warning {
+  background: var(--yellow-bg);
+  border: 1px solid var(--yellow-soft);
+}
+
+.surge-stat.avoid {
+  background: rgba(255, 107, 107, 0.10);
+  border: 1px solid rgba(255, 107, 107, 0.3);
+}
+
+.surge-stat.critical {
+  background: var(--red-bg);
+  border: 1px solid var(--red-soft);
+}
+
+.stat-label {
+  font-size: 11px;
+  color: var(--text-dim);
+  margin-bottom: 4px;
+}
+
+.stat-value {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+/* 立即处理告警 */
+.surge-critical {
+  background: var(--red-bg);
+  border: 1px solid var(--red-soft);
+  border-radius: 6px;
+  padding: 10px;
+  margin-bottom: 12px;
+}
+
+.critical-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--red);
+  margin-bottom: 8px;
+}
+
+.critical-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 8px;
+  margin: 4px 0;
+  background: rgba(255,255,255,0.5);
+  border-radius: 4px;
+  font-size: 12px;
+  border-left: 3px solid transparent;
+}
+
+.critical-item.exit {
+  border-left-color: #ff5555;
+  background: rgba(255, 85, 85, 0.08);
+}
+
+.critical-item.avoid {
+  border-left-color: #ff8c42;
+  background: rgba(255, 140, 66, 0.08);
+}
+
+.critical-code {
+  font-family: var(--mono);
+  font-weight: 600;
+  color: var(--text);
+  min-width: 60px;
+}
+
+.critical-name {
+  flex: 1;
+  color: var(--text-dim);
+}
+
+.critical-action {
+  font-weight: 600;
+  color: var(--red);
+  min-width: 50px;
+}
+
+.critical-reason {
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+/* 告警列表 */
+.surge-alerts {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+@media (max-width: 1200px) {
+  .surge-alerts {
+    grid-template-columns: 1fr;
+  }
+}
+
+.alert-section {
+  border: 1px solid var(--border-soft);
+  border-radius: 6px;
+  padding: 10px;
+  background: rgba(255,255,255,0.5);
+}
+
+.section-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-dim);
+  margin-bottom: 8px;
+}
+
+.alert-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.alert-empty {
+  padding: 20px;
+  text-align: center;
+  color: var(--text-faint);
+  font-size: 12px;
+}
+
+.alert-item {
+  padding: 8px;
+  border-radius: 4px;
+  border-left: 3px solid;
+  font-size: 11px;
+}
+
+.alert-item.safe {
+  border-left-color: var(--green);
+  background: var(--green-bg);
+}
+
+.alert-item.warning {
+  border-left-color: var(--yellow);
+  background: var(--yellow-bg);
+}
+
+.alert-item.avoid {
+  border-left-color: #ff8c42;
+  background: rgba(255, 140, 66, 0.10);
+}
+
+.alert-item.exit {
+  border-left-color: var(--red);
+  background: var(--red-bg);
+}
+
+.alert-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+
+.alert-code {
+  font-family: var(--mono);
+  font-weight: 600;
+  color: var(--text);
+}
+
+.alert-name {
+  flex: 1;
+  color: var(--text-dim);
+}
+
+.alert-action {
+  font-weight: 600;
+  font-size: 10px;
+}
+
+.alert-item.safe .alert-action { color: var(--green); }
+.alert-item.warning .alert-action { color: var(--yellow); }
+.alert-item.avoid .alert-action { color: #ff8c42; }
+.alert-item.exit .alert-action { color: var(--red); }
+
+.alert-detail {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 4px;
+  font-size: 10px;
+  color: var(--text-dim);
+}
+
+.detail-item {
+  font-family: var(--mono);
+}
+
+.alert-reason {
+  font-size: 10px;
+  color: var(--text-dim);
+  font-style: italic;
+}
+
