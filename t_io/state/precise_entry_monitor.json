@@ -1,0 +1,26 @@
+{
+  "last_check_date": "2026-08-25",
+  "history": {
+    "2026-08-25": {
+      "date": "2026-08-25",
+      "verdict": "wait_consolidation",
+      "summary": "⏳ L2未通过(支撑未站稳、成交量未显著缩量、缩量趋势未确立)，继续等待",
+      "ready": false,
+      "l1": {
+        "level": "warning",
+        "risk_score": 45,
+        "status": "⚠️ 警告"
+      },
+      "l2": {
+        "consolidating": false,
+        "support_level": null,
+        "volume_ratio": null,
+        "status": "⏳ 等待"
+      },
+      "l3": {
+        "resonance": false,
+        "status": "⏳ 等待"
+      }
+    }
+  }
+}

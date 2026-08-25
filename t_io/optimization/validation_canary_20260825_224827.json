@@ -1,0 +1,28 @@
+{
+  "status": "PASSED",
+  "phase": "canary",
+  "created_at": "2026-08-25T22:48:27.556556",
+  "duration_seconds": 0.0,
+  "checks_passed": [
+    "Live win rate acceptable",
+    "Live return positive",
+    "Daily loss within limit",
+    "Performance vs baseline acceptable",
+    "No system downtime",
+    "No risk incidents"
+  ],
+  "checks_failed": [],
+  "warnings": [],
+  "metrics": {
+    "deployment_period": "1-2 weeks",
+    "position_size_pct": 10,
+    "live_trades": 42,
+    "live_win_rate": 0.667,
+    "live_return": 0.035,
+    "max_daily_loss": -450,
+    "vs_baseline_return": -0.005,
+    "downtime_minutes": 0,
+    "risk_incidents": 0
+  },
+  "recommendation": "Promote to production (100% position)"
+}

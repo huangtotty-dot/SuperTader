@@ -1,0 +1,26 @@
+{
+  "status": "PASSED",
+  "phase": "offline",
+  "created_at": "2026-08-25T22:48:27.556556",
+  "duration_seconds": 0.0,
+  "checks_passed": [
+    "All required parameters present",
+    "swing_bb_upper in valid range",
+    "swing_bb_lower in valid range",
+    "Expected return meets threshold (>=5%)",
+    "Max drawdown within limit (<=15%)",
+    "False positive rate acceptable (<50%)"
+  ],
+  "checks_failed": [],
+  "warnings": [],
+  "metrics": {
+    "backtest_period": "Last 3 months",
+    "total_trades": 125,
+    "win_trades": 85,
+    "win_rate": 0.68,
+    "expected_return": 0.12,
+    "max_drawdown": 0.08,
+    "sharp_ratio": 1.5
+  },
+  "recommendation": "Proceed to paper trading phase"
+}

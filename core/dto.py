@@ -139,17 +139,13 @@ class BuildSignal:
     """建仓信号"""
     code: str
     timestamp: datetime
-
-    # 是否满足建仓条件
     is_signal: bool
-    score: float  # 综合得分
+    score: float
+    suggested_qty: int
+    suggested_price: float
 
     # 建仓通道
     channel: Optional[str] = None  # "ice_point_reversal" / "breakout_follow"
-
-    # 建议仓位
-    suggested_qty: int
-    suggested_price: float
 
     # 详细分析
     analysis: Dict[str, Any] = field(default_factory=dict)
@@ -160,18 +156,10 @@ class SizingAdvice:
     """仓位建议"""
     code: str
     timestamp: datetime
-
-    # 行动
     action: str  # "add" / "reduce" / "first_add" / "cover"
-
-    # 建议数量
     suggested_qty: int
     suggested_price: float
-
-    # 理由
     reason: str
-
-    # 关键参数
     current_position: int
     target_position: int
 
