@@ -1,0 +1,23 @@
+---
+# 日内两点交易信号配置
+
+swing_bb_upper: 1.0
+swing_bb_lower: -0.8
+
+# 时间窗口
+time_window_start: "10:00"
+time_window_end: "15:00"
+
+# 信号确认条件
+min_volume_ratio: 1.2
+min_price_change: 0.5
+
+# 建仓通道参数
+ice_point_reversal:
+  min_depth: 3
+  max_depth: 8
+  recovery_threshold: 0.5
+
+breakout_follow:
+  box_height: 2.0
+  breakout_threshold: 0.3

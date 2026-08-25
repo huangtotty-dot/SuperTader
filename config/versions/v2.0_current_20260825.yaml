@@ -1,0 +1,64 @@
+---
+# 当前版本配置 - v2.0 (2026-08-25)
+
+_metadata:
+  version: "v2.0"
+  created_at: "2026-08-25T22:45:00"
+  description: "Phase 3.1 完成 - 基础架构版本"
+  status: "baseline"
+
+# 日内两点交易配置
+signal:
+  swing_bb_upper: 1.0
+  swing_bb_lower: -0.8
+  time_window_start: "10:00"
+  time_window_end: "15:00"
+  min_volume_ratio: 1.2
+  min_price_change: 0.5
+
+# 双通道建仓配置
+strategies:
+  dual_channel:
+    channel1:
+      name: "ice_point_reversal"
+      weight: 0.6
+    channel2:
+      name: "breakout_follow"
+      weight: 0.4
+    combined_score_threshold: 0.65
+
+  single_tier:
+    add_position:
+      max_add_times: 3
+    stop_loss:
+      max_drawdown: 3.0
+
+# 市场参数
+market:
+  index_levels:
+    sh:
+      very_strong: 3500
+      strong: 3300
+      neutral: 3100
+    sz:
+      very_strong: 12000
+      strong: 11000
+      neutral: 10000
+
+# 系统参数
+system:
+  data_fetch:
+    interval: 1
+    retries: 3
+    cache:
+      enabled: true
+      ttl: 300
+
+  execution:
+    order_submit:
+      timeout: 5
+    risk_control:
+      max_loss_per_order: 1000
+
+  logging:
+    level: "INFO"

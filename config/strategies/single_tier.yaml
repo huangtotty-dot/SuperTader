@@ -1,0 +1,19 @@
+---
+# 单档加仓配置
+
+# 加仓规则
+add_position:
+  trigger_depth: 2.0
+  target_add_qty: 100
+  max_add_times: 3
+
+# 减仓规则
+reduce_position:
+  trigger_profit: 2.0
+  target_reduce_qty: 50
+  min_position: 100
+
+# 止损规则
+stop_loss:
+  max_drawdown: 3.0
+  auto_cover: true

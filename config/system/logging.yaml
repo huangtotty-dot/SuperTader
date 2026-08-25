@@ -1,0 +1,40 @@
+---
+# 系统日志配置
+
+logging:
+  # 日志级别
+  level: "INFO"  # DEBUG / INFO / WARNING / ERROR / CRITICAL
+
+  # 日志输出
+  outputs:
+    console:
+      enabled: true
+      level: "INFO"
+
+    file:
+      enabled: true
+      level: "DEBUG"
+      path: "logs"
+      max_size_mb: 100
+      backup_count: 10
+
+  # 日志格式
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+
+  # 模块级别日志
+  modules:
+    core.config_manager: "DEBUG"
+    strategies.signal_engine: "INFO"
+    execution.executor: "INFO"
+
+# 监控配置
+monitoring:
+  enabled: true
+  metrics_interval: 60  # 60秒采集一次
+
+  # 关键指标
+  metrics:
+    - "signal_count"
+    - "order_count"
+    - "execution_latency"
+    - "cache_hit_rate"

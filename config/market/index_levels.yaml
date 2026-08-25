@@ -1,0 +1,30 @@
+---
+# 大盘制度和阈值配置
+
+index_levels:
+  # 上证指数关键水位
+  sh:
+    very_strong: 3500
+    strong: 3300
+    neutral: 3100
+    weak: 2900
+    very_weak: 2700
+
+  # 深证成指关键水位
+  sz:
+    very_strong: 12000
+    strong: 11000
+    neutral: 10000
+    weak: 9000
+    very_weak: 8000
+
+# 市场制度判断
+regime_detection:
+  uptrend_ma_period: 20
+  downtrend_ma_period: 20
+  range_width_ratio: 0.1
+
+# 个股关联性
+correlation:
+  index_resonance_threshold: 0.7
+  sector_resonance_threshold: 0.6

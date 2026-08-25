@@ -1,0 +1,42 @@
+---
+# 系统执行配置
+
+execution:
+  # 订单提交
+  order_submit:
+    timeout: 5
+    retry_count: 2
+
+  # 订单管理
+  order_management:
+    cancel_unfilled_timeout: 60  # 60秒未成交则撤销
+    max_pending_orders: 10
+
+  # 成交确认
+  fill_confirmation:
+    timeout: 10
+    required_confirmations: 1
+
+# 风控配置
+risk_control:
+  # 单笔风险限制
+  single_order:
+    max_loss_per_order: 1000
+    max_qty_per_order: 500
+
+  # 日度风险限制
+  daily:
+    max_loss: 5000
+    max_trades: 50
+
+  # 头寸限制
+  position:
+    max_single_stock: 1000
+    max_total: 5000
+    max_cash_drawdown: 0.2
+
+# 熔断机制
+circuit_breaker:
+  enabled: true
+  daily_loss_limit: 10000
+  hourly_error_limit: 5
