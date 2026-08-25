@@ -153,7 +153,7 @@ def _tx_kline(symbol: str, period: str, count: int, end: str) -> list:
     else:
         start_days = int(count * 1.6) + 40
     start = (end_dt - timedelta(days=start_days)).strftime("%Y-%m-%d")
-    url = (f"https://ifzq.gtimg.cn/appstock/app/fqkline/get?"
+    url = (f"https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?"
            f"param={symbol},{period},{start},{end},{count},qfq")
     try:  # 2026-08-24 fix: 腾讯超时/异常降级返回空，不让复盘卡死(timeout)
         js = _http_json(url)

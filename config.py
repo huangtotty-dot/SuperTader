@@ -779,6 +779,10 @@ ENTRY_TIMING_PARAMS = {
     "trend_dn_rsi_max": 20.0,         # 空头趋势：RSI(14) 深度超卖阈值（抄底超卖极值，2026-08-16 实验两时段稳健）
     "apply_to_add": True,     # 加仓侧也应用时机门控（NO-GO 时阻断加仓买入，降频）
     "add_block_rebuild": True,  # NO-GO 时是否也阻断"接回"(rebuild)；False=仅阻断首加
+    # W35(2026-08-25): 日内右侧确认闸门。GO 且盘中确认(15m站上EMA8+放量>vol_min+站上VWAP)才出 signal，
+    #   否则降级 approaching(待日内确认)。两年验证：回撤保护稳健、fwd1改善；仅 intraday 扫描生效。
+    "intraday_confirm_gate": True,     # 总开关；False 回滚到"GO 即 signal"
+    "intraday_confirm_vol_min": 1.2,   # 15m vol_ratio 放量阈值（w35 实验默认口径）
 }
 
 # ==================== B-2: C20 竞价现实校验（2026-08-21 评审通过，双条件与门） ====================

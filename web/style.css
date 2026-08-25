@@ -153,6 +153,7 @@ tr:hover td { background: rgba(243,93,43,.03); }
 .badge.weak { color:var(--gray); border-color:var(--border) }
 .badge.nodata { color:var(--text-faint); border-color:var(--border) }
 .badge.hold { color:var(--accent); border-color:rgba(243,93,43,.5); background:rgba(243,93,43,.1) }
+.badge.monitor { color:#79c0ff; border-color:rgba(121,192,255,.5); background:rgba(121,192,255,.1) }
 .badge.t-long { color:var(--red); border-color:rgba(248,81,73,.4) }
 .badge.t-short { color:var(--green); border-color:rgba(63,185,80,.4) }
 .cond { font-size: 12px; letter-spacing: 2px; white-space: nowrap; }

@@ -1199,7 +1199,7 @@ class Api:
                     return out
             else:
                 try:
-                    url = f"https://ifzq.gtimg.cn/appstock/app/fqkline/get?param={symbol},day,,,400,qfq"
+                    url = f"https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param={symbol},day,,,400,qfq"
                     req = _ur.Request(url, headers={"User-Agent": "Mozilla/5.0",
                                                     "Referer": "https://finance.qq.com/"})
                     raw = _ur.urlopen(req, timeout=10).read().decode("utf-8", errors="ignore")
@@ -3269,32 +3269,40 @@ class Api:
                 bool((holdings.get(code.split("_")[0]) or {}).get("qty") or 0)
             rows.append(row)
 
-        # 未扫描的 watchlist 股票：作为"等待扫描"添加
+        # 未扫描的 watchlist 股票：monitoring/signal → "等待扫描"；archived → "已停用"（可见但不参与扫描）
         pending = 0
+        archived_cnt = 0
         for code, info in wl_stocks.items():
             if not isinstance(info, dict): continue
             if code in scanned_codes: continue
-            if info.get("status") not in ("monitoring", "signal", None): continue
+            status = info.get("status")
+            if status not in ("monitoring", "signal", "archived", None): continue
             # fix 2026-08-20: qty>0 才算持仓（已清仓的 holdings 记录不算）
             in_hold = bool((holdings.get(code) or {}).get("qty") or 0) or \
                 bool((holdings.get(code.split("_")[0]) or {}).get("qty") or 0)
+            is_archived = status == "archived"
             rows.append({
                 "code": code, "name": info.get("name", code),
-                "verdict": "pending", "composite_score": 0,
+                "verdict": "archived" if is_archived else "pending",
+                "composite_score": 0,
                 "conditions": {},
                 "suggested_qty": 0, "suggested_price": 0, "capital_required": 0,
-                "in_holdings": in_hold, "scan_type": "等待扫描",
+                "in_holdings": in_hold,
+                "scan_type": "已停用" if is_archived else "等待扫描",
                 "scan_time": "",  # fix P0-14: 每行确保带 scan_time 字段
                 "_scans": 0,
             })
-            pending += 1
+            if is_archived: archived_cnt += 1
+            else: pending += 1
 
         rows.sort(key=lambda x: -(x.get("composite_score") or 0))
         verdicts["pending"] = pending
+        verdicts["archived"] = archived_cnt
         no_data_count = verdicts.get("insufficient_data", 0)
         note_parts = []
         if no_data_count: note_parts.append(f"{no_data_count}只无快照")
         if pending: note_parts.append(f"{pending}只等待首次扫描")
+        if archived_cnt: note_parts.append(f"{archived_cnt}只已停用")
         note = " · ".join(note_parts) if note_parts else ""
 
         total = len(wl_stocks)

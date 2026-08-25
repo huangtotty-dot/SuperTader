@@ -36,7 +36,7 @@ def fetch_index_daily(symbol="sh000001") -> dict:
               "ALL_PROXY", "all_proxy"):
         import os
         os.environ.pop(k, None)
-    url = f"https://ifzq.gtimg.cn/appstock/app/fqkline/get?param={symbol},day,,,800,qfq"
+    url = f"https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param={symbol},day,,,800,qfq"
     req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0",
                                                "Referer": "https://finance.qq.com/"})
     raw = urllib.request.urlopen(req, timeout=10).read().decode("utf-8", errors="ignore")

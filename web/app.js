@@ -27,8 +27,8 @@ function dayTypeBadge(t) {
   return `<span class="badge ${cls}">${esc(label)}</span>`;
 }
 function verdictBadge(v) {
-  const map = { signal: "signal", approaching: "approach", weak: "weak", insufficient_data: "nodata", pending: "nodata" };
-  const label = { signal: "signal", approaching: "approaching", weak: "weak", insufficient_data: "无数据", pending: "等待扫描" }[v] || v;
+  const map = { signal: "signal", approaching: "approach", weak: "weak", insufficient_data: "nodata", pending: "nodata", archived: "nodata" };
+  const label = { signal: "signal", approaching: "approaching", weak: "weak", insufficient_data: "无数据", pending: "等待扫描", archived: "已停用" }[v] || v;
   return `<span class="badge ${map[v] || 'weak'}">${esc(label)}</span>`;
 }
 function wrCell(w) {
@@ -1154,6 +1154,16 @@ function renderPB(pb) {
     const chBadge = chTxt ? `<span class="badge" style="background:#3a3a5a;color:#ddd">${chTxt}</span>` : "";
     const apTxt = r.approach_status === "immediate" ? "即时可建" : r.approach_status === "intraday_pending" ? "待日内确认" : r.approach_status === "next_day_pending" ? "待次日确认" : "";
     const apBadge = apTxt ? `<span class="badge" style="background:#5a4a2a;color:#ffd98a">${apTxt}</span>` : "";
+    // P1(2026-08-25): verdict/score 脱钩展示——range 市 signal 结构性不可达（t_regime 那30分锁死，
+    //   score 上限70）。用 score_ceiling/signal_reachable 诚实呈现，避免"70分"看着像"离signal一步"。
+    const _ceiling = (r.score_ceiling != null) ? r.score_ceiling : 100;
+    const _reachable = (r.signal_reachable != null) ? r.signal_reachable : true;
+    const scoreCellTitle = _reachable
+      ? "综合得分（满分100，signal 可达）"
+      : `综合得分 · 当前市况(震荡)下 signal 结构性不可达：市场有方向那30分锁死，得分上限 ${_ceiling}`;
+    const scoreCellHtml = _reachable
+      ? `<b>${r.composite_score}</b>`
+      : `<b>${r.composite_score}</b><span class="cell-dim" style="font-size:10px">/${_ceiling}🔒</span>`;
     // 建仓/加仓时机门控徽章（timing_gate: 多头追强/空头抄底/震荡降频）
     const _tm = r.timing || {};
     let tmBadge = "";
@@ -1163,6 +1173,34 @@ function renderPB(pb) {
       const _goTxt = _tm.go ? "GO" : "NO-GO";
       tmBadge = `<span class="badge" title="时机门控: ${esc(_tm.reason || "")}" style="background:${_goCls};color:#fff">${esc(_regimeCn)}·${_goTxt}</span>`;
     }
+    // W35(2026-08-25) 日内右侧确认徽章：GO 后是否已过 15分钟确认（站上EMA8+放量+站上VWAP）。
+    //   未确认 → GO 被降级为 approaching(待日内确认)，此徽章说明差在哪。
+    const _ic = r.intraday_confirm;
+    let icBadge = "";
+    if (_ic) {
+      if (_ic.insufficient) {
+        icBadge = `<span class="badge" title="日内确认: ${esc(_ic.detail || "")}" style="background:#4a4a5a;color:#bbb">确认·数据不足</span>`;
+      } else if (_ic.passed) {
+        icBadge = `<span class="badge" title="日内确认: ${esc(_ic.detail || "")}" style="background:#1f6f3f;color:#fff">日内✓确认</span>`;
+      } else {
+        icBadge = `<span class="badge" title="日内确认未过(GO已降级为待确认): ${esc(_ic.detail || "")}" style="background:#7a5a2a;color:#ffd98a">待日内确认</span>`;
+      }
+    }
+    // 卡点直观化(2026-08-25)：一句话"卡在哪、差多少" + hover 完整差距清单。
+    //   signal 无卡点；pending/archived/无数据 不显示（那是未扫描态，非条件卡）。
+    let blockLine = "";
+    if (r.block_reason && r.verdict !== "signal" && r.verdict !== "pending"
+        && r.verdict !== "archived" && r.verdict !== "insufficient_data") {
+      const bk = Array.isArray(r.blockers) ? r.blockers : [];
+      const full = bk.length
+        ? bk.map(b => `• ${b.label}：${b.gap_txt}（需${b.need}）`).join("\n")
+        : r.block_reason;
+      blockLine = `<div class="cell-dim" style="font-size:11px;line-height:1.5;color:#ffb454;margin-top:2px" title="${esc(full)}">🔸 ${esc(r.block_reason)}${bk.length > 1 ? ` <span style="color:#888">(+${bk.length - 1}项)</span>` : ""}</div>`;
+    }
+    // 追踪中徽章：在建仓股池监控、尚未触发 signal/archived 的股票明确标出（弱/等待/无数据也显示在监控）
+    const monitorBadge = (!r.in_holdings && r.verdict !== "signal" && r.verdict !== "archived")
+      ? `<span class="badge monitor" title="在建仓股池中监控，等待触发买点">追踪中</span>`
+      : "";
     // 30/60分钟线背离（2026-08-19 验证后收窄：仅 60min 连续底背离高亮，其余仅供参考）
     const dv = r.divergence || {};
     const dvd = r.divergence_detail || {};
@@ -1190,9 +1228,9 @@ function renderPB(pb) {
     return `
       <tr id="pb-row-${esc(r.code || '')}" ondblclick="openStockChart('${esc(r.code||'')}','${esc(r.name||r.code||'')}')" style="cursor:pointer;${isStale ? "opacity:.45;" : ""}" title="双击看K线${isStale ? "（数据陈旧，距今超过10分钟）" : ""}">
         <td>${esc(r.name || "")} <span class="mono cell-dim">${esc(r.code || "")}</span>
-          ${chBadge}${apBadge}${tmBadge}${r.in_holdings ? `<span class="badge hold">持仓</span>` : ""}${errTxt}</td>
+          ${monitorBadge}${chBadge}${apBadge}${tmBadge}${icBadge}${r.in_holdings ? `<span class="badge hold">持仓</span>` : ""}${errTxt}${blockLine}</td>
         <td>${verdictBadge(r.verdict)}</td>
-        <td class="num"><b>${r.composite_score}</b></td>
+        <td class="num" title="${esc(scoreCellTitle)}">${scoreCellHtml}</td>
         <td class="num ${metCls}"><b>${isNoData ? "—" : metCount + "/3"}</b></td>
         <td class="num">${fmt(r.price)}</td>
         <td style="text-align:center">${boxStr}</td>
@@ -1210,14 +1248,14 @@ function renderPB(pb) {
   // fix P0-1: counts 已是按 code 去重的股票数，徽章统一『只』口径并加 tooltip
   // fix P1-7: insufficient_data/pending 用独立灰色 nodata 徽章，不再落入 weak
   const badgeClsOf = k => k === "signal" ? "signal" : k === "approaching" ? "approach"
-    : (k === "insufficient_data" || k === "pending") ? "nodata" : "weak";
+    : (k === "insufficient_data" || k === "pending" || k === "archived") ? "nodata" : "weak";
   const c = k => counts[k] ? `<span class="badge ${badgeClsOf(k)}" title="按股票数统计（按 code 去重）">${k}: ${counts[k]}只</span>` : "";
   // fix P0-2: refreshed_at 语义为数据最后写入时间，直接展示
   const refreshed = pb.refreshed_at ? `<span class="live-dot"></span> ${esc(pb.refreshed_at)}${delta ? ` <span class="aw-delta">${delta}</span>` : ""}` : "";
   el.innerHTML = `
     <div class="card">
       <div style="display:flex;gap:8px;margin-bottom:6px;flex-wrap:wrap;align-items:center">
-        ${c("signal")}${c("approaching")}${c("weak")}${c("insufficient_data")}
+        ${c("signal")}${c("approaching")}${c("weak")}${c("insufficient_data")}${c("archived")}
         <span class="cell-dim mono" style="font-size:10px;margin-left:auto" title="数据最后写入时间（前端盘中每10s拉取）">${refreshed}</span>
       </div>
       ${pb.note ? `<div class="cell-dim" style="font-size:11px;margin-bottom:6px">⚠ ${esc(pb.note)}</div>` : ""}
@@ -2269,6 +2307,12 @@ function renderHunter(h) {
     const stocks = ss[category] || [];
     const d5Hits = stocks.filter(s => s.d5 > 0).length;
     const d6Hits = stocks.filter(s => s.d6 > 0).length;
+    // 细分按第一层级归并计数（半导体设备-测试设备 → 半导体设备），与下方展开分组一致
+    const _fl = new Set();
+    for (const s of stocks) {
+      for (const c of ((s.concepts && s.concepts.length) ? s.concepts : ["未分类"])) _fl.add(c.split("-")[0]);
+    }
+    const firstLevelCount = _fl.size;
 
     // 展开的个股明细（全部成分股，分页50），按细分（韭研概念）分组显示下一级分类
     const PAGE = 50;
@@ -2296,11 +2340,14 @@ function renderHunter(h) {
         <td>${buildBadge(s)}</td>
       </tr>`;
     };
-    // 板块 → 细分（| 分隔多概念，多概念股在多个细分下重复出现）→ 个股
+    // 板块 → 细分（按第一层级归并：半导体设备-测试设备 汇入 半导体设备；多概念股多组重复）→ 个股
     const subGroups = {};
     for (const s of paged) {
       const cons = (s.concepts && s.concepts.length) ? s.concepts : ["未分类"];
-      for (const c of cons) (subGroups[c] = subGroups[c] || []).push(s);
+      for (const c of cons) {
+        const gk = c.split("-")[0];
+        (subGroups[gk] = subGroups[gk] || []).push(s);
+      }
     }
     const groupKeys = Object.keys(subGroups)
       .sort((a, b) => (subGroups[b].length - subGroups[a].length) || a.localeCompare(b));
@@ -2337,7 +2384,7 @@ function renderHunter(h) {
             <a href="#" onclick="event.stopPropagation();showSectorHistory('${esc(category)}');return false;"
                title="查看板块历史情况" style="text-decoration:none;color:var(--accent)">🔗</a>
           </div>
-          <div class="h-sub">${r["细分数量"]||0}个细分 · ${r["股票数"]||(ss[category]||[]).length||0}只
+          <div class="h-sub">${firstLevelCount}个细分 · ${r["股票数"]||(ss[category]||[]).length||0}只
             ${d5Hits > 0 ? ` · <b class="up">D5×${d5Hits}</b>` : ""}
             ${d6Hits > 0 ? ` · <b class="warn">D6×${d6Hits}</b>` : ""}
           </div>
