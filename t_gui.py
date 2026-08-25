@@ -1080,6 +1080,136 @@ class Api:
             })
         return _clean(out)
 
+    # ---------- 入场三层评判（L1/L2/L3建议） ----------
+    def load_entry_verdict(self, date=None):
+        """候选股入场评判：L1追高风险 + L2缩量支撑 + L3日内共振 → 综合建议。
+
+        返回格式:
+        {
+          "stocks": [
+            {
+              "code": "300058",
+              "name": "蓝色光标",
+              "market_regime": "range_up",
+              "market_score": 60,
+              "l1": {"status": "✅", "detail": "安全", "risk_score": 0, "threshold": 35},
+              "l2": {"status": "✅", "detail": "缩量0.60x", "is_consolidating": True},
+              "l3": {"status": "❌", "detail": "放量不足", "resonance": False},
+              "verdict": "wait_resonance",
+              "action": "等待日内共振",
+              "expected_when": "盘中"
+            },
+            ...
+          ]
+        }
+        """
+        try:
+            from universal_precise_entry import batch_check_all_candidates
+            from datetime import datetime as dt
+
+            date_str = date or dt.now().strftime("%Y-%m-%d")
+            results = batch_check_all_candidates(date_str)
+
+            # 从候选池加载股票名称
+            try:
+                candidates = _load_json(BASE / "candidates.json", {})
+            except:
+                candidates = {}
+
+            stocks = []
+            for r in results:
+                code = r.get("code", "")
+                if not code:
+                    continue
+
+                # 构建L1状态
+                l1_info = r.get("l1", {})
+                l1_detail = l1_info.get("detail", "未知")
+                l1_risk = l1_info.get("risk_score", 0)
+                l1_threshold = l1_info.get("risk_threshold", 35)
+                if l1_risk <= l1_threshold:
+                    l1_status = "✅"
+                elif l1_risk > l1_threshold * 1.5:
+                    l1_status = "❌"
+                else:
+                    l1_status = "⚠️"
+
+                # 构建L2状态
+                l2_info = r.get("l2", {})
+                l2_is_ok = l2_info.get("is_consolidating", False)
+                l2_detail = l2_info.get("detail", "待评估")
+                l2_status = "✅" if l2_is_ok else "❌"
+
+                # 构建L3状态
+                l3_info = r.get("l3", {})
+                l3_is_ok = l3_info.get("resonance", False)
+                l3_detail = l3_info.get("detail", "待评估")
+                l3_status = "✅" if l3_is_ok else "❌"
+
+                # 生成行动建议和预期时间
+                verdict = r.get("verdict", "unknown")
+                if verdict == "ready_to_buy":
+                    action = "🟢 可以买入"
+                    expected_when = "立即"
+                elif verdict == "wait_resonance":
+                    action = "⏳ 等待日内共振"
+                    expected_when = "盘中"
+                elif verdict == "wait_consolidation":
+                    action = "⏳ 继续缩量巩固"
+                    expected_when = "3-5天"
+                elif verdict == "wait_cool_down":
+                    action = "⏳ 等待冷却"
+                    expected_when = "1-3天"
+                elif verdict == "avoid_chase":
+                    action = "🔴 避免追高"
+                    expected_when = "观察"
+                else:
+                    action = "❓ 未知"
+                    expected_when = "-"
+
+                stocks.append({
+                    "code": code,
+                    "name": candidates.get(code, {}).get("name", code),
+                    "market_regime": r.get("market_regime", "unknown"),
+                    "market_score": int(r.get("market_score", 0)),
+                    "l1": {
+                        "status": l1_status,
+                        "detail": l1_detail,
+                        "risk_score": int(l1_risk),
+                        "threshold": int(l1_threshold)
+                    },
+                    "l2": {
+                        "status": l2_status,
+                        "detail": l2_detail,
+                        "is_consolidating": bool(l2_is_ok)
+                    },
+                    "l3": {
+                        "status": l3_status,
+                        "detail": l3_detail,
+                        "resonance": bool(l3_is_ok)
+                    },
+                    "verdict": verdict,
+                    "action": action,
+                    "expected_when": expected_when
+                })
+
+            return _clean({
+                "date": date_str,
+                "stocks": stocks,
+                "summary": {
+                    "total": len(stocks),
+                    "ready": len([s for s in stocks if s["verdict"] == "ready_to_buy"]),
+                    "wait_resonance": len([s for s in stocks if s["verdict"] == "wait_resonance"]),
+                    "waiting": len([s for s in stocks if s["verdict"] in ["wait_consolidation", "wait_cool_down"]]),
+                    "avoid": len([s for s in stocks if s["verdict"] == "avoid_chase"])
+                }
+            })
+        except Exception as e:
+            return _clean({
+                "error": f"入场评判失败: {str(e)}",
+                "stocks": []
+            })
+
     # ---------- 严重顶背离报警 ----------
     def alert_severe_divergence(self, date=None):
         """严重顶背离告警——已停用（2026-08-19）。
