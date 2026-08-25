@@ -570,6 +570,8 @@ _SWING_PUSH_DEDUP: set = set()
 
 # 风险3修复(2026-08-24): 虚假信号监控系统
 _FALSE_SIGNAL_MONITOR = None
+_FALSE_SIGNAL_CHECK_TIME = None  # 上次检查时间
+_FALSE_SIGNAL_CHECK_INTERVAL = 3600  # 每小时检查一次 (秒)
 
 # VWAP 实时快照缓存（akshare stock_zh_a_spot_em 成交额/成交量，每 60s 刷新一次）
 _SPOT_VWAP_CACHE: Dict[str, float] = {}  # code -> 实时 VWAP
@@ -611,6 +613,130 @@ def _refresh_spot_vwap_cache() -> None:
         log.debug(f"📡 VWAP 实时缓存刷新: {len(cache)} 只")
     except Exception as e:
         log.debug(f"VWAP 缓存刷新失败: {str(e)[:80]}")
+
+
+# ════════════════════════════════════════════════════════════════════════════════
+# 【风险3修复】虚假信号监控系统 - 定时检查与动态回退机制
+# ════════════════════════════════════════════════════════════════════════════════
+
+def init_false_signal_monitor():
+    """初始化虚假信号监控器"""
+    global _FALSE_SIGNAL_MONITOR
+    try:
+        from fake_signal_monitor import init_monitor
+        _FALSE_SIGNAL_MONITOR = init_monitor()
+        log.info("✅ 虚假信号监控系统已初始化")
+        return True
+    except Exception as e:
+        log.warning(f"⚠️ 虚假信号监控系统初始化失败: {e}")
+        return False
+
+
+def _check_false_signals_routine(now: datetime) -> None:
+    """定时检查虚假信号（每小时或每日调用一次）"""
+    global _FALSE_SIGNAL_CHECK_TIME, _FALSE_SIGNAL_MONITOR
+
+    if _FALSE_SIGNAL_MONITOR is None:
+        return
+
+    # 检查是否到检查间隔
+    if _FALSE_SIGNAL_CHECK_TIME is None:
+        _FALSE_SIGNAL_CHECK_TIME = now
+        return
+
+    elapsed = (now - _FALSE_SIGNAL_CHECK_TIME).total_seconds()
+    if elapsed < _FALSE_SIGNAL_CHECK_INTERVAL:
+        return  # 尚未到检查时间
+
+    _FALSE_SIGNAL_CHECK_TIME = now
+
+    try:
+        # 获取当前价格（从 engine.positions 或其他数据源）
+        current_prices = {}
+        try:
+            if 'engine' in globals() and hasattr(globals()['engine'], 'positions'):
+                for code, holding in globals()['engine'].positions.items():
+                    if isinstance(holding, dict) and 'price' in holding:
+                        current_prices[code] = float(holding['price'])
+        except Exception:
+            pass
+
+        # 检查已推送信号的后续表现
+        if hasattr(_FALSE_SIGNAL_MONITOR, 'check_expired_signals'):
+            result = _FALSE_SIGNAL_MONITOR.check_expired_signals(current_prices, hours_elapsed=1)
+        else:
+            result = {'total': 0, 'true': 0, 'false': 0}
+
+        # 获取虚假比例
+        false_ratio = _FALSE_SIGNAL_MONITOR.get_false_ratio() if hasattr(_FALSE_SIGNAL_MONITOR, 'get_false_ratio') else 0.0
+
+        # 记录检查结果
+        log.info(f"📊 虚假信号检查: 总{result.get('total', 0)}条, 有效{result.get('true', 0)}条, 虚假{result.get('false', 0)}条, 比例{false_ratio:.2%}")
+
+        # 检查是否需要回退
+        if false_ratio > 0.05:
+            _trigger_plan_a_rollback(false_ratio)
+
+        # 定期输出报告 (15:00-15:05 时间窗口)
+        if now.hour == 15 and now.minute < 5:
+            _print_false_signal_daily_report()
+
+    except Exception as e:
+        log.warning(f"⚠️ 虚假信号检查出错: {e}")
+
+
+def _trigger_plan_a_rollback(false_ratio: float) -> None:
+    """触发方案A回退"""
+    log.warning(f"⚠️ 虚假信号比例过高: {false_ratio:.1%}, 触发回退机制")
+
+    try:
+        from config import INDEX_RESONANCE_STOCK_OVERRIDE
+
+        if false_ratio > 0.10:
+            # 虚假 > 10%: 彻底关闭方案A
+            INDEX_RESONANCE_STOCK_OVERRIDE.clear()
+            log.alert(f"❌ 虚假信号 > 10% ({false_ratio:.1%}), 彻底关闭方案A")
+
+        elif false_ratio > 0.08:
+            # 虚假 > 8%: 恢复单股门控
+            for code in ['588170.SH', '300153.SZ']:
+                if code in INDEX_RESONANCE_STOCK_OVERRIDE:
+                    INDEX_RESONANCE_STOCK_OVERRIDE[code]['enabled'] = True
+                    log.warning(f"⚠️ 虚假信号 > 8% ({false_ratio:.1%}), 恢复{code}共振门控")
+
+        elif false_ratio > 0.05:
+            # 虚假 > 5%: 记录警告，人工评估
+            log.warning(f"⚠️ 虚假信号超过阈值 ({false_ratio:.1%}), 建议人工评估")
+
+    except Exception as e:
+        log.warning(f"⚠️ 回退操作失败: {e}")
+
+
+def _print_false_signal_daily_report() -> None:
+    """输出虚假信号每日报告"""
+    if _FALSE_SIGNAL_MONITOR is None:
+        return
+
+    try:
+        if hasattr(_FALSE_SIGNAL_MONITOR, 'get_daily_report'):
+            report = _FALSE_SIGNAL_MONITOR.get_daily_report()
+            log.info(f"\n{report}")
+
+        # 保存到文件
+        from pathlib import Path
+        report_file = Path(__file__).resolve().parent / f"false_signal_report_{datetime.now().strftime('%Y%m%d')}.txt"
+        if hasattr(_FALSE_SIGNAL_MONITOR, 'get_daily_report'):
+            report = _FALSE_SIGNAL_MONITOR.get_daily_report()
+            try:
+                with open(report_file, 'w', encoding='utf-8') as f:
+                    f.write(report)
+                log.info(f"📝 虚假信号报告已保存: {report_file}")
+            except Exception:
+                pass
+
+    except Exception as e:
+        log.warning(f"⚠️ 生成报告失败: {e}")
+
 
 _IR_GATE_ADVICE_CN = {
     "trend_up_hold": "单边上涨：正T优先、买入门控放宽、减少卖飞",
@@ -1635,6 +1761,9 @@ def scan_once():
     try:
         now = _now()
         t = now.time()
+
+        # 风险3修复(2026-08-26): 虚假信号定时检查
+        _check_false_signals_routine(now)
 
         if _is_preopen_monitor_window(now):
             preopen_context = _ensure_preopen_context(force=True)
@@ -2828,6 +2957,10 @@ def run_watch():
 
     _ensure_preopen_context(force=True)
     engine = SignalEngine()
+
+    # 风险3修复(2026-08-26): 启动时初始化虚假信号监控系统
+    init_false_signal_monitor()
+
     log.info("========= 做T终极护城河防御版 (V1.26 正T/反T模式切换版) 启动 =========")
     if PREOPEN_CONTEXT is not None:
         log.info(_format_preopen_brief(PREOPEN_CONTEXT))
