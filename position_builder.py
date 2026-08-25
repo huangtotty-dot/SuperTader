@@ -299,39 +299,45 @@ def fetch_daily_kline(code: str) -> pd.DataFrame:
         _os.environ.pop(_k, None)
     _os.environ["NO_PROXY"] = "*"
     symbol = ("sh" + code if code[0] in "56" else "sz" + code)
-    try:
-        url = f"https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param={symbol},day,,,800,qfq"
-        req = _ur.Request(url, headers={"User-Agent": "Mozilla/5.0",
-                                        "Referer": "https://finance.qq.com/"})
-        raw = _ur.urlopen(req, timeout=8).read().decode("utf-8", errors="ignore")
-        data = json.loads(raw)
-        kline = data.get("data", {}).get(symbol, {}).get("day") or \
-                data.get("data", {}).get(symbol, {}).get("qfqday") or []
-        rows = [{"date": i[0], "open": float(i[1]), "close": float(i[2]),
-                 "high": float(i[3]), "low": float(i[4]), "volume": float(i[5])}
-                for i in kline if len(i) >= 6]
-        # 写缓存（每日）
-        if cache_fp and rows:
-            try:
-                # fix P0-14: 记录 saved_at，供读取端判断盘中缓存是否超龄
-                cache_fp.write_text(json.dumps(
-                    {"date": _dt.now().strftime("%Y-%m-%d"),
-                     "saved_at": _dt.now().strftime("%Y-%m-%d %H:%M:%S"),
-                     "rows": rows},
-                    ensure_ascii=False), encoding="utf-8")
-            except Exception:
-                pass
-        return pd.DataFrame(rows)
-    except Exception:
-        # 网络失败时回退旧缓存
-        if cache_fp and cache_fp.exists():
-            try:
-                cached = json.loads(cache_fp.read_text(encoding="utf-8"))
-                if cached.get("rows"):
-                    return pd.DataFrame(cached["rows"])
-            except Exception:
-                pass
-        return pd.DataFrame()
+    # 2026-08-25: 腾讯 WAF 间歇性 501 拦截不同主机（ifzq / web.ifzq 轮换），单主机失败会静默
+    # 回退旧缓存 → K线图/行情显示盘中旧价而非真实收盘。多主机兜底。
+    for _host in ("ifzq.gtimg.cn", "web.ifzq.gtimg.cn"):
+        try:
+            url = f"https://{_host}/appstock/app/fqkline/get?param={symbol},day,,,800,qfq"
+            req = _ur.Request(url, headers={"User-Agent": "Mozilla/5.0",
+                                            "Referer": "https://finance.qq.com/"})
+            raw = _ur.urlopen(req, timeout=8).read().decode("utf-8", errors="ignore")
+            data = json.loads(raw)
+            kline = data.get("data", {}).get(symbol, {}).get("day") or \
+                    data.get("data", {}).get(symbol, {}).get("qfqday") or []
+            rows = [{"date": i[0], "open": float(i[1]), "close": float(i[2]),
+                     "high": float(i[3]), "low": float(i[4]), "volume": float(i[5])}
+                    for i in kline if len(i) >= 6]
+            if not rows:
+                continue
+            # 写缓存（每日）
+            if cache_fp:
+                try:
+                    # fix P0-14: 记录 saved_at，供读取端判断盘中缓存是否超龄
+                    cache_fp.write_text(json.dumps(
+                        {"date": _dt.now().strftime("%Y-%m-%d"),
+                         "saved_at": _dt.now().strftime("%Y-%m-%d %H:%M:%S"),
+                         "rows": rows},
+                        ensure_ascii=False), encoding="utf-8")
+                except Exception:
+                    pass
+            return pd.DataFrame(rows)
+        except Exception:
+            continue
+    # 全部主机失败 → 回退旧缓存
+    if cache_fp and cache_fp.exists():
+        try:
+            cached = json.loads(cache_fp.read_text(encoding="utf-8"))
+            if cached.get("rows"):
+                return pd.DataFrame(cached["rows"])
+        except Exception:
+            pass
+    return pd.DataFrame()
 
 
 def _detect_boxes_simple(df: pd.DataFrame, n_keep: int = 3) -> list:

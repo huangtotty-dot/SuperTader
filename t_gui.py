@@ -1198,23 +1198,32 @@ class Api:
                     out["error"] = "东财拉取日线失败"
                     return out
             else:
-                try:
-                    url = f"https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param={symbol},day,,,400,qfq"
-                    req = _ur.Request(url, headers={"User-Agent": "Mozilla/5.0",
-                                                    "Referer": "https://finance.qq.com/"})
-                    raw = _ur.urlopen(req, timeout=10).read().decode("utf-8", errors="ignore")
-                    data = json.loads(raw)
-                    stock_data = data.get("data", {}).get(symbol)
-                    kline = stock_data.get("day") or stock_data.get("qfqday") or []
-                    for item in kline:
-                        if isinstance(item, list) and len(item) >= 6:
-                            rows.append({
-                                "date": item[0], "open": float(item[1]), "close": float(item[2]),
-                                "high": float(item[3]), "low": float(item[4]), "volume": float(item[5]),
-                            })
-                    out["name"] = stock_data.get("qt", {}).get(symbol, [None, code])[1] or code
-                except Exception as e:
-                    out["error"] = f"拉取日线失败: {e}"
+                # 2026-08-25: 腾讯 WAF 间歇性 501 拦截不同主机（ifzq / web.ifzq 轮换），多主机兜底
+                _last_exc = None
+                for _host in ("ifzq.gtimg.cn", "web.ifzq.gtimg.cn"):
+                    try:
+                        url = f"https://{_host}/appstock/app/fqkline/get?param={symbol},day,,,400,qfq"
+                        req = _ur.Request(url, headers={"User-Agent": "Mozilla/5.0",
+                                                        "Referer": "https://finance.qq.com/"})
+                        raw = _ur.urlopen(req, timeout=10).read().decode("utf-8", errors="ignore")
+                        data = json.loads(raw)
+                        stock_data = data.get("data", {}).get(symbol)
+                        kline = stock_data.get("day") or stock_data.get("qfqday") or []
+                        if kline:
+                            rows = []
+                            for item in kline:
+                                if isinstance(item, list) and len(item) >= 6:
+                                    rows.append({
+                                        "date": item[0], "open": float(item[1]), "close": float(item[2]),
+                                        "high": float(item[3]), "low": float(item[4]), "volume": float(item[5]),
+                                    })
+                            out["name"] = stock_data.get("qt", {}).get(symbol, [None, code])[1] or code
+                            break
+                    except Exception as e:
+                        _last_exc = e
+                        continue
+                else:
+                    out["error"] = f"拉取日线失败: {_last_exc or '全部主机返回空'}"
                     return out
 
         # 2026-08-24: 网络拉取的指数/东财日线写磁盘缓存（当日，下次秒回）
@@ -3250,12 +3259,23 @@ class Api:
                     bucket["best"] = r
 
         # fix P0-13: counts 按 code 去重后统计各 code 最新 verdict 的股票数（不再是扫描记录行数）
+        # fix 2026-08-25: 已从股池删除的（不在 watchlist 且非持仓）不再展示 → 删除按钮后 refresh_pb 不再"复活"
+        def _is_holding(code: str) -> bool:
+            return bool((holdings.get(code) or {}).get("qty") or 0) or \
+                bool((holdings.get(code.split("_")[0]) or {}).get("qty") or 0)
+        def _visible(code: str) -> bool:
+            return (code in wl_stocks) or _is_holding(code)
+
         for code, r in latest_by_code.items():
+            if not _visible(code):
+                continue
             verdicts[r.get("verdict", "")] += 1
 
         # 扫描过的：正常聚合
         rows = []
         for code, rec in by_code.items():
+            if not _visible(code):
+                continue
             # fix P0-14: 行选择改为最新一条扫描记录（不再取当日最高分快照）
             eod = (rec.get("eod") or {}).get("latest")
             intraday = (rec.get("intraday") or {}).get("latest")
@@ -3265,8 +3285,7 @@ class Api:
             row["_scans"] = sum(v.get("scans", 0) for v in rec.values())
             row.setdefault("scan_time", "")  # fix P0-14: 每行确保带 scan_time 字段
             # fix 2026-08-20: in_holdings 实时对齐 holdings.json（qty>0 才算持仓，trace/watchlist 字段可能陈旧）
-            row["in_holdings"] = bool((holdings.get(code) or {}).get("qty") or 0) or \
-                bool((holdings.get(code.split("_")[0]) or {}).get("qty") or 0)
+            row["in_holdings"] = _is_holding(code)
             rows.append(row)
 
         # 未扫描的 watchlist 股票：monitoring/signal → "等待扫描"；archived → "已停用"（可见但不参与扫描）
