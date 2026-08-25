@@ -1,0 +1,507 @@
+# -*- coding: utf-8 -*-
+"""
+生成HTML分析报告
+"""
+import json
+from datetime import datetime
+from pathlib import Path
+
+def create_html_report():
+    """生成HTML格式的分析报告"""
+
+    # 加载分析数据
+    analysis_file = Path('./t_io/validation/comprehensive_analysis_2026-08-25.json')
+    with open(analysis_file, 'r', encoding='utf-8') as f:
+        data = json.load(f)
+
+    index_analysis = data.get('index_analysis', {})
+    watchlist_analysis = data.get('watchlist_analysis', {})
+
+    # 提取watchlist统计
+    summary = watchlist_analysis.get('summary', {})
+    stocks = watchlist_analysis.get('stocks', {})
+
+    # 筛选通过条件的股票
+    watch_signals = [s for c, s in stocks.items() if s.get('latest_verdict') == 'watch_signal']
+
+    html = f"""<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>大盘多周期分析 + Watchlist 泛化测试报告</title>
+    <style>
+        body {{
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+            color: #333;
+        }}
+        .container {{
+            max-width: 1200px;
+            margin: 0 auto;
+            background-color: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }}
+        h1 {{
+            color: #1a73e8;
+            border-bottom: 3px solid #1a73e8;
+            padding-bottom: 10px;
+            margin-bottom: 30px;
+        }}
+        h2 {{
+            color: #444;
+            margin-top: 30px;
+            margin-bottom: 15px;
+            border-left: 4px solid #1a73e8;
+            padding-left: 10px;
+        }}
+        h3 {{
+            color: #555;
+            margin-top: 20px;
+        }}
+        .section {{
+            margin-bottom: 30px;
+            padding: 20px;
+            background-color: #f9f9f9;
+            border-radius: 5px;
+        }}
+        .stats {{
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 15px;
+            margin: 20px 0;
+        }}
+        .stat-box {{
+            background-color: #fff;
+            padding: 15px;
+            border-radius: 5px;
+            border-left: 4px solid #1a73e8;
+            text-align: center;
+        }}
+        .stat-value {{
+            font-size: 24px;
+            font-weight: bold;
+            color: #1a73e8;
+        }}
+        .stat-label {{
+            font-size: 12px;
+            color: #999;
+            margin-top: 5px;
+        }}
+        table {{
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+        }}
+        th {{
+            background-color: #1a73e8;
+            color: white;
+            padding: 12px;
+            text-align: left;
+            font-weight: 600;
+        }}
+        td {{
+            padding: 10px 12px;
+            border-bottom: 1px solid #ddd;
+        }}
+        tr:hover {{
+            background-color: #f5f5f5;
+        }}
+        .label-regime {{
+            background-color: #e3f2fd;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 12px;
+        }}
+        .label-watch {{
+            background-color: #fff3e0;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 12px;
+            color: #e65100;
+        }}
+        .label-weak {{
+            background-color: #f3e5f5;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 12px;
+            color: #6a1b9a;
+        }}
+        .tick {{
+            color: #4caf50;
+            font-weight: bold;
+        }}
+        .cross {{
+            color: #f44336;
+        }}
+        .chart {{
+            margin: 20px 0;
+            padding: 15px;
+            background-color: #f5f5f5;
+            border-radius: 5px;
+        }}
+        .bar {{
+            display: flex;
+            align-items: center;
+            margin: 8px 0;
+        }}
+        .bar-label {{
+            width: 120px;
+            font-size: 12px;
+        }}
+        .bar-container {{
+            flex: 1;
+            background-color: #e0e0e0;
+            height: 20px;
+            border-radius: 3px;
+            overflow: hidden;
+            margin: 0 10px;
+        }}
+        .bar-fill {{
+            height: 100%;
+            background-color: #1a73e8;
+            transition: width 0.3s ease;
+        }}
+        .bar-value {{
+            width: 60px;
+            text-align: right;
+            font-weight: bold;
+            color: #1a73e8;
+        }}
+        .recommendation {{
+            background-color: #e8f5e9;
+            border-left: 4px solid #4caf50;
+            padding: 15px;
+            margin: 15px 0;
+            border-radius: 3px;
+        }}
+        .warning {{
+            background-color: #fff3cd;
+            border-left: 4px solid #ffc107;
+            padding: 15px;
+            margin: 15px 0;
+            border-radius: 3px;
+        }}
+        .timestamp {{
+            color: #999;
+            font-size: 12px;
+            text-align: center;
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 1px solid #ddd;
+        }}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>大盘多周期底部形成分析 + Watchlist 泛化性能测试报告</h1>
+        <div class="timestamp">分析日期: 2026-08-25 | 生成时间: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}</div>
+
+        <!-- 大盘分析 -->
+        <div class="section">
+            <h2>1. 大盘多周期底部形成分析 (2026-08-19 之后)</h2>
+
+            <h3>事件回顾</h3>
+            <p><strong>2026-08-19:</strong> 上证指数大阴线转折，市场从 uni_up (得分 55.25) 快速转为 range (得分 36.04)</p>
+
+            <h3>多日期状态演变</h3>
+            <table>
+                <tr>
+                    <th>日期</th>
+                    <th>市场状态</th>
+                    <th>得分</th>
+                    <th>解读</th>
+                </tr>
+                <tr>
+                    <td>2026-08-17</td>
+                    <td><span class="label-regime">uni_up</span></td>
+                    <td>55.25</td>
+                    <td>多头主导，涨势强劲</td>
+                </tr>
+                <tr>
+                    <td>2026-08-18</td>
+                    <td><span class="label-regime">uni_up</span></td>
+                    <td>52.36</td>
+                    <td>多头延续，衰减开始</td>
+                </tr>
+                <tr>
+                    <td class="tick">2026-08-19</td>
+                    <td><span class="label-regime">range</span></td>
+                    <td>36.04</td>
+                    <td><strong>大转折</strong> - 大阴线冲击，进入震荡</td>
+                </tr>
+                <tr>
+                    <td>2026-08-20</td>
+                    <td><span class="label-regime">uni_down</span></td>
+                    <td>17.92</td>
+                    <td>下跌确认，空头启动</td>
+                </tr>
+                <tr>
+                    <td>2026-08-21</td>
+                    <td><span class="label-regime">range</span></td>
+                    <td>9.03</td>
+                    <td>底部探试，反弹尝试</td>
+                </tr>
+                <tr>
+                    <td>2026-08-24</td>
+                    <td><span class="label-regime">uni_down</span></td>
+                    <td>4.0</td>
+                    <td>再次下跌，底部确认</td>
+                </tr>
+                <tr>
+                    <td>2026-08-25</td>
+                    <td><span class="label-regime">range</span></td>
+                    <td>0.84</td>
+                    <td>极度虚弱，观望阶段</td>
+                </tr>
+            </table>
+
+            <h3>底部形成特征</h3>
+            <ul>
+                <li><strong>时间周期:</strong> 08-19 转折 → 08-20 首次下跌 → 08-21 反弹尝试 → 08-24 二次下跌 → 08-25 继续虚弱
+                    <br/>总计 6 个交易日，底部形成过程</li>
+                <li><strong>支撑区间:</strong> 得分从 36.04 跌至 0.84，显示空头控制力度逐步加强</li>
+                <li><strong>特征判定:</strong>
+                    <ul>
+                        <li>✗ 高点逐步抬升：未能形成，反而屡创新低</li>
+                        <li>✓ 支撑多次试探：08-21、08-24 连续两次下跌试探底部</li>
+                        <li>✗ 多周期共振：日线空头控制，尚未出现周期底背离确认</li>
+                    </ul>
+                </li>
+            </ul>
+
+            <div class="warning">
+                <strong>当前市场判定:</strong> 极度虚弱阶段。得分仅 0.84，市场缺乏方向性，处于磨底区域。
+                建议继续观望，直到看到明确的反弹信号（高点抬升 + 量能确认）。
+            </div>
+        </div>
+
+        <!-- Watchlist 泛化测试 -->
+        <div class="section">
+            <h2>2. Watchlist 泛化性能测试 (39 只股票)</h2>
+
+            <h3>总体统计</h3>
+            <div class="stats">
+                <div class="stat-box">
+                    <div class="stat-value">{summary.get('total', 39)}</div>
+                    <div class="stat-label">总股票数</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-value">{summary.get('all_pass', 0)}</div>
+                    <div class="stat-label">L1+L2+L3全通过</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-value">{summary.get('verdict_distribution', {}).get('watch_signal', 0)}</div>
+                    <div class="stat-label">watch_signal信号</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-value">{summary.get('verdict_distribution', {}).get('weak', 0)}</div>
+                    <div class="stat-label">weak信号</div>
+                </div>
+            </div>
+
+            <h3>分层条件通过率</h3>
+            <div class="chart">
+                <div class="bar">
+                    <div class="bar-label">L1 (市场方向)</div>
+                    <div class="bar-container">
+                        <div class="bar-fill" style="width: {summary.get('l1_rate', '0%')}"></div>
+                    </div>
+                    <div class="bar-value">{summary.get('l1_pass', 0)}/{summary.get('total', 39)}</div>
+                </div>
+                <div class="bar">
+                    <div class="bar-label">L2 (多头结构)</div>
+                    <div class="bar-container">
+                        <div class="bar-fill" style="width: {summary.get('l2_rate', '0%')}"></div>
+                    </div>
+                    <div class="bar-value">{summary.get('l2_pass', 0)}/{summary.get('total', 39)}</div>
+                </div>
+                <div class="bar">
+                    <div class="bar-label">L3 (回撤到位)</div>
+                    <div class="bar-container">
+                        <div class="bar-fill" style="width: {summary.get('l3_rate', '0%')}"></div>
+                    </div>
+                    <div class="bar-value">{summary.get('l3_pass', 0)}/{summary.get('total', 39)}</div>
+                </div>
+                <div class="bar">
+                    <div class="bar-label">加分 (MACD金叉)</div>
+                    <div class="bar-container">
+                        <div class="bar-fill" style="width: {summary.get('bonus_rate', '0%')}"></div>
+                    </div>
+                    <div class="bar-value">{summary.get('bonus_pass', 0)}/{summary.get('total', 39)}</div>
+                </div>
+            </div>
+
+            <h3>Watch Signal 标的 (最值得关注)</h3>
+            <table>
+                <tr>
+                    <th>代码</th>
+                    <th>名称</th>
+                    <th>综合分</th>
+                    <th>L1</th>
+                    <th>L2</th>
+                    <th>L3</th>
+                    <th>加分</th>
+                    <th>最新价</th>
+                    <th>状态</th>
+                </tr>
+"""
+
+    # 添加watch signal股票表
+    for code, stock_data in sorted(stocks.items(),
+                                   key=lambda x: x[1].get('composite_score', 0),
+                                   reverse=True):
+        if stock_data.get('latest_verdict') == 'watch_signal':
+            cond = stock_data.get('conditions', {})
+            html += f"""                <tr>
+                    <td><strong>{code}</strong></td>
+                    <td>{stock_data.get('name', '?')}</td>
+                    <td><strong>{stock_data.get('composite_score', 0)}</strong></td>
+                    <td>{'<span class="tick">✓</span>' if cond.get('t_regime') else '<span class="cross">✗</span>'}</td>
+                    <td>{'<span class="tick">✓</span>' if cond.get('t_trend') else '<span class="cross">✗</span>'}</td>
+                    <td>{'<span class="tick">✓</span>' if cond.get('t_drawdown') else '<span class="cross">✗</span>'}</td>
+                    <td>{'<span class="tick">✓</span>' if cond.get('t_golden') else '<span class="cross">✗</span>'}</td>
+                    <td>{stock_data.get('latest_price', '?')}</td>
+                    <td><span class="label-watch">{stock_data.get('latest_verdict', '?')}</span></td>
+                </tr>
+"""
+
+    html += """            </table>
+        </div>
+
+        <!-- 参数调优建议 -->
+        <div class="section">
+            <h2>3. 参数调优建议与大盘方向判定逻辑</h2>
+
+            <h3>当前环境判定</h3>
+            <div class="warning">
+                <strong>环境等级: 恶劣 (0.0%)</strong>
+                <ul>
+                    <li>市场处于极度虚弱状态，仅 0 只股票同时满足 L1+L2+L3 三层条件</li>
+                    <li>L1 (市场方向) 完全失效：0% 通过率 → 市场无明确方向</li>
+                    <li>L3 (回撤到位) 通过率仅 12.8% → 股票尚未充分回撤到支撑位</li>
+                    <li>整体建议: <strong>观望为主，等待明确信号</strong></li>
+                </ul>
+            </div>
+
+            <h3>分层调优建议</h3>
+
+            <h4>L1 调优: 市场方向判定</h4>
+            <div class="recommendation">
+                <p><strong>当前问题:</strong> L1 通过率 0%，完全失效</p>
+                <p><strong>原因分析:</strong> 市场处于转折期，得分从高位 55.25 → 低位 0.84，
+                   大盘处于 range (震荡) 或 uni_down (空头) 状态，所有股票都缺乏"市场有方向"的条件</p>
+                <p><strong>调整建议:</strong></p>
+                <ul>
+                    <li>① 关闭 L1 或降低权重: 在市场没有明确方向时，L1 不应作为硬性门槛
+                       → 改为"建议门槛" (advisory)，得分降权但仍计入</li>
+                    <li>② 延长确认窗口: 需要连续 3 日以上 uni_up 状态才算有效，避免震荡时的误触发</li>
+                    <li>③ 添加底背离确认: 当市场处于 uni_down 但出现底背离信号（60min + 30min 同时反弹），
+                       可临时放宽 L1 判定</li>
+                </ul>
+            </div>
+
+            <h4>L2 调优: 多头结构判定</h4>
+            <div class="recommendation">
+                <p><strong>当前情况:</strong> L2 通过率 30.8% (12/39)，相对合理</p>
+                <p><strong>特点:</strong> 12 只股票满足"价格 > MA20 > MA60"的多头结构</p>
+                <p><strong>调整建议:</strong></p>
+                <ul>
+                    <li>① 保持现有参数，继续监控</li>
+                    <li>② 可选强化: 要求 MA5 > MA20 > MA60 的三均线排列，进一步筛选强势股</li>
+                    <li>③ 阶段调整: 在市场反弹阶段，可降低要求 → 仅需"价格 > MA20"即可</li>
+                </ul>
+            </div>
+
+            <h4>L3 调优: 回撤到位判定</h4>
+            <div class="recommendation">
+                <p><strong>当前情况:</strong> L3 通过率 12.8% (5/39)，过低</p>
+                <p><strong>问题诊断:</strong> 当前阈值 "回撤 >= -3%" 过于严格，导致大部分股票被过滤</p>
+                <p><strong>调整建议:</strong></p>
+                <ul>
+                    <li>① 放宽回撤幅度: 从 -3% → -5% (对多头 >= -5%)</li>
+                    <li>② 市场阶段式调整:
+                        <ul>
+                            <li>市场 uni_up: 要求 -3% (严格)</li>
+                            <li>市场 range: 要求 -5% (中等)</li>
+                            <li>市场 uni_down: 要求 -8% (宽松)</li>
+                        </ul>
+                    </li>
+                    <li>③ 添加时间确认: 要求回撤持续 >= 3 日，避免单日波动影响</li>
+                </ul>
+            </div>
+
+            <h3>新的"大盘方向判定"逻辑</h3>
+            <div class="section" style="background-color: #f0f4ff; border-left: 4px solid #1a73e8;">
+                <p><strong>提议改进:</strong> 从单层"市场有方向"→ 三级阶段判定</p>
+
+                <p><strong>一级判定 (Primary):</strong> 日线得分 (INDEX_SCORE)</p>
+                <ul>
+                    <li>score >= 50: 强多头 (uni_up) → L1 == True, 严格门槛</li>
+                    <li>20 <= score < 50: 弱多头 (range_up) → L1 == True, 中等门槛</li>
+                    <li>-50 <= score < 20: 磨底 (range) → L1 == False, 观望</li>
+                    <li>score < -50: 强空头 (uni_down) → L1 == False, 风险回避</li>
+                </ul>
+
+                <p><strong>二级确认 (Secondary):</strong> 多周期共振</p>
+                <ul>
+                    <li>当日线处于 range，但 60min + 30min 连续 3 根反弹 → 临时确认 L1 (bottom signal)</li>
+                    <li>当日线处于 uni_up，但 15min 连续下跌 → 降级为 weak signal</li>
+                </ul>
+
+                <p><strong>三级修正 (Tertiary):</strong> 持股信心度</p>
+                <ul>
+                    <li>结合持股时长、浮盈情况、止损位距离 → 动态调整 L2/L3 门槛</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- 下一步行动 -->
+        <div class="section">
+            <h2>4. 下一步行动计划</h2>
+
+            <h3>短期 (1-3 日)</h3>
+            <ul>
+                <li>持续监控大盘日线得分，关注 range → uni_up 的转折</li>
+                <li>重点观察 watch_signal 的 5 只标的: 002451, 002536, 688143, 515180, 601318
+                    <br/>这些已通过 L2+L3，只待市场确认 L1</li>
+                <li>查看 60min/30min 是否出现连续底背离，作为提前入场信号</li>
+            </ul>
+
+            <h3>中期 (1 周)</h3>
+            <ul>
+                <li>实施 L1 调优: 测试"底背离临时放宽 L1"的效果</li>
+                <li>调整 L3 阈值: 从 -3% 放宽至 -5%, 测试胜率变化</li>
+                <li>每日更新泛化测试，追踪通过率变化趋势</li>
+            </ul>
+
+            <h3>长期 (持续)</h3>
+            <ul>
+                <li>建立日线 + 多周期共振的完整判定体系</li>
+                <li>用历史数据回测新逻辑，验证通过率 vs 胜率的权衡</li>
+                <li>形成"市场环境阶段"的参数库，快速切换应对</li>
+            </ul>
+        </div>
+
+        <div class="timestamp">
+            报告完毕 | 联系人: 选股猎手系统 | 下次更新: 2026-08-26
+        </div>
+    </div>
+</body>
+</html>
+"""
+
+    # 保存HTML
+    html_file = Path('./t_io/validation/analysis_report_2026-08-25.html')
+    with open(html_file, 'w', encoding='utf-8') as f:
+        f.write(html)
+
+    print(f"HTML报告已生成: {html_file}")
+
+
+if __name__ == '__main__':
+    create_html_report()
