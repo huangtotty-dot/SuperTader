@@ -3000,7 +3000,8 @@ class Api:
 
     def get_auction_diagnosis(self, date=None):
         """加载竞价诊断报告（auction_diagnosis_{date}.json）"""
-        date = date or get_today_str()
+        if not date:
+            date = datetime.now().strftime("%Y-%m-%d")
         fp = PREOPEN_DIR / f"auction_diagnosis_{date}.json"
         if not fp.exists():
             return None
