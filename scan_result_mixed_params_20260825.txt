@@ -1,0 +1,43 @@
+【通用精准买入检测 - 全量候选股】2026-08-25
+
+代码         名称              市场           L1         L2         L3         建议                  
+----------------------------------------------------------------------------------------------------
+000988     华工科技            range_up     ✅ 安全 (0/35) ❌          ❌          wait_consolidation  
+002176     江特电机            range_up     ✅ 安全 (15/35) ❌          ❌          wait_consolidation  
+002202     金风科技            range_up     ✅ 安全 (0/35) ❌          ❌          wait_consolidation  
+002261     拓维信息            range_up     ✅ 安全 (0/35) ❌          ❌          wait_consolidation  
+002451     摩恩电气            range_up     ❌ 危险 (85/35) ❌          ❌          avoid_chase         
+002536     飞龙股份            range_up     ⚠️ 警告 (40/35) ❌          ❌          wait_cool_down      
+002639     雪人集团            range_up     ✅ 安全 (0/35) ❌          ❌          wait_consolidation  
+300054     鼎龙股份            range_up     ✅ 安全 (0/35) ❌          ❌          wait_consolidation  
+300058     蓝色光标            range_up     ✅ 安全 (0/35) ✅          ❌          wait_resonance      
+300153     科泰电源            range_up     ✅ 安全 (0/35) ❌          ❌          wait_consolidation  
+300364     中文在线            range_up     ✅ 安全 (0/35) ❌          ❌          wait_consolidation  
+300456     赛微电子            range_up     ✅ 安全 (0/35) ❌          ❌          wait_consolidation  
+588170     科创半导体ETF华夏      range_up     ✅ 安全 (0/35) ❌          ❌          wait_consolidation  
+600089     特变电工            range_up     ✅ 安全 (0/35) ❌          ❌          wait_consolidation  
+600481     双良节能            range_up     ✅ 安全 (0/35) ❌          ❌          wait_consolidation  
+600584     长电科技            range_up     ✅ 安全 (0/35) ❌          ❌          wait_consolidation  
+603667     五洲新春            range_up     ✅ 安全 (0/35) ❌          ❌          wait_consolidation  
+515120     创新药ETF广发        range_up     ✅ 安全 (0/35) ❌          ❌          wait_consolidation  
+688008     澜起科技            range_up     ✅ 安全 (0/35) ❌          ❌          wait_consolidation  
+000636     风华高科            range_up     ✅ 安全 (0/35) ❌          ❌          wait_consolidation  
+301165     锐捷网络            range_up     ✅ 安全 (0/35) ❌          ❌          wait_consolidation  
+300548     长芯博创            range_up     ✅ 安全 (0/35) ❌          ❌          wait_consolidation  
+002409     雅克科技            range_up     ✅ 安全 (0/35) ❌          ❌          wait_consolidation  
+300666     江丰电子            range_up     ✅ 安全 (0/35) ❌          ❌          wait_consolidation  
+002407     多氟多             range_up     ✅ 安全 (0/35) ❌          ❌          wait_consolidation  
+603259     药明康德            range_up     ✅ 安全 (0/35) ❌          ❌          wait_consolidation  
+600176     中国巨石            range_up     ✅ 安全 (0/35) ❌          ❌          wait_consolidation  
+688143     长盈通             range_up     ✅ 安全 (30/35) ❌          ❌          wait_consolidation  
+515180     红利ETF易方达        range_up     ✅ 安全 (0/35) ❌          ❌          wait_consolidation  
+601899     紫金矿业            range_up     ✅ 安全 (0/35) ❌          ❌          wait_consolidation  
+000506     招金黄金            range_up     ✅ 安全 (0/35) ❌          ❌          wait_consolidation  
+600547     山东黄金            range_up     ✅ 安全 (0/35) ❌          ❌          wait_consolidation  
+300017     网宿科技            range_up     ✅ 安全 (0/35) ❌          ❌          wait_consolidation  
+300475     香农芯创            range_up     ✅ 安全 (0/35) ❌          ❌          wait_consolidation  
+600722     金牛化工            range_up     ✅ 安全 (0/35) ❌          ❌          wait_consolidation  
+601628     中国人寿            range_up     ✅ 安全 (0/35) ❌          ❌          wait_consolidation  
+601318     中国平安            range_up     ✅ 安全 (0/35) ❌          ❌          wait_consolidation  
+600900     长江电力            range_up     ✅ 安全 (0/35) ❌          ❌          wait_consolidation  
+688037     芯源微             range_up     ✅ 安全 (0/35) ❌          ❌          wait_consolidation  
