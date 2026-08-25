@@ -153,13 +153,23 @@ def _tx_kline(symbol: str, period: str, count: int, end: str) -> list:
     else:
         start_days = int(count * 1.6) + 40
     start = (end_dt - timedelta(days=start_days)).strftime("%Y-%m-%d")
-    url = (f"https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?"
-           f"param={symbol},{period},{start},{end},{count},qfq")
-    try:  # 2026-08-24 fix: 腾讯超时/异常降级返回空，不让复盘卡死(timeout)
-        js = _http_json(url)
-        node = js["data"][symbol]
-        rows = node.get(f"qfq{period}") or node.get(period) or []
-    except Exception:
+    # 2026-08-25: 腾讯 WAF 间歇性 501 拦截不同主机（ifzq / web.ifzq 轮换），多主机兜底
+    # 2026-08-24 fix: 腾讯超时/异常降级返回空，不让复盘卡死(timeout)
+    js = None
+    for _host in ("ifzq.gtimg.cn", "web.ifzq.gtimg.cn"):
+        try:
+            url = (f"https://{_host}/appstock/app/fqkline/get?"
+                   f"param={symbol},{period},{start},{end},{count},qfq")
+            js = _http_json(url)
+            node = js["data"][symbol]
+            rows = node.get(f"qfq{period}") or node.get(period) or []
+            if rows:
+                break
+            js = None
+        except Exception:
+            js = None
+            continue
+    if js is None:
         return []
     out = []
     for row in rows:

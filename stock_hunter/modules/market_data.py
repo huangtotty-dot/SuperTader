@@ -26,6 +26,8 @@ class MarketDataFetcher:
     MAX_CODES_PER_REQUEST = 200
     HISTORICAL_WORKERS = 20  # 并发数，平衡速度和稳定性（2026-08-15: 10→20 加快首跑）
     HISTORICAL_RETRIES = 2
+    # 2026-08-25: 腾讯 WAF 间歇性 501 拦截不同主机（ifzq / web.ifzq 轮换），多主机兜底
+    KLINE_HOSTS = ("ifzq.gtimg.cn", "web.ifzq.gtimg.cn")
 
     def __init__(self, data_dir: str = None, st_codes: set = None):
         self.data_dir = data_dir or os.path.join(os.path.dirname(os.path.dirname(__file__)), "data")
@@ -284,6 +286,25 @@ class MarketDataFetcher:
             })
         return pd.DataFrame(rows)
 
+    def _fetch_kline_multi(self, symbol: str):
+        """腾讯日线 fqkline 多主机兜底拉取：WAF 会间歇性 501 拦截不同主机，返回首个有效 JSON。"""
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            'Referer': 'https://finance.qq.com/'
+        }
+        for host in self.KLINE_HOSTS:
+            try:
+                url = f"https://{host}/appstock/app/fqkline/get?param={symbol},day,,,1000,qfq"
+                req = urllib.request.Request(url, headers=headers)
+                with urllib.request.urlopen(req, timeout=10) as response:
+                    content = response.read().decode('utf-8', errors='ignore')
+                    data = json.loads(content)
+                if data.get('code') == 0 and data.get('data'):
+                    return data
+            except Exception:
+                continue
+        return None
+
     def _fetch_historical_tencent(self, codes: List[str], date_str: str) -> tuple:
         """
         获取历史K线数据，返回 (DataFrame, 失败代码列表)
@@ -297,18 +318,8 @@ class MarketDataFetcher:
                 try:
                     market = "sh" if code.startswith(("6", "5", "9")) else "sz"
                     symbol = f"{market}{code}"
-                    # 2026-08-25: ifzq.gtimg.cn 返回 HTTP 501 拦截，切 web.ifzq.gtimg.cn（同格式数据）
-                    url = f"https://web.web.ifzq.gtimg.cn/appstock/app/fqkline/get?param={symbol},day,,,1000,qfq"
-                    headers = {
-                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-                        'Referer': 'https://finance.qq.com/'
-                    }
-                    req = urllib.request.Request(url, headers=headers)
-                    with urllib.request.urlopen(req, timeout=10) as response:
-                        content = response.read().decode('utf-8', errors='ignore')
-                        data = json.loads(content)
-
-                    if data.get('code') != 0 or not data.get('data'):
+                    data = self._fetch_kline_multi(symbol)
+                    if not data:
                         continue
 
                     stock_data = data['data'].get(symbol)

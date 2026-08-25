@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-08-21 15:59:12",
+  "generated_at": "2026-08-25 16:05:52",
   "params": {
     "days": null,
     "min_samples": 20,
@@ -67,14 +67,14 @@
       }
     },
     "watch_signal": {
-      "samples": 1,
+      "samples": 13,
       "horizons": {
         "1": {
-          "n": 0,
-          "avg_ret": null,
-          "win_rate": null,
-          "beat_benchmark_rate": null,
-          "avg_max_drawdown": null
+          "n": 7,
+          "avg_ret": -0.0211,
+          "win_rate": 0.4286,
+          "beat_benchmark_rate": 0.5714,
+          "avg_max_drawdown": -0.031
         },
         "3": {
           "n": 0,
@@ -93,7 +93,7 @@
       }
     },
     "weak": {
-      "samples": 389,
+      "samples": 460,
       "horizons": {
         "1": {
           "n": 0,
@@ -197,6 +197,58 @@
       "scan_time": "2026-08-21 14:50:37",
       "verdict": "weak",
       "price": 20.77,
+      "score": 30,
+      "returns": null
+    },
+    {
+      "code": "000506",
+      "name": "招金黄金",
+      "date": "2026-08-24",
+      "scan_time": "2026-08-24 20:29:36",
+      "verdict": "watch_signal",
+      "price": 22.34,
+      "score": 60,
+      "kline_source": "cache+tencent",
+      "returns": {
+        "1": {
+          "date": "2026-08-25",
+          "close": 20.61,
+          "ret": -0.0774,
+          "status": "ok",
+          "reason": "",
+          "max_drawdown": -0.0913,
+          "benchmark_ret": -0.0024,
+          "beat_benchmark": false
+        },
+        "3": {
+          "date": null,
+          "close": null,
+          "ret": null,
+          "status": "unavailable",
+          "reason": "目标交易日数据未到期或获取失败",
+          "max_drawdown": null,
+          "benchmark_ret": null,
+          "beat_benchmark": null
+        },
+        "5": {
+          "date": null,
+          "close": null,
+          "ret": null,
+          "status": "unavailable",
+          "reason": "目标交易日数据未到期或获取失败",
+          "max_drawdown": null,
+          "benchmark_ret": null,
+          "beat_benchmark": null
+        }
+      }
+    },
+    {
+      "code": "000506",
+      "name": "招金黄金",
+      "date": "2026-08-25",
+      "scan_time": "2026-08-25 15:05:30",
+      "verdict": "weak",
+      "price": 20.61,
       "score": 30,
       "returns": null
     },
@@ -307,6 +359,26 @@
       "scan_time": "2026-08-21 14:50:37",
       "verdict": "weak",
       "price": 54.55,
+      "score": 0,
+      "returns": null
+    },
+    {
+      "code": "000636",
+      "name": "风华高科",
+      "date": "2026-08-24",
+      "scan_time": "2026-08-24 20:29:36",
+      "verdict": "weak",
+      "price": 51.91,
+      "score": 0,
+      "returns": null
+    },
+    {
+      "code": "000636",
+      "name": "风华高科",
+      "date": "2026-08-25",
+      "scan_time": "2026-08-25 15:05:30",
+      "verdict": "weak",
+      "price": 51.33,
       "score": 0,
       "returns": null
     },
@@ -621,6 +693,26 @@
       "returns": null
     },
     {
+      "code": "000988",
+      "name": "华工科技",
+      "date": "2026-08-24",
+      "scan_time": "2026-08-24 20:29:36",
+      "verdict": "weak",
+      "price": 104.07,
+      "score": 0,
+      "returns": null
+    },
+    {
+      "code": "000988",
+      "name": "华工科技",
+      "date": "2026-08-25",
+      "scan_time": "2026-08-25 15:05:30",
+      "verdict": "weak",
+      "price": 105.27,
+      "score": 0,
+      "returns": null
+    },
+    {
       "code": "002176",
       "name": "江特电机",
       "date": "2026-08-05",
@@ -799,6 +891,26 @@
       "scan_time": "2026-08-21 14:50:37",
       "verdict": "weak",
       "price": 9.03,
+      "score": 0,
+      "returns": null
+    },
+    {
+      "code": "002176",
+      "name": "江特电机",
+      "date": "2026-08-24",
+      "scan_time": "2026-08-24 20:29:36",
+      "verdict": "weak",
+      "price": 9.15,
+      "score": 0,
+      "returns": null
+    },
+    {
+      "code": "002176",
+      "name": "江特电机",
+      "date": "2026-08-25",
+      "scan_time": "2026-08-25 15:05:30",
+      "verdict": "weak",
+      "price": 9.35,
       "score": 0,
       "returns": null
     },
@@ -985,14 +1097,14 @@
       "kline_source": "cache+tencent",
       "returns": {
         "1": {
-          "date": null,
-          "close": null,
-          "ret": null,
-          "status": "unavailable",
-          "reason": "目标交易日数据未到期或获取失败",
-          "max_drawdown": null,
-          "benchmark_ret": null,
-          "beat_benchmark": null
+          "date": "2026-08-24",
+          "close": 18.3,
+          "ret": -0.0464,
+          "status": "ok",
+          "reason": "",
+          "max_drawdown": -0.062,
+          "benchmark_ret": -0.0121,
+          "beat_benchmark": false
         },
         "3": {
           "date": null,
@@ -1015,6 +1127,26 @@
           "beat_benchmark": null
         }
       }
+    },
+    {
+      "code": "002202",
+      "name": "金风科技",
+      "date": "2026-08-24",
+      "scan_time": "2026-08-24 20:29:36",
+      "verdict": "weak",
+      "price": 18.3,
+      "score": 0,
+      "returns": null
+    },
+    {
+      "code": "002202",
+      "name": "金风科技",
+      "date": "2026-08-25",
+      "scan_time": "2026-08-25 15:05:30",
+      "verdict": "weak",
+      "price": 18.46,
+      "score": 0,
+      "returns": null
     },
     {
       "code": "002261",
@@ -1231,6 +1363,26 @@
       "returns": null
     },
     {
+      "code": "002261",
+      "name": "拓维信息",
+      "date": "2026-08-24",
+      "scan_time": "2026-08-24 20:29:36",
+      "verdict": "weak",
+      "price": 25.08,
+      "score": 0,
+      "returns": null
+    },
+    {
+      "code": "002261",
+      "name": "拓维信息",
+      "date": "2026-08-25",
+      "scan_time": "2026-08-25 15:05:30",
+      "verdict": "weak",
+      "price": 25.18,
+      "score": 0,
+      "returns": null
+    },
+    {
       "code": "002407",
       "name": "多氟多",
       "date": "2026-08-11",
@@ -1337,6 +1489,26 @@
       "scan_time": "2026-08-21 14:50:37",
       "verdict": "weak",
       "price": 36.17,
+      "score": 0,
+      "returns": null
+    },
+    {
+      "code": "002407",
+      "name": "多氟多",
+      "date": "2026-08-24",
+      "scan_time": "2026-08-24 20:29:36",
+      "verdict": "weak",
+      "price": 34.57,
+      "score": 0,
+      "returns": null
+    },
+    {
+      "code": "002407",
+      "name": "多氟多",
+      "date": "2026-08-25",
+      "scan_time": "2026-08-25 15:05:30",
+      "verdict": "weak",
+      "price": 33.88,
       "score": 0,
       "returns": null
     },
@@ -1479,6 +1651,26 @@
       "scan_time": "2026-08-21 14:50:37",
       "verdict": "weak",
       "price": 138.4,
+      "score": 0,
+      "returns": null
+    },
+    {
+      "code": "002409",
+      "name": "雅克科技",
+      "date": "2026-08-24",
+      "scan_time": "2026-08-24 20:29:36",
+      "verdict": "weak",
+      "price": 140.59,
+      "score": 0,
+      "returns": null
+    },
+    {
+      "code": "002409",
+      "name": "雅克科技",
+      "date": "2026-08-25",
+      "scan_time": "2026-08-25 15:05:30",
+      "verdict": "weak",
+      "price": 137.19,
       "score": 0,
       "returns": null
     },
@@ -1662,6 +1854,26 @@
       "verdict": "weak",
       "price": 7.2,
       "score": 0,
+      "returns": null
+    },
+    {
+      "code": "002451",
+      "name": "摩恩电气",
+      "date": "2026-08-24",
+      "scan_time": "2026-08-24 20:29:36",
+      "verdict": "weak",
+      "price": 7.39,
+      "score": 40,
+      "returns": null
+    },
+    {
+      "code": "002451",
+      "name": "摩恩电气",
+      "date": "2026-08-25",
+      "scan_time": "2026-08-25 15:05:30",
+      "verdict": "weak",
+      "price": 8.13,
+      "score": 40,
       "returns": null
     },
     {
@@ -1877,6 +2089,58 @@
       "price": 46.97,
       "score": 30,
       "returns": null
+    },
+    {
+      "code": "002536",
+      "name": "飞龙股份",
+      "date": "2026-08-24",
+      "scan_time": "2026-08-24 20:29:36",
+      "verdict": "weak",
+      "price": 48.8,
+      "score": 30,
+      "returns": null
+    },
+    {
+      "code": "002536",
+      "name": "飞龙股份",
+      "date": "2026-08-25",
+      "scan_time": "2026-08-25 15:05:30",
+      "verdict": "watch_signal",
+      "price": 51.56,
+      "score": 60,
+      "kline_source": "cache+tencent",
+      "returns": {
+        "1": {
+          "date": null,
+          "close": null,
+          "ret": null,
+          "status": "unavailable",
+          "reason": "目标交易日数据未到期或获取失败",
+          "max_drawdown": null,
+          "benchmark_ret": null,
+          "beat_benchmark": null
+        },
+        "3": {
+          "date": null,
+          "close": null,
+          "ret": null,
+          "status": "unavailable",
+          "reason": "目标交易日数据未到期或获取失败",
+          "max_drawdown": null,
+          "benchmark_ret": null,
+          "beat_benchmark": null
+        },
+        "5": {
+          "date": null,
+          "close": null,
+          "ret": null,
+          "status": "unavailable",
+          "reason": "目标交易日数据未到期或获取失败",
+          "max_drawdown": null,
+          "benchmark_ret": null,
+          "beat_benchmark": null
+        }
+      }
     },
     {
       "code": "002600",
@@ -2217,6 +2481,26 @@
       "returns": null
     },
     {
+      "code": "002639",
+      "name": "雪人集团",
+      "date": "2026-08-24",
+      "scan_time": "2026-08-24 20:29:36",
+      "verdict": "weak",
+      "price": 11.45,
+      "score": 0,
+      "returns": null
+    },
+    {
+      "code": "002639",
+      "name": "雪人集团",
+      "date": "2026-08-25",
+      "scan_time": "2026-08-25 15:05:30",
+      "verdict": "weak",
+      "price": 11.82,
+      "score": 0,
+      "returns": null
+    },
+    {
       "code": "159253",
       "name": "银行ETF博时",
       "date": "2026-08-19",
@@ -2245,6 +2529,90 @@
       "price": 0.975,
       "score": 40,
       "returns": null
+    },
+    {
+      "code": "159253",
+      "name": "银行ETF博时",
+      "date": "2026-08-24",
+      "scan_time": "2026-08-24 20:29:36",
+      "verdict": "watch_signal",
+      "price": 0.989,
+      "score": 70,
+      "kline_source": "cache+tencent",
+      "returns": {
+        "1": {
+          "date": "2026-08-25",
+          "close": 0.99,
+          "ret": 0.001,
+          "status": "ok",
+          "reason": "",
+          "max_drawdown": -0.0091,
+          "benchmark_ret": -0.0024,
+          "beat_benchmark": true
+        },
+        "3": {
+          "date": null,
+          "close": null,
+          "ret": null,
+          "status": "unavailable",
+          "reason": "目标交易日数据未到期或获取失败",
+          "max_drawdown": null,
+          "benchmark_ret": null,
+          "beat_benchmark": null
+        },
+        "5": {
+          "date": null,
+          "close": null,
+          "ret": null,
+          "status": "unavailable",
+          "reason": "目标交易日数据未到期或获取失败",
+          "max_drawdown": null,
+          "benchmark_ret": null,
+          "beat_benchmark": null
+        }
+      }
+    },
+    {
+      "code": "159253",
+      "name": "银行ETF博时",
+      "date": "2026-08-25",
+      "scan_time": "2026-08-25 15:05:30",
+      "verdict": "watch_signal",
+      "price": 0.99,
+      "score": 70,
+      "kline_source": "cache+tencent",
+      "returns": {
+        "1": {
+          "date": null,
+          "close": null,
+          "ret": null,
+          "status": "unavailable",
+          "reason": "目标交易日数据未到期或获取失败",
+          "max_drawdown": null,
+          "benchmark_ret": null,
+          "beat_benchmark": null
+        },
+        "3": {
+          "date": null,
+          "close": null,
+          "ret": null,
+          "status": "unavailable",
+          "reason": "目标交易日数据未到期或获取失败",
+          "max_drawdown": null,
+          "benchmark_ret": null,
+          "beat_benchmark": null
+        },
+        "5": {
+          "date": null,
+          "close": null,
+          "ret": null,
+          "status": "unavailable",
+          "reason": "目标交易日数据未到期或获取失败",
+          "max_drawdown": null,
+          "benchmark_ret": null,
+          "beat_benchmark": null
+        }
+      }
     },
     {
       "code": "300017",
@@ -2355,6 +2723,26 @@
       "scan_time": "2026-08-21 14:50:37",
       "verdict": "weak",
       "price": 15.52,
+      "score": 30,
+      "returns": null
+    },
+    {
+      "code": "300017",
+      "name": "网宿科技",
+      "date": "2026-08-24",
+      "scan_time": "2026-08-24 20:29:36",
+      "verdict": "weak",
+      "price": 15.2,
+      "score": 30,
+      "returns": null
+    },
+    {
+      "code": "300017",
+      "name": "网宿科技",
+      "date": "2026-08-25",
+      "scan_time": "2026-08-25 15:05:30",
+      "verdict": "weak",
+      "price": 15.1,
       "score": 30,
       "returns": null
     },
@@ -2637,6 +3025,26 @@
       "returns": null
     },
     {
+      "code": "300054",
+      "name": "鼎龙股份",
+      "date": "2026-08-24",
+      "scan_time": "2026-08-24 20:29:36",
+      "verdict": "weak",
+      "price": 73.62,
+      "score": 0,
+      "returns": null
+    },
+    {
+      "code": "300054",
+      "name": "鼎龙股份",
+      "date": "2026-08-25",
+      "scan_time": "2026-08-25 15:05:30",
+      "verdict": "weak",
+      "price": 72.19,
+      "score": 0,
+      "returns": null
+    },
+    {
       "code": "300058",
       "name": "蓝色光标",
       "date": "2026-08-05",
@@ -2783,6 +3191,26 @@
       "scan_time": "2026-08-21 14:50:37",
       "verdict": "weak",
       "price": 13.65,
+      "score": 0,
+      "returns": null
+    },
+    {
+      "code": "300058",
+      "name": "蓝色光标",
+      "date": "2026-08-24",
+      "scan_time": "2026-08-24 20:29:36",
+      "verdict": "weak",
+      "price": 13.15,
+      "score": 0,
+      "returns": null
+    },
+    {
+      "code": "300058",
+      "name": "蓝色光标",
+      "date": "2026-08-25",
+      "scan_time": "2026-08-25 15:05:30",
+      "verdict": "weak",
+      "price": 13.33,
       "score": 0,
       "returns": null
     },
@@ -3001,6 +3429,16 @@
       "returns": null
     },
     {
+      "code": "300153",
+      "name": "科泰电源",
+      "date": "2026-08-25",
+      "scan_time": "2026-08-25 15:05:30",
+      "verdict": "weak",
+      "price": 21.34,
+      "score": 0,
+      "returns": null
+    },
+    {
       "code": "300364",
       "name": "中文在线",
       "date": "2026-08-05",
@@ -3147,6 +3585,16 @@
       "scan_time": "2026-08-21 14:50:37",
       "verdict": "weak",
       "price": 23.04,
+      "score": 0,
+      "returns": null
+    },
+    {
+      "code": "300364",
+      "name": "中文在线",
+      "date": "2026-08-25",
+      "scan_time": "2026-08-25 15:05:30",
+      "verdict": "weak",
+      "price": 22.92,
       "score": 0,
       "returns": null
     },
@@ -3397,6 +3845,26 @@
       "returns": null
     },
     {
+      "code": "300456",
+      "name": "赛微电子",
+      "date": "2026-08-24",
+      "scan_time": "2026-08-24 20:29:36",
+      "verdict": "weak",
+      "price": 30.85,
+      "score": 0,
+      "returns": null
+    },
+    {
+      "code": "300456",
+      "name": "赛微电子",
+      "date": "2026-08-25",
+      "scan_time": "2026-08-25 15:05:30",
+      "verdict": "weak",
+      "price": 31.04,
+      "score": 0,
+      "returns": null
+    },
+    {
       "code": "300475",
       "name": "香农芯创",
       "date": "2026-08-19",
@@ -3423,6 +3891,26 @@
       "scan_time": "2026-08-21 14:50:37",
       "verdict": "weak",
       "price": 158.21,
+      "score": 0,
+      "returns": null
+    },
+    {
+      "code": "300475",
+      "name": "香农芯创",
+      "date": "2026-08-24",
+      "scan_time": "2026-08-24 20:29:36",
+      "verdict": "weak",
+      "price": 153.0,
+      "score": 0,
+      "returns": null
+    },
+    {
+      "code": "300475",
+      "name": "香农芯创",
+      "date": "2026-08-25",
+      "scan_time": "2026-08-25 15:05:30",
+      "verdict": "weak",
+      "price": 153.7,
       "score": 0,
       "returns": null
     },
@@ -3565,6 +4053,26 @@
       "scan_time": "2026-08-21 14:50:37",
       "verdict": "weak",
       "price": 198.0,
+      "score": 0,
+      "returns": null
+    },
+    {
+      "code": "300548",
+      "name": "长芯博创",
+      "date": "2026-08-24",
+      "scan_time": "2026-08-24 20:29:36",
+      "verdict": "weak",
+      "price": 198.94,
+      "score": 0,
+      "returns": null
+    },
+    {
+      "code": "300548",
+      "name": "长芯博创",
+      "date": "2026-08-25",
+      "scan_time": "2026-08-25 15:05:30",
+      "verdict": "weak",
+      "price": 196.23,
       "score": 0,
       "returns": null
     },
@@ -3743,6 +4251,26 @@
       "returns": null
     },
     {
+      "code": "300666",
+      "name": "江丰电子",
+      "date": "2026-08-24",
+      "scan_time": "2026-08-24 20:29:36",
+      "verdict": "weak",
+      "price": 250.4,
+      "score": 0,
+      "returns": null
+    },
+    {
+      "code": "300666",
+      "name": "江丰电子",
+      "date": "2026-08-25",
+      "scan_time": "2026-08-25 15:05:30",
+      "verdict": "weak",
+      "price": 235.5,
+      "score": 0,
+      "returns": null
+    },
+    {
       "code": "301165",
       "name": "锐捷网络",
       "date": "2026-08-11",
@@ -3853,6 +4381,26 @@
       "returns": null
     },
     {
+      "code": "301165",
+      "name": "锐捷网络",
+      "date": "2026-08-24",
+      "scan_time": "2026-08-24 20:29:36",
+      "verdict": "weak",
+      "price": 115.9,
+      "score": 0,
+      "returns": null
+    },
+    {
+      "code": "301165",
+      "name": "锐捷网络",
+      "date": "2026-08-25",
+      "scan_time": "2026-08-25 15:05:30",
+      "verdict": "weak",
+      "price": 115.73,
+      "score": 0,
+      "returns": null
+    },
+    {
       "code": "512890",
       "name": "红利低波ETF华泰柏瑞",
       "date": "2026-08-21",
@@ -3861,6 +4409,90 @@
       "price": 1.176,
       "score": 30,
       "returns": null
+    },
+    {
+      "code": "512890",
+      "name": "红利低波ETF华泰柏瑞",
+      "date": "2026-08-24",
+      "scan_time": "2026-08-24 20:29:36",
+      "verdict": "watch_signal",
+      "price": 1.189,
+      "score": 70,
+      "kline_source": "cache+tencent",
+      "returns": {
+        "1": {
+          "date": "2026-08-25",
+          "close": 1.19,
+          "ret": 0.0008,
+          "status": "ok",
+          "reason": "",
+          "max_drawdown": -0.0076,
+          "benchmark_ret": -0.0024,
+          "beat_benchmark": true
+        },
+        "3": {
+          "date": null,
+          "close": null,
+          "ret": null,
+          "status": "unavailable",
+          "reason": "目标交易日数据未到期或获取失败",
+          "max_drawdown": null,
+          "benchmark_ret": null,
+          "beat_benchmark": null
+        },
+        "5": {
+          "date": null,
+          "close": null,
+          "ret": null,
+          "status": "unavailable",
+          "reason": "目标交易日数据未到期或获取失败",
+          "max_drawdown": null,
+          "benchmark_ret": null,
+          "beat_benchmark": null
+        }
+      }
+    },
+    {
+      "code": "512890",
+      "name": "红利低波ETF华泰柏瑞",
+      "date": "2026-08-25",
+      "scan_time": "2026-08-25 15:05:30",
+      "verdict": "watch_signal",
+      "price": 1.185,
+      "score": 70,
+      "kline_source": "cache+tencent",
+      "returns": {
+        "1": {
+          "date": null,
+          "close": null,
+          "ret": null,
+          "status": "unavailable",
+          "reason": "目标交易日数据未到期或获取失败",
+          "max_drawdown": null,
+          "benchmark_ret": null,
+          "beat_benchmark": null
+        },
+        "3": {
+          "date": null,
+          "close": null,
+          "ret": null,
+          "status": "unavailable",
+          "reason": "目标交易日数据未到期或获取失败",
+          "max_drawdown": null,
+          "benchmark_ret": null,
+          "beat_benchmark": null
+        },
+        "5": {
+          "date": null,
+          "close": null,
+          "ret": null,
+          "status": "unavailable",
+          "reason": "目标交易日数据未到期或获取失败",
+          "max_drawdown": null,
+          "benchmark_ret": null,
+          "beat_benchmark": null
+        }
+      }
     },
     {
       "code": "515120",
@@ -4079,6 +4711,26 @@
       "returns": null
     },
     {
+      "code": "515120",
+      "name": "创新药ETF广发",
+      "date": "2026-08-24",
+      "scan_time": "2026-08-24 20:29:36",
+      "verdict": "weak",
+      "price": 0.636,
+      "score": 0,
+      "returns": null
+    },
+    {
+      "code": "515120",
+      "name": "创新药ETF广发",
+      "date": "2026-08-25",
+      "scan_time": "2026-08-25 15:05:30",
+      "verdict": "weak",
+      "price": 0.649,
+      "score": 0,
+      "returns": null
+    },
+    {
       "code": "515180",
       "name": "红利ETF易方达",
       "date": "2026-08-14",
@@ -4157,6 +4809,90 @@
       "price": 1.433,
       "score": 30,
       "returns": null
+    },
+    {
+      "code": "515180",
+      "name": "红利ETF易方达",
+      "date": "2026-08-24",
+      "scan_time": "2026-08-24 20:29:36",
+      "verdict": "watch_signal",
+      "price": 1.452,
+      "score": 70,
+      "kline_source": "cache+tencent",
+      "returns": {
+        "1": {
+          "date": "2026-08-25",
+          "close": 1.45,
+          "ret": -0.0021,
+          "status": "ok",
+          "reason": "",
+          "max_drawdown": -0.0089,
+          "benchmark_ret": -0.0024,
+          "beat_benchmark": true
+        },
+        "3": {
+          "date": null,
+          "close": null,
+          "ret": null,
+          "status": "unavailable",
+          "reason": "目标交易日数据未到期或获取失败",
+          "max_drawdown": null,
+          "benchmark_ret": null,
+          "beat_benchmark": null
+        },
+        "5": {
+          "date": null,
+          "close": null,
+          "ret": null,
+          "status": "unavailable",
+          "reason": "目标交易日数据未到期或获取失败",
+          "max_drawdown": null,
+          "benchmark_ret": null,
+          "beat_benchmark": null
+        }
+      }
+    },
+    {
+      "code": "515180",
+      "name": "红利ETF易方达",
+      "date": "2026-08-25",
+      "scan_time": "2026-08-25 15:05:30",
+      "verdict": "watch_signal",
+      "price": 1.443,
+      "score": 70,
+      "kline_source": "cache+tencent",
+      "returns": {
+        "1": {
+          "date": null,
+          "close": null,
+          "ret": null,
+          "status": "unavailable",
+          "reason": "目标交易日数据未到期或获取失败",
+          "max_drawdown": null,
+          "benchmark_ret": null,
+          "beat_benchmark": null
+        },
+        "3": {
+          "date": null,
+          "close": null,
+          "ret": null,
+          "status": "unavailable",
+          "reason": "目标交易日数据未到期或获取失败",
+          "max_drawdown": null,
+          "benchmark_ret": null,
+          "beat_benchmark": null
+        },
+        "5": {
+          "date": null,
+          "close": null,
+          "ret": null,
+          "status": "unavailable",
+          "reason": "目标交易日数据未到期或获取失败",
+          "max_drawdown": null,
+          "benchmark_ret": null,
+          "beat_benchmark": null
+        }
+      }
     },
     {
       "code": "588170",
@@ -4501,6 +5237,26 @@
       "returns": null
     },
     {
+      "code": "588170",
+      "name": "科创半导体ETF华夏",
+      "date": "2026-08-24",
+      "scan_time": "2026-08-24 20:29:36",
+      "verdict": "weak",
+      "price": 1.005,
+      "score": 0,
+      "returns": null
+    },
+    {
+      "code": "588170",
+      "name": "科创半导体ETF华夏",
+      "date": "2026-08-25",
+      "scan_time": "2026-08-25 15:05:30",
+      "verdict": "weak",
+      "price": 0.976,
+      "score": 0,
+      "returns": null
+    },
+    {
       "code": "600089",
       "name": "特变电工",
       "date": "2026-08-05",
@@ -4683,6 +5439,26 @@
       "returns": null
     },
     {
+      "code": "600089",
+      "name": "特变电工",
+      "date": "2026-08-24",
+      "scan_time": "2026-08-24 20:29:36",
+      "verdict": "weak",
+      "price": 19.0,
+      "score": 0,
+      "returns": null
+    },
+    {
+      "code": "600089",
+      "name": "特变电工",
+      "date": "2026-08-25",
+      "scan_time": "2026-08-25 15:05:30",
+      "verdict": "weak",
+      "price": 19.0,
+      "score": 0,
+      "returns": null
+    },
+    {
       "code": "600176",
       "name": "中国巨石",
       "date": "2026-08-11",
@@ -4821,6 +5597,26 @@
       "scan_time": "2026-08-21 14:50:37",
       "verdict": "weak",
       "price": 41.91,
+      "score": 0,
+      "returns": null
+    },
+    {
+      "code": "600176",
+      "name": "中国巨石",
+      "date": "2026-08-24",
+      "scan_time": "2026-08-24 20:29:36",
+      "verdict": "weak",
+      "price": 40.11,
+      "score": 0,
+      "returns": null
+    },
+    {
+      "code": "600176",
+      "name": "中国巨石",
+      "date": "2026-08-25",
+      "scan_time": "2026-08-25 15:05:30",
+      "verdict": "weak",
+      "price": 39.79,
       "score": 0,
       "returns": null
     },
@@ -5039,6 +5835,26 @@
       "returns": null
     },
     {
+      "code": "600481",
+      "name": "双良节能",
+      "date": "2026-08-24",
+      "scan_time": "2026-08-24 20:29:36",
+      "verdict": "weak",
+      "price": 4.2,
+      "score": 0,
+      "returns": null
+    },
+    {
+      "code": "600481",
+      "name": "双良节能",
+      "date": "2026-08-25",
+      "scan_time": "2026-08-25 15:05:30",
+      "verdict": "weak",
+      "price": 4.28,
+      "score": 0,
+      "returns": null
+    },
+    {
       "code": "600547",
       "name": "山东黄金",
       "date": "2026-08-14",
@@ -5115,6 +5931,26 @@
       "scan_time": "2026-08-21 14:50:37",
       "verdict": "weak",
       "price": 36.98,
+      "score": 30,
+      "returns": null
+    },
+    {
+      "code": "600547",
+      "name": "山东黄金",
+      "date": "2026-08-24",
+      "scan_time": "2026-08-24 20:29:36",
+      "verdict": "weak",
+      "price": 36.5,
+      "score": 30,
+      "returns": null
+    },
+    {
+      "code": "600547",
+      "name": "山东黄金",
+      "date": "2026-08-25",
+      "scan_time": "2026-08-25 15:05:30",
+      "verdict": "weak",
+      "price": 34.97,
       "score": 30,
       "returns": null
     },
@@ -5397,6 +6233,66 @@
       "returns": null
     },
     {
+      "code": "600584",
+      "name": "长电科技",
+      "date": "2026-08-24",
+      "scan_time": "2026-08-24 20:29:36",
+      "verdict": "weak",
+      "price": 73.8,
+      "score": 0,
+      "returns": null
+    },
+    {
+      "code": "600584",
+      "name": "长电科技",
+      "date": "2026-08-25",
+      "scan_time": "2026-08-25 15:05:30",
+      "verdict": "weak",
+      "price": 74.05,
+      "score": 0,
+      "returns": null
+    },
+    {
+      "code": "600722",
+      "name": "金牛化工",
+      "date": "2026-08-24",
+      "scan_time": "2026-08-24 20:29:36",
+      "verdict": "weak",
+      "price": 14.38,
+      "score": 30,
+      "returns": null
+    },
+    {
+      "code": "600722",
+      "name": "金牛化工",
+      "date": "2026-08-25",
+      "scan_time": "2026-08-25 15:05:30",
+      "verdict": "weak",
+      "price": 14.02,
+      "score": 30,
+      "returns": null
+    },
+    {
+      "code": "600900",
+      "name": "长江电力",
+      "date": "2026-08-24",
+      "scan_time": "2026-08-24 20:29:36",
+      "verdict": "weak",
+      "price": 28.15,
+      "score": 0,
+      "returns": null
+    },
+    {
+      "code": "600900",
+      "name": "长江电力",
+      "date": "2026-08-25",
+      "scan_time": "2026-08-25 15:05:30",
+      "verdict": "weak",
+      "price": 28.21,
+      "score": 0,
+      "returns": null
+    },
+    {
       "code": "600977",
       "name": "中国电影",
       "date": "2026-08-05",
@@ -5579,6 +6475,130 @@
       "returns": null
     },
     {
+      "code": "600977",
+      "name": "中国电影",
+      "date": "2026-08-24",
+      "scan_time": "2026-08-24 20:29:36",
+      "verdict": "weak",
+      "price": 11.94,
+      "score": 0,
+      "returns": null
+    },
+    {
+      "code": "600977",
+      "name": "中国电影",
+      "date": "2026-08-25",
+      "scan_time": "2026-08-25 10:03:22",
+      "verdict": "weak",
+      "price": 12.08,
+      "score": 0,
+      "returns": null
+    },
+    {
+      "code": "601318",
+      "name": "中国平安",
+      "date": "2026-08-24",
+      "scan_time": "2026-08-24 20:29:36",
+      "verdict": "watch_signal",
+      "price": 54.92,
+      "score": 70,
+      "kline_source": "cache+tencent",
+      "returns": {
+        "1": {
+          "date": "2026-08-25",
+          "close": 55.01,
+          "ret": 0.0016,
+          "status": "ok",
+          "reason": "",
+          "max_drawdown": -0.0049,
+          "benchmark_ret": -0.0024,
+          "beat_benchmark": true
+        },
+        "3": {
+          "date": null,
+          "close": null,
+          "ret": null,
+          "status": "unavailable",
+          "reason": "目标交易日数据未到期或获取失败",
+          "max_drawdown": null,
+          "benchmark_ret": null,
+          "beat_benchmark": null
+        },
+        "5": {
+          "date": null,
+          "close": null,
+          "ret": null,
+          "status": "unavailable",
+          "reason": "目标交易日数据未到期或获取失败",
+          "max_drawdown": null,
+          "benchmark_ret": null,
+          "beat_benchmark": null
+        }
+      }
+    },
+    {
+      "code": "601318",
+      "name": "中国平安",
+      "date": "2026-08-25",
+      "scan_time": "2026-08-25 15:05:30",
+      "verdict": "watch_signal",
+      "price": 55.01,
+      "score": 70,
+      "kline_source": "cache+tencent",
+      "returns": {
+        "1": {
+          "date": null,
+          "close": null,
+          "ret": null,
+          "status": "unavailable",
+          "reason": "目标交易日数据未到期或获取失败",
+          "max_drawdown": null,
+          "benchmark_ret": null,
+          "beat_benchmark": null
+        },
+        "3": {
+          "date": null,
+          "close": null,
+          "ret": null,
+          "status": "unavailable",
+          "reason": "目标交易日数据未到期或获取失败",
+          "max_drawdown": null,
+          "benchmark_ret": null,
+          "beat_benchmark": null
+        },
+        "5": {
+          "date": null,
+          "close": null,
+          "ret": null,
+          "status": "unavailable",
+          "reason": "目标交易日数据未到期或获取失败",
+          "max_drawdown": null,
+          "benchmark_ret": null,
+          "beat_benchmark": null
+        }
+      }
+    },
+    {
+      "code": "601628",
+      "name": "中国人寿",
+      "date": "2026-08-24",
+      "scan_time": "2026-08-24 20:29:36",
+      "verdict": "weak",
+      "price": 37.64,
+      "score": 0,
+      "returns": null
+    },
+    {
+      "code": "601628",
+      "name": "中国人寿",
+      "date": "2026-08-25",
+      "scan_time": "2026-08-25 15:05:30",
+      "verdict": "weak",
+      "price": 37.6,
+      "score": 0,
+      "returns": null
+    },
+    {
       "code": "601899",
       "name": "紫金矿业",
       "date": "2026-08-14",
@@ -5655,6 +6675,58 @@
       "scan_time": "2026-08-21 14:50:37",
       "verdict": "weak",
       "price": 34.7,
+      "score": 30,
+      "returns": null
+    },
+    {
+      "code": "601899",
+      "name": "紫金矿业",
+      "date": "2026-08-24",
+      "scan_time": "2026-08-24 20:29:36",
+      "verdict": "watch_signal",
+      "price": 34.54,
+      "score": 60,
+      "kline_source": "cache+tencent",
+      "returns": {
+        "1": {
+          "date": "2026-08-25",
+          "close": 33.68,
+          "ret": -0.0249,
+          "status": "ok",
+          "reason": "",
+          "max_drawdown": -0.033,
+          "benchmark_ret": -0.0024,
+          "beat_benchmark": false
+        },
+        "3": {
+          "date": null,
+          "close": null,
+          "ret": null,
+          "status": "unavailable",
+          "reason": "目标交易日数据未到期或获取失败",
+          "max_drawdown": null,
+          "benchmark_ret": null,
+          "beat_benchmark": null
+        },
+        "5": {
+          "date": null,
+          "close": null,
+          "ret": null,
+          "status": "unavailable",
+          "reason": "目标交易日数据未到期或获取失败",
+          "max_drawdown": null,
+          "benchmark_ret": null,
+          "beat_benchmark": null
+        }
+      }
+    },
+    {
+      "code": "601899",
+      "name": "紫金矿业",
+      "date": "2026-08-25",
+      "scan_time": "2026-08-25 15:05:30",
+      "verdict": "weak",
+      "price": 33.68,
       "score": 30,
       "returns": null
     },
@@ -5765,6 +6837,26 @@
       "scan_time": "2026-08-21 14:50:37",
       "verdict": "weak",
       "price": 162.9,
+      "score": 30,
+      "returns": null
+    },
+    {
+      "code": "603259",
+      "name": "药明康德",
+      "date": "2026-08-24",
+      "scan_time": "2026-08-24 20:29:36",
+      "verdict": "weak",
+      "price": 155.84,
+      "score": 30,
+      "returns": null
+    },
+    {
+      "code": "603259",
+      "name": "药明康德",
+      "date": "2026-08-25",
+      "scan_time": "2026-08-25 15:05:30",
+      "verdict": "weak",
+      "price": 161.0,
       "score": 30,
       "returns": null
     },
@@ -5983,6 +7075,26 @@
       "returns": null
     },
     {
+      "code": "603667",
+      "name": "五洲新春",
+      "date": "2026-08-24",
+      "scan_time": "2026-08-24 20:29:36",
+      "verdict": "weak",
+      "price": 51.35,
+      "score": 0,
+      "returns": null
+    },
+    {
+      "code": "603667",
+      "name": "五洲新春",
+      "date": "2026-08-25",
+      "scan_time": "2026-08-25 15:05:30",
+      "verdict": "weak",
+      "price": 50.84,
+      "score": 0,
+      "returns": null
+    },
+    {
       "code": "688008",
       "name": "澜起科技",
       "date": "2026-08-10",
@@ -6167,6 +7279,36 @@
       "returns": null
     },
     {
+      "code": "688008",
+      "name": "澜起科技",
+      "date": "2026-08-24",
+      "scan_time": "2026-08-24 20:29:36",
+      "verdict": "weak",
+      "price": 191.83,
+      "score": 0,
+      "returns": null
+    },
+    {
+      "code": "688008",
+      "name": "澜起科技",
+      "date": "2026-08-25",
+      "scan_time": "2026-08-25 15:05:30",
+      "verdict": "weak",
+      "price": 194.42,
+      "score": 0,
+      "returns": null
+    },
+    {
+      "code": "688037",
+      "name": "芯源微",
+      "date": "2026-08-25",
+      "scan_time": "2026-08-25 15:05:30",
+      "verdict": "weak",
+      "price": 355.65,
+      "score": 30,
+      "returns": null
+    },
+    {
       "code": "688102",
       "name": "斯瑞新材",
       "date": "2026-08-11",
@@ -6309,6 +7451,26 @@
       "returns": null
     },
     {
+      "code": "688102",
+      "name": "斯瑞新材",
+      "date": "2026-08-24",
+      "scan_time": "2026-08-24 20:29:36",
+      "verdict": "weak",
+      "price": 31.92,
+      "score": 0,
+      "returns": null
+    },
+    {
+      "code": "688102",
+      "name": "斯瑞新材",
+      "date": "2026-08-25",
+      "scan_time": "2026-08-25 10:03:22",
+      "verdict": "weak",
+      "price": 32.18,
+      "score": 0,
+      "returns": null
+    },
+    {
       "code": "688143",
       "name": "长盈通",
       "date": "2026-08-12",
@@ -6407,6 +7569,58 @@
       "price": 157.05,
       "score": 30,
       "returns": null
+    },
+    {
+      "code": "688143",
+      "name": "长盈通",
+      "date": "2026-08-24",
+      "scan_time": "2026-08-24 20:29:36",
+      "verdict": "weak",
+      "price": 150.22,
+      "score": 30,
+      "returns": null
+    },
+    {
+      "code": "688143",
+      "name": "长盈通",
+      "date": "2026-08-25",
+      "scan_time": "2026-08-25 15:05:30",
+      "verdict": "watch_signal",
+      "price": 168.8,
+      "score": 60,
+      "kline_source": "cache+tencent",
+      "returns": {
+        "1": {
+          "date": null,
+          "close": null,
+          "ret": null,
+          "status": "unavailable",
+          "reason": "目标交易日数据未到期或获取失败",
+          "max_drawdown": null,
+          "benchmark_ret": null,
+          "beat_benchmark": null
+        },
+        "3": {
+          "date": null,
+          "close": null,
+          "ret": null,
+          "status": "unavailable",
+          "reason": "目标交易日数据未到期或获取失败",
+          "max_drawdown": null,
+          "benchmark_ret": null,
+          "beat_benchmark": null
+        },
+        "5": {
+          "date": null,
+          "close": null,
+          "ret": null,
+          "status": "unavailable",
+          "reason": "目标交易日数据未到期或获取失败",
+          "max_drawdown": null,
+          "benchmark_ret": null,
+          "beat_benchmark": null
+        }
+      }
     }
   ]
 }

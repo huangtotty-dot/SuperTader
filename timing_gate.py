@@ -91,21 +91,29 @@ def _fetch_index_daily():
     for _k in ["http_proxy", "https_proxy", "HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "all_proxy"]:
         os.environ.pop(_k, None)
     os.environ["NO_PROXY"] = "*"
-    url = "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param=sh000001,day,,,800,qfq"
-    try:
-        req = _ur.Request(url, headers={"User-Agent": "Mozilla/5.0", "Referer": "https://finance.qq.com/"})
-        raw = _ur.urlopen(req, timeout=10).read().decode("utf-8", errors="ignore")
-        data = json.loads(raw)
-        kline = data.get("data", {}).get("sh000001", {}).get("day") or \
-                data.get("data", {}).get("sh000001", {}).get("qfqday") or []
-        rows = [{"date": i[0], "close": float(i[2])} for i in kline if len(i) >= 3]
-        if not rows:
-            raise ValueError("上证指数日线为空")
-    except Exception:
+    # 2026-08-25: 腾讯 WAF 间歇性 501 拦截不同主机（ifzq / web.ifzq 轮换），多主机兜底
+    rows = []
+    _last_exc = None
+    for _host in ("ifzq.gtimg.cn", "web.ifzq.gtimg.cn"):
+        try:
+            url = f"https://{_host}/appstock/app/fqkline/get?param=sh000001,day,,,800,qfq"
+            req = _ur.Request(url, headers={"User-Agent": "Mozilla/5.0", "Referer": "https://finance.qq.com/"})
+            raw = _ur.urlopen(req, timeout=10).read().decode("utf-8", errors="ignore")
+            data = json.loads(raw)
+            kline = data.get("data", {}).get("sh000001", {}).get("day") or \
+                    data.get("data", {}).get("sh000001", {}).get("qfqday") or []
+            rows = [{"date": i[0], "close": float(i[2])} for i in kline if len(i) >= 3]
+            if not rows:
+                raise ValueError("上证指数日线为空")
+            break
+        except Exception as e:
+            _last_exc = e
+            continue
+    if not rows:
         if cached_rows:  # B-1: 重拉失败回退旧缓存，标记 stale
             _STALE["index_cache_stale"] = True
             return pd.DataFrame(cached_rows)
-        raise
+        raise (_last_exc if _last_exc is not None else ValueError("上证指数日线为空"))
     INDEX_CACHE.parent.mkdir(parents=True, exist_ok=True)
     INDEX_CACHE.write_text(json.dumps({"rows": rows}, ensure_ascii=False), encoding="utf-8")
     return pd.DataFrame(rows)

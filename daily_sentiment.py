@@ -397,28 +397,32 @@ def stock_daily_features(code: str, date_str: Optional[str] = None) -> Dict[str,
     end_dt = datetime.strptime(end, "%Y-%m-%d")
     start = (end_dt - timedelta(days=60)).strftime("%Y-%m-%d")
 
-    # 1) 腾讯源（最多重试 1 次）
+    # 1) 腾讯源（最多重试 1 次；WAF 间歇性 501 拦截不同主机，多主机兜底）
     symbol = ("sh" if digits.startswith(("5", "6", "9")) else "sz") + digits
     for attempt in range(2):
-        try:
-            url = (f"https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?"
-                   f"param={symbol},day,{start},{end},40,qfq")
-            req = urllib.request.Request(url, headers={
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-                "Referer": "https://finance.qq.com/",
-            })
-            with urllib.request.urlopen(req, timeout=10) as resp:
-                js = json.loads(resp.read().decode("utf-8", errors="ignore"))
-            node = (js.get("data") or {}).get(symbol) or {}
-            rows = node.get("qfqday") or node.get("day") or [] if isinstance(node, dict) else []
-            bars = _parse_bars(rows)
-            if len(bars) >= 7:
-                break
-            bars = []
-        except Exception as e:
-            _log.debug(f"[stock_feat] 腾讯 {code} {'重试' if attempt==0 else '放弃'}: {str(e)[:60]}")
-            if attempt == 0:
-                _time_mod.sleep(0.3)
+        for _host in ("ifzq.gtimg.cn", "web.ifzq.gtimg.cn"):
+            try:
+                url = (f"https://{_host}/appstock/app/fqkline/get?"
+                       f"param={symbol},day,{start},{end},40,qfq")
+                req = urllib.request.Request(url, headers={
+                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+                    "Referer": "https://finance.qq.com/",
+                })
+                with urllib.request.urlopen(req, timeout=10) as resp:
+                    js = json.loads(resp.read().decode("utf-8", errors="ignore"))
+                node = (js.get("data") or {}).get(symbol) or {}
+                rows = node.get("qfqday") or node.get("day") or [] if isinstance(node, dict) else []
+                bars = _parse_bars(rows)
+                if len(bars) >= 7:
+                    break
+                bars = []
+            except Exception as e:
+                _log.debug(f"[stock_feat] 腾讯 {code} {_host}: {str(e)[:60]}")
+                bars = []
+        if len(bars) >= 7:
+            break
+        if attempt == 0:
+            _time_mod.sleep(0.3)
 
     # 2) 腾讯失败 → akshare 兜底
     if len(bars) < 7:
@@ -831,16 +835,28 @@ def fetch_index_pct_change(date_str: Optional[str] = None, symbol: str = "sh0000
         end = date_str or _now_fn().strftime("%Y-%m-%d")
         end_dt = datetime.strptime(end, "%Y-%m-%d")
         start = (end_dt - timedelta(days=20)).strftime("%Y-%m-%d")
-        url = (f"https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?"
-               f"param={symbol},day,{start},{end},10,qfq")
-        req = urllib.request.Request(url, headers={
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-            "Referer": "https://finance.qq.com/",
-        })
-        with urllib.request.urlopen(req, timeout=10) as resp:
-            js = json.loads(resp.read().decode("utf-8", errors="ignore"))
-        node = js["data"][symbol]
-        rows = node.get("qfqday") or node.get("day") or []
+        # 2026-08-25: 腾讯 WAF 间歇性 501 拦截不同主机，多主机兜底
+        js = None
+        for _host in ("ifzq.gtimg.cn", "web.ifzq.gtimg.cn"):
+            try:
+                url = (f"https://{_host}/appstock/app/fqkline/get?"
+                       f"param={symbol},day,{start},{end},10,qfq")
+                req = urllib.request.Request(url, headers={
+                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+                    "Referer": "https://finance.qq.com/",
+                })
+                with urllib.request.urlopen(req, timeout=10) as resp:
+                    js = json.loads(resp.read().decode("utf-8", errors="ignore"))
+                node = js["data"][symbol]
+                rows = node.get("qfqday") or node.get("day") or []
+                if rows:
+                    break
+                js = None
+            except Exception:
+                js = None
+                continue
+        if js is None:
+            return None
         bars = [(str(r[0])[:10], float(r[2])) for r in rows
                 if isinstance(r, (list, tuple)) and len(r) >= 3]
         if len(bars) < 2:

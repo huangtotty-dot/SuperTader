@@ -41,14 +41,22 @@ def _fetch_daily_bar_tencent(api_code: str, count: int = 400) -> pd.DataFrame:
     ETF 日线主用此链路（工程内已验证 588170 有完整数据）；个股 akshare 失败时也作兜底。"""
     market = "sh" if api_code.startswith(("5", "6", "9")) else "sz"
     symbol = f"{market}{api_code}"
-    url = f"https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param={symbol},day,,,{count},qfq"
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
         "Referer": "https://finance.qq.com/",
     }
-    req = urllib.request.Request(url, headers=headers)
-    with urllib.request.urlopen(req, timeout=10) as response:
-        data = json.loads(response.read().decode("utf-8", errors="ignore"))
+    # 2026-08-25: 腾讯 WAF 间歇性 501 拦截不同主机（ifzq / web.ifzq 轮换），多主机兜底
+    data = {}
+    for _host in ("ifzq.gtimg.cn", "web.ifzq.gtimg.cn"):
+        try:
+            url = f"https://{_host}/appstock/app/fqkline/get?param={symbol},day,,,{count},qfq"
+            req = urllib.request.Request(url, headers=headers)
+            with urllib.request.urlopen(req, timeout=10) as response:
+                data = json.loads(response.read().decode("utf-8", errors="ignore"))
+            if data.get("data", {}).get(symbol):
+                break
+        except Exception:
+            continue
     node = data.get("data", {}).get(symbol, {}) or {}
     kline = node.get("qfqday") or node.get("day") or []
     rows = []
