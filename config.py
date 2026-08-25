@@ -133,6 +133,29 @@ def send_feishu_payload(payload: dict, success_log: str, error_prefix: str, trig
     return False
 
 
+def _preopen_adv_counts(preopen) -> Dict[str, int]:
+    """从 PreOpenContext 提取涨跌家数统计（启动自检用）
+
+    Args:
+        preopen: PreOpenContext 对象
+
+    Returns:
+        {"up": 上涨家数, "down": 下跌家数, "flat": 平开家数}
+    """
+    if preopen is None or not isinstance(preopen.breadth, dict):
+        return {"up": 0, "down": 0, "flat": 0}
+
+    adv = preopen.breadth.get("advance_decline", {})
+    if not isinstance(adv, dict):
+        return {"up": 0, "down": 0, "flat": 0}
+
+    return {
+        "up": int(adv.get("up", 0) or 0),
+        "down": int(adv.get("down", 0) or 0),
+        "flat": int(adv.get("flat", 0) or 0)
+    }
+
+
 def send_startup_self_test():
     if not FEISHU_WEBHOOK:
         log.warning("⚠️  启动自检跳过：飞书 Webhook 未配置")

@@ -2975,7 +2975,8 @@ def run_watch():
 
     log.info("========= 做T终极护城河防御版 (V1.26 正T/反T模式切换版) 启动 =========")
     if PREOPEN_CONTEXT is not None:
-        log.info(_format_preopen_brief(PREOPEN_CONTEXT))
+        # 早盘竞价分析已转移到 UI 面板（auction_analyzer 在 9:24:45 生成诊断报告）
+        log.info(f"📊 早盘竞价分析完成（评分 {PREOPEN_CONTEXT.market_score:.0f} 分，{PREOPEN_CONTEXT.market_bias}）")
     log.info(f"飞书推送: {'✓ 已启用' if FEISHU_WEBHOOK else '✗ 未配置'}")
     log.info(f"飞书关键词: {FEISHU_KEYWORD}")
     if FEISHU_WEBHOOK:
