@@ -48,8 +48,8 @@ if str(BASE) not in sys.path:
     sys.path.insert(0, str(BASE))
 
 import index_resonance as ir
-from indicators import resample_to_5min, add_5min_indicators
-from index_regime_intraday import _iri_tushare_pro
+from analysis.indicators import resample_to_5min, add_5min_indicators
+from analysis.index_regime_intraday import _iri_tushare_pro
 
 HOLDINGS_FILE = BASE / "holdings.json"
 WATCHLIST_FILE = BASE / "watchlist_buy.json"

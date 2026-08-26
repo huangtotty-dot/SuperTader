@@ -38,7 +38,7 @@ BASE = Path(__file__).resolve().parent
 if str(BASE) not in sys.path:
     sys.path.insert(0, str(BASE))
 
-from position_builder import fetch_daily_kline  # noqa: E402
+from core.position_builder import fetch_daily_kline  # noqa: E402
 
 try:
     from config import ENTRY_TIMING_PARAMS as _ETP

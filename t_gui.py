@@ -782,7 +782,7 @@ class Api:
             if bars and len(bars) >= 30:
                 try:
                     import pandas as _pd
-                    from position_builder import resample_to_5min, add_5min_indicators
+                    from core.position_builder import resample_to_5min, add_5min_indicators
                     _df = _pd.DataFrame(bars)
                     if "time" in _df.columns:
                         _df["time"] = _pd.to_datetime(_df["time"], errors="coerce")
@@ -856,7 +856,7 @@ class Api:
         """补算 daily_ctx 的日线 MACD/趋势字段（旧快照缺失时）。就地更新 daily_ctx。"""
         try:
             import pandas as pd
-            from position_builder import fetch_daily_kline
+            from core.position_builder import fetch_daily_kline
             df = fetch_daily_kline(str(code).split("_")[0])
             if df.empty or len(df) < 30:
                 return
@@ -1358,7 +1358,7 @@ class Api:
         rows = []
         if not is_index and not is_em:
             try:
-                from position_builder import fetch_daily_kline
+                from core.position_builder import fetch_daily_kline
                 _df = fetch_daily_kline(code_str)
                 if not _df.empty:
                     for _r in _df.itertuples(index=False):
@@ -1972,7 +1972,7 @@ class Api:
         result = {}
         try:
             import pandas as _pd
-            from position_builder import _DAILY_CACHE_DIR
+            from core.position_builder import _DAILY_CACHE_DIR
             from config import ENTRY_TIMING_PARAMS as _ETP
             # 指数 regime（读指数日线缓存，零网络）
             regime_by_date = {}
@@ -2354,7 +2354,7 @@ class Api:
     def load_channel_batch(self, codes):
         """批量拉日线算通道方向（分批并发，支持全部成分股）。返回 {code: trend}。"""
         import threading
-        from position_builder import fetch_daily_kline
+        from core.position_builder import fetch_daily_kline
         codes = [str(c) for c in (codes or []) if c]
         result = {}
         lock = threading.Lock()
@@ -2390,7 +2390,7 @@ class Api:
         """单只股票技术标签。返回 {trend, box_pos, tags:[{label,color}]}。"""
         import numpy as np
         import pandas as pd
-        from position_builder import fetch_daily_kline
+        from core.position_builder import fetch_daily_kline
         df = fetch_daily_kline(code)
         if df.empty or len(df) < 30:
             return {"trend": "flat", "tags": []}
@@ -3626,7 +3626,7 @@ class Api:
         重跑用 eod 档、不推送飞书（避免重复打扰）；run_position_scan 会更新 watchlist_buy。"""
         # 1) 重跑建仓扫描（eod 档）
         try:
-            from position_builder import run_position_scan
+            from core.position_builder import run_position_scan
             run_position_scan(date_str=date, scan_type="eod", silent=True, no_feishu=True)
         except Exception:
             pass  # 扫描失败不阻断，add_watch 仍返回

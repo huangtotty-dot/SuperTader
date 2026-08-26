@@ -27,7 +27,7 @@ import pandas as pd
 BASE = Path(r"E:\06_T")
 sys.path.insert(0, str(BASE))
 
-from position_builder import eval_dual_channels, fetch_daily_kline, _box_raw_pct  # noqa: E402 单一真源
+from core.position_builder import eval_dual_channels, fetch_daily_kline, _box_raw_pct  # noqa: E402 单一真源
 
 COST_RT = 0.002  # 双向成本（建仓+卖出）
 TRAIN_N, VALID_N = 80, 40

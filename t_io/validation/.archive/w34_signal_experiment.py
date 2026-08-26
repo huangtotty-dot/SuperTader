@@ -41,8 +41,8 @@ BASE = Path(__file__).resolve().parents[2]
 if str(BASE) not in sys.path:
     sys.path.insert(0, str(BASE))
 
-from indicators import resample_to_5min, add_5min_indicators, resample_to_15min, add_15min_indicators  # noqa: E402
-from index_regime_intraday import _iri_tushare_pro  # noqa: E402
+from analysis.indicators import resample_to_5min, add_5min_indicators, resample_to_15min, add_15min_indicators  # noqa: E402
+from analysis.index_regime_intraday import _iri_tushare_pro  # noqa: E402
 from index_resonance import resolve_index  # noqa: E402
 from w34_resonance_backtest_year import (  # noqa: E402
     _day_df, _stock_code_to_ts, _trading_days, WATCHLIST_FILE, HOLDINGS_FILE,

@@ -35,7 +35,7 @@ BASE = Path(__file__).resolve().parent
 if str(BASE) not in sys.path:
     sys.path.insert(0, str(BASE))
 
-from indicators import resample_to_5min, add_5min_indicators  # noqa: E402
+from analysis.indicators import resample_to_5min, add_5min_indicators  # noqa: E402
 
 try:
     from config import INDEX_RESONANCE_PARAMS as _IRP, INDEX_RESONANCE_MAP as _IRM

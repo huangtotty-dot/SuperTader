@@ -26,12 +26,12 @@
       "top20_down": 1,
       "holdings_bullish": 0,
       "holdings_bearish": 0,
-      "source_ts": "2026-08-26 12:11:38"
+      "source_ts": "2026-08-26 12:28:25"
     }
   },
   "session_note": "竞价额Top20中涨19家/跌1家",
   "auction_result": {},
-  "generated_at": "2026-08-26 12:11:38",
+  "generated_at": "2026-08-26 12:28:25",
   "source": "spot",
   "market_snapshot": {
     "source": "spot",
@@ -219,7 +219,7 @@
     "top20_down": 1,
     "holdings_bullish": 0,
     "holdings_bearish": 0,
-    "source_ts": "2026-08-26 12:11:38"
+    "source_ts": "2026-08-26 12:28:25"
   },
   "top20_volume_analysis": {
     "total_up": 19,

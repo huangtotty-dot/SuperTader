@@ -25,7 +25,7 @@ import pandas as pd
 BASE = Path(r"E:\06_T")
 sys.path.insert(0, str(BASE))
 
-from position_builder import eval_dual_channels, fetch_daily_kline, load_snapshot_df, _box_raw_pct  # noqa: E402
+from core.position_builder import eval_dual_channels, fetch_daily_kline, load_snapshot_df, _box_raw_pct  # noqa: E402
 
 REPORT_FP = BASE / "t_io" / "validation" / "w33_offline_rescan_report.md"
 

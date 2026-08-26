@@ -15,7 +15,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
-from position_sizer import PositionSizer  # noqa: E402
+from core.position_sizer import PositionSizer  # noqa: E402
 
 
 def mk(t_qty, typ="stock"):

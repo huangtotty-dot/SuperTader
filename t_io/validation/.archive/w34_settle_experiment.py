@@ -33,8 +33,8 @@ BASE = Path(__file__).resolve().parents[2]
 if str(BASE) not in sys.path:
     sys.path.insert(0, str(BASE))
 
-from indicators import resample_to_5min, add_5min_indicators  # noqa: E402
-from index_regime_intraday import _iri_tushare_pro  # noqa: E402
+from analysis.indicators import resample_to_5min, add_5min_indicators  # noqa: E402
+from analysis.index_regime_intraday import _iri_tushare_pro  # noqa: E402
 from w34_resonance_backtest_year import _day_df, _stock_code_to_ts, _trading_days, WATCHLIST_FILE, HOLDINGS_FILE  # noqa: E402
 
 COST_RATE = 0.0015  # 单次交易成本近似（佣金+印花税）
