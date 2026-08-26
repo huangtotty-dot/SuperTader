@@ -116,10 +116,9 @@ class DataLoader:
         if config is None:
             config = self._load_config()
         self.config = config
-        self.base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        self.base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # = stock_hunter/
         self.data_dir = data_dir or config.get("base_dir", ".") + "/" + config.get("data_dir", "data")
-        project_root = os.path.dirname(self.base_dir)
-        self._watchlist_path = os.path.join(project_root, "watchlist_jiuyan.json")
+        self._watchlist_path = os.path.join(self.base_dir, "watchlist_jiuyan.json")
         self._watchlist_df: Optional[pd.DataFrame] = None
 
     @staticmethod

@@ -170,7 +170,7 @@ def _holdings() -> Dict[str, dict]:
     h = globals().get("HOLDINGS")
     if isinstance(h, dict) and h:
         return h
-    path = os.path.join(_BASE_DIR, "holdings.json")
+    path = os.path.join(_BASE_DIR, "t_io", "state", "holdings.json")
     try:
         if os.path.exists(path):
             with open(path, "r", encoding="utf-8") as f:

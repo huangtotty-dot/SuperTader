@@ -27,7 +27,7 @@ if str(BASE) not in sys.path:
     sys.path.insert(0, str(BASE))
 
 OUT_DIR = BASE / "t_io" / "validation" / "w35_divergence"
-WATCHLIST_FILE = BASE / "watchlist_buy.json"
+WATCHLIST_FILE = BASE / "t_io" / "state" / "watchlist_buy.json"
 
 K_DAYS = 5        # 驻顶确认窗口（交易日）
 R_PCT = 0.05      # 回落阈值

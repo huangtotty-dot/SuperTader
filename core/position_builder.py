@@ -56,7 +56,7 @@ except Exception:
     send_feishu_payload = None
     FEISHU_KEYWORD = "建仓信号"
 
-WATCHLIST_FILE = BASE / "watchlist_buy.json"
+WATCHLIST_FILE = BASE / "t_io" / "state" / "watchlist_buy.json"
 SNAPSHOT_DIR = BASE / "t_io" / "minute_snapshots"
 TRACE_DIR = BASE / "t_io" / "traces"
 TRACE_DIR.mkdir(parents=True, exist_ok=True)
@@ -799,7 +799,7 @@ def compute_score(conditions: dict) -> int:
     return sum(20 for passed, *_ in conditions.values() if passed)
 
 
-HOLDINGS_FILE = BASE / "holdings.json"
+HOLDINGS_FILE = STATE_DIR / "holdings.json"
 _HOLDINGS_CACHE = {"mtime": None, "codes": set()}
 
 

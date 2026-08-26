@@ -34,7 +34,7 @@ if str(BASE) not in sys.path:
 import divergence  # noqa: E402
 
 OUT_DIR = BASE / "t_io" / "validation" / "w35_divergence"
-WATCHLIST_FILE = BASE / "watchlist_buy.json"
+WATCHLIST_FILE = BASE / "t_io" / "state" / "watchlist_buy.json"
 
 K_DAYS = 3          # 驻顶/驻底确认窗口（交易日）
 R_PCT = 0.03        # 回落/反弹阈值

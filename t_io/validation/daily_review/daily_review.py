@@ -87,7 +87,7 @@ try:
 except Exception:
     pass
 try:
-    _hold = json.load(open(BASE / "holdings.json", encoding="utf-8"))
+    _hold = json.load(open(BASE / "t_io" / "state" / "holdings.json", encoding="utf-8"))
     for _c in CODES:
         if _c not in _prev_close_map and fnum((_hold.get(_c) or {}).get("pre_close")):
             _prev_close_map[_c] = float(_hold[_c]["pre_close"])
@@ -238,7 +238,7 @@ watch = {
 # ---------- 7. KPI 日快照（喂周复盘 §1.5 周 KPI 表 K1-K5） ----------
 STATE_DIR = BASE / "t_io/state"
 STATE_DIR.mkdir(parents=True, exist_ok=True)
-HOLDINGS_FP = BASE / "holdings.json"
+HOLDINGS_FP = STATE_DIR / "holdings.json"
 
 def archive_holdings_snapshot(date):
     """幂等归档: 当前 holdings.json → t_io/state/holdings_DATE.json（已存在则跳过）。

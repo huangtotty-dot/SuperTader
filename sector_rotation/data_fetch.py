@@ -32,7 +32,7 @@ BASE = Path(__file__).resolve().parents[1]
 ROT_DIR = BASE / "t_io" / "rotation"
 DAILY_CACHE = ROT_DIR / "daily_cache"
 INDUSTRY_MAP = ROT_DIR / "industry_map.csv"
-JIUYAN_WATCHLIST = BASE / "watchlist_jiuyan.json"
+JIUYAN_WATCHLIST = BASE / "stock_hunter" / "watchlist_jiuyan.json"
 LEGACY_DB = Path(r"E:\sector-rotation-v2\sample_data.db")
 
 BOOTSTRAP_CALENDAR_DAYS = 75      # 拉取历史日历天数（约 50 个交易日，足够 20 日 RS + 10 日成交额基准）

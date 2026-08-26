@@ -21,7 +21,7 @@ from pathlib import Path
 
 BASE = Path(__file__).resolve().parents[2]  # C17-1 修复(2026-08-18): 自解析到项目根（t_io/preopen/ → 根），替代旧目录硬编码 E:\06_T
 PREOPEN_DIR = BASE / "t_io" / "preopen"
-HOLDINGS_FP = BASE / "holdings.json"
+HOLDINGS_FP = BASE / "t_io" / "state" / "holdings.json"
 
 os.environ["NO_PROXY"] = "*"
 os.environ["no_proxy"] = "*"

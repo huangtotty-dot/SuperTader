@@ -33,7 +33,7 @@ if sys.platform == "win32":
 BASE = Path(__file__).resolve().parents[1]  # 项目根（本模块位于 execution/ 下）
 PREOPEN_DIR = BASE / "t_io" / "preopen"
 STATE_DIR = BASE / "t_io" / "state"
-HOLDINGS_FP = BASE / "holdings.json"
+HOLDINGS_FP = STATE_DIR / "holdings.json"
 
 if str(BASE) not in sys.path:
     sys.path.insert(0, str(BASE))
