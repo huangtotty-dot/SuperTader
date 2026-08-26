@@ -46,7 +46,7 @@ import urllib.error
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 T_IO_DIR = os.path.join(BASE_DIR, "t_io")
 STATE_DIR = os.path.join(T_IO_DIR, "state")
-HOLDINGS_FILE = os.path.join(BASE_DIR, "holdings.json")
+HOLDINGS_FILE = os.path.join(STATE_DIR, "holdings.json")
 T_MODE_FILE = os.path.join(STATE_DIR, "t_mode.json")
 LEARNING_FILE = os.path.join(T_IO_DIR, "t_trader_learning.json")
 LOG_DIR = os.path.join(T_IO_DIR, "logs")

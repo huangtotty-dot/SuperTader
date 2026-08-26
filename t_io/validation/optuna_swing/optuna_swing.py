@@ -28,7 +28,7 @@ if str(BASE) not in sys.path:
 from harness_backtest import load_snapshots, load_shared
 
 OUT_DIR = BASE / "t_io" / "validation" / "optuna_swing" / "out"
-HOLDINGS_FILE = BASE / "holdings.json"
+HOLDINGS_FILE = BASE / "t_io" / "state" / "holdings.json"
 CODES = ["588170", "600176", "600481", "000988", "002639"]   # 5 核心持仓
 DATE_START = "2023-08-01"     # 3 年窗口（回补数据起点; 002639 亦从该月起有数据）
 DATE_END = "2026-08-24"

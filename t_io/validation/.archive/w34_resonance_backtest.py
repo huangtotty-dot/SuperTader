@@ -40,7 +40,7 @@ import index_resonance as ir
 from indicators import resample_to_5min, add_5min_indicators
 from index_regime_intraday import _iri_tushare_pro
 
-HOLDINGS_FILE = BASE / "holdings.json"
+HOLDINGS_FILE = BASE / "t_io" / "state" / "holdings.json"
 CACHE_DIR = BASE / "t_io" / "cache" / "tushare_mins"
 
 # 做T成功率结算参数（对齐 daily_review.settle：+0.5%/-0.4%/30tick）

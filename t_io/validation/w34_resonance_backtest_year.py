@@ -51,8 +51,8 @@ import index_resonance as ir
 from indicators import resample_to_5min, add_5min_indicators
 from index_regime_intraday import _iri_tushare_pro
 
-HOLDINGS_FILE = BASE / "holdings.json"
-WATCHLIST_FILE = BASE / "watchlist_buy.json"
+HOLDINGS_FILE = BASE / "t_io" / "state" / "holdings.json"
+WATCHLIST_FILE = BASE / "t_io" / "state" / "watchlist_buy.json"
 CACHE_DIR = BASE / "t_io" / "cache" / "tushare_mins"
 FETCH_DELAY = 0.4
 

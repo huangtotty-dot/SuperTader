@@ -388,7 +388,7 @@ class UniversalPreciseEntry:
 
 def batch_check_all_candidates(date_str: str = None) -> list:
     """对watchlist中所有候选股进行检测"""
-    watchlist_file = BASE / "watchlist_buy.json"
+    watchlist_file = BASE / "t_io" / "state" / "watchlist_buy.json"
 
     if not watchlist_file.exists():
         return []

@@ -33,7 +33,7 @@ BASE = Path(__file__).resolve().parent  # 自解析：生产机 E:\06_T 与本�
 OUT = BASE / "t_io" / "validation" / "daily_review"
 TRACES = BASE / "t_io" / "traces"
 STATE_DIR = BASE / "t_io" / "state"
-HOLDINGS = BASE / "holdings.json"
+HOLDINGS = STATE_DIR / "holdings.json"
 T_MODE = STATE_DIR / "t_mode.json"
 IDX_REGIME = BASE / "t_io" / "index_regime"
 LOGS_DIR = BASE / "t_io" / "logs"
@@ -438,7 +438,7 @@ class Api:
         """拉腾讯实时行情（持仓 + watchlist 候选股），失败回退 pre_close。"""
         cur = dict(_load_json(HOLDINGS, {}))
         # 合并 watchlist_buy 候选股（非持仓的也拉，供建仓表实时价）
-        wl = _load_json(BASE / "watchlist_buy.json", {})
+        wl = _load_json(STATE_DIR / "watchlist_buy.json", {})
         for code, info in (wl.get("stocks", {}) or {}).items():
             if code not in cur and isinstance(info, dict):
                 cur[code] = {"name": info.get("name", code), "qty": 0, "cost": None,
@@ -1456,7 +1456,7 @@ class Api:
             return out
         if out["name"] == code:
             try:
-                jy = _load_json(BASE / "watchlist_jiuyan.json", {})
+                jy = _load_json(HUNTER_DIR / "watchlist_jiuyan.json", {})
                 nm = (jy.get(code, {}) or {}).get("name", "") if isinstance(jy.get(code), dict) else ""
                 if nm:
                     out["name"] = nm
@@ -2541,7 +2541,7 @@ class Api:
 
     # ---------- 突破箱体股票聚合 ----------
     def _breakout_pool_codes(self):
-        jy = _load_json(BASE / "watchlist_jiuyan.json", {})
+        jy = _load_json(HUNTER_DIR / "watchlist_jiuyan.json", {})
         return [c for c, i in jy.items()
                 if isinstance(i, dict) and c.isdigit()
                 and _jiuyan_concepts(i).strip()]
@@ -2551,7 +2551,7 @@ class Api:
 
     def _scan_breakout(self, codes, state):
         """分批算技术标签筛"向上突破"。state 非空时更新进度（done/total/found/stocks）。"""
-        jy = _load_json(BASE / "watchlist_jiuyan.json", {})
+        jy = _load_json(HUNTER_DIR / "watchlist_jiuyan.json", {})
         breakouts = []
         for i in range(0, len(codes), 80):
             batch = codes[i:i + 80]
@@ -2706,7 +2706,7 @@ class Api:
             # 板块→成分股（从 watchlist_jiuyan.json 静态筛选，非实时价）
             sector_stocks = {}
             try:
-                jy = _load_json(BASE / "watchlist_jiuyan.json", {})
+                jy = _load_json(HUNTER_DIR / "watchlist_jiuyan.json", {})
                 for code, info in jy.items():
                     if not isinstance(info, dict):
                         continue
@@ -3324,7 +3324,7 @@ class Api:
         # 2. 名称模糊: 从 watchlist_jiuyan.json 匹配（{code: {name,...}} 或 list）
         if not results:
             try:
-                jy = _load_json(BASE / "watchlist_jiuyan.json", {})
+                jy = _load_json(HUNTER_DIR / "watchlist_jiuyan.json", {})
                 if isinstance(jy, dict):
                     for code, info in jy.items():
                         name = str(info.get("名称", "") if isinstance(info, dict) else "")
@@ -3346,7 +3346,7 @@ class Api:
 
     def add_to_watchlist(self, code, name):
         """将股票加入 watchlist_buy.json（status=monitoring）。"""
-        fp = BASE / "watchlist_buy.json"
+        fp = STATE_DIR / "watchlist_buy.json"
         wl = _load_json(fp, {"stocks": {}, "total_capital": 300000, "max_per_stock_pct": 0.2})
         stocks = wl.setdefault("stocks", {})
         if code in stocks:
@@ -3365,7 +3365,7 @@ class Api:
 
     def remove_from_watchlist(self, code):
         """从 watchlist_buy.json 删除股票。"""
-        fp = BASE / "watchlist_buy.json"
+        fp = STATE_DIR / "watchlist_buy.json"
         wl = _load_json(fp, {})
         stocks = wl.get("stocks", {})
         if code in stocks:
@@ -3384,7 +3384,7 @@ class Api:
     def confirm_position(self, code, price=None, qty=None):
         """人工确认建仓 → signal_history 追加 {confirmed, confirm_price, confirm_time, confirm_qty}，
         状态置 confirmed（不再重复出建仓建议）。forward_tracker 以 confirm_price 为基准算前瞻收益。"""
-        fp = BASE / "watchlist_buy.json"
+        fp = STATE_DIR / "watchlist_buy.json"
         wl = _load_json(fp, {})
         stocks = wl.get("stocks", {})
         if code not in stocks:
@@ -3654,7 +3654,7 @@ class Api:
 
     def _agg_position_builder(self, date, filter_high_confidence=False):
         fp = TRACES / f"position_builder_{date}.jsonl"
-        wl = _load_json(BASE / "watchlist_buy.json", {})
+        wl = _load_json(STATE_DIR / "watchlist_buy.json", {})
         wl_stocks = wl.get("stocks", {})
         holdings = _load_json(HOLDINGS, {})
         empty = {"has_data": True, "counts": {}, "by_code": {}, "rows": [],
