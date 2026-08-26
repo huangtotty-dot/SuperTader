@@ -24,7 +24,7 @@ from datetime import datetime, timedelta, time as dtime
 import numpy as np
 import pandas as pd
 
-BASE_DIR = Path(__file__).resolve().parent
+BASE_DIR = Path(__file__).resolve().parents[1]  # 项目根（本脚本位于 scripts/ 下）
 # 数据源可用环境变量 T_SNAPSHOT_DIR 切换（默认原腾讯快照目录；统一口径复测指向 minute_snapshots_ts）
 SNAPSHOT_DIR = Path(os.environ.get("T_SNAPSHOT_DIR", str(BASE_DIR / "t_io" / "minute_snapshots")))
 # v1.1.1: E2 日上下文注入 — 预热期分钟库(MA60 预热)目录，默认指向 e2_daily_gate/minute_snapshots_pre
@@ -105,9 +105,16 @@ def load_shared() -> dict:
         'np': np, 'pd': pd, 'requests': requests, 'urllib': urllib,
         'urllib.request': urllib.request, 'urllib.error': urllib.error,
     })
-    for mod_name in ['config', 'utils', 'data_fetcher', 'indicators',
-                      'signal_engine', 'position_sizer']:
-        mod_path = BASE_DIR / f"{mod_name}.py"
+    _MODULE_PATHS = {
+        'config': 'config.py',
+        'utils': 'core/utils.py',
+        'data_fetcher': 'src/data_fetcher.py',
+        'indicators': 'analysis/indicators.py',
+        'signal_engine': 'core/signal_engine.py',
+        'position_sizer': 'core/position_sizer.py',
+    }
+    for mod_name, rel in _MODULE_PATHS.items():
+        mod_path = BASE_DIR / rel
         with open(mod_path, 'r', encoding='utf-8') as f:
             code = f.read()
         exec(compile(code, str(mod_path), 'exec'), shared)

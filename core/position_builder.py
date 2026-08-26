@@ -37,8 +37,8 @@ import pandas as pd
 
 # ── 路径 ──
 # fix 2026-08-14: 原硬编码 E:\06_T 在非生产路径（如本仓库 checkout）下读不到 watchlist/holdings；
-# 改为自解析到模块所在目录，生产机仍解析到 E:\06_T，行为不变。
-BASE = Path(__file__).resolve().parent
+# 自解析到项目根（本模块位于 core/ 下，parents[1] = 项目根），生产机仍解析到 E:\06_T，行为不变。
+BASE = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(BASE))
 
 from analysis.indicators import (  # noqa: F401

@@ -75,7 +75,7 @@ if _IN_HOST:
     if _pd is None:
         import pandas as _pd  # noqa
 else:
-    _BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+    _BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # 项目根（本模块位于 execution/ 下）
     import logging as _logging
     import pandas as _pd  # noqa
 
@@ -93,6 +93,7 @@ else:
     # —— 独立模式：按文件路径加载 index_regime.py（只读，不改动）——
     def _load_index_regime_module():
         candidates = [
+            os.path.join(_BASE_DIR, "analysis", "index_regime.py"),
             os.path.join(_BASE_DIR, "index_regime.py"),
             os.path.join(os.path.dirname(os.path.abspath(__file__)), "index_regime.py"),
         ]
@@ -128,7 +129,8 @@ else:
     def _load_standalone_feishu() -> Tuple[str, str]:
         """独立模式推送时才读取 config.json 的 webhook/keyword（--no-push 不调用；C17-1 修复：自解析路径替代旧 06_T 硬编码）"""
         webhook, keyword = "", "做T猎手预警"
-        for cfg_path in (os.path.join(_BASE_DIR, "config.json"),
+        for cfg_path in (os.path.join(_BASE_DIR, "t_io", "state", "config.json"),
+                         os.path.join(_BASE_DIR, "config.json"),
                          os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.json")):
             try:
                 if os.path.exists(cfg_path):

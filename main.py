@@ -72,7 +72,7 @@ except Exception:
 # 格式: (模块名, 相对路径)
 module_order = [
     ('config', 'config.py'),
-    ('utils', 'utils.py'),
+    ('utils', 'core/utils.py'),
     ('data_fetcher', 'src/data_fetcher.py'),
     ('indicators', 'analysis/indicators.py'),
     ('signal_engine', 'core/signal_engine.py'),
@@ -2916,7 +2916,7 @@ def _launch_sentiment_backfill(date_str: str) -> None:
     （2026-08-24 事故：partition_address_space Check failed），故强制独立进程，
     V8/网络异常最多丢一个后台补算，不影响盯盘主循环。"""
     import subprocess
-    script = os.path.join(BASE_DIR, "daily_sentiment.py")
+    script = os.path.join(BASE_DIR, "execution", "daily_sentiment.py")
     log_dir = os.path.join(BASE_DIR, "t_io", "logs")
     os.makedirs(log_dir, exist_ok=True)
     out_fp = open(os.path.join(log_dir, f"sentiment_backfill_{date_str}.log"), "a", encoding="utf-8")

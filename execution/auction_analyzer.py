@@ -30,7 +30,7 @@ if sys.platform == "win32":
     except Exception:
         pass
 
-BASE = Path(__file__).resolve().parent
+BASE = Path(__file__).resolve().parents[1]  # 项目根（本模块位于 execution/ 下）
 PREOPEN_DIR = BASE / "t_io" / "preopen"
 STATE_DIR = BASE / "t_io" / "state"
 HOLDINGS_FP = BASE / "holdings.json"

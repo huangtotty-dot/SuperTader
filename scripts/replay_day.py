@@ -26,7 +26,7 @@ from datetime import datetime, timedelta, time as dtime
 import numpy as np
 import pandas as pd
 
-BASE_DIR = Path(__file__).resolve().parent
+BASE_DIR = Path(__file__).resolve().parents[1]  # 项目根（本脚本位于 scripts/ 下）
 REPLAY_DATE = "2026-07-08"  # v1.1.0 验收: 降级后兼容性回放日(原 2026-07-24 缓存缺失)
 CODES = ["588170", "600176", "600481", "603667", "000988"]
 
@@ -79,8 +79,17 @@ def load_shared() -> dict:
         'np': np, 'pd': pd, 'requests': requests, 'urllib': urllib,
         'urllib.request': urllib.request, 'urllib.error': urllib.error,
     })
-    for mod_name in ['config', 'utils', 'data_fetcher', 'indicators', 'signal_engine', 'auction_analyzer', 'position_sizer']:
-        mod_path = BASE_DIR / f"{mod_name}.py"
+    _MODULE_PATHS = {
+        'config': 'config.py',
+        'utils': 'core/utils.py',
+        'data_fetcher': 'src/data_fetcher.py',
+        'indicators': 'analysis/indicators.py',
+        'signal_engine': 'core/signal_engine.py',
+        'auction_analyzer': 'execution/auction_analyzer.py',
+        'position_sizer': 'core/position_sizer.py',
+    }
+    for mod_name, rel in _MODULE_PATHS.items():
+        mod_path = BASE_DIR / rel
         with open(mod_path, 'r', encoding='utf-8') as f:
             code = f.read()
         exec(compile(code, str(mod_path), 'exec'), shared)

@@ -19,7 +19,7 @@ from pathlib import Path
 
 import pandas as pd
 
-BASE = Path(__file__).resolve().parent
+BASE = Path(__file__).resolve().parents[1]  # 项目根（本模块位于 core/ 下）
 if str(BASE) not in sys.path:
     sys.path.insert(0, str(BASE))
 
