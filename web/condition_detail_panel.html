@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>建仓条件详情</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --bg: #f5f7fa;
+            --bg-card: #ffffff;
+            --border: #e0e4e8;
+            --text: #1f2937;
+            --text-dim: #6b7280;
+            --pass: #10b981;
+            --warn: #f59e0b;
+            --fail: #ef4444;
+            --info: #3b82f6;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            padding: 16px;
+        }
+
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+        }
+
+        /* 头部 */
+        .header {
+            background: var(--bg-card);
+            border-radius: 10px;
+            padding: 16px;
+            margin-bottom: 16px;
+            border: 1px solid var(--border);
+        }
+
+        .header-top {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 12px;
+        }
+
+        .stock-info {
+            flex: 1;
+        }
+
+        .stock-code {
+            font-size: 12px;
+            color: var(--text-dim);
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+
+        .stock-name {
+            font-size: 18px;
+            font-weight: 700;
+            margin-bottom: 4px;
+        }
+
+        .stock-verdict {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 600;
+            background: rgba(96, 165, 250, 0.1);
+            color: var(--info);
+        }
+
+        .score-badge {
+            text-align: right;
+        }
+
+        .score-value {
+            font-size: 28px;
+            font-weight: 700;
+            color: var(--info);
+        }
+
+        .score-label {
+            font-size: 11px;
+            color: var(--text-dim);
+        }
+
+        .header-meta {
+            font-size: 12px;
+            color: var(--text-dim);
+            padding-top: 12px;
+            border-top: 1px solid var(--border);
+        }
+
+        /* 条件组 */
+        .section {
+            background: var(--bg-card);
+            border-radius: 10px;
+            padding: 16px;
+            margin-bottom: 16px;
+            border: 1px solid var(--border);
+        }
+
+        .section-title {
+            font-size: 13px;
+            font-weight: 700;
+            color: var(--text);
+            margin-bottom: 14px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid var(--border);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .section-title::before {
+            content: '';
+            display: inline-block;
+            width: 4px;
+            height: 16px;
+            background: var(--info);
+            border-radius: 2px;
+        }
+
+        /* 条件行 */
+        .condition-item {
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+            padding: 12px;
+            background: var(--bg);
+            border-radius: 6px;
+            margin-bottom: 10px;
+        }
+
+        .condition-item:last-child {
+            margin-bottom: 0;
+        }
+
+        .condition-icon {
+            flex-shrink: 0;
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+            font-weight: 700;
+        }
+
+        .condition-icon.pass {
+            background: rgba(16, 185, 129, 0.1);
+            color: var(--pass);
+        }
+
+        .condition-icon.warn {
+            background: rgba(245, 158, 11, 0.1);
+            color: var(--warn);
+        }
+
+        .condition-icon.fail {
+            background: rgba(239, 68, 68, 0.1);
+            color: var(--fail);
+        }
+
+        .condition-content {
+            flex: 1;
+        }
+
+        .condition-name {
+            font-size: 13px;
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+
+        .condition-message {
+            font-size: 12px;
+            color: var(--text-dim);
+            line-height: 1.5;
+        }
+
+        .condition-detail {
+            font-size: 11px;
+            color: var(--text-dim);
+            margin-top: 6px;
+            padding: 8px;
+            background: rgba(0, 0, 0, 0.02);
+            border-radius: 4px;
+            border-left: 3px solid var(--border);
+        }
+
+        /* Blockers（卡点） */
+        .blocker-item {
+            display: flex;
+            gap: 12px;
+            padding: 12px;
+            background: rgba(239, 68, 68, 0.05);
+            border-left: 4px solid var(--fail);
+            border-radius: 6px;
+            margin-bottom: 10px;
+        }
+
+        .blocker-item:last-child {
+            margin-bottom: 0;
+        }
+
+        .blocker-icon {
+            flex-shrink: 0;
+            font-size: 18px;
+            line-height: 1;
+        }
+
+        .blocker-content {
+            flex: 1;
+        }
+
+        .blocker-label {
+            font-size: 13px;
+            font-weight: 700;
+            color: var(--fail);
+            margin-bottom: 4px;
+        }
+
+        .blocker-current {
+            font-size: 12px;
+            color: var(--text-dim);
+            margin-bottom: 4px;
+        }
+
+        .blocker-required {
+            font-size: 11px;
+            background: rgba(0, 0, 0, 0.02);
+            padding: 6px 8px;
+            border-radius: 4px;
+            border-left: 2px solid var(--warn);
+        }
+
+        /* 背离信息 */
+        .divergence-item {
+            display: inline-block;
+            padding: 6px 12px;
+            background: rgba(59, 130, 246, 0.1);
+            color: var(--info);
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 600;
+            margin-right: 8px;
+            margin-bottom: 8px;
+        }
+
+        .divergence-item.consecutive {
+            background: rgba(16, 185, 129, 0.1);
+            color: var(--pass);
+        }
+
+        /* 加载状态 */
+        .loading {
+            text-align: center;
+            padding: 40px 20px;
+            color: var(--text-dim);
+        }
+
+        .spinner {
+            display: inline-block;
+            width: 18px;
+            height: 18px;
+            border: 2px solid var(--border);
+            border-top-color: var(--info);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            margin-right: 8px;
+            vertical-align: -3px;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* 响应式 */
+        @media (max-width: 600px) {
+            body { padding: 12px; }
+            .header { padding: 12px; }
+            .section { padding: 12px; }
+            .stock-name { font-size: 16px; }
+            .score-value { font-size: 24px; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- 加载状态 -->
+        <div id="loading-state" style="display: none;">
+            <div class="loading">
+                <span class="spinner"></span>加载中...
+            </div>
+        </div>
+
+        <!-- 头部 -->
+        <div id="header-state" style="display: none;">
+            <div class="header">
+                <div class="header-top">
+                    <div class="stock-info">
+                        <div class="stock-code" id="stock-code"></div>
+                        <div class="stock-name" id="stock-name"></div>
+                        <div class="stock-verdict" id="stock-verdict"></div>
+                    </div>
+                    <div class="score-badge">
+                        <div class="score-value" id="score-value">—</div>
+                        <div class="score-label">综合得分</div>
+                    </div>
+                </div>
+                <div class="header-meta">
+                    <span>扫描时间: <span id="scan-time"></span></span>
+                </div>
+            </div>
+
+            <!-- 通道条件 -->
+            <div class="section" id="conditions-section" style="display: none;">
+                <div class="section-title">📊 通道条件</div>
+                <div id="conditions-list"></div>
+            </div>
+
+            <!-- 背离信息 -->
+            <div class="section" id="divergence-section" style="display: none;">
+                <div class="section-title">⚡ 背离信息</div>
+                <div id="divergence-list"></div>
+            </div>
+
+            <!-- 卡点分析 -->
+            <div class="section" id="blockers-section" style="display: none;">
+                <div class="section-title">🚫 建仓卡点</div>
+                <div id="blockers-list"></div>
+            </div>
+
+            <!-- 无数据 -->
+            <div id="no-data-state" style="display: none;">
+                <div class="section">
+                    <div style="text-align: center; padding: 20px; color: var(--text-dim);">
+                        <div style="font-size: 40px; margin-bottom: 8px;">📭</div>
+                        <div>未找到该股票的扫描数据</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        async function loadConditionDetail() {
+            const params = new URLSearchParams(window.location.search);
+            const code = params.get('code') || '002451';
+            const date = params.get('date');
+
+            document.getElementById('loading-state').style.display = 'block';
+
+            try {
+                // 通过 postMessage 请求数据
+                if (window.parent && window.parent !== window) {
+                    const detail = await requestDetailFromParent(code, date);
+                    renderDetail(detail);
+                } else if (window.pywebview && window.pywebview.api) {
+                    // 独立打开时直接调用
+                    const detail = await window.pywebview.api.get_signal_condition_detail(code, date);
+                    renderDetail(detail);
+                }
+            } catch (error) {
+                console.error('加载失败:', error);
+            }
+
+            document.getElementById('loading-state').style.display = 'none';
+            document.getElementById('header-state').style.display = 'block';
+        }
+
+        function requestDetailFromParent(code, date) {
+            return new Promise((resolve) => {
+                let done = false;
+                const finish = (data) => {
+                    if (done) return;
+                    done = true;
+                    window.removeEventListener('message', onMsg);
+                    clearTimeout(timer);
+                    resolve(data || {});
+                };
+
+                const onMsg = (e) => {
+                    if (e.data && e.data.type === 'condition-detail-response') {
+                        finish(e.data.detail || {});
+                    }
+                };
+
+                const timer = setTimeout(() => finish({}), 8000);
+                window.addEventListener('message', onMsg);
+                window.parent.postMessage({
+                    type: 'condition-detail-request',
+                    code: code,
+                    date: date
+                }, '*');
+            });
+        }
+
+        function renderDetail(detail) {
+            if (!detail.available) {
+                document.getElementById('no-data-state').style.display = 'block';
+                return;
+            }
+
+            // 头部信息
+            document.getElementById('stock-code').textContent = detail.code;
+            document.getElementById('stock-name').textContent = detail.name || detail.code;
+            document.getElementById('stock-verdict').textContent = {
+                'signal': '✅ 建仓信号',
+                'approaching': '⏳ 接近达标',
+                'watch_signal': '👀 观察信号',
+                'weak': '❌ 未达标'
+            }[detail.verdict] || detail.verdict;
+            document.getElementById('score-value').textContent = detail.composite_score || '—';
+            document.getElementById('scan-time').textContent = detail.scan_time || '—';
+
+            // 条件详情
+            if (detail.conditions_detail && detail.conditions_detail.length > 0) {
+                document.getElementById('conditions-section').style.display = 'block';
+                const html = detail.conditions_detail.map(c => `
+                    <div class="condition-item">
+                        <div class="condition-icon ${['pass', 'warn', 'fail'].includes(c.verdict) ? c.verdict : 'info'}">
+                            ${c.verdict === 'signal' ? '✓' : c.verdict === 'approaching' ? '◐' : c.verdict === 'weak' ? '✕' : '?'}
+                        </div>
+                        <div class="condition-content">
+                            <div class="condition-name">${c.name}</div>
+                            <div class="condition-message">${c.message}</div>
+                        </div>
+                    </div>
+                `).join('');
+                document.getElementById('conditions-list').innerHTML = html;
+            }
+
+            // 背离信息
+            if (detail.divergence && Object.keys(detail.divergence).length > 0) {
+                document.getElementById('divergence-section').style.display = 'block';
+                const html = Object.entries(detail.divergence).map(([key, val]) => {
+                    const tag = `${key}: ${val.type}${val.consec ? '✓连续' : ''}`;
+                    const cls = val.consec ? 'consecutive' : '';
+                    return `<span class="divergence-item ${cls}">${tag}</span>`;
+                }).join('');
+                document.getElementById('divergence-list').innerHTML = html;
+            }
+
+            // 卡点分析
+            if (detail.blockers && detail.blockers.length > 0) {
+                document.getElementById('blockers-section').style.display = 'block';
+                const html = detail.blockers.map(b => `
+                    <div class="blocker-item">
+                        <div class="blocker-icon">⚠️</div>
+                        <div class="blocker-content">
+                            <div class="blocker-label">${b.label}</div>
+                            <div class="blocker-current">当前: ${b.current}</div>
+                            <div class="blocker-required">需要: ${b.required}</div>
+                            <div style="margin-top: 6px; font-size: 11px; color: var(--text-dim);">
+                                差距: ${b.gap}
+                            </div>
+                        </div>
+                    </div>
+                `).join('');
+                document.getElementById('blockers-list').innerHTML = html;
+            }
+        }
+
+        // 页面加载时自动获取数据
+        loadConditionDetail();
+    </script>
+</body>
+</html>

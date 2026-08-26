@@ -22,6 +22,27 @@ window.addEventListener("message", (e) => {
     });
 });
 
+/* ================= 条件详情面板 iframe 桥 =================
+   条件详情面板通过 postMessage 请求本页面调用 get_signal_condition_detail() 并回传。 */
+window.addEventListener("message", (e) => {
+  if (!e.data || e.data.type !== "condition-detail-request") return;
+  const { code, date } = e.data;
+  Promise.resolve()
+    .then(() => (window.pywebview && window.pywebview.api)
+      ? window.pywebview.api.get_signal_condition_detail(code, date)
+      : null)
+    .then(detail => {
+      if (e.source && e.source.postMessage) {
+        e.source.postMessage({ type: "condition-detail-response", detail: detail || {} }, "*");
+      }
+    })
+    .catch(() => {
+      if (e.source && e.source.postMessage) {
+        e.source.postMessage({ type: "condition-detail-response", detail: {} }, "*");
+      }
+    });
+});
+
 /* ================= 工具 ================= */
 function esc(s) {
   return String(s == null ? "" : s).replace(/[&<>"']/g, c => ({
