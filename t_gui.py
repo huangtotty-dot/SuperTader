@@ -825,7 +825,7 @@ class Api:
             # 加仓时机判定（timing_gate: 多头追强/空头抄底/震荡降频）——仅供 GUI 展示加仓是否被时机门控
             _tm = {}
             try:
-                from timing_gate import timing_verdict as _timing_verdict
+                from core.timing_gate import timing_verdict as _timing_verdict
                 _g = _timing_verdict(str(code).split("_")[0], datetime.now().strftime("%Y-%m-%d"))
                 _tm = {"regime": _g["regime"], "go": _g["go"], "reason": _g["reason"]}
             except Exception:
@@ -1104,7 +1104,7 @@ class Api:
         }
         """
         try:
-            from universal_precise_entry import batch_check_all_candidates
+            from strategies.universal_precise_entry import batch_check_all_candidates
             from datetime import datetime as dt
 
             date_str = date or dt.now().strftime("%Y-%m-%d")
@@ -2895,7 +2895,7 @@ class Api:
     # ---------- 每日大盘复盘（LLM，2026-08-23 新增） ----------
     def _review_bootstrap_work(self, date, cfg):
         try:
-            from market_review import run_market_review_stream
+            from core.market_review import run_market_review_stream
             _REVIEW_RUN_STATE["output"] = ""
             def _on_text(t):
                 _REVIEW_RUN_STATE["output"] = (_REVIEW_RUN_STATE.get("output") or "") + t
@@ -2906,17 +2906,17 @@ class Api:
             _REVIEW_RUN_STATE["running"] = False
 
     def get_llm_config(self):
-        from market_review import load_llm_config
+        from core.market_review import load_llm_config
         return load_llm_config()
 
     def save_llm_config(self, base_url, model, api_key, reasoning_effort=""):
-        from market_review import save_llm_config as _s
+        from core.market_review import save_llm_config as _s
         return _s(base_url, model, api_key, reasoning_effort)
 
     def run_daily_review(self, date, base_url, model, api_key, reasoning_effort=""):
         """大盘复盘（后台线程）。模型配置保存后即触发。返回 {status: running/error}。"""
         try:
-            from market_review import save_llm_config
+            from core.market_review import save_llm_config
         except Exception as e:
             return {"status": "error", "message": f"market_review 加载失败: {e}"}
         cfg = save_llm_config(base_url, model, api_key, reasoning_effort)

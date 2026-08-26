@@ -52,14 +52,14 @@ BASE = Path(__file__).resolve().parents[2]
 if str(BASE) not in sys.path:
     sys.path.insert(0, str(BASE))
 
-from position_builder import fetch_daily_kline  # noqa: E402
-from timing_gate import timing_verdict  # noqa: E402
-from universal_precise_entry import UniversalPreciseEntry  # noqa: E402
-from indicators import resample_to_15min, add_15min_indicators  # noqa: E402
+from core.position_builder import fetch_daily_kline  # noqa: E402
+from core.timing_gate import timing_verdict  # noqa: E402
+from strategies.universal_precise_entry import UniversalPreciseEntry  # noqa: E402
+from analysis.indicators import resample_to_15min, add_15min_indicators  # noqa: E402
 from t_io.validation.w34_resonance_backtest_year import (  # noqa: E402
     _day_df, _stock_code_to_ts, _trading_days, WATCHLIST_FILE,
 )
-from index_regime_intraday import _iri_tushare_pro  # noqa: E402
+from analysis.index_regime_intraday import _iri_tushare_pro  # noqa: E402
 
 OUT_ROOT = BASE / "t_io" / "replay"
 

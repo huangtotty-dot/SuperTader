@@ -21,7 +21,7 @@ BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "
 sys.path.insert(0, BASE_DIR)
 
 from config import PARAMS  # noqa: E402
-import indicators  # noqa: E402
+from analysis import indicators  # noqa: E402
 
 RSI_PERIOD = PARAMS.get("rsi_period", 6)
 

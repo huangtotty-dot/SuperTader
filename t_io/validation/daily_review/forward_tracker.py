@@ -19,7 +19,7 @@ from pathlib import Path
 BASE = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(BASE))
 
-from position_builder import fetch_daily_kline  # noqa: E402
+from core.position_builder import fetch_daily_kline  # noqa: E402
 
 
 def _num(v):

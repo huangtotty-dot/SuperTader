@@ -2727,7 +2727,7 @@ def _ir_cli() -> None:
     # eod 模式落盘 sentiment_daily.csv（供 main.py/复盘工具消费）
     if args.mode == "eod":
         try:
-            from daily_sentiment import save_sentiment_record  # 延迟导入避免循环
+            from execution.daily_sentiment import save_sentiment_record  # 延迟导入避免循环
             _dt = (ctx.get("detail") or {}).get("limit_pool") or {}
             _kd = (ctx.get("detail") or {}).get("key_day") or {}
             _dc = int(_dt.get("dt_count") or 0)

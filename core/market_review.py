@@ -85,7 +85,7 @@ def save_daily_index_minutes(date: str | None = None) -> None:
     def _one(item):
         symbol, ts_code, _name = item
         try:
-            from index_regime_intraday import fetch_index_minutes_live
+            from analysis.index_regime_intraday import fetch_index_minutes_live
             df = fetch_index_minutes_live(symbol)
             if df is None or df.empty:
                 return ts_code, {}
@@ -230,7 +230,7 @@ def fetch_index_minutes(ts_code: str, freq: str, date: str) -> list:
     from concurrent.futures import ThreadPoolExecutor, TimeoutError as _FTO
 
     def _fetch():
-        from index_regime_intraday import _iri_fetch_stk_mins_one_day
+        from analysis.index_regime_intraday import _iri_fetch_stk_mins_one_day
         return _iri_fetch_stk_mins_one_day(ts_code, date, freq)
 
     _ex = ThreadPoolExecutor(max_workers=1)

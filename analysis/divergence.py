@@ -50,7 +50,7 @@ def fetch_freq_kline(code: str, freq: str = "60min", days: int = FETCH_DAYS) -> 
         except Exception:
             pass
     try:
-        from index_regime_intraday import _iri_tushare_pro
+        from analysis.index_regime_intraday import _iri_tushare_pro
         pro = _iri_tushare_pro()
         start = (datetime.now() - pd.Timedelta(days=days)).strftime("%Y-%m-%d")
         end = datetime.now().strftime("%Y-%m-%d")

@@ -286,7 +286,7 @@ class PositionSizer:
         # 2026-08-15 接入加仓侧：NO-GO 时阻断加仓买入（降频），接回是否阻断由
         # ENTRY_TIMING_PARAMS.add_block_rebuild 控制；时机模块故障不阻断交易
         try:
-            from timing_gate import timing_verdict as _timing_verdict
+            from core.timing_gate import timing_verdict as _timing_verdict
             from config import ENTRY_TIMING_PARAMS as _ETP
             if _ETP.get("apply_to_add", True) and _ETP.get("enabled", True):
                 if not _timing_verdict(code, None).get("go", False):

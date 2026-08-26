@@ -1076,7 +1076,7 @@ def scan_stock(code: str, stock_info: dict, date_str: str = None,
     result["divergence"] = {}
     result["divergence_detail"] = {}
     try:
-        from divergence import detect_minute_divergence_detail as _det_div
+        from analysis.divergence import detect_minute_divergence_detail as _det_div
         result["divergence_detail"] = _det_div(code)
         result["divergence"] = {k: v["type"] for k, v in result["divergence_detail"].items()}
     except Exception:
@@ -1103,7 +1103,7 @@ def scan_stock(code: str, stock_info: dict, date_str: str = None,
     # 旧双通道结果保留在 result["channels"] 供参考，verdict/conditions 由时机判定驱动。
     result["timing"] = {"regime": None, "go": None, "reason": "未启用"}
     try:
-        from timing_gate import timing_verdict as _timing_verdict
+        from core.timing_gate import timing_verdict as _timing_verdict
         from config import ENTRY_TIMING_PARAMS as _ETP
         if _ETP.get("enabled", True):
             _tv = _timing_verdict(code, target_date)

@@ -30,7 +30,7 @@ BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "
 sys.path.insert(0, BASE_DIR)
 
 from config import CACHE_DIR, PARAMS  # noqa: E402
-import indicators  # noqa: E402
+from analysis import indicators  # noqa: E402
 
 CODES = ["600176", "600481", "000988", "588170", "603667"]
 

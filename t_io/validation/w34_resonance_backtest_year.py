@@ -47,9 +47,9 @@ BASE = Path(__file__).resolve().parents[2]  # 仓库根
 if str(BASE) not in sys.path:
     sys.path.insert(0, str(BASE))
 
-import index_resonance as ir
-from indicators import resample_to_5min, add_5min_indicators
-from index_regime_intraday import _iri_tushare_pro
+from analysis import index_resonance as ir
+from analysis.indicators import resample_to_5min, add_5min_indicators
+from analysis.index_regime_intraday import _iri_tushare_pro
 
 HOLDINGS_FILE = BASE / "t_io" / "state" / "holdings.json"
 WATCHLIST_FILE = BASE / "t_io" / "state" / "watchlist_buy.json"

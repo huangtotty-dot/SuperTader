@@ -40,7 +40,7 @@ except ImportError:
     PARAMS = {}; STOCK_PARAMS = {}; PUSH_THROTTLE_SECONDS = 300
 
 try:
-    from trend_regime import TrendRegime, TrendState
+    from analysis.trend_regime import TrendRegime, TrendState
 except ImportError:
     TrendRegime = None; TrendState = None
 
@@ -69,9 +69,9 @@ if 'send_morning_alert' not in globals():
 if 'notify_alert_cleared' not in globals():
     def notify_alert_cleared(*a,**kw): return None
 if 'resample_to_15min' not in globals():
-    from indicators import resample_to_15min, add_15min_indicators
+    from analysis.indicators import resample_to_15min, add_15min_indicators
 if 'resample_to_5min' not in globals():
-    from indicators import resample_to_5min, add_5min_indicators
+    from analysis.indicators import resample_to_5min, add_5min_indicators
 if 'fetch_minute_bar' not in globals():
     def fetch_minute_bar(*a, **kw): return pd.DataFrame()
 if 'add_indicators' not in globals():
