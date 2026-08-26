@@ -21,7 +21,7 @@ from typing import Dict, Tuple
 import numpy as np
 import pandas as pd
 
-BASE = Path(__file__).resolve().parent
+BASE = Path(__file__).resolve().parents[1]  # 项目根（本模块位于 strategies/ 下）
 import sys
 sys.path.insert(0, str(BASE))
 

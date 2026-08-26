@@ -45,19 +45,20 @@ import urllib.error
 # ==================== 路径与常量 ====================
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 T_IO_DIR = os.path.join(BASE_DIR, "t_io")
+STATE_DIR = os.path.join(T_IO_DIR, "state")
 HOLDINGS_FILE = os.path.join(BASE_DIR, "holdings.json")
-T_MODE_FILE = os.path.join(BASE_DIR, "t_mode.json")
+T_MODE_FILE = os.path.join(STATE_DIR, "t_mode.json")
 LEARNING_FILE = os.path.join(T_IO_DIR, "t_trader_learning.json")
 LOG_DIR = os.path.join(T_IO_DIR, "logs")
 CACHE_DIR = os.path.join(T_IO_DIR, "cache")
 SNAPSHOT_DIR = os.path.join(T_IO_DIR, "minute_snapshots")
 PREOPEN_DIR = os.path.join(T_IO_DIR, "preopen")
-CONFIG_FILE = os.path.join(BASE_DIR, "config.json")
+CONFIG_FILE = os.path.join(STATE_DIR, "config.json")
 TRACE_DIR = os.path.join(T_IO_DIR, "traces")
 WATCHLIST_FILE = os.path.join(BASE_DIR, "watchlist.json")
 VIRTUAL_TRADES_FILE = os.path.join(T_IO_DIR, "virtual_trades.json")
 
-for d in [T_IO_DIR, LOG_DIR, CACHE_DIR, SNAPSHOT_DIR, TRACE_DIR, PREOPEN_DIR]:
+for d in [T_IO_DIR, STATE_DIR, LOG_DIR, CACHE_DIR, SNAPSHOT_DIR, TRACE_DIR, PREOPEN_DIR]:
     if not os.path.exists(d):
         os.makedirs(d)
 
