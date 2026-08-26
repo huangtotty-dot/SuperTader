@@ -11,7 +11,7 @@
   },
   "session_note": "等待9:30开盘后获取市场数据",
   "auction_result": {},
-  "generated_at": "2026-08-26 00:41:51",
+  "generated_at": "2026-08-26 13:31:18",
   "source": "watchlist",
   "market_snapshot": {
     "source": "watchlist",
@@ -37,30 +37,30 @@
     "515180": {
       "code": "515180",
       "name": "红利ETF易方达",
-      "open_gap": -0.0068823124569855525,
-      "direction": "bearish",
-      "prev_close": 1.453
+      "open_gap": -0.0013840830449827002,
+      "direction": "neutral",
+      "prev_close": 1.445
     },
     "588170": {
       "code": "588170",
       "name": "科创半导体ETF华夏",
-      "open_gap": -0.028855721393034744,
-      "direction": "bearish",
-      "prev_close": 1.005
+      "open_gap": 0.0,
+      "direction": "neutral",
+      "prev_close": 0.976
     },
     "600481": {
       "code": "600481",
       "name": "双良节能",
-      "open_gap": 0.02147971360381858,
-      "direction": "bullish",
-      "prev_close": 4.19
+      "open_gap": 0.0,
+      "direction": "neutral",
+      "prev_close": 0.0
     },
     "002639": {
       "code": "002639",
       "name": "雪人集团",
-      "open_gap": 0.033216783216783285,
-      "direction": "bullish",
-      "prev_close": 11.44
+      "open_gap": 0.0,
+      "direction": "neutral",
+      "prev_close": 11.82
     }
   },
   "auction_summary": {},
