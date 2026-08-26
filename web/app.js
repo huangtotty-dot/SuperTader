@@ -43,6 +43,32 @@ window.addEventListener("message", (e) => {
     });
 });
 
+/* ================= 打开条件详情面板 ================= */
+function openConditionDetail(code, name) {
+  const url = `condition_detail_panel.html?code=${encodeURIComponent(code)}&date=${encodeURIComponent(state.date || new Date().toISOString().split('T')[0])}`;
+
+  // 创建 modal 弹窗
+  const overlay = document.createElement('div');
+  overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:9999;';
+
+  const modal = document.createElement('div');
+  modal.style.cssText = 'background:white;border-radius:10px;width:90%;max-width:650px;height:80vh;position:relative;box-shadow:0 10px 40px rgba(0,0,0,0.2);display:flex;flex-direction:column;';
+
+  const header = document.createElement('div');
+  header.style.cssText = 'padding:12px 16px;border-bottom:1px solid #e0e4e8;display:flex;justify-content:space-between;align-items:center;flex-shrink:0;';
+  header.innerHTML = `<div style="font-weight:700;">${esc(name || code)} - 建仓条件详情</div><button style="background:none;border:none;font-size:24px;cursor:pointer;padding:0;width:32px;height:32px;display:flex;align-items:center;justify-content:center;">×</button>`;
+  header.querySelector('button').onclick = () => overlay.remove();
+
+  const iframe = document.createElement('iframe');
+  iframe.src = url;
+  iframe.style.cssText = 'width:100%;flex:1;border:none;';
+
+  modal.appendChild(header);
+  modal.appendChild(iframe);
+  overlay.appendChild(modal);
+  document.body.appendChild(overlay);
+}
+
 /* ================= 工具 ================= */
 function esc(s) {
   return String(s == null ? "" : s).replace(/[&<>"']/g, c => ({
@@ -1229,6 +1255,7 @@ function renderPB(pb) {
     }
     // 卡点直观化(2026-08-25)：一句话"卡在哪、差多少" + hover 完整差距清单。
     //   signal 无卡点；pending/archived/无数据 不显示（那是未扫描态，非条件卡）。
+    //   点击卡点标签打开条件详情面板
     let blockLine = "";
     if (r.block_reason && r.verdict !== "signal" && r.verdict !== "pending"
         && r.verdict !== "archived" && r.verdict !== "insufficient_data") {
@@ -1236,7 +1263,9 @@ function renderPB(pb) {
       const full = bk.length
         ? bk.map(b => `• ${b.label}：${b.gap_txt}（需${b.need}）`).join("\n")
         : r.block_reason;
-      blockLine = `<div class="cell-dim" style="font-size:11px;line-height:1.5;color:#ffb454;margin-top:2px" title="${esc(full)}">🔸 ${esc(r.block_reason)}${bk.length > 1 ? ` <span style="color:#888">(+${bk.length - 1}项)</span>` : ""}</div>`;
+      const code = r.code || '';
+      const name = r.name || code;
+      blockLine = `<div class="cell-dim" style="font-size:11px;line-height:1.5;color:#ffb454;margin-top:2px;cursor:pointer;" title="${esc(full)}" onclick="event.stopPropagation();openConditionDetail('${esc(code)}','${esc(name)}')">🔸 ${esc(r.block_reason)}${bk.length > 1 ? ` <span style="color:#888">(+${bk.length - 1}项)</span>` : ""}</div>`;
     }
     // 追踪中徽章：在建仓股池监控、尚未触发 signal/archived 的股票明确标出（弱/等待/无数据也显示在监控）
     const monitorBadge = (!r.in_holdings && r.verdict !== "signal" && r.verdict !== "archived")
