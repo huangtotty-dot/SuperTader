@@ -3400,6 +3400,32 @@ class Api:
         except Exception as e:
             return {"ok": False, "error": str(e)}
 
+    def get_high_confidence_signals(self, date):
+        """获取高置信度建仓信号（仅 signal/approaching 且有连续背离或无背离数据）。
+        筛选规则：排除所有 weak 信号 + 单次无效背离，只显示核心信号。"""
+        result = self._agg_position_builder(date, filter_high_confidence=True)
+        # 更新刷新时间和技术标签
+        try:
+            _pb_fp = TRACES / f"position_builder_{date}.jsonl"
+            result["refreshed_at"] = datetime.fromtimestamp(_pb_fp.stat().st_mtime).strftime("%H:%M:%S")
+        except Exception:
+            result["refreshed_at"] = ""
+        # 批量个股技术标签
+        try:
+            codes = [r.get("code") for r in result.get("rows", []) if r.get("code")]
+            if codes:
+                tag_res = self.load_stock_tags_batch(codes)
+                tags_map = tag_res.get("tags", {})
+                for r in result.get("rows", []):
+                    code = r.get("code")
+                    info = tags_map.get(code, {})
+                    if info:
+                        r["tags"] = info.get("tags", [])
+                        r["trend"] = info.get("trend")
+        except Exception:
+            pass
+        return result
+
     # ---------- 轻量 PB 刷新（盘中实时） ----------
     def refresh_pb(self, date):
         """仅重读 position_builder jsonl 并返回聚合结果 + 个股技术标签。"""
@@ -3445,7 +3471,7 @@ class Api:
         sb = _load_json(OUT / "stage_board.json", {})
         return sb.get("stages", [])
 
-    def _agg_position_builder(self, date):
+    def _agg_position_builder(self, date, filter_high_confidence=False):
         fp = TRACES / f"position_builder_{date}.jsonl"
         wl = _load_json(BASE / "watchlist_buy.json", {})
         wl_stocks = wl.get("stocks", {})
@@ -3579,48 +3605,87 @@ class Api:
             "has_data": True,
             "counts": dict(verdicts),
             "by_code": by_code,
-            "rows": rows,
+            "rows": self._filter_high_confidence_signals(rows) if filter_high_confidence else rows,
             "cond_labels": COND_LABELS,
             "note": note,
             "progress": progress,
         }
 
+    def _filter_high_confidence_signals(self, rows: list) -> list:
+        """过滤仅保留高价值信号：
+        1. verdict 属于高价值类型（signal/approaching/watch_signal）
+        2. 如果有 divergence_detail：优先展示连续背离（m60 连续底背离最优）
+        3. 返回排序后的高价值行"""
+        filtered = []
+        for row in rows:
+            verdict = row.get("verdict", "").lower()
+
+            # 第一道筛选：verdict 必须是有价值的类型（排除 weak/insufficient_data）
+            if verdict not in ("signal", "approaching", "watch_signal"):
+                continue
+
+            # 获取背离详情
+            div_detail = row.get("divergence_detail") or {}
+            m60 = div_detail.get("m60", {})
+            m30 = div_detail.get("m30", {})
+
+            # 第二道筛选：背离质量评估
+            is_high_value = False
+            priority = 0  # 用于排序：越大越优先
+
+            # 最高价值：60分钟连续底背离
+            if m60.get("type") == "底背离" and m60.get("consec"):
+                is_high_value = True
+                priority = 100
+            # 次高价值：60分钟连续顶背离（仅当 verdict=signal 时）
+            elif m60.get("type") == "顶背离" and m60.get("consec") and verdict == "signal":
+                is_high_value = True
+                priority = 90
+            # 中等价值：30分钟连续底背离
+            elif m30.get("type") == "底背离" and m30.get("consec"):
+                is_high_value = True
+                priority = 80
+            # 低价值但有效：signal 级别（无论背离）
+            elif verdict == "signal":
+                is_high_value = True
+                priority = 50
+            # 保留 approaching + 有任何连续背离
+            elif verdict == "approaching" and (m60.get("consec") or m30.get("consec")):
+                is_high_value = True
+                priority = 40
+            # watch_signal + 有连续底背离
+            elif verdict == "watch_signal" and ((m60.get("type") == "底背离" and m60.get("consec")) or (m30.get("type") == "底背离" and m30.get("consec"))):
+                is_high_value = True
+                priority = 30
+
+            if is_high_value:
+                # 添加标记便于前端识别
+                row["_is_high_confidence"] = True
+                row["_priority"] = priority
+                row["_divergence_summary"] = self._format_divergence_summary(div_detail)
+                filtered.append(row)
+
+        # 按优先级和 score 排序
+        filtered.sort(key=lambda x: (
+            -(x.get("_priority") or 0),
+            -(x.get("composite_score") or 0)
+        ))
+        return filtered
+
+    @staticmethod
+    def _format_divergence_summary(div_detail: dict) -> str:
+        """格式化背离简述，供前端显示"""
+        if not div_detail:
+            return ""
+        parts = []
+        for key in ("m30", "m60"):
+            v = div_detail.get(key)
+            if v:
+                consec_mark = "✓" if v.get("consec") else ""
+                parts.append(f"{key}:{v.get('type', '')}{consec_mark}")
+        return " | ".join(parts) if parts else ""
+
     def _load_positions(self, date, kpi):
-        current = _load_json(HOLDINGS, {})
-        snap_today = {}
-        snap_prev = {}
-        prev_date = None
-
-        fps = sorted(STATE_DIR.glob("holdings_*.json"))
-        for fp in fps:
-            d = fp.stem.replace("holdings_", "")
-            if d == date:
-                snap_today = _load_json(fp, {})
-            if d < date and (prev_date is None or d > prev_date):
-                prev_date = d
-        if prev_date:
-            snap_prev = _load_json(STATE_DIR / f"holdings_{prev_date}.json", {})
-
-        t_mode_raw = _load_json(T_MODE, {})
-        t_mode = {k: v for k, v in t_mode_raw.items() if not k.startswith("_")}
-        auto = t_mode_raw.get("_auto_decision") or {}
-
-        # 从独立配置文件读（不再依赖 holdings.json）
-        pcfg = _load_json(PORTFOLIO, {})
-        accounts = pcfg.get("accounts", {})
-        return {
-            "current": current,
-            "accounts": accounts,
-            "snapshot_today": snap_today,
-            "snapshot_prev": snap_prev,
-            "prev_date": prev_date,
-            "t_mode": t_mode,
-            "auto_decision": auto,
-            "k2": (kpi or {}).get("K2_cost_change", {}),
-            "k3": (kpi or {}).get("K3_base_drift", {}),
-        }
-
-    def _build_name_map(self, sig_stat, add_watch, pb, current):
         names = dict(NAMES)
         for src in (sig_stat, add_watch, current):
             for code, info in (src or {}).items():
