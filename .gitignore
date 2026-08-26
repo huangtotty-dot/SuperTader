@@ -2,6 +2,7 @@ t_io/backtests/
 t_io/cache/
 t_io/minute_snapshots/
 t_io/backtest_cache/
+t_io/backtest_1year_data/
 t_io/replay/
 t_io/rotation/daily_cache/
 __pycache__/

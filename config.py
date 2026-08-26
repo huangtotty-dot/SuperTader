@@ -345,6 +345,16 @@ PARAMS = {
     # 2026-08-15 因子实验实施: 高抛放量确认（样本内+6.0pp/样本外+6.4pp，稳健）
     # 放量冲高(近5分钟量≥全天均量×该倍数)时高抛更可靠；0=关闭
     "swing_sell_vol_ratio": 1.5,
+    # —— V3.1 Renko买入+目标止盈做T (2026-08-26 集成, 默认关=生产行为不变) ——
+    # 依据: 39支×1年1min复验 — Renko向下砖+15分MACD金叉 买入择时39/39支>50%(+30min 60.6%);
+    #       baseline布林追跌 0/39(34.7%)。卖出侧 target+0.5% 止盈 胜率78.5% (vs 等MACD死叉 55.7%)
+    # False=原布林触轨+确认逻辑(生产); True=Renko买入+目标止盈做T
+    "swing_use_renko": False,
+    "swing_renko_brick_pct": 0.003,     # Renko砖高(0.3%, 已验证; 1min数据构建)
+    "swing_take_profit_pct": 0.005,     # 目标止盈: 相对做T买入价 +0.5%
+    "swing_t_max_hold_min": 0,          # 0=不启用时间止损; >0=买入后N分钟强制卖(可选)
+    # 尾盘强制平仓时间(HHMM), 做T当日闭环
+    "swing_force_exit_tval": 1455,
     # V1.2.0 (2026-08-08 用户拍板上线): C1' 口径B — 全部买信号单股日限 7 内置状态机
     # record_signal 层计数，第 8 条起当日不再产生买入信号（卖信号不受限；0/None=关闭；
     # harness T_BUY_DAILY_CAP 可显式覆盖做 A/B）
