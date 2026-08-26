@@ -333,3 +333,102 @@
 <script src="app.js"></script>
 </body>
 </html>
+
+<!-- 账户管理页面（添加到主要标签页后） -->
+<div class="tab-page" id="tab-accounts" style="display:none;">
+  <div class="section">
+    <h3>📊 多券商账户管理</h3>
+    
+    <div style="margin-bottom: 20px;">
+      <button class="btn btn-primary" onclick="showAddAccountModal()">+ 添加新账户</button>
+      <button class="btn btn-secondary" onclick="syncAllAccounts()">🔄 同步所有账户</button>
+      <button class="btn btn-secondary" onclick="toggleAutoSync()">⏱️ 自动同步 (关)</button>
+    </div>
+
+    <table class="accounts-table" style="width:100%; border-collapse: collapse;">
+      <thead>
+        <tr style="border-bottom: 2px solid #ddd;">
+          <th style="text-align: left; padding: 10px;">账户名称</th>
+          <th style="text-align: left; padding: 10px;">券商</th>
+          <th style="text-align: right; padding: 10px;">总资产</th>
+          <th style="text-align: right; padding: 10px;">现金</th>
+          <th style="text-align: right; padding: 10px;">持仓</th>
+          <th style="text-align: center; padding: 10px;">持仓数</th>
+          <th style="text-align: center; padding: 10px;">状态</th>
+          <th style="text-align: center; padding: 10px;">最后同步</th>
+          <th style="text-align: center; padding: 10px;">操作</th>
+        </tr>
+      </thead>
+      <tbody id="accounts-list">
+        <tr><td colspan="9" style="text-align: center; padding: 20px; color: #999;">暂无账户</td></tr>
+      </tbody>
+    </table>
+
+    <div style="margin-top: 20px; padding: 15px; background: #f5f5f5; border-radius: 6px;">
+      <h4>📈 合并持仓统计</h4>
+      <div id="merged-holdings" style="color: #666; font-size: 14px;">
+        总持仓: 0 只 | 总市值: 0 元 | 总成本: 0 元
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 账户添加 Modal -->
+<div id="add-account-modal" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.5); z-index:1000; display:flex; align-items:center; justify-content:center;">
+  <div style="background:white; border-radius:10px; padding:30px; max-width:500px; width:90%;">
+    <h3>添加新账户</h3>
+    
+    <div style="margin: 20px 0;">
+      <label>账户名称 (如: 账户A):</label>
+      <input type="text" id="add-account-name" placeholder="账户A" style="width:100%; padding:8px; border:1px solid #ddd; border-radius:4px; margin-top:5px;">
+    </div>
+
+    <div style="margin: 20px 0;">
+      <label>选择券商:</label>
+      <select id="add-account-broker" style="width:100%; padding:8px; border:1px solid #ddd; border-radius:4px; margin-top:5px;">
+        <option value="">-- 选择券商 --</option>
+        <option value="通达信_东方财富">东方财富 (通达信)</option>
+        <option value="通达信_国盛">国盛证券 (通达信)</option>
+        <option value="通达信_东莞">东莞证券 (通达信)</option>
+        <option value="东方财富_API">东方财富 (API - 需要 token)</option>
+      </select>
+    </div>
+
+    <div style="margin: 20px 0; display:none;" id="api-token-section">
+      <label>API Token (可选):</label>
+      <input type="password" id="add-account-token" placeholder="tushare 或其他 API token" style="width:100%; padding:8px; border:1px solid #ddd; border-radius:4px; margin-top:5px;">
+      <small style="color:#999; margin-top:5px; display:block;">从 tushare.pro 或券商获取</small>
+    </div>
+
+    <div style="margin: 20px 0;">
+      <label style="display:flex; align-items:center;">
+        <input type="checkbox" id="add-account-auto-sync" checked style="margin-right:10px;">
+        自动同步（盘中每5分钟）
+      </label>
+    </div>
+
+    <div style="margin: 20px 0; padding: 10px; background: #fffacd; border-radius: 4px; font-size: 12px;">
+      <strong>⚠️ 说明:</strong> 通达信接入需要你的电脑上已安装通达信客户端并登录
+    </div>
+
+    <div style="display: flex; gap: 10px; justify-content: flex-end;">
+      <button class="btn btn-secondary" onclick="closeAddAccountModal()">取消</button>
+      <button class="btn btn-primary" onclick="confirmAddAccount()">确认添加</button>
+    </div>
+  </div>
+</div>
+
+<style>
+.accounts-table tr {
+  border-bottom: 1px solid #eee;
+}
+.accounts-table tr:hover {
+  background: #f9f9f9;
+}
+.accounts-table td, .accounts-table th {
+  padding: 10px;
+}
+.status-ok { color: #28a745; }
+.status-error { color: #dc3545; }
+.status-pending { color: #ffc107; }
+</style>
