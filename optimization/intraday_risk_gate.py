@@ -226,7 +226,7 @@ def calc_l3_intraday_confirm(df_1min: pd.DataFrame, vol_min: float = 1.2) -> Dic
         }
 
     try:
-        from indicators import resample_to_15min, add_15min_indicators
+        from analysis.indicators import resample_to_15min, add_15min_indicators
     except ImportError:
         return {
             "passed": False,

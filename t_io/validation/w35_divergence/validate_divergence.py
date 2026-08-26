@@ -31,7 +31,7 @@ BASE = Path(__file__).resolve().parent.parent.parent.parent  # e:/superTrader
 if str(BASE) not in sys.path:
     sys.path.insert(0, str(BASE))
 
-import divergence  # noqa: E402
+from analysis import divergence  # noqa: E402
 
 OUT_DIR = BASE / "t_io" / "validation" / "w35_divergence"
 WATCHLIST_FILE = BASE / "t_io" / "state" / "watchlist_buy.json"

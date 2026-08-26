@@ -122,7 +122,7 @@ if "--tushare-replay" in sys.argv:
 else:
     try:
         from analysis.index_resonance import compute_resonance as _compute_resonance
-        from index_resonance import write_resonance_trace as _write_resonance_trace
+        from analysis.index_resonance import write_resonance_trace as _write_resonance_trace
     except Exception as _e:
         _RESONANCE_MODULE_OK = False
         _compute_resonance = None
@@ -1710,7 +1710,7 @@ def _maybe_check_index_intraday_alert(now: datetime) -> None:
         minute_bars = fetch_index_minutes_live("sh000001")
         # 2026-08-23: 大盘分时落盘缓存（供当日复盘直接用，绕过 tushare T-1 当日拿不到分钟）
         try:
-            from market_review import save_daily_index_minutes as _save_idx_min
+            from core.market_review import save_daily_index_minutes as _save_idx_min
             _save_idx_min()
         except Exception:
             pass
@@ -1793,7 +1793,7 @@ def scan_once():
             t_now = now.time()
             if dtime(9, 24, 40) <= t_now <= dtime(9, 24, 50):
                 try:
-                    from auction_analyzer import analyze_and_save
+                    from execution.auction_analyzer import analyze_and_save
                     today_str = now.strftime("%Y-%m-%d")
                     report = analyze_and_save(today_str)
                     log.info(f"✅ 集合竞价诊断报告已生成（{report.suggested_action}）")
@@ -2075,7 +2075,7 @@ def scan_once():
                     # 2. 动态份数计算（个股/ETF统一）
                     _advice = None  # W33 G1: sizing_advice 结构化落盘（买卖双侧）
                     try:
-                        from position_sizer import calc_sell_qty, calc_buy_qty, set_all_holdings
+                        from core.position_sizer import calc_sell_qty, calc_buy_qty, set_all_holdings
                         set_all_holdings(HOLDINGS)  # fix P0-9(B4): 注入全量持仓供单股上限 A/B 合并判定
                         threshold = float(sig.factors.get("threshold", 35))
                         cur_price = float(sig.price or 0)

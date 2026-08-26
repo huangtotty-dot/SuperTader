@@ -26,7 +26,7 @@ import sys
 sys.path.insert(0, str(BASE))
 
 from core.position_builder import fetch_daily_kline, load_snapshot_df
-from timing_gate import timing_verdict, _regime
+from core.timing_gate import timing_verdict, _regime
 from analysis.indicators import resample_to_5min, resample_to_15min, add_5min_indicators, add_15min_indicators
 
 

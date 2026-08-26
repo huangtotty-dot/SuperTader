@@ -44,7 +44,7 @@ except Exception:
     _IRM = {}
 
 try:
-    from index_regime_intraday import fetch_index_minutes_live as _fetch_index_minutes_live
+    from analysis.index_regime_intraday import fetch_index_minutes_live as _fetch_index_minutes_live
 except Exception:
     def _fetch_index_minutes_live(code: str):
         raise RuntimeError("index_regime_intraday 不可用")
@@ -120,7 +120,7 @@ def get_index_5min(index_code: str, boundary_ts=None, provider: str = "live",
     else:
         # backtest: tushare 指数 1 分钟 → 5 分钟
         try:
-            from index_regime_intraday import fetch_index_minutes_backtest as _bt
+            from analysis.index_regime_intraday import fetch_index_minutes_backtest as _bt
             ts_code = _index_code_to_ts(index_code)
             if not ts_code:
                 return pd.DataFrame(), False

@@ -203,7 +203,7 @@ def main():
     ap = argparse.ArgumentParser(description="日线顶背离 vs 驻顶 验证")
     ap.add_argument("--codes", default=None, help="逗号分隔指定代码（默认 watchlist 全部）")
     args = ap.parse_args()
-    import position_builder as pb
+    from core import position_builder as pb
     stocks = _load_watchlist()
     if args.codes:
         stocks = {c: stocks[c] for c in args.codes.split(",") if c in stocks}

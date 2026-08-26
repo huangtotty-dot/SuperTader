@@ -18,7 +18,7 @@ from pathlib import Path
 import pandas as pd
 
 sys.path.insert(0, r"E:\superTrader")
-from indicators import resample_to_5min, add_5min_indicators, resample_to_15min
+from analysis.indicators import resample_to_5min, add_5min_indicators, resample_to_15min
 
 BASE = Path(r"E:\superTrader")
 SNAP_DIR = BASE / "t_io" / "minute_snapshots" / "2026"

@@ -39,7 +39,7 @@ BASE = Path(__file__).resolve().parents[2]
 if str(BASE) not in sys.path:
     sys.path.insert(0, str(BASE))
 
-from position_builder import fetch_daily_kline  # noqa: E402
+from core.position_builder import fetch_daily_kline  # noqa: E402
 from w34_resonance_backtest_year import _trading_days, WATCHLIST_FILE, HOLDINGS_FILE  # noqa: E402
 
 INDEX_CACHE = BASE / "t_io" / "cache" / "daily_kline" / "index_sh000001.json"

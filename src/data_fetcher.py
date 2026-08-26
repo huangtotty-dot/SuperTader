@@ -390,7 +390,7 @@ def _attach_index_regime_context(ctx: Dict[str, Any], code: str, as_of: Optional
     except Exception:
         pass
     try:
-        from index_regime import detect_index_regime, get_regime_position_factor, index_regime_name
+        from analysis.index_regime import detect_index_regime, get_regime_position_factor, index_regime_name
         regime, score, ir_ctx = detect_index_regime(as_of=target_date, force=False, mode=mode)
         regime_value = getattr(regime, "value", str(regime))
         score = float(ir_ctx.get("score", score) or 0.0)

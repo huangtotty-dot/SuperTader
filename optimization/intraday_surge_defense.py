@@ -83,7 +83,7 @@ def classify_daily_limit(df_1min: pd.DataFrame) -> Tuple[bool, str, str]:
     else:
         # 尝试从日线数据获取
         try:
-            from position_builder import fetch_daily_kline
+            from core.position_builder import fetch_daily_kline
             code = d.get("code", "unknown")
             daily = fetch_daily_kline(code)
             if daily is not None and not daily.empty:
@@ -231,7 +231,7 @@ def check_intraday_buypoint_quality(df_1min: pd.DataFrame) -> Dict:
         }
 
     try:
-        from position_builder import resample_to_5min, add_5min_indicators, resample_to_15min, add_15min_indicators
+        from core.position_builder import resample_to_5min, add_5min_indicators, resample_to_15min, add_15min_indicators
     except ImportError:
         return {
             "is_quality_buypoint": False,
