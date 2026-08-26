@@ -455,19 +455,58 @@
             // 卡点分析
             if (detail.blockers && detail.blockers.length > 0) {
                 document.getElementById('blockers-section').style.display = 'block';
-                const html = detail.blockers.map(b => `
-                    <div class="blocker-item">
-                        <div class="blocker-icon">⚠️</div>
-                        <div class="blocker-content">
-                            <div class="blocker-label">${b.label}</div>
-                            <div class="blocker-current">当前: ${b.current}</div>
-                            <div class="blocker-required">需要: ${b.required}</div>
-                            <div style="margin-top: 6px; font-size: 11px; color: var(--text-dim);">
-                                差距: ${b.gap}
+                const html = detail.blockers.map(b => {
+                    let detailHtml = '';
+
+                    // 市场方向卡点 - 显示指数目标
+                    if (b.key === 't_regime' && b.detail) {
+                        const d = b.detail;
+                        detailHtml = `
+                            <div style="margin-top: 8px; padding: 8px; background: rgba(0,0,0,0.03); border-radius: 4px;">
+                                <div style="font-weight: 600; margin-bottom: 4px;">${d.action || '指数方向判定'}</div>
+                                <div style="font-size: 12px; color: var(--text-dim); line-height: 1.6;">
+                                    ${d.rule ? `<div>📋 规则: ${d.rule}</div>` : ''}
+                                    ${d.message ? `<div>📊 当前: ${d.message}</div>` : ''}
+                                </div>
+                            </div>
+                        `;
+                    }
+
+                    // 回撤卡点 - 显示详细说明
+                    else if (b.key === 't_drawdown' && b.detail) {
+                        const d = b.detail;
+                        detailHtml = `
+                            <div style="margin-top: 8px; padding: 10px; background: rgba(0,0,0,0.03); border-radius: 4px;">
+                                <div style="font-weight: 600; margin-bottom: 6px;">
+                                    📉 ${d.type} (${d.rule})
+                                </div>
+                                <div style="font-size: 12px; color: var(--text-dim); line-height: 1.8; margin-bottom: 8px;">
+                                    <div><strong>当前回撤:</strong> ${d.current_drawdown.toFixed(2)}%</div>
+                                    <div><strong>需要标准:</strong> ${d.type === '浅回撤' ? '≥-3%' : '<-10%'}</div>
+                                    <div><strong>状态:</strong> <span style="color: ${d.status.includes('已满足') ? 'var(--pass)' : 'var(--fail)'}; font-weight: 600;">${d.status}</span></div>
+                                </div>
+                                <div style="font-size: 11px; color: var(--text-dim); padding: 8px; background: white; border-radius: 3px; border-left: 3px solid var(--info); white-space: pre-wrap; line-height: 1.6;">
+${d.explanation || ''}
+                                </div>
+                            </div>
+                        `;
+                    }
+
+                    return `
+                        <div class="blocker-item">
+                            <div class="blocker-icon">⚠️</div>
+                            <div class="blocker-content">
+                                <div class="blocker-label">${b.label}</div>
+                                <div class="blocker-current">当前: ${b.current}</div>
+                                <div class="blocker-required">需要: ${b.required}</div>
+                                <div style="margin-top: 6px; font-size: 11px; color: var(--text-dim);">
+                                    差距: ${b.gap}
+                                </div>
+                                ${detailHtml}
                             </div>
                         </div>
-                    </div>
-                `).join('');
+                    `;
+                }).join('');
                 document.getElementById('blockers-list').innerHTML = html;
             }
         }

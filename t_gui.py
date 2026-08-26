@@ -3435,6 +3435,7 @@ class Api:
         channels = latest_record.get("channels", {})
         conditions = latest_record.get("conditions", {})
         verdict = latest_record.get("verdict", "")
+        blockers_raw = latest_record.get("blockers", [])
 
         # 从 channels 提取条件
         for ch_name in ("iceberg", "breakout"):
@@ -3449,18 +3450,27 @@ class Api:
                 "message": f"得分 {ch.get('score', 0)}/100，状态: {ch.get('verdict', '未知')}"
             })
 
-        # blockers 信息
-        blockers = latest_record.get("blockers", [])
+        # 增强 blockers 信息：计算具体指标值
         blockers_detail = []
-        for b in blockers:
-            blockers_detail.append({
+        for b in blockers_raw:
+            blocker_info = {
                 "key": b.get("key", ""),
                 "label": b.get("label", ""),
                 "current": b.get("cur", ""),
                 "required": b.get("need", ""),
                 "gap": b.get("gap_txt", ""),
                 "message": f"【{b.get('label', '未知')}】{b.get('gap_txt', '条件未满足')}"
-            })
+            }
+
+            # 增强特定卡点的信息
+            if b.get("key") == "t_regime":
+                # 计算具体的指数目标值
+                blocker_info["detail"] = self._compute_regime_targets(latest_record)
+            elif b.get("key") == "t_drawdown":
+                # 添加回撤逻辑说明
+                blocker_info["detail"] = self._compute_drawdown_detail(latest_record)
+
+            blockers_detail.append(blocker_info)
 
         # 计算满足的条件数
         conditions_met = sum(1 for v in conditions.values() if isinstance(v, dict) and v.get("passed"))
@@ -3479,6 +3489,85 @@ class Api:
             "blockers": blockers_detail,
             "divergence": latest_record.get("divergence_detail", {}),
         }
+
+    def _compute_regime_targets(self, record: dict) -> dict:
+        """从 blockers 或特征中计算市场方向条件的具体指数目标值"""
+        feats = record.get("features") or {}
+        regime = record.get("regime", "")
+        blockers = record.get("blockers", [])
+
+        # 尝试从 blockers 中提取指数信息
+        regime_blocker = None
+        for b in blockers:
+            if b.get("key") == "t_regime":
+                regime_blocker = b
+                break
+
+        detail = {
+            "regime": regime,
+            "raw_message": regime_blocker.get("gap_txt") if regime_blocker else "未知",
+        }
+
+        # 从 gap_txt 中解析指数价格（如果有的话）
+        # 格式通常是 "当前震荡市(指数在MA60±缓冲带内)，signal 结构性不可达" 或含具体数值
+        if regime_blocker:
+            gap_txt = regime_blocker.get("gap_txt", "")
+            detail["message"] = gap_txt
+
+            # 尝试从文本中提取数值（未来可由后端优化）
+            if "MA60" in gap_txt:
+                detail["action"] = "需要指数通过 MA60 缓冲带的检查"
+                if regime == "trend_up":
+                    detail["rule"] = "指数需站上 MA60×1.005（多头确认）"
+                elif regime == "trend_dn":
+                    detail["rule"] = "指数需跌破 MA60×0.97（空头确认）"
+                else:
+                    detail["rule"] = "指数需突破 MA60±缓冲带（确立方向）"
+
+        return detail
+
+    def _compute_drawdown_detail(self, record: dict) -> dict:
+        """计算回撤到位条件的详细说明"""
+        regime = record.get("regime", "")
+        feats = record.get("features") or {}
+        dd = feats.get("drawdown") or 0.0
+
+        detail = {
+            "regime": regime,
+            "current_drawdown": dd,
+        }
+
+        if regime == "trend_up":
+            detail["threshold"] = -0.03
+            detail["type"] = "浅回撤"
+            detail["rule"] = "多头趋势下，需要浅回撤≥-3%"
+            detail["explanation"] = (
+                "在多头趋势中，股价应该快速回撤到位后继续上升。\n"
+                "浅回撤（-3% 以内）表示多头力度足，适合建仓。\n"
+                "若回撤超过 -3%，说明多头动能不足，需要等待。"
+            )
+            detail["status"] = "已满足" if dd >= -0.03 else f"未满足（差 {((-0.03) - dd) * 100:.2f}pp）"
+        elif regime == "trend_dn":
+            detail["threshold"] = -0.10
+            detail["type"] = "深回撤"
+            detail["rule"] = "空头趋势下，需要深回撤<-10%"
+            detail["explanation"] = (
+                "在空头趋势中，股价应该深度回撤后再继续下跌。\n"
+                "深回撤（< -10%）表示有充分的获利回吐机会，适合建仓。\n"
+                "若回撤不足 -10%，说明跌幅还不够深，继续等待。"
+            )
+            detail["status"] = "已满足" if dd < -0.10 else f"未满足（差 {(dd - (-0.10)) * 100:.2f}pp）"
+        else:  # range
+            detail["threshold"] = -0.03
+            detail["type"] = "浅回撤"
+            detail["rule"] = "震荡市中，按浅回撤≥-3% 判断"
+            detail["explanation"] = (
+                "在震荡市中，没有明确的主方向，保守按浅回撤标准。\n"
+                "等待指数破位后确立方向，然后再调整标准。"
+            )
+            detail["status"] = "已满足" if dd >= -0.03 else f"未满足（差 {((-0.03) - dd) * 100:.2f}pp）"
+
+        return detail
 
     def get_high_confidence_signals(self, date):
         """获取高置信度建仓信号（仅 signal/approaching 且有连续背离或无背离数据）。
