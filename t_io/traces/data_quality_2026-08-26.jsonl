@@ -6,3 +6,5 @@
 {"fetch_time": "2026-08-26 13:31:25", "code": "588170", "source": "cache", "minute_status": "cache_hit", "raw_rows": 152, "parsed_rows": 152, "valid_rows": 152, "fetch_cost_ms": 1}
 {"fetch_time": "2026-08-26 13:31:29", "code": "600481", "source": "cache", "minute_status": "cache_hit", "raw_rows": 152, "parsed_rows": 152, "valid_rows": 152, "fetch_cost_ms": 3}
 {"fetch_time": "2026-08-26 13:31:36", "code": "002639", "source": "cache", "minute_status": "cache_hit", "raw_rows": 152, "parsed_rows": 152, "valid_rows": 152, "fetch_cost_ms": 1}
+{"fetch_time": "2026-08-26 13:39:08", "code": "600481", "source": "cache", "minute_status": "cache_hit", "raw_rows": 159, "parsed_rows": 159, "valid_rows": 159, "fetch_cost_ms": 2}
+{"fetch_time": "2026-08-26 13:39:14", "code": "002639", "source": "cache", "minute_status": "cache_hit", "raw_rows": 159, "parsed_rows": 159, "valid_rows": 159, "fetch_cost_ms": 3}
