@@ -38,7 +38,6 @@ T_MODE = BASE / "t_mode.json"
 IDX_REGIME = BASE / "t_io" / "index_regime"
 LOGS_DIR = BASE / "t_io" / "logs"
 INTRADAY_STATE = BASE / "t_io" / "intraday_state.json"
-ACCOUNTS_CONFIG = STATE_DIR / "accounts_config.json"
 PORTFOLIO = STATE_DIR / "portfolio_config.json"
 
 # 内置名称映射（数据缺失 code 时兜底；可由 holdings/add_watch/trace 补充）
@@ -164,7 +163,6 @@ class Api:
                     "position_builder": self._agg_position_builder(date),
                     "stage_board": self._load_stage_board(),
                     "portfolio_config": self.load_portfolio_config(),
-                    "accounts_detail": _load_json(ACCOUNTS_CONFIG, {}).get("accounts", {}),
                     "report_md": "", "name_map": {},
                 })
                 return _clean(out)
@@ -201,7 +199,6 @@ class Api:
         out["stage_board"] = self._load_stage_board()
 
         out["portfolio_config"] = self.load_portfolio_config()
-        out["accounts_detail"] = _load_json(ACCOUNTS_CONFIG, {}).get("accounts", {})
         out["name_map"] = self._build_name_map(
             out["sig_stat"], out["add_watch"], out["position_builder"], out["positions"]["current"]
         )
@@ -785,7 +782,7 @@ class Api:
             if bars and len(bars) >= 30:
                 try:
                     import pandas as _pd
-                    from position_builder import resample_to_5min, add_5min_indicators
+                    from core.position_builder import resample_to_5min, add_5min_indicators
                     _df = _pd.DataFrame(bars)
                     if "time" in _df.columns:
                         _df["time"] = _pd.to_datetime(_df["time"], errors="coerce")
@@ -859,7 +856,7 @@ class Api:
         """补算 daily_ctx 的日线 MACD/趋势字段（旧快照缺失时）。就地更新 daily_ctx。"""
         try:
             import pandas as pd
-            from position_builder import fetch_daily_kline
+            from core.position_builder import fetch_daily_kline
             df = fetch_daily_kline(str(code).split("_")[0])
             if df.empty or len(df) < 30:
                 return
@@ -1361,7 +1358,7 @@ class Api:
         rows = []
         if not is_index and not is_em:
             try:
-                from position_builder import fetch_daily_kline
+                from core.position_builder import fetch_daily_kline
                 _df = fetch_daily_kline(code_str)
                 if not _df.empty:
                     for _r in _df.itertuples(index=False):
@@ -1975,7 +1972,7 @@ class Api:
         result = {}
         try:
             import pandas as _pd
-            from position_builder import _DAILY_CACHE_DIR
+            from core.position_builder import _DAILY_CACHE_DIR
             from config import ENTRY_TIMING_PARAMS as _ETP
             # 指数 regime（读指数日线缓存，零网络）
             regime_by_date = {}
@@ -2090,29 +2087,10 @@ class Api:
             return out
 
         try:
-            # 自动生成 watchlist_jiuyan.json（若缺失）
-            jiuyan_path = HUNTER_DIR / "watchlist_jiuyan.json"
-            if not jiuyan_path.exists():
-                try:
-                    buy_data = _load_json(BASE / "watchlist_buy.json", {})
-                    jiuyan_data = {}
-                    if "stocks" in buy_data:
-                        for code, stock_info in buy_data["stocks"].items():
-                            jiuyan_data[code] = {
-                                "name": stock_info.get("name", ""),
-                                "sector": "监控清单",
-                                "jiuyan_category": "建仓候选",
-                                "jiuyan_concept": stock_info.get("status", "")
-                            }
-                    with open(jiuyan_path, "w", encoding="utf-8") as f:
-                        json.dump(jiuyan_data, f, ensure_ascii=False, indent=2)
-                except Exception as gen_err:
-                    pass  # 生成失败不阻断，后面会由 loader 报错
-
             loader = HLoader(config=hunter_cfg)
             watchlist = loader.load_watchlist()
             if watchlist is None or watchlist.empty:
-                out["error"] = "watchlist 加载为空（检查 watchlist_jiuyan.json 或 watchlist_buy.json 是否存在）"
+                out["error"] = "watchlist 加载为空"
                 return out
 
             df_pool = watchlist[watchlist["韭研概念"].str.strip().ne("")].copy()
@@ -2376,7 +2354,7 @@ class Api:
     def load_channel_batch(self, codes):
         """批量拉日线算通道方向（分批并发，支持全部成分股）。返回 {code: trend}。"""
         import threading
-        from position_builder import fetch_daily_kline
+        from core.position_builder import fetch_daily_kline
         codes = [str(c) for c in (codes or []) if c]
         result = {}
         lock = threading.Lock()
@@ -2412,7 +2390,7 @@ class Api:
         """单只股票技术标签。返回 {trend, box_pos, tags:[{label,color}]}。"""
         import numpy as np
         import pandas as pd
-        from position_builder import fetch_daily_kline
+        from core.position_builder import fetch_daily_kline
         df = fetch_daily_kline(code)
         if df.empty or len(df) < 30:
             return {"trend": "flat", "tags": []}
@@ -3034,24 +3012,10 @@ class Api:
 
     # ---------- 独立配置（账户总资金+已实现亏损） ----------
     def load_portfolio_config(self):
-        """读 t_io/state/accounts_config.json（统一账户源头），无则降级到 portfolio_config.json。"""
-        # 优先读统一配置
-        data = _load_json(ACCOUNTS_CONFIG, None)
-        if data is None or not data.get("accounts"):
-            # 降级到旧配置
-            data = _load_json(PORTFOLIO, {})
-        accounts_data = data.get("accounts", {})
-        # 仅提取需要的字段
-        accounts = {}
-        for name, info in accounts_data.items():
-            accounts[name] = {
-                "total_capital": info.get("total_capital", 0),
-                "broker": info.get("broker", ""),
-                "available": info.get("available", 0),
-                "holdings": info.get("holdings", [])
-            }
+        """读 t_io/state/portfolio_config.json（独立于 holdings.json，用户更新持仓不会覆盖）。"""
+        data = _load_json(PORTFOLIO, {})
         return _clean({
-            "accounts": accounts,
+            "accounts": data.get("accounts", {}),
             "realized_loss": data.get("realized_loss", {}),
         })
 
@@ -3062,15 +3026,8 @@ class Api:
             import config
         except Exception:
             config = None
-        # 使用统一配置加载账户
-        acfg = _load_json(ACCOUNTS_CONFIG, {})
-        if not acfg.get("accounts"):
-            pcfg = _load_json(PORTFOLIO, {})
-            accounts = pcfg.get("accounts", {})
-        else:
-            accounts_data = acfg.get("accounts", {})
-            accounts = {name: {"total_capital": info.get("total_capital", 0)}
-                       for name, info in accounts_data.items()}
+        pcfg = _load_json(PORTFOLIO, {})
+        accounts = pcfg.get("accounts", {})
         total_capital = sum(float(a.get("total_capital") or 0) for a in accounts.values())
         cur = _load_json(HOLDINGS, {})
         # 实时价
@@ -3669,7 +3626,7 @@ class Api:
         重跑用 eod 档、不推送飞书（避免重复打扰）；run_position_scan 会更新 watchlist_buy。"""
         # 1) 重跑建仓扫描（eod 档）
         try:
-            from position_builder import run_position_scan
+            from core.position_builder import run_position_scan
             run_position_scan(date_str=date, scan_type="eod", silent=True, no_feishu=True)
         except Exception:
             pass  # 扫描失败不阻断，add_watch 仍返回
