@@ -38,6 +38,7 @@ T_MODE = BASE / "t_mode.json"
 IDX_REGIME = BASE / "t_io" / "index_regime"
 LOGS_DIR = BASE / "t_io" / "logs"
 INTRADAY_STATE = BASE / "t_io" / "intraday_state.json"
+ACCOUNTS_CONFIG = STATE_DIR / "accounts_config.json"
 PORTFOLIO = STATE_DIR / "portfolio_config.json"
 
 # 内置名称映射（数据缺失 code 时兜底；可由 holdings/add_watch/trace 补充）
@@ -163,6 +164,7 @@ class Api:
                     "position_builder": self._agg_position_builder(date),
                     "stage_board": self._load_stage_board(),
                     "portfolio_config": self.load_portfolio_config(),
+                    "accounts_detail": _load_json(ACCOUNTS_CONFIG, {}).get("accounts", {}),
                     "report_md": "", "name_map": {},
                 })
                 return _clean(out)
@@ -199,6 +201,7 @@ class Api:
         out["stage_board"] = self._load_stage_board()
 
         out["portfolio_config"] = self.load_portfolio_config()
+        out["accounts_detail"] = _load_json(ACCOUNTS_CONFIG, {}).get("accounts", {})
         out["name_map"] = self._build_name_map(
             out["sig_stat"], out["add_watch"], out["position_builder"], out["positions"]["current"]
         )
@@ -3012,10 +3015,24 @@ class Api:
 
     # ---------- 独立配置（账户总资金+已实现亏损） ----------
     def load_portfolio_config(self):
-        """读 t_io/state/portfolio_config.json（独立于 holdings.json，用户更新持仓不会覆盖）。"""
-        data = _load_json(PORTFOLIO, {})
+        """读 t_io/state/accounts_config.json（统一账户源头），无则降级到 portfolio_config.json。"""
+        # 优先读统一配置
+        data = _load_json(ACCOUNTS_CONFIG, None)
+        if data is None or not data.get("accounts"):
+            # 降级到旧配置
+            data = _load_json(PORTFOLIO, {})
+        accounts_data = data.get("accounts", {})
+        # 仅提取需要的字段
+        accounts = {}
+        for name, info in accounts_data.items():
+            accounts[name] = {
+                "total_capital": info.get("total_capital", 0),
+                "broker": info.get("broker", ""),
+                "available": info.get("available", 0),
+                "holdings": info.get("holdings", [])
+            }
         return _clean({
-            "accounts": data.get("accounts", {}),
+            "accounts": accounts,
             "realized_loss": data.get("realized_loss", {}),
         })
 
@@ -3026,8 +3043,15 @@ class Api:
             import config
         except Exception:
             config = None
-        pcfg = _load_json(PORTFOLIO, {})
-        accounts = pcfg.get("accounts", {})
+        # 使用统一配置加载账户
+        acfg = _load_json(ACCOUNTS_CONFIG, {})
+        if not acfg.get("accounts"):
+            pcfg = _load_json(PORTFOLIO, {})
+            accounts = pcfg.get("accounts", {})
+        else:
+            accounts_data = acfg.get("accounts", {})
+            accounts = {name: {"total_capital": info.get("total_capital", 0)}
+                       for name, info in accounts_data.items()}
         total_capital = sum(float(a.get("total_capital") or 0) for a in accounts.values())
         cur = _load_json(HOLDINGS, {})
         # 实时价
