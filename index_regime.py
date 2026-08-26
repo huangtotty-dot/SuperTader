@@ -656,7 +656,7 @@ def _ir_http_get_json(url: str, p: Dict[str, Any]) -> Optional[dict]:
         except Exception as e:
             is_last = attempt + 1 >= max_retry
             if is_last:
-                _ir_log.warning(f"[index_regime] http 全部{max_retry}次重试失败，最后错误: {type(e).__name__}")
+                _ir_log.debug(f"[index_regime] http 全部{max_retry}次重试失败，最后错误: {type(e).__name__} (已降级处理)")
             else:
                 _ir_log.debug(f"[index_regime] http 重试{attempt + 1}/{max_retry}: {type(e).__name__}")
                 time.sleep(float(p["http_retry_sleep"]))
