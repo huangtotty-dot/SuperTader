@@ -51,8 +51,9 @@ def load_df(code):
     return df
 
 
-def run_evaluate(code, df, use_renko, step_min=5):
-    """用 SignalEngine.evaluate 驱动, 每 step_min 分钟评估一次, 返回信号列表[(ts, action, price)]"""
+def run_evaluate(code, df, step_min=5):
+    """用 SignalEngine.evaluate 驱动, 每 step_min 分钟评估一次, 返回信号列表[(ts, action, price)]
+    V3.1: evaluate 恒走 Renko 买入 + 目标止盈(旧布林+MACD已删)。"""
     import core.signal_engine as se
     from core.signal_engine import SignalEngine
     from config import PARAMS
@@ -62,7 +63,6 @@ def run_evaluate(code, df, use_renko, step_min=5):
     se.MINUTE_FETCH_STATUS = {code: "ok"}
     se.PERSIST_INTRADAY_STATE = False
     se.PARAMS = PARAMS
-    PARAMS["swing_use_renko"] = use_renko
 
     eng = SignalEngine()
     signals = []
@@ -170,7 +170,7 @@ def main():
     log(f"样本: {len(codes)}支 × 最近{args.days}交易日 × 每{args.step}min evaluate")
     log("=" * 100)
 
-    agg = {"renko_on": [], "renko_off": [], "independent": []}
+    agg = {"renko_on": [], "independent": []}
     for code in codes:
         df = load_df(code)
         if df is None or df.empty:
@@ -181,17 +181,11 @@ def main():
         df = df[df["date"].isin(last_days)].reset_index(drop=True)
 
         try:
-            sig_on = run_evaluate(code, df, True, step_min=args.step)
+            sig_on = run_evaluate(code, df, step_min=args.step)
             tr_on = settle_daily(sig_on)
         except Exception as e:
-            log(f"{code}: evaluate开 异常 {str(e)[:40]}")
+            log(f"{code}: evaluate 异常 {str(e)[:40]}")
             tr_on = np.array([])
-        try:
-            sig_off = run_evaluate(code, df, False, step_min=args.step)
-            tr_off = settle_daily(sig_off)
-        except Exception as e:
-            log(f"{code}: evaluate关 异常 {str(e)[:40]}")
-            tr_off = np.array([])
         try:
             tr_ind = run_independent(code, df)
         except Exception as e:
@@ -199,19 +193,16 @@ def main():
             tr_ind = np.array([])
 
         n_on, wr_on, avg_on = summarize(tr_on)
-        n_off, wr_off, avg_off = summarize(tr_off)
         n_ind, wr_ind, avg_ind = summarize(tr_ind)
-        agg["renko_on"].append(tr_on); agg["renko_off"].append(tr_off); agg["independent"].append(tr_ind)
-        log(f"{code:<8} 集成开(Renko+止盈): {n_on:>3}笔 {wr_on:5.1f}% {avg_on:+.3f}% | "
-            f"集成关(原布林): {n_off:>3}笔 {wr_off:5.1f}% {avg_off:+.3f}% | "
+        agg["renko_on"].append(tr_on); agg["independent"].append(tr_ind)
+        log(f"{code:<8} evaluate(Renko+止盈): {n_on:>3}笔 {wr_on:5.1f}% {avg_on:+.3f}% | "
             f"独立基准: {n_ind:>3}笔 {wr_ind:5.1f}% {avg_ind:+.3f}%")
 
     log("\n" + "-" * 100)
     log("📊 汇总 (合并全部股票)")
     log(f"{'口径':<22}{'总交易':>8}{'胜率':>9}{'平均收益':>10}")
     log("-" * 100)
-    for name, key in [("集成开 Renko+止盈", "renko_on"), ("集成关 原布林+MACD", "renko_off"),
-                      ("独立基准 Renko+止盈", "independent")]:
+    for name, key in [("evaluate Renko+止盈", "renko_on"), ("独立基准 Renko+止盈", "independent")]:
         all_t = np.concatenate(agg[key]) if agg[key] else np.array([])
         n, wr, avg = summarize(all_t)
         log(f"{name:<22}{n:>8d}{wr:>8.1f}%{avg:>+9.3f}%")

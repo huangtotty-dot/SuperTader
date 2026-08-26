@@ -450,77 +450,13 @@ class SignalEngine:
         sell_score = 0.0
         sig = None
         decision_reason = "HOLD_NO_SWING"
-        # ===== 高抛低吸纯两点 (2026-08-13 用户拍板) =====
-        # 高抛: 5分收盘≥上轨(bb_pct_5m>=1.0) 且 5分RSI(6)>75
-        # 低吸: 5分收盘≤下轨(bb_pct_5m<=0.0) 且 5分RSI(6)<35
-        # 只参考这两点，其余条件(风控/闭环/冷却/限频)全部移除；决策新鲜重采样5分K
+        # ===== V3.1 (2026-08-26): Renko 向下砖买入 + 目标止盈（全面取代旧布林+MACD 纯两点）=====
+        # 依据: 39支×1年复验 Renko买入择时 60.6%(39/39支>50%) / target+0.5%止盈 78.5%胜率
+        # 旧逻辑(布林触轨+MACD/RSI确认)已于 2026-08-27 删除, git 历史可恢复
         self._check_morning_alert(code, name, df, feats)  # 保留飞书早盘预警(纯通知，不再阻断)
         try:
-            if PARAMS.get("swing_use_renko"):
-                # ===== V3.1 (2026-08-26): Renko 向下砖买入 + 目标止盈 =====
-                # 依据: 39支×1年复验 Renko买入择时 60.6%(39/39支>50%) / target+0.5%止盈 78.5%胜率
-                sig, buy_score, sell_score, decision_reason = self._swing_renko_eval(
-                    code, name, df, feats, price)
-            else:
-                _df5 = resample_to_5min(df) if 'resample_to_5min' in globals() else pd.DataFrame()
-                if not _df5.empty:
-                    _df5 = add_5min_indicators(_df5) if 'add_5min_indicators' in globals() else _df5
-                if not _df5.empty and len(_df5) >= int(PARAMS.get("swing_min_5m_bars", 13)):
-                    _l5 = _df5.iloc[-1]
-                    _bb = _l5.get("bb_pct_5m")
-                    _rsi6 = _l5.get("rsi_5m_p6")
-                    if _bb is not None and _rsi6 is not None and not (pd.isna(_bb) or pd.isna(_rsi6)):
-                        _bbv = float(_bb)
-                        _rv = float(_rsi6)
-                        # 2026-08-15 实施: 确认点升级 — 用 15 分钟 MACD 方向替代 5 分 RSI
-                        # （实证 macd15_bb5: 样本内 58.8%/过滤后 73.9%，样本外 75.0%）
-                        _use_macd15 = bool(PARAMS.get("swing_macd15_dir", True))
-                        if _use_macd15:
-                            _bb_up = float(PARAMS.get("swing_macd15_bb_upper", 0.85))
-                            _bb_dn = float(PARAMS.get("swing_macd15_bb_lower", 0.15))
-                            _m15 = float(feats.get("f15_macd_hist_15m") or 0.0)
-                            _sell_ok = _m15 < 0   # 15分MACD死叉(dif<dea) → 高抛
-                            _buy_ok = _m15 > 0    # 15分MACD金叉(dif>dea) → 低吸
-                            _ck = f"15分MACD{'死叉' if _m15 < 0 else ('金叉' if _m15 > 0 else '0')}({_m15:.2f})"
-                            _kind = "swing_bb_macd15"
-                        else:
-                            _bb_up = float(PARAMS.get("swing_bb_upper", 1.0))
-                            _bb_dn = float(PARAMS.get("swing_bb_lower", 0.0))
-                            _sell_ok = _rv > float(PARAMS.get("swing_sell_rsi", 75.0))
-                            _buy_ok = _rv < float(PARAMS.get("swing_buy_rsi", 35.0))
-                            _ck = f"RSI6={_rv:.1f}"
-                            _kind = "swing_bb_rsi"
-                        _ind = {
-                            "vwap": feats.get("vwap", price),
-                            "today_ret": feats.get("today_ret", 0),
-                            "market_state": daily_ctx.get("daily_status", "unknown"),
-                            "entry_kind": _kind,
-                            "macd_hist_15m": feats.get("f15_macd_hist_15m", 0.0),
-                        }
-                        _fac = {"threshold": 35.0, "entry_kind": _kind}
-                        # 2026-08-15 因子实验实施: 高抛放量确认（样本内+6.0pp/样本外+6.4pp 稳健）
-                        _sell_vol_ratio = float(PARAMS.get("swing_sell_vol_ratio", 0) or 0)
-                        _sell_vol_ok, _sell_vol_txt = True, ""
-                        if _sell_vol_ratio > 0:
-                            _vol_5m = float(_l5.get("volume") or 0)
-                            _vol_avg = float(_df5["volume"].mean()) if len(_df5) > 0 else 0.0
-                            _vol_r = _vol_5m / _vol_avg if _vol_avg > 0 else 0.0
-                            _sell_vol_ok = _vol_r >= _sell_vol_ratio
-                            _sell_vol_txt = f" 量比{_vol_r:.1f}≥{_sell_vol_ratio}"
-                        if _bbv >= _bb_up and _sell_ok and _sell_vol_ok:
-                            sell_score = 100.0
-                            _det = f"布林上轨(bb_pct={_bbv:.2f}) + {_ck}{_sell_vol_txt}"
-                            sig = Signal(code, name, "SELL_HIGH", price, sell_score,
-                                         [_det], [{"指标": "高抛", "当前": _det, "加分": 100.0}],
-                                         _ind, dict(_fac))
-                            decision_reason = "SELL_HIGH"
-                        elif _bbv <= _bb_dn and _buy_ok:
-                            buy_score = 100.0
-                            _det = f"布林下轨(bb_pct={_bbv:.2f}) + {_ck}"
-                            sig = Signal(code, name, "BUY_LOW", price, buy_score,
-                                         [_det], [{"指标": "低吸", "当前": _det, "加分": 100.0}],
-                                         _ind, dict(_fac))
-                            decision_reason = "BUY_LOW"
+            sig, buy_score, sell_score, decision_reason = self._swing_renko_eval(
+                code, name, df, feats, price)
         except Exception:
             sig = None
             buy_score = 0.0
@@ -640,6 +576,19 @@ class SignalEngine:
                 sig = Signal(code, name, "SELL_HIGH", price, sell_score,
                              [_det], [{"指标": "高抛", "当前": _det, "加分": 100.0}], _ind, dict(_fac))
                 self.t_entry_price.pop(code, None)
+                # V3.1 复盘 trace: 卖出路径逐笔记录（目标止盈/时间止损/尾盘强平）
+                try:
+                    _append_jsonl(_trace_path(f"renko_t_{today}"), {
+                        "ts": _now().strftime("%Y-%m-%d %H:%M:%S"),
+                        "code": code, "name": name, "action": "SELL_HIGH",
+                        "price": round(float(price), 3),
+                        "entry_price": round(float(entry["price"]), 3),
+                        "tp_target": round(float(entry["price"]) * (1 + tp), 3),
+                        "exit_reason": exit_reason,
+                        "macd15": round(m15, 3),
+                    })
+                except Exception:
+                    pass
                 return sig, 0.0, sell_score, "SELL_HIGH"
 
         # 3) 买入：最新向下砖 + 15分MACD金叉（当日未持有做T仓）
@@ -649,6 +598,17 @@ class SignalEngine:
             sig = Signal(code, name, "BUY_LOW", price, buy_score,
                          [_det], [{"指标": "低吸", "当前": _det, "加分": 100.0}], _ind, dict(_fac))
             self.t_entry_price[code] = {"date": today, "price": price, "ts": df.iloc[-1]["time"]}
+            # V3.1 复盘 trace: 买入信号逐笔记录（供 +30min 反弹验证）
+            try:
+                _append_jsonl(_trace_path(f"renko_t_{today}"), {
+                    "ts": _now().strftime("%Y-%m-%d %H:%M:%S"),
+                    "code": code, "name": name, "action": "BUY_LOW",
+                    "price": round(float(price), 3),
+                    "macd15": round(m15, 3),
+                    "brick_direction": "down",
+                })
+            except Exception:
+                pass
             return sig, buy_score, 0.0, "BUY_LOW"
 
         return None, 0.0, 0.0, "HOLD_NO_SWING"

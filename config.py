@@ -330,31 +330,17 @@ PARAMS = {
     "max_sell_times_per_stock": 3,
     # —— 早盘 ——
     "morning_no_sell_until": 940,
-    # —— 高抛低吸纯两点 (2026-08-13 用户拍板: 布林线触轨 + 确认点) ——
-    "rsi_period_5m_swing": 6,   # 5分钟RSI周期(专用列 rsi_5m_p6, 不动 rsi_5m(14))
-    # 2026-08-15 实验后回退: 15分MACD确认(macd15_bb5)修正未来函数后无效(44.4% vs 原45.9%)，
-    # 故默认 False 保持原 5分RSI 确认；True 仅供实验，不作为生产口径
-    "swing_macd15_dir": False,              # False=5分RSI确认(生产)；True=15分MACD方向(实验)
-    "swing_macd15_bb_upper": 0.85,          # 实验: 高抛 5分收盘 bb_pct_5m ≥ 0.85
-    "swing_macd15_bb_lower": 0.15,          # 实验: 低吸 5分收盘 bb_pct_5m ≤ 0.15
-    "swing_sell_rsi": 75.0,     # 高抛: 5分RSI(6) > 75
-    "swing_buy_rsi": 35.0,      # 低吸: 5分RSI(6) < 35
-    "swing_bb_upper": 1.0,      # 高抛: 5分收盘 ≥ 上轨 (bb_pct_5m>=1.0)
-    "swing_bb_lower": 0.0,      # 低吸: 5分收盘 ≤ 下轨 (bb_pct_5m<=0.0)
-    "swing_min_5m_bars": 13,    # 预热: 至少13根5分K才开始判断
-    # 2026-08-15 因子实验实施: 高抛放量确认（样本内+6.0pp/样本外+6.4pp，稳健）
-    # 放量冲高(近5分钟量≥全天均量×该倍数)时高抛更可靠；0=关闭
-    "swing_sell_vol_ratio": 1.5,
-    # —— V3.1 Renko买入+目标止盈做T (2026-08-26 集成, 默认关=生产行为不变) ——
+    # —— V3.1 Renko买入+目标止盈做T (2026-08-26 集成, 全面取代旧布林+MACD) ——
     # 依据: 39支×1年1min复验 — Renko向下砖+15分MACD金叉 买入择时39/39支>50%(+30min 60.6%);
     #       baseline布林追跌 0/39(34.7%)。卖出侧 target+0.5% 止盈 胜率78.5% (vs 等MACD死叉 55.7%)
-    # False=原布林触轨+确认逻辑(生产); True=Renko买入+目标止盈做T
-    "swing_use_renko": False,
+    # 旧 swing 参数(swing_macd15_*/swing_sell_rsi/swing_buy_rsi/swing_bb_*/swing_min_5m_bars/
+    #   swing_sell_vol_ratio/swing_use_renko)已于 2026-08-27 删除, git 历史可恢复
+    # rsi_period_5m_swing 保留: analysis/indicators.py 计算 rsi_5m_p6, 被 index_resonance.py 依赖
+    "rsi_period_5m_swing": 6,   # 5分钟RSI周期(专用列 rsi_5m_p6, 不动 rsi_5m(14))
     "swing_renko_brick_pct": 0.003,     # Renko砖高(0.3%, 已验证; 1min数据构建)
     "swing_take_profit_pct": 0.005,     # 目标止盈: 相对做T买入价 +0.5%
     "swing_t_max_hold_min": 0,          # 0=不启用时间止损; >0=买入后N分钟强制卖(可选)
-    # 尾盘强制平仓时间(HHMM), 做T当日闭环
-    "swing_force_exit_tval": 1455,
+    "swing_force_exit_tval": 1455,      # 尾盘强制平仓时间(HHMM), 做T当日闭环
     # V1.2.0 (2026-08-08 用户拍板上线): C1' 口径B — 全部买信号单股日限 7 内置状态机
     # record_signal 层计数，第 8 条起当日不再产生买入信号（卖信号不受限；0/None=关闭；
     # harness T_BUY_DAILY_CAP 可显式覆盖做 A/B）
@@ -435,8 +421,6 @@ STOCK_PARAMS = {
         # 2026-08-24 方案A: 分标的做T门控优化（ETF激进）
         "allow_overheated_buy": True,          # 激进：绕过过热门控
         "allow_breakdown_buy": True,           # 激进：绕过破位门控
-        "swing_buy_rsi": 40,                   # ETF激进参数：低吸点更浅（35→40）
-        "swing_bb_lower": 0.1,                 # ETF激进参数：下轨更高，提前触发（0.0→0.1）
     },
     "600176": {  # 中国巨石
         "stock_qty_base_pct": 0.34, "stock_qty_strong_pct": 0.59,
@@ -453,7 +437,6 @@ STOCK_PARAMS = {
     "300153": {  # 科泰电源
         # 2026-08-24 方案A: 分标的做T门控优化（波动大的个股适度放宽）
         "allow_overheated_buy": True,          # 适度激进：绕过过热门控
-        "swing_buy_rsi": 38,                   # 个股激进参数：低吸点更浅（35→38）
     },
 }
 
