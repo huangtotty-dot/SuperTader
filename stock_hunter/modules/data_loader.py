@@ -118,7 +118,8 @@ class DataLoader:
         self.config = config
         self.base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         self.data_dir = data_dir or config.get("base_dir", ".") + "/" + config.get("data_dir", "data")
-        self._watchlist_path = os.path.join(self.base_dir, "watchlist_jiuyan.json")
+        project_root = os.path.dirname(self.base_dir)
+        self._watchlist_path = os.path.join(project_root, "watchlist_jiuyan.json")
         self._watchlist_df: Optional[pd.DataFrame] = None
 
     @staticmethod
