@@ -453,8 +453,10 @@ def analyze_holdings_auction(date: str, auction_data: dict,
         price_9_22 = row_9_22.get("auction_price")
         pre_close = row_9_20.get("pre_close") or holding.get("pre_close", 0)
 
-        # 缺口计算（基于 9:20 快照）
-        if pre_close and price_9_20:
+        # 缺口计算（优先使用竞价数据中已计算的 pct_vs_preclose，否则重新计算）
+        if "pct_vs_preclose" in row_9_20:
+            gap_pct = row_9_20.get("pct_vs_preclose", 0.0) or 0.0
+        elif pre_close and price_9_20:
             gap_pct = (price_9_20 - pre_close) / pre_close * 100
         else:
             gap_pct = 0.0
