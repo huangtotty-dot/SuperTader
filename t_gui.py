@@ -2090,7 +2090,19 @@ class Api:
             loader = HLoader(config=hunter_cfg)
             watchlist = loader.load_watchlist()
             if watchlist is None or watchlist.empty:
-                out["error"] = "watchlist 加载为空"
+                # 诊断信息：输出更多细节帮助排查问题
+                watchlist_path = HUNTER_DIR / "watchlist_jiuyan.json"
+                log.warning(f"[HUNTER] watchlist 加载失败")
+                log.warning(f"  - watchlist_path: {watchlist_path}")
+                log.warning(f"  - exists: {watchlist_path.exists()}")
+                if watchlist_path.exists():
+                    try:
+                        test_data = json.loads(watchlist_path.read_text(encoding='utf-8'))
+                        log.warning(f"  - file size: {watchlist_path.stat().st_size} bytes")
+                        log.warning(f"  - records: {len(test_data)}")
+                    except Exception as e:
+                        log.warning(f"  - read error: {e}")
+                out["error"] = f"watchlist 加载失败 (path: {watchlist_path}, exists: {watchlist_path.exists()})"
                 return out
 
             df_pool = watchlist[watchlist["韭研概念"].str.strip().ne("")].copy()

@@ -154,9 +154,20 @@ class DataLoader:
     def load_watchlist(self) -> Optional[pd.DataFrame]:
         """对外接口：加载完整 watchlist"""
         try:
-            return self._load_watchlist()
+            print(f"[HUNTER] Attempting to load watchlist from: {self._watchlist_path}")
+            result = self._load_watchlist()
+            print(f"[HUNTER] Watchlist loaded successfully")
+            return result
         except FileNotFoundError as e:
-            print(f"  [INFO] {e}")
+            print(f"  [ERROR] {e}")
+            print(f"[HUNTER] Watchlist file not found at: {self._watchlist_path}")
+            import os
+            print(f"[HUNTER] Directory contents: {os.listdir(os.path.dirname(self._watchlist_path))}")
+            return None
+        except Exception as e:
+            print(f"  [ERROR] Unexpected error loading watchlist: {e}")
+            import traceback
+            traceback.print_exc()
             return None
 
     def load_concept_summary(self) -> pd.DataFrame:
