@@ -1,0 +1,136 @@
+{
+  "date": "2026-08-26",
+  "codes": [
+    "515180",
+    "588170",
+    "600481",
+    "002639"
+  ],
+  "snapshots": {
+    "09:20": {
+      "ts": "2026-08-26 09:21:24",
+      "source": "qt.gtimg.cn realtime",
+      "rows": {
+        "515180": {
+          "name": "红利ETF易方达",
+          "auction_price": 1.441,
+          "pre_close": 1.445,
+          "pct_vs_preclose": -0.28,
+          "auction_vol_hand": 0.0,
+          "amount_wan": 0.0,
+          "src_ts": "20260826092124"
+        },
+        "588170": {
+          "name": "科创半导体ETF华夏",
+          "auction_price": 0.977,
+          "pre_close": 0.976,
+          "pct_vs_preclose": 0.1,
+          "auction_vol_hand": 0.0,
+          "amount_wan": 0.0,
+          "src_ts": "20260826092125"
+        },
+        "600481": {
+          "name": "双良节能",
+          "auction_price": 4.25,
+          "pre_close": 4.27,
+          "pct_vs_preclose": -0.47,
+          "auction_vol_hand": 0.0,
+          "amount_wan": 0.0,
+          "src_ts": "20260826092122"
+        },
+        "002639": {
+          "name": "雪人集团",
+          "auction_price": 11.97,
+          "pre_close": 11.82,
+          "pct_vs_preclose": 1.27,
+          "auction_vol_hand": 0.0,
+          "amount_wan": 0.0,
+          "src_ts": "20260826092121"
+        }
+      },
+      "index_rows": {
+        "sh000001": {
+          "name": "上证指数",
+          "auction_price": 3889.24,
+          "pre_close": 3889.44,
+          "gap_pct": -0.01
+        },
+        "sh000688": {
+          "name": "科创50",
+          "auction_price": 1604.59,
+          "pre_close": 1604.59,
+          "gap_pct": 0.0
+        },
+        "sz399001": {
+          "name": "深证成指",
+          "auction_price": 13745.87,
+          "pre_close": 13745.87,
+          "gap_pct": 0.0
+        }
+      }
+    },
+    "09:22": {
+      "ts": "2026-08-26 09:23:24",
+      "source": "qt.gtimg.cn realtime",
+      "rows": {
+        "515180": {
+          "name": "红利ETF易方达",
+          "auction_price": 1.441,
+          "pre_close": 1.445,
+          "pct_vs_preclose": -0.28,
+          "auction_vol_hand": 0.0,
+          "amount_wan": 0.0,
+          "src_ts": "20260826092321"
+        },
+        "588170": {
+          "name": "科创半导体ETF华夏",
+          "auction_price": 0.977,
+          "pre_close": 0.976,
+          "pct_vs_preclose": 0.1,
+          "auction_vol_hand": 0.0,
+          "amount_wan": 0.0,
+          "src_ts": "20260826092325"
+        },
+        "600481": {
+          "name": "双良节能",
+          "auction_price": 4.26,
+          "pre_close": 4.27,
+          "pct_vs_preclose": -0.23,
+          "auction_vol_hand": 0.0,
+          "amount_wan": 0.0,
+          "src_ts": "20260826092322"
+        },
+        "002639": {
+          "name": "雪人集团",
+          "auction_price": 11.97,
+          "pre_close": 11.82,
+          "pct_vs_preclose": 1.27,
+          "auction_vol_hand": 0.0,
+          "amount_wan": 0.0,
+          "src_ts": "20260826092318"
+        }
+      },
+      "index_rows": {
+        "sh000001": {
+          "name": "上证指数",
+          "auction_price": 3889.24,
+          "pre_close": 3889.44,
+          "gap_pct": -0.01
+        },
+        "sh000688": {
+          "name": "科创50",
+          "auction_price": 1604.59,
+          "pre_close": 1604.59,
+          "gap_pct": 0.0
+        },
+        "sz399001": {
+          "name": "深证成指",
+          "auction_price": 13745.87,
+          "pre_close": 13745.87,
+          "gap_pct": 0.0
+        }
+      }
+    }
+  },
+  "gaps": []
+}

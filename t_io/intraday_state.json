@@ -1,22 +1,60 @@
 {
-  "date": "2026-08-22",
-  "cycle_count": {},
+  "date": "2026-08-26",
+  "cycle_count": {
+    "588170": 4
+  },
   "buy_count": {},
   "sell_count": {
-    "002639": 4
+    "588170": 4
   },
   "trend_regimes": {
-    "002639": {
+    "515180": {
       "state": "BULL",
       "confidence": 0.55,
       "pending_state": null,
       "pending_bars": 0,
-      "last_dif": 0.11467341313530532,
-      "last_dea": 0.09058316786953942,
-      "last_rsi": 73.3333333333333,
-      "prev_rsi": 72.00000000000014,
-      "bb_mid_slope": 0.0014397696368579343,
-      "bb_width_ratio": 1.745989584699713
+      "last_dif": 0.004499450008630168,
+      "last_dea": 0.004219424334542858,
+      "last_rsi": 77.272727272727,
+      "prev_rsi": 82.14285714285688,
+      "bb_mid_slope": 0.00020836302451180216,
+      "bb_width_ratio": 0.9547874394856988
+    },
+    "588170": {
+      "state": "NEUTRAL",
+      "confidence": 0.0,
+      "pending_state": "BULL",
+      "pending_bars": 1,
+      "last_dif": 0.0014870990661610684,
+      "last_dea": -0.0005252825000187647,
+      "last_rsi": 61.29032258064516,
+      "prev_rsi": 50.0,
+      "bb_mid_slope": 0.0007512512007811001,
+      "bb_width_ratio": 1.7240295432688955
+    },
+    "600481": {
+      "state": "NEUTRAL",
+      "confidence": 0.0,
+      "pending_state": "BULL",
+      "pending_bars": 1,
+      "last_dif": 0.008716101793079467,
+      "last_dea": 0.003704336606411324,
+      "last_rsi": 62.500000000000064,
+      "prev_rsi": 50.0,
+      "bb_mid_slope": 0.0006043023826409869,
+      "bb_width_ratio": 1.398977725234236
+    },
+    "002639": {
+      "state": "NEUTRAL",
+      "confidence": 0.0,
+      "pending_state": "BEAR",
+      "pending_bars": 1,
+      "last_dif": -0.06255713222509662,
+      "last_dea": -0.0669046680333977,
+      "last_rsi": 28.571428571428683,
+      "prev_rsi": 50.0,
+      "bb_mid_slope": -4.7329353529294625e-05,
+      "bb_width_ratio": 0.8862474808972322
     }
   }
 }

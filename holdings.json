@@ -6,18 +6,18 @@
     "base": 14000,
     "t_qty": 0,
     "type": "etf",
-    "account": "账户A",
+    "account": "账户B",
     "pre_close": 1.443
   },
   "588170": {
     "name": "科创半导体ETF华夏",
     "cost": 0.478,
     "qty": 1500,
-    "base": 1000,
-    "t_qty": 500,
+    "base": 1500,
+    "t_qty": 0,
     "type": "etf",
-    "account": "账户B",
-    "pre_close": 0.976
+    "account": "账户C",
+    "pre_close": 0.98
   },
   "600481": {
     "name": "双良节能",
@@ -36,7 +36,7 @@
     "base": 100,
     "t_qty": 0,
     "type": "stock",
-    "account": "账户A",
+    "account": "账户B",
     "pre_close": 11.82
   }
 }
