@@ -69,9 +69,24 @@ except Exception:
     pass
 
 # 按顺序加载模块：后面的模块可以引用前面的模块
-module_order = ['config', 'utils', 'data_fetcher', 'indicators', 'signal_engine', 'auction_analyzer', 'preopen', 'support_resistance', 'index_regime', 'index_regime_intraday', 'market_regime', 'position_sizer', 'daily_sentiment']
-for mod_name in module_order:
-    mod_path = _os.path.join(BASE_DIR, f"{mod_name}.py")
+# 格式: (模块名, 相对路径)
+module_order = [
+    ('config', 'config.py'),
+    ('utils', 'utils.py'),
+    ('data_fetcher', 'src/data_fetcher.py'),
+    ('indicators', 'analysis/indicators.py'),
+    ('signal_engine', 'core/signal_engine.py'),
+    ('auction_analyzer', 'execution/auction_analyzer.py'),
+    ('preopen', 'execution/preopen.py'),
+    ('support_resistance', 'optimization/support_resistance.py'),
+    ('index_regime', 'analysis/index_regime.py'),
+    ('index_regime_intraday', 'analysis/index_regime_intraday.py'),
+    ('market_regime', 'core/market_regime.py'),
+    ('position_sizer', 'core/position_sizer.py'),
+    ('daily_sentiment', 'execution/daily_sentiment.py'),
+]
+for mod_name, mod_rel_path in module_order:
+    mod_path = _os.path.join(BASE_DIR, mod_rel_path)
     if not _os.path.exists(mod_path):
         print(f"[WARN] 模块不存在: {mod_path}")
         continue
@@ -83,9 +98,9 @@ for mod_name in module_order:
     shared['__name__'] = mod_name
     exec(compile(code, mod_path, 'exec'), shared)
     try:
-        print(f"[OK] 模块已加载: {mod_name}.py")
+        print(f"[OK] 模块已加载: {mod_rel_path}")
     except UnicodeEncodeError:
-        print(f"[OK] 模块已加载: {mod_name}.py")
+        print(f"[OK] 模块已加载: {mod_rel_path}")
 shared['__name__'] = '__main__'  # 恢复：main.py 尾部自身的 __main__ 启动守卫依赖该值
 
 # ── 建仓信号扫描（收盘后自动执行）──
