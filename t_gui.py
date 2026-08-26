@@ -2090,10 +2090,29 @@ class Api:
             return out
 
         try:
+            # 自动生成 watchlist_jiuyan.json（若缺失）
+            jiuyan_path = HUNTER_DIR / "watchlist_jiuyan.json"
+            if not jiuyan_path.exists():
+                try:
+                    buy_data = _load_json(BASE / "watchlist_buy.json", {})
+                    jiuyan_data = {}
+                    if "stocks" in buy_data:
+                        for code, stock_info in buy_data["stocks"].items():
+                            jiuyan_data[code] = {
+                                "name": stock_info.get("name", ""),
+                                "sector": "监控清单",
+                                "jiuyan_category": "建仓候选",
+                                "jiuyan_concept": stock_info.get("status", "")
+                            }
+                    with open(jiuyan_path, "w", encoding="utf-8") as f:
+                        json.dump(jiuyan_data, f, ensure_ascii=False, indent=2)
+                except Exception as gen_err:
+                    pass  # 生成失败不阻断，后面会由 loader 报错
+
             loader = HLoader(config=hunter_cfg)
             watchlist = loader.load_watchlist()
             if watchlist is None or watchlist.empty:
-                out["error"] = "watchlist 加载为空"
+                out["error"] = "watchlist 加载为空（检查 watchlist_jiuyan.json 或 watchlist_buy.json 是否存在）"
                 return out
 
             df_pool = watchlist[watchlist["韭研概念"].str.strip().ne("")].copy()
