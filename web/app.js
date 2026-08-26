@@ -126,7 +126,7 @@ function scanAgeSec(scanTime) {
 }
 
 /* ================= 数据加载 ================= */
-let state = { date: null, payload: null, trend: [] };
+let state = { date: null, payload: null, trend: [], accountsDetail: {} };
 let userPinnedDate = false;   // 用户手动选了历史日期时置 true，防止自动切回今天覆盖用户选择
 
 async function apiCall(name, ...args) {
@@ -148,6 +148,8 @@ async function loadAndRender(date, silent) {
     state.payload = payload;
     // 独立配置（账户总资金+已实现亏损），不随 holdings.json 更新丢失
     portfolioCfg = (payload.portfolio_config) || { accounts: {}, realized_loss: {} };
+    // 账户详细信息（统一源头）
+    state.accountsDetail = (payload.accounts_detail) || {};
     renderAll(payload);
 
     // K1 做T盈亏（独立于 daily_review，读 closure_audit）
@@ -917,10 +919,13 @@ function renderPositions(pos, nameMap) {
     const k2v = k2b[code], k3v = k3b[code];
     const drift = k3v ? k3v.drift : null;
     const costDelta = k2v ? k2v.delta : null;
+    // 从 accountsDetail 获取账户 broker 信息
+    const acctDetail = state.accountsDetail && state.accountsDetail[s.account] ? state.accountsDetail[s.account] : {};
+    const brokerTip = acctDetail.broker ? `title="${esc(acctDetail.broker)}"` : "";
     return `
       <tr>
         <td>${esc(nm)} <span class="mono cell-dim">${esc(code)}</span> ${tmBadge}</td>
-        <td class="cell-dim">${esc(s.account || "")} ${esc(s.type || "")}</td>
+        <td class="cell-dim" ${brokerTip}>${esc(s.account || "")} ${esc(s.type || "")}</td>
         <td class="num">${fmt(s.qty, 0)}</td>
         <td class="num"><span class="hl">${fmt(s.t_qty, 0)}</span><span class="cell-dim">/base ${fmt(s.base, 0)}</span></td>
         <td class="num cell-dim">${fmt(prev.t_qty, 0)}</td>
@@ -3309,6 +3314,10 @@ function switchTab(tab) {
   if (sideItem) sideItem.classList.add("active");
   // 延迟 resize 让 tab 的 display:block 先生效
   setTimeout(resizeAllEch, 80);
+  // 切到选股猎手：若未加载过则自动加载当日数据
+  if (tab === "hunter" && !hunterLoaded) {
+    loadHunter(false);
+  }
   // 切到每日复盘：懒加载模型配置 + 已有复盘
   if (tab === "archive") renderDailyReview();
 }
