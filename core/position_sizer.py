@@ -15,7 +15,7 @@ position_sizer.py — 动态仓位管理器（V1.14 新架构）
 
 import logging
 from typing import Dict, Any, Optional
-from market_regime import MarketRegime, should_clear_all, should_reduce
+from core.market_regime import MarketRegime, should_clear_all, should_reduce
 
 log = logging.getLogger("做T助手")
 

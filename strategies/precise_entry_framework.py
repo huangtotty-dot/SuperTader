@@ -28,7 +28,7 @@ BASE = Path(__file__).resolve().parent
 import sys
 sys.path.insert(0, str(BASE))
 
-from position_builder import (
+from core.position_builder import (
     fetch_daily_kline, load_snapshot_df,
     resample_to_5min, add_5min_indicators,
     resample_to_15min, add_15min_indicators
