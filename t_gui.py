@@ -3400,6 +3400,86 @@ class Api:
         except Exception as e:
             return {"ok": False, "error": str(e)}
 
+    def get_signal_condition_detail(self, code, date=None):
+        """获取某支股票的详细条件检查报告（用于 GUI 折叠式面板）。
+        返回 {conditions_met, conditions_total, conditions: [{name, status, message, detail}], blockers: [...]}"""
+        if not date:
+            date = datetime.now().strftime("%Y-%m-%d")
+
+        fp = TRACES / f"position_builder_{date}.jsonl"
+        if not fp.exists():
+            return {"available": False, "error": "扫描数据不可用"}
+
+        # 查找该股票的最新扫描记录
+        latest_record = None
+        try:
+            lines = open(fp, encoding="utf-8").read().splitlines()
+            for line in reversed(lines):
+                if not line.strip():
+                    continue
+                try:
+                    r = json.loads(line)
+                    if r.get("code") == code:
+                        latest_record = r
+                        break
+                except Exception:
+                    continue
+        except Exception:
+            pass
+
+        if not latest_record:
+            return {"available": False, "error": f"未找到 {code} 的扫描记录"}
+
+        # 构建条件详情列表
+        conditions_detail = []
+        channels = latest_record.get("channels", {})
+        conditions = latest_record.get("conditions", {})
+        verdict = latest_record.get("verdict", "")
+
+        # 从 channels 提取条件
+        for ch_name in ("iceberg", "breakout"):
+            ch = channels.get(ch_name, {})
+            if not ch:
+                continue
+            conditions_detail.append({
+                "category": ch_name,
+                "name": ch.get("name", ch_name),
+                "verdict": ch.get("verdict", ""),
+                "score": ch.get("score", 0),
+                "message": f"得分 {ch.get('score', 0)}/100，状态: {ch.get('verdict', '未知')}"
+            })
+
+        # blockers 信息
+        blockers = latest_record.get("blockers", [])
+        blockers_detail = []
+        for b in blockers:
+            blockers_detail.append({
+                "key": b.get("key", ""),
+                "label": b.get("label", ""),
+                "current": b.get("cur", ""),
+                "required": b.get("need", ""),
+                "gap": b.get("gap_txt", ""),
+                "message": f"【{b.get('label', '未知')}】{b.get('gap_txt', '条件未满足')}"
+            })
+
+        # 计算满足的条件数
+        conditions_met = sum(1 for v in conditions.values() if isinstance(v, dict) and v.get("passed"))
+        conditions_total = len([v for v in conditions.values() if isinstance(v, dict)])
+
+        return {
+            "available": True,
+            "code": code,
+            "name": latest_record.get("name", code),
+            "verdict": verdict,
+            "composite_score": latest_record.get("composite_score", 0),
+            "scan_time": latest_record.get("scan_time", ""),
+            "conditions_met": conditions_met,
+            "conditions_total": conditions_total,
+            "conditions_detail": conditions_detail,
+            "blockers": blockers_detail,
+            "divergence": latest_record.get("divergence_detail", {}),
+        }
+
     def get_high_confidence_signals(self, date):
         """获取高置信度建仓信号（仅 signal/approaching 且有连续背离或无背离数据）。
         筛选规则：排除所有 weak 信号 + 单次无效背离，只显示核心信号。"""
