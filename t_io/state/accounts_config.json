@@ -1,0 +1,36 @@
+{
+  "_description": "统一账户配置 - 所有账户信息的唯一源头",
+  "accounts": {
+    "账户A": {
+      "broker": "国盛证券-黄",
+      "total_capital": 100021.06,
+      "available": 100021.06,
+      "holdings": [],
+      "enabled": true
+    },
+    "账户B": {
+      "broker": "东兴证券-鲁",
+      "total_capital": 85098.18,
+      "available": 63546.18,
+      "holdings": ["515180", "600481", "002639"],
+      "enabled": true
+    },
+    "账户C": {
+      "broker": "东方证券-黄",
+      "total_capital": 213618.62,
+      "available": 211694.12,
+      "holdings": ["588170"],
+      "enabled": true
+    }
+  },
+  "realized_loss": {
+    "588170": 0,
+    "600176": 0,
+    "600481": 0,
+    "603667": 0,
+    "000988": 0,
+    "000988_B": 0,
+    "002639": 0,
+    "300153": 0
+  }
+}

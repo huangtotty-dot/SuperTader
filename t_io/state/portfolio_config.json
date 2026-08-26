@@ -1,8 +1,10 @@
 {
-  "_note": "此文件独立于 holdings.json，你更新持仓时不会覆盖这里的配置",
+  "_note": "此文件已废弃，改用 accounts_config.json 作为唯一源头。本文件保留向后兼容。",
+  "_accounts_config_path": "t_io/state/accounts_config.json",
   "accounts": {
-    "账户A": {"total_capital": 83478.92},
-    "账户B": {"total_capital": 209893.56}
+    "账户A": {"total_capital": 100021.06},
+    "账户B": {"total_capital": 85098.18},
+    "账户C": {"total_capital": 213618.62}
   },
   "realized_loss": {
     "588170": 0,
