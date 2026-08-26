@@ -69,9 +69,24 @@ except Exception:
     pass
 
 # 按顺序加载模块：后面的模块可以引用前面的模块
-module_order = ['config', 'utils', 'data_fetcher', 'indicators', 'signal_engine', 'auction_analyzer', 'preopen', 'support_resistance', 'index_regime', 'index_regime_intraday', 'market_regime', 'position_sizer', 'daily_sentiment']
-for mod_name in module_order:
-    mod_path = _os.path.join(BASE_DIR, f"{mod_name}.py")
+# 格式: (模块名, 相对路径)
+module_order = [
+    ('config', 'config.py'),
+    ('utils', 'utils.py'),
+    ('data_fetcher', 'src/data_fetcher.py'),
+    ('indicators', 'analysis/indicators.py'),
+    ('signal_engine', 'core/signal_engine.py'),
+    ('auction_analyzer', 'execution/auction_analyzer.py'),
+    ('preopen', 'execution/preopen.py'),
+    ('support_resistance', 'optimization/support_resistance.py'),
+    ('index_regime', 'analysis/index_regime.py'),
+    ('index_regime_intraday', 'analysis/index_regime_intraday.py'),
+    ('market_regime', 'core/market_regime.py'),
+    ('position_sizer', 'core/position_sizer.py'),
+    ('daily_sentiment', 'execution/daily_sentiment.py'),
+]
+for mod_name, mod_rel_path in module_order:
+    mod_path = _os.path.join(BASE_DIR, mod_rel_path)
     if not _os.path.exists(mod_path):
         print(f"[WARN] 模块不存在: {mod_path}")
         continue
@@ -83,15 +98,15 @@ for mod_name in module_order:
     shared['__name__'] = mod_name
     exec(compile(code, mod_path, 'exec'), shared)
     try:
-        print(f"[OK] 模块已加载: {mod_name}.py")
+        print(f"[OK] 模块已加载: {mod_rel_path}")
     except UnicodeEncodeError:
-        print(f"[OK] 模块已加载: {mod_name}.py")
+        print(f"[OK] 模块已加载: {mod_rel_path}")
 shared['__name__'] = '__main__'  # 恢复：main.py 尾部自身的 __main__ 启动守卫依赖该值
 
 # ── 建仓信号扫描（收盘后自动执行）──
 try:
-    from position_builder import run_position_scan as _run_position_scan
-    from position_builder import push_summary_feishu as _push_summary_feishu
+    from core.position_builder import run_position_scan as _run_position_scan
+    from core.position_builder import push_summary_feishu as _push_summary_feishu
 except Exception as _e:
     _run_position_scan = None
     _push_summary_feishu = None
@@ -106,7 +121,7 @@ if "--tushare-replay" in sys.argv:
     _write_resonance_trace = None
 else:
     try:
-        from index_resonance import compute_resonance as _compute_resonance
+        from analysis.index_resonance import compute_resonance as _compute_resonance
         from index_resonance import write_resonance_trace as _write_resonance_trace
     except Exception as _e:
         _RESONANCE_MODULE_OK = False
@@ -177,7 +192,7 @@ def _below_ma5(code):
     """个股日线最新收盘 < MA5（盘中用最新可得收盘，通常为昨日；docstring 注明边界）。
     C-2(2026-08-21): 用户规则"破五日线只卖不买"系统化。数据缺失返回 None（不拦截）。"""
     try:
-        from position_builder import fetch_daily_kline
+        from core.position_builder import fetch_daily_kline
         df = fetch_daily_kline(code)
         if df is None or df.empty or "close" not in df.columns or len(df) < 6:
             return None
@@ -1229,7 +1244,7 @@ def _maybe_run_ma_break_alert(now: datetime) -> None:
 
     def _worker(day: str) -> None:
         try:
-            from position_builder import run_ma_break_alert as _run_ma_break_alert
+            from core.position_builder import run_ma_break_alert as _run_ma_break_alert
             if not _position_scan_lock.acquire(timeout=120):
                 log.warning("⚠️ 破线报警等待建仓扫描释放锁超时，本轮跳过（下轮重试）")
                 return
@@ -2042,7 +2057,7 @@ def scan_once():
                     regime = None
                     regime_reason = ""
                     try:
-                        from market_regime import detect_regime, MarketRegime
+                        from core.market_regime import detect_regime, MarketRegime
                         regime_obj, regime_reason = detect_regime(
                             code, _now().strftime("%Y-%m-%d"), 
                             preopen_data=preopen_context
