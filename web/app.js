@@ -2138,23 +2138,39 @@ async function showSectorHistory(sector) {
   }
 }
 async function addNewWatchlist() {
-  const code = document.getElementById("pbSearchCode").value.trim();
-  const name = document.getElementById("pbSearchName").value.trim();
-  if (!code) { statusEl("请输入股票代码", "err"); return; }
-  if (!/^\d{6}$/.test(code)) { statusEl("代码格式应为6位数字", "err"); return; }
-  // 若名称空则尝试自动取
-  let finalName = name;
-  if (!finalName) {
-    try {
-      const r = await apiCall("search_stock", code);
-      const hit = (r.results || []).find(x => x.code === code);
-      if (hit) finalName = hit.name;
-    } catch (e) { /* 静默 */ }
-  }
-  const ok = await addToWatchlist(code, finalName || code, null);
-  if (ok) {
-    document.getElementById("pbSearchCode").value = "";
-    document.getElementById("pbSearchName").value = "";
+  const codeEl = document.getElementById("pbSearchCode");
+  const nameEl = document.getElementById("pbSearchName");
+  const btn = document.getElementById("pbAddBtn");
+  const code = codeEl.value.trim();
+  const name = nameEl.value.trim();
+  if (!code) { statusEl("请输入股票代码", "err"); codeEl.focus(); return; }
+  if (!/^\d{6}$/.test(code)) { statusEl("代码格式应为6位数字", "err"); codeEl.focus(); return; }
+  // 立即反馈：按钮置灰 + 文案变化，同时防重复点击
+  const prevTxt = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = "添加中...";
+  try {
+    // 名称空则自动取（带进度提示 + 2.5s 超时兜底，避免网络卡住时界面毫无反应）
+    let finalName = name;
+    if (!finalName) {
+      statusEl(`正在获取 ${code} 名称...`, "ok");
+      try {
+        const r = await Promise.race([
+          apiCall("search_stock", code),
+          new Promise((_, rej) => setTimeout(() => rej(new Error("timeout")), 2500))
+        ]);
+        const hit = (r.results || []).find(x => x.code === code);
+        if (hit) finalName = hit.name;
+      } catch (e) { /* 名称获取失败/超时则用代码兜底 */ }
+    }
+    const ok = await addToWatchlist(code, finalName || code, null);
+    if (ok) {
+      codeEl.value = "";
+      nameEl.value = "";
+    }
+  } finally {
+    btn.disabled = false;
+    btn.textContent = prevTxt;
   }
 }
 async function addToWatchlist(code, name, btn) {
