@@ -122,8 +122,9 @@ def _load_json(fp, default=None):
 
 
 # 技术标签 TTL 缓存：GUI 每 10s 轮询 refresh_pb → load_stock_tags_batch（单次约 7-12s，
-# 期间大量 pandas + 网络在 pywebview 主线程执行会冻结界面）。改为 30s 缓存 + 后台异步重算，
-# 轮询永远读缓存即时返回，界面不卡。
+# 期间大量 pandas + 网络在 pywebview 主线程执行会冻结界面）。改为 TTL 缓存 + 后台异步重算，
+# 轮询永远读缓存即时返回，界面不卡。TTL 取 120s：标签变化慢，过长 TTL 减少后台重算的 CPU 尖峰。
+_TAGS_TTL = 120.0
 _TAGS_CACHE: dict = {}
 _TAGS_LOCK = threading.Lock()
 _TAGS_RUNNING = False
@@ -213,6 +214,22 @@ class Api:
             out["sig_stat"], out["add_watch"], out["position_builder"], out["positions"]["current"]
         )
         return _clean(out)
+
+    def _build_name_map(self, sig_stat, add_watch, pb, current):
+        """汇总各数据源构建 {code: name} 映射，供信号条/持仓/结算显示股票名。
+        （828fcea6 误删本方法只留调用，load_day 完整路径会 AttributeError；此处恢复原实现）"""
+        names = dict(NAMES)
+        for src in (sig_stat, add_watch, current):
+            for code, info in (src or {}).items():
+                nm = info.get("name") if isinstance(info, dict) else None
+                if nm:
+                    names[code] = nm
+        for code, rec in ((pb or {}).get("by_code") or {}).items():
+            for bucket in rec.values():
+                row = bucket.get("best") or bucket.get("latest")
+                if row and row.get("name"):
+                    names[code] = row["name"]
+        return names
 
     # ---------- K4 跨日胜率 ----------
     def kpi_trend(self, days=10):
@@ -2582,7 +2599,7 @@ class Api:
         return {"trend": trend, "box_pos": box_pos, "price": round(cur, 3), "tags": tags[:6]}
 
     def load_stock_tags_batch(self, codes):
-        """批量拉技术标签（并发，ThreadPoolExecutor），带 30s 缓存 + 后台异步重算。
+        """批量拉技术标签（并发，ThreadPoolExecutor），带 TTL 缓存 + 后台异步重算。
         返回 {code: {trend, box_pos, tags}}。GUI 每 10s 轮询 refresh_pb 时走缓存即时返回，
         避免 7-12s 的批量计算（pandas + 网络）阻塞 pywebview 主线程冻结界面。"""
         from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -2611,7 +2628,7 @@ class Api:
 
         with _TAGS_LOCK:
             cached = _TAGS_CACHE.get(today)
-            if cached and (now - cached["ts"]) < 30:
+            if cached and (now - cached["ts"]) < _TAGS_TTL:
                 return _clean({"tags": cached["tags"]})
             if cached:
                 # 缓存过期 → 后台重算，先返回旧值，界面不阻塞
