@@ -1209,8 +1209,14 @@ function renderPB(pb) {
       : Object.keys(condLabels).map(k =>
           conds[k] === undefined ? `<span class="cell-dim">·</span>`
             : conds[k] ? `<span class="on">●</span>` : `<span class="off">○</span>`).join("");
+    // 2026-08-27: 圆点行第 5 槽位 = 否决因子（t_veto 仅触发时由后端写入 false）。
+    //   未触发=暗点·，触发=🚫——让"条件全过但被否决"在圆点行直接可见（此前与全通过无差别）。
+    const vetoDot = isNoData ? "" : (conds.t_veto === false
+      ? `<span title="否决因子触发：${esc((((r.timing || {}).veto) || []).join("、") || "爆量/偏离MA60")}">🚫</span>`
+      : `<span class="cell-dim" title="否决因子（爆量≥3倍20日均量 / 偏离MA60>+20%）：未触发">·</span>`);
     const condTitle = Object.keys(condLabels).map(k =>
-      `${condLabels[k]}:${conds[k] ? "通过" : "未过"}`).join(" · ");
+      `${condLabels[k]}:${conds[k] ? "通过" : "未过"}`).join(" · ")
+      + (isNoData ? "" : ` · 否决因子:${conds.t_veto === false ? "触发" : "未触发"}`);
     const boxMet = conds[boxKey] || false;
     const boxStr = boxMet ? `<span class="badge signal">🚀突破</span>` : `<span class="off">—</span>`;
     // 方案A (2026-08-15): 建仓条件=时机门控（市场有方向/多头结构/回撤到位）→ "X/3"（金叉为加分不计）
@@ -1325,7 +1331,7 @@ function renderPB(pb) {
         <td class="num">${fmt(r.price)}</td>
         <td style="text-align:center">${boxStr}</td>
         <td style="max-width:220px;line-height:1.7">${tagsTxt}</td>
-        <td><span class="cond" title="${esc(condTitle)}">${condStr}</span></td>
+        <td><span class="cond" title="${esc(condTitle)}">${condStr}${vetoDot}</span></td>
         ${dvCell}
         <td class="num">${fmt(r.suggested_qty, 0)}</td>
         <td class="num">${fmt(r.suggested_price)}</td>
@@ -1365,7 +1371,7 @@ function renderPB(pb) {
         </tr></thead>
         <tbody>${rows || '<tr><td colspan="14" class="empty">无扫描结果</td></tr>'}</tbody>
       </table>
-      <div class="cell-dim" style="font-size:11px;margin-top:8px">●=通过 ○=未通过 · 时机条件：${Object.values(condLabels).join(" / ")} · GO(多头追强/空头抄底)→signal，震荡→降频 · 🚫否决=爆量≥3倍或偏离MA60超+20% · 观察=震荡市结构达标(不推送) · 盘中每10s刷新</div>
+      <div class="cell-dim" style="font-size:11px;margin-top:8px">●=通过 ○=未通过 · 时机条件：${Object.values(condLabels).join(" / ")} · 第5位🚫=否决因子(爆量≥3倍或偏离MA60超+20%) · GO(多头追强/空头抄底)→signal，震荡→降频 · 观察=震荡市结构达标(不推送) · 盘中每10s刷新</div>
     </div>`;
   // fix P1-2: 页脚文案与后端实际逻辑一致（≥80 且突破箱体→signal，突破另需≥40）
 }
