@@ -2813,61 +2813,17 @@ def _attach_dynamic_t_decision(code: str, holding: dict, daily_ctx: dict, now_dt
         return {"auto": {}, "decision": {}, "per_stock": {}}
 
 
-def _push_morning_t_strategy(t_mode: dict, auto: dict) -> None:
-    """V3.0: 早盘推送当日T策略卡（仅自动决策日首日推送一次，手动覆盖后重推）"""
-    try:
-        if not FEISHU_WEBHOOK:
-            return
-        dec = auto.get("decision") or {}
-        mode_names = {"long": "正T(先买后卖)", "short": "反T(先卖后买)"}
-        lines = [
-            f"**依据**：大盘{auto.get('regime_name')}｜z_top3={float(auto.get('z_top3') or 0):+.2f}"
-            f"（{auto.get('basis_date') or '无热度记录'}）",
-            f"**矩阵结论**：{dec.get('mode_cn', '正T')} ×{dec.get('pos_factor', 1.0)} — {dec.get('reason', '')}",
-            "**逐股**：",
-        ]
-        per_stock_auto = auto.get("per_stock") or {}
-        for code, mode in t_mode.items():
-            if str(code).startswith("_"):
-                continue
-            name = (HOLDINGS.get(code) or {}).get("name", code)
-            line = f"• {name}({code})：{mode_names.get(mode, mode)}"
-            notes = (per_stock_auto.get(code) or {}).get("notes") or []
-            if notes:
-                line += f"｜{'；'.join(notes)}"
-            lines.append(line)
-        if auto.get("systemic_risk"):
-            lines.append("🚨 昨日触发系统性风险：今日以清仓门控为主，禁止正T")
-        card = {"config": {"wide_screen_mode": True},
-                "header": _feishu_card_header(f"🎯 当日T策略（矩阵） - {FEISHU_KEYWORD}", "blue"),
-                "elements": [_feishu_md_div(x) for x in lines]}
-        send_feishu_payload(
-            payload={"msg_type": "interactive", "card": card, "notify_type": 1},
-            success_log=f"✅ 当日T策略卡已推送: {dec.get('mode_cn')}",
-            error_prefix="当日T策略卡推送",
-        )
-    except Exception as e:
-        log.warning(f"⚠️ 当日T策略卡推送异常（已吞掉）: {str(e)[:120]}")
-
-
 def _auto_apply_t_mode(holdings, t_mode):
     """V3.1: 基于昨日热度+sentiment自动决定今日正T/反T，无需人工选择。
     sentiment_daily.jsonl 由 daily_sentiment.py 在 14:30 写入昨日大盘热度+z_top3，
     启动时 _auto_t_mode_suggestion() 读取该记录并通过决策矩阵判定 T-mode，
-    结果自动写入 t_mode.json，推送飞书策略卡。"""
+    结果自动写入 t_mode.json。"""
     auto = _auto_t_mode_suggestion()
     dec = auto.get("decision") or {}
     auto_mode = dec.get("mode", "long")
     auto_factor = dec.get("pos_factor", 1.0)
     auto_reason = dec.get("reason", "")
     today = _now().strftime("%Y-%m-%d")
-    prev_meta = {}
-    try:
-        if os.path.exists(T_MODE_FILE):
-            with open(T_MODE_FILE, "r", encoding="utf-8") as f:
-                prev_meta = (json.load(f).get("_auto_decision") or {})
-    except Exception:
-        prev_meta = {}
 
     mode_names = {"long": "正T(先买后卖)", "short": "反T(先卖后买)"}
     print("\n" + "=" * 60)
@@ -2902,9 +2858,6 @@ def _auto_apply_t_mode(holdings, t_mode):
     if 'save_t_mode' in globals():
         save_t_mode(t_mode)
         print(f"✅ T模式已自动保存到 t_mode.json（含 _auto_decision 元信息）")
-    # 早盘策略卡：今日首次推送一次
-    if str(prev_meta.get("date")) != today:
-        _push_morning_t_strategy(t_mode, auto)
     print("=" * 60 + "\n")
 
 

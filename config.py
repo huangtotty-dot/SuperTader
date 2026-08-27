@@ -134,43 +134,15 @@ def send_feishu_payload(payload: dict, success_log: str, error_prefix: str, trig
     return False
 
 
-def _preopen_adv_counts(preopen) -> Dict[str, int]:
-    """从 PreOpenContext 提取涨跌家数统计（启动自检用）
-
-    Args:
-        preopen: PreOpenContext 对象
-
-    Returns:
-        {"up": 上涨家数, "down": 下跌家数, "flat": 平开家数}
-    """
-    if preopen is None or not isinstance(preopen.breadth, dict):
-        return {"up": 0, "down": 0, "flat": 0}
-
-    adv = preopen.breadth.get("advance_decline", {})
-    if not isinstance(adv, dict):
-        return {"up": 0, "down": 0, "flat": 0}
-
-    return {
-        "up": int(adv.get("up", 0) or 0),
-        "down": int(adv.get("down", 0) or 0),
-        "flat": int(adv.get("flat", 0) or 0)
-    }
-
-
 def send_startup_self_test():
     if not FEISHU_WEBHOOK:
         log.warning("⚠️  启动自检跳过：飞书 Webhook 未配置")
         return
 
-    preopen = _ensure_preopen_context(force=False)
-
     runtime_config = load_runtime_config()
     feishu_cfg = runtime_config.get("feishu", {}) if isinstance(runtime_config, dict) else {}
     at_all = feishu_cfg.get("at_all_on_signal", True)
-    use_strong = feishu_cfg.get("use_strong_notification", True)
-    relay_urgent_alarm = feishu_cfg.get("relay_urgent_alarm_on_feishu", True)
     at_text = "<at user_id=\"all\">所有人</at>" if at_all else ""
-    title = f"🚨🚨🚨 【加急】{FEISHU_KEYWORD} - 启动自检 🚨🚨🚨" if use_strong else f"📢 【提醒】{FEISHU_KEYWORD} - 启动自检"
 
     card_elements = []
     if at_all:
@@ -180,27 +152,7 @@ def send_startup_self_test():
         })
     card_elements.append({
         "tag": "div",
-        "text": {"content": title, "tag": "lark_md"}
-    })
-    preopen_text = "盘前解读：未生成"
-    if preopen is not None:
-        adv = _preopen_adv_counts(preopen)
-        hot_theme = preopen.breadth.get("hot_theme_text", "") if isinstance(preopen.breadth, dict) else ""
-        preopen_text = (
-            f"盘前解读：{preopen.market_bias} | 评分 {preopen.market_score:.1f} | {preopen.session_note}\n"
-            f"涨跌家数：{adv['up']} / {adv['down']} / {adv['flat']} | 热主题：{hot_theme or '暂无'}"
-        )
-    card_elements.append({
-        "tag": "div",
-        "text": {
-            "content": (
-                f"【{FEISHU_SYSTEM_KEYWORD}】\n"
-                f"t_trader_v1.8 已启动。\n"
-                f"{preopen_text}\n"
-                f"如果你收到此消息并听到急促报警音，说明飞书推送与本地报警链路均正常。"
-            ),
-            "tag": "lark_md"
-        }
+        "text": {"content": f"📢 【提醒】{FEISHU_KEYWORD}：系统已启动，飞书推送链路正常。", "tag": "lark_md"}
     })
 
     payload = {
@@ -215,7 +167,6 @@ def send_startup_self_test():
         payload=payload,
         success_log="✅ 启动自检飞书消息已成功送达",
         error_prefix="启动自检飞书推送",
-        trigger_urgent_alarm_after_success=use_strong and relay_urgent_alarm,
     )
 
 
