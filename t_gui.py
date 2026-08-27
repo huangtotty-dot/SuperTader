@@ -18,6 +18,8 @@ t_gui.py — 做T实盘·盘后复盘决策看板（pywebview 桌面壳）
 import json
 import math
 import sys
+import threading
+import time as _time_mod
 from collections import Counter
 from datetime import datetime
 from pathlib import Path
@@ -117,6 +119,14 @@ def _load_json(fp, default=None):
             return json.load(f)
     except Exception:
         return default if default is not None else {}
+
+
+# 技术标签 TTL 缓存：GUI 每 10s 轮询 refresh_pb → load_stock_tags_batch（单次约 7-12s，
+# 期间大量 pandas + 网络在 pywebview 主线程执行会冻结界面）。改为 30s 缓存 + 后台异步重算，
+# 轮询永远读缓存即时返回，界面不卡。
+_TAGS_CACHE: dict = {}
+_TAGS_LOCK = threading.Lock()
+_TAGS_RUNNING = False
 
 
 class Api:
@@ -2572,19 +2582,55 @@ class Api:
         return {"trend": trend, "box_pos": box_pos, "price": round(cur, 3), "tags": tags[:6]}
 
     def load_stock_tags_batch(self, codes):
-        """批量拉技术标签（并发，ThreadPoolExecutor）。返回 {code: {trend, box_pos, tags}}。"""
+        """批量拉技术标签（并发，ThreadPoolExecutor），带 30s 缓存 + 后台异步重算。
+        返回 {code: {trend, box_pos, tags}}。GUI 每 10s 轮询 refresh_pb 时走缓存即时返回，
+        避免 7-12s 的批量计算（pandas + 网络）阻塞 pywebview 主线程冻结界面。"""
         from concurrent.futures import ThreadPoolExecutor, as_completed
+        global _TAGS_RUNNING
         codes = [str(c) for c in (codes or []) if c]
-        result = {}
-        with ThreadPoolExecutor(max_workers=40) as ex:
-            futures = {ex.submit(self._stock_tags_one, c): c for c in codes}
-            for fut in as_completed(futures, timeout=40):
-                code = futures[fut]
-                try:
-                    result[code] = fut.result()
-                except Exception:
-                    result[code] = {"trend": "flat", "tags": []}
-        return _clean({"tags": result})
+        if not codes:
+            return _clean({"tags": {}})
+        today = datetime.now().strftime("%Y-%m-%d")
+        now = _time_mod.time()
+
+        def _compute():
+            result = {}
+            with ThreadPoolExecutor(max_workers=40) as ex:
+                futures = {ex.submit(self._stock_tags_one, c): c for c in codes}
+                for fut in as_completed(futures, timeout=90):
+                    code = futures[fut]
+                    try:
+                        result[code] = fut.result()
+                    except Exception:
+                        result[code] = {"trend": "flat", "tags": []}
+            return result
+
+        def _cache_store(tags):
+            with _TAGS_LOCK:
+                _TAGS_CACHE[today] = {"ts": _time_mod.time(), "tags": tags}
+
+        with _TAGS_LOCK:
+            cached = _TAGS_CACHE.get(today)
+            if cached and (now - cached["ts"]) < 30:
+                return _clean({"tags": cached["tags"]})
+            if cached:
+                # 缓存过期 → 后台重算，先返回旧值，界面不阻塞
+                if not _TAGS_RUNNING:
+                    _TAGS_RUNNING = True
+                    def _bg():
+                        global _TAGS_RUNNING
+                        try:
+                            _cache_store(_compute())
+                        except Exception:
+                            pass
+                        finally:
+                            _TAGS_RUNNING = False
+                    threading.Thread(target=_bg, daemon=True).start()
+                return _clean({"tags": cached["tags"]})
+        # 冷启动（无缓存）：同步算一次，仅首次加载会稍等，之后轮询不再阻塞
+        tags = _compute()
+        _cache_store(tags)
+        return _clean({"tags": tags})
 
     # ---------- 突破箱体股票聚合 ----------
     def _breakout_pool_codes(self):
