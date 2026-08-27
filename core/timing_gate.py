@@ -172,6 +172,14 @@ def _stock_features(code: str, date_str: str) -> dict:
     _gain = _delta.clip(lower=0).rolling(14).mean()
     _loss = (-_delta.clip(upper=0)).rolling(14).mean()
     _rsi = float((100 - 100 / (1 + _gain / _loss.replace(0, float("nan")))).iloc[-1]) if _loss.iloc[-1] and _loss.iloc[-1] > 0 else 50.0
+    # 2026-08-27 因子挖掘（127万股票-日）：两个否决因子的特征
+    #   vol_ratio20≥3 爆量当日 w5=38.3%/r5=-1.0%（毒药桶）；dist_ma60>+20% w10=43.6%（追高最差档）
+    _vol_ratio20 = None
+    if "volume" in sub.columns:
+        _v = pd.to_numeric(sub["volume"], errors="coerce")
+        _v20 = float(_v.rolling(20).mean().iloc[-1]) if len(_v) >= 20 else float("nan")
+        if _v20 and _v20 > 0:
+            _vol_ratio20 = round(float(_v.iloc[-1]) / _v20, 2)
     return {
         "price": round(price, 3),
         "trend_multihead": bool(price > ma20 and price > ma60),
@@ -180,6 +188,8 @@ def _stock_features(code: str, date_str: str) -> dict:
         "macd_golden_5d": golden,
         "rsi": round(_rsi, 1),
         "ma20": round(ma20, 3), "ma60": round(ma60, 3),
+        "vol_ratio20": _vol_ratio20,
+        "dist_ma60": round(price / ma60 - 1, 4),
     }
 
 
@@ -190,13 +200,25 @@ def timing_verdict(code: str, date_str: str = None) -> dict:
     r = _regime(date_str)
     f = _stock_features(code, date_str)
     if not f:
-        return {"go": False, "regime": r["regime"], "reason": "日线不足", "features": f}
+        return {"go": False, "regime": r["regime"], "reason": "日线不足", "features": f, "veto": []}
     regime = r["regime"]
     reasons = []
+    vetoes = []
     if regime == "trend_up":
         # 多头趋势 → 追强
-        cond = f["trend_multihead"] and f["drawdown"] >= -0.03
+        # 2026-08-27 因子挖掘：两个硬否决（仅追强侧；抄底侧爆量是恐慌出清常态，不否决）
+        _vol_max = float(p.get("veto_vol_spike", 3.0))
+        _dist_max = float(p.get("veto_dist_ma60_max", 0.20))
+        _vr = f.get("vol_ratio20")
+        if _vr is not None and _vr >= _vol_max:
+            vetoes.append(f"爆量{_vr:g}倍≥{_vol_max:g}")
+        _dm = f.get("dist_ma60")
+        if _dm is not None and _dm > _dist_max:
+            vetoes.append(f"偏离MA60{_dm:+.1%}>{_dist_max:+.0%}")
+        cond = f["trend_multihead"] and f["drawdown"] >= -0.03 and not vetoes
         reasons.append(f"多头趋势: 追强(多头{'✓' if f['trend_multihead'] else '✗'}+浅回撤{'✓' if f['drawdown']>=-0.03 else '✗'})")
+        if vetoes:
+            reasons.append(f"否决: {'、'.join(vetoes)}")
         if f["macd_golden_5d"]:
             reasons.append("MACD金叉近5日 ✓（加分）")
         # P1(2026-08-25): 原写法 `cond and (macd_golden_5d or True)`——`or True` 恒真，
@@ -217,7 +239,8 @@ def timing_verdict(code: str, date_str: str = None) -> dict:
         # 震荡 → 降频
         go = False
         reasons.append("震荡市: 降频，暂不建仓/加仓")
-    return {"go": bool(go), "regime": regime, "reason": "；".join(reasons), "features": f}
+    return {"go": bool(go), "regime": regime, "reason": "；".join(reasons), "features": f,
+            "veto": vetoes}
 
 
 def _cli():
