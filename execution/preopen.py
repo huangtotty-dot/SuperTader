@@ -213,6 +213,33 @@ class PreOpenEngine:
             log.debug(f"⚠️  Top20竞价量分析失败: {str(e)[:120]}")
             return f"异常:{type(e).__name__}"
 
+    def _score_from_auction_index(self, date_str: str):
+        """Top20 竞价量不可用（本机 akshare/东财 SSL 不可达，方案集合竞价决策方案 §1.1 已确诊）时，
+        用竞价指数缺口计算市场评分/偏向作为降级口径——指数竞价走腾讯接口可用。
+        返回 (score, bias, note)；指数竞价仍不可得时返回 (None, "data_pending", 等待提示)。"""
+        try:
+            from execution.auction_analyzer import analyze_index_auction
+            auction_data = {}
+            try:
+                fp = PREOPEN_DIR / f"auction_{date_str}.json"
+                if fp.exists():
+                    auction_data = json.loads(fp.read_text(encoding="utf-8"))
+            except Exception:
+                auction_data = {}
+            # analyze_index_auction：优先读已采集 index_rows，当日缺失时实时拉 qt.gtimg.cn
+            diags = analyze_index_auction(date_str, auction_data)
+            gaps = [d.gap_pct for d in diags if d.gap_pct is not None]
+            if gaps:
+                mean_gap = sum(gaps) / len(gaps)
+                score = max(0.0, min(100.0, 50.0 + mean_gap * 25.0))
+                bias = "risk_on" if score >= 65 else ("neutral" if score >= 45 else "risk_off")
+                detail = "、".join(f"{d.name}{d.gap_pct:+.2f}%" for d in diags if d.gap_pct is not None)
+                note = f"Top20不可用(akshare SSL)，降级用指数竞价均值{mean_gap:+.2f}% [{detail}]"
+                return score, bias, note
+        except Exception as e:
+            log.debug(f"⚠️  指数竞价降级评分失败: {str(e)[:80]}")
+        return None, "data_pending", "等待9:30开盘后获取市场数据"
+
     # ----- 主评估方法（V2 简化版）-----
 
     def evaluate(self) -> PreOpenContext:
@@ -255,18 +282,24 @@ class PreOpenEngine:
                 "prev_close": prev_close,
             }
 
-        # 3. 盘前（9:30前）无有效市场数据 → 返回等待状态
+        # 3. 盘前（9:30前）无有效市场数据：
+        #    Top20 竞价量在竞价时段用 akshare 拿不到真实值（本机 SSL 不可达），
+        #    降级用竞价指数缺口评分（腾讯接口可用），避免评分永远卡 50 分(data_pending)。
         top20_up = top20.get("total_up", 0)
         top20_down = top20.get("total_down", 0)
         if top20_up + top20_down == 0:
+            score, bias, note = self._score_from_auction_index(get_today_str())
+            if score is None:
+                score, bias = 50.0, "data_pending"
             return PreOpenContext(
-                market_score=50.0, market_bias="data_pending",
+                market_score=score, market_bias=bias,
                 breadth={"total_codes": max(1, len(self.holdings)),
                          "etf_count": sum(1 for h in self.holdings.values() if h.get("type") == "etf"),
                          "stock_count": max(0, len(self.holdings) - sum(1 for h in self.holdings.values() if h.get("type") == "etf")),
                          "advance_decline": market_snapshot.get("advance_decline", {}),
-                         "risk_flag": "unknown", "market_open": False},
-                session_note="等待9:30开盘后获取市场数据",
+                         "risk_flag": "unknown", "market_open": False,
+                         "top20_status": top20.get("top20_status", "empty")},
+                session_note=note,
                 generated_at=_now().strftime("%Y-%m-%d %H:%M:%S"),
                 source=market_snapshot.get("source", "watchlist"),
                 market_snapshot=market_snapshot, code_snapshots=code_snapshots,

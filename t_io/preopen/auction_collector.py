@@ -181,10 +181,14 @@ def do_slot(date, slot):
         pc = s["pre_close"] or 0
         price = s["price"]
         pct = round((price - pc) / pc * 100, 2) if pc and price else None
+        # 竞价时段(9:20-9:25)腾讯字段[6]=全天累计成交量(此时为0)，非竞价量（方案集合竞价决策方案 §1.1 已确诊）。
+        # 量/额置 None 避免误导；真实量能由 9:31 后 --backfill 回填 09:25 口径(auction_vol_hand_approx)。
+        vol_hand = s["vol_hand"] or None
+        amount_wan = s["amount_wan"] or None
         rows[code] = {
             "name": s["name"] or pool.get(code, code),
             "auction_price": price, "pre_close": pc, "pct_vs_preclose": pct,
-            "auction_vol_hand": s["vol_hand"], "amount_wan": s["amount_wan"],
+            "auction_vol_hand": vol_hand, "amount_wan": amount_wan,
             "src_ts": s["ts_raw"],
         }
     # 大盘指数竞价快照（供 auction_analyzer 指数分析）
@@ -194,7 +198,9 @@ def do_slot(date, slot):
     except Exception as e:
         print(f"[slot {slot}] index snapshot failed: {e}")
     data["snapshots"][slot] = {"ts": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                               "source": "qt.gtimg.cn realtime", "rows": rows,
+                               "source": "qt.gtimg.cn realtime",
+                               "vol_note": "竞价时段腾讯字段[6]=全天累计量(0)不可用；真实量/额由 09:31 后 backfill 回填(auction_vol_hand_approx)",
+                               "rows": rows,
                                "index_rows": index_rows}
     save(fp, data)
     print(f"[slot {slot}] {len(rows)} codes, {len(index_rows)} indexes -> {fp}")
