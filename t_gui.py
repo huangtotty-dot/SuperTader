@@ -3813,10 +3813,24 @@ class Api:
     def recompute_pb(self, date):
         """盘后重跑建仓扫描 + 重算加仓观察。返回 {position_builder, add_watch, error?}。
         重跑用 eod 档、不推送飞书（避免重复打扰）；run_position_scan 会更新 watchlist_buy。
-        fix 2026-08-27: 不再静默吞异常——失败记录并随返回带 error，前端可见。"""
+        fix 2026-08-27: 不再静默吞异常——失败记录并随返回带 error，前端可见。
+        fix 2026-08-27(2): 重跑前热重载 config/timing_gate/position_builder——GUI 进程常驻，
+        不重启时 import 缓存的是启动时的旧模块，"盘后重跑"会跑旧逻辑。重载顺序保证依赖新鲜：
+        config → position_builder → timing_gate（timing_gate 顶部 from position_builder import）。
+        重载失败回退普通 import（用当前内存模块），不阻断重跑。"""
         err = None
         # 1) 重跑建仓扫描（eod 档）
         try:
+            import importlib
+            try:
+                import config as _cfg
+                import core.position_builder as _pb_mod
+                import core.timing_gate as _tg_mod
+                importlib.reload(_cfg)
+                importlib.reload(_pb_mod)
+                importlib.reload(_tg_mod)
+            except Exception as _re:
+                print(f"⚠️ 模块热重载失败（回退当前内存模块）: {str(_re)[:120]}")
             from core.position_builder import run_position_scan
             run_position_scan(date_str=date, scan_type="eod", silent=True, no_feishu=True)
         except Exception as e:
