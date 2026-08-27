@@ -256,6 +256,44 @@ def _parse_snapshot_file(fp: Path, snap_date: str) -> tuple:
 _DAILY_CACHE_DIR = BASE / "t_io" / "cache" / "daily_kline"
 
 
+def _live_forming_bar(symbol: str) -> dict:
+    """腾讯实时快照（qt.gtimg.cn）→ 当日 forming bar {date, open, close, high, low, volume} 或 None。
+    仅当快照时间戳是当日（真实交易日盘中/盘后）才返回；用于 K线主机(ifzq)被 WAF 501 拦截、
+    回退旧缓存缺当日K线时补一条，保持 fetch_daily_kline"盘中最后一行=当日 forming bar"的契约。
+    非当日（周末/节假日/盘前返回上一交易日收盘）返回 None，避免造出假bar。"""
+    import urllib.request as _ur, os as _os
+    from datetime import datetime as _dt
+    for _k in ["http_proxy", "https_proxy", "HTTP_PROXY", "HTTPS_PROXY",
+               "ALL_PROXY", "all_proxy"]:
+        _os.environ.pop(_k, None)
+    _os.environ["NO_PROXY"] = "*"
+    try:
+        url = f"https://qt.gtimg.cn/q={symbol}"
+        req = _ur.Request(url, headers={"User-Agent": "Mozilla/5.0",
+                                        "Referer": "https://gu.qq.com/"})
+        raw = _ur.urlopen(req, timeout=5).read().decode("gbk", errors="replace")
+        if "~" not in raw:
+            return None
+        f = raw.split('"')[1].split("~")
+        if len(f) < 35 or not f[30]:
+            return None
+        if str(f[30])[:8] != _dt.now().strftime("%Y%m%d"):
+            return None
+        price = float(f[3])
+        if price <= 0:
+            return None
+        def _fl(i, d=0.0):
+            try:
+                return float(f[i]) if f[i] else d
+            except (ValueError, IndexError):
+                return d
+        return {"date": _dt.now().strftime("%Y-%m-%d"),
+                "open": _fl(5), "close": price,
+                "high": _fl(33), "low": _fl(34), "volume": _fl(6)}
+    except Exception:
+        return None
+
+
 def fetch_daily_kline(code: str) -> pd.DataFrame:
     """拉腾讯日线（前复权，365天），带本地缓存（每日更新）。
     返回 {date, open, close, high, low, volume}。"""
@@ -334,7 +372,18 @@ def fetch_daily_kline(code: str) -> pd.DataFrame:
         try:
             cached = json.loads(cache_fp.read_text(encoding="utf-8"))
             if cached.get("rows"):
-                return pd.DataFrame(cached["rows"])
+                df = pd.DataFrame(cached["rows"])
+                # K线主机被 WAF 501 拦截时会走到这里，缓存通常缺当日 forming bar；
+                # 补一条当日实时 bar，与正常路径"盘中最后一行=当日"契约一致（否则下游
+                # 按昨日收盘误判破均线/破位）。只拼返回值，不写回缓存，主机恢复后自然覆盖。
+                try:
+                    if len(df) and str(df["date"].iloc[-1]) < _dt.now().strftime("%Y-%m-%d"):
+                        fb = _live_forming_bar(symbol)
+                        if fb:
+                            df = pd.concat([df, pd.DataFrame([fb])], ignore_index=True)
+                except Exception:
+                    pass
+                return df
         except Exception:
             pass
     return pd.DataFrame()
