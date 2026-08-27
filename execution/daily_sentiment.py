@@ -67,7 +67,7 @@ if _IN_HOST:
     _send_feishu_payload = globals().get("send_feishu_payload")
     _feishu_md_div_fn = globals().get("_feishu_md_div")
     _feishu_card_header_fn = globals().get("_feishu_card_header")
-    _feishu_hr_fn = globals().get("_feishu_hr")
+    _feishu_hr_fn = globals().get("_feishu_hr") or (lambda: {"tag": "hr"})
     _append_jsonl_fn = globals().get("_append_jsonl")
     _FEISHU_KEYWORD = globals().get("FEISHU_KEYWORD") or "做T猎手预警"
     _FEISHU_WEBHOOK = globals().get("FEISHU_WEBHOOK") or ""

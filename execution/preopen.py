@@ -374,12 +374,17 @@ def _feishu_md_div(content: str) -> dict:
     return {"tag": "div", "text": {"content": content, "tag": "lark_md"}}
 
 
+def _feishu_hr() -> dict:
+    """飞书卡片分割线。供 main.py（大盘分时预警）与 daily_sentiment（宿主模式合成卡片）共用；
+    2026-08-26 清理集合竞价推送时误删，两处调用仍在，故恢复。"""
+    return {"tag": "hr"}
+
+
 # ==================== 已删除的集合竞价飞书推送相关函数（2026-08-26） ====================
 # 以下函数已删除，因为集合竞价推送已禁用，改为 UI 面板显示：
 # - _preopen_action_label() → 飞书卡片标签，已无用
 # - _preopen_card_template() → 飞书卡片配色，已无用
 # - _format_preopen_brief() → 飞书推送文本格式，已无用
-# - _feishu_hr() → 飞书分割线，已无用
 # - _preopen_safe_breadth() → 飞书数据处理，已无用
 # - _preopen_adv_counts() → 飞书涨跌统计，已无用
 # - _writeback_auction_summary() → 飞书推送前的回写，已无用
