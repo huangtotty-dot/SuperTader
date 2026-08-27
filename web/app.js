@@ -97,6 +97,10 @@ function dayTypeBadge(t) {
 function verdictBadge(v) {
   const map = { signal: "signal", approaching: "approach", weak: "weak", insufficient_data: "nodata", pending: "nodata", archived: "nodata" };
   const label = { signal: "signal", approaching: "approaching", weak: "weak", insufficient_data: "无数据", pending: "等待扫描", archived: "已停用" }[v] || v;
+  // 2026-08-27: watch_signal（震荡市观察态：多头结构+浅回撤，只喂样本不出建议）独立样式，不再落入 weak
+  if (v === "watch_signal") {
+    return `<span class="badge" title="震荡市观察态：个股结构+回撤达标但市场无方向，signal 结构性不可达；不推飞书不出建议" style="background:#2a4a5a;color:#8ad4ff">观察</span>`;
+  }
   return `<span class="badge ${map[v] || 'weak'}">${esc(label)}</span>`;
 }
 function wrCell(w) {
@@ -1262,6 +1266,13 @@ function renderPB(pb) {
         icBadge = `<span class="badge" title="日内确认未过(GO已降级为待确认): ${esc(_ic.detail || "")}" style="background:#7a5a2a;color:#ffd98a">待日内确认</span>`;
       }
     }
+    // 2026-08-27: 否决因子徽章（爆量≥3倍20日均量 / 偏离MA60>+20%，仅 trend_up 追强侧触发）。
+    //   conditions.t_veto 仅在触发时由后端写入（false）；未触发时键不存在，不显示。
+    let vetoBadge = "";
+    if (conds.t_veto === false) {
+      const _vt = ((r.timing || {}).veto || []).join("、") || (_tm.reason || "");
+      vetoBadge = `<span class="badge" title="否决因子触发（建仓被压为 approaching）：${esc(_vt)}" style="background:#7a2a2a;color:#ffd98a">🚫否决</span>`;
+    }
     // 卡点直观化(2026-08-25)：一句话"卡在哪、差多少" + hover 完整差距清单。
     //   signal 无卡点；pending/archived/无数据 不显示（那是未扫描态，非条件卡）。
     //   点击卡点标签打开条件详情面板
@@ -1307,7 +1318,7 @@ function renderPB(pb) {
     return `
       <tr id="pb-row-${esc(r.code || '')}" ondblclick="openStockChart('${esc(r.code||'')}','${esc(r.name||r.code||'')}')" style="cursor:pointer;${isStale ? "opacity:.45;" : ""}" title="双击看K线${isStale ? "（数据陈旧，距今超过10分钟）" : ""}">
         <td>${esc(r.name || "")} <span class="mono cell-dim">${esc(r.code || "")}</span>
-          ${monitorBadge}${chBadge}${apBadge}${tmBadge}${icBadge}${r.in_holdings ? `<span class="badge hold">持仓</span>` : ""}${errTxt}${blockLine}</td>
+          ${monitorBadge}${chBadge}${apBadge}${tmBadge}${icBadge}${vetoBadge}${r.in_holdings ? `<span class="badge hold">持仓</span>` : ""}${errTxt}${blockLine}</td>
         <td>${verdictBadge(r.verdict)}</td>
         <td class="num" title="${esc(scoreCellTitle)}">${scoreCellHtml}</td>
         <td class="num ${metCls}"><b>${isNoData ? "—" : metCount + "/3"}</b></td>
@@ -1329,12 +1340,15 @@ function renderPB(pb) {
   const badgeClsOf = k => k === "signal" ? "signal" : k === "approaching" ? "approach"
     : (k === "insufficient_data" || k === "pending" || k === "archived") ? "nodata" : "weak";
   const c = k => counts[k] ? `<span class="badge ${badgeClsOf(k)}" title="按股票数统计（按 code 去重）">${k}: ${counts[k]}只</span>` : "";
+  // 2026-08-27: watch_signal 独立计数徽章（此前在计数里消失，只落 weak 样式）
+  const cWatch = counts["watch_signal"]
+    ? `<span class="badge" style="background:#2a4a5a;color:#8ad4ff" title="震荡市观察态：结构+回撤达标但市场无方向，只喂样本不推送">观察: ${counts["watch_signal"]}只</span>` : "";
   // fix P0-2: refreshed_at 语义为数据最后写入时间，直接展示
   const refreshed = pb.refreshed_at ? `<span class="live-dot"></span> ${esc(pb.refreshed_at)}${delta ? ` <span class="aw-delta">${delta}</span>` : ""}` : "";
   el.innerHTML = `
     <div class="card">
       <div style="display:flex;gap:8px;margin-bottom:6px;flex-wrap:wrap;align-items:center">
-        ${c("signal")}${c("approaching")}${c("weak")}${c("insufficient_data")}${c("archived")}
+        ${c("signal")}${c("approaching")}${c("weak")}${cWatch}${c("insufficient_data")}${c("archived")}
         <span class="cell-dim mono" style="font-size:10px;margin-left:auto" title="数据最后写入时间（前端盘中每10s拉取）">${refreshed}</span>
       </div>
       ${pb.note ? `<div class="cell-dim" style="font-size:11px;margin-bottom:6px">⚠ ${esc(pb.note)}</div>` : ""}
@@ -1351,7 +1365,7 @@ function renderPB(pb) {
         </tr></thead>
         <tbody>${rows || '<tr><td colspan="14" class="empty">无扫描结果</td></tr>'}</tbody>
       </table>
-      <div class="cell-dim" style="font-size:11px;margin-top:8px">●=通过 ○=未通过 · 时机条件：${Object.values(condLabels).join(" / ")} · GO(多头追强/空头抄底)→signal，震荡→降频 · 盘中每10s刷新</div>
+      <div class="cell-dim" style="font-size:11px;margin-top:8px">●=通过 ○=未通过 · 时机条件：${Object.values(condLabels).join(" / ")} · GO(多头追强/空头抄底)→signal，震荡→降频 · 🚫否决=爆量≥3倍或偏离MA60超+20% · 观察=震荡市结构达标(不推送) · 盘中每10s刷新</div>
     </div>`;
   // fix P1-2: 页脚文案与后端实际逻辑一致（≥80 且突破箱体→signal，突破另需≥40）
 }

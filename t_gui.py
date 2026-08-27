@@ -3557,24 +3557,60 @@ class Api:
         if not latest_record:
             return {"available": False, "error": f"未找到 {code} 的扫描记录"}
 
-        # 构建条件详情列表
+        # 构建条件详情列表：先时机门控条件（现行判定，2026-08-27 对齐），再旧双通道（参考级）
         conditions_detail = []
         channels = latest_record.get("channels", {})
         conditions = latest_record.get("conditions", {})
         verdict = latest_record.get("verdict", "")
         blockers_raw = latest_record.get("blockers", [])
+        timing = latest_record.get("timing") or {}
 
-        # 从 channels 提取条件
+        _bk_by_key = {b.get("key"): b for b in blockers_raw if isinstance(b, dict)}
+
+        # 1) 时机门控条件（trace 中 conditions 为 bool 映射；此前面板只显示旧双通道，
+        #    真正的建仓条件不可见——"条件不符合没说清楚"的根源）
+        for _k, _label, _required in (
+                ("t_regime", "市场有方向", True),
+                ("t_trend", "多头结构", True),
+                ("t_drawdown", "回撤到位", True),
+                ("t_golden", "MACD金叉(近5日)", False)):
+            if _k not in conditions:
+                continue
+            _ok = bool(conditions.get(_k))
+            _bk = _bk_by_key.get(_k)
+            if _ok:
+                _msg = "已满足"
+            elif _bk:
+                _msg = f"未满足：{_bk.get('gap_txt', '')}（需：{_bk.get('need', '')}）"
+            else:
+                _msg = "未满足"
+            conditions_detail.append({
+                "category": "timing",
+                "name": _label if _required else f"{_label}（加分项，不影响判定）",
+                "verdict": "pass" if _ok else "fail",
+                "message": _msg,
+            })
+        # 否决因子（2026-08-27 因子挖掘：爆量/远离MA60，仅触发时存在于 conditions）
+        if conditions.get("t_veto") is False:
+            _bk = _bk_by_key.get("t_veto") or {}
+            conditions_detail.append({
+                "category": "timing",
+                "name": "否决因子（爆量≥3倍 / 偏离MA60>+20%）",
+                "verdict": "fail",
+                "message": f"已触发否决：{_bk.get('gap_txt') or timing.get('reason') or ''}",
+            })
+
+        # 2) 旧双通道（参考级·未验收 W33 A4，不驱动判定）
         for ch_name in ("iceberg", "breakout"):
             ch = channels.get(ch_name, {})
             if not ch:
                 continue
             conditions_detail.append({
                 "category": ch_name,
-                "name": ch.get("name", ch_name),
+                "name": f"（参考）{ch.get('name', ch_name)}",
                 "verdict": ch.get("verdict", ""),
                 "score": ch.get("score", 0),
-                "message": f"得分 {ch.get('score', 0)}/100，状态: {ch.get('verdict', '未知')}"
+                "message": f"得分 {ch.get('score', 0)}/100，状态: {ch.get('verdict', '未知')}（参考级，不影响判定）"
             })
 
         # 增强 blockers 信息：计算具体指标值
@@ -3599,9 +3635,15 @@ class Api:
 
             blockers_detail.append(blocker_info)
 
-        # 计算满足的条件数
-        conditions_met = sum(1 for v in conditions.values() if isinstance(v, dict) and v.get("passed"))
-        conditions_total = len([v for v in conditions.values() if isinstance(v, dict)])
+        # 计算满足的必要条件数（时机门控 3 必要条件；trace 中 conditions 为 bool 映射，
+        # 此前按 dict.get('passed') 取值恒为 0——已修复）
+        _NECESSARY = ("t_regime", "t_trend", "t_drawdown")
+        if any(k in conditions for k in _NECESSARY):
+            conditions_met = sum(1 for k in _NECESSARY if conditions.get(k))
+            conditions_total = 3
+        else:
+            conditions_met = 0
+            conditions_total = 0
 
         return {
             "available": True,
@@ -3619,8 +3661,8 @@ class Api:
 
     def _compute_regime_targets(self, record: dict) -> dict:
         """从 blockers 或特征中计算市场方向条件的具体指数目标值"""
-        feats = record.get("features") or {}
-        regime = record.get("regime", "")
+        # 2026-08-27: regime 改读 timing（trace 顶层无 regime 字段，此前恒为空导致详情错乱）
+        regime = (record.get("timing") or {}).get("regime") or record.get("regime", "")
         blockers = record.get("blockers", [])
 
         # 尝试从 blockers 中提取指数信息
@@ -3655,14 +3697,34 @@ class Api:
 
     def _compute_drawdown_detail(self, record: dict) -> dict:
         """计算回撤到位条件的详细说明"""
-        regime = record.get("regime", "")
-        feats = record.get("features") or {}
-        dd = feats.get("drawdown") or 0.0
+        # 2026-08-27: regime/drawdown 改读 timing/timing_features（trace 顶层无 features 字段，
+        # 此前 drawdown 恒 0.0 → 详情永远显示"已满足"，严重误导）
+        regime = (record.get("timing") or {}).get("regime") or record.get("regime", "")
+        feats = record.get("timing_features") or record.get("features") or {}
+        dd = feats.get("drawdown")
+        if dd is None:
+            # 旧 trace 无 timing_features（2026-08-27 前落盘）：从回撤卡点的 cur 文本回补（如 "-5.0%"）
+            for _b in record.get("blockers", []):
+                if _b.get("key") == "t_drawdown" and _b.get("cur"):
+                    try:
+                        dd = float(str(_b["cur"]).replace("%", "")) / 100
+                    except (ValueError, TypeError):
+                        pass
+                    break
 
         detail = {
             "regime": regime,
-            "current_drawdown": dd,
+            "current_drawdown": None,
         }
+        if dd is None:
+            detail.update({
+                "threshold": None, "type": "回撤", "rule": "个股日线数据不足",
+                "explanation": "个股日线拉取失败或不足61根，回撤无法计算。\n请检查数据管道（缓存/网络/腾讯WAF拦截）后重扫。",
+                "status": "数据不足",
+            })
+            return detail
+        # 面板按百分数直接显示（toFixed(2)+"%"），这里换算成百分数（如 -5.0 表示 -5.0%）
+        detail["current_drawdown"] = round(dd * 100, 2)
 
         if regime == "trend_up":
             detail["threshold"] = -0.03

@@ -1851,7 +1851,7 @@ def scan_once():
         log.info(f"🫀 扫描心跳 第{_scan_count + 1}轮开始")
 
         _maybe_check_index_intraday_alert(now)         # 09:35-14:55 大盘分时预警（300s 节流）
-        _maybe_run_position_builder_intraday(now)      # 09:45-14:55 盘中建仓信号扫描（每5分钟）
+        _maybe_run_position_builder_intraday(now)      # 09:30-11:30/13:00-14:55 盘中建仓信号扫描（每5分钟）
         _maybe_run_ma_break_alert(now)                 # 09:30-14:55 盘中破5/10日线报警（每5分钟，提醒建仓）
 
         if not HOLDINGS:

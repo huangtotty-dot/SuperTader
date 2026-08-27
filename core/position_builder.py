@@ -10,12 +10,15 @@ position_builder.py — 建仓信号扫描（只建议、不自动执行）
 数据源: t_io/minute_snapshots/{year}/{month}/{code}_{date}.json
        复用 indicators.py 的 5 分钟 MACD/BOLL/RSI 计算
 
-建仓五条件（全部满足才建议建仓，≥70 分触发 signal）:
-  1. MACD 多头: dif_5m > dea_5m 且 macd_hist_5m > 0（近 3 根 ≥2 根满足）
-  2. BOLL 中轨支撑: bb_pct_5m 在 0.3~0.7 区间
-  3. RSI 健康区间: rsi_5m 在 35~60
-  4. 成交量缩量: 近 30 分钟均量 < 前 60 分钟均量 × 0.8
-  5. 回踩支撑不破: 最新价距支撑位 ≤2% 且未破位
+现行判定（方案A 2026-08-15 起，详见 doc/建仓五条件完全指南.md）：
+  verdict 由 core/timing_gate.py 的时机门控 GO 驱动——
+  · 市场有方向：指数 vs MA60 缓冲带（×1.005 / ×0.97），震荡市 signal 结构性不可达
+  · 多头趋势 → 追强：价>MA20&MA60 + 浅回撤≥-3%（距20日高点）
+  · 空头趋势 → 抄底：深回撤<-10% + RSI(14)<20
+  · MACD金叉近5日：+10 加分项，不参与 go
+  · 否决因子（2026-08-27 因子挖掘）：trend_up 下 爆量≥3倍20日均量 或 偏离MA60>+20% → go=False
+  · 个股日线不足：条件判不通过 + 「数据不足」卡点（2026-08-27 修复，此前 drawdown 缺失按0.0白送通过）
+  W33 双通道结果保留在 result["channels"] 仅供参考（W33 A4 离线闸门未过），不驱动 verdict。
 """
 import argparse
 import json
@@ -49,12 +52,14 @@ from analysis.indicators import (  # noqa: F401
 
 # ── 飞书推送（可选，Webhook 未配置时静默跳过）──
 try:
-    from config import send_feishu_payload, FEISHU_WEBHOOK, FEISHU_KEYWORD
+    from config import send_feishu_payload, FEISHU_WEBHOOK, FEISHU_KEYWORD, log
     _FEISHU_AVAILABLE = bool(FEISHU_WEBHOOK)
 except Exception:
     _FEISHU_AVAILABLE = False
     send_feishu_payload = None
     FEISHU_KEYWORD = "建仓信号"
+    import logging
+    log = logging.getLogger("position_builder")
 
 WATCHLIST_FILE = BASE / "t_io" / "state" / "watchlist_buy.json"
 SNAPSHOT_DIR = BASE / "t_io" / "minute_snapshots"
@@ -773,12 +778,15 @@ def check_intraday_confirm(df_1min, vol_min: float = 1.2) -> tuple:
 # ============================================================
 
 def build_blockers(regime, feats, dd, dir_ok, trend_ok, dd_ok, golden_ok,
-                   intraday_confirm=None, scan_type="manual") -> tuple:
+                   intraday_confirm=None, scan_type="manual", data_insufficient=False,
+                   vetoes=None) -> tuple:
     """汇总所有未过的【必要条件】及其量化差距，返回 (block_reason, blockers)。
 
     blockers: [{key, label, gap_txt, need, cur}]，按判定顺序（regime→trend→drawdown→日内确认）。
     block_reason: 第一个卡住的必要条件的一句话（含差多少）。全部通过 → (None, [])。
     金叉是加分项，不计入 blockers（不卡 signal）。
+    data_insufficient=True（个股日线不足）时结构/回撤不可判，只出"数据不足"卡点，
+    不再用量化的假差距误导（fix 2026-08-27: 此前 drawdown 缺失按 0.0 处理，t_drawdown 白送通过）。
     """
     f = feats or {}
     price = f.get("price")
@@ -794,8 +802,16 @@ def build_blockers(regime, feats, dd, dir_ok, trend_ok, dd_ok, golden_ok,
             "need": "指数站上MA60×1.005(多头) 或 跌破MA60×0.97(空头)", "cur": regime,
         })
 
+    # 1.5) 个股日线数据不足：结构/回撤不可判（fix 2026-08-27）
+    if data_insufficient:
+        blockers.append({
+            "key": "data_insufficient", "label": "数据不足",
+            "gap_txt": "个股日线拉取失败或不足61根，多头结构/回撤无法判定",
+            "need": "恢复日线数据后重扫", "cur": "无数据",
+        })
+
     # 2) 多头结构（价 > MA20 且 > MA60）——仅多头趋势要求
-    if regime == "trend_up" and not trend_ok:
+    if not data_insufficient and regime == "trend_up" and not trend_ok:
         parts = []
         if price is not None and ma20 and price <= ma20:
             parts.append(f"距MA20差{(price/ma20-1)*100:+.2f}%")
@@ -808,7 +824,7 @@ def build_blockers(regime, feats, dd, dir_ok, trend_ok, dd_ok, golden_ok,
         })
 
     # 3) 回撤到位
-    if not dd_ok:
+    if not data_insufficient and not dd_ok:
         if regime == "trend_dn":
             need_txt = "深回撤<-10%"
             gap = f"当前回撤{dd:+.1%}，距-10%还差{(dd-(-0.10))*100:+.1f}pp"
@@ -818,6 +834,14 @@ def build_blockers(regime, feats, dd, dir_ok, trend_ok, dd_ok, golden_ok,
         blockers.append({
             "key": "t_drawdown", "label": "回撤到位",
             "gap_txt": gap, "need": need_txt, "cur": f"{dd:+.1%}",
+        })
+
+    # 3.5) 否决因子（2026-08-27 因子挖掘：爆量/远离MA60，仅 trend_up 追强侧硬否决）
+    if vetoes:
+        blockers.append({
+            "key": "t_veto", "label": "否决因子",
+            "gap_txt": "、".join(str(v) for v in vetoes),
+            "need": "非爆量(<3倍20日均量) 且 偏离MA60≤+20%", "cur": "、".join(str(v) for v in vetoes),
         })
 
     # 4) 日内右侧确认（仅 intraday 且前三项已过时才可能成为卡点）
@@ -1157,11 +1181,18 @@ def scan_stock(code: str, stock_info: dict, date_str: str = None,
         if _ETP.get("enabled", True):
             _tv = _timing_verdict(code, target_date)
             _f = _tv.get("features") or {}
+            # fix 2026-08-27(bug1): 个股日线不足时 timing_verdict 返回 features={}，
+            # 此前 drawdown 缺失按 0.0 处理 → t_drawdown 在 trend_up/range 下白送通过，
+            # 无数据股可能被打成 approaching 且 blockers 为空（数据失败伪装成条件通过）。
+            # 现：数据不足时结构/回撤一律判不通过，detail/blockers 明示"数据不足"。
+            _data_insufficient = not _f
             _regime = _tv.get("regime", "range")
             _dir_ok = _regime in ("trend_up", "trend_dn")
             _trend = bool(_f.get("trend_multihead"))
-            _dd = float(_f.get("drawdown") or 0.0)
-            if _regime == "trend_up":
+            _dd = float(_f["drawdown"]) if "drawdown" in _f else None
+            if _data_insufficient:
+                _dd_ok = False
+            elif _regime == "trend_up":
                 _dd_ok = _dd >= -0.03
             elif _regime == "trend_dn":
                 _dd_ok = _dd < -0.10
@@ -1169,12 +1200,22 @@ def scan_stock(code: str, stock_info: dict, date_str: str = None,
                 # B-4(2026-08-21): range 市观察态回撤单独算——用多头口径 dd>=-3%(非硬编码 False)
                 _dd_ok = _dd >= -0.03
             _golden = bool(_f.get("macd_golden_5d"))
+            _vetoes = _tv.get("veto") or []   # 2026-08-27: 否决因子（爆量/远离MA60，仅trend_up触发）
+            _dd_rule = "空头<-10%" if _regime == "trend_dn" else "多头≥-3%"
+            _dd_txt = "数据不足" if _data_insufficient else f"{_dd:+.1%}"
+            _trend_txt = "数据不足" if _data_insufficient else ("是" if _trend else "否")
             result["conditions"] = {
                 "t_regime": {"passed": _dir_ok, "detail": f"市场状态:{_regime}(需多头/空头非震荡)"},
-                "t_trend": {"passed": _trend, "detail": f"多头结构(价>MA20&MA60)={'是' if _trend else '否'}"},
-                "t_drawdown": {"passed": _dd_ok, "detail": f"回撤到位({_dd:+.1%}，{'多头≥-3%' if _regime=='trend_up' else '空头<-10%'})"},
+                "t_trend": {"passed": _trend, "detail": f"多头结构(价>MA20&MA60)={_trend_txt}"},
+                "t_drawdown": {"passed": _dd_ok, "detail": f"回撤到位({_dd_txt}，{_dd_rule})"},
                 "t_golden": {"passed": _golden, "detail": f"MACD金叉近5日={'是' if _golden else '否'}(加分)"},
             }
+            if _vetoes:
+                # 否决触发时 go 已被 timing_gate 压为 False，此处补可解释性（trace/GUI 卡点可见）
+                result["conditions"]["t_veto"] = {
+                    "passed": False, "detail": f"否决因子触发: {'、'.join(_vetoes)}"}
+            if _data_insufficient:
+                result["errors"].append("个股日线数据不足(timing features为空)")
             _score = (30 if _dir_ok else 0) + (30 if _trend else 0) + (30 if _dd_ok else 0) + (10 if _golden else 0)
             if _tv.get("go"):
                 _v = "signal"
@@ -1202,7 +1243,12 @@ def scan_stock(code: str, stock_info: dict, date_str: str = None,
             result["approach_status"] = "immediate" if _v == "signal" else None
             result["gated"] = False
             result["gated_from"] = None
-            result["timing"] = {"regime": _regime, "go": _tv["go"], "reason": _tv["reason"]}
+            result["timing"] = {"regime": _regime, "go": _tv["go"], "reason": _tv["reason"],
+                                "veto": _vetoes}
+            # 2026-08-27: 时机特征随 trace 落盘（GUI 条件详情面板显示精确数值用；
+            #   此前面板读不到 features，回撤详情退化为"已满足+0.0%"的误导显示）
+            result["timing_features"] = {k: _f.get(k) for k in (
+                "price", "ma20", "ma60", "drawdown", "rsi", "vol_ratio20", "dist_ma60")}
 
             # W35(2026-08-25) 日内右侧确认闸门 + 例外出口（两年验证：回撤保护稳健，fwd5 样本外打平）。
             #   仅 intraday 扫描且 go=true 时生效：确认通过→保持 signal(即时可建)；
@@ -1231,11 +1277,19 @@ def scan_stock(code: str, stock_info: dict, date_str: str = None,
             else:
                 _br, _bk = build_blockers(_regime, _f, _dd, _dir_ok, _trend, _dd_ok, _golden,
                                           intraday_confirm=result.get("intraday_confirm"),
-                                          scan_type=scan_type)
+                                          scan_type=scan_type,
+                                          data_insufficient=_data_insufficient,
+                                          vetoes=_vetoes)
                 result["block_reason"] = _br
                 result["blockers"] = _bk
     except Exception as _te:
-        pass  # timing_gate 故障时保留 W33 双通道判定
+        # fix 2026-08-27(bug2): timing_gate 故障（如指数日线断供且无缓存）此前静默 pass，
+        # 判定口径悄悄回退 W33 双通道，trace/日志无任何标记，外部无法区分"真 weak"与"引擎掉线"。
+        # 现：记 warning 日志 + errors 标记 + timing. regime=unknown，trace 可见、复盘可查。
+        log.warning(f"⚠️ timing_gate 判定失败({code})，回退双通道口径: {str(_te)[:200]}")
+        result["errors"].append(f"timing_gate故障(回退双通道): {str(_te)[:120]}")
+        result["timing"] = {"regime": "unknown", "go": False,
+                            "reason": f"timing_gate故障: {str(_te)[:120]}"}
 
     # 仓位计算
     # fix 仓位一刀切(A1-A6): 仅 verdict=signal 才出建仓建议；已持仓股不再给"建仓"建议（防重复建仓）
@@ -1425,7 +1479,7 @@ def build_summary_card(results: list, date_str: str = "") -> dict:
         lines.append(nd_codes)
 
     lines.append("")
-    lines.append("●=通过  ○=未通过  (转向/BOLL/缩量/RSI/5分冰点/突破/放量/多头)")
+    lines.append("●=通过  ○=未通过  (市场有方向/多头结构/回撤到位/MACD金叉加分)  🚫否决=爆量≥3倍或偏离MA60超+20%")
 
     markdown = "\n".join(lines)
 
@@ -2028,6 +2082,7 @@ def run_position_scan(date_str: str = None, capital: float = None,
             "gated": bool(r.get("gated", False)),
             "gated_from": r.get("gated_from"),
             "intraday_confirm": r.get("intraday_confirm"),
+            "timing_features": r.get("timing_features") or {},
             "block_reason": r.get("block_reason"),
             "blockers": r.get("blockers") or [],
             "timing": r.get("timing") or {"regime": None, "go": None, "reason": "未启用"},

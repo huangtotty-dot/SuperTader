@@ -751,6 +751,10 @@ ENTRY_TIMING_PARAMS = {
     #   否则降级 approaching(待日内确认)。两年验证：回撤保护稳健、fwd1改善；仅 intraday 扫描生效。
     "intraday_confirm_gate": True,     # 总开关；False 回滚到"GO 即 signal"
     "intraday_confirm_vol_min": 1.2,   # 15m vol_ratio 放量阈值（w35 实验默认口径）
+    # 2026-08-27 因子挖掘（127万股票-日，doc/experiment/建仓因子挖掘与分批建仓实验_2026-08-27.md）：
+    # 两个硬否决，仅 trend_up 追强侧生效（trend_dn 抄底侧爆量是恐慌出清常态，不否决）。
+    "veto_vol_spike": 3.0,        # 当日成交量≥3倍20日均量不建仓（该桶 w5=38.3% r5=-1.0%）
+    "veto_dist_ma60_max": 0.20,   # 高于MA60超+20%不追高（该桶 w10=43.6%，全因子最差档）
 }
 
 # ==================== B-2: C20 竞价现实校验（2026-08-21 评审通过，双条件与门） ====================
