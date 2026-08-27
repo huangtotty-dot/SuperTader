@@ -2398,6 +2398,40 @@ class Api:
         return _clean({"trends": result})
 
     # ---------- 个股技术标签引擎 ----------
+    def _live_quote_forming(self, code):
+        """腾讯实时快照（qt.gtimg.cn）→ {price, open, high, low, volume} 或 None。
+        K线主机(ifzq)被 WAF 501 拦截时 fetch_daily_kline 会静默回退缺当日K线的旧缓存，
+        用实时快照补一条当日 forming bar，避免技术标签按昨日收盘误判。"""
+        import urllib.request as _ur, os as _os
+        base = str(code).split("_")[0]
+        symbol = ("sh" + base if base[0] in "56" else "sz" + base)
+        try:
+            for _k in ["http_proxy", "https_proxy", "HTTP_PROXY", "HTTPS_PROXY",
+                       "ALL_PROXY", "all_proxy"]:
+                _os.environ.pop(_k, None)
+            _os.environ["NO_PROXY"] = "*"
+            url = f"https://qt.gtimg.cn/q={symbol}"
+            req = _ur.Request(url, headers={"User-Agent": "Mozilla/5.0",
+                                            "Referer": "https://gu.qq.com/"})
+            raw = _ur.urlopen(req, timeout=5).read().decode("gbk", errors="replace")
+            if "~" not in raw:
+                return None
+            f = raw.split('"')[1].split("~")
+            if len(f) < 35:
+                return None
+            price = float(f[3])
+            if price <= 0:
+                return None
+            def _f(i, d=0.0):
+                try:
+                    return float(f[i]) if f[i] else d
+                except (ValueError, IndexError):
+                    return d
+            return {"price": price, "open": _f(5), "high": _f(33), "low": _f(34),
+                    "volume": _f(6)}
+        except Exception:
+            return None
+
     def _stock_tags_one(self, code):
         """单只股票技术标签。返回 {trend, box_pos, tags:[{label,color}]}。"""
         import numpy as np
@@ -2406,6 +2440,19 @@ class Api:
         df = fetch_daily_kline(code)
         if df.empty or len(df) < 30:
             return {"trend": "flat", "tags": []}
+        # P0: ifzq K线主机被 WAF 501 拦截时 fetch_daily_kline 静默回退旧缓存（缺当日 forming bar），
+        # 破5/10日线 等标签会用昨日收盘误判（现价已站上均线仍显示破线）。补当日实时 forming bar。
+        try:
+            if str(df["date"].iloc[-1]) != datetime.now().strftime("%Y-%m-%d"):
+                live = self._live_quote_forming(code)
+                if live:
+                    fb = pd.DataFrame([{"date": datetime.now().strftime("%Y-%m-%d"),
+                                        "open": live["open"], "close": live["price"],
+                                        "high": live["high"], "low": live["low"],
+                                        "volume": live["volume"]}])
+                    df = pd.concat([df, fb], ignore_index=True)
+        except Exception:
+            pass
         closes = df["close"].values
         highs = df["high"].values
         lows = df["low"].values
