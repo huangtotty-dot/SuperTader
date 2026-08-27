@@ -3677,13 +3677,35 @@ class Api:
             "raw_message": regime_blocker.get("gap_txt") if regime_blocker else "未知",
         }
 
-        # 从 gap_txt 中解析指数价格（如果有的话）
-        # 格式通常是 "当前震荡市(指数在MA60±缓冲带内)，signal 结构性不可达" 或含具体数值
-        if regime_blocker:
+        # 2026-08-28: 给出具体指数点位（当前值/多头线/空头线/各差多少）。
+        # 优先读 trace timing.index（新格式）；旧 trace 无该字段时从指数缓存现算（口径同 timing_gate）。
+        idx_info = (record.get("timing") or {}).get("index") or {}
+        close, up_line, dn_line, ma60 = (idx_info.get("close"), idx_info.get("up_line"),
+                                         idx_info.get("dn_line"), idx_info.get("ma60"))
+        if not (close and up_line and dn_line):
+            try:
+                import json as _json
+                _cache = TRACES.parent / "cache" / "daily_kline" / "index_sh000001.json"
+                _rows = _json.loads(_cache.read_text(encoding="utf-8"))["rows"]
+                import pandas as _pd
+                _c = _pd.Series([float(x["close"]) for x in _rows])
+                close = float(_c.iloc[-1])
+                ma60 = float(_c.rolling(60).mean().iloc[-1])
+                up_line = round(ma60 * 1.005, 1)   # 与 timing_gate._regime 同口径
+                dn_line = round(ma60 * 0.97, 1)
+            except Exception:
+                close = up_line = dn_line = ma60 = None
+
+        if close and up_line and dn_line:
+            detail["action"] = "需要指数突破 MA60 缓冲带（确立方向）"
+            detail["rule"] = (f"多头线：站上 {up_line:.1f}（MA60 {ma60:.1f} × 1.005）｜"
+                              f"空头线：跌破 {dn_line:.1f}（MA60 × 0.97）")
+            detail["message"] = (f"当前指数 {close:.2f}，位于缓冲带 {dn_line:.1f} ~ {up_line:.1f} 内（无方向）："
+                                 f"距多头线 {(up_line / close - 1) * 100:+.2f}%，"
+                                 f"距空头线 {(dn_line / close - 1) * 100:+.2f}%")
+        elif regime_blocker:
             gap_txt = regime_blocker.get("gap_txt", "")
             detail["message"] = gap_txt
-
-            # 尝试从文本中提取数值（未来可由后端优化）
             if "MA60" in gap_txt:
                 detail["action"] = "需要指数通过 MA60 缓冲带的检查"
                 if regime == "trend_up":

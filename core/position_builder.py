@@ -779,7 +779,7 @@ def check_intraday_confirm(df_1min, vol_min: float = 1.2) -> tuple:
 
 def build_blockers(regime, feats, dd, dir_ok, trend_ok, dd_ok, golden_ok,
                    intraday_confirm=None, scan_type="manual", data_insufficient=False,
-                   vetoes=None) -> tuple:
+                   vetoes=None, index_info=None) -> tuple:
     """汇总所有未过的【必要条件】及其量化差距，返回 (block_reason, blockers)。
 
     blockers: [{key, label, gap_txt, need, cur}]，按判定顺序（regime→trend→drawdown→日内确认）。
@@ -796,10 +796,21 @@ def build_blockers(regime, feats, dd, dir_ok, trend_ok, dd_ok, golden_ok,
 
     # 1) 市场方向（regime 必须 trend_up/trend_dn）
     if not dir_ok:
+        _need = "指数站上MA60×1.005(多头) 或 跌破MA60×0.97(空头)"
+        _gap = "当前震荡市(指数在MA60±缓冲带内)，signal 结构性不可达"
+        _cur = regime
+        # 2026-08-28: 给出具体指数点位——站上多少转多头、跌破多少转空头、各差多少
+        _ii = index_info or {}
+        if _ii.get("close") and _ii.get("up_line") and _ii.get("dn_line"):
+            _c = float(_ii["close"]); _up = float(_ii["up_line"]); _dn = float(_ii["dn_line"])
+            _gap = (f"指数{_c:.2f} 在缓冲带 {_dn:.1f}~{_up:.1f} 内，无方向，signal 结构性不可达")
+            _need = (f"站上 {_up:.1f} 转多头（还差 {(_up / _c - 1) * 100:+.2f}%）"
+                     f" 或 跌破 {_dn:.1f} 转空头（还差 {(_dn / _c - 1) * 100:+.2f}%）")
+            _cur = f"{_c:.2f}（{_dn:.1f}~{_up:.1f} 之间）"
         blockers.append({
             "key": "t_regime", "label": "市场有方向",
-            "gap_txt": f"当前震荡市(指数在MA60±缓冲带内)，signal 结构性不可达",
-            "need": "指数站上MA60×1.005(多头) 或 跌破MA60×0.97(空头)", "cur": regime,
+            "gap_txt": _gap,
+            "need": _need, "cur": _cur,
         })
 
     # 1.5) 个股日线数据不足：结构/回撤不可判（fix 2026-08-27）
@@ -1244,7 +1255,7 @@ def scan_stock(code: str, stock_info: dict, date_str: str = None,
             result["gated"] = False
             result["gated_from"] = None
             result["timing"] = {"regime": _regime, "go": _tv["go"], "reason": _tv["reason"],
-                                "veto": _vetoes}
+                                "veto": _vetoes, "index": _tv.get("index") or {}}
             # 2026-08-27: 时机特征随 trace 落盘（GUI 条件详情面板显示精确数值用；
             #   此前面板读不到 features，回撤详情退化为"已满足+0.0%"的误导显示）
             result["timing_features"] = {k: _f.get(k) for k in (
@@ -1279,7 +1290,8 @@ def scan_stock(code: str, stock_info: dict, date_str: str = None,
                                           intraday_confirm=result.get("intraday_confirm"),
                                           scan_type=scan_type,
                                           data_insufficient=_data_insufficient,
-                                          vetoes=_vetoes)
+                                          vetoes=_vetoes,
+                                          index_info=_tv.get("index"))
                 result["block_reason"] = _br
                 result["blockers"] = _bk
     except Exception as _te:

@@ -194,13 +194,20 @@ def _stock_features(code: str, date_str: str) -> dict:
 
 
 def timing_verdict(code: str, date_str: str = None) -> dict:
-    """建仓/加仓时机判定。返回 {go, regime, reason, features}。"""
+    """建仓/加仓时机判定。返回 {go, regime, reason, features, veto, index}。"""
     date_str = date_str or pd.Timestamp.now().strftime("%Y-%m-%d")
     p = _params()
     r = _regime(date_str)
     f = _stock_features(code, date_str)
+    # 2026-08-28: 指数具体点位随结果带出（GUI/卡点显示"站上多少转多头、跌破多少转空头"）
+    _idx_info = {"close": r.get("close"), "ma60": r.get("ma60"), "ratio": r.get("ratio")}
+    if r.get("close") and r.get("ma60"):
+        _up_buf = float(p.get("regime_up_buffer", 1.005))
+        _idx_info["up_line"] = round(r["ma60"] * _up_buf, 1)   # 站上即转多头（与 _regime 同口径）
+        _idx_info["dn_line"] = round(r["ma60"] * 0.97, 1)      # 跌破即转空头（与 _regime 同口径）
     if not f:
-        return {"go": False, "regime": r["regime"], "reason": "日线不足", "features": f, "veto": []}
+        return {"go": False, "regime": r["regime"], "reason": "日线不足", "features": f,
+                "veto": [], "index": _idx_info}
     regime = r["regime"]
     reasons = []
     vetoes = []
@@ -240,7 +247,7 @@ def timing_verdict(code: str, date_str: str = None) -> dict:
         go = False
         reasons.append("震荡市: 降频，暂不建仓/加仓")
     return {"go": bool(go), "regime": regime, "reason": "；".join(reasons), "features": f,
-            "veto": vetoes}
+            "veto": vetoes, "index": _idx_info}
 
 
 def _cli():
