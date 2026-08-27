@@ -1,0 +1,78 @@
+{
+  "date": "2026-08-27",
+  "updated_at": "2026-08-27 09:13:31",
+  "source": "live",
+  "accounts_summary": {
+    "账户A": {
+      "broker": "国盛证券-黄",
+      "total_value": 85090.18,
+      "available": 63546.18,
+      "holdings": [
+        {
+          "code": "515180",
+          "name": "红利ETF易方达",
+          "qty": 14000,
+          "price": 1.455,
+          "cost": 1.43,
+          "pnl_amt": 350.0,
+          "pnl_pct": 1.7482517482517501
+        },
+        {
+          "code": "002639",
+          "name": "雪人集团",
+          "qty": 100,
+          "price": 11.74,
+          "cost": 10.807,
+          "pnl_amt": 93.3,
+          "pnl_pct": 8.633293235865636
+        }
+      ],
+      "total_cost": 16078.32,
+      "total_value": 21813.32,
+      "pnl": 5735.0
+    },
+    "账户B": {
+      "broker": "东兴证券-鲁",
+      "total_value": 213620.12,
+      "available": 211694.12,
+      "holdings": [
+        {
+          "code": "588170",
+          "name": "科创半导体ETF华夏",
+          "qty": 1500,
+          "price": 0.994,
+          "cost": 0.478,
+          "pnl_amt": 774.0,
+          "pnl_pct": 107.94979079497908
+        },
+        {
+          "code": "600481",
+          "name": "双良节能",
+          "qty": 100,
+          "price": 4.35,
+          "cost": 28.216,
+          "pnl_amt": -2386.6,
+          "pnl_pct": -84.58321519705132
+        }
+      ],
+      "total_cost": 8560.98,
+      "total_value": 6656.98,
+      "pnl": -1904.0
+    },
+    "账户C": {
+      "broker": "东方证券-黄",
+      "total_value": 100021.06,
+      "available": 100021.06,
+      "holdings": [],
+      "total_cost": 0.0,
+      "total_value": 0.0,
+      "pnl": 0.0
+    }
+  },
+  "portfolio_summary": {
+    "total_value": 398731.36,
+    "total_cost": 24639.3,
+    "total_pnl": 3831.0,
+    "total_pnl_pct": 15.55
+  }
+}

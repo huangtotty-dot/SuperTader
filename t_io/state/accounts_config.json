@@ -3,23 +3,23 @@
   "accounts": {
     "账户A": {
       "broker": "国盛证券-黄",
-      "total_capital": 100021.06,
-      "available": 100021.06,
-      "holdings": [],
+      "total_capital": 85090.18,
+      "available": 63546.18,
+      "holdings": ["515180", "002639"],
       "enabled": true
     },
     "账户B": {
       "broker": "东兴证券-鲁",
-      "total_capital": 85098.18,
-      "available": 63546.18,
-      "holdings": ["515180", "600481", "002639"],
+      "total_capital": 213620.12,
+      "available": 211694.12,
+      "holdings": ["588170", "600481"],
       "enabled": true
     },
     "账户C": {
       "broker": "东方证券-黄",
-      "total_capital": 213618.62,
-      "available": 211694.12,
-      "holdings": ["588170"],
+      "total_capital": 100021.06,
+      "available": 100021.06,
+      "holdings": [],
       "enabled": true
     }
   },
