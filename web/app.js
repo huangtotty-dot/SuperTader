@@ -536,6 +536,10 @@ function renderLive(live, isToday) {
     const isNear = s.near && !isSig;  // 近阈但未触发
     const nearInfo = isNear
       ? `距买阈${fmt((s.buy_threshold||0)-(s.buy_score||0),0)}/卖阈${fmt((s.sell_threshold||0)-(s.sell_score||0),0)}` : "";
+    const sw = s.swing_meta || {};
+    const renkoTxt = (!isSig && sw.brick_count != null)
+      ? ` <span class="cell-dim" style="font-size:10px">砖${sw.brick_dir || "?"}:${sw.brick_count} MACD15:${fmt(sw.m15, 2)}</span>`
+      : "";
     return `
       <tr class="${isSig ? "live-signal-row sig" : isNear ? "live-signal-row near" : ""}">
         <td class="mono">${esc((s.scan_time || "").slice(11, 19))}</td>
@@ -544,7 +548,7 @@ function renderLive(live, isToday) {
         <td class="num ${clsOf((s.buy_score || 0) - (s.buy_threshold || 36))}">${fmt(s.buy_score, 1)}</td>
         <td class="num ${clsOf((s.sell_score || 0) - (s.sell_threshold || 55))}">${fmt(s.sell_score, 1)}</td>
         <td><span class="badge ${isSig ? "signal" : isNear ? "approach" : "chop"}">${isNear ? "接近" : esc(dec)}</span></td>
-        <td class="cell-dim" style="font-size:11px">${esc(nearInfo || s.reason || "")}</td>
+        <td class="cell-dim" style="font-size:11px">${esc(nearInfo || s.reason || "")}${renkoTxt}</td>
       </tr>`;
   }).join("");
 
@@ -555,7 +559,7 @@ function renderLive(live, isToday) {
         ${trendCards || '<div class="empty">无趋势状态</div>'}
       </div>
       <div class="card">
-        <div class="card-title">实时信号流（decision_trace 尾部 20）· 信号 ${signals.filter(s => s.decision !== "HOLD").length} 条</div>
+        <div class="card-title">实时信号流（decision_trace 尾部 20）· 信号 ${signals.filter(s => s.decision !== "HOLD").length} 条 · <span class="cell-dim" style="font-weight:normal">Renko触发式:0=等待/100=触发(0分正常)·约15s刷新</span></div>
         <table>
           <thead><tr><th>时间</th><th>股票</th><th class="num">价</th><th class="num">买分</th><th class="num">卖分</th><th>决策</th><th>原因</th></tr></thead>
           <tbody>${sigRows || '<tr><td colspan="7" class="empty">暂无信号（盘中数据写入中）</td></tr>'}</tbody>
@@ -1495,7 +1499,7 @@ async function recomputePB() {
   const btns = document.querySelectorAll(".recompute-pb-btn");
   pbRecomputeRunning = true;
   btns.forEach(b => { b.disabled = true; b.textContent = "⏳ 重跑中..."; });
-  statusEl("盘后重跑中（建仓扫描+加仓观察）...", "ok");
+  statusEl("盘后重跑中（建仓扫描+加仓观察，约需1-2分钟）...", "ok");
   try {
     const r = await apiCall("recompute_pb", state.date);
     if (r && r.position_builder) {
@@ -1505,7 +1509,13 @@ async function recomputePB() {
         state.payload.position_builder = r.position_builder;
         state.payload.add_watch = r.add_watch;
       }
-      statusEl("盘后重跑完成", "ok");
+      const cnt = r.position_builder.counts || {};
+      const cntTxt = Object.keys(cnt).filter(k => cnt[k] > 0)
+        .map(k => `${k}:${cnt[k]}`).join(" ");
+      statusEl(r.error
+        ? `⚠ 盘后重跑建仓扫描异常: ${r.error}（已返回现有结果）`
+        : `盘后重跑完成（${cntTxt || "无"}，刷新于 ${r.position_builder.refreshed_at || "?"}）`,
+        r.error ? "err" : "ok");
     } else {
       statusEl("重跑失败: 无返回", "err");
     }

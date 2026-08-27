@@ -3153,11 +3153,16 @@ class Api:
                 bs = r.get("buy_score") or 0; ss = r.get("sell_score") or 0
                 bt = r.get("buy_threshold") or 99; st = r.get("sell_threshold") or 99
                 near = r.get("decision") == "HOLD" and (bs >= bt - 5 or ss >= st - 5)
+                sw = r.get("swing_meta") or {}
+                reason = r.get("decision_reason")
+                if r.get("decision") == "HOLD" and sw.get("wait"):
+                    reason = sw.get("wait")
                 return {
                     "scan_time": r.get("scan_time"), "code": r.get("code"),
                     "name": r.get("name"), "price": r.get("price"),
                     "buy_score": bs, "sell_score": ss, "decision": r.get("decision"),
-                    "reason": r.get("decision_reason"),
+                    "reason": reason,
+                    "swing_meta": sw,
                     "buy_threshold": bt, "sell_threshold": st,
                     "near": near,
                 }
@@ -3634,18 +3639,24 @@ class Api:
         return result
 
     def recompute_pb(self, date):
-        """盘后重跑建仓扫描 + 重算加仓观察。返回 {position_builder, add_watch}。
-        重跑用 eod 档、不推送飞书（避免重复打扰）；run_position_scan 会更新 watchlist_buy。"""
+        """盘后重跑建仓扫描 + 重算加仓观察。返回 {position_builder, add_watch, error?}。
+        重跑用 eod 档、不推送飞书（避免重复打扰）；run_position_scan 会更新 watchlist_buy。
+        fix 2026-08-27: 不再静默吞异常——失败记录并随返回带 error，前端可见。"""
+        err = None
         # 1) 重跑建仓扫描（eod 档）
         try:
             from core.position_builder import run_position_scan
             run_position_scan(date_str=date, scan_type="eod", silent=True, no_feishu=True)
-        except Exception:
-            pass  # 扫描失败不阻断，add_watch 仍返回
+        except Exception as e:
+            err = str(e)[:200]
+            print(f"⚠️ 盘后重跑建仓扫描失败: {err}")
         # 2) 聚合新 trace（含技术标签）+ 重算加仓
         pb = self.refresh_pb(date)
         aw = self.compute_add_watch(date)
-        return _clean({"position_builder": pb, "add_watch": aw})
+        out = {"position_builder": pb, "add_watch": aw}
+        if err:
+            out["error"] = err
+        return _clean(out)
 
     # ---------- 内部聚合 ----------
     def _load_stage_board(self):

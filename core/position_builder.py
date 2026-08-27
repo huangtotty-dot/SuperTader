@@ -1858,6 +1858,22 @@ def _build_holdings_gap(total_capital: float) -> dict:
         return None
 
 
+def _build_scan_error_result(code: str, info: dict, exc: Exception) -> dict:
+    """单只股扫描异常时的兜底结果行：结构对齐 scan_stock 基础 dict，
+    供 trace/聚合消费；scan_error 标记用于跳过 watchlist 回写。"""
+    return {
+        "code": code, "name": (info or {}).get("name", code),
+        "date": None, "latest_price": None, "conditions": {},
+        "composite_score": 0, "score_ceiling": 100, "signal_reachable": True,
+        "verdict": "insufficient_data", "channel": None, "approach_status": None,
+        "channels": {}, "gated": False, "gated_from": None,
+        "intraday_confirm": None, "block_reason": None, "blockers": [],
+        "position": None, "note": None,
+        "scan_error": True,
+        "errors": [f"扫描异常: {str(exc)[:200]}"],
+    }
+
+
 def run_position_scan(date_str: str = None, capital: float = None,
                       no_feishu: bool = False, target_code: str = None,
                       silent: bool = False, scan_type: str = "manual") -> list:
@@ -1909,11 +1925,22 @@ def run_position_scan(date_str: str = None, capital: float = None,
         if not silent:
             print(f"扫描 {code} {info.get('name', '')}...")
         # 盘后(eod)/手动(manual)重跑允许快照陈旧（日线判断独立拉取）；scan_type 传给 scan_stock
-        r = scan_stock(code, info, date_str, total_capital, max_pct,
-                       allow_stale=(scan_type in ("eod", "manual")), scan_type=scan_type,
-                       position_gap=position_gap)
+        try:
+            r = scan_stock(code, info, date_str, total_capital, max_pct,
+                           allow_stale=(scan_type in ("eod", "manual")), scan_type=scan_type,
+                           position_gap=position_gap)
+        except Exception as _se:
+            # fix 2026-08-27: 单只股异常不再中止整轮扫描（此前任一异常导致整体不写 trace、
+            # GUI"盘后重跑"静默失败无任何反馈）。记入 error 行继续，成功股仍正常写 trace。
+            r = _build_scan_error_result(code, info, _se)
+            if not silent:
+                print(f"  ⚠️ {code} 扫描异常，已记录并继续: {str(_se)[:120]}")
         results.append(r)
-        update_watchlist(r, watchlist)
+        if not r.get("scan_error"):
+            try:
+                update_watchlist(r, watchlist)
+            except Exception:
+                pass  # 单股写回失败不阻断整体
 
         if r["verdict"] == "signal":
             signal_count += 1

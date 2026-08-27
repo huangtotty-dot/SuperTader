@@ -454,14 +454,17 @@ class SignalEngine:
         # 依据: 39支×1年复验 Renko买入择时 60.6%(39/39支>50%) / target+0.5%止盈 78.5%胜率
         # 旧逻辑(布林触轨+MACD/RSI确认)已于 2026-08-27 删除, git 历史可恢复
         self._check_morning_alert(code, name, df, feats)  # 保留飞书早盘预警(纯通知，不再阻断)
+        swing_meta = {}
         try:
-            sig, buy_score, sell_score, decision_reason = self._swing_renko_eval(
+            sig, buy_score, sell_score, decision_reason, swing_meta = self._swing_renko_eval(
                 code, name, df, feats, price)
         except Exception:
             sig = None
             buy_score = 0.0
             sell_score = 0.0
             decision_reason = "HOLD_NO_SWING"
+            swing_meta = {}
+        swing_meta = swing_meta if isinstance(swing_meta, dict) else {}
 
         _buy_factors = {d["指标"]: d.get("加分", 0) for d in (sig.details if sig and sig.action == "BUY_LOW" else [])}
         _sell_factors = {d["指标"]: d.get("加分", 0) for d in (sig.details if sig and sig.action == "SELL_HIGH" else [])}
@@ -503,6 +506,7 @@ class SignalEngine:
             "buy_factors": _buy_factors,
             "sell_factors": _sell_factors,
             "engine": "v2_swing2pt",
+            "swing_meta": swing_meta,
         })
         return buy_score, sell_score, sig
 
@@ -517,7 +521,7 @@ class SignalEngine:
         try:
             from analysis.renko_builder import RenkoBuilder
         except Exception:
-            return None, 0.0, 0.0, "HOLD_NO_SWING"
+            return None, 0.0, 0.0, "HOLD_NO_SWING", None
         today = get_today_str()
         t_val = int(feats.get("t_val", 0))
         # 1) Renko 增量状态机（实盘/回放共用，避免每次全量重建）
@@ -551,6 +555,16 @@ class SignalEngine:
         tp = float(PARAMS.get("swing_take_profit_pct", 0.005))
         max_hold = int(PARAMS.get("swing_t_max_hold_min", 0) or 0)
         force_tval = int(PARAMS.get("swing_force_exit_tval", 1455))
+        # GUI 实时流展示用：当前 Renko 状态（证明引擎持续评估，0 分≠异常而是等待触发）
+        _brick_dir = getattr(builder, "brick_direction", None)
+        swing_meta = {
+            "brick_dir": _brick_dir,
+            "brick_count": len(builder.bricks) if hasattr(builder, "bricks") else None,
+            "m15": round(m15, 3),
+            "has_entry": has_entry,
+            "tp_gap_pct": round((price / entry["price"] - 1) * 100, 2)
+                          if has_entry and entry.get("price") else None,
+        }
         _ind = {"vwap": feats.get("vwap", price), "today_ret": feats.get("today_ret", 0),
                 "market_state": feats.get("daily_status", "unknown"),
                 "entry_kind": "swing_renko", "macd_hist_15m": m15}
@@ -589,7 +603,7 @@ class SignalEngine:
                     })
                 except Exception:
                     pass
-                return sig, 0.0, sell_score, "SELL_HIGH"
+                return sig, 0.0, sell_score, "SELL_HIGH", swing_meta
 
         # 3) 买入：最新向下砖 + 15分MACD金叉（当日未持有做T仓）
         if not has_entry and last_down and m15 > 0 and price > 0:
@@ -609,9 +623,25 @@ class SignalEngine:
                 })
             except Exception:
                 pass
-            return sig, buy_score, 0.0, "BUY_LOW"
+            return sig, buy_score, 0.0, "BUY_LOW", swing_meta
 
-        return None, 0.0, 0.0, "HOLD_NO_SWING"
+        if has_entry:
+            _gap = swing_meta["tp_gap_pct"]
+            swing_meta["wait"] = (f"持仓中·距目标止盈+{tp*100:.1f}%: {_gap:+.2f}%"
+                                  if _gap is not None else f"持仓中·等+{tp*100:.1f}%")
+        else:
+            try:
+                _df15 = resample_to_15min(df) if 'resample_to_15min' in globals() else None
+                _n15 = len(_df15) if _df15 is not None else None
+            except Exception:
+                _n15 = None
+            if _n15 is not None and _n15 < 3:
+                swing_meta["wait"] = f"MACD15预热中(需3根15分K线, 当前{_n15}根)"
+            elif last_down:
+                swing_meta["wait"] = f"等MACD15转正(当前{m15:.2f})"
+            else:
+                swing_meta["wait"] = f"等Renko向下砖(当前{_brick_dir or '首砖'})"
+        return None, 0.0, 0.0, "HOLD_NO_SWING", swing_meta
 
 
 # ====================================================================
