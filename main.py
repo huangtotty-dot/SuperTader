@@ -872,6 +872,27 @@ def _launch_auction_collector(slot: str, today: str) -> None:
     log.info(f"📸 竞价采集已触发: slot={slot} (pid={proc.pid}) → t_io/preopen/auction_{today}.json")
 
 
+def _launch_auction_backfill(today: str) -> None:
+    """子进程拉起 auction_collector.py --backfill（fire-and-forget，复用采集器隔离模式）。
+    09:31 后 09:30 分钟线已出，回填 09:25 口径：开盘价 + 09:30 首根量/额 ≈ 竞价撮合量/额 + vol_ratio。
+    竞价时段腾讯字段[6]=全天累计量(0)，量能只能靠此路径补（方案集合竞价决策方案 §3.1）。"""
+    import subprocess
+    collector = os.path.join(BASE_DIR, "t_io", "preopen", "auction_collector.py")
+    log_dir = os.path.join(BASE_DIR, "t_io", "preopen", "logs")
+    os.makedirs(log_dir, exist_ok=True)
+    out_fp = open(os.path.join(log_dir, f"auction_collector_{today}.log"), "a", encoding="utf-8")
+    try:
+        flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+        proc = subprocess.Popen(
+            [sys.executable, collector, "--backfill", "--date", today],
+            cwd=BASE_DIR, creationflags=flags,
+            stdout=out_fp, stderr=subprocess.STDOUT,
+        )
+    finally:
+        out_fp.close()
+    log.info(f"📸 竞价回填已触发: 09:25口径(真实量/额) → t_io/preopen/auction_{today}.json (pid={proc.pid})")
+
+
 def _maybe_collect_auction_snapshot(now: datetime) -> None:
     """09:20/09:22 竞价快照采集调度（每日各一次，W32-B2 用户 2026-08-08 拍板挂载）。
 
@@ -891,6 +912,11 @@ def _maybe_collect_auction_snapshot(now: datetime) -> None:
             if start <= t < end and _AUCTION_COLLECT_STATE.get(slot) != today:
                 _AUCTION_COLLECT_STATE[slot] = today       # 先占位防重复触发（无论成败）
                 _launch_auction_collector(slot, today)
+        # 09:31 后自动回填 09:25 口径（真实竞价量/额/vol_ratio），每日一次。
+        # 竞价时段 qt.gtimg.cn 字段[6]=全天累计量(0)，量能只能靠 09:30 分钟线首根补算。
+        if dtime(9, 31) <= t < dtime(9, 45) and _AUCTION_COLLECT_STATE.get("_backfilled") != today:
+            _AUCTION_COLLECT_STATE["_backfilled"] = today
+            _launch_auction_backfill(today)
         # 断档检查（每日一次）
         if t >= dtime(9, 26) and _AUCTION_COLLECT_STATE.get("_gap_warned") != today:
             _AUCTION_COLLECT_STATE["_gap_warned"] = today
