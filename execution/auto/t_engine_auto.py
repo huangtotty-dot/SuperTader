@@ -1,29 +1,65 @@
-# coding=utf-8
-"""
-signal/engine.py — 信号评分引擎
+# -*- coding: utf-8 -*-
+"""t_engine_auto.py — auto 侧做T引擎适配器（期B：做T引擎同源，双侧单一真源）
 
-移植自 E:\06_T\signal_engine.py
-- 移除 exec/globals 依赖，改用标准 import
-- 时间由外部注入 SIM_NOW
+把 gm_main 消费的 SignalEngine 从旧 sigmoid 评分引擎（_gm/signals/engine.py，已删）切换为
+core/t_decision.py 的 Renko 触发式决策核（手动侧 signal_engine.py 同源）。
+
+保留（执行侧，不进决策核）：
+  · RiskManager —— 纯函数一票否决（buy_block/sell_block，决策后挂否决）
+  · FeatureExtractor —— auto 侧特征提取（_last_feats 契约：gm_main 原地写 price/profit_pct 等）
+  · 执行状态全量（冷却/计数/回补记忆/轮次/诊断……）
+  · 回补价格记忆门控：delayed/not_target/downgrade（WP-B07/B18）——但买回触发交给 Renko 向下砖，
+    不再有分数激励（用户拍板「纯 Renko 触发」）
+
+删除：ScoringEngine / FACTOR_WEIGHTS / calc_buy_score / calc_sell_score（sigmoid 连续打分）。
+
+三段式加载决策核（与 build_decision_auto 同款跨仓消费）：sys.modules 短路 → 常规 import →
+importlib 绝对路径（SUPERTRADER_ROOT，.gszq 部署环境回退）。
 """
+import importlib.util
+import os
+import sys
 
 import numpy as np
 import pandas as pd
-from typing import Dict, Any, List, Optional, Tuple
+from typing import Dict, Any, List, Optional
 from datetime import datetime, timedelta
 
 from config.params import PARAMS, STOCK_PARAMS
-from data.indicators import Signal, clean_code
 
 
-# ===== 时间注入（回测时由 main.py 设为当前 K 线时间） =====
+def _load_t_decision():
+    if "core.t_decision" in sys.modules:
+        return sys.modules["core.t_decision"]
+    try:
+        from core import t_decision as m
+        return m
+    except ImportError:
+        pass
+    _root = os.environ.get("SUPERTRADER_ROOT") or os.path.dirname(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    _path = os.path.join(_root, "core", "t_decision.py")
+    if not os.path.exists(_path):
+        raise RuntimeError(f"做T决策核缺失（期B 依赖）: {_path}")
+    _spec = importlib.util.spec_from_file_location("core.t_decision", _path)
+    _m = importlib.util.module_from_spec(_spec)
+    sys.modules["core.t_decision"] = _m
+    _spec.loader.exec_module(_m)
+    return _m
+
+
+td = _load_t_decision()
+Signal = td.Signal
+TDecisionEngine = td.TDecisionEngine
+
+
+# ===== 时间注入（回测/回放时由 gm_main 设为当前 K 线时间） =====
 SIM_NOW: Optional[datetime] = None
+
 
 def _engine_now() -> datetime:
     return SIM_NOW if SIM_NOW is not None else datetime.now()
 
-
-# ===== 工具函数 =====
 
 def _business_day_add(d, n):
     """WP-B18: 日期加 n 个交易日（跳过周末；节假日不剔除，交易日历留 Phase D）。"""
@@ -36,237 +72,10 @@ def _business_day_add(d, n):
     return cur
 
 
-def _sp_param(code: str, key: str, default=None):
-    """个股专属参数 > 全局 PARAMS > default"""
-    v = STOCK_PARAMS.get(code, {}).get(key)
-    if v is not None:
-        return v
-    return PARAMS.get(key, default)
-
-
-def _clamp(value: float, lower: float, upper: float) -> float:
-    return max(lower, min(upper, value))
-
-
-# ===== FACTOR_WEIGHTS =====
-FACTOR_WEIGHTS = {
-    "vwap_buy_atr_mult": -1.5,
-    "vwap_sell_atr_mult": 1.2,
-    "rsi_oversold_atr_adj": True,
-    "buy_score_atr_smooth": 50,
-    "sell_score_atr_smooth": 50,
-    "trend_strength_atr_mult": 2.0,
-    "stop_loss_atr_mult": 2.5,
-    "take_profit_atr_mult": 3.0,
-    "min_score_continuous": True,
-    "factor_weight_vwap": 0.20,
-    "factor_weight_rsi": 0.12,
-    "factor_weight_macd": 0.08,
-    "factor_weight_volume": 0.08,
-    "factor_weight_position": 0.08,
-    "factor_weight_ema": 0.04,
-    "factor_weight_pattern": 0.20,
-    "factor_weight_index_regime": 0.20,
-    "factor_weight_time": 0.00,
-    "max_score_raw": 100,
-}
-
-
-# ===== ScoringEngine =====
-
-class ScoringEngine:
-    """因子打分引擎"""
-
-    @staticmethod
-    def _sigmoid(x: float, center: float = 0, slope: float = 1) -> float:
-        z = -slope * (x - center)
-        if z > 100:
-            return 0.0
-        if z < -100:
-            return 1.0
-        return 1.0 / (1.0 + np.exp(z))
-
-    @staticmethod
-    def score_vwap_buy(feats: dict) -> tuple:
-        ratio = feats.get("vwap_dev_atr_ratio", 0)
-        raw = ScoringEngine._sigmoid(-ratio, center=0.5, slope=2.0)
-        return raw, [{"指标": "VWAP偏离(ATR)", "当前": f"{ratio:.2f}σ", "强度": round(raw, 3)}]
-
-    @staticmethod
-    def score_rsi_buy(feats: dict) -> tuple:
-        rsi = feats.get("rsi", 50)
-        raw = ScoringEngine._sigmoid(35 - rsi, center=3, slope=0.5)
-        return raw, [{"指标": "RSI超卖", "当前": f"{rsi:.1f}", "强度": round(raw, 3)}]
-
-    @staticmethod
-    def score_rsi_sell(feats: dict) -> tuple:
-        rsi = feats.get("rsi", 50)
-        raw = ScoringEngine._sigmoid(rsi - 78, center=3, slope=0.5)
-        return raw, [{"指标": "RSI超买", "当前": f"{rsi:.1f}", "强度": round(raw, 3)}]
-
-    @staticmethod
-    def score_macd_buy(feats: dict) -> tuple:
-        mh = feats.get("macd_hist", 0)
-        pmh = feats.get("prev_macd_hist", 0)
-        if mh < 0 and mh > pmh:
-            ratio = min(1.0, abs(mh) / max(abs(pmh), 0.001))
-            return ratio, [{"指标": "MACD负区拐头", "当前": f"{mh:.4f}↑", "强度": round(ratio, 3)}]
-        return 0.0, []
-
-    @staticmethod
-    def score_macd_sell(feats: dict) -> tuple:
-        mh = feats.get("macd_hist", 0)
-        pmh = feats.get("prev_macd_hist", 0)
-        if mh > 0 and mh < pmh:
-            ratio = min(1.0, mh / max(mh - pmh, 0.001))
-            return ratio, [{"指标": "MACD正区萎缩", "当前": f"{mh:.4f}↓", "强度": round(ratio, 3)}]
-        return 0.0, []
-
-    @staticmethod
-    def score_vwap_sell(feats: dict) -> tuple:
-        price = feats.get("price", 0)
-        vwap = feats.get("vwap", 0)
-        atr = max(feats.get("atr", 0.02), 0.002)
-        if vwap <= 0 or price <= 0:
-            return 0.0, []
-        ratio = (price - vwap) / vwap / atr
-        raw = ScoringEngine._sigmoid(ratio, center=0.5, slope=1.5)
-        return raw, [{"指标": "VWAP溢价(ATR)", "当前": f"{ratio:.2f}σ", "强度": round(raw, 3)}]
-
-    @staticmethod
-    def score_lower_shadow(feats: dict) -> tuple:
-        ls = feats.get("lower_shadow", 0)
-        raw = ScoringEngine._sigmoid(ls, center=0.3, slope=8.0)
-        if raw > 0.05:
-            return raw, [{"指标": "长下影", "当前": f"{ls:.2f}", "强度": round(raw, 3)}]
-        return 0.0, []
-
-    @staticmethod
-    def score_ema_improve(feats: dict) -> tuple:
-        es = feats.get("ema_spread", 0)
-        pes = feats.get("prev_ema_spread", 0)
-        delta = es - pes
-        raw = ScoringEngine._sigmoid(delta, center=0.0005, slope=500.0)
-        if raw > 0.05:
-            return raw, [{"指标": "EMA转强", "当前": f"{es*100:.4f}%", "强度": round(raw, 3)}]
-        return 0.0, []
-
-    @staticmethod
-    def score_ema_weaken(feats: dict) -> tuple:
-        es = feats.get("ema_spread", 0)
-        pes = feats.get("prev_ema_spread", 0)
-        delta = pes - es
-        raw = ScoringEngine._sigmoid(delta, center=0.0005, slope=500.0)
-        if raw > 0.05:
-            return raw, [{"指标": "EMA转弱", "当前": f"{es*100:.4f}%", "强度": round(raw, 3)}]
-        return 0.0, []
-
-    @staticmethod
-    def score_volume(feats: dict) -> tuple:
-        vr = feats.get("vol_ratio", 1.0)
-        raw = ScoringEngine._sigmoid(vr, center=1.2, slope=4.0)
-        if raw > 0.05:
-            return raw, [{"指标": "量能确认", "当前": f"{vr:.2f}", "强度": round(raw, 3)}]
-        return 0.0, []
-
-    @staticmethod
-    def score_upper_shadow(feats: dict) -> tuple:
-        us = feats.get("upper_shadow", 0)
-        raw = ScoringEngine._sigmoid(us, center=0.4, slope=6.0)
-        if raw > 0.05:
-            return raw, [{"指标": "长上影", "当前": f"{us:.2f}", "强度": round(raw, 3)}]
-        return 0.0, []
-
-    @staticmethod
-    def _weighted_factor_score(raw: float, weight_key: str, w_mult: float = 1.0,
-                                 p: dict = None) -> float:
-        w = (p or FACTOR_WEIGHTS).get(weight_key, 0.10)
-        return raw * 100 * w * w_mult
-
-    @staticmethod
-    def score_index_regime(feats: dict, side: str = "buy") -> float:
-        regime = feats.get("index_regime", "range")
-        if regime == "uni_down":
-            return 1.0 if side == "sell" else 0.0
-        if regime == "uni_up":
-            return 0.2 if side == "sell" else 1.0
-        return 0.5
-
-    @staticmethod
-    def calc_buy_score(feats: dict, p: dict = None) -> tuple:
-        details = []
-        score = 0.0
-        raw, d = ScoringEngine.score_vwap_buy(feats)
-        s = ScoringEngine._weighted_factor_score(raw, "factor_weight_vwap", p=p)
-        score += s
-        d and details.append(d[0] | {"加分": round(s, 1)})
-        raw, d = ScoringEngine.score_rsi_buy(feats)
-        s = ScoringEngine._weighted_factor_score(raw, "factor_weight_rsi", p=p)
-        score += s
-        d and details.append(d[0] | {"加分": round(s, 1)})
-        raw, d = ScoringEngine.score_macd_buy(feats)
-        s = ScoringEngine._weighted_factor_score(raw, "factor_weight_macd", p=p)
-        score += s
-        d and details.append(d[0] | {"加分": round(s, 1)})
-        raw, d = ScoringEngine.score_volume(feats)
-        s = ScoringEngine._weighted_factor_score(raw, "factor_weight_volume", p=p)
-        score += s
-        d and details.append(d[0] | {"加分": round(s, 1)})
-        raw, d = ScoringEngine.score_lower_shadow(feats)
-        s = ScoringEngine._weighted_factor_score(raw, "factor_weight_pattern", p=p)
-        score += s
-        d and details.append(d[0] | {"加分": round(s, 1)})
-        raw, d = ScoringEngine.score_ema_improve(feats)
-        s = ScoringEngine._weighted_factor_score(raw, "factor_weight_ema", p=p)
-        score += s
-        d and details.append(d[0] | {"加分": round(s, 1)})
-        s_regime = ScoringEngine.score_index_regime(feats, "buy")
-        s = ScoringEngine._weighted_factor_score(s_regime, "factor_weight_index_regime", p=p)
-        score += s
-        details.append({"指标": "大盘态势", "当前": feats.get("index_regime", "range"), "加分": round(s, 1)})
-        score = min(score, FACTOR_WEIGHTS.get("max_score_raw", 100))
-        return round(score, 1), details
-
-    @staticmethod
-    def calc_sell_score(feats: dict, p: dict = None) -> tuple:
-        details = []
-        score = 0.0
-        raw, d = ScoringEngine.score_vwap_sell(feats)
-        s = ScoringEngine._weighted_factor_score(raw, "factor_weight_vwap", p=p)
-        score += s
-        d and details.append(d[0] | {"加分": round(s, 1)})
-        raw, d = ScoringEngine.score_rsi_sell(feats)
-        s = ScoringEngine._weighted_factor_score(raw, "factor_weight_rsi", p=p)
-        score += s
-        d and details.append(d[0] | {"加分": round(s, 1)})
-        raw, d = ScoringEngine.score_macd_sell(feats)
-        s = ScoringEngine._weighted_factor_score(raw, "factor_weight_macd", p=p)
-        score += s
-        d and details.append(d[0] | {"加分": round(s, 1)})
-        raw, d = ScoringEngine.score_volume(feats)
-        s = ScoringEngine._weighted_factor_score(raw, "factor_weight_volume", p=p)
-        score += s
-        d and details.append(d[0] | {"加分": round(s, 1)})
-        raw, d = ScoringEngine.score_upper_shadow(feats)
-        s = ScoringEngine._weighted_factor_score(raw, "factor_weight_pattern", p=p)
-        score += s
-        d and details.append(d[0] | {"加分": round(s, 1)})
-        raw, d = ScoringEngine.score_ema_weaken(feats)
-        s = ScoringEngine._weighted_factor_score(raw, "factor_weight_ema", p=p)
-        score += s
-        d and details.append(d[0] | {"加分": round(s, 1)})
-        s_regime = ScoringEngine.score_index_regime(feats, "sell")
-        s = ScoringEngine._weighted_factor_score(s_regime, "factor_weight_index_regime", p=p)
-        score += s
-        details.append({"指标": "大盘态势", "当前": feats.get("index_regime", "range"), "加分": round(s, 1)})
-        score = min(score, FACTOR_WEIGHTS.get("max_score_raw", 100))
-        return round(score, 1), details
-
-
 # ===== RiskManager =====
 
 class RiskManager:
-    """一票否决守门员"""
+    """一票否决守门员（纯函数，保留在 auto 侧执行态，不进决策核）"""
 
     @staticmethod
     def check_all(feats: dict) -> dict:
@@ -298,7 +107,7 @@ class RiskManager:
 # ===== FeatureExtractor =====
 
 class FeatureExtractor:
-    """单次调用提取全部客观特征"""
+    """单次调用提取全部客观特征（auto 侧口径，供 _last_feats 与 RiskManager）"""
 
     @staticmethod
     def extract_all(code: str, name: str, df, holding: dict,
@@ -451,9 +260,12 @@ class SignalEngine:
         self.scenario_factor_state: Dict[str, Dict[str, Dict[str, Any]]] = {}
         self.morning_alert_state: Dict[str, Dict[str, Any]] = {}
         self.last_decision: Dict[str, Dict[str, Any]] = {}
-        self.factor_weights = factor_weights or FACTOR_WEIGHTS
+        # 期B: ScoringEngine 已删，factor_weights 仅留占位（不再参与 Renko 触发式决策）
+        self.factor_weights = factor_weights or {}
         self.signals: List[Signal] = []
         self._last_feats: Dict[str, Dict[str, Any]] = {}
+        # 期B: 做T决策核单一真源（与手动侧 core/signal_engine.py 同源）
+        self._core = TDecisionEngine()
 
     def _get_params(self, code: str) -> dict:
         p = dict(PARAMS)
@@ -475,9 +287,14 @@ class SignalEngine:
             self.last_signal_state.clear()
             self.last_trade_state.clear()
             self.state_reset_date = now.strftime("%Y-%m-%d")
+            # 期B: 决策核 Renko 砖状态 + 做T买入价随日界清空（决策核单一真源）
+            self._core.reset_day(self.state_reset_date)
 
     def evaluate(self, code, name, df, holding, daily_ctx=None) -> tuple:
-        """主入口：返回 (buy_score, sell_score, Signal|None)"""
+        """主入口：返回 (buy_score, sell_score, Signal|None)。
+
+        决策委托 core/t_decision.py（Renko 触发式，双侧同源）；执行侧一票否决/冷却/计数/
+        回补记忆门控保留在本适配器。"""
         self._check_date_reset()
         now = _engine_now()
         p = self._get_params(code)
@@ -487,49 +304,50 @@ class SignalEngine:
             return 0.0, 0.0, None
 
         self._last_feats[code] = feats
-        buy_score, buy_details = ScoringEngine.calc_buy_score(feats, self.factor_weights)
-        sell_score, sell_details = ScoringEngine.calc_sell_score(feats, self.factor_weights)
         risk = RiskManager.check_all(feats)
         sig = None
 
         if risk.get("blocked"):
             self.last_decision[code] = {"action": "HOLD", "reason": risk.get("reason", "blocked")}
-            return buy_score, sell_score, None
+            return 0.0, 0.0, None
 
-        t_val = feats.get("t_val", 0)
         sell_blocks = risk.get("sell_block", [])
         buy_blocks = risk.get("buy_block", [])
 
-        # 卖出判定
-        sell_threshold = float(p.get("notify_sell_threshold", 65))
-        sell_allowed = not sell_blocks
-        sell_cooldown_ok = code not in self.sell_cooldown or now >= self.sell_cooldown.get(code, now)
-        max_sells = int(p.get("max_sell_times_per_stock", 3))
-        sell_count_ok = self.sell_count_per_stock.get(code, 0) < max_sells
+        # 决策核（唯一真源）：Renko 向下砖买入 / 目标止盈·时间止损·尾盘强平卖出
+        try:
+            core_sig, buy_score, sell_score, _reason, _swing_meta = self._core.evaluate(
+                code, name, df,
+                price=float(feats.get("price", 0)),
+                t_val=int(feats.get("t_val", 0)),
+                vwap=float(feats.get("vwap", 0) or feats.get("price", 0)),
+                today_ret=float(feats.get("today_ret", 0)),
+                daily_status=feats.get("daily_status", "unknown"),
+                today_str=_engine_now().strftime("%Y-%m-%d"),
+                params=p,
+            )
+        except Exception:
+            core_sig, buy_score, sell_score = None, 0.0, 0.0
 
-        if sell_score >= sell_threshold and sell_allowed and sell_cooldown_ok and sell_count_ok:
-            action = "SELL_HIGH"
-            sig = Signal(code=code, name=name, action=action,
-                         price=feats.get("price", 0), score=sell_score,
-                         reasons=["评分达标"],
-                         indicators={"vwap": feats.get("vwap", 0),
-                                     "market_state": "normal",
-                                     "today_ret": feats.get("today_ret", 0)},
-                         details=sell_details)
+        # 卖出判定（决策核 SELL_HIGH + 执行侧闸）
+        if core_sig is not None and core_sig.action == "SELL_HIGH":
+            sell_allowed = not sell_blocks
+            sell_cooldown_ok = code not in self.sell_cooldown or now >= self.sell_cooldown.get(code, now)
+            max_sells = int(p.get("max_sell_times_per_stock", 3))
+            sell_count_ok = self.sell_count_per_stock.get(code, 0) < max_sells
+            if sell_allowed and sell_cooldown_ok and sell_count_ok:
+                sig = core_sig
 
         # 买入判定（卖出优先）
-        if sig is None:
-            buy_threshold = float(p.get("notify_buy_threshold", 68))
-            if t_val >= 1000:
-                buy_threshold = float(p.get("notify_buy_threshold", 68))
-
-            # ── WP-B07: 回补价格记忆 — TTL清理 + 低吸激励 + 高接门控 ──
-            buyback_gate = None  # None / "delayed" / "downgrade"
+        if sig is None and core_sig is not None and core_sig.action == "BUY_LOW":
+            # ── WP-B07/B18: 回补价格记忆 — TTL清理 + 高接门控（纯 Renko 触发，不再分数激励）──
+            buyback_gate = None  # None / "delayed" / "downgrade" / "not_target"
             buyback_info = None
             ab = self.awaiting_buyback.get(code)
             if ab and float(ab.get("sell_price", 0) or 0) > 0 and feats.get("price", 0) > 0:
                 _ttl = int(p.get("awaiting_buyback_ttl_minutes", 240))
                 _expired = False
+                _elapsed = 0
                 if ab.get("persisted"):
                     # WP-B18: 跨日恢复记忆——日内 TTL 不再适用，按 expire_date 判过期
                     _exp = str(ab.get("expire_date", "") or "")
@@ -566,36 +384,16 @@ class SignalEngine:
                     elif _premium > _dg_pct:
                         buyback_gate = "downgrade"    # 软降档带：信号保留、数量减半
                     elif _cp > _target:
-                        # WP-B18 3.3: 触发价语义——price <= target_price 才达标（平触算达标）。
-                        # 未回踩到 target 的浅折让/平价不算回补触发（600481 =4.36 平触即达标）
+                        # WP-B18 3.3: 触发价语义——price <= target_price 才达标（平触算达标）
                         buyback_gate = "not_target"
-                    else:
-                        # 价格不高于前卖价（正常低吸接回）：接通原系统激励
-                        # （E:\06_T\signal_engine.py 语义——折让>0.5% 强激励 / >0.1% 弱激励）
-                        _discount = -_premium
-                        _boost = 0.0
-                        if _discount > 0.005:
-                            _boost = float(p.get("awaiting_buyback_score_boost", 15))
-                            _tag = "接回追踪(已卖待接)"
-                        elif _discount > 0.001:
-                            _boost = float(p.get("awaiting_buyback_score_boost_weak", 8))
-                            _tag = "接回追踪(微利)"
-                        if _boost > 0:
-                            buy_score = round(buy_score + _boost, 1)
-                            buy_details.append({
-                                "指标": _tag,
-                                "当前": f"卖{_sp:.2f}现{_cp:.2f}折{_discount:.1%}",
-                                "加分": round(_boost, 1)})
-                        buy_threshold -= float(p.get("awaiting_buyback_threshold_relax", 10))
-                        buyback_info["incentive"] = {"boost": _boost,
-                                                     "threshold_relax": float(p.get("awaiting_buyback_threshold_relax", 10))}
+                    # else: 正常低吸接回（price <= target），买回触发交给 Renko 向下砖
 
             buy_allowed = not buy_blocks
             buy_cooldown_ok = code not in self.buy_cooldown or now >= self.buy_cooldown.get(code, now)
             max_buys = int(p.get("max_buy_times_per_stock", 3))
             buy_count_ok = self.buy_count_per_stock.get(code, 0) < max_buys
 
-            if buy_score >= buy_threshold and buy_allowed and buy_cooldown_ok and buy_count_ok:
+            if buy_allowed and buy_cooldown_ok and buy_count_ok:
                 if buyback_gate == "delayed":
                     # WP-B07 高接延迟：不产生 BUY_LOW，留痕后按 HOLD 返回
                     self.diagnostics[code] = {"buyback_delayed": buyback_info}
@@ -622,14 +420,7 @@ class SignalEngine:
                         **buyback_info,
                     }
                     return buy_score, sell_score, None
-                action = "BUY_LOW"
-                sig = Signal(code=code, name=name, action=action,
-                             price=feats.get("price", 0), score=buy_score,
-                             reasons=["评分达标"],
-                             indicators={"vwap": feats.get("vwap", 0),
-                                         "market_state": "normal",
-                                         "today_ret": feats.get("today_ret", 0)},
-                             details=buy_details)
+                sig = core_sig
                 if buyback_gate == "downgrade":
                     # WP-B07 高接降档：信号保留，main.py 在 sizer 处数量减半
                     sig.details.append({
@@ -641,6 +432,7 @@ class SignalEngine:
                     self.diagnostics[code] = {"buyback_downgrade": buyback_info}
 
         if sig:
+            sig.channel = "auto"  # 期B: 自动链路标记（决策核默认 manual，auto 侧改写）
             self.signals.append(sig)
 
         self.last_decision[code] = {

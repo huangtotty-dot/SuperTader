@@ -48,20 +48,9 @@ except ImportError:
 from dataclasses import dataclass, field
 from analysis.indicators import resample_to_15min, add_15min_indicators
 from analysis.indicators import resample_to_5min, add_5min_indicators
-
-
-@dataclass
-class Signal:
-    code: str = ''; name: str = ''; action: str = ''; price: float = 0.0; score: float = 0.0
-    reasons: List[str] = field(default_factory=list)
-    details: List[Dict[str, Any]] = field(default_factory=list)
-    indicators: Dict[str, float] = field(default_factory=dict)
-    factors: Dict[str, Any] = field(default_factory=dict)
-    ts: Any = None
-    cycle_id: str = ''; cycle_action_count: int = 0; hold_qty: int = 0
-    # P2-3 双消费接线：manual=人工链路(飞书→人工跟单)；auto=自动化链路(闸链→下单，P4 迁入)。
-    # 分叉点必须在消费侧显式判断（见 main.py notify），不允许隐式共享副作用。
-    channel: str = "manual"
+# 期B（2026-08-28）：做T决策核单一真源。Signal/TDecisionEngine 从 core.t_decision 引入，
+# 手动侧不再局部定义 Signal（带 channel）/ _swing_renko_eval，避免与自动侧引擎类对象分叉。
+from core.t_decision import Signal, TDecisionEngine
 
 
 @dataclass
@@ -140,10 +129,9 @@ class SignalEngine:
         self._5min_cache: Dict[str, tuple] = {}  # code → (last_boundary_ts, df_5min)
         # V1.30: 决策原因码缓存（供面板/日报展示熔断等原因）
         self.last_decision: Dict[str, Dict[str, Any]] = {}
-        # V3.1: Renko 增量砖状态（swing_use_renko 启用）— code → {date, builder, last_ts}
-        self._renko_states: Dict[str, Dict[str, Any]] = {}
-        # V3.1: 当日做T买入价 — code → {date, price, ts}（目标止盈需要买入价上下文）
-        self.t_entry_price: Dict[str, Dict[str, Any]] = {}
+        # 期B（2026-08-28）：Renko 增量砖状态 + 当日做T买入价迁入决策核单一真源
+        # （原 self._renko_states / self.t_entry_price 删除，改由 TDecisionEngine 内部持有）。
+        self._core = TDecisionEngine()
         # V1.30: 恢复轮次/次数/冷却等盘中状态（重启后不清零）
         self._load_intraday_state()
 
@@ -163,8 +151,7 @@ class SignalEngine:
             self.morning_alert_state = {}
             self._5min_cache = {}       # V3.0: 5分钟缓存每日重置
             self.trend_regimes = {}     # V3.0: 趋势状态机每日重置（开盘从头累积）
-            self._renko_states = {}     # V3.1: Renko 砖状态每日重置（开盘从头累积）
-            self.t_entry_price = {}     # V3.1: 当日做T买入价每日清空
+            self._core.reset_day(today)  # 期B：Renko 砖状态 + 做T买入价随日界清空（决策核单一真源）
             self.state_reset_date = today
 
     # ===== V1.30: 盘中状态持久化（轮次/次数/冷却，重启后不清零）=====
@@ -482,8 +469,17 @@ class SignalEngine:
         self._check_morning_alert(code, name, df, feats)  # 保留飞书早盘预警(纯通知，不再阻断)
         swing_meta = {}
         try:
-            sig, buy_score, sell_score, decision_reason, swing_meta = self._swing_renko_eval(
-                code, name, df, feats, price)
+            sig, buy_score, sell_score, decision_reason, swing_meta = self._core.evaluate(
+                code, name, df,
+                price=price,
+                t_val=int(feats.get("t_val", 0)),
+                vwap=feats.get("vwap", price),
+                today_ret=feats.get("today_ret", 0),
+                daily_status=feats.get("daily_status", "unknown"),
+                today_str=get_today_str(),
+                params=PARAMS,
+                trace=self._emit_renko_trace,
+            )
         except Exception:
             sig = None
             buy_score = 0.0
@@ -536,138 +532,18 @@ class SignalEngine:
         })
         return buy_score, sell_score, sig
 
-    # ===== V3.1 (2026-08-26): Renko 买入 + 目标止盈 做T =====
-    def _swing_renko_eval(self, code, name, df, feats, price):
-        """Renko 向下砖+15分MACD金叉 买入 / +target% 目标止盈 卖出（做T当日闭环）。
-
-        依据: 39支×1年1min复验 — Renko买入择时 +30min 60.6%(39/39支>50%);
-              target+0.5%止盈 完整做T闭环胜率 78.5% (vs 等MACD死叉 55.7%)。
-        状态: self._renko_states[code] 增量砖; self.t_entry_price[code] 当日买入价。
-        """
+    # ===== 期B（2026-08-28）: 决策核 trace 回调（IO 留在手动侧，不进决策核）=====
+    def _emit_renko_trace(self, event):
+        """决策核 TDecisionEngine 的 trace 注入回调：补 ts 后落盘 renko_t_{today}。
+        event 由决策核产出（无 ts 字段），本方法负责时间戳与文件 IO，保持与原 _swing_renko_eval
+        相同的 renko_t_*.jsonl 逐笔记录格式（供 +30min 反弹验证 / 日复盘）。"""
         try:
-            from analysis.renko_builder import RenkoBuilder
+            _append_jsonl(_trace_path(f"renko_t_{get_today_str()}"), {
+                "ts": _now().strftime("%Y-%m-%d %H:%M:%S"),
+                **event,
+            })
         except Exception:
-            return None, 0.0, 0.0, "HOLD_NO_SWING", None
-        today = get_today_str()
-        t_val = int(feats.get("t_val", 0))
-        # 1) Renko 增量状态机（实盘/回放共用，避免每次全量重建）
-        rs = self._renko_states.get(code)
-        if rs is None or rs.get("date") != today:
-            rs = {"date": today,
-                  "builder": RenkoBuilder(brick_size_pct=float(PARAMS.get("swing_renko_brick_pct", 0.003))),
-                  "last_ts": None}
-        builder = rs["builder"]
-        last_ts = rs.get("last_ts")
-        try:
-            new_rows = df[df["time"] > last_ts] if last_ts is not None else df
-        except Exception:
-            new_rows = df
-        last_down = False
-        for row in new_rows.itertuples():
-            try:
-                created = builder.update(row.time, float(row.close), float(row.high), float(row.low),
-                                         float(getattr(row, "volume", 0) or 0))
-            except Exception:
-                created = False
-            if created:
-                last_down = (builder.brick_direction == "down")
-        if len(new_rows) > 0:
-            rs["last_ts"] = df.iloc[-1]["time"]
-        self._renko_states[code] = rs
-
-        entry = self.t_entry_price.get(code)
-        has_entry = bool(entry and entry.get("date") == today)
-        m15 = float(feats.get("f15_macd_hist_15m") or 0.0)
-        tp = float(PARAMS.get("swing_take_profit_pct", 0.005))
-        max_hold = int(PARAMS.get("swing_t_max_hold_min", 0) or 0)
-        force_tval = int(PARAMS.get("swing_force_exit_tval", 1455))
-        # GUI 实时流展示用：当前 Renko 状态（证明引擎持续评估，0 分≠异常而是等待触发）
-        _brick_dir = getattr(builder, "brick_direction", None)
-        swing_meta = {
-            "brick_dir": _brick_dir,
-            "brick_count": len(builder.bricks) if hasattr(builder, "bricks") else None,
-            "m15": round(m15, 3),
-            "has_entry": has_entry,
-            "tp_gap_pct": round((price / entry["price"] - 1) * 100, 2)
-                          if has_entry and entry.get("price") else None,
-        }
-        _ind = {"vwap": feats.get("vwap", price), "today_ret": feats.get("today_ret", 0),
-                "market_state": feats.get("daily_status", "unknown"),
-                "entry_kind": "swing_renko", "macd_hist_15m": m15}
-        _fac = {"threshold": 0.0, "entry_kind": "swing_renko"}
-
-        # 2) 卖出优先：目标止盈 / 时间止损 / 尾盘强平
-        if has_entry and price > 0:
-            exit_reason = None
-            if price >= entry["price"] * (1 + tp):
-                exit_reason = f"目标止盈+{tp*100:.1f}%(卖{price:.2f}≥买{entry['price']:.2f}×{1+tp:.3f})"
-            elif max_hold > 0 and entry.get("ts") is not None:
-                try:
-                    mins = (df.iloc[-1]["time"] - pd.to_datetime(entry["ts"])).total_seconds() / 60
-                except Exception:
-                    mins = 0
-                if mins >= max_hold:
-                    exit_reason = f"时间止损{max_hold}min"
-            elif t_val >= force_tval:
-                exit_reason = "尾盘强平(当日闭环)"
-            if exit_reason:
-                sell_score = 100.0
-                _det = f"Renko做T卖出({exit_reason})"
-                sig = Signal(code, name, "SELL_HIGH", price, sell_score,
-                             [_det], [{"指标": "高抛", "当前": _det, "加分": 100.0}], _ind, dict(_fac))
-                self.t_entry_price.pop(code, None)
-                # V3.1 复盘 trace: 卖出路径逐笔记录（目标止盈/时间止损/尾盘强平）
-                try:
-                    _append_jsonl(_trace_path(f"renko_t_{today}"), {
-                        "ts": _now().strftime("%Y-%m-%d %H:%M:%S"),
-                        "code": code, "name": name, "action": "SELL_HIGH",
-                        "price": round(float(price), 3),
-                        "entry_price": round(float(entry["price"]), 3),
-                        "tp_target": round(float(entry["price"]) * (1 + tp), 3),
-                        "exit_reason": exit_reason,
-                        "macd15": round(m15, 3),
-                    })
-                except Exception:
-                    pass
-                return sig, 0.0, sell_score, "SELL_HIGH", swing_meta
-
-        # 3) 买入：最新向下砖 + 15分MACD金叉（当日未持有做T仓）
-        if not has_entry and last_down and m15 > 0 and price > 0:
-            buy_score = 100.0
-            _det = f"Renko向下砖+15分MACD金叉({m15:.2f})"
-            sig = Signal(code, name, "BUY_LOW", price, buy_score,
-                         [_det], [{"指标": "低吸", "当前": _det, "加分": 100.0}], _ind, dict(_fac))
-            self.t_entry_price[code] = {"date": today, "price": price, "ts": df.iloc[-1]["time"]}
-            # V3.1 复盘 trace: 买入信号逐笔记录（供 +30min 反弹验证）
-            try:
-                _append_jsonl(_trace_path(f"renko_t_{today}"), {
-                    "ts": _now().strftime("%Y-%m-%d %H:%M:%S"),
-                    "code": code, "name": name, "action": "BUY_LOW",
-                    "price": round(float(price), 3),
-                    "macd15": round(m15, 3),
-                    "brick_direction": "down",
-                })
-            except Exception:
-                pass
-            return sig, buy_score, 0.0, "BUY_LOW", swing_meta
-
-        if has_entry:
-            _gap = swing_meta["tp_gap_pct"]
-            swing_meta["wait"] = (f"持仓中·距目标止盈+{tp*100:.1f}%: {_gap:+.2f}%"
-                                  if _gap is not None else f"持仓中·等+{tp*100:.1f}%")
-        else:
-            try:
-                _df15 = resample_to_15min(df) if 'resample_to_15min' in globals() else None
-                _n15 = len(_df15) if _df15 is not None else None
-            except Exception:
-                _n15 = None
-            if _n15 is not None and _n15 < 3:
-                swing_meta["wait"] = f"MACD15预热中(需3根15分K线, 当前{_n15}根)"
-            elif last_down:
-                swing_meta["wait"] = f"等MACD15转正(当前{m15:.2f})"
-            else:
-                swing_meta["wait"] = f"等Renko向下砖(当前{_brick_dir or '首砖'})"
-        return None, 0.0, 0.0, "HOLD_NO_SWING", swing_meta
+            pass
 
 
 # ====================================================================
