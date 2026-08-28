@@ -25,5 +25,6 @@ class MarketDataProvider(ABC):
         """实时快照。返回 {code: {price, open, high, low, volume(手), ts_date(YYYY-MM-DD)}}。"""
 
     @abstractmethod
-    def index_daily(self, index: str = "sh000001", days: int = 800) -> pd.DataFrame:
-        """指数日线，前复权。至少含列 date, close。"""
+    def index_daily(self, index: str = "sh000001", days: int = 800, end_date: str = None) -> pd.DataFrame:
+        """指数日线，前复权。返回列: date, open, high, low, close, volume(手)。
+        end_date 给定时按该日截止（回测/历史 regime 用）。"""

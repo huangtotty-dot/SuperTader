@@ -105,15 +105,18 @@ class GmProvider(MarketDataProvider):
         return out
 
     # ---------- 指数日线 ----------
-    def index_daily(self, index: str = "sh000001", days: int = 800) -> pd.DataFrame:
+    def index_daily(self, index: str = "sh000001", days: int = 800, end_date: str = None) -> pd.DataFrame:
         gma = self._gma
+        end_time = end_date or datetime.now().strftime("%Y-%m-%d")
         df = gma.history_n(symbol=_gm_index_symbol(index), frequency="1d", count=days,
-                           end_time=datetime.now().strftime("%Y-%m-%d"),
-                           fields="eob,close", adjust=gma.ADJUST_PREV, df=True)
+                           end_time=end_time,
+                           fields="eob,open,high,low,close,volume", adjust=gma.ADJUST_PREV, df=True)
         if df is None or df.empty:
-            return pd.DataFrame(columns=["date", "close"])
+            return pd.DataFrame(columns=["date", "open", "high", "low", "close", "volume"])
         out = pd.DataFrame({
             "date": pd.to_datetime(df["eob"]).dt.strftime("%Y-%m-%d"),
-            "close": df["close"].astype(float),
+            "open": df["open"].astype(float), "high": df["high"].astype(float),
+            "low": df["low"].astype(float), "close": df["close"].astype(float),
+            "volume": df["volume"].astype(float) / 100.0,  # 股 → 手
         })
         return out.sort_values("date").reset_index(drop=True)

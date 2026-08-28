@@ -689,42 +689,16 @@ def _ir_call_with_timeout(func, timeout_s: float):
 
 
 def _ir_fetch_index_daily_tx(symbol: str, end_date: str, count: int, p: Dict[str, Any]) -> Optional[pd.DataFrame]:
-    """腾讯 fqkline（主源）。行格式 [date, open, close, high, low, volume, (amount), ...]"""
-    end_dt = datetime.strptime(end_date, "%Y-%m-%d")
-    start = (end_dt - timedelta(days=int(count * 1.6) + 40)).strftime("%Y-%m-%d")
-    js = None
-    for _host in ("ifzq.gtimg.cn", "web.ifzq.gtimg.cn"):  # WAF 间歇性 501，多主机兜底
-        url = (f"https://{_host}/appstock/app/fqkline/get?"
-               f"param={symbol},day,{start},{end_date},{count},qfq")
-        js = _ir_http_get_json(url, p)
-        if js:
-            break
-    if not js:
-        return None
+    """指数日线（P1-2 #5 收敛：走 market_data provider，gm 主源/腾讯兜底）。
+    symbol 为 sh000001 内部格式；返回 OHLCV df（date/open/high/low/close/volume，volume=手）。"""
+    from core.market_data import get_provider
     try:
-        node = js["data"][symbol]
-        rows = node.get("qfqday") or node.get("day") or []
-        recs = []
-        for row in rows:
-            if not isinstance(row, (list, tuple)) or len(row) < 6:
-                continue  # 跳过末位元数据 dict 等非K线行
-            try:
-                amt = float(row[6]) if len(row) >= 7 and str(row[6]).replace(".", "").isdigit() else float(row[5])
-                recs.append({
-                    "date": str(row[0])[:10],
-                    "open": float(row[1]), "close": float(row[2]),
-                    "high": float(row[3]), "low": float(row[4]),
-                    "volume": float(row[5]), "amount": amt,
-                })
-            except Exception:
-                continue
-        if not recs:
+        df = get_provider().index_daily(symbol, max(count, 100), end_date)
+        if df is None or df.empty:
             return None
-        df = pd.DataFrame(recs).drop_duplicates(subset="date", keep="last")
-        df = df.sort_values("date").reset_index(drop=True)
-        return df
+        return df.sort_values("date").reset_index(drop=True)
     except Exception as e:
-        _ir_log.info(f"[index_regime] 腾讯 {symbol} 解析失败: {e}")
+        _ir_log.info(f"[index_regime] 指数日线 provider 失败: {e}")
         return None
 
 
@@ -756,7 +730,9 @@ def _ir_fetch_index_daily_ak(symbol: str, end_date: str, timeout_s: float = 20.0
 def _ir_fetch_index_daily(symbol: str, end_date: str, count: int, p: Dict[str, Any]) -> Tuple[Optional[pd.DataFrame], str]:
     df = _ir_fetch_index_daily_tx(symbol, end_date, count, p)
     if df is not None and len(df) > 0:
-        return df[df["date"] <= end_date].reset_index(drop=True), "tencent"
+        # P1-2 #5: 来源改由 provider attrs 透传（原硬编码 "tencent"）
+        src = df.attrs.get("source", "tencent")
+        return df[df["date"] <= end_date].reset_index(drop=True), src
     df = _ir_fetch_index_daily_ak(symbol, end_date)
     if df is not None and len(df) > 0:
         return df, "akshare_sina"

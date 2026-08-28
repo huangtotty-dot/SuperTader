@@ -126,14 +126,18 @@ class TencentProvider:
         return pd.DataFrame(columns=_DAILY_COLS)
 
     # ---------- 指数日线 ----------
-    def index_daily(self, index: str = "sh000001", days: int = 800) -> pd.DataFrame:
-        """上证指数日线（腾讯 qfq），缓存 t_io/cache/daily_kline/index_{index}.json。"""
+    _IDX_COLS = ["date", "open", "high", "low", "close", "volume"]
+
+    def index_daily(self, index: str = "sh000001", days: int = 800, end_date: str = None) -> pd.DataFrame:
+        """指数日线（腾讯 qfq，OHLCV），缓存 t_io/cache/daily_kline/index_{index}.json。
+        end_date 给定时按该日截止（回测/历史 regime 用）。"""
         idx = str(index).lower()
         cache_fp = os.path.join(_DAILY_CACHE_DIR, f"index_{idx}.json")
         _now = datetime.now()
         _today = _now.strftime("%Y-%m-%d")
+        _end = end_date or _today
         cached_rows = None
-        if os.path.exists(cache_fp):
+        if end_date is None and os.path.exists(cache_fp):
             try:
                 d = _read_json(cache_fp)
                 if d.get("rows"):
@@ -142,7 +146,7 @@ class TencentProvider:
                     need_refresh = (_now.weekday() < 5 and _now.strftime("%H:%M") >= "09:15"
                                     and cache_date < _today)
                     if cached_rows and not need_refresh:
-                        df = pd.DataFrame(cached_rows)[["date", "close"]]
+                        df = pd.DataFrame(cached_rows)[self._IDX_COLS]
                         df.attrs["source"] = "cache"
                         return df
             except Exception:
@@ -157,22 +161,25 @@ class TencentProvider:
                 data = json.loads(raw)
                 kline = data.get("data", {}).get(symbol, {}).get("day") or \
                         data.get("data", {}).get(symbol, {}).get("qfqday") or []
-                rows = [{"date": i[0], "close": float(i[2])} for i in kline if len(i) >= 3]
+                rows = [{"date": i[0], "open": float(i[1]), "close": float(i[2]),
+                         "high": float(i[3]), "low": float(i[4]), "volume": float(i[5])}
+                        for i in kline if len(i) >= 6]
                 if not rows:
                     continue
-                os.makedirs(_DAILY_CACHE_DIR, exist_ok=True)
-                with open(cache_fp, "w", encoding="utf-8") as f:
-                    f.write(json.dumps({"rows": rows}, ensure_ascii=False))
-                df = pd.DataFrame(rows)[["date", "close"]]
+                if end_date is None:
+                    os.makedirs(_DAILY_CACHE_DIR, exist_ok=True)
+                    with open(cache_fp, "w", encoding="utf-8") as f:
+                        f.write(json.dumps({"rows": rows}, ensure_ascii=False))
+                df = pd.DataFrame(rows)[self._IDX_COLS]
                 df.attrs["source"] = "tencent"
                 return df
             except Exception:
                 continue
         if cached_rows:
-            df = pd.DataFrame(cached_rows)[["date", "close"]]
+            df = pd.DataFrame(cached_rows)[self._IDX_COLS]
             df.attrs["source"] = "cache"
             return df
-        return pd.DataFrame(columns=["date", "close"])
+        return pd.DataFrame(columns=self._IDX_COLS)
 
     # ---------- 分钟线 ----------
     def minute_cache(self, code: str, date: str, ttl_seconds: int = None) -> pd.DataFrame:
