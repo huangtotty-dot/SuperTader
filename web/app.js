@@ -300,6 +300,8 @@ function renderAll(p, tradePnl) {
   renderShadow(p.shadow, p.qty_freeze);
   renderPB(p.position_builder);
   renderAddWatch(p.add_watch);
+  // P4-3: 概览页自动盘持仓卡片 + 全页 KILL_SWITCH 横幅
+  loadAutoStatus();
 }
 
 /* ---- ECharts 辅助 ---- */
@@ -1389,6 +1391,83 @@ function renderPB(pb) {
 function setPoolFilter(v) {
   window._pbPoolFilter = v;
   if (window._pbLastPayload) renderPB(window._pbLastPayload);
+}
+
+/* ---- P4-3 自动盘页：读 t_io/bridge ---- */
+async function loadAutoStatus() {
+  try {
+    const d = await apiCall("load_auto_status");
+    renderAutoStatus(d);
+  } catch (e) { /* pywebview 未就绪时忽略 */ }
+}
+
+function renderAutoStatus(d) {
+  const hb = d && d.heartbeat;
+  // KILL_SWITCH 全页顶部红色横幅（P4-3）
+  const ksb = document.getElementById("killSwitchBanner");
+  if (ksb) {
+    if (d && d.kill_switch) {
+      ksb.innerHTML = '⛔ KILL_SWITCH 已触发 —— 自动盘已停止下单/买入，请人工检查';
+      ksb.style.display = "block";
+    } else {
+      ksb.style.display = "none";
+    }
+  }
+  const el = document.getElementById("autoStatusBody");
+  if (!el) return;
+  if (!hb) {
+    el.innerHTML = '<div class="empty">无自动盘心跳（auto 引擎未运行，或 t_io/bridge/heartbeat.json 不存在）</div>';
+    renderAutoPositions(null);
+    return;
+  }
+  const counts = d.events || {};
+  const countBadge = k => counts[k] ? `<span class="badge" style="background:#2a4a5a;color:#8ad4ff">${k}: ${counts[k]}</span>` : "";
+  const latest = (d.latest || []).map(e => {
+    const color = e.event === "reject" ? "#f85149" : e.event === "risk" ? "#ffb454"
+      : e.event === "fill" ? "#3fb950" : "#8ad4ff";
+    const tm = (e.time || "").slice(11, 19);
+    const extra = e.side ? ` ${e.side}${e.qty ? ` ${e.qty}` : ""}${e.price ? `@${e.price}` : ""}` : "";
+    return `<div style="font-size:11px;line-height:1.7;border-bottom:1px solid #333;display:flex;gap:6px;align-items:center">
+      <span class="badge" style="background:${color};color:#111">${esc(e.event)}</span>
+      <span class="mono cell-dim">${esc(tm)}</span><span>${esc(e.code || "")}</span>
+      <span class="cell-dim">${esc(e.detail || "")}${extra}</span></div>`;
+  }).join("") || '<div class="cell-dim">今日无 order/fill/reject/risk 事件</div>';
+  const regime = esc(hb.index_regime || "—");
+  const cash = hb.cash != null ? fmt(hb.cash, 0) : "—";
+  const posCount = Object.keys(hb.positions || {}).length;
+  el.innerHTML = `
+    <div class="card">
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px">
+        <span class="live-dot"></span> 心跳 <span class="mono">${esc(hb.time || "")}</span> bar=${esc(hb.bar || "")}
+        ${countBadge("order")}${countBadge("fill")}${countBadge("reject")}${countBadge("risk")}
+        <span class="cell-dim mono" style="margin-left:auto">现金 ${cash} · 持仓 ${posCount} 只 · 大盘 ${regime} ${hb.index_score != null ? esc(hb.index_score) : ""}</span>
+      </div>
+      <div class="cell-dim" style="font-size:11px;margin-bottom:4px">最新 10 条 order/fill/reject/risk 事件（t_io/bridge/events_*.jsonl）</div>
+      ${latest}
+    </div>`;
+  renderAutoPositions(hb.positions);
+}
+
+function renderAutoPositions(positions) {
+  // 双台账并列（P4-3）：自动盘 tab 全量 + overview 紧凑卡片，来源标注「自动」
+  const els = ["autoPositionsBody", "autoOverviewBody"].map(
+    id => document.getElementById(id)).filter(Boolean);
+  if (!els.length) return;
+  if (!positions || !Object.keys(positions).length) {
+    const empty = '<div class="empty">无自动盘持仓数据（auto 引擎未运行或空仓）</div>';
+    els.forEach(el => { el.innerHTML = empty; });
+    return;
+  }
+  const srcBadge = '<span class="badge" style="background:#2a4a5a;color:#8ad4ff" title="自动盘（goldminer auto 侧管理）">自动</span>';
+  const rows = Object.entries(positions).map(([code, p]) => `
+    <tr>
+      <td>${esc(p.name || code)} <span class="mono cell-dim">${esc(code)}</span></td>
+      <td>${srcBadge}</td>
+      <td class="num">${fmt(p.qty, 0)}</td>
+      <td class="num">${fmt(p.cost, 3)}</td>
+    </tr>`).join("");
+  const html = `<table><thead><tr><th>股票</th><th>来源</th><th class="num">持仓</th><th class="num">成本</th></tr></thead><tbody>${rows}</tbody></table>`;
+  els.forEach(el => { el.innerHTML = html; });
 }
 
 /* ---- ⑦ 加仓观察 ---- */
@@ -3381,6 +3460,8 @@ function switchTab(tab) {
   }
   // 切到每日复盘：懒加载模型配置 + 已有复盘
   if (tab === "archive") renderDailyReview();
+  // P4-3 切到自动盘：加载 t_io/bridge 状态
+  if (tab === "auto") loadAutoStatus();
 }
 
 /* ================= 侧栏汇总 ================= */
@@ -3414,6 +3495,7 @@ function updateSidebarSummary(quotes) {
 let dateSelect, refreshBtn, autoPoll;
 let pollTimer = null;      // 60s 盘后轮询
 let liveTimer = null;      // 10s 盘中实时轮询
+let autoTimer = null;      // P4-3: 10s 自动盘轮询（仅自动盘 tab 激活时加载）
 
 function stopPoll() {
   if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
@@ -3442,6 +3524,7 @@ function startPoll() {
 }
 function stopLivePoll() {
   if (liveTimer) { clearInterval(liveTimer); liveTimer = null; }
+  if (autoTimer) { clearInterval(autoTimer); autoTimer = null; }
   document.getElementById("liveTag").style.display = "none";
 }
 function startLivePoll() {
@@ -3450,6 +3533,12 @@ function startLivePoll() {
   document.getElementById("liveTag").textContent = "LIVE 10s";
   liveTimer = setInterval(() => {
     if (state.date) refreshLive(false);
+  }, 10000);
+  // P4-3: 自动盘 10s 轮询（自动盘 tab 或概览页（含自动盘持仓卡片）激活时拉取 bridge）
+  autoTimer = setInterval(() => {
+    const act = document.querySelector(".sidebar-item.active");
+    const t = act && act.dataset.tab;
+    if (t === "auto" || t === "overview") loadAutoStatus();
   }, 10000);
 }
 

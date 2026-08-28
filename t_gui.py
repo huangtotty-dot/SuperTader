@@ -41,6 +41,7 @@ IDX_REGIME = BASE / "t_io" / "index_regime"
 LOGS_DIR = BASE / "t_io" / "logs"
 INTRADAY_STATE = BASE / "t_io" / "intraday_state.json"
 PORTFOLIO = STATE_DIR / "portfolio_config.json"
+BRIDGE_DIR = BASE / "t_io" / "bridge"  # P4-2/3: 自动盘事件总线（heartbeat.json + events_*.jsonl + KILL_SWITCH）
 
 # 内置名称映射（数据缺失 code 时兜底；可由 holdings/add_watch/trace 补充）
 NAMES = {
@@ -3073,6 +3074,53 @@ class Api:
             "accounts": data.get("accounts", {}),
             "realized_loss": data.get("realized_loss", {}),
         })
+
+    def load_auto_status(self):
+        """P4-3 自动盘页：读 t_io/bridge（heartbeat.json + 当日 events + KILL_SWITCH）。
+        返回 heartbeat{positions/cash/index_regime/index_score} + order/fill/reject/risk 计数
+        + 最新 10 条事件 + kill_switch 状态。GM 格式持仓 key 经 codec 转内部码。"""
+        hb = _load_json(BRIDGE_DIR / "heartbeat.json", {})
+        out = {"heartbeat": None, "events": {"order": 0, "fill": 0, "reject": 0, "risk": 0},
+               "latest": [], "kill_switch": (BRIDGE_DIR / "KILL_SWITCH").exists(),
+               "bridge_dir": str(BRIDGE_DIR)}
+        if hb:
+            try:
+                from core.market_data.codec import to_internal
+            except Exception:
+                to_internal = lambda g: str(g).split(".")[-1]
+            positions = {}
+            for gk, p in (hb.get("positions", {}) or {}).items():
+                try:
+                    positions[to_internal(str(gk))] = p
+                except Exception:
+                    positions[str(gk)] = p
+            out["heartbeat"] = {
+                "time": hb.get("time"), "bar": hb.get("bar"),
+                "positions": positions, "cash": hb.get("cash"),
+                "index_regime": hb.get("index_regime"), "index_score": hb.get("index_score"),
+            }
+        date_str = datetime.now().strftime("%Y%m%d")
+        ep = BRIDGE_DIR / f"events_{date_str}.jsonl"
+        latest = []
+        if ep.exists():
+            try:
+                with open(ep, encoding="utf-8") as f:
+                    for line in f:
+                        line = line.strip()
+                        if not line:
+                            continue
+                        try:
+                            e = json.loads(line)
+                        except Exception:
+                            continue
+                        ev = e.get("event")
+                        if ev in out["events"]:
+                            out["events"][ev] += 1
+                            latest.append(e)
+            except Exception:
+                pass
+        out["latest"] = latest[-10:]
+        return _clean(out)
 
     def load_position_manager(self):
         """仓位管理器：每只持仓的目标/当前市值、资金占比、超配欠配。
