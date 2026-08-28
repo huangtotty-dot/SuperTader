@@ -225,39 +225,24 @@ _DAILY_CACHE_DIR = BASE / "t_io" / "cache" / "daily_kline"
 
 
 def _live_forming_bar(symbol: str) -> dict:
-    """腾讯实时快照（qt.gtimg.cn）→ 当日 forming bar {date, open, close, high, low, volume} 或 None。
-    仅当快照时间戳是当日（真实交易日盘中/盘后）才返回；用于 K线主机(ifzq)被 WAF 501 拦截、
-    回退旧缓存缺当日K线时补一条，保持 fetch_daily_kline"盘中最后一行=当日 forming bar"的契约。
-    非当日（周末/节假日/盘前返回上一交易日收盘）返回 None，避免造出假bar。"""
-    import urllib.request as _ur, os as _os
-    from datetime import datetime as _dt
-    for _k in ["http_proxy", "https_proxy", "HTTP_PROXY", "HTTPS_PROXY",
-               "ALL_PROXY", "all_proxy"]:
-        _os.environ.pop(_k, None)
-    _os.environ["NO_PROXY"] = "*"
+    """当日 forming bar（P1-2 收敛：走 tencent_provider.snapshot_auction）。
+    仅当快照时间戳是当日才返回；非当日（盘前/节假日）返回 None，避免造出假bar。
+    （当前无调用方，fetch_daily_kline 已由 provider 接管 forming 逻辑，保留供兼容。）"""
+    base = str(symbol).lstrip("sh").lstrip("sz")
+    from core.market_data.tencent_provider import TencentProvider
     try:
-        url = f"https://qt.gtimg.cn/q={symbol}"
-        req = _ur.Request(url, headers={"User-Agent": "Mozilla/5.0",
-                                        "Referer": "https://gu.qq.com/"})
-        raw = _ur.urlopen(req, timeout=5).read().decode("gbk", errors="replace")
-        if "~" not in raw:
+        snap = TencentProvider().snapshot_auction([base]).get(base)
+        if not snap or not snap.get("ts_date"):
             return None
-        f = raw.split('"')[1].split("~")
-        if len(f) < 35 or not f[30]:
+        from datetime import datetime as _dt
+        if snap["ts_date"] != _dt.now().strftime("%Y-%m-%d"):
             return None
-        if str(f[30])[:8] != _dt.now().strftime("%Y%m%d"):
-            return None
-        price = float(f[3])
+        price = float(snap.get("price") or 0)
         if price <= 0:
             return None
-        def _fl(i, d=0.0):
-            try:
-                return float(f[i]) if f[i] else d
-            except (ValueError, IndexError):
-                return d
-        return {"date": _dt.now().strftime("%Y-%m-%d"),
-                "open": _fl(5), "close": price,
-                "high": _fl(33), "low": _fl(34), "volume": _fl(6)}
+        return {"date": snap["ts_date"], "open": float(snap.get("open") or price), "close": price,
+                "high": float(snap.get("high") or price), "low": float(snap.get("low") or price),
+                "volume": float(snap.get("volume") or 0.0)}
     except Exception:
         return None
 
