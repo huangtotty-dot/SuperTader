@@ -18,3 +18,4 @@ stock_hunter/__pycache__/
 stock_hunter/output/
 
 t_io/state/llm_config.json
+t_io/state/gm_config.json
