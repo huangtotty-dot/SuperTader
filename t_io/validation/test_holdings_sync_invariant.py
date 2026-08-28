@@ -17,7 +17,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
-from holdings_sync import read_t_qty, sync_t_qty, apply_eod_sync
+from src.holdings_sync import read_t_qty, sync_t_qty, apply_eod_sync
 
 FAILED = []
 

@@ -95,6 +95,24 @@ def _write_trace_line(entry: dict, date_str: str):
         f.write(json.dumps(entry, ensure_ascii=False) + "\n")
 
 
+MANUAL_SIGNALS_DIR = BASE / "t_io" / "logs"
+
+
+def _write_manual_signal_event(entry: dict, date_str: str):
+    """manual_signals 事件落盘（合并日志系统 §2.2：manual 侧需入总线的事件——
+    建仓 signal 推送（含 verdict/veto/regime/score）、池分管拦截；P3 同源核验点）。
+    append-only 行级安全：盘后扫描与 GUI 盘后重跑同时段不并发，均只追加。
+    任何异常吞掉不阻断业务。"""
+    try:
+        MANUAL_SIGNALS_DIR.mkdir(parents=True, exist_ok=True)
+        entry.setdefault("_ts", datetime.now().timestamp())
+        fp = MANUAL_SIGNALS_DIR / f"manual_signals_{date_str}.jsonl"
+        with open(fp, "a", encoding="utf-8") as f:
+            f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+    except Exception:
+        pass
+
+
 # fix P1-4: 飞书推送去重状态文件（(code, date) 当日 signal 只推一次）
 STATE_DIR = BASE / "t_io" / "state"
 PUSH_DEDUP_FILE = STATE_DIR / "position_signal_pushed.json"
@@ -1861,6 +1879,20 @@ def run_position_scan(date_str: str = None, capital: float = None,
                 print(f"[ERROR] {target_code} 不在 watchlist_buy.json 中")
             return []
     else:
+        # P3-2 池分管：manual 侧只扫 manual 池；被分管排除的标的落 manual_signals 留痕（合并日志 §2.2）
+        _pool_excluded = [k for k, v in stocks.items()
+                          if v.get("status") in ("monitoring", "signal")
+                          and not k.startswith("_example")
+                          and not _is_manual_pool(k, v)]
+        if _pool_excluded:
+            _write_manual_signal_event({
+                "event": "pool_guard",
+                "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                "channel": "manual",
+                "codes": _pool_excluded,
+                "count": len(_pool_excluded),
+                "scan_type": scan_type,
+            }, date_str or datetime.now().strftime("%Y-%m-%d"))
         stocks = {k: v for k, v in stocks.items()
                   if v.get("status") in ("monitoring", "signal")
                   and not k.startswith("_example")
@@ -1874,6 +1906,7 @@ def run_position_scan(date_str: str = None, capital: float = None,
 
     results = []
     signal_count = 0
+    pushed_map = {}  # 合并日志 §2.2：code -> 本轮 signal 是否实际推送成功（manual_signals 留痕用）
     for code, info in stocks.items():
         if not silent:
             print(f"扫描 {code} {info.get('name', '')}...")
@@ -1901,12 +1934,14 @@ def run_position_scan(date_str: str = None, capital: float = None,
             sig_date = r.get("date") or datetime.now().strftime("%Y-%m-%d")
             sig_channel = r.get("channel")
             if not no_feishu and _signal_already_pushed(code, sig_date, sig_channel):
+                pushed_map[code] = False
                 if not silent:
                     print(f"  => 今日已推送过该通道 signal，跳过重复推送")
             else:
                 pushed = push_signal_feishu(r, dry_run=no_feishu)
                 if pushed:
                     _mark_signal_pushed(code, sig_date, sig_channel)
+                pushed_map[code] = bool(pushed)
                 if not silent:
                     if pushed:
                         print(f"  => 飞书推送已发送")
@@ -1949,6 +1984,27 @@ def run_position_scan(date_str: str = None, capital: float = None,
             "suggested_price": _py_type((r.get("position") or {}).get("suggested_price", 0)),
             "capital_required": _py_type((r.get("position") or {}).get("capital_required", 0)),
             "errors": [str(e) for e in r.get("errors", [])],
+        }, log_date)
+
+    # 合并日志 §2.2：manual_signals 留痕——建仓 signal/watch_signal 事件
+    # （含 verdict/veto/regime/score，P3 同源日内核验点；与 auto events 同池标的 verdict 抽查用）
+    for r in results:
+        if r.get("verdict") not in ("signal", "watch_signal"):
+            continue
+        _timing = r.get("timing") or {}
+        _write_manual_signal_event({
+            "event": "build_signal",
+            "time": scan_time,
+            "code": r["code"],
+            "name": r["name"],
+            "channel": "manual",
+            "signal_channel": r.get("channel"),
+            "verdict": str(r["verdict"]),
+            "veto": _timing.get("veto") or [],
+            "regime": _timing.get("regime"),
+            "score": int(r["composite_score"]),
+            "scan_type": scan_type,
+            "pushed": bool(pushed_map.get(r["code"], False)),
         }, log_date)
 
     # 保存更新后的 watchlist

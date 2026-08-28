@@ -45,6 +45,17 @@ from signals.engine import SignalEngine, ScoringEngine  # noqa: E402
 from data.indicators import Signal  # noqa: E402
 import gm_main as main  # noqa: E402  (run() 在 __main__ 守卫下，import 安全)
 import sell_state, sell_channels
+import utils.helpers as _helpers  # 2026-08-28：sell_state 有效期判定改注入时钟，测试须同步 helpers.SIM_NOW
+
+
+def _restore(ctx):
+    """sell_state_restore 包装：把引擎侧模拟时钟同步给 helpers.SIM_NOW（有效期判定用），
+    消除对真实系统日期的依赖（此前 08-17/18 模拟日在真实日期超过有效期后必败）。"""
+    _helpers.SIM_NOW = se.SIM_NOW
+    try:
+        return main._sell_state_restore(ctx)
+    finally:
+        _helpers.SIM_NOW = None
 
 main._AUDIT_LOG_PATH = os.path.join(TMP, "backtrace_b18.jsonl")
 main._audit_file = None
@@ -203,7 +214,7 @@ check("T1a persist 落盘 _buyback(价/量/通道/有效期)",
 
 se.SIM_NOW = datetime(2026, 8, 18, 9, 31, 0)
 c2 = live_ctx(800, 50.0, datetime(2026, 8, 18, 9, 31, 0))
-main._sell_state_restore(c2)
+_restore(c2)
 ab2 = c2.engine.awaiting_buyback.get(CODE, {})
 check("T1b INIT 恢复记忆(persisted/价/目标/有效期)",
       ab2.get("sell_price") == 52.14 and ab2.get("persisted") is True
@@ -229,7 +240,7 @@ c_t.engine.awaiting_buyback[CODE]["expire_date"] = "2026-08-10"   # 强制已过
 main._sell_state_persist(c_t, CODE, GM_SYM)
 se.SIM_NOW = datetime(2026, 8, 18, 9, 31, 0)
 c_t2 = live_ctx(800, 50.0, datetime(2026, 8, 18, 9, 31, 0))
-main._sell_state_restore(c_t2)
+_restore(c_t2)
 check("T2a 有效期已过 → 不作废恢复（TARGET/TRAIL 状态不受影响）",
       CODE not in c_t2.engine.awaiting_buyback
       and main._sell_state_load().get(CODE, {}).get("_buyback") is None,
@@ -245,7 +256,7 @@ c_pk.engine.awaiting_buyback[CODE] = c_pk.engine.arm_awaiting_buyback(CODE, 52.1
 main._sell_state_persist(c_pk, CODE, GM_SYM)
 se.SIM_NOW = datetime(2026, 8, 18, 9, 31, 0)
 c_pk2 = live_ctx(600, 50.0, datetime(2026, 8, 18, 9, 31, 0))   # 持仓变化 → pos_key 不符
-main._sell_state_restore(c_pk2)
+_restore(c_pk2)
 check("T3 pos_key 不符 → 段作废，回补不恢复",
       CODE not in c_pk2.engine.awaiting_buyback and CODE not in main._sell_state_load())
 
@@ -290,7 +301,7 @@ main._sell_state_persist(c6a, CODE, GM_SYM)
 se.SIM_NOW = datetime(2026, 8, 18, 9, 31, 0)
 c6b = live_ctx(800, 60.0, datetime(2026, 8, 18, 9, 31, 0))
 c6b.bar_cache = {GM_SYM: [{"close": 50.0}]}   # 现价 50 → profit -16.7% < -8%
-main._sell_state_restore(c6b)
+_restore(c6b)
 blk6 = [e for e in read_events() if e.get("event") == "buyback_blocked" and e.get("code") == CODE]
 check("T6a M4 恢复时深亏背景 → 不恢复 + buyback_blocked:M4",
       CODE not in c6b.engine.awaiting_buyback and len(blk6) == 1 and blk6[0].get("rule") == "M4",
@@ -304,7 +315,7 @@ main._sell_state_persist(c6c_p, CODE, GM_SYM)
 se.SIM_NOW = datetime(2026, 8, 18, 9, 31, 0)
 c6c = live_ctx(800, 60.0, datetime(2026, 8, 18, 9, 31, 0))
 c6c.bar_cache = {GM_SYM: [{"close": 58.0}]}
-main._sell_state_restore(c6c)
+_restore(c6c)
 check("T6b 恢复时非深亏(-3.3%) → 正常恢复",
       CODE in c6c.engine.awaiting_buyback,
       f"ab={c6c.engine.awaiting_buyback.get(CODE, {}).get('sell_price')}")

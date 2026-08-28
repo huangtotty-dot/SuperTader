@@ -23,7 +23,6 @@ t_io/state/gm_config.json
 # P4 运行时产物（auto 引擎事件桥 / 回放校验 / 错位脚手架）
 t_io/bridge/
 t_io/validation/auto/replay/
-execution/t_io/
 execution/auto/_gm/runtime/
 execution/auto/gmcache/
 execution/auto/logs/
