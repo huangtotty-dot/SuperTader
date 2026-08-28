@@ -64,15 +64,15 @@ class MarketDataFacade:
                 log.warning("gm.snapshot 降级腾讯: %s", str(e)[:100])
         return self._tx.snapshot(codes)
 
-    def index_daily(self, index: str = "sh000001", days: int = 800) -> pd.DataFrame:
+    def index_daily(self, index: str = "sh000001", days: int = 800, end_date: str = None) -> pd.DataFrame:
         if self._gm_ready():
             try:
-                df = self._gm.index_daily(index, days)
+                df = self._gm.index_daily(index, days, end_date)
                 if df is not None and not df.empty:
                     return self._mark(df, "gm")
             except Exception as e:
                 log.warning("gm.index_daily 降级腾讯(%s): %s", index, str(e)[:100])
-        df = self._tx.index_daily(index, days)
+        df = self._tx.index_daily(index, days, end_date)
         return self._mark(df, df.attrs.get("source", "tencent"))
 
 
