@@ -103,6 +103,27 @@ for mod_name, mod_rel_path in module_order:
         print(f"[OK] 模块已加载: {mod_rel_path}")
 shared['__name__'] = '__main__'  # 恢复：main.py 尾部自身的 __main__ 启动守卫依赖该值
 
+
+def _make_engine_ctx():
+    """构造 SignalEngine 的 EngineContext（合并实施方案 P2-1：显式依赖注入）。
+    从 exec 共享命名空间取对象引用（ctx.holdings 即 HOLDINGS 本体，非拷贝）。"""
+    from core.signal_engine import EngineContext
+    # 个别全局仅在回测/特定模块存在（如 BACKTEST_DAY_CACHE），缺失时用空默认，不阻断实盘
+    def _g(name, default):
+        return globals().get(name, default)
+    return EngineContext(
+        holdings=HOLDINGS, virtual_trades=VIRTUAL_TRADES,
+        minute_fetch_status=MINUTE_FETCH_STATUS, minute_fetch_detail=MINUTE_FETCH_DETAIL,
+        t_mode=T_MODE, daily_decision_stats=DAILY_DECISION_STATS,
+        daily_context_cache=DAILY_CONTEXT_CACHE, signal_outcome_tracker=SIGNAL_OUTCOME_TRACKER,
+        backtest_day_cache=_g("BACKTEST_DAY_CACHE", {}),
+        now=_now, get_today_str=get_today_str,
+        append_jsonl=_append_jsonl, trace_path=_trace_path,
+        fetch_minute_bar=fetch_minute_bar, default_daily_context=_default_daily_context,
+        send_morning_alert=send_morning_alert, notify_alert_cleared=notify_alert_cleared,
+    )
+
+
 # ── 建仓信号扫描（收盘后自动执行）──
 try:
     from core.position_builder import run_position_scan as _run_position_scan
@@ -2380,7 +2401,7 @@ def replay_today():
                 "cost": float(holding.get("cost") or 0),
             }
 
-            engine_local = SignalEngine()
+            engine_local = SignalEngine(_make_engine_ctx())
             engine_local.state_reset_date = today
             engine_local.buy_count_per_stock[code] = 0
             engine_local.sell_count_per_stock[code] = 0
@@ -2551,7 +2572,7 @@ def tushare_replay(date_str=None):
         }
         
         # 初始化引擎
-        engine = SignalEngine()
+        engine = SignalEngine(_make_engine_ctx())
         engine.state_reset_date = today
         engine.buy_count_per_stock[code] = 0
         engine.sell_count_per_stock[code] = 0
@@ -2962,7 +2983,7 @@ def run_watch():
     _auto_apply_t_mode(HOLDINGS, T_MODE)
 
     _ensure_preopen_context(force=True)
-    engine = SignalEngine()
+    engine = SignalEngine(_make_engine_ctx())
 
     # 风险3修复(2026-08-26): 启动时初始化虚假信号监控系统
     init_false_signal_monitor()
