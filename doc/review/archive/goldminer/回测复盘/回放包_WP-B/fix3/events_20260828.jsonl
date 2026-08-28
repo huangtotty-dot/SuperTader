@@ -1,0 +1,113 @@
+{"event": "risk", "time": "2026-04-24 09:31:00+08:00", "code": "000988", "kind": "ma5_break_block", "detail": "BASE cp=116.47 < ma5=116.84", "_ts": 1787918360.6791744}
+{"event": "risk", "time": "2026-04-24 09:32:00+08:00", "code": "000988", "kind": "build_gate", "detail": "channel=iceberg verdict=approaching score=60", "_ts": 1787918360.8996058}
+{"event": "risk", "time": "2026-04-27 09:31:00+08:00", "code": "000988", "kind": "ma5_break_block", "detail": "BASE cp=117.30 < ma5=117.60", "_ts": 1787918374.7223237}
+{"event": "risk", "time": "2026-04-27 09:32:00+08:00", "code": "000988", "kind": "build_gate", "detail": "channel=None verdict=weak score=40", "_ts": 1787918374.881259}
+{"event": "risk", "time": "2026-04-28 09:31:00+08:00", "code": "000988", "kind": "ma5_break_block", "detail": "BASE cp=117.20 < ma5=117.46", "_ts": 1787918409.7104661}
+{"event": "risk", "time": "2026-04-28 09:32:00+08:00", "code": "000988", "kind": "build_gate", "detail": "channel=iceberg verdict=approaching score=60", "_ts": 1787918409.8409607}
+{"event": "risk", "time": "2026-04-29 09:31:00+08:00", "code": "000988", "kind": "ma5_break_block", "detail": "BASE cp=114.82 < ma5=117.08", "_ts": 1787918422.3722806}
+{"event": "risk", "time": "2026-04-29 09:33:00+08:00", "code": "000988", "kind": "build_gate", "detail": "channel=None verdict=weak score=40", "_ts": 1787918422.5047402}
+{"event": "risk", "time": "2026-04-30 09:42:00+08:00", "code": "000988", "kind": "ma5_break_block", "detail": "BASE cp=117.45 < ma5=117.46", "_ts": 1787918451.60934}
+{"event": "risk", "time": "2026-05-13 09:31:00+08:00", "code": "000988", "kind": "ma5_break_block", "detail": "BASE cp=139.29 < ma5=140.57", "_ts": 1787918621.3970082}
+{"event": "risk", "time": "2026-05-14 09:31:00+08:00", "code": "000988", "kind": "build_gate", "detail": "channel=None verdict=weak score=30", "_ts": 1787918641.3969603}
+{"event": "risk", "time": "2026-05-14 10:21:00+08:00", "code": "000988", "kind": "ma5_break_block", "detail": "BASE cp=141.27 < ma5=141.35", "_ts": 1787918647.4853592}
+{"event": "risk", "time": "2026-05-15 09:31:00+08:00", "code": "000988", "kind": "ma5_break_block", "detail": "BASE cp=139.73 < ma5=140.81", "_ts": 1787918660.2965868}
+{"event": "risk", "time": "2026-05-18 09:31:00+08:00", "code": "000988", "kind": "ma5_break_block", "detail": "BASE cp=139.62 < ma5=140.77", "_ts": 1787918672.626221}
+{"event": "risk", "time": "2026-05-18 09:32:00+08:00", "code": "000988", "kind": "build_gate", "detail": "channel=iceberg verdict=approaching score=60", "_ts": 1787918672.7548535}
+{"event": "risk", "time": "2026-05-19 09:31:00+08:00", "code": "000988", "kind": "build_gate", "detail": "channel=None verdict=weak score=40", "_ts": 1787918703.0327106}
+{"event": "risk", "time": "2026-05-22 09:32:00+08:00", "code": "000988", "kind": "ma5_break_block", "detail": "BASE cp=154.74 < ma5=155.64", "_ts": 1787918794.852149}
+{"event": "risk", "time": "2026-05-25 09:31:00+08:00", "code": "000988", "kind": "ma5_break_block", "detail": "BASE cp=156.61 < ma5=160.54", "_ts": 1787918813.6415393}
+{"event": "risk", "time": "2026-05-27 09:31:00+08:00", "code": "000988", "kind": "build_gate", "detail": "channel=None verdict=weak score=30", "_ts": 1787918871.110048}
+{"event": "risk", "time": "2026-05-27 13:42:00+08:00", "code": "000988", "kind": "ma5_break_block", "detail": "BASE cp=160.93 < ma5=162.21", "_ts": 1787918891.0374467}
+{"event": "risk", "time": "2026-05-28 09:31:00+08:00", "code": "000988", "kind": "ma5_break_block", "detail": "BASE cp=158.74 < ma5=164.54", "_ts": 1787918895.9841273}
+{"event": "risk", "time": "2026-05-28 13:32:00+08:00", "code": "000988", "kind": "build_gate", "detail": "channel=None verdict=weak score=40", "_ts": 1787918902.9750142}
+{"event": "risk", "time": "2026-05-29 09:31:00+08:00", "code": "000988", "kind": "ma5_break_block", "detail": "BASE cp=163.61 < ma5=163.67", "_ts": 1787918915.5298514}
+{"event": "risk", "time": "2026-05-29 09:33:00+08:00", "code": "000988", "kind": "build_gate", "detail": "channel=None verdict=weak score=30", "_ts": 1787918915.6825666}
+{"event": "risk", "time": "2026-06-01 09:31:00+08:00", "code": "000988", "kind": "ma5_break_block", "detail": "BASE cp=154.34 < ma5=157.90", "_ts": 1787918926.7919714}
+{"event": "risk", "time": "2026-06-02 09:31:00+08:00", "code": "000988", "kind": "ma5_break_block", "detail": "BASE cp=143.91 < ma5=153.69", "_ts": 1787918937.1047204}
+{"event": "risk", "time": "2026-06-03 09:31:00+08:00", "code": "000988", "kind": "build_gate", "detail": "channel=None verdict=weak score=40", "_ts": 1787918947.6548178}
+{"event": "risk", "time": "2026-06-03 14:32:00+08:00", "code": "000988", "kind": "ma5_break_block", "detail": "BASE cp=151.84 < ma5=152.60", "_ts": 1787918976.8463635}
+{"event": "risk", "time": "2026-06-04 09:31:00+08:00", "code": "000988", "kind": "ma5_break_block", "detail": "BASE cp=151.05 < ma5=151.15", "_ts": 1787918980.367097}
+{"event": "risk", "time": "2026-06-08 09:31:00+08:00", "code": "000988", "kind": "ma5_break_block", "detail": "BASE cp=147.25 < ma5=153.35", "_ts": 1787919048.9170537}
+{"event": "risk", "time": "2026-06-08 10:32:00+08:00", "code": "000988", "kind": "base_deferred", "detail": "_stock_trend_state=TREND_BREAKDOWN", "_ts": 1787919052.8962436}
+{"event": "risk", "time": "2026-06-09 09:31:00+08:00", "code": "000988", "kind": "ma5_break_block", "detail": "BASE cp=151.25 < ma5=154.61", "_ts": 1787919066.1995537}
+{"event": "risk", "time": "2026-06-10 09:31:00+08:00", "code": "000988", "kind": "ma5_break_block", "detail": "BASE cp=151.15 < ma5=153.53", "_ts": 1787919085.8559375}
+{"event": "risk", "time": "2026-06-11 09:31:00+08:00", "code": "000988", "kind": "ma5_break_block", "detail": "BASE cp=150.14 < ma5=151.96", "_ts": 1787919100.94875}
+{"event": "risk", "time": "2026-06-11 09:47:00+08:00", "code": "000988", "kind": "base_deferred", "detail": "_stock_trend_state=TREND_BREAKDOWN", "_ts": 1787919101.8296006}
+{"event": "risk", "time": "2026-06-12 09:31:00+08:00", "code": "000988", "kind": "base_deferred", "detail": "_stock_trend_state=TREND_BREAKDOWN", "_ts": 1787919115.6060991}
+{"event": "risk", "time": "2026-06-15 09:31:00+08:00", "code": "000988", "kind": "ma5_break_block", "detail": "BASE cp=151.98 < ma5=153.25", "_ts": 1787919131.057993}
+{"event": "order", "time": "2026-06-22 10:10:00+08:00", "code": "000988", "side": "BUY", "qty": 800, "price": 175.6, "order_id": "base", "order_type": "MKT", "_ts": 1787919280.161354}
+{"event": "fill", "time": "2026-08-28 20:14:40.190983", "code": "000988", "side": "BUY", "qty": 800, "price": 175.61756610412598, "order_id": "", "pos_after": 800, "_ts": 1787919280.1909828}
+{"event": "signal", "time": "2026-06-23 09:31:00+08:00", "code": "000988", "action": "MA5_EXIT", "score": 80.0, "reasons": ["MA5破位离场: cp=170.05 < ma5=170.08×(1-0.0)=170.08 (-0.0%)"], "pos_qty": 800, "_ts": 1787919289.801667}
+{"event": "order", "time": "2026-06-23 09:31:00+08:00", "code": "000988", "side": "SELL", "qty": 800, "price": 170.05, "order_id": "", "order_type": "MKT", "_ts": 1787919289.801667}
+{"event": "fill", "time": "2026-08-28 20:14:49.801667", "code": "000988", "side": "SELL", "qty": 800, "price": 170.03299805145264, "order_id": "", "pos_after": 0, "_ts": 1787919289.801667}
+{"event": "risk", "time": "2026-06-24 09:31:00+08:00", "code": "000988", "kind": "ma5_break_block", "detail": "BASE cp=164.66 < ma5=170.86", "_ts": 1787919299.495349}
+{"event": "risk", "time": "2026-06-25 09:31:00+08:00", "code": "000988", "kind": "ma5_break_block", "detail": "BASE cp=166.33 < ma5=171.47", "_ts": 1787919309.0938826}
+{"event": "risk", "time": "2026-06-25 09:51:00+08:00", "code": "000988", "kind": "build_gate", "detail": "channel=None verdict=weak score=40", "_ts": 1787919309.8453925}
+{"event": "order", "time": "2026-06-25 10:04:00+08:00", "code": "000988", "side": "BUY", "qty": 800, "price": 173.93, "order_id": "base", "order_type": "MKT", "_ts": 1787919310.7397268}
+{"event": "fill", "time": "2026-08-28 20:15:10.739726", "code": "000988", "side": "BUY", "qty": 800, "price": 173.94738567504882, "order_id": "", "pos_after": 800, "_ts": 1787919310.7397268}
+{"event": "signal", "time": "2026-06-25 10:42:00+08:00", "code": "000988", "action": "MA5_EXIT", "score": 80.0, "reasons": ["MA5破位离场: cp=171.41 < ma5=171.47×(1-0.0)=171.47 (-0.0%)"], "pos_qty": 800, "_ts": 1787919312.4259653}
+{"event": "signal", "time": "2026-06-25 10:43:00+08:00", "code": "000988", "action": "MA5_EXIT", "score": 80.0, "reasons": ["MA5破位离场: cp=171.00 < ma5=171.47×(1-0.0)=171.47 (-0.3%)"], "pos_qty": 800, "_ts": 1787919312.456985}
+{"event": "signal", "time": "2026-06-25 10:44:00+08:00", "code": "000988", "action": "MA5_EXIT", "score": 80.0, "reasons": ["MA5破位离场: cp=171.33 < ma5=171.47×(1-0.0)=171.47 (-0.1%)"], "pos_qty": 800, "_ts": 1787919312.5074182}
+{"event": "signal", "time": "2026-06-25 10:45:00+08:00", "code": "000988", "action": "MA5_EXIT", "score": 80.0, "reasons": ["MA5破位离场: cp=171.00 < ma5=171.47×(1-0.0)=171.47 (-0.3%)"], "pos_qty": 800, "_ts": 1787919312.5483782}
+{"event": "signal", "time": "2026-06-25 10:46:00+08:00", "code": "000988", "action": "MA5_EXIT", "score": 80.0, "reasons": ["MA5破位离场: cp=170.98 < ma5=171.47×(1-0.0)=171.47 (-0.3%)"], "pos_qty": 800, "_ts": 1787919312.5894454}
+{"event": "signal", "time": "2026-06-25 10:47:00+08:00", "code": "000988", "action": "MA5_EXIT", "score": 80.0, "reasons": ["MA5破位离场: cp=170.91 < ma5=171.47×(1-0.0)=171.47 (-0.3%)"], "pos_qty": 800, "_ts": 1787919312.6300817}
+{"event": "signal", "time": "2026-06-25 10:48:00+08:00", "code": "000988", "action": "MA5_EXIT", "score": 80.0, "reasons": ["MA5破位离场: cp=170.85 < ma5=171.47×(1-0.0)=171.47 (-0.4%)"], "pos_qty": 800, "_ts": 1787919312.6604738}
+{"event": "signal", "time": "2026-06-25 10:51:00+08:00", "code": "000988", "action": "MA5_EXIT", "score": 80.0, "reasons": ["MA5破位离场: cp=170.78 < ma5=171.47×(1-0.0)=171.47 (-0.4%)"], "pos_qty": 800, "_ts": 1787919312.7921085}
+{"event": "signal", "time": "2026-06-25 10:52:00+08:00", "code": "000988", "action": "MA5_EXIT", "score": 80.0, "reasons": ["MA5破位离场: cp=170.45 < ma5=171.47×(1-0.0)=171.47 (-0.6%)"], "pos_qty": 800, "_ts": 1787919312.8326273}
+{"event": "signal", "time": "2026-06-25 10:53:00+08:00", "code": "000988", "action": "MA5_EXIT", "score": 80.0, "reasons": ["MA5破位离场: cp=170.30 < ma5=171.47×(1-0.0)=171.47 (-0.7%)"], "pos_qty": 800, "_ts": 1787919312.873078}
+{"event": "signal", "time": "2026-06-25 10:54:00+08:00", "code": "000988", "action": "MA5_EXIT", "score": 80.0, "reasons": ["MA5破位离场: cp=170.13 < ma5=171.47×(1-0.0)=171.47 (-0.8%)"], "pos_qty": 800, "_ts": 1787919312.9038677}
+{"event": "signal", "time": "2026-06-25 10:55:00+08:00", "code": "000988", "action": "MA5_EXIT", "score": 80.0, "reasons": ["MA5破位离场: cp=169.98 < ma5=171.47×(1-0.0)=171.47 (-0.9%)"], "pos_qty": 800, "_ts": 1787919312.9443922}
+{"event": "signal", "time": "2026-06-25 10:56:00+08:00", "code": "000988", "action": "MA5_EXIT", "score": 80.0, "reasons": ["MA5破位离场: cp=169.79 < ma5=171.47×(1-0.0)=171.47 (-1.0%)"], "pos_qty": 800, "_ts": 1787919312.984875}
+{"event": "signal", "time": "2026-06-25 10:57:00+08:00", "code": "000988", "action": "MA5_EXIT", "score": 80.0, "reasons": ["MA5破位离场: cp=170.43 < ma5=171.47×(1-0.0)=171.47 (-0.6%)"], "pos_qty": 800, "_ts": 1787919313.0258465}
+{"event": "signal", "time": "2026-06-25 10:58:00+08:00", "code": "000988", "action": "MA5_EXIT", "score": 80.0, "reasons": ["MA5破位离场: cp=170.74 < ma5=171.47×(1-0.0)=171.47 (-0.4%)"], "pos_qty": 800, "_ts": 1787919313.0667934}
+{"event": "signal", "time": "2026-06-25 10:59:00+08:00", "code": "000988", "action": "MA5_EXIT", "score": 80.0, "reasons": ["MA5破位离场: cp=170.30 < ma5=171.47×(1-0.0)=171.47 (-0.7%)"], "pos_qty": 800, "_ts": 1787919313.0971658}
+{"event": "signal", "time": "2026-06-25 11:00:00+08:00", "code": "000988", "action": "MA5_EXIT", "score": 80.0, "reasons": ["MA5破位离场: cp=170.50 < ma5=171.47×(1-0.0)=171.47 (-0.6%)"], "pos_qty": 800, "_ts": 1787919313.13754}
+{"event": "signal", "time": "2026-06-25 11:01:00+08:00", "code": "000988", "action": "MA5_EXIT", "score": 80.0, "reasons": ["MA5破位离场: cp=170.47 < ma5=171.47×(1-0.0)=171.47 (-0.6%)"], "pos_qty": 800, "_ts": 1787919313.177931}
+{"event": "signal", "time": "2026-06-25 11:02:00+08:00", "code": "000988", "action": "MA5_EXIT", "score": 80.0, "reasons": ["MA5破位离场: cp=171.00 < ma5=171.47×(1-0.0)=171.47 (-0.3%)"], "pos_qty": 800, "_ts": 1787919313.2184007}
+{"event": "signal", "time": "2026-06-25 11:03:00+08:00", "code": "000988", "action": "MA5_EXIT", "score": 80.0, "reasons": ["MA5破位离场: cp=171.25 < ma5=171.47×(1-0.0)=171.47 (-0.1%)"], "pos_qty": 800, "_ts": 1787919313.2489743}
+{"event": "signal", "time": "2026-06-25 11:04:00+08:00", "code": "000988", "action": "MA5_EXIT", "score": 80.0, "reasons": ["MA5破位离场: cp=170.80 < ma5=171.47×(1-0.0)=171.47 (-0.4%)"], "pos_qty": 800, "_ts": 1787919313.2893846}
+{"event": "signal", "time": "2026-06-25 11:05:00+08:00", "code": "000988", "action": "MA5_EXIT", "score": 80.0, "reasons": ["MA5破位离场: cp=171.00 < ma5=171.47×(1-0.0)=171.47 (-0.3%)"], "pos_qty": 800, "_ts": 1787919313.3304112}
+{"event": "signal", "time": "2026-06-25 11:06:00+08:00", "code": "000988", "action": "MA5_EXIT", "score": 80.0, "reasons": ["MA5破位离场: cp=171.00 < ma5=171.47×(1-0.0)=171.47 (-0.3%)"], "pos_qty": 800, "_ts": 1787919313.3608}
+{"event": "signal", "time": "2026-06-25 11:07:00+08:00", "code": "000988", "action": "MA5_EXIT", "score": 80.0, "reasons": ["MA5破位离场: cp=171.10 < ma5=171.47×(1-0.0)=171.47 (-0.2%)"], "pos_qty": 800, "_ts": 1787919313.4018145}
+{"event": "signal", "time": "2026-06-25 11:08:00+08:00", "code": "000988", "action": "MA5_EXIT", "score": 80.0, "reasons": ["MA5破位离场: cp=171.05 < ma5=171.47×(1-0.0)=171.47 (-0.2%)"], "pos_qty": 800, "_ts": 1787919313.4519672}
+{"event": "signal", "time": "2026-06-25 11:09:00+08:00", "code": "000988", "action": "MA5_EXIT", "score": 80.0, "reasons": ["MA5破位离场: cp=170.95 < ma5=171.47×(1-0.0)=171.47 (-0.3%)"], "pos_qty": 800, "_ts": 1787919313.4832122}
+{"event": "signal", "time": "2026-06-25 11:10:00+08:00", "code": "000988", "action": "MA5_EXIT", "score": 80.0, "reasons": ["MA5破位离场: cp=170.80 < ma5=171.47×(1-0.0)=171.47 (-0.4%)"], "pos_qty": 800, "_ts": 1787919313.5250545}
+{"event": "signal", "time": "2026-06-25 11:11:00+08:00", "code": "000988", "action": "MA5_EXIT", "score": 80.0, "reasons": ["MA5破位离场: cp=170.51 < ma5=171.47×(1-0.0)=171.47 (-0.6%)"], "pos_qty": 800, "_ts": 1787919313.5858786}
+{"event": "signal", "time": "2026-06-25 11:12:00+08:00", "code": "000988", "action": "MA5_EXIT", "score": 80.0, "reasons": ["MA5破位离场: cp=170.33 < ma5=171.47×(1-0.0)=171.47 (-0.7%)"], "pos_qty": 800, "_ts": 1787919313.62645}
+{"event": "signal", "time": "2026-06-25 11:13:00+08:00", "code": "000988", "action": "MA5_EXIT", "score": 80.0, "reasons": ["MA5破位离场: cp=170.28 < ma5=171.47×(1-0.0)=171.47 (-0.7%)"], "pos_qty": 800, "_ts": 1787919313.667456}
+{"event": "signal", "time": "2026-06-25 11:14:00+08:00", "code": "000988", "action": "MA5_EXIT", "score": 80.0, "reasons": ["MA5破位离场: cp=170.03 < ma5=171.47×(1-0.0)=171.47 (-0.8%)"], "pos_qty": 800, "_ts": 1787919313.6978636}
+{"event": "signal", "time": "2026-06-25 11:15:00+08:00", "code": "000988", "action": "MA5_EXIT", "score": 80.0, "reasons": ["MA5破位离场: cp=170.03 < ma5=171.47×(1-0.0)=171.47 (-0.8%)"], "pos_qty": 800, "_ts": 1787919313.7388108}
+{"event": "signal", "time": "2026-06-25 11:16:00+08:00", "code": "000988", "action": "MA5_EXIT", "score": 80.0, "reasons": ["MA5破位离场: cp=170.51 < ma5=171.47×(1-0.0)=171.47 (-0.6%)"], "pos_qty": 800, "_ts": 1787919313.779345}
+{"event": "signal", "time": "2026-06-25 11:17:00+08:00", "code": "000988", "action": "MA5_EXIT", "score": 80.0, "reasons": ["MA5破位离场: cp=171.27 < ma5=171.47×(1-0.0)=171.47 (-0.1%)"], "pos_qty": 800, "_ts": 1787919313.8257864}
+{"event": "signal", "time": "2026-06-25 11:20:00+08:00", "code": "000988", "action": "MA5_EXIT", "score": 80.0, "reasons": ["MA5破位离场: cp=171.44 < ma5=171.47×(1-0.0)=171.47 (-0.0%)"], "pos_qty": 800, "_ts": 1787919313.9625506}
+{"event": "signal", "time": "2026-06-26 09:49:00+08:00", "code": "000988", "action": "MA5_EXIT", "score": 80.0, "reasons": ["MA5破位离场: cp=167.00 < ma5=168.15×(1-0.0)=168.15 (-0.7%)"], "pos_qty": 800, "_ts": 1787919320.4101856}
+{"event": "order", "time": "2026-06-26 09:49:00+08:00", "code": "000988", "side": "SELL", "qty": 800, "price": 167.0, "order_id": "", "order_type": "MKT", "_ts": 1787919320.4111838}
+{"event": "fill", "time": "2026-08-28 20:15:20.414184", "code": "000988", "side": "SELL", "qty": 800, "price": 166.9833, "order_id": "", "pos_after": 0, "_ts": 1787919320.4141843}
+{"event": "risk", "time": "2026-06-29 09:31:00+08:00", "code": "000988", "kind": "build_gate", "detail": "channel=breakout verdict=approaching score=60", "_ts": 1787919329.0537176}
+{"event": "order", "time": "2026-06-29 09:33:00+08:00", "code": "000988", "side": "BUY", "qty": 800, "price": 176.66, "order_id": "base", "order_type": "MKT", "_ts": 1787919329.2670257}
+{"event": "fill", "time": "2026-08-28 20:15:29.267025", "code": "000988", "side": "BUY", "qty": 800, "price": 176.67766966247558, "order_id": "", "pos_after": 800, "_ts": 1787919329.2670257}
+{"event": "signal", "time": "2026-07-01 10:00:00+08:00", "code": "000988", "action": "BUY_LOW", "score": 53.9, "reasons": ["评分达标"], "pos_qty": 800, "_ts": 1787919350.0431516}
+{"event": "risk", "time": "2026-07-01 10:00:00+08:00", "code": "000988", "kind": "max_pos_cap", "detail": "budget=38906 equity=194531 weight=20.0% max_pos_shares=200 base_ref=800 pos_qty=800 reason=pos_at_cap", "_ts": 1787919350.0532475}
+{"event": "signal", "time": "2026-07-01 13:17:00+08:00", "code": "000988", "action": "MA5_EXIT", "score": 80.0, "reasons": ["MA5破位离场: cp=173.89 < ma5=173.94×(1-0.0)=173.94 (-0.0%)"], "pos_qty": 800, "_ts": 1787919353.7736456}
+{"event": "order", "time": "2026-07-01 13:17:00+08:00", "code": "000988", "side": "SELL", "qty": 800, "price": 173.89, "order_id": "", "order_type": "MKT", "_ts": 1787919353.7736456}
+{"event": "fill", "time": "2026-08-28 20:15:53.773645", "code": "000988", "side": "SELL", "qty": 800, "price": 173.87261038970948, "order_id": "", "pos_after": 0, "_ts": 1787919353.7736456}
+{"event": "risk", "time": "2026-07-03 09:31:00+08:00", "code": "000988", "kind": "ma5_break_block", "detail": "BASE cp=154.50 < ma5=169.07", "_ts": 1787919364.519974}
+{"event": "risk", "time": "2026-07-03 09:31:00+08:00", "code": "000988", "kind": "base_deferred", "detail": "_stock_trend_state=TREND_BREAKDOWN", "_ts": 1787919364.519974}
+{"event": "risk", "time": "2026-07-06 09:31:00+08:00", "code": "000988", "kind": "ma5_break_block", "detail": "BASE cp=153.18 < ma5=163.60", "_ts": 1787919371.3203206}
+{"event": "risk", "time": "2026-07-06 09:31:00+08:00", "code": "000988", "kind": "base_deferred", "detail": "_stock_trend_state=TREND_BREAKDOWN", "_ts": 1787919371.3203206}
+{"event": "risk", "time": "2026-07-08 09:31:00+08:00", "code": "000988", "kind": "base_deferred", "detail": "_stock_trend_state=TREND_BREAKDOWN", "_ts": 1787919386.6504788}
+{"event": "risk", "time": "2026-07-08 09:36:00+08:00", "code": "000988", "kind": "ma5_break_block", "detail": "BASE cp=152.05 < ma5=152.19", "_ts": 1787919386.798351}
+{"event": "risk", "time": "2026-07-09 09:31:00+08:00", "code": "000988", "kind": "ma5_break_block", "detail": "BASE cp=150.03 < ma5=152.75", "_ts": 1787919395.0733683}
+{"event": "risk", "time": "2026-07-09 09:31:00+08:00", "code": "000988", "kind": "base_deferred", "detail": "_stock_trend_state=TREND_BREAKDOWN", "_ts": 1787919395.0733683}
+{"event": "risk", "time": "2026-07-14 09:31:00+08:00", "code": "000988", "kind": "ma5_break_block", "detail": "BASE cp=153.75 < ma5=155.73", "_ts": 1787919418.6761625}
+{"event": "risk", "time": "2026-07-14 09:31:00+08:00", "code": "000988", "kind": "base_deferred", "detail": "_stock_trend_state=TREND_BREAKDOWN", "_ts": 1787919418.6761625}
+{"event": "risk", "time": "2026-07-15 09:31:00+08:00", "code": "000988", "kind": "ma5_break_block", "detail": "BASE cp=151.53 < ma5=155.27", "_ts": 1787919426.591465}
+{"event": "risk", "time": "2026-07-15 09:31:00+08:00", "code": "000988", "kind": "base_deferred", "detail": "_stock_trend_state=TREND_BREAKDOWN", "_ts": 1787919426.591465}
+{"event": "risk", "time": "2026-07-20 09:31:00+08:00", "code": "000988", "kind": "ma5_break_block", "detail": "BASE cp=117.22 < ma5=131.84", "_ts": 1787919448.9289522}
+{"event": "risk", "time": "2026-07-20 09:31:00+08:00", "code": "000988", "kind": "base_deferred", "detail": "_stock_trend_state=TREND_BREAKDOWN", "_ts": 1787919448.9289522}
+{"event": "risk", "time": "2026-07-21 09:31:00+08:00", "code": "000988", "kind": "ma5_break_block", "detail": "BASE cp=103.93 < ma5=122.51", "_ts": 1787919456.2488868}
+{"event": "risk", "time": "2026-07-21 09:31:00+08:00", "code": "000988", "kind": "base_deferred", "detail": "_stock_trend_state=TREND_BREAKDOWN", "_ts": 1787919456.2488868}
+{"event": "risk", "time": "2026-07-22 09:31:00+08:00", "code": "000988", "kind": "ma5_break_block", "detail": "BASE cp=114.99 < ma5=116.17", "_ts": 1787919463.484862}
+{"event": "risk", "time": "2026-07-22 09:31:00+08:00", "code": "000988", "kind": "base_deferred", "detail": "_stock_trend_state=TREND_BREAKDOWN", "_ts": 1787919463.484862}
+{"event": "risk", "time": "2026-07-23 09:31:00+08:00", "code": "000988", "kind": "ma5_break_block", "detail": "BASE cp=111.83 < ma5=112.41", "_ts": 1787919470.8990161}
+{"event": "risk", "time": "2026-07-23 09:31:00+08:00", "code": "000988", "kind": "base_deferred", "detail": "_stock_trend_state=TREND_BREAKDOWN", "_ts": 1787919470.9000156}

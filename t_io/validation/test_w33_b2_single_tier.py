@@ -30,6 +30,13 @@ def mk(t_qty, typ="stock"):
 def run():
     n = 0
 
+    # 2026-08-28 修复（既有失败登记项）：2026-08-15 起 calc_buy_qty 接入 timing_gate
+    # （NO-GO 阻断加仓/接回，ENTRY_TIMING_PARAMS.add_block_rebuild 默认 True）。
+    # 本回归目标是 B2 单档比例数学，与时机判定正交——打桩放行，避免真实行情数据
+    # NO-GO 导致接回用例返回 0（此前 Case1 got 0 want 300 即此原因，非代码回归）。
+    import core.timing_gate as _timing_gate_mod
+    _timing_gate_mod.timing_verdict = lambda code, _ctx=None: {"go": True}
+
     def check(name, got, want):
         nonlocal n
         assert got == want, f"{name}: got {got}, want {want}"

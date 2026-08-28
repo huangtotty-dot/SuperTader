@@ -101,7 +101,55 @@ def should_run_startup_self_test() -> bool:
     return bool(config.get("feishu", {}).get("startup_self_test", True))
 
 
+def _extract_push_title(payload: dict) -> str:
+    """尽力从飞书 payload 提取标题（card.header.title → 首个文本元素 → content.text）。"""
+    try:
+        title = ((payload.get("card") or {}).get("header") or {}).get("title") or {}
+        text = (title.get("content") or "").strip()
+        if text:
+            return text[:120]
+        for el in (payload.get("card") or {}).get("elements") or []:
+            content = ((el.get("text") or {}).get("content") or "").strip()
+            if content:
+                return content[:120]
+        return ((payload.get("content") or {}).get("text") or "").strip()[:120]
+    except Exception:
+        return ""
+
+
+def _log_push_event(payload: dict, sent: bool, elapsed_ms: float) -> None:
+    """推送留痕（合并日志系统 §2.2：manual 侧补推送无留痕缺口，对齐 auto 侧 pushes_{date}.jsonl）。
+    append-only，任何异常吞掉不阻断业务。"""
+    try:
+        record = {
+            "event": "push",
+            "time": _now().strftime("%Y-%m-%d %H:%M:%S"),
+            "channel": "manual",
+            "title": _extract_push_title(payload),
+            "level": payload.get("notify_type"),
+            "sent": bool(sent),
+            "elapsed_ms": round(elapsed_ms, 1),
+            "_ts": time.time(),
+        }
+        fp = os.path.join(LOG_DIR, f"pushes_{get_today_str()}.jsonl")
+        with open(fp, "a", encoding="utf-8") as f:
+            f.write(json.dumps(record, ensure_ascii=False) + "\n")
+    except Exception:
+        pass
+
+
 def send_feishu_payload(payload: dict, success_log: str, error_prefix: str, trigger_urgent_alarm_after_success: bool = False) -> bool:
+    """发送飞书消息 + 推送留痕（每次调用向 t_io/logs/pushes_{date}.jsonl 落一条）。"""
+    _t0 = time.time()
+    sent = False
+    try:
+        sent = _send_feishu_payload(payload, success_log, error_prefix, trigger_urgent_alarm_after_success)
+        return sent
+    finally:
+        _log_push_event(payload, sent, (time.time() - _t0) * 1000)
+
+
+def _send_feishu_payload(payload: dict, success_log: str, error_prefix: str, trigger_urgent_alarm_after_success: bool = False) -> bool:
     if not FEISHU_WEBHOOK:
         log.warning(f"⚠️  {error_prefix}：飞书 Webhook 未配置")
         return False

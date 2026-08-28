@@ -819,7 +819,13 @@ def init(context):
             print(f"[init] 历史分钟数据预取失败 {sym}: {e}")
 
     # 预取上证指数日线
+    # 2026-08-28 复审修复（隐性遮蔽显式化）：本模块必须解析到 _gm/analysis 副本
+    # （其 GM_INDEX_CACHE/GM_DATA_READY 是本策略的指数数据契约；superTrader 侧同名模块
+    # 是另一套带 IO 的实现）。_GM_DIR 在 sys.path 最前，正常即命中 _gm 副本；
+    # 若未来 sys.path 被外部改动（如 .gszq 壳误注入仓库根）而遮蔽到 superTrader 侧，立即 fail-loud。
     import analysis.index_regime as ir
+    if "_gm" not in ir.__file__:
+        raise RuntimeError(f"analysis.index_regime 解析错误（应命中 _gm 副本）: {ir.__file__}")
     try:
         idx_data = history_n(symbol="SHSE.000001", frequency="1d", count=900,
                             fields="eob,open,high,low,close,volume",

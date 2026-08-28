@@ -615,11 +615,6 @@ _BUY_FUSE_NOTIFY_DATE: str = ""   # 买入熔断飞书明示（每日一次）
 _SWING_DEDUP_DATE: str = ""
 _SWING_PUSH_DEDUP: set = set()
 
-# 风险3修复(2026-08-24): 虚假信号监控系统
-_FALSE_SIGNAL_MONITOR = None
-_FALSE_SIGNAL_CHECK_TIME = None  # 上次检查时间
-_FALSE_SIGNAL_CHECK_INTERVAL = 3600  # 每小时检查一次 (秒)
-
 # VWAP 实时快照缓存（akshare stock_zh_a_spot_em 成交额/成交量，每 60s 刷新一次）
 _SPOT_VWAP_CACHE: Dict[str, float] = {}  # code -> 实时 VWAP
 _LAST_SPOT_VWAP_REFRESH = 0.0
@@ -660,129 +655,6 @@ def _refresh_spot_vwap_cache() -> None:
         log.debug(f"📡 VWAP 实时缓存刷新: {len(cache)} 只")
     except Exception as e:
         log.debug(f"VWAP 缓存刷新失败: {str(e)[:80]}")
-
-
-# ════════════════════════════════════════════════════════════════════════════════
-# 【风险3修复】虚假信号监控系统 - 定时检查与动态回退机制
-# ════════════════════════════════════════════════════════════════════════════════
-
-def init_false_signal_monitor():
-    """初始化虚假信号监控器"""
-    global _FALSE_SIGNAL_MONITOR
-    try:
-        from fake_signal_monitor import init_monitor
-        _FALSE_SIGNAL_MONITOR = init_monitor()
-        log.info("✅ 虚假信号监控系统已初始化")
-        return True
-    except Exception as e:
-        log.warning(f"⚠️ 虚假信号监控系统初始化失败: {e}")
-        return False
-
-
-def _check_false_signals_routine(now: datetime) -> None:
-    """定时检查虚假信号（每小时或每日调用一次）"""
-    global _FALSE_SIGNAL_CHECK_TIME, _FALSE_SIGNAL_MONITOR
-
-    if _FALSE_SIGNAL_MONITOR is None:
-        return
-
-    # 检查是否到检查间隔
-    if _FALSE_SIGNAL_CHECK_TIME is None:
-        _FALSE_SIGNAL_CHECK_TIME = now
-        return
-
-    elapsed = (now - _FALSE_SIGNAL_CHECK_TIME).total_seconds()
-    if elapsed < _FALSE_SIGNAL_CHECK_INTERVAL:
-        return  # 尚未到检查时间
-
-    _FALSE_SIGNAL_CHECK_TIME = now
-
-    try:
-        # 获取当前价格（从 engine.positions 或其他数据源）
-        current_prices = {}
-        try:
-            if 'engine' in globals() and hasattr(globals()['engine'], 'positions'):
-                for code, holding in globals()['engine'].positions.items():
-                    if isinstance(holding, dict) and 'price' in holding:
-                        current_prices[code] = float(holding['price'])
-        except Exception:
-            pass
-
-        # 检查已推送信号的后续表现
-        if hasattr(_FALSE_SIGNAL_MONITOR, 'check_expired_signals'):
-            result = _FALSE_SIGNAL_MONITOR.check_expired_signals(current_prices, hours_elapsed=1)
-        else:
-            result = {'total': 0, 'true': 0, 'false': 0}
-
-        # 获取虚假比例
-        false_ratio = _FALSE_SIGNAL_MONITOR.get_false_ratio() if hasattr(_FALSE_SIGNAL_MONITOR, 'get_false_ratio') else 0.0
-
-        # 记录检查结果
-        log.info(f"📊 虚假信号检查: 总{result.get('total', 0)}条, 有效{result.get('true', 0)}条, 虚假{result.get('false', 0)}条, 比例{false_ratio:.2%}")
-
-        # 检查是否需要回退
-        if false_ratio > 0.05:
-            _trigger_plan_a_rollback(false_ratio)
-
-        # 定期输出报告 (15:00-15:05 时间窗口)
-        if now.hour == 15 and now.minute < 5:
-            _print_false_signal_daily_report()
-
-    except Exception as e:
-        log.warning(f"⚠️ 虚假信号检查出错: {e}")
-
-
-def _trigger_plan_a_rollback(false_ratio: float) -> None:
-    """触发方案A回退"""
-    log.warning(f"⚠️ 虚假信号比例过高: {false_ratio:.1%}, 触发回退机制")
-
-    try:
-        from config import INDEX_RESONANCE_STOCK_OVERRIDE
-
-        if false_ratio > 0.10:
-            # 虚假 > 10%: 彻底关闭方案A
-            INDEX_RESONANCE_STOCK_OVERRIDE.clear()
-            log.alert(f"❌ 虚假信号 > 10% ({false_ratio:.1%}), 彻底关闭方案A")
-
-        elif false_ratio > 0.08:
-            # 虚假 > 8%: 恢复单股门控
-            for code in ['588170.SH', '300153.SZ']:
-                if code in INDEX_RESONANCE_STOCK_OVERRIDE:
-                    INDEX_RESONANCE_STOCK_OVERRIDE[code]['enabled'] = True
-                    log.warning(f"⚠️ 虚假信号 > 8% ({false_ratio:.1%}), 恢复{code}共振门控")
-
-        elif false_ratio > 0.05:
-            # 虚假 > 5%: 记录警告，人工评估
-            log.warning(f"⚠️ 虚假信号超过阈值 ({false_ratio:.1%}), 建议人工评估")
-
-    except Exception as e:
-        log.warning(f"⚠️ 回退操作失败: {e}")
-
-
-def _print_false_signal_daily_report() -> None:
-    """输出虚假信号每日报告"""
-    if _FALSE_SIGNAL_MONITOR is None:
-        return
-
-    try:
-        if hasattr(_FALSE_SIGNAL_MONITOR, 'get_daily_report'):
-            report = _FALSE_SIGNAL_MONITOR.get_daily_report()
-            log.info(f"\n{report}")
-
-        # 保存到文件
-        from pathlib import Path
-        report_file = Path(__file__).resolve().parent / f"false_signal_report_{datetime.now().strftime('%Y%m%d')}.txt"
-        if hasattr(_FALSE_SIGNAL_MONITOR, 'get_daily_report'):
-            report = _FALSE_SIGNAL_MONITOR.get_daily_report()
-            try:
-                with open(report_file, 'w', encoding='utf-8') as f:
-                    f.write(report)
-                log.info(f"📝 虚假信号报告已保存: {report_file}")
-            except Exception:
-                pass
-
-    except Exception as e:
-        log.warning(f"⚠️ 生成报告失败: {e}")
 
 
 _IR_GATE_ADVICE_CN = {
@@ -1643,7 +1515,7 @@ def _maybe_audit_closure(now: datetime) -> None:
             # t_qty 增加只能来自晨间截图 reconcile（人工）；纯底仓 t_qty=0 天然持久，sync 不得复活。
             # 事故：旧逻辑 t_qty=qty 无条件"释放冻结"，今日 14:50:25 复活 002639/603667 纯底仓，
             # 致 14:50:45 002639 误推 SELL_HIGH + 幻影卖出持久化。
-            from holdings_sync import apply_eod_sync
+            from src.holdings_sync import apply_eod_sync  # 2026-08-28 修复：79f34f1a 把模块移到 src/ 后裸 import 静默失败（被钩子吞掉），EOD 同步 08-27/28 未执行
             old_qty = int(holding.get("qty", 0))
             old_t_qty = int(holding["t_qty"]) if "t_qty" in holding else old_qty
             new_qty, new_t_qty, new_base, delta, _changed = apply_eod_sync(
@@ -1823,6 +1695,25 @@ def _maybe_check_index_intraday_alert(now: datetime) -> None:
 
 # ==================== 主循环函数（从原始 t_trader_v1.10.py lines 4970-5363 提取） ====================
 
+def _write_manual_heartbeat(now: datetime) -> None:
+    """轻量心跳（合并日志系统 §2.2：heartbeat_manual.json，补 manual 无心跳缺口，GUI/复盘可判活）。
+    状态类文件允许覆写（tmp + os.replace 原子写）；任何异常吞掉不阻断扫描。"""
+    try:
+        payload = {
+            "time": now.strftime("%Y-%m-%d %H:%M:%S"),
+            "pid": os.getpid(),
+            "scan_count": _scan_count,
+            "last_scan_ts": now.timestamp(),
+        }
+        fp = os.path.join(LOG_DIR, "heartbeat_manual.json")
+        tmp = fp + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            _json.dump(payload, f, ensure_ascii=False)
+        os.replace(tmp, fp)
+    except Exception:
+        pass
+
+
 def scan_once():
     global _last_idle_log, _scan_count, _scan_lock, _BUY_FUSE_NOTIFY_DATE
     global _SWING_DEDUP_DATE
@@ -1834,9 +1725,7 @@ def scan_once():
     try:
         now = _now()
         t = now.time()
-
-        # 风险3修复(2026-08-26): 虚假信号定时检查
-        _check_false_signals_routine(now)
+        _write_manual_heartbeat(now)  # 合并日志 §2.2：每轮覆写（含非交易时段早退分支，保活可判）
 
         if _is_preopen_monitor_window(now):
             preopen_context = _ensure_preopen_context(force=True)
@@ -2291,14 +2180,6 @@ def scan_once():
                         else:
                             log.info(f"📡 {code} {sig.action}两点触发(score={sig.score:.0f})但仓控可交易量为0，"
                                      f"已推送仅供参考(不记账)")
-                        # 风险3修复(2026-08-24): 记录推送信号到虚假信号监控器
-                        try:
-                            if _stock_override_enabled is False:  # 仅记录stock_override禁用的标的
-                                from fake_signal_monitor import get_monitor
-                                m = get_monitor()
-                                m.record_signal(code, sig.price, sig.action, timestamp=now)
-                        except Exception:
-                            pass
                     else:
                         action_type = "买入" if sig.action in ["BUY_LOW", "ADD_POS"] else "卖出"
                         time_window = "10:00前" if t < dtime(10, 0) else "10:00后"
@@ -2995,9 +2876,6 @@ def run_watch():
 
     _ensure_preopen_context(force=True)
     engine = SignalEngine(_make_engine_ctx())
-
-    # 风险3修复(2026-08-26): 启动时初始化虚假信号监控系统
-    init_false_signal_monitor()
 
     log.info("========= 做T终极护城河防御版 (V1.26 正T/反T模式切换版) 启动 =========")
     if PREOPEN_CONTEXT is not None:

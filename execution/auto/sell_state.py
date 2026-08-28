@@ -103,6 +103,7 @@ def _sell_state_restore(context):
     保守原则：状态存疑即重置——宁多触发一档，也不错杀新持仓期。
     pending 为进程中断遗留（下单后结果未知）→ 作废（防永久封档）。"""
     from datetime import datetime
+    from utils.helpers import _now as _inj_now  # 时间注入（红线：引擎 API 不隐式读系统时钟；SIM_NOW 为空时=datetime.now，生产行为不变）
     try:
         _is_live = context.mode == GM.MODE_LIVE
     except Exception:
@@ -156,7 +157,7 @@ def _sell_state_restore(context):
         _bb = st.get("_buyback") or {}
         if _bb and _bb.get("sell_price"):
             _exp = str(_bb.get("expire_date", "") or "")
-            _today = datetime.now().strftime("%Y-%m-%d")
+            _today = _inj_now().strftime("%Y-%m-%d")  # 2026-08-28：系统时钟→注入时钟（b18 跨日用例此前依赖真实日期，时间敏感）
             if _exp and _today > _exp:
                 state[code]["_buyback"] = None
                 GM._audit_write({"event": "buyback_expired", "code": code,
