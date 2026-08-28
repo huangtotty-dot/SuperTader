@@ -12,6 +12,25 @@ from .tencent_provider import TencentProvider
 log = logging.getLogger("market_data.facade")
 
 
+def _resample_period(df: pd.DataFrame, period: str) -> pd.DataFrame:
+    """日线重采样为周/月线（OHLC 聚合），period ∈ {day, week, month}。"""
+    if period not in ("week", "month") or df is None or df.empty:
+        return df
+    d = df.copy()
+    d["dt"] = pd.to_datetime(d["date"])
+    rule = "W-FRI" if period == "week" else "ME"
+    g = d.groupby(pd.Grouper(key="dt", freq=rule))
+    out = pd.DataFrame({
+        "date": g["dt"].max().dt.strftime("%Y-%m-%d"),
+        "open": g["open"].first(),
+        "high": g["high"].max(),
+        "low": g["low"].min(),
+        "close": g["close"].last(),
+        "volume": g["volume"].sum(),
+    }).dropna(subset=["close"])
+    return out.reset_index(drop=True)
+
+
 class MarketDataFacade:
     """双源门面：优先 gm，异常/空结果降级腾讯。"""
 
@@ -26,16 +45,16 @@ class MarketDataFacade:
         df.attrs["source"] = src
         return df
 
-    def daily(self, code: str, days: int = 800) -> pd.DataFrame:
+    def daily(self, code: str, days: int = 800, period: str = "day") -> pd.DataFrame:
         if self._gm_ready():
             try:
                 df = self._gm.daily(code, days)
                 if df is not None and not df.empty:
-                    return self._mark(df, "gm")
+                    return self._mark(_resample_period(df, period), "gm")
             except Exception as e:
                 log.warning("gm.daily 降级腾讯(%s): %s", code, str(e)[:100])
         df = self._tx.daily(code, days)
-        return self._mark(df, df.attrs.get("source", "tencent"))
+        return self._mark(_resample_period(df, period), df.attrs.get("source", "tencent"))
 
     def minute(self, code: str, date: str, ttl_seconds: int = None) -> pd.DataFrame:
         # 先查分钟 CSV 缓存（TTL 内命中直接返回，避免每轮重拉，保留既有快路径）
@@ -63,6 +82,11 @@ class MarketDataFacade:
             except Exception as e:
                 log.warning("gm.snapshot 降级腾讯: %s", str(e)[:100])
         return self._tx.snapshot(codes)
+
+    def index_minute(self, index: str = "sh000001") -> pd.DataFrame:
+        """指数当日分时。gm 无累计量差分形态，指数分钟保留腾讯（P1-2 #6）。"""
+        df = self._tx.index_minute(index)
+        return self._mark(df, df.attrs.get("source", "tencent"))
 
     def index_daily(self, index: str = "sh000001", days: int = 800, end_date: str = None) -> pd.DataFrame:
         if self._gm_ready():

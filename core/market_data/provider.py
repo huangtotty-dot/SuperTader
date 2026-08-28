@@ -13,8 +13,9 @@ class MarketDataProvider(ABC):
     source = "abstract"
 
     @abstractmethod
-    def daily(self, code: str, days: int = 800) -> pd.DataFrame:
-        """日线，前复权。返回列: date(str YYYY-MM-DD), open, high, low, close, volume(手)。"""
+    def daily(self, code: str, days: int = 800, period: str = "day") -> pd.DataFrame:
+        """日线，前复权。period ∈ {day, week, month}（week/month 由日线重采样）。
+        返回列: date(str YYYY-MM-DD), open, high, low, close, volume(手)。"""
 
     @abstractmethod
     def minute(self, code: str, date: str) -> pd.DataFrame:

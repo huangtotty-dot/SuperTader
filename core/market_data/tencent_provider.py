@@ -284,6 +284,55 @@ class TencentProvider:
         _cols = ["time", "open", "high", "low", "close", "volume", "amount"]
         return pd.DataFrame(columns=_cols)
 
+    # ---------- 指数分时（累计量差分还原） ----------
+    def index_minute(self, index: str = "sh000001") -> pd.DataFrame:
+        """指数当日分时（腾讯 minute/query，rows=[HHMM price cum_vol(手) cum_amount(元)]）。
+        累计量差分还原为每分钟量；gm 无此数据形态，指数分钟保留腾讯（P1-2 #6 记录在案）。
+        返回 {time(datetime64), open, high, low, close, volume(手), amount(元)}。"""
+        code = str(index).strip()
+        _cols = ["time", "open", "high", "low", "close", "volume", "amount"]
+        try:
+            _clear_proxy()
+            url = f"https://ifzq.gtimg.cn/appstock/app/minute/query?code={code}"
+            req = urllib.request.Request(url, headers={
+                "User-Agent": "Mozilla/5.0", "Referer": "https://finance.qq.com/"})
+            content = urllib.request.urlopen(req, timeout=10).read().decode("utf-8", errors="ignore")
+            data = json.loads(content)
+            node = data.get("data", {}).get(code) or {}
+            pack = node.get("data") or {}
+            if isinstance(pack, list):
+                rows, day_str = pack, ""
+            else:
+                rows = pack.get("data") or []
+                day_str = str(pack.get("date") or "")
+            if not rows:
+                return pd.DataFrame(columns=_cols)
+            if not day_str:
+                day_str = datetime.now().strftime("%Y%m%d")
+            day_fmt = f"{day_str[:4]}-{day_str[4:6]}-{day_str[6:8]}"
+            parsed = []
+            prev_v, prev_a = 0.0, 0.0
+            for row in rows:
+                parts = row.split() if isinstance(row, str) else [str(x) for x in row]
+                if len(parts) < 4:
+                    continue
+                hm = str(parts[0]).strip().zfill(4)
+                price = float(parts[1])
+                cum_v, cum_a = float(parts[2]), float(parts[3])
+                v = max(cum_v - prev_v, 0.0)   # 累计差分 → 每分钟量（手）
+                a = max(cum_a - prev_a, 0.0)
+                prev_v, prev_a = cum_v, cum_a
+                parsed.append({"time": pd.to_datetime(f"{day_fmt} {hm[:2]}:{hm[2:]}:00"),
+                               "open": price, "high": price, "low": price, "close": price,
+                               "volume": v, "amount": a})
+            if not parsed:
+                return pd.DataFrame(columns=_cols)
+            df = pd.DataFrame(parsed)
+            df.attrs["source"] = "tencent"
+            return df.sort_values("time").reset_index(drop=True)
+        except Exception:
+            return pd.DataFrame(columns=_cols)
+
     # ---------- 实时快照 ----------
     def snapshot(self, codes: list) -> dict:
         """腾讯实时快照 → {code: {price, open, high, low, volume(手), ts_date}}。"""

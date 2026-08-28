@@ -143,48 +143,24 @@ def _http_json(url: str, timeout: int = 12):
 
 
 def _tx_kline(symbol: str, period: str, count: int, end: str) -> list:
-    """腾讯 fqkline（day/week/month）→ [{date,open,close,high,low,volume}] 升序。仿 index_regime._ir_fetch_index_daily_tx。"""
-    end_dt = datetime.strptime(end, "%Y-%m-%d")
-    # 按周期算 start 提前天数：day 按交易日、week/month 按自然日（原 count*1.6 只对 day 对，导致周/月线拉不满）
-    if period == "week":
-        start_days = int(count * 7 * 1.3) + 40
-    elif period == "month":
-        start_days = int(count * 30 * 1.3) + 40
-    else:
-        start_days = int(count * 1.6) + 40
-    start = (end_dt - timedelta(days=start_days)).strftime("%Y-%m-%d")
-    # 2026-08-25: 腾讯 WAF 间歇性 501 拦截不同主机（ifzq / web.ifzq 轮换），多主机兜底
-    # 2026-08-24 fix: 腾讯超时/异常降级返回空，不让复盘卡死(timeout)
-    js = None
-    for _host in ("ifzq.gtimg.cn", "web.ifzq.gtimg.cn"):
-        try:
-            url = (f"https://{_host}/appstock/app/fqkline/get?"
-                   f"param={symbol},{period},{start},{end},{count},qfq")
-            js = _http_json(url)
-            node = js["data"][symbol]
-            rows = node.get(f"qfq{period}") or node.get(period) or []
-            if rows:
-                break
-            js = None
-        except Exception:
-            js = None
-            continue
-    if js is None:
+    """日/周/月线（P1-2 #7 收敛：走 market_data provider；指数走 index_daily，个股走 daily）。
+    period 的 week/month 由 provider 日线重采样（OHLC 聚合）。返回 [{date,open,close,high,low,volume}] 升序。"""
+    from core.market_data import get_provider
+    from core.market_data.facade import _resample_period
+    try:
+        p = get_provider()
+        if str(symbol).startswith(("sh", "sz")):
+            df = p.index_daily(symbol, count, end)
+        else:
+            df = p.daily(symbol, count)
+        if df is None or df.empty:
+            return []
+        df = _resample_period(df, period)
+        return [{"date": r.date, "open": r.open, "close": r.close,
+                 "high": r.high, "low": r.low, "volume": r.volume}
+                for r in df.itertuples()]
+    except Exception:
         return []
-    out = []
-    for row in rows:
-        if not isinstance(row, (list, tuple)) or len(row) < 6:
-            continue
-        try:
-            out.append({
-                "date": str(row[0])[:10],
-                "open": float(row[1]), "close": float(row[2]),
-                "high": float(row[3]), "low": float(row[4]),
-                "volume": float(row[5]),
-            })
-        except (ValueError, TypeError):
-            continue
-    return out
 
 
 INDEX_DAILY_CACHE = BASE / "t_io" / "cache" / "market_review_idx"

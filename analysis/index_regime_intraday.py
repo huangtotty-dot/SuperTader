@@ -151,42 +151,13 @@ def _iri_fetch_live_akshare_sina(code: str) -> "pd.DataFrame":
 #   rows: ["HHMM price cum_vol(手) cum_amount(元)", ...] → 差分还原每分钟量
 # ---------------------------------------------------------------------------
 def _iri_fetch_live_tencent(code: str) -> "pd.DataFrame":
-    url = f"https://ifzq.gtimg.cn/appstock/app/minute/query?code={code}"
-    data = _iri_http_get_json(url)
-    node = (data.get("data", {}) or {}).get(code) or {}
-    pack = node.get("data") or {}
-    if isinstance(pack, list):  # 兼容个别返回形态
-        rows, day_str = pack, ""
-    else:
-        rows = pack.get("data") or []
-        day_str = str(pack.get("date") or "")
-    if not rows:
+    """腾讯指数分时（P1-2 #6 收敛：走 tencent_provider.index_minute，累计量差分还原）。"""
+    from core.market_data.tencent_provider import TencentProvider
+    df = TencentProvider().index_minute(code)
+    if df is None or df.empty:
         raise ValueError("tencent minute rows empty")
-    if not day_str:
-        day_str = _iri_now().strftime("%Y%m%d")
-    day_fmt = f"{day_str[:4]}-{day_str[4:6]}-{day_str[6:8]}"
+    return _iri_std_df(df)
 
-    parsed = []
-    prev_cum_vol, prev_cum_amt = 0.0, 0.0
-    for row in rows:
-        parts = row.split() if isinstance(row, str) else [str(x) for x in row]
-        if len(parts) < 4:
-            continue
-        hm = str(parts[0]).strip().zfill(4)          # "0930" → 09:30
-        price = float(parts[1])
-        cum_vol = float(parts[2])                    # 累计量（手）
-        cum_amt = float(parts[3])                    # 累计额（元）
-        vol = max(cum_vol - prev_cum_vol, 0.0) * 100  # 差分 + 手→股
-        amt = max(cum_amt - prev_cum_amt, 0.0)
-        prev_cum_vol, prev_cum_amt = cum_vol, cum_amt
-        parsed.append({
-            "time": f"{day_fmt} {hm[:2]}:{hm[2:]}:00",
-            "open": price, "high": price, "low": price, "close": price,
-            "volume": vol, "amount": amt,
-        })
-    if not parsed:
-        raise ValueError("tencent minute parsed empty")
-    return _iri_std_df(pd.DataFrame(parsed))
 
 
 def fetch_index_minutes_live(code: str = "sh000001") -> "pd.DataFrame":
