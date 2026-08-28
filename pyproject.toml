@@ -1,6 +1,6 @@
-[build-system]
-requires = ["setuptools>=45", "wheel", "setuptools_scm[toml]>=6.2"]
-build-backend = "setuptools.build_meta"
+# 开发工具配置（black/isort/mypy/pylint）。
+# 期A 清理（2026-08-28）：移除 [build-system]（无 setup.py）、[tool.coverage]（source=src 已删）、
+# [tool.pytest.ini_options]（testpaths=src/tests 已删）——它们都指向已删除的 Phase4 src/ 脚手架。
 
 [tool.black]
 line-length = 100
@@ -57,37 +57,3 @@ max-line-length = 100
 [tool.pylint.design]
 max-attributes = 10
 max-arguments = 8
-
-[tool.coverage.run]
-source = ["src"]
-omit = [
-    "*/tests/*",
-    "*/test_*.py",
-    "setup.py",
-]
-
-[tool.coverage.report]
-exclude_lines = [
-    "pragma: no cover",
-    "def __repr__",
-    "raise AssertionError",
-    "raise NotImplementedError",
-    "if __name__ == .__main__.:",
-    "if TYPE_CHECKING:",
-    "if sys.version_info",
-]
-skip_covered = false
-precision = 2
-
-[tool.pytest.ini_options]
-testpaths = ["src/tests"]
-python_files = ["test_*.py"]
-python_classes = ["Test*"]
-python_functions = ["test_*"]
-addopts = "-v --strict-markers --tb=short --disable-warnings"
-markers = [
-    "unit: Unit tests",
-    "integration: Integration tests",
-    "slow: Slow running tests",
-    "market: Market data tests",
-]
