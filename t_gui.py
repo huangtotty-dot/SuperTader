@@ -2426,44 +2426,13 @@ class Api:
 
     # ---------- 个股技术标签引擎 ----------
     def _live_quote_forming(self, code):
-        """腾讯实时快照（qt.gtimg.cn）→ {price, open, high, low, volume} 或 None。
+        """实时快照 → {price, open, high, low, volume, ts_date} 或 None。P1-2 收敛：走 market_data provider。
         K线主机(ifzq)被 WAF 501 拦截时 fetch_daily_kline 会静默回退缺当日K线的旧缓存，
-        用实时快照补一条当日 forming bar，避免技术标签按昨日收盘误判。"""
-        import urllib.request as _ur, os as _os
+        用实时快照补一条当日 forming bar，避免技术标签按昨日收盘误判。
+        ts_date 新鲜度语义保留：开盘前/快照陈旧时返回昨日日期，_stock_tags_one 据此不补 forming bar。"""
+        from core.market_data import get_provider
         base = str(code).split("_")[0]
-        symbol = ("sh" + base if base[0] in "56" else "sz" + base)
-        try:
-            for _k in ["http_proxy", "https_proxy", "HTTP_PROXY", "HTTPS_PROXY",
-                       "ALL_PROXY", "all_proxy"]:
-                _os.environ.pop(_k, None)
-            _os.environ["NO_PROXY"] = "*"
-            url = f"https://qt.gtimg.cn/q={symbol}"
-            req = _ur.Request(url, headers={"User-Agent": "Mozilla/5.0",
-                                            "Referer": "https://gu.qq.com/"})
-            raw = _ur.urlopen(req, timeout=5).read().decode("gbk", errors="replace")
-            if "~" not in raw:
-                return None
-            f = raw.split('"')[1].split("~")
-            if len(f) < 35:
-                return None
-            price = float(f[3])
-            if price <= 0:
-                return None
-            def _f(i, d=0.0):
-                try:
-                    return float(f[i]) if f[i] else d
-                except (ValueError, IndexError):
-                    return d
-            # 时间戳字段[30]=YYYYMMDDHHMMSS：开盘前/无新数据时腾讯返回的是上一交易日收盘，
-            # 此时补 forming bar 会把昨收重复计入 MA5 → 误判破线（2026-08-28 摩恩电气事故）。
-            # ts_date 归一化为 YYYY-MM-DD，与 _stock_tags_one 里 datetime.now() 口径对齐。
-            ts = f[30] if len(f) > 30 else ""
-            _tsd = ts[:8] if len(ts) >= 8 and ts[:8].isdigit() else None
-            ts_date = (f"{_tsd[:4]}-{_tsd[4:6]}-{_tsd[6:8]}" if _tsd else None)
-            return {"price": price, "open": _f(5), "high": _f(33), "low": _f(34),
-                    "volume": _f(6), "ts": ts, "ts_date": ts_date}
-        except Exception:
-            return None
+        return get_provider().snapshot([base]).get(base)
 
     def _stock_tags_one(self, code):
         """单只股票技术标签。返回 {trend, box_pos, tags:[{label,color}]}。"""

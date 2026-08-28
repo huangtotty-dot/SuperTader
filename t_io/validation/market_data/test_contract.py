@@ -70,9 +70,13 @@ class TestGmContract(unittest.TestCase):
         self.assertTrue(all(df["volume"] > 0))
 
     def test_minute_shape(self):
+        import pandas as pd
         df = self.gm.minute("600481", "2026-08-27")
         self.assertEqual(list(df.columns), MINUTE_COLS)
-        self.assertTrue(all(df["time"].str.fullmatch(r"\d{2}:\d{2}")))
+        self.assertTrue(pd.api.types.is_datetime64_any_dtype(df["time"]),
+                        "time 应为 datetime64（signal_engine 依赖 datetime 比较/算术）")
+        # 当日数据不跨日
+        self.assertTrue(all(df["time"].dt.strftime("%Y-%m-%d") == "2026-08-27"))
 
     def test_snapshot_shape(self):
         s = self.gm.snapshot(["600481", "002639"])
