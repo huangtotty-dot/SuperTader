@@ -71,7 +71,7 @@ def _sell_arbiter(context, code, sig, pos_qty, cp, now, holding, threshold,
     # 地板检查
     base_ref = getattr(context, f"_base_ref_{code}", pos_qty)
     setattr(context, f"_base_ref_{code}", base_ref)
-    _is_protection = sig.action in ("PANIC_SELL", "TRAIL_SELL", "TREND_EXIT", "MA5_EXIT")
+    _is_protection = sig.action in ("PANIC_SELL", "TRAIL_SELL", "TREND_EXIT", "HARD_STOP_EXIT")
     sell_floor_ratio = 0.0 if _is_protection else float(PARAMS.get("sell_floor_ratio", 0.5))
     min_hold = int(base_ref * sell_floor_ratio)
     if pos_qty - 100 < min_hold:
@@ -109,7 +109,7 @@ def _sell_arbiter(context, code, sig, pos_qty, cp, now, holding, threshold,
         return False
 
     # sizer 计算卖出量
-    if sig.action == "MA5_EXIT":
+    if sig.action == "HARD_STOP_EXIT":
         # WP-B19 a: 全离（可用量，非 sizer 定量；遵守 T+1——当日买入锁定部分次日破位续卖）
         _avail_raw = holding.get("available")
         _avail = pos_qty if _avail_raw is None else int(_avail_raw)
@@ -189,20 +189,22 @@ def _sell_channel_gate(context, code, gm_sym, cp, now, sig, pos_qty, holding, da
     返回 (sig, tail_done)：tail_done=True 表示 TAIL 通道已执行、本 bar 后续逻辑应跳过
     （迁移前的 `continue` 语义）。其余通道只更新 sig/context 状态。
     """
-    # ── WP-B19 a/b/d/e: MA5 破位全离通道（第四类保护，优先级最高，TRAIL 之前） ──
-    # 静态 MA5（daily_ma5，前 5 日收盘均值，日内不变）；破位→全离（可用量）+ 禁一切买入
-    _ma5_val = float(daily_ctx.get("daily_ma5", 0) or 0)
-    _ma5_tol = float(STOCK_PARAMS.get(code, {}).get("ma5_break_tolerance", 0.0))
-    if _ma5_val > 0 and cp < _ma5_val * (1 - _ma5_tol) and pos_qty > 0:
-        from data.indicators import Signal as _Ma5Sig
-        sig = _Ma5Sig(code=code, name=STOCK_NAMES.get(code, code),
-                      action="MA5_EXIT", price=cp, score=80.0,
-                      reasons=[f"MA5破位离场: cp={cp:.2f} < ma5={_ma5_val:.2f}×"
-                               f"(1-{_ma5_tol})={_ma5_val*(1-_ma5_tol):.2f} ({cp/_ma5_val-1:.1%})"])
-        # 破位日标记（供买侧禁令/留痕查询；破位状态每日由 price vs 当日 MA5 动态重建，无需落盘）
-        if not hasattr(context, "_ma5_broken"):
-            context._ma5_broken = {}
-        context._ma5_broken[code] = now.strftime("%Y-%m-%d")
+    # ── WP-B19-rev(2026-08-28): -8% 硬止损通道（第四类保护，优先级最高，TRAIL 之前） ──
+    # 触发：持仓亏损 ≥ hard_stop_pct（默认 8%）→ 全离（可用量）+ 当日禁一切买入
+    # 依据：exit_strategy_mining_20260828 报告，日线 close 模拟下硬止损显著优于 MA5 静态破位
+    _profit = feats_cache.get("profit_pct", 0) if feats_cache else 0
+    _hard_stop_pct = float(
+        STOCK_PARAMS.get(code, {}).get("hard_stop_pct",
+            PARAMS.get("hard_stop_pct", 0.08)))
+    if pos_qty > 0 and _profit < -_hard_stop_pct:
+        from data.indicators import Signal as _HsSig
+        sig = _HsSig(code=code, name=STOCK_NAMES.get(code, code),
+                     action="HARD_STOP_EXIT", price=cp, score=80.0,
+                     reasons=[f"硬止损离场: profit={_profit:.1%} < -{_hard_stop_pct:.0%}"])
+        # 硬止损触发日标记（供买侧禁令/留痕查询）
+        if not hasattr(context, "_hard_stop_today"):
+            context._hard_stop_today = {}
+        context._hard_stop_today[code] = now.strftime("%Y-%m-%d")
 
     # ── B1/T1: TRAIL_SELL 移动止盈 ──
     # TODO(PhaseD): 寻优 ACT_LINE/k/MIN_BACK/MAX_BACK
@@ -226,7 +228,7 @@ def _sell_channel_gate(context, code, gm_sym, cp, now, sig, pos_qty, holding, da
         _daily_atr = daily_ctx.get("daily_atr", 0.02) or 0.02
         _back = max(0.03, min(1.5 * _daily_atr, 0.08))  # TODO(PhaseD): MIN_BACK/k/MAX_BACK
         _drawdown = (_trail_peak - cp) / _trail_peak if _trail_peak > 0 else 0
-        if _drawdown > _back and not _panic_on_cooldown and (sig is None or sig.action != "MA5_EXIT"):
+        if _drawdown > _back and not _panic_on_cooldown and (sig is None or sig.action != "HARD_STOP_EXIT"):
             from data.indicators import Signal
             sig = Signal(code=code, name=STOCK_NAMES.get(code, code),
                          action="TRAIL_SELL", price=cp, score=80.0,
@@ -248,8 +250,8 @@ def _sell_channel_gate(context, code, gm_sym, cp, now, sig, pos_qty, holding, da
     # B2/T3: 趋势破坏止盈 TREND_EXIT
     _profit = feats_cache.get("profit_pct", 0)
     _base_ref = getattr(context, f'_base_ref_{code}', 0) or pos_qty
-    # N20: 不得覆盖更高优先级信号(P1 PANIC/P2 TRAIL/P0 MA5_EXIT)
-    if ((sig is None or sig.action not in ("PANIC_SELL", "TRAIL_SELL", "MA5_EXIT"))
+    # N20: 不得覆盖更高优先级信号(P1 PANIC/P2 TRAIL/P0 HARD_STOP_EXIT)
+    if ((sig is None or sig.action not in ("PANIC_SELL", "TRAIL_SELL", "HARD_STOP_EXIT"))
             and _profit > 0 and not _panic_on_cooldown
             and daily_ctx.get("_stock_trend_state") in ("TREND_DOWN", "TREND_BREAKDOWN")):
         from data.indicators import Signal as _Sig
@@ -262,8 +264,8 @@ def _sell_channel_gate(context, code, gm_sym, cp, now, sig, pos_qty, holding, da
     # B4/T2: 分批目标止盈 TARGET_SELL
     # TODO(PhaseD): 寻优分档 L1/L2/L3 及批次比例
     if (_profit > 0.10 and not _panic_on_cooldown
-            # N20: 不得覆盖更高优先级信号(P0 MA5_EXIT / P1/P2/P3)
-            and not (sig and sig.action in ("PANIC_SELL", "TRAIL_SELL", "TREND_EXIT", "MA5_EXIT"))):
+            # N20: 不得覆盖更高优先级信号(P0 HARD_STOP_EXIT / P1/P2/P3)
+            and not (sig and sig.action in ("PANIC_SELL", "TRAIL_SELL", "TREND_EXIT", "HARD_STOP_EXIT"))):
         # WP-B14: 三段式状态机——state is None 才生成；置位移到下单/成交回调
         # （被缓冲拦/地板拦/未成交的信号不耗档，条件满足后可再触发）
         _l1_state = (context.manual_position.get(gm_sym, {}).get("_target_l1_state")
@@ -279,7 +281,7 @@ def _sell_channel_gate(context, code, gm_sym, cp, now, sig, pos_qty, holding, da
             context.manual_position[gm_sym]["_target_l1_state"] = None
             _sell_state_persist(context, code, gm_sym)
 
-    if feats_cache.get("is_deep_loss") and not _panic_on_cooldown and (sig is None or sig.action != "MA5_EXIT"):
+    if feats_cache.get("is_deep_loss") and not _panic_on_cooldown and (sig is None or sig.action != "HARD_STOP_EXIT"):
         from data.indicators import Signal
         sig = Signal(code=code, name=STOCK_NAMES.get(code, code),
                      action="PANIC_SELL", price=cp, score=75.0,
@@ -289,7 +291,7 @@ def _sell_channel_gate(context, code, gm_sym, cp, now, sig, pos_qty, holding, da
 
     # ── D5-c: 尾盘回转（14:50-15:00），超底仓部分强制卖出归位 ──
     if is_tail and pos_qty > getattr(context, '_base_ref_' + code, pos_qty) and not _panic_on_cooldown:
-        if sig is None or sig.action not in ('SELL_HIGH', 'PANIC_SELL', 'MA5_EXIT'):
+        if sig is None or sig.action not in ('SELL_HIGH', 'PANIC_SELL', 'HARD_STOP_EXIT'):
             target = getattr(context, '_base_ref_' + code, pos_qty)
             excess = pos_qty - target
             if excess >= 100:

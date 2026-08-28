@@ -116,14 +116,16 @@ check("T3c audit 同步落盘", len(au3) == 1 and au3[0].get("code") == "603667"
       f"audit={au3}")
 
 # 去重：同日第二次拦截不重复写事件，但拦截语义不变
-blocked3b = main._check_max_pos_cap(ctx3, "603667", now + timedelta(minutes=5),
+# 用 noon 避免跨午夜导致 _max_pos_cap_{code} 日键重置（TODAY 与 now 日期必须一致）
+_noon = now.replace(hour=12, minute=0, second=0, microsecond=0)
+blocked3b = main._check_max_pos_cap(ctx3, "603667", _noon + timedelta(minutes=5),
                                     800, 800, 500, 7500.0, 150000.0)
 ev3b = [e for e in read_events() if e.get("kind") == "max_pos_cap"]
 check("T3d 每票每日去重: 同日第二次拦截不写新事件但仍拦截",
       blocked3b is True and len(ev3b) == 1, f"events={len(ev3b)}")
 
 # 次日重新放行事件
-blocked3c = main._check_max_pos_cap(ctx3, "603667", now + timedelta(days=1),
+blocked3c = main._check_max_pos_cap(ctx3, "603667", _noon + timedelta(days=1),
                                     800, 800, 500, 7500.0, 150000.0)
 ev3c = [e for e in read_events() if e.get("kind") == "max_pos_cap"]
 check("T3e 次日重置去重键再写一条", blocked3c is True and len(ev3c) == 2,

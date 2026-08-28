@@ -25,6 +25,9 @@ PARAMS = {
     "sell_floor_ratio": 0.5,
     "index_regime_intraday_lock": True,
     "max_single_position_pct": 0.80,
+    # WP-B19-rev(2026-08-28): -8% 硬止损替代 MA5 破位清仓（见 exit_strategy_mining_20260828 报告）
+    # TODO(PhaseD): 8% 为日线 close 模拟最优值，实盘/分钟级触发可微调
+    "hard_stop_pct": 0.08,
     # WP-E2 总权益预算制（2026-08-05 owner决策：底仓+活动仓+现金三段式，现金保留20%）：
     # 每股预算 = 总权益×(1−cash_reserve_pct)/股票池只数（等权）
     # TODO(PhaseD): 现金保留线寻优定值；预算权重改趋势加权
@@ -301,8 +304,9 @@ STOCK_PARAMS = {
     },
     "515180": {
         "_note": "红利ETF 防守仓 - WP-E4 2026-08-24 纳入做T观察，低波动定制",
-        # WP-B22: MA5破位容差（0.5%）——低波动标的过滤噪音级破位（0826 whipsaw 案例）
-        "ma5_break_tolerance": 0.005,
+        # WP-B19-rev(2026-08-28): MA5 破位已替换为 -8% 硬止损；ETF 低波动，暂沿用全局 8%
+        # （ TODO PhaseD: ETF 波动率显著低于个股，硬止损或可收紧至 5%）
+        "hard_stop_pct": 0.08,
         # M2 池闸个股覆盖（红利ETF amp20≈0.8%、单手≈145元，全局硬编码门槛会永久拦截）
         "m2_amp20_min": 0.005,
         "m2_amount20_min": 30000000,
