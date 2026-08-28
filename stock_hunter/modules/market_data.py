@@ -83,61 +83,33 @@ class MarketDataFetcher:
         print(f"  [SAVE] 行情数据已归档: {spot_path} ({len(df)} 只)")
 
     def _fetch_spot_tencent(self, codes: List[str]) -> pd.DataFrame:
-        symbols = [self._normalize_qt_symbol(c) for c in codes if self._is_a_share_code(c)]
-        if not symbols:
+        """腾讯实时快照（P1-2 #10 收敛：走 tencent_provider.snapshot_auction，含筛选字段）。
+        批量由 provider 内处理；保留 A股过滤与 成交额/现价 双零跳过。"""
+        keep = [c for c in codes if self._is_a_share_code(c)]
+        if not keep:
             print(f"  [WARN] 过滤后无有效A股代码 (原始 {len(codes)} 只)")
             return pd.DataFrame()
-
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-            "Referer": "https://finance.qq.com/",
-        }
-
+        from core.market_data.tencent_provider import TencentProvider
         snapshot_map: Dict[str, Dict] = {}
-
-        for idx, chunk in enumerate(self._chunk_list(symbols, self.MAX_CODES_PER_REQUEST)):
-            url = f"https://qt.gtimg.cn/q={','.join(chunk)}"
-            text = ""
-            try:
-                req = urllib.request.Request(url, headers=headers)
-                with urllib.request.urlopen(req, timeout=20) as response:
-                    text = response.read().decode("utf-8", errors="replace")
-            except Exception as e:
-                print(f"  [WARN] 腾讯快照 urllib 失败: {type(e).__name__}: {str(e)[:120]}")
-                try:
-                    result = subprocess.run(
-                        ["curl", "-k", "-s", url],
-                        capture_output=True, text=True,
-                        encoding="utf-8", errors="replace", timeout=30,
-                    )
-                    text = result.stdout or ""
-                    if result.returncode != 0:
-                        stderr = (result.stderr or "").strip().replace("\n", " ")
-                        print(f"  [WARN] 腾讯快照 curl 失败: rc={result.returncode} stderr={stderr[:120]}")
-                except Exception as curl_error:
-                    print(f"  [WARN] 腾讯快照抓取失败: {type(curl_error).__name__}: {str(curl_error)[:120]}")
+        for chunk in self._chunk_list(keep, self.MAX_CODES_PER_REQUEST):
+            snap = TencentProvider().snapshot_auction(chunk)
+            for code, d in snap.items():
+                if (d.get("amount_wan") or 0) <= 0 and (d.get("price") or 0) <= 0:
                     continue
-
-            if not text.strip():
-                print(f"  [WARN] 腾讯快照第 {idx+1} 批返回为空 (URL len={len(url)})")
-                continue
-
-            batch_count = 0
-            for line in text.splitlines():
-                code, data = self._parse_qt_snapshot_line(line)
-                if not code or not data:
-                    continue
-                if data.get("成交额", 0) <= 0 and data.get("现价", 0) <= 0:
-                    continue
-                snapshot_map[code] = data
-                batch_count += 1
-
+                snapshot_map[code] = {
+                    "代码": code, "名称": d.get("name", ""), "现价": d.get("price", 0.0),
+                    "涨跌幅": d.get("pct", 0.0), "涨停": d.get("limit_up", 0.0),
+                    "成交额": d.get("amount_wan", 0.0), "换手率": d.get("turnover", 0.0),
+                    "振幅": d.get("amplitude", 0.0), "最高": d.get("high", 0.0),
+                    "最低": d.get("low", 0.0), "今开": d.get("open", 0.0),
+                    "昨收": d.get("pre_close", 0.0), "量比": d.get("vol_ratio", 1.0),
+                }
         if snapshot_map:
             print(f"  [OK] 腾讯快照批量加载完成: {len(snapshot_map)} 只")
         else:
-            print(f"  [WARN] 腾讯快照批量加载为空 (总计 {len(symbols)} 只, 分 {len(list(self._chunk_list(symbols, self.MAX_CODES_PER_REQUEST)))} 批)")
-
+            print(f"  [WARN] 腾讯快照批量加载为空 (总计 {len(keep)} 只)")
         return self._snapshot_map_to_df(snapshot_map)
+
 
     @staticmethod
     def _normalize_qt_symbol(code: str) -> str:

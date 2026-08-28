@@ -83,23 +83,20 @@ def _snapshot_map_to_rows(snapshot_map: dict[str, dict[str, Any]]) -> pd.DataFra
 
 
 def fetch_snapshot(codes: list[str]) -> pd.DataFrame:
-    """腾讯实时快照（qt.gtimg.cn），批量 200/请求，返回 代码/名称/收盘/涨跌幅/成交额。"""
-    symbols = [_qt_symbol(c) for c in codes if _is_a_share_code(c)]
+    """实时快照（P1-2 #10 收敛：走 tencent_provider.snapshot_auction，含涨跌幅/成交额）。
+    返回 代码/名称/收盘/涨跌幅/成交额。批量 200/请求由 provider 内处理。"""
+    from core.market_data.tencent_provider import TencentProvider
+    keep = [c for c in codes if _is_a_share_code(c)]
     snapshot_map: dict[str, dict[str, Any]] = {}
-    for i in range(0, len(symbols), SNAPSHOT_BATCH):
-        chunk = symbols[i : i + SNAPSHOT_BATCH]
-        url = f"https://qt.gtimg.cn/q={','.join(chunk)}"
-        try:
-            text = _http_get(url, timeout=20)
-        except Exception:
-            continue
-        for line in text.splitlines():
-            parsed = _parse_qt_line(line)
-            if parsed:
-                code, data = parsed
-                if data.get("成交额", 0) <= 0 and data.get("现价", 0) <= 0:
-                    continue
-                snapshot_map[code] = data
+    for i in range(0, len(keep), SNAPSHOT_BATCH):
+        snap = TencentProvider().snapshot_auction(keep[i : i + SNAPSHOT_BATCH])
+        for code, d in snap.items():
+            if (d.get("amount_wan") or 0) <= 0 and (d.get("price") or 0) <= 0:
+                continue
+            snapshot_map[code] = {
+                "代码": code, "名称": d.get("name", ""), "现价": d.get("price", 0.0),
+                "涨跌幅": d.get("pct", 0.0), "成交额": d.get("amount_wan", 0.0),
+            }
     return _snapshot_map_to_rows(snapshot_map)
 
 

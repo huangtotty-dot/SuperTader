@@ -352,7 +352,10 @@ class TencentProvider:
                 out[code] = {"name": f[1] if len(f) > 1 else code,
                              "price": _f(3), "pre_close": _f(4), "open": _f(5) or None,
                              "high": _f(33), "low": _f(34), "vol_hand": _f(6),
-                             "amount_wan": _f(37), "ts_raw": ts, "ts_date": ts_date}
+                             "amount_wan": _f(37), "pct": _f(32),
+                             "turnover": _f(38), "amplitude": _f(43),
+                             "limit_up": _f(47), "limit_down": _f(48), "vol_ratio": _f(49),
+                             "ts_raw": ts, "ts_date": ts_date}
         except Exception:
             pass
         return out
