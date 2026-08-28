@@ -37,15 +37,20 @@ class MarketDataFacade:
         df = self._tx.daily(code, days)
         return self._mark(df, df.attrs.get("source", "tencent"))
 
-    def minute(self, code: str, date: str) -> pd.DataFrame:
+    def minute(self, code: str, date: str, ttl_seconds: int = None) -> pd.DataFrame:
+        # 先查分钟 CSV 缓存（TTL 内命中直接返回，避免每轮重拉，保留既有快路径）
+        cached = self._tx.minute_cache(code, date, ttl_seconds)
+        if not cached.empty:
+            return self._mark(cached, "cache")
         if self._gm_ready():
             try:
                 df = self._gm.minute(code, date)
                 if df is not None and not df.empty:
+                    self._tx.save_minute_cache(code, date, df)
                     return self._mark(df, "gm")
             except Exception as e:
                 log.warning("gm.minute 降级腾讯(%s %s): %s", code, date, str(e)[:100])
-        df = self._tx.minute(code, date)
+        df = self._tx.minute(code, date, ttl_seconds)
         return self._mark(df, df.attrs.get("source", "tencent"))
 
     def snapshot(self, codes: list) -> dict:

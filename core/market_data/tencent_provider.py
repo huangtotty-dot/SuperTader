@@ -175,26 +175,50 @@ class TencentProvider:
         return pd.DataFrame(columns=["date", "close"])
 
     # ---------- 分钟线 ----------
-    def minute(self, code: str, date: str) -> pd.DataFrame:
-        """当日 1 分钟线（腾讯 minute 接口），CSV 缓存（t_io/cache/minute_{code}_{date}.csv）。"""
+    def minute_cache(self, code: str, date: str, ttl_seconds: int = None) -> pd.DataFrame:
+        """只读分钟 CSV 缓存。命中返回 df(source=cache)；超龄或缺失返回空 df。"""
         code = str(code).split("_")[0]
         cache_fp = os.path.join(_MINUTE_CACHE_DIR, f"minute_{code}_{date}.csv")
-        # CSV 缓存（TTL 由调用方 PARAMS 控制，此处按文件存在直接读）
-        if os.path.exists(cache_fp):
+        if not os.path.exists(cache_fp):
+            return pd.DataFrame(columns=["time", "open", "high", "low", "close", "volume", "amount"])
+        if ttl_seconds is not None:
             try:
-                df = pd.read_csv(cache_fp)
-                if not df.empty and "time" in df.columns:
-                    # 归一化：旧缓存为 "YYYY-MM-DD HH:MM:00" 或 "HH:MM:00"，统一为契约 "HH:MM"
-                    t = df["time"].astype(str).str.strip()
-                    t = t.str.replace(r"^\d{4}-\d{2}-\d{2} ", "", regex=True)
-                    t = t.str.slice(0, 5)
-                    df["time"] = t
-                    _cols = ["time", "open", "high", "low", "close", "volume", "amount"]
-                    df = df.reindex(columns=[c for c in _cols if c in df.columns])
-                    df.attrs["source"] = "cache"
-                    return df
+                if (datetime.now().timestamp() - os.path.getmtime(cache_fp)) > ttl_seconds:
+                    return pd.DataFrame(columns=["time", "open", "high", "low", "close", "volume", "amount"])
             except Exception:
                 pass
+        try:
+            df = pd.read_csv(cache_fp)
+            if df.empty or "time" not in df.columns:
+                return pd.DataFrame(columns=["time", "open", "high", "low", "close", "volume", "amount"])
+            t = df["time"].astype(str).str.strip()
+            mask = ~t.str.match(r"^\d{4}-\d{2}-\d{2}")
+            if mask.any():
+                t = t.mask(mask, date + " " + t)
+            df["time"] = pd.to_datetime(t, errors="coerce")  # datetime64（与 gm/腾讯输出一致）
+            _cols = ["time", "open", "high", "low", "close", "volume", "amount"]
+            df = df.reindex(columns=[c for c in _cols if c in df.columns])
+            df.attrs["source"] = "cache"
+            return df
+        except Exception:
+            return pd.DataFrame(columns=["time", "open", "high", "low", "close", "volume", "amount"])
+
+    def save_minute_cache(self, code: str, date: str, df: pd.DataFrame):
+        try:
+            code = str(code).split("_")[0]
+            os.makedirs(_MINUTE_CACHE_DIR, exist_ok=True)
+            df.to_csv(os.path.join(_MINUTE_CACHE_DIR, f"minute_{code}_{date}.csv"), index=False, encoding="utf-8")
+        except Exception:
+            pass
+
+    def minute(self, code: str, date: str, ttl_seconds: int = None) -> pd.DataFrame:
+        """当日 1 分钟线（腾讯 minute 接口），CSV 缓存（t_io/cache/minute_{code}_{date}.csv）。
+        ttl_seconds 给定时缓存超龄视为 miss（盘中避免返回陈旧分钟数据）。"""
+        code = str(code).split("_")[0]
+        # 缓存命中（TTL 超龄视为 miss）→ 直接返回
+        _cached = self.minute_cache(code, date, ttl_seconds)
+        if not _cached.empty:
+            return _cached
         market = "sh" if code[0] in ("5", "6", "9") else "sz"
         symbol = f"{market}{code}"
         last_error = None
@@ -238,15 +262,13 @@ class TencentProvider:
                     tm = str(tm).strip()
                     if tm.isdigit() and len(tm) in (3, 4):
                         tm = tm.zfill(4)
-                        bars.append({"time": f"{tm[:2]}:{tm[2:]}", "open": o, "high": h,
-                                     "low": l, "close": c, "volume": v, "amount": amt})
+                        # time 用 datetime64：signal_engine 按时间切片依赖 datetime 比较与算术
+                        bars.append({"time": pd.to_datetime(f"{date} {tm[:2]}:{tm[2:]}:00"),
+                                     "open": o, "high": h, "low": l, "close": c,
+                                     "volume": v, "amount": amt})
                 if bars:
                     df = pd.DataFrame(bars)
-                    os.makedirs(_MINUTE_CACHE_DIR, exist_ok=True)
-                    try:
-                        df.to_csv(cache_fp, index=False, encoding="utf-8")
-                    except Exception:
-                        pass
+                    self.save_minute_cache(code, date, df)
                     df.attrs["source"] = "tencent"
                     return df
                 last_error = "no_bars"
@@ -287,5 +309,77 @@ class TencentProvider:
 
     # ---------- 竞价快照（唯一例外：gm 无虚拟匹配价，保留腾讯） ----------
     def snapshot_auction(self, codes: list) -> dict:
-        """竞价时段快照（qt.gtimg.cn 字段[3]=虚拟匹配价）。gm 无此概念，本方法为竞价专用保留腾讯。"""
-        return self.snapshot(codes)
+        """竞价/实时快照（qt.gtimg.cn 批量，字段[3]=虚拟匹配价/现价）。
+        gm 无虚拟匹配价概念，竞价专用保留腾讯（合并实施方案 P1-2 #9）。
+        返回 {code: {name, price, pre_close, open, high, low, vol_hand, amount_wan, ts_raw, ts_date}}。"""
+        out = {}
+        if not codes:
+            return out
+        syms = []
+        for c in codes:
+            b = str(c).split("_")[0]
+            syms.append(("sh" if b[0] in "56" else "sz") + b)
+        try:
+            _clear_proxy()
+            q = ",".join(syms)
+            req = urllib.request.Request(f"https://qt.gtimg.cn/q={q}",
+                                         headers={"User-Agent": "Mozilla/5.0", "Referer": "https://gu.qq.com/"})
+            txt = urllib.request.urlopen(req, timeout=8).read().decode("gbk", errors="replace")
+            for part in txt.strip().split(";"):
+                part = part.strip()
+                if not part or "=" not in part:
+                    continue
+                key, _, payload = part.partition("=")
+                code = key.strip().lstrip("v_").upper()[2:]
+                f = payload.strip().strip('"').split("~")
+                if len(f) < 38:
+                    continue
+                def _f(i, d=0.0):
+                    try:
+                        return float(f[i]) if f[i] else d
+                    except (ValueError, IndexError):
+                        return d
+                ts = f[30] if len(f) > 30 else ""
+                _tsd = ts[:8] if len(ts) >= 8 and ts[:8].isdigit() else None
+                ts_date = (f"{_tsd[:4]}-{_tsd[4:6]}-{_tsd[6:8]}" if _tsd else None)
+                out[code] = {"name": f[1] if len(f) > 1 else code,
+                             "price": _f(3), "pre_close": _f(4), "open": _f(5) or None,
+                             "high": _f(33), "low": _f(34), "vol_hand": _f(6),
+                             "amount_wan": _f(37), "ts_raw": ts, "ts_date": ts_date}
+        except Exception:
+            pass
+        return out
+
+    def index_auction(self, codes: list) -> dict:
+        """指数竞价快照（qt.gtimg.cn 批量，字段[3]=虚拟匹配价，[4]=昨收）。
+        返回 {code: {name, auction_price, pre_close, gap_pct}}。"""
+        out = {}
+        if not codes:
+            return out
+        try:
+            _clear_proxy()
+            q = ",".join(codes)
+            req = urllib.request.Request(f"https://qt.gtimg.cn/q={q}",
+                                         headers={"User-Agent": "Mozilla/5.0", "Referer": "https://gu.qq.com/"})
+            txt = urllib.request.urlopen(req, timeout=8).read().decode("gbk", errors="replace")
+            for part in txt.strip().split(";"):
+                part = part.strip()
+                if not part or "=" not in part:
+                    continue
+                key, _, payload = part.partition("=")
+                code = key.strip().lstrip("v_").lower()
+                f = payload.strip().strip('"').split("~")
+                if len(f) < 5:
+                    continue
+                def _f(i):
+                    try:
+                        return float(f[i])
+                    except Exception:
+                        return None
+                price, pc = _f(3), _f(4)
+                out[code] = {"name": f[1] if len(f) > 1 and f[1] else code,
+                             "auction_price": price, "pre_close": pc,
+                             "gap_pct": round((price - pc) / pc * 100, 2) if price and pc else None}
+        except Exception:
+            pass
+        return out

@@ -33,36 +33,9 @@ AUCTION_INDEX_CODES = ["sh000001", "sh000688", "sz399001"]
 
 
 def fetch_index_snapshot():
-    """腾讯 qt.gtimg.cn 指数竞价快照 → {code: {name, auction_price, pre_close, gap_pct}}
-    竞价时段字段[3]=虚拟匹配价，字段[4]=昨收；与 fetch_qt_snapshot 同源同口径。"""
-    q = ",".join(AUCTION_INDEX_CODES)
-    req = urllib.request.Request(f"http://qt.gtimg.cn/q={q}", headers=UA)
-    txt = urllib.request.urlopen(req, timeout=15).read().decode("gbk", errors="ignore")
-    out = {}
-    for part in txt.strip().split(";"):
-        part = part.strip()
-        if not part or "=" not in part:
-            continue
-        key, _, payload = part.partition("=")
-        code = key.strip().lstrip("v_").lower()
-        f = payload.strip().strip('"').split("~")
-        if len(f) < 5:
-            continue
-
-        def _f(i):
-            try:
-                return float(f[i])
-            except Exception:
-                return None
-
-        price, pc = _f(3), _f(4)
-        out[code] = {
-            "name": (f[1] if len(f) > 1 and f[1] else code),
-            "auction_price": price,
-            "pre_close": pc,
-            "gap_pct": round((price - pc) / pc * 100, 2) if price and pc else None,
-        }
-    return out
+    """指数竞价快照（P1-2 #9 收敛：走 tencent_provider.index_auction，gm 无虚拟匹配价保留腾讯）。"""
+    from core.market_data.tencent_provider import TencentProvider
+    return TencentProvider().index_auction(AUCTION_INDEX_CODES)
 
 
 def mkt_code(code: str) -> str:
@@ -70,35 +43,9 @@ def mkt_code(code: str) -> str:
 
 
 def fetch_qt_snapshot(codes):
-    """腾讯 qt.gtimg.cn 批量实时快照 → {code: {name, price, pre_close, open, vol_hand, ts_raw}}"""
-    q = ",".join(mkt_code(c) for c in codes)
-    req = urllib.request.Request(f"http://qt.gtimg.cn/q={q}", headers=UA)
-    txt = urllib.request.urlopen(req, timeout=15).read().decode("gbk", errors="ignore")
-    out = {}
-    for part in txt.strip().split(";"):
-        part = part.strip()
-        if not part or "=" not in part:
-            continue
-        key, _, payload = part.partition("=")
-        code = key.strip().lstrip("v_").upper()[2:]
-        f = payload.strip().strip('"').split("~")
-        if len(f) < 39:
-            continue
-        def _f(i):
-            try:
-                return float(f[i])
-            except Exception:
-                return None
-        out[code] = {
-            "name": f[1],
-            "price": _f(3),          # 竞价时段=虚拟匹配价（待实测）；连续竞价=现价
-            "pre_close": _f(4),
-            "open": _f(5) or None,   # 今开（9:25 撮合后有效）
-            "vol_hand": _f(6),       # 竞价时段=竞价累计量（待实测）；盘后=全天总量
-            "amount_wan": _f(37),    # 成交额（万）
-            "ts_raw": f[30] if len(f) > 30 else "",
-        }
-    return out
+    """批量实时/竞价快照（P1-2 #9 收敛：走 tencent_provider.snapshot_auction，竞价专用保留腾讯）。"""
+    from core.market_data.tencent_provider import TencentProvider
+    return TencentProvider().snapshot_auction(codes)
 
 
 def fetch_minute_first_bar(code):

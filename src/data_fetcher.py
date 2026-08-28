@@ -609,202 +609,30 @@ def cleanup_expired_minute_cache():
 
 
 def fetch_minute_bar(code: str, is_etf: bool = False) -> pd.DataFrame:
-    """获取分钟线数据，优先使用本地缓存，再使用直连接口。"""
+    """获取分钟线数据。P1-2 收敛：改走 core/market_data provider（CSV缓存TTL + gm主源 + 腾讯兜底）。
+    保留 MINUTE_FETCH_STATUS/MINUTE_FETCH_DETAIL 诊断与 data_quality trace。"""
     market_date = _now().strftime("%Y-%m-%d")
     fetch_started = _now()
     MINUTE_FETCH_DETAIL[code] = ""
-    api_code = clean_code(code)  # 去除 _A/_B 等后缀
+    api_code = clean_code(code)
+    from core.market_data import get_provider
+    df = get_provider().minute(api_code, market_date, ttl_seconds=PARAMS.get("cache_ttl_seconds"))
+    src = df.attrs.get("source", "fetch")
+    if df.empty:
+        MINUTE_FETCH_STATUS[code] = "provider_empty"
+        MINUTE_FETCH_DETAIL[code] = f"provider({src}) 返回空分钟数据"
+    else:
+        MINUTE_FETCH_STATUS[code] = "cache_hit" if src == "cache" else "ok"
+        MINUTE_FETCH_DETAIL[code] = f"provider source={src} rows={len(df)}"
+    _append_jsonl(_trace_path("data_quality", market_date), {
+        "fetch_time": _now().strftime("%Y-%m-%d %H:%M:%S"),
+        "code": code, "source": src, "minute_status": MINUTE_FETCH_STATUS[code],
+        "raw_rows": int(len(df)), "parsed_rows": int(len(df)), "valid_rows": int(len(df)),
+        "fetch_cost_ms": int((_now() - fetch_started).total_seconds() * 1000),
+    })
+    return df
 
-    cached = _load_minute_cache(code, market_date)
-    if not cached.empty:
-        MINUTE_FETCH_STATUS[code] = "cache_hit"
-        log.debug(f"♻️  {code} 命中分钟线缓存")
-        _append_jsonl(_trace_path("data_quality", market_date), {
-            "fetch_time": _now().strftime("%Y-%m-%d %H:%M:%S"),
-            "code": code,
-            "source": "cache",
-            "minute_status": "cache_hit",
-            "raw_rows": int(len(cached)),
-            "parsed_rows": int(len(cached)),
-            "valid_rows": int(len(cached)),
-            "fetch_cost_ms": int((_now() - fetch_started).total_seconds() * 1000),
-        })
-        return cached
 
-    last_error = ""
-    for attempt in range(3):
-        try:
-            market = "sh" if api_code.startswith(("5", "6", "9")) else "sz"
-            symbol = f"{market}{api_code}"
-            url = f"https://ifzq.gtimg.cn/appstock/app/minute/query?code={symbol}"
-            headers = {
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-                "Referer": "https://finance.qq.com/"
-            }
-
-            req = urllib.request.Request(url, headers=headers)
-            with urllib.request.urlopen(req, timeout=10) as response:
-                content = response.read().decode("utf-8", errors="ignore")
-                if not content.strip():
-                    MINUTE_FETCH_STATUS[code] = "json_empty"
-                    MINUTE_FETCH_DETAIL[code] = "响应体为空"
-                    raise ValueError("empty response body")
-                if "<html" in content.lower() or "<!doctype html" in content.lower():
-                    MINUTE_FETCH_STATUS[code] = "json_html"
-                    MINUTE_FETCH_DETAIL[code] = "响应像HTML拦截页"
-                    raise ValueError("html response body")
-                try:
-                    data = json.loads(content)
-                except json.JSONDecodeError:
-                    MINUTE_FETCH_STATUS[code] = "json_error"
-                    MINUTE_FETCH_DETAIL[code] = f"非JSON响应: {content[:80]}"
-                    raise ValueError("json decode error")
-
-            if data.get("code") != 0 or not data.get("data"):
-                MINUTE_FETCH_STATUS[code] = "api_empty"
-                MINUTE_FETCH_DETAIL[code] = f"返回code={data.get('code')} data为空"
-                raise ValueError("minute api returned empty data")
-
-            minute_data = data["data"].get(symbol) or data["data"].get(api_code)
-            if not minute_data:
-                MINUTE_FETCH_STATUS[code] = "symbol_missing"
-                MINUTE_FETCH_DETAIL[code] = f"data中未找到{symbol}或{api_code}"
-                raise ValueError("minute api missing symbol data")
-
-            rows = minute_data.get("data") or minute_data.get("day") or []
-            if isinstance(rows, dict):
-                rows = rows.get("data") or []
-
-            parsed = []
-            today_str = _now().strftime("%Y-%m-%d")
-            total_rows = len(rows) if hasattr(rows, "__len__") else 0
-            if total_rows == 1 and isinstance(rows[0], str) and rows[0].strip() == "0":
-                MINUTE_FETCH_STATUS[code] = "parse_zero_placeholder"
-                MINUTE_FETCH_DETAIL[code] = "接口返回占位0行，不是有效分钟数据"
-                raise ValueError("minute api returned zero placeholder")
-            short_rows = 0
-            type_rows = 0
-            parse_fail_rows = 0
-            derived_ohlc_rows = 0
-            for row in rows:
-                try:
-                    if isinstance(row, str):
-                        parts = row.split()
-                    elif isinstance(row, list):
-                        parts = [str(x) for x in row]
-                    else:
-                        type_rows += 1
-                        continue
-
-                    if len(parts) >= 6:
-                        tm = parts[0]
-                        open_p, close_p, high_p, low_p, vol = map(float, parts[1:6])
-                        amount = float(parts[6]) if len(parts) > 6 else np.nan
-                    elif len(parts) >= 4:
-                        tm = parts[0]
-                        close_p = float(parts[1])
-                        vol = float(parts[2])
-                        amount = float(parts[3]) if len(parts) > 3 else np.nan
-                        open_p = high_p = low_p = close_p
-                        derived_ohlc_rows += 1
-                    else:
-                        short_rows += 1
-                        continue
-
-                    tm = str(tm).strip()
-                    if tm.isdigit() and len(tm) in (3, 4):
-                        tm = tm.zfill(4)
-                        ts = f"{today_str} {tm[:2]}:{tm[2:]}:00"
-                    elif ":" in tm and len(tm) <= 5:
-                        ts = f"{today_str} {tm}:00"
-                    else:
-                        ts = tm
-
-                    parsed.append({
-                        "time": ts,
-                        "open": open_p,
-                        "close": close_p,
-                        "high": high_p,
-                        "low": low_p,
-                        "volume": vol,
-                        "amount": amount,
-                    })
-                except Exception:
-                    parse_fail_rows += 1
-                    continue
-
-            df = pd.DataFrame(parsed)
-            if df.empty:
-                if total_rows == 0:
-                    MINUTE_FETCH_STATUS[code] = "parse_no_rows"
-                    MINUTE_FETCH_DETAIL[code] = "接口返回0行分钟数据"
-                elif short_rows == total_rows:
-                    MINUTE_FETCH_STATUS[code] = "parse_short_rows"
-                    MINUTE_FETCH_DETAIL[code] = f"原始行数{total_rows}，全部字段不足4列"
-                elif type_rows == total_rows:
-                    MINUTE_FETCH_STATUS[code] = "parse_type_rows"
-                    MINUTE_FETCH_DETAIL[code] = f"原始行数{total_rows}，全部为不支持的行类型"
-                elif parse_fail_rows == total_rows:
-                    MINUTE_FETCH_STATUS[code] = "parse_value_error"
-                    MINUTE_FETCH_DETAIL[code] = f"原始行数{total_rows}，全部在数值转换时失败"
-                else:
-                    MINUTE_FETCH_STATUS[code] = "parse_empty"
-                    MINUTE_FETCH_DETAIL[code] = f"原始行数{total_rows}，短行{short_rows}，类型行{type_rows}，解析失败{parse_fail_rows}"
-                raise ValueError("no parsed minute rows")
-
-            df["time"] = pd.to_datetime(df["time"], errors="coerce").dt.strftime("%Y-%m-%d %H:%M:%S")
-            _save_minute_cache(code, market_date, df)
-            MINUTE_FETCH_STATUS[code] = "ok"
-            MINUTE_FETCH_DETAIL[code] = f"解析成功{len(df)}行，4列行{derived_ohlc_rows}，跳过短行{short_rows}，类型行{type_rows}，解析失败{parse_fail_rows}"
-            _append_jsonl(_trace_path("data_quality", market_date), {
-                "fetch_time": _now().strftime("%Y-%m-%d %H:%M:%S"),
-                "code": code,
-                "source": "api",
-                "minute_status": "ok",
-                "raw_rows": int(total_rows),
-                "parsed_rows": int(len(df)),
-                "valid_rows": int(len(df)),
-                "short_rows": int(short_rows),
-                "type_rows": int(type_rows),
-                "parse_fail_rows": int(parse_fail_rows),
-                "derived_ohlc_rows": int(derived_ohlc_rows),
-                "fetch_cost_ms": int((_now() - fetch_started).total_seconds() * 1000),
-            })
-            return df
-
-        except urllib.error.URLError as e:
-            last_error = str(e)
-            reason = getattr(e, "reason", None)
-            if isinstance(reason, TimeoutError) or "timed out" in last_error.lower():
-                MINUTE_FETCH_STATUS[code] = "network_timeout"
-                MINUTE_FETCH_DETAIL[code] = f"请求超时: {last_error[:80]}"
-            elif isinstance(reason, OSError):
-                err_text = str(reason).lower()
-                if "name or service not known" in err_text or "temporary failure" in err_text or "dns" in err_text:
-                    MINUTE_FETCH_STATUS[code] = "network_dns"
-                    MINUTE_FETCH_DETAIL[code] = f"DNS解析失败: {last_error[:80]}"
-                elif "ssl" in err_text or "certificate" in err_text:
-                    MINUTE_FETCH_STATUS[code] = "network_ssl"
-                    MINUTE_FETCH_DETAIL[code] = f"SSL握手失败: {last_error[:80]}"
-                else:
-                    MINUTE_FETCH_STATUS[code] = "network_error"
-                    MINUTE_FETCH_DETAIL[code] = f"网络错误: {last_error[:80]}"
-            elif hasattr(reason, "code"):
-                MINUTE_FETCH_STATUS[code] = "network_http"
-                MINUTE_FETCH_DETAIL[code] = f"HTTP错误{getattr(reason, 'code', '')}: {last_error[:80]}"
-            else:
-                MINUTE_FETCH_STATUS[code] = "network_error"
-                MINUTE_FETCH_DETAIL[code] = f"网络错误: {last_error[:80]}"
-        except Exception as e:
-            last_error = str(e)
-            if MINUTE_FETCH_STATUS.get(code) not in {"json_empty", "json_html", "json_error", "api_empty", "symbol_missing", "parse_no_rows", "parse_short_rows", "parse_type_rows", "parse_value_error", "parse_zero_placeholder", "parse_empty"}:
-                MINUTE_FETCH_STATUS[code] = "network_error"
-                MINUTE_FETCH_DETAIL[code] = f"其他异常: {last_error[:80]}"
-        if attempt < 2:
-            time.sleep(0.8)
-
-    log.warning(f"⚠️  {code} 分钟线获取失败[{MINUTE_FETCH_STATUS.get(code, 'unknown')}]: {MINUTE_FETCH_DETAIL.get(code, last_error[:60])}")
-    return pd.DataFrame()
 
 def add_indicators(df: pd.DataFrame) -> pd.DataFrame:
     if df.empty or len(df) < 2:

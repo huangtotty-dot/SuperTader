@@ -310,46 +310,20 @@ def _analyze_linkage(yesterday_label: str, gap_level: str) -> tuple:
 # ============== 大盘指数竞价分析（方案 §2.3 / §4.4） ==============
 
 def _fetch_index_auction_live() -> List[IndexAuctionDiagnosis]:
-    """实时拉取大盘指数竞价快照（腾讯 qt.gtimg.cn，竞价时段字段[3]=虚拟匹配价）。
+    """实时拉取大盘指数竞价快照（P1-2 #9 收敛：走 tencent_provider.index_auction，竞价专用保留腾讯）。
     仅用于当日盘中分析；历史日期应从已采集数据读取（见 _get_index_auction_from_data）。"""
-    os.environ["NO_PROXY"] = "*"
-    os.environ["no_proxy"] = "*"
+    from core.market_data.tencent_provider import TencentProvider
     codes = AUCTION_PARAMS["index_codes"]
-    q = ",".join(codes)
-    try:
-        req = urllib.request.Request(
-            f"http://qt.gtimg.cn/q={q}", headers={"User-Agent": "Mozilla/5.0"}
-        )
-        txt = urllib.request.urlopen(req, timeout=12).read().decode("gbk", errors="ignore")
-    except Exception:
-        return []
-
+    raw = TencentProvider().index_auction(codes)
     out = []
-    for part in txt.strip().split(";"):
-        part = part.strip()
-        if not part or "=" not in part:
+    for code, r in raw.items():
+        if not r.get("auction_price") or not r.get("pre_close"):
             continue
-        key, _, payload = part.partition("=")
-        code = key.strip().lstrip("v_").lower()
-        f = payload.strip().strip('"').split("~")
-        if len(f) < 5:
-            continue
-
-        def _f(i):
-            try:
-                return float(f[i])
-            except Exception:
-                return None
-
-        price, pre_close = _f(3), _f(4)
-        if not price or not pre_close:
-            continue
-        gap_pct = (price - pre_close) / pre_close * 100
         out.append(IndexAuctionDiagnosis(
             code=code,
-            name=(f[1] if len(f) > 1 and f[1] else INDEX_META.get(code, code)),
-            gap_pct=round(gap_pct, 2),
-            gap_level=_classify_gap_level(gap_pct),
+            name=r.get("name") or INDEX_META.get(code, code),
+            gap_pct=round(r["gap_pct"] or 0.0, 2),
+            gap_level=_classify_gap_level(r["gap_pct"] or 0.0),
         ))
     return out
 
