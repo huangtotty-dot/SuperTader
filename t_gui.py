@@ -3867,6 +3867,8 @@ class Api:
             row.setdefault("scan_time", "")  # fix P0-14: 每行确保带 scan_time 字段
             # fix 2026-08-20: in_holdings 实时对齐 holdings.json（qty>0 才算持仓，trace/watchlist 字段可能陈旧）
             row["in_holdings"] = _is_holding(code)
+            # P3-2 池分管：pool 标注（watchlist 未列/缺省 → manual），供 GUI 池筛选
+            row["pool"] = (wl_stocks.get(code) or {}).get("pool") or "manual"
             rows.append(row)
 
         # 未扫描的 watchlist 股票：monitoring/signal → "等待扫描"；archived → "已停用"（可见但不参与扫描）
@@ -3888,7 +3890,9 @@ class Api:
                 "conditions": {},
                 "suggested_qty": 0, "suggested_price": 0, "capital_required": 0,
                 "in_holdings": in_hold,
-                "scan_type": "已停用" if is_archived else "等待扫描",
+                "pool": info.get("pool", "manual"),  # P3-2 池分管：GUI 池筛选
+                "scan_type": "已停用" if is_archived else (
+                    "自动盘(不手动扫)" if info.get("pool") == "auto" else "等待扫描"),
                 "scan_time": "",  # fix P0-14: 每行确保带 scan_time 字段
                 "_scans": 0,
             })

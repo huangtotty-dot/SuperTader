@@ -3068,6 +3068,24 @@ def _close_gui():
             pass
 
 
+def _validate_pool_split_or_exit():
+    """P3-2 池分管启动校验：manual 池与 auto 池交集冲突则拒绝启动并提示（fail-closed）。"""
+    try:
+        _cfg = os.path.join(BASE_DIR, "config", "auto_pool.py")
+        _spec = _importlib_util.spec_from_file_location("auto_pool", _cfg)
+        _m = _importlib_util.module_from_spec(_spec)
+        _spec.loader.exec_module(_m)
+        _conflicts = _m.validate_pool_split(
+            os.path.join(BASE_DIR, "t_io", "state", "watchlist_buy.json"))
+    except Exception as _e:
+        log.error(f"❌ P3-2 池分管校验异常（无法确认池归属，拒绝启动）: {_e}")
+        sys.exit(1)
+    if _conflicts:
+        log.error(f"❌ P3-2 池分管冲突：以下标的同属 manual 池与 auto 池 → {_conflicts}。"
+                  f"请修正 watchlist_buy.json 的 pool 字段或 config/auto_pool.py 后重启。")
+        sys.exit(1)
+
+
 if __name__ == "__main__":
     import atexit
     atexit.register(_close_gui)
@@ -3076,5 +3094,6 @@ if __name__ == "__main__":
     elif len(sys.argv) > 1 and sys.argv[1] == "--tushare-replay":
         tushare_replay(sys.argv[2] if len(sys.argv) > 2 else None)
     else:
+        _validate_pool_split_or_exit()
         _launch_gui()
         run_watch()
