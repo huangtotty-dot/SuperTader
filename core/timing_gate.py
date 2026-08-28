@@ -39,6 +39,7 @@ if str(BASE) not in sys.path:
     sys.path.insert(0, str(BASE))
 
 from core.position_builder import fetch_daily_kline  # noqa: E402
+from core import build_decision as _bd  # noqa: E402  P3 同源：决策核单一真源
 
 try:
     from config import ENTRY_TIMING_PARAMS as _ETP
@@ -88,72 +89,22 @@ def _regime(date_str: str) -> dict:
     B-3(2026-08-21): 多头加缓冲带 close>MA60*regime_up_buffer(默认1.005) 才 trend_up，
     中间带(MA60*0.97 ~ MA60*1.005)归 range，防 08-17/18/19 razor 横跳。
     B-1: 返回 index_cache_stale 标记供 trace。
+    P3 同源：判定逻辑委托 core/build_decision.regime_from_index_daily（单一真源）。
     """
     p = _params()
     idx = _fetch_index_daily()
-    idx = idx[idx["date"].astype(str) <= str(date_str)]
-    if len(idx) < 61:
-        return {"regime": "unknown", "close": None, "ma60": None,
-                "index_cache_stale": bool(_STALE["index_cache_stale"])}
-    close = float(idx["close"].iloc[-1])
-    ma60 = float(idx["close"].astype(float).rolling(60).mean().iloc[-1])
-    up_buffer = float(p.get("regime_up_buffer", 1.005))
-    if close > ma60 * up_buffer:
-        regime = "trend_up"
-    elif close < ma60 * 0.97:
-        regime = "trend_dn"
-    else:
-        regime = "range"
-    return {"regime": regime, "close": close, "ma60": round(ma60, 3),
-            "ratio": round(close / ma60, 4), "index_cache_stale": bool(_STALE["index_cache_stale"])}
+    r = _bd.regime_from_index_daily(idx, date_str, p)
+    r["index_cache_stale"] = bool(_STALE["index_cache_stale"])
+    return r
 
 
 def _stock_features(code: str, date_str: str) -> dict:
-    """个股日线时机特征（截止 date_str，无未来）。"""
+    """个股日线时机特征（截止 date_str，无未来）。
+    P3 同源：特征计算委托 core/build_decision.features_from_daily（单一真源）。"""
     df = fetch_daily_kline(code)
     if df.empty:
         return {}
-    df = df.sort_values("date").reset_index(drop=True)
-    df["date"] = df["date"].astype(str)
-    sub = df[df["date"] <= str(date_str)]
-    if len(sub) < 61:
-        return {}
-    c = sub["close"].astype(float)
-    h = sub["high"].astype(float)
-    price = float(c.iloc[-1])
-    ma20 = float(c.rolling(20).mean().iloc[-1])
-    ma60 = float(c.rolling(60).mean().iloc[-1])
-    rec_high = float(h.tail(20).max())
-    # MACD 金叉（近5日）
-    e12 = c.ewm(span=12, adjust=False).mean()
-    e26 = c.ewm(span=26, adjust=False).mean()
-    dif = e12 - e26
-    dea = dif.ewm(span=9, adjust=False).mean()
-    golden = bool(((dif > dea) & (dif.shift(1) <= dea.shift(1))).tail(5).any())
-    # RSI(14)（空头抄底超卖极值用）
-    _delta = c.diff()
-    _gain = _delta.clip(lower=0).rolling(14).mean()
-    _loss = (-_delta.clip(upper=0)).rolling(14).mean()
-    _rsi = float((100 - 100 / (1 + _gain / _loss.replace(0, float("nan")))).iloc[-1]) if _loss.iloc[-1] and _loss.iloc[-1] > 0 else 50.0
-    # 2026-08-27 因子挖掘（127万股票-日）：两个否决因子的特征
-    #   vol_ratio20≥3 爆量当日 w5=38.3%/r5=-1.0%（毒药桶）；dist_ma60>+20% w10=43.6%（追高最差档）
-    _vol_ratio20 = None
-    if "volume" in sub.columns:
-        _v = pd.to_numeric(sub["volume"], errors="coerce")
-        _v20 = float(_v.rolling(20).mean().iloc[-1]) if len(_v) >= 20 else float("nan")
-        if _v20 and _v20 > 0:
-            _vol_ratio20 = round(float(_v.iloc[-1]) / _v20, 2)
-    return {
-        "price": round(price, 3),
-        "trend_multihead": bool(price > ma20 and price > ma60),
-        "above_ma60": bool(price > ma60),
-        "drawdown": round(price / rec_high - 1, 4) if rec_high > 0 else 0.0,
-        "macd_golden_5d": golden,
-        "rsi": round(_rsi, 1),
-        "ma20": round(ma20, 3), "ma60": round(ma60, 3),
-        "vol_ratio20": _vol_ratio20,
-        "dist_ma60": round(price / ma60 - 1, 4),
-    }
+    return _bd.features_from_daily(df, date_str)
 
 
 def timing_verdict(code: str, date_str: str = None) -> dict:
@@ -172,45 +123,11 @@ def timing_verdict(code: str, date_str: str = None) -> dict:
         return {"go": False, "regime": r["regime"], "reason": "日线不足", "features": f,
                 "veto": [], "index": _idx_info}
     regime = r["regime"]
-    reasons = []
-    vetoes = []
-    if regime == "trend_up":
-        # 多头趋势 → 追强
-        # 2026-08-27 因子挖掘：两个硬否决（仅追强侧；抄底侧爆量是恐慌出清常态，不否决）
-        _vol_max = float(p.get("veto_vol_spike", 3.0))
-        _dist_max = float(p.get("veto_dist_ma60_max", 0.20))
-        _vr = f.get("vol_ratio20")
-        if _vr is not None and _vr >= _vol_max:
-            vetoes.append(f"爆量{_vr:g}倍≥{_vol_max:g}")
-        _dm = f.get("dist_ma60")
-        if _dm is not None and _dm > _dist_max:
-            vetoes.append(f"偏离MA60{_dm:+.1%}>{_dist_max:+.0%}")
-        cond = f["trend_multihead"] and f["drawdown"] >= -0.03 and not vetoes
-        reasons.append(f"多头趋势: 追强(多头{'✓' if f['trend_multihead'] else '✗'}+浅回撤{'✓' if f['drawdown']>=-0.03 else '✗'})")
-        if vetoes:
-            reasons.append(f"否决: {'、'.join(vetoes)}")
-        if f["macd_golden_5d"]:
-            reasons.append("MACD金叉近5日 ✓（加分）")
-        # P1(2026-08-25): 原写法 `cond and (macd_golden_5d or True)`——`or True` 恒真，
-        #   金叉对 go 零影响，是误导性死逻辑（既非必要项也未真正加分，只进 score 那 10 分，
-        #   而 score 不参与 verdict）。此处明确：追强 go 判据 = 多头结构 + 浅回撤，金叉不参与 go。
-        #   金叉的加分仅体现在 position_builder 的 composite_score，语义与此一致。
-        go = cond
-    elif regime == "trend_dn":
-        # 空头趋势 → 抄底超跌极值（2026-08-16 实验：深回撤 + RSI<20 深度超卖，样本内/外一致提升）
-        _rsi_lim = float(p.get("trend_dn_rsi_max", 20))
-        _dd_ok = f["drawdown"] < -0.10
-        _rsi_ok = (f.get("rsi") or 50) < _rsi_lim
-        cond = _dd_ok and _rsi_ok
-        reasons.append(f"空头趋势: 抄底(深回撤{'✓' if _dd_ok else '✗'} + RSI极值{'✓' if _rsi_ok else '✗'} "
-                       f"rsi={f.get('rsi')} drawdown={f['drawdown']:.1%})")
-        go = cond
-    else:
-        # 震荡 → 降频
-        go = False
-        reasons.append("震荡市: 降频，暂不建仓/加仓")
-    return {"go": bool(go), "regime": regime, "reason": "；".join(reasons), "features": f,
-            "veto": vetoes, "index": _idx_info}
+    # P3 同源：决策（含否决因子）委托 core/build_decision.timing_decision（单一真源）。
+    # 注：金叉不参与 go（P1 2026-08-25 修复语义保留），仅体现在 composite_score 加分。
+    _dec = _bd.timing_decision(f, regime, p)
+    return {"go": _dec["go"], "regime": regime, "reason": "；".join(_dec["reasons"]), "features": f,
+            "veto": _dec["veto"], "index": _idx_info}
 
 
 def _cli():
