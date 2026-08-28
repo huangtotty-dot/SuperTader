@@ -59,6 +59,9 @@ class Signal:
     factors: Dict[str, Any] = field(default_factory=dict)
     ts: Any = None
     cycle_id: str = ''; cycle_action_count: int = 0; hold_qty: int = 0
+    # P2-3 双消费接线：manual=人工链路(飞书→人工跟单)；auto=自动化链路(闸链→下单，P4 迁入)。
+    # 分叉点必须在消费侧显式判断（见 main.py notify），不允许隐式共享副作用。
+    channel: str = "manual"
 
 
 @dataclass
