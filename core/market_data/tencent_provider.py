@@ -94,8 +94,9 @@ class TencentProvider:
     source = "tencent"
 
     # ---------- 日线 ----------
-    def daily(self, code: str, days: int = 800) -> pd.DataFrame:
-        """腾讯日线（前复权 qfq），带本地缓存（t_io/cache/daily_kline/{code}.json）。"""
+    def daily_cache(self, code: str):
+        """读个股日线缓存（每日 + 盘中 15 分钟新鲜度）。命中返回 df(source=cache)，否则 None。
+        供 facade gm 路径 cache-first 快读（审核残留建议，削减 10× 负载）。"""
         code = str(code).split("_")[0]
         cache_fp = os.path.join(_DAILY_CACHE_DIR, f"{code}.json")
         _now = datetime.now()
@@ -103,30 +104,37 @@ class TencentProvider:
         try:
             os.makedirs(_DAILY_CACHE_DIR, exist_ok=True)
         except Exception:
-            cache_fp = None
-
-        # 缓存命中（每日 + 盘中 15 分钟新鲜度）
-        if cache_fp and os.path.exists(cache_fp):
+            return None
+        if not os.path.exists(cache_fp):
+            return None
+        try:
+            cached = _read_json(cache_fp)
+            if not (cached.get("date") == _today and cached.get("rows")):
+                return None
+            rows = cached["rows"]
+            _last_date = str(rows[-1].get("date", "")) if rows else ""
+            _saved_at = cached.get("saved_at")
             try:
-                cached = _read_json(cache_fp)
-                if cached.get("date") == _today and cached.get("rows"):
-                    rows = cached["rows"]
-                    _last_date = str(rows[-1].get("date", "")) if rows else ""
-                    _saved_at = cached.get("saved_at")
-                    try:
-                        _ts = datetime.strptime(_saved_at, "%Y-%m-%d %H:%M:%S") if _saved_at \
-                            else datetime.fromtimestamp(os.path.getmtime(cache_fp))
-                    except Exception:
-                        _ts = datetime.fromtimestamp(os.path.getmtime(cache_fp))
-                    _stale = ((_last_date < _today and _now.strftime("%H:%M") >= "09:15")
-                              or (_last_date == _today and (_now - _ts).total_seconds() > 15 * 60))
-                    if not _stale:
-                        df = pd.DataFrame(rows)[_DAILY_COLS]
-                        df.attrs["source"] = "cache"
-                        return df
+                _ts = datetime.strptime(_saved_at, "%Y-%m-%d %H:%M:%S") if _saved_at \
+                    else datetime.fromtimestamp(os.path.getmtime(cache_fp))
             except Exception:
-                pass
+                _ts = datetime.fromtimestamp(os.path.getmtime(cache_fp))
+            _stale = ((_last_date < _today and _now.strftime("%H:%M") >= "09:15")
+                      or (_last_date == _today and (_now - _ts).total_seconds() > 15 * 60))
+            if _stale:
+                return None
+            df = pd.DataFrame(rows)[_DAILY_COLS]
+            df.attrs["source"] = "cache"
+            return df
+        except Exception:
+            return None
 
+    def daily(self, code: str, days: int = 800) -> pd.DataFrame:
+        """腾讯日线（前复权 qfq），带本地缓存（t_io/cache/daily_kline/{code}.json）。"""
+        cached = self.daily_cache(code)
+        if cached is not None:
+            return cached
+        code = str(code).split("_")[0]
         symbol = ("sh" + code if code[0] in "56" else "sz" + code)
         _clear_proxy()  # 审核 #7: daily 路径代理清除恢复
         for host in ("ifzq.gtimg.cn", "web.ifzq.gtimg.cn"):

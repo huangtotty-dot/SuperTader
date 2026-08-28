@@ -46,11 +46,15 @@ class MarketDataFacade:
         return df
 
     def daily(self, code: str, days: int = 800, period: str = "day") -> pd.DataFrame:
+        # 审核残留建议: cache-first 快读（15分钟新鲜度，削减 gm 每次实拉 10× 负载）
+        cached = self._tx.daily_cache(code)
+        if cached is not None:
+            return self._mark(_resample_period(cached, period), "cache")
         if self._gm_ready():
             try:
                 df = self._gm.daily(code, days)
                 if df is not None and not df.empty:
-                    # 阻断5: gm 日线盘中对当日 forming bar（带 ts_date 新鲜度闸）
+                    # 阻断5: gm 日线对当日 forming bar（带 ts_date 新鲜度闸；窗口至收盘后16:00，重审#7）
                     df = self._maybe_append_forming(df, code)
                     # 阻断6: gm 结果写缓存（含盘中 15 分钟新鲜度/B-1，由 tencent 缓存读取端执行）
                     from .tencent_provider import save_daily_cache
@@ -62,12 +66,15 @@ class MarketDataFacade:
         return self._mark(_resample_period(df, period), df.attrs.get("source", "tencent"))
 
     def _maybe_append_forming(self, df: pd.DataFrame, code: str) -> pd.DataFrame:
-        """盘中对 gm 日线补当日 forming bar（P1 审核阻断5）。
-        ts_date 新鲜度闸：快照时间戳非当日（盘前/节假日）不补，避免伪造 bar（08-28 教训）。"""
+        """对 gm 日线补当日 bar（P1 审核阻断5+重审#7）。
+        gm history_n 盘中/盘后初段不含当日 daily bar（实测 14:11/14:29 end_time=当日23:59:59 仍只返回到昨日），
+        故窗口覆盖至收盘后 16:00：盘后快照=当日收盘（ts_date=当日），补入即为完整当日 bar。
+        ts_date 新鲜度闸：快照时间戳非当日（盘前/节假日）不补，避免伪造 bar（08-28 教训）。
+        注：gm 结算（~15:35）后是否已含当日 bar 待 15:35 后实测确认；无论是否，本窗口在 16:00 前均可靠补全。"""
         import datetime as _dt
         _now = _dt.datetime.now()
         today = _now.strftime("%Y-%m-%d")
-        if _now.weekday() >= 5 or not ("09:15" <= _now.strftime("%H:%M") <= "15:05"):
+        if _now.weekday() >= 5 or not ("09:15" <= _now.strftime("%H:%M") <= "16:00"):
             return df
         if df is None or df.empty or str(df["date"].iloc[-1]) >= today:
             return df
