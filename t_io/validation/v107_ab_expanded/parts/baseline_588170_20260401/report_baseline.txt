@@ -1,5 +1,0 @@
-=== BACKTEST REPORT (baseline) ===
-Codes: 588170
-Period: 2026-04-01 ~ 2026-04-03
-Signals: 6  WIN=5 FAIL=0 VOID=1
-Win rate: 100.0%

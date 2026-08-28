@@ -1,5 +1,0 @@
-=== BACKTEST REPORT (baseline) ===
-Codes: 000988
-Period: 2026-05-01 ~ 2026-05-08
-Signals: 0  WIN=0 FAIL=0 VOID=0
-Win rate: 0.0%

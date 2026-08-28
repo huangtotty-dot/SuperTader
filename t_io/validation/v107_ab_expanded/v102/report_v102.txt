@@ -1,5 +1,0 @@
-=== BACKTEST REPORT (v102) MERGED 105 parts ===
-Signals: 329 WIN=158 FAIL=133 VOID=37 UNSETTLED=1
-Win rate: 54.3%
-P1 consistency: 0.755 NEUTRAL: 0.1
-Closed loop: pairs=15 pnl=633.85

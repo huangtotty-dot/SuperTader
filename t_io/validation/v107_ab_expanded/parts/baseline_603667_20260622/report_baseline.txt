@@ -1,5 +1,0 @@
-=== BACKTEST REPORT (baseline) ===
-Codes: 603667
-Period: 2026-06-22 ~ 2026-06-26
-Signals: 4  WIN=3 FAIL=1 VOID=0
-Win rate: 75.0%

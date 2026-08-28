@@ -1,5 +1,0 @@
-=== BACKTEST REPORT (baseline) ===
-Codes: 600481
-Period: 2026-05-11 ~ 2026-05-15
-Signals: 8  WIN=1 FAIL=4 VOID=3
-Win rate: 20.0%

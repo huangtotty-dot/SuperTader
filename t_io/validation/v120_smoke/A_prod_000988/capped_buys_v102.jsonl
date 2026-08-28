@@ -1,4 +1,0 @@
-{"ts": "2026-03-25 14:37:00", "code": "000988", "name": "华工科技", "action": "BUY_LOW", "price": 115.69, "buy_score": 42.1, "sell_score": 36.3, "threshold": 36, "cap": 7, "capped_rank": 8, "settle_result": "VOID", "settle_time": null}
-{"ts": "2026-03-25 14:42:00", "code": "000988", "name": "华工科技", "action": "BUY_LOW", "price": 115.84, "buy_score": 36.3, "sell_score": 36.0, "threshold": 36, "cap": 7, "capped_rank": 8, "settle_result": "FAIL", "settle_time": "2026-03-25 14:51:00"}
-{"ts": "2026-03-25 14:51:00", "code": "000988", "name": "华工科技", "action": "BUY_LOW", "price": 115.51, "buy_score": 50.7, "sell_score": 40.6, "threshold": 36, "cap": 7, "capped_rank": 8, "settle_result": "VOID", "settle_time": null}
-{"ts": "2026-03-25 14:56:00", "code": "000988", "name": "华工科技", "action": "BUY_LOW", "price": 115.63, "buy_score": 49.5, "sell_score": 38.7, "threshold": 36, "cap": 7, "capped_rank": 8, "settle_result": "VOID", "settle_time": null}

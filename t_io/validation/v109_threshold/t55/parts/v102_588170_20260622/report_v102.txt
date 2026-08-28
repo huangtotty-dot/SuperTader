@@ -1,5 +1,0 @@
-=== BACKTEST REPORT (v102) ===
-Codes: 588170
-Period: 2026-06-22 ~ 2026-06-26
-Signals: 10  WIN=6 FAIL=4 VOID=0
-Win rate: 60.0%

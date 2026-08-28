@@ -1,5 +1,0 @@
-=== BACKTEST REPORT (v102) ===
-Codes: 600481
-Period: 2026-07-06 ~ 2026-07-10
-Signals: 0  WIN=0 FAIL=0 VOID=0
-Win rate: 0.0%

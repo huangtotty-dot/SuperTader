@@ -1,5 +1,0 @@
-=== BACKTEST REPORT (baseline) UNIFIED TUSHARE ===
-Signals: 374 WIN=170 FAIL=170 VOID=34 UNSETTLED=0
-Win rate: 50.0%
-P1 consistency: None NEUTRAL: None
-Closed loop: pairs=0 pnl=0.0
