@@ -1,0 +1,291 @@
+# -*- coding: utf-8 -*-
+"""TencentProvider — 腾讯数据源（合并实施方案 P1-1，降级兜底）。
+从现有内联逻辑原样搬迁（fetch_daily_kline / _fetch_index_daily / fetch_minute_bar /
+_live_quote_forming），不改变行为，只加契约断言与 attrs["source"] 标记。
+缓存格式不变式：t_io/cache/daily_kline/*.json 保持 {date, saved_at, rows:[...]}。
+"""
+import json
+import os
+import urllib.request
+from datetime import datetime
+
+import pandas as pd
+
+_BASE = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+_DAILY_CACHE_DIR = os.path.join(_BASE, "t_io", "cache", "daily_kline")
+_MINUTE_CACHE_DIR = os.path.join(_BASE, "t_io", "cache")
+
+_DAILY_COLS = ["date", "open", "high", "low", "close", "volume"]
+
+
+def _read_json(fp):
+    with open(fp, encoding="utf-8") as f:
+        return json.load(f)
+
+
+def _clear_proxy():
+    for _k in ["http_proxy", "https_proxy", "HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "all_proxy"]:
+        os.environ.pop(_k, None)
+    os.environ["NO_PROXY"] = "*"
+
+
+def _qt_snapshot_raw(symbol: str):
+    """腾讯 qt.gtimg.cn 实时快照 → fields 列表；失败返回 None。"""
+    _clear_proxy()
+    req = urllib.request.Request(f"https://qt.gtimg.cn/q={symbol}",
+                                 headers={"User-Agent": "Mozilla/5.0", "Referer": "https://gu.qq.com/"})
+    raw = urllib.request.urlopen(req, timeout=8).read().decode("gbk", errors="replace")
+    if "~" not in raw:
+        return None
+    f = raw.split('"')[1].split("~")
+    return f
+
+
+class TencentProvider:
+    source = "tencent"
+
+    # ---------- 日线 ----------
+    def daily(self, code: str, days: int = 800) -> pd.DataFrame:
+        """腾讯日线（前复权 qfq），带本地缓存（t_io/cache/daily_kline/{code}.json）。"""
+        code = str(code).split("_")[0]
+        cache_fp = os.path.join(_DAILY_CACHE_DIR, f"{code}.json")
+        _now = datetime.now()
+        _today = _now.strftime("%Y-%m-%d")
+        try:
+            os.makedirs(_DAILY_CACHE_DIR, exist_ok=True)
+        except Exception:
+            cache_fp = None
+
+        # 缓存命中（每日 + 盘中 15 分钟新鲜度）
+        if cache_fp and os.path.exists(cache_fp):
+            try:
+                cached = _read_json(cache_fp)
+                if cached.get("date") == _today and cached.get("rows"):
+                    rows = cached["rows"]
+                    _last_date = str(rows[-1].get("date", "")) if rows else ""
+                    _saved_at = cached.get("saved_at")
+                    try:
+                        _ts = datetime.strptime(_saved_at, "%Y-%m-%d %H:%M:%S") if _saved_at \
+                            else datetime.fromtimestamp(os.path.getmtime(cache_fp))
+                    except Exception:
+                        _ts = datetime.fromtimestamp(os.path.getmtime(cache_fp))
+                    _stale = ((_last_date < _today and _now.strftime("%H:%M") >= "09:15")
+                              or (_last_date == _today and (_now - _ts).total_seconds() > 15 * 60))
+                    if not _stale:
+                        df = pd.DataFrame(rows)[_DAILY_COLS]
+                        df.attrs["source"] = "cache"
+                        return df
+            except Exception:
+                pass
+
+        symbol = ("sh" + code if code[0] in "56" else "sz" + code)
+        for host in ("ifzq.gtimg.cn", "web.ifzq.gtimg.cn"):
+            try:
+                url = f"https://{host}/appstock/app/fqkline/get?param={symbol},day,,,{days},qfq"
+                req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0",
+                                                           "Referer": "https://finance.qq.com/"})
+                raw = urllib.request.urlopen(req, timeout=8).read().decode("utf-8", errors="ignore")
+                data = json.loads(raw)
+                kline = data.get("data", {}).get(symbol, {}).get("day") or \
+                        data.get("data", {}).get(symbol, {}).get("qfqday") or []
+                rows = [{"date": i[0], "open": float(i[1]), "close": float(i[2]),
+                         "high": float(i[3]), "low": float(i[4]), "volume": float(i[5])}
+                        for i in kline if len(i) >= 6]
+                if not rows:
+                    continue
+                if cache_fp:
+                    try:
+                        with open(cache_fp, "w", encoding="utf-8") as f:
+                            f.write(json.dumps(
+                                {"date": _today, "saved_at": _now.strftime("%Y-%m-%d %H:%M:%S"),
+                                 "rows": rows}, ensure_ascii=False))
+                    except Exception:
+                        pass
+                df = pd.DataFrame(rows)[_DAILY_COLS]
+                df.attrs["source"] = "tencent"
+                return df
+            except Exception:
+                continue
+
+        # 全部主机失败 → 回退旧缓存 + 补当日 forming bar（防破均线误判，08-28 教训）
+        if cache_fp and os.path.exists(cache_fp):
+            try:
+                cached = _read_json(cache_fp)
+                if cached.get("rows"):
+                    rows = cached["rows"]
+                    live = self.snapshot([code]).get(code)
+                    if live and str(live.get("ts_date")) == _today and live.get("price"):
+                        rows = rows + [{"date": _today, "open": live["open"], "close": live["price"],
+                                        "high": live["high"], "low": live["low"],
+                                        "volume": live["volume"]}]
+                    df = pd.DataFrame(rows)[_DAILY_COLS]
+                    df.attrs["source"] = "cache"
+                    return df
+            except Exception:
+                pass
+        return pd.DataFrame(columns=_DAILY_COLS)
+
+    # ---------- 指数日线 ----------
+    def index_daily(self, index: str = "sh000001", days: int = 800) -> pd.DataFrame:
+        """上证指数日线（腾讯 qfq），缓存 t_io/cache/daily_kline/index_{index}.json。"""
+        idx = str(index).lower()
+        cache_fp = os.path.join(_DAILY_CACHE_DIR, f"index_{idx}.json")
+        _now = datetime.now()
+        _today = _now.strftime("%Y-%m-%d")
+        cached_rows = None
+        if os.path.exists(cache_fp):
+            try:
+                d = _read_json(cache_fp)
+                if d.get("rows"):
+                    cached_rows = d["rows"]
+                    cache_date = str(cached_rows[-1].get("date", ""))
+                    need_refresh = (_now.weekday() < 5 and _now.strftime("%H:%M") >= "09:15"
+                                    and cache_date < _today)
+                    if cached_rows and not need_refresh:
+                        df = pd.DataFrame(cached_rows)[["date", "close"]]
+                        df.attrs["source"] = "cache"
+                        return df
+            except Exception:
+                pass
+        symbol = idx.replace("sh", "sh").replace("sz", "sz")
+        for host in ("ifzq.gtimg.cn", "web.ifzq.gtimg.cn"):
+            try:
+                url = f"https://{host}/appstock/app/fqkline/get?param={symbol},day,,,{days},qfq"
+                req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0",
+                                                           "Referer": "https://finance.qq.com/"})
+                raw = urllib.request.urlopen(req, timeout=10).read().decode("utf-8", errors="ignore")
+                data = json.loads(raw)
+                kline = data.get("data", {}).get(symbol, {}).get("day") or \
+                        data.get("data", {}).get(symbol, {}).get("qfqday") or []
+                rows = [{"date": i[0], "close": float(i[2])} for i in kline if len(i) >= 3]
+                if not rows:
+                    continue
+                os.makedirs(_DAILY_CACHE_DIR, exist_ok=True)
+                with open(cache_fp, "w", encoding="utf-8") as f:
+                    f.write(json.dumps({"rows": rows}, ensure_ascii=False))
+                df = pd.DataFrame(rows)[["date", "close"]]
+                df.attrs["source"] = "tencent"
+                return df
+            except Exception:
+                continue
+        if cached_rows:
+            df = pd.DataFrame(cached_rows)[["date", "close"]]
+            df.attrs["source"] = "cache"
+            return df
+        return pd.DataFrame(columns=["date", "close"])
+
+    # ---------- 分钟线 ----------
+    def minute(self, code: str, date: str) -> pd.DataFrame:
+        """当日 1 分钟线（腾讯 minute 接口），CSV 缓存（t_io/cache/minute_{code}_{date}.csv）。"""
+        code = str(code).split("_")[0]
+        cache_fp = os.path.join(_MINUTE_CACHE_DIR, f"minute_{code}_{date}.csv")
+        # CSV 缓存（TTL 由调用方 PARAMS 控制，此处按文件存在直接读）
+        if os.path.exists(cache_fp):
+            try:
+                df = pd.read_csv(cache_fp)
+                if not df.empty and "time" in df.columns:
+                    # 归一化：旧缓存为 "YYYY-MM-DD HH:MM:00" 或 "HH:MM:00"，统一为契约 "HH:MM"
+                    t = df["time"].astype(str).str.strip()
+                    t = t.str.replace(r"^\d{4}-\d{2}-\d{2} ", "", regex=True)
+                    t = t.str.slice(0, 5)
+                    df["time"] = t
+                    _cols = ["time", "open", "high", "low", "close", "volume", "amount"]
+                    df = df.reindex(columns=[c for c in _cols if c in df.columns])
+                    df.attrs["source"] = "cache"
+                    return df
+            except Exception:
+                pass
+        market = "sh" if code[0] in ("5", "6", "9") else "sz"
+        symbol = f"{market}{code}"
+        last_error = None
+        for _ in range(3):
+            try:
+                url = f"https://ifzq.gtimg.cn/appstock/app/minute/query?code={symbol}"
+                req = urllib.request.Request(url, headers={
+                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+                    "Referer": "https://finance.qq.com/"})
+                content = urllib.request.urlopen(req, timeout=10).read().decode("utf-8", errors="ignore")
+                if not content.strip() or "<html" in content.lower():
+                    last_error = "empty_or_html"
+                    continue
+                data = json.loads(content)
+                if data.get("code") != 0 or not data.get("data"):
+                    last_error = "api_empty"
+                    continue
+                minute_data = data.get("data", {}).get(symbol)
+                if not minute_data:
+                    last_error = "symbol_missing"
+                    continue
+                rows = minute_data.get("data") or minute_data.get("day") or []
+                if isinstance(rows, dict):
+                    rows = rows.get("data") or []   # 实际列表在 data.data[symbol].data.data 下
+                bars = []
+                for row in rows:
+                    parts = row.split() if isinstance(row, str) else \
+                        ([str(x) for x in row] if isinstance(row, list) else None)
+                    if not parts:
+                        continue
+                    if len(parts) >= 6:
+                        tm, o, c, h, l, v = (parts[0], float(parts[1]), float(parts[2]),
+                                             float(parts[3]), float(parts[4]), float(parts[5]))
+                        amt = float(parts[6]) if len(parts) > 6 else 0.0
+                    elif len(parts) >= 4:
+                        # 腾讯基础分钟接口仅 time close vol amount → OHLC 同价派生（与原实现一致）
+                        tm, c, v, amt = (parts[0], float(parts[1]), float(parts[2]), float(parts[3]))
+                        o = h = l = c
+                    else:
+                        continue
+                    tm = str(tm).strip()
+                    if tm.isdigit() and len(tm) in (3, 4):
+                        tm = tm.zfill(4)
+                        bars.append({"time": f"{tm[:2]}:{tm[2:]}", "open": o, "high": h,
+                                     "low": l, "close": c, "volume": v, "amount": amt})
+                if bars:
+                    df = pd.DataFrame(bars)
+                    os.makedirs(_MINUTE_CACHE_DIR, exist_ok=True)
+                    try:
+                        df.to_csv(cache_fp, index=False, encoding="utf-8")
+                    except Exception:
+                        pass
+                    df.attrs["source"] = "tencent"
+                    return df
+                last_error = "no_bars"
+            except Exception as e:
+                last_error = str(e)[:60]
+        _cols = ["time", "open", "high", "low", "close", "volume", "amount"]
+        return pd.DataFrame(columns=_cols)
+
+    # ---------- 实时快照 ----------
+    def snapshot(self, codes: list) -> dict:
+        """腾讯实时快照 → {code: {price, open, high, low, volume(手), ts_date}}。"""
+        out = {}
+        if not codes:
+            return out
+        for code in codes:
+            base = str(code).split("_")[0]
+            symbol = ("sh" + base if base[0] in "56" else "sz" + base)
+            try:
+                f = _qt_snapshot_raw(symbol)
+                if not f or len(f) < 35:
+                    continue
+                price = float(f[3])
+                if price <= 0:
+                    continue
+                ts = f[30] if len(f) > 30 else ""
+                _tsd = ts[:8] if len(ts) >= 8 and ts[:8].isdigit() else None
+                ts_date = (f"{_tsd[:4]}-{_tsd[4:6]}-{_tsd[6:8]}" if _tsd else None)
+                def _f(i, d=0.0):
+                    try:
+                        return float(f[i]) if f[i] else d
+                    except (ValueError, IndexError):
+                        return d
+                out[base] = {"price": price, "open": _f(5), "high": _f(33), "low": _f(34),
+                             "volume": _f(6), "ts_date": ts_date}
+            except Exception:
+                continue
+        return out
+
+    # ---------- 竞价快照（唯一例外：gm 无虚拟匹配价，保留腾讯） ----------
+    def snapshot_auction(self, codes: list) -> dict:
+        """竞价时段快照（qt.gtimg.cn 字段[3]=虚拟匹配价）。gm 无此概念，本方法为竞价专用保留腾讯。"""
+        return self.snapshot(codes)
