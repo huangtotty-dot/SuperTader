@@ -128,6 +128,7 @@ class TencentProvider:
                 pass
 
         symbol = ("sh" + code if code[0] in "56" else "sz" + code)
+        _clear_proxy()  # 审核 #7: daily 路径代理清除恢复
         for host in ("ifzq.gtimg.cn", "web.ifzq.gtimg.cn"):
             try:
                 url = f"https://{host}/appstock/app/fqkline/get?param={symbol},day,,,{days},qfq"
@@ -199,6 +200,7 @@ class TencentProvider:
             except Exception:
                 pass
         symbol = idx.replace("sh", "sh").replace("sz", "sz")
+        _clear_proxy()  # 审核 #7: index_daily 路径代理清除恢复
         for host in ("ifzq.gtimg.cn", "web.ifzq.gtimg.cn"):
             try:
                 url = f"https://{host}/appstock/app/fqkline/get?param={symbol},day,,,{days},qfq"
@@ -212,6 +214,8 @@ class TencentProvider:
                          "high": float(i[3]), "low": float(i[4]), "volume": float(i[5]),
                          "amount": float(i[6]) if len(i) >= 7 and str(i[6]).replace(".", "").isdigit() else float(i[5])}
                         for i in kline if len(i) >= 6]
+                if end_date:  # 审核 #8: 历史查询按 end_date 截止（此前静默退化）
+                    rows = [r for r in rows if r["date"] <= end_date]
                 if not rows:
                     continue
                 if end_date is None:
@@ -273,6 +277,7 @@ class TencentProvider:
         market = "sh" if code[0] in ("5", "6", "9") else "sz"
         symbol = f"{market}{code}"
         last_error = None
+        _clear_proxy()  # 审核 #7: minute 路径代理清除恢复
         for _ in range(3):
             try:
                 url = f"https://ifzq.gtimg.cn/appstock/app/minute/query?code={symbol}"
@@ -372,7 +377,8 @@ class TencentProvider:
                 hm = str(parts[0]).strip().zfill(4)
                 price = float(parts[1])
                 cum_v, cum_a = float(parts[2]), float(parts[3])
-                v = max(cum_v - prev_v, 0.0)   # 累计差分 → 每分钟量（手）
+                # 审核 #6: 差分还原 → 股（×100 手→股），与 akshare 主通道 vwap 口径一致（Σamount/Σvolume=元/股）
+                v = max(cum_v - prev_v, 0.0) * 100.0
                 a = max(cum_a - prev_a, 0.0)
                 prev_v, prev_a = cum_v, cum_a
                 parsed.append({"time": pd.to_datetime(f"{day_fmt} {hm[:2]}:{hm[2:]}:00"),

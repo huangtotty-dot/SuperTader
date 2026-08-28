@@ -159,6 +159,8 @@ def _tx_kline(symbol: str, period: str, count: int, end: str) -> list:
             df = p.daily(symbol, fetch_days)
         if df is None or df.empty:
             return []
+        # 审核 #9: 按 end 截止（个股日线含未来数据 → 缓存污染按 end 键）
+        df = df[df["date"] <= end]
         df = _resample_period(df, period)
         return [{"date": r.date, "open": r.open, "close": r.close,
                  "high": r.high, "low": r.low, "volume": r.volume}

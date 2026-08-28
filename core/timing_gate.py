@@ -70,10 +70,12 @@ def _fetch_index_daily():
     df = get_provider().index_daily("sh000001", 800)
     _STALE["index_cache_stale"] = False
     if df is None or df.empty:
+        # 审核 #13: 指数日线全失败恢复抛错（原行为；此前静默返回空 → regime 静默退化）
         _STALE["index_cache_stale"] = True
-        return df
+        raise ValueError("上证指数日线获取失败（gm/腾讯均不可用）")
     _now = datetime.now()
-    if _now.weekday() < 5 and _now.strftime("%H:%M") >= "09:15":
+    # B-1 语义：仅盘中(工作日 09:15-15:00)才按"缺今日"标陈旧；盘前用昨收为参考，不算陈旧
+    if _now.weekday() < 5 and "09:15" <= _now.strftime("%H:%M") <= "15:00":
         _last = str(df["date"].iloc[-1])
         if _last < _now.strftime("%Y-%m-%d"):
             _STALE["index_cache_stale"] = True
