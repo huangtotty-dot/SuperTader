@@ -19,3 +19,8 @@ stock_hunter/output/
 
 t_io/state/llm_config.json
 t_io/state/gm_config.json
+
+# P4 运行时产物（auto 引擎事件桥 / 回放校验 / 错位脚手架）
+t_io/bridge/
+t_io/validation/auto/replay/
+execution/t_io/
