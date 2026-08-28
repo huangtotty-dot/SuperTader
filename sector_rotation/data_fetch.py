@@ -146,50 +146,27 @@ def _parse_qt_line(line: str):
 
 
 def fetch_stock_history(code: str, days: int = BOOTSTRAP_CALENDAR_DAYS) -> pd.DataFrame:
-    """腾讯历史日线（ifzq.gtimg.cn fqkline qfq），返回 日期/收盘/涨跌幅/成交额（按日期升序）。"""
-    symbol = _qt_symbol(code)
-    url = f"https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param={symbol},day,,,{days},qfq"
+    """历史日线（P1-2 #10 收敛：走 provider.daily，gm 主源/腾讯兜底）。
+    返回 日期/收盘/涨跌幅/成交额（按日期升序）。成交额=收盘×量(手→股)估算，各股统一口径。"""
+    from core.market_data import get_provider
     try:
-        data = json.loads(_http_get(url))
+        df = get_provider().daily(code, days)
+        if df is None or df.empty:
+            return pd.DataFrame()
     except Exception:
-        return pd.DataFrame()
-    if data.get("code") != 0:
-        return pd.DataFrame()
-    stock_data = (data.get("data") or {}).get(symbol) or {}
-    kline = stock_data.get("day") or stock_data.get("qfqday")
-    if not kline:
         return pd.DataFrame()
 
     records = []
-    is_kcb = code.startswith("688")
-    volume_unit = 1.0 if is_kcb else 100.0
     prev_close = None
-    for item in kline:
-        try:
-            if not isinstance(item, list) or len(item) < 6:
-                continue
-            date = str(item[0])
-            close = float(item[2])
-            high = float(item[3])
-            low = float(item[4])
-            volume = float(item[5])
-            if len(item) >= 7:
-                amount = float(item[6] or 0)
-            else:
-                amount = ((high + low + close) / 3.0) * volume * volume_unit
-            if amount <= 0:
-                amount = close * volume * volume_unit
-            chg = 0.0
-            if prev_close and prev_close > 0:
-                chg = round((close - prev_close) / prev_close * 100, 4)
-            prev_close = close
-            records.append({"日期": date, "收盘": close, "涨跌幅": chg, "成交额": amount, "代码": code})
-        except (ValueError, IndexError, TypeError):
-            continue
+    for r in df.itertuples():
+        close = float(r.close)
+        amount = close * float(r.volume) * 100.0  # 手→股 × 价（估算）
+        chg = round((close - prev_close) / prev_close * 100, 4) if prev_close and prev_close > 0 else 0.0
+        prev_close = close
+        records.append({"日期": r.date, "收盘": close, "涨跌幅": chg, "成交额": amount, "代码": code})
     if not records:
         return pd.DataFrame()
-    df = pd.DataFrame(records).drop_duplicates("日期").sort_values("日期").reset_index(drop=True)
-    return df
+    return pd.DataFrame(records).drop_duplicates("日期").sort_values("日期").reset_index(drop=True)
 
 
 # ---------- 全市场代码池 ----------
