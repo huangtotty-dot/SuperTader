@@ -10,7 +10,9 @@ import os
 import re
 import subprocess
 
-_TERM_PROC = "gmterm-serv.exe"
+# P4-4: 新终端（国盛掘金3 专业版）数据服务仍是 gmterm-serv.exe（从新安装目录启动）；
+# gsgm3.exe 为新终端 Electron 壳（防御未来版本改名/只挂壳场景）。任一进程命中即提取 --token。
+_TERM_PROCS = ("gmterm-serv.exe", "gsgm3.exe")
 _TOKEN_RE = re.compile(r"--token=([0-9a-fA-F]{32,64})")
 
 _BASE = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -23,19 +25,30 @@ def _parse_token(text: str):
 
 
 def _terminal_token():
+    for proc in _TERM_PROCS:
+        t = _token_from_proc(proc)
+        if t:
+            return t
+    return None
+
+
+def _token_from_proc(proc: str):
+    """对单个候选进程名做 psutil→wmic→powershell 回退链提取 token；命中即返回。"""
     try:
         import psutil
         for p in psutil.process_iter(["name", "cmdline"]):
             try:
-                if p.info["name"] and p.info["name"].lower() == _TERM_PROC and p.info["cmdline"]:
-                    return _parse_token(" ".join(p.info["cmdline"]))
+                if p.info["name"] and p.info["name"].lower() == proc.lower() and p.info["cmdline"]:
+                    t = _parse_token(" ".join(p.info["cmdline"]))
+                    if t:
+                        return t
             except Exception:
                 continue
     except ImportError:
         pass
     try:
         out = subprocess.run(
-            ["wmic", "process", "where", f"name='{_TERM_PROC}'", "get", "commandline", "/format:list"],
+            ["wmic", "process", "where", f"name='{proc}'", "get", "commandline", "/format:list"],
             capture_output=True, text=True, timeout=10)
         if out.returncode == 0:
             t = _parse_token(out.stdout)
@@ -46,7 +59,7 @@ def _terminal_token():
     try:
         out = subprocess.run(
             ["powershell", "-NoProfile", "-Command",
-             f"Get-CimInstance Win32_Process -Filter \"name='{_TERM_PROC}'\" | Select-Object -ExpandProperty CommandLine"],
+             f"Get-CimInstance Win32_Process -Filter \"name='{proc}'\" | Select-Object -ExpandProperty CommandLine"],
             capture_output=True, text=True, timeout=10)
         if out.returncode == 0:
             t = _parse_token(out.stdout)

@@ -443,6 +443,19 @@ def _refresh_daily_ctx(context, code: str, gm_symbol: str, now: datetime) -> dic
 
     if daily is not None and len(daily) >= 10:
         df = pd.DataFrame(daily)
+        # P4-6: 供 core/build_decision 决策核消费的日线 DataFrame（date/open/high/low/close/volume）
+        try:
+            _ddf = df.copy()
+            if "eob" in _ddf.columns:
+                _ddf["date"] = pd.to_datetime(_ddf["eob"]).dt.strftime("%Y-%m-%d")
+            _ddf["open"] = pd.to_numeric(_ddf.get("open"), errors="coerce")
+            _ddf["high"] = pd.to_numeric(_ddf.get("high"), errors="coerce")
+            _ddf["low"] = pd.to_numeric(_ddf.get("low"), errors="coerce")
+            _ddf["close"] = pd.to_numeric(_ddf.get("close"), errors="coerce")
+            _ddf["volume"] = pd.to_numeric(_ddf.get("volume"), errors="coerce")
+            ctx["_daily_df"] = _ddf[["date", "open", "high", "low", "close", "volume"]].dropna(subset=["date"])
+        except Exception:
+            ctx["_daily_df"] = pd.DataFrame()
         c = df["close"].astype(float)
         h = df["high"].astype(float)
         l = df["low"].astype(float)
@@ -1098,48 +1111,76 @@ def on_bar(context, bars):
                     context._base_settled.add(code)
                     return
                 _topup_blocked = True  # F8: 回补被M2闸拦截，信号评估照常
-            # WP-B20: 双通道建仓闸（owner 2026-08-19 决策，完全替换 G4 支撑建仓闸；
-            # 同步自 superTrader W33 A1 双通道——冰点反转/突破跟随）。
-            # 仅 verdict=signal（冰点80/突破70 分档）放行建仓；approaching 仅留痕观察（每票每日去重）。
+            # P4-6: auto 建仓判定接 core/build_decision（P3 双侧单一真源）。
+            # 数据适配：_daily_df（个股日线）+ ir.GM_INDEX_CACHE（指数日线）+ bar_cache 1m → 决策核；
+            # 数据不足 fail-closed；WP-B20 双通道降为参考留痕（与 manual 侧 result["channels"] 同定位）。
             if not _topup_blocked:
                 from signals import position_builder as _pb
+                from build_decision_auto import decide as _bd_decide
+                _idx_df = None
+                try:
+                    import analysis.index_regime as _ir
+                    _idx_df = _ir.GM_INDEX_CACHE.get("SHSE.000001")
+                except Exception:
+                    _idx_df = None
+                _daily_df = _dc.get("_daily_df")
+                if _daily_df is None or _daily_df.empty or _idx_df is None or _idx_df.empty:
+                    _dec = {"go": False, "veto": [], "verdict": "weak", "reasons": ["数据不足(日线/指数缺失) fail-closed"],
+                            "data_insufficient": True}
+                else:
+                    _bars = context.bar_cache.get(gm_sym, []) or []
+                    _today_bars = [b for b in _bars if str(b.get("time", "")).startswith(now.strftime("%Y-%m-%d"))]
+                    _df1m = None
+                    try:
+                        _src = _today_bars if _today_bars else _bars
+                        if _src:
+                            _df1m = pd.DataFrame(_src)
+                    except Exception:
+                        _df1m = None
+                    _dec = _bd_decide(_daily_df, _idx_df, now.strftime("%Y-%m-%d"), None, df_1min=_df1m)
+                _bd_verdict = _dec["verdict"]
+                # WP-B20 双通道 → 参考留痕（不再驱动放行）
                 _pb_res = _pb.eval_dual_channels(
                     _dc, cp, m5_df=_pb.build_m5_df(context.bar_cache.get(gm_sym, [])),
                     scan_type="intraday")
                 _pb_verdict = _pb_res["verdict"]
                 _pb_channel = _pb_res["channel"]
                 _pb_score = _pb_res["composite_score"]
-                if _pb_verdict != "signal":
-                    _pb_key = f'_pb_last_{code}'
-                    _pb_sig = f"{_pb_channel}|{_pb_verdict}|{_pb_score}"
-                    if getattr(context, _pb_key, None) != _pb_sig:
-                        setattr(context, _pb_key, _pb_sig)
+                if _bd_verdict != "signal":
+                    _bd_key = f'_bd_last_{code}'
+                    _bd_sig = f"{_bd_verdict}|go={_dec.get('go')}|{'、'.join(_dec.get('veto', []))}"
+                    if getattr(context, _bd_key, None) != _bd_sig:
+                        setattr(context, _bd_key, _bd_sig)
                         print(f"[{now:%H:%M:%S}] BASE {code} {STOCK_NAMES.get(code,code)} "
-                              f"双通道{_pb_channel}={_pb_verdict}({_pb_score}分)→仅观察")
+                              f"build_decision={_bd_verdict}(go={_dec.get('go')}, "
+                              f"veto={'、'.join(_dec.get('veto', [])) or '无'})→仅观察 "
+                              f"(双通道参考:{_pb_channel}={_pb_verdict}/{_pb_score})")
                         try:
                             write_risk(str(now), "build_gate",
-                                       f"channel={_pb_channel} verdict={_pb_verdict} score={_pb_score}", code=code)
+                                       f"verdict={_bd_verdict} go={_dec.get('go')} "
+                                       f"veto={'、'.join(_dec.get('veto', [])) or '无'}", code=code)
                         except Exception:
                             pass
                         _audit_write({"event": "build_gate_block", "code": code,
-                                      "channel": _pb_channel, "verdict": _pb_verdict,
-                                      "score": _pb_score, "cp": cp, "time": str(now)})
+                                      "verdict": _bd_verdict, "go": _dec.get("go"),
+                                      "veto": _dec.get("veto"), "cp": cp, "time": str(now),
+                                      "channels": f"{_pb_channel}={_pb_verdict}({_pb_score})"})
                     if _hb_live:
                         try: write_snapshot(str(now), code, cp, bar=f"{now:%H:%M}",
-                                            gate="build_gate", gate_detail=f"{_pb_channel}={_pb_verdict}({_pb_score})")
+                                            gate="build_gate",
+                                            gate_detail=f"{_bd_verdict}(go={_dec.get('go')})")
                         except Exception: pass
                     if not _is_topup:
                         return
-                    _topup_blocked = True  # 双通道拦截回补，信号评估照常（F8 同模式）
+                    _topup_blocked = True  # build_decision 拦截回补，信号评估照常（F8 同模式）
                 else:
                     if _hb_live:
                         try: write_snapshot(str(now), code, cp, bar=f"{now:%H:%M}",
-                                            gate="build_gate_pass", gate_detail=f"{_pb_channel}={_pb_verdict}({_pb_score})")
+                                            gate="build_gate_pass", gate_detail=f"signal(score={_dec.get('score')})")
                         except Exception: pass
-                    if getattr(context, f'_pb_last_{code}', None) is not None:
-                        setattr(context, f'_pb_last_{code}', None)
-                        print(f"[{now:%H:%M:%S}] BASE {code} {STOCK_NAMES.get(code,code)} "
-                              f"双通道{_pb_channel}=signal({_pb_score}分)")
+                    if getattr(context, f'_bd_last_{code}', None) is not None:
+                        setattr(context, f'_bd_last_{code}', None)
+                        print(f"[{now:%H:%M:%S}] BASE {code} {STOCK_NAMES.get(code,code)} build_decision=signal")
             if not _topup_blocked:
                 try:
                     try:

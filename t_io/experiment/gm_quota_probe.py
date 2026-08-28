@@ -20,14 +20,13 @@ if sys.platform == "win32":
         pass
 
 BASE = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+if BASE not in sys.path:
+    sys.path.insert(0, BASE)
 WATCHLIST = os.path.join(BASE, "t_io", "state", "watchlist_buy.json")
 OUT_MD = os.path.join(BASE, "t_io", "experiment", "gm_quota_probe_report.md")
 
-# 生产同款 token 机制（goldminer utils/gm_token.py：GM_TOKEN 环境变量→终端会话动态发现→gm_config.json）
-_GM_REPO = r"c:/Users/Lenovo/.goldminer3/projects/e8bb1f4d-87ce-11f1-97f7-98fa9b8df5e7"
-if _GM_REPO not in sys.path:
-    sys.path.insert(0, _GM_REPO)
-from utils.gm_token import load_token  # noqa: E402
+# P4-4: token 机制统一走 superTrader core/market_data/gm_token（新终端会话动态发现，旧 goldminer 已冻结）
+from core.market_data.gm_token import load_token  # noqa: E402
 
 DAILY_TARGET, MINUTE_TARGET = 800, 240
 
