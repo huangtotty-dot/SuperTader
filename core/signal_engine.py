@@ -44,54 +44,77 @@ try:
 except ImportError:
     TrendRegime = None; TrendState = None
 
-# ======== 独立模式回退依赖 ========
-if 'get_today_str' not in globals():
-    def get_today_str(): return datetime.now().strftime("%Y-%m-%d")
-if '_now' not in globals():
-    def _now(): return datetime.now()
-# PARAMS now exclusively from config.py (stub removed — dual-copy drift fixed in V3.0)
-if 'MINUTE_FETCH_DETAIL' not in globals(): MINUTE_FETCH_DETAIL = {}
-if 'MINUTE_FETCH_STATUS' not in globals(): MINUTE_FETCH_STATUS = {}
-if 'DAILY_CONTEXT_CACHE' not in globals(): DAILY_CONTEXT_CACHE = {}
-if 'HOLDINGS' not in globals(): HOLDINGS = {}
-if 'VIRTUAL_TRADES' not in globals(): VIRTUAL_TRADES = {}
-if 'SIGNAL_OUTCOME_TRACKER' not in globals(): SIGNAL_OUTCOME_TRACKER = {}
-if 'T_MODE' not in globals(): T_MODE = {}
-if 'DAILY_DECISION_STATS' not in globals(): DAILY_DECISION_STATS = {}
-if '_default_daily_context' not in globals():
-    def _default_daily_context(c,s="",r=""): return {"daily_status":s,"daily_reason":r,"daily_buy_t_ok":False}
-if '_append_jsonl' not in globals():
-    def _append_jsonl(*a,**kw): return None
-if '_trace_path' not in globals():
-    def _trace_path(n,d=None): return f"/tmp/{n}"
-if 'send_morning_alert' not in globals():
-    def send_morning_alert(*a,**kw): return None
-if 'notify_alert_cleared' not in globals():
-    def notify_alert_cleared(*a,**kw): return None
-if 'resample_to_15min' not in globals():
-    from analysis.indicators import resample_to_15min, add_15min_indicators
-if 'resample_to_5min' not in globals():
-    from analysis.indicators import resample_to_5min, add_5min_indicators
-if 'fetch_minute_bar' not in globals():
-    def fetch_minute_bar(*a, **kw): return pd.DataFrame()
-if 'add_indicators' not in globals():
-    def add_indicators(df): return df
-if 'Signal' not in globals():
-    from dataclasses import dataclass, field
-    from typing import List, Dict, Any
-    @dataclass
-    class Signal:
-        code: str=''; name: str=''; action: str=''; price: float=0.0; score: float=0.0
-        reasons: List[str]=field(default_factory=list)
-        details: List[Dict[str,Any]]=field(default_factory=list)
-        indicators: Dict[str,float]=field(default_factory=dict)
-        factors: Dict[str,Any]=field(default_factory=dict)
-        ts: Any=None
-        cycle_id: str=''; cycle_action_count: int=0; hold_qty: int=0
+# ======== 依赖注入（P2-1：EngineContext 显式注入，移除 exec 共享全局 fallback 桩） ========
+from dataclasses import dataclass, field
+from analysis.indicators import resample_to_15min, add_15min_indicators
+from analysis.indicators import resample_to_5min, add_5min_indicators
+
+
+@dataclass
+class Signal:
+    code: str = ''; name: str = ''; action: str = ''; price: float = 0.0; score: float = 0.0
+    reasons: List[str] = field(default_factory=list)
+    details: List[Dict[str, Any]] = field(default_factory=list)
+    indicators: Dict[str, float] = field(default_factory=dict)
+    factors: Dict[str, Any] = field(default_factory=dict)
+    ts: Any = None
+    cycle_id: str = ''; cycle_action_count: int = 0; hold_qty: int = 0
+
+
+@dataclass
+class EngineContext:
+    """SignalEngine 显式依赖注入（合并实施方案 P2-1）。
+    替代 main.py exec 共享命名空间的隐式全局引用；对象引用同一性由调用方保证
+    （ctx.holdings 即 HOLDINGS 本体，非拷贝）。"""
+    holdings: Dict[str, dict]
+    virtual_trades: Dict[str, Dict[str, list]]
+    minute_fetch_status: Dict[str, str]
+    minute_fetch_detail: Dict[str, str]
+    t_mode: Dict[str, str]
+    daily_decision_stats: Dict[str, dict]
+    daily_context_cache: Dict[str, Dict[str, Any]]
+    signal_outcome_tracker: Dict[str, list]
+    backtest_day_cache: Dict = field(default_factory=dict)
+    now: Any = datetime.now
+    get_today_str: Any = None
+    append_jsonl: Any = None
+    trace_path: Any = None
+    fetch_minute_bar: Any = None
+    default_daily_context: Any = None
+    send_morning_alert: Any = None
+    notify_alert_cleared: Any = None
 # ==========================================================
 
 class SignalEngine:
-    def __init__(self):
+    def __init__(self, ctx: EngineContext = None, params: dict = None):
+        # P2-1: 显式依赖注入。无 ctx 不许实例化（已移除共享全局 fallback 桩）。
+        if ctx is None:
+            raise TypeError("SignalEngine 需显式注入 EngineContext（P2-1 已移除 exec 共享全局 fallback）")
+        self.ctx = ctx
+        # 将 ctx 字段绑定到模块全局：保持既有方法引用不变，对象引用同一性由调用方保证
+        # （ctx.holdings 即 HOLDINGS 本体，非拷贝）
+        _g = globals()
+        _g['HOLDINGS'] = ctx.holdings
+        _g['VIRTUAL_TRADES'] = ctx.virtual_trades
+        _g['T_MODE'] = ctx.t_mode
+        _g['DAILY_DECISION_STATS'] = ctx.daily_decision_stats
+        _g['MINUTE_FETCH_STATUS'] = ctx.minute_fetch_status
+        _g['MINUTE_FETCH_DETAIL'] = ctx.minute_fetch_detail
+        _g['DAILY_CONTEXT_CACHE'] = ctx.daily_context_cache
+        _g['SIGNAL_OUTCOME_TRACKER'] = ctx.signal_outcome_tracker
+        _g['BACKTEST_DAY_CACHE'] = ctx.backtest_day_cache
+        # 可调用依赖：无条件绑定（ctx 缺失时用默认，保证最小 ctx 也能实例化）
+        _g['_now'] = ctx.now or datetime.now
+        _g['get_today_str'] = ctx.get_today_str or (lambda: datetime.now().strftime("%Y-%m-%d"))
+        _g['_append_jsonl'] = ctx.append_jsonl or (lambda *a, **kw: None)
+        _g['_trace_path'] = ctx.trace_path or (lambda n, d=None: "")
+        _g['fetch_minute_bar'] = ctx.fetch_minute_bar or (lambda *a, **kw: pd.DataFrame())
+        _g['_default_daily_context'] = ctx.default_daily_context or (
+            lambda c, s="", r="": {"daily_status": s, "daily_reason": r, "daily_buy_t_ok": False})
+        _g['send_morning_alert'] = ctx.send_morning_alert or (lambda *a, **kw: None)
+        _g['notify_alert_cleared'] = ctx.notify_alert_cleared or (lambda *a, **kw: None)
+        if params is not None:
+            _g['PARAMS'] = params
         self.buy_count_per_stock: Dict[str, int] = {}
         self.sell_count_per_stock: Dict[str, int] = {}
         # C1' 口径B（W33 验证开关软消费，默认关）：record_signal 层当日已记录买信号计数

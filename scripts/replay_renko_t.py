@@ -63,8 +63,15 @@ def run_evaluate(code, df, step_min=5):
     se.MINUTE_FETCH_STATUS = {code: "ok"}
     se.PERSIST_INTRADAY_STATE = False
     se.PARAMS = PARAMS
-
-    eng = SignalEngine()
+    # P2-1: EngineContext 显式注入（now=SIM_NOW 回测时间注入契约）
+    from core.signal_engine import EngineContext
+    ctx = EngineContext(
+        holdings=se.HOLDINGS, virtual_trades=se.VIRTUAL_TRADES,
+        minute_fetch_status=se.MINUTE_FETCH_STATUS, minute_fetch_detail={},
+        t_mode={}, daily_decision_stats={}, daily_context_cache={}, signal_outcome_tracker={},
+        now=lambda: se.SIM_NOW,
+    )
+    eng = SignalEngine(ctx)
     signals = []
     # 每5分钟边界(含9:30/收盘)
     eval_times = df[df["time"].dt.minute % step_min == 0]["time"].unique()
