@@ -170,52 +170,15 @@ def load_snapshot_df(code: str, date_str: str = None) -> tuple:
     if target not in (today, yesterday):
         return pd.DataFrame(), {}, None
 
-    import urllib.request as _ur, os as _os
-    for _k in ["http_proxy", "https_proxy", "HTTP_PROXY", "HTTPS_PROXY",
-               "ALL_PROXY", "all_proxy"]:
-        _os.environ.pop(_k, None)
-    _os.environ["NO_PROXY"] = "*"
-    symbol = ("sh" + code if code[0] in "56" else "sz" + code)
-    try:
-        url = f"https://ifzq.gtimg.cn/appstock/app/minute/query?code={symbol}"
-        req = _ur.Request(url, headers={
-            "User-Agent": "Mozilla/5.0", "Referer": "https://gu.qq.com/"})
-        raw = _ur.urlopen(req, timeout=8).read().decode("utf-8", errors="replace")
-        data = json.loads(raw)
-    except Exception:
+    # P1-2 收敛：market_data provider（gm 主源/腾讯兜底），time datetime64、volume=手
+    from core.market_data import get_provider
+    df = get_provider().minute(code, target)
+    if df is None or df.empty:
         return pd.DataFrame(), {}, None
-
-    symbol_data = data.get("data", {}).get(symbol) or {}
-    minute_arr = symbol_data.get("data", {}).get("data") or []
-    if not minute_arr:
-        return pd.DataFrame(), {}, None
-
-    # 日期来自返回数据（格式YYYYMMDD）
-    raw_date = symbol_data.get("data", {}).get("date", "")
-    use_date = f"{raw_date[:4]}-{raw_date[4:6]}-{raw_date[6:8]}" if len(raw_date) >= 8 else (date_str or datetime.now().strftime("%Y-%m-%d"))
-
-    # fix P2-4: 校验响应数据日期与目标日期一致，不符视为无效数据（置 insufficient_data）
-    if use_date != target:
-        return pd.DataFrame(), {}, use_date
-
-    rows = []
-    for b in minute_arr:
-        parts = str(b).split()
-        if len(parts) < 2:
-            continue
-        t = use_date + " " + parts[0][:2] + ":" + parts[0][2:4]
-        price = float(parts[1]) if len(parts) > 1 else 0
-        vol = float(parts[2]) if len(parts) > 2 else 0
-        amt = float(parts[3]) if len(parts) > 3 else 0
-        rows.append({"time": t, "open": price, "high": price,
-                     "low": price, "close": price, "volume": vol, "amount": amt})
-
-    df = pd.DataFrame(rows)
     if not df.empty:
-        df["time"] = pd.to_datetime(df["time"], errors="coerce")
         df = df.sort_values("time").reset_index(drop=True)
     # online fetch 无 daily_context
-    return df, {}, use_date
+    return df, {}, target
 
 
 def _parse_snapshot_file(fp: Path, snap_date: str) -> tuple:

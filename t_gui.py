@@ -316,28 +316,18 @@ class Api:
                 {"symbol": "sh000688", "name": "科创50"},
                 {"symbol": "sh000680", "name": "科创综指"},
             ]
-            # 腾讯实时行情
-            url = "https://qt.gtimg.cn/q=" + ",".join(i["symbol"] for i in tx_indices)
-            req = _ur.Request(url, headers={"User-Agent": "Mozilla/5.0",
-                                            "Referer": "https://gu.qq.com/"})
-            data = _ur.urlopen(req, timeout=4).read().decode("gbk", errors="replace")
+            # 指数实时行情（P1-2 收敛：tencent_provider.index_auction，竞价/快照专用保留腾讯）
+            from core.market_data.tencent_provider import TencentProvider
+            idx_snaps = TencentProvider().index_auction([i["symbol"] for i in tx_indices])
             px = {}
-            for line in data.splitlines():
-                line = line.strip()
-                if "=" not in line or '"' not in line:
-                    continue
-                body = line[line.index('"') + 1: line.rindex('"')]
-                f = body.split("~")
-                if len(f) < 40:
-                    continue
-                try:
-                    px[f[2]] = {
-                        "price": float(f[3]), "pre_close": float(f[4]),
-                        "change": float(f[31]) if f[31] else 0.0,
-                        "change_pct": float(f[32]) if f[32] else 0.0,
-                    }
-                except (ValueError, IndexError):
-                    continue
+            for code, d in idx_snaps.items():
+                price = d.get("auction_price") or 0
+                pre_close = d.get("pre_close") or 0
+                px[code[2:]] = {
+                    "price": price, "pre_close": pre_close,
+                    "change": round(price - pre_close, 3) if price and pre_close else 0.0,
+                    "change_pct": d.get("gap_pct") or 0.0,
+                }
             for i in tx_indices:
                 base = i["symbol"][2:]
                 p = px.get(base)
@@ -482,23 +472,13 @@ class Api:
             sym = _to_symbol(code)
             if sym not in symbols.values():  # 同一只股票（如 000988/000988_B）只请求一次
                 symbols[code] = sym
-        try:
-            import os as _os
-            import urllib.request as _ur
-            for _k in ["http_proxy", "https_proxy", "HTTP_PROXY", "HTTPS_PROXY",
-                       "ALL_PROXY", "all_proxy"]:
-                _os.environ.pop(_k, None)
-            _os.environ["NO_PROXY"] = "*"
-            url = "https://qt.gtimg.cn/q=" + ",".join(symbols.values())
-            req = _ur.Request(url, headers={"User-Agent": "Mozilla/5.0",
-                                            "Referer": "https://gu.qq.com/"})
-            data = _ur.urlopen(req, timeout=4).read().decode("gbk", errors="replace")
-        except Exception:
-            data = ""
+        # P1-2 收敛：tencent_provider.snapshot_auction（快照/竞价专用保留腾讯）
+        from core.market_data.tencent_provider import TencentProvider
+        snaps = TencentProvider().snapshot_auction(list(symbols.keys()))
 
         ts = datetime.now().strftime("%H:%M:%S")
         out["ts"] = ts
-        if not data or "~" not in data:
+        if not snaps:
             # 回退：用 pre_close
             out["source"] = "fallback"
             for code, info in cur.items():
@@ -516,25 +496,16 @@ class Api:
             return out
 
         out["source"] = "live"
-        # 1) 解析 API → {base_code: {price,pre_close,change,change_pct}}
+        # 1) snapshot_auction → {base_code: {price,pre_close,change,change_pct}}
         px = {}
-        for line in data.splitlines():
-            line = line.strip()
-            if "=" not in line or '"' not in line:
-                continue
-            body = line[line.index('"') + 1: line.rindex('"')]
-            f = body.split("~")
-            if len(f) < 40:
-                continue
-            base = f[2]
-            try:
-                px[base] = {
-                    "price": float(f[3]), "pre_close": float(f[4]),
-                    "change": float(f[31]) if f[31] else 0.0,
-                    "change_pct": float(f[32]) if f[32] else 0.0,
-                }
-            except (ValueError, IndexError):
-                continue
+        for base, d in snaps.items():
+            price = d.get("price") or 0
+            pre_close = d.get("pre_close") or 0
+            px[base] = {
+                "price": price, "pre_close": pre_close,
+                "change": round(price - pre_close, 3) if price and pre_close else 0.0,
+                "change_pct": d.get("pct") or 0.0,
+            }
 
         # 2) 按 holdings 条目驱动 → 每个条目用自己的 code/cost/qty，查同一个 base 的价格
         for code, info in cur.items():
@@ -1440,32 +1411,17 @@ class Api:
                     out["error"] = "东财拉取日线失败"
                     return out
             else:
-                # 2026-08-25: 腾讯 WAF 间歇性 501 拦截不同主机（ifzq / web.ifzq 轮换），多主机兜底
-                _last_exc = None
-                for _host in ("ifzq.gtimg.cn", "web.ifzq.gtimg.cn"):
-                    try:
-                        url = f"https://{_host}/appstock/app/fqkline/get?param={symbol},day,,,400,qfq"
-                        req = _ur.Request(url, headers={"User-Agent": "Mozilla/5.0",
-                                                        "Referer": "https://finance.qq.com/"})
-                        raw = _ur.urlopen(req, timeout=10).read().decode("utf-8", errors="ignore")
-                        data = json.loads(raw)
-                        stock_data = data.get("data", {}).get(symbol)
-                        kline = stock_data.get("day") or stock_data.get("qfqday") or []
-                        if kline:
-                            rows = []
-                            for item in kline:
-                                if isinstance(item, list) and len(item) >= 6:
-                                    rows.append({
-                                        "date": item[0], "open": float(item[1]), "close": float(item[2]),
-                                        "high": float(item[3]), "low": float(item[4]), "volume": float(item[5]),
-                                    })
-                            out["name"] = stock_data.get("qt", {}).get(symbol, [None, code])[1] or code
-                            break
-                    except Exception as e:
-                        _last_exc = e
-                        continue
-                else:
-                    out["error"] = f"拉取日线失败: {_last_exc or '全部主机返回空'}"
+                # P1-2 收敛：market_data provider（gm 主源/腾讯兜底）
+                from core.market_data import get_provider
+                try:
+                    df = get_provider().daily(code, 400)
+                    rows = []
+                    if df is not None and not df.empty:
+                        for r in df.itertuples():
+                            rows.append({"date": r.date, "open": r.open, "close": r.close,
+                                         "high": r.high, "low": r.low, "volume": r.volume})
+                except Exception as e:
+                    out["error"] = f"拉取日线失败: {e}"
                     return out
 
         # 2026-08-24: 网络拉取的指数/东财日线写磁盘缓存（当日，下次秒回）
@@ -3399,18 +3355,13 @@ class Api:
         if not query:
             return {"results": []}
         results = []
-        # 1. 精确代码: 腾讯行情直接查
+        # 1. 精确代码: provider 快照直查（名称；竞价/快照专用腾讯，gm 无中文名）
         if query.isdigit() and len(query) == 6:
-            symbol = "sh" + query if query[0] in "56" else "sz" + query
             try:
-                url = f"https://qt.gtimg.cn/q={symbol}"
-                req = _ur.Request(url, headers={"User-Agent": "Mozilla/5.0",
-                                                "Referer": "https://gu.qq.com/"})
-                raw = _ur.urlopen(req, timeout=5).read().decode("gbk", errors="replace")
-                if "~" in raw:
-                    f = raw.split('"')[1].split("~")
-                    if len(f) > 3:
-                        results.append({"code": query, "name": f[1]})
+                from core.market_data.tencent_provider import TencentProvider
+                snap = TencentProvider().snapshot_auction([query])
+                if query in snap and snap[query].get("name"):
+                    results.append({"code": query, "name": snap[query]["name"]})
             except Exception:
                 pass
         # 2. 名称模糊: 从 watchlist_jiuyan.json 匹配（{code: {name,...}} 或 list）
