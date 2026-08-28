@@ -44,25 +44,21 @@ def manual_chain(code, date_str, etp):
 
 
 def auto_chain(code, gm_symbol, date_str, etp):
-    """auto 侧判定链（gm 直拉数据路径 + 同一决策核）。"""
+    """auto 侧判定链（P4-6：走 execution/auto/build_decision_auto 真实代码路径，EOD 口径 df_1min=None）。
+
+    与 execution/auto/gm_main.py BASE 建仓块同款决策适配器（core/build_decision 单一真源）。"""
     from core.market_data.gm_provider import GmProvider
-    from core import build_decision as bd
+    from execution.auto import build_decision_auto as bda
     gp = GmProvider()
     df = gp.daily(code, days=200)  # provider 契约：内部 6 位码，codec 内部转 GM 格式
     idx = gp.index_daily("sh000001", days=200)
     if df is None or df.empty or idx is None or idx.empty:
         return {"verdict": "data_unavailable", "go": None, "veto": [], "regime": None,
                 "score": None, "features": {}}
-    f = bd.features_from_daily(df, date_str)
-    r = bd.regime_from_index_daily(idx, date_str, etp)
-    regime = r.get("regime", "unknown")
-    if not f:
-        return {"verdict": "weak", "go": False, "veto": [], "regime": regime,
-                "score": 0, "features": {}, "data_insufficient": True}
-    dec = bd.timing_decision(f, regime, etp)
-    verdict, score = bd.verdict_from_timing(dec["go"], regime, f, False)
-    return {"verdict": verdict, "go": dec["go"], "veto": dec["veto"], "regime": regime,
-            "score": score, "features": f}
+    dec = bda.decide(df, idx, date_str, params=etp, df_1min=None)
+    return {"verdict": dec["verdict"], "go": dec["go"], "veto": dec["veto"],
+            "regime": dec["regime"], "score": dec["score"], "features": dec.get("features", {}),
+            "data_insufficient": dec.get("data_insufficient", False)}
 
 
 def main():

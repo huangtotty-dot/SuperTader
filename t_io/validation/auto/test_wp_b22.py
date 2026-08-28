@@ -147,6 +147,25 @@ def make_ctx(code, now_str, qty, cost, base_ref=None, trend="TREND_RANGE"):
     return ctx
 
 
+def _daily_df_up():
+    """P4-6: build_decision 上行日线（→ signal），与 test_wp_b20 同口径。"""
+    n = 150
+    base = 50.0
+    closes = [base + i * 0.3 for i in range(n)]
+    dates = pd.date_range("2026-01-01", periods=n, freq="B")
+    return pd.DataFrame({"date": dates.strftime("%Y-%m-%d"),
+                         "open": closes, "high": [c + 1.0 for c in closes],
+                         "low": [c - 1.0 for c in closes], "close": closes,
+                         "volume": [100000.0] * n})
+
+
+def _index_df_up():
+    n = 150
+    dates = pd.date_range("2026-01-01", periods=n, freq="B")
+    return pd.DataFrame({"date": dates.strftime("%Y-%m-%d"),
+                         "close": [3000.0 + i * 1.0 for i in range(n)]})
+
+
 def drive_bar(ctx, code, now_str, close, ma5, trend=None, buy_sig=None):
     """驱动 main.on_bar 一根 bar；返回本 bar 内 order_volume 的调用列表。"""
     ctx.now = datetime.strptime(now_str, "%Y-%m-%d %H:%M:%S")
@@ -157,9 +176,13 @@ def drive_bar(ctx, code, now_str, close, ma5, trend=None, buy_sig=None):
     if buy_sig is not None:
         ctx.engine.evaluate = lambda *a, **k: (buy_sig.score, 0.0, buy_sig)
     calls = []
+    # P4-6: build_decision 需要指数日线 + 个股 _daily_df
+    import analysis.index_regime as _ir
+    _ir.GM_INDEX_CACHE["SHSE.000001"] = _index_df_up()
+    _dc = dict(DAILY_CTX, _stock_trend_state=trend, daily_ma5=ma5,
+               _daily_df=_daily_df_up())
     with mock.patch.object(main, "_build_bar_df", return_value=df), \
-         mock.patch.object(main, "_refresh_daily_ctx",
-                           return_value=dict(DAILY_CTX, _stock_trend_state=trend, daily_ma5=ma5)), \
+         mock.patch.object(main, "_refresh_daily_ctx", return_value=_dc), \
          mock.patch.object(main, "_get_holding",
                            side_effect=lambda c, cd, s: dict(c.manual_position[s])), \
          mock.patch.object(main, "_base_topup_qty", return_value=0), \

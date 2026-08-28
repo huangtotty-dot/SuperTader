@@ -72,7 +72,42 @@ def make_ohlc():
     return {"close": close, "high": high, "low": low}
 
 
+def _daily_df(profile):
+    """P4-6: 构造 core/build_decision 消费的日线 df（date/open/high/low/close/volume）。
+    up=平稳上行(signal) / pullback=上行后深回撤但仍在ma60上(approaching) / weak=下行破ma60(weak)。"""
+    n = 150
+    base = 50.0
+    slope = 0.3  # 较陡上行，给 pullback 留出"多头结构但深回撤"的余量
+    if profile == "up":
+        closes = [base + i * slope for i in range(n)]
+    elif profile == "pullback":
+        closes = [base + i * slope for i in range(n)]
+        # 近15日自峰值回撤 ~7%：price 仍>ma60（多头结构）但 drawdown<-3% → approaching
+        _peak = closes[n - 16]
+        _drop = 0.07 * _peak
+        for i in range(n - 15, n):
+            closes[i] = _peak - _drop * (i - (n - 15)) / 14.0
+    else:  # weak：下行，price<ma60
+        closes = [base + (n - i) * slope for i in range(n)]
+    dates = pd.date_range("2026-01-01", periods=n, freq="B")
+    return pd.DataFrame({
+        "date": dates.strftime("%Y-%m-%d"),
+        "open": closes, "high": [c + 1.0 for c in closes],
+        "low": [c - 1.0 for c in closes], "close": closes,
+        "volume": [100000.0] * n,
+    })
+
+
+def _index_df_up():
+    """P4-6: trend_up 指数日线（close 上行，close>ma60×1.005）。"""
+    n = 150
+    dates = pd.date_range("2026-01-01", periods=n, freq="B")
+    return pd.DataFrame({"date": dates.strftime("%Y-%m-%d"),
+                         "close": [3000.0 + i * 1.0 for i in range(n)]})
+
+
 def make_daily_ctx(**over):
+    _profile = over.pop("_daily_df_profile", "weak")
     dc = {
         "daily_macd_golden": False,
         "daily_price_ref": 50.0,
@@ -84,6 +119,7 @@ def make_daily_ctx(**over):
         "daily_macd_dif": -0.5,
         "daily_macd_dea": 0.0,      # 非多头
         "_daily_ohlc": make_ohlc(),
+        "_daily_df": _daily_df(_profile),   # P4-6: build_decision 日线
         "daily_status": "ok",
         "_m2_pool_pass": True,
     }
@@ -131,7 +167,7 @@ def clear_events():
 
 
 # ══ T1: 冰点通道 signal（转向+BOLL冰点+缩量+5分钟冰点 全过） ══
-dc1 = make_daily_ctx()
+dc1 = make_daily_ctx(_daily_df_profile="pullback")  # T7 用 build_decision=approaching
 m5 = make_m5_df(ice=True)
 r1 = pb.eval_dual_channels(dc1, 50.0, m5_df=m5, scan_type="intraday")
 check("T1a 冰点 signal（iceberg）", r1["verdict"] == "signal" and r1["channel"] == "iceberg",
@@ -153,6 +189,7 @@ dc3 = make_daily_ctx(
     daily_vol_today=300.0, daily_vol_ma5=100.0,   # 放量 3.0
     daily_rsi14=60.0,
     daily_macd_dif=1.0, daily_macd_dea=0.5,       # 多头
+    _daily_df_profile="up",    # P4-6: build_decision 上行 → signal
 )
 r3 = pb.eval_dual_channels(dc3, 54.0, m5_df=None, scan_type="intraday")
 check("T3a 突破 signal（breakout）", r3["verdict"] == "signal" and r3["channel"] == "breakout",
@@ -227,6 +264,9 @@ def drive_bar(ctx, now_str, close, dc):
     ctx.now = datetime.strptime(now_str, "%Y-%m-%d %H:%M:%S")
     df = make_df(close, now_str)
     calls = []
+    # P4-6: build_decision 需要指数日线（trend_up）
+    import analysis.index_regime as _ir
+    _ir.GM_INDEX_CACHE["SHSE.000001"] = _index_df_up()
     with mock.patch.object(main, "_build_bar_df", return_value=df), \
          mock.patch.object(main, "_refresh_daily_ctx", return_value=dc), \
          mock.patch.object(main, "_base_topup_qty", return_value=0), \
@@ -247,15 +287,17 @@ buys6 = [c for c in calls6 if c.get("side") == main.OrderSide_Buy]
 check("T6 突破 signal → BASE 建仓下单", len(buys6) == 1, f"buys={[c.get('volume') for c in buys6]}")
 check("T6b base_order 审计落盘", any(a.get("event") == "base_order" for a in read_audit()))
 
-# ══ T7: BASE 冰点 approaching → 拦截 + build_gate 事件 ══
+# ══ T7: BASE build_decision 非signal → 拦截 + build_gate 事件（P4-6 接线） ══
+# dc1 为 pullback 场景，build_decision 给非 signal（approaching/weak 由决策核定，其分支覆盖见
+# t_io/validation/build_decision/test_build_decision.py 23 用例 + build_verdict_parity 68/68）
 clear_events()
 c7 = make_ctx("2026-08-19 09:36:00")
-calls7 = drive_bar(c7, "2026-08-19 09:36:00", 50.0, dc1)   # dc1 冰点但无 m5 → approaching
+calls7 = drive_bar(c7, "2026-08-19 09:36:00", 50.0, dc1)   # dc1 非signal → 拦截
 buys7 = [c for c in calls7 if c.get("side") == main.OrderSide_Buy]
 risk7 = [e for e in read_events() if e.get("kind") == "build_gate"]
-check("T7a 冰点 approaching → BASE 拦截无下单", len(buys7) == 0, f"buys={len(buys7)}")
-check("T7b build_gate 事件留痕（approaching）",
-      len(risk7) >= 1 and "approaching" in risk7[0].get("detail", ""), f"risk={risk7}")
+check("T7a build_decision 非signal → BASE 拦截无下单", len(buys7) == 0, f"buys={len(buys7)}")
+check("T7b build_gate 事件留痕（verdict=非signal）",
+      len(risk7) >= 1 and risk7[0].get("detail", "").startswith("verdict="), f"risk={risk7}")
 
 # ══ T8: BASE weak → 拦截 ══
 clear_events()
