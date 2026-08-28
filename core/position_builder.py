@@ -49,6 +49,25 @@ from analysis.indicators import (  # noqa: F401
     resample_to_15min, add_15min_indicators,
 )
 
+# ── P3-2 池分管：manual 侧只扫描 pool!=auto 的标的 ──
+sys.path.insert(0, str(BASE / "config"))
+try:
+    import auto_pool  # noqa: E402
+except Exception:
+    auto_pool = None  # 配置缺失时 fail-open（回退 pre-P3 全量扫描，不破生产）
+
+
+def _is_manual_pool(code, wl_info=None) -> bool:
+    """池分管判定：watchlist 条目带 pool 字段用其值；否则按 AUTO_POOL 归属。
+    manual 侧（本模块扫描）只处理 manual 池标的。"""
+    if isinstance(wl_info, dict):
+        p = wl_info.get("pool")
+        if p:
+            return str(p) != "auto"
+    if auto_pool is not None:
+        return auto_pool.is_manual(code)
+    return True
+
 
 # ── 飞书推送（可选，Webhook 未配置时静默跳过）──
 try:
@@ -1559,6 +1578,8 @@ def scan_ma_breaks(date_str: str = None, silent: bool = False) -> list:
                     continue
                 if info.get("status") not in ("monitoring", "signal"):
                     continue
+                if not _is_manual_pool(code, info):  # P3-2 池分管：auto 池标的归 auto 侧
+                    continue
                 _add(code, info.get("name") or code, False)
     except Exception:
         pass
@@ -1569,6 +1590,8 @@ def scan_ma_breaks(date_str: str = None, silent: bool = False) -> list:
                 holdings = json.load(f)
             for code, h in (holdings.items() if isinstance(holdings, dict) else []):
                 if not isinstance(h, dict) or int(h.get("qty") or 0) <= 0:
+                    continue
+                if not _is_manual_pool(code):  # P3-2 池分管：auto 池持仓归 auto 侧监控
                     continue
                 _add(code, h.get("name") or code, True)
     except Exception:
@@ -1889,7 +1912,8 @@ def run_position_scan(date_str: str = None, capital: float = None,
         stocks = {k: v for k, v in stocks.items()
                   if v.get("status") in ("monitoring", "signal")
                   and not k.startswith("_example")
-                  and v.get("status") != "archived"}  # A-5(2026-08-21): 排除 archived 停用股
+                  and v.get("status") != "archived"  # A-5(2026-08-21): 排除 archived 停用股
+                  and _is_manual_pool(k, v)}  # P3-2 池分管：manual 侧只扫 manual 池
 
     if not stocks:
         if not silent:

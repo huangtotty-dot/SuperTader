@@ -1164,6 +1164,7 @@ function renderShadow(shadow, qtyFreeze) {
 
 /* ---- ⑥ 建仓扫描 ---- */
 function renderPB(pb) {
+  window._pbLastPayload = pb;  // P3-2 池筛选：切换下拉时用最近一次 payload 重渲染
   const el = document.getElementById("pbBody");
   if (!pb || !pb.has_data) {
     el.innerHTML = '<div class="empty">当日无建仓扫描记录（position_builder 未运行）</div>';
@@ -1200,7 +1201,14 @@ function renderPB(pb) {
     if (moved) delta = ` 📊 approaching 变动 ${moved} 只`;
   }
   if (!delta && prev.sig !== undefined) delta = " ✓ 无变化";
-  const rows = (pb.rows || []).map(r => {
+  // P3-2 池分管：按下拉筛选（全部/manual/auto），未标注按 manual
+  const _poolFilter = window._pbPoolFilter || "all";
+  const srcRows = (pb.rows || []).filter(
+    r => _poolFilter === "all" || (r.pool || "manual") === _poolFilter);
+  const rows = srcRows.map(r => {
+    const poolBadge = (r.pool === "auto")
+      ? `<span class="badge" style="background:#2a4a5a;color:#8ad4ff" title="自动盘池（goldminer auto 侧管理，manual 不扫描）">自动</span>`
+      : `<span class="badge" style="background:#3a3a3a;color:#bbb" title="人工池（superTrader manual 侧管理）">人工</span>`;
     const conds = r.conditions || {};
     // fix P1-3: insufficient_data 行圆点区显示『—』而非 5 个空心圆
     const isNoData = r.verdict === "insufficient_data";
@@ -1325,6 +1333,7 @@ function renderPB(pb) {
       <tr id="pb-row-${esc(r.code || '')}" ondblclick="openStockChart('${esc(r.code||'')}','${esc(r.name||r.code||'')}')" style="cursor:pointer;${isStale ? "opacity:.45;" : ""}" title="双击看K线${isStale ? "（数据陈旧，距今超过10分钟）" : ""}">
         <td>${esc(r.name || "")} <span class="mono cell-dim">${esc(r.code || "")}</span>
           ${monitorBadge}${chBadge}${apBadge}${tmBadge}${icBadge}${vetoBadge}${r.in_holdings ? `<span class="badge hold">持仓</span>` : ""}${errTxt}${blockLine}</td>
+        <td style="text-align:center">${poolBadge}</td>
         <td>${verdictBadge(r.verdict)}</td>
         <td class="num" title="${esc(scoreCellTitle)}">${scoreCellHtml}</td>
         <td class="num ${metCls}"><b>${isNoData ? "—" : metCount + "/3"}</b></td>
@@ -1362,18 +1371,24 @@ function renderPB(pb) {
   ${pb.progress ? `<div class="cell-dim" style="font-size:10px;margin-bottom:6px">扫描进度: <b>${pb.progress.scanned}/${pb.progress.total_candidates}</b> 只已扫${pb.progress.pending ? ` · <b class="warn">${pb.progress.pending}</b> 只待扫描` : ''} · 已扫描 <b>${pb.progress.online_fetched}</b> 只 · 无数据 <b class="warn" title="insufficient_data：5分钟K线/快照不足，未参与条件判定">${pb.progress.no_data}</b> 只<span class="cell-dim">（K线/快照不足）</span></div>` : ""}
       <table>
         <thead><tr>
-          <th>股票</th><th>判定</th><th class="num">得分</th><th class="num">通过</th><th class="num">价</th>
+          <th>股票</th><th title="P3-2 池分管：人工=manual侧扫描 / 自动=auto侧管理">池</th><th>判定</th><th class="num">得分</th><th class="num">通过</th><th class="num">价</th>
           <th title="突破箱体=第一优先级">突破</th>
           <th title="通道/箱体/背离等技术形态">技术标签</th>
           <th title="时机门控：市场有方向/多头结构/回撤到位（GO→signal，震荡→降频）">时机条件</th>
           <th title="背离显示连续标记：60分连续底背离高亮（180天验证有区分度）；其余连续/单次背离命中率≈随机基线，仅供参考">背离</th>
           <th class="num">建议股数</th><th class="num">建议价</th><th class="num">所需资金</th><th>扫描</th><th></th>
         </tr></thead>
-        <tbody>${rows || '<tr><td colspan="14" class="empty">无扫描结果</td></tr>'}</tbody>
+        <tbody>${rows || '<tr><td colspan="15" class="empty">无扫描结果</td></tr>'}</tbody>
       </table>
       <div class="cell-dim" style="font-size:11px;margin-top:8px">●=通过 ○=未通过 · 时机条件：${Object.values(condLabels).join(" / ")} · 第5位🚫=否决因子(爆量≥3倍或偏离MA60超+20%) · GO(多头追强/空头抄底)→signal，震荡→降频 · 观察=震荡市结构达标(不推送) · 盘中每10s刷新</div>
     </div>`;
   // fix P1-2: 页脚文案与后端实际逻辑一致（≥80 且突破箱体→signal，突破另需≥40）
+}
+
+/* ---- P3-2 池分管：切换池筛选下拉时重渲染建仓表 ---- */
+function setPoolFilter(v) {
+  window._pbPoolFilter = v;
+  if (window._pbLastPayload) renderPB(window._pbLastPayload);
 }
 
 /* ---- ⑦ 加仓观察 ---- */
