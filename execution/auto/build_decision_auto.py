@@ -10,16 +10,35 @@ core/build_decision.py 决策核（P3 双侧单一真源）。纯函数、无 gm
 盘中（df_1min 提供）：GO 后跑 W35 日内确认，未过 → verdict=approaching(待日内确认)不建仓；
 EOD 口径（df_1min=None）：跳过 W35（与 manual 侧 EOD 同）。
 """
+import importlib.util
 import os
 import sys
 
-_ST = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-for _p in (_ST, os.path.dirname(os.path.abspath(__file__)),
-           os.path.join(os.path.dirname(os.path.abspath(__file__)), "_gm")):
-    if _p not in sys.path:
-        sys.path.insert(0, _p)
+# 跨仓消费 core/build_decision.py（决策核，纯函数无 IO）。repo 上下文走常规 import；
+# .gszq 部署环境（sys.path 无 superTrader 根）回退 importlib 绝对路径加载——与 .gszq 壳
+# _load_token / gm_main _load_auto_pool 同款模式。此前用 dirname×2 + sys.path 注入的写法
+# 在 .gszq 环境必崩（_ST 少一层解析到 execution/，ModuleNotFoundError: core，2026-08-28 复审实测）。
+def _load_build_decision():
+    if "core.build_decision" in sys.modules:
+        return sys.modules["core.build_decision"]
+    try:
+        from core import build_decision as m
+        return m
+    except ImportError:
+        pass
+    _root = os.environ.get("SUPERTRADER_ROOT") or os.path.dirname(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    _path = os.path.join(_root, "core", "build_decision.py")
+    if not os.path.exists(_path):
+        raise RuntimeError(f"决策核缺失（P4-6 依赖）: {_path}")
+    _spec = importlib.util.spec_from_file_location("core.build_decision", _path)
+    _m = importlib.util.module_from_spec(_spec)
+    sys.modules["core.build_decision"] = _m
+    _spec.loader.exec_module(_m)
+    return _m
 
-from core import build_decision as bd  # noqa: E402
+
+bd = _load_build_decision()
 
 
 def decide(stock_daily_df, index_daily_df, date_str, params=None, df_1min=None) -> dict:

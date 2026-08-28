@@ -26,3 +26,4 @@ t_io/validation/auto/replay/
 execution/t_io/
 execution/auto/_gm/runtime/
 execution/auto/gmcache/
+execution/auto/logs/
