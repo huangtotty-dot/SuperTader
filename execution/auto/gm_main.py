@@ -1054,22 +1054,21 @@ def on_bar(context, bars):
             # R1/A3: 底仓过趋势闸——TREND_BREAKDOWN 延迟到次日（F5: 回退61a19e6激进模式）
             _trend = _dc.get("_stock_trend_state", "TREND_RANGE")
             _topup_blocked = False
-            # WP-B19 c: MA5 破位日禁 BASE 建仓/回补（最先执行，任何门槛前拦截；每票每日去重留痕）
-            _base_ma5 = float(_dc.get("daily_ma5", 0) or 0)
-            _base_ma5_tol = float(STOCK_PARAMS.get(code, {}).get("ma5_break_tolerance", 0.0))
-            if not _topup_blocked and _base_ma5 > 0 and cp < _base_ma5 * (1 - _base_ma5_tol):
-                _bma5k = f'_ma5_block_{code}'
-                if getattr(context, _bma5k, '') != now.strftime("%Y-%m-%d"):
-                    setattr(context, _bma5k, now.strftime("%Y-%m-%d"))
+            # WP-B19-rev(2026-08-28): 硬止损触发日禁 BASE 建仓/回补（最先执行，任何门槛前拦截；每票每日去重留痕）
+            _hs_today_base = (getattr(context, "_hard_stop_today", {}) or {}).get(code)
+            if not _topup_blocked and _hs_today_base == now.strftime("%Y-%m-%d"):
+                _bhs_k = f'_hard_stop_block_{code}'
+                if getattr(context, _bhs_k, '') != now.strftime("%Y-%m-%d"):
+                    setattr(context, _bhs_k, now.strftime("%Y-%m-%d"))
                     try:
-                        write_risk(str(now), "ma5_break_block",
-                                   f"BASE cp={cp:.2f} < ma5={_base_ma5:.2f}", code=code)
+                        write_risk(str(now), "hard_stop_block",
+                                   f"BASE blocked after HARD_STOP today", code=code)
                     except Exception:
                         pass
-                    _audit_write({"event": "buy_blocked", "code": code, "reason": "ma5_break",
-                                  "where": "base", "cp": cp, "ma5": _base_ma5,
+                    _audit_write({"event": "buy_blocked", "code": code, "reason": "hard_stop",
+                                  "where": "base", "cp": cp,
                                   "time": str(now)})
-                    print(f"[{now:%H:%M:%S}] BASE {code} MA5破位→禁建仓 cp={cp:.2f}<ma5={_base_ma5:.2f}")
+                    print(f"[{now:%H:%M:%S}] BASE {code} 硬止损触发日→禁建仓 cp={cp:.2f}")
                 if not _is_topup:
                     return
                 _topup_blocked = True
@@ -1356,7 +1355,7 @@ def on_bar(context, bars):
         max_buys = stock_params.get("max_buy_times_per_stock", 3)
 
         # ── D1: 引擎冷却/计数 ──
-        threshold = stock_params.get("notify_sell_threshold", 65) if sig.action in ("SELL_HIGH", "PANIC_SELL", "TRAIL_SELL", "TREND_EXIT", "TARGET_SELL", "MA5_EXIT") else \
+        threshold = stock_params.get("notify_sell_threshold", 65) if sig.action in ("SELL_HIGH", "PANIC_SELL", "TRAIL_SELL", "TREND_EXIT", "TARGET_SELL", "HARD_STOP_EXIT") else \
                     stock_params.get("notify_buy_threshold", 43)
 
         if sig.score < threshold:
@@ -1364,22 +1363,21 @@ def on_bar(context, bars):
 
         # 执行交易
         if sig.action in ("BUY_LOW", "ADD_POS"):
-            # WP-B19 c: MA5 破位日禁一切买入（BUY_LOW/buyback/ADD_POS 一视同仁；每票每日去重留痕）
-            _ma5_v = float(daily_ctx.get("daily_ma5", 0) or 0)
-            _ma5_v_tol = float(STOCK_PARAMS.get(code, {}).get("ma5_break_tolerance", 0.0))
-            if _ma5_v > 0 and cp < _ma5_v * (1 - _ma5_v_tol):
-                _mbk = f'_ma5_block_{code}'
+            # WP-B19-rev(2026-08-28): 硬止损触发日禁一切买入（BUY_LOW/buyback/ADD_POS 一视同仁；每票每日去重留痕）
+            _hs_today = (getattr(context, "_hard_stop_today", {}) or {}).get(code)
+            if _hs_today == now.strftime("%Y-%m-%d"):
+                _mbk = f'_hard_stop_block_{code}'
                 if getattr(context, _mbk, '') != now.strftime("%Y-%m-%d"):
                     setattr(context, _mbk, now.strftime("%Y-%m-%d"))
                     try:
-                        write_risk(str(now), "ma5_break_block",
-                                   f"cp={cp:.2f} < ma5={_ma5_v:.2f}", code=code)
+                        write_risk(str(now), "hard_stop_block",
+                                   f"BUY {sig.action} blocked after HARD_STOP today", code=code)
                     except Exception:
                         pass
-                    _audit_write({"event": "buy_blocked", "code": code, "reason": "ma5_break",
-                                  "action": sig.action, "cp": cp, "ma5": _ma5_v,
+                    _audit_write({"event": "buy_blocked", "code": code, "reason": "hard_stop",
+                                  "action": sig.action, "cp": cp,
                                   "time": str(now)})
-                    print(f"[{now:%H:%M:%S}] BUY {code} MA5破位→禁买 cp={cp:.2f}<ma5={_ma5_v:.2f}")
+                    print(f"[{now:%H:%M:%S}] BUY {code} 硬止损触发日→禁买 {sig.action} cp={cp:.2f}")
                 continue
             if _killed:
                 try:
@@ -1575,7 +1573,7 @@ def on_bar(context, bars):
             except Exception as e:
                 print(f"[{now:%H:%M:%S}] BUY {code} 失败: {e}")
 
-        elif sig.action in ("SELL_HIGH", "PANIC_SELL", "TRAIL_SELL", "TREND_EXIT", "TARGET_SELL", "MA5_EXIT"):
+        elif sig.action in ("SELL_HIGH", "PANIC_SELL", "TRAIL_SELL", "TREND_EXIT", "TARGET_SELL", "HARD_STOP_EXIT"):
             # T4: 仲裁器统一处理（地板 + 阈值 + sizer + 下单 + 审计）——sell_channels._sell_arbiter
             sell_channels._sell_arbiter(context, code, sig, pos_qty, cp, now, holding,
                                         threshold, stock_params, gm_sym)
@@ -1634,9 +1632,9 @@ def on_order_status(context, order):
         if code in STOCKS:
             _action = 'BUY_LOW' if side == 1 else 'SELL_HIGH'
             _rta = context.engine.record_trade_action(code, _action, volume, price)
-            # WP-B19 f: MA5_EXIT 破位离场不生成回补记忆（破位不回头；
+            # WP-B19 f: HARD_STOP_EXIT 硬止损离场不生成回补记忆（破位不回头；
             # record_trade_action 以 SELL_HIGH 记 arm，此处按真实通道清除）
-            if side == 2 and getattr(context, "_pending_sell_action", {}).get(symbol, ("", 0))[0] == "MA5_EXIT":
+            if side == 2 and getattr(context, "_pending_sell_action", {}).get(symbol, ("", 0))[0] == "HARD_STOP_EXIT":
                 context.engine.awaiting_buyback.pop(code, None)
                 _rta = None
         _rta = _rta or {}

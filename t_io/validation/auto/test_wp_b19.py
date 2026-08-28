@@ -1,19 +1,20 @@
 # coding=utf-8
 """
-tests/test_wp_b19.py — WP-B19 MA5破位全离通道 + O-12 pos_key容差 + O-13 推送节流 验证
+tests/test_wp_b19.py — WP-B19-rev(2026-08-28): -8% 硬止损通道 + O-12 pos_key容差 + O-13 推送节流 验证
 
-背景（docs/回测复盘/施工方案_WP-B19_MA5破位全离通道.md）：
-  0819 owner 决策"跌破五日均线应该直接离场"：第四类保护通道 MA5_EXIT（全离+当日禁买），
-  补齐 TRAIL/PANIC/TREND_EXIT 未覆盖的 MA5 破位场景；同包 O-12 pos_key 成本容差、
-  O-13 watcher 同票同 kind 风控推送节流。
+背景：
+  0819 原决策"跌破五日均线应该直接离场"已替换为 0828 决策：-8% 硬止损（HARD_STOP_EXIT）
+  全离 + 当日禁买。依据 exit_strategy_mining_20260828 报告，硬止损在日线 close 模拟下
+  显著优于 MA5 静态破位（mean_ret +5.6% vs +2.7%，max_mae -18.8% vs -18.6%）。
+  同包 O-12 pos_key 成本容差、O-13 watcher 同票同 kind 风控推送节流。
 
-验证范围（施工方案三节 8 场景）：
-  T1  开盘破 MA5 持仓 500 全可用 → MA5_EXIT 500 全离，信号在 TRAIL 之前生成
-  T2  破位日 BUY_LOW / buyback / BASE 三种买入意图 → 全部 ma5_break 拦截留痕
-  T3  破位日部分仓位 T+1 锁定 → 卖可用部分；次日仍破位 → 续卖剩余
-  T4  次日收复 MA5 → 买入禁令自动解除；无新 MA5_EXIT
-  T5  同日 MA5 破位 + TRAIL 触发 → 仅 MA5_EXIT 成交（优先级 e），无 TRAIL_SELL
-  T6  MA5_EXIT 成交后 → 无 buyback_armed 事件（f）
+验证范围（8 场景）：
+  T1  亏损 -10%（<-8%）持仓 500 全可用 → HARD_STOP_EXIT 500 全离，信号在 TRAIL 之前生成
+  T2  硬止损触发日 BUY_LOW / BASE 买入意图 → 全部 hard_stop_block 拦截留痕
+  T3  部分仓位 T+1 锁定 → 卖可用部分；次日仍触发硬止损 → 续卖剩余
+  T4  次日价格回升（未触发硬止损）→ 买入禁令自动解除；无新 HARD_STOP_EXIT
+  T5  同日 HARD_STOP_EXIT + TRAIL 触发 → 仅 HARD_STOP_EXIT 成交（优先级 P0），无 TRAIL_SELL
+  T6  HARD_STOP_EXIT 成交后 → 无 buyback_armed 事件（f）
   T7  O-12: pos_key 成本差 +0.002 / +0.04（容差内）→ 恢复+指纹更新；+8% → 作废留痕
   T8  O-13: 同票同 kind 30min 内 3 次 entry_gate → 仅 1 条推送（事件流照写）
 
@@ -195,94 +196,96 @@ def live_ctx(qty, cost, now):
     )
 
 
-# ══ T1: 开盘破 MA5 → MA5_EXIT 全离 500（TRAIL 之前生成） ══
+# ══ T1: 亏损 -10%（<-8% 硬止损）→ HARD_STOP_EXIT 全离 500（TRAIL 之前生成） ══
 clear_events()
 c1 = make_ctx("2026-08-19 09:36:00", qty=500, cost=50.0, base_ref=500)
-calls1 = drive_bar(c1, "2026-08-19 09:36:00", 54.0, ma5=MA5)   # cp 54 < ma5 56
+calls1 = drive_bar(c1, "2026-08-19 09:36:00", 45.0, ma5=MA5)   # cp 45 < cost 50 × 0.92
 s1 = sell_calls(calls1)
-sig1 = [e for e in read_events() if e.get("event") == "signal" and e.get("action") == "MA5_EXIT"]
-check("T1a MA5_EXIT 全离 500 股（非 sizer 定量）",
+sig1 = [e for e in read_events() if e.get("event") == "signal" and e.get("action") == "HARD_STOP_EXIT"]
+check("T1a HARD_STOP_EXIT 全离 500 股（非 sizer 定量）",
       len(s1) == 1 and s1[0]["volume"] == 500, f"sells={[(c.get('volume')) for c in s1]}")
-check("T1b 信号事件 action=MA5_EXIT 且无 TRAIL_SELL（优先级 e）",
+check("T1b 信号事件 action=HARD_STOP_EXIT 且无 TRAIL_SELL（优先级 P0）",
       len(sig1) == 1 and not [e for e in read_events()
                               if e.get("event") == "signal" and e.get("action") == "TRAIL_SELL"],
       f"sig={sig1 and sig1[0].get('action')}")
-check("T1c 破位日标记 _ma5_broken", getattr(c1, "_ma5_broken", {}).get(CODE) == "2026-08-19",
-      f"broken={getattr(c1, '_ma5_broken', {}).get(CODE)}")
+check("T1c 硬止损触发日标记 _hard_stop_today",
+      getattr(c1, "_hard_stop_today", {}).get(CODE) == "2026-08-19",
+      f"hard_stop={getattr(c1, '_hard_stop_today', {}).get(CODE)}")
 
-# ══ T2: 破位日禁一切买入（BUY_LOW 被 MA5_EXIT 覆盖 / BASE 拦截留痕） ══
+# ══ T2: 硬止损触发日禁一切买入（BUY_LOW 被 HARD_STOP_EXIT 覆盖 / BASE 拦截留痕） ══
 clear_events()
 c2 = make_ctx("2026-08-19 09:36:00", qty=500, cost=50.0, base_ref=500)
-c2.engine.evaluate = lambda *a, **k: (70.0, 0.0, buy_low_sig(54.0))
-calls2 = drive_bar(c2, "2026-08-19 09:36:00", 54.0, ma5=MA5)
+c2.engine.evaluate = lambda *a, **k: (70.0, 0.0, buy_low_sig(45.0))
+calls2 = drive_bar(c2, "2026-08-19 09:36:00", 45.0, ma5=MA5)
 buys2 = [c for c in calls2 if c.get("side") == main.OrderSide_Buy]
 sig2 = [e for e in read_events() if e.get("event") == "signal"]
-check("T2a 破位日 BUY_LOW 无买入成交（MA5_EXIT 优先级 e 覆盖禁买）",
+check("T2a 硬止损触发日 BUY_LOW 无买入成交（HARD_STOP_EXIT 优先级 P0 覆盖禁买）",
       len(buys2) == 0, f"buys={len(buys2)}")
-check("T2b 破位日信号为 MA5_EXIT（非 BUY_LOW）",
-      any(e.get("action") == "MA5_EXIT" for e in sig2)
+check("T2b 硬止损触发日信号为 HARD_STOP_EXIT（非 BUY_LOW）",
+      any(e.get("action") == "HARD_STOP_EXIT" for e in sig2)
       and not any(e.get("action") == "BUY_LOW" for e in sig2),
       f"actions={[e.get('action') for e in sig2]}")
 
 clear_events()
 c2b = make_ctx("2026-08-19 09:36:00", qty=0, cost=50.0, base_ref=500)
 c2b._base_settled = set()   # 未建仓 → 走 BASE 路径
-calls2b = drive_bar(c2b, "2026-08-19 09:36:00", 54.0, ma5=MA5)
-check("T2c 破位日 BASE 建仓被拦", len(calls2b) == 0, f"orders={len(calls2b)}")
-risk2b = [e for e in read_events() if e.get("kind") == "ma5_break_block"]
-check("T2d BASE 侧 ma5_break_block 留痕", len(risk2b) >= 1, f"risk={len(risk2b)}")
+c2b._hard_stop_today = {CODE: "2026-08-19"}  # 模拟当日已触发硬止损
+calls2b = drive_bar(c2b, "2026-08-19 09:36:00", 45.0, ma5=MA5)
+check("T2c 硬止损触发日 BASE 建仓被拦", len(calls2b) == 0, f"orders={len(calls2b)}")
+risk2b = [e for e in read_events() if e.get("kind") == "hard_stop_block"]
+check("T2d BASE 侧 hard_stop_block 留痕", len(risk2b) >= 1, f"risk={len(risk2b)}")
 
-# ══ T3: T+1 锁定——卖可用部分，次日仍破位续卖剩余 ══
+# ══ T3: T+1 锁定——卖可用部分，次日仍触发硬止损续卖剩余 ══
 clear_events()
 c3 = make_ctx("2026-08-19 09:36:00", qty=500, cost=50.0, base_ref=500)
 c3.manual_position[GM_SYM]["available"] = 200   # 当日买 300 锁定
-calls3 = drive_bar(c3, "2026-08-19 09:36:00", 54.0, ma5=MA5)
+calls3 = drive_bar(c3, "2026-08-19 09:36:00", 45.0, ma5=MA5)
 s3 = sell_calls(calls3)
-check("T3a 破位日卖可用 200（T+1 锁定部分不卖）",
+check("T3a 硬止损日卖可用 200（T+1 锁定部分不卖）",
       len(s3) == 1 and s3[0]["volume"] == 200, f"sells={[c.get('volume') for c in s3]}")
-# 次日仍破位：先模拟 T3a 的 200 卖出成交（释放 F9 在途额度），pos=300 全可用 → 续卖 300
+# 次日仍满足硬止损：先模拟 T3a 的 200 卖出成交（释放 F9 在途额度），pos=300 全可用 → 续卖 300
 main.on_order_status(c3, {"symbol": GM_SYM, "status": 3, "volume": 200,
-                          "side": 2, "price": 54.0, "filled_vwap": 54.0})
+                          "side": 2, "price": 45.0, "filled_vwap": 45.0})
 c3.manual_position[GM_SYM]["qty"] = 300
 c3.manual_position[GM_SYM]["available"] = 300
 c3.manual_position[GM_SYM]["t_qty"] = 300
-calls3b = drive_bar(c3, "2026-08-20 09:36:00", 54.0, ma5=MA5)
+calls3b = drive_bar(c3, "2026-08-20 09:36:00", 45.0, ma5=MA5)
 s3b = sell_calls(calls3b)
-check("T3b 次日仍破位续卖剩余 300",
+check("T3b 次日仍触发硬止损续卖剩余 300",
       len(s3b) == 1 and s3b[0]["volume"] == 300, f"sells={[c.get('volume') for c in s3b]}")
 
-# ══ T4: 次日收复 MA5 → 禁解除，无新 MA5_EXIT ══
+# ══ T4: 次日价格回升（未触发硬止损）→ 禁解除，无新 HARD_STOP_EXIT ══
 clear_events()
-c4 = make_ctx("2026-08-20 09:36:00", qty=300, cost=52.0, base_ref=500)
-calls4 = drive_bar(c4, "2026-08-20 09:36:00", 56.5, ma5=MA5)   # cp 56.5 > ma5 56 收复
-check("T4a 收复 MA5 → 无 MA5_EXIT/卖出", len(sell_calls(calls4)) == 0, f"sells={len(calls4)}")
-c4.engine.evaluate = lambda *a, **k: (70.0, 0.0, buy_low_sig(56.5))
-calls4b = drive_bar(c4, "2026-08-20 09:37:00", 56.5, ma5=MA5)
+c4 = make_ctx("2026-08-20 09:36:00", qty=300, cost=50.0, base_ref=500)
+calls4 = drive_bar(c4, "2026-08-20 09:36:00", 52.0, ma5=MA5)   # profit=+4%，不触发 -8%
+check("T4a 未触发硬止损 → 无 HARD_STOP_EXIT/卖出", len(sell_calls(calls4)) == 0, f"sells={len(calls4)}")
+c4.engine.evaluate = lambda *a, **k: (70.0, 0.0, buy_low_sig(52.0))
+calls4b = drive_bar(c4, "2026-08-20 09:37:00", 52.0, ma5=MA5)
 sig4 = [e for e in read_events() if e.get("event") == "signal" and e.get("action") == "BUY_LOW"]
-risk4 = [e for e in read_events() if e.get("kind") == "ma5_break_block"]
-check("T4b 收复后 BUY_LOW 信号照写（禁解除）", len(sig4) == 1, f"sig={len(sig4)}")
-check("T4c 收复后无新增 ma5_break_block 拦截", len(risk4) == 0, f"risk={len(risk4)}")
+risk4 = [e for e in read_events() if e.get("kind") == "hard_stop_block"]
+check("T4b 未触发日 BUY_LOW 信号照写（禁解除）", len(sig4) == 1, f"sig={len(sig4)}")
+check("T4c 未触发日无新增 hard_stop_block 拦截", len(risk4) == 0, f"risk={len(risk4)}")
 
-# ══ T5: 同日 MA5 破位 + TRAIL 回撤 → 仅 MA5_EXIT（优先级 e） ══
+# ══ T5: 同日 HARD_STOP_EXIT + TRAIL 回撤 → 仅 HARD_STOP_EXIT（优先级 P0） ══
 clear_events()
 c5 = make_ctx("2026-08-19 09:36:00", qty=500, cost=50.0, base_ref=500)
 c5.manual_position[GM_SYM]["_trail_state"] = "ARMED"
-c5.manual_position[GM_SYM]["_trail_peak"] = 58.0
-calls5 = drive_bar(c5, "2026-08-19 09:36:00", 54.0, ma5=MA5)   # 回撤 (58-54)/58≈6.9%
-s5 = sell_calls(calls5)
+c5.manual_position[GM_SYM]["_trail_peak"] = 49.0   # 从 49 峰值回撤到 45 ≈ 8.2%，TRAIL 本应触发
+calls5 = drive_bar(c5, "2026-08-19 09:36:00", 45.0, ma5=MA5)   # profit=-10% 同时触发硬止损
+check("T5a 仅 HARD_STOP_EXIT 成交一次（全离 500）",
+      len(sell_calls(calls5)) == 1 and sell_calls(calls5)[0]["volume"] == 500,
+      f"sells={[c.get('volume') for c in sell_calls(calls5)]}")
 sig5 = [e for e in read_events() if e.get("event") == "signal" and e.get("action") == "TRAIL_SELL"]
-check("T5a 仅 MA5_EXIT 成交一次（全离 500）", len(s5) == 1 and s5[0]["volume"] == 500,
-      f"sells={[c.get('volume') for c in s5]}")
-check("T5b 无 TRAIL_SELL 信号（MA5 优先级最高）", len(sig5) == 0, f"trail_sig={len(sig5)}")
+check("T5b 无 TRAIL_SELL 信号（硬止损优先级最高）", len(sig5) == 0, f"trail_sig={len(sig5)}")
 
-# ══ T6: MA5_EXIT 成交不生成 buyback（f） ══
+# ══ T6: HARD_STOP_EXIT 成交不生成 buyback（f） ══
 clear_events()
 c6 = make_ctx("2026-08-19 09:36:00", qty=500, cost=50.0, base_ref=500)
-drive_bar(c6, "2026-08-19 09:36:00", 54.0, ma5=MA5)   # MA5_EXIT 500 卖 → pending_sell_action
+drive_bar(c6, "2026-08-19 09:36:00", 45.0, ma5=MA5)   # HARD_STOP_EXIT 500 卖 → pending_sell_action
 main.on_order_status(c6, {"symbol": GM_SYM, "status": 3, "volume": 500,
-                          "side": 2, "price": 54.0, "filled_vwap": 54.0})
+                          "side": 2, "price": 45.0, "filled_vwap": 45.0})
 arm6 = [e for e in read_events() if e.get("event") == "buyback_armed"]
-check("T6a MA5_EXIT 成交后无 buyback_armed 事件", len(arm6) == 0, f"armed={len(arm6)}")
+check("T6a HARD_STOP_EXIT 成交后无 buyback_armed 事件", len(arm6) == 0, f"armed={len(arm6)}")
 check("T6b 不生成回补记忆（awaiting_buyback 无）", CODE not in c6.engine.awaiting_buyback)
 
 # ══ T7: O-12 pos_key 成本容差匹配 ══
