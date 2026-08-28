@@ -2454,8 +2454,14 @@ class Api:
                     return float(f[i]) if f[i] else d
                 except (ValueError, IndexError):
                     return d
+            # 时间戳字段[30]=YYYYMMDDHHMMSS：开盘前/无新数据时腾讯返回的是上一交易日收盘，
+            # 此时补 forming bar 会把昨收重复计入 MA5 → 误判破线（2026-08-28 摩恩电气事故）。
+            # ts_date 归一化为 YYYY-MM-DD，与 _stock_tags_one 里 datetime.now() 口径对齐。
+            ts = f[30] if len(f) > 30 else ""
+            _tsd = ts[:8] if len(ts) >= 8 and ts[:8].isdigit() else None
+            ts_date = (f"{_tsd[:4]}-{_tsd[4:6]}-{_tsd[6:8]}" if _tsd else None)
             return {"price": price, "open": _f(5), "high": _f(33), "low": _f(34),
-                    "volume": _f(6)}
+                    "volume": _f(6), "ts": ts, "ts_date": ts_date}
         except Exception:
             return None
 
@@ -2470,9 +2476,11 @@ class Api:
         # P0: ifzq K线主机被 WAF 501 拦截时 fetch_daily_kline 静默回退旧缓存（缺当日 forming bar），
         # 破5/10日线 等标签会用昨日收盘误判（现价已站上均线仍显示破线）。补当日实时 forming bar。
         try:
+            # 仅当实时快照时间戳为今日才补 forming bar：开盘前/快照陈旧时腾讯返回昨收，
+            # 补进去会把昨收重复计入 MA5 → cur 看似低于虚高的 MA5，误判"破5日线"（08-28 事故）。
             if str(df["date"].iloc[-1]) != datetime.now().strftime("%Y-%m-%d"):
                 live = self._live_quote_forming(code)
-                if live:
+                if live and live.get("ts_date") == datetime.now().strftime("%Y-%m-%d"):
                     fb = pd.DataFrame([{"date": datetime.now().strftime("%Y-%m-%d"),
                                         "open": live["open"], "close": live["price"],
                                         "high": live["high"], "low": live["low"],
