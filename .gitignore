@@ -1,28 +1,19 @@
-t_io/backtests/
-t_io/cache/
-t_io/minute_snapshots/
-t_io/backtest_cache/
-t_io/backtest_1year_data/
-t_io/replay/
-t_io/rotation/daily_cache/
+# ── t_io：整体忽略运行时数据/回测结果，仅保留 .py 源码脚本 ──
+t_io/**
+!t_io/**/
+!t_io/**/*.py
+
 __pycache__/
 *.pyc
 node_modules/
-t_io/logs/*.log
-t_io/gm_bridge/events_*.jsonl
-t_io/gm_bridge/heartbeat_*.jsonl
+
 stock_hunter/data/
 stock_hunter/watchlist_jiuyan.json
 stock_hunter/config.json
 stock_hunter/__pycache__/
 stock_hunter/output/
 
-t_io/state/llm_config.json
-t_io/state/gm_config.json
-
 # P4 运行时产物（auto 引擎事件桥 / 回放校验 / 错位脚手架）
-t_io/bridge/
-t_io/validation/auto/replay/
 execution/auto/_gm/runtime/
 execution/auto/gmcache/
 execution/auto/logs/
