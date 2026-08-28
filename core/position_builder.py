@@ -56,6 +56,8 @@ try:
 except Exception:
     auto_pool = None  # 配置缺失时 fail-open（回退 pre-P3 全量扫描，不破生产）
 
+from core import build_decision as _bd  # noqa: E402  P3 同源：建仓判定决策核单一真源
+
 
 def _is_manual_pool(code, wl_info=None) -> bool:
     """池分管判定：watchlist 条目带 pool 字段用其值；否则按 AUTO_POOL 归属。
@@ -611,47 +613,9 @@ def check_intraday_confirm(df_1min, vol_min: float = 1.2) -> tuple:
 
     无未来函数：只用截止最新一根【已收盘】15m bar 的数据；未收盘的当前根不参与。
     df_1min 为当日 1 分钟线（intraday 快照）。数据不足时 insufficient=True（不视为未确认）。
+    P3 同源：实现委托 core/build_decision.intraday_confirm（双侧单一真源）。
     """
-    if df_1min is None or df_1min.empty or len(df_1min) < 20:
-        return False, "日内分钟数据不足", True
-    d = df_1min.copy()
-    d["time"] = pd.to_datetime(d["time"], errors="coerce")
-    d = d.dropna(subset=["time"]).sort_values("time").reset_index(drop=True)
-    # 当日累计 VWAP（Σamount/Σvol；缺 amount 用 close*vol 代理）
-    if "amount" in d.columns and d["amount"].fillna(0).sum() > 0:
-        cum_amt = d["amount"].fillna(0).cumsum()
-    else:
-        cum_amt = (d["close"] * d["volume"].fillna(0)).cumsum()
-    cum_vol = d["volume"].fillna(0).cumsum().replace(0, np.nan)
-    d["vwap_cum"] = cum_amt / cum_vol
-
-    df15 = add_15min_indicators(resample_to_15min(d))
-    if df15 is None or df15.empty:
-        return False, "15分钟数据不足", True
-    df15 = df15.copy()
-    df15["time"] = pd.to_datetime(df15["time"], errors="coerce")
-    last_min_ts = d["time"].iloc[-1]
-    # 取最新一根【已收盘】15m bar（收盘时刻 <= 当日最新分钟+1min）
-    closed = df15[(df15["time"] + pd.Timedelta(minutes=15)) <= (last_min_ts + pd.Timedelta(minutes=1))]
-    if closed.empty:
-        return False, "尚无已收盘15分钟bar", True
-    bar = closed.iloc[-1]
-    c = bar.get("close")
-    ema8 = bar.get("ema_fast_15m")
-    volr = bar.get("vol_ratio_15m")
-    if any(pd.isna(x) for x in (c, ema8, volr)):
-        return False, "15分钟指标NaN", True
-    close_ts = bar["time"] + pd.Timedelta(minutes=15)
-    vw_rows = d[d["time"] <= close_ts]
-    vwap = float(vw_rows["vwap_cum"].iloc[-1]) if (not vw_rows.empty and pd.notna(vw_rows["vwap_cum"].iloc[-1])) else None
-    ema_ok = float(c) > float(ema8)
-    vol_ok = float(volr) > vol_min
-    vwap_ok = (vwap is None) or (float(c) >= vwap)
-    passed = ema_ok and vol_ok and vwap_ok
-    detail = (f"15分钟确认: 站上EMA8={ema_ok}(c={float(c):.3f}/ema8={float(ema8):.3f}) "
-              f"放量={vol_ok}(量比{float(volr):.2f}>{vol_min}) 站上VWAP={vwap_ok}"
-              f"{f'(vwap={vwap:.3f})' if vwap is not None else ''}")
-    return passed, detail, False
+    return _bd.intraday_confirm(df_1min, vol_min=vol_min)
 
 
 # ============================================================
@@ -1082,15 +1046,11 @@ def scan_stock(code: str, stock_info: dict, date_str: str = None,
             _dir_ok = _regime in ("trend_up", "trend_dn")
             _trend = bool(_f.get("trend_multihead"))
             _dd = float(_f["drawdown"]) if "drawdown" in _f else None
+            # P3 同源：回撤口径（B-4 range 用多头 ≥-3%）委托 build_decision.dd_threshold_ok
             if _data_insufficient:
                 _dd_ok = False
-            elif _regime == "trend_up":
-                _dd_ok = _dd >= -0.03
-            elif _regime == "trend_dn":
-                _dd_ok = _dd < -0.10
             else:
-                # B-4(2026-08-21): range 市观察态回撤单独算——用多头口径 dd>=-3%(非硬编码 False)
-                _dd_ok = _dd >= -0.03
+                _dd_ok = _bd.dd_threshold_ok(_dd, _regime)
             _golden = bool(_f.get("macd_golden_5d"))
             _vetoes = _tv.get("veto") or []   # 2026-08-27: 否决因子（爆量/远离MA60，仅trend_up触发）
             _dd_rule = "空头<-10%" if _regime == "trend_dn" else "多头≥-3%"
@@ -1108,17 +1068,9 @@ def scan_stock(code: str, stock_info: dict, date_str: str = None,
                     "passed": False, "detail": f"否决因子触发: {'、'.join(_vetoes)}"}
             if _data_insufficient:
                 result["errors"].append("个股日线数据不足(timing features为空)")
-            _score = (30 if _dir_ok else 0) + (30 if _trend else 0) + (30 if _dd_ok else 0) + (10 if _golden else 0)
-            if _tv.get("go"):
-                _v = "signal"
-            elif _regime == "range" and _trend and _dd_ok:
-                # B-4(2026-08-21): range 市观察态 watch_signal——多头结构+浅回撤，
-                # 只进 trace/C18 清单喂样本，不推飞书不出 position 建议
-                _v = "watch_signal"
-            elif _dir_ok and (_trend or _dd_ok):
-                _v = "approaching"
-            else:
-                _v = "weak"
+            # P3 同源：verdict/score 映射委托 build_decision.verdict_from_timing（单一真源）。
+            # B-4 watch_signal：range 市观察态——多头结构+浅回撤，只进 trace/C18 清单喂样本，不推飞书不出 position 建议
+            _v, _score = _bd.verdict_from_timing(bool(_tv.get("go")), _regime, _f, _data_insufficient)
             result["verdict"] = _v
             result["composite_score"] = _score
             # P1(2026-08-25): verdict 与 score 脱钩修复。
