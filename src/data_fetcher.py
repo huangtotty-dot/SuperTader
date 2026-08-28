@@ -37,46 +37,10 @@ def _fnum(v, default: float = 0.0) -> float:
 
 
 def _fetch_daily_bar_tencent(api_code: str, count: int = 400) -> pd.DataFrame:
-    """fix D4: 腾讯 fqkline 前复权日线（与 position_builder.fetch_daily_kline 同源口径）。
-    ETF 日线主用此链路（工程内已验证 588170 有完整数据）；个股 akshare 失败时也作兜底。"""
-    market = "sh" if api_code.startswith(("5", "6", "9")) else "sz"
-    symbol = f"{market}{api_code}"
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-        "Referer": "https://finance.qq.com/",
-    }
-    # 2026-08-25: 腾讯 WAF 间歇性 501 拦截不同主机（ifzq / web.ifzq 轮换），多主机兜底
-    data = {}
-    for _host in ("ifzq.gtimg.cn", "web.ifzq.gtimg.cn"):
-        try:
-            url = f"https://{_host}/appstock/app/fqkline/get?param={symbol},day,,,{count},qfq"
-            req = urllib.request.Request(url, headers=headers)
-            with urllib.request.urlopen(req, timeout=10) as response:
-                data = json.loads(response.read().decode("utf-8", errors="ignore"))
-            if data.get("data", {}).get(symbol):
-                break
-        except Exception:
-            continue
-    node = data.get("data", {}).get(symbol, {}) or {}
-    kline = node.get("qfqday") or node.get("day") or []
-    rows = []
-    for item in kline:
-        if not isinstance(item, (list, tuple)) or len(item) < 6:
-            continue
-        try:
-            amount = float(item[6]) if len(item) > 6 else np.nan
-        except (TypeError, ValueError):
-            amount = np.nan
-        rows.append({
-            "date": str(item[0])[:10],
-            "open": float(item[1]),
-            "close": float(item[2]),
-            "high": float(item[3]),
-            "low": float(item[4]),
-            "volume": float(item[5]),
-            "amount": amount,
-        })
-    return pd.DataFrame(rows)
+    """fix D4: 前复权日线。P1-2 收敛：改走 core/market_data provider（gm 主源，腾讯兜底）。
+    ETF 日线主用此链路；个股 akshare 失败时也作兜底。返回 date/open/high/low/close/volume。"""
+    from core.market_data import get_provider
+    return get_provider().daily(api_code, count)
 
 
 def _fetch_daily_bar(code: str, is_etf: bool = False, as_of: Optional[str] = None) -> tuple:

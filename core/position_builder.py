@@ -300,98 +300,11 @@ def _live_forming_bar(symbol: str) -> dict:
 
 
 def fetch_daily_kline(code: str) -> pd.DataFrame:
-    """拉腾讯日线（前复权，365天），带本地缓存（每日更新）。
-    返回 {date, open, close, high, low, volume}。"""
-    import urllib.request as _ur, os as _os
-    from datetime import datetime as _dt
-    code = str(code)
-    # 本地缓存路径
-    try:
-        _DAILY_CACHE_DIR.mkdir(parents=True, exist_ok=True)
-        cache_fp = _DAILY_CACHE_DIR / f"{code}.json"
-    except Exception:
-        cache_fp = None
+    """拉日线（前复权，默认800天）。P1-2 收敛：改走 core/market_data provider（gm 主源，腾讯兜底）。
+    返回 {date, open, close, high, low, volume}（列名与历史一致；列序为 date/open/high/low/close/volume）。"""
+    from core.market_data import get_provider
+    return get_provider().daily(code)
 
-    # 本地有缓存且日期是今天 → 直接用
-    if cache_fp and cache_fp.exists():
-        try:
-            cached = json.loads(cache_fp.read_text(encoding="utf-8"))
-            if cached.get("date") == _dt.now().strftime("%Y-%m-%d") and cached.get("rows"):
-                rows = cached["rows"]
-                # fix P0-14: 缓存含当日未完成K线且距缓存时间超过15分钟 → 重新拉取（防盘中冻结）
-                # fix P0-15: 盘前写入的缓存缺当日K线(_last_date<今天)，09:15后也重拉补今日K线
-                _now = _dt.now()
-                _today = _now.strftime("%Y-%m-%d")
-                _last_date = str(rows[-1].get("date", "")) if rows else ""
-                _saved_at = cached.get("saved_at")
-                try:
-                    _ts = _dt.strptime(_saved_at, "%Y-%m-%d %H:%M:%S") if _saved_at \
-                        else _dt.fromtimestamp(cache_fp.stat().st_mtime)
-                except Exception:
-                    _ts = _dt.fromtimestamp(cache_fp.stat().st_mtime)
-                _stale_intraday = ((_last_date < _today and _now.strftime("%H:%M") >= "09:15")
-                                   or (_last_date == _today
-                                       and (_now - _ts).total_seconds() > 15 * 60))
-                if not _stale_intraday:
-                    return pd.DataFrame(rows)
-        except Exception:
-            pass
-
-    for _k in ["http_proxy", "https_proxy", "HTTP_PROXY", "HTTPS_PROXY",
-               "ALL_PROXY", "all_proxy"]:
-        _os.environ.pop(_k, None)
-    _os.environ["NO_PROXY"] = "*"
-    symbol = ("sh" + code if code[0] in "56" else "sz" + code)
-    # 2026-08-25: 腾讯 WAF 间歇性 501 拦截不同主机（ifzq / web.ifzq 轮换），单主机失败会静默
-    # 回退旧缓存 → K线图/行情显示盘中旧价而非真实收盘。多主机兜底。
-    for _host in ("ifzq.gtimg.cn", "web.ifzq.gtimg.cn"):
-        try:
-            url = f"https://{_host}/appstock/app/fqkline/get?param={symbol},day,,,800,qfq"
-            req = _ur.Request(url, headers={"User-Agent": "Mozilla/5.0",
-                                            "Referer": "https://finance.qq.com/"})
-            raw = _ur.urlopen(req, timeout=8).read().decode("utf-8", errors="ignore")
-            data = json.loads(raw)
-            kline = data.get("data", {}).get(symbol, {}).get("day") or \
-                    data.get("data", {}).get(symbol, {}).get("qfqday") or []
-            rows = [{"date": i[0], "open": float(i[1]), "close": float(i[2]),
-                     "high": float(i[3]), "low": float(i[4]), "volume": float(i[5])}
-                    for i in kline if len(i) >= 6]
-            if not rows:
-                continue
-            # 写缓存（每日）
-            if cache_fp:
-                try:
-                    # fix P0-14: 记录 saved_at，供读取端判断盘中缓存是否超龄
-                    cache_fp.write_text(json.dumps(
-                        {"date": _dt.now().strftime("%Y-%m-%d"),
-                         "saved_at": _dt.now().strftime("%Y-%m-%d %H:%M:%S"),
-                         "rows": rows},
-                        ensure_ascii=False), encoding="utf-8")
-                except Exception:
-                    pass
-            return pd.DataFrame(rows)
-        except Exception:
-            continue
-    # 全部主机失败 → 回退旧缓存
-    if cache_fp and cache_fp.exists():
-        try:
-            cached = json.loads(cache_fp.read_text(encoding="utf-8"))
-            if cached.get("rows"):
-                df = pd.DataFrame(cached["rows"])
-                # K线主机被 WAF 501 拦截时会走到这里，缓存通常缺当日 forming bar；
-                # 补一条当日实时 bar，与正常路径"盘中最后一行=当日"契约一致（否则下游
-                # 按昨日收盘误判破均线/破位）。只拼返回值，不写回缓存，主机恢复后自然覆盖。
-                try:
-                    if len(df) and str(df["date"].iloc[-1]) < _dt.now().strftime("%Y-%m-%d"):
-                        fb = _live_forming_bar(symbol)
-                        if fb:
-                            df = pd.concat([df, pd.DataFrame([fb])], ignore_index=True)
-                except Exception:
-                    pass
-                return df
-        except Exception:
-            pass
-    return pd.DataFrame()
 
 
 def _detect_boxes_simple(df: pd.DataFrame, n_keep: int = 3) -> list:

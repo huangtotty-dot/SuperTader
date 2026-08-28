@@ -60,63 +60,24 @@ def _params() -> dict:
 
 
 def _fetch_index_daily():
-    """上证指数日线（腾讯 qfq 800天，缓存）。返回 DataFrame(date, close)。
+    """上证指数日线（前复权 800天，缓存）。返回 DataFrame(date, close)。
 
-    B-1(2026-08-21): 缓存日期校验——缓存最后日期<今天 且盘中(工作日≥09:15)时重拉，
-    避免"昨日收盘冒充今日"误判 regime（08-18 因缓存陈旧把唯一 trend_up 日误判 range 的根因）。
-    重拉失败回退旧缓存并置 index_cache_stale=True 供 trace 标记。
+    P1-2 收敛：改走 core/market_data provider（gm 主源，腾讯兜底，多主机 WAF 兜底在 provider 内）。
+    B-1(2026-08-21) 语义保留：盘中(工作日≥09:15)缓存缺今日 → 视为陈旧并置 index_cache_stale=True，
+    避免"昨日收盘冒充今日"误判 regime（08-18 根因）。
     """
-    cached_rows = None
-    cache_date = None
-    if INDEX_CACHE.exists():
-        try:
-            d = json.loads(INDEX_CACHE.read_text(encoding="utf-8"))
-            if d.get("rows"):
-                cached_rows = d["rows"]
-                cache_date = str(cached_rows[-1].get("date", ""))
-        except Exception:
-            cached_rows = None
-    today = datetime.now().strftime("%Y-%m-%d")
-    need_refresh = False
-    if cached_rows:
-        try:
-            _now = datetime.now()
-            need_refresh = (_now.weekday() < 5
-                            and _now.strftime("%H:%M") >= "09:15"
-                            and cache_date < today)
-        except Exception:
-            need_refresh = False
-    if cached_rows and not need_refresh:
-        return pd.DataFrame(cached_rows)
-    for _k in ["http_proxy", "https_proxy", "HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "all_proxy"]:
-        os.environ.pop(_k, None)
-    os.environ["NO_PROXY"] = "*"
-    # 2026-08-25: 腾讯 WAF 间歇性 501 拦截不同主机（ifzq / web.ifzq 轮换），多主机兜底
-    rows = []
-    _last_exc = None
-    for _host in ("ifzq.gtimg.cn", "web.ifzq.gtimg.cn"):
-        try:
-            url = f"https://{_host}/appstock/app/fqkline/get?param=sh000001,day,,,800,qfq"
-            req = _ur.Request(url, headers={"User-Agent": "Mozilla/5.0", "Referer": "https://finance.qq.com/"})
-            raw = _ur.urlopen(req, timeout=10).read().decode("utf-8", errors="ignore")
-            data = json.loads(raw)
-            kline = data.get("data", {}).get("sh000001", {}).get("day") or \
-                    data.get("data", {}).get("sh000001", {}).get("qfqday") or []
-            rows = [{"date": i[0], "close": float(i[2])} for i in kline if len(i) >= 3]
-            if not rows:
-                raise ValueError("上证指数日线为空")
-            break
-        except Exception as e:
-            _last_exc = e
-            continue
-    if not rows:
-        if cached_rows:  # B-1: 重拉失败回退旧缓存，标记 stale
+    from core.market_data import get_provider
+    df = get_provider().index_daily("sh000001", 800)
+    _STALE["index_cache_stale"] = False
+    if df is None or df.empty:
+        _STALE["index_cache_stale"] = True
+        return df
+    _now = datetime.now()
+    if _now.weekday() < 5 and _now.strftime("%H:%M") >= "09:15":
+        _last = str(df["date"].iloc[-1])
+        if _last < _now.strftime("%Y-%m-%d"):
             _STALE["index_cache_stale"] = True
-            return pd.DataFrame(cached_rows)
-        raise (_last_exc if _last_exc is not None else ValueError("上证指数日线为空"))
-    INDEX_CACHE.parent.mkdir(parents=True, exist_ok=True)
-    INDEX_CACHE.write_text(json.dumps({"rows": rows}, ensure_ascii=False), encoding="utf-8")
-    return pd.DataFrame(rows)
+    return df
 
 
 def _regime(date_str: str) -> dict:
