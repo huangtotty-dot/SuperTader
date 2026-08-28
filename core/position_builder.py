@@ -171,8 +171,9 @@ def load_snapshot_df(code: str, date_str: str = None) -> tuple:
         return pd.DataFrame(), {}, None
 
     # P1-2 收敛：market_data provider（gm 主源/腾讯兜底），time datetime64、volume=手
+    # 审核 #10: 在线兜底强制新鲜（ttl=0），不吃无 TTL 的陈旧 CSV 缓存
     from core.market_data import get_provider
-    df = get_provider().minute(code, target)
+    df = get_provider().minute(code, target, ttl_seconds=0)
     if df is None or df.empty:
         return pd.DataFrame(), {}, None
     if not df.empty:
