@@ -10,7 +10,7 @@ position_builder.py — 建仓信号扫描（只建议、不自动执行）
 数据源: t_io/minute_snapshots/{year}/{month}/{code}_{date}.json
        复用 indicators.py 的 5 分钟 MACD/BOLL/RSI 计算
 
-现行判定（方案A 2026-08-15 起，详见 doc/建仓五条件完全指南.md）：
+现行判定（方案A 2026-08-15 起，详见 doc/guides/建仓五条件完全指南.md）：
   verdict 由 core/timing_gate.py 的时机门控 GO 驱动——
   · 市场有方向：指数 vs MA60 缓冲带（×1.005 / ×0.97），震荡市 signal 结构性不可达
   · 多头趋势 → 追强：价>MA20&MA60 + 浅回撤≥-3%（距20日高点）
