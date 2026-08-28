@@ -25,7 +25,7 @@ if _GM_DIR not in sys.path:
 
 from config.params import PARAMS, STOCK_PARAMS
 from data.indicators import add_indicators, clean_code
-from signals.engine import SignalEngine, SIM_NOW as SE_SIM_NOW
+from t_engine_auto import SignalEngine
 from signals.position_sizer import PositionSizer
 from utils.helpers import SIM_NOW, _now, get_today_str, _default_daily_context
 from gm_bridge.writer import (
@@ -882,8 +882,8 @@ def on_bar(context, bars):
     now = context.now if hasattr(context, "now") else datetime.now()
     import utils.helpers as uh
     uh.SIM_NOW = now
-    import signals.engine as se
-    se.SIM_NOW = now
+    import t_engine_auto as tea
+    tea.SIM_NOW = now
 
     t = now.time()
     today = now.date()
