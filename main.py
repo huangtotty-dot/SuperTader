@@ -321,8 +321,19 @@ def _signal_whitelist(code, holding):
 
 
 # ==================== notify 信号通知（拆分后补充） ====================
+def _route_auto_signal(sig, holding):
+    """P2-3 auto 通道路由（P4 迁入 execution/auto/ 的闸链+下单适配器）。
+    当前公共引擎不产出 auto 信号，此为显式分叉占位；auto 执行层迁移后在此接线。"""
+    return
+
+
 def notify(sig, holding):
-    """当信号触发时发送飞书通知（V1.14 增强版：含市场状态/组合拳/预计接回价位）"""
+    """当信号触发时发送飞书通知（V1.14 增强版：含市场状态/组合拳/预计接回价位）。
+    P2-3 双消费分叉点：manual → 现有飞书链路（不动）；auto → 执行层闸链+下单（P4 迁入，当前不推送）。"""
+    # 显式 channel 分叉：auto 信号走执行层，不进入人工飞书链路（避免隐式共享副作用）
+    if getattr(sig, "channel", "manual") == "auto":
+        _route_auto_signal(sig, holding)
+        return
     try:
         if not sig or not FEISHU_WEBHOOK:
             return
