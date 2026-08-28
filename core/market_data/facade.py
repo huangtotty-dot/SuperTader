@@ -50,11 +50,36 @@ class MarketDataFacade:
             try:
                 df = self._gm.daily(code, days)
                 if df is not None and not df.empty:
+                    # 阻断5: gm 日线盘中对当日 forming bar（带 ts_date 新鲜度闸）
+                    df = self._maybe_append_forming(df, code)
+                    # 阻断6: gm 结果写缓存（含盘中 15 分钟新鲜度/B-1，由 tencent 缓存读取端执行）
+                    from .tencent_provider import save_daily_cache
+                    save_daily_cache(code, df)
                     return self._mark(_resample_period(df, period), "gm")
             except Exception as e:
                 log.warning("gm.daily 降级腾讯(%s): %s", code, str(e)[:100])
         df = self._tx.daily(code, days)
         return self._mark(_resample_period(df, period), df.attrs.get("source", "tencent"))
+
+    def _maybe_append_forming(self, df: pd.DataFrame, code: str) -> pd.DataFrame:
+        """盘中对 gm 日线补当日 forming bar（P1 审核阻断5）。
+        ts_date 新鲜度闸：快照时间戳非当日（盘前/节假日）不补，避免伪造 bar（08-28 教训）。"""
+        import datetime as _dt
+        _now = _dt.datetime.now()
+        today = _now.strftime("%Y-%m-%d")
+        if _now.weekday() >= 5 or not ("09:15" <= _now.strftime("%H:%M") <= "15:05"):
+            return df
+        if df is None or df.empty or str(df["date"].iloc[-1]) >= today:
+            return df
+        base = str(code).split("_")[0]
+        snap = self._tx.snapshot([base]).get(base)
+        if not snap or snap.get("ts_date") != today or not snap.get("price"):
+            return df
+        px = snap["price"]
+        fb = pd.DataFrame([{"date": today, "open": snap.get("open") or px,
+                            "high": snap.get("high") or px, "low": snap.get("low") or px,
+                            "close": px, "volume": snap.get("volume") or 0.0}])
+        return pd.concat([df, fb], ignore_index=True)
 
     def minute(self, code: str, date: str, ttl_seconds: int = None) -> pd.DataFrame:
         # 先查分钟 CSV 缓存（TTL 内命中直接返回，避免每轮重拉，保留既有快路径）
@@ -93,6 +118,10 @@ class MarketDataFacade:
             try:
                 df = self._gm.index_daily(index, days, end_date)
                 if df is not None and not df.empty:
+                    # 阻断6: gm 指数结果写缓存（end_date 缺省时）
+                    if end_date is None:
+                        from .tencent_provider import save_index_daily_cache
+                        save_index_daily_cache(index, df)
                     return self._mark(df, "gm")
             except Exception as e:
                 log.warning("gm.index_daily 降级腾讯(%s): %s", index, str(e)[:100])

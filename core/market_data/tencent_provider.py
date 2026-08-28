@@ -23,6 +23,55 @@ def _read_json(fp):
         return json.load(f)
 
 
+_IDX_COLS_ = ["date", "open", "high", "low", "close", "volume", "amount"]
+
+
+def _idx_ensure_cols(df, source):
+    """确保指数日线含全部列（旧缓存缺 amount 时退化为 volume，口径自洽）。"""
+    for c in _IDX_COLS_:
+        if c not in df.columns:
+            df[c] = df["volume"] if c == "amount" else 0.0
+    df = df[_IDX_COLS_]
+    df.attrs["source"] = source
+    return df
+
+
+def save_daily_cache(code: str, df, days: int = 800):
+    """写个股日线缓存（不变式 {date, saved_at, rows:[{date,open,close,high,low,volume}]}）。
+    gm 结果也写缓存（审核 P1 阻断6：gm 路径不能每次直拉）。"""
+    if df is None or df.empty:
+        return
+    code = str(code).split("_")[0]
+    recs = []
+    for r in df.itertuples():
+        recs.append({"date": r.date, "open": float(r.open), "close": float(r.close),
+                     "high": float(r.high), "low": float(r.low), "volume": float(r.volume)})
+    try:
+        os.makedirs(_DAILY_CACHE_DIR, exist_ok=True)
+        with open(os.path.join(_DAILY_CACHE_DIR, f"{code}.json"), "w", encoding="utf-8") as f:
+            f.write(json.dumps({"date": datetime.now().strftime("%Y-%m-%d"),
+                                "saved_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                                "rows": recs}, ensure_ascii=False))
+    except Exception:
+        pass
+
+
+def save_index_daily_cache(index: str, df):
+    """写指数日线缓存（含 amount 列）。"""
+    if df is None or df.empty:
+        return
+    idx = str(index).lower()
+    recs = [{"date": r.date, "open": float(r.open), "close": float(r.close),
+             "high": float(r.high), "low": float(r.low), "volume": float(r.volume),
+             "amount": float(r.amount)} for r in df.itertuples()]
+    try:
+        os.makedirs(_DAILY_CACHE_DIR, exist_ok=True)
+        with open(os.path.join(_DAILY_CACHE_DIR, f"index_{idx}.json"), "w", encoding="utf-8") as f:
+            f.write(json.dumps({"rows": recs}, ensure_ascii=False))
+    except Exception:
+        pass
+
+
 def _clear_proxy():
     for _k in ["http_proxy", "https_proxy", "HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "all_proxy"]:
         os.environ.pop(_k, None)
@@ -126,7 +175,7 @@ class TencentProvider:
         return pd.DataFrame(columns=_DAILY_COLS)
 
     # ---------- 指数日线 ----------
-    _IDX_COLS = ["date", "open", "high", "low", "close", "volume"]
+    _IDX_COLS = ["date", "open", "high", "low", "close", "volume", "amount"]
 
     def index_daily(self, index: str = "sh000001", days: int = 800, end_date: str = None) -> pd.DataFrame:
         """指数日线（腾讯 qfq，OHLCV），缓存 t_io/cache/daily_kline/index_{index}.json。
@@ -146,9 +195,7 @@ class TencentProvider:
                     need_refresh = (_now.weekday() < 5 and _now.strftime("%H:%M") >= "09:15"
                                     and cache_date < _today)
                     if cached_rows and not need_refresh:
-                        df = pd.DataFrame(cached_rows)[self._IDX_COLS]
-                        df.attrs["source"] = "cache"
-                        return df
+                        return _idx_ensure_cols(pd.DataFrame(cached_rows), "cache")
             except Exception:
                 pass
         symbol = idx.replace("sh", "sh").replace("sz", "sz")
@@ -162,7 +209,8 @@ class TencentProvider:
                 kline = data.get("data", {}).get(symbol, {}).get("day") or \
                         data.get("data", {}).get(symbol, {}).get("qfqday") or []
                 rows = [{"date": i[0], "open": float(i[1]), "close": float(i[2]),
-                         "high": float(i[3]), "low": float(i[4]), "volume": float(i[5])}
+                         "high": float(i[3]), "low": float(i[4]), "volume": float(i[5]),
+                         "amount": float(i[6]) if len(i) >= 7 and str(i[6]).replace(".", "").isdigit() else float(i[5])}
                         for i in kline if len(i) >= 6]
                 if not rows:
                     continue
@@ -170,15 +218,11 @@ class TencentProvider:
                     os.makedirs(_DAILY_CACHE_DIR, exist_ok=True)
                     with open(cache_fp, "w", encoding="utf-8") as f:
                         f.write(json.dumps({"rows": rows}, ensure_ascii=False))
-                df = pd.DataFrame(rows)[self._IDX_COLS]
-                df.attrs["source"] = "tencent"
-                return df
+                return _idx_ensure_cols(pd.DataFrame(rows), "tencent")
             except Exception:
                 continue
         if cached_rows:
-            df = pd.DataFrame(cached_rows)[self._IDX_COLS]
-            df.attrs["source"] = "cache"
-            return df
+            return _idx_ensure_cols(pd.DataFrame(cached_rows), "cache")
         return pd.DataFrame(columns=self._IDX_COLS)
 
     # ---------- 分钟线 ----------
@@ -247,6 +291,15 @@ class TencentProvider:
                 if not minute_data:
                     last_error = "symbol_missing"
                     continue
+                # P1 审核阻断3：校验响应实际日期，周末/节假日会把上一交易日伪造成当日 → 不符即空
+                _pack = minute_data.get("data")
+                resp_date = (str(_pack.get("date") or "") if isinstance(_pack, dict)
+                             else str(minute_data.get("date") or ""))
+                if resp_date and len(resp_date) >= 8:
+                    rd = f"{resp_date[:4]}-{resp_date[4:6]}-{resp_date[6:8]}"
+                    if rd != str(date):
+                        last_error = f"resp_date_mismatch({rd} != {date})"
+                        continue
                 rows = minute_data.get("data") or minute_data.get("day") or []
                 if isinstance(rows, dict):
                     rows = rows.get("data") or []   # 实际列表在 data.data[symbol].data.data 下

@@ -149,10 +149,14 @@ def _tx_kline(symbol: str, period: str, count: int, end: str) -> list:
     from core.market_data.facade import _resample_period
     try:
         p = get_provider()
+        # 按周期换算拉取量（审核 P1 阻断2）：周/月线用 count 根日线重采样会坍缩。
+        # 交易日口径：周≈5天、月≈22天，日线重采样后条数≈count。
+        mult = 5 if period == "week" else (22 if period == "month" else 1)
+        fetch_days = max(count * mult + 5, count)
         if str(symbol).startswith(("sh", "sz")):
-            df = p.index_daily(symbol, count, end)
+            df = p.index_daily(symbol, fetch_days, end)
         else:
-            df = p.daily(symbol, count)
+            df = p.daily(symbol, fetch_days)
         if df is None or df.empty:
             return []
         df = _resample_period(df, period)

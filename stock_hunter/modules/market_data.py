@@ -96,9 +96,21 @@ class MarketDataFetcher:
             for code, d in snap.items():
                 if (d.get("amount_wan") or 0) <= 0 and (d.get("price") or 0) <= 0:
                     continue
+                pct = d.get("pct") or 0.0
+                # 涨停列恢复 0/1 布尔旗标（审核 P1 阻断4）：按板块分档阈值，heat_tracker 按 0/1 计数
+                name = str(d.get("name", ""))
+                is_st = name.startswith(("*ST", "ST", "SST", "S*ST"))
+                if is_st:
+                    is_limit = 1 if pct >= 4.5 else 0
+                elif code.startswith(("30", "68")):
+                    is_limit = 1 if pct >= 19.5 else 0
+                elif code.startswith(("8", "9")):
+                    is_limit = 1 if pct >= 29.5 else 0
+                else:
+                    is_limit = 1 if pct >= 9.5 else 0
                 snapshot_map[code] = {
-                    "代码": code, "名称": d.get("name", ""), "现价": d.get("price", 0.0),
-                    "涨跌幅": d.get("pct", 0.0), "涨停": d.get("limit_up", 0.0),
+                    "代码": code, "名称": name, "现价": d.get("price", 0.0),
+                    "涨跌幅": pct, "涨停": is_limit,
                     "成交额": d.get("amount_wan", 0.0), "换手率": d.get("turnover", 0.0),
                     "振幅": d.get("amplitude", 0.0), "最高": d.get("high", 0.0),
                     "最低": d.get("low", 0.0), "今开": d.get("open", 0.0),
