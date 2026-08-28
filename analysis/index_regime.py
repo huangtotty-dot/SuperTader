@@ -342,7 +342,7 @@ def _ir_state_dir(p: Dict[str, Any]) -> str:
         return env
     if p.get("state_dir"):
         return p["state_dir"]
-    base = globals().get("BASE_DIR") or os.path.dirname(os.path.abspath(__file__))  # C17-1 修复(2026-08-18): 自解析替代 06_T
+    base = globals().get("BASE_DIR") or os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # C17-1 修复(2026-08-18): 自解析替代 06_T；2026-08-28 复审修复：包导入场景 __file__ 在 analysis/ 下，需 dirname×2 到仓库根，否则写盘错位于 analysis/t_io
     return os.path.join(base, "t_io", "index_regime")
 
 

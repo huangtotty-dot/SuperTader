@@ -59,7 +59,7 @@ from typing import Any, Dict, List, Optional, Tuple
 _IN_HOST = callable(globals().get("detect_index_regime"))
 
 if _IN_HOST:
-    _BASE_DIR = globals().get("BASE_DIR") or os.path.dirname(os.path.abspath(__file__))
+    _BASE_DIR = globals().get("BASE_DIR") or os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # 2026-08-28 复审修复：宿主未注入 BASE_DIR 时回落到仓库根（本模块在 execution/ 下，dirname×2），原写法会写盘错位于 execution/t_io
     _log = globals().get("log")
     _now_fn = globals().get("_now") or datetime.now
     _detect_index_regime = globals().get("detect_index_regime")
