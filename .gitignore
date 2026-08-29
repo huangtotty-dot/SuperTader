@@ -6,8 +6,10 @@ t_io/**
 __pycache__/
 *.pyc
 node_modules/
+.vscode/
 
 stock_hunter/data/
+stock_hunter/history/
 stock_hunter/watchlist_jiuyan.json
 stock_hunter/config.json
 stock_hunter/__pycache__/
