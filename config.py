@@ -433,6 +433,13 @@ STOCK_PARAMS = {
         "stock_qty_base_pct": 0.28, "stock_qty_strong_pct": 0.37,
         "notify_sell_threshold": 55, "notify_buy_threshold": 36.0,  # v1.1.0: sell 64→55 对齐t55档; E1采纳: buy 40→36 对齐引擎T36b档
     },
+    "002451": {  # 摩恩电气
+        "stock_qty_base_pct": 0.30, "stock_qty_strong_pct": 0.30,
+        "notify_sell_threshold": 55, "notify_buy_threshold": 36.0,
+        # 2026-08-29 新增持仓: 默认保守配置
+        "allow_overheated_buy": False,         # 保守：不绕过过热门控
+        "allow_breakdown_buy": False,          # 保守：不绕过破位门控
+    },
     "300153": {  # 科泰电源
         # 2026-08-24 方案A: 分标的做T门控优化（波动大的个股适度放宽）
         "allow_overheated_buy": True,          # 适度激进：绕过过热门控
@@ -530,6 +537,21 @@ MORNING_ALERT_PARAMS = {
                 "desc": "开盘后最低跌幅<-2.04%",
                 "precision": 0.583, "recall": 0.538,
                 "condition": {"max_loss_after_open": -0.0204},
+            },
+        ],
+    },
+    # ===== 摩恩电气 002451 =====
+    # 2026-08-29 新增持仓: 使用默认保守预警规则
+    "002451": {
+        "alert_enabled": True,
+        "alert_window_end": 1000,
+        "level_2_rules": [],
+        "level_1_rules": [
+            {
+                "name": "【主】开盘30分钟大跌",
+                "desc": "开盘30分钟涨幅≤-1.00%（核心阈值）",
+                "precision": 0.55, "recall": 0.72,
+                "condition": {"open_30min_ret": -0.010},
             },
         ],
     },
@@ -780,6 +802,9 @@ INDEX_RESONANCE_STOCK_OVERRIDE = {
         # "enabled": True  # 使用全局默认
     },
     "000988": {  # 华工科技 - 保守
+        # "enabled": True  # 使用全局默认
+    },
+    "002451": {  # 摩恩电气 - 保守
         # "enabled": True  # 使用全局默认
     },
 }
