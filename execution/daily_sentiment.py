@@ -64,7 +64,7 @@ if _IN_HOST:
     _now_fn = globals().get("_now") or datetime.now
     _detect_index_regime = globals().get("detect_index_regime")
     _index_regime_name = globals().get("index_regime_name")
-    _send_feishu_payload = globals().get("send_feishu_payload")
+    _ds_send_feishu = globals().get("send_feishu_payload")
     _feishu_md_div_fn = globals().get("_feishu_md_div")
     _feishu_card_header_fn = globals().get("_feishu_card_header")
     _feishu_hr_fn = globals().get("_feishu_hr") or (lambda: {"tag": "hr"})
@@ -144,7 +144,7 @@ else:
                 continue
         return webhook, keyword
 
-    def _send_feishu_payload(payload: dict, success_log: str, error_prefix: str,
+    def _ds_send_feishu(payload: dict, success_log: str, error_prefix: str,
                              trigger_urgent_alarm_after_success: bool = False) -> bool:
         webhook, _ = _load_standalone_feishu()
         if not webhook:
@@ -1136,7 +1136,7 @@ def push_daily_sentiment(now: Optional[datetime] = None) -> bool:
             p = sentiment_params()
             if p.get("push_enabled", True):
                 payload = build_sentiment_card(result)
-                _send_feishu_payload(
+                _ds_send_feishu(
                     payload=payload,
                     success_log=(f"✅ 大盘热度×韭研TOP3已推送: {result.get('regime_name')} "
                                  f"S={result.get('score_S')} z_S={result.get('z_S')} "
@@ -1188,7 +1188,7 @@ def _cli() -> None:
 
     if not args.no_push and not args.no_save:
         payload = build_sentiment_card(result)
-        _send_feishu_payload(
+        _ds_send_feishu(
             payload=payload,
             success_log=f"✅ 大盘热度×韭研TOP3已推送: {result.get('date')}",
             error_prefix="大盘热度×韭研TOP3推送",
