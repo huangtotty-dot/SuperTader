@@ -161,7 +161,7 @@ async function loadAndRender(date, silent) {
     // 行情条 + 大盘趋势 + 成本历史（静态，一次拉取）
     // 持仓日线体检（超买/顶背离）
     apiCall("load_ob_analysis").then(ob => renderOB(ob || {})).catch(() => {});
-    apiCall("load_quotes").then(q => renderQuotes(q || {}, null)).catch(() => {});
+    apiCall("load_quotes").then(q => updateSidebarSummary((q && q.quotes) || [])).catch(() => {});
     apiCall("load_position_manager").then(pm => renderPositionManager(pm || {})).catch(() => {});
     apiCall("load_market_score", date).then(ms => renderMarket(ms || {})).catch(() => {});
     apiCall("load_cost_history").then(ch => { state.costHistory = ch || {}; renderCost(ch || {}); }).catch(() => {});
@@ -217,9 +217,9 @@ async function refreshLive(reset) {
     liveFailCnt = 0;   // fix P1-6: 主链路成功即清零
     renderLive(live, date === todayStr());
 
-    // 实时行情条（10s 刷新）+ 存 quotes 供 PB 价格更新
+    // 实时行情（10s 刷新）：更新侧栏汇总 + 存 quotes 供 PB 价格更新
     apiCall("load_quotes").then(q => {
-      renderQuotes(q || {}, null);
+      updateSidebarSummary((q && q.quotes) || []);
       state.quotes = (q && q.quotes) || [];
       if (state.payload) {
         // PB 表价格实时更新
@@ -2730,64 +2730,6 @@ function renderOB(ob) {
     </div>`;
 }
 
-/* ---- 行情条（卡片网格） ---- */
-function renderQuotes(q, market) {
-  const bar = document.getElementById("quoteBar");
-  const body = document.getElementById("quotesBody");
-  if (!q || !q.quotes || !q.quotes.length) {
-    if (bar) bar.innerHTML = "";
-    if (body) body.innerHTML = '<div class="empty">无持仓行情</div>';
-    return;
-  }
-  const srcBadge = q.source === "live"
-    ? `<span class="quote-src">${esc(q.ts)}</span>`
-    : `<span class="quote-src warn">离线/回退昨收</span>`;
-
-  // 卡片网格
-  const cards = q.quotes.map(x => {
-    const chgCls = clsOf(x.change);
-    const pnlTxt = x.pnl_pct == null ? "—" : `${x.pnl_pct >= 0 ? "+" : ""}${fmt(x.pnl_pct, 1)}%`;
-    const pnlCls = clsOf(x.pnl_pct);
-    const pnlAmt = x.price && x.cost && x.qty ? (x.price - x.cost) * x.qty : null;
-    const pnlAmtTxt = pnlAmt == null ? "—" : `${pnlAmt >= 0 ? "+" : ""}${fmt(pnlAmt, 0)}`;
-    return `<div class="quote-card">
-      <div class="qc-top">
-        <span class="qc-name">${esc(x.name)}</span>
-        <span class="qc-code mono">${esc(x.code)}</span>
-      </div>
-      <div class="qc-price ${chgCls}">${fmt(x.price, 3)}</div>
-      <div class="qc-chg ${chgCls}">${x.change >= 0 ? "+" : ""}${fmt(x.change, 2)} ${x.change_pct >= 0 ? "+" : ""}${fmt(x.change_pct, 2)}%</div>
-      <div class="qc-meta">
-        <span>成本 <b class="mono">${fmt(x.cost, 3)}</b></span>
-        <span>浮盈 <b class="${pnlCls}">${pnlTxt}</b> <span class="mono cell-dim">${pnlAmtTxt}</span></span>
-      </div>
-    </div>`;
-  }).join("");
-
-  // 汇总
-  let tv = 0, tc = 0, tp = 0;
-  q.quotes.forEach(x => {
-    if (x.price && x.cost) {
-      tv += x.price * (x.qty || 0);
-      tc += x.cost * (x.qty || 0);
-      tp += (x.price - x.cost) * (x.qty || 0);
-    }
-  });
-  const sumCls = clsOf(tp);
-  const sumPct = tc ? `${tp >= 0 ? "+" : ""}${fmt(tp / tc * 100, 1)}%` : "—";
-  const html = `<div class="quote-grid">${cards}</div>
-    <div class="quote-summary" style="margin-top:10px">
-      总市值 <b class="num">${fmt(tv, 0)}</b>
-      总成本 <b class="num">${fmt(tc, 0)}</b>
-      总盈亏 <b class="num ${sumCls}">${tp >= 0 ? "+" : ""}${fmt(tp, 0)}（${sumPct}）</b>
-    </div>
-    <div class="cell-dim" style="font-size:11px;margin-top:6px">腾讯实时行情 · 盘中每10s刷新${srcBadge}</div>`;
-
-  updateSidebarSummary(q.quotes);
-  if (bar) bar.innerHTML = srcBadge;
-  if (body) body.innerHTML = html;
-}
-
 /* ---- 成本校准 modal ---- */
 let costCalibData = null;  // {stocks, effective_today}
 
@@ -2843,244 +2785,6 @@ async function saveCalib() {
     state.costHistory = ch || {};
     renderCost(ch || {});
   }).catch(() => {});
-}
-
-/* ================= 板块轮动（移植自 sector-rotation-v2） ================= */
-const ROT_PHASE_COLORS = { "领涨": "#d62728", "修复": "#ff9f1c", "走弱": "#4c78a8", "退潮": "#2ca02c" };
-const ROT_VIEW_LABEL = { jiuyan: "韭研概念轮动", industry: "全市场行业轮动" };
-let rotState = { view: "jiuyan", date: null, tail: 18, data: null, table: "family" };
-let rotChart = null;
-let rotPollTimer = null;
-
-async function loadRotation(force) {
-  const statusEl2 = document.getElementById("rotStatus");
-  const wrap = document.getElementById("rotProgressWrap");
-  try {
-    if (force) rotState.date = null;   // 强制重新构建时重置日期，取最新
-    statusEl2.textContent = "加载中...（首次约 10-20 秒，已缓存则秒回）";
-    const res = await apiCall("load_sector_rotation", rotState.date, rotState.view, rotState.tail);
-    if (res.status === "bootstrapping") {
-      statusEl2.textContent = "首次构建日线缓存（约几分钟），请稍候...";
-      wrap.style.display = "";
-      wrap.textContent = res.message || "";
-      pollRotationProgress();
-      return;
-    }
-    if (res.status === "error") {
-      statusEl2.textContent = "错误: " + (res.message || "");
-      return;
-    }
-    rotState.data = res;
-    renderRotation(res);
-    statusEl2.textContent = "";
-  } catch (e) {
-    statusEl2.textContent = "调用失败: " + e.message;
-  }
-}
-
-async function pollRotationProgress() {
-  if (rotPollTimer) return;
-  const statusEl2 = document.getElementById("rotStatus");
-  const wrap = document.getElementById("rotProgressWrap");
-  rotPollTimer = setInterval(async () => {
-    try {
-      const p = await apiCall("sector_rotation_progress");
-      if (p.error) statusEl2.textContent = "构建失败: " + p.error;
-      wrap.textContent = p.total ? `${p.phase} ${p.done}/${p.total}` : (p.phase || "构建中...");
-      if (!p.running) {
-        clearInterval(rotPollTimer);
-        rotPollTimer = null;
-        wrap.style.display = "none";
-        statusEl2.textContent = "";
-        await loadRotation(true);
-      }
-    } catch (e) { /* 静默 */ }
-  }, 1200);
-}
-
-function renderRotation(m) {
-  const dateSel = document.getElementById("rotDate");
-  if (dateSel.options.length === 0 || !rotState.date) {
-    dateSel.innerHTML = "";
-    (m.dates || []).slice().reverse().forEach(d => {
-      const o = document.createElement("option");
-      o.value = d; o.textContent = d;
-      dateSel.appendChild(o);
-    });
-    if (m.as_of) dateSel.value = m.as_of;
-  }
-  renderRotationKpi(m);
-  renderRrgChart(m);
-  renderRotationTable(m);
-  document.getElementById("rotTitle").textContent = `${ROT_VIEW_LABEL[rotState.view] || ""} | ${m.as_of} | ${m.market_state}`;
-}
-
-const ROT_RANK_COLS = ["行业名称", "活跃分", "1日涨幅", "3日涨幅", "5日涨幅", "相对强弱", "动量"];
-const ROT_RANK_TOP_COLS = ["行业名称", "5日涨幅", "活跃分", "相对强弱", "动量"];
-
-function showRotationSectorList(title, sectors, cols) {
-  /* 2026-08-22: KPI 数字双击查看明细——板块排名 / Top5 5日涨幅 */
-  const overlay = document.createElement("div");
-  overlay.className = "modal-mask";
-  overlay.innerHTML = `<div class="modal" style="width:600px;max-height:80vh">
-    <div class="modal-title"><span>${esc(title)}</span>
-      <button class="mini-btn" onclick="this.closest('.modal-mask').remove()">×</button></div>
-    <div class="modal-body" style="font-size:12px;overflow:auto">
-      ${sectors.length
-        ? `<table class="h-table"><thead><tr>${cols.map(c => `<th class="${typeof sectors[0][c] === "number" ? "num" : ""}">${esc(c)}</th>`).join("")}</tr></thead>
-           <tbody>${sectors.map(s => `<tr>${cols.map(c => `<td class="${typeof s[c] === "number" ? "num" : ""}">${rotCell(s[c], c)}</td>`).join("")}</tr>`).join("")}</tbody></table>`
-        : '<div class="empty">无数据</div>'}
-    </div>
-  </div>`;
-  document.body.appendChild(overlay);
-}
-
-function renderRotationKpi(m) {
-  const grid = document.getElementById("rotKpi");
-  const sf = m.sector_frame || [];
-  const byPhase = ph => sf.filter(x => x["阶段"] === ph)
-    .sort((a, b) => (b["活跃分"] || 0) - (a["活跃分"] || 0));
-  const top5 = () => sf.slice().sort((a, b) => (b["5日涨幅"] || 0) - (a["5日涨幅"] || 0)).slice(0, 5);
-  const clickHandlers = {
-    "领涨板块数": (v) => showRotationSectorList(`领涨板块排名（${v}）`, byPhase("领涨"), ROT_RANK_COLS),
-    "修复板块数": (v) => showRotationSectorList(`修复板块排名（${v}）`, byPhase("修复"), ROT_RANK_COLS),
-    "走弱板块数": (v) => showRotationSectorList(`走弱板块排名（${v}）`, byPhase("走弱"), ROT_RANK_COLS),
-    "退潮板块数": (v) => showRotationSectorList(`退潮板块排名（${v}）`, byPhase("退潮"), ROT_RANK_COLS),
-    "Top5平均5日涨幅": (v) => showRotationSectorList(`Top5 5日涨幅（均值 ${v}）`, top5(), ROT_RANK_TOP_COLS),
-  };
-  const entries = [["市场状态", m.market_state, null], ...Object.entries(m.summary || {}).map(([k, v]) => [k, v, clickHandlers[k] || null])];
-  grid.innerHTML = entries.map(([k, v, onClick], i) =>
-    `<div class="card" id="rotKpi-${i}" style="padding:8px 10px${onClick ? ";cursor:pointer" : ""}" ${onClick ? 'title="双击查看明细"' : ""}>
-      <div class="card-title">${esc(k)}</div>
-      <div class="num" style="font-size:15px;font-weight:700">${fmt(v, 2)}</div></div>`
-  ).join("");
-  entries.forEach(([k, v, onClick], i) => {
-    if (onClick) grid.querySelector(`#rotKpi-${i}`).ondblclick = () => onClick(v);
-  });
-}
-
-function rotTooltip(p) {
-  const s = p.data && p.data.sector;
-  if (!s) return "";
-  const up = v => (v >= 0 ? "+" : "") + fmt(v, 2) + "%";
-  return [
-    `<b>${esc(s["行业名称"])}</b>`,
-    `阶段: ${s["阶段"]} · ${s["方向"]} · ${esc(s["题材地位"] || "")}`,
-    `活跃分: ${fmt(s["活跃分"], 1)} · 家族: ${esc(s["主线家族"] || "")}`,
-    `相对强弱: ${fmt(s["相对强弱"], 1)} · 动量: ${fmt(s["动量"], 1)}`,
-    `1日 ${up(s["1日涨幅"])} · 3日 ${up(s["3日涨幅"])} · 5日 ${up(s["5日涨幅"])}`,
-    `上涨占比: ${fmt((s["上涨占比"] || 0) * 100, 1)}% · 涨停: ${s["涨停数"]} · 成分: ${s["成分数"]}`,
-  ].join("<br>");
-}
-
-function renderRrgChart(m) {
-  const el = document.getElementById("rotRrg");
-  if (!rotChart) {
-    rotChart = echarts.init(el);
-    echInstances["rotation"] = rotChart;   // fix: 注册到 echInstances，让 resizeAllEch/窗口resize 能处理
-  }
-  const sectors = m.sector_frame || [];
-  const trails = m.trail_frame || [];
-  const phases = ["领涨", "修复", "走弱", "退潮"];
-  const labelLimit = 14;
-  const topNames = new Set(sectors.slice(0, labelLimit).map(s => s["行业名称"]));
-
-  const scatterSeries = phases.map(ph => ({
-    name: ph,
-    type: "scatter",
-    // fix 2026-08-22: symbolSize 参数是 echarts data item，须从 p.data.sector 取活跃分（原代码取 p["活跃分"] 恒 undefined → 点大小恒 9）
-    symbolSize: p => {
-      const act = p && p.data && p.data.sector ? (p.data.sector["活跃分"] || 0) : 0;
-      return Math.max(9, Math.min(42, act / 100 * 42));
-    },
-    itemStyle: { color: ROT_PHASE_COLORS[ph], opacity: 0.85, borderColor: "#0d1117", borderWidth: 0.5 },
-    label: { show: true, position: "right", fontSize: 10, color: "#d0d7de",
-      formatter: p => topNames.has(p.data.name) ? p.data.name : "" },
-    emphasis: { focus: "series", label: { show: true, fontSize: 12, fontWeight: "bold" } },
-    data: sectors.filter(s => s["阶段"] === ph).map(s => ({
-      value: [s["相对强弱"], s["动量"]],
-      sector: s,
-      name: s["行业名称"],
-    })),
-  }));
-
-  const phaseBySector = {};
-  sectors.forEach(s => { phaseBySector[s["行业名称"]] = s["阶段"]; });
-  const trailTop = 10;
-  const trailNames = sectors.slice(0, trailTop).map(s => s["行业名称"]);
-  const trailSeries = trailNames.map(name => {
-    const pts = trails.filter(t => t["行业名称"] === name)
-      .sort((a, b) => (a["序号"] || 0) - (b["序号"] || 0))
-      .map(p => [p["相对强弱"], p["动量"]]);
-    if (pts.length < 2) return null;
-    return {
-      name: name + "轨迹",
-      type: "line",
-      data: pts,
-      showSymbol: false,
-      lineStyle: { color: ROT_PHASE_COLORS[phaseBySector[name]] || "#8899aa", width: 1.2, opacity: 0.35 },
-      tooltip: { show: false },
-      emphasis: { disabled: true },
-      silent: true,
-      legendHoverLink: false,
-    };
-  }).filter(Boolean);
-
-  rotChart.setOption({
-    backgroundColor: "transparent",
-    tooltip: { trigger: "item", backgroundColor: "#161b22", borderColor: "#30363d", textStyle: { color: "#e6edf3", fontSize: 12 }, formatter: rotTooltip },
-    legend: { top: 0, textStyle: { color: "#8b949e" }, data: phases },
-    grid: { left: 70, right: 50, top: 36, bottom: 44 },
-    xAxis: { name: "相对强弱", nameLocation: "middle", nameGap: 26, type: "value", scale: true,
-      axisLine: { onZero: true }, splitLine: { lineStyle: { color: "rgba(139,148,158,.18)" } } },
-    yAxis: { name: "动量", nameLocation: "middle", nameGap: 38, type: "value", scale: true,
-      axisLine: { onZero: true }, splitLine: { lineStyle: { color: "rgba(139,148,158,.18)" } } },
-    series: [...trailSeries, ...scatterSeries],
-  }, true);
-}
-
-function rotCell(v, col) {
-  if (v === null || v === undefined || v === "") return '<span class="cell-dim">—</span>';
-  if (col === "1日涨幅" || col === "3日涨幅" || col === "5日涨幅" || col === "5日涨幅均值") {
-    const n = Number(v);
-    return `<span class="num ${clsOf(n)}">${n >= 0 ? "+" : ""}${fmt(n, 2)}%</span>`;
-  }
-  if (col === "动量" || col === "相对强弱") {
-    const n = Number(v);
-    return `<span class="num ${clsOf(n)}">${fmt(n, 1)}</span>`;
-  }
-  if (typeof v === "number") return `<span class="num">${fmt(v, 1)}</span>`;
-  return `<span>${esc(v)}</span>`;
-}
-
-function rotTable(rows, cols) {
-  if (!rows || !rows.length) return '<div class="empty">暂无数据</div>';
-  const head = cols.map(c => `<th class="${typeof rows[0][c] === "number" ? "num" : ""}">${esc(c)}</th>`).join("");
-  const body = rows.map(r =>
-    `<tr>${cols.map(c => `<td>${rotCell(r[c], c)}</td>`).join("")}</tr>`).join("");
-  return `<table class="h-table"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>`;
-}
-
-function renderRotationTable(m) {
-  const el = document.getElementById("rotTables");
-  const sectors = m.sector_frame || [];
-  const tbl = rotState.table;
-  const mainCols = ["主线家族", "行业名称", "题材地位", "阶段", "方向", "活跃分", "1日涨幅", "3日涨幅", "5日涨幅", "涨停数"];
-  const fixCols = ["主线家族", "行业名称", "题材地位", "方向", "动量", "相对强弱", "3日涨幅", "5日涨幅"];
-  const downCols = ["主线家族", "行业名称", "题材地位", "阶段", "方向", "1日涨幅", "3日涨幅", "5日涨幅"];
-  let html = "";
-  if (tbl === "family") {
-    html = rotTable(m.family_frame || [], ["主线家族", "子题材数", "家族强度", "家族共振度", "个体活跃均分", "5日涨幅均值", "涨停数"]);
-  } else if (tbl === "main") {
-    html = rotTable(sectors.slice(0, 30), mainCols);
-  } else if (tbl === "fix") {
-    html = rotTable(sectors.filter(s => s["阶段"] === "修复").sort((a, b) => b["动量"] - a["动量"]).slice(0, 30), fixCols);
-  } else if (tbl === "down") {
-    html = rotTable(sectors.slice().sort((a, b) => a["5日涨幅"] - b["5日涨幅"]).slice(0, 35), downCols);
-  } else if (tbl === "leaders") {
-    html = rotTable(m.leaders_frame || [], ["行业名称", "类型", "排名", "股票名称", "展示"]);
-  }
-  el.innerHTML = html;
 }
 
 /* ================= 每日大盘复盘（LLM，2026-08-23 新增） ================= */
@@ -3350,6 +3054,73 @@ function loadReviewFromHistory() {
   refreshDailyReview();
 }
 
+function toggleLlmConfig() {
+  const el = document.getElementById("llmConfigCard");
+  if (el) el.style.display = el.style.display === "none" ? "" : "none";
+}
+
+function copyReviewText() {
+  const el = document.getElementById("reviewResult");
+  if (!el || !el.innerText.trim()) { statusEl("无复盘文本可复制", "err"); return; }
+  navigator.clipboard.writeText(el.innerText).then(() => statusEl("复盘文本已复制", "ok"))
+    .catch(() => statusEl("复制失败，请手动选择文本", "err"));
+}
+
+/* 数据健康条（2026-08-29）：显示各数据源状态，点击展开缺失原因 */
+function renderDataHealth(health) {
+  const el = document.getElementById("dataHealthBar");
+  if (!el) return;
+  if (!health || !Object.keys(health).length) { el.innerHTML = ""; return; }
+  const items = Object.entries(health).map(([k, v]) => {
+    const ok = v && v.ok;
+    const reason = (v && v.reason) || "";
+    const icon = ok ? "✅" : "⚠️";
+    const title = reason ? ` title="${esc(reason)}"` : "";
+    return `<span class="dh-item ${ok ? "ok" : "warn"}"${title}>${icon} ${esc(k)}</span>`;
+  }).join("");
+  el.innerHTML = `<span style="color:var(--text-dim)">数据状态：</span>${items}`;
+}
+
+/* 两融余额面板（2026-08-29）：当日值 + 日变动 + 30日变动 + 近30日走势 */
+function renderMarginBalance(margin) {
+  const el = document.getElementById("marginBalanceBody");
+  if (!el) return;
+  clearPanelInstances("mb-");
+  if (!margin || margin.missing) {
+    el.innerHTML = `<div class="empty">两融数据缺失${margin && margin.reason ? "：" + esc(margin.reason) : ""}</div>`;
+    return;
+  }
+  const latest = margin.latest || 0;
+  const c1 = margin.change_1d || 0;
+  const c30 = margin.change_30d || 0;
+  const fmt = v => (v / 1e12).toFixed(2) + "万亿";
+  const fmtSign = v => (v >= 0 ? "+" : "") + (v / 1e12).toFixed(3) + "万亿";
+  const color1 = c1 >= 0 ? "var(--red)" : "var(--green)";
+  const color30 = c30 >= 0 ? "var(--red)" : "var(--green)";
+  el.innerHTML = `
+    <div class="mb-kpis">
+      <div class="mb-kpi"><div class="mb-k">最新余额</div><div class="mb-v">${fmt(latest)}</div></div>
+      <div class="mb-kpi"><div class="mb-k">日变动</div><div class="mb-v" style="color:${color1}">${fmtSign(c1)}</div></div>
+      <div class="mb-kpi"><div class="mb-k">30日变动</div><div class="mb-v" style="color:${color30}">${fmtSign(c30)}</div></div>
+    </div>
+    <div id="mb-chart" class="echart" style="height:180px;margin-top:8px"></div>`;
+  const series = (margin.series || []).map(r => [r.date.slice(5), r.balance / 1e12]);
+  if (series.length < 2) return;
+  const first = series[0][1], last = series[series.length - 1][1];
+  const up = last >= first;
+  echRender("mb-chart", {
+    backgroundColor: "transparent",
+    tooltip: { trigger: "axis", backgroundColor: "#161b22", borderColor: "#30363d", textStyle: { color: "#c9d1d9", fontSize: 11 },
+      formatter: p => `${p[0].axisValue}<br/>余额: ${p[0].data[1].toFixed(3)} 万亿` },
+    grid: { left: 40, right: 16, top: 10, bottom: 24 },
+    xAxis: { type: "category", data: series.map(r => r[0]), axisLabel: { color: "#8b949e", fontSize: 9 } },
+    yAxis: { type: "value", scale: true, axisLabel: { color: "#8b949e", fontSize: 9, formatter: v => v.toFixed(2) + "万亿" }, splitLine: { lineStyle: { color: "rgba(139,148,158,.12)" } } },
+    series: [{ type: "line", data: series.map(r => r[1]), smooth: true, symbol: "none",
+      lineStyle: { width: 1.8, color: up ? "#f85149" : "#3fb950" },
+      areaStyle: { color: up ? "rgba(248,81,73,.15)" : "rgba(63,185,80,.15)" } }],
+  });
+}
+
 function providerChanged() {
   const p = document.getElementById("llmProvider").value;
   if (p in LLM_PROVIDER_BASE) document.getElementById("llmBaseUrl").value = LLM_PROVIDER_BASE[p];
@@ -3425,12 +3196,124 @@ async function pollReviewProgress() {
   }, 800);
 }
 
+/* 面板 ECharts 实例清理（每次重渲染前释放旧的，避免复用已脱离 DOM 的实例） */
+function clearPanelInstances(prefix) {
+  Object.keys(echInstances).forEach(k => {
+    if (k.startsWith(prefix)) {
+      try { echInstances[k].dispose(); } catch (e) {}
+      delete echInstances[k];
+    }
+  });
+}
+
+/* 上证指数多周期面板（2026-08-29）——30/60min + 日/周/月线 格式化走势 */
+function renderIndexMultiFrame(multi) {
+  const el = document.getElementById("indexMultiBody");
+  if (!el) return;
+  clearPanelInstances("imf-");
+  if (!multi) { el.innerHTML = '<div class="empty">暂无多周期数据（运行「开始大盘复盘」后生成）</div>'; return; }
+  const min = multi["分钟线"] || {};
+  const specs = [
+    { key: "30min", label: "30分钟", data: min["30min"], xf: r => String(r.time).slice(5, 16) },
+    { key: "60min", label: "60分钟", data: min["60min"], xf: r => String(r.time).slice(5, 16) },
+    { key: "day", label: "日线", data: multi["日线"], xf: r => String(r.date).slice(5) },
+    { key: "week", label: "周线", data: multi["周线"], xf: r => String(r.date).slice(5) },
+    { key: "month", label: "月线", data: multi["月线"], xf: r => String(r.date).slice(5) },
+  ];
+  const cards = specs.map(s => {
+    const rows = (s.data && s.data.length) ? s.data : [];
+    if (rows.length < 2) return `<div class="imf-card"><div class="imf-head"><span class="imf-title">${s.label}</span></div><div class="empty" style="padding:14px 0">无数据</div></div>`;
+    const last = rows[rows.length - 1], prev = rows[rows.length - 2];
+    const close = parseFloat(last.close);
+    const chg = (close / parseFloat(prev.close) - 1) * 100;
+    const color = chg >= 0 ? "#f85149" : "#3fb950";
+    return `<div class="imf-card">
+      <div class="imf-head"><span class="imf-title">${s.label}</span>
+        <span class="imf-price" style="color:${color}">${close.toFixed(2)}<span class="imf-chg">${chg >= 0 ? "+" : ""}${chg.toFixed(2)}%</span></span></div>
+      <div id="imf-${s.key}" class="imf-chart"></div>
+    </div>`;
+  });
+  el.innerHTML = `<div class="imf-grid">${cards.join("")}</div>`;
+  specs.forEach(s => {
+    const rows = (s.data && s.data.length) ? s.data : [];
+    if (rows.length < 2) return;
+    const id = "imf-" + s.key;
+    const closes = rows.map(r => parseFloat(r.close));
+    const up = closes[closes.length - 1] >= closes[0];
+    const x = rows.map(s.xf);
+    echRender(id, {
+      backgroundColor: "transparent",
+      grid: { left: 6, right: 6, top: 6, bottom: 16 },
+      tooltip: { trigger: "axis", backgroundColor: "#161b22", borderColor: "#30363d", textStyle: { color: "#c9d1d9", fontSize: 10 } },
+      xAxis: { type: "category", data: x, show: false, boundaryGap: false },
+      yAxis: { type: "value", scale: true, show: false },
+      series: [{ type: "line", data: closes, smooth: true, symbol: "none",
+        lineStyle: { width: 1.5, color: up ? "#f85149" : "#3fb950" },
+        areaStyle: { color: up ? "rgba(248,81,73,.15)" : "rgba(63,185,80,.15)" } }],
+    });
+  });
+}
+
+/* 涨停/跌停面板（2026-08-29）——当日比例 + 近一月走势 */
+function renderZtDtPanel(emo, hist) {
+  const el = document.getElementById("ztDtBody");
+  if (!el) return;
+  clearPanelInstances("ztd-");
+  const zt = emo.涨停数, dt = emo.跌停数, zbl = emo.炸板率;
+  const hasToday = zt != null || dt != null;
+  const series = (hist && hist.series) || [];
+  let todayHtml = "";
+  if (hasToday) {
+    const total = (zt || 0) + (dt || 0) || 1;
+    const ztPct = Math.round((zt || 0) / total * 100);
+    const zblTxt = zbl != null ? (Math.round(zbl * 1000) / 10) + "%" : "—";
+    todayHtml = `<div class="ztd-today">
+      <div class="ztd-stat"><span class="ztd-dot up"></span>涨停 <b>${zt != null ? zt : "—"}</b></div>
+      <div class="ztd-stat"><span class="ztd-dot down"></span>跌停 <b>${dt != null ? dt : "—"}</b></div>
+      <div class="ztd-stat"><span class="ztd-dot warn"></span>炸板率 <b>${zblTxt}</b></div>
+      <div class="ztd-barwrap">
+        <div class="ztd-bar"><div class="ztd-bar-up" style="width:${ztPct}%"></div><div class="ztd-bar-down" style="width:${100 - ztPct}%"></div></div>
+        <div class="ztd-bar-label"><span>涨停 ${ztPct}%</span><span>跌停 ${100 - ztPct}%</span></div>
+      </div>
+    </div>`;
+  }
+  if (series.length < 2) {
+    el.innerHTML = todayHtml + '<div class="empty">暂无近一月涨跌停历史数据</div>';
+    return;
+  }
+  el.innerHTML = todayHtml + `<div class="ztd-sub">近一月涨停 / 跌停走势</div><div id="ztd-chart" class="echart" style="height:220px"></div>`;
+  const x = series.map(r => String(r.date).slice(5));
+  const zts = series.map(r => r.zt || 0);
+  const dts = series.map(r => -(r.dt || 0));
+  echRender("ztd-chart", {
+    backgroundColor: "transparent",
+    tooltip: { trigger: "axis", backgroundColor: "#161b22", borderColor: "#30363d", textStyle: { color: "#c9d1d9", fontSize: 11 } },
+    legend: { top: 0, textStyle: { color: "#8b949e" }, data: ["涨停", "跌停"] },
+    grid: { left: 40, right: 16, top: 26, bottom: 24 },
+    xAxis: { type: "category", data: x, axisLabel: { color: "#8b949e", fontSize: 10 } },
+    yAxis: { type: "value", axisLabel: { color: "#8b949e", fontSize: 10 }, splitLine: { lineStyle: { color: "rgba(139,148,158,.12)" } } },
+    series: [
+      { name: "涨停", type: "bar", barWidth: 7, data: zts, itemStyle: { color: "#f85149" } },
+      { name: "跌停", type: "bar", barWidth: 7, data: dts, itemStyle: { color: "#3fb950" } },
+    ],
+  });
+}
+
 async function refreshDailyReview() {
   const date = document.getElementById("reviewDate").value || new Date().toISOString().slice(0, 10);
   const el = document.getElementById("reviewResult");
   if (!el) return;
   try {
     const r = await apiCall("get_daily_review", date);
+    const hist = await apiCall("get_zt_dt_history", 30).catch(() => null);
+    const margin = await apiCall("get_margin_balance", 30).catch(() => null);
+    const emo = (r && r.exists && r.data && r.data.extra && r.data.extra.情绪) || {};
+    const multi = (r && r.exists && r.data && r.data.index_multi) || null;
+    const health = (r && r.exists && r.data && r.data.data_health) || {};
+    renderDataHealth(health);                      // 数据健康条
+    renderIndexMultiFrame(multi);                 // 上证指数多周期面板
+    renderZtDtPanel(emo, hist);                    // 涨停/跌停面板
+    renderMarginBalance(margin);                   // 两融余额面板（独立刷新，不依赖 LLM）
     if (r && r.exists) {
       renderSummary(r.text);                     // 复盘总结卡（置顶）
       renderReviewCharts(r.text, r.data || {});   // 可视化（玻璃卡 + 条形图 + 关键位）
@@ -3559,8 +3442,6 @@ async function init() {
       switchTab(si.dataset.tab);
       // 图表 tab：切过去时初始化未渲染的 ECharts（首次 lazy init）
       if (si.dataset.tab === "charts") setTimeout(resizeAllEch, 120);
-      // 板块轮动 tab：首次进入懒加载
-      if (si.dataset.tab === "rotation" && !rotState.data) setTimeout(() => loadRotation(false), 120);
     });
   });
   dateSelect.addEventListener("change", () => {
@@ -3579,30 +3460,6 @@ async function init() {
   const hunterRegen = document.getElementById("hunterRegenBtn");
   if (hunterRegen) hunterRegen.addEventListener("click", regenerateHunter);
   initHunterDates();
-  // 板块轮动：事件绑定
-  const rotRunBtn = document.getElementById("rotRunBtn");
-  if (rotRunBtn) rotRunBtn.addEventListener("click", () => loadRotation(true));
-  const rotDateSel = document.getElementById("rotDate");
-  if (rotDateSel) rotDateSel.addEventListener("change", () => {
-    rotState.date = rotDateSel.value || null;
-    loadRotation(false);
-  });
-  const rotTail = document.getElementById("rotTail");
-  if (rotTail) {
-    rotTail.addEventListener("input", () => { document.getElementById("rotTailVal").textContent = rotTail.value; });
-    rotTail.addEventListener("change", () => { rotState.tail = Number(rotTail.value); loadRotation(false); });
-  }
-  document.querySelectorAll(".rot-view-btn").forEach(b => b.addEventListener("click", () => {
-    rotState.view = b.dataset.view;
-    document.querySelectorAll(".rot-view-btn").forEach(x => x.classList.toggle("primary", x === b));
-    rotState.data = null;
-    loadRotation(true);
-  }));
-  document.querySelectorAll(".rot-table-btn").forEach(b => b.addEventListener("click", () => {
-    rotState.table = b.dataset.tbl;
-    document.querySelectorAll(".rot-table-btn").forEach(x => x.classList.toggle("primary", x === b));
-    if (rotState.data) renderRotationTable(rotState.data);
-  }));
   loadIndices();
   setInterval(loadIndices, 60000);  // 指数行情每分钟刷新
   // 成本校准按钮
