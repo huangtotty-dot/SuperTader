@@ -44,6 +44,7 @@ body {
   background: rgba(244, 246, 250, .95); border-bottom: 1px solid var(--border);
 }
 .brand-title { font-weight: 700; font-size: 14px; letter-spacing: .5px; }
+.brand-logo { display: inline-flex; align-items: center; filter: drop-shadow(0 1px 3px rgba(232,83,31,.45)); }
 .date-tag { font-family: var(--mono); font-size: 12px; color: var(--accent); background: rgba(243,93,43,.12); padding: 2px 8px; border-radius: 20px; }
 .topbar-right { margin-left: auto; display: flex; align-items: center; gap: 10px; }
 .date-sel { background: var(--bg-soft); color: var(--text); border: 1px solid var(--border); border-radius: 5px; padding: 3px 8px; font-size: 12px; }
@@ -107,28 +108,6 @@ body {
   font-size: 14px; font-weight: 700; margin-bottom: 10px; padding-left: 8px;
   border-left: 3px solid var(--accent); color: var(--text);
 }
-
-/* ===== 行情条 ===== */
-.quote-src { color: var(--text-faint); font-size: 11px; margin-left: 4px; }
-.quote-summary {
-  padding-top: 8px; border-top: 1px dashed var(--border-soft);
-  color: var(--text-dim); font-size: 13px; font-family: var(--mono);
-  display: flex; gap: 20px; flex-wrap: wrap;
-}
-/* 行情卡片网格 */
-.quote-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 10px; }
-.quote-card {
-  background: var(--bg-card); border: 1px solid var(--border-soft); border-radius: 8px;
-  padding: 12px 14px; transition: border-color .2s;
-}
-.quote-card:hover { border-color: var(--accent); }
-.qc-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
-.qc-name { font-weight: 700; font-size: 13px; }
-.qc-code { color: var(--text-faint); font-size: 10px; }
-.qc-price { font-size: 22px; font-weight: 700; font-family: var(--mono); margin-bottom: 4px; }
-.qc-chg { font-size: 13px; font-family: var(--mono); margin-bottom: 8px; }
-.qc-meta { display: flex; flex-direction: column; gap: 3px; font-size: 11px; color: var(--text-dim); }
-.qc-meta b { font-size: 12px; }
 
 /* ===== 卡片 / 表格 / 徽章（复用之前的精简版） ===== */
 .card { background-image: linear-gradient(162deg, var(--glass-fill-top), var(--glass-fill-bot)); border: 1px solid var(--glass-stroke); border-radius: 14px; padding: 12px 14px; box-shadow: 0 12px 30px rgba(40,60,90,.10), inset 0 1px 0 var(--glass-hi); }
@@ -307,6 +286,23 @@ tr:hover td { background: rgba(243,93,43,.03); }
 .rv-chip.hot { color: var(--red); border-color: rgba(243,93,43,.4); background: rgba(243,93,43,.1); }
 .rv-chip.cold { color: var(--green); border-color: rgba(63,191,114,.4); background: rgba(63,191,114,.1); }
 .rv-chip-label { font-size: 11px; font-weight: 700; margin-right: 4px; }
+
+/* 每日复盘驾驶舱（2026-08-29） */
+.rv-dashboard { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 10px; margin-bottom: 10px; }
+.rv-dash-card { padding: 10px; min-height: 200px; }
+.rv-dash-title { font-size: 12px; font-weight: 700; color: var(--accent); margin-bottom: 8px; padding-bottom: 5px; border-bottom: 1px solid var(--border); }
+
+/* 数据健康条 */
+.dh-item { display: inline-block; margin: 2px 6px 2px 0; padding: 2px 8px; border-radius: 10px; font-size: 11px; cursor: default; }
+.dh-item.ok { background: rgba(63,185,80,.12); color: var(--green); }
+.dh-item.warn { background: rgba(210,153,34,.12); color: var(--yellow); }
+
+/* 两融余额 KPI */
+.mb-kpis { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.mb-kpi { background-image: linear-gradient(162deg, var(--glass-fill-top), var(--glass-fill-bot)); border: 1px solid var(--glass-stroke); border-radius: 12px; padding: 8px 10px; text-align: center; }
+.mb-k { font-size: 11px; color: var(--text-dim); }
+.mb-v { font-size: 15px; font-weight: 700; font-family: var(--mono); margin-top: 2px; color: var(--text); }
+
 .h-main-row { transition: background .15s; }
 .h-main-row:hover { background: rgba(243,93,43,.08); }
 .h-main-row td { padding: 10px 8px; border-bottom: 1px solid var(--border-soft); vertical-align: middle; }
@@ -650,4 +646,49 @@ tr:hover td { background: rgba(243,93,43,.03); }
   border-radius: 8px;
   background: #f4f6fa;
 }
+
+/* 上证指数多周期面板（2026-08-29） */
+.imf-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 10px;
+}
+.imf-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  padding: 10px 12px 6px;
+  transition: border-color .15s, transform .15s;
+}
+.imf-card:hover { border-color: var(--accent); transform: translateY(-1px); }
+.imf-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 4px; }
+.imf-title { font-size: 12px; font-weight: 700; color: var(--accent); }
+.imf-price { font-family: var(--mono); font-size: 15px; font-weight: 700; }
+.imf-chg { font-size: 11px; margin-left: 5px; font-family: var(--mono); }
+.imf-chart { height: 96px; }
+
+/* 涨停/跌停面板（2026-08-29） */
+.ztd-today {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 18px;
+  padding: 12px 14px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  margin-bottom: 10px;
+}
+.ztd-stat { display: flex; align-items: center; gap: 6px; font-size: 13px; }
+.ztd-stat b { font-family: var(--mono); font-size: 16px; }
+.ztd-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+.ztd-dot.up { background: var(--red); }
+.ztd-dot.down { background: var(--green); }
+.ztd-dot.warn { background: var(--yellow-soft); }
+.ztd-barwrap { flex: 1 1 220px; min-width: 160px; }
+.ztd-bar { display: flex; height: 12px; border-radius: 6px; overflow: hidden; background: var(--bg-soft); }
+.ztd-bar-up { background: linear-gradient(90deg, #ffb199, var(--red)); }
+.ztd-bar-down { background: linear-gradient(90deg, var(--green), #9fe0b8); }
+.ztd-bar-label { display: flex; justify-content: space-between; font-size: 10px; color: var(--text-dim); margin-top: 3px; }
+.ztd-sub { font-size: 12px; font-weight: 700; color: var(--accent); margin: 6px 0; }
 

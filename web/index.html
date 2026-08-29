@@ -3,12 +3,26 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>做T决策看板</title>
+<title>trader pannel</title>
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
 <header class="topbar">
-  <span class="brand-title">做T决策看板</span>
+  <span class="brand-logo" aria-hidden="true">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <linearGradient id="brandGrad" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stop-color="#ff8a3d"/>
+          <stop offset="55%" stop-color="#e8531f"/>
+          <stop offset="100%" stop-color="#f6a623"/>
+        </linearGradient>
+      </defs>
+      <rect x="1.5" y="1.5" width="21" height="21" rx="6" fill="url(#brandGrad)"/>
+      <path d="M6 15.5 L10.5 10.5 L13.5 13.5 L18 7.5" stroke="#fff" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M13.5 7.5 H18 V12" stroke="#fff" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+  </span>
+  <span class="brand-title">trader pannel</span>
   <span id="dateTag" class="date-tag"></span>
   <div class="topbar-right">
     <span id="liveTag" class="live-tag" style="display:none"></span>
@@ -34,16 +48,13 @@
       <span class="sidebar-icon">📈</span><span>图表分析</span>
     </div>
     <div class="sidebar-item" data-tab="signals">
-      <span class="sidebar-icon">⚡</span><span>信号与交易</span>
+      <span class="sidebar-icon">⚡</span><span>手动盘</span>
     </div>
     <div class="sidebar-item" data-tab="archive">
       <span class="sidebar-icon">📋</span><span>每日复盘</span>
     </div>
     <div class="sidebar-item" data-tab="hunter">
       <span class="sidebar-icon">🔍</span><span>选股猎手</span>
-    </div>
-    <div class="sidebar-item" data-tab="rotation">
-      <span class="sidebar-icon">🧭</span><span>板块轮动</span>
     </div>
     <div class="sidebar-item" data-tab="auto">
       <span class="sidebar-icon">🤖</span><span>自动盘</span>
@@ -70,12 +81,6 @@
 
   <!-- ====== Tab 1: 概览仪表盘 ====== -->
   <div class="tab-page active" id="tab-overview">
-    <div class="section" id="quotes">
-      <h2>持仓行情</h2>
-      <div id="quoteBar" class="quote-bar"></div>
-      <div id="quotesBody" class="card"></div>
-    </div>
-
     <div class="section">
       <h2>KPI 日快照</h2>
       <div id="kpiCards" class="kpi-grid"></div>
@@ -87,7 +92,7 @@
     </div>
 
     <div class="section" id="auto-overview">
-      <h2>自动盘持仓 <span class="cell-dim" style="font-size:12px;font-weight:normal">P4-3 双台账并列 · 来源：人工=上方持仓行情 / 自动=此处（读 t_io/bridge）</span></h2>
+      <h2>自动盘持仓 <span class="cell-dim" style="font-size:12px;font-weight:normal">P4-3 双台账并列 · 来源：自动=此处（读 t_io/bridge）</span></h2>
       <div id="autoOverviewBody"><div class="empty">无自动盘持仓数据</div></div>
     </div>
 
@@ -134,7 +139,7 @@
     </div>
   </div>
 
-  <!-- ====== Tab 3: 信号与交易 ====== -->
+  <!-- ====== Tab 3: 手动盘 ====== -->
   <div class="tab-page" id="tab-signals">
     <div class="section" id="surge-defense">
       <!-- 冲高防御实时监控将在此渲染 -->
@@ -200,11 +205,14 @@
   <!-- ====== Tab 4: 每日复盘 ====== -->
   <div class="tab-page" id="tab-archive">
     <div class="section" id="market-review">
-      <h2>每日大盘复盘（LLM）
+      <h2>每日复盘驾驶舱
         <button class="mini-btn primary" onclick="runDailyReview()" title="收集指数多周期数据并调用模型复盘">▶ 开始大盘复盘</button>
         <button class="mini-btn" onclick="refreshDailyReview()" title="读取已生成的复盘结果">🔄 刷新</button>
+        <button class="mini-btn" onclick="toggleLlmConfig()" title="展开/收起模型配置">⚙️ 模型配置</button>
       </h2>
-      <div class="card" style="padding:10px;margin-bottom:10px">
+
+      <!-- 模型配置（可折叠） -->
+      <div id="llmConfigCard" class="card" style="padding:10px;margin-bottom:10px;display:none">
         <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
           <select id="llmProvider" class="mini-btn" onchange="providerChanged()" style="width:130px">
             <option value="">选择服务商…</option>
@@ -225,58 +233,58 @@
           <input type="password" id="llmApiKey" class="mini-input" placeholder="API key" style="width:180px">
           <button class="mini-btn" onclick="saveModelConfig()">💾 保存</button>
         </div>
-        <div style="display:flex;gap:8px;align-items:center;margin-top:8px">
+      </div>
+
+      <!-- 操作条：日期 + 历史 + 复制 -->
+      <div class="card" style="padding:8px 10px;margin-bottom:10px">
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
           <label class="cell-dim" style="font-size:11px">复盘日期</label>
           <input type="date" id="reviewDate" class="mini-input" style="width:140px">
           <select id="reviewHistory" class="mini-btn" style="width:130px" onchange="loadReviewFromHistory()" title="历史复盘存档">
             <option value="">历史复盘…</option>
           </select>
-          <span class="cell-dim" style="font-size:11px">数据：6指数横评 + 触发项/双锚多周期深拆（腾讯日/周/月线 + tushare 分钟线）</span>
+          <button class="mini-btn" onclick="copyReviewText()" title="复制当前复盘文本">📋 复制</button>
+          <span class="cell-dim" style="font-size:11px;margin-left:auto">数据：6指数横评 + 涨停/跌停 + 两融余额 + 多周期深拆</span>
         </div>
       </div>
-      <div id="reviewStatus" class="cell-dim" style="margin-bottom:8px;user-select:text"></div>
+
+      <!-- 数据健康条 -->
+      <div id="dataHealthBar" class="card" style="padding:6px 10px;margin-bottom:10px;font-size:11px"></div>
+
+      <!-- 驾驶舱：四卡网格 -->
+      <div class="rv-dashboard">
+        <div class="card rv-dash-card">
+          <div class="rv-dash-title">指数横评</div>
+          <div id="reviewVibe"></div>
+        </div>
+        <div class="card rv-dash-card">
+          <div class="rv-dash-title">涨停 / 跌停 情绪</div>
+          <div id="ztDtBody"><div class="empty">暂无数据</div></div>
+        </div>
+        <div class="card rv-dash-card">
+          <div class="rv-dash-title">两融余额</div>
+          <div id="marginBalanceBody"><div class="empty">加载中…</div></div>
+        </div>
+        <div class="card rv-dash-card">
+          <div class="rv-dash-title">上证指数多周期</div>
+          <div id="indexMultiBody"><div class="empty">暂无多周期数据</div></div>
+        </div>
+      </div>
+
+      <div id="reviewStatus" class="cell-dim" style="margin:10px 0 8px;user-select:text"></div>
+
+      <!-- 复盘可视化（条形图 + 关键位） -->
       <div id="reviewChartWrap" style="display:none;margin-bottom:10px">
         <div id="reviewSummary" style="margin-bottom:10px"></div>
-        <div id="reviewVibe" style="margin-bottom:10px"></div>
         <div id="reviewChart" class="echart" style="height:280px"></div>
         <div id="reviewKeyLevels" class="card" style="padding:10px;margin-top:8px"></div>
       </div>
-      <div id="reviewResult" class="card" style="white-space:pre-wrap;font-size:12px;line-height:1.7;max-height:70vh;overflow:auto;user-select:text"></div>
-    </div>
-  </div>
 
-  <!-- ====== Tab 6: 板块轮动 ====== -->
-  <div class="tab-page" id="tab-rotation">
-    <div class="section">
-      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
-        <div style="display:inline-flex;gap:4px">
-          <button class="mini-btn primary rot-view-btn" data-view="jiuyan">韭研概念轮动</button>
-          <button class="mini-btn rot-view-btn" data-view="industry">全市场行业轮动</button>
-        </div>
-        <select id="rotDate" class="mini-btn" title="选择交易日"></select>
-        <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text-dim)">轨迹回看
-          <input type="range" id="rotTail" min="8" max="35" value="18" style="width:100px">
-          <span id="rotTailVal" class="mono">18</span>
-        </label>
-        <button class="mini-btn primary" id="rotRunBtn">▶ 运行</button>
-        <span id="rotStatus" class="cell-dim" style="font-size:12px"></span>
+      <!-- LLM 深度复盘文本 -->
+      <div class="section" style="margin-top:10px">
+        <h2 style="font-size:14px">LLM 深度复盘</h2>
+        <div id="reviewResult" class="card" style="white-space:pre-wrap;font-size:12px;line-height:1.7;max-height:70vh;overflow:auto;user-select:text"></div>
       </div>
-      <div id="rotProgressWrap" class="cell-dim" style="display:none;font-size:12px;margin-bottom:8px"></div>
-      <div id="rotKpi" class="kpi-grid" style="margin-bottom:10px"></div>
-      <div class="card">
-        <div class="card-title" id="rotTitle">板块轮动地图</div>
-        <div id="rotRrg" class="echart" style="height:560px"></div>
-      </div>
-    </div>
-    <div class="section">
-      <div style="display:flex;gap:6px;margin-bottom:8px">
-        <button class="mini-btn rot-table-btn primary" data-tbl="family">主线家族</button>
-        <button class="mini-btn rot-table-btn" data-tbl="main">主线榜</button>
-        <button class="mini-btn rot-table-btn" data-tbl="fix">修复榜</button>
-        <button class="mini-btn rot-table-btn" data-tbl="down">退潮榜</button>
-        <button class="mini-btn rot-table-btn" data-tbl="leaders">个股穿透</button>
-      </div>
-      <div id="rotTables" style="overflow-x:auto"></div>
     </div>
   </div>
 

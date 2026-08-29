@@ -3005,6 +3005,42 @@ class Api:
             pass
         return {"dates": dates}
 
+    def get_margin_balance(self, days=30):
+        """近 N 日两融余额（融资融券余额），供每日复盘两融面板（2026-08-29）。"""
+        try:
+            from core.market_review import fetch_margin_balance
+            return fetch_margin_balance(None, days=int(days or 30))
+        except Exception as e:
+            return {"missing": True, "reason": str(e)[:120], "series": []}
+
+    def get_zt_dt_history(self, days=30):
+        """近 N 日涨停/跌停数（读 sentiment_daily.jsonl），供每日复盘涨停跌停面板走势图（2026-08-29）。"""
+        fp = BASE / "t_io" / "logs" / "sentiment_daily.jsonl"
+        try:
+            rows = []
+            if fp.exists():
+                with open(fp, encoding="utf-8") as f:
+                    for line in f:
+                        line = line.strip()
+                        if not line:
+                            continue
+                        try:
+                            d = json.loads(line)
+                        except Exception:
+                            continue
+                        if d.get("date"):
+                            rows.append({"date": d["date"], "zt": d.get("zt_count"), "dt": d.get("dt_count")})
+            rows.sort(key=lambda r: r["date"])
+            # 按 date 去重（同一天多次生成 eod/tail 快照，保留最后一条）
+            dedup = {}
+            for r in rows:
+                dedup[r["date"]] = r
+            rows = [dedup[k] for k in sorted(dedup)]
+            n = int(days) if days else 0
+            return {"series": rows[-n:] if n > 0 else rows}
+        except Exception:
+            return {"series": []}
+
     # ---------- 集合竞价信息层 ----------
     def load_auction(self, date):
         """读 t_io/preopen/auction_{date}.json，聚合并返回竞价摘要。"""
@@ -4088,7 +4124,7 @@ if __name__ == "__main__":
     debug = sys.argv[1] == "--debug" if len(sys.argv) > 1 else False
 
     window = webview.create_window(
-        "做T复盘决策看板",
+        "trader pannel",
         str(entry),
         js_api=api,
         width=1440,
