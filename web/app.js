@@ -2860,7 +2860,8 @@ function renderMarkdown(md) {
 }
 
 /* LLM 深度复盘 → 分卡片渲染（2026-08-29）：按 ## 章节拆分为独立卡片，
-   一句话结论/操作含义用醒目样式突出。 */
+   一句话结论/操作含义用醒目样式突出。
+   （2026-08-31）**加粗** 即 LLM 标记的重点，直接渲染为红色高亮。 */
 function renderReviewAsCards(md) {
   if (!md) return '<div class="empty">无复盘内容</div>';
   const lines = String(md).split("\n");
@@ -2882,9 +2883,12 @@ function renderReviewAsCards(md) {
   push();
 
   const inline = (t) => esc(t)
-    .replace(/\*\*(.+?)\*\*/g, "<b>$1</b>")
+    .replace(/\*\*(.+?)\*\*/g, '<span class="rv-red">$1</span>')  // 加粗=重点，标红
     .replace(/\*(.+?)\*/g, "<i>$1</i>")
-    .replace(/`(.+?)`/g, '<code class="rv-code">$1</code>');
+    .replace(/`(.+?)`/g, '<code class="rv-code">$1</code>')
+    // 重点标红：结论性/风险性/操作性短语（2026-08-29 用户要求）
+    .replace(/(一句话结论|操作含义|次日推演|关键位|共振结论|注意|警惕|风险|机会|突破|跌破|放量|缩量|上涨|下跌|买入|卖出|持有|减仓|加仓|支撑|压力)/g,
+             '<span class="rv-red">$1</span>');
 
   const renderBody = (lines) => {
     const html = [];

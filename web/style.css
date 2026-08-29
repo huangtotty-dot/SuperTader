@@ -303,18 +303,34 @@ tr:hover td { background: rgba(243,93,43,.03); }
 .mb-k { font-size: 11px; color: var(--text-dim); }
 .mb-v { font-size: 15px; font-weight: 700; font-family: var(--mono); margin-top: 2px; color: var(--text); }
 
-/* LLM 深度复盘分卡片（2026-08-29） */
+/* LLM 深度复盘分卡片（2026-08-29；字体放大 2026-08-31） */
 .rv-cards-grid { display: grid; grid-template-columns: 1fr; gap: 10px; }
-.rv-sec-card { padding: 12px 14px; }
-.rv-sec-title { font-size: 13px; font-weight: 700; color: var(--accent); margin-bottom: 8px; padding-bottom: 6px; border-bottom: 1px solid var(--border); }
-.rv-sec-body { font-size: 12px; line-height: 1.7; color: var(--text); }
+.rv-sec-card { padding: 16px 18px; }
+.rv-sec-title { font-size: 16px; font-weight: 700; color: var(--accent); margin-bottom: 9px; padding-bottom: 7px; border-bottom: 1px solid var(--border); }
+.rv-sec-body { font-size: 15px; line-height: 1.85; color: var(--text); }
+/* 卡片内各元素字体同步放大（覆盖全局 .rv-* 小字号） */
+.rv-sec-card .rv-p { font-size: 15px; margin: 7px 0; }
+.rv-sec-card .rv-li { font-size: 15px; margin: 5px 0; }
+.rv-sec-card .rv-h4 { font-size: 15px; margin: 13px 0 6px; }
+.rv-sec-card .rv-h5 { font-size: 14px; margin: 10px 0 5px; }
+.rv-sec-card .rv-table { font-size: 14px; }
+.rv-sec-card .rv-table td { padding: 6px 10px; }
+.rv-sec-card .rv-code { font-size: 13px; }
 .rv-sec-key {
-  background-image: linear-gradient(162deg, rgba(243,93,43,.14), rgba(243,93,43,.04));
-  border: 1px solid rgba(243,93,43,.35);
+  background-image: linear-gradient(162deg, rgba(243,93,43,.16), rgba(243,93,43,.06));
+  border: 1px solid rgba(243,93,43,.4);
   border-radius: 14px;
   box-shadow: 0 10px 26px rgba(40,60,90,.08), inset 0 1px 0 var(--glass-hi);
 }
-.rv-sec-key .rv-sec-title { color: var(--accent); font-size: 14px; border-bottom-color: rgba(243,93,43,.25); }
+.rv-sec-key .rv-sec-title { color: var(--accent); font-size: 17px; border-bottom-color: rgba(243,93,43,.25); }
+.rv-sec-key .rv-sec-body { font-size: 16px; font-weight: 500; line-height: 1.9; }
+/* 重点标红 */
+.rv-red { color: #f85149; font-weight: 700; }
+.rv-bold { font-weight: 700; color: var(--text); }
+/* 关键卡内表格/列表字体同步放大 */
+.rv-sec-key .rv-table { font-size: 15px; }
+.rv-sec-key .rv-li { font-size: 16px; margin: 5px 0; }
+.rv-sec-key .rv-p { font-size: 16px; margin: 7px 0; }
 
 .h-main-row { transition: background .15s; }
 .h-main-row:hover { background: rgba(243,93,43,.08); }
