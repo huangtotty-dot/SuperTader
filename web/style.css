@@ -303,6 +303,19 @@ tr:hover td { background: rgba(243,93,43,.03); }
 .mb-k { font-size: 11px; color: var(--text-dim); }
 .mb-v { font-size: 15px; font-weight: 700; font-family: var(--mono); margin-top: 2px; color: var(--text); }
 
+/* LLM 深度复盘分卡片（2026-08-29） */
+.rv-cards-grid { display: grid; grid-template-columns: 1fr; gap: 10px; }
+.rv-sec-card { padding: 12px 14px; }
+.rv-sec-title { font-size: 13px; font-weight: 700; color: var(--accent); margin-bottom: 8px; padding-bottom: 6px; border-bottom: 1px solid var(--border); }
+.rv-sec-body { font-size: 12px; line-height: 1.7; color: var(--text); }
+.rv-sec-key {
+  background-image: linear-gradient(162deg, rgba(243,93,43,.14), rgba(243,93,43,.04));
+  border: 1px solid rgba(243,93,43,.35);
+  border-radius: 14px;
+  box-shadow: 0 10px 26px rgba(40,60,90,.08), inset 0 1px 0 var(--glass-hi);
+}
+.rv-sec-key .rv-sec-title { color: var(--accent); font-size: 14px; border-bottom-color: rgba(243,93,43,.25); }
+
 .h-main-row { transition: background .15s; }
 .h-main-row:hover { background: rgba(243,93,43,.08); }
 .h-main-row td { padding: 10px 8px; border-bottom: 1px solid var(--border-soft); vertical-align: middle; }
@@ -646,26 +659,6 @@ tr:hover td { background: rgba(243,93,43,.03); }
   border-radius: 8px;
   background: #f4f6fa;
 }
-
-/* 上证指数多周期面板（2026-08-29） */
-.imf-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-  gap: 10px;
-}
-.imf-card {
-  background: var(--bg-card);
-  border: 1px solid var(--border-soft);
-  border-radius: 8px;
-  padding: 10px 12px 6px;
-  transition: border-color .15s, transform .15s;
-}
-.imf-card:hover { border-color: var(--accent); transform: translateY(-1px); }
-.imf-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 4px; }
-.imf-title { font-size: 12px; font-weight: 700; color: var(--accent); }
-.imf-price { font-family: var(--mono); font-size: 15px; font-weight: 700; }
-.imf-chg { font-size: 11px; margin-left: 5px; font-family: var(--mono); }
-.imf-chart { height: 96px; }
 
 /* 涨停/跌停面板（2026-08-29） */
 .ztd-today {

@@ -2859,6 +2859,87 @@ function renderMarkdown(md) {
   return `<div class="rv">${html.join("\n")}</div>`;
 }
 
+/* LLM 深度复盘 → 分卡片渲染（2026-08-29）：按 ## 章节拆分为独立卡片，
+   一句话结论/操作含义用醒目样式突出。 */
+function renderReviewAsCards(md) {
+  if (!md) return '<div class="empty">无复盘内容</div>';
+  const lines = String(md).split("\n");
+  const sections = [];
+  let cur = { title: "", lines: [] };
+  const push = () => {
+    if (cur.title || cur.lines.length) sections.push({ ...cur });
+    cur = { title: "", lines: [] };
+  };
+  lines.forEach(line => {
+    const t = line.trim();
+    if (/^##\s+/.test(t)) {
+      push();
+      cur.title = t.replace(/^##\s+/, "");
+    } else {
+      cur.lines.push(line);
+    }
+  });
+  push();
+
+  const inline = (t) => esc(t)
+    .replace(/\*\*(.+?)\*\*/g, "<b>$1</b>")
+    .replace(/\*(.+?)\*/g, "<i>$1</i>")
+    .replace(/`(.+?)`/g, '<code class="rv-code">$1</code>');
+
+  const renderBody = (lines) => {
+    const html = [];
+    let tableRows = [];
+    const flushTable = () => {
+      if (!tableRows.length) return;
+      const rows = tableRows.map((cells, i) => {
+        const tds = cells.map((c, j) => {
+          const txt = inline(c);
+          const s = String(c).trim();
+          let style = "";
+          if (i > 0 && /%/.test(s)) {
+            const n = parseFloat(s.replace(/[%,+\s]/g, ""));
+            if (!isNaN(n)) style = n > 0 ? "color:#f85149;font-weight:600" : n < 0 ? "color:#3fb950" : "";
+          }
+          return `<td${i === 0 ? ' style="font-weight:700"' : ""}${style ? ` style="${style}"` : ""}>${txt}</td>`;
+        }).join("");
+        return `<tr${i === 0 ? ' class="rv-th"' : (i % 2 === 0 ? ' class="rv-alt"' : "")}>${tds}</tr>`;
+      }).join("");
+      html.push(`<table class="rv-table"><tbody>${rows}</tbody></table>`);
+      tableRows = [];
+    };
+    lines.forEach(line => {
+      const t = line.trim();
+      if (t.startsWith("|")) {
+        const cells = t.replace(/^\||\|$/g, "").split("|").map(c => c.trim());
+        if (!cells.every(c => /^[-: ]+$/.test(c))) tableRows.push(cells);
+        return;
+      }
+      flushTable();
+      if (t === "---" || /^={3,}$/.test(t)) html.push('<hr class="rv-hr">');
+      else if (t.startsWith("### ")) html.push(`<h4 class="rv-h4">${inline(t.slice(4))}</h4>`);
+      else if (t.startsWith("#### ")) html.push(`<h5 class="rv-h5">${inline(t.slice(5))}</h5>`);
+      else if (t.startsWith("- ")) html.push(`<div class="rv-li">• ${inline(t.slice(2))}</div>`);
+      else if (/^\d+[\.、]/.test(t)) html.push(`<div class="rv-li">${inline(t)}</div>`);
+      else if (t) html.push(`<div class="rv-p">${inline(t)}</div>`);
+      else html.push('<div style="height:6px"></div>');
+    });
+    flushTable();
+    return html.join("\n");
+  };
+
+  const isKey = (title) => /一句话结论|操作含义|次日推演|关键位|共振结论/.test(title);
+  const cards = sections.map(sec => {
+    const body = renderBody(sec.lines);
+    if (!body.trim()) return "";
+    const key = isKey(sec.title);
+    return `<div class="card rv-sec-card ${key ? "rv-sec-key" : ""}">
+      <div class="rv-sec-title">${esc(sec.title)}</div>
+      <div class="rv-sec-body">${body}</div>
+    </div>`;
+  }).filter(Boolean);
+  return cards.length ? `<div class="rv-cards-grid">${cards.join("")}</div>` : '<div class="empty">无复盘内容</div>';
+}
+
 /* ===== 复盘可视化：解析横评表→条形图、关键位表→卡片（2026-08-23） ===== */
 function parseCrossTable(md) {
   const lines = String(md).split("\n");
@@ -3206,54 +3287,6 @@ function clearPanelInstances(prefix) {
   });
 }
 
-/* 上证指数多周期面板（2026-08-29）——30/60min + 日/周/月线 格式化走势 */
-function renderIndexMultiFrame(multi) {
-  const el = document.getElementById("indexMultiBody");
-  if (!el) return;
-  clearPanelInstances("imf-");
-  if (!multi) { el.innerHTML = '<div class="empty">暂无多周期数据（运行「开始大盘复盘」后生成）</div>'; return; }
-  const min = multi["分钟线"] || {};
-  const specs = [
-    { key: "30min", label: "30分钟", data: min["30min"], xf: r => String(r.time).slice(5, 16) },
-    { key: "60min", label: "60分钟", data: min["60min"], xf: r => String(r.time).slice(5, 16) },
-    { key: "day", label: "日线", data: multi["日线"], xf: r => String(r.date).slice(5) },
-    { key: "week", label: "周线", data: multi["周线"], xf: r => String(r.date).slice(5) },
-    { key: "month", label: "月线", data: multi["月线"], xf: r => String(r.date).slice(5) },
-  ];
-  const cards = specs.map(s => {
-    const rows = (s.data && s.data.length) ? s.data : [];
-    if (rows.length < 2) return `<div class="imf-card"><div class="imf-head"><span class="imf-title">${s.label}</span></div><div class="empty" style="padding:14px 0">无数据</div></div>`;
-    const last = rows[rows.length - 1], prev = rows[rows.length - 2];
-    const close = parseFloat(last.close);
-    const chg = (close / parseFloat(prev.close) - 1) * 100;
-    const color = chg >= 0 ? "#f85149" : "#3fb950";
-    return `<div class="imf-card">
-      <div class="imf-head"><span class="imf-title">${s.label}</span>
-        <span class="imf-price" style="color:${color}">${close.toFixed(2)}<span class="imf-chg">${chg >= 0 ? "+" : ""}${chg.toFixed(2)}%</span></span></div>
-      <div id="imf-${s.key}" class="imf-chart"></div>
-    </div>`;
-  });
-  el.innerHTML = `<div class="imf-grid">${cards.join("")}</div>`;
-  specs.forEach(s => {
-    const rows = (s.data && s.data.length) ? s.data : [];
-    if (rows.length < 2) return;
-    const id = "imf-" + s.key;
-    const closes = rows.map(r => parseFloat(r.close));
-    const up = closes[closes.length - 1] >= closes[0];
-    const x = rows.map(s.xf);
-    echRender(id, {
-      backgroundColor: "transparent",
-      grid: { left: 6, right: 6, top: 6, bottom: 16 },
-      tooltip: { trigger: "axis", backgroundColor: "#161b22", borderColor: "#30363d", textStyle: { color: "#c9d1d9", fontSize: 10 } },
-      xAxis: { type: "category", data: x, show: false, boundaryGap: false },
-      yAxis: { type: "value", scale: true, show: false },
-      series: [{ type: "line", data: closes, smooth: true, symbol: "none",
-        lineStyle: { width: 1.5, color: up ? "#f85149" : "#3fb950" },
-        areaStyle: { color: up ? "rgba(248,81,73,.15)" : "rgba(63,185,80,.15)" } }],
-    });
-  });
-}
-
 /* 涨停/跌停面板（2026-08-29）——当日比例 + 近一月走势 */
 function renderZtDtPanel(emo, hist) {
   const el = document.getElementById("ztDtBody");
@@ -3308,16 +3341,14 @@ async function refreshDailyReview() {
     const hist = await apiCall("get_zt_dt_history", 30).catch(() => null);
     const margin = await apiCall("get_margin_balance", 30).catch(() => null);
     const emo = (r && r.exists && r.data && r.data.extra && r.data.extra.情绪) || {};
-    const multi = (r && r.exists && r.data && r.data.index_multi) || null;
     const health = (r && r.exists && r.data && r.data.data_health) || {};
     renderDataHealth(health);                      // 数据健康条
-    renderIndexMultiFrame(multi);                 // 上证指数多周期面板
     renderZtDtPanel(emo, hist);                    // 涨停/跌停面板
     renderMarginBalance(margin);                   // 两融余额面板（独立刷新，不依赖 LLM）
     if (r && r.exists) {
       renderSummary(r.text);                     // 复盘总结卡（置顶）
       renderReviewCharts(r.text, r.data || {});   // 可视化（玻璃卡 + 条形图 + 关键位）
-      el.innerHTML = renderMarkdown(r.text);
+      el.innerHTML = renderReviewAsCards(r.text);  // LLM 深度复盘 → 分卡片渲染
     } else {
       const wrap = document.getElementById("reviewChartWrap");
       if (wrap) wrap.style.display = "none";
