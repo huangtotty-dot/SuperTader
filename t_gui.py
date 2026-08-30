@@ -40,7 +40,8 @@ T_MODE = STATE_DIR / "t_mode.json"
 IDX_REGIME = BASE / "t_io" / "index_regime"
 LOGS_DIR = BASE / "t_io" / "logs"
 INTRADAY_STATE = BASE / "t_io" / "intraday_state.json"
-PORTFOLIO = STATE_DIR / "portfolio_config.json"
+PORTFOLIO = STATE_DIR / "accounts_config.json"  # 2026-08-30 合并：账户配置唯一源头（原 portfolio_config.json 已并入）
+PORTFOLIO_LEGACY = STATE_DIR / "portfolio_config.json"  # 旧部署回退（.gszq 等）
 BRIDGE_DIR = BASE / "t_io" / "bridge"  # P4-2/3: 自动盘事件总线（heartbeat.json + events_*.jsonl + KILL_SWITCH）
 
 # 内置名称映射（数据缺失 code 时兜底；可由 holdings/add_watch/trace 补充）
@@ -3104,8 +3105,10 @@ class Api:
 
     # ---------- 独立配置（账户总资金+已实现亏损） ----------
     def load_portfolio_config(self):
-        """读 t_io/state/portfolio_config.json（独立于 holdings.json，用户更新持仓不会覆盖）。"""
-        data = _load_json(PORTFOLIO, {})
+        """读 t_io/state/accounts_config.json（独立于 holdings.json，用户更新持仓不会覆盖）。
+        2026-08-30 起账户配置唯一源头为 accounts_config.json；旧 portfolio_config.json 仅作回退。"""
+        fp = PORTFOLIO if PORTFOLIO.exists() else PORTFOLIO_LEGACY
+        data = _load_json(fp, {})
         return _clean({
             "accounts": data.get("accounts", {}),
             "realized_loss": data.get("realized_loss", {}),
@@ -3157,6 +3160,51 @@ class Api:
                 pass
         out["latest"] = latest[-10:]
         return _clean(out)
+
+    def load_buy_confirm_pending(self):
+        """人工确认闸（2026-08-30）：读 BUY_PENDING.json（引擎写）待确认买入请求 + 当日已拒绝清单，
+        并从 BUY_DECISION.json 组出已应答集合（防 GUI 重启重弹）。date!=今日 → 忽略。"""
+        today = datetime.now().strftime("%Y-%m-%d")
+        bp = _load_json(BRIDGE_DIR / "BUY_PENDING.json", {})
+        if not isinstance(bp, dict) or bp.get("date") != today:
+            return {"date": today, "pending": [], "rejected_today": [], "answered": {}}
+        reqs = [r for r in (bp.get("pending") or {}).values()
+                if isinstance(r, dict) and r.get("code")]
+        reqs.sort(key=lambda r: (r.get("request_ts") or 0))
+        dec = _load_json(BRIDGE_DIR / "BUY_DECISION.json", {})
+        answered = {}
+        if isinstance(dec, dict):
+            for code, d in (dec.get("decisions") or {}).items():
+                if isinstance(d, dict) and d.get("request_id"):
+                    answered[code] = d["request_id"]
+        return _clean({"date": today, "pending": reqs,
+                       "rejected_today": bp.get("rejected_today") or [],
+                       "answered": answered})
+
+    def respond_buy_confirm(self, code, request_id, decision):
+        """人工确认闸：写用户确认/拒绝到 BUY_DECISION.json（GUI 单写者，tmp+replace 原子写）。
+        引擎只消费 request_id 与内存 pending 匹配的 decision，陈旧/错配一律忽略。"""
+        if decision not in ("confirm", "reject"):
+            return {"ok": False, "error": "decision 必须为 confirm/reject"}
+        if not code or not request_id:
+            return {"ok": False, "error": "code/request_id 不能为空"}
+        fp = BRIDGE_DIR / "BUY_DECISION.json"
+        data = _load_json(fp, {})
+        if not isinstance(data, dict) or "decisions" not in data:
+            data = {"date": datetime.now().strftime("%Y-%m-%d"), "decisions": {}}
+        (data.setdefault("decisions", {}))[code] = {
+            "request_id": request_id, "decision": decision,
+            "ts": datetime.now().timestamp()}
+        data["date"] = datetime.now().strftime("%Y-%m-%d")
+        data["updated_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        try:
+            tmp = fp.with_suffix(".tmp")
+            with open(tmp, "w", encoding="utf-8") as f:
+                json.dump(data, f, ensure_ascii=False, indent=2)
+            tmp.replace(fp)
+            return {"ok": True, "request_id": request_id, "decision": decision}
+        except Exception as e:
+            return {"ok": False, "error": str(e)}
 
     def load_position_manager(self):
         """仓位管理器：每只持仓的目标/当前市值、资金占比、超配欠配。
@@ -3928,8 +3976,22 @@ class Api:
         def _is_holding(code: str) -> bool:
             return bool((holdings.get(code) or {}).get("qty") or 0) or \
                 bool((holdings.get(code.split("_")[0]) or {}).get("qty") or 0)
+        # 手动盘建仓表可见性（2026-08-30）：manual 候选 + 实际持仓股；auto 池且未持有 → 隐藏（属自动盘 tab）。
+        # 判定用 holdings 派生的 auto_pool.is_manual（权威源），不用 watchlist 的 pool 字段（可能过时，
+        # 如 600481/002451 在 watchlist 标 auto 但 holdings 是 both 且 qty>0 → _is_holding 放行）。
+        if str(BASE / "config") not in sys.path:
+            sys.path.insert(0, str(BASE / "config"))
+        try:
+            import auto_pool as _auto_pool_mod
+        except Exception:
+            _auto_pool_mod = None
+
         def _visible(code: str) -> bool:
-            return (code in wl_stocks) or _is_holding(code)
+            if _is_holding(code):
+                return True                       # 持仓股始终显示
+            if _auto_pool_mod is not None and not _auto_pool_mod.is_manual(code):
+                return False                      # auto 池且未持有 → 隐藏
+            return code in wl_stocks              # manual 候选
 
         for code, r in latest_by_code.items():
             if not _visible(code):
@@ -3951,8 +4013,9 @@ class Api:
             row.setdefault("scan_time", "")  # fix P0-14: 每行确保带 scan_time 字段
             # fix 2026-08-20: in_holdings 实时对齐 holdings.json（qty>0 才算持仓，trace/watchlist 字段可能陈旧）
             row["in_holdings"] = _is_holding(code)
-            # P3-2 池分管：pool 标注（watchlist 未列/缺省 → manual），供 GUI 池筛选
-            row["pool"] = (wl_stocks.get(code) or {}).get("pool") or "manual"
+            # P3-2 池分管：pool 标注（优先 holdings 权威源，回退 watchlist，缺省 manual），供 GUI 池筛选
+            row["pool"] = (holdings.get(code) or {}).get("pool") or \
+                (wl_stocks.get(code) or {}).get("pool") or "manual"
             rows.append(row)
 
         # 未扫描的 watchlist 股票：monitoring/signal → "等待扫描"；archived → "已停用"（可见但不参与扫描）
@@ -3974,7 +4037,7 @@ class Api:
                 "conditions": {},
                 "suggested_qty": 0, "suggested_price": 0, "capital_required": 0,
                 "in_holdings": in_hold,
-                "pool": info.get("pool", "manual"),  # P3-2 池分管：GUI 池筛选
+                "pool": (holdings.get(code) or {}).get("pool") or info.get("pool") or "manual",  # P3-2 池分管：GUI 池筛选（优先 holdings）
                 "scan_type": "已停用" if is_archived else (
                     "自动盘(不手动扫)" if info.get("pool") == "auto" else "等待扫描"),
                 "scan_time": "",  # fix P0-14: 每行确保带 scan_time 字段
@@ -3993,7 +4056,7 @@ class Api:
         if archived_cnt: note_parts.append(f"{archived_cnt}只已停用")
         note = " · ".join(note_parts) if note_parts else ""
 
-        total = len(wl_stocks)
+        total = len([c for c in wl_stocks if _visible(c)])  # fix 2026-08-30: 分母=手动盘可见候选数（auto 池未持有已隐藏）
         progress = {
             "total_candidates": total,
             "scanned": len(scanned_codes),

@@ -1470,6 +1470,95 @@ function renderAutoPositions(positions) {
   els.forEach(el => { el.innerHTML = html; });
 }
 
+/* ---- 自动盘买入人工确认闸（2026-08-30 建仓/加仓/底仓回补人工把关） ---- */
+let _shownReqs = {};   // {code: request_id} 已弹出未处理的请求（防重复弹窗）
+const BUY_CONFIRM_KIND = { build: "建仓", add: "加仓", topup: "底仓回补" };
+
+function renderBuyConfirmBadge(n) {
+  const el = document.getElementById("buyConfirmBadge");
+  if (!el) return;
+  if (n > 0) { el.textContent = n; el.style.display = "inline-block"; }
+  else el.style.display = "none";
+}
+
+function closeBuyConfirmModal() {
+  const m = document.getElementById("buyConfirmModal");
+  if (m) m.style.display = "none";
+}
+
+async function respondBuyConfirm(code, requestId, decision) {
+  try {
+    const r = await apiCall("respond_buy_confirm", code, requestId, decision);
+    if (!r || !r.ok) { statusEl("确认回复失败: " + ((r && r.error) || ""), "err"); return; }
+    delete _shownReqs[code];
+    const item = document.querySelector(`.buy-confirm-item[data-code="${code}"]`);
+    if (item) item.remove();
+    const modal = document.getElementById("buyConfirmModal");
+    const list = document.getElementById("buyConfirmList");
+    if (list && !list.querySelectorAll(".buy-confirm-item").length) closeBuyConfirmModal();
+    pollBuyConfirm();
+  } catch (e) { statusEl("确认回复失败: " + e.message, "err"); }
+}
+
+async function pollBuyConfirm() {
+  try {
+    const d = await apiCall("load_buy_confirm_pending");
+    const pending = (d && d.pending) || [];
+    const answered = (d && d.answered) || {};
+    const modal = document.getElementById("buyConfirmModal");
+    const list = document.getElementById("buyConfirmList");
+    let changed = false;
+    for (const req of pending) {
+      const code = req.code;
+      if (answered[code] === req.request_id) { delete _shownReqs[code]; continue; }
+      if (_shownReqs[code] === req.request_id) continue;
+      _shownReqs[code] = req.request_id;
+      changed = true;
+      if (!list) break;
+      const kind = BUY_CONFIRM_KIND[req.kind] || req.action || "买入";
+      const reasons = (req.reasons || []).map(esc).join("<br>")
+        || '<span class="cell-dim">无理由</span>';
+      const item = document.createElement("div");
+      item.className = "buy-confirm-item";
+      item.dataset.code = code;
+      item.dataset.requestId = req.request_id;
+      item.innerHTML = `
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+          <span class="badge" style="background:#ffb454;color:#111">${esc(kind)}</span>
+          <b>${esc(req.name || code)}</b> <span class="mono cell-dim">${esc(code)}</span>
+        </div>
+        <div class="cell-dim" style="font-size:12px;margin-bottom:6px">
+          预计买入 <b>${fmt(req.qty, 0)}</b> 股 @ <b>${req.price != null ? fmt(req.price, 3) : "—"}</b>
+          ${req.pos_qty > 0 ? ` · 现持仓 <b>${fmt(req.pos_qty, 0)}</b>` : ""}
+        </div>
+        <div class="cell-dim" style="font-size:11px;margin-bottom:10px">${reasons}</div>
+        <div style="display:flex;gap:8px">
+          <button class="mini-btn primary" style="flex:1" data-confirm="confirm">✅ 确认买入</button>
+          <button class="mini-btn danger" style="flex:1" data-confirm="reject">❌ 拒绝</button>
+        </div>`;
+      list.appendChild(item);
+    }
+    const remaining = pending.filter(
+      r => answered[r.code] !== r.request_id && _shownReqs[r.code] === r.request_id).length;
+    renderBuyConfirmBadge(remaining);
+    if (changed && modal && list && list.querySelectorAll(".buy-confirm-item").length) {
+      modal.style.display = "flex";
+    }
+  } catch (e) { /* pywebview 未就绪时忽略 */ }
+}
+
+function initBuyConfirmEvents() {
+  const modal = document.getElementById("buyConfirmModal");
+  if (!modal) return;
+  modal.addEventListener("click", async (e) => {
+    const btn = e.target.closest("button[data-confirm]");
+    if (!btn) return;
+    const item = btn.closest(".buy-confirm-item");
+    if (!item) return;
+    await respondBuyConfirm(item.dataset.code, item.dataset.requestId, btn.dataset.confirm);
+  });
+}
+
 /* ---- ⑦ 加仓观察 ---- */
 function renderAddWatch(aw) {
   const el = document.getElementById("addWatchBody");
@@ -3443,6 +3532,7 @@ function startPoll() {
 function stopLivePoll() {
   if (liveTimer) { clearInterval(liveTimer); liveTimer = null; }
   if (autoTimer) { clearInterval(autoTimer); autoTimer = null; }
+  if (buyConfirmTimer) { clearInterval(buyConfirmTimer); buyConfirmTimer = null; }
   document.getElementById("liveTag").style.display = "none";
 }
 function startLivePoll() {
@@ -3458,6 +3548,9 @@ function startLivePoll() {
     const t = act && act.dataset.tab;
     if (t === "auto" || t === "overview") loadAutoStatus();
   }, 10000);
+  // 人工确认闸 10s 全局轮询（与 tab 无关：买入确认时效敏感，任何 tab 都弹窗打扰）
+  buyConfirmTimer = setInterval(pollBuyConfirm, 10000);
+  pollBuyConfirm();
 }
 
 async function init() {
@@ -3489,6 +3582,8 @@ async function init() {
   refreshBtn.addEventListener("click", () => {
     if (dateSelect.value) loadAndRender(dateSelect.value, false);
   });
+  // 自动盘买入人工确认闸：确认/拒绝按钮事件委托 + 初始拉取（全局轮询在 startLivePoll）
+  initBuyConfirmEvents();
   // 选股猎手运行按钮 + 历史日期下拉
   const hunterBtn = document.getElementById("hunterRunBtn");
   if (hunterBtn) hunterBtn.addEventListener("click", () => loadHunter(true));

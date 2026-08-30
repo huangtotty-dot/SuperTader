@@ -53,6 +53,16 @@ def _snapshot_path(date_str: str = None) -> str:
     return os.path.join(BRIDGE_DIR, f"signals_{date_str}.jsonl")
 
 
+def _buy_pending_path() -> str:
+    """待人工确认买入请求（引擎单写者 / GUI 只读）。整文件原子覆写。"""
+    return os.path.join(BRIDGE_DIR, "BUY_PENDING.json")
+
+
+def _buy_decision_path() -> str:
+    """用户确认/拒绝回复（GUI 单写者 / 引擎只读）。整文件原子覆写。"""
+    return os.path.join(BRIDGE_DIR, "BUY_DECISION.json")
+
+
 # ── 写入工具 ──
 
 def _append_jsonl(path: str, rec: dict):
@@ -70,6 +80,17 @@ def _write_json(path: str, data):
     try:
         with open(path, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, default=str)
+    except Exception:
+        pass
+
+
+def _write_json_atomic(path: str, data):
+    """整文件原子覆写（tmp+replace），GUI 读侧看不到半写状态。"""
+    try:
+        tmp = path + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, default=str)
+        os.replace(tmp, path)
     except Exception:
         pass
 
@@ -211,3 +232,42 @@ def check_kill_switch() -> bool:
         return os.path.exists(_kill_switch_path())
     except Exception:
         return False
+
+
+# ── 公开 API：人工确认闸（2026-08-30 建仓/加仓人工把关） ──
+
+def write_buy_pending(rec: dict):
+    """写待人工确认买入请求（BUY_PENDING.json，引擎单写者）。整文件原子覆写。
+    rec 结构 {date, updated_at, rejected_today[], pending{code: request}}。"""
+    _write_json_atomic(_buy_pending_path(), rec)
+
+
+def read_buy_pending() -> dict:
+    """读待人工确认买入请求。异常/不存在 → {}。"""
+    try:
+        with open(_buy_pending_path(), encoding="utf-8") as f:
+            return json.load(f) or {}
+    except Exception:
+        return {}
+
+
+def read_buy_decision() -> dict:
+    """读用户确认/拒绝回复（BUY_DECISION.json）。异常/不存在 → {}。"""
+    try:
+        with open(_buy_decision_path(), encoding="utf-8") as f:
+            return json.load(f) or {}
+    except Exception:
+        return {}
+
+
+def write_confirm(time_str: str, code: str, state: str, detail: str = "", **kw):
+    """人工确认闸事件（追加进既有 events 流，引擎是 events 唯一写者）：
+    state ∈ request / approved / rejected / expired / blocked。事件名 buy_confirm_<state>。"""
+    rec = {
+        "event": f"buy_confirm_{state}",
+        "time": time_str,
+        "code": code,
+        "detail": detail,
+    }
+    rec.update(kw)
+    _append_jsonl(_events_path(), rec)
