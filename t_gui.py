@@ -12,7 +12,7 @@ t_gui.py — 做T实盘·盘后复盘决策看板（pywebview 桌面壳）
   t_io/validation/daily_review/stage_board.json           阶段看板
   t_io/traces/position_builder_{date}.jsonl               建仓扫描逐行日志
   doc/每日复盘/{date}_复盘.md                              复盘报告 markdown
-  holdings.json / t_io/state/holdings_{date}.json         持仓（当前 + 日快照）
+  holdings.json / t_io/state/holdings_daily_{date}.json     持仓（当前 + GUI 日快照；旧 holdings_{date}.json 已于 2026-08-30 清理）
   t_mode.json                                             T模式（正/反T）
 """
 import json
@@ -3206,6 +3206,220 @@ class Api:
         except Exception as e:
             return {"ok": False, "error": str(e)}
 
+    # ---------- 自动盘：建仓扫描 / 添加标的 / 手动建仓做T衔接（2026-08-30） ----------
+
+    def _auto_pool_module(self):
+        """加载 config/auto_pool.py（config 无 __init__.py，需把 config 目录入 path）。"""
+        if str(BASE / "config") not in sys.path:
+            sys.path.insert(0, str(BASE / "config"))
+        try:
+            import auto_pool
+            return auto_pool
+        except Exception:
+            return None
+
+    def load_auto_scan(self, date=None):
+        """自动盘建仓扫描结果（读 TRACES/auto_scan_{date}.jsonl 聚合，不回源）。无文件 → has_data:False。"""
+        date = date or datetime.now().strftime("%Y-%m-%d")
+        fp = TRACES / f"auto_scan_{date}.jsonl"
+        if not fp.exists():
+            return {"has_data": False, "date": date, "rows": [], "counts": {}}
+        latest = {}
+        for line in open(fp, encoding="utf-8").read().splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                r = json.loads(line)
+            except Exception:
+                continue
+            code = r.get("code")
+            if not code:
+                continue
+            if code not in latest or (r.get("scan_time") or "") > (latest[code].get("scan_time") or ""):
+                latest[code] = r
+        rows = sorted(latest.values(), key=lambda r: -(r.get("score") or 0))
+        counts = Counter(r.get("verdict", "weak") for r in rows)
+        return _clean({"has_data": True, "date": date, "rows": rows, "counts": dict(counts)})
+
+    def run_auto_scan(self, date=None):
+        """对 auto 池全量跑建仓判定（EOD 口径，df_1min=None 跳过 W35 日内确认），
+        逐行追加 TRACES/auto_scan_{date}.jsonl，返回聚合结果。咨询性扫描，以引擎闸链为准。"""
+        date = date or datetime.now().strftime("%Y-%m-%d")
+        try:
+            from src.holdings_repo import load_full
+            from execution.auto.build_decision_auto import decide
+            from core.market_data import get_provider
+            from config import ENTRY_TIMING_PARAMS
+        except Exception as e:
+            return {"has_data": False, "error": f"依赖导入失败: {e}"}
+        _ap = self._auto_pool_module()
+        if _ap is None:
+            return {"has_data": False, "error": "auto_pool 不可用"}
+        hold = load_full()
+        try:
+            prov = get_provider()
+            idx = prov.index_daily("sh000001", 400)
+        except Exception as e:
+            return {"has_data": False, "error": f"指数数据获取失败: {e}"}
+        fp = TRACES / f"auto_scan_{date}.jsonl"
+        fp.parent.mkdir(parents=True, exist_ok=True)
+        _scan_time = datetime.now().strftime("%H:%M:%S")
+        for code in _ap.auto_pool_codes():
+            row = {"code": code, "scan_time": _scan_time, "date": date,
+                   "name": (hold.get(code) or {}).get("name", code),
+                   "mirror_qty": int((hold.get(code) or {}).get("mirror_qty") or 0),
+                   "held": bool(int((hold.get(code) or {}).get("qty") or 0))}
+            try:
+                df = prov.daily(code, 400)
+                dec = decide(df, idx, date, params=ENTRY_TIMING_PARAMS, df_1min=None)
+                row.update({"verdict": dec.get("verdict", "weak"),
+                            "go": bool(dec.get("go")), "score": dec.get("score", 0),
+                            "regime": dec.get("regime"), "reasons": dec.get("reasons", []),
+                            "veto": dec.get("veto", []),
+                            "data_insufficient": bool(dec.get("data_insufficient"))})
+                if dec.get("features") and dec["features"].get("price"):
+                    row["price"] = dec["features"]["price"]
+            except Exception as e:
+                row.update({"verdict": "scan_error", "error": str(e)[:80]})
+            try:
+                with open(fp, "a", encoding="utf-8") as f:
+                    f.write(json.dumps(row, ensure_ascii=False) + "\n")
+            except Exception:
+                pass
+        return self.load_auto_scan(date)
+
+    def add_auto_stock(self, code, name, mirror_qty, type=None):
+        """添加新股票到 auto 池（pool=auto + mirror_qty 目标底仓）→ 原子写 holdings.json；
+        若 code 在 watchlist 且 pool=manual → 改 auto（防引擎 validate_pool_split 拒绝启动）。
+        引擎需重启才含该标的。"""
+        code = str(code or "").strip()
+        if not (code.isdigit() and len(code) == 6):
+            return {"ok": False, "error": "代码须为 6 位数字"}
+        try:
+            mirror_qty = int(mirror_qty)
+        except (TypeError, ValueError):
+            return {"ok": False, "error": "目标底仓须为整数"}
+        if mirror_qty < 100 or mirror_qty % 100 != 0:
+            return {"ok": False, "error": "目标底仓须 ≥100 且为 100 的整数倍"}
+        _ap = self._auto_pool_module()
+        if _ap is not None and not _ap.is_manual(code):
+            return {"ok": False, "error": f"{code} 已在 auto 池"}
+        try:
+            from src.holdings_repo import upsert_auto_entry
+            from core.market_data.codec import to_gm
+        except Exception as e:
+            return {"ok": False, "error": str(e)}
+        try:
+            gm_symbol = to_gm(code)
+        except Exception:
+            gm_symbol = ("SHSE." if code.startswith(("6", "5")) else "SZSE.") + code
+        if type is None:
+            type = "etf" if code.startswith("5") else "stock"
+        try:
+            upsert_auto_entry(code, name=name or code, gm_symbol=gm_symbol,
+                              type=type, mirror_qty=mirror_qty)
+        except Exception as e:
+            return {"ok": False, "error": f"写 holdings 失败: {e}"}
+        try:
+            wl_fp = STATE_DIR / "watchlist_buy.json"
+            wl = _load_json(wl_fp, {})
+            stocks = wl.get("stocks", {})
+            if isinstance(stocks, dict) and isinstance(stocks.get(code), dict):
+                if str(stocks[code].get("pool") or "manual") == "manual":
+                    stocks[code]["pool"] = "auto"
+                    tmp = wl_fp.with_suffix(".tmp")
+                    with open(tmp, "w", encoding="utf-8") as f:
+                        json.dump(wl, f, ensure_ascii=False, indent=2)
+                    tmp.replace(wl_fp)
+        except Exception:
+            pass
+        return {"ok": True, "code": code, "gm_symbol": gm_symbol, "type": type,
+                "mirror_qty": mirror_qty, "restart_required": True,
+                "msg": f"已加入 auto 池（目标底仓 {mirror_qty}），重启掘金策略后生效"}
+
+    def manual_auto_build(self, code, qty, action="build"):
+        """自动盘手动建仓/加仓入口（仅限 auto 池内）：写 holdings.json（mirror_qty 设/加）+
+        写 AUTO_BUILD.json 武装标记（引擎重启后 BASE 建仓跳过确认闸直接做T）。
+        同时清除该 code 既有 BUY_PENDING 请求（防双通道）。"""
+        code = str(code or "").strip()
+        if action not in ("build", "add"):
+            return {"ok": False, "error": "action 必须为 build/add"}
+        if not (code.isdigit() and len(code) == 6):
+            return {"ok": False, "error": "代码须为 6 位数字"}
+        try:
+            qty = int(qty)
+        except (TypeError, ValueError):
+            return {"ok": False, "error": "数量须为整数"}
+        if qty < 100 or qty % 100 != 0:
+            return {"ok": False, "error": "数量须 ≥100 且为 100 的整数倍"}
+        _ap = self._auto_pool_module()
+        if _ap is not None and _ap.is_manual(code):
+            return {"ok": False, "error": f"{code} 不在 auto 池（仅限 auto 池内已有股票）"}
+        try:
+            from src.holdings_repo import load_full, save_held_merged
+        except Exception as e:
+            return {"ok": False, "error": str(e)}
+        full = load_full()
+        entry = dict(full.get(code) or {})
+        if not entry:
+            return {"ok": False, "error": f"{code} 不在持仓真源"}
+        old_mirror = int(entry.get("mirror_qty") or 0)
+        new_mirror = qty if action == "build" else old_mirror + qty
+        entry["mirror_qty"] = new_mirror
+        if str(entry.get("pool") or "") == "manual":
+            entry["pool"] = "auto"
+        try:
+            save_held_merged({code: entry})
+        except Exception as e:
+            return {"ok": False, "error": f"写 holdings 失败: {e}"}
+        # 写 AUTO_BUILD.json 武装标记（GUI 直读直写 bridge，与 respond_buy_confirm 同款原子写）
+        try:
+            ab_fp = BRIDGE_DIR / "AUTO_BUILD.json"
+            ab = _load_json(ab_fp, {}) or {}
+            ab.setdefault("requests", {})
+            ab["requests"][code] = {"action": action, "qty": new_mirror,
+                                    "ts": datetime.now().timestamp()}
+            ab["updated_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            tmp = ab_fp.with_suffix(".tmp")
+            with open(tmp, "w", encoding="utf-8") as f:
+                json.dump(ab, f, ensure_ascii=False, indent=2)
+            tmp.replace(ab_fp)
+        except Exception as e:
+            return {"ok": False, "error": f"写武装标记失败: {e}"}
+        # 清除该 code 的既有 BUY_PENDING 请求（防"武装"与"旧请求"双通道）
+        try:
+            bp_fp = BRIDGE_DIR / "BUY_PENDING.json"
+            bp = _load_json(bp_fp, {}) or {}
+            if code in (bp.get("pending") or {}):
+                bp["pending"].pop(code, None)
+                tmp = bp_fp.with_suffix(".tmp")
+                with open(tmp, "w", encoding="utf-8") as f:
+                    json.dump(bp, f, ensure_ascii=False, indent=2)
+                tmp.replace(bp_fp)
+        except Exception:
+            pass
+        return {"ok": True, "code": code, "action": action, "mirror_qty": new_mirror,
+                "restart_required": True,
+                "msg": f"已武装 {'建仓' if action == 'build' else '加仓'} {new_mirror} 股，"
+                       "重启掘金策略后引擎将自动建仓并开始做T"}
+
+    def clear_auto_build(self, code):
+        """撤销自动盘手动建仓/加仓武装标记（从 AUTO_BUILD.json 删除该 code）。"""
+        try:
+            ab_fp = BRIDGE_DIR / "AUTO_BUILD.json"
+            ab = _load_json(ab_fp, {}) or {}
+            if code in (ab.get("requests") or {}):
+                ab["requests"].pop(code, None)
+                ab["updated_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                tmp = ab_fp.with_suffix(".tmp")
+                with open(tmp, "w", encoding="utf-8") as f:
+                    json.dump(ab, f, ensure_ascii=False, indent=2)
+                tmp.replace(ab_fp)
+            return {"ok": True}
+        except Exception as e:
+            return {"ok": False, "error": str(e)}
+
     def load_position_manager(self):
         """仓位管理器：每只持仓的目标/当前市值、资金占比、超配欠配。
         目标比例 = STOCK_PARAMS 个股 stock_qty_base_pct 或 全局默认。"""
@@ -4023,6 +4237,7 @@ class Api:
         archived_cnt = 0
         for code, info in wl_stocks.items():
             if not isinstance(info, dict): continue
+            if not _visible(code): continue   # fix 2026-08-30: auto 池且未持有 → 隐藏（属自动盘 tab）
             if code in scanned_codes: continue
             status = info.get("status")
             if status not in ("monitoring", "signal", "archived", None): continue
@@ -4146,15 +4361,23 @@ class Api:
         snap_prev = {}
         prev_date = None
 
-        fps = sorted(STATE_DIR.glob("holdings_*.json"))
+        # 2026-08-30: 旧格式 holdings_{date}.json 快照已清理删除，改读 GUI 每日快照
+        # holdings_daily_{date}.json（{"holdings": [...]} 列表）→ 转 code 键 dict（下游口径不变）
+        def _daily_to_map(snap):
+            rows = snap.get("holdings") if isinstance(snap, dict) else None
+            if isinstance(rows, list):
+                return {r.get("code"): r for r in rows if isinstance(r, dict) and r.get("code")}
+            return snap if isinstance(snap, dict) else {}
+
+        fps = sorted(STATE_DIR.glob("holdings_daily_*.json"))
         for fp in fps:
-            d = fp.stem.replace("holdings_", "")
+            d = fp.stem.replace("holdings_daily_", "")
             if d == date:
-                snap_today = _load_json(fp, {})
+                snap_today = _daily_to_map(_load_json(fp, {}))
             if d < date and (prev_date is None or d > prev_date):
                 prev_date = d
         if prev_date:
-            snap_prev = _load_json(STATE_DIR / f"holdings_{prev_date}.json", {})
+            snap_prev = _daily_to_map(_load_json(STATE_DIR / f"holdings_daily_{prev_date}.json", {}))
 
         t_mode_raw = _load_json(T_MODE, {})
         t_mode = {k: v for k, v in t_mode_raw.items() if not k.startswith("_")}
