@@ -31,6 +31,7 @@ from utils.helpers import SIM_NOW, _now, get_today_str, _default_daily_context
 from gm_bridge.writer import (
     write_signal, write_order, write_fill, write_reject, write_risk,
     write_heartbeat, check_kill_switch, write_snapshot, write_buyback,
+    write_buy_pending, read_buy_pending, read_buy_decision, write_confirm,
 )
 from gm_bridge import ops_guard
 
@@ -290,6 +291,115 @@ def _check_max_pos_cap(context, code, now, pos_qty: int, base_ref: int,
                       "pos_qty": pos_qty, "reason": _reason, "time": str(now)})
         print(f"[{now:%H:%M:%S}] BUY {code} 个股仓位到顶拦截: {_detail}")
     return True
+
+
+def _project_buy_qty(context, code, holding, sig, threshold, pos_qty):
+    """预估确认买入量（仅请求文件展示用；下单量以下单块 sizer 重算为准）。
+    pos_qty<=0 → 300（信号建仓兜底，与下单块 1508 同源）；
+    pos_qty>0 → sizer.calc_buy_qty(带 target_t=底仓+T余量)，异常/0 回退 300。"""
+    try:
+        if pos_qty <= 0:
+            return 300
+        _base_ref = getattr(context, f'_base_ref_{code}', 0) or pos_qty
+        _t_pct = float(context.engine._get_params(code).get("stock_qty_base_pct", 0.3) or 0.3)
+        _t_head = max(100, int(_base_ref * _t_pct / 100) * 100)
+        _target_t = max(pos_qty, _base_ref + _t_head)
+        _q = context.sizer.calc_buy_qty(code, dict(holding, target_t=_target_t),
+                                        getattr(sig, "score", 0) or 0, threshold)
+        return int(_q) if _q and int(_q) > 0 else 300
+    except Exception:
+        return 300
+
+
+def _buy_confirm_gate(context, code, now, *, action, price, qty_proj, pos_qty,
+                      reasons, needs_confirm, kind=None):
+    """人工确认闸（2026-08-30 建仓/加仓/底仓回补人工把关）。on_bar 内绝不阻塞。
+    返回 "allow" | "pending" | "rejected_today"。
+
+    - 主开关关闭或非 MODE_LIVE（回测）→ "allow"（零文件 I/O，防回测卡死）
+    - 当日已拒绝 → "rejected_today"（不再弹、不再写请求）
+    - 无 pending：needs_confirm=False（做T回补路径）→ "allow"；否则发请求 → "pending"
+    - 有 pending：action 不匹配（同标的有另一块请求未决）→ "pending" 等待不消费；
+      action 匹配 → 读 BUY_DECISION.json：
+        confirm → 清请求 → "allow"；reject → 记当日拒绝 → "rejected_today"；
+        无回复 → "pending"（一直挂起直到用户响应）。"""
+    if not PARAMS.get("human_confirm_buy_enabled", True) or context.mode != MODE_LIVE:
+        return "allow"
+    if code in context._buy_confirm_rejected:
+        return "rejected_today"
+
+    def _persist():
+        try:
+            write_buy_pending({"date": f"{now:%Y-%m-%d}",
+                               "updated_at": f"{now:%Y-%m-%d %H:%M:%S}",
+                               "rejected_today": sorted(context._buy_confirm_rejected),
+                               "pending": context._buy_confirm_pending})
+        except Exception:
+            pass
+
+    if code not in context._buy_confirm_pending:
+        if not needs_confirm:
+            return "allow"
+        _req = {
+            "request_id": f"{code}_{action}_{now:%Y%m%d%H%M%S}",
+            "code": code,
+            "name": STOCK_NAMES.get(code, code),
+            "action": action,
+            "kind": kind or ("build" if pos_qty <= 0 else "add"),
+            "side": "BUY",
+            "qty": int(qty_proj or 0),
+            "price": round(float(price), 3) if price else None,
+            "pos_qty": int(pos_qty or 0),
+            "score": 0,
+            "reasons": [str(r) for r in (reasons or [])],
+            "request_ts": now.timestamp(),
+        }
+        context._buy_confirm_pending[code] = _req
+        _persist()
+        try:
+            write_confirm(str(now), code, "request",
+                          detail=(f"{_req['action']} {_req['qty']}@{_req['price']} "
+                                  f"pos={_req['pos_qty']} kind={_req['kind']}"),
+                          request_id=_req["request_id"], action=_req["action"],
+                          qty=_req["qty"], kind=_req["kind"])
+        except Exception:
+            pass
+        print(f"[{now:%H:%M:%S}] BUY {code} 待人工确认: {_req['action']} "
+              f"{_req['qty']}@{_req['price']} pos_qty={pos_qty} kind={_req['kind']}")
+        return "pending"
+
+    _pend = context._buy_confirm_pending[code]
+    if _pend.get("action") != action:
+        return "pending"
+    try:
+        _d = (read_buy_decision().get("decisions") or {}).get(code)
+    except Exception:
+        _d = None
+    if _d and _d.get("request_id") == _pend.get("request_id"):
+        if _d.get("decision") == "confirm":
+            context._buy_confirm_pending.pop(code, None)
+            _persist()
+            try:
+                write_confirm(str(now), code, "approved",
+                              detail=f"{action} qty={_pend.get('qty')}@{_pend.get('price')}",
+                              request_id=_pend.get("request_id"))
+            except Exception:
+                pass
+            print(f"[{now:%H:%M:%S}] BUY {code} 用户确认放行: {action}")
+            return "allow"
+        if _d.get("decision") == "reject":
+            context._buy_confirm_pending.pop(code, None)
+            context._buy_confirm_rejected.add(code)
+            _persist()
+            try:
+                write_confirm(str(now), code, "rejected",
+                              detail=f"{action} 用户拒绝，当日不再提示",
+                              request_id=_pend.get("request_id"))
+            except Exception:
+                pass
+            print(f"[{now:%H:%M:%S}] BUY {code} 用户拒绝，当日不再提示: {action}")
+            return "rejected_today"
+    return "pending"
 
 
 def _dedup_bar(context, gm_sym: str, eob: str) -> bool:
@@ -806,6 +916,21 @@ def init(context):
     # WP-B14: 卖出体系状态跨日恢复（pos_key 校验；qty<=0/不符 → 作废）
     _sell_state_restore(context)
 
+    # 人工确认闸状态（2026-08-30 建仓/加仓人工把关）：
+    # _buy_confirm_pending = {code: request}；_buy_confirm_rejected = set(code)。
+    # MODE_LIVE 下断点续传（date==今日才恢复，跨日/回测不恢复）——引擎重启后
+    # 仍兑现「挂起直到确认」与「拒绝后当天不再弹」。
+    context._buy_confirm_pending = {}
+    context._buy_confirm_rejected = set()
+    if context.mode == MODE_LIVE:
+        try:
+            _bkp = read_buy_pending()
+            if _bkp and _bkp.get("date") == datetime.now().strftime("%Y-%m-%d"):
+                context._buy_confirm_pending = dict(_bkp.get("pending") or {})
+                context._buy_confirm_rejected = set(_bkp.get("rejected_today") or [])
+        except Exception:
+            pass
+
     # P3-1(C) 冰点预热：盘前 gm history_n(60s×240) 预取进 bar_cache，消灭开盘 5 分钟指标空窗
     # （对齐方案「盘前用 gm history_n(60s×240) 预取」统一口径；预取覆盖上一交易日 session，
     #  开盘后 subscribe 追加当日 bar，>480 根自动裁剪）。
@@ -908,6 +1033,25 @@ def on_bar(context, bars):
         context.daily_trade_price.clear()
         context.engine._check_date_reset()
         _audit_write({"event": "date_reset", "date": str(today)})
+        # 人工确认闸按日重置：作废旧 pending（留痕 expired）+ 清当日拒绝 + 重写空请求文件
+        _old_pending = dict(getattr(context, "_buy_confirm_pending", {}) or {})
+        if _old_pending or getattr(context, "_buy_confirm_rejected", set()):
+            try:
+                for _c, _req in _old_pending.items():
+                    write_confirm(str(now), _c, "expired",
+                                  detail=(f"跨日作废 {_req.get('action', '')} "
+                                          f"qty={_req.get('qty')}@{_req.get('price')}"),
+                                  request_id=_req.get("request_id"))
+            except Exception:
+                pass
+        context._buy_confirm_rejected = set()
+        context._buy_confirm_pending = {}
+        try:
+            write_buy_pending({"date": str(today),
+                               "updated_at": f"{now:%Y-%m-%d %H:%M:%S}",
+                               "rejected_today": [], "pending": {}})
+        except Exception:
+            pass
 
     # ── KILL_SWITCH 检查 ──
     _killed = check_kill_switch()
@@ -1204,30 +1348,41 @@ def on_bar(context, bars):
                         setattr(context, f'_bd_last_{code}', None)
                         print(f"[{now:%H:%M:%S}] BASE {code} {STOCK_NAMES.get(code,code)} build_decision=signal")
             if not _topup_blocked:
-                try:
+                _cg = _buy_confirm_gate(
+                    context, code, now, action="BASE", price=cp, qty_proj=base_qty,
+                    pos_qty=(0 if not _is_topup else int(mirror.get("qty", 0) or 0)),
+                    reasons=["初始建仓" if not _is_topup else "镜像底仓 F7回补"],
+                    needs_confirm=(not _is_topup) or PARAMS.get("human_confirm_base_topup", True),
+                    kind=("build" if not _is_topup else "topup"))
+                if _cg in ("pending", "rejected_today"):
+                    # 待人工确认/当日已拒绝：不下单。topup 沿用 F8 语义继续信号评估（可卖）；
+                    # 初始建仓 pos_qty<=0 走下方 return 自然退出本标的本 bar（非阻塞挂起等待）。
+                    _topup_blocked = True
+                else:
                     try:
-                        write_order(str(now), code, "BUY", base_qty, cp, order_id="base")
-                    except Exception:
-                        pass
-                    order_volume(symbol=gm_sym, volume=base_qty,
-                                 side=OrderSide_Buy,
-                                 order_type=OrderType_Market,
-                                 position_effect=PositionEffect_Open)
-                    context._base_ordered.add(code)
-                    print(f"[{now:%H:%M:%S}] BASE {code} {STOCK_NAMES.get(code,code)} 下单 {base_qty}股@{cp:.2f}")
-                    _audit_write({"event": "base_order", "code": code, "qty": base_qty, "price": cp, "time": str(now)})
-                    if _hb_live:
-                        try: write_snapshot(str(now), code, cp, bar=f"{now:%H:%M}",
-                                            gate="base_order", action="BUY",
-                                            gate_detail=f"qty={base_qty}")
-                        except Exception: pass
-                except Exception as e:
-                    print(f"[{now:%H:%M:%S}] BASE {code} 下单失败: {e}")
-                    try:
-                        write_risk(str(now), "order_failed", f"BASE BUY {base_qty}@{cp:.2f} err={e}", code=code)
-                    except Exception:
-                        pass
-                return
+                        try:
+                            write_order(str(now), code, "BUY", base_qty, cp, order_id="base")
+                        except Exception:
+                            pass
+                        order_volume(symbol=gm_sym, volume=base_qty,
+                                     side=OrderSide_Buy,
+                                     order_type=OrderType_Market,
+                                     position_effect=PositionEffect_Open)
+                        context._base_ordered.add(code)
+                        print(f"[{now:%H:%M:%S}] BASE {code} {STOCK_NAMES.get(code,code)} 下单 {base_qty}股@{cp:.2f}")
+                        _audit_write({"event": "base_order", "code": code, "qty": base_qty, "price": cp, "time": str(now)})
+                        if _hb_live:
+                            try: write_snapshot(str(now), code, cp, bar=f"{now:%H:%M}",
+                                                gate="base_order", action="BUY",
+                                                gate_detail=f"qty={base_qty}")
+                            except Exception: pass
+                    except Exception as e:
+                        print(f"[{now:%H:%M:%S}] BASE {code} 下单失败: {e}")
+                        try:
+                            write_risk(str(now), "order_failed", f"BASE BUY {base_qty}@{cp:.2f} err={e}", code=code)
+                        except Exception:
+                            pass
+                    return
             # F8: _topup_blocked=True 时不下单，继续走下方信号评估流程
 
         if code not in context._base_settled and code in context._base_ordered:
@@ -1447,6 +1602,18 @@ def on_bar(context, bars):
                     _audit_write({"event": "buyback_blocked", "code": code, "rule": "M3",
                                   "sell_price": _ab_now.get("sell_price"),
                                   "time": str(now)})
+                    continue
+
+            # 人工确认闸（2026-08-30 建仓/加仓人工把关）：做T回补（awaiting_buyback 记忆态）不弹窗；
+            # 加仓/信号建仓 → 弹窗确认后才下单。pending/当日已拒绝 → 本 bar 跳过（非阻塞挂起）。
+            # 位于信号级闸之后（无假弹窗）、容量闸（slot/cash/sizer/pos_limit）之前（确认放行时全量重查）。
+            if not _ab_now:
+                _cg = _buy_confirm_gate(
+                    context, code, now, action=sig.action, price=cp,
+                    qty_proj=_project_buy_qty(context, code, holding, sig, threshold, pos_qty),
+                    pos_qty=pos_qty, reasons=list(getattr(sig, "reasons", []) or []),
+                    needs_confirm=True)
+                if _cg in ("pending", "rejected_today"):
                     continue
 
             # WP-E3: 持仓槽位闸（买入执行块）——仅全新建仓(pos_qty<=0)检查；
