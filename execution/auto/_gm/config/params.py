@@ -259,6 +259,9 @@ STOCK_PARAMS = {
         "m2_lot_value_min": 400,
         # 0827 owner 批复：20 日均成交额 1.97 亿 < 全局 2 亿卡线（解禁空转），覆盖为 1.5 亿
         "m2_amount20_min": 150000000,
+        # 2026-08-31: 破位/过热门控保持保守（显式标注，auto 侧 RiskManager 已接入）
+        "allow_breakdown_buy": False,
+        "allow_overheated_buy": False,
     },
     "600176": {
         "_note": "中国巨石 - 未适配，沿用全局默认参数",
@@ -301,6 +304,13 @@ STOCK_PARAMS = {
     },
     "002451": {
         "_note": "摩恩电气 - 未适配，沿用全局默认参数（2026-08-05 入池，实盘亏损票）",
+        # 2026-08-31: 破位/过热门控保持保守（显式标注，auto 侧 RiskManager 已接入）
+        "allow_breakdown_buy": False,
+        "allow_overheated_buy": False,
+        # 2026-08-31: M2 池闸个股覆盖——单手≈724元、20日均成交额≈1.0亿，
+        # 全局门槛(lot≥2000/amt≥2亿)导致卖出后回补通道永久关闭（回测实证），留10-20%裕量
+        "m2_lot_value_min": 600,
+        "m2_amount20_min": 80000000,
     },
     "515180": {
         "_note": "红利ETF 防守仓 - WP-E4 2026-08-24 纳入做T观察，低波动定制",
@@ -324,6 +334,16 @@ STOCK_PARAMS = {
     "588170": {
         "_note": "科创芯片ETF - 未适配，沿用全局默认参数",
         "type": "etf",
+        # 2026-08-31: 破位/过热个股放行（对齐根 config.py:416-422 既有设计意图，
+        # ETF 激进做T；auto 侧 RiskManager 已接入该开关）
+        "allow_breakdown_buy": True,
+        "allow_overheated_buy": True,
+        # 2026-08-31: M2 池闸个股覆盖——ETF 单手≈55~98元，全局 lot≥2000 永久拦截回补
+        # （回测实证：卖出后永远补不回），参照 515180 红利ETF 口径；
+        # lot_value_min 取 50（run8 实测 lot=98 元，首版 100 边界卡线未过，再修正）
+        "m2_amp20_min": 0.005,
+        "m2_amount20_min": 30000000,
+        "m2_lot_value_min": 50,
     },
 }
 

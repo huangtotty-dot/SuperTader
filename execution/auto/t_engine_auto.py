@@ -78,22 +78,25 @@ class RiskManager:
     """一票否决守门员（纯函数，保留在 auto 侧执行态，不进决策核）"""
 
     @staticmethod
-    def check_all(feats: dict) -> dict:
+    def check_all(feats: dict, stock_params: dict = None) -> dict:
         result = {"blocked": False, "reason": "", "buy_block": [], "sell_block": []}
         if not feats:
             result["blocked"] = True
             result["reason"] = "无特征数据"
             return result
+        sp = stock_params or {}
         if feats.get("day_amplitude", 0) < 0.002 and feats.get("t_val", 0) > 1000:
             result["sell_block"].append("dead_water")
-        if feats.get("daily_breakdown_risk"):
+        # 2026-08-31: 破位/过热拦截支持个股放行开关（对齐根 config.py 既有设计，
+        # 此前 auto 侧硬拦截、allow_* 键形同虚设，回测实证 588170 做T瘫痪）
+        if feats.get("daily_breakdown_risk") and not sp.get("allow_breakdown_buy"):
             result["buy_block"].append("daily_breakdown_risk")
         # N1 fix: strong_uptrend 不再禁卖（做T策略的利润来源就是卖强），
         # 改为在评分中降分处理。仅当 指数uni_up + 个股强趋势 双确认时才降分不禁卖
         # (已通过 factor_weight_index_regime 在评分中体现)
         if feats.get("is_gap_down_no_reversal"):
             result["buy_block"].append("gap_down_no_reversal")
-        if feats.get("daily_overheated"):
+        if feats.get("daily_overheated") and not sp.get("allow_overheated_buy"):
             result["buy_block"].append("daily_overheated")
         index_regime = feats.get("index_regime", "range")
         if index_regime == "uni_down":
@@ -304,7 +307,7 @@ class SignalEngine:
             return 0.0, 0.0, None
 
         self._last_feats[code] = feats
-        risk = RiskManager.check_all(feats)
+        risk = RiskManager.check_all(feats, STOCK_PARAMS.get(code, {}))
         sig = None
 
         if risk.get("blocked"):
@@ -315,6 +318,11 @@ class SignalEngine:
         buy_blocks = risk.get("buy_block", [])
 
         # 决策核（唯一真源）：Renko 向下砖买入 / 目标止盈·时间止损·尾盘强平卖出
+        # 幻影entry修复（2026-08-31）：决策核在发信号时会即时改写 t_entry_price
+        # （BUY_LOW 写入 / SELL_HIGH 弹出），而执行侧门控在其后才判定。快照 entry，
+        # 凡信号被门控丢弃时恢复原状，保证「信号未采用 ⇒ entry 状态不变」不变式——
+        # 否则一个被 daily_breakdown_risk 拦截的 BUY_LOW 会毒化全天买入机会。
+        _entry_before = self._core.t_entry_price.get(code)
         try:
             core_sig, buy_score, sell_score, _reason, _swing_meta = self._core.evaluate(
                 code, name, df,
@@ -329,6 +337,12 @@ class SignalEngine:
         except Exception:
             core_sig, buy_score, sell_score = None, 0.0, 0.0
 
+        def _restore_entry():
+            if _entry_before is None:
+                self._core.t_entry_price.pop(code, None)
+            else:
+                self._core.t_entry_price[code] = _entry_before
+
         # 卖出判定（决策核 SELL_HIGH + 执行侧闸）
         if core_sig is not None and core_sig.action == "SELL_HIGH":
             sell_allowed = not sell_blocks
@@ -337,6 +351,8 @@ class SignalEngine:
             sell_count_ok = self.sell_count_per_stock.get(code, 0) < max_sells
             if sell_allowed and sell_cooldown_ok and sell_count_ok:
                 sig = core_sig
+            else:
+                _restore_entry()  # 卖出被门控丢弃 → 恢复被弹出的 entry（做T仓仍持有）
 
         # 买入判定（卖出优先）
         if sig is None and core_sig is not None and core_sig.action == "BUY_LOW":
@@ -396,6 +412,7 @@ class SignalEngine:
             if buy_allowed and buy_cooldown_ok and buy_count_ok:
                 if buyback_gate == "delayed":
                     # WP-B07 高接延迟：不产生 BUY_LOW，留痕后按 HOLD 返回
+                    _restore_entry()  # 幻影entry回滚：信号未采用
                     self.diagnostics[code] = {"buyback_delayed": buyback_info}
                     self.last_decision[code] = {
                         "action": "HOLD",
@@ -409,6 +426,7 @@ class SignalEngine:
                     return buy_score, sell_score, None
                 if buyback_gate == "not_target":
                     # WP-B18 3.3: 未回踩到 target → 不作为回补触发，留痕后按 HOLD 返回
+                    _restore_entry()  # 幻影entry回滚：信号未采用
                     self.diagnostics[code] = {"buyback_not_target": buyback_info}
                     self.last_decision[code] = {
                         "action": "HOLD",
@@ -430,6 +448,9 @@ class SignalEngine:
                         "premium": buyback_info["premium"],
                     })
                     self.diagnostics[code] = {"buyback_downgrade": buyback_info}
+            else:
+                # 幻影entry回滚：买入被门控/冷却/次数拦截，信号未采用（2026-08-31）
+                _restore_entry()
 
         if sig:
             sig.channel = "auto"  # 期B: 自动链路标记（决策核默认 manual，auto 侧改写）
