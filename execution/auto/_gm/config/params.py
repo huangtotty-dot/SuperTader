@@ -211,6 +211,12 @@ PARAMS = {
     "entry_rsi_low": 30,
     "entry_rsi_high": 55,
     "entry_vol_shrink": 0.95,
+    # 人工确认闸（2026-08-30 owner决策）：自动盘建仓/加仓/底仓回补必须先经 GUI 弹窗确认才下单。
+    # human_confirm_buy_enabled=False → 闸全关（所有买入直接放行，事故/回退用）；
+    # human_confirm_base_topup=True → BASE 底仓回补也要确认（owner 已确认；False=回补不弹等同做T回补口径）。
+    # 注意与既有 buy_confirm_min_*（信号强度确认闸）语义无关。
+    "human_confirm_buy_enabled": True,
+    "human_confirm_base_topup": True,
 }
 
 # 华工科技 000988 个股专属参数
