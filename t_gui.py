@@ -3218,26 +3218,54 @@ class Api:
         except Exception:
             return None
 
+    def _auto_pool_codes(self):
+        """当前 auto 池 6 位码（基于 holdings.json 实时派生，不依赖 auto_pool 模块缓存——新增标的立即可见）。"""
+        try:
+            from src.holdings_repo import load_full
+            full = load_full()
+        except Exception:
+            return []
+        return [c for c, h in full.items()
+                if isinstance(h, dict) and str(h.get("pool")) in ("auto", "both")]
+
     def load_auto_scan(self, date=None):
-        """自动盘建仓扫描结果（读 TRACES/auto_scan_{date}.jsonl 聚合，不回源）。无文件 → has_data:False。"""
+        """自动盘建仓扫描结果：读 TRACES/auto_scan_{date}.jsonl 聚合 + 合并 auto 池全量
+        （未扫描/新增标的 → verdict=pending 待扫描行，保证添加后立即显示）。"""
         date = date or datetime.now().strftime("%Y-%m-%d")
         fp = TRACES / f"auto_scan_{date}.jsonl"
-        if not fp.exists():
-            return {"has_data": False, "date": date, "rows": [], "counts": {}}
         latest = {}
-        for line in open(fp, encoding="utf-8").read().splitlines():
-            line = line.strip()
-            if not line:
+        if fp.exists():
+            for line in open(fp, encoding="utf-8").read().splitlines():
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    r = json.loads(line)
+                except Exception:
+                    continue
+                code = r.get("code")
+                if not code:
+                    continue
+                if code not in latest or (r.get("scan_time") or "") > (latest[code].get("scan_time") or ""):
+                    latest[code] = r
+        # 合并 auto 池全量：不在 trace 的（新增/未扫）→ pending 待扫描行
+        try:
+            from src.holdings_repo import load_full
+            full = load_full()
+        except Exception:
+            full = {}
+        for code in self._auto_pool_codes():
+            if code in latest:
                 continue
-            try:
-                r = json.loads(line)
-            except Exception:
-                continue
-            code = r.get("code")
-            if not code:
-                continue
-            if code not in latest or (r.get("scan_time") or "") > (latest[code].get("scan_time") or ""):
-                latest[code] = r
+            h = full.get(code) or {}
+            latest[code] = {
+                "code": code, "scan_time": "", "date": date,
+                "name": h.get("name", code),
+                "mirror_qty": int(h.get("mirror_qty") or 0),
+                "held": bool(int(h.get("qty") or 0)),
+                "verdict": "pending", "score": 0,
+                "regime": "", "go": False, "reasons": [], "veto": [],
+            }
         rows = sorted(latest.values(), key=lambda r: -(r.get("score") or 0))
         counts = Counter(r.get("verdict", "weak") for r in rows)
         return _clean({"has_data": True, "date": date, "rows": rows, "counts": dict(counts)})
@@ -3253,8 +3281,7 @@ class Api:
             from config import ENTRY_TIMING_PARAMS
         except Exception as e:
             return {"has_data": False, "error": f"依赖导入失败: {e}"}
-        _ap = self._auto_pool_module()
-        if _ap is None:
+        if self._auto_pool_module() is None:
             return {"has_data": False, "error": "auto_pool 不可用"}
         hold = load_full()
         try:
@@ -3265,7 +3292,7 @@ class Api:
         fp = TRACES / f"auto_scan_{date}.jsonl"
         fp.parent.mkdir(parents=True, exist_ok=True)
         _scan_time = datetime.now().strftime("%H:%M:%S")
-        for code in _ap.auto_pool_codes():
+        for code in self._auto_pool_codes():  # 基于 holdings 实时派生（新增标的也扫），非 auto_pool 模块缓存
             row = {"code": code, "scan_time": _scan_time, "date": date,
                    "name": (hold.get(code) or {}).get("name", code),
                    "mirror_qty": int((hold.get(code) or {}).get("mirror_qty") or 0),
@@ -3423,6 +3450,43 @@ class Api:
             return {"ok": True}
         except Exception as e:
             return {"ok": False, "error": str(e)}
+
+    def remove_auto_stock(self, code):
+        """从 auto 池删除标的（仅 qty/base 均为 0 的候选；有持仓拒绝）。同步 watchlist pool 改回 manual。
+        引擎需重启后不再含该标的。"""
+        code = str(code or "").strip()
+        if not (code.isdigit() and len(code) == 6):
+            return {"ok": False, "error": "代码须为 6 位数字"}
+        try:
+            from src.holdings_repo import load_full, delete_entry
+        except Exception as e:
+            return {"ok": False, "error": str(e)}
+        full = load_full()
+        entry = full.get(code)
+        if not entry:
+            return {"ok": False, "error": f"{code} 不在持仓真源"}
+        if int(entry.get("qty") or 0) > 0 or int(entry.get("base") or 0) > 0:
+            return {"ok": False, "error": f"{code} 有持仓（qty>0），不能从 auto 池删除"}
+        try:
+            delete_entry(code)
+        except Exception as e:
+            return {"ok": False, "error": f"写 holdings 失败: {e}"}
+        # watchlist 该 code pool 若为 auto → 改回 manual（防悬空 auto 标记）
+        try:
+            wl_fp = STATE_DIR / "watchlist_buy.json"
+            wl = _load_json(wl_fp, {})
+            stocks = wl.get("stocks", {})
+            if isinstance(stocks, dict) and isinstance(stocks.get(code), dict):
+                if str(stocks[code].get("pool") or "") == "auto":
+                    stocks[code]["pool"] = "manual"
+                    tmp = wl_fp.with_suffix(".tmp")
+                    with open(tmp, "w", encoding="utf-8") as f:
+                        json.dump(wl, f, ensure_ascii=False, indent=2)
+                    tmp.replace(wl_fp)
+        except Exception:
+            pass
+        return {"ok": True, "code": code,
+                "msg": f"已从 auto 池删除 {code}（重启掘金策略后生效）"}
 
     def load_position_manager(self):
         """仓位管理器：每只持仓的目标/当前市值、资金占比、超配欠配。

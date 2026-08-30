@@ -31,7 +31,8 @@ def _write_watchlist(path, stocks):
 class TestAutoPool(unittest.TestCase):
     def test_codes_count_and_content(self):
         codes = auto_pool.auto_pool_codes()
-        self.assertEqual(len(codes), 17)
+        # 数量随 holdings.json 动态变化（GUI 自动盘 tab 可添加标的，如 002396）；只断言基础池下限 + 核心股票
+        self.assertGreaterEqual(len(codes), 17)
         self.assertIn("000988", codes)
         self.assertIn("515180", codes)
         self.assertEqual(auto_pool.POOL, "auto")

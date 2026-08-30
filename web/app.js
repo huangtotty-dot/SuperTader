@@ -1568,32 +1568,80 @@ async function loadAutoScan() {
 }
 
 function renderAutoScan(d) {
+  // 显示对齐手动盘建仓表（2026-08-30）：池徽章/判定/得分(含ceiling锁)/时机门控(regime·GO)/否决/持仓 + 双击看K线
   const el = document.getElementById("autoScanBody");
   if (!el) return;
-  if (!d || !d.has_data || !(d.rows || []).length) {
-    el.innerHTML = '<div class="empty">尚无扫描结果，点击「🔄 盘后重跑」生成</div>';
+  const rows = (d && d.rows) || [];
+  if (!rows.length) {
+    el.innerHTML = '<div class="empty">暂无 auto 池标的，可在下方「添加自动盘标的」加入</div>';
     return;
   }
   const counts = d.counts || {};
   const countBadge = k => counts[k] ? `<span class="badge">${esc(k)}: ${counts[k]}</span>` : "";
-  const rows = (d.rows || []).map(r => `
-    <tr>
-      <td>${esc(r.name || r.code)} <span class="mono cell-dim">${esc(r.code)}</span></td>
+  const trs = rows.map(r => {
+    const poolBadge = '<span class="badge" style="background:#2a4a5a;color:#8ad4ff" title="自动盘池（goldminer auto 侧管理）">自动</span>';
+    const holdBadge = r.held ? '<span class="badge hold">持仓</span>' : "";
+    // 时机门控徽章（对齐手动盘 tmBadge：多头/空头/震荡 + GO/NO-GO）
+    let tmBadge = "";
+    if (r.regime) {
+      const _regimeCn = { trend_up: "多头", trend_dn: "空头", range: "震荡" }[r.regime] || r.regime;
+      const _goCls = r.go ? "#1f6f3f" : "#7a2a2a";
+      const _goTxt = r.go ? "GO" : "NO-GO";
+      tmBadge = `<span class="badge" title="时机门控: ${esc((r.reasons || []).join("；"))}" style="background:${_goCls};color:#fff">${esc(_regimeCn)}·${_goTxt}</span>`;
+    }
+    // 否决徽章（对齐手动盘 vetoBadge）
+    let vetoBadge = "";
+    if (r.veto && r.veto.length) {
+      vetoBadge = `<span class="badge" title="否决因子: ${esc(r.veto.join("、"))}" style="background:#7a2a2a;color:#ffd98a">🚫否决</span>`;
+    }
+    // 数据不足徽章
+    let nodataBadge = "";
+    if (r.data_insufficient) nodataBadge = '<span class="badge nodata">数据不足</span>';
+    // 得分含 ceiling 语义（对齐手动盘：震荡市 signal 结构性不可达，得分上限锁定）
+    const _reachable = r.verdict !== "weak" || r.regime !== "range";
+    const scoreCell = r.score != null
+      ? `<b>${r.score}</b>${!r.go && r.regime === "range" ? '<span class="cell-dim" style="font-size:10px">/70🔒</span>' : ""}`
+      : "—";
+    // 条件/理由列：reasons 简述 + 错误
+    const reasonTxt = (r.reasons || []).slice(0, 2).map(esc).join("<br>")
+      || (r.verdict === "pending" ? '<span class="cell-dim">待扫描（盘后重跑出判定）</span>'
+        : '<span class="cell-dim">—</span>');
+    const errTxt = r.error ? `<div class="cell-dim" style="font-size:10px;line-height:1.4">⚠ ${esc(r.error)}</div>` : "";
+    // 删除按钮（有持仓则禁用）
+    const delBtn = r.held
+      ? '<button class="mini-btn" disabled title="有持仓不能删除">✕</button>'
+      : `<button class="mini-btn" onclick="removeAutoStock('${esc(r.code)}')" title="从 auto 池删除（需无持仓）">✕</button>`;
+    return `<tr style="cursor:pointer" ondblclick="openStockChart('${esc(r.code)}','${esc(r.name || r.code)}')" title="双击看K线">
+      <td>${esc(r.name || r.code)} <span class="mono cell-dim">${esc(r.code)}</span>
+        ${holdBadge}${tmBadge}${vetoBadge}${nodataBadge}${errTxt}</td>
+      <td style="text-align:center">${poolBadge}</td>
       <td>${verdictBadge(r.verdict)}</td>
-      <td class="num">${r.score != null ? fmt(r.score, 0) : "—"}</td>
-      <td>${esc(r.regime || "—")}</td>
-      <td>${r.go ? '<span class="badge" style="background:#3fb950;color:#111">GO</span>' : '<span class="cell-dim">—</span>'}</td>
+      <td class="num" title="综合得分">${scoreCell}</td>
+      <td class="cell-dim" style="font-size:11px;max-width:230px;line-height:1.5">${reasonTxt}</td>
       <td class="num">${r.mirror_qty ? fmt(r.mirror_qty, 0) : "—"}</td>
-      <td>${r.held ? "持有" : ""}</td>
-      <td class="cell-dim" style="font-size:11px">${(r.reasons || []).slice(0, 2).map(esc).join("；")}${r.error ? " " + esc(r.error) : ""}</td>
-    </tr>`).join("");
+      <td style="text-align:center">${delBtn}</td>
+    </tr>`;
+  }).join("");
   el.innerHTML = `
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:6px">
-      ${countBadge("signal")}${countBadge("approaching")}${countBadge("weak")}${countBadge("scan_error")}
-      <span class="cell-dim" style="margin-left:auto">共 ${d.rows.length} 只 · ${esc(d.date)}</span>
+      ${countBadge("signal")}${countBadge("approaching")}${countBadge("watch_signal")}${countBadge("weak")}${countBadge("scan_error")}
+      <span class="cell-dim" style="margin-left:auto">共 ${rows.length} 只 · ${esc(d.date || "")} · 双击看K线</span>
     </div>
-    <table><thead><tr><th>股票</th><th>判定</th><th class="num">得分</th><th>市场</th><th>GO</th><th class="num">目标底仓</th><th>持仓</th><th>理由</th></tr></thead>
-    <tbody>${rows}</tbody></table>`;
+    <table><thead><tr><th>股票</th><th>池</th><th>判定</th><th class="num">得分</th><th>条件/理由</th><th class="num">目标底仓</th><th>操作</th></tr></thead>
+    <tbody>${trs}</tbody></table>`;
+}
+
+async function removeAutoStock(code) {
+  if (!window.confirm(`确定从 auto 池删除 ${code}？`)) return;
+  try {
+    const r = await apiCall("remove_auto_stock", code);
+    if (r && r.ok) {
+      loadAutoScan();
+      loadAutoBuildOptions();
+    } else {
+      statusEl("删除失败: " + ((r && r.error) || "未知"), "err");
+    }
+  } catch (e) { statusEl("删除失败: " + e.message, "err"); }
 }
 
 async function recomputeAutoScan() {
@@ -1621,7 +1669,8 @@ async function addAutoStock() {
     if (r && r.ok) {
       document.getElementById("asCode").value = "";
       document.getElementById("asMirrorQty").value = "";
-      loadAutoBuildOptions();
+      loadAutoScan();          // 刷新扫描表（合并全量后新标的立即显示）
+      loadAutoBuildOptions();  // 刷新手动建仓下拉
     }
   } catch (e) { if (el) el.textContent = "添加失败: " + e.message; }
 }
