@@ -1472,6 +1472,7 @@ function renderAutoPositions(positions) {
 
 /* ---- 自动盘买入人工确认闸（2026-08-30 建仓/加仓/底仓回补人工把关） ---- */
 let _shownReqs = {};   // {code: request_id} 已弹出未处理的请求（防重复弹窗）
+let buyConfirmTimer = null;  // 确认闸全局 10s 轮询定时器（startLivePoll 启动/stopLivePoll 清除）
 const BUY_CONFIRM_KIND = { build: "建仓", add: "加仓", topup: "底仓回补" };
 
 function renderBuyConfirmBadge(n) {
