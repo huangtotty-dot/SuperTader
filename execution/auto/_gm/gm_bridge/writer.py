@@ -63,6 +63,11 @@ def _buy_decision_path() -> str:
     return os.path.join(BRIDGE_DIR, "BUY_DECISION.json")
 
 
+def _auto_build_path() -> str:
+    """人工建仓/加仓武装标记（GUI 写 / 引擎读+消费，一次性 one-shot）。整文件原子覆写。"""
+    return os.path.join(BRIDGE_DIR, "AUTO_BUILD.json")
+
+
 # ── 写入工具 ──
 
 def _append_jsonl(path: str, rec: dict):
@@ -271,3 +276,30 @@ def write_confirm(time_str: str, code: str, state: str, detail: str = "", **kw):
     }
     rec.update(kw)
     _append_jsonl(_events_path(), rec)
+
+
+# ── 公开 API：人工建仓/加仓武装标记（2026-08-30 手动建仓→引擎做T衔接） ──
+
+def read_auto_build() -> dict:
+    """读人工建仓武装标记 AUTO_BUILD.json。异常/不存在 → {}。
+    结构 {updated_at, requests: {code: {action: build|add, qty, ts}}}。"""
+    try:
+        with open(_auto_build_path(), encoding="utf-8") as f:
+            return json.load(f) or {}
+    except Exception:
+        return {}
+
+
+def write_auto_build(data: dict):
+    """整文件原子写 AUTO_BUILD.json（GUI 与引擎共用；单写者纪律=GUI 写、引擎消费时重写）。"""
+    _write_json_atomic(_auto_build_path(), data)
+
+
+def consume_auto_build(code: str):
+    """消费（删除）某 code 的武装标记并原子重写。返回删除的请求 dict 或 None。"""
+    data = read_auto_build()
+    req = (data.get("requests") or {}).pop(code, None)
+    if req is not None:
+        data["updated_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        write_auto_build(data)
+    return req

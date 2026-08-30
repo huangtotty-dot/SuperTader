@@ -32,6 +32,7 @@ from gm_bridge.writer import (
     write_signal, write_order, write_fill, write_reject, write_risk,
     write_heartbeat, check_kill_switch, write_snapshot, write_buyback,
     write_buy_pending, read_buy_pending, read_buy_decision, write_confirm,
+    read_auto_build, consume_auto_build,
 )
 from gm_bridge import ops_guard
 
@@ -1056,6 +1057,14 @@ def on_bar(context, bars):
     # ── KILL_SWITCH 检查 ──
     _killed = check_kill_switch()
 
+    # 人工建仓武装标记（2026-08-30 手动建仓→做T衔接）：GUI 手动确认建仓/加仓后写 AUTO_BUILD.json，
+    # 本 bar 起对武装标的跳过 BASE 确认闸（不再重复弹窗），直接走完整闸链建仓→成交→做T。
+    # 每根 bar 读一次存 context（避免 17 票每票读文件）；下单成功后消费（一次性）。
+    try:
+        context._auto_build_armed = read_auto_build().get("requests") or {}
+    except Exception:
+        context._auto_build_armed = {}
+
     # 双向看门狗：watcher 心跳缺失/过期自动重生（0806 红日整改）
     ops_guard.ensure_watcher(PROJECT_DIR)
 
@@ -1348,11 +1357,16 @@ def on_bar(context, bars):
                         setattr(context, f'_bd_last_{code}', None)
                         print(f"[{now:%H:%M:%S}] BASE {code} {STOCK_NAMES.get(code,code)} build_decision=signal")
             if not _topup_blocked:
+                # 2026-08-30 手动建仓/加仓衔接：GUI 已人工确认（武装标记）→ 跳过确认闸，直接走完整闸链建仓→做T
+                _armed = bool((getattr(context, "_auto_build_armed", {}) or {}).get(code))
+                _needs_confirm = (not _is_topup) or PARAMS.get("human_confirm_base_topup", True)
+                if _armed:
+                    _needs_confirm = False
                 _cg = _buy_confirm_gate(
                     context, code, now, action="BASE", price=cp, qty_proj=base_qty,
                     pos_qty=(0 if not _is_topup else int(mirror.get("qty", 0) or 0)),
                     reasons=["初始建仓" if not _is_topup else "镜像底仓 F7回补"],
-                    needs_confirm=(not _is_topup) or PARAMS.get("human_confirm_base_topup", True),
+                    needs_confirm=_needs_confirm,
                     kind=("build" if not _is_topup else "topup"))
                 if _cg in ("pending", "rejected_today"):
                     # 待人工确认/当日已拒绝：不下单。topup 沿用 F8 语义继续信号评估（可卖）；
@@ -1369,6 +1383,12 @@ def on_bar(context, bars):
                                      order_type=OrderType_Market,
                                      position_effect=PositionEffect_Open)
                         context._base_ordered.add(code)
+                        if _armed:
+                            # 人工建仓武装标记：下单成功即消费（一次性），防止损离场后残留标记自动无确认重入
+                            try:
+                                consume_auto_build(code)
+                            except Exception:
+                                pass
                         print(f"[{now:%H:%M:%S}] BASE {code} {STOCK_NAMES.get(code,code)} 下单 {base_qty}股@{cp:.2f}")
                         _audit_write({"event": "base_order", "code": code, "qty": base_qty, "price": cp, "time": str(now)})
                         if _hb_live:

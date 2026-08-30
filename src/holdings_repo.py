@@ -68,3 +68,33 @@ def save_held_merged(held: dict) -> None:
     with open(_tmp, "w", encoding="utf-8") as f:
         json.dump(full, f, ensure_ascii=False, indent=2)
     os.replace(_tmp, HOLDINGS_FILE)
+
+
+def upsert_auto_entry(code, *, name, gm_symbol, type, mirror_qty, mirror_cost=0.0) -> dict:
+    """新增/更新 auto 池标的（pool=auto, 未持仓）→ 原子写回。
+
+    已存在则保留其既有 qty/cost/base/t_qty 持仓字段不归零（仅设 pool/mirror_qty/mirror_cost）。
+    返回该条目。"""
+    full = load_full()
+    cur = full.get(code) or {}
+    entry = dict(cur)
+    entry.update({
+        "name": name or cur.get("name", code),
+        "gm_symbol": gm_symbol or cur.get("gm_symbol", ""),
+        "type": type or cur.get("type", "stock"),
+        "account": cur.get("account", ""),
+        "pool": "auto",
+        "qty": int(cur.get("qty") or 0),
+        "base": int(cur.get("base") or 0),
+        "t_qty": int(cur.get("t_qty") or 0),
+        "cost": float(cur.get("cost") or 0),
+        "pre_close": float(cur.get("pre_close") or 0),
+        "mirror_qty": int(mirror_qty or 0),
+        "mirror_cost": float(mirror_cost or 0),
+    })
+    full[code] = entry
+    _tmp = HOLDINGS_FILE + ".tmp"
+    with open(_tmp, "w", encoding="utf-8") as f:
+        json.dump(full, f, ensure_ascii=False, indent=2)
+    os.replace(_tmp, HOLDINGS_FILE)
+    return entry
