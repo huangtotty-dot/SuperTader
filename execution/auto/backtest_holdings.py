@@ -55,15 +55,23 @@ import gm_main  # noqa: E402
 from gm.api import run, MODE_BACKTEST, ADJUST_PREV  # noqa: E402
 from utils.gm_token import load_token  # noqa: E402
 
-# ── 当前持仓（对齐 t_io/state/holdings.json；gm_symbol 对齐 config/auto_pool.py） ──
+# ── 当前持仓（单一真源 t_io/state/holdings.json 派生仅持有 qty>0；gm_symbol/name/cost 对齐） ──
 # 注：588170（科创芯片ETF）在旧终端账号无 ETF 品种数据权限（ERR_NO_DATA_PERMISSION）。
 #     新终端（国盛掘金3 专业版）账号是否放开 ETF 待实测——此处保留 588170 一并试跑，
 #     若 subscribe 仍报 ERR_NO_DATA_PERMISSION 则剔除重跑两只股票。
-HOLDINGS = {
-    "588170": {"name": "科创半导体ETF华夏", "gm_symbol": "SHSE.588170", "qty": 6500,  "cost": 0.889},
-    "600481": {"name": "双良节能",    "gm_symbol": "SHSE.600481", "qty": 100,   "cost": 28.216},
-    "002451": {"name": "摩恩电气",    "gm_symbol": "SZSE.002451", "qty": 1300,  "cost": 7.754},
-}
+def _load_holdings_for_backtest():
+    _hp = os.path.join(_ST, "t_io", "state", "holdings.json")
+    with open(_hp, "r", encoding="utf-8") as f:
+        _data = json.load(f)
+    return {
+        c: {"name": h.get("name", c), "gm_symbol": h.get("gm_symbol", ""),
+            "qty": int(h.get("qty") or 0), "cost": float(h.get("cost") or 0)}
+        for c, h in _data.items()
+        if isinstance(h, dict) and not str(c).startswith("_") and int(h.get("qty") or 0) > 0
+    }
+
+
+HOLDINGS = _load_holdings_for_backtest()
 
 gm_main.STOCKS = {c: v["gm_symbol"] for c, v in HOLDINGS.items()}
 gm_main.STOCK_NAMES = {c: v["name"] for c, v in HOLDINGS.items()}

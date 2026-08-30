@@ -515,14 +515,17 @@ def load_watchlist() -> Dict[str, dict]:
 
 def load_holdings() -> Dict[str, dict]:
     global STRATEGY_MEMORY
-    if not os.path.exists(HOLDINGS_FILE): return {}
-    try:
-        with open(HOLDINGS_FILE, "r", encoding="utf-8") as f:
-            holdings = json.load(f)
-    except json.JSONDecodeError as e:
-        log.error(f"❌ holdings.json 格式错误: {e}。请检查标点符号是否遗漏！")
-        return {}
+    from src.holdings_repo import load_held, HOLDINGS_FILE as _HR_FILE
+    # 友好报错：用户手改 holdings.json 常见漏逗号；load_held 容错静默，这里先显式校验一次
+    if os.path.exists(_HR_FILE):
+        try:
+            with open(_HR_FILE, "r", encoding="utf-8") as f:
+                json.load(f)
+        except json.JSONDecodeError as e:
+            log.error(f"❌ holdings.json 格式错误: {e}。请检查标点符号是否遗漏！")
+            return {}
 
+    holdings = load_held()  # 仅持有（qty/base/t_qty>0）；未持有的 auto 候选不进入手动链
     STRATEGY_MEMORY = load_strategy_memory()
     for code, h in holdings.items():
         if not h.get("name"):

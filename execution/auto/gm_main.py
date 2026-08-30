@@ -55,21 +55,31 @@ STOCK_NAMES = {code: v["name"] for code, v in _auto_pool.AUTO_POOL.items()}
 REVERSE_MAP = {v: k for k, v in STOCKS.items()}
 
 # ── 镜像持仓（与实盘账户一致） ──
-# 模拟盘建仓时按此表中的股数/成本下单
-MIRROR_HOLDINGS = {
-    # 2026-07-28 owner决策(N2): 事故超配减仓后新基线
-    # 2026-07-29 F7返工: MIRROR语义=目标底仓。000988维持500, 缺口200由_base_topup_qty择时回补
-    # 2026-08-07 owner决策(WP-E3槽位制配套): MIRROR缩编至4支优先票（华工/巨石/五洲/双良）。
-    # 其余12票保留在STOCKS候选池，槽位空出时凭信号竞争建仓，不再预挂目标底仓（消除slot_full排队噪音）。
-    "000988": {"qty": 500,  "cost": 0},
-    "600481": {"qty": 1400, "cost": 0},
-    "600176": {"qty": 500,  "cost": 0},
-    "603667": {"qty": 800,  "cost": 0},
-    # WP-E4(2026-08-24 owner决策): 红利ETF 防守仓纳入做T体系观察做T效率。
-    # 境内股票型ETF，T+1、最小单位100股，与股票机制一致（无588170的T+0兼容问题）。
-    "515180": {"qty": 50000, "cost": 1.451},
-    # 588170 ETF 已移除：T+0机制/最小单位与策略不兼容，首日仅观察
-}
+# 模拟盘建仓时按此表中的股数/成本下单。
+# 2026-08-30 单文件合并：MIRROR 从单一持仓真源 holdings.json 派生（mirror_qty>0 → {qty, cost}），
+# 不再手写清单；语义不变 = 目标底仓（WP-E3 槽位制配套：华工/巨石/五洲/双良 + 红利ETF 共 5 支挂目标底仓）。
+# 历史 owner 决策注释：MIRROR 缩编至 4 支优先票 + 515180 红利ETF（境内股票型 ETF、T+1 与股票机制一致）；
+# 588170 ETF 因 T+0/最小单位与策略不兼容已移除。
+def _load_mirror_holdings():
+    import json as _json
+    root = os.environ.get("SUPERTRADER_ROOT", r"E:\superTrader")
+    path = os.path.join(root, "t_io", "state", "holdings.json")
+    if not os.path.exists(path):
+        raise RuntimeError(f"持仓真源缺失（镜像持仓依赖）: {path}")
+    with open(path, "r", encoding="utf-8") as f:
+        data = _json.load(f)
+    out = {}
+    for code, h in (data.items() if isinstance(data, dict) else []):
+        if not isinstance(h, dict) or str(code).startswith("_"):
+            continue
+        mq = int(h.get("mirror_qty") or 0)
+        if mq <= 0:
+            continue
+        out[code] = {"qty": mq, "cost": float(h.get("mirror_cost") or 0)}
+    return out
+
+
+MIRROR_HOLDINGS = _load_mirror_holdings()
 
 COMMISSION = PARAMS["commission_rate"]
 MIN_BARS = 25
