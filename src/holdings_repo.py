@@ -98,3 +98,16 @@ def upsert_auto_entry(code, *, name, gm_symbol, type, mirror_qty, mirror_cost=0.
         json.dump(full, f, ensure_ascii=False, indent=2)
     os.replace(_tmp, HOLDINGS_FILE)
     return entry
+
+
+def delete_entry(code) -> bool:
+    """从持仓真源删除条目（原子写）。返回是否存在并删除（False=不存在）。"""
+    full = load_full()
+    if code not in full:
+        return False
+    del full[code]
+    _tmp = HOLDINGS_FILE + ".tmp"
+    with open(_tmp, "w", encoding="utf-8") as f:
+        json.dump(full, f, ensure_ascii=False, indent=2)
+    os.replace(_tmp, HOLDINGS_FILE)
+    return True
