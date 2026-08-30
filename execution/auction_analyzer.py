@@ -135,9 +135,10 @@ class AuctionDiagnosisReport:
 # ============== 分析函数 ==============
 
 def _get_holdings() -> Dict[str, dict]:
-    """加载持仓列表"""
+    """加载持仓列表（仅持有；未持有的 auto 候选不参与竞价诊断）"""
     try:
-        return json.loads(HOLDINGS_FP.read_text(encoding="utf-8"))
+        from src.holdings_repo import load_held
+        return load_held()
     except Exception:
         return {}
 

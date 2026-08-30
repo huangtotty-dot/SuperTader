@@ -176,7 +176,10 @@ def _holdings() -> Dict[str, dict]:
             with open(path, "r", encoding="utf-8") as f:
                 data = json.load(f)
             if isinstance(data, dict):
-                return {k: v for k, v in data.items() if isinstance(v, dict)}
+                # 2026-08-30 单文件合并：仅持有（qty/base/t_qty>0），未持有 auto 候选跳过
+                return {k: v for k, v in data.items()
+                        if isinstance(v, dict)
+                        and (v.get("qty") or v.get("base") or v.get("t_qty"))}
     except Exception:
         pass
     return {}

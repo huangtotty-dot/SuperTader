@@ -82,6 +82,11 @@ def load_pool():
     h = json.loads(HOLDINGS_FP.read_text(encoding="utf-8"))
     pool = {}
     for c, v in h.items():
+        if not isinstance(v, dict):
+            continue
+        # 2026-08-30 单文件合并：仅持有（qty/base/t_qty>0）进竞价采集，未持有 auto 候选跳过
+        if not (v.get("qty") or v.get("base") or v.get("t_qty")):
+            continue
         clean = c.split("_")[0]          # 双账户条目（如 000988_B）归并到正代码
         if clean not in pool:
             pool[clean] = v.get("name", clean)

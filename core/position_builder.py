@@ -1807,9 +1807,11 @@ def _build_holdings_gap(total_capital: float) -> dict:
         for code, h in cur.items():
             if not isinstance(h, dict):
                 continue
+            qty = int(h.get("qty") or 0)
+            if qty <= 0:
+                continue  # 2026-08-30 单文件合并：未持有 auto 候选(qty=0)不进仓位缺口表
             base = str(code).split("_")[0]
             merged.setdefault(base, {"name": h.get("name", code), "qty": 0, "cost": 0.0, "px_sum": 0.0})
-            qty = int(h.get("qty") or 0)
             px = float(h.get("cost") or h.get("pre_close") or 0)
             merged[base]["qty"] += qty
             merged[base]["px_sum"] += px * qty

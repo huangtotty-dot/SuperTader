@@ -1,16 +1,17 @@
 # -*- coding: utf-8 -*-
 """
-config/auto_pool.py — 自动盘标的池（P3-2 池分管：auto 侧候选池单一真源）
+config/auto_pool.py — 自动盘标的池（P3-2 池分管 → 2026-08-30 单文件合并）
 
-来源：原 goldminer main.py:33-71 硬编码 17 票 STOCKS/STOCK_NAMES，P3-2 迁入本模块。
-标注 pool="auto"；manual 池 = watchlist_buy.json 中 pool="manual" 的标的。
+来源：原 goldminer main.py:33-71 硬编码 17 票 STOCKS/STOCK_NAMES，P3-2 迁入本模块；
+2026-08-30 起改为从单一持仓真源 t_io/state/holdings.json 派生（pool ∈ {auto, both} →
+{name, gm_symbol}），与手动链/回测共用同一文件，杜绝身份清单漂移。
 
 消费方：
   · superTrader：core/position_builder.py（manual 扫描过滤）、main.py（启动池校验）、t_gui.py（池筛选）
   · goldminer：main.py（STOCKS/STOCK_NAMES 构建 + init 池校验）——经 SUPERTRADER_ROOT 定位本文件、
     以绝对路径 importlib 加载（goldminer 自身也有 config 包，不能用 `from config.auto_pool` 直接导入）。
 
-注意：本模块保持轻量、无副作用（不 import 顶层 config.py 那套 requests/akshare），
+注意：本模块保持轻量、无副作用（不 import 顶层 config.py 那套 requests/akshare，不 import core/src），
 仅依赖标准库；改名/挪位需同步 goldminer main.py 的加载路径。
 """
 import json
@@ -18,27 +19,30 @@ import os
 
 POOL = "auto"
 
+_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+HOLDINGS_FILE = os.path.join(_ROOT, "t_io", "state", "holdings.json")
+
+
+def _load_auto_pool() -> dict:
+    """从 holdings.json 派生 auto 池身份（pool ∈ {auto, both} → {name, gm_symbol}）。读失败返回 {}。"""
+    try:
+        with open(HOLDINGS_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+    except Exception:
+        return {}
+    if not isinstance(data, dict):
+        return {}
+    return {
+        code: {"name": h.get("name", code), "gm_symbol": h.get("gm_symbol", "")}
+        for code, h in data.items()
+        if isinstance(h, dict)
+        and not str(code).startswith("_")
+        and str(h.get("pool") or "") in ("auto", "both")
+    }
+
+
 # code(内部 6 位) → {name, gm_symbol}
-AUTO_POOL = {
-    "000988": {"name": "华工科技", "gm_symbol": "SZSE.000988"},
-    "600481": {"name": "双良节能", "gm_symbol": "SHSE.600481"},
-    "600176": {"name": "中国巨石", "gm_symbol": "SHSE.600176"},
-    "603667": {"name": "五洲新春", "gm_symbol": "SHSE.603667"},
-    "300054": {"name": "鼎龙股份", "gm_symbol": "SZSE.300054"},
-    "300364": {"name": "中文在线", "gm_symbol": "SZSE.300364"},
-    "002639": {"name": "雪人集团", "gm_symbol": "SZSE.002639"},
-    "300153": {"name": "科泰电源", "gm_symbol": "SZSE.300153"},
-    "300456": {"name": "赛微电子", "gm_symbol": "SZSE.300456"},
-    "002202": {"name": "金风科技", "gm_symbol": "SZSE.002202"},
-    "002536": {"name": "飞龙股份", "gm_symbol": "SZSE.002536"},
-    "002176": {"name": "江特电机", "gm_symbol": "SZSE.002176"},
-    "600584": {"name": "长电科技", "gm_symbol": "SHSE.600584"},
-    "002261": {"name": "拓维信息", "gm_symbol": "SZSE.002261"},
-    "600089": {"name": "特变电工", "gm_symbol": "SHSE.600089"},
-    "002451": {"name": "摩恩电气", "gm_symbol": "SZSE.002451"},
-    # WP-E4(2026-08-24 owner决策): 红利ETF 防守仓纳入做T体系
-    "515180": {"name": "红利ETF", "gm_symbol": "SHSE.515180"},
-}
+AUTO_POOL = _load_auto_pool()
 
 
 def auto_pool_codes() -> list:

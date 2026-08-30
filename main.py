@@ -1529,9 +1529,10 @@ def _maybe_audit_closure(now: datetime) -> None:
                 holdings_updated = True
         if holdings_updated:
             try:
-                with open(HOLDINGS_FILE, "w", encoding="utf-8") as f:
-                    json.dump(HOLDINGS, f, ensure_ascii=False, indent=2)
-                log.info(f"✅ holdings.json 已更新（共 {len(HOLDINGS)} 只），冻结仓位已释放")
+                from src.holdings_repo import save_held_merged, load_full
+                # 合并回写：HOLDINGS 是过滤后的持仓 dict，直接 dump 会抹掉未持有的 auto 候选（18 只全量）
+                save_held_merged(HOLDINGS)
+                log.info(f"✅ holdings.json 已更新（共 {len(load_full())} 只，持仓 {len(HOLDINGS)} 只），冻结仓位已释放")
             except Exception as e:
                 log.warning(f"⚠️ holdings.json 写入失败: {str(e)[:80]}")
             # 收盘同步后清空 VIRTUAL_TRADES
