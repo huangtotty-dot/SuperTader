@@ -74,6 +74,10 @@ def _sell_arbiter(context, code, sig, pos_qty, cp, now, holding, threshold,
     _is_protection = sig.action in ("PANIC_SELL", "TRAIL_SELL", "TREND_EXIT", "HARD_STOP_EXIT")
     sell_floor_ratio = 0.0 if _is_protection else float(PARAMS.get("sell_floor_ratio", 0.5))
     min_hold = int(base_ref * sell_floor_ratio)
+    # 2026-08-31: 小底仓豁免——底仓不足2手时地板保护使任何非保护卖出恒被拦
+    # （回测实证: 600481 底仓100股 min_hold=50 → pos-100=0<50 死锁，结构性做不了T）
+    if base_ref < 200:
+        min_hold = 0
     if pos_qty - 100 < min_hold:
         # WP-B15: 地板拦截去重——同持仓状态重复拦截静默，状态(pos/min_hold)变化再写（O-03 风格）
         _floor_key = f'_floor_logged_{code}_{sig.action}'
@@ -162,7 +166,10 @@ def _sell_arbiter(context, code, sig, pos_qty, cp, now, holding, threshold,
         new_pos = max(0, pos_qty - qty)
         if gm_sym in context.manual_position:
             context.manual_position[gm_sym]["qty"] = new_pos
-            context.manual_position[gm_sym]["available"] = new_pos
+            # T+1: 卖出只减可用量（可卖部分），不得把 available 顶到总持仓 new_pos——
+            # 否则当天买入的锁定部分被误记为可卖，尾盘/后续卖出超额下单 → status=8 仓位不足
+            # （run10 实证 600481 21 次拒单）。qty 已按 _avail 封顶，故 _avail-qty >= 0。
+            context.manual_position[gm_sym]["available"] = max(0, _avail - qty)
             context.manual_position[gm_sym]["t_qty"] = new_pos
         # WP-B14: TARGET 下单即置 pending 落盘——防下单→成交回调间竞态重复触发
         if sig.action == "TARGET_SELL" and gm_sym in context.manual_position:
@@ -192,11 +199,15 @@ def _sell_channel_gate(context, code, gm_sym, cp, now, sig, pos_qty, holding, da
     # ── WP-B19-rev(2026-08-28): -8% 硬止损通道（第四类保护，优先级最高，TRAIL 之前） ──
     # 触发：持仓亏损 ≥ hard_stop_pct（默认 8%）→ 全离（可用量）+ 当日禁一切买入
     # 依据：exit_strategy_mining_20260828 报告，日线 close 模拟下硬止损显著优于 MA5 静态破位
+    # 2026-08-31: 拒单退避（gm_main 拒单回调写入 _protect_sell_reject_until）——
+    # 防「拒单回滚→状态复原→下分钟同单重发」订单风暴（run6 实证 2524 次拒单）
+    _reject_until = (getattr(context, "_protect_sell_reject_until", None) or {}).get(code)
+    _on_reject_cooldown = _reject_until is not None and now < _reject_until
     _profit = feats_cache.get("profit_pct", 0) if feats_cache else 0
     _hard_stop_pct = float(
         STOCK_PARAMS.get(code, {}).get("hard_stop_pct",
             PARAMS.get("hard_stop_pct", 0.08)))
-    if pos_qty > 0 and _profit < -_hard_stop_pct:
+    if pos_qty > 0 and _profit < -_hard_stop_pct and not _on_reject_cooldown:
         from data.indicators import Signal as _HsSig
         sig = _HsSig(code=code, name=STOCK_NAMES.get(code, code),
                      action="HARD_STOP_EXIT", price=cp, score=80.0,
@@ -208,8 +219,9 @@ def _sell_channel_gate(context, code, gm_sym, cp, now, sig, pos_qty, holding, da
 
     # ── B1/T1: TRAIL_SELL 移动止盈 ──
     # TODO(PhaseD): 寻优 ACT_LINE/k/MIN_BACK/MAX_BACK
-    _panic_on_cooldown = (code in context.engine.sell_cooldown
-                          and now < context.engine.sell_cooldown.get(code, now))
+    _panic_on_cooldown = ((code in context.engine.sell_cooldown
+                           and now < context.engine.sell_cooldown.get(code, now))
+                          or _on_reject_cooldown)  # 2026-08-31: 拒单退避同样抑制 TRAIL/PANIC/TREND_EXIT/TARGET/TAIL
     _profit = feats_cache.get("profit_pct", 0) if feats_cache else 0
     _trail_state = "INACTIVE"
     _trail_peak = 0.0
@@ -334,7 +346,8 @@ def _sell_channel_gate(context, code, gm_sym, cp, now, sig, pos_qty, holding, da
                 if gm_sym in context.manual_position:
                     new_pos = pos_qty - qty
                     context.manual_position[gm_sym]["qty"] = new_pos
-                    context.manual_position[gm_sym]["available"] = new_pos
+                    # T+1: 同仲裁器——available 只减 qty，不顶到 new_pos（当天买入锁定部分不可卖）
+                    context.manual_position[gm_sym]["available"] = max(0, _avail - qty)
                     context.manual_position[gm_sym]["t_qty"] = new_pos
                 print(f'[{now:%H:%M:%S}] TAIL {code} 尾盘归位 {qty}股 (pos={pos_qty}→{pos_qty-qty} target={target})')
                 if not hasattr(context, "_pending_sell_action"):

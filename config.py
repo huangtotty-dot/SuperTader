@@ -393,6 +393,9 @@ PARAMS = {
 # 个股专属参数覆盖（基于近90日分钟数据统计回测定制）
 # 科泰电源 300153：反转最强、流动性最差、尾盘低点概率最高
 # V3.0 P0-D: STOCK_PARAMS 精简 — 仅保留有 _sp_param 消费端的键（含 N3/N4 修复后生效的）
+# 注意（2026-08-31）：allow_overheated_buy/allow_breakdown_buy 的 auto/回测侧消费端
+# 在 execution/auto/_gm/config/params.py 的 STOCK_PARAMS（RiskManager 已接入）；
+# 此处键值仅手动侧（core/signal_engine.py override_gates）留档，两侧需分别维护。
 STOCK_PARAMS = {
     "600481": {  # 双良节能
         "stock_qty_base_pct": 0.39, "stock_qty_strong_pct": 0.27,

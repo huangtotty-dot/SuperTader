@@ -245,14 +245,16 @@ def _buyback_mutex_block(context, code, daily_ctx, open_price, cp, now, ab):
 
 def _check_max_pos_cap(context, code, now, pos_qty: int, base_ref: int,
                        max_pos_shares: int, budget: float, total_eq: float,
-                       force: bool = False, action: str = "") -> bool:
+                       force: bool = False, action: str = "", t_headroom: int = 0) -> bool:
     """WP-E2: 个股最大仓位闸。True=拦截（调用方 continue）。
 
-    触发条件：pos_qty>0 且 pos_qty >= max(max_pos_shares, base_ref)
+    触发条件：pos_qty>0 且 pos_qty >= max(max_pos_shares, base_ref + t_headroom)
     （预算帽与底仓取高——永不在底仓下方收口，不逼卖出，与 target_t 语义一致）。
+    t_headroom（2026-08-31）：做T买入(BUY_LOW/ADD_POS)专用的一档T余量，
+    否则持仓=底仓即恒到顶、做T加仓永远被拦（run8 实证）。
     force=True 用于 sizer 返回 0 的确认分支（reason=sizer_zero_at_cap）。
     拦截时写 risk 事件 max_pos_cap + audit，每票每日去重（O-03 风格）。"""
-    ceiling = max(int(max_pos_shares or 0), int(base_ref or 0))
+    ceiling = max(int(max_pos_shares or 0), int(base_ref or 0) + int(t_headroom or 0))
     if pos_qty <= 0 or (not force and pos_qty < ceiling):
         return False
     # WP-B15: 到顶拦截 → 每次拦截都置位同源信号 mute（事件层去重；决策/执行不受影响）。
@@ -1119,7 +1121,12 @@ def on_bar(context, bars):
             # P4-6: auto 建仓判定接 core/build_decision（P3 双侧单一真源）。
             # 数据适配：_daily_df（个股日线）+ ir.GM_INDEX_CACHE（指数日线）+ bar_cache 1m → 决策核；
             # 数据不足 fail-closed；WP-B20 双通道降为参考留痕（与 manual 侧 result["channels"] 同定位）。
-            if not _topup_blocked:
+            # 2026-08-31（owner批复）: 回补(topup)走轻量闸——豁免 build_decision=signal 要求，
+            # 个股非 TREND_BREAKDOWN（上方 :1075 趋势闸已拦）即允许补回 MIRROR 目标。
+            # 语义：回补是恢复既有持仓配置，不是新建仓决策；震荡市 go 恒 False 曾致止损后
+            # 5 个月空仓踏空（run8 实证：588170 硬止损后 +160% 行情全程未回补）。
+            # 全新建仓（非 topup）仍走下方全闸不变。
+            if not _topup_blocked and not _is_topup:
                 from signals import position_builder as _pb
                 from build_decision_auto import decide as _bd_decide
                 _idx_df = None
@@ -1269,7 +1276,11 @@ def on_bar(context, bars):
 
         # ── R1/G3: 个股趋势熔断（一票一闸） ──
         _trend = daily_ctx.get("_stock_trend_state", "TREND_RANGE")
-        if _trend == "TREND_BREAKDOWN" and sig and sig.action in ("BUY_LOW", "ADD_POS"):
+        # 2026-08-31: G3 闸接入个股放行开关（与 RiskManager 同源语义）——此前此处硬拦，
+        # 588170 配了 allow_breakdown_buy=True 仍被掐（回测 run8 实证：23 次 BUY_LOW 全灭）
+        _g3_allow_bd = bool(STOCK_PARAMS.get(code, {}).get("allow_breakdown_buy"))
+        if (_trend == "TREND_BREAKDOWN" and not _g3_allow_bd
+                and sig and sig.action in ("BUY_LOW", "ADD_POS")):
             sig = None
             try: write_risk(str(now), "stock_trend_gate", f"{_trend} 禁买", code=code)
             except: pass
@@ -1463,13 +1474,20 @@ def on_bar(context, bars):
             _total_eq = _total_equity(context, available_cash)
             _stock_budget, max_pos_shares = _stock_budget_cap(context, code, cp, _total_eq)
             _base_ref = getattr(context, f'_base_ref_{code}', 0) or pos_qty
-            target_t = max(max_pos_shares, _base_ref, pos_qty)
+            # 2026-08-31（owner批复）: 做T买入顶帽加一档T余量——做T语义即「底仓之上加一档、
+            # 日内了结」，旧口径 ceiling=max(预算帽,底仓) 在持仓=底仓时恒到顶、
+            # 做T加仓永远被拦（run8 实证: 002451 底仓1300=顶帽1300，3 次 BUY_LOW 全灭）
+            _t_head = 0
+            if sig.action in ("BUY_LOW", "ADD_POS") and _base_ref > 0:
+                _t_pct = float(context.engine._get_params(code).get("stock_qty_base_pct", 0.3) or 0.3)
+                _t_head = max(100, int(_base_ref * _t_pct / 100) * 100)
+            target_t = max(max_pos_shares, _base_ref + _t_head, pos_qty)
             holding_with_target = dict(holding, target_t=target_t)
 
             # WP-E2: 个股最大仓位闸——到顶直接拦截（堵 sizer 内部 1.5× 兜底洞）
             if _check_max_pos_cap(context, code, now, pos_qty, _base_ref,
                                   max_pos_shares, _stock_budget, _total_eq,
-                                  action=sig.action):
+                                  action=sig.action, t_headroom=_t_head):
                 continue
 
             qty = context.sizer.calc_buy_qty(code, holding_with_target, sig.score, threshold)
@@ -1481,7 +1499,7 @@ def on_bar(context, bars):
                 else:
                     _check_max_pos_cap(context, code, now, pos_qty, _base_ref,
                                        max_pos_shares, _stock_budget, _total_eq,
-                                       force=True, action=sig.action)
+                                       force=True, action=sig.action, t_headroom=_t_head)
                     continue
 
             # WP-B07: 高接降档 — 数量减半取整到 min_unit，不足 min_unit 则延迟
@@ -1541,8 +1559,16 @@ def on_bar(context, bars):
                 # 快照法而非逆运算，避免成本加权逆推的浮点漂移；纯日内状态，无需落盘。
                 if not hasattr(context, "_pending_buy_snapshot") or context._pending_buy_snapshot is None:
                     context._pending_buy_snapshot = {}
+                # 2026-08-30: order_volume 返回 List[Dict]（同步下单回报），非单值——此前
+                # 直接把整个 list 当 dict 键 → TypeError: unhashable type: 'list'，
+                # 做T买入(BUY_LOW/ADD_POS)下单成功后记账全崩、manual_position 永不更新
+                # （run9 实证 90 次，并连锁 16 次 status=8 仓位不足卖单拒单）。取首单
+                # cl_ord_id 作快照键，空/异常回退 gm_sym（与 _pop_buy_snapshot 的 symbol 兜底一致）。
+                _orders = _oid if isinstance(_oid, list) else []
+                _first = _orders[0] if _orders and isinstance(_orders[0], dict) else {}
+                _snap_key = (_first.get("cl_ord_id") or _first.get("order_id")) or gm_sym
                 _snap = context.manual_position.get(gm_sym)
-                context._pending_buy_snapshot[_oid or gm_sym] = copy.deepcopy(_snap) if _snap else None
+                context._pending_buy_snapshot[_snap_key] = copy.deepcopy(_snap) if _snap else None
                 context.daily_buy_count[code] = bc + 1
                 context.daily_trade_price[code] = cp
                 context.total_trade_count += 1
@@ -1764,6 +1790,13 @@ def on_order_status(context, order):
             else:
                 print(f'[ORDER] {code} 底仓拒单已达上限({MAX_BASE_RETRY})，停止重试')
         print(f"[ORDER] {symbol} 被拒 status={status} {_rej_detail}")
+        # 2026-08-31: 卖单拒单退避——拒单回滚后本地状态复原，若不记冷却，保护通道
+        # （HARD_STOP 无冷却检查）会下一分钟同单重发形成订单风暴（run6 实证 2524 次
+        # status=8 仓位不足）。用仿真时钟(_now)，回测压缩时间下仍按行情时间计 30 分钟。
+        if side == 2:
+            if not hasattr(context, "_protect_sell_reject_until") or context._protect_sell_reject_until is None:
+                context._protect_sell_reject_until = {}
+            context._protect_sell_reject_until[code] = _now() + timedelta(minutes=30)
         # N25-2: 卖出拒单回滚manual_position(下单时已虚减)
         if side == 2 and symbol in context.manual_position:
             # WP-B15: 持仓回滚 → 解除信号 mute / 地板去重键
