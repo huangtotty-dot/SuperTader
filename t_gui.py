@@ -3451,6 +3451,11 @@ class Api:
         except Exception as e:
             return {"ok": False, "error": str(e)}
 
+    def load_auto_build_armed(self):
+        """读 AUTO_BUILD.json 武装标记（手动建仓/加仓，引擎待消费，一次性）。"""
+        ab = _load_json(BRIDGE_DIR / "AUTO_BUILD.json", {}) or {}
+        return _clean({"requests": ab.get("requests") or {}})
+
     def remove_auto_stock(self, code):
         """从 auto 池删除标的（仅 qty/base 均为 0 的候选；有持仓拒绝）。同步 watchlist pool 改回 manual。
         引擎需重启后不再含该标的。"""

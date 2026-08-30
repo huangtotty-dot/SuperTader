@@ -1680,15 +1680,44 @@ async function loadAutoBuildOptions() {
   const sel = document.getElementById("abCode");
   if (!sel) return;
   try {
-    const scan = await apiCall("load_auto_scan");
+    const [scan, armed] = await Promise.all([
+      apiCall("load_auto_scan"),
+      apiCall("load_auto_build_armed").catch(() => ({ requests: {} })),
+    ]);
+    window._autoBuildArmed = (armed && armed.requests) || {};
     const rows = (scan && scan.rows) || [];
+    window._autoScanRows = rows;  // 供 onAbCodeChange 显示选中标的详情
     if (!rows.length) {
       sel.innerHTML = '<option value="">暂无 auto 池数据，先跑一次盘后重跑</option>';
+      onAbCodeChange();
       return;
     }
     sel.innerHTML = rows.map(r =>
       `<option value="${esc(r.code)}">${esc(r.name || r.code)} ${esc(r.code)}${r.mirror_qty ? " 底仓" + fmt(r.mirror_qty, 0) : ""}${r.held ? " 持有" : ""}</option>`).join("");
+    onAbCodeChange();
   } catch (e) { /* ignore */ }
+}
+
+function onAbCodeChange() {
+  // 选择建仓/加仓标的后，下方显示对应标的详情（2026-08-30）
+  const el = document.getElementById("abInfo");
+  const sel = document.getElementById("abCode");
+  if (!el || !sel) return;
+  const code = (sel.value || "").trim();
+  if (!code) { el.innerHTML = ""; return; }
+  const r = (window._autoScanRows || []).find(x => x.code === code);
+  if (!r) { el.innerHTML = `<span class="mono">${esc(code)}</span>`; return; }
+  const armed = (window._autoBuildArmed || {})[code];
+  const parts = [
+    `<b>${esc(r.name || r.code)}</b> <span class="mono cell-dim">${esc(r.code)}</span>`,
+    r.held ? '<span class="badge hold">持仓</span>' : '<span class="badge">候选</span>',
+    `目标底仓 <b>${r.mirror_qty ? fmt(r.mirror_qty, 0) : "未设"}</b>`,
+    r.verdict !== "pending" ? `判定 ${esc(r.verdict)}${r.score != null ? " / " + r.score : ""}` : "",
+  ].filter(Boolean).join(" · ");
+  const armedTxt = armed
+    ? `<div style="margin-top:4px"><span class="badge" style="background:#f85149;color:#fff">已武装 ${armed.action === "add" ? "加仓" : "建仓"} → 重启引擎后自动执行</span> <button class="mini-btn" onclick="clearAutoBuild()">撤销</button></div>`
+    : "";
+  el.innerHTML = `<div style="color:var(--text)">${parts}</div>${armedTxt}`;
 }
 
 async function manualAutoBuild() {
@@ -1703,6 +1732,7 @@ async function manualAutoBuild() {
     if (el) el.innerHTML = r && r.ok
       ? `<span style="color:#3fb950">✔ ${esc(r.msg)}</span>`
       : `<span style="color:#f85149">✘ ${esc((r && r.error) || "失败")}</span>`;
+    if (r && r.ok) loadAutoBuildOptions();  // 刷新武装状态 + 标的详情
   } catch (e) { if (el) el.textContent = "失败: " + e.message; }
 }
 
@@ -1713,6 +1743,7 @@ async function clearAutoBuild() {
   try {
     const r = await apiCall("clear_auto_build", code);
     if (el) el.innerHTML = r && r.ok ? "已清除武装标记" : "清除失败: " + ((r && r.error) || "");
+    if (r && r.ok) loadAutoBuildOptions();  // 刷新武装状态 + 标的详情
   } catch (e) { if (el) el.textContent = "清除失败: " + e.message; }
 }
 
