@@ -324,7 +324,7 @@
         <span class="cell-dim" style="font-size:12px;font-weight:normal">人工确认后引擎跳过确认闸 · 重启掘金策略后自动建仓并开始做T（仅限 auto 池内）</span>
       </h2>
       <div style="display:inline-flex;align-items:center;gap:6px;font-size:12px">
-        <select id="abCode" class="mini-btn" style="width:170px;font-size:11px"></select>
+        <select id="abCode" class="mini-btn" style="width:170px;font-size:11px" onchange="onAbCodeChange()"></select>
         <input type="text" id="abQty" class="mini-input" placeholder="数量(100整数倍)" style="width:130px">
         <select id="abAction" class="mini-btn" style="width:90px;font-size:11px">
           <option value="build">建仓</option>
@@ -333,6 +333,7 @@
         <button class="mini-btn primary" onclick="manualAutoBuild()">确认并武装</button>
         <button class="mini-btn" onclick="clearAutoBuild()" title="撤销武装标记">清除标记</button>
       </div>
+      <div id="abInfo" class="cell-dim" style="margin-top:6px"></div>
       <div id="abResult" class="cell-dim" style="margin-top:6px"></div>
     </div>
   </div>
