@@ -1041,16 +1041,19 @@ _TOTAL_EQUITY_CACHE = {"ts": 0.0, "value": 0.0}  # fix P0-9(B1): total_equity �
 
 
 def _compute_total_equity() -> float:
-    """fix P0-9(B1): 从 t_io/state/portfolio_config.json 计算账户总资产
+    """fix P0-9(B1): 从 t_io/state/accounts_config.json 计算账户总资产
     （账户A现金+持仓市值 + 账户B现金+持仓市值）。
     现金 ≈ total_capital - 持仓成本（忽略已实现盈亏/手续费）；持仓市值用快照最新价。
+    2026-08-30: 账户配置合并为 accounts_config.json 唯一源头，旧 portfolio_config.json 仅回退。
     """
     now_ts = time.time()
     if _TOTAL_EQUITY_CACHE["value"] > 0 and now_ts - _TOTAL_EQUITY_CACHE["ts"] < 300:
         return _TOTAL_EQUITY_CACHE["value"]
     equity = 0.0
     try:
-        fp = os.path.join(BASE_DIR, "t_io", "state", "portfolio_config.json")
+        fp = os.path.join(BASE_DIR, "t_io", "state", "accounts_config.json")
+        if not os.path.exists(fp):
+            fp = os.path.join(BASE_DIR, "t_io", "state", "portfolio_config.json")  # 旧部署回退
         with open(fp, encoding="utf-8") as f:
             cfg = json.load(f)
         capital_by_acct = {k: float((v or {}).get("total_capital") or 0)
