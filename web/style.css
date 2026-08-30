@@ -203,6 +203,11 @@ tr:hover td { background: rgba(243,93,43,.03); }
 .modal-body { padding: 10px 16px; overflow-y: auto; }
 .modal-body td input { width: 100px; background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 4px; padding: 3px 6px; font-family: var(--mono); text-align: right; }
 .modal-foot { padding: 10px 16px; border-top: 1px solid var(--border-soft); text-align: right; }
+/* 自动盘买入人工确认闸（2026-08-30） */
+.buy-confirm-item { background: var(--bg); border: 1px solid var(--border-soft); border-radius: 8px; padding: 10px 12px; margin-bottom: 10px; }
+.mini-btn.danger { background: #f85149; color: #fff; border-color: #f85149; font-weight: 700; }
+.mini-btn.danger:hover { filter: brightness(1.1); }
+.confirm-badge { background: #f85149; color: #fff; font-size: 11px; font-weight: 700; border-radius: 10px; padding: 0 7px; margin-left: 6px; line-height: 18px; }
 /* 个股技术分析弹窗 */
 .modal-lg { width: 90vw; max-width: 1200px; height: 85vh; max-height: 85vh; transition: all .25s ease; }
 .modal-lg.modal-max { width: 98vw; max-width: 98vw; height: 97vh; max-height: 97vh; }

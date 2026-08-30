@@ -58,6 +58,7 @@
     </div>
     <div class="sidebar-item" data-tab="auto">
       <span class="sidebar-icon">🤖</span><span>自动盘</span>
+      <span id="buyConfirmBadge" class="confirm-badge" style="display:none"></span>
     </div>
   </div>
   <div class="sidebar-summary" id="sidebarSummary">
@@ -362,6 +363,16 @@
     <div class="modal-foot">
       <button class="mini-btn primary" id="calibSave">保存校准</button>
     </div>
+  </div>
+</div>
+
+<!-- 自动盘买入人工确认 modal（2026-08-30 建仓/加仓人工把关） -->
+<div id="buyConfirmModal" class="modal-mask" style="display:none">
+  <div class="modal">
+    <div class="modal-title" style="color:#ffb454">⏸ 自动盘买入待确认
+      <span class="cell-dim" style="font-size:12px;font-weight:normal">确认后引擎才会下单；拒绝则当日不再提示</span>
+    </div>
+    <div class="modal-body" id="buyConfirmList" style="max-height:60vh;overflow-y:auto"></div>
   </div>
 </div>
 
