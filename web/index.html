@@ -300,6 +300,41 @@
       </h2>
       <div id="autoPositionsBody"><div class="empty">无自动盘持仓数据</div></div>
     </div>
+    <div class="section">
+      <h2>自动盘建仓信号扫描
+        <span class="cell-dim" style="font-size:12px;font-weight:normal">对 auto 池跑建仓判定（EOD 口径 · 仅供参考，以引擎闸链为准）</span>
+        <button class="mini-btn primary" onclick="recomputeAutoScan()" title="盘后对 auto 池全量重跑建仓判定">🔄 盘后重跑</button>
+      </h2>
+      <div id="autoScanBody"><div class="empty">尚无扫描结果，点击「盘后重跑」生成</div></div>
+    </div>
+    <div class="section">
+      <h2>添加自动盘标的
+        <span class="cell-dim" style="font-size:12px;font-weight:normal">写入 holdings.json（pool=auto + 目标底仓）· 需重启掘金策略生效</span>
+      </h2>
+      <div style="display:inline-flex;align-items:center;gap:6px;font-size:12px">
+        <input type="text" id="asCode" class="mini-input" placeholder="代码(6位)" style="width:100px">
+        <input type="text" id="asName" class="mini-input" placeholder="名称" style="width:110px">
+        <input type="text" id="asMirrorQty" class="mini-input" placeholder="目标底仓(股)" style="width:110px">
+        <button class="mini-btn primary" onclick="addAutoStock()">+ 添加</button>
+      </div>
+      <div id="asResult" class="cell-dim" style="margin-top:6px"></div>
+    </div>
+    <div class="section">
+      <h2>手动建仓/加仓（引擎做T衔接）
+        <span class="cell-dim" style="font-size:12px;font-weight:normal">人工确认后引擎跳过确认闸 · 重启掘金策略后自动建仓并开始做T（仅限 auto 池内）</span>
+      </h2>
+      <div style="display:inline-flex;align-items:center;gap:6px;font-size:12px">
+        <select id="abCode" class="mini-btn" style="width:170px;font-size:11px"></select>
+        <input type="text" id="abQty" class="mini-input" placeholder="数量(100整数倍)" style="width:130px">
+        <select id="abAction" class="mini-btn" style="width:90px;font-size:11px">
+          <option value="build">建仓</option>
+          <option value="add">加仓</option>
+        </select>
+        <button class="mini-btn primary" onclick="manualAutoBuild()">确认并武装</button>
+        <button class="mini-btn" onclick="clearAutoBuild()" title="撤销武装标记">清除标记</button>
+      </div>
+      <div id="abResult" class="cell-dim" style="margin-top:6px"></div>
+    </div>
   </div>
 
 </main>

@@ -1559,6 +1559,113 @@ function initBuyConfirmEvents() {
   });
 }
 
+/* ---- 自动盘：建仓扫描 + 添加标的 + 手动建仓做T衔接（2026-08-30） ---- */
+async function loadAutoScan() {
+  try {
+    const d = await apiCall("load_auto_scan");
+    renderAutoScan(d);
+  } catch (e) { /* pywebview 未就绪忽略 */ }
+}
+
+function renderAutoScan(d) {
+  const el = document.getElementById("autoScanBody");
+  if (!el) return;
+  if (!d || !d.has_data || !(d.rows || []).length) {
+    el.innerHTML = '<div class="empty">尚无扫描结果，点击「🔄 盘后重跑」生成</div>';
+    return;
+  }
+  const counts = d.counts || {};
+  const countBadge = k => counts[k] ? `<span class="badge">${esc(k)}: ${counts[k]}</span>` : "";
+  const rows = (d.rows || []).map(r => `
+    <tr>
+      <td>${esc(r.name || r.code)} <span class="mono cell-dim">${esc(r.code)}</span></td>
+      <td>${verdictBadge(r.verdict)}</td>
+      <td class="num">${r.score != null ? fmt(r.score, 0) : "—"}</td>
+      <td>${esc(r.regime || "—")}</td>
+      <td>${r.go ? '<span class="badge" style="background:#3fb950;color:#111">GO</span>' : '<span class="cell-dim">—</span>'}</td>
+      <td class="num">${r.mirror_qty ? fmt(r.mirror_qty, 0) : "—"}</td>
+      <td>${r.held ? "持有" : ""}</td>
+      <td class="cell-dim" style="font-size:11px">${(r.reasons || []).slice(0, 2).map(esc).join("；")}${r.error ? " " + esc(r.error) : ""}</td>
+    </tr>`).join("");
+  el.innerHTML = `
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:6px">
+      ${countBadge("signal")}${countBadge("approaching")}${countBadge("weak")}${countBadge("scan_error")}
+      <span class="cell-dim" style="margin-left:auto">共 ${d.rows.length} 只 · ${esc(d.date)}</span>
+    </div>
+    <table><thead><tr><th>股票</th><th>判定</th><th class="num">得分</th><th>市场</th><th>GO</th><th class="num">目标底仓</th><th>持仓</th><th>理由</th></tr></thead>
+    <tbody>${rows}</tbody></table>`;
+}
+
+async function recomputeAutoScan() {
+  const el = document.getElementById("autoScanBody");
+  if (el) el.innerHTML = '<div class="empty">盘后重跑中（对 auto 池全量建仓判定，秒级~30s）...</div>';
+  try {
+    const d = await apiCall("run_auto_scan");
+    renderAutoScan(d);
+    if (d && d.error) statusEl("自动盘扫描失败: " + d.error, "err");
+    loadAutoBuildOptions();
+  } catch (e) { statusEl("自动盘扫描失败: " + e.message, "err"); }
+}
+
+async function addAutoStock() {
+  const code = (document.getElementById("asCode").value || "").trim();
+  const name = (document.getElementById("asName").value || "").trim();
+  const mirrorQty = (document.getElementById("asMirrorQty").value || "").trim();
+  const el = document.getElementById("asResult");
+  if (!code) { if (el) el.innerHTML = '<span style="color:#f85149">✘ 请输入股票代码</span>'; return; }
+  try {
+    const r = await apiCall("add_auto_stock", code, name, mirrorQty);
+    if (el) el.innerHTML = r && r.ok
+      ? `<span style="color:#3fb950">✔ ${esc(r.msg)}</span>`
+      : `<span style="color:#f85149">✘ ${esc((r && r.error) || "添加失败")}</span>`;
+    if (r && r.ok) {
+      document.getElementById("asCode").value = "";
+      document.getElementById("asMirrorQty").value = "";
+      loadAutoBuildOptions();
+    }
+  } catch (e) { if (el) el.textContent = "添加失败: " + e.message; }
+}
+
+async function loadAutoBuildOptions() {
+  const sel = document.getElementById("abCode");
+  if (!sel) return;
+  try {
+    const scan = await apiCall("load_auto_scan");
+    const rows = (scan && scan.rows) || [];
+    if (!rows.length) {
+      sel.innerHTML = '<option value="">暂无 auto 池数据，先跑一次盘后重跑</option>';
+      return;
+    }
+    sel.innerHTML = rows.map(r =>
+      `<option value="${esc(r.code)}">${esc(r.name || r.code)} ${esc(r.code)}${r.mirror_qty ? " 底仓" + fmt(r.mirror_qty, 0) : ""}${r.held ? " 持有" : ""}</option>`).join("");
+  } catch (e) { /* ignore */ }
+}
+
+async function manualAutoBuild() {
+  const code = (document.getElementById("abCode").value || "").trim();
+  const qty = (document.getElementById("abQty").value || "").trim();
+  const action = (document.getElementById("abAction").value || "build");
+  const el = document.getElementById("abResult");
+  if (!code) { if (el) el.innerHTML = '<span style="color:#f85149">✘ 请先选择股票</span>'; return; }
+  if (!qty) { if (el) el.innerHTML = '<span style="color:#f85149">✘ 请输入数量</span>'; return; }
+  try {
+    const r = await apiCall("manual_auto_build", code, qty, action);
+    if (el) el.innerHTML = r && r.ok
+      ? `<span style="color:#3fb950">✔ ${esc(r.msg)}</span>`
+      : `<span style="color:#f85149">✘ ${esc((r && r.error) || "失败")}</span>`;
+  } catch (e) { if (el) el.textContent = "失败: " + e.message; }
+}
+
+async function clearAutoBuild() {
+  const code = (document.getElementById("abCode").value || "").trim();
+  const el = document.getElementById("abResult");
+  if (!code) { if (el) el.textContent = "请先选择股票"; return; }
+  try {
+    const r = await apiCall("clear_auto_build", code);
+    if (el) el.innerHTML = r && r.ok ? "已清除武装标记" : "清除失败: " + ((r && r.error) || "");
+  } catch (e) { if (el) el.textContent = "清除失败: " + e.message; }
+}
+
 /* ---- ⑦ 加仓观察 ---- */
 function renderAddWatch(aw) {
   const el = document.getElementById("addWatchBody");
@@ -3467,8 +3574,12 @@ function switchTab(tab) {
   }
   // 切到每日复盘：懒加载模型配置 + 已有复盘
   if (tab === "archive") renderDailyReview();
-  // P4-3 切到自动盘：加载 t_io/bridge 状态
-  if (tab === "auto") loadAutoStatus();
+  // P4-3 切到自动盘：加载 t_io/bridge 状态 + 建仓扫描 + 手动建仓下拉
+  if (tab === "auto") {
+    loadAutoStatus();
+    loadAutoScan();
+    loadAutoBuildOptions();
+  }
 }
 
 /* ================= 侧栏汇总 ================= */

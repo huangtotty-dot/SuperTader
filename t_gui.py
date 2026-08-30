@@ -3306,10 +3306,14 @@ class Api:
         if _ap is not None and not _ap.is_manual(code):
             return {"ok": False, "error": f"{code} 已在 auto 池"}
         try:
-            from src.holdings_repo import upsert_auto_entry
+            from src.holdings_repo import upsert_auto_entry, load_full
             from core.market_data.codec import to_gm
         except Exception as e:
             return {"ok": False, "error": str(e)}
+        # 已在 auto/both 池 → 拒绝（基于当前 holdings 而非 auto_pool 模块缓存，防重复添加）
+        _cur = load_full().get(code) or {}
+        if str(_cur.get("pool") or "") in ("auto", "both"):
+            return {"ok": False, "error": f"{code} 已在 auto 池"}
         try:
             gm_symbol = to_gm(code)
         except Exception:
