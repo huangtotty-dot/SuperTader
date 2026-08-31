@@ -1569,7 +1569,7 @@ async function loadAutoScan() {
 }
 
 function renderAutoScan(d) {
-  // 显示对齐手动盘建仓表（2026-08-30）：池徽章/判定/得分(含ceiling锁)/时机门控(regime·GO)/否决/持仓 + 双击看K线
+  // 显示对齐手动盘建仓表（2026-08-31）：池/判定/得分(ceiling锁)/通过X/3/价/条件圆点/时机门控/否决 + 双击看K线
   const el = document.getElementById("autoScanBody");
   if (!el) return;
   const rows = (d && d.rows) || [];
@@ -1579,6 +1579,8 @@ function renderAutoScan(d) {
   }
   const counts = d.counts || {};
   const countBadge = k => counts[k] ? `<span class="badge">${esc(k)}: ${counts[k]}</span>` : "";
+  // 条件圆点标签（与手动盘 COND_LABELS 同口径）
+  const AUTO_COND_LABELS = { t_regime: "市场有方向", t_trend: "多头结构", t_drawdown: "回撤到位", t_golden: "MACD金叉(加分)" };
   const trs = rows.map(r => {
     const poolBadge = '<span class="badge" style="background:#2a4a5a;color:#8ad4ff" title="自动盘池（goldminer auto 侧管理）">自动</span>';
     const holdBadge = r.held ? '<span class="badge hold">持仓</span>' : "";
@@ -1599,10 +1601,26 @@ function renderAutoScan(d) {
     let nodataBadge = "";
     if (r.data_insufficient) nodataBadge = '<span class="badge nodata">数据不足</span>';
     // 得分含 ceiling 语义（对齐手动盘：震荡市 signal 结构性不可达，得分上限锁定）
-    const _reachable = r.verdict !== "weak" || r.regime !== "range";
     const scoreCell = r.score != null
       ? `<b>${r.score}</b>${!r.go && r.regime === "range" ? '<span class="cell-dim" style="font-size:10px">/70🔒</span>' : ""}`
       : "—";
+    // 条件圆点（对齐手动盘 renderPB：condStr + vetoDot，hover 看标签）
+    const conds = r.conditions || {};
+    const isNoData = r.verdict === "insufficient_data" || r.verdict === "pending";
+    const condStr = isNoData
+      ? `<span class="cell-dim">—</span>`
+      : Object.keys(AUTO_COND_LABELS).map(k =>
+          conds[k] === undefined ? `<span class="cell-dim">·</span>`
+            : conds[k] ? `<span class="on">●</span>` : `<span class="off">○</span>`).join("");
+    const vetoDot = isNoData ? "" : (conds.t_veto === false
+      ? `<span title="否决因子触发：${esc((r.veto || []).join("、") || "爆量/偏离MA60")}">🚫</span>`
+      : `<span class="cell-dim" title="否决因子（爆量≥3倍20日均量 / 偏离MA60>+20%）：未触发">·</span>`);
+    const condTitle = Object.keys(AUTO_COND_LABELS).map(k =>
+      `${AUTO_COND_LABELS[k]}:${conds[k] ? "通过" : "未过"}`).join(" · ");
+    // 通过 X/3（t_regime/t_trend/t_drawdown 通过数，金叉为加分不计，与手动盘同口径）
+    const iceKeys = ["t_regime", "t_trend", "t_drawdown"];
+    const metCount = iceKeys.filter(k => conds[k]).length;
+    const metCls = metCount >= 3 ? "up" : metCount >= 2 ? "warn" : "cell-dim";
     // 条件/理由列：reasons 简述 + 错误
     const reasonTxt = (r.reasons || []).slice(0, 2).map(esc).join("<br>")
       || (r.verdict === "pending" ? '<span class="cell-dim">待扫描（盘后重跑出判定）</span>'
@@ -1618,6 +1636,9 @@ function renderAutoScan(d) {
       <td style="text-align:center">${poolBadge}</td>
       <td>${verdictBadge(r.verdict)}</td>
       <td class="num" title="综合得分">${scoreCell}</td>
+      <td class="num ${metCls}"><b>${isNoData ? "—" : metCount + "/3"}</b></td>
+      <td class="num">${r.price != null ? fmt(r.price) : "—"}</td>
+      <td><span class="cond" title="${esc(condTitle)}">${condStr}${vetoDot}</span></td>
       <td class="cell-dim" style="font-size:11px;max-width:230px;line-height:1.5">${reasonTxt}</td>
       <td class="num">${r.mirror_qty ? fmt(r.mirror_qty, 0) : "—"}</td>
       <td style="text-align:center">${delBtn}</td>
@@ -1628,7 +1649,7 @@ function renderAutoScan(d) {
       ${countBadge("signal")}${countBadge("approaching")}${countBadge("watch_signal")}${countBadge("weak")}${countBadge("scan_error")}
       <span class="cell-dim" style="margin-left:auto">共 ${rows.length} 只 · ${esc(d.date || "")} · 双击看K线</span>
     </div>
-    <table><thead><tr><th>股票</th><th>池</th><th>判定</th><th class="num">得分</th><th>条件/理由</th><th class="num">目标底仓</th><th>操作</th></tr></thead>
+    <table><thead><tr><th>股票</th><th>池</th><th>判定</th><th class="num">得分</th><th class="num">通过</th><th class="num">价</th><th>条件</th><th>理由</th><th class="num">目标底仓</th><th>操作</th></tr></thead>
     <tbody>${trs}</tbody></table>`;
 }
 
