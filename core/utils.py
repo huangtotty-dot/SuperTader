@@ -1,3 +1,29 @@
+# P0-4(2026-08-31): 补齐 V3.0 迁移遗漏——本模块此前仅经 main.py exec 共享命名空间注入依赖，
+# 作为独立模块 import（如 src/data_fetcher 引入）时 NameError。补模块级 import/常量使其自包含。
+import os
+import json
+import numpy as np
+import pandas as pd
+from datetime import datetime
+from pathlib import Path
+from typing import Dict, List, Optional, Any
+
+BASE = Path(__file__).resolve().parents[1]
+TRACE_DIR = BASE / "t_io" / "traces"
+SNAPSHOT_DIR = BASE / "t_io" / "minute_snapshots"
+PREOPEN_DIR = BASE / "t_io" / "preopen"
+_now = datetime.now
+
+
+def get_today_str() -> str:
+    return _now().strftime("%Y-%m-%d")
+
+
+AI_REVIEW_STATS: Dict[str, dict] = {}
+DAILY_DECISION_STATS: Dict[str, dict] = {}
+_ORPHAN_TMP_COUNT = 0
+
+
 def _ensure_ai_review_stats(code: str, holding: dict) -> dict:
     if code not in AI_REVIEW_STATS:
         AI_REVIEW_STATS[code] = {"名称": holding.get("name", code), "最大多头分": 0, "最大空头分": 0, "最大振幅": 0.0, "触发买入次数": 0, "触发卖出次数": 0, "触发买入股数": 0, "触发卖出股数": 0}

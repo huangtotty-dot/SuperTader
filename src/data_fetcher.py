@@ -15,6 +15,30 @@ try:
 except ImportError:
     PARAMS = {}; STOCK_PARAMS = {}; CACHE_DIR = "./cache"
 
+# P0-4(2026-08-31): 补缺失常量——V3.0 显式导入迁移时漏掉，导致 load_holdings→load_strategy_memory
+# 抛 NameError(LEARNING_FILE)、load_watchlist 抛 NameError(WATCHLIST_FILE) →
+# build_preopen_context 异常 → preopen_{date}.json 连续多日(08-27/28/31)无产出。
+_ST_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+LEARNING_FILE = os.path.join(_ST_ROOT, "t_io", "state", "strategy_memory.json")
+WATCHLIST_FILE = os.path.join(_ST_ROOT, "t_io", "state", "watchlist_buy.json")
+
+# P0-4(2026-08-31): 补齐 V3.0 迁移遗漏的模块级依赖——此前依赖 main.py exec 共享命名空间注入，
+# 作为独立模块 import（如 preopen.py 用 load_holdings/get_daily_context）时 NameError。
+_now = datetime.now
+log = logging.getLogger("data_fetcher")
+
+
+def get_today_str() -> str:
+    return _now().strftime("%Y-%m-%d")
+
+
+from core.utils import _append_jsonl, _trace_path, _default_daily_context  # noqa: E402
+
+DAILY_CONTEXT_CACHE: Dict[str, Any] = {}
+MINUTE_FETCH_DETAIL: Dict[str, str] = {}
+MINUTE_FETCH_STATUS: Dict[str, str] = {}
+STRATEGY_MEMORY: Dict[str, dict] = {}
+
 def clean_code(code: str) -> str:
     """去除 _A/_B 等账户后缀，返回纯数字代码供数据接口使用"""
     if not code:

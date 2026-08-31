@@ -14,6 +14,21 @@ from typing import Dict, List, Optional, Any
 import json
 import os
 import time
+import logging
+import sys as _sys
+from pathlib import Path as _Path
+
+log = logging.getLogger("preopen")  # P0-4(2026-08-31): 补缺失 logger（此前 log.* 抛 NameError）
+
+# P0-4(2026-08-31): 补 load_holdings/load_watchlist import —— 此前缺失导致 build_preopen_context
+# 抛 NameError、被 _ensure_preopen_context except 吞掉 → preopen_{date}.json 连续多日(08-27/28/31)无产出。
+# 08-25/26 有产出说明此前可用，后被某次清理丢失。同时注入项目根到 sys.path（直接运行本模块也可用）。
+_ROOT = _Path(__file__).resolve().parents[1]
+if str(_ROOT) not in _sys.path:
+    _sys.path.insert(0, str(_ROOT))
+from src.data_fetcher import load_holdings, load_watchlist, get_daily_context  # noqa: E402
+from core.utils import (  # noqa: E402
+    _preopen_path, _trace_path, _append_jsonl, get_today_str, _now, PREOPEN_DIR)
 # V3: analyze_auction + format_auction_feishu 由 auction_analyzer.py exec 加载提供（globals）
 
 @dataclass
@@ -488,7 +503,12 @@ def _ensure_preopen_context(force: bool = False) -> Optional[PreOpenContext]:
         log.info(f"📊 早盘竞价分析完成（评分 {PREOPEN_CONTEXT.market_score:.0f} 分）")
         return PREOPEN_CONTEXT
     except Exception as e:
-        log.warning(f"⚠️  早盘解读生成失败: {str(e)[:120]}")
+        # P0-4(2026-08-31): 失败必有日志（含 traceback）+ 落盘 error 标记，杜绝"无声缺口"
+        log.error(f"⚠️  早盘解读生成失败: {type(e).__name__}: {str(e)[:120]}", exc_info=True)
+        try:
+            _append_jsonl(_trace_path("preopen_fail"), {"date": today, "error": f"{type(e).__name__}: {str(e)[:200]}"})
+        except Exception:
+            pass
         return PREOPEN_CONTEXT
 
 
