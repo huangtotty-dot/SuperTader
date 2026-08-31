@@ -136,6 +136,11 @@ class TencentProvider:
             return cached
         code = str(code).split("_")[0]
         symbol = ("sh" + code if code[0] in "56" else "sz" + code)
+        # P0 修复(2026-08-31): daily() 写缓存/回退旧缓存用了 cache_fp/_now/_today 但未定义 →
+        # gm 降级腾讯路径抛 NameError → 手动盘盘后重跑"无输出"。补齐定义（与 daily_cache 同路径/时间口径）。
+        cache_fp = os.path.join(_DAILY_CACHE_DIR, f"{code}.json")
+        _now = datetime.now()
+        _today = _now.strftime("%Y-%m-%d")
         _clear_proxy()  # 审核 #7: daily 路径代理清除恢复
         for host in ("ifzq.gtimg.cn", "web.ifzq.gtimg.cn"):
             try:
