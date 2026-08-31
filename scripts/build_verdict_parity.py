@@ -43,6 +43,38 @@ def manual_chain(code, date_str, etp):
             "regime": tv.get("regime"), "score": score, "features": f}
 
 
+def _idx_forming(idx_df):
+    """指数日线补当日 forming bar（与 execution/auto/gm_main._append_index_forming 同语义，2026-08-31）。
+    gm.history_n 盘中不含当日指数 bar；用 gm.current(SHSE.000001) 实时快照补当日 OHLC。
+    否则 auto_chain 用昨日收盘判 regime，与手动链(facade 补 forming)盘中不一致。"""
+    from datetime import datetime
+    import pandas as pd
+    now = datetime.now()
+    today = now.strftime("%Y-%m-%d")
+    if now.weekday() >= 5 or not ("09:15" <= now.strftime("%H:%M") <= "16:00"):
+        return idx_df
+    if idx_df is None or idx_df.empty or str(idx_df["date"].iloc[-1]) >= today:
+        return idx_df
+    try:
+        from gm.api import current
+        rows = current("SHSE.000001")
+    except Exception:
+        return idx_df
+    if not rows:
+        return idx_df
+    r = rows[0] if isinstance(rows, list) else rows
+    px = float(r.get("price") or 0)
+    if px <= 0:
+        return idx_df
+    fb = pd.DataFrame([{
+        "date": today,
+        "open": float(r.get("open") or px), "high": float(r.get("high") or px),
+        "low": float(r.get("low") or px), "close": px,
+        "volume": float(r.get("cum_volume") or 0) / 100.0,  # 股 → 手
+    }])
+    return pd.concat([idx_df, fb], ignore_index=True)
+
+
 def auto_chain(code, gm_symbol, date_str, etp):
     """auto 侧判定链（P4-6：走 execution/auto/build_decision_auto 真实代码路径，EOD 口径 df_1min=None）。
 
@@ -51,7 +83,7 @@ def auto_chain(code, gm_symbol, date_str, etp):
     from execution.auto import build_decision_auto as bda
     gp = GmProvider()
     df = gp.daily(code, days=200)  # provider 契约：内部 6 位码，codec 内部转 GM 格式
-    idx = gp.index_daily("sh000001", days=200)
+    idx = _idx_forming(gp.index_daily("sh000001", days=200))  # 2026-08-31: 补当日指数 forming（与引擎一致）
     if df is None or df.empty or idx is None or idx.empty:
         return {"verdict": "data_unavailable", "go": None, "veto": [], "regime": None,
                 "score": None, "features": {}}

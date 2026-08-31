@@ -3,6 +3,7 @@
 每次降级 log.warning；返回 DataFrame 统一在 attrs["source"] 标记 "gm"/"tencent"/"cache"。
 """
 import logging
+from datetime import datetime
 
 import pandas as pd
 
@@ -14,6 +15,11 @@ log = logging.getLogger("market_data.facade")
 # 指数当日 forming bar 缓存（key=(index, today)，同一天内多次 index_daily 不重复拉腾讯分时；
 # 手动扫描 24 只每只都会走 timing_gate→index_daily，避免每只都拉一次分时导致慢/限流）
 _index_forming_cache = {}
+
+# gm 分钟线短 TTL 去重（2026-08-31，手动盘数据源与自动盘对齐：gm 优先 + 去 cache-first 后，
+# 手动扫描 ~24 只每轮 gm 60s 直拉最坏 12-48s；gm 数据专用内存去重把同股同分钟拉取压到至多 1 次）
+_GM_MINUTE_TTL = 60          # 秒：去重窗口（< 5 分钟扫描节拍）
+_gm_minute_cache = {}        # {(code, date): {"df": df, "ts": datetime}}
 
 
 def _resample_period(df: pd.DataFrame, period: str) -> pd.DataFrame:
@@ -50,17 +56,15 @@ class MarketDataFacade:
         return df
 
     def daily(self, code: str, days: int = 800, period: str = "day") -> pd.DataFrame:
-        # 审核残留建议: cache-first 快读（15分钟新鲜度，削减 gm 每次实拉 10× 负载）
-        cached = self._tx.daily_cache(code)
-        if cached is not None:
-            return self._mark(_resample_period(cached, period), "cache")
+        # 2026-08-31 手动盘数据源与自动盘对齐：去掉腾讯 cache-first，gm 优先（腾讯仅降级兜底）。
+        # 自动盘(gm_main)纯 gm 直拉；手动盘此处同样优先 gm，保证两侧数据/判定一致。
         if self._gm_ready():
             try:
                 df = self._gm.daily(code, days)
                 if df is not None and not df.empty:
                     # 阻断5: gm 日线对当日 forming bar（带 ts_date 新鲜度闸；窗口至收盘后16:00，重审#7）
                     df = self._maybe_append_forming(df, code)
-                    # 阻断6: gm 结果写缓存（含盘中 15 分钟新鲜度/B-1，由 tencent 缓存读取端执行）
+                    # 阻断6: gm 结果写缓存（供 gm 不可用时段兜底；含盘中 15 分钟新鲜度/B-1，由 tencent 缓存读取端执行）
                     from .tencent_provider import save_daily_cache
                     save_daily_cache(code, df)
                     return self._mark(_resample_period(df, period), "gm")
@@ -128,15 +132,21 @@ class MarketDataFacade:
         return pd.concat([df, fb], ignore_index=True)
 
     def minute(self, code: str, date: str, ttl_seconds: int = None) -> pd.DataFrame:
-        # 先查分钟 CSV 缓存（TTL 内命中直接返回，避免每轮重拉，保留既有快路径）
-        cached = self._tx.minute_cache(code, date, ttl_seconds)
-        if not cached.empty:
-            return self._mark(cached, "cache")
+        # 2026-08-31 手动盘数据源与自动盘对齐：去掉腾讯 CSV cache-first，gm 优先（腾讯仅降级兜底）。
+        # gm 数据内存 60s 去重：同股同分钟 60s 内不重复直拉，压住手动扫描 ~24 只的 gm 分钟拉取量。
+        # ttl_seconds 仅作用于腾讯 CSV 兜底缓存（position_builder 传 0 = 兜底不吃陈旧 CSV）。
         if self._gm_ready():
+            _k = (code, date)
+            _hit = _gm_minute_cache.get(_k)
+            if _hit and (datetime.now() - _hit["ts"]).total_seconds() < _GM_MINUTE_TTL:
+                return self._mark(_hit["df"], "gm")
             try:
                 df = self._gm.minute(code, date)
                 if df is not None and not df.empty:
-                    self._tx.save_minute_cache(code, date, df)
+                    _gm_minute_cache[_k] = {"df": df.copy(), "ts": datetime.now()}
+                    if len(_gm_minute_cache) > 200:  # 清理早于昨天的条目，防长期运行累积
+                        _gm_minute_cache.clear()
+                    self._tx.save_minute_cache(code, date, df)  # 写 CSV：gm 不可用时段腾讯兜底可读
                     return self._mark(df, "gm")
             except Exception as e:
                 log.warning("gm.minute 降级腾讯(%s %s): %s", code, date, str(e)[:100])
