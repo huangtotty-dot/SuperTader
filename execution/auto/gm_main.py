@@ -856,6 +856,7 @@ def _base_topup_qty(context, code, gm_sym):
     反绞肉门控（本函数内，on_bar 的 M2/趋势闸仍照常叠加）:
       - 当日已有任意卖出成交(如PANIC止损) → 当日不反补，防恐慌-回补来回打脸
       - 指数 uni_down → 不补（防御日不加重敞口）
+    例外: 若已人工武装，表示用户已确认，跳过上述反绞肉门控。
     """
     if code not in getattr(context, "_base_settled", set()):
         return 0  # 未建仓标的走原建仓路径
@@ -866,16 +867,20 @@ def _base_topup_qty(context, code, gm_sym):
     _short = ((_mirror - _held) // 100) * 100
     if _short < 100:
         return 0
-    if context.daily_sell_count.get(code, 0):
-        return 0
-    if getattr(context, "last_index_regime", "range") == "uni_down":
-        return 0
+    _armed = bool((getattr(context, "_auto_build_armed", {}) or {}).get(code))
+    if not _armed:
+        if context.daily_sell_count.get(code, 0):
+            return 0
+        if getattr(context, "last_index_regime", "range") == "uni_down":
+            return 0
     return _short
 
 
 def init(context):
     global _AUDIT_RUN_ID
     _AUDIT_RUN_ID = datetime.now().strftime("%Y%m%d_%H%M%S")
+    # 2026-08-31 版本探针：用于确认掘金策略是否加载了含武装/拒单修复的最新 gm_main.py
+    print(f"[INIT] gm_main.py 2026-08-31 armed-v2 loaded")
     # 运维自举（0806 红日整改）：控制台日志落盘 + watcher 自动拉起
     ops_guard.bootstrap_logging(PROJECT_DIR)
     ops_guard.ensure_watcher(PROJECT_DIR)
@@ -1209,6 +1214,9 @@ def on_bar(context, bars):
             mirror = MIRROR_HOLDINGS.get(code, {})
             base_qty = mirror.get("qty", 0) if code not in context._base_settled else _topup_qty
             _is_topup = code in context._base_settled  # F8: 已持仓标的走回补路径——闸门拦截不得中断持仓信号评估(0730盲区事故)
+            # 2026-08-31 修复：GUI 手动武装建仓/加仓，表示用户已人工确认，应跳过自动闸直接执行。
+            # 此标记在 build_decision 等闸之前读取，确保「武装」真正生效而不只是跳过确认弹窗。
+            _armed = bool((getattr(context, "_auto_build_armed", {}) or {}).get(code))
             if base_qty < 100:
                 print(f"[{now:%H:%M:%S}] BASE {code} 跳过: MIRROR_HOLDINGS 中无此标的或 qty<100")
                 context._base_settled.add(code)
@@ -1222,65 +1230,77 @@ def on_bar(context, bars):
             # WP-B19-rev(2026-08-28): 硬止损触发日禁 BASE 建仓/回补（最先执行，任何门槛前拦截；每票每日去重留痕）
             _hs_today_base = (getattr(context, "_hard_stop_today", {}) or {}).get(code)
             if not _topup_blocked and _hs_today_base == now.strftime("%Y-%m-%d"):
-                _bhs_k = f'_hard_stop_block_{code}'
-                if getattr(context, _bhs_k, '') != now.strftime("%Y-%m-%d"):
-                    setattr(context, _bhs_k, now.strftime("%Y-%m-%d"))
-                    try:
-                        write_risk(str(now), "hard_stop_block",
-                                   f"BASE blocked after HARD_STOP today", code=code)
-                    except Exception:
-                        pass
-                    _audit_write({"event": "buy_blocked", "code": code, "reason": "hard_stop",
-                                  "where": "base", "cp": cp,
-                                  "time": str(now)})
-                    print(f"[{now:%H:%M:%S}] BASE {code} 硬止损触发日→禁建仓 cp={cp:.2f}")
-                if not _is_topup:
-                    return
-                _topup_blocked = True
+                if _armed:
+                    print(f"[{now:%H:%M:%S}] BASE {code} 已人工武装→跳过硬止损日禁")
+                else:
+                    _bhs_k = f'_hard_stop_block_{code}'
+                    if getattr(context, _bhs_k, '') != now.strftime("%Y-%m-%d"):
+                        setattr(context, _bhs_k, now.strftime("%Y-%m-%d"))
+                        try:
+                            write_risk(str(now), "hard_stop_block",
+                                       f"BASE blocked after HARD_STOP today", code=code)
+                        except Exception:
+                            pass
+                        _audit_write({"event": "buy_blocked", "code": code, "reason": "hard_stop",
+                                      "where": "base", "cp": cp,
+                                      "time": str(now)})
+                        print(f"[{now:%H:%M:%S}] BASE {code} 硬止损触发日→禁建仓 cp={cp:.2f}")
+                    if not _is_topup:
+                        return
+                    _topup_blocked = True
             if _trend == "TREND_BREAKDOWN":
-                _defer_key = f'_base_deferred_{code}'
-                if getattr(context, _defer_key, '') != now.strftime("%Y-%m-%d"):
-                    setattr(context, _defer_key, now.strftime("%Y-%m-%d"))
-                    print(f'[{now:%H:%M:%S}] BASE {code} {STOCK_NAMES.get(code,code)} TREND_BREAKDOWN→延迟建仓')
-                    try: write_risk(str(now), "base_deferred", f"_stock_trend_state={_trend}", code=code)
-                    except: pass
-                if _hb_live:
-                    try: write_snapshot(str(now), code, cp, bar=f"{now:%H:%M}",
-                                        gate="trend_breakdown", gate_detail=_trend)
-                    except Exception: pass
-                if not _is_topup:
-                    return
-                _topup_blocked = True  # F8: 回补被趋势闸拦截，但持仓信号评估照常落地
+                if _armed:
+                    print(f"[{now:%H:%M:%S}] BASE {code} 已人工武装→跳过 TREND_BREAKDOWN 延迟")
+                else:
+                    _defer_key = f'_base_deferred_{code}'
+                    if getattr(context, _defer_key, '') != now.strftime("%Y-%m-%d"):
+                        setattr(context, _defer_key, now.strftime("%Y-%m-%d"))
+                        print(f'[{now:%H:%M:%S}] BASE {code} {STOCK_NAMES.get(code,code)} TREND_BREAKDOWN→延迟建仓')
+                        try: write_risk(str(now), "base_deferred", f"_stock_trend_state={_trend}", code=code)
+                        except: pass
+                    if _hb_live:
+                        try: write_snapshot(str(now), code, cp, bar=f"{now:%H:%M}",
+                                            gate="trend_breakdown", gate_detail=_trend)
+                        except Exception: pass
+                    if not _is_topup:
+                        return
+                    _topup_blocked = True  # F8: 回补被趋势闸拦截，但持仓信号评估照常落地
             # WP-E3: 持仓槽位闸（底仓建仓块）——该票当前持仓为 0（建仓=新增持票数）
             # 且槽满 → 以 base_deferred(reason=slot_full) 延迟，下一根 bar 自然重试
             # （复用既有延迟机制，不新建重试）；该票已持仓的 topup 回补不受限。
             _held_now = int(context.manual_position.get(gm_sym, {}).get("qty", 0) or 0)
             if not _topup_blocked and _held_now <= 0 and _slot_full(context):
-                _emit_slot_full(context, code, now, "base")
-                if not _is_topup:
-                    return
-                _topup_blocked = True
+                if _armed:
+                    print(f"[{now:%H:%M:%S}] BASE {code} 已人工武装→跳过槽满限制")
+                else:
+                    _emit_slot_full(context, code, now, "base")
+                    if not _is_topup:
+                        return
+                    _topup_blocked = True
             # 默认 False: 数据不足时保守不放行（F5: 恢复M2门槛）
             if not _topup_blocked and not _dc.get("_m2_pool_pass", False):
-                # O-03(2026-08-07 W32表决): pool_gate 每票每日只报一次（0807 实战:3票×237bar=711条刷屏）
-                _pg_key = f'_pool_gate_{code}'
-                if getattr(context, _pg_key, '') != now.strftime("%Y-%m-%d"):
-                    setattr(context, _pg_key, now.strftime("%Y-%m-%d"))
-                    print(f"[{now:%H:%M:%S}] BASE {code} {STOCK_NAMES.get(code,code)} 门槛未过→仅观察 "
-                          f"(amp={_dc.get('_m2_amp20',0):.1%} amt={_dc.get('_m2_amount20',0)/1e8:.1f}亿 "
-                          f"lot={_dc.get('_m2_lot_value',0):.0f}元)")
-                    try: write_risk(str(now), "pool_gate", f"amp={_dc.get('_m2_amp20',0):.1%} 仅观察", code=code)
-                    except: pass
-                if _hb_live:
-                    try: write_snapshot(str(now), code, cp, bar=f"{now:%H:%M}", gate="pool_gate",
-                                        gate_detail=(f"amp={_dc.get('_m2_amp20',0):.1%} "
-                                                     f"amt={_dc.get('_m2_amount20',0)/1e8:.1f}亿 "
-                                                     f"lot={_dc.get('_m2_lot_value',0):.0f}元"))
-                    except Exception: pass
-                if not _is_topup:
-                    context._base_settled.add(code)
-                    return
-                _topup_blocked = True  # F8: 回补被M2闸拦截，信号评估照常
+                if _armed:
+                    print(f"[{now:%H:%M:%S}] BASE {code} 已人工武装→跳过 M2 门槛未过")
+                else:
+                    # O-03(2026-08-07 W32表决): pool_gate 每票每日只报一次（0807 实战:3票×237bar=711条刷屏）
+                    _pg_key = f'_pool_gate_{code}'
+                    if getattr(context, _pg_key, '') != now.strftime("%Y-%m-%d"):
+                        setattr(context, _pg_key, now.strftime("%Y-%m-%d"))
+                        print(f"[{now:%H:%M:%S}] BASE {code} {STOCK_NAMES.get(code,code)} 门槛未过→仅观察 "
+                              f"(amp={_dc.get('_m2_amp20',0):.1%} amt={_dc.get('_m2_amount20',0)/1e8:.1f}亿 "
+                              f"lot={_dc.get('_m2_lot_value',0):.0f}元)")
+                        try: write_risk(str(now), "pool_gate", f"amp={_dc.get('_m2_amp20',0):.1%} 仅观察", code=code)
+                        except: pass
+                    if _hb_live:
+                        try: write_snapshot(str(now), code, cp, bar=f"{now:%H:%M}", gate="pool_gate",
+                                            gate_detail=(f"amp={_dc.get('_m2_amp20',0):.1%} "
+                                                         f"amt={_dc.get('_m2_amount20',0)/1e8:.1f}亿 "
+                                                         f"lot={_dc.get('_m2_lot_value',0):.0f}元"))
+                        except Exception: pass
+                    if not _is_topup:
+                        context._base_settled.add(code)
+                        return
+                    _topup_blocked = True  # F8: 回补被M2闸拦截，信号评估照常
             # P4-6: auto 建仓判定接 core/build_decision（P3 双侧单一真源）。
             # 数据适配：_daily_df（个股日线）+ ir.GM_INDEX_CACHE（指数日线）+ bar_cache 1m → 决策核；
             # 数据不足 fail-closed；WP-B20 双通道降为参考留痕（与 manual 侧 result["channels"] 同定位）。
@@ -1322,32 +1342,36 @@ def on_bar(context, bars):
                 _pb_channel = _pb_res["channel"]
                 _pb_score = _pb_res["composite_score"]
                 if _bd_verdict != "signal":
-                    _bd_key = f'_bd_last_{code}'
-                    _bd_sig = f"{_bd_verdict}|go={_dec.get('go')}|{'、'.join(_dec.get('veto', []))}"
-                    if getattr(context, _bd_key, None) != _bd_sig:
-                        setattr(context, _bd_key, _bd_sig)
-                        print(f"[{now:%H:%M:%S}] BASE {code} {STOCK_NAMES.get(code,code)} "
-                              f"build_decision={_bd_verdict}(go={_dec.get('go')}, "
-                              f"veto={'、'.join(_dec.get('veto', [])) or '无'})→仅观察 "
-                              f"(双通道参考:{_pb_channel}={_pb_verdict}/{_pb_score})")
-                        try:
-                            write_risk(str(now), "build_gate",
-                                       f"verdict={_bd_verdict} go={_dec.get('go')} "
-                                       f"veto={'、'.join(_dec.get('veto', [])) or '无'}", code=code)
-                        except Exception:
-                            pass
-                        _audit_write({"event": "build_gate_block", "code": code,
-                                      "verdict": _bd_verdict, "go": _dec.get("go"),
-                                      "veto": _dec.get("veto"), "cp": cp, "time": str(now),
-                                      "channels": f"{_pb_channel}={_pb_verdict}({_pb_score})"})
-                    if _hb_live:
-                        try: write_snapshot(str(now), code, cp, bar=f"{now:%H:%M}",
-                                            gate="build_gate",
-                                            gate_detail=f"{_bd_verdict}(go={_dec.get('go')})")
-                        except Exception: pass
-                    if not _is_topup:
-                        return
-                    _topup_blocked = True  # build_decision 拦截回补，信号评估照常（F8 同模式）
+                    if _armed:
+                        print(f"[{now:%H:%M:%S}] BASE {code} 已人工武装→跳过 build_decision({_bd_verdict}) 直接建仓")
+                        _topup_blocked = False
+                    else:
+                        _bd_key = f'_bd_last_{code}'
+                        _bd_sig = f"{_bd_verdict}|go={_dec.get('go')}|{'、'.join(_dec.get('veto', []))}"
+                        if getattr(context, _bd_key, None) != _bd_sig:
+                            setattr(context, _bd_key, _bd_sig)
+                            print(f"[{now:%H:%M:%S}] BASE {code} {STOCK_NAMES.get(code,code)} "
+                                  f"build_decision={_bd_verdict}(go={_dec.get('go')}, "
+                                  f"veto={'、'.join(_dec.get('veto', [])) or '无'})→仅观察 "
+                                  f"(双通道参考:{_pb_channel}={_pb_verdict}/{_pb_score})")
+                            try:
+                                write_risk(str(now), "build_gate",
+                                           f"verdict={_bd_verdict} go={_dec.get('go')} "
+                                           f"veto={'、'.join(_dec.get('veto', [])) or '无'}", code=code)
+                            except Exception:
+                                pass
+                            _audit_write({"event": "build_gate_block", "code": code,
+                                          "verdict": _bd_verdict, "go": _dec.get("go"),
+                                          "veto": _dec.get("veto"), "cp": cp, "time": str(now),
+                                          "channels": f"{_pb_channel}={_pb_verdict}({_pb_score})"})
+                        if _hb_live:
+                            try: write_snapshot(str(now), code, cp, bar=f"{now:%H:%M}",
+                                                gate="build_gate",
+                                                gate_detail=f"{_bd_verdict}(go={_dec.get('go')})")
+                            except Exception: pass
+                        if not _is_topup:
+                            return
+                        _topup_blocked = True  # build_decision 拦截回补，信号评估照常（F8 同模式）
                 else:
                     if _hb_live:
                         try: write_snapshot(str(now), code, cp, bar=f"{now:%H:%M}",
@@ -1358,7 +1382,7 @@ def on_bar(context, bars):
                         print(f"[{now:%H:%M:%S}] BASE {code} {STOCK_NAMES.get(code,code)} build_decision=signal")
             if not _topup_blocked:
                 # 2026-08-30 手动建仓/加仓衔接：GUI 已人工确认（武装标记）→ 跳过确认闸，直接走完整闸链建仓→做T
-                _armed = bool((getattr(context, "_auto_build_armed", {}) or {}).get(code))
+                # _armed 已在上方 BASE 块开头读取
                 _needs_confirm = (not _is_topup) or PARAMS.get("human_confirm_base_topup", True)
                 if _armed:
                     _needs_confirm = False
@@ -1378,24 +1402,38 @@ def on_bar(context, bars):
                             write_order(str(now), code, "BUY", base_qty, cp, order_id="base")
                         except Exception:
                             pass
-                        order_volume(symbol=gm_sym, volume=base_qty,
-                                     side=OrderSide_Buy,
-                                     order_type=OrderType_Market,
-                                     position_effect=PositionEffect_Open)
-                        context._base_ordered.add(code)
-                        if _armed:
-                            # 人工建仓武装标记：下单成功即消费（一次性），防止损离场后残留标记自动无确认重入
+                        _base_orders = order_volume(symbol=gm_sym, volume=base_qty,
+                                                    side=OrderSide_Buy,
+                                                    order_type=OrderType_Market,
+                                                    position_effect=PositionEffect_Open)
+                        # 掘金 SDK order_volume 同步返回 List[Dict]；status=8 等表示拒单，
+                        # 不能当成已下单，否则武装标记会被误消费且 N5 重试也会丢标记。
+                        _base_first = _base_orders[0] if isinstance(_base_orders, list) and _base_orders else {}
+                        _base_status = _base_first.get("status") if isinstance(_base_first, dict) else None
+                        if _base_status in (4, 5, 6, 8, 12):
+                            _rej_detail = _base_first.get("ord_rej_reason_detail", "") or ""
+                            print(f"[{now:%H:%M:%S}] BASE {code} 下单被拒 status={_base_status} {_rej_detail}")
                             try:
-                                consume_auto_build(code)
+                                write_risk(str(now), "order_rejected",
+                                           f"BASE BUY {base_qty}@{cp:.2f} status={_base_status} {_rej_detail}", code=code)
                             except Exception:
                                 pass
-                        print(f"[{now:%H:%M:%S}] BASE {code} {STOCK_NAMES.get(code,code)} 下单 {base_qty}股@{cp:.2f}")
-                        _audit_write({"event": "base_order", "code": code, "qty": base_qty, "price": cp, "time": str(now)})
-                        if _hb_live:
-                            try: write_snapshot(str(now), code, cp, bar=f"{now:%H:%M}",
-                                                gate="base_order", action="BUY",
-                                                gate_detail=f"qty={base_qty}")
-                            except Exception: pass
+                            # 不加入 _base_ordered，不消费武装标记，下一根 bar  armed 仍在，继续尝试
+                        else:
+                            context._base_ordered.add(code)
+                            if _armed:
+                                # 人工建仓武装标记：下单成功即消费（一次性），防止损离场后残留标记自动无确认重入
+                                try:
+                                    consume_auto_build(code)
+                                except Exception:
+                                    pass
+                            print(f"[{now:%H:%M:%S}] BASE {code} {STOCK_NAMES.get(code,code)} 下单 {base_qty}股@{cp:.2f}")
+                            _audit_write({"event": "base_order", "code": code, "qty": base_qty, "price": cp, "time": str(now)})
+                            if _hb_live:
+                                try: write_snapshot(str(now), code, cp, bar=f"{now:%H:%M}",
+                                                    gate="base_order", action="BUY",
+                                                    gate_detail=f"qty={base_qty}")
+                                except Exception: pass
                     except Exception as e:
                         print(f"[{now:%H:%M:%S}] BASE {code} 下单失败: {e}")
                         try:
