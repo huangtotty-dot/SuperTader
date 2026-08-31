@@ -82,8 +82,8 @@ def _log_push(title: str, content: str, level: str, sent: bool):
         pass
 
 
-def _push(title: str, content: str, level: str = "info"):
-    """推送通知（飞书优先，不可用时 print）；每次尝试落 pushes 留痕"""
+def _push(title: str, content: str, level: str = "info") -> bool:
+    """推送通知（飞书优先，不可用时 print）；每次尝试落 pushes 留痕。返回是否发送成功(sent)。"""
     if FEISHU_AVAILABLE:
         try:
             template = {"green": "green", "orange": "orange", "red": "red"}.get(level, "blue")
@@ -101,11 +101,12 @@ def _push(title: str, content: str, level: str = "info"):
             sent = bool(_send_feishu(payload=card, success_log="", error_prefix="watcher",
                                      trigger_urgent_alarm_after_success=(level == "red")))
             _log_push(title, content, level, sent)
-            return
+            return sent
         except Exception:
             pass
     _log_push(title, content, level, False)
     print(f"[watcher] {level.upper()} {title}: {content[:200]}")
+    return False
 
 
 # ── 去重与限流 ──
@@ -120,17 +121,20 @@ def _dedup_key(rec: dict) -> str:
 
 
 def _should_push(event_type: str, dedup_key: str, code: str = "") -> bool:
+    # S-2(2026-08-31): 只判断可推性，防重标记由调用方在 _push 发送成功后才写入（_mark_pushed）——
+    # 否则 sent=false(webhook 缺失)时 key 已写 → 该事件全天不再推（002451 拦截可见性零感知 bug）。
     if dedup_key in _seen_signals:
         return False
-    _seen_signals.add(dedup_key)
     now = time.time()
-    # 限流键 = event_type + code（每票独立窗口，A票不挤B票）
     _throttle_key = f"{event_type}|{code}" if code else event_type
-    last = _last_push.get(_throttle_key, 0)
-    if now - last < 60:
-        return False
-    _last_push[_throttle_key] = now
-    return True
+    return now - _last_push.get(_throttle_key, 0) >= 60
+
+
+def _mark_pushed(event_type: str, dedup_key: str, code: str = ""):
+    """S-2: 发送成功后写防重标记（_seen_signals + 限流 _last_push）。"""
+    _seen_signals.add(dedup_key)
+    _throttle_key = f"{event_type}|{code}" if code else event_type
+    _last_push[_throttle_key] = time.time()
 
 
 # ── 旁路风控 ──
@@ -180,24 +184,26 @@ def _in_trading_window(dt: datetime) -> bool:
 def _push_throttled(key: str, title: str, content: str, level: str, window: int = 120):
     """O-04(2026-08-10 复盘①)：推送级去重安全网——
     0810 实战多实例并存致同一告警双发/三发（12:55×2、13:01×3）。
-    单例锁为主防线，此处兜底：同 key 推送 window 秒内只发一次。"""
+    单例锁为主防线，此处兜底：同 key 推送 window 秒内只发一次。
+    S-2(2026-08-31): 发送成功才写防重 key（sent=false 时下次仍可推）。"""
     now = time.time()
     if now - _last_push.get(key, 0) < window:
         return
-    _last_push[key] = now
-    _push(title, content, level)
+    if _push(title, content, level):
+        _last_push[key] = now
 
 
 def _push_risk_throttled(code: str, kind: str, title: str, content: str,
                          level: str, window: int = 1800):
     """O-13: 同票同 kind 风控推送节流——每日首次推送 + 之后 window 秒（默认30分钟）节流。
-    事件桥 jsonl 原文照写（审计流不减，只节推送层）；键含日期，日切自清（同 B-15 mute 思路）。"""
+    事件桥 jsonl 原文照写（审计流不减，只节推送层）；键含日期，日切自清（同 B-15 mute 思路）。
+    S-2(2026-08-31): 发送成功才写防重 key。"""
     _k = f'risk_{code}_{kind}_{datetime.now().strftime("%Y-%m-%d")}'
     _now = time.time()
     if _now - _last_push.get(_k, 0) < window:
         return
-    _last_push[_k] = _now
-    _push(title, content, level)
+    if _push(title, content, level):
+        _last_push[_k] = _now
 
 
 def _check_heartbeat():
@@ -268,12 +274,12 @@ def handle_event(rec: dict):
             side = rec.get("side", "")
             emoji = "🔵" if side == "BUY" else "🔴"
             side_cn = "买入" if side == "BUY" else "卖出"
-            _push(
-                f"{emoji} 成交 — {label}",
-                f"{side_cn} {rec.get('qty',0)}股 @ {rec.get('price',0):.2f} | "
-                f"成交后持仓: {rec.get('pos_after', '?')}股",
-                "green"
-            )
+            if _push(
+                    f"{emoji} 成交 — {label}",
+                    f"{side_cn} {rec.get('qty',0)}股 @ {rec.get('price',0):.2f} | "
+                    f"成交后持仓: {rec.get('pos_after', '?')}股",
+                    "green"):
+                _mark_pushed("fill", dk, code)  # S-2: 发送成功才写防重
 
     elif event == "reject":
         side_cn = "买入" if rec.get("side") == "BUY" else "卖出"

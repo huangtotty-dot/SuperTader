@@ -965,6 +965,30 @@ def init(context):
     # WP-B14: 卖出体系状态跨日恢复（pos_key 校验；qty<=0/不符 → 作废）
     _sell_state_restore(context)
 
+    # S-1(2026-08-31): 启动自检 GM 交易会话登录态 + cash>0——未通过即写风险事件（watcher 推飞书加急）。
+    # 对应今日账号未登录 2.5h、6 笔拒单事故；cash 读取失败/为 0 视为会话失效。
+    if context.mode == MODE_LIVE:
+        _cashv = 0.0
+        try:
+            _acct = context.account()
+            _c = getattr(_acct, "cash", None)
+            if _c is not None:
+                _c = _c() if callable(_c) else _c
+                if isinstance(_c, dict):
+                    _cashv = float(_c.get("available") or _c.get("available_cash")
+                                   or _c.get("cash") or _c.get("total") or 0)
+                else:
+                    _cashv = float(_c or 0)
+        except Exception:
+            _cashv = 0.0
+        if _cashv <= 0:
+            print(f"⚠️⚠️ [S-1] GM 交易会话异常: cash={_cashv}（未登录或会话失效——曾 2.5h 拒单事故）")
+            try:
+                write_risk(str(datetime.now()), "session_down",
+                           f"启动自检: cash={_cashv}，交易会话可能未登录", code="")
+            except Exception:
+                pass
+
     # 人工确认闸状态（2026-08-30 建仓/加仓人工把关）：
     # _buy_confirm_pending = {code: request}；_buy_confirm_rejected = set(code)。
     # MODE_LIVE 下断点续传（date==今日才恢复，跨日/回测不恢复）——引擎重启后
