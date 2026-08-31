@@ -322,6 +322,21 @@ def run(date_str: str = None):
     path = _events_path(cur_date)
     print(f"[watcher] 监听 {path}")
     print(f"[watcher] 飞书: {'可用' if FEISHU_AVAILABLE else '不可用(stdout)'}")
+    # P0-1(2026-08-31): 启动自检「webhook 可解析」——缺失时打印明显错误（防第三次"聋子日"：
+    # runtime/feishu_webhook.txt 缺失 + GM_FEISHU_WEBHOOK 未设 → 全天 43/43 sent=false）
+    if FEISHU_AVAILABLE:
+        _wh = None
+        try:
+            from gm_bridge.feishu import get_webhook as _get_wh
+        except ImportError:
+            from feishu import get_webhook as _get_wh
+        try:
+            _wh = _get_wh()
+        except Exception:
+            _wh = None
+        if not _wh:
+            print("⚠️⚠️ [watcher] 飞书 webhook 未配置！GM_FEISHU_WEBHOOK 未设 且 runtime/feishu_webhook.txt 缺失 —— "
+                  "今日推送将全部 sent=false（聋子日）。请立即提供「掘金模拟盘」机器人 webhook（P0-1）")
 
     last_size = 0
     while True:
