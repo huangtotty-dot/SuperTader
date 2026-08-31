@@ -164,11 +164,6 @@ class MarketDataFacade:
                 log.warning("gm.snapshot 降级腾讯: %s", str(e)[:100])
         return self._tx.snapshot(codes)
 
-    def index_minute(self, index: str = "sh000001") -> pd.DataFrame:
-        """指数当日分时。gm 无累计量差分形态，指数分钟保留腾讯（P1-2 #6）。"""
-        df = self._tx.index_minute(index)
-        return self._mark(df, df.attrs.get("source", "tencent"))
-
     def index_daily(self, index: str = "sh000001", days: int = 800, end_date: str = None) -> pd.DataFrame:
         if self._gm_ready():
             try:
