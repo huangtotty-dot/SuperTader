@@ -3305,8 +3305,23 @@ class Api:
                             "regime": dec.get("regime"), "reasons": dec.get("reasons", []),
                             "veto": dec.get("veto", []),
                             "data_insufficient": bool(dec.get("data_insufficient"))})
-                if dec.get("features") and dec["features"].get("price"):
-                    row["price"] = dec["features"]["price"]
+                _f = dec.get("features") or {}
+                if _f.get("price"):
+                    row["price"] = _f["price"]
+                # 2026-08-31: 构造与手动盘建仓表一致的条件圆点（t_regime/t_trend/t_drawdown/t_golden + t_veto）
+                _cond = {}
+                _regime = dec.get("regime")
+                _cond["t_regime"] = _regime in ("trend_up", "trend_dn")
+                _cond["t_trend"] = bool(_f.get("trend_multihead"))
+                _dd = _f.get("drawdown")
+                if _dd is not None:
+                    _cond["t_drawdown"] = (float(_dd) >= -0.03 if _regime != "trend_dn" else float(_dd) < -0.10)
+                else:
+                    _cond["t_drawdown"] = False
+                _cond["t_golden"] = bool(_f.get("macd_golden_5d"))
+                if dec.get("veto"):
+                    _cond["t_veto"] = False
+                row["conditions"] = _cond
             except Exception as e:
                 row.update({"verdict": "scan_error", "error": str(e)[:80]})
             try:
