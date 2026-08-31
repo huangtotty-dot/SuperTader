@@ -876,6 +876,39 @@ def _base_topup_qty(context, code, gm_sym):
     return _short
 
 
+def _append_index_forming(idx_df):
+    """指数日线补当日 forming bar（2026-08-31，对齐手动链 facade 的 _maybe_append_index_forming）：
+    gm history_n 盘中不含当日指数 bar → build_decision/regime 用昨日收盘误判市场方向。
+    用 gm.current(SHSE.000001) 实时行情补当日 OHLC；失败/盘前(未开盘)/已含当日/周末不补。
+    仅 MODE_LIVE 调用（回测不得用实时数据污染历史）。"""
+    import datetime as _dt
+    _now = _dt.datetime.now()
+    today = _now.strftime("%Y-%m-%d")
+    if _now.weekday() >= 5 or not ("09:15" <= _now.strftime("%H:%M") <= "16:00"):
+        return idx_df
+    if idx_df is None or idx_df.empty or str(idx_df["date"].iloc[-1]) >= today:
+        return idx_df
+    try:
+        rows = current("SHSE.000001")
+    except Exception:
+        return idx_df
+    if not rows:
+        return idx_df
+    r = rows[0] if isinstance(rows, list) else rows
+    px = float(r.get("price") or 0)
+    if px <= 0:
+        return idx_df
+    fb = pd.DataFrame([{
+        "date": today,
+        "open": float(r.get("open") or px),
+        "high": float(r.get("high") or px),
+        "low": float(r.get("low") or px),
+        "close": px,
+        "volume": float(r.get("cum_volume") or 0) / 100.0,  # 股 → 手
+    }])
+    return pd.concat([idx_df, fb], ignore_index=True)
+
+
 def init(context):
     global _AUDIT_RUN_ID
     _AUDIT_RUN_ID = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -986,6 +1019,9 @@ def init(context):
                     "volume": float(bar["volume"]) if bar["volume"] is not None else 0,
                 })
             df_idx = pd.DataFrame(rows).sort_values("date").reset_index(drop=True)
+            # 2026-08-31: 实盘补当日 forming bar（gm history_n 盘中不含当日指数 → 否则 regime 用昨日收盘）
+            if context.mode == MODE_LIVE:
+                df_idx = _append_index_forming(df_idx)
             ir.GM_INDEX_CACHE["SHSE.000001"] = df_idx
             ir.GM_DATA_READY = True
             print(f"[init] 大盘日线已缓存: {len(df_idx)} 行, {df_idx['date'].iloc[0]} ~ {df_idx['date'].iloc[-1]}")
@@ -1099,6 +1135,9 @@ def on_bar(context, bars):
                                 "volume": float(bar["volume"]) if bar["volume"] is not None else 0,
                             })
                         df_idx = pd.DataFrame(rows).sort_values("date").reset_index(drop=True)
+                        # 2026-08-31: 实盘补当日 forming bar（gm history_n 盘中不含当日指数）
+                        if context.mode == MODE_LIVE:
+                            df_idx = _append_index_forming(df_idx)
                         ir.GM_INDEX_CACHE["SHSE.000001"] = df_idx
                         ir.GM_DATA_READY = True
                 except Exception as e:
