@@ -11,6 +11,10 @@ from .tencent_provider import TencentProvider
 
 log = logging.getLogger("market_data.facade")
 
+# 指数当日 forming bar 缓存（key=(index, today)，同一天内多次 index_daily 不重复拉腾讯分时；
+# 手动扫描 24 只每只都会走 timing_gate→index_daily，避免每只都拉一次分时导致慢/限流）
+_index_forming_cache = {}
+
 
 def _resample_period(df: pd.DataFrame, period: str) -> pd.DataFrame:
     """日线重采样为周/月线（OHLC 聚合），period ∈ {day, week, month}。"""
@@ -88,6 +92,41 @@ class MarketDataFacade:
                             "close": px, "volume": snap.get("volume") or 0.0}])
         return pd.concat([df, fb], ignore_index=True)
 
+    def _maybe_append_index_forming(self, df: pd.DataFrame, index: str = "sh000001") -> pd.DataFrame:
+        """指数日线补当日 forming bar（对齐个股 daily 的 _maybe_append_forming，2026-08-31 修复）。
+
+        gm history_n 盘中不含当日指数 bar（与个股同，结算后才返回当日），否则 regime 判定
+        用昨日收盘误判市场方向（实测：昨日 3952 盘中已 3982，建仓时效性被拖后）。
+        用腾讯指数分时（index_minute）聚合当日 OHLCV 补上；分时失败则返回原 df（降级用昨日）。
+        时间窗与个股一致：工作日 09:15-16:00，已含当日/周末/盘前不补。"""
+        import datetime as _dt
+        _now = _dt.datetime.now()
+        today = _now.strftime("%Y-%m-%d")
+        if _now.weekday() >= 5 or not ("09:15" <= _now.strftime("%H:%M") <= "16:00"):
+            return df
+        if df is None or df.empty or str(df["date"].iloc[-1]) >= today:
+            return df
+        _key = (index, today)
+        fb = _index_forming_cache.get(_key)
+        if fb is None:
+            try:
+                m = self._tx.index_minute(index)
+            except Exception:
+                return df
+            if m is None or m.empty:
+                return df
+            fb = pd.DataFrame([{
+                "date": today,
+                "open": float(m["open"].iloc[0]),
+                "high": float(m["high"].max()),
+                "low": float(m["low"].min()),
+                "close": float(m["close"].iloc[-1]),
+                "volume": float(m["volume"].sum()),
+                "amount": float(m["amount"].sum()),
+            }])
+            _index_forming_cache[_key] = fb
+        return pd.concat([df, fb], ignore_index=True)
+
     def minute(self, code: str, date: str, ttl_seconds: int = None) -> pd.DataFrame:
         # 先查分钟 CSV 缓存（TTL 内命中直接返回，避免每轮重拉，保留既有快路径）
         cached = self._tx.minute_cache(code, date, ttl_seconds)
@@ -127,6 +166,8 @@ class MarketDataFacade:
                 if df is not None and not df.empty:
                     # 阻断6: gm 指数结果写缓存（end_date 缺省时）
                     if end_date is None:
+                        # 2026-08-31: 补当日 forming bar（gm 盘中不含当日指数），否则 regime 用昨日收盘
+                        df = self._maybe_append_index_forming(df, index)
                         from .tencent_provider import save_index_daily_cache
                         save_index_daily_cache(index, df)
                     return self._mark(df, "gm")
