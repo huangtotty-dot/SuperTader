@@ -753,15 +753,20 @@ def _base_entry_gate(cp: float, dc: dict):
 
 
 # ── 审计 JSONL ──
+# P0-2(2026-08-31): backtrace 实际落盘 gmcache/backtrace.jsonl；复盘清单期待 t_io/logs/auto_backtrace.jsonl。
+# 双写镜像到清单路径（口径修复，历史不回改；当日已 281 条在 gmcache，明日 B-2 起清单路径可查）。
 
 _AUDIT_LOG_PATH = os.path.join(PROJECT_DIR, "gmcache", "backtrace.jsonl")
+_AUDIT_MIRROR_PATH = os.path.join(
+    os.environ.get("SUPERTRADER_ROOT", os.path.dirname(PROJECT_DIR)), "t_io", "logs", "auto_backtrace.jsonl")
 _audit_file = None
+_audit_mirror_file = None
 _AUDIT_RUN_ID = ""
 
 def _audit_write(rec: dict):
     rec['_run_id'] = _AUDIT_RUN_ID
     """追加一条决策审计记录"""
-    global _audit_file
+    global _audit_file, _audit_mirror_file
     try:
         if _audit_file is None:
             os.makedirs(os.path.dirname(_AUDIT_LOG_PATH), exist_ok=True)
@@ -770,12 +775,24 @@ def _audit_write(rec: dict):
         _audit_file.flush()
     except Exception:
         pass
+    # P0-2 镜像写：复盘清单路径（失败静默，不阻断主链）
+    try:
+        if _audit_mirror_file is None:
+            os.makedirs(os.path.dirname(_AUDIT_MIRROR_PATH), exist_ok=True)
+            _audit_mirror_file = open(_AUDIT_MIRROR_PATH, "a", encoding="utf-8")
+        _audit_mirror_file.write(json.dumps(rec, ensure_ascii=False, default=str) + "\n")
+        _audit_mirror_file.flush()
+    except Exception:
+        pass
 
 def _audit_close():
-    global _audit_file
+    global _audit_file, _audit_mirror_file
     if _audit_file:
         _audit_file.close()
         _audit_file = None
+    if _audit_mirror_file:
+        _audit_mirror_file.close()
+        _audit_mirror_file = None
 
 
 import sell_state
