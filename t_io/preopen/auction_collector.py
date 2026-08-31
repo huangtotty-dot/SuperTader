@@ -20,6 +20,9 @@ from datetime import datetime
 from pathlib import Path
 
 BASE = Path(__file__).resolve().parents[2]  # C17-1 修复(2026-08-18): 自解析到项目根（t_io/preopen/ → 根），替代旧目录硬编码 E:\06_T
+# P0-3(2026-08-31): 加项目根入 sys.path——否则函数内 `from core.market_data...` 抛 ModuleNotFoundError: core
+if str(BASE) not in sys.path:
+    sys.path.insert(0, str(BASE))
 PREOPEN_DIR = BASE / "t_io" / "preopen"
 HOLDINGS_FP = BASE / "t_io" / "state" / "holdings.json"
 
