@@ -41,9 +41,13 @@ HIST_DIR = BASE / "t_io" / "backtest_1year_data"
 
 
 def load_trace(date_str):
-    p = TRACE_DIR / f"renko_t_{date_str}.jsonl"
+    """读当日 renko_t trace。兼容两种命名（2026-08-27 起落盘为 renko_t_{date}_{date}.jsonl，
+    早前为 renko_t_{date}.jsonl）。均不存在 → 返回 None（调用方须显式报警，防"无声假阴性"）。"""
+    p1 = TRACE_DIR / f"renko_t_{date_str}_{date_str}.jsonl"  # 08-27 起实际命名
+    p2 = TRACE_DIR / f"renko_t_{date_str}.jsonl"             # 旧命名
+    p = p1 if p1.exists() else p2
     if not p.exists():
-        return []
+        return None
     rows = []
     for line in open(p, encoding="utf-8"):
         line = line.strip()
@@ -81,8 +85,12 @@ def main():
 
     rows = load_trace(args.date)
     print("=" * 100)
-    print(f"Renko 做T 每日复盘: {args.date}   (信号数 {len(rows)})")
+    print(f"Renko 做T 每日复盘: {args.date}   (信号数 {len(rows) if rows else 0})")
     print("=" * 100)
+    if rows is None:
+        print("🔴 未找到 renko_t trace 文件（期望 renko_t_{date}_{date}.jsonl 或 renko_t_{date}.jsonl）"
+              "——当日无信号数据，需排查引擎是否写入（P0-5 口径修复）")
+        return
     if not rows:
         print("⚠️ 无 renko_t trace（当日无 Renko 做T信号，或引擎未启用）")
         return
