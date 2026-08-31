@@ -35,9 +35,9 @@ from datetime import datetime, timedelta
 
 # === V3.0: 显式导入，替代 exec() 共享命名空间 ===
 try:
-    from config import PARAMS, STOCK_PARAMS, PUSH_THROTTLE_SECONDS
+    from config import PARAMS, STOCK_PARAMS
 except ImportError:
-    PARAMS = {}; STOCK_PARAMS = {}; PUSH_THROTTLE_SECONDS = 300
+    PARAMS = {}; STOCK_PARAMS = {}
 
 try:
     from analysis.trend_regime import TrendRegime, TrendState

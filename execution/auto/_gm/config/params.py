@@ -19,7 +19,6 @@ PARAMS = {
     "ema_fast_period": 8,
     "ema_slow_period": 21,
     "min_amplitude": 0.015,
-    "min_profit_space": 0.010,
     "commission_rate": 0.00015,
     "cooldown_minutes": 30,
     "sell_floor_ratio": 0.5,

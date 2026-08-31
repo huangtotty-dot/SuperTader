@@ -44,10 +44,7 @@ import pandas as pd
 BASE = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(BASE))
 
-from analysis.indicators import (  # noqa: F401
-    resample_to_5min, add_5min_indicators, add_indicators,
-    resample_to_15min, add_15min_indicators,
-)
+from analysis.indicators import resample_to_5min, add_5min_indicators  # noqa: F401
 
 # ── P3-2 池分管：manual 侧只扫描 pool!=auto 的标的 ──
 sys.path.insert(0, str(BASE / "config"))
@@ -264,29 +261,6 @@ def _parse_snapshot_file(fp: Path, snap_date: str) -> tuple:
 _DAILY_CACHE_DIR = BASE / "t_io" / "cache" / "daily_kline"
 
 
-def _live_forming_bar(symbol: str) -> dict:
-    """当日 forming bar（P1-2 收敛：走 tencent_provider.snapshot_auction）。
-    仅当快照时间戳是当日才返回；非当日（盘前/节假日）返回 None，避免造出假bar。
-    （当前无调用方，fetch_daily_kline 已由 provider 接管 forming 逻辑，保留供兼容。）"""
-    base = str(symbol).lstrip("sh").lstrip("sz")
-    from core.market_data.tencent_provider import TencentProvider
-    try:
-        snap = TencentProvider().snapshot_auction([base]).get(base)
-        if not snap or not snap.get("ts_date"):
-            return None
-        from datetime import datetime as _dt
-        if snap["ts_date"] != _dt.now().strftime("%Y-%m-%d"):
-            return None
-        price = float(snap.get("price") or 0)
-        if price <= 0:
-            return None
-        return {"date": snap["ts_date"], "open": float(snap.get("open") or price), "close": price,
-                "high": float(snap.get("high") or price), "low": float(snap.get("low") or price),
-                "volume": float(snap.get("volume") or 0.0)}
-    except Exception:
-        return None
-
-
 def fetch_daily_kline(code: str) -> pd.DataFrame:
     """拉日线（前复权，默认800天）。P1-2 收敛：改走 core/market_data provider（gm 主源，腾讯兜底）。
     返回 {date, open, close, high, low, volume}（列名与历史一致；列序为 date/open/high/low/close/volume）。"""
@@ -472,16 +446,6 @@ def _ensure_daily_indicators(daily_ctx: dict, code: str) -> dict:
 # ============================================================
 # 五个建仓条件
 # ============================================================
-
-def check_macd_golden(daily_ctx: dict) -> tuple:
-    """日线 MACD 金叉: 近 5 日出现 DIF 上穿 DEA（不要求当前多头）。"""
-    golden = daily_ctx.get("daily_macd_golden")
-    if golden is None:
-        return False, "缺日线MACD数据", True
-    passed = bool(golden)
-    detail = f"近5日MACD金叉={'有' if passed else '无'}（需近5日出现金叉）"
-    return passed, detail
-
 
 def check_boll_lower(daily_ctx: dict, max_pct: float = 0.15) -> tuple:
     """日线 BOLL 接近/跌破下轨(情绪冰点): bb_pct ≤ max_pct。max_pct 供离线重扫调参。"""
@@ -829,10 +793,6 @@ CHANNEL_COND_LABELS = {
     "c1_rsi_oversold": "RSI超卖(展示)", "c1_m5_iceberg": "5分钟冰点",
     "c2_box_breakout": "突破箱体", "c2_volume_confirm": "放量确认", "c2_trend_bull": "趋势多头",
 }
-# 冰点评分键（转向40 + BOLL20 + 缩量20 = 80 signal / 60 approaching）
-C1_SCORED_KEYS = ("c1_turn_confirm", "c1_boll_lower", "c1_volume_shrink")
-# 突破评分键（箱体40 + 放量30 + 多头30 = signal≥70）
-C2_SCORED_KEYS = ("c2_box_breakout", "c2_volume_confirm", "c2_trend_bull")
 _ICE_WEIGHTS = {"c1_turn_confirm": 40, "c1_boll_lower": 20, "c1_volume_shrink": 20}
 _BREAK_WEIGHTS = {"c2_box_breakout": 40, "c2_volume_confirm": 30, "c2_trend_bull": 30}
 
@@ -1191,7 +1151,6 @@ TIMING_COND_LABELS = {
 }
 # W33 A1: 旧双通道 8 键标签（channels 参考保留，不再驱动建仓 verdict）
 COND_LABELS = dict(TIMING_COND_LABELS)
-_CHANNEL_COND_LABELS = dict(CHANNEL_COND_LABELS)
 
 
 def build_signal_card(result: dict) -> dict:

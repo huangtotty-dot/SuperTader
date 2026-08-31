@@ -24,10 +24,10 @@ if _GM_DIR not in sys.path:
     sys.path.insert(0, _GM_DIR)
 
 from config.params import PARAMS, STOCK_PARAMS
-from data.indicators import add_indicators, clean_code
+from data.indicators import add_indicators
 from t_engine_auto import SignalEngine
 from signals.position_sizer import PositionSizer
-from utils.helpers import SIM_NOW, _now, get_today_str, _default_daily_context
+from utils.helpers import _now, _default_daily_context
 from gm_bridge.writer import (
     write_signal, write_order, write_fill, write_reject, write_risk,
     write_heartbeat, check_kill_switch, write_snapshot, write_buyback,
@@ -54,7 +54,6 @@ def _load_auto_pool():
 _auto_pool = _load_auto_pool()
 STOCKS = {code: v["gm_symbol"] for code, v in _auto_pool.AUTO_POOL.items()}
 STOCK_NAMES = {code: v["name"] for code, v in _auto_pool.AUTO_POOL.items()}
-REVERSE_MAP = {v: k for k, v in STOCKS.items()}
 
 # ── 镜像持仓（与实盘账户一致） ──
 # 模拟盘建仓时按此表中的股数/成本下单。
@@ -83,7 +82,6 @@ def _load_mirror_holdings():
 
 MIRROR_HOLDINGS = _load_mirror_holdings()
 
-COMMISSION = PARAMS["commission_rate"]
 MIN_BARS = 25
 T1_AUTO_UNLOCK_HOUR = 9
 T1_AUTO_UNLOCK_MINUTE = 31
@@ -296,11 +294,9 @@ def _check_max_pos_cap(context, code, now, pos_qty: int, base_ref: int,
 
 def _project_buy_qty(context, code, holding, sig, threshold, pos_qty):
     """预估确认买入量（仅请求文件展示用；下单量以下单块 sizer 重算为准）。
-    pos_qty<=0 → 300（信号建仓兜底，与下单块 1508 同源）；
-    pos_qty>0 → sizer.calc_buy_qty(带 target_t=底仓+T余量)，异常/0 回退 300。"""
+    pos_qty>0 → sizer.calc_buy_qty(带 target_t=底仓+T余量)，异常/0 回退 300。
+    注：调用点（BUY 块）pos_qty 恒 >0（on_bar 1498 已守卫），无持仓分支不可达。"""
     try:
-        if pos_qty <= 0:
-            return 300
         _base_ref = getattr(context, f'_base_ref_{code}', 0) or pos_qty
         _t_pct = float(context.engine._get_params(code).get("stock_qty_base_pct", 0.3) or 0.3)
         _t_head = max(100, int(_base_ref * _t_pct / 100) * 100)
@@ -783,10 +779,7 @@ def _audit_close():
 
 
 import sell_state
-from sell_state import (
-    SELL_STATE_PATH, _sell_state_load, _sell_state_save,
-    _pos_key, _split_pos_key, _sell_state_persist, _sell_state_restore,
-)
+from sell_state import _sell_state_persist, _sell_state_restore
 # sell_state/sell_channels 经 GM 命名空间取 gm_main 的 MODE_LIVE/STOCKS/_audit_write 等
 # （保持「唯一 import gm.api 在 gm_main」，且规避双模块名导入分裂）
 sell_state.GM = sys.modules[__name__]
@@ -1713,12 +1706,6 @@ def on_bar(context, bars):
                 if _cg in ("pending", "rejected_today"):
                     continue
 
-            # WP-E3: 持仓槽位闸（买入执行块）——仅全新建仓(pos_qty<=0)检查；
-            # 已持仓票的做T买入不新增持票数，不受槽位闸限制
-            if pos_qty <= 0 and _slot_full(context):
-                _emit_slot_full(context, code, now, "buy")
-                continue
-
             # N3: 现金预检（移到 sizer 之前，供 target_t 计算）
             available_cash = INITIAL_CASH
             _cash_ok = False
@@ -1766,15 +1753,11 @@ def on_bar(context, bars):
 
             qty = context.sizer.calc_buy_qty(code, holding_with_target, sig.score, threshold)
             if qty <= 0:
-                # WP-E2: 区分兜底——全新建仓(pos_qty<=0)保留 300 股兜底；
-                # 已有持仓 sizer 返回 0 = 已到个股上限 → max_pos_cap（堵 qty=300 强制兜底洞）
-                if pos_qty <= 0:
-                    qty = 300  # 全新建仓信号的最小交易量兜底
-                else:
-                    _check_max_pos_cap(context, code, now, pos_qty, _base_ref,
-                                       max_pos_shares, _stock_budget, _total_eq,
-                                       force=True, action=sig.action, t_headroom=_t_head)
-                    continue
+                # WP-E2: 已有持仓 sizer 返回 0 = 已到个股上限 → max_pos_cap（pos_qty 恒>0，无 300 兜底分支）
+                _check_max_pos_cap(context, code, now, pos_qty, _base_ref,
+                                   max_pos_shares, _stock_budget, _total_eq,
+                                   force=True, action=sig.action, t_headroom=_t_head)
+                continue
 
             # WP-B07: 高接降档 — 数量减半取整到 min_unit，不足 min_unit 则延迟
             qty, _bb_dg, _bb_min_unit = _apply_buyback_downgrade(context, code, sig, qty)

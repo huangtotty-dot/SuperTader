@@ -243,28 +243,17 @@ class FeatureExtractor:
 # ===== SignalEngine =====
 
 class SignalEngine:
-    def __init__(self, factor_weights: dict = None):
+    def __init__(self):
         self.buy_cooldown: Dict[str, datetime] = {}
         self.sell_cooldown: Dict[str, datetime] = {}
         self.buy_count_per_stock: Dict[str, int] = {}
         self.sell_count_per_stock: Dict[str, int] = {}
         self.state_reset_date = _engine_now().strftime("%Y-%m-%d")
-        self.t_cycle_start_time: Dict[str, datetime] = {}
         self.last_signal_state: Dict[str, Dict[str, Any]] = {}
         self.last_trade_state: Dict[str, Dict[str, Any]] = {}
-        self.cycle_count: Dict[str, int] = {}
-        self.cycle_direction: Dict[str, str] = {}
-        self.post_sell_block_until: Dict[str, datetime] = {}
         self.awaiting_buyback: Dict[str, Dict[str, Any]] = {}
-        self.pending_sells: Dict[str, Dict[str, Any]] = {}
-        self.peak_tracker: Dict[str, Dict[str, Any]] = {}
-        self.daily_realized_loss_monitor = 0.0
         self.diagnostics: Dict[str, Dict[str, Any]] = {}
-        self.scenario_factor_state: Dict[str, Dict[str, Dict[str, Any]]] = {}
-        self.morning_alert_state: Dict[str, Dict[str, Any]] = {}
         self.last_decision: Dict[str, Dict[str, Any]] = {}
-        # 期B: ScoringEngine 已删，factor_weights 仅留占位（不再参与 Renko 触发式决策）
-        self.factor_weights = factor_weights or {}
         self.signals: List[Signal] = []
         self._last_feats: Dict[str, Dict[str, Any]] = {}
         # 期B: 做T决策核单一真源（与手动侧 core/signal_engine.py 同源）
@@ -280,11 +269,8 @@ class SignalEngine:
         now = _engine_now().date()
         if now != datetime.strptime(self.state_reset_date, "%Y-%m-%d").date():
             for k in ["buy_cooldown", "sell_cooldown", "buy_count_per_stock",
-                       "sell_count_per_stock", "cycle_count", "post_sell_block_until",
-                       "awaiting_buyback", "pending_sells", "peak_tracker",
-                       "scenario_factor_state", "morning_alert_state", "cycle_direction"]:
+                       "sell_count_per_stock", "awaiting_buyback"]:
                 getattr(self, k).clear()
-            self.cycle_direction.clear()
             self.diagnostics.clear()
             self.last_decision.clear()
             self.last_signal_state.clear()
@@ -465,12 +451,6 @@ class SignalEngine:
             "sell_blocks": sell_blocks,
         }
         return buy_score, sell_score, sig
-
-    def record_signal(self, code, action, price, score):
-        self.last_signal_state[code] = {
-            "action": action, "price": price, "score": score,
-            "time": _engine_now(),
-        }
 
     # WP-B07: 卖出类成交动作（回补价格记忆对全部卖出通道生效，
     # 以 main.py on_order_status 成交回调为实际写入点）
