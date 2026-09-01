@@ -399,6 +399,49 @@ def _buy_confirm_gate(context, code, now, *, action, price, qty_proj, pos_qty,
     return "pending"
 
 
+# P0-4(2026-09-01): confirm 后未执行超时阈值——具体数值留周六(09-05)拍板，先用占位 300s
+BUY_CONFIRM_EXEC_TIMEOUT_SEC = 300
+
+
+def _scan_pending_confirm(context, now):
+    """P0-4 日内巡检：BUY_DECISION 已 confirm 但 pending 未被消费（信号未再触发 → gate 未调用）
+    → 超时后作废并留痕 approved_not_executed + 告警，杜绝永久悬空。on_bar 每 bar 调用。"""
+    _pend_map = getattr(context, "_buy_confirm_pending", None)
+    if not _pend_map:
+        return
+    try:
+        _decs = (read_buy_decision().get("decisions") or {})
+    except Exception:
+        return
+    for code, pend in list(_pend_map.items()):
+        _d = _decs.get(code)
+        if not (_d and _d.get("request_id") == pend.get("request_id")
+                and _d.get("decision") == "confirm"):
+            continue
+        try:
+            _elapsed = now.timestamp() - float(pend.get("request_ts") or 0)
+        except Exception:
+            _elapsed = 0
+        if _elapsed < BUY_CONFIRM_EXEC_TIMEOUT_SEC:
+            continue
+        _pend_map.pop(code, None)
+        try:
+            write_confirm(str(now), code, "approved_not_executed",
+                          detail=(f"confirm 到达但超时({BUY_CONFIRM_EXEC_TIMEOUT_SEC}s)未执行，"
+                                  f"信号未再触发 request_ts={pend.get('request_ts')}"),
+                          request_id=pend.get("request_id"), action=pend.get("action"))
+        except Exception:
+            pass
+        try:
+            write_buy_pending({"date": f"{now:%Y-%m-%d}",
+                               "updated_at": f"{now:%Y-%m-%d %H:%M:%S}",
+                               "rejected_today": sorted(getattr(context, "_buy_confirm_rejected", set())),
+                               "pending": _pend_map})
+        except Exception:
+            pass
+        print(f"[{now:%H:%M:%S}] BUY {code} 确认超时未执行（信号未再触发），已作废 approved_not_executed")
+
+
 def _dedup_bar(context, gm_sym: str, eob: str) -> bool:
     """F9: 同 eob 重复 bar 判定（True=重复应跳过）。
 
@@ -1143,6 +1186,12 @@ def on_bar(context, bars):
     except Exception:
         context._auto_build_armed = {}
 
+    # P0-4(2026-09-01): 日内巡检——confirm 已到但信号未再触发导致 pending 悬空 → 超时作废留痕
+    try:
+        _scan_pending_confirm(context, now)
+    except Exception:
+        pass
+
     # 双向看门狗：watcher 心跳缺失/过期自动重生（0806 红日整改）
     ops_guard.ensure_watcher(PROJECT_DIR)
 
@@ -1600,6 +1649,25 @@ def on_bar(context, bars):
             continue
 
         if sig is None:
+            # P0-4(2026-09-01): 信号褪化留痕——confirm 已到达但信号消失/score 掉阈，
+            # pending 不再有消费机会 → 作废并留痕 signal_faded（防悬空）
+            if code in getattr(context, "_buy_confirm_pending", {}):
+                try:
+                    _d_fade = (read_buy_decision().get("decisions") or {}).get(code)
+                    _pend_fade = context._buy_confirm_pending.get(code)
+                    if _d_fade and _pend_fade and _d_fade.get("request_id") == _pend_fade.get("request_id") \
+                            and _d_fade.get("decision") == "confirm":
+                        context._buy_confirm_pending.pop(code, None)
+                        write_confirm(str(now), code, "signal_faded",
+                                      detail="confirm 已到但信号褪化，pending 作废",
+                                      request_id=_pend_fade.get("request_id"),
+                                      action=_pend_fade.get("action"))
+                        write_buy_pending({"date": f"{now:%Y-%m-%d}",
+                                           "updated_at": f"{now:%Y-%m-%d %H:%M:%S}",
+                                           "rejected_today": sorted(context._buy_confirm_rejected),
+                                           "pending": context._buy_confirm_pending})
+                except Exception:
+                    pass
             _last_dec = context.engine.last_decision.get(code, {})
             # WP-B07: 高接延迟事件（每次记忆建立后只报一次，防每 bar 刷屏）
             if _last_dec.get("reason") == "buyback_above_sell_delayed":
@@ -1749,6 +1817,25 @@ def on_bar(context, bars):
                     needs_confirm=True)
                 if _cg in ("pending", "rejected_today"):
                     continue
+            else:
+                # P0-4(2026-09-01): 回补路径绕过确认闸直接下单——该 code 若有挂起确认请求，
+                # 已被真实回补成交取代 → 作废旧 pending（superseded），防 confirm 悬空
+                if code in context._buy_confirm_pending:
+                    _pend_s = context._buy_confirm_pending.pop(code, None)
+                    try:
+                        write_confirm(str(now), code, "superseded",
+                                      detail="回补成交取代挂起确认请求",
+                                      request_id=_pend_s.get("request_id") if _pend_s else None,
+                                      action=sig.action)
+                    except Exception:
+                        pass
+                    try:
+                        write_buy_pending({"date": f"{now:%Y-%m-%d}",
+                                           "updated_at": f"{now:%Y-%m-%d %H:%M:%S}",
+                                           "rejected_today": sorted(context._buy_confirm_rejected),
+                                           "pending": context._buy_confirm_pending})
+                    except Exception:
+                        pass
 
             # N3: 现金预检（移到 sizer 之前，供 target_t 计算）
             available_cash = INITIAL_CASH
