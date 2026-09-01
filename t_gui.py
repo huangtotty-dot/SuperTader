@@ -2544,6 +2544,11 @@ class Api:
             return _clean({"tags": {}})
         today = datetime.now().strftime("%Y-%m-%d")
         now = _time_mod.time()
+        # P0 修复(2026-09-01): 缓存 key 加 codes 指纹——此前只按日期键 → 突破扫描 17 批/不同板块
+        # 全部命中第 1 批缓存，只扫前 80 只且互相污染标签。改为 (today, codes指纹) 隔离各批次。
+        import hashlib
+        _codes_fp = hashlib.md5(",".join(sorted(set(codes))).encode()).hexdigest()[:12]
+        _cache_key = f"{today}:{_codes_fp}"
 
         def _compute():
             result = {}
@@ -2559,10 +2564,12 @@ class Api:
 
         def _cache_store(tags):
             with _TAGS_LOCK:
-                _TAGS_CACHE[today] = {"ts": _time_mod.time(), "tags": tags}
+                if len(_TAGS_CACHE) > 60:  # 防指纹 key 无限增长：超阈值清空（重算成本可接受）
+                    _TAGS_CACHE.clear()
+                _TAGS_CACHE[_cache_key] = {"ts": _time_mod.time(), "tags": tags}
 
         with _TAGS_LOCK:
-            cached = _TAGS_CACHE.get(today)
+            cached = _TAGS_CACHE.get(_cache_key)
             if cached and (now - cached["ts"]) < _TAGS_TTL:
                 return _clean({"tags": cached["tags"]})
             if cached:
@@ -2598,14 +2605,16 @@ class Api:
         """分批算技术标签筛"向上突破"。state 非空时更新进度（done/total/found/stocks）。"""
         jy = _load_json(HUNTER_DIR / "watchlist_jiuyan.json", {})
         breakouts = []
+        _seen = set()  # 防同一股票重复（缓存污染遗留防御）
         for i in range(0, len(codes), 80):
             batch = codes[i:i + 80]
             r = self.load_stock_tags_batch(batch)
             for code, info in (r.get("tags", {}) or {}).items():
-                if not info:
+                if not info or code in _seen:
                     continue
                 tags = info.get("tags", []) or []
                 if any(t.get("label") == "向上突破" for t in tags):
+                    _seen.add(code)
                     nm = jy.get(code, {}).get("name", code) if isinstance(jy.get(code), dict) else code
                     breakouts.append({
                         "code": code, "name": nm,
@@ -2648,19 +2657,20 @@ class Api:
             pass
         return result
 
-    def start_breakout_scan(self):
+    def start_breakout_scan(self, force=False):
         """启动后台突破扫描（幂等：内存/磁盘缓存命中→立即 done；扫描中→返回当前进度）。
+        force=True 绕开当日缓存强制重扫（前端「🔄 重新扫描」，修复 2026-09-01 缓存永不更新的 bug）。
         返回 {status: idle|running|done|error, total, done, found, stocks, error?}。"""
         today = datetime.now().strftime("%Y-%m-%d")
         cache_key = "breakout_" + today
         if not hasattr(self, "_breakout_cache"):
             self._breakout_cache = {}
-        if cache_key in self._breakout_cache:
+        if not force and cache_key in self._breakout_cache:
             r = self._breakout_cache[cache_key]
             return {"status": "done", "total": 0, "done": 0,
                     "found": r.get("count", 0), "stocks": r.get("stocks", [])}
         disk_fp = self._breakout_disk_path(today)
-        if disk_fp.exists():
+        if not force and disk_fp.exists():
             disk = _load_json(disk_fp, None)
             if disk and isinstance(disk, dict) and "stocks" in disk:
                 self._breakout_cache[cache_key] = disk
