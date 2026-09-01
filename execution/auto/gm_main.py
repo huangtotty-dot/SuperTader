@@ -757,8 +757,11 @@ def _base_entry_gate(cp: float, dc: dict):
 # 双写镜像到清单路径（口径修复，历史不回改；当日已 281 条在 gmcache，明日 B-2 起清单路径可查）。
 
 _AUDIT_LOG_PATH = os.path.join(PROJECT_DIR, "gmcache", "backtrace.jsonl")
+# 2026-09-01: 修镜像路径——PROJECT_DIR=execution/auto，dirname×2 才是项目根；
+# 此前 dirname×1 解析到 execution/ → 镜像误写到 execution/t_io/logs/（已清）。
 _AUDIT_MIRROR_PATH = os.path.join(
-    os.environ.get("SUPERTRADER_ROOT", os.path.dirname(PROJECT_DIR)), "t_io", "logs", "auto_backtrace.jsonl")
+    os.environ.get("SUPERTRADER_ROOT", os.path.dirname(os.path.dirname(PROJECT_DIR))),
+    "t_io", "logs", "auto_backtrace.jsonl")
 _audit_file = None
 _audit_mirror_file = None
 _AUDIT_RUN_ID = ""

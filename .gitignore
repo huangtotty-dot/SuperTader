@@ -19,3 +19,6 @@ stock_hunter/output/
 execution/auto/_gm/runtime/
 execution/auto/gmcache/
 execution/auto/logs/
+
+# 2026-09-01: 误路径运行时数据（P0-2 镜像曾解析到 execution/），不应入库
+execution/t_io/
