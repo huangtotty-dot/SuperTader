@@ -546,6 +546,34 @@ def build_alert_card(code, name, alert_level, triggered_rules, morning_stats, on
     }
     return card
 
+
+def compute_t0_pnl(vt, commission_rate):
+    """统一做T盈亏配对口径（P0-5，2026-09-01）——daily_pnl 与 closure_audit 共同调用。
+
+    - 各自总量加权均价（avg_s=卖出总额/卖出量，avg_b=买入总额/买入量）
+    - matched=min(卖量,买量)，费用只计 matched 双腿（此前计全部腿 → 未配对裸佣金虚增亏损）
+    - 未接回部分单列 open_qty（正=反T卖出未接回，负=正T买入未卖出），不进实盈
+    - 价格守卫：price<=0 的历史记录隔离不计入（保留 V1.30 语义）
+    返回 {t0_pnl, matched, avg_s, avg_b, open_qty, sold_qty, bought_qty}。"""
+    _sells = [t for t in (vt.get("SELL_HIGH", []) or []) if float(t.get("price", 0) or 0) > 0]
+    _buys = [t for t in (vt.get("BUY_LOW", []) or []) if float(t.get("price", 0) or 0) > 0]
+    sold_qty = sum(t.get("qty", 0) for t in _sells)
+    bought_qty = sum(t.get("qty", 0) for t in _buys)
+    sold_amt = sum(t.get("qty", 0) * float(t.get("price", 0) or 0) for t in _sells)
+    bought_amt = sum(t.get("qty", 0) * float(t.get("price", 0) or 0) for t in _buys)
+    avg_s = sold_amt / sold_qty if sold_qty else 0.0
+    avg_b = bought_amt / bought_qty if bought_qty else 0.0
+    matched = min(sold_qty, bought_qty)
+    open_qty = sold_qty - bought_qty
+    if matched > 0:
+        fees = matched * (avg_s + avg_b) * commission_rate   # 费用只计 matched 双腿
+        t0 = round(matched * (avg_s - avg_b) - fees, 2)
+    else:
+        t0 = 0.0
+    return {"t0_pnl": t0, "matched": matched, "avg_s": round(avg_s, 4), "avg_b": round(avg_b, 4),
+            "open_qty": open_qty, "sold_qty": sold_qty, "bought_qty": bought_qty}
+
+
 def notify_alert_cleared(code, name, reason, morning_stats):
     """V1.25: 早盘预警纠正解除通知"""
     try:
@@ -1270,7 +1298,7 @@ def _maybe_push_daily_pnl_summary(now: datetime) -> None:
         total_t0_pnl = 0.0
         total_value = 0.0
         total_cost_value = 0.0
-        commission_rate = float(PARAMS.get("commission_rate", 0.00015) or 0.00015)
+        commission_rate = float(PARAMS.get("commission_rate", 0.00025) or 0.00025)  # P0-5: 统一 0.00025（对齐 config）
 
         for code, holding in sorted(HOLDINGS.items()):
             name = holding.get("name", code)
@@ -1292,22 +1320,9 @@ def _maybe_push_daily_pnl_summary(now: datetime) -> None:
             total_value += mkt_val
             total_cost_value += cost_val
 
-            # 做T实盈（已配对部分，使用实际成交价）
-            vt = VIRTUAL_TRADES.get(code) or {}
-            sell_qty_tot = sum(tr.get("qty", 0) for tr in vt.get("SELL_HIGH", []))
-            buy_qty_tot = sum(tr.get("qty", 0) for tr in vt.get("BUY_LOW", []))
-            sold = sum(tr.get("qty", 0) * max(tr.get("price", 0), 0) for tr in vt.get("SELL_HIGH", []))
-            bought = sum(tr.get("qty", 0) * max(tr.get("price", 0), 0) for tr in vt.get("BUY_LOW", []))
-            matched = min(sell_qty_tot, buy_qty_tot)
-            avg_s = sold / max(sell_qty_tot, 1)
-            avg_b = bought / max(buy_qty_tot, 1)
-            matched = min(
-                sum(tr.get("qty", 0) for tr in vt.get("SELL_HIGH", [])),
-                sum(tr.get("qty", 0) for tr in vt.get("BUY_LOW", [])),
-            )
-            avg_s = sold / max(matched, 1)
-            avg_b = bought / max(matched, 1)
-            t0_pnl = round(matched * (avg_s - avg_b) - (sold + bought) * commission_rate, 2)
+            # 做T实盈（统一配对口径，P0-5：各自总量加权均价 + 费用只计 matched 双腿）
+            _pnl = compute_t0_pnl(VIRTUAL_TRADES.get(code) or {}, commission_rate)
+            t0_pnl = _pnl["t0_pnl"]
             total_t0_pnl += t0_pnl
 
             arrow = "🔴" if day_pnl < 0 else ("🟢" if day_pnl > 0 else "⚪")
@@ -1445,16 +1460,9 @@ def _maybe_audit_closure(now: datetime) -> None:
             valid_sells = [tr for tr in _sells_all if float(tr.get("price", 0) or 0) > 0]
             valid_buys = [tr for tr in _buys_all if float(tr.get("price", 0) or 0) > 0]
             n_price_missing = (len(_sells_all) - len(valid_sells)) + (len(_buys_all) - len(valid_buys))
-            vsold = sum(tr.get("qty", 0) for tr in valid_sells)
-            vbought = sum(tr.get("qty", 0) for tr in valid_buys)
-            sell_amt = sum(tr.get("qty", 0) * tr.get("price", 0) for tr in valid_sells)
-            buy_amt = sum(tr.get("qty", 0) * tr.get("price", 0) for tr in valid_buys)
-            # V2c 数据源：当日做T估算盈亏（撮合对口径：min(卖,买) 量的价差 - 双边费用）
-            matched = min(vsold, vbought)
-            avg_sell = sell_amt / vsold if vsold else 0.0
-            avg_buy = buy_amt / vbought if vbought else 0.0
-            fees = (buy_amt + sell_amt) * commission_rate
-            est_pnl = round(matched * (avg_sell - avg_buy) - fees, 2) if (vsold or vbought) else 0.0
+            # V2c 数据源：当日做T估算盈亏（统一配对口径 P0-5：各自总量加权均价 + 费用只计 matched 双腿）
+            _p = compute_t0_pnl(vt, commission_rate)
+            est_pnl = _p["t0_pnl"]
             if n_price_missing:
                 problems.append(
                     f"• {name}({code}) {n_price_missing} 条虚拟记录缺价格字段，"

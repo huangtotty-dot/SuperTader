@@ -17,6 +17,7 @@ core/t_decision.py 的 Renko 触发式决策核（手动侧 signal_engine.py 同
 importlib 绝对路径（SUPERTRADER_ROOT，.gszq 部署环境回退）。
 """
 import importlib.util
+import json
 import os
 import sys
 
@@ -258,6 +259,34 @@ class SignalEngine:
         self._last_feats: Dict[str, Dict[str, Any]] = {}
         # 期B: 做T决策核单一真源（与手动侧 core/signal_engine.py 同源）
         self._core = TDecisionEngine()
+        # P0-5(2026-09-01): 做T买入价 t_entry_price 持久化/回灌（防策略重启丢内存态 → 600176 闭环漏记）
+        self._t_entry_path = os.path.join(
+            os.environ.get("SUPERTRADER_ROOT", os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))),
+            "t_io", "state", "auto_t_entry.json")
+        self._load_t_entry()
+
+    def _persist_t_entry(self):
+        try:
+            with open(self._t_entry_path, "w", encoding="utf-8") as f:
+                json.dump({"date": _engine_now().strftime("%Y-%m-%d"),
+                           "entries": dict(getattr(self._core, "t_entry_price", {}) or {})},
+                          f, ensure_ascii=False, default=str)
+        except Exception:
+            pass
+
+    def _load_t_entry(self):
+        try:
+            if os.path.exists(self._t_entry_path):
+                with open(self._t_entry_path, "r", encoding="utf-8") as f:
+                    d = json.load(f)
+                if str(d.get("date")) == _engine_now().strftime("%Y-%m-%d"):
+                    for k, v in (d.get("entries") or {}).items():
+                        try:
+                            self._core.t_entry_price[k] = dict(v)
+                        except Exception:
+                            pass
+        except Exception:
+            pass
 
     def _get_params(self, code: str) -> dict:
         p = dict(PARAMS)
@@ -507,4 +536,5 @@ class SignalEngine:
                 ret["armed"] = self.arm_awaiting_buyback(code, price, qty, action)
             elif action in self.BUYBACK_BUY_ACTIONS:
                 ret["buyback_filled"] = self.awaiting_buyback.pop(code, None)
+        self._persist_t_entry()  # P0-5(2026-09-01): 成交后持久化做T买入价，防重启丢内存态
         return ret
