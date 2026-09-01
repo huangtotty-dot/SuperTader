@@ -1120,11 +1120,9 @@ _push_lock = threading.Lock()
 
 
 def push_daily_sentiment(now: Optional[datetime] = None) -> bool:
-    """14:30 热度推送（由 main.py _maybe_push_index_regime_eod 钩子调用）。
-
-    计算 + 落盘 + 推送全部在后台线程执行；调用方已做窗口/每日一次占位。
-    返回 True 表示后台任务已启动。
-    """
+    """14:30 热度计算 + 落盘（飞书推送已删除——2026-09-01 owner 判定「大盘热度×韭研TOP3」推送属无用信息；
+    计算/落盘保留，供每日复盘 §4 引用）。由 main.py _maybe_push_index_regime_eod 钩子调用。
+    后台线程执行；返回 True 表示任务已启动。"""
     global _push_thread_running
     with _push_lock:
         if _push_thread_running:
@@ -1136,18 +1134,7 @@ def push_daily_sentiment(now: Optional[datetime] = None) -> bool:
         try:
             result = compute_daily_sentiment(mode="tail")
             save_sentiment_record(result)
-            p = sentiment_params()
-            if p.get("push_enabled", True):
-                payload = build_sentiment_card(result)
-                _ds_send_feishu(
-                    payload=payload,
-                    success_log=(f"✅ 大盘热度×韭研TOP3已推送: {result.get('regime_name')} "
-                                 f"S={result.get('score_S')} z_S={result.get('z_S')} "
-                                 f"top3={result.get('top3_avg')} z_top3={result.get('z_top3')} "
-                                 f"决策={result.get('decision_summary')}"),
-                    error_prefix="大盘热度×韭研TOP3推送",
-                    trigger_urgent_alarm_after_success=bool(result.get("systemic_risk")),
-                )
+            # 2026-09-01: 飞书推送已删除（owner: 无用信息）；保留计算+落盘
         except Exception as e:
             try:
                 _log.warning(f"⚠️ push_daily_sentiment 后台异常（已吞掉）: {str(e)[:150]}")
