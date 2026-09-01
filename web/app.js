@@ -3829,8 +3829,7 @@ async function init() {
   const hunterRegen = document.getElementById("hunterRegenBtn");
   if (hunterRegen) hunterRegen.addEventListener("click", regenerateHunter);
   initHunterDates();
-  loadIndices();
-  setInterval(loadIndices, 60000);  // 指数行情每分钟刷新
+  // 2026-09-01: 选股猎手 tab 主要指数已删除，移除 loadIndices 初始化与 60s 轮询（loadIndices 函数保留供兼容）
   // 成本校准按钮
   const calibBtn = document.getElementById("calibBtn");
   if (calibBtn) calibBtn.addEventListener("click", () => {
