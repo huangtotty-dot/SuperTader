@@ -158,6 +158,18 @@ class PreOpenEngine:
         # 两次仍空 → 显式标注 top20_status=empty（B-2 读到 empty 时降级为单条件）
         result["top20_status"] = "empty"
         result["note"] = f"Top20 数据为空({empty_reason})"
+        # P0-8(2026-09-01): empty 必告警 + preopen_fail trace（竞价窗口内升 error，杜绝兜底静默裸奔）
+        _t = datetime.now().time()
+        _msg = f"Top20 竞价量 empty({empty_reason})"
+        if dtime(9, 15) <= _t <= dtime(9, 30):
+            log.error(f"⚠️ {_msg}（竞价窗口内）")
+        else:
+            log.warning(f"⚠️ {_msg}")
+        try:
+            _append_jsonl(_trace_path("preopen_fail"), {"date": _now().strftime("%Y-%m-%d"),
+                                                        "error": _msg, "ts": _now().strftime("%H:%M:%S")})
+        except Exception:
+            pass
         return result
 
     def _fetch_top20_attempt(self, result: Dict[str, Any]) -> Optional[str]:
@@ -383,7 +395,24 @@ class PreOpenEngine:
     def persist(self, context: PreOpenContext) -> None:
         try:
             os.makedirs(PREOPEN_DIR, exist_ok=True)
-            with open(_preopen_path(), "w", encoding="utf-8") as f:
+            fp = _preopen_path()
+            # P0-8(2026-09-01): 覆写守卫——当日已有 top20 成功结果时，当前 top20 empty 不覆盖
+            # （防盘中重启(如 12:14)把盘前成功产物覆盖成降级空结果 → 口径污染）
+            _cur = {}
+            try:
+                if os.path.exists(fp):
+                    _cur = json.loads(open(fp, encoding="utf-8").read())
+            except Exception:
+                _cur = {}
+            _cur_top20 = _cur.get("top20_volume_analysis") or {}
+            _new_top20 = context.top20_volume_analysis or {}
+            _prev_ok = bool(_cur_top20.get("top_volume_stocks"))
+            _new_empty = (not _new_top20.get("top_volume_stocks")
+                          or str(_new_top20.get("top20_status") or "") == "empty")
+            if _prev_ok and _new_empty:
+                _log.warning(f"⚠️ preopen 覆写守卫: 保留盘前 top20 成功产物（当前 top20 empty 不覆盖）")
+                return
+            with open(fp, "w", encoding="utf-8") as f:
                 json.dump(context.__dict__, f, ensure_ascii=False, indent=2)
         except Exception:
             pass
@@ -426,43 +455,6 @@ def _feishu_hr() -> dict:
     """飞书卡片分割线。供 main.py（大盘分时预警）与 daily_sentiment（宿主模式合成卡片）共用；
     2026-08-26 清理集合竞价推送时误删，两处调用仍在，故恢复。"""
     return {"tag": "hr"}
-
-
-# ==================== 已删除的集合竞价飞书推送相关函数（2026-08-26） ====================
-# 以下函数已删除，因为集合竞价推送已禁用，改为 UI 面板显示：
-# - _preopen_action_label() → 飞书卡片标签，已无用
-# - _preopen_card_template() → 飞书卡片配色，已无用
-# - _format_preopen_brief() → 飞书推送文本格式，已无用
-# - _preopen_safe_breadth() → 飞书数据处理，已无用
-# - _preopen_adv_counts() → 飞书涨跌统计，已无用
-# - _writeback_auction_summary() → 飞书推送前的回写，已无用
-    """A-2(2026-08-21): 竞价分析完成后将 auction_summary 合并回写 preopen_{date}.json。
-    读改写保留其他字段；文件不存在则新建最小结构。修复 08-19 auction_summary={} 缺值。"""
-    try:
-        summary = context.auction_summary if isinstance(context.auction_summary, dict) else {}
-        if not summary:
-            return
-        fp = _preopen_path()
-        data = {}
-        if os.path.exists(fp):
-            try:
-                data = json.load(open(fp, encoding="utf-8"))
-            except Exception:
-                data = {}
-        if not isinstance(data, dict):
-            data = {}
-        old = data.get("auction_summary") if isinstance(data.get("auction_summary"), dict) else {}
-        merged = dict(old)
-        for k in ("top20_bias", "top20_up", "top20_down",
-                  "holdings_bullish", "holdings_bearish", "source_ts"):
-            if summary.get(k) is not None:
-                merged[k] = summary[k]
-        data["auction_summary"] = merged
-        os.makedirs(os.path.dirname(fp), exist_ok=True)
-        with open(fp, "w", encoding="utf-8") as f:
-            json.dump(data, f, ensure_ascii=False, indent=2)
-    except Exception:
-        pass
 
 
 def _send_preopen_feishu(context: PreOpenContext, force_push: bool = False) -> bool:
