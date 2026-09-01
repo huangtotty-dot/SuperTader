@@ -1227,6 +1227,51 @@ def _maybe_run_ma_break_alert(now: datetime) -> None:
     _ma_break_thread.start()
 
 
+# P0-7(2026-09-01): 收盘自动触发 daily_review + forward_tracker（子进程隔离，幂等）
+_daily_review_state = {"date": "", "next_try": 0.0}
+
+
+def _maybe_run_daily_review(now: datetime) -> None:
+    """15:10 后交易日自动触发每日复盘——子进程 fire-and-forget，内部串行跑
+    daily_review → forward_tracker（后者读前者产出）；成功才占位，失败 10 分钟节流重试。"""
+    global _daily_review_state
+    try:
+        t = now.time()
+        if now.weekday() >= 5 or t < dtime(15, 10):
+            return
+        today = now.strftime("%Y-%m-%d")
+        if _daily_review_state.get("date") == today:
+            return
+        if _now().timestamp() < _daily_review_state.get("next_try", 0):
+            return
+        import subprocess
+        flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+        log_dir = os.path.join(BASE_DIR, "t_io", "logs")
+        os.makedirs(log_dir, exist_ok=True)
+        log_fp = os.path.join(log_dir, f"daily_review_{today}.log")
+        # 子进程内部串行：daily_review → forward_tracker（同一进程不阻塞主循环）
+        _dr_dir = os.path.join(BASE_DIR, "t_io", "validation", "daily_review")
+        _py = (
+            "import subprocess,sys,os;"
+            f"dr={_dr_dir!r};log=open({log_fp!r},'a',encoding='utf-8');"
+            "for sp in ['daily_review.py','forward_tracker.py']:"
+            "  p=subprocess.Popen([sys.executable,os.path.join(dr,sp),'--date',sys.argv[1]],"
+            "  stdout=log,stderr=subprocess.STDOUT);p.wait(timeout=600)"
+        )
+        out_fp = open(log_fp, "a", encoding="utf-8")
+        try:
+            proc = subprocess.Popen([sys.executable, "-c", _py, today],
+                                    cwd=BASE_DIR, creationflags=flags,
+                                    stdout=out_fp, stderr=subprocess.STDOUT)
+        finally:
+            out_fp.close()
+        _daily_review_state.update({"date": today, "next_try": 0})
+        log.info(f"📊 收盘复盘已自动触发: daily_review+forward_tracker → {log_fp} (pid={proc.pid})")
+    except Exception as e:
+        _daily_review_state["next_try"] = _now().timestamp() + 600
+        log.warning(f"⚠️ 收盘复盘自动触发失败（10 分钟重试）: {str(e)[:120]}")
+
+
 def _maybe_run_position_builder(now: datetime) -> None:
     """收盘后（15:05 起）每日一次建仓信号扫描 + 盘后汇总飞书推送。
 
@@ -1777,6 +1822,7 @@ def scan_once():
             pivot_audit(now)                           # 14:50-15:05 pivot 支撑/压力复盘
 
         _maybe_run_position_builder(now)                # 15:05-15:15 建仓信号扫描（每日一次）
+        _maybe_run_daily_review(now)                    # P0-7(2026-09-01): 15:10 后自动每日复盘（子进程隔离）
 
         if now.weekday() >= 5 or t < dtime(9, 30) or (dtime(11, 30) < t < dtime(13, 0)) or t > dtime(15, 0):
             if (_now() - _last_idle_log).total_seconds() >= PARAMS["idle_log_minutes"] * 60:
