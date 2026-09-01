@@ -2,6 +2,7 @@
 # 作为独立模块 import（如 src/data_fetcher 引入）时 NameError。补模块级 import/常量使其自包含。
 import os
 import json
+import time
 import numpy as np
 import pandas as pd
 from datetime import datetime
@@ -148,12 +149,19 @@ def _snapshot_write(code: str, holding: dict, df: pd.DataFrame, indicators: dict
     tmp = f"{path}.{os.getpid()}.{int(time.time() * 1000)}.tmp"
     try:
         with open(tmp, "w", encoding="utf-8") as f:
-            json.dump(_json_safe(rec), f, ensure_ascii=False)  # fix D12: NaN→None
-    except Exception:
+            # P0-1(2026-09-01): default=str 兼容 pd.Timestamp(分钟线 time 已改 datetime64)——
+            # 此前 str(Timestamp) 不可序列化必抛，被 C19-3 静默吞掉 → 快照 2 日零落盘。
+            json.dump(_json_safe(rec), f, ensure_ascii=False, default=str)  # fix D12: NaN→None
+    except Exception as _se:
         try:
             os.remove(tmp)
         except Exception:
             pass
+        _lg = globals().get("log")
+        if _lg is not None:
+            _lg.warning(f"⚠️ 快照写 tmp 失败（不再静默）: {type(_se).__name__}: {str(_se)[:120]} → {path}")
+        else:
+            print(f"[WARN] 快照写 tmp 失败: {path} ({type(_se).__name__})", flush=True)
         return  # C19-3: 写 tmp 失败自吞，不打断当轮信号扫描
     for _attempt in range(5):  # 指数退避 0.2/0.4/0.8/1.6/3.2s，覆盖 AV 秒级锁窗
         try:
