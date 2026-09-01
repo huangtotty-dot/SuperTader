@@ -2393,6 +2393,18 @@ async function loadSectorTags(category) {
   } catch (e) { return {}; }
 }
 
+function riskFromTags(tags) {
+  // 对齐手动盘「持仓日线风险体检」(load_ob_analysis)：顶背离/超买/趋势下行 → 风险+减仓提醒（2026-09-01）
+  const lbl = (tags || []).map(t => t.label || "");
+  if (lbl.includes("顶背离")) return { level: "高", advice: "🚨 顶背离风险：警惕见顶回落，建议减仓/回避" };
+  if (lbl.includes("超买")) return { level: "高", advice: "⚠ 严重超买：短线过热，建议减仓" };
+  if (lbl.includes("跌破下沿") || lbl.includes("下行") || lbl.includes("破10日线"))
+    return { level: "中", advice: "⚠ 趋势走弱：反弹减仓，不追高" };
+  if (lbl.includes("破5日线")) return { level: "中", advice: "⚠ 破5日线：短线转弱，注意减仓" };
+  if (lbl.includes("超卖")) return { level: "低", advice: "✓ 超卖：可关注反弹" };
+  return { level: "低", advice: "✓ 无超买无下行：风险较低，持有/关注" };
+}
+
 function applySectorTags(tbody, category) {
   const wrap = tbody.querySelector(".h-expand-wrap");
   const stageEl = tbody.querySelector(".h-stage-badge");
@@ -2403,7 +2415,15 @@ function applySectorTags(tbody, category) {
     const code = row.querySelector("td").textContent.trim();
     const info = tagsMap[code];
     if (info && info.tags) {
-      row.querySelectorAll("td")[2].innerHTML = info.tags.map(t => tagBadge(t)).join(" ");
+      const tds = row.querySelectorAll("td");
+      tds[2].innerHTML = info.tags.map(t => tagBadge(t)).join(" ");
+      // 2026-09-01: 同步更新风险列（td[9]，对齐手动盘风险体检）
+      const risk = riskFromTags(info.tags);
+      if (tds[9]) {
+        tds[9].innerHTML = risk.level === "低"
+          ? `<span class="badge weak" title="${esc(risk.advice)}">低</span>`
+          : `<span class="badge ${risk.level === "高" ? "signal" : "approach"}" title="${esc(risk.advice)}">${risk.level}</span>`;
+      }
     }
   });
   // 板块阶段判定（用 trend）
@@ -2701,7 +2721,7 @@ async function loadBreakoutStocks(force) {
   if (btn) { btn.disabled = true; btn.textContent = "⏳ 扫描中..."; }
   body.innerHTML = '<div class="empty">⏳ 准备扫描...</div>';
   try {
-    const st = await apiCall("start_breakout_scan");
+    const st = await apiCall("start_breakout_scan", !!force);
     if (st.status === "done") {
       renderBreakout(st);
       breakoutLoaded = true;
@@ -2838,6 +2858,10 @@ function renderHunter(h) {
       const trendTxt = s.tags && s.tags.length
         ? s.tags.map(t => tagBadge(t)).join(" ")
         : '<span class="cell-dim" style="font-size:10px">…</span>';
+      const risk = riskFromTags(s.tags);
+      const riskCell = risk.level === "低"
+        ? `<span class="badge weak" title="${esc(risk.advice)}">低</span>`
+        : `<span class="badge ${risk.level === "高" ? "signal" : "approach"}" title="${esc(risk.advice)}">${risk.level}</span>`;
       return `<tr class="h-expand-row" ondblclick="openStockChart('${esc(s.code)}','${esc(s.name)}')">
         <td class="mono cell-dim" title="双击看技术分析">${esc(s.code)}</td>
         <td title="双击看技术分析">${esc(s.name)} <button class="mini-btn" style="font-size:10px;padding:0 5px"
@@ -2850,6 +2874,7 @@ function renderHunter(h) {
         <td class="num">${s.d9 || "—"}</td>
         <td class="num ${clsOf(s.change_pct)}">${s.change_pct >= 0 ? '+' : ''}${fmt(s.change_pct, 1)}%</td>
         <td>${s.limit_up ? '<span class="badge signal">涨停</span>' : ''}</td>
+        <td>${riskCell}</td>
         <td>${buildBadge(s)}</td>
       </tr>`;
     };
@@ -2927,6 +2952,7 @@ function renderHunter(h) {
             <th class="num" title="潜在突破5日">D6</th>
             <th class="num">D9</th>
             <th class="num">涨跌</th><th>状态</th>
+            <th title="风险等级（对齐手动盘持仓日线风险体检：顶背离/超买→减仓提醒；悬停看提醒文案）">风险</th>
             <th title="建仓信号符合度（时机门控：市场有方向/多头结构/回撤到位/金叉加分；盘后计算，GO=符合）">建仓</th>
           </tr></thead>
           <tbody>${stockRows}</tbody></table>
