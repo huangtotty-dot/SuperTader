@@ -335,9 +335,10 @@ class SignalEngine:
                     "rules": [rule.get("name", "L2")]
                 })
                 # V3.0fix P0-A5: 推送红色预警卡片
+                # P0-3(2026-09-01): 传完整 rule dict（此前退化 str 列表 → main.py 卡片构建 AttributeError 静默吞 → 卡片未发）；max_gain → max_gain_after_open
                 if 'send_morning_alert' in globals():
-                    try: send_morning_alert(code, name, 2, [rule.get("name", "L2")],
-                        {"open_30min_ret": open_30min_ret, "max_gain": max_gain_after_open})
+                    try: send_morning_alert(code, name, 2, [rule],
+                        {"open_30min_ret": open_30min_ret, "max_gain_after_open": max_gain_after_open})
                     except Exception: pass
                 return
         # 检查Level 1 (提高买入门槛)
@@ -359,9 +360,10 @@ class SignalEngine:
                     "rules": [rule.get("name", "L1")]
                 })
                 # V3.0fix P0-A5: 推送黄色预警卡片
+                # P0-3(2026-09-01): 传完整 rule dict + max_gain_after_open 键名（对齐 main.py:504/569 读取）
                 if 'send_morning_alert' in globals():
-                    try: send_morning_alert(code, name, 1, [rule.get("name", "L1")],
-                        {"open_30min_ret": open_30min_ret, "max_gain": max_gain_after_open})
+                    try: send_morning_alert(code, name, 1, [rule],
+                        {"open_30min_ret": open_30min_ret, "max_gain_after_open": max_gain_after_open})
                     except Exception: pass
                 return
         _was_alerted = self.morning_alert_state.get(code, {}).get("level", 0) > 0

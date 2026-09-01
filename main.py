@@ -494,7 +494,10 @@ def build_alert_card(code, name, alert_level, triggered_rules, morning_stats, on
     }
     cfg = level_config.get(alert_level, level_config[0])
 
-    rules_text = "\n".join([f"• **{r.get('name', '')}**: {r.get('desc', '')} (历史命中率{r.get('precision', 0)*100:.0f}%)" for r in triggered_rules])
+    # P0-3(2026-09-01): triggered_rules 防御归一化——兼容 str 列表（旧调用退化的 name 列表）与 dict 列表
+    _rules_norm = [r if isinstance(r, dict) else {"name": str(r), "desc": "", "precision": 0}
+                   for r in (triggered_rules or [])]
+    rules_text = "\n".join([f"• **{r.get('name', '')}**: {r.get('desc', '')} (历史命中率{r.get('precision', 0)*100:.0f}%)" for r in _rules_norm])
 
     stats_text = (
         f"| 指标 | 数值 |\n"
