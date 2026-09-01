@@ -174,6 +174,8 @@ class SignalEngine:
                 "sell_count": dict(self.sell_count_per_stock),
                 # V3.0: 5分钟趋势状态持久化
                 "trend_regimes": {k: v.to_dict() for k, v in self.trend_regimes.items()} if TrendRegime else {},
+                # P0-5(2026-09-01): 做T买入价(t_entry_price)持久化——修复进程重启丢内存态致 600176 闭环漏记
+                "t_entry_price": dict(getattr(self._core, "t_entry_price", {}) or {}),
             }
             with open(self._intraday_state_path(), "w", encoding="utf-8") as f:
                 _j.dump(data, f, ensure_ascii=False, indent=2)
@@ -202,6 +204,13 @@ class SignalEngine:
                         self.trend_regimes[code] = TrendRegime.from_dict(tr_data)
                     except Exception:
                         pass
+            # P0-5(2026-09-01): 回灌做T买入价 t_entry_price（防重启后重复买入）
+            if data.get("t_entry_price"):
+                try:
+                    self._core.t_entry_price.update({
+                        k: dict(v) for k, v in (data["t_entry_price"] or {}).items()})
+                except Exception:
+                    pass
         except Exception:
             pass
 
