@@ -1419,9 +1419,9 @@ def _maybe_push_daily_pnl_summary(now: datetime) -> None:
                         h["pre_close"] = _cp
                         _updated = True
                 if _updated:
-                    with open(HOLDINGS_FILE, "w", encoding="utf-8") as f:
-                        _json.dump(_hdata, f, ensure_ascii=False, indent=2)
-                    log.info(f"📝 pre_close 已更新为当日收盘价")
+                    from src.holdings_repo import save_held_merged  # P0-6: 改走 repo 强制审计
+                    save_held_merged(_hdata, actor="main", reason="eod_pre_close")
+                    log.info(f"📝 pre_close 已更新为当日收盘价（审计留痕）")
             except Exception as e:
                 log.warning(f"⚠️ pre_close 更新失败: {str(e)[:80]}")
 

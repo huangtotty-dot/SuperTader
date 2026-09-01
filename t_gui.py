@@ -3374,7 +3374,8 @@ class Api:
             type = "etf" if code.startswith("5") else "stock"
         try:
             upsert_auto_entry(code, name=name or code, gm_symbol=gm_symbol,
-                              type=type, mirror_qty=mirror_qty)
+                              type=type, mirror_qty=mirror_qty,
+                              actor="gui", reason="添加自动盘标的")
         except Exception as e:
             return {"ok": False, "error": f"写 holdings 失败: {e}"}
         try:
@@ -3426,7 +3427,7 @@ class Api:
         if str(entry.get("pool") or "") == "manual":
             entry["pool"] = "auto"
         try:
-            save_held_merged({code: entry})
+            save_held_merged({code: entry}, actor="gui", reason="手动建仓/加仓武装")
         except Exception as e:
             return {"ok": False, "error": f"写 holdings 失败: {e}"}
         # 写 AUTO_BUILD.json 武装标记（GUI 直读直写 bridge，与 respond_buy_confirm 同款原子写）
@@ -3498,7 +3499,7 @@ class Api:
         if int(entry.get("qty") or 0) > 0 or int(entry.get("base") or 0) > 0:
             return {"ok": False, "error": f"{code} 有持仓（qty>0），不能从 auto 池删除"}
         try:
-            delete_entry(code)
+            delete_entry(code, actor="gui", reason="删除auto标的")
         except Exception as e:
             return {"ok": False, "error": f"写 holdings 失败: {e}"}
         # watchlist 该 code pool 若为 auto → 改回 manual（防悬空 auto 标记）

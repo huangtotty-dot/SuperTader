@@ -14,9 +14,41 @@
 """
 import json
 import os
+import sys
+from datetime import datetime
 
 _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 HOLDINGS_FILE = os.path.join(_ROOT, "t_io", "state", "holdings.json")
+_AUDIT_DIR = os.path.join(_ROOT, "t_io", "logs")
+
+
+def _audit_holdings_write(code, action, reason, before, after, actor="system"):
+    """holdings 写入审计（P0-6，2026-09-01）：追加 t_io/logs/holdings_write_audit_{date}.jsonl。
+    记录 actor/action/reason/code/before/after/changed_fields/pid/ts。失败不静默（写 stderr）。"""
+    try:
+        os.makedirs(_AUDIT_DIR, exist_ok=True)
+        _d = datetime.now()
+        _before = before if isinstance(before, dict) else {}
+        _after = after if isinstance(after, dict) else {}
+        rec = {
+            "ts": _d.strftime("%Y-%m-%d %H:%M:%S"),
+            "date": _d.strftime("%Y-%m-%d"),
+            "actor": actor, "action": action, "reason": reason,
+            "code": code,
+            "before": {k: _before.get(k) for k in _before},
+            "after": {k: _after.get(k) for k in _after},
+            "changed_fields": sorted(k for k in set(list(_before.keys()) + list(_after.keys()))
+                                     if _before.get(k) != _after.get(k)),
+            "pid": os.getpid(),
+        }
+        path = os.path.join(_AUDIT_DIR, f"holdings_write_audit_{rec['date']}.jsonl")
+        with open(path, "a", encoding="utf-8") as f:
+            f.write(json.dumps(rec, ensure_ascii=False, default=str) + "\n")
+    except Exception as _e:
+        try:
+            print(f"[holdings-audit] 审计写失败: {_e}", file=sys.stderr, flush=True)
+        except Exception:
+            pass
 
 
 def _is_entry(code, h):
@@ -60,18 +92,22 @@ def load_mirror_holdings() -> dict:
             for c, h in load_full().items() if int(h.get("mirror_qty") or 0) > 0}
 
 
-def save_held_merged(held: dict) -> None:
-    """把持有 dict 合并回全量文件（保留未持有的 auto 候选），原子写回。"""
+def save_held_merged(held: dict, actor: str = "system", reason: str = "merge") -> None:
+    """把持有 dict 合并回全量文件（保留未持有的 auto 候选），原子写回。写入强制审计（P0-6）。"""
     full = load_full()
+    _before = dict(full)
     full.update(held or {})
     _tmp = HOLDINGS_FILE + ".tmp"
     with open(_tmp, "w", encoding="utf-8") as f:
         json.dump(full, f, ensure_ascii=False, indent=2)
     os.replace(_tmp, HOLDINGS_FILE)
+    for code in (held or {}):
+        _audit_holdings_write(code, "merge", reason, _before.get(code), full.get(code), actor)
 
 
-def upsert_auto_entry(code, *, name, gm_symbol, type, mirror_qty, mirror_cost=0.0) -> dict:
-    """新增/更新 auto 池标的（pool=auto, 未持仓）→ 原子写回。
+def upsert_auto_entry(code, *, name, gm_symbol, type, mirror_qty, mirror_cost=0.0,
+                      actor: str = "system", reason: str = "upsert") -> dict:
+    """新增/更新 auto 池标的（pool=auto, 未持仓）→ 原子写回。写入强制审计（P0-6）。
 
     已存在则保留其既有 qty/cost/base/t_qty 持仓字段不归零（仅设 pool/mirror_qty/mirror_cost）。
     返回该条目。"""
@@ -97,17 +133,20 @@ def upsert_auto_entry(code, *, name, gm_symbol, type, mirror_qty, mirror_cost=0.
     with open(_tmp, "w", encoding="utf-8") as f:
         json.dump(full, f, ensure_ascii=False, indent=2)
     os.replace(_tmp, HOLDINGS_FILE)
+    _audit_holdings_write(code, "upsert", reason, cur, entry, actor)
     return entry
 
 
-def delete_entry(code) -> bool:
-    """从持仓真源删除条目（原子写）。返回是否存在并删除（False=不存在）。"""
+def delete_entry(code, actor: str = "system", reason: str = "delete") -> bool:
+    """从持仓真源删除条目（原子写）。返回是否存在并删除（False=不存在）。写入强制审计（P0-6）。"""
     full = load_full()
     if code not in full:
         return False
+    _before = dict(full[code])
     del full[code]
     _tmp = HOLDINGS_FILE + ".tmp"
     with open(_tmp, "w", encoding="utf-8") as f:
         json.dump(full, f, ensure_ascii=False, indent=2)
     os.replace(_tmp, HOLDINGS_FILE)
+    _audit_holdings_write(code, "delete", reason, _before, None, actor)
     return True
