@@ -2880,11 +2880,25 @@ function renderHunter(h) {
     // 板块 → 细分（按第一层级归并：半导体设备-测试设备 汇入 半导体设备；多概念股多组重复）→ 个股。
     // 2026-09-01 修复：subGroups 基于**全部股票**(allStocks) 构造，分页按**子分组**（每页整组，子分组头唯一不跨页重复）
     // ——此前基于 paged(当前页50只) 构造，半导体165只分4页 → "半导体设备"子分组头每页重复。
+    // 概念归一化（2026-09-01）：大小写统一（端侧AI芯片/端侧ai芯片→端侧AI芯片）；
+    // 语义归并（存储接口芯片/存储主控芯片→存储芯片；其他算力芯片→算力芯片）
+    const normGk = c => {
+      const gk = c.split("-")[0];
+      const lower = gk.toLowerCase();
+      if (lower === "端侧ai芯片") return "端侧AI芯片";
+      if (lower === "存储接口芯片" || lower === "存储主控芯片") return "存储芯片";
+      if (lower === "其他算力芯片") return "算力芯片";
+      return gk;
+    };
     const subGroups = {};
+    const subSeen = {};  // gk -> Set(code)：同一子分组内 code 唯一（数据源同 code 多行/多概念 → 不重复）
     for (const s of allStocks) {
       const cons = (s.concepts && s.concepts.length) ? s.concepts : ["未分类"];
       for (const c of cons) {
-        const gk = c.split("-")[0];
+        const gk = normGk(c);
+        (subSeen[gk] = subSeen[gk] || new Set());
+        if (subSeen[gk].has(s.code)) continue;
+        subSeen[gk].add(s.code);
         (subGroups[gk] = subGroups[gk] || []).push(s);
       }
     }
