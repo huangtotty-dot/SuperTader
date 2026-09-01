@@ -2851,7 +2851,6 @@ function renderHunter(h) {
     const PAGE = 50;
     const pageIdx = window._hunterPage && window._hunterPage[category] || 0;
     const allStocks = stocks;
-    const paged = allStocks.slice(pageIdx * PAGE, (pageIdx + 1) * PAGE);
     const hunterRow = s => {
       const d5Cls = s.d5 >= 8 ? "up" : s.d5 >= 5 ? "warn" : s.d5 > 0 ? "cell-dim" : "";
       const d6Cls = s.d6 >= 8 ? "up" : s.d6 >= 5 ? "warn" : s.d6 > 0 ? "cell-dim" : "";
@@ -2878,9 +2877,11 @@ function renderHunter(h) {
         <td>${buildBadge(s)}</td>
       </tr>`;
     };
-    // 板块 → 细分（按第一层级归并：半导体设备-测试设备 汇入 半导体设备；多概念股多组重复）→ 个股
+    // 板块 → 细分（按第一层级归并：半导体设备-测试设备 汇入 半导体设备；多概念股多组重复）→ 个股。
+    // 2026-09-01 修复：subGroups 基于**全部股票**(allStocks) 构造，分页按**子分组**（每页整组，子分组头唯一不跨页重复）
+    // ——此前基于 paged(当前页50只) 构造，半导体165只分4页 → "半导体设备"子分组头每页重复。
     const subGroups = {};
-    for (const s of paged) {
+    for (const s of allStocks) {
       const cons = (s.concepts && s.concepts.length) ? s.concepts : ["未分类"];
       for (const c of cons) {
         const gk = c.split("-")[0];
@@ -2889,7 +2890,9 @@ function renderHunter(h) {
     }
     const groupKeys = Object.keys(subGroups)
       .sort((a, b) => (subGroups[b].length - subGroups[a].length) || a.localeCompare(b));
-    const stockRows = groupKeys.map(gk => {
+    const gStart = pageIdx * PAGE;
+    const gPaged = groupKeys.slice(gStart, gStart + PAGE);
+    const stockRows = gPaged.map(gk => {
       const gs = subGroups[gk];
       const gAvg = Math.round(gs.reduce((a, s) => a + (s.score || 0), 0) / gs.length);
       const gUp = gs.filter(s => s.limit_up).length;
@@ -2899,10 +2902,11 @@ function renderHunter(h) {
       </td></tr>`;
       return head + gs.map(hunterRow).join("");
     }).join("");
-    const pageInfo = allStocks.length > PAGE
-      ? `<div class="h-pager"><button class="mini-btn" onclick="hunterPage('${esc(category)}',-1)" ${pageIdx===0?'disabled':''}>←</button>
-         ${pageIdx + 1}/${Math.ceil(allStocks.length / PAGE)} 页（共${allStocks.length}只）
-         <button class="mini-btn" onclick="hunterPage('${esc(category)}',1)" ${(pageIdx+1)*PAGE>=allStocks.length?'disabled':''}>→</button></div>` : "";
+    const gTotal = groupKeys.length;
+    const pageInfo = gTotal > PAGE
+      ? `<div class="h-pager"><button class="mini-btn" onclick="hunterPage('${esc(category)}',-1)" ${gStart===0?'disabled':''}>←</button>
+         ${gStart + 1}-${Math.min(gStart + PAGE, gTotal)}/${gTotal} 子分组（${allStocks.length}只）
+         <button class="mini-btn" onclick="hunterPage('${esc(category)}',1)" ${gStart + PAGE >= gTotal ? 'disabled' : ''}>→</button></div>` : "";
 
     const rank = i + 1;
     const medal = rank === 1 ? "🥇" : rank === 2 ? "🥈" : rank === 3 ? "🥉" : "";
