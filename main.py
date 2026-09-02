@@ -967,7 +967,15 @@ def _maybe_push_index_regime_morning(now: datetime) -> None:
     global _index_regime_morning_pushed_date
     try:
         t = now.time()
-        if now.weekday() >= 5 or not (dtime(9, 26) <= t <= dtime(9, 31)):
+        if now.weekday() >= 5:
+            return
+        # T-3(2026-09-02): 硬窗口 09:26-09:31 + 迟到补发(09:31<t≤11:30——进程晚于窗口启动时仍推送一次)
+        _late_push = False
+        if dtime(9, 26) <= t <= dtime(9, 31):
+            pass
+        elif dtime(9, 31) < t <= dtime(11, 30):
+            _late_push = True
+        else:
             return
         today = now.strftime("%Y-%m-%d")
         if _index_regime_morning_pushed_date == today:
@@ -996,11 +1004,14 @@ def _maybe_push_index_regime_morning(now: datetime) -> None:
                 _banner.append(f"🔴 {_msg}")
             else:
                 _banner.append(f"🟡 {_msg}")
+        _extra_lines = ["**决策提示**：9:30-10:00 决策窗口主要参考前两日状态"]
+        if _late_push:
+            _extra_lines.insert(0, "⚠️ **迟到补发**（进程晚于推送窗口启动，仅供参考）")  # T-3(2026-09-02)
         payload = _build_index_regime_card(
             ctx, "🧭 早盘大盘基调",
             as_of_note="（基于昨日收盘的判定）",
             recent_days=recent_days,
-            extra_lines=["**决策提示**：9:30-10:00 决策窗口主要参考前两日状态"],
+            extra_lines=_extra_lines,
             regime_name_override=_override_name,
             banner_lines=_banner,
         )
