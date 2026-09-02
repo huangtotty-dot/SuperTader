@@ -1250,13 +1250,16 @@ def _maybe_run_daily_review(now: datetime) -> None:
         os.makedirs(log_dir, exist_ok=True)
         log_fp = os.path.join(log_dir, f"daily_review_{today}.log")
         # 子进程内部串行：daily_review → forward_tracker（同一进程不阻塞主循环）
+        # T-1(2026-09-02): 内嵌 -c 用换行分隔（此前分号后接 for 是语法错误，子进程启动即 SyntaxError）
         _dr_dir = os.path.join(BASE_DIR, "t_io", "validation", "daily_review")
         _py = (
-            "import subprocess,sys,os;"
-            f"dr={_dr_dir!r};log=open({log_fp!r},'a',encoding='utf-8');"
-            "for sp in ['daily_review.py','forward_tracker.py']:"
-            "  p=subprocess.Popen([sys.executable,os.path.join(dr,sp),'--date',sys.argv[1]],"
-            "  stdout=log,stderr=subprocess.STDOUT);p.wait(timeout=600)"
+            "import subprocess, sys, os\n"
+            f"dr = {_dr_dir!r}\n"
+            f"log = open({log_fp!r}, 'a', encoding='utf-8')\n"
+            "for sp in ['daily_review.py', 'forward_tracker.py']:\n"
+            "    p = subprocess.Popen([sys.executable, os.path.join(dr, sp), '--date', sys.argv[1]], "
+            "stdout=log, stderr=subprocess.STDOUT)\n"
+            "    p.wait(timeout=600)\n"
         )
         out_fp = open(log_fp, "a", encoding="utf-8")
         try:
