@@ -3379,16 +3379,8 @@ class Api:
         except Exception as e:
             return {"ok": False, "error": f"写 holdings 失败: {e}"}
         try:
-            wl_fp = STATE_DIR / "watchlist_buy.json"
-            wl = _load_json(wl_fp, {})
-            stocks = wl.get("stocks", {})
-            if isinstance(stocks, dict) and isinstance(stocks.get(code), dict):
-                if str(stocks[code].get("pool") or "manual") == "manual":
-                    stocks[code]["pool"] = "auto"
-                    tmp = wl_fp.with_suffix(".tmp")
-                    with open(tmp, "w", encoding="utf-8") as f:
-                        json.dump(wl, f, ensure_ascii=False, indent=2)
-                    tmp.replace(wl_fp)
+            from src.holdings_repo import sync_watchlist_pool  # T-4: 公共函数统一 watchlist 同步
+            sync_watchlist_pool(code, "auto")
         except Exception:
             pass
         return {"ok": True, "code": code, "gm_symbol": gm_symbol, "type": type,
@@ -3840,8 +3832,18 @@ class Api:
         if code in stocks:
             stocks[code]["status"] = "monitoring"
         else:
-            stocks[code] = {"name": name, "status": "monitoring", "composite_score": 0,
-                            "criteria_met": {}, "suggested_qty": 0, "in_holdings": False}
+            # T-4(2026-09-02): 新建条目缺省 manual 会与 auto 池标的冲突（002409 教训）——
+            # 若该码属 auto/both 池则直接写 pool=auto
+            _entry = {"name": name, "status": "monitoring", "composite_score": 0,
+                      "criteria_met": {}, "suggested_qty": 0, "in_holdings": False}
+            try:
+                from src.holdings_repo import load_full
+                _h = load_full().get(code)
+                if _h and str(_h.get("pool") or "") in ("auto", "both"):
+                    _entry["pool"] = "auto"
+            except Exception:
+                pass
+            stocks[code] = _entry
         try:
             tmp = fp.with_suffix(".tmp")
             with open(tmp, "w", encoding="utf-8") as f:

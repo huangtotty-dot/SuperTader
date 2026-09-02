@@ -92,8 +92,30 @@ def load_mirror_holdings() -> dict:
             for c, h in load_full().items() if int(h.get("mirror_qty") or 0) > 0}
 
 
+def sync_watchlist_pool(code, pool="auto"):
+    """T-4(2026-09-02): 同步 watchlist_buy.json 该码 pool——凡 holdings 置 pool∈{auto,both}，
+    watchlist 侧缺省 manual 会触发 P3-2 池分管冲突；此函数统一兜底（幂等，仅 manual→auto）。"""
+    try:
+        _wl = os.path.join(_ROOT, "t_io", "state", "watchlist_buy.json")
+        if not os.path.exists(_wl):
+            return
+        with open(_wl, "r", encoding="utf-8") as f:
+            wl = json.load(f)
+        stocks = wl.get("stocks", {})
+        if isinstance(stocks, dict) and isinstance(stocks.get(code), dict):
+            if str(stocks[code].get("pool") or "manual") == "manual":
+                stocks[code]["pool"] = pool
+                _tmp = _wl + ".tmp"
+                with open(_tmp, "w", encoding="utf-8") as f:
+                    json.dump(wl, f, ensure_ascii=False, indent=2)
+                os.replace(_tmp, _wl)
+    except Exception:
+        pass
+
+
 def save_held_merged(held: dict, actor: str = "system", reason: str = "merge") -> None:
-    """把持有 dict 合并回全量文件（保留未持有的 auto 候选），原子写回。写入强制审计（P0-6）。"""
+    """把持有 dict 合并回全量文件（保留未持有的 auto 候选），原子写回。写入强制审计（P0-6）。
+    T-4(2026-09-02): 写入口自动同步——凡 pool∈{auto,both} 的标的同步 watchlist pool 置 auto（防 P3-2 冲突）。"""
     full = load_full()
     _before = dict(full)
     full.update(held or {})
@@ -103,6 +125,9 @@ def save_held_merged(held: dict, actor: str = "system", reason: str = "merge") -
     os.replace(_tmp, HOLDINGS_FILE)
     for code in (held or {}):
         _audit_holdings_write(code, "merge", reason, _before.get(code), full.get(code), actor)
+        _h = full.get(code) or {}
+        if str(_h.get("pool") or "") in ("auto", "both"):
+            sync_watchlist_pool(code, "auto")
 
 
 def upsert_auto_entry(code, *, name, gm_symbol, type, mirror_qty, mirror_cost=0.0,
@@ -134,6 +159,7 @@ def upsert_auto_entry(code, *, name, gm_symbol, type, mirror_qty, mirror_cost=0.
         json.dump(full, f, ensure_ascii=False, indent=2)
     os.replace(_tmp, HOLDINGS_FILE)
     _audit_holdings_write(code, "upsert", reason, cur, entry, actor)
+    sync_watchlist_pool(code, "auto")  # T-4(2026-09-02): 加入 auto 池同步 watchlist（防 P3-2 冲突）
     return entry
 
 
