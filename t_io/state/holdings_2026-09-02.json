@@ -7,7 +7,7 @@
   "pool": "manual",
   "qty": 16500,
   "base": 16500,
-  "t_qty": 2700,
+  "t_qty": 4900,
   "cost": 0.942,
   "pre_close": 0.965,
   "mirror_qty": 0,
@@ -266,7 +266,7 @@
   "mirror_cost": 0.0
  },
  "518880": {
-  "name": "518880",
+  "name": "黄金ETF华安",
   "gm_symbol": "SHSE.518880",
   "type": "etf",
   "account": "",
