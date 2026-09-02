@@ -518,7 +518,15 @@ def _maybe_push_pivot_report(now: datetime) -> bool:
     if not FEISHU_WEBHOOK:
         return False
     t = now.time()
-    if now.weekday() >= 5 or not (dtime(9, 25) <= t <= dtime(9, 30)):
+    if now.weekday() >= 5:
+        return False
+    # T-3(2026-09-02): 硬窗口 09:25-09:30 + 迟到补发(09:30<t≤11:30——进程晚于窗口启动)
+    _late_push = False
+    if dtime(9, 25) <= t <= dtime(9, 30):
+        pass
+    elif dtime(9, 30) < t <= dtime(11, 30):
+        _late_push = True
+    else:
         return False
 
     try:
@@ -529,6 +537,8 @@ def _maybe_push_pivot_report(now: datetime) -> bool:
             return False
 
         text = format_pivot_text(all_levels, max_stocks=8)
+        if _late_push:
+            text = "⚠️ 迟到补发（进程晚于推送窗口启动，仅供参考）\n" + text
 
         card = {"config": {"wide_screen_mode": True},
                 "header": _feishu_card_header(f"📊 支撑/压力位 - {FEISHU_KEYWORD}", "blue"),
