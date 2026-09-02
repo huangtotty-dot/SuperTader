@@ -23,7 +23,7 @@ log = logging.getLogger("preopen")  # P0-4(2026-08-31): 补缺失 logger（此�
 # P0-4(2026-08-31): 补 load_holdings/load_watchlist import —— 此前缺失导致 build_preopen_context
 # 抛 NameError、被 _ensure_preopen_context except 吞掉 → preopen_{date}.json 连续多日(08-27/28/31)无产出。
 # 08-25/26 有产出说明此前可用，后被某次清理丢失。同时注入项目根到 sys.path（直接运行本模块也可用）。
-_ROOT = _Path(__file__).resolve().parents[1]
+_ROOT = _Path(globals().get("BASE_DIR") or _Path(__file__).resolve().parents[1])  # T-2: exec 加载下优先宿主 BASE_DIR（防算到仓库外）
 if str(_ROOT) not in _sys.path:
     _sys.path.insert(0, str(_ROOT))
 from src.data_fetcher import load_holdings, load_watchlist, get_daily_context  # noqa: E402

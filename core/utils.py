@@ -9,7 +9,9 @@ from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional, Any
 
-BASE = Path(__file__).resolve().parents[1]
+# T-2(2026-09-02): main.py exec 加载只切 __name__ 不切 __file__ → 自解析算到 E:\（仓库外）→ 快照误写 E:\t_io。
+# 免疫模式（同 index_regime/daily_sentiment）：优先宿主注入的 BASE_DIR，回落自解析。
+BASE = Path(globals().get("BASE_DIR") or Path(__file__).resolve().parents[1])
 TRACE_DIR = BASE / "t_io" / "traces"
 SNAPSHOT_DIR = BASE / "t_io" / "minute_snapshots"
 PREOPEN_DIR = BASE / "t_io" / "preopen"

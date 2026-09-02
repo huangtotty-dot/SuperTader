@@ -30,7 +30,7 @@ if sys.platform == "win32":
     except Exception:
         pass
 
-BASE = Path(__file__).resolve().parents[1]  # 项目根（本模块位于 execution/ 下）
+BASE = Path(globals().get("BASE_DIR") or Path(__file__).resolve().parents[1])  # 项目根（execution/ 下）；T-2: exec 加载下优先宿主 BASE_DIR 防算到仓库外
 PREOPEN_DIR = BASE / "t_io" / "preopen"
 STATE_DIR = BASE / "t_io" / "state"
 HOLDINGS_FP = STATE_DIR / "holdings.json"
