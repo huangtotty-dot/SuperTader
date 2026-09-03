@@ -1505,22 +1505,55 @@ def _maybe_audit_closure(now: datetime) -> None:
         problems = []
         details = []
         commission_rate = float(PARAMS.get("commission_rate", 0.00025) or 0.00025)
+        # F-20260903-1: 并入 auto 通道成交（bridge events fill）——VIRTUAL_TRADES 只见 manual 虚拟交易，
+        # auto 侧 SELL/BUY fill 使"卖而未接"缺口监控失效（09-03 实证：002451 缺400、600481 缺5500 盲区）
+        _auto_events = {}
+        try:
+            _ev_fp = os.path.join(BASE_DIR, "t_io", "bridge", f"events_{now.strftime('%Y%m%d')}.jsonl")
+            if os.path.exists(_ev_fp):
+                for _line in open(_ev_fp, encoding="utf-8", errors="replace"):
+                    _line = _line.strip()
+                    if not _line:
+                        continue
+                    try:
+                        _e = _json.loads(_line)
+                    except Exception:
+                        continue
+                    if _e.get("event") != "fill":
+                        continue
+                    _c = str(_e.get("code") or "")
+                    _side = str(_e.get("side") or "")
+                    _q = int(_e.get("qty") or 0)
+                    _pr = float(_e.get("price") or 0)
+                    if not _c or _q <= 0:
+                        continue
+                    _ae = _auto_events.setdefault(_c, {"sells": [], "buys": []})
+                    if _side == "SELL":
+                        _ae["sells"].append({"qty": _q, "price": _pr})
+                    elif _side == "BUY":
+                        _ae["buys"].append({"qty": _q, "price": _pr})
+        except Exception:
+            _auto_events = {}
         for code, holding in (HOLDINGS or {}).items():
             name = holding.get("name", code)
             vt = VIRTUAL_TRADES.get(code) or {}
-            sold = sum(tr.get("qty", 0) for tr in vt.get("SELL_HIGH", []))
-            bought = sum(tr.get("qty", 0) for tr in vt.get("BUY_LOW", []))
-            unrebuilt = max(0, sold - bought)                # 反T/高抛卖出未接回
+            # F-20260903-1: 合并 auto 通道成交（bridge events fill）进配对——manual VIRTUAL_TRADES + auto 通道
+            _ae = _auto_events.get(code) or {"sells": [], "buys": []}
+            _merged = {"SELL_HIGH": list(vt.get("SELL_HIGH", [])) + list(_ae["sells"]),
+                       "BUY_LOW": list(vt.get("BUY_LOW", [])) + list(_ae["buys"])}
+            sold = sum(tr.get("qty", 0) for tr in _merged["SELL_HIGH"])
+            bought = sum(tr.get("qty", 0) for tr in _merged["BUY_LOW"])
+            unrebuilt = max(0, sold - bought)                # 反T/高抛卖出未接回（含 auto 通道）
             unclosed_buy = max(0, bought - sold)             # 正T买入未卖出
             # V1.30: 价格字段完整性守卫 —— 缺 price/price<=0 的历史记录不进入利润公式
             # （07-24 事故：V1.29 之前记录无 price 字段，avg_buy=0 把卖出成交额全额记成利润 +13018）
-            _sells_all = vt.get("SELL_HIGH", [])
-            _buys_all = vt.get("BUY_LOW", [])
+            _sells_all = _merged["SELL_HIGH"]
+            _buys_all = _merged["BUY_LOW"]
             valid_sells = [tr for tr in _sells_all if float(tr.get("price", 0) or 0) > 0]
             valid_buys = [tr for tr in _buys_all if float(tr.get("price", 0) or 0) > 0]
             n_price_missing = (len(_sells_all) - len(valid_sells)) + (len(_buys_all) - len(valid_buys))
             # V2c 数据源：当日做T估算盈亏（统一配对口径 P0-5：各自总量加权均价 + 费用只计 matched 双腿）
-            _p = compute_t0_pnl(vt, commission_rate)
+            _p = compute_t0_pnl(_merged, commission_rate)
             est_pnl = _p["t0_pnl"]
             if n_price_missing:
                 problems.append(
