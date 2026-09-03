@@ -210,9 +210,11 @@ function updateRefreshAlarm() {
 }
 
 async function refreshConsole(reset) {
-  // 2026-09-02: console 独立 2s 增量刷新（从 refreshLive 解耦，避免 10s live 轮询拖慢 console）
+  // 2026-09-02: console 独立 2s 增量刷新（从 refreshLive 解耦）。
+  // reset=true(切日期/首次) 才清空从头读；日期变化但未 reset → 自动按 reset 处理。
   const date = state.date;
   if (!date) return;
+  if (consoleDate && consoleDate !== date) reset = true;
   try {
     const since = reset ? 0 : consoleOffset;
     const c = await apiCall("load_console", date, since);
@@ -3810,11 +3812,13 @@ function startLivePoll() {
   liveTimer = setInterval(() => {
     if (state.date) refreshLive(false);
   }, 10000);
-  // 2026-09-02: 实时 Console 2s 独立刷新（不随 10s live 轮询）
+  // 2026-09-02: 实时 Console 2s 独立刷新（不随 10s live 轮询）。
+  // 不在此 refreshConsole(true)——首次/切日期的从头拉由 refreshLive(reset) 负责，避免每次
+  // startLivePoll 都清空 consoleBuf 导致已显示信息被重置。
   consoleTimer = setInterval(() => {
     if (state.date) refreshConsole(false);
   }, 2000);
-  refreshConsole(true);  // 立即从头拉一次 console
+  if (!consoleDate) refreshConsole(true);  // 仅首次(consoleDate 未初始化)从头拉
   // P4-3: 自动盘 10s 轮询（自动盘 tab 或概览页（含自动盘持仓卡片）激活时拉取 bridge）
   autoTimer = setInterval(() => {
     const act = document.querySelector(".sidebar-item.active");
