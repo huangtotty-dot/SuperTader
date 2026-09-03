@@ -209,6 +209,23 @@ function updateRefreshAlarm() {
   window._refreshAlarmWas = interrupted;
 }
 
+async function refreshConsole(reset) {
+  // 2026-09-02: console 独立 2s 增量刷新（从 refreshLive 解耦，避免 10s live 轮询拖慢 console）
+  const date = state.date;
+  if (!date) return;
+  try {
+    const since = reset ? 0 : consoleOffset;
+    const c = await apiCall("load_console", date, since);
+    if (reset) { consoleBuf = []; consoleOffset = 0; consoleDate = date; }
+    if (c.exists && c.lines && c.lines.length) {
+      consoleOffset = c.offset;
+      consoleDate = date;
+      const keyOnly = (document.getElementById("consoleKeyOnly") || {}).checked !== false;
+      appendConsole(c.lines, keyOnly);
+    }
+  } catch (e) {}
+}
+
 async function refreshLive(reset) {
   const date = state.date;
   if (!date) return;
@@ -260,16 +277,8 @@ async function refreshLive(reset) {
       }
     });
 
-    // console 增量拉取（reset=true 时从头读）
-    const since = reset ? 0 : consoleOffset;
-    const c = await apiCall("load_console", date, since);
-    if (reset) { consoleBuf = []; consoleOffset = 0; consoleDate = date; }
-    if (c.exists && c.lines && c.lines.length) {
-      consoleOffset = c.offset;
-      consoleDate = date;
-      const keyOnly = (document.getElementById("consoleKeyOnly") || {}).checked !== false;
-      appendConsole(c.lines, keyOnly);
-    }
+    // console 由独立 2s 定时器(refreshConsole)刷新；reset=true(切日期/首次) 时从头读一次
+    if (reset) refreshConsole(true);
 
     // 建仓/加仓扫描表实时刷新（position_builder 盘中每5分钟有新数据）
     // fix P1-6: refresh_pb 成败纳入轮询告警计数
@@ -3759,6 +3768,7 @@ function updateSidebarSummary(quotes) {
 let dateSelect, refreshBtn, autoPoll;
 let pollTimer = null;      // 60s 盘后轮询
 let liveTimer = null;      // 10s 盘中实时轮询
+let consoleTimer = null;   // 2026-09-02: 实时 Console 2s 独立刷新
 let autoTimer = null;      // P4-3: 10s 自动盘轮询（仅自动盘 tab 激活时加载）
 
 function stopPoll() {
@@ -3790,6 +3800,7 @@ function stopLivePoll() {
   if (liveTimer) { clearInterval(liveTimer); liveTimer = null; }
   if (autoTimer) { clearInterval(autoTimer); autoTimer = null; }
   if (buyConfirmTimer) { clearInterval(buyConfirmTimer); buyConfirmTimer = null; }
+  if (consoleTimer) { clearInterval(consoleTimer); consoleTimer = null; }  // 2026-09-02
   document.getElementById("liveTag").style.display = "none";
 }
 function startLivePoll() {
@@ -3799,6 +3810,11 @@ function startLivePoll() {
   liveTimer = setInterval(() => {
     if (state.date) refreshLive(false);
   }, 10000);
+  // 2026-09-02: 实时 Console 2s 独立刷新（不随 10s live 轮询）
+  consoleTimer = setInterval(() => {
+    if (state.date) refreshConsole(false);
+  }, 2000);
+  refreshConsole(true);  // 立即从头拉一次 console
   // P4-3: 自动盘 10s 轮询（自动盘 tab 或概览页（含自动盘持仓卡片）激活时拉取 bridge）
   autoTimer = setInterval(() => {
     const act = document.querySelector(".sidebar-item.active");
