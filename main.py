@@ -1824,8 +1824,6 @@ def scan_once():
         _maybe_collect_auction_snapshot(now)             # 09:20/09:22 竞价快照采集（每日各一次，W32-B2）
         _maybe_push_index_regime_morning(now)          # 09:26-09:31 早盘大盘基调（须在 <9:30 早退之前）
 
-        _maybe_push_pivot_report(now)                  # 09:25-09:30 支撑/压力位推送
-
         if dtime(14, 55) <= t <= dtime(15, 5):
             pass  # EOD复盘已移除（V2简化）
         _maybe_push_daily_pnl_summary(now)             # 14:59-15:01 每日收益汇总推送（每日一次，V1.29）
