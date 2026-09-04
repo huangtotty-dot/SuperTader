@@ -46,14 +46,9 @@ class PreOpenContext:
     code_snapshots: Dict[str, Any] = field(default_factory=dict)
     auction_summary: Dict[str, Any] = field(default_factory=dict)
     top20_volume_analysis: Dict[str, Any] = field(default_factory=dict)
-    # 兼容字段（保留空列表）
-    theme_rank: List[Dict[str, Any]] = field(default_factory=list)
-    focus_codes: List[str] = field(default_factory=list)
-    active_codes: List[str] = field(default_factory=list)
-    watch_codes: List[str] = field(default_factory=list)
-    blocked_codes: List[str] = field(default_factory=list)
-    favored_sectors: List[str] = field(default_factory=list)
-    weak_sectors: List[str] = field(default_factory=list)
+    # Q-20260903-7(2026-09-04): 焦点名单废弃——07-21 V2 重写删 _pick_focus 后 theme_rank/focus_codes/
+    # active_codes/watch_codes/blocked_codes/favored_sectors/weak_sectors 空置 45 天且全仓无消费者，
+    # owner 拍板停用改造，移除占位字段使 preopen_trace/持久化不再含焦点名单空键。
 
 
 # ==================== 模块级状态变量 ====================
