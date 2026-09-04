@@ -759,3 +759,51 @@ try:
     print("[tracker] signal_outcomes 已结算（A-1，含退出侧 max_drawdown）")
 except Exception as _e:
     print(f"[warn] signal_outcomes 结算失败: {_e}")
+
+# ---------- F-8(2026-09-04): 自动复盘推飞书摘要（W-20260904-1 owner 拍板） ----------
+try:
+    if str(BASE) not in sys.path:
+        sys.path.insert(0, str(BASE))
+    try:
+        from config import send_feishu_payload as _sfp, FEISHU_WEBHOOK as _fbh, FEISHU_KEYWORD as _fkw
+    except Exception:
+        _sfp, _fbh, _fkw = None, None, "做T猎手预警"
+    if _sfp and _fbh:
+        _rfp = BASE / "t_io/state/review_pushed.json"
+        try:
+            _pd = json.loads(_rfp.read_text(encoding="utf-8")) if _rfp.exists() else {}
+        except Exception:
+            _pd = {}
+        if _pd.get(DATE) != "pushed":
+            _tb = sum((v or {}).get("buy_signals", 0) for v in sig_stat.values())
+            _ts = sum((v or {}).get("sell_signals", 0) for v in sig_stat.values())
+            _tcode = sum(1 for v in sig_stat.values() if (v or {}).get("buy_signals") or (v or {}).get("sell_signals"))
+            _cl = len(closed) if isinstance(closed, (list, dict)) else 0
+            _prob = len((audit_today or {}).get("problems", [])) if isinstance(audit_today, dict) else 0
+            _sample = 0
+            try:
+                _so = json.loads((BASE / "t_io/validation/signal_outcomes.json").read_text(encoding="utf-8"))
+                _recs = _so.get("records") or [] if isinstance(_so, dict) else []
+                _sample = len(_recs)
+            except Exception:
+                pass
+            _txt = "\n".join([
+                f"**{DATE} 日复盘自动摘要**", "",
+                f"🔴 做T信号 **{_tb}买/{_ts}卖** · {_tcode} 只触发",
+                f"✅ 做T闭环 {_cl} 笔 · 审计问题 {_prob} 条",
+                f"📈 前瞻样本 {_sample} 条",
+                f"📄 报告: doc/每日复盘/{DATE}_复盘.md",
+            ])
+            _card = {"msg_type": "interactive", "card": {
+                "config": {"wide_screen_mode": True},
+                "header": {"title": {"tag": "plain_text", "content": f"📊 日复盘摘要 - {_fkw}"}, "template": "blue"},
+                "elements": [{"tag": "div", "text": {"tag": "lark_md", "content": _txt}}]}}
+            _ok = _sfp(_card, success_log=f"日复盘摘要已推送: {DATE}", error_prefix="日复盘摘要推送")
+            if _ok:
+                try:
+                    _pd[DATE] = "pushed"
+                    _rfp.write_text(json.dumps(_pd, ensure_ascii=False, indent=2), encoding="utf-8")
+                except Exception:
+                    pass
+except Exception as _e:
+    print(f"[warn] 日复盘推飞书失败: {_e}")
