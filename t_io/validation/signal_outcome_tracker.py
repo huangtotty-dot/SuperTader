@@ -166,6 +166,10 @@ def load_final_verdicts(days=None):
     if days:
         files = files[-days:]
     latest = {}   # (code, date) -> record
+    # F-2(2026-09-04): verdict 优先级聚合——signal>watch_signal>approaching>weak；
+    # 同级取首次触发(scan_time 最早)；原 last-scan 最终 verdict 保留为新字段 final_verdict
+    _PRIO = {"signal": 5, "watch_signal": 4, "approaching": 3, "weak": 2,
+             "insufficient_data": 1, "pending": 1, "archived": 1}
     for fp in files:
         for line in open(fp, encoding="utf-8"):
             line = line.strip()
@@ -178,14 +182,32 @@ def load_final_verdicts(days=None):
             code, st = r.get("code"), r.get("scan_time")
             if not code or not st:
                 continue
+            # F-2: 剔除 16:00 后 eod 陈旧重扫行（688037 伪 signal 源）——signal 只看盘中触发
+            if len(st) >= 16 and st[11:16] >= "16:00":
+                continue
             date = st[:10]
             key = (code, date)
-            if key not in latest or st > latest[key]["scan_time"]:
-                latest[key] = {"code": code, "name": r.get("name", ""),
-                               "date": date, "scan_time": st,
-                               "verdict": r.get("verdict"),
-                               "price": r.get("price"),
-                               "score": r.get("composite_score")}
+            _v = str(r.get("verdict") or "weak")
+            _p = _PRIO.get(_v, 0)
+            cur = latest.get(key)
+            if cur is None:
+                latest[key] = {"code": code, "name": r.get("name", ""), "date": date,
+                               "scan_time": st, "verdict": _v,
+                               "final_verdict": _v, "price": r.get("price"),
+                               "score": r.get("composite_score"),
+                               "_prio": _p, "_last_st": st}
+            else:
+                # final_verdict = 原 last-scan-wins 语义（当日最后一条的有效 verdict）
+                if st > cur["_last_st"]:
+                    cur["final_verdict"] = _v
+                    cur["_last_st"] = st
+                # 主 verdict = 高优先级；同级取首次触发（scan_time 最早）
+                if _p > cur["_prio"] or (_p == cur["_prio"] and st < cur["scan_time"]):
+                    cur["verdict"] = _v
+                    cur["scan_time"] = st
+                    cur["price"] = r.get("price")
+                    cur["score"] = r.get("composite_score")
+                    cur["_prio"] = _p
     return [latest[k] for k in sorted(latest)]
 
 
