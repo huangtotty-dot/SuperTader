@@ -228,25 +228,18 @@ _INTERCEPT_STATE_FILE = os.path.join(BASE_DIR, "t_io", "state", "intercept_notic
 
 
 def _push_intercept_notice(code, sig, now, reason):
-    """C-3(2026-08-21): 拦截可见性——被 C-1/C-2 拦截且原 score>=推送阈值，推低优飞书（非加急）。
-    每股每向每日最多 1 条，去重 json（参照 position_signal_pushed.json 模式）。"""
+    """C-3(2026-08-21)+F-11(2026-09-04): 拦截可见性——被 C-1/C-2 拦截且原 score>=推送阈值，推低优飞书（非加急）。
+    去重由"每股每向每日 1 条"布尔改为 20min 滚动冷却窗（core/intercept_notice.py）：同码同日复拦仍发
+    （09-04 10:57 002451 漏发案，Q-20260904-5）；send 失败不写时间戳（B3 语义，重启允许补报）。"""
     try:
         if not FEISHU_WEBHOOK:
             return
+        from core import intercept_notice as _intn
         _today = now.strftime("%Y-%m-%d")
-        _st = {}
-        if os.path.exists(_INTERCEPT_STATE_FILE):
-            try:
-                _st = json.load(open(_INTERCEPT_STATE_FILE, encoding="utf-8"))
-            except Exception:
-                _st = {}
         _key = f"{code}:{sig.action}"
-        if _key in (_st.get(_today) or {}):
+        _st = _intn.read_state(_INTERCEPT_STATE_FILE)
+        if not _intn.send_allowed(_st, _today, _key, now):
             return
-        _st.setdefault(_today, {})[_key] = True
-        os.makedirs(os.path.dirname(_INTERCEPT_STATE_FILE), exist_ok=True)
-        json.dump(_st, open(_INTERCEPT_STATE_FILE, "w", encoding="utf-8"),
-                  ensure_ascii=False, indent=2)
         _acn = {"BUY_LOW": "买入", "SELL_HIGH": "卖出", "ADD_POS": "加仓",
                 "PANIC_SELL": "恐慌卖"}.get(sig.action, sig.action)
         card = {
@@ -258,8 +251,10 @@ def _push_intercept_notice(code, sig, now, reason):
                     f"🔕 **{sig.name}（{code}）** {_acn} score={sig.score:.0f} 已拦截（{reason}）"}],
             },
         }
-        send_feishu_payload(card, success_log=f"拦截可见性飞书: {code} {sig.action}",
-                            error_prefix="拦截可见性飞书")
+        if send_feishu_payload(card, success_log=f"拦截可见性飞书: {code} {sig.action}",
+                               error_prefix="拦截可见性飞书"):
+            _intn.mark_sent(_st, _today, _key, now)
+            _intn.write_state(_INTERCEPT_STATE_FILE, _st)
     except Exception:
         pass
 
@@ -2282,7 +2277,8 @@ def scan_once():
                                 log.info(f"🚫 {code} BUY_LOW 个股收盘<MA5(破线只卖不买)，不推送")
                         except Exception:
                             pass
-                    # C-3(2026-08-21): 拦截可见性——被拦截且原score>=推送阈值，推低优飞书（每股每向每日1条）
+                    # C-3(2026-08-21)+F-11(2026-09-04): 拦截可见性——被拦截且原score>=推送阈值，推低优飞书
+                    # （20min 滚动冷却窗去重，同码同日复拦仍可见）
                     if (_res_blocked or _ma5_suppressed) and sig.score >= notify_threshold:
                         try:
                             _push_intercept_notice(code, sig, now,
