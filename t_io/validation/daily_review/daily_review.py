@@ -150,7 +150,7 @@ shadow_report = {c: shadow_compact(shadow_near[c]) for c in CODES if shadow_near
 # ---------- 3. 日志: 仓控拦截/静默/实际推送/收盘同步 ----------
 log_fp = BASE / f"t_io/logs/t_trader_sys_{DATE}.log"
 suppress, silent_sell, pushes, eod = defaultdict(list), defaultdict(list), [], []
-re_sup = re.compile(r"^(\d{2}:\d{2}:\d{2}).*🛑 (\d{6}) (BUY_LOW|SELL_HIGH)信号达标\((\d+)分\)但仓控可交易量为0")
+re_sup = re.compile(r"^(\d{2}:\d{2}:\d{2}).*📡 (\d{6}) (BUY_LOW|ADD_POS|SELL_HIGH|PANIC_SELL)两点触发\(score=(\d+)分\)但仓控可交易量为0")
 re_sil = re.compile(r"^(\d{2}:\d{2}:\d{2}).*📉 (\d{6}) 卖出信号得分(\d+)分，低于.*阈值(\d+)分，静默")
 re_push = re.compile(r"^(\d{2}:\d{2}:\d{2}).*飞书消息已成功送达: .+?\((\d{6})\) (BUY_LOW|SELL_HIGH)")
 re_sync = re.compile(r"收盘同步 (.+?\((\d{6})\)): qty (\d+)→(\d+), t_qty (\d+)→(\d+)")
