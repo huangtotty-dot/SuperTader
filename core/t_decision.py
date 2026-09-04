@@ -182,14 +182,16 @@ class TDecisionEngine:
         last_down = False
         for row in new_rows.itertuples():
             try:
-                created = builder.update(row.time, float(row.close), float(row.high),
-                                         float(row.low), float(getattr(row, "volume", 0) or 0))
+                builder.update(row.time, float(row.close), float(row.high),
+                               float(row.low), float(getattr(row, "volume", 0) or 0))
             except Exception:
-                created = False
-            if created:
-                last_down = (builder.brick_direction == "down")
+                pass
+        # F-4(2026-09-04): last_down = 最新砖方向为 down（不再要求"本 tick 新出向下砖"）——
+        # 否则价格沿向下砖横盘后 MACD 转正的买点会永久错过（09-04 全天 m15>0 次数=0 实证）。
+        # 砖方向由 builder 每次新砖更新，无新砖时保持最新方向；首砖前无方向。
         if len(new_rows) > 0:
             rs["last_ts"] = df.iloc[-1]["time"]
+            last_down = bool(getattr(builder, "brick_direction", None) == "down")
         self._renko_states[code] = rs
 
         entry = self.t_entry_price.get(code)
