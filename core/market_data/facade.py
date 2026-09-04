@@ -82,7 +82,9 @@ class MarketDataFacade:
         import datetime as _dt
         _now = _dt.datetime.now()
         today = _now.strftime("%Y-%m-%d")
-        if _now.weekday() >= 5 or not ("09:15" <= _now.strftime("%H:%M") <= "16:00"):
+        # F-1(2026-09-04): 窗口延至 23:59——16:00 后 gm 日线仍无当日 bar，eod 重扫(16:04)会退回昨日
+        # 判出伪 signal(688037)；盘后快照 ts_date=当日闸已防伪造 bar，延窗只补真实收盘。
+        if _now.weekday() >= 5 or not ("09:15" <= _now.strftime("%H:%M") <= "23:59"):
             return df
         if df is None or df.empty or str(df["date"].iloc[-1]) >= today:
             return df
@@ -106,7 +108,9 @@ class MarketDataFacade:
         import datetime as _dt
         _now = _dt.datetime.now()
         today = _now.strftime("%Y-%m-%d")
-        if _now.weekday() >= 5 or not ("09:15" <= _now.strftime("%H:%M") <= "16:00"):
+        # F-1(2026-09-04): 窗口延至 23:59——16:00 后 gm 日线仍无当日 bar，eod 重扫(16:04)会退回昨日
+        # 判出伪 signal(688037)；盘后快照 ts_date=当日闸已防伪造 bar，延窗只补真实收盘。
+        if _now.weekday() >= 5 or not ("09:15" <= _now.strftime("%H:%M") <= "23:59"):
             return df
         if df is None or df.empty or str(df["date"].iloc[-1]) >= today:
             return df

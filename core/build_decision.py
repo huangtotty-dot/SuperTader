@@ -107,6 +107,8 @@ def features_from_daily(df: pd.DataFrame, date_str: str) -> dict:
         "ma20": round(ma20, 3), "ma60": round(ma60, 3),
         "vol_ratio20": _vol_ratio20,
         "dist_ma60": round(price / ma60 - 1, 4),
+        # F-1(2026-09-04): 特征末 bar 日期——供消费方校验"当日形成 bar 是否已入"(陈旧日线 fail-closed)
+        "last_bar_date": str(sub["date"].iloc[-1]),
     }
 
 
