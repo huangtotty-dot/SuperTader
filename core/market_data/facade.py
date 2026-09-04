@@ -68,6 +68,8 @@ class MarketDataFacade:
                     from .tencent_provider import save_daily_cache
                     save_daily_cache(code, df)
                     return self._mark(_resample_period(df, period), "gm")
+                # F-6(2026-09-04): gm 静默返空（588170 ETF 疑单点依赖腾讯）——补 warning 可观测
+                log.warning("gm.daily 返回空(%s) → 降级腾讯（ETF 疑 gm 静默返空）", code)
             except Exception as e:
                 log.warning("gm.daily 降级腾讯(%s): %s", code, str(e)[:100])
         df = self._tx.daily(code, days)

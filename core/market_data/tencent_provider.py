@@ -178,14 +178,17 @@ class TencentProvider:
                     rows = cached["rows"]
                     live = self.snapshot([code]).get(code)
                     if live and str(live.get("ts_date")) == _today and live.get("price"):
-                        rows = rows + [{"date": _today, "open": live["open"], "close": live["price"],
-                                        "high": live["high"], "low": live["low"],
-                                        "volume": live["volume"]}]
+                        # F-6(2026-09-04): 防重复日期行——缓存末行已是 today 则不追加（实测 347 行含两行 09-04）
+                        if not rows or str(rows[-1].get("date", "")) != _today:
+                            rows = rows + [{"date": _today, "open": live["open"], "close": live["price"],
+                                            "high": live["high"], "low": live["low"],
+                                            "volume": live["volume"]}]
                     df = pd.DataFrame(rows)[_DAILY_COLS]
                     df.attrs["source"] = "cache"
                     return df
-            except Exception:
-                pass
+            except Exception as _e:
+                # F-6(2026-09-04): 兜底异常不再裸吞——打日志可观测（588170 抖动即空特征的排查源）
+                print(f"[WARN] tencent.daily 缓存兜底失败({code}): {type(_e).__name__}: {str(_e)[:80]}", flush=True)
         return pd.DataFrame(columns=_DAILY_COLS)
 
     # ---------- 指数日线 ----------
