@@ -1020,6 +1020,16 @@ def scan_stock(code: str, stock_info: dict, date_str: str = None,
             # 无数据股可能被打成 approaching 且 blockers 为空（数据失败伪装成条件通过）。
             # 现：数据不足时结构/回撤一律判不通过，detail/blockers 明示"数据不足"。
             _data_insufficient = not _f
+            # F-1(2026-09-04): 陈旧日线 fail-closed——eod 重扫(16:00 后)若特征末 bar < 当日
+            # （gm 盘中缺当日 + 快照 ts_date 非当日未补）→ 直接 insufficient_data return，防 688037 伪 signal
+            _lbd = _f.get("last_bar_date")
+            if _lbd and str(_lbd) < str(target_date):
+                result["date"] = snap_date or target_date
+                result["errors"].append(f"日线末 bar 陈旧({_lbd}<{target_date})→ insufficient_data")
+                result["verdict"] = "insufficient_data"
+                result["composite_score"] = 0
+                result["signal_reachable"] = False
+                return result
             _regime = _tv.get("regime", "range")
             _dir_ok = _regime in ("trend_up", "trend_dn")
             _trend = bool(_f.get("trend_multihead"))
@@ -1040,10 +1050,10 @@ def scan_stock(code: str, stock_info: dict, date_str: str = None,
                 "t_drawdown": {"passed": _dd_ok, "detail": f"回撤到位({_dd_txt}，{_dd_rule})"},
                 "t_golden": {"passed": _golden, "detail": f"MACD金叉近5日={'是' if _golden else '否'}(加分)"},
             }
-            if _vetoes:
-                # 否决触发时 go 已被 timing_gate 压为 False，此处补可解释性（trace/GUI 卡点可见）
-                result["conditions"]["t_veto"] = {
-                    "passed": False, "detail": f"否决因子触发: {'、'.join(_vetoes)}"}
+            # F-1b(2026-09-04): t_veto 恒写（未触发时 passed=True）——trace 每行 conditions 恒含 t_veto 键
+            result["conditions"]["t_veto"] = (
+                {"passed": False, "detail": f"否决因子触发: {'、'.join(_vetoes)}"} if _vetoes
+                else {"passed": True, "detail": f"否决因子(爆量/远离MA60)未触发"})
             if _data_insufficient:
                 result["errors"].append("个股日线数据不足(timing features为空)")
             # P3 同源：verdict/score 映射委托 build_decision.verdict_from_timing（单一真源）。
