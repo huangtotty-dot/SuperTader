@@ -40,6 +40,15 @@ class PositionSizer:
         """
         self.params = params or {}
         self.virtual_trades = virtual_trades or {}
+        # F-5(2026-09-04): 买入 sizing 归因旁路——calc_buy_qty 各出口记录 {reason, 钳制后max_buyable, qty}
+        self._buy_state = {"reason": None, "max_buyable": 0, "qty": 0}
+
+    def _mark_buy(self, qty: int, reason: str = None, cap: int = None) -> int:
+        """F-5: 记录买入 sizing 归因后返回 qty（不改变调用契约，int 返回保持）。"""
+        self._buy_state = {"reason": reason,
+                           "max_buyable": cap if cap is not None else 0,
+                           "qty": qty}
+        return qty
 
     def _effective_params(self, code: str, holding: dict) -> dict:
         p = dict(self.params or {})
@@ -237,7 +246,7 @@ class PositionSizer:
         # fix P0-9(B3): 纯底仓口径——严格 t_qty，不回退 qty；t_qty=0 不买
         total_t = int(holding.get("t_qty", 0) or 0)
         if total_t <= 0:
-            return 0
+            return self._mark_buy(0, "no_t_budget")
 
         net_qty = self._virtual_net_qty(code, holding)
         is_etf = holding.get("type") == "etf"
@@ -249,14 +258,14 @@ class PositionSizer:
         # allow_full_position_buy=False（默认）→ 恢复早退 return 0；True → 走 V1.2.1 保底一手。
         max_buyable = max(0, total_t - net_qty)
         if max_buyable <= 0 and not p.get("allow_full_position_buy", False):
-            return 0
+            return self._mark_buy(0, "full_position", cap=max_buyable)
 
         index_ctx = index_ctx or {}
 
         # V1.27: 仓位上限 → 如果已超上限，禁止继续买入
         excess_pos = self._check_position_limit(code, holding, index_ctx, current_price, total_equity)
         if excess_pos > 0:
-            return 0
+            return self._mark_buy(0, "single_stock_cap")
 
         # W33 B2 (2026-08-13): strength 三档失效——V2 纯两点后 sig_score 恒=100、阈值 36 → strength 恒≥10，
         # 永远走"强"档。简化为单档固定比例：个股 接回×0.60 / 首加×0.20；ETF 接回/首加×0.25。
@@ -269,18 +278,18 @@ class PositionSizer:
 
         # 场景1：熔断/观望/减仓 → 不买
         if index_state in {"clear", "reduce", "stand_aside"} or should_clear_all(regime):
-            return 0
+            return self._mark_buy(0, "index_circuit")
 
         # 场景2：防守模式 → 只允许低风险接回，且受大盘目标仓位限制
         if index_factor <= 0:
-            return 0
+            return self._mark_buy(0, "index_target_cap_clamp")
         target_cap = max(0, int(total_t * index_factor))
         max_buyable = min(max_buyable, max(0, target_cap - net_qty))
         # V1.2.1: 此处不再因 max_buyable<=0 早退（同为满仓冻结链一环）；
         # 大盘目标仓位仍作为数量上限参与下方 min(qty, max_buyable) 钳制（风控保留，冻结取消）
         # V1.2.2: 大盘目标仓位钳到 0 视同"算不出可买量"——开关关（默认）同样早退；开关开走 V1.2.1 保底一手
         if max_buyable <= 0 and not p.get("allow_full_position_buy", False):
-            return 0
+            return self._mark_buy(0, "index_target_cap_clamp", cap=max_buyable)
 
         # 建仓/加仓时机判定（timing_gate，regime条件化：多头追强/空头抄底/震荡降频）
         # 2026-08-15 接入加仓侧：NO-GO 时阻断加仓买入（降频），接回是否阻断由
@@ -293,7 +302,7 @@ class PositionSizer:
                     if unrebuilt > 0 and not _ETP.get("add_block_rebuild", True):
                         pass  # 接回放行
                     else:
-                        return 0
+                        return self._mark_buy(0, "timing_gate_nogo")
         except Exception:
             pass
 
@@ -314,7 +323,8 @@ class PositionSizer:
             qty = min_unit
         qty = max(min_unit, (qty // min_unit) * min_unit)
 
-        return max(0, qty)
+        # F-5: 成功出口也记录钳制后真实 max_buyable（cap 语义=t_qty−net 经 index_factor 目标仓钳制后）
+        return self._mark_buy(max(0, qty), None, cap=max_buyable)
 
     # ==================== 内部辅助方法 ====================
 
@@ -424,8 +434,21 @@ def calc_sell_qty(code: str, holding: dict, regime, sig_score: float, threshold:
     return get_sizer(params, virtual_trades).calc_sell_qty(code, holding, regime, sig_score, threshold, used_sells, index_ctx=index_ctx, current_price=current_price, total_equity=total_equity)
 
 
+_LAST_BUY_STATE = {"reason": None, "max_buyable": 0, "qty": 0}
+
+
 def calc_buy_qty(code: str, holding: dict, regime, sig_score: float, threshold: float,
                  params: dict = None, virtual_trades: dict = None, index_ctx: dict = None,
                  current_price: float = 0.0, total_equity: float = 0.0) -> int:
-    """便捷函数：计算买入股数"""
-    return get_sizer(params, virtual_trades).calc_buy_qty(code, holding, regime, sig_score, threshold, index_ctx=index_ctx, current_price=current_price, total_equity=total_equity)
+    """便捷函数：计算买入股数。同时把归因复制到 _LAST_BUY_STATE，供调用方随后读 last_buy_state()。"""
+    global _LAST_BUY_STATE
+    s = get_sizer(params, virtual_trades)
+    qty = s.calc_buy_qty(code, holding, regime, sig_score, threshold, index_ctx=index_ctx,
+                         current_price=current_price, total_equity=total_equity)
+    _LAST_BUY_STATE = dict(getattr(s, "_buy_state", {}) or {})
+    return qty
+
+
+def last_buy_state() -> dict:
+    """F-5: 返回最近一次 calc_buy_qty 的归因 {reason, max_buyable(钳制后), qty}。"""
+    return dict(_LAST_BUY_STATE)

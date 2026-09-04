@@ -2133,8 +2133,12 @@ def scan_once():
                     
                     # 2. 动态份数计算（个股/ETF统一）
                     _advice = None  # W33 G1: sizing_advice 结构化落盘（买卖双侧）
+                    _buy_cap = None          # F-5: 买入钳制后真实 max_buyable（归因旁路）
+                    _buy_block_reason = None  # F-5: 买入拦截原因码（no_t_budget/full_position/...）
+                    _is_buy = False          # F-5: 本信号是否买入动作（advice 归因字段选择）
                     try:
-                        from core.position_sizer import calc_sell_qty, calc_buy_qty, set_all_holdings
+                        from core.position_sizer import (calc_sell_qty, calc_buy_qty, set_all_holdings,
+                                                         last_buy_state)
                         set_all_holdings(HOLDINGS)  # fix P0-9(B4): 注入全量持仓供单股上限 A/B 合并判定
                         threshold = float(sig.factors.get("threshold", 35))
                         cur_price = float(sig.price or 0)
@@ -2160,6 +2164,10 @@ def scan_once():
                                 current_price=cur_price,
                                 total_equity=total_equity,
                             )
+                            # F-5: 紧接 calc_buy_qty 读归因（避免跨信号污染）
+                            _st_buy = last_buy_state() or {}
+                            _buy_cap = _st_buy.get("max_buyable")
+                            _buy_block_reason = _st_buy.get("reason")
                         if dynamic_qty > 0:
                             sig.hold_qty = dynamic_qty
                             total_t = int(holding.get("t_qty", 0))  # 纯底仓(t_qty=0)不应用qty回退
@@ -2174,6 +2182,8 @@ def scan_once():
                         _sell_sum = sum(t.get("qty", 0) for t in _vt.get("SELL_HIGH", []))
                         _net = max(0, int(holding.get("t_qty", 0)) + _buy_sum - _sell_sum)
                         _unrebuilt = max(0, _sell_sum - _buy_sum)
+                        _is_buy = sig.action in ("BUY_LOW", "ADD_POS")
+                        _raw_cap = max(0, int(holding.get("t_qty", 0)) - _net)
                         _advice = {
                             "ts": _now().strftime("%Y-%m-%d %H:%M:%S"),
                             "code": code, "name": holding.get("name", code),
@@ -2184,7 +2194,10 @@ def scan_once():
                             "score": float(sig.score), "threshold": threshold,
                             "t_qty": int(holding.get("t_qty", 0)),
                             "net_qty": _net, "unrebuilt": _unrebuilt,
-                            "max_buyable": max(0, int(holding.get("t_qty", 0)) - _net),
+                            # F-5(2026-09-04): 买入显示 index_factor 钳制后真实上限；卖出保留原 raw 口径
+                            "max_buyable": (_buy_cap if (_is_buy and _buy_cap is not None) else _raw_cap),
+                            "block_reason": (_buy_block_reason if _is_buy else None),
+                            "executable": dynamic_qty > 0,
                         }
                     except Exception as e:
                         log.warning(f"⚠️  动态份数计算失败 {code}: {e}")
@@ -2328,7 +2341,10 @@ def scan_once():
                             _advice["pushed"] = bool(pushed)
                             _advice["buy_kind"] = "rebuild" if _advice["unrebuilt"] > 0 else "first_add"
                             if sig.hold_qty <= 0:
-                                _advice["note"] = "仓控可交易量为0(满仓/熔断)，仅供参考不记账"
+                                # F-5: 买入拦截携带真实原因码（替代笼统"满仓/熔断"）；卖出保持原文案
+                                _advice["note"] = (f"仓控拦截({_buy_block_reason})仅供参考不记账"
+                                                   if _is_buy and _buy_block_reason
+                                                   else "仓控可交易量为0(满仓/熔断)，仅供参考不记账")
                             _append_jsonl(_trace_path("sizing_advice"), _advice)
                         except Exception as _e:
                             log.warning(f"⚠️  sizing_advice 落盘失败 {code}: {_e}")
