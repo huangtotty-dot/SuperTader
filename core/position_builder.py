@@ -1343,6 +1343,86 @@ def push_summary_feishu(results: list, date_str: str = "", dry_run: bool = False
     )
 
 
+# F-7(2026-09-04): 收盘待确认清单（C18，owner 拍板 17 天强制上线）
+_C18_DEDUP_FILE = STATE_DIR / "c18_list_dedup.json"
+_C18_ORDER = {"signal": 2, "watch_signal": 1}
+
+
+def push_pending_confirm_list(date_str: str = "", dry_run: bool = False) -> bool:
+    """收盘建仓 signal 待确认清单推送——读 manual_signals build_signal 当日全量触发
+    （盘中+eod），按 code 去重取最高 verdict（signal>watch_signal），标注已即时推送/未推送 + veto；
+    0 只也推空卡（与 0 signal 计数器联动）。dedup 键 c18_list:{date}（state 落盘，防重复）。"""
+    if not _FEISHU_AVAILABLE:
+        return False
+    date_str = date_str or datetime.now().strftime("%Y-%m-%d")
+    fp = MANUAL_SIGNALS_DIR / f"manual_signals_{date_str}.jsonl"
+    try:
+        dedup = json.loads(_C18_DEDUP_FILE.read_text(encoding="utf-8")) if _C18_DEDUP_FILE.exists() else {}
+    except Exception:
+        dedup = {}
+    if dedup.get(date_str) == "pushed":
+        return True
+    best = {}
+    if fp.exists():
+        for line in open(fp, encoding="utf-8"):
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                e = json.loads(line)
+            except Exception:
+                continue
+            if e.get("event") != "build_signal":
+                continue
+            code = e.get("code")
+            if not code:
+                continue
+            verdict = str(e.get("verdict") or "")
+            _o = _C18_ORDER.get(verdict, 0)
+            cur = best.get(code)
+            if cur is None or _o > cur["_order"]:
+                best[code] = {"code": code, "name": e.get("name", code),
+                              "verdict": verdict, "score": e.get("score"),
+                              "pushed": bool(e.get("pushed")), "veto": list(e.get("veto") or []),
+                              "_order": _o}
+    rows = sorted(best.values(), key=lambda x: (-x["_order"], x["code"]))
+    lines = [f"**收盘建仓待确认清单**  {date_str}", ""]
+    if not rows:
+        lines.append("0 只触发建仓 signal——今日无待确认")
+    else:
+        lines.append(f"共 **{len(rows)}** 只触发建仓信号（盘中/eod 全量，供确认是否已买入）：")
+        lines.append("")
+        for r in rows:
+            icon = "🔴" if r["verdict"] == "signal" else "🟡"
+            pushed_txt = "✅ 已即时推送" if r["pushed"] else "❌ 未推送"
+            veto_txt = f"  🚫否决:{'、'.join(r['veto'])}" if r.get("veto") else ""
+            lines.append(f"{icon} {r['name']}({r['code']}) {r['verdict']} 分{r.get('score')} | {pushed_txt}{veto_txt}")
+    lines.append("")
+    lines.append("> 盘中 signal 可能因日内确认门降级，此处列全量触发供盘后核对")
+    text = "\n".join(lines)
+    card = {
+        "msg_type": "interactive",
+        "card": {
+            "config": {"wide_screen_mode": True},
+            "header": {"title": {"tag": "plain_text",
+                                 "content": f"📋 收盘建仓待确认 - {FEISHU_KEYWORD}"},
+                       "template": "blue"},
+            "elements": [{"tag": "div", "text": {"tag": "lark_md", "content": text}}],
+        },
+    }
+    if dry_run:
+        return True
+    ok = send_feishu_payload(card, success_log=f"C18 收盘待确认清单已推送: {len(rows)} 只",
+                             error_prefix="C18 收盘待确认清单推送")
+    if ok:
+        try:
+            dedup[date_str] = "pushed"
+            _C18_DEDUP_FILE.write_text(json.dumps(dedup, ensure_ascii=False, indent=2), encoding="utf-8")
+        except Exception:
+            pass
+    return ok
+
+
 # ============================================================
 # 破5/10日线检测与飞书推送（2026-08-14 新增）
 # ============================================================

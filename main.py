@@ -1329,6 +1329,12 @@ def _maybe_run_position_builder(now: datetime) -> None:
         if _push_summary_feishu and results:
             _push_summary_feishu(results, date_str=today)
             log.info(f"📋 建仓扫描汇总已推送")
+        # F-7(2026-09-04): C18 收盘待确认清单推送（读 manual_signals 全量触发）
+        try:
+            from core.position_builder import push_pending_confirm_list as _push_confirm_list
+            _push_confirm_list(today)
+        except Exception as _e:
+            log.warning(f"⚠️ C18 待确认清单推送异常（已吞掉）: {str(_e)[:120]}")
 
     except Exception as e:
         log.warning(f"⚠️ 建仓信号扫描异常（已吞掉，10分钟后重试）: {str(e)[:200]}")
