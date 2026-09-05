@@ -2271,6 +2271,8 @@ def scan_once():
                                     "t_swing_buy": "做T低吸跳过共振(意图分流)",
                                     "stock_override_disabled": "共振放行(标的禁用)",
                                 }.get(str(_res.get("bypass")), "共振放行(bypass)")
+                                if str(_res.get("bypass")) == "t_swing_buy":
+                                    log.info(f"⏭️ {code} {sig.action} 共振放行(做T低吸意图分流, C-1)，正常推送")
                             elif _res.get("missing"):
                                 _res_status = "指数数据缺失" if not _gate_pass else "指数数据缺失放行"
                             elif _gate_pass:
@@ -2292,15 +2294,21 @@ def scan_once():
                     _ma5_suppressed = False
                     _is_t_swing_buy = (sig.action == "BUY_LOW"
                                        and str((sig.factors or {}).get("entry_kind", "")) == "swing_renko")
-                    if pushed and sig.action == "BUY_LOW" and not (_is_t_swing_buy and _t_gate_bypass("c2_ma5_for_swing_buy")):
+                    _c2_released = (_is_t_swing_buy and _t_gate_bypass("c2_ma5_for_swing_buy"))
+                    if pushed and sig.action == "BUY_LOW":
                         try:
-                            if _below_ma5(code):
-                                _ma5_suppressed = True
-                                pushed = False
-                                _block_reason = "个股收盘<MA5(破线只卖不买)"
-                                log.info(f"🚫 {code} BUY_LOW 个股收盘<MA5(破线只卖不买)，不推送")
+                            _below5 = _below_ma5(code)
                         except Exception:
-                            pass
+                            _below5 = None
+                        if _below5 and _c2_released:
+                            # 可见性: 破线但属做T日内低吸 → 放行（周复盘逐笔可核对）
+                            log.info(f"⏭️ {code} BUY_LOW 破线放行(做T低吸意图分流, C-2)")
+                        elif _below5:
+                            _ma5_suppressed = True
+                            pushed = False
+                            _block_reason = "个股收盘<MA5(破线只卖不买)"
+                            log.info(f"🚫 {code} BUY_LOW 个股收盘<MA5(破线只卖不买)，不推送")
+                        # else: 站上MA5，C-2 天然放行
                     # C-3(2026-08-21)+F-11(2026-09-04): 拦截可见性——被拦截且原score>=推送阈值，推低优飞书
                     # （20min 滚动冷却窗去重，同码同日复拦仍可见）
                     if (_res_blocked or _ma5_suppressed) and sig.score >= notify_threshold:
