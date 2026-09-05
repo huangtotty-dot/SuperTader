@@ -785,6 +785,16 @@ RESONANCE_GATE = {
     "enabled": True,            # 总开关；False 时恢复旧行为（全部信号走共振门控）
     "bypass_sell_high": True,   # SELL_HIGH 跳过共振门控
 }
+
+# 2026-09-05 做T低吸闸门分流（owner 拍板：近一周活跃 T 仓低吸信号几乎为零的系统性根因）
+# swing_renko 日内低吸(BUY_LOW，当日 14:55 尾盘强平了结)属日内做T，不受两类"顺趋势建仓闸"锁死——
+#   c2_ma5_for_swing_buy      个股日线破 MA5 只卖不买(C-2) 主要压 588170（整周 0 低吸）
+#   resonance_for_swing_buy   指数5min 共振门控(C-1 BUY 侧) 主要压 002451（多日 index<MA5）
+# 建仓/加仓(隔日持有)信号不受影响仍过两闸。关回 False 即回滚旧行为（对照窗口用）。
+T_INTRADAY_GATE_BYPASS = {
+    "c2_ma5_for_swing_buy": True,     # 做T低吸跳过"个股收盘<MA5 只卖不买"
+    "resonance_for_swing_buy": True,  # 做T低吸跳过指数共振(BUY 侧)
+}
 # 个股/ETF → 板块指数覆盖（分板默认之外显式指定）；值 = (index_code, index_name)
 # 2026-08-24 优化：添加标的级别的共振门控开关
 INDEX_RESONANCE_MAP = {

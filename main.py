@@ -151,6 +151,15 @@ else:
         print(f"[WARN] index_resonance 加载失败（共振过滤不可用，信号按不过滤放行）: {_e}")
 
 
+def _t_gate_bypass(key: str) -> bool:
+    """读 T_INTRADAY_GATE_BYPASS 开关（config），供做T低吸意图分流用。"""
+    try:
+        from config import T_INTRADAY_GATE_BYPASS as _tgb
+        return bool((_tgb or {}).get(key, False))
+    except Exception:
+        return False
+
+
 def _resonance_gate(code, sig, now):
     """指数5分钟共振门控。返回 (gate_pass, resonance_info)。
 
@@ -160,6 +169,8 @@ def _resonance_gate(code, sig, now):
     C-1(2026-08-21): 做T/接回意图分流——SELL_HIGH(日内了结)跳过共振门控直接放行，
     卖侧不受指数 MA5 尺约束（08-19 破线日 0 卖出信号教训）。
     2026-08-24 方案A: 按标的启用/禁用共振门控
+    2026-09-05 意图分流(owner 拍板): swing_renko 做T日内低吸(BUY, 14:55 强平了结)同样跳过共振——
+    近一周活跃 T 仓低吸几乎为零的主因之一（002451 多日被 index_ma5_dir 拦）。开关见 T_INTRADAY_GATE_BYPASS。
     """
     # 2026-08-24 方案A: 检查该标的是否有分标的覆盖
     try:
@@ -179,6 +190,11 @@ def _resonance_gate(code, sig, now):
     if (_rg.get("enabled", True) and _rg.get("bypass_sell_high", True)
             and str(sig.action) == "SELL_HIGH"):
         return True, {"bypass": "sell_high"}
+    # 2026-09-05 意图分流: 做T日内低吸(swing_renko BUY, 当日14:55强平了结)跳过指数共振 BUY 侧
+    if (_rg.get("enabled", True) and _t_gate_bypass("resonance_for_swing_buy")
+            and str(sig.action) == "BUY_LOW"
+            and str((sig.factors or {}).get("entry_kind", "")) == "swing_renko"):
+        return True, {"bypass": "t_swing_buy"}
     if not _RESONANCE_MODULE_OK or _compute_resonance is None:
         return True, None
     try:
@@ -2250,7 +2266,11 @@ def scan_once():
                         _gate_pass, _res = _resonance_gate(code, sig, now)
                         if _res is not None:
                             if _res.get("bypass"):
-                                _res_status = "SELL_HIGH跳过共振(C-1)"
+                                _res_status = {
+                                    "sell_high": "SELL_HIGH跳过共振(C-1)",
+                                    "t_swing_buy": "做T低吸跳过共振(意图分流)",
+                                    "stock_override_disabled": "共振放行(标的禁用)",
+                                }.get(str(_res.get("bypass")), "共振放行(bypass)")
                             elif _res.get("missing"):
                                 _res_status = "指数数据缺失" if not _gate_pass else "指数数据缺失放行"
                             elif _gate_pass:
@@ -2267,8 +2287,12 @@ def scan_once():
                             pushed = False
                             log.info(f"🚫 {code} {sig.action} 指数共振拦截（{_res_status}）: {(_res or {}).get('gate_reason', '')}")
                     # C-2(2026-08-21): 个股MA5闸——破五日线只卖不买（用户规则系统化）；BUY_LOW 最新收盘<MA5 不推送
+                    # 2026-09-05 意图分流: swing_renko 做T日内低吸(当日14:55了结)不受日线破MA5锁死
+                    # （近一周 588170 整周 0 低吸的主因）。开关 T_INTRADAY_GATE_BYPASS.c2_ma5_for_swing_buy。
                     _ma5_suppressed = False
-                    if pushed and sig.action == "BUY_LOW":
+                    _is_t_swing_buy = (sig.action == "BUY_LOW"
+                                       and str((sig.factors or {}).get("entry_kind", "")) == "swing_renko")
+                    if pushed and sig.action == "BUY_LOW" and not (_is_t_swing_buy and _t_gate_bypass("c2_ma5_for_swing_buy")):
                         try:
                             if _below_ma5(code):
                                 _ma5_suppressed = True
