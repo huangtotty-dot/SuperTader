@@ -102,6 +102,9 @@ class RiskManager:
         index_regime = feats.get("index_regime", "range")
         if index_regime == "uni_down":
             result["buy_block"].append("index_uni_down_clearance")
+            # C-3(2026-09-07): 熔断可归因到板块（reason 带指数码；无板块码=市场级上证）
+            if feats.get("index_board_code"):
+                result["board_index_code"] = feats["index_board_code"]
         for alert in (feats.get("intraday_alerts") or []):
             if alert.get("tag") in ("I1", "I4"):
                 result["buy_block"].append(f"intraday_panic_{alert.get('tag')}")
@@ -181,6 +184,7 @@ class FeatureExtractor:
         for k in ["daily_status", "daily_gate", "daily_trend_bg", "daily_ma5_state",
                    "daily_support_name", "index_regime"]:
             feats[k] = dc.get(k, "unknown")
+        feats["index_board_code"] = dc.get("index_board_code", "")     # C-3: 该股所属板块指数码（熔断归因）
         for n in [5, 10, 20, 30, 60, 120]:
             feats[f"daily_ma{n}"] = float(dc.get(f"daily_ma{n}", 0) or 0)
         feats["daily_ma5_slope"] = float(dc.get("daily_ma5_slope", 0) or 0)
