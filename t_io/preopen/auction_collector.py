@@ -31,8 +31,8 @@ os.environ["no_proxy"] = "*"
 
 UA = {"User-Agent": "Mozilla/5.0"}
 
-# 大盘指数竞价采集（方案 §6 Phase1：sh000001 上证 / sh000688 科创50 / sz399001 深证成指）
-AUCTION_INDEX_CODES = ["sh000001", "sh000688", "sz399001"]
+# 大盘指数竞价采集（方案 §6 Phase1：上证 / 科创50 / 深证成指；2026-09-07 A-6 补 sz399006 创业板指 → 4 指数）
+AUCTION_INDEX_CODES = ["sh000001", "sh000688", "sz399001", "sz399006"]
 
 
 def fetch_index_snapshot():

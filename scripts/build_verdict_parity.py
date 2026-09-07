@@ -43,9 +43,9 @@ def manual_chain(code, date_str, etp):
             "regime": tv.get("regime"), "score": score, "features": f}
 
 
-def _idx_forming(idx_df):
+def _idx_forming(idx_df, gm_symbol="SHSE.000001"):
     """指数日线补当日 forming bar（与 execution/auto/gm_main._append_index_forming 同语义，2026-08-31）。
-    gm.history_n 盘中不含当日指数 bar；用 gm.current(SHSE.000001) 实时快照补当日 OHLC。
+    gm.history_n 盘中不含当日指数 bar；用 gm.current(gm_symbol) 实时快照补当日 OHLC（A-5: 分板口径）。
     否则 auto_chain 用昨日收盘判 regime，与手动链(facade 补 forming)盘中不一致。"""
     from datetime import datetime
     import pandas as pd
@@ -57,7 +57,7 @@ def _idx_forming(idx_df):
         return idx_df
     try:
         from gm.api import current
-        rows = current("SHSE.000001")
+        rows = current(gm_symbol)
     except Exception:
         return idx_df
     if not rows:
@@ -78,12 +78,17 @@ def _idx_forming(idx_df):
 def auto_chain(code, gm_symbol, date_str, etp):
     """auto 侧判定链（P4-6：走 execution/auto/build_decision_auto 真实代码路径，EOD 口径 df_1min=None）。
 
-    与 execution/auto/gm_main.py BASE 建仓块同款决策适配器（core/build_decision 单一真源）。"""
+    与 execution/auto/gm_main.py BASE 建仓块同款决策适配器（core/build_decision 单一真源）。
+    A-5: 指数按个股所属板 resolve（与 manual 侧 timing_gate 分板口径一致），不再恒传上证。"""
+    from core.board_index import resolve_index as _resolve_index
+    from core.board_index import index_gm_symbol as _index_gm_symbol
     from core.market_data.gm_provider import GmProvider
     from execution.auto import build_decision_auto as bda
     gp = GmProvider()
     df = gp.daily(code, days=200)  # provider 契约：内部 6 位码，codec 内部转 GM 格式
-    idx = _idx_forming(gp.index_daily("sh000001", days=200))  # 2026-08-31: 补当日指数 forming（与引擎一致）
+    _idx_code, _ = _resolve_index(code)
+    idx = _idx_forming(gp.index_daily(_idx_code, days=200),
+                       _index_gm_symbol(_idx_code))  # 2026-08-31: 补当日指数 forming（A-5: 分板口径）
     if df is None or df.empty or idx is None or idx.empty:
         return {"verdict": "data_unavailable", "go": None, "veto": [], "regime": None,
                 "score": None, "features": {}}

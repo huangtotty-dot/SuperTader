@@ -4054,13 +4054,20 @@ class Api:
 
         # 2026-08-28: 给出具体指数点位（当前值/多头线/空头线/各差多少）。
         # 优先读 trace timing.index（新格式）；旧 trace 无该字段时从指数缓存现算（口径同 timing_gate）。
+        # A-4(2026-09-07): 旧 trace 兜底按 code 所属板读对应缓存——原恒读 index_sh000001，
+        # 深主板/创业板/科创板个股（30x/00x/68x/588x）会错用上证点位。新 trace 的
+        # timing.index.index_code 已带板指数，直接采用；缺时按 code resolve_index 回落。
         idx_info = (record.get("timing") or {}).get("index") or {}
         close, up_line, dn_line, ma60 = (idx_info.get("close"), idx_info.get("up_line"),
                                          idx_info.get("dn_line"), idx_info.get("ma60"))
         if not (close and up_line and dn_line):
             try:
+                _idx_code = idx_info.get("index_code")
+                if not _idx_code:
+                    from core.board_index import resolve_index as _ri
+                    _idx_code = _ri(str(record.get("code") or "sh000001"))[0]
                 import json as _json
-                _cache = TRACES.parent / "cache" / "daily_kline" / "index_sh000001.json"
+                _cache = TRACES.parent / "cache" / "daily_kline" / f"index_{_idx_code}.json"
                 _rows = _json.loads(_cache.read_text(encoding="utf-8"))["rows"]
                 import pandas as _pd
                 _c = _pd.Series([float(x["close"]) for x in _rows])

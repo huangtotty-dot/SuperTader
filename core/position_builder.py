@@ -627,10 +627,12 @@ def build_blockers(regime, feats, dd, dir_ok, trend_ok, dd_ok, golden_ok,
         _gap = "当前震荡市(指数在MA60±缓冲带内)，signal 结构性不可达"
         _cur = regime
         # 2026-08-28: 给出具体指数点位——站上多少转多头、跌破多少转空头、各差多少
+        # A-3(2026-09-07): 指数名带入文案（深/创/科创个股原恒显"指数"其实是上证，易误读）
         _ii = index_info or {}
+        _iname = _ii.get("index_name") or "指数"
         if _ii.get("close") and _ii.get("up_line") and _ii.get("dn_line"):
             _c = float(_ii["close"]); _up = float(_ii["up_line"]); _dn = float(_ii["dn_line"])
-            _gap = (f"指数{_c:.2f} 在缓冲带 {_dn:.1f}~{_up:.1f} 内，无方向，signal 结构性不可达")
+            _gap = (f"{_iname}{_c:.2f} 在缓冲带 {_dn:.1f}~{_up:.1f} 内，无方向，signal 结构性不可达")
             _need = (f"站上 {_up:.1f} 转多头（还差 {(_up / _c - 1) * 100:+.2f}%）"
                      f" 或 跌破 {_dn:.1f} 转空头（还差 {(_dn / _c - 1) * 100:+.2f}%）")
             _cur = f"{_c:.2f}（{_dn:.1f}~{_up:.1f} 之间）"
@@ -1044,8 +1046,13 @@ def scan_stock(code: str, stock_info: dict, date_str: str = None,
             _dd_rule = "空头<-10%" if _regime == "trend_dn" else "多头≥-3%"
             _dd_txt = "数据不足" if _data_insufficient else f"{_dd:+.1%}"
             _trend_txt = "数据不足" if _data_insufficient else ("是" if _trend else "否")
+            # A-3(2026-09-07): t_regime 条件带指数名——trace 可见 市场状态:trend_up@科创50，
+            # 便于按板块核对（原恒上证分不清是哪个板块口径）。
+            _idx_name_txt = ""
+            if (_tv.get("index") or {}).get("index_name"):
+                _idx_name_txt = "@" + str(_tv["index"]["index_name"])
             result["conditions"] = {
-                "t_regime": {"passed": _dir_ok, "detail": f"市场状态:{_regime}(需多头/空头非震荡)"},
+                "t_regime": {"passed": _dir_ok, "detail": f"市场状态:{_regime}{_idx_name_txt}(需多头/空头非震荡)"},
                 "t_trend": {"passed": _trend, "detail": f"多头结构(价>MA20&MA60)={_trend_txt}"},
                 "t_drawdown": {"passed": _dd_ok, "detail": f"回撤到位({_dd_txt}，{_dd_rule})"},
                 "t_golden": {"passed": _golden, "detail": f"MACD金叉近5日={'是' if _golden else '否'}(加分)"},

@@ -932,11 +932,11 @@ def _base_topup_qty(context, code, gm_sym):
     return _short
 
 
-def _append_index_forming(idx_df):
+def _append_index_forming(idx_df, gm_symbol="SHSE.000001"):
     """指数日线补当日 forming bar（2026-08-31，对齐手动链 facade 的 _maybe_append_index_forming）：
     gm history_n 盘中不含当日指数 bar → build_decision/regime 用昨日收盘误判市场方向。
-    用 gm.current(SHSE.000001) 实时行情补当日 OHLC；失败/盘前(未开盘)/已含当日/周末不补。
-    仅 MODE_LIVE 调用（回测不得用实时数据污染历史）。"""
+    用 gm.current(gm_symbol) 实时行情补当日 OHLC；失败/盘前(未开盘)/已含当日/周末不补。
+    仅 MODE_LIVE 调用（回测不得用实时数据污染历史）。A-7: gm_symbol 参数化（分板 4 指数各自补）。"""
     import datetime as _dt
     _now = _dt.datetime.now()
     today = _now.strftime("%Y-%m-%d")
@@ -945,7 +945,7 @@ def _append_index_forming(idx_df):
     if idx_df is None or idx_df.empty or str(idx_df["date"].iloc[-1]) >= today:
         return idx_df
     try:
-        rows = current("SHSE.000001")
+        rows = current(gm_symbol)
     except Exception:
         return idx_df
     if not rows:
@@ -963,6 +963,77 @@ def _append_index_forming(idx_df):
         "volume": float(r.get("cum_volume") or 0) / 100.0,  # 股 → 手
     }])
     return pd.concat([idx_df, fb], ignore_index=True)
+
+
+# ═══════════════════════════════════════════
+# A-7 分板指数（2026-09-07）：个股按所属板（沪主板/深主板/创业板/科创）参考对应指数，
+# 不再恒用上证。resolve_index 规则单一来源 = superTrader core/board_index（A-1 公共函数，
+# 与 manual 侧 timing_gate/index_resonance 同源，禁止在本仓复制第二份前缀规则）。
+# ═══════════════════════════════════════════
+_BOARD_INDEX_MOD = None
+
+
+def _board_index_module():
+    """加载 superTrader core/board_index（与 build_decision_auto._load_build_decision 同款：
+    常规 import 优先，.gszq 部署无 superTrader 根时回退 SUPERTRADER_ROOT importlib）。"""
+    global _BOARD_INDEX_MOD
+    if _BOARD_INDEX_MOD is not None:
+        return _BOARD_INDEX_MOD
+    import importlib.util as _ilu
+    try:
+        from core import board_index as _m
+    except ImportError:
+        _root = os.environ.get("SUPERTRADER_ROOT") or os.path.dirname(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        _path = os.path.join(_root, "core", "board_index.py")
+        if not os.path.exists(_path):
+            raise RuntimeError(f"分板规则缺失（A-7 依赖）: {_path}")
+        _spec = _ilu.spec_from_file_location("core.board_index", _path)
+        _m = _ilu.module_from_spec(_spec)
+        _spec.loader.exec_module(_m)
+    _BOARD_INDEX_MOD = _m
+    return _m
+
+
+def _code_board_index(code):
+    """个股代码 → (index_code, index_gm)。失败回落市场级 (sh000001, SHSE.000001)。"""
+    try:
+        m = _board_index_module()
+        ic, _name = m.resolve_index(code)
+        return ic, m.index_gm_symbol(ic)
+    except Exception:
+        return "sh000001", "SHSE.000001"
+
+
+def _index_daily_df(gm_symbol):
+    """拉 gm 指数日线 900 根 → df(date,open,high,low,close,volume)；失败/不足返回 None。"""
+    idx_data = history_n(symbol=gm_symbol, frequency="1d", count=900,
+                         fields="eob,open,high,low,close,volume", fill_missing="Previous")
+    if idx_data is None or len(idx_data) <= 10:
+        return None
+    rows = []
+    for bar in idx_data:
+        rows.append({
+            "date": str(bar["eob"])[:10],
+            "open": float(bar["open"]),
+            "high": float(bar["high"]),
+            "low": float(bar["low"]),
+            "close": float(bar["close"]),
+            "volume": float(bar["volume"]) if bar["volume"] is not None else 0,
+        })
+    return pd.DataFrame(rows).sort_values("date").reset_index(drop=True)
+
+
+def _needed_index_gm_symbols():
+    """本池所需板块指数 GM 符号集合（distinct resolve(STOCKS) ∪ 上证市场级恒有）。"""
+    out = {"SHSE.000001"}  # 市场级上证恒拉（大盘 regime/兼容字段依赖）
+    for _c in STOCKS:
+        try:
+            _ic, _gm = _code_board_index(_c)
+            out.add(_gm)
+        except Exception:
+            pass
+    return sorted(out)
 
 
 def init(context):
@@ -991,6 +1062,8 @@ def init(context):
     context.daily_trade_price = {}
     context.last_index_regime = "range"
     context.last_index_score = 0.0
+    context.board_regime = {}      # A-7: {GM指数sym: regime} 分板 regime（上证=市场级恒有，键 GM 全称）
+    context._board_gm_symbols = _needed_index_gm_symbols()  # A-7: 本池所需板块指数（预取/每日刷新共用）
     context.manual_position = {}
     context.latest_pre_close = {}
     context._base_ordered = set()
@@ -1074,7 +1147,7 @@ def init(context):
         except Exception as e:
             print(f"[init] 历史分钟数据预取失败 {sym}: {e}")
 
-    # 预取上证指数日线
+    # 预取板块指数日线（A-7 分板：本池标的所属板指数逐指数预取 + 上证市场级恒有）。
     # 2026-08-28 复审修复（隐性遮蔽显式化）：本模块必须解析到 _gm/analysis 副本
     # （其 GM_INDEX_CACHE/GM_DATA_READY 是本策略的指数数据契约；superTrader 侧同名模块
     # 是另一套带 IO 的实现）。_GM_DIR 在 sys.path 最前，正常即命中 _gm 副本；
@@ -1082,34 +1155,23 @@ def init(context):
     import analysis.index_regime as ir
     if "_gm" not in ir.__file__:
         raise RuntimeError(f"analysis.index_regime 解析错误（应命中 _gm 副本）: {ir.__file__}")
-    try:
-        idx_data = history_n(symbol="SHSE.000001", frequency="1d", count=900,
-                            fields="eob,open,high,low,close,volume",
-                            fill_missing="Previous")
-        if idx_data is not None and len(idx_data) > 10:
-            rows = []
-            for bar in idx_data:
-                dt = str(bar["eob"])[:10]
-                rows.append({
-                    "date": dt,
-                    "open": float(bar["open"]),
-                    "high": float(bar["high"]),
-                    "low": float(bar["low"]),
-                    "close": float(bar["close"]),
-                    "volume": float(bar["volume"]) if bar["volume"] is not None else 0,
-                })
-            df_idx = pd.DataFrame(rows).sort_values("date").reset_index(drop=True)
-            # 2026-08-31: 实盘补当日 forming bar（gm history_n 盘中不含当日指数 → 否则 regime 用昨日收盘）
-            if context.mode == MODE_LIVE:
-                df_idx = _append_index_forming(df_idx)
-            ir.GM_INDEX_CACHE["SHSE.000001"] = df_idx
-            ir.GM_DATA_READY = True
-            print(f"[init] 大盘日线已缓存: {len(df_idx)} 行, {df_idx['date'].iloc[0]} ~ {df_idx['date'].iloc[-1]}")
-        else:
-            print(f"[init] 警告: history_n 未返回上证指数日线")
-    except Exception as e:
-        print(f"[init] 大盘日线预取失败: {e}")
-        ir.GM_DATA_READY = False
+    for _gm_idx in context._board_gm_symbols:
+        try:
+            df_idx = _index_daily_df(_gm_idx)
+            if df_idx is not None:
+                # 2026-08-31: 实盘补当日 forming bar（gm history_n 盘中不含当日指数 → 否则 regime 用昨日收盘）
+                if context.mode == MODE_LIVE:
+                    df_idx = _append_index_forming(df_idx, _gm_idx)
+                ir.GM_INDEX_CACHE[_gm_idx] = df_idx
+                print(f"[init] 指数日线已缓存 {_gm_idx}: {len(df_idx)} 行, "
+                      f"{df_idx['date'].iloc[0]} ~ {df_idx['date'].iloc[-1]}")
+            else:
+                print(f"[init] 警告: history_n 未返回指数日线 {_gm_idx}")
+        except Exception as e:
+            print(f"[init] 指数日线预取失败 {_gm_idx}: {e}")
+    # GM_DATA_READY = 上证市场级就绪（大盘 regime 判定依赖；板指数缺失时 detect 单板降级 range）
+    ir.GM_DATA_READY = bool(ir.GM_INDEX_CACHE.get("SHSE.000001") is not None
+                            and not ir.GM_INDEX_CACHE["SHSE.000001"].empty)
 
     symbols = list(STOCKS.values())
     # WP-E2/E3: 启动预算表（复盘核对用——equity/现金保留/每股预算(按槽分解)/各票 max_pos_shares）
@@ -1198,49 +1260,52 @@ def on_bar(context, bars):
     if t < dtime(9, 30) or (dtime(11, 30) < t < dtime(13, 0)) or t > dtime(15, 0):
         return
 
-    # ── D4: 大盘态势（每交易日一次） ──
+    # ── D4: 大盘态势 + 分板态势（每交易日一次） ──
     if today != getattr(context, "_last_ir_date", None):
         context._last_ir_date = today
         try:
             import analysis.index_regime as ir
             if ir.GM_DATA_READY:
-                # 每个交易日重新拉指数日线（回测时钟下自动对齐）
-                try:
-                    idx_data = history_n(symbol="SHSE.000001", frequency="1d", count=900,
-                                        fields="eob,open,high,low,close,volume",
-                                        fill_missing="Previous")
-                    if idx_data is not None and len(idx_data) > 10:
-                        rows = []
-                        for bar in idx_data:
-                            rows.append({
-                                "date": str(bar["eob"])[:10],
-                                "open": float(bar["open"]),
-                                "high": float(bar["high"]),
-                                "low": float(bar["low"]),
-                                "close": float(bar["close"]),
-                                "volume": float(bar["volume"]) if bar["volume"] is not None else 0,
-                            })
-                        df_idx = pd.DataFrame(rows).sort_values("date").reset_index(drop=True)
-                        # 2026-08-31: 实盘补当日 forming bar（gm history_n 盘中不含当日指数）
-                        if context.mode == MODE_LIVE:
-                            df_idx = _append_index_forming(df_idx)
-                        ir.GM_INDEX_CACHE["SHSE.000001"] = df_idx
-                        ir.GM_DATA_READY = True
-                except Exception as e:
-                    print(f"[ir] 指数日线刷新失败: {e}")
-                    # R-3(2026-08-07 W32表决): regime 数据故障不再静默——fail-open 保留但要告警
-                    try: write_risk(str(now), "regime_degraded", f"指数日线刷新失败: {str(e)[:120]}", code="")
-                    except Exception: pass
+                # 每个交易日重新拉指数日线（回测时钟下自动对齐；A-7: 分板指数逐指数刷新）
+                for _gm_idx in getattr(context, "_board_gm_symbols", []) or []:
+                    try:
+                        df_idx = _index_daily_df(_gm_idx)
+                        if df_idx is not None:
+                            # 2026-08-31: 实盘补当日 forming bar（gm history_n 盘中不含当日指数）
+                            if context.mode == MODE_LIVE:
+                                df_idx = _append_index_forming(df_idx, _gm_idx)
+                            ir.GM_INDEX_CACHE[_gm_idx] = df_idx
+                    except Exception as _e2:
+                        print(f"[ir] 指数日线刷新失败 {_gm_idx}: {_e2}")
+                        # R-3(2026-08-07 W32表决): regime 数据故障不再静默——fail-open 保留但要告警
+                        try: write_risk(str(now), "regime_degraded",
+                                        f"指数日线刷新失败 {_gm_idx}: {str(_e2)[:120]}", code="")
+                        except Exception: pass
 
                 # R-1(2026-08-07 W32表决): 实盘传 mode="live"，剔除当日未成形K线再判定
                 try:
                     _ir_mode = "live" if context.mode == MODE_LIVE else "eod"
                 except Exception:
                     _ir_mode = "eod"
+                # 市场级（上证腿）——context.last_index_regime 兼容字段恒 = 上证（D2 双轨：市场级保留，不替换）
                 ir_regime, ir_score, ir_ctx = ir.detect_index_regime(
                     as_of=now.strftime("%Y-%m-%d"), force=True, mode=_ir_mode)
                 context.last_index_regime = ir_regime.value if hasattr(ir_regime, "value") else str(ir_regime)
                 context.last_index_score = float(ir_score)
+                # A-7: 分板级 regime（board_regime 键 = GM 指数全称；上证复用市场级结果）
+                _br = {"SHSE.000001": context.last_index_regime}
+                for _gm_idx in getattr(context, "_board_gm_symbols", []) or []:
+                    if _gm_idx == "SHSE.000001":
+                        continue
+                    try:
+                        _r, _s, _c = ir.detect_index_regime(
+                            as_of=now.strftime("%Y-%m-%d"), force=True, mode=_ir_mode,
+                            index_symbol=_gm_idx)
+                        _br[_gm_idx] = _r.value if hasattr(_r, "value") else str(_r)
+                    except Exception as _e3:
+                        print(f"[ir] {_gm_idx} 分板态势判定失败: {_e3}")
+                        _br[_gm_idx] = "range"
+                context.board_regime = _br
                 degraded = ir_ctx.get("degraded", [])
                 if degraded:
                     print(f"[ir] {str(today)} regime={context.last_index_regime} score={context.last_index_score:.1f} degraded={degraded}")
@@ -1249,6 +1314,7 @@ def on_bar(context, bars):
                     except Exception: pass
                 else:
                     print(f"[ir] {str(today)} regime={context.last_index_regime} score={context.last_index_score:.1f}")
+                print(f"[ir] {str(today)} board_regime={context.board_regime}")
         except Exception as e:
             print(f"[ir] 大盘态势判定失败: {e}")
 
@@ -1439,8 +1505,11 @@ def on_bar(context, bars):
                 from build_decision_auto import decide as _bd_decide
                 _idx_df = None
                 try:
+                    # A-7: 建仓时机闸按个股所属板取对应指数（60→上证/688·588→科创50/300→创业板/00x→深成），
+                    # 不再恒传上证。板指数缺失 fail-closed（数据不足不建仓），不回退上证冒充。
                     import analysis.index_regime as _ir
-                    _idx_df = _ir.GM_INDEX_CACHE.get("SHSE.000001")
+                    _ic, _ig = _code_board_index(code)
+                    _idx_df = _ir.GM_INDEX_CACHE.get(_ig)
                 except Exception:
                     _idx_df = None
                 _daily_df = _dc.get("_daily_df")
@@ -1574,9 +1643,17 @@ def on_bar(context, bars):
 
         # ── 日线上下文刷新（每日首根有效 bar） ──
         daily_ctx = _refresh_daily_ctx(context, code, gm_sym, now)
-        # 注入指数态势
+        # 注入指数态势（market 级字段保持现状；C-2/C-3 数据就位：按股补所属板块 regime 归因，决策开关留周六对照）
         daily_ctx["index_circuit_state"] = "clear" if context.last_index_regime == "uni_down" else "normal"
         daily_ctx["index_gate_advice"] = "defensive_t" if context.last_index_regime == "uni_down" else "normal_t"
+        try:
+            _bic, _big = _code_board_index(code)
+            _brv = (getattr(context, "board_regime", {}) or {}).get(_big) or context.last_index_regime
+            daily_ctx["index_board_code"] = _bic
+            daily_ctx["index_board_regime"] = _brv      # 该股所属板块 regime（上证=市场级恒有）
+            daily_ctx["index_regime"] = daily_ctx.get("index_regime") or context.last_index_regime
+        except Exception:
+            pass
 
         # 持仓读取
         holding = _get_holding(context, code, gm_sym)
