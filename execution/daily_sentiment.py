@@ -850,6 +850,33 @@ def fetch_index_pct_change(date_str: Optional[str] = None, symbol: str = "sh0000
         return None
 
 
+# B-1/B-2(2026-09-07): 分板指数当日涨跌幅（口径与 A 层 resolve_index 同源；供 sysrisk 分板级减仓确认 +
+# sentiment_daily.jsonl 落盘 index_pct_by_board）。沪主板/深主板/创业板/科创板四板块指数恒定。
+_BOARD_INDEX_CODES = ["sh000001", "sz399001", "sz399006", "sh000688"]
+_BOARD_INDEX_NAMES = {"sh000001": "上证指数", "sz399001": "深证成指",
+                      "sz399006": "创业板指", "sh000688": "科创50"}
+
+
+def fetch_board_index_pct_changes(date_str: Optional[str] = None) -> Dict[str, Optional[float]]:
+    """4 板块指数当日涨跌幅 map（逐指数轻量拉取；单指数失败记 None，不整体抛）。"""
+    out: Dict[str, Optional[float]] = {}
+    for _c in _BOARD_INDEX_CODES:
+        try:
+            out[_c] = fetch_index_pct_change(date_str, symbol=_c)
+        except Exception:
+            out[_c] = None
+    return out
+
+
+def _board_index_of_code(code: str) -> str:
+    """个股 → 板块指数码（B-1 分板级减仓确认归因）。失败回落上证。"""
+    try:
+        from core.board_index import resolve_index as _ri
+        return _ri(code)[0]
+    except Exception:
+        return "sh000001"
+
+
 # ============================================================================
 # 核心：compute_daily_sentiment
 # ============================================================================
@@ -902,7 +929,8 @@ def compute_daily_sentiment(mode: str = "tail", as_of: Optional[str] = None) -> 
 
     # 5) 系统性风险（V2.1 终稿：z_S≤阈值 → systemic_risk 当日生效全标的 hold；
     #    E5跌停潮/指数跌幅≥阈值 为清仓流程升级确认条件 systemic_confirmed）
-    index_pct = fetch_index_pct_change(date_str)
+    board_pct = fetch_board_index_pct_changes(date_str)   # B-1: 分板当日涨跌幅（含市场级上证）
+    index_pct = board_pct.get("sh000001")                 # 市场级=上证，口径不变
     e5_surge = dt_count >= int(p["sysrisk_e5_dt"])
     idx_crash = (index_pct is not None and float(index_pct) <= float(p["sysrisk_index_drop_pct"]))
     sysreasons: List[str] = []
@@ -911,6 +939,17 @@ def compute_daily_sentiment(mode: str = "tail", as_of: Optional[str] = None) -> 
     if idx_crash:
         sysreasons.append(f"指数{float(index_pct):+.2f}%≤{p['sysrisk_index_drop_pct']}%")
     systemic_confirmed = bool(sysreasons)
+
+    # B-1 分板级 sysrisk：本板指数跌≥阈值 → 该板持仓减仓确认（独立于市场级清仓流程；
+    #    仅登记/标注，不改自动卖出——卖侧响应机制走 C 层验证管线）
+    _irc_th = float(p["sysrisk_index_drop_pct"])
+    board_crash = {_c: (_v is not None and float(_v) <= _irc_th) for _c, _v in board_pct.items()}
+    board_crash_note: Optional[str] = None
+    _cr_boards = [_c for _c, _hit in board_crash.items() if _hit]
+    if _cr_boards:
+        board_crash_note = ("🚨分板暴跌: " + "、".join(
+            f"{_BOARD_INDEX_NAMES.get(_c, _c)}({float(board_pct[_c]):+.2f}%)" for _c in _cr_boards)
+            + f" ≤{_irc_th}% → 该板持仓减仓确认")
 
     # 6) 决策矩阵 + V2.1 个股级覆盖（P1清仓/P2背离/P3昨日大跌/P4昨日跌停/P5 K-day/P6连亏/P7高开标注）
     ds = per_stock_decisions(regime=regime, z_S=z_S, z_top3=z_top3,
@@ -923,6 +962,15 @@ def compute_daily_sentiment(mode: str = "tail", as_of: Optional[str] = None) -> 
     systemic_risk = bool(ds.get("sysrisk_hit"))           # z_S≤阈值 当日生效
     if systemic_risk and systemic_confirmed:
         sysreasons.append("满足清仓流程升级确认条件→建议启动清仓流程")
+    # B-1: 分板级减仓确认归因到本板持仓（reason/notes 标注；不改 mode/pos_factor）
+    if board_crash_note and per_stock:
+        for _c, _d in per_stock.items():
+            try:
+                if board_crash.get(_board_index_of_code(_c)):
+                    _d.setdefault("notes", []).append(board_crash_note)
+                    _d["reason"] = _d.get("reason", "") + "；" + board_crash_note
+            except Exception:
+                pass
 
     # 7) 汇总理由
     reasons = [
@@ -934,6 +982,8 @@ def compute_daily_sentiment(mode: str = "tail", as_of: Optional[str] = None) -> 
         reasons.append(f"K-day: {k_day_type}")
     if prev_k_down:
         reasons.append("昨日K-down→今日按K-down次日处理")
+    if board_crash_note:
+        reasons.append(board_crash_note)   # B-1 分板级（市场未清仓时也单独可见）
     if systemic_risk:
         reasons.append(f"🚨 系统性风险: z_S={z_S:+.2f}≤{p['sysrisk_z_S']}（14:30当日判定当日生效，全标的hold）"
                        + (f"；{' + '.join(sysreasons)}" if sysreasons else ""))
@@ -968,6 +1018,8 @@ def compute_daily_sentiment(mode: str = "tail", as_of: Optional[str] = None) -> 
         "overheat_streak": overheat_streak,
         "uni_down_days": uni_down_days,
         "index_pct": index_pct,
+        "index_pct_by_board": board_pct,   # B-2(2026-09-07): 4 板块指数当日涨跌幅（上证/深成/创业板/科创50）
+        "board_crash": board_crash,        # B-1(2026-09-07): 各板块是否跌≤sysrisk_index_drop_pct
         "zt_count": zt_count,
         "dt_count": dt_count,
         "systemic_risk": systemic_risk,

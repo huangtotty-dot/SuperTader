@@ -647,10 +647,14 @@ def send_morning_alert(code, name, alert_level, triggered_rules, morning_stats):
 # ==================== 大盘态势判定钩子（index_regime 日线 + 分时预警） ====================
 
 _INDEX_INTRADAY_LAST_FETCH_TS = 0.0   # 分时数据拉取节流（至多 300 秒一次）
-_index_intraday_alert_cache: Dict[str, float] = {}  # 同 tag 60 分钟不重复推
+_index_intraday_alert_cache: Dict[str, float] = {}  # 同 tag 60 分钟不重复推（B-3: key=板块@tag）
 # V1.30: 盘中预警活动状态（注入引擎 feats["intraday_alerts"] 供展示/回溯）
 _INDEX_INTRADAY_ACTIVE_ALERTS: list = []
 _INDEX_INTRADAY_ACTIVE_TS: float = 0.0
+# B-3(2026-09-07): 分板盘中预警活动状态 {板块指数码: [alerts]}——注入改按个股所属板取
+_INDEX_INTRADAY_ACTIVE_ALERTS_BY_BOARD: dict = {}
+_BOARD_INDEX_NAME = {"sh000001": "上证指数", "sz399001": "深证成指",
+                     "sz399006": "创业板指", "sh000688": "科创50"}
 _BUY_FUSE_NOTIFY_DATE: str = ""   # 买入熔断飞书明示（每日一次）
 
 # 高抛低吸纯两点推送最小防重：同 (code, action, 5分钟桶) 每日只推一次
@@ -723,13 +727,16 @@ def _build_index_regime_card(ctx: dict, title_prefix: str, switched: bool = Fals
                              recent_days: Optional[list] = None,
                              extra_lines: Optional[list] = None,
                              regime_name_override: Optional[str] = None,
-                             banner_lines: Optional[list] = None) -> dict:
+                             banner_lines: Optional[list] = None,
+                             board_lines: Optional[list] = None) -> dict:
     """组装大盘态势飞书卡片：标题模板按状态选 green/red/blue，切换日加急红/绿
 
     recent_days：morning 模式 detail.recent_days（近3日 [{date,regime,score}]），
     以 "MM-DD regime score → ..." 序列展示；extra_lines：附加说明行（插在基准日期之后）。
     B-2(2026-08-21)：regime_name_override 覆盖显示基调（C20 Level2 推"震荡观察"）；
     banner_lines 追加在卡片顶部（Level1 黄条 / Level2 红条）。
+    B-2(2026-09-07)：board_lines 分板指数行（上证/深成/创业板/科创50 各一行，方向=close vs MA60
+    缓冲带口径，非 uni 状态机）——插在状态区之后，供早盘看四板块强弱。
     """
     regime = str(ctx.get("regime", "range"))
     regime_name = regime_name_override or (ctx.get("regime_name") or index_regime_name(regime))
@@ -753,6 +760,9 @@ def _build_index_regime_card(ctx: dict, title_prefix: str, switched: bool = Fals
         f"**综合分 S**：{score:+.2f}（趋势T {trend_score} ／ 环境E {env_score}）",
         f"**基准日期**：{ctx.get('date', '-')}{as_of_note}",
     ]
+    if board_lines:
+        lines.append("**板块指数**（方向=收盘 vs MA60 缓冲带，同建仓/时机闸口径）：")
+        lines.extend(board_lines)
     if banner_lines:
         for _bl in banner_lines:
             lines.insert(0, _bl)
@@ -966,6 +976,37 @@ def _c20_auction_check(date_str: str) -> dict:
     return out
 
 
+def _build_board_index_lines(as_of_date: str) -> list:
+    """B-2(2026-09-07): 分板指数行（上证/深成/创业板/科创50）——每行 = 指数名 + 方向
+    (close vs MA60 缓冲带，build_decision.regime_from_index_daily 同 A 层时机闸口径) + 当日涨跌幅。
+    只读日线、无 uni 状态机依赖；as_of 取已收盘交易日（morning 卡片基准=昨日收盘）。
+    单板数据失败跳过，不阻断整卡。"""
+    try:
+        from core import build_decision as _bd
+        from core.market_data import get_provider as _gp
+    except Exception:
+        return []
+    _boards = [("sh000001", "上证指数"), ("sz399001", "深证成指"),
+               ("sz399006", "创业板指"), ("sh000688", "科创50")]
+    out = []
+    for _c, _n in _boards:
+        try:
+            _df = _gp().index_daily(_c, days=120, end_date=as_of_date)
+            if _df is None or _df.empty:
+                continue
+            _df = _df[_df["date"].astype(str) <= str(as_of_date)]
+            if len(_df) < 2:
+                continue
+            _reg = _bd.regime_from_index_daily(_df, str(as_of_date)).get("regime", "unknown")
+            _last = float(_df["close"].iloc[-1])
+            _prev = float(_df["close"].iloc[-2])
+            _pct = (_last / _prev - 1.0) * 100.0 if _prev > 0 else 0.0
+            out.append(f"· {_n} {_c}  {_reg}  {_pct:+.2f}%")
+        except Exception:
+            continue
+    return out
+
+
 def _maybe_push_index_regime_morning(now: datetime) -> None:
     """09:26-09:31 早盘大盘基调推送（每日一次；须在 scan_once 的 <9:30 早退分支之前调用）
 
@@ -1018,6 +1059,8 @@ def _maybe_push_index_regime_morning(now: datetime) -> None:
         _extra_lines = ["**决策提示**：9:30-10:00 决策窗口主要参考前两日状态"]
         if _late_push:
             _extra_lines.insert(0, "⚠️ **迟到补发**（进程晚于推送窗口启动，仅供参考）")  # T-3(2026-09-02)
+        # B-2(2026-09-07): 卡片带分板指数行（上证/深成/创业板/科创50 方向+涨跌幅，喂 §5 日检）
+        _board_lines = _build_board_index_lines(str(ctx.get("date") or ""))
         payload = _build_index_regime_card(
             ctx, "🧭 早盘大盘基调",
             as_of_note="（基于昨日收盘的判定）",
@@ -1025,6 +1068,7 @@ def _maybe_push_index_regime_morning(now: datetime) -> None:
             extra_lines=_extra_lines,
             regime_name_override=_override_name,
             banner_lines=_banner,
+            board_lines=_board_lines,
         )
         send_feishu_payload(
             payload=payload,
@@ -1739,8 +1783,52 @@ def _push_daily_pnl_feishu(record: dict, date_str: str) -> None:
     )
 
 
+def _code_intraday_board(code: str) -> str:
+    """个股 → 板块指数码（B-3 分板注入归因）。失败回落上证。"""
+    try:
+        from core.board_index import resolve_index as _ri
+        return _ri(str(code))[0]
+    except Exception:
+        return "sh000001"
+
+
+def _intraday_board_codes() -> list:
+    """当前持仓覆盖的板块指数码集合（B-3：逐板盘中预警）；无持仓/读取失败回落 [sh000001]。"""
+    try:
+        from core.board_index import resolve_index as _ri
+    except Exception:
+        return ["sh000001"]
+    codes = []
+    _h = globals().get("HOLDINGS") or {}
+    if isinstance(_h, dict):
+        codes = [str(_c) for _c in _h if not str(_c).startswith("_")]
+    if not codes:
+        try:
+            import json as _json
+            fp = os.path.join(BASE_DIR, "t_io", "state", "holdings.json")
+            if os.path.exists(fp):
+                _data = _json.load(open(fp, encoding="utf-8"))
+                codes = [str(_c) for _c, _v in (_data.items() if isinstance(_data, dict) else [])
+                         if isinstance(_v, dict) and int(_v.get("qty") or 0) > 0
+                         and not str(_c).startswith("_")]
+        except Exception:
+            codes = []
+    boards = set()
+    for _c in codes:
+        try:
+            boards.add(_ri(_c)[0])
+        except Exception:
+            pass
+    return sorted(boards) or ["sh000001"]
+
+
 def _maybe_check_index_intraday_alert(now: datetime) -> None:
-    """盘中 09:35-14:55 大盘分时预警（每轮检查；拉数据 300s 节流；同 tag 60 分钟不重复推）"""
+    """盘中 09:35-14:55 大盘分时预警（每轮检查；拉数据 300s 节流；同 板块@tag 60 分钟不重复推）。
+
+    B-3(2026-09-07)：按当前持仓所属板块逐指数检测（上证/深成/创业板/科创50 覆盖的板块），
+    各板独立预警 + 合并一张卡推送；活动预警状态按板块分别注入个股 daily_ctx（原全局单标量只盯上证）。
+    成本：300s 节流内每板块拉一次分钟线（×N，N≤4），owner 已拍板接受。
+    """
     global _INDEX_INTRADAY_LAST_FETCH_TS
     try:
         t = now.time()
@@ -1761,56 +1849,76 @@ def _maybe_check_index_intraday_alert(now: datetime) -> None:
                 IRI_DEFAULT_PARAMS.update(INDEX_INTRADAY_PARAMS)
         except Exception:
             pass
-        minute_bars = fetch_index_minutes_live("sh000001")
+        # B-3(2026-09-07): 按持仓所属板块逐指数盘中预警（不再只盯上证）
+        _boards = _intraday_board_codes()
+        _daily_regime = str(INDEX_REGIME_CONTEXT.get("regime", "range"))
+        _daily_score = float(INDEX_REGIME_CONTEXT.get("score") or 0.0)
         # 2026-08-23: 大盘分时落盘缓存（供当日复盘直接用，绕过 tushare T-1 当日拿不到分钟）
         try:
             from core.market_review import save_daily_index_minutes as _save_idx_min
             _save_idx_min()
         except Exception:
             pass
-        result = detect_intraday_alert(
-            minute_bars,
-            daily_regime=str(INDEX_REGIME_CONTEXT.get("regime", "range")),
-            daily_score=float(INDEX_REGIME_CONTEXT.get("score") or 0.0),
-        )
-        alerts = result.get("alerts") or []
-        # V1.30: 维护活动预警状态（注入 feats 供展示），45 分钟未刷新自动过期
-        global _INDEX_INTRADAY_ACTIVE_ALERTS, _INDEX_INTRADAY_ACTIVE_TS
-        if alerts:
-            _INDEX_INTRADAY_ACTIVE_ALERTS = list(alerts)
+        global _INDEX_INTRADAY_ACTIVE_ALERTS, _INDEX_INTRADAY_ACTIVE_TS, \
+            _INDEX_INTRADAY_ACTIVE_ALERTS_BY_BOARD
+        _active_by_board: dict = {}
+        _all_alerts: list = []   # 合并卡行（含板块前缀）
+        _fresh: list = []        # 去重后待推（板块@tag 独立 60min 去重）
+        _snapshots: dict = {}
+        for _bc in _boards:
+            try:
+                _mb = fetch_index_minutes_live(_bc)
+            except Exception:
+                continue          # 单板分钟不可用 → 跳过该板，其余板块照常
+            try:
+                _res = detect_intraday_alert(
+                    _mb,
+                    daily_regime=_daily_regime,
+                    daily_score=_daily_score,
+                )
+            except Exception:
+                continue
+            _al = _res.get("alerts") or []
+            if _res.get("snapshot"):
+                _snapshots[_bc] = _res["snapshot"]
+            _active_by_board[_bc] = list(_al)
+            for _a in _al:
+                _ta = dict(_a)
+                _ta["msg"] = f"【{_BOARD_INDEX_NAME.get(_bc, _bc)}】{_a.get('msg')}"
+                _all_alerts.append(_ta)
+                _dk = f"{_bc}@{_a.get('tag', '')}"
+                if now_ts - float(_index_intraday_alert_cache.get(_dk, 0)) >= 3600:
+                    _fresh.append(_ta)
+                    _index_intraday_alert_cache[_dk] = now_ts
+        # V1.30: 活动预警状态（分板注入 + 兼容旧全局列表），45 分钟未刷新自动过期
+        _INDEX_INTRADAY_ACTIVE_ALERTS_BY_BOARD = _active_by_board
+        if _all_alerts:
+            _INDEX_INTRADAY_ACTIVE_ALERTS = _all_alerts
             _INDEX_INTRADAY_ACTIVE_TS = now_ts
         elif _INDEX_INTRADAY_ACTIVE_ALERTS and now_ts - _INDEX_INTRADAY_ACTIVE_TS > 2700:
             _INDEX_INTRADAY_ACTIVE_ALERTS = []
-        if not alerts:
+        if not _fresh:
             return
-        # 同 tag 60 分钟内不重复推
-        fresh = [a for a in alerts
-                 if now_ts - float(_index_intraday_alert_cache.get(a.get("tag", ""), 0)) >= 3600]
-        if not fresh:
-            return
-        for a in fresh:
-            _index_intraday_alert_cache[a.get("tag", "")] = now_ts
-
-        snapshot = result.get("snapshot") or {}
         level_rank = {"alert": 2, "warn": 1, "info": 0}
-        top_level = max((level_rank.get(a.get("level"), 0) for a in fresh), default=0)
+        top_level = max((level_rank.get(_a.get("level"), 0) for _a in _fresh), default=0)
         template = "red" if top_level >= 2 else "blue"
         icon = "🚨" if top_level >= 2 else ("⚠️" if top_level == 1 else "ℹ️")
         title = f"{icon} 大盘分时预警 - {FEISHU_KEYWORD}"
-        lines = [f"- 【{a.get('tag')}｜{a.get('level')}】{a.get('msg')}" for a in fresh]
-        if snapshot:
+        lines = [f"- 【{_a.get('tag')}｜{_a.get('level')}】{_a.get('msg')}" for _a in _fresh]
+        _snap = _snapshots.get("sh000001") or (list(_snapshots.values())[0] if _snapshots else None)
+        if _snap:
             lines.append(_feishu_hr())
             lines.append(
-                f"现价 {snapshot.get('last')}（{snapshot.get('chg_pct', 0):+.2f}%）｜"
-                f"日线态势 {index_regime_name(snapshot.get('daily_regime', 'range'))}｜"
-                f"VWAP {snapshot.get('vwap')}")
+                f"现价 {_snap.get('last')}（{_snap.get('chg_pct', 0):+.2f}%）｜"
+                f"日线态势 {index_regime_name(_snap.get('daily_regime', 'range'))}｜"
+                f"VWAP {_snap.get('vwap')}")
         card_elements = [_feishu_md_div(line) if not isinstance(line, dict) else line for line in lines]
         card = {"config": {"wide_screen_mode": True},
                 "header": _feishu_card_header(title, template),
                 "elements": card_elements}
         send_feishu_payload(
             payload={"msg_type": "interactive", "card": card, "notify_type": 1},
-            success_log=f"✅ 大盘分时预警已推送: {[a.get('tag') for a in fresh]}",
+            success_log=f"✅ 大盘分时预警已推送: {[a.get('tag') for a in _fresh]}",
             error_prefix="大盘分时预警推送",
         )
     except Exception as e:
@@ -2021,11 +2129,18 @@ def scan_once():
                 can_t = holding.get("t_qty", 0) > 0
                 daily_ctx = get_daily_context(code, holding, current_price=price)
                 # V1.30: 盘中分时预警注入引擎特征（供展示/回溯）
+                # B-3(2026-09-07): 改按个股所属板注入（原全局 _INDEX_INTRADAY_ACTIVE_ALERTS 只盯上证，
+                # 深/创/科创个股会收到错误板块的预警）。无该板活动预警时保留旧全局兜底（兼容旧启动态）。
                 try:
-                    if _INDEX_INTRADAY_ACTIVE_ALERTS:
+                    _board_active = _INDEX_INTRADAY_ACTIVE_ALERTS_BY_BOARD.get(
+                        _code_intraday_board(code))
+                    if _board_active is None:
+                        # 兼容兜底：旧启动态/尚未写入分板字典时用旧全局列表
+                        _board_active = _INDEX_INTRADAY_ACTIVE_ALERTS
+                    if _board_active:
                         daily_ctx["intraday_alerts"] = [
                             {"tag": a.get("tag"), "level": a.get("level"), "msg": a.get("msg")}
-                            for a in _INDEX_INTRADAY_ACTIVE_ALERTS
+                            for a in _board_active
                         ]
                 except Exception:
                     pass
