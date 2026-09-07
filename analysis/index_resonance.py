@@ -36,12 +36,12 @@ if str(BASE) not in sys.path:
     sys.path.insert(0, str(BASE))
 
 from analysis.indicators import resample_to_5min, add_5min_indicators  # noqa: E402
+from core.board_index import resolve_index  # noqa: E402  A-1: 分板规则单一来源（core/board_index.py）
 
 try:
-    from config import INDEX_RESONANCE_PARAMS as _IRP, INDEX_RESONANCE_MAP as _IRM
+    from config import INDEX_RESONANCE_PARAMS as _IRP
 except Exception:
     _IRP = {"enabled": True, "gate": "same_direction", "fail_closed": True}
-    _IRM = {}
 
 try:
     from analysis.index_regime_intraday import fetch_index_minutes_live as _fetch_index_minutes_live
@@ -53,23 +53,6 @@ TRACE_DIR = BASE / "t_io" / "traces"
 
 # 5 分钟边界缓存：{index_code: (boundary_ts, df_5min)}，同一边界所有个股共享
 _5MIN_CACHE = {}
-
-
-def resolve_index(code: str):
-    """个股代码 → (index_code, index_name)。剥离 _A/_B 后缀，先查覆盖表，再按板块默认。"""
-    base = str(code).split("_")[0]
-    ov = _IRM.get(base)
-    if ov:
-        return ov[0], ov[1]
-    if base.startswith("60"):
-        return "sh000001", "上证指数"
-    if base.startswith(("68", "588")):
-        return "sh000688", "科创50"
-    if base.startswith("30"):
-        return "sz399006", "创业板指"
-    if base.startswith(("00", "001", "002", "003")):
-        return "sz399001", "深证成指"
-    return "sh000001", "上证指数"
 
 
 def _params() -> dict:

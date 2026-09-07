@@ -631,36 +631,42 @@ class _IndexRegimeEngine:
     """大盘态势判定引擎（回测版）"""
 
     def detect(self, as_of: Optional[str] = None, force: bool = False,
-               mode: str = "eod") -> Tuple[IndexRegime, float, Dict[str, Any]]:
+               mode: str = "eod", index_symbol: Optional[str] = None,
+               ) -> Tuple[IndexRegime, float, Dict[str, Any]]:
+        """index_symbol: 判定的指数（A-7 分板新增）。缺省=大盘 p["index_symbol_sh"]（市场级，行为不变）。
+        内存缓存 key 加 symbol 维度——原 f"{mode}:{target}" 单标量：分板判定 4 指数会互相串缓存。"""
         p = _ir_params()
         target = (as_of or _ir_now().strftime("%Y-%m-%d"))[:10]
         mode = str(mode or "eod").lower()
+        sym = index_symbol or str(p.get("index_symbol_sh", "sh000001"))
 
-        # 内存缓存
-        cache_key = f"{mode}:{target}"
+        # 内存缓存（symbol 维度）
+        cache_key = f"{sym}:{mode}:{target}"
         if not force and cache_key in _IR_MEM_CACHE:
             ts, r, s, ctx = _IR_MEM_CACHE[cache_key]
             if (time.time() - ts) < float(p.get("score_cache_ttl", 1800)):
                 return r, s, ctx
 
         try:
-            regime, score, ctx = self._detect_inner(target, p, mode)
+            regime, score, ctx = self._detect_inner(target, p, mode, sym)
         except Exception as e:
             _ir_log.warning(f"[index_regime] detect 异常: {e}")
             regime, score = IndexRegime.RANGE, 0.0
             ctx = {"regime": regime.value, "score": 0.0, "degraded": ["internal_error"],
-                   "gate_advice": "normal_t", "mode": mode}
+                   "gate_advice": "normal_t", "mode": mode, "index_symbol": sym}
 
         _IR_MEM_CACHE[cache_key] = (time.time(), regime, score, ctx)
         return regime, score, ctx
 
     def _detect_inner(self, target: str, p: Dict[str, Any],
-                      mode: str = "eod") -> Tuple[IndexRegime, float, Dict[str, Any]]:
+                      mode: str = "eod", index_symbol: Optional[str] = None,
+                      ) -> Tuple[IndexRegime, float, Dict[str, Any]]:
         degraded: List[str] = []
+        sym = index_symbol or str(p.get("index_symbol_sh", "sh000001"))
 
-        # 指数日线
-        df, px_src = _ir_fetch_index_daily(p["index_symbol_sh"], target,
-                                            int(p["kline_count_sh"]), p)
+        # 指数日线（A-7: 按 index_symbol 取所属板指数 df；缺省=市场级上证，行为不变）
+        df, px_src = _ir_fetch_index_daily(sym, target,
+                                            int(p.get("kline_count_sh", 900)), p)
         if df is None or len(df) == 0:
             ctx = {"date": target, "regime": IndexRegime.RANGE.value,
                    "score": 0.0, "degraded": ["指数日线不可用"], "gate_advice": "normal_t"}
@@ -761,6 +767,7 @@ class _IndexRegimeEngine:
             "degraded": degraded,
             "gate_advice": gate_advice,
             "mode": mode,
+            "index_symbol": sym,   # A-7: 分板判定归因（哪个指数判的 regime）
         }
         return regime, s, ctx
 
@@ -776,6 +783,8 @@ _IR_ENGINE = _IndexRegimeEngine()
 
 
 def detect_index_regime(as_of: str = None, force: bool = False,
-                        mode: str = "eod") -> Tuple[IndexRegime, float, Dict[str, Any]]:
-    """公开入口：返回 (regime, score, context_dict)"""
-    return _IR_ENGINE.detect(as_of, force, mode)
+                        mode: str = "eod",
+                        index_symbol: str = None) -> Tuple[IndexRegime, float, Dict[str, Any]]:
+    """公开入口：返回 (regime, score, context_dict)。
+    index_symbol（A-7 分板新增）：判定的指数（如 sz399006）；缺省=大盘 p["index_symbol_sh"]（行为不变）。"""
+    return _IR_ENGINE.detect(as_of, force, mode, index_symbol)
