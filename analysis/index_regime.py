@@ -2190,7 +2190,7 @@ class _IndexRegimeEngine:
         mode = str(mode or "eod").lower()
         if mode not in _IR_MODES:
             raise ValueError(f"mode 必须是 {_IR_MODES} 之一，收到: {mode!r}")
-        sym = (str(index_code) or "").lower() or None   # 空 → 市场级（None），缺省 key 不变
+        sym = None if index_code in (None, "") else str(index_code).lower()   # 空/None → 市场级，缺省 key 不变
 
         # —— 内存缓存（TTL=score_cache_ttl；市场级 key 保持 f"{mode}:{target}" 不变，分板加 sym 维）——
         cache_key = f"{sym}:{mode}:{target}" if sym else f"{mode}:{target}"
@@ -2223,7 +2223,7 @@ class _IndexRegimeEngine:
                       mode: str = "eod",
                       index_code: Optional[str] = None) -> Tuple[IndexRegime, float, Dict[str, Any]]:
         degraded: List[str] = []
-        sym = (str(index_code) or "").lower() or None
+        sym = None if index_code in (None, "") else str(index_code).lower()
         # 1) 指数日线（主腿 = sym 或 上证(缺省)；深证成指成交额腿是市场级，分板时保留——C0b-(i)）
         df, px_src = _ir_fetch_index_daily(sym or str(p["index_symbol_sh"]), target,
                                             int(p["kline_count_sh"]), p)
