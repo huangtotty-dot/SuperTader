@@ -465,7 +465,11 @@ def _ir_json_default(o):
 # 状态持久化（state.json / breadth 落库 / traces jsonl）
 # ============================================================================
 
-def _ir_state_path(d: str) -> str:
+def _ir_state_path(d: str, sym: Optional[str] = None) -> str:
+    """C0(2026-09-07): 按 index sym 分 state 文件。缺省=市场（state.json，语义不变）；
+    分板（如 sz399006）→ state_{sym}.json，各板状态机互不污染。"""
+    if sym:
+        return os.path.join(d, f"state_{str(sym).replace('/', '_')}.json")
     return os.path.join(d, "state.json")
 
 
@@ -504,8 +508,8 @@ def _ir_default_state() -> Dict[str, Any]:
     }
 
 
-def _ir_load_state(d: str) -> Dict[str, Any]:
-    path = _ir_state_path(d)
+def _ir_load_state(d: str, sym: Optional[str] = None) -> Dict[str, Any]:
+    path = _ir_state_path(d, sym)
     st = _ir_default_state()
     try:
         if os.path.exists(path):
@@ -528,10 +532,10 @@ def _ir_load_state(d: str) -> Dict[str, Any]:
     return st
 
 
-def _ir_save_state(d: str, st: Dict[str, Any]) -> None:
+def _ir_save_state(d: str, st: Dict[str, Any], sym: Optional[str] = None) -> None:
     try:
         os.makedirs(d, exist_ok=True)
-        path = _ir_state_path(d)
+        path = _ir_state_path(d, sym)
         tmp = f"{path}.{os.getpid()}.{int(time.time() * 1000)}.tmp"  # C19 修复(2026-08-18): 唯一 tmp 名
         with open(tmp, "w", encoding="utf-8") as f:
             json.dump(st, f, ensure_ascii=False, indent=2, default=_ir_json_default)
@@ -2176,23 +2180,27 @@ class _IndexRegimeEngine:
     """大盘态势判定引擎（单例）"""
 
     def detect(self, as_of: Optional[str] = None, force: bool = False,
-               mode: str = "eod") -> Tuple[IndexRegime, float, Dict[str, Any]]:
+               mode: str = "eod",
+               index_code: Optional[str] = None) -> Tuple[IndexRegime, float, Dict[str, Any]]:
+        """C0(2026-09-07): index_code=None=市场（行为不变）；给板块指数码（sz399006 等）时判该板
+        状态机，state 文件/内存缓存按 index 隔离，互不污染。env 腿（breadth/成交额/e5）仍市场级（C0b-(i)）。"""
         p = _ir_params()
         state_dir = _ir_state_dir(p)
         target = (as_of or _ir_now().strftime("%Y-%m-%d"))[:10]
         mode = str(mode or "eod").lower()
         if mode not in _IR_MODES:
             raise ValueError(f"mode 必须是 {_IR_MODES} 之一，收到: {mode!r}")
+        sym = (str(index_code) or "").lower() or None   # 空 → 市场级（None），缺省 key 不变
 
-        # —— 内存缓存（TTL=score_cache_ttl，key=mode+请求日期）——
-        cache_key = f"{mode}:{target}"
+        # —— 内存缓存（TTL=score_cache_ttl；市场级 key 保持 f"{mode}:{target}" 不变，分板加 sym 维）——
+        cache_key = f"{sym}:{mode}:{target}" if sym else f"{mode}:{target}"
         if not force and cache_key in _IR_MEM_CACHE:
             ts, r, s, ctx = _IR_MEM_CACHE[cache_key]
             if (time.time() - ts) < float(p["score_cache_ttl"]):
                 return r, s, ctx
 
         try:
-            regime, score, ctx = self._detect_inner(target, state_dir, p, mode)
+            regime, score, ctx = self._detect_inner(target, state_dir, p, mode, sym)
         except Exception as e:  # 宁缺毋崩
             _ir_log.exception(f"[index_regime] detect 异常: {e}")
             if os.environ.get("IR_DEBUG"):
@@ -2212,11 +2220,13 @@ class _IndexRegimeEngine:
 
     # ------------------------------------------------------------------
     def _detect_inner(self, target: str, state_dir: str, p: Dict[str, Any],
-                      mode: str = "eod") -> Tuple[IndexRegime, float, Dict[str, Any]]:
+                      mode: str = "eod",
+                      index_code: Optional[str] = None) -> Tuple[IndexRegime, float, Dict[str, Any]]:
         degraded: List[str] = []
-
-        # 1) 指数日线（上证主 + 深证成指的成交额腿）
-        df, px_src = _ir_fetch_index_daily(p["index_symbol_sh"], target, int(p["kline_count_sh"]), p)
+        sym = (str(index_code) or "").lower() or None
+        # 1) 指数日线（主腿 = sym 或 上证(缺省)；深证成指成交额腿是市场级，分板时保留——C0b-(i)）
+        df, px_src = _ir_fetch_index_daily(sym or str(p["index_symbol_sh"]), target,
+                                            int(p["kline_count_sh"]), p)
         if df is None or len(df) == 0:
             ctx = self._degenerate_ctx(target, "指数日线主备源均不可用", mode)
             return IndexRegime.RANGE, 0.0, ctx
@@ -2235,7 +2245,7 @@ class _IndexRegimeEngine:
                 return IndexRegime.RANGE, 0.0, ctx
             eff = str(prior.iloc[-1])
             for d in [str(x) for x in prior.iloc[-3:-1]]:   # 补齐 recent_days 所需历史
-                self._detect_inner(d, state_dir, p, "eod")
+                self._detect_inner(d, state_dir, p, "eod", sym)   # C0: 递归沿用同 sym 状态机
             df = df[df["date"] <= eff].reset_index(drop=True)
             if df_sz is not None:
                 df_sz = df_sz[df_sz["date"] <= eff].reset_index(drop=True)
@@ -2255,7 +2265,7 @@ class _IndexRegimeEngine:
         detail: Dict[str, Any] = {}
 
         # 状态前置加载（K-day 判定需要 prev_regime 与锚点状态；幂等重跑先回卷）
-        st = _ir_load_state(state_dir)
+        st = _ir_load_state(state_dir, sym)   # C0: 分板各用各的 state 文件
         st = _ir_rewind_state(st, date_str)
         hist = st.get("history") or []
         prev_rec = hist[-1] if hist else None
@@ -2535,6 +2545,7 @@ class _IndexRegimeEngine:
             "date": date_str,
             "as_of": target,
             "mode": mode,
+            "index_symbol": sym or str(p.get("index_symbol_sh", "sh000001")),   # C0: 判定指数归因
             "regime": new_regime.value,
             "regime_name": index_regime_name(new_regime),
             "score": _ir_f(s_final, 2),
@@ -2597,7 +2608,7 @@ class _IndexRegimeEngine:
         st["k_up"] = dict(k_up_state)
         st["sharp"] = dict(sharp_carry)
         st["score_history"] = [{"date": r["date"], "S": r["S"]} for r in st["history"][-10:]]
-        _ir_save_state(state_dir, st)
+        _ir_save_state(state_dir, st, sym)   # C0: 分板各写各的 state 文件
         _ir_append_trace(state_dir, date_str, ctx)
 
         if mode == "morning":
@@ -2661,7 +2672,8 @@ def _ir_get_engine() -> _IndexRegimeEngine:
     return _IR_ENGINE
 
 
-def detect_index_regime(as_of: str = None, force: bool = False, mode: str = "eod") -> tuple:
+def detect_index_regime(as_of: str = None, force: bool = False, mode: str = "eod",
+                        index_code: str = None) -> tuple:
     """主入口：返回 (IndexRegime, 综合分, 明细dict)。
 
     as_of=None → 今天（宿主 _now()，支持 SIM_NOW 回测注入）；否则 'YYYY-MM-DD'。
@@ -2669,8 +2681,10 @@ def detect_index_regime(as_of: str = None, force: bool = False, mode: str = "eod
     mode="eod"（默认，截至 as_of 收盘）/ "morning"（早盘：对齐到 as_of 之前最近
     已完成交易日，detail.recent_days 附最近 3 日 [{date,regime,score}]）/
     "tail"（14:30 后盘中：含 forming bar，estimate=true，不写 state/trace）。
+    index_code（C0 分板新增）：None/缺省=市场（行为不变）；sz399006/sh000688/sz399001 等 → 判该板块
+    状态机（独立 state 文件 + 内存缓存）；env 腿仍市场级（C0b-(i)）。
     """
-    return _ir_get_engine().detect(as_of, force, mode)
+    return _ir_get_engine().detect(as_of, force, mode, index_code)
 
 
 # ============================================================================
@@ -2684,14 +2698,17 @@ def _ir_cli() -> None:
     ap.add_argument("--force", action="store_true", help="绕过内存缓存")
     ap.add_argument("--mode", default="eod", choices=list(_IR_MODES),
                     help="评估时点：eod 收盘(默认) / morning 早盘(前一完成日) / tail 盘中估值")
+    ap.add_argument("--index", default=None, help="C0 分板：指数码(sz399006/sh000688/sz399001/…)；缺省=市场")
     args = ap.parse_args()
 
-    regime, score, ctx = detect_index_regime(as_of=args.date, force=args.force, mode=args.mode)
+    regime, score, ctx = detect_index_regime(as_of=args.date, force=args.force, mode=args.mode,
+                                             index_code=args.index)
     if args.json:
         print(json.dumps(ctx, ensure_ascii=False, indent=2, default=_ir_json_default))
     else:
         print(f"日期        : {ctx.get('date')}  (as_of={ctx.get('as_of')}, mode={ctx.get('mode')}"
               f"{', estimate' if ctx.get('estimate') else ''})")
+        print(f"指数        : {ctx.get('index_symbol', '')}")
         print(f"状态        : {ctx.get('regime_name')} ({ctx.get('regime')})  持续 {ctx.get('days_in_regime')} 日")
         print(f"综合分 S    : {ctx.get('score')}  (raw={ctx.get('score_raw')}, "
               f"T={ctx.get('trend_score')}, E={ctx.get('env_score')}, "
@@ -2700,8 +2717,8 @@ def _ir_cli() -> None:
         print(f"降级项      : {ctx.get('degraded')}")
         print(f"gate_advice : {ctx.get('gate_advice')}")
 
-    # eod 模式落盘 sentiment_daily.csv（供 main.py/复盘工具消费）
-    if args.mode == "eod":
+    # eod 模式落盘 sentiment_daily.csv（供 main.py/复盘工具消费；分板 CLI 不写市场记录）
+    if args.mode == "eod" and not args.index:
         try:
             from execution.daily_sentiment import save_sentiment_record  # 延迟导入避免循环
             _dt = (ctx.get("detail") or {}).get("limit_pool") or {}

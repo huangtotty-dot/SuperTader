@@ -336,6 +336,117 @@ def _build_daily_context_from_df(code: str, df: pd.DataFrame, current_price: flo
         return _default_daily_context(code, status="error", reason=str(e)[:80])
 
 
+# ── C-1(2026-09-07) 分板 index context：manual 仓控按个股所属板取 regime/circuit ──
+# 预注册闸门：config.PARAMS["index_regime_board_mode"]=False（默认）→ 维持市场级，零行为变化；
+# 周六验证管线对照时置 True（板块级 clear 或 市场级 clear 任一触发全卖）。
+_IR_BOARD_MEM: Dict[str, tuple] = {}   # {index_code: (ts, (regime_obj, score, ir_ctx))}
+
+
+def _ir_board_mode_on() -> bool:
+    try:
+        from config import PARAMS as _P
+        return bool((_P or {}).get("index_regime_board_mode", False))
+    except Exception:
+        return False
+
+
+def _ir_resolve_board_index(code: str) -> str:
+    try:
+        from core.board_index import resolve_index as _ri
+        return _ri(str(code))[0]
+    except Exception:
+        return ""
+
+
+def _ir_board_circuit(score: float, recent_scores: list, days_in_regime: int,
+                      gate_advice: str, regime_value: str) -> str:
+    """由板块 detect 的 ir_ctx 推导 circuit（与 _attach 市场路径 401-424 同公式）。"""
+    sd = 0.0
+    if len(recent_scores) >= 2:
+        sd = float(recent_scores[-1] - recent_scores[-2])
+    bucket = "neutral"
+    if score <= float(PARAMS.get("index_temp_clear_score", -40.0)):
+        bucket = "clear"
+    elif score <= float(PARAMS.get("index_temp_freeze_score", -25.0)):
+        bucket = "freeze"
+    elif score <= float(PARAMS.get("index_temp_cold_score", -15.0)):
+        bucket = "cold"
+    elif score >= float(PARAMS.get("index_temp_hot_score", 25.0)):
+        bucket = "hot"
+    circuit = "normal"
+    if bucket in {"freeze", "clear"} and sd <= float(PARAMS.get("index_deterioration_delta", -10.0)):
+        circuit = "clear" if bucket == "clear" else "reduce"
+    elif bucket == "cold" or gate_advice == "defensive_t":
+        circuit = "defensive"
+    if regime_value == "uni_down" and days_in_regime >= int(PARAMS.get("index_deterioration_days", 2)) and sd <= 0:
+        if circuit == "defensive":
+            circuit = "reduce"
+    if score >= float(PARAMS.get("index_stabilize_score", -10.0)) and days_in_regime >= int(PARAMS.get("index_stabilize_days", 2)) and gate_advice in {"normal_t", "trend_up_hold"}:
+        if circuit in {"reduce", "defensive"}:
+            circuit = "stand_aside" if score < 0 else "normal"
+    return circuit
+
+
+def _board_index_override(ctx: Dict[str, Any], code: str, target_date: str, mode: str) -> Dict[str, Any]:
+    """C-1：个股所属板 != 上证时，把 index_* 字段覆盖为该板 detect 结果；
+    index_circuit_state 触发按 C1 拍板 = 该板 clear **或** 市场级 clear（市场级不断电）。"""
+    if not _ir_board_mode_on():
+        return ctx
+    if str(ctx.get("index_regime_source")) != "index_regime.py":   # 仅成功路径
+        return ctx
+    board = _ir_resolve_board_index(code)
+    if not board or board == "sh000001":    # 沪主板=市场，无板差，直接返回
+        return ctx
+    try:
+        from analysis.index_regime import (detect_index_regime as _det,
+                                           get_regime_position_factor as _gpf,
+                                           index_regime_name as _iname)
+        _hit = _IR_BOARD_MEM.get(board)
+        if _hit and time.time() - _hit[0] < float(PARAMS.get("daily_cache_ttl_seconds", 300)):
+            _bobj, _bscore, _bctx = _hit[1]
+        else:
+            _bobj, _bscore, _bctx = _det(as_of=target_date, force=False, mode=mode, index_code=board)
+            _IR_BOARD_MEM[board] = (time.time(), (_bobj, _bscore, _bctx))
+        _bval = getattr(_bobj, "value", str(_bobj))
+        _bscore = float(_bctx.get("score", _bscore) or 0.0)
+        _raw = float(_bctx.get("score_raw", _bscore) or _bscore)
+        _trend = float(_bctx.get("trend_score", 0.0) or 0.0)
+        _env = float(_bctx.get("env_score", 0.0) or 0.0)
+        _bdays = int(_bctx.get("days_in_regime", 0) or 0)
+        _bgate = str(_bctx.get("gate_advice", "normal_t") or "normal_t")
+        _recent = []
+        for _row in ((_bctx.get("detail") or {}).get("recent_days") or [])[-5:]:
+            if isinstance(_row, dict) and _row.get("score") is not None:
+                _recent.append(float(_row["score"]))
+        _mkt_clear = str(ctx.get("index_circuit_state", "normal")) == "clear"   # 市场级 clear 保留
+        _bcircuit = _ir_board_circuit(_bscore, _recent, _bdays, _bgate, _bval)
+        ctx.update({
+            "index_regime": _bval,
+            "index_regime_name": _iname(_bobj),
+            "index_score": _bscore,
+            "index_score_raw": _raw,
+            "index_trend_score": _trend,
+            "index_env_score": _env,
+            "index_days_in_regime": _bdays,
+            "index_gate_advice": _bgate,
+            "index_pos_factor": float(_gpf(_bobj)),
+            "index_score_delta": round(_recent[-1] - _recent[-2], 4) if len(_recent) >= 2 else 0.0,
+            "index_recent_scores": _recent,
+            "index_circuit_state": "clear" if (_mkt_clear or _bcircuit == "clear") else _bcircuit,
+            "index_temp_bucket": "clear" if (_mkt_clear or _bcircuit == "clear") else "neutral",
+            "index_index_code": board,
+            "index_index_name": _BOARD_INDEX_CN.get(board, board),
+            "index_symbol": board,
+        })
+    except Exception:
+        pass
+    return ctx
+
+
+_BOARD_INDEX_CN = {"sh000001": "上证指数", "sz399001": "深证成指",
+                   "sz399006": "创业板指", "sh000688": "科创50"}
+
+
 def _attach_index_regime_context(ctx: Dict[str, Any], code: str, as_of: Optional[str] = None) -> Dict[str, Any]:
     if not PARAMS.get("index_regime_context_enabled", True):
         ctx.update({
@@ -467,7 +578,8 @@ def _attach_index_regime_context(ctx: Dict[str, Any], code: str, as_of: Optional
             "index_policy_reason": str(e)[:80],
             "index_degraded": ["index_regime"],
         })
-    return ctx
+    # C-1: 预注册闸门后按个股所属板覆盖（默认 index_regime_board_mode=False 时不变）
+    return _board_index_override(ctx, code, target_date, mode)
 
 
 def get_daily_context(code: str, holding: dict, current_price: float = 0.0, as_of: Optional[str] = None, intraday: Optional[bool] = None) -> Dict[str, Any]:

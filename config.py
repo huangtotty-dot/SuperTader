@@ -325,6 +325,9 @@ PARAMS = {
     # True: 恢复 V1.2.1 满仓保底一手行为。仅影响"算不出可买量"场景；非满仓不足一手保底 100（V1.2.1）不受影响。
     "allow_full_position_buy": False,
     "index_regime_intraday_lock": True,
+    # C-1 预注册闸门（2026-09-07）：manual 按个股所属板覆盖 index context/circuit。
+    # False=市场级（现状，零行为变化）；周六验证管线对照时置 True（该板 clear 或 市场 clear 任一触发全卖）。
+    "index_regime_board_mode": False,
     "max_single_position_pct": 0.30,
     "max_sell_times_per_stock": 3,
     # —— 早盘 ——
