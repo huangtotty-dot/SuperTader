@@ -4510,6 +4510,13 @@ class Api:
 if __name__ == "__main__":
     import webview
 
+    # V8 预热(2026-09-08): akshare 的 py_mini_racer(V8) 首次初始化必须在主线程，见 core/v8guard.py
+    try:
+        from core.v8guard import prewarm_akshare_v8
+        prewarm_akshare_v8()
+    except Exception:
+        pass
+
     api = Api()
     here = Path(__file__).parent
     entry = here / "web" / "index.html"
