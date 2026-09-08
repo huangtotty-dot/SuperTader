@@ -1,0 +1,27 @@
+{
+  "item": "P4-1 回放对比",
+  "kind": "real_window_evidence",
+  "note": "非迁移前A/B回放（基线代码/旧目录已删、窗口分钟缓存缺失→①登记阻塞/待回填）。本件为 2026-09-08 auto 实盘真实有持仓窗口的卖出通道证据，替代覆盖'卖出通道在真实样本'诉求。",
+  "date": "2026-09-08",
+  "holdings": {
+    "SHSE.600481": {"qty": 1400, "cost": 4.3119},
+    "SZSE.002451": {"qty": 1400, "cost": 7.7812}
+  },
+  "sell_fills": [
+    {"code": "002451", "side": "SELL", "qty": 1500, "price": 7.78, "time": "09:43:03", "pos_after": 2300},
+    {"code": "002451", "side": "SELL", "qty": 900, "price": 7.78, "time": "10:41:03", "pos_after": 1400}
+  ],
+  "channel_attribution": {
+    "002451_TREND_EXIT": {"score": 78.0, "sells_qty": 2400, "detail": "当日 signal 事件 TREND_EXIT score=78 与两笔 SELL(1500/900) 时点/分数吻合；事件桥 signal/order/fill 链路一致（无未归因 reject）"},
+    "002451_BUY_LOW_score100": {"executed": false, "detail": "signal BUY_LOW score=100 出现但未成交（当日无 BUY fill）"}
+  },
+  "sources": [
+    "t_io/bridge/events_20260908.jsonl",
+    "execution/auto/logs/strategy_20260908.log",
+    "t_io/logs/auto_backtrace.jsonl"
+  ],
+  "blockers": {
+    "true_ab_backfill": "replay_day.py 单日写死(07-08)且缓存全缺; 迁移前 baseline 代码位于已删除 /e/06_T*; 09-04~09-07 分钟缓存 + tushare_mins 历史缺失 → 建议周六窗口回填 gm 分钟 + 扩展 replay_day(--date/--codes/--holdings) 再跑 A/B",
+    "evidence_dir": "doc/review/evidence/"
+  }
+}

@@ -1,0 +1,18 @@
+P4-③ 新终端启动过线证据（2026-09-08 实跑，路径修正为 execution/auto/logs/strategy_20260908.log）
+== 日志头 ==
+
+===== strategy run start 2026-09-08T09:08:46 pid=26508 =====
+[ops] 控制台日志已落盘: E:\superTrader\execution\auto\logs\strategy_20260908.log
+[INIT] 600481 双良节能 持仓对账: 1400股 可用1400 成本4.31
+[INIT] 002451 摩恩电气 持仓对账: 3800股 可用3800 成本7.78
+[INIT] 600481 sell_state 恢复: l1=None trail=INACTIVE peak=0.0
+== 决策核(非旧双通道) ==
+28:[09:31:02] BASE 002396 星网锐捷 build_decision=approaching(go=False, veto=无)→仅观察 (双通道参考:None=weak/30)
+== 当日成交尾 ==
+[09:31:03] BASE 518880 黄金ETF华安 TREND_BREAKDOWN→延迟建仓
+[09:43:01] SELL 002451 1500@7.79 score=78 regime=range
+[10:41:00] SELL 002451 900@7.79 score=78 regime=range
+== 心跳连续 ==
+heartbeat_2026-09-08.jsonl rows=4740 (09:31~14:58)
+== KILL_SWITCH ==
+ls: cannot access 't_io/bridge/KILL_SWITCH': No such file or directory
