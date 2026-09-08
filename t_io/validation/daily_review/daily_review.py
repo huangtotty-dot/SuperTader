@@ -173,15 +173,35 @@ for line in open(log_fp, encoding="utf-8", errors="replace"):
 suppress, silent_sell = dict(suppress), dict(silent_sell)
 
 # ---------- 4. 闭环(closure_audit 当日) ----------
-audit_today = None
+# F3-1/F3-3(2026-09-08): 主审计(14:50, 无 phase) 为首条；15:02-15:05 尾部(phase=tail_reconcile)为增量叠加。
+# 归账口径 = 虚拟/模拟盘视角（实盘 qty/base 仅截图 reconcile 写，见 F-3 施工方案）。
+audit_recs = []
 for line in open(BASE / "t_io/logs/closure_audit.jsonl", encoding="utf-8"):
-    r = json.loads(line)
+    try:
+        r = json.loads(line)
+    except Exception:
+        continue
     if r.get("date") == DATE:
-        audit_today = r
+        audit_recs.append(r)
 closed = {}
-if audit_today:
-    for d in audit_today["details"]:
+_main_recs = [r for r in audit_recs if not r.get("phase")]
+base = _main_recs[-1] if _main_recs else (audit_recs[-1] if audit_recs else None)
+if base:
+    for d in base.get("details", []):
         closed[d["code"]] = {k: d[k] for k in ("sold", "bought", "unrebuilt", "est_pnl", "qty_diff")}
+        closed[d["code"]]["_virtual"] = True   # Q-20260904-6/F3: 归账为虚拟口径（实盘仅截图 reconcile）
+for r in audit_recs:
+    if r.get("phase") != "tail_reconcile":
+        continue
+    for d in r.get("details") or []:
+        c = d.get("code")
+        net = int(d.get("net", 0) or 0)
+        if c in closed:
+            closed[c]["_tail"] = True
+            closed[c]["qty_diff"] = int(closed[c].get("qty_diff", 0) or 0) + net
+        else:
+            closed[c] = {"sold": 0, "bought": 0, "unrebuilt": 0, "est_pnl": 0.0,
+                         "qty_diff": net, "_virtual": True, "_tail": True}
 
 # ---------- 5. 当日信号结算(close-only近似: +0.5%/-0.4%, 30 tick窗口) ----------
 def settle(code, ts, action, price):
