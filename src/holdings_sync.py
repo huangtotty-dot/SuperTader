@@ -46,6 +46,9 @@ def apply_eod_sync(holding: dict, unclosed_buy: int, unrebuilt: int):
         unrebuilt: 反T/高抛卖出未接回股数
     返回:
         (new_qty, new_t_qty, new_base, delta, changed)
+
+    F3-1(2026-09-08) 起 eod 归账不再调用本函数写 qty/base/t_qty（截图 reconcile 是唯一实盘写入源）；
+    本函数保留供晨间 reconcile 路径/历史口径与既有不变量单测使用。
     """
     old_qty = int(holding.get("qty", 0) or 0)
     old_t_qty = read_t_qty(holding, old_qty)
@@ -54,3 +57,14 @@ def apply_eod_sync(holding: dict, unclosed_buy: int, unrebuilt: int):
     new_t_qty = sync_t_qty(old_t_qty, new_qty)
     changed = (delta != 0) or (old_t_qty != new_t_qty)
     return new_qty, new_t_qty, new_qty, delta, changed
+
+
+def virtual_view_qty(holding: dict, delta: int) -> int:
+    """F3-1/F3-3(2026-09-08): 系统视角虚拟股数（纯函数，不改 dict，实盘 qty/base/t_qty 不动）。
+
+    virtual_qty = max(0, qty + 累计虚拟/模拟成交净增量 delta)；视图缺失时 default=qty（同实盘）。
+    供 eod 归账与尾部二次归账写入 virtual_qty 视图（展示/闭环告警用），绝不触碰实盘字段。
+    """
+    old = int(holding.get("qty", 0) or 0)
+    oldv = int(holding.get("virtual_qty", old) or old)
+    return max(0, oldv + int(delta or 0))

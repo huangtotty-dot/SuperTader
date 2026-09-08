@@ -1472,7 +1472,7 @@ def _maybe_push_daily_pnl_summary(now: datetime) -> None:
         lines = [
             f"📊 **{today} 当日收益汇总**",
             "",
-            f"| 标的 | 持仓 | 现价 | 浮动盈亏 | 涨跌 | T0实盈 |",
+            f"| 标的 | 持仓(实盘·截图) | 现价 | 浮动盈亏 | 涨跌 | T0实盈(虚拟) |",
             f"|------|------|------|----------|------|--------|",
         ]
         for r in rows:
@@ -1485,6 +1485,7 @@ def _maybe_push_daily_pnl_summary(now: datetime) -> None:
             f"🔄 **今日做T实盈**: {total_t0_pnl:+,.0f} 元（已配对买卖差价，扣费后）",
             f"💰 **持仓总市值**: {total_value:,.0f} 元",
             f"📊 **今日总收益**: {total_day_float + total_t0_pnl:+,.0f} 元（浮动+T0）",
+            f"※ 持仓列 = 实盘（截图 reconcile 口径）；T0实盈 = 虚拟/模拟盘估算口径（F3-1 归账重构）",
         ]
 
         card = {
@@ -1548,17 +1549,31 @@ def _maybe_push_daily_pnl_summary(now: datetime) -> None:
     except Exception as e:
         log.warning(f"⚠️ 收益汇总推送异常（已吞掉，不影响主循环）: {str(e)[:120]}")
 
+_closure_audit_date = ""   # 主审计 14:50-15:01 每日一次去重
+_closure_tail_date = ""    # F3-3: 尾部二次归账 15:02-15:05 每日一次去重
+_closure_audit_ts = ""     # F3-3: 主审计完成时刻（尾部过滤 fill.time > audit_ts）
+
+
 def _maybe_audit_closure(now: datetime) -> None:
     """V3.0: 14:50-15:05 每日一次 买卖闭环审计
     逐股核对：VIRTUAL_TRADES 卖出 vs 接回（未接回>0 → 告警行 + 建议尾盘接回价）、
     正T买入未卖出、holdings qty vs base 一致性；有异常推飞书红卡，无异常落日志；
-    无论有无异常均写 logs/closure_audit.jsonl。"""
-    global _closure_audit_date
+    无论有无异常均写 logs/closure_audit.jsonl。
+    F3-1(2026-09-08 方案A 硬隔离): 归账不再写 qty/base/t_qty，只维护 virtual_qty 视图；
+    15:02-15:05 尾部成交改走 _closure_tail_reconcile（也只改 virtual_qty）。"""
+    global _closure_audit_date, _closure_tail_date, _closure_audit_ts
     try:
         t = now.time()
         if now.weekday() >= 5 or not (dtime(14, 50) <= t <= dtime(15, 5)):
             return
         today = now.strftime("%Y-%m-%d")
+        # F3-3: 15:02-15:05 尾部二次归账分支（独立去重，主审计不动）
+        if now.strftime("%H%M") >= "1502":
+            if _closure_tail_date == today:
+                return
+            _closure_tail_date = today
+            _closure_tail_reconcile(now, today)
+            return
         if _closure_audit_date == today:
             return
         _closure_audit_date = today                          # 先占位防重复触发（无论成败）
@@ -1604,8 +1619,21 @@ def _maybe_audit_closure(now: datetime) -> None:
                        "BUY_LOW": list(vt.get("BUY_LOW", [])) + list(_ae["buys"])}
             sold = sum(tr.get("qty", 0) for tr in _merged["SELL_HIGH"])
             bought = sum(tr.get("qty", 0) for tr in _merged["BUY_LOW"])
-            unrebuilt = max(0, sold - bought)                # 反T/高抛卖出未接回（含 auto 通道）
+            unrebuilt = max(0, sold - bought)                # 反T/高抛卖出未接回（含 auto 通道，监控口径）
             unclosed_buy = max(0, bought - sold)             # 正T买入未卖出
+            # F-20260903-1 细化(F3-1, 2026-09-08): 缺口按来源分列——manual 虚拟 vs auto 模拟盘不再混算一行
+            _vt_sells = vt.get("SELL_HIGH", []) or []
+            _vt_buys = vt.get("BUY_LOW", []) or []
+            _ae_sells = _ae.get("sells", []) or []
+            _ae_buys = _ae.get("buys", []) or []
+            msold = sum(tr.get("qty", 0) for tr in _vt_sells)
+            mbought = sum(tr.get("qty", 0) for tr in _vt_buys)
+            asold = sum(tr.get("qty", 0) for tr in _ae_sells)
+            abought = sum(tr.get("qty", 0) for tr in _ae_buys)
+            m_unrebuilt = max(0, msold - mbought)            # manual 虚拟口径
+            m_unclosed = max(0, mbought - msold)
+            a_unrebuilt = max(0, asold - abought)            # auto 模拟盘口径
+            a_unclosed = max(0, abought - asold)
             # V1.30: 价格字段完整性守卫 —— 缺 price/price<=0 的历史记录不进入利润公式
             # （07-24 事故：V1.29 之前记录无 price 字段，avg_buy=0 把卖出成交额全额记成利润 +13018）
             _sells_all = _merged["SELL_HIGH"]
@@ -1631,15 +1659,28 @@ def _maybe_audit_closure(now: datetime) -> None:
                             "unrebuilt": unrebuilt, "unclosed_buy": unclosed_buy,
                             "est_pnl": est_pnl,
                             "qty": qty, "base": base, "qty_diff": qty_diff,
-                            "ref_price": round(ref, 3)})
-            if unrebuilt > 0:
+                            "ref_price": round(ref, 3),
+                            # F3-1(2026-09-08): 缺口按来源分列——manual 虚拟 vs auto 模拟盘，不再混算一行
+                            "manual_vt": {"sold": msold, "bought": mbought,
+                                          "unrebuilt": m_unrebuilt, "unclosed_buy": m_unclosed},
+                            "auto_sim": {"sold": asold, "bought": abought,
+                                         "unrebuilt": a_unrebuilt, "unclosed_buy": a_unclosed}})
+            if m_unrebuilt > 0:
                 buyback = ref * 0.992 if ref > 0 else 0
                 problems.append(
-                    f"• {name}({code}) 已卖 {sold} / 未接回 **{unrebuilt}**"
+                    f"• {name}({code}) 虚拟已卖 {msold} / 未接回 **{m_unrebuilt}**"
                     + (f" → 建议尾盘接回价 ≈{buyback:.2f}（参考价下方0.8%）" if buyback else ""))
-            if unclosed_buy > 0:
+            if m_unclosed > 0:
                 problems.append(
-                    f"• {name}({code}) 正T买入 {bought} / 未卖出 **{unclosed_buy}** → 建议尾盘卖出还原仓位")
+                    f"• {name}({code}) 虚拟正T买入 {mbought} / 未卖出 **{m_unclosed}** → 建议尾盘卖出还原仓位")
+            if a_unrebuilt > 0:
+                problems.append(
+                    f"• {name}({code}) 【模拟盘 auto】卖出 {asold} / 未接回 {a_unrebuilt}"
+                    f" → 模拟盘缺口，不入实盘台账")
+            if a_unclosed > 0:
+                problems.append(
+                    f"• {name}({code}) 【模拟盘 auto】买入 {abought} / 未卖出 {a_unclosed}"
+                    f" → 模拟盘缺口，不入实盘台账")
             if qty_diff != 0:
                 problems.append(
                     f"• {name}({code}) 持仓 qty={qty} 与 base={base} 不一致（差 {qty_diff:+d}）→ 请核对 holdings.json")
@@ -1653,12 +1694,11 @@ def _maybe_audit_closure(now: datetime) -> None:
             for tr in (_vt.get("SELL_HIGH", []) + _vt.get("BUY_LOW", [])):
                 if int(tr.get("qty", 0) or 0) <= 0 or float(tr.get("price", 0) or 0) <= 0:
                     _sync_violations.append(f"{d['code']}:{tr.get('action','?')} qty={tr.get('qty')} price={tr.get('price')}")
-        holdings_updated = False
         if _sync_violations:
-            log.warning(f"⚠️ 收盘同步校验失败（{len(_sync_violations)} 条记录缺价格/数量），"
-                        f"跳过 holdings.json 同步: {_sync_violations[:5]}")
-            problems.append(f"• 收盘同步校验失败：{len(_sync_violations)} 条虚拟记录缺价格/数量，"
-                            f"holdings.json 未同步，请人工核对")
+            log.warning(f"⚠️ 归账视图校验失败（{len(_sync_violations)} 条记录缺价格/数量），"
+                        f"跳过虚拟视图更新: {_sync_violations[:5]}")
+            problems.append(f"• 归账视图校验失败：{len(_sync_violations)} 条虚拟记录缺价格/数量，"
+                            f"虚拟视图未更新，请人工核对")
             try:
                 send_feishu_payload(
                     payload={"msg_type": "interactive", "card": {
@@ -1673,36 +1713,38 @@ def _maybe_audit_closure(now: datetime) -> None:
                 )
             except Exception:
                 pass
+        # F3-1(2026-09-08) 归账口径重构（方案A 硬隔离）：eod 不再写 qty/base/t_qty——
+        # 截图 reconcile 是唯一实盘 qty/base 写入源；此处仅维护"系统视角"虚拟字段 virtual_qty（展示用，default=qty）。
+        # V1.1.3 t_qty 只减不增语义保留在晨间 reconcile 路径；eod 不动 t_qty（防止虚拟/模拟成交冲进实盘台账）。
+        virtual_updated = False
         for d in ([] if _sync_violations else details):
             code = d["code"]
             holding = HOLDINGS.get(code)
             if holding is None:
                 continue
-            # V1.1.3 (2026-08-06, 修复类): t_qty 只减不增不变量（holdings_sync.apply_eod_sync）——
-            # t_qty 增加只能来自晨间截图 reconcile（人工）；纯底仓 t_qty=0 天然持久，sync 不得复活。
-            # 事故：旧逻辑 t_qty=qty 无条件"释放冻结"，今日 14:50:25 复活 002639/603667 纯底仓，
-            # 致 14:50:45 002639 误推 SELL_HIGH + 幻影卖出持久化。
-            from src.holdings_sync import apply_eod_sync  # 2026-08-28 修复：79f34f1a 把模块移到 src/ 后裸 import 静默失败（被钩子吞掉），EOD 同步 08-27/28 未执行
+            from src.holdings_sync import virtual_view_qty as _vvq   # F3-1: 视图单一真源
             old_qty = int(holding.get("qty", 0))
-            old_t_qty = int(holding["t_qty"]) if "t_qty" in holding else old_qty
-            new_qty, new_t_qty, new_base, delta, _changed = apply_eod_sync(
-                holding, d["unclosed_buy"], d["unrebuilt"])
-            holding["qty"] = new_qty
-            holding["t_qty"] = new_t_qty  # 只减不增（V1.1.3）；增加只能来自晨间 reconcile
-            holding["base"] = new_base
-            if delta != 0 or old_t_qty != new_t_qty:
-                log.info(f"📝 收盘同步 {d['name']}({code}): "
-                         f"qty {old_qty}→{new_qty}, t_qty {old_t_qty}→{new_t_qty} (delta={delta:+d}, t_qty只减不增)")
-                holdings_updated = True
-        if holdings_updated:
+            old_virtual = int(holding.get("virtual_qty", old_qty) or old_qty)
+            # 虚拟(manual)+模拟(auto)成交净增量（监控口径）→ 仅写 virtual_qty 视图
+            delta = int(d["unclosed_buy"]) - int(d["unrebuilt"])
+            new_virtual = _vvq(holding, delta)
+            if new_virtual != old_virtual:
+                holding["virtual_qty"] = new_virtual
+                virtual_updated = True
+                _auto_note = "；auto 模拟盘成交已并入视图" if ((d.get("auto_sim") or {}).get("sold")
+                                                             or (d.get("auto_sim") or {}).get("bought")) else ""
+                log.info(f"📝 归账视图(虚拟) {d['name']}({code}): "
+                         f"virtual_qty {old_virtual}→{new_virtual} (delta={delta:+d}, 实盘 qty/base 不动)"
+                         + _auto_note)
+        if virtual_updated:
             try:
                 from src.holdings_repo import save_held_merged, load_full
                 # 合并回写：HOLDINGS 是过滤后的持仓 dict，直接 dump 会抹掉未持有的 auto 候选（18 只全量）
                 save_held_merged(HOLDINGS)
-                log.info(f"✅ holdings.json 已更新（共 {len(load_full())} 只，持仓 {len(HOLDINGS)} 只），冻结仓位已释放")
+                log.info(f"✅ holdings.json 虚拟视图已更新（共 {len(load_full())} 只，持仓 {len(HOLDINGS)} 只）；实盘 qty/base 未动")
             except Exception as e:
-                log.warning(f"⚠️ holdings.json 写入失败: {str(e)[:80]}")
-            # 收盘同步后清空 VIRTUAL_TRADES
+                log.warning(f"⚠️ holdings.json 虚拟视图写入失败: {str(e)[:80]}")
+            # 归账视图更新后清空 VIRTUAL_TRADES（审计记录已落盘，虚拟视图已固化）
             VIRTUAL_TRADES.clear()
             save_virtual_trades(VIRTUAL_TRADES)
             shared['VIRTUAL_TRADES'] = VIRTUAL_TRADES
@@ -1714,6 +1756,7 @@ def _maybe_audit_closure(now: datetime) -> None:
             _append_jsonl(os.path.join(LOG_DIR, "closure_audit.jsonl"), record)
         except Exception:
             pass
+        _closure_audit_ts = now.strftime("%Y-%m-%d %H:%M:%S")   # F3-3: 供尾部过滤 fill.time > 该时刻
 
         # 15:00 推送当日做T收益明细飞书卡
         try:
@@ -1736,6 +1779,76 @@ def _maybe_audit_closure(now: datetime) -> None:
             log.info(f"✅ 闭环审计通过（{len(details)} 只：卖出=接回，qty=base）")
     except Exception as e:
         log.warning(f"⚠️ 闭环审计钩子异常（已吞掉，不影响主循环）: {str(e)[:120]}")
+
+
+def _closure_tail_reconcile(now: datetime, today: str) -> None:
+    """F3-3(2026-09-08) 尾部二次归账（15:02-15:05，每日一次）。
+
+    覆盖"审计自己建议的尾盘处置落在审计之后"（如 14:51 TAIL 卖 1400）：
+    重读当日 bridge events，取 fill.time > 主审计完成时刻(_closure_audit_ts) 的尾部成交，
+    **只更新 virtual_qty 视图**（绝不写 qty/base/t_qty），并落 phase="tail_reconcile" 记录供复盘叠加。
+    """
+    global _closure_audit_ts
+    problems: list = []
+    details: list = []
+    try:
+        _by: dict = {}
+        _fp = os.path.join(BASE_DIR, "t_io", "bridge", f"events_{now.strftime('%Y%m%d')}.jsonl")
+        if os.path.exists(_fp):
+            for _line in open(_fp, encoding="utf-8", errors="replace"):
+                _line = _line.strip()
+                if not _line:
+                    continue
+                try:
+                    _e = _json.loads(_line)
+                except Exception:
+                    continue
+                if _e.get("event") != "fill":
+                    continue
+                _ts = str(_e.get("time") or "")
+                if not (_closure_audit_ts and _ts > _closure_audit_ts):
+                    continue  # 仅主审计(14:50)之后的尾部成交
+                _c = str(_e.get("code") or "")
+                _side = str(_e.get("side") or "")
+                _q = int(_e.get("qty") or 0)
+                if not _c or _q <= 0:
+                    continue
+                _acc = _by.setdefault(_c, {"buys": 0, "sells": 0})
+                if _side == "BUY":
+                    _acc["buys"] += _q
+                elif _side == "SELL":
+                    _acc["sells"] += _q
+        changed = False
+        for _c, _acc in _by.items():
+            h = (HOLDINGS or {}).get(_c)
+            if h is None:
+                continue
+            from src.holdings_sync import virtual_view_qty as _vvq   # F3-3: 视图单一真源
+            _net = _acc["buys"] - _acc["sells"]
+            _old = int(h.get("qty", 0))
+            _oldv = int(h.get("virtual_qty", _old) or _old)
+            _nv = _vvq(h, _net)
+            if _nv != _oldv:
+                h["virtual_qty"] = _nv
+                changed = True
+            details.append({"code": _c, "name": h.get("name", _c),
+                            "tail_buys": _acc["buys"], "tail_sells": _acc["sells"],
+                            "net": _net, "virtual_qty": _nv, "qty_unchanged": _old})
+        if changed:
+            try:
+                from src.holdings_repo import save_held_merged
+                save_held_merged(HOLDINGS)
+            except Exception as e:
+                log.warning(f"⚠️ tail 虚拟视图写入失败: {str(e)[:80]}")
+        _rec = {"date": today, "time": now.strftime("%H:%M:%S"), "phase": "tail_reconcile",
+                "ok": not problems, "problems": problems, "details": details}
+        try:
+            _append_jsonl(os.path.join(LOG_DIR, "closure_audit.jsonl"), _rec)
+        except Exception:
+            pass
+        log.info(f"✅ 尾部二次归账(虚拟视图)完成: 尾部成交 {len(details)} 票；实盘 qty/base 未动")
+    except Exception as e:
+        log.warning(f"⚠️ 尾部二次归账异常: {str(e)[:120]}")
 
 
 def _push_daily_pnl_feishu(record: dict, date_str: str) -> None:
