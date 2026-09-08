@@ -186,6 +186,7 @@ for line in open(BASE / "t_io/logs/closure_audit.jsonl", encoding="utf-8"):
 closed = {}
 _main_recs = [r for r in audit_recs if not r.get("phase")]
 base = _main_recs[-1] if _main_recs else (audit_recs[-1] if audit_recs else None)
+audit_today = base  # F3 重构后保持既有引用（:745/:802）可用
 if base:
     for d in base.get("details", []):
         closed[d["code"]] = {k: d[k] for k in ("sold", "bought", "unrebuilt", "est_pnl", "qty_diff")}
