@@ -5,8 +5,8 @@
   "type": "etf",
   "account": "账户B",
   "pool": "manual",
-  "qty": 54500,
-  "base": 54500,
+  "qty": 44800,
+  "base": 44800,
   "t_qty": 16350,
   "cost": 0.935,
   "pre_close": 0.935,
@@ -23,7 +23,7 @@
   "base": 100,
   "t_qty": 0,
   "cost": 28.216,
-  "pre_close": 4.22,
+  "pre_close": 4.34,
   "mirror_qty": 1400,
   "mirror_cost": 0
  },
@@ -33,11 +33,11 @@
   "type": "stock",
   "account": "账户B",
   "pool": "both",
-  "qty": 2800,
-  "base": 2800,
+  "qty": 5900,
+  "base": 5900,
   "t_qty": 1000,
   "cost": 7.845,
-  "pre_close": 7.84,
+  "pre_close": 7.71,
   "mirror_qty": 1400,
   "mirror_cost": 0
  },
@@ -51,7 +51,7 @@
   "base": 300,
   "t_qty": 0,
   "cost": 99.32,
-  "pre_close": 98.98,
+  "pre_close": 101.9,
   "mirror_qty": 500,
   "mirror_cost": 0
  },
@@ -65,7 +65,7 @@
   "base": 1100,
   "t_qty": 0,
   "cost": 43.208,
-  "pre_close": 42.63,
+  "pre_close": 41.69,
   "mirror_qty": 500,
   "mirror_cost": 0
  },
@@ -78,8 +78,8 @@
   "qty": 300,
   "base": 300,
   "t_qty": 0,
-  "cost": 49.997,
-  "pre_close": 0,
+  "cost": 50.382,
+  "pre_close": 51.1,
   "mirror_qty": 800,
   "mirror_cost": 0
  },
@@ -107,7 +107,7 @@
   "base": 800,
   "t_qty": 0,
   "cost": 69.462,
-  "pre_close": 68.51,
+  "pre_close": 68.4,
   "mirror_qty": 100,
   "mirror_cost": 0
  },
@@ -135,7 +135,7 @@
   "base": 900,
   "t_qty": 0,
   "cost": 13.631,
-  "pre_close": 14.07,
+  "pre_close": 14.0,
   "mirror_qty": 0,
   "mirror_cost": 0
  },
@@ -149,7 +149,7 @@
   "base": 500,
   "t_qty": 0,
   "cost": 22.79,
-  "pre_close": 0,
+  "pre_close": 25.39,
   "mirror_qty": 0,
   "mirror_cost": 0
  },
@@ -288,8 +288,8 @@
   "qty": 600,
   "base": 600,
   "t_qty": 0,
-  "cost": 132.385,
-  "pre_close": 131.6,
+  "cost": 132.2,
+  "pre_close": 131.0,
   "mirror_qty": 500,
   "mirror_cost": 0.0
  }
