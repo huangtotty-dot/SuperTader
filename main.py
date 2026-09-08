@@ -3351,6 +3351,14 @@ def _validate_pool_split_or_exit():
 if __name__ == "__main__":
     import atexit
     atexit.register(_close_gui)
+    # V8 预热(2026-09-08): akshare 的 py_mini_racer(V8) 首次初始化必须在主线程，否则后台扫描线程内
+    # 首用（如 stock_zh_a_hist 兜底）会 FATAL 拖垮整进程——启动最先预热，见 core/v8guard.py
+    try:
+        from core.v8guard import prewarm_akshare_v8
+        if prewarm_akshare_v8():
+            print("[v8guard] py_mini_racer(V8) 已主线程预热（akshare 线程内首用不再 FATAL）")
+    except Exception as _v8e:
+        print(f"[v8guard] 预热失败（akshare 未用 V8 或不可用）: {_v8e}")
     if len(sys.argv) > 1 and sys.argv[1] == "--replay-today":
         replay_today()
     elif len(sys.argv) > 1 and sys.argv[1] == "--tushare-replay":
