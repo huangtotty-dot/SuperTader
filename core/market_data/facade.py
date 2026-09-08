@@ -3,7 +3,7 @@
 每次降级 log.warning；返回 DataFrame 统一在 attrs["source"] 标记 "gm"/"tencent"/"cache"。
 """
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import pandas as pd
 
@@ -42,14 +42,39 @@ def _resample_period(df: pd.DataFrame, period: str) -> pd.DataFrame:
 
 
 class MarketDataFacade:
-    """双源门面：优先 gm，异常/空结果降级腾讯。"""
+    """双源门面：优先 gm，异常/空结果降级腾讯。
+
+    GM 熔断（2026-09-08）：gm._ready 只校验 token 不验连接，掘金终端未启动/断连时每次
+    history_n 都抛 1001"无法连接终端服务"→ 逐调用 warning。故加 60s 冷却：首次不可达告警一次，
+    窗内直接走腾讯（不再逐调用重试刷屏）；窗后恢复尝试，成功即复位。
+    """
+    _GM_COOLDOWN_SECONDS = 60
 
     def __init__(self):
         self._gm = GmProvider()
         self._tx = TencentProvider()
+        self._gm_down_until = None
 
     def _gm_ready(self) -> bool:
         return getattr(self._gm, "_ready", False)
+
+    def _gm_ok(self) -> bool:
+        """可尝试 gm = 已 ready 且不在不可达冷却窗内。"""
+        return self._gm_ready() and (self._gm_down_until is None
+                                     or datetime.now() >= self._gm_down_until)
+
+    def _gm_ok_reset(self) -> None:
+        self._gm_down_until = None
+
+    def _note_gm_down(self, ctx: str, key: str, exc: Exception) -> None:
+        """gm 调用失败（多为终端服务不可达）→ 置冷却窗并每窗只告警一次。"""
+        now = datetime.now()
+        if self._gm_down_until is None or now >= self._gm_down_until:
+            self._gm_down_until = now + timedelta(seconds=self._GM_COOLDOWN_SECONDS)
+            log.warning("gm 服务不可达(%s %s: %s) → %ds 内直接走腾讯，不再逐调用重试",
+                        ctx, key, str(exc)[:100], self._GM_COOLDOWN_SECONDS)
+        else:
+            self._gm_down_until = now + timedelta(seconds=self._GM_COOLDOWN_SECONDS)  # 续窗
 
     def _mark(self, df: pd.DataFrame, src: str) -> pd.DataFrame:
         df.attrs["source"] = src
@@ -58,7 +83,7 @@ class MarketDataFacade:
     def daily(self, code: str, days: int = 800, period: str = "day") -> pd.DataFrame:
         # 2026-08-31 手动盘数据源与自动盘对齐：去掉腾讯 cache-first，gm 优先（腾讯仅降级兜底）。
         # 自动盘(gm_main)纯 gm 直拉；手动盘此处同样优先 gm，保证两侧数据/判定一致。
-        if self._gm_ready():
+        if self._gm_ok():
             try:
                 df = self._gm.daily(code, days)
                 if df is not None and not df.empty:
@@ -67,11 +92,13 @@ class MarketDataFacade:
                     # 阻断6: gm 结果写缓存（供 gm 不可用时段兜底；含盘中 15 分钟新鲜度/B-1，由 tencent 缓存读取端执行）
                     from .tencent_provider import save_daily_cache
                     save_daily_cache(code, df)
+                    self._gm_ok_reset()   # 连通成功 → 复位熔断
                     return self._mark(_resample_period(df, period), "gm")
                 # F-6(2026-09-04): gm 静默返空（588170 ETF 疑单点依赖腾讯）——补 warning 可观测
+                self._gm_ok_reset()
                 log.warning("gm.daily 返回空(%s) → 降级腾讯（ETF 疑 gm 静默返空）", code)
             except Exception as e:
-                log.warning("gm.daily 降级腾讯(%s): %s", code, str(e)[:100])
+                self._note_gm_down("daily", code, e)
         df = self._tx.daily(code, days)
         return self._mark(_resample_period(df, period), df.attrs.get("source", "tencent"))
 
@@ -141,7 +168,7 @@ class MarketDataFacade:
         # 2026-08-31 手动盘数据源与自动盘对齐：去掉腾讯 CSV cache-first，gm 优先（腾讯仅降级兜底）。
         # gm 数据内存 60s 去重：同股同分钟 60s 内不重复直拉，压住手动扫描 ~24 只的 gm 分钟拉取量。
         # ttl_seconds 仅作用于腾讯 CSV 兜底缓存（position_builder 传 0 = 兜底不吃陈旧 CSV）。
-        if self._gm_ready():
+        if self._gm_ok():
             _k = (code, date)
             _hit = _gm_minute_cache.get(_k)
             if _hit and (datetime.now() - _hit["ts"]).total_seconds() < _GM_MINUTE_TTL:
@@ -153,25 +180,27 @@ class MarketDataFacade:
                     if len(_gm_minute_cache) > 200:  # 清理早于昨天的条目，防长期运行累积
                         _gm_minute_cache.clear()
                     self._tx.save_minute_cache(code, date, df)  # 写 CSV：gm 不可用时段腾讯兜底可读
+                    self._gm_ok_reset()   # 连通成功 → 复位熔断
                     return self._mark(df, "gm")
             except Exception as e:
-                log.warning("gm.minute 降级腾讯(%s %s): %s", code, date, str(e)[:100])
+                self._note_gm_down("minute", f"{code} {date}", e)
         df = self._tx.minute(code, date, ttl_seconds)
         return self._mark(df, df.attrs.get("source", "tencent"))
 
     def snapshot(self, codes: list) -> dict:
         # 快照契约是 dict 非 DataFrame，source 无法进 attrs——gm 优先，空/异常回退腾讯
-        if self._gm_ready():
+        if self._gm_ok():
             try:
                 out = self._gm.snapshot(codes)
                 if out:
+                    self._gm_ok_reset()
                     return out
             except Exception as e:
-                log.warning("gm.snapshot 降级腾讯: %s", str(e)[:100])
+                self._note_gm_down("snapshot", ",".join(str(c) for c in codes[:3]), e)
         return self._tx.snapshot(codes)
 
     def index_daily(self, index: str = "sh000001", days: int = 800, end_date: str = None) -> pd.DataFrame:
-        if self._gm_ready():
+        if self._gm_ok():
             try:
                 df = self._gm.index_daily(index, days, end_date)
                 if df is not None and not df.empty:
@@ -181,9 +210,10 @@ class MarketDataFacade:
                         df = self._maybe_append_index_forming(df, index)
                         from .tencent_provider import save_index_daily_cache
                         save_index_daily_cache(index, df)
+                    self._gm_ok_reset()
                     return self._mark(df, "gm")
             except Exception as e:
-                log.warning("gm.index_daily 降级腾讯(%s): %s", index, str(e)[:100])
+                self._note_gm_down("index_daily", index, e)
         df = self._tx.index_daily(index, days, end_date)
         return self._mark(df, df.attrs.get("source", "tencent"))
 
