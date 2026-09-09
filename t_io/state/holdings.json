@@ -4,14 +4,14 @@
   "gm_symbol": "SHSE.588170",
   "type": "etf",
   "account": "账户B",
-  "pool": "manual",
+  "pool": "both",
   "qty": 54500,
   "base": 54500,
   "t_qty": 16350,
   "cost": 0.938,
   "pre_close": 0.913,
-  "mirror_qty": 0,
-  "mirror_cost": 0,
+  "mirror_qty": 70000,
+  "mirror_cost": 0.917,
   "virtual_qty": 124500
  },
  "600481": {
