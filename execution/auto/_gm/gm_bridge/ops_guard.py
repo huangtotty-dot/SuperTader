@@ -37,11 +37,37 @@ except ImportError:
 
 
 class _TeeStream:
-    """同时写原控制台与日志文件的流。"""
+    """同时写原控制台与日志文件的流。F2(2026-09-09): 每次写前做跨日滚动——旧句柄定死首日日期，
+    进程跨日运行时日志仍全写首日文件，新增按日滚动（仿 watcher._roll_events_path）。"""
 
     def __init__(self, stream, fh):
         self._stream = stream
         self._fh = fh
+
+    def _roll_if_needed(self):
+        today = datetime.now().strftime("%Y%m%d")
+        if today == _state.get("_log_date"):
+            return
+        log_dir = _state.get("_log_dir") or ""
+        if not log_dir:
+            return
+        try:
+            log_path = os.path.join(log_dir, "strategy_%s.log" % today)
+            nf = open(log_path, "a", encoding="utf-8", errors="replace", buffering=1)
+            nf.write("\n===== strategy run rollover %s pid=%d (跨日新日志) =====\n"
+                     % (datetime.now().isoformat(timespec="seconds"), os.getpid()))
+            nf.flush()
+            old = self._fh
+            self._fh = nf
+            _state["_log_fh"] = nf
+            _state["_log_date"] = today
+            try:
+                old.close()
+            except Exception:
+                pass
+            sys.__stdout__.write("  [ops] 日志已跨日滚动: %s\n" % log_path)
+        except Exception:
+            pass
 
     def write(self, data):
         try:
@@ -49,6 +75,7 @@ class _TeeStream:
         except Exception:
             pass
         try:
+            self._roll_if_needed()
             self._fh.write(data)
             self._fh.flush()
         except Exception:
@@ -77,6 +104,9 @@ def bootstrap_logging(project_dir):
         os.makedirs(log_dir, exist_ok=True)
         log_path = os.path.join(log_dir, "strategy_%s.log" % datetime.now().strftime("%Y%m%d"))
         fh = open(log_path, "a", encoding="utf-8", errors="replace", buffering=1)
+        _state["_log_dir"] = log_dir            # F2: 供 _TeeStream 跨日滚动开新文件
+        _state["_log_date"] = datetime.now().strftime("%Y%m%d")
+        _state["_log_fh"] = fh
         fh.write("\n===== strategy run start %s pid=%d =====\n"
                  % (datetime.now().isoformat(timespec="seconds"), os.getpid()))
         sys.stdout = _TeeStream(sys.stdout, fh)

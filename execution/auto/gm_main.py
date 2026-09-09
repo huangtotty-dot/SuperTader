@@ -36,6 +36,23 @@ from gm_bridge.writer import (
 )
 from gm_bridge import ops_guard
 
+# F1(2026-09-09) 退出留痕：gm SDK 把所有退出接到 os._exit（无 traceback、不跑 atexit），
+# 死亡只能二分定位——注册自己的 atexit（LIFO 先于 gm 逻辑执行）写 risk:strategy_exit + 横幅。
+# 有 banner/事件 = 优雅退出路径；硬 kill(taskkill/终止) 无 banner → 由 watcher 心跳兜底告警。
+import atexit as _atexit
+
+
+def _gm_atexit_banner():
+    try:
+        _ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        write_risk(_ts, "strategy_exit", "策略进程退出(atexit 优雅路径)")
+        print(f"\n===== strategy exit atexit {_ts} (pid={os.getpid()}) =====", flush=True)
+    except Exception:
+        pass
+
+
+_atexit.register(_gm_atexit_banner)
+
 # ── 标的池（P3-2 池分管：auto 侧候选池单一真源 = superTrader config/auto_pool.py）──
 # 原 hardcode 17 票迁出；消费方式与 utils/gm_token.py 读取 superTrader 配置同源（SUPERTRADER_ROOT）。
 # 用绝对路径 importlib 加载：goldminer 自身也有 config 包，`from config.auto_pool` 会命中本仓 config。
@@ -1120,6 +1137,33 @@ def init(context):
             if _bkp and _bkp.get("date") == datetime.now().strftime("%Y-%m-%d"):
                 context._buy_confirm_pending = dict(_bkp.get("pending") or {})
                 context._buy_confirm_rejected = set(_bkp.get("rejected_today") or [])
+            elif _bkp and (_bkp.get("pending") or {}):
+                # F3(2026-09-09): 跨日陈旧 pending → 作废清空（自动化应急处置#1）——
+                # 防 GUI 幽灵待确认与"引擎重启后 date 不匹配不恢复"的悬空文件
+                _stale = list((_bkp.get("pending") or {}).items())
+                _ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                for _c, _req in _stale:
+                    try:
+                        write_confirm(_ts, _c, "expired",
+                                      f"跨日作废 {_req.get('action','')} qty={_req.get('qty')}@"
+                                      f"{_req.get('price')}",
+                                      request_id=_req.get("request_id"))
+                    except Exception:
+                        pass
+                write_buy_pending({"date": datetime.now().strftime("%Y-%m-%d"),
+                                   "updated_at": _ts, "rejected_today": [],
+                                   "pending": {}})
+                try:
+                    from gm_bridge.writer import write_buy_decision as _wbd
+                    _wbd({})
+                except Exception:
+                    pass
+                try:
+                    write_risk(_ts, "buy_pending_expired",
+                               f"跨日作废 {len(_stale)} 条陈旧 pending 已清空(BUY_PENDING/BUY_DECISION)", code="")
+                except Exception:
+                    pass
+                print(f"[init] F3 跨日陈旧 pending 作废: {len(_stale)} 条已清空")
         except Exception:
             pass
 
@@ -2351,3 +2395,10 @@ if __name__ == "__main__":
     run(strategy_id="e8bb1f4d-87ce-11f1-97f7-98fa9b8df5e7",
         filename="gm_main.py", mode=MODE_LIVE,
         token=load_token())
+    # F1(2026-09-09): run() 正常返回分支横幅（区分优雅结束 vs 硬 kill）
+    print("===== strategy run 返回（正常结束）=====", flush=True)
+    try:
+        write_risk(datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                   "strategy_exit", "策略 run() 返回（优雅结束）")
+    except Exception:
+        pass
