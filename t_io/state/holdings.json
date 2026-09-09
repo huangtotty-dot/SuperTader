@@ -8,8 +8,8 @@
   "qty": 54500,
   "base": 54500,
   "t_qty": 16350,
-  "cost": 0.935,
-  "pre_close": 0.935,
+  "cost": 0.938,
+  "pre_close": 0.919,
   "mirror_qty": 0,
   "mirror_cost": 0
  },
@@ -23,7 +23,7 @@
   "base": 100,
   "t_qty": 0,
   "cost": 28.216,
-  "pre_close": 4.34,
+  "pre_close": 4.37,
   "mirror_qty": 1400,
   "mirror_cost": 0
  },
@@ -37,9 +37,10 @@
   "base": 2800,
   "t_qty": 1000,
   "cost": 7.845,
-  "pre_close": 7.71,
+  "pre_close": 7.87,
   "mirror_qty": 1400,
-  "mirror_cost": 0
+  "mirror_cost": 0,
+  "virtual_qty": 100
  },
  "000988": {
   "name": "华工科技",
@@ -50,8 +51,8 @@
   "qty": 300,
   "base": 300,
   "t_qty": 0,
-  "cost": 99.32,
-  "pre_close": 101.9,
+  "cost": 99.607,
+  "pre_close": 100.53,
   "mirror_qty": 500,
   "mirror_cost": 0
  },
@@ -64,8 +65,8 @@
   "qty": 1100,
   "base": 1100,
   "t_qty": 0,
-  "cost": 43.208,
-  "pre_close": 41.69,
+  "cost": 43.359,
+  "pre_close": 41.39,
   "mirror_qty": 500,
   "mirror_cost": 0
  },
@@ -78,23 +79,9 @@
   "qty": 300,
   "base": 300,
   "t_qty": 0,
-  "cost": 50.382,
-  "pre_close": 51.1,
+  "cost": 50.611,
+  "pre_close": 50.97,
   "mirror_qty": 800,
-  "mirror_cost": 0
- },
- "515180": {
-  "name": "红利ETF",
-  "gm_symbol": "SHSE.515180",
-  "type": "etf",
-  "account": "",
-  "pool": "auto",
-  "qty": 0,
-  "base": 0,
-  "t_qty": 0,
-  "cost": 0,
-  "pre_close": 0,
-  "mirror_qty": 0,
   "mirror_cost": 0
  },
  "300054": {
@@ -107,22 +94,8 @@
   "base": 800,
   "t_qty": 0,
   "cost": 69.462,
-  "pre_close": 68.4,
+  "pre_close": 67.55,
   "mirror_qty": 100,
-  "mirror_cost": 0
- },
- "300364": {
-  "name": "中文在线",
-  "gm_symbol": "SZSE.300364",
-  "type": "stock",
-  "account": "账户A",
-  "pool": "both",
-  "qty": 0,
-  "base": 0,
-  "t_qty": 0,
-  "cost": 0.0,
-  "pre_close": 0.0,
-  "mirror_qty": 0,
   "mirror_cost": 0
  },
  "002639": {
@@ -135,7 +108,7 @@
   "base": 900,
   "t_qty": 0,
   "cost": 13.631,
-  "pre_close": 14.0,
+  "pre_close": 14.78,
   "mirror_qty": 0,
   "mirror_cost": 0
  },
@@ -148,36 +121,8 @@
   "qty": 500,
   "base": 500,
   "t_qty": 0,
-  "cost": 22.79,
-  "pre_close": 25.39,
-  "mirror_qty": 0,
-  "mirror_cost": 0
- },
- "300456": {
-  "name": "赛微电子",
-  "gm_symbol": "SZSE.300456",
-  "type": "stock",
-  "account": "",
-  "pool": "auto",
-  "qty": 0,
-  "base": 0,
-  "t_qty": 0,
-  "cost": 0,
-  "pre_close": 0,
-  "mirror_qty": 0,
-  "mirror_cost": 0
- },
- "002202": {
-  "name": "金风科技",
-  "gm_symbol": "SZSE.002202",
-  "type": "stock",
-  "account": "",
-  "pool": "auto",
-  "qty": 0,
-  "base": 0,
-  "t_qty": 0,
-  "cost": 0,
-  "pre_close": 0,
+  "cost": 22.692,
+  "pre_close": 25.34,
   "mirror_qty": 0,
   "mirror_cost": 0
  },
@@ -285,11 +230,11 @@
   "type": "stock",
   "account": "账户B",
   "pool": "both",
-  "qty": 600,
-  "base": 600,
+  "qty": 700,
+  "base": 700,
   "t_qty": 0,
-  "cost": 132.2,
-  "pre_close": 131.0,
+  "cost": 132.244,
+  "pre_close": 132.12,
   "mirror_qty": 500,
   "mirror_cost": 0.0
  }
