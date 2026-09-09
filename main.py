@@ -3359,6 +3359,13 @@ if __name__ == "__main__":
             print("[v8guard] py_mini_racer(V8) 已主线程预热（akshare 线程内首用不再 FATAL）")
     except Exception as _v8e:
         print(f"[v8guard] 预热失败（akshare 未用 V8 或不可用）: {_v8e}")
+    # H3(2026-09-09): 启动 log 记录解释器路径——15:08/15:16 无 gm 解释器重启事故靠它二分定位
+    print(f"[startup] python={sys.executable}")
+    try:
+        import logging as _lg
+        _lg.getLogger("main").info("[startup] python=%s", sys.executable)
+    except Exception:
+        pass
     if len(sys.argv) > 1 and sys.argv[1] == "--replay-today":
         replay_today()
     elif len(sys.argv) > 1 and sys.argv[1] == "--tushare-replay":
