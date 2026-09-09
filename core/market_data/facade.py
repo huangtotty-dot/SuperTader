@@ -51,12 +51,19 @@ class MarketDataFacade:
     _GM_COOLDOWN_SECONDS = 60
 
     def __init__(self):
-        self._gm = GmProvider()
+        # H1/G2(2026-09-09): GmProvider 构造容错——gm SDK/解释器不可用时置 None，腾讯兜底不再被绑架
+        # （09-08/09-09 事故：无 gm 解释器重启 → facade 构造期 import gm 爆炸 → 腾讯兜底陪葬 → 盘后全 0）
+        try:
+            self._gm = GmProvider()
+        except Exception as e:
+            log.warning("gm provider 初始化失败(gm SDK/解释器不可用): %s → 本次运行全部走腾讯兜底",
+                        str(e)[:120])
+            self._gm = None
         self._tx = TencentProvider()
         self._gm_down_until = None
 
     def _gm_ready(self) -> bool:
-        return getattr(self._gm, "_ready", False)
+        return bool(self._gm is not None and getattr(self._gm, "_ready", False))
 
     def _gm_ok(self) -> bool:
         """可尝试 gm = 已 ready 且不在不可达冷却窗内。"""

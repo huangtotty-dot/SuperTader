@@ -202,6 +202,28 @@ def send_startup_self_test():
         "tag": "div",
         "text": {"content": f"📢 【提醒】{FEISHU_KEYWORD}：系统已启动，飞书推送链路正常。", "tag": "lark_md"}
     })
+    # H3(2026-09-09): 自检卡附解释器+gm 探针——15:08/15:16 无 gm 解释器重启事故，当场即可发现
+    _pyexe = "?"
+    _gm_txt = "gm 探针未执行"
+    try:
+        import sys as _sys2
+        _pyexe = getattr(_sys2, "executable", "?")
+    except Exception:
+        pass
+    try:
+        import gm.api as _gma  # noqa: F401
+        try:
+            from core.market_data.gm_token import load_token as _lt
+            _tok = _lt()
+        except Exception:
+            _tok = None
+        _gm_txt = "gm 可用(token 就绪)" if _tok else "⚠️ gm SDK 在但 token 缺失"
+    except Exception as _ge:
+        _gm_txt = f"⚠️ gm 不可用({type(_ge).__name__}: {str(_ge)[:60]})"
+    card_elements.append({
+        "tag": "div",
+        "text": {"content": f"python={_pyexe}<br/>{_gm_txt}", "tag": "lark_md"}
+    })
 
     payload = {
         "msg_type": "interactive",

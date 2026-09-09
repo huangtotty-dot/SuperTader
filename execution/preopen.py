@@ -285,6 +285,19 @@ class PreOpenEngine:
             price = float(holding.get("pre_close", 0) or 0)
             daily_ctx = get_daily_context(code, holding or {}, current_price=price)
             prev_close = float(daily_ctx.get("daily_prev_close", 0) or 0)
+            # G1(2026-09-09): prev_close≤0 或 daily 非 ok → open_gap 结构性失效（C-4 高开预警失明源头之一），
+            # 显式降级告警+落盘，不再静默产出 0 口径误导下游（market_regime/C-4 消费同一字段）。
+            _gap_degraded = (prev_close <= 0) or (str(daily_ctx.get("daily_status")) != "ok")
+            if _gap_degraded:
+                _log.warning(f"⚠️ preopen {code} prev_close={prev_close} daily_status="
+                             f"{daily_ctx.get('daily_status')} → open_gap 降级(degraded)，C-4 高开预警不可用")
+                try:
+                    _append_jsonl(_trace_path("preopen_fail"), {
+                        "code": code, "ts": _now().strftime("%Y-%m-%d %H:%M:%S"),
+                        "reason": "prev_close_zero_or_daily_not_ok",
+                        "prev_close": prev_close, "daily_status": daily_ctx.get("daily_status")})
+                except Exception:
+                    pass
             # 注意口径：open_gap 为小数（0.0558 = 5.58%），不是百分比数值；7 月老文件 prev_close=0 导致 gap 恒 0 不可信
             open_gap = (price - prev_close) / prev_close if prev_close > 0 else 0.0
 
@@ -302,6 +315,7 @@ class PreOpenEngine:
                 "open_gap": open_gap,
                 "direction": direction,
                 "prev_close": prev_close,
+                "gap_status": "degraded" if _gap_degraded else "ok",
             }
 
         # 3. 盘前（9:30前）无有效市场数据：
@@ -406,6 +420,18 @@ class PreOpenEngine:
                           or str(_new_top20.get("top20_status") or "") == "empty")
             if _prev_ok and _new_empty:
                 _log.warning(f"⚠️ preopen 覆写守卫: 保留盘前 top20 成功产物（当前 top20 empty 不覆盖）")
+                return
+            # G3(2026-09-09): code_snapshots 覆写守卫——已有非零结果时，全 0 新 build 不覆盖
+            # （只挡 非零→全 0 方向，不挡恢复方向；防盘后 gm-less 全 0 毁掉晨间健康产物）
+            _cur_cs = _cur.get("code_snapshots") or {}
+            _new_cs = context.code_snapshots or {}
+            _cur_cs_have = any(bool((v or {}).get("prev_close", 0) or (v or {}).get("open_gap"))
+                               for v in _cur_cs.values())
+            _new_cs_all_zero = bool(_new_cs) and all(
+                not bool((v or {}).get("prev_close", 0) or (v or {}).get("open_gap"))
+                for v in _new_cs.values())
+            if _cur_cs_have and _new_cs_all_zero:
+                _log.warning("⚠️ preopen 覆写守卫: 保留已有 code_snapshots（新 build 全 0 不覆盖，防盘后毁证）")
                 return
             with open(fp, "w", encoding="utf-8") as f:
                 json.dump(context.__dict__, f, ensure_ascii=False, indent=2)
