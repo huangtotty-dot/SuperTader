@@ -265,6 +265,12 @@ def read_buy_decision() -> dict:
         return {}
 
 
+def write_buy_decision(rec: dict):
+    """F3(2026-09-09): 写/清空用户确认回复（BUY_DECISION.json，引擎单写者，整文件原子覆写）。
+    跨日陈旧 pending 作废时以 {} 清空，避免 GUI 幽灵待确认。"""
+    _write_json_atomic(_buy_decision_path(), rec)
+
+
 def write_confirm(time_str: str, code: str, state: str, detail: str = "", **kw):
     """人工确认闸事件（追加进既有 events 流，引擎是 events 唯一写者）：
     state ∈ request / approved / rejected / expired / blocked。事件名 buy_confirm_<state>。"""
