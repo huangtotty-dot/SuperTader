@@ -1403,7 +1403,9 @@ def _maybe_push_daily_pnl_summary(now: datetime) -> None:
     global _daily_pnl_push_date
     try:
         t = now.time()
-        if now.weekday() >= 5 or not (dtime(14, 59) <= t <= dtime(15, 1)):
+        # P1-2(2026-09-10): 去右界——原 (14:59~15:01) 窗口一旦该段无扫描（如主循环挂死/卡顿恢复晚）
+        # 就永久错过当日 daily_pnl；改为 t>=14:59 即可补扫（每日一次去重仍由 _daily_pnl_push_date 保证）。
+        if now.weekday() >= 5 or t < dtime(14, 59):
             return
         today = now.strftime("%Y-%m-%d")
         if _daily_pnl_push_date == today:
