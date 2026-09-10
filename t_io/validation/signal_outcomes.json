@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-09-09 15:17:31",
+  "generated_at": "2026-09-10 15:00:02",
   "params": {
     "days": null,
     "min_samples": 20,
@@ -18,44 +18,44 @@
       "samples": 5,
       "horizons": {
         "1": {
-          "n": 4,
-          "avg_ret": -0.0136,
-          "win_rate": 0.25,
-          "beat_benchmark_rate": 0.5,
-          "avg_max_drawdown": -0.0222
+          "n": 5,
+          "avg_ret": -0.0077,
+          "win_rate": 0.4,
+          "beat_benchmark_rate": 0.6,
+          "avg_max_drawdown": -0.0214
         },
         "3": {
           "n": 4,
-          "avg_ret": -0.0063,
+          "avg_ret": -0.0062,
           "win_rate": 0.75,
           "beat_benchmark_rate": 0.75,
-          "avg_max_drawdown": -0.0228
+          "avg_max_drawdown": -0.0229
         },
         "5": {
           "n": 4,
-          "avg_ret": -0.0155,
+          "avg_ret": -0.0156,
           "win_rate": 0.25,
           "beat_benchmark_rate": 0.25,
-          "avg_max_drawdown": -0.0354
+          "avg_max_drawdown": -0.0356
         }
       }
     },
     "approaching": {
-      "samples": 49,
+      "samples": 64,
       "horizons": {
         "1": {
-          "n": 35,
-          "avg_ret": -0.0042,
-          "win_rate": 0.2571,
-          "beat_benchmark_rate": 0.3714,
-          "avg_max_drawdown": -0.0272
+          "n": 49,
+          "avg_ret": -0.0054,
+          "win_rate": 0.2449,
+          "beat_benchmark_rate": 0.3878,
+          "avg_max_drawdown": -0.0261
         },
         "3": {
-          "n": 10,
-          "avg_ret": -0.0083,
-          "win_rate": 0.4,
-          "beat_benchmark_rate": 0.5,
-          "avg_max_drawdown": -0.0575
+          "n": 22,
+          "avg_ret": -0.0188,
+          "win_rate": 0.2727,
+          "beat_benchmark_rate": 0.3182,
+          "avg_max_drawdown": -0.0501
         },
         "5": {
           "n": 10,
@@ -67,33 +67,33 @@
       }
     },
     "watch_signal": {
-      "samples": 76,
+      "samples": 78,
       "horizons": {
         "1": {
-          "n": 73,
-          "avg_ret": -0.0057,
-          "win_rate": 0.4384,
-          "beat_benchmark_rate": 0.411,
-          "avg_max_drawdown": -0.0271
+          "n": 76,
+          "avg_ret": -0.0067,
+          "win_rate": 0.4342,
+          "beat_benchmark_rate": 0.4079,
+          "avg_max_drawdown": -0.0276
         },
         "3": {
-          "n": 68,
-          "avg_ret": -0.0098,
-          "win_rate": 0.3235,
-          "beat_benchmark_rate": 0.3235,
-          "avg_max_drawdown": -0.0472
+          "n": 71,
+          "avg_ret": -0.0093,
+          "win_rate": 0.338,
+          "beat_benchmark_rate": 0.3521,
+          "avg_max_drawdown": -0.0459
         },
         "5": {
-          "n": 59,
-          "avg_ret": -0.0044,
-          "win_rate": 0.4746,
-          "beat_benchmark_rate": 0.4915,
-          "avg_max_drawdown": -0.0584
+          "n": 63,
+          "avg_ret": -0.0059,
+          "win_rate": 0.4444,
+          "beat_benchmark_rate": 0.4603,
+          "avg_max_drawdown": -0.0575
         }
       }
     },
     "weak": {
-      "samples": 295,
+      "samples": 304,
       "horizons": {
         "1": {
           "n": 0,
@@ -415,14 +415,14 @@
           "beat_benchmark": false
         },
         "3": {
-          "date": null,
-          "close": null,
-          "ret": null,
-          "status": "unavailable",
-          "reason": "目标交易日数据未到期或获取失败",
-          "max_drawdown": null,
-          "benchmark_ret": null,
-          "beat_benchmark": null
+          "date": "2026-09-10",
+          "close": 19.15,
+          "ret": -0.0343,
+          "status": "ok",
+          "reason": "",
+          "max_drawdown": -0.0605,
+          "benchmark_ret": -0.006,
+          "beat_benchmark": false
         },
         "5": {
           "date": null,
@@ -492,6 +492,51 @@
       "score": 60,
       "_prio": 3,
       "_last_st": "2026-09-09 15:17:21",
+      "kline_source": "cache+tencent",
+      "returns": {
+        "1": {
+          "date": "2026-09-10",
+          "close": 19.15,
+          "ret": -0.0067,
+          "status": "ok",
+          "reason": "",
+          "max_drawdown": -0.027,
+          "benchmark_ret": -0.0054,
+          "beat_benchmark": false
+        },
+        "3": {
+          "date": null,
+          "close": null,
+          "ret": null,
+          "status": "unavailable",
+          "reason": "目标交易日数据未到期或获取失败",
+          "max_drawdown": null,
+          "benchmark_ret": null,
+          "beat_benchmark": null
+        },
+        "5": {
+          "date": null,
+          "close": null,
+          "ret": null,
+          "status": "unavailable",
+          "reason": "目标交易日数据未到期或获取失败",
+          "max_drawdown": null,
+          "benchmark_ret": null,
+          "beat_benchmark": null
+        }
+      }
+    },
+    {
+      "code": "000506",
+      "name": "招金黄金",
+      "date": "2026-09-10",
+      "scan_time": "2026-09-10 09:31:03",
+      "verdict": "approaching",
+      "final_verdict": "approaching",
+      "price": 19.0,
+      "score": 60,
+      "_prio": 3,
+      "_last_st": "2026-09-10 14:51:29",
       "kline_source": "cache+tencent",
       "returns": {
         "1": {
@@ -693,14 +738,14 @@
           "beat_benchmark": false
         },
         "3": {
-          "date": null,
-          "close": null,
-          "ret": null,
-          "status": "unavailable",
-          "reason": "目标交易日数据未到期或获取失败",
-          "max_drawdown": null,
-          "benchmark_ret": null,
-          "beat_benchmark": null
+          "date": "2026-09-10",
+          "close": 50.84,
+          "ret": 0.0077,
+          "status": "ok",
+          "reason": "",
+          "max_drawdown": -0.0371,
+          "benchmark_ret": -0.006,
+          "beat_benchmark": true
         },
         "5": {
           "date": null,
@@ -770,6 +815,51 @@
       "score": 60,
       "_prio": 3,
       "_last_st": "2026-09-09 15:17:21",
+      "kline_source": "cache+tencent",
+      "returns": {
+        "1": {
+          "date": "2026-09-10",
+          "close": 50.84,
+          "ret": 0.0229,
+          "status": "ok",
+          "reason": "",
+          "max_drawdown": -0.0225,
+          "benchmark_ret": -0.0054,
+          "beat_benchmark": true
+        },
+        "3": {
+          "date": null,
+          "close": null,
+          "ret": null,
+          "status": "unavailable",
+          "reason": "目标交易日数据未到期或获取失败",
+          "max_drawdown": null,
+          "benchmark_ret": null,
+          "beat_benchmark": null
+        },
+        "5": {
+          "date": null,
+          "close": null,
+          "ret": null,
+          "status": "unavailable",
+          "reason": "目标交易日数据未到期或获取失败",
+          "max_drawdown": null,
+          "benchmark_ret": null,
+          "beat_benchmark": null
+        }
+      }
+    },
+    {
+      "code": "000636",
+      "name": "风华高科",
+      "date": "2026-09-10",
+      "scan_time": "2026-09-10 09:31:03",
+      "verdict": "approaching",
+      "final_verdict": "approaching",
+      "price": 48.69,
+      "score": 60,
+      "_prio": 3,
+      "_last_st": "2026-09-10 14:51:29",
       "kline_source": "cache+tencent",
       "returns": {
         "1": {
@@ -880,14 +970,14 @@
           "beat_benchmark": true
         },
         "3": {
-          "date": null,
-          "close": null,
-          "ret": null,
-          "status": "unavailable",
-          "reason": "目标交易日数据未到期或获取失败",
-          "max_drawdown": null,
-          "benchmark_ret": null,
-          "beat_benchmark": null
+          "date": "2026-09-10",
+          "close": 59.42,
+          "ret": -0.0097,
+          "status": "ok",
+          "reason": "",
+          "max_drawdown": -0.0225,
+          "benchmark_ret": -0.006,
+          "beat_benchmark": false
         },
         "5": {
           "date": null,
@@ -957,6 +1047,51 @@
       "score": 60,
       "_prio": 3,
       "_last_st": "2026-09-09 15:17:21",
+      "kline_source": "cache+tencent",
+      "returns": {
+        "1": {
+          "date": "2026-09-10",
+          "close": 59.42,
+          "ret": -0.0179,
+          "status": "ok",
+          "reason": "",
+          "max_drawdown": -0.0306,
+          "benchmark_ret": -0.0054,
+          "beat_benchmark": false
+        },
+        "3": {
+          "date": null,
+          "close": null,
+          "ret": null,
+          "status": "unavailable",
+          "reason": "目标交易日数据未到期或获取失败",
+          "max_drawdown": null,
+          "benchmark_ret": null,
+          "beat_benchmark": null
+        },
+        "5": {
+          "date": null,
+          "close": null,
+          "ret": null,
+          "status": "unavailable",
+          "reason": "目标交易日数据未到期或获取失败",
+          "max_drawdown": null,
+          "benchmark_ret": null,
+          "beat_benchmark": null
+        }
+      }
+    },
+    {
+      "code": "000657",
+      "name": "中钨高新",
+      "date": "2026-09-10",
+      "scan_time": "2026-09-10 09:31:03",
+      "verdict": "approaching",
+      "final_verdict": "approaching",
+      "price": 59.28,
+      "score": 60,
+      "_prio": 3,
+      "_last_st": "2026-09-10 14:51:29",
       "kline_source": "cache+tencent",
       "returns": {
         "1": {
@@ -1197,6 +1332,51 @@
       "score": 60,
       "_prio": 5,
       "_last_st": "2026-09-09 15:17:21",
+      "kline_source": "cache+tencent",
+      "returns": {
+        "1": {
+          "date": "2026-09-10",
+          "close": 18.14,
+          "ret": 0.0162,
+          "status": "ok",
+          "reason": "",
+          "max_drawdown": -0.0179,
+          "benchmark_ret": -0.0054,
+          "beat_benchmark": true
+        },
+        "3": {
+          "date": null,
+          "close": null,
+          "ret": null,
+          "status": "unavailable",
+          "reason": "目标交易日数据未到期或获取失败",
+          "max_drawdown": null,
+          "benchmark_ret": null,
+          "beat_benchmark": null
+        },
+        "5": {
+          "date": null,
+          "close": null,
+          "ret": null,
+          "status": "unavailable",
+          "reason": "目标交易日数据未到期或获取失败",
+          "max_drawdown": null,
+          "benchmark_ret": null,
+          "beat_benchmark": null
+        }
+      }
+    },
+    {
+      "code": "002202",
+      "name": "金风科技",
+      "date": "2026-09-10",
+      "scan_time": "2026-09-10 09:31:03",
+      "verdict": "approaching",
+      "final_verdict": "approaching",
+      "price": 17.67,
+      "score": 60,
+      "_prio": 3,
+      "_last_st": "2026-09-10 14:51:29",
       "kline_source": "cache+tencent",
       "returns": {
         "1": {
@@ -1463,14 +1643,14 @@
           "beat_benchmark": true
         },
         "3": {
-          "date": null,
-          "close": null,
-          "ret": null,
-          "status": "unavailable",
-          "reason": "目标交易日数据未到期或获取失败",
-          "max_drawdown": null,
-          "benchmark_ret": null,
-          "beat_benchmark": null
+          "date": "2026-09-10",
+          "close": 32.82,
+          "ret": -0.0144,
+          "status": "ok",
+          "reason": "",
+          "max_drawdown": -0.018,
+          "benchmark_ret": -0.006,
+          "beat_benchmark": false
         },
         "5": {
           "date": null,
@@ -1540,6 +1720,51 @@
       "score": 60,
       "_prio": 3,
       "_last_st": "2026-09-09 15:17:21",
+      "kline_source": "cache+tencent",
+      "returns": {
+        "1": {
+          "date": "2026-09-10",
+          "close": 32.82,
+          "ret": -0.0258,
+          "status": "ok",
+          "reason": "",
+          "max_drawdown": -0.0294,
+          "benchmark_ret": -0.0054,
+          "beat_benchmark": false
+        },
+        "3": {
+          "date": null,
+          "close": null,
+          "ret": null,
+          "status": "unavailable",
+          "reason": "目标交易日数据未到期或获取失败",
+          "max_drawdown": null,
+          "benchmark_ret": null,
+          "beat_benchmark": null
+        },
+        "5": {
+          "date": null,
+          "close": null,
+          "ret": null,
+          "status": "unavailable",
+          "reason": "目标交易日数据未到期或获取失败",
+          "max_drawdown": null,
+          "benchmark_ret": null,
+          "beat_benchmark": null
+        }
+      }
+    },
+    {
+      "code": "002407",
+      "name": "多氟多",
+      "date": "2026-09-10",
+      "scan_time": "2026-09-10 09:31:03",
+      "verdict": "approaching",
+      "final_verdict": "approaching",
+      "price": 33.02,
+      "score": 60,
+      "_prio": 3,
+      "_last_st": "2026-09-10 14:51:29",
       "kline_source": "cache+tencent",
       "returns": {
         "1": {
@@ -2322,14 +2547,14 @@
           "beat_benchmark": false
         },
         "3": {
-          "date": null,
-          "close": null,
-          "ret": null,
-          "status": "unavailable",
-          "reason": "目标交易日数据未到期或获取失败",
-          "max_drawdown": null,
-          "benchmark_ret": null,
-          "beat_benchmark": null
+          "date": "2026-09-10",
+          "close": 15.07,
+          "ret": -0.0444,
+          "status": "ok",
+          "reason": "",
+          "max_drawdown": -0.0463,
+          "benchmark_ret": -0.006,
+          "beat_benchmark": false
         },
         "5": {
           "date": null,
@@ -2399,6 +2624,51 @@
       "score": 60,
       "_prio": 3,
       "_last_st": "2026-09-09 15:17:21",
+      "kline_source": "cache+tencent",
+      "returns": {
+        "1": {
+          "date": "2026-09-10",
+          "close": 15.07,
+          "ret": -0.0046,
+          "status": "ok",
+          "reason": "",
+          "max_drawdown": -0.0059,
+          "benchmark_ret": -0.0054,
+          "beat_benchmark": true
+        },
+        "3": {
+          "date": null,
+          "close": null,
+          "ret": null,
+          "status": "unavailable",
+          "reason": "目标交易日数据未到期或获取失败",
+          "max_drawdown": null,
+          "benchmark_ret": null,
+          "beat_benchmark": null
+        },
+        "5": {
+          "date": null,
+          "close": null,
+          "ret": null,
+          "status": "unavailable",
+          "reason": "目标交易日数据未到期或获取失败",
+          "max_drawdown": null,
+          "benchmark_ret": null,
+          "beat_benchmark": null
+        }
+      }
+    },
+    {
+      "code": "300017",
+      "name": "网宿科技",
+      "date": "2026-09-10",
+      "scan_time": "2026-09-10 09:31:03",
+      "verdict": "approaching",
+      "final_verdict": "approaching",
+      "price": 15.21,
+      "score": 60,
+      "_prio": 3,
+      "_last_st": "2026-09-10 14:51:29",
       "kline_source": "cache+tencent",
       "returns": {
         "1": {
@@ -2665,14 +2935,14 @@
           "beat_benchmark": false
         },
         "3": {
-          "date": null,
-          "close": null,
-          "ret": null,
-          "status": "unavailable",
-          "reason": "目标交易日数据未到期或获取失败",
-          "max_drawdown": null,
-          "benchmark_ret": null,
-          "beat_benchmark": null
+          "date": "2026-09-10",
+          "close": 13.47,
+          "ret": -0.0541,
+          "status": "ok",
+          "reason": "",
+          "max_drawdown": -0.0576,
+          "benchmark_ret": -0.006,
+          "beat_benchmark": false
         },
         "5": {
           "date": null,
@@ -2742,6 +3012,51 @@
       "score": 70,
       "_prio": 3,
       "_last_st": "2026-09-09 15:17:21",
+      "kline_source": "cache+tencent",
+      "returns": {
+        "1": {
+          "date": "2026-09-10",
+          "close": 13.47,
+          "ret": -0.0096,
+          "status": "ok",
+          "reason": "",
+          "max_drawdown": -0.0125,
+          "benchmark_ret": -0.0054,
+          "beat_benchmark": false
+        },
+        "3": {
+          "date": null,
+          "close": null,
+          "ret": null,
+          "status": "unavailable",
+          "reason": "目标交易日数据未到期或获取失败",
+          "max_drawdown": null,
+          "benchmark_ret": null,
+          "beat_benchmark": null
+        },
+        "5": {
+          "date": null,
+          "close": null,
+          "ret": null,
+          "status": "unavailable",
+          "reason": "目标交易日数据未到期或获取失败",
+          "max_drawdown": null,
+          "benchmark_ret": null,
+          "beat_benchmark": null
+        }
+      }
+    },
+    {
+      "code": "300058",
+      "name": "蓝色光标",
+      "date": "2026-09-10",
+      "scan_time": "2026-09-10 09:31:03",
+      "verdict": "approaching",
+      "final_verdict": "approaching",
+      "price": 13.7,
+      "score": 70,
+      "_prio": 3,
+      "_last_st": "2026-09-10 14:51:29",
       "kline_source": "cache+tencent",
       "returns": {
         "1": {
@@ -2991,6 +3306,51 @@
       "kline_source": "cache+tencent",
       "returns": {
         "1": {
+          "date": "2026-09-10",
+          "close": 36.03,
+          "ret": -0.0286,
+          "status": "ok",
+          "reason": "",
+          "max_drawdown": -0.0307,
+          "benchmark_ret": -0.0054,
+          "beat_benchmark": false
+        },
+        "3": {
+          "date": null,
+          "close": null,
+          "ret": null,
+          "status": "unavailable",
+          "reason": "目标交易日数据未到期或获取失败",
+          "max_drawdown": null,
+          "benchmark_ret": null,
+          "beat_benchmark": null
+        },
+        "5": {
+          "date": null,
+          "close": null,
+          "ret": null,
+          "status": "unavailable",
+          "reason": "目标交易日数据未到期或获取失败",
+          "max_drawdown": null,
+          "benchmark_ret": null,
+          "beat_benchmark": null
+        }
+      }
+    },
+    {
+      "code": "300456",
+      "name": "赛微电子",
+      "date": "2026-09-10",
+      "scan_time": "2026-09-10 09:31:03",
+      "verdict": "approaching",
+      "final_verdict": "approaching",
+      "price": 36.68,
+      "score": 90,
+      "_prio": 3,
+      "_last_st": "2026-09-10 14:51:29",
+      "kline_source": "cache+tencent",
+      "returns": {
+        "1": {
           "date": null,
           "close": null,
           "ret": null,
@@ -3237,6 +3597,19 @@
       "returns": null
     },
     {
+      "code": "300475",
+      "name": "香农芯创",
+      "date": "2026-09-10",
+      "scan_time": "2026-09-10 09:31:03",
+      "verdict": "weak",
+      "final_verdict": "weak",
+      "price": 176.49,
+      "score": 30,
+      "_prio": 2,
+      "_last_st": "2026-09-10 14:51:29",
+      "returns": null
+    },
+    {
       "code": "300548",
       "name": "长芯博创",
       "date": "2026-08-24",
@@ -3435,14 +3808,14 @@
           "beat_benchmark": false
         },
         "3": {
-          "date": null,
-          "close": null,
-          "ret": null,
-          "status": "unavailable",
-          "reason": "目标交易日数据未到期或获取失败",
-          "max_drawdown": null,
-          "benchmark_ret": null,
-          "beat_benchmark": null
+          "date": "2026-09-10",
+          "close": 214.7,
+          "ret": 0.0033,
+          "status": "ok",
+          "reason": "",
+          "max_drawdown": -0.021,
+          "benchmark_ret": -0.006,
+          "beat_benchmark": true
         },
         "5": {
           "date": null,
@@ -3512,6 +3885,51 @@
       "score": 60,
       "_prio": 3,
       "_last_st": "2026-09-09 15:17:21",
+      "kline_source": "cache+tencent",
+      "returns": {
+        "1": {
+          "date": "2026-09-10",
+          "close": 214.7,
+          "ret": -0.0023,
+          "status": "ok",
+          "reason": "",
+          "max_drawdown": -0.0239,
+          "benchmark_ret": -0.0054,
+          "beat_benchmark": true
+        },
+        "3": {
+          "date": null,
+          "close": null,
+          "ret": null,
+          "status": "unavailable",
+          "reason": "目标交易日数据未到期或获取失败",
+          "max_drawdown": null,
+          "benchmark_ret": null,
+          "beat_benchmark": null
+        },
+        "5": {
+          "date": null,
+          "close": null,
+          "ret": null,
+          "status": "unavailable",
+          "reason": "目标交易日数据未到期或获取失败",
+          "max_drawdown": null,
+          "benchmark_ret": null,
+          "beat_benchmark": null
+        }
+      }
+    },
+    {
+      "code": "300548",
+      "name": "长芯博创",
+      "date": "2026-09-10",
+      "scan_time": "2026-09-10 09:31:03",
+      "verdict": "approaching",
+      "final_verdict": "approaching",
+      "price": 213.86,
+      "score": 60,
+      "_prio": 3,
+      "_last_st": "2026-09-10 14:51:29",
       "kline_source": "cache+tencent",
       "returns": {
         "1": {
@@ -3713,14 +4131,14 @@
           "beat_benchmark": false
         },
         "3": {
-          "date": null,
-          "close": null,
-          "ret": null,
-          "status": "unavailable",
-          "reason": "目标交易日数据未到期或获取失败",
-          "max_drawdown": null,
-          "benchmark_ret": null,
-          "beat_benchmark": null
+          "date": "2026-09-10",
+          "close": 233.7,
+          "ret": -0.0232,
+          "status": "ok",
+          "reason": "",
+          "max_drawdown": -0.047,
+          "benchmark_ret": -0.006,
+          "beat_benchmark": false
         },
         "5": {
           "date": null,
@@ -3790,6 +4208,51 @@
       "score": 60,
       "_prio": 3,
       "_last_st": "2026-09-09 15:17:21",
+      "kline_source": "cache+tencent",
+      "returns": {
+        "1": {
+          "date": "2026-09-10",
+          "close": 233.7,
+          "ret": 0.0116,
+          "status": "ok",
+          "reason": "",
+          "max_drawdown": -0.013,
+          "benchmark_ret": -0.0054,
+          "beat_benchmark": true
+        },
+        "3": {
+          "date": null,
+          "close": null,
+          "ret": null,
+          "status": "unavailable",
+          "reason": "目标交易日数据未到期或获取失败",
+          "max_drawdown": null,
+          "benchmark_ret": null,
+          "beat_benchmark": null
+        },
+        "5": {
+          "date": null,
+          "close": null,
+          "ret": null,
+          "status": "unavailable",
+          "reason": "目标交易日数据未到期或获取失败",
+          "max_drawdown": null,
+          "benchmark_ret": null,
+          "beat_benchmark": null
+        }
+      }
+    },
+    {
+      "code": "300666",
+      "name": "江丰电子",
+      "date": "2026-09-10",
+      "scan_time": "2026-09-10 09:31:03",
+      "verdict": "approaching",
+      "final_verdict": "approaching",
+      "price": 228.77,
+      "score": 60,
+      "_prio": 3,
+      "_last_st": "2026-09-10 14:51:29",
       "kline_source": "cache+tencent",
       "returns": {
         "1": {
@@ -3991,14 +4454,14 @@
           "beat_benchmark": false
         },
         "3": {
-          "date": null,
-          "close": null,
-          "ret": null,
-          "status": "unavailable",
-          "reason": "目标交易日数据未到期或获取失败",
-          "max_drawdown": null,
-          "benchmark_ret": null,
-          "beat_benchmark": null
+          "date": "2026-09-10",
+          "close": 108.5,
+          "ret": -0.0312,
+          "status": "ok",
+          "reason": "",
+          "max_drawdown": -0.0347,
+          "benchmark_ret": -0.006,
+          "beat_benchmark": false
         },
         "5": {
           "date": null,
@@ -4068,6 +4531,51 @@
       "score": 60,
       "_prio": 3,
       "_last_st": "2026-09-09 15:17:21",
+      "kline_source": "cache+tencent",
+      "returns": {
+        "1": {
+          "date": "2026-09-10",
+          "close": 108.5,
+          "ret": -0.0142,
+          "status": "ok",
+          "reason": "",
+          "max_drawdown": -0.0178,
+          "benchmark_ret": -0.0054,
+          "beat_benchmark": false
+        },
+        "3": {
+          "date": null,
+          "close": null,
+          "ret": null,
+          "status": "unavailable",
+          "reason": "目标交易日数据未到期或获取失败",
+          "max_drawdown": null,
+          "benchmark_ret": null,
+          "beat_benchmark": null
+        },
+        "5": {
+          "date": null,
+          "close": null,
+          "ret": null,
+          "status": "unavailable",
+          "reason": "目标交易日数据未到期或获取失败",
+          "max_drawdown": null,
+          "benchmark_ret": null,
+          "beat_benchmark": null
+        }
+      }
+    },
+    {
+      "code": "301165",
+      "name": "锐捷网络",
+      "date": "2026-09-10",
+      "scan_time": "2026-09-10 09:31:03",
+      "verdict": "approaching",
+      "final_verdict": "approaching",
+      "price": 108.77,
+      "score": 60,
+      "_prio": 3,
+      "_last_st": "2026-09-10 14:51:29",
       "kline_source": "cache+tencent",
       "returns": {
         "1": {
@@ -4372,6 +4880,19 @@
       "score": 0,
       "_prio": 2,
       "_last_st": "2026-09-09 15:17:21",
+      "returns": null
+    },
+    {
+      "code": "515120",
+      "name": "创新药ETF广发",
+      "date": "2026-09-10",
+      "scan_time": "2026-09-10 09:31:03",
+      "verdict": "weak",
+      "final_verdict": "weak",
+      "price": 0.623,
+      "score": 0,
+      "_prio": 2,
+      "_last_st": "2026-09-10 14:51:29",
       "returns": null
     },
     {
@@ -4828,8 +5349,8 @@
       "returns": {
         "1": {
           "date": "2026-09-09",
-          "close": 0.91,
-          "ret": -0.0098,
+          "close": 0.913,
+          "ret": -0.0065,
           "status": "ok",
           "reason": "",
           "max_drawdown": -0.0098,
@@ -4869,6 +5390,51 @@
       "score": 60,
       "_prio": 3,
       "_last_st": "2026-09-09 15:17:21",
+      "kline_source": "cache+tencent",
+      "returns": {
+        "1": {
+          "date": "2026-09-10",
+          "close": 0.91,
+          "ret": -0.0033,
+          "status": "ok",
+          "reason": "",
+          "max_drawdown": -0.0142,
+          "benchmark_ret": -0.0054,
+          "beat_benchmark": true
+        },
+        "3": {
+          "date": null,
+          "close": null,
+          "ret": null,
+          "status": "unavailable",
+          "reason": "目标交易日数据未到期或获取失败",
+          "max_drawdown": null,
+          "benchmark_ret": null,
+          "beat_benchmark": null
+        },
+        "5": {
+          "date": null,
+          "close": null,
+          "ret": null,
+          "status": "unavailable",
+          "reason": "目标交易日数据未到期或获取失败",
+          "max_drawdown": null,
+          "benchmark_ret": null,
+          "beat_benchmark": null
+        }
+      }
+    },
+    {
+      "code": "588170",
+      "name": "科创半导体ETF华夏",
+      "date": "2026-09-10",
+      "scan_time": "2026-09-10 09:31:03",
+      "verdict": "approaching",
+      "final_verdict": "approaching",
+      "price": 0.907,
+      "score": 60,
+      "_prio": 3,
+      "_last_st": "2026-09-10 14:51:29",
       "kline_source": "cache+tencent",
       "returns": {
         "1": {
@@ -5337,6 +5903,51 @@
       "kline_source": "cache+tencent",
       "returns": {
         "1": {
+          "date": "2026-09-10",
+          "close": 49.64,
+          "ret": 0.0014,
+          "status": "ok",
+          "reason": "",
+          "max_drawdown": -0.0101,
+          "benchmark_ret": -0.0054,
+          "beat_benchmark": true
+        },
+        "3": {
+          "date": null,
+          "close": null,
+          "ret": null,
+          "status": "unavailable",
+          "reason": "目标交易日数据未到期或获取失败",
+          "max_drawdown": null,
+          "benchmark_ret": null,
+          "beat_benchmark": null
+        },
+        "5": {
+          "date": null,
+          "close": null,
+          "ret": null,
+          "status": "unavailable",
+          "reason": "目标交易日数据未到期或获取失败",
+          "max_drawdown": null,
+          "benchmark_ret": null,
+          "beat_benchmark": null
+        }
+      }
+    },
+    {
+      "code": "600362",
+      "name": "江西铜业",
+      "date": "2026-09-10",
+      "scan_time": "2026-09-10 09:31:03",
+      "verdict": "watch_signal",
+      "final_verdict": "watch_signal",
+      "price": 50.09,
+      "score": 70,
+      "_prio": 4,
+      "_last_st": "2026-09-10 14:51:29",
+      "kline_source": "cache+tencent",
+      "returns": {
+        "1": {
           "date": null,
           "close": null,
           "ret": null,
@@ -5712,14 +6323,14 @@
           "beat_benchmark": false
         },
         "5": {
-          "date": null,
-          "close": null,
-          "ret": null,
-          "status": "unavailable",
-          "reason": "目标交易日数据未到期或获取失败",
-          "max_drawdown": null,
-          "benchmark_ret": null,
-          "beat_benchmark": null
+          "date": "2026-09-10",
+          "close": 35.61,
+          "ret": -0.0504,
+          "status": "ok",
+          "reason": "",
+          "max_drawdown": -0.0613,
+          "benchmark_ret": -0.0011,
+          "beat_benchmark": false
         }
       }
     },
@@ -5805,6 +6416,19 @@
       "score": 30,
       "_prio": 2,
       "_last_st": "2026-09-09 15:17:21",
+      "returns": null
+    },
+    {
+      "code": "600547",
+      "name": "山东黄金",
+      "date": "2026-09-10",
+      "scan_time": "2026-09-10 09:31:03",
+      "verdict": "weak",
+      "final_verdict": "weak",
+      "price": 35.97,
+      "score": 30,
+      "_prio": 2,
+      "_last_st": "2026-09-10 14:51:29",
       "returns": null
     },
     {
@@ -6279,6 +6903,51 @@
       "kline_source": "cache+tencent",
       "returns": {
         "1": {
+          "date": "2026-09-10",
+          "close": 18.3,
+          "ret": -0.085,
+          "status": "ok",
+          "reason": "",
+          "max_drawdown": -0.0945,
+          "benchmark_ret": -0.0054,
+          "beat_benchmark": false
+        },
+        "3": {
+          "date": null,
+          "close": null,
+          "ret": null,
+          "status": "unavailable",
+          "reason": "目标交易日数据未到期或获取失败",
+          "max_drawdown": null,
+          "benchmark_ret": null,
+          "beat_benchmark": null
+        },
+        "5": {
+          "date": null,
+          "close": null,
+          "ret": null,
+          "status": "unavailable",
+          "reason": "目标交易日数据未到期或获取失败",
+          "max_drawdown": null,
+          "benchmark_ret": null,
+          "beat_benchmark": null
+        }
+      }
+    },
+    {
+      "code": "600722",
+      "name": "金牛化工",
+      "date": "2026-09-10",
+      "scan_time": "2026-09-10 09:31:03",
+      "verdict": "watch_signal",
+      "final_verdict": "weak",
+      "price": 20.6,
+      "score": 60,
+      "_prio": 4,
+      "_last_st": "2026-09-10 14:51:29",
+      "kline_source": "cache+tencent",
+      "returns": {
+        "1": {
           "date": null,
           "close": null,
           "ret": null,
@@ -6525,14 +7194,14 @@
           "beat_benchmark": false
         },
         "5": {
-          "date": null,
-          "close": null,
-          "ret": null,
-          "status": "unavailable",
-          "reason": "目标交易日数据未到期或获取失败",
-          "max_drawdown": null,
-          "benchmark_ret": null,
-          "beat_benchmark": null
+          "date": "2026-09-10",
+          "close": 28.09,
+          "ret": -0.0123,
+          "status": "ok",
+          "reason": "",
+          "max_drawdown": -0.0285,
+          "benchmark_ret": -0.0011,
+          "beat_benchmark": false
         }
       }
     },
@@ -6605,14 +7274,14 @@
           "beat_benchmark": true
         },
         "3": {
-          "date": null,
-          "close": null,
-          "ret": null,
-          "status": "unavailable",
-          "reason": "目标交易日数据未到期或获取失败",
-          "max_drawdown": null,
-          "benchmark_ret": null,
-          "beat_benchmark": null
+          "date": "2026-09-10",
+          "close": 28.09,
+          "ret": 0.0086,
+          "status": "ok",
+          "reason": "",
+          "max_drawdown": -0.0079,
+          "benchmark_ret": -0.006,
+          "beat_benchmark": true
         },
         "5": {
           "date": null,
@@ -6650,6 +7319,19 @@
       "score": 0,
       "_prio": 2,
       "_last_st": "2026-09-09 15:17:21",
+      "returns": null
+    },
+    {
+      "code": "600900",
+      "name": "长江电力",
+      "date": "2026-09-10",
+      "scan_time": "2026-09-10 09:31:03",
+      "verdict": "weak",
+      "final_verdict": "weak",
+      "price": 28.17,
+      "score": 30,
+      "_prio": 2,
+      "_last_st": "2026-09-10 14:51:29",
       "returns": null
     },
     {
@@ -6982,6 +7664,19 @@
       "returns": null
     },
     {
+      "code": "601212",
+      "name": "白银有色",
+      "date": "2026-09-10",
+      "scan_time": "2026-09-10 09:31:03",
+      "verdict": "weak",
+      "final_verdict": "weak",
+      "price": 7.09,
+      "score": 30,
+      "_prio": 2,
+      "_last_st": "2026-09-10 14:51:29",
+      "returns": null
+    },
+    {
       "code": "601318",
       "name": "中国平安",
       "date": "2026-08-24",
@@ -6996,31 +7691,31 @@
       "returns": {
         "1": {
           "date": "2026-08-25",
-          "close": 55.01,
-          "ret": 0.0016,
+          "close": 54.03,
+          "ret": 0.0017,
           "status": "ok",
           "reason": "",
-          "max_drawdown": -0.0049,
+          "max_drawdown": -0.005,
           "benchmark_ret": -0.0024,
           "beat_benchmark": true
         },
         "3": {
           "date": "2026-08-27",
-          "close": 55.87,
-          "ret": 0.0173,
+          "close": 54.89,
+          "ret": 0.0176,
           "status": "ok",
           "reason": "",
-          "max_drawdown": -0.0049,
+          "max_drawdown": -0.005,
           "benchmark_ret": 0.0147,
           "beat_benchmark": true
         },
         "5": {
           "date": "2026-08-31",
-          "close": 55.82,
-          "ret": 0.0164,
+          "close": 54.84,
+          "ret": 0.0167,
           "status": "ok",
           "reason": "",
-          "max_drawdown": -0.0049,
+          "max_drawdown": -0.005,
           "benchmark_ret": 0.0136,
           "beat_benchmark": true
         }
@@ -7041,31 +7736,31 @@
       "returns": {
         "1": {
           "date": "2026-08-26",
-          "close": 56.13,
-          "ret": 0.0204,
+          "close": 55.15,
+          "ret": 0.0207,
           "status": "ok",
           "reason": "",
-          "max_drawdown": -0.0064,
+          "max_drawdown": -0.0065,
           "benchmark_ret": 0.0085,
           "beat_benchmark": true
         },
         "3": {
           "date": "2026-08-28",
-          "close": 55.85,
-          "ret": 0.0153,
+          "close": 54.87,
+          "ret": 0.0155,
           "status": "ok",
           "reason": "",
-          "max_drawdown": -0.0064,
+          "max_drawdown": -0.0065,
           "benchmark_ret": 0.0126,
           "beat_benchmark": true
         },
         "5": {
           "date": "2026-09-01",
-          "close": 57.23,
-          "ret": 0.0404,
+          "close": 56.25,
+          "ret": 0.0411,
           "status": "ok",
           "reason": "",
-          "max_drawdown": -0.0064,
+          "max_drawdown": -0.0065,
           "benchmark_ret": 0.0131,
           "beat_benchmark": true
         }
@@ -7086,31 +7781,31 @@
       "returns": {
         "1": {
           "date": "2026-08-27",
-          "close": 55.87,
-          "ret": -0.0046,
+          "close": 54.89,
+          "ret": -0.0047,
           "status": "ok",
           "reason": "",
-          "max_drawdown": -0.0121,
+          "max_drawdown": -0.0123,
           "benchmark_ret": 0.0086,
           "beat_benchmark": false
         },
         "3": {
           "date": "2026-08-31",
-          "close": 55.82,
-          "ret": -0.0055,
+          "close": 54.84,
+          "ret": -0.0056,
           "status": "ok",
           "reason": "",
-          "max_drawdown": -0.0155,
+          "max_drawdown": -0.0158,
           "benchmark_ret": 0.0075,
           "beat_benchmark": false
         },
         "5": {
           "date": "2026-09-02",
-          "close": 56.63,
-          "ret": 0.0089,
+          "close": 55.65,
+          "ret": 0.0091,
           "status": "ok",
           "reason": "",
-          "max_drawdown": -0.0155,
+          "max_drawdown": -0.0158,
           "benchmark_ret": -0.0093,
           "beat_benchmark": true
         }
@@ -7131,31 +7826,31 @@
       "returns": {
         "1": {
           "date": "2026-08-28",
-          "close": 55.85,
+          "close": 54.87,
           "ret": -0.0004,
           "status": "ok",
           "reason": "",
-          "max_drawdown": -0.0109,
+          "max_drawdown": -0.0111,
           "benchmark_ret": -0.0046,
           "beat_benchmark": true
         },
         "3": {
           "date": "2026-09-01",
-          "close": 57.23,
-          "ret": 0.0243,
+          "close": 56.25,
+          "ret": 0.0248,
           "status": "ok",
           "reason": "",
-          "max_drawdown": -0.0109,
+          "max_drawdown": -0.0111,
           "benchmark_ret": -0.0041,
           "beat_benchmark": true
         },
         "5": {
           "date": "2026-09-03",
-          "close": 58.0,
-          "ret": 0.0381,
+          "close": 57.02,
+          "ret": 0.0388,
           "status": "ok",
           "reason": "",
-          "max_drawdown": -0.0109,
+          "max_drawdown": -0.0111,
           "benchmark_ret": -0.0168,
           "beat_benchmark": true
         }
@@ -7176,31 +7871,31 @@
       "returns": {
         "1": {
           "date": "2026-08-31",
-          "close": 55.82,
+          "close": 54.84,
           "ret": -0.0005,
           "status": "ok",
           "reason": "",
-          "max_drawdown": -0.003,
+          "max_drawdown": -0.0031,
           "benchmark_ret": 0.0035,
           "beat_benchmark": false
         },
         "3": {
           "date": "2026-09-02",
-          "close": 56.63,
-          "ret": 0.014,
+          "close": 55.65,
+          "ret": 0.0142,
           "status": "ok",
           "reason": "",
-          "max_drawdown": -0.0079,
+          "max_drawdown": -0.008,
           "benchmark_ret": -0.0133,
           "beat_benchmark": true
         },
         "5": {
           "date": "2026-09-04",
-          "close": 58.24,
-          "ret": 0.0428,
+          "close": 57.26,
+          "ret": 0.0436,
           "status": "ok",
           "reason": "",
-          "max_drawdown": -0.0079,
+          "max_drawdown": -0.008,
           "benchmark_ret": -0.0133,
           "beat_benchmark": true
         }
@@ -7221,31 +7916,31 @@
       "returns": {
         "1": {
           "date": "2026-08-31",
-          "close": 55.82,
+          "close": 54.84,
           "ret": -0.0005,
           "status": "ok",
           "reason": "",
-          "max_drawdown": -0.003,
+          "max_drawdown": -0.0031,
           "benchmark_ret": 0.0035,
           "beat_benchmark": false
         },
         "3": {
           "date": "2026-09-02",
-          "close": 56.63,
-          "ret": 0.014,
+          "close": 55.65,
+          "ret": 0.0142,
           "status": "ok",
           "reason": "",
-          "max_drawdown": -0.0079,
+          "max_drawdown": -0.008,
           "benchmark_ret": -0.0133,
           "beat_benchmark": true
         },
         "5": {
           "date": "2026-09-04",
-          "close": 58.24,
-          "ret": 0.0428,
+          "close": 57.26,
+          "ret": 0.0436,
           "status": "ok",
           "reason": "",
-          "max_drawdown": -0.0079,
+          "max_drawdown": -0.008,
           "benchmark_ret": -0.0133,
           "beat_benchmark": true
         }
@@ -7266,31 +7961,31 @@
       "returns": {
         "1": {
           "date": "2026-09-01",
-          "close": 57.23,
-          "ret": 0.0253,
+          "close": 56.25,
+          "ret": 0.0257,
           "status": "ok",
           "reason": "",
-          "max_drawdown": -0.0073,
+          "max_drawdown": -0.0075,
           "benchmark_ret": -0.003,
           "beat_benchmark": true
         },
         "3": {
           "date": "2026-09-03",
-          "close": 58.0,
-          "ret": 0.0391,
+          "close": 57.02,
+          "ret": 0.0398,
           "status": "ok",
           "reason": "",
-          "max_drawdown": -0.0073,
+          "max_drawdown": -0.0075,
           "benchmark_ret": -0.0157,
           "beat_benchmark": true
         },
         "5": {
           "date": "2026-09-07",
-          "close": 56.36,
-          "ret": 0.0097,
+          "close": 55.38,
+          "ret": 0.0098,
           "status": "ok",
           "reason": "",
-          "max_drawdown": -0.0073,
+          "max_drawdown": -0.0075,
           "benchmark_ret": -0.0108,
           "beat_benchmark": true
         }
@@ -7311,31 +8006,31 @@
       "returns": {
         "1": {
           "date": "2026-09-02",
-          "close": 56.63,
-          "ret": -0.0105,
+          "close": 55.65,
+          "ret": -0.0107,
           "status": "ok",
           "reason": "",
-          "max_drawdown": -0.0133,
+          "max_drawdown": -0.0135,
           "benchmark_ret": -0.0138,
           "beat_benchmark": true
         },
         "3": {
           "date": "2026-09-04",
-          "close": 58.24,
-          "ret": 0.0176,
+          "close": 57.26,
+          "ret": 0.018,
           "status": "ok",
           "reason": "",
-          "max_drawdown": -0.0133,
+          "max_drawdown": -0.0135,
           "benchmark_ret": -0.0137,
           "beat_benchmark": true
         },
         "5": {
           "date": "2026-09-08",
-          "close": 55.7,
-          "ret": -0.0267,
+          "close": 54.72,
+          "ret": -0.0272,
           "status": "ok",
           "reason": "",
-          "max_drawdown": -0.0271,
+          "max_drawdown": -0.0276,
           "benchmark_ret": -0.0114,
           "beat_benchmark": false
         }
@@ -7356,8 +8051,8 @@
       "returns": {
         "1": {
           "date": "2026-09-03",
-          "close": 58.0,
-          "ret": 0.0242,
+          "close": 57.02,
+          "ret": 0.0246,
           "status": "ok",
           "reason": "",
           "max_drawdown": -0.0023,
@@ -7366,21 +8061,21 @@
         },
         "3": {
           "date": "2026-09-07",
-          "close": 56.36,
-          "ret": -0.0048,
+          "close": 55.38,
+          "ret": -0.0049,
           "status": "ok",
           "reason": "",
-          "max_drawdown": -0.0079,
+          "max_drawdown": -0.0081,
           "benchmark_ret": 0.0059,
           "beat_benchmark": false
         },
         "5": {
           "date": "2026-09-09",
-          "close": 56.26,
-          "ret": -0.0065,
+          "close": 55.28,
+          "ret": -0.0066,
           "status": "ok",
           "reason": "",
-          "max_drawdown": -0.0187,
+          "max_drawdown": -0.019,
           "benchmark_ret": 0.0054,
           "beat_benchmark": false
         }
@@ -7401,8 +8096,8 @@
       "returns": {
         "1": {
           "date": "2026-09-04",
-          "close": 58.24,
-          "ret": 0.0041,
+          "close": 57.26,
+          "ret": 0.0042,
           "status": "ok",
           "reason": "",
           "max_drawdown": -0.0021,
@@ -7411,23 +8106,23 @@
         },
         "3": {
           "date": "2026-09-08",
-          "close": 55.7,
-          "ret": -0.0397,
+          "close": 54.72,
+          "ret": -0.0403,
           "status": "ok",
           "reason": "",
-          "max_drawdown": -0.04,
+          "max_drawdown": -0.0407,
           "benchmark_ret": 0.0014,
           "beat_benchmark": false
         },
         "5": {
-          "date": null,
-          "close": null,
-          "ret": null,
-          "status": "unavailable",
-          "reason": "目标交易日数据未到期或获取失败",
-          "max_drawdown": null,
-          "benchmark_ret": null,
-          "beat_benchmark": null
+          "date": "2026-09-10",
+          "close": 55.44,
+          "ret": -0.0277,
+          "status": "ok",
+          "reason": "",
+          "max_drawdown": -0.0426,
+          "benchmark_ret": -0.0011,
+          "beat_benchmark": false
         }
       }
     },
@@ -7446,21 +8141,21 @@
       "returns": {
         "1": {
           "date": "2026-09-07",
-          "close": 56.36,
-          "ret": -0.0323,
+          "close": 55.38,
+          "ret": -0.0328,
           "status": "ok",
           "reason": "",
-          "max_drawdown": -0.0354,
+          "max_drawdown": -0.036,
           "benchmark_ret": 0.0059,
           "beat_benchmark": false
         },
         "3": {
           "date": "2026-09-09",
-          "close": 56.26,
-          "ret": -0.034,
+          "close": 55.28,
+          "ret": -0.0346,
           "status": "ok",
           "reason": "",
-          "max_drawdown": -0.0458,
+          "max_drawdown": -0.0466,
           "benchmark_ret": 0.0054,
           "beat_benchmark": false
         },
@@ -7491,23 +8186,23 @@
       "returns": {
         "1": {
           "date": "2026-09-08",
-          "close": 55.7,
-          "ret": -0.0117,
+          "close": 54.72,
+          "ret": -0.0119,
           "status": "ok",
           "reason": "",
-          "max_drawdown": -0.0121,
+          "max_drawdown": -0.0123,
           "benchmark_ret": -0.0036,
           "beat_benchmark": false
         },
         "3": {
-          "date": null,
-          "close": null,
-          "ret": null,
-          "status": "unavailable",
-          "reason": "目标交易日数据未到期或获取失败",
-          "max_drawdown": null,
-          "benchmark_ret": null,
-          "beat_benchmark": null
+          "date": "2026-09-10",
+          "close": 55.44,
+          "ret": 0.0011,
+          "status": "ok",
+          "reason": "",
+          "max_drawdown": -0.0143,
+          "benchmark_ret": -0.006,
+          "beat_benchmark": true
         },
         "5": {
           "date": null,
@@ -7545,6 +8240,19 @@
       "score": 30,
       "_prio": 2,
       "_last_st": "2026-09-09 15:17:21",
+      "returns": null
+    },
+    {
+      "code": "601318",
+      "name": "中国平安",
+      "date": "2026-09-10",
+      "scan_time": "2026-09-10 09:31:03",
+      "verdict": "weak",
+      "final_verdict": "weak",
+      "price": 55.55,
+      "score": 30,
+      "_prio": 2,
+      "_last_st": "2026-09-10 14:51:29",
       "returns": null
     },
     {
@@ -7826,14 +8534,14 @@
           "beat_benchmark": false
         },
         "5": {
-          "date": null,
-          "close": null,
-          "ret": null,
-          "status": "unavailable",
-          "reason": "目标交易日数据未到期或获取失败",
-          "max_drawdown": null,
-          "benchmark_ret": null,
-          "beat_benchmark": null
+          "date": "2026-09-10",
+          "close": 38.28,
+          "ret": -0.0252,
+          "status": "ok",
+          "reason": "",
+          "max_drawdown": -0.0448,
+          "benchmark_ret": -0.0011,
+          "beat_benchmark": false
         }
       }
     },
@@ -7906,14 +8614,14 @@
           "beat_benchmark": false
         },
         "3": {
-          "date": null,
-          "close": null,
-          "ret": null,
-          "status": "unavailable",
-          "reason": "目标交易日数据未到期或获取失败",
-          "max_drawdown": null,
-          "benchmark_ret": null,
-          "beat_benchmark": null
+          "date": "2026-09-10",
+          "close": 38.28,
+          "ret": -0.0044,
+          "status": "ok",
+          "reason": "",
+          "max_drawdown": -0.0244,
+          "benchmark_ret": -0.006,
+          "beat_benchmark": true
         },
         "5": {
           "date": null,
@@ -7951,6 +8659,19 @@
       "score": 0,
       "_prio": 2,
       "_last_st": "2026-09-09 15:17:21",
+      "returns": null
+    },
+    {
+      "code": "601628",
+      "name": "中国人寿",
+      "date": "2026-09-10",
+      "scan_time": "2026-09-10 09:31:03",
+      "verdict": "weak",
+      "final_verdict": "weak",
+      "price": 38.18,
+      "score": 30,
+      "_prio": 2,
+      "_last_st": "2026-09-10 14:51:29",
       "returns": null
     },
     {
@@ -8360,14 +9081,14 @@
       "kline_source": "cache+tencent",
       "returns": {
         "1": {
-          "date": null,
-          "close": null,
-          "ret": null,
-          "status": "unavailable",
-          "reason": "目标交易日数据未到期或获取失败",
-          "max_drawdown": null,
-          "benchmark_ret": null,
-          "beat_benchmark": null
+          "date": "2026-09-10",
+          "close": 34.11,
+          "ret": -0.0084,
+          "status": "ok",
+          "reason": "",
+          "max_drawdown": -0.0125,
+          "benchmark_ret": -0.0054,
+          "beat_benchmark": false
         },
         "3": {
           "date": null,
@@ -8390,6 +9111,19 @@
           "beat_benchmark": null
         }
       }
+    },
+    {
+      "code": "601899",
+      "name": "紫金矿业",
+      "date": "2026-09-10",
+      "scan_time": "2026-09-10 09:31:03",
+      "verdict": "weak",
+      "final_verdict": "weak",
+      "price": 34.35,
+      "score": 30,
+      "_prio": 2,
+      "_last_st": "2026-09-10 14:51:29",
+      "returns": null
     },
     {
       "code": "603259",
@@ -8571,6 +9305,19 @@
       "score": 0,
       "_prio": 2,
       "_last_st": "2026-09-09 15:17:21",
+      "returns": null
+    },
+    {
+      "code": "603259",
+      "name": "药明康德",
+      "date": "2026-09-10",
+      "scan_time": "2026-09-10 09:31:03",
+      "verdict": "weak",
+      "final_verdict": "weak",
+      "price": 154.18,
+      "score": 0,
+      "_prio": 2,
+      "_last_st": "2026-09-10 14:51:29",
       "returns": null
     },
     {
@@ -8805,14 +9552,14 @@
           "beat_benchmark": false
         },
         "3": {
-          "date": null,
-          "close": null,
-          "ret": null,
-          "status": "unavailable",
-          "reason": "目标交易日数据未到期或获取失败",
-          "max_drawdown": null,
-          "benchmark_ret": null,
-          "beat_benchmark": null
+          "date": "2026-09-10",
+          "close": 195.33,
+          "ret": -0.0126,
+          "status": "ok",
+          "reason": "",
+          "max_drawdown": -0.0261,
+          "benchmark_ret": -0.006,
+          "beat_benchmark": false
         },
         "5": {
           "date": null,
@@ -8882,6 +9629,51 @@
       "score": 70,
       "_prio": 3,
       "_last_st": "2026-09-09 15:17:21",
+      "kline_source": "cache+tencent",
+      "returns": {
+        "1": {
+          "date": "2026-09-10",
+          "close": 195.33,
+          "ret": 0.0002,
+          "status": "ok",
+          "reason": "",
+          "max_drawdown": -0.0135,
+          "benchmark_ret": -0.0054,
+          "beat_benchmark": true
+        },
+        "3": {
+          "date": null,
+          "close": null,
+          "ret": null,
+          "status": "unavailable",
+          "reason": "目标交易日数据未到期或获取失败",
+          "max_drawdown": null,
+          "benchmark_ret": null,
+          "beat_benchmark": null
+        },
+        "5": {
+          "date": null,
+          "close": null,
+          "ret": null,
+          "status": "unavailable",
+          "reason": "目标交易日数据未到期或获取失败",
+          "max_drawdown": null,
+          "benchmark_ret": null,
+          "beat_benchmark": null
+        }
+      }
+    },
+    {
+      "code": "688008",
+      "name": "澜起科技",
+      "date": "2026-09-10",
+      "scan_time": "2026-09-10 09:31:03",
+      "verdict": "approaching",
+      "final_verdict": "approaching",
+      "price": 193.06,
+      "score": 70,
+      "_prio": 3,
+      "_last_st": "2026-09-10 14:51:29",
       "kline_source": "cache+tencent",
       "returns": {
         "1": {
@@ -9262,14 +10054,14 @@
           "beat_benchmark": false
         },
         "3": {
-          "date": null,
-          "close": null,
-          "ret": null,
-          "status": "unavailable",
-          "reason": "目标交易日数据未到期或获取失败",
-          "max_drawdown": null,
-          "benchmark_ret": null,
-          "beat_benchmark": null
+          "date": "2026-09-10",
+          "close": 322.99,
+          "ret": -0.0499,
+          "status": "ok",
+          "reason": "",
+          "max_drawdown": -0.0576,
+          "benchmark_ret": -0.006,
+          "beat_benchmark": false
         },
         "5": {
           "date": null,
@@ -9339,6 +10131,51 @@
       "score": 60,
       "_prio": 3,
       "_last_st": "2026-09-09 15:17:21",
+      "kline_source": "cache+tencent",
+      "returns": {
+        "1": {
+          "date": "2026-09-10",
+          "close": 322.99,
+          "ret": -0.0137,
+          "status": "ok",
+          "reason": "",
+          "max_drawdown": -0.0217,
+          "benchmark_ret": -0.0054,
+          "beat_benchmark": false
+        },
+        "3": {
+          "date": null,
+          "close": null,
+          "ret": null,
+          "status": "unavailable",
+          "reason": "目标交易日数据未到期或获取失败",
+          "max_drawdown": null,
+          "benchmark_ret": null,
+          "beat_benchmark": null
+        },
+        "5": {
+          "date": null,
+          "close": null,
+          "ret": null,
+          "status": "unavailable",
+          "reason": "目标交易日数据未到期或获取失败",
+          "max_drawdown": null,
+          "benchmark_ret": null,
+          "beat_benchmark": null
+        }
+      }
+    },
+    {
+      "code": "688037",
+      "name": "芯源微",
+      "date": "2026-09-10",
+      "scan_time": "2026-09-10 09:31:03",
+      "verdict": "approaching",
+      "final_verdict": "approaching",
+      "price": 323.01,
+      "score": 60,
+      "_prio": 3,
+      "_last_st": "2026-09-10 14:51:29",
       "kline_source": "cache+tencent",
       "returns": {
         "1": {
@@ -9694,14 +10531,14 @@
           "beat_benchmark": false
         },
         "3": {
-          "date": null,
-          "close": null,
-          "ret": null,
-          "status": "unavailable",
-          "reason": "目标交易日数据未到期或获取失败",
-          "max_drawdown": null,
-          "benchmark_ret": null,
-          "beat_benchmark": null
+          "date": "2026-09-10",
+          "close": 168.85,
+          "ret": -0.0682,
+          "status": "ok",
+          "reason": "",
+          "max_drawdown": -0.0993,
+          "benchmark_ret": -0.006,
+          "beat_benchmark": false
         },
         "5": {
           "date": null,
@@ -9771,6 +10608,51 @@
       "score": 60,
       "_prio": 3,
       "_last_st": "2026-09-09 15:17:21",
+      "kline_source": "cache+tencent",
+      "returns": {
+        "1": {
+          "date": "2026-09-10",
+          "close": 168.85,
+          "ret": -0.0307,
+          "status": "ok",
+          "reason": "",
+          "max_drawdown": -0.0631,
+          "benchmark_ret": -0.0054,
+          "beat_benchmark": false
+        },
+        "3": {
+          "date": null,
+          "close": null,
+          "ret": null,
+          "status": "unavailable",
+          "reason": "目标交易日数据未到期或获取失败",
+          "max_drawdown": null,
+          "benchmark_ret": null,
+          "beat_benchmark": null
+        },
+        "5": {
+          "date": null,
+          "close": null,
+          "ret": null,
+          "status": "unavailable",
+          "reason": "目标交易日数据未到期或获取失败",
+          "max_drawdown": null,
+          "benchmark_ret": null,
+          "beat_benchmark": null
+        }
+      }
+    },
+    {
+      "code": "688143",
+      "name": "长盈通",
+      "date": "2026-09-10",
+      "scan_time": "2026-09-10 09:31:03",
+      "verdict": "approaching",
+      "final_verdict": "approaching",
+      "price": 167.3,
+      "score": 90,
+      "_prio": 3,
+      "_last_st": "2026-09-10 14:51:29",
       "kline_source": "cache+tencent",
       "returns": {
         "1": {
