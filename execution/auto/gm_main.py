@@ -1994,7 +1994,10 @@ def on_bar(context, bars):
             if sig.action in ("BUY_LOW", "ADD_POS") and _base_ref > 0:
                 _t_pct = float(context.engine._get_params(code).get("stock_qty_base_pct", 0.3) or 0.3)
                 _t_head = max(100, int(_base_ref * _t_pct / 100) * 100)
-            target_t = max(max_pos_shares, _base_ref + _t_head, pos_qty)
+            # P0-1(2026-09-10 修): 原来把个股预算上限 max_pos_shares(≈20400) 当 sizer 目标仓位传入
+            # → 目标虚高、按 30% 出量失控（600481 BUY 6100）。目标应为「底仓+一档T」，上限防护由
+            # 下方 _check_max_pos_cap 承担。
+            target_t = max(_base_ref + _t_head, pos_qty)
             holding_with_target = dict(holding, target_t=target_t)
 
             # WP-E2: 个股最大仓位闸——到顶直接拦截（堵 sizer 内部 1.5× 兜底洞）
@@ -2130,6 +2133,30 @@ def _pop_buy_snapshot(context, order, symbol):
     return _MISSING
 
 
+def _strategy_ordered_today(code: str) -> bool:
+    """P2-3A(2026-09-10): 当日事件桥是否存在本策略对该 code 的 order 事件。
+    账户级 on_order_status 会对非本策略成交（掘金仿真终端手工单）也回调——据此识别孤儿单。
+    fail-open：读失败/文件缺失 → True（按非孤儿，不误拦本策略单）。"""
+    try:
+        from gm_bridge.writer import BRIDGE_DIR
+        fp = os.path.join(BRIDGE_DIR, f"events_{datetime.now().strftime('%Y%m%d')}.jsonl")
+        if not os.path.exists(fp):
+            return True
+        for _line in open(fp, encoding="utf-8", errors="replace"):
+            _line = _line.strip()
+            if not _line:
+                continue
+            try:
+                _e = json.loads(_line)
+            except Exception:
+                continue
+            if _e.get("event") == "order" and str(_e.get("code")) == str(code):
+                return True
+        return False
+    except Exception:
+        return True
+
+
 def on_order_status(context, order):
     symbol = order["symbol"]
     status = order["status"]
@@ -2149,9 +2176,20 @@ def on_order_status(context, order):
             _ifl[symbol] = max(0, int(_ifl[symbol]) - int(volume))
 
     if status == 3:  # 全部成交
+        # P2-3A(2026-09-10): 孤儿闸——账户级回调对非本策略成交（掘金仿真终端手工单）也触发，
+        # 当日无本策略 order 记录 → 只留痕 risk:orphan_fill，不写 fill/不进台账（09-10 300054 串 800 股根因）。
+        _side = "BUY" if side == 1 else "SELL"
+        if not _strategy_ordered_today(code):
+            try:
+                write_risk(str(datetime.now()), "orphan_fill",
+                           f"非本策略成交(疑似仿真终端手工单) {code} {_side} {volume}@{price} → 不入台账",
+                           code=code)
+                print(f"[{datetime.now():%H:%M:%S}] ORPHAN_FILL {code} {_side} {volume}@{price} 不入台账")
+            except Exception:
+                pass
+            return
         # WP-B15: 持仓变化（成交）→ 解除信号 mute / 地板去重键（单点清理，防解封后忘清键）
         _clear_signal_mute_keys(context, code)
-        _side = "BUY" if side == 1 else "SELL"
         # O-06(2026-08-11 复盘①轻)：台账在本回调内尚未更新（更新在下方），
         # SELL 分支直接读台账得到的是成交前持仓（0811 实战：卖 200 后 pos_after 仍报 1400）。
         _pre_qty = int(context.executed_orders.get(symbol, {}).get("qty", 0))
