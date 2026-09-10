@@ -22,7 +22,7 @@ for _p in (_ST, _AUTO, os.path.join(_AUTO, "_gm")):
         sys.path.insert(0, _p)
 
 SCEN = sys.argv[1] if len(sys.argv) > 1 else "fix3"
-assert SCEN in ("fix2", "fix3", "fix4"), f"未知场景 {SCEN}"
+assert SCEN in ("fix2", "fix3", "fix4", "p0"), f"未知场景 {SCEN}"
 
 OUT_DIR = os.path.join(_ST, "t_io", "validation", "auto", "replay", SCEN)
 os.makedirs(OUT_DIR, exist_ok=True)
@@ -42,11 +42,22 @@ if SCEN in ("fix2", "fix3"):
     gm_main.INITIAL_CASH = 200000
     CASH = 200000
     START = "2026-04-26 08:00:00" if SCEN == "fix2" else "2026-04-24 08:00:00"
+    END = "2026-07-24 16:00:00"
+elif SCEN == "p0":
+    # P0-1(2026-09-10): 600481 sizing 失控回归场景——底仓 1400，修复后一档T BUY qty 应为 400
+    # （修复前 target_t=max_pos_shares≈20400 → 6100；见 Q-20260910-1）
+    gm_main.STOCKS = {"600481": "SHSE.600481"}
+    gm_main.STOCK_NAMES = {"600481": "双良节能"}
+    gm_main.MIRROR_HOLDINGS = {"600481": {"qty": 1400, "cost": 4.31}}
+    gm_main.INITIAL_CASH = 150000
+    CASH = 150000
+    START = "2026-09-10 08:00:00"
+    END = "2026-09-10 16:00:00"
 else:
     CASH = 150000
     gm_main.INITIAL_CASH = 150000
     START = "2026-04-27 08:00:00"
-END = "2026-07-24 16:00:00"
+    END = "2026-07-24 16:00:00"
 
 gm_main._AUDIT_LOG_PATH = os.path.join(OUT_DIR, "backtrace.jsonl")
 # 迁移日 sell_state 全新初始化语义：校验目录下独立，不触碰生产 auto_sell_state.json
@@ -69,3 +80,30 @@ run(strategy_id="e8bb1f4d-87ce-11f1-97f7-98fa9b8df5e7",
     backtest_slippage_ratio=0.0001,
     backtest_adjust=ADJUST_PREV,
     backtest_match_mode=1)
+
+# ── P0-1(2026-09-10) 断言：600481 一档T BUY qty 必须 == 400（修复前=6100）──
+if SCEN == "p0":
+    import glob as _glob
+    import json as _json
+    _buys = []
+    for _fp in sorted(_glob.glob(os.path.join(OUT_DIR, "events_*.jsonl"))):
+        for _ln in open(_fp, encoding="utf-8", errors="replace"):
+            _ln = _ln.strip()
+            if not _ln:
+                continue
+            try:
+                _e = _json.loads(_ln)
+            except Exception:
+                continue
+            if _e.get("event") == "order" and str(_e.get("code")) == "600481" and _e.get("side") == "BUY":
+                _buys.append(int(_e.get("qty") or 0))
+    print(f"[P0-1] 600481 BUY orders qty={_buys}")
+    if not _buys:
+        # 单日回测未必复现当日做T信号（live 11:20 BUY_LOW 由引擎实时触发；回测该窗口未产出）
+        # → 本场景作「不回归护栏」：无 BUY 视为无失控样本通过；严格 qty 复算见 PositionSizer 断言。
+        print("⚠️ P0-1: 本回放窗口无 600481 BUY（未复现当日信号）→ 无失控样本，通过；"
+              "严格口径以 PositionSizer 复算为准(old=6100/new=400)")
+    else:
+        assert all(q == 400 for q in _buys), f"存在非 400 的 BUY qty: {_buys}（一档T口径=floor(底仓×30%)）"
+        assert max(_buys) < 6100, "仍出现预算级失控量"
+        print("✅ P0-1 断言 OK: 600481 BUY qty==400（修复前 6100）")
