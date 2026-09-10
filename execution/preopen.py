@@ -32,6 +32,43 @@ from core.utils import (  # noqa: E402
 # V3: analyze_auction + format_auction_feishu 由 auction_analyzer.py exec 加载提供（globals）
 
 @dataclass
+def _load_auction_gap_map(date_str: Optional[str] = None) -> dict:
+    """P2-3B(2026-09-10): 读当日 auction_{date}.json 最新有效档的竞价缺口，作今日 open_gap 真口径。
+
+    返回 {code: (open_gap_frac, pre_close)}；用 pct_vs_preclose 字段直接换算（不拿 price 重算——
+    09:25 档 price 可能 None 但 pct 有效；先例 c20_auction_backtest.py:170）。逐档降级 09:25/09:22/09:20。
+    修复根因 R1：旧逻辑 open_gap=(holdings昨收−日线前收)/前收 = 昨日日收益，非今日竞价缺口 → C-4 结构性失明。
+    """
+    out: dict = {}
+    try:
+        d = date_str or get_today_str()
+        fp = PREOPEN_DIR / f"auction_{d}.json"
+        if not os.path.exists(fp):
+            return out
+        j = json.load(open(fp, encoding="utf-8"))
+        snaps = j.get("snapshots") or {}
+        for slot in sorted(snaps.keys(), reverse=True):   # 09:25 > 09:22 > 09:20
+            rows = (snaps.get(slot) or {}).get("rows") or {}
+            got = False
+            for c, v in rows.items():
+                if c in out:
+                    continue
+                pct = (v or {}).get("pct_vs_preclose")
+                if pct is None:
+                    continue
+                pc = (v or {}).get("pre_close")
+                try:
+                    out[c] = (float(pct) / 100.0, float(pc) if pc is not None else None)
+                    got = True
+                except Exception:
+                    pass
+            if got:
+                break   # 用最新有效档
+    except Exception:
+        pass
+    return out
+
+
 class PreOpenContext:
     """早盘集合竞价分析结论（V3 竞价增强版）"""
     market_score: float = 0.0
@@ -281,25 +318,36 @@ class PreOpenEngine:
         bearish_count = 0
         code_snapshots = {}
 
+        _gap_map = _load_auction_gap_map(get_today_str())   # P2-3B: 今日竞价缺口真口径
         for code, holding in self.holdings.items():
             price = float(holding.get("pre_close", 0) or 0)
             daily_ctx = get_daily_context(code, holding or {}, current_price=price)
             prev_close = float(daily_ctx.get("daily_prev_close", 0) or 0)
-            # G1(2026-09-09): prev_close≤0 或 daily 非 ok → open_gap 结构性失效（C-4 高开预警失明源头之一），
-            # 显式降级告警+落盘，不再静默产出 0 口径误导下游（market_regime/C-4 消费同一字段）。
-            _gap_degraded = (prev_close <= 0) or (str(daily_ctx.get("daily_status")) != "ok")
-            if _gap_degraded:
-                _log.warning(f"⚠️ preopen {code} prev_close={prev_close} daily_status="
-                             f"{daily_ctx.get('daily_status')} → open_gap 降级(degraded)，C-4 高开预警不可用")
-                try:
-                    _append_jsonl(_trace_path("preopen_fail"), {
-                        "code": code, "ts": _now().strftime("%Y-%m-%d %H:%M:%S"),
-                        "reason": "prev_close_zero_or_daily_not_ok",
-                        "prev_close": prev_close, "daily_status": daily_ctx.get("daily_status")})
-                except Exception:
-                    pass
-            # 注意口径：open_gap 为小数（0.0558 = 5.58%），不是百分比数值；7 月老文件 prev_close=0 导致 gap 恒 0 不可信
-            open_gap = (price - prev_close) / prev_close if prev_close > 0 else 0.0
+            # P2-3B(2026-09-10): 竞价缺口优先于日线口径——旧口径 = 昨日涨跌幅，导致 C-4 结构性失明
+            _ag = _gap_map.get(code) or _gap_map.get(str(code).split("_")[0])
+            gap_source = "daily"
+            _gap_degraded = False
+            if _ag is not None:
+                open_gap = float(_ag[0])
+                if _ag[1]:
+                    prev_close = float(_ag[1])
+                gap_source = "auction"
+            else:
+                # G1(2026-09-09): prev_close≤0 或 daily 非 ok → open_gap 结构性失效，显式降级告警+落盘
+                _gap_degraded = (prev_close <= 0) or (str(daily_ctx.get("daily_status")) != "ok")
+                gap_source = "degraded" if _gap_degraded else "daily"
+                if _gap_degraded:
+                    _log.warning(f"⚠️ preopen {code} prev_close={prev_close} daily_status="
+                                 f"{daily_ctx.get('daily_status')} → open_gap 降级(degraded，无竞价档)，C-4 高开预警不可用")
+                    try:
+                        _append_jsonl(_trace_path("preopen_fail"), {
+                            "code": code, "ts": _now().strftime("%Y-%m-%d %H:%M:%S"),
+                            "reason": "prev_close_zero_or_daily_not_ok",
+                            "prev_close": prev_close, "daily_status": daily_ctx.get("daily_status")})
+                    except Exception:
+                        pass
+                # 注意口径：open_gap 为小数（0.0558 = 5.58%），不是百分比数值
+                open_gap = (price - prev_close) / prev_close if prev_close > 0 else 0.0
 
             direction = "neutral"
             if open_gap > 0.005:
@@ -315,6 +363,7 @@ class PreOpenEngine:
                 "open_gap": open_gap,
                 "direction": direction,
                 "prev_close": prev_close,
+                "gap_source": gap_source,
                 "gap_status": "degraded" if _gap_degraded else "ok",
             }
 

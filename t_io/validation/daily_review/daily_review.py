@@ -7,8 +7,9 @@ daily_review.py — 三层复盘体系·日复盘系统自动数据项(§1 第1�
 日型口径: harness_backtest.classify_day_type 的 close-only 近似(生产无分钟OHLC落盘, trace仅tick价)
 产物: t_io/validation/daily_review/daily_review_DATE.json + 控制台摘要
 """
-import argparse, json, math, re, shutil, sys
+import argparse, json, math, os, re, shutil, sys
 from collections import Counter, defaultdict
+from datetime import datetime
 from pathlib import Path
 
 BASE = Path(__file__).resolve().parents[3]  # 自解析：本文件在 t_io/validation/daily_review/ 下，上级3级=仓库根（生产机=E:\06_T）
@@ -18,8 +19,9 @@ NAMES = {"000988": "华工科技", "588170": "科创半导体ETF华夏", "600176
          "300153": "科泰电源", "300364": "中文在线"}
 
 p = argparse.ArgumentParser()
-p.add_argument("--date", default="2026-08-03")
-DATE = p.parse_args().date
+p.add_argument("--date", default=None)   # P2-3C: default 当天（原硬编码 2026-08-03）
+_DATE_ARG = p.parse_args().date
+DATE = _DATE_ARG or datetime.now().strftime("%Y-%m-%d")
 OUT = BASE / "t_io/validation/daily_review"
 OUT.mkdir(parents=True, exist_ok=True)
 
@@ -262,14 +264,36 @@ STATE_DIR.mkdir(parents=True, exist_ok=True)
 HOLDINGS_FP = STATE_DIR / "holdings.json"
 
 def archive_holdings_snapshot(date):
-    """幂等归档: 当前 holdings.json → t_io/state/holdings_DATE.json（已存在则跳过）。
-    收盘同步会覆盖 holdings.json，必须先归档才能做跨日 K2/K3 对照。"""
+    """P2-3C(2026-09-10) 重写归档规则（旧"已存在则跳过"会被晨跑旧值锁死 reconcile 前状态）：
+    - 历史日期：只读护栏——已存在不覆盖（保留当时快照）。
+    - date==今日：holdings.json mtime 非今日 → 不建档（防用旧值）；已存在且 holdings.json 更新则覆盖自愈。
+    返回 (snap_path, created_or_updated)。
+    """
     snap = STATE_DIR / f"holdings_{date}.json"
-    created = False
-    if not snap.exists() and HOLDINGS_FP.exists():
+    if not HOLDINGS_FP.exists():
+        return snap, False
+    today = datetime.now().strftime("%Y-%m-%d")
+    if date != today:
+        if snap.exists():
+            return snap, False
         shutil.copy2(HOLDINGS_FP, snap)
-        created = True
-    return snap, created
+        return snap, True
+    try:
+        h_mtime = os.path.getmtime(HOLDINGS_FP)
+    except Exception:
+        h_mtime = 0
+    if datetime.fromtimestamp(h_mtime).strftime("%Y-%m-%d") != today:
+        return snap, False      # holdings.json 非今日 → 不建档
+    if snap.exists():
+        try:
+            if h_mtime > os.path.getmtime(snap):   # 比快照新 → 覆盖自愈
+                shutil.copy2(HOLDINGS_FP, snap)
+                return snap, True
+        except Exception:
+            pass
+        return snap, False
+    shutil.copy2(HOLDINGS_FP, snap)
+    return snap, True
 
 def prev_holdings_snapshot(date):
     """前一交易日归档快照（取日期 < date 的最新一份）。"""
