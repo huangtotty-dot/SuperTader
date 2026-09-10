@@ -2,6 +2,7 @@
 """数据源门面（合并实施方案 P1-1）：默认 gm 主源，失败/超时降级腾讯。
 每次降级 log.warning；返回 DataFrame 统一在 attrs["source"] 标记 "gm"/"tencent"/"cache"。
 """
+import concurrent.futures as _cf
 import logging
 from datetime import datetime, timedelta
 
@@ -49,6 +50,7 @@ class MarketDataFacade:
     窗内直接走腾讯（不再逐调用重试刷屏）；窗后恢复尝试，成功即复位。
     """
     _GM_COOLDOWN_SECONDS = 60
+    _GM_CALL_TIMEOUT = 12.0    # P1-2(2026-09-10): gm SDK 无超时（history_n 可无限期挂死），线程池硬超时
 
     def __init__(self):
         # H1/G2(2026-09-09): GmProvider 构造容错——gm SDK/解释器不可用时置 None，腾讯兜底不再被绑架
@@ -61,6 +63,8 @@ class MarketDataFacade:
             self._gm = None
         self._tx = TencentProvider()
         self._gm_down_until = None
+        # P1-2: 单 worker 池承载 gm 调用，超时即弃池重建（挂死线程不可回收）
+        self._gm_pool = _cf.ThreadPoolExecutor(max_workers=1, thread_name_prefix="gm-call")
 
     def _gm_ready(self) -> bool:
         return bool(self._gm is not None and getattr(self._gm, "_ready", False))
@@ -72,6 +76,23 @@ class MarketDataFacade:
 
     def _gm_ok_reset(self) -> None:
         self._gm_down_until = None
+
+    def _gm_call(self, desc: str, fn, *args, **kwargs):
+        """P1-2(2026-09-10): 给 gm SDK 调用套线程池硬超时。
+        gm 无超时，挂死既不返回也不抛 → 既有 except 熔断捕不到。超时抛 TimeoutError（内置），
+        由调用点既有 `except Exception → _note_gm_down → 腾讯兜底` 接住；超时后丢弃该池重建。"""
+        if self._gm_pool is None:
+            self._gm_pool = _cf.ThreadPoolExecutor(max_workers=1, thread_name_prefix="gm-call")
+        fut = self._gm_pool.submit(fn, *args, **kwargs)
+        try:
+            return fut.result(timeout=self._GM_CALL_TIMEOUT)
+        except _cf.TimeoutError:
+            try:
+                self._gm_pool.shutdown(wait=False)
+            except Exception:
+                pass
+            self._gm_pool = _cf.ThreadPoolExecutor(max_workers=1, thread_name_prefix="gm-call")
+            raise TimeoutError(f"gm {desc} 调用超时>{self._GM_CALL_TIMEOUT}s（SDK 无超时挂死）")
 
     def _note_gm_down(self, ctx: str, key: str, exc: Exception) -> None:
         """gm 调用失败（多为终端服务不可达）→ 置冷却窗并每窗只告警一次。"""
@@ -92,7 +113,7 @@ class MarketDataFacade:
         # 自动盘(gm_main)纯 gm 直拉；手动盘此处同样优先 gm，保证两侧数据/判定一致。
         if self._gm_ok():
             try:
-                df = self._gm.daily(code, days)
+                df = self._gm_call("daily", self._gm.daily, code, days)
                 if df is not None and not df.empty:
                     # 阻断5: gm 日线对当日 forming bar（带 ts_date 新鲜度闸；窗口至收盘后16:00，重审#7）
                     df = self._maybe_append_forming(df, code)
@@ -181,7 +202,7 @@ class MarketDataFacade:
             if _hit and (datetime.now() - _hit["ts"]).total_seconds() < _GM_MINUTE_TTL:
                 return self._mark(_hit["df"], "gm")
             try:
-                df = self._gm.minute(code, date)
+                df = self._gm_call("minute", self._gm.minute, code, date)
                 if df is not None and not df.empty:
                     _gm_minute_cache[_k] = {"df": df.copy(), "ts": datetime.now()}
                     if len(_gm_minute_cache) > 200:  # 清理早于昨天的条目，防长期运行累积
@@ -198,7 +219,7 @@ class MarketDataFacade:
         # 快照契约是 dict 非 DataFrame，source 无法进 attrs——gm 优先，空/异常回退腾讯
         if self._gm_ok():
             try:
-                out = self._gm.snapshot(codes)
+                out = self._gm_call("snapshot", self._gm.snapshot, codes)
                 if out:
                     self._gm_ok_reset()
                     return out
@@ -209,7 +230,7 @@ class MarketDataFacade:
     def index_daily(self, index: str = "sh000001", days: int = 800, end_date: str = None) -> pd.DataFrame:
         if self._gm_ok():
             try:
-                df = self._gm.index_daily(index, days, end_date)
+                df = self._gm_call("index_daily", self._gm.index_daily, index, days, end_date)
                 if df is not None and not df.empty:
                     # 阻断6: gm 指数结果写缓存（end_date 缺省时）
                     if end_date is None:
