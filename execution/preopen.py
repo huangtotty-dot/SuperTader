@@ -31,7 +31,6 @@ from core.utils import (  # noqa: E402
     _preopen_path, _trace_path, _append_jsonl, get_today_str, _now, PREOPEN_DIR)
 # V3: analyze_auction + format_auction_feishu 由 auction_analyzer.py exec 加载提供（globals）
 
-@dataclass
 def _load_auction_gap_map(date_str: Optional[str] = None) -> dict:
     """P2-3B(2026-09-10): 读当日 auction_{date}.json 最新有效档的竞价缺口，作今日 open_gap 真口径。
 
@@ -69,6 +68,7 @@ def _load_auction_gap_map(date_str: Optional[str] = None) -> dict:
     return out
 
 
+@dataclass
 class PreOpenContext:
     """早盘集合竞价分析结论（V3 竞价增强版）"""
     market_score: float = 0.0
