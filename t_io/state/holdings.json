@@ -20,12 +20,12 @@
     "type": "stock",
     "account": "账户B",
     "pool": "both",
-    "qty": 100,
-    "base": 100,
+    "qty": 5600,
+    "base": 5600,
     "t_qty": 0,
-    "cost": 28.216,
+    "cost": 4.757,
     "pre_close": 4.32,
-    "mirror_qty": 1400,
+    "mirror_qty": 6900,
     "mirror_cost": 0,
     "virtual_qty": 4800
   },
@@ -239,7 +239,7 @@
     "t_qty": 0,
     "cost": 0,
     "pre_close": 0,
-    "mirror_qty": 500,
-    "mirror_cost": 0.0
+    "mirror_qty": 0,
+    "mirror_cost": 0
   }
 }
