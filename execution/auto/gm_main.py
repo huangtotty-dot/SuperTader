@@ -58,6 +58,8 @@ _atexit.register(_gm_atexit_banner)
 def _mark_pending_recon(context, code, sym, side, qty, px, orders):
     """下单成功登记待对账项（Fix B 步1）。orders=order_volume 返回（List[Dict] 或单 dict）。"""
     try:
+        if getattr(context, "mode", None) != MODE_LIVE:
+            return   # 仅实盘需要对账；回测不登记（省内存/无轮询）
         _ids = []
         for _o in (orders if isinstance(orders, list) else [orders]):
             if isinstance(_o, dict):
@@ -87,6 +89,8 @@ def _poll_pending_recon(context, now):
     """Fix C: 回调失效轮询兜底。扫 _pending_recon，age≥90s 用 get_orders 查当日委托，
     status==3 → 合成 order 喂 on_order_status 补记（回调/轮询经 _fills_done 防重）。整段 fail-open。"""
     try:
+        if context.mode != MODE_LIVE:
+            return   # 回测无回调失效问题；轮询仅实盘需要，避免每 bar 多余 get_orders 拖慢/污染回放
         _prec = getattr(context, "_pending_recon", None)
         if not _prec:
             return
