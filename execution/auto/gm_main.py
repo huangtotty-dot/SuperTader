@@ -76,6 +76,26 @@ def _mark_pending_recon(context, code, sym, side, qty, px, orders):
         pass
 
 
+def _buyback_cap_qty(qty, ab_now, audit_fn=None, code=""):
+    """P0-1(2026-09-11 Q-20260911-1) 纯函数：回补量封顶为 armed 卖出量 sell_qty。
+    防 sizer 按预算/底仓口径出量失控（588170 armed 1100 实买 21000≈19×）。返回封顶后 qty。"""
+    try:
+        if ab_now:
+            cap = int(ab_now.get("sell_qty") or 0)
+            if cap >= 100 and int(qty) > cap:
+                if audit_fn:
+                    try:
+                        audit_fn({"event": "buyback_capped", "code": code,
+                                  "qty_before": int(qty), "qty_after": cap,
+                                  "sell_qty": cap, "time": str(datetime.now())})
+                    except Exception:
+                        pass
+                return cap
+    except Exception:
+        pass
+    return qty
+
+
 def _pending_recon_close(context, sym):
     try:
         _rec = getattr(context, "_pending_recon", None)
@@ -2133,13 +2153,7 @@ def on_bar(context, bars):
             # P0-1(2026-09-11 Q-20260911-1): 回补 armed 硬帽——回补量封顶为 armed 卖出量（sell_qty），
             # 防 sizer 按预算/底仓口径出量失控（09-11 588170 armed 1100 实买 21000 ≈19×；600481 armed 900→2600）。
             # 注意字段名是 sell_qty（t_engine_auto.arm_awaiting_buyback / sell_state 同 key），非 qty。
-            if _ab_now:
-                _bb_cap = int(_ab_now.get("sell_qty") or 0)
-                if _bb_cap >= 100 and qty > _bb_cap:
-                    _audit_write({"event": "buyback_capped", "code": code,
-                                  "qty_before": qty, "qty_after": _bb_cap,
-                                  "sell_qty": _bb_cap, "time": str(now)})
-                    qty = _bb_cap
+            qty = _buyback_cap_qty(qty, _ab_now, _audit_write, code)
 
             # WP-B07: 高接降档 — 数量减半取整到 min_unit，不足 min_unit 则延迟
             qty, _bb_dg, _bb_min_unit = _apply_buyback_downgrade(context, code, sig, qty)
