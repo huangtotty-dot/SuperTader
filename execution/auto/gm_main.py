@@ -2332,8 +2332,9 @@ def on_order_status(context, order):
         _pre_qty = int(context.executed_orders.get(symbol, {}).get("qty", 0))
         _pos_after = max(0, _pre_qty - volume) if _side == "SELL" else _pre_qty + volume
         try:
+            _fee_rate = float(PARAMS.get("commission_ratio", 0.00015) or 0.00015)
             write_fill(str(datetime.now()), _raw_code(symbol), _side, volume, price,
-                       pos_after=_pos_after)
+                       pos_after=_pos_after, fee=round(float(price) * int(volume) * _fee_rate, 2))
         except Exception:
             pass
         _pending_recon_close(context, symbol)   # Fix B: 该 symbol 已完成对账，轮询不再兜底
