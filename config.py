@@ -746,6 +746,29 @@ INDEX_RSI5M_ALERT = {
     "indices": ["sh000001", "sz399001", "sz399006", "sh000688"],   # 上证/深成/创业板/科创50
 }
 
+
+def build_index_rsi5_alert_card(hits, when: str = "", sim: bool = False) -> dict:
+    """指数 5 分钟 RSI 超卖**独立醒目卡**（红头/大字/全体@，区别于常规大盘分时预警）。
+
+    hits: [{"msg": "创业板指 5分钟RSI=2.0<20（超卖）", ...}, ...]
+    sim=True 时标题带 🧪 模拟测试 前缀（供离线复现测试推送）。
+    """
+    tag = "🧪【模拟测试】" if sim else ""
+    title = f"🚨🚨 {tag}指数5分钟超卖预警 🚨🚨 - {FEISHU_KEYWORD}"
+    els = [{"tag": "div", "text": {"content": '<at user_id="all">所有人</at>', "tag": "lark_md"}},
+           {"tag": "div", "text": {"content": f"**{when}** 以下指数 5 分钟 RSI 进入超卖区：", "tag": "lark_md"}}]
+    for h in (hits or []):
+        els.append({"tag": "div", "text": {"content": f"## 🚨 {h.get('msg', '')}", "tag": "lark_md"}})
+    els.append({"tag": "hr"})
+    els.append({"tag": "note", "elements": [{"tag": "plain_text",
+                "content": f"口径：5分钟RSI(rsi_5m_p6)<{INDEX_RSI5M_ALERT.get('threshold', 20)} · "
+                           f"独立预警（与常规大盘分时预警区分）"}]})
+    return {"msg_type": "interactive", "notify_type": 1,
+            "card": {"config": {"wide_screen_mode": True},
+                     "header": {"template": "red",
+                                "title": {"tag": "plain_text", "content": title}},
+                     "elements": els}}
+
 # ==================== 日志双写配置 ====================
 log = logging.getLogger("做T助手")
 log.setLevel(logging.INFO)
