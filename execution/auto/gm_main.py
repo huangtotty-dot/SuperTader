@@ -218,11 +218,16 @@ def _load_mirror_holdings():
         # 仅 auto 池成员纳入 MIRROR（防纯手动票被镜像进来）；池读取失败时不裁剪（保持可用）
         if _pool and code not in _pool:
             continue
-        _ov = (_pool.get(code) or {}).get("mirror_qty")   # 按票覆盖（None=镜像）
-        if _ov is not None:
-            tgt = int(_ov or 0)
+        # 覆盖优先级：AUTO_MIRROR_OVERRIDE（含 0） > AUTO_POOL[code].mirror_qty > 镜像 base
+        _ovmap = getattr(_auto_pool, "AUTO_MIRROR_OVERRIDE", {}) or {}
+        if code in _ovmap:
+            tgt = int(_ovmap.get(code) or 0)
         else:
-            tgt = int(h.get("base") or 0) or int(h.get("qty") or 0)   # 镜像 base，回退 qty
+            _ov = (_pool.get(code) or {}).get("mirror_qty")
+            if _ov is not None:
+                tgt = int(_ov or 0)
+            else:
+                tgt = int(h.get("base") or 0) or int(h.get("qty") or 0)   # 镜像 base，回退 qty
         if tgt <= 0:
             continue
         out[code] = {"qty": tgt, "cost": float(h.get("cost") or 0)}
