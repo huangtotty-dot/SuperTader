@@ -22,7 +22,7 @@
     "pool": "both",
     "qty": 5600,
     "base": 5600,
-    "t_qty": 0,
+    "t_qty": 1600,
     "cost": 4.757,
     "pre_close": 4.32,
     "mirror_qty": 6900,
