@@ -1980,11 +1980,13 @@ def _maybe_check_index_intraday_alert(now: datetime) -> None:
         _all_alerts: list = []   # 合并卡行（含板块前缀）
         _fresh: list = []        # 去重后待推（板块@tag 独立 60min 去重）
         _snapshots: dict = {}
+        _mb_by: dict = {}        # 本轮各板分钟线（供 RSI5m 复用，避免重复拉取）
         for _bc in _boards:
             try:
                 _mb = fetch_index_minutes_live(_bc)
             except Exception:
                 continue          # 单板分钟不可用 → 跳过该板，其余板块照常
+            _mb_by[_bc] = _mb
             try:
                 _res = detect_intraday_alert(
                     _mb,
@@ -2005,6 +2007,43 @@ def _maybe_check_index_intraday_alert(now: datetime) -> None:
                 if now_ts - float(_index_intraday_alert_cache.get(_dk, 0)) >= 3600:
                     _fresh.append(_ta)
                     _index_intraday_alert_cache[_dk] = now_ts
+        # ── RSI(5min)<阈值 超卖报警（2026-09-11 owner 需求；各大指数固定覆盖，不依赖持仓） ──
+        try:
+            from config import INDEX_RSI5M_ALERT as _ra
+        except Exception:
+            _ra = {"enabled": True, "threshold": 20,
+                   "indices": ["sh000001", "sz399001", "sz399006", "sh000688"]}
+        if _ra.get("enabled", True):
+            try:
+                from analysis.indicators import resample_to_5min as _r5, add_5min_indicators as _a5
+                _th = float(_ra.get("threshold", 20))
+                for _ic in (_ra.get("indices") or []):
+                    try:
+                        _m = _mb_by.get(_ic)
+                        if _m is None:
+                            _m = fetch_index_minutes_live(_ic)
+                            _mb_by[_ic] = _m
+                        _df5 = _r5(_m) if _m is not None and not _m.empty else None
+                        if _df5 is None or _df5.empty or len(_df5) < 6:
+                            continue
+                        _df5 = _a5(_df5)
+                        _rsi = float(_df5["rsi_5m_p6"].iloc[-1])
+                        if _rsi != _rsi:      # NaN
+                            continue
+                        if _rsi < _th:
+                            _tag = f"RSI5<{_th:g}"
+                            _ta = {"tag": _tag, "level": "warn",
+                                   "msg": f"【{_BOARD_INDEX_NAME.get(_ic, _ic)}】5分钟RSI={_rsi:.1f}<{_th:g}（超卖）"}
+                            _all_alerts.append(_ta)
+                            _active_by_board.setdefault(_ic, []).append(_ta)
+                            _dk = f"{_ic}@{_tag}"
+                            if now_ts - float(_index_intraday_alert_cache.get(_dk, 0)) >= 3600:
+                                _fresh.append(_ta)
+                                _index_intraday_alert_cache[_dk] = now_ts
+                    except Exception:
+                        continue
+            except Exception:
+                pass
         # V1.30: 活动预警状态（分板注入 + 兼容旧全局列表），45 分钟未刷新自动过期
         _INDEX_INTRADAY_ACTIVE_ALERTS_BY_BOARD = _active_by_board
         if _all_alerts:
