@@ -1048,26 +1048,26 @@ class Api:
             trend_down = ch.get("direction") == "down"
             trend_up = ch.get("direction") == "up"
 
-            # 风险提醒建议（2026-09-11 重校准，依据 t_io/validation/ob_calib 前瞻实验）：
-            # 实证（9 持仓×500 日，基线 T+5 +1.52%/跌占 45.3%）：仅 RSI>70 偏弱(+0.73%/53.3%)；
-            # KDJ/CCI>100、破BOLL上轨实为动能(均 >+2.4% 跑赢基线)、日线顶背离无前瞻(≈基线)
-            # → 不再拿 KDJ/CCI/BOLL/单次背离报"高风险"；RSI>70 需叠加趋势下行/顶背离才升「高」。
+            # 风险提醒建议（2026-09-11 两次实验校准：ob_signal_calib + rsi_sensitivity）：
+            # 实证：RSI 阈值 68~75 差异不大(均 T+5≈+0.8%/跌52%)；RSI>80 才明显转弱(-0.06%/56%)；
+            # RSI超买+日线顶背离反而偏强(+1.8~3.2%)→ 顶背离不作升级因子；KDJ/CCI/BOLL 为动能。
+            # → 高 = RSI>80 或 (RSI>70 且趋势下行)；中 = RSI>70 或趋势下行；顶背离仅展示不计风险。
             rsi_hot = bool(cur_rsi > 70)
-            if rsi_hot and trend_down:
+            if cur_rsi > 80:
+                risk = "高"
+                advice = "🚨 RSI极度超买(>80)：实证 T+5 转平、56% 下跌，注意回落/减仓"
+            elif rsi_hot and trend_down:
                 risk = "高"
                 advice = "🚨 RSI超买+趋势下行：回落风险高，反弹减仓/回避"
-            elif rsi_hot and div["count"] >= 1:
-                risk = "高"
-                advice = "🚨 RSI超买+顶背离：动能转弱迹象，减仓/回避"
             elif rsi_hot:
                 risk = "中"
-                advice = "⚠ RSI超买(>70)：短线偏热，注意回调（实证 T+5 偏弱）"
-            elif div["count"] >= 2:
-                risk = "中"
-                advice = "· 顶背离≥2：仅观察（日线前瞻性弱），勿追高"
+                advice = "⚠ RSI超买(>70)：短线偏热，注意回调（实证跌占52%>基线45%）"
             elif trend_down:
                 risk = "中"
                 advice = "⚠ 趋势下行：不追高，反弹减仓"
+            elif div["count"] >= 2:
+                risk = "低"
+                advice = "✓ 风险低；顶背离≥2 仅观察（日线前瞻性弱，勿据此减仓）"
             else:
                 risk = "低"
                 advice = "✓ 指标中性（KDJ/CCI/BOLL 偏强属动能）：持有/关注"
