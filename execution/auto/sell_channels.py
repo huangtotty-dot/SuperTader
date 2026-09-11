@@ -8,7 +8,7 @@ gm 符号与 gm_main 模块级名字经 `_bind_gm(gm)` 注入（由 gm_main 在 
 import concurrent.futures as _cf
 import os
 import sys
-from datetime import timedelta
+from datetime import datetime, timedelta
 from functools import partial as _partial
 
 _PROJ = os.path.dirname(os.path.abspath(__file__))
@@ -72,6 +72,25 @@ def _sdk_call(desc, fn, *a, **k):
             pass
         _SELL_SDK_POOL = _cf.ThreadPoolExecutor(max_workers=1, thread_name_prefix="gm-sell")
         raise TimeoutError(f"gm SDK {desc} 超时>{_SELL_SDK_TIMEOUT}s（挂死，弃池）")
+
+
+def _mark_pending_recon(context, code, sym, side, qty, px, orders):
+    """Fix B(2026-09-11): 卖单成功登记待对账（gm_main._poll_pending_recon 轮询兜底用）。"""
+    try:
+        _ids = []
+        for _o in (orders if isinstance(orders, list) else [orders]):
+            if isinstance(_o, dict):
+                _i = _o.get("id") or _o.get("order_id")
+                if _i:
+                    _ids.append(_i)
+        _r = getattr(context, "_pending_recon", None)
+        if _r is None:
+            context._pending_recon = {}
+            _r = context._pending_recon
+        _r[sym] = {"code": code, "side": side, "qty": int(qty or 0), "px": float(px or 0),
+                   "ts_dt": datetime.now(), "order_ids": _ids, "closed": False}
+    except Exception:
+        pass
 
 
 def _sell_arbiter(context, code, sig, pos_qty, cp, now, holding, threshold,
@@ -165,11 +184,12 @@ def _sell_arbiter(context, code, sig, pos_qty, cp, now, holding, threshold,
         write_order(str(now), code, "SELL", qty, cp)
     except Exception: pass
     try:
-        _sdk_call("order_volume_sell", _partial(
+        _so = _sdk_call("order_volume_sell", _partial(
             order_volume, symbol=gm_sym, volume=qty,
             side=OrderSide_Sell,
             order_type=OrderType_Market,
             position_effect=PositionEffect_Close))
+        _mark_pending_recon(context, code, gm_sym, "SELL", qty, cp, _so)
         # F9: 登记在途量（fill/reject 回调释放）
         if not hasattr(context, "_inflight_sell") or context._inflight_sell is None:
             context._inflight_sell = {}
@@ -342,11 +362,12 @@ def _sell_channel_gate(context, code, gm_sym, cp, now, sig, pos_qty, holding, da
                 except Exception:
                     pass
                 try:
-                    _sdk_call("order_volume_tail", _partial(
+                    _to = _sdk_call("order_volume_tail", _partial(
                         order_volume, symbol=gm_sym, volume=qty,
                         side=OrderSide_Sell,
                         order_type=OrderType_Market,
                         position_effect=PositionEffect_Close))
+                    _mark_pending_recon(context, code, gm_sym, "SELL", qty, cp, _to)
                 except Exception as e:
                     print(f'[{now:%H:%M:%S}] TAIL {code} 下单失败: {e}')
                     try:
