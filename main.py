@@ -2561,8 +2561,13 @@ def scan_once():
                         if sig.hold_qty > 0:
                             engine.record_trade_action(code, sig.action, sig.hold_qty, price=sig.price)
                         else:
+                            # 查证(2026-09-11 W37): 原日志无原因码，无法区分 no_t_budget(无T仓) vs full_position(满仓)。
+                            # 补 reason/max_buyable 归因（不改闸门），下一交易日即可定性。
+                            _st_b = locals().get("_st_buy") or {}
                             log.info(f"📡 {code} {sig.action}两点触发(score={sig.score:.0f})但仓控可交易量为0，"
-                                     f"已推送仅供参考(不记账)")
+                                     f"已推送仅供参考(不记账) [reason={locals().get('_buy_block_reason') or '?'} "
+                                     f"max_buyable={_st_b.get('max_buyable')} t_qty={holding.get('t_qty')} "
+                                     f"net_qty={_st_b.get('net_qty')}]")
                     else:
                         action_type = "买入" if sig.action in ["BUY_LOW", "ADD_POS"] else "卖出"
                         time_window = "10:00前" if t < dtime(10, 0) else "10:00后"
