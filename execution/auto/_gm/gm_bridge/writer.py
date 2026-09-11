@@ -132,8 +132,9 @@ def write_order(time_str: str, code: str, side: str, qty: int, price: float,
 
 
 def write_fill(time_str: str, code: str, side: str, qty: int, price: float,
-               order_id: str = "", pos_after: int = 0, fee: float = 0.0):
-    """全部成交事件。Q-20260911(候选): 落 fee 字段——全周费用可机读核对（N11 防线费率=0.00015）。"""
+               order_id: str = "", pos_after: int = 0, fee: float = 0.0, fee_source: str = "estimated"):
+    """全部成交事件。F-9/Q-20260911: 落 fee + fee_source（gm=实收 filled_commission / estimated=费率估算），
+    全周费用可机读核对（N11 防线费率=0.00015）。"""
     _append_jsonl(_events_path(), {
         "event": "fill",
         "time": time_str,
@@ -144,6 +145,7 @@ def write_fill(time_str: str, code: str, side: str, qty: int, price: float,
         "order_id": str(order_id),
         "pos_after": pos_after,
         "fee": fee,
+        "fee_source": fee_source,
     })
 
 

@@ -2336,9 +2336,16 @@ def on_order_status(context, order):
         _pre_qty = int(context.executed_orders.get(symbol, {}).get("qty", 0))
         _pos_after = max(0, _pre_qty - volume) if _side == "SELL" else _pre_qty + volume
         try:
-            _fee_rate = float(PARAMS.get("commission_ratio", 0.00015) or 0.00015)
+            # F-9/Q-20260911: 优先 gm 实收 filled_commission，缺失回退费率估算并标 fee_source
+            _gm_fee = order.get("filled_commission")
+            if _gm_fee is not None:
+                _fee, _fsrc = float(_gm_fee), "gm"
+            else:
+                _fee_rate = float(PARAMS.get("commission_ratio", 0.00015) or 0.00015)
+                _fee, _fsrc = round(float(price) * int(volume) * _fee_rate, 2), "estimated"
             write_fill(str(datetime.now()), _raw_code(symbol), _side, volume, price,
-                       pos_after=_pos_after, fee=round(float(price) * int(volume) * _fee_rate, 2))
+                       order_id=str(order.get("id") or ""), pos_after=_pos_after,
+                       fee=_fee, fee_source=_fsrc)
         except Exception:
             pass
         _pending_recon_close(context, symbol)   # Fix B: 该 symbol 已完成对账，轮询不再兜底
