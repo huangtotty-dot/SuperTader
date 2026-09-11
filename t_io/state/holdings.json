@@ -8,11 +8,13 @@
     "qty": 74500,
     "base": 74500,
     "t_qty": 22350,
-    "cost": 0.935,
-    "pre_close": 0.912,
+    "cost": 0.932,
+    "pre_close": 0.895,
     "mirror_qty": 70000,
     "mirror_cost": 0.917,
-    "virtual_qty": 124500
+    "virtual_qty": 133300,
+    "available_qty": 54500,
+    "frozen_qty": 20000
   },
   "600481": {
     "name": "双良节能",
@@ -20,14 +22,16 @@
     "type": "stock",
     "account": "账户B",
     "pool": "both",
-    "qty": 5600,
-    "base": 5600,
-    "t_qty": 1600,
-    "cost": 4.757,
-    "pre_close": 4.32,
-    "mirror_qty": 6900,
+    "qty": 100,
+    "base": 100,
+    "t_qty": 0,
+    "cost": 28.216,
+    "pre_close": 4.22,
+    "mirror_qty": 100,
     "mirror_cost": 0,
-    "virtual_qty": 4800
+    "virtual_qty": 6700,
+    "available_qty": 100,
+    "frozen_qty": 0
   },
   "002451": {
     "name": "摩恩电气",
@@ -39,10 +43,12 @@
     "base": 2800,
     "t_qty": 1000,
     "cost": 7.837,
-    "pre_close": 8.26,
+    "pre_close": 8.03,
     "mirror_qty": 1800,
     "mirror_cost": 0,
-    "virtual_qty": 0
+    "virtual_qty": 0,
+    "available_qty": 2800,
+    "frozen_qty": 0
   },
   "000988": {
     "name": "华工科技",
@@ -50,13 +56,15 @@
     "type": "stock",
     "account": "账户B",
     "pool": "both",
-    "qty": 200,
-    "base": 200,
+    "qty": 300,
+    "base": 300,
     "t_qty": 0,
-    "cost": 93.675,
-    "pre_close": 105.8,
+    "cost": 97.829,
+    "pre_close": 103.88,
     "mirror_qty": 500,
-    "mirror_cost": 0
+    "mirror_cost": 0,
+    "available_qty": 0,
+    "frozen_qty": 300
   },
   "600176": {
     "name": "中国巨石",
@@ -67,11 +75,13 @@
     "qty": 1600,
     "base": 1600,
     "t_qty": 0,
-    "cost": 43.25,
-    "pre_close": 43.46,
+    "cost": 42.599,
+    "pre_close": 44.66,
     "mirror_qty": 1600,
     "mirror_cost": 0,
-    "virtual_qty": 2100
+    "virtual_qty": 1900,
+    "available_qty": 600,
+    "frozen_qty": 1000
   },
   "603667": {
     "name": "五洲新春",
@@ -82,10 +92,12 @@
     "qty": 500,
     "base": 500,
     "t_qty": 0,
-    "cost": 50.606,
-    "pre_close": 48.15,
+    "cost": 50.569,
+    "pre_close": 47.14,
     "mirror_qty": 500,
-    "mirror_cost": 0
+    "mirror_cost": 0,
+    "available_qty": 200,
+    "frozen_qty": 300
   },
   "300054": {
     "name": "鼎龙股份",
@@ -97,10 +109,12 @@
     "base": 800,
     "t_qty": 0,
     "cost": 69.563,
-    "pre_close": 67.32,
+    "pre_close": 66.64,
     "mirror_qty": 100,
     "mirror_cost": 0,
-    "virtual_qty": 1600
+    "virtual_qty": 1600,
+    "available_qty": 800,
+    "frozen_qty": 0
   },
   "002639": {
     "name": "雪人集团",
@@ -111,10 +125,12 @@
     "qty": 900,
     "base": 900,
     "t_qty": 0,
-    "cost": 13.349,
-    "pre_close": 13.7,
+    "cost": 13.309,
+    "pre_close": 13.18,
     "mirror_qty": 0,
-    "mirror_cost": 0
+    "mirror_cost": 0,
+    "available_qty": 400,
+    "frozen_qty": 500
   },
   "300153": {
     "name": "科泰电源",
@@ -126,9 +142,11 @@
     "base": 500,
     "t_qty": 0,
     "cost": 22.557,
-    "pre_close": 25.4,
+    "pre_close": 24.65,
     "mirror_qty": 0,
-    "mirror_cost": 0
+    "mirror_cost": 0,
+    "available_qty": 500,
+    "frozen_qty": 0
   },
   "002536": {
     "name": "飞龙股份",
