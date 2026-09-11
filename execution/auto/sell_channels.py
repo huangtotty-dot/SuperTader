@@ -5,9 +5,11 @@
 gm 符号与 gm_main 模块级名字经 `_bind_gm(gm)` 注入（由 gm_main 在 import 后调用），
 保持函数体与迁移前完全一致。
 """
+import concurrent.futures as _cf
 import os
 import sys
 from datetime import timedelta
+from functools import partial as _partial
 
 _PROJ = os.path.dirname(os.path.abspath(__file__))
 if _PROJ not in sys.path:
@@ -51,6 +53,25 @@ def _bind_gm(gm):
     OrderSide_Sell = gm.OrderSide_Sell
     OrderType_Market = gm.OrderType_Market
     PositionEffect_Close = gm.PositionEffect_Close
+
+
+# P0-2 Fix A(2026-09-11): 卖侧下单 order_volume 也套硬超时（TAIL 下单曾阻塞 on_bar 连坐 fill 回调）。
+_SELL_SDK_TIMEOUT = 15.0
+_SELL_SDK_POOL = _cf.ThreadPoolExecutor(max_workers=1, thread_name_prefix="gm-sell")
+
+
+def _sdk_call(desc, fn, *a, **k):
+    global _SELL_SDK_POOL
+    _fut = _SELL_SDK_POOL.submit(fn, *a, **k)
+    try:
+        return _fut.result(timeout=_SELL_SDK_TIMEOUT)
+    except _cf.TimeoutError:
+        try:
+            _SELL_SDK_POOL.shutdown(wait=False)
+        except Exception:
+            pass
+        _SELL_SDK_POOL = _cf.ThreadPoolExecutor(max_workers=1, thread_name_prefix="gm-sell")
+        raise TimeoutError(f"gm SDK {desc} 超时>{_SELL_SDK_TIMEOUT}s（挂死，弃池）")
 
 
 def _sell_arbiter(context, code, sig, pos_qty, cp, now, holding, threshold,
@@ -144,10 +165,11 @@ def _sell_arbiter(context, code, sig, pos_qty, cp, now, holding, threshold,
         write_order(str(now), code, "SELL", qty, cp)
     except Exception: pass
     try:
-        order_volume(symbol=gm_sym, volume=qty,
-                     side=OrderSide_Sell,
-                     order_type=OrderType_Market,
-                     position_effect=PositionEffect_Close)
+        _sdk_call("order_volume_sell", _partial(
+            order_volume, symbol=gm_sym, volume=qty,
+            side=OrderSide_Sell,
+            order_type=OrderType_Market,
+            position_effect=PositionEffect_Close))
         # F9: 登记在途量（fill/reject 回调释放）
         if not hasattr(context, "_inflight_sell") or context._inflight_sell is None:
             context._inflight_sell = {}
@@ -320,10 +342,11 @@ def _sell_channel_gate(context, code, gm_sym, cp, now, sig, pos_qty, holding, da
                 except Exception:
                     pass
                 try:
-                    order_volume(symbol=gm_sym, volume=qty,
-                                 side=OrderSide_Sell,
-                                 order_type=OrderType_Market,
-                                 position_effect=PositionEffect_Close)
+                    _sdk_call("order_volume_tail", _partial(
+                        order_volume, symbol=gm_sym, volume=qty,
+                        side=OrderSide_Sell,
+                        order_type=OrderType_Market,
+                        position_effect=PositionEffect_Close))
                 except Exception as e:
                     print(f'[{now:%H:%M:%S}] TAIL {code} 下单失败: {e}')
                     try:

@@ -53,6 +53,31 @@ def _gm_atexit_banner():
 
 _atexit.register(_gm_atexit_banner)
 
+# P0-2 Fix A(2026-09-11 Q-20260911-2): gm SDK 同步直调（history_n/current/positions/account/order_volume）
+# 无超时——挂死不返回也不抛，连坐 SDK 事件派发线程（09-11 14:50 on_bar 阻塞→fill 永久排队）。
+# 统一套单 worker 线程池 + 15s 硬超时（略宽于数据侧 facade 12s），超时弃池重建抛 TimeoutError，
+# 由各调用点既有 except 接住走拒单/告警/fail-open 路径。
+import concurrent.futures as _cfmod
+from functools import partial as _partial
+
+_SDK_CALL_TIMEOUT = 15.0
+_SDK_POOL = _cfmod.ThreadPoolExecutor(max_workers=1, thread_name_prefix="gm-sdk")
+
+
+def _sdk_call(desc, fn, *a, **k):
+    """gm SDK 调用硬超时包装。注意：超时≠未成（单可能已报柜台）→ 须配合 Fix B 对账。"""
+    global _SDK_POOL
+    _fut = _SDK_POOL.submit(fn, *a, **k)
+    try:
+        return _fut.result(timeout=_SDK_CALL_TIMEOUT)
+    except _cfmod.TimeoutError:
+        try:
+            _SDK_POOL.shutdown(wait=False)
+        except Exception:
+            pass
+        _SDK_POOL = _cfmod.ThreadPoolExecutor(max_workers=1, thread_name_prefix="gm-sdk")
+        raise TimeoutError(f"gm SDK {desc} 超时>{_SDK_CALL_TIMEOUT}s（挂死，弃池）")
+
 # ── 标的池（P3-2 池分管：auto 侧候选池单一真源 = superTrader config/auto_pool.py）──
 # 原 hardcode 17 票迁出；消费方式与 utils/gm_token.py 读取 superTrader 配置同源（SUPERTRADER_ROOT）。
 # 用绝对路径 importlib 加载：goldminer 自身也有 config 包，`from config.auto_pool` 会命中本仓 config。
@@ -529,7 +554,8 @@ def _get_holding(context, code: str, gm_symbol: str) -> dict:
     if not _skip_reconcile and (last_rec is None or (now - last_rec).total_seconds() > reconcile_interval):
         context._last_position_reconcile = now
         try:
-            pos = context.account().positions(symbol=gm_symbol, side=PositionSide_Long)
+            pos = _sdk_call("positions_reconcile",
+                            lambda: context.account().positions(symbol=gm_symbol, side=PositionSide_Long))
             if pos and len(pos) > 0:
                 p = pos[0]
                 gm_pos = {
@@ -608,10 +634,11 @@ def _refresh_daily_ctx(context, code: str, gm_symbol: str, now: datetime) -> dic
     # 取 200 个交易日日线（P3-1(A): ≥150 供箱体 _daily_ohlc tail(150)）
     _exc_info = None
     try:
-        daily = history_n(symbol=gm_symbol, frequency="1d", count=200,
-                          fields="eob,open,high,low,close,volume",
-                          fill_missing="Previous", adjust=ADJUST_PREV,
-                          end_time=now.strftime("%Y-%m-%d %H:%M:%S"))
+        daily = _sdk_call("history_n_daily200", _partial(
+            history_n, symbol=gm_symbol, frequency="1d", count=200,
+            fields="eob,open,high,low,close,volume",
+            fill_missing="Previous", adjust=ADJUST_PREV,
+            end_time=now.strftime("%Y-%m-%d %H:%M:%S")))
     except Exception as _e:
         daily = None
         # O-01(2026-08-07 W32表决): 异常不再裸吞——留痕在下方失败分支统一打印，
@@ -888,7 +915,7 @@ def _reconcile_positions_at_init(context):
         return
     for code, sym in STOCKS.items():
         try:
-            pos = context.account().positions(symbol=sym, side=PositionSide_Long)
+            pos = _sdk_call("positions_recover", lambda: context.account().positions(symbol=sym, side=PositionSide_Long))
             if not pos or len(pos) == 0:
                 continue
             p = pos[0]
@@ -962,7 +989,7 @@ def _append_index_forming(idx_df, gm_symbol="SHSE.000001"):
     if idx_df is None or idx_df.empty or str(idx_df["date"].iloc[-1]) >= today:
         return idx_df
     try:
-        rows = current(gm_symbol)
+        rows = _sdk_call("current", current, gm_symbol)
     except Exception:
         return idx_df
     if not rows:
@@ -1024,8 +1051,9 @@ def _code_board_index(code):
 
 def _index_daily_df(gm_symbol):
     """拉 gm 指数日线 900 根 → df(date,open,high,low,close,volume)；失败/不足返回 None。"""
-    idx_data = history_n(symbol=gm_symbol, frequency="1d", count=900,
-                         fields="eob,open,high,low,close,volume", fill_missing="Previous")
+    idx_data = _sdk_call("history_n_index900", _partial(
+        history_n, symbol=gm_symbol, frequency="1d", count=900,
+        fields="eob,open,high,low,close,volume", fill_missing="Previous"))
     if idx_data is None or len(idx_data) <= 10:
         return None
     rows = []
@@ -1106,7 +1134,7 @@ def init(context):
     if context.mode == MODE_LIVE:
         _cashv = 0.0
         try:
-            _acct = context.account()
+            _acct = _sdk_call("account", context.account)
             _c = getattr(_acct, "cash", None)
             if _c is not None:
                 _c = _c() if callable(_c) else _c
@@ -1172,9 +1200,10 @@ def init(context):
     #  开盘后 subscribe 追加当日 bar，>480 根自动裁剪）。
     for code, sym in STOCKS.items():
         try:
-            his = history_n(symbol=sym, frequency="60s", count=240,
-                           fields="symbol,eob,open,high,low,close,volume,amount",
-                           fill_missing="Previous", adjust=ADJUST_PREV)
+            his = _sdk_call("history_n_60s240", _partial(
+                history_n, symbol=sym, frequency="60s", count=240,
+                fields="symbol,eob,open,high,low,close,volume,amount",
+                fill_missing="Previous", adjust=ADJUST_PREV))
             if his is not None and len(his) > 0:
                 rows = []
                 for bar in his:
@@ -1382,7 +1411,7 @@ def on_bar(context, bars):
         # ①-3: 实时读取可用现金
         _hb_cash = INITIAL_CASH
         try:
-            _acct = context.account()
+            _acct = _sdk_call("account", context.account)
             _c = getattr(_acct, 'cash', None)
             if _c is not None:
                 _c = _c() if callable(_c) else _c
@@ -1640,10 +1669,11 @@ def on_bar(context, bars):
                             write_order(str(now), code, "BUY", base_qty, cp, order_id="base")
                         except Exception:
                             pass
-                        _base_orders = order_volume(symbol=gm_sym, volume=base_qty,
-                                                    side=OrderSide_Buy,
-                                                    order_type=OrderType_Market,
-                                                    position_effect=PositionEffect_Open)
+                        _base_orders = _sdk_call("order_volume_base", _partial(
+                            order_volume, symbol=gm_sym, volume=base_qty,
+                            side=OrderSide_Buy,
+                            order_type=OrderType_Market,
+                            position_effect=PositionEffect_Open))
                         # 掘金 SDK order_volume 同步返回 List[Dict]；status=8 等表示拒单，
                         # 不能当成已下单，否则武装标记会被误消费且 N5 重试也会丢标记。
                         _base_first = _base_orders[0] if isinstance(_base_orders, list) and _base_orders else {}
@@ -1962,7 +1992,7 @@ def on_bar(context, bars):
             available_cash = INITIAL_CASH
             _cash_ok = False
             try:
-                _acct = context.account()
+                _acct = _sdk_call("account", context.account)
                 _c = getattr(_acct, 'cash', None)
                 if _c is not None:
                     _c = _c() if callable(_c) else _c
@@ -2014,6 +2044,17 @@ def on_bar(context, bars):
                                    force=True, action=sig.action, t_headroom=_t_head)
                 continue
 
+            # P0-1(2026-09-11 Q-20260911-1): 回补 armed 硬帽——回补量封顶为 armed 卖出量（sell_qty），
+            # 防 sizer 按预算/底仓口径出量失控（09-11 588170 armed 1100 实买 21000 ≈19×；600481 armed 900→2600）。
+            # 注意字段名是 sell_qty（t_engine_auto.arm_awaiting_buyback / sell_state 同 key），非 qty。
+            if _ab_now:
+                _bb_cap = int(_ab_now.get("sell_qty") or 0)
+                if _bb_cap >= 100 and qty > _bb_cap:
+                    _audit_write({"event": "buyback_capped", "code": code,
+                                  "qty_before": qty, "qty_after": _bb_cap,
+                                  "sell_qty": _bb_cap, "time": str(now)})
+                    qty = _bb_cap
+
             # WP-B07: 高接降档 — 数量减半取整到 min_unit，不足 min_unit 则延迟
             qty, _bb_dg, _bb_min_unit = _apply_buyback_downgrade(context, code, sig, qty)
             if _bb_dg is not None and qty < _bb_min_unit:
@@ -2063,10 +2104,11 @@ def on_bar(context, bars):
             except Exception:
                 pass
             try:
-                _oid = order_volume(symbol=gm_sym, volume=qty,
-                                    side=OrderSide_Buy,
-                                    order_type=OrderType_Market,
-                                    position_effect=PositionEffect_Open)
+                _oid = _sdk_call("order_volume_buy", _partial(
+                    order_volume, symbol=gm_sym, volume=qty,
+                    side=OrderSide_Buy,
+                    order_type=OrderType_Market,
+                    position_effect=PositionEffect_Open))
                 # WP-A1: 下单副作用之前留存 manual_position 条目快照（含"无此条目"状态）。
                 # 快照法而非逆运算，避免成本加权逆推的浮点漂移；纯日内状态，无需落盘。
                 if not hasattr(context, "_pending_buy_snapshot") or context._pending_buy_snapshot is None:
