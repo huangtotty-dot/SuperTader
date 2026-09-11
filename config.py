@@ -739,6 +739,13 @@ INDEX_REGIME_PARAMS = {
 
 # V3.0fix: INDEX_INTRADAY_PARAMS 删除（9键全部与模块默认值相同，main.py 本就 merge，效果不变）
 
+# 2026-09-11 owner 需求：各大指数 5 分钟 RSI < threshold 时飞书报警（接入盘中预警节流/去重/合并卡）。
+INDEX_RSI5M_ALERT = {
+    "enabled": True,
+    "threshold": 20,
+    "indices": ["sh000001", "sz399001", "sz399006", "sh000688"],   # 上证/深成/创业板/科创50
+}
+
 # ==================== 日志双写配置 ====================
 log = logging.getLogger("做T助手")
 log.setLevel(logging.INFO)
