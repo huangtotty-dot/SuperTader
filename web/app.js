@@ -3050,6 +3050,7 @@ function renderOB(ob) {
     // 2026-09-11 修：overbought.rsi/kdj/cci 是"数值"不是布尔，原 mark(数值) 恒真 → ⚠ 满天飞。
     // 按前瞻实验口径：仅 RSI>70 计风险；KDJ/CCI>100 与破BOLL上轨属动能（不报警）。
     const rsiHot = (ob_.rsi || 0) > 70;
+    const rsiExtreme = (ob_.rsi || 0) > 80;   // 实证：RSI>80 才明显转弱（T+5≈0/跌56%）
     const kdjHot = (ob_.kdj || 0) > 100;
     const cciHot = (ob_.cci || 0) > 100;
     const advCls = s.risk === "高" ? "up" : s.risk === "中" ? "warn" : "cell-dim";
@@ -3062,7 +3063,7 @@ function renderOB(ob) {
       <td>${esc(s.name)} <span class="mono cell-dim">${esc(s.code)}</span></td>
       <td class="num">${fmt(s.price, 2)}</td>
       <td>${trendTxt}</td>
-      <td class="num ${rsiHot ? 'up' : 'cell-dim'}" title="RSI>70 计风险">${fmt(ob_.rsi, 0)} ${rsiHot ? '<span class="badge signal">⚠</span>' : ''}</td>
+      <td class="num ${rsiHot ? 'up' : 'cell-dim'}" title="RSI>70 提示 / >80 高危（实证 T+5 转弱）">${fmt(ob_.rsi, 0)} ${rsiHot ? `<span class="badge ${rsiExtreme ? 'signal' : 'approach'}">⚠</span>` : ''}</td>
       <td class="num ${kdjHot ? 'up' : 'cell-dim'}" title="KDJ-J>100 属动能(实证偏强，不计风险)">${fmt(ob_.kdj, 0)}</td>
       <td class="num ${cciHot ? 'up' : 'cell-dim'}" title="CCI>100 属动能(实证偏强，不计风险)">${fmt(ob_.cci, 0)}</td>
       <td>${ob_.boll ? '<span class="badge chop" title="破BOLL上轨=突破动能(实证偏强)">破</span>' : '<span class="cell-dim">—</span>'}</td>
@@ -3083,7 +3084,7 @@ function renderOB(ob) {
         <th class="num">风险</th>
         <th>风险提醒</th>
       </tr></thead><tbody>${rows}</tbody></table>
-      <div class="cell-dim" style="font-size:10px;margin-top:4px">目的：发现超买+趋势下行风险 → 提醒减仓/回避（非建仓建议） · 口径(2026-09-11 前瞻校准)：仅 RSI>70 提示，且叠加趋势下行/顶背离才升「高」；KDJ/CCI/破上轨属动能不报警 · 双击行看K线</div>
+      <div class="cell-dim" style="font-size:10px;margin-top:4px">目的：发现超买+趋势下行风险 → 提醒减仓/回避（非建仓建议） · 口径(2026-09-11 两次前瞻校准)：高=RSI>80 或 RSI>70+趋势下行；中=RSI>70 或趋势下行；KDJ/CCI/破上轨属动能、日线顶背离无前瞻，均不报警 · 双击行看K线</div>
     </div>`;
 }
 
