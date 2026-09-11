@@ -3569,10 +3569,35 @@ class Api:
         # W33 A3: 归一化/欠配缺口/分批 抽到 config.build_position_gap 共享（避免 GUI/扫描器两处漂移）
         _cost_map = {r["base"]: r["cost"] for r in raw}
         gap_ctx = config.build_position_gap(total_capital, raw, default_pct) if config else None
+        # 可T仓位（2026-09-11 实验口径）：近250日 median 日内振幅 → config.suggest_t_budget
+        _amp_map = {}
+        try:
+            import numpy as _np
+            from core.market_data import get_provider as _gp
+            for _b in merged.keys():
+                try:
+                    _df = _gp().daily(_b, 250)
+                    if _df is not None and len(_df) >= 60:
+                        _df = _df.sort_values("date")
+                        _amp = ((_df["high"].astype(float) - _df["low"].astype(float))
+                                / _df["close"].astype(float).shift(1)).dropna()
+                        _amp_map[_b] = float(_np.median(_amp.tail(250)))
+                except Exception:
+                    pass
+        except Exception:
+            pass
         rows = []
         for r in (gap_ctx["rows"] if gap_ctx else []):
             row = dict(r)
             row["cost"] = round(_cost_map.get(r["code"], 0), 3) if r.get("total_qty") else 0
+            try:
+                _tb = config.suggest_t_budget(int(row.get("total_qty") or 0),
+                                              _amp_map.get(r["code"], 0.0)) if config else {"rho": 0.30, "t_qty": 0, "amp": 0.0}
+                row["t_ratio"] = _tb["rho"]
+                row["t_suggest"] = _tb["t_qty"]
+                row["t_amp"] = _tb["amp"]
+            except Exception:
+                row["t_ratio"], row["t_suggest"], row["t_amp"] = 0.30, 0, 0.0
             rows.append(row)
         rows.sort(key=lambda x: -x["pct"])
         return _clean({
