@@ -1396,10 +1396,9 @@ def _maybe_run_position_builder(now: datetime) -> None:
     finally:
         _position_scan_lock.release()
 
-def _maybe_push_daily_pnl_summary(now: datetime) -> None:
-    """V1.29: 14:59-15:01 每日一次 收益汇总推送。
-    逐股计算当日浮动盈亏 + 做T实盈 + 总资产，推飞书卡片。
-    """
+def _maybe_record_daily_pnl(now: datetime) -> None:
+    """V1.29 → 2026-09-11: 14:59 后每日一次，**只落盘** daily_pnl.jsonl（供复盘 A-1）+ 更新收盘 pre_close。
+    飞书「收益汇总」推送已按 owner 裁决删除（无效信息）。"""
     global _daily_pnl_push_date
     try:
         t = now.time()
@@ -1415,7 +1414,6 @@ def _maybe_push_daily_pnl_summary(now: datetime) -> None:
         if not HOLDINGS:
             return
 
-        rows = []
         stock_records = []  # for JSONL logging
         total_t0_pnl = 0.0
         total_value = 0.0
@@ -1447,20 +1445,10 @@ def _maybe_push_daily_pnl_summary(now: datetime) -> None:
             t0_pnl = _pnl["t0_pnl"]
             total_t0_pnl += t0_pnl
 
-            arrow = "🔴" if day_pnl < 0 else ("🟢" if day_pnl > 0 else "⚪")
             stock_records.append({
                 "code": code, "name": name, "qty": qty, "price": round(price, 2),
                 "day_pnl": round(day_pnl, 2), "day_pct": round(day_pct, 2),
                 "mkt_val": round(mkt_val, 0), "t0_pnl": t0_pnl,
-            })
-            rows.append({
-                "name": f"{arrow} {name}({code})",
-                "qty": qty,
-                "price": round(price, 2),
-                "day_pnl": round(day_pnl, 2),
-                "day_pct": round(day_pct, 2),
-                "mkt_val": round(mkt_val, 0),
-                "t0_pnl": t0_pnl,
             })
 
         total_day_float = sum(
@@ -1470,47 +1458,10 @@ def _maybe_push_daily_pnl_summary(now: datetime) -> None:
             for dec in [DAILY_DECISION_STATS.get(code) or {}]
         )
 
-        # 构建飞书卡片 — 区分浮动盈亏与做T实盈
-        lines = [
-            f"📊 **{today} 当日收益汇总**",
-            "",
-            f"| 标的 | 持仓(实盘·截图) | 现价 | 浮动盈亏 | 涨跌 | T0实盈(虚拟) |",
-            f"|------|------|------|----------|------|--------|",
-        ]
-        for r in rows:
-            lines.append(
-                f"| {r['name']} | {r['qty']}股 | {r['price']} | {r['day_pnl']:+,.0f} | {r['day_pct']:+.2f}% | {r['t0_pnl']:+,.0f} |"
-            )
-        lines += [
-            "",
-            f"📈 **持仓浮动盈亏**: {total_day_float:+,.0f} 元（现价相对昨收）",
-            f"🔄 **今日做T实盈**: {total_t0_pnl:+,.0f} 元（已配对买卖差价，扣费后）",
-            f"💰 **持仓总市值**: {total_value:,.0f} 元",
-            f"📊 **今日总收益**: {total_day_float + total_t0_pnl:+,.0f} 元（浮动+T0）",
-            f"※ 持仓列 = 实盘（截图 reconcile 口径）；T0实盈 = 虚拟/模拟盘估算口径（F3-1 归账重构）",
-        ]
+        # 2026-09-11 owner 裁决：删除 14:59「收益汇总」飞书推送（属无效信息）；
+        # 保留下方 daily_pnl.jsonl 落盘（复盘 A-1 依赖）与收盘 pre_close 更新。
 
-        card = {
-            "msg_type": "interactive",
-            "card": {
-                "header": {
-                    "title": {"tag": "plain_text", "content": f"📊 {today} 收益汇总"},
-                    "template": "red" if total_day_float < 0 else "green",
-                },
-                "elements": [
-                    {"tag": "markdown", "content": "\n".join(lines)},
-                    {"tag": "hr"},
-                    {"tag": "note", "elements": [{"tag": "plain_text", "content": "⏰ 14:59 自动推送 · 数据基于最新扫描价"}]},
-                ],
-            },
-        }
-        send_feishu_payload(
-            card,
-            success_log=f"✅ 14:59 收益汇总已推送: 持仓{total_value:,.0f} T0实盈{total_t0_pnl:+.0f}",
-            error_prefix="收益汇总推送",
-        )
-
-        # V1.29: 同时写 JSONL 日志供复盘
+        # V1.29: 写 JSONL 日志供复盘
         _pnl_log_dir = _os.path.join(BASE_DIR, "t_io", "logs")
         _os.makedirs(_pnl_log_dir, exist_ok=True)
         _pnl_log_path = _os.path.join(_pnl_log_dir, "daily_pnl.jsonl")
@@ -2148,7 +2099,7 @@ def scan_once():
 
         if dtime(14, 55) <= t <= dtime(15, 5):
             pass  # EOD复盘已移除（V2简化）
-        _maybe_push_daily_pnl_summary(now)             # 14:59-15:01 每日收益汇总推送（每日一次，V1.29）
+        _maybe_record_daily_pnl(now)                   # 14:59 后每日一次：仅落盘 daily_pnl.jsonl + 收盘 pre_close（推送已删）
         _maybe_audit_closure(now)                      # 14:50-15:05 买卖闭环审计（每日一次，V3.0）
         _maybe_push_index_regime_eod(now)              # 14:30-14:55 尾盘大盘评分预判 mode="tail"（须在 >15:00 早退之前）
 
