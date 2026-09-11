@@ -177,8 +177,20 @@ class SignalEngine:
                 # P0-5(2026-09-01): 做T买入价(t_entry_price)持久化——修复进程重启丢内存态致 600176 闭环漏记
                 "t_entry_price": dict(getattr(self._core, "t_entry_price", {}) or {}),
             }
-            with open(self._intraday_state_path(), "w", encoding="utf-8") as f:
+            # Q-20260911-4(2026-09-11): 原子写（tmp+os.replace+退避重试）——原直写 14:55 截断损坏
+            import time as _time_mod
+            _p = self._intraday_state_path()
+            _tmp = f"{_p}.{_os_mod.getpid()}.{int(_time_mod.time() * 1000)}.tmp"
+            with open(_tmp, "w", encoding="utf-8") as f:
                 _j.dump(data, f, ensure_ascii=False, indent=2)
+            for _a in range(5):
+                try:
+                    _os_mod.replace(_tmp, _p)
+                    return
+                except OSError:
+                    if _a < 4:
+                        _time_mod.sleep(0.2 * (2 ** _a))
+            # 重试耗尽：保留 tmp 供恢复（不静默丢数据）
         except Exception:
             pass
 
