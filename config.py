@@ -350,6 +350,11 @@ PARAMS = {
     # C-1 预注册闸门（2026-09-07）：manual 按个股所属板覆盖 index context/circuit。
     # False=市场级（现状，零行为变化）；周六验证管线对照时置 True（该板 clear 或 市场 clear 任一触发全卖）。
     "index_regime_board_mode": False,
+    # 可T仓位比例（2026-09-11 实验：t_io/validation/t_budget/t_budget_ratio_experiment.py）
+    # ρ=clamp(R / 近250日 median 日内振幅%, 下限, 上限)，令 T 仓最坏日波动≈R（占仓位比）。
+    "t_budget_risk_pct": 0.015,   # R：风险预算（1.5% 保守；2.0% 空间更大）
+    "t_budget_rho_min": 0.15,
+    "t_budget_rho_max": 0.50,
     "max_single_position_pct": 0.30,
     "max_sell_times_per_stock": 3,
     # —— 早盘 ——
@@ -947,6 +952,26 @@ def save_t_mode(t_mode: Dict[str, str]):
 
 # ==================== W33 A3: 仓位管理器共享计算（t_gui 与 position_builder 同源） ====================
 # 从 t_gui.load_position_manager 内联逻辑抽取，避免 GUI/建仓扫描两处实现漂移。
+
+def suggest_t_budget(qty: int, amp_pct: float, risk_pct: float = None) -> dict:
+    """每票"可T仓位"建议（2026-09-11 实验口径）：
+    ρ = clamp(R / 近250日 median 日内振幅, min, max)；可T股数 = floor(qty×ρ/100)×100。
+    amp_pct 为小数（0.0433=4.33%）；amp 无效(≤0) → 回落 ρ=0.30 惯例。返回 {rho,t_qty,amp}。
+    """
+    R = float(PARAMS.get("t_budget_risk_pct", 0.015) if risk_pct is None else risk_pct)
+    lo = float(PARAMS.get("t_budget_rho_min", 0.15))
+    hi = float(PARAMS.get("t_budget_rho_max", 0.50))
+    try:
+        a = float(amp_pct)
+    except Exception:
+        a = 0.0
+    if a > 0:
+        rho = min(hi, max(lo, R / a))
+    else:
+        rho = 0.30
+    tq = int(qty) if int(qty) < 100 else int(int(qty) * rho // 100 * 100)
+    return {"rho": round(rho, 4), "t_qty": max(0, tq), "amp": round(a, 4)}
+
 
 def build_position_gap(total_capital: float, raw_list: list, default_pct: float = 0.30) -> dict:
     """由各持仓的基础市值/目标比例计算归一化目标市值与欠配缺口。
