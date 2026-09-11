@@ -194,12 +194,10 @@ _auto_pool = _load_auto_pool()
 STOCKS = {code: v["gm_symbol"] for code, v in _auto_pool.AUTO_POOL.items()}
 STOCK_NAMES = {code: v["name"] for code, v in _auto_pool.AUTO_POOL.items()}
 
-# ── 镜像持仓（与实盘账户一致） ──
-# 模拟盘建仓时按此表中的股数/成本下单。
-# 2026-08-30 单文件合并：MIRROR 从单一持仓真源 holdings.json 派生（mirror_qty>0 → {qty, cost}），
-# 不再手写清单；语义不变 = 目标底仓（WP-E3 槽位制配套：华工/巨石/五洲/双良 + 红利ETF 共 5 支挂目标底仓）。
-# 历史 owner 决策注释：MIRROR 缩编至 4 支优先票 + 515180 红利ETF（境内股票型 ETF、T+1 与股票机制一致）；
-# 588170 ETF 因 T+0/最小单位与策略不兼容已移除。
+# ── 镜像持仓（手动盘/自动盘分离，2026-09-11 方案A） ──
+# MIRROR = 自动盘目标底仓；**默认镜像手动盘 holdings.json 的 base（底仓；缺失回退 qty）**，
+# 不再由 holdings.mirror_qty 决定（该字段 deprecated 读兼容、不再写）。按票可用
+# config/auto_pool.py 的 AUTO_POOL[code]["mirror_qty"] 覆盖（缺省镜像）。
 def _load_mirror_holdings():
     import json as _json
     root = os.environ.get("SUPERTRADER_ROOT", r"E:\superTrader")
@@ -208,14 +206,26 @@ def _load_mirror_holdings():
         raise RuntimeError(f"持仓真源缺失（镜像持仓依赖）: {path}")
     with open(path, "r", encoding="utf-8") as f:
         data = _json.load(f)
+    try:
+        _pool = (_auto_pool.AUTO_POOL if hasattr(_auto_pool, "AUTO_POOL")
+                 else getattr(_auto_pool, "AUTO_POOL", {})) or {}
+    except Exception:
+        _pool = {}
     out = {}
     for code, h in (data.items() if isinstance(data, dict) else []):
         if not isinstance(h, dict) or str(code).startswith("_"):
             continue
-        mq = int(h.get("mirror_qty") or 0)
-        if mq <= 0:
+        # 仅 auto 池成员纳入 MIRROR（防纯手动票被镜像进来）；池读取失败时不裁剪（保持可用）
+        if _pool and code not in _pool:
             continue
-        out[code] = {"qty": mq, "cost": float(h.get("mirror_cost") or 0)}
+        _ov = (_pool.get(code) or {}).get("mirror_qty")   # 按票覆盖（None=镜像）
+        if _ov is not None:
+            tgt = int(_ov or 0)
+        else:
+            tgt = int(h.get("base") or 0) or int(h.get("qty") or 0)   # 镜像 base，回退 qty
+        if tgt <= 0:
+            continue
+        out[code] = {"qty": tgt, "cost": float(h.get("cost") or 0)}
     return out
 
 

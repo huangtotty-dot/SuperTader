@@ -13,6 +13,10 @@ config/auto_pool.py — 自动盘标的池（P3-2 池分管 → 2026-08-30 单�
 
 注意：本模块保持轻量、无副作用（不 import 顶层 config.py 那套 requests/akshare，不 import core/src），
 仅依赖标准库；改名/挪位需同步 goldminer main.py 的加载路径。
+
+2026-09-11 方案A（手动/自动持仓分离）：MIRROR 目标底仓默认**镜像手动盘 holdings.json 的 base**
+（缺失回退 qty），不再读 holdings.mirror_qty（deprecated 读兼容、不再写）。
+按票可在 AUTO_POOL[code] 增加可选键 **mirror_qty** 覆盖镜像默认（缺省=镜像）。
 """
 import json
 import os
