@@ -53,6 +53,79 @@ def _gm_atexit_banner():
 
 _atexit.register(_gm_atexit_banner)
 
+
+# ── P0-2 Fix B/C(2026-09-11 Q-20260911-2): fill 记账与下单解耦（轮询兜底版，低风险替代抽取） ──
+def _mark_pending_recon(context, code, sym, side, qty, px, orders):
+    """下单成功登记待对账项（Fix B 步1）。orders=order_volume 返回（List[Dict] 或单 dict）。"""
+    try:
+        _ids = []
+        for _o in (orders if isinstance(orders, list) else [orders]):
+            if isinstance(_o, dict):
+                _i = _o.get("id") or _o.get("order_id")
+                if _i:
+                    _ids.append(_i)
+        _rec = getattr(context, "_pending_recon", None)
+        if _rec is None:
+            context._pending_recon = {}
+            _rec = context._pending_recon
+        _rec[sym] = {"code": code, "side": side, "qty": int(qty or 0), "px": float(px or 0),
+                     "ts_dt": datetime.now(), "order_ids": _ids, "closed": False}
+    except Exception:
+        pass
+
+
+def _pending_recon_close(context, sym):
+    try:
+        _rec = getattr(context, "_pending_recon", None)
+        if _rec and sym in _rec:
+            _rec[sym]["closed"] = True
+    except Exception:
+        pass
+
+
+def _poll_pending_recon(context, now):
+    """Fix C: 回调失效轮询兜底。扫 _pending_recon，age≥90s 用 get_orders 查当日委托，
+    status==3 → 合成 order 喂 on_order_status 补记（回调/轮询经 _fills_done 防重）。整段 fail-open。"""
+    try:
+        _prec = getattr(context, "_pending_recon", None)
+        if not _prec:
+            return
+        for _sym, _rec in list(_prec.items()):
+            try:
+                if _rec.get("closed"):
+                    _prec.pop(_sym, None)
+                    continue
+                _ts = _rec.get("ts_dt")
+                if _ts and (now - _ts).total_seconds() < 90:
+                    continue
+                try:
+                    _orders = _sdk_call("get_orders_poll", _partial(get_orders, symbol=_sym))
+                except TypeError:
+                    _orders = _sdk_call("get_orders_poll_all", get_orders)
+                _hit = None
+                for _o in (_orders or []):
+                    try:
+                        if int(_o.get("status") or 0) == 3 and int(_o.get("volume") or 0) > 0:
+                            _hit = _o
+                            break
+                    except Exception:
+                        continue
+                if not _hit:
+                    continue
+                on_order_status(context, _hit)
+                _rec["closed"] = True
+                try:
+                    write_risk(str(now), "fill_recovered_by_poll",
+                               f"{_sym} 回调失效,轮询补记 fill qty={_hit.get('volume')}",
+                               code=_rec.get("code", ""))
+                except Exception:
+                    pass
+            except Exception:
+                continue
+    except Exception:
+        pass
+
+
 # P0-2 Fix A(2026-09-11 Q-20260911-2): gm SDK 同步直调（history_n/current/positions/account/order_volume）
 # 无超时——挂死不返回也不抛，连坐 SDK 事件派发线程（09-11 14:50 on_bar 阻塞→fill 永久排队）。
 # 统一套单 worker 线程池 + 15s 硬超时（略宽于数据侧 facade 12s），超时弃池重建抛 TimeoutError，
@@ -1159,6 +1232,8 @@ def init(context):
     # 仍兑现「挂起直到确认」与「拒绝后当天不再弹」。
     context._buy_confirm_pending = {}
     context._buy_confirm_rejected = set()
+    context._pending_recon = {}    # Fix B: 下单成功待对账 {sym: {...}}
+    context._fills_done = set()    # Fix B: fill 防重 key 集合（回调/轮询共用）
     if context.mode == MODE_LIVE:
         try:
             _bkp = read_buy_pending()
@@ -1390,6 +1465,12 @@ def on_bar(context, bars):
                 print(f"[ir] {str(today)} board_regime={context.board_regime}")
         except Exception as e:
             print(f"[ir] 大盘态势判定失败: {e}")
+
+    # Fix C(2026-09-11): 回调失效轮询兜底（挂心跳前，60s bar 自然节拍；fail-open 不阻塞）
+    try:
+        _poll_pending_recon(context, now)
+    except Exception:
+        pass
 
     # ── 心跳（每分钟写一次；仅模拟盘/实盘，回测跳过省I/O——纯监控产物不参与决策） ──
     try:
@@ -1689,6 +1770,7 @@ def on_bar(context, bars):
                             # 不加入 _base_ordered，不消费武装标记，下一根 bar  armed 仍在，继续尝试
                         else:
                             context._base_ordered.add(code)
+                            _mark_pending_recon(context, code, gm_sym, "BUY", base_qty, cp, _base_orders)
                             if _armed:
                                 # 人工建仓武装标记：下单成功即消费（一次性），防止损离场后残留标记自动无确认重入
                                 try:
@@ -2109,6 +2191,7 @@ def on_bar(context, bars):
                     side=OrderSide_Buy,
                     order_type=OrderType_Market,
                     position_effect=PositionEffect_Open))
+                _mark_pending_recon(context, code, gm_sym, "BUY", qty, cp, _oid)
                 # WP-A1: 下单副作用之前留存 manual_position 条目快照（含"无此条目"状态）。
                 # 快照法而非逆运算，避免成本加权逆推的浮点漂移；纯日内状态，无需落盘。
                 if not hasattr(context, "_pending_buy_snapshot") or context._pending_buy_snapshot is None:
@@ -2230,6 +2313,18 @@ def on_order_status(context, order):
             except Exception:
                 pass
             return
+        # Fix B(2026-09-11): fill 防重闸——回调迟到与轮询补记共用 key，防二次入账
+        _oid = order.get("id") or order.get("order_id") or ""
+        _fk = (symbol, _oid, int(volume or 0)) if _oid else \
+            (symbol, _side, int(volume or 0), str(datetime.now())[:16])
+        _done = getattr(context, "_fills_done", None)
+        if _done is None:
+            context._fills_done = set()
+            _done = context._fills_done
+        if _fk in _done:
+            print(f"[fill] 重复成交已跳过 {code} {_side} {volume}@{price}")
+            return
+        _done.add(_fk)
         # WP-B15: 持仓变化（成交）→ 解除信号 mute / 地板去重键（单点清理，防解封后忘清键）
         _clear_signal_mute_keys(context, code)
         # O-06(2026-08-11 复盘①轻)：台账在本回调内尚未更新（更新在下方），
@@ -2241,6 +2336,7 @@ def on_order_status(context, order):
                        pos_after=_pos_after)
         except Exception:
             pass
+        _pending_recon_close(context, symbol)   # Fix B: 该 symbol 已完成对账，轮询不再兜底
         # P0-2: 成交回调接线冷却（只有真的成交了才计冷却，避免下单即计）
         # WP-B07: 捕获返回值——卖成交建回补记忆(armed) / 买成交清记忆(buyback_filled)
         _rta = None
