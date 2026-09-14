@@ -1912,6 +1912,13 @@ def on_bar(context, bars):
         if is_tail and sig and sig.action in ("BUY_LOW", "ADD_POS"):
             sig = None
 
+        # ── 数量不变硬约束：尾盘强制回补（2026-09-14 owner 裁决，先于归位卖出） ──
+        # 卖出后当日必须等量买回；14:50 仍未回补则无条件按市价买回（认亏也买），
+        # 杜绝"高抛变隔夜方向性头寸"。置于卖出门链之前：回补后 pos 可能已不超底仓，
+        # 归位卖出自然不再触发，两者不会在同一 bar 互撞。
+        if is_tail and sell_channels._force_tail_buyback(context, code, gm_sym, cp, now, holding):
+            continue
+
         # ── P0-P6 卖出通道门链（P4-1 迁至 sell_channels._sell_channel_gate，行为逐字一致）──
         feats_cache = getattr(context.engine, "_last_feats", {}).get(code, {})
         sig, tail_done = sell_channels._sell_channel_gate(

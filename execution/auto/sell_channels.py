@@ -29,15 +29,18 @@ STOCK_NAMES = None
 _audit_write = None
 order_volume = None
 OrderSide_Sell = None
+OrderSide_Buy = None
 OrderType_Market = None
 PositionEffect_Close = None
+PositionEffect_Open = None
 
 
 def _bind_gm(gm):
     """从 gm_main 绑定卖出所需符号。可调用项（order_volume/_audit_write）用委托包装——
     运行时读 gm 模块当前值，测试 patch gm_main.order_volume 即可同时拦截 BUY(gm_main) 与 SELL(本模块)。"""
     global PARAMS, STOCK_PARAMS, STOCK_NAMES, _audit_write
-    global order_volume, OrderSide_Sell, OrderType_Market, PositionEffect_Close
+    global order_volume, OrderSide_Sell, OrderSide_Buy, OrderType_Market
+    global PositionEffect_Close, PositionEffect_Open
     PARAMS = gm.PARAMS
     STOCK_PARAMS = gm.STOCK_PARAMS
     STOCK_NAMES = gm.STOCK_NAMES
@@ -51,8 +54,10 @@ def _bind_gm(gm):
     order_volume = _order_volume
     _audit_write = _audit_write_impl
     OrderSide_Sell = gm.OrderSide_Sell
+    OrderSide_Buy = gm.OrderSide_Buy
     OrderType_Market = gm.OrderType_Market
     PositionEffect_Close = gm.PositionEffect_Close
+    PositionEffect_Open = gm.PositionEffect_Open
 
 
 # P0-2 Fix A(2026-09-11): 卖侧下单 order_volume 也套硬超时（TAIL 下单曾阻塞 on_bar 连坐 fill 回调）。
@@ -113,7 +118,15 @@ def _sell_arbiter(context, code, sig, pos_qty, cp, now, holding, threshold,
     setattr(context, f"_base_ref_{code}", base_ref)
     _is_protection = sig.action in ("PANIC_SELL", "TRAIL_SELL", "TREND_EXIT", "HARD_STOP_EXIT")
     sell_floor_ratio = 0.0 if _is_protection else float(PARAMS.get("sell_floor_ratio", 0.5))
-    min_hold = int(base_ref * sell_floor_ratio)
+    # 2026-09-14: 地板封顶到"实际持仓 − 1手"，解开"实际低于目标一半 → 非保护类卖出永久冻结"。
+    # 原式 min_hold = base_ref*0.5 只按**目标**算：一旦实际持仓低于目标的一半（多因历史卖出
+    # 未回补造成），`pos_qty-100 < min_hold` 恒真 → 该票被永久冻结（09-14 实证：600176
+    # 目标1600/实持800 → min_hold=800 > 700，当日三次 SELL_HIGH 全灭）。
+    # 注：不能改成 min(base_ref, pos_qty)*ratio —— 那样 `pos-100 < pos*0.5` 退化为 `pos<200`，
+    # 地板变成**完全失效**（本轮测试已证伪，勿再走这条路）。
+    # 封顶后：pos_qty >= base_ref 的正常情形 min() 取原值 → 行为**逐字不变**；
+    # 仅在实际低于目标时放开"至少能卖出一手"，保护强度基本保留。
+    min_hold = min(int(base_ref * sell_floor_ratio), max(0, int(pos_qty) - 100))
     # 2026-08-31: 小底仓豁免——底仓不足2手时地板保护使任何非保护卖出恒被拦
     # （回测实证: 600481 底仓100股 min_hold=50 → pos-100=0<50 死锁，结构性做不了T）
     if base_ref < 200:
@@ -229,6 +242,66 @@ def _sell_arbiter(context, code, sig, pos_qty, cp, now, holding, threshold,
         try: write_risk(str(now), "order_failed", f"SELL {qty}@{cp:.2f} err={e}", code=code)
         except Exception: pass
         return False
+
+
+def _force_tail_buyback(context, code, gm_sym, cp, now, holding) -> bool:
+    """数量不变硬约束（owner 2026-09-14 裁决）：尾盘 14:50+ 无条件回补未平卖出。
+
+    背景：`awaiting_buyback` 原设计只在"价格回到卖出价下方且 Renko 出向下砖"时接回，
+    溢价时 `delayed` 挂起、最长留 `buyback_persist_days=3` 个交易日 → 高抛最终变成
+    **隔夜方向性头寸**，数量不还原（09-14 收盘挂 5 笔：002451 900+700 / 600176 500 /
+    600481 8600 / 300054 700）。本函数在尾盘把"数量不变"落成硬约束：认亏也买回。
+
+    与 TAIL 卖出对称：直下市价单，不走信号/闸门链（回补是风险了结，非新开仓）。
+    返回 True=已下单（调用方应跳过本 bar 其余买入逻辑）。
+    """
+    ab = (getattr(context.engine, "awaiting_buyback", {}) or {}).get(code)
+    if not ab:
+        return False
+    qty = (int(ab.get("sell_qty", 0) or 0) // 100) * 100
+    if qty < 100:
+        return False
+    if int(getattr(context, "_inflight_buy", {}).get(gm_sym, 0) or 0) >= 100:
+        return False
+    sell_px = float(ab.get("sell_price", 0) or 0)
+    try:
+        write_order(str(now), code, "BUY", qty, cp, order_id="tail_buyback")
+    except Exception:
+        pass
+    try:
+        _bo = _sdk_call("order_volume_tail_buyback", _partial(
+            order_volume, symbol=gm_sym, volume=qty,
+            side=OrderSide_Buy, order_type=OrderType_Market,
+            position_effect=PositionEffect_Open))
+        _mark_pending_recon(context, code, gm_sym, "BUY", qty, cp, _bo)
+    except Exception as e:
+        print(f'[{now:%H:%M:%S}] TAIL_BUYBACK {code} 下单失败: {e}')
+        try:
+            write_risk(str(now), "order_failed", f"TAIL_BUYBACK {qty}@{cp:.2f} err={e}", code=code)
+        except Exception:
+            pass
+        return True
+    if not hasattr(context, "_inflight_buy") or context._inflight_buy is None:
+        context._inflight_buy = {}
+    context._inflight_buy[gm_sym] = int(context._inflight_buy.get(gm_sym, 0) or 0) + qty
+    # 立即更新台账防下一分钟重复触发；available 不顶（T+1 当日买入次日才可卖）
+    if gm_sym in context.manual_position:
+        mp = context.manual_position[gm_sym]
+        mp["qty"] = int(mp.get("qty", 0) or 0) + qty
+        mp["t_qty"] = mp["qty"]
+    context.engine.awaiting_buyback.pop(code, None)
+    try:
+        _sell_state_persist(context, code, gm_sym)     # 落盘，防重启后复活
+    except Exception:
+        pass
+    _audit_write({"event": "tail_buyback_forced", "code": code, "qty": qty,
+                  "price": round(float(cp), 3), "sell_price": round(sell_px, 3),
+                  "premium_pct": round((float(cp) - sell_px) / sell_px * 100, 3) if sell_px else None,
+                  "time": str(now)})
+    print(f'[{now:%H:%M:%S}] TAIL_BUYBACK {code} 尾盘强制回补 {qty}股@{cp:.2f} '
+          f'(前卖{sell_px:.2f}, 溢价{((float(cp)/sell_px-1)*100 if sell_px else 0):+.2f}%)')
+    context.total_trade_count += 1
+    return True
 
 
 def _sell_channel_gate(context, code, gm_sym, cp, now, sig, pos_qty, holding, daily_ctx,
