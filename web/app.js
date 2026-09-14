@@ -156,8 +156,8 @@ async function loadAndRender(date, silent) {
     state.accountsDetail = (payload.accounts_detail) || {};
     renderAll(payload);
 
-    // K1 做T盈亏（独立于 daily_review，读 closure_audit）
-    apiCall("load_trade_pnl", date).then(tp => renderKPI(payload.kpi, tp || {})).catch(() => {});
+    // K1 KPI（manual 做T 已于 2026-09-14 下线，不再有独立的做T盈亏源）
+    renderKPI(payload.kpi, {});
     // 行情条 + 大盘趋势 + 成本历史（静态，一次拉取）
     // 持仓日线体检（超买/顶背离）
     apiCall("load_ob_analysis").then(ob => renderOB(ob || {})).catch(() => {});
@@ -718,12 +718,8 @@ async function pollSignals() {
   const date = state.date;
   if (!date) return;
   try {
-    // 盘中交易信号（decision_trace）
-    const r = await apiCall("poll_new_signals", date);
-    if (r && !r.baseline && r.signals && r.signals.length) {
-      r.signals.forEach(pushAlert);
-    }
     // 建仓/加仓信号（position_builder intraday signal）
+    // （盘中做T信号轮询 poll_new_signals 已随 manual 做T 于 2026-09-14 下线）
     const p = await apiCall("poll_new_position_signals", date);
     if (p && !p.baseline && p.signals && p.signals.length) {
       p.signals.forEach(pushAlert);

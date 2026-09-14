@@ -13,7 +13,6 @@ t_gui.py — 做T实盘·盘后复盘决策看板（pywebview 桌面壳）
   t_io/traces/position_builder_{date}.jsonl               建仓扫描逐行日志
   doc/每日复盘/{date}_复盘.md                              复盘报告 markdown
   holdings.json / t_io/state/holdings_daily_{date}.json     持仓（当前 + GUI 日快照；旧 holdings_{date}.json 已于 2026-08-30 清理）
-  t_mode.json                                             T模式（正/反T）
 """
 import json
 import math
@@ -36,7 +35,6 @@ OUT = BASE / "t_io" / "validation" / "daily_review"
 TRACES = BASE / "t_io" / "traces"
 STATE_DIR = BASE / "t_io" / "state"
 HOLDINGS = STATE_DIR / "holdings.json"
-T_MODE = STATE_DIR / "t_mode.json"
 IDX_REGIME = BASE / "t_io" / "index_regime"
 LOGS_DIR = BASE / "t_io" / "logs"
 INTRADAY_STATE = BASE / "t_io" / "intraday_state.json"
@@ -137,8 +135,6 @@ class Api:
 
     def __init__(self):
         self._dates_cache = None
-        # 增量信号轮询的内存态（webview.start() 期间存活）
-        self._dt = {"date": None, "offset": 0, "seen": set()}
         # 建仓/加仓信号增量轮询内存态
         self._pos = {"date": None, "offset": 0, "seen": set()}
 
@@ -617,40 +613,6 @@ class Api:
         except Exception:
             pass
         return out
-
-    # ---------- 做T闭环盈亏（K1） ----------
-    def load_trade_pnl(self, date):
-        """读 closure_audit.jsonl 当天行，聚合 est_pnl（系统报警产生的做T闭环盈亏）。"""
-        out = {"total_pnl": None, "by_code": {}, "source": "closure_audit", "note": ""}
-        fp = LOGS_DIR / "closure_audit.jsonl"
-        if not fp.exists():
-            out["note"] = "closure_audit.jsonl 不存在"
-            return out
-        for line in open(fp, encoding="utf-8"):
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                r = json.loads(line)
-            except Exception:
-                continue
-            if r.get("date") != date:
-                continue
-            total = 0.0
-            for d in r.get("details", []):
-                code = d.get("code")
-                pnl = d.get("est_pnl", 0) or 0
-                sold = d.get("sold", 0) or 0
-                bought = d.get("bought", 0) or 0
-                out["by_code"][code] = {"pnl": round(pnl, 2), "sold": sold, "bought": bought}
-                total += pnl
-            out["total_pnl"] = round(total, 2) if total else 0.0
-            out["source"] = "closure_audit"
-            if not out["by_code"]:
-                out["note"] = "当日无成交闭环"
-            return _clean(out)
-        out["note"] = "当日无 closure_audit 记录"
-        return _clean(out)
 
     # ---------- 加仓观察（实时计算，不依赖 daily_review） ----------
     def compute_add_watch(self, date):
@@ -3569,35 +3531,11 @@ class Api:
         # W33 A3: 归一化/欠配缺口/分批 抽到 config.build_position_gap 共享（避免 GUI/扫描器两处漂移）
         _cost_map = {r["base"]: r["cost"] for r in raw}
         gap_ctx = config.build_position_gap(total_capital, raw, default_pct) if config else None
-        # 可T仓位（2026-09-11 实验口径）：近250日 median 日内振幅 → config.suggest_t_budget
-        _amp_map = {}
-        try:
-            import numpy as _np
-            from core.market_data import get_provider as _gp
-            for _b in merged.keys():
-                try:
-                    _df = _gp().daily(_b, 250)
-                    if _df is not None and len(_df) >= 60:
-                        _df = _df.sort_values("date")
-                        _amp = ((_df["high"].astype(float) - _df["low"].astype(float))
-                                / _df["close"].astype(float).shift(1)).dropna()
-                        _amp_map[_b] = float(_np.median(_amp.tail(250)))
-                except Exception:
-                    pass
-        except Exception:
-            pass
+        # 2026-09-14: manual 做T 下线——"可T仓位"列（config.suggest_t_budget → t_suggest/t_ratio/t_amp）删除。
         rows = []
         for r in (gap_ctx["rows"] if gap_ctx else []):
             row = dict(r)
             row["cost"] = round(_cost_map.get(r["code"], 0), 3) if r.get("total_qty") else 0
-            try:
-                _tb = config.suggest_t_budget(int(row.get("total_qty") or 0),
-                                              _amp_map.get(r["code"], 0.0)) if config else {"rho": 0.30, "t_qty": 0, "amp": 0.0}
-                row["t_ratio"] = _tb["rho"]
-                row["t_suggest"] = _tb["t_qty"]
-                row["t_amp"] = _tb["amp"]
-            except Exception:
-                row["t_ratio"], row["t_suggest"], row["t_amp"] = 0.30, 0, 0.0
             rows.append(row)
         rows.sort(key=lambda x: -x["pct"])
         return _clean({
@@ -3680,69 +3618,6 @@ class Api:
         out["intraday_state"] = _load_json(INTRADAY_STATE, {})
         out["market_intraday"] = self.load_market_score(date).get("intraday", [])
         out["add_watch"] = self.compute_add_watch(date)
-        return _clean(out)
-
-    # ---------- 增量信号轮询（报警用） ----------
-    SIGNAL_TYPES = ("BUY_LOW", "SELL_HIGH", "ADD_POS", "PANIC_SELL")
-    # 飞书同款通知阈值（与 config.py PARAMS 对齐：notify_buy=68, sell=55, sell_early=65）
-    NOTIFY_BUY = 68
-    NOTIFY_SELL = 55
-    NOTIFY_SELL_EARLY = 65
-
-    def poll_new_signals(self, date):
-        """增量读 decision_trace，仅返回飞书同款通知阈值以上的新信号。
-        与 main.py scan_once 推送逻辑对齐：score >= notify_threshold 才报警。"""
-        out = {"signals": [], "baseline": True}
-        fp = TRACES / f"decision_trace_{date}.jsonl"
-        if not fp.exists():
-            self._dt["date"] = None; self._dt["offset"] = 0; self._dt["seen"] = set()
-            return out
-        try: size = fp.stat().st_size
-        except Exception: return out
-
-        st = self._dt
-        if st["date"] != date or size < st["offset"]:
-            st["date"] = date; st["offset"] = size; st["seen"] = set()
-            return out
-        if size <= st["offset"]:
-            return {"signals": [], "baseline": False}
-
-        try:
-            with open(fp, encoding="utf-8", errors="replace") as f:
-                f.seek(st["offset"]); data = f.read()
-        except Exception: return out
-        st["offset"] = size; out["baseline"] = False
-
-        for line in data.splitlines():
-            line = line.strip()
-            if not line: continue
-            try: r = json.loads(line)
-            except Exception: continue
-            if r.get("decision") not in self.SIGNAL_TYPES: continue
-            key = (r.get("scan_time"), r.get("code"), r.get("decision"))
-            if key in st["seen"]: continue
-            score = (r.get("buy_score") if r.get("decision") in ("BUY_LOW", "ADD_POS")
-                     else r.get("sell_score"))
-            if score is None: continue
-            dec = r.get("decision", "")
-            # 飞书同款通知阈值过滤
-            if dec in ("BUY_LOW", "ADD_POS"):
-                if score < self.NOTIFY_BUY: continue
-            else:
-                ts = r.get("scan_time", "") or ""
-                hour = 9
-                if ts and len(ts) >= 13:
-                    try: hour = int(ts[11:13])
-                    except Exception: pass
-                threshold = self.NOTIFY_SELL_EARLY if hour < 10 else self.NOTIFY_SELL
-                if score < threshold: continue
-
-            st["seen"].add(key)
-            out["signals"].append({
-                "scan_time": ts, "code": r.get("code"), "name": r.get("name"),
-                "price": r.get("price"), "decision": dec,
-                "score": score, "reason": r.get("decision_reason"),
-            })
         return _clean(out)
 
     # ---------- 建仓/加仓信号增量轮询 ----------
@@ -4516,9 +4391,7 @@ class Api:
         if prev_date:
             snap_prev = _daily_to_map(_load_json(STATE_DIR / f"holdings_daily_{prev_date}.json", {}))
 
-        t_mode_raw = _load_json(T_MODE, {})
-        t_mode = {k: v for k, v in t_mode_raw.items() if not k.startswith("_")}
-        auto = t_mode_raw.get("_auto_decision") or {}
+        # 2026-09-14: manual 做T 下线——t_mode.json（正/反T）已随 manual 做T 删除，不再读入/返回。
 
         # 从独立配置文件读（不再依赖 holdings.json）
         pcfg = _load_json(PORTFOLIO, {})
@@ -4529,8 +4402,6 @@ class Api:
             "snapshot_today": snap_today,
             "snapshot_prev": snap_prev,
             "prev_date": prev_date,
-            "t_mode": t_mode,
-            "auto_decision": auto,
             "k2": (kpi or {}).get("K2_cost_change", {}),
             "k3": (kpi or {}).get("K3_base_drift", {}),
         }

@@ -12,8 +12,8 @@
 #   （t_io/validation/w32_c1p/C1P_FINAL.md；GATE_BREACH 的 C1 经"全部买信号单股日限7内置状态机"修复后采纳）
 #   ① config.py PARAMS["buyback_bypass_gates"]=True 生产默认开（接回激活 tick 绕过
 #      daily_overheated/index_uni_down_clearance，本文件 :615 软消费）
-#   ② config.py PARAMS["buy_daily_cap"]=7（record_signal 层计数，buy_daily_cap_reached 谓词；
-#      生产 main.py scan_once 与 harness 记录层双挂载点拦截）
+#   ② config.py 全部买信号单股日限7内置状态机（record_signal 层计数 + 谓词；
+#      生产 main.py scan_once 与 harness 记录层双挂载点拦截）——[2026-09-14 已随 manual 做T 一并删除]
 #   回归证据: t_io/validation/w32_c1p/（冒烟/复用/决赛产物）+ t_io/validation/test_v120_production_cap.py
 # 2026-08-13 纯两点改造 + 僵尸清理（V2 swing2pt）:
 #   ① 引擎降级为纯两点规则（bb_pct_5m 触轨 + rsi_5m_p6）；删除 ScoringEngine/FACTOR_WEIGHTS/RiskManager
@@ -31,7 +31,7 @@ if _06t_dir not in _sys.path:
 import numpy as np
 import pandas as pd
 from typing import Dict, Any, List, Optional
-from datetime import datetime, timedelta
+from datetime import datetime
 
 # === V3.0: 显式导入，替代 exec() 共享命名空间 ===
 try:
@@ -59,10 +59,8 @@ class EngineContext:
     替代 main.py exec 共享命名空间的隐式全局引用；对象引用同一性由调用方保证
     （ctx.holdings 即 HOLDINGS 本体，非拷贝）。"""
     holdings: Dict[str, dict]
-    virtual_trades: Dict[str, Dict[str, list]]
     minute_fetch_status: Dict[str, str]
     minute_fetch_detail: Dict[str, str]
-    t_mode: Dict[str, str]
     daily_decision_stats: Dict[str, dict]
     daily_context_cache: Dict[str, Dict[str, Any]]
     signal_outcome_tracker: Dict[str, list]
@@ -87,8 +85,6 @@ class SignalEngine:
         # （ctx.holdings 即 HOLDINGS 本体，非拷贝）
         _g = globals()
         _g['HOLDINGS'] = ctx.holdings
-        _g['VIRTUAL_TRADES'] = ctx.virtual_trades
-        _g['T_MODE'] = ctx.t_mode
         _g['DAILY_DECISION_STATS'] = ctx.daily_decision_stats
         _g['MINUTE_FETCH_STATUS'] = ctx.minute_fetch_status
         _g['MINUTE_FETCH_DETAIL'] = ctx.minute_fetch_detail
@@ -109,16 +105,12 @@ class SignalEngine:
             _g['PARAMS'] = params
         self.buy_count_per_stock: Dict[str, int] = {}
         self.sell_count_per_stock: Dict[str, int] = {}
-        # C1' 口径B（W33 验证开关软消费，默认关）：record_signal 层当日已记录买信号计数
-        # （仅 PARAMS["buy_daily_cap"] 开启时递增；计数口径与 signals.jsonl 逐条对应）
-        self.buy_recorded_today: Dict[str, int] = {}
         self.state_reset_date = get_today_str()
         self.t_cycle_start_time: Dict[str, datetime] = {}
         self.last_signal_state: Dict[str, Dict[str, Any]] = {}
         self.last_trade_state: Dict[str, Dict[str, Any]] = {}
         self.cycle_count: Dict[str, int] = {}
         self.cycle_direction: Dict[str, str] = {}
-        self.post_sell_block_until: Dict[str, datetime] = {}
         self.daily_realized_loss_monitor = 0.0
         # V1.20/V1.21 dead states removed in V3.0 (peak_tracker, diagnostics, scenario_factor_state)
         # V1.25: 早盘预警状态机（基于近两年数据训练）
@@ -140,13 +132,11 @@ class SignalEngine:
         if self.state_reset_date != today:
             self.buy_count_per_stock = {}
             self.sell_count_per_stock = {}
-            self.buy_recorded_today = {}   # C1' 口径B：日限计数随日界重置
             self.t_cycle_start_time = {}
             self.last_signal_state = {}
             self.last_trade_state = {}
             self.cycle_count = {}
             self.cycle_direction = {}
-            self.post_sell_block_until = {}
             self.daily_realized_loss_monitor = 0.0
             self.morning_alert_state = {}
             self._5min_cache = {}       # V3.0: 5分钟缓存每日重置
@@ -256,21 +246,7 @@ class SignalEngine:
         snapshot["score"] = score
         snapshot["ts"] = _now()
         self._last_sig_price = price  # 供 record_trade_action 记录成交价
-        # C1' 口径B（W33 软消费，默认关=零行为变化）：仅 cap 开启时计数已记录买信号
-        if "SELL" not in action and PARAMS.get("buy_daily_cap"):
-            self.buy_recorded_today[code] = self.buy_recorded_today.get(code, 0) + 1
         self._persist_intraday_state()  # V1.30
-
-    def buy_daily_cap_reached(self, code: str) -> bool:
-        """C1' 口径B（W33 验证开关软消费，默认关=生产行为不变）：全部买信号单股日限判定。
-        计数口径 = record_signal 层已记录买信号数（与 signals.jsonl 逐条对应；
-        不分 ctl 原有/接回/二阶增量；卖信号不受限）。第 cap+1 条起返回 True。
-        依据: t_io/validation/w32_c1p/C1P_PREREG.md（用户 2026-08-08 拍板口径 B）"""
-        cap = PARAMS.get("buy_daily_cap")
-        if not cap:
-            return False
-        self._reset_daily_state_if_needed()
-        return self.buy_recorded_today.get(code, 0) >= int(cap)
 
     def record_trade_action(self, code: str, action: str, qty: int = 0, price: float = 0.0):
         self._reset_daily_state_if_needed()
@@ -282,28 +258,9 @@ class SignalEngine:
             self.buy_count_per_stock[code] = self.buy_count_per_stock.get(code, 0) + 1
             self.t_cycle_start_time.setdefault(code, _now())
             self.cycle_direction[code] = "buy"
-            if qty > 0:
-                bucket = VIRTUAL_TRADES.setdefault(code, {})
-                _px = float(getattr(self, '_last_sig_price', 0) or 0)
-                bucket.setdefault("BUY_LOW", []).append({"qty": qty, "ts": _now(), "action": action, "price": _px})
         elif action in ["SELL_HIGH", "PANIC_SELL"]:
             self.sell_count_per_stock[code] = self.sell_count_per_stock.get(code, 0) + 1
             self.cycle_direction[code] = "sell"
-            self.post_sell_block_until[code] = _now() + timedelta(minutes=PARAMS["post_sell_rebuild_minutes"])
-            if qty > 0:
-                bucket = VIRTUAL_TRADES.setdefault(code, {})
-                _px = float(getattr(self, '_last_sig_price', 0) or 0)
-                bucket.setdefault("SELL_HIGH", []).append({"qty": qty, "ts": _now(), "action": action, "price": _px})
-            buys = VIRTUAL_TRADES.get(code, {}).get("BUY_LOW", [])
-            sells = VIRTUAL_TRADES.get(code, {}).get("SELL_HIGH", [])
-            net_qty = sum(t["qty"] for t in buys) - sum(t["qty"] for t in sells)
-            if net_qty <= 0 and code in self.t_cycle_start_time:
-                del self.t_cycle_start_time[code]
-        if qty > 0:
-            try:
-                save_virtual_trades(VIRTUAL_TRADES)
-            except Exception:
-                pass
         self._persist_intraday_state()  # V1.30
 
     def _check_morning_alert(self, code, name, df, feats):

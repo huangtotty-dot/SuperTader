@@ -59,16 +59,15 @@ def run_evaluate(code, df, step_min=5):
     from config import PARAMS
 
     se.HOLDINGS = {}
-    se.VIRTUAL_TRADES = {}
     se.MINUTE_FETCH_STATUS = {code: "ok"}
     se.PERSIST_INTRADAY_STATE = False
     se.PARAMS = PARAMS
     # P2-1: EngineContext 显式注入（now=SIM_NOW 回测时间注入契约）
     from core.signal_engine import EngineContext
     ctx = EngineContext(
-        holdings=se.HOLDINGS, virtual_trades=se.VIRTUAL_TRADES,
+        holdings=se.HOLDINGS,
         minute_fetch_status=se.MINUTE_FETCH_STATUS, minute_fetch_detail={},
-        t_mode={}, daily_decision_stats={}, daily_context_cache={}, signal_outcome_tracker={},
+        daily_decision_stats={}, daily_context_cache={}, signal_outcome_tracker={},
         now=lambda: se.SIM_NOW,
     )
     eng = SignalEngine(ctx)
