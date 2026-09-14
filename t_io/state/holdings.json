@@ -4,9 +4,9 @@
     "gm_symbol": "SHSE.588170",
     "type": "etf",
     "pool": "both",
-    "qty": 70000,
-    "cost": 0.914,
-    "base": 70000,
+    "qty": 74500,
+    "cost": 0.927,
+    "base": 74500,
     "pre_close": 0.889
   },
   "600481": {
@@ -15,7 +15,7 @@
     "type": "stock",
     "pool": "both",
     "qty": 100,
-    "cost": 4.32,
+    "cost": 28.216,
     "base": 100,
     "pre_close": 4.23
   },
@@ -24,9 +24,9 @@
     "gm_symbol": "SZSE.002451",
     "type": "stock",
     "pool": "both",
-    "qty": 1100,
-    "cost": 7.85,
-    "base": 1800,
+    "qty": 2800,
+    "cost": 7.871,
+    "base": 2800,
     "pre_close": 7.87
   },
   "000988": {
@@ -34,9 +34,9 @@
     "gm_symbol": "SZSE.000988",
     "type": "stock",
     "pool": "both",
-    "qty": 0,
-    "cost": 0.0,
-    "base": 500,
+    "qty": 300,
+    "cost": 99.522,
+    "base": 300,
     "pre_close": 100.0
   },
   "600176": {
@@ -44,8 +44,8 @@
     "gm_symbol": "SHSE.600176",
     "type": "stock",
     "pool": "both",
-    "qty": 800,
-    "cost": 42.96,
+    "qty": 1600,
+    "cost": 42.913,
     "base": 1600,
     "pre_close": 45.29
   },
@@ -55,7 +55,7 @@
     "type": "stock",
     "pool": "auto",
     "qty": 500,
-    "cost": 49.86,
+    "cost": 50.569,
     "base": 500,
     "pre_close": 48.92
   },
@@ -64,9 +64,9 @@
     "gm_symbol": "SZSE.300054",
     "type": "stock",
     "pool": "both",
-    "qty": 100,
-    "cost": 67.53,
-    "base": 100,
+    "qty": 600,
+    "cost": 70.429,
+    "base": 600,
     "pre_close": 66.94
   },
   "002639": {
@@ -74,9 +74,9 @@
     "gm_symbol": "SZSE.002639",
     "type": "stock",
     "pool": "both",
-    "qty": 0,
-    "cost": 0.0,
-    "base": 0,
+    "qty": 900,
+    "cost": 13.308,
+    "base": 900,
     "pre_close": 12.99
   },
   "300153": {
@@ -84,9 +84,9 @@
     "gm_symbol": "SZSE.300153",
     "type": "stock",
     "pool": "auto",
-    "qty": 0,
-    "cost": 0.0,
-    "base": 0,
+    "qty": 500,
+    "cost": 22.514,
+    "base": 500,
     "pre_close": 24.85
   },
   "002536": {
@@ -146,7 +146,7 @@
     "pool": "auto",
     "qty": 0,
     "cost": 0.0,
-    "base": 300,
+    "base": 0,
     "pre_close": 0.0
   },
   "518880": {
@@ -156,7 +156,7 @@
     "pool": "auto",
     "qty": 0,
     "cost": 0.0,
-    "base": 2000,
+    "base": 0,
     "pre_close": 0.0
   },
   "002409": {
