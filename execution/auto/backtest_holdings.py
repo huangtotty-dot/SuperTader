@@ -42,6 +42,7 @@ _ap.add_argument("--label", default="", help="输出目录后缀；空=默认 ba
 _ap.add_argument("--cash", type=float, default=50000.0,
                  help="回测初始资金。播种底仓需 ≥ Σ(qty×价)；持仓变大后默认 5 万会全部拒单"
                       "（资金不足）→ 0 成交（2026-09-14 实证：6 票底仓需 ≈13.9 万）")
+_ap.add_argument("--codes", default="", help="逗号分隔，只回测这些 6 位码（缺省=holdings 全部持仓）")
 _ARGS = _ap.parse_args()
 # 清空自定义参数：gm.api 在 import 时(getopt)与 run() 内(optparse)都会二次解析 sys.argv，
 # 不认识 --start/--end/--label 会抛 "no such option"；此处先消费掉，仅保留脚本名。
@@ -67,11 +68,13 @@ def _load_holdings_for_backtest():
     _hp = os.path.join(_ST, "t_io", "state", "holdings.json")
     with open(_hp, "r", encoding="utf-8") as f:
         _data = json.load(f)
+    _only = {s.strip() for s in (_ARGS.codes or "").split(",") if s.strip()}
     return {
         c: {"name": h.get("name", c), "gm_symbol": h.get("gm_symbol", ""),
             "qty": int(h.get("qty") or 0), "cost": float(h.get("cost") or 0)}
         for c, h in _data.items()
         if isinstance(h, dict) and not str(c).startswith("_") and int(h.get("qty") or 0) > 0
+        and (not _only or c in _only)
     }
 
 
