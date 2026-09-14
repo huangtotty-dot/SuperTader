@@ -511,7 +511,15 @@ def _sell_channel_gate(context, code, gm_sym, cp, now, sig, pos_qty, holding, da
 
     # B3/R2: SELL_HIGH 成本锚定 — 亏损单不由 SELL_HIGH 通道卖出
     _cost_anchor = 0.0  # TODO(PhaseD): 寻优 cost_anchor
-    if (sig and sig.action == "SELL_HIGH"
+    # 2026-09-14 owner 裁决（方案A）：**平 T 腿豁免成本锚**。
+    # 内核的止盈判据以 **T 腿入场价** 为锚（+0.5%），而此处成本锚用**持仓成本价**——
+    # 两者不一致 → 底仓浮亏时，明明赚钱的 T 腿止盈被无差别丢弃
+    # （600176 09-14 实证：09:39/09:45 两次 SELL_HIGH 在此被置 None，
+    #  最终只能靠 14:50 TAIL 尾盘归位平仓，把日内T 拖成尾盘归位）。
+    # 平 T 腿的盈亏应看 T 腿自身，不该被底仓成本绑架 → 有 t_lot_qty 标记则豁免。
+    _t_lot_gate = int((getattr(sig, "factors", {}) or {}).get("t_lot_qty") or 0) if sig else 0
+    _is_t_leg_close = bool(sig and sig.action == "SELL_HIGH" and _t_lot_gate > 0)
+    if (sig and sig.action == "SELL_HIGH" and not _is_t_leg_close
             and feats_cache.get("profit_pct", 0) < _cost_anchor):
         sig = None  # 降级：交回 PANIC/TREND_EXIT 接管
 
