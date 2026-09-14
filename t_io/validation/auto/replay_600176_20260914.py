@@ -84,6 +84,8 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--pos", type=int, default=800)
     ap.add_argument("--base", type=int, default=1600)
+    ap.add_argument("--entry-price", type=float, default=0.0,
+                    help="把 T 腿入场价对齐真实引擎（如实盘 45.70）；0=用回放自身入场")
     args = ap.parse_args()
 
     fp = os.path.join(_ROOT, "t_io", "minute_snapshots", "2026", "09", f"{CODE}_{DATE}.json")
@@ -111,6 +113,7 @@ def main():
 
     ctx = _Ctx(args.pos, args.base)
     eng = TDecisionEngine()
+    _aligned = [False]
     print(f"[回放] {CODE} {DATE} 底仓实际 {args.pos} 股 / 目标底仓 {args.base} 股")
     print(f"[回放] MIRROR(引擎读到的目标)={gm_main.MIRROR_HOLDINGS.get(CODE)}")
     print("-" * 100)
@@ -135,6 +138,8 @@ def main():
                     print(f"{now:%H:%M}  {cp:>8.2f}  ⟲ 尾盘强制回补 {orders[-1]['qty']} 股"
                           f"（台账 {h0['qty']}→{ctx.manual_position[GM_SYM]['qty']}）")
 
+            ctx._pending_sell_action.pop(GM_SYM, None)
+
             # 1) 真实决策核
             sig, _bs, _ss, reason, _meta = eng.evaluate(
                 CODE, "中国巨石", sub, cp, t_val, vwap, today_ret, "range", DATE)
@@ -145,14 +150,32 @@ def main():
                 print(f"{now:%H:%M}  {cp:>8.2f}  ▲ 信号 {sig.action}  ({reason})")
                 # 2a) 买入侧：真实 sizer 定量 → stub 下单 → 台账加仓（否则持仓口径不自洽）
                 if sig.action in ("BUY_LOW", "ADD_POS"):
+                    # 入场价对齐真实引擎：离线回放的 tick 时点比实盘早一根 bar
+                    # （回放 10:04@45.80 vs 实盘 10:05@45.70），0.10 的差正好卡住 +0.5% 止盈线，
+                    # 会把赢单变亏单。对齐后 P&L 才可比。
+                    if args.entry_price > 0 and not _aligned[0]:
+                        _aligned[0] = True
+                        _e = eng.t_entry_price.get(CODE)
+                        if isinstance(_e, dict):
+                            _e["price"] = args.entry_price
+                        print(f"{'':10}{'':8}   ※ 入场价对齐真实引擎 {args.entry_price}"
+                              f"（止盈线 {args.entry_price*1.005:.3f}）")
                     h = dict(ctx.manual_position[GM_SYM])
                     thr = float(gm_main.PARAMS.get("notify_buy_threshold", 55))
                     q = (int(ctx.sizer.calc_buy_qty(CODE, h, float(sig.score), thr) or 0) // 100) * 100
                     if q >= 100:
+                        # 对齐时连成交价一起对齐（否则止盈线用 45.70 而成交价 45.80，P&L 不自洽）
+                        _fill_px = args.entry_price if (args.entry_price > 0 and _aligned[0]
+                                                        and h["qty"] == args.pos) else cp
                         orders.append({"side": "BUY", "qty": q})
                         ctx.manual_position[GM_SYM]["qty"] += q
                         ctx.manual_position[GM_SYM]["t_qty"] += q
-                        print(f"{'':10}{'':8}   → 下单 BUY {q} 股（台账 {h['qty']}→{ctx.manual_position[GM_SYM]['qty']}）")
+                        # 镜像生产 gm_main 的新逻辑：把 T 腿实际下单量记回 entry（平腿按原量卖）
+                        _ent = eng.t_entry_price.get(CODE)
+                        if isinstance(_ent, dict):
+                            _ent["qty"] = q
+                        print(f"{'':10}{'':8}   → 下单 BUY {q} 股 @{_fill_px}"
+                              f"（台账 {h['qty']}→{ctx.manual_position[GM_SYM]['qty']}）")
                     else:
                         print(f"{'':10}{'':8}   → ✗ 买入 sizer 定量 {q} < 100，不下单")
                 # 2b) 真实卖出门链（含 floor_protection）
@@ -169,9 +192,17 @@ def main():
                                                     gm_main.STOCK_PARAMS.get(CODE, {}), GM_SYM)
                     if len(orders) > before:
                         o = orders[-1]
-                        ctx.engine.arm_awaiting_buyback(CODE, cp, o["qty"], _s2.action)  # 成交即武装回补
-                        print(f"{'':10}{'':8}   → 下单 {o['side']} {o['qty']} 股"
-                              f"（已武装回补 {o['qty']}@{round(cp*0.998,2)}）")
+                        # 镜像生产成交回调（gm_main.on_order_status）：HARD_STOP_EXIT / T_LEG_CLOSE
+                        # **不建回补记忆**——平 T 腿本身就是数量还原，再回补=把刚平掉的腿重新打开。
+                        _act = (getattr(ctx, "_pending_sell_action", {}) or {}).get(GM_SYM, ("", 0))[0]
+                        ctx._inflight_sell[GM_SYM] = 0   # 模拟成交回调释放在途量
+                        if _act in ("HARD_STOP_EXIT", "T_LEG_CLOSE"):
+                            print(f"{'':10}{'':8}   → 下单 {o['side']} {o['qty']} 股"
+                                  f"（{_act}：数量已还原，不建回补义务）")
+                        else:
+                            ctx.engine.arm_awaiting_buyback(CODE, cp, o["qty"], _s2.action)
+                            print(f"{'':10}{'':8}   → 下单 {o['side']} {o['qty']} 股"
+                                  f"（已武装回补 {o['qty']}@{round(cp*0.998,2)}）")
                     else:
                         blk = [e for e in events if e.get("event") == "sell_skip"][-1:]
                         why = blk[-1].get("reason") if blk else ("tail_done" if tail_done else "未穿透门链")

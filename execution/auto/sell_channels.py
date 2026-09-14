@@ -166,13 +166,25 @@ def _sell_arbiter(context, code, sig, pos_qty, cp, now, holding, threshold,
         return False
 
     # sizer 计算卖出量
+    _is_t_leg_close = False
     if sig.action == "HARD_STOP_EXIT":
         # WP-B19 a: 全离（可用量，非 sizer 定量；遵守 T+1——当日买入锁定部分次日破位续卖）
         _avail_raw = holding.get("available")
         _avail = pos_qty if _avail_raw is None else int(_avail_raw)
         qty = max(0, min(pos_qty, _avail) - _inflight)
     else:
-        qty = context.sizer.calc_sell_qty(code, holding, sig.score, threshold, used_sells=sc)
+        # 2026-09-14: SELL_HIGH = 平 T 腿 → **按开腿原量卖**（数量不变硬约束）。
+        # 旧口径走 sizer 的 40%×t_qty：t_qty 被引擎设成**整个持仓量**、与 T 腿无关，
+        # 必然过卖（回放实证 1100×0.4=440→400，而 T 腿只有 300 → 仓位漂移 +300）。
+        # 比例口径仍保留给 TARGET_SELL/TREND_EXIT 这类**减仓**通道。
+        _t_lot = int((getattr(sig, "factors", {}) or {}).get("t_lot_qty") or 0)
+        _is_t_leg_close = bool(sig.action == "SELL_HIGH" and _t_lot > 0)
+        if _is_t_leg_close:
+            qty = _t_lot
+            _audit_write({"event": "t_leg_close", "code": code, "lot_qty": _t_lot,
+                          "pos_qty": pos_qty, "time": str(now)})
+        else:
+            qty = context.sizer.calc_sell_qty(code, holding, sig.score, threshold, used_sells=sc)
         if qty < 100:
             qty = min(300, pos_qty)
         # F13: TREND_EXIT 量封顶到超 base_ref 部分——设计语义"只卖利润仓/超额仓，
@@ -235,7 +247,10 @@ def _sell_arbiter(context, code, sig, pos_qty, cp, now, holding, threshold,
         # N28: 挂接通道信息，成交回调写入action/score
         if not hasattr(context, "_pending_sell_action"):
             context._pending_sell_action = {}
-        context._pending_sell_action[gm_sym] = (sig.action, sig.score)
+        # 2026-09-14: 平 T 腿以 T_LEG_CLOSE 挂接通道——成交回调据此**不建回补义务**
+        # （平 T 腿本身就是数量还原；再回补等于把刚平掉的腿重新打开，同价来回纯付手续费）。
+        context._pending_sell_action[gm_sym] = ("T_LEG_CLOSE" if _is_t_leg_close else sig.action,
+                                                sig.score)
         return True
     except Exception as e:
         print(f"[{now:%H:%M:%S}] SELL {code} 失败: {e}")
