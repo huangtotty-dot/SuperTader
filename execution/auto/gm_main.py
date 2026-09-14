@@ -194,10 +194,9 @@ _auto_pool = _load_auto_pool()
 STOCKS = {code: v["gm_symbol"] for code, v in _auto_pool.AUTO_POOL.items()}
 STOCK_NAMES = {code: v["name"] for code, v in _auto_pool.AUTO_POOL.items()}
 
-# ── 镜像持仓（手动盘/自动盘分离，2026-09-11 方案A） ──
-# MIRROR = 自动盘目标底仓；**默认镜像手动盘 holdings.json 的 base（底仓；缺失回退 qty）**，
-# 不再由 holdings.mirror_qty 决定（该字段 deprecated 读兼容、不再写）。按票可用
-# config/auto_pool.py 的 AUTO_POOL[code]["mirror_qty"] 覆盖（缺省镜像）。
+# ── 目标底仓（2026-09-14 持仓并表后） ──
+# MIRROR = 各票**目标底仓**，直读 holdings.json 的 `base`（身份/实际持仓/目标同源）。
+# 旧的两级回退（AUTO_MIRROR_OVERRIDE / AUTO_POOL[code].mirror_qty）已随并表删除。
 def _load_mirror_holdings():
     import json as _json
     root = os.environ.get("SUPERTRADER_ROOT", r"E:\superTrader")
@@ -218,16 +217,9 @@ def _load_mirror_holdings():
         # 仅 auto 池成员纳入 MIRROR（防纯手动票被镜像进来）；池读取失败时不裁剪（保持可用）
         if _pool and code not in _pool:
             continue
-        # 覆盖优先级：AUTO_MIRROR_OVERRIDE（含 0） > AUTO_POOL[code].mirror_qty > 镜像 base
-        _ovmap = getattr(_auto_pool, "AUTO_MIRROR_OVERRIDE", {}) or {}
-        if code in _ovmap:
-            tgt = int(_ovmap.get(code) or 0)
-        else:
-            _ov = (_pool.get(code) or {}).get("mirror_qty")
-            if _ov is not None:
-                tgt = int(_ov or 0)
-            else:
-                tgt = int(h.get("base") or 0) or int(h.get("qty") or 0)   # 镜像 base，回退 qty
+        # 2026-09-14 持仓并表：目标底仓 = holdings.json 的 `base`（旧 OVERRIDE / mirror_qty
+        # 两级回退已随并表删除——身份+持仓+目标现为同一份真源）。
+        tgt = int(h.get("base") or 0)
         if tgt <= 0:
             continue
         out[code] = {"qty": tgt, "cost": float(h.get("cost") or 0)}
@@ -235,6 +227,56 @@ def _load_mirror_holdings():
 
 
 MIRROR_HOLDINGS = _load_mirror_holdings()
+
+
+# ── 持仓真源回写（2026-09-14 并表）──────────────────────────────
+def _load_holdings_repo():
+    """经 SUPERTRADER_ROOT 加载 src/holdings_repo.py（该模块自述设计为 goldminer 可跨仓 import）。"""
+    import importlib.util as _ilu
+    root = os.environ.get("SUPERTRADER_ROOT", r"E:\superTrader")
+    path = os.path.join(root, "src", "holdings_repo.py")
+    if not os.path.exists(path):
+        return None
+    _spec = _ilu.spec_from_file_location("holdings_repo", path)
+    _m = _ilu.module_from_spec(_spec)
+    _spec.loader.exec_module(_m)
+    return _m
+
+
+_WB_DONE_DATE = None
+
+
+def _writeback_holdings(context) -> int:
+    """收盘后把**账户实际 qty/cost** 写回 superTrader 的 holdings.json（唯一持仓真源）。
+
+    2026-09-14 并表：holdings.json 现承载 身份+实际持仓+目标底仓；本函数只同步"实际持仓"。
+    **磁盘为基 + 只补丁 qty/cost**（沿用 Q-20260914-1 补丁语义）——绝不整写、绝不碰
+    base（目标底仓）与 pre_close。只回写引擎**实际跟踪**的标的，未跟踪的跳过（不臆造）。
+    返回回写票数。
+    """
+    repo = _load_holdings_repo()
+    if repo is None:
+        return 0
+    disk = repo.load_full()
+    rev = {v: k for k, v in STOCKS.items()}          # gm_symbol → 6 位 code
+    patch = {}
+    for gm_sym, mp in (getattr(context, "manual_position", {}) or {}).items():
+        code = rev.get(gm_sym)
+        if not code or code not in disk:
+            continue
+        try:
+            h = _get_holding(context, code, gm_sym)
+        except Exception:
+            continue
+        e = dict(disk[code])                          # 磁盘新值全保留
+        e["qty"] = int(h.get("qty", 0) or 0)          # 唯一允许写的字段
+        e["cost"] = round(float(h.get("cost", 0) or 0), 4)
+        patch[code] = e
+    if not patch:
+        return 0
+    repo.save_held_merged(patch, actor="auto_eod", reason="eod_writeback_qty_cost")
+    print(f"[WRITEBACK] 持仓真源已回写 {len(patch)} 票（qty/cost；base/pre_close 未动）")
+    return len(patch)
 
 MIN_BARS = 25
 T1_AUTO_UNLOCK_HOUR = 9
@@ -1446,6 +1488,17 @@ def on_bar(context, bars):
 
     if t < dtime(9, 30) or (dtime(11, 30) < t < dtime(13, 0)) or t > dtime(15, 0):
         return
+
+    # ── 持仓真源回写（2026-09-14 并表）：收盘后一次，把账户实际 qty/cost 写回 holdings.json ──
+    # 取 14:57 每日一次（on_bar 在 15:00 后 return，没有更晚的钩子）。与 superTrader 14:59 的
+    # pre_close 写并发也安全：本侧是"磁盘为基 + 只补丁 qty/cost"，且对方读后再写，两个方向都不丢。
+    global _WB_DONE_DATE
+    if t >= dtime(14, 57) and _WB_DONE_DATE != today:
+        _WB_DONE_DATE = today
+        try:
+            _writeback_holdings(context)
+        except Exception as _wbe:
+            print(f"[WRITEBACK] 失败（不阻断主循环）: {_wbe}")
 
     # ── D4: 大盘态势 + 分板态势（每交易日一次） ──
     if today != getattr(context, "_last_ir_date", None):

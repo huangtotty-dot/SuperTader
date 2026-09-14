@@ -121,6 +121,26 @@ def _load_json(fp, default=None):
         return default if default is not None else {}
 
 
+_ACCT_MAP_CACHE = {"ts": 0.0, "map": {}}
+
+
+def _account_of(code) -> str:
+    """code → 账户名，自 accounts_config.json 各账户的 holdings 清单派生（TTL 300s）。
+
+    2026-09-14 持仓并表：holdings.json 不再存 `account` 字段，归属改由账户配置声明。
+    """
+    import time as _t
+    base = str(code).split("_")[0]
+    if _t.time() - _ACCT_MAP_CACHE["ts"] > 300:
+        cfg = _load_json(STATE_DIR / "accounts_config.json", {}) or {}
+        m = {}
+        for a, v in (cfg.get("accounts") or {}).items():
+            for c in ((v or {}).get("holdings") or []):
+                m[str(c).split("_")[0]] = a
+        _ACCT_MAP_CACHE.update({"ts": _t.time(), "map": m})
+    return _ACCT_MAP_CACHE["map"].get(base, "")
+
+
 # 技术标签 TTL 缓存：GUI 每 10s 轮询 refresh_pb → load_stock_tags_batch（单次约 7-12s，
 # 期间大量 pandas + 网络在 pywebview 主线程执行会冻结界面）。改为 TTL 缓存 + 后台异步重算，
 # 轮询永远读缓存即时返回，界面不卡。TTL 取 120s：标签变化慢，过长 TTL 减少后台重算的 CPU 尖峰。
@@ -553,8 +573,8 @@ class Api:
                 total_pnl += (price - cost) * qty
             rows.append({
                 "code": code, "name": qq.get("name", code),
-                "account": info.get("account", ""), "type": info.get("type", ""),
-                "qty": qty, "base": info.get("base", 0), "t_qty": info.get("t_qty", 0),
+                "account": _account_of(code), "type": info.get("type", ""),
+                "qty": qty, "base": info.get("base", 0),
                 "cost": cost, "pre_close": info.get("pre_close"),
                 "price": price, "change_pct": qq.get("change_pct"),
                 "pnl_pct": qq.get("pnl_pct"), "pnl_amt": pnl_amt,
@@ -3237,7 +3257,7 @@ class Api:
             latest[code] = {
                 "code": code, "scan_time": "", "date": date,
                 "name": h.get("name", code),
-                "mirror_qty": int(h.get("mirror_qty") or 0),
+                "base": int(h.get("base") or 0),
                 "held": bool(int(h.get("qty") or 0)),
                 "verdict": "pending", "score": 0,
                 "regime": "", "go": False, "reasons": [], "veto": [],
@@ -3271,7 +3291,7 @@ class Api:
         for code in self._auto_pool_codes():  # 基于 holdings 实时派生（新增标的也扫），非 auto_pool 模块缓存
             row = {"code": code, "scan_time": _scan_time, "date": date,
                    "name": (hold.get(code) or {}).get("name", code),
-                   "mirror_qty": int((hold.get(code) or {}).get("mirror_qty") or 0),
+                   "base": int((hold.get(code) or {}).get("base") or 0),
                    "held": bool(int((hold.get(code) or {}).get("qty") or 0))}
             try:
                 df = prov.daily(code, 400)
@@ -3307,18 +3327,18 @@ class Api:
                 pass
         return self.load_auto_scan(date)
 
-    def add_auto_stock(self, code, name, mirror_qty, type=None):
-        """添加新股票到 auto 池（pool=auto + mirror_qty 目标底仓）→ 原子写 holdings.json；
+    def add_auto_stock(self, code, name, base, type=None):
+        """添加新股票到 auto 池（pool=auto + base 目标底仓）→ 原子写 holdings.json；
         若 code 在 watchlist 且 pool=manual → 改 auto（防引擎 validate_pool_split 拒绝启动）。
         引擎需重启才含该标的。"""
         code = str(code or "").strip()
         if not (code.isdigit() and len(code) == 6):
             return {"ok": False, "error": "代码须为 6 位数字"}
         try:
-            mirror_qty = int(mirror_qty)
+            base = int(base)
         except (TypeError, ValueError):
             return {"ok": False, "error": "目标底仓须为整数"}
-        if mirror_qty < 100 or mirror_qty % 100 != 0:
+        if base < 100 or base % 100 != 0:
             return {"ok": False, "error": "目标底仓须 ≥100 且为 100 的整数倍"}
         _ap = self._auto_pool_module()
         if _ap is not None and not _ap.is_manual(code):
@@ -3340,8 +3360,14 @@ class Api:
             type = "etf" if code.startswith("5") else "stock"
         try:
             upsert_auto_entry(code, name=name or code, gm_symbol=gm_symbol,
-                              type=type, mirror_qty=mirror_qty,
-                              actor="gui", reason="添加自动盘标的")
+                              type=type, actor="gui", reason="添加自动盘标的")
+            try:  # 目标底仓写入 base（2026-09-14 并表：OVERRIDE 已迁入 holdings.base）
+                from src.holdings_repo import load_full as _lf, save_held_merged as _sm
+                _e = dict(_lf().get(code) or {})
+                _e["base"] = base
+                _sm({code: _e}, actor="gui", reason="设置目标底仓")
+            except Exception:
+                pass
         except Exception as e:
             return {"ok": False, "error": f"写 holdings 失败: {e}"}
         try:
@@ -3350,11 +3376,11 @@ class Api:
         except Exception:
             pass
         return {"ok": True, "code": code, "gm_symbol": gm_symbol, "type": type,
-                "mirror_qty": mirror_qty, "restart_required": True,
-                "msg": f"已加入 auto 池（目标底仓 {mirror_qty}），重启掘金策略后生效"}
+                "base": base, "restart_required": True,
+                "msg": f"已加入 auto 池（目标底仓 {base}），重启掘金策略后生效"}
 
     def manual_auto_build(self, code, qty, action="build"):
-        """自动盘手动建仓/加仓入口（仅限 auto 池内）：写 holdings.json（mirror_qty 设/加）+
+        """自动盘手动建仓/加仓入口（仅限 auto 池内）：写 holdings.json（base 设/加）+
         写 AUTO_BUILD.json 武装标记（引擎重启后 BASE 建仓跳过确认闸直接做T）。
         同时清除该 code 既有 BUY_PENDING 请求（防双通道）。"""
         code = str(code or "").strip()
@@ -3379,9 +3405,9 @@ class Api:
         entry = dict(full.get(code) or {})
         if not entry:
             return {"ok": False, "error": f"{code} 不在持仓真源"}
-        old_mirror = int(entry.get("mirror_qty") or 0)
-        new_mirror = qty if action == "build" else old_mirror + qty
-        entry["mirror_qty"] = new_mirror
+        old_base = int(entry.get("base") or 0)
+        new_base = qty if action == "build" else old_base + qty
+        entry["base"] = new_base
         if str(entry.get("pool") or "") == "manual":
             entry["pool"] = "auto"
         try:
@@ -3393,7 +3419,7 @@ class Api:
             ab_fp = BRIDGE_DIR / "AUTO_BUILD.json"
             ab = _load_json(ab_fp, {}) or {}
             ab.setdefault("requests", {})
-            ab["requests"][code] = {"action": action, "qty": new_mirror,
+            ab["requests"][code] = {"action": action, "qty": new_base,
                                     "ts": datetime.now().timestamp()}
             ab["updated_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             tmp = ab_fp.with_suffix(".tmp")
@@ -3414,9 +3440,9 @@ class Api:
                 tmp.replace(bp_fp)
         except Exception:
             pass
-        return {"ok": True, "code": code, "action": action, "mirror_qty": new_mirror,
+        return {"ok": True, "code": code, "action": action, "base": new_base,
                 "restart_required": True,
-                "msg": f"已武装 {'建仓' if action == 'build' else '加仓'} {new_mirror} 股，"
+                "msg": f"已武装 {'建仓' if action == 'build' else '加仓'} {new_base} 股，"
                        "重启掘金策略后引擎将自动建仓并开始做T"}
 
     def clear_auto_build(self, code):
