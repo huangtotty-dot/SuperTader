@@ -2,7 +2,7 @@
   "date": "2026-09-10",
   "snapshot": {
     "file": "t_io\\state\\holdings_2026-09-10.json",
-    "created_now": false,
+    "created_now": true,
     "prev": "t_io\\state\\holdings_2026-09-09.json"
   },
   "K2_cost_change": {
@@ -10,19 +10,19 @@
     "note": "对照 2026-09-09",
     "by_code": {
       "000988": {
-        "cost_now": 99.607,
+        "cost_now": 80.581,
         "cost_prev": 99.32,
-        "delta": 0.287
+        "delta": -18.739
       },
       "588170": {
-        "cost_now": 0.938,
+        "cost_now": 0.935,
         "cost_prev": 0.935,
-        "delta": 0.003
+        "delta": 0.0
       },
       "600176": {
-        "cost_now": 43.359,
+        "cost_now": 43.137,
         "cost_prev": 43.208,
-        "delta": 0.151
+        "delta": -0.071
       },
       "600481": {
         "cost_now": 28.216,
@@ -30,9 +30,9 @@
         "delta": 0.0
       },
       "603667": {
-        "cost_now": 50.611,
+        "cost_now": 50.295,
         "cost_prev": 50.382,
-        "delta": 0.229
+        "delta": -0.087
       },
       "002639": {
         "cost_now": 13.631,
@@ -56,10 +56,10 @@
     "baseline": false,
     "by_code": {
       "000988": {
-        "t_qty_now": 300,
+        "t_qty_now": 100,
         "t_qty_prev": 300,
-        "drift": 0,
-        "attribution": "无漂移",
+        "drift": -200,
+        "attribution": "需人工确认",
         "audit": {
           "sold": 0,
           "bought": 0,
@@ -86,10 +86,10 @@
         "source": "snapshot_diff"
       },
       "600176": {
-        "t_qty_now": 1100,
+        "t_qty_now": 1600,
         "t_qty_prev": 1100,
-        "drift": 0,
-        "attribution": "无漂移",
+        "drift": 500,
+        "attribution": "需人工确认",
         "audit": {
           "sold": 1200,
           "bought": 600,
@@ -116,10 +116,10 @@
         "source": "snapshot_diff"
       },
       "603667": {
-        "t_qty_now": 300,
+        "t_qty_now": 500,
         "t_qty_prev": 300,
-        "drift": 0,
-        "attribution": "无漂移",
+        "drift": 200,
+        "attribution": "需人工确认",
         "audit": {
           "sold": 0,
           "bought": 0,
@@ -169,6 +169,6 @@
         "source": "snapshot_diff"
       }
     },
-    "drift_total": 0
+    "drift_total": 500
   }
 }
