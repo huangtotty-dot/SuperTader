@@ -32,14 +32,12 @@ def set_all_holdings(holdings: dict) -> None:
 class PositionSizer:
     """动态仓位管理器 + V1.27 日线止损 + 持仓上限"""
 
-    def __init__(self, params: dict = None, virtual_trades: dict = None):
+    def __init__(self, params: dict = None):
         """
         参数:
             params: 全局参数（从 config.py 的 PARAMS 传入）
-            virtual_trades: 虚拟交易记录（从 signal_engine 的 VIRTUAL_TRADES 传入）
         """
         self.params = params or {}
-        self.virtual_trades = virtual_trades or {}
         # F-5(2026-09-04): 买入 sizing 归因旁路——calc_buy_qty 各出口记录 {reason, 钳制后max_buyable, qty}
         self._buy_state = {"reason": None, "max_buyable": 0, "qty": 0}
 
@@ -387,14 +385,10 @@ class PositionSizer:
         return min(qty, net_qty)
 
     def _virtual_net_qty(self, code: str, holding: dict) -> int:
-        """计算当前虚拟净持仓（可卖量）"""
+        """计算当前净持仓（可卖量）。
+        manual 做T 下线（2026-09-14）后不再叠加虚拟成交，恒等于纯底仓 t_qty。"""
         # fix P0-9(B3): 纯底仓口径——严格 t_qty，不再回退 qty
-        base_qty = int(holding.get("t_qty") or 0)
-        if code not in self.virtual_trades:
-            return base_qty
-        buys = self.virtual_trades[code].get("BUY_LOW", [])
-        sells = self.virtual_trades[code].get("SELL_HIGH", [])
-        return max(0, base_qty + sum(t.get("qty", 0) for t in buys) - sum(t.get("qty", 0) for t in sells))
+        return int(holding.get("t_qty") or 0)
 
     def _available_sell_qty(self, holding: dict) -> int:
         available = holding.get("available")
@@ -406,43 +400,37 @@ class PositionSizer:
         return max(0, int(holding.get("qty") or holding.get("t_qty") or 0))
 
     def _calc_unrebuilt(self, code: str) -> int:
-        """计算已卖出但未接回的量"""
-        if code not in self.virtual_trades:
-            return 0
-        sells = self.virtual_trades[code].get("SELL_HIGH", [])
-        buys = self.virtual_trades[code].get("BUY_LOW", [])
-        total_sold = sum(t.get("qty", 0) for t in sells)
-        total_bought = sum(t.get("qty", 0) for t in buys)
-        return max(0, total_sold - total_bought)
+        """计算已卖出但未接回的量。manual 做T 下线（2026-09-14）后恒为 0。"""
+        return 0
 
 
 # ==================== 便捷函数（供共享命名空间调用） ====================
 
 _default_sizer = None
 
-def get_sizer(params: dict = None, virtual_trades: dict = None) -> PositionSizer:
+def get_sizer(params: dict = None) -> PositionSizer:
     global _default_sizer
     if _default_sizer is None or params is not None:
-        _default_sizer = PositionSizer(params=params, virtual_trades=virtual_trades)
+        _default_sizer = PositionSizer(params=params)
     return _default_sizer
 
 
 def calc_sell_qty(code: str, holding: dict, regime, sig_score: float, threshold: float,
-                  used_sells: int = 0, params: dict = None, virtual_trades: dict = None, index_ctx: dict = None,
+                  used_sells: int = 0, params: dict = None, index_ctx: dict = None,
                   current_price: float = 0.0, total_equity: float = 0.0) -> int:
     """便捷函数：计算卖出股数"""
-    return get_sizer(params, virtual_trades).calc_sell_qty(code, holding, regime, sig_score, threshold, used_sells, index_ctx=index_ctx, current_price=current_price, total_equity=total_equity)
+    return get_sizer(params).calc_sell_qty(code, holding, regime, sig_score, threshold, used_sells, index_ctx=index_ctx, current_price=current_price, total_equity=total_equity)
 
 
 _LAST_BUY_STATE = {"reason": None, "max_buyable": 0, "qty": 0}
 
 
 def calc_buy_qty(code: str, holding: dict, regime, sig_score: float, threshold: float,
-                 params: dict = None, virtual_trades: dict = None, index_ctx: dict = None,
+                 params: dict = None, index_ctx: dict = None,
                  current_price: float = 0.0, total_equity: float = 0.0) -> int:
     """便捷函数：计算买入股数。同时把归因复制到 _LAST_BUY_STATE，供调用方随后读 last_buy_state()。"""
     global _LAST_BUY_STATE
-    s = get_sizer(params, virtual_trades)
+    s = get_sizer(params)
     qty = s.calc_buy_qty(code, holding, regime, sig_score, threshold, index_ctx=index_ctx,
                          current_price=current_price, total_equity=total_equity)
     _LAST_BUY_STATE = dict(getattr(s, "_buy_state", {}) or {})

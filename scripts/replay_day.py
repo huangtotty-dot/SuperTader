@@ -145,16 +145,12 @@ def main():
 
     # ── 环境隔离：traces/虚拟账/盘中状态全部指向回放目录，不碰实盘文件 ──
     shared['TRACE_DIR'] = str(out_dir)
-    shared['VIRTUAL_TRADES_FILE'] = str(out_dir / "virtual_trades.json")
     if 'PERSIST_INTRADAY_STATE' in shared:
         shared['PERSIST_INTRADAY_STATE'] = False
     shared['HOLDINGS'] = {c: dict(h) for c, h in HOLDINGS0.items()}
 
     PARAMS = shared['PARAMS']
     STOCK_PARAMS = shared['STOCK_PARAMS']
-    _se = sys.modules.get('signal_engine')  # 不存在（共享命名空间），用 shared 取
-    VIRTUAL_TRADES = shared['VIRTUAL_TRADES']
-    VIRTUAL_TRADES.clear()
     MINUTE_FETCH_STATUS = shared.get('MINUTE_FETCH_STATUS')
     if MINUTE_FETCH_STATUS is not None:
         for c in CODES:
@@ -238,12 +234,12 @@ def main():
                 dynamic_qty = calc_sell_qty(
                     code, holding, None, float(sig.score), threshold,
                     used_sells=engine.sell_count_per_stock.get(code, 0),
-                    params=merged_params, virtual_trades=VIRTUAL_TRADES,
+                    params=merged_params,
                     index_ctx=daily_ctx, current_price=cur_price)
             else:
                 dynamic_qty = calc_buy_qty(
                     code, holding, None, float(sig.score), threshold,
-                    params=merged_params, virtual_trades=VIRTUAL_TRADES,
+                    params=merged_params,
                     index_ctx=daily_ctx, current_price=cur_price)
             sig.hold_qty = int(dynamic_qty or 0)
 
@@ -316,7 +312,8 @@ def main():
     naive_est = 0.0   # 基线审计口径：全部记录参与（price=0 也照算 → 伪影来源）
     valid_est = 0.0   # 修复版审计口径：仅 price>0 有效记录
     for code in CODES:
-        vt = VIRTUAL_TRADES.get(code, {})
+        # 2026-09-14: manual 做T 台账（VIRTUAL_TRADES）已删除，manual 成交记录恒空。
+        vt = {}
         sells = list(vt.get("SELL_HIGH", [])) + list(vt.get("PANIC_SELL", []))
         buys = list(vt.get("BUY_LOW", [])) + list(vt.get("ADD_POS", []))
         cost = HOLDINGS0[code]["cost"]

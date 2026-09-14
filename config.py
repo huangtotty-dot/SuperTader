@@ -47,7 +47,6 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 T_IO_DIR = os.path.join(BASE_DIR, "t_io")
 STATE_DIR = os.path.join(T_IO_DIR, "state")
 HOLDINGS_FILE = os.path.join(STATE_DIR, "holdings.json")
-T_MODE_FILE = os.path.join(STATE_DIR, "t_mode.json")
 LEARNING_FILE = os.path.join(T_IO_DIR, "t_trader_learning.json")
 LOG_DIR = os.path.join(T_IO_DIR, "logs")
 CACHE_DIR = os.path.join(T_IO_DIR, "cache")
@@ -56,7 +55,6 @@ PREOPEN_DIR = os.path.join(T_IO_DIR, "preopen")
 CONFIG_FILE = os.path.join(STATE_DIR, "config.json")
 TRACE_DIR = os.path.join(T_IO_DIR, "traces")
 WATCHLIST_FILE = os.path.join(BASE_DIR, "watchlist.json")
-VIRTUAL_TRADES_FILE = os.path.join(T_IO_DIR, "virtual_trades.json")
 
 for d in [T_IO_DIR, STATE_DIR, LOG_DIR, CACHE_DIR, SNAPSHOT_DIR, TRACE_DIR, PREOPEN_DIR]:
     if not os.path.exists(d):
@@ -258,45 +256,8 @@ def chunk_list(items: List[Any], size: int):
         yield items[i:i + size]
 
 
-# ==================== VIRTUAL_TRADES 持久化 ====================
-
-def load_virtual_trades() -> Dict[str, Dict[str, list]]:
-    """从文件加载虚拟交易记录。若非当日数据，自动重置（每日清零）。"""
-    try:
-        if not os.path.exists(VIRTUAL_TRADES_FILE):
-            return {}
-        with open(VIRTUAL_TRADES_FILE, "r", encoding="utf-8") as f:
-            data = json.load(f)
-        if not isinstance(data, dict):
-            return {}
-        saved_date = data.get("_date", "")
-        today = get_today_str()
-        if saved_date != today:
-            log.info(f"🔄 VIRTUAL_TRADES 日期 {saved_date} != 今日 {today}，自动重置")
-            return {}
-        raw = data.get("trades", {})
-        if not isinstance(raw, dict):
-            return {}
-        return raw
-    except Exception as e:
-        log.warning(f"⚠️  VIRTUAL_TRADES 加载失败: {str(e)[:80]}")
-        return {}
-
-
-def save_virtual_trades(data: dict) -> None:
-    """将虚拟交易记录持久化到文件，附带日期标记。"""
-    try:
-        os.makedirs(os.path.dirname(VIRTUAL_TRADES_FILE), exist_ok=True)
-        payload = {
-            "_date": get_today_str(),
-            "trades": data,
-        }
-        with open(VIRTUAL_TRADES_FILE, "w", encoding="utf-8") as f:
-            json.dump(payload, f, ensure_ascii=False, indent=2, default=str)
-    except Exception as e:
-        log.warning(f"⚠️  VIRTUAL_TRADES 保存失败: {str(e)[:80]}")
-
-
+# ==================== （manual 做T 已下线 2026-09-14） ====================
+# VIRTUAL_TRADES 持久化（load_/save_virtual_trades / VIRTUAL_TRADES_FILE）随 manual 做T 一并删除。
 # ==================== 【高级声音报警引擎动态挂载】 ====================
 SYS_ALERT_AVAILABLE = False
 try:
@@ -350,11 +311,6 @@ PARAMS = {
     # C-1 预注册闸门（2026-09-07）：manual 按个股所属板覆盖 index context/circuit。
     # False=市场级（现状，零行为变化）；周六验证管线对照时置 True（该板 clear 或 市场 clear 任一触发全卖）。
     "index_regime_board_mode": False,
-    # 可T仓位比例（2026-09-11 实验：t_io/validation/t_budget/t_budget_ratio_experiment.py）
-    # ρ=clamp(R / 近250日 median 日内振幅%, 下限, 上限)，令 T 仓最坏日波动≈R（占仓位比）。
-    "t_budget_risk_pct": 0.015,   # R：风险预算（1.5% 保守；2.0% 空间更大）
-    "t_budget_rho_min": 0.15,
-    "t_budget_rho_max": 0.50,
     "max_single_position_pct": 0.30,
     "max_sell_times_per_stock": 3,
     # —— 早盘 ——
@@ -370,10 +326,6 @@ PARAMS = {
     "swing_take_profit_pct": 0.005,     # 目标止盈: 相对做T买入价 +0.5%
     "swing_t_max_hold_min": 0,          # 0=不启用时间止损; >0=买入后N分钟强制卖(可选)
     "swing_force_exit_tval": 1455,      # 尾盘强制平仓时间(HHMM), 做T当日闭环
-    # V1.2.0 (2026-08-08 用户拍板上线): C1' 口径B — 全部买信号单股日限 7 内置状态机
-    # record_signal 层计数，第 8 条起当日不再产生买入信号（卖信号不受限；0/None=关闭；
-    # harness T_BUY_DAILY_CAP 可显式覆盖做 A/B）
-    "buy_daily_cap": 7,
     # —— 通知阈值 ——
     # v1.1.0 X9 阈值阶梯实测采纳 t55 档（两组胜率+2.1~2.8pp、密度双升、无单股恶化，
     # 依据 t_io/validation/v109_threshold/阈值阶梯报告.md）；买侧 68 未实验不动
@@ -388,9 +340,6 @@ PARAMS = {
     # v1.1.0 补定义: V1.30 轮次上限被 main.py:1223/1341 以 PARAMS["max_t_cycles_per_stock"] 消费
     # 但从未在 config 定义(首个达标卖出信号即 KeyError 的潜伏崩溃); 默认值与 position_sizer.py:289 一致
     "max_t_cycles_per_stock": 8,
-    # v1.1.0 补定义: 与上同批 P0-D 误删 — signal_engine.py:291 消费(卖出后重建封锁分钟数);
-    # 恢复 P0-D 清理前全局值 3(个股原 10/12 已随 STOCK_PARAMS 清理退役)
-    "post_sell_rebuild_minutes": 3,
     # —— 仓位（position_sizer 消费） ——
     "stock_qty_base_pct": 0.30,
     "stock_qty_strong_pct": 0.40,
@@ -790,7 +739,6 @@ logging.getLogger("apscheduler").setLevel(logging.WARNING)
 
 HOLDINGS: Dict[str, dict] = {}
 STRATEGY_MEMORY: Dict[str, dict] = {}
-VIRTUAL_TRADES: Dict[str, Dict[str, list]] = {}
 AI_REVIEW_STATS: Dict[str, dict] = {}
 MINUTE_FETCH_STATUS: Dict[str, str] = {}
 MINUTE_FETCH_DETAIL: Dict[str, str] = {}
@@ -798,7 +746,6 @@ DAILY_DECISION_STATS: Dict[str, dict] = {}
 SIGNAL_OUTCOME_TRACKER: Dict[str, list] = {}
 DAILY_CONTEXT_CACHE: Dict[str, Dict[str, Any]] = {}
 SESSION_CONTEXT: Dict[str, Any] = {}
-T_MODE: Dict[str, str] = {}  # V1.26: T模式配置 {code: 'long'|'short'}
 PREOPEN_CONTEXT: Optional[Any] = None
 _preopen_logged_date: Optional[str] = None
 _preopen_pushed_date: Optional[str] = None
@@ -916,92 +863,8 @@ C20_AUCTION_CHECK = {
     "l2_top20_down_ratio": 0.75,  # Level2 Top20 跌家占比阈值
 }
 
-# ==================== V1.26: T模式配置（正T/反T切换） ====================
-# long = 正T（先买后卖，默认）
-# short = 反T（先卖后买，下跌趋势用）
-_T_MODE_VALID = {"long", "short"}
-
-
-def _normalize_t_mode_value(value: Any) -> str:
-    if value in _T_MODE_VALID:
-        return str(value)
-    return ""
-
-
-def load_t_mode() -> Dict[str, str]:
-    """加载T模式配置，返回 {code: 'long'|'short'}"""
-    if not os.path.exists(T_MODE_FILE):
-        return {}
-    try:
-        with open(T_MODE_FILE, "r", encoding="utf-8") as f:
-            data = json.load(f)
-        if not isinstance(data, dict):
-            return {}
-        runtime: Dict[str, str] = {}
-        for k, v in data.items():
-            if str(k).startswith("_"):
-                continue
-            mode = _normalize_t_mode_value(v)
-            if mode:
-                runtime[str(k)] = mode
-        return runtime
-    except Exception as e:
-        log.warning(f"⚠️  T模式配置读取失败: {str(e)[:80]}")
-    return {}
-
-
-def save_t_mode(t_mode: Dict[str, str]):
-    """保存T模式配置到文件"""
-    try:
-        existing = {}
-        if os.path.exists(T_MODE_FILE):
-            with open(T_MODE_FILE, "r", encoding="utf-8") as f:
-                existing = json.load(f)
-        merged = {k: v for k, v in existing.items() if str(k).startswith("_")}
-        for k, v in (t_mode or {}).items():
-            if str(k).startswith("_"):
-                merged[k] = v
-                continue
-            mode = _normalize_t_mode_value(v)
-            if mode:
-                merged[k] = mode
-        with open(T_MODE_FILE, "w", encoding="utf-8") as f:
-            json.dump(merged, f, ensure_ascii=False, indent=2)
-    except Exception as e:
-        log.warning(f"⚠️  T模式配置保存失败: {str(e)[:80]}")
-
-
-# 反T模式（short）专属参数覆盖
-# 核心逻辑反转：正T是"低买高卖"，反T是"高卖低买"
-# 参数调整原则：
-#   1. 降低卖出门槛（鼓励早盘/冲高卖出）
-#   2. 提高买入门槛（只接回深跌）
-#   3. 取消"价格低于VWAP禁买"限制（反T需要在低位接回）
-#   4. 早盘允许卖出（反T的核心是早盘先卖）
-# V1.26fix: SHORT_MODE_PARAMS removed in V3.0 (no consumers — dead config block)
-
 # ==================== W33 A3: 仓位管理器共享计算（t_gui 与 position_builder 同源） ====================
 # 从 t_gui.load_position_manager 内联逻辑抽取，避免 GUI/建仓扫描两处实现漂移。
-
-def suggest_t_budget(qty: int, amp_pct: float, risk_pct: float = None) -> dict:
-    """每票"可T仓位"建议（2026-09-11 实验口径）：
-    ρ = clamp(R / 近250日 median 日内振幅, min, max)；可T股数 = floor(qty×ρ/100)×100。
-    amp_pct 为小数（0.0433=4.33%）；amp 无效(≤0) → 回落 ρ=0.30 惯例。返回 {rho,t_qty,amp}。
-    """
-    R = float(PARAMS.get("t_budget_risk_pct", 0.015) if risk_pct is None else risk_pct)
-    lo = float(PARAMS.get("t_budget_rho_min", 0.15))
-    hi = float(PARAMS.get("t_budget_rho_max", 0.50))
-    try:
-        a = float(amp_pct)
-    except Exception:
-        a = 0.0
-    if a > 0:
-        rho = min(hi, max(lo, R / a))
-    else:
-        rho = 0.30
-    tq = int(qty) if int(qty) < 100 else int(int(qty) * rho // 100 * 100)
-    return {"rho": round(rho, 4), "t_qty": max(0, tq), "amp": round(a, 4)}
-
 
 def build_position_gap(total_capital: float, raw_list: list, default_pct: float = 0.30) -> dict:
     """由各持仓的基础市值/目标比例计算归一化目标市值与欠配缺口。
@@ -1118,9 +981,6 @@ SENTIMENT_PARAMS = {
     "log_dir": None,                   # None → env SENTIMENT_LOG_DIR > BASE_DIR/logs
     "push_enabled": True,
 }
-
-# V3.0: T_AUTO_MODE=1 时启动跳过人工确认，直接采用决策矩阵逐股建议（无人值守）
-AUTO_T_MODE = os.getenv("T_AUTO_MODE", "0").strip() == "1"
 
 # V3.0: 闭环审计（_maybe_audit_closure）每日去重
 _closure_audit_date: Optional[str] = None

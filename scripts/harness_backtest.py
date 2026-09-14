@@ -427,21 +427,17 @@ def run_backtest(codes: list, date_range: list, holdings_map: dict,
     out_dir = out_dir or (BASE_DIR / "t_io" / "validation" / "p0_test")
     out_dir.mkdir(parents=True, exist_ok=True)
     shared['TRACE_DIR'] = str(out_dir)
-    shared['VIRTUAL_TRADES_FILE'] = str(out_dir / "virtual_trades.json")
     if 'PERSIST_INTRADAY_STATE' in shared:
         shared['PERSIST_INTRADAY_STATE'] = False
 
     PARAMS = shared['PARAMS']
     STOCK_PARAMS = shared['STOCK_PARAMS']
-    VIRTUAL_TRADES = shared['VIRTUAL_TRADES']
-    VIRTUAL_TRADES.clear()
 
     # 所有回测标的的分钟状态设为 ok（跳过实盘 fetch_minute_bar 检查）
     MINUTE_FETCH_STATUS = shared.get('MINUTE_FETCH_STATUS', {})
     for c in codes:
         MINUTE_FETCH_STATUS[c] = "ok"
     shared['HOLDINGS'] = {c: dict(h) for c, h in holdings_map.items()}
-    shared['VIRTUAL_TRADES'] = VIRTUAL_TRADES
 
     # v1.1.1: 变体A实验开关(默认关) — T_GATE_VARIANT_A=1 时 below_ma5_weak且slope>=0 放行
     if os.environ.get("T_GATE_VARIANT_A") == "1":
@@ -450,10 +446,7 @@ def run_backtest(codes: list, date_range: list, holdings_map: dict,
     # E1: 引擎买阈基线注入(验证用途, 默认42不变) — 引擎软消费 PARAMS["engine_buy_threshold_base"](signal_engine.py:524)
     if os.environ.get("T_BUY_BONUS_MIN_SCORE"):
         PARAMS["engine_buy_threshold_base"] = float(os.environ["T_BUY_BONUS_MIN_SCORE"])
-    # W33 C1' 口径B: 全部买信号单股日限注入 — V1.2.0 起生产默认 7（config.py PARAMS["buy_daily_cap"]=7）；
-    # env 可显式覆盖做 A/B："0"=关闭（buy_daily_cap_reached 对 0 返回 False），"N"=自定义上限
-    if os.environ.get("T_BUY_DAILY_CAP"):
-        PARAMS["buy_daily_cap"] = int(os.environ["T_BUY_DAILY_CAP"])
+    # 2026-09-14: W33 C1' 单股日限（buy_daily_cap）已随 manual 做T 下线删除，不再注入。
     # V1.2.1: 底仓地板开关注入 — 生产默认关（config.py PARAMS["sell_floor_enabled"]=False）；
     # "1"=恢复 V1.30 钳制（复现旧世界对照），"0"=显式关闭
     if os.environ.get("T_SELL_FLOOR_ENABLED") == "1":
@@ -583,22 +576,8 @@ def run_backtest(codes: list, date_range: list, holdings_map: dict,
                     engine._last_signal_seg = {}
                 engine._last_signal_seg[_seg_key] = bt
 
-                # W33 C1' 口径B: 全部买信号单股日限（信号产生层拦截，默认关=生产行为不变）
-                # 段去重已消费该信号段；cap 命中则不记录——无冷却/无簿记/无落盘，
-                # 状态机看到被 cap 后的世界（二阶效应真实）；命中落 day_capped 供审计
-                if sig.action in ("BUY_LOW", "ADD_POS") and engine.buy_daily_cap_reached(code):
-                    day_capped.append({
-                        "ts": bt.strftime("%Y-%m-%d %H:%M:%S"),
-                        "code": code, "name": holding.get("name", code),
-                        "action": sig.action, "price": price,
-                        "buy_score": round(float(buy_score), 1),
-                        "sell_score": round(float(sell_score), 1),
-                        "threshold": _nth,
-                        "cap": int(PARAMS.get("buy_daily_cap", 0)),
-                        "capped_rank": engine.buy_recorded_today.get(code, 0) + 1,
-                        "settle_result": None, "settle_time": None,
-                    })
-                    continue
+                # 2026-09-14: W33 C1' 单股日限（buy_daily_cap_reached）已随 manual 做T 下线删除，
+                # day_capped 恒空（保留列表供下游审计口径不变）。
 
                 # R2: 回测簿记对齐 — record_signal 计数 + record_trade_action 记账
                 try:
@@ -612,7 +591,7 @@ def run_backtest(codes: list, date_range: list, holdings_map: dict,
                 if _calc_qty:
                     try:
                         _qty = _calc_qty(code, holding, None, float(sig.score), 42.0,
-                                         params=_merged_params, virtual_trades=VIRTUAL_TRADES,
+                                         params=_merged_params,
                                          index_ctx=daily_ctx, current_price=price)
                         _qty = int(_qty or 0)
                     except Exception:

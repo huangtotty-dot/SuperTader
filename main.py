@@ -112,9 +112,9 @@ def _make_engine_ctx():
     def _g(name, default):
         return globals().get(name, default)
     return EngineContext(
-        holdings=HOLDINGS, virtual_trades=VIRTUAL_TRADES,
+        holdings=HOLDINGS,
         minute_fetch_status=MINUTE_FETCH_STATUS, minute_fetch_detail=MINUTE_FETCH_DETAIL,
-        t_mode=T_MODE, daily_decision_stats=DAILY_DECISION_STATS,
+        daily_decision_stats=DAILY_DECISION_STATS,
         daily_context_cache=DAILY_CONTEXT_CACHE, signal_outcome_tracker=SIGNAL_OUTCOME_TRACKER,
         backtest_day_cache=_g("BACKTEST_DAY_CACHE", {}),
         now=_now, get_today_str=get_today_str,
@@ -345,152 +345,7 @@ def notify(sig, holding):
     if getattr(sig, "channel", "manual") == "auto":
         _route_auto_signal(sig, holding)
         return
-    try:
-        if not sig or not FEISHU_WEBHOOK:
-            return
-        action_cn = {"BUY_LOW": "低吸", "ADD_POS": "加仓", "SELL_HIGH": "高抛", "PANIC_SELL": "恐慌卖出"}.get(sig.action, sig.action)
-        title_color = {"BUY_LOW": "🟢", "ADD_POS": "🟢", "SELL_HIGH": "🔴", "PANIC_SELL": "🔴"}.get(sig.action, "⚪")
-        title = f"{title_color} 【触发】{action_cn}信号({sig.action}) {sig.name}({sig.code}) 得:{sig.score:.0f}分"
-        
-        runtime_config = load_runtime_config()
-        feishu_cfg = runtime_config.get("feishu", {}) if isinstance(runtime_config, dict) else {}
-        at_all = feishu_cfg.get("at_all_on_signal", True)
-        use_strong = feishu_cfg.get("use_strong_notification", True)
-        at_text = "<at user_id=\"all\">所有人</at>" if at_all else ""
-        
-        card_elements = []
-        if at_all:
-            card_elements.append({"tag": "div", "text": {"content": at_text, "tag": "lark_md"}})
-        card_elements.append({"tag": "div", "text": {"content": title, "tag": "lark_md"}})
-        
-        # V1.14: 增强通知内容
-        reasons_text = "\n".join([f"• {r}" for r in (sig.reasons or [])[:5]])
-        vwap = float(sig.indicators.get("vwap", sig.price) or sig.price)
-        today_ret = float(sig.indicators.get("today_ret", 0) or 0)
-        market_state = str(sig.indicators.get("market_state", "unknown"))
-        
-        # 【V1.14 新增】市场状态识别
-        regime_info = ""
-        regime = getattr(sig, "regime", None)
-        regime_reason = getattr(sig, "regime_reason", "")
-        if regime and regime != "normal":
-            regime_info = f"\n🚨 **市场状态**：{regime} | {regime_reason}"
-        
-        # 【V1.14 新增】组合拳交易摘要
-        trade_summary = ""
-        code = sig.code
-        total_sold = 0
-        total_bought = 0
-        unrebuilt = 0
-        if code in VIRTUAL_TRADES:
-            total_sold = sum(t.get("qty", 0) for t in VIRTUAL_TRADES[code].get("SELL_HIGH", []))
-            total_bought = sum(t.get("qty", 0) for t in VIRTUAL_TRADES[code].get("BUY_LOW", []))
-            unrebuilt = max(0, total_sold - total_bought)
-        
-        # 建议交易股数
-        hold_qty = int(sig.hold_qty or 0)
-        total_t = int(holding.get("t_qty", 0))  # 纯底仓(t_qty=0)不应用qty回退
-        
-        advice = f"建议{action_cn} {hold_qty} 股/份"
-        
-        # ETF显示交易份数
-        if holding.get("type") == "etf" and hold_qty > 0:
-            pct = hold_qty / total_t * 100 if total_t > 0 else 0
-            advice += f"（占总T仓{pct:.0f}%）"
-        
-        # 组合拳信息
-        if action_cn in ["高抛", "恐慌卖出"]:
-            if total_sold > 0 or total_bought > 0:
-                advice += f"\n📦 本日已卖出 {total_sold} | 已接回 {total_bought} | 未接回 {unrebuilt}"
-            if unrebuilt > 0:
-                advice += f"\n💡 建议尾盘接回价位：{vwap * 0.992:.2f}（VWAP下方0.8%）"
-            else:
-                advice += f"\n💡 预计接回价位：{vwap * 0.992:.2f}（VWAP下方0.8%）"
-            if today_ret > 0.005:
-                advice += f"\n📈 早盘已涨{today_ret*100:.1f}%，建议高抛后等回落接回"
-            # 风险提醒
-            if regime and regime in ["heavy_sell", "distribution"]:
-                advice += f"\n⚠️ 风险：当前处于主力出货/重压状态，建议谨慎接回，尾盘仅接回30%"
-        elif action_cn in ["低吸", "加仓"]:
-            if unrebuilt > 0:
-                advice = f"建议接回 {hold_qty} 股/份（未接回 {unrebuilt}）"
-            else:
-                advice = f"建议买入 {hold_qty} 股/份（首次加仓/建仓）"
-            advice += f"\n💡 参考卖出价位：{vwap * 1.008:.2f}（VWAP上方0.8%）"
-            # 风险提醒
-            if regime and regime in ["heavy_sell", "distribution"]:
-                advice += f"\n⚠️ 风险：当前处于主力出货/重压状态，不建议主动加仓，仅接回已卖出部分"
-        if hold_qty <= 0:
-            advice += "\n⚠️ 仓控可交易量为0(无T仓/大盘熔断)，仅供参考不自动跟单"
-            # W33 J6 (2026-08-13 用户拍板选项甲): 满仓股两点触发照推，卡片标注满仓参考
-            advice += "\n🔒 满仓参考·可交易量0"
-
-        # 【V1.14 新增】支撑位与决策透明化
-        support_info = ""
-        nearest_support = sig.indicators.get("nearest_support")
-        if nearest_support:
-            ns_name = nearest_support.get("name", "")
-            ns_level = float(nearest_support.get("level", 0))
-            ns_gap = float(nearest_support.get("gap_pct", 0))
-            if ns_name and ns_level > 0:
-                support_info = f"\n📍 **最近支撑**：{ns_name} {ns_level:.2f}（偏离{ns_gap*100:.2f}%）"
-        # 旁路原因
-        entry_kind = str(sig.indicators.get("entry_kind", ""))
-        open_dip_reason = sig.indicators.get("open_dip_reason", "")
-        bypass_info = ""
-        if entry_kind == "open_dip_support":
-            bypass_info = f"\n⚡ **旁路买入**：{open_dip_reason}"
-        
-        # 【V1.15 新增】均线压力信息
-        ma_resistance_info = ""
-        ma_resistance = sig.indicators.get("ma_resistance")
-        if ma_resistance:
-            pressure_count = ma_resistance.get("pressure_count", 0)
-            if pressure_count >= 1:
-                pressure_mas = ma_resistance.get("pressure_mas", [])
-                pressure_names = "/".join([p.get("name", "") for p in pressure_mas]) if pressure_mas else ""
-                is_cluster = ma_resistance.get("is_cluster", False)
-                fail_note = ma_resistance.get("fail_note", "")
-                cluster_text = " 密集区" if is_cluster else ""
-                fail_text = f"，{fail_note}" if fail_note else ""
-                ma_resistance_info = f"\n📍 **均线压力**：{pressure_names}{cluster_text}（{pressure_count}条）{fail_text}"
-        
-        # 【V1.15 新增】均线支撑确认信息（低吸用）
-        ma_support_info = ""
-        ma_support = sig.indicators.get("ma_support")
-        if ma_support:
-            ms_name = ma_support.get("name", "")
-            ms_level = float(ma_support.get("level", 0))
-            if ms_name and ms_level > 0:
-                ma_support_info = f"\n📍 **均线支撑确认**：{ms_name} {ms_level:.2f}（冲高回落后站稳，理想低吸）"
-        
-        content = (
-            f"【做T猎手预警】{regime_info}{bypass_info}{support_info}{ma_resistance_info}{ma_support_info}\n"
-            f"股票：{sig.name} ({sig.code})\n"
-            f"动作：{action_cn}\n"
-            f"现价：{sig.price:.2f}\n"
-            f"VWAP：{vwap:.2f}\n"
-            f"评分：{sig.score:.0f}\n"
-            f"市场状态：{market_state}\n"
-            f"总T仓：{total_t} 股/份\n\n"
-            f"**触发原因**：\n{reasons_text}\n\n"
-            f"**操作建议**：\n{advice}"
-        )
-        card_elements.append({"tag": "div", "text": {"content": content, "tag": "lark_md"}})
-        
-        payload = {
-            "msg_type": "interactive",
-            "card": {"config": {"wide_screen_mode": True}, "elements": card_elements},
-            "notify_type": 1,
-        }
-        send_feishu_payload(
-            payload=payload,
-            success_log=f"✅ 飞书消息已成功送达: {sig.name}({sig.code}) {sig.action} - 加急通知已发送",
-            error_prefix="飞书推送",
-            trigger_urgent_alarm_after_success=use_strong,
-        )
-    except Exception as e:
-        log.warning(f"⚠️ notify 发送异常: {str(e)[:100]}")
+    # manual 做T 飞书卡片推送（原 V1.14 增强版 notify 卡片体）已随 manual 做T 一并删除（2026-09-14）。
 
 # ==================== V1.25: 早盘预警飞书推送 ====================
 def build_alert_card(code, name, alert_level, triggered_rules, morning_stats, oneway_ratio="N/A", avg_decline="N/A"):
@@ -1447,7 +1302,6 @@ def _maybe_record_daily_pnl(now: datetime) -> None:
         total_t0_pnl = 0.0
         total_value = 0.0
         total_cost_value = 0.0
-        commission_rate = float(PARAMS.get("commission_rate", 0.00025) or 0.00025)  # P0-5: 统一 0.00025（对齐 config）
 
         for code, holding in sorted(HOLDINGS.items()):
             name = holding.get("name", code)
@@ -1469,10 +1323,9 @@ def _maybe_record_daily_pnl(now: datetime) -> None:
             total_value += mkt_val
             total_cost_value += cost_val
 
-            # 做T实盈（统一配对口径，P0-5：各自总量加权均价 + 费用只计 matched 双腿）
-            _pnl = compute_t0_pnl(VIRTUAL_TRADES.get(code) or {}, commission_rate)
-            t0_pnl = _pnl["t0_pnl"]
-            total_t0_pnl += t0_pnl
+            # manual 做T 实盈已随 manual 做T 下线（2026-09-14）删除——VIRTUAL_TRADES 台账不再存在。
+            # auto 做T 盈亏由 closure_audit.jsonl 的 details.est_pnl（自动模拟盘口径）单列，不复用此处。
+            t0_pnl = 0.0
 
             stock_records.append({
                 "code": code, "name": name, "qty": qty, "price": round(price, 2),
@@ -1541,11 +1394,11 @@ _closure_audit_ts = ""     # F3-3: 主审计完成时刻（尾部过滤 fill.tim
 
 def _maybe_audit_closure(now: datetime) -> None:
     """V3.0: 14:50-15:05 每日一次 买卖闭环审计
-    逐股核对：VIRTUAL_TRADES 卖出 vs 接回（未接回>0 → 告警行 + 建议尾盘接回价）、
-    正T买入未卖出、holdings qty vs base 一致性；有异常推飞书红卡，无异常落日志；
+    逐股核对：auto 通道（bridge events fill）卖出 vs 接回（未接回>0 → 告警行）、
+    holdings qty vs base 一致性；有异常推飞书红卡，无异常落日志；
     无论有无异常均写 logs/closure_audit.jsonl。
-    F3-1(2026-09-08 方案A 硬隔离): 归账不再写 qty/base/t_qty，只维护 virtual_qty 视图；
-    15:02-15:05 尾部成交改走 _closure_tail_reconcile（也只改 virtual_qty）。"""
+    2026-09-14: manual 做T 台账（VIRTUAL_TRADES / virtual_qty 视图）已随 manual 做T 下线删除，
+    本审计只保留 auto 模拟盘缺口监控与 qty/base 一致性检查。"""
     global _closure_audit_date, _closure_tail_date, _closure_audit_ts
     try:
         t = now.time()
@@ -1566,8 +1419,9 @@ def _maybe_audit_closure(now: datetime) -> None:
         problems = []
         details = []
         commission_rate = float(PARAMS.get("commission_rate", 0.00025) or 0.00025)
-        # F-20260903-1: 并入 auto 通道成交（bridge events fill）——VIRTUAL_TRADES 只见 manual 虚拟交易，
-        # auto 侧 SELL/BUY fill 使"卖而未接"缺口监控失效（09-03 实证：002451 缺400、600481 缺5500 盲区）
+        # F-20260903-1: 读 auto 通道成交（bridge events fill）——auto 侧 SELL/BUY fill 的
+        # "卖而未接"缺口监控（09-03 实证：002451 缺400、600481 缺5500 盲区）。
+        # 2026-09-14: manual 做T 下线后，本审计的成交来源仅剩 auto bridge events。
         _auto_events = {}
         try:
             _ev_fp = os.path.join(BASE_DIR, "t_io", "bridge", f"events_{now.strftime('%Y%m%d')}.jsonl")
@@ -1597,26 +1451,19 @@ def _maybe_audit_closure(now: datetime) -> None:
             _auto_events = {}
         for code, holding in (HOLDINGS or {}).items():
             name = holding.get("name", code)
-            vt = VIRTUAL_TRADES.get(code) or {}
-            # F-20260903-1: 合并 auto 通道成交（bridge events fill）进配对——manual VIRTUAL_TRADES + auto 通道
+            # F-20260903-1: auto 通道成交（bridge events fill）配对——manual VIRTUAL_TRADES 台账已随
+            # manual 做T 下线（2026-09-14）删除，此处仅监控 auto 模拟盘缺口。
             _ae = _auto_events.get(code) or {"sells": [], "buys": []}
-            _merged = {"SELL_HIGH": list(vt.get("SELL_HIGH", [])) + list(_ae["sells"]),
-                       "BUY_LOW": list(vt.get("BUY_LOW", [])) + list(_ae["buys"])}
+            _merged = {"SELL_HIGH": list(_ae["sells"]),
+                       "BUY_LOW": list(_ae["buys"])}
             sold = sum(tr.get("qty", 0) for tr in _merged["SELL_HIGH"])
             bought = sum(tr.get("qty", 0) for tr in _merged["BUY_LOW"])
-            unrebuilt = max(0, sold - bought)                # 反T/高抛卖出未接回（含 auto 通道，监控口径）
-            unclosed_buy = max(0, bought - sold)             # 正T买入未卖出
-            # F-20260903-1 细化(F3-1, 2026-09-08): 缺口按来源分列——manual 虚拟 vs auto 模拟盘不再混算一行
-            _vt_sells = vt.get("SELL_HIGH", []) or []
-            _vt_buys = vt.get("BUY_LOW", []) or []
+            unrebuilt = max(0, sold - bought)                # auto 模拟盘卖出未接回（监控口径）
+            unclosed_buy = max(0, bought - sold)             # auto 模拟盘买入未卖出
             _ae_sells = _ae.get("sells", []) or []
             _ae_buys = _ae.get("buys", []) or []
-            msold = sum(tr.get("qty", 0) for tr in _vt_sells)
-            mbought = sum(tr.get("qty", 0) for tr in _vt_buys)
             asold = sum(tr.get("qty", 0) for tr in _ae_sells)
             abought = sum(tr.get("qty", 0) for tr in _ae_buys)
-            m_unrebuilt = max(0, msold - mbought)            # manual 虚拟口径
-            m_unclosed = max(0, mbought - msold)
             a_unrebuilt = max(0, asold - abought)            # auto 模拟盘口径
             a_unclosed = max(0, abought - asold)
             # V1.30: 价格字段完整性守卫 —— 缺 price/price<=0 的历史记录不进入利润公式
@@ -1631,7 +1478,7 @@ def _maybe_audit_closure(now: datetime) -> None:
             est_pnl = _p["t0_pnl"]
             if n_price_missing:
                 problems.append(
-                    f"• {name}({code}) {n_price_missing} 条虚拟记录缺价格字段，"
+                    f"• {name}({code}) {n_price_missing} 条 auto 成交记录缺价格字段，"
                     f"已隔离不计入利润（旧版本数据损坏）")
             qty = int(holding.get("qty", 0) or 0)
             base = int(holding.get("base", 0) or 0)
@@ -1645,19 +1492,8 @@ def _maybe_audit_closure(now: datetime) -> None:
                             "est_pnl": est_pnl,
                             "qty": qty, "base": base, "qty_diff": qty_diff,
                             "ref_price": round(ref, 3),
-                            # F3-1(2026-09-08): 缺口按来源分列——manual 虚拟 vs auto 模拟盘，不再混算一行
-                            "manual_vt": {"sold": msold, "bought": mbought,
-                                          "unrebuilt": m_unrebuilt, "unclosed_buy": m_unclosed},
                             "auto_sim": {"sold": asold, "bought": abought,
                                          "unrebuilt": a_unrebuilt, "unclosed_buy": a_unclosed}})
-            if m_unrebuilt > 0:
-                buyback = ref * 0.992 if ref > 0 else 0
-                problems.append(
-                    f"• {name}({code}) 虚拟已卖 {msold} / 未接回 **{m_unrebuilt}**"
-                    + (f" → 建议尾盘接回价 ≈{buyback:.2f}（参考价下方0.8%）" if buyback else ""))
-            if m_unclosed > 0:
-                problems.append(
-                    f"• {name}({code}) 虚拟正T买入 {mbought} / 未卖出 **{m_unclosed}** → 建议尾盘卖出还原仓位")
             if a_unrebuilt > 0:
                 problems.append(
                     f"• {name}({code}) 【模拟盘 auto】卖出 {asold} / 未接回 {a_unrebuilt}"
@@ -1669,75 +1505,6 @@ def _maybe_audit_closure(now: datetime) -> None:
             if qty_diff != 0:
                 problems.append(
                     f"• {name}({code}) 持仓 qty={qty} 与 base={base} 不一致（差 {qty_diff:+d}）→ 请核对 holdings.json")
-
-        # V1.28: 收盘自动同步 holdings.json + 释放冻结仓位
-        # V1.30: 同步前校验 —— 虚拟记录价格/数量字段完整性；不合格则跳过同步并告警，
-        # 防止幽灵交易被固化为次日底仓（07-24 曾把静默信号的虚拟卖出直接写进 holdings.json）
-        _sync_violations = []
-        for d in details:
-            _vt = VIRTUAL_TRADES.get(d["code"]) or {}
-            for tr in (_vt.get("SELL_HIGH", []) + _vt.get("BUY_LOW", [])):
-                if int(tr.get("qty", 0) or 0) <= 0 or float(tr.get("price", 0) or 0) <= 0:
-                    _sync_violations.append(f"{d['code']}:{tr.get('action','?')} qty={tr.get('qty')} price={tr.get('price')}")
-        if _sync_violations:
-            log.warning(f"⚠️ 归账视图校验失败（{len(_sync_violations)} 条记录缺价格/数量），"
-                        f"跳过虚拟视图更新: {_sync_violations[:5]}")
-            problems.append(f"• 归账视图校验失败：{len(_sync_violations)} 条虚拟记录缺价格/数量，"
-                            f"虚拟视图未更新，请人工核对")
-            try:
-                send_feishu_payload(
-                    payload={"msg_type": "interactive", "card": {
-                        "config": {"wide_screen_mode": True},
-                        "header": _feishu_card_header(f"⚠️ 收盘同步校验失败 - {FEISHU_KEYWORD}", "orange"),
-                        "elements": [_feishu_md_div(
-                            f"{len(_sync_violations)} 条虚拟成交记录缺价格/数量字段，holdings.json **未同步**。\n"
-                            + "\n".join(f"• {v}" for v in _sync_violations[:8]))]},
-                        "notify_type": 1},
-                    success_log="✅ 收盘同步校验失败告警已推送",
-                    error_prefix="收盘同步告警推送",
-                )
-            except Exception:
-                pass
-        # F3-1(2026-09-08) 归账口径重构（方案A 硬隔离）：eod 不再写 qty/base/t_qty——
-        # 截图 reconcile 是唯一实盘 qty/base 写入源；此处仅维护"系统视角"虚拟字段 virtual_qty（展示用，default=qty）。
-        # V1.1.3 t_qty 只减不增语义保留在晨间 reconcile 路径；eod 不动 t_qty（防止虚拟/模拟成交冲进实盘台账）。
-        virtual_updated = False
-        virtual_codes: list = []
-        for d in ([] if _sync_violations else details):
-            code = d["code"]
-            holding = HOLDINGS.get(code)
-            if holding is None:
-                continue
-            from src.holdings_sync import virtual_view_qty as _vvq   # F3-1: 视图单一真源
-            old_qty = int(holding.get("qty", 0))
-            old_virtual = int(holding.get("virtual_qty", old_qty) or old_qty)
-            # 虚拟(manual)+模拟(auto)成交净增量（监控口径）→ 仅写 virtual_qty 视图
-            delta = int(d["unclosed_buy"]) - int(d["unrebuilt"])
-            new_virtual = _vvq(holding, delta)
-            if new_virtual != old_virtual:
-                holding["virtual_qty"] = new_virtual
-                virtual_updated = True
-                virtual_codes.append(code)
-                _auto_note = "；auto 模拟盘成交已并入视图" if ((d.get("auto_sim") or {}).get("sold")
-                                                             or (d.get("auto_sim") or {}).get("bought")) else ""
-                log.info(f"📝 归账视图(虚拟) {d['name']}({code}): "
-                         f"virtual_qty {old_virtual}→{new_virtual} (delta={delta:+d}, 实盘 qty/base 不动)"
-                         + _auto_note)
-        if virtual_updated:
-            try:
-                from src.holdings_repo import build_virtual_qty_patch, save_held_merged, load_full
-                # 合并回写：HOLDINGS 是过滤后的持仓 dict，直接 dump 会抹掉未持有的 auto 候选（18 只全量）
-                # Q-20260914-1: 改"磁盘为基 + 仅补丁 virtual_qty"——内存陈旧字段（pre_close 等）不得回写
-                save_held_merged(build_virtual_qty_patch(HOLDINGS, virtual_codes),
-                                 actor="main", reason="eod_reconcile")
-                log.info(f"✅ holdings.json 虚拟视图已更新（共 {len(load_full())} 只，持仓 {len(HOLDINGS)} 只）；实盘 qty/base 未动")
-            except Exception as e:
-                log.warning(f"⚠️ holdings.json 虚拟视图写入失败: {str(e)[:80]}")
-            # 归账视图更新后清空 VIRTUAL_TRADES（审计记录已落盘，虚拟视图已固化）
-            VIRTUAL_TRADES.clear()
-            save_virtual_trades(VIRTUAL_TRADES)
-            shared['VIRTUAL_TRADES'] = VIRTUAL_TRADES
-            log.info("🔄 VIRTUAL_TRADES 已清空，准备下一交易日")
 
         record = {"date": today, "time": now.strftime("%H:%M:%S"),
                   "ok": not problems, "problems": problems, "details": details}
@@ -1773,9 +1540,9 @@ def _maybe_audit_closure(now: datetime) -> None:
 def _closure_tail_reconcile(now: datetime, today: str) -> None:
     """F3-3(2026-09-08) 尾部二次归账（15:02-15:05，每日一次）。
 
-    覆盖"审计自己建议的尾盘处置落在审计之后"（如 14:51 TAIL 卖 1400）：
-    重读当日 bridge events，取 fill.time > 主审计完成时刻(_closure_audit_ts) 的尾部成交，
-    **只更新 virtual_qty 视图**（绝不写 qty/base/t_qty），并落 phase="tail_reconcile" 记录供复盘叠加。
+    重读当日 bridge events，取 fill.time > 主审计完成时刻(_closure_audit_ts) 的尾部 auto 成交，
+    落 phase="tail_reconcile" 记录供复盘叠加。
+    2026-09-14: manual 做T 下线后不再写 virtual_qty 视图，仅保留 bridge 尾部成交的日志/落盘。
     """
     global _closure_audit_ts
     problems: list = []
@@ -1807,39 +1574,23 @@ def _closure_tail_reconcile(now: datetime, today: str) -> None:
                     _acc["buys"] += _q
                 elif _side == "SELL":
                     _acc["sells"] += _q
-        changed = False
-        _changed_codes: list = []
         for _c, _acc in _by.items():
             h = (HOLDINGS or {}).get(_c)
             if h is None:
                 continue
-            from src.holdings_sync import virtual_view_qty as _vvq   # F3-3: 视图单一真源
             _net = _acc["buys"] - _acc["sells"]
             _old = int(h.get("qty", 0))
-            _oldv = int(h.get("virtual_qty", _old) or _old)
-            _nv = _vvq(h, _net)
-            if _nv != _oldv:
-                h["virtual_qty"] = _nv
-                changed = True
-                _changed_codes.append(_c)
+            # 2026-09-14: manual 做T 下线后不再写 virtual_qty 视图，仅落盘尾部 auto 成交记录
             details.append({"code": _c, "name": h.get("name", _c),
                             "tail_buys": _acc["buys"], "tail_sells": _acc["sells"],
-                            "net": _net, "virtual_qty": _nv, "qty_unchanged": _old})
-        if changed:
-            try:
-                from src.holdings_repo import build_virtual_qty_patch, save_held_merged
-                # Q-20260914-1: 磁盘为基 + 仅补丁 virtual_qty（内存 pre_close 停在启动值，整写会回滚磁盘）
-                save_held_merged(build_virtual_qty_patch(HOLDINGS, _changed_codes),
-                                 actor="main", reason="tail_reconcile")
-            except Exception as e:
-                log.warning(f"⚠️ tail 虚拟视图写入失败: {str(e)[:80]}")
+                            "net": _net, "qty_unchanged": _old})
         _rec = {"date": today, "time": now.strftime("%H:%M:%S"), "phase": "tail_reconcile",
                 "ok": not problems, "problems": problems, "details": details}
         try:
             _append_jsonl(os.path.join(LOG_DIR, "closure_audit.jsonl"), _rec)
         except Exception:
             pass
-        log.info(f"✅ 尾部二次归账(虚拟视图)完成: 尾部成交 {len(details)} 票；实盘 qty/base 未动")
+        log.info(f"✅ 尾部二次归账(auto 尾盘成交记录)完成: 尾部成交 {len(details)} 票；实盘台账未动")
     except Exception as e:
         log.warning(f"⚠️ 尾部二次归账异常: {str(e)[:120]}")
 
@@ -2430,7 +2181,6 @@ def scan_once():
                                 float(sig.score), threshold,
                                 used_sells=engine.sell_count_per_stock.get(code, 0),
                                 params={**PARAMS, **STOCK_PARAMS.get(code, {})},
-                                virtual_trades=VIRTUAL_TRADES,
                                 index_ctx=daily_ctx,
                                 current_price=cur_price,
                                 total_equity=total_equity,
@@ -2440,7 +2190,6 @@ def scan_once():
                                 code, holding, regime,
                                 float(sig.score), threshold,
                                 params={**PARAMS, **STOCK_PARAMS.get(code, {})},
-                                virtual_trades=VIRTUAL_TRADES,
                                 index_ctx=daily_ctx,
                                 current_price=cur_price,
                                 total_equity=total_equity,
@@ -2458,11 +2207,9 @@ def scan_once():
                             sig.hold_qty = 0
                             log.info(f"🛑 大盘熔断/仓控阻断 {code}: {daily_ctx.get('index_circuit_state', 'normal')} / {daily_ctx.get('index_gate_advice', 'normal_t')}")
                         # W33 G1: 捕获 sizing 画像（pushed 待推送决策后回填）
-                        _vt = VIRTUAL_TRADES.get(code, {})
-                        _buy_sum = sum(t.get("qty", 0) for t in _vt.get("BUY_LOW", []))
-                        _sell_sum = sum(t.get("qty", 0) for t in _vt.get("SELL_HIGH", []))
-                        _net = max(0, int(holding.get("t_qty", 0)) + _buy_sum - _sell_sum)
-                        _unrebuilt = max(0, _sell_sum - _buy_sum)
+                        # manual 做T 下线（2026-09-14）：虚拟成交台账不再存在，净量恒=纯底仓 t_qty。
+                        _net = max(0, int(holding.get("t_qty", 0)))
+                        _unrebuilt = 0
                         _is_buy = sig.action in ("BUY_LOW", "ADD_POS")
                         _raw_cap = max(0, int(holding.get("t_qty", 0)) - _net)
                         _advice = {
@@ -2594,18 +2341,16 @@ def scan_once():
                         _block_reason = "纯底仓股(t_qty=0)跳过推送(白名单)"
                         log.info(f"🚫 {code} {sig.action} 纯底仓股(t_qty=0)，跳过推送（C-5/C25）")
                     if pushed:
-                        notify(sig, holding)
+                        # manual 做T 飞书推送（notify）与信号记账（record_signal / record_trade_action）
+                        # 已随 manual 做T 下线（2026-09-14）删除；仅保留轮次计数诊断。
                         if sig.action in ["SELL_HIGH", "PANIC_SELL"]:
                             engine.incr_cycle(code)
-                        engine.record_signal(code, sig.action, sig.price, sig.score)
-                        if sig.hold_qty > 0:
-                            engine.record_trade_action(code, sig.action, sig.hold_qty, price=sig.price)
-                        else:
-                            # 查证(2026-09-11 W37): 原日志无原因码，无法区分 no_t_budget(无T仓) vs full_position(满仓)。
+                        if sig.hold_qty <= 0:
+                            # 查证(2026-09-11 W37): 日志无原因码，无法区分 no_t_budget(无T仓) vs full_position(满仓)。
                             # 补 reason/max_buyable 归因（不改闸门），下一交易日即可定性。
                             _st_b = locals().get("_st_buy") or {}
-                            log.info(f"📡 {code} {sig.action}两点触发(score={sig.score:.0f})但仓控可交易量为0，"
-                                     f"已推送仅供参考(不记账) [reason={locals().get('_buy_block_reason') or '?'} "
+                            log.info(f"📡 {code} {sig.action}两点触发(score={sig.score:.0f})但仓控可交易量为0"
+                                     f" [reason={locals().get('_buy_block_reason') or '?'} "
                                      f"max_buyable={_st_b.get('max_buyable')} t_qty={holding.get('t_qty')} "
                                      f"net_qty={_st_b.get('net_qty')}]")
                     else:
@@ -2669,9 +2414,6 @@ def scan_once():
 
 
 def replay_today():
-    global T_MODE
-    T_MODE = load_t_mode()
-    shared['T_MODE'] = T_MODE
     today = get_today_str()
     snapshot_files = []
     snapshot_days = set()
@@ -2728,7 +2470,6 @@ def replay_today():
             engine_local.state_reset_date = today
             engine_local.buy_count_per_stock[code] = 0
             engine_local.sell_count_per_stock[code] = 0
-            engine_local.post_sell_block_until[code] = None
             got_buy = False
             got_sell = False
             code_stats = {"buy_ok": 0, "sell_ok": 0, "rebuild_buy_ok": 0, "buy_blocked": 0, "sell_blocked": 0, "buy_block_by_reason": {}, "sell_block_by_reason": {}, "preempt_by_sell_fast_path": 0, "buy_candidate_but_rejected": 0, "buy_candidate_preheat": 0, "buy_candidate_preheat_rejected": 0}
@@ -2765,9 +2506,6 @@ def replay_today():
                     got_buy = True
                     stats["buy_ok"] += 1
                     code_stats["buy_ok"] += 1
-                    if engine_local.post_sell_block_until.get(code):
-                        stats["rebuild_buy_ok"] += 1
-                        code_stats["rebuild_buy_ok"] += 1
                     engine_local.record_trade_action(code, sig.action, sig.hold_qty)
                 elif sig and sig.action in ["SELL_HIGH", "PANIC_SELL"]:
                     got_sell = True
@@ -2834,13 +2572,11 @@ def tushare_replay(date_str=None):
     pro = ts.pro_api()
 
     global SIM_NOW, HOLDINGS, MINUTE_FETCH_STATUS, MINUTE_FETCH_DETAIL
-    global DAILY_DECISION_STATS, AI_REVIEW_STATS, SIGNAL_OUTCOME_TRACKER, T_MODE
+    global DAILY_DECISION_STATS, AI_REVIEW_STATS, SIGNAL_OUTCOME_TRACKER
 
     today = date_str or get_today_str()
     HOLDINGS = load_holdings()
     shared['HOLDINGS'] = HOLDINGS  # V1.19: 更新共享命名空间中的HOLDINGS
-    T_MODE = load_t_mode()
-    shared['T_MODE'] = T_MODE
     holdings = HOLDINGS
 
     results = []
@@ -2899,8 +2635,7 @@ def tushare_replay(date_str=None):
         engine.state_reset_date = today
         engine.buy_count_per_stock[code] = 0
         engine.sell_count_per_stock[code] = 0
-        engine.post_sell_block_until[code] = None
-        
+
         # 初始化统计
         DAILY_DECISION_STATS[code] = _ensure_daily_decision_stats(code, holding)
         AI_REVIEW_STATS[code] = _ensure_ai_review_stats(code, holding)
@@ -2927,14 +2662,9 @@ def tushare_replay(date_str=None):
             # 获取 daily_ctx（简单版）
             daily_ctx = _default_daily_context(code)
             # 回测不调 _attach_dynamic_t_decision：它内部会拉日线特征做网络调用，本机可能挂起
-            # 改为静态 T_MODE 注入（回测目的在信号引擎，不依赖当日大盘态）
-            _replay_t_mode = "long"
-            if isinstance(T_MODE, dict):
-                _replay_t_mode = T_MODE.get(code) or T_MODE.get(code.split("_")[0]) or "long"
-            if _replay_t_mode not in {"long", "short"}:
-                _replay_t_mode = "long"
-            daily_ctx["t_mode"] = _replay_t_mode
-            daily_ctx["effective_t_mode"] = _replay_t_mode
+            # manual 做T 下线（2026-09-14）：T_MODE 全局已删除，回测固定注入 long（正T）。
+            daily_ctx["t_mode"] = "long"
+            daily_ctx["effective_t_mode"] = "long"
             daily_ctx["t_mode_source"] = "replay_static"
             daily_ctx["t_pos_factor"] = 1.0
             daily_ctx["t_trade_gate"] = "normal"
@@ -3138,7 +2868,7 @@ def _auto_t_mode_suggestion() -> dict:
 
 
 def _attach_dynamic_t_decision(code: str, holding: dict, daily_ctx: dict, now_dt=None) -> dict:
-    """把当前有效T决策写回daily_ctx和全局T_MODE，供执行层和回测复用。"""
+    """把当前有效T决策写回 daily_ctx（供展示/回溯复用；2026-09-14 起不再回写全局 T_MODE）。"""
     decision = {}
     per_stock = {}
     try:
@@ -3167,10 +2897,7 @@ def _attach_dynamic_t_decision(code: str, holding: dict, daily_ctx: dict, now_dt
         daily_ctx["t_basis_date"] = auto.get("basis_date")
         daily_ctx["t_heat"] = auto.get("z_top3")
         daily_ctx["t_sysrisk"] = bool(auto.get("systemic_risk"))
-        global T_MODE
-        if isinstance(T_MODE, dict):
-            T_MODE[code] = mode
-        shared["T_MODE"] = T_MODE
+        # manual 做T 下线（2026-09-14）：不再回写全局 T_MODE（T_MODE/t_mode.json 已删除）。
         return {"auto": auto, "decision": decision, "per_stock": per_stock}
     except Exception as e:
         log.warning(f"⚠️ 动态T决策注入失败: {str(e)[:120]}")
@@ -3181,54 +2908,6 @@ def _attach_dynamic_t_decision(code: str, holding: dict, daily_ctx: dict, now_dt
         daily_ctx.setdefault("t_trade_gate", "normal")
         daily_ctx.setdefault("t_reason", "fallback")
         return {"auto": {}, "decision": {}, "per_stock": {}}
-
-
-def _auto_apply_t_mode(holdings, t_mode):
-    """V3.1: 基于昨日热度+sentiment自动决定今日正T/反T，无需人工选择。
-    sentiment_daily.jsonl 由 daily_sentiment.py 在 14:30 写入昨日大盘热度+z_top3，
-    启动时 _auto_t_mode_suggestion() 读取该记录并通过决策矩阵判定 T-mode，
-    结果自动写入 t_mode.json。"""
-    auto = _auto_t_mode_suggestion()
-    dec = auto.get("decision") or {}
-    auto_mode = dec.get("mode", "long")
-    auto_factor = dec.get("pos_factor", 1.0)
-    auto_reason = dec.get("reason", "")
-    today = _now().strftime("%Y-%m-%d")
-
-    mode_names = {"long": "正T(先买后卖)", "short": "反T(先卖后买)"}
-    print("\n" + "=" * 60)
-    print("【V3.1 T模式自动决策】基于昨日热度 + 大盘态势")
-    print(f"  依据: 大盘{auto.get('regime_name')}｜z_top3={float(auto.get('z_top3') or 0):+.2f}"
-          f"（{auto.get('basis_date') or '无热度记录'}）")
-    print(f"  矩阵结论: {dec.get('mode_cn', '正T')} ×{auto_factor} — {auto_reason}")
-    print("=" * 60)
-
-    per_stock_auto = auto.get("per_stock") or {}
-    for code, holding in holdings.items():
-        name = holding.get("name", code)
-        s_dec = per_stock_auto.get(code) or {}
-        s_mode = s_dec.get("mode", auto_mode)
-        s_reason = s_dec.get("reason", auto_reason)
-        t_mode[code] = s_mode
-        print(f"  {name}({code}) → {mode_names.get(s_mode, s_mode)} — {s_reason}")
-
-    t_mode["_auto_decision"] = {
-        "date": today,
-        "regime": auto.get("regime"),
-        "regime_name": auto.get("regime_name"),
-        "z_top3": auto.get("z_top3"),
-        "basis_date": auto.get("basis_date"),
-        "matrix_mode": auto_mode,
-        "pos_factor": auto_factor,
-        "reason": auto_reason,
-        "per_stock": {c: (d.get("mode") if isinstance(d, dict) else str(d))
-                      for c, d in per_stock_auto.items()},
-        "source": "auto_v3.1",
-    }
-    if 'save_t_mode' in globals():
-        save_t_mode(t_mode)
-        print(f"✅ T模式已自动保存到 t_mode.json（含 _auto_decision 元信息）")
-    print("=" * 60 + "\n")
 
 
 def _launch_sentiment_backfill(date_str: str) -> None:
@@ -3281,34 +2960,20 @@ def _maybe_backfill_sentiment():
 
 
 def run_watch():
-    global HOLDINGS, engine, T_MODE
+    global HOLDINGS, engine
     HOLDINGS = load_holdings()
     shared['HOLDINGS'] = HOLDINGS  # V1.12: 更新共享命名空间中的HOLDINGS，供signal_engine使用
 
-    # V1.28: 启动时加载持久化的 VIRTUAL_TRADES，防止重启后盘中交易记录丢失
-    loaded_vt = load_virtual_trades()
-    if loaded_vt:
-        VIRTUAL_TRADES.clear()
-        VIRTUAL_TRADES.update(loaded_vt)
-        shared['VIRTUAL_TRADES'] = VIRTUAL_TRADES
-        total_sells = sum(len(v.get("SELL_HIGH", [])) for v in loaded_vt.values())
-        total_buys = sum(len(v.get("BUY_LOW", [])) for v in loaded_vt.values())
-        log.info(f"🔄 已恢复 VIRTUAL_TRADES: {len(loaded_vt)} 只股票, {total_sells} 笔卖出, {total_buys} 笔买入")
-    else:
-        log.info("🔄 VIRTUAL_TRADES: 无历史记录，全新开始")
+    # manual 做T 下线（2026-09-14）：VIRTUAL_TRADES 持久化恢复与 T_MODE（正/反T）自动决策
+    # 均已随 manual 做T 一并删除；run_watch 只保留持仓加载 + 热度补算 + 引擎启动。
 
     # V3.1fix: 启动时补算昨日热度（如果缺失）
     _maybe_backfill_sentiment()
 
-    # V3.1: 基于昨日大盘热度+数决矩阵自动决定今日正T/反T，无需人工选择
-    T_MODE = load_t_mode()
-    shared['T_MODE'] = T_MODE
-    _auto_apply_t_mode(HOLDINGS, T_MODE)
-
     _ensure_preopen_context(force=True)
     engine = SignalEngine(_make_engine_ctx())
 
-    log.info("========= 做T终极护城河防御版 (V1.26 正T/反T模式切换版) 启动 =========")
+    log.info("========= 做T终极护城河防御版 启动 =========")
     if PREOPEN_CONTEXT is not None:
         # 早盘竞价分析已转移到 UI 面板（auction_analyzer 在 9:24:45 生成诊断报告）
         log.info(f"📊 早盘竞价分析完成（评分 {PREOPEN_CONTEXT.market_score:.0f} 分，{PREOPEN_CONTEXT.market_bias}）")
