@@ -26,6 +26,7 @@ import os
 import sys
 import json
 import argparse
+from datetime import datetime
 
 _ST = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 _AUTO = os.path.join(_ST, "execution", "auto")
@@ -113,6 +114,15 @@ def _bt_seed_holdings(context):
         if qty <= 0:
             continue
         try:
+            # ⚠️ 必须先 write_order 落 order 事件：on_order_status 的孤儿闸
+            # （_strategy_ordered_today）按"当日事件桥有无本策略 order"判非本策略成交，
+            # 直接调 order_volume 会 5/6 单被判 orphan_fill「不入台账」→ 引擎以为没持仓 →
+            # 全程 no_signal（2026-09-14 实证；588170 侥幸通过只因当时事件文件尚不存在走 fail-open）。
+            try:
+                from gm_bridge.writer import write_order as _wo
+                _wo(str(datetime.now()), code, "BUY", qty, float(h.get("cost") or 0))
+            except Exception as _we:
+                print(f"[INIT·回测播种] {code} order 事件写入失败（将触发孤儿闸）: {_we}")
             gm_main.order_volume(symbol=sym, volume=qty,
                                  side=gm_main.OrderSide_Buy,
                                  order_type=gm_main.OrderType_Market,
