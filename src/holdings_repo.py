@@ -113,6 +113,26 @@ def sync_watchlist_pool(code, pool="auto"):
         pass
 
 
+def build_virtual_qty_patch(holdings: dict, codes) -> dict:
+    """F-3/Q-20260914-1: 构造"只允许改 virtual_qty"的写入补丁——以磁盘为基，内存仅提供 virtual_qty。
+
+    内存 holdings 可能停留在启动时刻（如 pre_close 是昨日值），整写回磁盘会覆盖磁盘新值
+    （09-14 事故：尾部归账把 14:59 已更新的 pre_close 回滚成周五值）。此处只取 virtual_qty，
+    磁盘其余字段原样保留。不在磁盘中的 code 跳过（不新建条目）。
+    """
+    disk = load_full()
+    patch = {}
+    for c in codes:
+        src = (holdings or {}).get(c)
+        base = disk.get(c)
+        if src is None or base is None:
+            continue
+        e = dict(base)
+        e["virtual_qty"] = src.get("virtual_qty")
+        patch[c] = e
+    return patch
+
+
 def save_held_merged(held: dict, actor: str = "system", reason: str = "merge") -> None:
     """把持有 dict 合并回全量文件（保留未持有的 auto 候选），原子写回。写入强制审计（P0-6）。
     T-4(2026-09-02): 写入口自动同步——凡 pool∈{auto,both} 的标的同步 watchlist pool 置 auto（防 P3-2 冲突）。"""
