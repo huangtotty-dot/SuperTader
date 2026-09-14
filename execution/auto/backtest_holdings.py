@@ -38,6 +38,9 @@ _ap = argparse.ArgumentParser(description="当前持仓回测")
 _ap.add_argument("--start", default="2026-03-05 08:00:00")
 _ap.add_argument("--end", default="2026-08-28 16:00:00")
 _ap.add_argument("--label", default="", help="输出目录后缀；空=默认 backtest_holdings")
+_ap.add_argument("--cash", type=float, default=50000.0,
+                 help="回测初始资金。播种底仓需 ≥ Σ(qty×价)；持仓变大后默认 5 万会全部拒单"
+                      "（资金不足）→ 0 成交（2026-09-14 实证：6 票底仓需 ≈13.9 万）")
 _ARGS = _ap.parse_args()
 # 清空自定义参数：gm.api 在 import 时(getopt)与 run() 内(optparse)都会二次解析 sys.argv，
 # 不认识 --start/--end/--label 会抛 "no such option"；此处先消费掉，仅保留脚本名。
@@ -76,7 +79,7 @@ HOLDINGS = _load_holdings_for_backtest()
 gm_main.STOCKS = {c: v["gm_symbol"] for c, v in HOLDINGS.items()}
 gm_main.STOCK_NAMES = {c: v["name"] for c, v in HOLDINGS.items()}
 gm_main.MIRROR_HOLDINGS = {c: {"qty": v["qty"], "cost": v["cost"]} for c, v in HOLDINGS.items()}
-gm_main.INITIAL_CASH = 50000
+gm_main.INITIAL_CASH = float(_ARGS.cash)
 
 # 掘金账号个股历史数据上限 180 自然日（最早 2026-03-02）。
 # subscribe(60s,count=240) 预热实际拉 miss_count+1=241 根 bar：START 若为 03-03（盘前），

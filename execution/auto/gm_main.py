@@ -1493,7 +1493,10 @@ def on_bar(context, bars):
     # 取 14:57 每日一次（on_bar 在 15:00 后 return，没有更晚的钩子）。与 superTrader 14:59 的
     # pre_close 写并发也安全：本侧是"磁盘为基 + 只补丁 qty/cost"，且对方读后再写，两个方向都不丢。
     global _WB_DONE_DATE
-    if t >= dtime(14, 57) and _WB_DONE_DATE != today:
+    # ⚠️ 必须 MODE_LIVE 才回写：回测/回放里的持仓是模拟的，写回会污染生产 holdings.json
+    # （2026-09-14 实证：跑回测把 588170 cost 从 0.914 改成回测播种价 0.8951）。
+    if (t >= dtime(14, 57) and _WB_DONE_DATE != today
+            and getattr(context, "mode", None) == MODE_LIVE):
         _WB_DONE_DATE = today
         try:
             _writeback_holdings(context)
