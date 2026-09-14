@@ -673,12 +673,24 @@ def _maybe_clear_audit_log(context):
     return False
 
 
-def _build_bar_df(context, code: str, gm_symbol: str) -> pd.DataFrame:
+def _build_bar_df(context, code: str, gm_symbol: str, now=None) -> pd.DataFrame:
     rows = context.bar_cache.get(gm_symbol, [])
     if len(rows) < MIN_BARS:
         return pd.DataFrame()
     df = pd.DataFrame(rows, columns=["time", "open", "high", "low", "close", "volume", "amount"])
     df = df.sort_values("time").reset_index(drop=True)
+    # 2026-09-14: 截断到 <= 当前时刻。回测模式下 init 的 history_n(60s×240) 预取会返回
+    # **到回测窗口末尾**的 bar（GM 的 count=N 取的是窗口最后 N 根，非"截至当前"），
+    # 于是每根 bar 内核都拿着"当日收盘价结尾的全天数据"评估：Renko 砖方向恒 up、m15 恒负
+    # → 买入条件 `last_down and m15>0` 永不成立 → 全程 no_signal、0 成交（实测 2867 次评估
+    # close 唯一值=[45.29]、m15 恒 -0.037）。实盘时该过滤是无操作（不会有未来 bar）。
+    if now is not None:
+        try:
+            df = df[df["time"].astype(str) <= str(now)].reset_index(drop=True)
+        except Exception:
+            pass
+    if df.empty:
+        return df
     df = add_indicators(df)
     return df
 
@@ -1634,7 +1646,7 @@ def on_bar(context, bars):
             context._day_open = {}
         context._day_open.setdefault(code, row["open"])
 
-        df = _build_bar_df(context, code, gm_sym)
+        df = _build_bar_df(context, code, gm_sym, now=now)
         if df.empty:
             continue
 
