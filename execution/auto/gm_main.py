@@ -278,6 +278,117 @@ def _writeback_holdings(context) -> int:
     print(f"[WRITEBACK] 持仓真源已回写 {len(patch)} 票（qty/cost；base/pre_close 未动）")
     return len(patch)
 
+
+# ── 开盘强制对齐（2026-09-14 owner 裁决）────────────────────────────
+_OPEN_ALIGN_DONE_DATE = None
+# 买入优先级：缺额从小到大（资金效率优先，能多对齐几只）。owner 可自行调整顺序，
+# 未列出的 code 排在最后。
+OPEN_ALIGN_BUY_ORDER = ["588170", "002639", "300153", "002451", "000988", "300054", "600176"]
+
+
+def _force_open_align(context) -> int:
+    """开盘一次性把实际持仓对齐到目标底仓（base）：超额卖出、缺口买入。
+
+    owner 2026-09-14 裁决："明日开盘一次性强制对齐；资金不足时按优先级逐个买满"。
+    这是**账本校正**不是做T，故不走信号/闸门链；但有两条硬约束：
+      ① **必须先 write_order 落 order 事件** —— 否则 on_order_status 的孤儿闸会把成交
+         判成"非本策略"直接丢弃（6a96829c 实证：5/6 底仓单因此不入台账）；
+      ② 买入受**可用现金**封顶，按 OPEN_ALIGN_BUY_ORDER 逐个买满，买不起就停。
+    返回本轮下单单数。
+    """
+    avail = 0.0
+    try:
+        _acct = _sdk_call("account", context.account)
+        _c = getattr(_acct, "cash", None)
+        if _c is not None:
+            avail = float(getattr(_c, "available", 0) or 0)
+    except Exception:
+        avail = 0.0
+
+    def _px_of(code, sym):
+        try:
+            p = float(context.latest_pre_close.get(code, 0) or 0)
+        except Exception:
+            p = 0.0
+        if p <= 0:
+            try:
+                dec = (getattr(context, "daily_decision_stats", None) or {}).get(code) or {}
+                p = float(dec.get("last_price") or 0)
+            except Exception:
+                p = 0.0
+        return p
+
+    sells, buys = [], []
+    for code, sym in STOCKS.items():
+        target = int(getattr(context, f"_base_ref_{code}", 0) or 0)
+        if target <= 0:
+            continue
+        try:
+            h = _get_holding(context, code, sym)
+        except Exception:
+            continue
+        actual = int(h.get("qty", 0) or 0)
+        diff = actual - target
+        if diff >= 100:                                   # 超额 → 卖
+            _av_raw = h.get("available")
+            _av = actual if _av_raw is None else int(_av_raw)
+            q = (min(diff, _av) // 100) * 100
+            if q >= 100:
+                sells.append((code, sym, q))
+        elif -diff >= 100:                                # 缺口 → 买
+            buys.append((code, sym, (-diff // 100) * 100))
+
+    now = context.now if hasattr(context, "now") else datetime.now()
+    n = 0
+    # ① 超额一律卖出（不占资金）
+    for code, sym, q in sells:
+        px = _px_of(code, sym)
+        if px <= 0:
+            continue
+        try:
+            write_order(str(now), code, "SELL", q, px, order_type="ALIGN")
+            _o = _sdk_call("order_volume_align_sell", _partial(
+                order_volume, symbol=sym, volume=q, side=OrderSide_Sell,
+                order_type=OrderType_Market, position_effect=PositionEffect_Close))
+            _mark_pending_recon(context, code, sym, "SELL", q, px, _o)
+            n += 1
+            print(f"[OPEN_ALIGN] SELL {code} {q}股@{px:.3f}（超额归位到目标 {getattr(context, f'_base_ref_{code}', 0)}）")
+            _audit_write({"event": "open_align", "code": code, "side": "SELL", "qty": q,
+                          "price": round(px, 4), "time": str(now), "reason": "excess_over_base"})
+        except Exception as e:
+            print(f"[OPEN_ALIGN] SELL {code} 失败: {e}")
+    # ② 缺口按优先级买满，现金不够就停
+    _pri = {c: i for i, c in enumerate(OPEN_ALIGN_BUY_ORDER)}
+    buys.sort(key=lambda x: _pri.get(x[0], 999))
+    skipped = []
+    for code, sym, q in buys:
+        px = _px_of(code, sym)
+        if px <= 0:
+            skipped.append((code, q, "无价"))
+            continue
+        afford = int(avail / px) // 100 * 100
+        q = min(q, afford)
+        if q < 100:
+            skipped.append((code, q, f"现金不足(可用{avail:.0f})"))
+            continue
+        try:
+            write_order(str(now), code, "BUY", q, px, order_type="ALIGN")
+            _o = _sdk_call("order_volume_align_buy", _partial(
+                order_volume, symbol=sym, volume=q, side=OrderSide_Buy,
+                order_type=OrderType_Market, position_effect=PositionEffect_Open))
+            _mark_pending_recon(context, code, sym, "BUY", q, px, _o)
+            avail -= q * px
+            n += 1
+            print(f"[OPEN_ALIGN] BUY {code} {q}股@{px:.3f}（补缺口到目标 {getattr(context, f'_base_ref_{code}', 0)}，余现金 {avail:.0f}）")
+            _audit_write({"event": "open_align", "code": code, "side": "BUY", "qty": q,
+                          "price": round(px, 4), "time": str(now), "reason": "shortfall_vs_base"})
+        except Exception as e:
+            print(f"[OPEN_ALIGN] BUY {code} 失败: {e}")
+    if skipped:
+        print(f"[OPEN_ALIGN] 未补满: {skipped}")
+    print(f"[OPEN_ALIGN] 完成：下单 {n} 笔（卖 {len(sells)} / 买 {len(buys) - len(skipped)}）")
+    return n
+
 MIN_BARS = 25
 T1_AUTO_UNLOCK_HOUR = 9
 T1_AUTO_UNLOCK_MINUTE = 31
@@ -1504,6 +1615,16 @@ def on_bar(context, bars):
     # ── 持仓真源回写（2026-09-14 并表）：收盘后一次，把账户实际 qty/cost 写回 holdings.json ──
     # 取 14:57 每日一次（on_bar 在 15:00 后 return，没有更晚的钩子）。与 superTrader 14:59 的
     # pre_close 写并发也安全：本侧是"磁盘为基 + 只补丁 qty/cost"，且对方读后再写，两个方向都不丢。
+    # ── 开盘强制对齐（2026-09-14 owner 裁决）：每个交易日一次，把实际持仓拉到目标底仓 ──
+    global _OPEN_ALIGN_DONE_DATE
+    if (t >= dtime(9, 31) and _OPEN_ALIGN_DONE_DATE != today
+            and getattr(context, "mode", None) == MODE_LIVE):
+        _OPEN_ALIGN_DONE_DATE = today
+        try:
+            _force_open_align(context)
+        except Exception as _oae:
+            print(f"[OPEN_ALIGN] 失败（不阻断主循环）: {_oae}")
+
     global _WB_DONE_DATE
     # ⚠️ 必须 MODE_LIVE 才回写：回测/回放里的持仓是模拟的，写回会污染生产 holdings.json
     # （2026-09-14 实证：跑回测把 588170 cost 从 0.914 改成回测播种价 0.8951）。
