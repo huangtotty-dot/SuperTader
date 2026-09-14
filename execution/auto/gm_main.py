@@ -2301,8 +2301,12 @@ def on_bar(context, bars):
                     position_effect=PositionEffect_Open))
                 _mark_pending_recon(context, code, gm_sym, "BUY", qty, cp, _oid)
                 # 2026-09-14: 把本笔 T 腿**实际下单量**记回 entry——平腿按原量卖，保证数量不变。
+                # ⚠️ t_entry_price 在**决策核**上（context.engine 是适配器 SignalEngine，
+                #    内核是它的 ._core）；早先误写成 context.engine.t_entry_price → getattr
+                #    恒返回 {} → qty 从未记录 → 下游 t_lot_qty 恒 0、平腿按原量卖与成本锚豁免双双空转。
                 if sig.action in ("BUY_LOW", "ADD_POS"):
-                    _ent = (getattr(context.engine, "t_entry_price", {}) or {}).get(code)
+                    _core = getattr(context.engine, "_core", None)
+                    _ent = (getattr(_core, "t_entry_price", {}) or {}).get(code) if _core else None
                     if isinstance(_ent, dict):
                         _ent["qty"] = int(qty)
                 # WP-A1: 下单副作用之前留存 manual_position 条目快照（含"无此条目"状态）。
