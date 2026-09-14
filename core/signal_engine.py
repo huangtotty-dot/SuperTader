@@ -190,9 +190,26 @@ class SignalEngine:
                 except OSError:
                     if _a < 4:
                         _time_mod.sleep(0.2 * (2 ** _a))
-            # 重试耗尽：保留 tmp 供恢复（不静默丢数据）
-        except Exception:
-            pass
+            # Q-20260914-2(2026-09-14): 原子替换重试耗尽（占用源常为会话级进程以无 DELETE 共享持有目标
+            # 文件，Windows os.replace 必败）→ 降级直写保底：共享 WRITE 仍可用，flush+fsync 压截断窗口。
+            # 原实现此处零日志零告警静默 fall-through，14:55 落盘失败当日无人知（对照 core/utils.py 同款有 WARN）。
+            try:
+                with open(_p, "w", encoding="utf-8") as _f:
+                    _j.dump(data, _f, ensure_ascii=False, indent=2)
+                    _f.flush()
+                    _os_mod.fsync(_f.fileno())
+                try:
+                    _os_mod.remove(_tmp)
+                except Exception:
+                    pass
+                print(f"[WARN] intraday_state 原子替换失败，已降级直写保底: {_p}", flush=True)
+                return
+            except Exception as _de:
+                # 双失败才留 tmp（数据不丢），且必须显式告警
+                print(f"[WARN] intraday_state 直写亦失败，保留 tmp 供恢复: {_tmp} → {_p} "
+                      f"({type(_de).__name__}: {str(_de)[:120]})", flush=True)
+        except Exception as _pe:
+            print(f"[WARN] intraday_state 持久化异常: {type(_pe).__name__}: {str(_pe)[:120]}", flush=True)
 
     def _load_intraday_state(self):
         if not PERSIST_INTRADAY_STATE:

@@ -1318,14 +1318,28 @@ def _maybe_run_daily_review(now: datetime) -> None:
         # 子进程内部串行：daily_review → forward_tracker（同一进程不阻塞主循环）
         # T-1(2026-09-02): 内嵌 -c 用换行分隔（此前分号后接 for 是语法错误，子进程启动即 SyntaxError）
         _dr_dir = os.path.join(BASE_DIR, "t_io", "validation", "daily_review")
+        # Q-20260914-4': forward_tracker 回填源改真实复盘路径 doc/review/复盘清单.md（owner 拍板 09-14）。
+        # 旧口径 doc/每日复盘/ 整目录不存在 → 每日空转；按方案的①（每日 md）实测无前瞻表，仍会空转。
+        # 前瞻表（加仓价/次日浮盈%、确认价/3日浮盈%）现由合并后唯一清单承载，08-28 起取代每日模板。
         _py = (
             "import subprocess, sys, os\n"
             f"dr = {_dr_dir!r}\n"
+            f"base = {BASE_DIR!r}\n"
             f"log = open({log_fp!r}, 'a', encoding='utf-8')\n"
+            "date = sys.argv[1]\n"
+            "failed = []\n"
             "for sp in ['daily_review.py', 'forward_tracker.py']:\n"
-            "    p = subprocess.Popen([sys.executable, os.path.join(dr, sp), '--date', sys.argv[1]], "
-            "stdout=log, stderr=subprocess.STDOUT)\n"
-            "    p.wait(timeout=600)\n"
+            "    cmd = [sys.executable, os.path.join(dr, sp), '--date', date]\n"
+            "    if sp == 'forward_tracker.py':\n"
+            "        cmd += ['--report', os.path.join(base, 'doc', 'review', '复盘清单.md')]\n"
+            "    p = subprocess.Popen(cmd, stdout=log, stderr=subprocess.STDOUT)\n"
+            "    rc = p.wait(timeout=600)\n"
+            "    print('[child] ' + sp + ' exit=' + str(rc), flush=True)\n"
+            "    if rc != 0:\n"
+            "        failed.append(sp + '(rc=' + str(rc) + ')')\n"
+            "if failed:\n"
+            "    print('[child] FAILED: ' + ', '.join(failed), flush=True)\n"
+            "sys.exit(1 if failed else 0)\n"
         )
         out_fp = open(log_fp, "a", encoding="utf-8")
         try:
@@ -1335,6 +1349,21 @@ def _maybe_run_daily_review(now: datetime) -> None:
         finally:
             out_fp.close()
         _daily_review_state.update({"date": today, "next_try": 0})
+
+        def _watch_daily_review(pr=proc, _today=today):
+            # Q-20260914-3': 退出码守护——非 0 撤销当日占位并 600s 后重试。
+            # 原 fire-and-forget 不查退出码：子进程中途崩 → 当日静默断档，次日复盘才发现。
+            try:
+                rc = pr.wait()
+            except Exception as _we:
+                rc = -1
+                log.warning(f"⚠️ 收盘复盘子进程等待异常: {str(_we)[:100]}")
+            if rc != 0:
+                log.warning(f"⚠️ 收盘复盘子进程失败(rc={rc})，撤销 {_today} 占位并 600s 后重试 → {log_fp}")
+                if _daily_review_state.get("date") == _today:
+                    _daily_review_state.update({"date": "", "next_try": _now().timestamp() + 600})
+
+        _threading.Thread(target=_watch_daily_review, daemon=True).start()
         log.info(f"📊 收盘复盘已自动触发: daily_review+forward_tracker → {log_fp} (pid={proc.pid})")
     except Exception as e:
         _daily_review_state["next_try"] = _now().timestamp() + 600
@@ -1492,6 +1521,9 @@ def _maybe_record_daily_pnl(now: datetime) -> None:
                     if _cp > 0:
                         h["pre_close"] = _cp
                         _updated = True
+                        # Q-20260914-1: 同步内存 HOLDINGS，消除"磁盘新/内存旧"被后续整写回滚的源头
+                        if code in (HOLDINGS or {}):
+                            HOLDINGS[code]["pre_close"] = _cp
                 if _updated:
                     from src.holdings_repo import save_held_merged  # P0-6: 改走 repo 强制审计
                     save_held_merged(_hdata, actor="main", reason="eod_pre_close")
@@ -1670,6 +1702,7 @@ def _maybe_audit_closure(now: datetime) -> None:
         # 截图 reconcile 是唯一实盘 qty/base 写入源；此处仅维护"系统视角"虚拟字段 virtual_qty（展示用，default=qty）。
         # V1.1.3 t_qty 只减不增语义保留在晨间 reconcile 路径；eod 不动 t_qty（防止虚拟/模拟成交冲进实盘台账）。
         virtual_updated = False
+        virtual_codes: list = []
         for d in ([] if _sync_violations else details):
             code = d["code"]
             holding = HOLDINGS.get(code)
@@ -1684,6 +1717,7 @@ def _maybe_audit_closure(now: datetime) -> None:
             if new_virtual != old_virtual:
                 holding["virtual_qty"] = new_virtual
                 virtual_updated = True
+                virtual_codes.append(code)
                 _auto_note = "；auto 模拟盘成交已并入视图" if ((d.get("auto_sim") or {}).get("sold")
                                                              or (d.get("auto_sim") or {}).get("bought")) else ""
                 log.info(f"📝 归账视图(虚拟) {d['name']}({code}): "
@@ -1691,9 +1725,11 @@ def _maybe_audit_closure(now: datetime) -> None:
                          + _auto_note)
         if virtual_updated:
             try:
-                from src.holdings_repo import save_held_merged, load_full
+                from src.holdings_repo import build_virtual_qty_patch, save_held_merged, load_full
                 # 合并回写：HOLDINGS 是过滤后的持仓 dict，直接 dump 会抹掉未持有的 auto 候选（18 只全量）
-                save_held_merged(HOLDINGS)
+                # Q-20260914-1: 改"磁盘为基 + 仅补丁 virtual_qty"——内存陈旧字段（pre_close 等）不得回写
+                save_held_merged(build_virtual_qty_patch(HOLDINGS, virtual_codes),
+                                 actor="main", reason="eod_reconcile")
                 log.info(f"✅ holdings.json 虚拟视图已更新（共 {len(load_full())} 只，持仓 {len(HOLDINGS)} 只）；实盘 qty/base 未动")
             except Exception as e:
                 log.warning(f"⚠️ holdings.json 虚拟视图写入失败: {str(e)[:80]}")
@@ -1772,6 +1808,7 @@ def _closure_tail_reconcile(now: datetime, today: str) -> None:
                 elif _side == "SELL":
                     _acc["sells"] += _q
         changed = False
+        _changed_codes: list = []
         for _c, _acc in _by.items():
             h = (HOLDINGS or {}).get(_c)
             if h is None:
@@ -1784,13 +1821,16 @@ def _closure_tail_reconcile(now: datetime, today: str) -> None:
             if _nv != _oldv:
                 h["virtual_qty"] = _nv
                 changed = True
+                _changed_codes.append(_c)
             details.append({"code": _c, "name": h.get("name", _c),
                             "tail_buys": _acc["buys"], "tail_sells": _acc["sells"],
                             "net": _net, "virtual_qty": _nv, "qty_unchanged": _old})
         if changed:
             try:
-                from src.holdings_repo import save_held_merged
-                save_held_merged(HOLDINGS)
+                from src.holdings_repo import build_virtual_qty_patch, save_held_merged
+                # Q-20260914-1: 磁盘为基 + 仅补丁 virtual_qty（内存 pre_close 停在启动值，整写会回滚磁盘）
+                save_held_merged(build_virtual_qty_patch(HOLDINGS, _changed_codes),
+                                 actor="main", reason="tail_reconcile")
             except Exception as e:
                 log.warning(f"⚠️ tail 虚拟视图写入失败: {str(e)[:80]}")
         _rec = {"date": today, "time": now.strftime("%H:%M:%S"), "phase": "tail_reconcile",
