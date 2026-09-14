@@ -273,6 +273,14 @@ def _force_tail_buyback(context, code, gm_sym, cp, now, holding) -> bool:
     ab = (getattr(context.engine, "awaiting_buyback", {}) or {}).get(code)
     if not ab:
         return False
+    # 2026-09-14: **只在持仓低于目标底仓时才回补**——那才说明这笔卖出啃到了底仓（反T高抛），
+    # 需要还原。若持仓已 >= 目标底仓，说明该卖出只是"把仓位还原到目标"（平T腿 / TAIL 尾盘归位），
+    # 再买回就是破坏还原（GM 回测实证：14:50 TAIL 归位 1000→800，14:51 又被买回 200 → 1000）。
+    _base_ref = int(getattr(context, f"_base_ref_{code}", 0) or 0)
+    _pos = int((holding or {}).get("qty", 0) or 0)
+    if _base_ref > 0 and _pos >= _base_ref:
+        context.engine.awaiting_buyback.pop(code, None)   # 已还原则清掉义务，防下一 bar 再触发
+        return False
     qty = (int(ab.get("sell_qty", 0) or 0) // 100) * 100
     if qty < 100:
         return False
