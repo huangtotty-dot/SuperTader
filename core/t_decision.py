@@ -233,8 +233,13 @@ class TDecisionEngine:
             if exit_reason:
                 sell_score = 100.0
                 _det = f"Renko做T卖出({exit_reason})"
+                # 2026-09-14: 把 T 腿原量带进信号——平腿必须**按原量**卖出才是"数量不变"。
+                # 执行侧（sell_channels._sell_arbiter）优先用该值，不再用 40%×t_qty 的比例口径
+                # （回放实证：1100×0.4=440→400，而 T 腿只有 300，必然过卖、仓位漂移）。
+                _fac_sell = dict(_fac)
+                _fac_sell["t_lot_qty"] = int(entry.get("qty") or 0)
                 sig = Signal(code, name, "SELL_HIGH", price, sell_score,
-                             [_det], [{"指标": "高抛", "当前": _det, "加分": 100.0}], _ind, dict(_fac))
+                             [_det], [{"指标": "高抛", "当前": _det, "加分": 100.0}], _ind, _fac_sell)
                 self.t_entry_price.pop(code, None)
                 if trace is not None:
                     try:

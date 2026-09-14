@@ -2285,6 +2285,11 @@ def on_bar(context, bars):
                     order_type=OrderType_Market,
                     position_effect=PositionEffect_Open))
                 _mark_pending_recon(context, code, gm_sym, "BUY", qty, cp, _oid)
+                # 2026-09-14: 把本笔 T 腿**实际下单量**记回 entry——平腿按原量卖，保证数量不变。
+                if sig.action in ("BUY_LOW", "ADD_POS"):
+                    _ent = (getattr(context.engine, "t_entry_price", {}) or {}).get(code)
+                    if isinstance(_ent, dict):
+                        _ent["qty"] = int(qty)
                 # WP-A1: 下单副作用之前留存 manual_position 条目快照（含"无此条目"状态）。
                 # 快照法而非逆运算，避免成本加权逆推的浮点漂移；纯日内状态，无需落盘。
                 if not hasattr(context, "_pending_buy_snapshot") or context._pending_buy_snapshot is None:
@@ -2447,6 +2452,10 @@ def on_order_status(context, order):
             # WP-B19 f: HARD_STOP_EXIT 硬止损离场不生成回补记忆（破位不回头；
             # record_trade_action 以 SELL_HIGH 记 arm，此处按真实通道清除）
             if side == 2 and getattr(context, "_pending_sell_action", {}).get(symbol, ("", 0))[0] == "HARD_STOP_EXIT":
+                context.engine.awaiting_buyback.pop(code, None)
+            # 2026-09-14: 平 T 腿（T_LEG_CLOSE）同理不建回补记忆——卖出即数量还原，
+            # 再回补等于把刚平掉的腿重新打开（回放实证：14:55 平、14:56 同价买回，白付 24.6 元手续费）。
+            if side == 2 and getattr(context, "_pending_sell_action", {}).get(symbol, ("", 0))[0] == "T_LEG_CLOSE":
                 context.engine.awaiting_buyback.pop(code, None)
                 _rta = None
         _rta = _rta or {}
