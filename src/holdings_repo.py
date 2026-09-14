@@ -7,10 +7,12 @@
 
 本模块仅依赖标准库（json/os），可被 superTrader 手动链与 goldminer 自动链共同 import。
 
-字段 schema（每只 6 位 code）：
-  name / gm_symbol / type / account / pool(manual|auto|both)
-  qty / base / t_qty / cost / pre_close      —— 持仓字段，非持有=0
-  mirror_qty / mirror_cost                   —— 自动目标底仓，无=0
+字段 schema（每只 6 位 code，2026-09-14 并表后）：
+  name / gm_symbol / type / pool(manual|auto|both)   —— 身份
+  qty / cost                                          —— 实际持仓（引擎收盘回写，见 gm_main._writeback_holdings）
+  base                                                —— **目标底仓**（旧 AUTO_MIRROR_OVERRIDE/mirror_qty 迁入）
+  pre_close
+已删：account / available_qty / frozen_qty / t_qty / virtual_qty / mirror_qty / mirror_cost
 """
 import json
 import os
@@ -71,25 +73,17 @@ def load_full() -> dict:
 
 
 def load_held() -> dict:
-    """仅持有（qty>0 or base>0 or t_qty>0）—— 手动链视图，行为与扩容前（3 只）一致。"""
-    return {c: h for c, h in load_full().items()
-            if h.get("qty") or h.get("base") or h.get("t_qty")}
+    """仅实际持有（qty > 0）。
+
+    2026-09-14 并表后 `base` 语义改为**目标底仓**（可能为 0 持仓的候选），不再能当持有标记；
+    `t_qty` 已随 manual 做T 删除。故"持有"只认 qty>0。"""
+    return {c: h for c, h in load_full().items() if int(h.get("qty") or 0) > 0}
 
 
 def load_auto_pool() -> dict:
     """auto 池身份（code → {name, gm_symbol}），pool ∈ {auto, both}。"""
     return {c: {"name": h.get("name", c), "gm_symbol": h.get("gm_symbol", "")}
             for c, h in load_full().items() if str(h.get("pool") or "") in ("auto", "both")}
-
-
-def load_mirror_holdings() -> dict:
-    """自动目标底仓（code → {qty, cost}），mirror_qty > 0。
-
-    cost 取 mirror_cost（参考成本，非真实持仓 cost）——515180=1.451 是参考价，
-    与持仓 cost 语义不同，须分离，否则回测 -8% 硬止损会用错成本。"""
-    return {c: {"qty": int(h.get("mirror_qty") or 0),
-                "cost": float(h.get("mirror_cost") or 0)}
-            for c, h in load_full().items() if int(h.get("mirror_qty") or 0) > 0}
 
 
 def sync_watchlist_pool(code, pool="auto"):
@@ -130,11 +124,11 @@ def save_held_merged(held: dict, actor: str = "system", reason: str = "merge") -
             sync_watchlist_pool(code, "auto")
 
 
-def upsert_auto_entry(code, *, name, gm_symbol, type, mirror_qty, mirror_cost=0.0,
+def upsert_auto_entry(code, *, name, gm_symbol, type,
                       actor: str = "system", reason: str = "upsert") -> dict:
     """新增/更新 auto 池标的（pool=auto, 未持仓）→ 原子写回。写入强制审计（P0-6）。
 
-    已存在则保留其既有 qty/cost/base/t_qty 持仓字段不归零（仅设 pool/mirror_qty/mirror_cost）。
+    已存在则保留其既有 qty/cost/base 持仓字段不归零（仅设 pool/身份）。
     返回该条目。"""
     full = load_full()
     cur = full.get(code) or {}
@@ -143,15 +137,11 @@ def upsert_auto_entry(code, *, name, gm_symbol, type, mirror_qty, mirror_cost=0.
         "name": name or cur.get("name", code),
         "gm_symbol": gm_symbol or cur.get("gm_symbol", ""),
         "type": type or cur.get("type", "stock"),
-        "account": cur.get("account", ""),
         "pool": "auto",
         "qty": int(cur.get("qty") or 0),
         "base": int(cur.get("base") or 0),
-        "t_qty": int(cur.get("t_qty") or 0),
         "cost": float(cur.get("cost") or 0),
         "pre_close": float(cur.get("pre_close") or 0),
-        "mirror_qty": int(mirror_qty or 0),
-        "mirror_cost": float(mirror_cost or 0),
     })
     full[code] = entry
     _tmp = HOLDINGS_FILE + ".tmp"

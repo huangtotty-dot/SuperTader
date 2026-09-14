@@ -14,9 +14,9 @@ config/auto_pool.py — 自动盘标的池（P3-2 池分管 → 2026-08-30 单�
 注意：本模块保持轻量、无副作用（不 import 顶层 config.py 那套 requests/akshare，不 import core/src），
 仅依赖标准库；改名/挪位需同步 goldminer main.py 的加载路径。
 
-2026-09-11 方案A（手动/自动持仓分离）：MIRROR 目标底仓默认**镜像手动盘 holdings.json 的 base**
-（缺失回退 qty），不再读 holdings.mirror_qty（deprecated 读兼容、不再写）。
-按票可在 AUTO_POOL[code] 增加可选键 **mirror_qty** 覆盖镜像默认（缺省=镜像）。
+2026-09-14 持仓并表（manual 做T 下线后）：目标底仓统一存 **holdings.json 的 `base`**，
+身份/实际持仓/目标底仓同源；本模块只做身份派生（pool ∈ {auto,both} → name/gm_symbol），
+不再持有目标底仓表（旧 AUTO_MIRROR_OVERRIDE 已迁入 base）。
 """
 import json
 import os
@@ -48,22 +48,9 @@ def _load_auto_pool() -> dict:
 # code(内部 6 位) → {name, gm_symbol}
 AUTO_POOL = _load_auto_pool()
 
-# 2026-09-11 方案A：auto 目标底仓（MIRROR）按票覆盖。缺省=镜像手动盘 holdings.base；
-# 本表显式列出的 code 用表中值（含 0=不做底仓）。本次拆分按"保原 mirror 值"登记，行为中性；
-# 后续 owner 想放开镜像，删除对应行即可。600481=100 为 2026-09-11 owner 裁决（实盘=100）。
-AUTO_MIRROR_OVERRIDE = {
-    "588170": 70000,
-    "600481": 100,      # owner 裁决：实盘 100 股
-    "002451": 1800,
-    "000988": 500,
-    "600176": 1600,
-    "603667": 500,
-    "300054": 100,
-    "002639": 0,        # 原为纯观察，无底仓目标
-    "300153": 0,
-    "002396": 300,      # 原 mirror>0（当前 qty=0，保留原目标）
-    "518880": 2000,
-}
+# 2026-09-14 持仓并表：目标底仓（旧 AUTO_MIRROR_OVERRIDE）已迁入
+# t_io/state/holdings.json 的 `base` 字段——身份 / 实际持仓 / 目标底仓现由同一份真源承载，
+# 消除"两个表说不同的话"。引擎经 gm_main._load_mirror_holdings() 直读 base；本模块只留身份派生。
 
 
 def auto_pool_codes() -> list:

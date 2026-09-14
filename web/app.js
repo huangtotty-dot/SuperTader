@@ -944,8 +944,8 @@ function renderPositions(pos, nameMap) {
         <td>${esc(nm)} <span class="mono cell-dim">${esc(code)}</span> ${tmBadge}</td>
         <td class="cell-dim" ${brokerTip}>${esc(s.account || "")} ${esc(s.type || "")}</td>
         <td class="num">${fmt(s.qty, 0)}</td>
-        <td class="num"><span class="hl">${fmt(s.t_qty, 0)}</span><span class="cell-dim">/base ${fmt(s.base, 0)}</span></td>
-        <td class="num cell-dim">${fmt(prev.t_qty, 0)}</td>
+        <td class="num"><span class="hl">${fmt(s.base, 0)}</span></td>
+        <td class="num cell-dim">${fmt(prev.base, 0)}</td>
         <td class="num ${drift === null ? "neutral" : clsOf(drift)}">${drift === null ? "—" : (drift > 0 ? "+" : "") + fmt(drift, 0)}</td>
         <td class="num cell-dim">${esc(k3v && k3v.attribution ? k3v.attribution : "—")}</td>
         <td class="num">${fmt(s.cost, 3)}</td>
@@ -959,8 +959,8 @@ function renderPositions(pos, nameMap) {
     <div class="card">
       <table>
         <thead><tr>
-          <th>股票</th><th>账户/类型</th><th class="num">持股</th><th class="num">T仓(base)</th>
-          <th class="num">前日T仓</th><th class="num">K3漂移</th><th>归因</th>
+          <th>股票</th><th>账户/类型</th><th class="num">持股</th><th class="num">目标底仓</th>
+          <th class="num">前日底仓</th><th class="num">K3漂移</th><th>归因</th>
           <th class="num">成本</th><th class="num">前成本</th><th class="num">K2Δ</th><th class="num">昨收</th>
         </tr></thead>
         <tbody>${rows}</tbody>
@@ -1651,7 +1651,7 @@ function renderAutoScan(d) {
       <td class="num">${r.price != null ? fmt(r.price) : "—"}</td>
       <td><span class="cond" title="${esc(condTitle)}">${condStr}${vetoDot}</span></td>
       <td class="cell-dim" style="font-size:11px;max-width:230px;line-height:1.5">${reasonTxt}</td>
-      <td class="num">${r.mirror_qty ? fmt(r.mirror_qty, 0) : "—"}</td>
+      <td class="num">${r.base ? fmt(r.base, 0) : "—"}</td>
       <td style="text-align:center">${delBtn}</td>
     </tr>`;
   }).join("");
@@ -1725,7 +1725,7 @@ async function loadAutoBuildOptions() {
       return;
     }
     sel.innerHTML = rows.map(r =>
-      `<option value="${esc(r.code)}">${esc(r.name || r.code)} ${esc(r.code)}${r.mirror_qty ? " 底仓" + fmt(r.mirror_qty, 0) : ""}${r.held ? " 持有" : ""}</option>`).join("");
+      `<option value="${esc(r.code)}">${esc(r.name || r.code)} ${esc(r.code)}${r.base ? " 底仓" + fmt(r.base, 0) : ""}${r.held ? " 持有" : ""}</option>`).join("");
     onAbCodeChange();
   } catch (e) { /* ignore */ }
 }
@@ -1743,7 +1743,7 @@ function onAbCodeChange() {
   const parts = [
     `<b>${esc(r.name || r.code)}</b> <span class="mono cell-dim">${esc(r.code)}</span>`,
     r.held ? '<span class="badge hold">持仓</span>' : '<span class="badge">候选</span>',
-    `目标底仓 <b>${r.mirror_qty ? fmt(r.mirror_qty, 0) : "未设"}</b>`,
+    `目标底仓 <b>${r.base ? fmt(r.base, 0) : "未设"}</b>`,
     r.verdict !== "pending" ? `判定 ${esc(r.verdict)}${r.score != null ? " / " + r.score : ""}` : "",
   ].filter(Boolean).join(" · ");
   const armedTxt = armed

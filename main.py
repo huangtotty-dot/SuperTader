@@ -1012,9 +1012,16 @@ def _compute_total_equity() -> float:
                            for k, v in (cfg.get("accounts") or {}).items()}
         cost_by_acct = {k: 0.0 for k in capital_by_acct}
         mv_by_acct = {k: 0.0 for k in capital_by_acct}
+        # 2026-09-14 并表：holdings.json 不再存 `account` 字段 → 归属改由 accounts_config.json
+        # 各账户的 holdings 清单派生（该清单本就是账户归属的声明处）。
+        _code_acct = {}
+        for _a, _v in (cfg.get("accounts") or {}).items():
+            for _hc in ((_v or {}).get("holdings") or []):
+                _code_acct[str(_hc).split("_")[0]] = _a
+        _default_acct = "账户A" if "账户A" in capital_by_acct else next(iter(capital_by_acct), None)
         for _c, _h in (HOLDINGS or {}).items():
-            acct = _h.get("account") or "账户A"
-            if acct not in capital_by_acct:
+            acct = _code_acct.get(str(_c).split("_")[0]) or _default_acct
+            if acct is None or acct not in capital_by_acct:
                 continue
             _q = int(_h.get("qty") or 0)
             if _q <= 0:

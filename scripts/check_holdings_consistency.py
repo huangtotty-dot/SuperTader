@@ -5,7 +5,7 @@
 本脚本校验派生关系不漂移（用户手改 holdings.json 后跑一遍，漏改/孤岛立即暴露）：
 
   1) 全集一致：auto 池 ∪ 持有 == holdings.json 全量（无孤岛条目）
-  2) mirror ⊆ auto：挂了目标底仓(mirror_qty>0)的码必须属于 auto 池
+  2) mirror ⊆ auto：挂了目标底仓(base>0)的码必须属于 auto 池
   3) pool 与 is_manual 语义一致
   4) auto 池每只都有非空 gm_symbol
   5) auto_pool.py 的 AUTO_POOL 与 holdings_repo.load_auto_pool 一致
@@ -20,7 +20,7 @@ _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
 
-from src.holdings_repo import load_full, load_held, load_auto_pool, load_mirror_holdings
+from src.holdings_repo import load_full, load_held, load_auto_pool
 
 # config 是目录非 package，按绝对路径加载 auto_pool（与 goldminer/position_builder 同款）
 _spec = importlib.util.spec_from_file_location(
@@ -33,7 +33,9 @@ def main() -> int:
     full = load_full()
     held = load_held()
     auto = load_auto_pool()
-    mirror = load_mirror_holdings()
+    # 2026-09-14 并表：目标底仓 = holdings.json 的 base（旧 mirror_qty 已迁入）
+    mirror = {c: int(h.get("base") or 0) for c, h in full.items()
+              if int(h.get("base") or 0) > 0}
     errs = []
 
     union = set(held) | set(auto)
