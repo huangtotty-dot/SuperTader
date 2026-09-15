@@ -1762,6 +1762,42 @@ if _B7_BACKTEST_ENABLE:
         _B7_BACKTEST_ENABLE = False
 
 
+# ══════════════════════════════════════════════════════════════════════
+# B7 尾盘反T · 影子通道接线（2026-09-15 B7影子施工4/4，接入专员_B7）
+#
+# 与上方回测接线共存：_B7_BACKTEST_ENABLE=True 时影子逻辑整体跳过（防回测双记账）。
+# 总开关：PARAMS["b7_shadow_enabled"]（默认 False，周六评审后由 owner 翻启）。
+# 影子期铁律：绝不下单、绝不写 bridge/orders、不碰 t_qty/mirror_qty 语义；
+#   只读当日分钟 bar + 写 t_io/logs/b7_shadow_{date}.jsonl + engine B7 链挂账/熔断落盘。
+# 方案：doc/solutions/2026-09-15_B7尾盘反T通道施工方案.md §1/§3/§4。
+# ══════════════════════════════════════════════════════════════════════
+_B7_SHADOW_MOD = None
+_b7_glue = None
+try:
+    import overnight_reverse_t as _B7_SHADOW_MOD   # 独立导入（回测块的 _b7_mod 在其门控块内）
+    import b7_shadow_glue as _b7_glue              # 影子纯逻辑（守卫链/结算配对，可离线测试）
+except Exception as _e:
+    print(f"[B7影子] 模块加载失败 → 影子通道整体关闭: {_e}")
+    _B7_SHADOW_MOD = None
+    _b7_glue = None
+
+# 保护类卖出动作集合：当日成交后记入 context._protect_sell_today（B7 当日互斥统一查询口，
+# 含 HARD_STOP_EXIT；D1 日界块清零）
+_B7_SHADOW_PROTECT_ACTIONS = frozenset(
+    {"HARD_STOP_EXIT", "PANIC_SELL", "TRAIL_SELL", "TREND_EXIT", "TARGET_SELL"})
+# 影子台账目录（t_io/logs，与 auto_backtrace 镜像同根；B7ShadowLedger 生产默认口径）
+_B7_SHADOW_LOG_DIR = os.path.join(
+    os.environ.get("SUPERTRADER_ROOT", os.path.dirname(os.path.dirname(PROJECT_DIR))),
+    "t_io", "logs")
+
+
+def _b7_shadow_enabled() -> bool:
+    """影子通道总闸：PARAMS 翻启 + 非回测接线 + 模块加载成功。"""
+    return (bool(PARAMS.get("b7_shadow_enabled", False))
+            and not _B7_BACKTEST_ENABLE
+            and _B7_SHADOW_MOD is not None and _b7_glue is not None)
+
+
 def _b7_day_bars(context, gm_sym, now):
     return [b for b in (context.bar_cache.get(gm_sym) or [])
             if str(b.get("time", "")).startswith(now.strftime("%Y-%m-%d"))]
@@ -1849,6 +1885,123 @@ def _b7_day_start_buyback(context, now) -> None:
         context.total_trade_count += 1
 
 
+# ── B7 影子通道核心函数（2026-09-15 B7影子施工4/4）──────────────────────
+def _b7_shadow_state(context):
+    """影子台账 + 连亏熔断器（首次使用装配并缓存到 context）。
+
+    熔断器从引擎落盘态恢复（拍板口径②：状态跨进程持久化）；每次 record/reset 经
+    on_change 回写 engine.record_b7_circuit → buyback_chains.json（人工复盘后手动
+    reset，不自动复活）。"""
+    ledger = getattr(context, "_b7_shadow_ledger", None)
+    if ledger is None:
+        ledger = _B7_SHADOW_MOD.B7ShadowLedger(_B7_SHADOW_LOG_DIR)
+        context._b7_shadow_ledger = ledger
+    breaker = getattr(context, "_b7_shadow_breaker", None)
+    if breaker is None:
+        _eng = context.engine
+        breaker = _B7_SHADOW_MOD.B7CircuitBreaker.from_dict(
+            getattr(_eng, "b7_circuit", None) or {},
+            on_change=lambda s: _eng.record_b7_circuit(s))
+        context._b7_shadow_breaker = breaker
+    return ledger, breaker
+
+
+def _b7_shadow_settle_due(context, code, row, now) -> None:
+    """次日开盘虚拟接回结算（独立函数便于测试）：该 code 有 armed B7 链且当前 bar
+    日期 > sell_date（次日首根 bar）→ 以本 bar 的 open 价虚拟接回并结算。
+
+    结算三连：breaker.record(net) → engine.settle_b7_chain → ledger.record_virtual_buyback。
+    prev_close 用 sell 日 c14:55（sell_px），与方案口径一致。fail-open：异常绝不冒泡。"""
+    if not _b7_shadow_enabled():
+        return
+    try:
+        today_str = now.strftime("%Y-%m-%d")
+        chains = getattr(context.engine, "b7_overnight_chains", None) or {}
+        due = _b7_glue.find_due_chains(chains, code, today_str)
+        if not due:
+            return
+        open_px = float(row.get("open") or 0)
+        if open_px <= 0:
+            return
+        ledger, breaker = _b7_shadow_state(context)
+        for chain_id, chain in due:
+            sell_px = float(chain.get("sell_px") or 0)
+            net = _B7_SHADOW_MOD.virtual_net_pct(sell_px, open_px)
+            breaker.record(net)                      # 全池连亏计数（on_change 自动落盘）
+            context.engine.settle_b7_chain(chain_id, buy_px=open_px, buy_date=today_str)
+            settle = ledger.record_virtual_buyback(
+                _b7_glue.sell_entry_from_chain(chain), today_str, open_px,
+                prev_close=sell_px, chain_id=chain_id)
+            print(f"[{now:%H:%M:%S}] B7影子接回 {code} 虚拟买入 {settle['qty']}股@{open_px:.3f} "
+                  f"(卖{sell_px:.3f}, 费后净{net * 100:+.3f}%"
+                  f"{', 连亏熔断触发' if breaker.tripped else ''})")
+    except Exception as _e:
+        print(f"[B7影子] 接回结算异常 {code}: {_e}")   # fail-open：绝不冒泡进 on_bar 主流程
+
+
+def _b7_shadow_try_signal(context, code, gm_sym, now, pos_qty) -> None:
+    """14:55 bar B7 影子信号评估（每票每日一次；绝不下单、绝不写 bridge/orders）。
+
+    门链：tail30 未过闸（None 或 ≤1%）→ 什么都不记（不是 skip）；
+    触发但守卫拦截 → b7_skip 留痕（reason 枚举见 b7_shadow_glue.SKIP_REASONS）；
+    全过 → detect_signal 复核 → 虚拟量闸（<100 记 qty_below_100）
+    → record_signal + record_virtual_sell + engine.arm_b7_chain。fail-open。"""
+    if not _b7_shadow_enabled():
+        return
+    try:
+        if not (now.hour == 14 and now.minute == 55):
+            return
+        date_str = now.strftime("%Y-%m-%d")
+        done = getattr(context, "_b7_shadow_done", None)
+        if done is None:
+            done = set()
+            context._b7_shadow_done = done
+        if code in done:
+            return                                   # 每票每日一次
+        done.add(code)
+        day_bars = _b7_day_bars(context, gm_sym, now)
+        tail30 = _B7_SHADOW_MOD.compute_tail30_pct(day_bars)
+        base_ref = int(getattr(context, f"_base_ref_{code}", 0) or 0)
+        awaiting = bool((getattr(context.engine, "awaiting_buyback", {}) or {}).get(code))
+        protect = (getattr(context, "_protect_sell_today", {}) or {}).get(code) == date_str
+        chains = getattr(context.engine, "b7_overnight_chains", None) or {}
+        in_chain = _b7_glue.armed_chain_id(chains, code) is not None
+        ledger, breaker = _b7_shadow_state(context)
+        decision, reason = _b7_glue.guard_decision(
+            tail30=tail30, breaker_tripped=breaker.tripped,
+            has_awaiting_buyback=awaiting, pos_qty=int(pos_qty), base_ref=base_ref,
+            protect_sold_today=protect, in_b7_chain=in_chain)
+        if decision == "none":
+            return                                   # tail30 未过闸：不留痕
+        _tail_pct = round(tail30 * 100, 4) if tail30 is not None else None
+        if decision == "skip":
+            ledger.record_skip(code, date_str, reason, _tail_pct)
+            print(f"[{now:%H:%M:%S}] B7影子跳过 {code} reason={reason} "
+                  f"tail30={tail30 * 100:+.2f}%")
+            return
+        # 全过 → detect_signal 复核（守卫内置 pos_qty >= base_ref > 0 / awaiting 互斥）
+        sig = _B7_SHADOW_MOD.detect_signal(code, STOCK_NAMES.get(code, code), day_bars,
+                                           pos_qty=int(pos_qty), base_ref=base_ref, now=now)
+        if sig is None:
+            return
+        virtual_qty = _B7_SHADOW_MOD.compute_virtual_qty(int(pos_qty), base_ref)
+        qd, qreason = _b7_glue.qty_gate(virtual_qty)
+        if qd == "skip":
+            ledger.record_skip(code, date_str, qreason, _tail_pct)
+            print(f"[{now:%H:%M:%S}] B7影子跳过 {code} reason={qreason} "
+                  f"virtual_qty={virtual_qty}")
+            return
+        chain_id = _B7_SHADOW_MOD.make_chain_id(code, date_str)
+        ledger.record_signal(sig, pos_qty=int(pos_qty), virtual_qty=virtual_qty,
+                             chain_id=chain_id)
+        ledger.record_virtual_sell(sig, virtual_qty, chain_id=chain_id, sell_date=date_str)
+        context.engine.arm_b7_chain(chain_id, code, virtual_qty, sig["price"], date_str)
+        print(f"[{now:%H:%M:%S}] B7影子卖出 {code} 虚拟卖出 {virtual_qty}股@{sig['price']:.3f} "
+              f"(tail30={sig['factors']['tail30_pct']:+.2f}%, base_ref={base_ref}, 绝不下单)")
+    except Exception as _e:
+        print(f"[B7影子] 信号评估异常 {code}: {_e}")   # fail-open：绝不冒泡进 on_bar 主流程
+
+
 def on_bar(context, bars):
     now = context.now if hasattr(context, "now") else datetime.now()
     import utils.helpers as uh
@@ -1865,6 +2018,9 @@ def on_bar(context, bars):
         context.daily_buy_count.clear()
         context.daily_sell_count.clear()
         context.daily_trade_price.clear()
+        # B7 影子：按日清零——保护类卖出当日留痕 + 影子评估每票每日一次标记
+        context._protect_sell_today = {}
+        context._b7_shadow_done = set()
         context.engine._check_date_reset()
         _audit_write({"event": "date_reset", "date": str(today)})
         # 人工确认闸按日重置：作废旧 pending（留痕 expired）+ 清当日拒绝 + 重写空请求文件
@@ -2072,6 +2228,9 @@ def on_bar(context, bars):
         if not hasattr(context, "_day_open"):
             context._day_open = {}
         context._day_open.setdefault(code, row["open"])
+
+        # ── B7 影子：次日开盘虚拟接回结算（仅影子开关启用；绝不下单，fail-open）──
+        _b7_shadow_settle_due(context, code, row, now)
 
         df = _build_bar_df(context, code, gm_sym, now=now)
         if df.empty:
@@ -2430,6 +2589,11 @@ def on_bar(context, bars):
         if (_B7_BACKTEST_ENABLE and sig is None and pos_qty > 0
                 and _b7_try_sell(context, code, gm_sym, cp, now, holding, pos_qty)):
             continue
+
+        # ── B7 影子通道（仅 b7_shadow_enabled 且非回测接线；sig 为空时才轮到它，
+        #    与未来实单「全场最低优先级」口径一致；绝不下单，fail-open）──
+        if sig is None:
+            _b7_shadow_try_signal(context, code, gm_sym, now, pos_qty)
 
         if sig is None:
             # P0-4(2026-09-01): 信号褪化留痕——confirm 已到达但信号消失/score 掉阈，
@@ -3008,6 +3172,22 @@ def on_order_status(context, order):
             _audit_write({"event": "sell", "code": code, "qty": volume, "price": price,
                           "time": _ts_now, "pos_after_sell": new_qty,
                           "action": _act, "score": _sc})
+            # B7 影子（2026-09-15 施工4/4）：①保护类卖出当日留痕 _protect_sell_today
+            # （结构 {code: date_str}，D1 日界清零，B7 当日互斥统一查询口，含 HARD_STOP_EXIT）；
+            # ②硬止损破位票 → 该 code 的 armed B7 链立即作废、次日不接回（方案 §4.4，
+            # 与上方 clear_awaiting_buyback(reason="hard_stop_exit") 同款处置）
+            try:
+                if _act in _B7_SHADOW_PROTECT_ACTIONS:
+                    if not isinstance(getattr(context, "_protect_sell_today", None), dict):
+                        context._protect_sell_today = {}
+                    context._protect_sell_today[code] = _ts_now[:10]
+                if _act == "HARD_STOP_EXIT":
+                    for _cid, _ch in list(
+                            (getattr(context.engine, "b7_overnight_chains", {}) or {}).items()):
+                        if _ch.get("code") == code:
+                            context.engine.void_b7_chain(_cid, reason="hard_stop_exit")
+            except Exception as _e:
+                print(f"[B7影子] 保护卖出留痕/链作废异常 {code}: {_e}")
             # WP-B14: TARGET 成交 → 置 filled 落盘（真实落袋才封档）
             if _act == "TARGET_SELL" and symbol in context.manual_position:
                 context.manual_position[symbol]["_target_l1_state"] = "filled"
