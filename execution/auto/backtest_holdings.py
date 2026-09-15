@@ -45,10 +45,17 @@ _ap.add_argument("--cash", type=float, default=50000.0,
 _ap.add_argument("--codes", default="", help="逗号分隔，只回测这些 6 位码（缺省=holdings 全部持仓）")
 _ap.add_argument("--tp", type=float, default=0.0,
                  help="覆盖 swing_take_profit_pct（如 0.008）；0=用生产默认 0.005。做止盈档位扫描用")
+_ap.add_argument("--b7", action="store_true",
+                 help="启用 B7 尾盘反T通道（仅本回测生效；通过 SUPERTRADER_B7_BACKTEST=1 传给 gm_main）")
 _ARGS = _ap.parse_args()
 # 清空自定义参数：gm.api 在 import 时(getopt)与 run() 内(optparse)都会二次解析 sys.argv，
 # 不认识 --start/--end/--label 会抛 "no such option"；此处先消费掉，仅保留脚本名。
 sys.argv = [sys.argv[0]]
+
+# B7 尾盘反T：必须在 import gm_main 之前置位（gm_main 在模块级读取该变量）
+if _ARGS.b7:
+    os.environ["SUPERTRADER_B7_BACKTEST"] = "1"
+    print("[backtest_holdings] B7 尾盘反T通道已启用（仅本回测）")
 
 _OUT_SUB = ("backtest_holdings_" + _ARGS.label) if _ARGS.label else "backtest_holdings"
 OUT_DIR = os.path.join(_ST, "t_io", "validation", "auto", _OUT_SUB)
