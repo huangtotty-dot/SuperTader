@@ -244,9 +244,12 @@ def main():
             sig.hold_qty = int(dynamic_qty or 0)
 
             nth = notify_threshold(code, sig.action, hhmm, daily_ctx)
+            # 2026-09-15 阶段0-4（诊断D3）：回放产物统一打 run_type=replay_day，
+            # 与实盘（缺失=live）/backtest 分流，下游按字段过滤。
             ev_base = {"ts": bt.strftime("%H:%M"), "code": code, "action": sig.action,
                        "score": round(float(sig.score), 1), "price": cur_price,
-                       "qty": sig.hold_qty, "nth": nth, "regime": regime}
+                       "qty": sig.hold_qty, "nth": nth, "regime": regime,
+                       "run_type": "replay_day"}
 
             if args.engine == "baseline":
                 # ── 基线 main.py 信号块：推送与记账分离，静默+有量也记账（幽灵交易来源） ──
@@ -374,6 +377,7 @@ def main():
 
     summary = {
         "tag": args.tag, "engine": args.engine, "regime_mode": args.regime,
+        "run_type": "replay_day",  # 2026-09-15 阶段0-4（诊断D3）：run_type 分流标记
         "date": REPLAY_DATE,
         "daily_bars_available": n_daily,
         "n_evals": n_evals, "n_signals": n_signals,

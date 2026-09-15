@@ -43,6 +43,8 @@ _ap.add_argument("--cash", type=float, default=50000.0,
                  help="回测初始资金。播种底仓需 ≥ Σ(qty×价)；持仓变大后默认 5 万会全部拒单"
                       "（资金不足）→ 0 成交（2026-09-14 实证：6 票底仓需 ≈13.9 万）")
 _ap.add_argument("--codes", default="", help="逗号分隔，只回测这些 6 位码（缺省=holdings 全部持仓）")
+_ap.add_argument("--tp", type=float, default=0.0,
+                 help="覆盖 swing_take_profit_pct（如 0.008）；0=用生产默认 0.005。做止盈档位扫描用")
 _ARGS = _ap.parse_args()
 # 清空自定义参数：gm.api 在 import 时(getopt)与 run() 内(optparse)都会二次解析 sys.argv，
 # 不认识 --start/--end/--label 会抛 "no such option"；此处先消费掉，仅保留脚本名。
@@ -84,6 +86,11 @@ gm_main.STOCKS = {c: v["gm_symbol"] for c, v in HOLDINGS.items()}
 gm_main.STOCK_NAMES = {c: v["name"] for c, v in HOLDINGS.items()}
 gm_main.MIRROR_HOLDINGS = {c: {"qty": v["qty"], "cost": v["cost"]} for c, v in HOLDINGS.items()}
 gm_main.INITIAL_CASH = float(_ARGS.cash)
+if _ARGS.tp > 0:
+    # PARAMS 是 config.params 的同一个 dict 引用（t_engine_auto 亦 from config.params import PARAMS），
+    # 就地改即对内核 _get_params 生效。
+    gm_main.PARAMS["swing_take_profit_pct"] = float(_ARGS.tp)
+    print(f"[backtest_holdings] swing_take_profit_pct 覆盖为 {_ARGS.tp}")
 
 # 掘金账号个股历史数据上限 180 自然日（最早 2026-03-02）。
 # subscribe(60s,count=240) 预热实际拉 miss_count+1=241 根 bar：START 若为 03-03（盘前），
@@ -94,6 +101,8 @@ START = _ARGS.start
 END = _ARGS.end
 
 gm_main._AUDIT_LOG_PATH = os.path.join(OUT_DIR, "backtrace.jsonl")
+# 2026-09-15 阶段0-4（诊断D3）：镜像路径同步重定向——只改主链会漏镜像通道，回测审计灌入生产 auto_backtrace.jsonl（91% 污染根因）
+gm_main._AUDIT_MIRROR_PATH = os.path.join(OUT_DIR, "backtrace_mirror.jsonl")
 # 卖出体系状态独立目录，不触碰生产 auto_sell_state.json
 import sell_state  # noqa: E402
 sell_state.SELL_STATE_PATH = os.path.join(OUT_DIR, "sell_state.json")

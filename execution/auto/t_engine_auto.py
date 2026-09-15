@@ -73,6 +73,50 @@ def _business_day_add(d, n):
     return cur
 
 
+# 2026-09-15 阶段0-2（诊断D1/D3）：回补链状态机持久化。
+# awaiting_buyback 由纯内存 dict 改为「内存 + t_io/state/buyback_chains.json 磁盘权威源」：
+# dict 子类挂钩全部变更点（__setitem__/pop/clear/update），任何写入或移除自动原子落盘——
+# 覆盖 gm_main:2244/2595/2599、sell_channels:282/315 等外部 pop 点（这些文件本阶段无权修改），
+# 进程重启/静默死亡后链状态可自洽恢复。
+class _BuybackChainDict(dict):
+    """awaiting_buyback 持久化字典：任何变更自动同步 buyback_chains.json（fail-open）。"""
+
+    def __init__(self, owner):
+        super().__init__()
+        self._owner = owner
+
+    def _sync(self):
+        try:
+            if getattr(self._owner, "_buyback_persist_on", False):
+                self._owner._persist_buyback_chains()
+        except Exception:
+            pass
+
+    def __setitem__(self, k, v):
+        super().__setitem__(k, v)
+        self._sync()
+
+    def __delitem__(self, k):
+        super().__delitem__(k)
+        self._sync()
+
+    def pop(self, k, *a):
+        _had = k in self
+        r = super().pop(k, *a)
+        if _had:
+            self._sync()
+        return r
+
+    def clear(self):
+        if self:
+            super().clear()
+            self._sync()
+
+    def update(self, *a, **kw):
+        super().update(*a, **kw)
+        self._sync()
+
+
 # ===== RiskManager =====
 
 class RiskManager:
@@ -256,7 +300,7 @@ class SignalEngine:
         self.state_reset_date = _engine_now().strftime("%Y-%m-%d")
         self.last_signal_state: Dict[str, Dict[str, Any]] = {}
         self.last_trade_state: Dict[str, Dict[str, Any]] = {}
-        self.awaiting_buyback: Dict[str, Dict[str, Any]] = {}
+        self.awaiting_buyback: Dict[str, Dict[str, Any]] = _BuybackChainDict(self)  # 2026-09-15 阶段0-2：持久化字典
         self.diagnostics: Dict[str, Dict[str, Any]] = {}
         self.last_decision: Dict[str, Dict[str, Any]] = {}
         self.signals: List[Signal] = []
@@ -268,6 +312,233 @@ class SignalEngine:
             os.environ.get("SUPERTRADER_ROOT", os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))),
             "t_io", "state", "auto_t_entry.json")
         self._load_t_entry()
+        # 2026-09-15 阶段0-2（诊断D1/D3）：回补链状态机持久化初始化 + 启动恢复。
+        # 磁盘文件为权威源（含 000988_B 等 B 账户代码 key——不依赖 GM.STOCKS 映射）；
+        # sell_state 的 events 恢复仅作兜底（见 sell_state._sell_state_restore 跳过逻辑）。
+        # SUPERTRADER_BUYBACK_STATE_PATH 环境变量供离线测试重定向，生产缺省走 t_io/state/。
+        _bb_root = os.environ.get("SUPERTRADER_ROOT", os.path.dirname(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+        self._buyback_path = os.environ.get("SUPERTRADER_BUYBACK_STATE_PATH") or os.path.join(
+            _bb_root, "t_io", "state", "buyback_chains.json")
+        self._buyback_terminal_events: List[Dict[str, Any]] = []
+        self._buyback_persist_on = True
+        self._load_buyback_chains()
+
+    # ===== 2026-09-15 阶段0-2：回补链持久化（落盘/恢复/过期/终态） =====
+
+    def _serialize_buyback_chain(self, code, ab):
+        """内存链记录 → 落盘 JSON 记录（sell_time datetime → ISO 字符串）。"""
+        _st = ab.get("sell_time")
+        return {
+            "code": code,
+            "sell_price": ab.get("sell_price"),
+            "sell_qty": ab.get("sell_qty"),
+            "sell_action": ab.get("sell_action", ""),
+            "target_price": ab.get("target_price"),
+            "sell_time": _st.isoformat(sep=" ") if isinstance(_st, datetime) else str(_st or ""),
+            "armed_date": ab.get("armed_date") or (
+                _st.strftime("%Y-%m-%d") if isinstance(_st, datetime) else ""),
+            "expire_date": ab.get("expire_date", ""),
+            "status": ab.get("status", "armed"),
+            # 2026-09-15 阶段0-2b：部分回补累计（新增字段，旧文件缺省为 0）
+            "filled_qty": int(ab.get("filled_qty", 0) or 0),
+            "partial_fills": int(ab.get("partial_fills", 0) or 0),
+        }
+
+    def _persist_buyback_chains(self):
+        """原子写（tmp + os.replace）；异常 fail-open 打印，不影响盘中主流程。"""
+        if not getattr(self, "_buyback_persist_on", False):
+            return
+        try:
+            data = {
+                "version": 1,
+                "updated": _engine_now().isoformat(sep=" "),
+                "chains": {c: self._serialize_buyback_chain(c, ab)
+                           for c, ab in self.awaiting_buyback.items()},
+                "terminal_events": list(self._buyback_terminal_events)[-200:],
+            }
+            os.makedirs(os.path.dirname(self._buyback_path), exist_ok=True)
+            _tmp = self._buyback_path + ".tmp"
+            with open(_tmp, "w", encoding="utf-8") as f:
+                json.dump(data, f, ensure_ascii=False, indent=2, default=str)
+            os.replace(_tmp, self._buyback_path)
+        except Exception as e:
+            print(f"[buyback_chains] 落盘失败 fail-open: {e}")
+
+    def _load_buyback_chains(self):
+        """启动时从磁盘恢复回补链（权威源）。已过期链不入内存，转终态记录。"""
+        try:
+            if not os.path.exists(self._buyback_path):
+                return
+            with open(self._buyback_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            if not isinstance(data, dict):
+                return
+            self._buyback_terminal_events = list(data.get("terminal_events") or [])[-200:]
+            now = _engine_now()
+            _ttl = int(PARAMS.get("awaiting_buyback_ttl_minutes", 240))
+            _restored = 0
+            for code, rec in (data.get("chains") or {}).items():
+                try:
+                    if not isinstance(rec, dict) or not rec.get("sell_price"):
+                        continue
+                    try:
+                        _st_dt = datetime.fromisoformat(str(rec.get("sell_time") or ""))
+                    except Exception:
+                        _st_dt = now
+                    ab = {
+                        "sell_price": float(rec.get("sell_price") or 0),
+                        "sell_qty": int(rec.get("sell_qty") or 0),
+                        "sell_action": rec.get("sell_action", "SELL_HIGH"),
+                        "target_price": float(rec.get("target_price") or 0),
+                        "sell_time": _st_dt,
+                        "armed_date": rec.get("armed_date") or _st_dt.strftime("%Y-%m-%d"),
+                        "expire_date": rec.get("expire_date", ""),
+                        "persisted": True,   # WP-B18 兼容标记：跨日/重启恢复记忆
+                        "status": "armed",
+                        # 2026-09-15 阶段0-2b：部分回补累计随链恢复（sell_qty 文件值已是剩余量）
+                        "filled_qty": int(rec.get("filled_qty", 0) or 0),
+                        "partial_fills": int(rec.get("partial_fills", 0) or 0),
+                    }
+                    if self._buyback_chain_expired(ab, now, _ttl)[0]:
+                        self._record_buyback_terminal(code, ab, "expired",
+                                                      "磁盘恢复时已过期")
+                        continue
+                    # dict.__setitem__ 绕过 hook：加载期间不回写，加载完统一落盘一次
+                    dict.__setitem__(self.awaiting_buyback, code, ab)
+                    _restored += 1
+                except Exception:
+                    continue
+            if _restored or (data.get("chains") or {}):
+                print(f"[buyback_chains] 磁盘恢复 {_restored} 条回补链")
+                self._persist_buyback_chains()  # 回写：剔除已过期链、合并历史终态
+        except Exception as e:
+            print(f"[buyback_chains] 读取失败 fail-open: {e}")
+
+    def _buyback_chain_expired(self, ab, now, ttl_minutes):
+        """2026-09-15 阶段0-2（诊断D1/D3）：回补链双 TTL 过期判定。
+
+        · 当日链（评估日 == armed 日）：盘中 TTL（awaiting_buyback_ttl_minutes=240）
+          语义保留——elapsed > TTL 即过期（WP-B07 既有盘中行为不变）；
+        · 跨日链（评估日 > armed 日）：按 armed 日起 N 个交易日 expire_date
+          （buyback_persist_days=3，arm 时写入）判定；
+        · 两种 TTL 并存时以较长者为准：链一旦跨日，盘中 240min TTL 必然已超时，
+          让位 3 交易日规则；expire_date 是全周期硬截止（任何一天超过即过期）。
+        返回 (expired: bool, reason: str, elapsed_min: float|None)。"""
+        _st = ab.get("sell_time")
+        if not isinstance(_st, datetime):
+            try:
+                _st = datetime.fromisoformat(str(_st))
+            except Exception:
+                _st = now
+        _armed = str(ab.get("armed_date") or _st.strftime("%Y-%m-%d"))
+        _today = now.strftime("%Y-%m-%d")
+        _exp = str(ab.get("expire_date") or "")
+        if _exp and _today > _exp:
+            return True, "expire_date", None        # 3 交易日硬截止
+        if _today == _armed:
+            _elapsed = (now - _st).total_seconds() / 60
+            if _elapsed > ttl_minutes:
+                return True, "intraday_ttl", _elapsed
+        return False, "", None
+
+    def _expire_buyback_chains(self, now):
+        """跨日逐条过期（替代旧版 _check_date_reset 对 awaiting_buyback 的无脑 clear）。"""
+        for _code, _ab in list(self.awaiting_buyback.items()):
+            try:
+                _ttl = int(self._get_params(_code).get("awaiting_buyback_ttl_minutes", 240))
+                _expired, _reason, _ = self._buyback_chain_expired(_ab, now, _ttl)
+                if _expired:
+                    self.awaiting_buyback.pop(_code, None)  # hook 自动落盘
+                    self._record_buyback_terminal(_code, _ab, "expired",
+                                                  f"date_reset:{_reason}")
+            except Exception:
+                continue
+        self._persist_buyback_chains()
+
+    def _record_buyback_terminal(self, code, ab, status, reason):
+        """回补链终态留痕（filled/expired/cleared）：
+        内存 _buyback_terminal_events + diagnostics[code]["buyback_terminal"]，
+        并随 _persist_buyback_chains 落盘 terminal_events（保留最近 200 条）。"""
+        try:
+            ev = {
+                "code": code, "status": status, "reason": reason,
+                "sell_price": ab.get("sell_price"), "sell_qty": ab.get("sell_qty"),
+                "sell_action": ab.get("sell_action", ""),
+                "target_price": ab.get("target_price"),
+                "sell_time": str(ab.get("sell_time")),
+                "armed_date": ab.get("armed_date") or "",
+                "expire_date": ab.get("expire_date", ""),
+                # 2026-09-15 阶段0-2b：终态注明部分回补次数与累计已回补量
+                "partial_fills": int(ab.get("partial_fills", 0) or 0),
+                "filled_qty": int(ab.get("filled_qty", 0) or 0),
+                "terminal_time": _engine_now().isoformat(sep=" "),
+            }
+            self._buyback_terminal_events.append(ev)
+            del self._buyback_terminal_events[:-200]
+            _diag = dict(self.diagnostics.get(code) or {})
+            _diag["buyback_terminal"] = ev
+            self.diagnostics[code] = _diag
+        except Exception:
+            pass
+
+    def clear_awaiting_buyback(self, code, reason="manual"):
+        """2026-09-15 阶段0-2：手工清除回补链（终态留痕 + 落盘）。返回被清除记录或 None。"""
+        ab = self.awaiting_buyback.pop(code, None)  # hook 自动落盘（移除链）
+        if ab:
+            ab = dict(ab)
+            ab["status"] = "cleared"
+            self._record_buyback_terminal(code, ab, "cleared", reason)
+            self._persist_buyback_chains()           # 补写终态事件
+            return ab
+        return None
+
+    def _apply_buyback_fill(self, code, action, fill_qty, price, now):
+        """2026-09-15 阶段0-2b（诊断D1：6 链 12,100 股状态丢失；W1-S1）：部分回补根治。
+
+        · fill_qty < 链剩余 sell_qty → 只冲减 sell_qty、保留链继续有效，
+          累计 partial_fills 次数与 filled_qty 已回补量（落盘）；
+        · fill_qty >= 剩余 sell_qty → 清链并写 filled 终态，终态注明 partial_fills 与累计已回补量。
+        返回值契约不变：全量闭环返回被清除的链记录（非 None），部分回补/无链返回 None——
+        gm_main 以「非 None = 链已闭环」消费 buyback_filled 写闭环事件，部分回补不写闭环，语义一致。"""
+        ab = self.awaiting_buyback.get(code)
+        if not ab:
+            return None
+        _remain = int(ab.get("sell_qty", 0) or 0)
+        _done = int(ab.get("filled_qty", 0) or 0) + fill_qty
+        if 0 < fill_qty < _remain:
+            # 部分回补：取出→修改→整体重新赋值——嵌套 dict 直改不触发
+            # _BuybackChainDict 的 __setitem__ 落盘 hook，必须整体回写
+            ab = dict(ab)
+            ab["sell_qty"] = _remain - fill_qty
+            ab["filled_qty"] = _done
+            ab["partial_fills"] = int(ab.get("partial_fills", 0) or 0) + 1
+            ab["last_fill_price"] = price
+            ab["last_fill_time"] = now.isoformat(sep=" ")
+            self.awaiting_buyback[code] = ab          # hook 自动落盘
+            _diag = dict(self.diagnostics.get(code) or {})
+            _diag["buyback_partial_fill"] = {
+                "code": code, "fill_qty": fill_qty, "fill_price": price,
+                "remain_qty": ab["sell_qty"], "filled_qty": _done,
+                "partial_fills": ab["partial_fills"], "time": ab["last_fill_time"],
+            }
+            self.diagnostics[code] = _diag
+            return None
+        # 全部回补（fill_qty >= 剩余量）→ 清链 + 终态
+        _filled = self.awaiting_buyback.pop(code, None)  # hook 自动落盘（移除链）
+        if _filled:
+            _filled = dict(_filled)
+            _filled.update({"status": "filled", "fill_price": price,
+                            "fill_qty": fill_qty, "fill_action": action,
+                            "filled_qty": _done,
+                            "partial_fills": int(_filled.get("partial_fills", 0) or 0),
+                            "terminal_time": now.isoformat(sep=" ")})
+            self._record_buyback_terminal(
+                code, _filled, "filled",
+                f"{action} 成交回补（partial_fills={_filled['partial_fills']} "
+                f"累计已回补={_done}）")
+            self._persist_buyback_chains()               # 补写终态事件
+        return _filled
 
     def _persist_t_entry(self):
         try:
@@ -301,9 +572,12 @@ class SignalEngine:
     def _check_date_reset(self):
         now = _engine_now().date()
         if now != datetime.strptime(self.state_reset_date, "%Y-%m-%d").date():
+            # 2026-09-15 阶段0-2（诊断D1/D3）：awaiting_buyback 移出无脑 clear 清单——
+            # 「6 链 12,100 股状态丢失、76% 链过夜失控」主因即此；改为逐条双 TTL 过期
             for k in ["buy_cooldown", "sell_cooldown", "buy_count_per_stock",
-                       "sell_count_per_stock", "awaiting_buyback"]:
+                       "sell_count_per_stock"]:
                 getattr(self, k).clear()
+            self._expire_buyback_chains(_engine_now())  # 跨日链按 3 交易日逐条过期
             self.diagnostics.clear()
             self.last_decision.clear()
             self.last_signal_state.clear()
@@ -381,25 +655,22 @@ class SignalEngine:
             ab = self.awaiting_buyback.get(code)
             if ab and float(ab.get("sell_price", 0) or 0) > 0 and feats.get("price", 0) > 0:
                 _ttl = int(p.get("awaiting_buyback_ttl_minutes", 240))
-                _expired = False
-                _elapsed = 0
-                if ab.get("persisted"):
-                    # WP-B18: 跨日恢复记忆——日内 TTL 不再适用，按 expire_date 判过期
-                    _exp = str(ab.get("expire_date", "") or "")
-                    if _exp and str(now.date()) > _exp:
-                        _expired = True
-                else:
-                    _elapsed = (now - ab["sell_time"]).total_seconds() / 60
-                    if _elapsed > _ttl:
-                        _expired = True
+                # 2026-09-15 阶段0-2：双 TTL 判定（当日链盘中 TTL / 跨日链 3 交易日，
+                # 并存取较长者）——替代旧版 persisted 标志二分支
+                _expired, _exp_reason, _elapsed = self._buyback_chain_expired(ab, now, _ttl)
                 if _expired:
-                    self.awaiting_buyback.pop(code, None)  # 过期清除
+                    self.awaiting_buyback.pop(code, None)  # 过期清除（hook 自动落盘）
                     self.diagnostics[code] = {
                         "buyback_ttl_expired": True,
+                        "terminal_status": "expired",
+                        "expire_reason": _exp_reason,
                         "sell_price": ab.get("sell_price"),
-                        "elapsed_min": round(_elapsed, 1) if not ab.get("persisted") else None,
+                        "elapsed_min": round(_elapsed, 1) if _elapsed is not None else None,
                         "expire_date": ab.get("expire_date"),
                     }
+                    # 2026-09-15 阶段0-2：过期终态留痕（merge 进上方 diagnostics）+ 补写终态落盘
+                    self._record_buyback_terminal(code, ab, "expired", _exp_reason)
+                    self._persist_buyback_chains()
                 else:
                     _sp = float(ab["sell_price"])
                     _cp = float(feats.get("price", 0))
@@ -512,6 +783,9 @@ class SignalEngine:
             "sell_action": action,
             "target_price": round(price * _gap, 2),
             "expire_date": _business_day_add(now.date(), _n).strftime("%Y-%m-%d"),
+            # 2026-09-15 阶段0-2：armed 日（双 TTL 判定基准）+ 状态字段（持久化/终态机）
+            "armed_date": now.strftime("%Y-%m-%d"),
+            "status": "armed",
         }
         self.awaiting_buyback[code] = rec
         return rec
@@ -539,6 +813,8 @@ class SignalEngine:
             if action in self.BUYBACK_SELL_ACTIONS:
                 ret["armed"] = self.arm_awaiting_buyback(code, price, qty, action)
             elif action in self.BUYBACK_BUY_ACTIONS:
-                ret["buyback_filled"] = self.awaiting_buyback.pop(code, None)
+                # 2026-09-15 阶段0-2b：部分回补只冲减、全回补才清链（见 _apply_buyback_fill）
+                ret["buyback_filled"] = self._apply_buyback_fill(
+                    code, action, int(qty or 0), price, now)
         self._persist_t_entry()  # P0-5(2026-09-01): 成交后持久化做T买入价，防重启丢内存态
         return ret

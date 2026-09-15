@@ -1,0 +1,170 @@
+{
+  "test": "buyback_cap_qty 离线仿真验证（阶段0-7）",
+  "generated_at": "2026-09-15 14:23:31",
+  "function": "execution/auto/gm_main.py:79 _buyback_cap_qty",
+  "extract_method": "ast 提取函数节点单独编译（绕开 gm SDK 顶层 import）",
+  "total": 16,
+  "passed": 16,
+  "failed": 0,
+  "all_pass": true,
+  "cases": [
+    {
+      "case": "正常量不钳制",
+      "pass": true,
+      "got": [
+        500,
+        0
+      ],
+      "expect": [
+        500,
+        0
+      ],
+      "note": "qty=500 ≤ armed sell_qty=1100，原样返回且无审计事件"
+    },
+    {
+      "case": "超量钳制到armed量",
+      "pass": true,
+      "got": [
+        1100,
+        true
+      ],
+      "expect": [
+        1100,
+        true
+      ],
+      "note": "qty=21000 > cap=1100 → 钳到 1100 并写 buyback_capped 审计",
+      "audit": [
+        {
+          "event": "buyback_capped",
+          "code": "588170",
+          "qty_before": 21000,
+          "qty_after": 1100,
+          "sell_qty": 1100,
+          "time": "2026-09-15 14:23:31.314152"
+        }
+      ]
+    },
+    {
+      "case": "等于帽不钳制",
+      "pass": true,
+      "got": [
+        1100,
+        0
+      ],
+      "expect": [
+        1100,
+        0
+      ],
+      "note": "qty==cap 边界，原样返回"
+    },
+    {
+      "case": "零量原样返回",
+      "pass": true,
+      "got": 0,
+      "expect": 0,
+      "note": "qty=0 < cap，不钳制"
+    },
+    {
+      "case": "负数原样返回",
+      "pass": true,
+      "got": -100,
+      "expect": -100,
+      "note": "qty=-100：int(-100)>1100 不成立 → 原样返回（记录现状语义）"
+    },
+    {
+      "case": "非整百超帽钳制",
+      "pass": true,
+      "got": [
+        1100,
+        1
+      ],
+      "expect": [
+        1100,
+        1
+      ],
+      "note": "qty=1550 > 1100 → 1100"
+    },
+    {
+      "case": "非整百未超帽原样",
+      "pass": true,
+      "got": 150,
+      "expect": 150,
+      "note": "qty=150 ≤ 1100 → 原样，不凑整百"
+    },
+    {
+      "case": "armed缺失(None)不钳制",
+      "pass": true,
+      "got": 21000,
+      "expect": 21000,
+      "note": "ab_now=None → 直接返回 qty"
+    },
+    {
+      "case": "armed空dict不钳制",
+      "pass": true,
+      "got": 21000,
+      "expect": 21000,
+      "note": "sell_qty 缺失 → cap=0 < 100 门限，不钳制"
+    },
+    {
+      "case": "cap低于100不钳制",
+      "pass": true,
+      "got": 21000,
+      "expect": 21000,
+      "note": "sell_qty=50 < 100 门限 → 不钳制（记录现状语义）"
+    },
+    {
+      "case": "cap为0不钳制",
+      "pass": true,
+      "got": 21000,
+      "expect": 21000,
+      "note": "sell_qty=0 < 100 门限 → 不钳制"
+    },
+    {
+      "case": "字符串sell_qty可解析",
+      "pass": true,
+      "got": [
+        1100,
+        1
+      ],
+      "expect": [
+        1100,
+        1
+      ],
+      "note": "sell_qty=\"1100\" → int() 解析成功并钳制"
+    },
+    {
+      "case": "非法sell_qty原样返回",
+      "pass": true,
+      "got": 21000,
+      "expect": 21000,
+      "note": "sell_qty=\"abc\" → int() 异常被吞，fail-open 返回 qty"
+    },
+    {
+      "case": "audit异常仍钳制",
+      "pass": true,
+      "got": 1100,
+      "expect": 1100,
+      "note": "audit_fn 抛异常被内层 except 吞掉，返回 cap 不受影响"
+    },
+    {
+      "case": "armed非法类型fail-open",
+      "pass": true,
+      "got": 21000,
+      "expect": 21000,
+      "note": "ab_now=object() → .get 异常被吞，原样返回"
+    },
+    {
+      "case": "无audit_fn仍钳制",
+      "pass": true,
+      "got": 1100,
+      "expect": 1100,
+      "note": "audit_fn 缺省 None → 钳制生效、无审计事件"
+    }
+  ],
+  "semantics_notes": [
+    "钳制条件: cap=int(ab_now['sell_qty']) >= 100 且 int(qty) > cap（严格大于，等于不钳）",
+    "负数/非整百 qty 不做符号与凑整校验，原样返回（语义由调用侧保证）",
+    "sell_qty < 100 视为无效帽不钳制（防碎股/零帽误伤）",
+    "全程 fail-open：任何异常 → 原样返回 qty，绝不阻断交易"
+  ]
+}

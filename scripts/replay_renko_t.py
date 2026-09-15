@@ -173,6 +173,8 @@ def main():
 
     log("=" * 100)
     log(f"离线回放验证: Renko买入+目标止盈 集成 signal_engine")
+    # 2026-09-15 阶段0-4（诊断D3）：回放产物统一打 run_type=replay，与实盘（缺失=live）分流。
+    log(f"run_type: replay")
     log(f"样本: {len(codes)}支 × 最近{args.days}交易日 × 每{args.step}min evaluate")
     log("=" * 100)
 
@@ -216,6 +218,14 @@ def main():
     out = BASE / "t_io" / "backtest_1year" / "replay_renko_t_result.txt"
     with open(out, "w", encoding="utf-8") as f:
         f.write("\n".join(lines))
+    # 2026-09-15 阶段0-4（诊断D3）：机读 meta（run_type 分流；txt 供人读，json 供下游过滤）
+    import json as _json
+    from datetime import datetime as _dt
+    meta = {"run_type": "replay", "script": "scripts/replay_renko_t.py",
+            "codes": codes, "days": args.days, "step_min": args.step,
+            "generated_at": _dt.now().strftime("%Y-%m-%d %H:%M:%S")}
+    with open(str(out) + ".meta.json", "w", encoding="utf-8") as f:
+        _json.dump(meta, f, ensure_ascii=False, indent=2)
     print(f"\n✅ 已保存: {out}")
 
 

@@ -197,6 +197,11 @@ def _sell_state_restore(context):
                     except Exception:
                         pass
                     print(f"[INIT] {code} buyback 作废: 深亏背景(PANIC 域)不回补")
+                elif code in (getattr(context.engine, "awaiting_buyback", {}) or {}):
+                    # 2026-09-15 阶段0-2（诊断D1/D3）：buyback_chains.json 磁盘为权威源，
+                    # sell_state events 恢复仅兜底——引擎 init 已从磁盘恢复该链，
+                    # 跳过 events 镜像恢复，防旧值覆盖权威源
+                    print(f"[INIT] {code} buyback 跳过 events 恢复: 磁盘权威源已有该链")
                 else:
                     _st = str(_bb.get("sell_time", "") or "")
                     try:
@@ -210,8 +215,15 @@ def _sell_state_restore(context):
                         "target_price": float(_bb.get("target_price", 0) or 0),
                         "sell_time": _st_dt,
                         "expire_date": _exp,
+                        # 2026-09-15 阶段0-2：armed 日（双 TTL 判定基准，兜底按 sell_time 日）
+                        "armed_date": _st_dt.strftime("%Y-%m-%d"),
                         "persisted": True,
                     }
+                    # 2026-09-15 阶段0-2：兜底恢复后同步进磁盘权威源（fail-open）
+                    try:
+                        context.engine._persist_buyback_chains()
+                    except Exception:
+                        pass
                     GM._audit_write({"event": "buyback_restored", "code": code,
                                   "sell_price": _bb.get("sell_price"),
                                   "target_price": _bb.get("target_price"),

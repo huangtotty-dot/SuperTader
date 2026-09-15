@@ -60,6 +60,8 @@ else:
     END = "2026-07-24 16:00:00"
 
 gm_main._AUDIT_LOG_PATH = os.path.join(OUT_DIR, "backtrace.jsonl")
+# 2026-09-15 阶段0-4（诊断D3）：镜像路径同步重定向——只改主链会漏镜像通道，回放审计灌入生产 auto_backtrace.jsonl（91% 污染根因）
+gm_main._AUDIT_MIRROR_PATH = os.path.join(OUT_DIR, "backtrace_mirror.jsonl")
 # 迁移日 sell_state 全新初始化语义：校验目录下独立，不触碰生产 auto_sell_state.json
 import sell_state  # noqa: E402
 sell_state.SELL_STATE_PATH = os.path.join(OUT_DIR, "sell_state.json")

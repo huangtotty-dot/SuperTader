@@ -279,7 +279,8 @@ def _force_tail_buyback(context, code, gm_sym, cp, now, holding) -> bool:
     _base_ref = int(getattr(context, f"_base_ref_{code}", 0) or 0)
     _pos = int((holding or {}).get("qty", 0) or 0)
     if _base_ref > 0 and _pos >= _base_ref:
-        context.engine.awaiting_buyback.pop(code, None)   # 已还原则清掉义务，防下一 bar 再触发
+        # 2026-09-15 阶段0-2b：外部 pop → clear_awaiting_buyback，终态账完整（持仓已还原到底仓，义务解除）
+        context.engine.clear_awaiting_buyback(code, reason="tail_buyback_already_restored")
         return False
     qty = (int(ab.get("sell_qty", 0) or 0) // 100) * 100
     if qty < 100:
@@ -312,7 +313,8 @@ def _force_tail_buyback(context, code, gm_sym, cp, now, holding) -> bool:
         mp = context.manual_position[gm_sym]
         mp["qty"] = int(mp.get("qty", 0) or 0) + qty
         mp["t_qty"] = mp["qty"]
-    context.engine.awaiting_buyback.pop(code, None)
+    # 2026-09-15 阶段0-2b：外部 pop → clear_awaiting_buyback，终态账完整（尾盘 14:50+ 强制回补已下单）
+    context.engine.clear_awaiting_buyback(code, reason="tail_buyback_forced")
     try:
         _sell_state_persist(context, code, gm_sym)     # 落盘，防重启后复活
     except Exception:
