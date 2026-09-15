@@ -12,8 +12,49 @@ from __future__ import annotations
 SIGNAL_THRESHOLD = 0.01          # S1：尾盘30min涨幅 > 1%（与 overnight_reverse_t 同口径）
 
 # skip reason 全集（拍板枚举）；guard_decision 按下标顺序求值优先级
+# 2026-09-15 B7实单施工：追加 "no_available"（实单专用——T+1 可用量钳制后不足 100 股，
+# 影子通道不下单永不产生；仅追加不改既有六项顺序，影子行为零变化）。
 SKIP_REASONS = ("breaker_tripped", "has_awaiting_buyback", "pos_below_base",
-                "protect_sell_today", "in_b7_chain", "qty_below_100")
+                "protect_sell_today", "in_b7_chain", "qty_below_100",
+                "no_available")
+
+# 实单次日接回重试上限：>30 次（逐 bar 约半小时）仍失败 → 链转 void（复盘红色项）
+BUYBACK_MAX_RETRY = 30
+
+
+def dispatch_mode(live_enabled, shadow_enabled):
+    """B7 通道互斥分派（2026-09-15 B7实单施工）：live 严格优先于 shadow；全关 → "off"。
+
+    14:55 挂钩点与次日首根 bar 结算挂钩点共用一个口径，保证任一时刻只有一条通道
+    在评估/结算（实单模式下影子仅作台账数据源，不再做信号评估与虚拟结算）。"""
+    if live_enabled:
+        return "live"
+    if shadow_enabled:
+        return "shadow"
+    return "off"
+
+
+def clamp_available_qty(qty, *, pos_qty, available, inflight):
+    """实单 T+1 可用量钳制（sell_channels TAIL 归位同口径，2026-09-15 B7实单施工）。
+
+    qty 不得超过 GM 持仓可用量（available=None 时按 pos_qty 计）减去在途冻结 inflight，
+    结果整百向下取整。返回 (clamped_qty, reason)：≥100 → (q, "")；不足 → (0, "no_available")。"""
+    avail = int(pos_qty) if available is None else int(available)
+    cap = max(0, min(int(pos_qty), avail) - int(inflight or 0))
+    q = min(int(qty), cap) // 100 * 100
+    return (q, "") if q >= 100 else (0, "no_available")
+
+
+def buyback_retry_step(retry_count, order_ok, max_retry=BUYBACK_MAX_RETRY):
+    """实单次日接回重试决策（2026-09-15 B7实单施工）。
+
+    order_ok=True  → ("settle", 0)：下单成功，链可结算，计数清零；
+    失败且未超上限 → ("retry", n+1)：保留链 armed，下一 bar 重试；
+    失败且超上限   → ("void", n+1)：转 void reason="buyback_order_failed"（红色留痕）。"""
+    if order_ok:
+        return "settle", 0
+    n = int(retry_count) + 1
+    return ("void", n) if n > int(max_retry) else ("retry", n)
 
 
 def guard_decision(*, tail30, breaker_tripped, has_awaiting_buyback,
