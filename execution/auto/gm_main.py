@@ -1738,6 +1738,117 @@ def init(context):
     print(f"[init] 策略初始化完成: {len(symbols)} 只标的")
 
 
+# ══════════════════════════════════════════════════════════════════════
+# B7 尾盘反T · 回测接线（2026-09-15，owner 批准「仅回测生效」方案）
+#
+# ⚠️ 默认完全关闭：仅当环境变量 SUPERTRADER_B7_BACKTEST=1 时启用，而该变量**只由**
+#    backtest_holdings.py --b7 设置。生产路径（main.py / 实盘 gm_main）永不设置
+#    → 本段在产线是死代码，实盘行为零改变。
+# 设计依据：doc/solutions/2026-09-15_B7尾盘反T通道施工方案.md
+#   §1.2 B7 为全场最低优先级、仅在 14:55 bar 评估；§4.1 卖出量 ≤ min(持仓, base_ref×50%)
+#   §4.3 次日开盘即接是不可谈判的纪律（E1：open 接回 +0.638% > vwap30 +0.323% > close +0.165%）
+# ══════════════════════════════════════════════════════════════════════
+_B7_BACKTEST_ENABLE = os.environ.get("SUPERTRADER_B7_BACKTEST") == "1"
+_b7_mod = None
+_b7_breaker = None
+_b7_chain = {}          # {code: {"qty": int, "sell_px": float, "sell_date": str}}
+if _B7_BACKTEST_ENABLE:
+    try:
+        import overnight_reverse_t as _b7_mod
+        _b7_breaker = _b7_mod.B7CircuitBreaker()
+        print("[B7] 回测接线已启用（加载草案模块 overnight_reverse_t）")
+    except Exception as _e:
+        print(f"[B7] 模块加载失败 → B7 接线自动关闭: {_e}")
+        _B7_BACKTEST_ENABLE = False
+
+
+def _b7_day_bars(context, gm_sym, now):
+    return [b for b in (context.bar_cache.get(gm_sym) or [])
+            if str(b.get("time", "")).startswith(now.strftime("%Y-%m-%d"))]
+
+
+def _b7_last_px(context, gm_sym):
+    bars = context.bar_cache.get(gm_sym) or []
+    return float(bars[-1].get("close") or 0) if bars else 0.0
+
+
+def _b7_try_sell(context, code, gm_sym, cp, now, holding, pos_qty) -> bool:
+    """14:55 评估并执行 B7 卖出（直下市价单，不走信号/闸门链）。True=已下单。"""
+    if not _B7_BACKTEST_ENABLE or _b7_mod is None or code in _b7_chain:
+        return False
+    if not (now.hour == 14 and now.minute == 55):
+        return False
+    if _b7_breaker is not None and _b7_breaker.tripped:
+        return False
+    base_ref = int(getattr(context, f"_base_ref_{code}", 0) or 0)
+    if base_ref <= 0 or int(pos_qty) < base_ref:
+        return False                       # 归位未完成：B7 卖的是底仓的隔夜敞口，不是超仓
+    if (getattr(context.engine, "awaiting_buyback", {}) or {}).get(code):
+        return False                       # 与日内反T回补链互斥
+    sig7 = _b7_mod.detect_signal(code, STOCK_NAMES.get(code, code),
+                                 _b7_day_bars(context, gm_sym, now),
+                                 pos_qty=int(pos_qty), base_ref=base_ref, now=now)
+    if sig7 is None:
+        return False
+    qty = min(int(pos_qty), int(base_ref * 0.5)) // 100 * 100
+    if qty < 100:
+        return False
+    try:
+        write_order(str(now), code, "SELL", qty, cp, order_type="B7")
+        _sdk_call("order_volume_b7_sell", _partial(
+            order_volume, symbol=gm_sym, volume=qty, side=OrderSide_Sell,
+            order_type=OrderType_Market, position_effect=PositionEffect_Close))
+    except Exception as e:
+        print(f"[{now:%H:%M:%S}] B7 SELL {code} 下单失败: {e}")
+        return False
+    _b7_chain[code] = {"qty": qty, "sell_px": float(cp), "sell_date": str(now.date())}
+    if gm_sym in context.manual_position:
+        mp = context.manual_position[gm_sym]
+        mp["qty"] = max(0, int(mp.get("qty", 0) or 0) - qty)
+    _audit_write({"event": "b7_overnight_sell", "code": code, "qty": qty,
+                  "price": round(float(cp), 3),
+                  "tail30_pct": sig7["factors"]["tail30_pct"], "time": str(now)})
+    print(f"[{now:%H:%M:%S}] B7_SELL {code} 尾盘反T卖出 {qty}股@{cp:.3f} "
+          f"(tail30={sig7['factors']['tail30_pct']:+.2f}%, base_ref={base_ref})")
+    context.total_trade_count += 1
+    return True
+
+
+def _b7_day_start_buyback(context, now) -> None:
+    """日界执行 B7 次日开盘接回（纪律：开盘即接，不等回落）。"""
+    if not _B7_BACKTEST_ENABLE or not _b7_chain:
+        return
+    for code in list(_b7_chain):
+        rec = _b7_chain.pop(code)
+        gm_sym = STOCKS.get(code, "")
+        qty = int(rec.get("qty", 0) or 0) // 100 * 100
+        px = _b7_last_px(context, gm_sym) if gm_sym else 0.0
+        if not gm_sym or qty < 100 or px <= 0:
+            continue
+        try:
+            write_order(str(now), code, "BUY", qty, px, order_type="B7")
+            _sdk_call("order_volume_b7_buy", _partial(
+                order_volume, symbol=gm_sym, volume=qty, side=OrderSide_Buy,
+                order_type=OrderType_Market, position_effect=PositionEffect_Open))
+        except Exception as e:
+            print(f"[{now:%H:%M:%S}] B7 BUYBACK {code} 下单失败: {e}")
+            continue
+        if gm_sym in context.manual_position:
+            mp = context.manual_position[gm_sym]
+            mp["qty"] = int(mp.get("qty", 0) or 0) + qty
+        sell_px = float(rec.get("sell_px", 0) or 0)
+        net = _b7_mod.virtual_net_pct(sell_px, px)
+        if _b7_breaker is not None:
+            _b7_breaker.record(net)
+        _audit_write({"event": "b7_overnight_buyback", "code": code, "qty": qty,
+                      "price": round(px, 3), "sell_px": round(sell_px, 3),
+                      "net_pct": round(net * 100, 4), "sell_date": rec.get("sell_date"),
+                      "time": str(now)})
+        print(f"[{now:%H:%M:%S}] B7_BUYBACK {code} 接回 {qty}股@{px:.3f} "
+              f"(卖{sell_px:.3f}, 费后净{net * 100:+.3f}%)")
+        context.total_trade_count += 1
+
+
 def on_bar(context, bars):
     now = context.now if hasattr(context, "now") else datetime.now()
     import utils.helpers as uh
@@ -1775,6 +1886,8 @@ def on_bar(context, bars):
                                "rejected_today": [], "pending": {}})
         except Exception:
             pass
+        # B7 次日开盘接回（仅回测开关启用；默认关闭 → 实盘无操作）
+        _b7_day_start_buyback(context, now)
 
     # ── KILL_SWITCH 检查 ──
     _killed = check_kill_switch()
@@ -2311,6 +2424,11 @@ def on_bar(context, bars):
             context, code, gm_sym, cp, now, sig, pos_qty, holding, daily_ctx,
             feats_cache, is_tail, morning_no_buy)
         if tail_done:
+            continue
+
+        # ── B7 尾盘反T（仅回测开关启用；仅 14:55 bar；全场最低优先级，sig 为空时才轮到它）──
+        if (_B7_BACKTEST_ENABLE and sig is None and pos_qty > 0
+                and _b7_try_sell(context, code, gm_sym, cp, now, holding, pos_qty)):
             continue
 
         if sig is None:
