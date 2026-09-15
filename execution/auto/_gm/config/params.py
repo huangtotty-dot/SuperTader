@@ -458,10 +458,11 @@ INDEX_REGIME_PARAMS = {
     "http_timeout": 15,
     "http_retry": 2,
     "http_retry_sleep": 1.0,
-    # 2026-09-15 B7影子施工4/4：B7 尾盘反T影子通道总开关（默认关，周六评审后由 owner 翻启）。
-    # 翻启方式：改 True 并重启策略。影子期绝不下单、绝不写 bridge/orders，
+    # 2026-09-15 B7影子施工4/4：B7 尾盘反T影子通道总开关。
+    # 2026-09-15 17:20 owner 拍板「直接上线该方案，每天复盘改进」→ 当日翻启，09-16 起为首日。
+    # 影子期绝不下单、绝不写 bridge/orders，
     # 只写 t_io/logs/b7_shadow_{date}.jsonl + buyback_chains.json 的 b7_* 键族。
-    "b7_shadow_enabled": False,
+    "b7_shadow_enabled": True,
 }
 
 # ==================== 大盘分时预警参数（回测中不使用，保留占位） ====================
