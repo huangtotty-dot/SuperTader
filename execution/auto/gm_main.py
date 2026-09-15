@@ -286,6 +286,123 @@ _OPEN_ALIGN_DONE_DATE = None
 OPEN_ALIGN_BUY_ORDER = ["588170", "002639", "300153", "002451", "000988", "300054", "600176"]
 
 
+# ── 2026-09-15 阶段0-6（诊断D3旁注）：沪市市价单(=保护限价)涨跌停贴板钳制 ──
+# 背景：09-15 盘中新增 7 笔 GMBROKER 拒单——沪市市价单的保护限价与涨/跌停价冲突
+# （600176×5、588170×1）。贴涨停的买单/贴跌停的卖单是**确定性拒单**（涨停价买单
+# 排不到队、跌停价卖单同理），下单前预判跳过并留痕，不再把废单送到柜台。
+# 约束（施工单）：只加钳制与留痕——不改 OrderType_Market、不改任何量价逻辑。
+# 贴板判定带宽默认 0.2%（距涨/跌停不足 0.2% 即跳过，预留撮合余量）；
+# 可在 config/params.py 的 PARAMS 里加 "limit_clamp_margin": 0.002 覆盖。
+LIMIT_CLAMP_MARGIN = float(PARAMS.get("limit_clamp_margin", 0.002) or 0.002)
+
+
+def _board_limit_pct(code, name=""):
+    """按板块规则返回涨跌停幅度（2026-09 现行规则口径）：
+    - 主板（60xxxx/000xxx/001xxx/002xxx/003xxx）10%
+    - 主板风险警示 ST/*ST 5%
+    - 创业板（300/301/302）20%（2020-08-24 注册制起，含其风险警示股）
+    - 科创板（688/689）20%；科创类 ETF（588xxx）同板 20%
+    - 北交所（4xxxxx/8xxxxx/920xxx）30%（本池暂无，防御性列出）
+    - 其余场内基金（51xxxx/15xxxx/56xxxx 等）随主板 10%
+    返回小数（0.10/0.20/0.30/0.05）。ST 判定用名称含 "ST"。"""
+    c = str(code or "")
+    nm = str(name or STOCK_NAMES.get(c, "") or "").upper()
+    if c.startswith(("300", "301", "302")):          # 创业板 20%
+        return 0.20
+    if c.startswith(("688", "689", "588")):          # 科创板 / 科创ETF 20%
+        return 0.20
+    if c.startswith(("4", "8", "920")):              # 北交所 30%（池内暂无）
+        return 0.30
+    if "ST" in nm:                                    # 主板风险警示 5%
+        return 0.05
+    return 0.10                                       # 主板（含主板ETF）10%
+
+
+def _limit_prices(context, code, sym, pre_close):
+    """返回 (limit_up, limit_down, src)。优先 gm 真实涨跌停价（get_instruments 的
+    upper_limit/lower_limit 字段——真实值含 ST/次新股等全部特殊规则，优于推算）；
+    拿不到按板块规则 × pre_close 推算。结果按 (code, 交易日) 缓存（涨跌停价日内不变）。
+    全程 fail-open：任何异常回退规则推算；仍不可得 → (None, None, "none") 表示无法预判。"""
+    _cache = getattr(context, "_limit_px_cache", None)
+    if _cache is None:
+        _cache = {}
+        context._limit_px_cache = _cache
+    # 缓存键日期用策略时钟（context.now，回测=仿真日），无则系统时钟——防回测跨日缓存不刷新
+    _ndt = getattr(context, "now", None) or datetime.now()
+    _today = _ndt.strftime("%Y-%m-%d")
+    _hit = _cache.get(code)
+    if _hit and _hit.get("date") == _today:
+        return _hit.get("up"), _hit.get("down"), _hit.get("src")
+    _up = _down = None
+    _src = "none"
+    # ① gm 真实值（实盘；回测/异常静默跳过）
+    try:
+        if getattr(context, "mode", None) == MODE_LIVE and "get_instruments" in globals():
+            _df = _sdk_call("get_instruments_limit", _partial(
+                get_instruments, symbols=sym, df=True))
+            if _df is not None and len(_df) > 0:
+                _row = _df.iloc[0]
+                _u = float(_row.get("upper_limit") or 0)
+                _d = float(_row.get("lower_limit") or 0)
+                if _u > 0 and _d > 0:
+                    _up, _down, _src = _u, _d, "gm"
+    except Exception:
+        pass
+    # ② 板块规则 × pre_close 推算
+    if _up is None:
+        try:
+            _pc = float(pre_close or 0)
+        except Exception:
+            _pc = 0.0
+        if _pc > 0:
+            _pct = _board_limit_pct(code)
+            # 最小变动价位 0.01 四舍五入（A 股涨跌停价按分舍入，容差由 0.2% 带宽覆盖）
+            _up = round(_pc * (1 + _pct), 2)
+            _down = round(_pc * (1 - _pct), 2)
+            _src = "rule"
+    _cache[code] = {"date": _today, "up": _up, "down": _down, "src": _src}
+    return _up, _down, _src
+
+
+def _limit_clamp_should_skip(context, code, sym, side, qty, price, now, where):
+    """下单前贴板预判：BUY 距涨停 / SELL 距跌停不足 LIMIT_CLAMP_MARGIN（默认 0.2%）
+    → 确定性拒单，跳过并留痕（print + risk:limit_clamp_skip + audit），返回 True。
+    涨跌停价不可得 / 钳制器自身异常 → False（不拦，保持原行为，fail-open）。"""
+    try:
+        _px = float(price or 0)
+        if _px <= 0:
+            return False
+        try:
+            _pc = float(context.latest_pre_close.get(code, 0) or 0)
+        except Exception:
+            _pc = 0.0
+        _up, _down, _src = _limit_prices(context, code, sym, _pc)
+        _kind, _lim = None, None
+        if side == "BUY" and _up and _px >= _up * (1 - LIMIT_CLAMP_MARGIN):
+            _kind, _lim = "near_limit_up", _up
+        elif side == "SELL" and _down and _px <= _down * (1 + LIMIT_CLAMP_MARGIN):
+            _kind, _lim = "near_limit_down", _down
+        if not _kind:
+            return False
+        _msg = (f"{side} {int(qty or 0)}@{_px:.3f} 贴板跳过: {_kind} limit={_lim:.3f} "
+                f"带宽={LIMIT_CLAMP_MARGIN:.1%} src={_src} where={where} "
+                f"—市价保护限价与涨跌停冲突属确定性拒单(09-15盘中×7)")
+        print(f"[{now:%H:%M:%S}] LIMIT_CLAMP {code} {_msg}")
+        try:
+            write_risk(str(now), "limit_clamp_skip", _msg, code=code)
+        except Exception:
+            pass
+        try:
+            _audit_write({"event": "limit_clamp_skip", "code": code, "side": side,
+                          "qty": int(qty or 0), "price": _px, "limit": _lim,
+                          "kind": _kind, "src": _src, "where": where, "time": str(now)})
+        except Exception:
+            pass
+        return True
+    except Exception:
+        return False
+
+
 def _force_open_align(context) -> int:
     """开盘一次性把实际持仓对齐到目标底仓（base）：超额卖出、缺口买入。
 
@@ -345,6 +462,9 @@ def _force_open_align(context) -> int:
         px = _px_of(code, sym)
         if px <= 0:
             continue
+        # 2026-09-15 阶段0-6（诊断D3旁注）：贴跌停卖单=确定性拒单，跳过并留痕
+        if _limit_clamp_should_skip(context, code, sym, "SELL", q, px, now, "open_align"):
+            continue
         try:
             write_order(str(now), code, "SELL", q, px, order_type="ALIGN")
             _o = _sdk_call("order_volume_align_sell", _partial(
@@ -365,6 +485,10 @@ def _force_open_align(context) -> int:
         px = _px_of(code, sym)
         if px <= 0:
             skipped.append((code, q, "无价"))
+            continue
+        # 2026-09-15 阶段0-6（诊断D3旁注）：贴涨停买单=确定性拒单，跳过并留痕
+        if _limit_clamp_should_skip(context, code, sym, "BUY", q, px, now, "open_align"):
+            skipped.append((code, q, "贴板(近涨停)"))
             continue
         afford = int(avail / px) // 100 * 100
         q = min(q, afford)
@@ -747,6 +871,69 @@ def _scan_pending_confirm(context, now):
         except Exception:
             pass
         print(f"[{now:%H:%M:%S}] BUY {code} 确认超时未执行（信号未再触发），已作废 approved_not_executed")
+
+
+# 2026-09-15 阶段0-3（诊断D3）：BUY_PENDING 盘中超时看门狗默认 20 分钟。
+# 可在 config/params.py 的 PARAMS 里加 "buy_pending_timeout_min": <分钟> 覆盖；
+# 跨日作废已有（init F3 块）、confirm 到达未执行已有（上方 P0-4），本项补"无人确认挂起"第三种失控。
+BUY_PENDING_TIMEOUT_MIN = float(PARAMS.get("buy_pending_timeout_min", 20) or 20)
+
+
+def _scan_pending_unanswered(context, now):
+    """阶段0-3(2026-09-15 诊断D3-C)：人工确认请求（BUY_PENDING/BUY_DECISION）挂起超过
+    BUY_PENDING_TIMEOUT_MIN 分钟无人确认 → 自动作废并留痕（expired_timeout + risk 告警）。
+    防 09-09「confirm 无人执行、挂起至今」重演（D3：9 条请求 6 条非正常闭环，挂起未决 1 条）。
+    与 P0-4 互补：P0-4 处理"confirm 已到但信号未再触发"，本函数处理"用户始终未响应"。
+    作废后下一根 bar 若信号仍触发会重新发请求（request_id 更新），不堵交易链路。
+    on_bar 每 bar 调用；仅 MODE_LIVE 有意义（回测 gate 恒 allow，pending 恒空）。"""
+    if getattr(context, "mode", None) != MODE_LIVE:
+        return
+    _pend_map = getattr(context, "_buy_confirm_pending", None)
+    if not _pend_map:
+        return
+    _timeout_sec = BUY_PENDING_TIMEOUT_MIN * 60.0
+    try:
+        _decs = (read_buy_decision().get("decisions") or {})
+    except Exception:
+        _decs = {}
+    _expired = []
+    for code, pend in list(_pend_map.items()):
+        # 已有匹配决策（confirm/reject）→ 交给 gate / P0-4 消费，本看门狗不管
+        _d = _decs.get(code)
+        if _d and _d.get("request_id") == pend.get("request_id"):
+            continue
+        try:
+            _elapsed = now.timestamp() - float(pend.get("request_ts") or 0)
+        except Exception:
+            _elapsed = 0
+        if _elapsed < _timeout_sec:
+            continue
+        _pend_map.pop(code, None)
+        _expired.append((code, pend, _elapsed))
+    if not _expired:
+        return
+    for code, pend, _elapsed in _expired:
+        try:
+            write_confirm(str(now), code, "expired",
+                          detail=(f"盘中超时无人确认自动作废: {pend.get('action')} "
+                                  f"qty={pend.get('qty')}@{pend.get('price')} "
+                                  f"挂起{_elapsed/60:.1f}min>阈值{BUY_PENDING_TIMEOUT_MIN:.0f}min"),
+                          request_id=pend.get("request_id"), action=pend.get("action"))
+        except Exception:
+            pass
+        try:
+            write_risk(str(now), "buy_pending_timeout",
+                       f"{code} {pend.get('action')} 挂起{_elapsed/60:.1f}分钟无人确认已自动作废", code=code)
+        except Exception:
+            pass
+        print(f"[{now:%H:%M:%S}] BUY {code} 挂起 {_elapsed/60:.1f} 分钟无人确认，已自动作废（防挂起失控）")
+    try:
+        write_buy_pending({"date": f"{now:%Y-%m-%d}",
+                           "updated_at": f"{now:%Y-%m-%d %H:%M:%S}",
+                           "rejected_today": sorted(getattr(context, "_buy_confirm_rejected", set())),
+                           "pending": _pend_map})
+    except Exception:
+        pass
 
 
 def _dedup_bar(context, gm_sym: str, eob: str) -> bool:
@@ -1606,6 +1793,12 @@ def on_bar(context, bars):
     except Exception:
         pass
 
+    # 2026-09-15 阶段0-3（诊断D3）：BUY_PENDING 盘中超时看门狗——挂起无人确认超时自动作废留痕
+    try:
+        _scan_pending_unanswered(context, now)
+    except Exception:
+        pass
+
     # 双向看门狗：watcher 心跳缺失/过期自动重生（0806 红日整改）
     ops_guard.ensure_watcher(PROJECT_DIR)
 
@@ -1973,6 +2166,10 @@ def on_bar(context, bars):
                     # 初始建仓 pos_qty<=0 走下方 return 自然退出本标的本 bar（非阻塞挂起等待）。
                     _topup_blocked = True
                 else:
+                    # 2026-09-15 阶段0-6（诊断D3旁注）：贴涨停买单=确定性拒单，跳过并留痕。
+                    # 不消费 armed 标记、不进 _base_ordered——下一根 bar 价格离开贴板带可重试（同拒单语义）。
+                    if _limit_clamp_should_skip(context, code, gm_sym, "BUY", base_qty, cp, now, "base"):
+                        return
                     try:
                         try:
                             write_order(str(now), code, "BUY", base_qty, cp, order_id="base")
@@ -2241,7 +2438,12 @@ def on_bar(context, bars):
                 _mx_act, _mx_rule = _buyback_mutex_block(context, code, daily_ctx,
                                                          _day_open, cp, now, _ab_now)
                 if _mx_act == "block":
-                    context.engine.awaiting_buyback.pop(code, None)
+                    # 2026-09-15 阶段0-2 接线：外部 pop 改调引擎公开方法（终态留痕 cleared+reason + 落盘）；
+                    # context.engine 即 SignalEngine 本体（t_engine_auto.py:476）。旧引擎无此方法时兜底直 pop。
+                    try:
+                        context.engine.clear_awaiting_buyback(code, reason="mutex_blocked")
+                    except AttributeError:
+                        context.engine.awaiting_buyback.pop(code, None)
                     try:
                         write_buyback(str(now), code, "blocked",
                                       detail=(f"rule={_mx_rule} "
@@ -2410,6 +2612,9 @@ def on_bar(context, bars):
                 except Exception:
                     pass
                 continue
+            # 2026-09-15 阶段0-6（诊断D3旁注）：贴涨停买单=确定性拒单，跳过并留痕（不下单、不计数）
+            if _limit_clamp_should_skip(context, code, gm_sym, "BUY", qty, cp, now, "buy"):
+                continue
             try:
                 write_order(str(now), code, "BUY", qty, cp)
             except Exception:
@@ -2577,9 +2782,15 @@ def on_order_status(context, order):
             else:
                 _fee_rate = float(PARAMS.get("commission_ratio", 0.00015) or 0.00015)
                 _fee, _fsrc = round(float(price) * int(volume) * _fee_rate, 2), "estimated"
+            # 2026-09-15 阶段0-5 接线（诊断D3，W4 已在 writer.write_fill 加可空字段）：
+            # 补真实委托价/成交均价。口径注意——市价单 order["price"] 是**涨跌停保护价**
+            # （非期望价，见 :2728 既有注释），slippage=fill_vwap-order_price 的方向解读归下游；
+            # 无真实值的字段传 None（writer 落 null，禁止编造）；0 值经 or None 归一防假滑点。
             write_fill(str(datetime.now()), _raw_code(symbol), _side, volume, price,
                        order_id=str(order.get("id") or ""), pos_after=_pos_after,
-                       fee=_fee, fee_source=_fsrc)
+                       fee=_fee, fee_source=_fsrc,
+                       order_price=(order.get("price") or None),
+                       fill_vwap=(order.get("filled_vwap") or order.get("vwap") or None))
         except Exception:
             pass
         _pending_recon_close(context, symbol)   # Fix B: 该 symbol 已完成对账，轮询不再兜底
@@ -2591,12 +2802,19 @@ def on_order_status(context, order):
             _rta = context.engine.record_trade_action(code, _action, volume, price)
             # WP-B19 f: HARD_STOP_EXIT 硬止损离场不生成回补记忆（破位不回头；
             # record_trade_action 以 SELL_HIGH 记 arm，此处按真实通道清除）
+            # 2026-09-15 阶段0-2 接线：外部 pop 改调引擎公开方法（终态留痕）
             if side == 2 and getattr(context, "_pending_sell_action", {}).get(symbol, ("", 0))[0] == "HARD_STOP_EXIT":
-                context.engine.awaiting_buyback.pop(code, None)
+                try:
+                    context.engine.clear_awaiting_buyback(code, reason="hard_stop_exit")
+                except AttributeError:
+                    context.engine.awaiting_buyback.pop(code, None)
             # 2026-09-14: 平 T 腿（T_LEG_CLOSE）同理不建回补记忆——卖出即数量还原，
             # 再回补等于把刚平掉的腿重新打开（回放实证：14:55 平、14:56 同价买回，白付 24.6 元手续费）。
             if side == 2 and getattr(context, "_pending_sell_action", {}).get(symbol, ("", 0))[0] == "T_LEG_CLOSE":
-                context.engine.awaiting_buyback.pop(code, None)
+                try:
+                    context.engine.clear_awaiting_buyback(code, reason="t_leg_close")
+                except AttributeError:
+                    context.engine.awaiting_buyback.pop(code, None)
                 _rta = None
         _rta = _rta or {}
         if side == 1:  # 买入
@@ -2623,7 +2841,10 @@ def on_order_status(context, order):
                 try:
                     # O-06(2026-08-11 复盘①轻)：qty 记 armed 匹配量（sell_qty），
                     # 而非整笔买入成交量（0811 实战：armed 200，事件误报 qty=2500）。
-                    _matched = int(_bb_filled.get("sell_qty") or 0)
+                    # 2026-09-15 阶段0（诊断D1）：matched 封顶实际成交量——部分成交时
+                    # sell_qty>fill 会失真（实证 matched=600>fill=300）；与「部分回补
+                    # 只冲减 sell_qty」（引擎侧 W2）配套，本侧 matched 取真实成交量即可。
+                    _matched = min(int(_bb_filled.get("sell_qty") or 0), int(volume or 0))
                     write_buyback(str(getattr(context, "now", None) or datetime.now()),
                                   code, "filled",
                                   detail=(f"sell={_bb_filled.get('sell_price')} "

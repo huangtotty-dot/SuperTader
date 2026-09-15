@@ -132,9 +132,27 @@ def write_order(time_str: str, code: str, side: str, qty: int, price: float,
 
 
 def write_fill(time_str: str, code: str, side: str, qty: int, price: float,
-               order_id: str = "", pos_after: int = 0, fee: float = 0.0, fee_source: str = "estimated"):
+               order_id: str = "", pos_after: int = 0, fee: float = 0.0, fee_source: str = "estimated",
+               fee_rate: Optional[float] = None, order_price: Optional[float] = None,
+               fill_vwap: Optional[float] = None, slippage: Optional[float] = None):
     """全部成交事件。F-9/Q-20260911: 落 fee + fee_source（gm=实收 filled_commission / estimated=费率估算），
-    全周费用可机读核对（N11 防线费率=0.00015）。"""
+    全周费用可机读核对（N11 防线费率=0.00015）。
+
+    2026-09-15 阶段0-5（诊断D3）：成本归因实验铺路，新增 4 个可空字段（新增不删旧，向后兼容）：
+      fee_rate    费用率 = fee / (price*qty)（仅当 fee>0 且成交额>0 时由真实值推导，否则 null）
+      order_price 委托价（gm SDK Order.price / ExecRpt.price；市价单为涨跌停保护价，注意口径）
+      fill_vwap   成交均价（gm SDK Order.filled_vwap，调用侧现有兜底链 filled_vwap→vwap→price）
+      slippage    滑点 = fill_vwap - order_price（仅当两者均传入时推导；BUY 正=买贵不利，
+                  SELL 负=卖贱不利；符号为原始价差，方向解释归下游）
+    当前唯一调用侧 gm_main.py:2580 未传新参数 → 实盘暂落 null（禁止编造；
+    接线 gm_main 为建议项，见阶段0-5施工报告）。数据源备查：order.get("filled_vwap") /
+    order.get("price") / order.get("filled_commission")（gm_main.py:2530/2574）。"""
+    # 仅由传入的真实值推导，缺失保持 None（不落估算假值）
+    _amount = float(price or 0) * int(qty or 0)
+    if fee_rate is None and fee and _amount > 0:
+        fee_rate = round(float(fee) / _amount, 6)
+    if slippage is None and order_price is not None and fill_vwap is not None:
+        slippage = round(float(fill_vwap) - float(order_price), 4)
     _append_jsonl(_events_path(), {
         "event": "fill",
         "time": time_str,
@@ -146,6 +164,10 @@ def write_fill(time_str: str, code: str, side: str, qty: int, price: float,
         "pos_after": pos_after,
         "fee": fee,
         "fee_source": fee_source,
+        "fee_rate": fee_rate,
+        "order_price": order_price,
+        "fill_vwap": fill_vwap,
+        "slippage": slippage,
     })
 
 
@@ -312,3 +334,49 @@ def consume_auto_build(code: str):
         data["updated_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         write_auto_build(data)
     return req
+
+
+# ── 2026-09-15 阶段0-4（诊断D3）：backtrace run_type 分流 ──
+# 背景：t_io/logs/auto_backtrace.jsonl 74,887 行中 91% 为回放/回测 run 与实盘混存。
+# 写入链事实（施工核查）：backtrace 唯一写入点是 gm_main._audit_write（gm_main.py:1133，
+# 主链 gmcache/backtrace.jsonl + 镜像 _AUDIT_MIRROR_PATH=t_io/logs/auto_backtrace.jsonl），
+# 不经过本模块；gm_main.py 本阶段禁改，故实盘侧无法在记录上补 run_type=live。
+# 约定：审计记录「run_type 字段缺失 ⇒ live」（下游按 run_type.isnull()|=="live" 过滤实盘）；
+# 回放/回测入口（replay_verify.py / backtest_holdings.py，非本施工员专属文件）调用
+# install_audit_run_type(gm_main, "replay"/"backtest") 即可在 writer 层完成打标，无需改 gm_main。
+
+RUN_TYPE_LIVE = "live"           # 实盘（缺省；实盘记录不落字段，按缺失=live 过滤）
+RUN_TYPE_REPLAY = "replay"       # 通用回放（scripts/replay_renko_t.py 等）
+RUN_TYPE_REPLAY_DAY = "replay_day"   # 单日回放（scripts/replay_day.py）
+RUN_TYPE_BACKTEST = "backtest"   # 回测（execution/auto/backtest_holdings.py 等）
+
+
+def stamp_run_type(rec: dict, run_type: str = RUN_TYPE_LIVE) -> dict:
+    """为一条审计/事件记录补 run_type 字段（已存在则不覆盖）。返回 rec 本身（就地修改）。"""
+    try:
+        rec.setdefault("run_type", run_type or RUN_TYPE_LIVE)
+    except Exception:
+        pass
+    return rec
+
+
+def install_audit_run_type(gm_module, run_type: str):
+    """包装 gm_main._audit_write：此后该进程全部审计记录自动打 run_type（setdefault，不覆盖显式值）。
+    仅供回放/回测入口脚本在 import gm_main 之后、run() 之前调用一次；实盘进程不调用，
+    实盘记录保持无 run_type（=live 缺省约定）。重复调用安全（后调用的 run_type 生效于外层）。"""
+    try:
+        _orig = gm_module._audit_write
+        if getattr(_orig, "_run_type_wrapped", False):
+            _orig = _orig._run_type_orig  # 重复安装时解到最里层再包
+        def _wrapped(rec, _o=_orig, _rt=run_type):
+            try:
+                rec.setdefault("run_type", _rt)
+            except Exception:
+                pass
+            return _o(rec)
+        _wrapped._run_type_wrapped = True
+        _wrapped._run_type_orig = _orig
+        gm_module._audit_write = _wrapped
+        return True
+    except Exception:
+        return False

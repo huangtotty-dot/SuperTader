@@ -413,14 +413,29 @@ def build_alert_card(code, name, alert_level, triggered_rules, morning_stats, on
     return card
 
 
-def compute_t0_pnl(vt, commission_rate):
+# 2026-09-15 阶段0-1（诊断D1/F2）：做T账本费率统一为真实双边分腿口径（owner 2026-09-14 裁决）。
+#   卖出腿 0.00121 = 佣金+印花税+过户费（GM 全成本）；买入腿 0.00015 = 佣金。
+# 旧口径：config.py PARAMS["commission_rate"]=0.00025 一刀切乘双腿，仅为真实双边（≈0.136%）的 37%，
+# 系统性低估费用、est_pnl 虚高（D1 实证样本期低估费用 ≈87~120 元，连亏熔断 P6 读失真账）。
+# 新旧关系：config.py 的 commission_rate 保留不动（其他模块/回测脚本可能引用，本阶段不改 config.py），
+# 但 closure_audit est_pnl 口径自 2026-09-15 起以本常量为准，不再读 PARAMS。
+T0_SELL_FEE_RATE = 0.00121   # 卖出腿全成本（佣金+印花税+过户费，GM 全成本）
+T0_BUY_FEE_RATE = 0.00015    # 买入腿佣金
+
+
+def compute_t0_pnl(vt, commission_rate=None, sell_fee_rate=None, buy_fee_rate=None):
     """统一做T盈亏配对口径（P0-5，2026-09-01）——daily_pnl 与 closure_audit 共同调用。
 
     - 各自总量加权均价（avg_s=卖出总额/卖出量，avg_b=买入总额/买入量）
     - matched=min(卖量,买量)，费用只计 matched 双腿（此前计全部腿 → 未配对裸佣金虚增亏损）
     - 未接回部分单列 open_qty（正=反T卖出未接回，负=正T买入未卖出），不进实盈
     - 价格守卫：price<=0 的历史记录隔离不计入（保留 V1.30 语义）
+    - 2026-09-15 阶段0-1（诊断D1/F2）：费用按交易方向分腿计算——卖出腿 matched*avg_s*sell_fee_rate、
+      买入腿 matched*avg_b*buy_fee_rate，默认 T0_SELL_FEE_RATE/T0_BUY_FEE_RATE（真实双边）；
+      旧参数 commission_rate 保留仅作签名兼容（占位，不再生效）。
     返回 {t0_pnl, matched, avg_s, avg_b, open_qty, sold_qty, bought_qty}。"""
+    _sr = T0_SELL_FEE_RATE if sell_fee_rate is None else float(sell_fee_rate)
+    _br = T0_BUY_FEE_RATE if buy_fee_rate is None else float(buy_fee_rate)
     _sells = [t for t in (vt.get("SELL_HIGH", []) or []) if float(t.get("price", 0) or 0) > 0]
     _buys = [t for t in (vt.get("BUY_LOW", []) or []) if float(t.get("price", 0) or 0) > 0]
     sold_qty = sum(t.get("qty", 0) for t in _sells)
@@ -432,7 +447,8 @@ def compute_t0_pnl(vt, commission_rate):
     matched = min(sold_qty, bought_qty)
     open_qty = sold_qty - bought_qty
     if matched > 0:
-        fees = matched * (avg_s + avg_b) * commission_rate   # 费用只计 matched 双腿
+        # 2026-09-15 阶段0-1（诊断D1/F2）：分腿计费——卖出腿全成本 + 买入腿佣金（费用只计 matched 双腿）
+        fees = matched * avg_s * _sr + matched * avg_b * _br
         t0 = round(matched * (avg_s - avg_b) - fees, 2)
     else:
         t0 = 0.0
@@ -1331,7 +1347,8 @@ def _maybe_record_daily_pnl(now: datetime) -> None:
             total_cost_value += cost_val
 
             # manual 做T 实盈已随 manual 做T 下线（2026-09-14）删除——VIRTUAL_TRADES 台账不再存在。
-            # auto 做T 盈亏由 closure_audit.jsonl 的 details.est_pnl（自动模拟盘口径）单列，不复用此处。
+            # auto 做T 盈亏由 closure_audit.jsonl 的 details.est_pnl（自动模拟盘口径）单列，不复用此处；
+            # 2026-09-15 阶段0-1 起 est_pnl 费用按真实双边分腿（卖出腿 0.00121 / 买入腿 0.00015，owner 2026-09-14 裁决）。
             t0_pnl = 0.0
 
             stock_records.append({
@@ -1425,11 +1442,13 @@ def _maybe_audit_closure(now: datetime) -> None:
 
         problems = []
         details = []
-        commission_rate = float(PARAMS.get("commission_rate", 0.00025) or 0.00025)
+        # 2026-09-15 阶段0-1（诊断D1/F2）：弃用 PARAMS["commission_rate"] 单费率（0.00025×双腿 ≈ 真实双边 37%），
+        # est_pnl 改按真实双边分腿（卖出腿 0.00121 / 买入腿 0.00015，见 compute_t0_pnl 头部常量与注释）。
         # F-20260903-1: 读 auto 通道成交（bridge events fill）——auto 侧 SELL/BUY fill 的
         # "卖而未接"缺口监控（09-03 实证：002451 缺400、600481 缺5500 盲区）。
         # 2026-09-14: manual 做T 下线后，本审计的成交来源仅剩 auto bridge events。
         _auto_events = {}
+        _bb_filled_events = []   # 2026-09-15 阶段0-1（诊断D1/F3）：buyback_filled 记账一致性检查用
         try:
             _ev_fp = os.path.join(BASE_DIR, "t_io", "bridge", f"events_{now.strftime('%Y%m%d')}.jsonl")
             if os.path.exists(_ev_fp):
@@ -1442,6 +1461,10 @@ def _maybe_audit_closure(now: datetime) -> None:
                     except Exception:
                         continue
                     if _e.get("event") != "fill":
+                        # 2026-09-15 阶段0-1（诊断D1/F3）：旁路收集 buyback_filled 事件，
+                        # 供下方 matched>fill 钳制+告警（不改变 fill 配对主流程）
+                        if _e.get("event") == "buyback_filled":
+                            _bb_filled_events.append(_e)
                         continue
                     _c = str(_e.get("code") or "")
                     _side = str(_e.get("side") or "")
@@ -1480,8 +1503,9 @@ def _maybe_audit_closure(now: datetime) -> None:
             valid_sells = [tr for tr in _sells_all if float(tr.get("price", 0) or 0) > 0]
             valid_buys = [tr for tr in _buys_all if float(tr.get("price", 0) or 0) > 0]
             n_price_missing = (len(_sells_all) - len(valid_sells)) + (len(_buys_all) - len(valid_buys))
-            # V2c 数据源：当日做T估算盈亏（统一配对口径 P0-5：各自总量加权均价 + 费用只计 matched 双腿）
-            _p = compute_t0_pnl(_merged, commission_rate)
+            # V2c 数据源：当日做T估算盈亏（统一配对口径 P0-5：各自总量加权均价 + 费用只计 matched 双腿；
+            # 2026-09-15 阶段0-1：费用真实双边分腿 卖0.00121/买0.00015）
+            _p = compute_t0_pnl(_merged, sell_fee_rate=T0_SELL_FEE_RATE, buy_fee_rate=T0_BUY_FEE_RATE)
             est_pnl = _p["t0_pnl"]
             if n_price_missing:
                 problems.append(
@@ -1513,8 +1537,32 @@ def _maybe_audit_closure(now: datetime) -> None:
                 problems.append(
                     f"• {name}({code}) 持仓 qty={qty} 与 base={base} 不一致（差 {qty_diff:+d}）→ 请核对 holdings.json")
 
+        # 2026-09-15 阶段0-1（诊断D1/F3）：buyback_filled 记账一致性检查——matched（事件 qty，记的是
+        # armed sell_qty）不得超过实际买入成交 fill_qty（09-11 实证：600176 matched=600 > fill=300，虚报闭环 300 股）。
+        # 根因在 execution/auto/t_engine_auto.py record_trade_action（部分回补即整链 pop，余量静默丢链）
+        # 与 execution/auto/gm_main.py（matched 记 armed sell_qty 而非 min(sell_qty, fill)）——非本文件可改，
+        # 此处审计侧只做钳制口径+告警留痕；匹配算法修复见当日施工报告建议项。
+        _bb_mismatch = 0
+        for _be in _bb_filled_events:
+            try:
+                _bm = int(_be.get("qty") or 0)          # matched（事件口径，可能虚高）
+                _bf = int(_be.get("fill_qty") or 0)     # 实际买入成交股数
+            except Exception:
+                continue
+            if _bf > 0 and _bm > _bf:
+                _bb_mismatch += 1
+                _bc = str(_be.get("code") or "?")
+                _bn = ((HOLDINGS or {}).get(_bc) or {}).get("name", _bc)
+                problems.append(
+                    f"• {_bn}({_bc}) 【回补记账】buyback_filled matched={_bm} > 实际fill={_bf}"
+                    f" → 虚报闭环 {_bm - _bf} 股，复盘请按 fill={_bf} 钳制口径；"
+                    f"根因=t_engine_auto 部分回补整链清除（待修）")
+
         record = {"date": today, "time": now.strftime("%H:%M:%S"),
-                  "ok": not problems, "problems": problems, "details": details}
+                  "ok": not problems, "problems": problems, "details": details,
+                  "buyback_mismatch": _bb_mismatch,   # 2026-09-15 阶段0-1：新增字段（不删旧）
+                  "fee_model": "bilateral_v2",        # 2026-09-15 阶段0-1：est_pnl 费率口径标记（卖0.00121/买0.00015）
+                  }
         try:
             _append_jsonl(os.path.join(LOG_DIR, "closure_audit.jsonl"), record)
         except Exception:
@@ -1613,8 +1661,10 @@ def _push_daily_pnl_feishu(record: dict, date_str: str) -> None:
         return
 
     total_pnl = sum(d.get("est_pnl", 0) for d in details)
-    total_fees = sum((d.get("sold", 0) * d.get("ref_price", 0)
-                      + d.get("bought", 0) * d.get("ref_price", 0)) * 0.00025
+    # 2026-09-15 阶段0-1（诊断D1/F2）：费用估算改真实双边分腿（卖出腿 0.00121 / 买入腿 0.00015），
+    # 替换原硬编码 0.00025×双腿（仅真实双边 37%）。
+    total_fees = sum(d.get("sold", 0) * d.get("ref_price", 0) * T0_SELL_FEE_RATE
+                     + d.get("bought", 0) * d.get("ref_price", 0) * T0_BUY_FEE_RATE
                      for d in traded)
     total_trades = sum(d.get("sold", 0) for d in details) + sum(d.get("bought", 0) for d in details)
 
