@@ -173,6 +173,101 @@ check("跨进程恢复 tripped=True（不自动复活）", breaker2.tripped)
 breaker2.reset()
 check("人工 reset 后熔断解除", not breaker2.tripped)
 
+print("== 7. B1 修复回归：B7 卖成交后 awaiting_buyback 无该 code 挂账 ==")
+# 镜像 gm_main 成交回调时序：B7 卖单成交 → generic record_trade_action 以 SELL_HIGH
+# 武装回补记忆（L3330 附近）→ B7 分支 clear_awaiting_buyback(reason="b7_overnight")
+# 在其后确定性覆盖（与 HARD_STOP_EXIT/T_LEG_CLOSE 同款先例）
+eng5 = tea.SignalEngine()
+eng5.b7_overnight_chains.clear()
+CODE7 = "600176"
+cid7 = ort.make_chain_id(CODE7, "2026-09-16")
+eng5.arm_b7_chain(cid7, CODE7, 500, 10.20, "2026-09-16")   # B7 下单成功挂账在前
+_rta7 = eng5.record_trade_action(CODE7, "SELL_HIGH", 500, 10.20)  # generic arm（隐患复现）
+check("generic SELL_HIGH 成交会武装 awaiting_buyback（B1 隐患前提成立）",
+      bool(eng5.awaiting_buyback.get(CODE7)))
+eng5.clear_awaiting_buyback(CODE7, reason="b7_overnight")          # B7 分支 clear（修复）
+check("B7 分支 clear 后 awaiting_buyback 无挂账 → 14:56 数量不变硬约束不触发",
+      CODE7 not in eng5.awaiting_buyback)
+check("clear 不误伤 B7 隔夜链（次日接回链独立存活）",
+      glue.armed_chain_id(eng5.b7_overnight_chains, CODE7) == cid7)
+check("次日该链仍到期可接回", len(glue.find_due_chains(eng5.b7_overnight_chains, CODE7, "2026-09-17")) == 1)
+
+print("== 8. B2 修复回归：有 armed B7 链的 code 不进 open_align 买入清单 ==")
+_chains8 = {
+    "c1": {"code": "600176", "status": "armed", "sell_date": "2026-09-16",
+           "qty": 500, "sell_px": 10.2},
+    "c2": {"code": "000001", "status": "armed", "sell_date": "2026-09-17",
+           "qty": 300, "sell_px": 5.0},
+    "c3": {"code": "600481", "status": "voided", "sell_date": "2026-09-16",
+           "qty": 100, "sell_px": 3.0},
+}
+check("昨日卖出已到接回日的 armed 链 → 排除（open_align 买入不碰）",
+      glue.open_align_buy_excluded(_chains8, "600176", "2026-09-17") is True)
+check("当日新 armed 链（sell_date == today，未到期）→ 不排除",
+      glue.open_align_buy_excluded(_chains8, "000001", "2026-09-17") is False)
+check("voided 终态链 → 不排除（缺口归 open_align 正常补）",
+      glue.open_align_buy_excluded(_chains8, "600481", "2026-09-17") is False)
+check("无链 code → 不排除",
+      glue.open_align_buy_excluded(_chains8, "300054", "2026-09-17") is False)
+check("chains=None（engine 缺属性 getattr 双保险）→ 不排除（fail-open）",
+      glue.open_align_buy_excluded(None, "600176", "2026-09-17") is False)
+
+print("== 9. B3 核实回归：买入成交回调按订单号清除接回重挂快照 ==")
+# 核实结论：gm_main 买入成交回调已有清除逻辑（L3351-3361，施工报告正确、审计快照
+# 过时），此处镜像其键匹配语义做行为回归（防后续改动把清除逻辑改丢）
+def _mirror_fill_clear_snapshot(pending, code, order):
+    """镜像 gm_main L3351-3361：order_ids 为空（未取到单号）或订单号命中 → 清除。"""
+    if code in pending:
+        _oid = str(order.get("cl_ord_id") or order.get("id")
+                   or order.get("order_id") or "")
+        _ids = pending[code].get("order_ids") or set()
+        if not _ids or _oid in _ids:
+            pending.pop(code, None)
+
+_p9 = {"600176": {"chain": {"chain_id": "c9"}, "order_ids": {"oid-1"},
+                  "date": "2026-09-17"}}
+_mirror_fill_clear_snapshot(_p9, "600176", {"id": "oid-9"})
+check("非本接回单的买入成交 → 快照保留（不误清）", "600176" in _p9)
+_mirror_fill_clear_snapshot(_p9, "600176", {"cl_ord_id": "oid-1"})
+check("本接回单成交（订单号命中）→ 快照清除 → 后续买拒单不会误重挂幽灵链",
+      "600176" not in _p9)
+_p9b = {"600176": {"chain": {"chain_id": "c9b"}, "order_ids": set(),
+                   "date": "2026-09-17"}}
+_mirror_fill_clear_snapshot(_p9b, "600176", {"id": "anything"})
+check("order_ids 为空（下单时未取到单号）→ 任意买入成交兜底清除",
+      "600176" not in _p9b)
+
+print("== 10. B4/B8 修复回归：接回重发前对账决策 + limit_clamped 枚举 ==")
+check("当日已有买单成交 → settle_estimated（不重发，同一链不会买两次）",
+      glue.buyback_recon_decide(inflight_buy=False, filled_buy_today=True,
+                                pos_now=1000, sell_pos_after=500,
+                                chain_qty=500) == "settle_estimated")
+check("持仓已较卖出后恢复 ≥ 链上 qty → settle_estimated",
+      glue.buyback_recon_decide(inflight_buy=False, filled_buy_today=False,
+                                pos_now=1000, sell_pos_after=500,
+                                chain_qty=500) == "settle_estimated")
+check("持仓恢复不足（+400 < 500）→ order（正常重发）",
+      glue.buyback_recon_decide(inflight_buy=False, filled_buy_today=False,
+                                pos_now=900, sell_pos_after=500,
+                                chain_qty=500) == "order")
+check("基线未知（sell_pos_after=None）仅凭在途买单 → skip_inflight（不重发不计重试）",
+      glue.buyback_recon_decide(inflight_buy=True, filled_buy_today=False,
+                                pos_now=None, sell_pos_after=None,
+                                chain_qty=500) == "skip_inflight")
+check("在途买单但持仓已恢复 → settle_estimated 优先（已满足 > 在途等待）",
+      glue.buyback_recon_decide(inflight_buy=True, filled_buy_today=False,
+                                pos_now=1000, sell_pos_after=500,
+                                chain_qty=500) == "settle_estimated")
+check("无成交/无恢复/无在途 → order（维持原重发行为）",
+      glue.buyback_recon_decide(inflight_buy=False, filled_buy_today=False,
+                                pos_now=500, sell_pos_after=500,
+                                chain_qty=500) == "order")
+check("limit_clamped 已进 SKIP_REASONS（B8 卖侧 skip reason，append-only）",
+      "limit_clamped" in glue.SKIP_REASONS
+      and glue.SKIP_REASONS[:7] == ("breaker_tripped", "has_awaiting_buyback",
+                                    "pos_below_base", "protect_sell_today",
+                                    "in_b7_chain", "qty_below_100", "no_available"))
+
 print()
 print(f"合计 {n_checks[0]} 项检查，失败 {len(fails)} 项")
 if fails:

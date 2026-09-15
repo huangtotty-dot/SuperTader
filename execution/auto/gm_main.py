@@ -435,6 +435,14 @@ def _force_open_align(context) -> int:
                 p = 0.0
         return p
 
+    # B2（2026-09-15 B7实单修复）：B7 隔夜卖出造成的持仓缺口归 B7 次日开盘接回单
+    # 专管——有 armed B7 链且已到接回日（today > sell_date）的 code，买入方向跳过，
+    # 否则 09:31 open_align 补缺口 + 逐股循环 _b7_live_day_open_buyback 会对同一缺口
+    # 双倍买入（真钱超仓）。仅过滤买入方向：卖出方向（超仓归位）不受影响。
+    # engine 缺 b7_overnight_chains 属性时传 {} → 不过滤（getattr 双保险 fail-open）。
+    _oa_now = context.now if hasattr(context, "now") else datetime.now()
+    _oa_today = _oa_now.strftime("%Y-%m-%d")
+    _oa_chains = getattr(getattr(context, "engine", None), "b7_overnight_chains", None) or {}
     sells, buys = [], []
     for code, sym in STOCKS.items():
         target = int(getattr(context, f"_base_ref_{code}", 0) or 0)
@@ -453,6 +461,12 @@ def _force_open_align(context) -> int:
             if q >= 100:
                 sells.append((code, sym, q))
         elif -diff >= 100:                                # 缺口 → 买
+            # B2: armed B7 链到期票的缺口由 B7 接回单专管，open_align 不碰
+            if _b7_glue is not None and _b7_glue.open_align_buy_excluded(
+                    _oa_chains, code, _oa_today):
+                print(f"[OPEN_ALIGN] BUY 跳过 {code}：armed B7 链缺口归 B7 接回单专管"
+                      f"（防双倍买入）")
+                continue
             buys.append((code, sym, (-diff // 100) * 100))
 
     now = context.now if hasattr(context, "now") else datetime.now()
@@ -2085,6 +2099,15 @@ def _b7_live_try_sell(context, code, gm_sym, cp, now, holding, pos_qty) -> bool:
             return False
         sell_px = float(sig["price"])          # c14:55 信号价（挂账口径，拍板锁定）
         chain_id = _B7_SHADOW_MOD.make_chain_id(code, date_str)
+        # B8（2026-09-15 B7实单修复）：贴跌停卖出=确定性拒单（市价保护限价与跌停冲突，
+        # 09-15 盘中×7 实证）——下单前钳制检查，命中记 skip reason="limit_clamped"，
+        # code 已入 _b7_live_done → 当日不再试（防贴板日拒单刷屏）。
+        if _limit_clamp_should_skip(context, code, gm_sym, "SELL", qty, sell_px,
+                                    now, "b7_live_sell"):
+            ledger.record_skip(code, date_str, "limit_clamped", _tail_pct)
+            print(f"[{now:%H:%M:%S}] B7实单跳过 {code} reason=limit_clamped "
+                  f"qty={qty}@{sell_px:.3f}（当日不再试）")
+            return False
         try:
             write_order(str(now), code, "SELL", qty, sell_px, order_type="B7")
             _to = _sdk_call("order_volume_b7_live_sell", _partial(
@@ -2113,6 +2136,16 @@ def _b7_live_try_sell(context, code, gm_sym, cp, now, holding, pos_qty) -> bool:
         context._pending_sell_action[gm_sym] = ("B7", 0)   # 成交审计 action + 拒单链作废识别
         # 持久化挂账（engine 原子落盘）+ 台账事件照写（复盘数据源不动）
         context.engine.arm_b7_chain(chain_id, code, qty, sell_px, date_str)
+        # B4 对账基线（2026-09-15 B7实单修复）：卖出后持仓（pos_qty - qty）记入链 dict，
+        # 供次日接回重发前「持仓是否已恢复 ≥ 链上 qty」判定。best-effort 直写：
+        # 随引擎下一次落盘持久化；若重启丢失则基线未知，对账退化为仅靠当日委托判定
+        # （glue.buyback_recon_decide 对 sell_pos_after=None 跳过持仓判定，fail-open）。
+        try:
+            _ch0 = (getattr(context.engine, "b7_overnight_chains", None) or {}).get(chain_id)
+            if isinstance(_ch0, dict):
+                _ch0["sell_pos_after"] = max(0, int(pos_qty) - qty)
+        except Exception:
+            pass
         ledger.record_signal(sig, pos_qty=int(pos_qty), virtual_qty=qty, chain_id=chain_id)
         ledger.record_virtual_sell(sig, qty, chain_id=chain_id, sell_date=date_str)
         _audit_write({"event": "b7_live_sell", "code": code, "qty": qty,
@@ -2126,6 +2159,85 @@ def _b7_live_try_sell(context, code, gm_sym, cp, now, holding, pos_qty) -> bool:
     except Exception as _e:
         print(f"[B7实单] 卖出评估异常 {code}: {_e}")   # fail-open：绝不冒泡进 on_bar 主流程
         return False
+
+
+def _b7_buyback_recon_facts(context, code, gm_sym, chain):
+    """B4（2026-09-15 B7实单修复）：接回重发前对账事实采集。
+
+    _sdk_call 15s 超时≠未成（单可能已报柜台），盲重发会使同一链买两次。
+    复用 _poll_pending_recon 的 get_orders 轮询模式查当日委托：
+      - 该 symbol 当日已有买单成交（status=3 且 volume>0）→ filled_buy_today；
+      - 有在途买单（status 1=已报 / 2=部成）→ inflight_buy；
+      - 当前持仓 qty → pos_now，与链上 sell_pos_after 基线（卖出时直写）比对
+        是否已恢复 ≥ 链上 qty。
+    全部查询 fail-open：异常按「未知/未满足」返回，决策归 glue.buyback_recon_decide。"""
+    facts = {"inflight_buy": False, "filled_buy_today": False,
+             "pos_now": None, "sell_pos_after": chain.get("sell_pos_after")}
+    try:
+        _BUY = int(OrderSide_Buy)
+    except Exception:
+        _BUY = 1
+    try:
+        try:
+            _orders = _sdk_call("get_orders_b7_recon", _partial(get_orders, symbol=gm_sym))
+        except TypeError:
+            _orders = _sdk_call("get_orders_b7_recon_all", get_orders)
+        for _o in (_orders or []):
+            try:
+                if int(_o.get("side") or 0) != _BUY:
+                    continue
+                _st = int(_o.get("status") or 0)
+                if _st == 3 and int(_o.get("volume") or 0) > 0:
+                    facts["filled_buy_today"] = True      # 当日已有买单成交
+                elif _st in (1, 2):
+                    facts["inflight_buy"] = True          # 已报/部成：在途
+            except Exception:
+                continue
+    except Exception:
+        pass
+    try:
+        _h = _get_holding(context, code, gm_sym)
+        facts["pos_now"] = int((_h or {}).get("qty", 0) or 0)
+    except Exception:
+        facts["pos_now"] = None
+    return facts
+
+
+def _b7_live_settle_filled(context, code, gm_sym, chain_id, chain, qty, fill_px,
+                           today_str, ledger, breaker, retry, now, estimated=False):
+    """B7 接回「按已成交」结算：正常下单成功路径与 B4 对账补结算路径共用。
+
+    estimated=True（B4 对账补结算）：真实成交价不可考，按该 bar open 价记账并注明
+    estimated；manual_position/daily_buy_count 同步加回——仓位在现实中确已恢复，
+    不补记会留本地簿记缺口（次日 open_align 读 GM 实仓不受影响，但盘中 sell 通道
+    以 manual_position 为即时缓存）。"""
+    # manual_position 加回（available 不加：T+1 买入当日锁定不可卖）
+    if gm_sym in context.manual_position:
+        mp = context.manual_position[gm_sym]
+        mp["qty"] = int(mp.get("qty", 0) or 0) + qty
+        mp["t_qty"] = int(mp.get("t_qty", 0) or 0) + qty
+    sell_px = float(chain.get("sell_px") or 0)
+    net = _B7_SHADOW_MOD.virtual_net_pct(sell_px, fill_px)
+    breaker.record(net)                      # 全池连亏计数（on_change 自动落盘）
+    context.engine.settle_b7_chain(chain_id, buy_px=fill_px, buy_date=today_str)
+    ledger.record_virtual_buyback(
+        _b7_glue.sell_entry_from_chain(chain), today_str, fill_px,
+        prev_close=sell_px, chain_id=chain_id)
+    retry.pop(chain_id, None)
+    _audit_write({"event": "b7_live_buyback", "code": code, "qty": qty,
+                  "price": round(fill_px, 3), "sell_px": round(sell_px, 3),
+                  "net_pct": round(net * 100, 4), "chain_id": chain_id,
+                  "sell_date": chain.get("sell_date"), "time": str(now),
+                  "estimated": bool(estimated)})
+    # 买入配额对称计数：拒单回调 side==1 有无条件 count-1 回滚，此处必须先 +1
+    context.daily_buy_count[code] = context.daily_buy_count.get(code, 0) + 1
+    if hasattr(context.engine, "buy_count_per_stock"):
+        context.engine.buy_count_per_stock[code] = context.daily_buy_count.get(code, 0)
+    context.total_trade_count += 1
+    print(f"[{now:%H:%M:%S}] B7实单接回 {code} 市价买入 {qty}股@{fill_px:.3f} "
+          f"(卖{sell_px:.3f}, 费后净{net * 100:+.3f}%"
+          f"{', estimated对账补结算' if estimated else ''}"
+          f"{', 连亏熔断触发' if breaker.tripped else ''})")
 
 
 def _b7_live_day_open_buyback(context, code, gm_sym, row, now) -> None:
@@ -2162,27 +2274,59 @@ def _b7_live_day_open_buyback(context, code, gm_sym, row, now) -> None:
             if qty < 100:
                 context.engine.void_b7_chain(chain_id, reason="buyback_qty_below_100")
                 continue
+            # B4（2026-09-15 B7实单修复）：重发前对账——_sdk_call 15s 超时≠未成
+            # （单可能已报柜台），盲重发会使同一链买两次。查当日委托+持仓：
+            # 已有在途买单 → 本 bar 不重发（链保持 armed 等回调，不计重试）；
+            # 当日已成交 / 持仓已恢复 ≥ 链上 qty → 按「已成交」settle（open 价记账，
+            # estimated）。对账自身异常 fail-open 为 "order"（维持原重发行为）。
             try:
-                write_order(str(now), code, "BUY", qty, open_px, order_type="B7")
-                _to = _sdk_call("order_volume_b7_live_buyback", _partial(
-                    order_volume, symbol=gm_sym, volume=qty, side=OrderSide_Buy,
-                    order_type=OrderType_Market, position_effect=PositionEffect_Open))
-            except Exception as e:
+                _rdec = _b7_glue.buyback_recon_decide(
+                    **_b7_buyback_recon_facts(context, code, gm_sym, chain),
+                    chain_qty=qty)
+            except Exception:
+                _rdec = "order"
+            if _rdec == "skip_inflight":
+                print(f"[{now:%H:%M:%S}] B7实单 BUYBACK {code} 检测到在途买单，本 bar 不重发"
+                      f"（链 {chain_id} 保持 armed 等回调，不计重试）")
+                continue
+            if _rdec == "settle_estimated":
+                print(f"[{now:%H:%M:%S}] B7实单 BUYBACK {code} 对账显示已成交/持仓已恢复"
+                      f" → 链 {chain_id} 按 open={open_px:.3f} 补结算(estimated)")
+                _b7_live_settle_filled(context, code, gm_sym, chain_id, chain, qty,
+                                       open_px, today_str, ledger, breaker, retry, now,
+                                       estimated=True)
+                continue
+            # B8（2026-09-15 B7实单修复）：贴涨停接回=确定性拒单（市价保护限价与涨停
+            # 冲突）。钳住等价自然等待——重试计数照常累进（>30 次转 void 既有逻辑不变），
+            # 贴板日不再制造拒单刷屏。与下单失败共用同一失败处置块（_err 载体）。
+            _err = None
+            if _limit_clamp_should_skip(context, code, gm_sym, "BUY", qty, open_px,
+                                        now, "b7_live_buyback"):
+                _err = "limit_clamped(贴涨停)"
+            if _err is None:
+                try:
+                    write_order(str(now), code, "BUY", qty, open_px, order_type="B7")
+                    _to = _sdk_call("order_volume_b7_live_buyback", _partial(
+                        order_volume, symbol=gm_sym, volume=qty, side=OrderSide_Buy,
+                        order_type=OrderType_Market, position_effect=PositionEffect_Open))
+                except Exception as e:
+                    _err = str(e)
+            if _err is not None:
                 step, n = _b7_glue.buyback_retry_step(retry.get(chain_id, 0), False)
                 retry[chain_id] = n
                 if step == "void":
                     context.engine.void_b7_chain(chain_id, reason="buyback_order_failed")
                     _audit_write({"event": "b7_live_buyback_failed", "code": code,
                                   "chain_id": chain_id, "qty": qty, "retries": n,
-                                  "error": str(e), "time": str(now), "severity": "red",
+                                  "error": _err, "time": str(now), "severity": "red",
                                   "note": "B7 次日未按纪律开盘接回（复盘红色项）"})
                     print(f"[{now:%H:%M:%S}] B7实单 BUYBACK {code} 下单失败 {n} 次超上限 "
-                          f"→ 链 {chain_id} 作废（红色项：未按纪律开盘接回）: {e}")
+                          f"→ 链 {chain_id} 作废（红色项：未按纪律开盘接回）: {_err}")
                 else:
                     _audit_write({"event": "b7_live_buyback_retry", "code": code,
                                   "chain_id": chain_id, "qty": qty, "retry": n,
-                                  "error": str(e), "time": str(now)})
-                    print(f"[{now:%H:%M:%S}] B7实单 BUYBACK {code} 下单失败(重试#{n}): {e}")
+                                  "error": _err, "time": str(now)})
+                    print(f"[{now:%H:%M:%S}] B7实单 BUYBACK {code} 下单失败(重试#{n}): {_err}")
                 continue
             _mark_pending_recon(context, code, gm_sym, "BUY", qty, open_px, _to)
             # 拒单重挂守卫快照：接回链在下单成功时已 settle，若异步拒单（status=8 等）
@@ -2202,31 +2346,11 @@ def _b7_live_day_open_buyback(context, code, gm_sym, row, now) -> None:
                 _bbp[code] = {"chain": dict(chain), "order_ids": _oids, "date": today_str}
             except Exception:
                 pass
-            # 下单成功：manual_position 加回（available 不加：T+1 买入当日锁定不可卖）
-            if gm_sym in context.manual_position:
-                mp = context.manual_position[gm_sym]
-                mp["qty"] = int(mp.get("qty", 0) or 0) + qty
-                mp["t_qty"] = int(mp.get("t_qty", 0) or 0) + qty
-            sell_px = float(chain.get("sell_px") or 0)
-            net = _B7_SHADOW_MOD.virtual_net_pct(sell_px, open_px)
-            breaker.record(net)                      # 全池连亏计数（on_change 自动落盘）
-            context.engine.settle_b7_chain(chain_id, buy_px=open_px, buy_date=today_str)
-            ledger.record_virtual_buyback(
-                _b7_glue.sell_entry_from_chain(chain), today_str, open_px,
-                prev_close=sell_px, chain_id=chain_id)
-            retry.pop(chain_id, None)
-            _audit_write({"event": "b7_live_buyback", "code": code, "qty": qty,
-                          "price": round(open_px, 3), "sell_px": round(sell_px, 3),
-                          "net_pct": round(net * 100, 4), "chain_id": chain_id,
-                          "sell_date": chain.get("sell_date"), "time": str(now)})
-            # 买入配额对称计数：拒单回调 side==1 有无条件 count-1 回滚，此处必须先 +1
-            context.daily_buy_count[code] = context.daily_buy_count.get(code, 0) + 1
-            if hasattr(context.engine, "buy_count_per_stock"):
-                context.engine.buy_count_per_stock[code] = context.daily_buy_count.get(code, 0)
-            context.total_trade_count += 1
-            print(f"[{now:%H:%M:%S}] B7实单接回 {code} 市价买入 {qty}股@{open_px:.3f} "
-                  f"(卖{sell_px:.3f}, 费后净{net * 100:+.3f}%"
-                  f"{', 连亏熔断触发' if breaker.tripped else ''})")
+            # 下单成功：manual_position 加回 + 链 settle + 台账/审计/配额
+            # （B4 起与对账补结算路径共用 _b7_live_settle_filled，estimated=False）
+            _b7_live_settle_filled(context, code, gm_sym, chain_id, chain, qty,
+                                   open_px, today_str, ledger, breaker, retry, now,
+                                   estimated=False)
     except Exception as _e:
         print(f"[B7实单] 接回异常 {code}: {_e}")   # fail-open：绝不冒泡进 on_bar 主流程
 
@@ -3341,6 +3465,20 @@ def on_order_status(context, order):
             if side == 2 and getattr(context, "_pending_sell_action", {}).get(symbol, ("", 0))[0] == "T_LEG_CLOSE":
                 try:
                     context.engine.clear_awaiting_buyback(code, reason="t_leg_close")
+                except AttributeError:
+                    context.engine.awaiting_buyback.pop(code, None)
+                _rta = None
+            # B1（2026-09-15 B7实单修复）：B7 尾盘隔夜卖出**不进 awaiting_buyback**
+            # （施工方案 §1.3-3）——该缺口由 B7 次日开盘接回单专管。若任由上方 generic
+            # record_trade_action 以 SELL_HIGH 武装回补记忆，14:56 _force_tail_buyback
+            # 数量不变硬约束（sell_channels.py:273 以 awaiting_buyback 为门槛）会在
+            # 1 分钟内抹掉隔夜腿，且引擎 B7 链仍 armed 次日再买一次 → 双重超仓。
+            # 时序：generic arm 发生在上方 record_trade_action(code,'SELL_HIGH',...) 内部，
+            # 本分支位于其后，clear 确定性覆盖（与 HARD_STOP_EXIT/T_LEG_CLOSE 同款先例）。
+            # _rta 置 None：防下方 armed 分支把 B7 卖出误写进 buyback 台账事件。
+            if side == 2 and getattr(context, "_pending_sell_action", {}).get(symbol, ("", 0))[0] == "B7":
+                try:
+                    context.engine.clear_awaiting_buyback(code, reason="b7_overnight")
                 except AttributeError:
                     context.engine.awaiting_buyback.pop(code, None)
                 _rta = None
