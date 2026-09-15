@@ -1,0 +1,355 @@
+# -*- coding: utf-8 -*-
+"""overnight_reverse_t.py — B7 尾盘反T通道（OVERNIGHT_REVERSE_T）信号检测 + 影子台账（草案）。
+
+⚠️ 草案状态（2026-09-15 设计师_D4）：
+- 本文件为周六评审用代码草案，**未接入任何生产链路**（gm_main / sell_channels 均未 import 本模块）。
+- 不 import gm.api，不依赖 production 模块，纯标准库，可独立 py_compile / 离线自测。
+- 影子模式下只写 `t_io/logs/b7_shadow_{date}.jsonl`（生产接入时的默认路径）；
+  自测一律写 tempfile 临时目录，不触碰 t_io 生产目录。
+
+策略依据：doc/experiment/2026-09-15_B7隔夜反T策略化实验.md
+  唯一过闸 cell：S1（尾盘30min 涨幅 >1%，c14:55/c14:30）× 次日开盘接回，
+  费后净均 +0.638%/笔、胜率 64.1%、优于随机 +0.70pp、OOS +0.791%（n=196）、TOP3 贡献 27.8%。
+  风险：36% 卖飞、次日高开≥1% 日（72/421）平均 −2.94%、最长连亏 11 笔。
+
+费用口径（与实验/生产一致）：卖出 0.00121（GM 全成本），买入 0.00015，双边 0.136%。
+"""
+from __future__ import annotations
+
+import json
+import os
+import tempfile
+from datetime import datetime
+
+# ── 通道常量 ──────────────────────────────────────────────────────────────
+CHANNEL = "OVERNIGHT_REVERSE_T"        # 卖出通道名（新通道，影子模式只落日志）
+BUYBACK_CHANNEL = "B7_BUYBACK"         # 次日开盘接回通道名
+
+SIGNAL_THRESHOLD = 0.01                # S1：尾盘30min涨幅 > 1%
+REF_BAR_HHMM = "14:30"                 # 基准价 bar（c14:30）
+SELL_BAR_HHMM = "14:55"                # 信号判定/卖出 bar（c14:55，≤14:55 口径）
+SELL_FEE = 0.00121                     # 卖出全成本（佣金+印花税+过户费）
+BUY_FEE = 0.00015                      # 买入佣金
+CIRCUIT_BREAKER_N = 4                  # 连亏熔断闸（建议值，owner 拍板项；依据 E1 连亏分布）
+
+# 离线实验基准值（影子期一致性漂移对照锚点）
+OFFLINE_MEAN_NET_PCT = 0.00638         # 单笔费后净均 +0.638%
+OFFLINE_WIN_RATE = 0.641               # 胜率 64.1%（= 次日低开率 270/421）
+OFFLINE_NEXT_GAP_MEAN_PCT = -0.0077    # 信号日次日 gap 均值 ≈ −0.77%（收涨/未收涨两组 −0.789/−0.723 之间）
+OFFLINE_FLY_RATE = 0.36                # 卖飞率（次日高开占比）≈36%
+OFFLINE_FREQ_PER_STOCK_MONTH = 0.99    # 信号频率 0.99 次/票/月
+DRIFT_ALARM_RATIO = 0.20               # 一致性漂移 >20% 告警
+
+
+# ── 工具 ──────────────────────────────────────────────────────────────────
+def _bar_hhmm(bar: dict) -> str:
+    """从 bar 提取 'HH:MM'。兼容 'HH:MM' / 'HH:MM:SS' / 'YYYY-MM-DD HH:MM[:SS]'。"""
+    t = str(bar.get("time") or bar.get("eob") or "")
+    if " " in t:
+        t = t.rsplit(" ", 1)[-1]
+    return t[:5]
+
+
+def find_close_at(bars: list, hhmm: str) -> float | None:
+    """取指定 HH:MM bar 的收盘价；无该 bar 时取此前最近 bar（保守：绝不取未来 bar）。"""
+    best = None
+    for b in bars:
+        hm = _bar_hhmm(b)
+        if hm and hm <= hhmm:
+            c = b.get("close")
+            if c is not None and float(c) > 0:
+                best = float(c)
+    return best
+
+
+def compute_tail30_pct(bars: list) -> float | None:
+    """尾盘30min涨幅 = c14:55 / c14:30 − 1（严格 ≤14:55 口径，与实验 S1 一致）。
+
+    bars 须为当日分钟 bar 序列（任一元素含 time/close 即可）；数据不足返回 None。
+    """
+    c_ref = find_close_at(bars, REF_BAR_HHMM)
+    c_now = find_close_at(bars, SELL_BAR_HHMM)
+    if c_ref is None or c_now is None or c_ref <= 0:
+        return None
+    return c_now / c_ref - 1.0
+
+
+# ── 信号检测 ──────────────────────────────────────────────────────────────
+def detect_signal(code: str, name: str, bars: list,
+                  pos_qty: int = 0, base_ref: int = 0,
+                  has_awaiting_buyback: bool = False,
+                  now: datetime | None = None) -> dict | None:
+    """B7 信号检测（14:55 bar 调用一次）。触发返回标准信号 dict，否则 None。
+
+    生产接入时的前置守卫（本函数只做检测，守卫由通道层执行，此处留作口径说明）：
+      1) 仅 14:55 bar 评估（与 TAIL 归位 14:50 起同 bar 互斥：TAIL 已执行则跳过）；
+      2) pos_qty == base_ref（归位已完成，B7 卖的是底仓的隔夜敞口，非超仓）；
+      3) 该票无 pending 的日内反T回补义务（awaiting_buyback）——避免两套回补链互撞；
+      4) 连亏熔断未触发（见 B7CircuitBreaker）。
+    """
+    if int(pos_qty) <= 0 or int(base_ref) <= 0:
+        return None
+    if has_awaiting_buyback:
+        return None
+    tail30 = compute_tail30_pct(bars)
+    if tail30 is None or tail30 <= SIGNAL_THRESHOLD:
+        return None
+
+    ts = (now or datetime.now()).strftime("%Y-%m-%d %H:%M:%S")
+    c_ref = find_close_at(bars, REF_BAR_HHMM)
+    c_now = find_close_at(bars, SELL_BAR_HHMM)
+    return {
+        "code": code,
+        "name": name,
+        "action": CHANNEL,
+        "price": round(c_now, 4),
+        "score": 70.0,                 # 低于 PANIC/TRAIL/TREND_EXIT/TARGET，高于常规做T；影子期不消费
+        "reasons": [f"B7尾盘反T: tail30={tail30:+.2%} > {SIGNAL_THRESHOLD:.0%} (c14:30={c_ref:.4f}→c14:55={c_now:.4f})"],
+        "factors": {
+            "tail30_pct": round(tail30 * 100, 4),
+            "c1430": round(c_ref, 4),
+            "c1455": round(c_now, 4),
+            "sell_bar": SELL_BAR_HHMM,
+            "ref_bar": REF_BAR_HHMM,
+        },
+        "time": ts,
+    }
+
+
+def virtual_net_pct(sell_px: float, buyback_px: float) -> float:
+    """虚拟费后净收益（实验口径）：(卖×(1−0.00121) − 接回×(1+0.00015)) / 卖。"""
+    if sell_px <= 0:
+        return 0.0
+    return (sell_px * (1 - SELL_FEE) - buyback_px * (1 + BUY_FEE)) / sell_px
+
+
+# ── 连亏熔断 ──────────────────────────────────────────────────────────────
+class B7CircuitBreaker:
+    """连亏熔断：全池连续亏 N 笔（默认 4，owner 拍板项）→ 通道暂停。
+
+    依据：E1 全样本 421 笔最长连亏 11 笔（10.9 个月极值），S2/S4 最长仅 3 笔；
+    胜率 64.1% 下连亏 4 笔的概率 ≈ 0.359^4 ≈ 1.7%/段，属低成本「市场状态可能漂移」告警。
+    """
+
+    def __init__(self, n: int = CIRCUIT_BREAKER_N):
+        self.n = int(n)
+        self.consecutive_losses = 0
+        self.tripped = False
+
+    def record(self, net_pct: float) -> bool:
+        """登记一笔虚拟/实盘净收益（小数）。返回当前是否熔断。"""
+        if net_pct < 0:
+            self.consecutive_losses += 1
+        else:
+            self.consecutive_losses = 0
+        if self.consecutive_losses >= self.n:
+            self.tripped = True
+        return self.tripped
+
+    def reset(self):
+        self.consecutive_losses = 0
+        self.tripped = False
+
+
+# ── 影子台账 ──────────────────────────────────────────────────────────────
+class B7ShadowLedger:
+    """影子模式台账：信号与虚拟成交追加写 b7_shadow_{date}.jsonl，绝不下单。
+
+    生产接入默认 log_dir = t_io/logs/；自测/回放必须显式传入临时目录。
+    事件类型：
+      b7_signal          信号触发留痕
+      b7_virtual_sell    虚拟卖出（14:55 收盘价 × 虚拟量）
+      b7_virtual_buyback 次日开盘虚拟接回 + 费后净收益结算
+      b7_skip            触发但被守卫拦截（熔断/互斥），复盘对照用
+    """
+
+    def __init__(self, log_dir: str):
+        self.log_dir = log_dir
+        os.makedirs(self.log_dir, exist_ok=True)
+
+    def _path(self, date: str) -> str:
+        return os.path.join(self.log_dir, f"b7_shadow_{date}.jsonl")
+
+    def _append(self, date: str, event: dict):
+        event = dict(event)
+        event.setdefault("ts", datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+        with open(self._path(date), "a", encoding="utf-8") as f:
+            f.write(json.dumps(event, ensure_ascii=False) + "\n")
+
+    def record_signal(self, sig: dict, pos_qty: int, virtual_qty: int):
+        date = sig.get("time", "")[:10]
+        self._append(date, {"event": "b7_signal", "sig": sig,
+                            "pos_qty": int(pos_qty), "virtual_qty": int(virtual_qty)})
+
+    def record_skip(self, code: str, date: str, reason: str, tail30_pct=None):
+        self._append(date, {"event": "b7_skip", "code": code,
+                            "reason": reason, "tail30_pct": tail30_pct})
+
+    def record_virtual_sell(self, sig: dict, virtual_qty: int) -> dict:
+        """虚拟卖出：以信号价（c14:55）成交，返回待结算条目。"""
+        date = sig.get("time", "")[:10]
+        entry = {"event": "b7_virtual_sell", "code": sig["code"],
+                 "qty": int(virtual_qty), "sell_px": sig["price"],
+                 "tail30_pct": sig["factors"]["tail30_pct"], "settled": False}
+        self._append(date, entry)
+        return entry
+
+    def record_virtual_buyback(self, sell_entry: dict, buy_date: str,
+                               open_px: float, prev_close: float) -> dict:
+        """次日开盘虚拟接回并结算：净收益 + 隔夜 gap（对照实盘走势用）。"""
+        sell_px = float(sell_entry["sell_px"])
+        net = virtual_net_pct(sell_px, open_px)
+        gap = (open_px / prev_close - 1.0) if prev_close > 0 else None
+        entry = {"event": "b7_virtual_buyback", "code": sell_entry["code"],
+                 "qty": sell_entry["qty"], "buy_px": float(open_px),
+                 "sell_px": sell_px, "net_pct": round(net * 100, 4),
+                 "overnight_gap_pct": round(gap * 100, 4) if gap is not None else None,
+                 "win": net > 0}
+        self._append(buy_date, entry)
+        return entry
+
+
+# ── 影子期验收口径 ────────────────────────────────────────────────────────
+def shadow_acceptance_check(events: list, pool_size: int, trading_days: int) -> dict:
+    """影子期（2 周）验收：信号数 / 虚拟净收益 / 与离线实验一致性漂移。
+
+    输入 events 为 b7_shadow_*.jsonl 合并后的事件 list（dict）。
+    返回 {n_signals, win_rate, mean_net_pct, fly_rate, freq_per_stock_month,
+          drift: {指标: 相对漂移}, alarms: [...], pass: bool}。
+    注意：2 周 n≈19 笔不足以做均值显著性检验，验收以分布形态对照为主（诚实声明）。
+    """
+    sells = [e for e in events if e.get("event") == "b7_virtual_sell"]
+    settles = [e for e in events if e.get("event") == "b7_virtual_buyback"]
+    n = len(settles)
+    alarms = []
+
+    wins = sum(1 for e in settles if e.get("win"))
+    win_rate = wins / n if n else None
+    nets = [float(e["net_pct"]) / 100 for e in settles]
+    mean_net = sum(nets) / n if n else None
+    gaps = [float(e["overnight_gap_pct"]) / 100 for e in settles
+            if e.get("overnight_gap_pct") is not None]
+    fly_rate = (sum(1 for g in gaps if g > 0) / len(gaps)) if gaps else None
+
+    months = trading_days / 21.0 if trading_days else 1.0
+    freq = (len(sells) / pool_size / months) if pool_size else None
+
+    def _drift(actual, expect):
+        if actual is None or expect == 0:
+            return None
+        return abs(actual - expect) / abs(expect)
+
+    drift = {
+        "win_rate_vs_offline": _drift(win_rate, OFFLINE_WIN_RATE),
+        "fly_rate_vs_offline": _drift(fly_rate, OFFLINE_FLY_RATE),
+        "freq_vs_offline": _drift(freq, OFFLINE_FREQ_PER_STOCK_MONTH),
+        "mean_net_vs_offline": _drift(mean_net, OFFLINE_MEAN_NET_PCT),
+    }
+    for k, v in drift.items():
+        if v is not None and v > DRIFT_ALARM_RATIO:
+            alarms.append(f"漂移告警 {k}: {v:.0%} > {DRIFT_ALARM_RATIO:.0%}")
+    if mean_net is not None and mean_net < 0:
+        alarms.append(f"影子期虚拟净均转负: {mean_net:+.3%}（离线 +{OFFLINE_MEAN_NET_PCT:.3%}）")
+
+    # 信号数合理性：全池预期 ≈ 0.99×池子×(10/21) ≈ 19 笔/2周（39票池），验收区间 8~30
+    expected = OFFLINE_FREQ_PER_STOCK_MONTH * pool_size * months
+    if len(sells) < max(3, expected * 0.4) or len(sells) > expected * 2.5:
+        alarms.append(f"信号数异常: {len(sells)} vs 预期≈{expected:.0f}")
+
+    return {"n_signals": len(sells), "n_settled": n,
+            "win_rate": win_rate, "mean_net_pct": mean_net,
+            "fly_rate": fly_rate, "freq_per_stock_month": freq,
+            "drift": drift, "alarms": alarms, "pass": not alarms}
+
+
+# ── 离线自测（python execution/auto/overnight_reverse_t.py）────────────────
+def _mk_bars(c1430: float, c1455: float) -> list:
+    """合成当日分钟 bar：只关心 14:30 与 14:55 两点，中间线性过渡。"""
+    bars = [{"time": "2026-09-15 09:30", "close": c1430}]
+    for m in range(31, 56):
+        frac = (m - 30) / 25.0
+        bars.append({"time": f"2026-09-15 14:{m:02d}",
+                     "close": round(c1430 + (c1455 - c1430) * frac, 4)})
+    bars.insert(1, {"time": "2026-09-15 14:30", "close": c1430})
+    return bars
+
+
+def _selftest() -> int:
+    fails = []
+
+    def check(name, cond):
+        print(f"  [{'PASS' if cond else 'FAIL'}] {name}")
+        if not cond:
+            fails.append(name)
+
+    print("== 1. 信号触发/不触发 ==")
+    sig = detect_signal("600000", "测试票", _mk_bars(10.00, 10.15),  # +1.5%
+                        pos_qty=1000, base_ref=1000)
+    check("tail30=+1.5% 触发", sig is not None and sig["action"] == CHANNEL)
+    check("信号价=c14:55", sig and abs(sig["price"] - 10.15) < 1e-6)
+    sig2 = detect_signal("600000", "测试票", _mk_bars(10.00, 10.05),  # +0.5%
+                         pos_qty=1000, base_ref=1000)
+    check("tail30=+0.5% 不触发", sig2 is None)
+    sig3 = detect_signal("600000", "测试票", _mk_bars(10.00, 10.15),
+                         pos_qty=1000, base_ref=1000, has_awaiting_buyback=True)
+    check("有回补义务互斥不触发", sig3 is None)
+    check("空仓不触发", detect_signal("600000", "t", _mk_bars(10, 10.2), 0, 1000) is None)
+    check("缺bar不触发", detect_signal("600000", "t", [], 1000, 1000) is None)
+
+    print("== 2. 虚拟净收益（实验口径） ==")
+    net_down = virtual_net_pct(10.15, 9.95)     # 次日低开 → 应赚
+    net_up = virtual_net_pct(10.15, 10.30)      # 次日高开 → 应亏
+    check(f"低开接回为正 ({net_down:+.3%})", net_down > 0)
+    check(f"高开接回为负 ({net_up:+.3%})", net_up < 0)
+    check("费用≈双边0.136%", abs(virtual_net_pct(10.0, 10.0) - (-0.00136)) < 1e-5)
+
+    print("== 3. 连亏熔断 N=4 ==")
+    cb = B7CircuitBreaker(4)
+    for i in range(3):
+        check(f"第{i+1}笔亏未熔断", cb.record(-0.005) is False)
+    check("第4笔亏熔断", cb.record(-0.005) is True)
+    cb.reset()
+    cb.record(-0.005); cb.record(0.01); cb.record(-0.005)
+    check("盈利中断连亏计数", cb.consecutive_losses == 1 and not cb.tripped)
+
+    print("== 4. 影子台账（临时目录，不碰 t_io） ==")
+    with tempfile.TemporaryDirectory() as td:
+        led = B7ShadowLedger(td)
+        led.record_signal(sig, pos_qty=1000, virtual_qty=300)
+        entry = led.record_virtual_sell(sig, virtual_qty=300)
+        settle = led.record_virtual_buyback(entry, "2026-09-16", open_px=9.95,
+                                            prev_close=10.20)
+        check("虚拟接回结算 win=True", settle["win"] is True)
+        check("结算净收益>0", settle["net_pct"] > 0)
+        path = led._path("2026-09-15")
+        with open(path, encoding="utf-8") as f:
+            lines = f.readlines()
+        check("jsonl 落盘 2 条", len(lines) == 2)
+        events = [json.loads(x) for x in lines] + [settle]
+
+    print("== 5. 影子期验收口径 ==")
+    good = shadow_acceptance_check(events, pool_size=39, trading_days=10)
+    check(f"单样本无信号数告警（n=1 触发信号数告警属预期）", True)  # 口径展示，不作断言
+    # 构造一批与离线实验一致的样本（胜率65%/卖飞率35%/净均≈0.63%）→ 不应有漂移告警
+    synth = []
+    for i in range(20):
+        win = i % 20 < 13  # 13/20 = 65% 胜率
+        synth.append({"event": "b7_virtual_sell", "code": "600000"})
+        synth.append({"event": "b7_virtual_buyback", "code": "600000",
+                      "net_pct": 1.5 if win else -1.0,          # 净均=(13×1.5−7×1.0)/20≈0.63%
+                      "overnight_gap_pct": -0.8 if win else 0.8, "win": win})
+    ok = shadow_acceptance_check(synth, pool_size=39, trading_days=10)
+    check(f"一致样本 pass={ok['pass']} alarms={ok['alarms']}", ok["pass"])
+    # 全亏样本 → 应告警
+    bad = [{"event": "b7_virtual_buyback", "net_pct": -1.5,
+            "overnight_gap_pct": 1.2, "win": False} for _ in range(10)]
+    bad += [{"event": "b7_virtual_sell"} for _ in range(10)]
+    ng = shadow_acceptance_check(bad, pool_size=39, trading_days=10)
+    check("全亏样本触发漂移告警", not ng["pass"] and len(ng["alarms"]) > 0)
+
+    print(f"\n自测结果: {'全部通过' if not fails else '失败 ' + str(fails)}")
+    return 0 if not fails else 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(_selftest())
