@@ -924,6 +924,27 @@ class SignalEngine:
             "armed_date": now.strftime("%Y-%m-%d"),
             "status": "armed",
         }
+        _prev = self.awaiting_buyback.get(code)
+        if _prev and int(_prev.get("sell_qty", 0) or 0) > 0:
+            # 数量不变硬约束（2026-09-15 修复）：旧义务未了结前再次卖出，必须**合并**而非覆盖。
+            # 覆盖会静默销毁前一笔的待回补数量 → 底仓单向流失。
+            # GM 回测实证（2026-04-08~07-01, 9 只底仓）：74 次 arm 仅 5 次 filled，
+            # 9 只底仓清空 6 只、588170 从 42000 股掉到 200 股；账户 +31% 全靠底仓 beta，
+            # 交易净贡献 −18.5%。根因即此行。
+            _pq = int(_prev.get("sell_qty", 0) or 0)
+            _pp = float(_prev.get("sell_price", 0) or 0)
+            _nq = int(qty or 0)
+            _tot = _pq + _nq
+            _avg = (_pp * _pq + price * _nq) / _tot if _tot > 0 else price
+            rec = {**rec,
+                   "sell_price": round(_avg, 6),          # 按量加权的卖出价
+                   "sell_qty": _tot,                       # 义务数量累加
+                   "target_price": round(_avg * _gap, 2),
+                   "sell_time": _prev.get("sell_time") or now,   # 保留最早起始
+                   "sell_action": _prev.get("sell_action", action),
+                   "armed_date": _prev.get("armed_date") or rec["armed_date"],
+                   "expire_date": max(str(_prev.get("expire_date") or ""),
+                                      str(rec["expire_date"]))}
         self.awaiting_buyback[code] = rec
         return rec
 
