@@ -1,0 +1,9 @@
+513130.SH chunk0: 10000 bars, 2026-07-20 10:00:00 ~ 2026-09-15 15:00:00
+513130.SH chunk1: 10000 bars, 2026-05-20 11:09:00 ~ 2026-07-20 10:00:00
+513130.SH chunk2: GmError(权限/其他), stop: {"status": 2002, "message": "超出业务授权范围; [ERR_NO_DATA_PERMISSION] rpc error: code = PermissionDenied desc = [ERR_NO_DATA_PERMISSION] 只允许下载[基金]品种的除今天外, 最近 180 个自然日的历史行情Bar数据, 查询起始日期不早于 2026-03-19", "function": "history_n"}
+513130.SH: saved 19999 bars, 84 days -> E:\superTrader\t_io\validation\etf_carrier\data\513130_1year_1min.csv
+513180.SH chunk0: 10000 bars, 2026-07-20 10:07:00 ~ 2026-09-15 15:00:00
+513180.SH chunk1: 10000 bars, 2026-05-20 11:17:00 ~ 2026-07-20 10:07:00
+513180.SH chunk2: GmError(权限/其他), stop: {"status": 2002, "message": "超出业务授权范围; [ERR_NO_DATA_PERMISSION] rpc error: code = PermissionDenied desc = [ERR_NO_DATA_PERMISSION] 只允许下载[基金]品种的除今天外, 最近 180 个自然日的历史行情Bar数据, 查询起始日期不早于 2026-03-19", "function": "history_n"}
+513180.SH: saved 19999 bars, 84 days -> E:\superTrader\t_io\validation\etf_carrier\data\513180_1year_1min.csv
+iopv probe saved

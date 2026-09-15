@@ -1,0 +1,122 @@
+{
+ "symbol": "SHSE.513130",
+ "probes": {
+  "get_instrumentinfos": {
+   "ok": true,
+   "columns": [
+    "symbol",
+    "sec_type",
+    "exchange",
+    "sec_id",
+    "sec_name",
+    "sec_abbr",
+    "price_tick",
+    "listed_date",
+    "delisted_date",
+    "multiplier",
+    "sec_type_ext",
+    "margin_ratio",
+    "trade_n",
+    "board",
+    "quote_unit",
+    "option_margin_ratio1",
+    "option_margin_ratio2",
+    "option_type",
+    "call_or_put",
+    "underlying_symbol",
+    "is_strike_price_adjusted",
+    "exercise_price",
+    "conversion_price",
+    "conversion_start_date"
+   ],
+   "row": {
+    "symbol": "SHSE.513130",
+    "sec_type": "2",
+    "exchange": "SHSE",
+    "sec_id": "513130",
+    "sec_name": "华泰柏瑞南方东英恒生科技指数ETF(QDII)",
+    "sec_abbr": "HTBRNFDYHSKJZSETFQDII",
+    "price_tick": "0.001",
+    "listed_date": "2021-06-01 00:00:00+08:00",
+    "delisted_date": "2038-01-01 00:00:00+08:00",
+    "multiplier": "1.0",
+    "sec_type_ext": "2002",
+    "margin_ratio": "1.0",
+    "trade_n": "0",
+    "board": "0",
+    "quote_unit": "",
+    "option_margin_ratio1": "0.0",
+    "option_margin_ratio2": "0.0",
+    "option_type": "",
+    "call_or_put": "",
+    "underlying_symbol": "",
+    "is_strike_price_adjusted": "False",
+    "exercise_price": "0.0",
+    "conversion_price": "0.0",
+    "conversion_start_date": "None"
+   }
+  },
+  "history_1d_iopv": {
+   "ok": true,
+   "columns": [
+    "close",
+    "eob"
+   ],
+   "sample": [
+    {
+     "close": "0.553",
+     "eob": "2026-09-08 00:00:00+08:00"
+    },
+    {
+     "close": "0.548",
+     "eob": "2026-09-09 00:00:00+08:00"
+    },
+    {
+     "close": "0.537",
+     "eob": "2026-09-10 00:00:00+08:00"
+    }
+   ]
+  },
+  "current": {
+   "ok": true,
+   "keys": [
+    [
+     "symbol",
+     "open",
+     "high",
+     "low",
+     "price",
+     "quotes",
+     "cum_volume",
+     "cum_amount",
+     "trade_type",
+     "created_at",
+     "iopv",
+     "cum_position",
+     "last_amount",
+     "last_volume",
+     "flag"
+    ]
+   ],
+   "sample": [
+    {
+     "symbol": "SHSE.513130",
+     "open": "0.537",
+     "high": "0.542",
+     "low": "0.533",
+     "price": "0.534",
+     "quotes": "[{'bid_p': 0.533, 'bid_v': 105400200, 'ask_p': 0.534, 'ask_v",
+     "cum_volume": "3466883801",
+     "cum_amount": "1862058924.0",
+     "trade_type": "7",
+     "created_at": "2026-09-15 15:01:41.388000+08:00",
+     "iopv": "0.5333",
+     "cum_position": "0",
+     "last_amount": "0.0",
+     "last_volume": "0",
+     "flag": "0"
+    }
+   ]
+  }
+ }
+}

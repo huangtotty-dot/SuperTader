@@ -1,0 +1,11 @@
+{
+ "fund_table": {
+  "ok": false,
+  "error": "TypeError(\"get_fundamentals() missing 2 required positional arguments: 'start_date' and 'end_date'\")"
+ },
+ "fund_table_n": {
+  "ok": true,
+  "columns": [],
+  "sample": []
+ }
+}
