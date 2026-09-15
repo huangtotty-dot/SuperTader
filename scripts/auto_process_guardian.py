@@ -15,6 +15,12 @@ scripts/auto_process_guardian.py — 阶段0-3(2026-09-15 诊断D3-A) 策略进�
   - t_io/bridge/KILL_SWITCH 存在 → 只发飞书告警，绝不拉起（人工急停语义优先）。
   守护自身日志写 t_io/logs/guardian_YYYYMMDD.log（时间戳行文本，同 daily_review 等现有日志结构）。
 
+  看护清单（2026-09-15 W5 起）：
+  1. 策略进程（gm_main.py，按 heartbeat.json 判活）；
+  2. IOPV 采集器（scripts/iopv_snapshot.py，按进程命令行判活）：工作日 09:25-15:05
+     内未运行则用用户 Python 拉起；拉起后 90s 内进程未存活记 1 次失败，连续 2 次
+     转只告警；KILL_SWITCH 同样压制拉起。
+
 使用：
   python scripts/auto_process_guardian.py          # 前台运行（建议开机/盘前启动）
 环境变量（测试/隔离用，生产不设）：
@@ -50,6 +56,18 @@ STRATEGY_WORKDIR = os.path.join(ST_ROOT, "execution", "auto")
 STRATEGY_CMD = ["python", "gm_main.py"]
 KILL_FROZEN_BEFORE_RESTART = True   # 进程存活但心跳停（冻结）→ 先 taskkill 再拉起，防双实例
 
+# IOPV 采集器看护（2026-09-15 W5 常驻化）：交易时段内 iopv_snapshot.py 未运行则拉起。
+# 采集器需 gm SDK（只在用户 Python），拉起命令固定用用户 Python 绝对路径。
+USER_PYTHON = os.environ.get(
+    "SUPERTRADER_USER_PYTHON",
+    r"C:\Users\Lenovo\AppData\Local\Programs\Python\Python311\python.exe")
+IOPV_WATCH_ENABLED = True
+IOPV_CMD = [USER_PYTHON, os.path.join(ST_ROOT, "scripts", "iopv_snapshot.py")]
+IOPV_WORKDIR = ST_ROOT
+IOPV_GRACE_SEC = 90          # 拉起后等待进程存活的宽限（进程应秒级出现，90s 足够）
+IOPV_MAX_FAIL = 2            # 连续拉起失败上限，达到后只告警不再拉起（同策略连败规则）
+IOPV_WINDOW = (dtime(9, 25), dtime(15, 5))   # 采集时段闸：09:25-15:05 工作日
+
 # 拉起时段闸：心跳只在实盘运行期刷新，非交易时段停顿属正常，绝不拉起
 ONLY_TRADING_HOURS = True
 TRADING_WINDOW = (dtime(9, 25), dtime(15, 10))   # 覆盖盘前预取(9:25 前 init)~收盘后末根 bar
@@ -75,6 +93,9 @@ _state = {
     "pending_restart_ts": 0.0, # 最近一次拉起时刻（>0 表示等待心跳恢复确认）
     "spawned_proc": None,      # 本守护拉起的进程句柄（存活探查用）
     "last_alert": {},          # 告警节流 {key: ts}
+    "iopv_consec_fail": 0,     # IOPV 采集器连续拉起失败计数
+    "iopv_alert_only": False,  # True=IOPV 只告警不拉起
+    "iopv_pending_ts": 0.0,    # IOPV 最近一次拉起时刻（等待进程存活确认）
 }
 
 
@@ -151,18 +172,31 @@ def _in_trading_window():
     return TRADING_WINDOW[0] <= n.time() <= TRADING_WINDOW[1]
 
 
-def _find_strategy_pids():
-    """找命令行含 gm_main.py 的 python 进程（冻结探查用；排除本守护自身）。
+def _resolve_exe(name, fallback):
+    """PATH 查找 + 绝对路径兜底（守护进程 PATH 可能不含 PowerShell/wbem 目录）。"""
+    import shutil
+    p = shutil.which(name)
+    if p:
+        return p
+    return fallback if os.path.exists(fallback) else name
+
+
+_WMIC = _resolve_exe("wmic", r"C:\Windows\System32\wbem\wmic.exe")
+_POWERSHELL = _resolve_exe("powershell", r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe")
+
+
+def _find_pids_by_cmdline(pattern):
+    """找命令行含 pattern 的 python 进程（排除本守护自身）。
     wmic 优先，失败回退 PowerShell CIM；都不可用 → []（当作无存活进程，不影响拉起链路）。"""
     pids = []
     self_pid = os.getpid()
     try:
         out = subprocess.check_output(
-            ["wmic", "process", "where", "name='python.exe'", "get", "processid,commandline"],
+            [_WMIC, "process", "where", "name='python.exe'", "get", "processid,commandline"],
             stderr=subprocess.DEVNULL, timeout=15)
         text = out.decode("utf-8", errors="replace")
         for line in text.splitlines():
-            if "gm_main.py" in line:
+            if pattern in line:
                 parts = line.strip().split()
                 if parts:
                     try:
@@ -177,20 +211,30 @@ def _find_strategy_pids():
     try:
         ps = ("Get-CimInstance Win32_Process -Filter \"Name='python.exe'\" | "
               "Select-Object ProcessId,CommandLine | ConvertTo-Json -Compress")
-        out = subprocess.check_output(["powershell", "-NoProfile", "-Command", ps],
+        out = subprocess.check_output([_POWERSHELL, "-NoProfile", "-Command", ps],
                                       stderr=subprocess.DEVNULL, timeout=20)
         data = json.loads(out.decode("utf-8", errors="replace") or "[]")
         if isinstance(data, dict):
             data = [data]
         for p in data:
             cmd = str(p.get("CommandLine") or "")
-            if "gm_main.py" in cmd:
+            if pattern in cmd:
                 pid = int(p.get("ProcessId") or 0)
                 if pid and pid != self_pid:
                     pids.append(pid)
     except Exception:
         pass
     return pids
+
+
+def _find_strategy_pids():
+    """找命令行含 gm_main.py 的 python 进程（冻结探查用）。"""
+    return _find_pids_by_cmdline("gm_main.py")
+
+
+def _find_iopv_pids():
+    """找命令行含 iopv_snapshot.py 的 python 进程（IOPV 采集器存活探查用）。"""
+    return _find_pids_by_cmdline("iopv_snapshot.py")
 
 
 def _kill_pids(pids):
@@ -244,6 +288,91 @@ def _spawn_strategy():
         return None
 
 
+# ── IOPV 采集器看护（W5，2026-09-15）──
+
+def _in_iopv_window():
+    """IOPV 拉起时段闸：工作日 09:25-15:05（采集器自身也有同样自律，双保险）。"""
+    n = _now_dt()
+    if WEEKDAYS_ONLY and n.weekday() >= 5:
+        return False
+    return IOPV_WINDOW[0] <= n.time() <= IOPV_WINDOW[1]
+
+
+def _spawn_iopv():
+    """拉起 IOPV 采集器（detached，stdout→logs/guardian_iopv_stdout.log）。返回 Popen 或 None。"""
+    if _DRY_RUN:
+        _log("[DRY_RUN] 将拉起 IOPV 采集器: %s (cwd=%s)" % (" ".join(IOPV_CMD), IOPV_WORKDIR))
+        return "DRY"
+    try:
+        os.makedirs(LOG_DIR, exist_ok=True)
+        stdout_path = os.path.join(LOG_DIR, "guardian_iopv_stdout.log")
+        flags = (getattr(subprocess, "DETACHED_PROCESS", 0)
+                 | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0))
+        with open(stdout_path, "ab") as out:
+            proc = subprocess.Popen(IOPV_CMD, cwd=IOPV_WORKDIR,
+                                    stdout=out, stderr=subprocess.STDOUT,
+                                    stdin=subprocess.DEVNULL, creationflags=flags)
+        _log("IOPV 采集器已拉起 pid=%s cmd=%s stdout→%s" % (proc.pid, IOPV_CMD, stdout_path))
+        return proc
+    except Exception as e:
+        _log("IOPV 采集器拉起失败: %s" % e)
+        return None
+
+
+def _tick_iopv():
+    """IOPV 采集器巡检：交易时段内未运行则拉起；连败 IOPV_MAX_FAIL 次转只告警；
+    KILL_SWITCH 存在 → 只告警绝不拉起（人工急停语义优先，与策略同一规则）。"""
+    if not IOPV_WATCH_ENABLED:
+        return
+    if _kill_switch_on():
+        _push("IOPV采集器守护：KILL_SWITCH 存在",
+              "检测到急停文件 %s，守护不拉起 IOPV 采集器。" % KILL_SWITCH_PATH,
+              level="red")
+        return
+    if not _in_iopv_window():
+        return  # 非采集时段：不拉起、不告警（采集器 15:05 后自行退出属正常）
+
+    pids = _find_iopv_pids()
+    if pids:
+        # 进程存活 → 销账复位（含人工恢复场景）
+        if _state["iopv_pending_ts"] or _state["iopv_consec_fail"] or _state["iopv_alert_only"]:
+            _log("IOPV 采集器存活 pids=%s，失败计数/只告警态复位" % pids)
+        _state["iopv_pending_ts"] = 0.0
+        _state["iopv_consec_fail"] = 0
+        _state["iopv_alert_only"] = False
+        return
+
+    # 有待确认的拉起且宽限已过、进程仍未出现 → 记一次失败
+    if (_state["iopv_pending_ts"]
+            and time.time() - _state["iopv_pending_ts"] > IOPV_GRACE_SEC):
+        _state["iopv_consec_fail"] += 1
+        _state["iopv_pending_ts"] = 0.0
+        _log("IOPV 拉起后 %ds 内进程未存活，记连续失败 #%d" % (IOPV_GRACE_SEC, _state["iopv_consec_fail"]))
+        if _state["iopv_consec_fail"] >= IOPV_MAX_FAIL:
+            _state["iopv_alert_only"] = True
+            _push("IOPV采集器守护：连续 %d 次拉起失败，转入只告警" % _state["iopv_consec_fail"],
+                  "IOPV 采集器连续 %d 次拉起后仍未存活，守护已停止自动拉起，请人工介入。\n"
+                  "拉起命令: %s" % (_state["iopv_consec_fail"], " ".join(IOPV_CMD)),
+                  level="red")
+            return
+
+    if _state["iopv_alert_only"]:
+        _push("IOPV采集器守护：采集器未运行（只告警态）",
+              "交易时段内未发现 iopv_snapshot.py 进程，守护处于只告警态，请人工介入。",
+              level="red")
+        return
+    if _state["iopv_pending_ts"]:
+        return  # 宽限期内，等进程出现
+
+    _log("交易时段内未发现 IOPV 采集器进程，尝试拉起")
+    proc = _spawn_iopv()
+    _state["iopv_pending_ts"] = time.time()
+    _push("IOPV采集器守护：已尝试拉起",
+          "交易时段内采集器未运行，已拉起。\n拉起: %s\n命令: %s"
+          % ("成功" if proc else "失败", " ".join(IOPV_CMD)),
+          level="orange")
+
+
 # ── 主巡检 ──
 
 def _try_restart(reason):
@@ -265,7 +394,12 @@ def _try_restart(reason):
 
 
 def tick():
-    """单轮巡检（主循环每 30s 调用；离线测试直接驱动本函数）。"""
+    """单轮巡检（主循环每 30s 调用；离线测试直接驱动本函数）。
+    先 IOPV 后策略：策略分支有 early return，IOPV 巡检须每轮必达。"""
+    try:
+        _tick_iopv()
+    except Exception as e:
+        _log("[ERROR] IOPV 巡检异常（不影响策略巡检）: %s" % e)
     # ① KILL_SWITCH 优先：人工急停语义——只告警，绝不拉起
     if _kill_switch_on():
         _push("做T策略进程守护：KILL_SWITCH 存在",
