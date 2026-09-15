@@ -14,9 +14,11 @@ SIGNAL_THRESHOLD = 0.01          # S1：尾盘30min涨幅 > 1%（与 overnight_r
 # skip reason 全集（拍板枚举）；guard_decision 按下标顺序求值优先级
 # 2026-09-15 B7实单施工：追加 "no_available"（实单专用——T+1 可用量钳制后不足 100 股，
 # 影子通道不下单永不产生；仅追加不改既有六项顺序，影子行为零变化）。
+# 2026-09-15 B7实单修复（B8）：追加 "limit_clamped"（实单专用——贴涨跌停确定性拒单，
+# 下单前被 _limit_clamp_should_skip 钳住；仅追加不改既有七项顺序，影子行为零变化）。
 SKIP_REASONS = ("breaker_tripped", "has_awaiting_buyback", "pos_below_base",
                 "protect_sell_today", "in_b7_chain", "qty_below_100",
-                "no_available")
+                "no_available", "limit_clamped")
 
 # 实单次日接回重试上限：>30 次（逐 bar 约半小时）仍失败 → 链转 void（复盘红色项）
 BUYBACK_MAX_RETRY = 30
@@ -119,3 +121,38 @@ def sell_entry_from_chain(chain):
             "sell_px": float(chain.get("sell_px", 0) or 0),
             "sell_date": str(chain.get("sell_date", "")),
             "chain_id": str(chain.get("chain_id", ""))}
+
+
+def open_align_buy_excluded(chains, code, today_str):
+    """B2（2026-09-15 B7实单修复）：open_align 买入方向排除谓词。
+
+    有 armed B7 链且已到接回日（today_str > sell_date，与 find_due_chains 同口径）的
+    code，其持仓缺口归 B7 次日开盘接回单专管，_force_open_align 不得重复补缺口
+    （否则 09:31 open_align 与逐股循环 B7 接回对同一缺口双倍买入 → 真钱超仓）。
+    仅服务买入方向；卖出方向（超仓归位）不受本谓词影响。
+    engine 缺 b7_overnight_chains 属性时调用方传 {} → 不过滤（getattr 双保险 fail-open）。"""
+    return bool(find_due_chains(chains, code, today_str))
+
+
+def buyback_recon_decide(*, inflight_buy, filled_buy_today, pos_now,
+                         sell_pos_after, chain_qty):
+    """B4（2026-09-15 B7实单修复）：接回重发前对账决策（_sdk_call 15s 超时≠未成）。
+
+    优先级：已满足 > 在途等待 > 重发。
+      "settle_estimated" — 当日已有买单成交，或当前持仓已较卖出后持仓恢复 ≥ chain_qty
+                           （sell_pos_after/pos_now 为 None 基线未知时跳过持仓判定）；
+      "skip_inflight"    — 该 code 已有在途买单（已报/部成）：本 bar 不重发、不计重试，
+                           等成交/拒单回调自然收敛；
+      "order"            — 无任何满足/在途迹象：正常重发。
+    查询侧异常由调用方 fail-open 为本函数的可判定输入（全 False/None → "order"）。"""
+    if filled_buy_today:
+        return "settle_estimated"
+    try:
+        if (sell_pos_after is not None and pos_now is not None
+                and int(pos_now) - int(sell_pos_after) >= int(chain_qty)):
+            return "settle_estimated"
+    except Exception:
+        pass
+    if inflight_buy:
+        return "skip_inflight"
+    return "order"
