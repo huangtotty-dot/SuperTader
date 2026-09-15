@@ -322,6 +322,11 @@ class SignalEngine:
             _bb_root, "t_io", "state", "buyback_chains.json")
         self._buyback_terminal_events: List[Dict[str, Any]] = []
         self._buyback_persist_on = True
+        # 2026-09-15 B7影子施工1/3：B7 隔夜反T链 + 连亏熔断状态（同文件顶层新键族，
+        # 绝不塞进 chains dict——chains 内的键会被 240min 盘中 TTL 误清扫）。
+        # B7 链 key = chain_id（f"{code}_{sell_date}"），不走 _buyback_chain_expired。
+        self.b7_overnight_chains: Dict[str, dict] = {}
+        self.b7_circuit: dict = {"consecutive_losses": 0, "tripped": False}
         self._load_buyback_chains()
 
     # ===== 2026-09-15 阶段0-2：回补链持久化（落盘/恢复/过期/终态） =====
@@ -345,6 +350,100 @@ class SignalEngine:
             "partial_fills": int(ab.get("partial_fills", 0) or 0),
         }
 
+    # ===== 2026-09-15 B7影子施工1/3：B7 隔夜反T链（顶层新键族，不走 240min 盘中 TTL） =====
+
+    def _serialize_b7_chain(self, chain):
+        """B7 链 → 落盘 JSON 记录（全字段字符串/数值，无 datetime 对象）。"""
+        return {
+            "chain_id": str(chain.get("chain_id", "")),
+            "code": str(chain.get("code", "")),
+            "qty": int(chain.get("qty", 0) or 0),
+            "sell_px": float(chain.get("sell_px", 0) or 0),
+            "sell_date": str(chain.get("sell_date", "")),
+            "due_buy_date": str(chain.get("due_buy_date", "")),
+            "status": str(chain.get("status", "armed")),
+            "void_reason": str(chain.get("void_reason", "") or ""),
+        }
+
+    def _record_b7_terminal(self, chain, status, reason):
+        """B7 链终态留痕：记入 terminal_events（chain_kind="b7" 与日内回补链区分），随落盘。"""
+        try:
+            ev = self._serialize_b7_chain(chain)
+            ev.update({
+                "chain_kind": "b7",
+                "status": status,
+                "reason": reason,
+                "terminal_time": _engine_now().isoformat(sep=" "),
+            })
+            for k in ("buy_px", "buy_date"):      # settle 时附带的结算信息（如有）
+                if chain.get(k) is not None:
+                    ev[k] = chain[k]
+            self._buyback_terminal_events.append(ev)
+            del self._buyback_terminal_events[:-200]
+            _code = ev.get("code", "")
+            _diag = dict(self.diagnostics.get(_code) or {})
+            _diag["b7_terminal"] = ev
+            self.diagnostics[_code] = _diag
+        except Exception:
+            pass
+
+    def arm_b7_chain(self, chain_id, code, qty, sell_px, sell_date, due_buy_date=""):
+        """挂 B7 隔夜反T链（14:55 虚拟/真实卖出后调用）。时间全部注入，不读系统时钟。
+
+        due_buy_date 缺省按 sell_date + 1 个交易日（跳过周末）推导；链立即原子落盘。"""
+        sell_date = str(sell_date)
+        due_buy_date = str(due_buy_date or "")
+        if not due_buy_date:
+            try:
+                _d = datetime.strptime(sell_date, "%Y-%m-%d")
+                due_buy_date = _business_day_add(_d, 1).strftime("%Y-%m-%d")
+            except Exception:
+                due_buy_date = ""
+        chain = {"chain_id": str(chain_id), "code": str(code), "qty": int(qty),
+                 "sell_px": float(sell_px), "sell_date": sell_date,
+                 "due_buy_date": due_buy_date, "status": "armed", "void_reason": ""}
+        self.b7_overnight_chains[chain["chain_id"]] = chain
+        self._persist_buyback_chains()
+        return chain
+
+    def settle_b7_chain(self, chain_id, buy_px=None, buy_date="", reason="次日开盘接回完成"):
+        """次日开盘接回闭环：链转 settled 终态留痕（terminal_events）并移出挂账表，落盘。"""
+        chain = self.b7_overnight_chains.pop(str(chain_id), None)
+        if not chain:
+            return None
+        chain = dict(chain)
+        if buy_px is not None:
+            chain["buy_px"] = float(buy_px)
+        if buy_date:
+            chain["buy_date"] = str(buy_date)
+        chain["status"] = "settled"
+        self._record_b7_terminal(chain, "settled", reason)
+        self._persist_buyback_chains()
+        return chain
+
+    def void_b7_chain(self, chain_id, reason="manual_void"):
+        """作废 B7 链（如 HARD_STOP_EXIT 触发破位票不接回）：转 voided 终态留痕并落盘。"""
+        chain = self.b7_overnight_chains.pop(str(chain_id), None)
+        if not chain:
+            return None
+        chain = dict(chain)
+        chain["status"] = "voided"
+        chain["void_reason"] = str(reason)
+        self._record_b7_terminal(chain, "voided", reason)
+        self._persist_buyback_chains()
+        return chain
+
+    def record_b7_circuit(self, state_dict):
+        """B7 连亏熔断状态落盘（拍板口径②：跨进程持久化，人工复盘后手动 reset 不自动复活）。
+
+        state_dict 为 B7CircuitBreaker.to_dict() 结果（n 字段忽略，引擎侧只存执行态）。"""
+        if isinstance(state_dict, dict):
+            self.b7_circuit = {
+                "consecutive_losses": int(state_dict.get("consecutive_losses", 0) or 0),
+                "tripped": bool(state_dict.get("tripped", False)),
+            }
+            self._persist_buyback_chains()
+
     def _persist_buyback_chains(self):
         """原子写（tmp + os.replace）；异常 fail-open 打印，不影响盘中主流程。"""
         if not getattr(self, "_buyback_persist_on", False):
@@ -356,6 +455,11 @@ class SignalEngine:
                 "chains": {c: self._serialize_buyback_chain(c, ab)
                            for c, ab in self.awaiting_buyback.items()},
                 "terminal_events": list(self._buyback_terminal_events)[-200:],
+                # 2026-09-15 B7影子施工1/3：顶层新键族（旧文件无此键时加载向后兼容；
+                # 与 chains 平级，绝不受 240min 盘中 TTL 清扫）
+                "b7_overnight_chains": {k: self._serialize_b7_chain(v)
+                                        for k, v in self.b7_overnight_chains.items()},
+                "b7_circuit": dict(self.b7_circuit),
             }
             os.makedirs(os.path.dirname(self._buyback_path), exist_ok=True)
             _tmp = self._buyback_path + ".tmp"
@@ -409,7 +513,40 @@ class SignalEngine:
                     _restored += 1
                 except Exception:
                     continue
-            if _restored or (data.get("chains") or {}):
+            # 2026-09-15 B7影子施工1/3：恢复顶层新键族（旧文件无此键 → 跳过，向后兼容）。
+            # 已过 due_buy_date 仍 armed 的链 → voided/overdue_unsettled 违约留痕
+            # （对应复盘红色项「B7 次日未按纪律开盘接回」），记入 terminal_events（chain_kind="b7"）。
+            _today = now.strftime("%Y-%m-%d")
+            _b7_restored = 0
+            _b7_overdue = 0
+            for cid, rec in (data.get("b7_overnight_chains") or {}).items():
+                try:
+                    if not isinstance(rec, dict) or not rec.get("code"):
+                        continue
+                    chain = self._serialize_b7_chain(rec)
+                    chain["chain_id"] = chain["chain_id"] or str(cid)
+                    if chain["status"] != "armed":
+                        continue  # 历史 settled/voided 残留不回挂账表（终态已在 terminal_events）
+                    if chain["due_buy_date"] and _today > chain["due_buy_date"]:
+                        chain["status"] = "voided"
+                        chain["void_reason"] = "overdue_unsettled"
+                        self._record_b7_terminal(chain, "voided", "overdue_unsettled")
+                        _b7_overdue += 1
+                        continue
+                    self.b7_overnight_chains[chain["chain_id"]] = chain
+                    _b7_restored += 1
+                except Exception:
+                    continue
+            _circ = data.get("b7_circuit")
+            if isinstance(_circ, dict):
+                self.b7_circuit = {
+                    "consecutive_losses": int(_circ.get("consecutive_losses", 0) or 0),
+                    "tripped": bool(_circ.get("tripped", False)),
+                }
+            if _b7_restored or _b7_overdue:
+                print(f"[buyback_chains] 磁盘恢复 B7 链 {_b7_restored} 条"
+                      f"（逾期未接回违约留痕 {_b7_overdue} 条）")
+            if _restored or (data.get("chains") or {}) or _b7_restored or _b7_overdue:
                 print(f"[buyback_chains] 磁盘恢复 {_restored} 条回补链")
                 self._persist_buyback_chains()  # 回写：剔除已过期链、合并历史终态
         except Exception as e:
