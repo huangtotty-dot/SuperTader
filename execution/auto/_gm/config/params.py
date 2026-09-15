@@ -463,6 +463,15 @@ INDEX_REGIME_PARAMS = {
     # 影子期绝不下单、绝不写 bridge/orders，
     # 只写 t_io/logs/b7_shadow_{date}.jsonl + buyback_chains.json 的 b7_* 键族。
     "b7_shadow_enabled": True,
+    # 2026-09-15 B7实单施工：B7 尾盘反T实单通道总开关（默认关！）。
+    # 2026-09-15 17:23 owner 拍板：跳过影子期直接上实单，翻启由 orchestrator 验收后执行。
+    # 实单优先级高于影子：翻启后 14:55 走 _b7_live_try_sell 直下市价卖单、
+    # 次日首根 bar 走 _b7_live_day_open_buyback 真实 open 价接回；影子台账事件照写
+    # （每日复盘数据源不动）。风控口径全部锁定：卖出量=min(pos,base_ref*0.5)整百、
+    # 连亏4笔费后为负熔断（跨进程持久化、人工 reset）、次日开盘即接不弹人工确认闸、
+    # HARD_STOP_EXIT→armed 链作废不接回、当日保护类卖出/有 awaiting_buyback/
+    # 归位未完成(pos<base_ref) 均不触发。
+    "b7_live_enabled": False,
 }
 
 # ==================== 大盘分时预警参数（回测中不使用，保留占位） ====================
