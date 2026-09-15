@@ -377,6 +377,27 @@ def _limit_clamp_should_skip(context, code, sym, side, qty, price, now, where):
         except Exception:
             _pc = 0.0
         _up, _down, _src = _limit_prices(context, code, sym, _pc)
+        # 数据一致性护栏（2026-09-15）：涨跌停价由 latest_pre_close 推导，若它与 bar 价**不同尺度**，
+        # 钳制会误拦该标的的全部买入。实测 588170：pre_close≈0.64 → up=0.70，而 bar 价 1.66-1.74，
+        # 导致 11,049 次 BUY 被"贴板跳过"（其余 8 只全为 0），该票日内只能卖不能买。
+        # 真实价格不可能高于涨停价 / 低于跌停价 ⇒ 出现该情形即判定涨跌停数据不可信，
+        # fail-open 不拦（只按 code 告警一次），把问题交回数据源而不是让订单被静默吞掉。
+        if (_up and _px > _up * 1.05) or (_down and _px < _down * 0.95):
+            _bad = getattr(context, "_limit_data_bad", None)
+            if _bad is None:
+                _bad = set(); context._limit_data_bad = _bad
+            if code not in _bad:
+                _bad.add(code)
+                print(f"[{now:%H:%M:%S}] LIMIT_DATA_BAD {code} 价格{_px:.3f} 越出涨跌停带 "
+                      f"(up={_up:.3f} down={_down:.3f} pre_close={_pc:.3f} src={_src}) "
+                      f"→ 涨跌停数据不可信，本标的不再贴板钳制（fail-open）")
+                try:
+                    write_risk(str(now), "limit_data_inconsistent",
+                               f"price={_px:.3f} up={_up:.3f} down={_down:.3f} pre_close={_pc:.3f}",
+                               code=code)
+                except Exception:
+                    pass
+            return False
         _kind, _lim = None, None
         if side == "BUY" and _up and _px >= _up * (1 - LIMIT_CLAMP_MARGIN):
             _kind, _lim = "near_limit_up", _up
@@ -1823,6 +1844,24 @@ def _b7_live_enabled() -> bool:
             and _B7_SHADOW_MOD is not None and _b7_glue is not None)
 
 
+_B7_REJ_STATUS = (4, 5, 6, 8, 12)      # 与既有 BASE/OPEN_ALIGN 口径一致：这些 status = 拒单
+
+
+def _b7_rej_status(ret):
+    """掘金 order_volume 返回 List[Dict]；返回拒单状态码，未被拒返回 None。
+
+    ⚠️ 必须查——否则「下单被拒」会被当成成交：链条照记、台账照改 → 凭空多出仓位。
+    2026-09-15 实测：首日底仓 T+1 不可卖，B7 卖出被拒 status=8，却仍记了次日接回 200 股，
+    并让对账逻辑反复触发（该轮回测因此比基线慢约 25 倍）。
+    """
+    if isinstance(ret, list):
+        ret = ret[0] if ret else {}
+    if not isinstance(ret, dict):
+        return None
+    st = ret.get("status")
+    return st if st in _B7_REJ_STATUS else None
+
+
 def _b7_day_bars(context, gm_sym, now):
     return [b for b in (context.bar_cache.get(gm_sym) or [])
             if str(b.get("time", "")).startswith(now.strftime("%Y-%m-%d"))]
@@ -1851,17 +1890,25 @@ def _b7_try_sell(context, code, gm_sym, cp, now, holding, pos_qty) -> bool:
                                  pos_qty=int(pos_qty), base_ref=base_ref, now=now)
     if sig7 is None:
         return False
-    qty = min(int(pos_qty), int(base_ref * 0.5)) // 100 * 100
+    _avail = int((holding or {}).get("available", pos_qty) or 0)   # T+1 可用量
+    qty = min(int(pos_qty), _avail, int(base_ref * 0.5)) // 100 * 100
     if qty < 100:
         return False
     try:
         write_order(str(now), code, "SELL", qty, cp, order_type="B7")
-        _sdk_call("order_volume_b7_sell", _partial(
+        _o7 = _sdk_call("order_volume_b7_sell", _partial(
             order_volume, symbol=gm_sym, volume=qty, side=OrderSide_Sell,
             order_type=OrderType_Market, position_effect=PositionEffect_Close))
     except Exception as e:
-        print(f"[{now:%H:%M:%S}] B7 SELL {code} 下单失败: {e}")
+        print(f"[{now:%H:%M:%S}] B7 SELL {code} 下单异常: {e}")
         return False
+    _st = _b7_rej_status(_o7)
+    if _st is not None:
+        print(f"[{now:%H:%M:%S}] B7_SELL {code} 下单被拒 status={_st} → 不记链条、不改台账")
+        _audit_write({"event": "b7_sell_rejected", "code": code, "qty": qty,
+                      "status": _st, "time": str(now)})
+        return False
+    _mark_pending_recon(context, code, gm_sym, "SELL", qty, cp, _o7)
     _b7_chain[code] = {"qty": qty, "sell_px": float(cp), "sell_date": str(now.date())}
     if gm_sym in context.manual_position:
         mp = context.manual_position[gm_sym]
@@ -1888,12 +1935,21 @@ def _b7_day_start_buyback(context, now) -> None:
             continue
         try:
             write_order(str(now), code, "BUY", qty, px, order_type="B7")
-            _sdk_call("order_volume_b7_buy", _partial(
+            _o7b = _sdk_call("order_volume_b7_buy", _partial(
                 order_volume, symbol=gm_sym, volume=qty, side=OrderSide_Buy,
                 order_type=OrderType_Market, position_effect=PositionEffect_Open))
         except Exception as e:
-            print(f"[{now:%H:%M:%S}] B7 BUYBACK {code} 下单失败: {e}")
+            print(f"[{now:%H:%M:%S}] B7 BUYBACK {code} 下单异常: {e}")
+            _b7_chain[code] = rec          # 链条保留，下一交易日重试（"开盘即接"纪律不放弃）
             continue
+        _stb = _b7_rej_status(_o7b)
+        if _stb is not None:
+            print(f"[{now:%H:%M:%S}] B7_BUYBACK {code} 被拒 status={_stb} → 链条保留待重试")
+            _audit_write({"event": "b7_buyback_rejected", "code": code, "qty": qty,
+                          "status": _stb, "time": str(now)})
+            _b7_chain[code] = rec
+            continue
+        _mark_pending_recon(context, code, gm_sym, "BUY", qty, px, _o7b)
         if gm_sym in context.manual_position:
             mp = context.manual_position[gm_sym]
             mp["qty"] = int(mp.get("qty", 0) or 0) + qty

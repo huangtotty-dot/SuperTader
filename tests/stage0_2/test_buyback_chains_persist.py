@@ -233,6 +233,48 @@ class TestBuybackChainsPersist(unittest.TestCase):
         d = _read_file()
         self.assertIn("300054", d["chains"], "events 兜底恢复未同步进磁盘权威源")
 
+    # ── 回归：数量不变硬约束（2026-09-15 修复「合并 vs 覆盖」）────────────────
+    def test_10_arm_merges_not_overwrites_same_day(self):
+        """旧义务未了结前再次卖出，必须**合并**义务；旧行为=覆盖 → 前一笔数量被静默销毁。
+
+        GM 回测实证（2026-04-08~07-01，9 只底仓）：74 次 arm 仅 5 次 filled，
+        9 只底仓清空 6 只、588170 从 42000 股掉到 200 股 —— 根因即覆盖。
+        """
+        _set_now(2026, 9, 15, 10, 0)
+        eng = SignalEngine()
+        eng.record_trade_action("588170", "SELL_HIGH", qty=16800, price=1.703)
+        eng.record_trade_action("588170", "SELL_HIGH", qty=10000, price=1.727)
+        rec = eng.awaiting_buyback.get("588170")
+        self.assertIsNotNone(rec)
+        self.assertEqual(rec["sell_qty"], 26800, "义务数量必须累加，不能被覆盖")
+        exp_avg = (1.703 * 16800 + 1.727 * 10000) / 26800
+        self.assertAlmostEqual(rec["sell_price"], round(exp_avg, 6), places=6,
+                               msg="卖出价应按量加权")
+        self.assertAlmostEqual(rec["target_price"], round(exp_avg * 0.998, 2), places=2)
+        self.assertEqual(rec["armed_date"], "2026-09-15")
+
+    def test_11_arm_merge_cross_day_keeps_later_expiry(self):
+        """跨日再卖：义务累加，起始日取最早、失效日取较晚。"""
+        _set_now(2026, 9, 15, 10, 0)
+        eng = SignalEngine()
+        eng.record_trade_action("600176", "SELL_HIGH", qty=500, price=33.66)
+        first_exp = eng.awaiting_buyback["600176"]["expire_date"]
+        _set_now(2026, 9, 17, 10, 0)
+        eng.record_trade_action("600176", "SELL_HIGH", qty=200, price=34.00)
+        rec = eng.awaiting_buyback["600176"]
+        self.assertEqual(rec["sell_qty"], 700, "跨日再卖同样必须累加")
+        self.assertEqual(rec["armed_date"], "2026-09-15", "起始日取最早")
+        self.assertGreater(rec["expire_date"], first_exp, "失效日应取较晚者")
+
+    def test_12_partial_fill_then_sell_merges_onto_remainder(self):
+        """部分回补后 sell_qty 已减少，此时再卖应合并到**剩余**义务上。"""
+        _set_now(2026, 9, 15, 10, 0)
+        eng = SignalEngine()
+        eng.record_trade_action("002451", "SELL_HIGH", qty=900, price=9.80)
+        eng.awaiting_buyback["002451"]["sell_qty"] = 400      # 模拟部分回补后剩 400
+        eng.record_trade_action("002451", "SELL_HIGH", qty=300, price=9.90)
+        self.assertEqual(eng.awaiting_buyback["002451"]["sell_qty"], 700)
+
 
 if __name__ == "__main__":
     print(f"临时目录: {_TMP}")
