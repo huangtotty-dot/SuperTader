@@ -1784,6 +1784,10 @@ def init(context):
 #   §4.3 次日开盘即接是不可谈判的纪律（E1：open 接回 +0.638% > vwap30 +0.323% > close +0.165%）
 # ══════════════════════════════════════════════════════════════════════
 _B7_BACKTEST_ENABLE = os.environ.get("SUPERTRADER_B7_BACKTEST") == "1"
+# 仅回测：跳过连亏熔断（评估用）。熔断跳闸后**不自动复活**，任何长跑都会被第一个
+# 4 连亏截断，永远看不到通道的长期行为（2026-04-08~07-01 实证：熔断在 04-15 跳闸，
+# 此后 11 周零活动，剩下 26 次离线机会从未被执行）。生产路径永不设置该变量。
+_B7_BREAKER_DISABLE = os.environ.get("SUPERTRADER_B7_NO_BREAKER") == "1"
 _b7_mod = None
 _b7_breaker = None
 _b7_chain = {}          # {code: {"qty": int, "sell_px": float, "sell_date": str}}
@@ -1868,6 +1872,10 @@ def _b7_day_bars(context, gm_sym, now):
 
 
 def _b7_last_px(context, gm_sym):
+    """（已弃用，保留仅为兼容外部引用）取 bar_cache 末根收盘价。
+
+    ⚠️ 不要用它做次日接回定价：日界时缓存末根仍是前一日 bar。见 _b7_bt_open_buyback 注释。
+    """
     bars = context.bar_cache.get(gm_sym) or []
     return float(bars[-1].get("close") or 0) if bars else 0.0
 
@@ -1878,7 +1886,7 @@ def _b7_try_sell(context, code, gm_sym, cp, now, holding, pos_qty) -> bool:
         return False
     if not (now.hour == 14 and now.minute == 55):
         return False
-    if _b7_breaker is not None and _b7_breaker.tripped:
+    if _b7_breaker is not None and _b7_breaker.tripped and not _B7_BREAKER_DISABLE:
         return False
     base_ref = int(getattr(context, f"_base_ref_{code}", 0) or 0)
     if base_ref <= 0 or int(pos_qty) < base_ref:
@@ -1922,48 +1930,58 @@ def _b7_try_sell(context, code, gm_sym, cp, now, holding, pos_qty) -> bool:
     return True
 
 
-def _b7_day_start_buyback(context, now) -> None:
-    """日界执行 B7 次日开盘接回（纪律：开盘即接，不等回落）。"""
+def _b7_bt_open_buyback(context, code, gm_sym, row, now) -> None:
+    """回测接线的 B7 次日开盘接回 —— 与生产 `_b7_live_day_open_buyback` **同位置同口径**：
+    用**本 bar 的 open** 作接回价。
+
+    ⚠️ 2026-09-16 修正：原实现放在日界块里、用 `_b7_last_px(bar_cache)` 取价 —— 日界那一刻
+    缓存里最后一根仍是**前一日** bar，接回价≈卖出价 → 隔夜缺口被抹平。
+    实测：002639 接回价 18.820 == 卖价 18.820，真实次日开盘 19.20；
+    该轮 26 笔净均 −0.160%/笔、胜率 15.4%（离线同信号为 +0.342% / 58%）→ **该轮结果作废**。
+    """
     if not _B7_BACKTEST_ENABLE or not _b7_chain:
         return
-    for code in list(_b7_chain):
-        rec = _b7_chain.pop(code)
-        gm_sym = STOCKS.get(code, "")
-        qty = int(rec.get("qty", 0) or 0) // 100 * 100
-        px = _b7_last_px(context, gm_sym) if gm_sym else 0.0
-        if not gm_sym or qty < 100 or px <= 0:
-            continue
-        try:
-            write_order(str(now), code, "BUY", qty, px, order_type="B7")
-            _o7b = _sdk_call("order_volume_b7_buy", _partial(
-                order_volume, symbol=gm_sym, volume=qty, side=OrderSide_Buy,
-                order_type=OrderType_Market, position_effect=PositionEffect_Open))
-        except Exception as e:
-            print(f"[{now:%H:%M:%S}] B7 BUYBACK {code} 下单异常: {e}")
-            _b7_chain[code] = rec          # 链条保留，下一交易日重试（"开盘即接"纪律不放弃）
-            continue
-        _stb = _b7_rej_status(_o7b)
-        if _stb is not None:
-            print(f"[{now:%H:%M:%S}] B7_BUYBACK {code} 被拒 status={_stb} → 链条保留待重试")
-            _audit_write({"event": "b7_buyback_rejected", "code": code, "qty": qty,
-                          "status": _stb, "time": str(now)})
-            _b7_chain[code] = rec
-            continue
-        _mark_pending_recon(context, code, gm_sym, "BUY", qty, px, _o7b)
-        if gm_sym in context.manual_position:
-            mp = context.manual_position[gm_sym]
-            mp["qty"] = int(mp.get("qty", 0) or 0) + qty
-        sell_px = float(rec.get("sell_px", 0) or 0)
-        net = _b7_mod.virtual_net_pct(sell_px, px)
-        if _b7_breaker is not None:
-            _b7_breaker.record(net)
-        _audit_write({"event": "b7_overnight_buyback", "code": code, "qty": qty,
-                      "price": round(px, 3), "sell_px": round(sell_px, 3),
-                      "net_pct": round(net * 100, 4), "sell_date": rec.get("sell_date"),
-                      "time": str(now)})
-        print(f"[{now:%H:%M:%S}] B7_BUYBACK {code} 接回 {qty}股@{px:.3f} "
-              f"(卖{sell_px:.3f}, 费后净{net * 100:+.3f}%)")
-        context.total_trade_count += 1
+    rec = _b7_chain.get(code)
+    if not rec:
+        return
+    if str(rec.get("sell_date") or "") >= str(now.date()):
+        return                      # 交易日必须晚于卖出日：卖出当日不回补
+    qty = int(rec.get("qty", 0) or 0) // 100 * 100
+    px = float((row or {}).get("open") or 0)
+    if not gm_sym or qty < 100 or px <= 0:
+        return
+    _b7_chain.pop(code, None)
+    try:
+        write_order(str(now), code, "BUY", qty, px, order_type="B7")
+        _o7b = _sdk_call("order_volume_b7_buy", _partial(
+            order_volume, symbol=gm_sym, volume=qty, side=OrderSide_Buy,
+            order_type=OrderType_Market, position_effect=PositionEffect_Open))
+    except Exception as e:
+        print(f"[{now:%H:%M:%S}] B7 BUYBACK {code} 下单异常: {e}")
+        _b7_chain[code] = rec       # 链条保留，下一 bar 重试（"开盘即接"纪律不放弃）
+        return
+    _stb = _b7_rej_status(_o7b)
+    if _stb is not None:
+        print(f"[{now:%H:%M:%S}] B7_BUYBACK {code} 被拒 status={_stb} → 链条保留待重试")
+        _audit_write({"event": "b7_buyback_rejected", "code": code, "qty": qty,
+                      "status": _stb, "time": str(now)})
+        _b7_chain[code] = rec
+        return
+    _mark_pending_recon(context, code, gm_sym, "BUY", qty, px, _o7b)
+    if gm_sym in context.manual_position:
+        mp = context.manual_position[gm_sym]
+        mp["qty"] = int(mp.get("qty", 0) or 0) + qty
+    sell_px = float(rec.get("sell_px", 0) or 0)
+    net = _b7_mod.virtual_net_pct(sell_px, px)
+    if _b7_breaker is not None and not _B7_BREAKER_DISABLE:
+        _b7_breaker.record(net)
+    _audit_write({"event": "b7_overnight_buyback", "code": code, "qty": qty,
+                  "price": round(px, 3), "sell_px": round(sell_px, 3),
+                  "net_pct": round(net * 100, 4), "sell_date": rec.get("sell_date"),
+                  "time": str(now)})
+    print(f"[{now:%H:%M:%S}] B7_BUYBACK {code} 接回 {qty}股@{px:.3f} "
+          f"(卖{sell_px:.3f}, 费后净{net * 100:+.3f}%)")
+    context.total_trade_count += 1
 
 
 # ── B7 影子通道核心函数（2026-09-15 B7影子施工4/4）──────────────────────
@@ -2457,8 +2475,9 @@ def on_bar(context, bars):
                                "rejected_today": [], "pending": {}})
         except Exception:
             pass
-        # B7 次日开盘接回（仅回测开关启用；默认关闭 → 实盘无操作）
-        _b7_day_start_buyback(context, now)
+        # B7 次日开盘接回**不在此处**做：日界这一刻 bar_cache 末根仍是前一日 bar，
+        # 取价会≈卖出价、把隔夜缺口抹平。改到逐票循环里用本 bar 的 open（见
+        # _b7_bt_open_buyback，与生产 _b7_live_day_open_buyback 同位置同口径）。
 
     # ── KILL_SWITCH 检查 ──
     _killed = check_kill_switch()
@@ -2649,6 +2668,8 @@ def on_bar(context, bars):
         # shadow：虚拟结算（绝不下单）；均 fail-open。
         if _b7_live_enabled():
             _b7_live_day_open_buyback(context, code, gm_sym, row, now)
+        elif _B7_BACKTEST_ENABLE:
+            _b7_bt_open_buyback(context, code, gm_sym, row, now)   # 回测接线（同位置同口径）
         else:
             _b7_shadow_settle_due(context, code, row, now)
 
