@@ -49,6 +49,8 @@ _ap.add_argument("--b7", action="store_true",
                  help="启用 B7 尾盘反T通道（仅本回测生效；通过 SUPERTRADER_B7_BACKTEST=1 传给 gm_main）")
 _ap.add_argument("--full-cost", action="store_true",
                  help="按生产口径计成本：把印花税折算进佣金率（往返 0.136%）。")
+_ap.add_argument("--b7-no-breaker", action="store_true",
+                 help="B7 连亏熔断不生效（仅评估用：熔断不自动复活会把长跑截断在第一个 4 连亏）")
 # ── 成本口径（2026-09-15 实测修正）────────────────────────────────────────────
 # gm 回测**不支持印花税参数**（端子可选参数仅 backtest_commission_ratio / slippage_ratio /
 # transaction_ratio / commission_unit / marginfloat_ratio，无 tax）。默认 0.00015 双边 =
@@ -66,6 +68,10 @@ sys.argv = [sys.argv[0]]
 if _ARGS.b7:
     os.environ["SUPERTRADER_B7_BACKTEST"] = "1"
     print("[backtest_holdings] B7 尾盘反T通道已启用（仅本回测）")
+if _ARGS.b7_no_breaker:
+    os.environ["SUPERTRADER_B7_BACKTEST"] = "1"
+    os.environ["SUPERTRADER_B7_NO_BREAKER"] = "1"
+    print("[backtest_holdings] B7 连亏熔断已禁用（仅评估用）")
 
 _OUT_SUB = ("backtest_holdings_" + _ARGS.label) if _ARGS.label else "backtest_holdings"
 OUT_DIR = os.path.join(_ST, "t_io", "validation", "auto", _OUT_SUB)
