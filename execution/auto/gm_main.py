@@ -1886,16 +1886,28 @@ def _b7_try_sell(context, code, gm_sym, cp, now, holding, pos_qty) -> bool:
         return False
     if not (now.hour == 14 and now.minute == 55):
         return False
-    if _b7_breaker is not None and _b7_breaker.tripped and not _B7_BREAKER_DISABLE:
-        return False
     base_ref = int(getattr(context, f"_base_ref_{code}", 0) or 0)
-    if base_ref <= 0 or int(pos_qty) < base_ref:
-        return False                       # 归位未完成：B7 卖的是底仓的隔夜敞口，不是超仓
-    if (getattr(context.engine, "awaiting_buyback", {}) or {}).get(code):
-        return False                       # 与日内反T回补链互斥
+    # 先算信号：只有 tail30 达标才值得为"守卫拦截"留痕（否则每 bar 刷屏）
+    _t30 = _b7_mod.compute_tail30_pct(_b7_day_bars(context, gm_sym, now), now_close=cp)
+    if _t30 is None or _t30 <= 0.01:
+        return False
+    # ── 守卫逐条判定；被挡则落 b7_guard_block（评估用：定位是哪条在挡大缺口日）──
+    _blk = None
+    if _b7_breaker is not None and _b7_breaker.tripped and not _B7_BREAKER_DISABLE:
+        _blk = "circuit_breaker"
+    elif base_ref <= 0 or int(pos_qty) < base_ref:
+        _blk = "pos_below_base_ref"
+    elif (getattr(context.engine, "awaiting_buyback", {}) or {}).get(code):
+        _blk = "awaiting_buyback"
+    if _blk:
+        _audit_write({"event": "b7_guard_block", "code": code, "reason": _blk,
+                      "tail30_pct": round(_t30 * 100, 4), "pos_qty": int(pos_qty),
+                      "base_ref": base_ref, "time": str(now)})
+        return False
     sig7 = _b7_mod.detect_signal(code, STOCK_NAMES.get(code, code),
                                  _b7_day_bars(context, gm_sym, now),
-                                 pos_qty=int(pos_qty), base_ref=base_ref, now=now)
+                                 pos_qty=int(pos_qty), base_ref=base_ref, now=now,
+                                 now_close=cp)
     if sig7 is None:
         return False
     _avail = int((holding or {}).get("available", pos_qty) or 0)   # T+1 可用量
@@ -2038,7 +2050,7 @@ def _b7_shadow_settle_due(context, code, row, now) -> None:
         print(f"[B7影子] 接回结算异常 {code}: {_e}")   # fail-open：绝不冒泡进 on_bar 主流程
 
 
-def _b7_shadow_try_signal(context, code, gm_sym, now, pos_qty) -> None:
+def _b7_shadow_try_signal(context, code, gm_sym, now, pos_qty, cp) -> None:
     """14:55 bar B7 影子信号评估（每票每日一次；绝不下单、绝不写 bridge/orders）。
 
     门链：tail30 未过闸（None 或 ≤1%）→ 什么都不记（不是 skip）；
@@ -2059,7 +2071,7 @@ def _b7_shadow_try_signal(context, code, gm_sym, now, pos_qty) -> None:
             return                                   # 每票每日一次
         done.add(code)
         day_bars = _b7_day_bars(context, gm_sym, now)
-        tail30 = _B7_SHADOW_MOD.compute_tail30_pct(day_bars)
+        tail30 = _B7_SHADOW_MOD.compute_tail30_pct(day_bars, now_close=cp)
         base_ref = int(getattr(context, f"_base_ref_{code}", 0) or 0)
         awaiting = bool((getattr(context.engine, "awaiting_buyback", {}) or {}).get(code))
         protect = (getattr(context, "_protect_sell_today", {}) or {}).get(code) == date_str
@@ -2080,7 +2092,8 @@ def _b7_shadow_try_signal(context, code, gm_sym, now, pos_qty) -> None:
             return
         # 全过 → detect_signal 复核（守卫内置 pos_qty >= base_ref > 0 / awaiting 互斥）
         sig = _B7_SHADOW_MOD.detect_signal(code, STOCK_NAMES.get(code, code), day_bars,
-                                           pos_qty=int(pos_qty), base_ref=base_ref, now=now)
+                                           pos_qty=int(pos_qty), base_ref=base_ref, now=now,
+                                           now_close=cp)
         if sig is None:
             return
         virtual_qty = _B7_SHADOW_MOD.compute_virtual_qty(int(pos_qty), base_ref)
@@ -2130,7 +2143,7 @@ def _b7_live_try_sell(context, code, gm_sym, cp, now, holding, pos_qty) -> bool:
             return False                       # 每票每日一次
         done.add(code)
         day_bars = _b7_day_bars(context, gm_sym, now)
-        tail30 = _B7_SHADOW_MOD.compute_tail30_pct(day_bars)
+        tail30 = _B7_SHADOW_MOD.compute_tail30_pct(day_bars, now_close=cp)
         base_ref = int(getattr(context, f"_base_ref_{code}", 0) or 0)
         awaiting = bool((getattr(context.engine, "awaiting_buyback", {}) or {}).get(code))
         protect = (getattr(context, "_protect_sell_today", {}) or {}).get(code) == date_str
@@ -2151,7 +2164,8 @@ def _b7_live_try_sell(context, code, gm_sym, cp, now, holding, pos_qty) -> bool:
             return False
         # 全过 → detect_signal 复核（守卫内置 pos_qty >= base_ref > 0 / awaiting 互斥）
         sig = _B7_SHADOW_MOD.detect_signal(code, STOCK_NAMES.get(code, code), day_bars,
-                                           pos_qty=int(pos_qty), base_ref=base_ref, now=now)
+                                           pos_qty=int(pos_qty), base_ref=base_ref, now=now,
+                                           now_close=cp)
         if sig is None:
             return False
         virtual_qty = _B7_SHADOW_MOD.compute_virtual_qty(int(pos_qty), base_ref)
@@ -2639,6 +2653,27 @@ def on_bar(context, bars):
         code = _raw_code(gm_sym)
         if code not in STOCKS:
             continue
+        # ── B7 诊断（仅回测）：逐票循环**最顶端**记录每次 14:55 评估 ──
+        # 之前的留痕放在钩子处，而钩子前面还有若干静默 continue（_force_tail_buyback 等），
+        # 导致"信号达标却没进门"的日子无法归因。此处先记原始观测，再看它走到哪一步。
+        if _B7_BACKTEST_ENABLE and now.hour == 14 and now.minute == 55:
+            try:
+                _db = _b7_day_bars(context, gm_sym, now)
+                _cp0 = float(bar.get("close") or 0)
+                _t = (_b7_mod.compute_tail30_pct(_db, now_close=_cp0)
+                      if _b7_mod else None)
+                _hh = [_b7_mod._bar_hhmm(b) for b in _db] if _b7_mod else []
+                _ref = [x for x in _hh if x <= "14:30"]
+                _now2 = [x for x in _hh if x <= "14:55"]
+                _audit_write({"event": "b7_eval", "code": code,
+                              "t30": (None if _t is None else round(_t * 100, 4)),
+                              "n_bars": len(_db),
+                              "last_hhmm": _hh[-1] if _hh else None,
+                              "ref_used": _ref[-1] if _ref else None,
+                              "now_used": _now2[-1] if _now2 else None,
+                              "time": str(now)})
+            except Exception:
+                pass
 
         # F9: 同 eob 重复 bar 去重（2026-07-31 模拟盘同秒 4 次重复投递
         # 导致 PANIC 连发 4 单；同时防止 bar_cache 重复累积）
@@ -3023,12 +3058,31 @@ def on_bar(context, bars):
         sig, tail_done = sell_channels._sell_channel_gate(
             context, code, gm_sym, cp, now, sig, pos_qty, holding, daily_ctx,
             feats_cache, is_tail, morning_no_buy)
-        if tail_done:
-            continue
+        # ── B7 尾盘反T（仅回测开关启用；仅 14:55 bar；全场最低优先级）──
+        # ⚠️ 调用点本身就是**静默过滤器**：14:50~15:00 是尾盘归位/强平最密集的时段，
+        #    信号非空或 tail_done 都会让 B7 无声跳过。故在此对"信号达标但被前置条件挡掉"
+        #    逐日落 b7_guard_block，否则频率缺口无从归因（2026-09-16 实证：2 个月窗口
+        #    20+ 个 S1 日只有 9 个进到 _b7_try_sell）。
+        if _B7_BACKTEST_ENABLE and now.hour == 14 and now.minute == 55:
+            _t30c = (_b7_mod.compute_tail30_pct(_b7_day_bars(context, gm_sym, now),
+                                                now_close=cp)
+                     if _b7_mod else None)
+            if _t30c is not None and _t30c > 0.01:
+                _why = None
+                if tail_done:
+                    _why = "tail_done"
+                elif sig is not None:
+                    _why = "other_signal:" + str(getattr(sig, "action", "?"))
+                elif pos_qty <= 0:
+                    _why = "no_position"
+                if _why:
+                    _audit_write({"event": "b7_guard_block", "code": code, "reason": _why,
+                                  "tail30_pct": round(_t30c * 100, 4),
+                                  "pos_qty": int(pos_qty), "time": str(now)})
+                elif _b7_try_sell(context, code, gm_sym, cp, now, holding, pos_qty):
+                    continue
 
-        # ── B7 尾盘反T（仅回测开关启用；仅 14:55 bar；全场最低优先级，sig 为空时才轮到它）──
-        if (_B7_BACKTEST_ENABLE and sig is None and pos_qty > 0
-                and _b7_try_sell(context, code, gm_sym, cp, now, holding, pos_qty)):
+        if tail_done:
             continue
 
         # ── B7 通道（非回测接线；sig 为空时才轮到它，全场最低优先级）──
@@ -3040,7 +3094,7 @@ def on_bar(context, bars):
                 if _b7_live_try_sell(context, code, gm_sym, cp, now, holding, pos_qty):
                     continue
             else:
-                _b7_shadow_try_signal(context, code, gm_sym, now, pos_qty)
+                _b7_shadow_try_signal(context, code, gm_sym, now, pos_qty, cp)
 
         if sig is None:
             # P0-4(2026-09-01): 信号褪化留痕——confirm 已到达但信号消失/score 掉阈，
