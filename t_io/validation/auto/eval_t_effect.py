@@ -58,6 +58,8 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--label', default='b7_off')
     ap.add_argument('--cash', type=float, default=400000.0)
+    ap.add_argument('--cost-included', action='store_true',
+                    help='回测已按 --full-cost 计含印花税 → 跳过事后补扣（否则重复扣）')
     ap.add_argument('--dir', default=None)
     args = ap.parse_args()
     d = args.dir or os.path.join(ROOT, 't_io', 'validation', 'auto',
@@ -111,8 +113,11 @@ def main():
     print('      ⚠️ 该项 = 「买入持有底仓」与实际账户之差，混合了 T 腿 + 止损/止盈退出，')
     print('         不是纯做T能力；且若期末持仓≠建仓量，说明底仓被削薄（见末表）。')
     print()
-    print(f'成本修正（GM 漏扣印花税 0.1%/卖出）：补扣 {stamp:,.0f} 元 = {stamp / args.cash * 100:.3f}pp')
-    print(f'  修正后 账户 {acct - stamp:>12,.0f} | 底仓 beta {base:>12,.0f} | 做T {t_leg - stamp:>12,.0f}')
+    if args.cost_included:
+        print('成本：回测已按 --full-cost 计含印花税（往返 0.136%）→ 上面即为成本后口径，无需再补扣')
+    else:
+        print(f'成本修正（GM 漏扣印花税 0.1%/卖出）：补扣 {stamp:,.0f} 元 = {stamp / args.cash * 100:.3f}pp')
+        print(f'  修正后 账户 {acct - stamp:>12,.0f} | 底仓 beta {base:>12,.0f} | 交易 {t_leg - stamp:>12,.0f}')
     print()
     print(f'{"code":8}{"建仓价":>9}{"期末价":>9}{"建仓量":>9}{"底仓盈亏":>12}{"期末持仓":>10}')
     for c in codes:
