@@ -70,13 +70,21 @@ def find_close_at(bars: list, hhmm: str) -> float | None:
     return best
 
 
-def compute_tail30_pct(bars: list) -> float | None:
+def compute_tail30_pct(bars: list, now_close: float | None = None) -> float | None:
     """尾盘30min涨幅 = c14:55 / c14:30 − 1（严格 ≤14:55 口径，与实验 S1 一致）。
 
     bars 须为当日分钟 bar 序列（任一元素含 time/close 即可）；数据不足返回 None。
+
+    ⚠️ **now_close（2026-09-16 修正，诊断实证）**：`context.bar_cache` **不含当前 bar**——
+    在 14:55 评估时它的末根是 **14:54**，于是 `find_close_at('14:55')` 退化取到 14:54，
+    信号用的是**上一分钟**收盘，而实际成交在 14:55 收盘价。尾盘急拉最猛的一分钟往往
+    就是最后那一分钟 ⇒ **系统性低估涨幅、吞掉临界信号**。
+    实测（000988 2026-04-08，引擎 self-report ref=14:30 / now=14:54）：
+      c(14:54)/c(14:30) = 0.796%  vs  c(14:55)/c(14:30) = 1.015%  —— 卡在 1% 阈值两侧。
+    调用方应把**当前 bar 的收盘价**传进来（与卖出成交价同源）。不传则保持旧行为。
     """
     c_ref = find_close_at(bars, REF_BAR_HHMM)
-    c_now = find_close_at(bars, SELL_BAR_HHMM)
+    c_now = float(now_close) if now_close else find_close_at(bars, SELL_BAR_HHMM)
     if c_ref is None or c_now is None or c_ref <= 0:
         return None
     return c_now / c_ref - 1.0
@@ -102,7 +110,8 @@ def compute_virtual_qty(pos_qty: int, base_ref: int) -> int:
 def detect_signal(code: str, name: str, bars: list,
                   pos_qty: int = 0, base_ref: int = 0,
                   has_awaiting_buyback: bool = False,
-                  now: datetime | None = None) -> dict | None:
+                  now: datetime | None = None,
+                  now_close: float | None = None) -> dict | None:
     """B7 信号检测（14:55 bar 调用一次）。触发返回标准信号 dict，否则 None。
 
     生产接入时的前置守卫（本函数只做检测，守卫由通道层执行，此处留作口径说明）：
@@ -116,13 +125,13 @@ def detect_signal(code: str, name: str, bars: list,
         return None
     if has_awaiting_buyback:
         return None
-    tail30 = compute_tail30_pct(bars)
+    tail30 = compute_tail30_pct(bars, now_close=now_close)
     if tail30 is None or tail30 <= SIGNAL_THRESHOLD:
         return None
 
     ts = (now or datetime.now()).strftime("%Y-%m-%d %H:%M:%S")
     c_ref = find_close_at(bars, REF_BAR_HHMM)
-    c_now = find_close_at(bars, SELL_BAR_HHMM)
+    c_now = float(now_close) if now_close else find_close_at(bars, SELL_BAR_HHMM)
     return {
         "code": code,
         "name": name,
