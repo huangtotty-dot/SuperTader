@@ -179,11 +179,8 @@ def run_entries(panel, zmap, sign, exit_name, code):
             # **穿越触发**（不是"超阈即发"）：否则因子持续超阈会每根 bar 发一次，
             # 实测会产生 81 次/票/日的荒谬密度（生产引擎约 3 次/日）。
             if not np.isfinite(s_prev):
-                if s > Z_THR:
-                    sig.append((i + 1, 'long'))
-                elif s < -Z_THR:
-                    sig.append((i + 1, 'short'))
-            elif s_prev <= Z_THR < s:
+                continue                  # 前值未知 ⇒ 无法判定"穿越"，不发信号（与快路径一致）
+            if s_prev <= Z_THR < s:
                 sig.append((i + 1, 'long'))
             elif s_prev >= -Z_THR > s:
                 sig.append((i + 1, 'short'))
@@ -284,13 +281,108 @@ def _cell_worker(pack):
         if not panel:
             return None
         fv = compute_factor(panel, fname, leak=leak)
-        zm = zscores(fv, panel)
-        legs = run_entries(panel, zm, sign, exit_name, code)
+        if exit_name == 'hold':                       # 快路径（已与慢路径交叉验证 |Δ|=0）
+            keep, labels, L, _nd = aligned_matrix(panel)
+            legs = legs_hold_fast(panel, fv, sign, keep, labels, L) if keep else []
+            for x in legs:
+                x['code'] = code
+                ctx = panel['days'][x['date']]
+                x['day_type'] = rx.day_type(ctx['o'], ctx['h'], ctx['l'], ctx['c'],
+                                            ctx['prev_close'])
+        else:
+            zm = zscores(fv, panel)
+            legs = run_entries(panel, zm, sign, exit_name, code)
         rnd = random_baseline(panel, legs, exit_name, code)
+
         return {'legs': legs, 'rand': rnd, 'n_days': len(panel['dates'])}
     except Exception as e:
         print(f'  [warn] {code} {fname} sign={sign} {exit_name}: {type(e).__name__} {e}')
         return None
+
+
+def aligned_matrix(panel):
+    """把一天一个数组摊成 [n_days, n_bars] 矩阵。
+
+    各交易日 bar 数基本一致（剔除异常日）；标签一致性强校验，不一致的日直接剔除。
+    这是**向量化提速的前提**：14 日同刻 z-score 于是变成沿轴 0 的滑动统计。
+    """
+    import collections as _c
+    lens = [len(panel['labels'][d]) for d in panel['dates']]
+    L = _c.Counter(lens).most_common(1)[0][0]
+    keep = [d for d, n in zip(panel['dates'], lens) if n == L]
+    if not keep:
+        return [], None, None, 0
+    labels = panel['labels'][keep[0]]
+    bad = {d for d in keep if panel['labels'][d] != labels}
+    keep = [d for d in keep if d not in bad]
+    if not keep:
+        return [], None, None, 0
+    return keep, labels, L, len(keep)
+
+
+def zscore_matrix(M, look=14, min_hist=MIN_HIST_DAYS):
+    """[n_days, n_bars] 上做**过去 look 日同刻**的 z-score（严格因果：不含当日）。"""
+    n = M.shape[0]
+    Z = np.full_like(M, np.nan)
+    for k in range(n):
+        a, b = max(0, k - look), k
+        if b - a < min_hist:
+            continue
+        w = M[a:b]
+        with np.errstate(invalid='ignore'):
+            m = np.nanmean(w, axis=0)
+            s = np.nanstd(w, axis=0, ddof=1)
+        ok = np.isfinite(m) & np.isfinite(s) & (s > 1e-12) & np.isfinite(M[k])
+        Z[k][ok] = (M[k][ok] - m[ok]) / s[ok]
+    return Z
+
+
+def legs_hold_matrix(panel, M, sign, keep, labels, L):
+    """核心：给定 [n_days, n_bars] 因子矩阵，向量化产出 `hold` 臂腿清单。"""
+    Z = zscore_matrix(M)
+    S = sign * Z
+    O = np.array([panel['days'][d]['o'] for d in keep], float)
+    C = np.array([panel['days'][d]['c'] for d in keep], float)
+    JF = np.array([rx.force_idx(panel['days'][d]['t']) for d in keep], int)
+    nets = []
+    long_m = (S[:, 1:] > Z_THR) & (S[:, :-1] <= Z_THR)
+    short_m = (S[:, 1:] < -Z_THR) & (S[:, :-1] >= -Z_THR)
+    legs = []
+    for r in range(len(keep)):
+        bars = []
+        # ⚠️ off-by-one：掩码下标 j 已是「前一根」（比较 S[j] 与 S[j+1]），
+        # 穿越发生在 bar j+1，故成交在 j+2（与 run_entries 的 i→i+1 同义）。
+        for off, is_long in ((np.where(long_m[r])[0], True), (np.where(short_m[r])[0], False)):
+            for j in off:
+                bars.append((j + 2, 'long' if is_long else 'short'))
+        bars.sort()
+        bars = [(b, dr) for b, dr in bars if 1 <= b <= JF[r] and O[r][b] > 0][:MAX_ENTRIES]
+        for ei, dr in bars:
+            net = rx._leg_pnl(dr, float(O[r][ei]), float(C[r][JF[r]]))
+            legs.append({'code': None, 'date': keep[r], 'bar': ei, 'dir': dr, 'net': net,
+                         'day_type': None, 'reason': 'hold1455'})
+            nets.append(net)
+    if not nets:
+        return []
+    return legs
+
+
+def legs_hold_fast(panel, fvals, sign, keep, labels, L):
+    """`legs_hold_matrix` 的 dict 入参包装（fvals = {date: array}）。"""
+    M = np.full((len(keep), L), np.nan)
+    for r, d in enumerate(keep):
+        a = fvals.get(d)
+        if a is not None and len(a) == L:
+            M[r] = a
+    return legs_hold_matrix(panel, M, sign, keep, labels, L)
+
+
+def score_hold_fast(panel, fvals, sign, keep, labels, L):
+    """→ (n, net_mean)，供 GP 适应度用。"""
+    legs = legs_hold_fast(panel, fvals, sign, keep, labels, L)
+    if not legs:
+        return 0, 0.0
+    return len(legs), float(np.mean([x['net'] for x in legs]))
 
 
 def _aggregate(fname, sign, exit_name, parts):
