@@ -2659,7 +2659,7 @@ def on_bar(context, bars):
         if _B7_BACKTEST_ENABLE and now.hour == 14 and now.minute == 55:
             try:
                 _db = _b7_day_bars(context, gm_sym, now)
-                _cp0 = float(bar.get("close") or 0)
+                _cp0 = float(bar["close"] or 0)   # gm Bar 对象：无 .get()（会解析成 None → TypeError）
                 _t = (_b7_mod.compute_tail30_pct(_db, now_close=_cp0)
                       if _b7_mod else None)
                 _hh = [_b7_mod._bar_hhmm(b) for b in _db] if _b7_mod else []
@@ -2672,8 +2672,13 @@ def on_bar(context, bars):
                               "ref_used": _ref[-1] if _ref else None,
                               "now_used": _now2[-1] if _now2 else None,
                               "time": str(now)})
-            except Exception:
-                pass
+                print(f"[{now:%H:%M:%S}] B7_EVAL {code} t30={_t} n={len(_db)} "
+                      f"last={_hh[-1] if _hh else None} ref={_ref[-1] if _ref else None} "
+                      f"now={_now2[-1] if _now2 else None}")
+            except Exception as _e:
+                import traceback as _tb
+                print(f"[{now:%H:%M:%S}] B7_EVAL_FAIL {code}: {type(_e).__name__} {_e}\n"
+                      + _tb.format_exc())
 
         # F9: 同 eob 重复 bar 去重（2026-07-31 模拟盘同秒 4 次重复投递
         # 导致 PANIC 连发 4 单；同时防止 bar_cache 重复累积）
