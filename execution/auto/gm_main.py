@@ -1788,6 +1788,8 @@ _B7_BACKTEST_ENABLE = os.environ.get("SUPERTRADER_B7_BACKTEST") == "1"
 # 4 连亏截断，永远看不到通道的长期行为（2026-04-08~07-01 实证：熔断在 04-15 跳闸，
 # 此后 11 周零活动，剩下 26 次离线机会从未被执行）。生产路径永不设置该变量。
 _B7_BREAKER_DISABLE = os.environ.get("SUPERTRADER_B7_NO_BREAKER") == "1"
+# 仅回测/评估：放宽归位护栏 pos_qty>=base_ref。生产路径永不设置。
+_B7_RELAX_BASE_GUARD = os.environ.get("SUPERTRADER_B7_RELAX_BASE") == "1"
 _b7_mod = None
 _b7_breaker = None
 _b7_chain = {}          # {code: {"qty": int, "sell_px": float, "sell_date": str}}
@@ -1895,7 +1897,7 @@ def _b7_try_sell(context, code, gm_sym, cp, now, holding, pos_qty) -> bool:
     _blk = None
     if _b7_breaker is not None and _b7_breaker.tripped and not _B7_BREAKER_DISABLE:
         _blk = "circuit_breaker"
-    elif base_ref <= 0 or int(pos_qty) < base_ref:
+    elif base_ref <= 0 or (int(pos_qty) < base_ref and not _B7_RELAX_BASE_GUARD):
         _blk = "pos_below_base_ref"
     elif (getattr(context.engine, "awaiting_buyback", {}) or {}).get(code):
         _blk = "awaiting_buyback"
@@ -1907,7 +1909,7 @@ def _b7_try_sell(context, code, gm_sym, cp, now, holding, pos_qty) -> bool:
     sig7 = _b7_mod.detect_signal(code, STOCK_NAMES.get(code, code),
                                  _b7_day_bars(context, gm_sym, now),
                                  pos_qty=int(pos_qty), base_ref=base_ref, now=now,
-                                 now_close=cp)
+                                 now_close=cp, relax_base_guard=_B7_RELAX_BASE_GUARD)
     if sig7 is None:
         return False
     _avail = int((holding or {}).get("available", pos_qty) or 0)   # T+1 可用量

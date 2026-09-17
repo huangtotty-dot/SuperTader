@@ -111,7 +111,8 @@ def detect_signal(code: str, name: str, bars: list,
                   pos_qty: int = 0, base_ref: int = 0,
                   has_awaiting_buyback: bool = False,
                   now: datetime | None = None,
-                  now_close: float | None = None) -> dict | None:
+                  now_close: float | None = None,
+                  relax_base_guard: bool = False) -> dict | None:
     """B7 信号检测（14:55 bar 调用一次）。触发返回标准信号 dict，否则 None。
 
     生产接入时的前置守卫（本函数只做检测，守卫由通道层执行，此处留作口径说明）：
@@ -121,7 +122,15 @@ def detect_signal(code: str, name: str, bars: list,
       3) 该票无 pending 的日内反T回补义务（awaiting_buyback）——避免两套回补链互撞；
       4) 连亏熔断未触发（见 B7CircuitBreaker）。
     """
-    if not (int(pos_qty) >= int(base_ref) > 0):
+    # relax_base_guard（2026-09-17，**仅评估用**）：归位护栏 pos_qty >= base_ref 会挡掉
+    # **恰恰最好的日子**——尾盘急拉越猛 ⇒ 日内波动越大 ⇒ T 腿越可能还开着 ⇒ 持仓不在底仓。
+    # 实测：窗口内被它挡掉的 000988 04-13 缺口 **−4.031%**（全窗口最大）。
+    # 放宽后只要求有底仓（pos_qty>0），卖出量仍由调用方按 min(持仓, 底仓额度) 收口。
+    # 默认 False = 生产口径逐字不变。
+    if relax_base_guard:
+        if not (int(pos_qty) > 0 and int(base_ref) > 0):
+            return None
+    elif not (int(pos_qty) >= int(base_ref) > 0):
         return None
     if has_awaiting_buyback:
         return None
