@@ -311,18 +311,32 @@ def main(argv: list[str] | None = None) -> None:
     only = None
     skip_mc = "--skip-mc" in argv
     use_snapshot = "--use-snapshot" in argv
+    tag = None                # --tag=prevadj → 结果写入 volatility_screen_2026-09-18_prevadj/
+    since = None              # --since=2023-09-01 → 面板截断（降级方案用）
+    mc_n = MC_N               # --mc-n=50 → 覆盖 MC 抽样次数
     for a in argv:
         if a.startswith("--only="):
             only = a.split("=", 1)[1].split(",")
+        elif a.startswith("--tag="):
+            tag = a.split("=", 1)[1]
+        elif a.startswith("--since="):
+            since = a.split("=", 1)[1]
+        elif a.startswith("--mc-n="):
+            mc_n = int(a.split("=", 1)[1])
 
-    RESULTS_DIR.mkdir(parents=True, exist_ok=True)
+    results_dir = RESULTS_DIR if not tag else RESULTS_DIR.with_name(RESULTS_DIR.name + "_" + tag)
+    results_dir.mkdir(parents=True, exist_ok=True)
+    print(f"[out] 结果目录 -> {results_dir}", flush=True)
     print(f"[load] panel <- {PANEL_DIR}", flush=True)
     panel = load_panel(str(PANEL_DIR))
     panel = _prep_panel(panel)
+    if since:
+        panel = panel[panel["date"] >= pd.Timestamp(since)].reset_index(drop=True)
+        print(f"[trim] --since={since} 截断后面板 {len(panel)} 行", flush=True)
     print(f"[load] {panel['symbol'].nunique()} symbols, {len(panel)} rows, "
           f"{panel['date'].min().date()} ~ {panel['date'].max().date()}", flush=True)
 
-    snap = RESULTS_DIR / "factors_filtered.parquet"
+    snap = results_dir / "factors_filtered.parquet"
     if use_snapshot and snap.exists():
         factors_f = pd.read_parquet(snap)
         factors_f["date"] = pd.to_datetime(factors_f["date"])
@@ -351,22 +365,22 @@ def main(argv: list[str] | None = None) -> None:
             "decile": decile_analysis(fdf, panel, horizon=DECILE_HORIZON, n_groups=10),
         }
         if not skip_mc:
-            res["mc"] = mc_baseline(fdf, panel, horizon=MC_HORIZON, n=MC_N, seed=MC_SEED)
+            res["mc"] = mc_baseline(fdf, panel, horizon=MC_HORIZON, n=mc_n, seed=MC_SEED)
         results[name] = res
         # 每个因子完成即落盘，防超时丢进度
-        (RESULTS_DIR / f"check_{name}.json").write_text(
+        (results_dir / f"check_{name}.json").write_text(
             json.dumps(_jsonable(res), ensure_ascii=False, indent=2), encoding="utf-8")
 
-    (RESULTS_DIR / "factor_health_all.json").write_text(
+    (results_dir / "factor_health_all.json").write_text(
         json.dumps(_jsonable(results), ensure_ascii=False, indent=2), encoding="utf-8")
 
     print("[pool] 生成 TOP100 候选池 ...", flush=True)
     pool = candidate_pool(factors_f)
-    pool.to_csv(RESULTS_DIR / "top100_pool.csv", index=False, encoding="utf-8-sig")
+    pool.to_csv(results_dir / "top100_pool.csv", index=False, encoding="utf-8-sig")
     n_held = int(pool["held"].sum())
     print(f"[pool] 截面日={pool['date'].iloc[0].date()} 已持有重合={n_held}/{len(pool)}", flush=True)
     print(pool.head(15).to_string(index=False), flush=True)
-    print(f"[done] 产物目录: {RESULTS_DIR}", flush=True)
+    print(f"[done] 产物目录: {results_dir}", flush=True)
 
 
 if __name__ == "__main__":
