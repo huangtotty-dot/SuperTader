@@ -75,13 +75,13 @@ def compute_tail30_pct(bars: list, now_close: float | None = None) -> float | No
 
     bars 须为当日分钟 bar 序列（任一元素含 time/close 即可）；数据不足返回 None。
 
-    ⚠️ **now_close（2026-09-16 修正，诊断实证）**：`context.bar_cache` **不含当前 bar**——
-    在 14:55 评估时它的末根是 **14:54**，于是 `find_close_at('14:55')` 退化取到 14:54，
-    信号用的是**上一分钟**收盘，而实际成交在 14:55 收盘价。尾盘急拉最猛的一分钟往往
-    就是最后那一分钟 ⇒ **系统性低估涨幅、吞掉临界信号**。
-    实测（000988 2026-04-08，引擎 self-report ref=14:30 / now=14:54）：
-      c(14:54)/c(14:30) = 0.796%  vs  c(14:55)/c(14:30) = 1.015%  —— 卡在 1% 阈值两侧。
-    调用方应把**当前 bar 的收盘价**传进来（与卖出成交价同源）。不传则保持旧行为。
+    ⚠️ **now_close 的由来与更正（2026-09-18 审计）**：
+    该参数原是为修「`bar_cache` 不含当前 bar、14:55 评估时末根是 14:54」而加。**该诊断是错的**：
+    它来自一个放在 `on_bar` 逐票循环**顶端**的观测，而 `bar_cache` 的 append 发生在
+    `_dedup_bar` 之后、**决策代码之前** → 真实决策点 cache 末根**就是当前 bar**。
+    实调用点审计（12/12 样本）：`cache末根=14:55 n=235 find('14:55')取到价 == cp`。
+    ⇒ **引擎本来就是对的，本参数是惰性的**（传 `now_close=cp` 与不传等价）。
+    保留仅为显式化"判定价 = 成交价"的意图，调用方传当前 bar 收盘价即可。
     """
     c_ref = find_close_at(bars, REF_BAR_HHMM)
     c_now = float(now_close) if now_close else find_close_at(bars, SELL_BAR_HHMM)
