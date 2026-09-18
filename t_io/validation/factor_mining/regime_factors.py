@@ -493,7 +493,9 @@ def scenario_value(fp: pd.DataFrame, n_perm=1000, seed=20260918):
     1. Mann-Whitney U（日聚合组均值，渐近 p 值，手写实现无 scipy）
     2. 日期内洗牌 MC：消除「高波动日所有 regime 一起波动」的市场级混杂。
     """
-    d = fp.dropna(subset=['regime', 'next_amp']).copy()
+    # 只取需要的列再 dropna：全市场 9.7M 行 × 全列 copy 会撑爆内存（列裁剪不改结果）
+    cols = ['eob', 'regime', 'next_amp', 'next_theo', 'next_real']
+    d = fp[cols].dropna(subset=['regime', 'next_amp']).copy()
     d['target'] = d['regime'].isin(TARGET_GROUP)
 
     # ── 分组分布 ──
@@ -626,11 +628,11 @@ def cmd_merge(args):
     print(fp['regime'].value_counts(dropna=False).to_string())
 
 
-def _load_fp(tag=''):
+def _load_fp(tag='', columns=None):
     pq = os.path.join(HERE, f'regime_factor_panel{tag}.parquet')
     if not os.path.exists(pq):
         raise FileNotFoundError(f'先跑 build + merge（缺 {pq}）')
-    return pd.read_parquet(pq)
+    return pd.read_parquet(pq, columns=columns)
 
 
 _IC_PANEL_CACHE = os.path.join(HERE, 'regime_ic_panel_cache.parquet')
@@ -663,7 +665,8 @@ def cmd_health(args):
         if os.path.exists(outs[s]) and not args.force:
             with open(outs[s], encoding='utf-8') as f:
                 done[s] = {json.loads(x)['factor'] for x in f if x.strip()}
-    fp = _load_fp(args.tag)
+    need_cols = ['symbol', 'eob', 'open', 'high', 'low', 'close', 'volume', 'amount'] + list(factors)
+    fp = _load_fp(args.tag, columns=need_cols)
     if args.start_date:
         fp = fp[fp['eob'] >= pd.Timestamp(args.start_date, tz='Asia/Shanghai')]
         print(f'[health] 窗口 {args.start_date} 起 → {len(fp):,} 行', flush=True)
@@ -712,7 +715,8 @@ def cmd_health(args):
 
 
 def cmd_scenario(args):
-    fp = _load_fp(args.tag)
+    # parquet 列裁剪直读（9.7M 行全列 ~2.5GB，5 列 ~0.4GB；低内存机器必需）
+    fp = _load_fp(args.tag, columns=['eob', 'regime', 'next_amp', 'next_theo', 'next_real'])
     print(f'[scenario] 面板 {len(fp):,} 行，开始分组统计 ...', flush=True)
     t0 = time.time()
     sv = scenario_value(fp, n_perm=args.scenario_perm)
@@ -732,7 +736,7 @@ def cmd_report_meta(args):
 
     体检读取优先级：3 年窗口（regime_health_*_2023-09-01.jsonl）> 全历史。
     """
-    fp = _load_fp(args.tag)
+    fp = _load_fp(args.tag, columns=['eob', 'symbol', 'regime'])
     dist = fp['regime'].value_counts(dropna=False)
     health = {}
     for step in ('eval', 'decile', 'mc'):
