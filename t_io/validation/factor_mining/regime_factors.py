@@ -71,6 +71,7 @@ python regime_factors.py merge                  # 合并分片 → regime_factor
 python regime_factors.py health                 # 因子体检（ic_layer 优先）→ regime_health.jsonl
 python regime_factors.py scenario               # 场景价值验证 → regime_scenario.json
 python regime_factors.py report                 # 汇总 → regime_results.json
+# 所有子命令支持 --tag _suffix：输出文件名加后缀，保留旧结果（口径切换复跑用）
 ```
 """
 import argparse
@@ -595,11 +596,11 @@ def _shard_files():
 
 
 def cmd_build(args):
-    """逐分片构建因子面板 → regime_fp_shard_XXXX.parquet（可并行/续跑）。"""
+    """逐分片构建因子面板 → regime_fp_shard_XXXX{tag}.parquet（可并行/续跑）。"""
     files = _shard_files()
     idxs = range(len(files)) if args.shard is None else [args.shard]
     for i in idxs:
-        out = os.path.join(HERE, f'regime_fp_shard_{i:04d}.parquet')
+        out = os.path.join(HERE, f'regime_fp_shard_{i:04d}{args.tag}.parquet')
         if os.path.exists(out) and not args.force:
             print(f'[build] 跳过已存在 {out}')
             continue
@@ -612,23 +613,23 @@ def cmd_build(args):
 
 
 def cmd_merge(args):
-    """合并分片因子面板 → regime_factor_panel.parquet + regime 分布打印。"""
+    """合并分片因子面板 → regime_factor_panel{tag}.parquet + regime 分布打印。"""
     import glob
-    parts = sorted(glob.glob(os.path.join(HERE, 'regime_fp_shard_*.parquet')))
+    parts = sorted(glob.glob(os.path.join(HERE, f'regime_fp_shard_*{args.tag}.parquet')))
     if not parts:
-        raise FileNotFoundError('无 regime_fp_shard_*.parquet，先跑 build')
+        raise FileNotFoundError(f'无 regime_fp_shard_*{args.tag}.parquet，先跑 build')
     fp = pd.concat([pd.read_parquet(p) for p in parts], ignore_index=True)
-    out = os.path.join(HERE, 'regime_factor_panel.parquet')
+    out = os.path.join(HERE, f'regime_factor_panel{args.tag}.parquet')
     fp.to_parquet(out, index=False)
     print(f'[merge] {len(parts)} 片 → {len(fp):,} 行 × {fp["symbol"].nunique()} 只 → {out}')
     print('[merge] regime 分布:')
     print(fp['regime'].value_counts(dropna=False).to_string())
 
 
-def _load_fp():
-    pq = os.path.join(HERE, 'regime_factor_panel.parquet')
+def _load_fp(tag=''):
+    pq = os.path.join(HERE, f'regime_factor_panel{tag}.parquet')
     if not os.path.exists(pq):
-        raise FileNotFoundError('先跑 build + merge')
+        raise FileNotFoundError(f'先跑 build + merge（缺 {pq}）')
     return pd.read_parquet(pq)
 
 
@@ -655,26 +656,26 @@ def cmd_health(args):
     backend, name = _load_ic_backend()
     steps = args.steps.split(',') if args.steps else ['eval', 'decile', 'mc']
     factors = args.factors.split(',') if args.factors else FACTOR_COLS
-    tag = f'_{args.start_date}' if args.start_date else ''
-    outs = {s: os.path.join(HERE, f'regime_health_{s}{tag}.jsonl') for s in steps}
+    wtag = f'_{args.start_date}' if args.start_date else ''
+    outs = {s: os.path.join(HERE, f'regime_health_{s}{wtag}{args.tag}.jsonl') for s in steps}
     done = {s: set() for s in steps}
     for s in steps:
         if os.path.exists(outs[s]) and not args.force:
             with open(outs[s], encoding='utf-8') as f:
                 done[s] = {json.loads(x)['factor'] for x in f if x.strip()}
-    fp = _load_fp()
+    fp = _load_fp(args.tag)
     if args.start_date:
         fp = fp[fp['eob'] >= pd.Timestamp(args.start_date, tz='Asia/Shanghai')]
         print(f'[health] 窗口 {args.start_date} 起 → {len(fp):,} 行', flush=True)
     panel_ic = None
-    print(f'[health] 后端={name} steps={steps}', flush=True)
+    print(f'[health] 后端={name} steps={steps} tag={args.tag!r}', flush=True)
     for step in steps:
         for fac in factors:
             if fac in done[step]:
                 continue
             if panel_ic is None:
                 t = time.time()
-                panel_ic = _ic_panel_cached(fp, tag)
+                panel_ic = _ic_panel_cached(fp, wtag + args.tag)
                 print(f'[health] panel 对齐 ({time.time() - t:.0f}s)', flush=True)
             t0 = time.time()
             fdf = _ic_factor(fp, fac)
@@ -711,12 +712,12 @@ def cmd_health(args):
 
 
 def cmd_scenario(args):
-    fp = _load_fp()
+    fp = _load_fp(args.tag)
     print(f'[scenario] 面板 {len(fp):,} 行，开始分组统计 ...', flush=True)
     t0 = time.time()
     sv = scenario_value(fp, n_perm=args.scenario_perm)
     print(f'[scenario] 计算完成 ({time.time() - t0:.0f}s)', flush=True)
-    out = os.path.join(HERE, 'regime_scenario.json')
+    out = os.path.join(HERE, f'regime_scenario{args.tag}.json')
     with open(out, 'w', encoding='utf-8') as f:
         json.dump(sv, f, ensure_ascii=False, indent=2, default=str)
     print(f"[scenario] 结论={sv['verdict']}  amp差={sv['mc_shuffle']['obs_diff_amp']:+.5f} "
@@ -731,12 +732,12 @@ def cmd_report_meta(args):
 
     体检读取优先级：3 年窗口（regime_health_*_2023-09-01.jsonl）> 全历史。
     """
-    fp = _load_fp()
+    fp = _load_fp(args.tag)
     dist = fp['regime'].value_counts(dropna=False)
     health = {}
     for step in ('eval', 'decile', 'mc'):
-        for tag in ('_2023-09-01', ''):
-            hp = os.path.join(HERE, f'regime_health_{step}{tag}.jsonl')
+        for wtag in ('_2023-09-01', ''):
+            hp = os.path.join(HERE, f'regime_health_{step}{wtag}{args.tag}.jsonl')
             if os.path.exists(hp):
                 with open(hp, encoding='utf-8') as f:
                     for x in f:
@@ -744,18 +745,18 @@ def cmd_report_meta(args):
                             r = json.loads(x)
                             rec = health.setdefault(r['factor'], {})
                             # 窗口版优先：已有窗口版记录时，全历史版不覆盖
-                            if tag == '' and str(rec.get('window', '')).startswith('近3年'):
+                            if wtag == '' and str(rec.get('window', '')).startswith('近3年'):
                                 continue
-                            r['window'] = '近3年(2023-09起)' if tag else 'full'
+                            r['window'] = '近3年(2023-09起)' if wtag else 'full'
                             rec.update(r)
-    sp = os.path.join(HERE, 'regime_scenario.json')
+    sp = os.path.join(HERE, f'regime_scenario{args.tag}.json')
     sv = json.load(open(sp, encoding='utf-8')) if os.path.exists(sp) else None
     result = {'meta': {'date': '2026-09-18', 'n_rows': int(len(fp)),
                        'n_symbols': int(fp['symbol'].nunique()),
                        'panel_range': [str(fp['eob'].min()), str(fp['eob'].max())]},
               'regime_dist': {str(k): int(v) for k, v in dist.items()},
               'health_check': health, 'scenario_value': sv}
-    out = os.path.join(HERE, 'regime_results.json')
+    out = os.path.join(HERE, f'regime_results{args.tag}.json')
     with open(out, 'w', encoding='utf-8') as f:
         json.dump(result, f, ensure_ascii=False, indent=2, default=str)
     print(f'[report] → {out}')
@@ -770,6 +771,8 @@ def main():
         p = sub.add_parser(name)
         p.set_defaults(fn=fn)
         p.add_argument('--force', action='store_true')
+        p.add_argument('--tag', default='',
+                       help="输出文件名后缀标签，如 '_prevadj'（保留旧结果，新旧可比）")
         if name == 'build':
             p.add_argument('--shard', type=int, default=None, help='只跑第 N 片')
             p.add_argument('--max-symbols', type=int, default=None, help='采样试跑')
@@ -785,7 +788,7 @@ def main():
         # 采样试跑：单文件直出，不分片
         panel = load_panel(args.max_symbols)
         fp = build_factor_panel(panel)
-        out = os.path.join(HERE, 'regime_factor_panel.parquet')
+        out = os.path.join(HERE, f'regime_factor_panel{args.tag}.parquet')
         fp.to_parquet(out, index=False)
         print(f'[build] 采样 {args.max_symbols} 只 → {out} ({len(fp):,} 行)')
         return
