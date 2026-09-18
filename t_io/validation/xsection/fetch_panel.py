@@ -16,7 +16,17 @@ akshare 在本机被拦；腾讯日线只给 640 根。掘金是唯一同时满�
   panel/shards/*.parquet   按批分片的长表（symbol,eob,open,high,low,close,volume,amount）
 分片的用途：**崩了不用从头拉**——已存在的分片直接跳过。
 
-用法：python fetch_panel.py [--limit N] [--shard 500] [--count 2000]
+用法：python fetch_panel.py [--limit N] [--shard 500] [--count 2000] [--adjust prev|none|post]
+
+## 复权口径（因子挖掘 P1-1 核查后修正，2026-09-18）
+
+check_adjust.py 三方对比判定：本面板首批数据实为**不复权**（history_n 默认
+adjust=ADJUST_NONE），5 只蓝筹 2000 个交易日与 GM ADJUST_NONE 100% 逐日吻合。
+价格类因子必须前复权，故 `--adjust` 默认值改为 **prev（前复权）**。
+
+⚠️ 存量分片（panel/shards/，2026-09-18 前生成）全部为不复权口径，且分片存在即跳过的
+续跑机制不会自动更正。**更换口径重拉前必须先移走/删除旧分片**（建议改名归档为
+panel_none_archive/ 另行留存审计，勿混入新面板）。
 """
 import argparse
 import os
@@ -44,11 +54,19 @@ def main():
     ap.add_argument('--shard', type=int, default=500)
     ap.add_argument('--count', type=int, default=2000)
     ap.add_argument('--sleep', type=float, default=0.05)
+    ap.add_argument('--adjust', choices=('prev', 'none', 'post'), default='prev',
+                    help='复权口径：prev=前复权（默认，因子挖掘用）；'
+                         'none=不复权；post=后复权。换口径重拉前必须先清旧分片！')
     args = ap.parse_args()
+    _ADJ = {'prev': 'ADJUST_PREV', 'none': 'ADJUST_NONE', 'post': 'ADJUST_POST'}
 
     os.makedirs(SHARDS, exist_ok=True)
     from utils.gm_token import load_token
-    from gm.api import set_token, get_symbols, history_n
+    import gm.api as gm
+    set_token = gm.set_token
+    get_symbols = gm.get_symbols
+    history_n = gm.history_n
+    adjust_mode = getattr(gm, _ADJ[args.adjust])
     set_token(load_token())
 
     uni = get_symbols(sec_type1=1010, skip_suspended=False, skip_st=False, df=True)
@@ -59,7 +77,8 @@ def main():
     syms = list(uni['symbol'])
     if args.limit:
         syms = syms[:args.limit]
-    print(f'[fetch] 全市场 {len(uni)} 只，本轮拉 {len(syms)} 只，每只 {args.count} 根', flush=True)
+    print(f'[fetch] 全市场 {len(uni)} 只，本轮拉 {len(syms)} 只，每只 {args.count} 根，'
+          f'复权口径={args.adjust}', flush=True)
 
     n_shard = (len(syms) + args.shard - 1) // args.shard
     t0 = time.time()
@@ -75,7 +94,7 @@ def main():
         for sym in batch:
             try:
                 df = history_n(symbol=sym, frequency='1d', count=args.count,
-                               fields=FIELDS, df=True)
+                               fields=FIELDS, adjust=adjust_mode, df=True)
                 if df is not None and len(df):
                     frames.append(df)
             except Exception:
