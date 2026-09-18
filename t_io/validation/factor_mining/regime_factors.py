@@ -532,7 +532,7 @@ def scenario_value(fp: pd.DataFrame, n_perm=1000, seed=20260918):
     dd = d.sort_values('eob', kind='mergesort')
     # 全市场 9M 行 × n_perm 次 lexsort 过慢：每日截面等概抽样至 cap 行做置换检验
     # （置换检验在抽样子集上仍有效，仅检验力略降；obs_diff 与 MW 用全量）
-    cap = 1500
+    cap = 500
     gid_full = pd.factorize(dd['eob'], sort=True)[0]
     if len(dd) > cap * (gid_full.max() + 1):
         rng0 = np.random.default_rng(seed + 1)
@@ -554,9 +554,10 @@ def scenario_value(fp: pd.DataFrame, n_perm=1000, seed=20260918):
     tot = np.bincount(gid, weights=amp, minlength=n_days)
     valid_day = (k_tgt > 0) & (k_tgt < n_day)
     # 每次置换内累积「日期均值差」
+    print(f'[scenario] MC 置换 {n_perm} 次 × {len(dd):,} 行（每日上限 {cap} 行抽样）...', flush=True)
     rng = np.random.default_rng(seed)
     cnt = 0
-    for _ in range(n_perm):
+    for _p in range(n_perm):
         keys = rng.random(len(dd))
         order = np.lexsort((keys, gid))          # 组内按随机键排序
         # 排序空间内的组内序号 < k_tgt 的行 → 本次置换的"伪目标组"
@@ -572,6 +573,8 @@ def scenario_value(fp: pd.DataFrame, n_perm=1000, seed=20260918):
             diff = s1 / k_tgt - (tot - s1) / (n_day - k_tgt)
         if np.nanmean(diff[valid_day]) >= obs_diff:
             cnt += 1
+        if (_p + 1) % 25 == 0:
+            print(f'  [scenario] MC {_p + 1}/{n_perm}', flush=True)
     mc_p = (cnt + 1) / (n_perm + 1)
 
     verdict = ('证实' if (mw['amp']['U_p_one_sided'] < 0.05 and mw['amp']['diff'] > 0 and mc_p < 0.05)
@@ -632,12 +635,13 @@ def _load_fp():
 _IC_PANEL_CACHE = os.path.join(HERE, 'regime_ic_panel_cache.parquet')
 
 
-def _ic_panel_cached(fp: pd.DataFrame) -> pd.DataFrame:
-    """_ic_panel 带磁盘缓存（全市场对齐 ~67s，跨调用复用）。"""
-    if os.path.exists(_IC_PANEL_CACHE):
-        return pd.read_parquet(_IC_PANEL_CACHE)
+def _ic_panel_cached(fp: pd.DataFrame, tag: str = '') -> pd.DataFrame:
+    """_ic_panel 带磁盘缓存（全市场对齐 ~67s，跨调用复用）。tag 区分窗口。"""
+    cache = _IC_PANEL_CACHE.replace('.parquet', f'{tag}.parquet')
+    if os.path.exists(cache):
+        return pd.read_parquet(cache)
     p = _ic_panel(fp)
-    p.to_parquet(_IC_PANEL_CACHE, index=False)
+    p.to_parquet(cache, index=False)
     return p
 
 
@@ -646,17 +650,22 @@ def cmd_health(args):
 
     全市场面板下 ic_layer 每次调用都要重做前瞻收益，单因子三步 > 5 分钟，
     故拆步：每步逐因子追加 regime_health_{step}.jsonl，可断点续跑。
+    --start-date：窗口右对齐（如 2023-09-01 = 最近 3 年），输出文件名带窗口标签。
     """
     backend, name = _load_ic_backend()
     steps = args.steps.split(',') if args.steps else ['eval', 'decile', 'mc']
     factors = args.factors.split(',') if args.factors else FACTOR_COLS
-    outs = {s: os.path.join(HERE, f'regime_health_{s}.jsonl') for s in steps}
+    tag = f'_{args.start_date}' if args.start_date else ''
+    outs = {s: os.path.join(HERE, f'regime_health_{s}{tag}.jsonl') for s in steps}
     done = {s: set() for s in steps}
     for s in steps:
         if os.path.exists(outs[s]) and not args.force:
             with open(outs[s], encoding='utf-8') as f:
                 done[s] = {json.loads(x)['factor'] for x in f if x.strip()}
     fp = _load_fp()
+    if args.start_date:
+        fp = fp[fp['eob'] >= pd.Timestamp(args.start_date, tz='Asia/Shanghai')]
+        print(f'[health] 窗口 {args.start_date} 起 → {len(fp):,} 行', flush=True)
     panel_ic = None
     print(f'[health] 后端={name} steps={steps}', flush=True)
     for step in steps:
@@ -665,7 +674,7 @@ def cmd_health(args):
                 continue
             if panel_ic is None:
                 t = time.time()
-                panel_ic = _ic_panel_cached(fp)
+                panel_ic = _ic_panel_cached(fp, tag)
                 print(f'[health] panel 对齐 ({time.time() - t:.0f}s)', flush=True)
             t0 = time.time()
             fdf = _ic_factor(fp, fac)
@@ -703,7 +712,10 @@ def cmd_health(args):
 
 def cmd_scenario(args):
     fp = _load_fp()
+    print(f'[scenario] 面板 {len(fp):,} 行，开始分组统计 ...', flush=True)
+    t0 = time.time()
     sv = scenario_value(fp, n_perm=args.scenario_perm)
+    print(f'[scenario] 计算完成 ({time.time() - t0:.0f}s)', flush=True)
     out = os.path.join(HERE, 'regime_scenario.json')
     with open(out, 'w', encoding='utf-8') as f:
         json.dump(sv, f, ensure_ascii=False, indent=2, default=str)
@@ -715,18 +727,27 @@ def cmd_scenario(args):
 
 
 def cmd_report_meta(args):
-    """汇总 meta + 分布 + 三份体检 jsonl → regime_results.json（报告数据源）。"""
+    """汇总 meta + 分布 + 体检 jsonl → regime_results.json（报告数据源）。
+
+    体检读取优先级：3 年窗口（regime_health_*_2023-09-01.jsonl）> 全历史。
+    """
     fp = _load_fp()
     dist = fp['regime'].value_counts(dropna=False)
     health = {}
     for step in ('eval', 'decile', 'mc'):
-        hp = os.path.join(HERE, f'regime_health_{step}.jsonl')
-        if os.path.exists(hp):
-            with open(hp, encoding='utf-8') as f:
-                for x in f:
-                    if x.strip():
-                        r = json.loads(x)
-                        health.setdefault(r['factor'], {}).update(r)
+        for tag in ('_2023-09-01', ''):
+            hp = os.path.join(HERE, f'regime_health_{step}{tag}.jsonl')
+            if os.path.exists(hp):
+                with open(hp, encoding='utf-8') as f:
+                    for x in f:
+                        if x.strip():
+                            r = json.loads(x)
+                            rec = health.setdefault(r['factor'], {})
+                            # 窗口版优先：已有窗口版记录时，全历史版不覆盖
+                            if tag == '' and str(rec.get('window', '')).startswith('近3年'):
+                                continue
+                            r['window'] = '近3年(2023-09起)' if tag else 'full'
+                            rec.update(r)
     sp = os.path.join(HERE, 'regime_scenario.json')
     sv = json.load(open(sp, encoding='utf-8')) if os.path.exists(sp) else None
     result = {'meta': {'date': '2026-09-18', 'n_rows': int(len(fp)),
@@ -756,6 +777,7 @@ def main():
             p.add_argument('--factors', default=None)
             p.add_argument('--steps', default=None, help='eval,decile,mc 子集')
             p.add_argument('--mc-perm', type=int, default=100)
+            p.add_argument('--start-date', default=None, help='窗口起点，如 2023-09-01')
         if name == 'scenario':
             p.add_argument('--scenario-perm', type=int, default=200)
     args = ap.parse_args()
