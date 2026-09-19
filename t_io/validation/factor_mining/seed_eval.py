@@ -351,19 +351,38 @@ def mc_factor(codes, factor, n=MC_N, seed=MC_SEED):
             'per_stock': per_stock}
 
 
+def _mc_worker(pack):
+    factor, codes, n, seed = pack
+    return factor, mc_factor(codes, factor, n=n, seed=seed)
+
+
 def cmd_mc(args):
     factors = args.factors.split(',')
     codes = args.codes.split(',') if args.codes else md.pool_symbols()
     t0 = time.perf_counter()
-    out = {}
-    for nm in factors:
-        out[nm] = mc_factor(codes, nm, n=args.n, seed=args.seed)
-        r = out[nm]
-        print(f"  [mc] {nm}: real={r.get('real_mean')} dir={r.get('dir')} "
-              f"null={r.get('null_mean')}±{r.get('null_std')} "
-              f"mc_rank={r.get('mc_rank')} pass={r.get('pass')} "
-              f"票通过率={r.get('stock_pass_rate')} 累计 {time.perf_counter() - t0:.0f}s",
-              flush=True)
+    if args.workers > 1 and len(factors) > 1:
+        import concurrent.futures as cf
+        packs = [(nm, codes, args.n, args.seed) for nm in factors]
+        with cf.ProcessPoolExecutor(max_workers=min(args.workers, len(factors))) as pool:
+            res = dict(pool.map(_mc_worker, packs))
+        out = {nm: res[nm] for nm in factors}
+        for nm in factors:
+            r = out[nm]
+            print(f"  [mc] {nm}: real={r.get('real_mean')} dir={r.get('dir')} "
+                  f"null={r.get('null_mean')}±{r.get('null_std')} "
+                  f"mc_rank={r.get('mc_rank')} pass={r.get('pass')} "
+                  f"票通过率={r.get('stock_pass_rate')}", flush=True)
+        print(f'  [mc] 并行完成 累计 {time.perf_counter() - t0:.0f}s')
+    else:
+        out = {}
+        for nm in factors:
+            out[nm] = mc_factor(codes, nm, n=args.n, seed=args.seed)
+            r = out[nm]
+            print(f"  [mc] {nm}: real={r.get('real_mean')} dir={r.get('dir')} "
+                  f"null={r.get('null_mean')}±{r.get('null_std')} "
+                  f"mc_rank={r.get('mc_rank')} pass={r.get('pass')} "
+                  f"票通过率={r.get('stock_pass_rate')} 累计 {time.perf_counter() - t0:.0f}s",
+                  flush=True)
     os.makedirs(RESULTS_DIR, exist_ok=True)
     p = os.path.join(RESULTS_DIR, 'seed_eval_mc.json')
     with open(p, 'w', encoding='utf-8') as fh:
@@ -451,6 +470,25 @@ def final_code(code, seed_names, signs=(1, -1), exits=('hold', 'native'), leak=0
     return parts
 
 
+def _json_default(o):
+    """numpy 标量 → python 标量（legs 里的 bar 索引来自 np.where）。"""
+    if isinstance(o, np.integer):
+        return int(o)
+    if isinstance(o, np.floating):
+        return float(o)
+    raise TypeError(f'{type(o).__name__} not serializable')
+
+
+def _final_code_worker(pack):
+    """子进程入口（Windows spawn 需模块级）。"""
+    code, factors, exits, leak = pack
+    try:
+        return code, final_code(code, factors, exits=tuple(exits), leak=leak)
+    except Exception as e:
+        print(f'  [warn] {code}: {type(e).__name__} {e}', flush=True)
+        return code, []
+
+
 def cmd_final(args):
     codes = args.codes.split(',')
     factors = args.factors.split(',')
@@ -458,18 +496,35 @@ def cmd_final(args):
     parts_p = os.path.join(CACHE_DIR, 'final_parts.jsonl')
     os.makedirs(CACHE_DIR, exist_ok=True)
     t0 = time.perf_counter()
+    packs = [(c, factors, exits, args.leak) for c in codes]
+    done = 0
     with open(parts_p, 'a', encoding='utf-8') as fh:
-        for i, c in enumerate(codes):
-            try:
-                parts = final_code(c, factors, exits=exits, leak=args.leak)
-            except Exception as e:
-                print(f'  [warn] {c}: {type(e).__name__} {e}', flush=True)
-                continue
-            for p in parts:
-                fh.write(json.dumps(p, ensure_ascii=False) + '\n')
-            fh.flush()
-            print(f'  [{i + 1}/{len(codes)}] {c} parts={len(parts)} '
-                  f'累计 {time.perf_counter() - t0:.0f}s', flush=True)
+        if args.workers > 1:
+            import concurrent.futures as cf
+            with cf.ProcessPoolExecutor(max_workers=args.workers) as pool:
+                futs = {pool.submit(_final_code_worker, pk): pk[0] for pk in packs}
+                for fut in cf.as_completed(futs):
+                    code, parts = fut.result()
+                    for p in parts:
+                        fh.write(json.dumps(p, ensure_ascii=False,
+                                            default=_json_default) + '\n')
+                    fh.flush()
+                    done += 1
+                    print(f'  [{done}/{len(codes)}] {code} parts={len(parts)} '
+                          f'累计 {time.perf_counter() - t0:.0f}s', flush=True)
+        else:
+            for i, c in enumerate(codes):
+                try:
+                    parts = final_code(c, factors, exits=exits, leak=args.leak)
+                except Exception as e:
+                    print(f'  [warn] {c}: {type(e).__name__} {e}', flush=True)
+                    continue
+                for p in parts:
+                    fh.write(json.dumps(p, ensure_ascii=False,
+                                        default=_json_default) + '\n')
+                fh.flush()
+                print(f'  [{i + 1}/{len(codes)}] {c} parts={len(parts)} '
+                      f'累计 {time.perf_counter() - t0:.0f}s', flush=True)
     print(f'[final] 本批完成 → {parts_p} 用时 {time.perf_counter() - t0:.0f}s')
 
 
@@ -515,6 +570,7 @@ def main():
     ap.add_argument('--factors', default=None)
     ap.add_argument('--exits', default='hold,native')
     ap.add_argument('--leak', type=int, default=0)
+    ap.add_argument('--workers', type=int, default=1)
     ap.add_argument('--n', type=int, default=MC_N)
     ap.add_argument('--seed', type=int, default=MC_SEED)
     ap.add_argument('--force', action='store_true')
