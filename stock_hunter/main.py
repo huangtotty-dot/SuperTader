@@ -257,6 +257,8 @@ def main():
                         help="跳过验证步骤")
     parser.add_argument("--save-spot", action="store_true",
                         help="保存行情快照到本地 data/spot_YYYYMMDD.csv，供后续回测")
+    parser.add_argument("--no-feishu", action="store_true",
+                        help="跳过日线背离飞书推送（用于本地试跑，不影响报告自身的推送）")
     args = parser.parse_args()
 
     # 日期格式化
@@ -461,6 +463,40 @@ def main():
                 pass
     else:
         print(f"\n[INFO] 飞书配置未完整（需要 webhook_url 或 app_id+app_secret+chat_id），跳过推送")
+
+    # 12. 日线 MACD 底背离飞书提醒（2026-09-19 owner 要求）
+    # 放在报告推送**之后**：扫描要几十秒，不能拖慢主交付物。
+    # 覆盖全部打分池（韭研概念非空）；只推底背离（顶背离 180 天验证无区分度）。
+    # 任何失败都只打印，不影响报告结果。
+    try:
+        _wl = data.get("watchlist")
+        _pool_codes, _name_of = [], {}
+        if _wl is not None and not _wl.empty and "代码" in _wl.columns:
+            _sel = _wl[_wl["韭研概念"].astype(str).str.strip().ne("")] if "韭研概念" in _wl.columns else _wl
+            for _, _r in _sel.iterrows():
+                _c = str(_r["代码"])
+                _pool_codes.append(_c)
+                _name_of[_c] = str(_r.get("名称") or _c)
+        if _pool_codes:
+            print(f"\n[背离] 扫描 {len(_pool_codes)} 只的日线 MACD 底背离...")
+            from modules.daily_divergence import scan_daily_bottom_divergence, format_alert_lines
+            _hits = scan_daily_bottom_divergence(_pool_codes)
+            if _hits:
+                print(f"[背离] 命中 {len(_hits)} 只: {', '.join(h['code'] for h in _hits)}")
+                if args.no_feishu:
+                    print("[背离] --no-feishu 跳过推送")
+                elif feishu_cfg.get("webhook_url"):
+                    from modules.push_feishu import send_post
+                    send_post(feishu_cfg["webhook_url"],
+                              f"日线MACD底背离(参考) - {args.date}",
+                              format_alert_lines(_hits, name_of=lambda c: _name_of.get(c, c)))
+                    print("[OK] 日线底背离已推送飞书")
+                else:
+                    print("[背离] 无 webhook_url，跳过推送")
+            else:
+                print("[背离] 无命中")
+    except Exception as e:
+        print(f"[WARN] 日线背离扫描异常（不影响报告）: {type(e).__name__}: {e}")
 
     print(f"\n{'=' * 60}")
     print(f"[OK] 全部完成！")

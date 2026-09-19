@@ -991,6 +991,18 @@ def scan_stock(code: str, stock_info: dict, date_str: str = None,
     except Exception:
         pass
 
+    # 日线 MACD 背离（2026-09-19）：口径与上面 30/60 分钟**不同源**，只用于飞书提醒
+    # （GUI 的『技术标签』列另有日线复合背离）。detect_daily_divergence 默认只认
+    # 「刚确认」的事件（bars_ago<=4），提醒侧按事件时间戳去重 ⇒ 每个事件只报一次。
+    result["daily_divergence"] = {}
+    try:
+        from analysis.divergence import detect_daily_divergence as _det_daily
+        _ddf = fetch_daily_kline(code)
+        if _ddf is not None and not _ddf.empty:
+            result["daily_divergence"] = _det_daily(_ddf)
+    except Exception:
+        pass
+
     result["date"] = snap_date
     # 展示/箱体突破用实时价；日线五条件用 daily_price_ref（日线收盘/参考价）
     live_price = round(float(df_1min["close"].iloc[-1]), 3) if not df_1min.empty else None
@@ -1512,6 +1524,65 @@ def _push_divergence_feishu(stocks: list, date_str: str, dry_run: bool = False) 
     return send_feishu_payload(
         card, success_log=f"60分钟连续底背离飞书推送: {len(stocks)} 只",
         error_prefix="60分钟连续底背离飞书推送")
+
+
+# ---------- 日线 MACD 背离推送（2026-09-19 新增）----------
+# 与上面的 30/60 分钟推送**分开**：口径不同源，去重也分开（key=代码@事件时间）。
+# 事件式去重是必需的：detect_daily_divergence 的窗口是「确认后 4 个交易日」，
+# 若按日期去重，同一个事件会在窗口内连报 4 天。
+DAILY_DIV_STATE_FILE = STATE_DIR / "daily_divergence_pushed.json"
+DAILY_DIV_KEEP = 400            # 去重文件保留条数上限
+
+
+def _load_daily_div_pushed() -> set:
+    try:
+        if DAILY_DIV_STATE_FILE.exists():
+            d = json.loads(DAILY_DIV_STATE_FILE.read_text(encoding="utf-8"))
+            return set(d.get("keys") or [])
+    except Exception:
+        pass
+    return set()
+
+
+def _mark_daily_div_pushed(keys: list) -> None:
+    try:
+        STATE_DIR.mkdir(parents=True, exist_ok=True)
+        cur = _load_daily_div_pushed()
+        cur.update(keys)
+        ordered = sorted(cur)[-DAILY_DIV_KEEP:]
+        DAILY_DIV_STATE_FILE.write_text(
+            json.dumps({"keys": ordered}, ensure_ascii=False, indent=1), encoding="utf-8")
+    except Exception:
+        pass
+
+
+def _push_daily_divergence_feishu(stocks: list, date_str: str, dry_run: bool = False) -> bool:
+    """推送日线 MACD 底背离参考提醒。stocks=[(code, name, desc)]。
+
+    ⚠️ 文案必须保留"未验证"措辞：本项目只证过 30/60min 单次背离≈随机基线、
+    日线**复合**顶背离无效；**日线单次 MACD 背离本身尚未验证**，不得写成买卖信号。"""
+    if not stocks or not _FEISHU_AVAILABLE:
+        return False
+    if dry_run:
+        print(f"  [DRY-RUN] 跳过日线背离飞书推送: {len(stocks)} 只")
+        return False
+    lines = [f"**日线 MACD 底背离（参考，未验证）**  {date_str}", ""]
+    for code, name, desc in stocks:
+        lines.append(f"🟡 **{name}（{code}）** {desc}")
+    lines += ["", "📌 日线单次 MACD 背离**尚未经本项目验证**（已验证的是：30/60分钟单次背离≈随机基线、"
+                  "日线复合顶背离无效、60分钟连续底背离仅『事件后止跌』）。此为非买卖建议，仅供观察。"]
+    card = {
+        "msg_type": "interactive",
+        "card": {
+            "header": {"template": "yellow",
+                       "title": {"tag": "plain_text",
+                                 "content": f"🟡 日线MACD底背离(参考) - {FEISHU_KEYWORD}"}},
+            "elements": [{"tag": "markdown", "content": "\n".join(lines)}],
+        },
+    }
+    return send_feishu_payload(
+        card, success_log=f"日线MACD底背离飞书推送: {len(stocks)} 只",
+        error_prefix="日线MACD底背离飞书推送")
 
 
 def check_ma_break(code: str, stock_info: dict = None, date_str: str = None,
@@ -2089,6 +2160,32 @@ def run_position_scan(date_str: str = None, capital: float = None,
                         print(f"背离提醒已推送: {len(_fresh)} 只")
         elif _div_stocks and not silent:
             print(f"背离检测: {len(_div_stocks)} 只（no_feishu 跳过推送）")
+    except Exception:
+        pass
+
+    # 日线 MACD 底背离飞书提醒（2026-09-19 owner 要求）
+    # 只推底背离：顶背离经 180 天验证无区分度（日线复合顶背离 count≥2 命中率 53.4% < 基线 57.8%）。
+    # 事件式去重（代码@事件时间）⇒ 同一事件只报一次，新事件仍会报。
+    try:
+        _daily_hits = []
+        for r in results:
+            _dv = r.get("daily_divergence") or {}
+            if _dv.get("type") == "底背离":
+                _key = f"{r['code']}@{_dv.get('time', '')}"
+                _daily_hits.append((r["code"], r.get("name", r["code"]), _key,
+                                    f"日线底背离 {str(_dv.get('time', ''))[:10]}"
+                                    f"（距今{_dv.get('bars_ago')}根）"
+                                    + ("，连续" if _dv.get("consec") else "")))
+        if _daily_hits and not no_feishu:
+            _pushed = _load_daily_div_pushed()
+            _fresh = [x for x in _daily_hits if x[2] not in _pushed]
+            if _fresh:
+                if _push_daily_divergence_feishu([(c, n, d) for c, n, _k, d in _fresh], log_date):
+                    _mark_daily_div_pushed([x[2] for x in _fresh])
+                    if not silent:
+                        print(f"日线底背离提醒已推送: {len(_fresh)} 只")
+        elif _daily_hits and not silent:
+            print(f"日线背离检测: {len(_daily_hits)} 只（no_feishu 跳过推送）")
     except Exception:
         pass
 

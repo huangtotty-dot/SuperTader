@@ -59,6 +59,13 @@ COND_LABELS = {
 }
 
 
+# 黄金分割（斐波那契回撤/扩展）参数 —— 按周期分档，越长的周期要求越大的摆动幅度
+_FIB_LOOKBACK = {"daily": 250, "weekly": 120, "monthly": 60}    # 回看根数（决定锚点搜索范围）
+_FIB_FRACTAL_N = {"daily": 3, "weekly": 2, "monthly": 1}        # 分形确认根数（越长周期 bar 越少）
+_FIB_MIN_AMP = {"daily": 5.0, "weekly": 8.0, "monthly": 12.0}   # 摆动最小幅度 %（低于此视为噪声）
+_FIB_RETRACE = [0.236, 0.382, 0.5, 0.618, 0.786]                # 回撤位（0.618 即黄金比例）
+_FIB_EXTENSION = [1.272, 1.618]                                 # 扩展位（突破后目标）
+
 PREOPEN_DIR = BASE / "t_io" / "preopen"
 HUNTER_DIR = BASE / "stock_hunter"
 if str(BASE) not in sys.path:
@@ -1515,6 +1522,9 @@ class Api:
             "weekly": to_series(weekly),
             "monthly": to_series(monthly),
         }
+        # 黄金分割按周期各算一份（前端切 Tab 即换锚点）
+        for _name, _d in (("daily", daily), ("weekly", weekly), ("monthly", monthly)):
+            out["period_data"][_name]["fib"] = self._calc_fibonacci(_d, _name)
         out["levels"] = self._calc_support_resistance(daily)
         out["boxes"] = self._detect_boxes(daily)
         out["channel"] = self._detect_channel(daily)
@@ -1874,6 +1884,118 @@ class Api:
             return [{"price": p, "label": l, "strength": s}]
 
         return {"supports": fmt(sup_cand), "resistances": fmt(res_cand)}
+
+    def _calc_fibonacci(self, daily, period="daily"):
+        """黄金分割：自动锚定该周期**最显著的一段摆动** → 回撤位/扩展位。
+
+        锚点选择：回看 N 根 → 分形找摆动点（复用 analysis.divergence._local_extrema）
+        → 合成"高-低"交替序列 → 滤掉幅度不足的噪声摆动 → 取幅度最大的一段。
+        全部不达标时降级为回看区间的最高/最低价（fallback=True）。
+
+        比例位公式（L=摆动低点, H=摆动高点, rng=H-L）：
+          上涨（低在前）：回撤 H-rng*ratio，扩展 L+rng*ext
+          下跌（高在前）：回撤 L+rng*ratio，扩展 H-rng*ext
+        side 按现价分：低于现价=支撑，高于现价=阻力。
+        """
+        from analysis.divergence import _local_extrema
+
+        n_bars = _FIB_FRACTAL_N.get(period, 3)
+        lookback = _FIB_LOOKBACK.get(period, 250)
+        min_amp = _FIB_MIN_AMP.get(period, 5.0)
+        if daily is None or len(daily) < 2 * n_bars + 5:
+            return {"available": False, "reason": "样本不足"}
+
+        d = daily.tail(lookback).reset_index(drop=True)
+        n = len(d)
+        if n < 2 * n_bars + 5:
+            return {"available": False, "reason": "样本不足"}
+        # 锚点索引要相对**完整周期序列**（前端 period.dates 是全量），故补齐偏移
+        off = len(daily) - n
+        highs = d["high"].astype(float).values
+        lows = d["low"].astype(float).values
+        dates = [x.strftime("%Y-%m-%d") for x in d["date"]]
+
+        peaks, troughs = _local_extrema(highs, lows, n_bars)
+
+        # 1) 合成交替序列：同类型相邻只保留更极端者（否则两者属同一段走势，不构成摆动）
+        piv = sorted([(i, "H") for i in peaks] + [(i, "L") for i in troughs])
+        seq = []
+        for idx, kind in piv:
+            px = float(highs[idx]) if kind == "H" else float(lows[idx])
+            if seq and seq[-1][1] == kind:
+                if (px > seq[-1][2]) if kind == "H" else (px < seq[-1][2]):
+                    seq[-1] = (idx, kind, px)
+                continue
+            seq.append((idx, kind, px))
+
+        def amp(lo_pt, hi_pt):
+            base = lo_pt[2]
+            return (hi_pt[2] - lo_pt[2]) / base * 100 if base else 0.0
+
+        # 2) 相邻两点对 → 规范成 (低点, 高点) + 方向；3) 过滤幅度不足的噪声摆动
+        cands = []
+        for a, b in zip(seq, seq[1:]):
+            lo_pt, hi_pt = (a, b) if a[1] == "L" else (b, a)
+            if hi_pt[2] <= lo_pt[2]:
+                continue
+            cands.append((lo_pt, hi_pt, "up" if a[1] == "L" else "down", amp(lo_pt, hi_pt)))
+
+        fallback = False
+        ok = [c for c in cands if c[3] >= min_amp]
+        if ok:
+            # 幅度最大者；幅度接近(差<2%)时取更近的一段
+            best = max(c[3] for c in ok)
+            lo_pt, hi_pt, direction, amplitude = max(
+                [c for c in ok if c[3] >= best * 0.98], key=lambda c: c[1][0])
+        elif cands:
+            lo_pt, hi_pt, direction, amplitude = max(cands, key=lambda c: c[3])
+            fallback = True
+        else:
+            # 无交替摆动点（单边行情）→ 降级为回看区间最高/最低
+            hi_i, lo_i = int(d["high"].idxmax()), int(d["low"].idxmin())
+            lo_pt, hi_pt = (lo_i, "L", float(lows[lo_i])), (hi_i, "H", float(highs[hi_i]))
+            direction = "up" if lo_i < hi_i else "down"
+            amplitude = amp(lo_pt, hi_pt)
+            fallback = True
+
+        L, H = lo_pt[2], hi_pt[2]
+        rng = H - L
+        if rng <= 0:
+            return {"available": False, "reason": "摆动幅度为零"}
+
+        cur = float(d["close"].iloc[-1])
+        levels = []
+
+        def add(ratio, price, kind):
+            price = round(float(price), 3)
+            if price <= 0:
+                return  # 大幅下跌摆动时扩展位可能算到 0 以下，无意义 → 丢弃
+            levels.append({
+                "ratio": ratio, "price": price, "kind": kind,
+                "label": f"{ratio * 100:.1f}%".replace(".0%", "%"),
+                "side": "support" if price < cur else "resistance",
+                "golden": abs(ratio - 0.618) < 1e-9,
+            })
+
+        up = direction == "up"
+        for rt in _FIB_RETRACE:
+            add(rt, (H - rng * rt) if up else (L + rng * rt), "retracement")
+        for ex in _FIB_EXTENSION:
+            add(ex, (L + rng * ex) if up else (H - rng * ex), "extension")
+
+        return {
+            "available": True,
+            "direction": direction,
+            "fallback": fallback,
+            "swing": {
+                "low": {"price": round(L, 3), "index": int(lo_pt[0]) + off, "date": dates[lo_pt[0]]},
+                "high": {"price": round(H, 3), "index": int(hi_pt[0]) + off, "date": dates[hi_pt[0]]},
+                "amplitude_pct": round(amplitude, 2),
+                "bars": int(abs(hi_pt[0] - lo_pt[0])),
+                "lookback": int(n),
+            },
+            "levels": levels,
+        }
 
     # ---------- 选股猎手（概念评分，与 Excel 报告一致） ----------
     def run_hunter(self, date=None):
@@ -4332,6 +4454,35 @@ class Api:
                             r["trend"] = info.get("trend")
             except Exception:
                 pass
+
+        # 持仓股背离兜底（2026-09-20 owner 要求"持仓股的背离也要显示"）：
+        # 自动池由 _gm 侧扫描，那条路径**不产出背离**（_gm/signals/position_builder.py
+        # 无背离逻辑，且其 docstring 声明"纯函数，无 IO"，不该塞网络调用）⇒ 自动池持仓
+        # 的背离列恒为"—"。这里对**持仓且无背离数据**的行补算一次。
+        # 与上面的技术标签同策略：仅当天、逐只 try、失败静默。
+        # 成本受控：只补持仓（~17 只）× 每 (票,周期) 当日文件缓存 ⇒ 首次刷新后基本无网络。
+        if date == datetime.now().strftime("%Y-%m-%d"):
+            _need = [r for r in rows
+                     if r.get("code") and r.get("in_holdings") and not r.get("divergence_detail")]
+            if _need:
+                _memo = getattr(self, "_div_memo", None)
+                if _memo is None:
+                    _memo = self._div_memo = {}
+                try:
+                    from analysis.divergence import detect_minute_divergence_detail as _det_div
+                    for r in _need:
+                        _c = r["code"]
+                        if _c not in _memo:
+                            try:
+                                _memo[_c] = _det_div(_c) or {}
+                            except Exception:
+                                _memo[_c] = {}
+                        _d = _memo[_c]
+                        if _d:
+                            r["divergence_detail"] = _d
+                            r["divergence"] = {k: v["type"] for k, v in _d.items()}
+                except Exception:
+                    pass
 
         return {
             "has_data": True,

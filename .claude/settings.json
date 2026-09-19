@@ -21,7 +21,11 @@
       "Read(//c/Users/Lenovo/.goldminer3/projects/d56bed6c-87ca-11f1-97f7-98fa9b8df5e7/**)",
       "WebFetch(domain:www.myquant.cn)",
       "Bash(git commit -m 'data: 实盘运行时数据归档 \\(08-03 ~ 08-04\\) *)",
-      "Bash(git tag *)"
+      "Bash(git tag *)",
+      "WebFetch(domain:dl.acm.org)",
+      "WebFetch(domain:xueqiu.com)",
+      "WebFetch(domain:m.tgb.cn)",
+      "Bash(python t_io/validation/t0_schemes/calibrate.py)"
     ],
     "additionalDirectories": [
       "C:\\Users\\Lenovo\\.goldminer3\\projects\\d56bed6c-87ca-11f1-97f7-98fa9b8df5e7"

@@ -1319,6 +1319,8 @@ function renderPB(pb) {
       ? `<span class="badge monitor" title="在建仓股池中监控，等待触发买点">追踪中</span>`
       : "";
     // 30/60分钟线背离（2026-08-19 验证后收窄：仅 60min 连续底背离高亮，其余仅供参考）
+    // 2026-09-19：① 一律写明方向（此前非连续只显示图标，看不出顶/底）
+    //             ② 标出距今几根 bar（后端已按 MAX_AGE_BARS 过滤过期事件）
     const dv = r.divergence || {};
     const dvd = r.divergence_detail || {};
     const dvParts = ["m30", "m60"].map(k => {
@@ -1326,18 +1328,21 @@ function renderPB(pb) {
       const dd = dvd[k];
       if (!v) return "";
       const freq = k === "m30" ? "30" : "60";
-      const icon = v === "顶背离" ? "⛔" : "✅";
+      const isTop = v === "顶背离";
+      const icon = isTop ? "⛔" : "✅";
+      const dir = isTop ? "顶背" : "底背";
       const consec = !!(dd && dd.consec);
+      const aged = (dd && dd.bars_ago != null) ? `，距今${dd.bars_ago}根` : "";
+      const when = (dd && dd.time) ? `（${String(dd.time).slice(0, 16)}）` : "";
       // 60分钟连续底背离：唯一验证有效的信号，高亮
       if (k === "m60" && dd && dd.type === "底背离" && consec) {
-        return `<span class="badge t-long" title="60分钟连续底背离（180天验证：命中率60% vs 基线47%，样本40）">60分✅连续底</span>`;
+        return `<span class="badge t-long" title="60分钟连续底背离${aged}${when}｜180天验证：命中率60% vs 基线47%（样本40）">60分连续底背</span>`;
       }
       // 其余连续背离：标注"连续"（信息性，验证命中率≈随机基线，仅供参考）
       if (consec) {
-        const lbl = v === "顶背离" ? "连续顶" : "连续底";
-        return `<span class="badge" title="${k.toUpperCase()} ${v}（连续背离；验证：命中率≈随机基线，仅供参考）">${freq}分${icon}${lbl}</span>`;
+        return `<span class="badge" title="${k.toUpperCase()} 连续${isTop ? "顶" : "底"}背离${aged}${when}｜验证：命中率≈随机基线，仅供参考">${freq}分连续${dir}</span>`;
       }
-      return `<span class="badge" title="${k.toUpperCase()} ${v}（验证：命中率≈随机基线，仅供参考）">${freq}分${icon}</span>`;
+      return `<span class="badge" title="${k.toUpperCase()} ${isTop ? "顶" : "底"}背离${aged}${when}｜验证：单次背离命中率≈随机基线，仅供参考">${freq}分${icon}${dir}</span>`;
     }).filter(Boolean);
     const dvCell = dvParts.length
       ? `<td style="text-align:center">${dvParts.join(" ")}</td>`
@@ -1386,9 +1391,9 @@ function renderPB(pb) {
         <thead><tr>
           <th>股票</th><th title="P3-2 池分管：人工=manual侧扫描 / 自动=auto侧管理">池</th><th>判定</th><th class="num">得分</th><th class="num">通过</th><th class="num">价</th>
           <th title="突破箱体=第一优先级">突破</th>
-          <th title="通道/箱体/背离等技术形态">技术标签</th>
+          <th title="通道/箱体/背离等技术形态（此列的顶/底背离是**日线**口径，与右侧『背离』列的30/60分钟口径不同源）">技术标签</th>
           <th title="时机门控：市场有方向/多头结构/回撤到位（GO→signal，震荡→降频）">时机条件</th>
-          <th title="背离显示连续标记：60分连续底背离高亮（180天验证有区分度）；其余连续/单次背离命中率≈随机基线，仅供参考">背离</th>
+          <th title="30/60分钟 MACD 背离（写明顶/底）。已过滤过期事件：30分钟超过32根、60分钟超过20根 bar 的历史背离不再显示。60分连续底背离高亮（180天验证有区分度）；其余单次/连续背离命中率≈随机基线，仅供参考">背离</th>
           <th class="num">建议股数</th><th class="num">建议价</th><th class="num">所需资金</th><th>扫描</th><th></th>
         </tr></thead>
         <tbody>${rows || '<tr><td colspan="15" class="empty">无扫描结果</td></tr>'}</tbody>
@@ -2078,6 +2083,7 @@ function renderStockChart() {
   const showBoxes = (document.getElementById("tgBoxes") || {}).checked !== false;
   const showChannel = (document.getElementById("tgChannel") || {}).checked !== false;
   const showMA = (document.getElementById("tgMA") || {}).checked !== false;
+  const showFib = (document.getElementById("tgFib") || {}).checked !== false;
 
   // markLine: 支撑/压力 — 去重降密度 + 精简标签
   function dedupeLines(items) {
@@ -2099,6 +2105,70 @@ function renderStockChart() {
   })));
   const currentLine = { yAxis: cur, lineStyle: { color: "#e3b341", width: 1, type: "solid" },
     label: { formatter: `${cur}`, color: "#e3b341", fontSize: 9, position: "insideEndTop" } };
+
+  // 黄金分割（斐波那契回撤/扩展）：跟随当前 Tab；后端已按周期各算一份
+  const fib = (period.fib && period.fib.available) ? period.fib : null;
+  const fibActive = !!(fib && showFib);
+  // 回撤位=区间内潜在支撑阻力(虚线)；扩展位=突破后目标(点线)；0.618 黄金位加粗标 ★
+  // 标签置于左端(insideStartTop)，与支撑压力的右端标签错开，避免重叠
+  const fibLines = fibActive ? fib.levels.map(lv => {
+    const col = lv.side === "support" ? "#3fb950" : "#f85149";
+    const isExt = lv.kind === "extension";
+    return {
+      yAxis: lv.price,
+      lineStyle: { color: col, type: isExt ? "dotted" : "dashed",
+        width: lv.golden ? 1.6 : 1, opacity: isExt ? .55 : (lv.golden ? 1 : .85) },
+      label: { formatter: `${lv.golden ? "★" : ""}${lv.label} ${lv.price}`,
+        color: col, fontSize: 9, position: "insideStartTop",
+        // 深色底衬：标签会压到K线柱体上，无底衬读不清
+        backgroundColor: "rgba(13,17,23,.9)", padding: [2, 4], borderRadius: 2 },
+    };
+  }) : [];
+  // 锚点连线：标出这段比例位取自哪一段摆动，便于人工核查
+  const fibAnchor = fibActive
+    && fib.swing.low.index < period.dates.length && fib.swing.high.index < period.dates.length
+    ? {
+      name: "黄金分割锚点", type: "line", xAxisIndex: 0, yAxisIndex: 0,
+      data: period.dates.map((_, i) => i === fib.swing.low.index ? fib.swing.low.price
+        : i === fib.swing.high.index ? fib.swing.high.price : null),
+      connectNulls: true, silent: true, z: 2,
+      symbol: "circle", symbolSize: 5,
+      lineStyle: { color: "#8b949e", width: 1, type: "dotted", opacity: .55 },
+      itemStyle: { color: "#8b949e" },
+    } : null;
+
+  // 初始缩放起点：默认 55%（只看近期），但若黄金分割锚定的摆动更早，
+  // 就放宽到能看见它 —— 否则周/月K 上锚点连线落在视窗外、比例位来源无从核对。
+  // 日K 的锚点通常本就在视窗内，故不受影响（min 取 55）。
+  let zStart = 55;
+  if (fibActive && period.dates.length > 1) {
+    const nBars = period.dates.length;
+    const aMin = Math.min(fib.swing.low.index, fib.swing.high.index);
+    const pad = Math.max(3, nBars * 0.02);
+    zStart = Math.min(55, Math.max(0, (aMin - pad) / (nBars - 1) * 100));
+  }
+
+  // 标题：通道(左) + 黄金分割锚点说明(右)
+  const titles = [];
+  if (data.channel && data.channel.direction !== "flat") {
+    titles.push({
+      text: (data.channel.direction === "up" ? "↗ 上行通道" : "↘ 下行通道")
+        + (data.channel.reversal ? "  ↺ 通道反转" : ""),
+      left: 6, top: 2,
+      textStyle: { color: data.channel.direction === "up" ? "#f85149" : "#3fb950",
+        fontSize: 11, fontWeight: "bold" },
+    });
+  }
+  if (fibActive) {
+    const sw = fib.swing, up = fib.direction === "up";
+    titles.push({
+      text: `黄金分割 · ${up ? "上涨" : "下跌"}摆动${fib.fallback ? "(区间降级)" : ""} `
+        + `${up ? `${sw.low.date} 低 → ${sw.high.date} 高` : `${sw.high.date} 高 → ${sw.low.date} 低`}`
+        + ` (+${sw.amplitude_pct}%)`,
+      right: 6, top: 2,
+      textStyle: { color: "#8b949e", fontSize: 10 },
+    });
+  }
 
   // 箱体标注（半透明矩形）：根据质量评分着色 — P2前端适配
   // 绿色:quality_score>=7 | 黄色:5-7 | 红色:<5(信号级) | 灰色:无评分(历史)
@@ -2167,15 +2237,7 @@ function renderStockChart() {
     backgroundColor: "transparent",
     animation: false,
     legend: { top: 0, textStyle: { color: "#8b949e", fontSize: 10 }, type: "scroll" },
-    ...(data.channel && data.channel.direction !== "flat" ? { title: [{
-      text: (data.channel.direction === "up" ? "↗ 上行通道" : "↘ 下行通道")
-        + (data.channel.reversal ? "  ↺ 通道反转" : ""),
-      left: 6, top: 2,
-      textStyle: {
-        color: data.channel.direction === "up" ? "#f85149" : "#3fb950",
-        fontSize: 11, fontWeight: "bold",
-      },
-    }] } : {}),
+    ...(titles.length ? { title: titles } : {}),
     tooltip: { trigger: "axis", axisPointer: { type: "cross" }, backgroundColor: "#161b22",
       borderColor: "#30363d", textStyle: { color: "#c9d1d9", fontSize: 11 },
       formatter: function (ps) {
@@ -2248,8 +2310,8 @@ function renderStockChart() {
       { min: 0, max: 100, gridIndex: 3, axisLabel: { color: "#8b949e", fontSize: 9 }, splitLine: { show: false } },
     ],
     dataZoom: [
-      { type: "inside", xAxisIndex: [0, 1, 2, 3], start: 55, end: 100 },
-      { type: "slider", xAxisIndex: [0, 1, 2, 3], bottom: 0, height: 18, start: 55, end: 100 },
+      { type: "inside", xAxisIndex: [0, 1, 2, 3], start: zStart, end: 100 },
+      { type: "slider", xAxisIndex: [0, 1, 2, 3], bottom: 0, height: 18, start: zStart, end: 100 },
     ],
     series: [
       { name: "K线", type: "candlestick", data: period.ohlc, xAxisIndex: 0, yAxisIndex: 0,
@@ -2262,6 +2324,7 @@ function renderStockChart() {
             ...(showLevels ? [...resistanceLines, ...supportLines] : []), currentLine,
           ],
           label: { position: "insideEndTop" } } },
+      ...(fibAnchor ? [fibAnchor] : []),
       // 通道色带：上轨实线/下轨虚线 + 区域填充。红涨绿跌：上行=红，下行=绿
       ...(showChannel && data.channel && data.channel.up_line.length ? [{
         name: "通道上轨", type: "line", xAxisIndex: 0, yAxisIndex: 0, symbol: "none",
@@ -2298,6 +2361,15 @@ function renderStockChart() {
         lineStyle: { color: "rgba(139,148,158,.3)", width: 1 } },
       { name: "BOLL下", type: "line", data: period.boll.dn, xAxisIndex: 0, yAxisIndex: 0, symbol: "none",
         lineStyle: { color: "rgba(139,148,158,.3)", width: 1 } },
+      // 黄金分割比例位：用**独立载体 series** 承载 markLine。
+      // 挂在 K线 自身的 markLine 上会被K线柱体压住，标签读不清（实测 markLine.zlevel
+      // 也无效）；改挂到 K线 之后的独立 series 并把 z 抬高 ⇒ 标签才画在柱体之上。
+      ...(fibLines.length ? [{
+        name: "黄金分割", type: "line", data: [], xAxisIndex: 0, yAxisIndex: 0,
+        silent: true, symbol: "none", z: 10,
+        markLine: { symbol: "none", silent: true, z: 10, data: fibLines,
+          label: { position: "insideStartTop" } },
+      }] : []),
       // 成交量独立窗口
       { name: "成交量", type: "bar", data: period.volume, xAxisIndex: 1, yAxisIndex: 1,
         itemStyle: { color: "rgba(255,140,90,.35)" }, barWidth: "60%" },

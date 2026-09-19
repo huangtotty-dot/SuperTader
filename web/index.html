@@ -356,6 +356,7 @@
         <label class="toggle-item"><input type="checkbox" id="tgBoxes" checked onchange="renderStockChart()"> 箱体</label>
         <label class="toggle-item"><input type="checkbox" id="tgChannel" checked onchange="renderStockChart()"> 通道</label>
         <label class="toggle-item"><input type="checkbox" id="tgMA" checked onchange="renderStockChart()"> 均线</label>
+        <label class="toggle-item"><input type="checkbox" id="tgFib" checked onchange="renderStockChart()"> 黄金分割</label>
         <button class="mini-btn" onclick="toggleChartHelp()" title="上行/下行区域使用说明">?</button>
       </div>
     </div>
@@ -372,6 +373,12 @@
         · 现价向上突破最近箱体上沿 → 第一优先级买入信号(报买入)<br>
         · 箱体上沿变支撑，回踩不破可加仓<br>
         · 现价跌破箱体下沿 → 减仓/回避</div>
+      <div class="help-sec"><b>【黄金分割】斐波那契回撤/扩展（左侧标签）</b>
+        · 先自动锚定本周期<b>最显著的一段摆动</b>（左端点线=锚点连线，标明取自哪段高低点）<br>
+        · <b>虚线</b>=回撤位 23.6/38.2/50/61.8/78.6%（落在摆动区间内）：<b class="down">绿色=现价下方(潜在支撑)</b>、<b class="up">红色=现价上方(潜在阻力)</b><br>
+        · <b class="warn">★ 61.8%</b>=黄金比例位，公认最可靠的反转/支撑位，线最粗、重点看<br>
+        · <b>点线</b>=扩展位 127.2/161.8%（落在摆动区间外）：突破后常见的目标位/阻力<br>
+        · 局限：结果为纯技术参考，锚点由算法自动选取，可能与你心中的那一段不同——以锚点连线为准自行核对</div>
     </div>
     <div id="stockChart" class="echart stock-chart"></div>
   </div>

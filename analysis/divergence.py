@@ -26,6 +26,58 @@ if str(BASE) not in sys.path:
 CACHE_DIR = BASE / "t_io" / "cache" / "tushare_mins"
 FETCH_DAYS = 35
 
+# 新鲜度口径（2026-09-19）：背离事件超过 N 根 bar 未更新即视为过期，不再展示/推送。
+# 修正前 detect_minute_divergence_detail 取 events[-1] 且不检查年龄，
+# 实测把 24 天前的 30min 底背离当成当前信号（300153，189 根前）。
+#
+# 阈值标定（39 只样本实测 bars_ago 分布，见 plan 验证节）：
+#   30min ≤32 根 → 49% 的票有显示；60min ≤20 根 → 37%。既滤陈旧又不会空列。
+#   注意地板：_local_extrema 需 3 根 bar 确认峰谷 ⇒ 最新可能的事件也已 3 根前，
+#   故「约 1 个交易日」级别的阈值（8/6 根）会让该列长期为空。
+MAX_AGE_BARS = {"30min": 32, "60min": 20}
+
+# "创新高/新低"的幅度门槛（2026-09-20）：没有它时，下跌途中两个相邻微反弹峰
+# 只要高出 0.1% 就被判顶背离（实测 002202：18.55 vs 18.52 仅高 0.16%，真实顶在 19.58）。
+# 0.3% 与 t0_schemes/run_experiment_v2.py 的 BUF 同源，保持项目内口径一致。
+PRICE_EXCESS = 0.003
+
+# 背离必须发生在对应价区（对齐 同花顺/通达信 口径）：顶背离要求 DIF>0、底背离要求 DIF<0。
+# 关闭时，下跌趋势中 DIF 深负区的小反弹会被误标为"顶背离"（owner 2026-09-20 报的 002202）。
+REQUIRE_DIF_ZONE = True
+
+# "两个极值必须被一次真实摆动分开"（2026-09-20 owner 抽查 300475 后加）。
+#
+# 问题：_local_extrema(n_bars=3) 会找出**大量噪声级小极值**，而背离判定只取相邻两个，
+# 于是同一段筑底/做顶过程里的两个小极值会被当成"两个低点/高点"去比对。
+# 实测 300475（30min）：谷 160.85(09-15 13:00) 与 谷 159.20(09-16 09:30) **仅隔 5 根、
+# 中间只反弹 2.26%** ⇒ 被判底背离；而行情软件把 09-14~09-16 视为**同一个底**（158.34），
+# 根本不存在两个低点 ⇒ owner 看到的图"没有背离"。
+#
+# 判据：两点之间的**逆向幅度**必须 ≥ SWING_MULT × 该票自身的中位 bar 振幅。
+# **必须用相对量** —— 固定 3% 会把低波票彻底静音（实测 515180/600900/601318/
+# 601628/600089/515120 六只信号归零）。
+# 取 2.5 是实测的最小可行值（1.5/2.0 挡不住 300475 那对，3.0 会多砍 3 个显示信号）。
+SWING_MULT = 2.5
+
+# 顶背离用**更严**的摆动门槛（2026-09-20 扩池 974 只 × 540 天，57,045 事件扫出来的）。
+#
+# 阈值扫描（训练/测试分开，`w35_divergence/sweep_divergence_thresholds.py`）显示：
+#   顶背离 —— 提升在**整条阈值曲线**上都显著（P30→P90），可放心落地：
+#       30min 测试 +5.4~+8.7pp(z 3.8~5.4)；60min 测试 +4.7~+10.5pp(z 3.7~5.4)
+#       且 swing_depth 在**低分位最好** ⇒ 抬到 4x 即够，再往上样本流失快、收益递减
+#   底背离 —— **不加**：60min 底背离上训练 +9.8~+12.6pp 但**测试 ≈0 甚至为负**
+#       （教科书级 train/test 落差），30min 底也只在高分位才勉强显著。
+#   ⇒ 故本参数**只作用于顶背离**；底背离仍用 SWING_MULT。
+SWING_MULT_TOP = 4.0
+
+# 日线口径与分钟**不同**：日线背离更稀疏（39 只实测 min=3 / P50=20 根，
+# ≤5 交易日仅 13% 的票有事件），"N 天内有没有事件"这种状态式判据对提醒毫无用处
+# —— 提醒要的是「**新形成**」而非「最近有过」。
+#   ⇒ 日线走**事件式**：只在事件刚被确认的头几天报（bars_ago<=4），
+#      再由调用方按事件时间戳去重，保证每个事件只提醒一次。
+DAILY_ALERT_MAX_AGE_BARS = 4    # 事件确认后 4 个交易日内视为"新"，用于飞书提醒
+DAILY_DISPLAY_MAX_AGE_BARS = 20 # 若将来要在 GUI 展示日线背离，用这个更宽的口径
+
 
 def _ts_code(code: str) -> str:
     base = str(code).split("_")[0]
@@ -127,30 +179,68 @@ def _local_extrema(highs, lows, n_bars=3):
     return _merge(peaks, highs, True), _merge(troughs, lows, False)
 
 
-def detect_divergence_events(df: pd.DataFrame) -> list:
+def detect_divergence_events(df: pd.DataFrame, price_excess: float = None,
+                             require_dif_zone: bool = None,
+                             swing_mult: float = None,
+                             swing_mult_top: float = None) -> list:
     """检测单分辨率 K 线全部顶/底背离事件。
-    返回 [{index, time, type('顶'/'底'), price, dif, consec}]；事件记在最新峰/谷上。
-    consec=True 表示该峰/谷与前一个峰/谷形成连续同向背离（验证显示 60min 连续底背离有区分度）。"""
+    返回 [{index, time, type('顶'/'底'), price, dif, consec, bars_ago}]；事件记在最新峰/谷上。
+    consec=True 表示该峰/谷与前一个峰/谷形成连续同向背离（验证显示 60min 连续底背离有区分度）。
+
+    两道门槛（2026-09-20 加，对齐 同花顺/通达信 口径）：
+
+    1. `price_excess`（默认 0.3%）——**"创新高/新低"的幅度门槛**，与 t0_schemes/
+       run_experiment_v2 的 BUF 同源。没有它时，下跌途中两个相邻微反弹峰只要高出 0.1%
+       就被判顶背离（实测 002202：18.55 vs 18.52 仅高 0.16%，真实顶在 19.58）。
+    2. `require_dif_zone`（默认 True）——**背离必须发生在对应价区**：
+       顶背离要求后一峰 DIF > 0（在零轴上方才叫"顶"），底背离要求 DIF < 0。
+       没有它时，**下跌趋势中 DIF 深负区的小反弹也会被标成"顶背离"**——这正是
+       owner 报的 002202 情形（两峰 DIF 均为负：-0.0668 / -0.2107）。
+
+    ⚠️ `require_dif_zone=True` 会**显著减少事件数**（实测 9 只 30min：603667 3→0、
+    002451 5→2、002261 5→3）。这会影响"60min 连续底背离"这一**唯一已验证信号**的
+    样本口径，若要引用其 +12.5pp 结论需按新口径重跑验证（validate_divergence.py）。"""
     if df is None or df.empty or len(df) < 40:
         return []
+    # ⚠️ 用 None 哨兵而非直接把模块常量写成默认值：默认值在 **import 时求值一次**，
+    # 写成 `price_excess=PRICE_EXCESS` 会让常量**运行时改不动** ——
+    # 2026-09-20 就因此静默算错了一次 A/B（两次运行结果完全相同才发现）。
+    if price_excess is None:
+        price_excess = PRICE_EXCESS
+    if require_dif_zone is None:
+        require_dif_zone = REQUIRE_DIF_ZONE
+    if swing_mult is None:
+        swing_mult = SWING_MULT
+    if swing_mult_top is None:
+        swing_mult_top = SWING_MULT_TOP
     closes = df["close"].astype(float).values
     highs = df["high"].astype(float).values
     lows = df["low"].astype(float).values
     times = df["time"].values
     dif = _macd_dif(closes)
     peaks, troughs = _local_extrema(highs, lows)
+    # 摆动门槛（相对该票自身波动）：两个极值之间的逆向幅度不足 `swing_min` 时，
+    # 它们属于同一段走势，不构成"两个高点/低点"⇒ 不作背离比对。
+    # ⚠️ 顶/底用**不同**门槛：顶更严（见 SWING_MULT_TOP 的标定说明），底维持宽松。
+    _med_bar = float(np.median((highs - lows) / closes))
+    swing_min_top = swing_mult_top * _med_bar if swing_mult_top > 0 else 0.0
+    swing_min = swing_mult * _med_bar if swing_mult > 0 else 0.0
     events = []
     peak_events, trough_events = {}, {}
     for i in range(1, len(peaks)):
         p2, p1 = peaks[i - 1], peaks[i]
-        if highs[p1] > highs[p2] and dif[p1] < dif[p2]:
+        if (highs[p1] > highs[p2] * (1 + price_excess) and dif[p1] < dif[p2]
+                and (not require_dif_zone or dif[p1] > 0)
+                and (swing_min_top <= 0 or lows[p2:p1 + 1].min() <= highs[p1] * (1 - swing_min_top))):
             e = {"index": int(p1), "time": str(times[p1]),
                  "type": "顶", "price": float(highs[p1]), "dif": float(dif[p1]), "consec": False}
             events.append(e)
             peak_events[p1] = e
     for i in range(1, len(troughs)):
         t2, t1 = troughs[i - 1], troughs[i]
-        if lows[t1] < lows[t2] and dif[t1] > dif[t2]:
+        if (lows[t1] < lows[t2] * (1 - price_excess) and dif[t1] > dif[t2]
+                and (not require_dif_zone or dif[t1] < 0)
+                and (swing_min <= 0 or highs[t2:t1 + 1].max() >= lows[t1] * (1 + swing_min))):
             e = {"index": int(t1), "time": str(times[t1]),
                  "type": "底", "price": float(lows[t1]), "dif": float(dif[t1]), "consec": False}
             events.append(e)
@@ -165,12 +255,27 @@ def detect_divergence_events(df: pd.DataFrame) -> list:
         else:
             pos = trough_pos.get(e["index"])
             e["consec"] = bool(pos is not None and pos >= 1 and troughs[pos - 1] in trough_events)
+        # 距今 bar 数：事件在窗口里有多旧（0=最后一根）。供新鲜度过滤与前端展示。
+        e["bars_ago"] = int(len(closes) - 1 - e["index"])
     return events
 
 
-def detect_minute_divergence_detail(code: str) -> dict:
-    """检测个股 30/60 分钟线背离详情（含连续标记）。返回 {m30: {type, consec}, m60: {...}}。
+def _latest_fresh(events: list, max_age_bars: int):
+    """窗口内最新的、且未过期（bars_ago <= max_age_bars）的事件；无则 None。
+    修正前一律取 events[-1]，会把数周前的背离当成当前信号。"""
+    fresh = [e for e in events if e.get("bars_ago", 0) <= max_age_bars]
+    return fresh[-1] if fresh else None
+
+
+def detect_minute_divergence_detail(code: str, max_age_bars: dict = None) -> dict:
+    """检测个股 30/60 分钟线背离详情（含连续标记与新鲜度）。
+    返回 {m30: {type, consec, bars_ago, time, price, dif}, m60: {...}}；过期项不返回。
+
+    ⚠️ 2026-09-19 修正：此前取 events[-1] 不看年龄，会把数周前的背离当当前信号
+    （实测 300153 的 30min 底背离距今 24 天仍被展示）→ 现按 MAX_AGE_BARS 过滤。
+
     验证结论（2026-08-19，180天）：单次背离命中率≈随机基线；60min 连续底背离是唯一可信正向信号。"""
+    age_map = max_age_bars or MAX_AGE_BARS
     out = {}
     for freq, key in (("30min", "m30"), ("60min", "m60")):
         try:
@@ -178,14 +283,52 @@ def detect_minute_divergence_detail(code: str) -> dict:
             if df is None or df.empty or len(df) < 40:
                 continue
             events = detect_divergence_events(df)
-            if not events:
+            _max_age = age_map.get(freq)
+            if _max_age is None:                       # 调用方传了不完整的 map
+                _max_age = MAX_AGE_BARS.get(freq, 20)
+            last = _latest_fresh(events, _max_age)
+            if last is None:
                 continue
-            last = events[-1]
             out[key] = {"type": "顶背离" if last["type"] == "顶" else "底背离",
-                        "consec": bool(last.get("consec", False))}
+                        "consec": bool(last.get("consec", False)),
+                        "bars_ago": int(last.get("bars_ago", 0)),
+                        "time": str(last.get("time", "")),
+                        "price": last.get("price"),
+                        "dif": last.get("dif")}
         except Exception:
             continue
     return out
+
+
+def detect_daily_divergence(df_daily: pd.DataFrame,
+                            max_age_bars: int = DAILY_ALERT_MAX_AGE_BARS) -> dict:
+    """日线 MACD 背离（复用 _macd_dif / _local_extrema，无周期假设）。
+    df_daily 需含 time|date / high / low / close 列（core.market_data provider 口径）。
+    返回 {type, consec, bars_ago, time, price, dif}；无新鲜事件返回 {}。
+
+    ⚠️ 验证状态：本项目只证过 ①30/60min 单次背离≈随机基线 ②日线**复合**顶背离无效
+    ③60min 连续底背离仅在"事件后止跌"口径有效。**日线单次 MACD 背离本身未验证** →
+    下游文案必须写"参考/未验证"，不得表述为买卖信号。"""
+    if df_daily is None or df_daily.empty or len(df_daily) < 40:
+        return {}
+    df = df_daily.copy()
+    if "time" not in df.columns:
+        for cand in ("date", "trade_date", "datetime"):
+            if cand in df.columns:
+                df = df.rename(columns={cand: "time"})
+                break
+    if "time" not in df.columns or not {"high", "low", "close"}.issubset(df.columns):
+        return {}
+    events = detect_divergence_events(df)
+    last = _latest_fresh(events, max_age_bars)
+    if last is None:
+        return {}
+    return {"type": "顶背离" if last["type"] == "顶" else "底背离",
+            "consec": bool(last.get("consec", False)),
+            "bars_ago": int(last.get("bars_ago", 0)),
+            "time": str(last.get("time", "")),
+            "price": last.get("price"),
+            "dif": last.get("dif")}
 
 
 def detect_divergence_df(df: pd.DataFrame) -> str:

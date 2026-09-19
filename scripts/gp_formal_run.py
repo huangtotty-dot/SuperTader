@@ -29,10 +29,11 @@ def run(ctx=None):
     print(f"[gp_formal] seed={seed} 启动: {' '.join(cmd)}", flush=True)
     try:
         proc = subprocess.run(cmd, capture_output=True, text=True,
-                              timeout=27000, cwd=ROOT, encoding="utf-8", errors="replace")
+                              timeout=169200, cwd=ROOT, encoding="utf-8", errors="replace",
+                              creationflags=subprocess.BELOW_NORMAL_PRIORITY_CLASS)
         rc, out, err = proc.returncode, proc.stdout or "", proc.stderr or ""
     except subprocess.TimeoutExpired:
-        rc, out, err = -9, "", "subprocess timeout (27000s)"
+        rc, out, err = -9, "", "subprocess timeout (169200s)"
     except Exception as e:  # noqa
         rc, out, err = -1, "", f"launcher error: {e}"
     el = time.time() - t0
