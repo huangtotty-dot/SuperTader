@@ -50,6 +50,24 @@ body {
 .date-sel { background: var(--bg-soft); color: var(--text); border: 1px solid var(--border); border-radius: 5px; padding: 3px 8px; font-size: 12px; }
 .status { color: var(--text-faint); font-size: 11px; max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .status.err { color: var(--red); } .status.ok { color: var(--green); }
+
+/* ===== 轻提示（右上角浮层，约 4s 自动消失、不阻断操作） ===== */
+.toast-host {
+  position: fixed; top: 48px; right: 16px; z-index: 500;
+  display: flex; flex-direction: column; gap: 8px; align-items: flex-end;
+  pointer-events: none;   /* 不拦截点击，保证"不阻断" */
+}
+.toast {
+  max-width: 400px; padding: 8px 12px; border-radius: 8px;
+  background: var(--bg-card); border: 1px solid var(--border); border-left: 3px solid var(--gray);
+  color: var(--text); font-size: 12px; line-height: 1.6;
+  white-space: pre-line;   /* 消息里的 \n 需换行显示 */
+  box-shadow: 0 6px 20px rgba(20, 30, 50, .14);
+  transition: opacity .3s ease, transform .3s ease;
+}
+.toast.ok { border-left-color: var(--green); }
+.toast.err { border-left-color: var(--red); }
+.toast.leaving { opacity: 0; transform: translateX(14px); }
 .live-tag {
   font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 20px;
   background: var(--red-bg); color: var(--red); border: 1px solid rgba(248,81,73,.6);

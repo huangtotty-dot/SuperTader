@@ -29,11 +29,15 @@ if str(BASE) not in sys.path:
 
 DOM_STUB = r"""
 const mkElRef = () => ({
-  innerHTML: '', textContent: '', value: '', checked: false,
+  innerHTML: '', textContent: '', value: '', checked: false, parentNode: null,
   style: new Proxy({}, { get: () => '', set: () => true }),
   classList: { add(){}, remove(){}, toggle(){}, contains(){ return false; } },
   dataset: {}, children: [], scrollTop: 0, scrollHeight: 0,
-  appendChild(){}, removeChild(){}, remove(){}, setAttribute(){}, getAttribute(){ return null; },
+  // appendChild 记录子节点：toast/模态窗是动态插入的，需可被断言检查
+  appendChild(c){ this.children.push(c); if (c) c.parentNode = this; return c; },
+  removeChild(c){ const i = this.children.indexOf(c); if (i >= 0) this.children.splice(i, 1); },
+  remove(){ if (this.parentNode) this.parentNode.removeChild(this); },
+  setAttribute(){}, getAttribute(){ return null; },
   addEventListener(){}, removeEventListener(){}, querySelector(){ return mkElRef(); },
   querySelectorAll(){ return []; }, insertAdjacentHTML(){}, focus(){}, click(){},
   getBoundingClientRect(){ return { top:0, left:0, width:0, height:0 }; },
@@ -70,6 +74,7 @@ function mkElRefGlobal(){ return document.createElement(); }
 
 (0, eval)(fs.readFileSync('web/app.js', 'utf8')
   + '\n;globalThis.__X = { renderPB, renderAutoScan, renderAddWatch, buildBadge, renderStockChart,'
+  + ' addNewWatchlist, addToWatchlist,'
   + ' __setChart: (d, p) => { stockChartData = d; stockChartPeriod = p; } };');
 const X = globalThis.__X;
 const P = JSON.parse(fs.readFileSync(DIR + '/payloads.json', 'utf8'));
@@ -156,6 +161,15 @@ if (P.chart && !P.chart.err && P.chart.period_data) {
     const labels = fibLines.map(it => String(it.label.formatter)).join(',');
     check(`${per}: 黄金分割比例位 >= 5 条`, fibLines.length >= 5);
     check(`${per}: 0.618 黄金位标注 ★`, fibLines.some(it => String(it.label.formatter).startsWith('★')));
+    // 标签只写比例（如「★61.8%」）；带上价格会变长，5~7 条堆在左端就看不清了 —— 防回退
+    check(`${per}: 标签精简无价格`, fibLines.every(it => String(it.label.formatter).length <= 8));
+    // 黄金位要比次要位更醒目（加粗 + 更不透明）
+    const gold = fibLines.find(it => String(it.label.formatter).startsWith('★')) || {};
+    const minor = fibLines.filter(it => !String(it.label.formatter).startsWith('★')
+      && !/^(38\.2%|50%)$/.test(String(it.label.formatter)));
+    check(`${per}: 黄金位比次要位更醒目`,
+          !!gold.lineStyle && minor.every(m => gold.lineStyle.width >= m.lineStyle.width
+            && gold.lineStyle.opacity >= m.lineStyle.opacity));
     check(`${per}: 有锚点连线`, !!anchor);
     check(`${per}: 标题含「黄金分割」`, titles.includes('黄金分割'));
     check(`${per}: 比例位标签无脏文本`, dirty(labels).length === 0);
@@ -183,8 +197,90 @@ if (P.chart && !P.chart.err && P.chart.period_data) {
   console.log('== 黄金分割图层渲染 == SKIP（无 chart payload）');
 }
 
-console.log(`\n结果: ${fails === 0 ? 'ALL PASS' : fails + ' FAILED'}`);
-process.exit(fails ? 1 : 0);
+// ── 建仓股池「+ 添加」成败反馈（2026-09-20 新增）──
+// 此前该路径完全无覆盖，而它有三个静默失败：输入框不清空、反馈在看不见的地方、
+// 加进去却不出现在表里。这里用假 pywebview.api 驱动真实 addNewWatchlist()。
+(async () => {
+  console.log('== 建仓股池添加反馈 ==');
+  const setInputs = (code) => {
+    captured['pbSearchCode'] = Object.assign({}, mkElRefGlobal(), { id: 'pbSearchCode', value: code || '600519' });
+    captured['pbSearchName'] = Object.assign({}, mkElRefGlobal(), { id: 'pbSearchName', value: '' });
+    captured['pbAddBtn'] = Object.assign({}, mkElRefGlobal(), { id: 'pbAddBtn', textContent: '+ 添加' });
+    captured['toastHost'] = Object.assign({}, mkElRefGlobal(), { id: 'toastHost' });
+  };
+  const runAdd = async (resp, inputCode) => {
+    setInputs(inputCode);
+    global.window.pywebview = { api: {
+      add_and_scan: async () => resp,
+      search_stock: async () => ({ results: [] }),
+      refresh_pb: async () => ({}),
+    } };
+    const nBefore = (document.body.children || []).length;
+    await X.addNewWatchlist();                    // 真实调用被测函数
+    const toasts = (captured['toastHost'].children || []).map(c => c.textContent);
+    const modals = (document.body.children || []).slice(nBefore).map(o => o.innerHTML);
+    return { toasts, modals, code: captured['pbSearchCode'].value };
+  };
+
+  // 1) 成功：清空输入框 + 轻提示带结论/卡点，且不弹模态窗
+  let a = await runAdd({ ok: true, code: '600519', name: '贵州茅台', scan_date: '2026-09-20',
+    visible_in_manual: true, scan_error: null,
+    scan: { verdict: 'approaching', composite_score: 62, block_reason: '卡「回撤到位」：还差 3.2%' } });
+  check('成功：输入框已清空', a.code === '');
+  check('成功：弹出轻提示', a.toasts.length === 1);
+  check('成功：提示含结论与卡点', /已加入并扫描/.test(a.toasts[0] || '') && /回撤到位/.test(a.toasts[0] || ''));
+  check('成功：不弹模态窗', a.modals.length === 0);
+  check('成功：提示无脏文本', dirty(a.toasts[0] || '').length === 0);
+
+  // 2) 股池写入失败：保留输入 + 模态窗列明原因 + 无成功提示
+  let b = await runAdd({ ok: false, error: '磁盘只读' });
+  check('失败：输入框保留原值', b.code === '600519');
+  check('失败：弹出模态窗', b.modals.length === 1);
+  check('失败：模态窗含原因', /磁盘只读/.test(b.modals[0] || ''));
+  check('失败：无成功轻提示', b.toasts.length === 0);
+  check('失败：模态窗无脏文本', dirty(b.modals[0] || '').length === 0);
+
+  // 3) 加成功但扫描失败：输入框清空（加本身成功），模态窗讲清"需重跑"
+  let c = await runAdd({ ok: true, code: '600519', name: '贵州茅台', scan_date: '2026-09-20',
+    visible_in_manual: true, scan_error: 'gm 行情服务不可达',
+    scan: { verdict: 'weak', composite_score: 0, block_reason: null } });
+  check('扫描失败：输入框仍清空（加成功）', c.code === '');
+  check('扫描失败：模态窗含扫描原因', /gm 行情服务不可达/.test((c.modals[0] || '')));
+  check('扫描失败：模态窗提示需重跑', /盘后重跑/.test((c.modals[0] || '')));
+  check('扫描失败：无成功轻提示', c.toasts.length === 0);
+
+  // 3b) insufficient_data（未开盘/数据陈旧）→ 必须给中文说明，不能把英文枚举丢给用户
+  let d = await runAdd({ ok: true, code: '600176', name: '中国巨石', scan_date: '2026-09-20',
+    visible_in_manual: true, scan_error: null,
+    scan: { verdict: 'insufficient_data', composite_score: 0, block_reason: null,
+            reason: '日线末 bar 陈旧(2026-09-18<2026-09-20)' } });
+  check('无数据：提示为中文且含原因', /分钟数据不足/.test(d.toasts[0] || '') && /陈旧/.test(d.toasts[0] || ''));
+  check('无数据：不出现英文枚举', !/insufficient_data/.test(d.toasts[0] || ''));
+  check('无数据：提示无脏文本', dirty(d.toasts[0] || '').length === 0);
+
+  // 3c) auto 池标的也走正常成功路径（2026-09-20 owner 拍板：两池互不阻塞，不再拒绝）
+  let e = await runAdd({ ok: true, code: '600089', name: '特变电工', scan_date: '2026-09-20',
+    visible_in_manual: true, scan_error: null,
+    scan: { verdict: 'weak', composite_score: 12, block_reason: null } }, '600089');
+  check('auto池：走成功路径，输入框清空', e.code === '');
+  check('auto池：弹轻提示', e.toasts.length === 1);
+  check('auto池：不弹失败模态窗', e.modals.length === 0);
+  check('auto池：提示无脏文本', dirty(e.toasts[0] || '').length === 0);
+
+  // 4) 行内「+股池」按钮：只加不扫，返回 true/false（此前恒为 undefined）
+  global.window.pywebview = { api: {
+    add_to_watchlist: async () => ({ ok: true, code: '000001' }),
+    refresh_pb: async () => ({}),
+  } };
+  const rOk = await X.addToWatchlist('000001', '平安银行', null);
+  check('行内按钮成功时返回 true', rOk === true);
+  global.window.pywebview = { api: { add_to_watchlist: async () => ({ ok: false, error: '不存在的代码' }) } };
+  const rBad = await X.addToWatchlist('999999', 'X', null);
+  check('行内按钮失败时返回 false', rBad === false);
+
+  console.log(`\n结果: ${fails === 0 ? 'ALL PASS' : fails + ' FAILED'}`);
+  process.exit(fails ? 1 : 0);
+})();
 """
 
 

@@ -116,6 +116,37 @@ function statusEl(msg, cls) {
   el.className = "status " + (cls || "");
   el.textContent = msg;
 }
+// 轻提示：右上角浮层，约 4s 自动消失、不阻断操作，可堆叠。
+// 用于"添加成功"这类无需用户确认的回执（顶部 #status 离操作区太远，等于没反馈）
+function toast(msg, cls) {
+  let host = document.getElementById("toastHost");
+  if (!host) {
+    host = document.createElement("div");
+    host.id = "toastHost";
+    host.className = "toast-host";
+    document.body.appendChild(host);
+  }
+  const el = document.createElement("div");
+  el.className = "toast " + (cls || "");
+  el.textContent = msg;
+  host.appendChild(el);
+  setTimeout(() => {
+    el.classList.add("leaving");
+    setTimeout(() => el.remove(), 320);
+  }, 4000);
+}
+// 结果模态窗：必须点掉才能继续。用于"失败"这类需要用户看清原因的情况。
+// bodyHtml 由调用方拼装（需自行 esc 用户数据）
+function showResultModal(title, bodyHtml, isErr) {
+  const overlay = document.createElement("div");
+  overlay.className = "modal-mask";
+  overlay.innerHTML = `<div class="modal" style="width:520px;max-height:80vh">
+    <div class="modal-title"><span class="${isErr ? "down" : "up"}">${esc(title)}</span>
+      <button class="mini-btn" onclick="this.closest('.modal-mask').remove()">×</button></div>
+    <div class="modal-body" style="font-size:12px;line-height:1.7">${bodyHtml}</div>
+  </div>`;
+  document.body.appendChild(overlay);
+}
 function nowTime() {
   const d = new Date();
   const p = n => String(n).padStart(2, "0");
@@ -2114,14 +2145,22 @@ function renderStockChart() {
   const fibLines = fibActive ? fib.levels.map(lv => {
     const col = lv.side === "support" ? "#3fb950" : "#f85149";
     const isExt = lv.kind === "extension";
+    // 关键位 = 黄金位 + 38.2/50（最常看的三条）；其余只画线、调淡，避免标签堆叠
+    const isKey = lv.golden || lv.ratio === 0.382 || lv.ratio === 0.5;
     return {
       yAxis: lv.price,
       lineStyle: { color: col, type: isExt ? "dotted" : "dashed",
-        width: lv.golden ? 1.6 : 1, opacity: isExt ? .55 : (lv.golden ? 1 : .85) },
-      label: { formatter: `${lv.golden ? "★" : ""}${lv.label} ${lv.price}`,
-        color: col, fontSize: 9, position: "insideStartTop",
-        // 深色底衬：标签会压到K线柱体上，无底衬读不清
-        backgroundColor: "rgba(13,17,23,.9)", padding: [2, 4], borderRadius: 2 },
+        width: lv.golden ? 1.8 : (isKey ? 1.2 : 1),
+        opacity: lv.golden ? 1 : (isKey ? .85 : .45) },
+      // 标签只写比例：价格可从左侧 Y 轴读到，精确值与距现价 % 见悬停 tooltip。
+      // 之前写全「78.6% 4057.239」→ 5~7 条长标签堆在左端，太密看不清。
+      label: { formatter: `${lv.golden ? "★" : ""}${lv.label}`,
+        color: col, fontSize: 9, fontWeight: isKey ? "bold" : "normal",
+        position: "insideStartTop",
+        // 底衬：标签会压到K线柱体上，无底衬读不清。图表在 .modal 的白底上，
+        // 故用白底 + 同色描边（深色底衬在浅色主题里是突兀的黑块）
+        backgroundColor: "rgba(255,255,255,.92)", borderColor: col, borderWidth: 1,
+        borderRadius: 3, padding: [1, 3] },
     };
   }) : [];
   // 锚点连线：标出这段比例位取自哪一段摆动，便于人工核查
@@ -2281,6 +2320,21 @@ function renderStockChart() {
             const tg = b.touch_grade || "—";
             const disp = b.display ? `${b.display}` : `${wg}箱 触及${tg}`;
             html += `<div>📦 ${disp}</div>`;
+          });
+          html += `</div>`;
+        }
+
+        // 黄金分割：精确价格 / 支撑阻力 / 距现价 % —— 图上标签已精简为只写比例，细节放这里
+        if (fibActive) {
+          html += `<div style="border-top:1px solid #30363d;margin-top:4px;padding-top:4px;font-size:10px">`
+            + `<div style="color:#8b949e">黄金分割 · ${fib.direction === "up" ? "上涨" : "下跌"}摆动</div>`;
+          fib.levels.forEach(lv => {
+            const c = lv.side === "support" ? "#3fb950" : "#f85149";
+            const d = (cur && lv.price) ? (lv.price - cur) / cur * 100 : null;
+            html += `<div style="color:${c}">${lv.golden ? "★" : ""}${lv.label}`
+              + ` <b>${lv.price}</b>`
+              + (d != null ? ` <span style="opacity:.65">${d >= 0 ? "+" : ""}${d.toFixed(2)}%</span>` : "")
+              + ` ${lv.side === "support" ? "支撑" : "阻力"}</div>`;
           });
           html += `</div>`;
         }
@@ -2652,6 +2706,18 @@ async function showSectorHistory(sector) {
     body.innerHTML = `<div class="empty">加载失败: ${esc(e.message)}</div>`;
   }
 }
+// 扫描结论 → 人话（取值同 position_builder.VERDICT_ICON，勿显示英文枚举给用户）
+const PB_VERDICT_TXT = {
+  signal: "报买(signal)",
+  approaching: "接近买点",
+  watch_signal: "观察信号",
+  weak: "监控中（未达买点）",
+  insufficient_data: "分钟数据不足（未开盘或数据未就绪）",
+};
+function localToday() {
+  const d = new Date(), p = n => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
 async function addNewWatchlist() {
   const codeEl = document.getElementById("pbSearchCode");
   const nameEl = document.getElementById("pbSearchName");
@@ -2659,7 +2725,13 @@ async function addNewWatchlist() {
   const code = codeEl.value.trim();
   const name = nameEl.value.trim();
   if (!code) { statusEl("请输入股票代码", "err"); codeEl.focus(); return; }
-  if (!/^\d{6}$/.test(code)) { statusEl("代码格式应为6位数字", "err"); codeEl.focus(); return; }
+  if (!/^\d{6}$/.test(code)) {
+    statusEl("代码格式应为6位数字", "err");
+    showResultModal("添加失败",
+      `<div>代码 <b class="mono">${esc(code)}</b> 格式不对：应为 6 位数字。</div>`, true);
+    codeEl.focus();
+    return;
+  }
   // 立即反馈：按钮置灰 + 文案变化，同时防重复点击
   const prevTxt = btn.textContent;
   btn.disabled = true;
@@ -2678,29 +2750,78 @@ async function addNewWatchlist() {
         if (hit) finalName = hit.name;
       } catch (e) { /* 名称获取失败/超时则用代码兜底 */ }
     }
-    const ok = await addToWatchlist(code, finalName || code, null);
-    if (ok) {
-      codeEl.value = "";
-      nameEl.value = "";
+
+    // 一次调用完成「写股池 + 立即单股扫描」，并回传成败明细
+    let r;
+    try {
+      r = await apiCall("add_and_scan", code, finalName || code);
+    } catch (e) {
+      r = { ok: false, error: e.message };
+    }
+
+    if (!r || !r.ok) {
+      const why = (r && r.error) || "未知原因";
+      statusEl(`加入失败: ${why}`, "err");
+      showResultModal("添加失败",
+        `<div>股票 <b class="mono">${esc(code)}</b> ${esc(finalName || "")} 未能加入建仓股池。</div>
+         <div class="down" style="margin-top:8px">原因：${esc(why)}</div>`, true);
+      return;   // 失败不清空输入框，便于改正后重试
+    }
+
+    // 成功 → 清空输入框并聚焦回代码框（此前 addToWatchlist 无返回值，这段判断从不成立）
+    codeEl.value = "";
+    nameEl.value = "";
+    codeEl.focus();
+    const nm = (r.name && r.name !== code) ? ` ${r.name}` : "";
+    statusEl(`${code}${nm} 已加入建仓股池并扫描`, "ok");
+    if (state.date) apiCall("refresh_pb", state.date).then(pb => renderPB(pb || {})).catch(() => {});
+
+    const sc = r.scan || {};
+    if (r.scan_error) {
+      // 加进股池了但没扫成功 → 该股不会出现在下表，必须讲清楚
+      showResultModal("已加入股池，但扫描失败",
+        `<div><b class="mono">${esc(code)}</b>${esc(nm)} 已写入建仓股池。</div>
+         <div class="warn" style="margin-top:8px">但立即扫描失败：${esc(r.scan_error)}</div>
+         <div class="cell-dim" style="margin-top:8px">该股需点「🔄 盘后重跑」后才会出现在下表。</div>`, true);
+    } else {
+      let msg = `✓ ${code}${nm} 已加入并扫描 · ${PB_VERDICT_TXT[sc.verdict] || sc.verdict || "—"}`
+        + `（${sc.composite_score != null ? sc.composite_score : "—"}分）`;
+      const why = sc.block_reason || sc.reason;
+      if (why) msg += `\n${sc.block_reason ? "卡点" : "说明"}：${why}`;
+      if (r.scan_date && state.date && state.date !== localToday()) {
+        msg += `\n已按今日(${r.scan_date})扫描；当前在看 ${state.date}，切回今日可见该行`;
+      }
+      toast(msg, "ok");
     }
   } finally {
     btn.disabled = false;
     btn.textContent = prevTxt;
   }
 }
+// 列表行内「+股池」按钮：只加不扫（避免在列表里误触发大量网络请求），返回是否成功
 async function addToWatchlist(code, name, btn) {
   try {
     const r = await apiCall("add_to_watchlist", code, name);
     if (r && r.ok) {
       if (btn) { btn.textContent = "✓已加"; btn.style.color = "#3fb950"; btn.style.borderColor = "#3fb950"; }
-      statusEl(`${esc(code)} ${esc(name)} 已加入建仓股池`, "ok");
+      statusEl(`${code} ${name} 已加入建仓股池`, "ok");
+      toast(`✓ ${code} ${name} 已加入建仓股池\n需扫描后才会出现在下表（或在该股行点「🔄」）`, "ok");
       // 自动刷新建仓扫描表
       if (state.date) apiCall("refresh_pb", state.date).then(pb => renderPB(pb || {})).catch(() => {});
-    } else {
-      statusEl(`加入失败: ${r ? r.error : '未知'}`, "err");
+      return true;
     }
+    const why = (r && r.error) || "未知原因";
+    statusEl(`加入失败: ${why}`, "err");
+    showResultModal("加入股池失败",
+      `<div>股票 <b class="mono">${esc(code)}</b> ${esc(name)} 未能加入建仓股池。</div>
+       <div class="down" style="margin-top:8px">原因：${esc(why)}</div>`, true);
+    return false;
   } catch (e) {
     statusEl(`加入失败: ${e.message}`, "err");
+    showResultModal("加入股池失败",
+      `<div>股票 <b class="mono">${esc(code)}</b> 未能加入建仓股池。</div>
+       <div class="down" style="margin-top:8px">原因：${esc(e.message)}</div>`, true);
+    return false;
   }
 }
 async function confirmPosition(code, rowEl) {

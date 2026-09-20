@@ -3877,7 +3877,12 @@ class Api:
         return _clean({"results": results})
 
     def add_to_watchlist(self, code, name):
-        """将股票加入 watchlist_buy.json（status=monitoring）。"""
+        """将股票加入 watchlist_buy.json（status=monitoring）。
+
+        人工盘/自动盘**互不阻塞**（2026-09-20 owner 拍板）：auto 池标的也可加入人工盘，
+        人工盘建仓表会显示它（带「自动」徽章）。仍照旧写 pool=auto，
+        以免触发引擎 validate_pool_split 的启动守卫（pool=manual 且属 AUTO_POOL 才冲突）。
+        """
         fp = STATE_DIR / "watchlist_buy.json"
         wl = _load_json(fp, {"stocks": {}, "total_capital": 300000, "max_per_stock_pct": 0.2})
         stocks = wl.setdefault("stocks", {})
@@ -3904,6 +3909,54 @@ class Api:
             return {"ok": True, "code": code}
         except Exception as e:
             return {"ok": False, "error": str(e)}
+
+    def add_and_scan(self, code, name):
+        """加入建仓股池并**立即单股扫描**，返回可展示的成败明细（GUI「+ 添加」用）。
+
+        为什么需要它：扫描表 _agg_position_builder 只从扫描轨迹
+        position_builder_{date}.jsonl 构行，而 add_to_watchlist 只写 watchlist_buy.json
+        ⇒ 新加的股不扫描就永远不出现在表里，用户会误判"没加成功"。
+
+        返回 {ok, code, name, scan_date, visible_in_manual, scan:{verdict,
+        composite_score, block_reason, reason}, scan_error}；失败 {ok:False, error}。
+        """
+        r = self.add_to_watchlist(code, name)
+        if not r.get("ok"):
+            return r
+
+        # 扫描只写"今天"的轨迹，不写历史文件（避免篡改历史）；
+        # 若用户正在看历史日期，前端据此提示"切回今日可见该行"
+        scan_date = datetime.now().strftime("%Y-%m-%d")
+        scan = None
+        scan_error = None
+        try:
+            from core.position_builder import run_position_scan
+            res = run_position_scan(date_str=scan_date, target_code=code,
+                                    scan_type="manual", silent=True, no_feishu=True) or []
+            if res:
+                _r0 = res[0]
+                # reason = 卡点 > 扫描内部错误 > note，兜底给一句人话，
+                # 避免 insufficient_data（无分钟数据/未开盘）这类情况前端只能显示英文枚举
+                _errs = [str(x) for x in (_r0.get("errors") or []) if str(x).strip()]
+                _note = str(_r0.get("note") or "").strip()
+                scan = {
+                    "verdict": _r0.get("verdict"),
+                    "composite_score": int(_r0.get("composite_score") or 0),
+                    "block_reason": _r0.get("block_reason"),
+                    "reason": _r0.get("block_reason") or (_errs[0] if _errs else (_note or None)),
+                }
+                # 单股扫描异常不阻断整轮（position_builder 的既有约定），这里如实带回
+                if _r0.get("scan_error"):
+                    scan_error = str(_r0.get("scan_error"))[:200]
+            else:
+                scan_error = "扫描未返回结果（该码可能不在股池中）"
+        except Exception as e:
+            scan_error = str(e)[:200]
+
+        # 走到这里说明该股会被人工盘表显示（auto 池未持有的已在上面被拒；
+        # 持仓股即便 pool=auto 也被 _visible() 放行）
+        return {"ok": True, "code": code, "name": name, "scan_date": scan_date,
+                "visible_in_manual": True, "scan": scan, "scan_error": scan_error}
 
     def remove_from_watchlist(self, code):
         """从 watchlist_buy.json 删除股票。"""
@@ -4350,22 +4403,14 @@ class Api:
         def _is_holding(code: str) -> bool:
             return bool((holdings.get(code) or {}).get("qty") or 0) or \
                 bool((holdings.get(code.split("_")[0]) or {}).get("qty") or 0)
-        # 手动盘建仓表可见性（2026-08-30）：manual 候选 + 实际持仓股；auto 池且未持有 → 隐藏（属自动盘 tab）。
-        # 判定用 holdings 派生的 auto_pool.is_manual（权威源），不用 watchlist 的 pool 字段（可能过时，
-        # 如 600481/002451 在 watchlist 标 auto 但 holdings 是 both 且 qty>0 → _is_holding 放行）。
-        if str(BASE / "config") not in sys.path:
-            sys.path.insert(0, str(BASE / "config"))
-        try:
-            import auto_pool as _auto_pool_mod
-        except Exception:
-            _auto_pool_mod = None
-
+        # 手动盘建仓表可见性（2026-09-20 owner 拍板调整）：
+        # 持仓股 + **显式加进股池的都显示** —— 不再按池隐藏 auto 标的。
+        # 人工盘/自动盘互不阻塞，同一只票两边都能加、都看得到；行的 pool 字段仍带
+        # 「自动」徽章，可用池筛选器（全部/人工/自动）分开看。
+        # （此前 2026-08-30 曾用 auto_pool.is_manual 把 auto 池+未持有的隐藏，
+        #   导致「添加成功却看不到」——600584 长电科技实例。）
         def _visible(code: str) -> bool:
-            if _is_holding(code):
-                return True                       # 持仓股始终显示
-            if _auto_pool_mod is not None and not _auto_pool_mod.is_manual(code):
-                return False                      # auto 池且未持有 → 隐藏
-            return code in wl_stocks              # manual 候选
+            return _is_holding(code) or code in wl_stocks
 
         for code, r in latest_by_code.items():
             if not _visible(code):
