@@ -20,6 +20,11 @@ ROOT = r"E:\superTrader"
 def run(ctx=None):
     sys.stdout.reconfigure(encoding="utf-8")
     seed = 0
+    if isinstance(ctx, str):                    # runner 可能传 JSON 字符串
+        try:
+            ctx = json.loads(ctx)
+        except Exception:
+            ctx = None
     if isinstance(ctx, dict):
         seed = int(ctx.get("seed", 0))
     cmd = [sys.executable,
