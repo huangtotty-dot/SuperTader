@@ -371,9 +371,10 @@ def build_build_candidates(sector_stocks: dict) -> list:
 
 
 def send_build_candidates(config: dict, groups: list, date_str: str) -> dict:
-    """把「建仓信号（按板块）」推送到飞书。无候选时调用方不应调用本函数。
+    """把「建仓信号」推送到飞书 —— **每个板块一条独立消息**（owner 要求，不合并成一条）。
 
     复用与 send_report_summary 相同的通道：优先应用API（与 Excel 同一群），Webhook 兜底。
+    单个板块发送失败不影响其余板块，失败数计入返回值。
     """
     feishu_cfg = config.get("feishu", {})
     webhook_url = feishu_cfg.get("webhook_url", "")
@@ -382,30 +383,33 @@ def send_build_candidates(config: dict, groups: list, date_str: str) -> dict:
     chat_id = feishu_cfg.get("chat_id", "")
 
     total = sum(len(g["stocks"]) for g in groups)
-    lines = [f"🎯 建仓信号符合 {total} 只 | {len(groups)} 个板块", ""]
-    lines.append("口径：时机门控 GO（市场有方向/多头结构/回撤到位/金叉加分）")
-    lines.append("")
+    sent = failed = 0
     for g in groups:
-        lines.append(f"【{g['sector']}】{len(g['stocks'])} 只")
+        lines = [f"🎯 {g['sector']}：建仓信号 {len(g['stocks'])} 只", ""]
+        lines.append("口径：时机门控 GO（市场有方向/多头结构/回撤到位/金叉加分）")
+        lines.append("")
         for s in g["stocks"]:
             chg = f" {s['涨跌幅']:+.2f}%" if s.get("涨跌幅") else ""
             lines.append(f"  ● {s['代码']} {s['名称']}{chg}  符合{s['符合数']}/4  {s['总得分']}分")
-        lines.append("")
+        title = f"【建仓信号·{g['sector']}】{date_str}"
 
-    title = f"【建仓信号·按板块】{date_str}"
-    text_result = None
-    if app_id and app_secret and chat_id:
-        try:
-            client = FeishuAppClient(app_id, app_secret)
-            text_result = client.send_post_message(chat_id, title, lines)
-        except Exception as e:
-            print(f"[WARN] 建仓信号推送：应用API失败，fallback到Webhook: {e}")
-            text_result = None
-    if (text_result is None or not text_result.get("ok")) and webhook_url:
-        text_result = send_post(webhook_url, title, lines)
+        r = None
+        if app_id and app_secret and chat_id:
+            try:
+                r = FeishuAppClient(app_id, app_secret).send_post_message(chat_id, title, lines)
+            except Exception as e:
+                print(f"[WARN] 建仓信号推送({g['sector']})：应用API失败，fallback到Webhook: {e}")
+                r = None
+        if (r is None or not r.get("ok")) and webhook_url:
+            r = send_post(webhook_url, title, lines)
+        if r and r.get("ok"):
+            sent += 1
+        else:
+            failed += 1
+            print(f"[WARN] 建仓信号推送({g['sector']})失败")
 
-    ok = bool(text_result and text_result.get("ok"))
-    return {"ok": ok, "count": total, "sector_count": len(groups)}
+    return {"ok": sent > 0 and failed == 0, "count": total, "sector_count": len(groups),
+            "sent": sent, "failed": failed}
 
 
 def send_error_alert(config: dict, error_msg: str, date_str: str) -> dict:

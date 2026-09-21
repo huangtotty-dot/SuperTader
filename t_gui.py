@@ -76,6 +76,13 @@ if str(HUNTER_DIR) not in sys.path:
 # 2026-08-15: 选股猎手后台运行状态（进度条轮询用）。进度细节来自 market_data.MARKET_PROGRESS。
 import threading as _th
 HUNTER_RUN_STATE = {"date": None, "running": False, "result": None}
+# 2026-09-21 owner 需求：开盘后每小时自动跑一次「今日数据」。
+# 时点**跳过午休**（11:30–13:00 无行情变化，跑了也是重复），15:00 收盘后不再跑。
+# 交易日按 weekday<5 近似（沿用仓库既有口径，节假日空跑无害）。
+HUNTER_AUTORUN_SLOTS = ("10:30", "11:30", "13:30", "14:30")
+_HUNTER_AUTORUN_STATE = {"date": None, "done": set(), "started": False}
+# 建仓推送的「当日去重」状态：自动运行只在候选集变化时推，避免一天重复刷屏
+_HUNTER_BUILD_PUSHED_FP = STATE_DIR / "hunter_build_pushed.json"
 ROTATION_RUN_STATE = {"running": False, "error": None}
 # 2026-08-22: 板块轮动结果缓存（内存+磁盘）——build_rotation_model 约 15s，重复点击/切 view 秒回
 _ROTATION_CACHE_DIR = BASE / "t_io" / "cache" / "sector_rotation"
@@ -1998,8 +2005,12 @@ class Api:
         }
 
     # ---------- 选股猎手（概念评分，与 Excel 报告一致） ----------
-    def run_hunter(self, date=None):
-        """后台运行选股猎手（拉取+评分），立即返回；前端轮询 hunter_progress 看进度。"""
+    def run_hunter(self, date=None, auto=False):
+        """后台运行选股猎手（拉取+评分），立即返回；前端轮询 hunter_progress 看进度。
+
+        auto=True 表示定时自动运行（见 HUNTER_AUTORUN_SLOTS）：只有在候选集变化时才推
+        飞书，避免一天重复刷屏；手动运行(auto=False)每次都推。
+        """
         date = date or datetime.now().strftime("%Y-%m-%d")
         if HUNTER_RUN_STATE.get("running") and HUNTER_RUN_STATE.get("date") == date:
             return {"started": True, "running": True, "date": date}
@@ -2015,9 +2026,9 @@ class Api:
 
         def _work():
             try:
-                res = self._load_hunter_impl(date)
+                res = self._load_hunter_impl(date, force_build=auto)
                 HUNTER_RUN_STATE["result"] = res
-                self._push_hunter_build_candidates(res, date)
+                self._push_hunter_build_candidates(res, date, dedup=auto)
             except Exception as e:
                 HUNTER_RUN_STATE["result"] = {"available": False, "error": f"选股猎手运行失败: {e}"}
             finally:
@@ -2026,15 +2037,16 @@ class Api:
         _th.Thread(target=_work, daemon=True).start()
         return {"started": True, "running": True, "date": date}
 
-    def _push_hunter_build_candidates(self, res, date):
-        """猎手跑完后，把「符合建仓条件」的股票按板块推送到飞书（无候选则不推）。
+    def _push_hunter_build_candidates(self, res, date, dedup=False):
+        """猎手跑完后，把「符合建仓条件」的股票**按板块逐条**推送到飞书（无候选则不推）。
 
         口径 = GUI「建仓」列的绿色 x·GO —— 即 _hunter_build_conformance 的时机门控
         （市场有方向/多头结构/回撤到位/金叉加分）。2026-09-21 owner 需求。
 
-        仅在 run_hunter 后台任务结束时调用：run_hunter 已有"运行中重复点击直接返回"的
-        并发拦截，故一次运行只会推一次。任何失败只打印，绝不影响猎手结果。
-        可用 stock_hunter/config.json 的 feishu.push_build_signals=false 关闭。
+        dedup=True（定时自动运行）：**按板块去重** —— 某板块候选集与当日已推的相同则跳过，
+        出现新票才推该板块；dedup=False（手动运行）每次全推。
+        任何失败只打印，绝不影响猎手结果。可用 stock_hunter/config.json 的
+        feishu.push_build_signals=false 关闭。
         """
         try:
             from modules.push_feishu import build_build_candidates, send_build_candidates
@@ -2044,13 +2056,36 @@ class Api:
                 print("[建仓推送] 已由配置关闭（feishu.push_build_signals=false），跳过")
                 return
             groups = build_build_candidates((res or {}).get("sector_stocks") or {})
-            total = sum(len(g["stocks"]) for g in groups)
             if not groups:
                 print("[建仓推送] 无符合建仓条件的股票，跳过")
                 return
             _d = str(date).replace("-", "")
+
+            # 当日已推状态（按板块记候选集）；跨日自然清空
+            _prev = _load_json(_HUNTER_BUILD_PUSHED_FP, {}) or {}
+            _pushed = dict(_prev.get("sectors") or {}) if str(_prev.get("date")) == _d else {}
+            if dedup:
+                _todo = [g for g in groups
+                         if _pushed.get(g["sector"]) != sorted(s["代码"] for s in g["stocks"])]
+                if not _todo:
+                    print(f"[建仓推送] 各板块候选集均未变化，跳过（{len(groups)} 个板块）")
+                    return
+                groups = _todo
+
+            total = sum(len(g["stocks"]) for g in groups)
             r = send_build_candidates(_cfg, groups, _d)
-            print(f"[建仓推送] {total} 只 / {len(groups)} 个板块 → ok={r.get('ok')}")
+
+            # 记录已推板块的候选集（自动/手动都记，供后续自动运行比对）
+            for g in groups:
+                _pushed[g["sector"]] = sorted(s["代码"] for s in g["stocks"])
+            try:
+                _HUNTER_BUILD_PUSHED_FP.write_text(json.dumps(
+                    {"date": _d, "sectors": _pushed,
+                     "ts": datetime.now().strftime("%Y-%m-%d %H:%M:%S")}, ensure_ascii=False),
+                    encoding="utf-8")
+            except Exception:
+                pass
+            print(f"[建仓推送] {total} 只 / {len(groups)} 个板块 → 成功{r.get('sent')} 失败{r.get('failed')}")
         except Exception as e:
             print(f"[建仓推送] 失败（已忽略，不影响猎手）: {str(e)[:150]}")
 
@@ -2081,17 +2116,19 @@ class Api:
         # 无后台运行（如历史视图直接调用）→ 同步执行
         return self._load_hunter_impl(date)
 
-    def _hunter_build_conformance(self, codes, date):
-        """盘后计算各股建仓信号符合度（时机门控 GO：市场有方向/多头结构/回撤到位/金叉加分）。
+    def _hunter_build_conformance(self, codes, date, force=False):
+        """计算各股建仓信号符合度（时机门控 GO：市场有方向/多头结构/回撤到位/金叉加分）。
 
-        实盘盘中（当日 9:15-15:00）跳过以省资源；盘后/周末/历史日点击运行时计算。
-        直接读 t_io/cache/daily_kline 日线缓存算特征（零网络，秒级；未缓存跳过显示"—"）。
+        实盘盘中（当日 9:15-15:00）默认跳过以省资源（手动点击时维持原状）；
+        `force=True`（定时自动运行）时盘中也算 —— 否则 10:30~14:30 的自动运行算不出信号，
+        建仓推送永远只能在盘后发生（2026-09-21 owner 拍板放开）。
+        直接读 t_io/cache/daily_kline 日线缓存算特征（零网络；全池约 20s；未缓存跳过显示"—"）。
         返回 {code: {go, regime, met, conds:{t_*:bool}, reason}}。"""
         today = datetime.now().strftime("%Y-%m-%d")
         now = datetime.now()
         _now_int = now.hour * 100 + now.minute
-        if date == today and 915 <= _now_int <= 1500 and now.weekday() < 5:
-            return {}  # 实盘盘中：省资源不计算
+        if not force and date == today and 915 <= _now_int <= 1500 and now.weekday() < 5:
+            return {}  # 实盘盘中：省资源不计算（定时自动运行除外）
         result = {}
         try:
             import pandas as _pd
@@ -2183,7 +2220,7 @@ class Api:
             pass
         return result
 
-    def _load_hunter_impl(self, date=None):
+    def _load_hunter_impl(self, date=None, force_build=False):
         """运行 stock_hunter 打分管线，返回 DataLoader 原生产出的表格数据。
         与 Excel 报告 Sheet 1/2/3 数据结构对齐。"""
         if not date:
@@ -2404,7 +2441,7 @@ class Api:
             except Exception:
                 pass
             try:
-                build_conf = self._hunter_build_conformance(codes, date)
+                build_conf = self._hunter_build_conformance(codes, date, force=force_build)
                 if build_conf:
                     for cat, stocks in sector_stocks.items():
                         for s in stocks:
@@ -4657,6 +4694,42 @@ class Api:
         }
 
 
+def start_hunter_autoscheduler(api):
+    """启动「猎手定时自动运行」守护线程（2026-09-21 owner 需求）。
+
+    开盘后按 HUNTER_AUTORUN_SLOTS（10:30/11:30/13:30/14:30）各跑一次「今日数据」；
+    交易日按 weekday<5 近似（仓库既有口径，节假日空跑无害）。循环 20s 一跳，
+    保证同一分钟内必中时点。定时运行走 auto=True → 建仓推送按板块当日去重。
+
+    仅在 t_gui.py 的 __main__ 显式调用：测试/其他进程构造 Api() 不会起线程。
+    """
+    if _HUNTER_AUTORUN_STATE.get("started"):
+        return
+    _HUNTER_AUTORUN_STATE["started"] = True
+
+    def _loop():
+        while True:
+            try:
+                now = datetime.now()
+                today = now.strftime("%Y-%m-%d")
+                st = _HUNTER_AUTORUN_STATE
+                if st.get("date") != today:       # 跨日重置已跑时点
+                    st["date"] = today
+                    st["done"] = set()
+                if now.weekday() < 5:
+                    hhmm = now.strftime("%H:%M")
+                    if hhmm in HUNTER_AUTORUN_SLOTS and hhmm not in st["done"]:
+                        st["done"].add(hhmm)
+                        print(f"[猎手自动运行] {hhmm} 触发（{today}）")
+                        api.run_hunter(today, auto=True)
+            except Exception as e:
+                print(f"[猎手自动运行] 异常（已忽略）: {str(e)[:150]}")
+            _time_mod.sleep(20)
+
+    _th.Thread(target=_loop, daemon=True).start()
+    print(f"[猎手自动运行] 已启动：{' / '.join(HUNTER_AUTORUN_SLOTS)}（仅工作日，跳午休）")
+
+
 if __name__ == "__main__":
     import webview
 
@@ -4668,6 +4741,7 @@ if __name__ == "__main__":
         pass
 
     api = Api()
+    start_hunter_autoscheduler(api)   # 开盘后每小时自动跑「今日数据」
     here = Path(__file__).parent
     entry = here / "web" / "index.html"
 
