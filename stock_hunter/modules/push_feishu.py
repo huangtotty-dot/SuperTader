@@ -335,6 +335,79 @@ def send_report_summary(config: dict, data: dict, output_path: str, date_str: st
     }
 
 
+# ==================== 建仓候选推送（2026-09-21 owner 需求） ====================
+# 口径：猎手视图「建仓」列的绿色 x·GO —— 即 t_gui._hunter_build_conformance 的
+# 时机门控 GO（市场有方向/多头结构/回撤到位/金叉加分）。命中即视为「符合建仓条件」。
+
+def build_build_candidates(sector_stocks: dict) -> list:
+    """从猎手 sector_stocks 里挑出「建仓 GO」的股票，按板块分组。
+
+    sector_stocks 形如 {板块: [{code,name,concepts,score,change_pct,build_go,build_met,...}, ...]}
+    （见 t_gui._load_hunter_impl）。
+
+    返回 [{"sector": 板块, "stocks": [{代码,名称,细分,总得分,涨跌幅,符合数,原因}...]}, ...]
+    板块间按「候选数 desc → 组内最高符合数 desc」排序，组内按「符合数 desc → 得分 desc」。
+    """
+    groups = []
+    for sector, stocks in (sector_stocks or {}).items():
+        hit = []
+        for s in (stocks or []):
+            if not s.get("build_go"):
+                continue
+            hit.append({
+                "代码": str(s.get("code", "") or ""),
+                "名称": str(s.get("name", "") or ""),
+                "细分": "|".join(s.get("concepts") or []),
+                "总得分": int(s.get("score") or 0),
+                "涨跌幅": float(s.get("change_pct") or 0.0),
+                "符合数": int(s.get("build_met") or 0),
+                "原因": str(s.get("build_reason") or ""),
+            })
+        if hit:
+            hit.sort(key=lambda x: (-x["符合数"], -x["总得分"]))
+            groups.append({"sector": str(sector), "stocks": hit})
+    groups.sort(key=lambda g: (-len(g["stocks"]), -g["stocks"][0]["符合数"]))
+    return groups
+
+
+def send_build_candidates(config: dict, groups: list, date_str: str) -> dict:
+    """把「建仓信号（按板块）」推送到飞书。无候选时调用方不应调用本函数。
+
+    复用与 send_report_summary 相同的通道：优先应用API（与 Excel 同一群），Webhook 兜底。
+    """
+    feishu_cfg = config.get("feishu", {})
+    webhook_url = feishu_cfg.get("webhook_url", "")
+    app_id = feishu_cfg.get("app_id", "")
+    app_secret = feishu_cfg.get("app_secret", "")
+    chat_id = feishu_cfg.get("chat_id", "")
+
+    total = sum(len(g["stocks"]) for g in groups)
+    lines = [f"🎯 建仓信号符合 {total} 只 | {len(groups)} 个板块", ""]
+    lines.append("口径：时机门控 GO（市场有方向/多头结构/回撤到位/金叉加分）")
+    lines.append("")
+    for g in groups:
+        lines.append(f"【{g['sector']}】{len(g['stocks'])} 只")
+        for s in g["stocks"]:
+            chg = f" {s['涨跌幅']:+.2f}%" if s.get("涨跌幅") else ""
+            lines.append(f"  ● {s['代码']} {s['名称']}{chg}  符合{s['符合数']}/4  {s['总得分']}分")
+        lines.append("")
+
+    title = f"【建仓信号·按板块】{date_str}"
+    text_result = None
+    if app_id and app_secret and chat_id:
+        try:
+            client = FeishuAppClient(app_id, app_secret)
+            text_result = client.send_post_message(chat_id, title, lines)
+        except Exception as e:
+            print(f"[WARN] 建仓信号推送：应用API失败，fallback到Webhook: {e}")
+            text_result = None
+    if (text_result is None or not text_result.get("ok")) and webhook_url:
+        text_result = send_post(webhook_url, title, lines)
+
+    ok = bool(text_result and text_result.get("ok"))
+    return {"ok": ok, "count": total, "sector_count": len(groups)}
+
+
 def send_error_alert(config: dict, error_msg: str, date_str: str) -> dict:
     feishu_cfg = config.get("feishu", {})
     webhook_url = feishu_cfg.get("webhook_url", "")

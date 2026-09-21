@@ -2015,7 +2015,9 @@ class Api:
 
         def _work():
             try:
-                HUNTER_RUN_STATE["result"] = self._load_hunter_impl(date)
+                res = self._load_hunter_impl(date)
+                HUNTER_RUN_STATE["result"] = res
+                self._push_hunter_build_candidates(res, date)
             except Exception as e:
                 HUNTER_RUN_STATE["result"] = {"available": False, "error": f"选股猎手运行失败: {e}"}
             finally:
@@ -2023,6 +2025,34 @@ class Api:
 
         _th.Thread(target=_work, daemon=True).start()
         return {"started": True, "running": True, "date": date}
+
+    def _push_hunter_build_candidates(self, res, date):
+        """猎手跑完后，把「符合建仓条件」的股票按板块推送到飞书（无候选则不推）。
+
+        口径 = GUI「建仓」列的绿色 x·GO —— 即 _hunter_build_conformance 的时机门控
+        （市场有方向/多头结构/回撤到位/金叉加分）。2026-09-21 owner 需求。
+
+        仅在 run_hunter 后台任务结束时调用：run_hunter 已有"运行中重复点击直接返回"的
+        并发拦截，故一次运行只会推一次。任何失败只打印，绝不影响猎手结果。
+        可用 stock_hunter/config.json 的 feishu.push_build_signals=false 关闭。
+        """
+        try:
+            from modules.push_feishu import build_build_candidates, send_build_candidates
+            import modules.data_loader as _hdl
+            _cfg = _hdl.DataLoader._load_config()
+            if not (_cfg.get("feishu", {}) or {}).get("push_build_signals", True):
+                print("[建仓推送] 已由配置关闭（feishu.push_build_signals=false），跳过")
+                return
+            groups = build_build_candidates((res or {}).get("sector_stocks") or {})
+            total = sum(len(g["stocks"]) for g in groups)
+            if not groups:
+                print("[建仓推送] 无符合建仓条件的股票，跳过")
+                return
+            _d = str(date).replace("-", "")
+            r = send_build_candidates(_cfg, groups, _d)
+            print(f"[建仓推送] {total} 只 / {len(groups)} 个板块 → ok={r.get('ok')}")
+        except Exception as e:
+            print(f"[建仓推送] 失败（已忽略，不影响猎手）: {str(e)[:150]}")
 
     def hunter_progress(self):
         """返回选股猎手运行进度（供前端进度条轮询）。"""

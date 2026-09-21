@@ -53,5 +53,14 @@
     "header_color_must_be": "4472C4",
     "top5_sector_diversity_min": 3,
     "cross_checks": ["code_name_match", "score_consistency", "top5_parseable", "header_color", "top5_row_count"]
+  },
+
+  "_feishu_说明": "推送凭据请填在 config.json（已被 .gitignore 忽略），勿提交版本库。push_build_signals=false 可关闭「建仓信号（按板块）」推送（猎手每次跑完，对 GUI「建仓」列为绿色 x·GO 的股票按板块推一条）。",
+  "feishu": {
+    "webhook_url": "",
+    "app_id": "",
+    "app_secret": "",
+    "chat_id": "",
+    "push_build_signals": true
   }
 }
