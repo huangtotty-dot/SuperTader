@@ -287,9 +287,22 @@ def _label_matrix(O, H, C, label_kind):
 
     close30（默认，修正口径）: r[t] = C[t+30]/O[t+1] − 1，t ≤ L−31
     maxh30（原口径A，仅参照）: r[t] = max(H[t+1..t+30])/O[t+1] − 1
+    closeeod（2026-09-21 G1 二轮后新增）: r[t] = C[L−2]/O[t+1] − 1，
+        持有到日内倒数第 2 根（≈14:55 尾盘强平口径），t ≤ L−3。
+        用途：把单笔毛利润空间从 30 分钟放大到「入场→尾盘」，对冲 0.136% 成本墙。
     """
     n_days, L = C.shape
     R = np.full((n_days, L), np.nan)
+    if label_kind == "closeeod":
+        m = L - 2                                    # t ∈ [0, L−3]，入场 t+1 ≤ L−2
+        if m <= 0:
+            return R
+        entry = O[:, 1:m + 1]
+        exit_px = C[:, L - 2:L - 1]                  # (n_days,1) 广播到 m 列
+        with np.errstate(divide="ignore", invalid="ignore"):
+            val = exit_px / np.where(entry > 0, entry, np.nan) - 1.0
+        R[:, :m] = np.where(np.isfinite(entry) & (entry > 0), val, np.nan)
+        return R
     m = L - LABEL_H                                  # 有效 t 数：t ∈ [0, L−31]
     if m <= 0:
         return R
@@ -514,11 +527,12 @@ def z_flat_is(evaluator, fit_ev, expr, panel):
     return Z[panel.is_rows()].ravel().astype(np.float32)
 
 
-def fee_check(expr, ev_expr, panels, sign, seed=20260919, k_rand=5, sample_every=1):
+def fee_check(expr, ev_expr, panels, sign, seed=20260919, k_rand=5, sample_every=1,
+              label_kind="close30"):
     """费后净均抽检（§3.3 候选三简化版，0.136% 双边）。
 
     触发：sign*z 上穿 +1（穿越口径，同 eval_factor）；成交：次根开盘；
-    出场：30 根后收盘（与 label 修正口径一致）或日内倒数第 2 根；
+    出场：close30 → 30 根后收盘或日内倒数第 2 根；closeeod → 日内倒数第 2 根（持有到尾盘）；
     每日 ≤MAX_ENTRIES 次。配逐腿随机基线（同票同日同方向随机入场）。
     """
     rng = np.random.RandomState(seed)
@@ -544,13 +558,13 @@ def fee_check(expr, ev_expr, panels, sign, seed=20260919, k_rand=5, sample_every
             for e in entries:
                 if not np.isfinite(o[e]) or o[e] <= 0:
                     continue
-                x = min(e + LABEL_H - 1, L - 2)
+                x = L - 2 if label_kind == "closeeod" else min(e + LABEL_H - 1, L - 2)
                 if not np.isfinite(c[x]):
                     continue
                 nets.append(sign * (c[x] / o[e] - 1.0) - FEE)
                 for _ in range(k_rand):
                     b = int(rng.randint(1, L - 1))
-                    xb = min(b + LABEL_H - 1, L - 2)
+                    xb = L - 2 if label_kind == "closeeod" else min(b + LABEL_H - 1, L - 2)
                     if np.isfinite(o[b]) and o[b] > 0 and np.isfinite(c[xb]):
                         rands.append(sign * (c[xb] / o[b] - 1.0) - FEE)
     if not nets:
@@ -565,10 +579,11 @@ class GPCallback:
     """每 mc_every 代：① |ρ|<0.7 去重组池 ② top-20 日块 MC ③ top-k 费后抽检。"""
 
     def __init__(self, fit_ev, ev_expr, panels, ledger_path, mc_every=4, n_mc=30,
-                 topk=5, seed=0, verbose=True, extra_meta=None):
+                 topk=5, seed=0, verbose=True, extra_meta=None, label_kind="close30"):
         self.fit_ev = fit_ev
         self.ev_expr = ev_expr
         self.panels = panels
+        self.label_kind = label_kind
         self.ledger_path = Path(ledger_path)
         self.mc_every = mc_every
         self.n_mc = n_mc
@@ -635,7 +650,8 @@ class GPCallback:
         for e in self.pool[: self.topk]:
             det = self.fit_ev.detail.get(e, {})
             sign = 1 if (det.get("mean_ic") or 0) >= 0 else -1
-            self._entry(e)["fee"] = fee_check(e, self.ev_expr, self.panels, sign)
+            self._entry(e)["fee"] = fee_check(e, self.ev_expr, self.panels, sign,
+                                              label_kind=self.label_kind)
             self._entry(e)["sign_hint"] = sign
         dt = time.perf_counter() - t0
         rec = {"gen": self.gen, "pool": len(self.pool), "sec": round(dt, 1),
@@ -775,7 +791,7 @@ def run_gp(pop, gen, seed, out, codes=None, windows=None, corr="pearson",
 
     Metric = make_fitness(function=_metric, greater_is_better=True)
     cb = GPCallback(fit_ev, ev_expr, panels, out, mc_every=mc_every, n_mc=n_mc,
-                    topk=topk, seed=seed,
+                    topk=topk, seed=seed, label_kind=label_kind,
                     extra_meta={"pop": pop, "gen": gen, "seed": seed,
                                 "sample_every": sample_every,
                                 "max_is_days": max_is_days, "corr": corr,
@@ -811,8 +827,8 @@ def main():
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--codes", default=None, help="逗号分隔；缺省=全池 39 只")
     ap.add_argument("--corr", choices=["pearson", "spearman"], default="pearson")
-    ap.add_argument("--label", choices=["close30", "maxh30"], default="close30",
-                    help="close30=修正口径（默认）；maxh30=原口径A（乐观偏差，仅参照）")
+    ap.add_argument("--label", choices=["close30", "maxh30", "closeeod"], default="close30",
+                    help="close30=30根后出场（默认）；closeeod=持有到尾盘（G1三轮）；maxh30=原口径A（乐观偏差，仅参照）")
     ap.add_argument("--sample-every", type=int, default=1, help="IS 隔 N 日抽样（冒烟加速）")
     ap.add_argument("--max-is-days", type=int, default=None,
                     help="只保留最近 N 个 IS 日（仅冒烟加速；正式跑勿用）")

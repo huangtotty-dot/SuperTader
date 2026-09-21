@@ -29,7 +29,11 @@ def run(ctx=None):
         seed = int(ctx.get("seed", 0))
     cmd = [sys.executable,
            os.path.join(ROOT, "t_io", "validation", "factor_mining", "gp_miner.py"),
-           "--pop", "1000", "--gen", "32", "--expr-timeout", "8", "--seed", str(seed)]
+           "--pop", "1000", "--gen", "32", "--expr-timeout", "8",
+           "--label", "closeeod",
+           "--out", os.path.join(ROOT, "t_io", "validation", "factor_mining",
+                                 "results", "gp_mine", f"gp_ledger_eod_seed{seed}.json"),
+           "--seed", str(seed)]
     t0 = time.time()
     print(f"[gp_formal] seed={seed} 启动: {' '.join(cmd)}", flush=True)
     try:
