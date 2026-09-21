@@ -76,6 +76,9 @@ Z_LOOK, Z_MIN_HIST = 14, 5  # 同日同时刻 z-score 窗口/最小历史日（e
 CONS_PEN = 0.05             # 票间一致性惩罚系数 λ（neg_frac 每 +1，fitness −0.05）
 TRIG_LO, TRIG_HI = 0.005, 0.10   # 全域触发率闸门（§3.3 推荐组合）
 MAX_ENTRIES = 3             # 费后抽检每日触发上限（生产 config 口径）
+# ── 2026-09-21 结构约束（G1 一轮教训：深嵌套×长窗口→NaN 覆盖→触发稀疏不可判）──
+WIN_BUDGET = 60             # 表达式窗口预算：根到叶路径上 _wN 窗口和上限（根因闸门）
+MIN_FINITE = 0.5            # 单票因子矩阵有限值占比下限，低于则该票不计入（稀疏判死）
 TERMINALS = ["open", "high", "low", "close", "volume", "vwap", "amount"]
 
 RESULTS_DIR = FM_DIR / "results" / "gp_mine"
@@ -393,6 +396,30 @@ def token_len(expr):
     return expr.count("(") + expr.count(")")
 
 
+def window_path_budget(expr):
+    """根到叶路径上 _wN 窗口参数和的最大值（日内暖机期 ≈ 路径窗口和，兄弟分支不叠加）。
+
+    深嵌套长窗口（如 amihud_w60∘ts_cov_w30∘ts_std_w5 = 95 根暖机）会大面积吃掉
+    每日 241 根有效 bar——G1 一轮 top 候选在 000506 上 99.4% NaN 的根因。
+    解析失败返回 inf（交给上层判死，不在此处兜底）。
+    """
+    def _walk(node):
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
+            w = 0
+            name = node.func.id
+            if "_w" in name:
+                try:
+                    w = int(name.rsplit("_w", 1)[1])
+                except ValueError:
+                    w = 0
+            return w + max((_walk(a) for a in node.args), default=0)
+        return 0
+    try:
+        return _walk(ast.parse(expr, mode="eval").body)
+    except Exception:
+        return float("inf")
+
+
 class FitnessEvaluator:
     """gplearn metric 闭包：fitness = mean_i(IC_i) − λ·neg_frac（只用 IS）。
 
@@ -425,6 +452,8 @@ class FitnessEvaluator:
     def _eval(self, expr):
         if token_len(expr) > TOKEN_MAX:
             return {"fitness": self.DEATH, "death": "token_len"}
+        if window_path_budget(expr) > WIN_BUDGET:
+            return {"fitness": self.DEATH, "death": "window_budget"}
         ics, trig_nums, trig_dens = [], 0, 0
         t_start = time.perf_counter()
         for p in self.panels:
@@ -436,6 +465,8 @@ class FitnessEvaluator:
                 F = self.ev.eval_matrix(expr, p, upto_row=is_last)
             except Exception:
                 return {"fitness": self.DEATH, "death": "eval_error"}
+            if float(np.isfinite(F).mean()) < MIN_FINITE:
+                continue                     # 稀疏票不计入（2026-09-21 结构约束）
             Z = _zscore_matrix(F, Z_LOOK, Z_MIN_HIST)
             rows = p.is_rows()[:: self.sample_every]
             z = Z[rows].ravel()
@@ -750,7 +781,8 @@ def run_gp(pop, gen, seed, out, codes=None, windows=None, corr="pearson",
                                 "max_is_days": max_is_days, "corr": corr,
                                 "label_kind": label_kind, "trig_gate": trig_gate,
                                 "init_depth": list(init_depth),
-                                "expr_budget": expr_budget})
+                                "expr_budget": expr_budget,
+                                "win_budget": WIN_BUDGET, "min_finite": MIN_FINITE})
     X, y = make_terminal_X()
     est = SymbolicRegressor(
         population_size=pop, generations=gen, init_depth=init_depth,
