@@ -11,6 +11,15 @@ import argparse
 from datetime import datetime
 from pathlib import Path
 
+# Windows 终端 UTF-8 修复（与 t_gui.py 同款）：趋势标签含 ➡️/🔥 等字符，
+# GBK 控制台下 print 会直接 UnicodeEncodeError 崩在热度 TOP3 打印处（2026-09-21 实测）
+if sys.platform == "win32":
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+
 # 将 modules 目录加入路径
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 

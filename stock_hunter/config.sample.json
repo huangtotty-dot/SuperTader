@@ -6,6 +6,12 @@
   "template_dir": "templates",
   "data_dir": "data",
 
+  "_category_merge_说明": "板块合并：{子板块: 父板块}。命中的板块名并入父板块，原名降为子概念。缺省（代码内置）为 {创新药: 医药, 中药: 医药}。",
+  "category_merge": {
+    "创新药": "医药",
+    "中药": "医药"
+  },
+
   "data_source": {
     "type": "watchlist_json",
     "file": "watchlist_jiuyan.json",

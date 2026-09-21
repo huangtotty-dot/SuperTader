@@ -10,6 +10,12 @@ import pandas as pd
 from abc import ABC, abstractmethod
 from typing import Dict, Optional, List
 
+# 板块合并（2026-09-21 owner 需求）：把细分板块并入父板块，原板块名降为「子概念」。
+#   中药 / 创新药 → 医药，在「医药」下以「创新药」「中药」两个子概念呈现；
+#   个股行保留原有细标签（种植/百年老字号/GLP…）在「所属板块」列作解释。
+# 可用 config.json 的 "category_merge": {"子": "父"} 覆盖或扩展；缺省用下面这份。
+DEFAULT_CATEGORY_MERGE = {"创新药": "医药", "中药": "医药"}
+
 
 class DataLoaderBase(ABC):
     """数据加载器基类"""
@@ -23,7 +29,14 @@ class WatchlistLoader(DataLoaderBase):
     """watchlist_jiuyan.json 专用加载器
     支持多 category/concept 对：jiuyan_category1/concept1, jiuyan_category2/concept2, ...
     每个 category/concept 对生成一行，确保统计时精确对应
+
+    category_merge：{子板块: 父板块} 映射。命中的板块名会被改写为父板块，
+    原板块名写入「原分类」列，供 load_all_sectors/load_concept_summary 当作子概念用。
     """
+
+    def __init__(self, category_merge: dict = None):
+        self.merge = dict(DEFAULT_CATEGORY_MERGE)
+        self.merge.update(category_merge or {})
 
     def load(self, source: str) -> pd.DataFrame:
         if not os.path.exists(source):
@@ -82,7 +95,7 @@ class WatchlistLoader(DataLoaderBase):
             if pairs:
                 for cat, concept in pairs:
                     record = base_record.copy()
-                    record["韭研分类"] = cat
+                    record["韭研分类"], record["原分类"] = self._apply_merge(cat)
                     record["韭研概念"] = concept
                     records.append(record)
             else:
@@ -94,17 +107,28 @@ class WatchlistLoader(DataLoaderBase):
                     cats = [c.strip() for c in str(cat).split("|") if c.strip()]
                     for c in cats:
                         record = base_record.copy()
-                        record["韭研分类"] = c
+                        record["韭研分类"], record["原分类"] = self._apply_merge(c)
                         record["韭研概念"] = str(concept).strip()
                         records.append(record)
                 else:
                     # 无韭研概念，保留一行（空值）
                     record = base_record.copy()
                     record["韭研分类"] = ""
+                    record["原分类"] = ""
                     record["韭研概念"] = ""
                     records.append(record)
 
         return pd.DataFrame(records)
+
+    def _apply_merge(self, cat) -> tuple:
+        """板块合并映射。返回 (板块名, 原分类)：
+
+        命中映射（如 中药/创新药）→ ("医药", "中药"/"创新药")：板块名归父，
+        原板块名留给下游当「子概念」；未命中 → (原名, "")。
+        """
+        c = str(cat).strip()
+        parent = self.merge.get(c)
+        return (parent, c) if parent else (c, "")
 
 
 class DataLoader:
@@ -139,7 +163,7 @@ class DataLoader:
                 f"请确保文件已拷贝到脚本同级目录。"
             )
 
-        loader = WatchlistLoader()
+        loader = WatchlistLoader(category_merge=self.config.get("category_merge"))
         self._watchlist_df = loader.load(self._watchlist_path)
         print(f"  [OK] watchlist_jiuyan.json 加载完成: {len(self._watchlist_df)} 只标的")
         # 统计有韭研概念的标的数量
@@ -188,10 +212,15 @@ class DataLoader:
             if not category:
                 continue
             cat_df = df_pool[df_pool["韭研分类"] == category].copy()
-            # 收集该分类下的所有细分概念（去重）
+            # 收集该分类下的细分概念（去重）。
+            # 合并板块（医药）用「原分类」当子概念（创新药/中药）；其余沿用韭研概念细标签。
             sub_concepts = set()
-            for sc in cat_df["韭研概念"].dropna():
-                for c in str(sc).split("|"):
+            for _, _r in cat_df.iterrows():
+                _orig = str(_r.get("原分类", "") or "").strip()
+                if _orig:
+                    sub_concepts.add(_orig)
+                    continue
+                for c in str(_r.get("韭研概念", "") or "").split("|"):
                     c = c.strip()
                     if c:
                         sub_concepts.add(c)
@@ -354,14 +383,19 @@ class DataLoader:
                 jiuyan_concept_raw = str(row.get("韭研概念", "")).strip()
                 if not jiuyan_concept_raw:
                     continue
-                sub_concepts = [c.strip() for c in jiuyan_concept_raw.split("|") if c.strip()]
-                category_concepts = []
-                for c in sub_concepts:
-                    if "-" in c:
-                        category_concepts.append(c.split("-")[0].strip())
-                    else:
-                        category_concepts.append(c)
-                category_concepts = list(dict.fromkeys(category_concepts))
+                # 合并板块（医药）：子概念直接用「原分类」（创新药/中药），不再细分到原细标签
+                _orig = str(row.get("原分类", "") or "").strip()
+                if _orig:
+                    category_concepts = [_orig]
+                else:
+                    sub_concepts = [c.strip() for c in jiuyan_concept_raw.split("|") if c.strip()]
+                    category_concepts = []
+                    for c in sub_concepts:
+                        if "-" in c:
+                            category_concepts.append(c.split("-")[0].strip())
+                        else:
+                            category_concepts.append(c)
+                    category_concepts = list(dict.fromkeys(category_concepts))
 
                 for concept in category_concepts:
                     rows.append({
