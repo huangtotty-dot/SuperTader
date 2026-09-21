@@ -87,8 +87,12 @@ def load_auto_pool() -> dict:
 
 
 def sync_watchlist_pool(code, pool="auto"):
-    """T-4(2026-09-02): 同步 watchlist_buy.json 该码 pool——凡 holdings 置 pool∈{auto,both}，
-    watchlist 侧缺省 manual 会触发 P3-2 池分管冲突；此函数统一兜底（幂等，仅 manual→auto）。"""
+    """T-4(2026-09-02): 同步 watchlist_buy.json 该码 pool —— watchlist 侧镜像 holdings 池归属。
+
+    凡 holdings 置 pool∈{auto,both}，watchlist 侧缺省 manual 会触发 P3-2 池分管冲突，
+    故写入口统一兜底。fix 2026-09-21：原先只在当前值为 "manual" 时写（幂等守卫），
+    导致已被写坏成 "auto" 的 both 标的永远修不回来 —— 现改为**值不同即纠正**（自愈）。
+    """
     try:
         _wl = os.path.join(_ROOT, "t_io", "state", "watchlist_buy.json")
         if not os.path.exists(_wl):
@@ -97,7 +101,7 @@ def sync_watchlist_pool(code, pool="auto"):
             wl = json.load(f)
         stocks = wl.get("stocks", {})
         if isinstance(stocks, dict) and isinstance(stocks.get(code), dict):
-            if str(stocks[code].get("pool") or "manual") == "manual":
+            if str(stocks[code].get("pool") or "manual") != str(pool):
                 stocks[code]["pool"] = pool
                 _tmp = _wl + ".tmp"
                 with open(_tmp, "w", encoding="utf-8") as f:
@@ -120,8 +124,12 @@ def save_held_merged(held: dict, actor: str = "system", reason: str = "merge") -
     for code in (held or {}):
         _audit_holdings_write(code, "merge", reason, _before.get(code), full.get(code), actor)
         _h = full.get(code) or {}
-        if str(_h.get("pool") or "") in ("auto", "both"):
-            sync_watchlist_pool(code, "auto")
+        _pool = str(_h.get("pool") or "")
+        if _pool in ("auto", "both"):
+            # fix 2026-09-21: 原先硬编码 "auto"，把 both 压平 → _is_manual_pool 判 False
+            # → 该标的永远不进人工盘扫描（表现：建仓表一直"等待扫描"）。照抄持仓池归属；
+            # 启动守卫只拒 pool=="manual"，写 "both" 同样安全。
+            sync_watchlist_pool(code, _pool)
 
 
 def upsert_auto_entry(code, *, name, gm_symbol, type,

@@ -2009,25 +2009,15 @@ def run_position_scan(date_str: str = None, capital: float = None,
                 print(f"[ERROR] {target_code} 不在 watchlist_buy.json 中")
             return []
     else:
-        # P3-2 池分管：manual 侧只扫 manual 池；被分管排除的标的落 manual_signals 留痕（合并日志 §2.2）
-        _pool_excluded = [k for k, v in stocks.items()
-                          if v.get("status") in ("monitoring", "signal")
-                          and not k.startswith("_example")
-                          and not _is_manual_pool(k, v)]
-        if _pool_excluded:
-            _write_manual_signal_event({
-                "event": "pool_guard",
-                "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                "channel": "manual",
-                "codes": _pool_excluded,
-                "count": len(_pool_excluded),
-                "scan_type": scan_type,
-            }, date_str or datetime.now().strftime("%Y-%m-%d"))
+        # 2026-09-21 owner 拍板：人工盘扫描**不再按池排除**。
+        # 此前按 _is_manual_pool 只扫 manual 池，导致 auto/both 标的（16 只中 9 只被
+        # sync 写坏成 pool=auto）在人工盘表里永远显示"等待扫描"、拿不到判定/得分。
+        # 池标注仍保留在行上（row.pool）供筛选，但不再作为扫描门槛。
+        # （原 pool_guard 留痕事件随之移除：不再有被排除的标的）
         stocks = {k: v for k, v in stocks.items()
                   if v.get("status") in ("monitoring", "signal")
                   and not k.startswith("_example")
-                  and v.get("status") != "archived"  # A-5(2026-08-21): 排除 archived 停用股
-                  and _is_manual_pool(k, v)}  # P3-2 池分管：manual 侧只扫 manual 池
+                  and v.get("status") != "archived"}  # A-5(2026-08-21): 排除 archived 停用股
 
     if not stocks:
         if not silent:

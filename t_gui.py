@@ -3955,14 +3955,17 @@ class Api:
             stocks[code]["status"] = "monitoring"
         else:
             # T-4(2026-09-02): 新建条目缺省 manual 会与 auto 池标的冲突（002409 教训）——
-            # 若该码属 auto/both 池则直接写 pool=auto
+            # 若该码属 auto/both 池则照抄持仓池归属。
+            # fix 2026-09-21: 原先一律写 "auto" 把 both 压平 → _is_manual_pool 判 False
+            # → 该标的永远不进人工盘扫描（表现：建仓表一直"等待扫描"）。照抄原值即可
+            # 满足启动守卫（守卫只拒 pool=="manual"）。
             _entry = {"name": name, "status": "monitoring", "composite_score": 0,
                       "criteria_met": {}, "suggested_qty": 0, "in_holdings": False}
             try:
                 from src.holdings_repo import load_full
                 _h = load_full().get(code)
                 if _h and str(_h.get("pool") or "") in ("auto", "both"):
-                    _entry["pool"] = "auto"
+                    _entry["pool"] = str(_h.get("pool"))
             except Exception:
                 pass
             stocks[code] = _entry
