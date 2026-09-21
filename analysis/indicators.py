@@ -27,6 +27,28 @@ def five_min_warmed_up(df_5min) -> bool:
     return df_5min is not None and not df_5min.empty and len(df_5min) >= WARMUP_MIN_BARS_5M
 
 
+def wilder_rsi(close: pd.Series, period: int) -> pd.Series:
+    """标准 RSI — Wilder 平滑（等价通达信/同花顺 SMA(X,N,1) 口径）。
+
+    为什么换掉原来的 `rolling(N).mean()`（2026-09-21）：
+    简单均值下**一根大阴/阳线进出 N 根窗口**就把 RSI 瞬间打到个位数。实测科创50
+    5分钟 10:35 那根：简单均值 6.24 / Wilder 26.69 / 同花顺同刻 ≈26 → 指数超卖
+    预警据此误报 RSI=4.6（同花顺同时刻 38.14）。
+
+    ⚠️ 递推式指标**必须有足够历史预热**：只喂当日 bar（1天≈48根）时种子主导结果。
+    与同花顺对齐需配多日连续序列——见 main.py 指数预警改用掘金多日 300s。
+    实测（科创50，796根/18天）：RSI6/12/24 = 36.67/45.55/50.77 vs 同花顺 38.14/46.06/50.99。
+    """
+    delta = close.diff()
+    gain = delta.clip(lower=0).ewm(alpha=1.0 / period, adjust=False).mean()
+    loss = (-delta.clip(upper=0)).ewm(alpha=1.0 / period, adjust=False).mean()
+    rs = gain / loss.replace(0, np.nan)
+    # V1.1.2 语义保留：0/0 钉平窗（gain==0 & loss==0）除零产生 NaN → 填 50 中性；
+    # 纯上涨窗（loss==0 & gain>0）保持 NaN；预热期 leading NaN 不变
+    return (100 - 100 / (1 + rs)).mask((gain == 0) & (loss == 0), 50.0)
+
+
+
 # ============================================================
 # 1分钟线指标（原有逻辑，从 data_fetcher.py 重构）
 # ============================================================
@@ -37,15 +59,9 @@ def add_indicators(df: pd.DataFrame) -> pd.DataFrame:
         return df
     c = df["close"]
 
-    # RSI(period from PARAMS, default 6)
+    # RSI(period from PARAMS, default 6) — Wilder 平滑（2026-09-21 统一口径）
     rsi_period = PARAMS.get("rsi_period", 6)
-    delta = c.diff()
-    gain = delta.clip(lower=0).rolling(rsi_period, min_periods=1).mean()
-    loss = -delta.clip(upper=0).rolling(rsi_period, min_periods=1).mean()
-    rs = gain / loss.replace(0, np.nan)
-    # V1.1.2 修复（bug fix，非调优，C 语义）：0/0 钉平窗（gain==0 & loss==0）除零产生 NaN
-    # → 填 50 中性；纯上涨窗（loss==0 & gain>0）保持 NaN 与现网一致；预热 leading NaN 不变
-    df["rsi"] = (100 - 100 / (1 + rs)).mask((gain == 0) & (loss == 0), 50.0)
+    df["rsi"] = wilder_rsi(c, rsi_period)
 
     # BOLL(20, 2.0)
     bb_period = PARAMS.get("bb_period", 20)
@@ -196,23 +212,13 @@ def add_5min_indicators(df_5min: pd.DataFrame) -> pd.DataFrame:
     df_5min["bb_width_5m"] = bb_width
     df_5min["bb_pct_5m"] = (c - df_5min["bb_dn_5m"]) / bb_width  # %b (0=下轨, 1=上轨)
 
-    # ── V3.0: RSI(14) — 择时层核心 ──
+    # ── V3.0: RSI(14) — 择时层核心（Wilder 平滑，2026-09-21 统一口径）──
     rsi_period = PARAMS.get("rsi_period_5m", 14)
-    delta = c.diff()
-    gain = delta.clip(lower=0).rolling(rsi_period, min_periods=1).mean()
-    loss = -delta.clip(upper=0).rolling(rsi_period, min_periods=1).mean()
-    rs = gain / loss.replace(0, np.nan)
-    # V1.1.2 修复（bug fix，非调优，C 语义）：0/0 钉平窗填 50 中性；
-    # 纯上涨窗保持 NaN 与现网一致；预热 leading NaN 不变
-    df_5min["rsi_5m"] = (100 - 100 / (1 + rs)).mask((gain == 0) & (loss == 0), 50.0)
+    df_5min["rsi_5m"] = wilder_rsi(c, rsi_period)
 
     # ── 高抛低吸专用: RSI(6) on 5-min（纯两点决策层，不影响 rsi_5m(14) 信息层）──
     _swing_rsi_period = int(PARAMS.get("rsi_period_5m_swing", 6))
-    _d6 = c.diff()
-    _g6 = _d6.clip(lower=0).rolling(_swing_rsi_period, min_periods=1).mean()
-    _l6 = -_d6.clip(upper=0).rolling(_swing_rsi_period, min_periods=1).mean()
-    _rs6 = _g6 / _l6.replace(0, np.nan)
-    df_5min["rsi_5m_p6"] = (100 - 100 / (1 + _rs6)).mask((_g6 == 0) & (_l6 == 0), 50.0)
+    df_5min["rsi_5m_p6"] = wilder_rsi(c, _swing_rsi_period)
 
     # ── 企稳信号（V1.26 遗留，保留）──
     df_5min["low_5m"] = l
@@ -255,14 +261,8 @@ def add_15min_indicators(df_15min: pd.DataFrame) -> pd.DataFrame:
 
     c = df_15min["close"]
 
-    # RSI(6)
-    delta = c.diff()
-    gain = delta.clip(lower=0).rolling(6, min_periods=1).mean()
-    loss = (-delta.clip(upper=0)).rolling(6, min_periods=1).mean()
-    rs = gain / loss.replace(0, np.nan)
-    # V1.1.2 修复（bug fix，非调优，C 语义）：0/0 钉平窗填 50 中性；
-    # 纯上涨窗保持 NaN 与现网一致；预热 leading NaN 不变
-    df_15min["rsi_15m"] = (100 - 100 / (1 + rs)).mask((gain == 0) & (loss == 0), 50.0)
+    # RSI(6) — Wilder 平滑（2026-09-21 统一口径）
+    df_15min["rsi_15m"] = wilder_rsi(c, 6)
 
     # MACD(12, 26, 9)
     exp1 = c.ewm(span=12, adjust=False).mean()

@@ -409,8 +409,9 @@ def _ensure_daily_indicators(daily_ctx: dict, code: str) -> dict:
         macd_dea = pd.Series(macd_dif).ewm(span=9, adjust=False).mean().values
         macd_hist = (macd_dif - macd_dea) * 2
         d = c.diff()
-        g = d.clip(lower=0).rolling(14, min_periods=1).mean()
-        l = (-d.clip(upper=0)).rolling(14, min_periods=1).mean()
+        # Wilder 平滑（2026-09-21 统一口径）；原 rolling(14).mean() 简单均值
+        g = d.clip(lower=0).ewm(alpha=1.0 / 14, adjust=False).mean()
+        l = (-d.clip(upper=0)).ewm(alpha=1.0 / 14, adjust=False).mean()
         rsi = (100 - 100 / (1 + (g / l.replace(0, float("nan"))))).fillna(50.0)
         boll_mid = c.rolling(20).mean()
         boll_std = c.rolling(20).std()

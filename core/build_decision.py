@@ -85,10 +85,11 @@ def features_from_daily(df: pd.DataFrame, date_str: str) -> dict:
     dif = e12 - e26
     dea = dif.ewm(span=9, adjust=False).mean()
     golden = bool(((dif > dea) & (dif.shift(1) <= dea.shift(1))).tail(5).any())
-    # RSI(14)（空头抄底超卖极值用）
+    # RSI(14)（空头抄底超卖极值用）— Wilder 平滑（2026-09-21 统一口径；
+    # 真相源 analysis/indicators.py::wilder_rsi。原为 rolling(14).mean() 简单均值）
     _delta = c.diff()
-    _gain = _delta.clip(lower=0).rolling(14).mean()
-    _loss = (-_delta.clip(upper=0)).rolling(14).mean()
+    _gain = _delta.clip(lower=0).ewm(alpha=1.0 / 14, adjust=False).mean()
+    _loss = (-_delta.clip(upper=0)).ewm(alpha=1.0 / 14, adjust=False).mean()
     _rsi = float((100 - 100 / (1 + _gain / _loss.replace(0, float("nan")))).iloc[-1]) if _loss.iloc[-1] and _loss.iloc[-1] > 0 else 50.0
     # 2026-08-27 因子挖掘（127万股票-日）：两个否决因子的特征
     _vol_ratio20 = None

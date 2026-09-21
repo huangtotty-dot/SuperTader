@@ -1814,19 +1814,21 @@ def _maybe_check_index_intraday_alert(now: datetime) -> None:
                    "indices": ["sh000001", "sz399001", "sz399006", "sh000688"]}
         if _ra.get("enabled", True):
             try:
-                from analysis.indicators import resample_to_5min as _r5, add_5min_indicators as _a5
+                from analysis.indicators import add_5min_indicators as _a5
+                from core.market_data import get_provider as _get_provider
                 _th = float(_ra.get("threshold", 20))
                 _rsi_fresh: list = []
+                _prov = _get_provider()
                 for _ic in (_ra.get("indices") or []):
                     try:
-                        _m = _mb_by.get(_ic)
-                        if _m is None:
-                            _m = fetch_index_minutes_live(_ic)
-                            _mb_by[_ic] = _m
-                        _df5 = _r5(_m) if _m is not None and not _m.empty else None
-                        # 预热≥8 根 5m bar：样本不足时 RSI 会假 0（09:35 首根必误报）
-                        if _df5 is None or len(_df5) < 8:
-                            continue
+                        # 2026-09-21 换源+换口径（owner 报"报的超卖与同花顺不吻合"）：
+                        # ① 数据源统一到掘金 300s（原生 5 分钟、时间戳=bar 结束时刻，同花顺同口径）
+                        # ② 拉多日连续序列：RSI 是递推指标，只喂当日 ~48 根会让种子主导结果
+                        #    （实测科创50单日 RSI6=3.6 / 同花顺 38.1；多日 796 根 Wilder=36.7）
+                        # ③ RSI 公式已改 Wilder 平滑（analysis.indicators.wilder_rsi）
+                        _df5 = _prov.index_minute(_ic, count_bars=800, freq="300s")
+                        if _df5 is None or _df5.empty or len(_df5) < 60:
+                            continue          # 预热不足 → 跳过，宁可不报也不误报
                         _df5 = _a5(_df5)
                         _rsi = float(_df5["rsi_5m_p6"].iloc[-1])
                         if _rsi != _rsi:      # NaN

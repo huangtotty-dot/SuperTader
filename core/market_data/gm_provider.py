@@ -121,3 +121,29 @@ class GmProvider(MarketDataProvider):
             "amount": df["amount"].astype(float),          # 元（index_regime 两市成交额腿）
         })
         return out.sort_values("date").reset_index(drop=True)
+
+    # ---------- 指数分钟线（2026-09-21：指数分钟数据源统一到掘金） ----------
+    def index_minute(self, index: str, count_bars: int = 800,
+                     freq: str = "300s") -> pd.DataFrame:
+        """指数分钟线。freq="300s" 原生 5 分钟；"60s" 为 1 分钟。
+
+        `count_bars` 可跨多日——递推式指标（RSI/MACD）**必须有足够历史预热**，
+        只喂当日 ~48 根会让种子主导结果（实测单日 RSI6 与同花顺差数倍）。
+        时间戳为 bar **结束**时刻，与同花顺/通达信一致（区别于 resample 的 floor 起始标注）。
+        """
+        gma = self._gma
+        df = gma.history_n(symbol=_gm_index_symbol(index), frequency=freq,
+                           count=int(count_bars),
+                           end_time=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                           fields="eob,open,high,low,close,volume,amount", df=True)
+        if df is None or df.empty:
+            return pd.DataFrame(columns=["time", "open", "high", "low", "close", "volume", "amount"])
+        out = pd.DataFrame({
+            "time": pd.to_datetime(df["eob"]).dt.tz_localize(None).values,
+            "open": df["open"].astype(float).values, "high": df["high"].astype(float).values,
+            "low": df["low"].astype(float).values, "close": df["close"].astype(float).values,
+            "volume": df["volume"].astype(float).values / 100.0,   # 股 → 手
+            "amount": df["amount"].astype(float).values,
+        })
+        return out.sort_values("time").reset_index(drop=True)
+

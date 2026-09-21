@@ -52,8 +52,11 @@ def add_indicators(df: pd.DataFrame) -> pd.DataFrame:
     p = PARAMS
 
     delta = c.diff()
-    gain = delta.clip(lower=0).rolling(p["rsi_period"], min_periods=1).mean()
-    loss = -delta.clip(upper=0).rolling(p["rsi_period"], min_periods=1).mean()
+    # Wilder 平滑（2026-09-21 统一口径）。真相源：superTrader analysis/indicators.py::wilder_rsi。
+    # 本模块刻意不依赖 superTrader 树（纯 pandas/numpy，便于 goldminer 侧移植），故就地实现
+    # ——改动时两处需同步。原为 rolling(N).mean()（简单均值）：单根大阴线会把 RSI 打到个位数。
+    gain = delta.clip(lower=0).ewm(alpha=1.0 / p["rsi_period"], adjust=False).mean()
+    loss = (-delta.clip(upper=0)).ewm(alpha=1.0 / p["rsi_period"], adjust=False).mean()
     rs = gain / loss.replace(0, np.nan)
     df["rsi"] = 100 - 100 / (1 + rs)
 

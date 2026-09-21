@@ -1195,8 +1195,9 @@ def _refresh_daily_ctx(context, code: str, gm_symbol: str, now: datetime) -> dic
         # G4: 支撑建仓闸指标（2026-08-05 owner决策：RSI/MACD/BOLL/缩量/MA60）
         if len(c) >= 26:
             _d = c.diff()
-            _up = _d.clip(lower=0).rolling(14).mean()
-            _dn = (-_d.clip(upper=0)).rolling(14).mean()
+            # Wilder 平滑（2026-09-21 统一口径）；原 rolling(14).mean() 简单均值
+            _up = _d.clip(lower=0).ewm(alpha=1.0 / 14, adjust=False).mean()
+            _dn = (-_d.clip(upper=0)).ewm(alpha=1.0 / 14, adjust=False).mean()
             _rs = _up / _dn.replace(0, 1e-10)
             ctx["daily_rsi14"] = float((100 - 100 / (1 + _rs)).iloc[-1])
             _ema12 = c.ewm(span=12, adjust=False).mean()

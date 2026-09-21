@@ -1479,11 +1479,11 @@ class Api:
             d["dif"] = ema12 - ema26
             d["dea"] = d["dif"].ewm(span=9, adjust=False).mean()
             d["macd_hist"] = (d["dif"] - d["dea"]) * 2
-            delta = d["close"].diff()
-            gain = delta.clip(lower=0).rolling(14).mean()
-            loss = (-delta.clip(upper=0)).rolling(14).mean()
-            rs = gain / loss.replace(0, float("nan"))
-            d["rsi"] = 100 - 100 / (1 + rs)
+            # RSI(14) — Wilder 平滑（2026-09-21 统一口径，与同花顺/通达信一致）。
+            # 原来用 rolling(14).mean()：单根大阴/阳线会把 RSI 打到极端值，图上看与
+            # 同花顺差很多（用户报"报的超卖与实际不吻合"）
+            from analysis.indicators import wilder_rsi as _wilder_rsi
+            d["rsi"] = _wilder_rsi(d["close"], 14)
             d["boll_mid"] = d["close"].rolling(20).mean()
             d["boll_std"] = d["close"].rolling(20).std()
             d["boll_up"] = d["boll_mid"] + 2 * d["boll_std"]
@@ -2116,9 +2116,10 @@ class Api:
                     trend = bool(price > ma20 and price > ma60)
                     dd = price / rec_high - 1 if rec_high > 0 else 0.0
                     # RSI(14)（空头抄底超卖极值，与 timing_gate 一致）
+                    # Wilder 平滑（2026-09-21 统一口径）；原 rolling(14).mean() 简单均值
                     _dlt = c.diff()
-                    _gn = _dlt.clip(lower=0).rolling(14).mean()
-                    _ls = (-_dlt.clip(upper=0)).rolling(14).mean()
+                    _gn = _dlt.clip(lower=0).ewm(alpha=1.0 / 14, adjust=False).mean()
+                    _ls = (-_dlt.clip(upper=0)).ewm(alpha=1.0 / 14, adjust=False).mean()
                     _rsi = float((100 - 100 / (1 + _gn / _ls.replace(0, float("nan")))).iloc[-1]) if _ls.iloc[-1] and _ls.iloc[-1] > 0 else 50.0
                     if _regime == "trend_up":
                         dd_ok = dd >= -0.03
@@ -2598,12 +2599,9 @@ class Api:
         ema12 = pd.Series(closes).ewm(span=12, adjust=False).mean()
         ema26 = pd.Series(closes).ewm(span=26, adjust=False).mean()
         dif = (ema12 - ema26).values
-        # RSI
-        delta = pd.Series(closes).diff()
-        gain = delta.clip(lower=0).rolling(14).mean()
-        loss = (-delta.clip(upper=0)).rolling(14).mean()
-        rs = gain / loss.replace(0, np.nan)
-        rsi = (100 - 100 / (1 + rs)).values
+        # RSI — Wilder 平滑（2026-09-21 统一口径）
+        from analysis.indicators import wilder_rsi as _wilder_rsi2
+        rsi = _wilder_rsi2(pd.Series(closes), 14).values
         # 顶背离
         if len(price_peaks) >= 2:
             p2, p1 = price_peaks[-2], price_peaks[-1]

@@ -160,6 +160,24 @@ def _iri_fetch_live_tencent(code: str) -> "pd.DataFrame":
 
 
 
+def _iri_fetch_live_gm(code: str) -> "pd.DataFrame":
+    """掘金当日 1 分钟线（指数）—— 2026-09-21 起 live 通道首选源。
+
+    owner 指示「数据源统一使用掘金量化的」：此前指数分钟走 akshare 新浪/腾讯直连，
+    绕过了 core/market_data 的 provider 抽象，与个股侧（gm 主源）不同源。
+    返回经 _iri_std_df 规整（time 为 "YYYY-MM-DD HH:MM:SS" 字符串，升序）。
+    """
+    from core.market_data import get_provider
+    df = get_provider().index_minute(code, count_bars=300, freq="60s")
+    if df is None or df.empty:
+        raise ValueError("gm index_minute empty")
+    today = datetime.now().strftime("%Y-%m-%d")
+    out = df[pd.to_datetime(df["time"]).dt.strftime("%Y-%m-%d") == today]
+    if out.empty:
+        raise ValueError("gm index_minute: 当日无 bar")
+    return _iri_std_df(out)
+
+
 def fetch_index_minutes_live(code: str = "sh000001") -> "pd.DataFrame":
     """盘中实时分钟线（live 通道）。
 
@@ -171,6 +189,8 @@ def fetch_index_minutes_live(code: str = "sh000001") -> "pd.DataFrame":
     p = IRI_DEFAULT_PARAMS
     degraded = []
     channels = [
+        # 2026-09-21 owner 指示：指数分钟数据源统一到掘金（原为 akshare 新浪/腾讯直连）
+        ("gm", _iri_fetch_live_gm),
         (p["live_primary"], _iri_fetch_live_akshare_sina),
         (p["live_fallback"], _iri_fetch_live_tencent),
     ]

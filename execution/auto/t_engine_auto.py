@@ -274,8 +274,11 @@ class FeatureExtractor:
             return feats
         c15 = df["close"]
         rsi_delta = c15.diff()
-        g = rsi_delta.clip(lower=0).rolling(6, min_periods=1).mean()
-        l = (-rsi_delta).clip(upper=0).rolling(6, min_periods=1).mean()
+        # Wilder 平滑（2026-09-21 统一口径；真相源 analysis/indicators.py::wilder_rsi）
+        g = rsi_delta.clip(lower=0).ewm(alpha=1.0 / 6, adjust=False).mean()
+        # fix 2026-09-21 符号 bug：原写 `(-rsi_delta).clip(upper=0)` —— 先取负再截断，
+        # 使下跌计 0、上涨计为负 ⇒ rs 为负 ⇒ RSI 算出负值或除零。正解是先截断再取负。
+        l = (-rsi_delta.clip(upper=0)).ewm(alpha=1.0 / 6, adjust=False).mean()
         rs = g / l.replace(0, np.nan)
         feats["rsi"] = float(100 - 100 / (1 + rs).iloc[-1]) if rs.notna().any() else 50
         return feats

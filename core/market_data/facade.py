@@ -245,6 +245,24 @@ class MarketDataFacade:
         df = self._tx.index_daily(index, days, end_date)
         return self._mark(df, df.attrs.get("source", "tencent"))
 
+    def index_minute(self, index: str = "sh000688", count_bars: int = 800,
+                     freq: str = "300s") -> pd.DataFrame:
+        """指数分钟线（2026-09-21 起指数分钟数据源统一到掘金）。
+
+        不回退腾讯：腾讯分时只给当日、喂不饱递推指标（RSI/MACD）的预热需求，
+        且时间戳口径与掘金不同源，混用会制造新的不一致。gm 不可用时返回空表，
+        由调用方决定「跳过本次」还是走别的路径。
+        """
+        if self._gm_ok():
+            try:
+                df = self._gm_call("index_minute", self._gm.index_minute, index, count_bars, freq)
+                if df is not None and not df.empty:
+                    self._gm_ok_reset()
+                    return self._mark(df, "gm")
+            except Exception as e:
+                self._note_gm_down("index_minute", f"{index} {freq}", e)
+        return pd.DataFrame(columns=["time", "open", "high", "low", "close", "volume", "amount"])
+
 
 _facade_singleton = None
 

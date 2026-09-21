@@ -164,8 +164,9 @@ def _build_daily_context_from_df(code: str, df: pd.DataFrame, current_price: flo
         work["macd_dea"] = work["macd_dif"].ewm(span=9, adjust=False).mean()
         work["macd_hist"] = (work["macd_dif"] - work["macd_dea"]) * 2
         _d = work["close"].diff()
-        _g = _d.clip(lower=0).rolling(14, min_periods=1).mean()
-        _l = (-_d.clip(upper=0)).rolling(14, min_periods=1).mean()
+        # Wilder 平滑（2026-09-21 统一口径；真相源 analysis/indicators.py::wilder_rsi）
+        _g = _d.clip(lower=0).ewm(alpha=1.0 / 14, adjust=False).mean()
+        _l = (-_d.clip(upper=0)).ewm(alpha=1.0 / 14, adjust=False).mean()
         work["rsi"] = (100 - 100 / (1 + (_g / _l.replace(0, float("nan"))))).fillna(50.0)
         work["boll_mid"] = work["close"].rolling(20).mean()
         work["boll_std"] = work["close"].rolling(20).std()
@@ -779,8 +780,9 @@ def add_indicators(df: pd.DataFrame) -> pd.DataFrame:
     c = df["close"]
 
     delta = c.diff()
-    gain = delta.clip(lower=0).rolling(PARAMS["rsi_period"], min_periods=1).mean()
-    loss = -delta.clip(upper=0).rolling(PARAMS["rsi_period"], min_periods=1).mean()
+    # Wilder 平滑（2026-09-21 统一口径；真相源 analysis/indicators.py::wilder_rsi）
+    gain = delta.clip(lower=0).ewm(alpha=1.0 / PARAMS["rsi_period"], adjust=False).mean()
+    loss = (-delta.clip(upper=0)).ewm(alpha=1.0 / PARAMS["rsi_period"], adjust=False).mean()
     rs = gain / loss.replace(0, np.nan)
     # V1.1.2 修复（bug fix，非调优，C 语义）：0/0 钉平窗填 50 中性；
     # 纯上涨窗保持 NaN 与现网一致；预热 leading NaN 不变
@@ -890,10 +892,11 @@ def add_15min_indicators(df_15min: pd.DataFrame) -> pd.DataFrame:
 
     c = df_15min["close"]
 
-    # 15分钟RSI (周期6，更敏感地捕捉短线超卖)
+    # 15分钟RSI (周期6，更敏感地捕捉短线超卖) — Wilder 平滑（2026-09-21 统一口径；
+    # 真相源 analysis/indicators.py::wilder_rsi。原为 rolling(6).mean() 简单均值）
     delta = c.diff()
-    gain = delta.clip(lower=0).rolling(6, min_periods=1).mean()
-    loss = (-delta.clip(upper=0)).rolling(6, min_periods=1).mean()
+    gain = delta.clip(lower=0).ewm(alpha=1.0 / 6, adjust=False).mean()
+    loss = (-delta.clip(upper=0)).ewm(alpha=1.0 / 6, adjust=False).mean()
     rs = gain / loss.replace(0, np.nan)
     # V1.1.2 修复（bug fix，非调优，C 语义）：0/0 钉平窗填 50 中性；
     # 纯上涨窗保持 NaN 与现网一致；预热 leading NaN 不变
