@@ -475,6 +475,16 @@ INDEX_REGIME_PARAMS = {
     # HARD_STOP_EXIT→armed 链作废不接回、当日保护类卖出/有 awaiting_buyback/
     # 归位未完成(pos<base_ref) 均不触发。
     "b7_live_enabled": True,
+    # 2026-09-22 B7择时过滤层（s0#3×F3）：信号日 14:30 的 z = fast_zscore 逐票时序口径
+    # （过去14日同刻、min_hist=5），z < -1 才允许 B7 出手；z 不可用默认放行+na_allow 留痕。
+    # owner 2026-09-22 审批：off/on 两态（无 shadow 态），判定日志全量保留
+    # （t_io/logs/b7ff_filter_{date}.jsonl），上线目标=掘金模拟盘。
+    # ⚠️ 默认 off。on 只允许出现在模拟盘终端运行的配置里；未来接入实盘账户时
+    #    本开关必须保持 off，待模拟盘验证通过后由 owner 拍板翻启。
+    # parity 硬闸已过：t_io/validation/t0_schemes/results_b7ff_parity_2026-09-22.json
+    # （421 腿重算，82 腿放行/拦截集合 100% 一致，z 值超差 0）。
+    # 预期口径（保守值，剔 W27）：+0.54pp/腿。
+    "b7_factor_filter_enabled": False,
 }
 
 # ==================== 大盘分时预警参数（回测中不使用，保留占位） ====================

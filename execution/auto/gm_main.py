@@ -1851,6 +1851,36 @@ def _b7_live_enabled() -> bool:
             and _B7_SHADOW_MOD is not None and _b7_glue is not None)
 
 
+# ══════════════════════════════════════════════════════════════════════
+# B7 择时过滤层（s0#3 × F3）接线（2026-09-22 施工，owner 审批：off/on 两态、
+# 取消 shadow 阶段直接模拟盘验证、判定日志全量保留）。
+# 模块按文件路径加载（core 包不加入 sys.path，避免与 _gm/config 等同名包互撞）；
+# 加载失败 fail-open = 过滤层关闭，绝不影响纯 B7。
+# 方案：doc/solutions/2026-09-22_B7择时过滤层生产集成方案.md
+# parity 硬闸：t_io/validation/t0_schemes/parity_check_b7ff.py（82 腿集合 100% 一致已过）
+# ══════════════════════════════════════════════════════════════════════
+_B7FF_MOD = None
+try:
+    import importlib.util as _ilu
+    _b7ff_path = os.path.join(
+        os.environ.get("SUPERTRADER_ROOT", os.path.dirname(os.path.dirname(PROJECT_DIR))),
+        "core", "b7_factor_filter.py")
+    _b7ff_spec = _ilu.spec_from_file_location("b7_factor_filter", _b7ff_path)
+    _B7FF_MOD = _ilu.module_from_spec(_b7ff_spec)
+    _b7ff_spec.loader.exec_module(_B7FF_MOD)
+except Exception as _e:
+    print(f"[B7FF] 过滤层模块加载失败 → 过滤层关闭: {_e}")
+    _B7FF_MOD = None
+
+
+def _b7ff_enabled() -> bool:
+    """过滤层总闸：PARAMS["b7_factor_filter_enabled"] 翻启 + 模块加载成功。
+
+    off/on 两态（owner 2026-09-22 审批口径，无 shadow 态）：on 时每次 14:55 评估
+    无论放行/拦截/na_allow 都落 t_io/logs/b7ff_filter_{date}.jsonl 判定日志。"""
+    return bool(PARAMS.get("b7_factor_filter_enabled", False)) and _B7FF_MOD is not None
+
+
 _B7_REJ_STATUS = (4, 5, 6, 8, 12)      # 与既有 BASE/OPEN_ALIGN 口径一致：这些 status = 拒单
 
 
@@ -2147,6 +2177,21 @@ def _b7_live_try_sell(context, code, gm_sym, cp, now, holding, pos_qty) -> bool:
         done.add(code)
         day_bars = _b7_day_bars(context, gm_sym, now)
         tail30 = _B7_SHADOW_MOD.compute_tail30_pct(day_bars, now_close=cp)
+        # ── B7 择时过滤层评估（2026-09-22 施工，s0#3×F3，owner 审批 off/on 两态）──
+        # 每票 14:55 评估一次：无论放行/拦截/na_allow 都落 b7ff_filter_{date}.jsonl
+        # 判定日志（审批口径②），并把当日 F(14:30) 写入 b7ff_factor_hist.json。
+        # 此处只评估+留痕；拦截动作在下方 qty_gate 全过之后执行（拦的是真要下单的腿，
+        # tail30 未过闸的"none"腿不记 skip，与既有语义一致）。fail-open：异常=放行。
+        _ff_rec = None
+        if _b7ff_enabled():
+            try:
+                _ff_rec = _B7FF_MOD.evaluate_and_log(
+                    day_bars, code, date_str,
+                    extra={"tail30_pct": (round(tail30 * 100, 4)
+                                          if tail30 is not None else None),
+                           "c1455": round(float(cp), 4)})
+            except Exception as _e:
+                print(f"[B7FF] 过滤层评估异常 {code}（fail-open 放行）: {_e}")
         base_ref = int(getattr(context, f"_base_ref_{code}", 0) or 0)
         awaiting = bool((getattr(context.engine, "awaiting_buyback", {}) or {}).get(code))
         protect = (getattr(context, "_protect_sell_today", {}) or {}).get(code) == date_str
@@ -2177,6 +2222,18 @@ def _b7_live_try_sell(context, code, gm_sym, cp, now, holding, pos_qty) -> bool:
             ledger.record_skip(code, date_str, qreason, _tail_pct)
             print(f"[{now:%H:%M:%S}] B7实单跳过 {code} reason={qreason} "
                   f"virtual_qty={virtual_qty}")
+            return False
+        # ── B7 择时过滤层拦截点（2026-09-22）：腿已全过既有守卫、即将下单 ──
+        # skip reason "b7ff_blocked" 不经 SKIP_REASONS 枚举拍板追加，只落台账+审计
+        # （方案 §7 风险①的备选路径；枚举不动 = 既有 skip 语义零变化）。
+        if _ff_rec is not None and _ff_rec.get("decision") == "block":
+            ledger.record_skip(code, date_str, "b7ff_blocked", _tail_pct)
+            _audit_write({"event": "b7ff_block", "code": code,
+                          "z": _ff_rec.get("z"), "f1430": _ff_rec.get("f1430"),
+                          "hist_days": _ff_rec.get("hist_days"),
+                          "tail30_pct": _tail_pct, "time": str(now)})
+            print(f"[{now:%H:%M:%S}] B7实单跳过 {code} reason=b7ff_blocked "
+                  f"z={_ff_rec.get('z')} tail30={tail30 * 100:+.2f}%")
             return False
         # T+1 可用量钳制（sell_channels TAIL 归位同口径）：可用量 - 在途冻结，不足 100 不卖
         _tif = int(getattr(context, "_inflight_sell", {}).get(gm_sym, 0) or 0)
