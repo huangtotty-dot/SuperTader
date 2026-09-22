@@ -1751,6 +1751,25 @@ def _ogr_live_enabled() -> bool:
             and _OGR_GLUE is not None and _OGR_GLUE.available())
 
 
+# 2026-09-22：回测启用开关（仅 `backtest_holdings.py --ogr` 设置）。
+# 生产路径**永不设置** ⇒ 本段在产线是死代码，实盘行为零改变。
+_OGR_BACKTEST_ENABLE = os.environ.get("SUPERTRADER_OGR_BACKTEST") == "1"
+_OGR_LOG_DIR = None          # None=胶水默认(t_io/logs)；回测由 backtest_holdings 重定向
+
+
+def _ogr_active(context) -> bool:
+    """L4 是否生效：**live**（PARAMS 翻启）**或 回测开关**。
+
+    ⚠️ 回测下 `context.mode == MODE_BACKTEST`，故不能只认 MODE_LIVE —— 否则回测里
+    本策略一次都不会触发（这正是回测闭环自检的前提）。
+    """
+    if not (bool(PARAMS.get("open_gap_reversal_live_enabled", False))
+            and _OGR_GLUE is not None and _OGR_GLUE.available()):
+        return False
+    _mode = getattr(context, "mode", None)
+    return (_mode == MODE_LIVE) or (_OGR_BACKTEST_ENABLE and _mode == MODE_BACKTEST)
+
+
 def _ogr_legs(context) -> dict:
     """当日 T 腿台账 {code: {gm_symbol, qty, buy_px, buy_time, date}}。"""
     d = getattr(context, "_ogr_legs", None)
@@ -1789,6 +1808,30 @@ def _ogr_last_px(context, sym: str) -> float:
 _OGR_LEG_NOTIONAL = 100000.0        # 单腿目标金额（owner 单笔 ≥10 万；容量表 10 万可覆盖 78~95%）
 
 
+def _ogr_prev_close_map(context, codes) -> dict:
+    """{code: 前一交易日收盘} —— 取自 `bar_cache` 末根。
+
+    ⚠️ **不可用 `holdings.json::pre_close`**：那是"当前"值（superTrader 14:59 写入），
+    回测里拿它算历史某日的 gap 会得到完全错误的信号；live 下也依赖 superTrader 当日已写。
+    `bar_cache` 在**盘前预热**（`:1620` history_n 60s×240）时就已填到前一交易日的最后一根，
+    且本触发点位于逐票循环**之前**（循环尚未 append 今日首根）⇒ 末根 = 前一交易日收盘 ✓。
+    取不到则跳过该票（fail-closed，不猜）。
+    """
+    out = {}
+    bc = getattr(context, "bar_cache", None) or {}
+    for code in codes:
+        try:
+            sym = _ogr_sym_of(context, code)
+            rows = bc.get(sym) or []
+            if rows:
+                c = float(rows[-1].get("close") or 0)
+                if c > 0:
+                    out[code] = c
+        except Exception:
+            continue
+    return out
+
+
 def _ogr_size(context, code: str, cp: float, avail_cash: float, sym: str) -> int:
     """单腿规模：目标 10 万，封顶到剩余现金与既定仓位口径；取整到 100 股。
 
@@ -1817,10 +1860,16 @@ def _ogr_try_buy(context, bars, now) -> int:
     """09:31 开盘低开反转买入。返回已下单腿数。**下单前逐项过既有额度闸。**"""
     if _OGR_GLUE is None:
         return 0
-    rec = _OGR_GLUE.decide(bars, _OGR_GLUE.read_holdings(), now)
+    hmap = _OGR_GLUE.read_holdings()
+    _codes = [c for c in hmap
+              if isinstance(hmap.get(c), dict)
+              and str(hmap[c].get("pool", "")) in ("auto", "both")]
+    rec = _OGR_GLUE.decide(bars, hmap, now,
+                           prev_close_map=_ogr_prev_close_map(context, _codes))
     if rec is None:
         return 0
-    _OGR_GLUE.append_log({**rec, "layer": "L4_live", "phase": "buy_decision"})
+    _OGR_GLUE.append_log({**rec, "layer": "L4_live", "phase": "buy_decision"},
+                         _OGR_LOG_DIR)
     tradable = list(rec.get("tradable") or [])[:_OGR_MAX_LEGS]
     if not tradable:
         return 0
@@ -2032,7 +2081,7 @@ def on_bar(context, bars):
     # C4 定序：本块位于 `_force_open_align` **之后** ⇒ 先对齐底仓、后本策略买入。
     # 时点同 L3：t >= 09:31 时本轮 bars 即当日第一根 60s bar（其 open 应≈集合竞价价，
     # 该假设由 L4 日志里的 px_bar_open / 实际成交回报对照验证）。
-    if (_ogr_live_enabled() and getattr(context, "mode", None) == MODE_LIVE):
+    if _ogr_active(context):
         if (_OGR_BUY_WINDOW[0] <= t <= _OGR_BUY_WINDOW[1]
                 and _OGR_LIVE_BUY_DONE_DATE != today):
             _OGR_LIVE_BUY_DONE_DATE = today

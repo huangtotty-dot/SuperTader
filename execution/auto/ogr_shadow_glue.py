@@ -148,16 +148,23 @@ def append_log(rec: dict, log_dir: str | None = None) -> None:
 # ══════════════════════════════════════════════════════════════════════
 # 主入口（供 gm_main 在开盘后「每日一次」调用）
 # ══════════════════════════════════════════════════════════════════════
-def decide(bars, holdings_map: dict, now: datetime) -> dict | None:
+def decide(bars, holdings_map: dict, now: datetime,
+           prev_close_map: dict | None = None) -> dict | None:
     """**纯决策**：组装池快照 → 调决策核 → 返回判定记录（**不落日志、不下单**）。
 
     L3 影子与 L4 实单共用本函数；差异只在调用方是否下单。
+
+    `prev_close_map`（code → 前一交易日收盘）：**回测必须传** —— `holdings.json::pre_close`
+    是"当前"值（superTrader 14:59 写入），拿它算历史某日的 gap 会得到完全错误的信号。
+    live 亦应优先传（bar_cache 末根 = 前一交易日收盘，见 gm_main._ogr_prev_close_map）。
     """
     if _OGR_MOD is None:
         return None
     try:
         snap = snapshot_from_bars(bars)
-        pc_map = pool_prev_close(holdings_map)
+        pc_map = dict(prev_close_map or {})
+        if not pc_map:
+            pc_map = pool_prev_close(holdings_map)
         common = sorted(set(snap) & set(pc_map))
         if len(common) < _OGR_MOD.MIN_POOL:
             return None

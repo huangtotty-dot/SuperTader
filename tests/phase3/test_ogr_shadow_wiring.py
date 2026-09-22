@@ -240,10 +240,20 @@ class TestT5LiveWiring(unittest.TestCase):
         self.assertIn("_OGR_BUY_WINDOW", src)
         self.assertIn("_OGR_BUY_WINDOW[0] <= t <= _OGR_BUY_WINDOW[1]", src)
 
-    def test_live_requires_mode_live(self):
+    def test_live_gate_requires_mode_live_or_explicit_backtest_flag(self):
+        """防回测/回放误下单：必须 `MODE_LIVE`，或**显式**回测开关（仅 backtest_holdings --ogr 设置）。
+
+        （2026-09-22：原断言写死 `mode == MODE_LIVE`；为支持回测闭环自检改为 `_ogr_active`，
+         它把回测分支收窄到 `_OGR_BACKTEST_ENABLE`，护栏强度不减 —— 见 TestT6。）
+        """
         src = _read(GMM_PATH)
-        i = src.find("_ogr_live_enabled() and getattr(context, \"mode\", None) == MODE_LIVE")
-        self.assertGreater(i, 0, "L4 触发必须限 MODE_LIVE（防回测/回放误下单）")
+        i = src.find("def _ogr_active(context)")
+        self.assertGreater(i, 0, "缺少 _ogr_active 总闸")
+        block = src[i:i + 900]
+        self.assertIn("MODE_LIVE", block, "live 分支必须限 MODE_LIVE")
+        self.assertIn("_OGR_BACKTEST_ENABLE", block,
+                      "回测分支必须限显式开关（生产永不设置 ⇒ 产线行为零改变）")
+        self.assertIn("MODE_BACKTEST", block)
 
     def test_budget_gates_not_bypassed(self):
         """C4：额度闸一律复用，不旁路。"""
@@ -265,6 +275,45 @@ class TestT5LiveWiring(unittest.TestCase):
         """卖出只平 T 腿原量（不碰底仓）。"""
         src = _read(GMM_PATH)
         self.assertIn("sell_qty = (min(qty, max(0, avail - _tif)) // 100) * 100", src)
+
+
+class TestT6BacktestLoop(unittest.TestCase):
+    """T6：回测闭环自检的接线（2026-09-22）。
+
+    回测需要三件事，缺一不可 —— 本类把它们钉成回归护栏：
+      ① prev_close 必须 day-aware（**不可**用 holdings.json::pre_close，那是"当前"值）；
+      ② L4 必须能在 MODE_BACKTEST 触发（否则回测里一次都不跑）；
+      ③ 回测日志必须重定向（否则灌入生产 t_io/logs）。
+    """
+
+    def test_prev_close_map_from_bar_cache(self):
+        src = _read(GMM_PATH)
+        self.assertIn("def _ogr_prev_close_map(", src)
+        self.assertIn("bar_cache", src)
+        # 必须显式说明不可用 holdings 的 pre_close（防后人"简化"回去）
+        i = src.find("def _ogr_prev_close_map(")
+        block = src[i:i + 1200]
+        self.assertIn("holdings.json::pre_close", block,
+                      "必须在注释里写明为何不用 holdings.pre_close")
+
+    def test_decide_accepts_prev_close_map(self):
+        src = _read(GLUE_PATH)
+        self.assertIn("prev_close_map", src)
+        self.assertIn("def decide(bars, holdings_map: dict, now: datetime,", src)
+
+    def test_backtest_gate(self):
+        src = _read(GMM_PATH)
+        self.assertIn("SUPERTRADER_OGR_BACKTEST", src)
+        self.assertIn("def _ogr_active(context)", src)
+        self.assertIn("MODE_BACKTEST", src)
+        # 触发点必须用 _ogr_active，而不是只认 MODE_LIVE
+        self.assertIn("if _ogr_active(context):", src)
+
+    def test_backtest_driver_has_ogr_flag(self):
+        bt = _read(os.path.join(_AUTO, "backtest_holdings.py"))
+        self.assertIn('"--ogr"', bt)
+        self.assertIn('os.environ["SUPERTRADER_OGR_BACKTEST"] = "1"', bt)
+        self.assertIn("gm_main._OGR_LOG_DIR = OUT_DIR", bt)
 
 
 if __name__ == '__main__':

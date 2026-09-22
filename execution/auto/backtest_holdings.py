@@ -45,6 +45,13 @@ _ap.add_argument("--cash", type=float, default=50000.0,
 _ap.add_argument("--codes", default="", help="逗号分隔，只回测这些 6 位码（缺省=holdings 全部持仓）")
 _ap.add_argument("--tp", type=float, default=0.0,
                  help="覆盖 swing_take_profit_pct（如 0.008）；0=用生产默认 0.005。做止盈档位扫描用")
+_ap.add_argument("--pool-csv", default="",
+                 help="外部股票池 CSV（列 code[,ref_px]）；给定时**覆盖** holdings 驱动本回测"
+                      "（用于测试不在持仓内的标的，如高波篮子）")
+_ap.add_argument("--base-notional", type=float, default=200000.0,
+                 help="--pool-csv 时每只票的底仓目标金额（元），按 ref_px 折算股数")
+_ap.add_argument("--ogr", action="store_true",
+                 help="启用「开盘低开反转」做T通道（2026-09-22 L4；通过 SUPERTRADER_OGR_BACKTEST=1 传给 gm_main）")
 _ap.add_argument("--full-cost", action="store_true",
                  help="按生产口径计成本：把印花税折算进佣金率（往返 0.136%）。")
 # ── 成本口径（2026-09-15 实测修正）────────────────────────────────────────────
@@ -68,6 +75,11 @@ os.makedirs(OUT_DIR, exist_ok=True)
 import gm_bridge.writer as writer  # noqa: E402
 writer.BRIDGE_DIR = OUT_DIR
 
+# 开盘低开反转（L4）：必须在 import gm_main 之前置位（gm_main 在模块级读取该变量）
+if _ARGS.ogr:
+    os.environ["SUPERTRADER_OGR_BACKTEST"] = "1"
+    print("[backtest_holdings] 开盘低开反转 L4 通道已启用（仅本回测；判定/下单日志落本目录）")
+
 import gm_main  # noqa: E402
 from gm.api import run, MODE_BACKTEST, ADJUST_PREV  # noqa: E402
 from utils.gm_token import load_token  # noqa: E402
@@ -90,7 +102,42 @@ def _load_holdings_for_backtest():
     }
 
 
-HOLDINGS = _load_holdings_for_backtest()
+def _gm_sym_of(code: str) -> str:
+    """6 位码 → gm symbol（6/5/9 开头为沪市，其余深市）。"""
+    return ("SHSE." if code[:1] in "569" else "SZSE.") + code
+
+
+def _load_pool_from_csv():
+    """外部股票池（`--pool-csv`）：列 `code[,ref_px]`。
+
+    用途：测试**不在当前持仓内**的标的（如高波篮子）。为每只构造**合成底仓**：
+    股数 = base_notional / ref_px 取整百，成本 = ref_px（窗口起点价）。
+
+    ⚠️ 底仓不可省：A股 T+1 ⇒ 当日买入不可当日卖出，规则「09:31 买 / 10:00 卖」只有
+    在**已持有底仓**时才合法（卖的是底仓，买回补回底仓）。
+    """
+    import csv as _csv
+    out = {}
+    _only = {s.strip() for s in (_ARGS.codes or "").split(",") if s.strip()}
+    with open(_ARGS.pool_csv, "r", encoding="utf-8") as f:
+        for r in _csv.DictReader(f):
+            c = str(r.get("code") or "").strip()
+            if not c or (_only and c not in _only):
+                continue
+            px = float(r.get("ref_px") or 0)
+            qty = int(_ARGS.base_notional / px / 100) * 100 if px > 0 else 0
+            if qty < 100:
+                print(f"[pool-csv] {c} 跳过：ref_px={px} 折不出≥100股")
+                continue
+            out[c] = {"name": c, "gm_symbol": _gm_sym_of(c), "qty": qty,
+                      "cost": px, "base": qty, "pool": "auto", "type": "stock"}
+    return out
+
+
+HOLDINGS = (_load_pool_from_csv() if _ARGS.pool_csv else _load_holdings_for_backtest())
+if _ARGS.pool_csv:
+    print(f"[pool-csv] 外部池 {len(HOLDINGS)} 只（每只底仓≈{_ARGS.base_notional:.0f}元）"
+          f" ← {_ARGS.pool_csv}")
 
 gm_main.STOCKS = {c: v["gm_symbol"] for c, v in HOLDINGS.items()}
 gm_main.STOCK_NAMES = {c: v["name"] for c, v in HOLDINGS.items()}
@@ -113,6 +160,9 @@ END = _ARGS.end
 gm_main._AUDIT_LOG_PATH = os.path.join(OUT_DIR, "backtrace.jsonl")
 # 2026-09-15 阶段0-4（诊断D3）：镜像路径同步重定向——只改主链会漏镜像通道，回测审计灌入生产 auto_backtrace.jsonl（91% 污染根因）
 gm_main._AUDIT_MIRROR_PATH = os.path.join(OUT_DIR, "backtrace_mirror.jsonl")
+# 开盘低开反转（L4）判定日志重定向——否则回测会灌入生产 t_io/logs/ogr_shadow_*.jsonl
+if _ARGS.ogr:
+    gm_main._OGR_LOG_DIR = OUT_DIR
 # 卖出体系状态独立目录，不触碰生产 auto_sell_state.json
 import sell_state  # noqa: E402
 sell_state.SELL_STATE_PATH = os.path.join(OUT_DIR, "sell_state.json")
