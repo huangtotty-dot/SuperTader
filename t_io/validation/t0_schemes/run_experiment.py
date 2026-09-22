@@ -11,7 +11,9 @@
 A股 T+1 ⇒ 每个信号拆成**一条当日闭合的往返腿**：
   正T(long) 买现金→卖：净 = (卖×(1−费卖) − 买×(1+费买)) / 买
   反T(short) 卖底仓→买回：净 = (卖×(1−费卖) − 买回×(1+费买)) / 卖
-两腿当日闭合（14:55 强平兜底）。费 卖0.00121/买0.00015（双边 0.136%，与生产一致）。
+两腿当日闭合（14:55 强平兜底）。费由 `core/cost_model.py` 单一真源给出
+（owner 实际费率：股票往返 0.06908% / ETF 0.01908%；`ST_COST_VENUE=legacy`
+可切回历史口径 0.136% 做回归对照）。
 
 ## 预注册取值（文档未写死处，已声明）
   A5: r1=close(10:00)/close(09:30)−1, r7=close(14:30)/close(14:00)−1（close-to-close）
@@ -39,7 +41,12 @@ for _p in (ROOT, _MD):
 import run_experiment_v2 as v2  # noqa: E402  复用 1min 数据层
 
 OUT = HERE
-FEE_S, FEE_B = 0.00121, 0.00015
+# 成本单一真源 core/cost_model.py（旧口径 0.136% 含 2023 年前已废止的 0.1% 印花税）
+# ST_COST_VENUE ∈ {stock, etf, legacy} 覆盖，用于回归对照与成本敏感性
+from core.cost_model import (fees as _cost_fees, round_trip as _cost_rt,  # noqa: E402
+                            leg_pnl as _cost_leg_pnl)
+FEE_S, FEE_B = _cost_fees()
+COST_ROUND_TRIP = _cost_rt()
 TP = 0.005                 # B1 +0.5%
 FORCE_LABEL = '14:55'
 A1_TIMES = ('10:29', '11:29', '13:59')
@@ -170,9 +177,7 @@ def exit_td9(direction, ei, fill, o, h, l, c, hi_bar, lm, td_day):
 
 
 def _leg_pnl(direction, fill, out):
-    if direction == 'long':
-        return 100 * (out * (1 - FEE_S) - fill * (1 + FEE_B)) / fill
-    return 100 * (fill * (1 - FEE_S) - out * (1 + FEE_B)) / fill
+    return _cost_leg_pnl(direction, fill, out, fee_s=FEE_S, fee_b=FEE_B)
 
 
 # ---------------- 入场模块 ----------------

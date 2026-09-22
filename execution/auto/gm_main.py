@@ -30,7 +30,7 @@ from signals.position_sizer import PositionSizer
 from utils.helpers import _now, _default_daily_context
 from gm_bridge.writer import (
     write_signal, write_order, write_fill, write_reject, write_risk,
-    write_heartbeat, check_kill_switch, write_snapshot, write_buyback,
+    write_heartbeat, check_kill_switch, write_snapshot,
     write_buy_pending, read_buy_pending, read_buy_decision, write_confirm,
     read_auto_build, consume_auto_build,
 )
@@ -74,26 +74,6 @@ def _mark_pending_recon(context, code, sym, side, qty, px, orders):
                      "ts_dt": datetime.now(), "order_ids": _ids, "closed": False}
     except Exception:
         pass
-
-
-def _buyback_cap_qty(qty, ab_now, audit_fn=None, code=""):
-    """P0-1(2026-09-11 Q-20260911-1) 纯函数：回补量封顶为 armed 卖出量 sell_qty。
-    防 sizer 按预算/底仓口径出量失控（588170 armed 1100 实买 21000≈19×）。返回封顶后 qty。"""
-    try:
-        if ab_now:
-            cap = int(ab_now.get("sell_qty") or 0)
-            if cap >= 100 and int(qty) > cap:
-                if audit_fn:
-                    try:
-                        audit_fn({"event": "buyback_capped", "code": code,
-                                  "qty_before": int(qty), "qty_after": cap,
-                                  "sell_qty": cap, "time": str(datetime.now())})
-                    except Exception:
-                        pass
-                return cap
-    except Exception:
-        pass
-    return qty
 
 
 def _pending_recon_close(context, sym):
@@ -456,14 +436,6 @@ def _force_open_align(context) -> int:
                 p = 0.0
         return p
 
-    # B2（2026-09-15 B7实单修复）：B7 隔夜卖出造成的持仓缺口归 B7 次日开盘接回单
-    # 专管——有 armed B7 链且已到接回日（today > sell_date）的 code，买入方向跳过，
-    # 否则 09:31 open_align 补缺口 + 逐股循环 _b7_live_day_open_buyback 会对同一缺口
-    # 双倍买入（真钱超仓）。仅过滤买入方向：卖出方向（超仓归位）不受影响。
-    # engine 缺 b7_overnight_chains 属性时传 {} → 不过滤（getattr 双保险 fail-open）。
-    _oa_now = context.now if hasattr(context, "now") else datetime.now()
-    _oa_today = _oa_now.strftime("%Y-%m-%d")
-    _oa_chains = getattr(getattr(context, "engine", None), "b7_overnight_chains", None) or {}
     sells, buys = [], []
     for code, sym in STOCKS.items():
         target = int(getattr(context, f"_base_ref_{code}", 0) or 0)
@@ -482,12 +454,6 @@ def _force_open_align(context) -> int:
             if q >= 100:
                 sells.append((code, sym, q))
         elif -diff >= 100:                                # 缺口 → 买
-            # B2: armed B7 链到期票的缺口由 B7 接回单专管，open_align 不碰
-            if _b7_glue is not None and _b7_glue.open_align_buy_excluded(
-                    _oa_chains, code, _oa_today):
-                print(f"[OPEN_ALIGN] BUY 跳过 {code}：armed B7 链缺口归 B7 接回单专管"
-                      f"（防双倍买入）")
-                continue
             buys.append((code, sym, (-diff // 100) * 100))
 
     now = context.now if hasattr(context, "now") else datetime.now()
@@ -566,27 +532,6 @@ MAX_BASE_RETRY = 3
 #   - P5/P6 占用计数
 def _raw_code(symbol: str) -> str:
     return symbol.replace("SHSE.", "").replace("SZSE.", "").replace("BJ.", "")
-
-
-def _apply_buyback_downgrade(context, code, sig, qty):
-    """WP-B07: 高接降档 — 回补价落入 (前卖价×(1+downgrade_pct), 前卖价×(1+delay_pct)]
-    区间时，sizer 结果减半后向下取整到 min_unit 的整数倍。
-
-    返回 (qty, dg_info, min_unit)；dg_info 非 None 表示命中降档。
-    qty < min_unit 时调用方应延迟（等同不产生买入）。"""
-    dg = None
-    for d in (getattr(sig, "details", None) or []):
-        if isinstance(d, dict) and d.get("buyback_downgrade"):
-            dg = d
-            break
-    try:
-        min_unit = int(context.sizer._effective_params(code).get("stock_min_trade_unit", 100))
-    except Exception:
-        min_unit = 100
-    if dg is None:
-        return int(qty), None, min_unit
-    qty2 = (int(qty) // 2 // min_unit) * min_unit
-    return qty2, dg, min_unit
 
 
 def _total_equity(context, available_cash: float) -> float:
@@ -692,31 +637,6 @@ def _clear_signal_mute_keys(context, code: str):
             context.__dict__[_k] = ''
     except Exception:
         pass
-
-
-def _buyback_mutex_block(context, code, daily_ctx, open_price, cp, now, ab):
-    """WP-B18 3.2: 回补触发互斥矩阵 M1-M4。
-    返回 (action, rule)：action ∈ pass / block(永久作废记忆) / delay(保留记忆但本 bar 不触发)。
-    M2 不拦截——TRAIL ARMED 为不同仓位腿（不互斥）；TRAIL_SELL 已触发(COOLED)由新卖价 arm 覆盖。"""
-    rule = ""
-    # M1: 日线 TREND_DOWN + 卖出通道 TREND_EXIT → 趋势破坏不机械接回（0818 600481 案例）
-    trend = (daily_ctx or {}).get("_stock_trend_state", "TREND_RANGE")
-    if trend == "TREND_DOWN" and ab.get("sell_action") == "TREND_EXIT":
-        return "block", "M1"
-    # M3: 开盘跳空 >2% → 09:35 开盘缓冲后评估（复用 B-13 闸语义）
-    _target = float(ab.get("target_price", 0) or 0)
-    if _target > 0 and open_price > 0 and now.hour == 9 and now.minute <= 35:
-        if abs(open_price - _target) / _target > 0.02:
-            return "delay", "M3"
-    # M4: 深亏背景(< -8% PANIC 域)不回补（回补语义是"接回高抛"，不是"摊平亏损"）
-    try:
-        _cost = float(((getattr(context, "manual_position", None) or {})
-                       .get(STOCKS.get(code, ""), {}) or {}).get("cost", 0) or 0)
-    except Exception:
-        _cost = 0.0
-    if _cost > 0 and cp > 0 and (cp - _cost) / _cost < -0.08:
-        return "block", "M4"
-    return "pass", ""
 
 
 def _check_max_pos_cap(context, code, now, pos_qty: int, base_ref: int,
@@ -1775,735 +1695,240 @@ def init(context):
 
 
 # ══════════════════════════════════════════════════════════════════════
-# B7 尾盘反T · 回测接线（2026-09-15，owner 批准「仅回测生效」方案）
-#
-# ⚠️ 默认完全关闭：仅当环境变量 SUPERTRADER_B7_BACKTEST=1 时启用，而该变量**只由**
-#    backtest_holdings.py --b7 设置。生产路径（main.py / 实盘 gm_main）永不设置
-#    → 本段在产线是死代码，实盘行为零改变。
-# 设计依据：doc/solutions/2026-09-15_B7尾盘反T通道施工方案.md
-#   §1.2 B7 为全场最低优先级、仅在 14:55 bar 评估；§4.1 卖出量 ≤ min(持仓, base_ref×50%)
-#   §4.3 次日开盘即接是不可谈判的纪律（E1：open 接回 +0.638% > vwap30 +0.323% > close +0.165%）
-# ══════════════════════════════════════════════════════════════════════
-_B7_BACKTEST_ENABLE = os.environ.get("SUPERTRADER_B7_BACKTEST") == "1"
-# 仅回测：跳过连亏熔断（评估用）。熔断跳闸后**不自动复活**，任何长跑都会被第一个
-# 4 连亏截断，永远看不到通道的长期行为（2026-04-08~07-01 实证：熔断在 04-15 跳闸，
-# 此后 11 周零活动，剩下 26 次离线机会从未被执行）。生产路径永不设置该变量。
-_B7_BREAKER_DISABLE = os.environ.get("SUPERTRADER_B7_NO_BREAKER") == "1"
-# 仅回测/评估：放宽归位护栏 pos_qty>=base_ref。生产路径永不设置。
-_B7_RELAX_BASE_GUARD = os.environ.get("SUPERTRADER_B7_RELAX_BASE") == "1"
-_b7_mod = None
-_b7_breaker = None
-_b7_chain = {}          # {code: {"qty": int, "sell_px": float, "sell_date": str}}
-if _B7_BACKTEST_ENABLE:
-    try:
-        import overnight_reverse_t as _b7_mod
-        _b7_breaker = _b7_mod.B7CircuitBreaker()
-        print("[B7] 回测接线已启用（加载草案模块 overnight_reverse_t）")
-    except Exception as _e:
-        print(f"[B7] 模块加载失败 → B7 接线自动关闭: {_e}")
-        _B7_BACKTEST_ENABLE = False
 
 
 # ══════════════════════════════════════════════════════════════════════
-# B7 尾盘反T · 影子通道接线（2026-09-15 B7影子施工4/4，接入专员_B7）
-#
-# 与上方回测接线共存：_B7_BACKTEST_ENABLE=True 时影子逻辑整体跳过（防回测双记账）。
-# 总开关：PARAMS["b7_shadow_enabled"]（默认 False，周六评审后由 owner 翻启）。
-# 影子期铁律：绝不下单、绝不写 bridge/orders、不碰 t_qty/mirror_qty 语义；
-#   只读当日分钟 bar + 写 t_io/logs/b7_shadow_{date}.jsonl + engine B7 链挂账/熔断落盘。
-# 方案：doc/solutions/2026-09-15_B7尾盘反T通道施工方案.md §1/§3/§4。
+# 开盘低开反转 · L3 影子层接线（2026-09-22 施工，owner 审批：先影子层）
+# **只记日志、绝不下单、绝不写持仓。** 规则与判据已事前冻结并通过样本外 + 独立池检验：
+#   样本外 2019-01~2025-03 +0.5245%/腿（t=8.07）；独立 400 只池 +0.5275%（比 1.01）；
+#   退市股子集 +0.7447%（更强）。规格：doc/solutions/2026-09-22_开盘低开反转日内T_设计规格.md
+# 决策逻辑全在 core/open_gap_reversal.py（纯函数；L1 24 项测试 + L2 逐腿 diff=0 已过）；
+# 本侧只做「取 bar → 组池快照 → 落日志」。加载失败 fail-open = 影子层关闭，绝不影响主循环。
 # ══════════════════════════════════════════════════════════════════════
-_B7_SHADOW_MOD = None
-_b7_glue = None
+_OGR_GLUE = None
 try:
-    import overnight_reverse_t as _B7_SHADOW_MOD   # 独立导入（回测块的 _b7_mod 在其门控块内）
-    import b7_shadow_glue as _b7_glue              # 影子纯逻辑（守卫链/结算配对，可离线测试）
+    import ogr_shadow_glue as _OGR_GLUE          # noqa: E402  （execution/auto/ 同目录）
 except Exception as _e:
-    print(f"[B7影子] 模块加载失败 → 影子通道整体关闭: {_e}")
-    _B7_SHADOW_MOD = None
-    _b7_glue = None
+    print(f"[OGR] 影子层胶水加载失败 → 影子层关闭: {_e}")
+    _OGR_GLUE = None
 
-# 保护类卖出动作集合：当日成交后记入 context._protect_sell_today（B7 当日互斥统一查询口，
-# 含 HARD_STOP_EXIT；D1 日界块清零）
-_B7_SHADOW_PROTECT_ACTIONS = frozenset(
-    {"HARD_STOP_EXIT", "PANIC_SELL", "TRAIL_SELL", "TREND_EXIT", "TARGET_SELL"})
-# 影子台账目录（t_io/logs，与 auto_backtrace 镜像同根；B7ShadowLedger 生产默认口径）
-_B7_SHADOW_LOG_DIR = os.path.join(
-    os.environ.get("SUPERTRADER_ROOT", os.path.dirname(os.path.dirname(PROJECT_DIR))),
-    "t_io", "logs")
+_OGR_SHADOW_DONE_DATE = None                     # 每日一次标记（与 _OPEN_ALIGN_DONE_DATE 同款）
 
 
-def _b7_shadow_enabled() -> bool:
-    """影子通道总闸：PARAMS 翻启 + 非回测接线 + 模块加载成功。"""
-    return (bool(PARAMS.get("b7_shadow_enabled", False))
-            and not _B7_BACKTEST_ENABLE
-            and _B7_SHADOW_MOD is not None and _b7_glue is not None)
-
-
-def _b7_live_enabled() -> bool:
-    """B7 实单通道总闸（2026-09-15 B7实单施工，owner 09-15 17:23 拍板跳过影子期直接实单）。
-
-    PARAMS["b7_live_enabled"] 翻启 + 非回测接线 + 模块加载成功。实单优先级高于影子：
-    翻启后 14:55 与次日首根 bar 挂钩点互斥分派（_b7_glue.dispatch_mode），
-    影子信号评估/虚拟结算让位，台账事件照写（复盘数据源不动）。"""
-    return (bool(PARAMS.get("b7_live_enabled", False))
-            and not _B7_BACKTEST_ENABLE
-            and _B7_SHADOW_MOD is not None and _b7_glue is not None)
+def _ogr_shadow_enabled() -> bool:
+    """影子层总闸：PARAMS 翻启 + 胶水与决策核均加载成功。**翻启也不下单。**"""
+    return (bool(PARAMS.get("open_gap_reversal_shadow_enabled", False))
+            and _OGR_GLUE is not None and _OGR_GLUE.available())
 
 
 # ══════════════════════════════════════════════════════════════════════
-# B7 择时过滤层（s0#3 × F3）接线（2026-09-22 施工，owner 审批：off/on 两态、
-# 取消 shadow 阶段直接模拟盘验证、判定日志全量保留）。
-# 模块按文件路径加载（core 包不加入 sys.path，避免与 _gm/config 等同名包互撞）；
-# 加载失败 fail-open = 过滤层关闭，绝不影响纯 B7。
-# 方案：doc/solutions/2026-09-22_B7择时过滤层生产集成方案.md
-# parity 硬闸：t_io/validation/t0_schemes/parity_check_b7ff.py（82 腿集合 100% 一致已过）
+# 开盘低开反转 · L4 实单（2026-09-22 施工，owner 指示：**直接下单、跳过影子模式**）
+#
+# 规则：大盘低开(mkt_gap<0) 且 个股相对低开 ≤ −1% ⇒ 09:31 买 / 10:00 卖（30 分钟持仓）。
+# 证据：样本外 2019-01~2025-03 +0.5245%/腿（t=8.07）；独立 400 只池 +0.5275%（比 1.01）；
+#       扣执行折价（拿不到竞价价、按 09:31 入场）后 +0.3385%/腿。
+#
+# ⚠️ 三处刻意的设计取舍（务必知悉）：
+#   ① **绕过 `_buy_confirm_gate`（人工确认闸）** —— 规则必须在 09:31 无人值守时下单；
+#      与已删除的 B7 接回单同款先例（"直下市价买单 Open——显式绕过确认闸与 morning_no_buy"）。
+#   ② **不受 `morning_no_buy`（09:30-09:35 禁买）约束** —— 本路径不经 sig 门链、直下市价单。
+#   ③ **额度闸一律复用**（`_stock_budget_cap` / `_check_max_pos_cap`），**不旁路**。
+#
+# C4 定序：调用点位于 `_force_open_align` 之后 ⇒ **先对齐底仓、后本策略买入**。
+# 安全网：若 10:00 卖出失败，腿仍留在 `_ogr_legs`，14:50 的 TAIL 尾盘归位会把它作为
+#         「超出底仓的部分」卖掉 —— 不会留过夜（符合「底仓不变」）。
 # ══════════════════════════════════════════════════════════════════════
-_B7FF_MOD = None
-try:
-    import importlib.util as _ilu
-    _b7ff_path = os.path.join(
-        os.environ.get("SUPERTRADER_ROOT", os.path.dirname(os.path.dirname(PROJECT_DIR))),
-        "core", "b7_factor_filter.py")
-    _b7ff_spec = _ilu.spec_from_file_location("b7_factor_filter", _b7ff_path)
-    _B7FF_MOD = _ilu.module_from_spec(_b7ff_spec)
-    _b7ff_spec.loader.exec_module(_B7FF_MOD)
-except Exception as _e:
-    print(f"[B7FF] 过滤层模块加载失败 → 过滤层关闭: {_e}")
-    _B7FF_MOD = None
+_OGR_LIVE_BUY_DONE_DATE = None
+_OGR_BUY_WINDOW = (dtime(9, 31), dtime(9, 35))   # 买入时间窗（防进程盘中启动时误在任意时刻买）
+_OGR_SELL_FROM = dtime(10, 0)                    # 10:00 起卖出
+_OGR_MAX_LEGS = 10                               # 单日最多腿数（仓位/风险上限）
+_OGR_PARTICIPATION = 0.10                        # 单腿不超过该票集合竞价量的比例
 
 
-def _b7ff_enabled() -> bool:
-    """过滤层总闸：PARAMS["b7_factor_filter_enabled"] 翻启 + 模块加载成功。
-
-    off/on 两态（owner 2026-09-22 审批口径，无 shadow 态）：on 时每次 14:55 评估
-    无论放行/拦截/na_allow 都落 t_io/logs/b7ff_filter_{date}.jsonl 判定日志。"""
-    return bool(PARAMS.get("b7_factor_filter_enabled", False)) and _B7FF_MOD is not None
+def _ogr_live_enabled() -> bool:
+    """L4 实单总闸：PARAMS 翻启 + 胶水与决策核加载成功。**默认 off。**"""
+    return (bool(PARAMS.get("open_gap_reversal_live_enabled", False))
+            and _OGR_GLUE is not None and _OGR_GLUE.available())
 
 
-_B7_REJ_STATUS = (4, 5, 6, 8, 12)      # 与既有 BASE/OPEN_ALIGN 口径一致：这些 status = 拒单
+def _ogr_legs(context) -> dict:
+    """当日 T 腿台账 {code: {gm_symbol, qty, buy_px, buy_time, date}}。"""
+    d = getattr(context, "_ogr_legs", None)
+    if not isinstance(d, dict):
+        d = {}
+        context._ogr_legs = d
+    return d
 
 
-def _b7_rej_status(ret):
-    """掘金 order_volume 返回 List[Dict]；返回拒单状态码，未被拒返回 None。
-
-    ⚠️ 必须查——否则「下单被拒」会被当成成交：链条照记、台账照改 → 凭空多出仓位。
-    2026-09-15 实测：首日底仓 T+1 不可卖，B7 卖出被拒 status=8，却仍记了次日接回 200 股，
-    并让对账逻辑反复触发（该轮回测因此比基线慢约 25 倍）。
-    """
-    if isinstance(ret, list):
-        ret = ret[0] if ret else {}
-    if not isinstance(ret, dict):
-        return None
-    st = ret.get("status")
-    return st if st in _B7_REJ_STATUS else None
-
-
-def _b7_day_bars(context, gm_sym, now):
-    return [b for b in (context.bar_cache.get(gm_sym) or [])
-            if str(b.get("time", "")).startswith(now.strftime("%Y-%m-%d"))]
-
-
-def _b7_last_px(context, gm_sym):
-    """（已弃用，保留仅为兼容外部引用）取 bar_cache 末根收盘价。
-
-    ⚠️ 不要用它做次日接回定价：日界时缓存末根仍是前一日 bar。见 _b7_bt_open_buyback 注释。
-    """
-    bars = context.bar_cache.get(gm_sym) or []
-    return float(bars[-1].get("close") or 0) if bars else 0.0
-
-
-def _b7_try_sell(context, code, gm_sym, cp, now, holding, pos_qty) -> bool:
-    """14:55 评估并执行 B7 卖出（直下市价单，不走信号/闸门链）。True=已下单。"""
-    if not _B7_BACKTEST_ENABLE or _b7_mod is None or code in _b7_chain:
-        return False
-    if not (now.hour == 14 and now.minute == 55):
-        return False
-    base_ref = int(getattr(context, f"_base_ref_{code}", 0) or 0)
-    # 先算信号：只有 tail30 达标才值得为"守卫拦截"留痕（否则每 bar 刷屏）
-    _t30 = _b7_mod.compute_tail30_pct(_b7_day_bars(context, gm_sym, now), now_close=cp)
-    if _t30 is None or _t30 <= 0.01:
-        return False
-    # ── 守卫逐条判定；被挡则落 b7_guard_block（评估用：定位是哪条在挡大缺口日）──
-    _blk = None
-    if _b7_breaker is not None and _b7_breaker.tripped and not _B7_BREAKER_DISABLE:
-        _blk = "circuit_breaker"
-    elif base_ref <= 0 or (int(pos_qty) < base_ref and not _B7_RELAX_BASE_GUARD):
-        _blk = "pos_below_base_ref"
-    elif (getattr(context.engine, "awaiting_buyback", {}) or {}).get(code):
-        _blk = "awaiting_buyback"
-    if _blk:
-        _audit_write({"event": "b7_guard_block", "code": code, "reason": _blk,
-                      "tail30_pct": round(_t30 * 100, 4), "pos_qty": int(pos_qty),
-                      "base_ref": base_ref, "time": str(now)})
-        return False
-    sig7 = _b7_mod.detect_signal(code, STOCK_NAMES.get(code, code),
-                                 _b7_day_bars(context, gm_sym, now),
-                                 pos_qty=int(pos_qty), base_ref=base_ref, now=now,
-                                 now_close=cp, relax_base_guard=_B7_RELAX_BASE_GUARD)
-    if sig7 is None:
-        return False
-    _avail = int((holding or {}).get("available", pos_qty) or 0)   # T+1 可用量
-    qty = min(int(pos_qty), _avail, int(base_ref * 0.5)) // 100 * 100
-    if qty < 100:
-        return False
+def _ogr_sym_of(context, code: str):
+    """6 位码 → gm symbol（沿用既有 STOCKS 映射）。"""
     try:
-        write_order(str(now), code, "SELL", qty, cp, order_type="B7")
-        _o7 = _sdk_call("order_volume_b7_sell", _partial(
-            order_volume, symbol=gm_sym, volume=qty, side=OrderSide_Sell,
-            order_type=OrderType_Market, position_effect=PositionEffect_Close))
-    except Exception as e:
-        print(f"[{now:%H:%M:%S}] B7 SELL {code} 下单异常: {e}")
-        return False
-    _st = _b7_rej_status(_o7)
-    if _st is not None:
-        print(f"[{now:%H:%M:%S}] B7_SELL {code} 下单被拒 status={_st} → 不记链条、不改台账")
-        _audit_write({"event": "b7_sell_rejected", "code": code, "qty": qty,
-                      "status": _st, "time": str(now)})
-        return False
-    _mark_pending_recon(context, code, gm_sym, "SELL", qty, cp, _o7)
-    _b7_chain[code] = {"qty": qty, "sell_px": float(cp), "sell_date": str(now.date())}
-    if gm_sym in context.manual_position:
-        mp = context.manual_position[gm_sym]
-        mp["qty"] = max(0, int(mp.get("qty", 0) or 0) - qty)
-    _audit_write({"event": "b7_overnight_sell", "code": code, "qty": qty,
-                  "price": round(float(cp), 3),
-                  "tail30_pct": sig7["factors"]["tail30_pct"], "time": str(now)})
-    print(f"[{now:%H:%M:%S}] B7_SELL {code} 尾盘反T卖出 {qty}股@{cp:.3f} "
-          f"(tail30={sig7['factors']['tail30_pct']:+.2f}%, base_ref={base_ref})")
-    context.total_trade_count += 1
-    return True
-
-
-def _b7_bt_open_buyback(context, code, gm_sym, row, now) -> None:
-    """回测接线的 B7 次日开盘接回 —— 与生产 `_b7_live_day_open_buyback` **同位置同口径**：
-    用**本 bar 的 open** 作接回价。
-
-    ⚠️ 2026-09-16 修正：原实现放在日界块里、用 `_b7_last_px(bar_cache)` 取价 —— 日界那一刻
-    缓存里最后一根仍是**前一日** bar，接回价≈卖出价 → 隔夜缺口被抹平。
-    实测：002639 接回价 18.820 == 卖价 18.820，真实次日开盘 19.20；
-    该轮 26 笔净均 −0.160%/笔、胜率 15.4%（离线同信号为 +0.342% / 58%）→ **该轮结果作废**。
-    """
-    if not _B7_BACKTEST_ENABLE or not _b7_chain:
-        return
-    rec = _b7_chain.get(code)
-    if not rec:
-        return
-    if str(rec.get("sell_date") or "") >= str(now.date()):
-        return                      # 交易日必须晚于卖出日：卖出当日不回补
-    qty = int(rec.get("qty", 0) or 0) // 100 * 100
-    px = float((row or {}).get("open") or 0)
-    if not gm_sym or qty < 100 or px <= 0:
-        return
-    _b7_chain.pop(code, None)
-    try:
-        write_order(str(now), code, "BUY", qty, px, order_type="B7")
-        _o7b = _sdk_call("order_volume_b7_buy", _partial(
-            order_volume, symbol=gm_sym, volume=qty, side=OrderSide_Buy,
-            order_type=OrderType_Market, position_effect=PositionEffect_Open))
-    except Exception as e:
-        print(f"[{now:%H:%M:%S}] B7 BUYBACK {code} 下单异常: {e}")
-        _b7_chain[code] = rec       # 链条保留，下一 bar 重试（"开盘即接"纪律不放弃）
-        return
-    _stb = _b7_rej_status(_o7b)
-    if _stb is not None:
-        print(f"[{now:%H:%M:%S}] B7_BUYBACK {code} 被拒 status={_stb} → 链条保留待重试")
-        _audit_write({"event": "b7_buyback_rejected", "code": code, "qty": qty,
-                      "status": _stb, "time": str(now)})
-        _b7_chain[code] = rec
-        return
-    _mark_pending_recon(context, code, gm_sym, "BUY", qty, px, _o7b)
-    if gm_sym in context.manual_position:
-        mp = context.manual_position[gm_sym]
-        mp["qty"] = int(mp.get("qty", 0) or 0) + qty
-    sell_px = float(rec.get("sell_px", 0) or 0)
-    net = _b7_mod.virtual_net_pct(sell_px, px)
-    if _b7_breaker is not None and not _B7_BREAKER_DISABLE:
-        _b7_breaker.record(net)
-    _audit_write({"event": "b7_overnight_buyback", "code": code, "qty": qty,
-                  "price": round(px, 3), "sell_px": round(sell_px, 3),
-                  "net_pct": round(net * 100, 4), "sell_date": rec.get("sell_date"),
-                  "time": str(now)})
-    print(f"[{now:%H:%M:%S}] B7_BUYBACK {code} 接回 {qty}股@{px:.3f} "
-          f"(卖{sell_px:.3f}, 费后净{net * 100:+.3f}%)")
-    context.total_trade_count += 1
-
-
-# ── B7 影子通道核心函数（2026-09-15 B7影子施工4/4）──────────────────────
-def _b7_shadow_state(context):
-    """影子台账 + 连亏熔断器（首次使用装配并缓存到 context）。
-
-    熔断器从引擎落盘态恢复（拍板口径②：状态跨进程持久化）；每次 record/reset 经
-    on_change 回写 engine.record_b7_circuit → buyback_chains.json（人工复盘后手动
-    reset，不自动复活）。"""
-    ledger = getattr(context, "_b7_shadow_ledger", None)
-    if ledger is None:
-        ledger = _B7_SHADOW_MOD.B7ShadowLedger(_B7_SHADOW_LOG_DIR)
-        context._b7_shadow_ledger = ledger
-    breaker = getattr(context, "_b7_shadow_breaker", None)
-    if breaker is None:
-        _eng = context.engine
-        breaker = _B7_SHADOW_MOD.B7CircuitBreaker.from_dict(
-            getattr(_eng, "b7_circuit", None) or {},
-            on_change=lambda s: _eng.record_b7_circuit(s))
-        context._b7_shadow_breaker = breaker
-    return ledger, breaker
-
-
-def _b7_shadow_settle_due(context, code, row, now) -> None:
-    """次日开盘虚拟接回结算（独立函数便于测试）：该 code 有 armed B7 链且当前 bar
-    日期 > sell_date（次日首根 bar）→ 以本 bar 的 open 价虚拟接回并结算。
-
-    结算三连：breaker.record(net) → engine.settle_b7_chain → ledger.record_virtual_buyback。
-    prev_close 用 sell 日 c14:55（sell_px），与方案口径一致。fail-open：异常绝不冒泡。"""
-    if not _b7_shadow_enabled():
-        return
-    try:
-        today_str = now.strftime("%Y-%m-%d")
-        chains = getattr(context.engine, "b7_overnight_chains", None) or {}
-        due = _b7_glue.find_due_chains(chains, code, today_str)
-        if not due:
-            return
-        open_px = float(row.get("open") or 0)
-        if open_px <= 0:
-            return
-        ledger, breaker = _b7_shadow_state(context)
-        for chain_id, chain in due:
-            sell_px = float(chain.get("sell_px") or 0)
-            net = _B7_SHADOW_MOD.virtual_net_pct(sell_px, open_px)
-            breaker.record(net)                      # 全池连亏计数（on_change 自动落盘）
-            context.engine.settle_b7_chain(chain_id, buy_px=open_px, buy_date=today_str)
-            settle = ledger.record_virtual_buyback(
-                _b7_glue.sell_entry_from_chain(chain), today_str, open_px,
-                prev_close=sell_px, chain_id=chain_id)
-            print(f"[{now:%H:%M:%S}] B7影子接回 {code} 虚拟买入 {settle['qty']}股@{open_px:.3f} "
-                  f"(卖{sell_px:.3f}, 费后净{net * 100:+.3f}%"
-                  f"{', 连亏熔断触发' if breaker.tripped else ''})")
-    except Exception as _e:
-        print(f"[B7影子] 接回结算异常 {code}: {_e}")   # fail-open：绝不冒泡进 on_bar 主流程
-
-
-def _b7_shadow_try_signal(context, code, gm_sym, now, pos_qty, cp) -> None:
-    """14:55 bar B7 影子信号评估（每票每日一次；绝不下单、绝不写 bridge/orders）。
-
-    门链：tail30 未过闸（None 或 ≤1%）→ 什么都不记（不是 skip）；
-    触发但守卫拦截 → b7_skip 留痕（reason 枚举见 b7_shadow_glue.SKIP_REASONS）；
-    全过 → detect_signal 复核 → 虚拟量闸（<100 记 qty_below_100）
-    → record_signal + record_virtual_sell + engine.arm_b7_chain。fail-open。"""
-    if not _b7_shadow_enabled():
-        return
-    try:
-        if not (now.hour == 14 and now.minute == 55):
-            return
-        date_str = now.strftime("%Y-%m-%d")
-        done = getattr(context, "_b7_shadow_done", None)
-        if done is None:
-            done = set()
-            context._b7_shadow_done = done
-        if code in done:
-            return                                   # 每票每日一次
-        done.add(code)
-        day_bars = _b7_day_bars(context, gm_sym, now)
-        tail30 = _B7_SHADOW_MOD.compute_tail30_pct(day_bars, now_close=cp)
-        base_ref = int(getattr(context, f"_base_ref_{code}", 0) or 0)
-        awaiting = bool((getattr(context.engine, "awaiting_buyback", {}) or {}).get(code))
-        protect = (getattr(context, "_protect_sell_today", {}) or {}).get(code) == date_str
-        chains = getattr(context.engine, "b7_overnight_chains", None) or {}
-        in_chain = _b7_glue.armed_chain_id(chains, code) is not None
-        ledger, breaker = _b7_shadow_state(context)
-        decision, reason = _b7_glue.guard_decision(
-            tail30=tail30, breaker_tripped=breaker.tripped,
-            has_awaiting_buyback=awaiting, pos_qty=int(pos_qty), base_ref=base_ref,
-            protect_sold_today=protect, in_b7_chain=in_chain)
-        if decision == "none":
-            return                                   # tail30 未过闸：不留痕
-        _tail_pct = round(tail30 * 100, 4) if tail30 is not None else None
-        if decision == "skip":
-            ledger.record_skip(code, date_str, reason, _tail_pct)
-            print(f"[{now:%H:%M:%S}] B7影子跳过 {code} reason={reason} "
-                  f"tail30={tail30 * 100:+.2f}%")
-            return
-        # 全过 → detect_signal 复核（守卫内置 pos_qty >= base_ref > 0 / awaiting 互斥）
-        sig = _B7_SHADOW_MOD.detect_signal(code, STOCK_NAMES.get(code, code), day_bars,
-                                           pos_qty=int(pos_qty), base_ref=base_ref, now=now,
-                                           now_close=cp)
-        if sig is None:
-            return
-        virtual_qty = _B7_SHADOW_MOD.compute_virtual_qty(int(pos_qty), base_ref)
-        qd, qreason = _b7_glue.qty_gate(virtual_qty)
-        if qd == "skip":
-            ledger.record_skip(code, date_str, qreason, _tail_pct)
-            print(f"[{now:%H:%M:%S}] B7影子跳过 {code} reason={qreason} "
-                  f"virtual_qty={virtual_qty}")
-            return
-        chain_id = _B7_SHADOW_MOD.make_chain_id(code, date_str)
-        ledger.record_signal(sig, pos_qty=int(pos_qty), virtual_qty=virtual_qty,
-                             chain_id=chain_id)
-        ledger.record_virtual_sell(sig, virtual_qty, chain_id=chain_id, sell_date=date_str)
-        context.engine.arm_b7_chain(chain_id, code, virtual_qty, sig["price"], date_str)
-        print(f"[{now:%H:%M:%S}] B7影子卖出 {code} 虚拟卖出 {virtual_qty}股@{sig['price']:.3f} "
-              f"(tail30={sig['factors']['tail30_pct']:+.2f}%, base_ref={base_ref}, 绝不下单)")
-    except Exception as _e:
-        print(f"[B7影子] 信号评估异常 {code}: {_e}")   # fail-open：绝不冒泡进 on_bar 主流程
-
-
-# ── B7 实单通道核心函数（2026-09-15 B7实单施工，owner 09-15 17:23 拍板跳过影子期直接实单）──
-# 与回测接线差异：a) 链/熔断全部走 engine.arm/settle/void/record_b7_circuit 持久化 API
-# （回测接线用内存 _b7_chain dict + 内存 breaker，重启即丢，实单不允许）；
-# b) 接回在逐股循环当日首根 bar 用真实 open 价下单并记账（回测接线在日界块用昨收价记账）。
-# 风控口径全部锁定（见 params.py b7_live_enabled 注释）；下单类异常 print + _audit_write
-# 留痕（与影子「静默」不同，实单失败必须可见），其余异常 try/except 兜底不炸主流程。
-def _b7_live_try_sell(context, code, gm_sym, cp, now, holding, pos_qty) -> bool:
-    """14:55 B7 实单卖出（直下市价单 Close，不走信号/闸门链）。True=已下单。
-
-    守卫链与影子完全一致（b7_shadow_glue.guard_decision，skip 事件照记台账）；
-    全过后 qty=compute_virtual_qty，再按 sell_channels TAIL 同口径做 T+1 可用量钳制
-    （不得超过 GM 可用量减去在途冻结，不足 100 记 skip reason="no_available"）；
-    下单成功才挂账/记 virtual_sell，下单失败不挂账不记。KILL_SWITCH 无豁免。"""
-    if not _b7_live_enabled():
-        return False
-    try:
-        if not (now.hour == 14 and now.minute == 55):
-            return False
-        if check_kill_switch():
-            return False                       # KILL_SWITCH 沿用无豁免（静默，不计 skip）
-        date_str = now.strftime("%Y-%m-%d")
-        done = getattr(context, "_b7_live_done", None)
-        if done is None:
-            done = set()
-            context._b7_live_done = done
-        if code in done:
-            return False                       # 每票每日一次
-        done.add(code)
-        day_bars = _b7_day_bars(context, gm_sym, now)
-        tail30 = _B7_SHADOW_MOD.compute_tail30_pct(day_bars, now_close=cp)
-        # ── B7 择时过滤层评估（2026-09-22 施工，s0#3×F3，owner 审批 off/on 两态）──
-        # 每票 14:55 评估一次：无论放行/拦截/na_allow 都落 b7ff_filter_{date}.jsonl
-        # 判定日志（审批口径②），并把当日 F(14:30) 写入 b7ff_factor_hist.json。
-        # 此处只评估+留痕；拦截动作在下方 qty_gate 全过之后执行（拦的是真要下单的腿，
-        # tail30 未过闸的"none"腿不记 skip，与既有语义一致）。fail-open：异常=放行。
-        _ff_rec = None
-        if _b7ff_enabled():
-            try:
-                _ff_rec = _B7FF_MOD.evaluate_and_log(
-                    day_bars, code, date_str,
-                    extra={"tail30_pct": (round(tail30 * 100, 4)
-                                          if tail30 is not None else None),
-                           "c1455": round(float(cp), 4)})
-            except Exception as _e:
-                print(f"[B7FF] 过滤层评估异常 {code}（fail-open 放行）: {_e}")
-        base_ref = int(getattr(context, f"_base_ref_{code}", 0) or 0)
-        awaiting = bool((getattr(context.engine, "awaiting_buyback", {}) or {}).get(code))
-        protect = (getattr(context, "_protect_sell_today", {}) or {}).get(code) == date_str
-        chains = getattr(context.engine, "b7_overnight_chains", None) or {}
-        in_chain = _b7_glue.armed_chain_id(chains, code) is not None
-        ledger, breaker = _b7_shadow_state(context)   # 台账+熔断器装配复用影子（熔断跨进程持久化）
-        decision, reason = _b7_glue.guard_decision(
-            tail30=tail30, breaker_tripped=breaker.tripped,
-            has_awaiting_buyback=awaiting, pos_qty=int(pos_qty), base_ref=base_ref,
-            protect_sold_today=protect, in_b7_chain=in_chain)
-        if decision == "none":
-            return False                       # tail30 未过闸：不留痕
-        _tail_pct = round(tail30 * 100, 4) if tail30 is not None else None
-        if decision == "skip":
-            ledger.record_skip(code, date_str, reason, _tail_pct)
-            print(f"[{now:%H:%M:%S}] B7实单跳过 {code} reason={reason} "
-                  f"tail30={tail30 * 100:+.2f}%")
-            return False
-        # 全过 → detect_signal 复核（守卫内置 pos_qty >= base_ref > 0 / awaiting 互斥）
-        sig = _B7_SHADOW_MOD.detect_signal(code, STOCK_NAMES.get(code, code), day_bars,
-                                           pos_qty=int(pos_qty), base_ref=base_ref, now=now,
-                                           now_close=cp)
-        if sig is None:
-            return False
-        virtual_qty = _B7_SHADOW_MOD.compute_virtual_qty(int(pos_qty), base_ref)
-        qd, qreason = _b7_glue.qty_gate(virtual_qty)
-        if qd == "skip":
-            ledger.record_skip(code, date_str, qreason, _tail_pct)
-            print(f"[{now:%H:%M:%S}] B7实单跳过 {code} reason={qreason} "
-                  f"virtual_qty={virtual_qty}")
-            return False
-        # ── B7 择时过滤层拦截点（2026-09-22）：腿已全过既有守卫、即将下单 ──
-        # skip reason "b7ff_blocked" 不经 SKIP_REASONS 枚举拍板追加，只落台账+审计
-        # （方案 §7 风险①的备选路径；枚举不动 = 既有 skip 语义零变化）。
-        if _ff_rec is not None and _ff_rec.get("decision") == "block":
-            ledger.record_skip(code, date_str, "b7ff_blocked", _tail_pct)
-            _audit_write({"event": "b7ff_block", "code": code,
-                          "z": _ff_rec.get("z"), "f1430": _ff_rec.get("f1430"),
-                          "hist_days": _ff_rec.get("hist_days"),
-                          "tail30_pct": _tail_pct, "time": str(now)})
-            print(f"[{now:%H:%M:%S}] B7实单跳过 {code} reason=b7ff_blocked "
-                  f"z={_ff_rec.get('z')} tail30={tail30 * 100:+.2f}%")
-            return False
-        # T+1 可用量钳制（sell_channels TAIL 归位同口径）：可用量 - 在途冻结，不足 100 不卖
-        _tif = int(getattr(context, "_inflight_sell", {}).get(gm_sym, 0) or 0)
-        qty, areason = _b7_glue.clamp_available_qty(
-            virtual_qty, pos_qty=int(pos_qty),
-            available=(holding or {}).get("available"), inflight=_tif)
-        if qty < 100:
-            ledger.record_skip(code, date_str, areason, _tail_pct)
-            print(f"[{now:%H:%M:%S}] B7实单跳过 {code} reason={areason} "
-                  f"virtual_qty={virtual_qty} inflight={_tif}")
-            return False
-        sell_px = float(sig["price"])          # c14:55 信号价（挂账口径，拍板锁定）
-        chain_id = _B7_SHADOW_MOD.make_chain_id(code, date_str)
-        # B8（2026-09-15 B7实单修复）：贴跌停卖出=确定性拒单（市价保护限价与跌停冲突，
-        # 09-15 盘中×7 实证）——下单前钳制检查，命中记 skip reason="limit_clamped"，
-        # code 已入 _b7_live_done → 当日不再试（防贴板日拒单刷屏）。
-        if _limit_clamp_should_skip(context, code, gm_sym, "SELL", qty, sell_px,
-                                    now, "b7_live_sell"):
-            ledger.record_skip(code, date_str, "limit_clamped", _tail_pct)
-            print(f"[{now:%H:%M:%S}] B7实单跳过 {code} reason=limit_clamped "
-                  f"qty={qty}@{sell_px:.3f}（当日不再试）")
-            return False
-        try:
-            write_order(str(now), code, "SELL", qty, sell_px, order_type="B7")
-            _to = _sdk_call("order_volume_b7_live_sell", _partial(
-                order_volume, symbol=gm_sym, volume=qty, side=OrderSide_Sell,
-                order_type=OrderType_Market, position_effect=PositionEffect_Close))
-        except Exception as e:
-            # 下单失败：不挂账、不记 virtual_sell；实单失败必须可见（print + 审计留痕）
-            print(f"[{now:%H:%M:%S}] B7实单 SELL {code} 下单失败: {e}")
-            _audit_write({"event": "b7_live_sell_failed", "code": code, "qty": qty,
-                          "price": round(sell_px, 3), "error": str(e), "time": str(now)})
-            return False
-        _mark_pending_recon(context, code, gm_sym, "SELL", qty, sell_px, _to)
-        # 下单成功：在途冻结 + manual_position 簿记（TAIL 同口径；拒单由 status=8 分支回滚）
-        if not hasattr(context, "_inflight_sell") or context._inflight_sell is None:
-            context._inflight_sell = {}
-        context._inflight_sell[gm_sym] = _tif + qty
-        _avail_raw = (holding or {}).get("available")
-        _avail = int(pos_qty) if _avail_raw is None else int(_avail_raw)
-        if gm_sym in context.manual_position:
-            mp = context.manual_position[gm_sym]
-            mp["qty"] = max(0, int(mp.get("qty", 0) or 0) - qty)
-            mp["available"] = max(0, _avail - qty)
-            mp["t_qty"] = mp["qty"]
-        if not hasattr(context, "_pending_sell_action") or context._pending_sell_action is None:
-            context._pending_sell_action = {}
-        context._pending_sell_action[gm_sym] = ("B7", 0)   # 成交审计 action + 拒单链作废识别
-        # 持久化挂账（engine 原子落盘）+ 台账事件照写（复盘数据源不动）
-        context.engine.arm_b7_chain(chain_id, code, qty, sell_px, date_str)
-        # B4 对账基线（2026-09-15 B7实单修复）：卖出后持仓（pos_qty - qty）记入链 dict，
-        # 供次日接回重发前「持仓是否已恢复 ≥ 链上 qty」判定。best-effort 直写：
-        # 随引擎下一次落盘持久化；若重启丢失则基线未知，对账退化为仅靠当日委托判定
-        # （glue.buyback_recon_decide 对 sell_pos_after=None 跳过持仓判定，fail-open）。
-        try:
-            _ch0 = (getattr(context.engine, "b7_overnight_chains", None) or {}).get(chain_id)
-            if isinstance(_ch0, dict):
-                _ch0["sell_pos_after"] = max(0, int(pos_qty) - qty)
-        except Exception:
-            pass
-        ledger.record_signal(sig, pos_qty=int(pos_qty), virtual_qty=qty, chain_id=chain_id)
-        ledger.record_virtual_sell(sig, qty, chain_id=chain_id, sell_date=date_str)
-        _audit_write({"event": "b7_live_sell", "code": code, "qty": qty,
-                      "price": round(sell_px, 3), "chain_id": chain_id,
-                      "tail30_pct": sig["factors"]["tail30_pct"], "time": str(now)})
-        context.daily_sell_count[code] = context.daily_sell_count.get(code, 0) + 1
-        context.total_trade_count += 1
-        print(f"[{now:%H:%M:%S}] B7实单卖出 {code} 市价卖出 {qty}股@{sell_px:.3f} "
-              f"(tail30={sig['factors']['tail30_pct']:+.2f}%, base_ref={base_ref}, 实单!)")
-        return True
-    except Exception as _e:
-        print(f"[B7实单] 卖出评估异常 {code}: {_e}")   # fail-open：绝不冒泡进 on_bar 主流程
-        return False
-
-
-def _b7_buyback_recon_facts(context, code, gm_sym, chain):
-    """B4（2026-09-15 B7实单修复）：接回重发前对账事实采集。
-
-    _sdk_call 15s 超时≠未成（单可能已报柜台），盲重发会使同一链买两次。
-    复用 _poll_pending_recon 的 get_orders 轮询模式查当日委托：
-      - 该 symbol 当日已有买单成交（status=3 且 volume>0）→ filled_buy_today；
-      - 有在途买单（status 1=已报 / 2=部成）→ inflight_buy；
-      - 当前持仓 qty → pos_now，与链上 sell_pos_after 基线（卖出时直写）比对
-        是否已恢复 ≥ 链上 qty。
-    全部查询 fail-open：异常按「未知/未满足」返回，决策归 glue.buyback_recon_decide。"""
-    facts = {"inflight_buy": False, "filled_buy_today": False,
-             "pos_now": None, "sell_pos_after": chain.get("sell_pos_after")}
-    try:
-        _BUY = int(OrderSide_Buy)
+        return STOCKS.get(code)
     except Exception:
-        _BUY = 1
+        return None
+
+
+def _ogr_last_px(context, sym: str) -> float:
+    """该 symbol 的最新参考价：优先账户/信号价，回退 bar_cache 末根收盘。"""
     try:
-        try:
-            _orders = _sdk_call("get_orders_b7_recon", _partial(get_orders, symbol=gm_sym))
-        except TypeError:
-            _orders = _sdk_call("get_orders_b7_recon_all", get_orders)
-        for _o in (_orders or []):
-            try:
-                if int(_o.get("side") or 0) != _BUY:
-                    continue
-                _st = int(_o.get("status") or 0)
-                if _st == 3 and int(_o.get("volume") or 0) > 0:
-                    facts["filled_buy_today"] = True      # 当日已有买单成交
-                elif _st in (1, 2):
-                    facts["inflight_buy"] = True          # 已报/部成：在途
-            except Exception:
-                continue
+        mp = (getattr(context, "manual_position", {}) or {}).get(sym) or {}
+        p = float(mp.get("price") or 0)
+        if p > 0:
+            return p
     except Exception:
         pass
     try:
-        _h = _get_holding(context, code, gm_sym)
-        facts["pos_now"] = int((_h or {}).get("qty", 0) or 0)
+        bars = (getattr(context, "bar_cache", {}) or {}).get(sym) or []
+        if bars:
+            return float(bars[-1].get("close") or 0)
     except Exception:
-        facts["pos_now"] = None
-    return facts
+        pass
+    return 0.0
 
 
-def _b7_live_settle_filled(context, code, gm_sym, chain_id, chain, qty, fill_px,
-                           today_str, ledger, breaker, retry, now, estimated=False):
-    """B7 接回「按已成交」结算：正常下单成功路径与 B4 对账补结算路径共用。
-
-    estimated=True（B4 对账补结算）：真实成交价不可考，按该 bar open 价记账并注明
-    estimated；manual_position/daily_buy_count 同步加回——仓位在现实中确已恢复，
-    不补记会留本地簿记缺口（次日 open_align 读 GM 实仓不受影响，但盘中 sell 通道
-    以 manual_position 为即时缓存）。"""
-    # manual_position 加回（available 不加：T+1 买入当日锁定不可卖）
-    if gm_sym in context.manual_position:
-        mp = context.manual_position[gm_sym]
-        mp["qty"] = int(mp.get("qty", 0) or 0) + qty
-        mp["t_qty"] = int(mp.get("t_qty", 0) or 0) + qty
-    sell_px = float(chain.get("sell_px") or 0)
-    net = _B7_SHADOW_MOD.virtual_net_pct(sell_px, fill_px)
-    breaker.record(net)                      # 全池连亏计数（on_change 自动落盘）
-    context.engine.settle_b7_chain(chain_id, buy_px=fill_px, buy_date=today_str)
-    ledger.record_virtual_buyback(
-        _b7_glue.sell_entry_from_chain(chain), today_str, fill_px,
-        prev_close=sell_px, chain_id=chain_id)
-    retry.pop(chain_id, None)
-    _audit_write({"event": "b7_live_buyback", "code": code, "qty": qty,
-                  "price": round(fill_px, 3), "sell_px": round(sell_px, 3),
-                  "net_pct": round(net * 100, 4), "chain_id": chain_id,
-                  "sell_date": chain.get("sell_date"), "time": str(now),
-                  "estimated": bool(estimated)})
-    # 买入配额对称计数：拒单回调 side==1 有无条件 count-1 回滚，此处必须先 +1
-    context.daily_buy_count[code] = context.daily_buy_count.get(code, 0) + 1
-    if hasattr(context.engine, "buy_count_per_stock"):
-        context.engine.buy_count_per_stock[code] = context.daily_buy_count.get(code, 0)
-    context.total_trade_count += 1
-    print(f"[{now:%H:%M:%S}] B7实单接回 {code} 市价买入 {qty}股@{fill_px:.3f} "
-          f"(卖{sell_px:.3f}, 费后净{net * 100:+.3f}%"
-          f"{', estimated对账补结算' if estimated else ''}"
-          f"{', 连亏熔断触发' if breaker.tripped else ''})")
+_OGR_LEG_NOTIONAL = 100000.0        # 单腿目标金额（owner 单笔 ≥10 万；容量表 10 万可覆盖 78~95%）
 
 
-def _b7_live_day_open_buyback(context, code, gm_sym, row, now) -> None:
-    """次日开盘实单接回：逐股循环当日首根 bar（bar 日期 > sell_date）对 armed 链
-    直下市价买单 Open——显式绕过 _buy_confirm_gate 人工确认闸与 morning_no_buy
-    （直接调 order_volume，不走信号链；_force_open_align 同款直下模式，不可谈判纪律）。
+def _ogr_size(context, code: str, cp: float, avail_cash: float, sym: str) -> int:
+    """单腿规模：目标 10 万，封顶到剩余现金与既定仓位口径；取整到 100 股。
 
-    下单成功 → manual_position 加回（available 不加：T+1 买入当日锁定）+ 该 bar open 价
-    settle_b7_chain + breaker.record(virtual_net_pct) + b7_live_buyback 审计 + 台账
-    record_virtual_buyback；下单失败 → 保留链 armed 下一 bar 重试，每链重试计数 >30
-    （约半小时）转 void reason="buyback_order_failed" 并红色审计留痕
-    （复盘红色项「B7 次日未按纪律开盘接回」）。KILL_SWITCH 无豁免：触发则本 bar 跳过
-    且不计重试。fail-open：异常绝不冒泡。"""
-    if not _b7_live_enabled():
-        return
+    刻意**不**复用 `context.sizer`（那是做T的按比例口径，需要 sig），本规则是固定金额口径。
+    """
+    if cp <= 0:
+        return 0
+    _n = min(_OGR_LEG_NOTIONAL, max(0.0, avail_cash * 0.95))
+    return int(_n / cp / 100) * 100
+
+
+def _ogr_first_oid(orders):
+    """从 order_volume 返回（List[Dict]）取首个 id。"""
     try:
-        today_str = now.strftime("%Y-%m-%d")
-        chains = getattr(context.engine, "b7_overnight_chains", None) or {}
-        due = _b7_glue.find_due_chains(chains, code, today_str)
-        if not due:
-            return
-        open_px = float(row.get("open") or 0)
-        if open_px <= 0:
-            return
-        if check_kill_switch():
-            return                             # KILL_SWITCH 沿用无豁免（不计重试次数）
-        ledger, breaker = _b7_shadow_state(context)
-        retry = getattr(context, "_b7_live_buyback_retry", None)
-        if retry is None:
-            retry = {}
-            context._b7_live_buyback_retry = retry
-        for chain_id, chain in due:
-            qty = int(chain.get("qty", 0) or 0) // 100 * 100
+        for _o in (orders if isinstance(orders, list) else [orders]):
+            if isinstance(_o, dict):
+                _i = _o.get("id") or _o.get("order_id") or _o.get("cl_ord_id")
+                if _i:
+                    return _i
+    except Exception:
+        pass
+    return None
+
+
+def _ogr_try_buy(context, bars, now) -> int:
+    """09:31 开盘低开反转买入。返回已下单腿数。**下单前逐项过既有额度闸。**"""
+    if _OGR_GLUE is None:
+        return 0
+    rec = _OGR_GLUE.decide(bars, _OGR_GLUE.read_holdings(), now)
+    if rec is None:
+        return 0
+    _OGR_GLUE.append_log({**rec, "layer": "L4_live", "phase": "buy_decision"})
+    tradable = list(rec.get("tradable") or [])[:_OGR_MAX_LEGS]
+    if not tradable:
+        return 0
+
+    _acct = None
+    try:
+        _acct = _sdk_call("account", context.account)
+    except Exception:
+        _acct = None
+    _avail = 0.0
+    try:
+        _c = getattr(_acct, "cash", None)
+        _c = _c() if callable(_c) else _c
+        _avail = float(getattr(_acct, "available", None) or _c or 0.0)
+    except Exception:
+        _avail = 0.0
+    if _avail <= 0:
+        _audit_write({"event": "ogr_buy_skip", "reason": "no_cash", "time": str(now)})
+        return 0
+
+    _total_eq = _total_equity(context, _avail)
+    n = 0
+    for code in tradable:
+        try:
+            sym = _ogr_sym_of(context, code)
+            if not sym:
+                continue
+            h = _get_holding(context, code, sym)
+            pos_qty = int(h.get("qty", 0) or 0)
+            cp = _ogr_last_px(context, sym)
+            if not (cp > 0):
+                continue
+            base_ref = int(getattr(context, f"_base_ref_{code}", 0) or 0)
+            budget, max_shares = _stock_budget_cap(context, code, cp, _total_eq)
+            if _check_max_pos_cap(context, code, now, pos_qty, base_ref, max_shares,
+                                  budget, _total_eq, action="OGR_BUY", t_headroom=0):
+                continue                                   # 额度闸拦截（已留痕）
+            qty = _ogr_size(context, code, cp, _avail, sym)
             if qty < 100:
-                context.engine.void_b7_chain(chain_id, reason="buyback_qty_below_100")
+                _audit_write({"event": "ogr_buy_skip", "code": code, "reason": "size_lt_100",
+                              "time": str(now)})
                 continue
-            # B4（2026-09-15 B7实单修复）：重发前对账——_sdk_call 15s 超时≠未成
-            # （单可能已报柜台），盲重发会使同一链买两次。查当日委托+持仓：
-            # 已有在途买单 → 本 bar 不重发（链保持 armed 等回调，不计重试）；
-            # 当日已成交 / 持仓已恢复 ≥ 链上 qty → 按「已成交」settle（open 价记账，
-            # estimated）。对账自身异常 fail-open 为 "order"（维持原重发行为）。
-            try:
-                _rdec = _b7_glue.buyback_recon_decide(
-                    **_b7_buyback_recon_facts(context, code, gm_sym, chain),
-                    chain_qty=qty)
-            except Exception:
-                _rdec = "order"
-            if _rdec == "skip_inflight":
-                print(f"[{now:%H:%M:%S}] B7实单 BUYBACK {code} 检测到在途买单，本 bar 不重发"
-                      f"（链 {chain_id} 保持 armed 等回调，不计重试）")
+            if _limit_clamp_should_skip(context, code, sym, OrderSide_Buy, qty, cp, now,
+                                        "ogr_buy"):
                 continue
-            if _rdec == "settle_estimated":
-                print(f"[{now:%H:%M:%S}] B7实单 BUYBACK {code} 对账显示已成交/持仓已恢复"
-                      f" → 链 {chain_id} 按 open={open_px:.3f} 补结算(estimated)")
-                _b7_live_settle_filled(context, code, gm_sym, chain_id, chain, qty,
-                                       open_px, today_str, ledger, breaker, retry, now,
-                                       estimated=True)
+            _o = _sdk_call("order_volume", _partial(
+                order_volume, symbol=sym, volume=qty, side=OrderSide_Buy,
+                order_type=OrderType_Market, position_effect=PositionEffect_Open))
+            _oid = _ogr_first_oid(_o)
+            _audit_write({"event": "ogr_buy", "code": code, "gm_symbol": sym, "qty": qty,
+                          "px_bar_open": rec["rows"][0].get("bar_open") if rec.get("rows") else None,
+                          "ref_px": cp, "order_id": _oid, "time": str(now)})
+            _ogr_legs(context)[code] = {"gm_symbol": sym, "qty": qty, "buy_px": cp,
+                                        "buy_time": str(now), "date": rec["date"]}
+            n += 1
+        except Exception as _e:
+            print(f"[OGR] 买入异常 {code}: {_e}")
+
+    if n:
+        print(f"[{now:%H:%M:%S}] [OGR] 开盘低开反转买入 {n} 腿 "
+              f"(mkt_gap={rec.get('mkt_gap')})")
+    return n
+
+
+def _ogr_try_sell(context, now) -> int:
+    """10:00 起平掉当日 T 腿（按买入原量卖回）。返回已下单腿数。"""
+    legs = _ogr_legs(context)
+    if not legs:
+        return 0
+    n = 0
+    for code, leg in list(legs.items()):
+        try:
+            sym = leg.get("gm_symbol")
+            qty = int(leg.get("qty", 0) or 0)
+            if not sym or qty < 100:
+                legs.pop(code, None)
                 continue
-            # B8（2026-09-15 B7实单修复）：贴涨停接回=确定性拒单（市价保护限价与涨停
-            # 冲突）。钳住等价自然等待——重试计数照常累进（>30 次转 void 既有逻辑不变），
-            # 贴板日不再制造拒单刷屏。与下单失败共用同一失败处置块（_err 载体）。
-            _err = None
-            if _limit_clamp_should_skip(context, code, gm_sym, "BUY", qty, open_px,
-                                        now, "b7_live_buyback"):
-                _err = "limit_clamped(贴涨停)"
-            if _err is None:
-                try:
-                    write_order(str(now), code, "BUY", qty, open_px, order_type="B7")
-                    _to = _sdk_call("order_volume_b7_live_buyback", _partial(
-                        order_volume, symbol=gm_sym, volume=qty, side=OrderSide_Buy,
-                        order_type=OrderType_Market, position_effect=PositionEffect_Open))
-                except Exception as e:
-                    _err = str(e)
-            if _err is not None:
-                step, n = _b7_glue.buyback_retry_step(retry.get(chain_id, 0), False)
-                retry[chain_id] = n
-                if step == "void":
-                    context.engine.void_b7_chain(chain_id, reason="buyback_order_failed")
-                    _audit_write({"event": "b7_live_buyback_failed", "code": code,
-                                  "chain_id": chain_id, "qty": qty, "retries": n,
-                                  "error": _err, "time": str(now), "severity": "red",
-                                  "note": "B7 次日未按纪律开盘接回（复盘红色项）"})
-                    print(f"[{now:%H:%M:%S}] B7实单 BUYBACK {code} 下单失败 {n} 次超上限 "
-                          f"→ 链 {chain_id} 作废（红色项：未按纪律开盘接回）: {_err}")
-                else:
-                    _audit_write({"event": "b7_live_buyback_retry", "code": code,
-                                  "chain_id": chain_id, "qty": qty, "retry": n,
-                                  "error": _err, "time": str(now)})
-                    print(f"[{now:%H:%M:%S}] B7实单 BUYBACK {code} 下单失败(重试#{n}): {_err}")
+            h = _get_holding(context, code, sym)
+            avail = h.get("available")
+            avail = int(h.get("qty", 0)) if avail is None else int(avail)
+            _tif = int(getattr(context, "_inflight_sell", {}).get(sym, 0) or 0)
+            sell_qty = (min(qty, max(0, avail - _tif)) // 100) * 100
+            if sell_qty < 100:
+                _audit_write({"event": "ogr_sell_skip", "code": code,
+                              "reason": "avail_lt_100", "avail": avail, "time": str(now)})
                 continue
-            _mark_pending_recon(context, code, gm_sym, "BUY", qty, open_px, _to)
-            # 拒单重挂守卫快照：接回链在下单成功时已 settle，若异步拒单（status=8 等）
-            # 则按此快照重挂 armed 链次 bar 重试（防「链已结算但股未接回」的空气链）；
-            # 成交回调按订单号匹配后清除，D1 日界兜底清零。
-            try:
-                _bbp = getattr(context, "_b7_live_buyback_pending", None)
-                if _bbp is None:
-                    _bbp = {}
-                    context._b7_live_buyback_pending = _bbp
-                _oids = set()
-                for _o in (_to if isinstance(_to, list) else [_to]):
-                    if isinstance(_o, dict):
-                        for _k in ("id", "order_id", "cl_ord_id"):
-                            if _o.get(_k):
-                                _oids.add(str(_o[_k]))
-                _bbp[code] = {"chain": dict(chain), "order_ids": _oids, "date": today_str}
-            except Exception:
-                pass
-            # 下单成功：manual_position 加回 + 链 settle + 台账/审计/配额
-            # （B4 起与对账补结算路径共用 _b7_live_settle_filled，estimated=False）
-            _b7_live_settle_filled(context, code, gm_sym, chain_id, chain, qty,
-                                   open_px, today_str, ledger, breaker, retry, now,
-                                   estimated=False)
-    except Exception as _e:
-        print(f"[B7实单] 接回异常 {code}: {_e}")   # fail-open：绝不冒泡进 on_bar 主流程
+            cp = _ogr_last_px(context, sym)
+            if _limit_clamp_should_skip(context, code, sym, OrderSide_Sell, sell_qty, cp, now,
+                                        "ogr_sell"):
+                continue
+            _o = _sdk_call("order_volume", _partial(
+                order_volume, symbol=sym, volume=sell_qty, side=OrderSide_Sell,
+                order_type=OrderType_Market, position_effect=PositionEffect_Close))
+            _audit_write({"event": "ogr_sell", "code": code, "gm_symbol": sym,
+                          "qty": sell_qty, "leg_qty": qty, "buy_px": leg.get("buy_px"),
+                          "ref_px": cp, "order_id": _ogr_first_oid(_o), "time": str(now)})
+            legs.pop(code, None)
+            n += 1
+        except Exception as _e:
+            print(f"[OGR] 卖出异常 {code}: {_e}")
+    if n:
+        print(f"[{now:%H:%M:%S}] [OGR] 开盘低开反转卖出 {n} 腿")
+    return n
 
 
 def on_bar(context, bars):
+    # 模块级"每日一次"标记（Python 要求 global 声明位于函数内任何使用之前）
+    global _OGR_LIVE_BUY_DONE_DATE, _OGR_SHADOW_DONE_DATE
     now = context.now if hasattr(context, "now") else datetime.now()
     import utils.helpers as uh
     uh.SIM_NOW = now
@@ -2519,16 +1944,10 @@ def on_bar(context, bars):
         context.daily_buy_count.clear()
         context.daily_sell_count.clear()
         context.daily_trade_price.clear()
-        # B7 影子：按日清零——保护类卖出当日留痕 + 影子评估每票每日一次标记
-        context._protect_sell_today = {}
-        context._b7_shadow_done = set()
-        # B7 实单：按日清零——实单评估每票每日一次标记 + 次日接回每链重试计数
-        # + 接回单拒单重挂守卫快照（昨日快照跨日无效：链要么已 settled 要么仍 armed 由
-        #   find_due_chains 正常接续，快照只服务「当日下单当日异步拒单」场景）
-        context._b7_live_done = set()
-        context._b7_live_buyback_retry = {}
-        context._b7_live_buyback_pending = {}
         context.engine._check_date_reset()
+        # 2026-09-22 开盘低开反转（L4）：按日清空 T 腿台账 + 买入一次标记
+        _OGR_LIVE_BUY_DONE_DATE = None
+        context._ogr_legs = {}
         _audit_write({"event": "date_reset", "date": str(today)})
         # 人工确认闸按日重置：作废旧 pending（留痕 expired）+ 清当日拒绝 + 重写空请求文件
         _old_pending = dict(getattr(context, "_buy_confirm_pending", {}) or {})
@@ -2549,9 +1968,6 @@ def on_bar(context, bars):
                                "rejected_today": [], "pending": {}})
         except Exception:
             pass
-        # B7 次日开盘接回**不在此处**做：日界这一刻 bar_cache 末根仍是前一日 bar，
-        # 取价会≈卖出价、把隔夜缺口抹平。改到逐票循环里用本 bar 的 open（见
-        # _b7_bt_open_buyback，与生产 _b7_live_day_open_buyback 同位置同口径）。
 
     # ── KILL_SWITCH 检查 ──
     _killed = check_kill_switch()
@@ -2594,6 +2010,41 @@ def on_bar(context, bars):
             _force_open_align(context)
         except Exception as _oae:
             print(f"[OPEN_ALIGN] 失败（不阻断主循环）: {_oae}")
+
+    # ── 开盘低开反转 L3 影子层（2026-09-22）：每个交易日一次，只记日志、不下单 ──
+    # 时点同 _OPEN_ALIGN：t >= 09:31 时本轮 on_bar 的 bars 即当日**第一根 60s bar**，
+    # 其 open 应等于集合竞价价（这正是 L3 要在真实 bar 流上验证的第一件事）。
+    # 位置在逐票循环**之前**，故不依赖 context.latest_pre_close 是否已填。
+    if (_ogr_shadow_enabled() and _OGR_BUY_WINDOW[0] <= t <= _OGR_BUY_WINDOW[1]
+            and _OGR_SHADOW_DONE_DATE != today
+            and getattr(context, "mode", None) == MODE_LIVE):
+        _OGR_SHADOW_DONE_DATE = today
+        try:
+            _ogr_rec = _OGR_GLUE.run_shadow(bars, _OGR_GLUE.read_holdings(), now)
+            if _ogr_rec:
+                print(f"[OGR] 影子 {today} mkt_gap={_ogr_rec.get('mkt_gap')} "
+                      f"池={_ogr_rec.get('pool_n')} 触发={_ogr_rec.get('n_tradable')} "
+                      f"{_ogr_rec.get('tradable')}")
+        except Exception as _oe:
+            print(f"[OGR] 影子层失败（不阻断主循环）: {_oe}")
+
+    # ── 开盘低开反转 L4 实单（2026-09-22）：09:31 买（每日一次）／10:00 起卖 ──
+    # C4 定序：本块位于 `_force_open_align` **之后** ⇒ 先对齐底仓、后本策略买入。
+    # 时点同 L3：t >= 09:31 时本轮 bars 即当日第一根 60s bar（其 open 应≈集合竞价价，
+    # 该假设由 L4 日志里的 px_bar_open / 实际成交回报对照验证）。
+    if (_ogr_live_enabled() and getattr(context, "mode", None) == MODE_LIVE):
+        if (_OGR_BUY_WINDOW[0] <= t <= _OGR_BUY_WINDOW[1]
+                and _OGR_LIVE_BUY_DONE_DATE != today):
+            _OGR_LIVE_BUY_DONE_DATE = today
+            try:
+                _ogr_try_buy(context, bars, now)
+            except Exception as _oe:
+                print(f"[OGR] 实单买入失败（不阻断主循环）: {_oe}")
+        elif t >= _OGR_SELL_FROM:
+            try:
+                _ogr_try_sell(context, now)
+            except Exception as _oe:
+                print(f"[OGR] 实单卖出失败（不阻断主循环）: {_oe}")
 
     global _WB_DONE_DATE
     # ⚠️ 必须 MODE_LIVE 才回写：回测/回放里的持仓是模拟的，写回会污染生产 holdings.json
@@ -2713,33 +2164,6 @@ def on_bar(context, bars):
         code = _raw_code(gm_sym)
         if code not in STOCKS:
             continue
-        # ── B7 诊断（仅回测）：逐票循环**最顶端**记录每次 14:55 评估 ──
-        # 之前的留痕放在钩子处，而钩子前面还有若干静默 continue（_force_tail_buyback 等），
-        # 导致"信号达标却没进门"的日子无法归因。此处先记原始观测，再看它走到哪一步。
-        if _B7_BACKTEST_ENABLE and now.hour == 14 and now.minute == 55:
-            try:
-                _db = _b7_day_bars(context, gm_sym, now)
-                _cp0 = float(bar["close"] or 0)   # gm Bar 对象：无 .get()（会解析成 None → TypeError）
-                _t = (_b7_mod.compute_tail30_pct(_db, now_close=_cp0)
-                      if _b7_mod else None)
-                _hh = [_b7_mod._bar_hhmm(b) for b in _db] if _b7_mod else []
-                _ref = [x for x in _hh if x <= "14:30"]
-                _now2 = [x for x in _hh if x <= "14:55"]
-                _audit_write({"event": "b7_eval", "code": code,
-                              "t30": (None if _t is None else round(_t * 100, 4)),
-                              "n_bars": len(_db),
-                              "last_hhmm": _hh[-1] if _hh else None,
-                              "ref_used": _ref[-1] if _ref else None,
-                              "now_used": _now2[-1] if _now2 else None,
-                              "time": str(now)})
-                print(f"[{now:%H:%M:%S}] B7_EVAL {code} t30={_t} n={len(_db)} "
-                      f"last={_hh[-1] if _hh else None} ref={_ref[-1] if _ref else None} "
-                      f"now={_now2[-1] if _now2 else None}")
-            except Exception as _e:
-                import traceback as _tb
-                print(f"[{now:%H:%M:%S}] B7_EVAL_FAIL {code}: {type(_e).__name__} {_e}\n"
-                      + _tb.format_exc())
-
         # F9: 同 eob 重复 bar 去重（2026-07-31 模拟盘同秒 4 次重复投递
         # 导致 PANIC 连发 4 单；同时防止 bar_cache 重复累积）
         if _dedup_bar(context, gm_sym, str(bar["eob"])):
@@ -2762,16 +2186,6 @@ def on_bar(context, bars):
         if not hasattr(context, "_day_open"):
             context._day_open = {}
         context._day_open.setdefault(code, row["open"])
-
-        # ── B7：次日开盘接回/结算，实单优先互斥分派（_b7_glue.dispatch_mode 同口径）──
-        # live：真实 open 价市价接回（2026-09-15 owner 拍板跳过影子期直接实单）；
-        # shadow：虚拟结算（绝不下单）；均 fail-open。
-        if _b7_live_enabled():
-            _b7_live_day_open_buyback(context, code, gm_sym, row, now)
-        elif _B7_BACKTEST_ENABLE:
-            _b7_bt_open_buyback(context, code, gm_sym, row, now)   # 回测接线（同位置同口径）
-        else:
-            _b7_shadow_settle_due(context, code, row, now)
 
         df = _build_bar_df(context, code, gm_sym, now=now)
         if df.empty:
@@ -3111,55 +2525,17 @@ def on_bar(context, bars):
         if is_tail and sig and sig.action in ("BUY_LOW", "ADD_POS"):
             sig = None
 
-        # ── 数量不变硬约束：尾盘强制回补（2026-09-14 owner 裁决，先于归位卖出） ──
-        # 卖出后当日必须等量买回；14:50 仍未回补则无条件按市价买回（认亏也买），
-        # 杜绝"高抛变隔夜方向性头寸"。置于卖出门链之前：回补后 pos 可能已不超底仓，
-        # 归位卖出自然不再触发，两者不会在同一 bar 互撞。
-        if is_tail and sell_channels._force_tail_buyback(context, code, gm_sym, cp, now, holding):
-            continue
+        # 2026-09-22：原「尾盘强制回补（数量不变硬约束）」已随做T引擎删除——
+        # 该约束是反T回补义务（awaiting_buyback）的兜底，义务机制已整删，故无回补可做。
+        # 尾盘「归位卖出」（TAIL，把持仓还原到目标底仓）仍在下方门链内，未受影响。
 
         # ── P0-P6 卖出通道门链（P4-1 迁至 sell_channels._sell_channel_gate，行为逐字一致）──
         feats_cache = getattr(context.engine, "_last_feats", {}).get(code, {})
         sig, tail_done = sell_channels._sell_channel_gate(
             context, code, gm_sym, cp, now, sig, pos_qty, holding, daily_ctx,
             feats_cache, is_tail, morning_no_buy)
-        # ── B7 尾盘反T（仅回测开关启用；仅 14:55 bar；全场最低优先级）──
-        # ⚠️ 调用点本身就是**静默过滤器**：14:50~15:00 是尾盘归位/强平最密集的时段，
-        #    信号非空或 tail_done 都会让 B7 无声跳过。故在此对"信号达标但被前置条件挡掉"
-        #    逐日落 b7_guard_block，否则频率缺口无从归因（2026-09-16 实证：2 个月窗口
-        #    20+ 个 S1 日只有 9 个进到 _b7_try_sell）。
-        if _B7_BACKTEST_ENABLE and now.hour == 14 and now.minute == 55:
-            _t30c = (_b7_mod.compute_tail30_pct(_b7_day_bars(context, gm_sym, now),
-                                                now_close=cp)
-                     if _b7_mod else None)
-            if _t30c is not None and _t30c > 0.01:
-                _why = None
-                if tail_done:
-                    _why = "tail_done"
-                elif sig is not None:
-                    _why = "other_signal:" + str(getattr(sig, "action", "?"))
-                elif pos_qty <= 0:
-                    _why = "no_position"
-                if _why:
-                    _audit_write({"event": "b7_guard_block", "code": code, "reason": _why,
-                                  "tail30_pct": round(_t30c * 100, 4),
-                                  "pos_qty": int(pos_qty), "time": str(now)})
-                elif _b7_try_sell(context, code, gm_sym, cp, now, holding, pos_qty):
-                    continue
-
         if tail_done:
             continue
-
-        # ── B7 通道（非回测接线；sig 为空时才轮到它，全场最低优先级）──
-        # 实单优先互斥分派（2026-09-15 B7实单施工，owner 09-15 17:23 拍板）：
-        # live → 14:55 直下市价卖单；shadow → 影子信号评估（绝不下单）；均 fail-open，
-        # 台账事件照写（复盘数据源不动）。
-        if sig is None:
-            if _b7_live_enabled():
-                if _b7_live_try_sell(context, code, gm_sym, cp, now, holding, pos_qty):
-                    continue
-            else:
-                _b7_shadow_try_signal(context, code, gm_sym, now, pos_qty, cp)
 
         if sig is None:
             # P0-4(2026-09-01): 信号褪化留痕——confirm 已到达但信号消失/score 掉阈，
@@ -3182,26 +2558,8 @@ def on_bar(context, bars):
                 except Exception:
                     pass
             _last_dec = context.engine.last_decision.get(code, {})
-            # WP-B07: 高接延迟事件（每次记忆建立后只报一次，防每 bar 刷屏）
-            if _last_dec.get("reason") == "buyback_above_sell_delayed":
-                _bb_key = f"{code}|{_last_dec.get('sell_time', '')}"
-                _bb_notified = getattr(context, "_buyback_delayed_notified", None)
-                if _bb_notified is None:
-                    _bb_notified = set()
-                    context._buyback_delayed_notified = _bb_notified
-                if _bb_key not in _bb_notified:
-                    _bb_notified.add(_bb_key)
-                    try:
-                        write_buyback(str(now), code, "delayed",
-                                      detail=(f"sell={_last_dec.get('sell_price')} "
-                                              f"cur={_last_dec.get('price')} "
-                                              f"premium={float(_last_dec.get('premium', 0) or 0):.2%} "
-                                              f"reason=above_sell_delay"),
-                                      sell_price=_last_dec.get("sell_price"),
-                                      price=_last_dec.get("price"),
-                                      premium=_last_dec.get("premium"))
-                    except Exception:
-                        pass
+            # 2026-09-22：原「高接延迟事件（WP-B07）」已随做T引擎删除
+            # （buyback_above_sell_delayed 不再产生）。
             _audit_write({
                 "event": "no_signal", "code": code, "time": str(now),
                 "buy_score": buy_score, "sell_score": sell_score,
@@ -3280,80 +2638,18 @@ def on_bar(context, bars):
             if bc >= max_buys:
                 continue
             # WP-B18 3.2: 回补记忆互斥矩阵（M1-M4）——仅该票有回补记忆时检查
-            _ab_now = (getattr(context.engine, "awaiting_buyback", {}) or {}).get(code)
-            if _ab_now:
-                _day_open = float(getattr(context, "_day_open", {}).get(code, row.get("open", 0)) or 0)
-                _mx_act, _mx_rule = _buyback_mutex_block(context, code, daily_ctx,
-                                                         _day_open, cp, now, _ab_now)
-                if _mx_act == "block":
-                    # 2026-09-15 阶段0-2 接线：外部 pop 改调引擎公开方法（终态留痕 cleared+reason + 落盘）；
-                    # context.engine 即 SignalEngine 本体（t_engine_auto.py:476）。旧引擎无此方法时兜底直 pop。
-                    try:
-                        context.engine.clear_awaiting_buyback(code, reason="mutex_blocked")
-                    except AttributeError:
-                        context.engine.awaiting_buyback.pop(code, None)
-                    try:
-                        write_buyback(str(now), code, "blocked",
-                                      detail=(f"rule={_mx_rule} "
-                                              f"sell={_ab_now.get('sell_price')} "
-                                              f"target={_ab_now.get('target_price')} "
-                                              f"trend={daily_ctx.get('_stock_trend_state', '')}"),
-                                      rule=_mx_rule, sell_price=_ab_now.get("sell_price"),
-                                      target_price=_ab_now.get("target_price"))
-                    except Exception:
-                        pass
-                    _audit_write({"event": "buyback_blocked", "code": code, "rule": _mx_rule,
-                                  "sell_price": _ab_now.get("sell_price"),
-                                  "target_price": _ab_now.get("target_price"),
-                                  "time": str(now)})
-                    try:
-                        _sell_state_persist(context, code, gm_sym)  # 落盘清除镜像
-                    except Exception:
-                        pass
-                    continue
-                if _mx_act == "delay":
-                    try:
-                        write_buyback(str(now), code, "blocked",
-                                      detail=(f"rule=M3 开盘跳空延迟到09:35后评估 "
-                                              f"sell={_ab_now.get('sell_price')}"),
-                                      rule="M3", sell_price=_ab_now.get("sell_price"))
-                    except Exception:
-                        pass
-                    _audit_write({"event": "buyback_blocked", "code": code, "rule": "M3",
-                                  "sell_price": _ab_now.get("sell_price"),
-                                  "time": str(now)})
-                    continue
-
-            # 人工确认闸（2026-08-30 建仓/加仓人工把关）：做T回补（awaiting_buyback 记忆态）不弹窗；
-            # 加仓/信号建仓 → 弹窗确认后才下单。pending/当日已拒绝 → 本 bar 跳过（非阻塞挂起）。
-            # 位于信号级闸之后（无假弹窗）、容量闸（slot/cash/sizer/pos_limit）之前（确认放行时全量重查）。
-            if not _ab_now:
-                _cg = _buy_confirm_gate(
-                    context, code, now, action=sig.action, price=cp,
-                    qty_proj=_project_buy_qty(context, code, holding, sig, threshold, pos_qty),
-                    pos_qty=pos_qty, reasons=list(getattr(sig, "reasons", []) or []),
-                    needs_confirm=True)
-                if _cg in ("pending", "rejected_today"):
-                    continue
-            else:
-                # P0-4(2026-09-01): 回补路径绕过确认闸直接下单——该 code 若有挂起确认请求，
-                # 已被真实回补成交取代 → 作废旧 pending（superseded），防 confirm 悬空
-                if code in context._buy_confirm_pending:
-                    _pend_s = context._buy_confirm_pending.pop(code, None)
-                    try:
-                        write_confirm(str(now), code, "superseded",
-                                      detail="回补成交取代挂起确认请求",
-                                      request_id=_pend_s.get("request_id") if _pend_s else None,
-                                      action=sig.action)
-                    except Exception:
-                        pass
-                    try:
-                        write_buy_pending({"date": f"{now:%Y-%m-%d}",
-                                           "updated_at": f"{now:%Y-%m-%d %H:%M:%S}",
-                                           "rejected_today": sorted(context._buy_confirm_rejected),
-                                           "pending": context._buy_confirm_pending})
-                    except Exception:
-                        pass
+            # 人工确认闸（2026-08-30 建仓/加仓人工把关）：加仓/信号建仓 → 弹窗确认后才下单。
+            # pending/当日已拒绝 → 本 bar 跳过（非阻塞挂起）。位于信号级闸之后（无假弹窗）、
+            # 容量闸（slot/cash/sizer/pos_limit）之前（确认放行时全量重查）。
+            # 2026-09-22：原「做T回补记忆态豁免弹窗 / 回补路径绕过确认闸」两分支已随做T引擎删除
+            # （awaiting_buyback 恒空 ⇒ 回补豁免永不适用，一律走确认闸）。
+            _cg = _buy_confirm_gate(
+                context, code, now, action=sig.action, price=cp,
+                qty_proj=_project_buy_qty(context, code, holding, sig, threshold, pos_qty),
+                pos_qty=pos_qty, reasons=list(getattr(sig, "reasons", []) or []),
+                needs_confirm=True)
+            if _cg in ("pending", "rejected_today"):
+                continue
 
             # N3: 现金预检（移到 sizer 之前，供 target_t 计算）
             available_cash = INITIAL_CASH
@@ -3411,28 +2707,8 @@ def on_bar(context, bars):
                                    force=True, action=sig.action, t_headroom=_t_head)
                 continue
 
-            # P0-1(2026-09-11 Q-20260911-1): 回补 armed 硬帽——回补量封顶为 armed 卖出量（sell_qty），
-            # 防 sizer 按预算/底仓口径出量失控（09-11 588170 armed 1100 实买 21000 ≈19×；600481 armed 900→2600）。
-            # 注意字段名是 sell_qty（t_engine_auto.arm_awaiting_buyback / sell_state 同 key），非 qty。
-            qty = _buyback_cap_qty(qty, _ab_now, _audit_write, code)
-
-            # WP-B07: 高接降档 — 数量减半取整到 min_unit，不足 min_unit 则延迟
-            qty, _bb_dg, _bb_min_unit = _apply_buyback_downgrade(context, code, sig, qty)
-            if _bb_dg is not None and qty < _bb_min_unit:
-                try:
-                    write_buyback(str(now), code, "delayed",
-                                  detail=(f"downgrade_below_min_unit: sizer_halved<{_bb_min_unit} "
-                                          f"sell={_bb_dg.get('sell_price')} cur={_bb_dg.get('price')} "
-                                          f"premium={float(_bb_dg.get('premium', 0) or 0):.2%}"),
-                                  sell_price=_bb_dg.get("sell_price"),
-                                  price=_bb_dg.get("price"),
-                                  premium=_bb_dg.get("premium"))
-                except Exception:
-                    pass
-                _audit_write({"event": "buyback_downgrade_defer", "code": code,
-                              "sell_price": _bb_dg.get("sell_price"), "price": _bb_dg.get("price"),
-                              "premium": _bb_dg.get("premium"), "time": str(now)})
-                continue
+            # 2026-09-22：回补量硬帽（_buyback_cap_qty）与「高接降档」（_apply_buyback_downgrade）
+            # 已随做T引擎删除——两者都只作用于反T回补（awaiting_buyback 记忆态），该记忆态恒空。
 
             # N3: 现金预检
             max_by_cash = int(available_cash * 0.95 / cp / 100) * 100 if cp > 0 else 0
@@ -3512,18 +2788,7 @@ def on_bar(context, bars):
                 _audit_write({"event": "buy", "code": code, "qty": qty, "price": cp, "score": sig.score,
                               "time": str(now), "regime": context.last_index_regime,
                               "pos_after_buy": new_q, "buy_count": bc + 1})
-                # WP-B07: 降档成交事件
-                if _bb_dg is not None:
-                    try:
-                        write_buyback(str(now), code, "downgrade",
-                                      detail=(f"qty={qty}@{cp:.2f} "
-                                              f"sell={_bb_dg.get('sell_price')} "
-                                              f"premium={float(_bb_dg.get('premium', 0) or 0):.2%}"),
-                                      qty=qty, price=cp,
-                                      sell_price=_bb_dg.get("sell_price"),
-                                      premium=_bb_dg.get("premium"))
-                    except Exception:
-                        pass
+                # 2026-09-22：原「降档成交事件（WP-B07）」已随做T引擎删除。
             except Exception as e:
                 print(f"[{now:%H:%M:%S}] BUY {code} 失败: {e}")
 
@@ -3648,51 +2913,12 @@ def on_order_status(context, order):
         if code in STOCKS:
             _action = 'BUY_LOW' if side == 1 else 'SELL_HIGH'
             _rta = context.engine.record_trade_action(code, _action, volume, price)
-            # WP-B19 f: HARD_STOP_EXIT 硬止损离场不生成回补记忆（破位不回头；
-            # record_trade_action 以 SELL_HIGH 记 arm，此处按真实通道清除）
-            # 2026-09-15 阶段0-2 接线：外部 pop 改调引擎公开方法（终态留痕）
-            if side == 2 and getattr(context, "_pending_sell_action", {}).get(symbol, ("", 0))[0] == "HARD_STOP_EXIT":
-                try:
-                    context.engine.clear_awaiting_buyback(code, reason="hard_stop_exit")
-                except AttributeError:
-                    context.engine.awaiting_buyback.pop(code, None)
-            # 2026-09-14: 平 T 腿（T_LEG_CLOSE）同理不建回补记忆——卖出即数量还原，
-            # 再回补等于把刚平掉的腿重新打开（回放实证：14:55 平、14:56 同价买回，白付 24.6 元手续费）。
-            if side == 2 and getattr(context, "_pending_sell_action", {}).get(symbol, ("", 0))[0] == "T_LEG_CLOSE":
-                try:
-                    context.engine.clear_awaiting_buyback(code, reason="t_leg_close")
-                except AttributeError:
-                    context.engine.awaiting_buyback.pop(code, None)
-                _rta = None
-            # B1（2026-09-15 B7实单修复）：B7 尾盘隔夜卖出**不进 awaiting_buyback**
-            # （施工方案 §1.3-3）——该缺口由 B7 次日开盘接回单专管。若任由上方 generic
-            # record_trade_action 以 SELL_HIGH 武装回补记忆，14:56 _force_tail_buyback
-            # 数量不变硬约束（sell_channels.py:273 以 awaiting_buyback 为门槛）会在
-            # 1 分钟内抹掉隔夜腿，且引擎 B7 链仍 armed 次日再买一次 → 双重超仓。
-            # 时序：generic arm 发生在上方 record_trade_action(code,'SELL_HIGH',...) 内部，
-            # 本分支位于其后，clear 确定性覆盖（与 HARD_STOP_EXIT/T_LEG_CLOSE 同款先例）。
-            # _rta 置 None：防下方 armed 分支把 B7 卖出误写进 buyback 台账事件。
-            if side == 2 and getattr(context, "_pending_sell_action", {}).get(symbol, ("", 0))[0] == "B7":
-                try:
-                    context.engine.clear_awaiting_buyback(code, reason="b7_overnight")
-                except AttributeError:
-                    context.engine.awaiting_buyback.pop(code, None)
-                _rta = None
+            # 2026-09-22：原「HARD_STOP_EXIT / T_LEG_CLOSE 不生成回补记忆」两个清除分支
+            # 已随做T引擎删除（回补记忆机制整体不存在了）。
         _rta = _rta or {}
         if side == 1:  # 买入
             # WP-A1: 成交即真实，快照使命结束（快照仅服务"纯拒单"场景）
             _pop_buy_snapshot(context, order, symbol)
-            # B7 实单：接回单真实成交 → 拒单重挂守卫快照按订单号匹配清除
-            try:
-                _b7p = getattr(context, "_b7_live_buyback_pending", None) or {}
-                if code in _b7p:
-                    _oid = str(order.get("cl_ord_id") or order.get("id")
-                               or order.get("order_id") or "")
-                    _ids = _b7p[code].get("order_ids") or set()
-                    if not _ids or _oid in _ids:
-                        _b7p.pop(code, None)
-            except Exception:
-                pass
             old = context.executed_orders.get(symbol, {"qty": 0, "available": 0, "cost": price})
             old_qty = int(old.get("qty", 0))
             old_cost = float(old.get("cost", price))
@@ -3708,25 +2934,7 @@ def on_order_status(context, order):
                 "type": "stock",
                 "pre_close": price,
             }
-            # WP-B07: 买入成交 → 回补闭环完成，清除记忆并写事件
-            _bb_filled = _rta.get("buyback_filled")
-            if _bb_filled:
-                try:
-                    # O-06(2026-08-11 复盘①轻)：qty 记 armed 匹配量（sell_qty），
-                    # 而非整笔买入成交量（0811 实战：armed 200，事件误报 qty=2500）。
-                    # 2026-09-15 阶段0（诊断D1）：matched 封顶实际成交量——部分成交时
-                    # sell_qty>fill 会失真（实证 matched=600>fill=300）；与「部分回补
-                    # 只冲减 sell_qty」（引擎侧 W2）配套，本侧 matched 取真实成交量即可。
-                    _matched = min(int(_bb_filled.get("sell_qty") or 0), int(volume or 0))
-                    write_buyback(str(getattr(context, "now", None) or datetime.now()),
-                                  code, "filled",
-                                  detail=(f"sell={_bb_filled.get('sell_price')} "
-                                          f"buyback={price:.2f} matched={_matched} fill={volume}"),
-                                  sell_price=_bb_filled.get("sell_price"),
-                                  price=price, qty=(_matched or volume), fill_qty=volume,
-                                  sell_action=_bb_filled.get("sell_action", ""))
-                except Exception:
-                    pass
+            # 2026-09-22：原「买入成交 → 回补闭环完成写 filled 事件」已随做T引擎删除。
             # 底仓确认（含F7回补单：已settled标的回补成交同样同步台账并释放_base_ordered）
             if code in context._base_ordered:
                 context._base_settled.add(code)
@@ -3763,41 +2971,11 @@ def on_order_status(context, order):
             _audit_write({"event": "sell", "code": code, "qty": volume, "price": price,
                           "time": _ts_now, "pos_after_sell": new_qty,
                           "action": _act, "score": _sc})
-            # B7 影子（2026-09-15 施工4/4）：①保护类卖出当日留痕 _protect_sell_today
-            # （结构 {code: date_str}，D1 日界清零，B7 当日互斥统一查询口，含 HARD_STOP_EXIT）；
-            # ②硬止损破位票 → 该 code 的 armed B7 链立即作废、次日不接回（方案 §4.4，
-            # 与上方 clear_awaiting_buyback(reason="hard_stop_exit") 同款处置）
-            try:
-                if _act in _B7_SHADOW_PROTECT_ACTIONS:
-                    if not isinstance(getattr(context, "_protect_sell_today", None), dict):
-                        context._protect_sell_today = {}
-                    context._protect_sell_today[code] = _ts_now[:10]
-                if _act == "HARD_STOP_EXIT":
-                    for _cid, _ch in list(
-                            (getattr(context.engine, "b7_overnight_chains", {}) or {}).items()):
-                        if _ch.get("code") == code:
-                            context.engine.void_b7_chain(_cid, reason="hard_stop_exit")
-            except Exception as _e:
-                print(f"[B7影子] 保护卖出留痕/链作废异常 {code}: {_e}")
             # WP-B14: TARGET 成交 → 置 filled 落盘（真实落袋才封档）
             if _act == "TARGET_SELL" and symbol in context.manual_position:
                 context.manual_position[symbol]["_target_l1_state"] = "filled"
                 _sell_state_persist(context, _raw_code(symbol), symbol)
-            # WP-B07: 卖出成交 → 建立回补价格记忆并写事件（通道名以 _pending_sell_action 为准）
-            _bb_armed = _rta.get("armed") or getattr(context.engine, "awaiting_buyback", {}).get(code)
-            if _bb_armed:
-                _bb_armed["sell_action"] = _act or _bb_armed.get("sell_action", "SELL_HIGH")
-                try:
-                    write_buyback(_ts_now, code, "armed",
-                                  detail=(f"sell={_bb_armed.get('sell_price')} qty={volume} "
-                                          f"action={_bb_armed.get('sell_action')} "
-                                          f"target={_bb_armed.get('target_price')}"),
-                                  sell_price=_bb_armed.get("sell_price"),
-                                  qty=volume,
-                                  sell_action=_bb_armed.get("sell_action"),
-                                  target_price=_bb_armed.get("target_price"))
-                except Exception:
-                    pass
+            # 2026-09-22：原「卖出成交 → 建立回补价格记忆并写 armed 事件」已随做T引擎删除。
         # O-10(2026-08-17 复盘①轻)：成交回调同步刷新 sell_state 指纹（pos_key）。
         # 活跃 TRAIL/TARGET 状态期间成交会使 qty/cost 变化，但状态字段不变、
         # 不触发落盘 → 次日 INIT pos_key 校验不符，活跃状态被静默作废
@@ -3842,49 +3020,6 @@ def on_order_status(context, order):
             if not hasattr(context, "_protect_sell_reject_until") or context._protect_sell_reject_until is None:
                 context._protect_sell_reject_until = {}
             context._protect_sell_reject_until[code] = _now() + timedelta(minutes=30)
-        # B7 实单拒单处置（2026-09-15 B7实单施工；_pending_sell_action 尚未 pop，先识别）：
-        # ① B7 卖单被拒 → 股未卖出，armed 链立即作废（次日起不得接回空气），红色留痕；
-        #    manual_position/日配额的通用回滚由下方既有分支完成（B7 单走同一拒单回调路径）。
-        # ② B7 接回买单被拒 → 下单时链已 settle，按 _b7_live_buyback_pending 快照重挂
-        #    armed 链，下一 bar 起重试（重试计数沿用），红色留痕。
-        try:
-            _b7_rej_act = getattr(context, "_pending_sell_action", {}).get(symbol, ("", 0))[0]
-            if side == 2 and _b7_rej_act == "B7" and _b7_glue is not None:
-                _b7_cid = _b7_glue.armed_chain_id(
-                    getattr(context.engine, "b7_overnight_chains", {}) or {}, code)
-                if _b7_cid:
-                    context.engine.void_b7_chain(_b7_cid, reason="sell_order_rejected")
-                    _audit_write({"event": "b7_live_sell_rejected", "code": code,
-                                  "chain_id": _b7_cid, "qty": volume, "status": status,
-                                  "severity": "red",
-                                  "time": str(getattr(context, "now", None) or datetime.now()),
-                                  "note": "B7卖单被拒→链作废：股未卖出，次日不接回"})
-                    print(f"[B7实单] {code} 卖单被拒 status={status} → 链 {_b7_cid} 作废"
-                          f"（股未卖出，不接回）")
-            if side == 1 and not _is_base_reject:
-                _b7p = getattr(context, "_b7_live_buyback_pending", None) or {}
-                if code in _b7p:
-                    _oid = str(order.get("cl_ord_id") or order.get("id")
-                               or order.get("order_id") or "")
-                    _ids = _b7p[code].get("order_ids") or set()
-                    if not _ids or _oid in _ids:
-                        _snap_ch = (_b7p.pop(code) or {}).get("chain") or {}
-                        if _b7_live_enabled() and _snap_ch.get("chain_id"):
-                            context.engine.arm_b7_chain(
-                                _snap_ch["chain_id"], code,
-                                int(_snap_ch.get("qty", 0) or 0),
-                                float(_snap_ch.get("sell_px", 0) or 0),
-                                str(_snap_ch.get("sell_date", "")))
-                            _audit_write({"event": "b7_live_buyback_rejected_rearm",
-                                          "code": code, "chain_id": _snap_ch["chain_id"],
-                                          "qty": volume, "status": status,
-                                          "severity": "red",
-                                          "time": str(getattr(context, "now", None) or datetime.now()),
-                                          "note": "B7接回单被拒→链重挂armed，次bar重试"})
-                            print(f"[B7实单] {code} 接回单被拒 status={status} → "
-                                  f"链 {_snap_ch['chain_id']} 重挂 armed，次 bar 重试")
-        except Exception as _e:
-            print(f"[B7实单] 拒单处置异常 {code}: {_e}")
         # N25-2: 卖出拒单回滚manual_position(下单时已虚减)
         if side == 2 and symbol in context.manual_position:
             # WP-B15: 持仓回滚 → 解除信号 mute / 地板去重键

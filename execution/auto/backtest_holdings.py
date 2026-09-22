@@ -45,14 +45,8 @@ _ap.add_argument("--cash", type=float, default=50000.0,
 _ap.add_argument("--codes", default="", help="逗号分隔，只回测这些 6 位码（缺省=holdings 全部持仓）")
 _ap.add_argument("--tp", type=float, default=0.0,
                  help="覆盖 swing_take_profit_pct（如 0.008）；0=用生产默认 0.005。做止盈档位扫描用")
-_ap.add_argument("--b7", action="store_true",
-                 help="启用 B7 尾盘反T通道（仅本回测生效；通过 SUPERTRADER_B7_BACKTEST=1 传给 gm_main）")
 _ap.add_argument("--full-cost", action="store_true",
                  help="按生产口径计成本：把印花税折算进佣金率（往返 0.136%）。")
-_ap.add_argument("--b7-no-breaker", action="store_true",
-                 help="B7 连亏熔断不生效（仅评估用：熔断不自动复活会把长跑截断在第一个 4 连亏）")
-_ap.add_argument("--b7-relax-base", action="store_true",
-                 help="B7 放宽归位护栏（仅评估用：原护栏 pos>=base_ref 会挡掉缺口最大的日子）")
 # ── 成本口径（2026-09-15 实测修正）────────────────────────────────────────────
 # gm 回测**不支持印花税参数**（端子可选参数仅 backtest_commission_ratio / slippage_ratio /
 # transaction_ratio / commission_unit / marginfloat_ratio，无 tax）。默认 0.00015 双边 =
@@ -65,19 +59,6 @@ _COMMISSION_RATIO = 0.00068 if _ARGS.full_cost else 0.00015
 # 清空自定义参数：gm.api 在 import 时(getopt)与 run() 内(optparse)都会二次解析 sys.argv，
 # 不认识 --start/--end/--label 会抛 "no such option"；此处先消费掉，仅保留脚本名。
 sys.argv = [sys.argv[0]]
-
-# B7 尾盘反T：必须在 import gm_main 之前置位（gm_main 在模块级读取该变量）
-if _ARGS.b7:
-    os.environ["SUPERTRADER_B7_BACKTEST"] = "1"
-    print("[backtest_holdings] B7 尾盘反T通道已启用（仅本回测）")
-if _ARGS.b7_no_breaker:
-    os.environ["SUPERTRADER_B7_BACKTEST"] = "1"
-    os.environ["SUPERTRADER_B7_NO_BREAKER"] = "1"
-    print("[backtest_holdings] B7 连亏熔断已禁用（仅评估用）")
-if _ARGS.b7_relax_base:
-    os.environ["SUPERTRADER_B7_BACKTEST"] = "1"
-    os.environ["SUPERTRADER_B7_RELAX_BASE"] = "1"
-    print("[backtest_holdings] B7 归位护栏已放宽（仅评估用）")
 
 _OUT_SUB = ("backtest_holdings_" + _ARGS.label) if _ARGS.label else "backtest_holdings"
 OUT_DIR = os.path.join(_ST, "t_io", "validation", "auto", _OUT_SUB)
@@ -120,15 +101,6 @@ if _ARGS.tp > 0:
     # 就地改即对内核 _get_params 生效。
     gm_main.PARAMS["swing_take_profit_pct"] = float(_ARGS.tp)
     print(f"[backtest_holdings] swing_take_profit_pct 覆盖为 {_ARGS.tp}")
-
-# B7 生产通道（shadow / live）在本回测里必须显式关闭：
-# config 里 b7_shadow_enabled / b7_live_enabled 已翻启（owner 2026-09-15 17:23 拍板跳过影子期直接实单），
-# 不加 --b7 时 _B7_BACKTEST_ENABLE=False → 生产 shadow/live 逻辑会照常执行，
-# 使「基线」轮自带 B7，A/B 失去意义。此处强制关闭，保证基线纯净。
-if not _ARGS.b7:
-    for _k in ("b7_shadow_enabled", "b7_live_enabled"):
-        gm_main.PARAMS[_k] = False
-    print("[backtest_holdings] 已强制关闭 B7 生产通道（shadow/live）→ 本轮为纯净基线")
 
 # 掘金账号个股历史数据上限 180 自然日（最早 2026-03-02）。
 # subscribe(60s,count=240) 预热实际拉 miss_count+1=241 根 bar：START 若为 03-03（盘前），

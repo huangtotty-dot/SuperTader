@@ -48,9 +48,9 @@ except ImportError:
 from dataclasses import dataclass, field
 from analysis.indicators import resample_to_15min, add_15min_indicators
 from analysis.indicators import resample_to_5min, add_5min_indicators
-# 期B（2026-08-28）：做T决策核单一真源。Signal/TDecisionEngine 从 core.t_decision 引入，
-# 手动侧不再局部定义 Signal（带 channel）/ _swing_renko_eval，避免与自动侧引擎类对象分叉。
-from core.t_decision import Signal, TDecisionEngine
+# 2026-09-22（owner 指示）：做T决策核（core/t_decision.py）已删除 ⇒ 不再 import
+# Signal / TDecisionEngine。本文件保留的是「非T共享服务」：EngineContext、飞书早盘预警、
+# 盘中状态持久化（intraday_state.json）、decision_trace、FeatureExtractor。
 
 
 @dataclass
@@ -121,9 +121,7 @@ class SignalEngine:
         self._5min_cache: Dict[str, tuple] = {}  # code → (last_boundary_ts, df_5min)
         # V1.30: 决策原因码缓存（供面板/日报展示熔断等原因）
         self.last_decision: Dict[str, Dict[str, Any]] = {}
-        # 期B（2026-08-28）：Renko 增量砖状态 + 当日做T买入价迁入决策核单一真源
-        # （原 self._renko_states / self.t_entry_price 删除，改由 TDecisionEngine 内部持有）。
-        self._core = TDecisionEngine()
+        # 2026-09-22：做T决策核（self._core = TDecisionEngine()）已随引擎删除。
         # V1.30: 恢复轮次/次数/冷却等盘中状态（重启后不清零）
         self._load_intraday_state()
 
@@ -141,7 +139,6 @@ class SignalEngine:
             self.morning_alert_state = {}
             self._5min_cache = {}       # V3.0: 5分钟缓存每日重置
             self.trend_regimes = {}     # V3.0: 趋势状态机每日重置（开盘从头累积）
-            self._core.reset_day(today)  # 期B：Renko 砖状态 + 做T买入价随日界清空（决策核单一真源）
             self.state_reset_date = today
 
     # ===== V1.30: 盘中状态持久化（轮次/次数/冷却，重启后不清零）=====
@@ -164,8 +161,6 @@ class SignalEngine:
                 "sell_count": dict(self.sell_count_per_stock),
                 # V3.0: 5分钟趋势状态持久化
                 "trend_regimes": {k: v.to_dict() for k, v in self.trend_regimes.items()} if TrendRegime else {},
-                # P0-5(2026-09-01): 做T买入价(t_entry_price)持久化——修复进程重启丢内存态致 600176 闭环漏记
-                "t_entry_price": dict(getattr(self._core, "t_entry_price", {}) or {}),
             }
             # Q-20260911-4(2026-09-11): 原子写（tmp+os.replace+退避重试）——原直写 14:55 截断损坏
             import time as _time_mod
@@ -223,13 +218,6 @@ class SignalEngine:
                         self.trend_regimes[code] = TrendRegime.from_dict(tr_data)
                     except Exception:
                         pass
-            # P0-5(2026-09-01): 回灌做T买入价 t_entry_price（防重启后重复买入）
-            if data.get("t_entry_price"):
-                try:
-                    self._core.t_entry_price.update({
-                        k: dict(v) for k, v in (data["t_entry_price"] or {}).items()})
-                except Exception:
-                    pass
         except Exception:
             pass
 
@@ -460,55 +448,14 @@ class SignalEngine:
         sell_score = 0.0
         sig = None
         decision_reason = "HOLD_NO_SWING"
-        # ===== V3.1 (2026-08-26): Renko 向下砖买入 + 目标止盈（全面取代旧布林+MACD 纯两点）=====
-        # 依据: 39支×1年复验 Renko买入择时 60.6%(39/39支>50%) / target+0.5%止盈 78.5%胜率
-        # 旧逻辑(布林触轨+MACD/RSI确认)已于 2026-08-27 删除, git 历史可恢复
-        self._check_morning_alert(code, name, df, feats)  # 保留飞书早盘预警(纯通知，不再阻断)
-        swing_meta = {}
-        try:
-            sig, buy_score, sell_score, decision_reason, swing_meta = self._core.evaluate(
-                code, name, df,
-                price=price,
-                t_val=int(feats.get("t_val", 0)),
-                vwap=feats.get("vwap", price),
-                today_ret=feats.get("today_ret", 0),
-                daily_status=feats.get("daily_status", "unknown"),
-                today_str=get_today_str(),
-                params=PARAMS,
-                trace=self._emit_renko_trace,
-            )
-        except Exception:
-            sig = None
-            buy_score = 0.0
-            sell_score = 0.0
-            decision_reason = "HOLD_NO_SWING"
-            swing_meta = {}
-        swing_meta = swing_meta if isinstance(swing_meta, dict) else {}
-
-        _buy_factors = {d["指标"]: d.get("加分", 0) for d in (sig.details if sig and sig.action == "BUY_LOW" else [])}
-        _sell_factors = {d["指标"]: d.get("加分", 0) for d in (sig.details if sig and sig.action == "SELL_HIGH" else [])}
-
-        # 2026-08-24 方案A: 分标的做T门控优化
-        # 纯两点信号已经生成（buy_score/sell_score/sig），现在检查是否需要应用分标的门控调整
-        # 注意：这里 sig 已经代表纯两点的决策，门控（daily_overheated等）仅在推送/GUI层应用
-        # 为了真正放宽门控，需要在推送前通知 main.py 这是一个"绕过门控"的信号
-        if sig and sig.action == "BUY_LOW":
-            _stock_param = {}
-            try:
-                from config import STOCK_PARAMS
-                _stock_param = STOCK_PARAMS.get(code, {})
-            except:
-                pass
-
-            # 标记该信号是否应该绕过某些门控，供 main.py/notify 层消费
-            if not hasattr(sig, 'override_gates'):
-                sig.override_gates = {}
-
-            if _stock_param.get("allow_overheated_buy", False):
-                sig.override_gates['daily_overheated'] = True
-            if _stock_param.get("allow_breakdown_buy", False):
-                sig.override_gates['daily_breakdown_risk'] = True
-
+        # 2026-09-22（owner 指示）：Renko 做T决策核（TDecisionEngine）已删除
+        # ⇒ 本方法**恒不产生 T 信号**（BUY_LOW / SELL_HIGH 一律不再生成）。
+        # 刻意保留的三项**共享副作用**：
+        #   ① 飞书早盘预警 `_check_morning_alert`（纯通知，非 T）
+        #   ② `last_decision`（GUI / 留痕）
+        #   ③ `decision_trace_{date}.jsonl`（t_gui.py:3793 读取）
+        self._check_morning_alert(code, name, df, feats)  # 保留飞书早盘预警(纯通知)
+        decision_reason = "T引擎已删除（无 T 信号）"
         self.last_decision[code] = {
             "reason": decision_reason, "ts": _now(),
             "buy_block": [], "sell_block": [],
@@ -517,30 +464,16 @@ class SignalEngine:
             "scan_time": _now().strftime("%Y-%m-%d %H:%M:%S"),
             "code": code, "name": name,
             "price": price, "vwap": feats.get("vwap", 0), "rsi": feats.get("rsi", 50),
-            "buy_score": buy_score, "sell_score": sell_score,
+            "buy_score": 0.0, "sell_score": 0.0,
             "buy_threshold": 100.0, "sell_threshold": 100.0,
-            "decision": sig.action if sig else "HOLD",
+            "decision": "HOLD",
             "decision_reason": decision_reason,
             "buy_block": [], "sell_block": [],
-            "buy_factors": _buy_factors,
-            "sell_factors": _sell_factors,
-            "engine": "v2_swing2pt",
-            "swing_meta": swing_meta,
+            "buy_factors": {}, "sell_factors": {},
+            "engine": "no_t_engine",
+            "swing_meta": {},
         })
-        return buy_score, sell_score, sig
-
-    # ===== 期B（2026-08-28）: 决策核 trace 回调（IO 留在手动侧，不进决策核）=====
-    def _emit_renko_trace(self, event):
-        """决策核 TDecisionEngine 的 trace 注入回调：补 ts 后落盘 renko_t_{today}。
-        event 由决策核产出（无 ts 字段），本方法负责时间戳与文件 IO，保持与原 _swing_renko_eval
-        相同的 renko_t_*.jsonl 逐笔记录格式（供 +30min 反弹验证 / 日复盘）。"""
-        try:
-            _append_jsonl(_trace_path(f"renko_t_{get_today_str()}"), {
-                "ts": _now().strftime("%Y-%m-%d %H:%M:%S"),
-                **event,
-            })
-        except Exception:
-            pass
+        return 0.0, 0.0, None
 
 
 # ====================================================================

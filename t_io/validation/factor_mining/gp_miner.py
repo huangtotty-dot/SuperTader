@@ -68,7 +68,9 @@ from t_io.validation.factor_mining.gp_vendor.genetic import SymbolicRegressor  #
 IS_START, IS_END = "2025-09-14", "2026-05-31"
 OOS_START, OOS_END = "2026-06-01", "2026-08-26"
 LABEL_H = 30                # label 前瞻 bar 数（次根开盘成交，30 根后收盘出场）
-FEE = 0.00136               # 双边 0.136%
+from core.cost_model import round_trip as _cost_rt  # noqa: E402
+FEE = _cost_rt()            # 单常数往返成本，真源 core/cost_model.py
+                            # （默认股票 0.0006908；ST_COST_VENUE=legacy → 0.00136）
 RHO_THR = 0.7               # 入池互相关阈值（取绝对值，时序口径）
 TOKEN_MAX = 20              # 表达式括号 token 硬闸（alphagen 口径）
 POOL_CAP = 20               # 候选池容量

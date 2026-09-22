@@ -166,25 +166,15 @@ def _sell_arbiter(context, code, sig, pos_qty, cp, now, holding, threshold,
         return False
 
     # sizer 计算卖出量
-    _is_t_leg_close = False
     if sig.action == "HARD_STOP_EXIT":
         # WP-B19 a: 全离（可用量，非 sizer 定量；遵守 T+1——当日买入锁定部分次日破位续卖）
         _avail_raw = holding.get("available")
         _avail = pos_qty if _avail_raw is None else int(_avail_raw)
         qty = max(0, min(pos_qty, _avail) - _inflight)
     else:
-        # 2026-09-14: SELL_HIGH = 平 T 腿 → **按开腿原量卖**（数量不变硬约束）。
-        # 旧口径走 sizer 的 40%×t_qty：t_qty 被引擎设成**整个持仓量**、与 T 腿无关，
-        # 必然过卖（回放实证 1100×0.4=440→400，而 T 腿只有 300 → 仓位漂移 +300）。
-        # 比例口径仍保留给 TARGET_SELL/TREND_EXIT 这类**减仓**通道。
-        _t_lot = int((getattr(sig, "factors", {}) or {}).get("t_lot_qty") or 0)
-        _is_t_leg_close = bool(sig.action == "SELL_HIGH" and _t_lot > 0)
-        if _is_t_leg_close:
-            qty = _t_lot
-            _audit_write({"event": "t_leg_close", "code": code, "lot_qty": _t_lot,
-                          "pos_qty": pos_qty, "time": str(now)})
-        else:
-            qty = context.sizer.calc_sell_qty(code, holding, sig.score, threshold, used_sells=sc)
+        # 2026-09-22：平 T 腿分支（SELL_HIGH + t_lot_qty → 按开腿原量卖）已随做T引擎删除。
+        # 卖出量一律走 sizer 比例口径（供 TARGET_SELL/TREND_EXIT 这类减仓通道）。
+        qty = context.sizer.calc_sell_qty(code, holding, sig.score, threshold, used_sells=sc)
         if qty < 100:
             qty = min(300, pos_qty)
         # F13: TREND_EXIT 量封顶到超 base_ref 部分——设计语义"只卖利润仓/超额仓，
@@ -247,86 +237,14 @@ def _sell_arbiter(context, code, sig, pos_qty, cp, now, holding, threshold,
         # N28: 挂接通道信息，成交回调写入action/score
         if not hasattr(context, "_pending_sell_action"):
             context._pending_sell_action = {}
-        # 2026-09-14: 平 T 腿以 T_LEG_CLOSE 挂接通道——成交回调据此**不建回补义务**
-        # （平 T 腿本身就是数量还原；再回补等于把刚平掉的腿重新打开，同价来回纯付手续费）。
-        context._pending_sell_action[gm_sym] = ("T_LEG_CLOSE" if _is_t_leg_close else sig.action,
-                                                sig.score)
+        # 2026-09-22：T_LEG_CLOSE 挂接已随做T引擎删除（无 T 腿可平，亦无回补义务）。
+        context._pending_sell_action[gm_sym] = (sig.action, sig.score)
         return True
     except Exception as e:
         print(f"[{now:%H:%M:%S}] SELL {code} 失败: {e}")
         try: write_risk(str(now), "order_failed", f"SELL {qty}@{cp:.2f} err={e}", code=code)
         except Exception: pass
         return False
-
-
-def _force_tail_buyback(context, code, gm_sym, cp, now, holding) -> bool:
-    """数量不变硬约束（owner 2026-09-14 裁决）：尾盘 14:50+ 无条件回补未平卖出。
-
-    背景：`awaiting_buyback` 原设计只在"价格回到卖出价下方且 Renko 出向下砖"时接回，
-    溢价时 `delayed` 挂起、最长留 `buyback_persist_days=3` 个交易日 → 高抛最终变成
-    **隔夜方向性头寸**，数量不还原（09-14 收盘挂 5 笔：002451 900+700 / 600176 500 /
-    600481 8600 / 300054 700）。本函数在尾盘把"数量不变"落成硬约束：认亏也买回。
-
-    与 TAIL 卖出对称：直下市价单，不走信号/闸门链（回补是风险了结，非新开仓）。
-    返回 True=已下单（调用方应跳过本 bar 其余买入逻辑）。
-    """
-    ab = (getattr(context.engine, "awaiting_buyback", {}) or {}).get(code)
-    if not ab:
-        return False
-    # 2026-09-14: **只在持仓低于目标底仓时才回补**——那才说明这笔卖出啃到了底仓（反T高抛），
-    # 需要还原。若持仓已 >= 目标底仓，说明该卖出只是"把仓位还原到目标"（平T腿 / TAIL 尾盘归位），
-    # 再买回就是破坏还原（GM 回测实证：14:50 TAIL 归位 1000→800，14:51 又被买回 200 → 1000）。
-    _base_ref = int(getattr(context, f"_base_ref_{code}", 0) or 0)
-    _pos = int((holding or {}).get("qty", 0) or 0)
-    if _base_ref > 0 and _pos >= _base_ref:
-        # 2026-09-15 阶段0-2b：外部 pop → clear_awaiting_buyback，终态账完整（持仓已还原到底仓，义务解除）
-        context.engine.clear_awaiting_buyback(code, reason="tail_buyback_already_restored")
-        return False
-    qty = (int(ab.get("sell_qty", 0) or 0) // 100) * 100
-    if qty < 100:
-        return False
-    if int(getattr(context, "_inflight_buy", {}).get(gm_sym, 0) or 0) >= 100:
-        return False
-    sell_px = float(ab.get("sell_price", 0) or 0)
-    try:
-        write_order(str(now), code, "BUY", qty, cp, order_id="tail_buyback")
-    except Exception:
-        pass
-    try:
-        _bo = _sdk_call("order_volume_tail_buyback", _partial(
-            order_volume, symbol=gm_sym, volume=qty,
-            side=OrderSide_Buy, order_type=OrderType_Market,
-            position_effect=PositionEffect_Open))
-        _mark_pending_recon(context, code, gm_sym, "BUY", qty, cp, _bo)
-    except Exception as e:
-        print(f'[{now:%H:%M:%S}] TAIL_BUYBACK {code} 下单失败: {e}')
-        try:
-            write_risk(str(now), "order_failed", f"TAIL_BUYBACK {qty}@{cp:.2f} err={e}", code=code)
-        except Exception:
-            pass
-        return True
-    if not hasattr(context, "_inflight_buy") or context._inflight_buy is None:
-        context._inflight_buy = {}
-    context._inflight_buy[gm_sym] = int(context._inflight_buy.get(gm_sym, 0) or 0) + qty
-    # 立即更新台账防下一分钟重复触发；available 不顶（T+1 当日买入次日才可卖）
-    if gm_sym in context.manual_position:
-        mp = context.manual_position[gm_sym]
-        mp["qty"] = int(mp.get("qty", 0) or 0) + qty
-        mp["t_qty"] = mp["qty"]
-    # 2026-09-15 阶段0-2b：外部 pop → clear_awaiting_buyback，终态账完整（尾盘 14:50+ 强制回补已下单）
-    context.engine.clear_awaiting_buyback(code, reason="tail_buyback_forced")
-    try:
-        _sell_state_persist(context, code, gm_sym)     # 落盘，防重启后复活
-    except Exception:
-        pass
-    _audit_write({"event": "tail_buyback_forced", "code": code, "qty": qty,
-                  "price": round(float(cp), 3), "sell_price": round(sell_px, 3),
-                  "premium_pct": round((float(cp) - sell_px) / sell_px * 100, 3) if sell_px else None,
-                  "time": str(now)})
-    print(f'[{now:%H:%M:%S}] TAIL_BUYBACK {code} 尾盘强制回补 {qty}股@{cp:.2f} '
-          f'(前卖{sell_px:.2f}, 溢价{((float(cp)/sell_px-1)*100 if sell_px else 0):+.2f}%)')
-    context.total_trade_count += 1
-    return True
 
 
 def _sell_channel_gate(context, code, gm_sym, cp, now, sig, pos_qty, holding, daily_ctx,
@@ -513,15 +431,9 @@ def _sell_channel_gate(context, code, gm_sym, cp, now, sig, pos_qty, holding, da
 
     # B3/R2: SELL_HIGH 成本锚定 — 亏损单不由 SELL_HIGH 通道卖出
     _cost_anchor = 0.0  # TODO(PhaseD): 寻优 cost_anchor
-    # 2026-09-14 owner 裁决（方案A）：**平 T 腿豁免成本锚**。
-    # 内核的止盈判据以 **T 腿入场价** 为锚（+0.5%），而此处成本锚用**持仓成本价**——
-    # 两者不一致 → 底仓浮亏时，明明赚钱的 T 腿止盈被无差别丢弃
-    # （600176 09-14 实证：09:39/09:45 两次 SELL_HIGH 在此被置 None，
-    #  最终只能靠 14:50 TAIL 尾盘归位平仓，把日内T 拖成尾盘归位）。
-    # 平 T 腿的盈亏应看 T 腿自身，不该被底仓成本绑架 → 有 t_lot_qty 标记则豁免。
-    _t_lot_gate = int((getattr(sig, "factors", {}) or {}).get("t_lot_qty") or 0) if sig else 0
-    _is_t_leg_close = bool(sig and sig.action == "SELL_HIGH" and _t_lot_gate > 0)
-    if (sig and sig.action == "SELL_HIGH" and not _is_t_leg_close
+    # 2026-09-22：原「平 T 腿豁免成本锚」的 `t_lot_qty` 分支已随做T引擎删除
+    # （不再有 T 腿，`_is_t_leg_close` 恒 False）。保留成本锚降级本身。
+    if (sig and sig.action == "SELL_HIGH"
             and feats_cache.get("profit_pct", 0) < _cost_anchor):
         sig = None  # 降级：交回 PANIC/TREND_EXIT 接管
 

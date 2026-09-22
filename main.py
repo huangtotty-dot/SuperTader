@@ -2134,7 +2134,7 @@ def scan_once():
                 dec["last_daily_support"] = daily_ctx.get("daily_support_name", "")
                 dec["last_daily_support_gap"] = daily_ctx.get("daily_support_gap", 0.0)
                 dec["last_daily_overheated"] = daily_ctx.get("daily_overheated", False)
-                _attach_dynamic_t_decision(code, holding, daily_ctx, now)
+                # 2026-09-22：_attach_dynamic_t_decision（T 模式选择）已随做T引擎删除。
                 buy_score, sell_score, sig = engine.evaluate(code, holding.get("name", code), df, holding, daily_ctx=daily_ctx)
 
                 dec["last_benchmark_code"] = sig.indicators.get("benchmark_code", "") if sig else dec.get("last_benchmark_code", "")
@@ -2556,7 +2556,7 @@ def replay_today():
                     daily_ctx = snap.get("daily_context") if isinstance(snap, dict) else None
                     if not isinstance(daily_ctx, dict):
                         daily_ctx = _default_daily_context(code, status="replay_missing", reason="snapshot missing daily_context")
-                    _attach_dynamic_t_decision(code, state, daily_ctx, SIM_NOW)
+                    # 2026-09-22：_attach_dynamic_t_decision 已随做T引擎删除。
                     buy_score, sell_score, sig = engine_local.evaluate(code, snap.get("name", code), add_indicators(df), state, daily_ctx=daily_ctx)
                 except Exception:
                     continue
@@ -2827,146 +2827,6 @@ def tushare_replay(date_str=None):
         print(f"{item['time']} {item['name']}({item['code']}) {action_cn} 得分{item['score']:.0f} 价格{item['price']:.2f}")
     
     return report_path
-
-
-def _auto_t_mode_suggestion() -> dict:
-    """V3.0: 决策矩阵自动建议（供 _prompt_t_mode_selection）。
-    regime 取 detect_index_regime(mode="morning")（基于昨日收盘）；
-    z_top3 / z_S / K-day / 系统性风险 取 sentiment_daily.jsonl 最后一条（=昨日 14:30 热度记录）；
-    morning 语境下昨日即"K-day 次日"判定日，故 k_day_type 传 None、prev_k_down 传昨日记录，
-    避免 K-down 被双重计入。逐股决策经 daily_sentiment.per_stock_decisions 应用
-    V2 个股级覆盖（背离否决 / 高开不追 / 连亏熔断）。"""
-    out = {"regime": "range", "regime_name": "横盘震荡", "z_top3": 0.0, "z_S": None,
-           "basis_date": None, "prev_k_down": False, "overheat_streak": 0,
-           "uni_down_days": 0, "systemic_risk": False,
-           "decision": {"mode": "long", "pos_factor": 1.0,
-                        "reason": "默认正T标准仓（无热度历史）"},
-           "per_stock": {}}
-    try:
-        # 1) 昨日热度记录（z_top3 / K-day / 连续过热 / 系统性风险）
-        hist = []
-        try:
-            if 'load_sentiment_history' in globals():
-                hist = load_sentiment_history() or []
-        except Exception:
-            hist = []
-        if hist:
-            last = hist[-1]
-            out["basis_date"] = last.get("date")
-            out["z_top3"] = float(last.get("z_top3") or 0.0)
-            out["z_S"] = last.get("z_S")
-            out["prev_k_down"] = str(last.get("k_day_type") or "") == "k_down"
-            out["systemic_risk"] = bool(last.get("systemic_risk"))
-            oh_z = 1.5
-            try:
-                oh_z = float(SENTIMENT_PARAMS.get("overheat_z", 1.5))
-            except Exception:
-                pass
-            streak = 0
-            for rec in reversed(hist):
-                try:
-                    if float(rec.get("z_top3")) >= oh_z:
-                        streak += 1
-                    else:
-                        break
-                except Exception:
-                    break
-            out["overheat_streak"] = streak
-        # 2) 大盘态（morning：昨日收盘判定）
-        try:
-            _r, _s, _ctx = detect_index_regime(mode="morning")
-            out["regime"] = str(_ctx.get("regime", "range"))
-            out["regime_name"] = str(_ctx.get("regime_name", out["regime"]))
-            if out["regime"] == "uni_down":
-                out["uni_down_days"] = int(_ctx.get("days_in_regime") or 0)
-        except Exception as e:
-            log.warning(f"⚠️ 自动建议大盘态获取失败（按 range 兜底）: {str(e)[:100]}")
-        # 3) 决策矩阵 + V2 个股级覆盖
-        if 'per_stock_decisions' in globals():
-            try:
-                ds = per_stock_decisions(
-                    regime=out["regime"], z_S=out["z_S"], z_top3=out["z_top3"],
-                    overheat_streak=out["overheat_streak"], k_day_type=None,
-                    prev_k_down=out["prev_k_down"], uni_down_days=out["uni_down_days"],
-                    systemic_risk=out["systemic_risk"], holdings=HOLDINGS or None,
-                    date_str=out["basis_date"])
-                out["decision"] = ds.get("market") or out["decision"]
-                out["per_stock"] = ds.get("per_stock") or {}
-            except Exception as e:
-                log.warning(f"⚠️ 个股级决策异常（回退市场级）: {str(e)[:100]}")
-        if not out["per_stock"] and 't_decision' in globals():
-            out["decision"] = t_decision(
-                regime=out["regime"], z_S=out["z_S"], z_top3=out["z_top3"],
-                overheat_streak=out["overheat_streak"], k_day_type=None,
-                prev_k_down=out["prev_k_down"], uni_down_days=out["uni_down_days"])
-        # 昨日触发系统性风险 → 根据今日实际大盘态分级处理
-        if out.get("systemic_risk") and isinstance(out.get("decision"), dict):
-            today_regime = out.get("regime", "range")
-            if today_regime == "uni_down":
-                # 大盘仍处单边下行 → 保持清仓门控（昨日风险未解除）
-                out["decision"]["mode"] = "short"
-                out["decision"]["mode_cn"] = "反T"
-                out["decision"]["pos_factor"] = 0.0
-                out["decision"]["trade_gate"] = "clear"
-                out["decision"]["t_enabled"] = False
-                out["decision"]["reason"] = str(out["decision"].get("reason", "")) + "；昨日系统性风险+今日仍uni_down→清仓门控"
-            elif today_regime == "range":
-                # 大盘已恢复震荡 → 风险缓和，仍反T但允许轻仓操作（不零封）
-                out["decision"]["mode"] = "short"
-                out["decision"]["mode_cn"] = "反T"
-                out["decision"]["pos_factor"] = min(out["decision"].get("pos_factor", 0.3), 0.3)
-                out["decision"]["trade_gate"] = "normal"
-                out["decision"]["t_enabled"] = True
-                out["decision"]["reason"] = str(out["decision"].get("reason", "")) + "；昨日系统性风险但今日已转range→反T轻仓"
-            else:
-                # 大盘已转好 → 不触发风控，尊重矩阵结论
-                out["systemic_risk"] = False
-    except Exception as e:
-        log.warning(f"⚠️ 自动建议计算异常（按默认正T兜底）: {str(e)[:120]}")
-    return out
-
-
-def _attach_dynamic_t_decision(code: str, holding: dict, daily_ctx: dict, now_dt=None) -> dict:
-    """把当前有效T决策写回 daily_ctx（供展示/回溯复用；2026-09-14 起不再回写全局 T_MODE）。"""
-    decision = {}
-    per_stock = {}
-    try:
-        auto = _auto_t_mode_suggestion()
-        decision = dict(auto.get("decision") or {})
-        per_stock = auto.get("per_stock") or {}
-        stock_decision = per_stock.get(code) or {}
-        if isinstance(stock_decision, dict) and stock_decision:
-            decision.update({
-                "mode": stock_decision.get("mode", decision.get("mode", "long")),
-                "mode_cn": stock_decision.get("mode_cn", decision.get("mode_cn", "正T")),
-                "pos_factor": stock_decision.get("pos_factor", decision.get("pos_factor", 1.0)),
-                "reason": stock_decision.get("reason", decision.get("reason", "")),
-                "trade_gate": stock_decision.get("trade_gate", decision.get("trade_gate", "normal")),
-                "t_enabled": stock_decision.get("t_enabled", decision.get("t_enabled", True)),
-            })
-        mode = decision.get("mode", "long")
-        if mode not in {"long", "short"}:
-            mode = "long"
-        daily_ctx["t_mode"] = mode
-        daily_ctx["effective_t_mode"] = mode
-        daily_ctx["t_mode_source"] = "dynamic_sentiment"
-        daily_ctx["t_pos_factor"] = float(decision.get("pos_factor", 1.0) or 0.0)
-        daily_ctx["t_trade_gate"] = str(decision.get("trade_gate", "normal") or "normal")
-        daily_ctx["t_reason"] = str(decision.get("reason", "") or "")
-        daily_ctx["t_basis_date"] = auto.get("basis_date")
-        daily_ctx["t_heat"] = auto.get("z_top3")
-        daily_ctx["t_sysrisk"] = bool(auto.get("systemic_risk"))
-        # manual 做T 下线（2026-09-14）：不再回写全局 T_MODE（T_MODE/t_mode.json 已删除）。
-        return {"auto": auto, "decision": decision, "per_stock": per_stock}
-    except Exception as e:
-        log.warning(f"⚠️ 动态T决策注入失败: {str(e)[:120]}")
-        daily_ctx.setdefault("t_mode", "long")
-        daily_ctx.setdefault("effective_t_mode", "long")
-        daily_ctx.setdefault("t_mode_source", "fallback")
-        daily_ctx.setdefault("t_pos_factor", 1.0)
-        daily_ctx.setdefault("t_trade_gate", "normal")
-        daily_ctx.setdefault("t_reason", "fallback")
-        return {"auto": {}, "decision": {}, "per_stock": {}}
 
 
 def _launch_sentiment_backfill(date_str: str) -> None:
