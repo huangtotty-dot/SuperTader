@@ -50,6 +50,23 @@ _ap.add_argument("--pool-csv", default="",
                       "（用于测试不在持仓内的标的，如高波篮子）")
 _ap.add_argument("--base-notional", type=float, default=200000.0,
                  help="--pool-csv 时每只票的底仓目标金额（元），按 ref_px 折算股数")
+_ap.add_argument("--no-protection", action="store_true",
+                 help="关闭 P0-P6 保护类卖出链（HARD_STOP/PANIC/TRAIL/TREND_EXIT/TARGET + TAIL 归位）"
+                      "—— 隔离「规则本身」的绩效，避免高波底仓被 -8% 硬止损打掉")
+_ap.add_argument("--ogr-limit", action="store_true",
+                 help="OGR 买腿用限价（价=09:31 bar 的 open）替代市价——消掉 GM 撮合伪影："
+                      "市价单按「最后收完的 bar 收盘价」成交，09:31 那刻即**前一交易日收盘价**"
+                      "（实测 fill/prev_close−1 恒 = slippage_ratio，见 gm_backtest_caveats）")
+# 市场代理池（Stage18 冻死的 L20）：**只用于算 mkt_gap，不交易**。
+# 不传就等于让规则核用「交易池自己」的中位当大盘（自指）⇒ 腿集与预注册几乎不相交。
+_OGR_MKT_PROXY_FROZEN = (
+    "000001,000021,000032,000034,000060,000062,000063,000066,000070,000155,"
+    "000158,000166,000301,000338,000408,000426,000506,000510,000530,000532")
+_ap.add_argument("--mkt-proxy", default=_OGR_MKT_PROXY_FROZEN,
+                 help="市场代理池（6 位码，逗号分隔）——**只用于算 mkt_gap，不交易**。"
+                      "默认 = Stage18 冻死的 L20（面板内代码字典序最小 20 只，排除篮子；"
+                      "与全样本中位相关 0.972/符号一致 85.8%）。给空串则退回「池内自指中位」"
+                      "（那是 2026-09-24 查出的实现偏差，别用）")
 _ap.add_argument("--ogr", action="store_true",
                  help="启用「开盘低开反转」做T通道（2026-09-22 L4；通过 SUPERTRADER_OGR_BACKTEST=1 传给 gm_main）")
 _ap.add_argument("--full-cost", action="store_true",
@@ -78,6 +95,9 @@ writer.BRIDGE_DIR = OUT_DIR
 # 开盘低开反转（L4）：必须在 import gm_main 之前置位（gm_main 在模块级读取该变量）
 if _ARGS.ogr:
     os.environ["SUPERTRADER_OGR_BACKTEST"] = "1"
+    if _ARGS.ogr_limit:
+        os.environ["SUPERTRADER_OGR_LIMIT"] = "1"
+        print("[backtest_holdings] OGR 买腿改为**限价**（价=09:31 bar open）")
     print("[backtest_holdings] 开盘低开反转 L4 通道已启用（仅本回测；判定/下单日志落本目录）")
 
 import gm_main  # noqa: E402
@@ -142,6 +162,22 @@ if _ARGS.pool_csv:
 gm_main.STOCKS = {c: v["gm_symbol"] for c, v in HOLDINGS.items()}
 gm_main.STOCK_NAMES = {c: v["name"] for c, v in HOLDINGS.items()}
 gm_main.MIRROR_HOLDINGS = {c: {"qty": v["qty"], "cost": v["cost"]} for c, v in HOLDINGS.items()}
+# 市场代理池：**只算 mkt_gap**，不交易、不进底仓（必须早于 run() ⇒ init 里才会 subscribe）
+_PROXY_CODES = [c.strip() for c in (_ARGS.mkt_proxy or "").split(",") if c.strip()]
+gm_main.MARKET_PROXY = {c: _gm_sym_of(c) for c in _PROXY_CODES if c not in gm_main.STOCKS}
+print(f"[backtest_holdings] 市场代理池 {len(gm_main.MARKET_PROXY)} 只（只算 mkt_gap，不交易）"
+      + ("" if gm_main.MARKET_PROXY else "  ⚠️ 为空 ⇒ mkt_gap 将「池内自指」，与预注册不同源！"))
+
+# 关闭保护类卖出链（--no-protection）：monkey-patch 为该驱动既有手法（同 _reconcile_positions_at_init）
+if _ARGS.no_protection:
+    import sell_channels  # noqa: E402
+    def _no_protection_gate(context, code, gm_sym, cp, now, sig, pos_qty, holding,
+                            daily_ctx, feats_cache, is_tail, morning_no_buy):
+        return sig, False          # 不新增任何保护类卖出，也不做 TAIL 尾盘归位
+    sell_channels._sell_channel_gate = _no_protection_gate
+    # ⚠️ 不加 emoji：Windows 控制台默认 GBK 编码不了 U+26A0，print 会抛
+    # UnicodeEncodeError 让回测**在启动时直接崩**（2026-09-23 实测踩到）。
+    print("[backtest_holdings] 保护类卖出链已关闭（--no-protection）→ 仅测规则本身")
 gm_main.INITIAL_CASH = float(_ARGS.cash)
 if _ARGS.tp > 0:
     # PARAMS 是 config.params 的同一个 dict 引用（t_engine_auto 亦 from config.params import PARAMS），
@@ -183,6 +219,19 @@ def _bt_seed_holdings(context):
         if not h:
             continue
         qty = int(h.get("qty", 0))
+        cost = float(h.get("cost") or 0)
+        if _ARGS.pool_csv:
+            # ⚠️ 价格基准必须与**回测数据同源**：取盘前预热末根（前一交易日收盘，ADJUST_PREV）。
+            # 用离线缓存价会因复权基准不同产生**假浮亏** → 假 HARD_STOP_EXIT 卖掉底仓
+            # （2026-09-22 实测：301396 离线 ref 162.32 vs 回测同日 191.27，差 17.8%）。
+            try:
+                _rows = (getattr(context, "bar_cache", {}) or {}).get(sym) or []
+                _px = float(_rows[-1].get("close", 0) or 0) if _rows else 0.0
+            except Exception:
+                _px = 0.0
+            if _px > 0:
+                qty = int(_ARGS.base_notional / _px / 100) * 100
+                cost = _px
         if qty <= 0:
             continue
         try:
@@ -192,7 +241,7 @@ def _bt_seed_holdings(context):
             # 全程 no_signal（2026-09-14 实证；588170 侥幸通过只因当时事件文件尚不存在走 fail-open）。
             try:
                 from gm_bridge.writer import write_order as _wo
-                _wo(str(datetime.now()), code, "BUY", qty, float(h.get("cost") or 0))
+                _wo(str(datetime.now()), code, "BUY", qty, float(cost))
             except Exception as _we:
                 print(f"[INIT·回测播种] {code} order 事件写入失败（将触发孤儿闸）: {_we}")
             gm_main.order_volume(symbol=sym, volume=qty,
@@ -201,6 +250,15 @@ def _bt_seed_holdings(context):
                                  position_effect=gm_main.PositionEffect_Open)
             context._base_ordered.add(code)
             setattr(context, f'_base_ref_{code}', qty)
+            # ⚠️ 必须把底仓灌进 `manual_position` 且 **available=qty**：
+            # 回测下 `_get_holding` 跳过 gm 持仓对账（`_skip_reconcile = not MODE_LIVE`），
+            # 且 `T1_AUTO_UNLOCK`(09:31) 只补丁 manual_position —— 不写这里 ⇒ available 恒 0
+            # ⇒ **任何卖出都会被正确拒绝**（T+1 语义），可卖腿只剩偶然有 manual_position 的那批，
+            # 样本出现系统性选择偏差（2026-09-23 实测：仅 45/108 腿能平）。
+            # 语义上也对：owner 是**已持有**这些底仓（早已过 T+1），故 available=qty。
+            context.manual_position[sym] = {
+                "name": h.get("name", code), "qty": qty, "available": qty,
+                "t_qty": qty, "cost": float(cost), "type": "stock"}
             print(f"[INIT·回测播种] {code} {h.get('name', code)} 买入建底仓 {qty}股（市价，成本=起点成交价）")
         except Exception as e:
             print(f"[INIT·回测播种] {code} 下单失败: {e}")

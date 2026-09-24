@@ -272,9 +272,14 @@ class TestT5LiveWiring(unittest.TestCase):
         self.assertIn("morning_no_buy", block)
 
     def test_sell_orders_only_leg_qty(self):
-        """卖出只平 T 腿原量（不碰底仓）。"""
+        """卖出量：① 不超过该腿买入量；② 可卖量以**底仓量**为准（底仓做T 卖的就是已过 T+1 的底仓）。
+
+        2026-09-23 改：原按 `available` 计，而回测 harness 的 available 语义未打通（恒 0
+        ⇒ 48 腿平不掉、样本出现选择偏差）。改 `max(available, base_ref)` 后 v8 实现 147/147 全平。
+        """
         src = _read(GMM_PATH)
-        self.assertIn("sell_qty = (min(qty, max(0, avail - _tif)) // 100) * 100", src)
+        self.assertIn("sell_qty = (min(qty, max(0, _sellable - _tif)) // 100) * 100", src)
+        self.assertIn("_sellable = max(_avail, _base, 0)", src)
 
 
 class TestT6BacktestLoop(unittest.TestCase):
@@ -307,7 +312,9 @@ class TestT6BacktestLoop(unittest.TestCase):
         self.assertIn("def _ogr_active(context)", src)
         self.assertIn("MODE_BACKTEST", src)
         # 触发点必须用 _ogr_active，而不是只认 MODE_LIVE
-        self.assertIn("if _ogr_active(context):", src)
+        # （2026-09-23 起叠加「回测第 1 天整日跳过」——底仓当日现买 ⇒ 卖腿必被 T+1 拒）
+        self.assertIn("if _ogr_active(context) and not _ogr_skip_today:", src)
+        self.assertIn('_ogr_skip_today = (getattr(context, "mode", None) == MODE_BACKTEST', src)
 
     def test_backtest_driver_has_ogr_flag(self):
         bt = _read(os.path.join(_AUTO, "backtest_holdings.py"))

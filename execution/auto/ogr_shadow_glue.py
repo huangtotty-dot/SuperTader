@@ -71,6 +71,9 @@ def _code_of(gm_symbol: str) -> str | None:
     return s if len(s) == 6 and s.isdigit() else None
 
 
+code_of = _code_of          # 公开别名（gm_main 逐票累积时要用）
+
+
 def snapshot_from_bars(bars) -> dict:
     """{code: {'gm_symbol','bar_open','bar_close','eob'}}。无有效开盘价的票不入选。"""
     out = {}
@@ -148,6 +151,59 @@ def append_log(rec: dict, log_dir: str | None = None) -> None:
 # ══════════════════════════════════════════════════════════════════════
 # 主入口（供 gm_main 在开盘后「每日一次」调用）
 # ══════════════════════════════════════════════════════════════════════
+def evaluate_maps(open_px: dict, prev_close: dict, now: datetime,
+                  codes=None, median_codes=None) -> dict | None:
+    """**核心决策**：直接给 `{code: 开盘价}` 与 `{code: 前收}` 两张 map。
+
+    `codes`        —— **关注名单**（默认 = 两张 map 的交集），只对它出 decision。
+    `median_codes` —— **取 mkt_gap 中位数的名单**（默认 = 关注名单）。⚠️ 必须分开传：
+      `open_px/prev_close` 给「代理池 + 交易池」的并集（交易池的 gap 仍要算），而中位数**只取
+      代理池**。若用交易池自己的中位就是**自指**：2026-09-24 实测与预注册的 981 面板中位在
+      31 天里 9 天符号相反、腿集交集仅 36/141 ⇒ 跑的是另一条规则。
+
+    L3 影子（从 bars 组快照）与 L4 实单（从逐票累积的 `_ogr_opens` + 昨收快照）
+    都走这里 —— 后者是必须的： **gm 回测的 `on_bar` 是逐票回调**（一次只有 1 根 bar），
+    无法在单次调用里看到全池，故开盘价必须跨回调累积。
+    """
+    if _OGR_MOD is None:
+        return None
+    try:
+        common = sorted(set(open_px) & set(prev_close))
+        if len(common) < _OGR_MOD.MIN_POOL:
+            return None
+        _watch = (common if codes is None
+                  else [c for c in codes if c in open_px and c in prev_close])
+        _mgp = None
+        if median_codes is not None:
+            _mgp = [c for c in median_codes if c in open_px and c in prev_close]
+            if len(_mgp) < _OGR_MOD.MIN_POOL:
+                return None                      # 代理池太薄 ⇒ fail-closed（不猜）
+        r = _OGR_MOD.evaluate({c: prev_close[c] for c in common},
+                              {c: open_px[c] for c in common},
+                              codes=_watch, median_codes=_mgp)
+        rows = []
+        for d in r["decisions"]:
+            rows.append({
+                "code": d["code"],
+                "prev_close": round(float(prev_close[d["code"]]), 4),
+                "bar_open": round(float(open_px[d["code"]]), 4),
+                "gap": None if d["gap"] is None else round(d["gap"], 6),
+                "rel": None if d["rel"] is None else round(d["rel"], 6),
+                "decision": d["decision"], "reason": d["reason"],
+            })
+        return {
+            "date": now.strftime("%Y-%m-%d"),
+            "bar_time": now.strftime("%H:%M:%S"),
+            "pool_n": r["pool_n"],
+            "mkt_gap": None if r["mkt_gap"] is None else round(r["mkt_gap"], 6),
+            "tradable": r["tradable"],
+            "n_tradable": len(r["tradable"]),
+            "rows": rows,
+        }
+    except Exception:
+        return None
+
+
 def decide(bars, holdings_map: dict, now: datetime,
            prev_close_map: dict | None = None) -> dict | None:
     """**纯决策**：组装池快照 → 调决策核 → 返回判定记录（**不落日志、不下单**）。

@@ -78,13 +78,19 @@ def decide_one(gap: float, mg: float) -> tuple[bool, str]:
 
 def evaluate(prev_close: Mapping[str, float],
              open_px: Mapping[str, float],
-             codes: Sequence[str] | None = None) -> dict:
+             codes: Sequence[str] | None = None,
+             median_codes: Sequence[str] | None = None) -> dict:
     """池级评估（**这是给自动盘调的入口**）。
 
     参数
-        prev_close : {code: 上一交易日收盘价}
-        open_px    : {code: T 日开盘价（09:25 竞价价 = 09:30 开盘价）}
-        codes      : 关注名单（默认 = open_px 的键）；只对该名单产 decision
+        prev_close   : {code: 上一交易日收盘价}
+        open_px      : {code: T 日开盘价（09:25 竞价价 = 09:30 开盘价）}
+        codes        : 关注名单（默认 = open_px 的键）；只对该名单产 decision
+        median_codes : **取 mkt_gap 中位数的名单**（默认 = open_px 的键）。
+                       ⚠️ 应与 `codes` 分开传：生产只订阅自己那几十只，而「大盘低开」的中位数
+                       若用**自己的池**算就是**自指**（2026-09-24 实测：与 981 面板中位在 31 天里
+                       9 天符号相反，腿集交集仅 36/141）。传一个**独立的市场代理池**即可落地
+                       （Stage14：随机 10 只即够；Stage18 冻死 L20）。
 
     返回
         {
@@ -96,7 +102,12 @@ def evaluate(prev_close: Mapping[str, float],
         }
     """
     gaps = compute_gaps(prev_close, open_px)
-    mg = market_gap(gaps)
+    if median_codes is None:
+        mgap = gaps
+    else:
+        _keep = set(median_codes)
+        mgap = {c: g for c, g in gaps.items() if c in _keep}
+    mg = market_gap(mgap)
     watch = list(codes) if codes is not None else list(open_px)
     decisions = []
     for code in watch:
@@ -111,7 +122,7 @@ def evaluate(prev_close: Mapping[str, float],
         })
     return {
         'mkt_gap': None if mg is None else float(mg),
-        'pool_n': len(gaps),
+        'pool_n': len(mgap),        # = **进中位数**的有效票数（不是全部 gap 数）
         'pool_gaps': gaps,
         'decisions': decisions,
         'tradable': [d['code'] for d in decisions if d['decision'] == TRADE],
