@@ -37,17 +37,33 @@ with (T0 / 'vol_basket_2026-04-08.csv').open(encoding='utf-8') as _f:
 
 
 def main() -> None:
+    import argparse
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--win0", default=W0, help=f"默认 {W0}（Stage16/17 的期望窗口）")
+    ap.add_argument("--win1", default=W1, help=f"默认 {W1}")
+    ap.add_argument("--proxy", default="l20", choices=("l20", "panel"),
+                    help="mkt_gap 用哪张代理（l20=修好的 L4 实际口径）")
+    a = ap.parse_args()
     D = load()
     D['prev_close'] = D.groupby('code')['cl_1500'].shift(1)
     D = D[np.isfinite(D['prev_close']) & (D['op_auc'] > 0)].copy()
     D['gap'] = D['op_auc'] / D['prev_close'] - 1
-    D['mkt_gap'] = D.groupby('date')['gap'].transform('median')
+    # 代理：默认用 **L20**（修好的 L4 实际就传这个）；`--proxy panel` 则用全样本中位
+    _L20 = ['000001', '000021', '000032', '000034', '000060', '000062', '000063',
+            '000066', '000070', '000155', '000158', '000166', '000301', '000338',
+            '000408', '000426', '000506', '000510', '000530', '000532']
+    if a.proxy == 'panel':
+        D['mkt_gap'] = D.groupby('date')['gap'].transform('median')
+    else:
+        D['mkt_gap'] = (D[D['code'].isin(_L20)].groupby('date')['gap'].median()
+                        .reindex(D['date']).values)
+    print(f'代理 = {"全样本中位" if a.proxy == "panel" else "L20（Stage18 冻死）"}')
     D['rel'] = D['gap'] - D['mkt_gap']
     fs, fb = fees('stock')
     D['net'] = ((D['cl_1000'] / D['op_auc']) * (1 - fs) - (1 + fb)) * 100
 
-    Win = D[(D['date'] >= W0) & (D['date'] <= W1)]
-    print(f'窗口 {W0} ~ {W1}   篮子 {len(BASKET)} 只（{BASKET}）\n')
+    Win = D[(D['date'] >= a.win0) & (D['date'] <= a.win1)]
+    print(f'窗口 {a.win0} ~ {a.win1}   篮子 {len(BASKET)} 只（{BASKET}）\n')
     print(f'{"组":10s}{"n":>7s}{"日":>5s}{"净均%":>10s}{"SE":>8s}{"t":>7s}{"胜率":>7s}'
           f'{"扣09:31折价后":>16s}')
     for lab, S in (('全样本', Win),
