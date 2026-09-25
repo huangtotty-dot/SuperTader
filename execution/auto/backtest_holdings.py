@@ -57,16 +57,19 @@ _ap.add_argument("--ogr-limit", action="store_true",
                  help="OGR 买腿用限价（价=09:31 bar 的 open）替代市价——消掉 GM 撮合伪影："
                       "市价单按「最后收完的 bar 收盘价」成交，09:31 那刻即**前一交易日收盘价**"
                       "（实测 fill/prev_close−1 恒 = slippage_ratio，见 gm_backtest_caveats）")
-# 市场代理池（Stage18 冻死的 L20）：**只用于算 mkt_gap，不交易**。
+# 市场代理池（**只用于算 mkt_gap，不交易**）——默认来源 = **规则单一源**
+# `core/open_gap_reversal.MARKET_PROXY_CODES`（经胶水暴露），与 live 同源，别各引一份。
 # 不传就等于让规则核用「交易池自己」的中位当大盘（自指）⇒ 腿集与预注册几乎不相交。
-_OGR_MKT_PROXY_FROZEN = (
-    "000001,000021,000032,000034,000060,000062,000063,000066,000070,000155,"
-    "000158,000166,000301,000338,000408,000426,000506,000510,000530,000532")
+try:
+    import ogr_shadow_glue as _glue                      # noqa: E402 （execution/auto 已在 sys.path）
+    _OGR_MKT_PROXY_FROZEN = ",".join(_glue.proxy_codes())
+except Exception:
+    _OGR_MKT_PROXY_FROZEN = ""
 _ap.add_argument("--mkt-proxy", default=_OGR_MKT_PROXY_FROZEN,
                  help="市场代理池（6 位码，逗号分隔）——**只用于算 mkt_gap，不交易**。"
-                      "默认 = Stage18 冻死的 L20（面板内代码字典序最小 20 只，排除篮子；"
-                      "与全样本中位相关 0.972/符号一致 85.8%）。给空串则退回「池内自指中位」"
-                      "（那是 2026-09-24 查出的实现偏差，别用）")
+                      "默认 = 规则核冻死的 L20（`core/open_gap_reversal.MARKET_PROXY_CODES`；"
+                      "面板内代码字典序最小 20 只、排除篮子；与全样本中位相关 0.972/符号一致 85.8%）。"
+                      "给空串则退回「池内自指中位」（2026-09-24 查出的实现偏差，别用来下结论）")
 _ap.add_argument("--ogr", action="store_true",
                  help="启用「开盘低开反转」做T通道（2026-09-22 L4；通过 SUPERTRADER_OGR_BACKTEST=1 传给 gm_main）")
 _ap.add_argument("--full-cost", action="store_true",

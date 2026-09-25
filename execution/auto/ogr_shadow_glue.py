@@ -47,6 +47,18 @@ def available() -> bool:
     return _OGR_MOD is not None
 
 
+def proxy_codes() -> list:
+    """**市场代理池名单**（6 位码）—— 取自规则核的冻结常量（单一真源）。
+
+    live 与回测都应从这里取，别各引一份：名单若不一致，「大盘」就不是同一条规则。
+    核未加载（`available()` 为 False）时返回空列表 ⇒ 调用方据此 fail-closed。
+    """
+    try:
+        return list(_OGR_MOD.MARKET_PROXY_CODES)
+    except Exception:
+        return []
+
+
 # ══════════════════════════════════════════════════════════════════════
 # 快照组装（全部防御式：bar 可能是对象也可能是 dict）
 # ══════════════════════════════════════════════════════════════════════

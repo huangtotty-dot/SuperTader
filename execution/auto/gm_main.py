@@ -181,7 +181,7 @@ STOCKS = {code: v["gm_symbol"] for code, v in _auto_pool.AUTO_POOL.items()}
 # 排除篮子：与全样本中位相关 **0.972** / 符号一致 **85.8%**，候选里最佳，且完全不按业绩选）。
 # 回测由 `backtest_holdings.py --mkt-proxy` 注入；live 应从同一份冻死名单注入。
 # ⚠️ 已知未覆盖：L3 影子层 `run_shadow` 仍用 `bars` 自建池 ⇒ 它的 `mkt_gap` 与 L4 不同源。
-MARKET_PROXY = {}
+MARKET_PROXY = {}   # ⇒ 真实定义在下面（`_OGR_BACKTEST_ENABLE` 之后）：从规则核的冻结名单构建
 STOCK_NAMES = {code: v["name"] for code, v in _auto_pool.AUTO_POOL.items()}
 
 # ── 目标底仓（2026-09-14 持仓并表后） ──
@@ -1721,7 +1721,11 @@ def init(context):
     from gm_bridge.writer import BRIDGE_DIR
     os.makedirs(BRIDGE_DIR, exist_ok=True)
     print(f"[init] 事件桥: {BRIDGE_DIR}")
-    print(f"[init] 策略初始化完成: {len(symbols)} 只标的")
+    print(f"[init] 策略初始化完成: {len(symbols)} 只标的"
+          f"（含市场代理池 {len(MARKET_PROXY)} 只，只算 mkt_gap、不交易）")
+    if not MARKET_PROXY:
+        print("[init] ⚠️ 市场代理池为空 ⇒ OGR 的 mkt_gap 会退化为「池内自指」，"
+              "与预注册规则不同源（见 core/open_gap_reversal.MARKET_PROXY_CODES）")
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -1795,6 +1799,25 @@ _OGR_BACKTEST_ENABLE = os.environ.get("SUPERTRADER_OGR_BACKTEST") == "1"
 #    从而消掉这个伪影：8/8 成交在 ref×(1+1bp)、8/8 平腿、拒单 0。详见 [[gm-backtest-caveats]]。
 _OGR_USE_LIMIT = os.environ.get("SUPERTRADER_OGR_LIMIT") == "1"
 _OGR_LOG_DIR = None          # None=胶水默认(t_io/logs)；回测由 backtest_holdings 重定向
+
+
+def _code_to_gm(code: str) -> str:
+    """6 位码 → gm symbol（6/5/9 开头沪市，其余深市）。与 `backtest_holdings._gm_sym_of` 同口径。"""
+    return ("SHSE." if code[:1] in "569" else "SZSE.") + code
+
+
+# 市场代理池的**默认来源 = 规则核的冻结名单**（单一真源；见 core/open_gap_reversal 的
+# `MARKET_PROXY_CODES` 与 Stage14/18 的验证）。只在「OGR 可能生效」时才建，免得白订阅 20 只票：
+# live 由 `PARAMS['open_gap_reversal_live_enabled']` 决定，回测由 `SUPERTRADER_OGR_BACKTEST` 决定。
+# 回测驱动 `backtest_holdings.py --mkt-proxy` 会在此之后覆盖（它早于 run() 赋值）⇒ 仍是同源。
+if _OGR_BACKTEST_ENABLE or bool(PARAMS.get("open_gap_reversal_live_enabled", False)):
+    try:
+        MARKET_PROXY = {c: _code_to_gm(c)
+                        for c in (_OGR_GLUE.proxy_codes() if _OGR_GLUE else [])
+                        if c not in STOCKS}
+    except Exception as _pe:                      # 构建失败 ⇒ 空池（mkt_gap 会退化，须告警）
+        print(f"[OGR] 市场代理池构建失败（mkt_gap 将退化为自指！）: {_pe}")
+        MARKET_PROXY = {}
 
 
 def _ogr_active(context) -> bool:

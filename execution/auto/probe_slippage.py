@@ -45,20 +45,27 @@ PROBE = {                      # 篮子内成交额前三（已排除数据坏�
     "603629": "SHSE.603629",
     "002733": "SZSE.002733",
 }
-MARKET_PROXY = {               # Stage18 冻死的 L20（只用于算 mkt_gap，不交易）
-    "000001": "SZSE.000001", "000021": "SZSE.000021", "000032": "SZSE.000032",
-    "000034": "SZSE.000034", "000060": "SZSE.000060", "000062": "SZSE.000062",
-    "000063": "SZSE.000063", "000066": "SZSE.000066", "000070": "SZSE.000070",
-    "000155": "SZSE.000155", "000158": "SZSE.000158", "000166": "SZSE.000166",
-    "000301": "SZSE.000301", "000338": "SZSE.000338", "000408": "SZSE.000408",
-    "000426": "SZSE.000426", "000506": "SZSE.000506", "000510": "SZSE.000510",
-    "000530": "SZSE.000530", "000532": "SZSE.000532",
-}
+MARKET_PROXY: dict = {}        # 下面从**规则单一源**填实（见文件尾部的 _build_proxy()）
 LEG_NOTIONAL = 100_000.0       # 与生产 _OGR_LEG_NOTIONAL 一致
 MAX_DAYS = 10                  # 跑满 10 个交易日（做 T 的天数，不含建底仓那天）
 MAX_NOTIONAL_RATIO = 1.10      # 兜底：单腿名义额不得超目标 10%
 BUY_AT, SELL_AT = dtime(9, 31), dtime(10, 0)
 
+def _build_proxy() -> dict:
+    """市场代理池 —— 从**规则单一源**取（`core/open_gap_reversal.MARKET_PROXY_CODES`，经胶水暴露）。
+
+    与 live/回测同源；名单若各引一份，「大盘」就不是同一条规则（见该常量的注释）。
+    """
+    try:
+        import ogr_shadow_glue as _g
+        return {c: ("SHSE." if c[:1] in "569" else "SZSE.") + c
+                for c in _g.proxy_codes() if c not in PROBE}
+    except Exception as e:
+        print(f"[probe] ⚠️ 代理池构建失败（mkt_gap 会退化）: {e}")
+        return {}
+
+
+MARKET_PROXY = _build_proxy()
 PROBE_STRATEGY_ID = "4f2a9d10-8b31-4a67-9f52-6c1e0d3ab7e4"   # 独立账户，勿与生产混用
 _DRY = os.environ.get("PROBE_DRY") == "1"    # 只记录不下单（先验证逻辑用）
 OUT_DIR = os.path.join(_ROOT, "t_io", "validation", "slippage_probe")
