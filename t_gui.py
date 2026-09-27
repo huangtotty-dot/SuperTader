@@ -155,6 +155,26 @@ def _account_of(code) -> str:
     return _ACCT_MAP_CACHE["map"].get(base, "")
 
 
+def _reconcile_cash():
+    """现金口径（净值法 §八）：accounts_config 最新人工 reconcile 的各启用账户
+    available（可用资金）之和。取不到返回 (None, "missing")——净值法下 cash 缺失时
+    equity/alpha 必须置 null 并标注，禁止硬算。"""
+    fp = PORTFOLIO if PORTFOLIO.exists() else PORTFOLIO_LEGACY
+    cfg = _load_json(fp, {}) or {}
+    accs = cfg.get("accounts") or {}
+    total, found = 0.0, False
+    for a in accs.values():
+        if not isinstance(a, dict) or not a.get("enabled", True):
+            continue
+        v = a.get("available")
+        if isinstance(v, (int, float)):
+            total += float(v)
+            found = True
+    if not found:
+        return None, "missing"
+    return round(total, 2), "accounts_config"
+
+
 # 技术标签 TTL 缓存：GUI 每 10s 轮询 refresh_pb → load_stock_tags_batch（单次约 7-12s，
 # 期间大量 pandas + 网络在 pywebview 主线程执行会冻结界面）。改为 TTL 缓存 + 后台异步重算，
 # 轮询永远读缓存即时返回，界面不卡。TTL 取 120s：标签变化慢，过长 TTL 减少后台重算的 CPU 尖峰。
@@ -565,7 +585,10 @@ class Api:
         return self._write_daily_holdings(self.load_quotes())
 
     def _write_daily_holdings(self, q):
-        """数量/成本读用户每天更新的 holdings.json，盈亏按盘中实时价计算。"""
+        """数量/成本读用户每天更新的 holdings.json，盈亏按盘中实时价计算。
+        2026-09-27 净值法改造：summary 增加 cash/available/cash_source（现金口径
+        = accounts_config 各启用账户 available 之和，取不到为 null + "missing"）；
+        顶层增加 eod 标志（交易日 15:00 后写 = true，复盘只认 eod=true 的行）。"""
         today = datetime.now().strftime("%Y-%m-%d")
         fp = STATE_DIR / f"holdings_daily_{today}.json"
         cur = _load_json(HOLDINGS, {})
@@ -600,10 +623,20 @@ class Api:
             "total_pnl": round(total_pnl, 2) if total_pnl else None,
             "total_pnl_pct": round(total_pnl / total_cost * 100, 2) if total_cost else None,
         }
+        # 现金落盘（净值法 equity = 持仓市值 + 现金）：accounts_config 最新 reconcile
+        cash, cash_source = _reconcile_cash()
+        summary["cash"] = cash
+        summary["available"] = cash
+        summary["cash_source"] = cash_source
+        # EOD 定值：交易日 15:00 后快照价格即收盘价，标 eod=true；盘中/周末 eod=false。
+        # 交易日按 weekday<5 近似（沿用仓库既有口径，法定节假日会误判为 eod=true）。
+        now = datetime.now()
+        is_eod = now.weekday() < 5 and now.strftime("%H:%M") >= "15:00"
         data = {
             "date": today,
-            "updated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "updated_at": now.strftime("%Y-%m-%d %H:%M:%S"),
             "source": q.get("source", "fallback"),
+            "eod": is_eod,
             "holdings": rows,
             "summary": summary,
         }
