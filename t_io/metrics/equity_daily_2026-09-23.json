@@ -1,0 +1,14 @@
+{
+  "date": "2026-09-23",
+  "equity": null,
+  "cash": null,
+  "market_value": 247965.0,
+  "prev_equity": null,
+  "account_ret": null,
+  "benchmark_ret": -0.006009342977034371,
+  "benchmark_aux_ret": -0.002516456061115724,
+  "alpha": null,
+  "t0_realized": 0.0,
+  "flow_adjust": 0.0,
+  "source": "sh000300:强制刷新生效,缓存末行=2026-09-24 | sh000688:强制刷新生效,缓存末行=2026-09-24 | 主基准sh000300:ok(2026-09-22→2026-09-23);辅基准sh000688:ok(2026-09-22→2026-09-23) | 市值=holdings_daily(live快照(updated_at=2026-09-23 18:18:39,未标eod),9只) | cash=null(快照无cash字段)→equity/account_ret/alpha置null,禁止市值法硬算 | t0_realized=0.00(2条审计)"
+}

@@ -1,0 +1,14 @@
+{
+  "date": "2026-09-25",
+  "equity": null,
+  "cash": null,
+  "market_value": 242805.0,
+  "prev_equity": null,
+  "account_ret": null,
+  "benchmark_ret": null,
+  "benchmark_aux_ret": null,
+  "alpha": null,
+  "t0_realized": null,
+  "flow_adjust": 0.0,
+  "source": "sh000300:强制刷新生效,缓存末行=2026-09-24 | sh000688:强制刷新生效,缓存末行=2026-09-24 | 主基准sh000300:指数无2026-09-25当日K线(末行=2026-09-24);辅基准sh000688:指数无2026-09-25当日K线(末行=2026-09-24) | 市值=holdings.json+K线重估(9只,向前携带收盘9只) | cash=null(快照无cash字段)→equity/account_ret/alpha置null,禁止市值法硬算 | t0_realized=无记录"
+}
