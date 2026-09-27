@@ -158,13 +158,17 @@ def _account_of(code) -> str:
 def _reconcile_cash():
     """现金口径（净值法 §八）：accounts_config 最新人工 reconcile 的各启用账户
     available（可用资金）之和。取不到返回 (None, "missing")——净值法下 cash 缺失时
-    equity/alpha 必须置 null 并标注，禁止硬算。"""
+    equity/alpha 必须置 null 并标注，禁止硬算。
+    2026-09-27：跳过 paper=true 的仿真账户（账户C 国盛掘金仿真），
+    防止纸面现金混入真实净值口径（holdings_daily 市值侧也只有实盘持仓）。"""
     fp = PORTFOLIO if PORTFOLIO.exists() else PORTFOLIO_LEGACY
     cfg = _load_json(fp, {}) or {}
     accs = cfg.get("accounts") or {}
     total, found = 0.0, False
     for a in accs.values():
         if not isinstance(a, dict) or not a.get("enabled", True):
+            continue
+        if a.get("paper"):
             continue
         v = a.get("available")
         if isinstance(v, (int, float)):
