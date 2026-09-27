@@ -13,10 +13,34 @@ from datetime import datetime
 from pathlib import Path
 
 BASE = Path(__file__).resolve().parents[3]  # 自解析：本文件在 t_io/validation/daily_review/ 下，上级3级=仓库根（生产机=E:\06_T）
-CODES = ["000988", "588170", "600176", "600481", "603667", "002639", "300153", "300364"]
-NAMES = {"000988": "华工科技", "588170": "科创半导体ETF华夏", "600176": "中国巨石",
-         "600481": "双良节能", "603667": "五洲新春", "002639": "雪人集团",
-         "300153": "科泰电源", "300364": "中文在线"}
+# 施工4(2026-09-27 清单V2.0 §八): CODES 改为从 holdings.json 动态读当前持仓票(qty>0)，
+# 失败回退原硬编码 8 票池并告警。NAMES 以 holdings 的 name 为准、硬编码兜底。
+CODES_FALLBACK = ["000988", "588170", "600176", "600481", "603667", "002639", "300153", "300364"]
+NAMES_FALLBACK = {"000988": "华工科技", "588170": "科创半导体ETF华夏", "600176": "中国巨石",
+                  "600481": "双良节能", "603667": "五洲新春", "002639": "雪人集团",
+                  "300153": "科泰电源", "300364": "中文在线"}
+
+def _load_codes_from_holdings():
+    """读 t_io/state/holdings.json，返回 (codes_qty>0, names)；失败返回 (None, {})。"""
+    try:
+        h = json.load(open(BASE / "t_io" / "state" / "holdings.json", encoding="utf-8"))
+        codes = sorted(c for c, v in h.items() if isinstance(v, dict) and (v.get("qty") or 0) > 0)
+        if not codes:
+            return None, {}
+        names = {c: str((h.get(c) or {}).get("name") or c) for c in codes}
+        return codes, names
+    except Exception:
+        return None, {}
+
+_dyn_codes, _dyn_names = _load_codes_from_holdings()
+if _dyn_codes:
+    CODES = _dyn_codes
+    NAMES = dict(NAMES_FALLBACK)
+    NAMES.update(_dyn_names)
+else:
+    CODES = list(CODES_FALLBACK)
+    NAMES = dict(NAMES_FALLBACK)
+    print("[warn] holdings.json 读取失败或无持仓(qty>0)，CODES 回退硬编码 8 票池")
 
 p = argparse.ArgumentParser()
 p.add_argument("--date", default=None)   # P2-3C: default 当天（原硬编码 2026-08-03）
@@ -244,12 +268,14 @@ for c in CODES:
 
 # ---------- 6. 观察项 ----------
 total_sigs = sum(v["buy_signals"] + v["sell_signals"] for v in sig_stat.values())
-s988 = sig_stat["000988"]["buy_signals"] + sig_stat["000988"]["sell_signals"]
+_s988 = sig_stat.get("000988") or {"buy_signals": 0, "sell_signals": 0}   # 施工4: 动态池可能不含 000988
+_p988 = prof.get("000988") or {"day_type": "unknown"}
+s988 = _s988["buy_signals"] + _s988["sell_signals"]
 watch = {
     "#1_000988_qty冻结": {"suppressed_qty0": len(suppress.get("000988", [])), "pushed": [p for p in pushes if p["code"] == "000988"],
                         "audit": closed.get("000988"),
                         "note": "实盘当日其买信号被仓控0拦截次数; audit sold/bought=0 表示无成交"},
-    "#2_000988_bull日买入": {"day_type": prof["000988"]["day_type"], "buy_signals": sig_stat["000988"]["buy_signals"],
+    "#2_000988_bull日买入": {"day_type": _p988["day_type"], "buy_signals": _s988["buy_signals"],
                             "note": "D+E未上线, bull日买入应仍触发"},
     "#3_588170_买wr": settle_by_code.get("588170", {}).get("BUY_LOW"),
     "#4_阴跌日股": {c: {"day_type": prof[c]["day_type"], "buy_settle": settle_by_code.get(c, {}).get("BUY_LOW")}
@@ -703,6 +729,184 @@ def position_builder_md():
     return "\n".join(L)
 
 
+# ---------- 10. OGR 开盘低开反转段（施工4，2026-09-27 清单V2.0 §八；主策略日内T） ----------
+# 事件名（gm_main.py _ogr_try_buy/_ogr_try_sell 落盘口径）：
+#   成交 ogr_buy / ogr_sell（status==3 回调才落账）；拒单 ogr_buy_rejected / ogr_sell_rejected；
+#   下单 ogr_buy_submit / ogr_sell_submit；跳过 ogr_buy_skip / ogr_sell_skip；诊断 ogr_diag。
+# 数据源：t_io/bridge/events_{yyyymmdd}.jsonl → t_io/logs/auto_backtrace.jsonl（镜像，按 time 前缀筛当日）
+#   → execution/auto/gmcache/backtrace.jsonl；影子期读 t_io/logs/ogr_shadow_{date}.jsonl。
+# 费口径：core/cost_model.py（股票往返 0.06908% / ETF 0.01908%）。无 OGR 活动日输出「无触发」不报错。
+def _ogr_cost_model():
+    import importlib.util as _ilu2
+    _spec = _ilu2.spec_from_file_location("cost_model", BASE / "core" / "cost_model.py")
+    _m = _ilu2.module_from_spec(_spec)
+    _spec.loader.exec_module(_m)
+    return _m
+
+
+def _ogr_fee_venue(code):
+    try:
+        _h = json.load(open(BASE / "t_io" / "state" / "holdings.json", encoding="utf-8"))
+        if str((_h.get(code) or {}).get("type") or "").lower() == "etf":
+            return "etf"
+    except Exception:
+        pass
+    return "stock"
+
+
+def _ogr_events(date):
+    """汇总当日 OGR 事件（多源去重；镜像/主审计文件为跨日追加，按 time 字段前缀筛当日）。"""
+    evts, seen = [], set()
+
+    def _take(fp, filter_date):
+        if not fp.exists():
+            return
+        for line in open(fp, encoding="utf-8", errors="replace"):
+            try:
+                e = json.loads(line)
+            except Exception:
+                continue
+            if not str(e.get("event") or "").startswith("ogr"):
+                continue
+            if filter_date and not str(e.get("time") or e.get("buy_time") or "").startswith(date):
+                continue
+            key = json.dumps(e, sort_keys=True, default=str)
+            if key in seen:
+                continue
+            seen.add(key)
+            evts.append(e)
+
+    _take(BASE / f"t_io/bridge/events_{date.replace('-', '')}.jsonl", False)
+    _take(BASE / "t_io/logs/auto_backtrace.jsonl", True)
+    _take(BASE / "execution/auto/gmcache/backtrace.jsonl", True)
+    return evts
+
+
+ogr_evts = _ogr_events(DATE)
+ogr_shadow_rows = []
+_ogr_shadow_fp = BASE / f"t_io/logs/ogr_shadow_{DATE}.jsonl"
+if _ogr_shadow_fp.exists():
+    for _line in open(_ogr_shadow_fp, encoding="utf-8", errors="replace"):
+        try:
+            ogr_shadow_rows.append(json.loads(_line))
+        except Exception:
+            continue
+
+ogr_stat = None
+if ogr_evts:
+    _cm = _ogr_cost_model()
+    buys = sorted((e for e in ogr_evts if e.get("event") == "ogr_buy"), key=lambda e: str(e.get("time") or ""))
+    sells = sorted((e for e in ogr_evts if e.get("event") == "ogr_sell"), key=lambda e: str(e.get("time") or ""))
+    rejs = [e for e in ogr_evts if e.get("event") in ("ogr_buy_rejected", "ogr_sell_rejected")]
+    skips = [e for e in ogr_evts if e.get("event") in ("ogr_buy_skip", "ogr_sell_skip")]
+    submits = [e for e in ogr_evts if e.get("event") in ("ogr_buy_submit", "ogr_sell_submit")]
+    _buy_q = defaultdict(list)
+    for _b in buys:
+        _buy_q[_b.get("code")].append(_b)
+    legs = []
+    for _s in sells:   # FIFO 配腿：卖成交 pop 同 code 最早买腿；买事件缺失时用卖事件自带 buy_px 兜底
+        c = _s.get("code")
+        _b = _buy_q[c].pop(0) if _buy_q.get(c) else None
+        buy_px = (_b or {}).get("fill_px") or (_b or {}).get("ref_px") or _s.get("buy_px")
+        sell_px = _s.get("fill_px") or _s.get("ref_px")
+        qty = int(_s.get("qty") or (_b or {}).get("qty") or 0)
+        if not (fnum(buy_px) and fnum(sell_px) and qty > 0):
+            legs.append({"code": c, "qty": qty or None, "buy_px": buy_px, "sell_px": sell_px,
+                         "pnl": None, "ret%": None, "note": "缺价/量，未核算"})
+            continue
+        buy_px, sell_px = float(buy_px), float(sell_px)
+        fee_s, fee_b = _cm.fees(_ogr_fee_venue(c))
+        pnl = qty * (sell_px * (1 - fee_s) - buy_px * (1 + fee_b))
+        legs.append({"code": c, "qty": qty, "buy_px": round(buy_px, 4), "sell_px": round(sell_px, 4),
+                     "pnl": round(pnl, 2), "ret%": round(_cm.leg_pnl("long", buy_px, sell_px, fee_s, fee_b), 4),
+                     "note": "" if _b else "买事件缺失(用腿快照价)"})
+    unclosed = [b for ql in _buy_q.values() for b in ql]   # 买成交但当日未卖平
+    ogr_stat = {"legs": legs, "n_legs": len(buys), "n_fills": len(buys) + len(sells),
+                "n_rejected": len(rejs), "n_skip": len(skips), "n_submit": len(submits),
+                "pnl_total": round(sum(l["pnl"] for l in legs if fnum(l.get("pnl"))), 2),
+                "unclosed": [{"code": b.get("code"), "qty": b.get("qty"),
+                              "px": b.get("fill_px") or b.get("ref_px")} for b in unclosed]}
+
+
+def ogr_md():
+    L = ["", "<!-- OGR日段:begin -->", "", f"## OGR 开盘低开反转（{DATE}，触发/成交/拒单/逐腿费后盈亏）", ""]
+    if not ogr_evts and not ogr_shadow_rows:
+        L.append("- 当日 OGR **无触发**（无实单事件、无影子记录）。")
+    else:
+        if ogr_stat:
+            s = ogr_stat
+            L.append(f"- 触发腿 **{s['n_legs']}** ｜ 成交 **{s['n_fills']}** 笔 ｜ 拒单 **{s['n_rejected']}** ｜ "
+                     f"跳过 {s['n_skip']} ｜ 下单 {s['n_submit']} ｜ 费后合计盈亏 **{s['pnl_total']:+.2f}** 元"
+                     + (f" ｜ ⚠️ 未平腿 {len(s['unclosed'])} 条" if s["unclosed"] else ""))
+            if s["legs"]:
+                L += ["", "| 代码 | 股数 | 买价 | 卖价 | 费后盈亏(元) | 费后收益% | 备注 |",
+                      "|---|---|---|---|---|---|---|"]
+                for l in s["legs"]:
+                    L.append(f"| {l['code']} | {l.get('qty') or '—'} | {l.get('buy_px') or '—'} "
+                             f"| {l.get('sell_px') or '—'} | "
+                             + (f"{l['pnl']:+.2f} | {l['ret%']:+.4f} |" if fnum(l.get("pnl")) else "— | — |")
+                             + f" {l.get('note') or '—'} |")
+            if s["unclosed"]:
+                L.append("")
+                L.append("- 未平腿：" + "；".join(f"{u['code']} {u.get('qty')}股@{u.get('px')}" for u in s["unclosed"]))
+        elif ogr_evts:
+            L.append(f"- 当日 OGR 事件 {len(ogr_evts)} 条（无成交腿）。")
+        if ogr_shadow_rows:
+            _sh = ogr_shadow_rows[-1]
+            L.append(f"- 影子记录 {len(ogr_shadow_rows)} 条：池 {_sh.get('pool_n')} 只 ｜ "
+                     f"mkt_gap {_sh.get('mkt_gap')} ｜ 触发 {_sh.get('n_tradable')} 只 "
+                     f"{_sh.get('tradable') or ''}（影子期，未下单）。")
+        L.append("")
+        L.append("> 费口径 core/cost_model.py：股票往返 0.06908% / ETF 0.01908%（逐腿费后=卖×(1−费卖)−买×(1+费买)）。")
+    L += ["", "<!-- OGR日段:end -->", ""]
+    return "\n".join(L)
+
+
+# ---------- 11. α/β 收益日统计段（施工4，清单 §八 口径钉死） ----------
+# 净值法：equity=持仓市值(EOD收盘重估)+现金；account_ret=(equity−flow_adjust)/prev_equity−1；
+# alpha=account_ret−benchmark_ret（主基准沪深300 sh000300，辅基准科创50 sh000688）；费后统一；
+# 禁止持仓市值法；现金取不到时 equity/alpha 为 null 并标注，不硬算。
+def _fmt_pct(x):
+    return "—" if not fnum(x) else f"{x * 100:+.3f}%"
+
+
+def alpha_beta_md():
+    fp = BASE / f"t_io/metrics/equity_daily_{DATE}.json"
+    L = ["", "<!-- αβKPI:begin -->", "", f"## α/β 收益日统计（{DATE}，净值法·费后）", ""]
+    if not fp.exists():
+        L.append(f"⚪ **α/β 未落盘**（t_io/metrics/equity_daily_{DATE}.json 不存在）")
+    else:
+        try:
+            d = json.load(open(fp, encoding="utf-8"))
+        except Exception as _e:
+            d = None
+            L.append(f"⚪ **α/β 读取失败**：{_e}")
+        if d:
+            if d.get("equity") is None:
+                L.append(f"- equity **—**（现金缺失，equity/r_t/α 置 null，不硬算；source: {d.get('source') or '—'}）")
+            else:
+                L.append(f"- equity **{d['equity']:,.2f}**（市值 {d.get('market_value')} ＋ 现金 {d.get('cash')}）")
+            L.append(f"- r_t(账户) **{_fmt_pct(d.get('account_ret'))}** ｜ β(沪深300) **{_fmt_pct(d.get('benchmark_ret'))}** ｜ "
+                     f"β_aux(科创50) {_fmt_pct(d.get('benchmark_aux_ret'))} ｜ **α {_fmt_pct(d.get('alpha'))}** ｜ "
+                     f"t0_realized {('—' if not fnum(d.get('t0_realized')) else f'{d['t0_realized']:+,.2f}元')}")
+            # 累计 α：历遍 metrics/equity_daily_*.json（≤当日，alpha 非 null 求和）
+            cum, n_cum = 0.0, 0
+            for _f in sorted((BASE / "t_io/metrics").glob("equity_daily_*.json")):
+                _fd = _f.stem.replace("equity_daily_", "")
+                if _fd > DATE:
+                    continue
+                try:
+                    _a = json.load(open(_f, encoding="utf-8")).get("alpha")
+                except Exception:
+                    continue
+                if fnum(_a):
+                    cum += float(_a)
+                    n_cum += 1
+            L.append(f"- 累计 α（{n_cum} 个有效落盘日）: **{cum * 100:+.3f}%**")
+    L += ["", "<!-- αβKPI:end -->", ""]
+    return "\n".join(L)
+
+
 if report_fp.exists():
     txt = report_fp.read_text(encoding="utf-8")
     if "<!-- KPI日快照:begin -->" in txt:
@@ -758,6 +962,24 @@ if report_fp.exists():
                          txt, flags=re.S)
         else:
             txt = txt.rstrip() + "\n" + rs_md
+    # 施工4: OGR 开盘低开反转段（无活动日也注入「无触发」，幂等护栏沿用既有模式）
+    og = ogr_md()
+    if "<!-- OGR日段:begin -->" in txt:
+        txt = re.sub(r"<!-- OGR日段:begin -->.*?<!-- OGR日段:end -->",
+                     og.strip().replace("\n\n<!-- OGR日段:end -->", "\n<!-- OGR日段:end -->")
+                     .replace("<!-- OGR日段:begin -->\n\n", "<!-- OGR日段:begin -->\n"),
+                     txt, flags=re.S)
+    else:
+        txt = txt.rstrip() + "\n" + og
+    # 施工4: α/β 收益日统计段（报告尾部新段；未落盘输出 ⚪ 不报错）
+    ab = alpha_beta_md()
+    if "<!-- αβKPI:begin -->" in txt:
+        txt = re.sub(r"<!-- αβKPI:begin -->.*?<!-- αβKPI:end -->",
+                     ab.strip().replace("\n\n<!-- αβKPI:end -->", "\n<!-- αβKPI:end -->")
+                     .replace("<!-- αβKPI:begin -->\n\n", "<!-- αβKPI:begin -->\n"),
+                     txt, flags=re.S)
+    else:
+        txt = txt.rstrip() + "\n" + ab
     report_fp.write_text(txt, encoding="utf-8")
 
 # ---------- 输出 ----------
@@ -772,11 +994,17 @@ result = {"date": DATE, "sig_stat": sig_stat, "shadow_total": shadow_total,
           "kpi": kpi,
           "add_watch": add_watch,
           "watch": watch,
-          "resonance": {"rows": resonance_rows, "groups": resonance_groups}}
+          "resonance": {"rows": resonance_rows, "groups": resonance_groups},
+          "ogr": {"events": len(ogr_evts), "stat": ogr_stat, "shadow_n": len(ogr_shadow_rows)},
+          "alpha_beta_file": str(BASE / f"t_io/metrics/equity_daily_{DATE}.json")}
 with open(OUT / f"daily_review_{DATE}.json", "w", encoding="utf-8") as f:
     json.dump(result, f, ensure_ascii=False, indent=2, default=str)
 
 print(f"== {DATE} 日复盘数据摘要 ==")
+print(f"CODES(动态持仓池 {len(CODES)}): {CODES}")
+print(f"OGR: 事件{len(ogr_evts)} 影子{len(ogr_shadow_rows)} "
+      + (f"腿{ogr_stat['n_legs']} 成交{ogr_stat['n_fills']} 拒单{ogr_stat['n_rejected']} 费后{ogr_stat['pnl_total']:+.2f}元" if ogr_stat else "无触发"))
+print(f"α/β: {'已落盘' if (BASE / f't_io/metrics/equity_daily_{DATE}.json').exists() else '⚪ 未落盘'}")
 for c in CODES:
     s = sig_stat[c]
     print(f"{c} {NAMES[c]}: 买{s['buy_signals']}/卖{s['sell_signals']} 买max{s['max_buy_score']} 卖max{s['max_sell_score']} "
