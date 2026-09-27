@@ -34,10 +34,10 @@
   "gm_symbol": "SZSE.000988",
   "type": "stock",
   "pool": "both",
-  "qty": 300,
-  "cost": 99.522,
-  "base": 300,
-  "pre_close": 106.05
+  "qty": 0,
+  "cost": 0.0,
+  "base": 0,
+  "pre_close": 0.0
  },
  "600176": {
   "name": "中国巨石",
@@ -74,20 +74,20 @@
   "gm_symbol": "SZSE.002639",
   "type": "stock",
   "pool": "both",
-  "qty": 900,
-  "cost": 13.308,
-  "base": 900,
-  "pre_close": 13.74
+  "qty": 0,
+  "cost": 0.0,
+  "base": 0,
+  "pre_close": 0.0
  },
  "300153": {
   "name": "科泰电源",
   "gm_symbol": "SZSE.300153",
   "type": "stock",
   "pool": "auto",
-  "qty": 500,
-  "cost": 22.514,
-  "base": 500,
-  "pre_close": 27.52
+  "qty": 0,
+  "cost": 0.0,
+  "base": 0,
+  "pre_close": 0.0
  },
  "002536": {
   "name": "飞龙股份",
