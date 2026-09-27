@@ -4,9 +4,9 @@
   "gm_symbol": "SHSE.588170",
   "type": "etf",
   "pool": "both",
-  "qty": 42000,
-  "cost": 0.9138,
-  "base": 74500,
+  "qty": 84500,
+  "cost": 0.9489,
+  "base": 84500,
   "pre_close": 0.982
  },
  "600481": {
@@ -14,24 +14,14 @@
   "gm_symbol": "SHSE.600481",
   "type": "stock",
   "pool": "both",
-  "qty": 100,
-  "cost": 4.3168,
-  "base": 100,
-  "pre_close": 3.98
+  "qty": 0,
+  "cost": 0.0,
+  "base": 0,
+  "pre_close": 0.0
  },
  "002451": {
   "name": "摩恩电气",
   "gm_symbol": "SZSE.002451",
-  "type": "stock",
-  "pool": "both",
-  "qty": 1800,
-  "cost": 7.8537,
-  "base": 2800,
-  "pre_close": 7.62
- },
- "000988": {
-  "name": "华工科技",
-  "gm_symbol": "SZSE.000988",
   "type": "stock",
   "pool": "both",
   "qty": 0,
@@ -39,34 +29,44 @@
   "base": 0,
   "pre_close": 0.0
  },
+ "000988": {
+  "name": "华工科技",
+  "gm_symbol": "SZSE.000988",
+  "type": "stock",
+  "pool": "both",
+  "qty": 600,
+  "cost": 106.51,
+  "base": 600,
+  "pre_close": 102.9
+ },
  "600176": {
   "name": "中国巨石",
   "gm_symbol": "SHSE.600176",
   "type": "stock",
   "pool": "both",
-  "qty": 1300,
-  "cost": 42.9585,
-  "base": 1600,
-  "pre_close": 43.06
+  "qty": 0,
+  "cost": 0.0,
+  "base": 0,
+  "pre_close": 0.0
  },
  "603667": {
   "name": "五洲新春",
   "gm_symbol": "SHSE.603667",
   "type": "stock",
   "pool": "auto",
-  "qty": 500,
-  "cost": 49.86,
-  "base": 500,
-  "pre_close": 50.65
+  "qty": 0,
+  "cost": 0.0,
+  "base": 0,
+  "pre_close": 0.0
  },
  "300054": {
   "name": "鼎龙股份",
   "gm_symbol": "SZSE.300054",
   "type": "stock",
   "pool": "both",
-  "qty": 700,
-  "cost": 67.53,
-  "base": 600,
+  "qty": 500,
+  "cost": 71.036,
+  "base": 500,
   "pre_close": 70.11
  },
  "002639": {
@@ -158,5 +158,45 @@
   "cost": 0.0,
   "base": 0,
   "pre_close": 0
+ },
+ "688008": {
+  "name": "澜起科技",
+  "gm_symbol": "SHSE.688008",
+  "type": "stock",
+  "pool": "manual",
+  "qty": 200,
+  "cost": 187.915,
+  "base": 200,
+  "pre_close": 214.5
+ },
+ "300456": {
+  "name": "赛微电子",
+  "gm_symbol": "SZSE.300456",
+  "type": "stock",
+  "pool": "manual",
+  "qty": 400,
+  "cost": 37.538,
+  "base": 400,
+  "pre_close": 37.54
+ },
+ "600276": {
+  "name": "恒瑞医药",
+  "gm_symbol": "SHSE.600276",
+  "type": "stock",
+  "pool": "manual",
+  "qty": 300,
+  "cost": 44.838,
+  "base": 300,
+  "pre_close": 44.86
+ },
+ "600584": {
+  "name": "长电科技",
+  "gm_symbol": "SHSE.600584",
+  "type": "stock",
+  "pool": "manual",
+  "qty": 800,
+  "cost": 70.558,
+  "base": 800,
+  "pre_close": 68.78
  }
 }
