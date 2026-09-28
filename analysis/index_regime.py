@@ -2699,6 +2699,8 @@ def _ir_cli() -> None:
     ap.add_argument("--mode", default="eod", choices=list(_IR_MODES),
                     help="评估时点：eod 收盘(默认) / morning 早盘(前一完成日) / tail 盘中估值")
     ap.add_argument("--index", default=None, help="C0 分板：指数码(sz399006/sh000688/sz399001/…)；缺省=市场")
+    ap.add_argument("--no-sentiment", action="store_true",
+                    help="不写 sentiment 兜底记录（补 breadth/涨跌停池时用，避免残缺记录遮蔽完整记录）")
     args = ap.parse_args()
 
     regime, score, ctx = detect_index_regime(as_of=args.date, force=args.force, mode=args.mode,
@@ -2717,23 +2719,31 @@ def _ir_cli() -> None:
         print(f"降级项      : {ctx.get('degraded')}")
         print(f"gate_advice : {ctx.get('gate_advice')}")
 
-    # eod 模式落盘 sentiment_daily.csv（供 main.py/复盘工具消费；分板 CLI 不写市场记录）
-    if args.mode == "eod" and not args.index:
+    # eod 模式落盘 sentiment 兜底记录（供 main.py/复盘工具消费；分板 CLI 不写市场记录）。
+    # 注意：这条记录是**残缺**的（z_S/top3_avg/z_top3/top3_names 均 None）。消费端按 date 取
+    # 最后一条匹配，因此若该日期已有字段更全的记录（daily_sentiment 产出），写这条会把它遮蔽。
+    # 只补 breadth/涨跌停池时请加 --no-sentiment 显式跳写。
+    if args.mode == "eod" and not args.index and not args.no_sentiment:
         try:
-            from execution.daily_sentiment import save_sentiment_record  # 延迟导入避免循环
-            _dt = (ctx.get("detail") or {}).get("limit_pool") or {}
-            _kd = (ctx.get("detail") or {}).get("key_day") or {}
-            _dc = int(_dt.get("dt_count") or 0)
-            rec = {
-                "date": ctx.get("date"), "regime": ctx.get("regime"),
-                "regime_name": ctx.get("regime_name"), "score_S": ctx.get("score"),
-                "z_S": None, "top3_avg": None, "z_top3": None, "top3_names": [],
-                "k_day_type": _kd.get("type") or "",
-                "index_pct": None, "dt_count": _dc,
-                "systemic_risk": _dc > 30,
-                "decision_summary": ctx.get("gate_advice", ""),
-            }
-            save_sentiment_record(rec)
+            # 延迟导入避免循环
+            from execution.daily_sentiment import save_sentiment_record, load_sentiment_history
+            _d = str(ctx.get("date") or "")
+            _exists = next((r for r in load_sentiment_history()
+                            if str(r.get("date") or "") == _d and r.get("top3_avg") is not None), None)
+            if _exists is None:
+                _dt = (ctx.get("detail") or {}).get("limit_pool") or {}
+                _kd = (ctx.get("detail") or {}).get("key_day") or {}
+                _dc = int(_dt.get("dt_count") or 0)
+                rec = {
+                    "date": ctx.get("date"), "regime": ctx.get("regime"),
+                    "regime_name": ctx.get("regime_name"), "score_S": ctx.get("score"),
+                    "z_S": None, "top3_avg": None, "z_top3": None, "top3_names": [],
+                    "k_day_type": _kd.get("type") or "",
+                    "index_pct": None, "dt_count": _dc,
+                    "systemic_risk": _dc > 30,
+                    "decision_summary": ctx.get("gate_advice", ""),
+                }
+                save_sentiment_record(rec)
         except Exception:
             pass
 

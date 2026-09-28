@@ -56,3 +56,41 @@ def index_gm_symbol(index_code: str) -> str:
     if c.startswith(("sz", "SZ")):
         return "SZSE." + c[2:]
     return c
+
+
+# ---------------------------------------------------------------------------
+# GUI 指数实时状态板（2026-09-28）
+# ---------------------------------------------------------------------------
+# 盘中实时面板顶部展示的 7 个指数。**单一真源**——t_gui.load_indices 与
+# analysis.index_divergence 共用本表，禁止第二份列表。
+#
+# source 语义：
+#   "gm" —— 真交易所指数，实时报价走掘金 gm.api.current(index_snapshot)，
+#           日线/分钟走 get_provider().index_daily / index_minute
+#   "em" —— 东财合成条目（平均股价非交易所指数，掘金无此标的），
+#           走东财 secid 47.800005（t_gui 既有分支）
+GUI_INDEX_BOARD = [
+    {"name": "上证指数", "symbol": "sh000001",     "gm": "SHSE.000001", "ts_code": "000001.SH", "source": "gm"},
+    {"name": "深证成指", "symbol": "sz399001",     "gm": "SZSE.399001", "ts_code": "399001.SZ", "source": "gm"},
+    {"name": "科创50",   "symbol": "sh000688",     "gm": "SHSE.000688", "ts_code": "000688.SH", "source": "gm"},
+    {"name": "中证500",  "symbol": "sh000905",     "gm": "SHSE.000905", "ts_code": "000905.SH", "source": "gm"},
+    {"name": "中证1000", "symbol": "sh000852",     "gm": "SHSE.000852", "ts_code": "000852.SH", "source": "gm"},
+    {"name": "平均股价", "symbol": "em47.800005",  "gm": None,          "ts_code": None,        "source": "em"},
+    {"name": "创业板指", "symbol": "sz399006",     "gm": "SZSE.399006", "ts_code": "399006.SZ", "source": "gm"},
+]
+
+
+def gui_board(source: str | None = None) -> list:
+    """GUI 指数板条目。source 给定时只返回该类（"gm"/"em"）。"""
+    if source is None:
+        return list(GUI_INDEX_BOARD)
+    return [i for i in GUI_INDEX_BOARD if i.get("source") == source]
+
+
+def gui_board_by_symbol(symbol: str) -> dict | None:
+    """按 symbol（如 "sh000001" / "em47.800005"）取条目。"""
+    s = str(symbol)
+    for i in GUI_INDEX_BOARD:
+        if i["symbol"] == s:
+            return i
+    return None

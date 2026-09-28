@@ -32,7 +32,12 @@
   </div>
 </header>
 
-<div id="alertBanner" class="alert-banner" style="display:none"></div>
+<!-- 顶部横幅容器（2026-09-28）：告警条与指数背离条同处一列，避免二者都固定 top:44px 时互相压盖 -->
+<div id="topBanners" class="top-banners">
+  <div id="alertBanner" class="alert-banner" style="display:none"></div>
+  <!-- 指数背离常驻提醒：常驻不自动消失；新事件到达时闪烁。观察提示，非交易信号 -->
+  <div id="divergenceBanner" class="divergence-banner" style="display:none"></div>
+</div>
 <!-- P4-3: KILL_SWITCH 全页顶部红色横幅（自动盘急停） -->
 <div id="killSwitchBanner" style="display:none;position:fixed;top:0;left:0;right:0;z-index:9999;background:#7a2a2a;color:#fff;font-weight:bold;text-align:center;padding:10px;box-shadow:0 2px 8px rgba(0,0,0,.4)"></div>
 
@@ -152,6 +157,12 @@
     </div>
     <div class="section" id="live">
       <h2>盘中实时</h2>
+      <!-- 指数实时状态板（2026-09-28，置顶；下方原持仓卡片与信号流保持不变）。
+           单独容器 → renderLive() 整体覆写 #liveBody 时不会清掉本板。 -->
+      <div id="indexBoardWrap" style="margin-bottom:12px">
+        <div id="indexBoardMeta" class="cell-dim" style="font-size:11px;margin-bottom:6px"></div>
+        <div id="indicesBody"></div>
+      </div>
       <div id="liveBody"><div class="empty">非今日日期或尚无盘中数据</div></div>
     </div>
     <div class="section" id="shadow">

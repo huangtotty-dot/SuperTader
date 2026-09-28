@@ -17,6 +17,21 @@ log = logging.getLogger("market_data.facade")
 # 手动扫描 24 只每只都会走 timing_gate→index_daily，避免每只都拉一次分时导致慢/限流）
 _index_forming_cache = {}
 
+# 指数昨收缓存（2026-09-28，index_snapshot 用）：GM current 不含昨收 → 由日线取。
+# 昨收盘内恒定，按 (symbol, today) 缓存，避免每 10s 轮询都打一次日线。
+_index_preclose_cache = {}
+
+
+def _code_tail(code: str) -> str:
+    """"sh000001"→"000001"；"SHSE.000001"→"000001"；"000001"→"000001"。
+    （GM current 回的是六位码，需与调用方传入的符号对回去。）"""
+    s = str(code).strip()
+    if "." in s:
+        return s.split(".")[-1].lower()
+    if s[:2].lower() in ("sh", "sz", "bj"):
+        return s[2:].lower()
+    return s.lower()
+
 # gm 分钟线短 TTL 去重（2026-08-31，手动盘数据源与自动盘对齐：gm 优先 + 去 cache-first 后，
 # 手动扫描 ~24 只每轮 gm 60s 直拉最坏 12-48s；gm 数据专用内存去重把同股同分钟拉取压到至多 1 次）
 _GM_MINUTE_TTL = 60          # 秒：去重窗口（< 5 分钟扫描节拍）
@@ -244,6 +259,82 @@ class MarketDataFacade:
                 self._note_gm_down("index_daily", index, e)
         df = self._tx.index_daily(index, days, end_date)
         return self._mark(df, df.attrs.get("source", "tencent"))
+
+    def _pre_close_of(self, symbol: str, today: str):
+        """指数昨收（GM current 不提供 → 从日线取；按日缓存，盘内恒定只取一次）。
+
+        ⚠️ **必须传 end_date**：provider 只在 `end_date is None` 时回写共享长历史缓存
+        `t_io/cache/daily_kline/index_{sym}.json`。不带 end_date 发一个 days=5 的请求，
+        会把 800 行的历史缓存**整个覆盖成 5 行**（2026-09-28 实测踩中，已修复）。
+        带 end_date 同样拿到所需尾部，但不写缓存。
+        """
+        hit = _index_preclose_cache.get(symbol)
+        if hit and hit[0] == today:
+            return hit[1]
+        try:
+            df = self.index_daily(symbol, days=10, end_date=today)
+            if df is None or df.empty:
+                return None
+            prev = df[df["date"].astype(str) < today]["close"]
+            pre = float(prev.iloc[-1]) if len(prev) else None
+            if pre:
+                _index_preclose_cache[symbol] = (today, pre)
+            return pre
+        except Exception:
+            return None
+
+    def index_snapshot(self, codes: list) -> dict:
+        """指数实时报价（2026-09-28，GUI 指数状态板）。返回 {调用方原样传入的代码: {...}}。
+
+        GM 优先（`gm.api.current`，经 `_gm_index_symbol` 正确编码指数；**不可用** `snapshot()`
+        ——其内部 `codec.to_gm` 按首位数字判市场，会把 sh000001 编成 SZSE.sh000001）。
+        GM 不可用/抛错/返回空 → 腾讯 `index_auction`（qt.gtimg.cn）兜底。
+        两路归一为同一形态：{price, pre_close, change, change_pct, open, high, low, volume, ts_date, source}
+
+        注：GM `current` 的 payload **只有 14 个字段且不含昨收**（实测 SHSE.000001：
+        price/open/high/low/cum_volume/cum_amount/created_at/trade_type…），故昨收改由日线取
+        （`_pre_close_of`，按日缓存）。这是"GM 实时价 + GM 日线昨收"，未引入第二实时源。
+        """
+        codes = [str(c) for c in (codes or []) if c]
+        if not codes:
+            return {}
+        if self._gm_ok():
+            try:
+                got = self._gm_call("index_snapshot", self._gm.index_snapshot, codes)
+                if got:
+                    # GM 回的是六位码（"000001"），调用方给的是 "sh000001" / "SHSE.000001"
+                    tail2in = {_code_tail(c): c for c in codes}
+                    today = datetime.now().strftime("%Y-%m-%d")
+                    out = {}
+                    for k, v in got.items():
+                        sym = tail2in.get(str(k).lower(), str(k))
+                        px = v.get("price")
+                        pre = v.get("pre_close") or self._pre_close_of(sym, today)
+                        chg = (px - pre) if (px and pre) else None
+                        out[sym] = {**v, "pre_close": pre, "change": chg,
+                                    "change_pct": (chg / pre * 100) if (chg is not None and pre) else None,
+                                    "source": "gm"}
+                    if out:
+                        self._gm_ok_reset()
+                        return out
+            except Exception as e:
+                self._note_gm_down("index_snapshot", " ".join(codes)[:60], e)
+        # 腾讯兜底（字段[3]=最新价、[4]=昨收）
+        try:
+            tx = self._tx.index_auction(codes)
+        except Exception:
+            tx = {}
+        out = {}
+        for code, v in (tx or {}).items():
+            price, pc = v.get("auction_price"), v.get("pre_close")
+            out[code] = {
+                "price": price, "pre_close": pc,
+                "change": (price - pc) if (price and pc) else None,
+                "change_pct": v.get("gap_pct"),
+                "open": None, "high": None, "low": None, "volume": None,
+                "ts_date": None, "name": v.get("name"), "source": "tencent",
+            }
+        return out
 
     def index_minute(self, index: str = "sh000688", count_bars: int = 800,
                      freq: str = "300s") -> pd.DataFrame:

@@ -147,3 +147,50 @@ class GmProvider(MarketDataProvider):
         })
         return out.sort_values("time").reset_index(drop=True)
 
+    # ---------- 指数实时快照（2026-09-28：GUI 指数板） ----------
+    def index_snapshot(self, codes: list) -> dict:
+        """指数实时报价。codes 接受 "sh000001" / "SHSE.000001"。
+
+        **不要用 snapshot() 取指数**——其内部走 `codec.to_gm`，该映射按首位数字判市场
+        （"SH" if c[0] in "569" else "SZ"），会把 `sh000001` 编成 `SZSE.sh000001` 而拿不到数据。
+        本方法改走 `_gm_index_symbol`（前缀规则）。
+
+        返回 {code: {price, pre_close, change, change_pct, open, high, low, volume(手), ts_date}}，
+        code 为六位数字（与 snapshot 一致）。volume 同 index_daily 口径 ÷100 收敛为"手"。
+        """
+        gma = self._gma
+        if not codes:
+            return {}
+        rows = gma.current([_gm_index_symbol(c) for c in codes]) or []
+        out = {}
+        for r in rows:
+            try:
+                px = float(r.get("price") or 0)
+                if px <= 0:
+                    continue
+                sym = str(r.get("symbol") or "")
+                code = sym.split(".")[-1] if "." in sym else sym
+                ts = r.get("created_at")
+                ts_date = ts.strftime("%Y-%m-%d") if hasattr(ts, "strftime") else None
+                pre = r.get("pre_close")
+                try:
+                    pre = float(pre) if pre is not None else None
+                except (TypeError, ValueError):
+                    pre = None
+                if not pre:
+                    pre = None
+                out[code] = {
+                    "price": px,
+                    "pre_close": pre,
+                    "change": (px - pre) if pre else None,
+                    "change_pct": ((px - pre) / pre * 100) if pre else None,
+                    "open": float(r.get("open") or 0),
+                    "high": float(r.get("high") or 0),
+                    "low": float(r.get("low") or 0),
+                    "volume": float(r.get("cum_volume") or 0) / 100.0,  # 股 → 手
+                    "ts_date": ts_date,
+                }
+            except Exception:
+                continue
+        return out
+

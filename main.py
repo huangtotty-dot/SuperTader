@@ -953,7 +953,10 @@ def _maybe_push_index_regime_morning(now: datetime) -> None:
 
 def _maybe_push_index_regime_eod(now: datetime) -> None:
     """14:30-14:55 尾盘大盘评分预判推送（每日一次，mode="tail" 含当日 forming bar；
-    盘中预判 estimate，最终以收盘落库为准；标注状态切换；推送后更新 INDEX_REGIME_CONTEXT）"""
+    盘中预判 estimate，最终以收盘落库为准；标注状态切换；推送后更新 INDEX_REGIME_CONTEXT）。
+
+    数据落盘与飞书推送解耦：sentiment 记录（sentiment_daily.jsonl）无论飞书开关如何都要产出，
+    只有 send_feishu_payload 受 `_index_regime_feishu_enabled()` 门控。"""
     global _index_regime_eod_pushed_date
     try:
         t = now.time()
@@ -963,11 +966,22 @@ def _maybe_push_index_regime_eod(now: datetime) -> None:
         if _index_regime_eod_pushed_date == today:
             return
         _index_regime_eod_pushed_date = today              # 先占位防重复触发（无论成败）
-        if not _index_regime_feishu_enabled():
-            return
         # mode="tail"：14:30 后当日态势已基本定型，腾讯日线含 forming bar；
         # 模块标注 estimate=true 且不写 state.json/trace（保持 EOD 状态机纯净，收盘落库为准）
         regime, score, ctx = detect_index_regime(mode="tail")
+        try:
+            push_index_regime_context(ctx)                 # 更新 INDEX_REGIME_CONTEXT / SESSION_CONTEXT
+        except Exception as e:
+            log.warning(f"⚠️ push_index_regime_context 异常: {str(e)[:80]}")
+        # V3.0: 大盘热度×韭研TOP3 合成卡片（后台线程计算+落盘，异常自吞不阻塞主循环）
+        # 与飞书开关解耦：关推送仍须落盘，否则复盘的情绪/板块/持仓段整段缺失
+        try:
+            if 'push_daily_sentiment' in globals():
+                push_daily_sentiment(now=now)
+        except Exception as e:
+            log.warning(f"⚠️ push_daily_sentiment 钩子异常（已吞掉，不影响主循环）: {str(e)[:120]}")
+        if not _index_regime_feishu_enabled():
+            return
         state_detail = (ctx.get("detail") or {}).get("state") or {}
         prev_regime = state_detail.get("prev_regime")
         switched = bool(prev_regime) and str(prev_regime) != str(ctx.get("regime"))
@@ -981,16 +995,6 @@ def _maybe_push_index_regime_eod(now: datetime) -> None:
             error_prefix="尾盘大盘评分预判推送",
             trigger_urgent_alarm_after_success=switched,   # 切换日加急
         )
-        try:
-            push_index_regime_context(ctx)                 # 更新 INDEX_REGIME_CONTEXT / SESSION_CONTEXT
-        except Exception as e:
-            log.warning(f"⚠️ push_index_regime_context 异常: {str(e)[:80]}")
-        # V3.0: 大盘热度×韭研TOP3 合成卡片（后台线程计算+落盘+推送，异常自吞不阻塞主循环）
-        try:
-            if 'push_daily_sentiment' in globals():
-                push_daily_sentiment(now=now)
-        except Exception as e:
-            log.warning(f"⚠️ push_daily_sentiment 钩子异常（已吞掉，不影响主循环）: {str(e)[:120]}")
     except Exception as e:
         log.warning(f"⚠️ 尾盘大盘评分预判钩子异常（已吞掉，不影响主循环）: {str(e)[:120]}")
 
@@ -1890,6 +1894,93 @@ def _maybe_check_index_intraday_alert(now: datetime) -> None:
         log.warning(f"⚠️ 大盘分时预警钩子异常（已吞掉，不影响主循环）: {str(e)[:120]}")
 
 
+# ---- 指数背离提醒（2026-09-28）------------------------------------------------
+_DIV_LAST_FETCH_TS = 0.0
+_DIV_SEEN_FP = os.path.join(BASE_DIR, "t_io", "state", "index_divergence_seen.json")
+_DIV_SEEN_TTL_DAYS = 10
+
+
+def _div_seen_load() -> dict:
+    """已推送背离事件表 {key: 首次推送日}。"""
+    try:
+        if os.path.exists(_DIV_SEEN_FP):
+            d = json.load(open(_DIV_SEEN_FP, encoding="utf-8"))
+            if isinstance(d, dict):
+                return {str(k): str(v) for k, v in d.items()}
+    except Exception:
+        pass
+    return {}
+
+
+def _div_seen_save(seen: dict) -> None:
+    try:
+        os.makedirs(os.path.dirname(_DIV_SEEN_FP), exist_ok=True)
+        cutoff = (datetime.now() - timedelta(days=_DIV_SEEN_TTL_DAYS)).strftime("%Y-%m-%d")
+        pruned = {k: v for k, v in seen.items() if str(v)[:10] >= cutoff}
+        with open(_DIV_SEEN_FP, "w", encoding="utf-8") as f:
+            json.dump(pruned, f, ensure_ascii=False, indent=1)
+    except Exception:
+        pass
+
+
+def _maybe_check_index_divergence(now: datetime) -> None:
+    """指数板各指数 30min/60min/日线的顶/底背离 → 飞书提醒（**同一事件只推一次**）。
+
+    ⚠️ 定位：**观察提示，不是交易信号**。仓内自研研究（t_io/validation/board_div/）结论：
+    30min 底 +5.8pp 显著；30min 顶 −1.4pp 无边际；60min 顶/底不显著；日线未验证；
+    **指数顶背离减仓规则至今未接线**。故卡片固定带证据分级 + 免责说明，且本函数**不触发任何交易动作**。
+    ⚠️ 滞后：背离需 3 根 bar 确认（30min 线即峰值后 1.5 小时），存在固有延迟。
+    """
+    global _DIV_LAST_FETCH_TS
+    try:
+        t = now.time()
+        if now.weekday() >= 5 or not (dtime(9, 35) <= t <= dtime(14, 55)):
+            return
+        if dtime(11, 30) < t < dtime(13, 0):
+            return
+        now_ts = time.time()
+        if now_ts - _DIV_LAST_FETCH_TS < 300:      # 与分时预警各自独立节流
+            return
+        _DIV_LAST_FETCH_TS = now_ts
+        if not _index_regime_feishu_enabled():
+            return
+        from analysis.index_divergence import detect_index_divergence
+        alerts = (detect_index_divergence() or {}).get("alerts") or []
+        if not alerts:
+            return
+        seen = _div_seen_load()
+        today = now.strftime("%Y-%m-%d")
+        fresh = [a for a in alerts if a.get("key") and a["key"] not in seen]
+        if not fresh:
+            return
+        for a in fresh:
+            seen[a["key"]] = today
+        _div_seen_save(seen)
+
+        lines = []
+        for a in fresh:
+            lines.append(f"**{a['index']}｜{a['freq']}｜{a['type']}背离**　"
+                         f"证据 {a['tier']} {a['evidence']}")
+            lines.append(f"> 事件时点 {a['time']}｜价 {a.get('price')}｜"
+                         f"距今 {a.get('bars_ago')} 根 bar" + ("｜连续背离" if a.get("consec") else ""))
+        lines.append(_feishu_hr())
+        lines.append(f"⚠️ {fresh[0].get('disclaimer', '')}；{fresh[0].get('lag_note', '')}")
+        types = {a.get("type") for a in fresh}
+        template = "red" if types == {"顶"} else ("blue" if types == {"底"} else "orange")
+        has_sig = any(a.get("significant") for a in fresh)
+        title = ("📉 指数背离提醒（含 1 条有边际信号）" if has_sig else "📉 指数背离提醒（观察项）")
+        card = {"config": {"wide_screen_mode": True},
+                "header": _feishu_card_header(title, template),
+                "elements": [_feishu_md_div(x) for x in lines]}
+        send_feishu_payload(
+            payload={"msg_type": "interactive", "card": card, "notify_type": 1},
+            success_log=f"✅ 指数背离提醒已推送: {[a['key'] for a in fresh]}",
+            error_prefix="指数背离提醒推送",
+        )
+    except Exception as e:
+        log.warning(f"⚠️ 指数背离提醒钩子异常（已吞掉，不影响主循环）: {str(e)[:120]}")
+
+
 # ==================== 主循环函数（从原始 t_trader_v1.10.py lines 4970-5363 提取） ====================
 
 def _write_manual_heartbeat(now: datetime) -> None:
@@ -1968,6 +2059,7 @@ def scan_once():
         log.info(f"🫀 扫描心跳 第{_scan_count + 1}轮开始")
 
         _maybe_check_index_intraday_alert(now)         # 09:35-14:55 大盘分时预警（300s 节流）
+        _maybe_check_index_divergence(now)             # 09:35-14:55 指数背离提醒（300s 节流，事件去重）
         _maybe_run_position_builder_intraday(now)      # 09:30-11:30/13:00-14:55 盘中建仓信号扫描（每5分钟）
         _maybe_run_ma_break_alert(now)                 # 09:30-14:55 盘中破5/10日线报警（每5分钟，提醒建仓）
 

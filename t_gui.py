@@ -191,6 +191,9 @@ _TAGS_RUNNING = False
 class Api:
     """暴露给前端的 js_api 方法（pywebview 序列化返回值）。"""
 
+    # 东财标的（平均股价）短缓存 {secid: (ts, price, pre_close, src)}，见 _em_last_price
+    _em_cache = {}
+
     def __init__(self):
         self._dates_cache = None
         # 建仓/加仓信号增量轮询内存态
@@ -351,10 +354,16 @@ class Api:
                     })
         return _clean(out)
 
-    # ---------- 主要指数概览 ----------
+    # ---------- 主要指数概览（2026-09-28：GUI_INDEX_BOARD 单一真源 + 掘金主源） ----------
     def load_indices(self):
-        """拉主要指数实时行情 + 大盘 regime 状态，返回列表（点击可看K线）。
-        腾讯指数(sh/sz) + 东财特殊指数(em，如 A股平均股价 em47.800005)。"""
+        """拉指数板实时行情 + 大盘 regime。返回 {ts, indices:[{symbol,name,price,change,change_pct,source}], ...}
+
+        指数列表来自 core.board_index.GUI_INDEX_BOARD（**单一真源**，7 项）。
+        实时源：**GM 主源** —— get_provider().index_snapshot()（内部 gm.api.current，指数符号经
+        _gm_index_symbol 正确编码）；GM 不可用时 facade 内建降级腾讯 index_auction。
+        返回的 source 字段标明本条实际来自 "gm" 还是 "tencent"。
+        平均股价（source="em"）非交易所指数、掘金无此标的 → 单列走东财 push2delay。
+        """
         out = {"ts": None, "indices": [], "regime": None, "days_in_regime": None}
         try:
             import os as _os
@@ -363,59 +372,53 @@ class Api:
                        "ALL_PROXY", "all_proxy"]:
                 _os.environ.pop(_k, None)
             _os.environ["NO_PROXY"] = "*"
-            tx_indices = [
-                {"symbol": "sh000001", "name": "上证指数"},
-                {"symbol": "sz399001", "name": "深证成指"},
-                {"symbol": "sz399006", "name": "创业板指"},
-                {"symbol": "sh000300", "name": "沪深300"},
-                {"symbol": "sh000905", "name": "中证500"},
-                {"symbol": "sh000688", "name": "科创50"},
-                {"symbol": "sh000680", "name": "科创综指"},
-            ]
-            # 指数实时行情（P1-2 收敛：tencent_provider.index_auction，竞价/快照专用保留腾讯）
-            from core.market_data.tencent_provider import TencentProvider
-            idx_snaps = TencentProvider().index_auction([i["symbol"] for i in tx_indices])
-            px = {}
-            for code, d in idx_snaps.items():
-                price = d.get("auction_price") or 0
-                pre_close = d.get("pre_close") or 0
-                px[code[2:]] = {
-                    "price": price, "pre_close": pre_close,
-                    "change": round(price - pre_close, 3) if price and pre_close else 0.0,
-                    "change_pct": d.get("gap_pct") or 0.0,
-                }
-            for i in tx_indices:
-                base = i["symbol"][2:]
-                p = px.get(base)
-                if p:
-                    out["indices"].append({
-                        "symbol": i["symbol"], "name": i["name"],
-                        "price": p["price"], "change": p["change"],
-                        "change_pct": p["change_pct"],
-                    })
-            # 东财特殊指数（A股平均股价等腾讯无代码的；用 push2delay 延迟行情，较稳定）
-            em_list = [
-                {"secid": "47.800005", "name": "A股平均股价"},
-            ]
-            for em in em_list:
+
+            from core.board_index import gui_board
+            board = gui_board()
+
+            # 真指数：GM 主源（facade 内建腾讯兜底）
+            gm_items = [i for i in board if i.get("source") == "gm"]
+            snaps = {}
+            if gm_items:
                 try:
-                    url_em = (f"https://push2delay.eastmoney.com/api/qt/stock/get?"
-                              f"secid={em['secid']}&fields=f43,f44,f45,f57,f58")
-                    req_em = _ur.Request(url_em, headers={"User-Agent": "Mozilla/5.0",
-                                                          "Referer": "https://quote.eastmoney.com/"})
-                    data_em = _ur.urlopen(req_em, timeout=5).read().decode("utf-8", errors="ignore")
-                    ed = (json.loads(data_em).get("data") or {})
-                    price = (ed.get("f43") or 0) / 100.0
-                    pre_close = (ed.get("f44") or 0) / 100.0
-                    if price and pre_close:
-                        chg = (price - pre_close) / pre_close * 100.0
-                        out["indices"].append({
-                            "symbol": "em" + em["secid"], "name": em["name"],
-                            "price": price, "change": price - pre_close,
-                            "change_pct": chg,
-                        })
+                    from core.market_data import get_provider
+                    snaps = get_provider().index_snapshot([i["symbol"] for i in gm_items]) or {}
                 except Exception:
-                    continue
+                    snaps = {}
+
+            for i in board:
+                sym, name, src = i["symbol"], i["name"], i.get("source")
+                if src == "gm":
+                    d = snaps.get(sym) or {}
+                    price = d.get("price")
+                    if not price:
+                        # 取不到也占位：卡片置灰显示原因，不静默消失（否则用户不知道为什么少一个）
+                        out["indices"].append({"symbol": sym, "name": name,
+                                               "error": "掘金与腾讯均取不到", "source": "gm"})
+                        continue
+                    out["indices"].append({
+                        "symbol": sym, "name": name, "price": price,
+                        "change": (round(d["change"], 3) if d.get("change") is not None else None),
+                        "change_pct": (round(d["change_pct"], 2)
+                                       if d.get("change_pct") is not None else None),
+                        "source": d.get("source") or "gm",
+                    })
+                elif src == "em":
+                    # 东财特殊条目（A股平均股价等）：非交易所指数，掘金无此标的
+                    secid = str(sym)[2:] if str(sym).startswith("em") else str(sym)
+                    price, pre_close, esrc = self._em_last_price(secid)
+                    if not price:
+                        out["indices"].append({"symbol": sym, "name": name,
+                                               "error": "东财风控/不可达", "source": "em"})
+                        continue
+                    chg = (price - pre_close) if pre_close else None
+                    out["indices"].append({
+                        "symbol": sym, "name": name, "price": price,
+                        "change": round(chg, 3) if chg is not None else None,
+                        "change_pct": (round(chg / pre_close * 100.0, 2)
+                                       if (chg is not None and pre_close) else None),
+                        "source": esrc,
+                    })
             out["ts"] = datetime.now().strftime("%H:%M:%S")
         except Exception:
             pass
@@ -427,6 +430,100 @@ class Api:
         except Exception:
             pass
         return _clean(out)
+
+    # ---------- 东财特殊标的报价（平均股价等；2026-09-28） ----------
+    def _em_last_price(self, secid: str):
+        """东财标的实时价 → (price, pre_close, src)；取不到返回 (None, None, None)。
+
+        push2delay/push2his 均有**间歇风控**（仓库既有注释：重试 8 次多数能成），
+        故两条路都重试。全部失败时返回 None，由调用方决定是否跳过该卡片。
+        退到 K 线时**只在能确定昨收时才给 pre_close**——宁可不显示涨跌幅，也不显示错的。
+        """
+        import os as _os
+        import time as _t
+        import urllib.request as _ur
+        # 短缓存：本函数在 10s 轮询里被调，若东财持续风控，
+        # 每次都跑「4 次实时重试 + 2×8 次 K 线重试」会把界面拖死。
+        # 成功缓存 120s，**失败也缓存 60s**（负缓存）——否则东财一挂，每轮都白等几秒。
+        # 代价只是 平均股价 最多滞后 2 分钟（情绪展示指标，不影响交易）。
+        _cache = Api._em_cache
+        _hit = _cache.get(secid)
+        if _hit:
+            _ttl = 120 if _hit[1] else 60
+            if (_t.time() - _hit[0]) < _ttl:
+                return _hit[1], _hit[2], _hit[3]
+        for _k in ["http_proxy", "https_proxy", "HTTP_PROXY", "HTTPS_PROXY",
+                   "ALL_PROXY", "all_proxy"]:
+            _os.environ.pop(_k, None)
+        _os.environ["NO_PROXY"] = "*"
+        # 1) 实时（带重试）
+        for _ in range(4):
+            try:
+                url = (f"https://push2delay.eastmoney.com/api/qt/stock/get?"
+                       f"secid={secid}&fields=f43,f44,f45,f57,f58")
+                req = _ur.Request(url, headers={"User-Agent": "Mozilla/5.0",
+                                                "Referer": "https://quote.eastmoney.com/"})
+                ed = (json.loads(_ur.urlopen(req, timeout=5).read()
+                                 .decode("utf-8", errors="ignore")).get("data") or {})
+                px, pc = (ed.get("f43") or 0) / 100.0, (ed.get("f44") or 0) / 100.0
+                if px and pc:
+                    _cache[secid] = (_t.time(), px, pc, "em")
+                    return px, pc, "em"
+            except Exception:
+                _t.sleep(0.4)
+        # 2) 退到 K 线（analysis.index_divergence._em_bars 自带 8 次重试）
+        try:
+            from analysis.index_divergence import _em_bars
+            bars = _em_bars("em" + str(secid), "30min")
+            if bars is not None and not bars.empty:
+                px = float(bars["close"].iloc[-1])
+                pc = None
+                daily = _em_bars("em" + str(secid), "日线")
+                today = datetime.now().strftime("%Y-%m-%d")
+                if daily is not None and not daily.empty and len(daily) >= 2:
+                    # 仅当日线最新一根是今天时，才能确定昨收 = 倒数第二根
+                    # （不引 pandas：t_gui 只在函数内局部 import pd）
+                    if str(daily["time"].iloc[-1])[:10] == today:
+                        pc = float(daily["close"].iloc[-2])
+                if pc:
+                    _cache[secid] = (_t.time(), px, pc, "em-kline")
+                return px, pc, "em-kline"
+        except Exception:
+            pass
+        _cache[secid] = (_t.time(), None, None, None)      # 负缓存，见函数开头注释
+        return None, None, None
+
+    # ---------- 指数背离（2026-09-28） ----------
+    _div_cache = {}          # {"t": ts, "v": res}——见 load_index_divergence 的 TTL 说明
+    _DIV_TTL = 180           # 秒
+
+    def load_index_divergence(self):
+        """指数板各指数 30min/60min/日线的顶/底背离（**观察提示，非交易信号**）。
+
+        检测核复用 analysis.divergence；证据分级与免责说明随每条返回。
+        同一事件按 key 去重（前端与飞书共用同一 key）。
+
+        ⚠️ **必须带 TTL 缓存**：一次检测要打 12+ 次 GM 调用（7 指数 × 分时/日线），
+        而前端把它挂在 **10s** 的实时轮询上。无缓存时若 GM 变慢，每轮都要等十几秒，
+        请求堆积会把 pywebview 拖到窗口释放（2026-09-28 实测：GM 超时期间日志出现
+        `index_minute ... 超时>12s` + `[pywebview] Error` + ObjectDisposedException）。
+        背离是低频事件，180s 粒度足够（后端 main.py 的推送钩子本身也是 300s 节奏）。
+        """
+        import time as _t
+        now = _t.time()
+        hit = Api._div_cache
+        if hit.get("v") is not None and (now - hit.get("t", 0)) < Api._DIV_TTL:
+            return hit["v"]
+        try:
+            from analysis.index_divergence import detect_index_divergence
+            res = _clean(detect_index_divergence())
+            Api._div_cache = {"t": now, "v": res}
+            return res
+        except Exception as e:
+            err = _clean({"alerts": [], "watching": [], "health": {},
+                          "error": f"{type(e).__name__}: {str(e)[:160]}"})
+            Api._div_cache = {"t": now, "v": err}     # 失败也缓存，避免每轮重试
+            return err
 
     # ---------- 持仓成本历史 ----------
     def load_cost_history(self):

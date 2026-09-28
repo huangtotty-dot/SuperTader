@@ -205,8 +205,11 @@ async function loadAndRender(date, silent) {
 
     // 今日则进入实时模式
     const isToday = date === todayStr();
+    // 指数板只在今日展示（避免看历史日期时混入实时行情）；背离条是全局告警，两种情形都刷新
+    const _ibw = document.getElementById("indexBoardWrap");
+    if (_ibw) _ibw.style.display = isToday ? "" : "none";
     if (isToday) {
-      await refreshLive(true);       // 立即拉一次 live + console
+      await refreshLive(true);       // 立即拉一次 live + console（内含 refreshIndexBoard）
       startLivePoll();               // 10s 实时
       startSignalPoll();             // 5s 信号检测 + 报警
       ensureAudio();                 // 尝试解锁音频
@@ -215,6 +218,7 @@ async function loadAndRender(date, silent) {
       stopSignalPoll();
       renderLive(null, false);       // 显示"非今日"
       consoleBuf = []; consoleOffset = 0; consoleDate = null;
+      refreshIndexDivergence();      // 全局背离条：非今日视图也反映实时告警
     }
     statusEl(`已加载 ${payload.date}${isToday ? " · 实时模式" : ""} · ${nowTime()}`, "ok");
   } catch (e) {
@@ -266,6 +270,8 @@ async function refreshLive(reset) {
     const live = await apiCall("load_live", date);
     liveFailCnt = 0;   // fix P1-6: 主链路成功即清零
     renderLive(live, date === todayStr());
+    // 指数板 + 背离角标（2026-09-28）：随后端 10s live 轮询一起刷新
+    refreshIndexBoard();
 
     // 实时行情（10s 刷新）：更新侧栏汇总 + 存 quotes 供 PB 价格更新
     apiCall("load_quotes").then(q => {
@@ -2604,10 +2610,11 @@ async function initHunterDates() {
   } catch (e) { /* 静默 */ }
 }
 
-// ---- 主要指数概览（点击看K线，与个股一致）----
+// ---- 主要指数实时状态板（2026-09-28；点击看K线，与个股一致）----
+// 指数列表来自后端 core.board_index.GUI_INDEX_BOARD（单一真源），实时源掘金（不可用降级腾讯）。
 async function loadIndices() {
   const body = document.getElementById("indicesBody");
-  const meta = document.getElementById("indicesMeta");
+  const meta = document.getElementById("indexBoardMeta");
   if (!body) return;
   try {
     const d = await apiCall("load_indices");
@@ -2616,24 +2623,94 @@ async function loadIndices() {
       body.innerHTML = '<div class="empty">指数行情不可用</div>';
       return;
     }
-    if (meta) meta.textContent = d.ts ? `更新于 ${d.ts}` : "";
-    const regimeTxt = d.regime ? (d.days_in_regime ? ` · 大盘 ${esc(d.regime)} 第${d.days_in_regime}天` : ` · 大盘 ${esc(d.regime)}`) : "";
+    const reg = d.regime
+      ? `大盘 ${esc(d.regime)}${d.days_in_regime ? " 第" + d.days_in_regime + "天" : ""}` : "";
+    if (meta) meta.textContent = [d.ts ? "更新于 " + d.ts : "", reg].filter(Boolean).join(" · ");
+
+    // 有效背离角标：同一指数多周期时优先显示「有边际」的那条
+    const divBySym = {};
+    (state.indexDivergences || []).forEach(a => {
+      const cur = divBySym[a.symbol];
+      if (!cur || (a.significant && !cur.significant)) divBySym[a.symbol] = a;
+    });
+
     body.innerHTML = `
-      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
         ${idx.map(i => {
-          const cls = i.change_pct > 0.05 ? "up" : i.change_pct < -0.05 ? "down" : "cell-dim";
-          return `<div class="idx-card" style="cursor:pointer;min-width:130px;text-align:center"
+          if (i.error) {
+            // 取不到也占位（后端有意不下发 price）→ 置灰 + 显式原因，避免"少了一个"看不懂
+            return `<div class="idx-card idx-card-err" style="min-width:132px;text-align:center"
+                title="${esc(i.name + "：" + i.error)}">
+              <div style="font-size:13px;color:var(--text-dim)">${esc(i.name)}</div>
+              <div class="mono" style="font-size:13px;color:var(--text-dim)">—</div>
+              <div style="font-size:10px;color:var(--text-dim)">${esc(i.error)}</div>
+            </div>`;
+          }
+          const pct = i.change_pct;
+          const cls = pct > 0.05 ? "up" : pct < -0.05 ? "down" : "cell-dim";
+          const pctTxt = (pct == null) ? "—" : `${pct >= 0 ? '+' : ''}${fmt(pct, 2)}%`;
+          const div = divBySym[i.symbol];
+          const badge = div
+            ? `<div class="div-badge ${div.type === "顶" ? "div-badge-top" : "div-badge-bottom"}"
+                 title="${esc(div.freq + div.type + "背离｜" + div.evidence + "｜" + div.disclaimer)}">${div.type}背离 ${esc(div.freq)}</div>`
+            : "";
+          const srcTxt = i.source === "tencent" ? "腾讯" : (i.source === "em" ? "东财" : "");
+          return `<div class="idx-card" style="cursor:pointer;min-width:132px;text-align:center;position:relative"
               onclick="openStockChart('${i.symbol}','${esc(i.name)}')" title="点击查看K线">
-            <div style="font-size:13px;color:var(--text-dim)">${esc(i.name)}</div>
+            <div style="font-size:13px;color:var(--text-dim)">${esc(i.name)}${srcTxt ? `<span class="idx-src">${srcTxt}</span>` : ""}</div>
             <div class="mono" style="font-size:16px;font-weight:700">${fmt(i.price, 2)}</div>
-            <div class="mono ${cls}" style="font-size:11px">${i.change_pct >= 0 ? '+' : ''}${fmt(i.change_pct, 2)}%</div>
+            <div class="mono ${cls}" style="font-size:11px">${pctTxt}</div>
+            ${badge}
           </div>`;
         }).join("")}
-        <span class="cell-dim" style="font-size:11px">${regimeTxt}</span>
       </div>`;
   } catch (e) {
     body.innerHTML = `<div class="empty">指数加载失败: ${esc(e.message)}</div>`;
   }
+}
+
+// ---- 指数背离常驻提醒（2026-09-28）----
+// ⚠️ 观察提示，非交易信号：每条固定带证据分级 + 免责说明（口径见 analysis/index_divergence.py）。
+// 常驻不自动消失（区别于 pushAlert 的 10s 淡出）；只有**新事件**才闪烁+响铃。
+let _divSeenKeys = null;   // 首次装载不闪（避免整页刷新把所有事件都闪一遍）
+async function refreshIndexDivergence() {
+  const banner = document.getElementById("divergenceBanner");
+  if (!banner) return;
+  let res = null;
+  try {
+    res = await apiCall("load_index_divergence");
+  } catch (e) {
+    return;
+  }
+  const alerts = (res && res.alerts) || [];
+  const watching = (res && res.watching) || [];
+  state.indexDivergences = alerts;      // 角标只用提醒集（= 新事件）
+  if (!alerts.length && !watching.length) {
+    banner.style.display = "none";
+    banner.innerHTML = "";
+    return;
+  }
+  const hasNew = _divSeenKeys !== null && alerts.some(a => !_divSeenKeys.has(a.key));
+  const item = (a, muted) => `<span class="div-item ${a.type === "顶" ? "div-top" : "div-bottom"}${muted ? " div-muted" : ""}"
+      title="${esc(a.time + "｜已过 " + a.bars_ago + " 根 bar｜证据 " + a.tier + " " + a.evidence + "｜" + a.disclaimer)}">
+      ${muted ? "观察中 " : ""}${esc(a.index)}·${esc(a.freq)}·${esc(a.type)} <em>${esc(a.tier)}</em>
+    </span>`;
+  banner.style.display = "block";
+  banner.innerHTML = `
+    <div class="div-strip ${hasNew ? "div-flash" : ""}">
+      <span class="div-strip-title">📉 指数背离 <span class="cell-dim">观察项 · 非交易信号</span></span>
+      ${alerts.map(a => item(a, false)).join("")}
+      ${watching.map(a => item(a, true)).join("")}
+      <span class="cell-dim" style="font-size:10px">背离需 3 根 bar 确认（30min 线即峰值后 1.5 小时）；「观察中」为宽窗口内的旧事件，不推送</span>
+    </div>`;
+  _divSeenKeys = new Set(alerts.map(a => a.key));
+  if (hasNew) { try { playAlert("SELL_HIGH"); } catch (e) {} }
+}
+
+// 指数板刷新入口：先取背离（供角标），再渲染板
+async function refreshIndexBoard() {
+  try { await refreshIndexDivergence(); } catch (e) {}
+  try { await loadIndices(); } catch (e) {}
 }
 
 // 重新生成选中日期结果（拉行情+评分）

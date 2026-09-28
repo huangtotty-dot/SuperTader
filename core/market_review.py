@@ -361,10 +361,12 @@ def build_cross_section(date: str) -> dict:
 
 
 # ---------------------------------------------------------------- 深拆数据
-def build_deep_dive(date: str, cross: dict, on_progress=None) -> dict:
+def build_deep_dive(date: str, cross: dict, on_progress=None, minute_avail: dict | None = None) -> dict:
     """触发项 + 双锚（上证+最弱）的多周期 K 线数据。
     控 token：双锚固定 + 触发项按强度取前 N，深拆总数 ≤ MAX_DEEP（默认3）。
-    on_progress: 逐指数/频率进度回调（2026-08-23 新增，供 GUI 显示卡在哪一步）。"""
+    on_progress: 逐指数/频率进度回调（2026-08-23 新增，供 GUI 显示卡在哪一步）。
+    minute_avail: 可选输出字典——回填每个指数各周期**实际取到没有**（2026-09-27 新增，
+        供 data_health 用真实可用性判定，替代"缓存文件存在与否"的旧判据）。"""
     pool = {name: (symbol, ts_code) for symbol, ts_code, name in INDEX_POOL}
     triggered = [r for r in cross.get("rows", []) if "error" not in r and r.get("触发")]
 
@@ -395,12 +397,16 @@ def build_deep_dive(date: str, cross: dict, on_progress=None) -> dict:
         weekly = fetch_index_weekly(symbol, count=52, end=date)
         daily = [d for d in fetch_index_daily(symbol, count=60, end=date) if d["date"] <= date]
         minutes = {}
+        per_freq = {}
         for freq in MINUTE_FREQS:
             if on_progress:
                 on_progress(f"   {name} {freq}…\n")
             m = fetch_index_minutes(ts_code, freq, date)
+            per_freq[freq] = bool(m)
             if m:
                 minutes[freq] = m
+        if minute_avail is not None:
+            minute_avail[name] = {"ts_code": ts_code, "分钟线": per_freq, "日线根数": len(daily)}
         out[name] = {
             "月线": monthly, "周线": weekly, "日线": daily, "分钟线": minutes,
         }
@@ -474,71 +480,215 @@ def load_sector_brief_ths(date: str, limit: int | None = None) -> dict:
     return result
 
 
-def load_market_extra(date: str) -> dict:
-    """情绪指标 + 板块强弱(同花顺概念) + 持仓个股 + 两融余额 + 数据健康（2026-08-29 扩展）。
-    数据源：sentiment_daily.jsonl + breadth json + 同花顺概念 + akshare 两融。"""
-    out = {"情绪": {}, "板块": {}, "持仓个股": {}, "两融余额": {}, "data_health": {}}
-    sfp = BASE / "t_io" / "logs" / "sentiment_daily.jsonl"
-    sentiment_found = False
-    if sfp.exists():
-        try:
-            for line in reversed(sfp.read_text(encoding="utf-8").splitlines()):
+_REPLAY_CMDS = {
+    "情绪": "python execution/daily_sentiment.py --date {date} --mode eod --no-push",
+    "炸板/涨跌停": "python analysis/index_regime.py --date {date} --mode eod --no-sentiment",
+    "指数分钟线": "python -c \"from core.market_review import save_daily_index_minutes; "
+              "save_daily_index_minutes('{date}')\"",
+    "涨跌家数": "（不可回补：源自 ak.stock_zh_a_spot_em() 当日实时快照，隔日无源）",
+}
+
+# 判定情绪记录"完整度"的字段（用于在同日中挑最全的一条）
+_SENTIMENT_STARS = ("z_S", "top3_avg", "z_top3", "top3_names", "sector_avgs", "per_stock")
+
+
+def _pick_sentiment_record(date: str) -> dict | None:
+    """取该日期**字段最全**的一条情绪记录。
+
+    旧实现是「倒序取第一条匹配」= 取最后写入的一条；而 `analysis/index_regime.py`
+    补跑 breadth 时会顺带追加一条**残缺**记录（z_S/top3_avg/z_top3/top3_names 全 None），
+    把完整记录遮蔽（2026-09-24 复盘的隐性数据污染源）。改为按非空字段数取最优。
+    """
+    fp = BASE / "t_io" / "logs" / "sentiment_daily.jsonl"
+    if not fp.exists():
+        return None
+    best, best_score = None, -1
+    try:
+        for line in fp.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            try:
                 r = json.loads(line)
-                if r.get("date") != date:
-                    continue
-                sentiment_found = True
-                out["情绪"] = {
-                    "情绪分S": r.get("score_S"), "z_S": r.get("z_S"),
-                    "大盘regime": r.get("regime_name"), "题材TOP3": r.get("top3_names"),
-                    "题材均分": r.get("top3_avg"), "涨停数": r.get("zt_count"),
-                    "跌停数": r.get("dt_count"), "系统性风险": r.get("systemic_risk"),
-                    "过热连续天数": r.get("overheat_streak"), "决策摘要": r.get("decision_summary"),
-                }
-                sa = r.get("sector_avgs") or {}
-                items = [(str(k), float(v["avg"])) for k, v in sa.items()
-                         if isinstance(v, dict) and v.get("avg") is not None]
-                items.sort(key=lambda x: -x[1])
-                # 板块：优先同花顺概念（用户要求），失败降级 sentiment 题材均分
-                ths = load_sector_brief_ths(date)
-                if ths:
-                    out["板块"] = ths
-                else:
-                    out["板块"] = {"强势TOP5": items[:5],
-                                  "弱势BOTTOM5": items[-5:] if len(items) >= 5 else items}
-                ps = r.get("per_stock") or {}
-                out["持仓个股"] = {
-                    str(k): {"做T模式": v.get("mode_cn"), "仓位因子": v.get("pos_factor"),
-                             "交易门": v.get("trade_gate"), "理由": str(v.get("reason"))[:120]}
-                    for k, v in ps.items() if isinstance(v, dict)}
-                break
-        except Exception:
-            pass
+            except Exception:
+                continue
+            if str(r.get("date") or "")[:10] != date:
+                continue
+            score = sum(1 for k in _SENTIMENT_STARS if r.get(k) not in (None, "", [], {}))
+            if score > best_score:
+                best, best_score = r, score
+    except Exception:
+        return None
+    return best
+
+
+def _load_holdings(date: str, per_stock: dict | None = None) -> dict:
+    """从台账 `t_io/state/holdings.json` 读当前持仓（qty>0）。**只读不写**（reconcile 是唯一写入源）。
+
+    2026-09-27 解耦：本段原先从情绪记录的 per_stock 派生，情绪文件一断 → 「情绪」与
+    「持仓个股」两节同时为空（09-24 复盘现象）。改以台账为准，做T模式仅作**可选**补充。
+    """
+    fp = BASE / "t_io" / "state" / "holdings.json"
+    if not fp.exists():
+        return {}
+    try:
+        raw = json.loads(fp.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+    if not isinstance(raw, dict):
+        return {}
+    out = {}
+    for code, h in raw.items():
+        if not isinstance(h, dict):
+            continue
+        try:
+            qty = float(h.get("qty") or 0)
+        except (TypeError, ValueError):
+            qty = 0.0
+        if qty <= 0:
+            continue
+        item = {"名称": h.get("name"), "类型": h.get("type"), "数量": qty,
+                "成本": h.get("cost"), "昨收": h.get("pre_close")}
+        ps = (per_stock or {}).get(str(code)) or {}
+        if isinstance(ps, dict) and ps:
+            item["做T模式"] = ps.get("mode_cn")
+            item["理由"] = str(ps.get("reason") or "")[:120]
+        else:
+            item["做T模式"] = "—（情绪记录缺失）"
+        out[str(code)] = item
+    return out
+
+
+def _minute_health(date: str, minute_avail: dict | None) -> dict:
+    """分钟线可用性：以**深拆实际取到没有**为准，而非缓存文件是否存在。
+
+    旧判据查 `_minute_cache_fp(date).exists()`，而深拆走 `fetch_index_minutes`
+    （缓存 miss 时回退 tushare 拉取）。2026-09-24 缓存未落盘 → 判 false，但数据其实拿到了，
+    提示词却告诉模型"分钟线缺失"，模型据此写出与数据自相矛盾的免责声明。
+    """
+    if minute_avail:
+        got = [n for n, v in minute_avail.items() if any((v.get("分钟线") or {}).values())]
+        if got:
+            miss = {n: [f for f, ok in (v.get("分钟线") or {}).items() if not ok]
+                    for n, v in minute_avail.items()}
+            miss = {n: fs for n, fs in miss.items() if fs}
+            return {"ok": True, "source": "分时缓存/tushare",
+                    "reason": f"命中 {len(got)}/{len(minute_avail)} 指数" + (f"；缺周期 {miss}" if miss else "")}
+        return {"ok": False, "reason": "深拆未取到任何指数分钟线（缓存缺失且回退失败）",
+                "producer": "t_io/index_regime/minute_cache_{date}.json（监控落盘）",
+                "cmd": _REPLAY_CMDS["指数分钟线"].format(date=date)}
+    fp_ok = _minute_cache_fp(date).exists()
+    return {"ok": fp_ok, "source": "仅缓存存在性（未提供深拆可用性）",
+            "reason": "" if fp_ok else "分钟缓存缺失（且未提供深拆可用性）",
+            "cmd": _REPLAY_CMDS["指数分钟线"].format(date=date)}
+
+
+def _safe_style_rotation(date: str) -> dict:
+    """风格/轮动计算的安全包装：失败降级为 error 字典，**不阻断**整篇复盘。"""
+    try:
+        from core.style_rotation import build_style_rotation
+        return build_style_rotation(date)
+    except Exception as e:
+        _log(f"风格/轮动计算失败（不阻断复盘）: {type(e).__name__}: {str(e)[:160]}")
+        return {"error": f"{type(e).__name__}: {str(e)[:160]}"}
+
+
+def format_data_gate(health: dict, date: str) -> str:
+    """渲染「数据可用性前置闸」控制台横幅 + 补跑清单（缺源高亮）。"""
+    lines = [f"──────── 数据可用性前置闸 {date} ────────"]
+    missing = []
+    for k, v in (health or {}).items():
+        ok = bool((v or {}).get("ok"))
+        reason = (v or {}).get("reason") or ""
+        lines.append(f"{'✅' if ok else '⚠️ '} {k}" + (f" — {reason}" if reason else ""))
+        if not ok:
+            missing.append(k)
+            if (v or {}).get("cmd"):
+                lines.append(f"      补跑: {v['cmd']}")
+    if missing:
+        lines.append(f"缺失 {len(missing)} 项（{', '.join(missing)}）：禁止编造结论；"
+                     "先补跑上述命令，或在报告开头如实标注缺失。")
+    else:
+        lines.append("全部数据源可用。")
+    return "\n".join(lines)
+
+
+def load_market_extra(date: str, minute_avail: dict | None = None) -> dict:
+    """情绪指标 + 板块强弱(同花顺概念) + 持仓个股 + 两融余额 + 数据健康。
+
+    数据源：sentiment_daily.jsonl + breadth json + holdings.json + 同花顺概念 + akshare 两融。
+    2026-09-27 重构：① 持仓与情绪**解耦**（各自独立可得）；② data_health 改为**实际可用性**；
+    ③ 逐源给出 producer/cmd 供补跑；④ 情绪记录取字段最全的一条（防残缺记录遮蔽）。
+    """
+    out = {"情绪": {}, "板块": {}, "持仓个股": {}, "两融余额": {}, "data_health": {}}
+
+    # --- 情绪记录（最全的一条）
+    rec = _pick_sentiment_record(date)
+    per_stock = {}
+    if rec:
+        per_stock = rec.get("per_stock") or {}
+        out["情绪"] = {
+            "情绪分S": rec.get("score_S"), "z_S": rec.get("z_S"),
+            "大盘regime": rec.get("regime_name"), "题材TOP3": rec.get("top3_names"),
+            "题材均分": rec.get("top3_avg"), "涨停数": rec.get("zt_count"),
+            "跌停数": rec.get("dt_count"), "系统性风险": rec.get("systemic_risk"),
+            "过热连续天数": rec.get("overheat_streak"), "决策摘要": rec.get("decision_summary"),
+        }
+        sa = rec.get("sector_avgs") or {}
+        items = [(str(k), float(v["avg"])) for k, v in sa.items()
+                 if isinstance(v, dict) and v.get("avg") is not None]
+        items.sort(key=lambda x: -x[1])
+        # 板块：优先同花顺概念（用户要求），失败降级 sentiment 题材均分
+        ths = load_sector_brief_ths(date)
+        if ths:
+            out["板块"] = ths
+        elif items:
+            out["板块"] = {"强势TOP5": items[:5],
+                           "弱势BOTTOM5": items[-5:] if len(items) >= 5 else items}
+
+    # --- 持仓（独立于情绪，2026-09-27 解耦）
+    out["持仓个股"] = _load_holdings(date, per_stock)
+
+    # --- 炸板/涨跌停（breadth_{date}.json）
     bfp = BASE / "t_io" / "index_regime" / f"breadth_{date}.json"
-    breadth_found = bfp.exists()
-    if breadth_found:
+    b = None
+    if bfp.exists():
         try:
             b = json.loads(bfp.read_text(encoding="utf-8"))
-            out["情绪"]["炸板数"] = b.get("zb_count")
-            out["情绪"]["炸板率"] = b.get("zb_rate")
         except Exception:
-            pass
+            b = None
+    if b:
+        out["情绪"]["炸板数"] = b.get("zb_count")
+        out["情绪"]["炸板率"] = b.get("zb_rate")
+        if b.get("zt_count") is not None:
+            out["情绪"].setdefault("涨停数", b.get("zt_count"))
+        if b.get("dt_count") is not None:
+            out["情绪"].setdefault("跌停数", b.get("dt_count"))
 
-    # 两融余额（2026-08-29）
+    # --- 两融余额（2026-08-29）
     margin = fetch_margin_balance(date, days=30)
     out["两融余额"] = margin
 
-    # 数据健康指示（前端显示「数据获取不到」的根因）
-    minute_cache_ok = _minute_cache_fp(date).exists()
+    # --- 数据健康（前端「数据获取不到」的根因 + 补跑命令）
+    up_ratio = (b or {}).get("up_ratio")
     out["data_health"] = {
         "指数日线": {"ok": True, "reason": ""},
-        "指数分钟线": {"ok": minute_cache_ok,
-                      "reason": "" if minute_cache_ok else "监控未运行（tushare 仅 T-1）"},
-        "情绪/持仓": {"ok": sentiment_found,
-                    "reason": "" if sentiment_found else "sentiment_daily.jsonl 无当日记录"},
-        "炸板": {"ok": breadth_found,
-                "reason": "" if breadth_found else f"breadth_{date}.json 不存在"},
-        "两融余额": {"ok": not margin.get("missing"),
-                   "reason": margin.get("reason") or ""},
+        "指数分钟线": _minute_health(date, minute_avail),
+        "情绪": {"ok": bool(rec),
+               "reason": "" if rec else "sentiment_daily.jsonl 无当日记录（z_S/题材/决策缺失）",
+               "producer": "execution/daily_sentiment.py（14:30 尾盘钩子；飞书关闭时曾不产出）",
+               "cmd": _REPLAY_CMDS["情绪"].format(date=date)},
+        "涨跌家数": {"ok": up_ratio is not None,
+                  "reason": "" if up_ratio is not None else "当日未采（实时快照，隔日不可回补）",
+                  "producer": "analysis/index_regime.py E1（ak.stock_zh_a_spot_em，仅当日）",
+                  "cmd": _REPLAY_CMDS["涨跌家数"]},
+        "炸板/涨跌停": {"ok": bool(b), "reason": "" if b else f"breadth_{date}.json 不存在",
+                    "producer": "analysis/index_regime.py（THS 涨停池，有 ≥8 月历史）",
+                    "cmd": _REPLAY_CMDS["炸板/涨跌停"].format(date=date)},
+        "持仓": {"ok": bool(out["持仓个股"]),
+               "reason": "" if out["持仓个股"] else "台账无 qty>0 持仓，或 holdings.json 不可读",
+               "producer": "reconcile 写入 t_io/state/holdings.json"},
+        "两融余额": {"ok": not margin.get("missing"), "reason": margin.get("reason") or ""},
     }
     return out
 
@@ -677,9 +827,11 @@ def call_llm_stream(prompt: str, cfg: dict, on_token=None, on_reasoning=None) ->
     raise RuntimeError(f"模型调用失败(3次重试): {last_err}")
 
 
-def build_prompt(date: str, cross: dict, deep: dict, extra: dict | None = None) -> str:
+def build_prompt(date: str, cross: dict, deep: dict, extra: dict | None = None,
+                 style_rotation: dict | None = None) -> str:
     """组装：方法论全文 + 数据 JSON + 使用说明（方法论 §五）。
-    extra：情绪/板块/持仓/两融/数据健康（2026-08-29 扩展）。"""
+    extra：情绪/板块/持仓/两融/数据健康（2026-08-29 扩展）。
+    style_rotation：风格/轮动确定性计算结果（2026-09-27 新增）；None 时内部现算。"""
     method = METHODOLOGY.read_text(encoding="utf-8") if METHODOLOGY.exists() else ""
     data = {"日期": date, "指数横评": cross.get("rows", []), "深拆数据": deep}
     health = {}
@@ -690,22 +842,41 @@ def build_prompt(date: str, cross: dict, deep: dict, extra: dict | None = None) 
         data["两融余额"] = extra.get("两融余额") or {}
         health = extra.get("data_health") or {}
     data["数据健康状态"] = health
+    # 风格/轮动（2026-09-27 新增）：确定性计算结果，§1.1 与 §四 直接引用，不得自行估算口径
+    if style_rotation is None:
+        try:
+            from core.style_rotation import build_style_rotation
+            style_rotation = build_style_rotation(date)
+        except Exception as e:
+            style_rotation = {"error": f"{type(e).__name__}: {str(e)[:160]}"}
+    data["风格轮动"] = style_rotation
     usage = (
         "你是一名A股复盘分析师。请严格按照附件《大盘指数多周期复盘方法论》执行：\n"
         "1. 用我提供的行情数据（指数横评 + 触发项指数的多周期K线数据）进行复盘；\n"
         "2. 遵守'从大往小看、横向优先、触发式深拆'三原则；\n"
         "3. 每个判断必须引用具体数据（价格、量能、均线值），不允许出现没有数据支撑的结论；\n"
         "4. 严格按'标准化输出模板'的六个部分输出（一句话结论/指数横评/深拆/共振结论/关键位表/次日推演/操作含义）；\n"
-        "5. **先读'数据健康状态'**：对缺失的数据项在开头用 1-2 句话说明'数据缺失及原因'，禁止对缺失数据编造结论；\n"
+        "5. **先读'数据健康状态'**：对缺失项在开头用 1-2 句话列出**缺失名称 + 原因 + 补跑命令（cmd 字段）**，"
+        "禁止对缺失数据编造结论。注意区分'当日未采'与'不可回补'（如涨跌家数）；\n"
         "6. 数据缺失的周期直接说明'数据缺失'，禁止编造；\n"
         "7. 复盘结论只做概率描述，不做确定性预测；推演剧本必须同时给出乐观与谨慎两套；\n"
         "8. **资金面必须分析两融余额**：基于'两融余额'的 latest/change_1d/change_30d/series，说明杠杆资金是加仓还是撤离，与指数走势是否背离；\n"
-        "9. 额外三块分析（基于'市场情绪指标/板块强弱/持仓个股'数据）：\n"
+        "9. **风格与轮动必须引用'风格轮动'结构中的数字**（本项由系统预计算，口径唯一，禁止自行估算或换口径）：\n"
+        "   (a) 风格横评：逐指数给出「当日% / vs上证1·5·10·20日(pp) / 量比」，并引用'日内风格差'的值与判定；\n"
+        "   (b) 风格轴：逐轴引用'风格轴'的价差(pp)与方向（规模 / 成长价值 / 科创主板）；\n"
+        "   (c) 风格切换：逐指数引用 RS5、阈值θ，并**分开报两个字段**——`当前风格`（答'现在偏强还是偏弱'，"
+        "看当前 |RS5| 相对 θ 的量级）与`状态`（答'有没有发生过切换'，看最近一次 sign 翻转当日达 θ 的事件）。"
+        "**两列不可混读**：会出现'RS5 很高但状态未切换'（强而无新事件）与'状态未切换但当前风格已偏弱'"
+        "（方向已转、事件未立）两种情形。同时区分三种语义：有效切换事件（翻转当日 |RS5|≥θ）、"
+        "原有状态解除（符号转了但未达 θ）、假切换（2日内反号）；\n"
+        "   (d) 板块轮动：引用'板块轮动'的强势TOP5/弱势BOTTOM5、新启、退潮、持续主线、迁移对；"
+        "若该段为 insufficient/partial，按'数据缺失'处理并说明原因，**禁止**用指数风格反推板块；\n"
+        "   (e) 任何 insufficient 项一律标注缺失，不得推断；\n"
+        "10. 额外两块分析（基于'市场情绪指标/持仓个股'数据）：\n"
         "   (a) 市场情绪温度：涨停/跌停/炸板数、题材TOP3热度、情绪分S与z值、是否有系统性风险；\n"
-        "   (b) 板块轮动方向：强势/弱势行业TOP5，判断主线与补涨/退潮方向；\n"
-        "   (c) 持仓个股点评：各持仓做T模式与理由，结合指数/板块结论给出次日操作提示。\n"
-        "   上述三块可并入对应章节或在'操作含义'前单列'情绪·板块·个股速览'小节；\n"
-        "10. **次日关注锚点**：在'次日推演'末尾用一行列出 2-3 个可执行观察点（价格位/事件/数据更新时间）。"
+        "   (b) 持仓个股点评：各持仓的数量/成本/昨收与做T模式，结合指数/板块结论给出次日操作提示；"
+        "若'做T模式'标注'情绪记录缺失'，如实说明而不臆断。\n"
+        "11. **次日关注锚点**：在'次日推演'末尾用一行列出 2-3 个可执行观察点（价格位/事件/数据更新时间）。"
     )
     return f"{method}\n\n===== 本轮行情数据 =====\n{json.dumps(data, ensure_ascii=False, default=str)}\n\n===== 复盘要求 =====\n{usage}"
 
@@ -713,9 +884,13 @@ def build_prompt(date: str, cross: dict, deep: dict, extra: dict | None = None) 
 def run_market_review(date: str, cfg: dict) -> str:
     """大盘复盘主入口：收集数据 → 组装提示词 → 调模型 → 落盘并返回 markdown。"""
     cross = build_cross_section(date)
-    deep = build_deep_dive(date, cross)
-    extra = load_market_extra(date)
-    prompt = build_prompt(date, cross, deep, extra)
+    minute_avail: dict = {}
+    deep = build_deep_dive(date, cross, minute_avail=minute_avail)
+    extra = load_market_extra(date, minute_avail=minute_avail)
+    print(format_data_gate(extra.get("data_health") or {}, date), flush=True)
+    _log(format_data_gate(extra.get("data_health") or {}, date).replace("\n", " | "))
+    sr = _safe_style_rotation(date)
+    prompt = build_prompt(date, cross, deep, extra, style_rotation=sr)
     text = call_llm(prompt, cfg)
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     (OUT_DIR / f"market_review_{date}.md").write_text(text, encoding="utf-8")
@@ -740,13 +915,17 @@ def run_market_review_stream(date: str, cfg: dict, on_text=None) -> str:
     if date == datetime.now().strftime("%Y-%m-%d") and not _minute_cache_fp(date).exists():
         _emit("  刷新当日大盘分时缓存…\n")
         save_daily_index_minutes(date)
-    deep = build_deep_dive(date, cross, on_progress=_emit)
+    minute_avail: dict = {}
+    deep = build_deep_dive(date, cross, on_progress=_emit, minute_avail=minute_avail)
     _log(f"深拆完成 耗时{_t.time()-_t0:.1f}s indices={list(deep.keys())}")
     _emit("③ 正在读取市场情绪/板块/持仓/两融数据…\n")
-    extra = load_market_extra(date)
+    extra = load_market_extra(date, minute_avail=minute_avail)
+    gate = format_data_gate(extra.get("data_health") or {}, date)
+    _emit(gate + "\n")
     _log(f"市场附加数据 情绪={bool(extra['情绪'])} 板块={bool(extra['板块'])} 个股={len(extra['持仓个股'])} 两融={not extra.get('两融余额', {}).get('missing')}")
     _emit(f"④ 数据收集完成，正在调用模型（{cfg.get('model')}）…\n\n")
-    prompt = build_prompt(date, cross, deep, extra)
+    sr = _safe_style_rotation(date)
+    prompt = build_prompt(date, cross, deep, extra, style_rotation=sr)
     _log(f"prompt 长度 {len(prompt)} 字符")
 
     def _on_reasoning():
@@ -764,6 +943,8 @@ def run_market_review_stream(date: str, cfg: dict, on_text=None) -> str:
         # 两融余额独立顶层字段（2026-08-29：前端单独刷新用）
         _meta["margin_balance"] = extra.get("两融余额") or {}
         _meta["data_health"] = extra.get("data_health") or {}
+        # 风格/轮动确定性结果存档（2026-09-27）：便于事后复核口径，前端暂不渲染
+        _meta["style_rotation"] = sr
         (OUT_DIR / f"market_review_{date}.json").write_text(
             json.dumps(_meta, ensure_ascii=False, default=str), encoding="utf-8")
     except Exception:
