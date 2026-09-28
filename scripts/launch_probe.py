@@ -48,7 +48,11 @@ if report["steps"][0]["ok"] and report["steps"][1]["ok"]:
     os.makedirs(OUT_DIR, exist_ok=True)
     logf = open(LOG, "a", encoding="utf-8")
     # 不降优先级：探针的 09:31 委托时效就是测量对象本身
-    p = subprocess.Popen([sys.executable, PROBE], stdout=logf, stderr=subprocess.STDOUT,
+    # gm SDK 只装在 Python311（managed 3.12 无 gm 模块，2026-09-28 实证）；
+    # 且 token 动态发现依赖 psutil（已补装入 py311）。固定用 py311 拉起探针。
+    PY311 = r"C:\Users\Lenovo\AppData\Local\Programs\Python\Python311\python.exe"
+    exe = PY311 if os.path.exists(PY311) else sys.executable
+    p = subprocess.Popen([exe, PROBE], stdout=logf, stderr=subprocess.STDOUT,
                          cwd=ROOT, creationflags=subprocess.CREATE_NEW_PROCESS_GROUP)
     report["pid"] = p.pid
     step("探针拉起", True, f"pid={p.pid} log={LOG}")
