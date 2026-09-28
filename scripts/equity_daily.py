@@ -182,7 +182,11 @@ def compute(date: str) -> dict:
     if os.path.exists(snap_fp):
         snap = _load_json(snap_fp)
         market_value, n = market_value_from_snapshot(snap)
+        # 2026-09-28 修复：施工1 将 cash 写在 summary.cash（附带 cash_source），顶层无此字段
+        summ = snap.get("summary") or {}
         cash = snap.get("cash")
+        if cash is None:
+            cash = summ.get("cash") if summ.get("cash_source") != "missing" else None
         tag = "eod=true快照" if snap.get("eod") is True else f"live快照(updated_at={snap.get('updated_at')},未标eod)"
         notes.append(f"市值=holdings_daily({tag},{n}只)")
     else:

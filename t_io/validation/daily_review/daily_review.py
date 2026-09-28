@@ -57,17 +57,21 @@ trace_fp = BASE / f"t_io/traces/decision_trace_{DATE}.jsonl"
 ticks = defaultdict(list)
 decisions = defaultdict(list)   # code -> [(ts, action, score)]
 nan_ticks = Counter()
-for line in open(trace_fp, encoding="utf-8"):
-    r = json.loads(line)
-    c = r["code"]
-    ticks[c].append(r)
-    bs, ss = r.get("buy_score"), r.get("sell_score")
-    if not fnum(bs) and not fnum(ss):
-        nan_ticks[c] += 1
-    d = r.get("decision")
-    if d in ("BUY_LOW", "SELL_HIGH"):
-        decisions[c].append((r["scan_time"], d, bs if d == "BUY_LOW" else ss,
-                             r.get("price"), r.get("buy_block") or [], r.get("sell_block") or []))
+# 2026-09-28 容错：Renko/T引擎删除后 decision_trace 不再每日产生，缺失时跳过本段
+if trace_fp.exists():
+    for line in open(trace_fp, encoding="utf-8"):
+        r = json.loads(line)
+        c = r["code"]
+        ticks[c].append(r)
+        bs, ss = r.get("buy_score"), r.get("sell_score")
+        if not fnum(bs) and not fnum(ss):
+            nan_ticks[c] += 1
+        d = r.get("decision")
+        if d in ("BUY_LOW", "SELL_HIGH"):
+            decisions[c].append((r["scan_time"], d, bs if d == "BUY_LOW" else ss,
+                                 r.get("price"), r.get("buy_block") or [], r.get("sell_block") or []))
+else:
+    print(f"[daily_review] 无 decision_trace_{DATE}.jsonl（T引擎已删），跳过信号段")
 
 def day_profile(rs, prev_close=None):
     """close-only 近似 classify_day_type(口径: harness_backtest.py:170-196)
