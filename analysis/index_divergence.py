@@ -257,7 +257,13 @@ def fetch_index_bars(entry: dict, freq: str):
             return _trim(df, freq), ("em" if not df.empty else "none")
         try:
             from core.market_data import get_provider
-            df = get_provider().index_daily(symbol, days=DAILY_COUNT)
+            # ⚠️ **必须传 end_date**：provider 只在 `end_date is None` 时回写共享长历史缓存
+            # `t_io/cache/daily_kline/index_{sym}.json`。不传的话，这个 days=200 的请求会把
+            # 801 行的长历史**截成 201 行**，进而让 style_rotation 的 θ 窗口从 250 根缩到 200 根、
+            # 结果整体漂移（2026-09-28 实测踩中，且一度被误诊为"数据源差异导致的边界敏感"）。
+            # 本函数只取尾部 200 根（WINDOW_BARS），带 end_date 结果相同但不写缓存。
+            _end = datetime.now().strftime("%Y-%m-%d")
+            df = get_provider().index_daily(symbol, days=DAILY_COUNT, end_date=_end)
             if df is not None and not df.empty:
                 out = df.rename(columns={"date": "time"}).copy()
                 out["time"] = pd.to_datetime(out["time"])
