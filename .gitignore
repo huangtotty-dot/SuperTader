@@ -8,6 +8,13 @@ __pycache__/
 node_modules/
 .vscode/
 
+# ── tmp/：临时脚手架（一次性探针/日志/实验中间产物/本地校验）──
+# 2026-09-28: 此前未忽略 ⇒ 每次会话的 scratch 都灌进 git status，导致"哪些是本人
+# 在改的工作、哪些是别人的临时文件"难以分辨（实测：另一会话的 volatility_rerun_*.py
+# 会话中途出现）。忽略后 git status 里剩下的每一条都有意义。
+# 确需入库的临时产物请显式 `git add -f`。
+tmp/
+
 stock_hunter/data/
 stock_hunter/history/
 stock_hunter/watchlist_jiuyan.json
