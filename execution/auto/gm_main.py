@@ -273,7 +273,9 @@ def _writeback_holdings(context) -> int:
 _OPEN_ALIGN_DONE_DATE = None
 # 买入优先级：缺额从小到大（资金效率优先，能多对齐几只）。owner 可自行调整顺序，
 # 未列出的 code 排在最后。
-OPEN_ALIGN_BUY_ORDER = ["588170", "002639", "300153", "002451", "000988", "300054", "600176"]
+# 2026-09-28 刷新为当前实盘目标 7 票（旧名单里 002639/300153/002451/600176 base 已=0）；
+# 600584/688008/300456/600276 暂未入 AUTO_POOL（不入池则引擎不管、对齐跳过）。
+OPEN_ALIGN_BUY_ORDER = ["600276", "300456", "688008", "000988", "300054", "600584", "588170"]
 
 
 # ── 2026-09-15 阶段0-6（诊断D3旁注）：沪市市价单(=保护限价)涨跌停贴板钳制 ──
@@ -446,18 +448,31 @@ def _force_open_align(context) -> int:
                 p = 0.0
         return p
 
+    # 2026-09-28 口径修正（09-28 复盘「仿真对齐」）：目标底仓直读 holdings.json 的
+    # base（真源），不再用 _base_ref_ —— reconcile_init 对 MIRROR 缺失票（base=0 被
+    # _load_mirror_holdings 过滤）会 `or vol` 兜底成现状持仓 ⇒ "实盘已清、仿真残留"
+    # 的票（002451/603667）diff 恒=0 永远卖不掉。新语义：base=0 且仍持有 ⇒ 超额全卖归位。
+    try:
+        _repo = _load_holdings_repo()
+        _base_map = {c: int((h or {}).get("base") or 0)
+                     for c, h in ((_repo.load_full() or {}) if _repo else {}).items()
+                     if isinstance(h, dict) and not str(c).startswith("_")}
+    except Exception as _be:
+        print(f"[OPEN_ALIGN] ⚠️ base 真源读取失败，回退 _base_ref_ 口径: {_be}")
+        _base_map = {}
     sells, buys = [], []
     for code, sym in STOCKS.items():
-        target = int(getattr(context, f"_base_ref_{code}", 0) or 0)
-        if target <= 0:
-            continue
+        if code in _base_map:
+            target = _base_map[code]
+        else:
+            target = int(getattr(context, f"_base_ref_{code}", 0) or 0)  # 真源无此票 → 旧口径兜底
         try:
             h = _get_holding(context, code, sym)
         except Exception:
             continue
         actual = int(h.get("qty", 0) or 0)
         diff = actual - target
-        if diff >= 100:                                   # 超额 → 卖
+        if diff >= 100:                                   # 超额（含 base=0 清仓）→ 卖
             _av_raw = h.get("available")
             _av = actual if _av_raw is None else int(_av_raw)
             q = (min(diff, _av) // 100) * 100
@@ -468,6 +483,7 @@ def _force_open_align(context) -> int:
 
     now = context.now if hasattr(context, "now") else datetime.now()
     n = 0
+    _placed_sells = []
     # ① 超额一律卖出（不占资金）
     for code, sym, q in sells:
         px = _px_of(code, sym)
@@ -483,12 +499,28 @@ def _force_open_align(context) -> int:
                 order_type=OrderType_Market, position_effect=PositionEffect_Close))
             _mark_pending_recon(context, code, sym, "SELL", q, px, _o)
             n += 1
-            print(f"[OPEN_ALIGN] SELL {code} {q}股@{px:.3f}（超额归位到目标 {getattr(context, f'_base_ref_{code}', 0)}）")
+            _placed_sells.append((code, sym, q, px))
+            print(f"[OPEN_ALIGN] SELL {code} {q}股@{px:.3f}（超额归位到目标 {_base_map.get(code, getattr(context, f'_base_ref_{code}', 0))}）")
             _audit_write({"event": "open_align", "code": code, "side": "SELL", "qty": q,
                           "price": round(px, 4), "time": str(now), "reason": "excess_over_base"})
         except Exception as e:
             print(f"[OPEN_ALIGN] SELL {code} 失败: {e}")
     # ② 缺口按优先级买满，现金不够就停
+    # 2026-09-28 对齐专项：买单现金 = max(实时重查, 期初可用 + 本轮已卖预计回款×0.999)。
+    # 卖单异步成交，立即重查 cash 可能尚未入账；只用期初现金会出现"卖得出却买不起"，
+    # 把对齐拖上好几天。若卖单最终被拒，透支买单会被柜台以 NoEnoughCash 拒掉（fail-closed，
+    # 次日对齐自愈）。
+    _proceeds = sum(_q2 * _p2 for _c2, _s2, _q2, _p2 in _placed_sells) * 0.999
+    if _placed_sells:
+        try:
+            _acct2 = _sdk_call("account", context.account)
+            _cv2 = getattr(_acct2, "cash", None)
+            _fresh = float(getattr(_cv2, "available", 0) or 0) if _cv2 is not None else 0.0
+        except Exception:
+            _fresh = 0.0
+        avail = max(_fresh, avail + _proceeds)
+        print(f"[OPEN_ALIGN] 买单现金口径: 期初 {avail - _proceeds:.0f} + 预计回款 {_proceeds:.0f}"
+              f" / 实时 {_fresh:.0f} → 取 {avail:.0f}")
     _pri = {c: i for i, c in enumerate(OPEN_ALIGN_BUY_ORDER)}
     buys.sort(key=lambda x: _pri.get(x[0], 999))
     skipped = []
@@ -514,7 +546,7 @@ def _force_open_align(context) -> int:
             _mark_pending_recon(context, code, sym, "BUY", q, px, _o)
             avail -= q * px
             n += 1
-            print(f"[OPEN_ALIGN] BUY {code} {q}股@{px:.3f}（补缺口到目标 {getattr(context, f'_base_ref_{code}', 0)}，余现金 {avail:.0f}）")
+            print(f"[OPEN_ALIGN] BUY {code} {q}股@{px:.3f}（补缺口到目标 {_base_map.get(code, getattr(context, f'_base_ref_{code}', 0))}，余现金 {avail:.0f}）")
             _audit_write({"event": "open_align", "code": code, "side": "BUY", "qty": q,
                           "price": round(px, 4), "time": str(now), "reason": "shortfall_vs_base"})
         except Exception as e:
