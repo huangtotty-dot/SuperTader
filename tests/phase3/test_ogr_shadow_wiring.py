@@ -7,7 +7,9 @@
      B7 的三个开关曾被放进 INDEX_REGIME_PARAMS，而各闸函数读 `PARAMS`
      ⇒ 总闸恒为 False、B7 生产通道从未生效（该代码已于 2026-09-22 随 B7 一并删除）。
      此处写死为回归护栏，防止新开关重犯。
-  T2 默认 off ⇒ `_ogr_shadow_enabled()` 为 False（影子层默认不跑）。
+  T2 开关**接线**：总闸读 `PARAMS` 且缺键 fail-safe 为 False。
+     （值本身不断言 —— owner 2026-09-28 决策翻 True（L3 期 09-29 起跑、live 保持 off），
+      回退改 params 即可，本测试不拦；同 T5 对 L4 开关的处理。）
   T3 胶水端到端：合成 bars + holdings ⇒ 产出**正确的判定记录**并落日志。
   T4 **绝不下单 / 绝不写持仓**：对胶水与 gm_main 钩子做静态检查。
 
@@ -55,10 +57,16 @@ class TestT1FlagPlacement(unittest.TestCase):
         self.assertNotIn("open_gap_reversal_shadow_enabled", p.INDEX_REGIME_PARAMS,
                          "不得落在 INDEX_REGIME_PARAMS（那是 index_regime 模块的参数表）")
 
-    def test_flag_default_off(self):
+    def test_shadow_flag_is_bool(self):
+        """L3 影子开关的**接线**——值本身刻意不断言。
+
+        2026-09-28：owner 决策把影子开关翻 True（L3 期 09-29 起跑，live 保持 off）。
+        沿用 T5 对 L4 开关的同一处理：只钉"落在 PARAMS 且为布尔"，不钉值，
+        否则每次按 L3/L4 进度切换都要来改测试（原断言锁死 False，就是这个后果）。
+        """
         p = _load(os.path.join(_CFG, "params.py"), "cp_test2")
-        self.assertIs(p.PARAMS["open_gap_reversal_shadow_enabled"], False,
-                      "影子层必须默认 off")
+        self.assertIsInstance(p.PARAMS["open_gap_reversal_shadow_enabled"], bool,
+                              "开关应为布尔（防误写成字符串等）")
 
     def test_no_b7_keys_left(self):
         """B7 已删除（2026-09-22）：三键不得残留在任何参数表里。"""
@@ -68,12 +76,19 @@ class TestT1FlagPlacement(unittest.TestCase):
             self.assertNotIn(k, p.INDEX_REGIME_PARAMS, f"{k} 应随 B7 一并删除")
 
 
-class TestT2GateOffByDefault(unittest.TestCase):
-    def test_gate_false_with_default_params(self):
+class TestT2GateWiring(unittest.TestCase):
+    """T2：总闸读 `PARAMS`（而非别的表），且缺键时 fail-safe 回退 False。
+
+    类名原为 TestT2GateOffByDefault —— 那是"默认 off"时代的命名；开关已按 owner 决策翻启，
+    名字会误导，故改为描述**接线**。原断言 `assertFalse(bool(False and True))` 是恒真的
+    空断言（不测任何东西），一并换成对总闸函数的实际检查。
+    """
+
+    def test_gate_reads_params_with_false_fallback(self):
         src = _read(GMM_PATH)
-        self.assertIn('PARAMS.get("open_gap_reversal_shadow_enabled", False)', src)
-        # 默认 False ⇒ 表达式为 False（与 §T1 一致）
-        self.assertFalse(bool(False and True))
+        self.assertIn('PARAMS.get("open_gap_reversal_shadow_enabled", False)', src,
+                      "总闸须读 PARAMS，且缺键回退 False（fail-safe：否则开关缺失时误开）")
+        self.assertIn("def _ogr_shadow_enabled()", src, "总闸函数缺失")
 
 
 class TestT3GlueEndToEnd(unittest.TestCase):
