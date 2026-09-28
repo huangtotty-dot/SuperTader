@@ -4,9 +4,9 @@
     "2026-09-21",
     "2026-09-27"
   ],
-  "files_found": 0,
+  "files_found": 4,
   "valid_days": 0,
-  "skipped_no_cash": 0,
+  "skipped_no_cash": 4,
   "daily": [],
   "weekly": {
     "account_cum_ret": null,
@@ -27,9 +27,9 @@
     "alpha_pos_ratio": null,
     "max_drawdown": null,
     "valid_days": 0,
-    "skipped_no_cash": 0,
-    "files_found": 0
+    "skipped_no_cash": 4,
+    "files_found": 4
   },
-  "generated_at": "2026-09-27T11:16:21",
+  "generated_at": "2026-09-27T11:24:10",
   "source": "alpha_beta_weekly.py（复盘清单V2.0 §4.5/§八；净值法；费后；主基准sh000300辅sh000688）"
 }
