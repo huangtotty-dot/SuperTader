@@ -1,5 +1,11 @@
 {
- "base_done": false,
+ "base": {
+  "300166": 8400,
+  "603629": 1000
+ },
  "days_done": 0,
- "legs": []
+ "legs": [],
+ "_base_attempt_date": "2026-09-29",
+ "_snap_date": "2026-09-29",
+ "_base_recon_date": "2026-09-29"
 }

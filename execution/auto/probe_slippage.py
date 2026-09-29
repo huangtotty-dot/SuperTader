@@ -66,7 +66,9 @@ def _build_proxy() -> dict:
 
 
 MARKET_PROXY = _build_proxy()
-PROBE_STRATEGY_ID = "4f2a9d10-8b31-4a67-9f52-6c1e0d3ab7e4"   # 独立账户，勿与生产混用
+PROBE_STRATEGY_ID = "6786d88d-bbac-11f1-88f2-98fa9b8df5e7"   # 独立账户，勿与生产混用
+# （2026-09-29 国盛定制版实证：strategy_id==account_id 必须终端注册；
+#   原拍脑袋 UUID 4f2a9d10-… 被柜台 1020 拒单，本 id 为 owner 终端新建仿真策略）
 _DRY = os.environ.get("PROBE_DRY") == "1"    # 只记录不下单（先验证逻辑用）
 OUT_DIR = os.path.join(_ROOT, "t_io", "validation", "slippage_probe")
 
@@ -105,7 +107,7 @@ def _load_state() -> dict:
         with open(os.path.join(OUT_DIR, "state.json"), encoding="utf-8") as f:
             return json.load(f)
     except Exception:
-        return {"base_done": False, "days_done": 0, "legs": []}
+        return {"base": {}, "days_done": 0, "legs": []}
 
 
 def _order(sym, qty, side, effect, log: dict):
@@ -123,37 +125,80 @@ def _order(sym, qty, side, effect, log: dict):
         return None
 
 
-def _avail(context, sym: str) -> int:
-    """该 symbol 的**可卖**数量（防御式：positions 可能是对象或 dict）。"""
+def _positions(context) -> list:
+    """账户全量持仓（list[dict]）。2026-09-29 实证：国盛定制版 `account().positions`
+    是**方法**（须调用），旧代码把方法对象当列表迭代 ⇒ 永远空/报错，
+    T_SELL 会永远看到 avail=0。此处统一调用口径。"""
     try:
         acct = context.account() if callable(getattr(context, "account", None)) else context.account
-        pos = getattr(acct, "positions", None)
-        if pos is None and isinstance(acct, dict):
+        attr = getattr(acct, "positions", None)
+        if callable(attr):
+            try:
+                pos = attr()
+            except TypeError:
+                pos = attr(symbol="", side=0)
+        elif isinstance(acct, dict):
             pos = acct.get("positions")
-        for p in (pos or []):
-            if isinstance(p, dict) and p.get("symbol") == sym:
-                return int(p.get("available", 0) or 0)
+        else:
+            pos = attr
+        return [p for p in (pos or []) if isinstance(p, dict)]
     except Exception:
-        pass
+        return []
+
+
+def _avail(context, sym: str) -> int:
+    """该 symbol 的**可卖**数量。"""
+    for p in _positions(context):
+        if p.get("symbol") == sym:
+            return int(p.get("available", 0) or 0)
     return 0
 
 
+def _reconcile_base(context, today: str) -> None:
+    """底仓对账：柜台**异步**拒单（资金不足）会让"同步被接受"的底仓实际不存在
+    （2026-09-29 002733 实证）。每日一次把 state.base 与账户实际持仓对齐：
+    实际=0 → 除名（下个窗口自动重试）；0<实际<记录 → 降为实际（部分成交）。"""
+    st = getattr(context, "_st", None)
+    if not isinstance(st, dict):
+        return
+    if st.get("_base_recon_date") == today:
+        return
+    base = st.get("base") or {}
+    if not base:
+        return
+    pos = _positions(context)
+    if not pos and st.get("base"):
+        return          # 查询失败/空回报不轻举妄动（fail-closed：宁可不对账也不误删）
+    held = {p.get("symbol"): int(p.get("volume", 0) or 0) for p in pos}
+    changed = False
+    for c in list(base):
+        hv = held.get(PROBE[c], 0)
+        if hv <= 0:
+            del base[c]; changed = True
+            _w({"event": "BASE_LOST", "date": today, "code": c, "held": hv})
+        elif hv < base[c]:
+            base[c] = hv; changed = True
+            _w({"event": "BASE_PARTIAL", "date": today, "code": c, "held": hv})
+    st["_base_recon_date"] = today
+    _save_state(st)
+    if changed:
+        print(f"[probe] 底仓对账修正: {base}")
+
+
 def _snapshot_positions(context, today: str) -> None:
-    """日末持仓快照 —— 用来**核实 `positions` 的字段名**（避免键名猜错导致只买不卖）。"""
-    try:
-        acct = context.account() if callable(getattr(context, "account", None)) else context.account
-        pos = getattr(acct, "positions", None)
-        if pos is None and isinstance(acct, dict):
-            pos = acct.get("positions")
-        rows = []
-        for p in (pos or []):
-            if isinstance(p, dict):
-                rows.append({k: p.get(k) for k in
-                             ("symbol", "volume", "available", "vwap", "amount")
-                             if k in p} or {"keys": sorted(p.keys())})
-        _w({"event": "POSITIONS", "date": today, "n": len(rows), "rows": rows})
-    except Exception as e:
-        _w({"event": "POSITIONS_FAIL", "date": today, "err": str(e)})
+    """持仓快照（按日一次，防缺仓日每根 bar 刷屏）+ 触发底仓对账（自带按日闸）。"""
+    st = getattr(context, "_st", None)
+    if isinstance(st, dict) and st.get("_snap_date") != today:
+        try:
+            rows = [{k: p.get(k) for k in
+                     ("symbol", "volume", "available", "vwap", "amount") if k in p}
+                    for p in _positions(context)]
+            _w({"event": "POSITIONS", "date": today, "n": len(rows), "rows": rows})
+        except Exception as e:
+            _w({"event": "POSITIONS_FAIL", "date": today, "err": str(e)})
+        st["_snap_date"] = today
+        _save_state(st)
+    _reconcile_base(context, today)
 
 
 def _px_prev_close(sym: str):
@@ -185,7 +230,7 @@ def init(context):
             print(f"[probe] 订阅/取前收失败 {s}: {e}")
     print(f"[probe] strategy_id={PROBE_STRATEGY_ID}（独立纸面账户）"
           f"  标的={list(PROBE)}  代理={len(MARKET_PROXY)} 只"
-          f"  前收={len(context._pc)} 条  底仓已建={st.get('base_done')}"
+          f"  前收={len(context._pc)} 条  底仓={st.get('base', {})}"
           f"  已做T天数={st.get('days_done')}")
     _w({"event": "init", "pc": context._pc, "state": st})
 
@@ -213,33 +258,31 @@ def on_bar(context, bars):
             continue
 
     st = context._st
-    # ② 建底仓（**仅一次**；这批腿不进滑点样本）。建底仓那天**不做 T**——T+1 下也做不了。
-    # 2026-09-29 实证修复：委托被拒（1020 无效ACCOUNT_ID）时不得置 base_done——
-    # 柜台没接单就是没建仓。当日尝试过一次即停（防每根 bar 重复下单），次日重试。
-    if not st.get("base_done"):
-        if st.get("_base_attempt_date") == today:
-            return
-        if t >= BUY_AT and all(c in context._opens for c in PROBE):
-            st["_base_attempt_date"] = today
-            accepted = 0
-            for c, s in PROBE.items():
-                q = _mk_qty(context._opens[c])
-                if q <= 0:
-                    continue
-                r = _order(s, q, OrderSide_Buy, PositionEffect_Open,
-                           {"event": "BASE_BUY", "date": today, "code": c, "qty": q,
-                            "ref_open": context._opens[c]})
-                if r:
-                    accepted += 1
-            if accepted == len(PROBE):
-                st["base_done"] = True
-            else:
-                _w({"event": "BASE_INCOMPLETE", "date": today,
-                    "accepted": accepted, "need": len(PROBE)})
-            _save_state(st)
-        elif t >= SELL_AT:
-            _snapshot_positions(context, today)      # 建底仓当日先核实 positions 字段名
-        return
+    # ② 建底仓（**按票记账**；这批腿不进滑点样本）。建底仓当天该票不做 T。
+    # 2026-09-29 v2（实证：柜台**异步**拒单"资金不足"，同步接受≠成交）：
+    # 弃用全局 base_done，改为 st["base"]={code: qty}；缺仓票每日一次重试，
+    # 终端补足资金后自愈。
+    base = st.setdefault("base", {})
+    missing = [c for c in PROBE if not base.get(c)]
+    if (missing and st.get("_base_attempt_date") != today and t >= BUY_AT
+            and all(c in context._opens for c in missing)):
+        st["_base_attempt_date"] = today
+        for c in missing:
+            q = _mk_qty(context._opens[c])
+            if q <= 0:
+                continue
+            r = _order(PROBE[c], q, OrderSide_Buy, PositionEffect_Open,
+                       {"event": "BASE_BUY", "date": today, "code": c, "qty": q,
+                        "ref_open": context._opens[c]})
+            if r:
+                base[c] = q
+        still = [c for c in PROBE if not base.get(c)]
+        if still:
+            _w({"event": "BASE_INCOMPLETE", "date": today,
+                "have": sorted(base), "missing": still})
+        _save_state(st)
+    if missing and t >= SELL_AT:
+        _snapshot_positions(context, today)          # 缺仓日核实 positions 字段名
 
     # ③ 规则条件（mkt_gap 只取代理池）
     need = [c for c in PROBE if c in context._opens]
@@ -254,6 +297,8 @@ def on_bar(context, bars):
         for c in need:
             if c in context._bought_today or c not in context._pc:
                 continue
+            if not base.get(c):
+                continue        # 无底仓的票不做 T（防现金只进不出，2026-09-29 v2）
             gap = context._opens[c] / context._pc[c] - 1
             if gap > -0.010:
                 continue
