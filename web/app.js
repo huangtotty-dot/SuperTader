@@ -2038,6 +2038,11 @@ async function openStockChart(code, name) {
   modal.style.display = "flex";
   stockChartCode = code;
   stockChartName = name;
+  // 换票时收起并清空资料面板（下次点开重新拉）
+  const _prof = document.getElementById("stockProfile");
+  if (_prof) { _prof.style.display = "none"; document.getElementById("stockProfileBody").innerHTML = ""; }
+  stockProfileCode = null;
+  stockProfileLiveLoaded = false;
   document.getElementById("stockModalTitle").textContent = `${name} (${code}) 技术分析`;
   document.getElementById("stockChart").innerHTML = '<div class="empty">加载中...</div>';
   // 10s 实时刷新
@@ -2048,6 +2053,85 @@ async function openStockChart(code, name) {
 function toggleChartHelp() {
   const el = document.getElementById("chartHelp");
   el.style.display = el.style.display === "none" ? "block" : "none";
+}
+
+/* ---- 公司资料（K线弹窗「📋 公司资料」）----
+   两层：本地表先出（秒开、零网络），再自动拉一次东财所属板块覆盖。
+   每个代码的实时层只自动拉一次（stockProfileLiveLoaded），避免反复点开反复打东财风控。 */
+let stockProfileCode = null;
+let stockProfileLiveLoaded = false;
+
+function toggleStockProfile() {
+  const el = document.getElementById("stockProfile");
+  if (!el) return;
+  const show = el.style.display === "none";
+  el.style.display = show ? "block" : "none";
+  if (show) loadStockProfile();
+}
+
+async function loadStockProfile() {
+  const body = document.getElementById("stockProfileBody");
+  if (!body || !stockChartCode) return;
+  if (stockProfileCode !== stockChartCode) {
+    stockProfileCode = stockChartCode;
+    stockProfileLiveLoaded = false;
+  }
+  // 1) 本地层
+  try {
+    const d = await apiCall("load_stock_profile", stockChartCode, false);
+    if (stockProfileCode !== stockChartCode) return;   // 期间切了票
+    renderStockProfile(body, d, false);
+  } catch (e) {
+    body.innerHTML = `<div class="empty">资料读取失败: ${esc(e.message)}</div>`;
+    return;
+  }
+  // 2) 实时层（每票只自动拉一次）
+  if (stockProfileLiveLoaded) return;
+  stockProfileLiveLoaded = true;
+  body.insertAdjacentHTML("beforeend", '<div class="prof-loading">⏳ 正在拉取东财所属板块…</div>');
+  try {
+    const d2 = await apiCall("load_stock_profile", stockChartCode, true);
+    if (stockProfileCode !== stockChartCode) return;
+    renderStockProfile(body, d2, true);
+  } catch (e) { /* 保留本地层 */ }
+}
+
+function renderStockProfile(body, d, live) {
+  if (!body) return;
+  if (!d || d.ok === false) {
+    body.innerHTML = `<div class="empty">资料读取失败: ${esc((d && d.error) || "未知")}</div>`;
+    return;
+  }
+  const chips = (arr) => (arr || []).map(x => `<span class="prof-chip">${esc(x)}</span>`).join("");
+  const none = '<span class="prof-none">无</span>';
+  let h = `<div class="prof-head"><b>${esc(d.name || stockChartName || d.code)}</b>`
+        + `<span class="prof-code">${esc(d.code)}</span>`;
+  if (d.boards_source === "em") h += '<span class="prof-src">东财实时</span>';
+  else if (!live) h += '<span class="prof-src prof-src-local">本地表</span>';
+  h += "</div>";
+  h += `<div class="prof-sec"><b>业务简介</b>：`
+     + (d.business_summary ? esc(d.business_summary)
+                           : '<span class="prof-none">本地表无记录</span>') + "</div>";
+  h += `<div class="prof-sec"><b>所属行业/板块</b>：`
+     + ((d.sector_list && d.sector_list.length) ? chips(d.sector_list) : none) + "</div>";
+  h += `<div class="prof-sec"><b>韭研概念</b>：`
+     + ((d.local_concepts && d.local_concepts.length) ? chips(d.local_concepts) : none) + "</div>";
+  if (live) {
+    h += `<div class="prof-sec"><b>所属板块</b>`
+       + `<span class="prof-note">${esc(d.boards_note || "")}</span>：`;
+    if (d.boards_source === "em" && d.boards && d.boards.length) {
+      const order = ["概念", "地域", "其他"];
+      const groups = {};
+      d.boards.forEach(b => { (groups[b.kind] = groups[b.kind] || []).push(b.name); });
+      h += order.filter(k => groups[k]).map(k =>
+        `<div class="prof-grp"><span class="prof-kind">${esc(k)}</span>${chips(groups[k])}</div>`
+      ).join("");
+    } else {
+      h += `<span class="prof-none">${esc(d.error || "取不到（东财风控或网络）")}</span>`;
+    }
+    h += "</div>";
+  }
+  body.innerHTML = h;
 }
 function toggleMaxStockChart() {
   const modal = document.getElementById("stockModal");
@@ -2068,6 +2152,8 @@ function closeStockChart() {
   if (stockChartInst) { stockChartInst.dispose(); stockChartInst = null; }
   if (stockChartTimer) { clearInterval(stockChartTimer); stockChartTimer = null; }
   stockChartCode = null;
+  stockProfileCode = null;
+  stockProfileLiveLoaded = false;
 }
 function switchStockPeriod(p) {
   stockChartPeriod = p;
@@ -3023,7 +3109,10 @@ async function loadBreakoutStocks(force) {
 }
 async function pollBreakoutScan(body, btn) {
   const t0 = Date.now();
-  const MAX = 300000; // 5 分钟兜底
+  // 全池 5000+ 只由后端 GM 批量拉取（900 只/批）。原先 5 分钟兜底会在扫完前放弃，
+  // 而按钮是 force 重扫 ⇒ 用户一点就把已扫完的结果作废、永远看不到结果。
+  // 实测全池约 1~2 分钟，故给足 20 分钟上限（仅防后端僵死），超时也**不谎报失败**。
+  const MAX = 1200000;
   while (Date.now() - t0 < MAX) {
     await sleep(800);
     if (!document.body.contains(body)) return;   // 标签已切换
@@ -3057,32 +3146,70 @@ async function pollBreakoutScan(body, btn) {
         </div>`;
     }
   }
-  body.innerHTML = '<div class="empty">扫描超时，请点击"重新扫描"重试</div>';
+  // 走到这里只可能是后端僵死（正常全池 1~2 分钟）。**不谎报"超时失败"**——
+  // 说清仍在后台跑、并提示点按钮会重新扫描（不是"重试失败"）。
+  const mins = Math.round((Date.now() - t0) / 60000);
+  body.innerHTML = `<div class="empty">⏳ 扫描仍在后台运行（已 ${mins} 分钟）<br>
+    <span class="cell-dim" style="font-size:11px">后端线程未结束；点「🔄 重新扫描」会作废本轮并重开</span></div>`;
   if (btn) { btn.disabled = false; btn.textContent = "🔄 重新扫描"; }
 }
 function renderBreakout(b) {
   const body = document.getElementById("hunterBreakoutBody");
   if (!body) return;
   const stocks = (b && b.stocks) || [];
+  const nd = (b && b.no_data) || 0;
   const meta = document.getElementById("hunterBreakoutMeta");
-  if (meta) meta.textContent = `· 共 ${stocks.length} 只`;
+  if (meta) meta.textContent = `· 共 ${stocks.length} 只` + (nd ? ` · ${nd} 只无日线数据` : "");
   if (!stocks.length) {
-    body.innerHTML = '<div class="empty">今日池内暂无突破箱体的股票</div>';
+    body.innerHTML = '<div class="empty">今日池内暂无「当日有效突破」的股票'
+      + (nd ? `<div class="cell-dim" style="font-size:10px;margin-top:4px">${nd} 只无日线数据（北交所在当前环境取不到日线，已跳过）</div>` : "")
+      + "</div>";
     return;
   }
+  // 按行业分组（2026-09-29 owner：平铺不直观）。组按只数降序，组内按超出幅度降序。
+  // 每组一个 <tbody> ⇒ 折叠只需切换该 tbody 的 class（表格允许多个 tbody）。
+  const groups = {};
+  stocks.forEach(s => {
+    const k = s.industry || "未分类";
+    (groups[k] = groups[k] || []).push(s);
+  });
+  const gkeys = Object.keys(groups).sort(
+    (a, b) => groups[b].length - groups[a].length || a.localeCompare(b, "zh"));
+
+  const bodyHtml = gkeys.map(k => {
+    const arr = groups[k].slice().sort(
+      (x, y) => (y.pct_above || 0) - (x.pct_above || 0));
+    return `<tbody class="bk-group">
+    <tr class="bk-group-head" onclick="toggleBkGroup(this)" title="点击收起/展开">
+      <td colspan="7"><span class="bk-arrow">▼</span> <b>${esc(k)}</b>
+        <span class="cell-dim">· ${arr.length} 只</span></td>
+    </tr>
+    ${arr.map(s => `<tr class="bk-member h-expand-row" ondblclick="openStockChart('${esc(s.code)}','${esc(s.name)}')">
+      <td class="mono cell-dim" title="双击看技术分析">${esc(s.code)}</td>
+      <td title="双击看技术分析">${esc(s.name)} <button class="mini-btn" style="font-size:10px;padding:0 5px"
+        onclick="event.stopPropagation();addToWatchlist('${esc(s.code)}','${esc(s.name)}',this)" title="加入建仓股池监控买点">+股池</button></td>
+      <td class="num">${s.box_top != null ? fmt(s.box_top, 2) : '—'}</td>
+      <td class="num cell-dim">${s.prev_close != null ? fmt(s.prev_close, 2) : '—'}</td>
+      <td class="num">${s.price != null ? fmt(s.price, 2) : '—'}</td>
+      <td class="num up">+${s.pct_above != null ? fmt(s.pct_above, 2) : '—'}%</td>
+      <td>${(s.tags || []).map(t => tagBadge(t)).join(" ")}</td>
+    </tr>`).join("")}
+  </tbody>`;
+  }).join("");
+
   body.innerHTML = `<table class="h-table"><thead><tr>
-    <th>代码</th><th>名称</th><th class="num">现价</th><th>趋势</th><th>技术标签</th>
-  </tr></thead><tbody>
-  ${stocks.map(s => `<tr class="h-expand-row" ondblclick="openStockChart('${esc(s.code)}','${esc(s.name)}')">
-    <td class="mono cell-dim" title="双击看技术分析">${esc(s.code)}</td>
-    <td title="双击看技术分析">${esc(s.name)} <button class="mini-btn" style="font-size:10px;padding:0 5px"
-      onclick="event.stopPropagation();addToWatchlist('${esc(s.code)}','${esc(s.name)}',this)" title="加入建仓股池监控买点">+股池</button></td>
-    <td class="num">${s.price != null && s.price !== '' ? fmt(s.price, 2) : '—'}</td>
-    <td>${trendBadge(s.trend)}</td>
-    <td>${(s.tags || []).map(t => tagBadge(t)).join(" ")}</td>
-  </tr>`).join("")}
-  </tbody></table>
-  <div class="cell-dim" style="font-size:10px;margin-top:3px">双击看技术分析 · 加入建仓股池监控买点 · 当日缓存</div>`;
+    <th>代码</th><th>名称</th><th class="num">箱体上沿</th><th class="num">昨收</th>
+    <th class="num">现价</th><th class="num">超出</th><th>标签</th>
+  </tr></thead>${bodyHtml}</table>
+  <div class="cell-dim" style="font-size:10px;margin-top:3px">共 ${gkeys.length} 个行业 · 组按只数降序 · 组内按超出幅度降序 · 双击看技术分析</div>
+  ${nd ? `<div class="cell-dim" style="font-size:10px;margin-top:2px">另有 ${nd} 只无日线数据、未参与判定（北交所在当前环境取不到日线）</div>` : ""}`;
+}
+function toggleBkGroup(headEl) {
+  const tb = headEl.closest("tbody");
+  if (!tb) return;
+  const collapsed = tb.classList.toggle("bk-collapsed");
+  const arrow = headEl.querySelector(".bk-arrow");
+  if (arrow) arrow.textContent = collapsed ? "▸" : "▼";
 }
 function renderHunter(h) {
   const el = document.getElementById("hunterBody");
@@ -3266,11 +3393,11 @@ function renderHunter(h) {
   const isHistory = h.is_history || (h.date && h.date !== todayStr());
   const breakoutCard = isHistory ? "" : `
     <div class="card" style="margin-bottom:10px;padding:10px 14px">
-      <div class="card-title">🚀 突破箱体（现价向上突破最近箱体上沿 ≤8%）
+      <div class="card-title">🚀 突破箱体·当日有效突破（昨收 ≤ 箱体上沿 &lt; 今价，幅度 0.3~8%）
         <button class="mini-btn" id="hunterBreakoutBtn" style="margin-left:8px" onclick="loadBreakoutStocks(true)">🔄 重新扫描</button>
         <span class="cell-dim" id="hunterBreakoutMeta" style="font-size:11px"></span>
       </div>
-      <div id="hunterBreakoutBody"><div class="empty">点击"运行今日数据"后自动扫描突破箱体的股票</div></div>
+      <div id="hunterBreakoutBody"><div class="empty">点击"运行今日数据"后自动扫描当日有效突破的股票（全池 5000+ 只，约 1~2 分钟）</div></div>
     </div>`;
 
   el.innerHTML = `

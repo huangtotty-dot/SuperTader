@@ -116,6 +116,95 @@ def _jiuyan_concepts(info):
     return "|".join(out)
 
 
+# 行业粗分类规则（2026-09-29，突破箱体按行业分组用）。
+#
+# 为什么需要它：watchlist 的 `sector` 首段是**国民经济行业分类大类**（约 90 个，且部分条目
+# 首段是概念而非行业）⇒ 直接用会碎成「125 只命中 → 55 组、其中 34 组只有 1 只」，反而不直观。
+# 这里按关键词收敛到 ~32 个申万一级式大类：实测 125 只命中 → 24 组（单只组仅 5）。
+#
+# ⚠️ 两条关键约束（都是踩过的）：
+#  1. **只匹配首段**，不拼接后续段：后续段是概念，会劫持匹配
+#     （`汽车零部件/参股保险/…` 曾被 '保险' 抢成非银金融、`软件开发/互联网保险` 同理）。
+#  2. **顺序敏感，特定先于宽泛**：`非金属矿物制品业` 含 '金属'、`黑色金属冶炼` 含 '金属'、
+#     `水上运输业` 含 '水'、`酒店` 含 '酒' —— 都必须让更特定的规则先命中。
+# 更新规则后请复跑 tests/phase3/test_breakout_daily_breakout.py 里的行业用例。
+_INDUSTRY_RULES = (
+    ('医药', '医药生物'), ('医疗', '医药生物'), ('中药', '医药生物'), ('生物', '医药生物'),
+    ('卫生', '医药生物'), ('化学制药', '医药生物'),
+    ('货币金融', '银行'), ('银行', '银行'), ('保险', '非银金融'), ('证券', '非银金融'),
+    ('信托', '非银金融'), ('资本市场', '非银金融'), ('期货', '非银金融'), ('金融', '非银金融'),
+    ('房地产', '房地产'), ('房屋', '房地产'), ('物业', '房地产'),
+    ('半导体', '电子'), ('电子化学品', '电子'), ('消费电子', '电子'), ('军工电子', '电子'),
+    ('光学', '电子'), ('元件', '电子'), ('面板', '电子'), ('电子', '电子'),
+    ('软件', '计算机'), ('IT服务', '计算机'), ('计算机', '计算机'), ('互联网', '计算机'),
+    ('通信', '通信'),
+    ('电池', '电力设备'), ('光伏', '电力设备'), ('风电', '电力设备'), ('电网', '电力设备'),
+    ('电力设备', '电力设备'), ('电气机械', '电力设备'), ('电机', '电力设备'), ('电源设备', '电力设备'),
+    ('汽车', '汽车'),
+    ('专用设备', '机械设备'), ('通用设备', '机械设备'), ('工程机械', '机械设备'),
+    ('仪器仪表', '机械设备'), ('自动化', '机械设备'), ('机床', '机械设备'), ('轨交', '机械设备'),
+    ('运输设备', '机械设备'), ('金属制品', '机械设备'), ('机械', '机械设备'),
+    # 建材/钢铁必须排在 metals 之前：'非金属矿物'/'黑色金属' 都含 '金属'
+    # ⚠️ 不要加裸的 ('冶','钢铁')：'有色金属冶炼和压延加工业' 含 '冶'，会被它抢成钢铁。
+    ('非金属矿物', '建筑材料'), ('建材', '建筑材料'), ('水泥', '建筑材料'), ('玻璃', '建筑材料'),
+    ('黑色金属', '钢铁'), ('钢铁', '钢铁'),
+    ('建筑', '建筑装饰'), ('装饰', '建筑装饰'), ('土木', '建筑装饰'),
+    ('化学', '基础化工'), ('化工', '基础化工'), ('塑料', '基础化工'), ('橡胶', '基础化工'),
+    ('石化', '石油石化'), ('石油', '石油石化'), ('油气', '石油石化'),
+    ('有色', '有色金属'), ('小金属', '有色金属'), ('工业金属', '有色金属'), ('金属', '有色金属'),
+    ('煤炭', '煤炭'), ('采掘', '煤炭'),
+    ('酒店', '社会服务'), ('教育', '社会服务'), ('旅游', '社会服务'), ('餐饮', '社会服务'),
+    ('服务', '社会服务'),
+    ('电力', '公用事业'), ('燃气', '公用事业'), ('水的生产', '公用事业'),
+    ('环保', '环保'), ('环境', '环保'),
+    ('食品', '食品饮料'), ('饮料', '食品饮料'), ('酒', '食品饮料'), ('精制茶', '食品饮料'),
+    ('农林', '农林牧渔'), ('农业', '农林牧渔'), ('农副', '农林牧渔'), ('畜牧', '农林牧渔'),
+    ('渔业', '农林牧渔'), ('饲料', '农林牧渔'),
+    ('纺织', '纺织服饰'), ('服装', '纺织服饰'), ('服饰', '纺织服饰'),
+    ('皮革', '纺织服饰'), ('制鞋', '纺织服饰'),
+    ('家电', '家用电器'), ('厨', '家用电器'),
+    ('物流', '交通运输'), ('运输', '交通运输'), ('航运', '交通运输'), ('航空', '交通运输'),
+    ('港口', '交通运输'), ('铁路', '交通运输'), ('道路', '交通运输'), ('交运', '交通运输'),
+    ('批发', '商贸零售'), ('零售', '商贸零售'), ('贸易', '商贸零售'),
+    ('商业', '商贸零售'), ('商贸', '商贸零售'),
+    ('传媒', '传媒'), ('新闻', '传媒'), ('出版', '传媒'), ('广播', '传媒'),
+    ('影视', '传媒'), ('游戏', '传媒'),
+    ('造纸', '轻工制造'), ('家具', '轻工制造'), ('包装', '轻工制造'),
+    ('轻工', '轻工制造'), ('文教', '轻工制造'), ('玩具', '轻工制造'),
+    ('国防', '国防军工'), ('航天', '国防军工'), ('军工', '国防军工'), ('船舶', '国防军工'),
+    ('其他', '其他'), ('综合', '综合'),
+    # —— 2026-09-29 补充：首段来自**东财行业三级名/长尾大类**，上面的关键词覆盖不到。
+    # 按实测未分类 Top30 补齐（加完未分类从 354 只降到 ~150 只）。都是较特定的词，
+    # 追加在末尾不会被前面的宽泛规则遮蔽（已复跑审查确认）。
+    ('家用电器', '家用电器'), ('照明', '家用电器'),
+    ('乘用车', '汽车'), ('商用车', '汽车'), ('底盘', '汽车'), ('车身', '汽车'),
+    ('减速器', '机械设备'), ('工控', '机械设备'), ('能源及重型', '机械设备'),
+    ('木材', '轻工制造'), ('印刷', '轻工制造'), ('家居', '轻工制造'), ('文娱', '轻工制造'),
+    ('仓储', '交通运输'), ('装卸', '交通运输'), ('邮政', '交通运输'),
+    ('耐火', '建筑材料'), ('专业工程', '建筑装饰'),
+    ('农化', '基础化工'), ('原料药', '医药生物'),
+    ('数字媒体', '传媒'), ('住宿', '社会服务'), ('公共设施', '公用事业'),
+    ('芯片', '电子'), ('航海', '国防军工'),
+)
+
+#: 归不到任何大类时的桶名。与源数据里字面的「其他」区分开——后者是真的"其他"，
+#: 前者是**我们不知道**（首段是概念、或 sector 为空），混在一起会误导。
+_INDUSTRY_UNKNOWN = "未分类"
+
+
+def _stock_industry(info) -> str:
+    """股票记录 → 粗行业名（申万一级式）。见 `_INDUSTRY_RULES` 的两条约束。"""
+    if not isinstance(info, dict):
+        return _INDUSTRY_UNKNOWN
+    first = str(info.get("sector") or "").split("/")[0].strip()
+    if not first:
+        return _INDUSTRY_UNKNOWN
+    for kw, ind in _INDUSTRY_RULES:
+        if kw in first:
+            return ind
+    return _INDUSTRY_UNKNOWN
+
+
 def _clean(obj):
     """递归清洗为 JSON 可序列化类型：nan/inf -> None，numpy 标量 -> 原生。"""
     if isinstance(obj, float):
@@ -136,6 +225,17 @@ def _load_json(fp, default=None):
 
 
 _ACCT_MAP_CACHE = {"ts": 0.0, "map": {}}
+
+
+def _hunter_is_intraday(date) -> bool:
+    """该日期是否为「今日且盘中」（工作日 9:15-15:00）。
+
+    盘中判定集中在此，供「盘中手动跑只算不推飞书」等处复用（2026-09-29）。
+    """
+    now = datetime.now()
+    return (str(date) == now.strftime("%Y-%m-%d")
+            and 915 <= now.hour * 100 + now.minute <= 1500
+            and now.weekday() < 5)
 
 
 def _account_of(code) -> str:
@@ -187,12 +287,20 @@ _TAGS_CACHE: dict = {}
 _TAGS_LOCK = threading.Lock()
 _TAGS_RUNNING = False
 
+# 突破扫描状态/缓存的同步锁（2026-09-29）。此前 `_breakout_scan`/`_breakout_cache` **零同步**：
+# 后台 daemon 线程写、pywebview 线程每 800ms 读 ⇒ 可读到 "status=done 但 stocks 还是上一批"
+# 的中间态；force 重扫还能与残留线程重叠写同一 state/磁盘。
+_BREAKOUT_LOCK = threading.Lock()
+
 
 class Api:
     """暴露给前端的 js_api 方法（pywebview 序列化返回值）。"""
 
     # 东财标的（平均股价）短缓存 {secid: (ts, price, pre_close, src)}，见 _em_last_price
     _em_cache = {}
+    # 东财「所属板块」缓存 {code: (ts, boards)}，见 load_stock_profile（TTL 见 _PROFILE_TTL）
+    _profile_cache = {}
+    _PROFILE_TTL = 600.0
 
     def __init__(self):
         self._dates_cache = None
@@ -1607,6 +1715,110 @@ class Api:
         self._stock_chart_cache[cache_key] = (datetime.now(), result)
         return result
 
+    # ---------- 公司资料（K 线弹窗「📋 公司资料」） ----------
+    @staticmethod
+    def _em_secid(code):
+        """6 位码 → 东财 secid。沪市=1.，深市/北交所=0.（东财北交所亦用 0.）。"""
+        from core.market_data.codec import market_of
+        c = str(code).split("_")[0]
+        return ("1." if market_of(c) == "SH" else "0.") + c
+
+    def _em_stock_boards(self, code):
+        """东财「所属板块」→ [{name, kind}]；取不到返回 []（永不抛）。
+
+        ⚠️ 只走 `push2.eastmoney.com/api/qt/slist/get`：2026-09-29 实测本机
+        `push2his`（K线）**整体不可达**（对照组平安银行亦 RemoteDisconnected，已排除代理），
+        `clist`/`stock/get` 同样被风控，只有 `slist/get` 稳定可用。故不依赖其它东财主机。
+
+        `kind` 是**板块名启发式**（含"概念"→概念；以"板块"结尾→地域；其余→其他），
+        **不是**东财语义 —— 该接口不带板块类型字段（实测 f13/f152 恒定）。界面上如实标注。
+        """
+        import os as _os
+        import time as _t
+        import urllib.request as _ur
+        c = str(code).split("_")[0]
+        _hit = Api._profile_cache.get(c)
+        if _hit and (_t.time() - _hit[0]) < Api._PROFILE_TTL:
+            return _hit[1]
+        for _k in ("http_proxy", "https_proxy", "HTTP_PROXY", "HTTPS_PROXY",
+                   "ALL_PROXY", "all_proxy"):
+            _os.environ.pop(_k, None)
+        _os.environ["NO_PROXY"] = "*"
+        url = ("https://push2.eastmoney.com/api/qt/slist/get?spt=3&fltt=2&invt=2"
+               f"&fields=f12,f14&secid={self._em_secid(c)}&pn=1&np=1&pz=100")
+        for _ in range(8):                       # 东财间歇风控，仓库既有对策=8 次重试
+            try:
+                req = _ur.Request(url, headers={"User-Agent": "Mozilla/5.0",
+                                                "Referer": "https://quote.eastmoney.com/"})
+                data = (json.loads(_ur.urlopen(req, timeout=6).read()
+                                   .decode("utf-8", errors="ignore")).get("data") or {})
+                diff = data.get("diff") or []
+                boards = []
+                for x in diff:
+                    nm = str(x.get("f14") or "").strip()
+                    if not nm:
+                        continue
+                    if "概念" in nm:
+                        kind = "概念"
+                    elif nm.endswith("板块"):
+                        kind = "地域"
+                    else:
+                        kind = "其他"
+                    boards.append({"name": nm, "kind": kind})
+                if boards:
+                    Api._profile_cache[c] = (_t.time(), boards)
+                    return boards
+            except Exception:
+                _t.sleep(0.6)
+        Api._profile_cache[c] = (_t.time(), [])   # 负缓存：别让每次点开都等 8 次重试
+        return []
+
+    def load_stock_profile(self, code, live=False):
+        """公司资料。两层（owner 2026-09-29：本地先显示 + 按钮拉实时）：
+
+          - **本地层**（`live=False`，秒开、零网络）：`watchlist_jiuyan.json` 的
+            `business_summary`（主营一句话）、`sector`（`/` 拼接的行业+概念混列）、
+            `_jiuyan_concepts`（韭研概念）
+          - **实时层**（`live=True`）：东财「所属板块」（见 `_em_stock_boards`）
+
+        三条口径说明（避免过度承诺）：
+          - 东财板块列表不带类型字段 ⇒ 行业/概念/地域只能按**板块名启发式**划分，界面标注。
+          - 本地 `sector` 是历史遗留混合串，行业与概念混在一起，**原样展示、不擅自归类**。
+          - 该文件的 `concept_boards`/`industry_boards` 字段 **0/5041 全空**（从未写入），故不读。
+
+        与 `load_stock_chart` 同契约：**永不抛**，失败置 `error` 且 `ok=False`。
+        """
+        out = {"code": str(code), "name": None, "ok": False, "error": None,
+               "business_summary": "", "sector": "", "sector_list": [],
+               "local_concepts": [], "boards": [], "boards_source": None,
+               "boards_note": "东财口径；行业/概念/地域按板块名启发式划分"}
+        try:
+            jy = _load_json(HUNTER_DIR / "watchlist_jiuyan.json", {})
+            info = jy.get(str(code).split("_")[0]) if isinstance(jy, dict) else None
+            if isinstance(info, dict):
+                out["name"] = info.get("name")
+                out["business_summary"] = str(info.get("business_summary") or "").strip()
+                sec = str(info.get("sector") or "").strip()
+                out["sector"] = sec
+                out["sector_list"] = [s.strip() for s in sec.split("/") if s.strip()]
+                out["local_concepts"] = [s for s in _jiuyan_concepts(info).split("|") if s]
+            out["ok"] = True
+        except Exception as e:
+            out["error"] = f"读取本地资料失败: {e}"
+            return _clean(out)
+
+        if live:
+            try:
+                boards = self._em_stock_boards(str(code))
+                if boards:
+                    out["boards"] = boards
+                    out["boards_source"] = "em"
+                else:
+                    out["error"] = "东财所属板块取不到（风控或网络）"
+            except Exception as e:                # 兜底：本地层仍可用
+                out["error"] = f"东财取数失败: {e}"
+        return _clean(out)
+
     def _build_chart_from_df(self, df, out, code):
         """由日线 DataFrame 构建 K 线弹窗数据（MA/MACD/RSI/BOLL + 周/月 + 支撑箱体通道）。"""
         import pandas as pd
@@ -2160,9 +2372,14 @@ class Api:
 
         def _work():
             try:
-                res = self._load_hunter_impl(date, force_build=auto)
+                res = self._load_hunter_impl(date)
                 HUNTER_RUN_STATE["result"] = res
-                self._push_hunter_build_candidates(res, date, dedup=auto)
+                # 2026-09-29 owner 拍板：**盘中手动运行只算不推**。
+                # 背景：盘中 GO 列现在会算出候选（见 _hunter_build_conformance），而手动运行是
+                # dedup=False（每次全推）⇒ 反复点「刷新数据」会把飞书群刷屏。
+                # 定时自动档(auto)盘中的建仓推送**保持原样**——2026-09-21 拍板放开的正是它。
+                if auto or not _hunter_is_intraday(date):
+                    self._push_hunter_build_candidates(res, date, dedup=auto)
             except Exception as e:
                 HUNTER_RUN_STATE["result"] = {"available": False, "error": f"选股猎手运行失败: {e}"}
             finally:
@@ -2250,19 +2467,16 @@ class Api:
         # 无后台运行（如历史视图直接调用）→ 同步执行
         return self._load_hunter_impl(date)
 
-    def _hunter_build_conformance(self, codes, date, force=False):
+    def _hunter_build_conformance(self, codes, date):
         """计算各股建仓信号符合度（时机门控 GO：市场有方向/多头结构/回撤到位/金叉加分）。
 
-        实盘盘中（当日 9:15-15:00）默认跳过以省资源（手动点击时维持原状）；
-        `force=True`（定时自动运行）时盘中也算 —— 否则 10:30~14:30 的自动运行算不出信号，
-        建仓推送永远只能在盘后发生（2026-09-21 owner 拍板放开）。
-        直接读 t_io/cache/daily_kline 日线缓存算特征（零网络；全池约 20s；未缓存跳过显示"—"）。
+        读 t_io/cache/daily_kline 日线缓存算特征（零网络；全池约 20s；未缓存跳过显示"—"）。
+
+        2026-09-29 起**盘中不再跳过**（原为「手动点击时维持原状」以省资源）——owner 要求
+        盘中点按钮即按当时实时 K 线算出建仓符合度。之所以敢放开：该缓存已由猎手本轮拉取
+        **回写当日实时 bar**（见 market_data 的 merge_daily_cache 调用），零网络也能拿到实时价；
+        此前不放开的后半段理由（缓存陈旧、GO 列是昨天的）已随回写一并消除。
         返回 {code: {go, regime, met, conds:{t_*:bool}, reason}}。"""
-        today = datetime.now().strftime("%Y-%m-%d")
-        now = datetime.now()
-        _now_int = now.hour * 100 + now.minute
-        if not force and date == today and 915 <= _now_int <= 1500 and now.weekday() < 5:
-            return {}  # 实盘盘中：省资源不计算（定时自动运行除外）
         result = {}
         try:
             import pandas as _pd
@@ -2354,7 +2568,7 @@ class Api:
             pass
         return result
 
-    def _load_hunter_impl(self, date=None, force_build=False):
+    def _load_hunter_impl(self, date=None):
         """运行 stock_hunter 打分管线，返回 DataLoader 原生产出的表格数据。
         与 Excel 报告 Sheet 1/2/3 数据结构对齐。"""
         if not date:
@@ -2575,7 +2789,7 @@ class Api:
             except Exception:
                 pass
             try:
-                build_conf = self._hunter_build_conformance(codes, date, force=force_build)
+                build_conf = self._hunter_build_conformance(codes, date)
                 if build_conf:
                     for cat, stocks in sector_stocks.items():
                         for s in stocks:
@@ -2899,65 +3113,154 @@ class Api:
         return _clean({"tags": tags})
 
     # ---------- 突破箱体股票聚合 ----------
+    # 当日有效突破参数（2026-09-29，owner 口径：昨收 ≤ 上沿 < 今价，幅度 0.3~8%）
+    _BK_MIN_PCT = 0.3
+    _BK_MAX_PCT = 8.0
+    _BK_MIN_BARS = 30      # _detect_boxes 在 <30 根时静默返回 []，必须显式挡在前面
+    _BK_SCAN_BARS = 200    # 取数窗口：_detect_boxes 只用 tail(150)，200 根足够且能开大 batch
+    _BK_BATCH = 900        # 配合 200 根 ≈ 180k 行，在 GM 实测 ~200k 行上限之内
+
     def _breakout_pool_codes(self):
+        """扫描池 = watchlist_jiuyan.json 的**全部** 6 位码。
+
+        2026-09-29 改：去掉 `_jiuyan_concepts(i).strip()` 过滤。原过滤把 5041 只砍到 **1258 只**
+        （多数条目没有概念字段），与 owner「扫该文件里出现的所有股票」的要求不符。
+        """
         jy = _load_json(HUNTER_DIR / "watchlist_jiuyan.json", {})
-        return [c for c, i in jy.items()
-                if isinstance(i, dict) and c.isdigit()
-                and _jiuyan_concepts(i).strip()]
+        return [c for c, i in jy.items() if isinstance(i, dict) and c.isdigit()]
+
+    def _box_top_for(self, hist):
+        """as-of 上一交易日的箱体上沿：取**含昨收**那只箱体（rel==0）的 high。
+
+        `_detect_boxes` 在 `low <= last_close <= high` 时置 rel=0；此处 last_close 即昨收，
+        故 rel==0 的箱体正是"昨收还在里面"的那只 —— 它的上沿就是今日要突破的线。
+        必须用**排除当日**的切片：带上当日跳空的话上沿会被抬高，今天反而判不出突破。
+        """
+        if hist is None or len(hist) < self._BK_MIN_BARS:
+            return None
+        for b in self._detect_boxes(hist):
+            if b.get("rel") == 0 and b.get("high"):
+                return float(b["high"])
+        return None
+
+    def _breakout_probe_one(self, code, df):
+        """单只「当日有效突破」判定，命中返回 dict，否则 None。
+
+        口径（owner 2026-09-29）：上沿取自 as-of 上一交易日的箱体，命中条件
+        `昨收 ≤ 上沿 < 今价` 且幅度 ∈ [0.3%, 8%]。
+
+        两道**必须**的闸：
+          - **交易日闸**：`df` 末根必须就是今日。`daily_many` 只在交易日 09:15-23:59 且快照
+            ts_date=当日 时才补 forming bar，故周末/盘前末根=上一交易日 → 此处返回 None。
+            没有这道闸，周六会把**周五**的突破当成"今天"报出去。
+          - **长度闸**：切片后需 ≥ `_BK_MIN_BARS` 根（恰好 30 根全量的票切完只剩 29，
+            `_detect_boxes` 会静默返回 [] 而无声漏掉）。
+        """
+        if df is None or df.empty:
+            return None
+        today = datetime.now().strftime("%Y-%m-%d")
+        if str(df["date"].iloc[-1]) != today:
+            return None
+        if len(df) < self._BK_MIN_BARS + 1:
+            return None
+        box_top = self._box_top_for(df.iloc[:-1])
+        if not box_top:
+            return None
+        prev_close = float(df["close"].iloc[-2])
+        cur = float(df["close"].iloc[-1])
+        # 对 rel==0 的箱体 `low ≤ 昨收 ≤ high` 恒成立 ⇒ `prev_close <= box_top` 恒真，
+        # 真正起作用的是"今价站上上沿"。两半都留着以对齐 owner 的表述口径。
+        if not (prev_close <= box_top < cur):
+            return None
+        pct = (cur - box_top) / box_top * 100
+        if not (self._BK_MIN_PCT <= pct <= self._BK_MAX_PCT):
+            return None
+        return {"price": round(cur, 3), "prev_close": round(prev_close, 3),
+                "box_top": round(box_top, 3), "pct_above": round(pct, 2)}
 
     def _breakout_disk_path(self, today):
         return BASE / "t_io" / "cache" / f"breakout_{today}.json"
 
     def _scan_breakout(self, codes, state):
-        """分批算技术标签筛"向上突破"。state 非空时更新进度（done/total/found/stocks）。"""
+        """全池扫描「当日有效突破」。state 非空时更新进度（done/total/found/stocks/no_data）。
+
+        2026-09-29 重写要点：
+          - 取数改 `facade.daily_many`（GM `history` 列表式，350 只/批 + 批量 forming bar），
+            取代逐只 `load_stock_tags_batch` —— 后者走 GM **单线程串行** + 90s 批超时**静默丢票**，
+            全池 5000+ 只不可行。
+          - 判定改「当日有效突破」，取代旧 `向上突破`（旧标签只看"当前价在箱体上沿之上"，
+            没有任何当日成分 ⇒ 三周前突破的票每天照旧被扫出来）。
+          - 北交所：`daily_many` 分流到 bj_daily，取不到的码**不出现在返回里** ⇒ 此处计入 no_data
+            如实汇报，而不是静默当成"没突破"。
+        """
         jy = _load_json(HUNTER_DIR / "watchlist_jiuyan.json", {})
+        from core.market_data.facade import get_provider
         breakouts = []
-        _seen = set()  # 防同一股票重复（缓存污染遗留防御）
-        for i in range(0, len(codes), 80):
-            batch = codes[i:i + 80]
-            r = self.load_stock_tags_batch(batch)
-            for code, info in (r.get("tags", {}) or {}).items():
-                if not info or code in _seen:
+        total = len(codes)
+        no_data = 0
+        BATCH = self._BK_BATCH
+        for i in range(0, total, BATCH):
+            chunk = codes[i:i + BATCH]
+            try:
+                frames = get_provider().daily_many(chunk, days=self._BK_SCAN_BARS)
+            except Exception as e:      # 兜底：单批异常绝不终止整轮
+                print(f"[WARN] breakout daily_many 失败({len(chunk)}只): "
+                      f"{type(e).__name__}: {str(e)[:80]}", flush=True)
+                frames = {}
+            for code in chunk:
+                if frames.get(code) is None:
+                    no_data += 1
                     continue
-                tags = info.get("tags", []) or []
-                if any(t.get("label") == "向上突破" for t in tags):
-                    _seen.add(code)
-                    nm = jy.get(code, {}).get("name", code) if isinstance(jy.get(code), dict) else code
-                    breakouts.append({
-                        "code": code, "name": nm,
-                        "price": info.get("price"),
-                        "trend": info.get("trend"),
-                        "tags": tags,
-                    })
+                hit = self._breakout_probe_one(code, frames.get(code))
+                if not hit:
+                    continue
+                info = jy.get(code) if isinstance(jy.get(code), dict) else None
+                nm = (info or {}).get("name", code)
+                breakouts.append({"code": code, "name": nm,
+                                  "industry": _stock_industry(info),
+                                  "tags": [{"label": "当日有效突破", "color": "up"}], **hit})
             if state is not None:
-                state["done"] = min(i + 80, len(codes))
-                state["found"] = len(breakouts)
-                state["stocks"] = list(breakouts)
-        breakouts.sort(key=lambda x: 0 if x["trend"] == "up" else 1)
+                with _BREAKOUT_LOCK:
+                    state["done"] = min(i + BATCH, total)
+                    state["found"] = len(breakouts)
+                    state["stocks"] = list(breakouts)
+                    state["no_data"] = no_data
+        breakouts.sort(key=lambda x: -(x.get("pct_above") or 0))
         return breakouts
+
+    def _bk_cache_get(self, key):
+        with _BREAKOUT_LOCK:
+            return (getattr(self, "_breakout_cache", None) or {}).get(key)
+
+    def _bk_cache_put(self, key, val):
+        with _BREAKOUT_LOCK:
+            if not hasattr(self, "_breakout_cache"):
+                self._breakout_cache = {}
+            self._breakout_cache[key] = val
 
     def load_breakout_stocks(self):
         """同步全量扫描突破箱体（前端走后端后台线程时用 start_breakout_scan）。
         结果缓存到内存+磁盘（当日），避免重复扫描。"""
         today = datetime.now().strftime("%Y-%m-%d")
         cache_key = "breakout_" + today
-        if not hasattr(self, "_breakout_cache"):
-            self._breakout_cache = {}
-        if cache_key in self._breakout_cache:
-            return self._breakout_cache[cache_key]
+        hit = self._bk_cache_get(cache_key)
+        if hit is not None:
+            return hit
         disk_fp = self._breakout_disk_path(today)
         if disk_fp.exists():
             disk = _load_json(disk_fp, None)
             if disk and isinstance(disk, dict) and "stocks" in disk:
-                self._breakout_cache[cache_key] = disk
+                self._bk_cache_put(cache_key, disk)
                 return disk
 
         codes = self._breakout_pool_codes()
         if not codes:
             return {"stocks": [], "count": 0}
-        breakouts = self._scan_breakout(codes, None)
-        result = _clean({"stocks": breakouts, "count": len(breakouts)})
-        self._breakout_cache[cache_key] = result
+        st = {}
+        breakouts = self._scan_breakout(codes, st)
+        result = _clean({"stocks": breakouts, "count": len(breakouts),
+                         "no_data": st.get("no_data", 0)})
+        self._bk_cache_put(cache_key, result)
         try:
             disk_fp.write_text(json.dumps(result, ensure_ascii=False), encoding="utf-8")
         except Exception:
@@ -2967,61 +3270,88 @@ class Api:
     def start_breakout_scan(self, force=False):
         """启动后台突破扫描（幂等：内存/磁盘缓存命中→立即 done；扫描中→返回当前进度）。
         force=True 绕开当日缓存强制重扫（前端「🔄 重新扫描」，修复 2026-09-01 缓存永不更新的 bug）。
-        返回 {status: idle|running|done|error, total, done, found, stocks, error?}。"""
+        返回 {status: idle|running|done|error, total, done, found, stocks, no_data?, error?}。
+
+        2026-09-29：状态与缓存全部改由 `_BREAKOUT_LOCK` 保护；「扫描中」判定与
+        `self._breakout_scan` 赋值在同一临界区内完成，防止两个 force 重扫并发跑同一池。
+        """
         today = datetime.now().strftime("%Y-%m-%d")
         cache_key = "breakout_" + today
-        if not hasattr(self, "_breakout_cache"):
-            self._breakout_cache = {}
-        if not force and cache_key in self._breakout_cache:
-            r = self._breakout_cache[cache_key]
-            return {"status": "done", "total": 0, "done": 0,
-                    "found": r.get("count", 0), "stocks": r.get("stocks", [])}
-        disk_fp = self._breakout_disk_path(today)
-        if not force and disk_fp.exists():
-            disk = _load_json(disk_fp, None)
-            if disk and isinstance(disk, dict) and "stocks" in disk:
-                self._breakout_cache[cache_key] = disk
+        if not force:
+            hit = self._bk_cache_get(cache_key)
+            if hit is not None:
                 return {"status": "done", "total": 0, "done": 0,
-                        "found": disk.get("count", 0), "stocks": disk.get("stocks", [])}
+                        "found": hit.get("count", 0), "stocks": hit.get("stocks", []),
+                        "no_data": hit.get("no_data", 0)}
+            disk_fp = self._breakout_disk_path(today)
+            if disk_fp.exists():
+                disk = _load_json(disk_fp, None)
+                if disk and isinstance(disk, dict) and "stocks" in disk:
+                    self._bk_cache_put(cache_key, disk)
+                    return {"status": "done", "total": 0, "done": 0,
+                            "found": disk.get("count", 0), "stocks": disk.get("stocks", []),
+                            "no_data": disk.get("no_data", 0)}
 
-        cur = getattr(self, "_breakout_scan", None)
-        if cur and cur.get("status") == "running":
-            return cur
-
-        codes = self._breakout_pool_codes()
-        if not codes:
-            return {"status": "done", "total": 0, "done": 0, "found": 0, "stocks": []}
-        import threading
-        state = {"status": "running", "total": len(codes), "done": 0, "found": 0, "stocks": []}
-        self._breakout_scan = state
+        with _BREAKOUT_LOCK:
+            cur = getattr(self, "_breakout_scan", None)
+            if cur and cur.get("status") == "running":
+                return dict(cur)
+            codes = self._breakout_pool_codes()
+            if not codes:
+                return {"status": "done", "total": 0, "done": 0, "found": 0, "stocks": []}
+            state = {"status": "running", "total": len(codes), "done": 0, "found": 0,
+                     "stocks": [], "no_data": 0}
+            self._breakout_scan = state
+            if force:
+                # 强制重扫必须**先失效**旧缓存：`get_breakout_scan` 优先返回缓存，
+                # 否则前端 poll 第一次就拿到上一轮结果、判为 done 并停止轮询 ⇒
+                # 用户看到的是旧数据，"重新扫描"形同无效。
+                # （状态已在上方置 running，故此刻起 poll 会读到 running 而非 idle。）
+                if hasattr(self, "_breakout_cache"):
+                    self._breakout_cache.pop(cache_key, None)
+                try:
+                    self._breakout_disk_path(today).unlink(missing_ok=True)
+                except Exception:
+                    pass
 
         def run():
             try:
                 breakouts = self._scan_breakout(codes, state)
-                result = _clean({"stocks": breakouts, "count": len(breakouts)})
-                self._breakout_cache[cache_key] = result
+                result = _clean({"stocks": breakouts, "count": len(breakouts),
+                                 "no_data": state.get("no_data", 0)})
+                self._bk_cache_put(cache_key, result)
                 try:
-                    disk_fp.write_text(json.dumps(result, ensure_ascii=False), encoding="utf-8")
+                    self._breakout_disk_path(today).write_text(
+                        json.dumps(result, ensure_ascii=False), encoding="utf-8")
                 except Exception:
                     pass
-                state.update({"status": "done", "done": len(codes), "found": len(breakouts), "stocks": breakouts})
+                with _BREAKOUT_LOCK:
+                    state.update({"status": "done", "done": len(codes),
+                                  "found": len(breakouts), "stocks": breakouts})
             except Exception as e:
-                state.update({"status": "error", "error": str(e)})
+                with _BREAKOUT_LOCK:
+                    state.update({"status": "error", "error": str(e)})
 
         threading.Thread(target=run, daemon=True).start()
-        return state
+        return dict(state)
 
     def get_breakout_scan(self):
-        """轮询后台突破扫描进度。done 后返回完整结果（含磁盘/内存缓存命中）。"""
+        """轮询后台突破扫描进度。done 后返回完整结果（含磁盘/内存缓存命中）。
+
+        返回的是**快照副本**（`dict(state)`），避免 800ms 读线程读到
+        「status=done 但 stocks 仍是上一批」的中间态。
+        """
         today = datetime.now().strftime("%Y-%m-%d")
         cache_key = "breakout_" + today
-        if hasattr(self, "_breakout_cache") and cache_key in self._breakout_cache:
-            r = self._breakout_cache[cache_key]
+        hit = self._bk_cache_get(cache_key)
+        if hit is not None:
             return {"status": "done", "total": 0, "done": 0,
-                    "found": r.get("count", 0), "stocks": r.get("stocks", [])}
-        cur = getattr(self, "_breakout_scan", None)
-        if cur:
-            return cur
+                    "found": hit.get("count", 0), "stocks": hit.get("stocks", []),
+                    "no_data": hit.get("no_data", 0)}
+        with _BREAKOUT_LOCK:
+            cur = getattr(self, "_breakout_scan", None)
+            if cur:
+                return dict(cur)
         return {"status": "idle", "total": 0, "done": 0, "found": 0, "stocks": []}
 
     # ---------- 选股猎手历史 ----------

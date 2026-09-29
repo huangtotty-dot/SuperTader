@@ -17,6 +17,12 @@ _MINUTE_CACHE_DIR = os.path.join(_BASE, "t_io", "cache")
 
 _DAILY_COLS = ["date", "open", "high", "low", "close", "volume"]
 
+def _tx_symbol(code: str) -> str:
+    """6 位码 → 腾讯符号（sh/sz/bj）。市场判定统一走 codec（本模块此前内联
+    `code[0] in "56"`，正是 codec docstring 明令禁止的写法，且完全漏掉北交所）。"""
+    from .codec import to_tx
+    return to_tx(code)
+
 
 def _read_json(fp):
     with open(fp, encoding="utf-8") as f:
@@ -52,6 +58,47 @@ def save_daily_cache(code: str, df, days: int = 800):
             f.write(json.dumps({"date": datetime.now().strftime("%Y-%m-%d"),
                                 "saved_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                                 "rows": recs}, ensure_ascii=False))
+    except Exception:
+        pass
+
+
+def merge_daily_cache(code: str, df, cap: int = 800):
+    """把 df 的日线**并入**共享缓存（按日期去重合并，不缩短既有历史）。
+
+    与 `save_daily_cache` 的区别——后者是**整体覆盖**：若调用方只拉了 150 根而缓存里
+    有 800 根，覆盖会把长历史**截短**（这正是 t_io/cache/daily_kline/index_*.json
+    踩过的坑，见 memory「指数日线缓存会被静默截短」）。本函数用于「只想补上当日实时 bar、
+    不想动历史」的调用方（如猎手拉完 150 天后回写当日价）。
+
+    ⚠️ 只在**当日**运行里调用：历史日回写会把当天的新数据挤掉。
+    """
+    if df is None or df.empty:
+        return
+    code = str(code).split("_")[0]
+    fp = os.path.join(_DAILY_CACHE_DIR, f"{code}.json")
+    try:
+        old_rows = []
+        if os.path.exists(fp):
+            old_rows = (_read_json(fp).get("rows") or [])
+        by_date = {}
+        for r in old_rows:
+            d = str(r.get("date") or "")
+            if d:
+                by_date[d] = r
+        for r in df.itertuples():
+            d = str(r.date)
+            if not d:
+                continue
+            by_date[d] = {"date": d, "open": float(r.open), "close": float(r.close),
+                          "high": float(r.high), "low": float(r.low), "volume": float(r.volume)}
+        rows = [by_date[k] for k in sorted(by_date)]
+        if cap and len(rows) > cap:
+            rows = rows[-cap:]
+        os.makedirs(_DAILY_CACHE_DIR, exist_ok=True)
+        with open(fp, "w", encoding="utf-8") as f:
+            f.write(json.dumps({"date": datetime.now().strftime("%Y-%m-%d"),
+                                "saved_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                                "rows": rows}, ensure_ascii=False))
     except Exception:
         pass
 
@@ -135,7 +182,7 @@ class TencentProvider:
         if cached is not None:
             return cached
         code = str(code).split("_")[0]
-        symbol = ("sh" + code if code[0] in "56" else "sz" + code)
+        symbol = _tx_symbol(code)
         # P0 修复(2026-08-31): daily() 写缓存/回退旧缓存用了 cache_fp/_now/_today 但未定义 →
         # gm 降级腾讯路径抛 NameError → 手动盘盘后重跑"无输出"。补齐定义（与 daily_cache 同路径/时间口径）。
         cache_fp = os.path.join(_DAILY_CACHE_DIR, f"{code}.json")
@@ -290,8 +337,7 @@ class TencentProvider:
         _cached = self.minute_cache(code, date, ttl_seconds)
         if not _cached.empty:
             return _cached
-        market = "sh" if code[0] in ("5", "6", "9") else "sz"
-        symbol = f"{market}{code}"
+        symbol = _tx_symbol(code)
         last_error = None
         _clear_proxy()  # 审核 #7: minute 路径代理清除恢复
         for _ in range(3):
@@ -416,7 +462,7 @@ class TencentProvider:
             return out
         for code in codes:
             base = str(code).split("_")[0]
-            symbol = ("sh" + base if base[0] in "56" else "sz" + base)
+            symbol = _tx_symbol(base)
             try:
                 f = _qt_snapshot_raw(symbol)
                 if not f or len(f) < 35:
@@ -449,7 +495,7 @@ class TencentProvider:
         syms = []
         for c in codes:
             b = str(c).split("_")[0]
-            syms.append(("sh" if b[0] in "56" else "sz") + b)
+            syms.append(_tx_symbol(b))
         try:
             _clear_proxy()
             q = ",".join(syms)

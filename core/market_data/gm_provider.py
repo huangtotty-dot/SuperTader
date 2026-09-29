@@ -2,7 +2,7 @@
 """GmProvider — 掘金数据源（合并实施方案 P1-1，主源）。
 gm SDK volume 单位=股 → 统一 ÷100 收敛为"手"；日线强制前复权(ADJUST_PREV)。
 """
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import pandas as pd
 
@@ -50,6 +50,55 @@ class GmProvider(MarketDataProvider):
             "volume": df["volume"].astype(float) / 100.0,  # 股 → 手
         })
         return out.sort_values("date").reset_index(drop=True)
+
+    def daily_batch(self, codes: list, days: int = 250) -> dict:
+        """批量日线（**窗口式** `gma.history`，不是 count 式 `history_n`）。
+
+        2026-09-29 实测：`history_n(symbol=[...])` 抛 `AttributeError: 'list' object has
+        no attribute 'strip'`（**只收单标的**）；而 `history(symbol=[...], start_time=...,
+        end_time=...)` **收列表**并返回带 `symbol` 列的长表 —— 这是全池扫描（5000+ 只）
+        唯一可行的 GM 通路。
+
+        ⚠️ **GM 的限制是「总行数」不是「标的数」**（实测上限约 **200k 行**：
+        1000 只×~200 根=199k ✓ / 1500 只 ✗ GmError 1029）。
+        故批量大小取决于留窗长度——留窗越宽、每批只能越小。详见 `_lookback_start()`。
+
+        ⚠️ `history` 无 count 语义，靠 start_time 留窗：见 `_lookback_start()`。
+
+        返回 {6位码: DataFrame(标准日线列)}；**取不到的码不出现在返回值里**（调用方补空）。
+        """
+        gma = self._gma
+        codes = [str(c).split("_")[0] for c in (codes or []) if c]
+        if not codes:
+            return {}
+        df = gma.history(symbol=[to_gm(c) for c in codes], frequency="1d",
+                         start_time=self._lookback_start(days),
+                         end_time=datetime.now().strftime("%Y-%m-%d"),
+                         fields="symbol,eob,open,high,low,close,volume",
+                         adjust=gma.ADJUST_PREV, df=True)
+        if df is None or df.empty:
+            return {}
+        df = df.copy()
+        df["code"] = df["symbol"].astype(str).str.split(".").str[-1]
+        out = {}
+        for code, g in df.groupby("code"):
+            out[str(code)] = pd.DataFrame({
+                "date": pd.to_datetime(g["eob"]).dt.strftime("%Y-%m-%d"),
+                "open": g["open"].astype(float), "high": g["high"].astype(float),
+                "low": g["low"].astype(float), "close": g["close"].astype(float),
+                "volume": g["volume"].astype(float) / 100.0,   # 股 → 手（同 daily）
+            }).sort_values("date").reset_index(drop=True)
+        return out
+
+    @staticmethod
+    def _lookback_start(days: int) -> str:
+        """把「要 days 根交易日」换算成日历起点。
+
+        交易日/日历日 ≈ 243/365 = 0.666 ⇒ 反过来乘 **1.5** 即可。留窗不足会**静默少 bar**，
+        留窗过宽则白拉数据并被 GM 的「结果过大」上限卡住（实测：300 日历日 ⇒ ~200 根；
+        350 日历日 ⇒ ~238 根，同样 900 只就会顶到 200k 行上限）。
+        """
+        return (datetime.now() - timedelta(days=int(days * 1.5) + 5)).strftime("%Y-%m-%d")
 
     # ---------- 分钟线 ----------
     def minute(self, code: str, date: str, ttl_seconds: int = None) -> pd.DataFrame:

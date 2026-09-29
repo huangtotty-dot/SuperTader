@@ -92,15 +92,18 @@ class MarketDataFacade:
     def _gm_ok_reset(self) -> None:
         self._gm_down_until = None
 
-    def _gm_call(self, desc: str, fn, *args, **kwargs):
+    def _gm_call(self, desc: str, fn, *args, timeout: float = None, **kwargs):
         """P1-2(2026-09-10): 给 gm SDK 调用套线程池硬超时。
         gm 无超时，挂死既不返回也不抛 → 既有 except 熔断捕不到。超时抛 TimeoutError（内置），
-        由调用点既有 `except Exception → _note_gm_down → 腾讯兜底` 接住；超时后丢弃该池重建。"""
+        由调用点既有 `except Exception → _note_gm_down → 腾讯兜底` 接住；超时后丢弃该池重建。
+
+        `timeout` 缺省用 `_GM_CALL_TIMEOUT`（12s，单标的调用）；批量调用（daily_batch）
+        单次 350 只要 ~19s，必须显式放宽，否则会被 12s 误杀。"""
         if self._gm_pool is None:
             self._gm_pool = _cf.ThreadPoolExecutor(max_workers=1, thread_name_prefix="gm-call")
         fut = self._gm_pool.submit(fn, *args, **kwargs)
         try:
-            return fut.result(timeout=self._GM_CALL_TIMEOUT)
+            return fut.result(timeout=self._GM_CALL_TIMEOUT if timeout is None else timeout)
         except _cf.TimeoutError:
             try:
                 self._gm_pool.shutdown(wait=False)
@@ -124,6 +127,12 @@ class MarketDataFacade:
         return df
 
     def daily(self, code: str, days: int = 800, period: str = "day") -> pd.DataFrame:
+        # 北交所分流（2026-09-29）：GM 与腾讯 K 线**均不供北交所**（实测 BJSE./BSE./BJ. 全 0 行；
+        # 腾讯 ifzq 0/40），走 bj_daily 可插拔取数器。放在 GM 之前——否则白烧一次必然为空的 GM 调用。
+        # 取不到返回空帧（不抛），由调用方跳过并计数。
+        from .codec import market_of
+        if market_of(code) == "BJ":
+            return self._bj_daily(code, days, period)
         # 2026-08-31 手动盘数据源与自动盘对齐：去掉腾讯 cache-first，gm 优先（腾讯仅降级兜底）。
         # 自动盘(gm_main)纯 gm 直拉；手动盘此处同样优先 gm，保证两侧数据/判定一致。
         if self._gm_ok():
@@ -144,6 +153,103 @@ class MarketDataFacade:
                 self._note_gm_down("daily", code, e)
         df = self._tx.daily(code, days)
         return self._mark(_resample_period(df, period), df.attrs.get("source", "tencent"))
+
+    def _bj_daily(self, code: str, days: int, period: str) -> pd.DataFrame:
+        """北交所日线（可插拔取数器，见 `bj_daily` 模块）。永不抛；取不到返回空帧。"""
+        from . import bj_daily
+        df = bj_daily.fetch_bj_daily(code, days)
+        if df is not None and not df.empty:
+            try:
+                from .tencent_provider import save_daily_cache
+                save_daily_cache(code, df)      # 供 gm 不可用时段的通用兜底读端复用
+            except Exception:
+                pass
+        return self._mark(_resample_period(df, period), "bj_em")
+
+    # 批量日线参数（2026-09-29）。GM `history` 的上限是**总行数约 200k**
+    # （1000 只×~200 根 ≈ 199k ✓；1500 只 ✗ GmError 1029），故批量上限取决于留窗长度。
+    # 配合 `_lookback_start`（1.5 倍）⇒ `days=200` 约 200 根/只 ⇒ 900 只 ≈ 180k 行，留余量。
+    # 实测 900 只一批 ≈ 7s（早先 400 只 19.1s 是**窗口过宽**所致，不是标的数）。
+    _BATCH_MAX = 900
+    _GM_BATCH_TIMEOUT = 60.0
+
+    def daily_many(self, codes: list, days: int = 250) -> dict:
+        """批量日线 → {6位码: DataFrame}。全池扫描专用，避免逐只 GM 串行。
+
+        非北交所码走 GM `history` 批量（`_BATCH_MAX` 只/批）；北交所码分流到 bj_daily
+        （可插拔，取不到则**该码不出现在结果里**）。
+
+        **本方法不抛**：GM 不可用/超时/异常 → 已取到的部分照常返回，缺的码由调用方补空并计数。
+        """
+        from .codec import market_of
+        codes = [str(c).split("_")[0] for c in (codes or []) if c]
+        if not codes:
+            return {}
+        bj = [c for c in codes if market_of(c) == "BJ"]
+        rest = [c for c in codes if market_of(c) != "BJ"]
+        out = {}
+        if rest and self._gm_ok():
+            for i in range(0, len(rest), self._BATCH_MAX):
+                chunk = rest[i:i + self._BATCH_MAX]
+                try:
+                    got = self._gm_call("daily_batch", self._gm.daily_batch, chunk, days,
+                                        timeout=self._GM_BATCH_TIMEOUT)
+                    if got:
+                        out.update(got)
+                    self._gm_ok_reset()
+                except Exception as e:
+                    self._note_gm_down("daily_batch", f"{len(chunk)}只", e)
+                    break          # GM 不可达：不再逐批重试刷屏，剩余码由调用方补空
+        elif rest:
+            log.warning("daily_many: GM 不可用，%d 只非北交所码本轮无日线", len(rest))
+        if bj:
+            from . import bj_daily
+            for idx, c in enumerate(bj):
+                df = bj_daily.fetch_bj_daily(c, days)
+                if df is not None and not df.empty:
+                    out[c] = df
+                elif bj_daily.LAST_ERROR is not None:
+                    # 首次失败即判主机不可达，剩余同族码不再逐个重试——
+                    # 否则 321 只 × 8 次重试 × 0.8s ≈ 37 分钟纯等待。
+                    log.warning("daily_many: 北交所首次取数失败(%s)，跳过剩余 %d 只",
+                                bj_daily.LAST_ERROR, len(bj) - idx - 1)
+                    break
+        return self._append_forming_batch(out, rest)
+
+    def _append_forming_batch(self, frames: dict, codes: list) -> dict:
+        """批量补当日 forming bar（与 `_maybe_append_forming` 逐条同闸口语义）。
+
+        为什么要批量版：`_maybe_append_forming` 是**逐只**调 `self._tx.snapshot([code])`
+        （一次 HTTP 一只），全池 5000+ 只会让扫描退回 5000+ 次往返——正是本次要消除的瓶颈。
+        这里改用 `snapshot_auction`（一次 HTTP 打多只，且 `_tx_symbol` 已支持 bj）。
+
+        闸口逐条对齐个股版：非工作日 / 不在 09:15-23:59 / 快照 `ts_date` 非当日 → 不补
+        （否则伪造 bar，08-28 教训）。GM `history` 盘中同样不含当日 bar，故这一步不可省。
+        """
+        _now = datetime.now()
+        today = _now.strftime("%Y-%m-%d")
+        if (_now.weekday() >= 5 or not ("09:15" <= _now.strftime("%H:%M") <= "23:59")
+                or not frames):
+            return frames
+        todo = [c for c in codes
+                if c in frames and frames[c] is not None and not frames[c].empty
+                and str(frames[c]["date"].iloc[-1]) < today]
+        if not todo:
+            return frames
+        try:
+            snaps = self._tx.snapshot_auction(todo)
+        except Exception:
+            return frames
+        for code in todo:
+            snap = snaps.get(code)
+            if not snap or snap.get("ts_date") != today or not snap.get("price"):
+                continue
+            px = snap["price"]
+            fb = pd.DataFrame([{"date": today, "open": snap.get("open") or px,
+                                "high": snap.get("high") or px, "low": snap.get("low") or px,
+                                "close": px, "volume": snap.get("vol_hand") or 0.0}])
+            frames[code] = pd.concat([frames[code], fb], ignore_index=True)
+        return frames
 
     def _maybe_append_forming(self, df: pd.DataFrame, code: str) -> pd.DataFrame:
         """对 gm 日线补当日 bar（P1 审核阻断5+重审#7）。

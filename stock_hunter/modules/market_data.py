@@ -125,14 +125,25 @@ class MarketDataFetcher:
 
     @staticmethod
     def _normalize_qt_symbol(code: str) -> str:
-        code = str(code).strip()
-        market = "sh" if code.startswith(("5", "6", "9")) else "sz"
-        return f"{market}{code}"
+        """6 位码 → 腾讯符号。统一走 codec（本模块此前内联 `startswith(("5","6","9"))`，
+        与 codec docstring 明令相悖，且把北交所 920xxx 编成 sh920xxx ⇒ 永远取不到数据）。"""
+        from core.market_data.codec import to_tx
+        return to_tx(code)
 
     @staticmethod
     def _is_a_share_code(code: str) -> bool:
+        """是否纳入猎手行情拉取的 A 股。2026-09-29：**纳入北交所**（4xxxxx/8xxxxx/920xxx）。
+
+        ⚠️ 代价已知：北交所日线在当前环境四源全不通（腾讯 ifzq/ GM / 东财 / akshare，
+        见 memory「突破扫描改造的环境级事实」）⇒ 这 321 只进来后会以「取数失败」形式进池，
+        拉取分母与失败计数都会变大。owner 2026-09-29 明确要求纳入。
+        """
         code = str(code).strip()
-        return len(code) == 6 and code.isdigit() and code.startswith(
+        if not (len(code) == 6 and code.isdigit()):
+            return False
+        if code.startswith(("4", "8", "920")):      # 北交所
+            return True
+        return code.startswith(
             ("000", "001", "002", "003", "300", "301", "600", "601", "603", "605", "688", "689")
         )
 
@@ -300,8 +311,7 @@ class MarketDataFetcher:
         def fetch_one(code: str):
             for attempt in range(1, self.HISTORICAL_RETRIES + 1):
                 try:
-                    market = "sh" if code.startswith(("6", "5", "9")) else "sz"
-                    symbol = f"{market}{code}"
+                    symbol = self._normalize_qt_symbol(code)
                     data = self._fetch_kline_multi(symbol)
                     if not data:
                         continue
@@ -349,6 +359,19 @@ class MarketDataFetcher:
                         continue
 
                     df = pd.DataFrame(parsed).sort_values('date').reset_index(drop=True)
+                    # 2026-09-29: **当日**运行时把这次拉到的实时日线并入共享缓存。
+                    # 为什么：GUI「建仓符合度」(_hunter_build_conformance) 为省资源是**零网络**
+                    # 直接读 t_io/cache/daily_kline/，而那些缓存对全池多数票是陈旧的
+                    # （实测 5373 只里只有 686 只有当日 bar，1116 只停在 2026-08-07）
+                    # ⇒ 算出来的 GO 列是昨天的。猎手本轮已经拿到了 150 天实时线，顺手回写即可。
+                    # ⚠️ 只在当日写：历史日回写会把当天新数据挤掉（用 merge 而非覆盖，且不缩历史）。
+                    from datetime import datetime as _dtm
+                    if str(target_date_str) == _dtm.now().strftime("%Y-%m-%d"):
+                        try:
+                            from core.market_data.tencent_provider import merge_daily_cache
+                            merge_daily_cache(code, df)
+                        except Exception:
+                            pass
                     target_rows = df[df['date'] == target_date_str]
                     if target_rows.empty:
                         # 目标日期不存在，回退到目标日期之前最近的交易日

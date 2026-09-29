@@ -231,9 +231,16 @@ class TestPushDedup(unittest.TestCase):
 
 
 class TestIntradayForce(unittest.TestCase):
-    """2026-09-21 owner 拍板：盘中也算建仓符合度——但**仅定时自动运行**；
-    手动点击盘中仍跳过（维持省资源）。否则 10:30~14:30 的自动运行算不出信号、
-    建仓推送永远只能在盘后发生。"""
+    """盘中是否算建仓符合度。
+
+    **2026-09-29 owner 拍板，覆盖 2026-09-21 的旧策略**：
+      旧 = 「手动点击盘中跳过（省资源），仅定时自动运行算」
+      新 = 「手动与自动**都算**」——owner 要求点按钮即按当时实时 K 线算出结果。
+    ⇒ 盘中跳过整体取消（`force` 参数随之移除）。
+
+    盘中刷屏的控制点因此从「跳过计算」移到「**盘中手动不推飞书**」——
+    那条策略由 tests/phase3/test_hunter_intraday_industry.py 守（定时自动档照旧推）。
+    """
 
     def setUp(self):
         import t_gui
@@ -254,16 +261,11 @@ class TestIntradayForce(unittest.TestCase):
 
         self.t_gui.datetime = _FrozenDT
 
-    def test_force_bypasses_intraday_skip(self):
-        # 2026-09-21 是周一；10:30 属盘中跳过窗口(09:15-15:00)
+    def test_manual_computes_intraday(self):
+        # 2026-09-21 是周一；10:30 属原盘中跳过窗口(09:15-15:00)
         self._freeze(2026, 9, 21, 10, 30)
-        codes = ["300153", "002639", "600176"]
-
-        manual = self.api._hunter_build_conformance(codes, "2026-09-21")
-        self.assertEqual(manual, {}, "手动盘中应跳过（省资源）")
-
-        forced = self.api._hunter_build_conformance(codes, "2026-09-21", force=True)
-        self.assertTrue(forced, "定时自动运行(force)盘中也必须算出结果，否则建仓推送永远只在盘后")
+        manual = self.api._hunter_build_conformance(["300153", "002639", "600176"], "2026-09-21")
+        self.assertNotEqual(manual, {}, "盘中手动必须算出结果（2026-09-29 owner 要求：GO 列不再为空）")
 
     def test_manual_still_computes_after_close(self):
         self._freeze(2026, 9, 21, 16, 0)          # 盘后
