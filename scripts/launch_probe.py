@@ -20,6 +20,8 @@ OUT_DIR = os.path.join(ROOT, "t_io", "validation", "slippage_probe")
 LOG = os.path.join(OUT_DIR, "probe_stdout.log")
 REPORT = os.path.join(OUT_DIR, "launch_report.json")
 
+os.makedirs(OUT_DIR, exist_ok=True)   # 失败分支也要写报告（2026-09-29 实证：前置失败时 FileNotFoundError）
+
 report = {"ts": datetime.now().isoformat(timespec="seconds"), "steps": []}
 
 
@@ -36,10 +38,11 @@ r = subprocess.run(
 procs = r.stdout.strip()
 step("掘金终端在线", bool(procs and procs != ""), procs[:300] or "未发现 gsgm3/gmterm-serv 进程")
 
-# 2) 探针未重复启动
+# 2) 探针未重复启动（只认 python 进程里的 probe_slippage.py——排除检查命令自身的
+#    powershell/bash 自匹配，2026-09-29 实证误报）
 r2 = subprocess.run(
     ["C:/Windows/System32/WindowsPowerShell/v1.0/powershell.exe", "-NoProfile", "-Command",
-     "Get-CimInstance Win32_Process | Where-Object {$_.CommandLine -like '*probe_slippage*'} | Select-Object ProcessId | ConvertTo-Json"],
+     "Get-CimInstance Win32_Process | Where-Object {$_.Name -match 'python' -and $_.CommandLine -like '*probe_slippage.py*'} | Select-Object ProcessId | ConvertTo-Json"],
     capture_output=True, text=True, timeout=30)
 already = "ProcessId" in (r2.stdout or "")
 step("探针未在跑", not already, r2.stdout.strip()[:200] if already else "无 probe_slippage 进程")

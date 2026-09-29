@@ -214,16 +214,28 @@ def on_bar(context, bars):
 
     st = context._st
     # ② 建底仓（**仅一次**；这批腿不进滑点样本）。建底仓那天**不做 T**——T+1 下也做不了。
+    # 2026-09-29 实证修复：委托被拒（1020 无效ACCOUNT_ID）时不得置 base_done——
+    # 柜台没接单就是没建仓。当日尝试过一次即停（防每根 bar 重复下单），次日重试。
     if not st.get("base_done"):
+        if st.get("_base_attempt_date") == today:
+            return
         if t >= BUY_AT and all(c in context._opens for c in PROBE):
+            st["_base_attempt_date"] = today
+            accepted = 0
             for c, s in PROBE.items():
                 q = _mk_qty(context._opens[c])
                 if q <= 0:
                     continue
-                _order(s, q, OrderSide_Buy, PositionEffect_Open,
-                       {"event": "BASE_BUY", "date": today, "code": c, "qty": q,
-                        "ref_open": context._opens[c]})
-            st["base_done"] = True
+                r = _order(s, q, OrderSide_Buy, PositionEffect_Open,
+                           {"event": "BASE_BUY", "date": today, "code": c, "qty": q,
+                            "ref_open": context._opens[c]})
+                if r:
+                    accepted += 1
+            if accepted == len(PROBE):
+                st["base_done"] = True
+            else:
+                _w({"event": "BASE_INCOMPLETE", "date": today,
+                    "accepted": accepted, "need": len(PROBE)})
             _save_state(st)
         elif t >= SELL_AT:
             _snapshot_positions(context, today)      # 建底仓当日先核实 positions 字段名
