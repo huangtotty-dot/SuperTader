@@ -14,6 +14,8 @@
 - prev_equity 链只接续仿真口径文件（source 含「仿真账户口径」标记）；旧实盘口径文件不可接续。
 - 探针遗留仓兼容（一次性）：slippage_probe/state.json 的 base 持仓（300166×8400 + 603629×1000）
   仅在 [base 建仓日, 2026-09-29 清退日] 窗口内补入市值（heartbeat 只含 AUTO_POOL 引擎跟踪票），source 标注。
+- 09-09 心跳丢票补丁（一次性，owner 09-29 授权）：仅 2026-09-09 若 heartbeat 末行缺 588170
+  或 qty<70000，按缺口补足 70000 股走同链路 EOD 重估（fill 事件 14:40:31 证据），source 标注。
 
 产出：t_io/metrics/equity_daily_{date}.json（幂等，重复跑覆盖）。
 
@@ -197,6 +199,31 @@ def probe_addon(date: str, hb_codes: set):
     return mv, parts, missing
 
 
+def patch_0909_addon(date: str, positions: dict):
+    """09-09 心跳丢票一次性补丁（owner 2026-09-29 授权）：
+    events_20260909.jsonl 14:40:31 有 fill BUY 588170×70000@0.917（pos_after=70000，≈6.4万），
+    但 heartbeat 当日末行 positions 漏掉该票 → 市值少计，09-09/09-10 α 呈 V 形假象。
+    仅对 date=="2026-09-09"：若末行 positions 缺 588170 或 qty<70000，按缺口补足 70000 股，
+    走与主流程同链路 _eod_close 重估。与既有持仓去重、与 probe_addon 正交。
+    返回 (mv, part, missing, via)；不触发返回 (0.0, None, [], None)。"""
+    if date != "2026-09-09":
+        return 0.0, None, [], None
+    target = 70000
+    have = 0
+    for gm_sym, p in (positions or {}).items():
+        code = str(gm_sym).split(".")[-1].split("_")[0]
+        if code == "588170":
+            have = int((p or {}).get("qty") or 0)
+            break
+    deficit = target - have
+    if deficit <= 0:
+        return 0.0, None, [], None
+    close, via = _eod_close("588170", date)
+    if close is None:
+        return 0.0, None, ["588170"], None
+    return deficit * close, f"09-09心跳丢票补丁:588170×{deficit}@{close}({via},fill事件14:40:31)", [], via
+
+
 def t0_realized(date: str):
     """closure_audit.jsonl 当日记录 est_pnl 合计（费后口径）；无记录返回 None。"""
     if not os.path.exists(_CLOSURE_AUDIT):
@@ -284,6 +311,14 @@ def compute(date: str, prev_override=None, extra_note: str = None) -> dict:
                 mv += p_mv
                 notes.append(f"探针遗留仓补入{len(p_parts)}笔:{','.join(p_parts)}")
             missing += p_missing
+            # 09-09 心跳丢票一次性补丁（588170×70000，与 probe_addon 正交）
+            a_mv, a_part, a_missing, a_via = patch_0909_addon(date, positions)
+            if a_part:
+                mv += a_mv
+                n += 1
+                via_n[a_via] = via_n.get(a_via, 0) + 1
+                notes.append(a_part)
+            missing += a_missing
             via_s = ",".join(f"{k}×{v}" for k, v in sorted(via_n.items()))
             market_value = mv
             note = f"市值=heartbeat尾行{n}只×EOD收盘({via_s})"
