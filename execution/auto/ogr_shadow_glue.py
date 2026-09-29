@@ -212,7 +212,15 @@ def evaluate_maps(open_px: dict, prev_close: dict, now: datetime,
             "n_tradable": len(r["tradable"]),
             "rows": rows,
         }
-    except Exception:
+    except Exception as e:
+        # 2026-09-29 复盘实证：裸 except 静默吞错。补留痕（fail-open 语义不变）。
+        try:
+            append_log({"date": now.strftime("%Y-%m-%d"),
+                        "bar_time": now.strftime("%H:%M:%S"),
+                        "layer": "L3_shadow_debug", "via": "evaluate_maps",
+                        "error": f"{type(e).__name__}: {e}"[:300]})
+        except Exception:
+            pass
         return None
 
 
@@ -235,6 +243,13 @@ def decide(bars, holdings_map: dict, now: datetime,
             pc_map = pool_prev_close(holdings_map)
         common = sorted(set(snap) & set(pc_map))
         if len(common) < _OGR_MOD.MIN_POOL:
+            # 2026-09-29 复盘实证：首根 bar 回调 symbols 不全时此处静默 return None，
+            # 叠加 caller 提前置 DONE ⇒ 整日零落盘。补留痕（caller 已改为 None 可重试）。
+            append_log({"date": now.strftime("%Y-%m-%d"),
+                        "bar_time": now.strftime("%H:%M:%S"),
+                        "layer": "L3_shadow_debug", "reason": "pool_too_thin",
+                        "common_n": len(common), "min_pool": _OGR_MOD.MIN_POOL,
+                        "snap_n": len(snap), "pc_n": len(pc_map)})
             return None
 
         prev_close = {c: pc_map[c] for c in common}
@@ -265,7 +280,15 @@ def decide(bars, holdings_map: dict, now: datetime,
             "n_tradable": len(r["tradable"]),
             "rows": rows,
         }
-    except Exception:
+    except Exception as e:
+        # 2026-09-29 复盘实证：裸 except 静默吞错 ⇒ 整日零落盘无从归因。补留痕。
+        try:
+            append_log({"date": now.strftime("%Y-%m-%d"),
+                        "bar_time": now.strftime("%H:%M:%S"),
+                        "layer": "L3_shadow_debug",
+                        "error": f"{type(e).__name__}: {e}"[:300]})
+        except Exception:
+            pass
         return None
 
 

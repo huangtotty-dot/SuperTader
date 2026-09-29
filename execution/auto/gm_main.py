@@ -441,9 +441,16 @@ def _force_open_align(context) -> int:
         except Exception:
             p = 0.0
         if p <= 0:
+            # 2026-09-29 复盘实证：align 跑在逐票循环之前，latest_pre_close 常为空；
+            # 原第二回退 daily_decision_stats 全库无赋值点（死代码）⇒ 002451/603667
+            # 应卖未卖、600276/300456/600584 应买未买，均因 px=0 静默跳过。
+            # 改用 history_n 兜底取昨收（probe_slippage._px_prev_close 同款模式）。
             try:
-                dec = (getattr(context, "daily_decision_stats", None) or {}).get(code) or {}
-                p = float(dec.get("last_price") or 0)
+                his = _sdk_call("align_prev_close", _partial(
+                    history_n, symbol=sym, frequency="1d", count=3,
+                    fields="eob,close", adjust=ADJUST_PREV))
+                if his:
+                    p = float(his[-1]["close"])
             except Exception:
                 p = 0.0
         return p
@@ -488,6 +495,10 @@ def _force_open_align(context) -> int:
     for code, sym, q in sells:
         px = _px_of(code, sym)
         if px <= 0:
+            # 2026-09-29 复盘实证：px=0 静默 continue 导致应卖单无声消失，补留痕
+            print(f"[OPEN_ALIGN] ⚠️ SELL {code} {q}股跳过：取价失败")
+            _audit_write({"event": "open_align_skip", "code": code, "side": "SELL",
+                          "qty": q, "time": str(now), "reason": "no_price"})
             continue
         # 2026-09-15 阶段0-6（诊断D3旁注）：贴跌停卖单=确定性拒单，跳过并留痕
         if _limit_clamp_should_skip(context, code, sym, "SELL", q, px, now, "open_align"):
@@ -528,6 +539,8 @@ def _force_open_align(context) -> int:
         px = _px_of(code, sym)
         if px <= 0:
             skipped.append((code, q, "无价"))
+            _audit_write({"event": "open_align_skip", "code": code, "side": "BUY",
+                          "qty": q, "time": str(now), "reason": "no_price"})
             continue
         # 2026-09-15 阶段0-6（诊断D3旁注）：贴涨停买单=确定性拒单，跳过并留痕
         if _limit_clamp_should_skip(context, code, sym, "BUY", q, px, now, "open_align"):
@@ -2315,15 +2328,23 @@ def on_bar(context, bars):
     if (_ogr_shadow_enabled() and _OGR_BUY_WINDOW[0] <= t <= _OGR_BUY_WINDOW[1]
             and _OGR_SHADOW_DONE_DATE != today
             and getattr(context, "mode", None) == MODE_LIVE):
-        _OGR_SHADOW_DONE_DATE = today
+        # 2026-09-29 复盘实证：DONE 在调用前置位，run_shadow 返回 None（首根 bar
+        # 池未收齐 / glue 静默吞错）⇒ 当日影子整日丢失且零留痕。改为 rec 非空才置
+        # DONE，窗口内下一根 bar 自动重试；None / 异常均补 audit。
         try:
             _ogr_rec = _OGR_GLUE.run_shadow(bars, _OGR_GLUE.read_holdings(), now)
-            if _ogr_rec:
-                print(f"[OGR] 影子 {today} mkt_gap={_ogr_rec.get('mkt_gap')} "
-                      f"池={_ogr_rec.get('pool_n')} 触发={_ogr_rec.get('n_tradable')} "
-                      f"{_ogr_rec.get('tradable')}")
         except Exception as _oe:
             print(f"[OGR] 影子层失败（不阻断主循环）: {_oe}")
+            _audit_write({"event": "ogr_shadow_error", "date": today, "bar": str(t),
+                          "error": f"{type(_oe).__name__}: {_oe}"[:300]})
+            _ogr_rec = None
+        if _ogr_rec:
+            _OGR_SHADOW_DONE_DATE = today
+            print(f"[OGR] 影子 {today} mkt_gap={_ogr_rec.get('mkt_gap')} "
+                  f"池={_ogr_rec.get('pool_n')} 触发={_ogr_rec.get('n_tradable')} "
+                  f"{_ogr_rec.get('tradable')}")
+        else:
+            _audit_write({"event": "ogr_shadow_none", "date": today, "bar": str(t)})
 
     # ── 开盘低开反转 L4 实单（2026-09-22）：09:31 买（每日一次）／10:00 起卖 ──
     # C4 定序：本块位于 `_force_open_align` **之后** ⇒ 先对齐底仓、后本策略买入。
