@@ -3181,7 +3181,7 @@ function renderBreakout(b) {
       (x, y) => (y.pct_above || 0) - (x.pct_above || 0));
     return `<tbody class="bk-group">
     <tr class="bk-group-head" onclick="toggleBkGroup(this)" title="点击收起/展开">
-      <td colspan="7"><span class="bk-arrow">▼</span> <b>${esc(k)}</b>
+      <td colspan="8"><span class="bk-arrow">▼</span> <b>${esc(k)}</b>
         <span class="cell-dim">· ${arr.length} 只</span></td>
     </tr>
     ${arr.map(s => `<tr class="bk-member h-expand-row" ondblclick="openStockChart('${esc(s.code)}','${esc(s.name)}')">
@@ -3193,15 +3193,17 @@ function renderBreakout(b) {
       <td class="num">${s.price != null ? fmt(s.price, 2) : '—'}</td>
       <td class="num up">+${s.pct_above != null ? fmt(s.pct_above, 2) : '—'}%</td>
       <td>${(s.tags || []).map(t => tagBadge(t)).join(" ")}</td>
+      <td class="bk-concepts-cell">${conceptsCell(s)}</td>
     </tr>`).join("")}
   </tbody>`;
   }).join("");
 
   body.innerHTML = `<table class="h-table"><thead><tr>
     <th>代码</th><th>名称</th><th class="num">箱体上沿</th><th class="num">昨收</th>
-    <th class="num">现价</th><th class="num">超出</th><th>标签</th>
+    <th class="num">现价</th><th class="num">超出</th><th>标签</th><th>概念</th>
   </tr></thead>${bodyHtml}</table>
   <div class="cell-dim" style="font-size:10px;margin-top:3px">共 ${gkeys.length} 个行业 · 组按只数降序 · 组内按超出幅度降序 · 双击看技术分析</div>
+  <div class="cell-dim" style="font-size:10px;margin-top:2px">概念为离线口径（韭研概念 + 东财板块概念段），仅覆盖约一半股票；无概念的显示「—」，双击看技术分析可点「📋 公司资料」拉东财全量板块</div>
   ${nd ? `<div class="cell-dim" style="font-size:10px;margin-top:2px">另有 ${nd} 只无日线数据、未参与判定（北交所在当前环境取不到日线）</div>` : ""}`;
 }
 function toggleBkGroup(headEl) {
@@ -3210,6 +3212,17 @@ function toggleBkGroup(headEl) {
   const collapsed = tb.classList.toggle("bk-collapsed");
   const arrow = headEl.querySelector(".bk-arrow");
   if (arrow) arrow.textContent = collapsed ? "▸" : "▼";
+}
+// 概念列（2026-09-30）。离线口径（韭研概念 + 东财板块概念段）只盖约一半股票 ⇒
+// 没数据时显示「—」而不是空白，避免看起来像渲染失败；全量概念在 title 里，
+// 想要东财全量可用双击弹窗的「📋 公司资料」。
+function conceptsCell(s) {
+  const cs = (s && s.concepts) || [];
+  if (!cs.length) {
+    return '<span class="cell-dim" title="离线无该股概念数据（该口径约覆盖一半股票）">—</span>';
+  }
+  const full = cs.join(" · ");
+  return `<span class="bk-concepts" title="${esc(full)}">${esc(full)}</span>`;
 }
 function renderHunter(h) {
   const el = document.getElementById("hunterBody");

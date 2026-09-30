@@ -291,6 +291,11 @@ tr:hover td { background: rgba(243,93,43,.03); }
 .bk-group-head:hover { background: var(--bg-card); }
 .bk-arrow { display: inline-block; width: 12px; color: var(--text-dim); }
 .bk-group.bk-collapsed tr.bk-member { display: none; }
+/* 概念列：单行截断，全量在 title 悬浮里（概念多的股可到 25 个） */
+.bk-concepts-cell { max-width: 300px; }
+.bk-concepts { display: inline-block; max-width: 290px; overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom;
+  font-size: 11px; color: var(--text-dim); }
 .modal-lg { display: flex; flex-direction: column; }
 .stock-chart { flex: 1; min-height: 300px; }
 .calib-badge { font-size: 10px; border-radius: 3px; padding: 1px 5px; margin-left: 3px; }

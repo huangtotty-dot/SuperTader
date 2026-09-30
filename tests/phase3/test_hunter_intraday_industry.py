@@ -124,6 +124,85 @@ class TestIndustryClassifier(unittest.TestCase):
         self.assertLess(rate, 0.10, f"未分类率 {rate:.1%} 过高（{unk}/{len(wl)}），规则表可能被改坏")
 
 
+class TestStockConcepts(unittest.TestCase):
+    """突破箱体「概念」列（2026-09-30）：离线两源合并 + 噪音剔除。"""
+
+    @classmethod
+    def setUpClass(cls):
+        import t_gui
+        cls.tg = t_gui
+
+    def c(self, info):
+        return self.tg._stock_concepts(info)
+
+    def test_合并两源并去重(self):
+        info = {"sector": "软件和信息技术服务业/国产软件/信创",
+                "jiuyan_concept": "人工智能|信创"}
+        got = self.c(info)
+        self.assertEqual(got[:2], ["人工智能", "信创"], "韭研概念应排在前面")
+        self.assertEqual(len(got), len(set(got)), "不得重复")
+        self.assertIn("国产软件", got)
+
+    def test_剔除申万层级段(self):
+        """`IT服务Ⅱ` 这类以 Ⅰ/Ⅱ/Ⅲ 结尾的是**行业层级**，不是概念。"""
+        got = self.c({"sector": "IT服务Ⅲ/IT服务Ⅱ/计算机/移动支付"})
+        self.assertNotIn("IT服务Ⅱ", got)
+        self.assertNotIn("IT服务Ⅲ", got)
+        self.assertIn("移动支付", got)
+
+    def test_剔除地域板块(self):
+        got = self.c({"sector": "半导体/福建板块/芯片概念"})
+        self.assertNotIn("福建板块", got)
+        self.assertIn("芯片概念", got)
+
+    def test_剔除与自身行业同名的段(self):
+        """后续段若与**该股粗行业**同名 ⇒ 与「行业」列重复，剔除。
+
+        ⚠️ 这是**保守**规则（只剔与自身行业同名的），不做「凡像行业的段全剔」——
+        源字段把行业与概念混在一串且无标记，激进剔除会误删真概念
+        （`汽车电子` 既含「汽车」又含「电子」，但它是概念）。
+        代价：偶尔有**别的**行业名漏进概念列（见下第二条断言），可接受。
+        """
+        self.assertNotIn("计算机", self.c({"sector": "IT服务Ⅲ/IT服务Ⅱ/计算机/移动支付"}),
+                         "与该股粗行业(计算机)同名的段应剔除")
+        self.assertIn("移动支付", self.c({"sector": "IT服务Ⅲ/IT服务Ⅱ/计算机/移动支付"}))
+        # 保守规则的已知代价：本行业=电子时，链上另有 '计算机'（另一个行业名）会被保留
+        self.assertIn("计算机", self.c({"sector": "半导体/计算机"}),
+                      "保守规则下异行业名会保留——若改成激进剔除，这里要同步改")
+
+    def test_电子字段名不得被误删(self):
+        """`汽车电子` 是真概念，不能因为含 '电子'（行业词）就被剔。"""
+        got = self.c({"sector": "汽车制造业/汽车电子/智能驾驶"})
+        self.assertIn("汽车电子", got)
+
+    def test_首段本身不入概念(self):
+        """首段是行业，不该出现在概念列里。"""
+        self.assertEqual(self.c({"sector": "房地产业"}), [])
+
+    def test_空输入(self):
+        for bad in ({}, None, {"sector": ""}, "x"):
+            self.assertEqual(self.c(bad), [])
+
+    def test_覆盖率为数据限制而非过滤过严(self):
+        """只带单个行业段的 legacy 条目**确实没有概念**——这是数据限制。
+
+        实测仅 300096 这类多段条目才有概念，全池覆盖 ~46.6%。
+        """
+        self.assertEqual(self.c({"sector": "专业技术服务业"}), [])
+        self.assertEqual(self.c({"sector": "其他制造业"}), [])
+
+    def test_全池覆盖率不低于四成(self):
+        """规则若被改坏（如误删源或过滤过严），覆盖率会塌——设下限兜住。"""
+        wl_path = os.path.join(_ROOT, "stock_hunter", "watchlist_jiuyan.json")
+        if not os.path.exists(wl_path):
+            self.skipTest("无 watchlist（运行期数据，可能被 gitignore）")
+        with open(wl_path, encoding="utf-8") as fh:
+            wl = json.load(fh)
+        n = sum(1 for v in wl.values() if self.c(v))
+        rate = n / max(1, len(wl))
+        self.assertGreater(rate, 0.40, f"概念覆盖率仅 {rate:.1%}（{n}/{len(wl)}），源或过滤可能被改坏")
+
+
 class TestHunterIntraday(unittest.TestCase):
     """T2：盘中实时接线（静态断言，不依赖运行时刻）。"""
 

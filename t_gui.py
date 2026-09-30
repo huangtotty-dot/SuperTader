@@ -205,6 +205,43 @@ def _stock_industry(info) -> str:
     return _INDUSTRY_UNKNOWN
 
 
+def _stock_concepts(info) -> list:
+    """该股的「概念」列表（离线两源合并，2026-09-30）。
+
+    源：
+      1) 韭研概念 `jiuyan_concept1..9` / `jiuyan_concept`（见 `_jiuyan_concepts`）
+      2) `sector` **首段以外**的板块段（首段是行业，已由「行业」列表达）
+
+    第 2 源要剔三类噪音，否则会把行业当成概念列出来：
+      · **地域**：以「板块」结尾（福建板块）——不是概念
+      · **申万层级**：以 Ⅰ/Ⅱ/Ⅲ 结尾（`IT服务Ⅱ`）——是行业层级，不是概念
+      · **与粗行业同名**：如 `计算机`（`_stock_industry` 已归入「计算机」）——重复
+
+    ⚠️ 离线覆盖率仅 **46.6%**（两源任一有）。`sector` 是东财「所属板块」混合串，
+       而 legacy 条目只有一个行业段 ⇒ **贵州茅台这类完全没有概念**，是数据本身的限制，
+       不是 bug。要全覆盖得按需拉东财（逐只接口，全池不现实；见 `load_stock_profile`）。
+    """
+    if not isinstance(info, dict):
+        return []
+    out, seen = [], set()
+
+    def _add(x):
+        x = str(x).strip()
+        if x and x not in seen:
+            seen.add(x)
+            out.append(x)
+
+    for x in _jiuyan_concepts(info).split("|"):
+        _add(x)
+    ind = _stock_industry(info)
+    for p in str(info.get("sector") or "").split("/")[1:]:
+        p = p.strip()
+        if not p or p.endswith("板块") or p in ind or p.endswith(("Ⅰ", "Ⅱ", "Ⅲ")):
+            continue
+        _add(p)
+    return out
+
+
 def _clean(obj):
     """递归清洗为 JSON 可序列化类型：nan/inf -> None，numpy 标量 -> 原生。"""
     if isinstance(obj, float):
@@ -3218,6 +3255,7 @@ class Api:
                 nm = (info or {}).get("name", code)
                 breakouts.append({"code": code, "name": nm,
                                   "industry": _stock_industry(info),
+                                  "concepts": _stock_concepts(info),
                                   "tags": [{"label": "当日有效突破", "color": "up"}], **hit})
             if state is not None:
                 with _BREAKOUT_LOCK:
