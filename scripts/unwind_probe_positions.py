@@ -1,10 +1,12 @@
 # -*- coding: utf-8 -*-
-"""探针遗留仓位清退（一次性，2026-09-30 开盘后用）。
+"""探针遗留仓位清退（standalone 手动后备，2026-09-30 起已集成进主策略）。
 
 背景：09-29 探针误在生产仿真账户买入 300166×8400 / 603629×1000（约 19.7 万），
 T+1 当日不可卖。方案 A 拍板后探针废弃，此脚本把这倆票市价卖出归还现金。
 
-用法（**Python311**，掘金终端在线，09:31 后）：
+⚠️ 2026-09-30 起：主策略 gm_main.py 已内置 `_maybe_unwind_probe_leftover`
+（每日 09:31 后首根 bar 自检自跑），**正常无需手动运行本脚本**；
+本脚本仅作为自动链路失效时的手动后备（需掘金终端在线、09:31 后）：
   "C:/Users/Lenovo/AppData/Local/Programs/Python/Python311/python.exe" scripts/unwind_probe_positions.py
 
 fail-closed：只卖 UNWIND 清单内的票、只卖 available；结果落

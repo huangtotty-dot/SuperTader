@@ -417,6 +417,90 @@ def _limit_clamp_should_skip(context, code, sym, side, qty, price, now, where):
         return False
 
 
+# ═══ 探针遗留仓位自动清退（2026-09-30 owner 裁决：随策略启动自动跑，不再手动跑脚本）═══
+# 背景：09-29 滑点探针误在本生产仿真账户买入 300166×8400 / 603629×1000（≈19.2 万，
+# 与生产持仓混在同一账户）。原 scripts/unwind_probe_positions.py 需手动单独运行 →
+# 改为本策略每日 09:31 后首根 bar 自检：账户仍有清单内遗留即市价卖出归还现金；
+# 无遗留也落 skip 报告（每日一次，成本≈0）。报告口径与 standalone 脚本一致：
+# equity_daily 的清退判定以「最后一个含 sell 动作的 unwind_report」为准（37e8ce2）。
+_PROBE_UNWIND_LEFT = {"SZSE.300166": 8400, "SHSE.603629": 1000}
+_PROBE_UNWIND_DONE_DATE = None
+
+
+def _maybe_unwind_probe_leftover(context, today, t) -> bool:
+    """每日 09:31 后自动清退探针遗留仓位。返回 True=本轮挂了卖单。
+
+    调用方约定：返回 True 时本轮跳过 OPEN_ALIGN（顺延下一根 bar），让卖出回款
+    先落账再对齐买入——09-30 实证 600584 align 买单因回款时序被资金不足拒掉（C-08）。
+    fail-closed：只卖 _PROBE_UNWIND_LEFT 清单内的票、只卖 available；
+    持仓查询失败时不置 done、不写报告（下一根 bar 重试），避免误报"已清退"。
+    """
+    global _PROBE_UNWIND_DONE_DATE
+    if _PROBE_UNWIND_DONE_DATE == today or t < dtime(9, 31):
+        return False
+    try:
+        if getattr(context, "mode", None) != MODE_LIVE:
+            return False
+    except Exception:
+        return False
+    now = context.now if hasattr(context, "now") else datetime.now()
+    # ① 查账户持仓（失败→不写报告不置 done，下根 bar 重试）
+    held = {}
+    try:
+        _acct = _sdk_call("account", context.account)
+        for _p in (_acct.positions() or []):
+            _sym = (_p.get("symbol") if isinstance(_p, dict)
+                    else getattr(_p, "symbol", None))
+            if _sym:
+                held[_sym] = _p
+    except Exception as _pe:
+        print(f"[UNWIND] ⚠️ 持仓查询失败（下根 bar 重试）: {_pe}")
+        return False
+    _PROBE_UNWIND_DONE_DATE = today
+    # ② 只卖清单内遗留
+    rep = {"ts": str(now), "source": "gm_main_auto", "actions": []}
+    placed = False
+    for sym, max_q in _PROBE_UNWIND_LEFT.items():
+        _p = held.get(sym)
+        _vol = int((_p.get("volume") if isinstance(_p, dict)
+                    else getattr(_p, "volume", 0)) or 0) if _p else 0
+        _av = int((_p.get("available") if isinstance(_p, dict)
+                   else getattr(_p, "available", 0)) or 0) if _p else 0
+        if _vol <= 0:
+            rep["actions"].append({"symbol": sym, "action": "skip_no_position"})
+            continue
+        q = (min(_av, max_q) // 100) * 100
+        if q < 100:
+            rep["actions"].append({"symbol": sym, "action": "skip_no_available",
+                                   "volume": _vol, "available": _av})
+            continue
+        try:
+            _sdk_call("unwind_sell", _partial(
+                order_volume, symbol=sym, volume=q, side=OrderSide_Sell,
+                order_type=OrderType_Market, position_effect=PositionEffect_Close))
+            rep["actions"].append({"symbol": sym, "action": "sell", "qty": q})
+            placed = True
+            print(f"[UNWIND] SELL {sym} x{q} 已委托（探针遗留清退）")
+            _audit_write({"event": "probe_unwind", "symbol": sym, "qty": q,
+                          "time": str(now)})
+        except Exception as _se:
+            rep["actions"].append({"symbol": sym, "action": "sell_fail",
+                                   "err": str(_se)[:200]})
+            print(f"[UNWIND] SELL {sym} 失败: {_se}")
+    # ③ 报告落盘（equity_daily 清退判定真源）
+    try:
+        _dir = os.path.join(os.environ.get("SUPERTRADER_ROOT", r"E:\superTrader"),
+                            "t_io", "validation", "slippage_probe")
+        os.makedirs(_dir, exist_ok=True)
+        _fp = os.path.join(_dir, f"unwind_report_{today}.json")
+        with open(_fp, "w", encoding="utf-8") as _f:
+            json.dump(rep, _f, ensure_ascii=False, indent=1)
+        print(f"[UNWIND] 报告: {_fp}")
+    except Exception as _we:
+        print(f"[UNWIND] ⚠️ 报告落盘失败: {_we}")
+    return placed
+
+
 def _force_open_align(context) -> int:
     """开盘一次性把实际持仓对齐到目标底仓（base）：超额卖出、缺口买入。
 
@@ -2328,9 +2412,18 @@ def on_bar(context, bars):
     # ── 持仓真源回写（2026-09-14 并表）：收盘后一次，把账户实际 qty/cost 写回 holdings.json ──
     # 取 14:57 每日一次（on_bar 在 15:00 后 return，没有更晚的钩子）。与 superTrader 14:59 的
     # pre_close 写并发也安全：本侧是"磁盘为基 + 只补丁 qty/cost"，且对方读后再写，两个方向都不丢。
+    # ── 探针遗留自动清退（2026-09-30 owner 裁决：随策略启动自动跑，不再手动跑脚本）──
+    # 每日 09:31 后首根 bar 自检；若本轮挂了清退卖单，align 顺延一根 bar 等回款落账
+    # （09-30 实证：600584 align 买单因卖单回款未到账被资金不足拒掉，C-08）。
+    _unwind_placed = False
+    try:
+        _unwind_placed = _maybe_unwind_probe_leftover(context, today, t)
+    except Exception as _uwe:
+        print(f"[UNWIND] 失败（不阻断主循环）: {_uwe}")
+
     # ── 开盘强制对齐（2026-09-14 owner 裁决）：每个交易日一次，把实际持仓拉到目标底仓 ──
     global _OPEN_ALIGN_DONE_DATE
-    if (t >= dtime(9, 31) and _OPEN_ALIGN_DONE_DATE != today
+    if (not _unwind_placed and t >= dtime(9, 31) and _OPEN_ALIGN_DONE_DATE != today
             and getattr(context, "mode", None) == MODE_LIVE):
         _OPEN_ALIGN_DONE_DATE = today
         try:
