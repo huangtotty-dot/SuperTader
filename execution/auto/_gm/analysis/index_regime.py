@@ -1,5 +1,5 @@
 # coding=utf-8
-"""
+r"""
 analysis/index_regime.py — 大盘态势判定模块 V2.2.4（精简回测版）
 
 核心逻辑移植自 E:\06_T\index_regime.py（2738行 → 精简版）

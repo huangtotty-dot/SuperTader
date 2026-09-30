@@ -1,5 +1,5 @@
 # coding=utf-8
-"""
+r"""
 data/indicators.py — 技术指标计算 + Signal 数据类
 
 移植自 E:\06_T\data_fetcher.py（add_indicators / resample / Signal）

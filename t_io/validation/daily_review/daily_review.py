@@ -890,9 +890,13 @@ def alpha_beta_md():
                 L.append(f"- equity **—**（现金缺失，equity/r_t/α 置 null，不硬算；source: {d.get('source') or '—'}）")
             else:
                 L.append(f"- equity **{d['equity']:,.2f}**（市值 {d.get('market_value')} ＋ 现金 {d.get('cash')}）")
+            # 内层格式化先取出：原来写成嵌套同引号 f-string（f'...{d['x']}...'），
+            # 那是 PEP 701 语法，**只有 3.12+ 能编译**，3.11 直接 SyntaxError。
+            _t0v = d.get('t0_realized')
+            _t0s = '—' if not fnum(_t0v) else f"{_t0v:+,.2f}元"
             L.append(f"- r_t(账户) **{_fmt_pct(d.get('account_ret'))}** ｜ β(沪深300) **{_fmt_pct(d.get('benchmark_ret'))}** ｜ "
                      f"β_aux(科创50) {_fmt_pct(d.get('benchmark_aux_ret'))} ｜ **α {_fmt_pct(d.get('alpha'))}** ｜ "
-                     f"t0_realized {('—' if not fnum(d.get('t0_realized')) else f'{d['t0_realized']:+,.2f}元')}")
+                     f"t0_realized {_t0s}")
             # 累计 α：历遍 metrics/equity_daily_*.json（≤当日，alpha 非 null 求和）
             cum, n_cum = 0.0, 0
             for _f in sorted((BASE / "t_io/metrics").glob("equity_daily_*.json")):

@@ -1,5 +1,5 @@
 # coding=utf-8
-"""
+r"""
 signal/position_sizer.py — 动态仓位管理器
 
 简化版：移除虚拟交易/ETF 等依赖，聚焦华工科技个股回测。

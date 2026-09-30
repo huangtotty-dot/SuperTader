@@ -1,5 +1,5 @@
 # coding=utf-8
-"""
+r"""
 analysis/market_regime.py — 个股市场状态识别（简化版）
 
 移植自 E:\06_T\market_regime.py

@@ -1,5 +1,5 @@
 # coding=utf-8
-"""
+r"""
 config/params.py — 全局参数
 
 融合自 E:\06_T\config.py，仅保留回测所需参数。
