@@ -4,10 +4,10 @@
     "gm_symbol": "SHSE.588170",
     "type": "etf",
     "pool": "both",
-    "qty": 42000,
-    "cost": 0.9138,
+    "qty": 84500,
+    "cost": 0.928,
     "base": 84500,
-    "pre_close": 0.982
+    "pre_close": 0.91
   },
   "600481": {
     "name": "双良节能",
@@ -24,10 +24,10 @@
     "gm_symbol": "SZSE.002451",
     "type": "stock",
     "pool": "both",
-    "qty": 1800,
+    "qty": 0,
     "cost": 7.7162,
     "base": 0,
-    "pre_close": 0.0
+    "pre_close": 7.68
   },
   "000988": {
     "name": "华工科技",
@@ -35,9 +35,9 @@
     "type": "stock",
     "pool": "both",
     "qty": 600,
-    "cost": 106.51,
+    "cost": 92.7983,
     "base": 600,
-    "pre_close": 102.9
+    "pre_close": 92.25
   },
   "600176": {
     "name": "中国巨石",
@@ -54,10 +54,10 @@
     "gm_symbol": "SHSE.603667",
     "type": "stock",
     "pool": "auto",
-    "qty": 500,
+    "qty": 0,
     "cost": 49.86,
     "base": 0,
-    "pre_close": 0.0
+    "pre_close": 49.41
   },
   "300054": {
     "name": "鼎龙股份",
@@ -67,7 +67,7 @@
     "qty": 500,
     "cost": 67.915,
     "base": 500,
-    "pre_close": 70.11
+    "pre_close": 67.45
   },
   "002639": {
     "name": "雪人集团",
@@ -165,9 +165,9 @@
     "type": "stock",
     "pool": "both",
     "qty": 200,
-    "cost": 187.915,
+    "cost": 205.74,
     "base": 200,
-    "pre_close": 214.5
+    "pre_close": 202.35
   },
   "300456": {
     "name": "赛微电子",
@@ -177,7 +177,7 @@
     "qty": 400,
     "cost": 37.538,
     "base": 400,
-    "pre_close": 37.54
+    "pre_close": 35.98
   },
   "600276": {
     "name": "恒瑞医药",
@@ -187,16 +187,16 @@
     "qty": 300,
     "cost": 44.838,
     "base": 300,
-    "pre_close": 44.86
+    "pre_close": 47.21
   },
   "600584": {
     "name": "长电科技",
     "gm_symbol": "SHSE.600584",
     "type": "stock",
     "pool": "both",
-    "qty": 800,
+    "qty": 0,
     "cost": 70.558,
-    "base": 800,
-    "pre_close": 68.78
+    "base": 1200,
+    "pre_close": 64.28
   }
 }
