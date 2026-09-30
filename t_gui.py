@@ -205,12 +205,15 @@ def _stock_industry(info) -> str:
     return _INDUSTRY_UNKNOWN
 
 
-def _stock_concepts(info) -> list:
-    """该股的「概念」列表（离线两源合并，2026-09-30）。
+def _stock_concepts(info, em_boards=None) -> list:
+    """该股的「概念」列表（离线两源合并 + 可选东财第三源，2026-09-30）。
 
     源：
       1) 韭研概念 `jiuyan_concept1..9` / `jiuyan_concept`（见 `_jiuyan_concepts`）
       2) `sector` **首段以外**的板块段（首段是行业，已由「行业」列表达）
+      3) 可选 `em_boards`：东财「所属板块」[{name,kind}]，**仅当 1+2 全空时启用**，
+         取 kind=="概念" 的板块名并去掉「概念」后缀（"MicroLED概念"→"MicroLED"）。
+         沿用第 2 源的剔除规则（地域/申万层级/与粗行业同名）。
 
     第 2 源要剔三类噪音，否则会把行业当成概念列出来：
       · **地域**：以「板块」结尾（福建板块）——不是概念
@@ -219,7 +222,8 @@ def _stock_concepts(info) -> list:
 
     ⚠️ 离线覆盖率仅 **46.6%**（两源任一有）。`sector` 是东财「所属板块」混合串，
        而 legacy 条目只有一个行业段 ⇒ **贵州茅台这类完全没有概念**，是数据本身的限制，
-       不是 bug。要全覆盖得按需拉东财（逐只接口，全池不现实；见 `load_stock_profile`）。
+       不是 bug。第 3 源由调用方通过 `_em_boards_disk_cached` 按需传入（逐只接口，
+       只补命中票；见 `_scan_breakout`）。
     """
     if not isinstance(info, dict):
         return []
@@ -239,6 +243,17 @@ def _stock_concepts(info) -> list:
         if not p or p.endswith("板块") or p in ind or p.endswith(("Ⅰ", "Ⅱ", "Ⅲ")):
             continue
         _add(p)
+    # 第 3 源：离线两源全空时，东财「所属板块」里 kind=="概念" 的板块名
+    if not out and em_boards:
+        for b in em_boards:
+            if not isinstance(b, dict) or b.get("kind") != "概念":
+                continue
+            nm = str(b.get("name") or "").strip()
+            if nm.endswith("概念"):
+                nm = nm[:-2].strip()
+            if not nm or nm.endswith("板块") or nm in ind or nm.endswith(("Ⅰ", "Ⅱ", "Ⅲ")):
+                continue
+            _add(nm)
     return out
 
 
@@ -262,6 +277,56 @@ def _load_json(fp, default=None):
 
 
 _ACCT_MAP_CACHE = {"ts": 0.0, "map": {}}
+
+
+# ---- 东财「所属板块」磁盘缓存层（2026-09-30，突破面板概念列补拉专用） ----
+#: 结构 {code: {"ts": epoch, "boards": [{name,kind}]}}；概念不常变，正缓存 7 天，
+#: 负缓存（拉空=风控或真无板块）1 天，防风控期反复 8 次重试拖慢扫描。
+_EM_BOARDS_DISK_FP = BASE / "t_io" / "cache" / "em_boards.json"
+_EM_BOARDS_DISK_TTL = 7 * 86400.0
+_EM_BOARDS_DISK_NEG_TTL = 1 * 86400.0
+_EM_BOARDS_DISK_LOCK = threading.Lock()
+_EM_BOARDS_DISK_MEM = {"data": None}     # 整文件内存镜像，避免逐只重复读盘
+
+
+def _em_boards_disk_cached(api, code) -> list:
+    """东财「所属板块」三级取数：Api 内存缓存(600s) → 磁盘(7天/负1天) → 在线。
+
+    读写全部 **fail-open**（文件坏=没缓存；写失败=忽略），绝不抛。
+    `Api._profile_cache` 的 600s TTL 面板重开即失效，磁盘层负责跨进程复用。
+    """
+    c = str(code).split("_")[0]
+    now = _time_mod.time()
+    hit = Api._profile_cache.get(c)
+    if hit and (now - hit[0]) < Api._PROFILE_TTL:
+        return hit[1]
+    with _EM_BOARDS_DISK_LOCK:
+        if _EM_BOARDS_DISK_MEM["data"] is None:
+            raw = _load_json(_EM_BOARDS_DISK_FP, None)
+            _EM_BOARDS_DISK_MEM["data"] = raw if isinstance(raw, dict) else {}
+        disk = _EM_BOARDS_DISK_MEM["data"]
+        rec = disk.get(c)
+        if isinstance(rec, dict) and isinstance(rec.get("boards"), list):
+            boards = rec["boards"]
+            ttl = _EM_BOARDS_DISK_TTL if boards else _EM_BOARDS_DISK_NEG_TTL
+            try:
+                fresh = (now - float(rec.get("ts") or 0)) < ttl
+            except Exception:
+                fresh = False
+            if fresh:
+                Api._profile_cache[c] = (now, boards)
+                return boards
+    boards = api._em_stock_boards(c)       # 在线补拉（自身 8 次重试、永不抛）
+    with _EM_BOARDS_DISK_LOCK:
+        disk[c] = {"ts": now, "boards": boards}
+        try:
+            _EM_BOARDS_DISK_FP.parent.mkdir(parents=True, exist_ok=True)
+            tmp = _EM_BOARDS_DISK_FP.with_suffix(".tmp")
+            tmp.write_text(json.dumps(disk, ensure_ascii=False), encoding="utf-8")
+            tmp.replace(_EM_BOARDS_DISK_FP)
+        except Exception:
+            pass
+    return boards
 
 
 def _hunter_is_intraday(date) -> bool:
@@ -3253,9 +3318,18 @@ class Api:
                     continue
                 info = jy.get(code) if isinstance(jy.get(code), dict) else None
                 nm = (info or {}).get("name", code)
+                concepts = _stock_concepts(info)
+                csrc = "offline" if concepts else "none"
+                if not concepts:
+                    # 离线两源为空：东财磁盘缓存层补拉（仅命中票，~30只/天，fail-open 不阻塞扫描）
+                    concepts = _stock_concepts(
+                        info, em_boards=_em_boards_disk_cached(self, code))
+                    if concepts:
+                        csrc = "em"
                 breakouts.append({"code": code, "name": nm,
                                   "industry": _stock_industry(info),
-                                  "concepts": _stock_concepts(info),
+                                  "concepts": concepts,
+                                  "concepts_source": csrc,
                                   "tags": [{"label": "当日有效突破", "color": "up"}], **hit})
             if state is not None:
                 with _BREAKOUT_LOCK:
