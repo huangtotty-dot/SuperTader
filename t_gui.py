@@ -403,6 +403,10 @@ class Api:
     # 东财「所属板块」缓存 {code: (ts, boards)}，见 load_stock_profile（TTL 见 _PROFILE_TTL）
     _profile_cache = {}
     _PROFILE_TTL = 600.0
+    # 两市成交额缓存 {"payload": (ts, payload)}，见 load_market_turnover
+    _turnover_cache = {}
+    # 近 N 日成交额缓存，见 load_turnover_history
+    _turnover_hist_cache = {}
 
     def __init__(self):
         self._dates_cache = None
@@ -563,6 +567,214 @@ class Api:
                         "regime_name": r.get("regime_name"),
                     })
         return _clean(out)
+
+    # ---------- 两市成交额（2026-09-30） ----------
+    # 成交额只看分钟线（见 _market_turnover 的三条口径说明），60s 去重：GUI 10s 轮询不至于每轮打两次 GM。
+    _TURNOVER_TTL = 60.0
+
+    def load_market_turnover(self):
+        """两市成交额 + 变化（指数板第 8 张卡片）。失败返回 {available: False, error}，**永不抛**。"""
+        now = _time_mod.time()
+        hit = Api._turnover_cache.get("payload")
+        if hit and (now - hit[0]) < self._TURNOVER_TTL:
+            return hit[1]
+        try:
+            out = self._market_turnover()
+        except Exception as e:                      # 兜底：绝不让一张卡片拖垮指数板
+            out = {"available": False, "error": f"{type(e).__name__}: {str(e)[:80]}"}
+        Api._turnover_cache["payload"] = (now, out)
+        return out
+
+    @staticmethod
+    def _market_turnover():
+        """两市成交额 + 与**昨日同期**的变化（owner 2026-09-30）。
+
+        三条口径（都是实测踩过才知道的）：
+
+        1) **两条腿 = 上证指数 + 深证综指(sz399106)**，不是深证成指(sz399001)。
+           实测 2026-09-30 分钟线「分时合计 ÷ 日线 amount」：
+             上证指数 1.000、深证综指 1.000、**深证成指 0.471**。
+           ⇒ 深证成指的**日线** amount 是深市全市场（≈深证综指），但它的**分钟** amount
+             只有成分股。盘中要按分时累计，用深证成指会把深市少算一半。
+           注：本口径与 `analysis/index_regime._two_market_amount`（上证+深证成指）**数值一致**
+           —— 因为那用的是日线字段，而深证成指日线 == 深证综指日线。
+
+        2) **只读分钟线**（不用日线）：日线在盘中/盘后初段**不含当日 bar**
+           （gm history_n 实测 16:00 后仍只返回到昨日），要拿当日得走 forming bar，
+           而 forming bar 只在 `end_date is None` 时拼接、会回写共享长历史缓存
+           （见 memory「指数日线缓存会被静默截短」）。分钟线一次拿到今昨两天，零缓存风险。
+
+        3) **盘中比昨日同期、收盘比全日**：今日是累计值，10:00 时可能才走 20%，
+           直接比昨日全日会显示 −80%，严重误导。故盘中取昨日**同一时刻**的累计值对比
+           （owner 选定的口径）；已收盘（或今天不是交易日）则两边都取全日。
+
+        返回 {available, amount, amount_prev, pct, basis: "同期"|"全日", as_of, day, prev_day,
+              legs, bse_included}。
+        """
+        from core.market_data.facade import get_provider
+        from core.market_data import sina_index
+        per_leg, legs, degraded = {}, [], []
+
+        def _norm(df):
+            d = df.copy()
+            d["_day"] = d["time"].astype(str).str[:10]
+            d["_hm"] = d["time"].astype(str).str[11:16]
+            return d
+
+        # 沪深两腿：GM 指数分钟线（含 amount）
+        for sym in ("sh000001", "sz399106"):     # 上证指数 + 深证综指
+            df = get_provider().index_minute(sym, count_bars=800, freq="300s")
+            if df is None or df.empty:
+                return {"available": False, "error": f"分钟线不可得({sym})",
+                        "degraded": ["index_minute"]}
+            per_leg[sym] = _norm(df)
+            legs.append(sym)
+
+        # 北交所腿：只能走新浪（见 sina_index 模块 docstring）。取不到则**如实降级为沪深口径**，
+        # 而不是静默少算 ~120 亿 —— 那正是本次与同花顺对不上的原因。
+        bse = sina_index.fetch_index_minutes("bj899050", scale=5, datalen=400)
+        bse_included = bse is not None and not bse.empty and float(bse["amount"].sum()) > 0
+        if bse_included:
+            per_leg["bj899050"] = _norm(bse)
+            legs.append("bj899050")
+        else:
+            degraded.append("bse_turnover")
+
+        out = Api._turnover_from_minutes(per_leg, datetime.now())
+        out["legs"] = legs
+        out["bse_included"] = bse_included
+        if degraded:
+            out["degraded"] = degraded
+        return out
+
+    @staticmethod
+    def _turnover_from_minutes(per_leg, now):
+        """纯计算（无 IO，便于离线单测）：{腿: 分钟线} + 当前时刻 → 成交额与变化。
+
+        见 `_market_turnover` 的三条口径说明。关键点：
+          · 「当前交易日」取分钟数据里的**最新一天**，不是日历日期 ⇒ 周末/节假日自动落到上一交易日
+          · 盘中取两边 **≤ 当前时刻** 的累计；收盘后（或今天非交易日）两边都取全日
+        """
+        cur_day = max(d["_day"].max() for d in per_leg.values())
+        days = sorted({x for d in per_leg.values() for x in d["_day"].unique()})
+        prior = [x for x in days if x < cur_day]
+        if not prior:
+            return {"available": False, "error": "分钟线里没有上一交易日", "degraded": ["index_minute"]}
+        prev_day = prior[-1]
+
+        hm = now.strftime("%H:%M")
+        # 盘中 = 今天就是当前交易日 且 未到收盘；否则（周末/收盘后）两边都按全日
+        intraday = (cur_day == now.strftime("%Y-%m-%d") and hm < "15:00")
+
+        def _sum(day):
+            per, as_of = {}, None
+            for sym, d in per_leg.items():
+                sub = d[d["_day"] == day]
+                if intraday:
+                    sub = sub[sub["_hm"] <= hm]
+                if len(sub):
+                    per[sym] = float(sub["amount"].sum())
+                    last = str(sub["_hm"].iloc[-1])
+                    as_of = last if as_of is None else max(as_of, last)
+            return per, as_of
+
+        per_cur, as_of = _sum(cur_day)
+        per_prev, _ = _sum(prev_day)
+        amount, amount_prev = sum(per_cur.values()), sum(per_prev.values())
+        if not amount or not amount_prev:
+            return {"available": False, "error": "成交额累计为 0", "degraded": ["index_minute"]}
+        return {
+            "available": True,
+            "amount": amount, "amount_prev": amount_prev,
+            "pct": (amount / amount_prev - 1.0) * 100.0,
+            "basis": "同期" if intraday else "全日",
+            "as_of": as_of, "day": cur_day, "prev_day": prev_day,
+            "by_leg": per_cur,          # 分腿拆解（前端 tooltip 用）
+        }
+
+    # ---------- 近 N 日成交额（「盘中状态」卡柱状图，2026-09-30） ----------
+    _TURNOVER_HIST_TTL = 120.0
+
+    def load_turnover_history(self, days=60):
+        """近 N 个交易日的**全市场**成交额（柱状图用）。失败返回 {available: False, error}，永不抛。"""
+        now = _time_mod.time()
+        hit = Api._turnover_hist_cache.get("payload")
+        if hit and (now - hit[0]) < self._TURNOVER_HIST_TTL:
+            return hit[1]
+        try:
+            out = self._turnover_history_impl(days)
+        except Exception as e:
+            out = {"available": False, "error": f"{type(e).__name__}: {str(e)[:80]}"}
+        Api._turnover_hist_cache["payload"] = (now, out)
+        return out
+
+    def _turnover_history_impl(self, days):
+        """拼装近 N 日全市场成交额（与 `load_market_turnover` 同口径：沪 + 深 + 北）。
+
+        三源：
+          · 沪深：`index_daily(上证指数/深证综指)` 的 amount。**传 end_date** ⇒ provider 不回写
+            共享长历史缓存（不传会把 800 行截短，见 memory「指数日线缓存会被静默截短」）。
+          · 北交所：新浪 `bj899050` **30 分钟**线按日求和。为什么不用别的精度：
+            日线**无 amount**（只有 volume）；5 分钟线 `datalen` 上限只够 ~32 天；
+            30 分钟 `datalen=1500` 给 188 天，且按日合计与 5 分钟口径**逐位一致**（实测 125.3/122.4 亿）。
+          · 今日那一根：用 `load_market_turnover()` 的实时值**覆盖** ⇒ 柱状图最后一根与
+            第 8 张卡片上的数字严格一致，不会出现"图上和卡上不一样"。
+
+        ⚠️ 盘中 GM 日线不含当日 ⇒ 若实时交易日不在日线序列里，**补一根**。
+        """
+        from core.market_data.facade import get_provider
+        from core.market_data import sina_index
+        today = datetime.now().strftime("%Y-%m-%d")
+        prov = get_provider()
+
+        hs = {}
+        for sym in ("sh000001", "sz399106"):
+            df = prov.index_daily(sym, days=int(days) + 60, end_date=today)
+            if df is None or df.empty:
+                return {"available": False, "error": f"指数日线不可得({sym})",
+                        "degraded": ["index_daily"]}
+            for _, r in df.iterrows():
+                d = str(r["date"])
+                hs[d] = hs.get(d, 0.0) + float(r.get("amount") or 0.0)
+        if not hs:
+            return {"available": False, "error": "沪深日线为空", "degraded": ["index_daily"]}
+
+        live = self.load_market_turnover()
+        live_day = live.get("day") if live.get("available") else None
+        live_amount = live.get("amount") if live.get("available") else None
+
+        bse = {}
+        sm = sina_index.fetch_index_minutes("bj899050", scale=30, datalen=1500)
+        if sm is not None and not sm.empty:
+            sm = sm.copy()
+            sm["_d"] = sm["time"].astype(str).str[:10]
+            bse = sm.groupby("_d")["amount"].sum().to_dict()
+
+        return Api._assemble_turnover_history(hs, bse, days, live_day, live_amount, datetime.now())
+
+    @staticmethod
+    def _assemble_turnover_history(hs, bse, days, live_day, live_amount, now):
+        """纯计算（无 IO，便于离线单测）：沪深/北交所按日成交额 + 实时值 → 柱状图数据。
+
+        · 交易日集合 = 沪深日线日期 ∪ {实时交易日}（盘中 GM 日线不含当日 ⇒ 必须补这一根）
+        · 最后一根的 amount 用**实时值覆盖** ⇒ 与「两市成交额」卡片数字严格一致
+        · `in_progress` 只标最后一根，且仅在「该日就是今天且未到 15:00」时
+        · `delta_pct` 环比**前一交易日**；首日无前值 ⇒ None
+        """
+        all_dates = sorted(set(hs) | ({live_day} if live_day else set()))
+        dates = all_dates[-int(days):]
+        rows = [{"date": d, "amount": float(hs.get(d, 0.0)) + float(bse.get(d, 0.0))} for d in dates]
+        if live_day and live_amount is not None and rows and rows[-1]["date"] == live_day:
+            rows[-1]["amount"] = float(live_amount)
+        today = now.strftime("%Y-%m-%d")
+        in_progress = bool(rows and rows[-1]["date"] == today and now.strftime("%H:%M") < "15:00")
+        for i, r in enumerate(rows):
+            prev = rows[i - 1]["amount"] if i > 0 else None
+            r["delta_pct"] = ((r["amount"] / prev - 1.0) * 100.0) if prev else None
+            r["in_progress"] = bool(in_progress and i == len(rows) - 1)
+            r["bse"] = float(bse.get(r["date"], 0.0))
+        return {"available": True, "days": rows, "in_progress": in_progress,
+                "bse_included": bool(bse), "legs": ["sh000001", "sz399106", "bj899050"]}
 
     # ---------- 主要指数概览（2026-09-28：GUI_INDEX_BOARD 单一真源 + 掘金主源） ----------
     def load_indices(self):

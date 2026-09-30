@@ -543,6 +543,94 @@ function renderCost(ch) {
   if (c2) c2.innerHTML = html;
 }
 
+/* ---- 近60日成交额柱状图（2026-09-30）----
+   放在「盘中状态」卡顶部。⚠️ renderLive 每 10s 重建 innerHTML ⇒ 容器每次都是**新节点**，
+   必须 dispose 旧实例再 init，否则每 10s 泄漏一个孤立的 ECharts 实例。 */
+let turnoverHistInst = null;
+let turnoverHistSig = "";
+const TURNOVER_UP = "#f85149";     // 放量（与 .h-bar-fill.up 同色）
+const TURNOVER_DOWN = "#3fb950";   // 缩量
+const TURNOVER_LIVE = "#d29922";   // 进行中：今日未走完，**不参与**放量/缩量判定（否则盘中看着像大幅缩量）
+
+// 把失败原因**写在卡片里**：此前各条失败路径都是静默 return ⇒ 界面只剩空白，
+// 分不清是"没数据""没 echarts"还是"后端没这个接口"。空白本身不携带任何信息。
+function _turnoverFail(msg) {
+  const box = document.getElementById("turnoverHistChart");
+  if (box) box.innerHTML = `<div class="empty" style="font-size:11px">成交额图不可用：${esc(msg)}</div>`;
+}
+
+async function drawTurnoverHist() {
+  const box = document.getElementById("turnoverHistChart");
+  if (!box) return;
+  if (!window.echarts) { _turnoverFail("ECharts 未加载"); return; }
+  let d = null;
+  try {
+    d = await apiCall("load_turnover_history", 60);
+  } catch (e) {
+    // 最常见：后端进程还是旧代码（没有 load_turnover_history 这个接口）⇒ 必须重启 t_gui.py
+    _turnoverFail(`接口调用失败（${e && e.message ? e.message : e}）· 若刚改过 t_gui.py 请重启它`);
+    return;
+  }
+  if (document.getElementById("turnoverHistChart") !== box) return;   // 期间又被重建（下一次会画）
+  if (!d || !d.available || !(d.days || []).length) {
+    _turnoverFail((d && d.error) || "后端返回空");
+    return;
+  }
+  const days = d.days;
+  const last = days[days.length - 1];
+  // 签名含**容器宽度**：面板隐藏时首次渲染拿到 0 宽，切到该 tab 后宽度变化必须触发重画，
+  // 否则会永远停在 0 宽的"空图"上。宽度变化 = 需要重画。
+  const sig = `${days.length}|${last.date}|${Math.round(last.amount)}|${box.clientWidth}`;
+  if (turnoverHistInst && sig === turnoverHistSig) {
+    if (turnoverHistInst.getWidth() !== box.clientWidth) {
+      try { turnoverHistInst.resize(); } catch (e) { }
+    }
+    return;                                   // 数据与尺寸都没变 → 不重绘（防闪烁）
+  }
+  if (!box.clientWidth || !box.clientHeight) {
+    // 容器零尺寸时 ECharts 会画出"空图"且**不报错**。此时**不记签名**，
+    // 等面板可见（宽度非 0）再画 —— 记了签名就再也不会重试了。
+    _turnoverFail(`容器尺寸为 0（${box.clientWidth}×${box.clientHeight}）`);
+    return;
+  }
+  if (turnoverHistInst) { try { turnoverHistInst.dispose(); } catch (e) { } turnoverHistInst = null; }
+  turnoverHistInst = echarts.init(box);
+  const data = days.map(x => ({
+    value: Math.round(x.amount / 1e8),
+    itemStyle: {
+      color: x.in_progress ? TURNOVER_LIVE
+        : (x.delta_pct == null ? "#8b949e" : (x.delta_pct > 0 ? TURNOVER_UP : TURNOVER_DOWN)),
+    },
+  }));
+  turnoverHistInst.setOption({
+    grid: { left: 46, right: 8, top: 8, bottom: 18 },
+    tooltip: {
+      trigger: "axis",
+      formatter: (ps) => {
+        const x = days[ps[0].dataIndex];
+        const dt = x.delta_pct == null ? "—" : `${x.delta_pct >= 0 ? "+" : ""}${x.delta_pct.toFixed(2)}%`;
+        return `${x.date}${x.in_progress ? "（进行中）" : ""}<br>`
+          + `全市场 ${fmtAmount(x.amount)}<br>环比前一交易日 ${dt}`;
+      },
+    },
+    xAxis: {
+      type: "category", data: days.map(x => x.date.slice(5)),
+      axisLabel: { fontSize: 9, interval: 9, color: "#8b949e" },
+      axisTick: { show: false }, axisLine: { lineStyle: { color: "rgba(139,148,158,.3)" } },
+    },
+    yAxis: {
+      type: "value",
+      axisLabel: {
+        fontSize: 9, color: "#8b949e",
+        formatter: (v) => (v >= 10000 ? (v / 10000).toFixed(1) + "万亿" : v + "亿"),
+      },
+      splitLine: { lineStyle: { color: "rgba(139,148,158,.15)" } },
+    },
+    series: [{ type: "bar", data, barMaxWidth: 12 }],
+  });
+  turnoverHistSig = sig;                       // **画成功之后**才记签名
+}
+
 /* ---- 盘中实时 ---- */
 function renderLive(live, isToday) {
   const el = document.getElementById("liveBody");
@@ -609,7 +697,15 @@ function renderLive(live, isToday) {
   el.innerHTML = `
     <div class="live-grid">
       <div class="card">
-        <div class="card-title">盘中状态（intraday_state.json · 10s 刷新）</div>
+        <div class="card-title">盘中状态
+          <span class="cell-dim" style="font-weight:normal;font-size:11px">上：近60日全市场成交额 · 下：个股趋势（intraday_state.json · 10s 刷新）</span>
+        </div>
+        <div id="turnoverHistChart" style="height:130px"></div>
+        <div class="cell-dim" style="font-size:10px;margin:-2px 0 8px">
+          <span style="color:${TURNOVER_UP}">■</span> 放量（较前一交易日）
+          <span style="color:${TURNOVER_DOWN};margin-left:8px">■</span> 缩量
+          <span style="color:${TURNOVER_LIVE};margin-left:8px">■</span> 今日进行中（不判放缩）
+        </div>
         ${trendCards || '<div class="empty">无趋势状态</div>'}
       </div>
       <div class="card">
@@ -628,6 +724,9 @@ function renderLive(live, isToday) {
       </div>
       <div class="console-box" id="consoleBox"></div>
     </div>`;
+
+  // 近60日成交额柱状图（容器刚随 innerHTML 重建 → 内部会 dispose 旧实例再 init）
+  drawTurnoverHist();
 
   // 绑定 console 过滤切换
   const keyOnly = document.getElementById("consoleKeyOnly");
@@ -2697,13 +2796,63 @@ async function initHunterDates() {
 }
 
 // ---- 主要指数实时状态板（2026-09-28；点击看K线，与个股一致）----
+// 成交额格式化：≥1万亿用「万亿」，否则用「亿」
+function fmtAmount(v) {
+  if (v == null || isNaN(v)) return "—";
+  if (v >= 1e12) return (v / 1e12).toFixed(2) + "万亿";
+  return Math.round(v / 1e8).toLocaleString("en-US") + "亿";
+}
+// 两市成交额卡片（2026-09-30）：市场级汇总，非指数 ⇒ **不挂 openStockChart**。
+// 后端已按「盘中比昨日同期 / 收盘比全日」算好，此处只渲染并如实标出 basis。
+function turnoverCard(t) {
+  if (!t || !t.available) {
+    const why = (t && t.error) || "不可用";
+    return `<div class="idx-card idx-card-err" style="min-width:150px;text-align:center"
+        title="${esc("两市成交额：" + why)}">
+      <div style="font-size:13px;color:var(--text-dim)">两市成交额</div>
+      <div class="mono" style="font-size:13px;color:var(--text-dim)">—</div>
+      <div style="font-size:10px;color:var(--text-dim)">${esc(why)}</div>
+    </div>`;
+  }
+  const pct = t.pct;
+  const cls = pct > 0.05 ? "up" : pct < -0.05 ? "down" : "cell-dim";
+  const pctTxt = (pct == null) ? "—" : `${pct >= 0 ? "+" : ""}${fmt(pct, 2)}%`;
+  const basis = t.basis === "同期" ? "vs昨日同期" : "vs昨日全日";
+  // 分腿拆解（后端 by_leg）：无北交所时如实标出，避免把"少算 120 亿"当正常
+  const LEG = { sh000001: "沪", sz399106: "深", bj899050: "北" };
+  const byLeg = t.by_leg || {};
+  const legTxt = Object.keys(LEG).filter(k => byLeg[k] != null)
+    .map(k => `${LEG[k]} ${Math.round(byLeg[k] / 1e8).toLocaleString("en-US")}`).join(" + ");
+  const tip = `今日 ${t.day} · 昨日 ${t.prev_day}\n`
+    + (legTxt ? `分腿(亿)：${legTxt}\n` : "")
+    + `今日${t.basis} ${Math.round(t.amount / 1e8).toLocaleString("en-US")}亿\n`
+    + `昨日${t.basis} ${Math.round(t.amount_prev / 1e8).toLocaleString("en-US")}亿\n`
+    + (t.basis === "同期"
+        ? `（盘中口径：两边都只算到 ${t.as_of}）`
+        : "（已收盘口径：两边都是全日）")
+    + (t.bse_included ? "\n口径：沪(上证指数)+深(深证综指)+北(北证50，全北交所)" : "");
+  // 北交所不可得 ⇒ 降级为沪深口径，明示（否则数值会比同花顺低 ~120 亿）
+  const warn = t.bse_included === false
+    ? `<div style="font-size:10px;color:var(--warn,#d29922)">沪深口径·北交所不可得</div>` : "";
+  return `<div class="idx-card" style="min-width:150px;text-align:center" title="${esc(tip)}">
+    <div style="font-size:13px;color:var(--text-dim)">两市成交额${t.bse_included === false ? "（缺北）" : ""}</div>
+    <div class="mono" style="font-size:16px;font-weight:700">${fmtAmount(t.amount)}</div>
+    <div class="mono ${cls}" style="font-size:11px">${pctTxt}
+      <span style="color:var(--text-faint);font-size:10px">${basis}</span></div>
+    ${warn}
+  </div>`;
+}
 // 指数列表来自后端 core.board_index.GUI_INDEX_BOARD（单一真源），实时源掘金（不可用降级腾讯）。
 async function loadIndices() {
   const body = document.getElementById("indicesBody");
   const meta = document.getElementById("indexBoardMeta");
   if (!body) return;
   try {
-    const d = await apiCall("load_indices");
+    // 成交额与指数并行取（成交额后端 60s 去重，不随 10s 轮询打 GM）
+    const [d, turn] = await Promise.all([
+      apiCall("load_indices"),
+      apiCall("load_market_turnover").catch(() => null),
+    ]);
     const idx = (d && d.indices) || [];
     if (!idx.length) {
       body.innerHTML = '<div class="empty">指数行情不可用</div>';
@@ -2749,6 +2898,7 @@ async function loadIndices() {
             ${badge}
           </div>`;
         }).join("")}
+        ${turnoverCard(turn)}
       </div>`;
   } catch (e) {
     body.innerHTML = `<div class="empty">指数加载失败: ${esc(e.message)}</div>`;
