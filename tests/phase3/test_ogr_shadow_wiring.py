@@ -212,8 +212,17 @@ class TestT4NeverTrades(unittest.TestCase):
         src = open(GMM_PATH, encoding='utf-8').read()
         self.assertIn('_OGR_SHADOW_DONE_DATE', src)
         self.assertIn('_ogr_shadow_enabled()', src)
-        self.assertIn('_OGR_GLUE.run_shadow(', src)
-        # 钩子块内不得出现下单调用（只准 run_shadow）
+        # 2026-09-30 复盘实证（ogr_shadow_2026-09-30.jsonl 全部 snap_n=1 / pool_too_thin）：
+        # live 的 on_bar 是逐票回调，run_shadow(bars) 永远只看到 1 只票 ⇒ 影子块改为与
+        # L4 同源：逐票累积 _ogr_opens + evaluate_maps（median_codes 必须传代理池，防自指）。
+        self.assertIn('_OGR_GLUE.evaluate_maps(', src,
+                      '影子块须走 evaluate_maps（逐票累积口径），不再用 run_shadow(bars)')
+        self.assertIn('_ogr_opens', src, '影子块须复用逐票累积的 _ogr_opens')
+        self.assertIn('median_codes=_OGR_GLUE.proxy_codes()', src,
+                      'median_codes 必须传代理池（防自指）')
+        self.assertNotIn('_OGR_GLUE.run_shadow(bars', src,
+                         '旧接法 run_shadow(bars) 在逐票回调下失明，不得回退')
+        # 钩子块内不得出现下单调用（只准 evaluate_maps + append_log）
         i = src.find('开盘低开反转 L3 影子层（2026-09-22）')
         self.assertGreater(i, 0, '钩子块缺失')
         block = src[i:i + 1400]

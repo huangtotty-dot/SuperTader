@@ -180,7 +180,8 @@ STOCKS = {code: v["gm_symbol"] for code, v in _auto_pool.AUTO_POOL.items()}
 # Stage14 已证「随机 10 只即可」；Stage18 把**固定名单冻死**为 L20（面板内代码字典序最小 20 只、
 # 排除篮子：与全样本中位相关 **0.972** / 符号一致 **85.8%**，候选里最佳，且完全不按业绩选）。
 # 回测由 `backtest_holdings.py --mkt-proxy` 注入；live 应从同一份冻死名单注入。
-# ⚠️ 已知未覆盖：L3 影子层 `run_shadow` 仍用 `bars` 自建池 ⇒ 它的 `mkt_gap` 与 L4 不同源。
+# 2026-09-30：L3 影子层已改为与 L4 同源（逐票累积 `_ogr_opens` + 代理池中位），
+# 不再用单次回调 bars 自建池（逐票回调 ⇒ 永远只能看到 1 只票）。
 MARKET_PROXY = {}   # ⇒ 真实定义在下面（`_OGR_BACKTEST_ENABLE` 之后）：从规则核的冻结名单构建
 STOCK_NAMES = {code: v["name"] for code, v in _auto_pool.AUTO_POOL.items()}
 
@@ -2321,30 +2322,75 @@ def on_bar(context, bars):
         except Exception as _oae:
             print(f"[OPEN_ALIGN] 失败（不阻断主循环）: {_oae}")
 
+    # ── OGR 池开盘价逐票累积（L3 影子与 L4 实单共用；2026-09-30 复盘实证）──
+    # gm 的 on_bar 是**逐票回调**（实测每次只有 1 根 bar），单次调用看不到全池 ⇒
+    # 截面中位数必须靠跨回调累积。setdefault 幂等：L3 与 L4 复用同一个
+    # context._ogr_opens（D1 按日重置为空 dict），重复调用无副作用。
+    if _OGR_GLUE is not None:
+        _opens_store = getattr(context, "_ogr_opens", None)
+        if _opens_store is None:
+            _opens_store = context._ogr_opens = {}
+        for _b in (bars or []):
+            try:
+                _gs = (_b.get("symbol") if isinstance(_b, dict)
+                       else getattr(_b, "symbol", None))
+                _cd = _OGR_GLUE.code_of(_gs)
+                _op = float(((_b.get("open") if isinstance(_b, dict)
+                              else getattr(_b, "open", 0)) or 0))
+                if (_cd and (_cd in STOCKS or _cd in MARKET_PROXY)
+                        and _op > 0 and t >= _OGR_BUY_WINDOW[0]):
+                    _opens_store.setdefault(_cd, _op)
+            except Exception:
+                continue
+
     # ── 开盘低开反转 L3 影子层（2026-09-22）：每个交易日一次，只记日志、不下单 ──
     # 时点同 _OPEN_ALIGN：t >= 09:31 时本轮 on_bar 的 bars 即当日**第一根 60s bar**，
     # 其 open 应等于集合竞价价（这正是 L3 要在真实 bar 流上验证的第一件事）。
-    # 位置在逐票循环**之前**，故不依赖 context.latest_pre_close 是否已填。
-    if (_ogr_shadow_enabled() and _OGR_BUY_WINDOW[0] <= t <= _OGR_BUY_WINDOW[1]
-            and _OGR_SHADOW_DONE_DATE != today
+    # 2026-09-30 复盘实证（ogr_shadow_2026-09-30.jsonl 窗口内重试全部 snap_n=1 /
+    # pool_too_thin）：旧实现把单次回调的 bars 直接喂 run_shadow，而 live 的 on_bar
+    # 是逐票回调 ⇒ 影子层永远只能看到 1 只票。改为与 L4 同款：用上面逐票累积的
+    # context._ogr_opens + 昨收 map 走 evaluate_maps，触发时机亦与 L4 对齐
+    # （交易池集齐 or 窗口末 09:35~09:40 且 have>=5 兜底）。
+    if (_ogr_shadow_enabled() and _OGR_SHADOW_DONE_DATE != today
             and getattr(context, "mode", None) == MODE_LIVE):
-        # 2026-09-29 复盘实证：DONE 在调用前置位，run_shadow 返回 None（首根 bar
-        # 池未收齐 / glue 静默吞错）⇒ 当日影子整日丢失且零留痕。改为 rec 非空才置
-        # DONE，窗口内下一根 bar 自动重试；None / 异常均补 audit。
-        try:
-            _ogr_rec = _OGR_GLUE.run_shadow(bars, _OGR_GLUE.read_holdings(), now)
-        except Exception as _oe:
-            print(f"[OGR] 影子层失败（不阻断主循环）: {_oe}")
-            _audit_write({"event": "ogr_shadow_error", "date": today, "bar": str(t),
-                          "error": f"{type(_oe).__name__}: {_oe}"[:300]})
-            _ogr_rec = None
-        if _ogr_rec:
-            _OGR_SHADOW_DONE_DATE = today
-            print(f"[OGR] 影子 {today} mkt_gap={_ogr_rec.get('mkt_gap')} "
-                  f"池={_ogr_rec.get('pool_n')} 触发={_ogr_rec.get('n_tradable')} "
-                  f"{_ogr_rec.get('tradable')}")
-        else:
-            _audit_write({"event": "ogr_shadow_none", "date": today, "bar": str(t)})
+        # ⚠️ 只数**交易池**的开盘价（代理池的数不算），与 L4 同款口径
+        _sh_have = len([c for c in (getattr(context, "_ogr_opens", {}) or {}) if c in STOCKS])
+        _sh_ready = (_sh_have >= max(5, len(STOCKS))
+                     and _OGR_BUY_WINDOW[0] <= t <= _OGR_BUY_WINDOW[1])
+        # 兜底：窗口末仍未集齐（个别票缺当日 bar）→ 用已到的算，不整日放弃
+        if not _sh_ready and _sh_have >= 5 and _OGR_BUY_WINDOW[1] <= t <= dtime(9, 40):
+            _sh_ready = True
+        if _sh_ready:
+            # 2026-09-29 复盘实证（dd1253c）：rec 非空才置 DONE；None / 异常窗口内
+            # 下一根 bar 自动重试，均补 audit 留痕。
+            try:
+                _sh_opens = dict(getattr(context, "_ogr_opens", {}) or {})
+                _sh_pool = list(STOCKS) + [c for c in MARKET_PROXY if c not in STOCKS]
+                # prev_close 优先用自冻结的昨收快照；太薄再退回 holdings.json::pre_close
+                _sh_pcm = _ogr_prev_close_map(context, _sh_pool)
+                if len(_sh_pcm) < 5:
+                    _sh_pcm = _OGR_GLUE.pool_prev_close(_OGR_GLUE.read_holdings())
+                # ⚠️ median_codes 必须传代理池（防自指，见 glue.evaluate_maps docstring）
+                _ogr_rec = _OGR_GLUE.evaluate_maps(
+                    _sh_opens, _sh_pcm, now,
+                    codes=list(STOCKS), median_codes=_OGR_GLUE.proxy_codes())
+                # evaluate_maps 不落日志 ⇒ 影子块拿到 rec 后自己补落盘
+                if _ogr_rec:
+                    _ogr_rec = {**_ogr_rec, "layer": "L3_shadow", "note": "只记日志，未下单"}
+                    _OGR_GLUE.append_log(_ogr_rec, _OGR_LOG_DIR)
+            except Exception as _oe:
+                print(f"[OGR] 影子层失败（不阻断主循环）: {_oe}")
+                _audit_write({"event": "ogr_shadow_error", "date": today, "bar": str(t),
+                              "error": f"{type(_oe).__name__}: {_oe}"[:300]})
+                _ogr_rec = None
+            if _ogr_rec:
+                _OGR_SHADOW_DONE_DATE = today
+                print(f"[OGR] 影子 {today} mkt_gap={_ogr_rec.get('mkt_gap')} "
+                      f"池={_ogr_rec.get('pool_n')} 触发={_ogr_rec.get('n_tradable')} "
+                      f"{_ogr_rec.get('tradable')}")
+            else:
+                _audit_write({"event": "ogr_shadow_none", "date": today, "bar": str(t),
+                              "have": _sh_have})
 
     # ── 开盘低开反转 L4 实单（2026-09-22）：09:31 买（每日一次）／10:00 起卖 ──
     # C4 定序：本块位于 `_force_open_align` **之后** ⇒ 先对齐底仓、后本策略买入。
@@ -2354,20 +2400,7 @@ def on_bar(context, bars):
     _ogr_skip_today = (getattr(context, "mode", None) == MODE_BACKTEST
                        and getattr(context, "_bt_first_day", None) == today)
     if _ogr_active(context) and not _ogr_skip_today:
-        # ⚠️ 池开盘价必须**逐票累积**：gm 回测的 on_bar 是**逐票回调**（实测 n_bars==1），
-        #    单次调用看不到全池 ⇒ 算不出截面中位数。live 的批量回调同样适用。
-        for _b in (bars or []):
-            try:
-                _gs = (_b.get("symbol") if isinstance(_b, dict)
-                       else getattr(_b, "symbol", None))
-                _cd = _OGR_GLUE.code_of(_gs) if _OGR_GLUE else None
-                _op = float(((_b.get("open") if isinstance(_b, dict)
-                              else getattr(_b, "open", 0)) or 0))
-                if (_cd and (_cd in STOCKS or _cd in MARKET_PROXY)
-                        and _op > 0 and t >= _OGR_BUY_WINDOW[0]):
-                    context._ogr_opens.setdefault(_cd, _op)
-            except Exception:
-                continue
+        # 池开盘价累积已上移到 L3 影子块之前（L3/L4 共用，见上方注释）。
         _need = len(STOCKS)
         # ⚠️ 只数**交易池**的开盘价：代理池的数不算（否则可能 20 个都来自代理、篮子还没到就触发）
         _have = len([c for c in (getattr(context, "_ogr_opens", {}) or {}) if c in STOCKS])
