@@ -44,8 +44,26 @@ _BENCH_AUX = "sh000688"    # 科创50（辅基准）
 
 # 仿真口径标记：prev_equity 链只认带此标记的历史文件（旧实盘口径不可接续）
 _SIM_TAG = "仿真账户口径"
-# 探针遗留仓清退日（约定 2026-09-30 上午清退，最后持有日 09-29）
-_PROBE_CLEAR_DATE = "2026-09-29"
+# 探针遗留仓清退判定：以 unwind_report 真实落地为准（原固定截止日 09-30 实证失效——
+# 09-30 上午清退未执行，遗留仓仍在账户里，不补则市值漏计 ~19.7 万）
+_PROBE_STATE_DIR = os.path.dirname(_PROBE_STATE)
+
+
+def _probe_unwound_upto(date: str):
+    """返回最后一个含 sell 动作的 unwind_report 日期（≤date）；无 → None（未清退）。"""
+    import glob as _g
+    for fp in sorted(_g.glob(os.path.join(_PROBE_STATE_DIR, "unwind_report_*.json")),
+                     reverse=True):
+        d = os.path.basename(fp)[len("unwind_report_"):-len(".json")]
+        if d > date:
+            continue
+        try:
+            rep = _load_json(fp)
+        except Exception:
+            continue
+        if any((a or {}).get("action") == "sell" for a in (rep.get("actions") or [])):
+            return d
+    return None
 
 sys.path.insert(0, _BASE)
 from core.market_data.tencent_provider import TencentProvider  # noqa: E402
@@ -182,8 +200,10 @@ def probe_addon(date: str, hb_codes: set):
     if not base:
         return 0.0, [], []
     start = st.get("_snap_date") or st.get("_base_attempt_date")
-    if not start or not (str(start) <= date <= _PROBE_CLEAR_DATE):
+    if not start or str(start) > date:
         return 0.0, [], []
+    if _probe_unwound_upto(date):
+        return 0.0, [], []   # 已清退（有 sell 报告的 unwind_report 落地），不再补
     mv, parts, missing = 0.0, [], []
     for code, qty in base.items():
         code = str(code).split("_")[0].split(".")[-1]
@@ -287,6 +307,36 @@ def compute(date: str, prev_override=None, extra_note: str = None) -> dict:
         positions = hb.get("positions") or {}
         raw_cash = hb.get("cash")
         cash = float(raw_cash) if isinstance(raw_cash, (int, float)) else None
+        # 成交回报覆盖层（2026-09-30 复盘实证）：heartbeat positions 是引擎台账，
+        # ALIGN 卖出曾不扣减（d97cdf0 前的 bug）⇒ 台账残影压住账户真值。
+        # 当日 fill 事件的 pos_after 来自 GM 成交回报，是真值 ⇒ 以末笔 fill 覆盖。
+        _ev_fp = os.path.join(_BASE, "t_io", "bridge", f"events_{date.replace('-', '')}.jsonl")
+        _overlay = []
+        if os.path.exists(_ev_fp):
+            _last_fill = {}
+            try:
+                with open(_ev_fp, encoding="utf-8") as _f:
+                    for _l in _f:
+                        try:
+                            _e = json.loads(_l)
+                        except Exception:
+                            continue
+                        if _e.get("event") == "fill" and _e.get("pos_after") is not None:
+                            _last_fill[str(_e.get("code"))] = int(_e.get("pos_after"))
+            except Exception:
+                _last_fill = {}
+            for _c, _pa in _last_fill.items():
+                for _gs in list(positions.keys()):
+                    if str(_gs).split(".")[-1].split("_")[0] == _c:
+                        _old = int((positions[_gs] or {}).get("qty") or 0)
+                        if _pa != _old:
+                            _overlay.append(f"{_c}:{_old}→{_pa}")
+                            if _pa > 0:
+                                                                positions[_gs] = {**(positions[_gs] or {}), "qty": _pa}
+                            else:
+                                positions.pop(_gs, None)
+        if _overlay:
+            notes.append(f"fill回报覆盖heartbeat台账:{','.join(_overlay)}")
         if not positions:
             notes.append("heartbeat末行positions为空→equity/account_ret/alpha置null,杜绝现金流静默错误")
         else:
