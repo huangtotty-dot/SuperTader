@@ -510,6 +510,15 @@ def _force_open_align(context) -> int:
                 order_volume, symbol=sym, volume=q, side=OrderSide_Sell,
                 order_type=OrderType_Market, position_effect=PositionEffect_Close))
             _mark_pending_recon(context, code, sym, "SELL", q, px, _o)
+            # 2026-09-30 复盘实证：ALIGN 卖单漏了 sell_channels/OGR 同口径的下单虚减
+            # （成交回调卖分支只更 executed_orders，不碰 manual_position）⇒ 台账残影
+            # 全天不自愈（002451×1800/603667×500 已成交 pos_after=0，14:58 心跳仍报原量）。
+            # 与 :2214 OGR 虚减同口径；拒单由 on_order_status N25-2 分支对称回滚。
+            _mp = context.manual_position.get(sym)
+            if _mp is not None:
+                _mp["qty"] = max(0, int(_mp.get("qty", 0) or 0) - q)
+                _mp["t_qty"] = _mp["qty"]
+                _mp["available"] = max(0, int(_mp.get("available", 0) or 0) - q)
             n += 1
             _placed_sells.append((code, sym, q, px))
             print(f"[OPEN_ALIGN] SELL {code} {q}股@{px:.3f}（超额归位到目标 {_base_map.get(code, getattr(context, f'_base_ref_{code}', 0))}）")
@@ -1019,7 +1028,14 @@ def _get_holding(context, code: str, gm_symbol: str) -> dict:
 
     # 1. 每30分钟跟 gm.api positions 对账一次
     reconcile_interval = 1800
-    last_rec = getattr(context, "_last_position_reconcile", None)
+    # 2026-09-30 复盘实证：对账节流必须**按 symbol** 记账——原全局单时间戳使每个 30min
+    # 窗口只有 STOCKS 序首那一票真正对账（09-29/09-30 的 reconcile_fix 全落在 588170），
+    # 其余票的台账残影永远轮不到自愈（002451/603667 残留全天的直接原因之二）。
+    _recs = getattr(context, "_last_position_reconcile", None)
+    if not isinstance(_recs, dict):          # 兼容旧的全局 datetime 形态
+        _recs = {}
+        context._last_position_reconcile = _recs
+    last_rec = _recs.get(gm_symbol)
     # F2: 模拟盘模式启用对账，回测模式跳过
     try:
         _is_live = context.mode == MODE_LIVE
@@ -1027,7 +1043,7 @@ def _get_holding(context, code: str, gm_symbol: str) -> dict:
         _is_live = False
     _skip_reconcile = not _is_live
     if not _skip_reconcile and (last_rec is None or (now - last_rec).total_seconds() > reconcile_interval):
-        context._last_position_reconcile = now
+        _recs[gm_symbol] = now
         try:
             pos = _sdk_call("positions_reconcile",
                             lambda: context.account().positions(symbol=gm_symbol, side=PositionSide_Long))
