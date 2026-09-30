@@ -1,0 +1,63 @@
+{
+  "week": "2026-W40",
+  "date_range": [
+    "2026-09-28",
+    "2026-10-04"
+  ],
+  "files_found": 3,
+  "valid_days": 3,
+  "skipped_no_cash": 0,
+  "daily": [
+    {
+      "date": "2026-09-28",
+      "equity": 494727.53650917124,
+      "account_ret": -0.014471101865058289,
+      "benchmark_ret": -0.02216195028766832,
+      "benchmark_aux_ret": -0.040625944126224556,
+      "alpha": 0.00769084842261003,
+      "t0_realized": null
+    },
+    {
+      "date": "2026-09-29",
+      "equity": 498000.31548176036,
+      "account_ret": 0.006615315969032309,
+      "benchmark_ret": 0.0010251660999456291,
+      "benchmark_aux_ret": 0.008586228614763547,
+      "alpha": 0.00559014986908668,
+      "t0_realized": 0.0
+    },
+    {
+      "date": "2026-09-30",
+      "equity": 486669.371887211,
+      "account_ret": -0.022752884370340065,
+      "benchmark_ret": 0.0028560184663111166,
+      "benchmark_aux_ret": -0.02506149081779596,
+      "alpha": -0.02560890283665118,
+      "t0_realized": 0.0
+    }
+  ],
+  "weekly": {
+    "account_cum_ret": -0.030523481235138483,
+    "benchmark_cum_ret": -0.018363917335339708,
+    "benchmark_aux_cum_ret": -0.05663832489656995,
+    "alpha_cum": -0.012159563899798775,
+    "alpha_cum_method": "account_cum_ret − benchmark_cum_ret（各自几何累计后相减）"
+  },
+  "attribution": {
+    "t0_realized_sum": 0.0,
+    "t0_realized_null_days": 1,
+    "base_float_pnl_approx": -14937.955081819682,
+    "flow_adjust_sum": 0.0,
+    "method": "粗拆占位：底仓浮动 = Σ(account_ret×equity) − Σt0_realized − Σflow_adjust，非精确归因（ret×equity 用当日收盘净值近似），仅作三拆方向参考"
+  },
+  "rolling_4w": {
+    "alpha_mean": 0.0015403387724493346,
+    "alpha_pos_ratio": 0.7,
+    "max_drawdown": -0.030523481235138594,
+    "valid_days": 10,
+    "skipped_no_cash": 4,
+    "files_found": 14
+  },
+  "generated_at": "2026-09-30T15:46:29",
+  "source": "alpha_beta_weekly.py（复盘清单V2.0 §4.5/§八；净值法；费后；主基准sh000300辅sh000688）"
+}
