@@ -30,8 +30,12 @@ execution/auto/logs/
 # 2026-09-01: 误路径运行时数据（P0-2 镜像曾解析到 execution/），不应入库
 execution/t_io/
 
+# ── 复盘文档整体不入库（owner 2026-10-02：不再上传 GitHub）──
+# ⚠️ 仅加 .gitignore **不生效** —— 这些文件已被跟踪，必须同时 `git rm -r --cached doc/review`
+# （只从索引移除、磁盘文件保留）。此条目覆盖原先单列的 doc/review/archive/。
+doc/review/
+
 # ── 死归档/历史报告（已 git rm --cached，保留磁盘但不再入库）──
-doc/review/archive/
 t_io/.archive_data/
 t_io/.archive_state/
 t_io/validation/.archive/
