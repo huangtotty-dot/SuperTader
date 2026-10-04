@@ -41,7 +41,7 @@ except ImportError:  # 允许从仓库根目录直接运行
 # ── 路径常量 ────────────────────────────────────────────────────────────
 WORKSPACE = Path(__file__).resolve().parents[3]           # E:\superTrader
 PANEL_DIR = WORKSPACE / "t_io" / "validation" / "xsection" / "panel"
-HOLDINGS_JSON = WORKSPACE / "t_io" / "state" / "holdings.json"
+HOLDINGS_JSON = WORKSPACE / "t_io" / "state" / "holdings_manual.json"  # 2026-10-04 拆分：手动侧
 RESULTS_DIR = Path(__file__).resolve().parent / "results" / "volatility_screen_2026-09-18"
 
 # ── 口径常量（预注册，不为结果好看而调） ────────────────────────────────

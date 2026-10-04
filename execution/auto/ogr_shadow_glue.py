@@ -127,12 +127,15 @@ def pool_prev_close(holdings_map: dict, pools=AUTO_POOLS) -> dict:
 
 
 def read_holdings(path: str | None = None) -> dict:
-    """**只读** holdings.json（唯一持仓真源；本模块绝不写）。
+    """**只读** 自动侧持仓真源 holdings_auto.json（本模块绝不写）。
 
+    2026-10-04 双文件拆分：auto 侧读 holdings_auto.json；新文件缺失时回退旧 holdings.json。
     不依赖引擎的 `latest_pre_close`（那个在逐票循环里才填），故调用点不受循环顺序影响。
     """
     try:
-        p = path or os.path.join(_ROOT, "t_io", "state", "holdings.json")
+        p = path or os.path.join(_ROOT, "t_io", "state", "holdings_auto.json")
+        if not path and not os.path.exists(p):
+            p = os.path.join(_ROOT, "t_io", "state", "holdings.json")
         if not os.path.exists(p):
             return {}
         with open(p, "r", encoding="utf-8") as fp:

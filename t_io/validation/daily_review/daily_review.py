@@ -21,9 +21,9 @@ NAMES_FALLBACK = {"000988": "华工科技", "588170": "科创半导体ETF华夏"
                   "300153": "科泰电源", "300364": "中文在线"}
 
 def _load_codes_from_holdings():
-    """读 t_io/state/holdings.json，返回 (codes_qty>0, names)；失败返回 (None, {})。"""
+    """读手动侧 t_io/state/holdings_manual.json，返回 (codes_qty>0, names)；失败返回 (None, {})。"""
     try:
-        h = json.load(open(BASE / "t_io" / "state" / "holdings.json", encoding="utf-8"))
+        h = json.load(open(BASE / "t_io" / "state" / "holdings_manual.json", encoding="utf-8"))
         codes = sorted(c for c, v in h.items() if isinstance(v, dict) and (v.get("qty") or 0) > 0)
         if not codes:
             return None, {}
@@ -40,7 +40,7 @@ if _dyn_codes:
 else:
     CODES = list(CODES_FALLBACK)
     NAMES = dict(NAMES_FALLBACK)
-    print("[warn] holdings.json 读取失败或无持仓(qty>0)，CODES 回退硬编码 8 票池")
+    print("[warn] holdings_manual.json 读取失败或无持仓(qty>0)，CODES 回退硬编码 8 票池")
 
 p = argparse.ArgumentParser()
 p.add_argument("--date", default=None)   # P2-3C: default 当天（原硬编码 2026-08-03）
@@ -106,7 +106,7 @@ def day_profile(rs, prev_close=None):
         out["day_ret_pc%"] = round((cl / float(prev_close) - 1) * 100, 2)
     return out
 
-# C23: 前收优先取竞价采集(当日真实前收)，回退 holdings.json(eod_sync 滚动前有效)
+# C23: 前收优先取竞价采集(当日真实前收)，回退 holdings_manual.json(eod_sync 滚动前有效)
 _prev_close_map = {}
 try:
     _auc = json.load(open(BASE / f"t_io/preopen/auction_{DATE}.json", encoding="utf-8"))
@@ -117,7 +117,7 @@ try:
 except Exception:
     pass
 try:
-    _hold = json.load(open(BASE / "t_io" / "state" / "holdings.json", encoding="utf-8"))
+    _hold = json.load(open(BASE / "t_io" / "state" / "holdings_manual.json", encoding="utf-8"))
     for _c in CODES:
         if _c not in _prev_close_map and fnum((_hold.get(_c) or {}).get("pre_close")):
             _prev_close_map[_c] = float(_hold[_c]["pre_close"])
@@ -291,12 +291,12 @@ watch = {
 # ---------- 7. KPI 日快照（喂周复盘 §1.5 周 KPI 表 K1-K5） ----------
 STATE_DIR = BASE / "t_io/state"
 STATE_DIR.mkdir(parents=True, exist_ok=True)
-HOLDINGS_FP = STATE_DIR / "holdings.json"
+HOLDINGS_FP = STATE_DIR / "holdings_manual.json"  # 2026-10-04 拆分：快照源取手动侧台账
 
 def archive_holdings_snapshot(date):
     """P2-3C(2026-09-10) 重写归档规则（旧"已存在则跳过"会被晨跑旧值锁死 reconcile 前状态）：
     - 历史日期：只读护栏——已存在不覆盖（保留当时快照）。
-    - date==今日：holdings.json mtime 非今日 → 不建档（防用旧值）；已存在且 holdings.json 更新则覆盖自愈。
+    - date==今日：holdings_manual.json mtime 非今日 → 不建档（防用旧值）；已存在且 holdings_manual.json 更新则覆盖自愈。
     返回 (snap_path, created_or_updated)。
     """
     snap = STATE_DIR / f"holdings_{date}.json"
@@ -313,7 +313,7 @@ def archive_holdings_snapshot(date):
     except Exception:
         h_mtime = 0
     if datetime.fromtimestamp(h_mtime).strftime("%Y-%m-%d") != today:
-        return snap, False      # holdings.json 非今日 → 不建档
+        return snap, False      # holdings_manual.json 非今日 → 不建档
     if snap.exists():
         try:
             if h_mtime > os.path.getmtime(snap):   # 比快照新 → 覆盖自愈
@@ -326,9 +326,14 @@ def archive_holdings_snapshot(date):
     return snap, True
 
 def prev_holdings_snapshot(date):
-    """前一交易日归档快照（取日期 < date 的最新一份）。"""
-    cands = [s for s in STATE_DIR.glob("holdings_*.json")
-             if s.stem.replace("holdings_", "") < date]
+    """前一交易日归档快照（取日期 < date 的最新一份）。只认日期名，防 holdings_manual/auto 误入。"""
+    cands = []
+    for s in STATE_DIR.glob("holdings_*.json"):
+        _d = s.stem.replace("holdings_", "")
+        if len(_d) != 10 or _d[4] != "-" or _d[7] != "-":
+            continue  # 非日期名（如 holdings_manual/auto.json）跳过
+        if _d < date:
+            cands.append(s)
     return sorted(cands)[-1] if cands else None
 
 snap_fp, snap_created = archive_holdings_snapshot(DATE)
@@ -750,7 +755,7 @@ def _ogr_cost_model():
 
 def _ogr_fee_venue(code):
     try:
-        _h = json.load(open(BASE / "t_io" / "state" / "holdings.json", encoding="utf-8"))
+        _h = json.load(open(BASE / "t_io" / "state" / "holdings_manual.json", encoding="utf-8"))
         if str((_h.get(code) or {}).get("type") or "").lower() == "etf":
             return "etf"
     except Exception:

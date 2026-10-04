@@ -47,9 +47,9 @@ WINDOW_START, WINDOW_END = "2026-09-01", "2026-09-29"
 
 
 def load_pool():
-    """holdings.json + watchlist_buy.json 中 pool ∈ {auto, both} 的票。"""
+    """holdings_auto.json + watchlist_buy.json 中 pool ∈ {auto, both} 的票。"""
     pool = {}
-    for fp, key in ((os.path.join(BASE, "t_io", "state", "holdings.json"), None),
+    for fp, key in ((os.path.join(BASE, "t_io", "state", "holdings_auto.json"), None),
                     (os.path.join(BASE, "t_io", "state", "watchlist_buy.json"), "stocks")):
         with open(fp, encoding="utf-8") as f:
             d = json.load(f)

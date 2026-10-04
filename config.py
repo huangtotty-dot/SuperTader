@@ -46,7 +46,11 @@ import urllib.error
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 T_IO_DIR = os.path.join(BASE_DIR, "t_io")
 STATE_DIR = os.path.join(T_IO_DIR, "state")
-HOLDINGS_FILE = os.path.join(STATE_DIR, "holdings.json")
+# 2026-10-04 手动/自动持仓文件拆分：原单一 holdings.json 拆为两份独立真源。
+# HOLDINGS_FILE 保留旧名并指向手动侧（无其它模块导入，仅向后兼容）。
+HOLDINGS_FILE = os.path.join(STATE_DIR, "holdings_manual.json")
+HOLDINGS_MANUAL_FILE = HOLDINGS_FILE
+HOLDINGS_AUTO_FILE = os.path.join(STATE_DIR, "holdings_auto.json")
 LEARNING_FILE = os.path.join(T_IO_DIR, "t_trader_learning.json")
 LOG_DIR = os.path.join(T_IO_DIR, "logs")
 CACHE_DIR = os.path.join(T_IO_DIR, "cache")

@@ -1,5 +1,9 @@
 # -*- coding: utf-8 -*-
-"""t_io/state/holdings.json 统一迁移（2026-09-14）—— 一份真源 + 目标底仓并表。
+"""[已失效 2026-10-04] t_io/state/holdings.json 统一迁移（2026-09-14）—— 一份真源 + 目标底仓并表。
+
+⚠️ 已失效：持仓真源于 2026-10-04 拆分为 holdings_manual.json / holdings_auto.json，
+旧 holdings.json 已删除，本脚本（读旧路径）不再可运行。保留仅为审计追溯。
+拆分迁移见 scripts/migrate_holdings_split.py。
 
 背景（见 doc 方案 / commit 32e63d46 之后）：
 - holdings.json 是**旧手动盘遗留**，qty 停在手动账户（600176=1600/002451=2800/588170=74500），

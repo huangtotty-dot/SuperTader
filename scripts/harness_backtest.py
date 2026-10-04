@@ -699,13 +699,15 @@ def main():
         dates.append(dt.strftime("%Y-%m-%d"))
         dt += timedelta(days=1)
 
-    # 默认持仓映射（从 holdings.json 读取；W32: T_HOLDINGS_FILE 可注入历史快照，验证用途默认不变）
-    holdings_file = Path(os.environ.get("T_HOLDINGS_FILE", str(BASE_DIR / "t_io" / "state" / "holdings.json")))
+    # 默认持仓映射（2026-10-04 拆分：默认读手动侧 holdings_manual.json；
+    # W32: T_HOLDINGS_FILE 可注入历史快照，验证用途默认不变）
+    holdings_file = Path(os.environ.get(
+        "T_HOLDINGS_FILE", str(BASE_DIR / "t_io" / "state" / "holdings_manual.json")))
     holdings_map = {}
     if holdings_file.exists():
         with open(holdings_file, 'r', encoding='utf-8') as f:
             raw = json.load(f)
-            # holdings.json 格式: {code: {name, cost, qty, base, t_qty, type, account, pre_close}}
+            # 格式: {code: {name, cost, qty, base, type, pre_close}}
             for code, h in raw.items():
                 clean = code.split("_")[0] if "_" in code else code
                 holdings_map[clean] = h

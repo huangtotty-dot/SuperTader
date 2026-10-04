@@ -3,8 +3,8 @@
 config/auto_pool.py — 自动盘标的池（P3-2 池分管 → 2026-08-30 单文件合并）
 
 来源：原 goldminer main.py:33-71 硬编码 17 票 STOCKS/STOCK_NAMES，P3-2 迁入本模块；
-2026-08-30 起改为从单一持仓真源 t_io/state/holdings.json 派生（pool ∈ {auto, both} →
-{name, gm_symbol}），与手动链/回测共用同一文件，杜绝身份清单漂移。
+2026-08-30 起改为从持仓真源派生（pool ∈ {auto, both} → {name, gm_symbol}）。
+2026-10-04 双文件拆分后，真源为**自动侧** t_io/state/holdings_auto.json（手动/自动分文件）。
 
 消费方：
   · superTrader：core/position_builder.py（manual 扫描过滤）、main.py（启动池校验）、t_gui.py（池筛选）
@@ -24,16 +24,29 @@ import os
 POOL = "auto"
 
 _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-HOLDINGS_FILE = os.path.join(_ROOT, "t_io", "state", "holdings.json")
+# 2026-10-04 双文件拆分：auto 池身份来自自动侧真源 holdings_auto.json。
+# 过渡回退：新文件缺失但旧 holdings.json 尚在时，从旧文件按 pool 派生（迁移落盘后自然失效）。
+AUTO_HOLDINGS_FILE = os.path.join(_ROOT, "t_io", "state", "holdings_auto.json")
+_LEGACY_HOLDINGS_FILE = os.path.join(_ROOT, "t_io", "state", "holdings.json")
+# 兼容旧引用名（少数按绝对路径加载本模块的地方）
+HOLDINGS_FILE = AUTO_HOLDINGS_FILE
 
 
-def _load_auto_pool() -> dict:
-    """从 holdings.json 派生 auto 池身份（pool ∈ {auto, both} → {name, gm_symbol}）。读失败返回 {}。"""
+def _read(path: str) -> dict:
     try:
-        with open(HOLDINGS_FILE, "r", encoding="utf-8") as f:
+        with open(path, "r", encoding="utf-8") as f:
             data = json.load(f)
     except Exception:
         return {}
+    return data if isinstance(data, dict) else {}
+
+
+def _load_auto_pool() -> dict:
+    """从 holdings_auto.json 派生 auto 池身份（pool ∈ {auto, both} → {name, gm_symbol}）。
+    新文件缺失时回退旧 holdings.json。读失败返回 {}。"""
+    data = _read(AUTO_HOLDINGS_FILE)
+    if not data:
+        data = _read(_LEGACY_HOLDINGS_FILE)
     if not isinstance(data, dict):
         return {}
     return {

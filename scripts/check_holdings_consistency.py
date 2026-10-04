@@ -1,14 +1,16 @@
 # -*- coding: utf-8 -*-
-"""scripts/check_holdings_consistency.py — 持仓单一真源一致性守卫（2026-08-30）
+"""scripts/check_holdings_consistency.py — 持仓双文件一致性守卫（2026-10-04 拆分后）
 
-持仓信息合并成 t_io/state/holdings.json 单一真源后，手动链/自动链/回测都从它派生。
-本脚本校验派生关系不漂移（用户手改 holdings.json 后跑一遍，漏改/孤岛立即暴露）：
+持仓拆成两份真源后，手动链/自动链分别从各自文件派生，`both` 标的在两份各有一条。
+本脚本校验两份不漂移（用户手改任一份后跑一遍，漏改/孤岛/漂移立即暴露）：
 
-  1) 全集一致：auto 池 ∪ 持有 == holdings.json 全量（无孤岛条目）
-  2) mirror ⊆ auto：挂了目标底仓(base>0)的码必须属于 auto 池
-  3) pool 与 is_manual 语义一致
-  4) auto 池每只都有非空 gm_symbol
-  5) auto_pool.py 的 AUTO_POOL 与 holdings_repo.load_auto_pool 一致
+  1) 成员↔pool：仅手动⇒manual、仅自动⇒auto、两份都有⇒both；both 必须两份都在
+  2) 身份一致：两份都有的码，(name,gm_symbol,type) 相等
+  3) 共享字段一致：pre_close 相等、base 镜像相等
+  4) auto 池码集 == auto_pool.AUTO_POOL == holdings_repo.load_auto_pool
+  5) 每个自动条目 gm_symbol 非空
+  6) base>0 的码 ⊆ 自动文件
+  7) 无 _ 前缀被当条目；qty 非负整数、cost 非负
 
 用法：python scripts/check_holdings_consistency.py（退出码 0=通过，1=漂移）
 """
@@ -20,7 +22,8 @@ _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
 
-from src.holdings_repo import load_full, load_held, load_auto_pool
+from src.holdings_repo import (load_manual, load_auto, load_union,
+                               load_auto_pool)
 
 # config 是目录非 package，按绝对路径加载 auto_pool（与 goldminer/position_builder 同款）
 _spec = importlib.util.spec_from_file_location(
@@ -30,41 +33,71 @@ _spec.loader.exec_module(_ap)
 
 
 def main() -> int:
-    full = load_full()
-    held = load_held()
-    auto = load_auto_pool()
-    # 2026-09-14 并表：目标底仓 = holdings.json 的 base（旧 mirror_qty 已迁入）
-    mirror = {c: int(h.get("base") or 0) for c, h in full.items()
-              if int(h.get("base") or 0) > 0}
+    manual = load_manual()
+    auto = load_auto()
+    union = load_union()
+    auto_pool = load_auto_pool()
+    mset, aset = set(manual), set(auto)
+    both = mset & aset
     errs = []
 
-    union = set(held) | set(auto)
-    if union != set(full):
-        errs.append(f"孤岛条目: full-union={sorted(set(full) - union)} "
-                    f"union-full={sorted(union - set(full))}")
+    # 1) 成员↔pool
+    for c in sorted(mset | aset):
+        pool = str((manual.get(c) or auto.get(c) or {}).get("pool") or "")
+        expect = "both" if (c in mset and c in aset) else ("manual" if c in mset else "auto")
+        if pool != expect:
+            errs.append(f"{c}: pool={pool!r} 但成员关系应为 {expect}")
 
-    if not set(mirror) <= set(auto):
-        errs.append(f"mirror 不在 auto 池: {sorted(set(mirror) - set(auto))}")
+    # 2) 身份一致 / 3) 共享字段一致
+    for c in sorted(both):
+        m, a = manual[c], auto[c]
+        for k in ("name", "gm_symbol", "type"):
+            if m.get(k) != a.get(k):
+                errs.append(f"{c}: 身份 {k} 两份不一致 manual={m.get(k)!r} auto={a.get(k)!r}")
+        for k in ("pre_close", "base"):
+            if m.get(k) != a.get(k):
+                errs.append(f"{c}: 共享字段 {k} 两份不一致 manual={m.get(k)!r} auto={a.get(k)!r}")
 
-    if set(_ap.AUTO_POOL) != set(auto):
-        errs.append(f"AUTO_POOL 与 load_auto_pool 不一致: "
-                    f"{sorted(set(_ap.AUTO_POOL) ^ set(auto))}")
+    # 4) auto 池码集一致
+    if set(_ap.AUTO_POOL) != aset:
+        errs.append(f"AUTO_POOL 与自动文件不一致: {sorted(set(_ap.AUTO_POOL) ^ aset)}")
+    if set(auto_pool) != aset:
+        errs.append(f"load_auto_pool 与自动文件不一致: {sorted(set(auto_pool) ^ aset)}")
 
-    for c, h in full.items():
-        if (str(h.get("pool") or "") == "manual") != _ap.is_manual(c):
-            errs.append(f"{c}: pool={h.get('pool')} 但 is_manual={_ap.is_manual(c)}")
-
-    for c in auto:
-        if not auto[c].get("gm_symbol"):
+    # 5) 自动条目 gm_symbol
+    for c, h in auto.items():
+        if not h.get("gm_symbol"):
             errs.append(f"{c} 缺 gm_symbol")
 
-    print(f"full={len(full)} held={len(held)} auto={len(auto)} mirror={len(mirror)}")
+    # 6) base>0 ⊆ 自动文件
+    base_pos = {c for c, h in {**manual, **auto}.items() if int(h.get("base") or 0) > 0}
+    if not base_pos <= aset:
+        errs.append(f"base>0 的码不在自动文件: {sorted(base_pos - aset)}")
+
+    # 7) 数值合理性
+    for c, h in {**manual, **auto}.items():
+        q = h.get("qty")
+        if q is not None:
+            try:
+                if int(q) < 0:
+                    errs.append(f"{c}: qty 为负 {q}")
+            except (TypeError, ValueError):
+                errs.append(f"{c}: qty 非整数 {q!r}")
+        co = h.get("cost")
+        if co is not None:
+            try:
+                if float(co) < 0:
+                    errs.append(f"{c}: cost 为负 {co}")
+            except (TypeError, ValueError):
+                errs.append(f"{c}: cost 非数值 {co!r}")
+
+    print(f"manual={len(manual)} auto={len(auto)} both={len(both)} union={len(union)}")
     if errs:
         print("RESULT: FAIL")
         for e in errs:
             print(" -", e)
         return 1
-    print("RESULT: PASS（持仓单一真源派生一致，无孤岛/无重复清单）")
+    print("RESULT: PASS（双文件一致，无孤岛/无漂移）")
     return 0
 
 

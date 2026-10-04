@@ -191,9 +191,15 @@ STOCK_NAMES = {code: v["name"] for code, v in _auto_pool.AUTO_POOL.items()}
 def _load_mirror_holdings():
     import json as _json
     root = os.environ.get("SUPERTRADER_ROOT", r"E:\superTrader")
-    path = os.path.join(root, "t_io", "state", "holdings.json")
+    # 2026-10-04 双文件拆分：目标底仓来自**自动侧**真源 holdings_auto.json。
+    # 过渡回退：新文件缺失但旧 holdings.json 尚在时读旧文件（迁移落盘后自然失效）。
+    path = os.path.join(root, "t_io", "state", "holdings_auto.json")
     if not os.path.exists(path):
-        raise RuntimeError(f"持仓真源缺失（镜像持仓依赖）: {path}")
+        _legacy = os.path.join(root, "t_io", "state", "holdings.json")
+        if os.path.exists(_legacy):
+            path = _legacy
+        else:
+            raise RuntimeError(f"持仓真源缺失（镜像持仓依赖）: {path}")
     with open(path, "r", encoding="utf-8") as f:
         data = _json.load(f)
     try:
@@ -248,7 +254,7 @@ def _writeback_holdings(context) -> int:
     repo = _load_holdings_repo()
     if repo is None:
         return 0
-    disk = repo.load_full()
+    disk = repo.load_auto()
     rev = {v: k for k, v in STOCKS.items()}          # gm_symbol → 6 位 code
     patch = {}
     for gm_sym, mp in (getattr(context, "manual_position", {}) or {}).items():
@@ -265,7 +271,7 @@ def _writeback_holdings(context) -> int:
         patch[code] = e
     if not patch:
         return 0
-    repo.save_held_merged(patch, actor="auto_eod", reason="eod_writeback_qty_cost")
+    repo.save_auto(patch, actor="auto_eod", reason="eod_writeback_qty_cost")
     print(f"[WRITEBACK] 持仓真源已回写 {len(patch)} 票（qty/cost；base/pre_close 未动）")
     return len(patch)
 
@@ -547,7 +553,7 @@ def _force_open_align(context) -> int:
     try:
         _repo = _load_holdings_repo()
         _base_map = {c: int((h or {}).get("base") or 0)
-                     for c, h in ((_repo.load_full() or {}) if _repo else {}).items()
+                     for c, h in ((_repo.load_auto() or {}) if _repo else {}).items()
                      if isinstance(h, dict) and not str(c).startswith("_")}
     except Exception as _be:
         print(f"[OPEN_ALIGN] ⚠️ base 真源读取失败，回退 _base_ref_ 口径: {_be}")

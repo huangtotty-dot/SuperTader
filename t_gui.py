@@ -34,7 +34,8 @@ BASE = Path(__file__).resolve().parent  # 自解析：生产机 E:\06_T 与本�
 OUT = BASE / "t_io" / "validation" / "daily_review"
 TRACES = BASE / "t_io" / "traces"
 STATE_DIR = BASE / "t_io" / "state"
-HOLDINGS = STATE_DIR / "holdings.json"
+# 2026-10-04 双文件拆分：手动盘页读 holdings_manual.json；自动盘页经 holdings_repo 读自动侧。
+HOLDINGS_MANUAL = STATE_DIR / "holdings_manual.json"
 IDX_REGIME = BASE / "t_io" / "index_regime"
 LOGS_DIR = BASE / "t_io" / "logs"
 INTRADAY_STATE = BASE / "t_io" / "intraday_state.json"
@@ -957,6 +958,10 @@ class Api:
             if "holdings_daily" in fp.stem:
                 continue  # 跳过 holdings_daily_* 文件（结构不同）
             d = fp.stem.replace("holdings_", "")
+            # 2026-10-04 拆分：holdings_manual/auto.json 也匹配 holdings_* 通配，
+            # 只接受日期名（YYYY-MM-DD）的快照文件，防新文件名被当成 bogus 日期污染成本图。
+            if len(d) != 10 or d[4] != "-" or d[7] != "-":
+                continue
             try:
                 snap = json.loads(open(fp, encoding="utf-8").read())
             except Exception:
@@ -986,7 +991,7 @@ class Api:
 
         # 今日有效成本（校准优先，否则当前 holdings）供预填
         today = datetime.now().strftime("%Y-%m-%d")
-        cur = _load_json(HOLDINGS, {})
+        cur = _load_json(HOLDINGS_MANUAL, {})
         effective = {}
         calib_today = calib.get(today, {})
         for code, info in cur.items():
@@ -1028,7 +1033,7 @@ class Api:
     # ---------- 实时行情（顶部行情条） ----------
     def load_quotes(self):
         """拉腾讯实时行情（持仓 + watchlist 候选股），失败回退 pre_close。"""
-        cur = dict(_load_json(HOLDINGS, {}))
+        cur = dict(_load_json(HOLDINGS_MANUAL, {}))
         # 合并 watchlist_buy 候选股（非持仓的也拉，供建仓表实时价）
         wl = _load_json(STATE_DIR / "watchlist_buy.json", {})
         for code, info in (wl.get("stocks", {}) or {}).items():
@@ -1114,7 +1119,7 @@ class Api:
         顶层增加 eod 标志（交易日 15:00 后写 = true，复盘只认 eod=true 的行）。"""
         today = datetime.now().strftime("%Y-%m-%d")
         fp = STATE_DIR / f"holdings_daily_{today}.json"
-        cur = _load_json(HOLDINGS, {})
+        cur = _load_json(HOLDINGS_MANUAL, {})
         rows = []
         total_value = total_cost = total_pnl = 0.0
         for qq in q.get("quotes", []):
@@ -1209,7 +1214,7 @@ class Api:
         """从分钟快照+最新价实时计算支撑位距离，返回 add_watch 同结构数据。
         替代 daily_review 收盘后才生成的静态 add_watch。"""
         out = {}
-        cur = _load_json(HOLDINGS, {})
+        cur = _load_json(HOLDINGS_MANUAL, {})
         if not cur:
             return out
 
@@ -1506,7 +1511,7 @@ class Api:
         """每只持仓：日线超买指标(RSI/KDJ-J/CCI/BOLL) + 顶背离(MACD/RSI/KDJ/量价) + 建仓建议。"""
         import numpy as np
         import pandas as pd
-        cur = _load_json(HOLDINGS, {})
+        cur = _load_json(HOLDINGS_MANUAL, {})
         out = {"stocks": []}
 
         for code, info in cur.items():
@@ -4190,14 +4195,12 @@ class Api:
             return None
 
     def _auto_pool_codes(self):
-        """当前 auto 池 6 位码（基于 holdings.json 实时派生，不依赖 auto_pool 模块缓存——新增标的立即可见）。"""
+        """当前 auto 池 6 位码（基于自动侧真源 holdings_auto.json 实时派生，不依赖 auto_pool 模块缓存——新增标的立即可见）。"""
         try:
-            from src.holdings_repo import load_full
-            full = load_full()
+            from src.holdings_repo import load_auto_pool
+            return list(load_auto_pool().keys())
         except Exception:
             return []
-        return [c for c, h in full.items()
-                if isinstance(h, dict) and str(h.get("pool")) in ("auto", "both")]
 
     def load_auto_scan(self, date=None):
         """自动盘建仓扫描结果：读 TRACES/auto_scan_{date}.jsonl 聚合 + 合并 auto 池全量
@@ -4221,8 +4224,8 @@ class Api:
                     latest[code] = r
         # 合并 auto 池全量：不在 trace 的（新增/未扫）→ pending 待扫描行
         try:
-            from src.holdings_repo import load_full
-            full = load_full()
+            from src.holdings_repo import load_auto
+            full = load_auto()
         except Exception:
             full = {}
         for code in self._auto_pool_codes():
@@ -4246,7 +4249,7 @@ class Api:
         逐行追加 TRACES/auto_scan_{date}.jsonl，返回聚合结果。咨询性扫描，以引擎闸链为准。"""
         date = date or datetime.now().strftime("%Y-%m-%d")
         try:
-            from src.holdings_repo import load_full
+            from src.holdings_repo import load_auto
             from execution.auto.build_decision_auto import decide
             from core.market_data import get_provider
             from config import ENTRY_TIMING_PARAMS
@@ -4254,7 +4257,7 @@ class Api:
             return {"has_data": False, "error": f"依赖导入失败: {e}"}
         if self._auto_pool_module() is None:
             return {"has_data": False, "error": "auto_pool 不可用"}
-        hold = load_full()
+        hold = load_auto()
         try:
             prov = get_provider()
             idx = prov.index_daily("sh000001", 400)
@@ -4303,7 +4306,7 @@ class Api:
         return self.load_auto_scan(date)
 
     def add_auto_stock(self, code, name, base, type=None):
-        """添加新股票到 auto 池（pool=auto + base 目标底仓）→ 原子写 holdings.json；
+        """添加新股票到 auto 池（pool=auto + base 目标底仓）→ 原子写自动侧 holdings_auto.json；
         若 code 在 watchlist 且 pool=manual → 改 auto（防引擎 validate_pool_split 拒绝启动）。
         引擎需重启才含该标的。"""
         code = str(code or "").strip()
@@ -4319,12 +4322,12 @@ class Api:
         if _ap is not None and not _ap.is_manual(code):
             return {"ok": False, "error": f"{code} 已在 auto 池"}
         try:
-            from src.holdings_repo import upsert_auto_entry, load_full
+            from src.holdings_repo import upsert_auto_entry, get_entry
             from core.market_data.codec import to_gm
         except Exception as e:
             return {"ok": False, "error": str(e)}
-        # 已在 auto/both 池 → 拒绝（基于当前 holdings 而非 auto_pool 模块缓存，防重复添加）
-        _cur = load_full().get(code) or {}
+        # 已在 auto/both 池 → 拒绝（基于当前自动侧而非 auto_pool 模块缓存，防重复添加）
+        _cur = get_entry(code) or {}
         if str(_cur.get("pool") or "") in ("auto", "both"):
             return {"ok": False, "error": f"{code} 已在 auto 池"}
         try:
@@ -4333,29 +4336,17 @@ class Api:
             gm_symbol = ("SHSE." if code.startswith(("6", "5")) else "SZSE.") + code
         if type is None:
             type = "etf" if code.startswith("5") else "stock"
-        try:
+        try:  # 一步写入：身份 + pool=auto + 目标底仓 base（经网关统一审计）
             upsert_auto_entry(code, name=name or code, gm_symbol=gm_symbol,
-                              type=type, actor="gui", reason="添加自动盘标的")
-            try:  # 目标底仓写入 base（2026-09-14 并表：OVERRIDE 已迁入 holdings.base）
-                from src.holdings_repo import load_full as _lf, save_held_merged as _sm
-                _e = dict(_lf().get(code) or {})
-                _e["base"] = base
-                _sm({code: _e}, actor="gui", reason="设置目标底仓")
-            except Exception:
-                pass
+                              type=type, base=base, actor="gui", reason="添加自动盘标的")
         except Exception as e:
-            return {"ok": False, "error": f"写 holdings 失败: {e}"}
-        try:
-            from src.holdings_repo import sync_watchlist_pool  # T-4: 公共函数统一 watchlist 同步
-            sync_watchlist_pool(code, "auto")
-        except Exception:
-            pass
+            return {"ok": False, "error": f"写 holdings_auto 失败: {e}"}
         return {"ok": True, "code": code, "gm_symbol": gm_symbol, "type": type,
                 "base": base, "restart_required": True,
                 "msg": f"已加入 auto 池（目标底仓 {base}），重启掘金策略后生效"}
 
     def manual_auto_build(self, code, qty, action="build"):
-        """自动盘手动建仓/加仓入口（仅限 auto 池内）：写 holdings.json（base 设/加）+
+        """自动盘手动建仓/加仓入口（仅限 auto 池内）：写自动侧 holdings_auto.json（base 设/加）+
         写 AUTO_BUILD.json 武装标记（引擎重启后 BASE 建仓跳过确认闸直接做T）。
         同时清除该 code 既有 BUY_PENDING 请求（防双通道）。"""
         code = str(code or "").strip()
@@ -4373,22 +4364,22 @@ class Api:
         if _ap is not None and _ap.is_manual(code):
             return {"ok": False, "error": f"{code} 不在 auto 池（仅限 auto 池内已有股票）"}
         try:
-            from src.holdings_repo import load_full, save_held_merged
+            from src.holdings_repo import load_auto, save_auto
         except Exception as e:
             return {"ok": False, "error": str(e)}
-        full = load_full()
+        full = load_auto()
         entry = dict(full.get(code) or {})
         if not entry:
-            return {"ok": False, "error": f"{code} 不在持仓真源"}
+            return {"ok": False, "error": f"{code} 不在自动侧持仓真源"}
         old_base = int(entry.get("base") or 0)
         new_base = qty if action == "build" else old_base + qty
         entry["base"] = new_base
         if str(entry.get("pool") or "") == "manual":
             entry["pool"] = "auto"
         try:
-            save_held_merged({code: entry}, actor="gui", reason="手动建仓/加仓武装")
+            save_auto({code: entry}, actor="gui", reason="手动建仓/加仓武装")
         except Exception as e:
-            return {"ok": False, "error": f"写 holdings 失败: {e}"}
+            return {"ok": False, "error": f"写 holdings_auto 失败: {e}"}
         # 写 AUTO_BUILD.json 武装标记（GUI 直读直写 bridge，与 respond_buy_confirm 同款原子写）
         try:
             ab_fp = BRIDGE_DIR / "AUTO_BUILD.json"
@@ -4448,31 +4439,23 @@ class Api:
         if not (code.isdigit() and len(code) == 6):
             return {"ok": False, "error": "代码须为 6 位数字"}
         try:
-            from src.holdings_repo import load_full, delete_entry
+            from src.holdings_repo import load_auto, delete_entry, sync_watchlist_pool
         except Exception as e:
             return {"ok": False, "error": str(e)}
-        full = load_full()
+        full = load_auto()
         entry = full.get(code)
         if not entry:
-            return {"ok": False, "error": f"{code} 不在持仓真源"}
+            return {"ok": False, "error": f"{code} 不在自动侧持仓真源"}
         if int(entry.get("qty") or 0) > 0 or int(entry.get("base") or 0) > 0:
             return {"ok": False, "error": f"{code} 有持仓（qty>0），不能从 auto 池删除"}
         try:
-            delete_entry(code, actor="gui", reason="删除auto标的")
+            # side="auto"：仅从自动文件移除；both 码保留手动副本并降 pool=manual
+            delete_entry(code, side="auto", actor="gui", reason="删除auto标的")
         except Exception as e:
-            return {"ok": False, "error": f"写 holdings 失败: {e}"}
-        # watchlist 该 code pool 若为 auto → 改回 manual（防悬空 auto 标记）
+            return {"ok": False, "error": f"写 holdings_auto 失败: {e}"}
+        # watchlist 该 code pool 改回 manual（已离开 auto 池，防悬空 auto/both 标记）
         try:
-            wl_fp = STATE_DIR / "watchlist_buy.json"
-            wl = _load_json(wl_fp, {})
-            stocks = wl.get("stocks", {})
-            if isinstance(stocks, dict) and isinstance(stocks.get(code), dict):
-                if str(stocks[code].get("pool") or "") == "auto":
-                    stocks[code]["pool"] = "manual"
-                    tmp = wl_fp.with_suffix(".tmp")
-                    with open(tmp, "w", encoding="utf-8") as f:
-                        json.dump(wl, f, ensure_ascii=False, indent=2)
-                    tmp.replace(wl_fp)
+            sync_watchlist_pool(code, "manual")
         except Exception:
             pass
         return {"ok": True, "code": code,
@@ -4488,7 +4471,7 @@ class Api:
         pcfg = _load_json(PORTFOLIO, {})
         accounts = pcfg.get("accounts", {})
         total_capital = sum(float(a.get("total_capital") or 0) for a in accounts.values())
-        cur = _load_json(HOLDINGS, {})
+        cur = _load_json(HOLDINGS_MANUAL, {})
         # 实时价
         px_map = {}
         try:
@@ -4750,8 +4733,8 @@ class Api:
             _entry = {"name": name, "status": "monitoring", "composite_score": 0,
                       "criteria_met": {}, "suggested_qty": 0, "in_holdings": False}
             try:
-                from src.holdings_repo import load_full
-                _h = load_full().get(code)
+                from src.holdings_repo import get_entry
+                _h = get_entry(code)
                 if _h and str(_h.get("pool") or "") in ("auto", "both"):
                     _entry["pool"] = str(_h.get("pool"))
             except Exception:
@@ -5218,7 +5201,7 @@ class Api:
         fp = TRACES / f"position_builder_{date}.jsonl"
         wl = _load_json(STATE_DIR / "watchlist_buy.json", {})
         wl_stocks = wl.get("stocks", {})
-        holdings = _load_json(HOLDINGS, {})
+        holdings = _load_json(HOLDINGS_MANUAL, {})
         empty = {"has_data": True, "counts": {}, "by_code": {}, "rows": [],
                  "cond_labels": COND_LABELS, "note": "", "progress": {}}
 
@@ -5446,7 +5429,7 @@ class Api:
         return " | ".join(parts) if parts else ""
 
     def _load_positions(self, date, kpi):
-        current = _load_json(HOLDINGS, {})
+        current = _load_json(HOLDINGS_MANUAL, {})
         snap_today = {}
         snap_prev = {}
         prev_date = None

@@ -24,7 +24,7 @@ BASE = Path(__file__).resolve().parents[2]  # C17-1 修复(2026-08-18): 自解�
 if str(BASE) not in sys.path:
     sys.path.insert(0, str(BASE))
 PREOPEN_DIR = BASE / "t_io" / "preopen"
-HOLDINGS_FP = BASE / "t_io" / "state" / "holdings.json"
+HOLDINGS_FP = BASE / "t_io" / "state" / "holdings_manual.json"  # 2026-10-04 拆分：竞价采集取手动侧
 
 os.environ["NO_PROXY"] = "*"
 os.environ["no_proxy"] = "*"
@@ -87,8 +87,8 @@ def load_pool():
     for c, v in h.items():
         if not isinstance(v, dict):
             continue
-        # 2026-08-30 单文件合并：仅持有（qty/base/t_qty>0）进竞价采集，未持有 auto 候选跳过
-        if not (v.get("qty") or v.get("base") or v.get("t_qty")):
+        # 2026-10-04 拆分：仅持有（qty/base>0）进竞价采集，未持有候选跳过
+        if not (v.get("qty") or v.get("base")):
             continue
         clean = c.split("_")[0]          # 双账户条目（如 000988_B）归并到正代码
         if clean not in pool:

@@ -713,12 +713,12 @@ def compute_score(conditions: dict) -> int:
     return sum(20 for passed, *_ in conditions.values() if passed)
 
 
-HOLDINGS_FILE = STATE_DIR / "holdings.json"
+HOLDINGS_FILE = STATE_DIR / "holdings_manual.json"  # 2026-10-04 拆分：手动链读手动侧
 _HOLDINGS_CACHE = {"mtime": None, "codes": set()}
 
 
 def _load_holding_codes() -> set:
-    """fix 仓位一刀切(A1-A6): 读取 holdings.json 的已持仓代码集合（剥离 _A/_B 账户后缀）。
+    """fix 仓位一刀切(A1-A6): 读取 holdings_manual.json 的已持仓代码集合（剥离 _A/_B 账户后缀）。
     按文件 mtime 缓存，避免逐股重复读盘；读取失败时返回空集合（不排除任何股）。"""
     try:
         mtime = HOLDINGS_FILE.stat().st_mtime

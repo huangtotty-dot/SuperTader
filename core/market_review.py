@@ -523,12 +523,13 @@ def _pick_sentiment_record(date: str) -> dict | None:
 
 
 def _load_holdings(date: str, per_stock: dict | None = None) -> dict:
-    """从台账 `t_io/state/holdings.json` 读当前持仓（qty>0）。**只读不写**（reconcile 是唯一写入源）。
+    """从手动台账 `t_io/state/holdings_manual.json` 读当前持仓（qty>0）。**只读不写**。
 
     2026-09-27 解耦：本段原先从情绪记录的 per_stock 派生，情绪文件一断 → 「情绪」与
     「持仓个股」两节同时为空（09-24 复盘现象）。改以台账为准，做T模式仅作**可选**补充。
+    2026-10-04 拆分：手动/自动分文件后，大盘复盘的「持仓个股」取手动侧（实盘台账）。
     """
-    fp = BASE / "t_io" / "state" / "holdings.json"
+    fp = BASE / "t_io" / "state" / "holdings_manual.json"
     if not fp.exists():
         return {}
     try:
@@ -686,8 +687,8 @@ def load_market_extra(date: str, minute_avail: dict | None = None) -> dict:
                     "producer": "analysis/index_regime.py（THS 涨停池，有 ≥8 月历史）",
                     "cmd": _REPLAY_CMDS["炸板/涨跌停"].format(date=date)},
         "持仓": {"ok": bool(out["持仓个股"]),
-               "reason": "" if out["持仓个股"] else "台账无 qty>0 持仓，或 holdings.json 不可读",
-               "producer": "reconcile 写入 t_io/state/holdings.json"},
+               "reason": "" if out["持仓个股"] else "台账无 qty>0 持仓，或 holdings_manual.json 不可读",
+               "producer": "t_io/state/holdings_manual.json（手动侧台账）"},
         "两融余额": {"ok": not margin.get("missing"), "reason": margin.get("reason") or ""},
     }
     return out

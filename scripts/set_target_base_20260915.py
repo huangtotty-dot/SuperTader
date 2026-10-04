@@ -1,14 +1,11 @@
 # -*- coding: utf-8 -*-
-"""按 owner 2026-09-14 两张账户截图设置目标底仓（base）——明日开盘强制对齐的基准。
+"""[已弃用 2026-10-04] 按 owner 2026-09-14 截图设置目标底仓（base）——一次性历史脚本。
 
-两账户合并为一个目标（owner 裁决 2026-09-14）：
-  账户1: 588170=74500 / 600176=1600 / 600481=100 / 603667=500 / 000988=300 / 002451=2800
-  账户2: 002639=900 / 300054=600 / 300153=500
+持仓真源已拆分为 holdings_manual.json / holdings_auto.json，本脚本硬编码的 09-15 目标值
+早已过时，且旧 holdings.json 已删除。**请勿再运行**——目标底仓现经 GUI「自动盘」页或
+`src/holdings_repo.save_auto` 维护。保留此文件仅为审计追溯。
 
-同时把 qty 也写成截图值（修正本会话早先按**局部截图**误迁移造成的偏差——
-新截图与 09-14 盘前 reconcile 的总资产一致，属全貌）。
-
-用法：python scripts/set_target_base_20260915.py [--write]
+用法：python scripts/set_target_base_20260915.py（会直接拒绝运行）
 """
 import argparse
 import json
@@ -17,7 +14,7 @@ import shutil
 from datetime import datetime
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-HOLDINGS = os.path.join(ROOT, "t_io", "state", "holdings.json")
+HOLDINGS = os.path.join(ROOT, "t_io", "state", "holdings.json")  # 已删除（拆分后）
 
 TARGET = {
     "588170": 74500, "600176": 1600, "600481": 100, "603667": 500,
@@ -31,6 +28,13 @@ COST = {
 
 
 def main():
+    print("[弃用] 持仓已拆分为 holdings_manual/auto.json，旧 holdings.json 不存在。")
+    print("       目标底仓请经 GUI「自动盘」页或 src/holdings_repo.save_auto 维护。")
+    print("       本一次性脚本不再执行。")
+    return 1
+
+
+def _legacy_main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--write", action="store_true")
     args = ap.parse_args()

@@ -86,9 +86,9 @@ POOLS = {
     'harness5': ['000988', '588170', '600176', '600481', '603667'],
 }
 
-# R2：生产底仓（t_io/state/holdings.json 只读；缺失票按 0 → 底仓存在性校验不过）
+# R2：生产底仓（2026-10-04 拆分：自动侧 t_io/state/holdings_auto.json 只读；缺失票按 0）
 def load_base_map():
-    fp = os.path.join(ROOT, 't_io', 'state', 'holdings.json')
+    fp = os.path.join(ROOT, 't_io', 'state', 'holdings_auto.json')
     base = {}
     try:
         raw = json.load(open(fp, encoding='utf-8'))
@@ -96,7 +96,7 @@ def load_base_map():
             code = k.split('_')[0]
             base[code] = int(h.get('base', 0) or 0)
     except Exception as e:
-        print(f'[b7p] holdings.json 读取失败（底仓校验将全拒）: {e}')
+        print(f'[b7p] holdings_auto.json 读取失败（底仓校验将全拒）: {e}')
     return base
 
 

@@ -33,7 +33,7 @@ if sys.platform == "win32":
 BASE = Path(globals().get("BASE_DIR") or Path(__file__).resolve().parents[1])  # 项目根（execution/ 下）；T-2: exec 加载下优先宿主 BASE_DIR 防算到仓库外
 PREOPEN_DIR = BASE / "t_io" / "preopen"
 STATE_DIR = BASE / "t_io" / "state"
-HOLDINGS_FP = STATE_DIR / "holdings.json"
+HOLDINGS_FP = STATE_DIR / "holdings_manual.json"  # 2026-10-04 拆分：手动侧（当前未引用，留待复用）
 
 if str(BASE) not in sys.path:
     sys.path.insert(0, str(BASE))
@@ -138,8 +138,8 @@ class AuctionDiagnosisReport:
 def _get_holdings() -> Dict[str, dict]:
     """加载持仓列表（仅持有；未持有的 auto 候选不参与竞价诊断）"""
     try:
-        from src.holdings_repo import load_held
-        return load_held()
+        from src.holdings_repo import load_held_manual
+        return load_held_manual()
     except Exception:
         return {}
 

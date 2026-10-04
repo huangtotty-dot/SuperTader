@@ -51,7 +51,7 @@ from analysis import index_resonance as ir
 from analysis.indicators import resample_to_5min, add_5min_indicators
 from analysis.index_regime_intraday import _iri_tushare_pro
 
-HOLDINGS_FILE = BASE / "t_io" / "state" / "holdings.json"
+HOLDINGS_FILE = BASE / "t_io" / "state" / "holdings_manual.json"  # 2026-10-04 拆分：手动侧
 WATCHLIST_FILE = BASE / "t_io" / "state" / "watchlist_buy.json"
 CACHE_DIR = BASE / "t_io" / "cache" / "tushare_mins"
 FETCH_DELAY = 0.4

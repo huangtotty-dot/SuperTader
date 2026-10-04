@@ -107,12 +107,12 @@ import gm_main  # noqa: E402
 from gm.api import run, MODE_BACKTEST, ADJUST_PREV  # noqa: E402
 from utils.gm_token import load_token  # noqa: E402
 
-# ── 当前持仓（单一真源 t_io/state/holdings.json 派生仅持有 qty>0；gm_symbol/name/cost 对齐） ──
+# ── 当前持仓（2026-10-04 拆分：自动侧 t_io/state/holdings_auto.json 派生仅持有 qty>0） ──
 # 注：588170（科创芯片ETF）在旧终端账号无 ETF 品种数据权限（ERR_NO_DATA_PERMISSION）。
 #     新终端（国盛掘金3 专业版）账号是否放开 ETF 待实测——此处保留 588170 一并试跑，
 #     若 subscribe 仍报 ERR_NO_DATA_PERMISSION 则剔除重跑两只股票。
 def _load_holdings_for_backtest():
-    _hp = os.path.join(_ST, "t_io", "state", "holdings.json")
+    _hp = os.path.join(_ST, "t_io", "state", "holdings_auto.json")
     with open(_hp, "r", encoding="utf-8") as f:
         _data = json.load(f)
     _only = {s.strip() for s in (_ARGS.codes or "").split(",") if s.strip()}

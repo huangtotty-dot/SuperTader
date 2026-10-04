@@ -166,20 +166,20 @@ else:
 
 
 def _holdings() -> Dict[str, dict]:
-    """持仓 dict：宿主模式取 HOLDINGS 全局；独立模式读 BASE_DIR/holdings.json"""
+    """持仓 dict：宿主模式取 HOLDINGS 全局；独立模式读手动侧 BASE_DIR/holdings_manual.json"""
     h = globals().get("HOLDINGS")
     if isinstance(h, dict) and h:
         return h
-    path = os.path.join(_BASE_DIR, "t_io", "state", "holdings.json")
+    path = os.path.join(_BASE_DIR, "t_io", "state", "holdings_manual.json")
     try:
         if os.path.exists(path):
             with open(path, "r", encoding="utf-8") as f:
                 data = json.load(f)
             if isinstance(data, dict):
-                # 2026-08-30 单文件合并：仅持有（qty/base/t_qty>0），未持有 auto 候选跳过
+                # 2026-10-04 双文件拆分：手动侧仅持有（qty/base>0）
                 return {k: v for k, v in data.items()
                         if isinstance(v, dict)
-                        and (v.get("qty") or v.get("base") or v.get("t_qty"))}
+                        and (v.get("qty") or v.get("base"))}
     except Exception:
         pass
     return {}

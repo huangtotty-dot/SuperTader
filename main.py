@@ -1390,25 +1390,24 @@ def _maybe_record_daily_pnl(now: datetime) -> None:
             f.write(_json.dumps(_pnl_record, ensure_ascii=False) + "\n")
         log.info(f"📝 收益汇总已写入日志: {_pnl_log_path}")
 
-        # V1.30: 收盘自动更新 holdings.json 的 pre_close 为当日收盘价
-        _updated = False
-        if HOLDINGS_FILE and _os.path.exists(HOLDINGS_FILE):
+        # V1.30: 收盘自动更新持仓真源 pre_close 为当日收盘价
+        # （2026-10-04 拆分后：一次写全所有副本——手动/自动两文件都更新，防某侧 pre_close 冻结）
+        _prices = {}
+        for code, dec in (DAILY_DECISION_STATS or {}).items():
             try:
-                with open(HOLDINGS_FILE, "r", encoding="utf-8") as f:
-                    _hdata = _json.load(f)
-                for code, h in _hdata.items():
-                    dec = DAILY_DECISION_STATS.get(code) or {}
-                    _cp = float(dec.get("last_price") or 0)
-                    if _cp > 0:
-                        h["pre_close"] = _cp
-                        _updated = True
-                        # Q-20260914-1: 同步内存 HOLDINGS，消除"磁盘新/内存旧"被后续整写回滚的源头
-                        if code in (HOLDINGS or {}):
-                            HOLDINGS[code]["pre_close"] = _cp
-                if _updated:
-                    from src.holdings_repo import save_held_merged  # P0-6: 改走 repo 强制审计
-                    save_held_merged(_hdata, actor="main", reason="eod_pre_close")
-                    log.info(f"📝 pre_close 已更新为当日收盘价（审计留痕）")
+                _cp = float((dec or {}).get("last_price") or 0)
+            except (TypeError, ValueError):
+                _cp = 0.0
+            if _cp > 0:
+                _prices[code] = _cp
+                # Q-20260914-1: 同步内存 HOLDINGS，消除"磁盘新/内存旧"被后续整写回滚的源头
+                if code in (HOLDINGS or {}):
+                    HOLDINGS[code]["pre_close"] = _cp
+        if _prices:
+            try:
+                from src.holdings_repo import save_pre_close  # P0-6: 改走 repo 强制审计
+                _n = save_pre_close(_prices, actor="main", reason="eod_pre_close")
+                log.info(f"📝 pre_close 已更新为当日收盘价（{_n} 票，审计留痕）")
             except Exception as e:
                 log.warning(f"⚠️ pre_close 更新失败: {str(e)[:80]}")
 
@@ -1539,7 +1538,7 @@ def _maybe_audit_closure(now: datetime) -> None:
                     f" → 模拟盘缺口，不入实盘台账")
             if qty_diff != 0:
                 problems.append(
-                    f"• {name}({code}) 持仓 qty={qty} 与 base={base} 不一致（差 {qty_diff:+d}）→ 请核对 holdings.json")
+                    f"• {name}({code}) 持仓 qty={qty} 与 base={base} 不一致（差 {qty_diff:+d}）→ 请核对 holdings_manual.json")
 
         # 2026-09-15 阶段0-1（诊断D1/F3）：buyback_filled 记账一致性检查——matched（事件 qty，记的是
         # armed sell_qty）不得超过实际买入成交 fill_qty（09-11 实证：600176 matched=600 > fill=300，虚报闭环 300 股）。
@@ -1723,7 +1722,7 @@ def _intraday_board_codes() -> list:
     if not codes:
         try:
             import json as _json
-            fp = os.path.join(BASE_DIR, "t_io", "state", "holdings.json")
+            fp = os.path.join(BASE_DIR, "t_io", "state", "holdings_manual.json")
             if os.path.exists(fp):
                 _data = _json.load(open(fp, encoding="utf-8"))
                 codes = [str(_c) for _c, _v in (_data.items() if isinstance(_data, dict) else [])

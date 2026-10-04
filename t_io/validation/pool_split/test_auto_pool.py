@@ -31,10 +31,11 @@ def _write_watchlist(path, stocks):
 class TestAutoPool(unittest.TestCase):
     def test_codes_count_and_content(self):
         codes = auto_pool.auto_pool_codes()
-        # 数量随 holdings.json 动态变化（GUI 自动盘 tab 可添加标的，如 002396）；只断言基础池下限 + 核心股票
+        # 数量随自动侧 holdings_auto.json 动态变化（GUI 自动盘 tab 可添加/删除标的）；
+        # 只断言基础池下限 + 稳定成员（515180 已于 2026 年移除，改用当前 both 成员 588170）。
         self.assertGreaterEqual(len(codes), 17)
         self.assertIn("000988", codes)
-        self.assertIn("515180", codes)
+        self.assertIn("588170", codes)
         self.assertEqual(auto_pool.POOL, "auto")
 
     def test_every_code_has_name_and_gm_symbol(self):
@@ -46,15 +47,15 @@ class TestAutoPool(unittest.TestCase):
     def test_is_manual(self):
         self.assertFalse(auto_pool.is_manual("600481"))     # auto 池
         self.assertFalse(auto_pool.is_manual("000988_A"))   # 后缀剥离后仍在 auto 池
-        self.assertTrue(auto_pool.is_manual("300058"))      # manual 池
-        self.assertTrue(auto_pool.is_manual("588170"))      # manual 池
+        self.assertFalse(auto_pool.is_manual("588170"))     # pool=both → 属 auto 池
+        self.assertTrue(auto_pool.is_manual("300058"))      # 纯 manual 池（不在 AUTO_POOL）
 
     def test_validate_no_conflict(self):
         with tempfile.TemporaryDirectory() as d:
             p = os.path.join(d, "watchlist_buy.json")
             stocks = {c: {"pool": "auto"} for c in auto_pool.AUTO_POOL}
             stocks["300058"] = {"pool": "manual"}
-            stocks["588170"] = {"pool": "manual"}
+            stocks["300364"] = {"pool": "manual"}
             _write_watchlist(p, stocks)
             self.assertEqual(auto_pool.validate_pool_split(p), [])
 

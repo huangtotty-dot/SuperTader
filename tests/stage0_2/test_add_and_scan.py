@@ -45,7 +45,8 @@ def _pick_auto_unheld():
     动态选取而非硬编码：池归属会随 holdings 变动（实测 600584 就被 owner 从 auto 池删过），
     硬编码会让测试因数据漂移而假红。"""
     import auto_pool
-    h = t_gui._load_json(t_gui.HOLDINGS, {})
+    from src.holdings_repo import load_auto  # 2026-10-04 拆分：auto 池持仓在自动侧
+    h = load_auto()
     for c in sorted(auto_pool.AUTO_POOL):
         if not (h.get(c) or {}).get("qty"):
             return c, (h.get(c) or {}).get("name") or c
@@ -238,13 +239,13 @@ class TestAddAndScan(unittest.TestCase):
                 json.dumps({"code": code, "name": name, "scan_type": "manual",
                             "scan_time": f"{DATE} 09:00:00", "verdict": "weak",
                             "composite_score": 5}) + "\n", encoding="utf-8")
-            o_tr, o_sd, o_hl = t_gui.TRACES, t_gui.STATE_DIR, t_gui.HOLDINGS
+            o_tr, o_sd, o_hl = t_gui.TRACES, t_gui.STATE_DIR, t_gui.HOLDINGS_MANUAL
             t_gui.TRACES, t_gui.STATE_DIR = td / "traces", td / "state"
-            t_gui.HOLDINGS = td / "state" / "holdings.json"   # 不存在 → 无持仓
+            t_gui.HOLDINGS_MANUAL = td / "state" / "holdings_manual.json"   # 不存在 → 无持仓
             try:
                 agg = self.api._agg_position_builder(DATE)
             finally:
-                t_gui.TRACES, t_gui.STATE_DIR, t_gui.HOLDINGS = o_tr, o_sd, o_hl
+                t_gui.TRACES, t_gui.STATE_DIR, t_gui.HOLDINGS_MANUAL = o_tr, o_sd, o_hl
 
         codes = [r.get("code") for r in (agg.get("rows") or [])]
         self.assertIn(code, codes,
