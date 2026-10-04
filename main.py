@@ -1306,9 +1306,66 @@ def _maybe_run_daily_review(now: datetime) -> None:
         log.warning(f"⚠️ 收盘复盘自动触发失败（10 分钟重试）: {str(e)[:120]}")
 
 
+# 2026-10-04: 收盘后 K线缓存预下载（小池日线+分钟 → 全池日线兜底）。子进程隔离、幂等。
+_chart_prefetch_state = {"date": "", "next_try": 0.0}
+
+
+def _maybe_run_chart_prefetch(now: datetime) -> None:
+    """15:10 后交易日触发 K线缓存预下载（子进程 fire-and-forget）。
+
+    幂等由 `core.chart_cache.run_prefetch` 的跨进程锁 + 当日标记保证（与 t_gui 侧互斥）。
+    成功才占位，失败 600s 重试。子进程不构建图表 payload（那是 t_gui 的活）。
+    """
+    global _chart_prefetch_state
+    try:
+        t = now.time()
+        if now.weekday() >= 5 or t < dtime(15, 10):
+            return
+        today = now.strftime("%Y-%m-%d")
+        if _chart_prefetch_state.get("date") == today:
+            return
+        if _now().timestamp() < _chart_prefetch_state.get("next_try", 0):
+            return
+        import subprocess
+        flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+        log_dir = os.path.join(BASE_DIR, "t_io", "logs")
+        os.makedirs(log_dir, exist_ok=True)
+        log_fp = os.path.join(log_dir, f"chart_prefetch_{today}.log")
+        _py = (
+            "import sys\n"
+            f"sys.path.insert(0, {BASE_DIR!r})\n"
+            "from core.chart_cache import run_prefetch\n"
+            "res = run_prefetch()\n"
+            "print('prefetch:', res, flush=True)\n"
+        )
+        out_fp = open(log_fp, "a", encoding="utf-8")
+        try:
+            proc = subprocess.Popen([sys.executable, "-c", _py],
+                                    cwd=BASE_DIR, creationflags=flags,
+                                    stdout=out_fp, stderr=subprocess.STDOUT)
+        finally:
+            out_fp.close()
+        _chart_prefetch_state.update({"date": today, "next_try": 0})
+
+        def _watch_chart_prefetch(pr=proc, _today=today):
+            try:
+                rc = pr.wait()
+            except Exception:
+                rc = -1
+            if rc != 0:
+                log.warning(f"⚠️ K线预下载子进程失败(rc={rc})，撤销 {_today} 占位并 600s 后重试 → {log_fp}")
+                if _chart_prefetch_state.get("date") == _today:
+                    _chart_prefetch_state.update({"date": "", "next_try": _now().timestamp() + 600})
+
+        _threading.Thread(target=_watch_chart_prefetch, daemon=True).start()
+        log.info(f"📈 K线缓存预下载已触发 → {log_fp} (pid={proc.pid})")
+    except Exception as e:
+        _chart_prefetch_state["next_try"] = _now().timestamp() + 600
+        log.warning(f"⚠️ K线预下载触发失败（10 分钟重试）: {str(e)[:120]}")
+
+
 def _maybe_run_position_builder(now: datetime) -> None:
     """收盘后（15:05 起）每日一次建仓信号扫描 + 盘后汇总飞书推送。
-
     fix P0-15关联(收盘档断供): 原 15:05-15:15 硬窗口在进程休眠/重启时整日断供（08-07 复盘：
     15:00:02 进入低频保活后进程疑似休眠，错过窗口；且异常时日期占位已写入导致当日不重试）。
     改为 15:05 后任意时刻补扫一次（限交易日）；扫描成功才占位，失败 10 分钟后重试。
@@ -2102,6 +2159,7 @@ def scan_once():
 
         _maybe_run_position_builder(now)                # 15:05-15:15 建仓信号扫描（每日一次）
         _maybe_run_daily_review(now)                    # P0-7(2026-09-01): 15:10 后自动每日复盘（子进程隔离）
+        _maybe_run_chart_prefetch(now)                  # 2026-10-04: 15:10 后 K线缓存预下载（与 t_gui 幂等）
 
         if now.weekday() >= 5 or t < dtime(9, 30) or (dtime(11, 30) < t < dtime(13, 0)) or t > dtime(15, 0):
             if (_now() - _last_idle_log).total_seconds() >= PARAMS["idle_log_minutes"] * 60:

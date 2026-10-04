@@ -88,6 +88,7 @@ HUNTER_RUN_STATE = {"date": None, "running": False, "result": None}
 # 交易日按 weekday<5 近似（沿用仓库既有口径，节假日空跑无害）。
 HUNTER_AUTORUN_SLOTS = ("10:30", "11:30", "13:30", "14:30")
 _HUNTER_AUTORUN_STATE = {"date": None, "done": set(), "started": False}
+_CHART_PREFETCH_STATE = {"started": False}  # 盘后 K线预下载调度（2026-10-04）
 # 建仓推送的「当日去重」状态：自动运行只在候选集变化时推，避免一天重复刷屏
 _HUNTER_BUILD_PUSHED_FP = STATE_DIR / "hunter_build_pushed.json"
 ROTATION_RUN_STATE = {"running": False, "error": None}
@@ -330,6 +331,47 @@ def _norm_min_bars(df):
     return df.reset_index(drop=True)
 
 
+def _calc_ma_and_indicators(d):
+    """MA(7 条)/MACD/RSI(Wilder)/BOLL。2026-10-04 从 _build_chart_from_df 的嵌套函数抽出，
+    供 K线 payload 缓存「仅补日线末根」时复用（避免整图重建）。"""
+    d = d.copy()
+    for n in (5, 10, 20, 30, 60, 180, 365):
+        d[f"ma{n}"] = d["close"].rolling(n).mean()
+    ema12 = d["close"].ewm(span=12, adjust=False).mean()
+    ema26 = d["close"].ewm(span=26, adjust=False).mean()
+    d["dif"] = ema12 - ema26
+    d["dea"] = d["dif"].ewm(span=9, adjust=False).mean()
+    d["macd_hist"] = (d["dif"] - d["dea"]) * 2
+    from analysis.indicators import wilder_rsi as _wilder_rsi
+    d["rsi"] = _wilder_rsi(d["close"], 14)
+    d["boll_mid"] = d["close"].rolling(20).mean()
+    d["boll_std"] = d["close"].rolling(20).std()
+    d["boll_up"] = d["boll_mid"] + 2 * d["boll_std"]
+    d["boll_dn"] = d["boll_mid"] - 2 * d["boll_std"]
+    return d
+
+
+def _to_series(d, intraday=False):
+    """DataFrame → 前端序列 dict（与 _build_chart_from_df 同口径；抽出以复用）。"""
+    import pandas as pd
+    _fmt = "%Y-%m-%d %H:%M" if intraday else "%Y-%m-%d"
+    return {
+        "dates": [x.strftime(_fmt) for x in d["date"]],
+        "ohlc": [[round(o, 3), round(c, 3), round(l, 3), round(h, 3)]
+                 for o, c, l, h in zip(d["open"], d["close"], d["low"], d["high"])],
+        "volume": [round(float(v), 0) for v in d["volume"]],
+        "ma": [[round(x, 3) if not pd.isna(x) else None for x in d[f"ma{n}"]]
+               for n in (5, 10, 20, 30, 60, 180, 365)],
+        "macd": {"dif": [round(x, 3) if not pd.isna(x) else None for x in d["dif"]],
+                 "dea": [round(x, 3) if not pd.isna(x) else None for x in d["dea"]],
+                 "hist": [round(x, 3) if not pd.isna(x) else None for x in d["macd_hist"]]},
+        "rsi": [round(x, 1) if not pd.isna(x) else None for x in d["rsi"]],
+        "boll": {"mid": [round(x, 3) if not pd.isna(x) else None for x in d["boll_mid"]],
+                 "up": [round(x, 3) if not pd.isna(x) else None for x in d["boll_up"]],
+                 "dn": [round(x, 3) if not pd.isna(x) else None for x in d["boll_dn"]]},
+    }
+
+
 def _fetch_min_bars_online(ts_code, freq, days):
     """tushare 原生 30/60 分钟线。异常/空 → 空 DataFrame（由调用方回退磁盘缓存）。"""
     import pandas as pd
@@ -346,19 +388,33 @@ def _fetch_min_bars_online(ts_code, freq, days):
 
 
 def _fetch_min_bars_disk(ts_code, freq):
-    """本地缓存兜底：w35 验证脚本落的 `_d540` 档（约 981/977 只覆盖）。"""
+    """本地缓存兜底。2026-10-04：优先读**新鲜**的 plain 档（盘后预下载写这里），
+    再回退历史档；多档间按末行时间取**最新者**（原来固定优先陈旧的 `_d540`，
+    当 plain 档更新时会被陈旧数据掩盖）。"""
     import pandas as pd
+    try:
+        from core import chart_cache as _cc
+        fresh = _cc.load_minute_history(ts_code, freq)
+        if fresh is not None and not fresh.empty:
+            return fresh
+    except Exception:
+        pass
+    best, best_last = pd.DataFrame(), ""
     for name in (f"{ts_code}_{freq}_d540.json", f"{ts_code}_{freq}.json"):
         fp = _MIN_BARS_DIR / name
         if not fp.exists():
             continue
         try:
             rows = (json.loads(fp.read_text(encoding="utf-8")) or {}).get("rows") or []
+            df = _norm_min_bars(pd.DataFrame(rows)) if rows else pd.DataFrame()
         except Exception:
             continue
-        if rows:
-            return _norm_min_bars(pd.DataFrame(rows))
-    return pd.DataFrame()
+        if df.empty:
+            continue
+        _last = str(df["time"].iloc[-1])
+        if _last >= best_last:
+            best, best_last = df, _last
+    return best
 
 
 def _fetch_min_bars(code, freq="30min", days=None):
@@ -383,6 +439,8 @@ def _fetch_min_bars(code, freq="30min", days=None):
         return df
     df = df.tail(MIN_BARS_KEEP).reset_index(drop=True)
     with _MIN_BARS_LOCK:
+        if len(_MIN_BARS_CACHE) > 2000:      # 无界增长防护（2026-10-04）：超限整表清空
+            _MIN_BARS_CACHE.clear()
         _MIN_BARS_CACHE[ck] = (slot, df)
     return df.copy()
 
@@ -2008,19 +2066,28 @@ class Api:
             except Exception:
                 pass
 
+        # 2026-10-04 cache-first（普通个股）：盘后预下载的「图表 payload」命中则**瞬开**，
+        # 不走 GM 优先路径（GM 不可达时每次卡满 12s 超时）。miss 时行为完全不变。
+        if not is_index and not is_em:
+            _hit = self._serve_payload_cache(code_str, version)
+            if _hit is not None:
+                return _hit
+
         # 股票优先本地日线缓存（当日秒回）；指数/东财无个股缓存，直接网络
         rows = []
         if not is_index and not is_em:
-            try:
-                from core.position_builder import fetch_daily_kline
-                _df = fetch_daily_kline(code_str)
-                if not _df.empty:
-                    for _r in _df.itertuples(index=False):
-                        rows.append({"date": str(_r.date), "open": float(_r.open),
-                                     "close": float(_r.close), "high": float(_r.high),
-                                     "low": float(_r.low), "volume": float(_r.volume)})
-            except Exception:
-                rows = []
+            rows = self._daily_rows_cache_first(code_str)
+            if not rows:
+                try:
+                    from core.position_builder import fetch_daily_kline
+                    _df = fetch_daily_kline(code_str)   # miss → 原 GM-first（语义不变）
+                    if not _df.empty:
+                        for _r in _df.itertuples(index=False):
+                            rows.append({"date": str(_r.date), "open": float(_r.open),
+                                         "close": float(_r.close), "high": float(_r.high),
+                                         "low": float(_r.low), "volume": float(_r.volume)})
+                except Exception:
+                    rows = []
 
         # 本地缓存不可用 → 走网络拉 400 根
         if not rows:
@@ -2124,7 +2191,7 @@ class Api:
                 }, ensure_ascii=False), encoding="utf-8")
             except Exception:
                 pass
-        self._stock_chart_cache[cache_key] = (datetime.now(), result)
+        self._cache_chart(cache_key, result)
         return result
 
     # ---------- 公司资料（K 线弹窗「📋 公司资料」） ----------
@@ -2231,6 +2298,108 @@ class Api:
                 out["error"] = f"东财取数失败: {e}"
         return _clean(out)
 
+    # ---------- K线 cache-first（2026-10-04） ----------
+    def _cache_chart(self, key, res):
+        """写内存图表缓存（容量上限 500，防全池无界增长）。"""
+        if not hasattr(self, "_stock_chart_cache"):
+            self._stock_chart_cache = {}
+        if len(self._stock_chart_cache) > 500:
+            self._stock_chart_cache.clear()
+        self._stock_chart_cache[key] = (datetime.now(), res)
+
+    @staticmethod
+    def _handshake(res, version):
+        """版本握手：数据未变只回 {unchanged:true}（省掉 ~300KB 过桥 + 重画）。"""
+        _v = res.get("version")
+        if version is not None and _v is not None and version == _v:
+            return {"code": res.get("code"), "available": True, "unchanged": True, "version": _v}
+        return res
+
+    def _serve_payload_cache(self, code, version):
+        """盘后预下载的图表 payload 命中 → 瞬开结果；未命中返回 None。"""
+        try:
+            import core.chart_cache as _cc
+            hit = _cc.load_payload(code)
+            if not hit:
+                return None
+            res = self._payload_to_result(hit, code)
+            if not res or not res.get("available"):
+                return None
+            self._cache_chart(f"{datetime.now().strftime('%Y-%m-%d')}_{code}", res)
+            return self._handshake(res, version)
+        except Exception:
+            return None
+
+    def _daily_rows_cache_first(self, code):
+        """盘后预下载的日线历史缓存（+当日 forming bar）→ rows；miss 返回 []。**不打网络**。"""
+        try:
+            import core.chart_cache as _cc
+            df = _cc.load_daily_display(code)
+            if df is None or df.empty:
+                return []
+            try:
+                from core.market_data import get_provider
+                df = get_provider().append_forming_bar(df, code)
+            except Exception:
+                pass
+            return [{"date": str(_r.date), "open": float(_r.open), "close": float(_r.close),
+                     "high": float(_r.high), "low": float(_r.low), "volume": float(_r.volume)}
+                    for _r in df.itertuples(index=False)]
+        except Exception:
+            return []
+
+    def _payload_to_result(self, hit, code):
+        """payload 缓存 → 结果 dict。日内（可能出新 bar）把当日那根补进 daily 序列并重算日线指标；
+        非交易时段直接返回收盘态（真·瞬开）。其他周期/箱体/通道沿用收盘态（≤1 根偏差）。"""
+        import copy
+        payload = copy.deepcopy(hit.get("payload") or {})
+        if not payload:
+            return None
+        payload["code"] = code
+        payload.setdefault("name", code)
+        daily_rows = list(hit.get("daily_rows") or [])
+        last = str(hit.get("last_daily_date") or "")
+        _now = datetime.now()
+        _today = _now.strftime("%Y-%m-%d")
+        _new_bar_possible = (last < _today and _now.weekday() < 5
+                             and _now.strftime("%H:%M") >= "09:30")
+        if _new_bar_possible:
+            bar = self._today_forming_bar(code)
+            if bar and str(bar["date"]) > last:
+                try:
+                    self._rebuild_payload_daily(payload, daily_rows + [bar])
+                except Exception:
+                    pass
+        return payload
+
+    def _today_forming_bar(self, code):
+        """腾讯快照 → 当日 forming bar（ts_date 闸，与 facade._maybe_append_forming 同口径）。"""
+        try:
+            from core.market_data import get_provider
+            base = str(code).split("_")[0]
+            snap = get_provider().snapshot([base]).get(base)
+            if not snap or not snap.get("price"):
+                return None
+            today = datetime.now().strftime("%Y-%m-%d")
+            if snap.get("ts_date") != today:
+                return None
+            px = snap["price"]
+            return {"date": today, "open": snap.get("open") or px, "high": snap.get("high") or px,
+                    "low": snap.get("low") or px, "close": px, "volume": snap.get("volume") or 0.0}
+        except Exception:
+            return None
+
+    def _rebuild_payload_daily(self, payload, daily_rows):
+        """用 raw daily rows 重算日线序列，替换 payload 的 daily + current_price + version。"""
+        import pandas as pd
+        df = pd.DataFrame(daily_rows)
+        df["date"] = pd.to_datetime(df["date"])
+        df = df.sort_values("date").reset_index(drop=True)
+        d = _calc_ma_and_indicators(df)
+        payload["period_data"]["daily"] = _to_series(d)
+        payload["current_price"] = round(float(d["close"].iloc[-1]), 3)
+        payload["version"] = self._chart_version(payload["period_data"])
+
     def _build_chart_from_df(self, df, out, code, min_frames=None):
         """由日线 DataFrame 构建 K 线弹窗数据（MA/MACD/RSI/BOLL + 周/月/30分/60分 + 支撑箱体通道）。
 
@@ -2240,25 +2409,7 @@ class Api:
         """
         import pandas as pd
 
-        def calc_ma_and_indicators(d):
-            d = d.copy()
-            for n in (5, 10, 20, 30, 60, 180, 365):
-                d[f"ma{n}"] = d["close"].rolling(n).mean()
-            ema12 = d["close"].ewm(span=12, adjust=False).mean()
-            ema26 = d["close"].ewm(span=26, adjust=False).mean()
-            d["dif"] = ema12 - ema26
-            d["dea"] = d["dif"].ewm(span=9, adjust=False).mean()
-            d["macd_hist"] = (d["dif"] - d["dea"]) * 2
-            # RSI(14) — Wilder 平滑（2026-09-21 统一口径，与同花顺/通达信一致）。
-            # 原来用 rolling(14).mean()：单根大阴/阳线会把 RSI 打到极端值，图上看与
-            # 同花顺差很多（用户报"报的超卖与实际不吻合"）
-            from analysis.indicators import wilder_rsi as _wilder_rsi
-            d["rsi"] = _wilder_rsi(d["close"], 14)
-            d["boll_mid"] = d["close"].rolling(20).mean()
-            d["boll_std"] = d["close"].rolling(20).std()
-            d["boll_up"] = d["boll_mid"] + 2 * d["boll_std"]
-            d["boll_dn"] = d["boll_mid"] - 2 * d["boll_std"]
-            return d
+        calc_ma_and_indicators = _calc_ma_and_indicators   # 模块级（2026-10-04 抽出，供 payload 补 bar 复用）
 
         daily = calc_ma_and_indicators(df)
         weekly = calc_ma_and_indicators(df.resample("W-FRI", on="date").agg(
@@ -2270,23 +2421,7 @@ class Api:
         monthly = calc_ma_and_indicators(df.resample(_month_freq, on="date").agg(
             {"open": "first", "high": "max", "low": "min", "close": "last", "volume": "sum"}).dropna().reset_index())
 
-        def to_series(d, intraday=False):
-            _fmt = "%Y-%m-%d %H:%M" if intraday else "%Y-%m-%d"
-            return {
-                "dates": [x.strftime(_fmt) for x in d["date"]],
-                "ohlc": [[round(o, 3), round(c, 3), round(l, 3), round(h, 3)]
-                         for o, c, l, h in zip(d["open"], d["close"], d["low"], d["high"])],
-                "volume": [round(float(v), 0) for v in d["volume"]],
-                "ma": [[round(x, 3) if not pd.isna(x) else None for x in d[f"ma{n}"]]
-                       for n in (5, 10, 20, 30, 60, 180, 365)],
-                "macd": {"dif": [round(x, 3) if not pd.isna(x) else None for x in d["dif"]],
-                         "dea": [round(x, 3) if not pd.isna(x) else None for x in d["dea"]],
-                         "hist": [round(x, 3) if not pd.isna(x) else None for x in d["macd_hist"]]},
-                "rsi": [round(x, 1) if not pd.isna(x) else None for x in d["rsi"]],
-                "boll": {"mid": [round(x, 3) if not pd.isna(x) else None for x in d["boll_mid"]],
-                         "up": [round(x, 3) if not pd.isna(x) else None for x in d["boll_up"]],
-                         "dn": [round(x, 3) if not pd.isna(x) else None for x in d["boll_dn"]]},
-            }
+        to_series = _to_series   # 模块级（2026-10-04 抽出）
 
         out["period_data"] = {
             "daily": to_series(daily),
@@ -2324,14 +2459,19 @@ class Api:
         out["channel"] = self._detect_channel(daily)
         out["current_price"] = round(float(daily["close"].iloc[-1]), 3)
         # 数据身份版本号（不是时间）：前端拿它做「没变就别重传/重画」的握手，见 load_stock_chart。
-        def _sig(k):
-            _s = out["period_data"].get(k)
-            _d = (_s or {}).get("dates") or []
-            return f"{_d[-1]}:{len(_d)}" if _d else "-:0"
-        out["version"] = "|".join(_sig(k) for k in
-                                  ("daily", "weekly", "monthly", "min30", "min60"))
+        out["version"] = self._chart_version(out["period_data"])
         out["available"] = True
         return out
+
+    @staticmethod
+    def _chart_version(period_data):
+        """数据身份版本号：各周期 (末日期:根数) 串联。build 与 payload 补 bar 共用，保证握手一致。"""
+        def _sig(k):
+            _s = (period_data or {}).get(k)
+            _d = (_s or {}).get("dates") or []
+            return f"{_d[-1]}:{len(_d)}" if _d else "-:0"
+        return "|".join(_sig(k) for k in
+                        ("daily", "weekly", "monthly", "min30", "min60"))
 
     def _detect_boxes(self, daily):
         """检测箱体（P1修复）：严格触及标准 + 优化置信分。
@@ -5366,6 +5506,57 @@ class Api:
         except Exception:
             pass
 
+    def _build_and_save_payloads(self, codes):
+        """盘后预下载（小池）：逐只（低并发 3）建图并落盘 `chart_payload/`，供次日**瞬开**。
+        已有新鲜 payload 则跳过。返回统计。失败静默。"""
+        try:
+            import pandas as pd
+            import core.chart_cache as _cc
+            from concurrent.futures import ThreadPoolExecutor
+            codes = [str(c).split("_")[0] for c in (codes or [])]
+            stat = {"requested": len(codes), "built": 0, "skipped": 0, "miss": 0}
+
+            def _one(c):
+                try:
+                    if _cc.load_payload(c):
+                        return "skip"
+                    df = _cc.load_daily_display(c)
+                    if df is None or df.empty:
+                        from core.position_builder import fetch_daily_kline
+                        df = fetch_daily_kline(c)
+                    if df is None or df.empty:
+                        return "miss"
+                    try:
+                        from core.market_data import get_provider
+                        df = get_provider().append_forming_bar(df, c)
+                    except Exception:
+                        pass
+                    df = df.copy()
+                    df["date"] = pd.to_datetime(df["date"])
+                    df = df.sort_values("date").reset_index(drop=True)
+                    rows = [{"date": str(_r.date), "open": float(_r.open), "close": float(_r.close),
+                             "high": float(_r.high), "low": float(_r.low), "volume": float(_r.volume)}
+                            for _r in df.itertuples(index=False)]
+                    out = {"code": c, "name": c, "available": False, "error": ""}
+                    res = self._build_chart_from_df(df, out, c)
+                    if res.get("available") and _cc.save_payload(c, res, rows):
+                        return "built"
+                except Exception:
+                    return "err"
+                return "miss"
+
+            with ThreadPoolExecutor(max_workers=3) as ex:
+                for r in ex.map(_one, codes):
+                    if r == "built":
+                        stat["built"] += 1
+                    elif r == "skip":
+                        stat["skipped"] += 1
+                    else:
+                        stat["miss"] += 1
+            return stat
+        except Exception as e:
+            return {"error": str(e)[:120]}
+
     def recompute_pb(self, date):
         """盘后重跑建仓扫描 + 重算加仓观察。返回 {position_builder, add_watch, error?}。
         重跑用 eod 档、不推送飞书（避免重复打扰）；run_position_scan 会更新 watchlist_buy。
@@ -5676,6 +5867,29 @@ class Api:
         }
 
 
+def start_chart_prefetch_scheduler(api):
+    """盘后 K线预下载调度（2026-10-04）：交易日 15:10 后触发一次 `chart_cache.run_prefetch`。
+
+    小池日线+分钟+payload → 全池日线兜底。幂等由 `run_prefetch` 的跨进程锁 + 当日标记保证
+    （本循环可反复调用，已跑过即空转）。守护线程，失败静默。仅 __main__ 显式启动。"""
+    if _CHART_PREFETCH_STATE.get("started"):
+        return
+    _CHART_PREFETCH_STATE["started"] = True
+
+    def _loop():
+        while True:
+            try:
+                import core.chart_cache as _cc
+                now = datetime.now()
+                if now.weekday() < 5 and now.strftime("%H:%M") >= "15:10":
+                    _cc.run_prefetch(payload_builder=lambda codes: api._build_and_save_payloads(codes))
+            except Exception:
+                pass
+            _time_mod.sleep(300)
+
+    _th.Thread(target=_loop, daemon=True).start()
+
+
 def start_hunter_autoscheduler(api):
     """启动「猎手定时自动运行」守护线程（2026-09-21 owner 需求）。
 
@@ -5724,6 +5938,7 @@ if __name__ == "__main__":
 
     api = Api()
     start_hunter_autoscheduler(api)   # 开盘后每小时自动跑「今日数据」
+    start_chart_prefetch_scheduler(api)   # 盘后 15:10 预下载 K线缓存（小池 payload+分钟、全池日线）
     # 启动预热（均为后台 daemon 线程，不阻塞启动；失败静默）：
     #  · 持仓图表：低并发(3)，消除 load_ob_analysis 的 14s 冷启动阻塞
     #  · 技术标签：走其内置后台分支，消除首次进建仓表/破位表的标签冷算等待

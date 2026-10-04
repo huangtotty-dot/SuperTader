@@ -251,6 +251,17 @@ class MarketDataFacade:
             frames[code] = pd.concat([frames[code], fb], ignore_index=True)
         return frames
 
+    def append_forming_bar(self, df: pd.DataFrame, code: str) -> pd.DataFrame:
+        """公开薄封装（2026-10-04，纯加法）：给日线 df 补当日 forming bar。
+
+        图表 cache-first 路径读磁盘历史后需要补当日那根；直接暴露 `_maybe_append_forming`
+        的语义给 t_gui，避免调用私有方法。**不改变 `daily()` 的 GM-first 行为。**
+        """
+        try:
+            return self._maybe_append_forming(df, code)
+        except Exception:
+            return df
+
     def _maybe_append_forming(self, df: pd.DataFrame, code: str) -> pd.DataFrame:
         """对 gm 日线补当日 bar（P1 审核阻断5+重审#7）。
         gm history_n 盘中/盘后初段不含当日 daily bar（实测 14:11/14:29 end_time=当日23:59:59 仍只返回到昨日），
