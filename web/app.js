@@ -548,6 +548,7 @@ function renderCost(ch) {
    必须 dispose 旧实例再 init，否则每 10s 泄漏一个孤立的 ECharts 实例。 */
 let turnoverHistInst = null;
 let turnoverHistSig = "";
+let turnoverHistNode = null;   // 实例绑定的 DOM 节点；节点被重建（renderLive 每 10s 覆写 innerHTML）即需重画
 const TURNOVER_UP = "#f85149";     // 放量（与 .h-bar-fill.up 同色）
 const TURNOVER_DOWN = "#3fb950";   // 缩量
 const TURNOVER_LIVE = "#d29922";   // 进行中：今日未走完，**不参与**放量/缩量判定（否则盘中看着像大幅缩量）
@@ -581,11 +582,14 @@ async function drawTurnoverHist() {
   // 签名含**容器宽度**：面板隐藏时首次渲染拿到 0 宽，切到该 tab 后宽度变化必须触发重画，
   // 否则会永远停在 0 宽的"空图"上。宽度变化 = 需要重画。
   const sig = `${days.length}|${last.date}|${Math.round(last.amount)}|${box.clientWidth}`;
-  if (turnoverHistInst && sig === turnoverHistSig) {
+  // ⚠️ 必须带上节点判等：renderLive 每 10s 覆写 #liveBody.innerHTML，`box` 每次都是**新节点**，
+  // 而旧实例仍绑在**已脱离文档**的旧节点上。若只看数据签名就早返回，新节点永远拿不到图
+  // ⇒ 成交额图渲染几秒后消失（2026-10-04 修）。节点变了即强制重画。
+  if (turnoverHistInst && box === turnoverHistNode && sig === turnoverHistSig) {
     if (turnoverHistInst.getWidth() !== box.clientWidth) {
       try { turnoverHistInst.resize(); } catch (e) { }
     }
-    return;                                   // 数据与尺寸都没变 → 不重绘（防闪烁）
+    return;                                   // 同节点 + 数据与尺寸都没变 → 不重绘（防闪烁）
   }
   if (!box.clientWidth || !box.clientHeight) {
     // 容器零尺寸时 ECharts 会画出"空图"且**不报错**。此时**不记签名**，
@@ -593,8 +597,9 @@ async function drawTurnoverHist() {
     _turnoverFail(`容器尺寸为 0（${box.clientWidth}×${box.clientHeight}）`);
     return;
   }
-  if (turnoverHistInst) { try { turnoverHistInst.dispose(); } catch (e) { } turnoverHistInst = null; }
+  if (turnoverHistInst) { try { turnoverHistInst.dispose(); } catch (e) { } turnoverHistInst = null; turnoverHistNode = null; }
   turnoverHistInst = echarts.init(box);
+  turnoverHistNode = box;
   const data = days.map(x => ({
     value: Math.round(x.amount / 1e8),
     itemStyle: {
