@@ -1009,6 +1009,8 @@ import threading as _threading
 _position_scan_lock = _threading.Lock()  # 盘中/收盘建仓扫描互斥（trace 写盘线程安全）
 _ma_break_last = None  # 破5/10日线报警节流（datetime，仿盘中建仓扫描）
 _ma_break_thread = None  # 破5/10日线报警后台线程
+_trend30_alert_last = None  # 30min 趋势翻转告警节流（2026-10-04 方案 §4.6）
+_trend30_alert_thread = None  # 30min 趋势翻转告警后台线程
 _TOTAL_EQUITY_CACHE = {"ts": 0.0, "value": 0.0}  # fix P0-9(B1): total_equity 缓存
 
 
@@ -1173,6 +1175,58 @@ def _maybe_run_ma_break_alert(now: datetime) -> None:
     _ma_break_thread = _threading.Thread(
         target=_worker, args=(today,), name="ma-break-alert", daemon=True)
     _ma_break_thread.start()
+
+
+def _trend30_alert_feishu_enabled() -> bool:
+    """读取 config.json 的 feishu.enabled + notify_on_trend30 开关。"""
+    try:
+        runtime_config = load_runtime_config()
+        feishu_cfg = runtime_config.get("feishu", {}) if isinstance(runtime_config, dict) else {}
+        if not bool(feishu_cfg.get("enabled", True)):
+            return False
+        return bool(feishu_cfg.get("notify_on_trend30", True))
+    except Exception:
+        return True
+
+
+def _maybe_check_trend30_alert(now: datetime) -> None:
+    """30min 趋势状态翻转告警（每 5 分钟，翻转即飞书；2026-10-04 方案 §4.6）。纯通知。
+
+    持有(手动) + 自选标的逐码比较 30min 状态机最新状态；BULL↔BEAR 或 →RANGE 即推。
+    """
+    global _trend30_alert_last, _trend30_alert_thread
+    try:
+        if not _trend30_alert_feishu_enabled():
+            return
+    except Exception:
+        return
+    t = now.time()
+    if now.weekday() >= 5:
+        return
+    in_morning = dtime(9, 30) <= t <= dtime(11, 30)
+    in_afternoon = dtime(13, 0) <= t <= dtime(14, 55)
+    if not (in_morning or in_afternoon):
+        return
+    if _trend30_alert_last is not None:
+        if (now - _trend30_alert_last).total_seconds() < 300:
+            return
+    if _trend30_alert_thread is not None and _trend30_alert_thread.is_alive():
+        return
+    _trend30_alert_last = now
+
+    def _worker() -> None:
+        try:
+            from core.trend30_alert import run_trend30_alert
+            events = run_trend30_alert()
+            for e in events:
+                log.info(f"🔀 30min趋势翻转: {e['code']} {e['name']} "
+                         f"{e['from']}→{e['to']} ADX={e.get('adx')}")
+        except Exception as ex:
+            log.warning(f"⚠️ 30min趋势告警异常（已吞掉）: {str(ex)[:200]}")
+
+    _trend30_alert_thread = _threading.Thread(
+        target=_worker, name="trend30-alert", daemon=True)
+    _trend30_alert_thread.start()
 
 
 # P0-7(2026-09-01): 收盘自动触发 daily_review + forward_tracker（子进程隔离，幂等）
@@ -2061,6 +2115,7 @@ def scan_once():
         _maybe_check_index_divergence(now)             # 09:35-14:55 指数背离提醒（300s 节流，事件去重）
         _maybe_run_position_builder_intraday(now)      # 09:30-11:30/13:00-14:55 盘中建仓信号扫描（每5分钟）
         _maybe_run_ma_break_alert(now)                 # 09:30-14:55 盘中破5/10日线报警（每5分钟，提醒建仓）
+        _maybe_check_trend30_alert(now)                # 09:30-14:55 30min趋势翻转告警（每5分钟，纯通知）
 
         if not HOLDINGS:
             return

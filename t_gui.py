@@ -61,9 +61,15 @@ COND_LABELS = {
 
 
 # 黄金分割（斐波那契回撤/扩展）参数 —— 按周期分档，越长的周期要求越大的摆动幅度
-_FIB_LOOKBACK = {"daily": 250, "weekly": 120, "monthly": 60}    # 回看根数（决定锚点搜索范围）
-_FIB_FRACTAL_N = {"daily": 3, "weekly": 2, "monthly": 1}        # 分形确认根数（越长周期 bar 越少）
-_FIB_MIN_AMP = {"daily": 5.0, "weekly": 8.0, "monthly": 12.0}   # 摆动最小幅度 %（低于此视为噪声）
+# 回看根数（决定锚点搜索范围）。2026-10-04: daily 250→120，与前端默认视窗根数对齐——
+# 原来 250 会让前端为「看得见锚点」把视窗放宽，一屏塞进 250+ 根K线，蜡烛细到看不清。
+# 代价：更早的大级别摆动不再被选为锚点（用户 2026-10-04 确认接受）。
+_FIB_LOOKBACK = {"daily": 120, "weekly": 120, "monthly": 60,
+                 "min30": 160, "min60": 160}   # 分钟档与前端默认视窗根数对齐
+_FIB_FRACTAL_N = {"daily": 3, "weekly": 2, "monthly": 1,        # 分形确认根数（越长周期 bar 越少）
+                  "min30": 2, "min60": 2}
+_FIB_MIN_AMP = {"daily": 5.0, "weekly": 8.0, "monthly": 12.0,   # 摆动最小幅度 %（低于此视为噪声）
+                "min30": 3.0, "min60": 3.0}    # 分钟档为初始值，未标定，待图上肉眼校准
 _FIB_RETRACE = [0.236, 0.382, 0.5, 0.618, 0.786]                # 回撤位（0.618 即黄金比例）
 _FIB_EXTENSION = [1.272, 1.618]                                 # 扩展位（突破后目标）
 
@@ -277,6 +283,110 @@ def _load_json(fp, default=None):
         return default if default is not None else {}
 
 
+# ---- K线弹窗「30分/60分」分时取数（2026-10-04）----
+# 在线走 tushare **原生** freq；不复用 divergence._resample_minutes（它用 dt.floor，
+# A股午休会把 60min 桶错位）。无 token / 超频 → 回退本地 tushare_mins 缓存（零网络）。
+# 内存按「30 分钟时段」缓存：同一时段内秒回，跨时段自动重取。
+_MIN_BARS_DIR = BASE / "t_io" / "cache" / "tushare_mins"
+_MIN_BARS_CACHE: dict = {}
+_MIN_BARS_LOCK = threading.Lock()
+MIN_BARS_KEEP = 320                                    # 保留根数上限（前端「全部」档）
+_MIN_BARS_DAYS = {"30min": 70, "60min": 130}           # 自然日：够 320 根（8/日、4/日）
+
+
+def _min_bars_ts_code(code):
+    """6 位股票/指数码 → tushare ts_code（sh000001→000001.SH）。
+    不复用 divergence._ts_code：它不认 sh/sz 前缀（指数会拼错），且有其它调用方。"""
+    c = str(code).split("_")[0]
+    pre = c[:2].lower()
+    if pre in ("sh", "sz", "bj") and c[2:].isdigit():
+        return c[2:] + "." + {"sh": "SH", "sz": "SZ", "bj": "BJ"}[pre]
+    if len(c) == 9 and c[3] == "." and c[:3].isdigit():       # 已是 ts_code 形式
+        return c.upper()
+    if len(c) == 6 and c.isdigit():
+        ex = "SH" if c[0] in "56" else ("BJ" if c[0] in "48" else "SZ")
+        return f"{c}.{ex}"
+    return ""
+
+
+def _min_bars_slot():
+    """当前 30 分钟时段键（跨时段才重取）。"""
+    now = datetime.now()
+    return now.strftime("%Y-%m-%d %H:") + ("00" if now.minute < 30 else "30")
+
+
+def _norm_min_bars(df):
+    """统一分时帧列名/类型/排序；缺列或空 → 空 DataFrame。"""
+    import pandas as pd
+    if df is None or getattr(df, "empty", True):
+        return pd.DataFrame()
+    df = df.rename(columns={"trade_time": "time", "vol": "volume", "date": "time"})
+    need = {"time", "open", "high", "low", "close", "volume"}
+    if not need.issubset(df.columns):
+        return pd.DataFrame()
+    df = df[["time", "open", "high", "low", "close", "volume"]].copy()
+    df["time"] = pd.to_datetime(df["time"], errors="coerce")
+    df = df.dropna(subset=["time"]).sort_values("time").drop_duplicates(subset=["time"])
+    return df.reset_index(drop=True)
+
+
+def _fetch_min_bars_online(ts_code, freq, days):
+    """tushare 原生 30/60 分钟线。异常/空 → 空 DataFrame（由调用方回退磁盘缓存）。"""
+    import pandas as pd
+    try:
+        from analysis.index_regime_intraday import _iri_tushare_pro
+        pro = _iri_tushare_pro()
+        start = (datetime.now() - pd.Timedelta(days=days)).strftime("%Y-%m-%d")
+        end = datetime.now().strftime("%Y-%m-%d")
+        df = pro.stk_mins(ts_code=ts_code, freq=freq,
+                          start_date=f"{start} 09:00:00", end_date=f"{end} 19:00:00")
+    except Exception:
+        return pd.DataFrame()
+    return _norm_min_bars(df)
+
+
+def _fetch_min_bars_disk(ts_code, freq):
+    """本地缓存兜底：w35 验证脚本落的 `_d540` 档（约 981/977 只覆盖）。"""
+    import pandas as pd
+    for name in (f"{ts_code}_{freq}_d540.json", f"{ts_code}_{freq}.json"):
+        fp = _MIN_BARS_DIR / name
+        if not fp.exists():
+            continue
+        try:
+            rows = (json.loads(fp.read_text(encoding="utf-8")) or {}).get("rows") or []
+        except Exception:
+            continue
+        if rows:
+            return _norm_min_bars(pd.DataFrame(rows))
+    return pd.DataFrame()
+
+
+def _fetch_min_bars(code, freq="30min", days=None):
+    """原生 30/60 分钟线，最近 MIN_BARS_KEEP 根。
+    任何失败都返回空 DataFrame，调用方据此降级为「该周期无分时数据」。"""
+    import pandas as pd
+    ts_code = _min_bars_ts_code(code)
+    if not ts_code or freq not in _MIN_BARS_DAYS:
+        return pd.DataFrame()
+    days = days or _MIN_BARS_DAYS[freq]
+    ck = (ts_code, freq, days)
+    slot = _min_bars_slot()
+    with _MIN_BARS_LOCK:
+        hit = _MIN_BARS_CACHE.get(ck)
+        if hit and hit[0] == slot:
+            return hit[1].copy()
+
+    df = _fetch_min_bars_online(ts_code, freq, days)
+    if df.empty:
+        df = _fetch_min_bars_disk(ts_code, freq)
+    if df.empty:
+        return df
+    df = df.tail(MIN_BARS_KEEP).reset_index(drop=True)
+    with _MIN_BARS_LOCK:
+        _MIN_BARS_CACHE[ck] = (slot, df)
+    return df.copy()
+
+
 _ACCT_MAP_CACHE = {"ts": 0.0, "map": {}}
 
 
@@ -386,6 +496,11 @@ def _reconcile_cash():
 # 期间大量 pandas + 网络在 pywebview 主线程执行会冻结界面）。改为 TTL 缓存 + 后台异步重算，
 # 轮询永远读缓存即时返回，界面不卡。TTL 取 120s：标签变化慢，过长 TTL 减少后台重算的 CPU 尖峰。
 _TAGS_TTL = 120.0
+
+# 30 分钟趋势判定（2026-10-04，方案 doc/solutions/2026-10-04_30分钟趋势判定方案.md）：
+# 技术标签的「上行/下行/震荡」由日线斜率改按 30min 三层状态机。开关便于回滚；
+# 数据不可用（网络/根数不足）时自动回退日线斜率，保持旧行为。
+_TREND30_ENABLED = True
 _TAGS_CACHE: dict = {}
 _TAGS_LOCK = threading.Lock()
 _TAGS_RUNNING = False
@@ -2053,8 +2168,13 @@ class Api:
                 out["error"] = f"东财取数失败: {e}"
         return _clean(out)
 
-    def _build_chart_from_df(self, df, out, code):
-        """由日线 DataFrame 构建 K 线弹窗数据（MA/MACD/RSI/BOLL + 周/月 + 支撑箱体通道）。"""
+    def _build_chart_from_df(self, df, out, code, min_frames=None):
+        """由日线 DataFrame 构建 K 线弹窗数据（MA/MACD/RSI/BOLL + 周/月/30分/60分 + 支撑箱体通道）。
+
+        min_frames: {"min30": df, "min60": df} 直接注入（测试用，避免联网）；None → 自行取数
+        （仅普通个股；指数/em 标的跳过 ⇒ 这两个 Tab 显示「无分时数据」）。
+        注：levels/boxes/channel/current_price **仍只用日线算、全 Tab 共用**（owner 2026-10-04 决定）。
+        """
         import pandas as pd
 
         def calc_ma_and_indicators(d):
@@ -2087,9 +2207,10 @@ class Api:
         monthly = calc_ma_and_indicators(df.resample(_month_freq, on="date").agg(
             {"open": "first", "high": "max", "low": "min", "close": "last", "volume": "sum"}).dropna().reset_index())
 
-        def to_series(d):
+        def to_series(d, intraday=False):
+            _fmt = "%Y-%m-%d %H:%M" if intraday else "%Y-%m-%d"
             return {
-                "dates": [x.strftime("%Y-%m-%d") for x in d["date"]],
+                "dates": [x.strftime(_fmt) for x in d["date"]],
                 "ohlc": [[round(o, 3), round(c, 3), round(l, 3), round(h, 3)]
                          for o, c, l, h in zip(d["open"], d["close"], d["low"], d["high"])],
                 "volume": [round(float(v), 0) for v in d["volume"]],
@@ -2109,8 +2230,31 @@ class Api:
             "weekly": to_series(weekly),
             "monthly": to_series(monthly),
         }
+
+        # 30分/60分（2026-10-04）：原生分钟线，日期带时间。取不到就**不放这两个键**，
+        # 前端据此显示「该周期无分时数据」，而不是抛错。
+        _raw = min_frames
+        if _raw is None:
+            _raw = {}
+            _c = str(code).split("_")[0]
+            if not _c.startswith("em"):      # em 是合成标的(如A股平均股价)，无分时源
+                for _key, _freq in (("min30", "30min"), ("min60", "60min")):
+                    try:
+                        _raw[_key] = _fetch_min_bars(_c, _freq)
+                    except Exception:
+                        _raw[_key] = None
+        _frames = {"daily": daily, "weekly": weekly, "monthly": monthly}
+        for _key in ("min30", "min60"):
+            _mf = (_raw or {}).get(_key)
+            # 太短算不出 MA20/BOLL，放出来只会是一片空缺
+            if _mf is None or getattr(_mf, "empty", True) or len(_mf) < 30:
+                continue
+            _mf = _mf.rename(columns={"time": "date"}) if "time" in _mf.columns else _mf
+            _frames[_key] = _mf
+            out["period_data"][_key] = to_series(calc_ma_and_indicators(_mf), intraday=True)
+
         # 黄金分割按周期各算一份（前端切 Tab 即换锚点）
-        for _name, _d in (("daily", daily), ("weekly", weekly), ("monthly", monthly)):
+        for _name, _d in _frames.items():
             out["period_data"][_name]["fib"] = self._calc_fibonacci(_d, _name)
         out["levels"] = self._calc_support_resistance(daily)
         out["boxes"] = self._detect_boxes(daily)
@@ -2475,7 +2619,8 @@ class Api:
     def _calc_fibonacci(self, daily, period="daily"):
         """黄金分割：自动锚定该周期**最显著的一段摆动** → 回撤位/扩展位。
 
-        锚点选择：回看 N 根 → 分形找摆动点（复用 analysis.divergence._local_extrema）
+        锚点选择：回看 N 根（见 _FIB_LOOKBACK，daily=120 与前端默认视窗对齐）
+        → 分形找摆动点（复用 analysis.divergence._local_extrema）
         → 合成"高-低"交替序列 → 滤掉幅度不足的噪声摆动 → 取幅度最大的一段。
         全部不达标时降级为回看区间的最高/最低价（fallback=True）。
 
@@ -2500,7 +2645,9 @@ class Api:
         off = len(daily) - n
         highs = d["high"].astype(float).values
         lows = d["low"].astype(float).values
-        dates = [x.strftime("%Y-%m-%d") for x in d["date"]]
+        # 分钟周期的锚点日期要带时间，否则与日线格式混同、图上标不出取自哪根
+        _dfmt = "%Y-%m-%d %H:%M" if period in ("min30", "min60") else "%Y-%m-%d"
+        dates = [x.strftime(_dfmt) for x in d["date"]]
 
         peaks, troughs = _local_extrema(highs, lows, n_bars)
 
@@ -3150,6 +3297,20 @@ class Api:
         base = str(code).split("_")[0]
         return get_provider().snapshot([base]).get(base)
 
+    def _trend30_trend(self, code):
+        """30 分钟趋势判定（2026-10-04 方案）。返回 (trend|None, src)。
+        不可用（开关关闭/网络/根数不足）→ (None, src)，调用方回退日线斜率。"""
+        if not _TREND30_ENABLED:
+            return None, "disabled"
+        try:
+            from analysis.trend30.adapter import get_trend30
+            r = get_trend30(code)
+        except Exception as e:
+            return None, f"error:{type(e).__name__}"
+        if r.get("source") != "30min" or not r.get("trend"):
+            return None, str(r.get("source") or "error")
+        return r["trend"], "30min"
+
     def _stock_tags_one(self, code):
         """单只股票技术标签。返回 {trend, box_pos, tags:[{label,color}]}。"""
         import numpy as np
@@ -3180,12 +3341,15 @@ class Api:
         cur = float(closes[-1])
         n = len(closes)
 
-        # 通道方向
+        # 通道方向（2026-10-04：改按 30 分钟趋势判定；不可用时回退日线斜率）
         recent = df.tail(40)
         rc = recent["close"].values
         slope = np.polyfit(np.arange(len(rc)), rc, 1)[0]
         norm = slope / (rc.mean() or 1e-9)
-        trend = "up" if norm > 0.0015 else ("down" if norm < -0.0015 else "flat")
+        daily_trend = "up" if norm > 0.0015 else ("down" if norm < -0.0015 else "flat")
+        trend, _trend_src = self._trend30_trend(code)
+        if trend is None:                      # 30min 不可用 → 回退日线（保持旧行为）
+            trend, _trend_src = daily_trend, "daily"
 
         # 精密箱体（365日滑窗+斜率+触及验证+重叠合并）
         boxes = self._detect_boxes(df)
@@ -3286,7 +3450,8 @@ class Api:
         box_pos = None
         if cur_box and cur_box["high"] > cur_box["low"]:
             box_pos = round((cur - cur_box["low"]) / (cur_box["high"] - cur_box["low"]), 2)
-        return {"trend": trend, "box_pos": box_pos, "price": round(cur, 3), "tags": tags[:6]}
+        return {"trend": trend, "box_pos": box_pos, "price": round(cur, 3),
+                "trend_src": _trend_src, "tags": tags[:6]}
 
     def load_stock_tags_batch(self, codes):
         """批量拉技术标签（并发，ThreadPoolExecutor），带 TTL 缓存 + 后台异步重算。

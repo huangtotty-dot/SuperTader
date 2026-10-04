@@ -2122,7 +2122,63 @@ let stockChartInst = null;
 let stockChartTimer = null;
 let stockChartCode = null;
 let stockChartName = "";
+// 用户手动缩放（滚轮/拖拽 slider）后记住视窗，否则 10s 自动刷新重建图表时会弹回默认窗口。
+// 存 dataZoom 的百分比 {start, end}；null = 尚未手动缩放，用默认窗口。
+let stockChartZoom = null;
 const MA_COLORS = ["#e6c07b", "#56b4e9", "#e91e63", "#9b59b6", "#2ecc71", "#f39c12", "#3498db"];
+
+/* 默认可见根数。取值贴着后端黄金分割回看期（t_gui._FIB_LOOKBACK）——daily 120 与回看期
+   相等，锚点必然落在默认视窗内；weekly/monthly 因 bar 更少而略小，万一锚点更早由下面的
+   放宽分支兜底。核心目的：后端 800 根日线全画出来蜡烛只有 ~3px，形态根本看不清。 */
+const DEFAULT_BARS = { daily: 120, weekly: 104, monthly: 60, min30: 160, min60: 160 };
+// 快捷区间：按周期给不同标签；bars=null 表示全部。每个周期的默认项都在表内（高亮用）。
+// 分钟档后端各保留 320 根（30分≈8根/日、60分≈4根/日）。
+const RANGE_PRESETS = {
+  daily: [{ label: "近3月", bars: 60 }, { label: "近6月", bars: 120 },
+          { label: "近1年", bars: 250 }, { label: "全部", bars: null }],
+  weekly: [{ label: "近1年", bars: 52 }, { label: "近2年", bars: 104 }, { label: "全部", bars: null }],
+  monthly: [{ label: "近1年", bars: 12 }, { label: "近3年", bars: 36 },
+            { label: "近5年", bars: 60 }, { label: "全部", bars: null }],
+  min30: [{ label: "近1周", bars: 40 }, { label: "近2周", bars: 80 },
+          { label: "近1月", bars: 160 }, { label: "全部", bars: null }],
+  min60: [{ label: "近1周", bars: 20 }, { label: "近2周", bars: 40 },
+          { label: "近1月", bars: 80 }, { label: "全部", bars: null }],
+};
+// 各周期各自记住用户选的区间。**未设 = 用默认根数；null = 全部**（两者必须可区分，
+// 否则选了「全部」会退回默认窗口）。跨会话保留，避免每次打开重选。
+let stockChartRange = {};
+try {
+  const _savedRange = JSON.parse(localStorage.getItem("stockChartRange") || "null");
+  if (_savedRange && typeof _savedRange === "object") stockChartRange = _savedRange;
+} catch (e) { /* 坏数据忽略，用默认 */ }
+
+// 根数 → dataZoom 起始百分比。bars 为 null(全部) 或 n<=bars 时整体可见(0)。
+function barsToZStart(n, bars) {
+  if (!bars || n <= bars) return 0;
+  return (n - bars) / (n - 1) * 100;
+}
+// 该周期当前生效的根数：用户选过就用选的，否则用默认。
+function activeBars(period) {
+  const sel = stockChartRange[period];
+  return sel === undefined ? DEFAULT_BARS[period] : sel;
+}
+function renderRangeButtons(period) {
+  const host = document.getElementById("stockRangeGroup");
+  if (!host) return;
+  const cur = activeBars(period);
+  const presets = RANGE_PRESETS[period] || RANGE_PRESETS.daily;
+  host.innerHTML = presets.map(p =>
+    `<button class="range-btn${(p.bars === cur || (p.bars === null && cur === null)) ? " active" : ""}"`
+    + ` data-bars="${p.bars === null ? "all" : p.bars}" onclick="setChartRange('${period}',${p.bars === null ? "null" : p.bars})">${p.label}</button>`
+  ).join("");
+}
+function setChartRange(period, bars) {
+  stockChartRange[period] = bars;
+  stockChartZoom = null;                    // 换了区间，旧的缩放作废
+  try { localStorage.setItem("stockChartRange", JSON.stringify(stockChartRange)); } catch (e) {}
+  renderRangeButtons(period);
+  renderStockChart();
+}
 
 async function loadStockChartNow() {
   if (!stockChartCode) return;
@@ -2142,6 +2198,9 @@ async function openStockChart(code, name) {
   modal.style.display = "flex";
   stockChartCode = code;
   stockChartName = name;
+  // 换股票：回到默认/所选区间的视窗，不沿用上一只的缩放
+  stockChartZoom = null;
+  renderRangeButtons(stockChartPeriod);
   // 换票时收起并清空资料面板（下次点开重新拉）
   const _prof = document.getElementById("stockProfile");
   if (_prof) { _prof.style.display = "none"; document.getElementById("stockProfileBody").innerHTML = ""; }
@@ -2261,8 +2320,10 @@ function closeStockChart() {
 }
 function switchStockPeriod(p) {
   stockChartPeriod = p;
+  stockChartZoom = null;                    // 周期换了，根数尺度不同，旧缩放作废
   document.querySelectorAll(".stock-tab").forEach(t =>
     t.classList.toggle("active", t.dataset.period === p));
+  renderRangeButtons(p);
   renderStockChart();
 }
 function renderStockSummary(d) {
@@ -2303,6 +2364,14 @@ function renderStockChart() {
   const data = stockChartData;
   if (!data) return;
   const period = data.period_data[stockChartPeriod];
+  // 30分/60分 取不到分时数据时后端不放该键（指数/em 标的、tushare 不可用且无本地缓存）
+  // ⇒ 给明确提示而不是抛异常
+  if (!period || !(period.dates || []).length) {
+    if (stockChartInst) { stockChartInst.dispose(); stockChartInst = null; }
+    document.getElementById("stockChart").innerHTML =
+      '<div class="empty">该周期无分时数据（tushare 取不到，且本地无该标的缓存）</div>';
+    return;
+  }
   const levels = data.levels;
   const cur = data.current_price;
   // 显示开关
@@ -2372,16 +2441,27 @@ function renderStockChart() {
       itemStyle: { color: "#8b949e" },
     } : null;
 
-  // 初始缩放起点：默认 55%（只看近期），但若黄金分割锚定的摆动更早，
-  // 就放宽到能看见它 —— 否则周/月K 上锚点连线落在视窗外、比例位来源无从核对。
-  // 日K 的锚点通常本就在视窗内，故不受影响（min 取 55）。
-  let zStart = 55;
-  if (fibActive && period.dates.length > 1) {
-    const nBars = period.dates.length;
-    const aMin = Math.min(fib.swing.low.index, fib.swing.high.index);
-    const pad = Math.max(3, nBars * 0.02);
-    zStart = Math.min(55, Math.max(0, (aMin - pad) / (nBars - 1) * 100));
+  // 初始视窗：按「根数」而非百分比 —— 后端有 800 根日线，按百分比会让每根蜡烛只剩 ~3px。
+  //   ① 用户手动缩放过 → 原样沿用（10s 刷新重建图表时不能被弹回默认窗口）
+  //   ② 用户显式选过区间 → 严格按所选根数（显式选择优先，不为锚点放宽）
+  //   ③ 默认 → 按 DEFAULT_BARS 根；万一锚点更早再放宽到能看见它
+  //      （锚点连线落在视窗外则比例位来源无从核对）
+  const nBars = period.dates.length;
+  const rangeSel = stockChartRange[stockChartPeriod];   // undefined=默认 null=全部
+  let zStart;
+  if (stockChartZoom) {
+    zStart = stockChartZoom.start;
+  } else if (rangeSel !== undefined) {
+    zStart = barsToZStart(nBars, rangeSel);
+  } else {
+    zStart = barsToZStart(nBars, DEFAULT_BARS[stockChartPeriod] || DEFAULT_BARS.daily);
+    if (fibActive && nBars > 1) {
+      const aMin = Math.min(fib.swing.low.index, fib.swing.high.index);
+      const pad = Math.max(3, nBars * 0.02);
+      zStart = Math.min(zStart, Math.max(0, (aMin - pad) / (nBars - 1) * 100));
+    }
   }
+  const zEnd = stockChartZoom ? stockChartZoom.end : 100;
 
   // 标题：通道(左) + 黄金分割锚点说明(右)
   const titles = [];
@@ -2409,12 +2489,27 @@ function renderStockChart() {
   // 绿色:quality_score>=7 | 黄色:5-7 | 红色:<5(信号级) | 灰色:无评分(历史)
   const boxes = data.boxes || [];
   const boxIdx = period.dates;  // 当前周期的日期数组
+  // 箱体起止是**日线口径的 YYYY-MM-DD**，而分钟周期的时间轴是 "YYYY-MM-DD HH:MM" ⇒
+  // 精确 indexOf 在分钟图上必然落空、箱体静默消失。按**日期前缀**取落在区间内的首/末根。
+  const _dayOf = (s) => String(s).slice(0, 10);
+  const _boxRange = (dates, start, end) => {
+    const s = _dayOf(start), e = _dayOf(end);
+    let i0 = -1, i1 = -1;
+    for (let i = 0; i < dates.length; i++) {
+      const d = _dayOf(dates[i]);
+      if (d < s) continue;
+      if (d > e) break;
+      if (i0 < 0) i0 = i;
+      i1 = i;
+    }
+    return i0 < 0 ? null : [i0, i1];
+  };
   const boxAreas = boxes
     .filter(b => b.low && b.high)
     .map(b => {
-      const i0 = boxIdx.indexOf(b.start);
-      const i1 = boxIdx.indexOf(b.end);
-      if (i0 < 0 || i1 < 0) return null;
+      const _r = _boxRange(boxIdx, b.start, b.end);
+      if (!_r) return null;
+      const i0 = _r[0], i1 = _r[1];
       const isCur = b.rel === 0;
 
       // P2前端适配：根据quality_score判定颜色
@@ -2499,10 +2594,12 @@ function renderStockChart() {
         if (maParts.length) html += `<div style="color:#8b949e">${maParts.join("　")}</div>`;
 
         // P2前端优化：显示当前日期所在的箱体质量信息
-        const curDate = period.dates[i];
+        // 比到「天」：分钟周期的 curDate 带时间("2026-09-30 15:00")，直接与日线口径的
+        // b.end("2026-09-30") 比字符串会因空格排在末尾而判 false ⇒ 末根K线漏判箱体。
+        const curDate = _dayOf(period.dates[i]);
         const boxesAtDate = boxes.filter(b => {
           try {
-            return curDate >= b.start && curDate <= b.end;
+            return curDate >= _dayOf(b.start) && curDate <= _dayOf(b.end);
           } catch (e) {
             return false;
           }
@@ -2539,10 +2636,10 @@ function renderStockChart() {
       } },
     axisPointer: { link: [{ xAxisIndex: "all" }] },
     grid: [
-      { left: 60, right: 20, top: 34, height: "44%" },   // 主图: K线+MA+BOLL+支撑压力+箱体
-      { left: 60, right: 20, top: "52%", height: "10%" }, // 成交量(独立窗口)
-      { left: 60, right: 20, top: "64%", height: "11%" }, // MACD
-      { left: 60, right: 20, top: "77%", height: "11%" }, // RSI
+      { left: 60, right: 20, top: 34, height: "52%" },   // 主图: K线+MA+BOLL+支撑压力+箱体
+      { left: 60, right: 20, top: "60%", height: "9%" },  // 成交量(独立窗口)
+      { left: 60, right: 20, top: "71%", height: "10%" }, // MACD
+      { left: 60, right: 20, top: "83%", height: "10%" }, // RSI
     ],
     xAxis: [
       { type: "category", data: period.dates, gridIndex: 0, axisLine: { lineStyle: { color: "#30363d" } },
@@ -2560,11 +2657,12 @@ function renderStockChart() {
       { min: 0, max: 100, gridIndex: 3, axisLabel: { color: "#8b949e", fontSize: 9 }, splitLine: { show: false } },
     ],
     dataZoom: [
-      { type: "inside", xAxisIndex: [0, 1, 2, 3], start: zStart, end: 100 },
-      { type: "slider", xAxisIndex: [0, 1, 2, 3], bottom: 0, height: 18, start: zStart, end: 100 },
+      { type: "inside", xAxisIndex: [0, 1, 2, 3], start: zStart, end: zEnd },
+      { type: "slider", xAxisIndex: [0, 1, 2, 3], bottom: 0, height: 16, start: zStart, end: zEnd },
     ],
     series: [
       { name: "K线", type: "candlestick", data: period.ohlc, xAxisIndex: 0, yAxisIndex: 0,
+        barMaxWidth: 12,   // 根数很少时别把蜡烛拉成巨型方块；根数多时仍自动变细
         itemStyle: { color: "#f85149", color0: "#3fb950", borderColor: "#f85149", borderColor0: "#3fb950" },
         markArea: boxAreas.length && showBoxes ? {
           silent: true, data: boxAreas,
@@ -2622,7 +2720,7 @@ function renderStockChart() {
       }] : []),
       // 成交量独立窗口
       { name: "成交量", type: "bar", data: period.volume, xAxisIndex: 1, yAxisIndex: 1,
-        itemStyle: { color: "rgba(255,140,90,.35)" }, barWidth: "60%" },
+        itemStyle: { color: "rgba(255,140,90,.35)" }, barWidth: "60%", barMaxWidth: 12 },
       // MACD 窗口
       { name: "MACD-DIF", type: "line", data: period.macd.dif, xAxisIndex: 2, yAxisIndex: 2,
         symbol: "none", lineStyle: { color: "#ff8c5a", width: 1 } },
@@ -2637,20 +2735,39 @@ function renderStockChart() {
           { yAxis: 70, lineStyle: { color: "rgba(139,148,158,.4)", type: "dashed" } }] } },
     ],
   });
+
+  // 记住用户手动缩放：10s 刷新会 dispose+重建图表，不记下来就会被弹回默认窗口。
+  // 程序化 setOption 也会触发 dataZoom 事件，故回读实际值后与刚设进去的比较 —— 相同即
+  // 非用户操作，不覆盖（否则首帧就把默认值当成"用户缩放"锁死）。
+  if (stockChartInst && typeof stockChartInst.on === "function") {
+    try {
+      stockChartInst.on("dataZoom", () => {
+        try {
+          const dz = ((stockChartInst.getOption && stockChartInst.getOption()) || {}).dataZoom || [];
+          const z = dz[0];
+          if (z && typeof z.start === "number" && typeof z.end === "number") {
+            if (Math.abs(z.start - zStart) > 0.01 || Math.abs(z.end - zEnd) > 0.01) {
+              stockChartZoom = { start: z.start, end: z.end };
+            }
+          }
+        } catch (e) { /* 桩环境无 getOption，忽略 */ }
+      });
+    } catch (e) { /* 桩环境 on 不接受回调，忽略 */ }
+  }
 }
 
 /* ---- 选股猎手 ---- */
 let hunterLoaded = false;
 function trendBadge(t) {
-  if (t === "up") return `<span class="badge t-long" title="上行通道">上行↗</span>`;
-  if (t === "down") return `<span class="badge t-short" title="下行通道">下行↘</span>`;
-  return `<span class="badge chop">震荡→</span>`;
+  if (t === "up") return `<span class="badge t-long" title="30分钟趋势 BULL">上行↗</span>`;
+  if (t === "down") return `<span class="badge t-short" title="30分钟趋势 BEAR">下行↘</span>`;
+  return `<span class="badge chop" title="30分钟趋势 RANGE">震荡→</span>`;
 }
 // 技术标签徽章（desc 悬停解释文案，与 t_gui._stock_tags_one 标签一一对应）
 const TAG_DESC = {
-  "上行": "近40日收盘斜率向上，处于上行通道（趋势偏多，回踩中轨/下轨可低吸）",
-  "下行": "近40日收盘斜率向下，处于下行通道（趋势偏空，反弹到上轨/均线减仓，不抄底）",
-  "震荡": "近40日收盘斜率平缓，横盘震荡（无明确方向，按箱体高抛低吸）",
+  "上行": "30分钟线趋势=BULL（ADX(14)>22 且上行、EMA20>EMA60 且价在 EMA20 上、Supertrend 未破）：趋势偏多，回踩低吸",
+  "下行": "30分钟线趋势=BEAR（ADX(14)>22 且上行、EMA20<EMA60 且价在 EMA20 下、Supertrend 走空）：趋势偏空，反弹减仓、不抄底",
+  "震荡": "30分钟线趋势=RANGE（ADX 闸门未开或方向未确认）：无明确方向，按箱体高抛低吸",
   "箱体上沿": "现价处于最近箱体上沿（位置>85%），接近突破点，注意压力",
   "箱体下沿": "现价处于最近箱体下沿（位置<15%），接近支撑/跌破点",
   "箱体内部": "现价在箱体中段运行，方向未定，箱体内高抛低吸",

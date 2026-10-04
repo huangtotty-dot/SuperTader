@@ -1122,6 +1122,27 @@ def scan_stock(code: str, stock_info: dict, date_str: str = None,
                     result["verdict"] = "approaching"
                     result["approach_status"] = "intraday_pending"
 
+            # §5/§6.3 30min 趋势建仓许可闸（2026-10-04 方案）。
+            # enabled=False（默认）：仅把许可结论写进 trace（would_block）供观测，不改 verdict；
+            # enabled=True：许可被拒时把 signal 降级 approaching（待 §7 校准后再开）。
+            try:
+                from config import TREND30_GATE_PARAMS as _T30
+                if result["verdict"] == "signal":
+                    _bg = None
+                    if isinstance(daily_ctx, dict):
+                        _bg = daily_ctx.get("daily_trend_bg")
+                    if not _bg and _f:
+                        _bg = _f.get("daily_trend_bg")
+                    from analysis.trend30.adapter import get_trade_permission as _gtp
+                    _perm = _gtp(code, _bg)
+                    _blocked = (_perm.get("allow_zheng_t") is False)   # 建仓 = 正T口径
+                    result["trend30_gate"] = {**_perm, "would_block": bool(_blocked)}
+                    if _T30.get("enabled", False) and _blocked:
+                        result["verdict"] = "approaching"
+                        result["approach_status"] = "trend30_blocked"
+            except Exception:
+                pass
+
             # GUI 直观化(2026-08-25)：算"卡在哪、差多少"。signal 时无卡点。
             if result["verdict"] == "signal":
                 result["block_reason"] = None

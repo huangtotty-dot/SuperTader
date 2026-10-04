@@ -260,14 +260,19 @@ tr:hover td { background: rgba(243,93,43,.03); }
 .mini-btn.danger:hover { filter: brightness(1.1); }
 .confirm-badge { background: #f85149; color: #fff; font-size: 11px; font-weight: 700; border-radius: 10px; padding: 0 7px; margin-left: 6px; line-height: 18px; }
 /* 个股技术分析弹窗 */
-.modal-lg { width: 90vw; max-width: 1200px; height: 85vh; max-height: 85vh; transition: all .25s ease; }
+.modal-lg { width: 90vw; max-width: 1200px; height: 92vh; max-height: 92vh; transition: all .25s ease; }
 .modal-lg.modal-max { width: 98vw; max-width: 98vw; height: 97vh; max-height: 97vh; }
 .stock-summary { padding: 8px 16px; font-size: 13px; border-bottom: 1px solid var(--border-soft); display: flex; gap: 20px; flex-wrap: wrap; }
 .stock-summary .ss-item { display: flex; align-items: center; gap: 4px; }
 .stock-tabs { display: flex; gap: 4px; padding: 8px 16px 0; }
 .stock-tab { background: var(--bg); color: var(--text-dim); border: 1px solid var(--border); border-radius: 5px 5px 0 0; padding: 6px 16px; font-size: 13px; cursor: pointer; }
 .stock-tab.active { background: var(--bg-card); color: var(--accent); border-bottom: 2px solid var(--accent); font-weight: 700; }
-.stock-toolbar { display: flex; justify-content: space-between; align-items: center; padding: 0 16px; border-bottom: 1px solid var(--border-soft); }
+.stock-toolbar { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 12px; padding: 0 16px; border-bottom: 1px solid var(--border-soft); }
+/* 区间快捷选择（2026-10-04）：控制一屏显示多少根K线，默认近6月；选择写入 localStorage。 */
+.range-group { display: flex; gap: 3px; padding: 6px 0 8px; }
+.range-btn { background: var(--bg); color: var(--text-dim); border: 1px solid var(--border); border-radius: 4px; padding: 3px 9px; font-size: 11px; cursor: pointer; white-space: nowrap; }
+.range-btn:hover { border-color: var(--accent); color: var(--accent); }
+.range-btn.active { background: rgba(243,93,43,.12); color: var(--accent); border-color: var(--accent); font-weight: 700; }
 .stock-toggles { display: flex; gap: 12px; padding: 6px 0 8px; }
 .toggle-item { font-size: 12px; color: var(--text-dim); display: flex; align-items: center; gap: 4px; cursor: pointer; }
 .toggle-item input { accent-color: var(--accent); }

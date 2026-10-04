@@ -854,6 +854,15 @@ ENTRY_TIMING_PARAMS = {
     "veto_dist_ma60_max": 0.20,   # 高于MA60超+20%不追高（该桶 w10=43.6%，全因子最差档）
 }
 
+# ==================== 30min 趋势建仓许可闸（2026-10-04） ====================
+# 方案 doc/solutions/2026-10-04_30分钟趋势判定方案.md §5/§6.3。
+# ⚠️ 原目标「手动做T信号」已于 2026-09-22 关闭 ⇒ 本节闸门落到**建仓信号**上。
+# 「enabled」默认 False：仅把许可结论写进 trace 观测（would_block），不改 verdict；
+# 待 §7 回测校准通过后再由 owner 置 True 生效。
+TREND30_GATE_PARAMS = {
+    "enabled": False,       # True=许可被拒时把 verdict 降级为 approaching；False=仅记录
+}
+
 # ==================== B-2: C20 竞价现实校验（2026-08-21 评审通过，双条件与门） ====================
 # 09:26 基调推送前校验：持仓缺口(gap_med) 与 Top20 竞价跌占比 双条件，只纠"乐观错"不纠"悲观错"
 # Level1(降级标注黄条): gap_med<=l1_gap 且 top20跌占比>=l1_top20_down_ratio

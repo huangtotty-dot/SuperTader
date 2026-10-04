@@ -57,8 +57,24 @@ global.location = global.window.location;
 global.alert = () => {};
 global.confirm = () => true;
 // ECharts 桩：app.js 用 `const echarts = window.echarts` 取（见 app.js:319），
-// 故必须挂在 window 上。只捕获 setOption 的 option，供「黄金分割图层」断言。
-global.window.echarts = { init(){ return { setOption(o){ global.__opt = o; }, dispose(){}, resize(){}, on(){}, off(){} }; } };
+// 故必须挂在 window 上。捕获 setOption 的 option（供图层断言），并保存 on() 的回调 +
+// 实现 getOption()，供「手动缩放不被 10s 刷新重置」的断言驱动。
+// 注意：实例是全局单例 __inst，dispose() 不清 handlers —— app.js 每次渲染都新建实例并重挂
+// on('dataZoom')，若不清就会累积；这里 dispose 时清空，模拟真实实例生命周期。
+global.window.echarts = { init(){
+  const handlers = {};
+  global.__inst = {
+    setOption(o){ global.__opt = o; },
+    getOption(){ return global.__opt || {}; },
+    dispose(){ for (const k in handlers) delete handlers[k]; },
+    resize(){},
+    on(evt, cb){ (handlers[evt] = handlers[evt] || []).push(cb); global.__handlers = handlers; },
+    off(){},
+    // 测试用：模拟用户手动缩放（echarts 触发 dataZoom 事件前会先更新内部 option）
+    __trigger(evt, opt){ if (opt) global.__opt = opt; (handlers[evt] || []).forEach(cb => cb()); },
+  };
+  return global.__inst;
+} };
 """
 
 HARNESS = r"""
@@ -74,7 +90,7 @@ function mkElRefGlobal(){ return document.createElement(); }
 
 (0, eval)(fs.readFileSync('web/app.js', 'utf8')
   + '\n;globalThis.__X = { renderPB, renderAutoScan, renderAddWatch, buildBadge, renderStockChart,'
-  + ' addNewWatchlist, addToWatchlist,'
+  + ' addNewWatchlist, addToWatchlist, DEFAULT_BARS, RANGE_PRESETS, setChartRange, switchStockPeriod,'
   + ' __setChart: (d, p) => { stockChartData = d; stockChartPeriod = p; } };');
 const X = globalThis.__X;
 const P = JSON.parse(fs.readFileSync(DIR + '/payloads.json', 'utf8'));
@@ -135,13 +151,15 @@ check(`条件详情弹窗 ${detOk}/${Object.keys(P.detail || {}).length} 条渲�
       detOk === Object.keys(P.detail || {}).length);
 
 // ── K线弹窗：黄金分割图层（2026-09-20 新增；此前 renderStockChart 完全无覆盖）──
+// 全部周期：日/周/月 + 30分/60分（2026-10-04 新增分时）
+const PERIODS = ['daily', 'weekly', 'monthly', 'min30', 'min60'];
 if (P.chart && !P.chart.err && P.chart.period_data) {
   console.log('== 黄金分割图层渲染 ==');
   // 图层开关默认 checked；DOM 垫片默认 false 会让所有图层被关掉，故显式打开
   ['tgLevels', 'tgBoxes', 'tgChannel', 'tgMA', 'tgFib'].forEach(id => {
     captured[id] = Object.assign({}, mkElRefGlobal(), { id, checked: true });
   });
-  for (const per of ['daily', 'weekly', 'monthly']) {
+  for (const per of PERIODS) {
     if (!P.chart.period_data[per]) continue;
     let opt;
     try {
@@ -193,6 +211,151 @@ if (P.chart && !P.chart.err && P.chart.period_data) {
   check('关闭开关后支撑压力仍在（其余图层不受影响）',
         ((offKl.markLine || {}).data || []).length > 0);
   captured['tgFib'].checked = true;
+
+  // ── 默认视窗根数 + 手动缩放不被刷新重置（2026-10-04）──
+  // 背景：后端给 800 根日线，前端原按百分比(zStart=55)默认显示 45%≈360 根，蜡烛只有 ~3px；
+  // 且 10s 刷新会 dispose+重建图表、把用户缩放弹回默认窗口。两者都在此设闸。
+  console.log('== K线视窗根数 / 缩放保持 ==');
+  const barsOf = (z0, z1, n) => Math.round(z1 / 100 * (n - 1)) - Math.round(z0 / 100 * (n - 1)) + 1;
+
+  // 1) 默认窗口 == DEFAULT_BARS（数据不足时退化为全部）。
+  //    关掉黄金分割以隔离「为锚点放宽窗口」这条另一逻辑 —— 它是有意保留的，会多显示几根。
+  for (const per of PERIODS) {
+    if (!P.chart.period_data[per]) continue;
+    captured['tgFib'].checked = false;
+    X.setChartRange(per, undefined);       // 清掉可能残留的区间选择 ⇒ 回到默认
+    X.__setChart(P.chart, per);
+    X.renderStockChart();
+    const dz = ((global.__opt || {}).dataZoom || [])[0] || {};
+    const n = P.chart.period_data[per].dates.length;
+    const want = Math.min(X.DEFAULT_BARS[per], n);
+    const got = barsOf(dz.start, dz.end, n);
+    check(`${per}: 默认视窗 ${got} 根 == ${want}`, got === want);
+    captured['tgFib'].checked = true;
+  }
+  // 1b) 开着黄金分割时，默认视窗仍应是「一根数窗口」量级，绝不能退回旧的 ~360 根
+  for (const per of PERIODS) {
+    if (!P.chart.period_data[per]) continue;
+    X.setChartRange(per, undefined);
+    X.__setChart(P.chart, per);
+    X.renderStockChart();
+    const dz = ((global.__opt || {}).dataZoom || [])[0] || {};
+    const n = P.chart.period_data[per].dates.length;
+    const got = barsOf(dz.start, dz.end, n);
+    check(`${per}: 含锚点放宽后仍紧凑 ${got} 根 <= ${X.DEFAULT_BARS[per] + 12}`,
+          got <= X.DEFAULT_BARS[per] + 12);
+  }
+
+  // 2) 选「全部」⇒ 一屏显示全部根数（且不被默认窗口逻辑吞掉）
+  X.setChartRange('daily', null);
+  X.__setChart(P.chart, 'daily');
+  X.renderStockChart();
+  {
+    const dz = ((global.__opt || {}).dataZoom || [])[0] || {};
+    const n = P.chart.period_data.daily.dates.length;
+    check(`选「全部」⇒ 显示 ${n} 根`, barsOf(dz.start, dz.end, n) === n);
+  }
+
+  // 3) 手动缩放后，模拟 10s 刷新的再次渲染必须保住视窗
+  X.setChartRange('daily', undefined);
+  X.__setChart(P.chart, 'daily');
+  X.renderStockChart();
+  {
+    const n = P.chart.period_data.daily.dates.length;
+    // 模拟用户把视窗拖到 [40%, 90%]：echarts 会先更新内部 option 再触发 dataZoom 事件
+    const zoomed = JSON.parse(JSON.stringify(global.__opt));
+    zoomed.dataZoom = [{ start: 40, end: 90 }, { start: 40, end: 90 }];
+    global.__inst.__trigger('dataZoom', zoomed);
+    X.renderStockChart();                  // ← 等价于 10s 后 loadStockChartNow() 的重绘
+    const dz = ((global.__opt || {}).dataZoom || [])[0] || {};
+    check('手动缩放不被刷新重置(前)', Math.abs(dz.start - 40) < 0.01);
+    check('手动缩放不被刷新重置(后)', Math.abs(dz.end - 90) < 0.01);
+    check('重置后仍为手动视窗而非默认', barsOf(dz.start, dz.end, n) !== Math.min(X.DEFAULT_BARS.daily, n));
+  }
+
+  // 4) 切周期 / 换区间会清掉手动缩放（回到该周期默认），避免跨尺度沿用
+  X.renderStockChart();
+  X.setChartRange('daily', 60);
+  X.__setChart(P.chart, 'daily');
+  X.renderStockChart();
+  {
+    const dz = ((global.__opt || {}).dataZoom || [])[0] || {};
+    const n = P.chart.period_data.daily.dates.length;
+    check('选「近3月」⇒ 60 根', barsOf(dz.start, dz.end, n) === Math.min(60, n));
+  }
+
+  // 5) 5 个图层开关默认关闭（index.html 无 checked）⇒ 打开弹窗只剩 K线+量+MACD+RSI。
+  //    防回退：有人把 checked 加回去，或 showX 的默认值从「关」翻回「开」。
+  ['tgLevels', 'tgBoxes', 'tgChannel', 'tgMA', 'tgFib'].forEach(id => { captured[id].checked = false; });
+  X.setChartRange('daily', undefined);
+  X.__setChart(P.chart, 'daily');
+  X.renderStockChart();
+  {
+    const names = ((global.__opt || {}).series || []).map(s => s.name);
+    check('默认关：无支撑压力线',
+          (((global.__opt.series || []).find(s => s.name === 'K线') || {}).markLine || {}).data.length === 1);
+    check('默认关：无箱体/通道/均线/黄金分割',
+          !names.some(n => /黄金分割|通道|^MA\d/.test(n)));
+    check('默认关：K线/量/MACD/RSI 仍在（BOLL 无开关、恒常显示）',
+          ['K线', '成交量', 'MACD-DIF', 'RSI', 'BOLL中'].every(n => names.includes(n)));
+  }
+  ['tgLevels', 'tgBoxes', 'tgChannel', 'tgMA', 'tgFib'].forEach(id => { captured[id].checked = true; });
+
+  // ── 30分/60分 分时周期（2026-10-04）──
+  console.log('== 30分/60分 周期 ==');
+  for (const per of ['min30', 'min60']) {
+    const pp = (P.chart.period_data || {})[per];
+    check(`${per}: payload 存在`, !!pp);
+    if (!pp) continue;
+    // 日期必须带时间，否则分时图与日线图无从区分（后端 to_series(intraday=True)）
+    check(`${per}: dates 带时分`, pp.dates.every(d => /^\d{4}-\d\d-\d\d \d\d:\d\d$/.test(d)));
+    const t0 = pp.dates[0], t1 = pp.dates[pp.dates.length - 1];
+    check(`${per}: 时间升序且同日内不跨午休错位`, t0 < t1);
+    check(`${per}: 有 14:00~15:00 的收盘时段根`, pp.dates.some(d => /(1[45]):\d\d$/.test(d)));
+
+    X.setChartRange(per, undefined);
+    X.__setChart(P.chart, per);
+    X.renderStockChart();
+    const opt = global.__opt || {};
+    const dz = (opt.dataZoom || [])[0] || {};
+    const n = pp.dates.length;
+    const want = Math.min(X.DEFAULT_BARS[per], n);
+    check(`${per}: 默认视窗 ${barsOf(dz.start, dz.end, n)} 根 == ${want}`,
+          barsOf(dz.start, dz.end, n) === want);
+  }
+
+  // 箱体是**日线口径**的 YYYY-MM-DD，套到分钟时间轴("YYYY-MM-DD HH:MM")上必须仍画得出来。
+  // 之前靠 getOption 精确 indexOf ⇒ 分钟图上静默全丢；这条防回退。
+  {
+    const chartBox = JSON.parse(JSON.stringify(P.chart));
+    const md = chartBox.period_data.min30.dates;
+    const bStart = md[10].slice(0, 10), bEnd = md[100].slice(0, 10);
+    chartBox.boxes = [{ start: bStart, end: bEnd, low: 13, high: 18, rel: 0,
+                        days: 15, quality_score: 8, display: '13~18' }];
+    X.__setChart(chartBox, 'min30');
+    X.renderStockChart();
+    const kl = ((global.__opt.series || []).find(s => s.name === 'K线') || {});
+    const areas = ((kl.markArea || {}).data) || [];
+    check(`min30: 日线口径箱体在分钟轴上画得出（${areas.length} 块）`, areas.length > 0);
+    // 箱体区间之外不应误配
+    chartBox.boxes = [{ start: '1990-01-01', end: '1990-01-05', low: 13, high: 18, rel: 0 }];
+    X.__setChart(chartBox, 'min30');
+    X.renderStockChart();
+    const kl2 = ((global.__opt.series || []).find(s => s.name === 'K线') || {});
+    check('min30: 区间外的箱体不误画', (((kl2.markArea || {}).data) || []).length === 0);
+  }
+
+  // 缺该周期数据（指数/em 标的、tushare 不可用且无本地缓存）⇒ 出提示，不抛异常
+  {
+    const noMin = JSON.parse(JSON.stringify(P.chart));
+    delete noMin.period_data.min30;
+    X.__setChart(noMin, 'min30');
+    let threw = null;
+    try { X.renderStockChart(); } catch (e) { threw = e; }
+    check('min30 缺数据: 不抛异常', !threw);
+    check('min30 缺数据: 图表区出提示',
+          String(body('stockChart')).includes('无分时数据'));
+  }
 } else {
   console.log('== 黄金分割图层渲染 == SKIP（无 chart payload）');
 }
@@ -291,11 +454,39 @@ def _latest_trace_date():
     return files[-1].stem.replace("position_builder_", "")
 
 
+def _synth_min_frames():
+    """合成 30/60 分钟帧（**不联网**），经 min_frames= 注入 _build_chart_from_df。
+    每根 320 根、交易日 09:30~15:00 的固定时段；价格同样用「转折点+段长」拼接
+    ⇒ 转折点成为摆动点，黄金分割锚点确定（与日线那份同构）。"""
+    import numpy as np
+    import pandas as pd
+    out = {}
+    for key, per_day, slots in (
+            ("min30", 8, ["10:00", "10:30", "11:00", "11:30",
+                          "13:30", "14:00", "14:30", "15:00"]),
+            ("min60", 4, ["10:30", "11:30", "14:00", "15:00"])):
+        n = 320
+        days = pd.bdate_range(end="2024-11-15", periods=(n // per_day) + 2)
+        times = [pd.Timestamp("%s %s" % (d.date(), s)) for d in days for s in slots][-n:]
+        seg = [(20, 12, 60), (12, 30, 80), (30, 24, 60), (24, 34, 60), (34, 28, 60)]
+        prices = []
+        for p0, p1, k in seg:                       # 段长合计 == n
+            prices.extend(np.linspace(p0, p1, k, endpoint=False).tolist())
+        prices = (prices + [prices[-1]] * n)[:n]
+        out[key] = pd.DataFrame({
+            "time": times, "open": prices, "close": prices,
+            "high": [p * 1.005 for p in prices], "low": [p * 0.995 for p in prices],
+            "volume": [1e6] * n,
+        })
+    return out
+
+
 def _synth_chart_payload():
     """合成 K 线 payload（走真实 _build_chart_from_df 序列化路径，**不联网**）。
 
     价格用「转折点+根数」线性拼接：段内单调 ⇒ 段内无分形极值，转折点必然成为
-    摆动点 ⇒ 黄金分割锚点确定。总长 > 250 以覆盖 daily 的 lookback 分支。
+    摆动点 ⇒ 黄金分割锚点确定。总长 321 > daily lookback(120) 以覆盖 tail 截断分支。
+    分钟帧显式注入（不去打 tushare）。
     """
     import numpy as np
     import pandas as pd
@@ -309,7 +500,8 @@ def _synth_chart_payload():
         "date": pd.Timestamp("2024-01-01") + pd.Timedelta(days=i),
         "open": p, "close": p, "high": p * 1.005, "low": p * 0.995, "volume": 1e6,
     } for i, p in enumerate(prices)])
-    out = t_gui.Api()._build_chart_from_df(df, {"code": "TEST", "name": "合成样本"}, "TEST")
+    out = t_gui.Api()._build_chart_from_df(
+        df, {"code": "TEST", "name": "合成样本"}, "TEST", min_frames=_synth_min_frames())
     return t_gui._clean(out)
 
 
