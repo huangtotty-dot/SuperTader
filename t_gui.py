@@ -1146,7 +1146,42 @@ class Api:
             return {"ok": False, "error": str(e)}
 
     # ---------- 实时行情（顶部行情条） ----------
+    # 行情刷新：SWR（stale-while-revalidate）。实测 snapshot_auction(49 只) 约 230ms，
+    # 前端每 10s 轮询一次，这 230ms 全卡在 pywebview 线程上（K线弹窗卡顿排查 2026-10-04）。
+    # 改为：命中新鲜窗口直接返回；略旧则**立即返回旧值 + 后台线程刷新**；过旧才阻塞重拉。
+    _QUOTES_SWR_FRESH = 8.0     # 新鲜期：直接返回，连后台刷新都不触发
+    _QUOTES_SWR_MAX = 90.0      # 超过此年龄宁可阻塞也拉一次（防后台长期失败把价格冻住）
+
     def load_quotes(self):
+        """腾讯实时行情（SWR 包装；首次调用仍为阻塞拉取）。"""
+        c = getattr(self, "_quotes_cache", None)
+        if c is not None:
+            _ts, _val = c
+            _age = _time_mod.time() - _ts
+            if _age < self._QUOTES_SWR_FRESH:
+                return _val
+            if _age < self._QUOTES_SWR_MAX and not getattr(self, "_quotes_refreshing", False):
+                self._quotes_refreshing = True
+
+                def _bg():
+                    try:
+                        self._load_quotes_sync()
+                    except Exception:
+                        pass
+                    finally:
+                        self._quotes_refreshing = False
+
+                _th.Thread(target=_bg, name="quotes-refresh", daemon=True).start()
+                return _val
+        return self._load_quotes_sync()
+
+    def _load_quotes_sync(self):
+        """阻塞拉取一次并写入缓存。"""
+        _r = self._load_quotes_build()
+        self._quotes_cache = (_time_mod.time(), _r)
+        return _r
+
+    def _load_quotes_build(self):
         """拉腾讯实时行情（持仓 + watchlist 候选股），失败回退 pre_close。"""
         cur = dict(_load_json(HOLDINGS_MANUAL, {}))
         # 合并 watchlist_buy 候选股（非持仓的也拉，供建仓表实时价）
@@ -1224,8 +1259,8 @@ class Api:
         return _clean(out)
 
     def save_daily_holdings(self):
-        """写今日持仓每日快照（含数量/成本/盈亏）。"""
-        return self._write_daily_holdings(self.load_quotes())
+        """写今日持仓每日快照（含数量/成本/盈亏）。走同步路径取**新鲜**报价，不用 SWR 旧值。"""
+        return self._write_daily_holdings(self._load_quotes_sync())
 
     def _write_daily_holdings(self, q):
         """数量/成本读用户每天更新的 holdings.json，盈亏按盘中实时价计算。
@@ -1623,11 +1658,19 @@ class Api:
 
     # ---------- 持仓日线超买/顶背离体检 ----------
     def load_ob_analysis(self, date=None):
-        """每只持仓：日线超买指标(RSI/KDJ-J/CCI/BOLL) + 顶背离(MACD/RSI/KDJ/量价) + 建仓建议。"""
+        """每只持仓：日线超买指标(RSI/KDJ-J/CCI/BOLL) + 顶背离(MACD/RSI/KDJ/量价) + 建仓建议。
+
+        2026-10-04 卡顿修复：原来逐只 `load_stock_chart`（冷取数）⇒ 冷启动实测 **14.3s** 同步阻塞
+        在 pywebview 主线程。改为**只用已预热的图表缓存**：未就绪的持仓本轮跳过、计入 `pending`，
+        由前端稍后重拉（启动时 `prewarm_holdings_charts` 已在后台填缓存）。UI 不再被冻住。
+        """
         import numpy as np
         import pandas as pd
         cur = _load_json(HOLDINGS_MANUAL, {})
         out = {"stocks": []}
+        _today = datetime.now().strftime("%Y-%m-%d")
+        _chart_cache = getattr(self, "_stock_chart_cache", {})
+        pending = 0
 
         for code, info in cur.items():
             if not isinstance(info, dict) or code.startswith("_"):
@@ -1635,7 +1678,11 @@ class Api:
             if not (info.get("qty") or 0):
                 continue  # fix 2026-08-20: 已清仓(qty=0)不进入持仓体检
             base_code = code.split("_")[0]  # 000988_B → 000988
-            h = self.load_stock_chart(base_code)
+            _hit = _chart_cache.get(f"{_today}_{base_code}")
+            if _hit is None:
+                pending += 1          # 图表尚未预热好：跳过，不计入本轮（前端会重拉）
+                continue
+            h = _hit[1]
             if not h.get("available"):
                 out["stocks"].append({"code": code, "name": info.get("name", code),
                                       "error": h.get("error", "无数据")})
@@ -1754,6 +1801,8 @@ class Api:
                 "divergence": div,
                 "advice": advice,
             })
+        if pending:
+            out["pending"] = pending      # 未就绪的持仓数（>0 ⇒ 前端稍后重拉）
         return _clean(out)
 
     # ---------- 入场三层评判（L1/L2/L3建议） ----------
@@ -1897,22 +1946,36 @@ class Api:
         return _clean({"alerts": [], "disabled": True})
 
     # ---------- 个股技术分析弹窗 ----------
-    def load_stock_chart(self, code):
-        """日线(本地缓存秒回/网络兜底) → 7 条 MA + MACD/RSI/BOLL → resample 周/月 → 支撑压力。
-        支持带前缀指数代码(sh000001/sz399001 等)。内存缓存：同一标的当日结果复用。"""
+    def load_stock_chart(self, code, version=None):
+        """日线(本地缓存秒回/网络兜底) → 7 条 MA + MACD/RSI/BOLL → resample 周/月 + 30分/60分
+        → 支撑压力。支持带前缀指数代码(sh000001/sz399001 等)。内存缓存：同一标的当日结果复用。
+
+        version：前端持有的上一次版本号。若与缓存一致 ⇒ 只回 `{"unchanged": True}`（几百字节），
+        不序列化那 300KB payload —— 前端每 10s 轮询一次，这个握手把桥上的传输整个省掉。
+        """
         out = {"code": code, "name": code, "available": False, "error": ""}
         if not hasattr(self, "_stock_chart_cache"):
             self._stock_chart_cache = {}
         cache_key = f"{datetime.now().strftime('%Y-%m-%d')}_{code}"
         if cache_key in self._stock_chart_cache:
             _ts, _res = self._stock_chart_cache[cache_key]
-            # fix P0-15: 盘前缓存的图缺今日K线(最后日期<今天)，或盘中超15分钟 → 重算，避免图停在昨日
+            # fix P0-15: 盘前缓存的图缺今日K线(最后日期<今天)，或盘中超15分钟 → 重算，避免图停在昨日。
+            # 2026-10-04 卡顿修复：原来只看「最后日期<今天」就判 stale ⇒ 周末/假期**每次轮询都全量重建**
+            # （实测热路径 2.8s、冷 16.7s，跑在主线程上直接冻界面）。补两道闸：非交易日不可能出新K线；
+            # 交易日内也最多 2 分钟重建一次，而不是每 10s 一次。
             _dates = _res.get("period_data", {}).get("daily", {}).get("dates") or []
             _last = str(_dates[-1]) if _dates else ""
             _now = datetime.now()
             _today = _now.strftime("%Y-%m-%d")
-            _stale = (_last < _today) or (_last == _today and (_now - _ts).total_seconds() > 15 * 60)
+            _age = (_now - _ts).total_seconds()
+            _new_bar_possible = (_last < _today and _now.weekday() < 5
+                                 and _now.strftime("%H:%M") >= "09:30")
+            _stale = ((_new_bar_possible and _age > 120)
+                      or (_last == _today and _age > 15 * 60))
             if not _stale:
+                _v = _res.get("version")
+                if version is not None and _v is not None and version == _v:
+                    return {"code": code, "available": True, "unchanged": True, "version": _v}
                 return _res
 
         # 东财标的(em前缀)磁盘缓存：K线静态(每日更新)，当日缓存避免东财接口重试
@@ -2260,6 +2323,13 @@ class Api:
         out["boxes"] = self._detect_boxes(daily)
         out["channel"] = self._detect_channel(daily)
         out["current_price"] = round(float(daily["close"].iloc[-1]), 3)
+        # 数据身份版本号（不是时间）：前端拿它做「没变就别重传/重画」的握手，见 load_stock_chart。
+        def _sig(k):
+            _s = out["period_data"].get(k)
+            _d = (_s or {}).get("dates") or []
+            return f"{_d[-1]}:{len(_d)}" if _d else "-:0"
+        out["version"] = "|".join(_sig(k) for k in
+                                  ("daily", "weekly", "monthly", "min30", "min60"))
         out["available"] = True
         return out
 
@@ -3488,28 +3558,37 @@ class Api:
                     _TAGS_CACHE.clear()
                 _TAGS_CACHE[_cache_key] = {"ts": _time_mod.time(), "tags": tags}
 
+        def _spawn_bg():
+            """后台重算一次（全局单飞：_TAGS_RUNNING 保证同时只有一批在算）。"""
+            global _TAGS_RUNNING
+            if _TAGS_RUNNING:
+                return
+            _TAGS_RUNNING = True
+
+            def _bg():
+                global _TAGS_RUNNING
+                try:
+                    _cache_store(_compute())
+                except Exception:
+                    pass
+                finally:
+                    _TAGS_RUNNING = False
+            threading.Thread(target=_bg, daemon=True).start()
+
         with _TAGS_LOCK:
             cached = _TAGS_CACHE.get(_cache_key)
             if cached and (now - cached["ts"]) < _TAGS_TTL:
                 return _clean({"tags": cached["tags"]})
             if cached:
                 # 缓存过期 → 后台重算，先返回旧值，界面不阻塞
-                if not _TAGS_RUNNING:
-                    _TAGS_RUNNING = True
-                    def _bg():
-                        global _TAGS_RUNNING
-                        try:
-                            _cache_store(_compute())
-                        except Exception:
-                            pass
-                        finally:
-                            _TAGS_RUNNING = False
-                    threading.Thread(target=_bg, daemon=True).start()
+                _spawn_bg()
                 return _clean({"tags": cached["tags"]})
-        # 冷启动（无缓存）：同步算一次，仅首次加载会稍等，之后轮询不再阻塞
-        tags = _compute()
-        _cache_store(tags)
-        return _clean({"tags": tags})
+        # 冷启动（无缓存）：2026-10-04 改为后台算 + 立即返回空，不再同步阻塞。
+        # 原实现首次进建仓表/破位表会同步跑 40 线程 pandas+网络（实测 23~35s），把 pywebview
+        # 主线程冻住。代价：标签首次先空着，前端 10s 轮询，约 20s 后自填。调用方均 `.get(code, {})`
+        # 守卫，空 map 安全。
+        _spawn_bg()
+        return _clean({"tags": {}})
 
     # ---------- 突破箱体股票聚合 ----------
     # 当日有效突破参数（2026-09-29，owner 口径：昨收 ≤ 上沿 < 今价，幅度 0.3~8%）
@@ -5238,6 +5317,55 @@ class Api:
             pass
         return result
 
+    def prewarm_stock_tags(self, date=None):
+        """启动预热（2026-10-04）：后台算一次当日建仓池技术标签，避免首次进建仓表标签先空约 20s。
+        无返回值；仅触发 load_stock_tags_batch 的后台分支。失败静默（预热不该影响启动）。"""
+        try:
+            date = date or datetime.now().strftime("%Y-%m-%d")
+            rows = self._agg_position_builder(date).get("rows") or []
+            codes = [r.get("code") for r in rows if r.get("code")]
+            if codes:
+                self.load_stock_tags_batch(codes)  # 无缓存 ⇒ 起后台算，立即返回
+        except Exception:
+            pass
+
+    def prewarm_holdings_charts(self):
+        """启动预热（2026-10-04）：后台**低并发**预热持仓的个股图表缓存。
+
+        为什么：`load_ob_analysis`（持仓日线体检）逐只调 `load_stock_chart`，冷启动实测 **14.3s**
+        阻塞在主线程（热路径只需 60ms）。预热把这段冷取数挪到后台，让前端首次调用即命中热缓存。
+        并发压到 3：预热是「顺便」，不该和 UI/其它后台任务（如标签批算）抢 CPU/GIL 把整体拖涩。
+        失败静默；已在缓存内的标的直接跳过。"""
+        try:
+            cur = _load_json(HOLDINGS_MANUAL, {})
+            codes = []
+            for code, info in cur.items():
+                if not isinstance(info, dict) or code.startswith("_"):
+                    continue
+                if not (info.get("qty") or 0):
+                    continue  # 已清仓不体检（与 load_ob_analysis 同口径）
+                bc = str(code).split("_")[0]
+                if bc and bc not in codes:
+                    codes.append(bc)
+            if not codes:
+                return
+            if not hasattr(self, "_stock_chart_cache"):
+                self._stock_chart_cache = {}   # 先建，避免并发首次各建一份互相覆盖
+            from concurrent.futures import ThreadPoolExecutor
+            _today = datetime.now().strftime("%Y-%m-%d")
+
+            def _one(c):
+                if f"{_today}_{c}" in self._stock_chart_cache:
+                    return
+                try:
+                    self.load_stock_chart(c)
+                except Exception:
+                    pass
+            with ThreadPoolExecutor(max_workers=3) as ex:
+                list(ex.map(_one, codes))
+        except Exception:
+            pass
+
     def recompute_pb(self, date):
         """盘后重跑建仓扫描 + 重算加仓观察。返回 {position_builder, add_watch, error?}。
         重跑用 eod 档、不推送飞书（避免重复打扰）；run_position_scan 会更新 watchlist_buy。
@@ -5596,6 +5724,11 @@ if __name__ == "__main__":
 
     api = Api()
     start_hunter_autoscheduler(api)   # 开盘后每小时自动跑「今日数据」
+    # 启动预热（均为后台 daemon 线程，不阻塞启动；失败静默）：
+    #  · 持仓图表：低并发(3)，消除 load_ob_analysis 的 14s 冷启动阻塞
+    #  · 技术标签：走其内置后台分支，消除首次进建仓表/破位表的标签冷算等待
+    _th.Thread(target=api.prewarm_holdings_charts, daemon=True).start()
+    _th.Thread(target=api.prewarm_stock_tags, daemon=True).start()
     here = Path(__file__).parent
     entry = here / "web" / "index.html"
 

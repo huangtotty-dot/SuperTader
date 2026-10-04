@@ -191,7 +191,7 @@ async function loadAndRender(date, silent) {
     renderKPI(payload.kpi, {});
     // 行情条 + 大盘趋势 + 成本历史（静态，一次拉取）
     // 持仓日线体检（超买/顶背离）
-    apiCall("load_ob_analysis").then(ob => renderOB(ob || {})).catch(() => {});
+    loadOBAnalysis();
     apiCall("load_quotes").then(q => updateSidebarSummary((q && q.quotes) || [])).catch(() => {});
     apiCall("load_position_manager").then(pm => renderPositionManager(pm || {})).catch(() => {});
     apiCall("load_market_score", date).then(ms => renderMarket(ms || {})).catch(() => {});
@@ -1629,7 +1629,6 @@ function renderAutoPositions(positions) {
 
 /* ---- 自动盘买入人工确认闸（2026-08-30 建仓/加仓/底仓回补人工把关） ---- */
 let _shownReqs = {};   // {code: request_id} 已弹出未处理的请求（防重复弹窗）
-let buyConfirmTimer = null;  // 确认闸全局 10s 轮询定时器（startLivePoll 启动/stopLivePoll 清除）
 const BUY_CONFIRM_KIND = { build: "建仓", add: "加仓", topup: "底仓回补" };
 
 function renderBuyConfirmBadge(n) {
@@ -2125,6 +2124,11 @@ let stockChartName = "";
 // 用户手动缩放（滚轮/拖拽 slider）后记住视窗，否则 10s 自动刷新重建图表时会弹回默认窗口。
 // 存 dataZoom 的百分比 {start, end}；null = 尚未手动缩放，用默认窗口。
 let stockChartZoom = null;
+// 后端 payload 的数据身份版本号；轮询时带上它，后端数据没变就只回 {"unchanged":true}，
+// 省掉 300KB 过桥 + JSON 解析 + 重画（实测后者是每 10s 周期性卡顿的主因）。
+let stockChartVersion = null;
+// 最近一次**程序化**设进 dataZoom 的视窗：dataZoom 事件里用它区分「程序设置」与「用户缩放」。
+let stockChartAppliedZoom = null;
 const MA_COLORS = ["#e6c07b", "#56b4e9", "#e91e63", "#9b59b6", "#2ecc71", "#f39c12", "#3498db"];
 
 /* 默认可见根数。取值贴着后端黄金分割回看期（t_gui._FIB_LOOKBACK）——daily 120 与回看期
@@ -2183,9 +2187,15 @@ function setChartRange(period, bars) {
 async function loadStockChartNow() {
   if (!stockChartCode) return;
   try {
-    const d = await apiCall("load_stock_chart", stockChartCode);
+    const d = await apiCall("load_stock_chart", stockChartCode, stockChartVersion);
+    if (d && d.unchanged) {
+      // 数据没变：不重建图表，只刷新「10s实时更新」那行时间戳（renderStockSummary 只是拼串，很轻）
+      if (stockChartData) renderStockSummary(stockChartData);
+      return;
+    }
     if (d && d.available) {
       stockChartData = d;
+      stockChartVersion = d.version || null;
       renderStockSummary(d);
       renderStockChart();
     }
@@ -2207,6 +2217,9 @@ async function openStockChart(code, name) {
   stockProfileCode = null;
   stockProfileLiveLoaded = false;
   document.getElementById("stockModalTitle").textContent = `${name} (${code}) 技术分析`;
+  // 必须先 dispose 再清 innerHTML：实例复用后它绑在旧 DOM 上，节点被换掉会让 setOption 报错
+  if (stockChartInst) { stockChartInst.dispose(); stockChartInst = null; }
+  stockChartVersion = null;
   document.getElementById("stockChart").innerHTML = '<div class="empty">加载中...</div>';
   // 10s 实时刷新
   if (stockChartTimer) clearInterval(stockChartTimer);
@@ -2558,16 +2571,27 @@ function renderStockChart() {
     lineStyle: { width: 1, color: MA_COLORS[i] }, connectNulls: true,
   }));
 
-  if (stockChartInst) { stockChartInst.dispose(); stockChartInst = null; }
+  // 复用实例：原来每次渲染都 dispose+init 整个 ECharts（每 10s 一次 + 每次勾选图层一次），
+  // 1650 根K线 × ~16 条 series 重建一遍 ⇒ 明显卡顿。改为只 setOption，用 replaceMerge:["series"]
+  // 处理勾选导致的 series 数量变化，实例/DOM/dataZoom/交互状态全部保留。
+  // dispose 只发生在三处：closeStockChart、openStockChart 换票、缺数据守卫。
   const el = document.getElementById("stockChart");
-  stockChartInst = echarts.init(el);
-  window.stockChartInst = stockChartInst;  // 暴露供调试/检查
+  const _firstInit = !stockChartInst;
+  if (_firstInit) {
+    // 清掉占位文本（'加载中...' / '该周期无分时数据'）：echarts.init 是**追加**一个 div，
+    // 不清的话占位文字会一直留在图下面。仅首帧清 —— 复用时清会毁掉画布。
+    el.innerHTML = "";
+    stockChartInst = echarts.init(el);
+    window.stockChartInst = stockChartInst;  // 暴露供调试/检查
+  }
 
+  stockChartAppliedZoom = { start: zStart, end: zEnd };
   stockChartInst.setOption({
     backgroundColor: "transparent",
     animation: false,
     legend: { top: 0, textStyle: { color: "#8b949e", fontSize: 10 }, type: "scroll" },
-    ...(titles.length ? { title: titles } : {}),
+    // 恒常给 title（哪怕空数组）：实例复用后不再 dispose，缺省时旧标题会残留在图上
+    title: titles,
     tooltip: { trigger: "axis", axisPointer: { type: "cross" }, backgroundColor: "#161b22",
       borderColor: "#30363d", textStyle: { color: "#c9d1d9", fontSize: 11 },
       formatter: function (ps) {
@@ -2734,23 +2758,21 @@ function renderStockChart() {
         markLine: { symbol: "none", data: [{ yAxis: 30, lineStyle: { color: "rgba(139,148,158,.4)", type: "dashed" } },
           { yAxis: 70, lineStyle: { color: "rgba(139,148,158,.4)", type: "dashed" } }] } },
     ],
-  });
+  }, { replaceMerge: ["series", "title"], lazyUpdate: true });
 
-  // 记住用户手动缩放：10s 刷新会 dispose+重建图表，不记下来就会被弹回默认窗口。
-  // 程序化 setOption 也会触发 dataZoom 事件，故回读实际值后与刚设进去的比较 —— 相同即
-  // 非用户操作，不覆盖（否则首帧就把默认值当成"用户缩放"锁死）。
-  if (stockChartInst && typeof stockChartInst.on === "function") {
+  // 记住用户手动缩放。注意：**不要用 getOption()** —— 它会深拷贝整个 option
+  // （1650 根K线 × ~16 条 series），而拖动/滚轮缩放会连续触发本事件 ⇒ 实测就是卡顿主因之一。
+  // dataZoom 事件本身带 start/end 百分比，直接读。
+  // 程序化 setOption 也会触发本事件；用**模块级** stockChartAppliedZoom 记住刚设进去的值来区分，
+  // 不能用本函数的闭包变量 —— 处理器只在首次 init 时注册一次，闭包里的值早就是旧的。
+  if (_firstInit && stockChartInst && typeof stockChartInst.on === "function") {
     try {
-      stockChartInst.on("dataZoom", () => {
-        try {
-          const dz = ((stockChartInst.getOption && stockChartInst.getOption()) || {}).dataZoom || [];
-          const z = dz[0];
-          if (z && typeof z.start === "number" && typeof z.end === "number") {
-            if (Math.abs(z.start - zStart) > 0.01 || Math.abs(z.end - zEnd) > 0.01) {
-              stockChartZoom = { start: z.start, end: z.end };
-            }
-          }
-        } catch (e) { /* 桩环境无 getOption，忽略 */ }
+      stockChartInst.on("dataZoom", (ev) => {
+        const z = (ev && ev.batch && ev.batch[0]) || ev || {};
+        if (typeof z.start !== "number" || typeof z.end !== "number") return;
+        const a = stockChartAppliedZoom;
+        if (a && Math.abs(z.start - a.start) < 0.01 && Math.abs(z.end - a.end) < 0.01) return;
+        stockChartZoom = { start: z.start, end: z.end };
       });
     } catch (e) { /* 桩环境 on 不接受回调，忽略 */ }
   }
@@ -3719,10 +3741,25 @@ function renderHunter(h) {
 }
 
 /* ---- 持仓日线体检 ---- */
+// 持仓体检加载器：后端只用已预热的图表缓存算（见 t_gui.load_ob_analysis），未就绪的持仓
+// 会返回 pending>0 ⇒ 稍后自动重拉补全，避免冷启动时把主线程同步冻住 14s。
+let _obRetryTimer = null;
+async function loadOBAnalysis() {
+  try {
+    const ob = await apiCall("load_ob_analysis");
+    renderOB(ob || {});
+    if (ob && ob.pending) {
+      if (_obRetryTimer) clearTimeout(_obRetryTimer);
+      _obRetryTimer = setTimeout(loadOBAnalysis, 12000);
+    }
+  } catch (e) { /* 静默：体检非关键路径 */ }
+}
+
 function renderOB(ob) {
   const el = document.getElementById("obBody");
   if (!ob || !ob.stocks || !ob.stocks.length) {
-    el.innerHTML = '<div class="empty">无持仓体检数据</div>';
+    el.innerHTML = `<div class="empty">${ob && ob.pending
+      ? "持仓体检生成中…（图表预热未完成，稍后自动填充）" : "无持仓体检数据"}</div>`;
     return;
   }
   const rows = ob.stocks.map(s => {
@@ -4456,9 +4493,25 @@ function updateSidebarSummary(quotes) {
 /* ================= 初始化 ================= */
 let dateSelect, refreshBtn, autoPoll;
 let pollTimer = null;      // 60s 盘后轮询
-let liveTimer = null;      // 10s 盘中实时轮询
-let consoleTimer = null;   // 2026-09-02: 实时 Console 2s 独立刷新
-let autoTimer = null;      // P4-3: 10s 自动盘轮询（仅自动盘 tab 激活时加载）
+// 盘中轮询定时器：统一由 _startStaggered/_stopStaggered 管理（错开相位，见 startLivePoll）
+const _liveTimers = {};    // name -> { kick: timeoutId, interval: intervalId }
+function _startStaggered(name, fn, periodMs, offsetMs) {
+  _stopStaggered(name);
+  const slot = { kick: null, interval: null };
+  // 先延迟 offset 再转成周期定时器：只挪相位，不改「首帧等一个周期」的原有语义
+  slot.kick = setTimeout(() => {
+    slot.kick = null;
+    slot.interval = setInterval(fn, periodMs);
+  }, offsetMs);
+  _liveTimers[name] = slot;
+}
+function _stopStaggered(name) {
+  const s = _liveTimers[name];
+  if (!s) return;
+  if (s.kick) clearTimeout(s.kick);
+  if (s.interval) clearInterval(s.interval);
+  delete _liveTimers[name];
+}
 
 function stopPoll() {
   if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
@@ -4486,34 +4539,33 @@ function startPoll() {
   }, 60000);
 }
 function stopLivePoll() {
-  if (liveTimer) { clearInterval(liveTimer); liveTimer = null; }
-  if (autoTimer) { clearInterval(autoTimer); autoTimer = null; }
-  if (buyConfirmTimer) { clearInterval(buyConfirmTimer); buyConfirmTimer = null; }
-  if (consoleTimer) { clearInterval(consoleTimer); consoleTimer = null; }  // 2026-09-02
+  ["live", "console", "auto", "buyConfirm"].forEach(_stopStaggered);
   document.getElementById("liveTag").style.display = "none";
 }
 function startLivePoll() {
   stopLivePoll();
   document.getElementById("liveTag").style.display = "";
   document.getElementById("liveTag").textContent = "LIVE 10s";
-  liveTimer = setInterval(() => {
+  // 这几个定时器原来在同一条语句流里 setInterval，**相位完全相同** ⇒ 每 10s 所有请求在同一
+  // 瞬间一起打后端（突发尖峰，pywebview 线程上是串行的）。错开相位把尖峰摊平，周期不变。
+  _startStaggered("live", () => {
     if (state.date) refreshLive(false);
-  }, 10000);
+  }, 10000, 0);
   // 2026-09-02: 实时 Console 2s 独立刷新（不随 10s live 轮询）。
   // 不在此 refreshConsole(true)——首次/切日期的从头拉由 refreshLive(reset) 负责，避免每次
   // startLivePoll 都清空 consoleBuf 导致已显示信息被重置。
-  consoleTimer = setInterval(() => {
+  _startStaggered("console", () => {
     if (state.date) refreshConsole(false);
-  }, 2000);
+  }, 2000, 400);
   if (!consoleDate) refreshConsole(true);  // 仅首次(consoleDate 未初始化)从头拉
   // P4-3: 自动盘 10s 轮询（自动盘 tab 或概览页（含自动盘持仓卡片）激活时拉取 bridge）
-  autoTimer = setInterval(() => {
+  _startStaggered("auto", () => {
     const act = document.querySelector(".sidebar-item.active");
     const t = act && act.dataset.tab;
     if (t === "auto" || t === "overview") loadAutoStatus();
-  }, 10000);
+  }, 10000, 2200);
   // 人工确认闸 10s 全局轮询（与 tab 无关：买入确认时效敏感，任何 tab 都弹窗打扰）
-  buyConfirmTimer = setInterval(pollBuyConfirm, 10000);
+  _startStaggered("buyConfirm", pollBuyConfirm, 10000, 3600);
   pollBuyConfirm();
 }
 

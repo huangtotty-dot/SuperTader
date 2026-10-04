@@ -63,15 +63,18 @@ global.confirm = () => true;
 // on('dataZoom')，若不清就会累积；这里 dispose 时清空，模拟真实实例生命周期。
 global.window.echarts = { init(){
   const handlers = {};
+  global.__initCount = (global.__initCount || 0) + 1;
   global.__inst = {
     setOption(o){ global.__opt = o; },
-    getOption(){ return global.__opt || {}; },
-    dispose(){ for (const k in handlers) delete handlers[k]; },
+    // getOption 会深拷贝整个 option ⇒ 计数用来防回退（K线卡顿根因之一，2026-10-04）
+    getOption(){ global.__getOptionCount = (global.__getOptionCount || 0) + 1; return global.__opt || {}; },
+    dispose(){ global.__disposeCount = (global.__disposeCount || 0) + 1;
+               for (const k in handlers) delete handlers[k]; },
     resize(){},
     on(evt, cb){ (handlers[evt] = handlers[evt] || []).push(cb); global.__handlers = handlers; },
     off(){},
-    // 测试用：模拟用户手动缩放（echarts 触发 dataZoom 事件前会先更新内部 option）
-    __trigger(evt, opt){ if (opt) global.__opt = opt; (handlers[evt] || []).forEach(cb => cb()); },
+    // 测试用：模拟 echarts 触发事件（dataZoom 等）
+    __trigger(evt, params){ (handlers[evt] || []).forEach(cb => cb(params)); },
   };
   return global.__inst;
 } };
@@ -91,7 +94,10 @@ function mkElRefGlobal(){ return document.createElement(); }
 (0, eval)(fs.readFileSync('web/app.js', 'utf8')
   + '\n;globalThis.__X = { renderPB, renderAutoScan, renderAddWatch, buildBadge, renderStockChart,'
   + ' addNewWatchlist, addToWatchlist, DEFAULT_BARS, RANGE_PRESETS, setChartRange, switchStockPeriod,'
-  + ' __setChart: (d, p) => { stockChartData = d; stockChartPeriod = p; } };');
+  + ' __setChart: (d, p) => { stockChartData = d; stockChartPeriod = p; },'
+  + ' __getZoom: () => stockChartZoom,'
+  + ' __resetChart: () => { if (stockChartInst) { stockChartInst.dispose(); stockChartInst = null; }'
+  + ' stockChartZoom = null; stockChartVersion = null; } };');
 const X = globalThis.__X;
 const P = JSON.parse(fs.readFileSync(DIR + '/payloads.json', 'utf8'));
 
@@ -263,9 +269,11 @@ if (P.chart && !P.chart.err && P.chart.period_data) {
   {
     const n = P.chart.period_data.daily.dates.length;
     // 模拟用户把视窗拖到 [40%, 90%]：echarts 会先更新内部 option 再触发 dataZoom 事件
-    const zoomed = JSON.parse(JSON.stringify(global.__opt));
-    zoomed.dataZoom = [{ start: 40, end: 90 }, { start: 40, end: 90 }];
-    global.__inst.__trigger('dataZoom', zoomed);
+    // 模拟用户把视窗拖到 [40%, 90%]：dataZoom 事件直接带百分比，
+    // 处理器**不得**为此去调 getOption()（那会深拷贝整个 option ⇒ 缩放卡顿主因）
+    global.__getOptionCount = 0;
+    global.__inst.__trigger('dataZoom', { start: 40, end: 90 });
+    check('缩放事件不调用 getOption()', global.__getOptionCount === 0);
     X.renderStockChart();                  // ← 等价于 10s 后 loadStockChartNow() 的重绘
     const dz = ((global.__opt || {}).dataZoom || [])[0] || {};
     check('手动缩放不被刷新重置(前)', Math.abs(dz.start - 40) < 0.01);
@@ -282,6 +290,22 @@ if (P.chart && !P.chart.err && P.chart.period_data) {
     const dz = ((global.__opt || {}).dataZoom || [])[0] || {};
     const n = P.chart.period_data.daily.dates.length;
     check('选「近3月」⇒ 60 根', barsOf(dz.start, dz.end, n) === Math.min(60, n));
+  }
+
+  // 4b) 图表实例复用：连续渲染不得 dispose/重建（卡顿根因之一，2026-10-04）
+  {
+    X.__resetChart();                    // 模拟「关闭弹窗」后重新打开
+    global.__disposeCount = 0;
+    global.__initCount = 0;
+    global.__opt = null;
+    X.renderStockChart();                // 打开后的首帧
+    check('首帧建实例', global.__initCount === 1 && global.__opt !== null);
+    const _disposeAfter1 = global.__disposeCount;
+    global.__opt = null;
+    X.renderStockChart();                // 模拟 10s 刷新重绘
+    check('重绘复用实例、不 dispose', global.__disposeCount === _disposeAfter1);
+    check('重绘没有重复 init', global.__initCount === 1);
+    check('重绘确实重设了 option', global.__opt !== null);
   }
 
   // 5) 5 个图层开关默认关闭（index.html 无 checked）⇒ 打开弹窗只剩 K线+量+MACD+RSI。
