@@ -1263,6 +1263,12 @@ class Api:
         # P1-2 收敛：tencent_provider.snapshot_auction（快照/竞价专用保留腾讯）
         from core.market_data.tencent_provider import TencentProvider
         snaps = TencentProvider().snapshot_auction(list(symbols.keys()))
+        # 2026-10-06: 保留批量快照（含 ts_date/open/high/low/vol_hand）供 K线「补当日 bar」复用，
+        # 免去每只票单独打一次快照（假期/首帧实测 1.9s/只）。
+        try:
+            self._quotes_snaps = (_time_mod.time(), snaps or {})
+        except Exception:
+            pass
 
         ts = datetime.now().strftime("%H:%M:%S")
         out["ts"] = ts
@@ -2373,14 +2379,30 @@ class Api:
         return payload
 
     def _today_forming_bar(self, code):
-        """腾讯快照 → 当日 forming bar（ts_date 闸，与 facade._maybe_append_forming 同口径）。"""
+        """腾讯快照 → 当日 forming bar（ts_date 闸，与 facade._maybe_append_forming 同口径）。
+
+        2026-10-06：**优先复用 `load_quotes` 每 10s 批量拉的快照**（含 ts_date/open/high/low/vol_hand）
+        —— 小池标的零额外网络；快照非当日（休市/假期）直接判「不补」，不再白打一次 1.9s 的单只快照。
+        """
         try:
-            from core.market_data import get_provider
             base = str(code).split("_")[0]
+            today = datetime.now().strftime("%Y-%m-%d")
+            _c = getattr(self, "_quotes_snaps", None)
+            if _c and (_time_mod.time() - _c[0]) < 120:
+                _s = (_c[1] or {}).get(base)
+                if _s:
+                    if _s.get("ts_date") != today:
+                        return None       # 快照非当日 ⇒ 休市/假期，不补（免无谓网络）
+                    _px = _s.get("price") or 0
+                    if _px > 0:
+                        return {"date": today, "open": _s.get("open") or _px,
+                                "high": _s.get("high") or _px, "low": _s.get("low") or _px,
+                                "close": _px, "volume": _s.get("vol_hand") or 0.0}
+            # 回退：不在小池快照内 → 单只快照（网络）
+            from core.market_data import get_provider
             snap = get_provider().snapshot([base]).get(base)
             if not snap or not snap.get("price"):
                 return None
-            today = datetime.now().strftime("%Y-%m-%d")
             if snap.get("ts_date") != today:
                 return None
             px = snap["price"]
