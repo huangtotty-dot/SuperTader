@@ -92,6 +92,23 @@ class TestCacheFirst(unittest.TestCase):
         self.assertTrue(r.get("available"))
         self.assertEqual(calls["fetch"], 0)
 
+    def test_05_默认不取分时_按需才取(self):
+        calls = {"min": 0}
+
+        def _fake_min(code, freq="30min", days=None):
+            calls["min"] += 1
+            return pd.DataFrame()
+        with mock.patch.object(cc, "load_payload", return_value=None), \
+             mock.patch.object(cc, "load_daily_display", return_value=_daily_df()), \
+             mock.patch("t_gui._fetch_min_bars", _fake_min), \
+             mock.patch("core.position_builder.fetch_daily_kline", lambda c: _daily_df()):
+            r1 = self.api.load_stock_chart("600000")
+            self.assertEqual(calls["min"], 0, "日线视图默认不应取分时（want_minutes=False）")
+            self.assertNotIn("min30", r1.get("period_data", {}))
+            r2 = self.api.load_stock_chart("600000", None, True)   # 切到分钟 Tab
+            self.assertGreater(calls["min"], 0, "显式要分时时必须取数")
+            self.assertTrue(r2.get("available"))
+
     def test_04_分钟磁盘取新者(self):
         tmp = tempfile.mkdtemp(prefix="min_disk_")
         from pathlib import Path as _P

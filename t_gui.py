@@ -2010,12 +2010,16 @@ class Api:
         return _clean({"alerts": [], "disabled": True})
 
     # ---------- 个股技术分析弹窗 ----------
-    def load_stock_chart(self, code, version=None):
+    def load_stock_chart(self, code, version=None, want_minutes=False):
         """日线(本地缓存秒回/网络兜底) → 7 条 MA + MACD/RSI/BOLL → resample 周/月 + 30分/60分
-        → 支撑压力。支持带前缀指数代码(sh000001/sz399001 等)。内存缓存：同一标的当日结果复用。
+        → 支撑压力。支持带前缀指数代码(sh000001/sz399001 等)。内存缓存：同一标的当日重复用。
 
         version：前端持有的上一次版本号。若与缓存一致 ⇒ 只回 `{"unchanged": True}`（几百字节），
         不序列化那 300KB payload —— 前端每 10s 轮询一次，这个握手把桥上的传输整个省掉。
+
+        want_minutes（2026-10-06）：**默认 False ⇒ 不取 30/60分**。分钟线只能逐只打 tushare
+        （实测 1.6s/周期、无法批量），是日线视图首次打开的主延迟。前端仅在切到 30分/60分 Tab
+        时才传 True，日线/周/月视图因此不再被分钟取数阻塞。
         """
         out = {"code": code, "name": code, "available": False, "error": ""}
         if not hasattr(self, "_stock_chart_cache"):
@@ -2037,10 +2041,13 @@ class Api:
             _stale = ((_new_bar_possible and _age > 120)
                       or (_last == _today and _age > 15 * 60))
             if not _stale:
-                _v = _res.get("version")
-                if version is not None and _v is not None and version == _v:
-                    return {"code": code, "available": True, "unchanged": True, "version": _v}
-                return _res
+                # want_minutes 但缓存里没有分时（首帧为提速未取）⇒ 落到重建（带分时）
+                _has_min = bool((_res.get("period_data") or {}).get("min30"))
+                if not (want_minutes and not _has_min):
+                    _v = _res.get("version")
+                    if version is not None and _v is not None and version == _v:
+                        return {"code": code, "available": True, "unchanged": True, "version": _v}
+                    return _res
 
         # 东财标的(em前缀)磁盘缓存：K线静态(每日更新)，当日缓存避免东财接口重试
         if str(code).startswith("em"):
@@ -2180,7 +2187,8 @@ class Api:
             df = pd.DataFrame(rows)
             df["date"] = pd.to_datetime(df["date"])
             df = df.sort_values("date").reset_index(drop=True)
-            out = self._build_chart_from_df(df, out, code)
+            out = self._build_chart_from_df(df, out, code,
+                                            min_frames={} if not want_minutes else None)
         except Exception as e:
             out["error"] = f"计算失败: {e}"
             return out
@@ -2337,20 +2345,29 @@ class Api:
             return None
 
     def _daily_rows_cache_first(self, code):
-        """盘后预下载的日线历史缓存（+当日 forming bar）→ rows；miss 返回 []。**不打网络**。"""
+        """盘后预下载的日线历史缓存（+当日 forming bar）→ rows；miss 返回 []。
+
+        补当日 bar **复用 `_today_forming_bar`（走 load_quotes 批量快照）**，不用
+        `facade.append_forming_bar` —— 后者会**逐只单打一次网络快照**（实测 ~1.9s/只）。
+        """
         try:
             import core.chart_cache as _cc
             df = _cc.load_daily_display(code)
             if df is None or df.empty:
                 return []
-            try:
-                from core.market_data import get_provider
-                df = get_provider().append_forming_bar(df, code)
-            except Exception:
-                pass
-            return [{"date": str(_r.date), "open": float(_r.open), "close": float(_r.close),
+            rows = [{"date": str(_r.date), "open": float(_r.open), "close": float(_r.close),
                      "high": float(_r.high), "low": float(_r.low), "volume": float(_r.volume)}
                     for _r in df.itertuples(index=False)]
+            try:
+                _today = datetime.now().strftime("%Y-%m-%d")
+                _last = str(rows[-1]["date"]) if rows else ""
+                if _last < _today:
+                    bar = self._today_forming_bar(code, allow_network=False)
+                    if bar and str(bar["date"]) > _last:
+                        rows.append(bar)
+            except Exception:
+                pass
+            return rows
         except Exception:
             return []
 
@@ -2370,7 +2387,7 @@ class Api:
         _new_bar_possible = (last < _today and _now.weekday() < 5
                              and _now.strftime("%H:%M") >= "09:30")
         if _new_bar_possible:
-            bar = self._today_forming_bar(code)
+            bar = self._today_forming_bar(code, allow_network=False)
             if bar and str(bar["date"]) > last:
                 try:
                     self._rebuild_payload_daily(payload, daily_rows + [bar])
@@ -2378,11 +2395,13 @@ class Api:
                     pass
         return payload
 
-    def _today_forming_bar(self, code):
+    def _today_forming_bar(self, code, allow_network=True):
         """腾讯快照 → 当日 forming bar（ts_date 闸，与 facade._maybe_append_forming 同口径）。
 
         2026-10-06：**优先复用 `load_quotes` 每 10s 批量拉的快照**（含 ts_date/open/high/low/vol_hand）
         —— 小池标的零额外网络；快照非当日（休市/假期）直接判「不补」，不再白打一次 1.9s 的单只快照。
+
+        allow_network=False：不在批量快照内就**不单独打网络**（快路径用，保证打开即出图）。
         """
         try:
             base = str(code).split("_")[0]
@@ -2398,7 +2417,9 @@ class Api:
                         return {"date": today, "open": _s.get("open") or _px,
                                 "high": _s.get("high") or _px, "low": _s.get("low") or _px,
                                 "close": _px, "volume": _s.get("vol_hand") or 0.0}
-            # 回退：不在小池快照内 → 单只快照（网络）
+            if not allow_network:
+                return None               # 快路径：不在批量快照内即不补（不打网络）
+            # 回退：单只快照（网络）
             from core.market_data import get_provider
             snap = get_provider().snapshot([base]).get(base)
             if not snap or not snap.get("price"):

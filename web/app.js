@@ -2184,10 +2184,18 @@ function setChartRange(period, bars) {
   renderStockChart();
 }
 
+// 是否请求 30/60分：日线/周/月视图不取（分钟线逐只打 tushare，是首帧主延迟）；
+// 仅当切到分钟 Tab，或本票已加载过分时（轮询时保持），才请求。
+function _wantMinutes() {
+  const pd = stockChartData && stockChartData.period_data;
+  if (pd && pd.min30) return true;
+  return stockChartPeriod === "min30" || stockChartPeriod === "min60";
+}
+
 async function loadStockChartNow() {
   if (!stockChartCode) return;
   try {
-    const d = await apiCall("load_stock_chart", stockChartCode, stockChartVersion);
+    const d = await apiCall("load_stock_chart", stockChartCode, stockChartVersion, _wantMinutes());
     if (d && d.unchanged) {
       // 数据没变：不重建图表，只刷新「10s实时更新」那行时间戳（renderStockSummary 只是拼串，很轻）
       if (stockChartData) renderStockSummary(stockChartData);
@@ -2337,6 +2345,15 @@ function switchStockPeriod(p) {
   document.querySelectorAll(".stock-tab").forEach(t =>
     t.classList.toggle("active", t.dataset.period === p));
   renderRangeButtons(p);
+  const pd = stockChartData && stockChartData.period_data;
+  if ((p === "min30" || p === "min60") && !(pd && pd[p])) {
+    // 分钟线**按需拉**（日线视图首帧不再阻塞等它）：先提示，再取数（后端此时会带上分时）
+    const el = document.getElementById("stockChart");
+    if (stockChartInst) { stockChartInst.dispose(); stockChartInst = null; }   // 实例绑旧 DOM，先释放
+    if (el) el.innerHTML = '<div class="empty">加载分时数据中…</div>';
+    loadStockChartNow();
+    return;
+  }
   renderStockChart();
 }
 function renderStockSummary(d) {
