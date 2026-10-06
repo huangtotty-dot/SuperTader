@@ -2079,29 +2079,30 @@ class Api:
             except Exception:
                 pass
 
-        # 2026-10-04 cache-first（普通个股）：盘后预下载的「图表 payload」命中则**瞬开**，
-        # 不走 GM 优先路径（GM 不可达时每次卡满 12s 超时）。miss 时行为完全不变。
-        if not is_index and not is_em:
+        # 2026-10-04 cache-first：盘后预下载的「图表 payload」命中则**瞬开**，不走 GM 优先路径
+        # （GM 不可达时每次卡满 12s 超时）。miss 时行为完全不变。
+        # 2026-10-06：**覆盖指数**（此前 `not is_index` 把指数排除 → 指数每次走网络、且用错取数函数）。
+        if not is_em:
             _hit = self._serve_payload_cache(code_str, version, want_minutes)
             if _hit is not None:
                 return _hit
 
-        # 股票优先本地日线缓存（当日秒回）；指数/东财无个股缓存，直接网络
+        # 本地日线缓存（个股 `{code}.json` / 指数 `index_{code}.json`）
         rows = []
-        if not is_index and not is_em:
+        if not is_em:
             rows = self._daily_rows_cache_first(code_str)
             if not rows:
                 # 北交所：日线四源全不通（memory），`bj_daily.fetch_bj_daily` 逐只重试 8 次 ≈18s
                 # ⇒ 卡死主线程。有缓存/payload 的 BJ 码已在上面命中；无缓存则**立即优雅降级**。
                 try:
                     from core.market_data.codec import market_of
-                    if market_of(code_str) == "BJ":
+                    if not is_index and market_of(code_str) == "BJ":
                         out["error"] = "北交所行情源暂不可用（已知受限）"
                         return _clean(out)
                 except Exception:
                     pass
                 try:
-                    # miss → 原 GM-first（语义不变）；带 6s 硬超时，防慢源冻主线程
+                    # miss → 带 6s 硬超时，防慢源冻主线程（指数走 index_daily）
                     _df = self._fetch_daily_bounded(code_str)
                     if _df is not None and not _df.empty:
                         for _r in _df.itertuples(index=False):
@@ -2156,10 +2157,15 @@ class Api:
                     out["error"] = "东财拉取日线失败"
                     return out
             else:
-                # P1-2 收敛：market_data provider（gm 主源/腾讯兜底）
+                # P1-2 收敛：market_data provider（gm 主源/腾讯兜底）；指数走 index_daily
                 from core.market_data import get_provider
                 try:
-                    df = get_provider().daily(code, 400)
+                    _prov = get_provider()
+                    if is_index:
+                        # 传 end_date ⇒ 不回写共享长历史缓存（防静默截短 index_*.json）
+                        df = _prov.index_daily(code, 400, end_date=datetime.now().strftime("%Y-%m-%d"))
+                    else:
+                        df = _prov.daily(code, 400)
                     rows = []
                     if df is not None and not df.empty:
                         for r in df.itertuples():
@@ -2217,7 +2223,7 @@ class Api:
         self._cache_chart(cache_key, result)
         # 机会式 payload 落盘（2026-10-06）：任何**真正建完**的图都落一份磁盘 payload，
         # 使非小池码「这次开了、下次（含新会话）瞬开」。后台、失败静默、有 LRU 容量上限。
-        if result.get("available") and not is_index and not is_em:
+        if result.get("available") and not is_em:
             try:
                 import core.chart_cache as _cc
                 _cc.save_payload(code_str, result, rows)
@@ -2368,15 +2374,25 @@ class Api:
 
     def _fetch_daily_bounded(self, code, timeout=6.0):
         """带硬超时的日线取数（2026-10-06）：防止任何慢/挂死的数据源把 pywebview 主线程冻住。
-        超时返回 None（取数线程继续在后台跑完，不回收）。正常情况 ~1-2s（腾讯）/ GM 命中缓存。"""
+        超时返回 None（取数线程继续在后台跑完，不回收）。指数走 `index_daily`（`daily` 解不了指数码）。"""
         import concurrent.futures as _cf
+        _c = str(code).split("_")[0]
+        _is_index = _c[:2].lower() in ("sh", "sz", "bj") and _c[2:].isdigit()
         try:
+            from core.market_data import get_provider
             from core.position_builder import fetch_daily_kline
+            prov = get_provider()
         except Exception:
             return None
+
+        def _go():
+            if _is_index:
+                # 传 end_date ⇒ provider **不回写**共享长历史缓存（否则 400 行会静默截短 index_*.json）
+                return prov.index_daily(_c, 400, end_date=datetime.now().strftime("%Y-%m-%d"))
+            return fetch_daily_kline(_c)
         ex = _cf.ThreadPoolExecutor(max_workers=1)
         try:
-            return ex.submit(fetch_daily_kline, code).result(timeout=timeout)
+            return ex.submit(_go).result(timeout=timeout)
         except Exception:
             return None
         finally:

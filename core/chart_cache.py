@@ -87,15 +87,23 @@ def is_prefetch_current(rows, now=None) -> bool:
 # ---------------------------------------------------------------------------
 # 日线历史缓存
 # ---------------------------------------------------------------------------
+def daily_fp(code):
+    """日线缓存文件路径。指数码（sh/sz/bj + 6 位数字）落在 `index_{code}.json`（provider 惯例），
+    个股落 `{code}.json`。2026-10-06：此前只认个股名，指数读不到缓存。"""
+    c = str(code).split("_")[0]
+    if c[:2].lower() in ("sh", "sz", "bj") and c[2:].isdigit():
+        return _DAILY_CACHE_DIR / f"index_{c.lower()}.json"
+    return _DAILY_CACHE_DIR / f"{c}.json"
+
+
 def load_daily_display(code, now=None):
-    """读 `daily_kline/{code}.json`，按**交易日近似**新鲜度；命中返回 DataFrame(source=cache)，否则 None。
+    """读日线缓存（指数走 `index_{code}.json`），按**交易日近似**新鲜度；命中返回 DataFrame，否则 None。
 
     与 `TencentProvider.daily_cache` 的关键差别：只看末行数据日期，**不看写入日 `date`**
     —— 后者要求 `date==今天`，会让盘后预下载的缓存在次日直接失效。
     """
     import pandas as pd
-    code = str(code).split("_")[0]
-    fp = _DAILY_CACHE_DIR / f"{code}.json"
+    fp = daily_fp(code)
     if not fp.exists():
         return None
     cached = _read_json(fp, None)
