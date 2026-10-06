@@ -139,5 +139,45 @@ class TestMinuteCache(unittest.TestCase):
         self.assertEqual(len(cc.load_minute_history("600000.SH", "30min")), 1)
 
 
+class TestPrefetchSkip(unittest.TestCase):
+    """假期防重下：末行陈旧但**今日已写过**（date 头=今天）的码应被跳过。"""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp(prefix="cc_skip_")
+        self._orig = cc._DAILY_CACHE_DIR
+        cc._DAILY_CACHE_DIR = Path(self.tmp)
+
+    def tearDown(self):
+        cc._DAILY_CACHE_DIR = self._orig
+
+    def test_今日已写过_跳过(self):
+        from unittest import mock
+        code = "600000"
+        rows = [{"date": _d(10), "open": 1, "high": 1, "low": 1, "close": 1, "volume": 1}]
+        (Path(self.tmp) / f"{code}.json").write_text(
+            json.dumps({"date": datetime.now().strftime("%Y-%m-%d"), "rows": rows}), encoding="utf-8")
+        calls = {"n": 0}
+
+        def _fake_many(self, codes, days=250):
+            calls["n"] += 1
+            return {}
+        with mock.patch("core.market_data.facade.MarketDataFacade.daily_many", _fake_many):
+            st = cc.prefetch_daily([code], days=200)
+        self.assertEqual(st["skipped"], 1, "今日已写过的码应被跳过（避免假期反复重下全池）")
+        self.assertEqual(calls["n"], 0, "跳过的码不应触发下载")
+
+    def test_无缓存则下载(self):
+        from unittest import mock
+        calls = {"n": 0}
+
+        def _fake_many(self, codes, days=250):
+            calls["n"] += 1
+            return {}
+        with mock.patch("core.market_data.facade.MarketDataFacade.daily_many", _fake_many):
+            st = cc.prefetch_daily(["600001"], days=200, retries=0)
+        self.assertEqual(calls["n"], 1, "无缓存应触发一次批量下载")
+        self.assertEqual(st["got"], 0)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

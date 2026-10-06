@@ -333,11 +333,13 @@ def _dedup_valid(codes) -> list:
 # ---------------------------------------------------------------------------
 # 盘后预下载编排
 # ---------------------------------------------------------------------------
-def prefetch_daily(codes, days=250, now=None, skip_current=True, batch=600, sleep_s=0.3) -> dict:
+def prefetch_daily(codes, days=250, now=None, skip_current=True, batch=600,
+                   sleep_s=0.3, retries=2, retry_pause=3.0) -> dict:
     """批量下载日线并 merge 入缓存。返回 {requested, got, skipped, failed}。不抛。
 
     **自己分批**调用 `daily_many`（而非一次喂全池）——`daily_many` 一遇 GM 异常就 `break`
     丢掉剩余；分批后单批失败不影响其余（实测全池一次调用遇 RemoteDisconnected 只拿到 900/5373）。
+    某批失败/缺码的，隔 `retry_pause` 秒**整体重试 `retries` 轮**（GM 断连多为瞬时）。
     """
     from core.market_data import get_provider
     codes = _dedup_valid(codes)
@@ -348,25 +350,41 @@ def prefetch_daily(codes, days=250, now=None, skip_current=True, batch=600, slee
     def _is_current(c):
         if not skip_current:
             return False
-        rows = (_read_json(_DAILY_CACHE_DIR / f"{c}.json", {}) or {}).get("rows") or []
-        return is_prefetch_current(rows, now)
+        cd = _read_json(_DAILY_CACHE_DIR / f"{c}.json", {}) or {}
+        if is_prefetch_current(cd.get("rows") or [], now):
+            return True
+        # 今日已写过（merge_daily_cache 会把 date 头写成今天）⇒ 视为当期。
+        # 假期里「末行=上个交易日、gap>5」会让 5 天窗失效，导致每次跑都重下全池，这条兜住。
+        today = (now or datetime.now()).strftime("%Y-%m-%d")
+        return str(cd.get("date") or "") == today
 
     todo = [c for c in codes if not _is_current(c)]
     stat["skipped"] = len(codes) - len(todo)
     if not todo:
         return stat
     prov = get_provider()
-    for i in range(0, len(todo), batch):
-        chunk = todo[i:i + batch]
-        try:
-            got = prov.daily_many(chunk, days=days)
-        except Exception:
-            got = {}
-        for c, df in (got or {}).items():
-            if write_daily_history(c, df):
-                stat["got"] += 1
-        stat["failed"] += len(chunk) - len(got or {})
-        time.sleep(sleep_s)      # 轻节流，降低 GM 断连概率
+    remaining = list(todo)
+    for attempt in range(retries + 1):
+        if not remaining:
+            break
+        still = []
+        for i in range(0, len(remaining), batch):
+            chunk = remaining[i:i + batch]
+            try:
+                got = prov.daily_many(chunk, days=days) or {}
+            except Exception:
+                got = {}
+            for c, df in got.items():
+                if write_daily_history(c, df):
+                    stat["got"] += 1
+                else:
+                    still.append(c)
+            still.extend([c for c in chunk if c not in got])
+            time.sleep(sleep_s)      # 轻节流，降低 GM 断连概率
+        remaining = still
+        stat["failed"] = len(remaining)
+        if remaining and attempt < retries:
+            time.sleep(retry_pause)
     return stat
 
 
