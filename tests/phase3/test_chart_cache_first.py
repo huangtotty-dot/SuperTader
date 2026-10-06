@@ -109,6 +109,26 @@ class TestCacheFirst(unittest.TestCase):
             self.assertGreater(calls["min"], 0, "显式要分时时必须取数")
             self.assertTrue(r2.get("available"))
 
+    def test_06_要分时但payload无分时_回落重建(self):
+        today = datetime.now().strftime("%Y-%m-%d")
+        payload = {"available": True, "version": "vN", "code": "600000",
+                   "period_data": {"daily": {"dates": [today], "ohlc": [[1, 1, 1, 1]]}}}
+        hit = {"payload": payload,
+               "daily_rows": [{"date": today, "open": 1, "high": 1, "low": 1, "close": 1, "volume": 1}],
+               "last_daily_date": today, "version": "vN"}
+        calls = {"min": 0}
+
+        def _fake_min(code, freq="30min", days=None):
+            calls["min"] += 1
+            return pd.DataFrame()
+        with mock.patch.object(cc, "load_payload", return_value=hit), \
+             mock.patch.object(cc, "load_daily_display", return_value=_daily_df()), \
+             mock.patch("t_gui._fetch_min_bars", _fake_min), \
+             mock.patch("core.position_builder.fetch_daily_kline", lambda c: _daily_df()):
+            r = self.api.load_stock_chart("600000", None, True)
+        self.assertTrue(r.get("available"))
+        self.assertGreater(calls["min"], 0, "payload 无分时但前端要分时 ⇒ 必须回落重建、取分时")
+
     def test_04_分钟磁盘取新者(self):
         tmp = tempfile.mkdtemp(prefix="min_disk_")
         from pathlib import Path as _P

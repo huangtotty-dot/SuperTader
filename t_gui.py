@@ -2082,7 +2082,7 @@ class Api:
         # 2026-10-04 cache-first（普通个股）：盘后预下载的「图表 payload」命中则**瞬开**，
         # 不走 GM 优先路径（GM 不可达时每次卡满 12s 超时）。miss 时行为完全不变。
         if not is_index and not is_em:
-            _hit = self._serve_payload_cache(code_str, version)
+            _hit = self._serve_payload_cache(code_str, version, want_minutes)
             if _hit is not None:
                 return _hit
 
@@ -2206,6 +2206,14 @@ class Api:
             except Exception:
                 pass
         self._cache_chart(cache_key, result)
+        # 机会式 payload 落盘（2026-10-06）：任何**真正建完**的图都落一份磁盘 payload，
+        # 使非小池码「这次开了、下次（含新会话）瞬开」。后台、失败静默、有 LRU 容量上限。
+        if result.get("available") and not is_index and not is_em:
+            try:
+                import core.chart_cache as _cc
+                _cc.save_payload(code_str, result, rows)
+            except Exception:
+                pass
         return result
 
     # ---------- 公司资料（K 线弹窗「📋 公司资料」） ----------
@@ -2329,12 +2337,17 @@ class Api:
             return {"code": res.get("code"), "available": True, "unchanged": True, "version": _v}
         return res
 
-    def _serve_payload_cache(self, code, version):
-        """盘后预下载的图表 payload 命中 → 瞬开结果；未命中返回 None。"""
+    def _serve_payload_cache(self, code, version, want_minutes=False):
+        """盘后预下载/机会式落盘的图表 payload 命中 → 瞬开结果；未命中返回 None。
+
+        want_minutes 但 payload 内无分时 ⇒ 返回 None（落到重建带分时）。
+        """
         try:
             import core.chart_cache as _cc
             hit = _cc.load_payload(code)
             if not hit:
+                return None
+            if want_minutes and not (hit.get("payload") or {}).get("period_data", {}).get("min30"):
                 return None
             res = self._payload_to_result(hit, code)
             if not res or not res.get("available"):
@@ -5987,6 +6000,23 @@ if __name__ == "__main__":
     #  · 技术标签：走其内置后台分支，消除首次进建仓表/破位表的标签冷算等待
     _th.Thread(target=api.prewarm_holdings_charts, daemon=True).start()
     _th.Thread(target=api.prewarm_stock_tags, daemon=True).start()
+
+    def _prewarm_chart_build():
+        """建图冷启动预热（2026-10-06）：首次 `_build_chart_from_df` 含懒加载 import
+        （analysis.indicators.wilder_rsi / pandas-numba 首次计算）≈1.9s，预热后降到 ~0.5s。
+        后台线程，失败静默。"""
+        try:
+            import pandas as pd
+            _d = pd.DataFrame({
+                "date": pd.to_datetime(["2020-01-01"] * 400),
+                "open": [1.0] * 400, "high": [1.1] * 400, "low": [0.9] * 400,
+                "close": [1.0] * 400, "volume": [1.0] * 400,
+            })
+            _calc_ma_and_indicators(_d)
+        except Exception:
+            pass
+
+    _th.Thread(target=_prewarm_chart_build, daemon=True).start()
     here = Path(__file__).parent
     entry = here / "web" / "index.html"
 

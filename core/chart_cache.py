@@ -152,7 +152,7 @@ def payload_display_fresh(hit, now=None) -> bool:
 
 
 def save_payload(code, payload, daily_rows) -> bool:
-    """原子写 `chart_payload/{code}.json`（temp + os.replace），失败静默。"""
+    """原子写 `chart_payload/{code}.json`（temp + os.replace），失败静默。超上限则 LRU 淘汰。"""
     if not isinstance(payload, dict) or not payload.get("available"):
         return False
     code = str(code).split("_")[0]
@@ -170,9 +170,33 @@ def save_payload(code, payload, daily_rows) -> bool:
         with open(tmp, "w", encoding="utf-8") as f:
             f.write(json.dumps(rec, ensure_ascii=False))
         os.replace(tmp, _PAYLOAD_DIR / f"{code}.json")
+        _PAYLOAD_WRITES["n"] += 1
+        if _PAYLOAD_WRITES["n"] % 25 == 0:      # 每 25 次落盘做一次容量检查（避免每次 glob）
+            enforce_payload_cap()
         return True
     except Exception:
         return False
+
+
+_PAYLOAD_MAX = 800          # 容量上限：~800×300KB ≈ 240MB
+_PAYLOAD_WRITES = {"n": 0}
+
+
+def enforce_payload_cap(max_files=_PAYLOAD_MAX) -> int:
+    """payload 目录超上限时按 mtime **LRU 淘汰**最旧的。返回删除数。失败静默。"""
+    try:
+        files = sorted(_PAYLOAD_DIR.glob("*.json"), key=lambda p: p.stat().st_mtime)
+        excess = len(files) - max_files
+        removed = 0
+        for p in files[:max(0, excess)]:
+            try:
+                p.unlink()
+                removed += 1
+            except Exception:
+                pass
+        return removed
+    except Exception:
+        return 0
 
 
 # ---------------------------------------------------------------------------
@@ -309,11 +333,15 @@ def _dedup_valid(codes) -> list:
 # ---------------------------------------------------------------------------
 # 盘后预下载编排
 # ---------------------------------------------------------------------------
-def prefetch_daily(codes, days=250, now=None, skip_current=True) -> dict:
-    """批量下载日线并 merge 入缓存。返回 {requested, got, skipped}。不抛。"""
+def prefetch_daily(codes, days=250, now=None, skip_current=True, batch=600, sleep_s=0.3) -> dict:
+    """批量下载日线并 merge 入缓存。返回 {requested, got, skipped, failed}。不抛。
+
+    **自己分批**调用 `daily_many`（而非一次喂全池）——`daily_many` 一遇 GM 异常就 `break`
+    丢掉剩余；分批后单批失败不影响其余（实测全池一次调用遇 RemoteDisconnected 只拿到 900/5373）。
+    """
     from core.market_data import get_provider
     codes = _dedup_valid(codes)
-    stat = {"requested": len(codes), "got": 0, "skipped": 0}
+    stat = {"requested": len(codes), "got": 0, "skipped": 0, "failed": 0}
     if not codes:
         return stat
 
@@ -327,13 +355,18 @@ def prefetch_daily(codes, days=250, now=None, skip_current=True) -> dict:
     stat["skipped"] = len(codes) - len(todo)
     if not todo:
         return stat
-    try:
-        got = get_provider().daily_many(todo, days=days)
-    except Exception:
-        got = {}
-    for c, df in (got or {}).items():
-        if write_daily_history(c, df):
-            stat["got"] += 1
+    prov = get_provider()
+    for i in range(0, len(todo), batch):
+        chunk = todo[i:i + batch]
+        try:
+            got = prov.daily_many(chunk, days=days)
+        except Exception:
+            got = {}
+        for c, df in (got or {}).items():
+            if write_daily_history(c, df):
+                stat["got"] += 1
+        stat["failed"] += len(chunk) - len(got or {})
+        time.sleep(sleep_s)      # 轻节流，降低 GM 断连概率
     return stat
 
 

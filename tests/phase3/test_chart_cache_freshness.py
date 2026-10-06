@@ -104,6 +104,19 @@ class TestPayload(unittest.TestCase):
         self.assertFalse(cc.save_payload("600000", {"available": False}, []))
         self.assertIsNone(cc.load_payload("600000"))
 
+    def test_容量上限LRU淘汰(self):
+        for i in range(6):
+            cc.save_payload(f"60000{i}", {"available": True, "version": f"v{i}"}, [{"date": _d(1)}])
+            import time as _t
+            _t.sleep(0.01)   # 拉开 mtime
+        self.assertEqual(len(list(Path(self.tmp).glob("*.json"))), 6)
+        removed = cc.enforce_payload_cap(3)
+        self.assertEqual(removed, 3)
+        self.assertEqual(len(list(Path(self.tmp).glob("*.json"))), 3)
+        # 最旧的应被删（600000/600001/600002 走人）
+        self.assertFalse((Path(self.tmp) / "600000.json").exists())
+        self.assertTrue((Path(self.tmp) / "600005.json").exists())
+
 
 class TestMinuteCache(unittest.TestCase):
     def setUp(self):
