@@ -129,6 +129,18 @@ class TestCacheFirst(unittest.TestCase):
         self.assertTrue(r.get("available"))
         self.assertGreater(calls["min"], 0, "payload 无分时但前端要分时 ⇒ 必须回落重建、取分时")
 
+    def test_07_北交所无缓存_立即降级不阻塞(self):
+        """北交所日线源全不通 ⇒ 无缓存时必须**立即**优雅降级，不得走 fetch（实测 18s 冻主线程）。"""
+        import time as _t
+        with mock.patch.object(cc, "load_payload", return_value=None), \
+             mock.patch.object(cc, "load_daily_display", return_value=None), \
+             mock.patch("core.position_builder.fetch_daily_kline",
+                        side_effect=AssertionError("北交所不应走 fetch_daily_kline")):
+            t0 = _t.time()
+            r = self.api.load_stock_chart("830799")
+        self.assertFalse(r.get("available"))
+        self.assertLess(_t.time() - t0, 1.0, "北交所无缓存必须立即降级")
+
     def test_04_分钟磁盘取新者(self):
         tmp = tempfile.mkdtemp(prefix="min_disk_")
         from pathlib import Path as _P

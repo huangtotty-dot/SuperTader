@@ -2091,10 +2091,19 @@ class Api:
         if not is_index and not is_em:
             rows = self._daily_rows_cache_first(code_str)
             if not rows:
+                # 北交所：日线四源全不通（memory），`bj_daily.fetch_bj_daily` 逐只重试 8 次 ≈18s
+                # ⇒ 卡死主线程。有缓存/payload 的 BJ 码已在上面命中；无缓存则**立即优雅降级**。
                 try:
-                    from core.position_builder import fetch_daily_kline
-                    _df = fetch_daily_kline(code_str)   # miss → 原 GM-first（语义不变）
-                    if not _df.empty:
+                    from core.market_data.codec import market_of
+                    if market_of(code_str) == "BJ":
+                        out["error"] = "北交所行情源暂不可用（已知受限）"
+                        return _clean(out)
+                except Exception:
+                    pass
+                try:
+                    # miss → 原 GM-first（语义不变）；带 6s 硬超时，防慢源冻主线程
+                    _df = self._fetch_daily_bounded(code_str)
+                    if _df is not None and not _df.empty:
                         for _r in _df.itertuples(index=False):
                             rows.append({"date": str(_r.date), "open": float(_r.open),
                                          "close": float(_r.close), "high": float(_r.high),
@@ -2356,6 +2365,22 @@ class Api:
             return self._handshake(res, version)
         except Exception:
             return None
+
+    def _fetch_daily_bounded(self, code, timeout=6.0):
+        """带硬超时的日线取数（2026-10-06）：防止任何慢/挂死的数据源把 pywebview 主线程冻住。
+        超时返回 None（取数线程继续在后台跑完，不回收）。正常情况 ~1-2s（腾讯）/ GM 命中缓存。"""
+        import concurrent.futures as _cf
+        try:
+            from core.position_builder import fetch_daily_kline
+        except Exception:
+            return None
+        ex = _cf.ThreadPoolExecutor(max_workers=1)
+        try:
+            return ex.submit(fetch_daily_kline, code).result(timeout=timeout)
+        except Exception:
+            return None
+        finally:
+            ex.shutdown(wait=False)
 
     def _daily_rows_cache_first(self, code):
         """盘后预下载的日线历史缓存（+当日 forming bar）→ rows；miss 返回 []。
