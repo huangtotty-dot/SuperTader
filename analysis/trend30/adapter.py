@@ -16,6 +16,7 @@ import threading
 import time
 from datetime import datetime
 
+import numpy as np
 import pandas as pd
 
 _BASE = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))

@@ -1752,6 +1752,19 @@ class Api:
                                       "error": h.get("error", "无数据")})
                 continue
             d = h["period_data"]["daily"]
+            # 技术标签（2026-10-07）：与建仓表同口径（复用 `_stock_tags_from_df`）。用已缓存的
+            # 日线 payload 重建 df，**零额外网络**；标签口径/顺序与建仓表完全一致。
+            try:
+                import pandas as _pd
+                _tdf = _pd.DataFrame({
+                    "date": _pd.to_datetime(d["dates"]),
+                    "open": [x[0] for x in d["ohlc"]], "close": [x[1] for x in d["ohlc"]],
+                    "low": [x[2] for x in d["ohlc"]], "high": [x[3] for x in d["ohlc"]],
+                    "volume": [float(v) for v in d["volume"]],
+                })
+                _tags = self._stock_tags_from_df(_tdf, base_code).get("tags", [])
+            except Exception:
+                _tags = []
             closes = [x[1] for x in d["ohlc"]]
             highs = [x[3] for x in d["ohlc"]]
             lows = [x[2] for x in d["ohlc"]]
@@ -1864,6 +1877,7 @@ class Api:
                                "cci": round(cur_cci, 1), "boll": bool(ob["boll"]), "count": ob["count"]},
                 "divergence": div,
                 "advice": advice,
+                "tags": _tags,
             })
         if pending:
             out["pending"] = pending      # 未就绪的持仓数（>0 ⇒ 前端稍后重拉）
@@ -3619,8 +3633,7 @@ class Api:
         return r["trend"], "30min"
 
     def _stock_tags_one(self, code):
-        """单只股票技术标签。返回 {trend, box_pos, tags:[{label,color}]}。"""
-        import numpy as np
+        """单只股票技术标签（取数 + 补当日 forming bar）→ `_stock_tags_from_df`。"""
         import pandas as pd
         from core.position_builder import fetch_daily_kline
         df = fetch_daily_kline(code)
@@ -3641,6 +3654,12 @@ class Api:
                     df = pd.concat([df, fb], ignore_index=True)
         except Exception:
             pass
+        return self._stock_tags_from_df(df, code)
+
+    def _stock_tags_from_df(self, df, code):
+        """由**日线 df** 计算技术标签（纯计算，无取数）。批量标签与持仓体检共用同一口径。"""
+        import numpy as np
+        import pandas as pd
         closes = df["close"].values
         highs = df["high"].values
         lows = df["low"].values
@@ -5531,10 +5550,19 @@ class Api:
             _today = datetime.now().strftime("%Y-%m-%d")
 
             def _one(c):
-                if f"{_today}_{c}" in self._stock_chart_cache:
-                    return
+                # 建图（当日内存缓存命中则秒回）
                 try:
                     self.load_stock_chart(c)
+                except Exception:
+                    pass
+                # 2026-10-07：顺带预热**技术标签**（持仓体检表要显示标签）。`_stock_tags_from_df`
+                # 里最贵的是 30min 趋势 `get_trend30`（~0.8s/只、有 per-code 缓存），预热后
+                # `load_ob_analysis` 命中缓存 → 不卡主线程。
+                try:
+                    import core.chart_cache as _cc2
+                    _df = _cc2.load_daily_display(c)
+                    if _df is not None and not _df.empty:
+                        self._stock_tags_from_df(_df, c)
                 except Exception:
                     pass
             with ThreadPoolExecutor(max_workers=3) as ex:

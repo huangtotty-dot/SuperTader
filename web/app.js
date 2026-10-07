@@ -3759,7 +3759,7 @@ function renderOB(ob) {
     return;
   }
   const rows = ob.stocks.map(s => {
-    if (s.error) return `<tr><td colspan="10" class="cell-dim">${esc(s.code)}: ${esc(s.error)}</td></tr>`;
+    if (s.error) return `<tr><td colspan="11" class="cell-dim">${esc(s.code)}: ${esc(s.error)}</td></tr>`;
     const ob_ = s.overbought || {};
     const dv = s.divergence || {};
     // 2026-09-11 修：overbought.rsi/kdj/cci 是"数值"不是布尔，原 mark(数值) 恒真 → ⚠ 满天飞。
@@ -3783,6 +3783,7 @@ function renderOB(ob) {
       <td class="num ${cciHot ? 'up' : 'cell-dim'}" title="CCI>100 属动能(实证偏强，不计风险)">${fmt(ob_.cci, 0)}</td>
       <td>${ob_.boll ? '<span class="badge chop" title="破BOLL上轨=突破动能(实证偏强)">破</span>' : '<span class="cell-dim">—</span>'}</td>
       <td class="${dv.count ? 'warn' : 'cell-dim'}">${dv.count ? dvTxt : "无"}</td>
+      <td style="max-width:240px;line-height:1.7">${(s.tags || []).map(t => tagBadge(t)).join(" ") || '<span class="cell-dim">—</span>'}</td>
       <td class="num ${advCls}">${s.risk === "高" ? "高" : s.risk === "中" ? "中" : "低"}</td>
       <td><span class="${advCls}">${esc(s.advice)}</span></td>
     </tr>`;
@@ -3796,6 +3797,7 @@ function renderOB(ob) {
         <th class="num" title="CCI>100超买">CCI</th>
         <th title="收盘破BOLL上轨">BOLL</th>
         <th title="MACD/RSI/KDJ/量价顶背离">顶背离</th>
+        <th title="与建仓扫描同口径（通道/箱体/筑底顶/背离/超买/破均线）">技术标签</th>
         <th class="num">风险</th>
         <th>风险提醒</th>
       </tr></thead><tbody>${rows}</tbody></table>
