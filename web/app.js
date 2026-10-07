@@ -1,27 +1,6 @@
 /* 做T复盘决策看板 - 前端渲染逻辑 */
 "use strict";
 
-/* ================= 竞价诊断 iframe 桥 =================
-   pywebview 只在顶层页面注入 window.pywebview；竞价面板位于 iframe 内，
-   通过 postMessage 请求本页面代为调用 get_auction_diagnosis() 并把结果回传。 */
-window.addEventListener("message", (e) => {
-  if (!e.data || e.data.type !== "auction-request") return;
-  Promise.resolve()
-    .then(() => (window.pywebview && window.pywebview.api)
-      ? window.pywebview.api.get_auction_diagnosis()
-      : null)
-    .then(report => {
-      if (e.source && e.source.postMessage) {
-        e.source.postMessage({ type: "auction-response", report: report || null }, "*");
-      }
-    })
-    .catch(() => {
-      if (e.source && e.source.postMessage) {
-        e.source.postMessage({ type: "auction-response", report: null }, "*");
-      }
-    });
-});
-
 /* ================= 条件详情面板 iframe 桥 =================
    条件详情面板通过 postMessage 请求本页面调用 get_signal_condition_detail() 并回传。 */
 window.addEventListener("message", (e) => {
