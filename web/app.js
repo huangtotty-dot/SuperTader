@@ -534,6 +534,7 @@ const TURNOVER_LIVE = "#d29922";   // 进行中：今日未走完，**不参与*
 
 // 把失败原因**写在卡片里**：此前各条失败路径都是静默 return ⇒ 界面只剩空白，
 // 分不清是"没数据""没 echarts"还是"后端没这个接口"。空白本身不携带任何信息。
+let _turnoverRetry = null;   // 成交额图 warming 时的重试定时器
 function _turnoverFail(msg) {
   const box = document.getElementById("turnoverHistChart");
   if (box) box.innerHTML = `<div class="empty" style="font-size:11px">成交额图不可用：${esc(msg)}</div>`;
@@ -553,9 +554,18 @@ async function drawTurnoverHist() {
   }
   if (document.getElementById("turnoverHistChart") !== box) return;   // 期间又被重建（下一次会画）
   if (!d || !d.available || !(d.days || []).length) {
+    if (d && d.warming) {
+      // 后端还在算（冷启动/超时占位）→ 显示加载中并稍后自填，不当错误
+      box.innerHTML = '<div class="empty" style="font-size:11px">成交额图加载中…</div>';
+      if (!_turnoverRetry) {
+        _turnoverRetry = setTimeout(() => { _turnoverRetry = null; drawTurnoverHist(); }, 8000);
+      }
+      return;
+    }
     _turnoverFail((d && d.error) || "后端返回空");
     return;
   }
+  if (_turnoverRetry) { clearTimeout(_turnoverRetry); _turnoverRetry = null; }
   const days = d.days;
   const last = days[days.length - 1];
   // 签名含**容器宽度**：面板隐藏时首次渲染拿到 0 宽，切到该 tab 后宽度变化必须触发重画，

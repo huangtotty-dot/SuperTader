@@ -65,7 +65,11 @@ class MarketDataFacade:
     窗内直接走腾讯（不再逐调用重试刷屏）；窗后恢复尝试，成功即复位。
     """
     _GM_COOLDOWN_SECONDS = 60
-    _GM_CALL_TIMEOUT = 12.0    # P1-2(2026-09-10): gm SDK 无超时（history_n 可无限期挂死），线程池硬超时
+    # P1-2(2026-09-10): gm SDK 无超时（history_n 可无限期挂死），线程池硬超时。
+    # 2026-10-07: 12s → 4s。GM 抖动时单标的调用（daily/index_snapshot/minute）会卡满这个值，
+    # 而它们被 GUI 的 js_api 同步调用 ⇒ 界面冻十几秒。单标的 GM 健康时 <1s，4s 足够宽裕；
+    # 超时照旧走腾讯兜底。批量仍用 _GM_BATCH_TIMEOUT(60s)。
+    _GM_CALL_TIMEOUT = 4.0
 
     def __init__(self):
         # H1/G2(2026-09-09): GmProvider 构造容错——gm SDK/解释器不可用时置 None，腾讯兜底不再被绑架

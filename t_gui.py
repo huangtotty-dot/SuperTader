@@ -747,7 +747,10 @@ class Api:
     _TURNOVER_TTL = 60.0
 
     def load_market_turnover(self):
-        """两市成交额 + 变化（指数板第 8 张卡片）。失败返回 {available: False, error}，**永不抛**。"""
+        """两市成交额（外层硬超时 2.5s；超时给 {available:False} 占位，后台继续、下轮缓存命中）。"""
+        return self._bounded(self._market_turnover_impl, 2.5, {"available": False})
+
+    def _market_turnover_impl(self):
         now = _time_mod.time()
         hit = Api._turnover_cache.get("payload")
         if hit and (now - hit[0]) < self._TURNOVER_TTL:
@@ -870,6 +873,11 @@ class Api:
     _TURNOVER_HIST_TTL = 120.0
 
     def load_turnover_history(self, days=60):
+        """近 N 日全市场成交额（外层硬超时 2.0s；超时返回 warming，前端显示加载中、稍后自填）。"""
+        return self._bounded(lambda: self._turnover_history_cached(days), 2.0,
+                             {"available": False, "warming": True, "days": []})
+
+    def _turnover_history_cached(self, days=60):
         """近 N 个交易日的**全市场**成交额（柱状图用）。失败返回 {available: False, error}，永不抛。"""
         now = _time_mod.time()
         hit = Api._turnover_hist_cache.get("payload")
@@ -951,7 +959,26 @@ class Api:
                 "bse_included": bool(bse), "legs": ["sh000001", "sz399106", "bj899050"]}
 
     # ---------- 主要指数概览（2026-09-28：GUI_INDEX_BOARD 单一真源 + 掘金主源） ----------
+    @staticmethod
+    def _bounded(fn, timeout, default):
+        """硬超时执行 fn；超时返回 default（后台线程继续跑，跑完会写各自的缓存/占位）。
+        2026-10-07：GUI 的重显示端点（指数板/成交额历史）容易在 GM/东财抖动时卡十几秒，
+        而 js_api 是主线程同步调用 ⇒ 冻界面。用这个把它们的时间上界钉住。"""
+        import concurrent.futures as _cf
+        ex = _cf.ThreadPoolExecutor(max_workers=1)
+        try:
+            return ex.submit(fn).result(timeout=timeout)
+        except Exception:
+            return default
+        finally:
+            ex.shutdown(wait=False)
+
     def load_indices(self):
+        """指数状态板（外层硬超时 2.5s；超时给占位、后台继续，防 GM 抖动冻界面）。"""
+        return self._bounded(self._load_indices_impl, 2.5,
+                             {"ts": None, "indices": [], "regime": None, "error": "指数板取数超时"})
+
+    def _load_indices_impl(self):
         """拉指数板实时行情 + 大盘 regime。返回 {ts, indices:[{symbol,name,price,change,change_pct,source}], ...}
 
         指数列表来自 core.board_index.GUI_INDEX_BOARD（**单一真源**，7 项）。
@@ -1002,7 +1029,7 @@ class Api:
                 elif src == "em":
                     # 东财特殊条目（A股平均股价等）：非交易所指数，掘金无此标的
                     secid = str(sym)[2:] if str(sym).startswith("em") else str(sym)
-                    price, pre_close, esrc = self._em_last_price(secid)
+                    price, pre_close, esrc = self._em_last_price_bounded(secid)
                     if not price:
                         out["indices"].append({"symbol": sym, "name": name,
                                                "error": "东财风控/不可达", "source": "em"})
@@ -1052,14 +1079,14 @@ class Api:
                    "ALL_PROXY", "all_proxy"]:
             _os.environ.pop(_k, None)
         _os.environ["NO_PROXY"] = "*"
-        # 1) 实时（带重试）
-        for _ in range(4):
+        # 1) 实时（带重试）——2026-10-07：重试 4→2、超时 5→3s（东财风控时原设置首拉要 ~14s，冻界面）
+        for _ in range(2):
             try:
                 url = (f"https://push2delay.eastmoney.com/api/qt/stock/get?"
                        f"secid={secid}&fields=f43,f44,f45,f57,f58")
                 req = _ur.Request(url, headers={"User-Agent": "Mozilla/5.0",
                                                 "Referer": "https://quote.eastmoney.com/"})
-                ed = (json.loads(_ur.urlopen(req, timeout=5).read()
+                ed = (json.loads(_ur.urlopen(req, timeout=3).read()
                                  .decode("utf-8", errors="ignore")).get("data") or {})
                 px, pc = (ed.get("f43") or 0) / 100.0, (ed.get("f44") or 0) / 100.0
                 if px and pc:
@@ -1089,6 +1116,19 @@ class Api:
         _cache[secid] = (_t.time(), None, None, None)      # 负缓存，见函数开头注释
         return None, None, None
 
+    def _em_last_price_bounded(self, secid, timeout=1.0):
+        """带硬超时的 `_em_last_price`（2026-10-07）：东财风控时它最坏会跑「重试 + K线兜底」
+        十几秒，而 `load_indices` 在主线程上 ⇒ 冻界面。超时即返回 (None,None,None)，后台线程继续
+        （跑完会写负缓存，下一轮直接命中）。"""
+        import concurrent.futures as _cf
+        ex = _cf.ThreadPoolExecutor(max_workers=1)
+        try:
+            return ex.submit(self._em_last_price, secid).result(timeout=timeout)
+        except Exception:
+            return None, None, None
+        finally:
+            ex.shutdown(wait=False)
+
     # ---------- 指数背离（2026-09-28） ----------
     _div_cache = {}          # {"t": ts, "v": res}——见 load_index_divergence 的 TTL 说明
     _DIV_TTL = 180           # 秒
@@ -1110,16 +1150,24 @@ class Api:
         hit = Api._div_cache
         if hit.get("v") is not None and (now - hit.get("t", 0)) < Api._DIV_TTL:
             return hit["v"]
-        try:
-            from analysis.index_divergence import detect_index_divergence
-            res = _clean(detect_index_divergence())
-            Api._div_cache = {"t": now, "v": res}
-            return res
-        except Exception as e:
-            err = _clean({"alerts": [], "watching": [], "health": {},
-                          "error": f"{type(e).__name__}: {str(e)[:160]}"})
-            Api._div_cache = {"t": now, "v": err}     # 失败也缓存，避免每轮重试
-            return err
+        # 2026-10-07 SWR：冷/过期时**后台算 + 立即返回**（旧值或 warming），不再在主线程等 ~6s
+        # （一次检测 12+ 次 GM 调用）。前端挂在 60s 的 loadAndRender 上 ⇒ 后台算完下一轮即出。
+        if not getattr(self, "_div_running", False):
+            self._div_running = True
+
+            def _bg():
+                try:
+                    from analysis.index_divergence import detect_index_divergence
+                    res = _clean(detect_index_divergence())
+                except Exception as e:
+                    res = _clean({"alerts": [], "watching": [], "health": {},
+                                  "error": f"{type(e).__name__}: {str(e)[:160]}"})
+                Api._div_cache = {"t": _t.time(), "v": res}
+                self._div_running = False
+            _th.Thread(target=_bg, daemon=True).start()
+        if hit.get("v") is not None:
+            return hit["v"]
+        return _clean({"alerts": [], "watching": [], "health": {}, "warming": True})
 
     # ---------- 持仓成本历史 ----------
     def load_cost_history(self):
@@ -5524,6 +5572,24 @@ class Api:
         except Exception:
             pass
 
+    def prewarm_overview(self):
+        """启动预热（2026-10-07）：后台**并发**跑一遍总览页的重端点（指数板/大盘成交额/成交额历史/
+        指数背离），把冷启动成本（东财重试、多笔指数日线、12+ GM 调用）挪到后台，避免前端首帧在主
+        线程上等十几秒（实测这几个端点冷启动合计 ~15s）。失败静默。"""
+        from concurrent.futures import ThreadPoolExecutor
+
+        def _safe(fn):
+            try:
+                fn()
+            except Exception:
+                pass
+        try:
+            with ThreadPoolExecutor(max_workers=4) as ex:
+                list(ex.map(_safe, [self.load_indices, self.load_market_turnover,
+                                    self.load_turnover_history, self.load_index_divergence]))
+        except Exception:
+            pass
+
     def prewarm_holdings_charts(self):
         """启动预热（2026-10-04）：后台**低并发**预热持仓的个股图表缓存。
 
@@ -6008,6 +6074,7 @@ if __name__ == "__main__":
     #  · 技术标签：走其内置后台分支，消除首次进建仓表/破位表的标签冷算等待
     _th.Thread(target=api.prewarm_holdings_charts, daemon=True).start()
     _th.Thread(target=api.prewarm_stock_tags, daemon=True).start()
+    _th.Thread(target=api.prewarm_overview, daemon=True).start()   # 总览页重端点（指数板/成交额/背离）
 
     def _prewarm_chart_build():
         """建图冷启动预热（2026-10-06）：首次 `_build_chart_from_df` 含懒加载 import
