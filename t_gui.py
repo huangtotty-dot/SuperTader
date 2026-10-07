@@ -973,6 +973,18 @@ class Api:
         finally:
             ex.shutdown(wait=False)
 
+    def report_slow_call(self, name, ms):
+        """前端上报的慢 js_api 调用（>=800ms）→ 追加到 `t_io/logs/gui_slow_calls.log`。
+        2026-10-07：GUI 无自身日志，卡死只能靠外部探测；这里给"卡在哪"留痕。失败静默。"""
+        try:
+            log_fp = BASE / "t_io" / "logs" / "gui_slow_calls.log"
+            log_fp.parent.mkdir(parents=True, exist_ok=True)
+            with open(log_fp, "a", encoding="utf-8") as f:
+                f.write(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} {str(name)[:40]} {float(ms):.0f}ms\n")
+        except Exception:
+            pass
+        return {"ok": True}
+
     def load_indices(self):
         """指数状态板（外层硬超时 2.5s；超时给占位、后台继续，防 GM 抖动冻界面）。"""
         return self._bounded(self._load_indices_impl, 2.5,
@@ -3208,14 +3220,19 @@ class Api:
         }
 
     def load_hunter(self, date=None):
-        """选股猎手数据。若有进行中的后台运行→返回 running；有该日期结果→返回；否则同步跑（兼容）。"""
+        """选股猎手数据。运行中→running；有该日结果→返回；都没有→**起后台跑 + 返回 running**
+        （2026-10-07：原为同步跑整轮扫描，实测 **156s**，会冻死 pywebview 主线程）。"""
         date = date or datetime.now().strftime("%Y-%m-%d")
         if HUNTER_RUN_STATE.get("running") and HUNTER_RUN_STATE.get("date") == date:
-            return {"available": False, "running": True}
+            return {"available": False, "running": True, "date": date}
         if HUNTER_RUN_STATE.get("date") == date and HUNTER_RUN_STATE.get("result"):
             return HUNTER_RUN_STATE["result"]
-        # 无后台运行（如历史视图直接调用）→ 同步执行
-        return self._load_hunter_impl(date)
+        # 都没有：触发一次后台运行（与前端 run_hunter 同机制），立即返回 running，前端轮询进度后重取
+        try:
+            self.run_hunter(date, auto=False)
+        except Exception:
+            pass
+        return {"available": False, "running": True, "date": date}
 
     def _hunter_build_conformance(self, codes, date):
         """计算各股建仓信号符合度（时机门控 GO：市场有方向/多头结构/回撤到位/金叉加分）。

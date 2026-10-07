@@ -147,7 +147,17 @@ async function apiCall(name, ...args) {
   if (!window.pywebview || !window.pywebview.api) {
     throw new Error("未运行在 pywebview 环境（请用 python t_gui.py 启动）");
   }
-  return await window.pywebview.api[name](...args);
+  // 2026-10-07: 慢调用留痕——js_api 全在主线程串行，任何 >800ms 的调用都会冻界面。
+  // 计时后 fire-and-forget 上报后端写 t_io/logs/gui_slow_calls.log（不阻塞、失败静默）。
+  const _t0 = performance.now();
+  try {
+    return await window.pywebview.api[name](...args);
+  } finally {
+    const _dt = performance.now() - _t0;
+    if (_dt >= 800 && name !== "report_slow_call") {
+      try { window.pywebview.api.report_slow_call(name, Math.round(_dt)); } catch (e) { /* 静默 */ }
+    }
+  }
 }
 
 async function loadAndRender(date, silent) {
@@ -3130,7 +3140,16 @@ async function loadHunterHistory(date) {
       renderHunterProgress(el, p);
       guard++;
     }
-    const h = await apiCall("load_hunter", date);
+    let h = await apiCall("load_hunter", date);
+    // 后端已改为「起后台跑 + 返回 running」；若仍 running 就接着等（不显示"无数据"）
+    let hg = 0;
+    while (h && h.running && hg < 600) {
+      await sleep(1000);
+      const p2 = await apiCall("hunter_progress");
+      renderHunterProgress(el, p2);
+      if (!p2.running) h = await apiCall("load_hunter", date);
+      hg++;
+    }
     if (h.available) {
       renderHunter(h, true);
       hunterLoaded = true;
@@ -3365,9 +3384,21 @@ async function loadHunter(force) {
       renderHunterProgress(el, p);
       guard++;
     }
-    const h = await apiCall("load_hunter", date);
-    renderHunter(h);
-    hunterLoaded = true;
+    let h = await apiCall("load_hunter", date);
+    let hg = 0;
+    while (h && h.running && hg < 600) {   // 后端「起后台跑+返回 running」→ 这里接着等
+      await sleep(1000);
+      const p2 = await apiCall("hunter_progress");
+      renderHunterProgress(el, p2);
+      if (!p2.running) h = await apiCall("load_hunter", date);
+      hg++;
+    }
+    if (h && h.available === false && h.running) {
+      el.innerHTML = '<div class="empty">扫描超时，请稍后重试</div>';
+    } else {
+      renderHunter(h);
+      hunterLoaded = true;
+    }
     // 突破箱体扫描（后台并行，后端当日缓存）
     loadBreakoutStocks(true);
   } catch (e) {
