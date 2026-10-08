@@ -852,8 +852,9 @@ ENTRY_TIMING_PARAMS = {
     # 两个硬否决，仅 trend_up 追强侧生效（trend_dn 抄底侧爆量是恐慌出清常态，不否决）。
     "veto_vol_spike": 3.0,        # 当日成交量≥3倍20日均量不建仓（该桶 w5=38.3% r5=-1.0%）
     "veto_dist_ma60_max": 0.20,   # 高于MA60超+20%不追高（该桶 w10=43.6%，全因子最差档）
-    # 2026-10-08 owner：未站上5日线（收盘≤MA5）→ 综合得分大幅扣减（只减分、不改 verdict/go）
-    "ma5_below_penalty": 40,
+    # 2026-10-08 owner：未站上5日线（收盘≤MA5）→ 综合得分大幅扣减 + 不给 signal（压一级）
+    "ma5_below_penalty": 70,          # 扣分幅度（满分 100；70 = 几乎清零、沉到榜底）
+    "ma5_below_block_signal": True,   # 破 MA5 时把 signal 压成 approaching（不给建仓信号）
 }
 
 # ==================== 30min 趋势建仓许可闸（2026-10-04） ====================

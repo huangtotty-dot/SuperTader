@@ -33,7 +33,8 @@ DEFAULT_TIMING_PARAMS = {
     "intraday_confirm_vol_min": 1.2,
     "veto_vol_spike": 3.0,
     "veto_dist_ma60_max": 0.20,
-    "ma5_below_penalty": 40,   # 2026-10-08：未站上5日线 → 综合得分扣减（只减分，不改 verdict/go）
+    "ma5_below_penalty": 70,          # 2026-10-08：未站上5日线 → 综合得分扣减
+    "ma5_below_block_signal": True,   # 破 MA5 时把 signal 压成 approaching
 }
 
 
@@ -188,9 +189,11 @@ def verdict_from_timing(go: bool, regime: str, features: dict, data_insufficient
         _dd_ok = dd_threshold_ok(float(f["drawdown"]), regime) if "drawdown" in f else False
     _golden = bool(f.get("macd_golden_5d"))
     _score = (30 if _dir_ok else 0) + (30 if _trend else 0) + (30 if _dd_ok else 0) + (10 if _golden else 0)
-    # 2026-10-08 owner：**未站上5日线**（收盘 ≤ MA5）→ 综合得分大幅扣减（只减分，不改 verdict/go）。
-    if f.get("above_ma5") is False:
-        _score = max(0, _score - int((params or DEFAULT_TIMING_PARAMS).get("ma5_below_penalty", 40)))
+    _p = params or DEFAULT_TIMING_PARAMS
+    # 2026-10-08 owner：**未站上5日线**（收盘 ≤ MA5）→ ①综合得分大幅扣减 ②不给 signal（压成 approaching）。
+    _below_ma5 = f.get("above_ma5") is False
+    if _below_ma5:
+        _score = max(0, _score - int(_p.get("ma5_below_penalty", 70)))
     if go:
         _v = "signal"
     elif regime == "range" and _trend and _dd_ok:
@@ -199,6 +202,8 @@ def verdict_from_timing(go: bool, regime: str, features: dict, data_insufficient
         _v = "approaching"
     else:
         _v = "weak"
+    if _below_ma5 and _v == "signal" and bool(_p.get("ma5_below_block_signal", True)):
+        _v = "approaching"
     return _v, _score
 
 

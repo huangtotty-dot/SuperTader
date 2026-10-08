@@ -137,15 +137,15 @@ class TestVerdictMapping(unittest.TestCase):
         self.assertEqual(s, 30)  # 仅方向分
 
     def test_ma5_below_penalty(self):
-        # 2026-10-08：未站上5日线 ⇒ 综合得分扣 ma5_below_penalty(默认40)，verdict 不变
+        # 2026-10-08：未站上5日线 ⇒ 得分扣 ma5_below_penalty(默认70) **且** signal 压成 approaching
         self.assertEqual(bd.verdict_from_timing(True, "trend_up", _features(above_ma5=True), False),
                          ("signal", 90))
         self.assertEqual(bd.verdict_from_timing(True, "trend_up", _features(above_ma5=False), False),
-                         ("signal", 50))   # 90 - 40
-        # 缺 above_ma5（旧调用方/无该特征）⇒ 不扣分，向后兼容
+                         ("approaching", 20))   # 90-70，且 signal→approaching
+        # 缺 above_ma5（旧调用方/无该特征）⇒ 不扣分、不压级，向后兼容
         self.assertEqual(bd.verdict_from_timing(True, "trend_up", _features(), False), ("signal", 90))
         # 扣分不下穿 0
-        self.assertEqual(bd.verdict_from_timing(False, "range", _features(above_ma5=False), False)[1], 20)
+        self.assertEqual(bd.verdict_from_timing(False, "range", _features(above_ma5=False), False)[1], 0)
 
 
 class TestIntradayConfirm(unittest.TestCase):
