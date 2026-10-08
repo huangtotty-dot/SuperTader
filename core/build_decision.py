@@ -33,6 +33,7 @@ DEFAULT_TIMING_PARAMS = {
     "intraday_confirm_vol_min": 1.2,
     "veto_vol_spike": 3.0,
     "veto_dist_ma60_max": 0.20,
+    "ma5_below_penalty": 40,   # 2026-10-08：未站上5日线 → 综合得分扣减（只减分，不改 verdict/go）
 }
 
 
@@ -76,6 +77,7 @@ def features_from_daily(df: pd.DataFrame, date_str: str) -> dict:
     c = sub["close"].astype(float)
     h = sub["high"].astype(float)
     price = float(c.iloc[-1])
+    ma5 = float(c.rolling(5).mean().iloc[-1])
     ma20 = float(c.rolling(20).mean().iloc[-1])
     ma60 = float(c.rolling(60).mean().iloc[-1])
     rec_high = float(h.tail(20).max())
@@ -105,6 +107,8 @@ def features_from_daily(df: pd.DataFrame, date_str: str) -> dict:
         "drawdown": round(price / rec_high - 1, 4) if rec_high > 0 else 0.0,
         "macd_golden_5d": golden,
         "rsi": round(_rsi, 1),
+        "ma5": round(ma5, 3),
+        "above_ma5": bool(price > ma5),
         "ma20": round(ma20, 3), "ma60": round(ma60, 3),
         "vol_ratio20": _vol_ratio20,
         "dist_ma60": round(price / ma60 - 1, 4),
@@ -169,10 +173,12 @@ def timing_decision(features: dict, regime: str, params: dict = None) -> dict:
 # verdict 映射（scan_stock 生产口径）
 # ═══════════════════════════════════════════
 
-def verdict_from_timing(go: bool, regime: str, features: dict, data_insufficient: bool = False) -> tuple:
+def verdict_from_timing(go: bool, regime: str, features: dict, data_insufficient: bool = False,
+                        params: dict = None) -> tuple:
     """go/regime/features → (verdict, score)。
     go→signal；range+多头结构+浅回撤→watch_signal（只留痕不推送）；有方向且结构/回撤过一→approaching；否则 weak。
-    data_insufficient（features={}）时结构/回撤/金叉一律不通过（数据失败不得伪装成条件通过）。"""
+    data_insufficient（features={}）时结构/回撤/金叉一律不通过（数据失败不得伪装成条件通过）。
+    params：ENTRY_TIMING_PARAMS（可选）；用于 ma5_below_penalty 减分阈值。"""
     f = features or {}
     _dir_ok = regime in ("trend_up", "trend_dn")
     _trend = bool(f.get("trend_multihead"))
@@ -182,6 +188,9 @@ def verdict_from_timing(go: bool, regime: str, features: dict, data_insufficient
         _dd_ok = dd_threshold_ok(float(f["drawdown"]), regime) if "drawdown" in f else False
     _golden = bool(f.get("macd_golden_5d"))
     _score = (30 if _dir_ok else 0) + (30 if _trend else 0) + (30 if _dd_ok else 0) + (10 if _golden else 0)
+    # 2026-10-08 owner：**未站上5日线**（收盘 ≤ MA5）→ 综合得分大幅扣减（只减分，不改 verdict/go）。
+    if f.get("above_ma5") is False:
+        _score = max(0, _score - int((params or DEFAULT_TIMING_PARAMS).get("ma5_below_penalty", 40)))
     if go:
         _v = "signal"
     elif regime == "range" and _trend and _dd_ok:

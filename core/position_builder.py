@@ -1078,7 +1078,7 @@ def scan_stock(code: str, stock_info: dict, date_str: str = None,
                 result["errors"].append("个股日线数据不足(timing features为空)")
             # P3 同源：verdict/score 映射委托 build_decision.verdict_from_timing（单一真源）。
             # B-4 watch_signal：range 市观察态——多头结构+浅回撤，只进 trace/C18 清单喂样本，不推飞书不出 position 建议
-            _v, _score = _bd.verdict_from_timing(bool(_tv.get("go")), _regime, _f, _data_insufficient)
+            _v, _score = _bd.verdict_from_timing(bool(_tv.get("go")), _regime, _f, _data_insufficient, _ETP)
             result["verdict"] = _v
             result["composite_score"] = _score
             # P1(2026-08-25): verdict 与 score 脱钩修复。
