@@ -2438,6 +2438,16 @@ class Api:
                 return None
             if want_minutes and not (hit.get("payload") or {}).get("period_data", {}).get("min30"):
                 return None
+            # 2026-10-08: payload 比**日线缓存**旧 ⇒ 判过期、回落日线缓存路径（零网络、序列完整）。
+            # 背景：`MAX_DISPLAY_GAP_DAYS=12` 容忍长假，会把「缺了 1 个交易日」的 payload 也当新鲜
+            # 直接回放（实测 600362：payload 停在 09-30、日线缓存已到 10-08 ⇒ MA5 用旧序列 ⇒ 误报破5日线）。
+            try:
+                _dfc = _cc.load_daily_display(code)
+                if _dfc is not None and not _dfc.empty:
+                    if str(hit.get("last_daily_date") or "") < str(_dfc["date"].iloc[-1])[:10]:
+                        return None
+            except Exception:
+                pass
             res = self._payload_to_result(hit, code)
             if not res or not res.get("available"):
                 return None
