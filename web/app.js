@@ -3612,29 +3612,40 @@ function renderHunter(h) {
     const pageIdx = window._hunterPage && window._hunterPage[category] || 0;
     const allStocks = stocks;
     const hunterRow = s => {
-      const d5Cls = s.d5 >= 8 ? "up" : s.d5 >= 5 ? "warn" : s.d5 > 0 ? "cell-dim" : "";
-      const d6Cls = s.d6 >= 8 ? "up" : s.d6 >= 5 ? "warn" : s.d6 > 0 ? "cell-dim" : "";
-      const trendTxt = s.tags && s.tags.length
+      // 2026-10-08 owner：猎手个股行改用**建仓表同款列**（判定/得分/通过X/3/价/技术标签/时机条件/理由）
+      const _v = s.build_verdict;
+      const verdictTxt = _v ? verdictBadge(_v) : '<span class="cell-dim">—</span>';
+      const _sc = (s.build_score != null) ? s.build_score : null;
+      const _ceil = (s.build_ceiling != null) ? s.build_ceiling : 100;
+      const _reach = (s.build_reachable != null) ? s.build_reachable : true;
+      const scoreTxt = _sc == null ? '<span class="cell-dim">—</span>'
+        : (_reach ? `<b>${_sc}</b>` : `<b>${_sc}</b><span class="cell-dim" style="font-size:10px">/${_ceil}🔒</span>`);
+      const _metTxt = (s.build_met != null) ? `${s.build_met}/3` : "—";
+      const _cd = s.build_conds || {};
+      const condTxt = ["t_regime", "t_trend", "t_drawdown"].map(k =>
+        _cd[k] === undefined ? '<span class="cell-dim">·</span>'
+          : (_cd[k] ? '<span class="on">●</span>' : '<span class="off">○</span>')).join("")
+        + (_cd.t_veto === false
+          ? `<span title="否决因子触发：${esc((s.build_veto || []).join("、") || "爆量/偏离MA60")}">🚫</span>`
+          : '<span class="cell-dim" title="否决因子未触发">·</span>');
+      const tagsTxt = s.tags && s.tags.length
         ? s.tags.map(t => tagBadge(t)).join(" ")
         : '<span class="cell-dim" style="font-size:10px">…</span>';
-      const risk = riskFromTags(s.tags);
-      const riskCell = risk.level === "低"
-        ? `<span class="badge weak" title="${esc(risk.advice)}">低</span>`
-        : `<span class="badge ${risk.level === "高" ? "signal" : "approach"}" title="${esc(risk.advice)}">${risk.level}</span>`;
-      return `<tr class="h-expand-row" ondblclick="openStockChart('${esc(s.code)}','${esc(s.name)}')">
+      const _rowBg = (_sc === 0) ? "background:rgba(248,81,73,.12);"
+        : (_sc !== null && _sc > 0) ? "background:rgba(63,185,80,.07);" : "";
+      const _px = (s.build_price != null) ? fmt(s.build_price, 2) : "—";
+      return `<tr class="h-expand-row" style="${_rowBg}" ondblclick="openStockChart('${esc(s.code)}','${esc(s.name)}')">
         <td class="mono cell-dim" title="双击看技术分析">${esc(s.code)}</td>
         <td title="双击看技术分析">${esc(s.name)} <button class="mini-btn" style="font-size:10px;padding:0 5px"
           onclick="event.stopPropagation();addToWatchlist('${esc(s.code)}','${esc(s.name)}',this)"
           title="加入建仓股池监控买点">+股池</button></td>
-        <td>${trendTxt}</td>
-        <td class="num ${s.score >= 70 ? 'up' : s.score >= 50 ? 'warn' : 'cell-dim'}"><b>${s.score}</b></td>
-        <td class="num ${d5Cls}">${s.d5 || "—"}</td>
-        <td class="num ${d6Cls}">${s.d6 || "—"}</td>
-        <td class="num">${s.d9 || "—"}</td>
-        <td class="num ${clsOf(s.change_pct)}">${s.change_pct >= 0 ? '+' : ''}${fmt(s.change_pct, 1)}%</td>
-        <td>${s.limit_up ? '<span class="badge signal">涨停</span>' : ''}</td>
-        <td>${riskCell}</td>
-        <td>${buildBadge(s)}</td>
+        <td>${verdictTxt}</td>
+        <td class="num">${scoreTxt}</td>
+        <td class="num">${_metTxt}</td>
+        <td class="num">${_px}</td>
+        <td>${tagsTxt}</td>
+        <td class="cond" title="${esc(s.build_reason || "")}">${condTxt}</td>
+        <td class="cell-dim" style="max-width:240px;font-size:11px">${esc(s.build_reason || "")}</td>
       </tr>`;
     };
     // 板块 → 细分（按第一层级归并：半导体设备-测试设备 汇入 半导体设备；多概念股多组重复）→ 个股。
@@ -3670,7 +3681,7 @@ function renderHunter(h) {
       const gs = subGroups[gk];
       const gAvg = Math.round(gs.reduce((a, s) => a + (s.score || 0), 0) / gs.length);
       const gUp = gs.filter(s => s.limit_up).length;
-      const head = `<tr class="h-subgroup-head"><td colspan="10">
+      const head = `<tr class="h-subgroup-head"><td colspan="9">
         <span class="h-subgroup-name">📂 ${esc(gk)}</span>
         <span class="cell-dim" style="font-size:10px">${gs.length}只 · 均分${gAvg}${gUp ? ` · 涨停${gUp}` : ""}</span>
       </td></tr>`;
@@ -3720,18 +3731,22 @@ function renderHunter(h) {
             ${trendIcon || '—'} ${heatChange != null ? (heatChange>=0?'+':'')+fmt(heatChange,0) : ''}
           </span>
         </td>
-        <td class="cell-dim" style="font-size:11px;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(r["前三强"]||'')}">${esc(r["前三强"]||'—')}</td>
+        <td style="font-size:11px;max-width:230px" title="${esc(r["前三强"]||'')}">${stocks.slice(0, 3).map(s =>
+          `<span class="cell-dim">${esc(s.name)}</span><button class="mini-btn" style="font-size:9px;padding:0 4px;margin:0 2px 0 1px"
+            onclick="event.stopPropagation();addToWatchlist('${esc(s.code)}','${esc(s.name)}',this)"
+            title="加入建仓股池监控买点">+股池</button>`).join(" ") || esc(r["前三强"] || "—")}</td>
       </tr>
       <tr class="h-expand-wrap"><td colspan="8" style="padding:0">
         <div class="h-expand">
           <table><thead><tr>
-            <th>代码</th><th>名称</th><th>技术标签</th><th class="num">得分</th>
-            <th class="num" title="潜在突破10日">D5</th>
-            <th class="num" title="潜在突破5日">D6</th>
-            <th class="num">D9</th>
-            <th class="num">涨跌</th><th>状态</th>
-            <th title="风险等级（对齐手动盘持仓日线风险体检：顶背离/超买→减仓提醒；悬停看提醒文案）">风险</th>
-            <th title="建仓信号符合度（时机门控：市场有方向/多头结构/回撤到位/金叉加分；盘后计算，GO=符合）">建仓</th>
+            <th>代码</th><th>名称</th>
+            <th title="与建仓信号扫描同口径（go→signal / approaching / watch_signal / weak）">判定</th>
+            <th class="num" title="综合得分（与建仓表同口径；破5日线扣70且不给signal）">得分</th>
+            <th class="num" title="时机门控通过数（市场有方向/多头结构/回撤到位）">通过</th>
+            <th class="num">价</th>
+            <th>技术标签</th>
+            <th title="时机条件：市场有方向/多头结构/回撤到位 · 末位🚫=否决因子（爆量≥3倍或偏离MA60>+20%）">时机条件</th>
+            <th>理由</th>
           </tr></thead>
           <tbody>${stockRows}</tbody></table>
           ${pageInfo}

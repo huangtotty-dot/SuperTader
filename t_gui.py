@@ -3291,53 +3291,30 @@ class Api:
                     rows = json.loads(_fp.read_text(encoding="utf-8")).get("rows", [])
                     if len(rows) < 61:
                         continue
-                    _sub = [r for r in rows if str(r.get("date", "")) <= str(date)]
-                    if len(_sub) < 61:
+                    from core import build_decision as _bd
+                    _df = _pd.DataFrame(rows)
+                    _f = _bd.features_from_daily(_df, str(date))
+                    if not _f:
                         continue
-                    c = _pd.Series([float(r["close"]) for r in _sub])
-                    h = _pd.Series([float(r["high"]) for r in _sub])
-                    price = float(c.iloc[-1])
-                    ma20 = float(c.rolling(20).mean().iloc[-1])
-                    ma60 = float(c.rolling(60).mean().iloc[-1])
-                    rec_high = float(h.tail(20).max())
-                    e12 = c.ewm(span=12, adjust=False).mean()
-                    e26 = c.ewm(span=26, adjust=False).mean()
-                    dif = e12 - e26
-                    dea = dif.ewm(span=9, adjust=False).mean()
-                    golden = bool(((dif > dea) & (dif.shift(1) <= dea.shift(1))).tail(5).any())
-                    trend = bool(price > ma20 and price > ma60)
-                    dd = price / rec_high - 1 if rec_high > 0 else 0.0
-                    # RSI(14)（空头抄底超卖极值，与 timing_gate 一致）
-                    # Wilder 平滑（2026-09-21 统一口径）；原 rolling(14).mean() 简单均值
-                    _dlt = c.diff()
-                    _gn = _dlt.clip(lower=0).ewm(alpha=1.0 / 14, adjust=False).mean()
-                    _ls = (-_dlt.clip(upper=0)).ewm(alpha=1.0 / 14, adjust=False).mean()
-                    _rsi = float((100 - 100 / (1 + _gn / _ls.replace(0, float("nan")))).iloc[-1]) if _ls.iloc[-1] and _ls.iloc[-1] > 0 else 50.0
-                    if _regime == "trend_up":
-                        dd_ok = dd >= -0.03
-                        _dir_ok = True
-                        _rsi_ok = True
-                    elif _regime == "trend_dn":
-                        dd_ok = dd < -0.10
-                        _dir_ok = True
-                        _rsi_ok = _rsi < float(_ETP.get("trend_dn_rsi_max", 20))
-                    else:
-                        dd_ok = False
-                        _dir_ok = False
-                        _rsi_ok = False
-                    conds = {
-                        "t_regime": _dir_ok,
-                        "t_trend": trend,
-                        "t_drawdown": dd_ok,
-                        "t_golden": golden,
-                    }
-                    go = (_dir_ok and trend and dd_ok) if _regime == "trend_up" else (_dir_ok and dd_ok and _rsi_ok)
+                    # 2026-10-08 owner：猎手个股行与**建仓信号扫描同规则同展示** —— 一律走
+                    # build_decision 的单一真源（features_from_daily/timing_decision/verdict_from_timing），
+                    # 不再自己手算，保证 判定/得分/通过X/3/条件/否决 与建仓表逐列一致。
+                    _dec = _bd.timing_decision(_f, _regime, _ETP)
+                    _verdict, _score = _bd.verdict_from_timing(bool(_dec["go"]), _regime, _f, False, _ETP)
+                    _reachable = _regime in ("trend_up", "trend_dn")
+                    _trend = bool(_f.get("trend_multihead"))
+                    _dd_ok = _bd.dd_threshold_ok(float(_f["drawdown"]), _regime) if "drawdown" in _f else False
+                    _golden = bool(_f.get("macd_golden_5d"))
+                    conds = {"t_regime": bool(_reachable), "t_trend": _trend, "t_drawdown": _dd_ok,
+                             "t_golden": _golden, "t_veto": not _dec["veto"]}
                     result[str(code)] = {
-                        "go": bool(go),
-                        "regime": _regime,
-                        "met": sum(1 for v in conds.values() if v),
-                        "conds": conds,
-                        "reason": f"{_regime}: GO" if go else f"{_regime}: 降频",
+                        "go": bool(_dec["go"]), "regime": _regime,
+                        "met": int(_reachable) + int(_trend) + int(_dd_ok),
+                        "conds": conds, "reason": "；".join(_dec["reasons"]),
+                        "score": int(_score), "score_ceiling": 100 if _reachable else 70,
+                        "signal_reachable": bool(_reachable), "verdict": _verdict,
+                        "veto": list(_dec["veto"]), "above_ma5": _f.get("above_ma5"),
+                        "price": _f.get("price"),
                     }
                 except Exception:
                     continue
@@ -3577,14 +3554,21 @@ class Api:
                                 s["build_met"] = c["met"]
                                 s["build_conds"] = c["conds"]
                                 s["build_reason"] = c["reason"]
+                                s["build_score"] = c.get("score")
+                                s["build_ceiling"] = c.get("score_ceiling")
+                                s["build_reachable"] = c.get("signal_reachable")
+                                s["build_verdict"] = c.get("verdict")
+                                s["build_veto"] = c.get("veto") or []
+                                s["build_above_ma5"] = c.get("above_ma5")
+                                s["build_price"] = c.get("price")
             except Exception:
                 pass
-            # 建仓符合股靠前显示：GO(时机放行)优先 → 符合条件数 → 得分
+            # 建仓符合股靠前显示：GO(时机放行)优先 → 符合条件数 → 建仓得分（与建仓表同口径）
             for cat, stocks in sector_stocks.items():
                 stocks.sort(key=lambda s: (
                     -(1 if s.get("build_go") else 0),
                     -(s.get("build_met") or 0),
-                    -(s.get("score") or 0),
+                    -(s.get("build_score") or 0),
                 ))
 
             # 3) 生成排名表 + 注入热度/趋势/股票数
