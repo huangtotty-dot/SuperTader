@@ -1411,6 +1411,10 @@ function renderPB(pb) {
     const scoreCellHtml = _reachable
       ? `<b>${r.composite_score}</b>`
       : `<b>${r.composite_score}</b><span class="cell-dim" style="font-size:10px">/${_ceiling}🔒</span>`;
+    // 2026-10-08 owner：0 分 / >0 分 用背景色区分（0=红底、>0=淡绿底），一眼看出被扣到 0 的票
+    const _scNum = (typeof r.composite_score === "number") ? r.composite_score : null;
+    const _scoreBg = (_scNum === 0) ? "background:rgba(248,81,73,.12);"
+      : (_scNum !== null && _scNum > 0) ? "background:rgba(63,185,80,.07);" : "";
     // 建仓/加仓时机门控徽章（timing_gate: 多头追强/空头抄底/震荡降频）
     const _tm = r.timing || {};
     let tmBadge = "";
@@ -1488,7 +1492,7 @@ function renderPB(pb) {
       ? `<td style="text-align:center">${dvParts.join(" ")}</td>`
       : `<td class="cell-dim" style="text-align:center">—</td>`;
     return `
-      <tr id="pb-row-${esc(r.code || '')}" ondblclick="openStockChart('${esc(r.code||'')}','${esc(r.name||r.code||'')}')" style="cursor:pointer;${isStale ? "opacity:.45;" : ""}" title="双击看K线${isStale ? "（数据陈旧，距今超过10分钟）" : ""}">
+      <tr id="pb-row-${esc(r.code || '')}" ondblclick="openStockChart('${esc(r.code||'')}','${esc(r.name||r.code||'')}')" style="cursor:pointer;${_scoreBg}${isStale ? "opacity:.45;" : ""}" title="双击看K线${isStale ? "（数据陈旧，距今超过10分钟）" : ""}">
         <td>${esc(r.name || "")} <span class="mono cell-dim">${esc(r.code || "")}</span>
           ${monitorBadge}${chBadge}${apBadge}${tmBadge}${icBadge}${vetoBadge}${r.in_holdings ? `<span class="badge hold">持仓</span>` : ""}${errTxt}${blockLine}</td>
         <td style="text-align:center">${poolBadge}</td>
@@ -1759,6 +1763,10 @@ function renderAutoScan(d) {
     const scoreCell = r.score != null
       ? `<b>${r.score}</b>${!r.go && r.regime === "range" ? '<span class="cell-dim" style="font-size:10px">/70🔒</span>' : ""}`
       : "—";
+    // 2026-10-08 owner：0 分 / >0 分 用背景色区分（对齐手动盘 renderPB）
+    const _scNum2 = (typeof r.score === "number") ? r.score : null;
+    const _scoreBg2 = (_scNum2 === 0) ? "background:rgba(248,81,73,.12);"
+      : (_scNum2 !== null && _scNum2 > 0) ? "background:rgba(63,185,80,.07);" : "";
     // 条件圆点（对齐手动盘 renderPB：condStr + vetoDot，hover 看标签）
     const conds = r.conditions || {};
     const isNoData = r.verdict === "insufficient_data" || r.verdict === "pending";
@@ -1785,7 +1793,7 @@ function renderAutoScan(d) {
     const delBtn = r.held
       ? '<button class="mini-btn" disabled title="有持仓不能删除">✕</button>'
       : `<button class="mini-btn" onclick="removeAutoStock('${esc(r.code)}')" title="从 auto 池删除（需无持仓）">✕</button>`;
-    return `<tr style="cursor:pointer" ondblclick="openStockChart('${esc(r.code)}','${esc(r.name || r.code)}')" title="双击看K线">
+    return `<tr style="cursor:pointer;${_scoreBg2}" ondblclick="openStockChart('${esc(r.code)}','${esc(r.name || r.code)}')" title="双击看K线">
       <td>${esc(r.name || r.code)} <span class="mono cell-dim">${esc(r.code)}</span>
         ${holdBadge}${tmBadge}${vetoBadge}${nodataBadge}${errTxt}</td>
       <td style="text-align:center">${poolBadge}</td>
