@@ -1496,6 +1496,33 @@ def _mark_ma_break_pushed(code: str, date_str: str) -> None:
         pass
 
 
+# 站上5/10日线（回站）推送去重（2026-10-08）——与破线分开存，互不干扰
+MA_RECLAIM_STATE_FILE = STATE_DIR / "ma_reclaim_pushed.json"
+
+
+def _load_ma_reclaim_dedup() -> dict:
+    try:
+        if MA_RECLAIM_STATE_FILE.exists():
+            return json.loads(MA_RECLAIM_STATE_FILE.read_text(encoding="utf-8"))
+    except Exception:
+        pass
+    return {}
+
+
+def _mark_ma_reclaim_pushed(code: str, date_str: str) -> None:
+    try:
+        STATE_DIR.mkdir(parents=True, exist_ok=True)
+        dedup = _load_ma_reclaim_dedup()
+        dedup.setdefault(date_str, [])
+        if code not in dedup[date_str]:
+            dedup[date_str].append(code)
+        dedup = {d: dedup[d] for d in sorted(dedup)[-15:]}
+        MA_RECLAIM_STATE_FILE.write_text(
+            json.dumps(dedup, ensure_ascii=False, indent=2), encoding="utf-8")
+    except Exception:
+        pass
+
+
 # ---------- 30/60分钟线背离推送（2026-08-19 新增）----------
 DIVERGENCE_STATE_FILE = STATE_DIR / "divergence_pushed.json"
 
@@ -1623,6 +1650,7 @@ def check_ma_break(code: str, stock_info: dict = None, date_str: str = None,
         "prev_ma5": None, "prev_ma10": None, "prev_close": None,
         "broke5": False, "broke10": False,
         "below5": False, "below10": False,
+        "reclaim5": False, "reclaim10": False,   # 2026-10-08：刚**站上**（昨破→今上）
         "dev5_pct": None, "dev10_pct": None,
         "is_holding": bool((stock_info or {}).get("is_holding", False)),
         "insufficient": None,
@@ -1657,9 +1685,9 @@ def check_ma_break(code: str, stock_info: dict = None, date_str: str = None,
     prev_close = float(basis[-1])
     result["prev_close"] = prev_close
 
-    for period, ma_key, prev_key, broke_key, below_key, dev_key in (
-        (5, "ma5", "prev_ma5", "broke5", "below5", "dev5_pct"),
-        (10, "ma10", "prev_ma10", "broke10", "below10", "dev10_pct"),
+    for period, ma_key, prev_key, broke_key, below_key, dev_key, recl_key in (
+        (5, "ma5", "prev_ma5", "broke5", "below5", "dev5_pct", "reclaim5"),
+        (10, "ma10", "prev_ma10", "broke10", "below10", "dev10_pct", "reclaim10"),
     ):
         prev_ma = float(np.mean(basis[-period:]))
         # 今MA = (最近 period-1 根截至昨日的收盘 + 实时价) / period
@@ -1668,17 +1696,17 @@ def check_ma_break(code: str, stock_info: dict = None, date_str: str = None,
         result[prev_key] = round(prev_ma, 3)
         result[broke_key] = bool(prev_close >= prev_ma and price < cur_ma)
         result[below_key] = bool(price < cur_ma)
+        # 2026-10-08：刚站上（对称于刚跌破）——昨收在 MA 之下、现价回到 MA 之上
+        result[recl_key] = bool(prev_close < prev_ma and price > cur_ma)
         result[dev_key] = round((price - cur_ma) / cur_ma * 100, 2) if cur_ma else None
 
     result["price"] = round(price, 3)
     return result
 
 
-def scan_ma_breaks(date_str: str = None, silent: bool = False) -> list:
-    """扫描候选池+持仓池，返回刚跌破5日线/10日线的事件列表。
-
-    池合并：watchlist_buy.json 中 status=monitoring 的候选股 + holdings.json 中 qty>0 的持仓，
-    按基础代码去重（_A/_B 账户后缀归一，持仓标记 is_holding）。"""
+def _ma_alert_pool() -> dict:
+    """破线/站上报警共用的池：watchlist_buy(monitoring/signal, manual) + holdings(qty>0, manual)，
+    按基础码去重（_A/_B 归一，持仓标记 is_holding）。"""
     codes = {}
 
     def _add(code, name, is_holding):
@@ -1715,6 +1743,15 @@ def scan_ma_breaks(date_str: str = None, silent: bool = False) -> list:
                 _add(code, h.get("name") or code, True)
     except Exception:
         pass
+    return codes
+
+
+def scan_ma_breaks(date_str: str = None, silent: bool = False) -> list:
+    """扫描候选池+持仓池，返回刚跌破5日线/10日线的事件列表。
+
+    池合并：watchlist_buy.json 中 status=monitoring 的候选股 + holdings.json 中 qty>0 的持仓，
+    按基础代码去重（_A/_B 账户后缀归一，持仓标记 is_holding）。"""
+    codes = _ma_alert_pool()
 
     events = []
     for code, info in codes.items():
@@ -1728,6 +1765,28 @@ def scan_ma_breaks(date_str: str = None, silent: bool = False) -> list:
         if not silent:
             tags = "".join(
                 t for t, broke in (("【破5日线】", r["broke5"]), ("【破10日线】", r["broke10"])) if broke)
+            hold = " [持仓]" if r["is_holding"] else ""
+            print(f"  {code} {r['name']}{hold} {tags} 现价{r['price']} "
+                  f"MA5={r['ma5']}({r['dev5_pct']:+.2f}%) MA10={r['ma10']}({r['dev10_pct']:+.2f}%)")
+        events.append(r)
+    return events
+
+
+def scan_ma_reclaims(date_str: str = None, silent: bool = False) -> list:
+    """扫描候选池+持仓池，返回**刚从破线转为站上**5/10日线的事件（对称于 `scan_ma_breaks`）。
+
+    口径：昨收 < 昨MA(N) 且 现价 > 今MA(N)。owner 2026-10-08：破线有飞书，回站上也要通知。"""
+    codes = _ma_alert_pool()
+    events = []
+    for code, info in codes.items():
+        r = check_ma_break(code, info, date_str)
+        if r is None or r.get("insufficient"):
+            continue
+        if not r.get("reclaim5") and not r.get("reclaim10"):
+            continue
+        if not silent:
+            tags = "".join(
+                t for t, up in (("【站上5日线】", r["reclaim5"]), ("【站上10日线】", r["reclaim10"])) if up)
             hold = " [持仓]" if r["is_holding"] else ""
             print(f"  {code} {r['name']}{hold} {tags} 现价{r['price']} "
                   f"MA5={r['ma5']}({r['dev5_pct']:+.2f}%) MA10={r['ma10']}({r['dev10_pct']:+.2f}%)")
@@ -1759,6 +1818,30 @@ def run_ma_break_alert(date_str: str = None, dry_run: bool = False, silent: bool
             print(f"破线提醒已推送: {len(to_push)} 只")
     elif not silent:
         print(f"破线提醒推送未成功（dry_run={'是' if dry_run else '否'}），未写去重")
+    return to_push if pushed_ok else []
+
+
+def run_ma_reclaim_alert(date_str: str = None, dry_run: bool = False, silent: bool = False) -> list:
+    """执行一次**站上5/10日线**扫描，并按 (code, date) 当日去重推送飞书（对称于破线报警）。"""
+    events = scan_ma_reclaims(date_str, silent=silent)
+    if not events:
+        if not silent:
+            print("站上均线扫描完成：今日无刚由破线转为站上的股票")
+        return []
+    sig_date = date_str or datetime.now().strftime("%Y-%m-%d")
+    to_push = [e for e in events if e["code"] not in _load_ma_reclaim_dedup().get(sig_date, [])]
+    if not to_push:
+        if not silent:
+            print(f"站上均线扫描完成：{len(events)} 只触发但当日均已推送过，跳过")
+        return []
+    pushed_ok = push_ma_reclaim_feishu(to_push, date_str=sig_date, dry_run=dry_run)
+    if pushed_ok:
+        for e in to_push:
+            _mark_ma_reclaim_pushed(e["code"], sig_date)
+        if not silent:
+            print(f"站上均线提醒已推送: {len(to_push)} 只")
+    elif not silent:
+        print(f"站上均线提醒推送未成功（dry_run={'是' if dry_run else '否'}），未写去重")
     return to_push if pushed_ok else []
 
 
@@ -1817,6 +1900,64 @@ def push_ma_break_feishu(events: list, date_str: str = "", dry_run: bool = False
         card,
         success_log=f"破5/10日线提醒飞书推送成功: {len(events)} 只",
         error_prefix="破5/10日线提醒飞书推送",
+    )
+
+
+def build_ma_reclaim_card(events: list, date_str: str = "") -> dict:
+    """构建**站上5/10日线**提醒飞书卡片（绿色）。无事件返回 None。"""
+    if not events:
+        return None
+    lines = [
+        "**站上5/10日线提醒 · 破线回站**",
+        f"📅 {date_str or datetime.now().strftime('%Y-%m-%d')}（刚由破线转为站上，盘中实时）",
+        "",
+    ]
+    for r in events:
+        hold = " [持仓]" if r.get("is_holding") else ""
+        tags = " ".join(
+            t for t, up in (("【站上5日线】", r.get("reclaim5")), ("【站上10日线】", r.get("reclaim10"))) if up)
+        devs = []
+        if r.get("ma5"):
+            devs.append(f"MA5 {r['ma5']}({r['dev5_pct']:+.2f}%)")
+        if r.get("ma10"):
+            devs.append(f"MA10 {r['ma10']}({r['dev10_pct']:+.2f}%)")
+        lines.append(
+            f"🔺 **{r['code']}** {r['name']}{hold} {tags}\n"
+            f"　现价 {r['price']} ｜ {' ｜ '.join(devs)}"
+        )
+    lines += [
+        "",
+        "📌 由破线转为站上，短线转强信号，可关注建仓/加仓时机。",
+        "⚠️ 仅供参考，请人工确认后操作。",
+    ]
+    return {
+        "msg_type": "interactive",
+        "card": {
+            "header": {
+                "template": "green",
+                "title": {"tag": "plain_text", "content": "🔺 站上5/10日线提醒 - 破线回站"},
+            },
+            "elements": [{"tag": "markdown", "content": "\n".join(lines)}],
+        },
+    }
+
+
+def push_ma_reclaim_feishu(events: list, date_str: str = "", dry_run: bool = False) -> bool:
+    """推送**站上5/10日线**提醒到飞书。返回是否成功。"""
+    if not events:
+        return False
+    if not _FEISHU_AVAILABLE:
+        return False
+    if dry_run:
+        print(f"  [DRY-RUN] 跳过飞书推送: {len(events)} 只站上均线股票")
+        return False
+    card = build_ma_reclaim_card(events, date_str)
+    if card is None:
+        return False
+    return send_feishu_payload(
+        card,
+        success_log=f"站上5/10日线提醒飞书推送成功: {len(events)} 只",
+        error_prefix="站上5/10日线提醒飞书推送",
     )
 
 
