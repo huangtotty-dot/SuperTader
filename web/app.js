@@ -2889,18 +2889,6 @@ async function loadSectorTags(category) {
   } catch (e) { return {}; }
 }
 
-function riskFromTags(tags) {
-  // 对齐手动盘「持仓日线风险体检」(load_ob_analysis)：顶背离/超买/趋势下行 → 风险+减仓提醒（2026-09-01）
-  const lbl = (tags || []).map(t => t.label || "");
-  if (lbl.includes("顶背离")) return { level: "高", advice: "🚨 顶背离风险：警惕见顶回落，建议减仓/回避" };
-  if (lbl.includes("超买")) return { level: "高", advice: "⚠ 严重超买：短线过热，建议减仓" };
-  if (lbl.includes("跌破下沿") || lbl.includes("下行") || lbl.includes("破10日线"))
-    return { level: "中", advice: "⚠ 趋势走弱：反弹减仓，不追高" };
-  if (lbl.includes("破5日线")) return { level: "中", advice: "⚠ 破5日线：短线转弱，注意减仓" };
-  if (lbl.includes("超卖")) return { level: "低", advice: "✓ 超卖：可关注反弹" };
-  return { level: "低", advice: "✓ 无超买无下行：风险较低，持有/关注" };
-}
-
 function applySectorTags(tbody, category) {
   const wrap = tbody.querySelector(".h-expand-wrap");
   const stageEl = tbody.querySelector(".h-stage-badge");
@@ -2911,15 +2899,9 @@ function applySectorTags(tbody, category) {
     const code = row.querySelector("td").textContent.trim();
     const info = tagsMap[code];
     if (info && info.tags) {
-      const tds = row.querySelectorAll("td");
-      tds[2].innerHTML = info.tags.map(t => tagBadge(t)).join(" ");
-      // 2026-09-01: 同步更新风险列（td[9]，对齐手动盘风险体检）
-      const risk = riskFromTags(info.tags);
-      if (tds[9]) {
-        tds[9].innerHTML = risk.level === "低"
-          ? `<span class="badge weak" title="${esc(risk.advice)}">低</span>`
-          : `<span class="badge ${risk.level === "高" ? "signal" : "approach"}" title="${esc(risk.advice)}">${risk.level}</span>`;
-      }
+      // 2026-10-08: 按 class 定位标签列（此前按 tds[2] 固定下标，列序改成建仓表同款后填错位）
+      const _tagsTd = row.querySelector("td.h-tags");
+      if (_tagsTd) _tagsTd.innerHTML = info.tags.map(t => tagBadge(t)).join(" ");
     }
   });
   // 板块阶段判定（用 trend）
@@ -3643,7 +3625,7 @@ function renderHunter(h) {
         <td class="num">${scoreTxt}</td>
         <td class="num">${_metTxt}</td>
         <td class="num">${_px}</td>
-        <td>${tagsTxt}</td>
+        <td class="h-tags">${tagsTxt}</td>
         <td class="cond" title="${esc(s.build_reason || "")}">${condTxt}</td>
         <td class="cell-dim" style="max-width:240px;font-size:11px">${esc(s.build_reason || "")}</td>
       </tr>`;
