@@ -2869,6 +2869,7 @@ function hunterPage(category, dir) {
 const hunterOpenSectors = new Set();
 const hunterTagsCache = {};
 
+const hunterTagsRetry = {};   // 空结果重试计数（防死循环）
 async function loadSectorTags(category) {
   if (hunterTagsCache[category]) return hunterTagsCache[category];
   const stocks = (window._hunterSectors || {})[category] || [];
@@ -2877,7 +2878,16 @@ async function loadSectorTags(category) {
   try {
     const r = await apiCall("load_stock_tags_batch", codes);
     const tagsMap = (r && r.tags) || {};
-    hunterTagsCache[category] = tagsMap;
+    // 2026-10-08: 后端**冷启动会先回空 map**（改后台算后），空 map 若被缓存 ⇒ 该板块标签永远空。
+    // 故**只缓存非空**；空则稍后重试，等后台算完再填。
+    if (Object.keys(tagsMap).length) {
+      hunterTagsCache[category] = tagsMap;
+    } else if ((hunterTagsRetry[category] || 0) < 8) {
+      hunterTagsRetry[category] = (hunterTagsRetry[category] || 0) + 1;
+      setTimeout(() => {
+        if (hunterOpenSectors.has(category) && !hunterTagsCache[category]) loadSectorTags(category);
+      }, 4000);
+    }
     // 标签到位后，若该板块仍展开则刷新当前可见行（分页跳页后也生效）
     const el = document.getElementById("hunterBody");
     if (el && hunterOpenSectors.has(category)) {
