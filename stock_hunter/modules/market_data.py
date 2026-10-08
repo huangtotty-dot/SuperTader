@@ -20,6 +20,21 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 MARKET_PROGRESS = {"running": False, "phase": "", "done": 0, "total": 0, "msg": ""}
 
 
+def _df_to_kline_rows(df):
+    """provider 日线 DataFrame → 腾讯 fqkline 6 列形态 [[date,open,close,high,low,volume]]。
+    2026-10-08：ifzq 主机被 WAF 拦截后，改由 provider（GM/腾讯）供数，下游解析保持不变。"""
+    try:
+        if df is None or getattr(df, "empty", True):
+            return []
+        # 猎手评分只要 ~150 日；共享缓存有 800 根，只取尾部可省 4× 解析开销（2026-10-08）
+        if len(df) > 300:
+            df = df.tail(300)
+        return [[str(r.date)[:10], float(r.open), float(r.close), float(r.high), float(r.low),
+                 float(r.volume)] for r in df.itertuples(index=False)]
+    except Exception:
+        return []
+
+
 class MarketDataFetcher:
     """行情数据统一获取器 —— 强制网络查询，不使用本地缓存"""
 
@@ -282,7 +297,19 @@ class MarketDataFetcher:
         return pd.DataFrame(rows)
 
     def _fetch_kline_multi(self, symbol: str):
-        """腾讯日线 fqkline 多主机兜底拉取：WAF 会间歇性 501 拦截不同主机，返回首个有效 JSON。"""
+        """腾讯日线 fqkline 多主机兜底拉取：WAF 会间歇性 501 拦截不同主机，返回首个有效 JSON。
+
+        2026-10-08：实测 `ifzq.gtimg.cn` / `web.ifzq.gtimg.cn` **两台都被 WAF 501**（全池逐只
+        重试 ⇒ 974 只 4.7min 且 0 成功）。故改为：①先读**预取的 provider 批量结果**（GM history，
+        `_bulk_kline`，见 `_fetch_historical_tencent`）②两台 ifzq ③最后兜底单只 provider。
+        三者都拼成腾讯 fqkline 形态（6 列 [[date,open,close,high,low,volume]]），下游解析不变。
+        """
+        _c6 = symbol[-6:] if symbol[-6:].isdigit() else symbol
+        _bulk = getattr(self, "_bulk_kline", None)
+        if _bulk and _c6 in _bulk:
+            rows = _df_to_kline_rows(_bulk[_c6])
+            if rows:
+                return {"code": 0, "data": {symbol: {"qfqday": rows}}}
         headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
             'Referer': 'https://finance.qq.com/'
@@ -298,6 +325,15 @@ class MarketDataFetcher:
                     return data
             except Exception:
                 continue
+        # 兜底：统一 provider（GM 优先/腾讯兜底）
+        try:
+            from core.market_data import get_provider
+            _df = get_provider().daily(_c6, 1200)
+            rows = _df_to_kline_rows(_df)
+            if rows:
+                return {"code": 0, "data": {symbol: {"qfqday": rows}}}
+        except Exception:
+            pass
         return None
 
     def _fetch_historical_tencent(self, codes: List[str], date_str: str) -> tuple:
@@ -307,6 +343,33 @@ class MarketDataFetcher:
         target_date_str = date_str
         results = []
         failed = []
+        # 2026-10-08: 预批量取数。ifzq 两台都 501 ⇒ 逐只网络 974 次要 4.7min 且 0 成功。
+        # 优先读**本地日线缓存**（`t_io/cache/daily_kline/`，图表/预下载已铺 5000+ 只、零网络），
+        # 缺的再走 provider 批量（GM `history`，内部 900/批，days 控制在 200 以免超 GM 200k 行上限）。
+        self._bulk_kline = {}
+        self._bulk_from_cache = set()   # 来自本地缓存的码 → 值未变，省去回写 merge（见 fetch_one）
+        _c6map = {str(c): (str(c)[-6:] if str(c)[-6:].isdigit() else str(c)) for c in codes}
+        try:
+            import core.chart_cache as _cc
+            for _c, _c6 in _c6map.items():
+                if _c6 in self._bulk_kline:
+                    continue
+                _df = _cc.load_daily_display(_c6)
+                if _df is not None and not _df.empty:
+                    self._bulk_kline[_c6] = _df
+                    self._bulk_from_cache.add(_c6)
+            print(f"  [BULK] 本地日线缓存命中 {len(self._bulk_kline)}/{len(codes)} 只")
+        except Exception:
+            pass
+        _miss = [c6 for c6 in dict.fromkeys(_c6map.values()) if c6 not in self._bulk_kline]
+        if _miss:
+            try:
+                from core.market_data import get_provider
+                _got = get_provider().daily_many(_miss, days=200) or {}
+                self._bulk_kline.update(_got)
+                print(f"  [BULK] provider 批量补 {len(_got)}/{len(_miss)} 只")
+            except Exception as _e:
+                print(f"  [BULK] provider 批量失败: {str(_e)[:80]}")
 
         def fetch_one(code: str):
             for attempt in range(1, self.HISTORICAL_RETRIES + 1):
@@ -366,7 +429,9 @@ class MarketDataFetcher:
                     # ⇒ 算出来的 GO 列是昨天的。猎手本轮已经拿到了 150 天实时线，顺手回写即可。
                     # ⚠️ 只在当日写：历史日回写会把当天新数据挤掉（用 merge 而非覆盖，且不缩历史）。
                     from datetime import datetime as _dtm
-                    if str(target_date_str) == _dtm.now().strftime("%Y-%m-%d"):
+                    _c6 = code[-6:] if str(code)[-6:].isdigit() else str(code)
+                    if (str(target_date_str) == _dtm.now().strftime("%Y-%m-%d")
+                            and _c6 not in getattr(self, "_bulk_from_cache", set())):
                         try:
                             from core.market_data.tencent_provider import merge_daily_cache
                             merge_daily_cache(code, df)
