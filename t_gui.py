@@ -3914,7 +3914,11 @@ class Api:
     _BK_MAX_PCT = 8.0
     _BK_MIN_BARS = 30      # _detect_boxes 在 <30 根时静默返回 []，必须显式挡在前面
     _BK_SCAN_BARS = 200    # 取数窗口：_detect_boxes 只用 tail(150)，200 根足够且能开大 batch
-    _BK_BATCH = 900        # 配合 200 根 ≈ 180k 行，在 GM 实测 ~200k 行上限之内
+    # 2026-10-08：900 → 200。900 只×200 根 ≈ 18 万行，GM SDK 里 pandas 由 list-of-dicts 拼表 +
+    # 逐码 groupby 会**长时间持 GIL**，实测把 pywebview 主线程饿死（freeze 看门狗抓到主线程卡在
+    # evaluate_js、后台 `_scan_breakout→daily_many`）。降到 200 每次只 ~4 万行、GIL 持有缩 ~4.5×，
+    # 批间再显式让出，界面不再冻（代价：GM 调用次数变多、整轮慢一些，但在后台线程）。
+    _BK_BATCH = 200
 
     def _breakout_pool_codes(self):
         """扫描池 = watchlist_jiuyan.json 的**全部** 6 位码。
@@ -4031,6 +4035,7 @@ class Api:
                     state["found"] = len(breakouts)
                     state["stocks"] = list(breakouts)
                     state["no_data"] = no_data
+            _time_mod.sleep(0.05)   # 2026-10-08：批间显式让出，避免连续持 GIL 把主线程饿死
         breakouts.sort(key=lambda x: -(x.get("pct_above") or 0))
         return breakouts
 

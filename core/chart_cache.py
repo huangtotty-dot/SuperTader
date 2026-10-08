@@ -341,7 +341,7 @@ def _dedup_valid(codes) -> list:
 # ---------------------------------------------------------------------------
 # 盘后预下载编排
 # ---------------------------------------------------------------------------
-def prefetch_daily(codes, days=250, now=None, skip_current=True, batch=600,
+def prefetch_daily(codes, days=250, now=None, skip_current=True, batch=200,
                    sleep_s=0.3, retries=2, retry_pause=3.0) -> dict:
     """批量下载日线并 merge 入缓存。返回 {requested, got, skipped, failed}。不抛。
 
