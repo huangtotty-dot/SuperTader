@@ -89,6 +89,8 @@ HUNTER_RUN_STATE = {"date": None, "running": False, "result": None}
 HUNTER_AUTORUN_SLOTS = ("10:30", "11:30", "13:30", "14:30")
 _HUNTER_AUTORUN_STATE = {"date": None, "done": set(), "started": False}
 _CHART_PREFETCH_STATE = {"started": False}  # 盘后 K线预下载调度（2026-10-04）
+# 主线程(js_api)心跳：高频轮询方法每次更新；看门狗发现停跳 ⇒ 判界面卡死并落线程栈（2026-10-08）
+_GUI_HB = {"ts": 0.0}
 # 建仓推送的「当日去重」状态：自动运行只在候选集变化时推，避免一天重复刷屏
 _HUNTER_BUILD_PUSHED_FP = STATE_DIR / "hunter_build_pushed.json"
 ROTATION_RUN_STATE = {"running": False, "error": None}
@@ -1462,6 +1464,7 @@ class Api:
 
     def load_console(self, date, since=0):
         """增量读日志。since=字节偏移，返回新增行+新偏移。"""
+        _GUI_HB["ts"] = _time_mod.time()   # 前端 2s 轮询打点：看门狗据此判界面是否卡死
         fp = LOGS_DIR / f"t_trader_sys_{date}.log"
         out = {"lines": [], "offset": since, "exists": fp.exists(), "eof": True}
         if not fp.exists():
@@ -4972,6 +4975,7 @@ class Api:
     # ---------- 盘中实时载荷（仅今天） ----------
     def load_live(self, date):
         """decision_trace 尾部 + intraday_state + 大盘盘中尾部。"""
+        _GUI_HB["ts"] = _time_mod.time()   # 10s 轮询打点
         out = {"signals": [], "intraday_state": {}, "market_intraday": []}
 
         fp = TRACES / f"decision_trace_{date}.jsonl"
@@ -6031,6 +6035,37 @@ def start_chart_prefetch_scheduler(api):
     _th.Thread(target=_loop, daemon=True).start()
 
 
+def _start_gui_freeze_watchdog(threshold_s=12.0):
+    """界面卡死看门狗（2026-10-08 需求①）：js_api 全在 pywebview 主线程串行执行，任何长阻塞都会冻界面。
+    高频轮询（`load_console` 2s / `load_live` 10s）每次给 `_GUI_HB` 打点；本守护线程发现心跳停
+    >threshold_s 秒即判「卡死」，把**全部线程栈**追加到 `t_io/logs/gui_freeze.log`
+    （含主线程当前卡在哪一帧），供后续持续改进。单次卡死最多 30s 记一次，避免刷屏。"""
+    import faulthandler
+    log_fp = BASE / "t_io" / "logs" / "gui_freeze.log"
+
+    def _loop():
+        _last = 0.0
+        while True:
+            try:
+                _time_mod.sleep(2.0)
+                _ts = _GUI_HB.get("ts") or 0.0
+                _now = _time_mod.time()
+                if _ts and (_now - _ts) > threshold_s and (_now - _last) > 30:
+                    _last = _now
+                    try:
+                        log_fp.parent.mkdir(parents=True, exist_ok=True)
+                        with open(log_fp, "a", encoding="utf-8") as f:
+                            f.write(f"\n===== 疑似界面卡死 {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+                                    f"（主线程心跳停 {_now - _ts:.0f}s）线程栈 =====\n")
+                            faulthandler.dump_traceback(file=f, all_threads=True)
+                    except Exception:
+                        pass
+            except Exception:
+                pass
+
+    _th.Thread(target=_loop, name="gui-freeze-watchdog", daemon=True).start()
+
+
 def start_hunter_autoscheduler(api):
     """启动「猎手定时自动运行」守护线程（2026-09-21 owner 需求）。
 
@@ -6079,6 +6114,7 @@ if __name__ == "__main__":
 
     api = Api()
     start_hunter_autoscheduler(api)   # 开盘后每小时自动跑「今日数据」
+    _start_gui_freeze_watchdog()      # 卡死看门狗：心跳停 >12s → 落线程栈到 t_io/logs/gui_freeze.log
     start_chart_prefetch_scheduler(api)   # 盘后 15:10 预下载 K线缓存（小池 payload+分钟、全池日线）
     # 启动预热（均为后台 daemon 线程，不阻塞启动；失败静默）：
     #  · 持仓图表：低并发(3)，消除 load_ob_analysis 的 14s 冷启动阻塞

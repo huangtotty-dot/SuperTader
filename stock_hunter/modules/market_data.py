@@ -371,6 +371,21 @@ class MarketDataFetcher:
             except Exception as _e:
                 print(f"  [BULK] provider 批量失败: {str(_e)[:80]}")
 
+        # 2026-10-08 owner：**盘中实时**——批量快照 patch/append 当日 forming bar。
+        # 本地缓存/批量取数的最后一根可能是隔夜或较早的收盘价；不补的话猎手盘中并非实时。
+        self._live_snap = {}
+        try:
+            from datetime import datetime as _dtlive
+            if str(target_date_str) == _dtlive.now().strftime("%Y-%m-%d"):
+                from core.market_data.tencent_provider import TencentProvider as _TP
+                _sn = _TP().snapshot_auction(list(dict.fromkeys(_c6map.values()))) or {}
+                for _c, _v in _sn.items():
+                    if _v.get("ts_date") == str(target_date_str):
+                        self._live_snap[_c] = _v
+                print(f"  [LIVE] 盘中快照 patch {len(self._live_snap)}/{len(_c6map)} 只")
+        except Exception as _e:
+            print(f"  [LIVE] 快照失败(忽略): {str(_e)[:80]}")
+
         def fetch_one(code: str):
             for attempt in range(1, self.HISTORICAL_RETRIES + 1):
                 try:
@@ -422,6 +437,30 @@ class MarketDataFetcher:
                         continue
 
                     df = pd.DataFrame(parsed).sort_values('date').reset_index(drop=True)
+                    # 2026-10-08 需求②：盘中实时——用批量快照 patch 当日 bar（或补一根）
+                    _c6k = code[-6:] if str(code)[-6:].isdigit() else str(code)
+                    _snap = (getattr(self, "_live_snap", {}) or {}).get(_c6k)
+                    if _snap:
+                        _spx = float(_snap.get("price") or 0)
+                        if _spx > 0:
+                            _shi = float(_snap.get("high") or _spx)
+                            _slo = float(_snap.get("low") or _spx)
+                            _svol = float(_snap.get("vol_hand") or 0) or 0.0
+                            _u = 1.0 if str(code).startswith("688") else 100.0
+                            if str(df["date"].iloc[-1])[:10] == str(target_date_str):
+                                _i = df.index[-1]
+                                df.at[_i, "close"] = _spx
+                                df.at[_i, "high"] = max(float(df.at[_i, "high"]), _shi)
+                                df.at[_i, "low"] = min(float(df.at[_i, "low"]), _slo)
+                                if _svol:
+                                    df.at[_i, "volume"] = _svol
+                                df.at[_i, "amount"] = (_shi + _slo + _spx) / 3.0 * float(df.at[_i, "volume"]) * _u
+                            else:
+                                df = pd.concat([df, pd.DataFrame([{
+                                    "date": str(target_date_str), "open": float(_snap.get("open") or _spx),
+                                    "close": _spx, "high": _shi, "low": _slo, "volume": _svol,
+                                    "amount": (_shi + _slo + _spx) / 3.0 * _svol * _u,
+                                }])], ignore_index=True)
                     # 2026-09-29: **当日**运行时把这次拉到的实时日线并入共享缓存。
                     # 为什么：GUI「建仓符合度」(_hunter_build_conformance) 为省资源是**零网络**
                     # 直接读 t_io/cache/daily_kline/，而那些缓存对全池多数票是陈旧的
