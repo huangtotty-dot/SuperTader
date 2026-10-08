@@ -431,6 +431,8 @@ def _limit_clamp_should_skip(context, code, sym, side, qty, price, now, where):
 # equity_daily 的清退判定以「最后一个含 sell 动作的 unwind_report」为准（37e8ce2）。
 _PROBE_UNWIND_LEFT = {"SZSE.300166": 8400, "SHSE.603629": 1000}
 _PROBE_UNWIND_DONE_DATE = None
+_UNWIND_PLACED_TODAY = None   # 2026-10-08 复盘实证：on_bar 是逐票回调，局部变量跨回调失效，
+                              # 清退挂单日 align 须等到 09:32（持久标记，不能用调用处局部量）
 
 
 def _maybe_unwind_probe_leftover(context, today, t) -> bool:
@@ -441,7 +443,7 @@ def _maybe_unwind_probe_leftover(context, today, t) -> bool:
     fail-closed：只卖 _PROBE_UNWIND_LEFT 清单内的票、只卖 available；
     持仓查询失败时不置 done、不写报告（下一根 bar 重试），避免误报"已清退"。
     """
-    global _PROBE_UNWIND_DONE_DATE
+    global _PROBE_UNWIND_DONE_DATE, _UNWIND_PLACED_TODAY
     if _PROBE_UNWIND_DONE_DATE == today or t < dtime(9, 31):
         return False
     try:
@@ -486,6 +488,7 @@ def _maybe_unwind_probe_leftover(context, today, t) -> bool:
                 order_type=OrderType_Market, position_effect=PositionEffect_Close))
             rep["actions"].append({"symbol": sym, "action": "sell", "qty": q})
             placed = True
+            _UNWIND_PLACED_TODAY = today
             print(f"[UNWIND] SELL {sym} x{q} 已委托（探针遗留清退）")
             _audit_write({"event": "probe_unwind", "symbol": sym, "qty": q,
                           "time": str(now)})
@@ -1962,7 +1965,10 @@ def _code_to_gm(code: str) -> str:
 # `MARKET_PROXY_CODES` 与 Stage14/18 的验证）。只在「OGR 可能生效」时才建，免得白订阅 20 只票：
 # live 由 `PARAMS['open_gap_reversal_live_enabled']` 决定，回测由 `SUPERTRADER_OGR_BACKTEST` 决定。
 # 回测驱动 `backtest_holdings.py --mkt-proxy` 会在此之后覆盖（它早于 run() 赋值）⇒ 仍是同源。
-if _OGR_BACKTEST_ENABLE or bool(PARAMS.get("open_gap_reversal_live_enabled", False)):
+# 2026-10-08 复盘实证：条件漏了 **shadow 开关**——L3 影子期（shadow=on/live=off）代理池为空
+# ⇒ evaluate_maps「代理池太薄 fail-closed」⇒ 全天 161 条 ogr_shadow_none 零落盘（D1 失明）。
+if (_OGR_BACKTEST_ENABLE or bool(PARAMS.get("open_gap_reversal_live_enabled", False))
+        or bool(PARAMS.get("open_gap_reversal_shadow_enabled", False))):
     try:
         MARKET_PROXY = {c: _code_to_gm(c)
                         for c in (_OGR_GLUE.proxy_codes() if _OGR_GLUE else [])
@@ -2428,8 +2434,11 @@ def on_bar(context, bars):
         print(f"[UNWIND] 失败（不阻断主循环）: {_uwe}")
 
     # ── 开盘强制对齐（2026-09-14 owner 裁决）：每个交易日一次，把实际持仓拉到目标底仓 ──
+    # 2026-10-08 复盘实证：清退挂单日 align 必须等到 09:32——on_bar 逐票回调使
+    # 调用处局部标记同秒失效，600584 因此被现金封顶只买到 400/1200；改用模块级持久标记。
     global _OPEN_ALIGN_DONE_DATE
-    if (not _unwind_placed and t >= dtime(9, 31) and _OPEN_ALIGN_DONE_DATE != today
+    if (not _unwind_placed and not (_UNWIND_PLACED_TODAY == today and t < dtime(9, 32))
+            and t >= dtime(9, 31) and _OPEN_ALIGN_DONE_DATE != today
             and getattr(context, "mode", None) == MODE_LIVE):
         _OPEN_ALIGN_DONE_DATE = today
         try:
