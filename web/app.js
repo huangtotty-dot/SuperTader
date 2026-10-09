@@ -4011,7 +4011,10 @@ function renderOB(ob) {
     const dvTxt = dv.count ? [
       dv.macd ? "MACD" : "", dv.rsi ? "RSI" : "", dv.kdj ? "KDJ" : "", dv.vol ? "量价" : ""
     ].filter(Boolean).join("/") : "无";
-    return `<tr ondblclick="openStockChart('${esc(s.code)}','${esc(s.name)}')" style="cursor:pointer" title="双击看K线">
+    // 2026-10-09 owner：按**是否破5日线**给行进背景色（破线=红底，便于一眼扫风险）
+    const _obBg = ((s.tags || []).some(t => (t.label || "") === "破5日线"))
+      ? "background:rgba(248,81,73,.10);" : "";
+    return `<tr ondblclick="openStockChart('${esc(s.code)}','${esc(s.name)}')" style="cursor:pointer;${_obBg}" title="双击看K线">
       <td>${esc(s.name)} <span class="mono cell-dim">${esc(s.code)}</span></td>
       <td class="num">${fmt(s.price, 2)}</td>
       <td>${trendTxt}</td>

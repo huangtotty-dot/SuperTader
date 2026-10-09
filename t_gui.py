@@ -1866,6 +1866,7 @@ class Api:
             d = h["period_data"]["daily"]
             # 技术标签（2026-10-07）：与建仓表同口径（复用 `_stock_tags_from_df`）。用已缓存的
             # 日线 payload 重建 df，**零额外网络**；标签口径/顺序与建仓表完全一致。
+            _live_close = None
             try:
                 import pandas as _pd
                 _tdf = _pd.DataFrame({
@@ -1874,6 +1875,16 @@ class Api:
                     "low": [x[2] for x in d["ohlc"]], "high": [x[3] for x in d["ohlc"]],
                     "volume": [float(v) for v in d["volume"]],
                 })
+                # 2026-10-09: 图表**内存缓存盘中最多 15 分钟旧** ⇒ 用**实时快照**（load_quotes 每 10s 的
+                # 批量快照）校正当日那根，否则标签/现价会停在旧价（实测 600362 价已回 MA5 上方、
+                # 标签仍显示 15 分钟前的「破5日线」）。零额外网络；非当日/无快照则原样。
+                _live = self._today_forming_bar(base_code, allow_network=False)
+                if _live and str(_live["date"]) == str(_tdf["date"].iloc[-1])[:10]:
+                    _li = _tdf.index[-1]
+                    _tdf.at[_li, "close"] = float(_live["close"])
+                    _tdf.at[_li, "high"] = max(float(_tdf.at[_li, "high"]), float(_live["high"]))
+                    _tdf.at[_li, "low"] = min(float(_tdf.at[_li, "low"]), float(_live["low"]))
+                    _live_close = float(_live["close"])
                 _tags = self._stock_tags_from_df(_tdf, base_code).get("tags", [])
             except Exception:
                 _tags = []
@@ -1914,7 +1925,7 @@ class Api:
             cur_rsi = rsi[-1] if rsi and rsi[-1] is not None else 0
             cur_j = j_arr[-1]
             cur_cci = cci_arr[-1] or 0
-            cur_close = closes[-1]
+            cur_close = _live_close if _live_close else closes[-1]   # 现价优先实时快照（见上方校正）
             cur_boll = boll_up[-1] if boll_up and boll_up[-1] is not None else 0
             ob = {
                 "rsi": bool(cur_rsi > 70),
