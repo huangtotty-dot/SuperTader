@@ -6,7 +6,7 @@
     "pool": "both",
     "qty": 0,
     "cost": 0.928,
-    "base": 84500,
+    "base": 0,
     "pre_close": 0.949
   },
   "600481": {
@@ -36,7 +36,7 @@
     "pool": "both",
     "qty": 0,
     "cost": 92.0989,
-    "base": 900,
+    "base": 0,
     "pre_close": 86.98
   },
   "600176": {
@@ -166,7 +166,7 @@
     "pool": "both",
     "qty": 0,
     "cost": 205.74,
-    "base": 200,
+    "base": 0,
     "pre_close": 187.915
   },
   "300456": {
