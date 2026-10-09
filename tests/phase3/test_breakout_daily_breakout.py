@@ -256,5 +256,66 @@ class TestBjDegrade(unittest.TestCase):
         self.assertGreaterEqual(r["high"], r["close"])
 
 
+class TestScanFetchFailure(unittest.TestCase):
+    """2026-10-09 事故：整池取数失败被当成"当日 0 突破"。锁定"失败不可信"判据。"""
+
+    def _patch_provider(self, fake):
+        from core.market_data import facade as _fd
+        self._orig_gp = _fd.get_provider
+        _fd.get_provider = lambda: fake
+
+    def tearDown(self):
+        if hasattr(self, "_orig_gp"):
+            from core.market_data import facade as _fd
+            _fd.get_provider = self._orig_gp
+
+    def test_整池无帧判取数失败(self):
+        class _Fake:
+            def daily_many(self, codes, days=0):
+                return {}
+        self._patch_provider(_Fake())
+        import t_gui
+        st = {}
+        out = t_gui.Api()._scan_breakout(["600000", "000001"], st, "2026-10-09")
+        self.assertEqual(out, [])
+        self.assertTrue(st.get("fetch_failed"), "整池无帧必须判取数失败")
+        self.assertEqual(st.get("ok"), 0)
+        self.assertEqual(st.get("rest_no_data"), 2)
+        self.assertEqual(st.get("bj_no_data"), 0)
+
+    def test_有帧但无当日bar判取数失败(self):
+        import pandas as pd
+        df = pd.DataFrame({"date": ["2026-10-08"], "open": [1.0], "high": [1.0],
+                           "low": [1.0], "close": [1.0], "volume": [1.0]})
+
+        class _Fake:
+            def daily_many(self, codes, days=0):
+                return {c: df.copy() for c in codes}
+        self._patch_provider(_Fake())
+        import t_gui
+        st = {}
+        t_gui.Api()._scan_breakout(["600000"], st, "2026-10-09")
+        self.assertEqual(st.get("stale"), 1, "有历史无当日 bar 应计 stale")
+        self.assertEqual(st.get("ok"), 0)
+        self.assertTrue(st.get("fetch_failed"))
+
+    def test_北交所缺帧不误判为非北交所失败(self):
+        import pandas as pd
+        df = pd.DataFrame({"date": ["2026-10-09"], "open": [1.0], "high": [1.0],
+                           "low": [1.0], "close": [1.0], "volume": [1.0]})
+
+        class _Fake:
+            def daily_many(self, codes, days=0):
+                return {"600000": df.copy()}   # 北交所 430047 缺
+        self._patch_provider(_Fake())
+        import t_gui
+        st = {}
+        t_gui.Api()._scan_breakout(["600000", "430047"], st, "2026-10-09")
+        self.assertEqual(st.get("bj_no_data"), 1)
+        self.assertEqual(st.get("rest_no_data"), 0)
+        self.assertFalse(st.get("fetch_failed"),
+                         "仅北交所缺帧（非北交所有当日 bar）不得判为取数失败")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

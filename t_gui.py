@@ -4219,6 +4219,242 @@ class Api:
                 return dict(cur)
         return {"status": "idle", "date": today, "total": 0, "done": 0, "found": 0, "stocks": []}
 
+    # ---------- 全市场「刚刚站上5日线」扫描（2026-10-09） ----------
+    # 口径复用 core/position_builder.check_ma_break 的 reclaim5（只做「隔夜回站」）：
+    #   basis=截至昨日的收盘；prev_MA5=mean(basis[-5:])；cur_MA5=(sum(basis[-4:])+price)/5；
+    #   reclaim5 = prev_close < prev_MA5 and price > cur_MA5。
+    # 取数走 daily_many 批量帧（当日 forming bar 的 close=最新价），零逐只调用；池沿用突破扫描的全市场池。
+    _RC_BARS = 30
+    _RC_BATCH = 200
+
+    def _reclaim_probe_one(self, code, df, date=None):
+        """单只「刚刚站上5日线」判定，命中返回 dict，否则 None。"""
+        import numpy as np
+        if df is None or df.empty:
+            return None
+        target = str(date) if date else datetime.now().strftime("%Y-%m-%d")
+        df = df[df["date"].astype(str) <= target]
+        if df.empty or str(df["date"].iloc[-1]) != target:
+            return None                       # 交易日闸：末根必须=目标日
+        closes = df["close"].astype(float).values
+        if len(closes) < 6:
+            return None
+        price = float(closes[-1])
+        basis = closes[:-1]                   # 截至昨日
+        if len(basis) < 5 or price <= 0:
+            return None
+        prev_close = float(basis[-1])
+        prev_ma5 = float(np.mean(basis[-5:]))
+        cur_ma5 = float((np.sum(basis[-4:]) + price) / 5.0)
+        if not (prev_close < prev_ma5 and price > cur_ma5):
+            return None
+        return {"price": round(price, 3), "prev_close": round(prev_close, 3),
+                "ma5_prev": round(prev_ma5, 3), "ma5": round(cur_ma5, 3),
+                "dev5_pct": round((price - cur_ma5) / cur_ma5 * 100, 2) if cur_ma5 else None}
+
+    def _reclaim_disk_path(self, today):
+        return BASE / "t_io" / "cache" / f"reclaim_{today}.json"
+
+    def _rc_cache_get(self, key):
+        with _BREAKOUT_LOCK:
+            return (getattr(self, "_reclaim_cache", None) or {}).get(key)
+
+    def _rc_cache_put(self, key, val):
+        with _BREAKOUT_LOCK:
+            if not hasattr(self, "_reclaim_cache"):
+                self._reclaim_cache = {}
+            self._reclaim_cache[key] = val
+
+    def _scan_reclaim(self, codes, state, date=None):
+        """全市场扫描「刚刚站上5日线」。state 非空时更新进度（分类同突破扫描）。"""
+        jy = _load_json(HUNTER_DIR / "watchlist_jiuyan.json", {})
+        from core.market_data.facade import get_provider
+        from core.market_data.codec import market_of
+        hits = []
+        total = len(codes)
+        dt_target = str(date) if date else datetime.now().strftime("%Y-%m-%d")
+        rest_total = sum(1 for c in codes if market_of(c) != "BJ")
+        no_data = rest_missing = bj_missing = stale = ok = 0
+        BATCH = self._RC_BATCH
+        for i in range(0, total, BATCH):
+            chunk = codes[i:i + BATCH]
+            try:
+                frames = get_provider().daily_many(chunk, days=self._RC_BARS)
+            except Exception as e:      # 兜底：单批异常绝不终止整轮
+                print(f"[WARN] reclaim daily_many 失败({len(chunk)}只): "
+                      f"{type(e).__name__}: {str(e)[:80]}", flush=True)
+                frames = {}
+            for code in chunk:
+                fr = frames.get(code)
+                if fr is None or getattr(fr, "empty", True):
+                    no_data += 1
+                    if market_of(code) == "BJ":
+                        bj_missing += 1
+                    else:
+                        rest_missing += 1
+                    continue
+                _sl = fr[fr["date"].astype(str) <= dt_target]
+                if _sl.empty or str(_sl["date"].iloc[-1]) != dt_target:
+                    stale += 1
+                    continue
+                ok += 1
+                hit = self._reclaim_probe_one(code, fr, date)
+                if not hit:
+                    continue
+                info = jy.get(code) if isinstance(jy.get(code), dict) else None
+                nm = (info or {}).get("name", code)
+                concepts = _stock_concepts(info)
+                csrc = "offline" if concepts else "none"
+                if not concepts:
+                    concepts = _stock_concepts(
+                        info, em_boards=_em_boards_disk_cached(self, code))
+                    if concepts:
+                        csrc = "em"
+                hits.append({"code": code, "name": nm,
+                             "industry": _stock_industry(info),
+                             "concepts": concepts, "concepts_source": csrc,
+                             "tags": [{"label": "站上5日线", "color": "up"}], **hit})
+            if state is not None:
+                with _BREAKOUT_LOCK:
+                    state.update({"done": min(i + BATCH, total), "found": len(hits),
+                                  "stocks": list(hits), "no_data": no_data,
+                                  "rest_no_data": rest_missing, "bj_no_data": bj_missing,
+                                  "stale": stale, "ok": ok})
+            _time_mod.sleep(0.05)
+        hits.sort(key=lambda x: -(x.get("dev5_pct") if x.get("dev5_pct") is not None else -1e9))
+        fetch_failed = total > 0 and (ok == 0
+                                      or (rest_total > 0 and rest_missing >= 0.5 * rest_total))
+        if state is not None:
+            with _BREAKOUT_LOCK:
+                state.update({"done": total, "found": len(hits), "stocks": list(hits),
+                              "no_data": no_data, "rest_no_data": rest_missing,
+                              "bj_no_data": bj_missing, "stale": stale, "ok": ok,
+                              "fetch_failed": bool(fetch_failed)})
+        return hits
+
+    def load_reclaim_stocks(self, date=None):
+        """同步全市场扫描「刚刚站上5日线」。结果缓存内存+磁盘（按日）；取数失败不落盘。"""
+        today = str(date) if date else datetime.now().strftime("%Y-%m-%d")
+        cache_key = "reclaim_" + today
+        hit = self._rc_cache_get(cache_key)
+        if hit is not None:
+            return hit
+        disk_fp = self._reclaim_disk_path(today)
+        if disk_fp.exists():
+            disk = _load_json(disk_fp, None)
+            if disk and isinstance(disk, dict) and "stocks" in disk:
+                self._rc_cache_put(cache_key, disk)
+                return disk
+        codes = self._breakout_pool_codes()
+        if not codes:
+            return {"stocks": [], "count": 0}
+        st = {}
+        hits = self._scan_reclaim(codes, st, today)
+        result = _clean({"date": today, "stocks": hits, "count": len(hits),
+                         "no_data": st.get("no_data", 0),
+                         "rest_no_data": st.get("rest_no_data", 0),
+                         "bj_no_data": st.get("bj_no_data", 0),
+                         "stale": st.get("stale", 0), "ok": st.get("ok", 0),
+                         "fetch_failed": bool(st.get("fetch_failed", False))})
+        if not result.get("fetch_failed"):
+            self._rc_cache_put(cache_key, result)
+            try:
+                disk_fp.write_text(json.dumps(result, ensure_ascii=False), encoding="utf-8")
+            except Exception:
+                pass
+        return result
+
+    def start_reclaim_scan(self, force=False, date=None):
+        """启动后台「刚刚站上5日线」全市场扫描（幂等：缓存命中→done；扫描中→进度）。
+        force=True 绕开该日缓存强制重扫（前端「🔄 扫描该日」）。"""
+        today = str(date) if date else datetime.now().strftime("%Y-%m-%d")
+        cache_key = "reclaim_" + today
+        if not force:
+            hit = self._rc_cache_get(cache_key)
+            if hit is not None:
+                return {"status": "done", "date": today, "total": 0, "done": 0,
+                        "found": hit.get("count", 0), "stocks": hit.get("stocks", []),
+                        "no_data": hit.get("no_data", 0),
+                        "rest_no_data": hit.get("rest_no_data", 0),
+                        "bj_no_data": hit.get("bj_no_data", 0),
+                        "stale": hit.get("stale", 0), "ok": hit.get("ok", 0),
+                        "fetch_failed": bool(hit.get("fetch_failed", False))}
+            disk_fp = self._reclaim_disk_path(today)
+            if disk_fp.exists():
+                disk = _load_json(disk_fp, None)
+                if disk and isinstance(disk, dict) and "stocks" in disk:
+                    self._rc_cache_put(cache_key, disk)
+                    return {"status": "done", "date": today, "total": 0, "done": 0,
+                            "found": disk.get("count", 0), "stocks": disk.get("stocks", []),
+                            "no_data": disk.get("no_data", 0),
+                            "rest_no_data": disk.get("rest_no_data", 0),
+                            "bj_no_data": disk.get("bj_no_data", 0),
+                            "stale": disk.get("stale", 0), "ok": disk.get("ok", 0),
+                            "fetch_failed": bool(disk.get("fetch_failed", False))}
+
+        with _BREAKOUT_LOCK:
+            cur = getattr(self, "_reclaim_scan", None)
+            if cur and cur.get("status") == "running":
+                return dict(cur)
+            codes = self._breakout_pool_codes()
+            if not codes:
+                return {"status": "done", "total": 0, "done": 0, "found": 0, "stocks": []}
+            state = {"status": "running", "date": today, "total": len(codes), "done": 0, "found": 0,
+                     "stocks": [], "no_data": 0}
+            self._reclaim_scan = state
+            if force:
+                if hasattr(self, "_reclaim_cache"):
+                    self._reclaim_cache.pop(cache_key, None)
+                try:
+                    self._reclaim_disk_path(today).unlink(missing_ok=True)
+                except Exception:
+                    pass
+
+        def run():
+            try:
+                hits = self._scan_reclaim(codes, state, today)
+                result = _clean({"date": today, "stocks": hits, "count": len(hits),
+                                 "no_data": state.get("no_data", 0),
+                                 "rest_no_data": state.get("rest_no_data", 0),
+                                 "bj_no_data": state.get("bj_no_data", 0),
+                                 "stale": state.get("stale", 0), "ok": state.get("ok", 0),
+                                 "fetch_failed": bool(state.get("fetch_failed", False))})
+                if not result.get("fetch_failed"):
+                    self._rc_cache_put(cache_key, result)
+                    try:
+                        self._reclaim_disk_path(today).write_text(
+                            json.dumps(result, ensure_ascii=False), encoding="utf-8")
+                    except Exception:
+                        pass
+                with _BREAKOUT_LOCK:
+                    state.update({"status": "done", "done": len(codes),
+                                  "found": len(hits), "stocks": hits})
+            except Exception as e:
+                with _BREAKOUT_LOCK:
+                    state.update({"status": "error", "error": str(e)})
+
+        threading.Thread(target=run, daemon=True).start()
+        return dict(state)
+
+    def get_reclaim_scan(self, date=None):
+        """轮询后台「刚刚站上5日线」扫描进度。done 后返回完整结果（含缓存命中）。"""
+        today = str(date) if date else datetime.now().strftime("%Y-%m-%d")
+        cache_key = "reclaim_" + today
+        hit = self._rc_cache_get(cache_key)
+        if hit is not None:
+            return {"status": "done", "date": today, "total": 0, "done": 0,
+                    "found": hit.get("count", 0), "stocks": hit.get("stocks", []),
+                    "no_data": hit.get("no_data", 0),
+                    "rest_no_data": hit.get("rest_no_data", 0),
+                    "bj_no_data": hit.get("bj_no_data", 0),
+                    "stale": hit.get("stale", 0), "ok": hit.get("ok", 0),
+                    "fetch_failed": bool(hit.get("fetch_failed", False))}
+        with _BREAKOUT_LOCK:
+            cur = getattr(self, "_reclaim_scan", None)
+            if cur and cur.get("date") == today:
+                return dict(cur)
+        return {"status": "idle", "date": today, "total": 0, "done": 0, "found": 0, "stocks": []}
+
     # ---------- 选股猎手历史 ----------
     def available_hunter_dates(self):
         """返回可选日期（降序）：heat history 日期 + 最近 120 个工作日，支持扫描任意日期。"""

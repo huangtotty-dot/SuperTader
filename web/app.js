@@ -2835,7 +2835,7 @@ function tagBadge(t) {
     up: "t-long", down: "t-short", warn: "approach", neutral: "chop",
   };
   const iconMap = {
-    "上行": "↗", "下行": "↘", "震荡": "→",
+    "上行": "↗", "下行": "↘", "震荡": "→", "站上5日线": "⬆️",
     "箱体上沿": "🟠", "箱体下沿": "🔵", "箱体内部": "⚪",
     "向上突破": "🚀", "完全突破": "🔺", "跌破下沿": "⚠️", "筑底": "🧱", "筑顶": "⛰️",
     "顶背离": "⛔", "底背离": "✅", "超买": "⚠", "超卖": "📉",
@@ -3121,6 +3121,7 @@ async function regenerateHunter() {
   await loadHunterHistory(date);
   // 仅重新生成"今日"时同步扫描突破箱体（历史日期后端也按最新日线扫，会误导）
   if (!date || date === todayStr()) loadBreakoutStocks(true);
+  if (!date || date === todayStr()) loadReclaimStocks(true);
   if (btn) { btn.disabled = false; btn.textContent = "🔄 重新生成"; }
 }
 
@@ -3401,6 +3402,7 @@ async function loadHunter(force) {
     }
     // 突破箱体扫描（后台并行，后端按日缓存）；**历史日不自动扫**，由用户在卡片里选日期手动扫
     if (!h.date || h.date === todayStr()) loadBreakoutStocks(true);
+    if (!h.date || h.date === todayStr()) loadReclaimStocks(true);
   } catch (e) {
     el.innerHTML = `<div class="empty">加载失败: ${esc(e.message)}</div>`;
   }
@@ -3425,7 +3427,7 @@ async function loadBreakoutStocks(force, date) {
     const st = await apiCall("start_breakout_scan", !!force, _date);
     if (st.status === "done") {
       renderBreakout(st);
-      breakoutLoaded = true; breakoutLoadedDate = _date;
+      if (!st.fetch_failed) { breakoutLoaded = true; breakoutLoadedDate = _date; }  // 取数失败→不记已加载，允许自动重试
       if (btn) { btn.disabled = false; btn.textContent = "🔄 扫描该日"; }
       return;
     }
@@ -3454,7 +3456,7 @@ async function pollBreakoutScan(body, btn, date) {
     try { st = await apiCall("get_breakout_scan", date); } catch (e) { break; }
     if (st.status === "done") {
       renderBreakout(st);
-      breakoutLoaded = true;
+      if (!st.fetch_failed) breakoutLoaded = true;   // 取数失败→不记已加载，允许自动重试
       if (btn) { btn.disabled = false; btn.textContent = "🔄 扫描该日"; }
       return;
     }
@@ -3491,12 +3493,30 @@ function renderBreakout(b) {
   const body = document.getElementById("hunterBreakoutBody");
   if (!body) return;
   const stocks = (b && b.stocks) || [];
-  const nd = (b && b.no_data) || 0;
+  const restNd = (b && b.rest_no_data) || 0;   // 非北交所无日线（取数失败/未就绪）
+  const bjNd = (b && b.bj_no_data) || 0;       // 北交所无日线（环境限制）
+  const stale = (b && b.stale) || 0;           // 有历史但无当日 bar
   const meta = document.getElementById("hunterBreakoutMeta");
-  if (meta) meta.textContent = `${b && b.date ? '· ' + esc(b.date) + ' ' : ''}· 共 ${stocks.length} 只` + (nd ? ` · ${nd} 只无日线数据` : "");
+  const _parts = [];
+  if (b && b.date) _parts.push('· ' + esc(b.date));
+  _parts.push(`· 共 ${stocks.length} 只`);
+  if (restNd) _parts.push(`· <span class="warn">⚠ ${restNd} 只取数失败</span>`);
+  if (bjNd) _parts.push(`· ${bjNd} 只北交所无日线`);
+  if (meta) meta.innerHTML = _parts.join(" ");
+  // 整池不可用（取数失败/非交易日/行情未就绪）⇒ **绝不显示"暂无突破"**（那是假 0）
+  if (b && b.fetch_failed) {
+    const why = restNd > 0
+      ? `非北交所 ${restNd} 只无日线 —— 掘金终端可能未连接/行情未就绪`
+      : `全池 ${stale} 只无当日行情 —— 可能非交易日或当日行情未就绪`;
+    body.innerHTML = `<div class="empty" style="color:var(--warn,#d29922)">
+      ⚠ 本次扫描**取数失败，结果不可信**：${esc(why)}<br>
+      <span class="cell-dim" style="font-size:11px">已跳过判定且未缓存；点「🔄 扫描该日」重试（节假日/盘前无当日行情属正常）。</span></div>`;
+    return;
+  }
   if (!stocks.length) {
-    body.innerHTML = '<div class="empty">今日池内暂无「当日有效突破」的股票'
-      + (nd ? `<div class="cell-dim" style="font-size:10px;margin-top:4px">${nd} 只无日线数据（北交所在当前环境取不到日线，已跳过）</div>` : "")
+    body.innerHTML = '<div class="empty">池内暂无「当日有效突破」的股票'
+      + (bjNd ? `<div class="cell-dim" style="font-size:10px;margin-top:4px">${bjNd} 只北交所股在当前环境取不到日线，已跳过</div>` : "")
+      + (restNd ? `<div class="cell-dim" style="font-size:10px;margin-top:2px;color:var(--warn,#d29922)">另有 ${restNd} 只非北交所取数失败，可能漏报</div>` : "")
       + "</div>";
     return;
   }
@@ -3538,7 +3558,8 @@ function renderBreakout(b) {
   </tr></thead>${bodyHtml}</table>
   <div class="cell-dim" style="font-size:10px;margin-top:3px">共 ${gkeys.length} 个行业 · 组按只数降序 · 组内按超出幅度降序 · 双击看技术分析</div>
   <div class="cell-dim" style="font-size:10px;margin-top:2px">概念为离线口径（韭研概念 + 东财板块概念段），仅覆盖约一半股票；无概念的显示「—」，双击看技术分析可点「📋 公司资料」拉东财全量板块</div>
-  ${nd ? `<div class="cell-dim" style="font-size:10px;margin-top:2px">另有 ${nd} 只无日线数据、未参与判定（北交所在当前环境取不到日线）</div>` : ""}`;
+  ${bjNd ? `<div class="cell-dim" style="font-size:10px;margin-top:2px">另有 ${bjNd} 只北交所股无日线、未参与判定（当前环境取不到）</div>` : ""}
+  ${restNd ? `<div class="cell-dim" style="font-size:10px;margin-top:2px;color:var(--warn,#d29922)">⚠ 另有 ${restNd} 只非北交所取数失败、未参与判定，结果可能漏报</div>` : ""}`;
 }
 function toggleBkGroup(headEl) {
   const tb = headEl.closest("tbody");
@@ -3546,6 +3567,140 @@ function toggleBkGroup(headEl) {
   const collapsed = tb.classList.toggle("bk-collapsed");
   const arrow = headEl.querySelector(".bk-arrow");
   if (arrow) arrow.textContent = collapsed ? "▸" : "▼";
+}
+// ---- 全市场「刚刚站上5日线」（2026-10-09）----
+let reclaimLoaded = false;
+let reclaimLoadedDate = null;
+async function loadReclaimStocks(force, date) {
+  const body = document.getElementById("hunterReclaimBody");
+  if (!body) return;
+  const _di = document.getElementById("hunterReclaimDate");
+  const _date = date || (_di && _di.value) || todayStr();
+  if (!force && reclaimLoaded && reclaimLoadedDate === _date) return;
+  const btn = document.getElementById("hunterReclaimBtn");
+  if (btn) { btn.disabled = true; btn.textContent = "⏳ 扫描中..."; }
+  body.innerHTML = '<div class="empty">⏳ 准备扫描...</div>';
+  try {
+    const st = await apiCall("start_reclaim_scan", !!force, _date);
+    if (st.status === "done") {
+      renderReclaim(st);
+      if (!st.fetch_failed) { reclaimLoaded = true; reclaimLoadedDate = _date; }
+      if (btn) { btn.disabled = false; btn.textContent = "🔄 扫描该日"; }
+      return;
+    }
+    if (st.status === "error") {
+      body.innerHTML = `<div class="empty">扫描失败: ${esc(st.error || '未知')}</div>`;
+      if (btn) { btn.disabled = false; btn.textContent = "🔄 扫描该日"; }
+      return;
+    }
+    await pollReclaimScan(body, btn, _date);
+  } catch (e) {
+    const cur = document.getElementById("hunterReclaimBody");
+    if (cur) cur.innerHTML = `<div class="empty">站上5日线扫描失败: ${esc(e.message)}</div>`;
+    if (btn) { btn.disabled = false; btn.textContent = "🔄 扫描该日"; }
+  }
+}
+async function pollReclaimScan(body, btn, date) {
+  const t0 = Date.now();
+  const MAX = 1200000;
+  while (Date.now() - t0 < MAX) {
+    await sleep(800);
+    if (!document.body.contains(body)) return;
+    let st;
+    try { st = await apiCall("get_reclaim_scan", date); } catch (e) { break; }
+    if (st.status === "done") {
+      renderReclaim(st);
+      if (!st.fetch_failed) reclaimLoaded = true;
+      if (btn) { btn.disabled = false; btn.textContent = "🔄 扫描该日"; }
+      return;
+    }
+    if (st.status === "error") {
+      body.innerHTML = `<div class="empty">扫描失败: ${esc(st.error || '未知')}</div>`;
+      if (btn) { btn.disabled = false; btn.textContent = "🔄 扫描该日"; }
+      return;
+    }
+    if (st.status === "running") {
+      const pct = st.total ? Math.max(2, Math.round(st.done / st.total * 100)) : 0;
+      const found = st.found || 0;
+      const preview = (st.stocks || []).slice(0, 5).map(x => esc(x.name)).join('、');
+      body.innerHTML = `
+        <div class="bk-scan">
+          <div class="bk-scan-row"><span>⏳ 站上5日线扫描中</span>
+            <span class="cell-dim mono">${st.done}/${st.total} 只 · ${pct}%</span></div>
+          <div class="h-bar-track" style="height:6px;margin-top:4px">
+            <div class="h-bar-fill up" style="width:${pct}%"></div></div>
+          <div class="bk-scan-row" style="margin-top:6px">
+            <span class="cell-dim">已发现 <b class="up">${found}</b> 只</span>
+            ${preview ? `<span class="cell-dim" style="margin-left:8px">${preview}${found > 5 ? '…' : ''}</span>` : ''}
+          </div>
+        </div>`;
+    }
+  }
+  const mins = Math.round((Date.now() - t0) / 60000);
+  body.innerHTML = `<div class="empty">⏳ 扫描仍在后台运行（已 ${mins} 分钟）<br>
+    <span class="cell-dim" style="font-size:11px">点「🔄 扫描该日」会作废本轮并重开</span></div>`;
+  if (btn) { btn.disabled = false; btn.textContent = "🔄 扫描该日"; }
+}
+function renderReclaim(b) {
+  const body = document.getElementById("hunterReclaimBody");
+  if (!body) return;
+  const stocks = (b && b.stocks) || [];
+  const restNd = (b && b.rest_no_data) || 0;
+  const bjNd = (b && b.bj_no_data) || 0;
+  const stale = (b && b.stale) || 0;
+  const meta = document.getElementById("hunterReclaimMeta");
+  const _parts = [];
+  if (b && b.date) _parts.push('· ' + esc(b.date));
+  _parts.push(`· 共 ${stocks.length} 只`);
+  if (restNd) _parts.push(`· <span class="warn">⚠ ${restNd} 只取数失败</span>`);
+  if (bjNd) _parts.push(`· ${bjNd} 只北交所无日线`);
+  if (meta) meta.innerHTML = _parts.join(" ");
+  if (b && b.fetch_failed) {
+    const why = restNd > 0
+      ? `非北交所 ${restNd} 只无日线 —— 掘金终端可能未连接/行情未就绪`
+      : `全池 ${stale} 只无当日行情 —— 可能非交易日或当日行情未就绪`;
+    body.innerHTML = `<div class="empty" style="color:var(--warn,#d29922)">
+      ⚠ 本次扫描**取数失败，结果不可信**：${esc(why)}<br>
+      <span class="cell-dim" style="font-size:11px">已跳过判定且未缓存；点「🔄 扫描该日」重试。</span></div>`;
+    return;
+  }
+  if (!stocks.length) {
+    body.innerHTML = '<div class="empty">池内暂无「刚站上5日线」的股票'
+      + (bjNd ? `<div class="cell-dim" style="font-size:10px;margin-top:4px">${bjNd} 只北交所股在当前环境取不到日线，已跳过</div>` : "")
+      + (restNd ? `<div class="cell-dim" style="font-size:10px;margin-top:2px;color:var(--warn,#d29922)">另有 ${restNd} 只非北交所取数失败，可能漏报</div>` : "")
+      + "</div>";
+    return;
+  }
+  const groups = {};
+  stocks.forEach(s => { const k = s.industry || "未分类"; (groups[k] = groups[k] || []).push(s); });
+  const gkeys = Object.keys(groups).sort((a, b) => groups[b].length - groups[a].length || a.localeCompare(b, "zh"));
+  const bodyHtml = gkeys.map(k => {
+    const arr = groups[k].slice().sort((x, y) => (y.dev5_pct || 0) - (x.dev5_pct || 0));
+    return `<tbody class="bk-group">
+    <tr class="bk-group-head" onclick="toggleBkGroup(this)" title="点击收起/展开">
+      <td colspan="8"><span class="bk-arrow">▼</span> <b>${esc(k)}</b>
+        <span class="cell-dim">· ${arr.length} 只</span></td>
+    </tr>
+    ${arr.map(s => `<tr class="bk-member h-expand-row" ondblclick="openStockChart('${esc(s.code)}','${esc(s.name)}')">
+      <td class="mono cell-dim" title="双击看技术分析">${esc(s.code)}</td>
+      <td title="双击看技术分析">${esc(s.name)} <button class="mini-btn" style="font-size:10px;padding:0 5px"
+        onclick="event.stopPropagation();addToWatchlist('${esc(s.code)}','${esc(s.name)}',this)" title="加入建仓股池监控买点">+股池</button></td>
+      <td class="num">${s.price != null ? fmt(s.price, 2) : '—'}</td>
+      <td class="num cell-dim">${s.prev_close != null ? fmt(s.prev_close, 2) : '—'}</td>
+      <td class="num">${s.ma5 != null ? fmt(s.ma5, 2) : '—'}</td>
+      <td class="num up">+${s.dev5_pct != null ? fmt(s.dev5_pct, 2) : '—'}%</td>
+      <td>${(s.tags || []).map(t => tagBadge(t)).join(" ")}</td>
+      <td class="bk-concepts-cell">${conceptsCell(s)}</td>
+    </tr>`).join("")}
+  </tbody>`;
+  }).join("");
+  body.innerHTML = `<table class="h-table"><thead><tr>
+    <th>代码</th><th>名称</th><th class="num">现价</th><th class="num">昨收</th>
+    <th class="num">MA5</th><th class="num">超MA5</th><th>标签</th><th>概念</th>
+  </tr></thead>${bodyHtml}</table>
+  <div class="cell-dim" style="font-size:10px;margin-top:3px">共 ${gkeys.length} 个行业 · 组按只数降序 · 组内按超MA5幅度降序 · 双击看技术分析</div>
+  ${bjNd ? `<div class="cell-dim" style="font-size:10px;margin-top:2px">另有 ${bjNd} 只北交所股无日线、未参与判定</div>` : ""}
+  ${restNd ? `<div class="cell-dim" style="font-size:10px;margin-top:2px;color:var(--warn,#d29922)">⚠ 另有 ${restNd} 只非北交所取数失败、未参与判定</div>` : ""}`;
 }
 // 概念列（2026-09-30）。离线口径（韭研概念 + 东财板块概念段）只盖约一半股票 ⇒
 // 没数据时显示「—」而不是空白，避免看起来像渲染失败；全量概念在 title 里，
@@ -3765,6 +3920,19 @@ function renderHunter(h) {
       <div id="hunterBreakoutBody"><div class="empty">选日期后点「🔄 扫描该日」（全池 5000+ 只，约 1~2 分钟）；结果会按日保存，再选同一天直接秒回。</div></div>
     </div>`;
 
+  const reclaimCard = `
+    <div class="card" style="margin-bottom:10px;padding:10px 14px">
+      <div class="card-title">📈 站上5日线·全市场（昨收 &lt; MA5 且 今价 &gt; MA5）
+        <input type="date" id="hunterReclaimDate" value="${esc(h.date || todayStr())}"
+          style="margin-left:8px;background:transparent;color:inherit;border:1px solid var(--border-soft);border-radius:4px;padding:1px 4px;font-size:12px"
+          onchange="reclaimLoaded=false;loadReclaimStocks(true, this.value)" title="选择任意交易日扫描（结果按日保存）">
+        <button class="mini-btn" id="hunterReclaimBtn" style="margin-left:8px"
+          onclick="loadReclaimStocks(true, document.getElementById('hunterReclaimDate').value)">🔄 扫描该日</button>
+        <span class="cell-dim" id="hunterReclaimMeta" style="font-size:11px"></span>
+      </div>
+      <div id="hunterReclaimBody"><div class="empty">选日期后点「🔄 扫描该日」（全池 5000+ 只，约 1~2 分钟）；结果会按日保存，再选同一天直接秒回。</div></div>
+    </div>`;
+
   el.innerHTML = `
     <div class="cell-dim" style="margin-bottom:8px;display:flex;gap:16px;flex-wrap:wrap">
       <span>打分池: <b>${h.pool_size}</b> 只</span>
@@ -3773,6 +3941,7 @@ function renderHunter(h) {
     </div>
 
     ${breakoutCard}
+    ${reclaimCard}
 
     <div class="card" style="overflow-x:auto">
     <table class="h-table">
