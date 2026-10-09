@@ -1486,7 +1486,33 @@ class Api:
         return out
 
     # ---------- 加仓观察（实时计算，不依赖 daily_review） ----------
+    _ADD_WATCH_TTL = 120.0   # 加仓观察缓存新鲜期（秒）
+
     def compute_add_watch(self, date):
+        """加仓观察（SWR 包装，2026-10-09）：`load_day`（主线程）会调它，实测冷算 ~5.6s
+        （9 只 × 逐只 5min 指标 + 箱体），改 SWR ⇒ 命中直返；过期先返回旧值 + 后台重算；冷启动才同步算。"""
+        now = _time_mod.time()
+        _h = (getattr(self, "_add_watch_cache", None) or {}).get(date)
+        if _h and (now - _h[0]) < self._ADD_WATCH_TTL:
+            return _h[1]
+        if _h and not getattr(self, "_add_watch_refreshing", False):
+            self._add_watch_refreshing = True
+
+            def _bg():
+                try:
+                    _r = self._compute_add_watch_impl(date)
+                    self._add_watch_cache = {date: (_time_mod.time(), _r)}
+                except Exception:
+                    pass
+                finally:
+                    self._add_watch_refreshing = False
+            _th.Thread(target=_bg, name="add-watch-refresh", daemon=True).start()
+            return _h[1]
+        _r = self._compute_add_watch_impl(date)
+        self._add_watch_cache = {date: (_time_mod.time(), _r)}
+        return _r
+
+    def _compute_add_watch_impl(self, date):
         """从分钟快照+最新价实时计算支撑位距离，返回 add_watch 同结构数据。
         替代 daily_review 收盘后才生成的静态 add_watch。"""
         out = {}
@@ -1689,8 +1715,18 @@ class Api:
         """补算 daily_ctx 的日线 MACD/趋势字段（旧快照缺失时）。就地更新 daily_ctx。"""
         try:
             import pandas as pd
-            from core.position_builder import fetch_daily_kline
-            df = fetch_daily_kline(str(code).split("_")[0])
+            _c6 = str(code).split("_")[0]
+            # 2026-10-09: **本地日线缓存优先**——原来逐只 `fetch_daily_kline` 走 GM（实测 ~1.8s/只），
+            # `compute_add_watch` 在 `load_day`（主线程）上跑 9 只 ⇒ 17.3s 冻界面（看门狗抓到）。
+            df = None
+            try:
+                import core.chart_cache as _cc
+                df = _cc.load_daily_display(_c6)
+            except Exception:
+                df = None
+            if df is None or df.empty:
+                from core.position_builder import fetch_daily_kline
+                df = fetch_daily_kline(_c6)
             if df.empty or len(df) < 30:
                 return
             c = df["close"].astype(float)
@@ -1729,9 +1765,24 @@ class Api:
           - strong: 强势突破(3%+)，高概率后续，适合加仓
           - far_away: 已远离>8%，看不出是否有效
         """
-        h = self.load_stock_chart(code)
-        if not h.get("available"):
-            return {"broken": False, "level": None, "error": h.get("error", "")}
+        # 2026-10-09: 本函数只用到 `boxes` 与 `current_price`（**都是日线派生**）——改读**本地日线缓存**
+        # + `_detect_boxes`，不再走 `load_stock_chart` 全量建图（含分钟/指标；盘中每 2 分钟重建，
+        # 9 只持仓 ⇒ `load_day→compute_add_watch` 阻塞 17s，看门狗抓到）。缓存 miss 才回退原路径。
+        boxes, _h_price = [], None
+        try:
+            import core.chart_cache as _cc
+            _dfd = _cc.load_daily_display(str(code).split("_")[0])
+            if _dfd is not None and not _dfd.empty:
+                boxes = self._detect_boxes(_dfd)
+                _h_price = float(_dfd["close"].iloc[-1])
+        except Exception:
+            boxes = []
+        if not boxes:
+            h = self.load_stock_chart(code)
+            if not h.get("available"):
+                return {"broken": False, "level": None, "error": h.get("error", "")}
+            boxes = h.get("boxes", [])
+            _h_price = h.get("current_price")
         # fix P0-4: 现价改用 load_quotes 实时报价（30秒缓存避免逐股重复拉网），失败回退日线收盘
         now = datetime.now()
         qc = getattr(self, "_box_quote_cache", None)
@@ -1745,10 +1796,9 @@ class Api:
                 px_map = {}
             qc = (now, px_map)
             self._box_quote_cache = qc
-        cur = qc[1].get(code) or qc[1].get(code.split("_")[0]) or h.get("current_price")
+        cur = qc[1].get(code) or qc[1].get(code.split("_")[0]) or _h_price
         if not cur:
             return {"broken": False, "level": None, "error": "无可用现价"}
-        boxes = h.get("boxes", [])
         # fix P0-4: 候选箱体纳入 rel==1（刚突破）；rel 判定基于日线收盘，与实时现价解耦
         cur_boxes = [b for b in boxes if b.get("rel") in (0, 1)]
         # 现价 > 候选箱体上沿 → 判定突破级别
@@ -3918,6 +3968,8 @@ class Api:
     # evaluate_js、后台 `_scan_breakout→daily_many`）。降到 200 每次只 ~4 万行、GIL 持有缩 ~4.5×，
     # 批间再显式让出，界面不再冻（代价：GM 调用次数变多、整轮慢一些，但在后台线程）。
     _BK_BATCH = 200
+    # 批量取数整批空时的等待（疑 GM 冷却窗/瞬时不可达）；覆盖为 0 可让测试不真等
+    _GM_BATCH_RETRY_WAIT = 62
 
     def _breakout_pool_codes(self):
         """扫描池 = watchlist_jiuyan.json 的**全部** 6 位码。
@@ -4005,6 +4057,7 @@ class Api:
         # no_data 拆分成因（2026-10-09）：整池取数失败（GM 不可达）≠ 北交所取不到 ≠ 无当日 bar。
         no_data = rest_missing = bj_missing = stale = ok = 0
         BATCH = self._BK_BATCH
+        _waited = False
         for i in range(0, total, BATCH):
             chunk = codes[i:i + BATCH]
             try:
@@ -4013,6 +4066,15 @@ class Api:
                 print(f"[WARN] breakout daily_many 失败({len(chunk)}只): "
                       f"{type(e).__name__}: {str(e)[:80]}", flush=True)
                 frames = {}
+            if not frames and chunk and not _waited:
+                # 整批空 ⇒ 疑 GM 冷却窗/瞬时不可达（facade 60s 冷却内后续批全跳过）→ 等窗后重试一次
+                # （只等一次，避免 GM 真下线时逐批 62s 打转；仍空则由 fetch_failed 如实汇报）
+                _time_mod.sleep(self._GM_BATCH_RETRY_WAIT)
+                _waited = True
+                try:
+                    frames = get_provider().daily_many(chunk, days=self._BK_SCAN_BARS)
+                except Exception:
+                    frames = {}
             for code in chunk:
                 fr = frames.get(code)
                 if fr is None or getattr(fr, "empty", True):
@@ -4228,29 +4290,10 @@ class Api:
     _RC_BATCH = 200
 
     def _reclaim_probe_one(self, code, df, date=None):
-        """单只「刚刚站上5日线」判定，命中返回 dict，否则 None。"""
-        import numpy as np
-        if df is None or df.empty:
-            return None
+        """单只「刚刚站上5日线」判定（口径单一源 core/ma_reclaim.reclaim5_frame），命中返回 dict 否则 None。"""
+        from core.ma_reclaim import reclaim5_frame
         target = str(date) if date else datetime.now().strftime("%Y-%m-%d")
-        df = df[df["date"].astype(str) <= target]
-        if df.empty or str(df["date"].iloc[-1]) != target:
-            return None                       # 交易日闸：末根必须=目标日
-        closes = df["close"].astype(float).values
-        if len(closes) < 6:
-            return None
-        price = float(closes[-1])
-        basis = closes[:-1]                   # 截至昨日
-        if len(basis) < 5 or price <= 0:
-            return None
-        prev_close = float(basis[-1])
-        prev_ma5 = float(np.mean(basis[-5:]))
-        cur_ma5 = float((np.sum(basis[-4:]) + price) / 5.0)
-        if not (prev_close < prev_ma5 and price > cur_ma5):
-            return None
-        return {"price": round(price, 3), "prev_close": round(prev_close, 3),
-                "ma5_prev": round(prev_ma5, 3), "ma5": round(cur_ma5, 3),
-                "dev5_pct": round((price - cur_ma5) / cur_ma5 * 100, 2) if cur_ma5 else None}
+        return reclaim5_frame(df, target)
 
     def _reclaim_disk_path(self, today):
         return BASE / "t_io" / "cache" / f"reclaim_{today}.json"
@@ -4276,6 +4319,7 @@ class Api:
         rest_total = sum(1 for c in codes if market_of(c) != "BJ")
         no_data = rest_missing = bj_missing = stale = ok = 0
         BATCH = self._RC_BATCH
+        _waited = False
         for i in range(0, total, BATCH):
             chunk = codes[i:i + BATCH]
             try:
@@ -4284,6 +4328,13 @@ class Api:
                 print(f"[WARN] reclaim daily_many 失败({len(chunk)}只): "
                       f"{type(e).__name__}: {str(e)[:80]}", flush=True)
                 frames = {}
+            if not frames and chunk and not _waited:
+                _time_mod.sleep(self._GM_BATCH_RETRY_WAIT)
+                _waited = True
+                try:
+                    frames = get_provider().daily_many(chunk, days=self._RC_BARS)
+                except Exception:
+                    frames = {}
             for code in chunk:
                 fr = frames.get(code)
                 if fr is None or getattr(fr, "empty", True):
@@ -6417,6 +6468,9 @@ if __name__ == "__main__":
     _th.Thread(target=api.prewarm_holdings_charts, daemon=True).start()
     _th.Thread(target=api.prewarm_stock_tags, daemon=True).start()
     _th.Thread(target=api.prewarm_overview, daemon=True).start()   # 总览页重端点（指数板/成交额/背离）
+    # 预热「加仓观察」：消除首次 load_day 的 ~5.6s 冷算（看门狗抓到的主线程卡点）
+    _th.Thread(target=lambda: api.compute_add_watch(datetime.now().strftime("%Y-%m-%d")),
+               daemon=True).start()
 
     def _prewarm_chart_build():
         """建图冷启动预热（2026-10-06）：首次 `_build_chart_from_df` 含懒加载 import
