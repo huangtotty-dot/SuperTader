@@ -1,0 +1,15 @@
+{
+  "rule_px": "close < 2.0",
+  "rule_dd": "rolling60d 窗口最大回撤(峰在谷前) > 0.6; 窗口有效收盘<20日按剔除",
+  "n_days": 619,
+  "date_start": "2024-03-05",
+  "date_end": "2026-09-17",
+  "avg_univ": 3952.001615508885,
+  "avg_excl_total": 566.9063004846527,
+  "avg_excl_pct": 0.1557501653963923,
+  "avg_excl_px": 29.852988691437805,
+  "avg_excl_dd": 537.0533117932149,
+  "avg_clean": 3385.0953150242326,
+  "max_excl_pct": 1.0,
+  "naive_maxmin_avg_excl": 779.9289176090468
+}
