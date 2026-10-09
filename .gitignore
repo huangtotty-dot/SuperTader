@@ -1,7 +1,8 @@
-# ── t_io：整体忽略运行时数据/回测结果，仅保留 .py 源码脚本 ──
-t_io/**
-!t_io/**/
-!t_io/**/*.py
+# ── t_io：整体忽略（运行时数据 + 回测结果 + 验证脚本），全部不入库 ──
+# 2026-10-10: 原先 `t_io/**` + `!t_io/**/*.py` 保留源码脚本，但仍有 722 个文件被
+# 跟踪（490+ 数据文件持续污染 git status）。改为整体忽略，并已 `git rm -r --cached t_io`
+# 清空索引（磁盘文件保留）。本地脚本仍在，clone 后需另行获取。
+t_io/
 
 __pycache__/
 *.pyc
@@ -36,15 +37,12 @@ execution/t_io/
 doc/review/
 
 # ── 死归档/历史报告（已 git rm --cached，保留磁盘但不再入库）──
-t_io/.archive_data/
-t_io/.archive_state/
-t_io/validation/.archive/
-t_io/validation/.archive_large_backtest/
+# t_io 下的归档目录已由上面的 `t_io/` 覆盖，不再单列。
 stock_hunter/watchlist_jiuyan.backup_*.json
 
 # ── 大文件防护（2026-10-09：另一会话用 `git add -f` 提交了 220MB parquet，
 #    超 GitHub 100MB 硬限 ⇒ **整条推送被服务器拒绝**，11 个提交全堵住）──
-# ⚠️ `t_io/**` 本已忽略该文件，但 `git add -f` **绕过 .gitignore** ⇒ 真正护栏是
+# ⚠️ `t_io/` 本已忽略该文件，但 `git add -f` **绕过 .gitignore** ⇒ 真正护栏是
 #    pre-commit 钩子（已装；见 scripts/git-hooks/pre-commit）。此处仅列常见大数据扩展名作双保险。
 *.parquet
 *.feather
@@ -53,4 +51,3 @@ stock_hunter/watchlist_jiuyan.backup_*.json
 *.hdf5
 *.pkl
 *.pickle
-t_io/**/results/
