@@ -1,0 +1,35 @@
+{
+  "version": 1,
+  "params": {
+    "n": 4,
+    "m": 8,
+    "min_hold": 1,
+    "tp_arm": "A",
+    "score": "score_eq"
+  },
+  "asof": "2026-10-09",
+  "cash": 1000000.0,
+  "positions": {},
+  "pending": {
+    "for_date": "2026-10-12",
+    "sells": [],
+    "buys": [
+      {
+        "code": "605198",
+        "target": 250000.0
+      },
+      {
+        "code": "688003",
+        "target": 250000.0
+      },
+      {
+        "code": "301160",
+        "target": 250000.0
+      },
+      {
+        "code": "603950",
+        "target": 250000.0
+      }
+    ]
+  }
+}

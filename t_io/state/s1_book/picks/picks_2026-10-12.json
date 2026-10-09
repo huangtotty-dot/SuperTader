@@ -1,0 +1,85 @@
+{
+  "schema_version": 1,
+  "date": "2026-10-12",
+  "eval_date": "2026-10-09",
+  "generated_at": "2026-10-10T02:48:24",
+  "status": "OK",
+  "sells": [],
+  "buys": [
+    {
+      "symbol": "605198",
+      "gm_symbol": "SHSE.605198",
+      "target_weight": 0.25,
+      "target_value": 250000.0,
+      "qty_estimate": 4000,
+      "ref_price": 62.25,
+      "reason": "ROT_IN",
+      "rank": 1,
+      "score": 1.4200105667114258,
+      "limit_risk": null
+    },
+    {
+      "symbol": "688003",
+      "gm_symbol": "SHSE.688003",
+      "target_weight": 0.25,
+      "target_value": 250000.0,
+      "qty_estimate": 3700,
+      "ref_price": 66.22000122070312,
+      "reason": "ROT_IN",
+      "rank": 2,
+      "score": 1.359163761138916,
+      "limit_risk": null
+    },
+    {
+      "symbol": "301160",
+      "gm_symbol": "SZSE.301160",
+      "target_weight": 0.25,
+      "target_value": 250000.0,
+      "qty_estimate": 6800,
+      "ref_price": 36.7400016784668,
+      "reason": "ROT_IN",
+      "rank": 3,
+      "score": 1.336072564125061,
+      "limit_risk": null
+    },
+    {
+      "symbol": "603950",
+      "gm_symbol": "SHSE.603950",
+      "target_weight": 0.25,
+      "target_value": 250000.0,
+      "qty_estimate": 5000,
+      "ref_price": 49.2599983215332,
+      "reason": "ROT_IN",
+      "rank": 4,
+      "score": 1.3008272647857666,
+      "limit_risk": null
+    }
+  ],
+  "holds": [],
+  "meta": {
+    "nav_estimate": 1000000.0,
+    "cash": 1000000.0,
+    "bootstrap": true,
+    "params": {
+      "n": 4,
+      "m": 8,
+      "min_hold": 1,
+      "tp_arm": "A",
+      "score": "score_eq"
+    },
+    "fee": {
+      "buy": 9.54e-05,
+      "sell": 0.0005954,
+      "source": "core/cost_model.py"
+    },
+    "slot_weight": 0.25,
+    "data_last_date": "2026-10-09",
+    "warnings": [],
+    "notes": [
+      "开盘成交：先卖后买，卖出回款当日可用于买入。",
+      "buys.qty_estimate 以信号日收盘价估算；执行器须在开盘用实际开盘价按 q=int(min(target_value,可用现金)/(px*(1+fee_buy))/100)*100 重算。",
+      "停牌（无开盘价）单自动作废，持仓保留，次日收盘重新评估=顺延。",
+      "limit_risk 为按板块幅度阈值的启发式标记；涨跌停权威判定在执行器，堵单不成交则次日自动重评。"
+    ]
+  }
+}

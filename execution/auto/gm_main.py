@@ -672,6 +672,214 @@ def _force_open_align(context) -> int:
     print(f"[OPEN_ALIGN] 完成：下单 {n} 笔（卖 {len(sells)} / 买 {len(buys) - len(skipped)}）")
     return n
 
+
+# ══════════════════════════════════════════════════════════════════════
+# S1 终选选股策略 · 执行集成（2026-10-10 施工，W3）
+# owner 决策：2026-10-12 起掘金模拟盘 auto 账本由 S1 终选（N4/M8/H1/TP-A/score_eq）
+# 直接驱动，无影子期。账本切换 ⇒ 镜像对齐(OPEN_ALIGN)/TAIL/旧镜像做T引擎**挂起**
+# （开关制，非删代码；s1_mode_enabled=False 即整体回退）。
+# OGR 影子（只读日志）与滑点观测不受影响。执行逻辑真源 = 同目录 s1_executor.py
+# （不 import gm.api，可单测/干跑）；本侧只做「gm 原语 → Gateway」适配与盘初挂载。
+# 文档：doc/solutions/2026-10-10_S1执行集成.md
+# ══════════════════════════════════════════════════════════════════════
+_S1_EXEC_DONE_DATE = None                     # 每日一次标记（与 _OPEN_ALIGN_DONE_DATE 同款）
+
+
+def _s1_mode_on() -> bool:
+    """S1 总闸（读 PARAMS；缺键 fail-safe 回退 False=旧引擎，与 T2 接线测试同口径）。"""
+    return bool(PARAMS.get("s1_mode_enabled", False))
+
+
+def _s1_open_align_allowed() -> bool:
+    """S1 接管后镜像对齐默认挂起（否则镜像逻辑与 S1 调仓打架）。"""
+    return (not _s1_mode_on()) or bool(PARAMS.get("s1_open_align_enabled", False))
+
+
+def _s1_legacy_active() -> bool:
+    """旧镜像做T引擎（BASE 建仓/信号/卖出门链，含 TAIL 尾盘归位）是否放行。"""
+    return (not _s1_mode_on()) or bool(PARAMS.get("s1_legacy_engine_enabled", False))
+
+
+class _S1GmGateway:
+    """s1_executor Gateway 的掘金实现（仅 MODE_LIVE 实例化）。
+
+    下单风格沿用 gm_main 既有惯例：市价单（GM 自带涨跌停保护价）、先 write_order
+    落 order 事件（否则 on_order_status 孤儿闸丢成交）、_mark_pending_recon 待对账。
+    picks 标的**不限于 STOCKS 池**（S1 卫生宇宙远宽于做T池），故取价走 current()
+    实时快照，不依赖 subscribe。
+    """
+
+    def __init__(self, context):
+        self.context = context
+
+    def get_cash(self) -> float:
+        try:
+            _acct = _sdk_call("s1_cash", self.context.account)
+            _c = getattr(_acct, "cash", None)
+            if _c is not None:
+                _c = _c() if callable(_c) else _c
+                if isinstance(_c, dict):
+                    return float(_c.get("available") or _c.get("available_cash")
+                                 or _c.get("cash") or _c.get("total") or 0)
+                return float(_c or 0)
+        except Exception as _e:
+            print(f"[S1] ⚠️ get_cash 失败（按 0，买单将全部截断）: {_e}")
+        return 0.0
+
+    def get_positions(self) -> dict:
+        out = {}
+        try:
+            _acct = _sdk_call("s1_account", self.context.account)
+            for _p in (_acct.positions() or []):
+                _sym = (_p.get("symbol") if isinstance(_p, dict)
+                        else getattr(_p, "symbol", None))
+                if not _sym:
+                    continue
+                _vol = int((_p.get("volume") if isinstance(_p, dict)
+                            else getattr(_p, "volume", 0)) or 0)
+                if _vol <= 0:
+                    continue
+                _av = int((_p.get("available") if isinstance(_p, dict)
+                           else getattr(_p, "available", 0)) or 0)
+                _cost = float((_p.get("vwap") if isinstance(_p, dict)
+                               else getattr(_p, "vwap", 0)) or 0)
+                out[_raw_code(str(_sym))] = {"qty": _vol, "available": _av, "cost": _cost}
+        except Exception as _e:
+            print(f"[S1] ⚠️ get_positions 失败（按空持仓——清仓计划不生成，仅执行 picks）: {_e}")
+        return out
+
+    def get_open_price(self, code: str):
+        """当日开盘价：current() 快照（含 today open）；失败回退 history_n 60s 首根。"""
+        sym = _code_to_gm(code)
+        now = self.context.now if hasattr(self.context, "now") else datetime.now()
+        try:
+            _cur = _sdk_call("s1_current", _partial(current, symbols=sym))
+            if _cur:
+                _c0 = _cur[0] if isinstance(_cur, (list, tuple)) else _cur
+                _op = float((_c0.get("open") if isinstance(_c0, dict)
+                             else getattr(_c0, "open", 0)) or 0)
+                if _op > 0:
+                    return _op
+        except Exception:
+            pass
+        try:
+            _his = _sdk_call("s1_open_bar", _partial(
+                history_n, symbol=sym, frequency="60s", count=8,
+                end_time=now, fields="symbol,eob,open",
+                fill_missing="Previous", adjust=ADJUST_PREV))
+            _today = str(now.date())
+            for _b in (_his or []):
+                _eob = str((_b.get("eob") if isinstance(_b, dict)
+                            else getattr(_b, "eob", "")) or "")
+                _op = float((_b.get("open") if isinstance(_b, dict)
+                             else getattr(_b, "open", 0)) or 0)
+                if _eob[:10] == _today and _op > 0:
+                    return _op
+        except Exception:
+            pass
+        return None
+
+    def place_order(self, code: str, side: str, qty: int, price) -> dict:
+        sym = _code_to_gm(code)
+        now = self.context.now if hasattr(self.context, "now") else datetime.now()
+        px = float(price or 0)
+        # ① 先落 order 事件（孤儿闸登记，6a96829c 前科）——order_type="S1" 供下游区分账本
+        write_order(str(now), code, side, int(qty), px, order_type="S1")
+        _slip_bp = int(PARAMS.get("s1_limit_slippage_bp", 0) or 0)
+        if _slip_bp > 0 and px > 0:
+            # 限价口径：开盘价±滑点容忍（买+/卖-），0 则沿用 gm_main 市价风格
+            _lp = px * (1 + _slip_bp / 1e4) if side == "BUY" else px * (1 - _slip_bp / 1e4)
+            _kw = dict(order_type=OrderType_Limit, price=round(_lp, 2))
+        else:
+            _kw = dict(order_type=OrderType_Market)
+        _o = _sdk_call(f"s1_order_{side.lower()}", _partial(
+            order_volume, symbol=sym, volume=int(qty),
+            side=OrderSide_Buy if side == "BUY" else OrderSide_Sell,
+            position_effect=(PositionEffect_Open if side == "BUY" else PositionEffect_Close),
+            **_kw))
+        _mark_pending_recon(self.context, code, sym, side, int(qty), px, _o)
+        # 同步返回里直接带拒单（status∈4/5/6/8/12）的情形与既有口径对齐
+        _oid, _rej = None, None
+        for _od in (_o if isinstance(_o, list) else [_o]):
+            if isinstance(_od, dict):
+                _oid = _oid or (_od.get("id") or _od.get("order_id"))
+                if _rej is None and int(_od.get("status") or 0) in _OGR_REJ_STATUS:
+                    _rej = f"status={_od.get('status')}"
+        if _rej:
+            return {"order_id": _oid, "status": "rejected", "filled_qty": 0,
+                    "filled_price": None, "message": f"同步回报拒单 {_rej}"}
+        return {"order_id": _oid, "status": "submitted", "filled_qty": 0,
+                "filled_price": None, "message": ""}
+
+    def poll_order(self, order_id, code: str) -> dict:
+        """get_orders 轮询终态（掘金拒单/成交异步，与 _poll_pending_recon 同款渠道）。"""
+        sym = _code_to_gm(code)
+        try:
+            _orders = _sdk_call("s1_get_orders", _partial(get_orders, symbol=sym))
+        except TypeError:
+            _orders = _sdk_call("s1_get_orders_all", get_orders)
+        for _od in (_orders or []):
+            try:
+                if str(_od.get("id") or _od.get("order_id") or "") != str(order_id):
+                    continue
+                _st = int(_od.get("status") or 0)
+                _fq = int(_od.get("filled_volume") or _od.get("volume") or 0)
+                _fp = float(_od.get("filled_vwap") or _od.get("vwap")
+                            or _od.get("price") or 0) or None
+                if _st == 3:
+                    return {"order_id": order_id, "status": "filled",
+                            "filled_qty": _fq, "filled_price": _fp, "message": ""}
+                if _st in _OGR_REJ_STATUS:
+                    return {"order_id": order_id, "status": "rejected",
+                            "filled_qty": 0, "filled_price": None,
+                            "message": f"status={_st}"}
+                if _fq > 0:
+                    return {"order_id": order_id, "status": "partial",
+                            "filled_qty": _fq, "filled_price": _fp, "message": f"status={_st}"}
+                return {"order_id": order_id, "status": "submitted",
+                        "filled_qty": 0, "filled_price": None, "message": f"status={_st}"}
+            except Exception:
+                continue
+        return {"order_id": order_id, "status": "submitted", "filled_qty": 0,
+                "filled_price": None, "message": "order_not_found"}
+
+
+def _s1_open_exec(context, now, today):
+    """S1 盘初执行（每日一次，09:31 首根 bar 触发）。
+
+    fail-closed 语义：picks 缺失/陈旧/非法 ⇒ 当日 S1 不下单（**不回退旧引擎**——
+    账本已切换，回退等于让镜像逻辑与 S1 调仓打架）；写 risk 告警等次日。
+    """
+    import s1_executor as _s1e            # execution/auto/ 已在 sys.path（init 处插入）
+    _root = os.environ.get("SUPERTRADER_ROOT", r"E:\superTrader")
+    _book = os.path.join(_root, "t_io", "state", "s1_book")
+    _metrics = os.path.join(_root, "t_io", "metrics")
+    _params = {
+        "proceeds_haircut": float(PARAMS.get("s1_proceeds_haircut", 0.999)),
+        "min_lot": int(PARAMS.get("s1_min_lot", 100)),
+        "order_poll_rounds": int(PARAMS.get("s1_order_poll_rounds", 3)),
+        "order_poll_sleep_sec": float(PARAMS.get("s1_order_poll_sleep_sec", 2.0)),
+        "sell_retries": int(PARAMS.get("s1_sell_retries", 1)),
+    }
+    try:
+        _res = _s1e.run_open_exec(_S1GmGateway(context), str(today),
+                                  book_dir=_book, metrics_dir=_metrics,
+                                  params=_params, dry_run=False, log=print)
+        _sm = (_res or {}).get("summary") or {}
+        _audit_write({"event": "s1_open_exec", "date": str(today),
+                      "sells": _sm.get("sells_placed"), "buys": _sm.get("buys_placed"),
+                      "rejected": _sm.get("rejected_count"),
+                      "liquidation": _sm.get("liquidation_count")})
+    except _s1e.PicksError as _pe:
+        print(f"[S1] ⛔ picks 不可用（fail-closed 当日不下单）: {_pe}")
+        _audit_write({"event": "s1_picks_error", "date": str(today), "error": str(_pe)[:300]})
+        try:
+            write_risk(str(now), "s1_picks_missing",
+                       f"S1 picks 不可用,当日不下单: {str(_pe)[:200]}", code="")
+        except Exception:
+            pass
+
+
 MIN_BARS = 25
 T1_AUTO_UNLOCK_HOUR = 9
 T1_AUTO_UNLOCK_MINUTE = 31
@@ -2469,14 +2677,34 @@ def on_bar(context, bars):
     # 2026-10-08 复盘实证：清退挂单日 align 必须等到 09:32——on_bar 逐票回调使
     # 调用处局部标记同秒失效，600584 因此被现金封顶只买到 400/1200；改用模块级持久标记。
     global _OPEN_ALIGN_DONE_DATE
+    # 2026-10-10 S1 接管：s1_mode_enabled=on 时镜像对齐默认挂起（_s1_open_align_allowed），
+    # 否则镜像逻辑与 S1 调仓打架。挂起首日报一行醒目日志（不逐 bar 刷屏）。
     if (not _unwind_placed and not (_UNWIND_PLACED_TODAY == today and t < dtime(9, 32))
             and t >= dtime(9, 31) and _OPEN_ALIGN_DONE_DATE != today
-            and getattr(context, "mode", None) == MODE_LIVE):
+            and getattr(context, "mode", None) == MODE_LIVE
+            and _s1_open_align_allowed()):
         _OPEN_ALIGN_DONE_DATE = today
         try:
             _force_open_align(context)
         except Exception as _oae:
             print(f"[OPEN_ALIGN] 失败（不阻断主循环）: {_oae}")
+
+    # ── S1 终选选股策略 · 盘初执行（2026-10-10 owner 决策：10-12 起模拟盘 auto 账本由
+    #    S1 驱动，先卖后买、开盘成交）。位置刻意放在 OPEN_ALIGN 原位：S1 on 时 align 已挂起，
+    #    S1 接管同一时点；picks 缺失 fail-closed（当日不下单、不回退旧引擎）。──
+    global _S1_EXEC_DONE_DATE
+    if (_s1_mode_on() and t >= dtime(9, 31) and _S1_EXEC_DONE_DATE != today
+            and getattr(context, "mode", None) == MODE_LIVE):
+        _S1_EXEC_DONE_DATE = today
+        try:
+            _s1_open_exec(context, now, today)
+        except Exception as _s1e:
+            print(f"[S1] 开盘执行失败（不阻断主循环）: {_s1e}")
+            try:
+                write_risk(str(now), "s1_exec_error",
+                           f"S1 开盘执行异常: {str(_s1e)[:200]}", code="")
+            except Exception:
+                pass
 
     # ── OGR 池开盘价逐票累积（L3 影子与 L4 实单共用；2026-09-30 复盘实证）──
     # gm 的 on_bar 是**逐票回调**（实测每次只有 1 根 bar），单次调用看不到全池 ⇒
@@ -2731,6 +2959,14 @@ def on_bar(context, bars):
         context._ogr_pc_cache[code] = row["close"]
         # 代理池到此为止：不建仓、不信号、不卖出（只贡献 mkt_gap 的截面）
         if code in MARKET_PROXY and code not in STOCKS:
+            continue
+
+        # ── S1 接管（2026-10-10）：s1_mode_enabled=on 时旧镜像做T引擎挂起——
+        # BASE 建仓/做T信号/卖出门链（含 TAIL 尾盘归位）对本票全部跳过。
+        # 位置刻意放在「bar 累积 + _ogr_pc_cache 更新」**之后**：心跳、指数态势、
+        # OGR 影子（在逐票循环之前触发）与滑点观测照常，仅交易决策链断开。
+        # 开关回退：params.py s1_mode_enabled=False（或 s1_legacy_engine_enabled=True）。
+        if not _s1_legacy_active():
             continue
 
         df = _build_bar_df(context, code, gm_sym, now=now)

@@ -254,6 +254,28 @@ PARAMS = {
     #   ① **真实买侧滑点仍未测**（优势仅 0.86~0.99pp/腿 vs 离线假设折价 0.19pp，滑点 >1pp 即归零）；
     #   ② **live 必须注入 `gm_main.MARKET_PROXY`**（独立代理池，否则 mkt_gap 又变回自指）。
     "open_gap_reversal_live_enabled": False,
+
+    # ── S1 终选选股策略 · 执行集成（2026-10-10 施工，W3；owner 决策：2026-10-12 起
+    #    掘金模拟盘 auto 账本由 S1 终选 N4/M8/H1/TP-A/score_eq 直接驱动，无影子期）──
+    # 账本切换（owner 拍板）：S1 接管后，镜像对齐(OPEN_ALIGN)与 TAIL 尾盘归位对 S1 账本
+    # **必须挂起**（否则镜像逻辑与 S1 调仓打架）；旧镜像做T引擎（BASE 建仓/信号/卖出门链）
+    # 一并挂起——模拟盘持仓自 10-12 起由 S1 决定，不再镜像手动 A/B 实盘账户。
+    # OGR 影子记录保持 on（只读日志，与 S1 下单无冲突）；滑点观测保持。
+    # ⚠️ 挂起方式是**开关**不是删代码：s1_mode_enabled=False 即整体回退旧引擎。
+    # ⚠️ 必须落在 PARAMS（gm_main 闸函数读这张表；B7 开关错放 INDEX_REGIME_PARAMS 的前科）。
+    "s1_mode_enabled": True,            # S1 总闸：on=S1 驱动 auto 账本（下三项默认挂起）
+    "s1_open_align_enabled": False,     # S1 on 时镜像对齐挂起（True=强制恢复，调试用）
+    "s1_tail_enabled": False,           # S1 on 时 TAIL 尾盘归位挂起（随旧引擎门链一并跳过）
+    "s1_legacy_engine_enabled": False,  # S1 on 时旧镜像做T引擎（BASE/信号/卖出门链）挂起
+    # 执行参数（s1_executor.py DEFAULTS 的覆盖入口）：
+    "s1_exec_time_hhmm": 931,           # 盘初执行时点（首根 60s bar，≈09:31）
+    "s1_proceeds_haircut": 0.999,       # 卖出预计回款折扣（对齐 OPEN_ALIGN ×0.999）
+    "s1_min_lot": 100,                  # 最小交易单位
+    "s1_order_poll_rounds": 3,          # submitted/partial 轮询次数
+    "s1_order_poll_sleep_sec": 2.0,     # 轮询间隔秒
+    "s1_sell_retries": 1,               # 卖单异常重试次数
+    "s1_limit_slippage_bp": 0,          # 0=市价单（沿用 gm_main 风格）；>0=限价 开盘价±bp
+    # 文档：doc/solutions/2026-10-10_S1执行集成.md（含周一 runbook 与失败应急）
 }
 
 # 华工科技 000988 个股专属参数

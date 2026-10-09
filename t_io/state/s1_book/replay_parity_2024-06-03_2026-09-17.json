@@ -1,0 +1,33 @@
+{
+  "window": [
+    "2024-06-03",
+    "2026-09-17"
+  ],
+  "n_days": 560,
+  "params": {
+    "n": 4,
+    "m": 8,
+    "min_hold": 1,
+    "tp_arm": "A",
+    "score": "score_eq"
+  },
+  "ref": {
+    "n_trades": 2237,
+    "final_nav": 2589562.643192631,
+    "ann_ret": null,
+    "sharpe": null
+  },
+  "mine": {
+    "n_trades": 2237,
+    "final_nav": 2589562.643192631
+  },
+  "key_match_pct": 100.0,
+  "n_missing_in_mine": 0,
+  "n_extra_in_mine": 0,
+  "n_qty_mismatch": 0,
+  "max_rel_px_diff": 0.0,
+  "missing_in_mine": [],
+  "extra_in_mine": [],
+  "qty_mismatch": [],
+  "passed": true
+}
