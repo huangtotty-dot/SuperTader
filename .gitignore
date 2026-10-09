@@ -41,3 +41,16 @@ t_io/.archive_state/
 t_io/validation/.archive/
 t_io/validation/.archive_large_backtest/
 stock_hunter/watchlist_jiuyan.backup_*.json
+
+# ── 大文件防护（2026-10-09：另一会话用 `git add -f` 提交了 220MB parquet，
+#    超 GitHub 100MB 硬限 ⇒ **整条推送被服务器拒绝**，11 个提交全堵住）──
+# ⚠️ `t_io/**` 本已忽略该文件，但 `git add -f` **绕过 .gitignore** ⇒ 真正护栏是
+#    pre-commit 钩子（已装；见 scripts/git-hooks/pre-commit）。此处仅列常见大数据扩展名作双保险。
+*.parquet
+*.feather
+*.arrow
+*.h5
+*.hdf5
+*.pkl
+*.pickle
+t_io/**/results/
