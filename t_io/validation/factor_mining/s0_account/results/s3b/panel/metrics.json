@@ -1,0 +1,59 @@
+{
+  "variants": [
+    "v0",
+    "v1",
+    "v2",
+    "v3",
+    "v4",
+    "v5"
+  ],
+  "params": {
+    "N_TOP": 4,
+    "N_BASKET": 5,
+    "AMP_WIN": 20,
+    "MIN_A930": 1000000.0,
+    "MIN_LEG_A930": 100000.0,
+    "fee_buy": 9.54e-05,
+    "fee_sell": 0.0005954,
+    "post": "2026-02-24"
+  },
+  "gates": {
+    "v0": {
+      "VG1_on_ge_neg20": false,
+      "VG2_leg_ge_30": true,
+      "VG3_legs_ge_200": false,
+      "PASS": false
+    },
+    "v1": {
+      "VG1_on_ge_neg20": false,
+      "VG2_leg_ge_30": true,
+      "VG3_legs_ge_200": false,
+      "PASS": false
+    },
+    "v2": {
+      "VG1_on_ge_neg20": false,
+      "VG2_leg_ge_30": true,
+      "VG3_legs_ge_200": false,
+      "PASS": false
+    },
+    "v3": {
+      "VG1_on_ge_neg20": false,
+      "VG2_leg_ge_30": true,
+      "VG3_legs_ge_200": false,
+      "PASS": false
+    },
+    "v4": {
+      "VG1_on_ge_neg20": false,
+      "VG2_leg_ge_30": true,
+      "VG3_legs_ge_200": true,
+      "PASS": false
+    },
+    "v5": {
+      "VG1_on_ge_neg20": false,
+      "VG2_leg_ge_30": true,
+      "VG3_legs_ge_200": false,
+      "PASS": false
+    }
+  },
+  "elapsed": 9.9
+}
