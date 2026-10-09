@@ -1007,6 +1007,10 @@ _position_builder_eod_last_attempt = None  # eod 扫描失败重试节流（date
 _position_builder_intraday_thread = None  # 盘中建仓扫描后台线程（fix P1-5）
 import threading as _threading
 _position_scan_lock = _threading.Lock()  # 盘中/收盘建仓扫描互斥（trace 写盘线程安全）
+# 2026-10-09：破线/站上日均线报警**独立的锁**。原先两者与建仓扫描共用 `_position_scan_lock`，
+# 而盘中建仓扫描会持锁数分钟 ⇒ 报警每次都等 120s 超时、**从未推送过**（实测日志
+# 「⚠️ 站上均线报警等待建仓扫描释放锁超时」）。两者互斥即可（读写行情，不再抢扫描的锁）。
+_ma_alert_lock = _threading.Lock()
 _ma_break_last = None  # 破5/10日线报警节流（datetime，仿盘中建仓扫描）
 _ma_break_thread = None  # 破5/10日线报警后台线程
 _ma_reclaim_last = None  # 站上5/10日线（破线回站）报警节流（2026-10-08）
@@ -1161,13 +1165,13 @@ def _maybe_run_ma_break_alert(now: datetime) -> None:
     def _worker(day: str) -> None:
         try:
             from core.position_builder import run_ma_break_alert as _run_ma_break_alert
-            if not _position_scan_lock.acquire(timeout=120):
-                log.warning("⚠️ 破线报警等待建仓扫描释放锁超时，本轮跳过（下轮重试）")
+            if not _ma_alert_lock.acquire(timeout=120):
+                log.warning("⚠️ 破线报警等待均线报警锁超时，本轮跳过（下轮重试）")
                 return
             try:
                 pushed = _run_ma_break_alert(date_str=day, silent=True)
             finally:
-                _position_scan_lock.release()
+                _ma_alert_lock.release()
             for e in pushed:
                 log.info(f"⚠️ 破5/10日线报警: {e['code']} {e['name']} "
                          f"现价{e.get('price')} MA5={e.get('ma5')} MA10={e.get('ma10')}")
@@ -1222,13 +1226,13 @@ def _maybe_run_ma_reclaim_alert(now: datetime) -> None:
     def _worker(day: str) -> None:
         try:
             from core.position_builder import run_ma_reclaim_alert as _run_reclaim
-            if not _position_scan_lock.acquire(timeout=120):
-                log.warning("⚠️ 站上均线报警等待建仓扫描释放锁超时，本轮跳过（下轮重试）")
+            if not _ma_alert_lock.acquire(timeout=120):
+                log.warning("⚠️ 站上均线报警等待均线报警锁超时，本轮跳过（下轮重试）")
                 return
             try:
                 pushed = _run_reclaim(date_str=day, silent=True)
             finally:
-                _position_scan_lock.release()
+                _ma_alert_lock.release()
             for e in pushed:
                 log.info(f"🔺 站上5/10日线报警: {e['code']} {e['name']} "
                          f"现价{e.get('price')} MA5={e.get('ma5')} MA10={e.get('ma10')}")
