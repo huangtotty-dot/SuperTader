@@ -2045,17 +2045,30 @@ function renderAddWatch(aw) {
   el.innerHTML = summaryHtml + cards;
 }
 
-// ---- 盘后重跑：重新跑一遍建仓扫描+加仓观察（日线口径）----
+// ---- 建仓扫描：按面板所选日期重放（日线口径，支持历史任意一天）----
 let pbRecomputeRunning = false;
+function _pbSyncScanDate() {   // 面板日期选择器跟随全局选中日
+  const el = document.getElementById("pbScanDate");
+  if (el && state.date && el.value !== state.date) el.value = state.date;
+}
 async function recomputePB() {
   if (pbRecomputeRunning) return;
-  if (!state.date) return;
+  const _di = document.getElementById("pbScanDate");
+  const date = (_di && _di.value) || state.date;      // 面板内日期优先，回退全局选中日
+  if (!date) return;
   const btns = document.querySelectorAll(".recompute-pb-btn");
   pbRecomputeRunning = true;
   btns.forEach(b => { b.disabled = true; b.textContent = "⏳ 重跑中..."; });
-  statusEl("盘后重跑中（建仓扫描+加仓观察，约需1-2分钟）...", "ok");
+  statusEl(`重放 ${date} 建仓扫描（日线口径，约需1-2分钟）...`, "ok");
   try {
-    const r = await apiCall("recompute_pb", state.date);
+    // 面板选定日期 != 当前视图 → 先切到该日整日视图（各面板 + 10s 轮询口径一致）
+    if (date !== state.date) {
+      userPinnedDate = (date !== todayStr());
+      const _sel = document.getElementById("dateSelect");
+      if (_sel && Array.from(_sel.options).some(o => o.value === date)) _sel.value = date;
+      try { await loadAndRender(date, false); } catch (e) { /* 无复盘数据也能扫 */ }
+    }
+    const r = await apiCall("recompute_pb", date);
     if (r && r.position_builder) {
       renderPB(r.position_builder);
       renderAddWatch(r.add_watch || {});
@@ -2067,8 +2080,8 @@ async function recomputePB() {
       const cntTxt = Object.keys(cnt).filter(k => cnt[k] > 0)
         .map(k => `${k}:${cnt[k]}`).join(" ");
       statusEl(r.error
-        ? `⚠ 盘后重跑建仓扫描异常: ${r.error}（已返回现有结果）`
-        : `盘后重跑完成（${cntTxt || "无"}，刷新于 ${r.position_builder.refreshed_at || "?"}）`,
+        ? `⚠ 重放 ${date} 建仓扫描异常: ${r.error}（已返回现有结果）`
+        : `重放完成（${date}｜${cntTxt || "无"}，刷新于 ${r.position_builder.refreshed_at || "?"}）`,
         r.error ? "err" : "ok");
     } else {
       statusEl("重跑失败: 无返回", "err");
@@ -2077,7 +2090,7 @@ async function recomputePB() {
     statusEl("重跑失败: " + e.message, "err");
   }
   pbRecomputeRunning = false;
-  btns.forEach(b => { b.disabled = false; b.textContent = "🔄 盘后重跑"; });
+  btns.forEach(b => { b.disabled = false; b.textContent = "🔄 扫描该日"; });
 }
 
 /* ---- ⑧ 阶段看板 ---- */
@@ -4817,6 +4830,8 @@ async function init() {
     if (dateSelect.value) {
       // 用户手动选日期（非初始默认赋值）→ 记录，避免自动切回今天覆盖用户选择
       if (dateSelect.value !== todayStr()) userPinnedDate = true;
+      const _pd = document.getElementById("pbScanDate");   // 建仓面板日期跟随全局选中日
+      if (_pd) _pd.value = dateSelect.value;
       loadAndRender(dateSelect.value, false);
     }
   });
@@ -4883,6 +4898,7 @@ async function init() {
   document.getElementById("dateTag").textContent = dates[0];
 
   await loadAndRender(dates[0], false);
+  _pbSyncScanDate();   // 建仓面板日期选择器默认=当前选中日
   startPoll();
   // 启动时今天可能尚无数据导致停在历史日 → 立即检查一次，今天就绪则自动切回
   maybeAutoSwitchToToday();

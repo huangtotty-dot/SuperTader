@@ -164,7 +164,12 @@
           <input type="text" id="pbSearchName" class="mini-input" placeholder="名称(可选)" style="width:90px">
           <button class="mini-btn primary" id="pbAddBtn" onclick="addNewWatchlist()">+ 添加</button>
         </span>
-        <button class="mini-btn recompute-pb-btn" onclick="recomputePB()" title="对**当前选中日期**重跑建仓扫描+加仓观察（日线口径）。支持历史任意一天：先在右上角选择日期，再点此重跑。">🔄 扫描选中日</button>
+        <span style="display:inline-flex;align-items:center;gap:6px;margin-left:10px;font-weight:400;font-size:12px">
+          <label class="cell-dim" style="font-size:12px">扫描日期</label>
+          <input type="date" id="pbScanDate" class="mini-input" style="width:140px"
+                 title="选择任意历史交易日 → 点『扫描该日』按该日重放建仓扫描（日线口径、无未来函数）">
+          <button class="mini-btn primary" onclick="recomputePB()" title="按左侧所选日期重放建仓扫描+加仓观察（日线口径）">🔄 扫描该日</button>
+        </span>
         <select id="pbPoolFilter" class="mini-btn" style="margin-left:8px;font-size:11px"
                 onchange="setPoolFilter(this.value)" title="P3-2 池分管：manual=人工池 / auto=自动盘池">
           <option value="all">全部池</option>
@@ -176,7 +181,7 @@
     </div>
     <div class="section" id="add-watch">
       <h2>加仓观察（回踩支撑）
-        <button class="mini-btn recompute-pb-btn" onclick="recomputePB()" title="对**当前选中日期**重跑建仓扫描+加仓观察（日线口径）。支持历史任意一天：先在右上角选择日期，再点此重跑。">🔄 扫描选中日</button>
+        <button class="mini-btn recompute-pb-btn" onclick="recomputePB()" title="按『建仓信号扫描』左侧所选日期重放该日扫描+加仓观察">🔄 扫描该日</button>
       </h2>
       <div id="addWatchBody"></div>
     </div>
