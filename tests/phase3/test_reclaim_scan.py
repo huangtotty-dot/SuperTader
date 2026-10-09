@@ -86,8 +86,9 @@ class TestReclaimScan(unittest.TestCase):
                 return {}
         self._patch(_Fake())
         import t_gui
+        api = t_gui.Api(); api._GM_BATCH_RETRY_WAIT = 0
         st = {}
-        hits = t_gui.Api()._scan_reclaim(["600000", "000001"], st, _TODAY)
+        hits = api._scan_reclaim(["600000", "000001"], st, _TODAY)
         self.assertEqual(hits, [])
         self.assertTrue(st.get("fetch_failed"))
         self.assertEqual(st.get("rest_no_data"), 2)

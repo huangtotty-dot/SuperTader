@@ -275,8 +275,9 @@ class TestScanFetchFailure(unittest.TestCase):
                 return {}
         self._patch_provider(_Fake())
         import t_gui
+        api = t_gui.Api(); api._GM_BATCH_RETRY_WAIT = 0
         st = {}
-        out = t_gui.Api()._scan_breakout(["600000", "000001"], st, "2026-10-09")
+        out = api._scan_breakout(["600000", "000001"], st, "2026-10-09")
         self.assertEqual(out, [])
         self.assertTrue(st.get("fetch_failed"), "整池无帧必须判取数失败")
         self.assertEqual(st.get("ok"), 0)
