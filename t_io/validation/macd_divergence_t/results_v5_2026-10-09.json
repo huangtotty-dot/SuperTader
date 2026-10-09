@@ -1,0 +1,850 @@
+{
+ "meta": {
+  "version": "v5",
+  "base": "v4 克隆 + MA5 门控",
+  "date": "2026-10-09",
+  "n_codes": 39,
+  "start": "2025-09-14",
+  "end": "2026-08-26",
+  "n_mc": 500,
+  "dif_ratio": 0.5,
+  "k_swing": 5,
+  "min_gap": 15,
+  "stock_days": 8848,
+  "rule": "c2<=c1 (低高点) & dif1>0 & dif2<dif1*0.5; 1min; 确认滞后5根; MA5_dyn=mean(前4日收盘+当根价); 站上=c[j]>MA5_dyn",
+  "gates": {
+   "G0_none": "无门控(=v4 重跑)",
+   "G1_signal_gate": "信号根 c<=MA5_dyn 整笔跳过",
+   "G2_signal_and_cover_gate": "G1 + 回补根未站上则顺延至首个站上 bar，14:50 仍不满足则强制回补 forced_ma5=True"
+  },
+  "fees": {
+   "legacy": {
+    "sell": 0.00121,
+    "buy": 0.00015
+   },
+   "live": {
+    "sell": 0.0006054,
+    "buy": 0.0001054
+   }
+  },
+  "v4_n_signals_ref": 16861,
+  "g0_vs_v4_signal_deviation": 0.0
+ },
+ "signal_stats": {
+  "n_signals_dedup_g0": 16861,
+  "n_pairs_by_gate": {
+   "G0_none": 50583,
+   "G1_signal_gate": 25467,
+   "G2_signal_and_cover_gate": 25467
+  },
+  "ma5_signal_split": {
+   "n_sig": 16861,
+   "n_above": 8489,
+   "n_below": 8372,
+   "n_no_ma5": 0
+  }
+ },
+ "diagnostics_g0_e1_by_ma5": {
+  "above_ma5": {
+   "n": 8489,
+   "legacy": {
+    "win_rate": 0.2903,
+    "avg_net_pct": -0.1734,
+    "median_net_pct": -0.136
+   },
+   "live": {
+    "win_rate": 0.3555,
+    "avg_net_pct": -0.1085,
+    "median_net_pct": -0.0711
+   }
+  },
+  "below_ma5": {
+   "n": 8372,
+   "legacy": {
+    "win_rate": 0.2316,
+    "avg_net_pct": -0.1702,
+    "median_net_pct": -0.136
+   },
+   "live": {
+    "win_rate": 0.3071,
+    "avg_net_pct": -0.1053,
+    "median_net_pct": -0.0711
+   }
+  },
+  "no_ma5_history": {
+   "n": 0,
+   "legacy": {
+    "win_rate": null,
+    "avg_net_pct": null,
+    "median_net_pct": null
+   },
+   "live": {
+    "win_rate": null,
+    "avg_net_pct": null,
+    "median_net_pct": null
+   }
+  }
+ },
+ "per_code_days": {
+  "000506": 229,
+  "000636": 229,
+  "000988": 229,
+  "002176": 229,
+  "002202": 229,
+  "002261": 229,
+  "002407": 229,
+  "002409": 229,
+  "002451": 229,
+  "002536": 229,
+  "002639": 229,
+  "300017": 208,
+  "300054": 229,
+  "300058": 229,
+  "300153": 229,
+  "300364": 229,
+  "300456": 229,
+  "300475": 208,
+  "300548": 229,
+  "300666": 229,
+  "301165": 229,
+  "515120": 229,
+  "515180": 229,
+  "588170": 229,
+  "600089": 229,
+  "600176": 229,
+  "600481": 229,
+  "600547": 211,
+  "600584": 229,
+  "600722": 229,
+  "600900": 229,
+  "601318": 206,
+  "601628": 229,
+  "601899": 229,
+  "603259": 229,
+  "603667": 229,
+  "688008": 229,
+  "688037": 229,
+  "688143": 229
+ },
+ "skipped": [],
+ "results": {
+  "G0_none": {
+   "E1_dif_turnup": {
+    "strategy": {
+     "n": 16861,
+     "avg_net_pct": -0.1718,
+     "median_net_pct": -0.136,
+     "trimmed_mean_pct": -0.1318,
+     "win_rate": 0.2611,
+     "fake_cover_rate": 0.4745,
+     "forced_ma5_rate": 0.0,
+     "deferred_rate": 0.0,
+     "n_stocks": 39,
+     "n_stocks_pos": 0
+    },
+    "strategy_live": {
+     "n": 16861,
+     "avg_net_pct": -0.1069,
+     "median_net_pct": -0.0711,
+     "trimmed_mean_pct": -0.0668,
+     "win_rate": 0.3315,
+     "fake_cover_rate": 0.4745,
+     "forced_ma5_rate": 0.0,
+     "deferred_rate": 0.0,
+     "n_stocks": 39,
+     "n_stocks_pos": 0
+    },
+    "n_cells": 8551,
+    "baseline_random": -0.1612,
+    "baseline_random_live": -0.0963,
+    "baseline_any_high": -0.1585,
+    "baseline_any_high_live": -0.0936,
+    "baseline_note": "与 v4 数学口径一致（同种子 numpy 随机流）",
+    "vs_random": {
+     "delta_pp": -0.0111,
+     "bootstrap": {
+      "mean": -0.0111,
+      "ci_lo": -0.027,
+      "ci_hi": 0.0056,
+      "p_gt_0": 0.094,
+      "n_dates": 229
+     },
+     "delta_pp_live": -0.0111,
+     "bootstrap_live": {
+      "mean": -0.0111,
+      "ci_lo": -0.027,
+      "ci_hi": 0.0056,
+      "p_gt_0": 0.094,
+      "n_dates": 229
+     }
+    },
+    "vs_any_high": {
+     "delta_pp": -0.0138,
+     "bootstrap": {
+      "mean": -0.0138,
+      "ci_lo": -0.0299,
+      "ci_hi": 0.0033,
+      "p_gt_0": 0.0515,
+      "n_dates": 229
+     },
+     "delta_pp_live": -0.0138,
+     "bootstrap_live": {
+      "mean": -0.0138,
+      "ci_lo": -0.0299,
+      "ci_hi": 0.0033,
+      "p_gt_0": 0.051,
+      "n_dates": 229
+     }
+    }
+   },
+   "E2_hist_neg2pos": {
+    "strategy": {
+     "n": 16861,
+     "avg_net_pct": -0.1694,
+     "median_net_pct": -0.1893,
+     "trimmed_mean_pct": -0.1603,
+     "win_rate": 0.3005,
+     "fake_cover_rate": 0.5402,
+     "forced_ma5_rate": 0.0,
+     "deferred_rate": 0.0,
+     "n_stocks": 39,
+     "n_stocks_pos": 0
+    },
+    "strategy_live": {
+     "n": 16861,
+     "avg_net_pct": -0.1044,
+     "median_net_pct": -0.1244,
+     "trimmed_mean_pct": -0.0953,
+     "win_rate": 0.3465,
+     "fake_cover_rate": 0.5402,
+     "forced_ma5_rate": 0.0,
+     "deferred_rate": 0.0,
+     "n_stocks": 39,
+     "n_stocks_pos": 0
+    },
+    "n_cells": 8551,
+    "baseline_random": -0.1592,
+    "baseline_random_live": -0.0943,
+    "baseline_any_high": -0.1497,
+    "baseline_any_high_live": -0.0848,
+    "baseline_note": "与 v4 数学口径一致（同种子 numpy 随机流）",
+    "vs_random": {
+     "delta_pp": -0.0102,
+     "bootstrap": {
+      "mean": -0.0102,
+      "ci_lo": -0.0255,
+      "ci_hi": 0.005,
+      "p_gt_0": 0.104,
+      "n_dates": 229
+     },
+     "delta_pp_live": -0.0102,
+     "bootstrap_live": {
+      "mean": -0.0102,
+      "ci_lo": -0.0255,
+      "ci_hi": 0.005,
+      "p_gt_0": 0.104,
+      "n_dates": 229
+     }
+    },
+    "vs_any_high": {
+     "delta_pp": -0.0197,
+     "bootstrap": {
+      "mean": -0.0197,
+      "ci_lo": -0.0346,
+      "ci_hi": -0.0047,
+      "p_gt_0": 0.0045,
+      "n_dates": 229
+     },
+     "delta_pp_live": -0.0197,
+     "bootstrap_live": {
+      "mean": -0.0197,
+      "ci_lo": -0.0346,
+      "ci_hi": -0.0047,
+      "p_gt_0": 0.0045,
+      "n_dates": 229
+     }
+    }
+   },
+   "E3_forced_1450": {
+    "strategy": {
+     "n": 16861,
+     "avg_net_pct": -0.1567,
+     "median_net_pct": -0.0695,
+     "trimmed_mean_pct": -0.0942,
+     "win_rate": 0.4778,
+     "fake_cover_rate": 0.4639,
+     "forced_ma5_rate": 0.0,
+     "deferred_rate": 0.0,
+     "n_stocks": 39,
+     "n_stocks_pos": 2
+    },
+    "strategy_live": {
+     "n": 16861,
+     "avg_net_pct": -0.0917,
+     "median_net_pct": -0.0046,
+     "trimmed_mean_pct": -0.0293,
+     "win_rate": 0.4972,
+     "fake_cover_rate": 0.4639,
+     "forced_ma5_rate": 0.0,
+     "deferred_rate": 0.0,
+     "n_stocks": 39,
+     "n_stocks_pos": 11
+    },
+    "n_cells": 8551,
+    "baseline_random": -0.1271,
+    "baseline_random_live": -0.0622,
+    "baseline_any_high": -0.1157,
+    "baseline_any_high_live": -0.0508,
+    "baseline_note": "与 v4 数学口径一致（同种子 numpy 随机流）",
+    "vs_random": {
+     "delta_pp": -0.038,
+     "bootstrap": {
+      "mean": -0.038,
+      "ci_lo": -0.0798,
+      "ci_hi": 0.0042,
+      "p_gt_0": 0.041,
+      "n_dates": 229
+     },
+     "delta_pp_live": -0.038,
+     "bootstrap_live": {
+      "mean": -0.038,
+      "ci_lo": -0.0798,
+      "ci_hi": 0.0042,
+      "p_gt_0": 0.041,
+      "n_dates": 229
+     }
+    },
+    "vs_any_high": {
+     "delta_pp": -0.0494,
+     "bootstrap": {
+      "mean": -0.0494,
+      "ci_lo": -0.089,
+      "ci_hi": -0.0087,
+      "p_gt_0": 0.008,
+      "n_dates": 229
+     },
+     "delta_pp_live": -0.0494,
+     "bootstrap_live": {
+      "mean": -0.0494,
+      "ci_lo": -0.089,
+      "ci_hi": -0.0087,
+      "p_gt_0": 0.008,
+      "n_dates": 229
+     }
+    }
+   }
+  },
+  "G1_signal_gate": {
+   "E1_dif_turnup": {
+    "strategy": {
+     "n": 8489,
+     "avg_net_pct": -0.1734,
+     "median_net_pct": -0.136,
+     "trimmed_mean_pct": -0.1255,
+     "win_rate": 0.2903,
+     "fake_cover_rate": 0.4767,
+     "forced_ma5_rate": 0.0,
+     "deferred_rate": 0.0,
+     "n_stocks": 39,
+     "n_stocks_pos": 1
+    },
+    "strategy_live": {
+     "n": 8489,
+     "avg_net_pct": -0.1085,
+     "median_net_pct": -0.0711,
+     "trimmed_mean_pct": -0.0606,
+     "win_rate": 0.3555,
+     "fake_cover_rate": 0.4767,
+     "forced_ma5_rate": 0.0,
+     "deferred_rate": 0.0,
+     "n_stocks": 39,
+     "n_stocks_pos": 2
+    },
+    "n_cells": 4457,
+    "baseline_random": -0.1584,
+    "baseline_random_live": -0.0935,
+    "baseline_any_high": -0.1627,
+    "baseline_any_high_live": -0.0978,
+    "baseline_note": "G1/G2 基线仅从站上 MA5 的合格 bar 抽取；G2 基线回补含 MA5 顺延",
+    "vs_random": {
+     "delta_pp": -0.0181,
+     "bootstrap": {
+      "mean": -0.0181,
+      "ci_lo": -0.0421,
+      "ci_hi": 0.0051,
+      "p_gt_0": 0.0585,
+      "n_dates": 229
+     },
+     "delta_pp_live": -0.0181,
+     "bootstrap_live": {
+      "mean": -0.0181,
+      "ci_lo": -0.0421,
+      "ci_hi": 0.0051,
+      "p_gt_0": 0.0575,
+      "n_dates": 229
+     }
+    },
+    "vs_any_high": {
+     "delta_pp": -0.0138,
+     "bootstrap": {
+      "mean": -0.0138,
+      "ci_lo": -0.0375,
+      "ci_hi": 0.0078,
+      "p_gt_0": 0.1105,
+      "n_dates": 229
+     },
+     "delta_pp_live": -0.0138,
+     "bootstrap_live": {
+      "mean": -0.0138,
+      "ci_lo": -0.0375,
+      "ci_hi": 0.0078,
+      "p_gt_0": 0.1105,
+      "n_dates": 229
+     }
+    }
+   },
+   "E2_hist_neg2pos": {
+    "strategy": {
+     "n": 8489,
+     "avg_net_pct": -0.1851,
+     "median_net_pct": -0.2072,
+     "trimmed_mean_pct": -0.1794,
+     "win_rate": 0.2921,
+     "fake_cover_rate": 0.5608,
+     "forced_ma5_rate": 0.0,
+     "deferred_rate": 0.0,
+     "n_stocks": 39,
+     "n_stocks_pos": 0
+    },
+    "strategy_live": {
+     "n": 8489,
+     "avg_net_pct": -0.1201,
+     "median_net_pct": -0.1423,
+     "trimmed_mean_pct": -0.1145,
+     "win_rate": 0.3348,
+     "fake_cover_rate": 0.5608,
+     "forced_ma5_rate": 0.0,
+     "deferred_rate": 0.0,
+     "n_stocks": 39,
+     "n_stocks_pos": 0
+    },
+    "n_cells": 4457,
+    "baseline_random": -0.1566,
+    "baseline_random_live": -0.0917,
+    "baseline_any_high": -0.1561,
+    "baseline_any_high_live": -0.0912,
+    "baseline_note": "G1/G2 基线仅从站上 MA5 的合格 bar 抽取；G2 基线回补含 MA5 顺延",
+    "vs_random": {
+     "delta_pp": -0.0368,
+     "bootstrap": {
+      "mean": -0.0368,
+      "ci_lo": -0.059,
+      "ci_hi": -0.0152,
+      "p_gt_0": 0.001,
+      "n_dates": 229
+     },
+     "delta_pp_live": -0.0368,
+     "bootstrap_live": {
+      "mean": -0.0368,
+      "ci_lo": -0.059,
+      "ci_hi": -0.0152,
+      "p_gt_0": 0.001,
+      "n_dates": 229
+     }
+    },
+    "vs_any_high": {
+     "delta_pp": -0.0373,
+     "bootstrap": {
+      "mean": -0.0373,
+      "ci_lo": -0.0585,
+      "ci_hi": -0.0174,
+      "p_gt_0": 0.001,
+      "n_dates": 229
+     },
+     "delta_pp_live": -0.0373,
+     "bootstrap_live": {
+      "mean": -0.0373,
+      "ci_lo": -0.0585,
+      "ci_hi": -0.0174,
+      "p_gt_0": 0.001,
+      "n_dates": 229
+     }
+    }
+   },
+   "E3_forced_1450": {
+    "strategy": {
+     "n": 8489,
+     "avg_net_pct": -0.1662,
+     "median_net_pct": -0.0722,
+     "trimmed_mean_pct": -0.0951,
+     "win_rate": 0.4787,
+     "fake_cover_rate": 0.4663,
+     "forced_ma5_rate": 0.0,
+     "deferred_rate": 0.0,
+     "n_stocks": 39,
+     "n_stocks_pos": 7
+    },
+    "strategy_live": {
+     "n": 8489,
+     "avg_net_pct": -0.1013,
+     "median_net_pct": -0.0072,
+     "trimmed_mean_pct": -0.0302,
+     "win_rate": 0.4958,
+     "fake_cover_rate": 0.4663,
+     "forced_ma5_rate": 0.0,
+     "deferred_rate": 0.0,
+     "n_stocks": 39,
+     "n_stocks_pos": 12
+    },
+    "n_cells": 4457,
+    "baseline_random": -0.0888,
+    "baseline_random_live": -0.0239,
+    "baseline_any_high": -0.0995,
+    "baseline_any_high_live": -0.0346,
+    "baseline_note": "G1/G2 基线仅从站上 MA5 的合格 bar 抽取；G2 基线回补含 MA5 顺延",
+    "vs_random": {
+     "delta_pp": -0.1354,
+     "bootstrap": {
+      "mean": -0.1354,
+      "ci_lo": -0.1835,
+      "ci_hi": -0.0903,
+      "p_gt_0": 0.0,
+      "n_dates": 229
+     },
+     "delta_pp_live": -0.1354,
+     "bootstrap_live": {
+      "mean": -0.1354,
+      "ci_lo": -0.1835,
+      "ci_hi": -0.0902,
+      "p_gt_0": 0.0,
+      "n_dates": 229
+     }
+    },
+    "vs_any_high": {
+     "delta_pp": -0.1246,
+     "bootstrap": {
+      "mean": -0.1246,
+      "ci_lo": -0.1699,
+      "ci_hi": -0.0821,
+      "p_gt_0": 0.0,
+      "n_dates": 229
+     },
+     "delta_pp_live": -0.1246,
+     "bootstrap_live": {
+      "mean": -0.1246,
+      "ci_lo": -0.1699,
+      "ci_hi": -0.0821,
+      "p_gt_0": 0.0,
+      "n_dates": 229
+     }
+    }
+   }
+  },
+  "G2_signal_and_cover_gate": {
+   "E1_dif_turnup": {
+    "strategy": {
+     "n": 8489,
+     "avg_net_pct": -0.1687,
+     "median_net_pct": -0.136,
+     "trimmed_mean_pct": -0.1293,
+     "win_rate": 0.2824,
+     "fake_cover_rate": 0.4803,
+     "forced_ma5_rate": 0.0073,
+     "deferred_rate": 0.0168,
+     "n_stocks": 39,
+     "n_stocks_pos": 1
+    },
+    "strategy_live": {
+     "n": 8489,
+     "avg_net_pct": -0.1038,
+     "median_net_pct": -0.0711,
+     "trimmed_mean_pct": -0.0644,
+     "win_rate": 0.3488,
+     "fake_cover_rate": 0.4803,
+     "forced_ma5_rate": 0.0073,
+     "deferred_rate": 0.0168,
+     "n_stocks": 39,
+     "n_stocks_pos": 1
+    },
+    "n_cells": 4457,
+    "baseline_random": -0.153,
+    "baseline_random_live": -0.0881,
+    "baseline_any_high": -0.1573,
+    "baseline_any_high_live": -0.0923,
+    "baseline_note": "G1/G2 基线仅从站上 MA5 的合格 bar 抽取；G2 基线回补含 MA5 顺延",
+    "vs_random": {
+     "delta_pp": -0.0182,
+     "bootstrap": {
+      "mean": -0.0182,
+      "ci_lo": -0.043,
+      "ci_hi": 0.0052,
+      "p_gt_0": 0.0615,
+      "n_dates": 229
+     },
+     "delta_pp_live": -0.0182,
+     "bootstrap_live": {
+      "mean": -0.0182,
+      "ci_lo": -0.043,
+      "ci_hi": 0.0052,
+      "p_gt_0": 0.0615,
+      "n_dates": 229
+     }
+    },
+    "vs_any_high": {
+     "delta_pp": -0.0139,
+     "bootstrap": {
+      "mean": -0.0139,
+      "ci_lo": -0.0374,
+      "ci_hi": 0.0078,
+      "p_gt_0": 0.1105,
+      "n_dates": 229
+     },
+     "delta_pp_live": -0.0139,
+     "bootstrap_live": {
+      "mean": -0.0139,
+      "ci_lo": -0.0374,
+      "ci_hi": 0.0078,
+      "p_gt_0": 0.1105,
+      "n_dates": 229
+     }
+    }
+   },
+   "E2_hist_neg2pos": {
+    "strategy": {
+     "n": 8489,
+     "avg_net_pct": -0.1801,
+     "median_net_pct": -0.2082,
+     "trimmed_mean_pct": -0.1842,
+     "win_rate": 0.2838,
+     "fake_cover_rate": 0.565,
+     "forced_ma5_rate": 0.0127,
+     "deferred_rate": 0.0206,
+     "n_stocks": 39,
+     "n_stocks_pos": 0
+    },
+    "strategy_live": {
+     "n": 8489,
+     "avg_net_pct": -0.1151,
+     "median_net_pct": -0.1433,
+     "trimmed_mean_pct": -0.1192,
+     "win_rate": 0.3275,
+     "fake_cover_rate": 0.565,
+     "forced_ma5_rate": 0.0127,
+     "deferred_rate": 0.0206,
+     "n_stocks": 39,
+     "n_stocks_pos": 0
+    },
+    "n_cells": 4457,
+    "baseline_random": -0.1502,
+    "baseline_random_live": -0.0853,
+    "baseline_any_high": -0.1503,
+    "baseline_any_high_live": -0.0854,
+    "baseline_note": "G1/G2 基线仅从站上 MA5 的合格 bar 抽取；G2 基线回补含 MA5 顺延",
+    "vs_random": {
+     "delta_pp": -0.0391,
+     "bootstrap": {
+      "mean": -0.0391,
+      "ci_lo": -0.0611,
+      "ci_hi": -0.0177,
+      "p_gt_0": 0.0005,
+      "n_dates": 229
+     },
+     "delta_pp_live": -0.0391,
+     "bootstrap_live": {
+      "mean": -0.0391,
+      "ci_lo": -0.061,
+      "ci_hi": -0.0177,
+      "p_gt_0": 0.0005,
+      "n_dates": 229
+     }
+    },
+    "vs_any_high": {
+     "delta_pp": -0.039,
+     "bootstrap": {
+      "mean": -0.039,
+      "ci_lo": -0.0597,
+      "ci_hi": -0.0192,
+      "p_gt_0": 0.0,
+      "n_dates": 229
+     },
+     "delta_pp_live": -0.039,
+     "bootstrap_live": {
+      "mean": -0.039,
+      "ci_lo": -0.0597,
+      "ci_hi": -0.0192,
+      "p_gt_0": 0.0,
+      "n_dates": 229
+     }
+    }
+   },
+   "E3_forced_1450": {
+    "strategy": {
+     "n": 8489,
+     "avg_net_pct": -0.1662,
+     "median_net_pct": -0.0722,
+     "trimmed_mean_pct": -0.0951,
+     "win_rate": 0.4787,
+     "fake_cover_rate": 0.4663,
+     "forced_ma5_rate": 0.0,
+     "deferred_rate": 0.0,
+     "n_stocks": 39,
+     "n_stocks_pos": 7
+    },
+    "strategy_live": {
+     "n": 8489,
+     "avg_net_pct": -0.1013,
+     "median_net_pct": -0.0072,
+     "trimmed_mean_pct": -0.0302,
+     "win_rate": 0.4958,
+     "fake_cover_rate": 0.4663,
+     "forced_ma5_rate": 0.0,
+     "deferred_rate": 0.0,
+     "n_stocks": 39,
+     "n_stocks_pos": 12
+    },
+    "n_cells": 4457,
+    "baseline_random": -0.0888,
+    "baseline_random_live": -0.0239,
+    "baseline_any_high": -0.0995,
+    "baseline_any_high_live": -0.0346,
+    "baseline_note": "G1/G2 基线仅从站上 MA5 的合格 bar 抽取；G2 基线回补含 MA5 顺延",
+    "vs_random": {
+     "delta_pp": -0.1354,
+     "bootstrap": {
+      "mean": -0.1354,
+      "ci_lo": -0.1835,
+      "ci_hi": -0.0903,
+      "p_gt_0": 0.0,
+      "n_dates": 229
+     },
+     "delta_pp_live": -0.1354,
+     "bootstrap_live": {
+      "mean": -0.1354,
+      "ci_lo": -0.1835,
+      "ci_hi": -0.0902,
+      "p_gt_0": 0.0,
+      "n_dates": 229
+     }
+    },
+    "vs_any_high": {
+     "delta_pp": -0.1246,
+     "bootstrap": {
+      "mean": -0.1246,
+      "ci_lo": -0.1699,
+      "ci_hi": -0.0821,
+      "p_gt_0": 0.0,
+      "n_dates": 229
+     },
+     "delta_pp_live": -0.1246,
+     "bootstrap_live": {
+      "mean": -0.1246,
+      "ci_lo": -0.1699,
+      "ci_hi": -0.0821,
+      "p_gt_0": 0.0,
+      "n_dates": 229
+     }
+    }
+   }
+  }
+ },
+ "judge": {
+  "G0_none": {
+   "legacy": {
+    "best_arm": "E1_dif_turnup",
+    "lines": {
+     "n>=100": true,
+     "delta_vs_any_high>=0.10pp": false,
+     "ci_lo>0": false,
+     "win>=55%": false,
+     "median>0": false,
+     "stocks>=1/3": false,
+     "avg_net>0": false
+    },
+    "pass_all": false
+   },
+   "live": {
+    "best_arm": "E1_dif_turnup",
+    "lines": {
+     "n>=100": true,
+     "delta_vs_any_high>=0.10pp": false,
+     "ci_lo>0": false,
+     "win>=55%": false,
+     "median>0": false,
+     "stocks>=1/3": false,
+     "avg_net>0": false
+    },
+    "pass_all": false
+   }
+  },
+  "G1_signal_gate": {
+   "legacy": {
+    "best_arm": "E1_dif_turnup",
+    "lines": {
+     "n>=100": true,
+     "delta_vs_any_high>=0.10pp": false,
+     "ci_lo>0": false,
+     "win>=55%": false,
+     "median>0": false,
+     "stocks>=1/3": false,
+     "avg_net>0": false
+    },
+    "pass_all": false
+   },
+   "live": {
+    "best_arm": "E1_dif_turnup",
+    "lines": {
+     "n>=100": true,
+     "delta_vs_any_high>=0.10pp": false,
+     "ci_lo>0": false,
+     "win>=55%": false,
+     "median>0": false,
+     "stocks>=1/3": false,
+     "avg_net>0": false
+    },
+    "pass_all": false
+   }
+  },
+  "G2_signal_and_cover_gate": {
+   "legacy": {
+    "best_arm": "E1_dif_turnup",
+    "lines": {
+     "n>=100": true,
+     "delta_vs_any_high>=0.10pp": false,
+     "ci_lo>0": false,
+     "win>=55%": false,
+     "median>0": false,
+     "stocks>=1/3": false,
+     "avg_net>0": false
+    },
+    "pass_all": false
+   },
+   "live": {
+    "best_arm": "E1_dif_turnup",
+    "lines": {
+     "n>=100": true,
+     "delta_vs_any_high>=0.10pp": false,
+     "ci_lo>0": false,
+     "win>=55%": false,
+     "median>0": false,
+     "stocks>=1/3": false,
+     "avg_net>0": false
+    },
+    "pass_all": false
+   }
+  }
+ },
+ "assertions": {
+  "cover_map_consistent": {
+   "pass": true,
+   "detail": "688143 2026-08-26 E3_forced_1450 G2_signal_and_cover_gate sb=107"
+  },
+  "cost_nonnegative_pair": {
+   "pass": true,
+   "detail": ""
+  },
+  "cost_nonnegative_pair_live": {
+   "pass": true,
+   "detail": ""
+  }
+ }
+}

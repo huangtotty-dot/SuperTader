@@ -1,0 +1,150 @@
+{
+ "meta": {
+  "version": "v5s",
+  "date": "2026-10-09",
+  "n_codes": 39,
+  "start": "2025-09-14",
+  "end": "2026-08-26",
+  "arm": "E1_dif_turnup",
+  "fee_buy": 0.0001054,
+  "fee_sell": 0.0006054,
+  "n_mc": 500,
+  "mc_seed": 20260914,
+  "n_boot": 2000,
+  "boot_seed": 20260914,
+  "signal_rule": "v4: c2<=c1 & dif1>0 & dif2<dif1*0.5; 1min; 确认滞后5根",
+  "gate_def": {
+   "MA5_dyn": "c > mean(前4日收盘,c)",
+   "MA5_static": "c > mean(前5个已完成交易日收盘)",
+   "MA10_dyn": "c > mean(前9日收盘,c)",
+   "MA20_dyn": "c > mean(前19日收盘,c)",
+   "MA5_dyn_buf05": "c > mean(前4日收盘,c)*1.005"
+  },
+  "n_pairs_pre_gate": 16861,
+  "stock_days": 8848
+ },
+ "results": {
+  "MA5_dyn": {
+   "n_pairs": 8489,
+   "win_rate": 0.3555,
+   "avg_net_pct": -0.1084,
+   "median_net_pct": -0.0711,
+   "n_stocks": 39,
+   "n_stocks_pos": 2,
+   "n_universe": 39,
+   "n_signals_pre_gate": 16861,
+   "gate_pass_rate": 0.5035,
+   "n_skipped_insufficient_history": 0,
+   "n_cells": 4457,
+   "baseline_random": -0.1244,
+   "vs_random": {
+    "delta_pp": 0.013,
+    "bootstrap": {
+     "mean": 0.013,
+     "ci_lo": -0.0098,
+     "ci_hi": 0.0364,
+     "p_gt_0": 0.862,
+     "n_dates": 229
+    }
+   }
+  },
+  "MA5_static": {
+   "n_pairs": 8533,
+   "win_rate": 0.352,
+   "avg_net_pct": -0.1114,
+   "median_net_pct": -0.0711,
+   "n_stocks": 39,
+   "n_stocks_pos": 1,
+   "n_universe": 39,
+   "n_signals_pre_gate": 16861,
+   "gate_pass_rate": 0.5061,
+   "n_skipped_insufficient_history": 0,
+   "n_cells": 4460,
+   "baseline_random": -0.1202,
+   "vs_random": {
+    "delta_pp": 0.0053,
+    "bootstrap": {
+     "mean": 0.0053,
+     "ci_lo": -0.0194,
+     "ci_hi": 0.0304,
+     "p_gt_0": 0.6725,
+     "n_dates": 229
+    }
+   }
+  },
+  "MA10_dyn": {
+   "n_pairs": 8628,
+   "win_rate": 0.3506,
+   "avg_net_pct": -0.1123,
+   "median_net_pct": -0.0711,
+   "n_stocks": 39,
+   "n_stocks_pos": 2,
+   "n_universe": 39,
+   "n_signals_pre_gate": 16861,
+   "gate_pass_rate": 0.5117,
+   "n_skipped_insufficient_history": 0,
+   "n_cells": 4458,
+   "baseline_random": -0.1125,
+   "vs_random": {
+    "delta_pp": -0.0049,
+    "bootstrap": {
+     "mean": -0.0049,
+     "ci_lo": -0.026,
+     "ci_hi": 0.0168,
+     "p_gt_0": 0.3335,
+     "n_dates": 228
+    }
+   }
+  },
+  "MA20_dyn": {
+   "n_pairs": 8413,
+   "win_rate": 0.3545,
+   "avg_net_pct": -0.101,
+   "median_net_pct": -0.0711,
+   "n_stocks": 39,
+   "n_stocks_pos": 2,
+   "n_universe": 39,
+   "n_signals_pre_gate": 16861,
+   "gate_pass_rate": 0.499,
+   "n_skipped_insufficient_history": 379,
+   "n_cells": 4323,
+   "baseline_random": -0.1041,
+   "vs_random": {
+    "delta_pp": -0.0007,
+    "bootstrap": {
+     "mean": -0.0007,
+     "ci_lo": -0.0217,
+     "ci_hi": 0.0212,
+     "p_gt_0": 0.4715,
+     "n_dates": 224
+    }
+   }
+  },
+  "MA5_dyn_buf05": {
+   "n_pairs": 7235,
+   "win_rate": 0.3689,
+   "avg_net_pct": -0.1083,
+   "median_net_pct": -0.0711,
+   "n_stocks": 39,
+   "n_stocks_pos": 1,
+   "n_universe": 39,
+   "n_signals_pre_gate": 16861,
+   "gate_pass_rate": 0.4291,
+   "n_skipped_insufficient_history": 0,
+   "n_cells": 3817,
+   "baseline_random": -0.1314,
+   "vs_random": {
+    "delta_pp": 0.0195,
+    "bootstrap": {
+     "mean": 0.0195,
+     "ci_lo": -0.0066,
+     "ci_hi": 0.0467,
+     "p_gt_0": 0.9215,
+     "n_dates": 229
+    }
+   }
+  }
+ },
+ "errors": {},
+ "assertions": {}
+}
