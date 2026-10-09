@@ -185,6 +185,13 @@ def evaluate_maps(open_px: dict, prev_close: dict, now: datetime,
     try:
         common = sorted(set(open_px) & set(prev_close))
         if len(common) < _OGR_MOD.MIN_POOL:
+            # 2026-10-09 复盘实证：静默 fail-closed 无法区分「池薄」与「昨收缺失」。补留痕。
+            append_log({"date": now.strftime("%Y-%m-%d"),
+                        "bar_time": now.strftime("%H:%M:%S"),
+                        "layer": "L3_shadow_debug", "via": "evaluate_maps",
+                        "reason": "common_pool_too_thin",
+                        "common_n": len(common), "min_pool": _OGR_MOD.MIN_POOL,
+                        "open_n": len(open_px), "pc_n": len(prev_close)})
             return None
         _watch = (common if codes is None
                   else [c for c in codes if c in open_px and c in prev_close])
@@ -192,6 +199,15 @@ def evaluate_maps(open_px: dict, prev_close: dict, now: datetime,
         if median_codes is not None:
             _mgp = [c for c in median_codes if c in open_px and c in prev_close]
             if len(_mgp) < _OGR_MOD.MIN_POOL:
+                # 2026-10-09 复盘实证：live 新进程昨收快照为空 ⇒ 此分支全天静默
+                # fail-closed（ogr_shadow_none ×321）。补留痕（fail-closed 语义不变）。
+                append_log({"date": now.strftime("%Y-%m-%d"),
+                            "bar_time": now.strftime("%H:%M:%S"),
+                            "layer": "L3_shadow_debug", "via": "evaluate_maps",
+                            "reason": "median_pool_too_thin",
+                            "median_n": len(_mgp), "min_pool": _OGR_MOD.MIN_POOL,
+                            "median_codes_n": len(median_codes),
+                            "open_n": len(open_px), "pc_n": len(prev_close)})
                 return None                      # 代理池太薄 ⇒ fail-closed（不猜）
         r = _OGR_MOD.evaluate({c: prev_close[c] for c in common},
                               {c: open_px[c] for c in common},

@@ -1,0 +1,94 @@
+{
+  "date": "2026-10-09",
+  "snapshot": {
+    "file": "t_io\\state\\holdings_2026-10-09.json",
+    "created_now": false,
+    "prev": "t_io\\state\\holdings_2026-10-08.json"
+  },
+  "K2_cost_change": {
+    "baseline": false,
+    "note": "对照 2026-10-08",
+    "by_code": {
+      "002176": {
+        "cost_now": 8.504,
+        "cost_prev": null,
+        "delta": null
+      },
+      "588170": {
+        "cost_now": 0.949,
+        "cost_prev": 0.949,
+        "delta": 0.0
+      },
+      "600362": {
+        "cost_now": 42.24,
+        "cost_prev": 42.24,
+        "delta": 0.0
+      },
+      "600584": {
+        "cost_now": 69.46,
+        "cost_prev": 69.46,
+        "delta": 0.0
+      }
+    },
+    "snapshot": "t_io\\state\\holdings_2026-10-09.json"
+  },
+  "K3_base_drift": {
+    "baseline": false,
+    "by_code": {
+      "002176": {
+        "t_qty_now": 1300,
+        "t_qty_prev": null,
+        "drift": 1300,
+        "attribution": "需人工确认",
+        "audit": null,
+        "source": "snapshot_diff"
+      },
+      "588170": {
+        "t_qty_now": 84500,
+        "t_qty_prev": 84500,
+        "drift": 0,
+        "attribution": "无漂移",
+        "audit": {
+          "sold": 84500,
+          "bought": 0,
+          "unrebuilt": 84500,
+          "est_pnl": 0.0,
+          "qty_diff": 0,
+          "_virtual": true
+        },
+        "source": "snapshot_diff"
+      },
+      "600362": {
+        "t_qty_now": 500,
+        "t_qty_prev": 500,
+        "drift": 0,
+        "attribution": "无漂移",
+        "audit": {
+          "sold": 0,
+          "bought": 0,
+          "unrebuilt": 0,
+          "est_pnl": 0.0,
+          "qty_diff": 500,
+          "_virtual": true
+        },
+        "source": "snapshot_diff"
+      },
+      "600584": {
+        "t_qty_now": 1200,
+        "t_qty_prev": 1200,
+        "drift": 0,
+        "attribution": "无漂移",
+        "audit": {
+          "sold": 0,
+          "bought": 800,
+          "unrebuilt": 0,
+          "est_pnl": 0.0,
+          "qty_diff": 0,
+          "_virtual": true
+        },
+        "source": "snapshot_diff"
+      }
+    },
+    "drift_total": 1300
+  }
+}

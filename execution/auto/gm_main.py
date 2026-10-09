@@ -2369,6 +2369,38 @@ def on_bar(context, bars):
         # 在这里冻结而非触发时读，是为了不受「触发发生在本轮循环之前还是之后」影响（09:35 兜底路径
         # 会在循环之后才触发）。第 1 天空快照 ⇒ OGR 不发单（第 1 天本也整日跳过）。
         context._ogr_pc_snapshot = dict(getattr(context, "_ogr_pc_cache", None) or {})
+        # 2026-10-09 复盘实证：live 每日新进程 ⇒ `_ogr_pc_cache` 只在 live bar 循环逐根写、
+        # 无盘前预热 ⇒ 首根 bar 冻结到**空快照** ⇒ 影子层 median 池 ∩ 昨收 < MIN_POOL 全天
+        # fail-closed（ogr_shadow_none ×321，D1 重计第三次失败）。live 下用 history_n 日线
+        # 预热缺口（`_px_of` 同款兜底模式）；回测禁用——回测 init 的 history_n 返真实当日
+        # 数据、与回测窗口无关（见 `_ogr_prev_close_map` 坑 3），回测由 harness 喂快照。
+        if getattr(context, "mode", None) == MODE_LIVE:
+            try:
+                _pc_pool = list(STOCKS) + [c for c in MARKET_PROXY if c not in STOCKS]
+                _pc_missing = [c for c in _pc_pool
+                               if not (context._ogr_pc_snapshot.get(c) or 0)]
+                _pc_filled = 0
+                for _c in _pc_missing:
+                    try:
+                        _his = _sdk_call("ogr_pc_prewarm", _partial(
+                            history_n, symbol=_code_to_gm(_c), frequency="1d",
+                            count=3, fields="eob,close", adjust=ADJUST_PREV))
+                        # 只取 eob 早于今日的完整日线（防盘中 forming bar 混入）
+                        _rows = [r for r in (_his or [])
+                                 if str(r.get("eob", ""))[:10] < str(today)]
+                        if _rows:
+                            _cl = float(_rows[-1]["close"])
+                            if _cl > 0:
+                                context._ogr_pc_snapshot[_c] = _cl
+                                _pc_filled += 1
+                    except Exception:
+                        continue
+                if _pc_missing:
+                    print(f"[OGR] 昨收盘前预热: 缺 {len(_pc_missing)} 只, 补齐 {_pc_filled} 只")
+                    _audit_write({"event": "ogr_pc_prewarm", "date": str(today),
+                                  "missing": len(_pc_missing), "filled": _pc_filled})
+            except Exception as _pe:
+                print(f"[OGR] ⚠️ 昨收预热失败（fail-closed，沿用空快照）: {_pe}")
         context._ogr_legs = {}
         context._ogr_opens = {}
         _audit_write({"event": "date_reset", "date": str(today)})
