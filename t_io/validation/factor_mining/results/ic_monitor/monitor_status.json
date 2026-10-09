@@ -1,0 +1,71 @@
+{
+ "generated_at": "2026-10-10 00:55:34",
+ "as_of": "2026-09-17",
+ "ic_end": "2026-09-09",
+ "params": {
+  "h": 5,
+  "forward": "buy_open open(t+6)/open(t+1)-1",
+  "roll_win": 60,
+  "roll_min_periods": 40,
+  "warn_days": 10,
+  "alarm_days": 20,
+  "min_coverage": 30,
+  "monitor_start": "2024-03-05"
+ },
+ "factors": {
+  "REV10": {
+   "last_date": "2026-09-09",
+   "ic_last": 0.195,
+   "ic_mean20": 0.1029,
+   "roll60": 0.0194,
+   "consec_neg_days": 0,
+   "status": "正常",
+   "suggested_weight_mult": 1.0,
+   "hist_alarm_days": 48,
+   "hist_max_consec_neg": 67,
+   "hist_last_alarm_date": "2026-08-14"
+  },
+  "GAP": {
+   "last_date": "2026-09-09",
+   "ic_last": 0.2997,
+   "ic_mean20": 0.0285,
+   "roll60": 0.0197,
+   "consec_neg_days": 0,
+   "status": "正常",
+   "suggested_weight_mult": 1.0,
+   "hist_alarm_days": 25,
+   "hist_max_consec_neg": 44,
+   "hist_last_alarm_date": "2024-12-31"
+  },
+  "AMOUNT_CHG_inv": {
+   "last_date": "2026-09-09",
+   "ic_last": 0.1794,
+   "ic_mean20": 0.0757,
+   "roll60": 0.038,
+   "consec_neg_days": 0,
+   "status": "正常",
+   "suggested_weight_mult": 1.0,
+   "hist_alarm_days": 15,
+   "hist_max_consec_neg": 34,
+   "hist_last_alarm_date": "2026-08-03"
+  },
+  "PRICE_POS60_inv": {
+   "last_date": "2026-09-09",
+   "ic_last": 0.3684,
+   "ic_mean20": 0.017,
+   "roll60": 0.1479,
+   "consec_neg_days": 0,
+   "status": "正常",
+   "suggested_weight_mult": 1.0,
+   "hist_alarm_days": 35,
+   "hist_max_consec_neg": 54,
+   "hist_last_alarm_date": "2026-07-21"
+  }
+ },
+ "overall": {
+  "any_alarm": false,
+  "alarm_factors": [],
+  "warn_factors": [],
+  "action": "无动作"
+ }
+}

@@ -1,0 +1,46 @@
+{
+ "ic_vs_official": {
+  "REV10": {
+   "overlap_days": 613,
+   "corr": 1.0,
+   "mean_abs_diff": 0.0
+  },
+  "GAP": {
+   "overlap_days": 613,
+   "corr": 1.0,
+   "mean_abs_diff": 0.0
+  },
+  "AMOUNT_CHG_inv": {
+   "overlap_days": 613,
+   "corr": 1.0,
+   "mean_abs_diff": 0.0
+  },
+  "PRICE_POS60_inv": {
+   "overlap_days": 613,
+   "corr": 1.0,
+   "mean_abs_diff": 0.0
+  }
+ },
+ "roll60_vs_decay_diag": {
+  "REV10": {
+   "overlap_days": 574,
+   "corr": 0.9945,
+   "mean_abs_diff": 0.00061
+  },
+  "GAP": {
+   "overlap_days": 574,
+   "corr": 0.997,
+   "mean_abs_diff": 0.00017
+  },
+  "AMOUNT_CHG_inv": {
+   "overlap_days": 574,
+   "corr": 0.9894,
+   "mean_abs_diff": 0.00061
+  },
+  "PRICE_POS60_inv": {
+   "overlap_days": 574,
+   "corr": 0.9888,
+   "mean_abs_diff": 0.00087
+  }
+ }
+}

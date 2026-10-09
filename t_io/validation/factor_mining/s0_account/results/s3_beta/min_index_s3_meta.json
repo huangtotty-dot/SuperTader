@@ -1,0 +1,19 @@
+{
+  "n_files": 981,
+  "bad_files": [],
+  "n_partial": 0,
+  "prev_close_mismatch": 0,
+  "n_rows": 353461,
+  "n_codes": 981,
+  "date_min": "2025-03-31",
+  "date_max": "2026-09-18",
+  "check_vs_s2": {
+    "rows_s3": 353461,
+    "rows_s2": 353461,
+    "merged": 353461,
+    "o930_diff": 0,
+    "c1000_diff": 0,
+    "prev_close_diff": 0
+  },
+  "elapsed": 39.8
+}

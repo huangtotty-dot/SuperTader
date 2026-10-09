@@ -1,0 +1,45 @@
+{
+  "window": [
+    "2025-03-31",
+    "2026-09-18"
+  ],
+  "post_cut": "2026-02-24",
+  "n_codes": 981,
+  "trigger": {
+    "n_days_total": 361,
+    "n_days_mkt_neg": 184,
+    "n_days_any_trigger": 184,
+    "trig_median": 109.5,
+    "trig_p90": 193.70000000000002,
+    "n_candidates": 22225
+  },
+  "pocket_frac": 0.25,
+  "leg_min": 60000.0,
+  "y_impact": 0.7,
+  "auction_frac_of_day": 0.013,
+  "impact_sensitivity": {
+    "Y0.5": {
+      "C1M_N4": 5.11,
+      "C5M_N4": 10.87,
+      "C10M_N4": 14.46,
+      "C1M_N8": NaN,
+      "C5M_N8": 7.82,
+      "C10M_N8": 10.81,
+      "C1M_N16": NaN,
+      "C5M_N16": 5.62,
+      "C10M_N16": 7.89
+    },
+    "Y1.0": {
+      "C1M_N4": 10.21,
+      "C5M_N4": 21.74,
+      "C10M_N4": 28.91,
+      "C1M_N8": NaN,
+      "C5M_N8": 15.65,
+      "C10M_N8": 21.62,
+      "C1M_N16": NaN,
+      "C5M_N16": 11.24,
+      "C10M_N16": 15.78
+    }
+  },
+  "idx_size_mb": 14.9
+}
