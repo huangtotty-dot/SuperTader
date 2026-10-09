@@ -2019,7 +2019,7 @@ function renderAddWatch(aw) {
         const levelMatch = c.detail.match(/等级:(\w+)/);
         if (levelMatch) {
           const level = levelMatch[1];
-          const levelColor = level === "reliable" ? "#3fb950" : level === "strong" ? "#f85149" : "#e3b341";
+          const levelColor = level === "reliable" ? "#3fb950" : level === "strong" ? "#f85149" : "#9a6200";
           levelBadge = `<span style="color:${levelColor};font-weight:bold;margin-left:4px">[${level}]</span>`;
         }
       }
@@ -4129,7 +4129,7 @@ function renderMarkdown(md) {
       const n = parseFloat(s.replace(/[%,+\s]/g, ""));
       if (!isNaN(n)) style = n > 0 ? "color:#f85149;font-weight:600" : n < 0 ? "color:#3fb950" : "";
     } else if (!isHeader && /(破MA20|破MA60|量比|铁顶|铁底|分水岭|生命线|支撑|压力)/.test(s)) {
-      style = "color:#d29922;font-weight:500";             // 关键位/触发项：琥珀
+      style = "color:#9a6200;font-weight:500";             // 关键位/触发项：深琥珀(2026-10-09 原 #d29922 淡黄难读)
     }
     return `<td${numCls ? ` class="${numCls}"` : ""}${style ? ` style="${style}"` : ""}>${txt}</td>`;
   };
@@ -4332,7 +4332,7 @@ function renderKeyLevels(md) {
   }
   if (!rows.length) { el.innerHTML = ""; return; }
   const cards = rows.map(r => `<div style="flex:1;min-width:130px;padding:8px 10px;background:var(--bg-soft);border:1px solid var(--border);border-radius:6px">
-    <div style="font-size:11px;color:#d29922;font-weight:600">${esc(r[0])}</div>
+    <div style="font-size:11px;color:#9a6200;font-weight:600">${esc(r[0])}</div>
     <div style="font-size:15px;font-weight:700;color:#e6edf3;margin:3px 0;font-family:var(--mono)">${esc(r[1])}</div>
     <div style="font-size:10px;color:var(--text-dim)">${esc(r[2] || "")}</div>
   </div>`).join("");

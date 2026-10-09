@@ -12,6 +12,8 @@
   --red: #e8531f; --red-soft: #ffe3d6; --red-bg: rgba(232, 83, 31, .10);
   --green: #229652; --green-soft: #d3f3e0; --green-bg: rgba(34, 150, 82, .10);
   --yellow: #c97e00; --yellow-soft: #f6d9a8; --yellow-bg: rgba(201, 126, 0, .10);
+  /* 2026-10-09 owner：**警告文字**禁用浅黄（#f6d9a8 在白底上不可读）——统一用深琥珀。 */
+  --warn: #9a6200;
   --gray: #6b7280;
   --mono: "JetBrains Mono", "Consolas", monospace;
   --sidebar-w: 184px;
@@ -75,7 +77,7 @@ body {
 }
 @keyframes livePulse { 0%,100%{opacity:1} 50%{opacity:.55} }
 .live-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: #3fb950; animation: livePulse 1.6s ease-in-out infinite; vertical-align: middle; margin-right: 2px; }
-.aw-delta { font-size: 10px; color: var(--yellow-soft); }
+.aw-delta { font-size: 10px; color: var(--warn); }
 
 /* ===== 报警横幅 ===== */
 /* 顶部横幅容器（2026-09-28）：告警条与背离条**同处一列**。
@@ -173,13 +175,13 @@ tr:hover td { background: rgba(243,93,43,.03); }
 .mono { font-family: var(--mono); }
 .cell-dim { color: var(--text-dim); }
 .empty { color: var(--text-faint); padding: 18px; text-align: center; }
-.up { color: var(--red); } .down { color: var(--green); } .warn { color: var(--yellow-soft); } .neutral { color: var(--gray); }
+.up { color: var(--red); } .down { color: var(--green); } .warn { color: var(--warn); } .neutral { color: var(--gray); }
 .badge { display: inline-block; font-size: 10px; padding: 1px 6px; border-radius: 20px; border: 1px solid var(--border); color: var(--text-dim); white-space: nowrap; }
 .badge.bull { color:var(--red); border-color:rgba(248,81,73,.5); background:var(--red-bg) }
 .badge.bear { color:var(--green); border-color:rgba(63,185,80,.5); background:var(--green-bg) }
 .badge.chop { color:var(--gray); border-color:var(--border) }
 .badge.signal { color:var(--red); border-color:rgba(248,81,73,.6); background:var(--red-bg); font-weight:700 }
-.badge.approach { color:var(--yellow-soft); border-color:rgba(210,153,34,.5); background:var(--yellow-bg) }
+.badge.approach { color:var(--warn); border-color:rgba(210,153,34,.5); background:var(--yellow-bg) }
 .badge.weak { color:var(--gray); border-color:var(--border) }
 .badge.nodata { color:var(--text-faint); border-color:var(--border) }
 .badge.hold { color:var(--accent); border-color:rgba(243,93,43,.5); background:rgba(243,93,43,.1) }
@@ -213,12 +215,12 @@ tr:hover td { background: rgba(243,93,43,.03); }
 .regime-chip-live { font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 3px; }
 .regime-uni_up { color: var(--red); background: var(--red-bg); }
 .regime-uni_down { color: var(--green); background: var(--green-bg); }
-.regime-range { color: var(--yellow-soft); background: var(--yellow-bg); }
-.cool-tag { color: var(--yellow-soft); font-family: var(--mono); font-size: 10px; }
+.regime-range { color: var(--warn); background: var(--yellow-bg); }
+.cool-tag { color: var(--warn); font-family: var(--mono); font-size: 10px; }
 .live-signal-row.sig { background: var(--red-bg); }
 .live-signal-row.sig td { color: var(--red-soft); }
 .live-signal-row.near { background: var(--yellow-bg); }
-.live-signal-row.near td { color: var(--yellow-soft); }
+.live-signal-row.near td { color: var(--warn); }
 .console-toggle { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; font-size: 12px; color: var(--text-dim); }
 .console-box { background: rgba(244,246,250,.7); border: 1px solid var(--border-soft); border-radius: 6px; padding: 4px 6px; height: 280px; overflow-y: auto; font-family: var(--mono); font-size: 11px; line-height: 1.45; color: var(--text); }
 .con-line { display: flex; align-items: baseline; gap: 6px; padding: 3px 6px; border-left: 3px solid transparent; border-radius: 0 4px 4px 0; margin: 1px 0; }
@@ -243,7 +245,7 @@ tr:hover td { background: rgba(243,93,43,.03); }
 .zone-since { color: var(--text-faint); font-size: 10px; font-family: var(--mono); }
 .zone-note { color: var(--text-dim); font-size: 11px; margin-top: 1px; }
 .zone-已验收 .zone-title { color: var(--green); }
-.zone-观察中 .zone-title { color: var(--yellow-soft); }
+.zone-观察中 .zone-title { color: var(--warn); }
 .zone-优化管线中 .zone-title { color: var(--accent); }
 .zone-待启动 .zone-title { color: var(--gray); }
 
@@ -311,7 +313,7 @@ tr:hover td { background: rgba(243,93,43,.03); }
 .mini-btn.primary { background: var(--accent); color: #0d1117; border-color: var(--accent); font-weight: 700; }
 .mini-btn.primary:hover { filter: brightness(1.1); }
 .support-chip { display: inline-block; font-size: 11px; font-family: var(--mono); background: var(--bg); border: 1px solid var(--border-soft); border-radius: 4px; padding: 1px 5px; margin: 2px 3px 2px 0; color: var(--text-dim); }
-.warmup-banner { background: var(--yellow-bg); color: var(--yellow-soft); font-size: 12px; padding: 6px 12px; border-radius: 6px; margin-bottom: 8px; border: 1px dashed var(--yellow); }
+.warmup-banner { background: var(--yellow-bg); color: var(--warn); font-size: 12px; padding: 6px 12px; border-radius: 6px; margin-bottom: 8px; border: 1px dashed var(--yellow); }
 .mini-input { background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 4px; padding: 3px 8px; font-size: 12px; }
 .mini-input:focus { border-color: var(--accent); outline: none; }
 /* 加仓观察进度条 */
@@ -336,12 +338,12 @@ tr:hover td { background: rgba(243,93,43,.03); }
 .rv { font-size: 13px; line-height: 1.75; }
 .rv-h2 { font-size: 17px; color: var(--accent); margin: 18px 0 8px; padding-bottom: 5px; border-bottom: 1px solid var(--border); }
 .rv-h3 { font-size: 15px; color: var(--accent); margin: 14px 0 6px; }
-.rv-h4 { font-size: 13px; color: var(--yellow-soft); margin: 12px 0 5px; }
+.rv-h4 { font-size: 13px; color: var(--warn); margin: 12px 0 5px; }
 .rv-h5 { font-size: 12px; color: var(--text); margin: 9px 0 4px; }
 .rv-p { margin: 5px 0; color: var(--text); }
 .rv-li { padding-left: 16px; margin: 3px 0; color: var(--text); }
 .rv b { color: var(--text); }
-.rv-code { font-family: var(--mono); background: var(--bg-soft); border: 1px solid var(--border); border-radius: 3px; padding: 0 4px; font-size: 11px; color: var(--yellow-soft); }
+.rv-code { font-family: var(--mono); background: var(--bg-soft); border: 1px solid var(--border); border-radius: 3px; padding: 0 4px; font-size: 11px; color: var(--warn); }
 .rv-hr { border: none; border-top: 1px solid var(--border); margin: 14px 0; }
 .rv-table { border-collapse: collapse; width: 100%; font-size: 12px; margin: 8px 0; }
 .rv-table td { border: 1px solid var(--border-soft); padding: 5px 9px; color: var(--text); }
@@ -426,7 +428,7 @@ tr:hover td { background: rgba(243,93,43,.03); }
 .h-score-big { font-family: var(--mono); font-size: 20px; font-weight: 700; line-height: 1; }
 .h-score-unit { font-size: 11px; font-weight: 400; margin-left: 2px; color: var(--text-dim); }
 .h-score-big.h-hot { color: #f85149; }
-.h-score-big.h-warm { color: #d29922; }
+.h-score-big.h-warm { color: var(--warn); }
 .h-score-big.h-cool { color: var(--text-dim); }
 .h-bar-track { height: 4px; background: rgba(139,148,158,.12); border-radius: 2px; margin-top: 3px; overflow: hidden; }
 .h-bar-sm { height: 3px; }
@@ -462,7 +464,7 @@ tr:hover td { background: rgba(243,93,43,.03); }
 /* 加仓条件 checklist */
 .aw-score { display: inline-block; margin-left: 10px; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 10px; }
 .aw-score.up { color: #3fb950; background: rgba(63,185,80,.12); }
-.aw-score.warn { color: #d29922; background: rgba(210,153,34,.12); }
+.aw-score.warn { color: var(--warn); background: rgba(210,153,34,.12); }
 .aw-score.down { color: #f85149; background: rgba(248,81,73,.12); }
 .aw-cond-list { display: grid; grid-template-columns: 1fr 1fr; gap: 5px 12px; }
 @media (max-width: 800px) { .aw-cond-list { grid-template-columns: 1fr; } }
