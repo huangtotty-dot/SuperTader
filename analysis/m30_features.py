@@ -72,13 +72,21 @@ def _arrays(ind, vol_ma_n: int = 8) -> dict:
         "vma": ind[f"vol_ma{vol_ma_n}"].values,
         "sma20": ind["sma20"].values if "sma20" in ind.columns else None,
         "sma60": ind["sma60"].values if "sma60" in ind.columns else None,
+        "med": float(np.median((ind["high"].astype(float).values
+                                - ind["low"].astype(float).values)
+                               / np.maximum(ind["close"].astype(float).values, 1e-9))),
     }
 
 
 def _features_at(A, i, peaks, *, price_excess: float = 0.001, shrink_ratio: float = 0.7,
                  max_age_bars: int = 24, ma_touch: float = 0.003,
-                 high_zone_n: int = 16) -> dict:
-    """在数组视图 `A`（见 `_arrays`）的第 i 根上评估 T1–T4。单根评估 = 唯一真源（detect/scan 共用）。"""
+                 high_zone_n: int = 16, dif_zone: bool = False,
+                 swing_mult: float = 0.0) -> dict:
+    """在数组视图 `A`（见 `_arrays`）的第 i 根上评估 T1–T4。单根评估 = 唯一真源（detect/scan 共用）。
+
+    `dif_zone`/`swing_mult`（2026-10-09，精度调优用）：给 T1 加严门槛，默认关闭（=经典定义）。
+      · `dif_zone=True`：要求顶背离发生在 DIF>0 区（对齐 同花顺/通达信 口径，滤掉深负区小反弹）。
+      · `swing_mult>0`：要求两摆动高点间有 ≥`swing_mult`×中位 bar 振幅 的逆向摆动（滤同段做顶）。"""
     closes = A["close"]
     highs = A["high"]
     lows = A["low"]
@@ -91,6 +99,8 @@ def _features_at(A, i, peaks, *, price_excess: float = 0.001, shrink_ratio: floa
 
     t1 = t2 = t3 = t3_strong = t4 = False
     p1 = p2 = gap = bars_ago = None
+    zone_ok = False                            # 诊断量（无论是否加严门槛都算，供精度调优复用）
+    swing_ratio = 0.0
 
     # ── T1/T2：最近两个摆动高点 P1<P2（间距 4–48、价创新高）为共同前提 ──
     pos = bisect.bisect_right(peaks, i)   # peaks 升序 ⇒ O(log) 取「≤ i 的最后两个」
@@ -100,10 +110,16 @@ def _features_at(A, i, peaks, *, price_excess: float = 0.001, shrink_ratio: floa
         if (MIN_GAP <= g <= MAX_GAP and i - a2 <= max_age_bars
                 and closes[a2] > closes[a1] * (1 + price_excess)):
             p1, p2, gap, bars_ago = int(a1), int(a2), int(g), int(i - a2)
+            zone_ok = bool(not np.isnan(dif[a2]) and dif[a2] > 0)      # 顶背离须在 DIF>0 区
+            _med = A.get("med") or 0.0
+            if _med > 0:                                                # 逆向摆动深度 / 中位 bar 振幅
+                swing_ratio = float((highs[a2] - lows[a1:a2 + 1].min()) / highs[a2] / _med)
+            _zone_gate = (not dif_zone) or zone_ok
+            _swing_gate = (swing_mult <= 0) or (swing_ratio >= swing_mult)
             # T1：价创新高 但 DIF 未创新高（顶背离）。⚠️ 手册另要求 dif[P2]<dif[P2-1]（DIF 已回落），
             # 但摆动高点由 _local_extrema 滞后确认（n_bars=3），实测 P2 处 DIF 常仍在**上行**
             # ⇒ 该条会把绝大多数真实顶背离挡掉。改为只用经典定义（与 divergence.detect_divergence_df 同）。
-            if dif[a2] < dif[a1]:
+            if dif[a2] < dif[a1] and _zone_gate and _swing_gate:
                 t1 = True
             # T2：价创新高 但量萎缩（且低于自身量均线）
             if (vols[a2] < vols[a1] * shrink_ratio
@@ -142,14 +158,15 @@ def _features_at(A, i, peaks, *, price_excess: float = 0.001, shrink_ratio: floa
     return {"t1": t1, "t2": t2, "t3": t3, "t3_strong": t3_strong, "t4": t4,
             "count": int(t1) + int(t2) + int(t3) + int(t4),
             "fired": [FEATURE_LABELS[k] for k in fired],
-            "t1_p1": p1, "t1_p2": p2, "t1_swing_gap": gap, "t1_bars_ago": bars_ago}
+            "t1_p1": p1, "t1_p2": p2, "t1_swing_gap": gap, "t1_bars_ago": bars_ago,
+            "zone_ok": zone_ok, "t1_swing_ratio": round(swing_ratio, 2)}
 
 
 def _blank(n_bars: int = 0, ok: bool = False, bar_time=None) -> dict:
     return {"ok": ok, "n_bars": n_bars, "bar_time": bar_time,
             "t1": False, "t2": False, "t3": False, "t3_strong": False, "t4": False,
             "count": 0, "fired": [], "t1_p1": None, "t1_p2": None,
-            "t1_swing_gap": None, "t1_bars_ago": None}
+            "t1_swing_gap": None, "t1_bars_ago": None, "zone_ok": False, "t1_swing_ratio": 0.0}
 
 
 def detect_top_features(df, **kw) -> dict:
@@ -221,7 +238,8 @@ def verdict_from_features(feats, trend=None, div_type=None, div_bars_ago=None,
     t1, t2, t3, t4 = (f.get(k) for k in ("t1", "t2", "t3", "t4"))
     if t1 or t2:
         why = "、".join(x for x, v in (("T1顶背离", t1), ("T2量价背离", t2)) if v)
-        return "high", VERDICT_LABELS["high"], f"{why}（已验证强特征）"
+        tag = "强共振，H=4 下跌占比 85%" if (t1 and t2) else "H=4 下跌占比 78~83%"
+        return "high", VERDICT_LABELS["high"], f"{why}（{tag}）"
     if t3 and t4:
         return "watch", VERDICT_LABELS["watch"], "T3顶分型+T4均线压制（弱信号共振，未验出前瞻）"
     if div_type == "底背离" and div_bars_ago is not None and div_bars_ago <= fresh_bars:

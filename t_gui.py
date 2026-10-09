@@ -513,7 +513,9 @@ def _build_m30_snapshot(df):
                 "bars_ago": int(last.get("bars_ago", 0)),
                 "time": str(last.get("time", "")),
                 "price": last.get("price")}),
-            "feats": m30_features.detect_top_features(dbars),
+            # dif_zone=True：T1 顶背离须在 DIF>0 区（对齐 同花顺/通达信；滤「下行深负区小反弹」
+            # 这一类已知假阳性，见 002202）。精度调优见 t_io/validation/m30_top/调优_m30_precision.md。
+            "feats": m30_features.detect_top_features(dbars, dif_zone=True),
             "bar_time": str(dbars["time"].iloc[-1]),
             "n_bars": len(dbars),
         }
@@ -539,7 +541,9 @@ def _build_m30_light(df):
             "div": (None if last is None else {
                 "type": "顶背离" if last.get("type") == "顶" else "底背离",
                 "bars_ago": int(last.get("bars_ago", 0))}),
-            "feats": m30_features.detect_top_features(dbars),
+            # dif_zone=True：T1 顶背离须在 DIF>0 区（对齐 同花顺/通达信；滤「下行深负区小反弹」
+            # 这一类已知假阳性，见 002202）。精度调优见 t_io/validation/m30_top/调优_m30_precision.md。
+            "feats": m30_features.detect_top_features(dbars, dif_zone=True),
             "bar_time": str(dbars["time"].iloc[-1]),
         }
     except Exception:
