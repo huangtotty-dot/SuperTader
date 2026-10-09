@@ -3796,6 +3796,12 @@ function renderHunter(h) {
       }
     });
   }
+  // 2026-10-09: **预热前几个（最大的）板块的技术标签**——否则展开那一刻才拉，冷启动先回空、
+  // 要等后台算完（约 4~20s）。预热后用户展开即命中缓存。
+  try {
+    Object.keys(ss).sort((a, b) => ((ss[b] || []).length - (ss[a] || []).length))
+      .slice(0, 6).forEach(cat => { if (!hunterTagsCache[cat]) loadSectorTags(cat); });
+  } catch (e) { /* 静默 */ }
 }
 
 /* ---- 持仓日线体检 ---- */
