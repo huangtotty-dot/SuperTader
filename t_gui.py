@@ -295,6 +295,17 @@ _MIN_BARS_LOCK = threading.Lock()
 MIN_BARS_KEEP = 320                                    # 保留根数上限（前端「全部」档）
 _MIN_BARS_DAYS = {"30min": 70, "60min": 130}           # 自然日：够 320 根（8/日、4/日）
 
+# ---- 持仓体检（OB）30 分钟快照层（2026-10-09）----
+# 背景：体检表趋势/背离/风险提醒改用 30min 口径。`load_ob_analysis` 跑在 pywebview 串行主线程，
+# 任何网络调用都会冻界面 ⇒ 该层**只读磁盘/内存缓存**（零网络），由后台按 30 分钟时段预热。
+_M30_OB_ENABLED = True                                 # 回滚开关：False ⇒ 体检表退回日线口径
+_OB_M30_STATE: dict = {}                               # 刷新守护线程幂等标记 {"started": bool}
+_M30_SNAP_CACHE: dict = {}                             # {f"{base}_{slot}": snapshot}
+_M30_SNAP_LOCK = threading.Lock()
+_M30_SNAP_MAX = 2000                                   # 无界增长防护
+_M30_MIN_BARS = 60                                     # == Trend30Config.min_bars / m30_features.MIN_BARS
+_M30_DISPLAY_MAX_GAP_DAYS = 12                         # 与 chart_cache.MAX_DISPLAY_GAP_DAYS 一致
+
 
 def _min_bars_ts_code(code):
     """6 位股票/指数码 → tushare ts_code（sh000001→000001.SH）。
@@ -444,6 +455,60 @@ def _fetch_min_bars(code, freq="30min", days=None):
             _MIN_BARS_CACHE.clear()
         _MIN_BARS_CACHE[ck] = (slot, df)
     return df.copy()
+
+
+def _m30_bars_cache_only(code, freq="30min"):
+    """**零网络** 30min bars：读内存(同 slot) → 磁盘（`_fetch_min_bars_disk`：新鲜 plain → _d540）。
+    供持仓体检（OB）热路径用；绝不出网。返回最近 MIN_BARS_KEEP 根的副本（或空 DataFrame）。"""
+    import pandas as pd
+    ts_code = _min_bars_ts_code(code)
+    if not ts_code or freq not in _MIN_BARS_DAYS:
+        return pd.DataFrame()
+    ck = (ts_code, freq, "offline")
+    slot = _min_bars_slot()
+    with _MIN_BARS_LOCK:
+        hit = _MIN_BARS_CACHE.get(ck)
+        if hit and hit[0] == slot:
+            return hit[1].copy()
+    df = _fetch_min_bars_disk(ts_code, freq)           # 纯磁盘（plain→_d540），无网络
+    if df is None or df.empty:
+        return pd.DataFrame()
+    df = df.tail(MIN_BARS_KEEP).reset_index(drop=True)  # 必须：_d540 有 ~4300 根，须截断
+    with _MIN_BARS_LOCK:
+        if len(_MIN_BARS_CACHE) > 2000:
+            _MIN_BARS_CACHE.clear()
+        _MIN_BARS_CACHE[ck] = (slot, df)
+    return df.copy()
+
+
+def _build_m30_snapshot(df):
+    """由 30min bars 组装持仓体检快照：{t30, div, feats, bar_time, n_bars}。空/不足 → {}（纯计算）。"""
+    if df is None or getattr(df, "empty", True):
+        return {}
+    try:
+        from analysis.trend30.adapter import evaluate_bars
+        from analysis.trend30.indicators import drop_forming_bar
+        from analysis import m30_features, divergence as _dv
+        dbars = drop_forming_bar(df)                    # 丢掉未收盘根（与 trend30 管线一致）
+        if len(dbars) < _M30_MIN_BARS:
+            return {}
+        t30 = evaluate_bars(dbars)
+        evs = _dv.detect_divergence_events(dbars)
+        last = _dv._latest_fresh(evs, _dv.MAX_AGE_BARS.get("30min", 32))
+        return {
+            "t30": t30 if t30.get("state") else {},
+            "div": (None if last is None else {
+                "type": "顶背离" if last.get("type") == "顶" else "底背离",
+                "consec": bool(last.get("consec")),
+                "bars_ago": int(last.get("bars_ago", 0)),
+                "time": str(last.get("time", "")),
+                "price": last.get("price")}),
+            "feats": m30_features.detect_top_features(dbars),
+            "bar_time": str(dbars["time"].iloc[-1]),
+            "n_bars": len(dbars),
+        }
+    except Exception:
+        return {}
 
 
 _ACCT_MAP_CACHE = {"ts": 0.0, "map": {}}
@@ -1834,7 +1899,11 @@ class Api:
 
     # ---------- 持仓日线超买/顶背离体检 ----------
     def load_ob_analysis(self, date=None):
-        """每只持仓：日线超买指标(RSI/KDJ-J/CCI/BOLL) + 顶背离(MACD/RSI/KDJ/量价) + 建仓建议。
+        """每只持仓：**30min 趋势 / 30min 背离 / 30min 顶部特征(T1–T4)风险提醒** + 日线超买(RSI/KDJ-J/CCI/BOLL)。
+
+        2026-10-09 口径变更（owner 需求）：趋势/背离/风险提醒三列改用 **30 分钟线**（趋势=30min
+        三层状态机；背离=30min MACD 背离；风险/提醒=30min 顶部特征 T1–T4，**参考·未验证**）。
+        数据来自 `_m30_top_snapshot`（**只读内存/磁盘缓存、零网络**）；30min 不可用则各列回退日线。
 
         2026-10-04 卡顿修复：原来逐只 `load_stock_chart`（冷取数）⇒ 冷启动实测 **14.3s** 同步阻塞
         在 pywebview 主线程。改为**只用已预热的图表缓存**：未就绪的持仓本轮跳过、计入 `pending`，
@@ -1864,6 +1933,11 @@ class Api:
                                       "error": h.get("error", "无数据")})
                 continue
             d = h["period_data"]["daily"]
+            # 30min 快照（2026-10-09）：趋势/背离/风险提醒改 30 分钟口径。**只读内存/磁盘缓存、零网络**
+            # （后台 `refresh_ob_m30` 按 30min 时段预热）；miss 时磁盘兜底，仍无 → 各列回退日线。
+            _m30 = self._m30_top_snapshot(base_code) if _M30_OB_ENABLED else {}
+            _t30 = (_m30 or {}).get("t30") or {}
+            _feats = (_m30 or {}).get("feats") or {}
             # 技术标签（2026-10-07）：与建仓表同口径（复用 `_stock_tags_from_df`）。用已缓存的
             # 日线 payload 重建 df，**零额外网络**；标签口径/顺序与建仓表完全一致。
             _live_close = None
@@ -1885,15 +1959,15 @@ class Api:
                     _tdf.at[_li, "high"] = max(float(_tdf.at[_li, "high"]), float(_live["high"]))
                     _tdf.at[_li, "low"] = min(float(_tdf.at[_li, "low"]), float(_live["low"]))
                     _live_close = float(_live["close"])
-                _tags = self._stock_tags_from_df(_tdf, base_code).get("tags", [])
+                _tags = self._stock_tags_from_df(
+                    _tdf, base_code,
+                    t30=(_t30 if _t30.get("trend") else False)).get("tags", [])
             except Exception:
                 _tags = []
             closes = [x[1] for x in d["ohlc"]]
             highs = [x[3] for x in d["ohlc"]]
             lows = [x[2] for x in d["ohlc"]]
-            volumes = d["volume"]
             rsi = d["rsi"]
-            dif = d["macd"]["dif"]
             boll_up = d["boll"]["up"]
             n = len(closes)
             if n < 30:
@@ -1935,70 +2009,51 @@ class Api:
             }
             ob["count"] = sum(1 for v in ob.values() if v)
 
-            # 顶背离检测（近60日）
-            div = {"macd": False, "rsi": False, "kdj": False, "vol": False}
-            win = range(max(2, n - 60), n)
-            # 找近60日两个局部价格高点
-            highs_list = list(win)
-            price_peaks = []
-            for i in range(2, len(win) - 2):
-                idx = list(win)[i]
-                if highs[idx] >= highs[idx - 1] and highs[idx] >= highs[idx - 2] and \
-                   highs[idx] >= highs[idx + 1] and highs[idx] >= highs[idx + 2]:
-                    price_peaks.append(idx)
-            if len(price_peaks) >= 2:
-                p2, p1 = price_peaks[-2], price_peaks[-1]
-                # MACD 顶背离: 价创新高 但 DIF 未创新高
-                if highs[p1] > highs[p2] and dif[p1] is not None and dif[p2] is not None and dif[p1] < dif[p2]:
-                    div["macd"] = True
-                # RSI 顶背离
-                if highs[p1] > highs[p2] and rsi[p1] is not None and rsi[p2] is not None and rsi[p1] < rsi[p2]:
-                    div["rsi"] = True
-                # KDJ 顶背离
-                if highs[p1] > highs[p2] and j_arr[p1] < j_arr[p2]:
-                    div["kdj"] = True
-                # 量价背离: 价新高 量萎缩
-                if highs[p1] > highs[p2] and volumes[p1] < volumes[p2] * 0.9:
-                    div["vol"] = True
-            div["count"] = sum(1 for v in div.values() if v)
+            # 背离（2026-10-09）：改 **30 分钟** MACD 背离（已验证口径 detect_divergence_events
+            # + 新鲜度 MAX_AGE_BARS['30min']）；无 30min 数据 → 置空（不冒充日线结论）。
+            _dve = (_m30 or {}).get("div") or {}
+            div = {"type": _dve.get("type"), "consec": bool(_dve.get("consec")),
+                   "bars_ago": _dve.get("bars_ago"), "time": _dve.get("time"),
+                   "count": 1 if _dve.get("type") else 0}
 
-            # 趋势方向（通道下行=风险因子）
+            # 趋势方向（2026-10-09）：改 **30 分钟三层状态机趋势**（与行内技术标签同源，
+            # 二者从此一致）；无 30min 数据 → 回退日线通道方向（保持旧行为）。
             ch = (h.get("channel") or {})
-            trend_down = ch.get("direction") == "down"
-            trend_up = ch.get("direction") == "up"
-
-            # 风险提醒建议（2026-09-11 两次实验校准：ob_signal_calib + rsi_sensitivity）：
-            # 实证：RSI 阈值 68~75 差异不大(均 T+5≈+0.8%/跌52%)；RSI>80 才明显转弱(-0.06%/56%)；
-            # RSI超买+日线顶背离反而偏强(+1.8~3.2%)→ 顶背离不作升级因子；KDJ/CCI/BOLL 为动能。
-            # → 高 = RSI>80 或 (RSI>70 且趋势下行)；中 = RSI>70 或趋势下行；顶背离仅展示不计风险。
-            rsi_hot = bool(cur_rsi > 70)
-            if cur_rsi > 80:
-                risk = "高"
-                advice = "🚨 RSI极度超买(>80)：实证 T+5 转平、56% 下跌，注意回落/减仓"
-            elif rsi_hot and trend_down:
-                risk = "高"
-                advice = "🚨 RSI超买+趋势下行：回落风险高，反弹减仓/回避"
-            elif rsi_hot:
-                risk = "中"
-                advice = "⚠ RSI超买(>70)：短线偏热，注意回调（实证跌占52%>基线45%）"
-            elif trend_down:
-                risk = "中"
-                advice = "⚠ 趋势下行：不追高，反弹减仓"
-            elif div["count"] >= 2:
-                risk = "低"
-                advice = "✓ 风险低；顶背离≥2 仅观察（日线前瞻性弱，勿据此减仓）"
+            if _t30.get("trend"):
+                trend, trend_src = _t30["trend"], "30min"
             else:
-                risk = "低"
-                advice = "✓ 指标中性（KDJ/CCI/BOLL 偏强属动能）：持有/关注"
+                trend, trend_src = ch.get("direction", "flat"), "daily"
+
+            # 风险提醒（2026-10-09 改口径）：**以 30min 顶部特征 T1–T4 为准**，专注「减仓/避坑」。
+            # ⚠️ 未回测验证（参考·未验证）——由 t_io/validation/m30_top 并行验证；文案不产出买卖指令。
+            # 日线 RSI/KDJ/CCI/BOLL 仍单独成列（各自带超买提示），不再驱动风险等级。
+            from analysis import m30_features as _m30f
+            if _M30_OB_ENABLED:
+                risk, advice = _m30f.risk_from_features(_feats)
+            else:                                   # 回滚：日线 RSI 口径（2026-09-11 校准）
+                _td = ch.get("direction")
+                if cur_rsi > 80:
+                    risk, advice = "高", "🚨 RSI极度超买(>80)：实证 T+5 转平、56% 下跌，注意回落/减仓"
+                elif cur_rsi > 70 and _td == "down":
+                    risk, advice = "高", "🚨 RSI超买+趋势下行：回落风险高，反弹减仓/回避"
+                elif cur_rsi > 70:
+                    risk, advice = "中", "⚠ RSI超买(>70)：短线偏热，注意回调（实证跌占52%>基线45%）"
+                elif _td == "down":
+                    risk, advice = "中", "⚠ 趋势下行：不追高，反弹减仓"
+                else:
+                    risk, advice = "低", "✓ 指标中性（KDJ/CCI/BOLL 偏强属动能）：持有/关注"
 
             out["stocks"].append({
                 "code": code, "name": info.get("name", code),
                 "price": cur_close,
-                "trend": ch.get("direction", "flat"),
+                "trend": trend,
+                "trend_src": trend_src,
                 "risk": risk,
                 "overbought": {"rsi": round(cur_rsi, 1), "kdj": round(cur_j, 1),
                                "cci": round(cur_cci, 1), "boll": bool(ob["boll"]), "count": ob["count"]},
                 "divergence": div,
+                "top_features": _feats,
+                "bar_time": (_m30 or {}).get("bar_time"),
                 "advice": advice,
                 "tags": _tags,
             })
@@ -3740,6 +3795,60 @@ class Api:
         base = str(code).split("_")[0]
         return get_provider().snapshot([base]).get(base)
 
+    def _m30_top_snapshot(self, code):
+        """持仓体检 30min 快照（趋势/背离/顶部特征）：**只读内存/磁盘、零网络**、按 30min 时段记忆。
+        命中 → 字典；miss → 用磁盘缓存兜底就地算并缓存（可能略旧但绝不出网）。
+        返回 {t30,div,feats,bar_time,n_bars} 或 {}。"""
+        base = str(code).split("_")[0]
+        key = f"{base}_{_min_bars_slot()}"
+        with _M30_SNAP_LOCK:
+            if key in _M30_SNAP_CACHE:
+                return _M30_SNAP_CACHE[key]
+        snap = _build_m30_snapshot(_m30_bars_cache_only(base))
+        with _M30_SNAP_LOCK:
+            if len(_M30_SNAP_CACHE) > _M30_SNAP_MAX:
+                _M30_SNAP_CACHE.clear()
+            _M30_SNAP_CACHE[key] = snap
+        return snap
+
+    def refresh_ob_m30(self, codes=None):
+        """后台预热当前 30min 时段内的持仓 OB 快照（走 `_fetch_min_bars` 在线优先 ⇒ 数据最新）。
+        只在**后台线程**调用（会出网）。codes 缺省 = 持仓（qty>0）∪ 自动盘持仓。失败静默。"""
+        try:
+            from concurrent.futures import ThreadPoolExecutor
+            if codes is None:
+                codes = []
+                for fp in (HOLDINGS_MANUAL,):
+                    cur = _load_json(fp, {})
+                    for code, info in cur.items():
+                        if isinstance(info, dict) and not code.startswith("_") and (info.get("qty") or 0):
+                            bc = str(code).split("_")[0]
+                            if bc and bc not in codes:
+                                codes.append(bc)
+            codes = [str(c).split("_")[0] for c in (codes or [])]
+            if not codes:
+                return
+            slot = _min_bars_slot()
+
+            def _one(bc):
+                key = f"{bc}_{slot}"
+                with _M30_SNAP_LOCK:
+                    if key in _M30_SNAP_CACHE:
+                        return
+                try:
+                    df = _fetch_min_bars(bc, "30min")       # 在线→磁盘兜底（后台线程）
+                except Exception:
+                    df = None
+                snap = _build_m30_snapshot(df)
+                with _M30_SNAP_LOCK:
+                    if len(_M30_SNAP_CACHE) > _M30_SNAP_MAX:
+                        _M30_SNAP_CACHE.clear()
+                    _M30_SNAP_CACHE.setdefault(key, snap)
+            with ThreadPoolExecutor(max_workers=3) as ex:
+                list(ex.map(_one, codes))
+        except Exception:
+            pass
+
     def _trend30_trend(self, code):
         """30 分钟趋势判定（2026-10-04 方案）。返回 (trend|None, src)。
         不可用（开关关闭/网络/根数不足）→ (None, src)，调用方回退日线斜率。"""
@@ -3778,8 +3887,13 @@ class Api:
             pass
         return self._stock_tags_from_df(df, code)
 
-    def _stock_tags_from_df(self, df, code):
-        """由**日线 df** 计算技术标签（纯计算，无取数）。批量标签与持仓体检共用同一口径。"""
+    def _stock_tags_from_df(self, df, code, t30=None):
+        """由**日线 df** 计算技术标签（纯计算，无取数）。批量标签与持仓体检共用同一口径。
+
+        `t30`（可选，2026-10-09）：调用方传入的 30min 趋势 dict，避免主线程再出网——
+          · None（默认）→ 走既有 `_trend30_trend`（建仓表/批量路径，可能出网）；
+          · dict 且含 trend → 直接用（OB 命中已预热快照）；
+          · False → 显式离线（OB 无 30min 数据），直接回退日线斜率。"""
         import numpy as np
         import pandas as pd
         closes = df["close"].values
@@ -3795,9 +3909,14 @@ class Api:
         slope = np.polyfit(np.arange(len(rc)), rc, 1)[0]
         norm = slope / (rc.mean() or 1e-9)
         daily_trend = "up" if norm > 0.0015 else ("down" if norm < -0.0015 else "flat")
-        trend, _trend_src = self._trend30_trend(code)
-        if trend is None:                      # 30min 不可用 → 回退日线（保持旧行为）
+        if t30 is False:                       # 显式离线（OB 无 30min 数据）→ 禁止出网
             trend, _trend_src = daily_trend, "daily"
+        elif isinstance(t30, dict) and t30.get("trend"):   # OB 已预热快照 → 直接复用（单一口径）
+            trend, _trend_src = t30["trend"], "30min"
+        else:                                  # 默认路径：建仓表/批量（可能出网）
+            trend, _trend_src = self._trend30_trend(code)
+            if trend is None:                  # 30min 不可用 → 回退日线（保持旧行为）
+                trend, _trend_src = daily_trend, "daily"
 
         # 精密箱体（365日滑窗+斜率+触及验证+重叠合并）
         boxes = self._detect_boxes(df)
@@ -6005,6 +6124,8 @@ class Api:
                     pass
             with ThreadPoolExecutor(max_workers=3) as ex:
                 list(ex.map(_one, codes))
+            # 2026-10-09：顺带预热**持仓体检 30min 快照**（趋势/背离/顶部特征）→ OB 表零网络读取。
+            self.refresh_ob_m30(codes)
         except Exception:
             pass
 
@@ -6392,6 +6513,29 @@ def start_chart_prefetch_scheduler(api):
     _th.Thread(target=_loop, daemon=True).start()
 
 
+def start_ob_m30_refresher(api):
+    """持仓体检 30min 快照刷新（2026-10-09）：每 60s 一跳，跨 30 分钟时段即后台重算持仓快照
+    （`refresh_ob_m30` 走在线取数，off 主线程），使 OB 表的 30min 趋势/背离/顶部特征保持当根新鲜。
+    守护线程，失败静默。仅 __main__ 显式启动。"""
+    if _OB_M30_STATE.get("started"):
+        return
+    _OB_M30_STATE["started"] = True
+
+    def _loop():
+        _last_slot = None
+        while True:
+            try:
+                slot = _min_bars_slot()
+                if slot != _last_slot:
+                    _last_slot = slot
+                    api.refresh_ob_m30()
+            except Exception:
+                pass
+            _time_mod.sleep(60)
+
+    _th.Thread(target=_loop, daemon=True, name="ob-m30-refresher").start()
+
+
 def _start_gui_freeze_watchdog(threshold_s=12.0):
     """界面卡死看门狗（2026-10-08 需求①）：js_api 全在 pywebview 主线程串行执行，任何长阻塞都会冻界面。
     高频轮询（`load_console` 2s / `load_live` 10s）每次给 `_GUI_HB` 打点；本守护线程发现心跳停
@@ -6473,6 +6617,7 @@ if __name__ == "__main__":
     start_hunter_autoscheduler(api)   # 开盘后每小时自动跑「今日数据」
     _start_gui_freeze_watchdog()      # 卡死看门狗：心跳停 >12s → 落线程栈到 t_io/logs/gui_freeze.log
     start_chart_prefetch_scheduler(api)   # 盘后 15:10 预下载 K线缓存（小池 payload+分钟、全池日线）
+    start_ob_m30_refresher(api)           # 持仓体检 30min 快照：跨时段后台刷新（趋势/背离/顶部特征）
     # 启动预热（均为后台 daemon 线程，不阻塞启动；失败静默）：
     #  · 持仓图表：低并发(3)，消除 load_ob_analysis 的 14s 冷启动阻塞
     #  · 技术标签：走其内置后台分支，消除首次进建仓表/破位表的标签冷算等待

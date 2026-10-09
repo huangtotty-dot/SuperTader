@@ -10,10 +10,10 @@ from .indicators import (
     drop_forming_bar, collapse_stubs, mark_bar_meta, add_30min_indicators, linreg_quality,
 )
 from .state_machine import Trend30Config, Trend30StateMachine
-from .adapter import get_trend30, state_to_trend
+from .adapter import get_trend30, evaluate_bars, state_to_trend
 
 __all__ = [
-    "Trend30Config", "Trend30StateMachine", "get_trend30", "state_to_trend",
+    "Trend30Config", "Trend30StateMachine", "get_trend30", "evaluate_bars", "state_to_trend",
     "add_30min_indicators", "mark_bar_meta", "collapse_stubs",
     "drop_forming_bar", "linreg_quality",
 ]

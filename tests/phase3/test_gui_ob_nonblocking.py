@@ -45,10 +45,18 @@ def _fake_chart(n=40, close=10.0):
     }
 
 
+def _empty_df():
+    return pandas.DataFrame()
+
+
 class TestObNonBlocking(unittest.TestCase):
     def setUp(self):
         self.api = t_gui.Api()
         self._orig_load_json = t_gui._load_json
+        # 2026-10-09：OB 现读 30min 磁盘缓存（`_m30_bars_cache_only` → `_fetch_min_bars_disk`）。
+        # 测试桩成空 → 30min 列整体缺席、趋势回退日线；保证**全离线**且不依赖真实 cache。
+        self._orig_min_disk = t_gui._fetch_min_bars_disk
+        t_gui._fetch_min_bars_disk = lambda ts_code, freq: _empty_df()
         self._holdings = {
             "000001_A": {"name": "甲", "qty": 100},
             "600000_B": {"name": "乙", "qty": 200},
@@ -59,10 +67,15 @@ class TestObNonBlocking(unittest.TestCase):
             else (d if d is not None else {}))
         self._saved_cache = dict(getattr(self.api, "_stock_chart_cache", {}))
         self.api._stock_chart_cache = {}
+        self._saved_m30 = dict(t_gui._M30_SNAP_CACHE)
+        t_gui._M30_SNAP_CACHE.clear()
         self._today = datetime.now().strftime("%Y-%m-%d")
 
     def tearDown(self):
         t_gui._load_json = self._orig_load_json
+        t_gui._fetch_min_bars_disk = self._orig_min_disk
+        t_gui._M30_SNAP_CACHE.clear()
+        t_gui._M30_SNAP_CACHE.update(self._saved_m30)
         self.api._stock_chart_cache = self._saved_cache
 
     def test_01_冷启动立即返回且标记pending(self):

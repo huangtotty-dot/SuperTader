@@ -3996,34 +3996,43 @@ function renderOB(ob) {
     return;
   }
   const rows = ob.stocks.map(s => {
-    if (s.error) return `<tr><td colspan="11" class="cell-dim">${esc(s.code)}: ${esc(s.error)}</td></tr>`;
+    if (s.error) return `<tr><td colspan="12" class="cell-dim">${esc(s.code)}: ${esc(s.error)}</td></tr>`;
     const ob_ = s.overbought || {};
-    const dv = s.divergence || {};
-    // 2026-09-11 修：overbought.rsi/kdj/cci 是"数值"不是布尔，原 mark(数值) 恒真 → ⚠ 满天飞。
-    // 按前瞻实验口径：仅 RSI>70 计风险；KDJ/CCI>100 与破BOLL上轨属动能（不报警）。
+    const dv = s.divergence || {};        // 2026-10-09：改 30min {type,consec,bars_ago,time}
+    const tf = s.top_features || {};      // 2026-10-09：30min 顶部特征 T1–T4
+    // RSI/KDJ/CCI/BOLL 仍为**日线**超买指标（各自带提示，不驱动风险等级）。
     const rsiHot = (ob_.rsi || 0) > 70;
-    const rsiExtreme = (ob_.rsi || 0) > 80;   // 实证：RSI>80 才明显转弱（T+5≈0/跌56%）
+    const rsiExtreme = (ob_.rsi || 0) > 80;
     const kdjHot = (ob_.kdj || 0) > 100;
     const cciHot = (ob_.cci || 0) > 100;
     const advCls = s.risk === "高" ? "up" : s.risk === "中" ? "warn" : "cell-dim";
+    // 趋势：30min 三层状态机（s.trend；不可用时回退日线，s.trend_src=null/'daily' 标注）
     const trendTxt = s.trend === "down" ? `<b class="down">下行↘</b>`
       : s.trend === "up" ? `<b class="up">上行↗</b>` : `<span class="cell-dim">震荡→</span>`;
-    const dvTxt = dv.count ? [
-      dv.macd ? "MACD" : "", dv.rsi ? "RSI" : "", dv.kdj ? "KDJ" : "", dv.vol ? "量价" : ""
-    ].filter(Boolean).join("/") : "无";
+    const trendSrc = s.trend_src === "daily" ? ` <span class="cell-dim" style="font-size:10px">(日线)</span>` : "";
+    // 30min 背离
+    const dvTxt = dv.type
+      ? `<span class="${dv.type === "顶背离" ? "up" : "down"}">${esc(dv.type)}${dv.bars_ago != null ? `·${dv.bars_ago}根前` : ""}${dv.consec ? "·连续" : ""}</span>`
+      : `<span class="cell-dim">无</span>`;
+    // 30min 顶部特征 T1–T4（参考·未验证）
+    const tfTxt = !tf.ok ? `<span class="cell-dim">—</span>`
+      : (tf.count
+        ? (tf.fired || []).map(f => `<span class="badge ${tf.count >= 2 ? 'signal' : 'approach'}">${esc(f)}</span>`).join(" ")
+        : `<span class="cell-dim">无</span>`);
     // 2026-10-09 owner：按**是否破5日线**给行进背景色（破线=红底，便于一眼扫风险）
     const _obBg = ((s.tags || []).some(t => (t.label || "") === "破5日线"))
       ? "background:rgba(248,81,73,.10);" : "";
     return `<tr ondblclick="openStockChart('${esc(s.code)}','${esc(s.name)}')" style="cursor:pointer;${_obBg}" title="双击看K线">
       <td>${esc(s.name)} <span class="mono cell-dim">${esc(s.code)}</span></td>
       <td class="num">${fmt(s.price, 2)}</td>
-      <td>${trendTxt}</td>
-      <td class="num ${rsiHot ? 'up' : 'cell-dim'}" title="RSI>70 提示 / >80 高危（实证 T+5 转弱）">${fmt(ob_.rsi, 0)} ${rsiHot ? `<span class="badge ${rsiExtreme ? 'signal' : 'approach'}">⚠</span>` : ''}</td>
-      <td class="num ${kdjHot ? 'up' : 'cell-dim'}" title="KDJ-J>100 属动能(实证偏强，不计风险)">${fmt(ob_.kdj, 0)}</td>
-      <td class="num ${cciHot ? 'up' : 'cell-dim'}" title="CCI>100 属动能(实证偏强，不计风险)">${fmt(ob_.cci, 0)}</td>
-      <td>${ob_.boll ? '<span class="badge chop" title="破BOLL上轨=突破动能(实证偏强)">破</span>' : '<span class="cell-dim">—</span>'}</td>
-      <td class="${dv.count ? 'warn' : 'cell-dim'}">${dv.count ? dvTxt : "无"}</td>
-      <td style="max-width:240px;line-height:1.7">${(s.tags || []).map(t => tagBadge(t)).join(" ") || '<span class="cell-dim">—</span>'}</td>
+      <td title="30min 三层状态机趋势${s.trend_src === 'daily' ? '（30min不可用，已回退日线）' : ''}">${trendTxt}${trendSrc}</td>
+      <td class="num ${rsiHot ? 'up' : 'cell-dim'}" title="日线 RSI>70 提示 / >80 高危（实证 T+5 转弱）">${fmt(ob_.rsi, 0)} ${rsiHot ? `<span class="badge ${rsiExtreme ? 'signal' : 'approach'}">⚠</span>` : ''}</td>
+      <td class="num ${kdjHot ? 'up' : 'cell-dim'}" title="日线 KDJ-J>100 属动能(实证偏强，不计风险)">${fmt(ob_.kdj, 0)}</td>
+      <td class="num ${cciHot ? 'up' : 'cell-dim'}" title="日线 CCI>100 属动能(实证偏强，不计风险)">${fmt(ob_.cci, 0)}</td>
+      <td>${ob_.boll ? '<span class="badge chop" title="日线破BOLL上轨=突破动能(实证偏强)">破</span>' : '<span class="cell-dim">—</span>'}</td>
+      <td title="30min MACD 背离（已验证口径，新鲜度≤32根）${dv.time ? ' ' + esc(dv.time) : ''}">${dvTxt}</td>
+      <td style="max-width:200px;line-height:1.7" title="30min 顶部特征 T1顶背离/T2量价/T3顶分型/T4均线压制 —— 参考·未验证">${tfTxt}</td>
+      <td style="max-width:200px;line-height:1.7">${(s.tags || []).map(t => tagBadge(t)).join(" ") || '<span class="cell-dim">—</span>'}</td>
       <td class="num ${advCls}">${s.risk === "高" ? "高" : s.risk === "中" ? "中" : "低"}</td>
       <td><span class="${advCls}">${esc(s.advice)}</span></td>
     </tr>`;
@@ -4031,17 +4040,18 @@ function renderOB(ob) {
   el.innerHTML = `
     <div class="card" style="overflow-x:auto">
       <table><thead><tr>
-        <th>股票</th><th class="num">现价</th><th>趋势</th>
-        <th class="num" title="RSI>70超买">RSI</th>
-        <th class="num" title="KDJ J>100超买">KDJ-J</th>
-        <th class="num" title="CCI>100超买">CCI</th>
-        <th title="收盘破BOLL上轨">BOLL</th>
-        <th title="MACD/RSI/KDJ/量价顶背离">顶背离</th>
+        <th>股票</th><th class="num">现价</th><th>趋势(30m)</th>
+        <th class="num" title="日线 RSI>70超买">RSI</th>
+        <th class="num" title="日线 KDJ J>100超买">KDJ-J</th>
+        <th class="num" title="日线 CCI>100超买">CCI</th>
+        <th title="日线收盘破BOLL上轨">BOLL</th>
+        <th title="30min MACD 背离（已验证口径，新鲜度≤32根）">30m背离</th>
+        <th title="30min 顶部特征 T1顶背离/T2量价/T3顶分型/T4均线压制 —— 参考·未验证">30m顶部</th>
         <th title="与建仓扫描同口径（通道/箱体/筑底顶/背离/超买/破均线）">技术标签</th>
         <th class="num">风险</th>
         <th>风险提醒</th>
       </tr></thead><tbody>${rows}</tbody></table>
-      <div class="cell-dim" style="font-size:10px;margin-top:4px">目的：发现超买+趋势下行风险 → 提醒减仓/回避（非建仓建议） · 口径(2026-09-11 两次前瞻校准)：高=RSI>80 或 RSI>70+趋势下行；中=RSI>70 或趋势下行；KDJ/CCI/破上轨属动能、日线顶背离无前瞻，均不报警 · 双击行看K线</div>
+      <div class="cell-dim" style="font-size:10px;margin-top:4px">口径(2026-10-09 改30min)：趋势=30min三层状态机；背离=30min MACD背离(已验证口径)；风险/提醒=30min顶部特征 T1–T4 计数（参考·未验证，展示先行、验证并行，非买卖信号） · RSI/KDJ/CCI/BOLL 仍为日线超买指标（不驱动风险等级） · 双击行看K线</div>
     </div>`;
 }
 

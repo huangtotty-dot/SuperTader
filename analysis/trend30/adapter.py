@@ -64,6 +64,43 @@ def _fetch_30min(code: str, days: int = 35) -> pd.DataFrame:
     return df[keep].sort_values("time").reset_index(drop=True)
 
 
+def evaluate_bars(df, cfg: Trend30Config = None) -> dict:
+    """纯计算：**已取好的** 30min bars（{time,open,high,low,close,volume} 升序）→ 最新趋势快照，
+    与 `get_trend30` 同一管线（drop_forming_bar→collapse_stubs→mark_bar_meta→指标→状态机），
+    但**不出网**。供 GUI 热路径（持仓体检）直接喂磁盘缓存的 30min bars，零网络阻塞主线程。
+
+    成功 → {trend, state, confidence, adx, bar_time, n_bars, gate_ok, r2, er10}（不含 source/code）。
+    数据不足 → {trend:None, state:None, n_bars:..., insufficient:True}。
+    异常     → {trend:None, state:None, error:...}。"""
+    cfg = cfg or Trend30Config()
+    if df is None or getattr(df, "empty", True):
+        return {"trend": None, "state": None, "n_bars": 0, "insufficient": True}
+    try:
+        d = drop_forming_bar(df)
+        d = collapse_stubs(d)
+        d = mark_bar_meta(d)
+        d = add_30min_indicators(d, st_n=cfg.st_n, st_mult=cfg.st_mult)
+        d = d.join(linreg_quality(d["close"], n=cfg.reg_n))
+    except Exception:
+        return {"trend": None, "state": None, "error": "indicators"}
+    if len(d) < cfg.min_bars:
+        return {"trend": None, "state": None, "n_bars": len(d), "insufficient": True}
+    try:
+        sm = Trend30StateMachine(cfg)
+        sm.run(d)
+        cur = sm.current()
+    except Exception:
+        return {"trend": None, "state": None, "error": "state_machine"}
+    _last = d.iloc[-1]
+    _r2 = _last.get("r2", np.nan)
+    _er = _last.get("er10", np.nan)
+    return {"trend": state_to_trend(cur["state"]), "state": cur["state"],
+            "confidence": cur["confidence"], "adx": cur["adx"],
+            "bar_time": cur["bar_time"], "n_bars": cur["n_bars"], "gate_ok": cur["gate_ok"],
+            "r2": (None if pd.isna(_r2) else round(float(_r2), 3)),
+            "er10": (None if pd.isna(_er) else round(float(_er), 3))}
+
+
 def get_trend30(code: str, days: int = 35, cfg: Trend30Config = None, use_cache: bool = True) -> dict:
     """一站式：取数 → 指标 → 状态机 → 最新快照。
     返回 {state, trend('up'/'down'/'flat'), confidence, adx, bar_time, n_bars, gate_ok, source}；
@@ -92,34 +129,17 @@ def get_trend30(code: str, days: int = 35, cfg: Trend30Config = None, use_cache:
     if df is None or df.empty:
         return {"source": "error", "trend": None, "state": None, "code": code}
 
-    try:
-        d = drop_forming_bar(df)
-        d = collapse_stubs(d)
-        d = mark_bar_meta(d)
-        d = add_30min_indicators(d, st_n=cfg.st_n, st_mult=cfg.st_mult)
-        d = d.join(linreg_quality(d["close"], n=cfg.reg_n))
-    except Exception:
-        return {"source": "error", "trend": None, "state": None, "code": code}
+    res = evaluate_bars(df, cfg)
+    if res.get("state") is None:
+        out = {"source": ("insufficient" if res.get("insufficient") else "error"),
+               "trend": None, "state": None, "code": code}
+        if "n_bars" in res:
+            out["n_bars"] = res["n_bars"]
+        return out
 
-    if len(d) < cfg.min_bars:
-        return {"source": "insufficient", "trend": None, "state": None,
-                "n_bars": len(d), "code": code}
-
-    try:
-        sm = Trend30StateMachine(cfg)
-        sm.run(d)
-        cur = sm.current()
-    except Exception:
-        return {"source": "error", "trend": None, "state": None, "code": code}
-
-    _last = d.iloc[-1]
-    _r2 = _last.get("r2", np.nan)
-    _er = _last.get("er10", np.nan)
-    res = {"source": "30min", "code": code, "trend": state_to_trend(cur["state"]),
-           "state": cur["state"], "confidence": cur["confidence"], "adx": cur["adx"],
-           "bar_time": cur["bar_time"], "n_bars": cur["n_bars"], "gate_ok": cur["gate_ok"],
-           "r2": (None if pd.isna(_r2) else round(float(_r2), 3)),
-           "er10": (None if pd.isna(_er) else round(float(_er), 3))}
+    res = dict(res)
+    res["source"] = "30min"
+    res["code"] = code
     with _LOCK:
         _CACHE[code] = {"slot": slot, "value": res}
     return res
