@@ -695,6 +695,20 @@ class Api:
             stem = p.stem
             if stem.startswith("daily_review_") and len(stem) == len("daily_review_") + 10:
                 dates.add(stem[len("daily_review_"):])
+        # 2026-10-09：支持「对历史任意一天扫描/复盘」——补入有建仓扫描留痕的日期 + 最近 60 个交易日，
+        # 使前端日期下拉可选中历史日（选中后点「盘后重跑」即对该日重放扫描）。
+        for p in TRACES.glob("position_builder_*.jsonl"):
+            stem = p.stem
+            if stem.startswith("position_builder_") and len(stem) == len("position_builder_") + 10:
+                dates.add(stem[len("position_builder_"):])
+        from datetime import timedelta
+        _d = datetime.now()
+        _added = 0
+        while _added < 60:
+            _d -= timedelta(days=1)
+            if _d.weekday() < 5:                       # 近似交易日（节假日空跑无副作用）
+                dates.add(_d.strftime("%Y-%m-%d"))
+                _added += 1
         today = datetime.now().strftime("%Y-%m-%d")
         dates.add(today)  # 今天始终在首位（默认选中今天进入LIVE，即使盘前尚无数据）
         return sorted(dates, reverse=True)
@@ -711,8 +725,14 @@ class Api:
         today = datetime.now().strftime("%Y-%m-%d")
         dr_path = OUT / f"daily_review_{date}.json"
         if not dr_path.exists():
-            # 今天盘中可能尚无 daily_review，返回部分载荷供实时模式用
-            if date == today:
+            # 今天盘中可能尚无 daily_review；**历史交易日**也返回部分载荷，供「对历史任意一天
+            # 扫描/复盘」——daily_review 缺失不应挡住建仓表渲染（未扫过则该表显示"无扫描结果"，
+            # 用户点「盘后重跑」即对该日重放）。
+            try:
+                _wd = datetime.strptime(date, "%Y-%m-%d").weekday()
+            except Exception:
+                _wd = 5
+            if date == today or (TRACES / f"position_builder_{date}.jsonl").exists() or _wd < 5:
                 out.update({
                     "sig_stat": {}, "shadow": {"total": None, "near": {}},
                     "qty_freeze": {}, "closed_loop": {}, "audit_problems": None,

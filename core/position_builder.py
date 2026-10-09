@@ -2153,6 +2153,11 @@ def run_position_scan(date_str: str = None, capital: float = None,
     scan_type: 'intraday' (盘中) / 'eod' (盘后) / 'manual' (手动)
     当 silent=True 时只记录日志不打印报告（供 main.py 定时调用）。
     """
+    # 2026-10-09: 支持对**历史任意一天**重放（GUI 选历史日 → recompute_pb(date)）。
+    # 历史重放只写 `position_builder_{date}.jsonl`（按日文件，无副作用）；**不回写**实时
+    # watchlist 状态（status/last_check_date/signal_history）——否则会用历史结论覆盖当前状态。
+    _today_str = datetime.now().strftime("%Y-%m-%d")
+    _is_hist_run = bool(date_str) and date_str != _today_str
     if not WATCHLIST_FILE.exists():
         if not silent:
             print(f"[ERROR] 未找到 {WATCHLIST_FILE}，请先创建待买入清单")
@@ -2214,11 +2219,11 @@ def run_position_scan(date_str: str = None, capital: float = None,
             if not silent:
                 print(f"  ⚠️ {code} 扫描异常，已记录并继续: {str(_se)[:120]}")
         results.append(r)
-        if not r.get("scan_error"):
+        if not r.get("scan_error") and not _is_hist_run:
             try:
                 update_watchlist(r, watchlist)
             except Exception:
-                pass  # 单股写回失败不阻断整体
+                pass  # 单股写回失败不阻断整体（历史日重放也不回写，避免覆盖实时状态）
 
         if r["verdict"] == "signal":
             signal_count += 1
@@ -2299,9 +2304,10 @@ def run_position_scan(date_str: str = None, capital: float = None,
             "pushed": bool(pushed_map.get(r["code"], False)),
         }, log_date)
 
-    # 保存更新后的 watchlist
-    with open(WATCHLIST_FILE, "w", encoding="utf-8") as f:
-        json.dump(watchlist, f, ensure_ascii=False, indent=2)
+    # 保存更新后的 watchlist（历史日重放**不写回**，避免用历史结论覆盖实时状态）
+    if not _is_hist_run:
+        with open(WATCHLIST_FILE, "w", encoding="utf-8") as f:
+            json.dump(watchlist, f, ensure_ascii=False, indent=2)
 
     # 背离飞书提醒（2026-08-19 验证后收窄：仅 60min 连续底背离推送，顶背离不推）
     # 依据：180 天验证单次背离命中率≈随机基线，仅 60min 连续底背离(+12.5pp, 样本40)可信
