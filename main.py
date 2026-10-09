@@ -490,6 +490,12 @@ _BUY_FUSE_NOTIFY_DATE: str = ""   # 买入熔断飞书明示（每日一次）
 _SWING_DEDUP_DATE: str = ""
 _SWING_PUSH_DEDUP: set = set()
 
+# 主循环重入锁 / 扫描计数 / 非交易时段保活日志节流（2026-10-09 修复：这三行被误删，
+# 导致 scan_once 首轮读未定义全局 NameError，午间/盘中启动直接崩主循环）
+_scan_lock: bool = False
+_scan_count: int = 0
+_last_idle_log = None   # None ⇒ 首次进入空闲分支直接记录（见 scan_once 比较处）
+
 # VWAP 实时快照缓存（akshare stock_zh_a_spot_em 成交额/成交量，每 60s 刷新一次）
 _SPOT_VWAP_CACHE: Dict[str, float] = {}  # code -> 实时 VWAP
 _LAST_SPOT_VWAP_REFRESH = 0.0
@@ -1964,7 +1970,7 @@ def scan_once():
         _maybe_run_chart_prefetch(now)                  # 2026-10-04: 15:10 后 K线缓存预下载（与 t_gui 幂等）
 
         if now.weekday() >= 5 or t < dtime(9, 30) or (dtime(11, 30) < t < dtime(13, 0)) or t > dtime(15, 0):
-            if (_now() - _last_idle_log).total_seconds() >= PARAMS["idle_log_minutes"] * 60:
+            if _last_idle_log is None or (_now() - _last_idle_log).total_seconds() >= PARAMS["idle_log_minutes"] * 60:
                 log.info("⏸ 非交易时段，进入低频保活")
                 _last_idle_log = _now()
             return
