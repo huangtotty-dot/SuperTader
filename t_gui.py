@@ -306,6 +306,16 @@ _M30_SNAP_MAX = 2000                                   # 无界增长防护
 _M30_MIN_BARS = 60                                     # == Trend30Config.min_bars / m30_features.MIN_BARS
 _M30_DISPLAY_MAX_GAP_DAYS = 12                         # 与 chart_cache.MAX_DISPLAY_GAP_DAYS 一致
 
+# ---- 建仓信号扫描「30min 判定」列（2026-10-09）----
+# 与体检表**同口径**（`m30_features.verdict_from_features`），但判定只用 feats+div、**不用 trend**
+# ⇒ 跳过 trend30 状态机（~300ms/只），只算顶部特征+背离（~17ms/只）。整池 ~53 只 ≈ 0.9s（后台）。
+# 独立缓存（键 {code}_{slot}），与体检表的全量快照 `_M30_SNAP_CACHE` 互不覆盖。
+_PB_M30_CACHE: dict = {}
+_PB_M30_LOCK = threading.Lock()
+_PB_M30_MAX = 3000
+_PB_M30_WARM: dict = {"slot": None}                    # 每 30min 时段只起一次后台预热
+
+
 
 def _min_bars_ts_code(code):
     """6 位股票/指数码 → tushare ts_code（sh000001→000001.SH）。
@@ -506,6 +516,31 @@ def _build_m30_snapshot(df):
             "feats": m30_features.detect_top_features(dbars),
             "bar_time": str(dbars["time"].iloc[-1]),
             "n_bars": len(dbars),
+        }
+    except Exception:
+        return {}
+
+
+def _build_m30_light(df):
+    """建仓表「30min 判定」用的**轻量**快照：{feats, div, bar_time}。**跳过 trend30 状态机**
+    （`verdict_from_features` 不用 trend；状态机 ~300ms vs 本函数 ~17ms）⇒ 整池预热才 ~0.9s。
+    空/不足 → {}。"""
+    if df is None or getattr(df, "empty", True):
+        return {}
+    try:
+        from analysis.trend30.indicators import drop_forming_bar
+        from analysis import m30_features, divergence as _dv
+        dbars = drop_forming_bar(df)
+        if len(dbars) < _M30_MIN_BARS:
+            return {}
+        evs = _dv.detect_divergence_events(dbars)
+        last = _dv._latest_fresh(evs, _dv.MAX_AGE_BARS.get("30min", 32))
+        return {
+            "div": (None if last is None else {
+                "type": "顶背离" if last.get("type") == "顶" else "底背离",
+                "bars_ago": int(last.get("bars_ago", 0))}),
+            "feats": m30_features.detect_top_features(dbars),
+            "bar_time": str(dbars["time"].iloc[-1]),
         }
     except Exception:
         return {}
@@ -3833,6 +3868,57 @@ class Api:
             _M30_SNAP_CACHE[key] = snap
         return snap
 
+    def _m30_verdict_pb(self, code):
+        """建仓表「30min 判定」：读轻量缓存产出判定 dict（**主线程零计算**）。未热 → pending。
+        与体检表同口径（`m30_features.verdict_from_features`）。"""
+        from analysis import m30_features as _m30f
+        base = str(code).split("_")[0]
+        key = f"{base}_{_min_bars_slot()}"
+        with _PB_M30_LOCK:
+            snap = _PB_M30_CACHE.get(key)
+        if snap is None:
+            return {"level": "pending", "label": "⏳ 计算中", "reason": "30min 判定后台计算中…（约1s内就绪）"}
+        _dv = snap.get("div") or {}
+        lv, lb, rs = _m30f.verdict_from_features(
+            snap.get("feats") or {}, None, _dv.get("type"), _dv.get("bars_ago"))
+        return {"level": lv, "label": lb, "reason": rs}
+
+    def _kick_pb_m30_warm(self, codes):
+        """后台预热建仓表整池的轻量 30min 快照（每 30min 时段只起一次，守护线程）。
+        `_build_m30_light` ~17ms/只 ⇒ 53 只 ≈ 0.9s CPU，不拖慢启动。"""
+        codes = [str(c).split("_")[0] for c in (codes or []) if c]
+        if not codes:
+            return
+        slot = _min_bars_slot()
+        if _PB_M30_WARM.get("slot") == slot:
+            return
+        _PB_M30_WARM["slot"] = slot
+
+        def _run():
+            try:
+                from concurrent.futures import ThreadPoolExecutor
+
+                def _one(bc):
+                    key = f"{bc}_{slot}"
+                    with _PB_M30_LOCK:
+                        if key in _PB_M30_CACHE:
+                            return
+                    try:
+                        df = _fetch_min_bars(bc, "30min")       # 在线→磁盘兜底（后台线程）
+                    except Exception:
+                        df = None
+                    snap = _build_m30_light(df)
+                    with _PB_M30_LOCK:
+                        if len(_PB_M30_CACHE) > _PB_M30_MAX:
+                            _PB_M30_CACHE.clear()
+                        _PB_M30_CACHE[key] = snap
+                with ThreadPoolExecutor(max_workers=3) as ex:
+                    list(ex.map(_one, codes))
+            except Exception:
+                pass
+
+        _th.Thread(target=_run, daemon=True, name="pb-m30-warm").start()
+
     def _warm_ob_m30_disk(self, codes):
         """后台**磁盘**预热 OB 30min 快照（零网络，比在线刷新快 ~2s 内填满）。仅后台线程调用。"""
         try:
@@ -6425,7 +6511,22 @@ class Api:
                 except Exception:
                     pass
 
-        return {
+        # 建仓表「30min 判定」列（2026-10-09）：与体检表同口径，主线程**只读轻量缓存、零计算**；
+        # 未热 → 该行显示「计算中」，同时后台预热整池（每 30min 时段一次，~0.9s）。
+        _pb_m30_pending = False
+        if date == datetime.now().strftime("%Y-%m-%d"):
+            _codes = [r.get("code") for r in rows if r.get("code")]
+            for r in rows:
+                if not r.get("code"):
+                    continue
+                _v = self._m30_verdict_pb(r["code"])
+                r["m30_verdict"] = _v
+                if _v.get("level") == "pending":
+                    _pb_m30_pending = True
+            if _pb_m30_pending and _codes:
+                self._kick_pb_m30_warm(_codes)
+
+        _out = {
             "has_data": True,
             "counts": dict(verdicts),
             "by_code": by_code,
@@ -6434,6 +6535,9 @@ class Api:
             "note": note,
             "progress": progress,
         }
+        if _pb_m30_pending:
+            _out["pb_m30_pending"] = True
+        return _out
 
     def _filter_high_confidence_signals(self, rows: list) -> list:
         """过滤仅保留有连续背离的信号。

@@ -1462,35 +1462,14 @@ function renderPB(pb) {
     const monitorBadge = (!r.in_holdings && r.verdict !== "signal" && r.verdict !== "archived")
       ? `<span class="badge monitor" title="在建仓股池中监控，等待触发买点">追踪中</span>`
       : "";
-    // 30/60分钟线背离（2026-08-19 验证后收窄：仅 60min 连续底背离高亮，其余仅供参考）
-    // 2026-09-19：① 一律写明方向（此前非连续只显示图标，看不出顶/底）
-    //             ② 标出距今几根 bar（后端已按 MAX_AGE_BARS 过滤过期事件）
-    const dv = r.divergence || {};
-    const dvd = r.divergence_detail || {};
-    const dvParts = ["m30", "m60"].map(k => {
-      const v = dv[k];
-      const dd = dvd[k];
-      if (!v) return "";
-      const freq = k === "m30" ? "30" : "60";
-      const isTop = v === "顶背离";
-      const icon = isTop ? "⛔" : "✅";
-      const dir = isTop ? "顶背" : "底背";
-      const consec = !!(dd && dd.consec);
-      const aged = (dd && dd.bars_ago != null) ? `，距今${dd.bars_ago}根` : "";
-      const when = (dd && dd.time) ? `（${String(dd.time).slice(0, 16)}）` : "";
-      // 60分钟连续底背离：唯一验证有效的信号，高亮
-      if (k === "m60" && dd && dd.type === "底背离" && consec) {
-        return `<span class="badge t-long" title="60分钟连续底背离${aged}${when}｜180天验证：命中率60% vs 基线47%（样本40）">60分连续底背</span>`;
-      }
-      // 其余连续背离：标注"连续"（信息性，验证命中率≈随机基线，仅供参考）
-      if (consec) {
-        return `<span class="badge" title="${k.toUpperCase()} 连续${isTop ? "顶" : "底"}背离${aged}${when}｜验证：命中率≈随机基线，仅供参考">${freq}分连续${dir}</span>`;
-      }
-      return `<span class="badge" title="${k.toUpperCase()} ${isTop ? "顶" : "底"}背离${aged}${when}｜验证：单次背离命中率≈随机基线，仅供参考">${freq}分${icon}${dir}</span>`;
-    }).filter(Boolean);
-    const dvCell = dvParts.length
-      ? `<td style="text-align:center">${dvParts.join(" ")}</td>`
-      : `<td class="cell-dim" style="text-align:center">—</td>`;
+    // 30min 判定（2026-10-09）：与「持仓 30min 风险体检」**同口径**（m30_features.verdict_from_features）。
+    // 读后端 `r.m30_verdict`（主线程零计算；未热=⏳计算中，10s 轮询自动补）。原 30/60min 背离列已由本列取代。
+    const _M30VCLS = { high: "badge signal", watch: "badge approach", bull: "badge bear" };
+    const mv = r.m30_verdict || {};
+    const mvCls = _M30VCLS[mv.level];
+    const mvCell = `<td style="text-align:center" title="${esc(mv.reason || "30min 判定不可用")}">${
+      mvCls ? `<span class="${mvCls}">${esc(mv.label || "")}</span>`
+            : `<span class="cell-dim">${esc(mv.label || "—")}</span>`}</td>`;
     return `
       <tr id="pb-row-${esc(r.code || '')}" ondblclick="openStockChart('${esc(r.code||'')}','${esc(r.name||r.code||'')}')" style="cursor:pointer;${_scoreBg}${isStale ? "opacity:.45;" : ""}" title="双击看K线${isStale ? "（数据陈旧，距今超过10分钟）" : ""}">
         <td>${esc(r.name || "")} <span class="mono cell-dim">${esc(r.code || "")}</span>
@@ -1503,7 +1482,7 @@ function renderPB(pb) {
         <td style="text-align:center">${boxStr}</td>
         <td style="max-width:220px;line-height:1.7">${tagsTxt}</td>
         <td><span class="cond" title="${esc(condTitle)}">${condStr}${vetoDot}</span></td>
-        ${dvCell}
+        ${mvCell}
         <td class="num">${fmt(r.suggested_qty, 0)}</td>
         <td class="num">${fmt(r.suggested_price)}</td>
         <td class="num">${fmt(r.capital_required, 0)}</td>
@@ -1535,9 +1514,9 @@ function renderPB(pb) {
         <thead><tr>
           <th>股票</th><th title="P3-2 池分管：人工=manual侧扫描 / 自动=auto侧管理">池</th><th>判定</th><th class="num">得分</th><th class="num">通过</th><th class="num">价</th>
           <th title="突破箱体=第一优先级">突破</th>
-          <th title="通道/箱体/背离等技术形态（此列的顶/底背离是**日线**口径，与右侧『背离』列的30/60分钟口径不同源）">技术标签</th>
+          <th title="通道/箱体/背离等技术形态（此列的顶/底背离是**日线**口径，与右侧『30min判定』的 30 分钟口径不同源）">技术标签</th>
           <th title="时机门控：市场有方向/多头结构/回撤到位（GO→signal，震荡→降频）">时机条件</th>
-          <th title="30/60分钟 MACD 背离（写明顶/底）。已过滤过期事件：30分钟超过32根、60分钟超过20根 bar 的历史背离不再显示。60分连续底背离高亮（180天验证有区分度）；其余单次/连续背离命中率≈随机基线，仅供参考">背离</th>
+          <th title="30分钟综合判定（与『持仓 30min 风险体检』同口径）：🔴减仓/避高=30min 顶背离(T1/T2)；🟠盯紧=T3顶分型+T4均线压制同现；🟢偏好=无顶信号且有新鲜底背离(≤16根)；⚪中性=其余。依据 981只×540日 离线验证；T3/T4 无前瞻区分度、单个不报警">30min判定</th>
           <th class="num">建议股数</th><th class="num">建议价</th><th class="num">所需资金</th><th>扫描</th><th></th>
         </tr></thead>
         <tbody>${rows || '<tr><td colspan="15" class="empty">无扫描结果</td></tr>'}</tbody>
