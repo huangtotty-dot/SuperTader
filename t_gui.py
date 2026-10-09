@@ -1917,6 +1917,7 @@ class Api:
         _today = datetime.now().strftime("%Y-%m-%d")
         _chart_cache = getattr(self, "_stock_chart_cache", {})
         pending = 0
+        m30_pending = False          # 有持仓的 30min 判定尚未热（前端稍后重拉，不等 12s）
 
         for code, info in cur.items():
             if not isinstance(info, dict) or code.startswith("_"):
@@ -1934,11 +1935,13 @@ class Api:
                                       "error": h.get("error", "无数据")})
                 continue
             d = h["period_data"]["daily"]
-            # 30min 快照（2026-10-09）：趋势/背离/风险提醒改 30 分钟口径。**只读内存/磁盘缓存、零网络**
-            # （后台 `refresh_ob_m30` 按 30min 时段预热）；miss 时磁盘兜底，仍无 → 各列回退日线。
+            # 30min 快照（2026-10-09）：趋势/判定改 30 分钟口径。**主线程只读缓存、绝不算**（重算 ~300ms/只
+            # 会冻界面）；未热 → 本行判定显示「计算中」，由后台 `_warm_ob_m30_disk`/`refresh_ob_m30` 填充。
             _m30 = self._m30_top_snapshot(base_code) if _M30_OB_ENABLED else {}
-            _t30 = (_m30 or {}).get("t30") or {}
-            _feats = (_m30 or {}).get("feats") or {}
+            _m30_warm = _m30 is not None
+            _m30 = _m30 or {}
+            _t30 = _m30.get("t30") or {}
+            _feats = _m30.get("feats") or {}
             # 技术标签（2026-10-07）：与建仓表同口径（复用 `_stock_tags_from_df`）。用已缓存的
             # 日线 payload 重建 df，**零额外网络**；标签口径/顺序与建仓表完全一致。
             _live_close = None
@@ -2029,8 +2032,14 @@ class Api:
             # 依据 t_io/validation/m30_top/报告_m30_top.md：只有 T1顶背离/T2量价背离 前瞻强
             # （z≈97/88），T3顶分型/T4均线压制 无区分度 ⇒ 只有 T1/T2 触发「减仓」，T3/T4 不单独报警。
             from analysis import m30_features as _m30f
-            _vlevel, _vlabel, _vreason = _m30f.verdict_from_features(
-                _feats, trend, div.get("type"), div.get("bars_ago"))
+            if not _M30_OB_ENABLED:
+                _vlevel, _vlabel, _vreason = "na", "—", ""
+            elif not _m30_warm:
+                _vlevel, _vlabel, _vreason = "pending", "⏳ 计算中", "30min 判定后台计算中…（稍后自动刷新）"
+                m30_pending = True
+            else:
+                _vlevel, _vlabel, _vreason = _m30f.verdict_from_features(
+                    _feats, trend, div.get("type"), div.get("bars_ago"))
             # risk/advice 保留（回滚路径 `_M30_OB_ENABLED=False` 仍用旧日线 RSI 口径）。
             if _M30_OB_ENABLED:
                 risk, advice = _m30f.risk_from_features(_feats)
@@ -2064,6 +2073,8 @@ class Api:
             })
         if pending:
             out["pending"] = pending      # 未就绪的持仓数（>0 ⇒ 前端稍后重拉）
+        if m30_pending:
+            out["m30_pending"] = True     # 30min 判定未热（>0 ⇒ 前端 3s 快速重拉，不等 12s）
         return _clean(out)
 
     # ---------- 入场三层评判（L1/L2/L3建议） ----------
@@ -3800,21 +3811,39 @@ class Api:
         base = str(code).split("_")[0]
         return get_provider().snapshot([base]).get(base)
 
-    def _m30_top_snapshot(self, code):
+    def _m30_top_snapshot(self, code, allow_compute=False):
         """持仓体检 30min 快照（趋势/背离/顶部特征）：**只读内存/磁盘、零网络**、按 30min 时段记忆。
-        命中 → 字典；miss → 用磁盘缓存兜底就地算并缓存（可能略旧但绝不出网）。
-        返回 {t30,div,feats,bar_time,n_bars} 或 {}。"""
+
+        `allow_compute`（2026-10-09 性能）：`_build_m30_snapshot` 里 `evaluate_bars`（趋势状态机管线）
+        单只 ~300ms，7 只就是 ~2s——**绝不能在 pywebview 主线程跑**（实测 load_ob_analysis 冷启动 5.4s）。
+        故：缓存 miss 且 `allow_compute=False`（主线程热路径）→ 直接返回 `None`（调用方走"计算中"，
+        由后台 `_warm_ob_m30_disk`/`refresh_ob_m30` 填充）。`allow_compute=True` 仅后台线程用。
+        返回 {t30,div,feats,bar_time,n_bars} / {}（已算但无数据）/ None（未热，未算）。"""
         base = str(code).split("_")[0]
         key = f"{base}_{_min_bars_slot()}"
         with _M30_SNAP_LOCK:
             if key in _M30_SNAP_CACHE:
                 return _M30_SNAP_CACHE[key]
+        if not allow_compute:
+            return None
         snap = _build_m30_snapshot(_m30_bars_cache_only(base))
         with _M30_SNAP_LOCK:
             if len(_M30_SNAP_CACHE) > _M30_SNAP_MAX:
                 _M30_SNAP_CACHE.clear()
             _M30_SNAP_CACHE[key] = snap
         return snap
+
+    def _warm_ob_m30_disk(self, codes):
+        """后台**磁盘**预热 OB 30min 快照（零网络，比在线刷新快 ~2s 内填满）。仅后台线程调用。"""
+        try:
+            from concurrent.futures import ThreadPoolExecutor
+            codes = [str(c).split("_")[0] for c in (codes or [])]
+            if not codes:
+                return
+            with ThreadPoolExecutor(max_workers=1) as ex:      # CPU 密集，GIL 串行 ⇒ 1 线程足够、少抢
+                list(ex.map(lambda c: self._m30_top_snapshot(c, allow_compute=True), codes))
+        except Exception:
+            pass
 
     def refresh_ob_m30(self, codes=None):
         """后台预热当前 30min 时段内的持仓 OB 快照（走 `_fetch_min_bars` 在线优先 ⇒ 数据最新）。
@@ -3837,18 +3866,17 @@ class Api:
 
             def _one(bc):
                 key = f"{bc}_{slot}"
-                with _M30_SNAP_LOCK:
-                    if key in _M30_SNAP_CACHE:
-                        return
                 try:
                     df = _fetch_min_bars(bc, "30min")       # 在线→磁盘兜底（后台线程）
                 except Exception:
                     df = None
                 snap = _build_m30_snapshot(df)
+                if not snap:                                # 失败/空 → 不覆盖已热（可能是磁盘档）
+                    return
                 with _M30_SNAP_LOCK:
                     if len(_M30_SNAP_CACHE) > _M30_SNAP_MAX:
                         _M30_SNAP_CACHE.clear()
-                    _M30_SNAP_CACHE.setdefault(key, snap)
+                    _M30_SNAP_CACHE[key] = snap             # 在线档更新鲜 → 覆盖磁盘预热
             with ThreadPoolExecutor(max_workers=3) as ex:
                 list(ex.map(_one, codes))
         except Exception:
@@ -6129,8 +6157,10 @@ class Api:
                     pass
             with ThreadPoolExecutor(max_workers=3) as ex:
                 list(ex.map(_one, codes))
-            # 2026-10-09：顺带预热**持仓体检 30min 快照**（趋势/背离/顶部特征）→ OB 表零网络读取。
-            self.refresh_ob_m30(codes)
+            # 2026-10-09：预热**持仓体检 30min 快照**（趋势/背离/顶部特征）→ OB 表零计算读取。
+            # 只做**磁盘**预热（快、零网络）；**在线**刷新交给 `start_ob_m30_refresher`（启动即触发一次），
+            # 避免此处与它重复各算一遍（`_build_m30_snapshot` ~300ms/只）。
+            self._warm_ob_m30_disk(codes)
         except Exception:
             pass
 

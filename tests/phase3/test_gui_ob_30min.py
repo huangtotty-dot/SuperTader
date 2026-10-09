@@ -1,20 +1,23 @@
 # -*- coding: utf-8 -*-
-"""持仓体检 `load_ob_analysis` 改用 30 分钟口径的离线单测（2026-10-09）。**全离线**。
+"""持仓体检 `load_ob_analysis` 30 分钟口径 + **主线程零计算** 的离线单测（2026-10-09）。**全离线**。
 
-背景：体检表趋势/背离/风险提醒三列改 30min（趋势=30min 状态机；背离=30min MACD 背离；
-风险=30min 顶部特征 T1–T4）。数据走 `_m30_bars_cache_only`（只读内存/磁盘，**零网络**）。
+背景：体检判定走 30min（趋势=30min 状态机；判定=30min 顶部/底背离特征）。其中 `evaluate_bars`
+单只 ~300ms，7 只 ~2s ⇒ **绝不能在 pywebview 主线程算**（实测 load_ob_analysis 冷启动 5.4s）。
+改为：主线程只读 `_M30_SNAP_CACHE`，miss → 判定显示「计算中」+ `m30_pending`（前端 3s 快速重拉），
+由后台 `_warm_ob_m30_disk`（磁盘）/`refresh_ob_m30`（在线）填充。
 
 断言：
-  T1 30min 可得时：trend_src=="30min"、divergence 新结构、top_features.ok=True；
-     且 **网络层 `_fetch_30min` 绝不被调用**（打成抛异常不会触发）—— 证明热路径零网络。
-  T2 30min 缺席时：trend_src=="daily"、top_features 无（ok 缺失）；仍零网络。
-  T3 趋势列与行内「上行/下行/震荡」标签**同源一致**（单一 t30 口径）。
+  T1 冷启动（快照未热）：**立即返回**、`m30_pending` 置位、判定=pending —— 证主线程不算 30min。
+  T1b 快照就绪后：trend_src=30min、top_features.ok、verdict 合法，且 `_fetch_30min`（网络）**从未被调用**。
+  T2 无 30min 数据：trend 回退日线、top_features 不可用；仍零网络。
+  T3 趋势列与行内趋势标签**同源一致**。
 
-铁律：全离线。补桩 `_load_json` 给固定持仓、补桩磁盘分钟层，不读真实 cache、不打网络。
+铁律：全离线。补桩 `_load_json`/磁盘分钟层；`analysis.trend30.adapter._fetch_30min` 打成抛异常。
 运行：python -m unittest tests.phase3.test_gui_ob_30min
 """
 import os
 import sys
+import time as _time
 import unittest
 from datetime import datetime
 
@@ -25,8 +28,11 @@ if _ROOT not in sys.path:
 
 import numpy as np  # noqa: E402,F401
 import pandas  # noqa: E402,F401
+import analysis.indicators  # noqa: E402,F401  预热 `_stock_tags_from_df` 内的懒加载(~1.4s 一次性)
 import t_gui  # noqa: E402
 from analysis.trend30 import adapter as _adapter  # noqa: E402
+
+_CODE = "000001"
 
 
 def _empty_df():
@@ -35,15 +41,14 @@ def _empty_df():
 
 def _m30_uptrend(days=45, base=10.0, step=0.01):
     """构造一段稳定上行的 30min bars（8 根/日），跨多日 ⇒ 30min 状态机可判 BULL=up。"""
-    rows, px, t = [], base, 0
+    rows, px = [], base
     times = ["10:00", "10:30", "11:00", "11:30", "13:30", "14:00", "14:30", "15:00"]
     for d in range(days):
-        day = f"2026-01-{ (d % 28) + 1 :02d}"
+        day = f"2026-01-{(d % 28) + 1:02d}"
         for hm in times:
             px += step
             rows.append({"time": f"{day} {hm}:00", "open": px - 0.005, "high": px + 0.02,
                          "low": px - 0.02, "close": px, "volume": 1000.0})
-            t += 1
     return pandas.DataFrame(rows)
 
 
@@ -77,15 +82,15 @@ class TestObM30(unittest.TestCase):
         t_gui._load_json = lambda p, d=None: (
             {"000001_A": {"name": "甲", "qty": 100}} if str(p) == str(t_gui.HOLDINGS_MANUAL)
             else (d if d is not None else {}))
-        # 网络层：一旦被调用即失败（证明 OB 热路径零网络）
-        def _boom(*a, **k):
+
+        def _boom(*a, **k):           # 网络层：一旦被调用即失败（证明 OB 热路径零网络）
             raise AssertionError("OB 热路径不应调用网络 _fetch_30min")
         _adapter._fetch_30min = _boom
         t_gui._MIN_BARS_CACHE.clear()
         t_gui._M30_SNAP_CACHE.clear()
 
         self._today = datetime.now().strftime("%Y-%m-%d")
-        self.api._stock_chart_cache = {f"{self._today}_000001": (datetime.now(), _fake_chart())}
+        self.api._stock_chart_cache = {f"{self._today}_{_CODE}": (datetime.now(), _fake_chart())}
 
     def tearDown(self):
         t_gui._load_json = self._orig_load_json
@@ -95,23 +100,34 @@ class TestObM30(unittest.TestCase):
         t_gui._M30_SNAP_CACHE.clear(); t_gui._M30_SNAP_CACHE.update(self._saved_m30)
         self.api._stock_chart_cache = self._saved_chart
 
-    def test_01_30min_available(self):
+    def _warm(self, df=None):
+        """模拟后台磁盘预热：把持仓的 30min 快照填进 `_M30_SNAP_CACHE`（df 缺省=上行帧）。"""
+        t_gui._M30_SNAP_CACHE[f"{_CODE}_{t_gui._min_bars_slot()}"] = \
+            t_gui._build_m30_snapshot(_m30_uptrend() if df is None else df)
+
+    def test_01_cold_is_fast_and_pending(self):
         t_gui._fetch_min_bars_disk = lambda ts_code, freq: _m30_uptrend()
+        t0 = _time.perf_counter()
         r = self.api.load_ob_analysis()
-        stocks = r.get("stocks", [])
-        self.assertEqual(len(stocks), 1, "应出 1 行体检（图表缓存已就绪）")
-        s = stocks[0]
+        dt = _time.perf_counter() - t0
+        self.assertLess(dt, 0.5, f"冷启动阻塞 {dt:.2f}s：主线程不应算 30min（应只读缓存）")
+        self.assertTrue(r.get("m30_pending"), "未热时应置 m30_pending 供前端快速重拉")
+        self.assertEqual(r["stocks"][0]["verdict"]["level"], "pending")
+
+    def test_01b_warm_computes_verdict(self):
+        t_gui._fetch_min_bars_disk = lambda ts_code, freq: _m30_uptrend()
+        self._warm()
+        r = self.api.load_ob_analysis()
+        s = r["stocks"][0]
+        self.assertIsNone(r.get("m30_pending"), "已热不应再有 m30_pending")
         self.assertEqual(s.get("trend_src"), "30min", "趋势应来自 30min")
-        self.assertIn(s.get("trend"), ("up", "down", "flat"))
-        self.assertIn("type", s.get("divergence", {}), "背离应为新结构 {type,...}")
         self.assertTrue(s.get("top_features", {}).get("ok"), "30min 顶部特征应可用")
-        self.assertIn(s.get("risk"), ("高", "中", "低"))
-        v = s.get("verdict") or {}
-        self.assertIn(v.get("level"), ("high", "watch", "bull", "none", "na"), "判定级别应合法")
-        self.assertTrue(v.get("label") and v.get("reason"), "判定应有 label+reason")
+        self.assertIn(s["verdict"]["level"], ("high", "watch", "bull", "none", "na"))
+        self.assertTrue(s["verdict"].get("label") and s["verdict"].get("reason"))
 
     def test_02_30min_absent_falls_back_daily(self):
         t_gui._fetch_min_bars_disk = lambda ts_code, freq: _empty_df()
+        self._warm(_empty_df())                       # 无数据 → 快照为 {}（已热但空）
         r = self.api.load_ob_analysis()
         s = r["stocks"][0]
         self.assertEqual(s.get("trend_src"), "daily", "无 30min 数据 → 趋势回退日线")
@@ -119,8 +135,8 @@ class TestObM30(unittest.TestCase):
 
     def test_03_trend_agrees_with_tags(self):
         t_gui._fetch_min_bars_disk = lambda ts_code, freq: _m30_uptrend()
-        r = self.api.load_ob_analysis()
-        s = r["stocks"][0]
+        self._warm()
+        s = self.api.load_ob_analysis()["stocks"][0]
         label = s["tags"][0]["label"] if s.get("tags") else None      # 首个标签 = 上行/下行/震荡
         m = {"up": "上行", "down": "下行", "flat": "震荡"}
         self.assertEqual(label, m[s["trend"]], "趋势列与行内趋势标签必须同源一致")

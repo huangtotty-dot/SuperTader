@@ -3981,9 +3981,11 @@ async function loadOBAnalysis() {
   try {
     const ob = await apiCall("load_ob_analysis");
     renderOB(ob || {});
-    if (ob && ob.pending) {
+    if (ob && (ob.pending || ob.m30_pending)) {
       if (_obRetryTimer) clearTimeout(_obRetryTimer);
-      _obRetryTimer = setTimeout(loadOBAnalysis, 12000);
+      // 30min 判定未热（后台磁盘预热 ~2s）→ 3s 快速重拉；仅图表未热 → 12s（预热较慢）
+      const delay = (ob.m30_pending && !ob.pending) ? 3000 : 12000;
+      _obRetryTimer = setTimeout(loadOBAnalysis, delay);
     }
   } catch (e) { /* 静默：体检非关键路径 */ }
 }
