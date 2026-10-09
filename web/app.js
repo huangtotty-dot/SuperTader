@@ -4910,6 +4910,17 @@ async function init() {
 }
 
 document.addEventListener("DOMContentLoaded", () => {
+  // 顶部横幅（告警/指数背离）是 fixed 浮层，会压住首屏内容（2026-10-09 owner：提示栏挡视野）。
+  // 依其实测高度设 `--top-banner-h`（含与 topbar 的 6px 间隙），由 `.content` 顶部留白消费。
+  const _tb = document.getElementById("topBanners");
+  if (_tb) {
+    const _reserve = () => {
+      const h = _tb.offsetHeight;
+      document.documentElement.style.setProperty("--top-banner-h", h > 0 ? (h + 6) + "px" : "0px");
+    };
+    if (window.ResizeObserver) new ResizeObserver(_reserve).observe(_tb);
+    _reserve();
+  }
   // pywebview 桥接脚本可能在 DOMContentLoaded 之后才注入，等待 pywebviewready / 轮询兜底
   statusEl("尝试连接后端...");
   if (window.pywebview && window.pywebview.api) {

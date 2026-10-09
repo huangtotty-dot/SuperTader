@@ -27,6 +27,7 @@
 html, body { height: 100%; background: var(--bg); color: var(--text); font: 14px/1.5 -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif; }
 /* 浅色暖冷双光晕（顶暖橙 + 右下冷蓝，极淡） */
 body {
+  overflow: hidden;   /* 2026-10-09：滚动交给 .content 独立容器（顶部横幅固定不遮挡内容） */
   background-color: var(--bg);
   background-image:
     radial-gradient(1100px 620px at 12% -12%, rgba(232, 83, 31, .07), transparent 60%),
@@ -150,7 +151,11 @@ body {
 
 /* ===== 内容区 · 标签页 ===== */
 .content {
-  margin-left: var(--sidebar-w); margin-top: 38px; padding: 14px 18px; min-height: calc(100vh - 38px);
+  /* 2026-10-09 owner：顶部横幅（告警/指数背离）不能再压住视野 ⇒ 内容区改为**独立滚动容器**——
+     固定在视口下方（顶栏 38px + 横幅实测高 `--top-banner-h`），自身 overflow-y:auto。
+     横幅永久固定在顶、内容在下方独立滚动 ⇒ 任何滚动位置都不会被横幅盖住。 */
+  position: fixed; top: calc(38px + var(--top-banner-h, 0px)); left: var(--sidebar-w); right: 0; bottom: 0;
+  overflow-y: auto; overflow-x: hidden; padding: 14px 18px;
 }
 .tab-page { display: none; }
 .tab-page.active { display: block; }
