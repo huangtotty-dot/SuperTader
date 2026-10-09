@@ -1773,15 +1773,25 @@ def scan_ma_breaks(date_str: str = None, silent: bool = False) -> list:
 
 
 def scan_ma_reclaims(date_str: str = None, silent: bool = False) -> list:
-    """扫描候选池+持仓池，返回**刚从破线转为站上**5/10日线的事件（对称于 `scan_ma_breaks`）。
+    """扫描候选池+持仓池，返回**刚由破线转为站上**5/10日线的事件（对称于 `scan_ma_breaks`）。
 
-    口径：昨收 < 昨MA(N) 且 现价 > 今MA(N)。owner 2026-10-08：破线有飞书，回站上也要通知。"""
+    两种口径都算「回站」：
+      · **隔夜回站**：昨收 < 昨MA(N) 且 现价 > 今MA(N)。
+      · **盘内 V 反转**（2026-10-09 补）：今日**曾破线**（见破线报警记录 `ma_break_pushed`）且现价
+        回到 MA(N) 之上。owner 实报：江西铜业 600362 早盘破线、午后拉回站上，隔夜口径判不出。
+    owner 2026-10-08：破线有飞书，回站上也要通知。"""
     codes = _ma_alert_pool()
+    _d = date_str or datetime.now().strftime("%Y-%m-%d")
+    _broke_today = set(_load_ma_break_dedup().get(_d, []))
     events = []
     for code, info in codes.items():
         r = check_ma_break(code, info, date_str)
         if r is None or r.get("insufficient"):
             continue
+        _px, _m5, _m10 = r.get("price"), r.get("ma5"), r.get("ma10")
+        _v_up = code in _broke_today and bool(_px) and bool(_m5)
+        r["reclaim5"] = bool(r.get("reclaim5")) or (_v_up and _px > _m5)
+        r["reclaim10"] = bool(r.get("reclaim10")) or (_v_up and bool(_m10) and _px > _m10)
         if not r.get("reclaim5") and not r.get("reclaim10"):
             continue
         if not silent:
