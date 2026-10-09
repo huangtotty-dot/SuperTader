@@ -775,6 +775,8 @@ _position_scan_lock = _threading.Lock()  # 盘中/收盘建仓扫描互斥（tra
 _ma_alert_lock = _threading.Lock()
 _ma_break_last = None  # 破5/10日线报警节流（datetime，仿盘中建仓扫描）
 _ma_break_thread = None  # 破5/10日线报警后台线程
+_hunter_ma5_last = None  # 猎手热门板块「刚站上5日线」告警节流（2026-10-09）
+_hunter_ma5_thread = None  # 猎手热门板块「刚站上5日线」告警后台线程
 _ma_reclaim_last = None  # 站上5/10日线（破线回站）报警节流（2026-10-08）
 _ma_reclaim_thread = None  # 站上5/10日线报警后台线程
 _trend30_alert_last = None  # 30min 趋势翻转告警节流（2026-10-04 方案 §4.6）
@@ -1056,6 +1058,54 @@ def _maybe_check_trend30_alert(now: datetime) -> None:
     _trend30_alert_thread = _threading.Thread(
         target=_worker, name="trend30-alert", daemon=True)
     _trend30_alert_thread.start()
+
+
+def _hunter_ma5_feishu_enabled() -> bool:
+    """读取 config.json 的 feishu.enabled + notify_on_hunter_ma5 开关。"""
+    try:
+        runtime_config = load_runtime_config()
+        feishu_cfg = runtime_config.get("feishu", {}) if isinstance(runtime_config, dict) else {}
+        if not bool(feishu_cfg.get("enabled", True)):
+            return False
+        return bool(feishu_cfg.get("notify_on_hunter_ma5", True))
+    except Exception:
+        return True
+
+
+def _maybe_check_hunter_ma5_alert(now: datetime) -> None:
+    """选股猎手「热门板块内个股·刚站上5日线」飞书告警（每 5 分钟；2026-10-09）。纯通知。"""
+    global _hunter_ma5_last, _hunter_ma5_thread
+    try:
+        if not _hunter_ma5_feishu_enabled():
+            return
+    except Exception:
+        return
+    t = now.time()
+    if now.weekday() >= 5:
+        return
+    in_morning = dtime(9, 30) <= t <= dtime(11, 30)
+    in_afternoon = dtime(13, 0) <= t <= dtime(14, 55)
+    if not (in_morning or in_afternoon):
+        return
+    if _hunter_ma5_last is not None and (now - _hunter_ma5_last).total_seconds() < 300:
+        return
+    if _hunter_ma5_thread is not None and _hunter_ma5_thread.is_alive():
+        return
+    _hunter_ma5_last = now
+
+    def _worker() -> None:
+        try:
+            from core.hunter_ma5_alert import run_hunter_ma5_alert
+            events = run_hunter_ma5_alert()
+            for e in events:
+                log.info(f"⬆️ 猎手热门板块·站上5日线: {e['code']} {e['name']} "
+                         f"现价{e['price']} MA5={e['ma5']}(+{e['dev5_pct']}%)")
+        except Exception as ex:
+            log.warning(f"⚠️ 猎手站上5日线告警异常（已吞掉）: {str(ex)[:200]}")
+
+    _hunter_ma5_thread = _threading.Thread(
+        target=_worker, name="hunter-ma5-alert", daemon=True)
+    _hunter_ma5_thread.start()
 
 
 # P0-7(2026-09-01): 收盘自动触发 daily_review + forward_tracker（子进程隔离，幂等）
@@ -1922,23 +1972,19 @@ def _maybe_check_index_divergence(now: datetime) -> None:
 
 # ==================== 主循环函数（从原始 t_trader_v1.10.py lines 4970-5363 提取） ====================
 
-def _write_manual_heartbeat(now: datetime) -> None:
-    """轻量心跳（合并日志系统 §2.2：heartbeat_manual.json，补 manual 无心跳缺口，GUI/复盘可判活）。
-    状态类文件允许覆写（tmp + os.replace 原子写）；任何异常吞掉不阻断扫描。"""
-    try:
-        payload = {
-            "time": now.strftime("%Y-%m-%d %H:%M:%S"),
-            "pid": os.getpid(),
-            "scan_count": _scan_count,
-            "last_scan_ts": now.timestamp(),
-        }
-        fp = os.path.join(LOG_DIR, "heartbeat_manual.json")
-        tmp = fp + ".tmp"
-        with open(tmp, "w", encoding="utf-8") as f:
-            _json.dump(payload, f, ensure_ascii=False)
-        os.replace(tmp, fp)
-    except Exception:
-        pass
+def _feishu_md_div(content: str) -> dict:
+    """飞书卡片 markdown 元素（2026-10-09 补回：被「僵尸代码清理」误删定义但各处仍在调用）。"""
+    return {"tag": "div", "text": {"content": content, "tag": "lark_md"}}
+
+
+def _feishu_hr() -> dict:
+    """飞书卡片分割线元素（同上补回）。"""
+    return {"tag": "hr"}
+
+
+def _feishu_card_header(title: str, template: str) -> dict:
+    """飞书卡片头部（同上补回）。"""
+    return {"template": template, "title": {"tag": "plain_text", "content": title}}
 
 
 def scan_once():
@@ -1952,7 +1998,6 @@ def scan_once():
     try:
         now = _now()
         t = now.time()
-        _write_manual_heartbeat(now)  # 合并日志 §2.2：每轮覆写（含非交易时段早退分支，保活可判）
 
         _maybe_push_index_regime_morning(now)          # 09:26-09:31 早盘大盘基调（须在 <9:30 早退之前）
 
@@ -1975,14 +2020,13 @@ def scan_once():
                 _last_idle_log = _now()
             return
 
-        log.info(f"🫀 扫描心跳 第{_scan_count + 1}轮开始")
-
         _maybe_check_index_intraday_alert(now)         # 09:35-14:55 大盘分时预警（300s 节流）
         _maybe_check_index_divergence(now)             # 09:35-14:55 指数背离提醒（300s 节流，事件去重）
         _maybe_run_position_builder_intraday(now)      # 09:30-11:30/13:00-14:55 盘中建仓信号扫描（每5分钟）
         _maybe_run_ma_break_alert(now)                 # 09:30-14:55 盘中破5/10日线报警（每5分钟，提醒建仓）
         _maybe_run_ma_reclaim_alert(now)               # 09:30-14:55 盘中站上5/10日线报警（破线回站，2026-10-08）
         _maybe_check_trend30_alert(now)                # 09:30-14:55 30min趋势翻转告警（每5分钟，纯通知）
+        _maybe_check_hunter_ma5_alert(now)             # 09:30-14:55 猎手热门板块站上5日线告警（每5分钟，纯通知）
 
         if not HOLDINGS:
             return
@@ -2878,6 +2922,9 @@ def run_watch():
     global HOLDINGS, engine
     HOLDINGS = load_holdings()
     shared['HOLDINGS'] = HOLDINGS  # V1.12: 更新共享命名空间中的HOLDINGS，供signal_engine使用
+    # 引擎初始化（2026-10-09 修复：此前的 `engine = SignalEngine(_make_engine_ctx())`
+    # 随「移除竞价模块」误删，导致 scan_once 里 engine.evaluate 报 NameError → 每只持仓"扫描异常"）
+    engine = SignalEngine(_make_engine_ctx())
 
     # manual 做T 下线（2026-09-14）：VIRTUAL_TRADES 持久化恢复与 T_MODE（正/反T）自动决策
     # 均已随 manual 做T 一并删除；run_watch 只保留持仓加载 + 热度补算 + 引擎启动。
