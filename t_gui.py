@@ -1901,9 +1901,10 @@ class Api:
     def load_ob_analysis(self, date=None):
         """每只持仓：**30min 趋势 / 30min 背离 / 30min 顶部特征(T1–T4)风险提醒** + 日线超买(RSI/KDJ-J/CCI/BOLL)。
 
-        2026-10-09 口径变更（owner 需求）：趋势/背离/风险提醒三列改用 **30 分钟线**（趋势=30min
-        三层状态机；背离=30min MACD 背离；风险/提醒=30min 顶部特征 T1–T4，**参考·未验证**）。
-        数据来自 `_m30_top_snapshot`（**只读内存/磁盘缓存、零网络**）；30min 不可用则各列回退日线。
+        2026-10-09 口径变更（owner 需求）：趋势/判定改用 **30 分钟线**。前端只显示一列
+        **「30min 判定」**（`verdict`，由 `m30_features.verdict_from_features` 综合趋势+顶部/底背离特征）。
+        关键：只有 **T1顶背离/T2量价背离** 触发「减仓」（981只×540日离线验证 H=4 跌占比 +29/+32pp）；
+        T3顶分型/T4均线压制 **无区分度** ⇒ 不单独报警。数据来自 `_m30_top_snapshot`（**只读缓存、零网络**）。
 
         2026-10-04 卡顿修复：原来逐只 `load_stock_chart`（冷取数）⇒ 冷启动实测 **14.3s** 同步阻塞
         在 pywebview 主线程。改为**只用已预热的图表缓存**：未就绪的持仓本轮跳过、计入 `pending`，
@@ -2024,10 +2025,13 @@ class Api:
             else:
                 trend, trend_src = ch.get("direction", "flat"), "daily"
 
-            # 风险提醒（2026-10-09 改口径）：**以 30min 顶部特征 T1–T4 为准**，专注「减仓/避坑」。
-            # ⚠️ 未回测验证（参考·未验证）——由 t_io/validation/m30_top 并行验证；文案不产出买卖指令。
-            # 日线 RSI/KDJ/CCI/BOLL 仍单独成列（各自带超买提示），不再驱动风险等级。
+            # 30min 综合判定（2026-10-09 定稿口径）：**「30min 判定」列的唯一来源**。
+            # 依据 t_io/validation/m30_top/报告_m30_top.md：只有 T1顶背离/T2量价背离 前瞻强
+            # （z≈97/88），T3顶分型/T4均线压制 无区分度 ⇒ 只有 T1/T2 触发「减仓」，T3/T4 不单独报警。
             from analysis import m30_features as _m30f
+            _vlevel, _vlabel, _vreason = _m30f.verdict_from_features(
+                _feats, trend, div.get("type"), div.get("bars_ago"))
+            # risk/advice 保留（回滚路径 `_M30_OB_ENABLED=False` 仍用旧日线 RSI 口径）。
             if _M30_OB_ENABLED:
                 risk, advice = _m30f.risk_from_features(_feats)
             else:                                   # 回滚：日线 RSI 口径（2026-09-11 校准）
@@ -2048,6 +2052,7 @@ class Api:
                 "price": cur_close,
                 "trend": trend,
                 "trend_src": trend_src,
+                "verdict": {"level": _vlevel, "label": _vlabel, "reason": _vreason},
                 "risk": risk,
                 "overbought": {"rsi": round(cur_rsi, 1), "kdj": round(cur_j, 1),
                                "cci": round(cur_cci, 1), "boll": bool(ob["boll"]), "count": ob["count"]},

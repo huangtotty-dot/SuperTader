@@ -198,5 +198,39 @@ def risk_from_features(feats: dict):
     return "低", "✓ 无30min顶部特征 · 参考·未验证"
 
 
+VERDICT_LABELS = {"high": "🔴 减仓/避高", "watch": "🟠 盯紧", "bull": "🟢 偏好",
+                  "none": "⚪ 中性", "na": "⚪ 数据不足"}
+
+
+def verdict_from_features(feats, trend=None, div_type=None, div_bars_ago=None,
+                          fresh_bars: int = 16):
+    """30min 综合判定 → `(level, label, reason)`。面板「30min 判定」列的唯一口径。
+
+    口径依据 `t_io/validation/m30_top/报告_m30_top.md`（981只×540日，升沿事件 vs 全样本基线）：
+      · **T1 顶背离 / T2 量价背离**：前瞻**强**（H=4 跌占比 +29 / +32pp，z≈97 / 88）
+        ⇒ 唯一触发「减仓/避高」的信号。
+      · **T3 顶分型 / T4 均线压制**：**无区分度**（lift≈0 甚至反向，z<0）⇒ 只作"知情"弱信号，
+        不单独报警（单个 → 中性；两者同现 → 盯紧）。
+      · **新鲜底背离**且无顶信号 → 偏好。
+
+    与 `risk_from_features`（旧"计数≥2"口径，仅回滚用）不同：**不按计数报警**——那会把 T3/T4
+    噪声算进共振，反而稀释真信号（实测「共振≥2」lift 仅 +1.8pp）。"""
+    f = feats or {}
+    if not f.get("ok"):
+        return "na", VERDICT_LABELS["na"], "30min 数据不足"
+    t1, t2, t3, t4 = (f.get(k) for k in ("t1", "t2", "t3", "t4"))
+    if t1 or t2:
+        why = "、".join(x for x, v in (("T1顶背离", t1), ("T2量价背离", t2)) if v)
+        return "high", VERDICT_LABELS["high"], f"{why}（已验证强特征）"
+    if t3 and t4:
+        return "watch", VERDICT_LABELS["watch"], "T3顶分型+T4均线压制（弱信号共振，未验出前瞻）"
+    if div_type == "底背离" and div_bars_ago is not None and div_bars_ago <= fresh_bars:
+        return "bull", VERDICT_LABELS["bull"], f"无顶信号；新鲜底背离（{int(div_bars_ago)}根前）"
+    weak = "、".join(x for x, v in (("T3顶分型", t3), ("T4均线压制", t4)) if v)
+    reason = f"仅{weak}（未验出前瞻，不报警）" if weak else "无 30min 顶部特征"
+    return "none", VERDICT_LABELS["none"], reason
+
+
 __all__ = ["add_m30_indicators", "detect_top_features", "scan_top_features",
-           "risk_from_features", "FEATURE_LABELS", "MIN_BARS"]
+           "risk_from_features", "verdict_from_features", "VERDICT_LABELS",
+           "FEATURE_LABELS", "MIN_BARS"]

@@ -106,6 +106,9 @@ class TestObM30(unittest.TestCase):
         self.assertIn("type", s.get("divergence", {}), "背离应为新结构 {type,...}")
         self.assertTrue(s.get("top_features", {}).get("ok"), "30min 顶部特征应可用")
         self.assertIn(s.get("risk"), ("高", "中", "低"))
+        v = s.get("verdict") or {}
+        self.assertIn(v.get("level"), ("high", "watch", "bull", "none", "na"), "判定级别应合法")
+        self.assertTrue(v.get("label") and v.get("reason"), "判定应有 label+reason")
 
     def test_02_30min_absent_falls_back_daily(self):
         t_gui._fetch_min_bars_disk = lambda ts_code, freq: _empty_df()

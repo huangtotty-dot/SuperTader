@@ -135,6 +135,26 @@ class TestM30Features(unittest.TestCase):
         for k in ("t1", "t2", "t3", "t4", "count", "fired"):
             self.assertEqual(det[k], last[k], f"detect 与 scan 在 {k} 上口径漂移")
 
+    def test_11_verdict_mapping(self):
+        V = mf.verdict_from_features
+        # 数据不足
+        self.assertEqual(V(None)[0], "na")
+        self.assertEqual(V({"ok": False})[0], "na")
+        # T1/T2 任一 → 减仓（高）
+        self.assertEqual(V({"ok": True, "t1": True, "t2": False, "t3": False, "t4": False})[0], "high")
+        self.assertEqual(V({"ok": True, "t1": False, "t2": True, "t3": False, "t4": False})[0], "high")
+        # T1 与 T3 同现 → 仍高（T1 主导）
+        self.assertEqual(V({"ok": True, "t1": True, "t3": True})[0], "high")
+        # T3+T4 同现 → 盯紧；单个 T3 或 T4 → 中性（严格：弱信号不单独报警）
+        self.assertEqual(V({"ok": True, "t3": True, "t4": True})[0], "watch")
+        self.assertEqual(V({"ok": True, "t3": True, "t4": False})[0], "none")
+        self.assertEqual(V({"ok": True, "t4": True})[0], "none")
+        # 无顶信号 + 新鲜底背离 → 偏好；陈旧(>16根) → 中性
+        self.assertEqual(V({"ok": True}, "flat", "底背离", 6)[0], "bull")
+        self.assertEqual(V({"ok": True}, "flat", "底背离", 21)[0], "none")
+        # 顶背离类型不算偏好
+        self.assertEqual(V({"ok": True}, "flat", "顶背离", 3)[0], "none")
+
     def test_10_risk_mapping(self):
         self.assertEqual(mf.risk_from_features(None)[0], "低")
         self.assertEqual(mf.risk_from_features({"ok": False})[0], "低")
