@@ -3399,8 +3399,8 @@ async function loadHunter(force) {
       renderHunter(h);
       hunterLoaded = true;
     }
-    // 突破箱体扫描（后台并行，后端当日缓存）
-    loadBreakoutStocks(true);
+    // 突破箱体扫描（后台并行，后端按日缓存）；**历史日不自动扫**，由用户在卡片里选日期手动扫
+    if (!h.date || h.date === todayStr()) loadBreakoutStocks(true);
   } catch (e) {
     el.innerHTML = `<div class="empty">加载失败: ${esc(e.message)}</div>`;
   }
@@ -3410,35 +3410,38 @@ async function loadHunter(force) {
 
 // ---- 突破箱体股票（单独拎出）----
 let breakoutLoaded = false;
+let breakoutLoadedDate = null;
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
-async function loadBreakoutStocks(force) {
+async function loadBreakoutStocks(force, date) {
   const body = document.getElementById("hunterBreakoutBody");
   if (!body) return;
-  if (!force && breakoutLoaded) return;
+  const _di = document.getElementById("hunterBreakoutDate");
+  const _date = date || (_di && _di.value) || todayStr();
+  if (!force && breakoutLoaded && breakoutLoadedDate === _date) return;
   const btn = document.getElementById("hunterBreakoutBtn");
   if (btn) { btn.disabled = true; btn.textContent = "⏳ 扫描中..."; }
   body.innerHTML = '<div class="empty">⏳ 准备扫描...</div>';
   try {
-    const st = await apiCall("start_breakout_scan", !!force);
+    const st = await apiCall("start_breakout_scan", !!force, _date);
     if (st.status === "done") {
       renderBreakout(st);
-      breakoutLoaded = true;
-      if (btn) { btn.disabled = false; btn.textContent = "🔄 重新扫描"; }
+      breakoutLoaded = true; breakoutLoadedDate = _date;
+      if (btn) { btn.disabled = false; btn.textContent = "🔄 扫描该日"; }
       return;
     }
     if (st.status === "error") {
       body.innerHTML = `<div class="empty">扫描失败: ${esc(st.error || '未知')}</div>`;
-      if (btn) { btn.disabled = false; btn.textContent = "🔄 重新扫描"; }
+      if (btn) { btn.disabled = false; btn.textContent = "🔄 扫描该日"; }
       return;
     }
-    await pollBreakoutScan(body, btn);   // running → 轮询进度
+    await pollBreakoutScan(body, btn, _date);   // running → 轮询进度
   } catch (e) {
     const cur = document.getElementById("hunterBreakoutBody");
     if (cur) cur.innerHTML = `<div class="empty">突破箱体扫描失败: ${esc(e.message)}</div>`;
-    if (btn) { btn.disabled = false; btn.textContent = "🔄 重新扫描"; }
+    if (btn) { btn.disabled = false; btn.textContent = "🔄 扫描该日"; }
   }
 }
-async function pollBreakoutScan(body, btn) {
+async function pollBreakoutScan(body, btn, date) {
   const t0 = Date.now();
   // 全池 5000+ 只由后端 GM 批量拉取（900 只/批）。原先 5 分钟兜底会在扫完前放弃，
   // 而按钮是 force 重扫 ⇒ 用户一点就把已扫完的结果作废、永远看不到结果。
@@ -3448,16 +3451,16 @@ async function pollBreakoutScan(body, btn) {
     await sleep(800);
     if (!document.body.contains(body)) return;   // 标签已切换
     let st;
-    try { st = await apiCall("get_breakout_scan"); } catch (e) { break; }
+    try { st = await apiCall("get_breakout_scan", date); } catch (e) { break; }
     if (st.status === "done") {
       renderBreakout(st);
       breakoutLoaded = true;
-      if (btn) { btn.disabled = false; btn.textContent = "🔄 重新扫描"; }
+      if (btn) { btn.disabled = false; btn.textContent = "🔄 扫描该日"; }
       return;
     }
     if (st.status === "error") {
       body.innerHTML = `<div class="empty">扫描失败: ${esc(st.error || '未知')}</div>`;
-      if (btn) { btn.disabled = false; btn.textContent = "🔄 重新扫描"; }
+      if (btn) { btn.disabled = false; btn.textContent = "🔄 扫描该日"; }
       return;
     }
     if (st.status === "running") {
@@ -3481,8 +3484,8 @@ async function pollBreakoutScan(body, btn) {
   // 说清仍在后台跑、并提示点按钮会重新扫描（不是"重试失败"）。
   const mins = Math.round((Date.now() - t0) / 60000);
   body.innerHTML = `<div class="empty">⏳ 扫描仍在后台运行（已 ${mins} 分钟）<br>
-    <span class="cell-dim" style="font-size:11px">后端线程未结束；点「🔄 重新扫描」会作废本轮并重开</span></div>`;
-  if (btn) { btn.disabled = false; btn.textContent = "🔄 重新扫描"; }
+    <span class="cell-dim" style="font-size:11px">后端线程未结束；点「🔄 扫描该日」会作废本轮并重开</span></div>`;
+  if (btn) { btn.disabled = false; btn.textContent = "🔄 扫描该日"; }
 }
 function renderBreakout(b) {
   const body = document.getElementById("hunterBreakoutBody");
@@ -3490,7 +3493,7 @@ function renderBreakout(b) {
   const stocks = (b && b.stocks) || [];
   const nd = (b && b.no_data) || 0;
   const meta = document.getElementById("hunterBreakoutMeta");
-  if (meta) meta.textContent = `· 共 ${stocks.length} 只` + (nd ? ` · ${nd} 只无日线数据` : "");
+  if (meta) meta.textContent = `${b && b.date ? '· ' + esc(b.date) + ' ' : ''}· 共 ${stocks.length} 只` + (nd ? ` · ${nd} 只无日线数据` : "");
   if (!stocks.length) {
     body.innerHTML = '<div class="empty">今日池内暂无「当日有效突破」的股票'
       + (nd ? `<div class="cell-dim" style="font-size:10px;margin-top:4px">${nd} 只无日线数据（北交所在当前环境取不到日线，已跳过）</div>` : "")
@@ -3748,15 +3751,18 @@ function renderHunter(h) {
     </tbody>`;
   }).join("");
 
-  // 突破箱体扫描仅对"今日"数据有意义（后端按最新日线收盘扫描，当日缓存）
-  const isHistory = h.is_history || (h.date && h.date !== todayStr());
-  const breakoutCard = isHistory ? "" : `
+  // 2026-10-09 owner：突破箱体支持**任选交易日**扫描，结果按日保存（breakout_{date}.json）
+  const breakoutCard = `
     <div class="card" style="margin-bottom:10px;padding:10px 14px">
-      <div class="card-title">🚀 突破箱体·当日有效突破（昨收 ≤ 箱体上沿 &lt; 今价，幅度 0.3~8%）
-        <button class="mini-btn" id="hunterBreakoutBtn" style="margin-left:8px" onclick="loadBreakoutStocks(true)">🔄 重新扫描</button>
+      <div class="card-title">🚀 突破箱体·有效突破（昨收 ≤ 箱体上沿 &lt; 今价，幅度 0.3~8%）
+        <input type="date" id="hunterBreakoutDate" value="${esc(h.date || todayStr())}"
+          style="margin-left:8px;background:transparent;color:inherit;border:1px solid var(--border-soft);border-radius:4px;padding:1px 4px;font-size:12px"
+          onchange="breakoutLoaded=false;loadBreakoutStocks(true, this.value)" title="选择任意交易日扫描（结果按日保存）">
+        <button class="mini-btn" id="hunterBreakoutBtn" style="margin-left:8px"
+          onclick="loadBreakoutStocks(true, document.getElementById('hunterBreakoutDate').value)">🔄 扫描该日</button>
         <span class="cell-dim" id="hunterBreakoutMeta" style="font-size:11px"></span>
       </div>
-      <div id="hunterBreakoutBody"><div class="empty">点击"运行今日数据"后自动扫描当日有效突破的股票（全池 5000+ 只，约 1~2 分钟）</div></div>
+      <div id="hunterBreakoutBody"><div class="empty">选日期后点「🔄 扫描该日」（全池 5000+ 只，约 1~2 分钟）；结果会按日保存，再选同一天直接秒回。</div></div>
     </div>`;
 
   el.innerHTML = `

@@ -3943,7 +3943,7 @@ class Api:
                 return float(b["high"])
         return None
 
-    def _breakout_probe_one(self, code, df):
+    def _breakout_probe_one(self, code, df, date=None):
         """单只「当日有效突破」判定，命中返回 dict，否则 None。
 
         口径（owner 2026-09-29）：上沿取自 as-of 上一交易日的箱体，命中条件
@@ -3958,8 +3958,11 @@ class Api:
         """
         if df is None or df.empty:
             return None
-        today = datetime.now().strftime("%Y-%m-%d")
-        if str(df["date"].iloc[-1]) != today:
+        today = str(date) if date else datetime.now().strftime("%Y-%m-%d")
+        # 2026-10-09：支持**任选日期**扫描——先按目标日 as-of 切片（去掉目标日之后的 bar，
+        # 否则历史日扫描会用到"今天"的末根 = 前视），再要求切片末根**恰好等于目标日**。
+        df = df[df["date"].astype(str) <= today]
+        if df.empty or str(df["date"].iloc[-1]) != today:
             return None
         if len(df) < self._BK_MIN_BARS + 1:
             return None
@@ -3981,7 +3984,7 @@ class Api:
     def _breakout_disk_path(self, today):
         return BASE / "t_io" / "cache" / f"breakout_{today}.json"
 
-    def _scan_breakout(self, codes, state):
+    def _scan_breakout(self, codes, state, date=None):
         """全池扫描「当日有效突破」。state 非空时更新进度（done/total/found/stocks/no_data）。
 
         2026-09-29 重写要点：
@@ -4011,7 +4014,7 @@ class Api:
                 if frames.get(code) is None:
                     no_data += 1
                     continue
-                hit = self._breakout_probe_one(code, frames.get(code))
+                hit = self._breakout_probe_one(code, frames.get(code), date)
                 if not hit:
                     continue
                 info = jy.get(code) if isinstance(jy.get(code), dict) else None
@@ -4049,10 +4052,10 @@ class Api:
                 self._breakout_cache = {}
             self._breakout_cache[key] = val
 
-    def load_breakout_stocks(self):
+    def load_breakout_stocks(self, date=None):
         """同步全量扫描突破箱体（前端走后端后台线程时用 start_breakout_scan）。
-        结果缓存到内存+磁盘（当日），避免重复扫描。"""
-        today = datetime.now().strftime("%Y-%m-%d")
+        `date` 缺省=今日；可传任意交易日做历史扫描。结果缓存到内存+磁盘（按日），避免重复扫描。"""
+        today = str(date) if date else datetime.now().strftime("%Y-%m-%d")
         cache_key = "breakout_" + today
         hit = self._bk_cache_get(cache_key)
         if hit is not None:
@@ -4068,8 +4071,8 @@ class Api:
         if not codes:
             return {"stocks": [], "count": 0}
         st = {}
-        breakouts = self._scan_breakout(codes, st)
-        result = _clean({"stocks": breakouts, "count": len(breakouts),
+        breakouts = self._scan_breakout(codes, st, today)
+        result = _clean({"date": today, "stocks": breakouts, "count": len(breakouts),
                          "no_data": st.get("no_data", 0)})
         self._bk_cache_put(cache_key, result)
         try:
@@ -4078,20 +4081,21 @@ class Api:
             pass
         return result
 
-    def start_breakout_scan(self, force=False):
+    def start_breakout_scan(self, force=False, date=None):
         """启动后台突破扫描（幂等：内存/磁盘缓存命中→立即 done；扫描中→返回当前进度）。
-        force=True 绕开当日缓存强制重扫（前端「🔄 重新扫描」，修复 2026-09-01 缓存永不更新的 bug）。
-        返回 {status: idle|running|done|error, total, done, found, stocks, no_data?, error?}。
+        `date` 缺省=今日；可传任意交易日做历史扫描（结果按日缓存到 `breakout_{date}.json`）。
+        force=True 绕开该日缓存强制重扫（前端「🔄 重新扫描」）。
+        返回 {status: idle|running|done|error, date, total, done, found, stocks, no_data?, error?}。
 
         2026-09-29：状态与缓存全部改由 `_BREAKOUT_LOCK` 保护；「扫描中」判定与
         `self._breakout_scan` 赋值在同一临界区内完成，防止两个 force 重扫并发跑同一池。
         """
-        today = datetime.now().strftime("%Y-%m-%d")
+        today = str(date) if date else datetime.now().strftime("%Y-%m-%d")
         cache_key = "breakout_" + today
         if not force:
             hit = self._bk_cache_get(cache_key)
             if hit is not None:
-                return {"status": "done", "total": 0, "done": 0,
+                return {"status": "done", "date": today, "total": 0, "done": 0,
                         "found": hit.get("count", 0), "stocks": hit.get("stocks", []),
                         "no_data": hit.get("no_data", 0)}
             disk_fp = self._breakout_disk_path(today)
@@ -4099,7 +4103,7 @@ class Api:
                 disk = _load_json(disk_fp, None)
                 if disk and isinstance(disk, dict) and "stocks" in disk:
                     self._bk_cache_put(cache_key, disk)
-                    return {"status": "done", "total": 0, "done": 0,
+                    return {"status": "done", "date": today, "total": 0, "done": 0,
                             "found": disk.get("count", 0), "stocks": disk.get("stocks", []),
                             "no_data": disk.get("no_data", 0)}
 
@@ -4110,7 +4114,7 @@ class Api:
             codes = self._breakout_pool_codes()
             if not codes:
                 return {"status": "done", "total": 0, "done": 0, "found": 0, "stocks": []}
-            state = {"status": "running", "total": len(codes), "done": 0, "found": 0,
+            state = {"status": "running", "date": today, "total": len(codes), "done": 0, "found": 0,
                      "stocks": [], "no_data": 0}
             self._breakout_scan = state
             if force:
@@ -4127,8 +4131,8 @@ class Api:
 
         def run():
             try:
-                breakouts = self._scan_breakout(codes, state)
-                result = _clean({"stocks": breakouts, "count": len(breakouts),
+                breakouts = self._scan_breakout(codes, state, today)
+                result = _clean({"date": today, "stocks": breakouts, "count": len(breakouts),
                                  "no_data": state.get("no_data", 0)})
                 self._bk_cache_put(cache_key, result)
                 try:
@@ -4146,24 +4150,25 @@ class Api:
         threading.Thread(target=run, daemon=True).start()
         return dict(state)
 
-    def get_breakout_scan(self):
+    def get_breakout_scan(self, date=None):
         """轮询后台突破扫描进度。done 后返回完整结果（含磁盘/内存缓存命中）。
+        `date` 缺省=今日；扫描中且日期匹配才返回 running，否则 idle。
 
         返回的是**快照副本**（`dict(state)`），避免 800ms 读线程读到
         「status=done 但 stocks 仍是上一批」的中间态。
         """
-        today = datetime.now().strftime("%Y-%m-%d")
+        today = str(date) if date else datetime.now().strftime("%Y-%m-%d")
         cache_key = "breakout_" + today
         hit = self._bk_cache_get(cache_key)
         if hit is not None:
-            return {"status": "done", "total": 0, "done": 0,
+            return {"status": "done", "date": today, "total": 0, "done": 0,
                     "found": hit.get("count", 0), "stocks": hit.get("stocks", []),
                     "no_data": hit.get("no_data", 0)}
         with _BREAKOUT_LOCK:
             cur = getattr(self, "_breakout_scan", None)
-            if cur:
+            if cur and cur.get("date") == today:
                 return dict(cur)
-        return {"status": "idle", "total": 0, "done": 0, "found": 0, "stocks": []}
+        return {"status": "idle", "date": today, "total": 0, "done": 0, "found": 0, "stocks": []}
 
     # ---------- 选股猎手历史 ----------
     def available_hunter_dates(self):
