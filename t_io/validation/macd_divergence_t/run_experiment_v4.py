@@ -53,8 +53,11 @@ MIN_GAP = 15
 WARMUP = 30
 NO_NEW_AFTER = '14:30'
 FLAT_TIME = '14:50'
-FEE_SELL = 0.00121
-FEE_BUY = 0.00015
+from core.cost_model import fees as _cost_fees  # noqa: E402
+# 成本单一真源 core/cost_model.py（2026-10-09 任务COST，本文件为当日提交实验）：
+# 默认 legacy 保持与已发布结果可比，ST_COST_VENUE=stock/etf 可切新口径做敏感性。
+# 旧字面量 卖0.00121/买0.00015 已废止（内含 2023-08-28 已废止的 0.1% 印花税）。
+FEE_SELL, FEE_BUY = _cost_fees(os.environ.get('ST_COST_VENUE', 'legacy') or 'legacy')
 DIF_RATIO = 0.5          # dif2 < dif1 * DIF_RATIO
 MIN_1M = 100
 MAX_SIG_PER_DAY = 2      # 沿用 v1 MAX_SIG_PER_DIR，防单日主导

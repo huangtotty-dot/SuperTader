@@ -55,7 +55,10 @@ import run_experiment_v2 as v2  # noqa: E402  复用 1min 数据层（与 calibr
 OUT = HERE
 WIN_START, WIN_END = '2025-09-14', '2026-08-26'
 OOS_START = '2026-06-01'          # 最后 3 个月作样本外
-FEE_S, FEE_B = 0.00121, 0.00015   # 卖 0.121% / 买 0.015%（与生产一致）
+from core.cost_model import fees as _cost_fees  # noqa: E402
+# 成本单一真源 core/cost_model.py（2026-10-09 任务COST）：默认 legacy 保持与已发布结果可比，
+# ST_COST_VENUE=stock/etf 可切新口径做敏感性。旧字面量 卖0.00121/买0.00015 已废止（含 0.1% 印花税）。
+FEE_S, FEE_B = _cost_fees(os.environ.get('ST_COST_VENUE', 'legacy') or 'legacy')
 VOLR_TH = 1.5
 MIN_BAR = 100
 N_MC = 200

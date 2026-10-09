@@ -49,7 +49,10 @@ for _p in (ROOT, os.path.join(ROOT, 't_io', 'validation', 't0_schemes'),
 
 import run_experiment_v2 as v2  # noqa: E402
 
-FEE_S, FEE_B = 0.00121, 0.00015      # 与生产一致：双边 0.136%
+from core.cost_model import fees as _cost_fees  # noqa: E402
+# 成本单一真源 core/cost_model.py（2026-10-09 任务COST）：默认 legacy 保持与已发布结果可比，
+# ST_COST_VENUE=stock/etf 可切新口径做敏感性。旧字面量 卖0.00121/买0.00015 已废止（含 0.1% 印花税）。
+FEE_S, FEE_B = _cost_fees(os.environ.get('ST_COST_VENUE', 'legacy') or 'legacy')
 INIT = 100.0                          # 底仓规模归一化
 
 

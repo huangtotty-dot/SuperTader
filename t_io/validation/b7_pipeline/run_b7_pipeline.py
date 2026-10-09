@@ -68,7 +68,10 @@ import run_experiment_v2 as v2  # noqa: E402  复用 1min 数据层（与 E1/cal
 OUT = os.path.join(HERE, 'results_b7_pipeline_2026-09-15.json')
 WIN_START, WIN_END = '2025-09-14', '2026-08-26'
 OOS_START = '2026-06-01'
-FEE_S, FEE_B = 0.00121, 0.00015      # R1：生产全成本（main.py:417-422）
+from core.cost_model import fees as _cost_fees  # noqa: E402
+# 成本单一真源 core/cost_model.py（2026-10-09 任务COST）：默认 legacy 保持与 E1/已发布结果可比，
+# ST_COST_VENUE=stock/etf 可切新口径做敏感性。旧字面量 卖0.00121/买0.00015 已废止（含 0.1% 印花税）。
+FEE_S, FEE_B = _cost_fees(os.environ.get('ST_COST_VENUE', 'legacy') or 'legacy')
 HARNESS_FEE_S = 0.00065              # harness 口径：佣金0.00015+印花税0.0005
 MIN_BAR = 100
 N_MC, MC_SEED = 200, 20260915

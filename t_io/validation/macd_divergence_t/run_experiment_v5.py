@@ -57,8 +57,14 @@ MIN_GAP = 15
 WARMUP = 30
 NO_NEW_AFTER = '14:30'
 FLAT_TIME = '14:50'
-FEE_SELL = 0.00121            # legacy（与 v4 一致）
-FEE_BUY = 0.00015
+from core.cost_model import fees as _cost_fees  # noqa: E402
+# 成本单一真源 core/cost_model.py（2026-10-09 任务COST，本文件为当日提交实验）：
+# 默认 legacy 保持与 v4/已发布结果可比（judge 主口径），ST_COST_VENUE=stock/etf 可切新口径。
+# 旧字面量 卖0.00121/买0.00015 已废止（内含 2023-08-28 已废止的 0.1% 印花税）。
+FEE_SELL, FEE_BUY = _cost_fees(os.environ.get('ST_COST_VENUE', 'legacy') or 'legacy')
+# 注意：以下 LIVE 字面量（owner 实盘口径历史值）与 cost_model stock 口径相差 0.00001/腿
+# （0.0006054/0.0001054 vs 0.0005954/0.0000954，疑多计一次过户费）——为保持与已发布
+# v5 live 列严格可比，保留原值不改；新实验请用 ST_COST_VENUE=stock。
 FEE_SELL_LIVE = 0.0006054     # owner 实盘：0.0001054 + 0.0005 印花税
 FEE_BUY_LIVE = 0.0001054
 DIF_RATIO = 0.5

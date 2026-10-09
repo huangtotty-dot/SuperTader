@@ -371,14 +371,23 @@ def build_alert_card(code, name, alert_level, triggered_rules, morning_stats, on
     return card
 
 
-# 2026-09-15 阶段0-1（诊断D1/F2）：做T账本费率统一为真实双边分腿口径（owner 2026-09-14 裁决）。
-#   卖出腿 0.00121 = 佣金+印花税+过户费（GM 全成本）；买入腿 0.00015 = 佣金。
-# 旧口径：config.py PARAMS["commission_rate"]=0.00025 一刀切乘双腿，仅为真实双边（≈0.136%）的 37%，
-# 系统性低估费用、est_pnl 虚高（D1 实证样本期低估费用 ≈87~120 元，连亏熔断 P6 读失真账）。
-# 新旧关系：config.py 的 commission_rate 保留不动（其他模块/回测脚本可能引用，本阶段不改 config.py），
-# 但 closure_audit est_pnl 口径自 2026-09-15 起以本常量为准，不再读 PARAMS。
-T0_SELL_FEE_RATE = 0.00121   # 卖出腿全成本（佣金+印花税+过户费，GM 全成本）
-T0_BUY_FEE_RATE = 0.00015    # 买入腿佣金
+# 2026-10-09（S0·任务COST，owner 授权）：做T账本费率切到单一真源 core/cost_model.py，
+# 废止 2026-09-15 阶段0-1 的旧口径（卖 0.00121 / 买 0.00015，内含 2023-08-28 已废止的 0.1% 印花税）。
+#   新口径：stock 买 0.00954% / 卖 0.05954%（含 0.05% 印花税）；etf 免印花税；
+#   ST_COST_VENUE ∈ {stock, etf, legacy} 可覆盖（legacy=旧值，仅供历史复算对照）。
+# 历史背景（2026-09-15 阶段0-1，诊断D1/F2）：config.py PARAMS["commission_rate"]=0.00025
+# 一刀切乘双腿，仅为当时真实双边（≈0.136%）的 37%，系统性低估费用、est_pnl 虚高；
+# config.py 保留不动（其他模块/回测脚本可能引用），est_pnl 口径以本模块常量为准。
+from core.cost_model import fees as _cost_fees
+
+T0_SELL_FEE_RATE, T0_BUY_FEE_RATE = _cost_fees()   # 默认 stock；env ST_COST_VENUE 覆盖
+
+
+def _t0_fee_rates(code=None, holding=None):
+    """按标的类型取做T分腿费率 (卖, 买)：ETF 免印花税，其余走 ST_COST_VENUE 口径。"""
+    _is_etf = bool((holding or {}).get("type") == "etf") or \
+              bool(code and ((HOLDINGS or {}).get(code) or {}).get("type") == "etf")
+    return _cost_fees('etf') if _is_etf else (T0_SELL_FEE_RATE, T0_BUY_FEE_RATE)
 
 
 def compute_t0_pnl(vt, commission_rate=None, sell_fee_rate=None, buy_fee_rate=None):
@@ -1497,8 +1506,9 @@ def _maybe_audit_closure(now: datetime) -> None:
             valid_buys = [tr for tr in _buys_all if float(tr.get("price", 0) or 0) > 0]
             n_price_missing = (len(_sells_all) - len(valid_sells)) + (len(_buys_all) - len(valid_buys))
             # V2c 数据源：当日做T估算盈亏（统一配对口径 P0-5：各自总量加权均价 + 费用只计 matched 双腿；
-            # 2026-09-15 阶段0-1：费用真实双边分腿 卖0.00121/买0.00015）
-            _p = compute_t0_pnl(_merged, sell_fee_rate=T0_SELL_FEE_RATE, buy_fee_rate=T0_BUY_FEE_RATE)
+            # 2026-10-09 任务COST：费率改走 core/cost_model 单一真源，按标的类型区分 stock/etf）
+            _sr, _br = _t0_fee_rates(code=code, holding=holding)
+            _p = compute_t0_pnl(_merged, sell_fee_rate=_sr, buy_fee_rate=_br)
             est_pnl = _p["t0_pnl"]
             if n_price_missing:
                 problems.append(
@@ -1554,7 +1564,7 @@ def _maybe_audit_closure(now: datetime) -> None:
         record = {"date": today, "time": now.strftime("%H:%M:%S"),
                   "ok": not problems, "problems": problems, "details": details,
                   "buyback_mismatch": _bb_mismatch,   # 2026-09-15 阶段0-1：新增字段（不删旧）
-                  "fee_model": "bilateral_v2",        # 2026-09-15 阶段0-1：est_pnl 费率口径标记（卖0.00121/买0.00015）
+                  "fee_model": "bilateral_v3",        # 2026-10-09 任务COST：est_pnl 走 core/cost_model（stock/etf 分标的），旧标记 bilateral_v2=废止口径
                   }
         try:
             _append_jsonl(os.path.join(LOG_DIR, "closure_audit.jsonl"), record)
@@ -1654,10 +1664,10 @@ def _push_daily_pnl_feishu(record: dict, date_str: str) -> None:
         return
 
     total_pnl = sum(d.get("est_pnl", 0) for d in details)
-    # 2026-09-15 阶段0-1（诊断D1/F2）：费用估算改真实双边分腿（卖出腿 0.00121 / 买入腿 0.00015），
-    # 替换原硬编码 0.00025×双腿（仅真实双边 37%）。
-    total_fees = sum(d.get("sold", 0) * d.get("ref_price", 0) * T0_SELL_FEE_RATE
-                     + d.get("bought", 0) * d.get("ref_price", 0) * T0_BUY_FEE_RATE
+    # 2026-10-09 任务COST：费用估算走 core/cost_model 单一真源，按标的 code 区分 stock/etf
+    # （替换 2026-09-15 阶段0-1 的废止口径 卖0.00121/买0.00015）。
+    total_fees = sum(d.get("sold", 0) * d.get("ref_price", 0) * _t0_fee_rates(code=d.get("code"))[0]
+                     + d.get("bought", 0) * d.get("ref_price", 0) * _t0_fee_rates(code=d.get("code"))[1]
                      for d in traded)
     total_trades = sum(d.get("sold", 0) for d in details) + sum(d.get("bought", 0) for d in details)
 

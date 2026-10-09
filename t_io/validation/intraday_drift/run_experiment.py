@@ -35,7 +35,10 @@ for _p in (ROOT, _MD):
 import run_experiment_v2 as v2  # noqa: E402
 
 OUT = HERE
-FEE_S, FEE_B = 0.00121, 0.00015
+from core.cost_model import fees as _cost_fees  # noqa: E402
+# 成本单一真源 core/cost_model.py（2026-10-09 任务COST）：默认 legacy 保持与已发布结果可比，
+# ST_COST_VENUE=stock/etf 可切新口径做敏感性。旧字面量 卖0.00121/买0.00015 已废止（含 0.1% 印花税）。
+FEE_S, FEE_B = _cost_fees(os.environ.get('ST_COST_VENUE', 'legacy') or 'legacy')
 ARMS = [('09:31', '14:55'), ('10:00', '14:55'), ('10:30', '14:55'),
         ('13:01', '14:55'), ('09:31', '15:00'), ('10:00', '15:00')]
 GAP_BUCKETS = [(-1.0, -0.03, '<-3%'), (-0.03, -0.01, '-3~-1%'), (-0.01, 0.0, '-1~0%'),

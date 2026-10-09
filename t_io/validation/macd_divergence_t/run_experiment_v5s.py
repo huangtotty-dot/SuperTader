@@ -37,13 +37,21 @@ import numpy as np
 HERE = os.path.dirname(os.path.abspath(__file__))
 if HERE not in sys.path:
     sys.path.insert(0, HERE)
+ROOT = os.path.abspath(os.path.join(HERE, '..', '..', '..'))
+if ROOT not in sys.path:
+    sys.path.insert(0, ROOT)
 
 import run_experiment_v2 as v2  # noqa: E402  数据层
 import run_experiment_v4 as v4  # noqa: E402  信号层 + block_bootstrap
 
-# ---- owner 实盘费率口径（覆盖 v4 模块常量，pair_net 全局生效）----
-v4.FEE_SELL = 0.0006054
-v4.FEE_BUY = 0.0001054
+# ---- 费率口径（覆盖 v4 模块常量，pair_net 全局生效）----
+# 成本单一真源 core/cost_model.py（2026-10-09 任务COST，本文件为当日提交实验）：
+# 默认 legacy 保持与 v4 主口径可比，ST_COST_VENUE=stock/etf 可切新口径。
+# 注意：本文件原始发布结果（results_v5s_2026-10-09）用的是历史 live 字面量
+# 卖0.0006054/买0.0001054，与 cost_model stock 口径相差 0.00001/腿（疑多计一次
+# 过户费）；ST_COST_VENUE=stock 重跑会与该发布值有 ±0.001pp/腿 级偏差。
+from core.cost_model import fees as _cost_fees  # noqa: E402
+v4.FEE_SELL, v4.FEE_BUY = _cost_fees(os.environ.get('ST_COST_VENUE', 'legacy') or 'legacy')
 FEE_SELL, FEE_BUY = v4.FEE_SELL, v4.FEE_BUY
 
 START = '2025-09-14'
