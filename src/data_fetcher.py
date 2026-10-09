@@ -23,7 +23,7 @@ LEARNING_FILE = os.path.join(_ST_ROOT, "t_io", "state", "strategy_memory.json")
 WATCHLIST_FILE = os.path.join(_ST_ROOT, "t_io", "state", "watchlist_buy.json")
 
 # P0-4(2026-08-31): 补齐 V3.0 迁移遗漏的模块级依赖——此前依赖 main.py exec 共享命名空间注入，
-# 作为独立模块 import（如 preopen.py 用 load_holdings/get_daily_context）时 NameError。
+# 作为独立模块 import 时 NameError。
 _now = datetime.now
 log = logging.getLogger("data_fetcher")
 

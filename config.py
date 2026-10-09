@@ -55,12 +55,11 @@ LEARNING_FILE = os.path.join(T_IO_DIR, "t_trader_learning.json")
 LOG_DIR = os.path.join(T_IO_DIR, "logs")
 CACHE_DIR = os.path.join(T_IO_DIR, "cache")
 SNAPSHOT_DIR = os.path.join(T_IO_DIR, "minute_snapshots")
-PREOPEN_DIR = os.path.join(T_IO_DIR, "preopen")
 CONFIG_FILE = os.path.join(STATE_DIR, "config.json")
 TRACE_DIR = os.path.join(T_IO_DIR, "traces")
 WATCHLIST_FILE = os.path.join(BASE_DIR, "watchlist.json")
 
-for d in [T_IO_DIR, STATE_DIR, LOG_DIR, CACHE_DIR, SNAPSHOT_DIR, TRACE_DIR, PREOPEN_DIR]:
+for d in [T_IO_DIR, STATE_DIR, LOG_DIR, CACHE_DIR, SNAPSHOT_DIR, TRACE_DIR]:
     if not os.path.exists(d):
         os.makedirs(d)
 
@@ -750,14 +749,6 @@ DAILY_DECISION_STATS: Dict[str, dict] = {}
 SIGNAL_OUTCOME_TRACKER: Dict[str, list] = {}
 DAILY_CONTEXT_CACHE: Dict[str, Dict[str, Any]] = {}
 SESSION_CONTEXT: Dict[str, Any] = {}
-PREOPEN_CONTEXT: Optional[Any] = None
-_preopen_logged_date: Optional[str] = None
-_preopen_pushed_date: Optional[str] = None
-_preopen_monitor_date: Optional[str] = None
-_preopen_monitor_last_push_at: Optional[datetime] = None
-_preopen_monitor_last_signature: Optional[str] = None
-_preopen_monitor_push_count: int = 0
-_preopen_overview_last_push_at: Optional[datetime] = None
 _eod_logged_date: Optional[str] = None
 _scan_lock = False
 
@@ -864,19 +855,6 @@ ENTRY_TIMING_PARAMS = {
 # 待 §7 回测校准通过后再由 owner 置 True 生效。
 TREND30_GATE_PARAMS = {
     "enabled": False,       # True=许可被拒时把 verdict 降级为 approaching；False=仅记录
-}
-
-# ==================== B-2: C20 竞价现实校验（2026-08-21 评审通过，双条件与门） ====================
-# 09:26 基调推送前校验：持仓缺口(gap_med) 与 Top20 竞价跌占比 双条件，只纠"乐观错"不纠"悲观错"
-# Level1(降级标注黄条): gap_med<=l1_gap 且 top20跌占比>=l1_top20_down_ratio
-# Level2(推翻基调红条): gap_med<=l2_gap 且 top20跌占比>=l2_top20_down_ratio
-# Top20 缺失(top20_status=empty)时退化为缺口单条件，卡片标注"Top20缺失·单条件"
-C20_AUCTION_CHECK = {
-    "enabled": True,          # 总开关；False 时跳过竞价校验（回滚用）
-    "l1_gap": -1.0,           # Level1 持仓缺口中位数阈值(%)
-    "l2_gap": -2.5,           # Level2 持仓缺口中位数阈值(%)
-    "l1_top20_down_ratio": 0.60,  # Level1 Top20 跌家占比阈值
-    "l2_top20_down_ratio": 0.75,  # Level2 Top20 跌家占比阈值
 }
 
 # ==================== W33 A3: 仓位管理器共享计算（t_gui 与 position_builder 同源） ====================

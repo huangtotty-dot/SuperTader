@@ -76,8 +76,6 @@ module_order = [
     ('data_fetcher', 'src/data_fetcher.py'),
     ('indicators', 'analysis/indicators.py'),
     ('signal_engine', 'core/signal_engine.py'),
-    ('auction_analyzer', 'execution/auction_analyzer.py'),
-    ('preopen', 'execution/preopen.py'),
     ('support_resistance', 'optimization/support_resistance.py'),
     ('index_regime', 'analysis/index_regime.py'),
     ('index_regime_intraday', 'analysis/index_regime_intraday.py'),
@@ -275,46 +273,6 @@ def _push_intercept_notice(code, sig, now, reason):
         pass
 
 
-_HIGH_OPEN_PUSHED = set()   # C-4: "YYYY-MM-DD:code" 当日去重
-
-
-def _high_open_spike_check(code, holding, df, preopen_context, now):
-    """C-4(2026-08-21): 高开急拉预警——open_gap>3%（preopen 小数口径）且自开盘冲高>2%。
-    仅 09:30-09:45 早盘段检查；每股每日 1 条。证据：08-18 600176 gap 4.2% 冲 47.06 无预警。"""
-    try:
-        if now.time() < dtime(9, 30) or now.time() > dtime(9, 45):
-            return
-        today = now.strftime("%Y-%m-%d")
-        key = f"{today}:{code}"
-        if key in _HIGH_OPEN_PUSHED or not FEISHU_WEBHOOK:
-            return
-        gap = None
-        if preopen_context is not None:
-            gap = ((preopen_context.code_snapshots or {}).get(code) or {}).get("open_gap")
-        if gap is None or not (gap > 0.03):
-            return
-        if df is None or df.empty or "open" not in df.columns:
-            return
-        df = df.copy()
-        open_px = float(df.iloc[0]["open"])
-        if open_px <= 0:
-            return
-        hi = float(df["high"].max()) if "high" in df.columns else open_px
-        spike = (hi - open_px) / open_px
-        if spike > 0.02:
-            _HIGH_OPEN_PUSHED.add(key)
-            _name = holding.get("name", code)
-            card = {
-                "msg_type": "interactive",
-                "card": {
-                    "header": _feishu_card_header(f"⚡ 高开急拉预警 - {FEISHU_KEYWORD}", "orange"),
-                    "elements": [{"tag": "markdown", "content":
-                        f"⚡ **{_name}（{code}）** gap {gap*100:.1f}%，10min 冲高 {spike*100:.1f}%，谨防冲高回落"}],
-                },
-            }
-            send_feishu_payload(card, success_log=f"高开急拉预警: {code}", error_prefix="高开急拉预警")
-    except Exception:
-        pass
 
 
 def _signal_whitelist(code, holding):
@@ -584,7 +542,7 @@ _IR_GATE_ADVICE_CN = {
 
 
 def _index_regime_feishu_enabled() -> bool:
-    """读取 config.json 的 feishu.enabled 开关（仿 preopen.py 读法）"""
+    """读取 config.json 的 feishu.enabled 开关。"""
     try:
         runtime_config = load_runtime_config()
         feishu_cfg = runtime_config.get("feishu", {}) if isinstance(runtime_config, dict) else {}
@@ -660,191 +618,8 @@ def _build_index_regime_card(ctx: dict, title_prefix: str, switched: bool = Fals
     return {"msg_type": "interactive", "card": card, "notify_type": 1}
 
 
-# ---------- 竞价采集调度挂载（W32-B2，2026-08-08 用户拍板，周一 08-10 盘前必须生效）----------
-_AUCTION_COLLECT_STATE = {}  # 模块级：{slot/"_gap_warned": "YYYY-MM-DD"} 竞价采集防重复 + 断档告警防重复
 
 
-def _auction_slot_on_disk(date_str: str, slot: str) -> bool:
-    """t_io/preopen/auction_{date}.json 是否已落盘该 slot（供断档检查）。"""
-    try:
-        fp = os.path.join(BASE_DIR, "t_io", "preopen", f"auction_{date_str}.json")
-        if not os.path.exists(fp):
-            return False
-        with open(fp, "r", encoding="utf-8") as f:
-            return slot in (json.load(f).get("snapshots") or {})
-    except Exception:
-        return False
-
-
-def _launch_auction_collector(slot: str, today: str) -> None:
-    """子进程拉起 auction_collector.py --slot（fire-and-forget，仿 _launch_gui 隔离模式）。
-
-    采集器含网络 I/O（单请求 timeout=15s），子进程隔离保证采集失败/超时
-    不阻塞盘前主流程；stdout/stderr 追加到 t_io/preopen/logs/auction_collector_{date}.log
-    （断档可诊断，呼应 W32-B5 静默失败显式化方向）。"""
-    import subprocess
-    collector = os.path.join(BASE_DIR, "t_io", "preopen", "auction_collector.py")
-    log_dir = os.path.join(BASE_DIR, "t_io", "preopen", "logs")
-    os.makedirs(log_dir, exist_ok=True)
-    out_fp = open(os.path.join(log_dir, f"auction_collector_{today}.log"), "a", encoding="utf-8")
-    try:
-        flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
-        proc = subprocess.Popen(
-            [sys.executable, collector, "--slot", slot, "--date", today],
-            cwd=BASE_DIR, creationflags=flags,
-            stdout=out_fp, stderr=subprocess.STDOUT,
-        )
-    finally:
-        out_fp.close()   # 子进程已持有句柄副本，父进程立即关闭
-    log.info(f"📸 竞价采集已触发: slot={slot} (pid={proc.pid}) → t_io/preopen/auction_{today}.json")
-
-
-def _launch_auction_backfill(today: str) -> None:
-    """子进程拉起 auction_collector.py --backfill（fire-and-forget，复用采集器隔离模式）。
-    09:31 后 09:30 分钟线已出，回填 09:25 口径：开盘价 + 09:30 首根量/额 ≈ 竞价撮合量/额 + vol_ratio。
-    竞价时段腾讯字段[6]=全天累计量(0)，量能只能靠此路径补（方案集合竞价决策方案 §3.1）。"""
-    import subprocess
-    collector = os.path.join(BASE_DIR, "t_io", "preopen", "auction_collector.py")
-    log_dir = os.path.join(BASE_DIR, "t_io", "preopen", "logs")
-    os.makedirs(log_dir, exist_ok=True)
-    out_fp = open(os.path.join(log_dir, f"auction_collector_{today}.log"), "a", encoding="utf-8")
-    try:
-        flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
-        proc = subprocess.Popen(
-            [sys.executable, collector, "--backfill", "--date", today],
-            cwd=BASE_DIR, creationflags=flags,
-            stdout=out_fp, stderr=subprocess.STDOUT,
-        )
-    finally:
-        out_fp.close()
-    log.info(f"📸 竞价回填已触发: 09:25口径(真实量/额) → t_io/preopen/auction_{today}.json (pid={proc.pid})")
-
-
-def _maybe_collect_auction_snapshot(now: datetime) -> None:
-    """09:20/09:22 竞价快照采集调度（每日各一次，W32-B2 用户 2026-08-08 拍板挂载）。
-
-    窗口：09:20 slot=[09:20,09:22)，09:22 slot=[09:22,09:25)；先占位防重复（无论成败）。
-    断档显式化：09:26 后检查落盘（待最晚子进程收尾：09:24:59 启动 +15s 超时 → 09:26 检查不误报），
-    缺 slot 记 warning 一次——主程序晚于窗口启动或采集子进程失败均在此显式暴露，
-    盘后可用 auction_collector.py --backfill 回填 09:25 口径。
-    本次只动竞价挂载，不顺手改其他静默失败点。"""
-    try:
-        if now.weekday() >= 5:
-            return
-        t = now.time()
-        today = now.strftime("%Y-%m-%d")
-        windows = (("09:20", dtime(9, 20), dtime(9, 22)),
-                   ("09:22", dtime(9, 22), dtime(9, 25)))
-        for slot, start, end in windows:
-            if start <= t < end and _AUCTION_COLLECT_STATE.get(slot) != today:
-                _AUCTION_COLLECT_STATE[slot] = today       # 先占位防重复触发（无论成败）
-                _launch_auction_collector(slot, today)
-        # 09:31 后自动回填 09:25 口径（真实竞价量/额/vol_ratio），每日一次。
-        # 竞价时段 qt.gtimg.cn 字段[6]=全天累计量(0)，量能只能靠 09:30 分钟线首根补算。
-        if dtime(9, 31) <= t < dtime(9, 45) and _AUCTION_COLLECT_STATE.get("_backfilled") != today:
-            _AUCTION_COLLECT_STATE["_backfilled"] = today
-            _launch_auction_backfill(today)
-        # 断档检查（每日一次）
-        if t >= dtime(9, 26) and _AUCTION_COLLECT_STATE.get("_gap_warned") != today:
-            _AUCTION_COLLECT_STATE["_gap_warned"] = today
-            missing = [s for s, _, _ in windows if not _auction_slot_on_disk(today, s)]
-            if missing:
-                log.warning(f"⚠️ 竞价采集断档: {today} 缺 slot {missing}"
-                            f"（主程序晚于窗口启动或采集失败）；盘后可用 auction_collector.py --backfill 回填 09:25 口径")
-                # C17-3 修复(2026-08-18): 断档告警上飞书，数据缺失当场可见
-                try:
-                    send_feishu_payload({
-                        "msg_type": "interactive",
-                        "card": {
-                            "header": {"template": "red",
-                                       "title": {"tag": "plain_text", "content": f"⚠️ 竞价采集断档 - {FEISHU_SYSTEM_KEYWORD}"}},
-                            "elements": [{"tag": "markdown", "content": (
-                                f"**{today} 竞价采集断档**：缺 slot {missing}\n"
-                                f"> 主程序晚于窗口启动或采集子进程失败；今日竞价分析可能为空壳。\n"
-                                f"> 盘后可用 auction_collector.py --backfill 回填 09:25 口径。")}],
-                        },
-                    }, success_log=f"竞价断档飞书告警已发送: {missing}", error_prefix="竞价断档飞书告警")
-                except Exception as _ae:
-                    log.warning(f"⚠️ 竞价断档飞书告警发送失败: {str(_ae)[:80]}")
-    except Exception as e:
-        log.warning(f"⚠️ 竞价采集钩子异常（已吞掉，不影响主循环）: {str(e)[:120]}")
-
-
-# B-2(2026-08-21): C20 竞价现实校验——"只纠乐观错，不纠悲观错"（悲观错成本少赚、乐观错成本实亏）
-_BULL_REGIMES = {"uni_up"}   # 看多类基调：单边上涨（index_regime 枚举 uni_up/range/uni_down）
-
-
-def _c20_auction_check(date_str: str) -> dict:
-    """C20 竞价现实校验（双条件与门版，评审通过）。
-    读当日 auction_{date}.json 最后 slot 持仓缺口中位数 + preopen_{date}.json auction_summary。
-    返回 {level, gap_med, top20_down_ratio, top20_missing, degraded_top20}。
-      level=0 不触发 / 1 Level1 降级标注(黄) / 2 Level2 推翻基调(红)
-      Top20 缺失(top20_status=empty 或 up+down=0)时退化为缺口单条件并标 degraded_top20。"""
-    try:
-        from config import C20_AUCTION_CHECK as _c20
-    except Exception:
-        _c20 = {"enabled": True, "l1_gap": -1.0, "l2_gap": -2.5,
-                "l1_top20_down_ratio": 0.60, "l2_top20_down_ratio": 0.75}
-    out = {"level": 0, "gap_med": None, "top20_down_ratio": None,
-           "top20_missing": True, "degraded_top20": False}
-    if not _c20.get("enabled", True):
-        return out
-    base = os.path.join(BASE_DIR, "t_io", "preopen")
-    # 1) 持仓缺口中位数（剔除 _B 重复行）——auction 最后 slot 的 pct_vs_preclose(百分比)
-    gap_med = None
-    try:
-        fp = os.path.join(base, f"auction_{date_str}.json")
-        if os.path.exists(fp):
-            j = json.load(open(fp, encoding="utf-8"))
-            snaps = j.get("snapshots") or {}
-            if snaps:
-                rows = (snaps[list(snaps.keys())[-1]].get("rows") or {})
-                vals = []
-                for _c, _v in rows.items():
-                    if str(_c).endswith("_B"):
-                        continue
-                    _p = (_v or {}).get("pct_vs_preclose")
-                    if _p is not None:
-                        vals.append(float(_p))
-                if vals:
-                    gap_med = float(np.median(vals))
-    except Exception:
-        gap_med = None
-    out["gap_med"] = gap_med
-    if gap_med is None:
-        return out
-    # 2) Top20 竞价跌占比
-    top20_down_ratio, top20_missing = None, True
-    try:
-        fp = os.path.join(base, f"preopen_{date_str}.json")
-        if os.path.exists(fp):
-            s = json.load(open(fp, encoding="utf-8")).get("auction_summary") or {}
-            up = float(s.get("top20_up") or 0)
-            dn = float(s.get("top20_down") or 0)
-            if s.get("top20_status") == "empty" or (up + dn) <= 0:
-                top20_missing = True
-            else:
-                top20_missing = False
-                top20_down_ratio = dn / (up + dn)
-    except Exception:
-        top20_missing = True
-    out["top20_down_ratio"] = top20_down_ratio
-    out["top20_missing"] = top20_missing
-    if top20_missing:
-        # 数据缺失降级：缺口单条件
-        out["degraded_top20"] = True
-        if gap_med <= _c20["l2_gap"]:
-            out["level"] = 2
-        elif gap_med <= _c20["l1_gap"]:
-            out["level"] = 1
-        return out
-    if top20_down_ratio is None:
-        return out
-    if gap_med <= _c20["l2_gap"] and top20_down_ratio >= _c20["l2_top20_down_ratio"]:
-        out["level"] = 2
-    elif gap_med <= _c20["l1_gap"] and top20_down_ratio >= _c20["l1_top20_down_ratio"]:
-        out["level"] = 1
-    return out
 
 
 def _build_board_index_lines(as_of_date: str) -> list:
@@ -884,8 +659,6 @@ def _maybe_push_index_regime_morning(now: datetime) -> None:
     V2：调 detect_index_regime(mode="morning")，模块自动对齐到今天之前最近一个
     已完成交易日（基于其收盘判定），并输出 detail.recent_days 近3日
     [{date,regime,score}]；卡片注明 9:30-10:00 决策窗口主要参考前两日状态。
-    B-2(2026-08-21)：推送前做 C20 竞价现实校验——看多基调被 Level2 推翻时改"震荡观察"+红条，
-    Level1 加黄条；非看多基调不动作（只纠乐观错）。
     """
     global _index_regime_morning_pushed_date
     try:
@@ -910,23 +683,7 @@ def _maybe_push_index_regime_morning(now: datetime) -> None:
         # 保证评分基于昨日收盘（周一自动对齐到上周五），不受当日集合竞价 partial bar 影响
         regime, score, ctx = detect_index_regime(mode="morning")
         recent_days = (ctx.get("detail") or {}).get("recent_days") or []
-        # B-2: C20 竞价现实校验
         _banner, _override_name = [], None
-        _check = _c20_auction_check(today)
-        if _check.get("level") and str(ctx.get("regime")) in _BULL_REGIMES:
-            _gm = _check.get("gap_med")
-            _gm_txt = f"{_gm:.2f}%" if _gm is not None else "?"
-            if _check.get("degraded_top20"):
-                _bt = "Top20缺失·单条件"
-            else:
-                _ratio = _check.get("top20_down_ratio")
-                _bt = f"Top20跌 {round((_ratio or 0) * 100)}%"
-            _msg = f"竞价现实与基调背离：持仓缺口 {_gm_txt}，{_bt}"
-            if _check["level"] >= 2:
-                _override_name = "震荡观察"
-                _banner.append(f"🔴 {_msg}")
-            else:
-                _banner.append(f"🟡 {_msg}")
         _extra_lines = ["**决策提示**：9:30-10:00 决策窗口主要参考前两日状态"]
         if _late_push:
             _extra_lines.insert(0, "⚠️ **迟到补发**（进程晚于推送窗口启动，仅供参考）")  # T-3(2026-09-02)
@@ -943,8 +700,7 @@ def _maybe_push_index_regime_morning(now: datetime) -> None:
         )
         send_feishu_payload(
             payload=payload,
-            success_log=f"✅ 早盘大盘基调已推送: {_override_name or ctx.get('regime_name')} S={ctx.get('score')} (mode=morning)"
-                        + (f" C20_level={_check.get('level')}" if _check.get("level") else ""),
+            success_log=f"✅ 早盘大盘基调已推送: {_override_name or ctx.get('regime_name')} S={ctx.get('score')} (mode=morning)",
             error_prefix="早盘大盘基调推送",
         )
     except Exception as e:
@@ -2192,27 +1948,6 @@ def scan_once():
         t = now.time()
         _write_manual_heartbeat(now)  # 合并日志 §2.2：每轮覆写（含非交易时段早退分支，保活可判）
 
-        if _is_preopen_monitor_window(now):
-            preopen_context = _ensure_preopen_context(force=True)
-            if preopen_context is not None:
-                # 已禁用飞书推送 → 改为 UI 面板展示（auction_analyzer 在 9:24:45 生成诊断）
-                _send_preopen_monitor_feishu(preopen_context, now=now)
-            if (_now() - _last_idle_log).total_seconds() >= 120:
-                log.info("📡 盘前集合竞价监控已刷新")
-                _last_idle_log = _now()
-
-            # 9:24:45 生成集合竞价诊断报告（供 UI 面板显示）
-            t_now = now.time()
-            if dtime(9, 24, 40) <= t_now <= dtime(9, 24, 50):
-                try:
-                    from execution.auction_analyzer import analyze_and_save
-                    today_str = now.strftime("%Y-%m-%d")
-                    report = analyze_and_save(today_str)
-                    log.info(f"✅ 集合竞价诊断报告已生成（{report.suggested_action}）")
-                except Exception as e:
-                    log.warning(f"⚠️ 集合竞价诊断生成失败: {e}")
-
-        _maybe_collect_auction_snapshot(now)             # 09:20/09:22 竞价快照采集（每日各一次，W32-B2）
         _maybe_push_index_regime_morning(now)          # 09:26-09:31 早盘大盘基调（须在 <9:30 早退之前）
 
         if dtime(14, 55) <= t <= dtime(15, 5):
@@ -2245,7 +1980,6 @@ def scan_once():
 
         if not HOLDINGS:
             return
-        preopen_context = _ensure_preopen_context(force=False)
         _scan_count += 1
         panel_rows = []
         minute_issue_stats = {}
@@ -2343,21 +2077,9 @@ def scan_once():
                 price = float(df.iloc[-1]["close"]) if "close" in df.columns else 0.0
                 vwap = float(df.iloc[-1]["vwap"]) if "vwap" in df.columns else price
                 amp = float(df.iloc[-1]["day_amplitude"]) if "day_amplitude" in df.columns else 0.0
-                # C-4(2026-08-21): 高开急拉预警（09:30-09:45，每股每日1条）
-                try:
-                    _high_open_spike_check(code, holding, df, preopen_context, now)
-                except Exception:
-                    pass
-
-                dec["last_price"] = price
                 dec["last_vwap"] = vwap
                 dec["close_price"] = price
                 dec["last_amp"] = amp
-                if preopen_context is not None:
-                    dec["preopen_market_score"] = preopen_context.market_score
-                    dec["preopen_market_bias"] = preopen_context.market_bias
-                    dec["preopen_note"] = preopen_context.session_note
-
                 if len(df) < 2:
                     dec["last_status"] = "数据预热"
                     panel_rows.append([label(code, holding), f"{price:.2f}", f"{vwap:.2f}", f"{amp*100:.1f}%", "-", "数据预热"])
@@ -2463,9 +2185,6 @@ def scan_once():
                     "benchmark_state": dec.get("last_benchmark_state", "unknown"),
                     "benchmark_gate": dec.get("last_benchmark_gate", "neutral"),
                     "benchmark_reason": dec.get("last_benchmark_reason", ""),
-                    "preopen_market_score": dec.get("preopen_market_score", 0),
-                    "preopen_market_bias": dec.get("preopen_market_bias", "unknown"),
-                    "preopen_note": dec.get("preopen_note", ""),
                 }, {
                     "action": sig.action,
                     "score": sig.score,
@@ -2481,8 +2200,7 @@ def scan_once():
                     try:
                         from core.market_regime import detect_regime, MarketRegime
                         regime_obj, regime_reason = detect_regime(
-                            code, _now().strftime("%Y-%m-%d"), 
-                            preopen_data=preopen_context
+                            code, _now().strftime("%Y-%m-%d")
                         )
                         regime = regime_obj
                         # 将状态注入 sig，供 notify 使用
@@ -3104,7 +2822,7 @@ def tushare_replay(date_str=None):
 def _launch_sentiment_backfill(date_str: str) -> None:
     """子进程执行热度补算（daily_sentiment.py 独立 CLI：--mode eod --no-push）。
 
-    子进程隔离（仿 _launch_auction_collector）：补算链会触发 akshare 新浪/东财接口，
+    子进程隔离（子进程隔离）：补算链会触发 akshare 新浪/东财接口，
     首次使用 py_mini_racer(V8) 初始化时若在后台线程执行会 FATAL 崩溃拖垮盯盘主进程
     （2026-08-24 事故：partition_address_space Check failed），故强制独立进程，
     V8/网络异常最多丢一个后台补算，不影响盯盘主循环。"""
@@ -3161,13 +2879,8 @@ def run_watch():
     # V3.1fix: 启动时补算昨日热度（如果缺失）
     _maybe_backfill_sentiment()
 
-    _ensure_preopen_context(force=True)
-    engine = SignalEngine(_make_engine_ctx())
 
     log.info("========= 做T终极护城河防御版 启动 =========")
-    if PREOPEN_CONTEXT is not None:
-        # 早盘竞价分析已转移到 UI 面板（auction_analyzer 在 9:24:45 生成诊断报告）
-        log.info(f"📊 早盘竞价分析完成（评分 {PREOPEN_CONTEXT.market_score:.0f} 分，{PREOPEN_CONTEXT.market_bias}）")
     log.info(f"飞书推送: {'✓ 已启用' if FEISHU_WEBHOOK else '✗ 未配置'}")
     log.info(f"飞书关键词: {FEISHU_KEYWORD}")
     if FEISHU_WEBHOOK:

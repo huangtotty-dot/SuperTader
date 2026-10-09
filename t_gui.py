@@ -73,7 +73,6 @@ _FIB_MIN_AMP = {"daily": 5.0, "weekly": 8.0, "monthly": 12.0,   # 摆动最小�
 _FIB_RETRACE = [0.236, 0.382, 0.5, 0.618, 0.786]                # 回撤位（0.618 即黄金比例）
 _FIB_EXTENSION = [1.272, 1.618]                                 # 扩展位（突破后目标）
 
-PREOPEN_DIR = BASE / "t_io" / "preopen"
 HUNTER_DIR = BASE / "stock_hunter"
 if str(BASE) not in sys.path:
     sys.path.insert(0, str(BASE))  # stock_hunter 模块在 stock_hunter/ 下导入
@@ -3998,9 +3997,13 @@ class Api:
         """
         jy = _load_json(HUNTER_DIR / "watchlist_jiuyan.json", {})
         from core.market_data.facade import get_provider
+        from core.market_data.codec import market_of
         breakouts = []
         total = len(codes)
-        no_data = 0
+        dt_target = str(date) if date else datetime.now().strftime("%Y-%m-%d")
+        rest_total = sum(1 for c in codes if market_of(c) != "BJ")
+        # no_data 拆分成因（2026-10-09）：整池取数失败（GM 不可达）≠ 北交所取不到 ≠ 无当日 bar。
+        no_data = rest_missing = bj_missing = stale = ok = 0
         BATCH = self._BK_BATCH
         for i in range(0, total, BATCH):
             chunk = codes[i:i + BATCH]
@@ -4011,10 +4014,21 @@ class Api:
                       f"{type(e).__name__}: {str(e)[:80]}", flush=True)
                 frames = {}
             for code in chunk:
-                if frames.get(code) is None:
+                fr = frames.get(code)
+                if fr is None or getattr(fr, "empty", True):
                     no_data += 1
+                    if market_of(code) == "BJ":
+                        bj_missing += 1
+                    else:
+                        rest_missing += 1
                     continue
-                hit = self._breakout_probe_one(code, frames.get(code), date)
+                # 有帧但**无当日 bar** → 未就绪/非交易日/停牌（区别于"取数失败"）
+                _sl = fr[fr["date"].astype(str) <= dt_target]
+                if _sl.empty or str(_sl["date"].iloc[-1]) != dt_target:
+                    stale += 1
+                    continue
+                ok += 1
+                hit = self._breakout_probe_one(code, fr, date)
                 if not hit:
                     continue
                 info = jy.get(code) if isinstance(jy.get(code), dict) else None
@@ -4034,12 +4048,23 @@ class Api:
                                   "tags": [{"label": "当日有效突破", "color": "up"}], **hit})
             if state is not None:
                 with _BREAKOUT_LOCK:
-                    state["done"] = min(i + BATCH, total)
-                    state["found"] = len(breakouts)
-                    state["stocks"] = list(breakouts)
-                    state["no_data"] = no_data
+                    state.update({"done": min(i + BATCH, total), "found": len(breakouts),
+                                  "stocks": list(breakouts), "no_data": no_data,
+                                  "rest_no_data": rest_missing, "bj_no_data": bj_missing,
+                                  "stale": stale, "ok": ok})
             _time_mod.sleep(0.05)   # 2026-10-08：批间显式让出，避免连续持 GIL 把主线程饿死
         breakouts.sort(key=lambda x: -(x.get("pct_above") or 0))
+        # 整池不可用判据（任一成立即视为"取数失败，结果不可信"）：
+        #   ① 无一只带当日 bar（ok==0）—— GM 整池不可达 / 非交易日 / 行情未就绪；
+        #   ② 非北交所码大面积无帧（≥50%）—— GM `daily_batch` 不可达（批量路径无腾讯兜底）。
+        fetch_failed = total > 0 and (ok == 0
+                                      or (rest_total > 0 and rest_missing >= 0.5 * rest_total))
+        if state is not None:
+            with _BREAKOUT_LOCK:
+                state.update({"done": total, "found": len(breakouts),
+                              "stocks": list(breakouts), "no_data": no_data,
+                              "rest_no_data": rest_missing, "bj_no_data": bj_missing,
+                              "stale": stale, "ok": ok, "fetch_failed": bool(fetch_failed)})
         return breakouts
 
     def _bk_cache_get(self, key):
@@ -4073,12 +4098,17 @@ class Api:
         st = {}
         breakouts = self._scan_breakout(codes, st, today)
         result = _clean({"date": today, "stocks": breakouts, "count": len(breakouts),
-                         "no_data": st.get("no_data", 0)})
-        self._bk_cache_put(cache_key, result)
-        try:
-            disk_fp.write_text(json.dumps(result, ensure_ascii=False), encoding="utf-8")
-        except Exception:
-            pass
+                         "no_data": st.get("no_data", 0),
+                         "rest_no_data": st.get("rest_no_data", 0),
+                         "bj_no_data": st.get("bj_no_data", 0),
+                         "stale": st.get("stale", 0), "ok": st.get("ok", 0),
+                         "fetch_failed": bool(st.get("fetch_failed", False))})
+        if not result.get("fetch_failed"):
+            self._bk_cache_put(cache_key, result)
+            try:
+                disk_fp.write_text(json.dumps(result, ensure_ascii=False), encoding="utf-8")
+            except Exception:
+                pass
         return result
 
     def start_breakout_scan(self, force=False, date=None):
@@ -4097,7 +4127,11 @@ class Api:
             if hit is not None:
                 return {"status": "done", "date": today, "total": 0, "done": 0,
                         "found": hit.get("count", 0), "stocks": hit.get("stocks", []),
-                        "no_data": hit.get("no_data", 0)}
+                        "no_data": hit.get("no_data", 0),
+                        "rest_no_data": hit.get("rest_no_data", 0),
+                        "bj_no_data": hit.get("bj_no_data", 0),
+                        "stale": hit.get("stale", 0), "ok": hit.get("ok", 0),
+                        "fetch_failed": bool(hit.get("fetch_failed", False))}
             disk_fp = self._breakout_disk_path(today)
             if disk_fp.exists():
                 disk = _load_json(disk_fp, None)
@@ -4105,7 +4139,11 @@ class Api:
                     self._bk_cache_put(cache_key, disk)
                     return {"status": "done", "date": today, "total": 0, "done": 0,
                             "found": disk.get("count", 0), "stocks": disk.get("stocks", []),
-                            "no_data": disk.get("no_data", 0)}
+                            "no_data": disk.get("no_data", 0),
+                            "rest_no_data": disk.get("rest_no_data", 0),
+                            "bj_no_data": disk.get("bj_no_data", 0),
+                            "stale": disk.get("stale", 0), "ok": disk.get("ok", 0),
+                            "fetch_failed": bool(disk.get("fetch_failed", False))}
 
         with _BREAKOUT_LOCK:
             cur = getattr(self, "_breakout_scan", None)
@@ -4133,13 +4171,20 @@ class Api:
             try:
                 breakouts = self._scan_breakout(codes, state, today)
                 result = _clean({"date": today, "stocks": breakouts, "count": len(breakouts),
-                                 "no_data": state.get("no_data", 0)})
-                self._bk_cache_put(cache_key, result)
-                try:
-                    self._breakout_disk_path(today).write_text(
-                        json.dumps(result, ensure_ascii=False), encoding="utf-8")
-                except Exception:
-                    pass
+                                 "no_data": state.get("no_data", 0),
+                                 "rest_no_data": state.get("rest_no_data", 0),
+                                 "bj_no_data": state.get("bj_no_data", 0),
+                                 "stale": state.get("stale", 0), "ok": state.get("ok", 0),
+                                 "fetch_failed": bool(state.get("fetch_failed", False))})
+                # 取数失败（GM 整池不可达 / 非交易日 / 行情未就绪）→ **不落盘**，
+                # 避免把"假 0"缓存成当日定论（2026-10-09 事故：整池 no_data 被当成真 0）。
+                if not result.get("fetch_failed"):
+                    self._bk_cache_put(cache_key, result)
+                    try:
+                        self._breakout_disk_path(today).write_text(
+                            json.dumps(result, ensure_ascii=False), encoding="utf-8")
+                    except Exception:
+                        pass
                 with _BREAKOUT_LOCK:
                     state.update({"status": "done", "done": len(codes),
                                   "found": len(breakouts), "stocks": breakouts})
@@ -4163,7 +4208,11 @@ class Api:
         if hit is not None:
             return {"status": "done", "date": today, "total": 0, "done": 0,
                     "found": hit.get("count", 0), "stocks": hit.get("stocks", []),
-                    "no_data": hit.get("no_data", 0)}
+                    "no_data": hit.get("no_data", 0),
+                    "rest_no_data": hit.get("rest_no_data", 0),
+                    "bj_no_data": hit.get("bj_no_data", 0),
+                    "stale": hit.get("stale", 0), "ok": hit.get("ok", 0),
+                    "fetch_failed": bool(hit.get("fetch_failed", False))}
         with _BREAKOUT_LOCK:
             cur = getattr(self, "_breakout_scan", None)
             if cur and cur.get("date") == today:

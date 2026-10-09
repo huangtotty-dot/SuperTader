@@ -14,7 +14,6 @@ from typing import Dict, List, Optional, Any
 BASE = Path(globals().get("BASE_DIR") or Path(__file__).resolve().parents[1])
 TRACE_DIR = BASE / "t_io" / "traces"
 SNAPSHOT_DIR = BASE / "t_io" / "minute_snapshots"
-PREOPEN_DIR = BASE / "t_io" / "preopen"
 _now = datetime.now
 
 
@@ -79,11 +78,6 @@ def _snapshot_file(code: str, day: str) -> str:
 def _trace_path(kind: str, day: Optional[str] = None) -> str:
     day = day or get_today_str()
     return os.path.join(TRACE_DIR, f"{kind}_{day}.jsonl")
-
-
-def _preopen_path(day: Optional[str] = None) -> str:
-    day = day or get_today_str()
-    return os.path.join(PREOPEN_DIR, f"preopen_{day}.json")
 
 
 def _json_safe(obj):

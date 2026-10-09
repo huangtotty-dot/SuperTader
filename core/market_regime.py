@@ -34,17 +34,6 @@ class RegimeDetector:
 
     # ==================== 集合竞价识别（基于 open_gap 简化版） ====================
 
-    def detect_from_preopen(self, code: str, date: str) -> tuple:
-        """
-        基于集合竞价数据识别当天状态（V2 简化版：基于 open_gap）
-
-        返回: (MarketRegime, reason_str)
-        """
-        # 无竞价数据时的默认状态（由 detect() 回退到日线识别）
-        return MarketRegime.NORMAL, "无集合竞价数据（V2简化）"
-
-    # ==================== 日线历史识别（出货模式） ====================
-
     def detect_from_recent_days(self, code: str, daily_bars: List[dict]) -> tuple:
         """
         基于最近2-3日日线识别主力出货模式
@@ -164,30 +153,18 @@ class RegimeDetector:
 
     # ==================== 综合识别（主入口） ====================
 
-    def detect(self, code: str, date: str, 
-               preopen_data: dict = None, 
+    def detect(self, code: str, date: str,
                daily_bars: List[dict] = None,
                minute_bars: List[dict] = None) -> tuple:
         """
         综合识别市场状态（主入口）
 
         优先级：
-        1. 集合竞价（最高优先级，如果数据可用）
         2. 日线历史（次优先级）
         3. 盘中实时（最低优先级，用于确认）
 
         返回: (MarketRegime, reason_str)
         """
-        # 1. 集合竞价识别
-        if preopen_data:
-            regime, reason = self._detect_from_preopen_data(code, preopen_data)
-            if regime != MarketRegime.NORMAL:
-                return regime, reason
-        else:
-            regime, reason = self.detect_from_preopen(code, date)
-            if regime != MarketRegime.NORMAL:
-                return regime, reason
-
         # 2. 日线历史识别
         if daily_bars:
             regime, reason = self.detect_from_recent_days(code, daily_bars)
@@ -202,23 +179,6 @@ class RegimeDetector:
 
         return MarketRegime.NORMAL, "综合判断：正常状态"
 
-    def _detect_from_preopen_data(self, code: str, preopen_data: dict) -> tuple:
-        """基于已传入的preopen_data识别（V2简化版：基于open_gap）"""
-        snapshots = preopen_data.get("code_snapshots", {}) if isinstance(preopen_data, dict) else {}
-        snap = snapshots.get(code, {}) if isinstance(snapshots, dict) else {}
-        open_gap = float(snap.get("open_gap", 0) or 0)
-
-        if open_gap < -0.02:
-            return MarketRegime.HEAVY_SELL, f"竞价低开{abs(open_gap)*100:.1f}%（抛压沉重）"
-        if open_gap > 0.02:
-            return MarketRegime.BREAKOUT, f"竞价高开{open_gap*100:.1f}%（强势开盘）"
-
-        return MarketRegime.NORMAL, ""
-
-
-# ==================== 便捷函数（供共享命名空间调用） ====================
-
-_detector = None
 
 def get_detector() -> RegimeDetector:
     global _detector
@@ -233,7 +193,6 @@ def detect_regime(code: str, date: str, **kwargs) -> tuple:
 
     用法（在 main.py 或 signal_engine.py 中调用）：
         regime, reason = detect_regime("000988", "2026-07-01")
-        regime, reason = detect_regime("000988", "2026-07-01", preopen_data=preopen_ctx)
         regime, reason = detect_regime("000988", "2026-07-01", daily_bars=[...], minute_bars=[...])
     """
     return get_detector().detect(code, date, **kwargs)

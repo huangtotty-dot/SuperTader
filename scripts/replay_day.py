@@ -85,7 +85,6 @@ def load_shared() -> dict:
         'data_fetcher': 'src/data_fetcher.py',
         'indicators': 'analysis/indicators.py',
         'signal_engine': 'core/signal_engine.py',
-        'auction_analyzer': 'execution/auction_analyzer.py',
         'position_sizer': 'core/position_sizer.py',
     }
     for mod_name, rel in _MODULE_PATHS.items():
