@@ -11,8 +11,11 @@
 仿 main.py 的 index_divergence_seen 事件键模式。
 """
 import json
+import logging
 import os
 from datetime import datetime, timedelta
+
+log = logging.getLogger("trend30_alert")
 
 _BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _STATE_FP = os.path.join(_BASE, "t_io", "state", "trend30_state_seen.json")
@@ -154,9 +157,16 @@ def run_trend30_alert(codes=None, dry_run=False) -> list:
     card = build_trend30_card(events)
     if dry_run:
         return events
+    # ⚠️ send_feishu_payload 的必填参数是 (payload, success_log, error_prefix)。
+    # 2026-10-10 前这里只传了 card，每次抛 TypeError 又被裸 except 吞掉 ⇒
+    # 本告警同样从未推送成功过且不留痕迹（与 core/hunter_ma5_alert.py 同一处坑）。
     try:
         from config import send_feishu_payload
-        send_feishu_payload(card)
-    except Exception:
-        pass
+        ok = send_feishu_payload(
+            card, success_log=f"30min趋势翻转飞书推送: {len(events)} 只",
+            error_prefix="30min趋势翻转推送")
+        if not ok:
+            log.warning("⚠️ 30min趋势翻转推送返回失败")
+    except Exception as e:
+        log.warning(f"⚠️ 30min趋势翻转推送异常: {type(e).__name__}: {str(e)[:180]}")
     return events

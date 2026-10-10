@@ -8,15 +8,20 @@
 去重：每只每日一次（t_io/state/hunter_ma5_pushed.json）。纯通知，不触发交易。
 """
 import json
+import logging
 import os
 from datetime import datetime
+
+log = logging.getLogger("hunter_ma5_alert")
 
 _BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _HUNTER_DIR = os.path.join(_BASE, "stock_hunter")
 _SUMMARY_FP = os.path.join(_HUNTER_DIR, "history", "daily_summary.json")
 _WL_FP = os.path.join(_HUNTER_DIR, "watchlist_jiuyan.json")
 _DEDUP_FP = os.path.join(_BASE, "t_io", "state", "hunter_ma5_pushed.json")
+_BELOW_FP = os.path.join(_BASE, "t_io", "state", "hunter_ma5_below.json")
 _TOPN_DEFAULT = 5
+_CARD_MAX_ROWS = 20          # 卡片明细最多列这么多行，其余折叠成代码清单（owner 2026-10-10）
 _BATCH = 200
 _BARS = 30
 _DEDUP_KEEP = 10
@@ -111,12 +116,51 @@ def _save_dedup(d: dict) -> None:
         pass
 
 
-def scan_hunter_ma5(date: str = None, top_n: int = None) -> list:
-    """对热门板块内个股算 reclaim5，返回命中事件（未去重、未推送）。"""
+def _today() -> str:
+    """今天的日期串。单独抽出来做**测试缝**（单测可替换，从而离线验证 V 反转）。"""
+    return datetime.now().strftime("%Y-%m-%d")
+
+
+def _load_below() -> dict:
+    """{日期: [今日曾在 MA5 下方的码]} —— 盘中「V 反转」判据的必需记忆。
+
+    隔夜回站只看昨收/今价，答不了「早盘破线、午后拉回」——owner 2026-10-08 就实报过
+    江西铜业 600362 这种 case。要判 V 反转，必须记住今天它曾经在 MA5 下方过。
+    """
+    try:
+        with open(_BELOW_FP, "r", encoding="utf-8") as f:
+            d = json.load(f)
+        return d if isinstance(d, dict) else {}
+    except Exception:
+        return {}
+
+
+def _save_below(d: dict) -> None:
+    try:
+        for k in sorted(k for k in d if k)[:-_DEDUP_KEEP]:
+            d.pop(k, None)
+        os.makedirs(os.path.dirname(_BELOW_FP), exist_ok=True)
+        tmp = _BELOW_FP + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(d, f, ensure_ascii=False, indent=1)
+        os.replace(tmp, _BELOW_FP)
+    except Exception:
+        pass
+
+
+def scan_hunter_ma5(date: str = None, top_n: int = None, record_below: bool = True) -> list:
+    """对热门板块内个股算「刚站上5日线」，返回命中事件（未去重、未推送）。
+
+    两种口径都算命中（owner 2026-10-10 确认要补第二种）：
+      · **隔夜回站**（kind=`overnight`）：昨收 < 昨MA5 且 现价 > 今MA5。
+      · **盘内 V 反转**（kind=`vrev`）：今日**曾在 MA5 下方**（本函数每轮记录）且现价回到 MA5 上方。
+        这条只有**当天实时**跑才有意义——历史回放没有盘中状态，不参与。
+    """
     stocks = hot_board_stocks(top_n, date)
     if not stocks:
         return []
-    target = str(date) if date else datetime.now().strftime("%Y-%m-%d")
+    target = str(date) if date else _today()
+    live = (target == _today())
     codes = list(stocks)
     try:
         from core.market_data.facade import get_provider
@@ -129,15 +173,34 @@ def scan_hunter_ma5(date: str = None, top_n: int = None) -> list:
             frames.update(prov.daily_many(codes[i:i + _BATCH], days=_BARS) or {})
         except Exception:
             pass
-    from core.ma_reclaim import reclaim5_frame
+    from core.ma_reclaim import ma5_state, _round_state
+    below_store = _load_below() if live else {}
+    below_prev = set(below_store.get(target) or [])
+    below_now = set(below_prev)
     hits = []
     for c in codes:
         fr = frames.get(c)
         if fr is None or getattr(fr, "empty", True):
             continue
-        r = reclaim5_frame(fr, target)
-        if r:
-            hits.append({"code": c, "name": stocks[c], **r})
+        # 交易日闸：末根必须是目标日（历史扫描防前视；盘中由 daily_many 补当日 forming bar）
+        if str(fr["date"].astype(str).iloc[-1]) != target:
+            continue
+        s = ma5_state(fr[fr["date"].astype(str) <= target]["close"].astype(float).values)
+        if s is None:
+            continue
+        if s["below"]:
+            below_now.add(c)                      # 记下「今天它到过 MA5 下方」
+        kind = None
+        if s["overnight_reclaim"]:
+            kind = "overnight"
+        elif c in below_prev and s["above"]:
+            kind = "vrev"
+        if kind:
+            hits.append({"code": c, "name": stocks[c], "kind": kind,
+                         **_round_state(s)})
+    if live and record_below:
+        below_store[target] = sorted(below_now)
+        _save_below(below_store)
     hits.sort(key=lambda x: -(x.get("dev5_pct") if x.get("dev5_pct") is not None else -1e9))
     return hits
 
@@ -146,12 +209,26 @@ def build_card(events: list, top_n: int = None, date: str = None) -> dict:
     if not events:
         return None
     tn = int(top_n or _TOPN_DEFAULT)
-    lines = [f"**选股猎手·热门板块内「刚站上5日线」**（前 {tn} 板块）",
-             f"📅 {date or datetime.now().strftime('%Y-%m-%d')} · 共 {len(events)} 只", ""]
-    for e in events:
+    n_over = sum(1 for e in events if e.get("kind") == "overnight")
+    n_vrev = len(events) - n_over
+    head = f"📅 {date or _today()} · 共 {len(events)} 只"
+    if n_vrev:
+        head += f"（隔夜回站 {n_over} · 盘内V反转 {n_vrev}）"
+    lines = [f"**选股猎手·热门板块内「刚站上5日线」**（前 {tn} 板块）", head, ""]
+    shown = events[:_CARD_MAX_ROWS]
+    for e in shown:
+        tag = " ｜盘内V反转" if e.get("kind") == "vrev" else ""
         lines.append(f"⬆️ **{e['code']}** {e['name']}  "
-                     f"现价 {e['price']} ｜ MA5 {e['ma5']}（+{e['dev5_pct']}%）")
-    lines += ["", "📌 昨收在 MA5 之下、今日站上 MA5（隔夜回站口径）。",
+                     f"现价 {e['price']} ｜ MA5 {e['ma5']}（+{e['dev5_pct']}%）{tag}")
+    rest = events[_CARD_MAX_ROWS:]
+    if rest:
+        # 折叠而不是丢弃：只给代码，省版面又不丢信息（按偏离幅度已在上面排过序）
+        lines.append("")
+        lines.append(f"**另有 {len(rest)} 只**（偏离幅度较小）："
+                     + " ".join(e["code"] for e in rest))
+    lines += ["",
+              "📌 口径：**隔夜回站**=昨收在 MA5 下、今日站上；**盘内V反转**=今日曾跌破 MA5 又拉回站上。",
+              f"🔎 明细仅列前 {_CARD_MAX_ROWS} 只（按偏离幅度降序）。",
               "⚠️ 纯技术通知，不构成交易指令；请人工确认。"]
     return {
         "msg_type": "interactive",
@@ -177,11 +254,21 @@ def run_hunter_ma5_alert(top_n: int = None, date: str = None, dry_run: bool = Fa
     card = build_card(fresh, top_n=top_n, date=date)
     if dry_run:
         return fresh
+    # ⚠️ send_feishu_payload 的签名是 (payload, success_log, error_prefix, ...)——
+    # 2026-10-10 前这里只传了 card，每次都抛 TypeError，又被裸 except 吞掉 ⇒
+    # 本告警**自 2026-10-09 上线起从未推送成功过一次**，且不留任何日志/去重痕迹。
+    # 现在：参数补齐 + 检查返回值 + 失败时把原因打出来（别再用静默 except 把这类问题藏住）。
     try:
         from config import send_feishu_payload
-        send_feishu_payload(card)
-    except Exception:
-        return []                      # 推送失败不写去重，下轮重试
+        ok = send_feishu_payload(
+            card, success_log=f"猎手热门板块站上5日线飞书推送: {len(fresh)} 只",
+            error_prefix="猎手热门板块站上5日线推送")
+    except Exception as e:
+        log.warning(f"⚠️ 猎手站上5日线推送异常（不写去重，下轮重试）: {type(e).__name__}: {str(e)[:180]}")
+        return []
+    if not ok:
+        log.warning("⚠️ 猎手站上5日线推送返回失败（不写去重，下轮重试）")
+        return []
     seen.update(h["code"] for h in fresh)
     dedup[target] = sorted(seen)
     _save_dedup(dedup)
