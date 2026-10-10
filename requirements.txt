@@ -22,6 +22,10 @@ plotly>=5.0.0
 python-dotenv>=0.20.0
 tqdm>=4.64.0
 pendulum>=2.1.0
+pypdf>=6.0          # 券商历史成交/交割单解析（GUI「历史成交盈亏」，core/trade_history.py）
+openpyxl>=3.1       # .xlsx 历史成交
+xlrd>=2.0           # 老式 .xls（BIFF）历史成交
+beautifulsoup4>=4.12  # 伪 .xls（实为 HTML 表格的导出）
 
 # Development
 pytest>=7.0.0

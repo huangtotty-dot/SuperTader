@@ -35,7 +35,9 @@ import sys as _sys
 _sys.modules['requests'].post = _req.post
 _sys.modules['requests'].get = _req.get
 
-import akshare as ak
+# 注：本模块**不使用 akshare**，其 `import akshare` 实测 ~5.6s（含 py_mini_racer V8 初始化），
+# 而本模块被几乎所有模块 import ⇒ 曾是启动冷路径最大单项。2026-10-10 移除（勿再加回）：
+# 需要 akshare 的模块各自 `import akshare as ak`；V8 主线程初始化由 core/v8guard.prewarm_akshare_v8 负责。
 import numpy as np
 import pandas as pd
 import requests

@@ -64,11 +64,17 @@
     </div>
   </div>
   <div class="sidebar-summary" id="sidebarSummary">
+    <div class="sum-group-title">手动盘</div>
     <div class="sum-row"><span class="sum-label">总市值</span><span class="sum-val" id="sumValue">—</span></div>
     <div class="sum-row"><span class="sum-label">总资金</span><span class="sum-val" id="sumCapital">—</span></div>
     <div class="sum-row"><span class="sum-label">仓位占比</span><span class="sum-val" id="sumPos">—</span></div>
     <div class="sum-row"><span class="sum-label">总浮亏</span><span class="sum-val" id="sumUnreal">—</span></div>
     <div class="sum-row"><span class="sum-label">总实亏</span><span class="sum-val" id="sumRealLoss">—</span></div>
+    <div class="sum-group-title">自动盘</div>
+    <div class="sum-row"><span class="sum-label">总资产</span><span class="sum-val" id="sumAutoTotal">—</span></div>
+    <div class="sum-row"><span class="sum-label">持仓市值</span><span class="sum-val" id="sumAutoMv">—</span></div>
+    <div class="sum-row"><span class="sum-label">浮动盈亏</span><span class="sum-val" id="sumAutoUnreal">—</span></div>
+    <div class="sum-row"><span class="sum-label">已实现</span><span class="sum-val" id="sumAutoReal">—</span></div>
   </div>
   <div class="sidebar-controls">
     <label class="sidebar-ctl">
@@ -84,11 +90,6 @@
 
   <!-- ====== Tab 1: 概览仪表盘 ====== -->
   <div class="tab-page active" id="tab-overview">
-    <div class="section">
-      <h2>KPI 日快照</h2>
-      <div id="kpiCards" class="kpi-grid"></div>
-    </div>
-
     <div class="section" id="position-manager">
       <h2>仓位管理器 <span class="cell-dim" style="font-size:12px;font-weight:normal">手动盘（截图 reconcile 口径）· 目标=总资金×个股比例 · 超配应减 / 欠配可加</span></h2>
       <div id="positionManagerBody"></div>
@@ -99,13 +100,16 @@
       <div id="autoOverviewBody"><div class="empty">无自动盘持仓数据</div></div>
     </div>
 
+    <div class="section" id="auto-pnl">
+      <h2>自动盘盈亏账单 <span class="cell-dim" style="font-size:12px;font-weight:normal">每次建仓→清仓为一个周期（同一只票清仓后再次建仓重新计数）· 未平仓周期按最新收盘算浮盈</span></h2>
+      <div id="autoPnlSummary" class="cell-dim" style="font-size:12px;margin-bottom:8px"></div>
+      <div id="autoPnlBody"><div class="empty">加载中…</div></div>
+    </div>
+
     <div class="section">
       <h2>图表速览</h2>
       <div class="overview-grid">
         <div class="card"><div class="card-title">大盘跨日 S</div><div id="echMarket" class="echart ech-sm"></div></div>
-        <div class="card"><div class="card-title">持仓收益趋势</div><div id="echCost" class="echart ech-sm"></div></div>
-        <div class="card"><div class="card-title">各股信号数</div><div id="echSignal" class="echart ech-sm"></div></div>
-        <div class="card"><div class="card-title">K4 胜率</div><div id="echK4" class="echart ech-sm"></div></div>
       </div>
     </div>
 
@@ -119,21 +123,45 @@
   <div class="tab-page" id="tab-charts">
     <div class="section">
       <h2>大盘趋势</h2>
-      <div class="chart-grid2">
-        <div class="card"><div class="card-title">跨日 S 打分</div><div id="echMarketFull" class="echart"></div></div>
-        <div class="card"><div class="card-title">今日盘中 S</div><div id="echIntraday" class="echart"></div></div>
-      </div>
+      <div class="card"><div class="card-title">跨日 S 打分</div><div id="echMarketFull" class="echart"></div></div>
     </div>
-    <div class="section">
-      <h2>持仓收益趋势 <button class="mini-btn" id="calibBtn">✎ 校准</button></h2>
-      <div class="card"><div id="echCostFull" class="echart"></div><div id="costMatrix" style="margin-top:10px"></div></div>
-    </div>
-    <div class="section">
-      <h2>信号与胜率</h2>
-      <div class="chart-grid2">
-        <div class="card"><div class="card-title">各股买卖信号数</div><div id="echSignalFull" class="echart"></div></div>
-        <div class="card"><div class="card-title">K4 滚动胜率</div><div id="echK4Full" class="echart"></div></div>
+    <div class="section" id="trade-history">
+      <h2>历史成交盈亏
+        <span class="cell-dim" style="font-size:12px;font-weight:normal">券商「历史成交」导出 · 按移动加权平均成本复原每只股票的已实现盈亏 · 做T收益=同账户同票同日买卖配对（扣费净价差）· 导出里没有资金账号时**文件名即账户名**（一个账户一个文件）</span>
+        <select id="thAccount" class="mini-input" style="margin-left:8px;display:none"
+                onchange="renderTradeHistory(state.tradeHistory||{})" title="按资金账号筛选"></select>
+        <button class="mini-btn primary" onclick="importTradeHistory()" title="选择券商导出的历史成交（xls/xlsx，可多选；本地解析，不上传）">📥 导入历史成交</button>
+      </h2>
+      <div id="thMeta" class="cell-dim" style="font-size:12px;margin-bottom:8px"></div>
+      <div id="thBars"></div>
+      <div id="thAccounts" style="margin-top:12px"></div>
+      <div class="card" style="margin-top:12px">
+        <div class="card-title">累计收益趋势（含浮动） <span class="cell-dim" id="thCumPctTotal" style="font-weight:normal"></span></div>
+        <div id="echThCumPct" class="echart" style="height:340px"></div>
       </div>
+      <div class="chart-grid2" style="margin-top:12px">
+        <div class="card">
+          <div class="card-title">月度盈亏（含浮动）</div>
+          <div id="echThMonth" class="echart" style="height:300px"></div>
+        </div>
+        <div class="card">
+          <div class="card-title">月度做T收益 <span class="cell-dim" id="echThTTotal" style="font-weight:normal"></span></div>
+          <div id="echThT" class="echart" style="height:300px"></div>
+        </div>
+        <div class="card">
+          <div class="card-title">月度做T净收益（做T − 交易费用） <span class="cell-dim" id="echThTNetTotal" style="font-weight:normal"></span></div>
+          <div id="echThTNet" class="echart" style="height:300px"></div>
+        </div>
+        <div class="card">
+          <div class="card-title">月度交易费用 <span class="cell-dim" id="echThFeeTotal" style="font-weight:normal"></span></div>
+          <div id="echThFee" class="echart" style="height:300px"></div>
+        </div>
+        <div class="card">
+          <div class="card-title">累计已实现盈亏时间曲线</div>
+          <div id="echThCum" class="echart" style="height:300px"></div>
+        </div>
+      </div>
+      <div id="thBody" style="margin-top:12px"></div>
     </div>
   </div>
 
@@ -152,10 +180,6 @@
         <div id="indicesBody"></div>
       </div>
       <div id="liveBody"><div class="empty">非今日日期或尚无盘中数据</div></div>
-    </div>
-    <div class="section" id="shadow">
-      <h2>shadow 近阈 · 仓控与推送</h2>
-      <div id="shadowBody"></div>
     </div>
     <div class="section" id="position-builder">
       <h2>建仓信号扫描
@@ -298,6 +322,17 @@
       </h2>
       <div id="autoPositionsBody"><div class="empty">无自动盘持仓数据</div></div>
     </div>
+    <div class="section" id="auto-ledger">
+      <h2>自动盘成交流水 · 每日盈亏
+        <span class="cell-dim" style="font-size:12px;font-weight:normal">自动盘为仿真盘、无券商交割单 ⇒ 逐笔取自 events_*.jsonl（引擎不写名称/净发生金额，读取端补齐）· 每日取自 heartbeat_*.jsonl 末条心跳</span>
+      </h2>
+      <div id="autoLedgerSummary" class="cell-dim" style="font-size:12px;margin-bottom:8px"></div>
+      <div class="card">
+        <div class="card-title">每日账户权益 / 累计已实现盈亏 / 现金</div>
+        <div id="echAutoEquity" class="echart"></div>
+      </div>
+      <div id="autoFillsBody" style="margin-top:10px"><div class="empty">加载中…</div></div>
+    </div>
     <div class="section">
       <h2>自动盘建仓信号扫描
         <span class="cell-dim" style="font-size:12px;font-weight:normal">对 auto 池跑建仓判定（EOD 口径 · 仅供参考，以引擎闸链为准）</span>
@@ -394,25 +429,6 @@
       <div id="stockProfileBody">加载中…</div>
     </div>
     <div id="stockChart" class="echart stock-chart"></div>
-  </div>
-</div>
-
-<!-- 成本校准 modal -->
-<div id="calibModal" class="modal-mask" style="display:none">
-  <div class="modal">
-    <div class="modal-title">校准持仓成本 <span class="cell-dim" id="calibDate"></span>
-      <button class="mini-btn" id="calibClose">×</button>
-    </div>
-    <div class="modal-body">
-      <table id="calibTable">
-        <thead><tr><th>股票</th><th class="num">快照成本</th><th class="num">校准成本</th><th>来源</th></tr></thead>
-        <tbody></tbody>
-      </table>
-      <p class="cell-dim" style="font-size:11px">填券商持仓页显示的真实成本，保存后成本曲线将优先使用校准值（✎ 标注）。留空表示该股不校准。</p>
-    </div>
-    <div class="modal-foot">
-      <button class="mini-btn primary" id="calibSave">保存校准</button>
-    </div>
   </div>
 </div>
 

@@ -1,13 +1,14 @@
 # -*- coding: utf-8 -*-
-"""持仓体检 `load_ob_analysis` 的**冷启动不阻塞**防回退单测（2026-10-04）。
+"""持仓体检 `load_ob_analysis` 的**冷启动不阻塞**防回退单测（2026-10-04，2026-10-10 改口径）。
 
-背景：`load_ob_analysis` 逐只调 `load_stock_chart`（冷取数）⇒ 冷启动实测 **14.3s** 同步阻塞在
-pywebview 主线程。本次改为**只用已预热的图表缓存**：未就绪的持仓本轮跳过、计入 `pending`，
-前端稍后重拉（启动时 `prewarm_holdings_charts` 在后台填缓存）。
+背景：`load_ob_analysis` 逐只算 KDJ/CCI/标签/30min 判定（纯 Python 重活）⇒ 图表预热后同步跑
+实测 **9~11s** 冻 pywebview 主线程。2026-10-10 改 **SWR**：`load_ob_analysis` 只读缓存/起后台算，
+冷启动立即返回 `pending` 占位（前端重拉补）；计算体抽到 `_load_ob_analysis_impl`。
 
 断言：
-  T1 冷启动（图表缓存空）**立即**返回，且 `pending` == 有仓持仓数 —— 证明未同步 `load_stock_chart`。
-  T2 图表缓存就绪后，持仓进入 `stocks` 且不再 `pending` —— 证明确实读缓存。
+  T1 冷启动（无缓存）**立即**返回 `pending` 占位 —— 证明未同步算。
+  T2 图表缓存就绪后，`_load_ob_analysis_impl` 读缓存出结果、不再 `pending`（wrapper 仍非阻塞）。
+  T3 已清仓(qty=0)不计入 `pending`。
 
 铁律：全离线。补桩 `_load_json` 提供固定持仓，不读真实 holdings 文件、不打网络。
 
@@ -78,26 +79,30 @@ class TestObNonBlocking(unittest.TestCase):
         t_gui._M30_SNAP_CACHE.update(self._saved_m30)
         self.api._stock_chart_cache = self._saved_cache
 
-    def test_01_冷启动立即返回且标记pending(self):
+    def test_01_冷启动立即返回不阻塞(self):
+        # 2026-10-10：load_ob_analysis 改 SWR——冷启动**起后台算 + 立即返回 pending 占位**，
+        # 不再在主线程同步算（逐只 KDJ/CCI/标签 + 竞争预热线程，实测 9~11s）。
         t = time.perf_counter()
         r = self.api.load_ob_analysis()
         dt = time.perf_counter() - t
-        self.assertLess(dt, 0.5, f"冷启动阻塞了 {dt:.2f}s，疑似仍同步调 load_stock_chart")
-        self.assertEqual(len(r.get("stocks", [])), 0, "未预热时不应有体检行")
-        self.assertEqual(r.get("pending"), 2, "pending 应等于有仓持仓数（甲/乙）")
+        self.assertLess(dt, 0.5, f"冷启动阻塞了 {dt:.2f}s，疑似仍同步算")
+        self.assertEqual(len(r.get("stocks", [])), 0, "冷启动占位不应有体检行")
+        self.assertTrue(r.get("pending"), "冷启动应返回 pending（后台算、前端重拉）")
 
-    def test_02_缓存就绪后读缓存出结果(self):
+    def test_02_缓存就绪后出结果(self):
+        # 纯函数 `_load_ob_analysis_impl` 校验「读缓存出结果」；wrapper 只保证非阻塞。
         for c in ("000001", "600000"):
             self.api._stock_chart_cache[f"{self._today}_{c}"] = (datetime.now(), _fake_chart())
         t = time.perf_counter()
-        r = self.api.load_ob_analysis()
-        self.assertLess(time.perf_counter() - t, 0.5, "缓存就绪后仍阻塞")
+        self.api.load_ob_analysis()          # wrapper：非阻塞
+        self.assertLess(time.perf_counter() - t, 0.5, "缓存就绪后 wrapper 仍阻塞")
+        r = self.api._load_ob_analysis_impl()
         self.assertEqual(r.get("pending"), None, "全就绪时不应再有 pending")
         codes = {s["code"] for s in r.get("stocks", [])}
         self.assertEqual(codes, {"000001_A", "600000_B"})
 
     def test_03_清仓不计入pending(self):
-        r = self.api.load_ob_analysis()
+        r = self.api._load_ob_analysis_impl()
         self.assertEqual(r.get("pending"), 2, "已清仓(qty=0)不应计入 pending")
 
 

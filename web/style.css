@@ -144,6 +144,10 @@ body {
 .sidebar-icon { font-size: 16px; width: 22px; text-align: center; }
 .sidebar-summary { padding: 12px 10px; border-bottom: 1px solid var(--border-soft); }
 .sum-row { display: flex; justify-content: space-between; font-size: 12px; margin: 5px 0; }
+.sum-group-title { font-size: 11px; font-weight: 700; color: var(--accent); margin: 10px 0 6px; padding-top: 8px; border-top: 1px solid var(--border-soft); }
+.sidebar-summary > .sum-group-title:first-child { margin-top: 0; padding-top: 0; border-top: none; }
+.pnl-cycle { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font-size: 11px; line-height: 1.7; padding: 2px 0; border-bottom: 1px dashed var(--border-soft); }
+.pnl-cycle:last-child { border-bottom: none; }
 .sum-label { color: var(--text-faint); }
 .sum-val { font-family: var(--mono); font-weight: 700; font-size: 12px; }
 .sidebar-controls { padding: 12px 10px; }
@@ -310,9 +314,6 @@ tr:hover td { background: rgba(243,93,43,.03); }
   font-size: 11px; color: var(--text-dim); }
 .modal-lg { display: flex; flex-direction: column; }
 .stock-chart { flex: 1; min-height: 300px; }
-.calib-badge { font-size: 10px; border-radius: 3px; padding: 1px 5px; margin-left: 3px; }
-.calib-badge.人工校准 { color: var(--accent); background: rgba(243,93,43,.12); }
-.calib-badge.快照 { color: var(--text-faint); background: var(--bg); }
 .mini-btn { background: var(--bg); color: var(--accent); border: 1px solid var(--border); border-radius: 5px; padding: 3px 8px; font-size: 11px; cursor: pointer; }
 .mini-btn:hover { border-color: var(--accent); }
 .mini-btn.primary { background: var(--accent); color: #0d1117; border-color: var(--accent); font-weight: 700; }

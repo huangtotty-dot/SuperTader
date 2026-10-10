@@ -42,6 +42,7 @@ INTRADAY_STATE = BASE / "t_io" / "intraday_state.json"
 PORTFOLIO = STATE_DIR / "accounts_config.json"  # 2026-08-30 合并：账户配置唯一源头（原 portfolio_config.json 已并入）
 PORTFOLIO_LEGACY = STATE_DIR / "portfolio_config.json"  # 旧部署回退（.gszq 等）
 BRIDGE_DIR = BASE / "t_io" / "bridge"  # P4-2/3: 自动盘事件总线（heartbeat.json + events_*.jsonl + KILL_SWITCH）
+TRADE_HISTORY_LEDGER = STATE_DIR / "trade_history_ledger.json"  # 券商交割单解析后的逐股盈亏台账（2026-10-10 owner 需求3）
 
 # 内置名称映射（数据缺失 code 时兜底；可由 holdings/add_watch/trace 补充）
 NAMES = {
@@ -82,11 +83,7 @@ if str(HUNTER_DIR) not in sys.path:
 # 2026-08-15: 选股猎手后台运行状态（进度条轮询用）。进度细节来自 market_data.MARKET_PROGRESS。
 import threading as _th
 HUNTER_RUN_STATE = {"date": None, "running": False, "result": None}
-# 2026-09-21 owner 需求：开盘后每小时自动跑一次「今日数据」。
-# 时点**跳过午休**（11:30–13:00 无行情变化，跑了也是重复），15:00 收盘后不再跑。
-# 交易日按 weekday<5 近似（沿用仓库既有口径，节假日空跑无害）。
-HUNTER_AUTORUN_SLOTS = ("10:30", "11:30", "13:30", "14:30")
-_HUNTER_AUTORUN_STATE = {"date": None, "done": set(), "started": False}
+# 2026-10-10: 原「开盘后每小时自动跑」定时器已删除（owner 需求6，扫描一律按钮触发）。
 _CHART_PREFETCH_STATE = {"started": False}  # 盘后 K线预下载调度（2026-10-04）
 # 主线程(js_api)心跳：高频轮询方法每次更新；看门狗发现停跳 ⇒ 判界面卡死并落线程栈（2026-10-08）
 _GUI_HB = {"ts": 0.0}
@@ -98,6 +95,99 @@ _ROTATION_CACHE_DIR = BASE / "t_io" / "cache" / "sector_rotation"
 _ROTATION_CACHE_MEM = {}
 # 2026-08-23: 每日大盘复盘（LLM）后台线程状态
 _REVIEW_RUN_STATE = {"running": False, "error": None}
+# 2026-10-10: 自动盘盈亏账单缓存（load_auto_pnl；纯磁盘读，30s TTL 足够）
+_AUTO_PNL_CACHE = {"ts": 0.0, "date": None, "data": None}
+_AUTO_PNL_TTL = 30.0
+# 2026-10-10: 自动盘持仓成本派生缓存（load_auto_status 10s 轮询，避免每轮重读 events_*.jsonl）
+_AUTO_COST_CACHE = {"ts": 0.0, "data": None}
+_AUTO_COST_TTL = 30.0
+
+
+def _read_auto_fills():
+    """按时间序读出 t_io/bridge/events_*.jsonl 里全部 fill 事件。
+
+    GM 引擎的 write_fill 不带股票名/净发生金额/成交前持仓，但 code/side/qty/price/fee/pos_after
+    是齐的；这里只做「跨日排序」这一件事，语义补齐交给各调用方。
+    """
+    fills = []
+    try:
+        for fp in sorted(BRIDGE_DIR.glob("events_*.jsonl")):
+            try:
+                with open(fp, encoding="utf-8") as f:
+                    for line in f:
+                        line = line.strip()
+                        if not line or '"fill"' not in line:
+                            continue
+                        try:
+                            e = json.loads(line)
+                        except Exception:
+                            continue
+                        if e.get("event") == "fill":
+                            fills.append(e)
+            except Exception:
+                continue
+    except Exception:
+        pass
+    fills.sort(key=lambda e: (str(e.get("time") or ""), float(e.get("_ts") or 0)))
+    return fills
+
+
+def _daily_last_close(code):
+    """日线缓存（t_io/cache/daily_kline）里的最新收盘价；零网络、无缓存 → 0.0。"""
+    from core.position_builder import _DAILY_CACHE_DIR
+    try:
+        rows = json.loads(
+            (_DAILY_CACHE_DIR / f"{code}.json").read_text(encoding="utf-8")).get("rows") or []
+        if rows:
+            return float(rows[-1].get("close") or 0)
+    except Exception:
+        pass
+    return 0.0
+
+
+def _auto_fill_costs():
+    """从 fill 流复原各票**当前持仓的加权平均成本**（不含手续费，同券商「持仓均价」口径）。
+
+    返回 `{code: {"qty": n, "cost": avg}}`（只含派生持仓 > 0 的票）。
+
+    ⚠️ 为什么不能直接用 heartbeat 的 `cost`：引擎在**加仓时不重新加权**。实测 600584
+    2026-10-09 加买 800@61.497 后 heartbeat 仍写 64.35（加仓**前**的均价），而券商终端
+    的持仓均价是 (400×64.35 + 800×61.497)/1200 = 62.448 —— 直接采信 heartbeat 会让
+    浮盈差 32 元。费用**不计入**成本才能与券商逐只对齐（含费会再偏 0.01~0.03/股）。
+
+    但 heartbeat 的**数量**才是准的（fill 流会漏掉仿真终端手工单/orphan_fill），
+    所以数量一律用 heartbeat，只有「派生数量 == heartbeat 数量」时才采信派生成本。
+    """
+    import time as _t
+    c = _AUTO_COST_CACHE
+    if c["data"] is not None and (_t.time() - c["ts"] < _AUTO_COST_TTL):
+        return c["data"]
+    run = {}
+    for e in _read_auto_fills():
+        code = str(e.get("code") or "").split("_")[0]
+        if not code:
+            continue
+        try:
+            qty = int(e.get("qty") or 0)
+            price = float(e.get("price") or 0)
+        except Exception:
+            continue
+        st = run.setdefault(code, [0, 0.0])
+        if str(e.get("side") or "").upper() == "BUY":
+            st[0] += qty
+            st[1] += price * qty                      # 成交金额，刻意不含手续费
+        else:
+            avg = (st[1] / st[0]) if st[0] else 0.0
+            matched = min(qty, st[0])
+            st[0] = max(0, st[0] - qty)
+            st[1] = max(0.0, st[1] - matched * avg)
+            if st[0] == 0:
+                st[1] = 0.0
+    out = {k: {"qty": v[0], "cost": round(v[1] / v[0], 6)}
+           for k, v in run.items() if v[0] > 0}
+    c.update({"ts": _t.time(), "data": out})
+    return out
+
 
 
 def _jiuyan_concepts(info):
@@ -285,6 +375,41 @@ def _load_json(fp, default=None):
         return default if default is not None else {}
 
 
+def _tail_last_json_line(fp, max_bytes=65536):
+    """读 jsonl 的**最后一条完整行**并解析（只读尾块，禁整文件读）。
+
+    heartbeat_*.jsonl 单文件 1~4MB 且逐分钟追加，只取当日末条心跳时整文件读会拖慢
+    pywebview 串行主线程。此处 seek 到末尾读 max_bytes，丢弃首个不完整行（除非恰好从行首开始），
+    返回最后一条能 json.loads 的行；失败返回 None。
+    """
+    try:
+        with open(fp, "rb") as f:
+            f.seek(0, 2)
+            size = f.tell()
+            start = max(0, size - int(max_bytes))
+            f.seek(start)
+            buf = f.read()
+    except Exception:
+        return None
+    text = buf.decode("utf-8", "replace")
+    if start > 0:
+        nl = text.find("\n")
+        if nl < 0:
+            return None
+        text = text[nl + 1:]
+    for line in reversed(text.splitlines()):
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            obj = json.loads(line)
+        except Exception:
+            continue
+        if isinstance(obj, dict):
+            return obj
+    return None
+
+
 # ---- K线弹窗「30分/60分」分时取数（2026-10-04）----
 # 在线走 tushare **原生** freq；不复用 divergence._resample_minutes（它用 dt.floor，
 # A股午休会把 60min 桶错位）。无 token / 超频 → 回退本地 tushare_mins 缓存（零网络）。
@@ -314,6 +439,11 @@ _PB_M30_CACHE: dict = {}
 _PB_M30_LOCK = threading.Lock()
 _PB_M30_MAX = 3000
 _PB_M30_WARM: dict = {"slot": None}                    # 每 30min 时段只起一次后台预热
+# 历史日「30min 判定」（2026-10-10）：键 {base}_{date}，值 = {level,label,reason,asof} 或 None。
+# 由「扫描该日」时从**磁盘 30min 缓存**截到该日预算好（零网络），load_day 浏览历史只回填、不现算。
+_PB_M30_HIST: dict = {}
+_PB_M30_HIST_LOCK = threading.Lock()
+_PB_M30_HIST_MAX = 5000
 
 
 
@@ -550,6 +680,43 @@ def _build_m30_light(df):
         return {}
 
 
+_MIN_BARS_ASOF_FILES = ("{ts}_{freq}.json", "{ts}_{freq}_d540.json")
+
+
+def _min_bars_asof(code, date_str, freq="30min"):
+    """历史日 30min bars：**纯磁盘（零网络）**，合并各档（plain 覆盖近月、_d540 覆盖长历史）
+    按时序去重后只留 `<= date_str` 的根，供「历史日 30min 判定」。
+
+    与 `_fetch_min_bars_disk` 的差别：后者固定取「末行最新」的一档（可能不覆盖历史日），
+    本函数按目标日截取、跨档合并，保证任意历史日都能取到当时为止的 bars。空/不足 → 空 DataFrame。"""
+    import pandas as pd
+    ts_code = _min_bars_ts_code(code)
+    if not ts_code or freq not in _MIN_BARS_DAYS:
+        return pd.DataFrame()
+    frames = []
+    for tpl in _MIN_BARS_ASOF_FILES:
+        fp = _MIN_BARS_DIR / tpl.format(ts=ts_code, freq=freq)
+        if not fp.exists():
+            continue
+        try:
+            rows = (json.loads(fp.read_text(encoding="utf-8")) or {}).get("rows") or []
+        except Exception:
+            continue
+        if rows:
+            _d = _norm_min_bars(pd.DataFrame(rows))
+            if not _d.empty:
+                frames.append(_d)
+    if not frames:
+        return pd.DataFrame()
+    df = pd.concat(frames, ignore_index=True)
+    df = df.sort_values("time").drop_duplicates(subset=["time"], keep="last").reset_index(drop=True)
+    _end = pd.Timestamp(date_str) + pd.Timedelta(hours=23, minutes=59, seconds=59)
+    df = df[df["time"] <= _end].reset_index(drop=True)
+    if df.empty:
+        return df
+    return df.tail(MIN_BARS_KEEP).reset_index(drop=True)
+
+
 _ACCT_MAP_CACHE = {"ts": 0.0, "map": {}}
 
 
@@ -615,20 +782,38 @@ def _hunter_is_intraday(date) -> bool:
 
 
 def _account_of(code) -> str:
-    """code → 账户名，自 accounts_config.json 各账户的 holdings 清单派生（TTL 300s）。
+    """code → 账户名。**优先**取自「历史成交」台账的 (资金账号, 代码) 持仓，取不到才回退
+    accounts_config.json 的 holdings 清单声明（TTL 300s）。
 
-    2026-09-14 持仓并表：holdings.json 不再存 `account` 字段，归属改由账户配置声明。
+    2026-10-10 owner 定：全站账户信息统一以历史成交为源。历史成交是券商真实成交底账，
+    账户名就是券商的资金账号；config 里的 holdings 是人工维护的名单，只在成交流没覆盖到
+    （比如另一个账户压根没导）时兜底。
     """
     import time as _t
     base = str(code).split("_")[0]
     if _t.time() - _ACCT_MAP_CACHE["ts"] > 300:
-        cfg = _load_json(STATE_DIR / "accounts_config.json", {}) or {}
         m = {}
+        led = _load_json(TRADE_HISTORY_LEDGER, None)
+        if isinstance(led, dict):
+            for s in (led.get("stocks") or []):
+                acc = s.get("account") or ""
+                c = str(s.get("code") or "").split("_")[0]
+                if acc and c:
+                    m[c] = acc
+        cfg = _load_json(STATE_DIR / "accounts_config.json", {}) or {}
         for a, v in (cfg.get("accounts") or {}).items():
             for c in ((v or {}).get("holdings") or []):
-                m[str(c).split("_")[0]] = a
+                m.setdefault(str(c).split("_")[0], a)   # 历史成交优先，config 只补空缺
         _ACCT_MAP_CACHE.update({"ts": _t.time(), "map": m})
     return _ACCT_MAP_CACHE["map"].get(base, "")
+
+
+def _trade_history_accounts():
+    """历史成交台账里的账户清单（全站账户列表的唯一来源）。未导入 → []。"""
+    led = _load_json(TRADE_HISTORY_LEDGER, None)
+    if not isinstance(led, dict):
+        return []
+    return [a for a in (led.get("accounts") or []) if a.get("account")]
 
 
 def _reconcile_cash():
@@ -741,7 +926,7 @@ class Api:
                     "sig_stat": {}, "shadow": {"total": None, "near": {}},
                     "qty_freeze": {}, "closed_loop": {}, "audit_problems": None,
                     "settle": {}, "watch": {}, "kpi": {},
-                    "add_watch": self.compute_add_watch(date),
+                    "add_watch": self.compute_add_watch(date, block=False),
                     "positions": self._load_positions(date, {}),
                     "position_builder": self._agg_position_builder(date),
                     "stage_board": self._load_stage_board(),
@@ -767,7 +952,7 @@ class Api:
         dr_aw = out["add_watch"]
         if not dr_aw or not any(
             isinstance(v, dict) and "conditions" in v for v in dr_aw.values()):
-            out["add_watch"] = self.compute_add_watch(date)
+            out["add_watch"] = self.compute_add_watch(date, block=False)
         out["watch"] = dr.get("watch", {})
 
         # KPI：优先独立文件，缺失时回退到日复盘内嵌 kpi
@@ -829,9 +1014,13 @@ class Api:
         return _clean(pts)
 
     # ---------- 大盘趋势打分 ----------
-    def load_market_score(self, date=None):
-        """跨日 S 打分曲线 + 当日盘中曲线。"""
-        out = {"history": [], "intraday": []}
+    def load_market_score(self):
+        """跨日 S 打分曲线（日频）。
+
+        2026-10-10: 原「当日盘中曲线」随「今日盘中 S」图表一同下线——解析
+        index_regime_{date}.jsonl（50~220KB）在主线程上没有消费者了。
+        """
+        out = {"history": []}
         state = _load_json(IDX_REGIME / "state.json", {})
         hist = state.get("history") or state.get("score_history") or []
         if state.get("history"):
@@ -847,24 +1036,6 @@ class Api:
             ]
         out["last_regime"] = state.get("last_regime")
         out["days_in_regime"] = state.get("days_in_regime")
-
-        # 当日盘中曲线（jsonl 逐行容错）
-        if date:
-            fp = IDX_REGIME / "traces" / f"index_regime_{date}.jsonl"
-            if fp.exists():
-                for line in open(fp, encoding="utf-8"):
-                    line = line.strip()
-                    if not line:
-                        continue
-                    try:
-                        r = json.loads(line)
-                    except Exception:
-                        continue
-                    out["intraday"].append({
-                        "ts": r.get("ts"), "time": (r.get("ts") or "")[-8:],
-                        "score": r.get("score"), "regime": r.get("regime"),
-                        "regime_name": r.get("regime_name"),
-                    })
         return _clean(out)
 
     # ---------- 两市成交额（2026-09-30） ----------
@@ -1612,29 +1783,54 @@ class Api:
     # ---------- 加仓观察（实时计算，不依赖 daily_review） ----------
     _ADD_WATCH_TTL = 120.0   # 加仓观察缓存新鲜期（秒）
 
-    def compute_add_watch(self, date):
-        """加仓观察（SWR 包装，2026-10-09）：`load_day`（主线程）会调它，实测冷算 ~5.6s
-        （9 只 × 逐只 5min 指标 + 箱体），改 SWR ⇒ 命中直返；过期先返回旧值 + 后台重算；冷启动才同步算。"""
+    def compute_add_watch(self, date, block=True):
+        """加仓观察（SWR 包装，2026-10-09；2026-10-10 加 `block`）。
+
+        `block=True`（盘后重跑/启动预热）：冷启动同步算，返回真实结果。
+        `block=False`（GUI load_day 首帧）：冷启动**绝不阻塞主线程**——起后台算并立即返回
+        （有旧值则先给旧值），由前端 `load_add_watch` 轮询补齐。原因：该计算逐只 `timing_verdict`
+        走网络（GM 不可达时每只 4s 超时 → 整轮 30~60s），同步跑会冻死 pywebview 主线程（看门狗实测）。"""
         now = _time_mod.time()
         _h = (getattr(self, "_add_watch_cache", None) or {}).get(date)
         if _h and (now - _h[0]) < self._ADD_WATCH_TTL:
             return _h[1]
-        if _h and not getattr(self, "_add_watch_refreshing", False):
-            self._add_watch_refreshing = True
-
-            def _bg():
-                try:
-                    _r = self._compute_add_watch_impl(date)
-                    self._add_watch_cache = {date: (_time_mod.time(), _r)}
-                except Exception:
-                    pass
-                finally:
-                    self._add_watch_refreshing = False
-            _th.Thread(target=_bg, name="add-watch-refresh", daemon=True).start()
+        if _h is not None:
+            self._kick_add_watch_bg(date)      # 过期：后台刷新，先给旧值（SWR）
             return _h[1]
-        _r = self._compute_add_watch_impl(date)
-        self._add_watch_cache = {date: (_time_mod.time(), _r)}
-        return _r
+        if block:                              # 冷启动 + 显式要求：同步算
+            _r = self._compute_add_watch_impl(date)
+            self._add_watch_cache = {date: (_time_mod.time(), _r)}
+            return _r
+        self._kick_add_watch_bg(date)          # 冷启动 + 首帧：后台算，立即返回空
+        return {}
+
+    def _kick_add_watch_bg(self, date):
+        """起后台算加仓观察（按 date 去重，避免启动预热与首帧 load_day 重复算）。"""
+        _inflight = getattr(self, "_add_watch_inflight", None)
+        if _inflight is None:
+            _inflight = self._add_watch_inflight = set()
+        if date in _inflight:
+            return
+        _inflight.add(date)
+
+        def _bg():
+            try:
+                _r = self._compute_add_watch_impl(date)
+                self._add_watch_cache = {date: (_time_mod.time(), _r)}
+            except Exception:
+                pass
+            finally:
+                _inflight.discard(date)
+        _th.Thread(target=_bg, name="add-watch-compute", daemon=True).start()
+
+    def load_add_watch(self, date=None):
+        """轻量端点（2026-10-10）：只取加仓观察，供前端在冷启动后轮询补齐——避免为它整页 load_day。
+        非阻塞：未算好返回 {}（前端 3s 后重试）。"""
+        date = date or datetime.now().strftime("%Y-%m-%d")
+        try:
+            return _clean({"add_watch": self.compute_add_watch(date, block=False)})
+        except Exception as e:
+            return _clean({"add_watch": {}, "error": str(e)[:120]})
 
     def _compute_add_watch_impl(self, date):
         """从分钟快照+最新价实时计算支撑位距离，返回 add_watch 同结构数据。
@@ -1957,7 +2153,36 @@ class Api:
         return {"broken": False, "level": None, "price": cur}
 
     # ---------- 持仓日线超买/顶背离体检 ----------
+    _OB_TTL = 45.0          # 体检结果缓存新鲜期（秒）
+
     def load_ob_analysis(self, date=None):
+        """持仓体检（SWR 包装，2026-10-10）：逐只算 KDJ/CCI/标签/30min 判定是**纯 Python 重活**
+        （9 只 ~3~11s，叠加预热线程竞争更久），同步跑会冻 pywebview 主线程（看门狗实测 9~11s）。
+
+        改为：命中缓存直返；冷启动/过期起**后台算 + 立即返回**（冷启动返回 `pending`，前端已有
+        重试补拉）。判定口径见 `_load_ob_analysis_impl`。"""
+        now = _time_mod.time()
+        _c = getattr(self, "_ob_cache", None)
+        if _c is not None:
+            # 结果不完整（部分持仓图表未热）时用短 TTL：前端重试即重算，直到补齐；完整则 45s 内直返。
+            _ttl = 10.0 if _c[1].get("pending") else self._OB_TTL
+            if (now - _c[0]) < _ttl:
+                return _c[1]
+        if not getattr(self, "_ob_running", False):
+            self._ob_running = True
+
+            def _bg():
+                try:
+                    _r = self._load_ob_analysis_impl(date)
+                    self._ob_cache = (_time_mod.time(), _r)
+                except Exception:
+                    pass
+                finally:
+                    self._ob_running = False
+            _th.Thread(target=_bg, name="ob-analysis", daemon=True).start()
+        return _c[1] if _c is not None else {"stocks": [], "pending": True}
+
+    def _load_ob_analysis_impl(self, date=None):
         """每只持仓：**30min 趋势 / 30min 背离 / 30min 顶部特征(T1–T4)风险提醒** + 日线超买(RSI/KDJ-J/CCI/BOLL)。
 
         2026-10-09 口径变更（owner 需求）：趋势/判定改用 **30 分钟线**。前端只显示一列
@@ -3319,8 +3544,8 @@ class Api:
     def run_hunter(self, date=None, auto=False):
         """后台运行选股猎手（拉取+评分），立即返回；前端轮询 hunter_progress 看进度。
 
-        auto=True 表示定时自动运行（见 HUNTER_AUTORUN_SLOTS）：只有在候选集变化时才推
-        飞书，避免一天重复刷屏；手动运行(auto=False)每次都推。
+        auto=True 为保留参数（原定时自动运行已删，见 2026-10-10 owner 需求6）：
+        该分支只在候选集变化时才推飞书；手动运行(auto=False)每次都推。
         """
         date = date or datetime.now().strftime("%Y-%m-%d")
         if HUNTER_RUN_STATE.get("running") and HUNTER_RUN_STATE.get("date") == date:
@@ -3423,19 +3648,16 @@ class Api:
         }
 
     def load_hunter(self, date=None):
-        """选股猎手数据。运行中→running；有该日结果→返回；都没有→**起后台跑 + 返回 running**
-        （2026-10-07：原为同步跑整轮扫描，实测 **156s**，会冻死 pywebview 主线程）。"""
+        """选股猎手数据。运行中→running；有该日结果→返回；都没有→返回空（**不再懒触发扫描**）。
+
+        2026-10-10 owner 需求6：所有扫描一律由按钮（run_hunter）发起，打开页面/轮询不得自动跑。
+        """
         date = date or datetime.now().strftime("%Y-%m-%d")
         if HUNTER_RUN_STATE.get("running") and HUNTER_RUN_STATE.get("date") == date:
             return {"available": False, "running": True, "date": date}
         if HUNTER_RUN_STATE.get("date") == date and HUNTER_RUN_STATE.get("result"):
             return HUNTER_RUN_STATE["result"]
-        # 都没有：触发一次后台运行（与前端 run_hunter 同机制），立即返回 running，前端轮询进度后重取
-        try:
-            self.run_hunter(date, auto=False)
-        except Exception:
-            pass
-        return {"available": False, "running": True, "date": date}
+        return {"available": False, "running": False, "date": date}
 
     def _hunter_build_conformance(self, codes, date):
         """计算各股建仓信号符合度（时机门控 GO：市场有方向/多头结构/回撤到位/金叉加分）。
@@ -3906,6 +4128,35 @@ class Api:
         lv, lb, rs = _m30f.verdict_from_features(
             snap.get("feats") or {}, None, _dv.get("type"), _dv.get("bars_ago"))
         return {"level": lv, "label": lb, "reason": rs}
+
+    def _pb_m30_hist_verdict(self, code, date, compute=False):
+        """历史日「30min 判定」：从**磁盘 30min 缓存**取覆盖 date 的 bars（零网络）→ 同口径判定。
+        结果按 `{base}_{date}` 缓存；compute=False 时未算过返回 None（load_day 浏览历史不触发计算，
+        由「扫描该日」预先算好——见 `recompute_pb`）。与今日列同口径（verdict_from_features）。"""
+        from analysis import m30_features as _m30f
+        base = str(code).split("_")[0]
+        key = f"{base}_{date}"
+        with _PB_M30_HIST_LOCK:
+            if key in _PB_M30_HIST:
+                return _PB_M30_HIST[key]
+        if not compute:
+            return None
+        _v = None
+        try:
+            df = _min_bars_asof(base, date)
+            snap = _build_m30_light(df) if (df is not None and not df.empty) else {}
+            if snap:
+                _dv = snap.get("div") or {}
+                lv, lb, rs = _m30f.verdict_from_features(
+                    snap.get("feats") or {}, None, _dv.get("type"), _dv.get("bars_ago"))
+                _v = {"level": lv, "label": lb, "reason": rs, "asof": snap.get("bar_time")}
+        except Exception:
+            _v = None
+        with _PB_M30_HIST_LOCK:
+            if len(_PB_M30_HIST) > _PB_M30_HIST_MAX:
+                _PB_M30_HIST.clear()
+            _PB_M30_HIST[key] = _v
+        return _v
 
     def _kick_pb_m30_warm(self, codes):
         """后台预热建仓表整池的轻量 30min 快照（每 30min 时段只起一次，守护线程）。
@@ -5128,7 +5379,10 @@ class Api:
     def load_auto_status(self):
         """P4-3 自动盘页：读 t_io/bridge（heartbeat.json + 当日 events + KILL_SWITCH）。
         返回 heartbeat{positions/cash/index_regime/index_score} + order/fill/reject/risk 计数
-        + 最新 10 条事件 + kill_switch 状态。GM 格式持仓 key 经 codec 转内部码。"""
+        + 最新 10 条事件 + kill_switch 状态。GM 格式持仓 key 经 codec 转内部码。
+
+        2026-10-10: 持仓成本改用 fill 流派生的加权均价（见 `_auto_fill_costs`）——引擎的
+        heartbeat cost 在**加仓后不重新加权**，与券商终端对不上。"""
         hb = _load_json(BRIDGE_DIR / "heartbeat.json", {})
         out = {"heartbeat": None, "events": {"order": 0, "fill": 0, "reject": 0, "risk": 0},
                "latest": [], "kill_switch": (BRIDGE_DIR / "KILL_SWITCH").exists(),
@@ -5138,12 +5392,44 @@ class Api:
                 from core.market_data.codec import to_internal
             except Exception:
                 to_internal = lambda g: str(g).split(".")[-1]
+            # 名称源（heartbeat positions 只有 qty/cost）：holdings_auto.json → NAMES 兜底
+            _names = dict(NAMES)
+            try:
+                for _c, _h in (_load_json(STATE_DIR / "holdings_auto.json", {}) or {}).items():
+                    if isinstance(_h, dict) and _h.get("name"):
+                        _names[str(_c).split("_")[0]] = _h["name"]
+            except Exception:
+                pass
+            derived = _auto_fill_costs()
             positions = {}
             for gk, p in (hb.get("positions", {}) or {}).items():
                 try:
-                    positions[to_internal(str(gk))] = p
+                    c6 = to_internal(str(gk))
                 except Exception:
-                    positions[str(gk)] = p
+                    c6 = str(gk)
+                pp = dict(p) if isinstance(p, dict) else {"qty": p}
+                key = str(c6).split("_")[0]
+                if not pp.get("name"):
+                    pp["name"] = _names.get(key, "")
+                # 派生均价只在「数量对得上」时采信（数量对不上说明有手工单，成本也就无从复原）
+                dv = derived.get(key)
+                if dv and int(pp.get("qty") or 0) == dv["qty"]:
+                    pp["cost"] = dv["cost"]
+                    pp["cost_src"] = "fill派生"
+                else:
+                    pp["cost_src"] = "引擎快照"
+                # 市值/浮盈（同券商「持仓市值/浮动盈亏」口径：收盘价 × 数量 − 成本 × 数量）
+                try:
+                    _q = int(pp.get("qty") or 0)
+                    _c = float(pp.get("cost") or 0)
+                    _px = _daily_last_close(key) if _q > 0 else 0.0
+                    if _px:
+                        pp["last_price"] = round(_px, 3)
+                        pp["market_value"] = round(_px * _q, 2)
+                        pp["unreal_pnl"] = round(_px * _q - _c * _q, 2)
+                except Exception:
+                    pass
+                positions[c6] = pp
             out["heartbeat"] = {
                 "time": hb.get("time"), "bar": hb.get("bar"),
                 "positions": positions, "cash": hb.get("cash"),
@@ -5171,6 +5457,330 @@ class Api:
                 pass
         out["latest"] = latest[-10:]
         return _clean(out)
+
+    def load_auto_pnl(self):
+        """自动盘盈亏账单（2026-10-10 需求5）：按 code 用 fill.pos_after 归零切分
+        「建仓→清仓」周期，汇总每周期已实现盈亏；未平仓周期用日线缓存最新收盘算浮盈。
+        同一只票清仓后再次建仓 → 新周期（重新计算）。
+
+        纯磁盘（t_io/bridge/events_*.jsonl + t_io/cache/daily_kline），零网络，SWR 缓存 30s。
+        名称缺失问题一并修（holdings_auto.json → NAMES 兜底）。
+        """
+        import time as _t
+        today = datetime.now().strftime("%Y-%m-%d")
+        c = _AUTO_PNL_CACHE
+        if c["data"] is not None and c["date"] == today and (_t.time() - c["ts"] < _AUTO_PNL_TTL):
+            return c["data"]
+        try:
+            data = self._compute_auto_pnl(today)
+        except Exception as e:
+            return {"error": str(e)[:200], "stocks": [], "summary": {}}
+        c.update({"ts": _t.time(), "date": today, "data": data})
+        return data
+
+    def _compute_auto_pnl(self, today):
+        """账本体（纯函数式磁盘读，无副作用）。"""
+        from core.position_builder import _DAILY_CACHE_DIR
+        # 名称源：holdings_auto.json → NAMES 兜底
+        names = dict(NAMES)
+        try:
+            for code, h in (_load_json(STATE_DIR / "holdings_auto.json", {}) or {}).items():
+                if isinstance(h, dict) and h.get("name"):
+                    names[str(code).split("_")[0]] = h["name"]
+        except Exception:
+            pass
+        # 按时间序读全部 fill（跨日排序）——与 _auto_fill_costs 同源，避免两处解析漂移
+        fills = _read_auto_fills()
+        cost_map = _auto_fill_costs()
+
+        # ---- 逐笔流水 + 按日累计已实现（移动加权平均成本，随时间顺序全局跑一遍）----
+        # 引擎 write_fill 不带股票名/净发生金额/成交前持仓 ⇒ 读取端补齐：name 反查、
+        # net 按 BUY 出金/SELL 入金、pos_after 直接用事件自带余额。
+        disp_fills = []
+        realized_by_date = {}
+        _run = {}                                   # code -> [qty, cost_incl_fee]
+        for e in fills:
+            code = str(e.get("code") or "").split("_")[0]
+            if not code:
+                continue
+            side = str(e.get("side") or "").upper()
+            try:
+                qty = int(e.get("qty") or 0)
+                price = float(e.get("price") or 0)
+                fee = float(e.get("fee") or 0)
+                pos_after = int(e.get("pos_after") or 0)
+            except Exception:
+                continue
+            amt = price * qty
+            tstr = str(e.get("time") or "")
+            st = _run.setdefault(code, [0, 0.0])
+            if side == "BUY":
+                st[0] += qty
+                st[1] += amt + fee
+                net = -(amt + fee)
+            else:
+                avg = (st[1] / st[0]) if st[0] else 0.0
+                matched = min(qty, st[0])
+                # 只对**配对到的那部分**计提价差。若直接写 (amt-fee) - matched*avg，
+                # 卖出腿没有对应买入腿时（持仓在事件流起点之前建的）matched=0 ⇒ 整笔卖出款
+                # 被当成纯利润，realized_cum 会凭空虚高。
+                per = ((amt - fee) / qty) if qty else 0.0
+                rl = matched * (per - avg)
+                st[0] = max(0, st[0] - qty)
+                st[1] = max(0.0, st[1] - matched * avg)
+                if st[0] == 0:
+                    st[1] = 0.0
+                realized_by_date[tstr[:10]] = realized_by_date.get(tstr[:10], 0.0) + rl
+                net = amt - fee
+            disp_fills.append({
+                "date": tstr[:10], "time": tstr[11:19], "code": code,
+                "name": names.get(code, code), "side": side,
+                "qty": qty, "price": round(price, 3), "amount": round(amt, 2),
+                "net": round(net, 2), "fee": round(fee, 2), "pos_after": pos_after,
+            })
+        disp_fills.sort(key=lambda r: (r["date"], r["time"]), reverse=True)
+
+        # 逐 code 切周期
+        by_code = {}
+        for e in fills:
+            code = str(e.get("code") or "").split("_")[0]
+            if not code:
+                continue
+            by_code.setdefault(code, []).append(e)
+
+        def _last_close(code):
+            fp = _DAILY_CACHE_DIR / f"{code}.json"
+            try:
+                rows = json.loads(fp.read_text(encoding="utf-8")).get("rows") or []
+                if rows:
+                    return float(rows[-1].get("close") or 0)
+            except Exception:
+                pass
+            return 0.0
+
+        stocks = []
+        tot_realized = 0.0
+        tot_unreal = 0.0
+        tot_mv = 0.0
+        tot_cost = 0.0
+        for code, evs in by_code.items():
+            cycles = []
+            cur = None
+            prev_pos = 0
+            for e in evs:
+                side = str(e.get("side") or "").upper()
+                try:
+                    qty = int(e.get("qty") or 0)
+                    price = float(e.get("price") or 0)
+                    fee = float(e.get("fee") or 0)
+                    pos_after = int(e.get("pos_after") or 0)
+                except Exception:
+                    continue
+                if cur is None:
+                    # 新周期起点。prev_pos>0 ⇒ 历史被截断（无 0 起点），标注不规整
+                    cur = {"start": str(e.get("time") or "")[:10], "end": None,
+                           "buy_qty": 0, "buy_amt": 0.0, "buy_fee": 0.0,
+                           "sell_qty": 0, "sell_amt": 0.0, "sell_fee": 0.0,
+                           "irregular": prev_pos > 0}
+                if side == "BUY":
+                    cur["buy_qty"] += qty
+                    cur["buy_amt"] += price * qty
+                    cur["buy_fee"] += fee
+                elif side == "SELL":
+                    cur["sell_qty"] += qty
+                    cur["sell_amt"] += price * qty
+                    cur["sell_fee"] += fee
+                # 位置连续性护栏：pos_after 与 prev_pos ± qty 不符 ⇒ 标记 irregular
+                expect = prev_pos + qty if side == "BUY" else prev_pos - qty
+                if pos_after != expect:
+                    cur["irregular"] = True
+                prev_pos = pos_after
+                if pos_after <= 0:
+                    cur["end"] = str(e.get("time") or "")[:10]
+                    cycles.append(cur)
+                    cur = None
+                    prev_pos = 0
+            if cur is not None:
+                cycles.append(cur)  # 未平仓（open）
+
+            # 汇总每个周期
+            last_px = _last_close(code) if any(
+                c["buy_qty"] > c["sell_qty"] for c in cycles) else None
+            out_cycles = []
+            stock_realized = 0.0
+            stock_unreal = 0.0
+            stock_mv = 0.0
+            stock_cost = 0.0
+            open_qty_total = 0
+            for c in cycles:
+                closed = c["end"] is not None
+                matched = min(c["buy_qty"], c["sell_qty"])
+                unit_cost = ((c["buy_amt"] + c["buy_fee"]) / c["buy_qty"]) if c["buy_qty"] else 0.0
+                realized = (c["sell_amt"] - c["sell_fee"]) - matched * unit_cost if matched else 0.0
+                residual = c["buy_qty"] - c["sell_qty"]
+                unreal = 0.0
+                unit_disp = unit_cost
+                if not closed and residual > 0:
+                    px = float(last_px or 0)
+                    # 在场浮盈用**券商口径成本**（fill 派生、不含手续费），与终端「浮动盈亏」
+                    # 逐只对齐；派生数量对不上（有手工单）才退回本周期含费均价。
+                    dv = cost_map.get(code)
+                    unit_disp = dv["cost"] if (dv and dv["qty"] == residual) else unit_cost
+                    remain_cost = residual * unit_disp
+                    unreal = px * residual - remain_cost if px else 0.0
+                    stock_unreal += unreal
+                    stock_mv += px * residual
+                    stock_cost += remain_cost
+                    open_qty_total += residual
+                stock_realized += realized
+                cost_basis = matched * unit_cost
+                out_cycles.append({
+                    "start": c["start"], "end": c["end"],
+                    "days": self._pnl_days(c["start"], c["end"] or today),
+                    "status": "closed" if closed else "open",
+                    "buy_qty": c["buy_qty"], "sell_qty": c["sell_qty"],
+                    "avg_buy": round(unit_cost, 3),
+                    # 在场周期的券商口径成本价（不含费）；前端「均买」优先显示它
+                    "cost_price": round(unit_disp, 3) if not closed else None,
+                    "avg_sell": round((c["sell_amt"] / c["sell_qty"]), 3) if c["sell_qty"] else 0,
+                    "fees": round(c["buy_fee"] + c["sell_fee"], 2),
+                    "realized_pnl": round(realized, 2),
+                    "pnl_pct": round(realized / cost_basis * 100, 2) if cost_basis else 0,
+                    "open_qty": residual if not closed else 0,
+                    "last_price": round(float(last_px or 0), 3) if (not closed and last_px) else None,
+                    "unreal_pnl": round(unreal, 2),
+                    "irregular": bool(c.get("irregular")),
+                })
+            out_cycles.sort(key=lambda x: x["start"], reverse=True)
+            tot_realized += stock_realized
+            tot_unreal += stock_unreal
+            tot_mv += stock_mv
+            tot_cost += stock_cost
+            stocks.append({
+                "code": code,
+                "name": names.get(code, code),
+                "realized_pnl": round(stock_realized, 2),
+                "unreal_pnl": round(stock_unreal, 2),
+                "open_qty": open_qty_total,
+                "market_value": round(stock_mv, 2),
+                "trades_n": len(evs),
+                "round_trips": sum(1 for c in cycles if c["end"] is not None),
+                "cycles": out_cycles,
+            })
+        stocks.sort(key=lambda s: -(s["realized_pnl"] + s["unreal_pnl"]))
+
+        # ---- 每日账户盈亏：逐日取 heartbeat_YYYY-MM-DD.jsonl **末条**心跳 ----
+        # 引擎只写「当日现金 + 收盘持仓{qty,cost}」，账户权益需配日线缓存收盘价复算。
+        # 末条 = 当日收盘快照 ⇒ day_pnl 差分即当日盈亏。只读尾块，禁整文件读（见 _tail_last_json_line）。
+        try:
+            from core.market_data.codec import to_internal as _to_int
+        except Exception:
+            _to_int = lambda g: str(g).split(".")[-1]
+        _close_memo = {}
+
+        def _close_on(code, ds):
+            """该 code 在 ds 当日（含）之前的最后收盘价；日线缓存无此票 → 0。"""
+            if code not in _close_memo:
+                m = {}
+                try:
+                    rows = json.loads(
+                        (_DAILY_CACHE_DIR / f"{code}.json").read_text(encoding="utf-8")
+                    ).get("rows") or []
+                    for r in rows:
+                        d0 = str(r.get("date") or "")[:10]
+                        if d0:
+                            m[d0] = float(r.get("close") or 0)
+                except Exception:
+                    pass
+                _close_memo[code] = m
+            m = _close_memo[code]
+            if not m:
+                return 0.0
+            if ds in m:
+                return m[ds]
+            prior = [d0 for d0 in m if d0 <= ds]
+            return m[max(prior)] if prior else m[min(m)]
+
+        _real_dates = sorted(realized_by_date)
+        daily = []
+        prev_equity = None
+        cum_realized = 0.0
+        for fp in sorted(BRIDGE_DIR.glob("heartbeat_*.jsonl")):
+            ds = fp.name[len("heartbeat_"):-len(".jsonl")]
+            hb = _tail_last_json_line(fp)
+            if not hb:
+                continue
+            mv = 0.0
+            cost_tot = 0.0
+            for gk, p in (hb.get("positions") or {}).items():
+                if not isinstance(p, dict):
+                    continue
+                try:
+                    q = int(p.get("qty") or 0)
+                    cst = float(p.get("cost") or 0)
+                except Exception:
+                    continue
+                if q <= 0:
+                    continue
+                try:
+                    c6 = str(_to_int(str(gk))).split("_")[0]
+                except Exception:
+                    c6 = str(gk)
+                cost_tot += q * cst
+                mv += q * _close_on(c6, ds)
+            csh = hb.get("cash")
+            equity = (float(csh) if isinstance(csh, (int, float)) else 0.0) + mv
+            # 累计已实现：把 ds（含）之前所有成交日的已实现全部算入（含无心跳的交易日）
+            for d0 in _real_dates:
+                if d0 <= ds:
+                    cum_realized += realized_by_date[d0]
+            _real_dates = [d0 for d0 in _real_dates if d0 > ds]
+            day_pnl = round(equity - prev_equity, 2) if prev_equity is not None else None
+            daily.append({
+                "date": ds,
+                "cash": round(float(csh), 2) if isinstance(csh, (int, float)) else None,
+                "market_value": round(mv, 2),
+                "cost": round(cost_tot, 2),
+                "equity": round(equity, 2),
+                "unreal_pnl": round(mv - cost_tot, 2),
+                "day_pnl": day_pnl,
+                "realized_cum": round(cum_realized, 2),
+                # 权益日间跳变 >15% ⇒ 该日现金变动与策略成交流水对不上。实测成因是仿真终端
+                # 手工单/孤儿成交（只在 risk.orphan_fill 里，不进 fill 流也不进持仓快照）。
+                "suspect": bool(day_pnl is not None and prev_equity
+                                and abs(day_pnl) > 0.15 * abs(prev_equity)),
+            })
+            prev_equity = equity
+        daily.sort(key=lambda r: r["date"])
+        cash = None
+        try:
+            cash = _load_json(BRIDGE_DIR / "heartbeat.json", {}).get("cash")
+        except Exception:
+            pass
+        _cash = round(float(cash), 2) if isinstance(cash, (int, float)) else None
+        return _clean({
+            "summary": {
+                "realized_pnl": round(tot_realized, 2),
+                "unreal_pnl": round(tot_unreal, 2),
+                "market_value": round(tot_mv, 2),
+                "cost_basis": round(tot_cost, 2),
+                "cash": _cash,
+                "total_assets": round((_cash or 0.0) + tot_mv, 2),
+                "positions_count": len([s for s in stocks if s["open_qty"] > 0]),
+            },
+            "stocks": stocks,
+            "fills": disp_fills,
+            "daily": daily,
+        })
+
+    @staticmethod
+    def _pnl_days(start, end):
+        try:
+            d0 = datetime.strptime(str(start)[:10], "%Y-%m-%d")
+            d1 = datetime.strptime(str(end)[:10], "%Y-%m-%d")
+            return max(1, (d1 - d0).days + 1)
+        except Exception:
+            return 0
 
     def load_buy_confirm_pending(self):
         """人工确认闸（2026-08-30）：读 BUY_PENDING.json（引擎写）待确认买入请求 + 当日已拒绝清单，
@@ -5216,6 +5826,93 @@ class Api:
             return {"ok": True, "request_id": request_id, "decision": decision}
         except Exception as e:
             return {"ok": False, "error": str(e)}
+
+    # ---------- 历史成交（券商 xls/xlsx）→ 逐股盈亏台账（2026-10-10 需求3） ----------
+    # 券商「历史成交」是账户维度的成交底账（各账户唯一的真实成交来源）；解析后落盘缓存，
+    # 前端「图表分析」页按每只票的累计已实现盈亏出图，全站账户名也以它为准（见 _account_of）。
+    # 输入统一为 xls/xlsx（各券商列序/列名不一 ⇒ 表头驱动），且**可一次选多个**文件。
+
+    def load_accounts(self):
+        """全站账户列表 —— 唯一来源是导入的历史成交台账；未导入 → 空列表。"""
+        accs = _trade_history_accounts()
+        return _clean({"imported": bool(accs), "accounts": accs})
+
+    def load_trade_history(self):
+        """读已导入的历史成交台账；未导入过 → {imported: False}。
+
+        缓存里另存了合并后的原始成交行（`trades`，供下次导入增量合并），不下发前端。
+        """
+        d = _load_json(TRADE_HISTORY_LEDGER, None)
+        if not isinstance(d, dict) or not d.get("stocks"):
+            return {"imported": False}
+        d.pop("trades", None)                  # 原始成交行只留在磁盘里
+        return _clean(d)
+
+    def import_trade_history(self, path=None):
+        """导入历史成交（xls/xlsx/伪-xls/PDF）：path 为空 → 弹系统文件选择器（**可多选**）。
+
+        `path` 可为单个路径字符串或路径列表（CLI/测试用）。**增量导入**：与上一次已落盘的
+        成交行合并去重后再跑台账——券商是「每期一份」，日常只导新那几天，不能把老数据冲掉。
+        解析 → 原子写 t_io/state/trade_history_ledger.json → 返回台账。
+        注意：跑在 pywebview 串行主线程，多份大文件约 1~3s 会短暂卡界面（用户主动点击触发）。
+        """
+        src = path
+        if not src:
+            try:
+                import webview
+                wins = getattr(webview, "windows", None) or []
+                if not wins:
+                    return {"imported": False, "error": "窗口未就绪，稍后重试"}
+                # pywebview 6.x 无模块级 create_file_dialog，须走 Window 实例
+                picked = wins[0].create_file_dialog(
+                    webview.OPEN_DIALOG, allow_multiple=True,
+                    file_types=("交割单 (*.xls;*.xlsx;*.pdf)", "Excel (*.xls;*.xlsx)",
+                                "PDF (*.pdf)", "所有文件 (*.*)"))
+                if not picked:
+                    return {"imported": False, "cancelled": True}
+                src = picked
+            except Exception as e:
+                return {"imported": False, "error": f"打开文件选择器失败: {e}"}
+        paths = [src] if isinstance(src, (str, Path)) else list(src)
+        fps = [Path(str(p)) for p in paths]
+        missing = [str(p) for p in fps if not p.exists()]
+        if missing:
+            return {"imported": False, "error": f"文件不存在: {missing[0]}"}
+        # 增量导入：把上一次落盘的成交行一起送进去合并（只导新那几天也不能把历史冲掉）
+        prev = _load_json(TRADE_HISTORY_LEDGER, None)
+        prev_trades = (prev or {}).get("trades") if isinstance(prev, dict) else None
+        prev_through = (prev or {}).get("data_through") if isinstance(prev, dict) else None
+        try:
+            from core.trade_history import build_from_files
+            led = build_from_files(fps, prev_trades=prev_trades)
+        except Exception as e:
+            return {"imported": False, "error": f"解析失败: {str(e)[:200]}"}
+        if not led.get("stocks"):
+            detail = "；".join((led.get("parse_warnings") or [])[:3])
+            return {"imported": False,
+                    "error": "未解析到任何成交记录（确认是券商历史成交，且含「成交日期/证券代码/操作」列）"
+                             + (f"：{detail}" if detail else "")}
+        # 「记忆已导入到哪一天」：台账本身就是记忆（data_through = 覆盖到的最后交易日），
+        # 下次导入应导该日**之后**的成交。重复导入旧文件时 advanced=False，前端据此提示。
+        end = (led.get("range") or {}).get("end")
+        led["imported"] = True
+        led["data_through"] = end
+        led["prev_data_through"] = prev_through
+        led["advanced"] = bool(end and (not prev_through or end > prev_through))
+        srcs = led.get("sources") or [p.name for p in fps]
+        led["source"] = " + ".join(srcs) if len(srcs) > 1 else (srcs[0] if srcs else "")
+        led["imported_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        try:
+            TRADE_HISTORY_LEDGER.parent.mkdir(parents=True, exist_ok=True)
+            tmp = TRADE_HISTORY_LEDGER.with_suffix(".tmp")
+            with open(tmp, "w", encoding="utf-8") as f:
+                json.dump(led, f, ensure_ascii=False)
+            tmp.replace(TRADE_HISTORY_LEDGER)
+        except Exception as e:
+            return {"imported": False, "error": f"写缓存失败: {str(e)[:200]}"}
+        _ACCT_MAP_CACHE.update({"ts": 0.0, "map": {}})   # 账户名以新台账为准，立即失效重算
+        led.pop("trades", None)                          # 原始成交行只落盘，不下发前端
+        return _clean(led)
 
     # ---------- 自动盘：建仓扫描 / 添加标的 / 手动建仓做T衔接（2026-08-30） ----------
 
@@ -5505,7 +6202,13 @@ class Api:
             config = None
         pcfg = _load_json(PORTFOLIO, {})
         accounts = pcfg.get("accounts", {})
-        total_capital = sum(float(a.get("total_capital") or 0) for a in accounts.values())
+        # 2026-10-10: 手动/自动资金分离——本表行来自 HOLDINGS_MANUAL（手动盘），
+        # 分母若含 paper 账户（账户C 国盛掘金仿真=自动盘）会让仓位占比被稀释偏小。
+        # 口径同 _reconcile_cash：paper=true 归自动盘，单独汇总为 auto_capital 供展示。
+        total_capital = sum(float(a.get("total_capital") or 0)
+                            for a in accounts.values() if not a.get("paper"))
+        auto_capital = sum(float(a.get("total_capital") or 0)
+                           for a in accounts.values() if a.get("paper"))
         cur = _load_json(HOLDINGS_MANUAL, {})
         # 实时价
         px_map = {}
@@ -5544,7 +6247,7 @@ class Api:
                 cost_total += float(h.get("cost") or 0) * qty
             if total_qty <= 0:
                 continue  # fix 2026-08-20: 已清仓(base 全部 qty=0)不进仓位管理器
-            raw.append({"base": base, "name": info["name"], "raw_pct": raw_pct,
+            raw.append({"base": base, "code": base, "name": info["name"], "raw_pct": raw_pct,
                         "mkt_val": mkt_val, "total_qty": total_qty,
                         "cost": (cost_total / total_qty) if total_qty else 0})
         # W33 A3: 归一化/欠配缺口/分批 抽到 config.build_position_gap 共享（避免 GUI/扫描器两处漂移）
@@ -5559,6 +6262,7 @@ class Api:
         rows.sort(key=lambda x: -x["pct"])
         return _clean({
             "total_capital": round(total_capital, 0),
+            "auto_capital": round(auto_capital, 0),
             "rows": rows,
             "sum_mkt": round(sum(r["mkt_val"] for r in rows), 0),
             "sum_pct": round(sum(r["pct"] for r in rows), 1),
@@ -5595,7 +6299,7 @@ class Api:
     def load_live(self, date):
         """decision_trace 尾部 + intraday_state + 大盘盘中尾部。"""
         _GUI_HB["ts"] = _time_mod.time()   # 10s 轮询打点
-        out = {"signals": [], "intraday_state": {}, "market_intraday": []}
+        out = {"signals": [], "intraday_state": {}}
 
         fp = TRACES / f"decision_trace_{date}.jsonl"
         if fp.exists():
@@ -5636,8 +6340,10 @@ class Api:
             out["signals"] = [_sig(r) for r in tail]
 
         out["intraday_state"] = _load_json(INTRADAY_STATE, {})
-        out["market_intraday"] = self.load_market_score(date).get("intraday", [])
-        out["add_watch"] = self.compute_add_watch(date)
+        # 2026-10-10: 「今日盘中 S」图表下线 ⇒ 删掉这里的 market_intraday。它每次 10s 轮询都要
+        # 解析整个 index_regime_{date}.jsonl（50~220KB / 约 4400 行）且**跑在主线程**，
+        # 是纯浪费。跨日 S 由图表的 load_market_score 单独提供。
+        out["add_watch"] = self.compute_add_watch(date, block=False)   # 10s 轮询：绝不阻塞主线程
         return _clean(out)
 
     # ---------- 建仓/加仓信号增量轮询 ----------
@@ -6351,7 +7057,16 @@ class Api:
         except Exception as e:
             err = str(e)[:200]
             print(f"⚠️ 盘后重跑建仓扫描失败: {err}")
-        # 2) 聚合新 trace（含技术标签）+ 重算加仓
+        # 2) 历史日：预算「30min 判定」列（读磁盘 30min 缓存截到该日，零网络）写入缓存，
+        #    使刷新后的建仓表带出该列；今日走实时轻量缓存路径（_agg_position_builder），不在此算。
+        if date != datetime.now().strftime("%Y-%m-%d"):
+            try:
+                for _r in (self._agg_position_builder(date).get("rows") or []):
+                    if _r.get("code"):
+                        self._pb_m30_hist_verdict(_r["code"], date, compute=True)
+            except Exception:
+                pass
+        # 3) 聚合新 trace（含技术标签）+ 重算加仓
         pb = self.refresh_pb(date)
         aw = self.compute_add_watch(date)
         out = {"position_builder": pb, "add_watch": aw}
@@ -6537,8 +7252,11 @@ class Api:
 
         # 建仓表「30min 判定」列（2026-10-09）：与体检表同口径，主线程**只读轻量缓存、零计算**；
         # 未热 → 该行显示「计算中」，同时后台预热整池（每 30min 时段一次，~0.9s）。
+        # 历史日（2026-10-10）：读「扫描该日」时预存的历史判定（`_PB_M30_HIST`）；**不在浏览历史时现算**
+        # （load_day 会频繁切日，现算会拖慢；历史日判定由 recompute_pb 预算好）。
         _pb_m30_pending = False
-        if date == datetime.now().strftime("%Y-%m-%d"):
+        _is_today = (date == datetime.now().strftime("%Y-%m-%d"))
+        if _is_today:
             _codes = [r.get("code") for r in rows if r.get("code")]
             for r in rows:
                 if not r.get("code"):
@@ -6549,6 +7267,13 @@ class Api:
                     _pb_m30_pending = True
             if _pb_m30_pending and _codes:
                 self._kick_pb_m30_warm(_codes)
+        else:
+            for r in rows:
+                if not r.get("code"):
+                    continue
+                _v = self._pb_m30_hist_verdict(r["code"], date, compute=False)
+                if _v:
+                    r["m30_verdict"] = _v
 
         _out = {
             "has_data": True,
@@ -6730,44 +7455,16 @@ def _start_gui_freeze_watchdog(threshold_s=12.0):
     _th.Thread(target=_loop, name="gui-freeze-watchdog", daemon=True).start()
 
 
-def start_hunter_autoscheduler(api):
-    """启动「猎手定时自动运行」守护线程（2026-09-21 owner 需求）。
-
-    开盘后按 HUNTER_AUTORUN_SLOTS（10:30/11:30/13:30/14:30）各跑一次「今日数据」；
-    交易日按 weekday<5 近似（仓库既有口径，节假日空跑无害）。循环 20s 一跳，
-    保证同一分钟内必中时点。定时运行走 auto=True → 建仓推送按板块当日去重。
-
-    仅在 t_gui.py 的 __main__ 显式调用：测试/其他进程构造 Api() 不会起线程。
-    """
-    if _HUNTER_AUTORUN_STATE.get("started"):
-        return
-    _HUNTER_AUTORUN_STATE["started"] = True
-
-    def _loop():
-        while True:
-            try:
-                now = datetime.now()
-                today = now.strftime("%Y-%m-%d")
-                st = _HUNTER_AUTORUN_STATE
-                if st.get("date") != today:       # 跨日重置已跑时点
-                    st["date"] = today
-                    st["done"] = set()
-                if now.weekday() < 5:
-                    hhmm = now.strftime("%H:%M")
-                    if hhmm in HUNTER_AUTORUN_SLOTS and hhmm not in st["done"]:
-                        st["done"].add(hhmm)
-                        print(f"[猎手自动运行] {hhmm} 触发（{today}）")
-                        api.run_hunter(today, auto=True)
-            except Exception as e:
-                print(f"[猎手自动运行] 异常（已忽略）: {str(e)[:150]}")
-            _time_mod.sleep(20)
-
-    _th.Thread(target=_loop, daemon=True).start()
-    print(f"[猎手自动运行] 已启动：{' / '.join(HUNTER_AUTORUN_SLOTS)}（仅工作日，跳午休）")
-
-
 if __name__ == "__main__":
     import webview
+
+    # GIL 切换间隔（2026-10-10）：默认 5ms。启动时 3 个预热线程与 pywebview 主线程抢 GIL，
+    # 主线程的 js_api 调用被拖成数秒（实测 kpi_trend 读 10 个小 JSON 从 0.01s → 9.4s）。
+    # 调到 1ms ⇒ 主线程更频繁拿到 GIL，实测同序列 39s → 12s。代价是轻微上下文切换开销。
+    try:
+        sys.setswitchinterval(0.001)
+    except Exception:
+        pass
 
     # V8 预热(2026-09-08): akshare 的 py_mini_racer(V8) 首次初始化必须在主线程，见 core/v8guard.py
     try:
@@ -6777,7 +7474,18 @@ if __name__ == "__main__":
         pass
 
     api = Api()
-    start_hunter_autoscheduler(api)   # 开盘后每小时自动跑「今日数据」
+    # 冷启动 import 预热（2026-10-10）：首个 load_day 会懒加载 config/position_builder/timing_gate/
+    # pandas/akshare（合计 ~5s，会冻主线程）。提前在后台线程 import，摊到窗口创建那几秒里。
+    def _prewarm_imports():
+        for _m in ("config", "core.position_builder", "core.timing_gate", "core.chart_cache",
+                   "core.market_data", "analysis.indicators", "analysis.m30_features",
+                   "analysis.divergence", "analysis.trend30.adapter"):
+            try:
+                __import__(_m)
+            except Exception:
+                pass
+    _th.Thread(target=_prewarm_imports, name="import-prewarm", daemon=True).start()
+    # 2026-10-10: 后端「猎手定时自动运行」已停（owner 需求6，扫描一律按钮触发）。
     _start_gui_freeze_watchdog()      # 卡死看门狗：心跳停 >12s → 落线程栈到 t_io/logs/gui_freeze.log
     start_chart_prefetch_scheduler(api)   # 盘后 15:10 预下载 K线缓存（小池 payload+分钟、全池日线）
     start_ob_m30_refresher(api)           # 持仓体检 30min 快照：跨时段后台刷新（趋势/背离/顶部特征）

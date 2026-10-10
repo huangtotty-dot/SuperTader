@@ -24,6 +24,22 @@ def _parse_token(text: str):
     return m.group(1) if m else None
 
 
+def _run(cmd):
+    """跑 wmic / powershell 并**按 Windows OEM 代码页解码**。
+
+    不能用 `text=True`：它按 locale 解码，而 `python -X utf8`（或 PYTHONUTF8=1）会把
+    locale 变成 utf-8，此时中文 Windows 上 wmic/powershell 吐的 GBK 字节解不开 ⇒
+    subprocess 读取线程成批抛 UnicodeDecodeError（实测启动一次 60 条），token 也随之丢失。
+    显式指定 'oem' 与解释器是否开 UTF-8 模式无关，两种启动方式结果一致。
+    """
+    r = subprocess.run(cmd, capture_output=True, timeout=10)
+    try:
+        txt = r.stdout.decode("oem", "replace")
+    except LookupError:                          # 非 Windows / 无 oem 别名
+        txt = r.stdout.decode("utf-8", "replace")
+    return r.returncode, txt
+
+
 def _terminal_token():
     for proc in _TERM_PROCS:
         t = _token_from_proc(proc)
@@ -47,22 +63,20 @@ def _token_from_proc(proc: str):
     except ImportError:
         pass
     try:
-        out = subprocess.run(
-            ["wmic", "process", "where", f"name='{proc}'", "get", "commandline", "/format:list"],
-            capture_output=True, text=True, timeout=10)
-        if out.returncode == 0:
-            t = _parse_token(out.stdout)
+        rc, txt = _run(["wmic", "process", "where", f"name='{proc}'",
+                        "get", "commandline", "/format:list"])
+        if rc == 0:
+            t = _parse_token(txt)
             if t:
                 return t
     except Exception:
         pass
     try:
-        out = subprocess.run(
-            ["powershell", "-NoProfile", "-Command",
-             f"Get-CimInstance Win32_Process -Filter \"name='{proc}'\" | Select-Object -ExpandProperty CommandLine"],
-            capture_output=True, text=True, timeout=10)
-        if out.returncode == 0:
-            t = _parse_token(out.stdout)
+        rc, txt = _run(["powershell", "-NoProfile", "-Command",
+                        f"Get-CimInstance Win32_Process -Filter \"name='{proc}'\" "
+                        f"| Select-Object -ExpandProperty CommandLine"])
+        if rc == 0:
+            t = _parse_token(txt)
             if t:
                 return t
     except Exception:

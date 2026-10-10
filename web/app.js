@@ -66,6 +66,12 @@ function clsOf(v, pos = "up", neg = "down") {
   if (isNaN(n) || n === 0) return "neutral";
   return n > 0 ? pos : neg;
 }
+// A股配色：盈利红 / 亏损绿（与 .up/.down 一致）
+function pnlColor(v) {
+  const n = Number(v);
+  if (v === null || v === undefined || isNaN(n) || n === 0) return "#8b949e";
+  return n > 0 ? "#e8531f" : "#229652";
+}
 function dayTypeBadge(t) {
   if (!t) return "";
   const map = { bull_day: "bull", bear_day: "bear", chop_day: "chop", reversal_day: "reversal" };
@@ -140,12 +146,25 @@ function scanAgeSec(scanTime) {
 }
 
 /* ================= 数据加载 ================= */
-let state = { date: null, payload: null, trend: [], accountsDetail: {} };
+let state = { date: null, payload: null, trend: [], accountsDetail: {},
+              tradeHistory: null, accountList: [] };   // accountList: 历史成交为源的账户列表
 let userPinnedDate = false;   // 用户手动选了历史日期时置 true，防止自动切回今天覆盖用户选择
 
 async function apiCall(name, ...args) {
   if (!window.pywebview || !window.pywebview.api) {
     throw new Error("未运行在 pywebview 环境（请用 python t_gui.py 启动）");
+  }
+  // pywebview 的 `window.pywebview.api` 先建成**空对象**（api.js），稍后由 finish.js 挂上方法。
+  // 若调用落在该窗口内 ⇒ 报 "window.pywebview.api[name] is not a function"（桥接就绪竞态）。
+  // 此处等到方法真正可调用再发起（最多 4s），避免首帧误报「无法连接后端」。
+  if (typeof window.pywebview.api[name] !== "function") {
+    const _deadline = Date.now() + 4000;
+    while (typeof (window.pywebview.api || {})[name] !== "function" && Date.now() < _deadline) {
+      await new Promise(r => setTimeout(r, 100));
+    }
+    if (typeof window.pywebview.api[name] !== "function") {
+      throw new Error(`后端方法 ${name} 不可用（pywebview 桥接未就绪，或后端进程未重启）`);
+    }
   }
   // 2026-10-07: 慢调用留痕——js_api 全在主线程串行，任何 >800ms 的调用都会冻界面。
   // 计时后 fire-and-forget 上报后端写 t_io/logs/gui_slow_calls.log（不阻塞、失败静默）。
@@ -175,22 +194,19 @@ async function loadAndRender(date, silent) {
     // 账户详细信息（统一源头）
     state.accountsDetail = (payload.accounts_detail) || {};
     renderAll(payload);
+    // 加仓观察冷启动补齐：后端首帧不阻塞算（联网慢），空则短轮询补齐
+    if (_awHasData(payload.add_watch)) { if (_awRetryTimer) { clearTimeout(_awRetryTimer); _awRetryTimer = null; } }
+    else loadAddWatch(payload.date || date, 0);
 
-    // K1 KPI（manual 做T 已于 2026-09-14 下线，不再有独立的做T盈亏源）
-    renderKPI(payload.kpi, {});
-    // 行情条 + 大盘趋势 + 成本历史（静态，一次拉取）
+    // K1 KPI（manual 做T 已于 2026-09-14 下线）；2026-10-10 KPI 区块整体删除，不再渲染
+    // 行情条 + 大盘趋势（静态，一次拉取）
     // 持仓日线体检（超买/顶背离）
     loadOBAnalysis();
     apiCall("load_quotes").then(q => updateSidebarSummary((q && q.quotes) || [])).catch(() => {});
     apiCall("load_position_manager").then(pm => renderPositionManager(pm || {})).catch(() => {});
-    apiCall("load_market_score", date).then(ms => renderMarket(ms || {})).catch(() => {});
-    apiCall("load_cost_history").then(ch => { state.costHistory = ch || {}; renderCost(ch || {}); }).catch(() => {});
-
-    // K4 跨日趋势
-    apiCall("kpi_trend", 10).then(pts => {
-      state.trend = pts || [];
-      renderK4Trend(pts || []);
-    }).catch(() => {});
+    apiCall("load_market_score").then(ms => renderMarket(ms || {})).catch(() => {});
+    loadAutoPnl();
+    refreshAccountLabels();   // 全站账户列表（历史成交为源）：一次拉取，导入后刷新
 
     // 今日则进入实时模式
     const isToday = date === todayStr();
@@ -219,6 +235,13 @@ function todayStr() {
   const d = new Date();
   const p = n => String(n).padStart(2, "0");
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
+
+// 桥接就绪判定（2026-10-10）：pywebview 先建 `api: {}` 空对象再挂方法，
+// 仅判 `window.pywebview.api` 真值会在「空对象窗口」内误判为已就绪 ⇒ 改判**具体方法**是否已挂上。
+function _apiReady() {
+  return !!(window.pywebview && window.pywebview.api
+    && typeof window.pywebview.api.available_dates === "function");
 }
 
 // fix P1-6: 实时轮询失败计数，连续失败 ≥3 次在状态栏红色告警，恢复后自动消除
@@ -277,13 +300,13 @@ async function refreshLive(reset) {
         }
       }
     }).catch(() => {});
-    // 今日盘中 S 曲线刷新
-    if (live.market_intraday && live.market_intraday.length) {
-      apiCall("load_market_score", date).then(ms => renderMarket(ms || {})).catch(() => {});
-    }
+    // 2026-10-10: 「今日盘中 S」已下线，连带的 10s 重拉一并删除（跨日 S 是日频，改日期时拉一次即可）
 
     // 加仓条件全满足检测（与飞书推送无关，纯 GUI 报警）
-    const aw = live.add_watch || (state.payload && state.payload.add_watch) || {};
+    // 2026-10-10：后端 load_live 的 add_watch 首帧可能为空 {}（非阻塞算，见 load_add_watch），
+    // 空对象是真值 ⇒ 不能用 `||` 兜底，须显式判空后回退 payload。
+    const _awLive = live.add_watch || {};
+    const aw = _awHasData(_awLive) ? _awLive : ((state.payload && state.payload.add_watch) || {});
     // fix P0-4: 满分告警需 box_boost（突破加成），或真实 met==total 且 not_applicable 为空（排除盘中占位改写）
     const allMet = Object.entries(aw).filter(([code, v]) => {
       if (code === "_progress" || !v) return false;
@@ -331,10 +354,9 @@ async function refreshLive(reset) {
 
 /* ================= 各区块渲染 ================= */
 function renderAll(p, tradePnl) {
-  renderKPI(p.kpi, tradePnl);
-  renderSignalBar(p.sig_stat, p.name_map);
+  // 2026-10-10: KPI 日快照 / 各股信号数 / K4 胜率 区块已按 owner 需求删除。
+  // 2026-10-10: 「shadow 近阈 · 仓控与推送」整块按 owner 需求删除（renderShadow 已移除）。
   // 2026-08-23: 持仓对照/盘中结算/系统看板已从"每日复盘"tab移除
-  renderShadow(p.shadow, p.qty_freeze);
   renderPB(p.position_builder);
   renderAddWatch(p.add_watch);
   // P4-3: 概览页自动盘持仓卡片 + 全页 KILL_SWITCH 横幅
@@ -360,6 +382,14 @@ function echClear(id) {
   const el = document.getElementById(id);
   if (el) el.innerHTML = '<div class="empty">无数据</div>';
   if (echInstances[id]) { echInstances[id].dispose(); delete echInstances[id]; }
+}
+// 单张图渲染失败不能连累同页其它图。
+// 2026-10-10 事故：renderTradeHistory 里一个变量声明晚于使用（TDZ ReferenceError），
+// 函数在中间就抛了，后面三张图**静默留白**、界面上没有任何提示，排查花了一轮来回。
+// 用 echGuard 把每张图各自包起来：出错在控制台点名是哪张，其余照画。
+function echGuard(name, fn) {
+  try { fn(); }
+  catch (e) { console.error(`[图表] ${name} 渲染失败：`, e); }
 }
 // 渲染到概览(ech-sm)和图表tab(Full)两个容器
 function tabEch(baseId, opt) {
@@ -396,8 +426,8 @@ const ECH_BASE = {
 
 /* ---- 大盘趋势打分 ---- */
 function renderMarket(ms) {
-  if (!ms || ((!ms.history || !ms.history.length) && (!ms.intraday || !ms.intraday.length))) {
-    tabClear("echMarket"); echClear("echIntraday");
+  if (!ms || !ms.history || !ms.history.length) {
+    tabClear("echMarket");
     return;
   }
   // 跨日 S
@@ -422,114 +452,439 @@ function renderMarket(ms) {
       ],
     });
   } else tabClear("echMarket");
+}
 
-  // 今日盘中 S
-  const iday = ms.intraday || [];
-  if (iday.length >= 2) {
-    echRender("echIntraday", {
-      ...ECH_BASE,
-      xAxis: { ...ECH_BASE.xAxis, type: "category", data: iday.map(p => (p.time || "").slice(0, 5)) },
-      yAxis: { ...ECH_BASE.yAxis },
-      tooltip: { ...ECH_BASE.tooltip, trigger: "axis", formatter: p => {
-        const i = p[0].dataIndex, d = iday[i];
-        return `${d.ts}<br/>S=${fmt(d.score, 1)}<br/>${d.regime_name || ""}`;
-      }},
-      series: [{ name: "盘中S", type: "line", data: iday.map(p => p.score), smooth: true,
-        symbol: "circle", symbolSize: 4, lineStyle: { color: "#ff8c5a", width: 2 },
-        areaStyle: { color: "rgba(255,140,90,.15)" } }],
-    });
-  } else {
-    echClear("echIntraday");
+/* ---- 历史成交盈亏（2026-10-10 需求3）：券商「历史成交」→ 逐股已实现盈亏 · 做T收益 ----
+   全站账户列表的唯一来源就是这份台账；改完要连带刷新账户相关的各面板。 */
+async function loadTradeHistory() {
+  try {
+    const d = await apiCall("load_trade_history");
+    renderTradeHistory(d || {});
+  } catch (e) { /* 桥接未就绪时忽略 */ }
+}
+
+async function importTradeHistory() {
+  const meta = document.getElementById("thMeta");
+  if (meta) meta.textContent = "解析中…（多份大文件约需数秒）";
+  try {
+    const d = await apiCall("import_trade_history");
+    if (!d || !d.imported) {
+      if (d && d.cancelled) { loadTradeHistory(); return; }
+      if (meta) meta.innerHTML = `<span class="down">导入失败：${esc((d && d.error) || "未知错误")}</span>`;
+      return;
+    }
+    renderTradeHistory(d);
+    refreshAccountLabels();   // 账户名以新台账为准，持仓表等要跟着更新
+  } catch (e) {
+    if (meta) meta.innerHTML = `<span class="down">导入失败：${esc(e.message)}</span>`;
   }
 }
 
-/* ---- 持仓收益趋势 ---- */
-function renderCost(ch) {
-  const dates = (ch && ch.dates) || [];
-  const stocks = (ch && ch.stocks) || {};
-  const codes = Object.keys(stocks);
-  const palette = ["#ff8c5a","#f85149","#3fb950","#d29922","#bc8cff","#39c5cf","#ff7b72","#7ee787"];
-  if (!codes.length) { tabClear("echCost"); document.getElementById("costMatrix").innerHTML = ""; return; }
+// 全站账户列表（历史成交为源）——启动拉一次，导入后刷新
+async function refreshAccountLabels() {
+  try {
+    const d = await apiCall("load_accounts");
+    state.accountList = (d && d.accounts) || [];
+  } catch (e) { /* 忽略 */ }
+}
 
-  // 收益趋势图：每股 P&L 金额（元）
-  if (dates.length >= 2) {
-    const series = codes.map((code, i) => {
-      const pts = stocks[code].points || [];
-      const data = dates.map(d => {
-        const p = pts.find(x => x.date === d);
-        return p ? p.pnl_amt : null;
-      });
-      // 只画有点的股票
-      if (data.every(v => v == null)) return null;
-      return {
-        name: (stocks[code].name || code), type: "line", symbol: "circle",
-        symbolSize: 4, lineStyle: { color: palette[i % palette.length], width: 2 },
-        itemStyle: { color: palette[i % palette.length] },
-        data,
-      };
-    }).filter(Boolean);
-
-    tabEch("echCost", {
-      ...ECH_BASE,
-      grid: { left: 56, right: 20, top: 40, bottom: 34 },
-      legend: { type: "scroll", textStyle: { color: "#8b949e", fontSize: 10 }, top: 4 },
-      xAxis: { ...ECH_BASE.xAxis, type: "category", data: dates.map(d => d.slice(5)) },
-      yAxis: { ...ECH_BASE.yAxis, name: "元", nameTextStyle: { color: "#8b949e", fontSize: 10 },
-        axisLabel: { color: "#8b949e", fontSize: 10, formatter: v => (v >= 0 ? "+" : "") + fmt(v, 0) } },
-      tooltip: { ...ECH_BASE.tooltip, trigger: "axis", formatter: params => {
-        const d = dates[params[0].dataIndex];
-        let html = `<b>${d}</b>`;
-        params.forEach(p => {
-          const code = codes[p.seriesIndex] || "";
-          const pt = (stocks[code] || {}).points.find(x => x.date === d);
-          if (!pt) { html += `<br/>${p.marker}${p.seriesName}: —`; return; }
-          const pnl = pt.pnl_amt, pct = pt.pnl_pct;
-          const cls = pnl == null ? "" : (pnl >= 0 ? "color:#f85149" : "color:#3fb950");
-          html += `<br/>${p.marker}${p.seriesName}: <span style="${cls}">${pnl != null ? (pnl >= 0 ? "+" : "") + fmt(pnl, 0) : "—"}</span>
-            <span style="color:#8b949e;font-size:10px">${pct != null ? (pct >= 0 ? "+" : "") + fmt(pct, 1) + "%" : "—"} · 本${fmt(pt.cost, 3)} · ${pt.qty}股${pt.src === "人工校准" ? " ✎校准" : ""}</span>`;
-        });
-        return html;
-      }},
-      series,
+/* 按资金账号切一份台账视图：stocks 直接筛；monthly/t_monthly 筛完按月合并；
+   cum 是账户内累计值，跨账户同日相加即为合并账户的累计。 */
+function _jgdSlice(d, acc) {
+  const keep = r => !acc || (r.account || "") === acc;
+  const byMonth = rows => {
+    const m = {};
+    rows.filter(keep).forEach(r => {
+      const o = m[r.month] || (m[r.month] = {
+        month: r.month, realized: 0, fees: 0, n_trades: 0, n_pairs: 0, n_days: 0 });
+      o.realized += r.realized || 0;
+      o.fees += r.fees || 0;
+      o.n_trades += r.n_trades || 0;
+      o.n_pairs += r.n_pairs || 0;
+      o.n_days += r.n_days || 0;
+      o.total_pnl = (o.total_pnl || 0) + (r.total_pnl || 0);
     });
-  } else tabClear("echCost");
+    return Object.keys(m).sort().map(k => m[k]);
+  };
+  // ⚠️ d.cum 的每一行**已经是该账户的累计值**（后端按账户各自累计），这里只能筛选+排序，
+  // 绝不能再累加一遍——否则单账户视图会二次累计（380→622 会画成 380→1002）。
+  const cum = (d.cum || []).filter(keep)
+    .slice().sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+  const stocks = (d.stocks || []).filter(keep);
+  return {
+    stocks,
+    monthly: byMonth(d.monthly || []),
+    tMonthly: byMonth(d.t_monthly || []),
+    cum,
+    totalRealized: stocks.reduce((a, s) => a + (s.realized || 0), 0),
+    totalUnreal: stocks.reduce((a, s) => a + (s.unrealized || 0), 0),
+    totalPnl: stocks.reduce((a, s) => a + (s.total_pnl || 0), 0),
+    totalFees: stocks.reduce((a, s) => a + (s.fees || 0), 0),
+    totalT: (d.t_stocks || []).filter(keep).reduce((a, s) => a + (s.pnl || 0), 0),
+    totalTNet: (d.t_stocks || []).filter(keep).reduce((a, s) => a + (s.pnl || 0), 0)
+               - stocks.reduce((a, s) => a + (s.fees || 0), 0),
+    tByStock: (d.t_stocks || []).filter(keep),
+  };
+}
 
-  // 成本矩阵（保留）
-  const mtx = document.getElementById("costMatrix");
-  if (mtx && dates.length) {
-    const longPeriod = dates.length > 30;
-    const dateLabel = d => longPeriod ? (d.slice(0, 7).replace("-", "月") + "月") : d.slice(5);
-    const head = `<tr><th>股票</th>${dates.map(d => `<th class="num">${esc(dateLabel(d))}</th>`).join("")}</tr>`;
-    const rows = codes.map(code => {
-      const st = stocks[code];
-      return `<tr><td>${esc(st.name || code)} <span class="mono cell-dim">${esc(code)}</span></td>` +
-        dates.map(d => {
-          const p = st.points.find(x => x.date === d);
-          if (!p) return `<td class="num cell-dim">—</td>`;
-          const pnl = p.pnl_amt;
-          const pnlCls = pnl == null ? "" : (pnl >= 0 ? "up" : "down");
-          return `<td class="num"><span class="${pnlCls}">${pnl != null ? (pnl >= 0 ? "+" : "") + fmt(pnl, 0) : "—"}</span></td>`;
-        }).join("") + `</tr>`;
+function renderTradeHistory(d) {
+  const meta = document.getElementById("thMeta");
+  const body = document.getElementById("thBody");
+  if (!meta && !body) return;
+  const sel = document.getElementById("thAccount");
+  if (!d || !d.imported) {
+    if (meta) meta.textContent = "尚未导入历史成交 —— 点右上「📥 导入历史成交」选择券商导出的 xls/xlsx（可多选，多期/多账户会自动合并去重）";
+    ["echThMonth", "echThFee", "echThT", "echThTNet", "echThCum", "echThCumPct"].forEach(echClear);
+    ["echThFeeTotal", "echThTTotal", "echThTNetTotal", "echThCumPctTotal"].forEach(id => {
+      const el = document.getElementById(id); if (el) el.textContent = "";
+    });
+    if (sel) { sel.style.display = "none"; sel.innerHTML = ""; }
+    const bb = document.getElementById("thBars"); if (bb) bb.innerHTML = "";
+    const ab = document.getElementById("thAccounts");
+    if (ab) ab.innerHTML = "";
+    if (body) body.innerHTML = "";
+    return;
+  }
+  state.tradeHistory = d;
+  // 账户下拉：只有多账户时才出现（单账户/PDF 交割单没有 account 字段）
+  const accs = (d.accounts || []).map(a => a.account || "").filter(Boolean);
+  if (sel) {
+    if (accs.length > 1) {
+      if (sel.dataset.built !== accs.join("|")) {
+        sel.innerHTML = `<option value="">全部账户（${accs.length}）</option>`
+          + accs.map(a => `<option value="${esc(a)}">${esc(a)}</option>`).join("");
+        sel.dataset.built = accs.join("|");
+      }
+      sel.style.display = "";
+    } else {
+      sel.style.display = "none";
+    }
+  }
+  const acc = sel && sel.style.display !== "none" ? sel.value : "";
+  const v = _jgdSlice(d, acc);
+  const r = d.range || {};
+  const f = (x) => (x >= 0 ? "+" : "") + fmt(x, 0);
+  if (meta) {
+    const nsrc = (d.sources || []).length;
+    meta.innerHTML = `来源 <span class="mono">${esc(d.source || "—")}</span>`
+      + (nsrc > 1 ? ` <span class="badge" style="background:#2a4a5a;color:#8ad4ff">${nsrc} 份合并</span>` : "")
+      + (d.dup_dropped ? ` <span class="cell-dim">（重叠去重 ${d.dup_dropped} 笔）</span>` : "")
+      + (acc ? ` · 账户 <b>${esc(acc)}</b>` : "")
+      + ` · ${esc(r.start || "")} ~ ${esc(r.end || "")} · ${r.n_trades || 0} 笔 · `
+      + `已实现 <span class="${clsOf(v.totalRealized)}"><b>${f(v.totalRealized)}</b></span> · `
+      + `浮动 <span class="${clsOf(v.totalUnreal)}">${f(v.totalUnreal)}</span> · `
+      + `合计 <b class="${clsOf(v.totalPnl)}">${f(v.totalPnl)}</b> · `
+      + `做T收益 <span class="${clsOf(v.totalT)}"><b>${f(v.totalT)}</b></span> · `
+      + `做T净额(扣费) <b class="${clsOf(v.totalTNet)}">${f(v.totalTNet)}</b>`
+      + (v.totalFees ? ` · 交易费用 <b style="color:#d29922">${fmt(v.totalFees, 0)}</b>` : "")
+      + (acc ? "" : (d.total_misc ? ` · 其他收支 <span class="${clsOf(d.total_misc)}">${f(d.total_misc)}</span>` : ""))
+      + (d.imported_at ? ` · 导入于 ${esc(d.imported_at)}` : "")
+      + (d.data_through
+          ? `<br>已记忆到 <b>${esc(d.data_through)}</b> —— 下次请导入该日**之后**的历史成交`
+            + (d.prev_data_through && d.advanced === false
+                ? ` <span class="badge" style="background:#5a3a2a;color:#ffb454">本次未含新交易日（上次已到 ${esc(d.prev_data_through)}）</span>`
+                : (d.advanced && d.prev_data_through
+                    ? ` <span class="badge" style="background:#1e3a2a;color:#3fb950">已新增至 ${esc(d.data_through)}</span>`
+                    : ""))
+          : "");
+  }
+  // 0) 各账户汇总（含盈亏百分比）——始终展示全部账户，选中的高亮
+  const accBox = document.getElementById("thAccounts");
+  if (accBox) {
+    const accts = d.accounts || [];
+    if (!accts.length) {
+      accBox.innerHTML = "";
+    } else {
+      const pctOf = a => (a.pnl_pct >= 0 ? "+" : "") + fmt(a.pnl_pct, 2) + "%";
+      const rows = accts.map(a => {
+        const on = acc && a.account === acc;
+        return `<tr${on ? ' style="background:rgba(138,212,255,.08)"' : ""}>
+          <td>${esc(a.account || "（未标注账户）")}</td>
+          <td class="num ${clsOf(a.realized)}">${f(a.realized)}</td>
+          <td class="num ${clsOf(a.unrealized || 0)}">${a.unrealized ? f(a.unrealized) : "—"}</td>
+          <td class="num ${clsOf(a.total_pnl || 0)}"><b>${f(a.total_pnl || 0)}</b> <span class="cell-dim" style="font-size:10px">(${pctOf({pnl_pct: a.total_pct})})</span></td>
+          <td class="num ${clsOf(a.t_pnl || 0)}">${a.t_pnl ? f(a.t_pnl) : "—"}</td>
+          <td class="num cell-dim">${fmt(a.fees || 0, 0)}</td>
+          <td class="num cell-dim">${fmt(a.buy_amt || 0, 0)}</td>
+          <td class="num">${a.n_trades || 0}</td>
+          <td class="num">${a.n_stocks || 0}</td>
+          <td class="num cell-dim">${a.open_qty ? fmt(a.open_qty, 0) + "（成本 " + fmt(a.open_cost || 0, 0) + "）" : "—"}</td>
+        </tr>`;
+      }).join("");
+      accBox.innerHTML = `<div class="card-title">各账户汇总（口径同券商：合计＝已实现＋浮动；收益率＝合计 ÷ 累计买入成本）</div>
+        <table><thead><tr><th>账户</th><th class="num">已实现</th><th class="num">浮动</th>
+        <th class="num">合计（收益率）</th>
+        <th class="num">做T收益</th><th class="num">交易费用</th><th class="num">累计买入成本</th>
+        <th class="num">笔数</th><th class="num">股票数</th><th class="num">在场股数</th>
+        </tr></thead><tbody>${rows}</tbody></table>`;
+    }
+  }
+  const stocks = v.stocks;
+  // 1) 逐股盈亏条形图 —— **每个账户一张**（不再把多账户并成一张）
+  //    口径同券商：柱子画「合计=已实现+浮动」，tooltip 拆开给。同花顺的「盈亏」也是这个口径。
+  const bars = document.getElementById("thBars");
+  if (bars) {
+    const acctsAll = (d.accounts || []);
+    const groups = acctsAll.length > 1
+      ? acctsAll.map(a => ({ key: a.account || "", label: a.account || "（未标注账户）", rows: a }))
+      : [{ key: "", label: "", rows: acctsAll[0] || {} }];
+    // 已选的账户只影响下方月度/做T等图；逐股图始终**每账户一张**，天然分开
+    bars.innerHTML = groups.map((g, gi) => {
+      const sub = stocks.filter(x => (x.account || "") === g.key);
+      if (!sub.length) return "";
+      const head = g.label
+        ? `<div class="card-title">${esc(g.label)} · 逐股盈亏（合计＝已实现＋浮动）
+             <span class="cell-dim" style="font-weight:normal">已实现 ${f(g.rows.realized || 0)} · 浮动 ${f(g.rows.unrealized || 0)} · 合计 <b>${f(g.rows.total_pnl || 0)}</b> (${(g.rows.total_pct || 0).toFixed(2)}%) · 做T ${f(g.rows.t_pnl || 0)} · 在场 ${fmt(g.rows.open_qty || 0, 0)} 股</span></div>`
+        : `<div class="card-title">逐股盈亏（合计＝已实现＋浮动）</div>`;
+      const h = Math.max(240, 22 * sub.length + 40);
+      return `<div class="card" style="margin-bottom:12px">${head}<div id="echThBar_${gi}" class="echart" style="height:${h}px"></div></div>`;
     }).join("");
-    const scrollWrap = dates.length > 30 ? 'style="overflow-x:auto;max-width:100%"' : "";
-    mtx.innerHTML = `
-      <div class="card-title" style="margin-top:10px">收益矩阵（浮盈/浮亏=昨收价×股数−成本×股数）<button class="mini-btn" id="calibBtn2">✎ 校准成本</button></div>
-      <div class="cell-dim" style="font-size:10px;margin-bottom:4px">数据自 ${esc(dates[0])} 起（共${dates.length}天），持续累积中 · >30天切换月视图</div>
-      <div ${scrollWrap}><table><thead>${head}</thead><tbody>${rows}</tbody></table></div>`;
-    const cb2 = document.getElementById("calibBtn2");
-    if (cb2) cb2.addEventListener("click", () => {
-      if (!state.costHistory) {
-        apiCall("load_cost_history").then(ch2 => { state.costHistory = ch2 || {}; openCalibModal(ch2 || {}); }).catch(() => {});
-      } else openCalibModal(state.costHistory);
-    });
+    groups.forEach((g, gi) => echGuard(`${g.label || "逐股"} 条形图`, () => {
+      const sub = stocks.filter(x => (x.account || "") === g.key);
+      if (!sub.length) return;
+      const asc = sub.slice().sort((a, b) => a.total_pnl - b.total_pnl);
+      echRender(`echThBar_${gi}`, {
+        ...ECH_BASE,
+        grid: { left: 96, right: 74, top: 10, bottom: 26 },
+        tooltip: { ...ECH_BASE.tooltip, trigger: "axis", axisPointer: { type: "shadow" },
+          formatter: p => {
+            const s = asc[p[0].dataIndex];
+            return `<b>${esc(s.name)}</b> <span style="color:#8b949e">${esc(s.code)}</span>`
+              + `<br>合计: <b style="color:${pnlColor(s.total_pnl)}">${f(s.total_pnl)}</b>`
+              + `<br><span style="color:#8b949e">已实现 ${f(s.realized)}`
+              + (s.open_qty ? ` · 浮动 ${f(s.unrealized)}（${fmt(s.open_qty, 0)} 股 @${fmt(s.last_price, 3)}）` : "（已清仓）")
+              + `</span><br>买入 ${fmt(s.buy_amt, 0)} / 卖出 ${fmt(s.sell_amt, 0)} · 费 ${fmt(s.fees, 0)}`
+              + `<br>成交 ${s.n_trades} 笔 · ${esc(s.first)} ~ ${esc(s.last)}`;
+          } },
+        xAxis: { ...ECH_BASE.xAxis, type: "value",
+          axisLabel: { color: "#8b949e", fontSize: 10, formatter: x => (x >= 0 ? "+" : "") + fmt(x, 0) } },
+        yAxis: { ...ECH_BASE.yAxis, type: "category", data: asc.map(s => s.name || s.code),
+          axisLabel: { color: "#8b949e", fontSize: 10 } },
+        series: [{ type: "bar", data: asc.map(s => ({ value: s.total_pnl,
+            itemStyle: { color: pnlColor(s.total_pnl) } })),
+          label: { show: true, position: "right", color: "#8b949e", fontSize: 10,
+            formatter: p => (p.value >= 0 ? "+" : "") + fmt(p.value, 0) } }],
+      });
+    }));
   }
 
-  // 输出：概览 tab 用 echCost 容器 + 图表 tab 用 echCostFull 容器
-  const c1 = document.getElementById("echCost");
-  const c2 = document.getElementById("echCostFull");
-  const html = `<div class="cost-grid">${cards}</div>`;
-  if (c1) c1.innerHTML = html;
-  if (c2) c2.innerHTML = html;
+  // 2) 累计已实现时间曲线
+  const cum = v.cum;
+  if (cum.length >= 2) {
+    echRender("echThCum", {
+      ...ECH_BASE,
+      tooltip: { ...ECH_BASE.tooltip, trigger: "axis",
+        formatter: p => `<b>${cum[p[0].dataIndex].date}</b><br>累计已实现: `
+          + `<b style="color:${pnlColor(cum[p[0].dataIndex].cum_realized)}">${f(cum[p[0].dataIndex].cum_realized)}</b>` },
+      xAxis: { ...ECH_BASE.xAxis, type: "category", data: cum.map(x => x.date.slice(5)) },
+      yAxis: { ...ECH_BASE.yAxis, axisLabel: { color: "#8b949e", fontSize: 10,
+        formatter: v => (v >= 0 ? "+" : "") + fmt(v, 0) } },
+      series: [{ type: "line", smooth: true, symbolSize: 4, data: cum.map(x => x.cum_realized),
+        lineStyle: { color: "#8ad4ff", width: 2 }, itemStyle: { color: "#8ad4ff" },
+        areaStyle: { color: "rgba(138,212,255,.12)" },
+        markLine: { silent: true, symbol: "none",
+          lineStyle: { color: "#8b949e", type: "dashed" }, data: [{ yAxis: 0 }] } }],
+    });
+  } else echClear("echThCum");
+
+  // 2b) 累计收益趋势 —— 两账户合计（选了单账户就画那个账户）
+  //     口径：收益率 = 累计已实现 ÷ 累计买入成本（与账户汇总同源）；同时叠一条累计盈亏(元)
+  echGuard("累计收益趋势", () => {
+    const curve = (acc ? v.cum : (d.cum_all || [])).filter(x => x.cum_total != null);
+    const cpTotal = document.getElementById("thCumPctTotal");
+    if (cpTotal) {
+      const last = curve[curve.length - 1];
+      cpTotal.textContent = last
+        ? `${acc ? "账户 " + esc(acc) : "两账户合计"} · 末值 ${((last.pct_total ?? last.pct) >= 0 ? "+" : "") + fmt(last.pct_total ?? last.pct, 2)}%`
+          + `（总盈亏 ${f(last.cum_total)} / 累计买入 ${fmt(last.cum_buy || 0, 0)}）`
+        : "";
+    }
+    if (curve.length >= 2) {
+      echRender("echThCumPct", {
+        ...ECH_BASE,
+        grid: { left: 56, right: 62, top: 34, bottom: 34 },
+        legend: { data: ["累计收益率(左)", "累计总盈亏(右)"], textStyle: { color: "#8b949e", fontSize: 11 }, top: 0 },
+        tooltip: { ...ECH_BASE.tooltip, trigger: "axis", formatter: p => {
+          const r = curve[p[0].dataIndex];
+          return `<b>${r.date}</b><br>累计收益: <b style="color:${pnlColor(r.pct_total ?? r.pct)}">`
+            + `${((r.pct_total ?? r.pct) >= 0 ? "+" : "") + fmt(r.pct_total ?? r.pct, 2)}%</b>`
+            + `<br>累计总盈亏: <b style="color:${pnlColor(r.cum_total)}">${f(r.cum_total)}</b>`
+            + `<br><span style="color:#8b949e">已实现 ${f(r.cum_realized)} · 累计买入 ${fmt(r.cum_buy || 0, 0)}</span>`;
+        } },
+        xAxis: { ...ECH_BASE.xAxis, type: "category", data: curve.map(x => x.date.slice(5)) },
+        yAxis: [
+          { ...ECH_BASE.yAxis, name: "%", nameTextStyle: { color: "#8b949e", fontSize: 10 },
+            axisLabel: { color: "#8b949e", fontSize: 10, formatter: v => (v >= 0 ? "+" : "") + fmt(v, 2) + "%" } },
+          { ...ECH_BASE.yAxis, name: "元", nameTextStyle: { color: "#8b949e", fontSize: 10 },
+            splitLine: { show: false },
+            axisLabel: { color: "#8b949e", fontSize: 10, formatter: v => (v >= 0 ? "+" : "") + fmt(v, 0) } },
+        ],
+        series: [
+          { name: "累计收益率(左)", type: "line", yAxisIndex: 0, smooth: true, symbolSize: 3,
+            data: curve.map(x => x.pct_total ?? x.pct), lineStyle: { color: "#8ad4ff", width: 2 }, itemStyle: { color: "#8ad4ff" },
+            markLine: { silent: true, symbol: "none", lineStyle: { color: "#8b949e", type: "dashed" },
+              data: [{ yAxis: 0 }] } },
+          { name: "累计盈亏(右)", type: "line", yAxisIndex: 1, smooth: true, symbol: "none",
+            data: curve.map(x => x.cum_total ?? x.cum_realized), lineStyle: { color: "rgba(210,153,34,.8)", width: 1, type: "dashed" },
+            itemStyle: { color: "#d29922" } },
+        ],
+      });
+    } else echClear("echThCumPct");
+  });
+
+  // 3) 月度盈亏 —— **含浮动**（总盈亏＝Σ发生金额＋月末持仓市值变动）
+  //    只看已实现会漏掉浮亏：实测 2026-09 已实现 +3,933，含浮动是 −17,709。
+  const mon = v.monthly;
+  const tmon = v.tMonthly;      // ⚠️ 必须在下面各图之前声明：const 有 TDZ，
+                                // 声明前引用会抛 ReferenceError 并把后面几张图整段吃掉
+  echGuard("月度盈亏", () => {
+    if (mon.length) {
+      echRender("echThMonth", {
+        ...ECH_BASE,
+        grid: { left: 62, right: 20, top: 34, bottom: 40 },
+        legend: { data: ["总盈亏(含浮动)", "已实现"], textStyle: { color: "#8b949e", fontSize: 11 }, top: 0 },
+        tooltip: { ...ECH_BASE.tooltip, trigger: "axis", axisPointer: { type: "shadow" },
+          formatter: p => { const m = mon[p[0].dataIndex];
+            return `<b>${m.month}</b><br>总盈亏: <b style="color:${pnlColor(m.total_pnl || 0)}">${f(m.total_pnl || 0)}</b>`
+              + `<br>已实现: <span style="color:${pnlColor(m.realized)}">${f(m.realized)}</span>`
+              + `<br><span style="color:#8b949e">费用 ${fmt(m.fees || 0, 0)} · 成交 ${m.n_trades} 笔</span>`; } },
+        xAxis: { ...ECH_BASE.xAxis, type: "category", data: mon.map(m => m.month),
+          axisLabel: { color: "#8b949e", fontSize: 9, rotate: 45 } },
+        yAxis: { ...ECH_BASE.yAxis, axisLabel: { color: "#8b949e", fontSize: 10,
+          formatter: v => (v >= 0 ? "+" : "") + fmt(v, 0) } },
+        series: [
+          { name: "总盈亏(含浮动)", type: "bar", barGap: "-20%",
+            data: mon.map(m => ({ value: m.total_pnl || 0,
+              itemStyle: { color: pnlColor(m.total_pnl || 0) } })),
+            markLine: { silent: true, symbol: "none", lineStyle: { color: "#8b949e", type: "dashed" },
+              data: [{ yAxis: 0 }] } },
+          { name: "已实现", type: "bar",
+            data: mon.map(m => ({ value: m.realized,
+              itemStyle: { color: pnlColor(m.realized), opacity: 0.45 } })) },
+        ],
+      });
+    } else echClear("echThMonth");
+  });
+
+  echGuard("月度做T净收益", () => {
+    // 3b) 月度做T**净**收益 = 当月做T价差 − 当月全部交易费用
+    const tnetTitle = document.getElementById("echThTNetTotal");
+    const tnetRows = tmon.map(m => ({ month: m.month, net: (m.realized || 0) - (m.fees || 0),
+                                      t: m.realized || 0, f: m.fees || 0, n: m.n_pairs || 0 }));
+    if (tnetTitle) {
+      const total = tnetRows.reduce((a, x) => a + x.net, 0);
+      tnetTitle.textContent = tnetRows.length
+        ? `合计 ${(total >= 0 ? "+" : "") + fmt(total, 0)} 元` + (total < 0 ? "（做T抵不过手续费）" : "")
+        : "";
+    }
+    if (tnetRows.length) {
+      echRender("echThTNet", {
+        ...ECH_BASE,
+        tooltip: { ...ECH_BASE.tooltip, trigger: "axis", axisPointer: { type: "shadow" },
+          formatter: p => { const x = tnetRows[p[0].dataIndex];
+            return `<b>${x.month}</b><br>做T净收益: <b style="color:${pnlColor(x.net)}">${f(x.net)}</b>`
+              + `<br><span style="color:#8b949e">做T价差 ${f(x.t)} − 费用 ${fmt(x.f, 0)}</span>`
+              + `<br>做T日 ${x.n} 个`; } },
+        xAxis: { ...ECH_BASE.xAxis, type: "category", data: tnetRows.map(m => m.month),
+          axisLabel: { color: "#8b949e", fontSize: 9, rotate: 45 } },
+        yAxis: { ...ECH_BASE.yAxis, axisLabel: { color: "#8b949e", fontSize: 10,
+          formatter: v => (v >= 0 ? "+" : "") + fmt(v, 0) } },
+        series: [{ type: "bar", data: tnetRows.map(m => ({ value: m.net,
+          itemStyle: { color: pnlColor(m.net) } })),
+          label: { show: true, position: "top", color: "#8b949e", fontSize: 9,
+            formatter: p => p.value ? fmt(p.value, 0) : "" },
+          markLine: { silent: true, symbol: "none", lineStyle: { color: "#8b949e", type: "dashed" },
+            data: [{ yAxis: 0 }] } }],
+      });
+    } else echClear("echThTNet");
+  });
+
+  echGuard("月度交易费用", () => {
+    // 4) 月度交易费用柱状图（印花税+佣金+过户费+结算费，全月全部成交口径）
+    const feeTitle = document.getElementById("echThFeeTotal");
+    const bd = d.fee_breakdown || {};
+    if (feeTitle) {
+      feeTitle.textContent = v.totalFees
+        ? `累计 ${fmt(v.totalFees, 0)} 元（印花税 ${fmt(bd.stamp || 0, 0)} / 佣金 ${fmt(bd.commission || 0, 0)} / 过户费 ${fmt(bd.transfer || 0, 0)}）`
+        : "";
+    }
+    if (mon.length && v.totalFees) {
+      echRender("echThFee", {
+        ...ECH_BASE,
+        tooltip: { ...ECH_BASE.tooltip, trigger: "axis", axisPointer: { type: "shadow" },
+          formatter: p => { const m = mon[p[0].dataIndex];
+            const per = m.n_trades ? (m.fees / m.n_trades) : 0;
+            return `<b>${m.month}</b><br>交易费用: <b style="color:#d29922">${fmt(m.fees || 0, 0)}</b> 元`
+              + `<br>成交 ${m.n_trades} 笔 · 单笔均 ${fmt(per, 2)} 元`; } },
+        xAxis: { ...ECH_BASE.xAxis, type: "category", data: mon.map(m => m.month),
+          axisLabel: { color: "#8b949e", fontSize: 9, rotate: 45 } },
+        yAxis: { ...ECH_BASE.yAxis, axisLabel: { color: "#8b949e", fontSize: 10,
+          formatter: v => fmt(v, 0) } },
+        series: [{ type: "bar", data: mon.map(m => ({ value: m.fees || 0,
+          itemStyle: { color: "#d29922" } })),
+          label: { show: true, position: "top", color: "#8b949e", fontSize: 9,
+            formatter: p => p.value ? fmt(p.value, 0) : "" } }],
+      });
+    } else echClear("echThFee");
+  });
+
+  echGuard("月度做T收益", () => {
+    // 5) 月度做T收益柱状图（同账户同票同日买卖配对，扣费净价差）
+    const tTitle = document.getElementById("echThTTotal");
+    if (tTitle) {
+      const nPair = tmon.reduce((a, m) => a + (m.n_pairs || 0), 0);
+      tTitle.textContent = tmon.length
+        ? `累计 ${(v.totalT >= 0 ? "+" : "") + fmt(v.totalT, 0)} 元 / ${nPair} 个做T日`
+        : "（无同日买卖配对，不计做T）";
+    }
+    if (tmon.length) {
+      echRender("echThT", {
+        ...ECH_BASE,
+        tooltip: { ...ECH_BASE.tooltip, trigger: "axis", axisPointer: { type: "shadow" },
+          formatter: p => { const m = tmon[p[0].dataIndex];
+            return `<b>${m.month}</b><br>做T收益: <b style="color:${pnlColor(m.realized)}">${f(m.realized)}</b>`
+              + `<br>做T日 ${m.n_pairs} 个`; } },
+        xAxis: { ...ECH_BASE.xAxis, type: "category", data: tmon.map(m => m.month),
+          axisLabel: { color: "#8b949e", fontSize: 9, rotate: 45 } },
+        yAxis: { ...ECH_BASE.yAxis, axisLabel: { color: "#8b949e", fontSize: 10,
+          formatter: x => (x >= 0 ? "+" : "") + fmt(x, 0) } },
+        series: [{ type: "bar", data: tmon.map(m => ({ value: m.realized,
+          itemStyle: { color: pnlColor(m.realized) } })),
+          markLine: { silent: true, symbol: "none",
+            lineStyle: { color: "#8b949e", type: "dashed" }, data: [{ yAxis: 0 }] } }],
+      });
+    } else echClear("echThT");
+  });
+
+  // 明细表（按已实现排序，含仍持仓）
+  if (!body) return;
+  const tMap = {};
+  v.tByStock.forEach(t => { tMap[`${t.account || ""}|${t.code}`] = t; });
+  const rows = stocks.map(s => {
+    const t = tMap[`${s.account || ""}|${s.code}`];
+    return `<tr>
+      <td>${esc(s.name)} <span class="mono cell-dim">${esc(s.code)}</span>${s.account ? ` <span class="cell-dim" style="font-size:10px">${esc(s.account)}</span>` : ""}</td>
+      <td class="num ${clsOf(s.realized)}">${f(s.realized)}</td>
+      <td class="num ${clsOf(s.unrealized || 0)}">${s.unrealized ? f(s.unrealized) : "—"}</td>
+      <td class="num ${clsOf(s.total_pnl || 0)}"><b>${f(s.total_pnl || 0)}</b></td>
+      <td class="num ${t ? clsOf(t.pnl) : ""}">${t ? f(t.pnl) : "—"}</td>
+      <td class="num cell-dim">${t ? t.n_pairs : "—"}</td>
+      <td class="num">${s.pnl_pct >= 0 ? "+" : ""}${fmt(s.pnl_pct, 2)}%</td>
+      <td class="num cell-dim">${fmt(s.buy_amt, 0)}</td>
+      <td class="num cell-dim">${fmt(s.sell_amt, 0)}</td>
+      <td class="num cell-dim">${fmt(s.fees, 0)}</td>
+      <td class="num">${s.n_trades}</td>
+      <td class="num">${s.open_qty ? fmt(s.open_qty, 0) : "—"}</td>
+      <td class="mono cell-dim" style="font-size:11px">${esc(s.first)} ~ ${esc(s.last)}</td>
+    </tr>`;
+  }).join("");
+  body.innerHTML = `<div class="card-title">逐股明细（已实现降序，共 ${stocks.length} 只）</div>
+    <table><thead><tr><th>股票</th><th class="num">已实现</th><th class="num">浮动</th>
+    <th class="num">合计</th><th class="num">做T收益</th>
+    <th class="num">做T日</th><th class="num">收益率</th>
+    <th class="num">买入额</th><th class="num">卖出额</th><th class="num">费用</th>
+    <th class="num">笔数</th><th class="num">仍持有</th><th>区间</th></tr></thead>
+    <tbody>${rows}</tbody></table>`;
 }
 
 /* ---- 近60日成交额柱状图（2026-09-30）----
@@ -907,150 +1262,7 @@ function reflowConsole(isKeyOnly) {
   if (auto) box.scrollTop = box.scrollHeight;
 }
 
-/* ---- ① KPI ---- */
-function renderKPI(kpi, tradePnl) {
-  const el = document.getElementById("kpiCards");
-  if (!kpi || Object.keys(kpi).length === 0) {
-    el.innerHTML = '<div class="empty">无 KPI 数据</div>';
-    return;
-  }
-  const K2 = kpi.K2_cost_change || {};
-  const K3 = kpi.K3_base_drift || {};
-  const K4 = kpi.K4_rolling_wr || {};
-  const K5 = kpi.K5_qty0_suppressed || {};
-
-  // K1：做T闭环盈亏（优先用 tradePnl，回退到 kpi 内嵌 K1）
-  const K1 = kpi.K1_closed_pnl || {};
-  const tp = tradePnl || {};
-  const totalPnl = tp.total_pnl != null ? tp.total_pnl : K1.total_est_pnl;
-  const byCode = (tp.by_code && Object.keys(tp.by_code).length) ? tp.by_code : K1.by_code || {};
-  const pnlCls = clsOf(totalPnl);
-  const k1Val = totalPnl == null
-    ? `<span class="neutral">无闭环</span>`
-    : totalPnl === 0
-      ? `<span class="neutral">0</span>`
-      : `<span class="${pnlCls}">${totalPnl >= 0 ? "+" : ""}${fmt(totalPnl, 0)}</span>`;
-  const k1Sub = Object.keys(byCode).length
-    ? Object.entries(byCode).map(([c, v]) => `${c}: ${v.pnl != null ? (v.pnl >= 0 ? "+" : "") + fmt(v.pnl, 0) : "—"}`).join(" · ")
-    : tp.note || K1.source || "当日 0 闭环";
-  const k1Card = `
-    <div class="kpi-card">
-      <div class="kpi-label"><span>K1 做T盈亏</span><span class="flag">${tp.source || "快照"}</span></div>
-      <div class="kpi-value">${k1Val}</div>
-      <div class="kpi-sub">${esc(k1Sub)}</div>
-    </div>`;
-
-  // K2
-  const k2rows = Object.entries(K2.by_code || {}).filter(([, v]) => v && Math.abs(v.delta || 0) > 0.0001);
-  const k2Card = `
-    <div class="kpi-card">
-      <div class="kpi-label"><span>K2 成本变化</span><span class="flag">${k2rows.length ? k2rows.length + "只变动" : ""}</span></div>
-      <div class="kpi-value" style="font-size:18px">${k2rows.length
-        ? k2rows.map(([c, v]) => `${esc(c)} <span class="${clsOf(v.delta)}">${v.delta > 0 ? "+" : ""}${fmt(v.delta)}</span>`).join("<br>")
-        : `<span class="neutral">无成本变动</span>`}</div>
-      <div class="kpi-sub">${esc(K2.note || "")}</div>
-    </div>`;
-
-  // K3
-  const driftTotal = K3.drift_total;
-  const k3rows = Object.entries(K3.by_code || {}).filter(([, v]) => v && (v.drift || 0) !== 0);
-  const k3Card = `
-    <div class="kpi-card">
-      <div class="kpi-label"><span>K3 底仓漂移</span><span class="flag">净 ${driftTotal === null || driftTotal === undefined ? "—" : (driftTotal > 0 ? "+" : "") + fmt(driftTotal, 0)}</span></div>
-      <div class="kpi-value" style="font-size:18px">${k3rows.length
-        ? k3rows.map(([c, v]) => `${esc(c)} <span class="${clsOf(v.drift)}">${v.drift > 0 ? "+" : ""}${fmt(v.drift, 0)}股</span> <span class="cell-dim">${esc(v.attribution || "")}</span>`).join("<br>")
-        : `<span class="neutral">无底仓漂移</span>`}</div>
-      <div class="kpi-sub">drift_total = ${fmt(driftTotal, 0)}</div>
-    </div>`;
-
-  // K4
-  const buy = K4.buy || {}, sell = K4.sell || {};
-  const buyWr = buy.wr === null || buy.wr === undefined ? "—" : Math.round(buy.wr * 100) + "%";
-  const sellWr = sell.wr === null || sell.wr === undefined ? "—" : Math.round(sell.wr * 100) + "%";
-  const buyCls = buy.wr === null || buy.wr === undefined ? "neutral" : (buy.wr >= 0.5 ? "up" : (buy.wr < 0.3 ? "warn" : "down"));
-  const k4Card = `
-    <div class="kpi-card">
-      <div class="kpi-label"><span>K4 滚动胜率</span></div>
-      <div class="kpi-value">买 <span class="${buyCls}">${buyWr}</span></div>
-      <div class="kpi-sub">卖 <span class="${clsOf((sell.wr || 0) - 0.5) === "down" ? "down" : "up"}">${sellWr}</span> · 买 n=${buy.n || 0} / 卖 n=${sell.n || 0}</div>
-      <div class="kpi-sub cell-dim">${esc((K4.days_covered || []).join(" ~ ") || "")}</div>
-    </div>`;
-
-  // K5
-  const k5Card = `
-    <div class="kpi-card">
-      <div class="kpi-label"><span>K5 qty=0 拦截</span><span class="flag">${K5.total ? "需关注" : ""}</span></div>
-      <div class="kpi-value ${K5.total ? "warn" : "neutral"}">${K5.total || 0}</div>
-      <div class="kpi-sub">${Object.entries(K5.by_code || {}).map(([c, n]) => `${esc(c)}×${n}`).join(" · ") || "无拦截"}</div>
-    </div>`;
-
-  el.innerHTML = k1Card + k2Card + k3Card + k4Card + k5Card;
-}
-
 /* ---- ② 图表 ---- */
-function renderSignalBar(sigStat, nameMap) {
-  const codes = Object.keys(sigStat || {});
-  if (!codes.length) { tabClear("echSignal"); return; }
-  codes.sort((a, b) =>
-    ((sigStat[b].sell_signals || 0) + (sigStat[b].buy_signals || 0))
-    - ((sigStat[a].sell_signals || 0) + (sigStat[a].buy_signals || 0)));
-  const names = codes.map(c => (nameMap || {})[c] || c);
-  tabEch("echSignal", {
-    ...ECH_BASE,
-    grid: { left: 90, right: 40, top: 20, bottom: 26 },
-    xAxis: { type: "value", axisLabel: { color: "#8b949e", fontSize: 10 }, splitLine: { lineStyle: { color: "rgba(139,148,158,.15)" } } },
-    yAxis: { type: "category", data: names, axisLine: { lineStyle: { color: "#30363d" } }, axisLabel: { color: "#8b949e", fontSize: 10 } },
-    tooltip: { ...ECH_BASE.tooltip, trigger: "axis", axisPointer: { type: "shadow" } },
-    series: [
-      { name: "买入", type: "bar", data: codes.map(c => sigStat[c].buy_signals || 0),
-        itemStyle: { color: "#3fb950", borderRadius: [0, 3, 3, 0] },
-        label: { show: true, position: "right", color: "#8b949e", fontSize: 10 } },
-      { name: "卖出", type: "bar", data: codes.map(c => sigStat[c].sell_signals || 0),
-        itemStyle: { color: "#f85149", borderRadius: [0, 3, 3, 0] },
-        label: { show: true, position: "right", color: "#8b949e", fontSize: 10 } },
-    ],
-  });
-}
-
-function renderK4Trend(points) {
-  if (!points || !points.length) { tabClear("echK4"); return; }
-  const latest = points[points.length - 1];
-  const buyWr = latest.buy_wr == null ? 0 : Math.round(latest.buy_wr * 100);
-  const sellWr = latest.sell_wr == null ? 0 : Math.round(latest.sell_wr * 100);
-  const buyN = latest.buy_n || 0, sellN = latest.sell_n || 0;
-  const buyCls = buyWr < 30 ? "#d29922" : buyWr >= 50 ? "#3fb950" : "#f85149";
-  const sellCls = sellWr >= 50 ? "#3fb950" : sellWr < 30 ? "#d29922" : "#f85149";
-
-  const levelColors = [[.3, "#f85149"], [.5, "#d29922"], [1, "#3fb950"]];
-  const mkGauge = (value, name, color, cy) => ({
-    type: "gauge", center: ["50%", cy], radius: "72%",
-    startAngle: 210, endAngle: -30, min: 0, max: 100, splitNumber: 5,
-    progress: { show: true, width: 8, roundCap: true, itemStyle: { color } },
-    axisLine: { lineStyle: { width: 8, color: [levelColors] } },
-    axisTick: { show: false }, splitLine: { show: false },
-    axisLabel: { show: true, distance: -2, color: "#8b949e", fontSize: 8 },
-    anchor: { show: false },
-    title: { offsetCenter: [0, "78%"], color: "#8b949e", fontSize: 11 },
-    detail: { offsetCenter: [0, "52%"], valueAnimation: true, color,
-      fontSize: 16, fontFamily: "Consolas, monospace", formatter: "{value}%" },
-    data: [{ value, name }],
-  });
-
-  tabEch("echK4", {
-    backgroundColor: "transparent",
-    series: [
-      mkGauge(buyWr, "买信号胜率", buyCls, "28%"),
-      mkGauge(sellWr, "卖信号胜率", sellCls, "72%"),
-    ],
-    graphic: [
-      { type: "text", left: "center", top: "5%",
-        style: { text: "做T买卖胜率", fill: "#c9d1d9", fontSize: 12, fontWeight: "bold", textAlign: "center" } },
-      { type: "text", left: "center", bottom: 8,
-        style: { text: `近20笔滚动 · 买${buyWr}%(${buyN}笔) · 卖${sellWr}%(${sellN}笔) · 买信号≥50%为优 · 卖信号≥50%为优`,
-          fill: "#8b949e", fontSize: 10, textAlign: "center" } },
-    ],
-  });
-}
 
 /* ---- ③ 持仓对照 ---- */
 function renderPositions(pos, nameMap) {
@@ -1230,88 +1442,6 @@ function renderSettle(settle, sigStat, nameMap) {
         <tbody>${rows}</tbody>
       </table>
       <div class="cell-dim" style="font-size:11px;margin-top:8px">结算 = close-only 口径：WIN/FAIL 为该方向信号当日结算胜负 · 买max分/卖max分为全 tick 最高分</div>
-    </div>`;
-}
-
-/* ---- ⑤ shadow + 仓控 ---- */
-function renderShadow(shadow, qtyFreeze) {
-  const el = document.getElementById("shadowBody");
-  const total = (shadow && shadow.total) || 0;
-  const near = (shadow && shadow.near) || {};
-  const qf = qtyFreeze || {};
-  const suppressed = qf.suppressed || {};
-  const pushes = qf.pushes || [];
-  const silent = qf.silent_sell || {};
-
-  let nearRows = "";
-  Object.entries(near).forEach(([code, arr]) => {
-    (arr || []).forEach(n => {
-      nearRows += `
-        <tr>
-          <td>${esc(code)}</td>
-          <td><span class="badge ${n.action === "BUY_LOW" ? "t-long" : "t-short"}">${esc(n.action || "")}</span></td>
-          <td class="num">${n.n}</td>
-          <td class="mono cell-dim">${esc(n.span || "")}</td>
-          <td class="num warn">${fmt(n.min_dist, 2)}</td>
-          <td class="cell-dim">${esc(n.miss_reason || "")}</td>
-        </tr>`;
-    });
-  });
-
-  let suppRows = "";
-  Object.entries(suppressed).forEach(([code, arr]) => {
-    (arr || []).forEach(s => {
-      suppRows += `
-        <tr class="freeze-row">
-          <td>${esc(code)}</td>
-          <td class="mono">${esc(s.ts || "")}</td>
-          <td><span class="badge ${s.action === "BUY_LOW" ? "t-long" : "t-short"}">${esc(s.action || "")}</span></td>
-          <td class="num warn">${fmt(s.score, 1)}</td>
-        </tr>`;
-    });
-  });
-
-  let pushRows = "";
-  (pushes || []).forEach(p => {
-    pushRows += `
-      <tr>
-        <td class="mono">${esc(p.ts || "")}</td>
-        <td>${esc(p.code || "")}</td>
-        <td><span class="badge ${p.action === "BUY_LOW" ? "t-long" : "t-short"}">${esc(p.action || "")}</span></td>
-      </tr>`;
-  });
-
-  let silentRows = "";
-  Object.entries(silent).forEach(([code, v]) => {
-    silentRows += `<tr><td>${esc(code)}</td><td class="num">${v.n}</td><td class="num cell-dim">${fmt(v.max_score, 1)}</td></tr>`;
-  });
-
-  el.innerHTML = `
-    <div class="cols">
-      <div class="card">
-        <div class="card-title">shadow 近阈信号（差 3 分内未触发）· 当日 shadow 总数 <b>${total}</b></div>
-        <table>
-          <thead><tr><th>代码</th><th>方向</th><th class="num">条数</th><th>时段</th><th class="num">min_dist</th><th>原因</th></tr></thead>
-          <tbody>${nearRows || '<tr><td colspan="6" class="empty">无近阈信号</td></tr>'}</tbody>
-        </table>
-      </div>
-      <div class="card">
-        <div class="card-title">仓控拦截（qty=0 / 达阈被压）</div>
-        <table>
-          <thead><tr><th>代码</th><th>时间</th><th>方向</th><th class="num">分数</th></tr></thead>
-          <tbody>${suppRows || '<tr><td colspan="4" class="empty">无拦截</td></tr>'}</tbody>
-        </table>
-        <div class="card-title" style="margin-top:14px">当日飞书推送</div>
-        <table>
-          <thead><tr><th>时间</th><th>代码</th><th>方向</th></tr></thead>
-          <tbody>${pushRows || '<tr><td colspan="3" class="empty">无推送</td></tr>'}</tbody>
-        </table>
-        <div class="card-title" style="margin-top:14px">低于推送阈静默（silent）</div>
-        <table>
-          <thead><tr><th>代码</th><th class="num">条数</th><th class="num">max分</th></tr></thead>
-          <tbody>${silentRows || '<tr><td colspan="3" class="empty">无</td></tr>'}</tbody>
-        </table>
-      </div>
     </div>`;
 }
 
@@ -1598,15 +1728,161 @@ function renderAutoPositions(positions) {
     return;
   }
   const srcBadge = '<span class="badge" style="background:#2a4a5a;color:#8ad4ff" title="自动盘（goldminer auto 侧管理）">自动</span>';
-  const rows = Object.entries(positions).map(([code, p]) => `
-    <tr>
+  const rows = Object.entries(positions).map(([code, p]) => {
+    // 成本来源提示：引擎 heartbeat 的 cost 在加仓后不重新加权，故口径以 fill 派生为准
+    const costTip = p.cost_src === "fill派生"
+      ? '成交流派生的加权均价（不含手续费，同券商「持仓均价」）· 引擎 heartbeat 加仓后不重算'
+      : "引擎 heartbeat 快照（成交流数量对不上，无法派生）";
+    return `<tr>
       <td>${esc(p.name || code)} <span class="mono cell-dim">${esc(code)}</span></td>
       <td>${srcBadge}</td>
       <td class="num">${fmt(p.qty, 0)}</td>
-      <td class="num">${fmt(p.cost, 3)}</td>
-    </tr>`).join("");
-  const html = `<table><thead><tr><th>股票</th><th>来源</th><th class="num">持仓</th><th class="num">成本</th></tr></thead><tbody>${rows}</tbody></table>`;
+      <td class="num" title="${esc(costTip)}">${fmt(p.cost, 3)}</td>
+      <td class="num">${fmt(p.last_price, 3)}</td>
+      <td class="num">${fmt(p.market_value, 0)}</td>
+      <td class="num ${clsOf(p.unreal_pnl)}">${p.unreal_pnl == null ? "—" : (p.unreal_pnl >= 0 ? "+" : "") + fmt(p.unreal_pnl, 0)}</td>
+    </tr>`;
+  }).join("");
+  const html = `<table><thead><tr><th>股票</th><th>来源</th><th class="num">持仓</th><th class="num">成本</th>
+    <th class="num">最新价</th><th class="num">市值</th><th class="num">浮动盈亏</th></tr></thead><tbody>${rows}</tbody></table>`;
   els.forEach(el => { el.innerHTML = html; });
+}
+
+/* ---- 自动盘盈亏账单（2026-10-10 需求5）：每次建仓→清仓为一周期 ---- */
+async function loadAutoPnl() {
+  try {
+    const d = await apiCall("load_auto_pnl");
+    renderAutoPnl(d || {});
+  } catch (e) { /* 桥接未就绪/后端异常时忽略 */ }
+}
+
+function renderAutoPnl(d) {
+  state.autoLedger = d || {};
+  renderAutoLedger(d || {});
+  const body = document.getElementById("autoPnlBody");
+  if (!body) return;
+  if (d.error) { body.innerHTML = `<div class="empty">盈亏账单读取失败: ${esc(d.error)}</div>`; return; }
+  const s = d.summary || {};
+  updateSidebarAuto(s);
+  const sumEl = document.getElementById("autoPnlSummary");
+  if (sumEl) {
+    const f = (v, cls) => v == null ? "—" : `<span class="${cls || ""}">${(v >= 0 ? "+" : "") + fmt(v, 0)}</span>`;
+    sumEl.innerHTML = `总资产 <b>${fmt(s.total_assets || 0, 0)}</b> · `
+      + `已实现 ${f(s.realized_pnl, clsOf(s.realized_pnl))} · `
+      + `在场浮盈 ${f(s.unreal_pnl, clsOf(s.unreal_pnl))} · `
+      + `持仓市值 ${fmt(s.market_value || 0, 0)}（成本 ${fmt(s.cost_basis || 0, 0)}）· `
+      + `现金 ${s.cash == null ? "—" : fmt(s.cash, 0)} · `
+      + `在场 ${s.positions_count || 0} 只`;
+  }
+  const stocks = d.stocks || [];
+  if (!stocks.length) { body.innerHTML = '<div class="empty">无自动盘成交记录（t_io/bridge/events_*.jsonl 为空）</div>'; return; }
+  const rows = stocks.map(st => {
+    const cycles = (st.cycles || []).map(c => {
+      const open = c.status === "open";
+      const cls = clsOf(c.realized_pnl + (open ? (c.unreal_pnl || 0) : 0));
+      const pnlShow = open
+        ? `浮盈 <span class="${clsOf(c.unreal_pnl)}">${(c.unreal_pnl >= 0 ? "+" : "") + fmt(c.unreal_pnl, 0)}</span>`
+        : `<span class="${clsOf(c.realized_pnl)}">${(c.realized_pnl >= 0 ? "+" : "") + fmt(c.realized_pnl, 0)}</span> (${c.pnl_pct >= 0 ? "+" : ""}${c.pnl_pct}%)`;
+      return `<div class="pnl-cycle">
+        <span class="mono cell-dim">${esc(c.start)} → ${open ? '<span class="warn">在场</span>' : esc(c.end || "")}</span>
+        <span class="cell-dim">${c.days}天</span>
+        <span>${c.buy_qty}买/${c.sell_qty}卖</span>
+        <span class="cell-dim">均买${fmt(open && c.cost_price != null ? c.cost_price : c.avg_buy, 3)}${c.avg_sell ? " / 均卖" + fmt(c.avg_sell, 3) : ""} 费${fmt(c.fees, 0)}</span>
+        <span>${pnlShow}</span>
+        ${open && c.open_qty ? `<span class="cell-dim">在场${c.open_qty}股</span>` : ""}
+        ${c.irregular ? '<span class="badge" style="background:#5a3a2a;color:#ffb454" title="该周期含非策略/孤儿成交（pos_after 与逐笔不连续）">含非策略成交</span>' : ""}
+      </div>`;
+    }).join("");
+    const tot = st.realized_pnl + (st.unreal_pnl || 0);
+    return `<tr>
+      <td>${esc(st.name || st.code)} <span class="mono cell-dim">${esc(st.code)}</span></td>
+      <td class="num ${clsOf(st.realized_pnl)}">${(st.realized_pnl >= 0 ? "+" : "") + fmt(st.realized_pnl, 0)}</td>
+      <td class="num ${clsOf(st.unreal_pnl)}">${st.unreal_pnl ? (st.unreal_pnl >= 0 ? "+" : "") + fmt(st.unreal_pnl, 0) : "—"}</td>
+      <td class="num">${st.open_qty || "—"}</td>
+      <td class="num ${clsOf(tot)}">${(tot >= 0 ? "+" : "") + fmt(tot, 0)}</td>
+      <td>${cycles}</td>
+    </tr>`;
+  }).join("");
+  body.innerHTML = `<table><thead><tr>
+    <th>股票</th><th class="num">已实现</th><th class="num">在场浮盈</th><th class="num">在场股数</th><th class="num">合计</th>
+    <th>周期明细（建仓→清仓 / 天数 / 量 / 均价 / 盈亏）</th>
+  </tr></thead><tbody>${rows}</tbody></table>`;
+}
+
+/* ---- 自动盘成交流水 · 每日盈亏（2026-10-10 需求2）：自动盘无交割单，靠事件总线反推 ---- */
+const AUTO_FILLS_SHOW = 200;   // 流水表只显示最近 N 笔
+
+function renderAutoLedger(d) {
+  const sumEl = document.getElementById("autoLedgerSummary");
+  const bodyEl = document.getElementById("autoFillsBody");
+  if (!sumEl && !bodyEl) return;
+  const fills = (d && d.fills) || [];
+  const daily = (d && d.daily) || [];
+  if (sumEl) {
+    if (!fills.length && !daily.length) {
+      sumEl.textContent = "无自动盘成交流水（t_io/bridge/events_*.jsonl 为空）";
+    } else {
+      const realSum = fills.reduce((a, f) => a + (f.side === "SELL" ? (f.net || 0) : 0), 0);
+      const buySum = fills.reduce((a, f) => a + (f.side === "BUY" ? (f.net || 0) : 0), 0);
+      sumEl.innerHTML = `逐笔 ${fills.length} 笔 · 买入净流出 <span class="down mono">${fmt(buySum, 0)}</span> · `
+        + `卖出净流入 <span class="up mono">+${fmt(realSum, 0)}</span> · 收盘快照 ${daily.length} 日`;
+    }
+  }
+  // 每日权益 / 累计已实现 / 现金
+  if (!daily.length) {
+    echClear("echAutoEquity");
+  } else {
+    const dates = daily.map(r => r.date.slice(5));
+    const suspectIdx = daily.map((r, i) => (r.suspect ? i : -1)).filter(i => i >= 0);
+    echRender("echAutoEquity", {
+      ...ECH_BASE,
+      tooltip: { ...ECH_BASE.tooltip, trigger: "axis", formatter: p => {
+        const i = p[0].dataIndex, r = daily[i];
+        const line = (n, v, c) => v == null ? "" :
+          `<br>${n}: <span style="color:${c}">${(v >= 0 ? "+" : "") + fmt(v, 0)}</span>`;
+        return `${r.date}` + line("权益", r.equity, "#8ad4ff")
+          + line("现金", r.cash, "#8b949e") + line("市值", r.market_value, "#8b949e")
+          + line("当日盈亏", r.day_pnl, pnlColor(r.day_pnl))
+          + line("累计已实现", r.realized_cum, pnlColor(r.realized_cum))
+          + (r.suspect ? '<br><span style="color:#ffb454">⚠ 当日权益跳变 &gt;15%：现金变动与策略成交流水对不上（常见成因＝仿真终端手工单/孤儿成交）</span>' : "");
+      } },
+      legend: { data: ["权益", "累计已实现", "现金"], textStyle: { color: "#8b949e", fontSize: 11 }, top: 0 },
+      xAxis: { ...ECH_BASE.xAxis, type: "category", data: dates },
+      yAxis: { ...ECH_BASE.yAxis },
+      series: [
+        { name: "权益", type: "line", smooth: true, symbolSize: 5, data: daily.map(r => r.equity),
+          lineStyle: { color: "#8ad4ff" }, itemStyle: { color: "#8ad4ff" },
+          markPoint: suspectIdx.length ? { symbol: "pin", symbolSize: 34,
+            itemStyle: { color: "#ffb454" }, label: { formatter: "⚠", color: "#111" },
+            data: suspectIdx.map(i => ({ coord: [dates[i], daily[i].equity], name: "记账异常" })) } : undefined },
+        { name: "累计已实现", type: "line", smooth: true, symbolSize: 5,
+          data: daily.map(r => r.realized_cum), lineStyle: { color: "#3fb950" }, itemStyle: { color: "#3fb950" } },
+        { name: "现金", type: "line", smooth: true, symbolSize: 0, showSymbol: false,
+          data: daily.map(r => r.cash), lineStyle: { color: "#8b949e", type: "dashed", width: 1 },
+          itemStyle: { color: "#8b949e" } },
+      ],
+    });
+  }
+  if (!bodyEl) return;
+  if (!fills.length) { bodyEl.innerHTML = '<div class="empty">无成交流水</div>'; return; }
+  const shown = fills.slice(0, AUTO_FILLS_SHOW);
+  const rows = shown.map(f => {
+    const buy = f.side === "BUY";
+    return `<tr>
+      <td class="mono cell-dim">${esc(f.date)} ${esc(f.time || "")}</td>
+      <td>${esc(f.name || f.code)} <span class="mono cell-dim">${esc(f.code)}</span></td>
+      <td><span class="badge" style="background:${buy ? "#2a4a5a" : "#3a2a2a"};color:${buy ? "#8ad4ff" : "#ffb454"}">${buy ? "买入" : "卖出"}</span></td>
+      <td class="num">${fmt(f.qty, 0)}</td>
+      <td class="num">${fmt(f.price, 3)}</td>
+      <td class="num">${fmt(f.amount, 0)}</td>
+      <td class="num ${clsOf(f.net)}">${(f.net >= 0 ? "+" : "") + fmt(f.net, 0)}</td>
+      <td class="num cell-dim">${fmt(f.pos_after, 0)}</td>
+    </tr>`;
+  }).join("");
+  bodyEl.innerHTML = `<div class="card-title">逐笔流水（近 ${shown.length}/${fills.length} 笔，倒序）`
+    + `<span class="cell-dim" style="font-weight:normal;font-size:11px;margin-left:8px">净发生金额＝成交金额∓手续费；余额＝该笔成交后持仓</span></div>`
+    + `<table><thead><tr><th>时间</th><th>股票</th><th>方向</th><th class="num">数量</th><th class="num">均价</th>`
+    + `<th class="num">成交金额</th><th class="num">净发生金额</th><th class="num">余额</th></tr></thead><tbody>${rows}</tbody></table>`;
 }
 
 /* ---- 自动盘买入人工确认闸（2026-08-30 建仓/加仓/底仓回补人工把关） ---- */
@@ -1911,6 +2187,26 @@ async function clearAutoBuild() {
 }
 
 /* ---- ⑦ 加仓观察 ---- */
+// 冷启动补齐（2026-10-10）：后端 compute_add_watch 首帧非阻塞（起后台算、立即返回空），
+// 此处空则短轮询 load_add_watch 补齐，避免为它整页 load_day，也避免主线程被联网计算冻住。
+let _awRetryTimer = null;
+function _awHasData(aw) { return Object.keys(aw || {}).some(c => c[0] !== "_"); }
+async function loadAddWatch(date, tries) {
+  tries = tries || 0;
+  try {
+    const r = await apiCall("load_add_watch", date);
+    const aw = (r && r.add_watch) || {};
+    if (_awHasData(aw)) {
+      renderAddWatch(aw);
+      if (state.payload) state.payload.add_watch = aw;
+      return;
+    }
+  } catch (e) { return; }
+  if (tries < 12) {                       // 3s × 12 = 36s 上限（后台算完即止）
+    if (_awRetryTimer) clearTimeout(_awRetryTimer);
+    _awRetryTimer = setTimeout(() => loadAddWatch(date, tries + 1), 3000);
+  }
+}
 function renderAddWatch(aw) {
   const el = document.getElementById("addWatchBody");
   // fix P0-13 防护：过滤 `_progress` 等下划线伪股票键，避免混入卡片与『共 N 只』计数
@@ -2942,7 +3238,7 @@ async function initHunterDates() {
     sel.innerHTML = '<option value="">最新</option>' +
       hunterHistoryDates.map(d => `<option value="${d.date}">${d.date}</option>`).join("");
     sel.addEventListener("change", () => {
-      if (sel.value) loadHunterHistory(sel.value);
+      // 2026-10-10: 选日期只记录，不自动跑扫描（owner 需求6）；跑历史结果点「🔄 重新生成」。
     });
   } catch (e) { /* 静默 */ }
 }
@@ -3111,9 +3407,7 @@ async function regenerateHunter() {
   // 走后台线程 + 进度条（复用 loadHunterHistory），避免同步阻塞桥线程；
   // 拉取已加硬限时兜底（后端 420s 预算），卡死也能带结果/报错返回
   await loadHunterHistory(date);
-  // 仅重新生成"今日"时同步扫描突破箱体（历史日期后端也按最新日线扫，会误导）
-  if (!date || date === todayStr()) loadBreakoutStocks(true);
-  if (!date || date === todayStr()) loadReclaimStocks(true);
+  // 2026-10-10: 突破/站上5日线扫描不再随「重新生成」自动触发（owner 需求6），由其卡片按钮各自发起。
   if (btn) { btn.disabled = false; btn.textContent = "🔄 重新生成"; }
 }
 
@@ -3392,9 +3686,7 @@ async function loadHunter(force) {
       renderHunter(h);
       hunterLoaded = true;
     }
-    // 突破箱体扫描（后台并行，后端按日缓存）；**历史日不自动扫**，由用户在卡片里选日期手动扫
-    if (!h.date || h.date === todayStr()) loadBreakoutStocks(true);
-    if (!h.date || h.date === todayStr()) loadReclaimStocks(true);
+    // 2026-10-10: 突破箱体 / 站上5日线 扫描不再自动触发，一律由各自卡片按钮发起（owner 需求6）
   } catch (e) {
     el.innerHTML = `<div class="empty">加载失败: ${esc(e.message)}</div>`;
   }
@@ -3633,6 +3925,17 @@ async function pollReclaimScan(body, btn, date) {
     <span class="cell-dim" style="font-size:11px">点「🔄 扫描该日」会作废本轮并重开</span></div>`;
   if (btn) { btn.disabled = false; btn.textContent = "🔄 扫描该日"; }
 }
+// 站上5日线「条件」徽章：显式核对「昨在昨MA5下 → 今价上穿今MA5」，让口径可复核
+// （MA5 下行时昨收可能 > 今MA5，单看今MA5 会误以为违反条件；比较基准是昨MA5）。
+function _reclaimCondBadge(s) {
+  const ok = s.prev_close != null && s.ma5_prev != null && s.price != null && s.ma5 != null
+    && s.prev_close < s.ma5_prev && s.price > s.ma5;
+  const tip = `昨收 ${s.prev_close != null ? fmt(s.prev_close, 2) : '—'} ${s.prev_close != null && s.ma5_prev != null && s.prev_close < s.ma5_prev ? '<' : '≥'} 昨MA5 ${s.ma5_prev != null ? fmt(s.ma5_prev, 2) : '—'} 且 现价 ${s.price != null ? fmt(s.price, 2) : '—'} ${s.price != null && s.ma5 != null && s.price > s.ma5 ? '>' : '≤'} 今MA5 ${s.ma5 != null ? fmt(s.ma5, 2) : '—'}`;
+  return ok
+    ? `<span class="up" title="${esc(tip)}">✓ 昨在MA5下→今上穿</span>`
+    : `<span class="warn" title="${esc(tip)}">⚠ 不满足</span>`;
+}
+
 function renderReclaim(b) {
   const body = document.getElementById("hunterReclaimBody");
   if (!body) return;
@@ -3670,7 +3973,7 @@ function renderReclaim(b) {
     const arr = groups[k].slice().sort((x, y) => (y.dev5_pct || 0) - (x.dev5_pct || 0));
     return `<tbody class="bk-group">
     <tr class="bk-group-head" onclick="toggleBkGroup(this)" title="点击收起/展开">
-      <td colspan="8"><span class="bk-arrow">▼</span> <b>${esc(k)}</b>
+      <td colspan="10"><span class="bk-arrow">▼</span> <b>${esc(k)}</b>
         <span class="cell-dim">· ${arr.length} 只</span></td>
     </tr>
     ${arr.map(s => `<tr class="bk-member h-expand-row" ondblclick="openStockChart('${esc(s.code)}','${esc(s.name)}')">
@@ -3679,8 +3982,10 @@ function renderReclaim(b) {
         onclick="event.stopPropagation();addToWatchlist('${esc(s.code)}','${esc(s.name)}',this)" title="加入建仓股池监控买点">+股池</button></td>
       <td class="num">${s.price != null ? fmt(s.price, 2) : '—'}</td>
       <td class="num cell-dim">${s.prev_close != null ? fmt(s.prev_close, 2) : '—'}</td>
-      <td class="num">${s.ma5 != null ? fmt(s.ma5, 2) : '—'}</td>
+      <td class="num cell-dim" title="昨日 MA5（比较基准）">${s.ma5_prev != null ? fmt(s.ma5_prev, 2) : '—'}</td>
+      <td class="num" title="今日 MA5">${s.ma5 != null ? fmt(s.ma5, 2) : '—'}</td>
       <td class="num up">+${s.dev5_pct != null ? fmt(s.dev5_pct, 2) : '—'}%</td>
+      <td>${_reclaimCondBadge(s)}</td>
       <td>${(s.tags || []).map(t => tagBadge(t)).join(" ")}</td>
       <td class="bk-concepts-cell">${conceptsCell(s)}</td>
     </tr>`).join("")}
@@ -3688,9 +3993,9 @@ function renderReclaim(b) {
   }).join("");
   body.innerHTML = `<table class="h-table"><thead><tr>
     <th>代码</th><th>名称</th><th class="num">现价</th><th class="num">昨收</th>
-    <th class="num">MA5</th><th class="num">超MA5</th><th>标签</th><th>概念</th>
+    <th class="num">昨MA5</th><th class="num">今MA5</th><th class="num">超MA5</th><th>条件</th><th>标签</th><th>概念</th>
   </tr></thead>${bodyHtml}</table>
-  <div class="cell-dim" style="font-size:10px;margin-top:3px">共 ${gkeys.length} 个行业 · 组按只数降序 · 组内按超MA5幅度降序 · 双击看技术分析</div>
+  <div class="cell-dim" style="font-size:10px;margin-top:3px">口径：昨收 &lt; <b>昨MA5</b> 且 现价 &gt; <b>今MA5</b>（昨日在5日线下、今日刚上穿）· 共 ${gkeys.length} 个行业 · 组按只数降序 · 组内按超MA5幅度降序 · 双击看技术分析</div>
   ${bjNd ? `<div class="cell-dim" style="font-size:10px;margin-top:2px">另有 ${bjNd} 只北交所股无日线、未参与判定</div>` : ""}
   ${restNd ? `<div class="cell-dim" style="font-size:10px;margin-top:2px;color:var(--warn,#d29922)">⚠ 另有 ${restNd} 只非北交所取数失败、未参与判定</div>` : ""}`;
 }
@@ -3904,7 +4209,7 @@ function renderHunter(h) {
       <div class="card-title">🚀 突破箱体·有效突破（昨收 ≤ 箱体上沿 &lt; 今价，幅度 0.3~8%）
         <input type="date" id="hunterBreakoutDate" value="${esc(h.date || todayStr())}"
           style="margin-left:8px;background:transparent;color:inherit;border:1px solid var(--border-soft);border-radius:4px;padding:1px 4px;font-size:12px"
-          onchange="breakoutLoaded=false;loadBreakoutStocks(true, this.value)" title="选择任意交易日扫描（结果按日保存）">
+          title="选择任意交易日扫描（结果按日保存）；选日期不会自动扫，点右侧按钮">
         <button class="mini-btn" id="hunterBreakoutBtn" style="margin-left:8px"
           onclick="loadBreakoutStocks(true, document.getElementById('hunterBreakoutDate').value)">🔄 扫描该日</button>
         <span class="cell-dim" id="hunterBreakoutMeta" style="font-size:11px"></span>
@@ -3914,10 +4219,10 @@ function renderHunter(h) {
 
   const reclaimCard = `
     <div class="card" style="margin-bottom:10px;padding:10px 14px">
-      <div class="card-title">📈 站上5日线·全市场（昨收 &lt; MA5 且 今价 &gt; MA5）
+      <div class="card-title">📈 站上5日线·全市场（昨收 &lt; 昨MA5 且 现价 &gt; 今MA5：昨日在5日线下、今日刚上穿）
         <input type="date" id="hunterReclaimDate" value="${esc(h.date || todayStr())}"
           style="margin-left:8px;background:transparent;color:inherit;border:1px solid var(--border-soft);border-radius:4px;padding:1px 4px;font-size:12px"
-          onchange="reclaimLoaded=false;loadReclaimStocks(true, this.value)" title="选择任意交易日扫描（结果按日保存）">
+          title="选择任意交易日扫描（结果按日保存）；选日期不会自动扫，点右侧按钮">
         <button class="mini-btn" id="hunterReclaimBtn" style="margin-left:8px"
           onclick="loadReclaimStocks(true, document.getElementById('hunterReclaimDate').value)">🔄 扫描该日</button>
         <span class="cell-dim" id="hunterReclaimMeta" style="font-size:11px"></span>
@@ -3975,8 +4280,10 @@ async function loadOBAnalysis() {
     renderOB(ob || {});
     if (ob && (ob.pending || ob.m30_pending)) {
       if (_obRetryTimer) clearTimeout(_obRetryTimer);
-      // 30min 判定未热（后台磁盘预热 ~2s）→ 3s 快速重拉；仅图表未热 → 12s（预热较慢）
-      const delay = (ob.m30_pending && !ob.pending) ? 3000 : 12000;
+      // 30min 判定未热（后台磁盘预热 ~2s）→ 3s；体检后台算未回 → 5s；两者皆无仅图表未热 → 12s
+      let delay = 12000;
+      if (ob.m30_pending && !ob.pending) delay = 3000;
+      else if (ob.pending) delay = 5000;   // 2026-10-10：体检改 SWR，后台算通常数秒可好
       _obRetryTimer = setTimeout(loadOBAnalysis, delay);
     }
   } catch (e) { /* 静默：体检非关键路径 */ }
@@ -4043,63 +4350,6 @@ function renderOB(ob) {
       </tr></thead><tbody>${rows}</tbody></table>
       <div class="cell-dim" style="font-size:10px;margin-top:4px">口径(2026-10-09)：判定=30min顶部/底背离特征综合（依据 t_io/validation/m30_top 981只×540日离线验证）· 趋势=30min三层状态机 · RSI/KDJ/CCI/BOLL 为日线超买指标（不驱动判定）· 双击行看K线</div>
     </div>`;
-}
-
-/* ---- 成本校准 modal ---- */
-let costCalibData = null;  // {stocks, effective_today}
-
-function openCalibModal(ch) {
-  const modal = document.getElementById("calibModal");
-  if (!modal) return;
-  costCalibData = ch;
-  document.getElementById("calibDate").textContent = "(" + todayStr() + ")";
-  const codes = Object.keys((ch && ch.stocks) || {});
-  const tbody = modal.querySelector("#calibTable tbody");
-  tbody.innerHTML = codes.map(code => {
-    const st = ch.stocks[code];
-    const eff = (ch.effective_today || {})[code];
-    const snap = st.points.length ? st.points[st.points.length - 1].cost : "";
-    const srcBadge = eff && eff.src === "人工校准"
-      ? `<span class="calib-badge 人工校准">人工校准</span>`
-      : `<span class="calib-badge 快照">快照</span>`;
-    return `<tr>
-      <td>${esc(st.name || code)} <span class="mono cell-dim">${esc(code)}</span></td>
-      <td class="num">${fmt(snap, 3)}</td>
-      <td><input type="number" step="0.001" data-code="${esc(code)}" value="${eff ? eff.cost : ""}" placeholder="${fmt(snap, 3)}"></td>
-      <td>${srcBadge}</td>
-    </tr>`;
-  }).join("");
-  modal.style.display = "flex";
-}
-
-function closeCalibModal() {
-  const modal = document.getElementById("calibModal");
-  if (modal) modal.style.display = "none";
-}
-
-async function saveCalib() {
-  const modal = document.getElementById("calibModal");
-  const costs = {};
-  modal.querySelectorAll("#calibTable tbody input[data-code]").forEach(inp => {
-    const v = inp.value.trim();
-    if (v !== "") {
-      const n = parseFloat(v);
-      if (!isNaN(n) && n > 0) costs[inp.dataset.code] = n;
-    }
-  });
-  if (!Object.keys(costs).length) { closeCalibModal(); return; }
-  try {
-    const r = await apiCall("save_cost_calibration", todayStr(), costs);
-    statusEl(r.ok ? "成本校准已保存" : "保存失败: " + (r.error || ""), r.ok ? "ok" : "err");
-  } catch (e) {
-    statusEl("保存失败: " + e.message, "err");
-  }
-  closeCalibModal();
-  // 刷新成本曲线
-  apiCall("load_cost_history").then(ch => {
-    state.costHistory = ch || {};
-    renderCost(ch || {});
-  }).catch(() => {});
 }
 
 /* ================= 每日大盘复盘（LLM，2026-08-23 新增） ================= */
@@ -4687,17 +4937,17 @@ function switchTab(tab) {
   if (sideItem) sideItem.classList.add("active");
   // 延迟 resize 让 tab 的 display:block 先生效
   setTimeout(resizeAllEch, 80);
-  // 切到选股猎手：若未加载过则自动加载当日数据
-  if (tab === "hunter" && !hunterLoaded) {
-    loadHunter(false);
-  }
+  // 2026-10-10: 切到选股猎手不再自动跑扫描（owner 需求6）——一律点「▶ 运行今日数据」触发。
   // 切到每日复盘：懒加载模型配置 + 已有复盘
   if (tab === "archive") renderDailyReview();
+  // 图表分析：交割单台账懒加载（未导入过则只显示「点导入」提示，不弹窗）
+  if (tab === "charts") loadTradeHistory();
   // P4-3 切到自动盘：加载 t_io/bridge 状态 + 建仓扫描 + 手动建仓下拉
   if (tab === "auto") {
     loadAutoStatus();
     loadAutoScan();
     loadAutoBuildOptions();
+    if (state.autoLedger) renderAutoLedger(state.autoLedger);   // 已有数据先渲染，避免空白
   }
 }
 
@@ -4718,6 +4968,7 @@ function updateSidebarSummary(quotes) {
     trl += rl[x.code] || 0;
   });
   Object.values(accounts).forEach(a => {
+    if (a && a.paper) return;   // 2026-10-10: 手动盘=非 paper 账户（自动盘另列）
     totalCap += (a.total_capital || 0);
   });
   const pnl = tv - tc;
@@ -4726,6 +4977,21 @@ function updateSidebarSummary(quotes) {
   document.getElementById("sumPos").textContent = totalCap ? Math.round(tv / totalCap * 100) + "%" : "—";
   document.getElementById("sumUnreal").innerHTML = `<span class="${clsOf(pnl)}">${pnl >= 0 ? "+" : ""}${fmt(pnl, 0)}</span>`;
   document.getElementById("sumRealLoss").innerHTML = trl ? `<span class="${trl > 0 ? 'down' : 'neutral'}">${fmt(trl, 0)}</span>` : `<span class="neutral">0</span>`;
+}
+
+// 侧栏「自动盘」三行（数据来自 load_auto_pnl 的 summary）
+function updateSidebarAuto(summary) {
+  const s = summary || {};
+  const set = (id, val, cls) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    if (val == null) { el.textContent = "—"; return; }
+    el.innerHTML = cls ? `<span class="${cls}">${(val >= 0 ? "+" : "") + fmt(val, 0)}</span>` : fmt(val, 0);
+  };
+  set("sumAutoTotal", s.total_assets);
+  set("sumAutoMv", s.market_value);
+  set("sumAutoUnreal", s.unreal_pnl, clsOf(s.unreal_pnl));
+  set("sumAutoReal", s.realized_pnl, clsOf(s.realized_pnl));
 }
 
 /* ================= 初始化 ================= */
@@ -4801,6 +5067,7 @@ function startLivePoll() {
     const act = document.querySelector(".sidebar-item.active");
     const t = act && act.dataset.tab;
     if (t === "auto" || t === "overview") loadAutoStatus();
+    if (t === "auto" || t === "overview") loadAutoPnl();   // 2026-10-10: auto tab 也要流水/每日盈亏
   }, 10000, 2200);
   // 人工确认闸 10s 全局轮询（与 tab 无关：买入确认时效敏感，任何 tab 都弹窗打扰）
   _startStaggered("buyConfirm", pollBuyConfirm, 10000, 3600);
@@ -4847,20 +5114,6 @@ async function init() {
   if (hunterRegen) hunterRegen.addEventListener("click", regenerateHunter);
   initHunterDates();
   // 2026-09-01: 选股猎手 tab 主要指数已删除，移除 loadIndices 初始化与 60s 轮询（loadIndices 函数保留供兼容）
-  // 成本校准按钮
-  const calibBtn = document.getElementById("calibBtn");
-  if (calibBtn) calibBtn.addEventListener("click", () => {
-    if (!state.costHistory) {
-      apiCall("load_cost_history").then(ch => { state.costHistory = ch || {}; openCalibModal(ch || {}); }).catch(() => {});
-    } else openCalibModal(state.costHistory);
-  });
-  const calibClose = document.getElementById("calibClose");
-  if (calibClose) calibClose.addEventListener("click", closeCalibModal);
-  const calibSave = document.getElementById("calibSave");
-  if (calibSave) calibSave.addEventListener("click", saveCalib);
-  document.getElementById("calibModal").addEventListener("click", e => {
-    if (e.target.id === "calibModal") closeCalibModal();
-  });
   autoPoll.addEventListener("change", () => {
     if (autoPoll.checked) {
       startPoll();
@@ -4918,14 +5171,14 @@ document.addEventListener("DOMContentLoaded", () => {
   }
   // pywebview 桥接脚本可能在 DOMContentLoaded 之后才注入，等待 pywebviewready / 轮询兜底
   statusEl("尝试连接后端...");
-  if (window.pywebview && window.pywebview.api) {
+  if (_apiReady()) {
     init();
     return;
   }
   let booted = false;
   const doBoot = () => {
     if (booted) return;
-    if (window.pywebview && window.pywebview.api) { booted = true; init(); }
+    if (_apiReady()) { booted = true; init(); }
   };
   window.addEventListener("pywebviewready", doBoot);
   const t = setInterval(() => { doBoot(); if (booted) clearInterval(t); }, 250);
