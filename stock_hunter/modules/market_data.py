@@ -625,6 +625,26 @@ class MarketDataFetcher:
                     if is_limit and limit_up_price > 0 and open_price >= limit_up_price * 0.99:
                         is_word_limit = 1
 
+                    # 「刚站上5日线」状态跃迁（2026-10-10）：口径**与 core/ma_reclaim.ma5_state 一致**
+                    # （昨收<昨MA5 且今收>今MA5），勿另立门户。
+                    # 为什么只出跃迁、不出「是否站上」：实测 2488 只 / 119,275 候选 stock-day，
+                    # 布尔「站上」在候选层 96% 冗余且方向为负（未站上的票反而更好），
+                    # 而跃迁是唯一 h1/h2/非重叠三重为正的口径（见 tmp/exp_hunter_ma5.py）。
+                    ma5_reclaim = 0
+                    try:
+                        _lo = max(0, target_idx - 5)
+                        _win = [float(x) for x in df.iloc[_lo:target_idx + 1]['close'].tolist()]
+                        if len(_win) >= 6:                     # 需 5 根算昨 MA5 + 今日
+                            _px = _win[-1]
+                            _basis = _win[:-1]                 # 截至昨日
+                            _prev_close_ = _basis[-1]
+                            _prev_ma5 = sum(_basis[-5:]) / 5.0
+                            _cur_ma5 = (sum(_basis[-4:]) + _px) / 5.0
+                            if _cur_ma5 > 0 and _px > 0:
+                                ma5_reclaim = 1 if (_prev_close_ < _prev_ma5 and _px > _cur_ma5) else 0
+                    except Exception:
+                        ma5_reclaim = 0
+
                     return {
                         "代码": code,
                         "名称": "",
@@ -650,6 +670,7 @@ class MarketDataFetcher:
                         "首板涨停": is_first_limit,
                         "连板天数": consecutive_limit,
                         "一字板涨停": is_word_limit,
+                        "刚站上5日线": ma5_reclaim,
                         "数据日期": str(target_row['date']),
                     }
 

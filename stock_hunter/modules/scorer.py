@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
-评分计算模块 v11 — 标准版+P2箱体突破质量维度
-满分 = 8+6+3+2+1+5+6+3+2+3 = 39分，+3分 = 42分
+评分计算模块 v12 — v11 + D11刚站上5日线维度（2026-10-10）
+满分 = 8+6+3+2+1+5+6+3+2+2+3 = 41分（D10/D11 须在 config.scoring.dimensions 里列出才计入）
 
 打分标准：
   D1: 强势形态且新高（最高>近150日最高）- 8分
@@ -13,6 +13,7 @@
   D8: 情绪分数（当日一字板）- 6分
   D9: 活跃程度（近10日有涨停板）- 3分
   D10: 箱体突破质量（P2新增，基于改进的check_box_breakout）- 2分
+  D11: 刚站上5日线（2026-10-10新增，状态跃迁：昨收<昨MA5 且今收>今MA5）- 2分
   大成交额: 当日成交额>=50亿，额外+3分
 """
 from abc import ABC, abstractmethod
@@ -155,6 +156,34 @@ class D10箱体突破质量Scorer(ScorerBase):
         return score, detail
 
 
+class D11刚站上5日线Scorer(ScorerBase):
+    """D11 刚站上5日线（2026-10-10 新增）：昨收<昨MA5 且今收>今MA5。
+
+    ⚠️ 这里是**状态跃迁**（event），不是「是否在 MA5 上方」（state）——两者实测差别很大，别混：
+
+    | 口径 | 候选层表现（r_5d 单笔，n=119,275） |
+    |---|---|
+    | 布尔「站上」 | **96% 冗余**（114,751/119,275 同在 MA5 上方 ⇒ 给同分、不改排序），
+    |              | 且方向为负：未站上的 4,524 只反而更好（+0.77% vs +0.42%，胜率 50.7% vs 45.0%），
+    |              | 非重叠子样本里「站上」组均值 **−0.04%（t=−0.59，等于零）** |
+    | 跃迁「刚站上」| **唯一 h1/h2/非重叠三重为正**：Δ=+0.42pp（t=4.28）， |
+    |              | h1 +0.83%（t=4.09）/ h2 +0.81%（t=7.94），非重叠 +1.04%（t=5.14） |
+
+    机理上也不冗余：现有 10 项全是「**已经**在近期高位」（新高/连板/一字板），
+    本项是「**刚从**低位翻上来」——与它们不共线。
+
+    证据脚本：`tmp/exp_hunter_ma5.py`（2488 只 × 约 64 万 stock-day，2023-06~2026-10）。
+    未计成本（往返约 0.14%）；未叠加「热门板块」过滤，故是**打分器条件层**结论。
+    """
+
+    name = "D11刚站上5日线"
+
+    def compute(self, stock_data: dict) -> Tuple[int, str]:
+        reclaim = stock_data.get("刚站上5日线", 0) or 0
+        score = 2 if reclaim else 0
+        return score, f"刚站上5日线={reclaim} -> {score}分"
+
+
 class ConceptScorer:
     def __init__(self, dimensions: list = None):
         self.scorers = [
@@ -167,6 +196,7 @@ class ConceptScorer:
             D8情绪分数Scorer(),
             D9活跃程度Scorer(),
             D10箱体突破质量Scorer(),  # P2新增
+            D11刚站上5日线Scorer(),   # 2026-10-10 新增（须同时在 config.scoring.dimensions 里列出才生效）
             大成交额Scorer(),
         ]
         if dimensions:
