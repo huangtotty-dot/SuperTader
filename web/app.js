@@ -150,6 +150,27 @@ let state = { date: null, payload: null, trend: [], accountsDetail: {},
               tradeHistory: null, accountList: [] };   // accountList: 历史成交为源的账户列表
 let userPinnedDate = false;   // 用户手动选了历史日期时置 true，防止自动切回今天覆盖用户选择
 
+// ===== 投递层保护（2026-10-10）：超时 + 在飞上限 =====
+// 为什么要这两条（实测证据，见 t_io/logs/gui_thread_dumps.log 解析）：
+//   · pywebview 对**每次** js_api 调用 `Thread(target=_call).start()` —— 无池无上限；
+//   · 每个返回值都要经 `window.evaluate_js` → `self.webview.Invoke(...)`（**同步**编组回 UI 线程）
+//     → `semaphore.acquire()`（**无超时**，edgechromium.py:160）。
+//   · 实测一次卡死现场 68 个线程里 **25 个堵在这条返回路径上**（21 个躺在 semaphore.acquire，
+//     4 个躺在 Invoke），另有 12 个在 pandas、4 个在网络。
+//   ⇒ 只要某个返回值没送达，那个线程**永不退出**（线程数曾达 114）。这就是"卡死"而非"慢"：
+//     挂住的调用连 `finally` 都跑不到，**根本不会出现在 gui_slow_calls.log 里**
+//     （所以日志只有 43 条慢调用、进程里却有上百线程）。
+// 两条对策：
+//   1) **超时**：调用超过 _API_TIMEOUT_MS 就放弃等待。否则 `await` 永不 resolve，
+//      配上「非重叠轮询」会让该轮询器**永久停摆**（我上一轮改动引入的风险）。
+//   2) **在飞上限**：全局最多 _API_MAX_INFLIGHT 个并发。到达率不必超过服务率就能靠堆积
+//      把队列撑爆——限流把队列钉成有界。
+const _API_TIMEOUT_MS = 20000;
+const _API_MAX_INFLIGHT = 6;
+let _apiInflight = 0;
+let _apiTimeoutCnt = 0;
+let _lastReportAt = 0;      // 上报节流（见 apiCall 末尾注释）
+
 async function apiCall(name, ...args) {
   if (!window.pywebview || !window.pywebview.api) {
     throw new Error("未运行在 pywebview 环境（请用 python t_gui.py 启动）");
@@ -166,15 +187,39 @@ async function apiCall(name, ...args) {
       throw new Error(`后端方法 ${name} 不可用（pywebview 桥接未就绪，或后端进程未重启）`);
     }
   }
-  // 2026-10-07: 慢调用留痕——js_api 全在主线程串行，任何 >800ms 的调用都会冻界面。
-  // 计时后 fire-and-forget 上报后端写 t_io/logs/gui_slow_calls.log（不阻塞、失败静默）。
+  // 等空位（最多 30s，避免无界堆积；等不到就照常放行，宁可直接超时也不要静默吞掉）
+  const _qDeadline = Date.now() + 30000;
+  while (_apiInflight >= _API_MAX_INFLIGHT && Date.now() < _qDeadline) {
+    await new Promise(r => setTimeout(r, 40));
+  }
+  _apiInflight++;
   const _t0 = performance.now();
+  let _timedOut = false;
   try {
-    return await window.pywebview.api[name](...args);
+    return await Promise.race([
+      window.pywebview.api[name](...args),
+      new Promise((_, rej) => setTimeout(() => {
+        _timedOut = true;
+        rej(new Error(`后端 ${name} 超时 ${_API_TIMEOUT_MS}ms（投递层积压，该次结果已丢弃）`));
+      }, _API_TIMEOUT_MS)),
+    ]);
   } finally {
+    _apiInflight--;
     const _dt = performance.now() - _t0;
-    if (_dt >= 800 && name !== "report_slow_call") {
-      try { window.pywebview.api.report_slow_call(name, Math.round(_dt)); } catch (e) { /* 静默 */ }
+    // ⚠️ 上报本身是个 js_api 调用（会新起线程 + 占用 UI 线程返回通道）。冻结时"每次调用都慢"
+    // ⇒ 每次都再触发一次上报 = **把队列翻倍**。故全局节流：2s 内至多上报一次。
+    // ⚠️ 注意写法：**绝不能在 finally 里 `return`** —— JS 中 finally 的 return 会**覆盖**
+    // try 的返回值，那样几乎每次 apiCall 都会返回 undefined、整个界面作废。故用 if 包住。
+    const _now = Date.now();
+    if (_now - _lastReportAt >= 2000) {
+      _lastReportAt = _now;
+      if (_timedOut) {
+        _apiTimeoutCnt++;
+        // 超时单独记一笔（这类调用不会走慢调用上报：挂住的调用连 finally 都跑不到，日志里是隐形的）
+        try { window.pywebview.api.report_client_diag("api_timeout", _dt, String(name)); } catch (e) { }
+      } else if (_dt >= 800 && name !== "report_slow_call") {
+        try { window.pywebview.api.report_slow_call(name, Math.round(_dt)); } catch (e) { /* 静默 */ }
+      }
     }
   }
 }
@@ -962,7 +1007,16 @@ async function drawTurnoverHist() {
     },
   }));
   turnoverHistInst.setOption({
-    grid: { left: 46, right: 8, top: 8, bottom: 18 },
+    // 冷启动快照（2026-10-10）：stale 时在图上点名"这是快照、非实时"，并让出顶部空间。
+    // 注意：stale 快照的 `available` 为 true，所以上面「warming → 8s 重试」分支不会触发——
+    // 必须靠这条标题让用户知道看到的不是实时值（安全契约：不得静默当实时）。
+    title: d.stale
+      ? {
+        text: `⚠ 快照 ${d.snapshot_ts || "—"}（后台刷新中）`, left: 46, top: 0,
+        textStyle: { fontSize: 10, color: "#d29922", fontWeight: "normal" },
+      }
+      : undefined,
+    grid: { left: 46, right: 8, top: d.stale ? 22 : 8, bottom: 18 },
     tooltip: {
       trigger: "axis",
       formatter: (ps) => {
@@ -1204,10 +1258,19 @@ function pushAlert(s) {
 let sigTimer = null;
 function startSignalPoll() {
   stopSignalPoll();
-  sigTimer = setInterval(pollSignals, 5000);
+  // 「完成后才排下一次」（2026-10-10，见 _startStaggered 的说明）：pollSignals 是 async，
+  // setInterval 不 await，投递慢时会并发叠加（实测 20s ÷ 5s = 叠 4 个）。
+  const tick = async () => {
+    try {
+      // 上限保护同 _startStaggered
+      await Promise.race([pollSignals(), new Promise(r => setTimeout(r, 30000))]);
+    } catch (e) { /* 静默 */ }
+    if (sigTimer !== null) sigTimer = setTimeout(tick, 5000);
+  };
+  sigTimer = setTimeout(tick, 5000);
 }
 function stopSignalPoll() {
-  if (sigTimer) { clearInterval(sigTimer); sigTimer = null; }
+  if (sigTimer) { clearTimeout(sigTimer); sigTimer = null; }
 }
 async function pollSignals() {
   const date = state.date;
@@ -3282,12 +3345,17 @@ function turnoverCard(t) {
   // 北交所不可得 ⇒ 降级为沪深口径，明示（否则数值会比同花顺低 ~120 亿）
   const warn = t.bse_included === false
     ? `<div style="font-size:10px;color:var(--warn,#d29922)">沪深口径·北交所不可得</div>` : "";
-  return `<div class="idx-card" style="min-width:150px;text-align:center" title="${esc(tip)}">
-    <div style="font-size:13px;color:var(--text-dim)">两市成交额${t.bse_included === false ? "（缺北）" : ""}</div>
+  // 冷启动快照：加了"（快照）"标记 + tooltip 给出快照时刻（安全契约：不得静默当实时）
+  const stale = t.stale
+    ? `<div style="font-size:10px;color:var(--warn,#d29922)"
+         title="${esc("冷启动快照，非实时；后台刷新中")}">快照 ${esc(t.snapshot_ts || "—")}</div>` : "";
+  return `<div class="idx-card${t.stale ? " idx-card-stale" : ""}" style="min-width:150px;text-align:center" title="${esc(tip)}">
+    <div style="font-size:13px;color:var(--text-dim)">两市成交额${t.bse_included === false ? "（缺北）" : ""}${t.stale ? "（快照）" : ""}</div>
     <div class="mono" style="font-size:16px;font-weight:700">${fmtAmount(t.amount)}</div>
     <div class="mono ${cls}" style="font-size:11px">${pctTxt}
       <span style="color:var(--text-faint);font-size:10px">${basis}</span></div>
     ${warn}
+    ${stale}
   </div>`;
 }
 // 指数列表来自后端 core.board_index.GUI_INDEX_BOARD（单一真源），实时源掘金（不可用降级腾讯）。
@@ -3308,7 +3376,15 @@ async function loadIndices() {
     }
     const reg = d.regime
       ? `大盘 ${esc(d.regime)}${d.days_in_regime ? " 第" + d.days_in_regime + "天" : ""}` : "";
-    if (meta) meta.textContent = [d.ts ? "更新于 " + d.ts : "", reg].filter(Boolean).join(" · ");
+    // 冷启动快照（2026-10-10）：后端从磁盘 last-good 快照秒返时必带 stale=true。
+    // **必须显式标注**，绝不能把过期价静默渲染成实时值（交易台安全契约）。约 10s 内被下一轮轮询替换。
+    const staleTxt = d.stale
+      ? `⚠ 快照 ${esc(d.snapshot_ts || "—")}（后台刷新中）`
+      : (d.ts ? "更新于 " + d.ts : "");
+    if (meta) {
+      meta.textContent = [staleTxt, reg].filter(Boolean).join(" · ");
+      meta.classList.toggle("meta-stale", !!d.stale);
+    }
 
     // 有效背离角标：同一指数多周期时优先显示「有边际」的那条
     const divBySym = {};
@@ -4999,26 +5075,46 @@ let dateSelect, refreshBtn, autoPoll;
 let pollTimer = null;      // 60s 盘后轮询
 // 盘中轮询定时器：统一由 _startStaggered/_stopStaggered 管理（错开相位，见 startLivePoll）
 const _liveTimers = {};    // name -> { kick: timeoutId, interval: intervalId }
+// ⚠️ 2026-10-10 **改为「完成后才排下一次」**，这是本次卡顿修复的核心。
+// 原来用 `setInterval(fn, periodMs)`，而 fn 是 async（refreshLive/refreshConsole…）——
+// setInterval **不 await**，所以只要单次耗时 > 间隔就会**并发叠加**。实测投递层单次往返
+// 16-20s 时：load_console(2s 间隔) 叠 8 个、signals(5s) 叠 4 个、live/auto/buyConfirm(10s) 各叠 2 个
+// ⇒ 常驻 18+ 个调用同时在飞，全挤进 pywebview 的 UI 线程队列 ⇒ 每次更慢 ⇒ 叠得更多。
+// 这是**正反馈**，也是日志里"每次调用都慢、且延迟稳定停在 20s 平台"的成因。
+// 改成完成后 setTimeout 排下一次：每个轮询器至多 1 个在飞，队列有界，反馈环断开。
+// 代价：慢时轮询频率自然降下来（这正是我们想要的背压），不再是固定的"到点就打"。
 function _startStaggered(name, fn, periodMs, offsetMs) {
   _stopStaggered(name);
-  const slot = { kick: null, interval: null };
-  // 先延迟 offset 再转成周期定时器：只挪相位，不改「首帧等一个周期」的原有语义
+  const slot = { kick: null, interval: null, stopped: false };
+  const tick = async () => {
+    if (slot.stopped) return;
+    try {
+      // 上限保护：单次若卡死（后端挂住不返回），也必须能重新排期——否则该轮询永久停摆。
+      // 取 30s：远大于正常往返，只在真挂住时兜底。
+      await Promise.race([Promise.resolve(fn()), new Promise(r => setTimeout(r, 30000))]);
+    } catch (e) { /* 静默：轮询失败不该打断循环 */ }
+    if (slot.stopped) return;
+    slot.interval = setTimeout(tick, periodMs);   // ← 上一次跑完才排下一次
+  };
+  // 先延迟 offset 再起跑：只挪相位，不改「首帧等一个周期」的原有语义
   slot.kick = setTimeout(() => {
     slot.kick = null;
-    slot.interval = setInterval(fn, periodMs);
+    if (slot.stopped) return;
+    slot.interval = setTimeout(tick, 0);
   }, offsetMs);
   _liveTimers[name] = slot;
 }
 function _stopStaggered(name) {
   const s = _liveTimers[name];
   if (!s) return;
+  s.stopped = true;                       // 让已在飞的 tick 返回后不再自我续期
   if (s.kick) clearTimeout(s.kick);
-  if (s.interval) clearInterval(s.interval);
+  if (s.interval) clearTimeout(s.interval);   // 现在存的是 timeoutId（原为 intervalId）
   delete _liveTimers[name];
 }
 
 function stopPoll() {
-  if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+  if (pollTimer) { clearTimeout(pollTimer); pollTimer = null; }   // 存的是 timeoutId
 }
 async function maybeAutoSwitchToToday() {
   // 启动时今天尚无盘后数据被挪到末尾、看板停在历史日时，一旦今天数据出现自动切回
@@ -5035,12 +5131,21 @@ async function maybeAutoSwitchToToday() {
 }
 function startPoll() {
   stopPoll();
-  pollTimer = setInterval(() => {
+  // 同样是「完成后才排下一次」（2026-10-10，见 _startStaggered 的说明）：
+  // loadAndRender 会扇出十几个接口，若 60s 到点就打、不等上次跑完，慢时会层层叠加。
+  const tick = async () => {
     if (state.date) {
-      loadAndRender(state.date, true);
-      maybeAutoSwitchToToday();
+      try {
+        // 上限保护同 _startStaggered：卡死也要能重新排期
+        await Promise.race([(async () => {
+          await loadAndRender(state.date, true);
+          await maybeAutoSwitchToToday();
+        })(), new Promise(r => setTimeout(r, 60000))]);
+      } catch (e) { /* 静默 */ }
     }
-  }, 60000);
+    if (pollTimer !== null) pollTimer = setTimeout(tick, 60000);
+  };
+  pollTimer = setTimeout(tick, 60000);
 }
 function stopLivePoll() {
   ["live", "console", "auto", "buyConfirm"].forEach(_stopStaggered);
@@ -5052,22 +5157,25 @@ function startLivePoll() {
   document.getElementById("liveTag").textContent = "LIVE 10s";
   // 这几个定时器原来在同一条语句流里 setInterval，**相位完全相同** ⇒ 每 10s 所有请求在同一
   // 瞬间一起打后端（突发尖峰，pywebview 线程上是串行的）。错开相位把尖峰摊平，周期不变。
+  // ⚠️ 回调**必须 return promise**，否则 _startStaggered 的「完成后才排下一次」拿不到完成信号，
+  // 背压失效（2026-10-10 改非重叠轮询时踩到的坑）。
   _startStaggered("live", () => {
-    if (state.date) refreshLive(false);
+    if (state.date) return refreshLive(false);
   }, 10000, 0);
   // 2026-09-02: 实时 Console 2s 独立刷新（不随 10s live 轮询）。
   // 不在此 refreshConsole(true)——首次/切日期的从头拉由 refreshLive(reset) 负责，避免每次
   // startLivePoll 都清空 consoleBuf 导致已显示信息被重置。
   _startStaggered("console", () => {
-    if (state.date) refreshConsole(false);
+    if (state.date) return refreshConsole(false);
   }, 2000, 400);
   if (!consoleDate) refreshConsole(true);  // 仅首次(consoleDate 未初始化)从头拉
   // P4-3: 自动盘 10s 轮询（自动盘 tab 或概览页（含自动盘持仓卡片）激活时拉取 bridge）
   _startStaggered("auto", () => {
     const act = document.querySelector(".sidebar-item.active");
     const t = act && act.dataset.tab;
-    if (t === "auto" || t === "overview") loadAutoStatus();
-    if (t === "auto" || t === "overview") loadAutoPnl();   // 2026-10-10: auto tab 也要流水/每日盈亏
+    if (t !== "auto" && t !== "overview") return;
+    // 2026-10-10: auto tab 也要流水/每日盈亏
+    return Promise.all([loadAutoStatus(), loadAutoPnl()]);
   }, 10000, 2200);
   // 人工确认闸 10s 全局轮询（与 tab 无关：买入确认时效敏感，任何 tab 都弹窗打扰）
   _startStaggered("buyConfirm", pollBuyConfirm, 10000, 3600);
@@ -5169,6 +5277,54 @@ document.addEventListener("DOMContentLoaded", () => {
     if (window.ResizeObserver) new ResizeObserver(_reserve).observe(_tb);
     _reserve();
   }
+  // ===== 投递层诊断（2026-10-10）=====
+  // 结论已拿到（见 t_io/logs/gui_thread_dumps.log 与 tmp/parse_thread_dump.py）：
+  // 一次卡死现场 68 线程里 **25 个堵在 pywebview 的返回路径**（21 个在
+  // `edgechromium.py:160 semaphore.acquire()`、4 个在 `:152 self.webview.Invoke`），
+  // 另有 12 个在 pandas、4 个在网络。pinpoint 已足够，故**大幅降载**，避免埋点自己
+  // 给被测的队列添堵（每个 js_api 调用都会新起一个线程 + 占用一次 UI 线程返回通道）：
+  //  · jsblock：保留（纯 JS 侧，零桥接调用，不添载）。
+  //  · ping   ：2s → **10s**，且改走 `apiCall` ⇒ **受在飞上限约束**，不再绕过限流。
+  //  · dump_threads：**取消自动触发**（一次写 100KB+ 栈、且它本身是个 js_api 调用）。
+  //    需要时手工调 `dump_threads()`（或临时把下面的开关打开）。
+  const _AUTO_DUMP = false;   // 需要再抓栈现场时改 true
+  // ⚠️ 必须节流：jsblock 在卡顿时可能**每 250ms 就触发一次**，而每次上报都是一次 js_api 调用
+  // （新起线程 + 占用 UI 线程返回通道）⇒ 埋点自己会变成主要负载来源。2s 内至多一次。
+  let _lastDiagAt = 0;
+  function _diagReport(kind, value, note) {
+    const now = Date.now();
+    if (now - _lastDiagAt < 2000) return;
+    _lastDiagAt = now;
+    try {
+      if (window.pywebview && window.pywebview.api
+        && typeof window.pywebview.api.report_client_diag === "function") {
+        // fire-and-forget，且**不占** apiCall 的在飞名额（诊断不该挤掉业务调用）
+        window.pywebview.api.report_client_diag(kind, Math.round(value), note || "");
+      }
+    } catch (e) { /* 静默 */ }
+  }
+  let _lastTick = performance.now();
+  setInterval(() => {
+    const now = performance.now();
+    const gap = now - _lastTick;
+    _lastTick = now;
+    // 250ms 定时器被拖到 >1000ms ⇒ 主线程至少堵了 (gap-250)ms
+    if (gap > 1000) _diagReport("jsblock", gap - 250, "JS main thread blocked");
+  }, 250);
+  let _dumpedAt = 0;
+  setInterval(async () => {
+    const t0 = performance.now();
+    try {
+      await apiCall("ping");     // 走 apiCall ⇒ 受 _API_MAX_INFLIGHT / 超时约束
+    } catch (e) { return; }
+    const dt = performance.now() - t0;
+    if (dt > 300) _diagReport("ping", dt, "empty-endpoint round trip");
+    if (_AUTO_DUMP && dt > 3000 && Date.now() - _dumpedAt > 60000) {
+      _dumpedAt = Date.now();
+      try { window.pywebview.api.dump_threads(`ping=${Math.round(dt)}ms`); } catch (e) { }
+    }
+  }, 10000);
+
   // pywebview 桥接脚本可能在 DOMContentLoaded 之后才注入，等待 pywebviewready / 轮询兜底
   statusEl("尝试连接后端...");
   if (_apiReady()) {

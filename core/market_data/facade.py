@@ -4,6 +4,7 @@
 """
 import concurrent.futures as _cf
 import logging
+import threading
 from datetime import datetime, timedelta
 
 import pandas as pd
@@ -82,6 +83,9 @@ class MarketDataFacade:
             self._gm = None
         self._tx = TencentProvider()
         self._gm_down_until = None
+        # 半开单探针锁（2026-10-10）：见 _gm_ok 注释。
+        self._gm_probe_lock = threading.Lock()
+        self._gm_probe_until = None
         # P1-2: 单 worker 池承载 gm 调用，超时即弃池重建（挂死线程不可回收）
         self._gm_pool = _cf.ThreadPoolExecutor(max_workers=1, thread_name_prefix="gm-call")
 
@@ -89,12 +93,35 @@ class MarketDataFacade:
         return bool(self._gm is not None and getattr(self._gm, "_ready", False))
 
     def _gm_ok(self) -> bool:
-        """可尝试 gm = 已 ready 且不在不可达冷却窗内。"""
-        return self._gm_ready() and (self._gm_down_until is None
-                                     or datetime.now() >= self._gm_down_until)
+        """可尝试 gm = 已 ready 且不在不可达冷却窗内。冷却窗外再加**半开单探针闸**。
+
+        2026-10-10：原实现是「先检查后置位」——GUI 冷启动时几十个 js_api 线程几乎同时调
+        本函数，`_gm_down_until` 还是 None ⇒ **全部放行**，然后一起排进那个单 worker 池
+        （见 __init__ 的 _gm_pool）逐个付满 _GM_CALL_TIMEOUT=4s。而首次失败要到 t0+4s 才置冷却窗，
+        那时所有调用者**早已排队**。实测 16 路并发首帧扇出：进程内活线程 49–55，本征仅 19ms 的
+        接口也被拖到 2.4-3.5s。
+        ⇒ 改为半开：冷却窗外的**同一时刻只放一个真打 gm**，其余立即走腾讯（腾讯本就是合法兜底，
+        返回的 df.attrs["source"]/payload.source 会标 "tencent"，语义不变）。
+        注意：做成「原子置位冷却窗」是**修不好**的——爆发线程在 t0 就已通过闸门，原子性只保证
+        t0+4s 之后的状态正确。必须限制**并发探针数**，不是让置位变原子。
+        健康 gm（<1s）时首个成功即调 _gm_ok_reset() 清窗（daily/minute/snapshot/index_daily/
+        index_snapshot/index_minute 全路径都调）⇒ 不会把后续并发误降级到腾讯。
+        """
+        if not self._gm_ready():
+            return False
+        now = datetime.now()
+        if self._gm_down_until is not None and now < self._gm_down_until:
+            return False
+        with self._gm_probe_lock:
+            if self._gm_probe_until is not None and now < self._gm_probe_until:
+                return False          # 已有探针在飞 → 不排队，直接走腾讯
+            self._gm_probe_until = now + timedelta(seconds=self._GM_CALL_TIMEOUT + 0.5)
+            return True
 
     def _gm_ok_reset(self) -> None:
         self._gm_down_until = None
+        # 探针成功 ⇒ 立即放开窗口，让后续并发正常用 gm（健康时不误降级腾讯）
+        self._gm_probe_until = None
 
     def _gm_call(self, desc: str, fn, *args, timeout: float = None, **kwargs):
         """P1-2(2026-09-10): 给 gm SDK 调用套线程池硬超时。
@@ -110,7 +137,16 @@ class MarketDataFacade:
             return fut.result(timeout=self._GM_CALL_TIMEOUT if timeout is None else timeout)
         except _cf.TimeoutError:
             try:
-                self._gm_pool.shutdown(wait=False)
+                # cancel_futures（2026-10-10）：探针超时说明 gm 挂死，此时池里可能已排着一串
+                # 等待中的任务——不取消它们就会逐个再付满 4s。取消后未启动的任务立即抛
+                # CancelledError → 调用点既有 `except Exception → _note_gm_down → 腾讯兜底`，
+                # 快速失败而不是排队。
+                self._gm_pool.shutdown(wait=False, cancel_futures=True)
+            except TypeError:            # Python < 3.9 无 cancel_futures
+                try:
+                    self._gm_pool.shutdown(wait=False)
+                except Exception:
+                    pass
             except Exception:
                 pass
             self._gm_pool = _cf.ThreadPoolExecutor(max_workers=1, thread_name_prefix="gm-call")
@@ -119,6 +155,8 @@ class MarketDataFacade:
     def _note_gm_down(self, ctx: str, key: str, exc: Exception) -> None:
         """gm 调用失败（多为终端服务不可达）→ 置冷却窗并每窗只告警一次。"""
         now = datetime.now()
+        with self._gm_probe_lock:            # 探针已失败 ⇒ 撤半开窗，后续直接吃冷却窗
+            self._gm_probe_until = None
         if self._gm_down_until is None or now >= self._gm_down_until:
             self._gm_down_until = now + timedelta(seconds=self._GM_COOLDOWN_SECONDS)
             log.warning("gm 服务不可达(%s %s: %s) → %ds 内直接走腾讯，不再逐调用重试",

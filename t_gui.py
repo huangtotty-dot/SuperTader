@@ -720,6 +720,121 @@ def _min_bars_asof(code, date_str, freq="30min"):
 _ACCT_MAP_CACHE = {"ts": 0.0, "map": {}}
 
 
+# ---- 总览页冷启动快照 + 单飞刷新（2026-10-10） ----
+# 症状：每次打开 GUI，首帧的指数板/成交额/成交额历史三个接口都因**冷缓存 + GM 单 worker 池
+# 串行 4s 超时**而返回占位符（实测 load_indices → {"indices":[],"error":"指数板取数超时"} 2571ms、
+# load_market_turnover → {"available":false} 2567ms）⇒ 用户看到**空白卡片**。
+# 同时 `_bounded` 超时后 shutdown(wait=False) 把 worker 连同已经算出的结果一起丢弃（弃工），
+# 16 路并发首帧扇出实测活线程 49-55（本征仅 19ms 的接口也被拖到 2.4-3.5s）。
+# 对策：把上次**成功且有效**的结果落盘（跨进程复用，内存 TTL 缓存做不到），冷启动立即返回快照
+# 并标 stale，后台**单飞**刷新；刷新到达后前端下一轮 10s 轮询自然替换。
+#
+# ⚠️ 安全契约（交易台不得把过期快照渲染成实时值）：
+#   1) 后端一旦从磁盘出数，**必须**带 stale=True + snapshot_day + snapshot_ts；
+#   2) 前端必须在 stale 时渲染可见标记（灰显 + "快照 HH:MM:SS"），不得静默替换；
+#   3) **只落盘有效结果**（见 _snapshot_write 的调用点校验），绝不落盘 _bounded 的占位符。
+_OVERVIEW_SNAPSHOT_DIR = BASE / "t_io" / "cache" / "overview_snapshots"
+_OVERVIEW_SNAPSHOT_MAX_AGE = 26 * 3600.0     # 绝对上限：防周一早上把上周五收盘当实时
+_SNAPSHOT_LOCK = threading.Lock()
+
+# 单飞在飞表：key -> threading.Event。**不用** `_bounded` 那个每调用新建的池——它超时时
+# `shutdown(wait=False)`，之后再 submit 会 RuntimeError: cannot schedule new futures after shutdown。
+_OVERVIEW_INFLIGHT = {}
+_OVERVIEW_INFLIGHT_LOCK = threading.Lock()
+
+
+def _snapshot_read(key):
+    """读磁盘快照 → {"written_at","snapshot_day","age_sec","payload"} 或 None。
+
+    fail-open：文件坏/缺/超龄 = 没缓存，绝不抛。有效期为 _OVERVIEW_SNAPSHOT_MAX_AGE
+    （调用方各自再做同日/跨日判定——实时价类仅当日可用）。
+    """
+    fp = _OVERVIEW_SNAPSHOT_DIR / f"{key}.json"
+    with _SNAPSHOT_LOCK:
+        rec = _load_json(fp, None)
+    if not isinstance(rec, dict) or not isinstance(rec.get("payload"), dict):
+        return None
+    try:
+        age = _time_mod.time() - float(rec.get("written_at") or 0)
+    except Exception:
+        return None
+    if age < 0 or age > _OVERVIEW_SNAPSHOT_MAX_AGE:
+        return None
+    rec["age_sec"] = age
+    return rec
+
+
+def _snapshot_write(key, payload):
+    """写磁盘快照（tmp + 原子替换；沿用 `_em_boards_disk_cached` 的写法）。
+
+    fail-open：写失败忽略。**调用方必须保证 payload 有效**（非占位、且过 _clean）。
+    """
+    if not isinstance(payload, dict):
+        return
+    fp = _OVERVIEW_SNAPSHOT_DIR / f"{key}.json"
+    rec = {"written_at": _time_mod.time(),
+           "snapshot_day": datetime.now().strftime("%Y-%m-%d"),
+           "payload": payload}
+    try:
+        blob = json.dumps(rec, ensure_ascii=False, default=str)
+    except Exception:
+        return
+    try:
+        with _SNAPSHOT_LOCK:
+            fp.parent.mkdir(parents=True, exist_ok=True)
+            tmp = fp.with_suffix(".tmp")
+            tmp.write_text(blob, encoding="utf-8")
+            tmp.replace(fp)
+    except Exception:
+        pass
+
+
+def _kick_overview_refresh(key, fn):
+    """按 key **单飞**起一次后台刷新；返回 (本次是否由我起, Event)。
+
+    锁内**只做 dict 读写**，绝不跨慢活持锁——否则并发调用者会无界阻塞、失去超时语义。
+    失败不毒化单飞：finally 里无论成败都清在飞表，下一轮照常重试（异常绝不当作成功缓存）。
+    """
+    with _OVERVIEW_INFLIGHT_LOCK:
+        ev = _OVERVIEW_INFLIGHT.get(key)
+        if ev is not None:
+            return False, ev
+        ev = threading.Event()
+        _OVERVIEW_INFLIGHT[key] = ev
+
+    def _bg():
+        try:
+            fn()
+        except Exception:
+            pass
+        finally:
+            with _OVERVIEW_INFLIGHT_LOCK:
+                _OVERVIEW_INFLIGHT.pop(key, None)
+            ev.set()
+
+    _th.Thread(target=_bg, name=f"ovw-refresh-{key}", daemon=True).start()
+    return True, ev
+
+
+def _stale_wrap(snap):
+    """把磁盘快照包装成可下发的 payload（附 stale 元信息，见安全契约第 1 条）。"""
+    out = dict(snap["payload"])
+    ts = out.get("ts")
+    out.update({"stale": True,
+                "stale_age_sec": int(snap["age_sec"]),
+                "snapshot_day": snap.get("snapshot_day"),
+                "snapshot_ts": ts if isinstance(ts, str) else None,
+                "stale_reason": "cold_start"})
+    return _clean(out)
+
+
+def _is_today(snap):
+    return snap.get("snapshot_day") == datetime.now().strftime("%Y-%m-%d")
+
+
+# ---- 东财「所属板块」磁盘缓存层（2026-09-30，突破面板概念列补拉专用） ----
+
+
 # ---- 东财「所属板块」磁盘缓存层（2026-09-30，突破面板概念列补拉专用） ----
 #: 结构 {code: {"ts": epoch, "boards": [{name,kind}]}}；概念不常变，正缓存 7 天，
 #: 负缓存（拉空=风控或真无板块）1 天，防风控期反复 8 次重试拖慢扫描。
@@ -871,6 +986,10 @@ class Api:
     _turnover_cache = {}
     # 近 N 日成交额缓存，见 load_turnover_history
     _turnover_hist_cache = {}
+    # 指数板缓存 {"payload": (ts, payload)}，见 load_indices（2026-10-10：原先**无** TTL，
+    # 每 10s 轮询都重打 GM index_snapshot，是冷启动窗口 GM 负载的直接来源）
+    _indices_cache = {}
+    _INDICES_TTL = 10.0
 
     def __init__(self):
         self._dates_cache = None
@@ -1043,8 +1162,26 @@ class Api:
     _TURNOVER_TTL = 60.0
 
     def load_market_turnover(self):
-        """两市成交额（外层硬超时 2.5s；超时给 {available:False} 占位，后台继续、下轮缓存命中）。"""
-        return self._bounded(self._market_turnover_impl, 2.5, {"available": False})
+        """两市成交额。三段式（2026-10-10）：内存热 → 磁盘快照(stale) → 踢单飞刷新+短等。
+
+        **不再走 `_bounded`**：那个超时会 shutdown(wait=False) 把 worker 连结果一起丢弃（弃工），
+        冷启动每 10s 白跑一次完整慢路径。现在慢路径活在单飞后台线程里、必然跑完并写缓存+落盘。
+        策略：冷启动立即返回**当日**磁盘快照并标 stale（首屏不再空白），后台刷新到达后前端
+        下一轮 10s 轮询自然替换。跨日快照直接丢弃——指数板/成交额是**实时价**，隔夜值当实时是误读。
+        """
+        now = _time_mod.time()
+        hit = Api._turnover_cache.get("payload")
+        if hit and (now - hit[0]) < self._TURNOVER_TTL:
+            return hit[1]                                      # 1) 内存热
+        _, ev = _kick_overview_refresh("market_turnover", self._market_turnover_impl)
+        snap = _snapshot_read("market_turnover")
+        if snap and _is_today(snap):
+            return _stale_wrap(snap)                           # 2) 当日快照 + stale
+        if ev.wait(0.8):                                       # 3) 首次运行（无快照）：短等真实值
+            hit = Api._turnover_cache.get("payload")
+            if hit:
+                return hit[1]
+        return {"available": False, "warming": True}
 
     def _market_turnover_impl(self):
         now = _time_mod.time()
@@ -1056,7 +1193,23 @@ class Api:
         except Exception as e:                      # 兜底：绝不让一张卡片拖垮指数板
             out = {"available": False, "error": f"{type(e).__name__}: {str(e)[:80]}"}
         Api._turnover_cache["payload"] = (now, out)
+        if out.get("available") is True:            # 只落盘有效结果（安全契约第 3 条）
+            _snapshot_write("market_turnover", _clean(out))
         return out
+
+    def _market_turnover_live(self):
+        """给 `_turnover_history_impl` 用的实时成交额：只读内存/当日快照，**绝不**再踢刷新。
+
+        2026-10-10：原先它调 `self.load_market_turnover()`——那本身又是个 `_bounded` 抛弃池，
+        一次冷 `load_turnover_history` 会起 ≥2 个池。改为只读，消掉嵌套池。
+        """
+        hit = Api._turnover_cache.get("payload")
+        if hit:
+            return hit[1]
+        snap = _snapshot_read("market_turnover")
+        if snap and _is_today(snap):
+            return snap["payload"]
+        return None
 
     @staticmethod
     def _market_turnover():
@@ -1169,9 +1322,26 @@ class Api:
     _TURNOVER_HIST_TTL = 120.0
 
     def load_turnover_history(self, days=60):
-        """近 N 日全市场成交额（外层硬超时 2.0s；超时返回 warming，前端显示加载中、稍后自填）。"""
-        return self._bounded(lambda: self._turnover_history_cached(days), 2.0,
-                             {"available": False, "warming": True, "days": []})
+        """近 N 日全市场成交额。三段式（2026-10-10，同 load_market_turnover，见其 docstring）。
+
+        与前两者**跨日规则不同**：60 日柱状图跨日依然有意义，故快照**允许跨日**显示——
+        但存的 `in_progress`/`day`/`as_of`/`basis` 必须**原样重放**（`_stale_wrap` 只加 stale 元信息、
+        不重算任何字段），否则昨天的最后一根会被当成今天正在走的实时柱。
+        """
+        now = _time_mod.time()
+        hit = Api._turnover_hist_cache.get("payload")
+        if hit and (now - hit[0]) < self._TURNOVER_HIST_TTL:
+            return hit[1]                                      # 1) 内存热
+        _, ev = _kick_overview_refresh(
+            "turnover_history", lambda: self._turnover_history_cached(days))
+        snap = _snapshot_read("turnover_history")
+        if snap:
+            return _stale_wrap(snap)                           # 2) 快照（可跨日）+ stale
+        if ev.wait(0.8):                                       # 3) 首次运行：短等真实值
+            hit = Api._turnover_hist_cache.get("payload")
+            if hit:
+                return hit[1]
+        return {"available": False, "warming": True, "days": []}
 
     def _turnover_history_cached(self, days=60):
         """近 N 个交易日的**全市场**成交额（柱状图用）。失败返回 {available: False, error}，永不抛。"""
@@ -1184,6 +1354,8 @@ class Api:
         except Exception as e:
             out = {"available": False, "error": f"{type(e).__name__}: {str(e)[:80]}"}
         Api._turnover_hist_cache["payload"] = (now, out)
+        if out.get("available") is True:            # 只落盘有效结果（安全契约第 3 条）
+            _snapshot_write("turnover_history", _clean(out))
         return out
 
     def _turnover_history_impl(self, days):
@@ -1217,7 +1389,7 @@ class Api:
         if not hs:
             return {"available": False, "error": "沪深日线为空", "degraded": ["index_daily"]}
 
-        live = self.load_market_turnover()
+        live = self._market_turnover_live() or {}     # 只读，绝不再起嵌套池（2026-10-10）
         live_day = live.get("day") if live.get("available") else None
         live_amount = live.get("amount") if live.get("available") else None
 
@@ -1255,19 +1427,57 @@ class Api:
                 "bse_included": bool(bse), "legs": ["sh000001", "sz399106", "bj899050"]}
 
     # ---------- 主要指数概览（2026-09-28：GUI_INDEX_BOARD 单一真源 + 掘金主源） ----------
-    @staticmethod
-    def _bounded(fn, timeout, default):
-        """硬超时执行 fn；超时返回 default（后台线程继续跑，跑完会写各自的缓存/占位）。
-        2026-10-07：GUI 的重显示端点（指数板/成交额历史）容易在 GM/东财抖动时卡十几秒，
-        而 js_api 是主线程同步调用 ⇒ 冻界面。用这个把它们的时间上界钉住。"""
-        import concurrent.futures as _cf
-        ex = _cf.ThreadPoolExecutor(max_workers=1)
+    # 2026-10-10: 原 `_bounded(fn, timeout, default)`（每调用新建 max_workers=1 池 + 超时
+    # `shutdown(wait=False)`）已删除——它的三个调用方（load_indices / load_market_turnover /
+    # load_turnover_history）全部改走「内存热 → 磁盘快照 → 单飞刷新」三段式。
+    # 删它的理由：超时后遗弃的 worker 继续跑完整慢路径、结果被丢弃（弃工），且每调用漏一个线程；
+    # 单飞刷新让慢路径必然跑完并写缓存+落盘，不需要再"钉时间上界"。
+
+    def ping(self):
+        """**投递层探针**（2026-10-10）：什么都不做，立即返回。
+
+        用途：前端每 2s 调一次并量往返。这个端点本征耗时 ~0，所以量到的任何延迟都是
+        **纯投递开销**（pywebview 排队 + UI 线程 Invoke + evaluate_js 的 semaphore + JS 主线程阻塞）。
+        背景：`load_console` 进程内本征 4ms，生产日志却记 23202ms ⇒ 慢的绝大部分不在后端计算。
+        这个探针把"后端慢"与"投递慢"彻底分开。
+        """
+        return {"t": _time_mod.time()}
+
+    def report_client_diag(self, kind, value, note=""):
+        """前端上报的**客户端侧**诊断（2026-10-10）→ `t_io/logs/gui_client_diag.log`。
+
+        kind: "jsblock"（JS 主线程阻塞 ms）| "ping"（空端点往返 ms）
+        value: 毫秒数
+        与 `report_slow_call` 分开写，避免污染那份"慢调用"记录。失败静默。
+        """
         try:
-            return ex.submit(fn).result(timeout=timeout)
+            log_fp = BASE / "t_io" / "logs" / "gui_client_diag.log"
+            log_fp.parent.mkdir(parents=True, exist_ok=True)
+            with open(log_fp, "a", encoding="utf-8") as f:
+                f.write(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} "
+                        f"{str(kind)[:16]:<10} {float(value):9.0f}ms  {str(note)[:80]}\n")
         except Exception:
-            return default
-        finally:
-            ex.shutdown(wait=False)
+            pass
+        return {"ok": True}
+
+    def dump_threads(self, tag=""):
+        """**按需落线程栈**（2026-10-10）：前端测到投递层极慢时自动调它。
+
+        为什么需要：看门狗（`_start_gui_freeze_watchdog`）只在**心跳停 >12s** 时才落栈，而 2s 的
+        `load_console` 一直在续心跳 ⇒ 即使每次调用 20s 也触发不了。这里由前端主动触发，
+        把"投递层慢时 Python 侧卡在哪一帧"抓下来。失败静默。
+        """
+        try:
+            import faulthandler
+            log_fp = BASE / "t_io" / "logs" / "gui_thread_dumps.log"
+            log_fp.parent.mkdir(parents=True, exist_ok=True)
+            with open(log_fp, "a", encoding="utf-8") as f:
+                f.write(f"\n===== 按需线程栈 {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+                        f" tag={str(tag)[:60]} 活线程={_th.active_count()} =====\n")
+                faulthandler.dump_traceback(file=f, all_threads=True)
+        except Exception:
+            pass
+        return {"ok": True}
 
     def report_slow_call(self, name, ms):
         """前端上报的慢 js_api 调用（>=800ms）→ 追加到 `t_io/logs/gui_slow_calls.log`。
@@ -1282,9 +1492,25 @@ class Api:
         return {"ok": True}
 
     def load_indices(self):
-        """指数状态板（外层硬超时 2.5s；超时给占位、后台继续，防 GM 抖动冻界面）。"""
-        return self._bounded(self._load_indices_impl, 2.5,
-                             {"ts": None, "indices": [], "regime": None, "error": "指数板取数超时"})
+        """指数状态板。三段式（2026-10-10）：内存热 → 当日磁盘快照(stale) → 踢单飞刷新+短等。
+
+        原先走 `_bounded(2.5s)`：冷启动必超时返回 {"indices":[],"error":"指数板取数超时"} ⇒
+        **首屏空白**，而被丢弃的 worker 还在后台跑完整慢路径。现在慢路径在单飞线程里必然跑完。
+        快照**仅当日可用**：指数板本就只在 `isToday` 展示（web/app.js:215），隔夜价当实时是误读。
+        """
+        now = _time_mod.time()
+        hit = Api._indices_cache.get("payload")
+        if hit and (now - hit[0]) < self._INDICES_TTL:
+            return hit[1]                                      # 1) 内存热
+        _, ev = _kick_overview_refresh("indices", self._load_indices_impl)
+        snap = _snapshot_read("indices")
+        if snap and _is_today(snap):
+            return _stale_wrap(snap)                           # 2) 当日快照 + stale
+        if ev.wait(0.8):                                       # 3) 首次运行：短等真实值
+            hit = Api._indices_cache.get("payload")
+            if hit:
+                return hit[1]
+        return {"ts": None, "indices": [], "regime": None, "error": "指数板取数中"}
 
     def _load_indices_impl(self):
         """拉指数板实时行情 + 大盘 regime。返回 {ts, indices:[{symbol,name,price,change,change_pct,source}], ...}
@@ -1360,7 +1586,14 @@ class Api:
             out["days_in_regime"] = state.get("days_in_regime")
         except Exception:
             pass
-        return _clean(out)
+        clean = _clean(out)
+        # 写内存 TTL + 落盘快照（2026-10-10）。**只在确实拿到行情时**落盘——空/占位不写，
+        # 否则冷启动会把"空指数板"固化成快照，下次开面板秒显一个假的空态（安全契约第 3 条）。
+        real = [i for i in (clean.get("indices") or []) if i.get("price")]
+        if real:
+            Api._indices_cache["payload"] = (_time_mod.time(), clean)
+            _snapshot_write("indices", clean)
+        return clean
 
     # ---------- 东财特殊标的报价（平均股价等；2026-09-28） ----------
     def _em_last_price(self, secid: str):
@@ -1425,17 +1658,22 @@ class Api:
         return None, None, None
 
     def _em_last_price_bounded(self, secid, timeout=1.0):
-        """带硬超时的 `_em_last_price`（2026-10-07）：东财风控时它最坏会跑「重试 + K线兜底」
-        十几秒，而 `load_indices` 在主线程上 ⇒ 冻界面。超时即返回 (None,None,None)，后台线程继续
-        （跑完会写负缓存，下一轮直接命中）。"""
-        import concurrent.futures as _cf
-        ex = _cf.ThreadPoolExecutor(max_workers=1)
-        try:
-            return ex.submit(self._em_last_price, secid).result(timeout=timeout)
-        except Exception:
-            return None, None, None
-        finally:
-            ex.shutdown(wait=False)
+        """`_em_last_price` 的**非阻塞**取用（2026-10-10 改造，原为带硬超时的抛弃池）。
+
+        原实现每次调用新建一个 `max_workers=1` 池并 `shutdown(wait=False)`——冷启动时指数板里
+        每个东财条目（平均股价等）都起一个抛弃池，池里的 worker 跑完「2×重试 + 8 次 K 线兜底」
+        的结果**被丢弃**，只是白烧时间和线程。
+        现在：命中 `Api._em_cache`（成功 120s / 失败负缓存 60s）就直接返回；未命中则**单飞**踢一个
+        后台线程去补，本次先返回占位——下一轮 10s 轮询即命中缓存。慢路径一个字节都不浪费。
+        """
+        c = str(secid)
+        hit = Api._em_cache.get(c)
+        if hit:
+            ttl = 120 if hit[1] else 60
+            if (_time_mod.time() - hit[0]) < ttl:
+                return hit[1], hit[2], hit[3]
+        _kick_overview_refresh(f"em_price_{c}", lambda: self._em_last_price(c))
+        return None, None, None
 
     # ---------- 指数背离（2026-09-28） ----------
     _div_cache = {}          # {"t": ts, "v": res}——见 load_index_divergence 的 TTL 说明
@@ -4433,7 +4671,21 @@ class Api:
 
         def _compute():
             result = {}
-            with ThreadPoolExecutor(max_workers=40) as ex:
+            # ⚠️ 并发度 40 → 6（2026-10-10）。这是 GUI「卡死」的**主因**，实测证据：
+            #   一次卡死现场抓 6 份线程栈（t_io/logs/gui_thread_dumps.log），里面
+            #   25~38 个线程常驻在 pandas，且 160/162 个来自 `futures._worker`——
+            #   业务帧高度集中在本批算上：`_stock_tags_from_df` 121、`_stock_tags_one` 120、
+            #   `adapter.get_trend30` 119、`evaluate_bars` 101。
+            #   为什么线程数会引发"卡死"而不是"慢"：pywebview 的 `js_bridge_call` 是**在 UI 线程上**
+            #   执行 `Thread(target=_call).start()` 的（edgechromium.py:251 → util.py:336），
+            #   而 `Thread.start()` 会**阻塞到新 OS 线程真正被调度**（threading.py:969 `_started.wait()`）。
+            #   环境里有 100+ 线程时这个等待变长 ⇒ UI 线程跑不了 `ExecuteScriptAsync` 回调 ⇒
+            #   那些 `semaphore.acquire()`（无超时，edgechromium.py:160）的线程永不退出 ⇒ 线程更多
+            #   ⇒ **自我强化的死亡螺旋**。
+            #   为什么降到 6 几乎不损吞吐：这些线程大部分时间在等 facade 那个**单 worker 的 GM 池**
+            #   （栈里可见 `facade.py:_gm_call`），40 并发换不到并行度，只换来 40 倍线程压力。
+            #   代价：标签批算整体变慢，首次进建仓表/破位表时标签"稍后才自填"（前端本就轮询补齐）。
+            with ThreadPoolExecutor(max_workers=6) as ex:
                 futures = {ex.submit(self._stock_tags_one, c): c for c in codes}
                 for fut in as_completed(futures, timeout=90):
                     code = futures[fut]
@@ -7455,6 +7707,53 @@ def _start_gui_freeze_watchdog(threshold_s=12.0):
     _th.Thread(target=_loop, name="gui-freeze-watchdog", daemon=True).start()
 
 
+def _start_ctrlc_abort_watchdog(grace_s=2.5, poll_s=0.4):
+    """Ctrl+C 必须能**连带关掉 GUI**（owner 2026-10-10）。
+
+    为什么 pywebview 自带的 SIGINT 不足——**两条路都可能断**：
+    1) 它的退出路径是「信号处理器置 `_sigint_received` → **GUI 线程的 WinForms Timer 每 500ms
+       检查** → `app.Exit()`」。而 `WM_TIMER` 是**最低优先级**的消息，只在消息队列空时才合成；
+       界面被大量 js_api 回调/WebView2 消息堵住时（本仓实测过 18+ 并发在飞）它迟迟不触发
+       ⇒ Ctrl+C 看起来毫无反应、窗口赖着不走。
+    2) 即使优雅路径走通、`app.Run()` 已返回，python 退出时 atexit 会 **join 非守护的
+       ThreadPoolExecutor worker**，而 GM 挂死的调用**不可取消**（见 core/market_data/facade.py）
+       ⇒ 进程卡在退出上（实测：卡死的非守护 worker 让主流程已跑完的进程 12s 都退不出去，
+       见 tmp/probe_exit_hang.py）。
+
+    故这里**不依赖 UI 线程是否响应**：只轮询 pywebview 自己的标志（读一个模块全局，不改它），
+    发现收到 Ctrl+C 后走优雅路径；宽限期一过还没死就 `os._exit` 强杀——窗口随进程一起消失，不留孤儿。
+    优雅路径能在宽限期内完成时，本守护线程根本没机会动手。
+    """
+    import os as _os
+
+    def _loop():
+        try:
+            from webview.platforms import winforms as _wfw
+        except Exception:
+            return
+        seen_at = None
+        while True:
+            _time_mod.sleep(poll_s)
+            try:
+                got = bool(getattr(_wfw, "_sigint_received", False))
+            except Exception:
+                got = False
+            if not got:
+                continue
+            if seen_at is None:
+                seen_at = _time_mod.time()
+                print("[Ctrl+C] 正在关闭界面…（宽限 %.0fs，超时强制终止）" % grace_s, flush=True)
+            elif (_time_mod.time() - seen_at) > grace_s:
+                print("[Ctrl+C] 界面未在宽限期内退出 → 强制终止进程", flush=True)
+                try:
+                    sys.stdout.flush()
+                except Exception:
+                    pass
+                _os._exit(0)
+
+    _th.Thread(target=_loop, name="ctrlc-abort", daemon=True).start()
+
+
 if __name__ == "__main__":
     import webview
 
@@ -7485,8 +7784,30 @@ if __name__ == "__main__":
             except Exception:
                 pass
     _th.Thread(target=_prewarm_imports, name="import-prewarm", daemon=True).start()
+
+    # GM 健康探测（2026-10-10）：放在窗口创建**之前**，让前端加载页面那 1-2s 与探测重叠。
+    # 为什么需要：facade 的 GM 熔断是「失败后才置冷却窗」，而首次失败要付满 4s。若等到前端首帧
+    # 扇出时才发现 GM 不可达，几十个 js_api 线程会挤在那个**单 worker** 的 GM 池上排队（见
+    # core/market_data/facade.py 的半开探针注释）。这里提前探一次：不可达 ⇒ 首帧扇出时
+    # `_gm_down_until` 已置好，整波直接走腾讯。
+    def _prewarm_gm_probe():
+        try:
+            from core.market_data.facade import get_provider
+            prov = get_provider()
+            if not prov._gm_ready():
+                return
+            _t = datetime.now().strftime("%Y-%m-%d")
+            df = prov.index_daily("sh000001", days=2, end_date=_t)   # 走 _gm_call 的 4s 硬超时
+            if df is None or df.empty:
+                prov._note_gm_down("startup-probe", "sh000001",
+                                   RuntimeError("启动探测：指数日线为空"))
+        except Exception:
+            pass
+    _th.Thread(target=_prewarm_gm_probe, name="gm-health-probe", daemon=True).start()
+
     # 2026-10-10: 后端「猎手定时自动运行」已停（owner 需求6，扫描一律按钮触发）。
     _start_gui_freeze_watchdog()      # 卡死看门狗：心跳停 >12s → 落线程栈到 t_io/logs/gui_freeze.log
+    _start_ctrlc_abort_watchdog()     # Ctrl+C 连带关掉 GUI（不依赖 UI 线程响应，见其 docstring）
     start_chart_prefetch_scheduler(api)   # 盘后 15:10 预下载 K线缓存（小池 payload+分钟、全池日线）
     start_ob_m30_refresher(api)           # 持仓体检 30min 快照：跨时段后台刷新（趋势/背离/顶部特征）
     # 启动预热（均为后台 daemon 线程，不阻塞启动；失败静默）：
