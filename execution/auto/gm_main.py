@@ -683,6 +683,10 @@ def _force_open_align(context) -> int:
 # 文档：doc/solutions/2026-10-10_S1执行集成.md
 # ══════════════════════════════════════════════════════════════════════
 _S1_EXEC_DONE_DATE = None                     # 每日一次标记（与 _OPEN_ALIGN_DONE_DATE 同款）
+_WS_PREPARE_DONE_DATE = None                  # 弱转强盘前预筛 · 每日一次
+_WS_BUY_DONE_DATE = None                      # 弱转强 10:00 买侧 · 每日一次
+_WS_MORNING_SELL_DONE_DATE = None             # 弱转强 10:00 早盘冲高卖 · 每日一次
+_WS_SELL_DONE_DATE = None                     # 弱转强 14:50 卖侧 · 每日一次
 
 
 def _s1_mode_on() -> bool:
@@ -878,6 +882,306 @@ def _s1_open_exec(context, now, today):
                        f"S1 picks 不可用,当日不下单: {str(_pe)[:200]}", code="")
         except Exception:
             pass
+
+
+# ═══════════════════════════════════════════════════════════════════
+# 弱转强选股策略 · 10:00 买侧（2026-10-10 施工，WS2/WS3）
+# ═══════════════════════════════════════════════════════════════════
+def _ws_mode_on() -> bool:
+    """弱转强 10:00 买侧总闸（读 PARAMS；缺键 fail-safe False=不下单）。"""
+    return bool(PARAMS.get("weak_strong_paper_enabled", False))
+
+
+def _load_ws_poll():
+    """按绝对路径加载 core/weak_strong_poll.py（core 不入 sys.path，与 OGR 同款）。"""
+    import importlib.util as _ilu
+    _root = os.environ.get("SUPERTRADER_ROOT", r"E:\superTrader")
+    _p = os.path.join(_root, "core", "weak_strong_poll.py")
+    if not os.path.exists(_p):
+        return None
+    _spec = _ilu.spec_from_file_location("weak_strong_poll", _p)
+    _m = _ilu.module_from_spec(_spec)
+    _spec.loader.exec_module(_m)
+    return _m
+
+
+def _ws_prepare(context, now, today):
+    """盘前弱转强超跌候选预筛（每日一次，09:31 触发；取数在 10:00 之前完成）。"""
+    _wsp = _load_ws_poll()
+    if _wsp is None:
+        return
+    _top = int(PARAMS.get("weak_strong_board_top_n", 5))
+    try:
+        _cand = _wsp.premarket_candidates(_top, str(today))
+    except Exception as _e:
+        print(f"[WS] 盘前预筛失败（fail-closed，当日不下单）: {_e}")
+        _audit_write({"event": "ws_prepare_fail", "date": str(today),
+                      "error": str(_e)[:200]})
+        _cand = {}
+    context._ws_candidates = _cand
+    print(f"[WS] 盘前超跌候选 {len(_cand)} 只（前{_top}板块内 且 昨收<MA20）")
+    _audit_write({"event": "ws_prepare", "date": str(today), "candidates": len(_cand)})
+
+
+def _ws_10am_bars_from_df(df, codes, now):
+    """GM history(df=True) → {code: 10:00棒的 low/close/amount/volume}。防御式。"""
+    out = {}
+    if df is None or len(df) == 0:
+        return out
+    try:
+        df = df.copy()
+        df["_code"] = df["symbol"].astype(str).str.split(".").str[-1]
+        df["_hm"] = pd.to_datetime(df["eob"]).dt.strftime("%H:%M:%S")
+        df = df[df["_hm"] == "10:00:00"]
+        for c in codes:
+            _row = df[df["_code"] == c]
+            if _row.empty:
+                continue
+            _r = _row.iloc[0]
+            try:
+                low = float(_r.get("low") or 0)
+                close = float(_r.get("close") or 0)
+                amount = float(_r.get("amount") or 0)
+                volume = float(_r.get("volume") or 0)
+            except Exception:
+                continue
+            if low > 0 and close > 0:
+                out[c] = {"low": low, "close": close, "amount": amount, "volume": volume}
+    except Exception:
+        pass
+    return out
+
+
+def _ws_try_buy(context, now) -> int:
+    """10:00 弱转强买入（每日一次）。返回已下单腿数。fail-closed：候选/棒缺失当日不下单。"""
+    import weak_strong_executor as _wse
+    _cand = dict(getattr(context, "_ws_candidates", None) or {})
+    if not _cand:
+        _audit_write({"event": "ws_skip", "reason": "no_candidates", "time": str(now)})
+        return 0
+    _wsp = _load_ws_poll()
+    if _wsp is None:
+        return 0
+    _pc, _ma = _wsp.split_into_prev_close_ma20(_cand)
+    _board = {c: v.get("board", "") for c, v in _cand.items()}
+    _codes = sorted(_cand)
+    _syms = [_code_to_gm(c) for c in _codes]
+    _start = now.strftime("%Y-%m-%d 09:25:00")
+    _end = now.strftime("%Y-%m-%d 10:01:00")
+    try:
+        _df = _sdk_call("ws_10am_bars", _partial(
+            history, symbol=_syms, frequency="1800s", start_time=_start, end_time=_end,
+            fields="symbol,eob,open,high,low,close,volume,amount",
+            adjust=ADJUST_PREV, df=True))
+    except Exception as _e:
+        print(f"[WS] 10:00 棒取数失败（fail-closed，当日不下单）: {_e}")
+        _audit_write({"event": "ws_fetch_fail", "error": str(_e)[:200], "time": str(now)})
+        return 0
+    _bars = _ws_10am_bars_from_df(_df, _codes, now)
+    if not _bars:
+        _audit_write({"event": "ws_skip", "reason": "no_bars", "time": str(now)})
+        return 0
+    _root = os.environ.get("SUPERTRADER_ROOT", r"E:\superTrader")
+    _book = os.path.join(_root, "t_io", "state", "weak_strong_book")
+    _params = {
+        "top_n": int(PARAMS.get("weak_strong_top_n", 4)),
+        "single_budget": float(PARAMS.get("weak_strong_single_budget", 100000.0)),
+        "daily_budget": float(PARAMS.get("weak_strong_daily_budget", 400000.0)),
+        "cash_headroom": float(PARAMS.get("weak_strong_cash_headroom", 0.95)),
+        "order_poll_rounds": int(PARAMS.get("weak_strong_order_poll_rounds", 3)),
+        "order_poll_sleep_sec": float(PARAMS.get("weak_strong_order_poll_sleep_sec", 2.0)),
+    }
+    try:
+        _res = _wse.run_buy_exec(_S1GmGateway(context), str(now.date()),
+                                 prev_close=_pc, ma20=_ma, bars=_bars, board=_board,
+                                 allowed_boards=None, book_dir=_book, params=_params,
+                                 dry_run=False, log=print)
+        _sm = (_res or {}).get("summary") or {}
+        _audit_write({"event": "ws_buy_exec", "date": str(now.date()),
+                      "candidates": _sm.get("candidates"), "buys": _sm.get("buys_placed"),
+                      "rejected": _sm.get("rejected_count"),
+                      "picks": [p["code"] for p in (_res or {}).get("picks") or []]})
+        print(f"[WS] 10:00 买侧执行: {json.dumps(_sm, ensure_ascii=False)}")
+        return int(_sm.get("buys_placed") or 0)
+    except Exception as _e:
+        print(f"[WS] 买侧执行失败（不阻断主循环）: {_e}")
+        try:
+            write_risk(str(now), "ws_exec_error", f"弱转强执行异常: {str(_e)[:200]}", code="")
+        except Exception:
+            pass
+        return 0
+
+
+def _ws_sell_codes() -> list:
+    """当前弱转强账本在持仓的 6 位码列表（空=无需卖侧检查）。"""
+    try:
+        import weak_strong_executor as _wse
+        _root = os.environ.get("SUPERTRADER_ROOT", r"E:\superTrader")
+        _book = os.path.join(_root, "t_io", "state", "weak_strong_book")
+        return sorted((_wse.load_book(_book).get("open") or {}).keys())
+    except Exception:
+        return []
+
+
+def _ws_latest_close_from_df(df, codes, now):
+    """GM history(df=True) → {code: 当日最新一根 bar 的 close}。防御式。"""
+    out = {}
+    if df is None or len(df) == 0:
+        return out
+    try:
+        df = df.copy()
+        df["_code"] = df["symbol"].astype(str).str.split(".").str[-1]
+        df = df.sort_values("eob")
+        for c in codes:
+            _row = df[df["_code"] == c]
+            if _row.empty:
+                continue
+            _r = _row.iloc[-1]
+            try:
+                close = float(_r.get("close") or 0)
+            except Exception:
+                continue
+            if close > 0:
+                out[c] = close
+    except Exception:
+        pass
+    return out
+
+
+def _ws_sell_time():
+    """卖侧检查时点（dtime）。"""
+    _hhmm = int(PARAMS.get("weak_strong_sell_time_hhmm", 1450))
+    return dtime(_hhmm // 100, _hhmm % 100)
+
+
+def _ws_try_sell(context, now, today) -> int:
+    """14:50 弱转强卖侧（每日一次）：SL5只深 close 止损 + 到期平仓。返回已下单腿数。"""
+    import weak_strong_executor as _wse
+    _codes = _ws_sell_codes()
+    if not _codes:
+        return 0
+    _syms = [_code_to_gm(c) for c in _codes]
+    _start = now.strftime("%Y-%m-%d 09:25:00")
+    _end = now.strftime("%Y-%m-%d %H:%M:%S")
+    try:
+        _df = _sdk_call("ws_sell_bars", _partial(
+            history, symbol=_syms, frequency="60s", start_time=_start, end_time=_end,
+            fields="symbol,eob,close", adjust=ADJUST_PREV, df=True))
+    except Exception as _e:
+        print(f"[WS] 卖侧现价取数失败（fail-closed，当日不卖）: {_e}")
+        _audit_write({"event": "ws_sell_fetch_fail", "error": str(_e)[:200], "time": str(now)})
+        return 0
+    _prices = _ws_latest_close_from_df(_df, _codes, now)
+    if not _prices:
+        _audit_write({"event": "ws_sell_skip", "reason": "no_prices", "time": str(now)})
+        return 0
+    _root = os.environ.get("SUPERTRADER_ROOT", r"E:\superTrader")
+    _book = os.path.join(_root, "t_io", "state", "weak_strong_book")
+    _params = {
+        "hold_days": int(PARAMS.get("weak_strong_hold_days", 5)),
+        "stop_pct": float(PARAMS.get("weak_strong_stop_pct", 0.05)),
+        "stop_deep_dev20": float(PARAMS.get("weak_strong_stop_deep_dev20", -0.07)),
+        "order_poll_rounds": int(PARAMS.get("weak_strong_order_poll_rounds", 3)),
+        "order_poll_sleep_sec": float(PARAMS.get("weak_strong_order_poll_sleep_sec", 2.0)),
+    }
+    try:
+        _res = _wse.run_sell_exec(_S1GmGateway(context), str(today), _prices,
+                                  book_dir=_book, params=_params, dry_run=False, log=print)
+        _sm = (_res or {}).get("summary") or {}
+        _audit_write({"event": "ws_sell_exec", "date": str(today),
+                      "sells": _sm.get("sells_placed"), "stops": _sm.get("stop_count"),
+                      "expired": _sm.get("expired_count"),
+                      "open_after": _sm.get("open_after"),
+                      "rejected": _sm.get("rejected_count")})
+        print(f"[WS] 卖侧执行: {json.dumps(_sm, ensure_ascii=False)}")
+        return int(_sm.get("sells_placed") or 0)
+    except Exception as _e:
+        print(f"[WS] 卖侧执行失败（不阻断主循环）: {_e}")
+        try:
+            write_risk(str(now), "ws_sell_error", f"弱转强卖侧异常: {str(_e)[:200]}", code="")
+        except Exception:
+            pass
+        return 0
+
+
+def _ws_morning_high_from_df(df, codes, now):
+    """GM history(df=True) → {code: 早盘(09:30~当前)最高价}。防御式，取 high 列最大值。"""
+    out = {}
+    if df is None or len(df) == 0:
+        return out
+    try:
+        df = df.copy()
+        df["_code"] = df["symbol"].astype(str).str.split(".").str[-1]
+        for c in codes:
+            _row = df[df["_code"] == c]
+            if _row.empty:
+                continue
+            try:
+                hi = float(_row["high"].max())
+            except Exception:
+                continue
+            if hi > 0:
+                out[c] = hi
+    except Exception:
+        pass
+    return out
+
+
+def _ws_morning_sell_time():
+    """早盘冲高卖检查时点（dtime）。"""
+    _hhmm = int(PARAMS.get("weak_strong_morning_sell_time_hhmm", 1000))
+    return dtime(_hhmm // 100, _hhmm % 100)
+
+
+def _ws_try_morning_sell(context, now, today) -> int:
+    """10:00 弱转强早盘冲高卖（每日一次，先于买侧）：D+1 持仓早盘冲 ≥ entry×(1+target) 就卖。
+
+    只卖 days_held==0（次日）持仓；更老持仓不动，交 14:50 止损/到期。与买侧同刻触发，
+    但钩子排在买侧之前，先卖回笼现金再买。
+    """
+    import weak_strong_executor as _wse
+    _codes = _ws_sell_codes()
+    if not _codes:
+        return 0
+    _syms = [_code_to_gm(c) for c in _codes]
+    _start = now.strftime("%Y-%m-%d 09:25:00")
+    _end = now.strftime("%Y-%m-%d %H:%M:%S")
+    try:
+        _df = _sdk_call("ws_morning_high_bars", _partial(
+            history, symbol=_syms, frequency="1800s", start_time=_start, end_time=_end,
+            fields="symbol,eob,high", adjust=ADJUST_PREV, df=True))
+    except Exception as _e:
+        print(f"[WS] 早盘最高价取数失败（fail-closed，当日不卖）: {_e}")
+        _audit_write({"event": "ws_morning_sell_fetch_fail", "error": str(_e)[:200], "time": str(now)})
+        return 0
+    _highs = _ws_morning_high_from_df(_df, _codes, now)
+    if not _highs:
+        _audit_write({"event": "ws_morning_sell_skip", "reason": "no_highs", "time": str(now)})
+        return 0
+    _root = os.environ.get("SUPERTRADER_ROOT", r"E:\superTrader")
+    _book = os.path.join(_root, "t_io", "state", "weak_strong_book")
+    _params = {
+        "pop_target_pct": float(PARAMS.get("weak_strong_pop_target_pct", 0.03)),
+        "order_poll_rounds": int(PARAMS.get("weak_strong_order_poll_rounds", 3)),
+        "order_poll_sleep_sec": float(PARAMS.get("weak_strong_order_poll_sleep_sec", 2.0)),
+    }
+    try:
+        _res = _wse.run_morning_sell_exec(_S1GmGateway(context), str(today), _highs,
+                                          book_dir=_book, params=_params, dry_run=False, log=print)
+        _sm = (_res or {}).get("summary") or {}
+        _audit_write({"event": "ws_morning_sell_exec", "date": str(today),
+                      "sells": _sm.get("sells_placed"), "pops": _sm.get("pop_count"),
+                      "open_after": _sm.get("open_after"),
+                      "rejected": _sm.get("rejected_count")})
+        print(f"[WS] 早盘冲高卖执行: {json.dumps(_sm, ensure_ascii=False)}")
+        return int(_sm.get("sells_placed") or 0)
+    except Exception as _e:
+        print(f"[WS] 早盘冲高卖执行失败（不阻断主循环）: {_e}")
+        try:
+            write_risk(str(now), "ws_morning_sell_error", f"弱转强早盘卖侧异常: {str(_e)[:200]}", code="")
+        except Exception:
+            pass
+        return 0
 
 
 MIN_BARS = 25
@@ -2550,6 +2854,7 @@ def _ogr_try_sell(context, now) -> int:
 def on_bar(context, bars):
     # 模块级"每日一次"标记（Python 要求 global 声明位于函数内任何使用之前）
     global _OGR_LIVE_BUY_DONE_DATE, _OGR_SHADOW_DONE_DATE, _OGR_SELL_DONE_DATE
+    global _WS_PREPARE_DONE_DATE, _WS_BUY_DONE_DATE, _WS_MORNING_SELL_DONE_DATE, _WS_SELL_DONE_DATE
     now = context.now if hasattr(context, "now") else datetime.now()
     import utils.helpers as uh
     uh.SIM_NOW = now
@@ -2569,6 +2874,12 @@ def on_bar(context, bars):
         # 2026-09-22 开盘低开反转（L4）：按日清空 T 腿台账 + 池开盘价 + 买入/卖出一次标记
         _OGR_LIVE_BUY_DONE_DATE = None
         _OGR_SELL_DONE_DATE = None
+        # 弱转强（2026-10-10）：按日重置预筛候选 + 盘前/10:00买/10:00早盘卖/14:50 每日一次标记
+        _WS_PREPARE_DONE_DATE = None
+        _WS_BUY_DONE_DATE = None
+        _WS_MORNING_SELL_DONE_DATE = None
+        _WS_SELL_DONE_DATE = None
+        context._ws_candidates = {}
         # 回测第 1 个交易日（底仓由 harness 当日现买）：当日卖腿必被 T+1 拒，而买腿已成交
         # ⇒ 底仓被**永久**加厚。故回测下第 1 天整日跳过 OGR（2026-09-23 实测）。
         if getattr(context, "_bt_first_day", None) is None:
@@ -2705,6 +3016,48 @@ def on_bar(context, bars):
                            f"S1 开盘执行异常: {str(_s1e)[:200]}", code="")
             except Exception:
                 pass
+
+    # ── 弱转强选股 · 盘前超跌候选预筛（2026-10-10，WS3：09:31 提前把 10:00 要看的
+    #    股票从全池砍到「前 N 板块内 + 昨收<MA20」的几十只，10:00 只做一次批量取数）──
+    if (_ws_mode_on() and t >= dtime(9, 31) and _WS_PREPARE_DONE_DATE != today
+            and getattr(context, "mode", None) == MODE_LIVE):
+        _WS_PREPARE_DONE_DATE = today
+        try:
+            _ws_prepare(context, now, today)
+        except Exception as _wse:
+            print(f"[WS] 盘前预筛失败（不阻断主循环）: {_wse}")
+
+    # ── 弱转强选股 · 10:00 早盘冲高卖（2026-10-10，WS5：D+1 持仓早盘冲 ≥ +3% 就卖；
+    #    与买侧同刻，但排在买侧之前 → 先卖回笼现金再买，避免现金挤占）──
+    if (_ws_mode_on() and bool(PARAMS.get("weak_strong_sell_enabled", True))
+            and t >= _ws_morning_sell_time() and _WS_MORNING_SELL_DONE_DATE != today
+            and getattr(context, "mode", None) == MODE_LIVE):
+        _WS_MORNING_SELL_DONE_DATE = today
+        try:
+            _ws_try_morning_sell(context, now, today)
+        except Exception as _wse:
+            print(f"[WS] 10:00 早盘冲高卖失败（不阻断主循环）: {_wse}")
+
+    # ── 弱转强选股 · 10:00 买侧（2026-10-10，WS2：一次性批量拉 1800s 10:00 棒 → 决策核
+    #    → top-N 下单；复用 _S1GmGateway 的掘金模拟盘下单通道）──
+    if (_ws_mode_on() and t >= dtime(10, 0) and _WS_BUY_DONE_DATE != today
+            and getattr(context, "mode", None) == MODE_LIVE):
+        _WS_BUY_DONE_DATE = today
+        try:
+            _ws_try_buy(context, now)
+        except Exception as _wse:
+            print(f"[WS] 10:00 买侧失败（不阻断主循环）: {_wse}")
+
+    # ── 弱转强选股 · 14:50 卖侧（2026-10-10，WS4：SL5只深 close 止损 + 到期平仓；
+    #    只卖账本内持仓，先与账户真实持仓对账防 S1 清仓等外部卖出留幽灵单）──
+    if (_ws_mode_on() and bool(PARAMS.get("weak_strong_sell_enabled", True))
+            and t >= _ws_sell_time() and _WS_SELL_DONE_DATE != today
+            and getattr(context, "mode", None) == MODE_LIVE):
+        _WS_SELL_DONE_DATE = today
+        try:
+            _ws_try_sell(context, now, today)
+        except Exception as _wse:
+            print(f"[WS] 14:50 卖侧失败（不阻断主循环）: {_wse}")
 
     # ── OGR 池开盘价逐票累积（L3 影子与 L4 实单共用；2026-09-30 复盘实证）──
     # gm 的 on_bar 是**逐票回调**（实测每次只有 1 根 bar），单次调用看不到全池 ⇒

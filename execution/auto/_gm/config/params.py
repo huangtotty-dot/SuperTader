@@ -276,6 +276,34 @@ PARAMS = {
     "s1_sell_retries": 1,               # 卖单异常重试次数
     "s1_limit_slippage_bp": 0,          # 0=市价单（沿用 gm_main 风格）；>0=限价 开盘价±bp
     # 文档：doc/solutions/2026-10-10_S1执行集成.md（含周一 runbook 与失败应急）
+
+    # ── 弱转强选股策略 · 10:00 买侧（2026-10-10 施工，WS2；owner 决策：直接接掘金模拟盘
+    #    实单，选股范围=猎手靠前板块成分股，无影子期）──
+    # 规则（冻结，见 core/weak_strong.py）：日线超跌(昨收<MA20) + 盘中 10:00 跳空高开守住
+    #   (10:00棒 low≥昨收 且 close>昨收 且 close>VWAP) ⇒ 10:00 收盘买入，按 gap 取 top-N。
+    # ⚠️ 默认 off（owner 翻启）：买+卖两侧全通。卖侧三件套已接线（次日早盘冲高卖 10:00 +
+    #    SL5只深止损 14:50 + 满5交易日平仓）；板块过滤用「涨停数替身」（前一日涨幅≥9.5%家数
+    #    top-N 板块，exp15/21 定稿，非 daily_summary 排名）。翻启后只在掘金模拟盘下单，与 S1
+    #    共享账户 ⇒ 用 weak_strong_daily_budget 封顶，避免挤占 S1 轮动。
+    # ⚠️ 必须落在 PARAMS（gm_main 闸函数读这张表；B7 开关错放 INDEX_REGIME_PARAMS 的前科）。
+    "weak_strong_paper_enabled": False,  # 弱转强 10:00 买侧总闸（默认 off，owner 翻启）
+    "weak_strong_top_n": 4,              # 每日按 gap 取最强前 N（exp9 Sharpe 顶点）
+    "weak_strong_board_top_n": 5,        # 盘前取猎手前 N 热门板块的成分股为候选范围
+    "weak_strong_single_budget": 100000.0,  # 单票名义上限（元，对齐 OGR 10 万/腿）
+    "weak_strong_daily_budget": 400000.0,   # 每日名义总额度（元）
+    "weak_strong_cash_headroom": 0.95,      # 单票占用现金封顶比例
+    "weak_strong_exec_time_hhmm": 1000,     # 10:00 触发（GM 1800s 首根 10:00 棒）
+    "weak_strong_order_poll_rounds": 3,
+    "weak_strong_order_poll_sleep_sec": 2.0,
+    # ── 卖侧（2026-10-10 接线，exp19 owner 拍板 SL5只深；只动掘金模拟盘）──
+    "weak_strong_sell_enabled": True,        # 卖侧总闸（随 paper_enabled 一起生效）
+    "weak_strong_stop_pct": 0.05,            # 深超跌 close 止损线（−5%）
+    "weak_strong_stop_deep_dev20": -0.07,    # dev20 < 此值才挂止损（SL5只深）
+    "weak_strong_hold_days": 5,              # 持有满 N 交易日到期平仓（死拿5天 horizon）
+    "weak_strong_pop_target_pct": 0.03,      # 次日早盘冲高卖目标（+3%，止盈非止损）
+    "weak_strong_morning_sell_time_hhmm": 1000,  # 早盘冲高卖检查时点（10:00，与买侧同刻）
+    "weak_strong_sell_time_hhmm": 1450,      # 收盘止损检查时点（14:50）
+    # 文档：doc/research/2026-10-10_弱转强第一轮实验结论.md §8（接线定稿）
 }
 
 # 华工科技 000988 个股专属参数
