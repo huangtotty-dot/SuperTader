@@ -101,8 +101,23 @@ def features_from_daily(df: pd.DataFrame, date_str: str) -> dict:
         _v20 = float(_v.rolling(20).mean().iloc[-1]) if len(_v) >= 20 else float("nan")
         if _v20 and _v20 > 0:
             _vol_ratio20 = round(float(_v.iloc[-1]) / _v20, 2)
+    # 日线四阶段（2026-10-11）：与 `core/position_structure.stage_daily` **同规则**。
+    # 此处内联而非 import：goldminer 以 SUPERTRADER_ROOT 绝对路径 importlib 加载本文件，
+    # 不能反向依赖 core 包。一致性由单测守卫（tests/phase3/test_pb_position_structure.py）。
+    _m20, _m60 = float(ma20), float(ma60)                   # 上方已转为 float
+    _ma20_5ago = float(c.rolling(20).mean().iloc[-6])
+    _up20 = _m20 > _ma20_5ago
+    _dn20 = _m20 < _ma20_5ago
+    _stage = 1                                              # ①蓄势（默认）
+    if price > _m20 > _m60 and _up20:
+        _stage = 2                                          # ②抬升
+    if _m20 > _m60 and price < _m20:
+        _stage = 3                                          # ③派发
+    if price < _m20 < _m60 and _dn20:
+        _stage = 4                                          # ④下跌
     return {
         "price": round(price, 3),
+        "stage_daily_code": _stage,
         "trend_multihead": bool(price > ma20 and price > ma60),
         "above_ma60": bool(price > ma60),
         "drawdown": round(price / rec_high - 1, 4) if rec_high > 0 else 0.0,
@@ -174,6 +189,37 @@ def timing_decision(features: dict, regime: str, params: dict = None) -> dict:
 # verdict 映射（scan_stock 生产口径）
 # ═══════════════════════════════════════════
 
+_STAGE_REV_ORD = {4: 3, 3: 2, 1: 1, 2: 0}   # ④下跌最高 … ②抬升最低（证据：两半窗同号）
+
+
+def timing_score(features: dict, trend_ok: bool, dd_ok: bool, golden_ok: bool,
+                 data_insufficient: bool = False) -> int:
+    """建仓「综合得分」= **横截面相对强弱/状态分**（0~100），符号由实测证据定。
+
+    2026-10-11 重构。原式 = 30×市场有方向 + 30×多头结构 + 30×回撤到位 + 10×MACD金叉 − 70×破MA5。
+
+    实测（977 只 × 2265 日；**横截面 IC**，h1 定符号 → h2 **样本外**检验）：
+      · **四个分量全为负 IC**，且两个半窗符号一致：
+        多头结构 −0.048(t=−16.5)、站上MA5 −0.018(t=−6.9)、回撤到位 −0.005、MACD金叉 −0.006
+        ⇒ "看起来越强" 反而后续越差（与本仓既有结论一致：超跌是 alpha）。
+      · 日线阶段：②抬升 −0.042(t=−15.1)、④下跌 +0.034(t=+11.9)，两半窗一致；
+        ①蓄势会翻号（+0.006/−0.015）⇒ 作基准 0，不当信号。
+      · **市场项对当日全体个股相同 ⇒ 横截面 IC 恒为 0** ⇒ 不进此分（它只驱动 go/verdict 的择时）。
+    结果：全窗 IC 由 **−0.0286 → +0.0188**（H=20；保留 MA5 扣分口径；不保留则为 +0.0375）。
+
+    ⚠️ **0~100 只是线性外观映射**（raw∈[−4,3] → 0~100）；被检验过的是**排序**，不是这些数字本身。
+    ⚠️ 数据不足 → 返回 0（fail-closed：不得因缺数据反而拿到中高分）。
+    """
+    if data_insufficient:
+        return 0
+    f = features or {}
+    stage = int(f.get("stage_daily_code") or 1)
+    raw = (-(1 if trend_ok else 0) - (1 if dd_ok else 0) - (1 if golden_ok else 0)
+           - (1 if f.get("above_ma5") is True else 0)
+           + _STAGE_REV_ORD.get(stage, 0))
+    return int(round((raw + 4) / 7.0 * 100))
+
+
 def verdict_from_timing(go: bool, regime: str, features: dict, data_insufficient: bool = False,
                         params: dict = None) -> tuple:
     """go/regime/features → (verdict, score)。
@@ -188,9 +234,13 @@ def verdict_from_timing(go: bool, regime: str, features: dict, data_insufficient
     else:
         _dd_ok = dd_threshold_ok(float(f["drawdown"]), regime) if "drawdown" in f else False
     _golden = bool(f.get("macd_golden_5d"))
-    _score = (30 if _dir_ok else 0) + (30 if _trend else 0) + (30 if _dd_ok else 0) + (10 if _golden else 0)
+    # 2026-10-11 重构：证据化横截面分（见 timing_score）。市场项不再进分（IC 恒为 0）。
+    _score = timing_score(f, _trend, _dd_ok, _golden, data_insufficient)
     _p = params or DEFAULT_TIMING_PARAMS
     # 2026-10-08 owner：**未站上5日线**（收盘 ≤ MA5）→ ①综合得分大幅扣减 ②不给 signal（压成 approaching）。
+    # ⚠️ 2026-10-11：本扣分**按 owner 决定保持不变**（先观察）。实测它把证据化增益砍掉约一半
+    #    （H=20 IC：+0.0375 → +0.0188），且把 51.8% 的股票·日压到 0~30。
+    #    是否放宽/反向，待观察列数据再定，勿擅自改。
     _below_ma5 = f.get("above_ma5") is False
     if _below_ma5:
         _score = max(0, _score - int(_p.get("ma5_below_penalty", 70)))

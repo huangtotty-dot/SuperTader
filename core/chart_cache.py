@@ -244,6 +244,43 @@ def _norm_minutes(df):
     return df.reset_index(drop=True)
 
 
+def load_minute_asof(ts_code, freq, date_str=None, keep=None):
+    """**零网络**：合并 plain（近月，新鲜）+ `_d540`（长历史）两档分钟缓存，按 time 去重后
+    只留 `<= date_str`（当日 23:59:59）的根。date_str=None → 全量。空/缺 → 空 DataFrame。
+
+    对应 `t_gui._min_bars_asof` 的 core 版：GUI 侧版本供「历史日 30min 判定」列用，
+    本函数供结构层/回放复用，避免 core→t_gui 反向依赖。"""
+    import pandas as pd
+    if not ts_code:
+        return pd.DataFrame()
+    frames = []
+    # 顺序即优先级：**后读的覆盖先读的**（keep="last"）。`_d540` 是长历史但可能陈旧
+    # （5min 档实测停在 2026-09-18），plain 是新鲜的近月档 ⇒ plain 放最后，重复时刻以它为准。
+    for name in (f"{ts_code}_{freq}_d540.json", f"{ts_code}_{freq}.json"):
+        fp = _MINUTE_CACHE_DIR / name
+        if not fp.exists():
+            continue
+        rows = (_read_json(fp, {}) or {}).get("rows") or []
+        if not rows:
+            continue
+        try:
+            d = _norm_minutes(pd.DataFrame(rows))
+        except Exception:
+            continue
+        if not d.empty:
+            frames.append(d)
+    if not frames:
+        return pd.DataFrame()
+    df = pd.concat(frames, ignore_index=True)
+    df = df.sort_values("time").drop_duplicates(subset=["time"], keep="last").reset_index(drop=True)
+    if date_str:
+        _end = pd.Timestamp(date_str) + pd.Timedelta(hours=23, minutes=59, seconds=59)
+        df = df[df["time"] <= _end].reset_index(drop=True)
+    if keep and len(df) > keep:
+        df = df.tail(keep).reset_index(drop=True)
+    return df
+
+
 def save_minute_history(ts_code, freq, df, cap=920) -> bool:
     """把分钟 df **并入** plain 档 `{ts_code}_{freq}.json`（按 time 去重、cap 截尾、原子写）。"""
     import pandas as pd
@@ -397,9 +434,12 @@ def prefetch_daily(codes, days=250, now=None, skip_current=True, batch=200,
 
 
 def prefetch_minute(codes, freqs=("30min", "60min"), sleep_s=0.35) -> dict:
-    """逐只拉分钟线写 plain 档（tushare 单只、无法批量）。返回 {requested, got}。不抛。"""
+    """逐只拉分钟线写 plain 档（tushare 单只、无法批量）。返回 {requested, got}。不抛。
+
+    `5min`：结构层（10min 由 5min 降采样而来）的唯一磁盘源。tushare 无原生 10min。
+    取 30 自然日 ≈ 21 交易日 ≈ 1000 根，落盘时被 `save_minute_history(cap=920)` 截到 ≈19 日。"""
     from analysis.divergence import _ts_code as _div_ts_code
-    days_map = {"30min": 70, "60min": 130}
+    days_map = {"30min": 70, "60min": 130, "5min": 30}
     codes = _dedup_valid(codes)
     stat = {"requested": len(codes) * len(freqs), "got": 0}
     for c in codes:
@@ -488,7 +528,7 @@ def run_prefetch(small=True, full=True, minutes=True, days_full=200,
             out["daily_full"] = prefetch_daily(full_pool_codes(), days=days_full, now=now)
             mark_run_today("full", now)
         if minutes and small_codes and (force or not was_run_today("minute")):
-            out["minute_small"] = prefetch_minute(small_codes)
+            out["minute_small"] = prefetch_minute(small_codes, freqs=("30min", "60min", "5min"))
             mark_run_today("minute", now)
         if payload_builder and small_codes and (force or not was_run_today("payload")):
             try:

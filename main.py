@@ -220,6 +220,11 @@ def _resonance_gate(code, sig, now):
     return bool(r.get("gate_pass")), r
 
 # 将共享命名空间中的关键变量暴露到当前模块的 globals，使 main.py 的代码可以运行
+# ⚠️ 先记下**真正的导入名**：`shared` 里带着 `'__name__': '__main__'`（给 exec 进去的模块用），
+#    update 之后 main.py 自己的 `__name__` 也会变成 '__main__' ⇒ 尾部启动守卫**变成恒真**，
+#    **任何 `import main`（测试/脚本/IDE）都会启动实盘主循环并推一条 @所有人 自检**（2026-10-11 实测：
+#    推送留痕里 11 条 @所有人 全是这么来的）。此处留存真名，尾部守卫改用 `_TRUE_NAME`。
+_TRUE_NAME = __name__
 globals().update(shared)
 
 # ==================== C-2/C-3: 个股MA5闸 + 拦截可见性（2026-08-21） ====================
@@ -535,12 +540,14 @@ def _refresh_spot_vwap_cache() -> None:
         spot[vol_col] = pd.to_numeric(spot[vol_col], errors="coerce").fillna(0)
         spot[amt_col] = pd.to_numeric(spot[amt_col], errors="coerce").fillna(0)
         mask = (spot[vol_col] > 0) & (spot[amt_col] > 0)
-        cache = {}
-        for _, row in spot[mask].iterrows():
-            c = str(row[codes_col]).strip()
-            v = float(row[vol_col])
-            a = float(row[amt_col])
-            cache[c] = round(a / (v * 100), 2)  # 成交量单位是"手"(×100股)，还原为股
+        # 2026-10-11 向量化：原 `spot[mask].iterrows()` 逐行建 dict，5000 只实测 391ms，
+        # 而这一路每分钟就要跑一次。改批量算式后 2.4ms（159.6×）。
+        # 等价性已验（含零量/NaN/带空格代码/重复代码/空表/银行家舍入边界，0 不符）。
+        _sub = spot.loc[mask]
+        _vals = (spot.loc[mask, amt_col].to_numpy(dtype=float)
+                 / (spot.loc[mask, vol_col].to_numpy(dtype=float) * 100.0))
+        cache = dict(zip(_sub[codes_col].astype(str).str.strip(),
+                         np.round(_vals, 2).tolist()))  # 成交量单位是"手"(×100股)，还原为股
         _SPOT_VWAP_CACHE = cache
         log.debug(f"📡 VWAP 实时缓存刷新: {len(cache)} 只")
     except Exception as e:
@@ -1115,6 +1122,60 @@ def _maybe_check_hunter_ma5_alert(now: datetime) -> None:
     _hunter_ma5_thread = _threading.Thread(
         target=_worker, name="hunter-ma5-alert", daemon=True)
     _hunter_ma5_thread.start()
+
+
+# 2026-10-11 owner：「实盘过程中选股猎手每隔 30 分钟做轮询；**异常信息一定要通过飞书发出来**」
+_hunter_poll_last = None      # 节流（30 分钟一轮）
+_hunter_poll_thread = None    # 单飞（上一轮没跑完不开新轮）
+
+
+def _maybe_run_hunter_poll(now: datetime) -> None:
+    """选股猎手 **30 分钟轮询 + 异常飞书告警**（2026-10-11 owner）。
+
+    交易时段 09:30-11:30 / 13:00-15:00，**每满 30 分钟**跑一轮（不卡死整点，避免与其它 5 分钟任务撞车）。
+    每轮重跑猎手取数+打分并校验；**任何异常/数据异常 ⇒ 飞书告警**（去重：同类一天一次）。
+    无头运行，不依赖 GUI 是否打开；轮询本体在后台线程，不阻塞主循环。
+    """
+    global _hunter_poll_last, _hunter_poll_thread
+    try:
+        if not _hunter_poll_feishu_enabled():
+            return
+    except Exception:
+        return
+    # 时段/节流判据放 core（**可测**；根 main.py 导入重且与 stock_hunter/main.py 同名）
+    from core.hunter_poll import should_poll
+    if not should_poll(now, _hunter_poll_last):
+        return
+    if _hunter_poll_thread is not None and _hunter_poll_thread.is_alive():
+        return                      # 上一轮还没跑完（猎手全流程可达 1~2 分钟）⇒ 本轮跳过
+    _hunter_poll_last = now
+    today = now.strftime("%Y-%m-%d")
+
+    def _worker(day: str) -> None:
+        # ⚠️ 这里**不吞异常**：告警链路本身的失败必须留痕（本仓有"告警从未发出过"的血案）。
+        from core.hunter_poll import run_and_alert
+        res = run_and_alert(day)
+        if res.get("ok"):
+            log.info(f"选股猎手轮询正常（{day}）：打分 {res['stats'].get('scored')} 只，"
+                     f"行情覆盖率 {res['stats'].get('coverage')}")
+        else:
+            log.warning(f"⚠️ 选股猎手轮询异常（{day}）pushed={res.get('pushed')}")
+
+    _hunter_poll_thread = _threading.Thread(
+        target=_worker, args=(today,), name="hunter-poll", daemon=True)
+    _hunter_poll_thread.start()
+
+
+def _hunter_poll_feishu_enabled() -> bool:
+    """config.json 的 feishu.enabled + notify_on_hunter_poll 开关（与既有 notify_on_* 同款）。"""
+    try:
+        runtime_config = load_runtime_config()
+        feishu_cfg = runtime_config.get("feishu", {}) if isinstance(runtime_config, dict) else {}
+        if not bool(feishu_cfg.get("enabled", True)):
+            return False
+        return bool(feishu_cfg.get("notify_on_hunter_poll", True))
+    except Exception:
+        return True
 
 
 # P0-7(2026-09-01): 收盘自动触发 daily_review + forward_tracker（子进程隔离，幂等）
@@ -2037,6 +2098,7 @@ def scan_once():
         _maybe_run_ma_reclaim_alert(now)               # 09:30-14:55 盘中站上5/10日线报警（破线回站，2026-10-08）
         _maybe_check_trend30_alert(now)                # 09:30-14:55 30min趋势翻转告警（每5分钟，纯通知）
         _maybe_check_hunter_ma5_alert(now)             # 09:30-14:55 猎手热门板块站上5日线告警（每5分钟，纯通知）
+        _maybe_run_hunter_poll(now)                    # 09:30-15:00 猎手 30 分钟轮询 + **异常必发飞书**（2026-10-11）
 
         if not HOLDINGS:
             return
@@ -3027,7 +3089,7 @@ def _validate_pool_split_or_exit():
         sys.exit(1)
 
 
-if __name__ == "__main__":
+if _TRUE_NAME == "__main__":        # 只有**直接运行**才启动（import 不再误启动，见上）
     import atexit
     atexit.register(_close_gui)
     # V8 预热(2026-09-08): akshare 的 py_mini_racer(V8) 首次初始化必须在主线程，否则后台扫描线程内

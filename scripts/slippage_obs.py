@@ -57,18 +57,23 @@ def _bar_open_0931(code: str, date: str):
     """当日 09:31 首根 60s bar 的 open + 前收（掘金口径，前复权一致）。"""
     from gm.api import history_n, ADJUST_PREV
     sym = ("SHSE." if code[0] in "56" else "SZSE.") + code
-    bars = history_n(symbol=sym, frequency="60s", count=40,
+    # ⚠️ 2026-10-11 修：原为 count=40（从 10:30 往回只到 ~09:51），够不到 09:31，
+    #    于是静默走兜底取"返回的第一根"= 09:51 bar 的 open ⇒ 滑点分母含未来 19 分钟信息。
+    #    现改 count=90（覆盖全早盘）并在找不到 09:31 bar 时**显式报错**，不再静默兜底。
+    bars = history_n(symbol=sym, frequency="60s", count=90,
                      end_time=f"{date} 10:30:00",
                      fields="eob,open", adjust=ADJUST_PREV, df=True)
     o31 = 0.0
     if bars is not None and len(bars):
         for _, b in bars.iterrows():
             eob = str(b["eob"])
-            if eob.endswith("09:31:00") or " 09:31" in eob:
+            if " 09:31" in eob:
                 o31 = float(b["open"])
                 break
-        if o31 <= 0 and len(bars):          # 兜底：当日第一根
-            o31 = float(bars.iloc[0]["open"])
+        if o31 <= 0:
+            raise RuntimeError(
+                f"{code} {date}: 60s 序列里找不到 09:31 bar（返回 {len(bars)} 根，"
+                f"首根 {bars.iloc[0]['eob']}）⇒ 拒绝用兜底值，避免分母取错。")
     pc = 0.0
     his = history_n(symbol=sym, frequency="1d", count=3, end_time=f"{date} 09:00:00",
                     fields="eob,close", adjust=ADJUST_PREV, df=True)

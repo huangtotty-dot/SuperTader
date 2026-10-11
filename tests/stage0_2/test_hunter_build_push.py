@@ -274,19 +274,30 @@ class TestIntradayForce(unittest.TestCase):
 
 
 class TestAutorunSlots(unittest.TestCase):
-    """定时时点：跳午休、收盘后不跑。"""
+    """猎手定时轮询的**时段闸**。
+
+    2026-10-11 变更：旧的 `t_gui.HUNTER_AUTORUN_SLOTS`（整点档）已随 2026-10-10 的
+    「禁止自动跑」一起删除；owner 现在要求改为 **每 30 分钟轮询 + 异常必发飞书**，
+    判据落在 `core.hunter_poll`（`in_trading_hours` / `should_poll` / `POLL_INTERVAL_SEC`），
+    由 **main.py 主循环**驱动（无头，不依赖 GUI）。本用例改为守这套新判据。
+    """
 
     def test_slots(self):
         import t_gui
-        self.assertEqual(list(t_gui.HUNTER_AUTORUN_SLOTS),
-                         ["10:30", "11:30", "13:30", "14:30"])
-        self.assertNotIn("12:30", t_gui.HUNTER_AUTORUN_SLOTS, "午休不该跑（数据无变化）")
-        for s in t_gui.HUNTER_AUTORUN_SLOTS:
-            hh, mm = (int(x) for x in s.split(":"))
-            self.assertTrue(930 < hh * 100 + mm < 1500,
-                            f"{s} 应落在开盘后、收盘前")
-        self.assertFalse(t_gui._HUNTER_AUTORUN_STATE.get("started"),
-                         "导入 t_gui 不该自动启动调度线程（只在 __main__ 启动）")
+        from datetime import datetime
+        from core.hunter_poll import POLL_INTERVAL_SEC, in_trading_hours, should_poll
+        self.assertEqual(POLL_INTERVAL_SEC, 1800, "owner 指定 30 分钟一轮")
+        # 跳午休 / 收盘后不跑
+        self.assertTrue(in_trading_hours(datetime(2026, 10, 12, 10, 0)))
+        self.assertFalse(in_trading_hours(datetime(2026, 10, 12, 12, 30)), "午休不跑")
+        self.assertFalse(in_trading_hours(datetime(2026, 10, 12, 15, 30)), "收盘后不跑")
+        # 30 分钟节流
+        t0 = datetime(2026, 10, 12, 10, 0)
+        self.assertFalse(should_poll(datetime(2026, 10, 12, 10, 29), t0))
+        self.assertTrue(should_poll(datetime(2026, 10, 12, 10, 30), t0))
+        # 2026-10-10 的约束仍在：导入 GUI 不得自带自动扫描
+        self.assertFalse(hasattr(t_gui, "HUNTER_AUTORUN_SLOTS"),
+                         "旧的整点档常量应已删除（改由 core.hunter_poll 的 30 分钟闸驱动）")
 
 
 if __name__ == "__main__":

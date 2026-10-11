@@ -92,6 +92,13 @@ _HUNTER_BUILD_PUSHED_FP = STATE_DIR / "hunter_build_pushed.json"
 ROTATION_RUN_STATE = {"running": False, "error": None}
 # 2026-08-22: 板块轮动结果缓存（内存+磁盘）——build_rotation_model 约 15s，重复点击/切 view 秒回
 _ROTATION_CACHE_DIR = BASE / "t_io" / "cache" / "sector_rotation"
+
+# 2026-10-11: 日线缓存目录的**本地常量**。此前若干处为了拿这个路径去
+# `from core.position_builder import _DAILY_CACHE_DIR`，而那会连锁导入
+# core.market_data → facade → **pandas**（实测 ~2.3s）。它砸在 GUI 冷启动首帧上：
+# `_compute_auto_pnl` 只用它拼 `{code}.json` 路径，却把整条 pandas 链拖进首帧的 import 锁。
+# 值必须与 core/position_builder.py::_DAILY_CACHE_DIR 一致（同为 BASE/t_io/cache/daily_kline）。
+_DAILY_KLINE_DIR = BASE / "t_io" / "cache" / "daily_kline"
 _ROTATION_CACHE_MEM = {}
 # 2026-08-23: 每日大盘复盘（LLM）后台线程状态
 _REVIEW_RUN_STATE = {"running": False, "error": None}
@@ -134,7 +141,7 @@ def _read_auto_fills():
 
 def _daily_last_close(code):
     """日线缓存（t_io/cache/daily_kline）里的最新收盘价；零网络、无缓存 → 0.0。"""
-    from core.position_builder import _DAILY_CACHE_DIR
+    _DAILY_CACHE_DIR = _DAILY_KLINE_DIR   # 本地常量（2026-10-11）：原 import core.position_builder 会连带 pandas
     try:
         rows = json.loads(
             (_DAILY_CACHE_DIR / f"{code}.json").read_text(encoding="utf-8")).get("rows") or []
@@ -444,6 +451,22 @@ _PB_M30_WARM: dict = {"slot": None}                    # 每 30min 时段只起�
 _PB_M30_HIST: dict = {}
 _PB_M30_HIST_LOCK = threading.Lock()
 _PB_M30_HIST_MAX = 5000
+
+# ---- 建仓信号扫描「仓位结构」列（2026-10-11）----
+# 30min/10min **结构参考**（止损位/阻力/补仓三档/阶段/中期方向），供**仓位管理**用。
+# ⚠️ 不是买卖信号：本层模块 `core/position_structure.py` 已实测——机械按"阶段2加仓/阶段3减仓"
+#    做仓位择时的纯择时贡献不显著，唯一有证据的是"破位后在**下档支撑**挂限价补仓"。
+# 取数与纪律完全沿用「30min 判定」列：**后台预热 + 按 30min 时段缓存，主线程零计算零网络**
+# （pywebview 串行主线程，任何网络都会冻界面）。数据源 = tushare 5min(→10min)/30min + 日线。
+_PB_STRUCT_CACHE: dict = {}
+_PB_STRUCT_LOCK = threading.Lock()
+_PB_STRUCT_MAX = 3000
+_PB_STRUCT_WARM: dict = {"slot": None}
+# 历史日「仓位结构」：键 {base}_{date}。由「扫描该日」时**纯磁盘、零网络**截到该日预算好。
+_PB_STRUCT_HIST: dict = {}
+_PB_STRUCT_HIST_LOCK = threading.Lock()
+_PB_STRUCT_HIST_MAX = 5000
+_PB_STRUCT_POOL_MAX = 60                                # 单轮预热标的数上限（防误传全池打爆 tushare）
 
 
 
@@ -974,6 +997,65 @@ _TAGS_RUNNING = False
 _BREAKOUT_LOCK = threading.Lock()
 
 
+def _tier_sector_stocks(stocks, min_members=5):
+    """**就地**给一个板块的个股打 龙头/中军/杂毛 —— **按阈值自适应，无固定数量、也不硬凑**。
+
+    设计意图（owner）：**交易替代梯队** —— 龙头涨停买不到时，顺着梯队往下选。
+    故三档都用**阈值**判定，数量由板块自身决定：
+
+      · **龙头** = 涨幅 ≥ `max(9.5%, 板块最高涨幅 − LEAD_GAP)`（默认 gap=2pp）＝「最强一档」。
+        · 可 **0 个**（板块当日没行情 ⇒ 无龙头，不硬凑）；可 **多个**（并列/接近 ⇒ 多龙头）。
+        · 不用"涨停"单一判据：科创板/创业板涨停是 20%，实测半导体当日最强 +14.1%（未涨停）
+          ⇒ 按涨停判会得出"最大板块没有龙头"这种废结论。
+      · **中军** = 非龙头中 **成交额 ≥ 板块中位数 × MID_MULT**（默认 5 倍）＝资金主战场/核心大票。
+        同样可 0 个；数量随板块大小自适应（实测半导体 14 / 锂电池 4 / 电力 5 / AI应用 12）。
+      · **杂毛** = 其余。
+      · 板块当日成分 < `min_members` 一律不标（1 只的"板块"谈不上梯队）。
+
+    实测输出（2026-10-10 收盘，韭研分类口径）：
+      半导体150只 最高+14.1% → 龙头1(和林微纳) 中军14(寒武纪/兆易创新/中微公司…)
+      锂电池 88只 最高+15.9% → 龙头1(科恒股份)  中军4(天赐材料/赣锋锂业/龙蟠/恩捷)
+      电力   44只 最高+10.0% → **龙头2**(振华股份+雄韬股份，并列涨停) 中军5
+      机器人 76只 最高 +1.1% → **龙头0**(不硬凑)  中军10
+
+    ⚠️ **实测无前瞻区分度，别当依据用**（`t_io/validation/sector_tier/exp1|exp2`，
+    977 池 × 2009 日，行业口径、同板块同日配对、按日聚类 t、分半窗）：
+      四种定义（涨幅头名 / 涨幅前3 / 成交额头名 / **连板龙头**）× 4 个持有期 ≈ 全部无差异：
+      涨幅头名 vs 杂毛 H=5 仅 −0.021pp(t=−0.40)；成交额头名反而 **−0.302pp(t=−5.7)**；
+      连板龙头限定"板块内有连板"时 H=1 **−0.112pp(t=−1.71)**；**分半窗符号翻转**
+      （龙头 h1 +0.282 / h2 −0.217）。效应量 ±0.05~0.13pp 远低于往返成本 0.13~0.35pp。
+    ⇒ 它的价值在**能不能买到 / 是不是这个板块的钱**（可执行性），**不在预测收益**。
+    """
+    for s in stocks:
+        s["tier"] = ""
+    ok = [s for s in stocks if s.get("amount") and s.get("change_pct") is not None]
+    if len(stocks) < min_members or len(ok) < min_members:
+        return
+    chgs = [float(s.get("change_pct") or 0) for s in ok]
+    amts = sorted(float(s.get("amount") or 0) for s in ok)
+    med = amts[len(amts) // 2]
+    lead_thr = max(9.5, max(chgs) - LEAD_GAP)
+    leads = [s for s in ok if float(s.get("change_pct") or 0) >= lead_thr]
+    for s in leads:
+        s["tier"] = "龙头"
+    mid_thr = med * MID_MULT
+    for s in ok:
+        if not s["tier"] and float(s.get("amount") or 0) >= mid_thr:
+            s["tier"] = "中军"
+    # 整个板块**一只都没分层**（无龙头且无中军）⇒ 全不标。
+    # 否则会把这批票一律打成"杂毛"——它们只是"板块成员"，不是杂毛（不硬凑的反面同样适用）。
+    if not any(s["tier"] for s in ok):
+        return
+    for s in ok:
+        if not s["tier"]:
+            s["tier"] = "杂毛"
+
+
+
+LEAD_GAP = 2.0      # 龙头带宽（pp）：涨幅在"板块最高 − 2pp"以内的都算最强一档
+MID_MULT = 5.0      # 中军门槛：成交额 ≥ 板块中位数 × 此倍数（资金主战场）
+
+
 class Api:
     """暴露给前端的 js_api 方法（pywebview 序列化返回值）。"""
 
@@ -1022,6 +1104,26 @@ class Api:
         return sorted(dates, reverse=True)
 
     # ---------- 单日完整载荷 ----------
+    def _pb_cold_start_ready(self) -> bool:
+        """冷启动判定：`load_day` 是否该同步算建仓表聚合。
+
+        背景（2026-10-11 实测）：`load_day` → `_agg_position_builder` → 首次 `import
+        pandas / analysis.divergence / analysis.m30_features` 要 ~1.8s，而前端首帧正好
+        撞在预热线程还没导完的时刻 ⇒ **全堵在 import 锁**上。实测把这一项打桩后，
+        首帧 **2.11s → 0.92s**，`load_day` 本身 **1854ms → 133ms**。
+
+        为什么可以跳过而不错：`refresh_pb`（[`t_gui.py:refresh_pb`]）调的是**同一个**
+        `_agg_position_builder`，且前端 `_startStaggered("live", …, offset=0)` 在
+        `init()` 之后**几乎立即**触发 `refreshLive` → `refresh_pb`，把结果**覆盖**回去
+        （而且它的版本还多带个股技术标签）。即冷启动那次同步计算**算了就扔**。
+        与既有 `add_watch` 的「后端首帧不阻塞算、前端短轮询补齐」同款（见 web/app.js
+        的 `loadAddWatch(payload.date, 0)`）。
+
+        ⚠️ 只在**模块尚未导入**时跳过。稳态（已导入）仍同步计算 ⇒ 切日期等既有路径
+        行为**完全不变**，不引入"切日期后建仓表空 10s"的回归。
+        """
+        return "pandas" in sys.modules and "analysis.divergence" in sys.modules
+
     def load_day(self, date=None):
         if not date:
             dates = self.available_dates()
@@ -1047,7 +1149,12 @@ class Api:
                     "settle": {}, "watch": {}, "kpi": {},
                     "add_watch": self.compute_add_watch(date, block=False),
                     "positions": self._load_positions(date, {}),
-                    "position_builder": self._agg_position_builder(date),
+                    # 冷启动（模块未导入）跳过同步聚合 → 首帧不等那 ~1.8s 首次导入；
+                    # 前端 init 后立即调 refresh_pb 补齐（同款见上方 _pb_cold_start_ready）
+                    "position_builder": (self._agg_position_builder(date)
+                                         if self._pb_cold_start_ready()
+                                         else {"rows": [], "counts": {},
+                                               "cold_start_pending": True}),
                     "stage_board": self._load_stage_board(),
                     "portfolio_config": self.load_portfolio_config(),
                     "report_md": "", "name_map": {},
@@ -1082,7 +1189,11 @@ class Api:
             out["kpi"] = dr.get("kpi", {})
 
         out["positions"] = self._load_positions(date, out.get("kpi", {}))
-        out["position_builder"] = self._agg_position_builder(date)
+        # 同 1050 行处：冷启动跳过同步聚合（见 _pb_cold_start_ready 的说明）
+        out["position_builder"] = (self._agg_position_builder(date)
+                                   if self._pb_cold_start_ready()
+                                   else {"rows": [], "counts": {},
+                                         "cold_start_pending": True})
         out["stage_board"] = self._load_stage_board()
 
         out["portfolio_config"] = self.load_portfolio_config()
@@ -2592,11 +2703,22 @@ class Api:
                 "bar_time": (_m30 or {}).get("bar_time"),
                 "advice": advice,
                 "tags": _tags,
+                # 仓位结构（2026-10-11）：与建仓表**同一真源**（`_pb_struct_get` 只读缓存，
+                # 主线程零计算零网络）。是**结构参考、不是买卖信号**（见 core/position_structure.py）。
+                "structure": self._pb_struct_get(base_code),
             })
         if pending:
             out["pending"] = pending      # 未就绪的持仓数（>0 ⇒ 前端稍后重拉）
         if m30_pending:
             out["m30_pending"] = True     # 30min 判定未热（>0 ⇒ 前端 3s 快速重拉，不等 12s）
+        # 仓位结构未热：后台预热持仓（每 30min 时段一轮），前端按 struct_pending 快速重拉
+        _struct_pending = any((s.get("structure") or {}).get("pending") for s in out["stocks"])
+        if _struct_pending:
+            out["struct_pending"] = True
+            try:
+                self._kick_pb_struct_warm([s.get("code") for s in out["stocks"] if s.get("code")])
+            except Exception:
+                pass
         return _clean(out)
 
     # ---------- 入场三层评判（L1/L2/L3建议） ----------
@@ -3189,6 +3311,25 @@ class Api:
                     pass
         return payload
 
+    def _mk_forming_bar(today, px, o, h, l, v):
+        """造「当日 forming bar」；**无成交且无振幅 ⇒ 返回 None**（视为还没开始交易）。
+
+        ⚠️ 2026-10-11 事故：集合竞价后、开盘前（如 09:28）快照会给出 price=**开盘价**、vol=0，
+        照此造 bar 得到 `O=H=L=C`、`volume=0` 的假当日根，被写进 chart_payload。
+        实测 600362：假根 close=41.5 ⇒ cur(41.5) < MA5(41.57) ⇒ **误报「破5日线」**，
+        而真实 10-09 收盘是 42.51（站上）。旧代码只闸 `_px > 0`，拦不住这种盘前占位。
+        判据用「成交量≤0 **且** 高==低」——不依赖 vol_hand 字段存在（缺字段时不会误杀正常盘中根）。
+        """
+        if px is None or px <= 0:
+            return None
+        o = o or px
+        h = h or px
+        l = l or px
+        v = v or 0.0
+        if float(v) <= 0 and float(h) == float(l):
+            return None
+        return {"date": today, "open": o, "high": h, "low": l, "close": px, "volume": v}
+
     def _today_forming_bar(self, code, allow_network=True):
         """腾讯快照 → 当日 forming bar（ts_date 闸，与 facade._maybe_append_forming 同口径）。
 
@@ -3208,9 +3349,8 @@ class Api:
                         return None       # 快照非当日 ⇒ 休市/假期，不补（免无谓网络）
                     _px = _s.get("price") or 0
                     if _px > 0:
-                        return {"date": today, "open": _s.get("open") or _px,
-                                "high": _s.get("high") or _px, "low": _s.get("low") or _px,
-                                "close": _px, "volume": _s.get("vol_hand") or 0.0}
+                        return _mk_forming_bar(today, _px, _s.get("open"), _s.get("high"),
+                                               _s.get("low"), _s.get("vol_hand"))
             if not allow_network:
                 return None               # 快路径：不在批量快照内即不补（不打网络）
             # 回退：单只快照（网络）
@@ -3221,8 +3361,8 @@ class Api:
             if snap.get("ts_date") != today:
                 return None
             px = snap["price"]
-            return {"date": today, "open": snap.get("open") or px, "high": snap.get("high") or px,
-                    "low": snap.get("low") or px, "close": px, "volume": snap.get("volume") or 0.0}
+            return _mk_forming_bar(today, px, snap.get("open"), snap.get("high"),
+                                   snap.get("low"), snap.get("volume"))
         except Exception:
             return None
 
@@ -3910,7 +4050,7 @@ class Api:
         result = {}
         try:
             import pandas as _pd
-            from core.position_builder import _DAILY_CACHE_DIR
+            _DAILY_CACHE_DIR = _DAILY_KLINE_DIR   # 本地常量（2026-10-11），见模块顶部说明
             from config import ENTRY_TIMING_PARAMS as _ETP
             # 指数 regime（读指数日线缓存，零网络）
             regime_by_date = {}
@@ -3964,10 +4104,16 @@ class Api:
                         "go": bool(_dec["go"]), "regime": _regime,
                         "met": int(_reachable) + int(_trend) + int(_dd_ok),
                         "conds": conds, "reason": "；".join(_dec["reasons"]),
-                        "score": int(_score), "score_ceiling": 100 if _reachable else 70,
+                        # 2026-10-11：与 position_builder 同步——得分已**移出市场项**（横截面 IC 恒 0），
+                        # 故恒可满 0~100；旧的"range 市上限 70"不再成立。signal_reachable 仍只由 regime 定。
+                        "score": int(_score), "score_ceiling": 100,
                         "signal_reachable": bool(_reachable), "verdict": _verdict,
                         "veto": list(_dec["veto"]), "above_ma5": _f.get("above_ma5"),
                         "price": _f.get("price"),
+                        # 日线四阶段：**本函数已算出**（features_from_daily 的副产品）⇒ 白给，零额外取数。
+                        # 猎手池 5000+ 只，30min/10min 那两列要逐只出网（实测 ~1.5s/只、400 只 >5min），
+                        # 故猎手个股表**只给这一列**（见 doc/solutions §5.10）。
+                        "stage": _f.get("stage_daily_code"),
                     }
                 except Exception:
                     continue
@@ -4099,8 +4245,8 @@ class Api:
             df_detail = loader.load_detail_ranking()
             top5_list = []  # TOP5 按概念
             top5_ranker = Top5Ranker()
-            for _, row in df_pool.iterrows():
-                pass  # TOP5 用 ranker.select
+            # 2026-10-11 删除空循环：原为 `for _, row in df_pool.iterrows(): pass`
+            # ——遍历整个猎手池、逐行构造 Series，循环体是 `pass`，纯浪费（删后行为零变化）。
             # 按韭研分类聚合并选 TOP5
             for category in sorted(df_pool["韭研分类"].unique()):
                 if not category: continue
@@ -4183,11 +4329,19 @@ class Api:
                             "score": total, "d5": d5, "d6": d6, "d9": d9,
                             "change_pct": round(float(d.get("涨跌幅", 0) or 0), 2) if str(d.get("涨跌幅")) not in ("nan", "None", "") else 0.0,
                             "limit_up": int(float(d.get("涨停", 0) or 0)) if str(d.get("涨停")) not in ("nan", "None", "") else 0,
+                            # 成交额：**已在 df_pool 里**（零额外取数），仅供板块内分层用
+                            "amount": (float(d.get("成交额", 0) or 0)
+                                       if str(d.get("成交额")) not in ("nan", "None", "") else 0.0),
                         })
                     stocks.sort(key=lambda x: -x["score"])
                     sector_stocks[category] = stocks
             except Exception:
                 pass  # 个股明细非致命
+
+            # 板块内 龙头/中军/杂毛（**描述性标签**，零额外取数：只用已在该表里的 涨跌幅/成交额）。
+            # ⚠️ 实测无前瞻区分度，勿当依据 —— 见 `_tier_sector_stocks` docstring。
+            for _cat, _ss in sector_stocks.items():
+                _tier_sector_stocks(_ss)
 
             # 盘后建仓信号符合度注入（实盘盘中跳过省资源；盘后点击"今日数据"时显示）
             try:
@@ -4195,8 +4349,10 @@ class Api:
                 _MP.update({"phase": "计算建仓符合度", "done": 0, "total": len(codes), "msg": ""})
             except Exception:
                 pass
+            _build_n = 0
             try:
                 build_conf = self._hunter_build_conformance(codes, date)
+                _build_n = len(build_conf or {})
                 if build_conf:
                     for cat, stocks in sector_stocks.items():
                         for s in stocks:
@@ -4213,6 +4369,7 @@ class Api:
                                 s["build_verdict"] = c.get("verdict")
                                 s["build_veto"] = c.get("veto") or []
                                 s["build_above_ma5"] = c.get("above_ma5")
+                                s["build_stage"] = c.get("stage")
                                 s["build_price"] = c.get("price")
             except Exception:
                 pass
@@ -4272,6 +4429,10 @@ class Api:
             out["top5"] = top5_list
             out["heat_trends"] = heat_trends
             out["sector_stocks"] = sector_stocks
+            # 2026-10-11：把"建仓符合度算了多少"报给前端 —— 表格渲染后这段时间界面**没有反馈**
+            # （owner：展开板块后各列空着，不知道是不是在更新）。前端据此显示进度/原因。
+            out["build_n"] = _build_n
+            out["build_total"] = len(codes)
             out["concept_trends"] = concept_trends
             out["refreshed_at"] = datetime.now().strftime("%H:%M:%S")
             try:
@@ -4432,6 +4593,125 @@ class Api:
 
         _th.Thread(target=_run, daemon=True, name="pb-m30-warm").start()
 
+    # ---------------- 仓位结构（30min/10min 结构参考）----------------
+    def _pb_struct_get(self, code):
+        """建仓表「仓位结构」：读缓存（**主线程零计算零网络**）。未热 → pending。"""
+        base = str(code).split("_")[0]
+        key = f"{base}_{_min_bars_slot()}"
+        with _PB_STRUCT_LOCK:
+            st = _PB_STRUCT_CACHE.get(key)
+        if st is None:
+            return {"ok": False, "pending": True,
+                    "reason": "结构层后台计算中…（整池首轮约 10~30s，之后按 30min 时段刷新）"}
+        return st
+
+    def _pb_struct_hist(self, code, date, compute=False):
+        """历史日「仓位结构」：**纯磁盘、零网络**、截到该日（`load_structure(allow_network=False)`）。
+        compute=False 时未算过返回 None（浏览历史不触发计算，由「扫描该日」预算好）。"""
+        base = str(code).split("_")[0]
+        key = f"{base}_{date}"
+        with _PB_STRUCT_HIST_LOCK:
+            if key in _PB_STRUCT_HIST:
+                return _PB_STRUCT_HIST[key]
+        if not compute:
+            return None
+        try:
+            from core.position_structure_feed import load_structure
+            _st = load_structure(base, date_str=date, allow_network=False)
+        except Exception as e:
+            _st = {"ok": False, "reason": str(e)[:80]}
+        with _PB_STRUCT_HIST_LOCK:
+            if len(_PB_STRUCT_HIST) > _PB_STRUCT_HIST_MAX:
+                _PB_STRUCT_HIST.clear()
+            _PB_STRUCT_HIST[key] = _st
+        return _st
+
+    def _kick_pb_struct_warm(self, codes, force=False):
+        """后台预热「仓位结构」（守护线程）。磁盘优先（`load_structure` 内部：新鲜 plain 档 →
+        陈旧才出网补并落盘）。`max_workers=2`：比 30min 判定列克制——本层每只要多打一次 5min（~0.5s）。
+
+        force=False（默认，建仓表轮询用）：每 30min 时段只起一轮，避免每 10s 轮询重复排队。
+        force=True（猎手板块展开/批量接口用）：跳过"每时段一次"闸——**不同板块是不同代码集**，
+        共用一道闸会让第二个板块永远排不上；重复调用由 `_one` 内的 per-code 缓存命中天然去重。"""
+        codes = [str(c).split("_")[0] for c in (codes or []) if c][:_PB_STRUCT_POOL_MAX]
+        if not codes:
+            return
+        slot = _min_bars_slot()
+        if not force:
+            if _PB_STRUCT_WARM.get("slot") == slot:
+                return
+            _PB_STRUCT_WARM["slot"] = slot
+
+        def _run():
+            try:
+                from concurrent.futures import ThreadPoolExecutor
+                from core.position_structure_feed import load_structure
+
+                def _one(bc):
+                    key = f"{bc}_{slot}"
+                    with _PB_STRUCT_LOCK:
+                        if key in _PB_STRUCT_CACHE:
+                            return
+                    try:
+                        st = load_structure(bc)          # 后台线程，允许出网
+                    except Exception as e:
+                        st = {"ok": False, "reason": str(e)[:80]}
+                    with _PB_STRUCT_LOCK:
+                        if len(_PB_STRUCT_CACHE) > _PB_STRUCT_MAX:
+                            _PB_STRUCT_CACHE.clear()
+                        _PB_STRUCT_CACHE[key] = st
+                with ThreadPoolExecutor(max_workers=2) as ex:
+                    list(ex.map(_one, codes))
+            except Exception:
+                pass
+
+        _th.Thread(target=_run, daemon=True, name="pb-struct-warm").start()
+
+    def _kick_pb_struct_hist_warm(self, codes, date):
+        """**历史日**「仓位结构」后台预热（守护线程，纯磁盘、零网络）。
+
+        ⚠️ 必须异步：单只中位 0.72s（要解析整档 `_d540` JSON 再截到该日），50 只 ≈55s。
+        原先同步跑在 `recompute_pb` 里 ⇒ 前端 20s 投递层上限直接打爆，
+        表现为「重跑失败: 后端 recompute_pb 超时 20000ms」，而后端其实还在算。"""
+        codes = [str(c).split("_")[0] for c in (codes or []) if c][:_PB_STRUCT_POOL_MAX]
+        if not codes:
+            return
+
+        def _run():
+            try:
+                from concurrent.futures import ThreadPoolExecutor
+                with ThreadPoolExecutor(max_workers=2) as ex:
+                    list(ex.map(lambda c: self._pb_struct_hist(c, date, compute=True), codes))
+            except Exception:
+                pass
+
+        _th.Thread(target=_run, daemon=True, name="pb-struct-hist-warm").start()
+
+    def load_structure_batch(self, codes):
+        """批量取「仓位结构」（**主线程零计算零网络**）：只回**已热**的，未热的进后台预热。
+
+        契约与 `load_stock_tags_batch` 一致（前端**只缓存非空**、空则稍后重试）——但本接口
+        天然会回"部分就绪"，前端按 code 增量填充即可。返回 {"structures": {code: st}, "pending": n}。
+
+        ⚠️ 猎手池可达 5000+ 只，**绝不整池预热**：只预热本次传入的代码，且上限
+        `_PB_STRUCT_POOL_MAX`（调用方按"展开的板块"传入，通常几十~几百只）。
+        """
+        codes = [str(c).split("_")[0] for c in (codes or []) if c]
+        if not codes:
+            return _clean({"structures": {}, "pending": 0})
+        out = {}
+        for c in codes:
+            s = self._pb_struct_get(c)
+            if not s.get("pending"):
+                out[c] = s
+        n_pending = len(codes) - len(out)
+        if n_pending:
+            # 只对**尚未命中缓存**的排队，且限流（猎手池可达数千只）。限"未热的"而非"入参前 N 个"：
+            # 前端会重试，每轮已热的自然出队 ⇒ 逐轮推进剩下的，不会永远卡在同一批。
+            _todo = [c for c in codes if c not in out][:_PB_STRUCT_POOL_MAX]
+            self._kick_pb_struct_warm(_todo, force=True)
+        return _clean({"structures": out, "pending": n_pending})
+
     def _warm_ob_m30_disk(self, codes):
         """后台**磁盘**预热 OB 30min 快照（零网络，比在线刷新快 ~2s 内填满）。仅后台线程调用。"""
         try:
@@ -4495,15 +4775,48 @@ class Api:
             return None, str(r.get("source") or "error")
         return r["trend"], "30min"
 
-    def _stock_tags_one(self, code):
-        """单只股票技术标签（取数 + 补当日 forming bar）→ `_stock_tags_from_df`。"""
+    def _stock_tags_one(self, code, offline=False):
+        """单只股票技术标签 → `_stock_tags_from_df`。`offline=True`：批量视图用，**零网络**。
+
+        **2026-10-11 性能修复：日线改为「本地缓存优先」，缺才回退 provider。**
+        原因（实测）：`facade.daily()` 是 **GM 优先**，而 GM 调用池是 `max_workers=1`
+        （`facade._gm_call` 为硬超时**故意**如此）⇒ 逐只 GM 调用**全部串行**，
+        6 线程并发形同虚设：150 只 **44.0s**（293ms/只）。
+        改读本地日线缓存后 6 线程**真并行**：**150 只 2.0s（13ms/只，22×）**，
+        且**趋势仍走 30min**（`t30=None` 不传）⇒ **显示口径完全不变**。
+        顺带：本仓已有 `_hunter_build_conformance` 走同样的"读日线缓存"零网络路线。
+        """
         import pandas as pd
+        # ① 本地缓存优先（`_daily_rows_cache_first` 内部还会用**批量快照**补当日 forming bar，零网络）
+        df = None
+        try:
+            _rows = self._daily_rows_cache_first(code)
+            if _rows and len(_rows) >= 30:
+                df = pd.DataFrame(_rows)
+        except Exception:
+            df = None
+        if df is not None:
+            # `offline=True`（猎手批量）：当日 bar 已由 `_daily_rows_cache_first` 用**批量快照**补过
+            #   （零网络）⇒ 到此为止。**不能**再走下面那段补 bar：它调 `_live_quote_forming`
+            #   （逐只网络快照，且同为 GM 优先 ⇒ 又串行化，~1.9s/只），会把刚拿到的提速全还回去。
+            # `offline=False`（建仓表/持仓体检，小池且喂决策）：缓存只省了"取日线"，
+            #   当日 bar 仍按老逻辑用实时快照补，**行为与此前一致**。
+            if not offline:
+                df = self._append_today_forming_bar(df, code)
+            return self._stock_tags_from_df(df, code)
+        # ② 本地无缓存（或过旧被新鲜度闸拦掉）→ 回退网络；这类标的数量少，不拖累批量
         from core.position_builder import fetch_daily_kline
         df = fetch_daily_kline(code)
-        if df.empty or len(df) < 30:
+        if df is None or df.empty or len(df) < 30:
             return {"trend": "flat", "tags": []}
         # P0: ifzq K线主机被 WAF 501 拦截时 fetch_daily_kline 静默回退旧缓存（缺当日 forming bar），
         # 破5/10日线 等标签会用昨日收盘误判（现价已站上均线仍显示破线）。补当日实时 forming bar。
+        df = self._append_today_forming_bar(df, code)
+        return self._stock_tags_from_df(df, code)
+
+    def _append_today_forming_bar(self, df, code):
+        """日线末根不是今天时，用**实时快照**补一根当日 forming bar（可能出网，仅小池/回退路径用）。"""
+        import pandas as pd
         try:
             # 仅当实时快照时间戳为今日才补 forming bar：开盘前/快照陈旧时腾讯返回昨收，
             # 补进去会把昨收重复计入 MA5 → cur 看似低于虚高的 MA5，误判"破5日线"（08-28 事故）。
@@ -4517,7 +4830,7 @@ class Api:
                     df = pd.concat([df, fb], ignore_index=True)
         except Exception:
             pass
-        return self._stock_tags_from_df(df, code)
+        return df
 
     def _stock_tags_from_df(self, df, code, t30=None):
         """由**日线 df** 计算技术标签（纯计算，无取数）。批量标签与持仓体检共用同一口径。
@@ -4528,6 +4841,19 @@ class Api:
           · False → 显式离线（OB 无 30min 数据），直接回退日线斜率。"""
         import numpy as np
         import pandas as pd
+        # 2026-10-11：剔除**尾部**「无成交且无振幅」的占位根（盘前快照造的假当日 bar）。
+        # 写入侧已加闸（`_mk_forming_bar`），但**磁盘上已存在的坏 payload 也要能自愈**——
+        # 实测 600362 的 payload 里那根假 10-09（close=41.5、vol=0）会把 MA5/cur 污染成
+        # 「破5日线」，而真实收盘 42.51 是站上。只剔尾部：中间根可能是停牌/无成交的真实历史。
+        while len(df) > 0:
+            _last = df.iloc[-1]
+            if (float(_last.get("volume") or 0) <= 0
+                    and float(_last.get("high") or 0) == float(_last.get("low") or 0)):
+                df = df.iloc[:-1]
+            else:
+                break
+        if len(df) < 2:
+            return {"trend": "flat", "tags": []}
         closes = df["close"].values
         highs = df["high"].values
         lows = df["low"].values
@@ -4652,7 +4978,7 @@ class Api:
         return {"trend": trend, "box_pos": box_pos, "price": round(cur, 3),
                 "trend_src": _trend_src, "tags": tags[:6]}
 
-    def load_stock_tags_batch(self, codes):
+    def load_stock_tags_batch(self, codes, offline=False):
         """批量拉技术标签（并发，ThreadPoolExecutor），带 TTL 缓存 + 后台异步重算。
         返回 {code: {trend, box_pos, tags}}。GUI 每 10s 轮询 refresh_pb 时走缓存即时返回，
         避免 7-12s 的批量计算（pandas + 网络）阻塞 pywebview 主线程冻结界面。"""
@@ -4686,7 +5012,7 @@ class Api:
             #   （栈里可见 `facade.py:_gm_call`），40 并发换不到并行度，只换来 40 倍线程压力。
             #   代价：标签批算整体变慢，首次进建仓表/破位表时标签"稍后才自填"（前端本就轮询补齐）。
             with ThreadPoolExecutor(max_workers=6) as ex:
-                futures = {ex.submit(self._stock_tags_one, c): c for c in codes}
+                futures = {ex.submit(self._stock_tags_one, c, offline): c for c in codes}
                 for fut in as_completed(futures, timeout=90):
                     code = futures[fut]
                     try:
@@ -5732,7 +6058,7 @@ class Api:
 
     def _compute_auto_pnl(self, today):
         """账本体（纯函数式磁盘读，无副作用）。"""
-        from core.position_builder import _DAILY_CACHE_DIR
+        _DAILY_CACHE_DIR = _DAILY_KLINE_DIR   # 本地常量（2026-10-11）：原 import 会连带 pandas 进首帧
         # 名称源：holdings_auto.json → NAMES 兜底
         names = dict(NAMES)
         try:
@@ -7311,11 +7637,17 @@ class Api:
             print(f"⚠️ 盘后重跑建仓扫描失败: {err}")
         # 2) 历史日：预算「30min 判定」列（读磁盘 30min 缓存截到该日，零网络）写入缓存，
         #    使刷新后的建仓表带出该列；今日走实时轻量缓存路径（_agg_position_builder），不在此算。
+        #    同批预算「仓位结构」列（纯磁盘 5min/30min + 日线，零网络）。
         if date != datetime.now().strftime("%Y-%m-%d"):
             try:
-                for _r in (self._agg_position_builder(date).get("rows") or []):
+                _rows = self._agg_position_builder(date).get("rows") or []
+                for _r in _rows:
                     if _r.get("code"):
                         self._pb_m30_hist_verdict(_r["code"], date, compute=True)
+                # 仓位结构**必须异步**：纯磁盘也算得慢（单只中位 0.72s、50 只 ≈55s）——
+                # 原来同步跑在这里，把前端 20s 投递层上限打爆（2026-10-11 报「重跑失败: 超时」）。
+                self._kick_pb_struct_hist_warm(
+                    [_r.get("code") for _r in _rows if _r.get("code")], date)
             except Exception:
                 pass
         # 3) 聚合新 trace（含技术标签）+ 重算加仓
@@ -7526,6 +7858,29 @@ class Api:
                 _v = self._pb_m30_hist_verdict(r["code"], date, compute=False)
                 if _v:
                     r["m30_verdict"] = _v
+
+        # 建仓表「仓位结构」列（2026-10-11）：30min/10min 结构参考（止损位/阻力/补仓档/阶段），
+        # 供**仓位管理**用。与 30min 判定列同纪律：主线程只读缓存；未热 → 后台预热整池。
+        # ⚠️ 不是买卖信号（见模块纪律）；历史日走纯磁盘 `_pb_struct_hist`。
+        _pb_struct_pending = False
+        if _is_today:
+            _scodes = [r.get("code") for r in rows if r.get("code")]
+            for r in rows:
+                if not r.get("code"):
+                    continue
+                _s = self._pb_struct_get(r["code"])
+                r["structure"] = _s
+                if _s.get("pending"):
+                    _pb_struct_pending = True
+            if _pb_struct_pending and _scodes:
+                self._kick_pb_struct_warm(_scodes)
+        else:
+            for r in rows:
+                if not r.get("code"):
+                    continue
+                _s = self._pb_struct_hist(r["code"], date, compute=False)
+                if _s:
+                    r["structure"] = _s
 
         _out = {
             "has_data": True,

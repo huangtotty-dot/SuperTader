@@ -40,10 +40,16 @@ class TestAutoPnlLedger(unittest.TestCase):
         for d in (self.bridge, self.state, self.daily):
             d.mkdir(parents=True, exist_ok=True)
         # 模块级路径改指向临时目录
-        self._orig = (t_gui.BRIDGE_DIR, t_gui.STATE_DIR, _pb._DAILY_CACHE_DIR)
+        # ⚠️ 2026-10-11 起 t_gui 不再 `from core.position_builder import _DAILY_CACHE_DIR`
+        #    （那会连带 pandas 进 GUI 冷启动首帧），改用**本地常量** `t_gui._DAILY_KLINE_DIR`
+        #    ⇒ 只 patch `_pb._DAILY_CACHE_DIR` **已不再生效**（会静默去读真实日线缓存，
+        #    本用例用真实 600000 的价格 9.54 顶掉期望的 22.0）。两个都 patch。
+        self._orig = (t_gui.BRIDGE_DIR, t_gui.STATE_DIR, _pb._DAILY_CACHE_DIR,
+                      t_gui._DAILY_KLINE_DIR)
         t_gui.BRIDGE_DIR = self.bridge
         t_gui.STATE_DIR = self.state
         _pb._DAILY_CACHE_DIR = self.daily
+        t_gui._DAILY_KLINE_DIR = self.daily
         # 名称源
         (self.state / "holdings_auto.json").write_text(
             json.dumps({"600000": {"name": "测试甲"}, "000001": {"name": "测试乙"}}),
@@ -90,7 +96,8 @@ class TestAutoPnlLedger(unittest.TestCase):
         t_gui._AUTO_PNL_CACHE.update({"ts": 0.0, "date": None, "data": None})
 
     def tearDown(self):
-        t_gui.BRIDGE_DIR, t_gui.STATE_DIR, _pb._DAILY_CACHE_DIR = self._orig
+        (t_gui.BRIDGE_DIR, t_gui.STATE_DIR, _pb._DAILY_CACHE_DIR,
+         t_gui._DAILY_KLINE_DIR) = self._orig
         t_gui._AUTO_PNL_CACHE.update({"ts": 0.0, "date": None, "data": None})
         self._tmp.cleanup()
 

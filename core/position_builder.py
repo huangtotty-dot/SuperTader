@@ -1088,7 +1088,10 @@ def scan_stock(code: str, stock_info: dict, date_str: str = None,
             #   显式给出：signal_reachable(当前 regime 下 signal 是否可能出现) 与
             #   score_ceiling(当前 regime 下 score 的上限)，供 GUI/trace 诚实展示，不改 go/verdict 逻辑本身。
             _signal_reachable = _dir_ok  # 仅 trend_up/trend_dn 时 signal 可达
-            _score_ceiling = 100 if _signal_reachable else 70  # range: t_regime 那 30 分锁死，上限 70
+            # 2026-10-11：得分重构后**市场项已移出得分**（横截面 IC 恒 0）⇒ 得分恒可满 0~100，
+            # 原「range 市上限 70」不再成立（它是旧式里 t_regime 30 分锁死的产物）。
+            # signal_reachable 仍然只由 regime 决定（那是**判定**可达性，与得分无关）。
+            _score_ceiling = 100
             result["signal_reachable"] = bool(_signal_reachable)
             result["score_ceiling"] = int(_score_ceiling)
             result["channel"] = None
@@ -1100,7 +1103,10 @@ def scan_stock(code: str, stock_info: dict, date_str: str = None,
             # 2026-08-27: 时机特征随 trace 落盘（GUI 条件详情面板显示精确数值用；
             #   此前面板读不到 features，回撤详情退化为"已满足+0.0%"的误导显示）
             result["timing_features"] = {k: _f.get(k) for k in (
-                "price", "ma20", "ma60", "drawdown", "rsi", "vol_ratio20", "dist_ma60")}
+                "price", "ma20", "ma60", "drawdown", "rsi", "vol_ratio20", "dist_ma60",
+                # 2026-10-11：above_ma5 / stage_daily_code 是**得分**的两个输入（GUI 观察列要读），
+                # 此前未投影 ⇒ 面板看不到「为什么这只被扣了 70 分」。
+                "above_ma5", "stage_daily_code")}
 
             # W35(2026-08-25) 日内右侧确认闸门 + 例外出口（两年验证：回撤保护稳健，fwd5 样本外打平）。
             #   仅 intraday 扫描且 go=true 时生效：确认通过→保持 signal(即时可建)；

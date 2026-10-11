@@ -166,6 +166,10 @@ let userPinnedDate = false;   // 用户手动选了历史日期时置 true，防
 //   2) **在飞上限**：全局最多 _API_MAX_INFLIGHT 个并发。到达率不必超过服务率就能靠堆积
 //      把队列撑爆——限流把队列钉成有界。
 const _API_TIMEOUT_MS = 20000;
+// 少数**本质长时**的后端方法不能套 20s：`recompute_pb` 要重放整日建仓扫描（自身注释即写
+// 「约需 1-2 分钟」）⇒ 套 20s 必然报「重跑失败: 超时」而后端其实已经算完、结果被丢弃。
+// 这类方法要么走轮询（如全池突破扫描 get_breakout_scan），要么在此显式放宽上限（仅防后端僵死）。
+const _API_TIMEOUT_OVERRIDE = { recompute_pb: 300000 };
 const _API_MAX_INFLIGHT = 6;
 let _apiInflight = 0;
 let _apiTimeoutCnt = 0;
@@ -194,14 +198,15 @@ async function apiCall(name, ...args) {
   }
   _apiInflight++;
   const _t0 = performance.now();
+  const _cap = _API_TIMEOUT_OVERRIDE[name] || _API_TIMEOUT_MS;
   let _timedOut = false;
   try {
     return await Promise.race([
       window.pywebview.api[name](...args),
       new Promise((_, rej) => setTimeout(() => {
         _timedOut = true;
-        rej(new Error(`后端 ${name} 超时 ${_API_TIMEOUT_MS}ms（投递层积压，该次结果已丢弃）`));
-      }, _API_TIMEOUT_MS)),
+        rej(new Error(`后端 ${name} 超时 ${_cap}ms（投递层积压，该次结果已丢弃）`));
+      }, _cap)),
     ]);
   } finally {
     _apiInflight--;
@@ -1509,6 +1514,111 @@ function renderSettle(settle, sigStat, nameMap) {
 }
 
 /* ---- ⑥ 建仓扫描 ---- */
+/* 仓位结构列（2026-10-11）：**建仓表 / 持仓体检 / 猎手板块个股 共用同一真源与同一渲染**
+   （后端 `r.structure` / `s.structure`，均由 `_pb_struct_get` 出）。
+   ⚠️ 是**结构参考、不是买卖信号**——机械按「阶段2加仓/阶段3减仓」做仓位择时经实测无正贡献；
+   「破前低就清仓」−30pp 强有害；唯一有证据的动作是「破位后在**下档支撑**挂限价补仓」
+   （改善成本结构、不提高期望）。tooltip = 后端 `format_structure` 全文（单一真源）。 */
+function structSummaryHtml(st) {
+  st = st || {};
+  if (st.pending || (!st.ok && !st.reason)) {
+    return `<span class="cell-dim" title="结构层后台计算中（整池首轮约10~30s，之后按30min时段刷新）">⏳</span>`;
+  }
+  if (!st.ok) {
+    return `<span class="cell-dim" title="${esc(st.reason || "结构层不可用")}">—</span>`;
+  }
+  const broke = !!st.broke_stop;
+  const badge = broke
+    ? (st.refill_valid ? `<span class="badge signal">⚠️已破位</span>`
+                       : `<span class="badge weak">已破位·超期</span>`)
+    : `<span class="badge hold">持有</span>`;
+  const stop = (st.stop_level == null) ? "—" : st.stop_level;
+  const disc = (st.discount_pct == null) ? "" : `｜折价${st.discount_pct}%`;
+  const stale = (st.data_asof && st.data_asof.stale)
+    ? ` <span style="color:#ffb454" title="${esc(st.data_asof.stale_reason || "")}">⚠️陈旧</span>` : "";
+  return `${badge}<div class="cell-dim" style="font-size:11px">止损${esc(String(stop))}｜${esc(st.stage10 || "")}｜30m${esc(st.mid_trend_30 || "")}${esc(disc)}${stale}</div>`;
+}
+function structCellHtml(st) {
+  return `<td style="text-align:center;line-height:1.6" title="${esc((st || {}).text || "仓位结构不可用")}">${structSummaryHtml(st)}</td>`;
+}
+
+/* 30min MA5 状态（**纯展示列**，owner 要求看盘感）。
+   ⚠️ **实测无前瞻信息量**：977只×361日，状态/跃迁 × 站上/跌破 四个口径，在「同日同 bar-of-day」
+   对照下 |diff| ≤ 0.03pp、|t| ≤ 2.4（n=35万~130万）。朴素对照给出的「−0.343pp t=−25.5」是
+   **日内时段伪影**，勿采信。⇒ 本列**不参与任何判定/评分/择时**，只是把原始状态摆出来。
+   依据 doc/research/2026-10-11_30min站上MA5_作仓位依据实验.md */
+const MA5_WARN = "⚠️ 本项实测无前瞻信息量（状态与跃迁、站上与否四个口径，同日同bar-of-day对照下 |diff| ≤ 0.03pp、|t| ≤ 2.4）⇒ 仅供参考，不参与任何判定。依据：doc/research/2026-10-11_30min站上MA5_作仓位依据实验.md";
+function ma5CellHtml(st) {
+  st = st || {};
+  if (st.pending || (!st.ok && !st.reason)) {
+    return `<td style="text-align:center"><span class="cell-dim" title="结构层后台计算中">⏳</span></td>`;
+  }
+  if (!st.ok || st.ma5_30min == null) {
+    return `<td style="text-align:center" title="${esc((st.reason || "无 30min 数据") + "　" + MA5_WARN)}"><span class="cell-dim">—</span></td>`;
+  }
+  const up = !!st.above_ma5_30;
+  const n = st.bars_since_ma5_cross;
+  const title = `30min MA5 = ${st.ma5_30min}　现价${up ? "站上" : "跌破"}${n == null ? "" : `，距上次翻转 ${n} 根 30min`}。　${MA5_WARN}`;
+  return `<td style="text-align:center;line-height:1.5" title="${esc(title)}"><b class="${up ? "up" : "down"}">${up ? "站上" : "跌破"}</b><div class="cell-dim" style="font-size:10px">${n == null ? "" : n + "根"}</div></td>`;
+}
+
+/* 日线四阶段（2026-10-11）：摆**状态**，紧挨「得分/通过」便于对照。
+   ⚠️ 实测横截面 IC **与直觉相反**：②抬升 IC −0.031~−0.042(t=−12~−15)、
+   ④下跌 IC +0.020~+0.034(t=+7~+12) —— 抬升/追高前瞻更差、下跌/超跌前瞻更好，分半窗两段同号。
+   效应量小（IC≈0.04，低于往返成本）⇒ 只作相对强弱参照，不是独立交易依据。
+   依据 doc/research/2026-10-11_日线四阶段_得分区分度实验.md */
+const DAY_STAGE_TIP = "日线四阶段（描述状态）：②抬升=多头排列(收盘>MA20>MA60)且MA20上行；③派发=MA20>MA60但收盘丢了MA20；④下跌=空头排列且MA20下行；①蓄势=其余（均线缠绕）。"
+  + "⚠️ 实测(977只×2265日/163万股票·日)横截面IC与直觉相反：②抬升 −0.031~−0.042(t=−12~−15)、④下跌 +0.020~+0.034(t=+7~+12)，分半窗两段同号；效应量小(IC≈0.04)，仅作相对强弱参照。";
+function dayStageCellHtml(st) {
+  st = st || {};
+  if (st.pending || (!st.ok && !st.reason)) {
+    return `<td style="text-align:center"><span class="cell-dim" title="结构层后台计算中">⏳</span></td>`;
+  }
+  if (!st.ok || !st.stage_daily) {
+    return `<td style="text-align:center" title="${esc((st.reason || "日线数据不足") + " " + DAY_STAGE_TIP)}"><span class="cell-dim">—</span></td>`;
+  }
+  return `<td style="text-align:center" title="${esc(st.stage_daily + "。" + DAY_STAGE_TIP)}"><span style="font-size:12px">${esc(st.stage_daily)}</span></td>`;
+}
+
+/* 「5日线」观察列（2026-10-11，owner 要求）：显示**得分**里那个 −70 扣分的触发标志，
+   便于看"被砍到 0 的那批票后来怎么样"——它是决定是否保留该扣分的观察依据。
+   ⚠️ 实测（977只×2265日）「站上MA5」的横截面 IC 为**负**（−0.018, t=−6.9，两半窗一致），
+   即被扣分的那批（未站上）后续反而略好。扣分按 owner 决定**暂不修改**。 */
+const MA5_PENALTY_TIP = "是否站上 5 日线——「得分」中 −70 悬崖扣分的触发标志（未站上 → 扣 70 分，多数落到 0）。"
+  + "⚠️ 实测横截面 IC 为负（站上MA5 −0.018, t=−6.9，两半窗一致）：被扣分的这批后续反而略好。"
+  + "保留与否待观察后再定。依据 doc/research/2026-10-11_日线四阶段_得分区分度实验.md";
+function ma5FlagCellHtml(v, missingTip) {
+  if (v === true) return `<td style="text-align:center" title="${esc("站上 5 日线（不触发扣分）。" + MA5_PENALTY_TIP)}"><span class="cell-dim">站上</span></td>`;
+  if (v === false) return `<td style="text-align:center" title="${esc("未站上 5 日线 → 得分扣 70。" + MA5_PENALTY_TIP)}"><b class="down">破位</b><div class="cell-dim" style="font-size:10px">−70</div></td>`;
+  return `<td style="text-align:center" title="${esc(missingTip || "无该特征（旧数据/未扫描）")}"><span class="cell-dim">—</span></td>`;
+}
+
+/* 板块内 龙头/中军/杂毛（2026-10-11，owner 需求）：**描述性方位标签**，不是信号。
+   规则：龙头=板块内当日涨幅第1；中军=其余成交额前3（资金核心）；杂毛=其余；板块<8只不标。
+   ⚠️ **实测无前瞻区分度**（977池×2009日，行业口径、同板块同日配对、按日聚类 t、分半窗）：
+      涨幅头名 vs 杂毛 H=5 仅 −0.021pp(t=−0.40)；成交额头名 **−0.302pp(t=−5.7)**；
+      连板龙头 H=1 −0.112pp(t=−1.71)；**分半窗符号翻转**(h1 +0.282 / h2 −0.217)。
+      效应量 ±0.05~0.13pp 远低于往返成本 ⇒ 只看方位，勿当依据。
+   依据 doc/research/2026-10-11_板块内龙头中军杂毛_分层实验.md */
+/* 「还在更新」的统一标记（2026-10-11，owner：展开板块后各列空着，不知道是不是在更新）。
+   ⚠️ 必须与「确实没有数据」区分开：前者显示 ⏳ 且带说明，后者才是 "—"。 */
+const UPDATING_HTML = '<span class="cell-dim" style="font-size:11px" title="正在更新…（数据尚未返回，稍后自动填上）">⏳</span>';
+
+const TIER_TIP = "板块内方位标签（描述性，非信号）：龙头=本板块当日涨幅第1；中军=其余成交额前3（资金核心）；杂毛=其余。"
+  + "⚠️ 实测该分层**无前瞻区分度**（四种定义×四个持有期≈全无差异，分半窗符号翻转，效应量远低于交易成本）⇒ 仅供盘面方位感，不参与任何判定与排序。";
+function tierBadge(t) {
+  if (t === "龙头") return `<span style="display:inline-block;padding:1px 8px;border-radius:10px;background:rgba(248,81,73,.22);border:1px solid #f85149;color:#ff9d95;font-weight:700;font-size:11px;letter-spacing:1px" title="${esc("【龙头】" + TIER_TIP)}">龙头</span>`;
+  if (t === "中军") return `<span style="display:inline-block;padding:1px 8px;border-radius:10px;background:rgba(88,166,255,.20);border:1px solid #58a6ff;color:#9ecbff;font-weight:700;font-size:11px;letter-spacing:1px" title="${esc("【中军】" + TIER_TIP)}">中军</span>`;
+  if (t === "杂毛") return `<span style="display:inline-block;padding:1px 7px;border-radius:10px;background:rgba(139,148,158,.13);color:#8b949e;font-size:10px" title="${esc("【杂毛】" + TIER_TIP)}">杂毛</span>`;
+  return '<span class="cell-dim">—</span>';
+}
+/* 整行强调：龙头/中军用左侧色条 + 淡底色 —— 扫一列股票时能一眼挑出来 */
+function tierRowStyle(t) {
+  if (t === "龙头") return "box-shadow:inset 4px 0 0 #f85149;background:rgba(248,81,73,.10);";
+  if (t === "中军") return "box-shadow:inset 3px 0 0 #58a6ff;background:rgba(88,166,255,.07);";
+  return "";
+}
+
 function renderPB(pb) {
   window._pbLastPayload = pb;  // P3-2 池筛选：切换下拉时用最近一次 payload 重渲染
   const el = document.getElementById("pbBody");
@@ -1663,6 +1773,9 @@ function renderPB(pb) {
     const mvCell = `<td style="text-align:center" title="${esc(mv.reason || "30min 判定不可用")}">${
       mvCls ? `<span class="${mvCls}">${esc(mv.label || "")}</span>`
             : `<span class="cell-dim">${esc(mv.label || "—")}</span>`}</td>`;
+    // 仓位结构（2026-10-11）：读后端 `r.structure`（主线程零计算；未热=⏳，10s 轮询自动补）。
+    // 渲染与持仓体检/猎手板块**共用** `structCellHtml`（同一真源、同一外观）。
+    const stCell = structCellHtml(r.structure);
     return `
       <tr id="pb-row-${esc(r.code || '')}" ondblclick="openStockChart('${esc(r.code||'')}','${esc(r.name||r.code||'')}')" style="cursor:pointer;${_scoreBg}${isStale ? "opacity:.45;" : ""}" title="双击看K线${isStale ? "（数据陈旧，距今超过10分钟）" : ""}">
         <td>${esc(r.name || "")} <span class="mono cell-dim">${esc(r.code || "")}</span>
@@ -1671,14 +1784,15 @@ function renderPB(pb) {
         <td>${verdictBadge(r.verdict)}</td>
         <td class="num" title="${esc(scoreCellTitle)}">${scoreCellHtml}</td>
         <td class="num ${metCls}"><b>${isNoData ? "—" : metCount + "/3"}</b></td>
+        ${dayStageCellHtml(r.structure)}
+        ${ma5FlagCellHtml((r.timing_features || {}).above_ma5)}
         <td class="num">${fmt(r.price)}</td>
         <td style="text-align:center">${boxStr}</td>
         <td style="max-width:220px;line-height:1.7">${tagsTxt}</td>
         <td><span class="cond" title="${esc(condTitle)}">${condStr}${vetoDot}</span></td>
         ${mvCell}
-        <td class="num">${fmt(r.suggested_qty, 0)}</td>
-        <td class="num">${fmt(r.suggested_price)}</td>
-        <td class="num">${fmt(r.capital_required, 0)}</td>
+        ${stCell}
+        ${ma5CellHtml(r.structure)}
         <td class="cell-dim">${esc(r.scan_type || "")}${r._scans > 1 ? `×${r._scans}` : ""}${scanTimeTxt ? ` <span class="mono">${esc(scanTimeTxt)}</span>` : ""}${staleBadge}</td>
         <td>${!r.in_holdings ? `<button class="mini-btn" style="font-size:10px;padding:0 5px;color:#3fb950" onclick="confirmPosition('${esc(r.code||'')}',document.getElementById('pb-row-${esc(r.code||'')}'))" title="人工确认建仓（回写 signal_history）">✓确认</button><button class="mini-btn" style="font-size:10px;padding:0 5px;color:#f85149" onclick="removeFromWatchlist('${esc(r.code||'')}',document.getElementById('pb-row-${esc(r.code||'')}'))" title="从股池移除">✕</button>` : ""}</td>
       </tr>`;
@@ -1705,14 +1819,19 @@ function renderPB(pb) {
   ${pb.progress ? `<div class="cell-dim" style="font-size:10px;margin-bottom:6px">扫描进度: <b>${pb.progress.scanned}/${pb.progress.total_candidates}</b> 只已扫${pb.progress.pending ? ` · <b class="warn">${pb.progress.pending}</b> 只待扫描` : ''} · 已扫描 <b>${pb.progress.online_fetched}</b> 只 · 无数据 <b class="warn" title="insufficient_data：5分钟K线/快照不足，未参与条件判定">${pb.progress.no_data}</b> 只<span class="cell-dim">（K线/快照不足）</span></div>` : ""}
       <table>
         <thead><tr>
-          <th>股票</th><th title="P3-2 池分管：人工=manual侧扫描 / 自动=auto侧管理">池</th><th>判定</th><th class="num">得分</th><th class="num">通过</th><th class="num">价</th>
+          <th>股票</th><th title="P3-2 池分管：人工=manual侧扫描 / 自动=auto侧管理">池</th><th>判定</th><th class="num">得分</th><th class="num">通过</th>
+          <th title="日线四阶段（描述状态，紧挨得分便于对照）：②抬升/③派发/④下跌/①蓄势。⚠️ 实测横截面IC与直觉相反——抬升/追高前瞻更差(IC −0.031~−0.042, t=−12~−15)、下跌/超跌前瞻更好(IC +0.020~+0.034, t=+7~+12)，分半窗两段同号；效应量小(IC≈0.04)仅作相对强弱参照">日线阶段</th>
+          <th title="是否站上 5 日线——「得分」−70 扣分的触发标志（观察用）。⚠️ 实测该项横截面IC为负(站上MA5 −0.018, t=−6.9)：被扣的这批后续反而略好；扣分保留与否待观察">5日线<br><span style="font-size:9px;opacity:.6">观察</span></th>
+          <th class="num">价</th>
           <th title="突破箱体=第一优先级">突破</th>
           <th title="通道/箱体/背离等技术形态（此列的顶/底背离是**日线**口径，与右侧『30min判定』的 30 分钟口径不同源）">技术标签</th>
           <th title="时机门控：市场有方向/多头结构/回撤到位（GO→signal，震荡→降频）">时机条件</th>
           <th title="30分钟综合判定（与『持仓 30min 风险体检』同口径）：🔴减仓/避高=30min 顶背离(T1/T2)；🟠盯紧=T3顶分型+T4均线压制同现；🟢偏好=无顶信号且有新鲜底背离(≤16根)；⚪中性=其余。依据 981只×540日 离线验证；T3/T4 无前瞻区分度、单个不报警">30min判定</th>
-          <th class="num">建议股数</th><th class="num">建议价</th><th class="num">所需资金</th><th>扫描</th><th></th>
+          <th title="仓位结构（30min/10min，供仓位管理参考）：止损=10min 最近已确认摆动低点；阶段=10min 四阶段(①蓄势/②抬升/③派发/④下跌)；30m=30min MA65 中期方向；折价=现价/止损-1（到-4.3%记满）。破位时给出三档下档支撑挂单价与5日成交率估计。⚠️ 是**结构参考、不是买卖信号**——机械按阶段加减仓经实测无正贡献(纯择时-1.4~+2.7pp不显著)，「破前低就清仓」-30pp强有害；唯一有证据的是破位后在下档支撑挂限价补仓(改善成本结构、不提高期望)。悬停看明细">仓位结构</th>
+          <th title="30min MA5 状态（**纯展示**）：现价相对 5×30min 均线 站上/跌破，及距上次翻转几根。⚠️ 实测**无前瞻信息量**（状态/跃迁 × 站上/跌破 四口径，同日同bar-of-day对照 |diff|≤0.03pp、|t|≤2.4）⇒ 仅供参考，不参与任何判定。朴素对照的 −0.343pp(t=−25.5) 是日内时段伪影">30m MA5<br><span style="font-size:9px;opacity:.6">仅展示</span></th>
+          <th>扫描</th><th></th>
         </tr></thead>
-        <tbody>${rows || '<tr><td colspan="15" class="empty">无扫描结果</td></tr>'}</tbody>
+        <tbody>${rows || '<tr><td colspan="16" class="empty">无扫描结果</td></tr>'}</tbody>
       </table>
       <div class="cell-dim" style="font-size:11px;margin-top:8px">●=通过 ○=未通过 · 时机条件：${Object.values(condLabels).join(" / ")} · 第5位🚫=否决因子(爆量≥3倍或偏离MA60超+20%) · GO(多头追强/空头抄底)→signal，震荡→降频 · 观察=震荡市结构达标(不推送) · 盘中每10s刷新</div>
     </div>`;
@@ -2446,7 +2565,11 @@ async function recomputePB() {
       statusEl("重跑失败: 无返回", "err");
     }
   } catch (e) {
-    statusEl("重跑失败: " + e.message, "err");
+    // 不谎报失败：超时只说明**前端**不再等，后端仍在算且会写 trace（同 pollBreakoutScan 的原则）。
+    const _to = /超时/.test(e.message || "");
+    statusEl(_to
+      ? `重跑超时（${date}）：后端可能仍在计算，结果会写入 trace —— 稍后刷新即可看到`
+      : "重跑失败: " + e.message, "err");
   }
   pbRecomputeRunning = false;
   btns.forEach(b => { b.disabled = false; b.textContent = "🔄 扫描该日"; });
@@ -3221,22 +3344,46 @@ const hunterOpenSectors = new Set();
 const hunterTagsCache = {};
 
 const hunterTagsRetry = {};   // 空结果重试计数（防死循环）
+/* 只取**当前渲染出来的行**（分页 → 一页 50 行）。板块可达 200 只，全量取数要等很久，
+   而用户此刻只看得到这一页。翻页时 `hunterPage` 会重渲染，本函数会被再次调用去补下一页。 */
+function _renderedCodesFor(category) {
+  const out = [];
+  const el = document.getElementById("hunterBody");
+  if (!el) return out;
+  el.querySelectorAll("tbody.h-sector-group").forEach(tb => {
+    if (tb.getAttribute("data-category") !== category) return;
+    tb.querySelectorAll(".h-expand-row").forEach(row => {
+      const td = row.querySelector("td");
+      if (td) out.push(td.textContent.trim());
+    });
+  });
+  return out;
+}
+
 async function loadSectorTags(category) {
-  if (hunterTagsCache[category]) return hunterTagsCache[category];
-  const stocks = (window._hunterSectors || {})[category] || [];
-  const codes = (stocks || []).map(s => s.code);
-  if (!codes.length) return {};
+  // 2026-10-11 提速（owner：展开后列更新很慢）：
+  // ① 只取**当前页**（≤50）而不是整个板块（可达 200）；
+  // ② 逐 code 增量取，已缓存的跳过（翻页回来不再重复拉）；
+  // ③ 后端走 offline（本地日线缓存，零网络）——见 t_gui._stock_tags_one。
+  const want = _renderedCodesFor(category);
+  if (!want.length) return {};
+  const have = hunterTagsCache[category] || {};
+  const codes = want.filter(c => !(c in have));
+  if (!codes.length) return have;
   try {
-    const r = await apiCall("load_stock_tags_batch", codes);
+    // offline=true（2026-10-11）：猎手是**批量视图**，标签走"本地日线缓存"零网络路径
+    //（原来逐只 GM 取日线，而 GM 池 max_workers=1 ⇒ 全串行，实测 150 只 44s → 9s）。
+    // 建仓表/持仓体检仍走在线路径，行为不变。
+    const r = await apiCall("load_stock_tags_batch", codes, true);
     const tagsMap = (r && r.tags) || {};
     // 2026-10-08: 后端**冷启动会先回空 map**（改后台算后），空 map 若被缓存 ⇒ 该板块标签永远空。
     // 故**只缓存非空**；空则稍后重试，等后台算完再填。
     if (Object.keys(tagsMap).length) {
-      hunterTagsCache[category] = tagsMap;
+      hunterTagsCache[category] = Object.assign(have, tagsMap);   // 增量并入（翻页不丢已取的）
     } else if ((hunterTagsRetry[category] || 0) < 8) {
       hunterTagsRetry[category] = (hunterTagsRetry[category] || 0) + 1;
       setTimeout(() => {
-        if (hunterOpenSectors.has(category) && !hunterTagsCache[category]) loadSectorTags(category);
+        if (hunterOpenSectors.has(category)) loadSectorTags(category);
       }, 4000);
     }
     // 标签到位后，若该板块仍展开则刷新当前可见行（分页跳页后也生效）
@@ -3255,6 +3402,16 @@ function applySectorTags(tbody, category) {
   const stageEl = tbody.querySelector(".h-stage-badge");
   const tagsMap = hunterTagsCache[category] || {};
   if (!wrap) return;
+  // 状态条：仅当**本次渲染出来的行全部拿到标签**才撤（增量取数下"有任意一条"不等于取完）
+  const _rows = Array.from(wrap.querySelectorAll(".h-expand-row"));
+  const _allTagged = _rows.length > 0 && _rows.every(r => {
+    const td = r.querySelector("td");
+    return td && tagsMap[td.textContent.trim()];
+  });
+  if (_allTagged) {
+    wrap.querySelectorAll(".h-updating-strip").forEach(x => x.remove());
+    wrap.querySelectorAll(".h-updating-foot").forEach(x => x.remove());
+  }
   // 更新展开行标签列
   wrap.querySelectorAll(".h-expand-row").forEach(row => {
     const code = row.querySelector("td").textContent.trim();
@@ -4087,6 +4244,9 @@ function conceptsCell(s) {
   return `<span class="bk-concepts" title="${esc(full)}">${esc(full)}</span>`;
 }
 function renderHunter(h) {
+  // 「建仓符合度是否已算」：`build_n` 由后端在**算完之后**回填（算了多少只）。
+  // =0 说明这一步还没跑到/没跑完 ⇒ 各行显示 ⏳（更新中）而不是 —（无数据）。
+  const _buildReady = (h.build_n || 0) > 0;
   const el = document.getElementById("hunterBody");
   if (!h || !h.available) {
     el.innerHTML = `<div class="empty">选股猎手数据不可用${h && h.error ? ': ' + esc(h.error) : ''}</div>`;
@@ -4135,15 +4295,19 @@ function renderHunter(h) {
     const pageIdx = window._hunterPage && window._hunterPage[category] || 0;
     const allStocks = stocks;
     const hunterRow = s => {
+      // 本行是否属于"还没算到"（而不是"算了但该股无数据"）
+      if (!_buildReady && s.build_verdict === undefined) s._buildMissing = true;
       // 2026-10-08 owner：猎手个股行改用**建仓表同款列**（判定/得分/通过X/3/价/技术标签/时机条件/理由）
+      // `s._buildMissing`：本行**建仓符合度还没算到**（≠ 算了但无数据）⇒ 显示 ⏳ 而不是 —
+      const _pend = !!s._buildMissing;
       const _v = s.build_verdict;
-      const verdictTxt = _v ? verdictBadge(_v) : '<span class="cell-dim">—</span>';
+      const verdictTxt = _v ? verdictBadge(_v) : (_pend ? UPDATING_HTML : '<span class="cell-dim">—</span>');
       const _sc = (s.build_score != null) ? s.build_score : null;
       const _ceil = (s.build_ceiling != null) ? s.build_ceiling : 100;
       const _reach = (s.build_reachable != null) ? s.build_reachable : true;
-      const scoreTxt = _sc == null ? '<span class="cell-dim">—</span>'
+      const scoreTxt = _sc == null ? (_pend ? UPDATING_HTML : '<span class="cell-dim">—</span>')
         : (_reach ? `<b>${_sc}</b>` : `<b>${_sc}</b><span class="cell-dim" style="font-size:10px">/${_ceil}🔒</span>`);
-      const _metTxt = (s.build_met != null) ? `${s.build_met}/3` : "—";
+      const _metTxt = (s.build_met != null) ? `${s.build_met}/3` : (_pend ? UPDATING_HTML : "—");
       const _cd = s.build_conds || {};
       const condTxt = ["t_regime", "t_trend", "t_drawdown"].map(k =>
         _cd[k] === undefined ? '<span class="cell-dim">·</span>'
@@ -4153,18 +4317,29 @@ function renderHunter(h) {
           : '<span class="cell-dim" title="否决因子未触发">·</span>');
       const tagsTxt = s.tags && s.tags.length
         ? s.tags.map(t => tagBadge(t)).join(" ")
-        : '<span class="cell-dim" style="font-size:10px">…</span>';
-      const _rowBg = (_sc === 0) ? "background:rgba(248,81,73,.12);"
-        : (_sc !== null && _sc > 0) ? "background:rgba(63,185,80,.07);" : "";
+        : `<span class="cell-dim" style="font-size:11px" title="技术标签按板块后台批量计算（约 30~60 秒），完成后自动填上">⏳ 标签</span>`;
+      // 行强调优先级：**梯队色 > 得分色**（梯队要显眼；其余行仍按得分着色）
+      const _rowBg = tierRowStyle(s.tier)
+        || ((_sc === 0) ? "background:rgba(248,81,73,.12);"
+          : (_sc !== null && _sc > 0) ? "background:rgba(63,185,80,.07);" : "");
       const _px = (s.build_price != null) ? fmt(s.build_price, 2) : "—";
+      // 日线阶段：由后端 `_hunter_build_conformance` **白给**（它本就要算日线特征）⇒ 立即出、零额外取数。
+      // 猎手池 5000+ 只，逐只出网取 30min/10min 要 ~1.5s/只（400 只 >5min），故本表**不挂**那两列。
+      const _STG = { 1: "①蓄势", 2: "②抬升", 3: "③派发", 4: "④下跌" };
+      const _stageTxt = s.build_stage
+        ? `<span style="font-size:12px">${esc(_STG[s.build_stage] || "—")}</span>`
+        : '<span class="cell-dim">—</span>';
       return `<tr class="h-expand-row" style="${_rowBg}" ondblclick="openStockChart('${esc(s.code)}','${esc(s.name)}')">
         <td class="mono cell-dim" title="双击看技术分析">${esc(s.code)}</td>
         <td title="双击看技术分析">${esc(s.name)} <button class="mini-btn" style="font-size:10px;padding:0 5px"
           onclick="event.stopPropagation();addToWatchlist('${esc(s.code)}','${esc(s.name)}',this)"
           title="加入建仓股池监控买点">+股池</button></td>
+        <td style="text-align:center;white-space:nowrap">${tierBadge(s.tier)}</td>
         <td>${verdictTxt}</td>
         <td class="num">${scoreTxt}</td>
         <td class="num">${_metTxt}</td>
+        <td style="text-align:center" title="${esc("日线阶段" + "。" + DAY_STAGE_TIP)}">${_stageTxt}</td>
+        ${ma5FlagCellHtml(s.build_above_ma5)}
         <td class="num">${_px}</td>
         <td class="h-tags">${tagsTxt}</td>
         <td class="cond" title="${esc(s.build_reason || "")}">${condTxt}</td>
@@ -4204,7 +4379,7 @@ function renderHunter(h) {
       const gs = subGroups[gk];
       const gAvg = Math.round(gs.reduce((a, s) => a + (s.score || 0), 0) / gs.length);
       const gUp = gs.filter(s => s.limit_up).length;
-      const head = `<tr class="h-subgroup-head"><td colspan="9">
+      const head = `<tr class="h-subgroup-head"><td colspan="12">
         <span class="h-subgroup-name">📂 ${esc(gk)}</span>
         <span class="cell-dim" style="font-size:10px">${gs.length}只 · 均分${gAvg}${gUp ? ` · 涨停${gUp}` : ""}</span>
       </td></tr>`;
@@ -4254,18 +4429,30 @@ function renderHunter(h) {
             ${trendIcon || '—'} ${heatChange != null ? (heatChange>=0?'+':'')+fmt(heatChange,0) : ''}
           </span>
         </td>
-        <td style="font-size:11px;max-width:230px" title="${esc(r["前三强"]||'')}">${stocks.slice(0, 3).map(s =>
+        <td style="font-size:11px;max-width:230px" title="${esc(r["前三强"]||'')}">${
+          (() => { const _lds = stocks.filter(x => x.tier === "龙头");
+                   return _lds.length
+                     ? `<div style="margin-bottom:2px">${tierBadge("龙头")} <b>${_lds.map(x => esc(x.name)).join(" / ")}</b></div>`
+                     : ""; })()
+        }${stocks.slice(0, 3).map(s =>
           `<span class="cell-dim">${esc(s.name)}</span><button class="mini-btn" style="font-size:9px;padding:0 4px;margin:0 2px 0 1px"
             onclick="event.stopPropagation();addToWatchlist('${esc(s.code)}','${esc(s.name)}',this)"
             title="加入建仓股池监控买点">+股池</button>`).join(" ") || esc(r["前三强"] || "—")}</td>
       </tr>
       <tr class="h-expand-wrap"><td colspan="8" style="padding:0">
         <div class="h-expand">
+          ${(hunterTagsCache[category] || _buildReady) ? "" :
+            `<div class="h-updating-strip cell-dim" style="font-size:11px;padding:4px 8px;background:rgba(210,153,34,.10);border-left:3px solid #d29922">
+               ⏳ 正在更新：${(!_buildReady) ? "建仓符合度（判定/得分/通过/日线阶段）" : ""}${(!_buildReady && !hunterTagsCache[category]) ? " 与 " : ""}${hunterTagsCache[category] ? "" : "技术标签"} —— 后台算完自动填上，无需操作
+             </div>`}
           <table><thead><tr>
             <th>代码</th><th>名称</th>
+            <th title="板块内梯队（**描述性方位标签，非信号**）：龙头=本板块当日涨幅第1；中军=其余成交额前3（资金核心）；杂毛=其余；板块<8只不标。⚠️ 实测该分层无前瞻区分度（四种定义×四个持有期≈全无差异、分半窗符号翻转、效应量远低于交易成本）⇒ 只看方位，不参与任何判定与排序。依据 doc/research/2026-10-11_板块内龙头中军杂毛_分层实验.md">梯队</th>
             <th title="与建仓信号扫描同口径（go→signal / approaching / watch_signal / weak）">判定</th>
             <th class="num" title="综合得分（与建仓表同口径；破5日线扣70且不给signal）">得分</th>
             <th class="num" title="时机门控通过数（市场有方向/多头结构/回撤到位）">通过</th>
+            <th title="日线四阶段（描述状态，紧挨得分/通过便于对照）：②抬升/③派发/④下跌/①蓄势。⚠️ 实测横截面IC与直觉相反——抬升/追高前瞻更差(IC −0.031~−0.042, t=−12~−15)、下跌/超跌前瞻更好(IC +0.020~+0.034, t=+7~+12)，分半窗两段同号；效应量小(IC≈0.04)仅作相对强弱参照">日线阶段</th>
+            <th title="是否站上 5 日线——「得分」−70 扣分的触发标志（观察用）。⚠️ 实测该项横截面IC为负(站上MA5 −0.018, t=−6.9)：被扣的这批后续反而略好；扣分保留与否待观察">5日线<br><span style="font-size:9px;opacity:.6">观察</span></th>
             <th class="num">价</th>
             <th>技术标签</th>
             <th title="时机条件：市场有方向/多头结构/回撤到位 · 末位🚫=否决因子（爆量≥3倍或偏离MA60>+20%）">时机条件</th>
@@ -4273,7 +4460,8 @@ function renderHunter(h) {
           </tr></thead>
           <tbody>${stockRows}</tbody></table>
           ${pageInfo}
-          <div class="cell-dim" style="font-size:10px;margin-top:3px">D5=潜在突破10日(≥8强) · D6=潜在突破5日(≥8强) · D9=活跃程度 · 悬停技术标签看解释 · 点击行收起</div>
+          <div class="cell-dim" style="font-size:10px;margin-top:3px">D5=潜在突破10日(≥8强) · D6=潜在突破5日(≥8强) · D9=活跃程度 · 悬停技术标签看解释 · 点击行收起
+            ${hunterTagsCache[category] ? "" : ` · <b class="h-updating-foot warn">⏳ 技术标签更新中（本板块 ${(ss[category]||[]).length} 只，约 30~60 秒）</b>`}</div>
         </div>
       </td></tr>
     </tbody>`;
@@ -4312,6 +4500,12 @@ function renderHunter(h) {
       <span>概念: <b>${sumRows.length}</b> 个</span>
       <span class="mono"><span class="live-dot"></span> ${esc(h.refreshed_at || '')}</span>
     </div>
+    ${(_buildReady && (h.build_n || 0) >= (h.build_total || 0)) ? "" : `
+      <div class="cell-dim" style="font-size:11px;margin-bottom:8px;padding:5px 9px;background:rgba(210,153,34,.12);border-left:3px solid #d29922">
+        ${_buildReady
+          ? `ℹ️ 建仓符合度 <b>${h.build_n}/${h.build_total}</b> 只（其余无本地日线缓存 ⇒ 判定/得分/通过 显示 “—”）`
+          : `⏳ <b>建仓符合度本次未算出</b>（判定/得分/通过/日线阶段 显示 ⏳）—— 点右上「🔄 刷新数据」重跑`}
+      </div>`}
 
     ${breakoutCard}
     ${reclaimCard}
@@ -4335,14 +4529,17 @@ function renderHunter(h) {
         const wrap = tb.querySelector(".h-expand-wrap");
         if (wrap) wrap.classList.add("open");
         applySectorTags(tb, cat);
+        loadSectorTags(cat);      // 翻页后补当前页缺的 code（已缓存的跳过）
       }
     });
   }
   // 2026-10-09: **预热前几个（最大的）板块的技术标签**——否则展开那一刻才拉，冷启动先回空、
   // 要等后台算完（约 4~20s）。预热后用户展开即命中缓存。
+  // 2026-10-11: 仓位结构同批预热**只取前 2 个板块**——它每只要多打一次 5min（~0.5s/只，
+  // 比标签贵得多），且本机 I/O 是瓶颈；不预热也能用（展开即取）。
   try {
-    Object.keys(ss).sort((a, b) => ((ss[b] || []).length - (ss[a] || []).length))
-      .slice(0, 6).forEach(cat => { if (!hunterTagsCache[cat]) loadSectorTags(cat); });
+    const _big = Object.keys(ss).sort((a, b) => ((ss[b] || []).length - (ss[a] || []).length));
+    _big.slice(0, 6).forEach(cat => { if (!hunterTagsCache[cat]) loadSectorTags(cat); });
   } catch (e) { /* 静默 */ }
 }
 
@@ -4354,11 +4551,11 @@ async function loadOBAnalysis() {
   try {
     const ob = await apiCall("load_ob_analysis");
     renderOB(ob || {});
-    if (ob && (ob.pending || ob.m30_pending)) {
+    if (ob && (ob.pending || ob.m30_pending || ob.struct_pending)) {
       if (_obRetryTimer) clearTimeout(_obRetryTimer);
-      // 30min 判定未热（后台磁盘预热 ~2s）→ 3s；体检后台算未回 → 5s；两者皆无仅图表未热 → 12s
+      // 30min 判定/仓位结构未热（后台预热）→ 3s；体检后台算未回 → 5s；两者皆无仅图表未热 → 12s
       let delay = 12000;
-      if (ob.m30_pending && !ob.pending) delay = 3000;
+      if ((ob.m30_pending || ob.struct_pending) && !ob.pending) delay = 3000;
       else if (ob.pending) delay = 5000;   // 2026-10-10：体检改 SWR，后台算通常数秒可好
       _obRetryTimer = setTimeout(loadOBAnalysis, delay);
     }
@@ -4374,7 +4571,7 @@ function renderOB(ob) {
   }
   const _VCLS = { high: "badge signal", watch: "badge approach", bull: "badge bear" };
   const rows = ob.stocks.map(s => {
-    if (s.error) return `<tr><td colspan="10" class="cell-dim">${esc(s.code)}: ${esc(s.error)}</td></tr>`;
+    if (s.error) return `<tr><td colspan="13" class="cell-dim">${esc(s.code)}: ${esc(s.error)}</td></tr>`;
     const ob_ = s.overbought || {};
     const vd = s.verdict || {};           // 2026-10-09：30min 综合判定 {level,label,reason}
     const dv = s.divergence || {};        // 30min {type,bars_ago}（进 tooltip）
@@ -4397,12 +4594,15 @@ function renderOB(ob) {
       <td>${esc(s.name)} <span class="mono cell-dim">${esc(s.code)}</span></td>
       <td class="num">${fmt(s.price, 2)}</td>
       <td title="30min 三层状态机趋势${s.trend_src === 'daily' ? '（30min不可用，已回退日线）' : ''}">${trendTxt}${trendSrc}</td>
+      ${dayStageCellHtml(s.structure)}
       <td class="num ${rsiHot ? 'up' : 'cell-dim'}" title="日线 RSI>70 提示 / >80 高危">${fmt(ob_.rsi, 0)} ${rsiHot ? `<span class="badge ${rsiExtreme ? 'signal' : 'approach'}">⚠</span>` : ''}</td>
       <td class="num ${kdjHot ? 'up' : 'cell-dim'}" title="日线 KDJ-J>100 属动能(不计风险)">${fmt(ob_.kdj, 0)}</td>
       <td class="num ${cciHot ? 'up' : 'cell-dim'}" title="日线 CCI>100 属动能(不计风险)">${fmt(ob_.cci, 0)}</td>
       <td>${ob_.boll ? '<span class="badge chop" title="日线破BOLL上轨=突破动能">破</span>' : '<span class="cell-dim">—</span>'}</td>
       <td style="max-width:200px;line-height:1.7">${(s.tags || []).map(t => tagBadge(t)).join(" ") || '<span class="cell-dim">—</span>'}</td>
       <td title="30min 综合判定（趋势+顶部/底背离特征）&#10;${esc(tfTip)}&#10;${esc(dvTip)}">${vCell}</td>
+      ${structCellHtml(s.structure)}
+      ${ma5CellHtml(s.structure)}
       <td class="cell-dim" style="max-width:280px;line-height:1.7">${esc(vd.reason || "—")}</td>
     </tr>`;
   }).join("");
@@ -4416,12 +4616,15 @@ function renderOB(ob) {
       </div>
       <table><thead><tr>
         <th>股票</th><th class="num">现价</th><th>趋势(30m)</th>
+        <th title="日线四阶段（描述状态）：②抬升/③派发/④下跌/①蓄势。⚠️ 实测横截面IC与直觉相反——抬升/追高前瞻更差(t=−12~−15)、下跌/超跌前瞻更好(t=+7~+12)，效应量小(IC≈0.04)仅作相对强弱参照">日线阶段</th>
         <th class="num" title="日线 RSI>70超买">RSI</th>
         <th class="num" title="日线 KDJ J>100超买">KDJ-J</th>
         <th class="num" title="日线 CCI>100超买">CCI</th>
         <th title="日线收盘破BOLL上轨">BOLL</th>
         <th title="与建仓扫描同口径（通道/箱体/筑底顶/背离/超买/破均线）">技术标签</th>
         <th title="30min 趋势+顶部/底背离特征 → 重视程度（读一列即可）">30min判定</th>
+        <th title="仓位结构（30min/10min，与建仓信号扫描**同一真源**，供仓位管理参考）：止损=10min 最近已确认摆动低点；阶段=10min 四阶段；30m=30min MA65 中期方向；折价=现价/止损-1（到-4.3%记满）。破位时给三档下档支撑挂单价与5日成交率。⚠️ 是**结构参考、不是买卖信号**。悬停看明细">仓位结构</th>
+        <th title="30min MA5 状态（**纯展示**）：站上/跌破 5×30min 均线，及距上次翻转几根。⚠️ 实测**无前瞻信息量**（同日同bar-of-day对照 |diff|≤0.03pp）⇒ 仅供参考，不参与任何判定">30m MA5<br><span style="font-size:9px;opacity:.6">仅展示</span></th>
         <th title="判定依据">依据</th>
       </tr></thead><tbody>${rows}</tbody></table>
       <div class="cell-dim" style="font-size:10px;margin-top:4px">口径(2026-10-09)：判定=30min顶部/底背离特征综合（依据 t_io/validation/m30_top 981只×540日离线验证）· 趋势=30min三层状态机 · RSI/KDJ/CCI/BOLL 为日线超买指标（不驱动判定）· 双击行看K线</div>
