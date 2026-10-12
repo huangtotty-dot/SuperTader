@@ -211,10 +211,8 @@ DEFAULT_SENTIMENT_PARAMS: Dict[str, Any] = {
     "enable_yesterday_crash_veto": True,  # P3 昨日大跌否决开关
     "yesterday_crash_pct": -4.0,       # P3 昨日跌幅% ≤ 此值 → 次日禁 long 降 hold
     "yesterday_limit_pct": -9.8,       # P4 昨日跌幅% ≤ 此值（近似跌停/一字板）→ 次日 hold
-    "loss_streak_days": 2,             # P6 同一标的连续 N 日做T亏损 → 次日 hold
     "gap_up_no_chase_pct": 1.0,        # P7 正T日竞价高开 >此值% → 标注等回踩VWAP确认才买
     "gap_vwap_retrace_pct": 0.3,       # P7 标注文案中的 VWAP 回踩幅度%
-    "closure_audit_file": None,        # P6 数据源；None → <BASE_DIR>/t_io/logs/closure_audit.jsonl
     # —— 执行层参数（供 signal_engine/下游读取，本模块只落盘展示）——
     "stop_loss_pct": 0.008,            # 正T买后浮亏-0.8%立即止损 / 反T卖后反向+0.8%接回止损
     "profit_target_pct": 0.008,        # 做T单笔止盈目标 0.8%
@@ -472,60 +470,6 @@ def stock_daily_features(code: str, date_str: Optional[str] = None) -> Dict[str,
     return out
 
 
-def _closure_audit_path(params: Optional[Dict[str, Any]] = None) -> str:
-    p = params or sentiment_params()
-    if p.get("closure_audit_file"):
-        return str(p["closure_audit_file"])
-    env = os.environ.get("CLOSURE_AUDIT_FILE")
-    if env:
-        return env
-    return os.path.join(_BASE_DIR, "t_io", "logs", "closure_audit.jsonl")
-
-
-def load_loss_streaks(params: Optional[Dict[str, Any]] = None) -> Dict[str, int]:
-    """V2c 连亏熔断数据源：读 closure_audit.jsonl，按标的统计最近连续
-    做T亏损天数（est_pnl<0 且当日有成交；无成交日跳过不计、不打断连续性）。"""
-    p = params or sentiment_params()
-    path = _closure_audit_path(p)
-    series: Dict[str, List[Tuple[str, float]]] = {}
-    try:
-        if os.path.exists(path):
-            with open(path, "r", encoding="utf-8") as f:
-                for line in f:
-                    line = line.strip()
-                    if not line:
-                        continue
-                    try:
-                        rec = json.loads(line)
-                    except Exception:
-                        continue
-                    date = str(rec.get("date") or "")
-                    for d in (rec.get("details") or []):
-                        code = str(d.get("code") or "")
-                        if not code:
-                            continue
-                        if (float(d.get("sold", 0) or 0) + float(d.get("bought", 0) or 0)) <= 0:
-                            continue  # 当日无做T成交
-                        pnl = d.get("est_pnl")
-                        if pnl is None:
-                            continue
-                        series.setdefault(code, []).append((date, float(pnl)))
-    except Exception:
-        return {}
-    streaks: Dict[str, int] = {}
-    for code, items in series.items():
-        items.sort(key=lambda x: x[0])
-        streak = 0
-        for _, pnl in reversed(items):
-            if pnl < 0:
-                streak += 1
-            else:
-                break
-        if streak:
-            streaks[code] = streak
-    return streaks
-
-
 def per_stock_decisions(regime: str, z_S: Optional[float], z_top3: float,
                         overheat_streak: int = 0, k_day_type: Optional[str] = None,
                         prev_k_down: bool = False, uni_down_days: int = 0,
@@ -540,7 +484,6 @@ def per_stock_decisions(regime: str, z_S: Optional[float], z_top3: float,
       P3 昨日大跌否决（enable_yesterday_crash_veto）：昨日跌幅≤-4% → 禁long 降 hold
       P4 昨日跌停/一字板（昨日跌幅≤-9.8% 近似）→ hold
       P5 K-down 当日及次日→强制 short×0.5；K-up 当日→强制 long（t_decision 内完成，k_override）
-      P6 连亏熔断：同一标的连续2日做T亏损 → hold（closure_audit.jsonl est_pnl）
       P7 高开不追：正T日竞价高开>1% → 仍 long，reason 标注"等回踩VWAP-0.3%确认才买"
 
     返回 {"market": 市场级决策, "per_stock": {code: {mode, pos_factor, reason, notes}}}"""
@@ -573,7 +516,6 @@ def per_stock_decisions(regime: str, z_S: Optional[float], z_top3: float,
     base.setdefault("t_enabled", True)
 
     holdings = holdings if holdings is not None else _holdings()
-    loss_streaks = load_loss_streaks(p)
     per_stock: Dict[str, Dict[str, Any]] = {}
     for code, holding in holdings.items():
         name = str(holding.get("name", code))
@@ -608,12 +550,6 @@ def per_stock_decisions(regime: str, z_S: Optional[float], z_top3: float,
                 and float(feat["prev_day_pct"]) <= float(p["yesterday_limit_pct"]):
             factor, rank = 0.0, 4
             notes.append(f"昨日跌停/一字板(昨日{float(feat['prev_day_pct']):+.2f}%)→清仓门控")
-
-        # P6 连亏熔断：同一标的连续 N 日做T亏损 → 清仓门控
-        ls = int(loss_streaks.get(code, 0) or 0)
-        if rank > 6 and ls >= int(p["loss_streak_days"]):
-            factor, rank = 0.0, 6
-            notes.append(f"连亏熔断(连续{ls}日做T亏损)→今日清仓门控")
 
         # P7 高开不追（仅标注，不改 mode）
         d = {"mode": mode, "mode_cn": _MODE_CN.get(mode, mode), "pos_factor": factor, "trade_gate": "normal", "t_enabled": True}
@@ -951,7 +887,7 @@ def compute_daily_sentiment(mode: str = "tail", as_of: Optional[str] = None) -> 
             f"{_BOARD_INDEX_NAMES.get(_c, _c)}({float(board_pct[_c]):+.2f}%)" for _c in _cr_boards)
             + f" ≤{_irc_th}% → 该板持仓减仓确认")
 
-    # 6) 决策矩阵 + V2.1 个股级覆盖（P1清仓/P2背离/P3昨日大跌/P4昨日跌停/P5 K-day/P6连亏/P7高开标注）
+    # 6) 决策矩阵 + V2.1 个股级覆盖（P1清仓/P2背离/P3昨日大跌/P4昨日跌停/P5 K-day/P7高开标注）
     ds = per_stock_decisions(regime=regime, z_S=z_S, z_top3=z_top3,
                              overheat_streak=overheat_streak, k_day_type=k_day_type,
                              prev_k_down=prev_k_down, uni_down_days=uni_down_days,

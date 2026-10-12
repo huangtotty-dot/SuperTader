@@ -939,16 +939,14 @@ SENTIMENT_PARAMS = {
     "sysrisk_index_drop_pct": -2.0,    # 指数当日跌幅阈值 %（清仓流程升级确认条件之一）
     "sysrisk_e5_dt": 30,               # E5 跌停潮阈值（家，对齐 e5_dt_count；清仓流程升级确认条件之一）
     "sysrisk_intraday_enforce": True,  # V2.1: 14:30 tail z_S≤阈值 → 当日全标的 hold（盘中生效，不等次日）
-    # —— V2/V2.1 个股级覆盖规则（优先级 P1>P2>P3>P4>P5>P6>P7，见 daily_sentiment.per_stock_decisions）——
+    # —— V2/V2.1 个股级覆盖规则（优先级 P1>P2>P3>P4>P5>P7，见 daily_sentiment.per_stock_decisions；原 P6 连亏熔断已于 2026-10-12 随做T退场移除）——
     "stock_diverge_drop_5d": -8.0,     # P2 个股前5日累计跌幅% ≤ 此值 → 背离否决禁 long
     "stock_diverge_below_ma5_days": 3,  # P2 收盘连续 N 日 <MA5 → 背离否决禁 long
     "enable_yesterday_crash_veto": True,  # P3 昨日大跌否决开关
     "yesterday_crash_pct": -4.0,       # P3 昨日跌幅% ≤ 此值 → 次日禁 long 降 hold
     "yesterday_limit_pct": -9.8,       # P4 昨日跌幅% ≤ 此值（近似跌停/一字板）→ 次日 hold
-    "loss_streak_days": 2,             # P6 同一标的连续 N 日做T亏损 → 次日 hold
     "gap_up_no_chase_pct": 1.0,        # P7 正T日竞价高开 >此值% → 标注等回踩VWAP确认才买
     "gap_vwap_retrace_pct": 0.3,       # P7 标注文案中的 VWAP 回踩幅度%
-    "closure_audit_file": None,        # P6 数据源；None → <BASE_DIR>/t_io/logs/closure_audit.jsonl
     # —— 执行层参数（供 signal_engine/下游读取）——
     "stop_loss_pct": 0.008,            # 正T买后浮亏-0.8%立即止损 / 反T卖后反向+0.8%接回止损
     "profit_target_pct": 0.008,        # 做T单笔止盈目标 0.8%
@@ -977,7 +975,4 @@ SENTIMENT_PARAMS = {
     "log_dir": None,                   # None → env SENTIMENT_LOG_DIR > BASE_DIR/logs
     "push_enabled": True,
 }
-
-# V3.0: 闭环审计（_maybe_audit_closure）每日去重
-_closure_audit_date: Optional[str] = None
 
