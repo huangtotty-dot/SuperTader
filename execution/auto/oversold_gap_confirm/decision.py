@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
-"""弱转强 · 盘中选股 决策核（**纯函数，无 IO**）—— 2026-10-10。
+"""超跌跳空确认 · 决策核（**纯函数，零 IO**）—— 包内模块 `decision`（2026-10-10 施工）。
 
 信号（冻结，依据 `t_io/validation/weak_strong/exp5~6` 定稿，两段样本均成立）:
 
-    weak_W1(D−1):  prev_close < MA20                    日线超跌（安全边际=便宜）
-    strong10(D) :  bar0.low  >= prev_close              跳空高开、缺口未回补
+    osc_W1(D−1):  prev_close < MA20                    日线超跌（安全边际=便宜）
+    osc_S10(D) :  bar0.low  >= prev_close              跳空高开、缺口未回补
                  AND bar0.close >  prev_close           站上昨收
                  AND bar0.close >  bar0.amount/bar0.volume   站上分时均价(VWAP)
     gap          =  bar0.close / prev_close − 1         （入场=10:00 收盘，无前视）
@@ -56,7 +56,7 @@ def _bar_field(bar, key: str):
 
 
 def signal_ok(prev_close: float, ma20: float, bar: Mapping[str, float]) -> tuple[bool, str, float]:
-    """单票弱转强判定。返回 (是否触发, 原因, gap)。任一口径缺失 → (False, 原因, nan)。"""
+    """单票超跌跳空确认判定。返回 (是否触发, 原因, gap)。任一口径缺失 → (False, 原因, nan)。"""
     if not _valid(prev_close):
         return False, 'prev_close_missing', float('nan')
     low = _bar_field(bar, 'low')
@@ -88,7 +88,7 @@ def evaluate(prev_close: Mapping[str, float],
 
     参数
         prev_close      : {code: D−1 收盘}
-        ma20            : {code: D−1 的 20 日均线}（weak_W1 判据）
+        ma20            : {code: D−1 的 20 日均线}（osc_W1 判据）
         bars            : {code: {low, close, amount, volume}} —— 09:30~10:00 那根棒
         board           : {code: 板块名}（缺省=不启用板块过滤）
         allowed_boards  : 允许的板块集合（缺省/空=None=不过滤；非 None 则只在这些板块里选）

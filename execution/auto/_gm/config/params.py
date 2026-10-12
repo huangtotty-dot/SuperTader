@@ -27,14 +27,6 @@ PARAMS = {
     # WP-B19-rev(2026-08-28): -8% 硬止损替代 MA5 破位清仓（见 exit_strategy_mining_20260828 报告）
     # TODO(PhaseD): 8% 为日线 close 模拟最优值，实盘/分钟级触发可微调
     "hard_stop_pct": 0.08,
-    # WP-E2 总权益预算制（2026-08-05 owner决策：底仓+活动仓+现金三段式，现金保留20%）：
-    # 每股预算 = 总权益×(1−cash_reserve_pct)/股票池只数（等权）
-    # TODO(PhaseD): 现金保留线寻优定值；预算权重改趋势加权
-    "cash_reserve_pct": 0.20,
-    # WP-E3 持仓槽位制（2026-08-07 owner决策："持股小于4支可买入，否则继续等待"）：
-    # 同时持股(qty>0) ≤ max_concurrent_positions 支；每股预算按槽位数分解
-    # TODO(PhaseD): 槽位数寻优定值
-    "max_concurrent_positions": 4,
     "repeat_signal_gap_minutes": 60,
     "repeat_signal_price_move": 0.004,
     "repeat_signal_score_boost": 10,
@@ -210,101 +202,42 @@ PARAMS = {
     "entry_rsi_low": 30,
     "entry_rsi_high": 55,
     "entry_vol_shrink": 0.95,
-    # 人工确认闸（2026-08-30 owner决策）：自动盘建仓/加仓/底仓回补必须先经 GUI 弹窗确认才下单。
-    # human_confirm_buy_enabled=False → 闸全关（所有买入直接放行，事故/回退用）；
-    # human_confirm_base_topup=True → BASE 底仓回补也要确认（owner 已确认；False=回补不弹等同做T回补口径）。
-    # 注意与既有 buy_confirm_min_*（信号强度确认闸）语义无关。
-    "human_confirm_buy_enabled": True,
-    "human_confirm_base_topup": True,
+    # ── 超跌跳空确认的下单通道参数（`_OscGmGateway`）──
+    # ⚠️ 2026-10-12：S1 执行器 / S1 与旧引擎的四个挂起闸（s1_mode_enabled、
+    #    s1_open_align_enabled、s1_tail_enabled、s1_legacy_engine_enabled、
+    #    legacy_engine_enabled）与 OGR 的两个开关（open_gap_reversal_shadow_enabled /
+    #    open_gap_reversal_live_enabled）**均随其代码删除** —— 不再有任何读取方。
+    #    （参数表里"开关制挂起"的历史理由：见 docs/solutions 的 S1 执行集成文档。）
+    # 仅本键保留：它被 `_OscGmGateway.place_order` 读取，**超跌跳空确认共用该类**。
+    "osc_limit_slippage_bp": 0,          # 0=市价单（沿用 gm_main 风格）；>0=限价 开盘价±bp
 
-    # ── 开盘低开反转（日内做T · 30 分钟持仓）**L3 影子层**（2026-09-22 施工）──
-    # ⚠️ 必须落在 **PARAMS**（gm_main._ogr_shadow_enabled 读的是 PARAMS）。
-    #    旧例：B7 的三个开关曾被放进 INDEX_REGIME_PARAMS（错表），导致闸函数恒 False、
-    #    B7 生产通道从未生效（2026-09-22 已随 B7 一并删除）。
-    # owner 2026-09-22 审批：先做 L3 影子层（只记日志、不下单）。规则与判据事前冻结，
-    # 已过样本外 + 独立池检验：样本外 2019-01~2025-03 +0.5245%/腿（t=8.07）、
-    # 独立 400 只池 +0.5275%（比 1.01）、退市股子集更强（+0.7447%）。
-    # ⚠️ 默认 off。**即便翻启也不会下单** —— 只落 t_io/logs/ogr_shadow_{date}.jsonl；
-    #    真正下单属 L4，须另开 strategy_id + 终端/账户后由 owner 拍板。
-    # 预期口径：按 09:31 入场计（无 09:25 钩子、拿不到集合竞价价，实测折价 −18.6bp/腿）
-    #    ⇒ 期望 +0.34%/腿，不是 +0.52%。
-    # 容量：约束是**集合竞价量**（占全日成交额中位 1.30%），非 ADV；
-    #    10 万/笔可覆盖样本内 95% / 样本外 78~87% 的命中腿。
-    # 规格：doc/solutions/2026-09-22_开盘低开反转日内T_设计规格.md
-    # ✅ 2026-09-28 owner 重新放行（回测伪影三缺陷已修复并复跑对齐靶子）：
-    #    L3 影子期自 2026-09-29 起跑，放行闸=20 交易日 + 触发日/标的与回测一致率 ≥95%。
-    #    与滑点探针并行（探针用独立 strategy_id 纸面账户，影子只落日志不下单，互不干扰）。
-    "open_gap_reversal_shadow_enabled": True,
-
-    # ── 开盘低开反转 · **L4 实单**（2026-09-22 施工；owner 指示：直接下单、跳过影子模式）──
-    # 规则：大盘低开(mkt_gap<0) 且 个股相对低开 ≤ −1% ⇒ 09:31 买 / 10:00 卖（30 分钟持仓）。
-    # 证据：样本外 2019-01~2025-03 +0.5245%/腿（t=8.07）；独立 400 只池 +0.5275%（比 1.01）；
-    #      扣执行折价（拿不到竞价价、按 09:31 入场）后 +0.3385%/腿。
-    # ⚠️ **本开关翻启会真实下单**（目标环境=掘金模拟盘）。单腿目标 10 万、单日最多 10 腿。
-    # ⚠️ 刻意绕过 `_buy_confirm_gate`（人工确认闸）与 `morning_no_buy`——规则必须在 09:31
-    #    无人值守时下单（与已删 B7 接回单同款先例）；但**额度闸一律复用、不旁路**。
-    # 容量：约束是集合竞价量（占全日成交额中位 1.30%），10 万/笔可覆盖 78~95% 的命中腿。
-    # 规格：doc/solutions/2026-09-22_开盘低开反转日内T_设计规格.md
-    # ⚠️ 2026-09-23 owner 决定不实盘 ⇒ 本开关置回 off。**但该决定的依据已于 2026-09-24 被证伪**：
-    # 当时看到的「回测未体现优势」来自三处缺陷（均已修）——GM 撮合伪影（市价单买腿成交在**前收**）、
-    # `_ogr_prev_close_map` 把**当天 09:31 那根 bar 的收盘**当昨收（look-ahead）、`mkt_gap` 自指代理。
-    # 修复版全窗口复跑（2026-04-01~07-01）：做T 成交口径 **+0.8595%/腿**（离线靶子 +0.9864，Δ−0.13pp）、
-    # 200/200 全平、0 拒单、`mkt_gap` 与离线 L20 代理逐日吻合（差中位 0.0000pp）。
-    # ⇒ **是否重开由 owner 重新决策**，决定前保持 off。⚠️ 重开前必带两条：
-    #   ① **真实买侧滑点仍未测**（优势仅 0.86~0.99pp/腿 vs 离线假设折价 0.19pp，滑点 >1pp 即归零）；
-    #   ② **live 必须注入 `gm_main.MARKET_PROXY`**（独立代理池，否则 mkt_gap 又变回自指）。
-    "open_gap_reversal_live_enabled": False,
-
-    # ── S1 终选选股策略 · 执行集成（2026-10-10 施工，W3；owner 决策：2026-10-12 起
-    #    掘金模拟盘 auto 账本由 S1 终选 N4/M8/H1/TP-A/score_eq 直接驱动，无影子期）──
-    # 账本切换（owner 拍板）：S1 接管后，镜像对齐(OPEN_ALIGN)与 TAIL 尾盘归位对 S1 账本
-    # **必须挂起**（否则镜像逻辑与 S1 调仓打架）；旧镜像做T引擎（BASE 建仓/信号/卖出门链）
-    # 一并挂起——模拟盘持仓自 10-12 起由 S1 决定，不再镜像手动 A/B 实盘账户。
-    # OGR 影子记录保持 on（只读日志，与 S1 下单无冲突）；滑点观测保持。
-    # ⚠️ 挂起方式是**开关**不是删代码：s1_mode_enabled=False 即整体回退旧引擎。
-    # ⚠️ 必须落在 PARAMS（gm_main 闸函数读这张表；B7 开关错放 INDEX_REGIME_PARAMS 的前科）。
-    # ⚠️ 2026-10-12 owner 决策（选 C）：**改由弱转强接管，S1 关闭，旧引擎一并停**。
-    #    · s1_mode_enabled=False 单独用**不够** —— 它的语义是"整体回退旧引擎"（镜像对齐
-    #      + TAIL + 旧镜像做T引擎会全部复活，按手动 A/B 实盘账户下单）。
-    #    · 故同时置 `legacy_engine_enabled=False`（新增总闸，见 gm_main._legacy_engine_allowed）：
-    #      **无论 S1 开关如何**，旧引擎一律挂起 ⇒ 真正"停干净"。
-    "s1_mode_enabled": False,           # S1 总闸：off（2026-10-12 起由弱转强接管）
-    "s1_open_align_enabled": False,     # S1 on 时镜像对齐挂起（True=强制恢复，调试用）
-    "s1_tail_enabled": False,           # S1 on 时 TAIL 尾盘归位挂起（随旧引擎门链一并跳过）
-    "s1_legacy_engine_enabled": False,  # S1 on 时旧镜像做T引擎（BASE/信号/卖出门链）挂起
-    "legacy_engine_enabled": False,     # **旧镜像引擎总闸**：False=无论 S1 开关都挂起（2026-10-12 停用）
-    # ⚠️ 2026-10-12：S1 执行器（s1_executor.py + on_bar 钩子）已删除 ⇒ 下列执行参数一并移除。
-    #    仍保留 `s1_limit_slippage_bp`：它被 `_S1GmGateway.place_order` 读取，而**弱转强共用该类**。
-    "s1_limit_slippage_bp": 0,          # 0=市价单（沿用 gm_main 风格）；>0=限价 开盘价±bp
-    # 文档：doc/solutions/2026-10-10_S1执行集成.md（含周一 runbook 与失败应急）
-
-    # ── 弱转强选股策略 · 10:00 买侧（2026-10-10 施工，WS2；owner 决策：直接接掘金模拟盘
+    # ── 超跌跳空确认选股策略 · 10:00 买侧（2026-10-10 施工，WS2；owner 决策：直接接掘金模拟盘
     #    实单，选股范围=猎手靠前板块成分股，无影子期）──
-    # 规则（冻结，见 core/weak_strong.py）：日线超跌(昨收<MA20) + 盘中 10:00 跳空高开守住
+    # 规则（冻结，见 execution/auto/oversold_gap_confirm/decision.py）：日线超跌(昨收<MA20) + 盘中 10:00 跳空高开守住
     #   (10:00棒 low≥昨收 且 close>昨收 且 close>VWAP) ⇒ 10:00 收盘买入，按 gap 取 top-N。
     # ⚠️ 默认 off（owner 翻启）：买+卖两侧全通。卖侧三件套已接线（次日早盘冲高卖 10:00 +
     #    SL5只深止损 14:50 + 满5交易日平仓）；板块过滤用「涨停数替身」（前一日涨幅≥9.5%家数
-    #    top-N 板块，exp15/21 定稿，非 daily_summary 排名）。翻启后只在掘金模拟盘下单，与 S1
-    #    共享账户 ⇒ 用 weak_strong_daily_budget 封顶，避免挤占 S1 轮动。
+    #    top-N 板块，exp15/21 定稿，非 daily_summary 排名）。翻启后只在掘金模拟盘下单；
+    #    ⚠️ 2026-10-12 起本策略独占该账户（S1 已整链删除），osc_daily_budget 是自身上限。
     # ⚠️ 必须落在 PARAMS（gm_main 闸函数读这张表；B7 开关错放 INDEX_REGIME_PARAMS 的前科）。
-    "weak_strong_paper_enabled": True,   # 弱转强 10:00 买侧总闸（2026-10-12 owner 决策 C：翻启，接替 S1）
-    "weak_strong_top_n": 4,              # 每日按 gap 取最强前 N（exp9 Sharpe 顶点）
-    "weak_strong_board_top_n": 5,        # 盘前取猎手前 N 热门板块的成分股为候选范围
-    "weak_strong_single_budget": 100000.0,  # 单票名义上限（元，对齐 OGR 10 万/腿）
-    "weak_strong_daily_budget": 400000.0,   # 每日名义总额度（元）
-    "weak_strong_cash_headroom": 0.95,      # 单票占用现金封顶比例
-    "weak_strong_exec_time_hhmm": 1000,     # 10:00 触发（GM 1800s 首根 10:00 棒）
-    "weak_strong_order_poll_rounds": 3,
-    "weak_strong_order_poll_sleep_sec": 2.0,
+    "osc_enabled": True,   # 超跌跳空确认 10:00 买侧总闸（2026-10-12 owner 决策 C：翻启，接替 S1）
+    "osc_top_n": 4,              # 每日按 gap 取最强前 N（exp9 Sharpe 顶点）
+    "osc_board_top_n": 5,        # 盘前取猎手前 N 热门板块的成分股为候选范围
+    "osc_single_budget": 100000.0,  # 单票名义上限（元，对齐 OGR 10 万/腿）
+    "osc_daily_budget": 400000.0,   # 每日名义总额度（元）
+    "osc_cash_headroom": 0.95,      # 单票占用现金封顶比例
+    "osc_exec_time_hhmm": 1000,     # 10:00 触发（GM 1800s 首根 10:00 棒）
+    "osc_order_poll_rounds": 3,
+    "osc_order_poll_sleep_sec": 2.0,
     # ── 卖侧（2026-10-10 接线，exp19 owner 拍板 SL5只深；只动掘金模拟盘）──
-    "weak_strong_sell_enabled": True,        # 卖侧总闸（随 paper_enabled 一起生效）
-    "weak_strong_stop_pct": 0.05,            # 深超跌 close 止损线（−5%）
-    "weak_strong_stop_deep_dev20": -0.07,    # dev20 < 此值才挂止损（SL5只深）
-    "weak_strong_hold_days": 5,              # 持有满 N 交易日到期平仓（死拿5天 horizon）
-    "weak_strong_pop_target_pct": 0.03,      # 次日早盘冲高卖目标（+3%，止盈非止损）
-    "weak_strong_morning_sell_time_hhmm": 1000,  # 早盘冲高卖检查时点（10:00，与买侧同刻）
-    "weak_strong_sell_time_hhmm": 1450,      # 收盘止损检查时点（14:50）
-    # 文档：doc/research/2026-10-10_弱转强第一轮实验结论.md §8（接线定稿）
+    "osc_sell_enabled": True,        # 卖侧总闸（随 paper_enabled 一起生效）
+    "osc_stop_pct": 0.05,            # 深超跌 close 止损线（−5%）
+    "osc_stop_deep_dev20": -0.07,    # dev20 < 此值才挂止损（SL5只深）
+    "osc_hold_days": 5,              # 持有满 N 交易日到期平仓（死拿5天 horizon）
+    "osc_pop_target_pct": 0.03,      # 次日早盘冲高卖目标（+3%，止盈非止损）
+    "osc_morning_sell_time_hhmm": 1000,  # 早盘冲高卖检查时点（10:00，与买侧同刻）
+    "osc_sell_time_hhmm": 1450,      # 收盘止损检查时点（14:50）
+    # 文档：doc/research/2026-10-10_超跌跳空确认第一轮实验结论.md §8（接线定稿）
 }
 
 # 华工科技 000988 个股专属参数

@@ -52,14 +52,21 @@ MAX_NOTIONAL_RATIO = 1.10      # 兜底：单腿名义额不得超目标 10%
 BUY_AT, SELL_AT = dtime(9, 31), dtime(10, 0)
 
 def _build_proxy() -> dict:
-    """市场代理池 —— 从**规则单一源**取（`core/open_gap_reversal.MARKET_PROXY_CODES`，经胶水暴露）。
+    """市场代理池 —— 从**规则单一源**取（`core/open_gap_reversal.MARKET_PROXY_CODES`）。
 
-    与 live/回测同源；名单若各引一份，「大盘」就不是同一条规则（见该常量的注释）。
+    与（已删除的）live/回测接线同源；名单若各引一份，「大盘」就不是同一条规则。
+    ⚠️ 2026-10-12：live 侧 OGR 接线（含 `ogr_shadow_glue`）已随 OGR 整链删除，本探针**不再
+    依赖胶水**，直接读规则核的冻结常量（本探针自身亦已于 2026-09-29 被 owner 标为「废弃、
+    转观测式」——保留代码仅为留痕，勿据此下单）。
     """
     try:
-        import ogr_shadow_glue as _g
+        import importlib.util as _ilu
+        _p = os.path.join(_ROOT, "core", "open_gap_reversal.py")
+        _spec = _ilu.spec_from_file_location("open_gap_reversal", _p)
+        _m = _ilu.module_from_spec(_spec)
+        _spec.loader.exec_module(_m)
         return {c: ("SHSE." if c[:1] in "569" else "SZSE.") + c
-                for c in _g.proxy_codes() if c not in PROBE}
+                for c in _m.MARKET_PROXY_CODES if c not in PROBE}
     except Exception as e:
         print(f"[probe] ⚠️ 代理池构建失败（mkt_gap 会退化）: {e}")
         return {}

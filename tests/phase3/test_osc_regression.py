@@ -1,11 +1,11 @@
 # -*- coding: utf-8 -*-
-"""弱转强（超跌跳空确认）回归测试 —— 2026-10-12 补。
+"""超跌跳空确认 · 冻结口径回归测试 —— 2026-10-12 补（原名「弱转强」）。
 
-**为什么现在补**：owner 决策「启弱转强 / 关 S1」，而弱转强此前**没有任何专属单测**
+**为什么现在补**：owner 决策「启超跌跳空确认 / 关 S1」，而超跌跳空确认此前**没有任何专属单测**
 （全仓只有一条配置断言）。要在它身上动刀（改名 + 删 OGR/旧引擎），必须先有行为兜底；
 有了它，「改名」与「删除」两件事才有判据（改动前后这份测试都必须绿）。
 
-**钉住的是"冻结口径"**（`core/weak_strong.py` 文档串自述：改动常量/信号口径 = 换策略，
+**钉住的是"冻结口径"**（`oversold_gap_confirm/decision.py` 文档串自述：改动常量/信号口径 = 换策略，
 须重做 exp 系列检验）：
 
   W1 超跌: prev_close < MA20
@@ -14,7 +14,7 @@
   卖侧三件套: 次日早盘冲高 +3% 卖 / **SL5 只对深超跌(dev20<−7%)** / 满 5 交易日到期平仓
   额度闸: 单票 ≤10 万、单票占用现金 ≤ 可用×0.95、整手 100
 
-运行：python -m unittest tests.phase3.test_weak_strong_regression -v
+运行：python -m unittest tests.phase3.test_osc_regression -v
 """
 import sys
 import unittest
@@ -27,8 +27,9 @@ for _p in (str(_ROOT), str(_AUTO)):
     if _p not in sys.path:
         sys.path.insert(0, _p)
 
-from core.weak_strong import MIN_POOL, signal_ok, evaluate          # noqa: E402
-import weak_strong_executor as wse                                   # noqa: E402
+# 2026-10-12 策略归拢：实现全部在 `execution/auto/oversold_gap_confirm/` 包内
+from oversold_gap_confirm.decision import MIN_POOL, signal_ok, evaluate   # noqa: E402
+from oversold_gap_confirm import executor as wse                     # noqa: E402
 
 
 def _bar(low=11.0, close=11.5, amount=11.4 * 1000, volume=1000):

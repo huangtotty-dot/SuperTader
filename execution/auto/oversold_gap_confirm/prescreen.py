@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""弱转强 · 轮询/预筛胶水（2026-10-10 施工，WS3 轮询优化）。
+"""超跌跳空确认 · 预筛（两层漏斗）——包内模块 `prescreen`（2026-10-10 施工，原名 weak_strong_poll）。
 
 **关键优化（owner 2026-10-10 强调「轮询速度是硬约束」）**：绝不逐股轮询。两层漏斗把
 10:00 要看的股票从全池 ~5000 砍到几十只：
@@ -10,7 +10,7 @@
     → 得 {code: prev_close/ma20/board/name}。
   10:00（一次性，单次批量调用）
     超跌候选一次批量拉 `1800s`（GM `history` list form，~1 次调用覆盖全部候选）
-    → 10:00 棒 {code: low/close/amount/volume} → 交 `core/weak_strong.evaluate`。
+    → 10:00 棒 {code: low/close/amount/volume} → 交同包的 `decision.evaluate`。
 
 **纯逻辑 + 注入数据源**：不 import gm.api（分钟取数由 gm_main 注入 `fetch_fn`），
 日线走 facade（与 hunter_ma5_alert 同款），故可离线单测。
@@ -20,12 +20,27 @@ from __future__ import annotations
 import json
 import os
 
-_BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-_WL_FP = os.path.join(_BASE, "stock_hunter", "watchlist_jiuyan.json")
+# 仓库根：本文件在 execution/auto/oversold_gap_confirm/ ⇒ 上溯 3 层
+_ROOT = os.environ.get("SUPERTRADER_ROOT") or os.path.dirname(
+    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+_WL_FP = os.path.join(_ROOT, "stock_hunter", "watchlist_jiuyan.json")
 
 MERGES = {"创新药": "医药", "中药": "医药"}
 _BATCH = 200          # daily_many 分片（对齐 hunter_ma5_alert）
 _DAYS = 40            # 日线根数（MA20 预热 + 裕度）
+
+
+def default_provider():
+    """默认数据源 = `core/market_data/facade.py`（gm 主源、腾讯降级）。
+
+    ⚠️ 2026-10-12 实测：GM 终端里 sys.path 只有 `execution/auto` 与 `_gm/`，
+    `import core` 会 ModuleNotFoundError ⇒ 盘前预筛**天天 fail-closed、当日永不下单**。
+    修法见宿主 `gm_main.py` 顶部：**把仓根 append 到 sys.path 末尾**（append 而非 insert，
+    以保住 `_gm/` 对 `analysis`/`config` 的优先级）。此处仍保留注入参数 `provider=`，
+    供干跑/单测替换数据源。
+    """
+    from core.market_data import facade           # noqa: PLC0415（宿主负责路径）
+    return facade.get_provider()
 
 
 def sym2board_map() -> dict:
@@ -69,12 +84,13 @@ def premarket_candidates(top_n: int, date: str = None, provider=None) -> dict:
     实现：全池一次批量拉日线(40 根)，同批算 ①板块涨停家数排名 ②超跌(昨收<MA20) 预筛，
     只留 top-N 板块内超跌票。取不到日线/板块无分类的票自动缺省跳过。
     """
-    from core.market_data import facade
     from collections import Counter
     if provider is None:
         try:
-            provider = facade.get_provider()
-        except Exception:
+            provider = default_provider()
+        except Exception as _e:
+            print(f"[OSC] ⛔ 数据源不可用（core.market_data.facade）⇒ 当日不下单: "
+                  f"{type(_e).__name__}: {_e}")
             return {}
     board_map = sym2board_map()
     codes = _codes_with_board(board_map)
@@ -114,7 +130,7 @@ def premarket_candidates(top_n: int, date: str = None, provider=None) -> dict:
     if not hot:
         return {}
 
-    # ② 只留 top-N 板块内「昨收 < MA20」的超跌票（弱转强 weak_W1 预筛）
+    # ② 只留 top-N 板块内「昨收 < MA20」的超跌票（超跌跳空确认 osc_W1（原 weak_W1） 预筛）
     out = {}
     for c in codes:
         if board_map.get(c) not in hot:

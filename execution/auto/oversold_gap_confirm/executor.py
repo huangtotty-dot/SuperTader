@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
-r"""weak_strong_executor.py — 弱转强 · 10:00 买侧执行器（2026-10-10 施工，WS2 生产接线）。
+r"""executor.py — 超跌跳空确认 · 执行核（2026-10-10 施工；2026-10-12 归拢进策略包）。
 
-信号（冻结，见 core/weak_strong.py）：日线超跌 `昨收<MA20` + 盘中 10:00 跳空高开守住
+信号（冻结，见同包 decision.py）：日线超跌 `昨收<MA20` + 盘中 10:00 跳空高开守住
 （10:00 棒 low≥昨收 且 close>昨收 且 close>VWAP）⇒ 10:00 收盘买入，按 gap 降序取 top-N。
 
 **买侧**：候选(盘前超跌)+10:00 棒 → 决策核 → top-N → 下单。
@@ -9,11 +9,11 @@ r"""weak_strong_executor.py — 弱转强 · 10:00 买侧执行器（2026-10-10 
 entry_date/entry_price/dev20/gap/board；每日收盘检查——深超跌(dev20<−7%)挂 −5% close 止损、
 浅/中不挂、满 5 个交易日到期平仓（死拿5天 horizon）。卖出侧「次日早盘冲高卖」是下一步。
 
-与 S1 共用掘金模拟盘账户 ⇒ 本执行器**不带独立净值链**（避免与 S1 账本双记），只落
-fills/exec_report；每日名义总额度由 `weak_strong_daily_budget` 封顶，避免挤占 S1 轮动。
+（历史：原与 S1 共用掘金模拟盘账户，故本执行器**不带独立净值链**；S1 已于 2026-10-12 整链删除，
+账户现由本策略独占。）只落 fills/exec_report；每日名义总额度由 `osc_daily_budget` 封顶。
 
 **不 import gm.api**——券商/仿真通道全部经注入的 Gateway 鸭子类型（与已退役的 s1_executor 同款，
-gm_main 直接复用 `_S1GmGateway`），因此 gm_main / 干跑脚本 / 单测共用同一套执行逻辑。
+gm_main 直接复用 `_OscGmGateway`），因此 gm_main / 干跑脚本 / 单测共用同一套执行逻辑。
 
 Gateway 接口（鸭子类型，全部必需，poll_order 可选）::
 
@@ -42,23 +42,27 @@ import sys
 import time
 from datetime import datetime
 
+# 仓库根：本文件在 execution/auto/oversold_gap_confirm/ ⇒ 上溯 4 层
 _ROOT = os.environ.get("SUPERTRADER_ROOT") or os.path.dirname(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-if _ROOT not in sys.path:
-    sys.path.insert(0, _ROOT)
+    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+
+
 try:
     from core.cost_model import FEE_BUY_STOCK as _FEE_BUY, FEE_SELL_STOCK as _FEE_SELL
     _FEE_SRC = "core/cost_model.py"
 except Exception:                                    # pragma: no cover - 兜底
+    # ⚠️ 宿主 `gm_main.py` 负责把仓根 append 进 sys.path（见该文件顶部注释）；真拿不到就用同值常量。
     _FEE_BUY, _FEE_SELL = 0.0000954, 0.0005954
     _FEE_SRC = "fallback_constants(=core/cost_model 同值)"
 
+# ⚠️ 目录名沿用历史的 `weak_strong_book`（**刻意不改**）：它是**在线账本**（positions.json），
+#    改名会让在途持仓与卖侧失联。要改名须与「部署新代码」同刻做数据迁移。
 BOOK_DIR_DEFAULT = os.path.join(_ROOT, "t_io", "state", "weak_strong_book")
 
 DEFAULTS = {
     "top_n": 4,                     # 每日按 gap 取最强前 N（exp9 Sharpe 顶点）
     "single_budget": 100000.0,      # 单票名义上限（元，对齐 OGR 10 万/腿）
-    "daily_budget": 400000.0,       # 每日名义总额度（元，防挤占 S1 轮动）
+    "daily_budget": 400000.0,       # 每日名义总额度（元）
     "cash_headroom": 0.95,          # 单票占用现金封顶比例
     "min_lot": 100,
     "order_poll_rounds": 3,
@@ -90,22 +94,15 @@ def gm_symbol_of(code: str) -> str:
     return ("SHSE." if code[:1] in "569" else "SZSE.") + code
 
 
-# ════════════════════════ 决策（委托 core/weak_strong.py） ════════════════════════
+# ════════════════════════ 决策（委托同包 decision.py） ════════════════════════
 
 def evaluate_picks(prev_close: dict, ma20: dict, bars: dict,
                    board: dict | None = None, allowed_boards=None,
                    top_n: int = DEFAULTS["top_n"]) -> list:
     """决策核入口：返回 picks 列表（[{code,gap,board,...}]，gap 降序、板块已过滤、top-N 已取）。"""
-    try:
-        import importlib.util as _ilu
-        _p = os.path.join(_ROOT, "core", "weak_strong.py")
-        _spec = _ilu.spec_from_file_location("weak_strong", _p)
-        _m = _ilu.module_from_spec(_spec)
-        _spec.loader.exec_module(_m)
-    except Exception:                                    # pragma: no cover
-        return []
-    r = _m.evaluate(prev_close, ma20, bars, board=board,
-                    allowed_boards=allowed_boards, top_n=top_n)
+    from . import decision as _dec                        # 同包纯函数核
+    r = _dec.evaluate(prev_close, ma20, bars, board=board,
+                      allowed_boards=allowed_boards, top_n=top_n)
     return list(r["picks"])
 
 
@@ -189,7 +186,7 @@ BOOK_FILE = "positions.json"
 
 
 def load_book(book_dir: str = BOOK_DIR_DEFAULT) -> dict:
-    """读弱转强持仓账本。缺文件/损坏 → 空账本（fail-safe 不抛）。"""
+    """读超跌跳空确认持仓账本。缺文件/损坏 → 空账本（fail-safe 不抛）。"""
     fp = os.path.join(book_dir, BOOK_FILE)
     if not os.path.exists(fp):
         return {"updated_at": "", "open": {}}
@@ -232,13 +229,20 @@ def register_buys_to_book(book_dir: str, date: str, buys_out: list, picks: list,
         ma = float(ma20.get(code) or 0)
         dev20 = (pc / ma - 1.0) if (pc > 0 and ma > 0) else None
         old = book["open"].get(code)
-        if old and str(old.get("entry_date")) == str(date):
+        if old:
+            # ⚠️ 2026-10-12 修（两日纸面演练抓到的**真缺陷**，非搬家引入）：
+            #    原实现只在「同日」合并，**跨日再加仓会整体覆盖**条目 ⇒ 数量只记新买的、
+            #    entry_date/entry_price 被重置 ⇒ 账本恒小于账户，而卖侧只卖 min(账本, available)
+            #    ⇒ 那部分股票**永远卖不出去**（且 14:50 的账本对账只减不增，永不自愈）。
+            #    现在：无论同日/跨日，**一律合并**（数量相加、入场价按量加权），并保留**原 entry_date**
+            #    与 days_held ⇒ 「一票=一笔仓位」，到期/止损都按首次入场算。
             oq = int(old.get("qty") or 0)
             opx = float(old.get("entry_price") or 0)
             nq = oq + qty
             book["open"][code] = {**old, "qty": nq,
                                   "entry_price": round((opx * oq + px * qty) / nq, 4)}
-            log(f"[WS] 账本合并 {code}: 同日加仓 {oq}→{nq}股")
+            log(f"[WS] 账本合并 {code}: 加仓 {oq}→{nq}股（entry_date 保持 "
+                f"{old.get('entry_date')}，加权入场价 {book['open'][code]['entry_price']}）")
             continue
         book["open"][code] = {
             "entry_date": str(date), "entry_price": round(px, 4), "qty": qty,
@@ -304,7 +308,7 @@ def _snapshot_positions(gateway) -> dict:
 
 
 def _reconcile_open(open_pos: dict, positions: dict, log=print) -> None:
-    """账本 ↔ 账户对账：外部卖出（S1 清仓等）→ 从账本移除/减量。原地改 open_pos。"""
+    """账本 ↔ 账户对账：外部卖出（终端手工单等）→ 从账本移除/减量。原地改 open_pos。"""
     for code in list(open_pos):
         acct = positions.get(code)
         acct_qty = int((acct or {}).get("qty") or 0)
@@ -393,7 +397,7 @@ def _finish_sell(date, mode, started, sells_out, open_pos, note, tag, book_dir, 
                "open_after": len(open_pos),
                "notional_placed": round(notional, 2)}
     fills = {"date": str(date), "mode": mode, "started_at": started, "finished_at": finished,
-             "strategy": "weak_strong", "note": note,
+             "strategy": "oversold_gap_confirm", "note": note,
              "sells": sells_out, "summary": summary,
              "book_open": {k: v for k, v in sorted(open_pos.items())},
              "fee_model": _FEE_SRC,
@@ -411,7 +415,7 @@ def _finish_sell(date, mode, started, sells_out, open_pos, note, tag, book_dir, 
 def run_sell_exec(gateway, date: str, prices: dict,
                   book_dir: str = BOOK_DIR_DEFAULT, params: dict | None = None,
                   dry_run: bool = False, sleep_fn=time.sleep, log=print) -> dict:
-    """弱转强 14:50 收盘止损/到期平仓卖侧主流程。返回 fills dict（同时落盘）。
+    """超跌跳空确认 14:50 收盘止损/到期平仓卖侧主流程。返回 fills dict（同时落盘）。
 
     prices = {code: 当日现价}（调用方注入，14:50 批量取数）。
     """
@@ -474,7 +478,7 @@ def build_morning_sell_plan(book_open: dict, morning_highs: dict, today: str,
 def run_morning_sell_exec(gateway, date: str, morning_highs: dict,
                           book_dir: str = BOOK_DIR_DEFAULT, params: dict | None = None,
                           dry_run: bool = False, sleep_fn=time.sleep, log=print) -> dict:
-    """弱转强 次日早盘冲高卖主流程。返回 fills dict（同时落盘）。
+    """超跌跳空确认 次日早盘冲高卖主流程。返回 fills dict（同时落盘）。
 
     morning_highs = {code: 当日早盘最高价}（调用方注入，10:00 批量取数）。
     只对 days_held==0（次日）持仓判定；更老持仓不动，交 14:50 止损/到期。
@@ -507,7 +511,7 @@ def run_buy_exec(gateway, date: str, prev_close: dict, ma20: dict, bars: dict,
                  board: dict | None = None, allowed_boards=None,
                  book_dir: str = BOOK_DIR_DEFAULT, params: dict | None = None,
                  dry_run: bool = False, sleep_fn=time.sleep, log=print) -> dict:
-    """弱转强 10:00 买侧执行主流程。返回 fills dict（同时落盘）。
+    """超跌跳空确认 10:00 买侧执行主流程。返回 fills dict（同时落盘）。
 
     fail-closed：决策核因缺数据/min_pool 不足返回空 picks ⇒ 当日不下单（不抛异常）。
     """
@@ -522,7 +526,7 @@ def run_buy_exec(gateway, date: str, prev_close: dict, ma20: dict, bars: dict,
     picks = evaluate_picks(prev_close, ma20, bars, board=board,
                            allowed_boards=allowed_boards, top_n=top_n)
     if not picks:
-        log(f"[WS] {date} 无弱转强候选（fail-closed，当日不下单） pool_n={len(prev_close)}")
+        log(f"[WS] {date} 无超跌跳空确认候选（fail-closed，当日不下单） pool_n={len(prev_close)}")
         return _write_fills(date, mode, started, [], [], 0.0, 0.0, cfg, book_dir,
                             note="no_picks")
 
@@ -587,14 +591,18 @@ def run_buy_exec(gateway, date: str, prev_close: dict, ma20: dict, bars: dict,
 def _write_fills(date, mode, started, buys_out, picks, cash0, total_placed,
                  cfg, book_dir, note: str = "") -> dict:
     finished = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    n_rej = sum(1 for r in buys_out if r["status"] in _TERMINAL_BAD or r["status"] == "error")
+    # ⚠️ 2026-10-12：`buys_placed` 原先只数 `qty_placed>0`，把**被拒/被锁**的单也算成"已下单"
+    # （与 S1 复盘里 `buys_placed=4/rejected=0` 的虚报同源）。改为只数未被终态否决的。
+    _ok = [r for r in buys_out
+           if not (r["status"] in _TERMINAL_BAD or r["status"] == "error")]
+    n_rej = len(buys_out) - len(_ok)
     n_defer = sum(1 for r in buys_out if r["defer_reason"])
     summary = {"candidates": len(picks), "buys_planned": len(buys_out),
-               "buys_placed": sum(1 for r in buys_out if r["qty_placed"] > 0),
+               "buys_placed": sum(1 for r in _ok if r["qty_placed"] > 0),
                "rejected_count": n_rej, "deferred_count": n_defer,
                "notional_placed": round(total_placed, 2), "cash_before": round(cash0, 2)}
     fills = {"date": str(date), "mode": mode, "started_at": started, "finished_at": finished,
-             "strategy": "weak_strong", "note": note or "",
+             "strategy": "oversold_gap_confirm", "note": note or "",
              "picks": [{"code": p["code"], "gap": p.get("gap"),
                         "board": p.get("board", "")} for p in picks],
              "buys": buys_out, "summary": summary,

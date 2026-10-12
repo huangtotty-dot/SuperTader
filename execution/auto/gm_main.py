@@ -1,40 +1,59 @@
 # coding=utf-8
 """
 gm_main.py — 掘金量化策略入口（P4-1 迁入自 goldminer main.py，v1.1.0 WIP）
-execution/auto/gm_main.py 是唯一 import gm.api 的文件；卖出通道/状态在 sell_channels.py/sell_state.py。
+
+⚠️ 2026-10-12 owner 决策「超跌跳空确认接管 / 旧引擎删干净」后的**唯一策略链**：
+  超跌跳空确认（超跌跳空确认）10:00 买侧 / 10:00 早盘冲高卖 / 14:50 止损与到期。
+  旧镜像做T引擎（BASE 建仓/信号/卖出门链 + sell_channels/sell_state/t_engine_auto）、
+  开盘强制对齐（OPEN_ALIGN）、开盘低开反转（OGR）**均已整链删除**，勿照旧文档复原。
 """
 
 from __future__ import print_function, absolute_import, division
 from gm.api import *
-import numpy as np
 import pandas as pd
-from datetime import datetime, timedelta, time as dtime
+from datetime import datetime, time as dtime
 import os
 import sys
 import json
-import copy
 
 PROJECT_DIR = os.path.dirname(os.path.abspath(__file__))
-# P4-1: 支撑模块整体副本在 _gm/（goldminer 内部 import 相对路径不变，仅指向 _gm）；
-# 本目录（sell_state/sell_channels）同样入 path，保证 gm SDK 脚本模式与包导入两种方式都可 import。
+# P4-1: 支撑模块整体副本在 _gm/（goldminer 内部 import 相对路径不变，仅指向 _gm）。
 if PROJECT_DIR not in sys.path:
     sys.path.insert(0, PROJECT_DIR)
 _GM_DIR = os.path.join(PROJECT_DIR, "_gm")
 if _GM_DIR not in sys.path:
     sys.path.insert(0, _GM_DIR)
 
-from config.params import PARAMS, STOCK_PARAMS
-from data.indicators import add_indicators
-from t_engine_auto import SignalEngine
-from signals.position_sizer import PositionSizer
-from utils.helpers import _now, _default_daily_context
+# 仓根：让 `core.*`（cost_model / market_data.facade …）可导入。
+# ⚠️ 必须 **append 而不是 insert**：insert 会把仓根顶到 `_gm/` 之前，于是
+#    `import analysis.index_regime` 解析到仓根副本 ⇒ init 的 fail-loud 守卫直接 raise
+#    （2026-10-12 实测就是这么把策略搞起不来的）。append 则 `_gm/` 优先级不变。
+# ⚠️ PROJECT_DIR = execution/auto ⇒ 仓根要再上溯一层（dirname 两次）
+_ROOT_DIR = os.environ.get("SUPERTRADER_ROOT") or os.path.dirname(os.path.dirname(PROJECT_DIR))
+if _ROOT_DIR not in sys.path:
+    sys.path.append(_ROOT_DIR)
+
+from config.params import PARAMS
+from utils.helpers import _now
 from gm_bridge.writer import (
-    write_signal, write_order, write_fill, write_reject, write_risk,
-    write_heartbeat, check_kill_switch, write_snapshot,
-    write_buy_pending, read_buy_pending, read_buy_decision, write_confirm,
-    read_auto_build, consume_auto_build,
+    write_order, write_fill, write_reject, write_risk,
+    write_heartbeat, check_kill_switch,
 )
 from gm_bridge import ops_guard
+
+# 策略框架（2026-10-12）：多策略共存接缝层。framework/ 内**不得** import gm.api（仓规）⇒
+# 掘金能力经 GmServices 注入；归属硬锁（一票一策略）在 framework/ownership.py。
+from framework.ownership import Ownership, default_path as _ownership_path_fn
+from framework.services import GmServices
+
+# 唯一策略：超跌跳空确认（实现全在同名包内；本文件只做宿主与注入）
+import oversold_gap_confirm as osc
+
+# 策略账本目录（目录名由**策略包**声明：`osc.BOOK_DIRNAME` 刻意沿用历史名 weak_strong_book，
+# 改名会让在途持仓与卖侧失联）。宿主用它做归属判定与 Runtime 注入。
+_OSC_BOOK_DIR = os.path.join(
+    os.environ.get("SUPERTRADER_ROOT", r"E:\superTrader"),
+    "t_io", "state", osc.BOOK_DIRNAME)
 
 # F1(2026-09-09) 退出留痕：gm SDK 把所有退出接到 os._exit（无 traceback、不跑 atexit），
 # 死亡只能二分定位——注册自己的 atexit（LIFO 先于 gm 逻辑执行）写 risk:strategy_exit + 横幅。
@@ -173,57 +192,7 @@ def _load_auto_pool():
 _auto_pool = _load_auto_pool()
 STOCKS = {code: v["gm_symbol"] for code, v in _auto_pool.AUTO_POOL.items()}
 
-# ── 市场代理池（code → gm_symbol）：**只用于算 `mkt_gap`，不交易**（2026-09-24）──
-# 为什么需要：规则核 `core/open_gap_reversal.py` 定义 `mkt_gap = 池内 gap 中位数`，而**「池」由
-# 调用方给**。若只把自己要交易的池传进去（20 只高波篮子）⇒ **自指**：实测与预注册的 981 面板中位
-# 在 **31 天里 9 天符号相反**、腿集与离线**交集仅 36/141**（2026-09-24），等于跑的是另一条规则。
-# Stage14 已证「随机 10 只即可」；Stage18 把**固定名单冻死**为 L20（面板内代码字典序最小 20 只、
-# 排除篮子：与全样本中位相关 **0.972** / 符号一致 **85.8%**，候选里最佳，且完全不按业绩选）。
-# 回测由 `backtest_holdings.py --mkt-proxy` 注入；live 应从同一份冻死名单注入。
-# 2026-09-30：L3 影子层已改为与 L4 同源（逐票累积 `_ogr_opens` + 代理池中位），
-# 不再用单次回调 bars 自建池（逐票回调 ⇒ 永远只能看到 1 只票）。
-MARKET_PROXY = {}   # ⇒ 真实定义在下面（`_OGR_BACKTEST_ENABLE` 之后）：从规则核的冻结名单构建
 STOCK_NAMES = {code: v["name"] for code, v in _auto_pool.AUTO_POOL.items()}
-
-# ── 目标底仓（2026-09-14 持仓并表后） ──
-# MIRROR = 各票**目标底仓**，直读 holdings.json 的 `base`（身份/实际持仓/目标同源）。
-# 旧的两级回退（AUTO_MIRROR_OVERRIDE / AUTO_POOL[code].mirror_qty）已随并表删除。
-def _load_mirror_holdings():
-    import json as _json
-    root = os.environ.get("SUPERTRADER_ROOT", r"E:\superTrader")
-    # 2026-10-04 双文件拆分：目标底仓来自**自动侧**真源 holdings_auto.json。
-    # 过渡回退：新文件缺失但旧 holdings.json 尚在时读旧文件（迁移落盘后自然失效）。
-    path = os.path.join(root, "t_io", "state", "holdings_auto.json")
-    if not os.path.exists(path):
-        _legacy = os.path.join(root, "t_io", "state", "holdings.json")
-        if os.path.exists(_legacy):
-            path = _legacy
-        else:
-            raise RuntimeError(f"持仓真源缺失（镜像持仓依赖）: {path}")
-    with open(path, "r", encoding="utf-8") as f:
-        data = _json.load(f)
-    try:
-        _pool = (_auto_pool.AUTO_POOL if hasattr(_auto_pool, "AUTO_POOL")
-                 else getattr(_auto_pool, "AUTO_POOL", {})) or {}
-    except Exception:
-        _pool = {}
-    out = {}
-    for code, h in (data.items() if isinstance(data, dict) else []):
-        if not isinstance(h, dict) or str(code).startswith("_"):
-            continue
-        # 仅 auto 池成员纳入 MIRROR（防纯手动票被镜像进来）；池读取失败时不裁剪（保持可用）
-        if _pool and code not in _pool:
-            continue
-        # 2026-09-14 持仓并表：目标底仓 = holdings.json 的 `base`（旧 OVERRIDE / mirror_qty
-        # 两级回退已随并表删除——身份+持仓+目标现为同一份真源）。
-        tgt = int(h.get("base") or 0)
-        if tgt <= 0:
-            continue
-        out[code] = {"qty": tgt, "cost": float(h.get("cost") or 0)}
-    return out
-
-
-MIRROR_HOLDINGS = _load_mirror_holdings()
 
 
 # ── 持仓真源回写（2026-09-14 并表）──────────────────────────────
@@ -276,1187 +245,20 @@ def _writeback_holdings(context) -> int:
     return len(patch)
 
 
-# ── 开盘强制对齐（2026-09-14 owner 裁决）────────────────────────────
-_OPEN_ALIGN_DONE_DATE = None
-# 买入优先级：缺额从小到大（资金效率优先，能多对齐几只）。owner 可自行调整顺序，
-# 未列出的 code 排在最后。
-# 2026-09-28 刷新为当前实盘目标 7 票（旧名单里 002639/300153/002451/600176 base 已=0）；
-# 600584/688008/300456/600276 已入 AUTO_POOL（owner 拍板，pool=both，沿用全局默认参数）。
-OPEN_ALIGN_BUY_ORDER = ["600276", "300456", "688008", "000988", "300054", "600584", "588170"]
+# ── 唯一策略：超跌跳空确认 ────────────────────────────────────────────
+# 策略实现（决策核/预筛/执行核/四时点钩子/下单通道）整体在
+# `execution/auto/oversold_gap_confirm/` 包里；本文件只剩宿主职责：
+#   gm 回调 · 共享服务（服务容器/归属锁/审计/心跳/回写/指数态势）· 经 Runtime 注入。
+# 策略细节见该包 __init__ 与 doc/solutions/2026-10-12_超跌跳空确认_策略详解.md。
 
 
-# ── 2026-09-15 阶段0-6（诊断D3旁注）：沪市市价单(=保护限价)涨跌停贴板钳制 ──
-# 背景：09-15 盘中新增 7 笔 GMBROKER 拒单——沪市市价单的保护限价与涨/跌停价冲突
-# （600176×5、588170×1）。贴涨停的买单/贴跌停的卖单是**确定性拒单**（涨停价买单
-# 排不到队、跌停价卖单同理），下单前预判跳过并留痕，不再把废单送到柜台。
-# 约束（施工单）：只加钳制与留痕——不改 OrderType_Market、不改任何量价逻辑。
-# 贴板判定带宽默认 0.2%（距涨/跌停不足 0.2% 即跳过，预留撮合余量）；
-# 可在 config/params.py 的 PARAMS 里加 "limit_clamp_margin": 0.002 覆盖。
-LIMIT_CLAMP_MARGIN = float(PARAMS.get("limit_clamp_margin", 0.002) or 0.002)
-
-
-def _board_limit_pct(code, name=""):
-    """按板块规则返回涨跌停幅度（2026-09 现行规则口径）：
-    - 主板（60xxxx/000xxx/001xxx/002xxx/003xxx）10%
-    - 主板风险警示 ST/*ST 5%
-    - 创业板（300/301/302）20%（2020-08-24 注册制起，含其风险警示股）
-    - 科创板（688/689）20%；科创类 ETF（588xxx）同板 20%
-    - 北交所（4xxxxx/8xxxxx/920xxx）30%（本池暂无，防御性列出）
-    - 其余场内基金（51xxxx/15xxxx/56xxxx 等）随主板 10%
-    返回小数（0.10/0.20/0.30/0.05）。ST 判定用名称含 "ST"。"""
-    c = str(code or "")
-    nm = str(name or STOCK_NAMES.get(c, "") or "").upper()
-    if c.startswith(("300", "301", "302")):          # 创业板 20%
-        return 0.20
-    if c.startswith(("688", "689", "588")):          # 科创板 / 科创ETF 20%
-        return 0.20
-    if c.startswith(("4", "8", "920")):              # 北交所 30%（池内暂无）
-        return 0.30
-    if "ST" in nm:                                    # 主板风险警示 5%
-        return 0.05
-    return 0.10                                       # 主板（含主板ETF）10%
-
-
-def _limit_prices(context, code, sym, pre_close):
-    """返回 (limit_up, limit_down, src)。优先 gm 真实涨跌停价（get_instruments 的
-    upper_limit/lower_limit 字段——真实值含 ST/次新股等全部特殊规则，优于推算）；
-    拿不到按板块规则 × pre_close 推算。结果按 (code, 交易日) 缓存（涨跌停价日内不变）。
-    全程 fail-open：任何异常回退规则推算；仍不可得 → (None, None, "none") 表示无法预判。"""
-    _cache = getattr(context, "_limit_px_cache", None)
-    if _cache is None:
-        _cache = {}
-        context._limit_px_cache = _cache
-    # 缓存键日期用策略时钟（context.now，回测=仿真日），无则系统时钟——防回测跨日缓存不刷新
-    _ndt = getattr(context, "now", None) or datetime.now()
-    _today = _ndt.strftime("%Y-%m-%d")
-    _hit = _cache.get(code)
-    if _hit and _hit.get("date") == _today:
-        return _hit.get("up"), _hit.get("down"), _hit.get("src")
-    _up = _down = None
-    _src = "none"
-    # ① gm 真实值（实盘；回测/异常静默跳过）
-    try:
-        if getattr(context, "mode", None) == MODE_LIVE and "get_instruments" in globals():
-            _df = _sdk_call("get_instruments_limit", _partial(
-                get_instruments, symbols=sym, df=True))
-            if _df is not None and len(_df) > 0:
-                _row = _df.iloc[0]
-                _u = float(_row.get("upper_limit") or 0)
-                _d = float(_row.get("lower_limit") or 0)
-                if _u > 0 and _d > 0:
-                    _up, _down, _src = _u, _d, "gm"
-    except Exception:
-        pass
-    # ② 板块规则 × pre_close 推算
-    if _up is None:
-        try:
-            _pc = float(pre_close or 0)
-        except Exception:
-            _pc = 0.0
-        if _pc > 0:
-            _pct = _board_limit_pct(code)
-            # 最小变动价位 0.01 四舍五入（A 股涨跌停价按分舍入，容差由 0.2% 带宽覆盖）
-            _up = round(_pc * (1 + _pct), 2)
-            _down = round(_pc * (1 - _pct), 2)
-            _src = "rule"
-    _cache[code] = {"date": _today, "up": _up, "down": _down, "src": _src}
-    return _up, _down, _src
-
-
-def _limit_clamp_should_skip(context, code, sym, side, qty, price, now, where):
-    """下单前贴板预判：BUY 距涨停 / SELL 距跌停不足 LIMIT_CLAMP_MARGIN（默认 0.2%）
-    → 确定性拒单，跳过并留痕（print + risk:limit_clamp_skip + audit），返回 True。
-    涨跌停价不可得 / 钳制器自身异常 → False（不拦，保持原行为，fail-open）。"""
-    try:
-        _px = float(price or 0)
-        if _px <= 0:
-            return False
-        try:
-            _pc = float(context.latest_pre_close.get(code, 0) or 0)
-        except Exception:
-            _pc = 0.0
-        _up, _down, _src = _limit_prices(context, code, sym, _pc)
-        # 数据一致性护栏（2026-09-15）：涨跌停价由 latest_pre_close 推导，若它与 bar 价**不同尺度**，
-        # 钳制会误拦该标的的全部买入。实测 588170：pre_close≈0.64 → up=0.70，而 bar 价 1.66-1.74，
-        # 导致 11,049 次 BUY 被"贴板跳过"（其余 8 只全为 0），该票日内只能卖不能买。
-        # 真实价格不可能高于涨停价 / 低于跌停价 ⇒ 出现该情形即判定涨跌停数据不可信，
-        # fail-open 不拦（只按 code 告警一次），把问题交回数据源而不是让订单被静默吞掉。
-        if (_up and _px > _up * 1.05) or (_down and _px < _down * 0.95):
-            _bad = getattr(context, "_limit_data_bad", None)
-            if _bad is None:
-                _bad = set(); context._limit_data_bad = _bad
-            if code not in _bad:
-                _bad.add(code)
-                print(f"[{now:%H:%M:%S}] LIMIT_DATA_BAD {code} 价格{_px:.3f} 越出涨跌停带 "
-                      f"(up={_up:.3f} down={_down:.3f} pre_close={_pc:.3f} src={_src}) "
-                      f"→ 涨跌停数据不可信，本标的不再贴板钳制（fail-open）")
-                try:
-                    write_risk(str(now), "limit_data_inconsistent",
-                               f"price={_px:.3f} up={_up:.3f} down={_down:.3f} pre_close={_pc:.3f}",
-                               code=code)
-                except Exception:
-                    pass
-            return False
-        _kind, _lim = None, None
-        if side == "BUY" and _up and _px >= _up * (1 - LIMIT_CLAMP_MARGIN):
-            _kind, _lim = "near_limit_up", _up
-        elif side == "SELL" and _down and _px <= _down * (1 + LIMIT_CLAMP_MARGIN):
-            _kind, _lim = "near_limit_down", _down
-        if not _kind:
-            return False
-        _msg = (f"{side} {int(qty or 0)}@{_px:.3f} 贴板跳过: {_kind} limit={_lim:.3f} "
-                f"带宽={LIMIT_CLAMP_MARGIN:.1%} src={_src} where={where} "
-                f"—市价保护限价与涨跌停冲突属确定性拒单(09-15盘中×7)")
-        print(f"[{now:%H:%M:%S}] LIMIT_CLAMP {code} {_msg}")
-        try:
-            write_risk(str(now), "limit_clamp_skip", _msg, code=code)
-        except Exception:
-            pass
-        try:
-            _audit_write({"event": "limit_clamp_skip", "code": code, "side": side,
-                          "qty": int(qty or 0), "price": _px, "limit": _lim,
-                          "kind": _kind, "src": _src, "where": where, "time": str(now)})
-        except Exception:
-            pass
-        return True
-    except Exception:
-        return False
-
-
-def _force_open_align(context) -> int:
-    """开盘一次性把实际持仓对齐到目标底仓（base）：超额卖出、缺口买入。
-
-    owner 2026-09-14 裁决："明日开盘一次性强制对齐；资金不足时按优先级逐个买满"。
-    这是**账本校正**不是做T，故不走信号/闸门链；但有两条硬约束：
-      ① **必须先 write_order 落 order 事件** —— 否则 on_order_status 的孤儿闸会把成交
-         判成"非本策略"直接丢弃（6a96829c 实证：5/6 底仓单因此不入台账）；
-      ② 买入受**可用现金**封顶，按 OPEN_ALIGN_BUY_ORDER 逐个买满，买不起就停。
-    返回本轮下单单数。
-    """
-    avail = 0.0
-    try:
-        _acct = _sdk_call("account", context.account)
-        _c = getattr(_acct, "cash", None)
-        if _c is not None:
-            avail = float(getattr(_c, "available", 0) or 0)
-    except Exception:
-        avail = 0.0
-
-    def _px_of(code, sym):
-        try:
-            p = float(context.latest_pre_close.get(code, 0) or 0)
-        except Exception:
-            p = 0.0
-        if p <= 0:
-            # 2026-09-29 复盘实证：align 跑在逐票循环之前，latest_pre_close 常为空；
-            # 原第二回退 daily_decision_stats 全库无赋值点（死代码）⇒ 002451/603667
-            # 应卖未卖、600276/300456/600584 应买未买，均因 px=0 静默跳过。
-            # 改用 history_n 兜底取昨收（probe_slippage._px_prev_close 同款模式）。
-            try:
-                his = _sdk_call("align_prev_close", _partial(
-                    history_n, symbol=sym, frequency="1d", count=3,
-                    fields="eob,close", adjust=ADJUST_PREV))
-                if his:
-                    p = float(his[-1]["close"])
-            except Exception:
-                p = 0.0
-        return p
-
-    # 2026-09-28 口径修正（09-28 复盘「仿真对齐」）：目标底仓直读 holdings.json 的
-    # base（真源），不再用 _base_ref_ —— reconcile_init 对 MIRROR 缺失票（base=0 被
-    # _load_mirror_holdings 过滤）会 `or vol` 兜底成现状持仓 ⇒ "实盘已清、仿真残留"
-    # 的票（002451/603667）diff 恒=0 永远卖不掉。新语义：base=0 且仍持有 ⇒ 超额全卖归位。
-    try:
-        _repo = _load_holdings_repo()
-        _base_map = {c: int((h or {}).get("base") or 0)
-                     for c, h in ((_repo.load_auto() or {}) if _repo else {}).items()
-                     if isinstance(h, dict) and not str(c).startswith("_")}
-    except Exception as _be:
-        print(f"[OPEN_ALIGN] ⚠️ base 真源读取失败，回退 _base_ref_ 口径: {_be}")
-        _base_map = {}
-    sells, buys = [], []
-    for code, sym in STOCKS.items():
-        if code in _base_map:
-            target = _base_map[code]
-        else:
-            target = int(getattr(context, f"_base_ref_{code}", 0) or 0)  # 真源无此票 → 旧口径兜底
-        try:
-            h = _get_holding(context, code, sym)
-        except Exception:
-            continue
-        actual = int(h.get("qty", 0) or 0)
-        diff = actual - target
-        if diff >= 100:                                   # 超额（含 base=0 清仓）→ 卖
-            _av_raw = h.get("available")
-            _av = actual if _av_raw is None else int(_av_raw)
-            q = (min(diff, _av) // 100) * 100
-            if q >= 100:
-                sells.append((code, sym, q))
-        elif -diff >= 100:                                # 缺口 → 买
-            buys.append((code, sym, (-diff // 100) * 100))
-
-    now = context.now if hasattr(context, "now") else datetime.now()
-    n = 0
-    _placed_sells = []
-    # ① 超额一律卖出（不占资金）
-    for code, sym, q in sells:
-        px = _px_of(code, sym)
-        if px <= 0:
-            # 2026-09-29 复盘实证：px=0 静默 continue 导致应卖单无声消失，补留痕
-            print(f"[OPEN_ALIGN] ⚠️ SELL {code} {q}股跳过：取价失败")
-            _audit_write({"event": "open_align_skip", "code": code, "side": "SELL",
-                          "qty": q, "time": str(now), "reason": "no_price"})
-            continue
-        # 2026-09-15 阶段0-6（诊断D3旁注）：贴跌停卖单=确定性拒单，跳过并留痕
-        if _limit_clamp_should_skip(context, code, sym, "SELL", q, px, now, "open_align"):
-            continue
-        try:
-            write_order(str(now), code, "SELL", q, px, order_type="ALIGN")
-            _o = _sdk_call("order_volume_align_sell", _partial(
-                order_volume, symbol=sym, volume=q, side=OrderSide_Sell,
-                order_type=OrderType_Market, position_effect=PositionEffect_Close))
-            _mark_pending_recon(context, code, sym, "SELL", q, px, _o)
-            # 2026-09-30 复盘实证：ALIGN 卖单漏了 sell_channels/OGR 同口径的下单虚减
-            # （成交回调卖分支只更 executed_orders，不碰 manual_position）⇒ 台账残影
-            # 全天不自愈（002451×1800/603667×500 已成交 pos_after=0，14:58 心跳仍报原量）。
-            # 与 :2214 OGR 虚减同口径；拒单由 on_order_status N25-2 分支对称回滚。
-            _mp = context.manual_position.get(sym)
-            if _mp is not None:
-                _mp["qty"] = max(0, int(_mp.get("qty", 0) or 0) - q)
-                _mp["t_qty"] = _mp["qty"]
-                _mp["available"] = max(0, int(_mp.get("available", 0) or 0) - q)
-            n += 1
-            _placed_sells.append((code, sym, q, px))
-            print(f"[OPEN_ALIGN] SELL {code} {q}股@{px:.3f}（超额归位到目标 {_base_map.get(code, getattr(context, f'_base_ref_{code}', 0))}）")
-            _audit_write({"event": "open_align", "code": code, "side": "SELL", "qty": q,
-                          "price": round(px, 4), "time": str(now), "reason": "excess_over_base"})
-        except Exception as e:
-            print(f"[OPEN_ALIGN] SELL {code} 失败: {e}")
-    # ② 缺口按优先级买满，现金不够就停
-    # 2026-09-28 对齐专项：买单现金 = max(实时重查, 期初可用 + 本轮已卖预计回款×0.999)。
-    # 卖单异步成交，立即重查 cash 可能尚未入账；只用期初现金会出现"卖得出却买不起"，
-    # 把对齐拖上好几天。若卖单最终被拒，透支买单会被柜台以 NoEnoughCash 拒掉（fail-closed，
-    # 次日对齐自愈）。
-    _proceeds = sum(_q2 * _p2 for _c2, _s2, _q2, _p2 in _placed_sells) * 0.999
-    if _placed_sells:
-        try:
-            _acct2 = _sdk_call("account", context.account)
-            _cv2 = getattr(_acct2, "cash", None)
-            _fresh = float(getattr(_cv2, "available", 0) or 0) if _cv2 is not None else 0.0
-        except Exception:
-            _fresh = 0.0
-        avail = max(_fresh, avail + _proceeds)
-        print(f"[OPEN_ALIGN] 买单现金口径: 期初 {avail - _proceeds:.0f} + 预计回款 {_proceeds:.0f}"
-              f" / 实时 {_fresh:.0f} → 取 {avail:.0f}")
-    _pri = {c: i for i, c in enumerate(OPEN_ALIGN_BUY_ORDER)}
-    buys.sort(key=lambda x: _pri.get(x[0], 999))
-    skipped = []
-    for code, sym, q in buys:
-        px = _px_of(code, sym)
-        if px <= 0:
-            skipped.append((code, q, "无价"))
-            _audit_write({"event": "open_align_skip", "code": code, "side": "BUY",
-                          "qty": q, "time": str(now), "reason": "no_price"})
-            continue
-        # 2026-09-15 阶段0-6（诊断D3旁注）：贴涨停买单=确定性拒单，跳过并留痕
-        if _limit_clamp_should_skip(context, code, sym, "BUY", q, px, now, "open_align"):
-            skipped.append((code, q, "贴板(近涨停)"))
-            continue
-        afford = int(avail / px) // 100 * 100
-        q = min(q, afford)
-        if q < 100:
-            skipped.append((code, q, f"现金不足(可用{avail:.0f})"))
-            continue
-        try:
-            write_order(str(now), code, "BUY", q, px, order_type="ALIGN")
-            _o = _sdk_call("order_volume_align_buy", _partial(
-                order_volume, symbol=sym, volume=q, side=OrderSide_Buy,
-                order_type=OrderType_Market, position_effect=PositionEffect_Open))
-            _mark_pending_recon(context, code, sym, "BUY", q, px, _o)
-            avail -= q * px
-            n += 1
-            print(f"[OPEN_ALIGN] BUY {code} {q}股@{px:.3f}（补缺口到目标 {_base_map.get(code, getattr(context, f'_base_ref_{code}', 0))}，余现金 {avail:.0f}）")
-            _audit_write({"event": "open_align", "code": code, "side": "BUY", "qty": q,
-                          "price": round(px, 4), "time": str(now), "reason": "shortfall_vs_base"})
-        except Exception as e:
-            print(f"[OPEN_ALIGN] BUY {code} 失败: {e}")
-    if skipped:
-        print(f"[OPEN_ALIGN] 未补满: {skipped}")
-    print(f"[OPEN_ALIGN] 完成：下单 {n} 笔（卖 {len(sells)} / 买 {len(buys) - len(skipped)}）")
-    return n
-
-
-def _s1_mode_on() -> bool:
-    """S1 总闸（读 PARAMS；缺键 fail-safe 回退 False=旧引擎，与 T2 接线测试同口径）。"""
-    return bool(PARAMS.get("s1_mode_enabled", False))
-
-
-def _legacy_engine_allowed() -> bool:
-    """**旧镜像引擎总闸**（2026-10-12 owner 选 C 时新增）。
-
-    为什么必须有：原先两个闸都是 `(not _s1_mode_on()) or <开关>` —— 语义是"**S1 关掉 =
-    整体回退旧引擎**"。于是想"关 S1 但不要旧引擎"时**做不到**：那两个开关的语义是
-    "S1 **on** 时强制恢复（调试用）"，没有"off 时强制挂起"的入口。
-
-    现在：本总闸为 False ⇒ **无论 S1 开关如何**，镜像对齐 / TAIL / 旧镜像做T引擎一律挂起。
-    缺键默认 **True** ⇒ 保持历史语义（关 S1 即回退旧引擎），不影响既有配置与测试。
-    """
-    return bool(PARAMS.get("legacy_engine_enabled", True))
-
-
-def _s1_open_align_allowed() -> bool:
-    """S1 接管后镜像对齐默认挂起（否则镜像逻辑与 S1 调仓打架）。"""
-    return _legacy_engine_allowed() and (
-        (not _s1_mode_on()) or bool(PARAMS.get("s1_open_align_enabled", False)))
-
-
-def _s1_legacy_active() -> bool:
-    """旧镜像做T引擎（BASE 建仓/信号/卖出门链，含 TAIL 尾盘归位）是否放行。"""
-    return _legacy_engine_allowed() and (
-        (not _s1_mode_on()) or bool(PARAMS.get("s1_legacy_engine_enabled", False)))
-
-
-class _S1GmGateway:
-    """掘金下单 Gateway（仅 MODE_LIVE 实例化）。
-
-    ⚠️ 类名带 `_S1` 是历史命名（原为 S1 执行器而建）；**2026-10-12 S1 退役后由弱转强共用**
-    （`_ws_try_buy` / `_ws_try_sell` / `_ws_try_morning_sell`）⇒ **不要因为"名字里有 S1"就删它**。
-
-    下单风格沿用 gm_main 既有惯例：市价单（GM 自带涨跌停保护价）、先 write_order
-    落 order 事件（否则 on_order_status 孤儿闸丢成交）、_mark_pending_recon 待对账。
-    picks 标的**不限于 STOCKS 池**（S1 卫生宇宙远宽于做T池），故取价走 current()
-    实时快照，不依赖 subscribe。
-    """
-
-    def __init__(self, context):
-        self.context = context
-
-    def get_cash(self) -> float:
-        try:
-            _acct = _sdk_call("s1_cash", self.context.account)
-            _c = getattr(_acct, "cash", None)
-            if _c is not None:
-                _c = _c() if callable(_c) else _c
-                if isinstance(_c, dict):
-                    return float(_c.get("available") or _c.get("available_cash")
-                                 or _c.get("cash") or _c.get("total") or 0)
-                return float(_c or 0)
-        except Exception as _e:
-            print(f"[S1] ⚠️ get_cash 失败（按 0，买单将全部截断）: {_e}")
-        return 0.0
-
-    def get_positions(self) -> dict:
-        out = {}
-        try:
-            _acct = _sdk_call("s1_account", self.context.account)
-            for _p in (_acct.positions() or []):
-                _sym = (_p.get("symbol") if isinstance(_p, dict)
-                        else getattr(_p, "symbol", None))
-                if not _sym:
-                    continue
-                _vol = int((_p.get("volume") if isinstance(_p, dict)
-                            else getattr(_p, "volume", 0)) or 0)
-                if _vol <= 0:
-                    continue
-                _av = int((_p.get("available") if isinstance(_p, dict)
-                           else getattr(_p, "available", 0)) or 0)
-                _cost = float((_p.get("vwap") if isinstance(_p, dict)
-                               else getattr(_p, "vwap", 0)) or 0)
-                out[_raw_code(str(_sym))] = {"qty": _vol, "available": _av, "cost": _cost}
-        except Exception as _e:
-            print(f"[S1] ⚠️ get_positions 失败（按空持仓——清仓计划不生成，仅执行 picks）: {_e}")
-        return out
-
-    def get_open_price(self, code: str):
-        """当日开盘价：current() 快照（含 today open）；失败回退 history_n 60s 首根。"""
-        sym = _code_to_gm(code)
-        now = self.context.now if hasattr(self.context, "now") else datetime.now()
-        try:
-            _cur = _sdk_call("s1_current", _partial(current, symbols=sym))
-            if _cur:
-                _c0 = _cur[0] if isinstance(_cur, (list, tuple)) else _cur
-                _op = float((_c0.get("open") if isinstance(_c0, dict)
-                             else getattr(_c0, "open", 0)) or 0)
-                if _op > 0:
-                    return _op
-        except Exception:
-            pass
-        try:
-            _his = _sdk_call("s1_open_bar", _partial(
-                history_n, symbol=sym, frequency="60s", count=8,
-                end_time=now, fields="symbol,eob,open",
-                fill_missing="Previous", adjust=ADJUST_PREV))
-            _today = str(now.date())
-            for _b in (_his or []):
-                _eob = str((_b.get("eob") if isinstance(_b, dict)
-                            else getattr(_b, "eob", "")) or "")
-                _op = float((_b.get("open") if isinstance(_b, dict)
-                             else getattr(_b, "open", 0)) or 0)
-                if _eob[:10] == _today and _op > 0:
-                    return _op
-        except Exception:
-            pass
-        return None
-
-    def place_order(self, code: str, side: str, qty: int, price) -> dict:
-        sym = _code_to_gm(code)
-        now = self.context.now if hasattr(self.context, "now") else datetime.now()
-        px = float(price or 0)
-        # ① 先落 order 事件（孤儿闸登记，6a96829c 前科）——order_type="S1" 供下游区分账本
-        # ⚠️ 2026-10-12：S1 已退役，但**这个类与这个标签是弱转强在共用的**（`_ws_try_buy/sell/
-        # morning_sell` 都走 `_S1GmGateway`），且 `order_type="S1"` 被孤儿闸 `_strategy_ordered_today`
-        # 读取 ⇒ **改名必须连带动孤儿闸**，别只为"命名干净"单独改（漏一处 ⇒ 孤儿成交认不出）。
-        # 同理 `s1_limit_slippage_bp` 也是共用参数（0=市价单）。
-        write_order(str(now), code, side, int(qty), px, order_type="S1")
-        _slip_bp = int(PARAMS.get("s1_limit_slippage_bp", 0) or 0)
-        if _slip_bp > 0 and px > 0:
-            # 限价口径：开盘价±滑点容忍（买+/卖-），0 则沿用 gm_main 市价风格
-            _lp = px * (1 + _slip_bp / 1e4) if side == "BUY" else px * (1 - _slip_bp / 1e4)
-            _kw = dict(order_type=OrderType_Limit, price=round(_lp, 2))
-        else:
-            _kw = dict(order_type=OrderType_Market)
-        _o = _sdk_call(f"s1_order_{side.lower()}", _partial(
-            order_volume, symbol=sym, volume=int(qty),
-            side=OrderSide_Buy if side == "BUY" else OrderSide_Sell,
-            position_effect=(PositionEffect_Open if side == "BUY" else PositionEffect_Close),
-            **_kw))
-        _mark_pending_recon(self.context, code, sym, side, int(qty), px, _o)
-        # 同步返回里直接带拒单（status∈4/5/6/8/12）的情形与既有口径对齐
-        _oid, _rej = None, None
-        for _od in (_o if isinstance(_o, list) else [_o]):
-            if isinstance(_od, dict):
-                _oid = _oid or (_od.get("id") or _od.get("order_id"))
-                if _rej is None and int(_od.get("status") or 0) in _OGR_REJ_STATUS:
-                    _rej = f"status={_od.get('status')}"
-        if _rej:
-            return {"order_id": _oid, "status": "rejected", "filled_qty": 0,
-                    "filled_price": None, "message": f"同步回报拒单 {_rej}"}
-        return {"order_id": _oid, "status": "submitted", "filled_qty": 0,
-                "filled_price": None, "message": ""}
-
-    def poll_order(self, order_id, code: str) -> dict:
-        """get_orders 轮询终态（掘金拒单/成交异步，与 _poll_pending_recon 同款渠道）。"""
-        sym = _code_to_gm(code)
-        try:
-            _orders = _sdk_call("s1_get_orders", _partial(get_orders, symbol=sym))
-        except TypeError:
-            _orders = _sdk_call("s1_get_orders_all", get_orders)
-        for _od in (_orders or []):
-            try:
-                if str(_od.get("id") or _od.get("order_id") or "") != str(order_id):
-                    continue
-                _st = int(_od.get("status") or 0)
-                _fq = int(_od.get("filled_volume") or _od.get("volume") or 0)
-                _fp = float(_od.get("filled_vwap") or _od.get("vwap")
-                            or _od.get("price") or 0) or None
-                if _st == 3:
-                    return {"order_id": order_id, "status": "filled",
-                            "filled_qty": _fq, "filled_price": _fp, "message": ""}
-                if _st in _OGR_REJ_STATUS:
-                    return {"order_id": order_id, "status": "rejected",
-                            "filled_qty": 0, "filled_price": None,
-                            "message": f"status={_st}"}
-                if _fq > 0:
-                    return {"order_id": order_id, "status": "partial",
-                            "filled_qty": _fq, "filled_price": _fp, "message": f"status={_st}"}
-                return {"order_id": order_id, "status": "submitted",
-                        "filled_qty": 0, "filled_price": None, "message": f"status={_st}"}
-            except Exception:
-                continue
-        return {"order_id": order_id, "status": "submitted", "filled_qty": 0,
-                "filled_price": None, "message": "order_not_found"}
-
-
-# ═══════════════════════════════════════════════════════════════════
-# 弱转强选股策略 · 10:00 买侧（2026-10-10 施工，WS2/WS3）
-# ═══════════════════════════════════════════════════════════════════
-def _ws_mode_on() -> bool:
-    """弱转强 10:00 买侧总闸（读 PARAMS；缺键 fail-safe False=不下单）。"""
-    return bool(PARAMS.get("weak_strong_paper_enabled", False))
-
-
-def _load_ws_poll():
-    """按绝对路径加载 core/weak_strong_poll.py（core 不入 sys.path，与 OGR 同款）。"""
-    import importlib.util as _ilu
-    _root = os.environ.get("SUPERTRADER_ROOT", r"E:\superTrader")
-    _p = os.path.join(_root, "core", "weak_strong_poll.py")
-    if not os.path.exists(_p):
-        return None
-    _spec = _ilu.spec_from_file_location("weak_strong_poll", _p)
-    _m = _ilu.module_from_spec(_spec)
-    _spec.loader.exec_module(_m)
-    return _m
-
-
-def _ws_prepare(context, now, today):
-    """盘前弱转强超跌候选预筛（每日一次，09:31 触发；取数在 10:00 之前完成）。"""
-    _wsp = _load_ws_poll()
-    if _wsp is None:
-        return
-    _top = int(PARAMS.get("weak_strong_board_top_n", 5))
-    try:
-        _cand = _wsp.premarket_candidates(_top, str(today))
-    except Exception as _e:
-        print(f"[WS] 盘前预筛失败（fail-closed，当日不下单）: {_e}")
-        _audit_write({"event": "ws_prepare_fail", "date": str(today),
-                      "error": str(_e)[:200]})
-        _cand = {}
-    context._ws_candidates = _cand
-    print(f"[WS] 盘前超跌候选 {len(_cand)} 只（前{_top}板块内 且 昨收<MA20）")
-    _audit_write({"event": "ws_prepare", "date": str(today), "candidates": len(_cand)})
-
-
-def _ws_10am_bars_from_df(df, codes, now):
-    """GM history(df=True) → {code: 10:00棒的 low/close/amount/volume}。防御式。"""
-    out = {}
-    if df is None or len(df) == 0:
-        return out
-    try:
-        df = df.copy()
-        df["_code"] = df["symbol"].astype(str).str.split(".").str[-1]
-        df["_hm"] = pd.to_datetime(df["eob"]).dt.strftime("%H:%M:%S")
-        df = df[df["_hm"] == "10:00:00"]
-        for c in codes:
-            _row = df[df["_code"] == c]
-            if _row.empty:
-                continue
-            _r = _row.iloc[0]
-            try:
-                low = float(_r.get("low") or 0)
-                close = float(_r.get("close") or 0)
-                amount = float(_r.get("amount") or 0)
-                volume = float(_r.get("volume") or 0)
-            except Exception:
-                continue
-            if low > 0 and close > 0:
-                out[c] = {"low": low, "close": close, "amount": amount, "volume": volume}
-    except Exception:
-        pass
-    return out
-
-
-def _ws_try_buy(context, now) -> int:
-    """10:00 弱转强买入（每日一次）。返回已下单腿数。fail-closed：候选/棒缺失当日不下单。"""
-    import weak_strong_executor as _wse
-    _cand = dict(getattr(context, "_ws_candidates", None) or {})
-    if not _cand:
-        _audit_write({"event": "ws_skip", "reason": "no_candidates", "time": str(now)})
-        return 0
-    _wsp = _load_ws_poll()
-    if _wsp is None:
-        return 0
-    _pc, _ma = _wsp.split_into_prev_close_ma20(_cand)
-    _board = {c: v.get("board", "") for c, v in _cand.items()}
-    _codes = sorted(_cand)
-    _syms = [_code_to_gm(c) for c in _codes]
-    _start = now.strftime("%Y-%m-%d 09:25:00")
-    _end = now.strftime("%Y-%m-%d 10:01:00")
-    try:
-        _df = _sdk_call("ws_10am_bars", _partial(
-            history, symbol=_syms, frequency="1800s", start_time=_start, end_time=_end,
-            fields="symbol,eob,open,high,low,close,volume,amount",
-            adjust=ADJUST_PREV, df=True))
-    except Exception as _e:
-        print(f"[WS] 10:00 棒取数失败（fail-closed，当日不下单）: {_e}")
-        _audit_write({"event": "ws_fetch_fail", "error": str(_e)[:200], "time": str(now)})
-        return 0
-    _bars = _ws_10am_bars_from_df(_df, _codes, now)
-    if not _bars:
-        _audit_write({"event": "ws_skip", "reason": "no_bars", "time": str(now)})
-        return 0
-    _root = os.environ.get("SUPERTRADER_ROOT", r"E:\superTrader")
-    _book = os.path.join(_root, "t_io", "state", "weak_strong_book")
-    _params = {
-        "top_n": int(PARAMS.get("weak_strong_top_n", 4)),
-        "single_budget": float(PARAMS.get("weak_strong_single_budget", 100000.0)),
-        "daily_budget": float(PARAMS.get("weak_strong_daily_budget", 400000.0)),
-        "cash_headroom": float(PARAMS.get("weak_strong_cash_headroom", 0.95)),
-        "order_poll_rounds": int(PARAMS.get("weak_strong_order_poll_rounds", 3)),
-        "order_poll_sleep_sec": float(PARAMS.get("weak_strong_order_poll_sleep_sec", 2.0)),
-    }
-    try:
-        _res = _wse.run_buy_exec(_S1GmGateway(context), str(now.date()),
-                                 prev_close=_pc, ma20=_ma, bars=_bars, board=_board,
-                                 allowed_boards=None, book_dir=_book, params=_params,
-                                 dry_run=False, log=print)
-        _sm = (_res or {}).get("summary") or {}
-        _audit_write({"event": "ws_buy_exec", "date": str(now.date()),
-                      "candidates": _sm.get("candidates"), "buys": _sm.get("buys_placed"),
-                      "rejected": _sm.get("rejected_count"),
-                      "picks": [p["code"] for p in (_res or {}).get("picks") or []]})
-        print(f"[WS] 10:00 买侧执行: {json.dumps(_sm, ensure_ascii=False)}")
-        return int(_sm.get("buys_placed") or 0)
-    except Exception as _e:
-        print(f"[WS] 买侧执行失败（不阻断主循环）: {_e}")
-        try:
-            write_risk(str(now), "ws_exec_error", f"弱转强执行异常: {str(_e)[:200]}", code="")
-        except Exception:
-            pass
-        return 0
-
-
-def _ws_sell_codes() -> list:
-    """当前弱转强账本在持仓的 6 位码列表（空=无需卖侧检查）。"""
-    try:
-        import weak_strong_executor as _wse
-        _root = os.environ.get("SUPERTRADER_ROOT", r"E:\superTrader")
-        _book = os.path.join(_root, "t_io", "state", "weak_strong_book")
-        return sorted((_wse.load_book(_book).get("open") or {}).keys())
-    except Exception:
-        return []
-
-
-def _ws_latest_close_from_df(df, codes, now):
-    """GM history(df=True) → {code: 当日最新一根 bar 的 close}。防御式。"""
-    out = {}
-    if df is None or len(df) == 0:
-        return out
-    try:
-        df = df.copy()
-        df["_code"] = df["symbol"].astype(str).str.split(".").str[-1]
-        df = df.sort_values("eob")
-        for c in codes:
-            _row = df[df["_code"] == c]
-            if _row.empty:
-                continue
-            _r = _row.iloc[-1]
-            try:
-                close = float(_r.get("close") or 0)
-            except Exception:
-                continue
-            if close > 0:
-                out[c] = close
-    except Exception:
-        pass
-    return out
-
-
-def _ws_sell_time():
-    """卖侧检查时点（dtime）。"""
-    _hhmm = int(PARAMS.get("weak_strong_sell_time_hhmm", 1450))
-    return dtime(_hhmm // 100, _hhmm % 100)
-
-
-def _ws_try_sell(context, now, today) -> int:
-    """14:50 弱转强卖侧（每日一次）：SL5只深 close 止损 + 到期平仓。返回已下单腿数。"""
-    import weak_strong_executor as _wse
-    _codes = _ws_sell_codes()
-    if not _codes:
-        return 0
-    _syms = [_code_to_gm(c) for c in _codes]
-    _start = now.strftime("%Y-%m-%d 09:25:00")
-    _end = now.strftime("%Y-%m-%d %H:%M:%S")
-    try:
-        _df = _sdk_call("ws_sell_bars", _partial(
-            history, symbol=_syms, frequency="60s", start_time=_start, end_time=_end,
-            fields="symbol,eob,close", adjust=ADJUST_PREV, df=True))
-    except Exception as _e:
-        print(f"[WS] 卖侧现价取数失败（fail-closed，当日不卖）: {_e}")
-        _audit_write({"event": "ws_sell_fetch_fail", "error": str(_e)[:200], "time": str(now)})
-        return 0
-    _prices = _ws_latest_close_from_df(_df, _codes, now)
-    if not _prices:
-        _audit_write({"event": "ws_sell_skip", "reason": "no_prices", "time": str(now)})
-        return 0
-    _root = os.environ.get("SUPERTRADER_ROOT", r"E:\superTrader")
-    _book = os.path.join(_root, "t_io", "state", "weak_strong_book")
-    _params = {
-        "hold_days": int(PARAMS.get("weak_strong_hold_days", 5)),
-        "stop_pct": float(PARAMS.get("weak_strong_stop_pct", 0.05)),
-        "stop_deep_dev20": float(PARAMS.get("weak_strong_stop_deep_dev20", -0.07)),
-        "order_poll_rounds": int(PARAMS.get("weak_strong_order_poll_rounds", 3)),
-        "order_poll_sleep_sec": float(PARAMS.get("weak_strong_order_poll_sleep_sec", 2.0)),
-    }
-    try:
-        _res = _wse.run_sell_exec(_S1GmGateway(context), str(today), _prices,
-                                  book_dir=_book, params=_params, dry_run=False, log=print)
-        _sm = (_res or {}).get("summary") or {}
-        _audit_write({"event": "ws_sell_exec", "date": str(today),
-                      "sells": _sm.get("sells_placed"), "stops": _sm.get("stop_count"),
-                      "expired": _sm.get("expired_count"),
-                      "open_after": _sm.get("open_after"),
-                      "rejected": _sm.get("rejected_count")})
-        print(f"[WS] 卖侧执行: {json.dumps(_sm, ensure_ascii=False)}")
-        return int(_sm.get("sells_placed") or 0)
-    except Exception as _e:
-        print(f"[WS] 卖侧执行失败（不阻断主循环）: {_e}")
-        try:
-            write_risk(str(now), "ws_sell_error", f"弱转强卖侧异常: {str(_e)[:200]}", code="")
-        except Exception:
-            pass
-        return 0
-
-
-def _ws_morning_high_from_df(df, codes, now):
-    """GM history(df=True) → {code: 早盘(09:30~当前)最高价}。防御式，取 high 列最大值。"""
-    out = {}
-    if df is None or len(df) == 0:
-        return out
-    try:
-        df = df.copy()
-        df["_code"] = df["symbol"].astype(str).str.split(".").str[-1]
-        for c in codes:
-            _row = df[df["_code"] == c]
-            if _row.empty:
-                continue
-            try:
-                hi = float(_row["high"].max())
-            except Exception:
-                continue
-            if hi > 0:
-                out[c] = hi
-    except Exception:
-        pass
-    return out
-
-
-def _ws_morning_sell_time():
-    """早盘冲高卖检查时点（dtime）。"""
-    _hhmm = int(PARAMS.get("weak_strong_morning_sell_time_hhmm", 1000))
-    return dtime(_hhmm // 100, _hhmm % 100)
-
-
-def _ws_try_morning_sell(context, now, today) -> int:
-    """10:00 弱转强早盘冲高卖（每日一次，先于买侧）：D+1 持仓早盘冲 ≥ entry×(1+target) 就卖。
-
-    只卖 days_held==0（次日）持仓；更老持仓不动，交 14:50 止损/到期。与买侧同刻触发，
-    但钩子排在买侧之前，先卖回笼现金再买。
-    """
-    import weak_strong_executor as _wse
-    _codes = _ws_sell_codes()
-    if not _codes:
-        return 0
-    _syms = [_code_to_gm(c) for c in _codes]
-    _start = now.strftime("%Y-%m-%d 09:25:00")
-    _end = now.strftime("%Y-%m-%d %H:%M:%S")
-    try:
-        _df = _sdk_call("ws_morning_high_bars", _partial(
-            history, symbol=_syms, frequency="1800s", start_time=_start, end_time=_end,
-            fields="symbol,eob,high", adjust=ADJUST_PREV, df=True))
-    except Exception as _e:
-        print(f"[WS] 早盘最高价取数失败（fail-closed，当日不卖）: {_e}")
-        _audit_write({"event": "ws_morning_sell_fetch_fail", "error": str(_e)[:200], "time": str(now)})
-        return 0
-    _highs = _ws_morning_high_from_df(_df, _codes, now)
-    if not _highs:
-        _audit_write({"event": "ws_morning_sell_skip", "reason": "no_highs", "time": str(now)})
-        return 0
-    _root = os.environ.get("SUPERTRADER_ROOT", r"E:\superTrader")
-    _book = os.path.join(_root, "t_io", "state", "weak_strong_book")
-    _params = {
-        "pop_target_pct": float(PARAMS.get("weak_strong_pop_target_pct", 0.03)),
-        "order_poll_rounds": int(PARAMS.get("weak_strong_order_poll_rounds", 3)),
-        "order_poll_sleep_sec": float(PARAMS.get("weak_strong_order_poll_sleep_sec", 2.0)),
-    }
-    try:
-        _res = _wse.run_morning_sell_exec(_S1GmGateway(context), str(today), _highs,
-                                          book_dir=_book, params=_params, dry_run=False, log=print)
-        _sm = (_res or {}).get("summary") or {}
-        _audit_write({"event": "ws_morning_sell_exec", "date": str(today),
-                      "sells": _sm.get("sells_placed"), "pops": _sm.get("pop_count"),
-                      "open_after": _sm.get("open_after"),
-                      "rejected": _sm.get("rejected_count")})
-        print(f"[WS] 早盘冲高卖执行: {json.dumps(_sm, ensure_ascii=False)}")
-        return int(_sm.get("sells_placed") or 0)
-    except Exception as _e:
-        print(f"[WS] 早盘冲高卖执行失败（不阻断主循环）: {_e}")
-        try:
-            write_risk(str(now), "ws_morning_sell_error", f"弱转强早盘卖侧异常: {str(_e)[:200]}", code="")
-        except Exception:
-            pass
-        return 0
-
-
-MIN_BARS = 25
-T1_AUTO_UNLOCK_HOUR = 9
-T1_AUTO_UNLOCK_MINUTE = 31
-# 镜像持仓总市值约 123,000（500×100.6 + 1400×3.9 + 500×37.6 + 800×50.9，按2026-07-28收盘）
-# 按市值×1.5 配置模拟盘资金（留足做T现金水位）
+# 历史常量：模拟盘初始资金（仅作「账户 cash 读不到时」的兜底估值；不再参与任何预算计算——
+# 旧引擎的预算表/个股预算已随其删除）。
 INITIAL_CASH = 150000
-MAX_BASE_RETRY = 3
 
 
-# ═══════════════════════════════════════════
-# T4 卖出通道仲裁器
-# ═══════════════════════════════════════════
-# 优先级: P1 PANIC > P2 TRAIL > P3 TREND_EXIT > P4 TARGET > P5 SELL_HIGH > P6 TAIL
-# 当前: P1/P2/P5/P6 四通道，P3/P4 为 Phase B 预留
-#   - P1/P2 豁免 sizer 分批与日卖出计数（止血/保护不受节流）
-#   - P5/P6 占用计数
 def _raw_code(symbol: str) -> str:
     return symbol.replace("SHSE.", "").replace("SZSE.", "").replace("BJ.", "")
-
-
-def _total_equity(context, available_cash: float) -> float:
-    """WP-E2: 总权益 = 可用现金 + Σ(全部持仓市值)。
-
-    持仓复用 manual_position（_get_holding 的第一优先数据源，含即时缓存与对账结果），
-    定价取 bar_cache 最新收盘价；某票 qty>0 但无 bar 价格数据时退化为成本价估值
-    （mark-to-cost——开盘价前/数据缺失场景不用 0 低估、也不 fail-closed 误杀全天）。"""
-    total = float(available_cash or 0)
-    for sym, mp in (getattr(context, "manual_position", None) or {}).items():
-        try:
-            q = int(mp.get("qty", 0) or 0)
-        except Exception:
-            continue
-        if q <= 0:
-            continue
-        px = 0.0
-        rows = (getattr(context, "bar_cache", None) or {}).get(sym)
-        if rows:
-            try:
-                px = float(rows[-1].get("close", 0) or 0)
-            except Exception:
-                px = 0.0
-        if px <= 0:
-            px = float(mp.get("cost", 0) or 0)  # 退化：成本价估值
-        total += q * px
-    return total
-
-
-def _stock_budget_cap(context, code, cp: float, total_eq: float):
-    """WP-E2/E3: 个股预算与最大仓位。
-
-    stock_budget = total_equity × (1 − cash_reserve_pct) / max_concurrent_positions
-    （WP-E3 槽位制：同时持仓不超 4 支，预算按 4 槽分解；TODO(PhaseD) 趋势加权语义保留）
-    max_pos_shares = floor(stock_budget / cp / 100) × 100
-    返回 (stock_budget, max_pos_shares)。"""
-    reserve = float(PARAMS.get("cash_reserve_pct", 0.20))
-    n = max(int(PARAMS.get("max_concurrent_positions", 4)), 1)
-    budget = float(total_eq or 0) * (1 - reserve) / n
-    mps = int(budget / cp / 100) * 100 if cp > 0 else 0
-    return budget, mps
-
-
-def _held_codes(context):
-    """WP-E3: 当前持仓(qty>0)代码列表——槽位占用。
-    数据源与 _total_equity 一致（context.manual_position）。"""
-    codes = []
-    for sym, mp in (getattr(context, "manual_position", None) or {}).items():
-        try:
-            if int(mp.get("qty", 0) or 0) > 0:
-                codes.append(_raw_code(sym))
-        except Exception:
-            continue
-    return codes
-
-
-def _held_position_count(context) -> int:
-    """WP-E3: 当前占用槽位数（qty>0 的票数）。"""
-    return len(_held_codes(context))
-
-
-def _slot_full(context) -> bool:
-    """WP-E3: 槽位是否已满（≥ max_concurrent_positions）。"""
-    return _held_position_count(context) >= int(PARAMS.get("max_concurrent_positions", 4))
-
-
-def _emit_slot_full(context, code, now, where: str) -> bool:
-    """WP-E3: slot_full 事件（每票每日去重，O-03 风格）。True=首次已写事件。
-
-    where="buy"  → risk kind=slot_full（on_bar 全新建仓信号被挡）；
-    where="base" → risk kind=base_deferred、detail 含 reason=slot_full
-                   （底仓建仓块复用既有延迟机制，下一根 bar 自然重试）。
-    两处统一写 audit event=slot_full（where 字段区分）。"""
-    _key = f'_slot_full_{where}_{code}'
-    _today = now.strftime("%Y-%m-%d")
-    if getattr(context, _key, '') == _today:
-        return False
-    setattr(context, _key, _today)
-    held = _held_codes(context)
-    mx = int(PARAMS.get("max_concurrent_positions", 4))
-    _base = f"held_count={len(held)}/{mx} held_codes={','.join(held)} candidate={code}"
-    try:
-        if where == "base":
-            write_risk(str(now), "base_deferred", f"reason=slot_full {_base}", code=code)
-        else:
-            write_risk(str(now), "slot_full", _base, code=code)
-    except Exception:
-        pass
-    _audit_write({"event": "slot_full", "code": code, "where": where,
-                  "held_count": len(held), "max_slots": mx,
-                  "held_codes": held, "time": str(now)})
-    print(f"[{now:%H:%M:%S}] {where.upper()} {code} 槽位满({len(held)}/{mx})→等待 held={held}")
-    return True
-
-
-def _clear_signal_mute_keys(context, code: str):
-    """WP-B15: 持仓变化（成交/对账/拒单回滚）→ 解除信号 mute 与地板去重键。
-    键含日期串，置空即可——同状态重新被拦会再次置位，信息不丢。"""
-    try:
-        _keys = [k for k in context.__dict__
-                 if k.startswith(f'_sig_muted_{code}_') or k.startswith(f'_floor_logged_{code}_')]
-        for _k in _keys:
-            context.__dict__[_k] = ''
-    except Exception:
-        pass
-
-
-def _check_max_pos_cap(context, code, now, pos_qty: int, base_ref: int,
-                       max_pos_shares: int, budget: float, total_eq: float,
-                       force: bool = False, action: str = "", t_headroom: int = 0) -> bool:
-    """WP-E2: 个股最大仓位闸。True=拦截（调用方 continue）。
-
-    触发条件：pos_qty>0 且 pos_qty >= max(max_pos_shares, base_ref + t_headroom)
-    （预算帽与底仓取高——永不在底仓下方收口，不逼卖出，与 target_t 语义一致）。
-    t_headroom（2026-08-31）：做T买入(BUY_LOW/ADD_POS)专用的一档T余量，
-    否则持仓=底仓即恒到顶、做T加仓永远被拦（run8 实证）。
-    force=True 用于 sizer 返回 0 的确认分支（reason=sizer_zero_at_cap）。
-    拦截时写 risk 事件 max_pos_cap + audit，每票每日去重（O-03 风格）。"""
-    ceiling = max(int(max_pos_shares or 0), int(base_ref or 0) + int(t_headroom or 0))
-    if pos_qty <= 0 or (not force and pos_qty < ceiling):
-        return False
-    # WP-B15: 到顶拦截 → 每次拦截都置位同源信号 mute（事件层去重；决策/执行不受影响）。
-    # 置于去重块之外——成交清键后再到顶时，去重块不执行但 mute 必须重新生效（防复发刷屏）
-    _today = now.strftime("%Y-%m-%d")
-    if action:
-        setattr(context, f'_sig_muted_{code}_{action}', _today)
-    _key = f'_max_pos_cap_{code}'
-    if getattr(context, _key, '') != _today:
-        setattr(context, _key, _today)
-        _weight = (budget / total_eq) if total_eq > 0 else 0
-        _reason = "sizer_zero_at_cap" if force else "pos_at_cap"
-        _detail = (f"budget={budget:.0f} equity={total_eq:.0f} weight={_weight:.1%} "
-                   f"max_pos_shares={max_pos_shares} base_ref={base_ref} pos_qty={pos_qty} "
-                   f"reason={_reason}")
-        try:
-            write_risk(str(now), "max_pos_cap", _detail, code=code)
-        except Exception:
-            pass
-        _audit_write({"event": "max_pos_cap", "code": code, "budget": round(budget, 2),
-                      "equity": round(total_eq, 2), "weight": round(_weight, 4),
-                      "max_pos_shares": max_pos_shares, "base_ref": base_ref,
-                      "pos_qty": pos_qty, "reason": _reason, "time": str(now)})
-        print(f"[{now:%H:%M:%S}] BUY {code} 个股仓位到顶拦截: {_detail}")
-    return True
-
-
-def _project_buy_qty(context, code, holding, sig, threshold, pos_qty):
-    """预估确认买入量（仅请求文件展示用；下单量以下单块 sizer 重算为准）。
-    pos_qty>0 → sizer.calc_buy_qty(带 target_t=底仓+T余量)，异常/0 回退 300。
-    注：调用点（BUY 块）pos_qty 恒 >0（on_bar 1498 已守卫），无持仓分支不可达。"""
-    try:
-        _base_ref = getattr(context, f'_base_ref_{code}', 0) or pos_qty
-        _t_pct = float(context.engine._get_params(code).get("stock_qty_base_pct", 0.3) or 0.3)
-        _t_head = max(100, int(_base_ref * _t_pct / 100) * 100)
-        _target_t = max(pos_qty, _base_ref + _t_head)
-        _q = context.sizer.calc_buy_qty(code, dict(holding, target_t=_target_t),
-                                        getattr(sig, "score", 0) or 0, threshold)
-        return int(_q) if _q and int(_q) > 0 else 300
-    except Exception:
-        return 300
-
-
-def _buy_confirm_gate(context, code, now, *, action, price, qty_proj, pos_qty,
-                      reasons, needs_confirm, kind=None):
-    """人工确认闸（2026-08-30 建仓/加仓/底仓回补人工把关）。on_bar 内绝不阻塞。
-    返回 "allow" | "pending" | "rejected_today"。
-
-    - 主开关关闭或非 MODE_LIVE（回测）→ "allow"（零文件 I/O，防回测卡死）
-    - 当日已拒绝 → "rejected_today"（不再弹、不再写请求）
-    - 无 pending：needs_confirm=False（做T回补路径）→ "allow"；否则发请求 → "pending"
-    - 有 pending：action 不匹配（同标的有另一块请求未决）→ "pending" 等待不消费；
-      action 匹配 → 读 BUY_DECISION.json：
-        confirm → 清请求 → "allow"；reject → 记当日拒绝 → "rejected_today"；
-        无回复 → "pending"（一直挂起直到用户响应）。"""
-    if not PARAMS.get("human_confirm_buy_enabled", True) or context.mode != MODE_LIVE:
-        return "allow"
-    if code in context._buy_confirm_rejected:
-        return "rejected_today"
-
-    def _persist():
-        try:
-            write_buy_pending({"date": f"{now:%Y-%m-%d}",
-                               "updated_at": f"{now:%Y-%m-%d %H:%M:%S}",
-                               "rejected_today": sorted(context._buy_confirm_rejected),
-                               "pending": context._buy_confirm_pending})
-        except Exception:
-            pass
-
-    if code not in context._buy_confirm_pending:
-        if not needs_confirm:
-            return "allow"
-        _req = {
-            "request_id": f"{code}_{action}_{now:%Y%m%d%H%M%S}",
-            "code": code,
-            "name": STOCK_NAMES.get(code, code),
-            "action": action,
-            "kind": kind or ("build" if pos_qty <= 0 else "add"),
-            "side": "BUY",
-            "qty": int(qty_proj or 0),
-            "price": round(float(price), 3) if price else None,
-            "pos_qty": int(pos_qty or 0),
-            "score": 0,
-            "reasons": [str(r) for r in (reasons or [])],
-            "request_ts": now.timestamp(),
-        }
-        context._buy_confirm_pending[code] = _req
-        _persist()
-        try:
-            write_confirm(str(now), code, "request",
-                          detail=(f"{_req['action']} {_req['qty']}@{_req['price']} "
-                                  f"pos={_req['pos_qty']} kind={_req['kind']}"),
-                          request_id=_req["request_id"], action=_req["action"],
-                          qty=_req["qty"], kind=_req["kind"])
-        except Exception:
-            pass
-        print(f"[{now:%H:%M:%S}] BUY {code} 待人工确认: {_req['action']} "
-              f"{_req['qty']}@{_req['price']} pos_qty={pos_qty} kind={_req['kind']}")
-        return "pending"
-
-    _pend = context._buy_confirm_pending[code]
-    if _pend.get("action") != action:
-        return "pending"
-    try:
-        _d = (read_buy_decision().get("decisions") or {}).get(code)
-    except Exception:
-        _d = None
-    if _d and _d.get("request_id") == _pend.get("request_id"):
-        if _d.get("decision") == "confirm":
-            context._buy_confirm_pending.pop(code, None)
-            _persist()
-            try:
-                write_confirm(str(now), code, "approved",
-                              detail=f"{action} qty={_pend.get('qty')}@{_pend.get('price')}",
-                              request_id=_pend.get("request_id"))
-            except Exception:
-                pass
-            print(f"[{now:%H:%M:%S}] BUY {code} 用户确认放行: {action}")
-            return "allow"
-        if _d.get("decision") == "reject":
-            context._buy_confirm_pending.pop(code, None)
-            context._buy_confirm_rejected.add(code)
-            _persist()
-            try:
-                write_confirm(str(now), code, "rejected",
-                              detail=f"{action} 用户拒绝，当日不再提示",
-                              request_id=_pend.get("request_id"))
-            except Exception:
-                pass
-            print(f"[{now:%H:%M:%S}] BUY {code} 用户拒绝，当日不再提示: {action}")
-            return "rejected_today"
-    return "pending"
-
-
-# P0-4(2026-09-01): confirm 后未执行超时阈值——具体数值留周六(09-05)拍板，先用占位 300s
-BUY_CONFIRM_EXEC_TIMEOUT_SEC = 300
-
-
-def _scan_pending_confirm(context, now):
-    """P0-4 日内巡检：BUY_DECISION 已 confirm 但 pending 未被消费（信号未再触发 → gate 未调用）
-    → 超时后作废并留痕 approved_not_executed + 告警，杜绝永久悬空。on_bar 每 bar 调用。"""
-    _pend_map = getattr(context, "_buy_confirm_pending", None)
-    if not _pend_map:
-        return
-    try:
-        _decs = (read_buy_decision().get("decisions") or {})
-    except Exception:
-        return
-    for code, pend in list(_pend_map.items()):
-        _d = _decs.get(code)
-        if not (_d and _d.get("request_id") == pend.get("request_id")
-                and _d.get("decision") == "confirm"):
-            continue
-        try:
-            _elapsed = now.timestamp() - float(pend.get("request_ts") or 0)
-        except Exception:
-            _elapsed = 0
-        if _elapsed < BUY_CONFIRM_EXEC_TIMEOUT_SEC:
-            continue
-        _pend_map.pop(code, None)
-        try:
-            write_confirm(str(now), code, "approved_not_executed",
-                          detail=(f"confirm 到达但超时({BUY_CONFIRM_EXEC_TIMEOUT_SEC}s)未执行，"
-                                  f"信号未再触发 request_ts={pend.get('request_ts')}"),
-                          request_id=pend.get("request_id"), action=pend.get("action"))
-        except Exception:
-            pass
-        try:
-            write_buy_pending({"date": f"{now:%Y-%m-%d}",
-                               "updated_at": f"{now:%Y-%m-%d %H:%M:%S}",
-                               "rejected_today": sorted(getattr(context, "_buy_confirm_rejected", set())),
-                               "pending": _pend_map})
-        except Exception:
-            pass
-        print(f"[{now:%H:%M:%S}] BUY {code} 确认超时未执行（信号未再触发），已作废 approved_not_executed")
-
-
-# 2026-09-15 阶段0-3（诊断D3）：BUY_PENDING 盘中超时看门狗默认 20 分钟。
-# 可在 config/params.py 的 PARAMS 里加 "buy_pending_timeout_min": <分钟> 覆盖；
-# 跨日作废已有（init F3 块）、confirm 到达未执行已有（上方 P0-4），本项补"无人确认挂起"第三种失控。
-BUY_PENDING_TIMEOUT_MIN = float(PARAMS.get("buy_pending_timeout_min", 20) or 20)
-
-
-def _scan_pending_unanswered(context, now):
-    """阶段0-3(2026-09-15 诊断D3-C)：人工确认请求（BUY_PENDING/BUY_DECISION）挂起超过
-    BUY_PENDING_TIMEOUT_MIN 分钟无人确认 → 自动作废并留痕（expired_timeout + risk 告警）。
-    防 09-09「confirm 无人执行、挂起至今」重演（D3：9 条请求 6 条非正常闭环，挂起未决 1 条）。
-    与 P0-4 互补：P0-4 处理"confirm 已到但信号未再触发"，本函数处理"用户始终未响应"。
-    作废后下一根 bar 若信号仍触发会重新发请求（request_id 更新），不堵交易链路。
-    on_bar 每 bar 调用；仅 MODE_LIVE 有意义（回测 gate 恒 allow，pending 恒空）。"""
-    if getattr(context, "mode", None) != MODE_LIVE:
-        return
-    _pend_map = getattr(context, "_buy_confirm_pending", None)
-    if not _pend_map:
-        return
-    _timeout_sec = BUY_PENDING_TIMEOUT_MIN * 60.0
-    try:
-        _decs = (read_buy_decision().get("decisions") or {})
-    except Exception:
-        _decs = {}
-    _expired = []
-    for code, pend in list(_pend_map.items()):
-        # 已有匹配决策（confirm/reject）→ 交给 gate / P0-4 消费，本看门狗不管
-        _d = _decs.get(code)
-        if _d and _d.get("request_id") == pend.get("request_id"):
-            continue
-        try:
-            _elapsed = now.timestamp() - float(pend.get("request_ts") or 0)
-        except Exception:
-            _elapsed = 0
-        if _elapsed < _timeout_sec:
-            continue
-        _pend_map.pop(code, None)
-        _expired.append((code, pend, _elapsed))
-    if not _expired:
-        return
-    for code, pend, _elapsed in _expired:
-        try:
-            write_confirm(str(now), code, "expired",
-                          detail=(f"盘中超时无人确认自动作废: {pend.get('action')} "
-                                  f"qty={pend.get('qty')}@{pend.get('price')} "
-                                  f"挂起{_elapsed/60:.1f}min>阈值{BUY_PENDING_TIMEOUT_MIN:.0f}min"),
-                          request_id=pend.get("request_id"), action=pend.get("action"))
-        except Exception:
-            pass
-        try:
-            write_risk(str(now), "buy_pending_timeout",
-                       f"{code} {pend.get('action')} 挂起{_elapsed/60:.1f}分钟无人确认已自动作废", code=code)
-        except Exception:
-            pass
-        print(f"[{now:%H:%M:%S}] BUY {code} 挂起 {_elapsed/60:.1f} 分钟无人确认，已自动作废（防挂起失控）")
-    try:
-        write_buy_pending({"date": f"{now:%Y-%m-%d}",
-                           "updated_at": f"{now:%Y-%m-%d %H:%M:%S}",
-                           "rejected_today": sorted(getattr(context, "_buy_confirm_rejected", set())),
-                           "pending": _pend_map})
-    except Exception:
-        pass
-
-
-def _dedup_bar(context, gm_sym: str, eob: str) -> bool:
-    """F9: 同 eob 重复 bar 判定（True=重复应跳过）。
-
-    2026-07-31 模拟盘同秒 4 次重复投递 000988 bar，导致 PANIC 连发 4 单；
-    同时防止 bar_cache 重复累积。"""
-    _eob_map = getattr(context, "_last_bar_eob", None)
-    if _eob_map is None:
-        _eob_map = {}
-        context._last_bar_eob = _eob_map
-    if _eob_map.get(gm_sym) == eob:
-        return True
-    _eob_map[gm_sym] = eob
-    return False
 
 
 def _maybe_clear_audit_log(context):
@@ -1477,29 +279,6 @@ def _maybe_clear_audit_log(context):
     except Exception:
         pass
     return False
-
-
-def _build_bar_df(context, code: str, gm_symbol: str, now=None) -> pd.DataFrame:
-    rows = context.bar_cache.get(gm_symbol, [])
-    if len(rows) < MIN_BARS:
-        return pd.DataFrame()
-    df = pd.DataFrame(rows, columns=["time", "open", "high", "low", "close", "volume", "amount"])
-    df = df.sort_values("time").reset_index(drop=True)
-    # 2026-09-14: 截断到 <= 当前时刻。回测模式下 init 的 history_n(60s×240) 预取会返回
-    # **到回测窗口末尾**的 bar（GM 的 count=N 取的是窗口最后 N 根，非"截至当前"），
-    # 于是每根 bar 内核都拿着"当日收盘价结尾的全天数据"评估：Renko 砖方向恒 up、m15 恒负
-    # → 买入条件 `last_down and m15>0` 永不成立 → 全程 no_signal、0 成交（实测 2867 次评估
-    # close 唯一值=[45.29]、m15 恒 -0.037）。实盘时该过滤是无操作（不会有未来 bar）。
-    if now is not None:
-        try:
-            df = df[df["time"].astype(str) <= str(now)].reset_index(drop=True)
-        except Exception:
-            pass
-    if df.empty:
-        return df
-    df = add_indicators(df)
-    return df
-
 
 
 def _get_holding(context, code: str, gm_symbol: str) -> dict:
@@ -1544,15 +323,13 @@ def _get_holding(context, code: str, gm_symbol: str) -> dict:
                     "t_qty": int(p.volume),
                     "cost": float(p.vwap or 0),
                     "type": "stock",
-                    "pre_close": float(p.vwap or context.latest_pre_close.get(code, 0)),
+                    "pre_close": float(p.vwap or 0),   # 原「回退到昨收」的源随旧引擎删除
                 }
                 mp = context.manual_position.get(gm_symbol)
                 if mp and abs(int(mp.get("qty", 0)) - int(p.volume)) > 0:
                     _my_cost = mp.get("cost", gm_pos["cost"])
                     context.manual_position[gm_symbol] = gm_pos
                     context.manual_position[gm_symbol]["cost"] = _my_cost
-                    # WP-B15: 对账持仓变化 → 解除信号 mute / 地板去重键
-                    _clear_signal_mute_keys(context, code)
                     _audit_write({"event": "reconcile_fix", "code": code, "time": str(now),
                                   "old_qty": mp.get("qty"), "new_qty": gm_pos["qty"]})
                 # ①-1: manual_position cost=0时用gm vwap修正(市价单price=0兜底)
@@ -1574,8 +351,6 @@ def _get_holding(context, code: str, gm_symbol: str) -> dict:
                     mp["qty"] = 0
                     mp["available"] = 0
                     mp["t_qty"] = 0
-                    # WP-B15: 对账持仓归零 → 解除信号 mute / 地板去重键
-                    _clear_signal_mute_keys(context, code)
                     _audit_write({"event": "reconcile_fix", "code": code, "time": str(now),
                                   "old_qty": _old_q, "new_qty": 0})
         except Exception:
@@ -1590,249 +365,6 @@ def _get_holding(context, code: str, gm_symbol: str) -> dict:
     if gm_symbol in context.executed_orders:
         return context.executed_orders[gm_symbol]
     return default
-
-
-# ── 交易日线上下文构建 ──
-
-def _refresh_daily_ctx(context, code: str, gm_symbol: str, now: datetime) -> dict:
-    """用 history_n 拉标的日线，计算 daily_ctx 供信号引擎用。
-
-    每日 09:31 触发一次（或首次调用时），结果缓存到 context.daily_ctx_cache。
-    P3-1(B): 废 T-1 冻结——实时拉取（end_time=now）。量能口径：gm 盘中不返回当日
-    daily bar → 序列末根=上一根「已完成」bar（当前 bar 未完成时用上一根已完成 bar）；
-    收盘结算后若含当日 bar 则为当日完整量。若 P4 迁公共 provider（含 forming bar），
-    需在此补「剔除未完成末根」守卫。
-    """
-    today_str = now.strftime("%Y-%m-%d")
-    _cache_key = f"{today_str}|{code}"
-    if not hasattr(context, "_daily_ctx_cache_map"):
-        context._daily_ctx_cache_map = {}
-    if _cache_key in context._daily_ctx_cache_map:
-        return context._daily_ctx_cache_map[_cache_key]
-
-    # 取 200 个交易日日线（P3-1(A): ≥150 供箱体 _daily_ohlc tail(150)）
-    _exc_info = None
-    try:
-        daily = _sdk_call("history_n_daily200", _partial(
-            history_n, symbol=gm_symbol, frequency="1d", count=200,
-            fields="eob,open,high,low,close,volume",
-            fill_missing="Previous", adjust=ADJUST_PREV,
-            end_time=now.strftime("%Y-%m-%d %H:%M:%S")))
-    except Exception as _e:
-        daily = None
-        # O-01(2026-08-07 W32表决): 异常不再裸吞——留痕在下方失败分支统一打印，
-        # 每票每日一条（O-04 修正：原双分支各打一次，同一失败出两行且"无异常"字样误导）
-        _exc_info = f"{type(_e).__name__}: {str(_e)[:200]}"
-
-    ctx = dict(_default_daily_context(code))
-
-    if daily is not None and len(daily) >= 10:
-        df = pd.DataFrame(daily)
-        # ⚠️ 2026-09-24: **盘中剔除「当日」日线 bar**（docstring 早就预告的那个守卫）。
-        #    回测下 `history_n(1d, end_time=now)` 会返回**当日已完整**的 bar（回测知道全天）⇒
-        #    `c.iloc[-1]`（= `daily_prev_close`、MA/RSI/MACD/BOLL、破位/过热、趋势状态、T 引擎
-        #    日线输入）会吃到**今天的收盘** ⇒ look-ahead。实测 688519 于 04-01/04-02：
-        #    pc=133.3138 / 118.9681，与当日收盘 133.54 / 119.17 只差**同一常数复权因子 0.99831**
-        #    ⇒ 拿的就是当日收盘。live 不受影响（掘金盘中不返回当日 bar）⇒ **回测侧独有的污染**，
-        #    会抬高一切依赖日线闸的策略。收盘后（>=15:00）**保留**当日 bar（`daily_vol_today`
-        #    等语义依赖它），故只在盘中剔。
-        try:
-            if "eob" in df.columns and len(df):
-                _d_s = pd.to_datetime(df["eob"]).dt.strftime("%Y-%m-%d")
-                _today_s = now.strftime("%Y-%m-%d")
-                if str(_d_s.iloc[-1]) == _today_s and now.time() < dtime(15, 0):
-                    df = df[_d_s < _today_s].reset_index(drop=True)
-        except Exception:
-            pass
-        # P4-6: 供 core/build_decision 决策核消费的日线 DataFrame（date/open/high/low/close/volume）
-        try:
-            _ddf = df.copy()
-            if "eob" in _ddf.columns:
-                _ddf["date"] = pd.to_datetime(_ddf["eob"]).dt.strftime("%Y-%m-%d")
-            _ddf["open"] = pd.to_numeric(_ddf.get("open"), errors="coerce")
-            _ddf["high"] = pd.to_numeric(_ddf.get("high"), errors="coerce")
-            _ddf["low"] = pd.to_numeric(_ddf.get("low"), errors="coerce")
-            _ddf["close"] = pd.to_numeric(_ddf.get("close"), errors="coerce")
-            _ddf["volume"] = pd.to_numeric(_ddf.get("volume"), errors="coerce")
-            ctx["_daily_df"] = _ddf[["date", "open", "high", "low", "close", "volume"]].dropna(subset=["date"])
-        except Exception:
-            ctx["_daily_df"] = pd.DataFrame()
-        c = df["close"].astype(float)
-        h = df["high"].astype(float)
-        l = df["low"].astype(float)
-        ctx["daily_ma5"] = float(c.rolling(5).mean().iloc[-1]) if len(c) >= 5 else 0
-        ctx["daily_ma10"] = float(c.rolling(10).mean().iloc[-1]) if len(c) >= 10 else 0
-        ctx["daily_ma20"] = float(c.rolling(20).mean().iloc[-1]) if len(c) >= 20 else 0
-        # N4: 日线 ATR（用于 PANIC_SELL）
-        if len(c) >= 14:
-            tr = pd.concat([h - l, (h - c.shift(1)).abs(), (l - c.shift(1)).abs()], axis=1).max(axis=1)
-            ctx["daily_atr"] = float(tr.rolling(14).mean().iloc[-1] / c.iloc[-1]) if c.iloc[-1] > 0 else 0.02
-        else:
-            ctx["daily_atr"] = 0.02
-        # M2: 做T门槛指标（供标的池准入检查）
-        if len(c) >= 20 and "volume" in df.columns:
-            v = df["volume"].astype(float)
-            ctx["_m2_amp20"] = float((tr.rolling(20).mean().iloc[-1] / c.iloc[-1])) if c.iloc[-1] > 0 else 0
-            ctx["_m2_amount20"] = float((v * c).rolling(20).mean().iloc[-1]) if len(v) >= 20 else 0
-            ctx["_m2_lot_value"] = float(c.iloc[-1] * 100)
-            # 门槛判定（AMP/AMT/单手价值低于阈值 → 标记仅观察）
-            # WP-E4(2026-08-24 owner决策): 阈值支持 STOCK_PARAMS 个股覆盖
-            # （515180红利ETF 低波动定制：amp20≈0.8%、单手≈145元，硬编码门槛会永久拦截），
-            # 未配置个股参数时保持原硬编码缺省值（0.03 / 2亿 / 2000）。
-            _m2_sp = STOCK_PARAMS.get(code, {})
-            _m2_amp_min = float(_m2_sp.get("m2_amp20_min", 0.03))
-            _m2_amt_min = float(_m2_sp.get("m2_amount20_min", 200000000))
-            _m2_lot_min = float(_m2_sp.get("m2_lot_value_min", 2000))
-            _pass = (ctx["_m2_amp20"] >= _m2_amp_min and ctx["_m2_amount20"] >= _m2_amt_min
-                     and ctx["_m2_lot_value"] >= _m2_lot_min)  # TODO(PhaseD): 寻优定值
-            ctx["_m2_pool_pass"] = _pass
-            if not _pass:
-                ctx["daily_status"] = "pool_gate_fail"
-        # G4: 支撑建仓闸指标（2026-08-05 owner决策：RSI/MACD/BOLL/缩量/MA60）
-        if len(c) >= 26:
-            _d = c.diff()
-            # Wilder 平滑（2026-09-21 统一口径）；原 rolling(14).mean() 简单均值
-            _up = _d.clip(lower=0).ewm(alpha=1.0 / 14, adjust=False).mean()
-            _dn = (-_d.clip(upper=0)).ewm(alpha=1.0 / 14, adjust=False).mean()
-            _rs = _up / _dn.replace(0, 1e-10)
-            ctx["daily_rsi14"] = float((100 - 100 / (1 + _rs)).iloc[-1])
-            _ema12 = c.ewm(span=12, adjust=False).mean()
-            _ema26 = c.ewm(span=26, adjust=False).mean()
-            _dif = _ema12 - _ema26
-            _dea = _dif.ewm(span=9, adjust=False).mean()
-            ctx["daily_macd_dif"] = float(_dif.iloc[-1])
-            ctx["daily_macd_dea"] = float(_dea.iloc[-1])
-            ctx["daily_macd_bull"] = bool(_dif.iloc[-1] >= _dea.iloc[-1])
-            # WP-B20: 双通道建仓闸字段——近5日 MACD 金叉（冰点通道·转向确认用）
-            _difs = pd.Series(_dif)
-            _deas = pd.Series(_dea)
-            _cross_up = (_difs > _deas) & (_difs.shift(1) <= _deas.shift(1))
-            ctx["daily_macd_golden"] = bool(_cross_up.tail(5).any())
-            _mid = c.rolling(20).mean()
-            _std = c.rolling(20).std()
-            ctx["daily_boll_mid"] = float(_mid.iloc[-1])
-            ctx["daily_boll_upper"] = float((_mid + 2 * _std).iloc[-1])
-            ctx["daily_boll_lower"] = float((_mid - 2 * _std).iloc[-1])
-            # WP-B20: BOLL 百分比位置（冰点通道·bb_pct≤0.15 用）
-            _bup = (_mid + 2 * _std).iloc[-1]
-            _bdn = (_mid - 2 * _std).iloc[-1]
-            ctx["daily_boll_pct"] = float((c.iloc[-1] - _bdn) / (_bup - _bdn)) if (_bup - _bdn) > 0 else None
-        if len(c) >= 60:
-            ctx["daily_ma60"] = float(c.rolling(60).mean().iloc[-1])
-        if len(c) >= 20 and "volume" in df.columns:
-            _v = df["volume"].astype(float)
-            ctx["_vol3"] = float(_v.iloc[-3:].mean())
-            ctx["_vol20"] = float(_v.iloc[-20:].mean())
-            # WP-B20: 双通道建仓闸字段——当日量/5日均量（冰点缩量 & 突破放量用）
-            ctx["daily_vol_today"] = float(_v.iloc[-1])
-            ctx["daily_vol_ma5"] = float(_v.iloc[-5:].mean())
-        prev_close = float(c.iloc[-1]) if len(c) > 0 else 0
-        ctx["daily_prev_close"] = prev_close
-        # WP-B20: 日线收盘参考价（冰点·转向确认站上MA5 用；实时拉取 → 上一已完成 bar 收盘）
-        ctx["daily_price_ref"] = prev_close
-        # WP-B20: 近150日 OHLC 序列（P3-1(A): 双通道·箱体突破检测用，与 superTrader 150日/30窗同参）
-        ctx["_daily_ohlc"] = {
-            "high": [float(x) for x in h.tail(150).tolist()],
-            "low": [float(x) for x in l.tail(150).tolist()],
-            "close": [float(x) for x in c.tail(150).tolist()],
-        }
-        # F7-2(2026-08-10 复盘①)：setdefault 对默认 "unavailable" 无效——
-        # _default_daily_context 自带 daily_status="unavailable"，setdefault 永不覆盖，
-        # 致 G4 对所有 M2 通过票恒报"日线数据不足→保守拦截"（五要素上线 3 日零运行的
-        # 真根因；0806/0807 归因"取数失败"系误判），且引擎 daily_buy_t_ok 恒 False。
-        # 仅 pool_gate_fail 需保留可观测，其余成功路径必须置 ok（F7 验收：正常票仍为 ok）。
-        if ctx.get("daily_status") == "unavailable":
-            ctx["daily_status"] = "ok"  # F7: 不覆盖 pool_gate_fail
-        ctx["daily_buy_t_ok"] = True
-
-        # 破位/过热简化判断 + R1 个股趋势状态
-        if len(c) >= 20:
-            ma20 = c.rolling(20).mean().iloc[-1]
-            if prev_close < ma20 * 0.985:
-                ctx["daily_breakdown_risk"] = True
-            if prev_close > ma20 * 1.08:
-                ctx["daily_overheated"] = True
-            ctx["daily_ma5_state"] = "above_ma5_trend" if prev_close > ctx["daily_ma5"] else "near_ma5_chop"
-            # R1: 个股趋势状态（供趋势熔断 G3 消费）
-            _ma5_val = ctx["daily_ma5"]
-            _ma5_slope = float(c.rolling(5).mean().diff().iloc[-1]) if len(c) >= 6 else 0
-            if ctx.get("daily_breakdown_risk"):
-                ctx["_stock_trend_state"] = "TREND_BREAKDOWN"
-            elif prev_close < _ma5_val and _ma5_slope < 0:
-                ctx["_stock_trend_state"] = "TREND_DOWN"
-            elif prev_close > _ma5_val and _ma5_slope > 0:
-                ctx["_stock_trend_state"] = "TREND_UP"
-            else:
-                ctx["_stock_trend_state"] = "TREND_RANGE"
-
-        # 将 latest_pre_close 暴露给 _get_holding
-        context.latest_pre_close[code] = prev_close
-        # O-01: 取数成功则清零连续失败计数
-        if getattr(context, "_daily_fail_cnt", None):
-            context._daily_fail_cnt[code] = 0
-    else:
-        context.latest_pre_close[code] = 0
-        ctx["daily_status"] = "unavailable"
-        # G4-FIX(2026-08-06, 复盘0806-①): 取数失败不写日缓存、次 bar 重试——
-        # 瞬时失败不再锁死全天（0806 实战:7 只新票 09:31 取数抽风被整日关在 G4 门外）。
-        # 口径不变：成功后的数据仍冻结于昨收，仅失败分支允许重试。
-        # O-01(2026-08-07 W32表决): 无异常但数据为空/不足也要留痕；连续失败升级 risk 事件告警
-        _fc = getattr(context, "_daily_fail_cnt", None) or {}
-        _fc[code] = _fc.get(code, 0) + 1
-        context._daily_fail_cnt = _fc
-        _dn_key = f'_daily_fetch_none_{code}'
-        if getattr(context, _dn_key, '') != today_str:
-            setattr(context, _dn_key, today_str)
-            if _exc_info:
-                print(f"[daily] {code} 日线取数异常: {_exc_info}")
-            else:
-                print(f"[daily] {code} 日线数据不足(无异常): daily={'None' if daily is None else len(daily)}")
-        if _fc[code] == 10:
-            try: write_risk(str(now), "data_fetch_fail",
-                            f"{code} 日线连续10次取数失败, G4/趋势闸失效中", code=code)
-            except Exception: pass
-        return ctx
-
-    context._daily_ctx_cache_map[_cache_key] = ctx
-    return ctx
-
-
-def _base_entry_gate(cp: float, dc: dict):
-    """G4 支撑建仓闸（2026-08-05 owner决策）：多票池不可能同时买入——
-    仅"回踩重要支撑不破 + RSI/MACD/BOLL 日线联动 + 缩量"同时成立才放行建仓/回补。
-    返回 (是否放行, 判定明细)。数值均为 TODO(PhaseD) 临时值，日常复盘只记录不调整。
-    日线指标冻结于昨收（_refresh_daily_ctx 口径），盘中变量仅为现价 cp。"""
-    if dc.get("daily_status") == "unavailable":
-        return False, "G4: 日线数据不足→保守拦截"
-    sup_gap = float(PARAMS.get("daily_ma_support_gap", 0.025))
-    brk_gap = float(PARAMS.get("daily_ma_breakdown_gap", 0.015))
-    # ① 回踩重要支撑不破：现价落在任一支撑位 [lv*(1-brk), lv*(1+sup)] 带内
-    supports = {k: dc.get(k, 0) for k in ("daily_ma10", "daily_ma20", "daily_ma60", "daily_boll_lower")}
-    supports = {k: v for k, v in supports.items() if v and v > 0}
-    near = [k for k, lv in supports.items() if lv * (1 - brk_gap) <= cp <= lv * (1 + sup_gap)]
-    if not near:
-        return False, (f"G4: 未回踩支撑带 cp={cp:.2f} "
-                       + " ".join(f"{k}={v:.2f}" for k, v in supports.items()))
-    # ② RSI 企稳区间（回踩未超买、未崩盘）
-    rsi = float(dc.get("daily_rsi14", 0) or 0)
-    rsi_lo, rsi_hi = PARAMS.get("entry_rsi_low", 30), PARAMS.get("entry_rsi_high", 55)
-    if not (rsi_lo <= rsi <= rsi_hi):
-        return False, f"G4: RSI={rsi:.1f} 不在[{rsi_lo},{rsi_hi}] 支撑={near}"
-    # ③ MACD 多头未破坏（DIF ≥ DEA）
-    if not dc.get("daily_macd_bull", False):
-        return False, (f"G4: MACD非多头 DIF={dc.get('daily_macd_dif',0):.3f}"
-                       f"<DEA={dc.get('daily_macd_dea',0):.3f} 支撑={near} RSI={rsi:.1f}")
-    # ④ BOLL 联动：不深破下轨
-    bl = float(dc.get("daily_boll_lower", 0) or 0)
-    if bl > 0 and cp < bl * (1 - brk_gap):
-        return False, f"G4: 深破BOLL下轨 cp={cp:.2f} lower={bl:.2f} 支撑={near}"
-    # ⑤ 缩量回调：近3日均量 < 20日均量 × 系数
-    v3, v20 = float(dc.get("_vol3", 0) or 0), float(dc.get("_vol20", 0) or 0)
-    shrink = PARAMS.get("entry_vol_shrink", 0.95)
-    if v20 > 0 and v3 >= v20 * shrink:
-        return False, f"G4: 未缩量 v3/v20={v3 / v20:.2f}≥{shrink} 支撑={near} RSI={rsi:.1f}"
-    return True, (f"G4放行: 支撑={near} RSI={rsi:.1f} MACD多头 "
-                  f"v3/v20={(v3 / v20 if v20 else 0):.2f}")
 
 
 # ── 审计 JSONL ──
@@ -1881,27 +413,14 @@ def _audit_close():
         _audit_mirror_file = None
 
 
-import sell_state
-from sell_state import _sell_state_persist, _sell_state_restore
-# sell_state/sell_channels 经 GM 命名空间取 gm_main 的 MODE_LIVE/STOCKS/_audit_write 等
-# （保持「唯一 import gm.api 在 gm_main」，且规避双模块名导入分裂）
-sell_state.GM = sys.modules[__name__]
-import sell_channels
-sell_channels._bind_gm(sys.modules[__name__])
-# 重导出（原 main 模块名兼容；测试沿用 main._sell_arbiter 等引用）
-from sell_channels import _sell_arbiter, _sell_channel_gate  # noqa: E402
-
-
 def _reconcile_positions_at_init(context):
     """F1: 启动全量持仓对账（2026-07-28 日复盘 P0）
 
-    重启后 _base_ordered/_base_settled 为纯内存空集，若不从账户拉取真实持仓，
-    已持有标的会被重发底仓单（2026-07-28 600481 三轮重复建仓至 5600 股事故）。
-    本函数在 init 末尾执行：
-      1. 逐票查询 account().positions()，有持仓则灌入 executed_orders/manual_position
-      2. 已持仓标的直接入 _base_settled（跳过重发底仓单）并设 _base_ref_
-      3. 每票写 reconcile_init 审计事件
-    仅 MODE_LIVE 执行；回测模式跳过。
+    历史事故：重启后内存台账为空，已持仓标的被重发底仓单（2026-07-28 600481 三轮重复建仓
+    至 5600 股）。旧引擎已删（不再有底仓单），但**台账仍需启动灌满**——心跳
+    （`_get_holding` → `manual_position`）与收盘回写（`_writeback_holdings`）都读它。
+    本函数在 init 末尾执行：逐票查询 account().positions()，有持仓则灌入
+    executed_orders/manual_position，每票写 reconcile_init 审计事件。仅 MODE_LIVE 执行。
     """
     try:
         _is_live = context.mode == MODE_LIVE
@@ -1929,10 +448,6 @@ def _reconcile_positions_at_init(context):
                 "pre_close": _cost,
             }
             context.manual_position[sym] = dict(context.executed_orders[sym])
-            context._base_settled.add(code)
-            # F7: _base_ref_ 语义=目标底仓(镜像表)，非实际持仓——缺口由 _base_topup_qty 择时回补
-            setattr(context, f'_base_ref_{code}',
-                    int(MIRROR_HOLDINGS.get(code, {}).get("qty", 0) or vol))
             _audit_write({"event": "reconcile_init", "code": code, "qty": vol,
                           "available": int(p.available), "cost": _cost,
                           "time": str(datetime.now())})
@@ -1940,36 +455,6 @@ def _reconcile_positions_at_init(context):
                   f"{vol}股 可用{int(p.available)} 成本{_cost:.2f}")
         except Exception as e:
             print(f"[INIT] {code} 持仓对账失败: {e}")
-
-
-def _base_topup_qty(context, code, gm_sym):
-    """F7: 底仓择时回补量（2026-07-29 owner定调：基线维持，缺口择时买回）
-
-    语义: MIRROR_HOLDINGS 是目标底仓而非现状快照。已建仓标的实际持仓低于目标
-    100 股以上时，返回回补量(向下100取整)，由 on_bar 底仓块走既有 M2/趋势闸
-    择时买入；否则返回 0。
-
-    反绞肉门控（本函数内，on_bar 的 M2/趋势闸仍照常叠加）:
-      - 当日已有任意卖出成交(如PANIC止损) → 当日不反补，防恐慌-回补来回打脸
-      - 指数 uni_down → 不补（防御日不加重敞口）
-    例外: 若已人工武装，表示用户已确认，跳过上述反绞肉门控。
-    """
-    if code not in getattr(context, "_base_settled", set()):
-        return 0  # 未建仓标的走原建仓路径
-    _mirror = int(MIRROR_HOLDINGS.get(code, {}).get("qty", 0) or 0)
-    if _mirror <= 0:
-        return 0
-    _held = int(context.manual_position.get(gm_sym, {}).get("qty", 0) or 0)
-    _short = ((_mirror - _held) // 100) * 100
-    if _short < 100:
-        return 0
-    _armed = bool((getattr(context, "_auto_build_armed", {}) or {}).get(code))
-    if not _armed:
-        if context.daily_sell_count.get(code, 0):
-            return 0
-        if getattr(context, "last_index_regime", "range") == "uni_down":
-            return 0
-    return _short
 
 
 def _append_index_forming(idx_df, gm_symbol="SHSE.000001"):
@@ -2080,8 +565,8 @@ def _needed_index_gm_symbols():
 def init(context):
     global _AUDIT_RUN_ID
     _AUDIT_RUN_ID = datetime.now().strftime("%Y%m%d_%H%M%S")
-    # 2026-08-31 版本探针：用于确认掘金策略是否加载了含武装/拒单修复的最新 gm_main.py
-    print(f"[INIT] gm_main.py 2026-08-31 armed-v2 loaded")
+    # 版本探针：用于确认掘金策略加载的是哪一版 gm_main.py（2026-10-12 = 超跌跳空确认单链版）
+    print(f"[INIT] gm_main.py 2026-10-12 ws-only loaded")
     # 运维自举（0806 红日整改）：控制台日志落盘 + watcher 自动拉起
     ops_guard.bootstrap_logging(PROJECT_DIR)
     ops_guard.ensure_watcher(PROJECT_DIR)
@@ -2095,35 +580,48 @@ def init(context):
             f"请修正 superTrader watchlist_buy.json 的 pool 字段或 config/auto_pool.py。")
     # D8/F10: 仅回测模式清空审计文件（模拟盘重启不丢当日段）
     _maybe_clear_audit_log(context)
-    context.bar_cache = {}
+    # 数据源自检（2026-10-12）：盘前预筛靠 `core.market_data.facade`，路径不对会**静默**
+    # fail-closed（当日永不下单）⇒ 启动时就探一次并显式告警（08:55 看见，而不是 09:31 才猜）。
+    try:
+        from core.market_data import facade as _facade_probe      # noqa: F401
+        print(f"[init] 数据源就绪: {_facade_probe.__file__}")
+    except Exception as _fe:
+        print(f"⚠️⚠️ [init] core.market_data.facade 不可导入（盘前预筛将 fail-closed、当日不下单）: "
+              f"{type(_fe).__name__}: {_fe}｜sys.path={sys.path[:3]}")
     context.executed_orders = {}
-    context.engine = SignalEngine()
-    context.daily_buy_count = {}
-    context.daily_sell_count = {}
-    context.daily_trade_price = {}
     context.last_index_regime = "range"
     context.last_index_score = 0.0
     context.board_regime = {}      # A-7: {GM指数sym: regime} 分板 regime（上证=市场级恒有，键 GM 全称）
     context._board_gm_symbols = _needed_index_gm_symbols()  # A-7: 本池所需板块指数（预取/每日刷新共用）
     context.manual_position = {}
-    context.latest_pre_close = {}
-    context._base_ordered = set()
-    context._base_settled = set()
-    context._inflight_sell = {}   # F9: 在途卖单台账 {gm_sym: qty}
-    context._pending_buy_snapshot = {}  # WP-A1: 做T买入快照 {委托id或symbol: manual_position条目快照}
-    context._last_bar_eob = {}    # F9: 重复bar去重 {gm_sym: eob}
     context.cur_date = None
-    context._daily_ctx_cache_map = {}
-    context.total_trade_cost = 0.0
-    context.total_trade_count = 0
     context.rejected_order_count = 0
-    context.audit_records = []
-    context.sizer = PositionSizer(params=PARAMS)
 
-    # F1: 启动全量持仓对账——已持仓标的入 _base_settled，防止重启重发底仓单
+    # F1: 启动全量持仓对账（账户 → executed_orders/manual_position；心跳与收盘回写的数据源）
     _reconcile_positions_at_init(context)
-    # WP-B14: 卖出体系状态跨日恢复（pos_key 校验；qty<=0/不符 → 作废）
-    _sell_state_restore(context)
+
+    # 归属锁（一票一策略）：override 允许人工豁免 ⇒ 每次启动重读（改文件+重启即生效）；
+    # 并把当前归属打印出来，让"谁持有哪只票"在启动日志里可见（多策略下这行会变长）。
+    try:
+        OWNERSHIP.reload_overrides()
+        if OWNERSHIP.load_error:
+            print(f"[OWN] ⚠️ override 读取失败: {OWNERSHIP.load_error}")
+        _snap = OWNERSHIP.snapshot()
+        _held = {}
+        for _c, _s in STOCKS.items():
+            try:
+                _h = _get_holding(context, _c, _s)
+                if int(_h.get("qty", 0) or 0) > 0:
+                    _held[_c] = int(_h.get("qty", 0))
+            except Exception:
+                continue
+        print(f"[OWN] 归属表(账本认领)={_snap or '{}'}｜账户持有 {len(_held)} 只")
+        _unclaimed = sorted(set(_held) - set(_snap))
+        if _unclaimed:
+            print(f"[OWN] ⚠️ 账户持有但无策略认领（对全部策略锁定）: "
+                  f"{[(c, _held[c]) for c in _unclaimed]}")
+    except Exception as _e:
+        print(f"[OWN] ⚠️ 归属初始化失败（锁仍生效，按无 override 运行）: {_e}")
 
     # S-1(2026-08-31): 启动自检 GM 交易会话登录态 + cash>0——未通过即写风险事件（watcher 推飞书加急）。
     # 对应今日账号未登录 2.5h、6 笔拒单事故；cash 读取失败/为 0 视为会话失效。
@@ -2149,76 +647,8 @@ def init(context):
             except Exception:
                 pass
 
-    # 人工确认闸状态（2026-08-30 建仓/加仓人工把关）：
-    # _buy_confirm_pending = {code: request}；_buy_confirm_rejected = set(code)。
-    # MODE_LIVE 下断点续传（date==今日才恢复，跨日/回测不恢复）——引擎重启后
-    # 仍兑现「挂起直到确认」与「拒绝后当天不再弹」。
-    context._buy_confirm_pending = {}
-    context._buy_confirm_rejected = set()
     context._pending_recon = {}    # Fix B: 下单成功待对账 {sym: {...}}
     context._fills_done = set()    # Fix B: fill 防重 key 集合（回调/轮询共用）
-    if context.mode == MODE_LIVE:
-        try:
-            _bkp = read_buy_pending()
-            if _bkp and _bkp.get("date") == datetime.now().strftime("%Y-%m-%d"):
-                context._buy_confirm_pending = dict(_bkp.get("pending") or {})
-                context._buy_confirm_rejected = set(_bkp.get("rejected_today") or [])
-            elif _bkp and (_bkp.get("pending") or {}):
-                # F3(2026-09-09): 跨日陈旧 pending → 作废清空（自动化应急处置#1）——
-                # 防 GUI 幽灵待确认与"引擎重启后 date 不匹配不恢复"的悬空文件
-                _stale = list((_bkp.get("pending") or {}).items())
-                _ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                for _c, _req in _stale:
-                    try:
-                        write_confirm(_ts, _c, "expired",
-                                      f"跨日作废 {_req.get('action','')} qty={_req.get('qty')}@"
-                                      f"{_req.get('price')}",
-                                      request_id=_req.get("request_id"))
-                    except Exception:
-                        pass
-                write_buy_pending({"date": datetime.now().strftime("%Y-%m-%d"),
-                                   "updated_at": _ts, "rejected_today": [],
-                                   "pending": {}})
-                try:
-                    from gm_bridge.writer import write_buy_decision as _wbd
-                    _wbd({})
-                except Exception:
-                    pass
-                try:
-                    write_risk(_ts, "buy_pending_expired",
-                               f"跨日作废 {len(_stale)} 条陈旧 pending 已清空(BUY_PENDING/BUY_DECISION)", code="")
-                except Exception:
-                    pass
-                print(f"[init] F3 跨日陈旧 pending 作废: {len(_stale)} 条已清空")
-        except Exception:
-            pass
-
-    # P3-1(C) 冰点预热：盘前 gm history_n(60s×240) 预取进 bar_cache，消灭开盘 5 分钟指标空窗
-    # （对齐方案「盘前用 gm history_n(60s×240) 预取」统一口径；预取覆盖上一交易日 session，
-    #  开盘后 subscribe 追加当日 bar，>480 根自动裁剪）。
-    # ⚠️ 市场代理池一并预热：L4 的 mkt_gap 要代理票的**前一交易日收盘**（取自 bar_cache 末根）。
-    _preheat = {**MARKET_PROXY, **STOCKS}      # 同名以 STOCKS 为准（代理与交易池不该重叠）
-    for code, sym in _preheat.items():
-        try:
-            his = _sdk_call("history_n_60s240", _partial(
-                history_n, symbol=sym, frequency="60s", count=240,
-                fields="symbol,eob,open,high,low,close,volume,amount",
-                fill_missing="Previous", adjust=ADJUST_PREV))
-            if his is not None and len(his) > 0:
-                rows = []
-                for bar in his:
-                    rows.append({
-                        "time": str(bar["eob"]),
-                        "open": float(bar["open"]),
-                        "high": float(bar["high"]),
-                        "low": float(bar["low"]),
-                        "close": float(bar["close"]),
-                        "volume": float(bar["volume"]) if bar["volume"] is not None else 0,
-                        "amount": float(bar["amount"]) if bar["amount"] is not None else 0,
-                    })
-                context.bar_cache[sym] = rows
-        except Exception as e:
-            print(f"[init] 历史分钟数据预取失败 {sym}: {e}")
 
     # 预取板块指数日线（A-7 分板：本池标的所属板指数逐指数预取 + 上证市场级恒有）。
     # 2026-08-28 复审修复（隐性遮蔽显式化）：本模块必须解析到 _gm/analysis 副本
@@ -2246,503 +676,113 @@ def init(context):
     ir.GM_DATA_READY = bool(ir.GM_INDEX_CACHE.get("SHSE.000001") is not None
                             and not ir.GM_INDEX_CACHE["SHSE.000001"].empty)
 
-    # ⚠️ 市场代理池必须一并 subscribe：L4 的 mkt_gap 要代理票的**当日开盘价**（逐票累积）。
-    #    代理票**不交易、不进底仓/信号链**，只走 `_ogr_opens` 与 `_ogr_prev_close_map`。
-    symbols = list(STOCKS.values()) + [s for c, s in MARKET_PROXY.items() if c not in STOCKS]
-    # WP-E2/E3: 启动预算表（复盘核对用——equity/现金保留/每股预算(按槽分解)/各票 max_pos_shares）
-    try:
-        _eq0 = _total_equity(context, INITIAL_CASH)
-        _reserve0 = float(PARAMS.get("cash_reserve_pct", 0.20))
-        _slots0 = max(int(PARAMS.get("max_concurrent_positions", 4)), 1)
-        _bud0 = _eq0 * (1 - _reserve0) / _slots0
-        _caps = []
-        for _c, _s in STOCKS.items():
-            _rows = context.bar_cache.get(_s) or []
-            _px = float(_rows[-1].get("close", 0) or 0) if _rows else 0.0
-            _mps = int(_bud0 / _px / 100) * 100 if _px > 0 else 0
-            _caps.append(f"{_c}:{_mps}")
-        print(f"[init] WP-E2/E3 预算表: equity={_eq0:.0f} reserve={_reserve0:.0%} "
-              f"每股预算={_bud0:.0f}(按{_slots0}槽分解) max_pos_shares={' '.join(_caps)}")
-    except Exception as _e:
-        print(f"[init] WP-E2/E3 预算表生成失败: {_e}")
+    # 订阅 60s bar：on_bar 的节拍来源（时间窗钩子/心跳/指数态势全走它）。
+    # 2026-10-12：原「再额外 subscribe 一遍市场代理池」随 OGR 删除一并移除（代理池只为 mkt_gap 存在）。
+    # subscribe 的 count=240 历史上供「盘前 60s 预取进 bar_cache」——该预取与 bar_cache 一并删除
+    # 后，count 仅剩「首帧回补 240 根」语义（无消费方），保留数值不动以免改变首帧到达形态。
+    symbols = list(STOCKS.values())
     subscribe(symbols=symbols, frequency="60s", count=240,
               fields="symbol,eob,open,high,low,close,volume,amount")
     # 确保事件桥目录存在
     from gm_bridge.writer import BRIDGE_DIR
     os.makedirs(BRIDGE_DIR, exist_ok=True)
     print(f"[init] 事件桥: {BRIDGE_DIR}")
-    print(f"[init] 策略初始化完成: {len(symbols)} 只标的"
-          f"（含市场代理池 {len(MARKET_PROXY)} 只，只算 mkt_gap、不交易）")
-    if not MARKET_PROXY:
-        print("[init] ⚠️ 市场代理池为空 ⇒ OGR 的 mkt_gap 会退化为「池内自指」，"
-              "与预注册规则不同源（见 core/open_gap_reversal.MARKET_PROXY_CODES）")
-
-
-# ══════════════════════════════════════════════════════════════════════
-
-
-# ══════════════════════════════════════════════════════════════════════
-# 开盘低开反转 · L3 影子层接线（2026-09-22 施工，owner 审批：先影子层）
-# **只记日志、绝不下单、绝不写持仓。** 规则与判据已事前冻结并通过样本外 + 独立池检验：
-#   样本外 2019-01~2025-03 +0.5245%/腿（t=8.07）；独立 400 只池 +0.5275%（比 1.01）；
-#   退市股子集 +0.7447%（更强）。规格：doc/solutions/2026-09-22_开盘低开反转日内T_设计规格.md
-# 决策逻辑全在 core/open_gap_reversal.py（纯函数；L1 24 项测试 + L2 逐腿 diff=0 已过）；
-# 本侧只做「取 bar → 组池快照 → 落日志」。加载失败 fail-open = 影子层关闭，绝不影响主循环。
-# ══════════════════════════════════════════════════════════════════════
-_OGR_GLUE = None
-try:
-    import ogr_shadow_glue as _OGR_GLUE          # noqa: E402  （execution/auto/ 同目录）
-except Exception as _e:
-    print(f"[OGR] 影子层胶水加载失败 → 影子层关闭: {_e}")
-    _OGR_GLUE = None
-
-_OGR_SHADOW_DONE_DATE = None                     # 每日一次标记（与 _OPEN_ALIGN_DONE_DATE 同款）
-
-
-def _ogr_shadow_enabled() -> bool:
-    """影子层总闸：PARAMS 翻启 + 胶水与决策核均加载成功。**翻启也不下单。**"""
-    return (bool(PARAMS.get("open_gap_reversal_shadow_enabled", False))
-            and _OGR_GLUE is not None and _OGR_GLUE.available())
-
-
-# ══════════════════════════════════════════════════════════════════════
-# 开盘低开反转 · L4 实单（2026-09-22 施工，owner 指示：**直接下单、跳过影子模式**）
-#
-# 规则：大盘低开(mkt_gap<0) 且 个股相对低开 ≤ −1% ⇒ 09:31 买 / 10:00 卖（30 分钟持仓）。
-# 证据：样本外 2019-01~2025-03 +0.5245%/腿（t=8.07）；独立 400 只池 +0.5275%（比 1.01）；
-#       扣执行折价（拿不到竞价价、按 09:31 入场）后 +0.3385%/腿。
-#
-# ⚠️ 三处刻意的设计取舍（务必知悉）：
-#   ① **绕过 `_buy_confirm_gate`（人工确认闸）** —— 规则必须在 09:31 无人值守时下单；
-#      与已删除的 B7 接回单同款先例（"直下市价买单 Open——显式绕过确认闸与 morning_no_buy"）。
-#   ② **不受 `morning_no_buy`（09:30-09:35 禁买）约束** —— 本路径不经 sig 门链、直下市价单。
-#   ③ **额度闸一律复用**（`_stock_budget_cap` / `_check_max_pos_cap`），**不旁路**。
-#
-# C4 定序：调用点位于 `_force_open_align` 之后 ⇒ **先对齐底仓、后本策略买入**。
-# 安全网：若 10:00 卖出失败，腿仍留在 `_ogr_legs`，14:50 的 TAIL 尾盘归位会把它作为
-#         「超出底仓的部分」卖掉 —— 不会留过夜（符合「底仓不变」）。
-# ══════════════════════════════════════════════════════════════════════
-_OGR_LIVE_BUY_DONE_DATE = None
-_OGR_SELL_DONE_DATE = None                       # ⚠️ 卖腿也要「每日一次」：腿在下单后**不再 pop**
-                                                 # （改由成交回调 pop），若不加此闸会每根 bar 重发
-                                                 # 同一笔被拒的卖单 ⇒ 订单风暴（2026-09-23 实测）
-_OGR_BUY_WINDOW = (dtime(9, 31), dtime(9, 35))   # 买入时间窗（防进程盘中启动时误在任意时刻买）
-_OGR_SELL_FROM = dtime(10, 0)                    # 10:00 起卖出
-_OGR_MAX_LEGS = 10                               # 单日最多腿数（仓位/风险上限）
-_OGR_PARTICIPATION = 0.10                        # 单腿不超过该票集合竞价量的比例
-
-
-def _ogr_live_enabled() -> bool:
-    """L4 实单总闸：PARAMS 翻启 + 胶水与决策核加载成功。**默认 off。**"""
-    return (bool(PARAMS.get("open_gap_reversal_live_enabled", False))
-            and _OGR_GLUE is not None and _OGR_GLUE.available())
-
-
-# 2026-09-22：回测启用开关（仅 `backtest_holdings.py --ogr` 设置）。
-# 生产路径**永不设置** ⇒ 本段在产线是死代码，实盘行为零改变。
-_OGR_BACKTEST_ENABLE = os.environ.get("SUPERTRADER_OGR_BACKTEST") == "1"
-# 买腿用限价（价=09:31 那根 bar 的 open）而非市价。
-# ⚠️ 归因更正（2026-09-23）：市价单高出 open 的那 ~1.9% **不是执行滞后**，是 GM 回测
-#    的撮合口径——`backtest_match_mode=1` 按「最后收完的那根 bar 收盘价」成交，09:31 时
-#    最后收完的是**盘前那根**（价=前收）⇒ 当天第一笔买腿实际成交在**前一交易日收盘价**上
-#    （实测 fill/prev_close−1 恒 = slippage_ratio）。限价单把成交钉回 09:31 open，
-#    从而消掉这个伪影：8/8 成交在 ref×(1+1bp)、8/8 平腿、拒单 0。详见 [[gm-backtest-caveats]]。
-_OGR_USE_LIMIT = os.environ.get("SUPERTRADER_OGR_LIMIT") == "1"
-_OGR_LOG_DIR = None          # None=胶水默认(t_io/logs)；回测由 backtest_holdings 重定向
+    print(f"[init] 策略初始化完成: {len(symbols)} 只标的")
 
 
 def _code_to_gm(code: str) -> str:
-    """6 位码 → gm symbol（6/5/9 开头沪市，其余深市）。与 `backtest_holdings._gm_sym_of` 同口径。"""
+    """6 位码 → gm symbol（6/5/9 开头沪市，其余深市）。"""
     return ("SHSE." if code[:1] in "569" else "SZSE.") + code
 
 
-# 市场代理池的**默认来源 = 规则核的冻结名单**（单一真源；见 core/open_gap_reversal 的
-# `MARKET_PROXY_CODES` 与 Stage14/18 的验证）。只在「OGR 可能生效」时才建，免得白订阅 20 只票：
-# live 由 `PARAMS['open_gap_reversal_live_enabled']` 决定，回测由 `SUPERTRADER_OGR_BACKTEST` 决定。
-# 回测驱动 `backtest_holdings.py --mkt-proxy` 会在此之后覆盖（它早于 run() 赋值）⇒ 仍是同源。
-# 2026-10-08 复盘实证：条件漏了 **shadow 开关**——L3 影子期（shadow=on/live=off）代理池为空
-# ⇒ evaluate_maps「代理池太薄 fail-closed」⇒ 全天 161 条 ogr_shadow_none 零落盘（D1 失明）。
-if (_OGR_BACKTEST_ENABLE or bool(PARAMS.get("open_gap_reversal_live_enabled", False))
-        or bool(PARAMS.get("open_gap_reversal_shadow_enabled", False))):
-    try:
-        MARKET_PROXY = {c: _code_to_gm(c)
-                        for c in (_OGR_GLUE.proxy_codes() if _OGR_GLUE else [])
-                        if c not in STOCKS}
-    except Exception as _pe:                      # 构建失败 ⇒ 空池（mkt_gap 会退化，须告警）
-        print(f"[OGR] 市场代理池构建失败（mkt_gap 将退化为自指！）: {_pe}")
-        MARKET_PROXY = {}
+_REJ_STATUS = (4, 5, 6, 8, 12)   # gm 委托终态：这些 status = 拒单/撤单/过期
 
 
-def _ogr_active(context) -> bool:
-    """L4 是否生效：**live**（PARAMS 翻启）**或 回测开关**。
+# ══════════════════════════════════════════════════════════════════════
+# 策略框架接线（2026-10-12）：掘金原语 → GmServices → 网关/策略
+#
+# 仓规：**只有本文件能 import gm.api**。framework/ 内的网关与归属锁一律经 GmServices 注入，
+# 因此它们可离线单测、可换纸面网关干跑。
+# ══════════════════════════════════════════════════════════════════════
 
-    ⚠️ 回测下 `context.mode == MODE_BACKTEST`，故不能只认 MODE_LIVE —— 否则回测里
-    本策略一次都不会触发（这正是回测闭环自检的前提）。
+
+class _GmPrimitives(object):
+    """掘金原语的命名空间（注入给框架用，避免框架直接 import gm.api）。"""
+
+    order_volume = staticmethod(order_volume)
+    get_orders = staticmethod(get_orders)
+    current = staticmethod(current)
+    history = staticmethod(history)          # 列表式批量（1800s/60s 多票一次拉）——钩子取数用
+    history_n = staticmethod(history_n)
+    OrderSide_Buy = OrderSide_Buy
+    OrderSide_Sell = OrderSide_Sell
+    OrderType_Market = OrderType_Market
+    OrderType_Limit = OrderType_Limit
+    PositionEffect_Open = PositionEffect_Open
+    PositionEffect_Close = PositionEffect_Close
+    ADJUST_PREV = ADJUST_PREV
+
+
+class _OscBookOwner(object):
+    """超跌跳空确认的**归属证据**：它的持仓账本（`positions.json`）就是"谁持有"的真源。
+
+    策略增加时，每个策略挂一个这样的适配器进 `OWNERSHIP.strategies` 即可；
+    归属判据本身不需要新状态文件（见 framework/ownership.py docstring）。
     """
-    if _OGR_GLUE is None or not _OGR_GLUE.available():
-        return False
-    _mode = getattr(context, "mode", None)
-    # ⚠️ 回测分支**必须独立于实盘开关**：否则「为了不上实盘而关掉 live 开关」会把回测一起禁掉
-    #    （2026-09-23 实测踩到）。回测只认显式 `SUPERTRADER_OGR_BACKTEST=1`（仅 --ogr 设置）。
-    if _OGR_BACKTEST_ENABLE and _mode == MODE_BACKTEST:
-        return True
-    # 实盘分支：既要 PARAMS 翻启，也要真的在 MODE_LIVE
-    return bool(PARAMS.get("open_gap_reversal_live_enabled", False)) and _mode == MODE_LIVE
 
+    id = "osc"
 
-_OGR_REJ_STATUS = (4, 5, 6, 8, 12)      # 与既有 BASE/OPEN_ALIGN 口径一致：这些 status = 拒单
-
-
-def _ogr_rej(ret):
-    """order_volume 返回 List[Dict]；返回拒单状态码，未被拒返回 None。"""
-    try:
-        for _o in (ret if isinstance(ret, list) else [ret]):
-            if isinstance(_o, dict) and _o.get("status") in _OGR_REJ_STATUS:
-                return _o.get("status")
-    except Exception:
-        pass
-    return None
-
-
-def _ogr_legs(context) -> dict:
-    """当日 T 腿台账 {code: {gm_symbol, qty, buy_px, buy_time, date}}。"""
-    d = getattr(context, "_ogr_legs", None)
-    if not isinstance(d, dict):
-        d = {}
-        context._ogr_legs = d
-    return d
-
-
-def _ogr_pending_buy(context) -> dict:
-    """09:31 已下单、**尚未确认成交**的买腿 {gm_symbol: {...}}。
-
-    掘金拒单是异步经 on_order_status 回来的，`order_volume` 的同步返回值里没有终态 ⇒
-    下单即建腿会留下"幽灵腿"。故先挂此处，成交回调（status==3）才转成真腿 [[_ogr_legs]]。
-    """
-    d = getattr(context, "_ogr_pending_buy", None)
-    if not isinstance(d, dict):
-        d = {}
-        context._ogr_pending_buy = d
-    return d
-
-
-def _ogr_sym_of(context, code: str):
-    """6 位码 → gm symbol（交易池 STOCKS，回退市场代理池 MARKET_PROXY）。"""
-    try:
-        return STOCKS.get(code) or MARKET_PROXY.get(code)
-    except Exception:
-        return None
-
-
-def _ogr_last_px(context, sym: str) -> float:
-    """该 symbol 的最新参考价：优先账户/信号价，回退 bar_cache 末根收盘。"""
-    try:
-        mp = (getattr(context, "manual_position", {}) or {}).get(sym) or {}
-        p = float(mp.get("price") or 0)
-        if p > 0:
-            return p
-    except Exception:
-        pass
-    try:
-        bars = (getattr(context, "bar_cache", {}) or {}).get(sym) or []
-        if bars:
-            return float(bars[-1].get("close") or 0)
-    except Exception:
-        pass
-    return 0.0
-
-
-_OGR_LEG_NOTIONAL = 100000.0        # 单腿目标金额（owner 单笔 ≥10 万；容量表 10 万可覆盖 78~95%）
-
-
-def _ogr_prev_close_map(context, codes) -> dict:
-    """{code: 前一交易日收盘} —— 取自**自维护并每日冻结**的昨收快照 `context._ogr_pc_snapshot`。
-
-    ⚠️ 三个历史坑，都别再踩：
-    1. **不可用 `holdings.json::pre_close`**：那是"当前"值（superTrader 14:59 写入），
-       回测里拿它算历史某日的 gap 会得到完全错误的信号；live 也依赖 superTrader 当日已写。
-    2. **不可用 `bar_cache[sym][-1]['close']`**（2026-09-24 实锤）：OGR 触发要等全池开盘价集齐，
-       而开盘价是在**本轮逐票循环里**累积的 ⇒ 触发发生在循环**末尾**，那时末根已是**今天 09:31
-       那根 bar**。实测 002491 于 2026-04-02：审计 `prev_close=12.11`，而 GM 自己的 60s 数据里
-       `04-02 09:31` 那根正是 O=11.69 / C=12.11 ⇒ 拿「同一天 bar 的收盘」当昨收 ⇒ `gap` 退化成
-       **第一分钟涨跌**、「大盘低开」闸恒真、规则变成「选开盘一分钟已拉起的票」= 用**入场后**
-       才形成的信息选票（look-ahead）。那一轮的 +2.92%/腿 就是这么来的。
-    3. **不可用盘前预热的 `history_n` 结果**：回测 init 里 `history_n` 返回的是**真实当日**数据
-       （日志指数日线缓存写着 `~2026-09-23`），与回测窗口无关。
-    取不到则跳过该票（fail-closed，不猜）。
-    """
-    snap = getattr(context, "_ogr_pc_snapshot", None) or {}
-    out = {}
-    for code in codes:
+    def _open(self) -> dict:
+        # 归属证据 = 策略账本（`osc.executor.load_book`）。2026-10-12 搬进策略包时，
+        # executor 的「导入时 sys.path.insert(0, ROOT)」副作用已消除（改绝对路径加载 cost_model）
+        # ⇒ 本适配器对宿主零副作用，不再需要 save/restore sys.path。
         try:
-            c = float(snap.get(code) or 0)
-            if c > 0:
-                out[code] = c
-        except Exception:
-            continue
-    return out
-
-
-def _ogr_size(context, code: str, cp: float, avail_cash: float, sym: str) -> int:
-    """单腿规模：目标 10 万，封顶到剩余现金与既定仓位口径；取整到 100 股。
-
-    刻意**不**复用 `context.sizer`（那是做T的按比例口径，需要 sig），本规则是固定金额口径。
-    """
-    if cp <= 0:
-        return 0
-    _n = min(_OGR_LEG_NOTIONAL, max(0.0, avail_cash * 0.95))
-    return int(_n / cp / 100) * 100
-
-
-def _ogr_first_oid(orders):
-    """从 order_volume 返回（List[Dict]）取首个 id。"""
-    try:
-        for _o in (orders if isinstance(orders, list) else [orders]):
-            if isinstance(_o, dict):
-                _i = _o.get("id") or _o.get("order_id") or _o.get("cl_ord_id")
-                if _i:
-                    return _i
-    except Exception:
-        pass
-    return None
-
-
-def _ogr_try_buy(context, now) -> int:
-    """09:31 开盘低开反转买入。返回已下单腿数。**下单前逐项过既有额度闸。**"""
-    if _OGR_GLUE is None:
-        return 0
-    _opens = dict(getattr(context, "_ogr_opens", {}) or {})
-    # ⚠️ 代理池 + 交易池一起喂进决策核（**中位数用宽池算**），但只对**交易池**出决策与下单 ——
-    #    这是 2026-09-24 修掉「自指代理」的关键；规则核 `evaluate(codes=...)` 原生支持。
-    _pool = list(STOCKS) + [c for c in MARKET_PROXY if c not in STOCKS]
-    _pcm = _ogr_prev_close_map(context, _pool)
-    # 诊断：日线上下文到底取到了什么（2026-09-24 查「回测里日线是否含当日 forming bar」用）。
-    # 只在诊断用，不影响任何决策；两票 × 缓存里已有的 (日期|票) 键。
-    _dsample = []
-    try:
-        _dcache = getattr(context, "_daily_ctx_cache_map", None) or {}
-        for _c in list(STOCKS)[:2]:
-            for _k, _v in _dcache.items():
-                if str(_k).endswith("|" + _c):
-                    _dsample.append({"key": str(_k), "pc": _v.get("daily_prev_close"),
-                                     "ma5": _v.get("daily_ma5"), "st": _v.get("daily_status"),
-                                     "atr": _v.get("daily_atr")})
-    except Exception:
-        pass
-    _audit_write({"event": "ogr_diag", "n_opens": len(_opens), "n_prev": len(_pcm),
-                  "n_common": len(set(_opens) & set(_pcm)), "n_stocks": len(STOCKS),
-                  "n_proxy": len(MARKET_PROXY), "daily": _dsample,
-                  "common": sorted(set(_opens) & set(_pcm))[:5], "time": str(now)})
-    rec = _OGR_GLUE.evaluate_maps(_opens, _pcm, now,
-                                  codes=list(STOCKS), median_codes=list(MARKET_PROXY))
-    if rec is None:
-        return 0
-    _OGR_GLUE.append_log({**rec, "layer": "L4_live", "phase": "buy_decision"},
-                         _OGR_LOG_DIR)
-    tradable = list(rec.get("tradable") or [])[:_OGR_MAX_LEGS]
-    if not tradable:
-        return 0
-
-    # 现金：`account().cash` 返回 **dict**（键 available/available_cash/cash/total），
-    # 口径与既有「N3 现金预检」一致（gm_main:2724 一带）。
-    _avail = 0.0
-    try:
-        _acct = _sdk_call("account", context.account)
-        _c = getattr(_acct, "cash", None)
-        if _c is not None:
-            _c = _c() if callable(_c) else _c
-            if isinstance(_c, dict):
-                _avail = float(_c.get("available") or _c.get("available_cash")
-                               or _c.get("cash") or _c.get("total") or 0)
-            else:
-                _avail = float(_c)
-    except Exception:
-        _avail = 0.0
-    if _avail <= 0:
-        _audit_write({"event": "ogr_buy_skip", "reason": "no_cash", "time": str(now)})
-        return 0
-
-    _total_eq = _total_equity(context, _avail)
-    n = 0
-    for code in tradable:
-        try:
-            sym = _ogr_sym_of(context, code)
-            if not sym:
-                continue
-            h = _get_holding(context, code, sym)
-            pos_qty = int(h.get("qty", 0) or 0)
-            # ⚠️ 买入参考价必须取**当日首根 bar 的 open**（即本票本次累积到的那个值）。
-            # 不可用 _ogr_last_px：触发点在逐票循环**之前**，其 bar_cache 末根还是**前一交易日**
-            # 的最后一根 ⇒ 会拿前收当现价（2026-09-22 实测：301396 前收 194.99 vs 实际 ~136.5，
-            # 既错记收益、又把下单股数算成 1/3）。
-            cp = float(_opens.get(code) or 0)
-            if not (cp > 0):
-                continue
-            base_ref = int(getattr(context, f"_base_ref_{code}", 0) or 0)
-            budget, max_shares = _stock_budget_cap(context, code, cp, _total_eq)
-            if _check_max_pos_cap(context, code, now, pos_qty, base_ref, max_shares,
-                                  budget, _total_eq, action="OGR_BUY", t_headroom=0):
-                continue                                   # 额度闸拦截（已留痕）
-            qty = _ogr_size(context, code, cp, _avail, sym)
-            if qty < 100:
-                _audit_write({"event": "ogr_buy_skip", "code": code, "reason": "size_lt_100",
-                              "time": str(now)})
-                continue
-            if _limit_clamp_should_skip(context, code, sym, OrderSide_Buy, qty, cp, now,
-                                        "ogr_buy"):
-                continue
-            # ⚠️ 必须先写事件桥的 order 事件：on_order_status 的**孤儿闸**按「当日桥内
-            # 有无本策略 order」判非本策略成交，不写则 fill 被判 orphan_fill ⇒ **不入台账**
-            # ⇒ 引擎以为没持仓 ⇒ 卖出可用量算错（2026-09-22 实测根因）。
-            try:
-                write_order(str(now), code, "BUY", qty, cp)
-            except Exception:
-                pass
-            # 与做T买入同口径：**下单前**留 manual_position 快照（拒单恢复用）。不留快照 ⇒
-            # 拒单分支走「无快照兜底」按 volume 逆减，把从未加过的仓减掉（2026-09-23 排查发现）。
-            _pbs = getattr(context, "_pending_buy_snapshot", None)
-            if _pbs is None:
-                _pbs = context._pending_buy_snapshot = {}
-            _snap0 = context.manual_position.get(sym)
-            _pbs[sym] = copy.deepcopy(_snap0) if _snap0 else None
-            _o = _sdk_call("order_volume", _partial(
-                order_volume, symbol=sym, volume=qty, side=OrderSide_Buy,
-                order_type=(OrderType_Limit if _OGR_USE_LIMIT else OrderType_Market),
-                position_effect=PositionEffect_Open,
-                **({"price": cp} if _OGR_USE_LIMIT else {})))
-            _rj = _ogr_rej(_o)
-            if _rj is not None:
-                _pbs.pop(sym, None)
-                if _snap0 is None:
-                    context.manual_position.pop(sym, None)
-                else:
-                    context.manual_position[sym] = copy.deepcopy(_snap0)
-                _audit_write({"event": "ogr_buy_rejected", "code": code, "qty": qty,
-                              "status": _rj, "time": str(now)})
-                continue
-            _oid = _ogr_first_oid(_o)
-            # ⚠️ 必须取**本票**那行（2026-09-22 修：误用 rows[0] 导致所有票记同一个 bar_open）
-            _r0 = next((r for r in (rec.get("rows") or []) if r.get("code") == code), None)
-            # 买腿**不在下单时建账**：拒单异步回来（同步返回值无终态），下单即建腿 = 幽灵腿。
-            # 改挂 pending，由成交回调（status==3）落成真腿。
-            _ogr_pending_buy(context)[sym] = {
-                "code": code, "qty": qty, "buy_px": cp, "buy_time": str(now),
-                "date": rec["date"], "px_bar_open": (_r0 or {}).get("bar_open"),
-                "prev_close": (_r0 or {}).get("prev_close"), "gap": (_r0 or {}).get("gap")}
-            # 加仓（T+1：只加 qty/t_qty，不动 available），供 09:31~10:00 窗口内的持仓判定
-            _cur0 = context.manual_position.get(sym) or {}
-            _oq = int(_cur0.get("qty", 0) or 0)
-            _oc = float(_cur0.get("cost", cp) or cp)
-            _nq0 = _oq + qty
-            context.manual_position[sym] = dict(_cur0, **{
-                "name": _cur0.get("name") or STOCK_NAMES.get(code, code),
-                "qty": _nq0, "t_qty": _nq0,
-                "cost": ((_oc * _oq + cp * qty) / _nq0) if _nq0 else cp,
-                "type": _cur0.get("type") or "stock"})
-            _audit_write({"event": "ogr_buy_submit", "code": code, "gm_symbol": sym, "qty": qty,
-                          "px_bar_open": (_r0 or {}).get("bar_open"),
-                          "prev_close": (_r0 or {}).get("prev_close"),
-                          "gap": (_r0 or {}).get("gap"),
-                          "ref_px": cp, "order_id": _oid, "time": str(now)})
-            n += 1
+            return dict((osc.executor.load_book(_OSC_BOOK_DIR).get("open") or {}))
         except Exception as _e:
-            print(f"[OGR] 买入异常 {code}: {_e}")
+            print(f"[OWN] ⚠️ 读超跌跳空确认账本失败（按无持仓——只影响归属判定，不阻断）: {_e}")
+            return {}
 
-    if n:
-        print(f"[{now:%H:%M:%S}] [OGR] 开盘低开反转买入 {n} 腿 "
-              f"(mkt_gap={rec.get('mkt_gap')})")
-    return n
+    def owns(self, code: str) -> bool:
+        return str(code) in self._open()
+
+    def owned_codes(self):
+        return sorted(self._open())
 
 
-def _ogr_try_sell(context, now) -> int:
-    """10:00 起平掉当日 T 腿（按买入原量卖回）。返回已下单腿数。"""
-    legs = _ogr_legs(context)
-    if not legs:
-        return 0
-    n = 0
-    for code, leg in list(legs.items()):
-        try:
-            sym = leg.get("gm_symbol")
-            qty = int(leg.get("qty", 0) or 0)
-            if not sym or qty < 100:
-                legs.pop(code, None)
-                continue
-            h = _get_holding(context, code, sym)
-            _pos = int(h.get("qty", 0) or 0)
-            _araw = h.get("available")
-            _avail = _pos if _araw is None else int(_araw)
-            _base = int(getattr(context, f"_base_ref_{code}", 0) or 0)
-            # ⚠️ 底仓做T：卖的是**早已过 T+1 的底仓**（09:31 那笔买只是补回底仓），
-            # 故可卖量以**底仓量**为准。回测 harness 的 available 语义未打通（恒 0，
-            # 2026-09-23 实测 48 腿因此平不掉）⇒ 取 max(available, base_ref)。
-            # 注：qty 本身已 ≤ 底仓（09:31 按 10 万名义下单），故不会超卖底仓。
-            _sellable = max(_avail, _base, 0)
-            _tif = int(getattr(context, "_inflight_sell", {}).get(sym, 0) or 0)
-            sell_qty = (min(qty, max(0, _sellable - _tif)) // 100) * 100
-            if sell_qty < 100:
-                # 降噪：每票每日只记一条（原先每根 bar 记一条 ⇒ 150k 条刷屏）
-                _sk = f"_ogr_skipped_{code}"
-                if getattr(context, _sk, None) != str(now)[:10]:
-                    setattr(context, _sk, str(now)[:10])
-                    _audit_write({"event": "ogr_sell_skip", "code": code,
-                                  "reason": "avail_lt_100", "avail": _avail,
-                                  "base_ref": _base, "pos": _pos, "time": str(now)})
-                continue
-            cp = _ogr_last_px(context, sym)
-            if _limit_clamp_should_skip(context, code, sym, OrderSide_Sell, sell_qty, cp, now,
-                                        "ogr_sell"):
-                continue
-            try:
-                write_order(str(now), code, "SELL", sell_qty, cp)
-            except Exception:
-                pass
-            _o = _sdk_call("order_volume", _partial(
-                order_volume, symbol=sym, volume=sell_qty, side=OrderSide_Sell,
-                order_type=OrderType_Market, position_effect=PositionEffect_Close))
-            _rj = _ogr_rej(_o)
-            if _rj is not None:
-                _audit_write({"event": "ogr_sell_rejected", "code": code, "qty": sell_qty,
-                              "status": _rj, "time": str(now)})
-                continue
-            # ⚠️ 拒单是**异步**回来的（on_order_status status ∈ 4/5/6/8/12），`order_volume`
-            # 的同步返回值里没有终态 ⇒ `_ogr_rej` 只兜得住极少数同步拒单，**不可作准**。
-            # 2026-09-23 实测：5/5 OGR 卖单被拒，却全记 ogr_sell 并 pop 腿 ⇒ 腿丢失、底仓加厚。
-            # 故下单只做两件事：标 `_pending_sell_action` + 与 sell_channels 同口径虚减
-            # manual_position（拒单由 status=8 分支回滚，见 on_order_status N25-2）；
-            # **真腿在成交回调（status==3）里才 pop 并落 `ogr_sell`**。
-            if not hasattr(context, "_pending_sell_action"):
-                context._pending_sell_action = {}
-            context._pending_sell_action[sym] = ("OGR_SELL", 0)
-            # ⚠️ 决策参考价必须单独带过去：成交回调里只有 fill price，若把 `ref_px` 也填成
-            # fill，口径A（决策价→决策价）就退化了，卖腿滑点永远量不出来（2026-09-23 踩到）。
-            if not hasattr(context, "_ogr_sell_ref"):
-                context._ogr_sell_ref = {}
-            context._ogr_sell_ref[sym] = cp
-            _mp = context.manual_position.get(sym)
-            if _mp is not None:
-                _mp["qty"] = max(0, int(_mp.get("qty", 0) or 0) - sell_qty)
-                _mp["t_qty"] = _mp["qty"]
-                _mp["available"] = max(0, int(_mp.get("available", 0) or 0) - sell_qty)
-            _audit_write({"event": "ogr_sell_submit", "code": code, "gm_symbol": sym,
-                          "qty": sell_qty, "leg_qty": qty, "buy_px": leg.get("buy_px"),
-                          "ref_px": cp, "order_id": _ogr_first_oid(_o), "time": str(now)})
-            n += 1
-        except Exception as _e:
-            print(f"[OGR] 卖出异常 {code}: {_e}")
-    if n:
-        print(f"[{now:%H:%M:%S}] [OGR] 开盘低开反转卖出 {n} 腿")
-    return n
+OWNERSHIP = Ownership(
+    strategies=[_OscBookOwner()],
+    override_path=_ownership_path_fn(os.environ.get("SUPERTRADER_ROOT", r"E:\superTrader")),
+)
+
+SERVICES = GmServices(
+    gm=_GmPrimitives(),
+    sdk_call=_sdk_call,
+    write_order=write_order,
+    mark_pending_recon=_mark_pending_recon,
+    code_to_gm=_code_to_gm,
+    raw_code=_raw_code,
+    param=lambda k, d=None: PARAMS.get(k, d),
+    clock=lambda ctx: (ctx.now if hasattr(ctx, "now") else datetime.now()),
+    reject_statuses=_REJ_STATUS,
+    ownership=OWNERSHIP,
+    risk=write_risk,
+    audit=_audit_write,
+    kill_switch=check_kill_switch,
+)
+
+# 策略运行时句柄（账本目录 + 时钟 + 日志 + 网关工厂）—— 策略包的唯一入口
+OSC_RT = osc.Runtime(
+    services=SERVICES,
+    book_dir=_OSC_BOOK_DIR,
+    is_live=lambda ctx: getattr(ctx, "mode", None) == MODE_LIVE,
+    log=print,
+)
 
 
 def on_bar(context, bars):
-    # 模块级"每日一次"标记（Python 要求 global 声明位于函数内任何使用之前）
-    global _OGR_LIVE_BUY_DONE_DATE, _OGR_SHADOW_DONE_DATE, _OGR_SELL_DONE_DATE
-    global _WS_PREPARE_DONE_DATE, _WS_BUY_DONE_DATE, _WS_MORNING_SELL_DONE_DATE, _WS_SELL_DONE_DATE
     now = context.now if hasattr(context, "now") else datetime.now()
     import utils.helpers as uh
     uh.SIM_NOW = now
-    import t_engine_auto as tea
-    tea.SIM_NOW = now
 
     t = now.time()
     today = now.date()
@@ -2750,104 +790,9 @@ def on_bar(context, bars):
     # ── D1: 按日重置 ──
     if context.cur_date is None or context.cur_date != today:
         context.cur_date = today
-        context.daily_buy_count.clear()
-        context.daily_sell_count.clear()
-        context.daily_trade_price.clear()
-        context.engine._check_date_reset()
-        # 2026-09-22 开盘低开反转（L4）：按日清空 T 腿台账 + 池开盘价 + 买入/卖出一次标记
-        _OGR_LIVE_BUY_DONE_DATE = None
-        _OGR_SELL_DONE_DATE = None
-        # 弱转强（2026-10-10）：按日重置预筛候选 + 盘前/10:00买/10:00早盘卖/14:50 每日一次标记
-        _WS_PREPARE_DONE_DATE = None
-        _WS_BUY_DONE_DATE = None
-        _WS_MORNING_SELL_DONE_DATE = None
-        _WS_SELL_DONE_DATE = None
-        context._ws_candidates = {}
-        # 回测第 1 个交易日（底仓由 harness 当日现买）：当日卖腿必被 T+1 拒，而买腿已成交
-        # ⇒ 底仓被**永久**加厚。故回测下第 1 天整日跳过 OGR（2026-09-23 实测）。
-        if getattr(context, "_bt_first_day", None) is None:
-            context._bt_first_day = today
-        # 冻结「今日的前收」= 上一交易日各票的**最后收盘**（见 `_ogr_prev_close_map`）。
-        # 在这里冻结而非触发时读，是为了不受「触发发生在本轮循环之前还是之后」影响（09:35 兜底路径
-        # 会在循环之后才触发）。第 1 天空快照 ⇒ OGR 不发单（第 1 天本也整日跳过）。
-        context._ogr_pc_snapshot = dict(getattr(context, "_ogr_pc_cache", None) or {})
-        # 2026-10-09 复盘实证：live 每日新进程 ⇒ `_ogr_pc_cache` 只在 live bar 循环逐根写、
-        # 无盘前预热 ⇒ 首根 bar 冻结到**空快照** ⇒ 影子层 median 池 ∩ 昨收 < MIN_POOL 全天
-        # fail-closed（ogr_shadow_none ×321，D1 重计第三次失败）。live 下用 history_n 日线
-        # 预热缺口（`_px_of` 同款兜底模式）；回测禁用——回测 init 的 history_n 返真实当日
-        # 数据、与回测窗口无关（见 `_ogr_prev_close_map` 坑 3），回测由 harness 喂快照。
-        if getattr(context, "mode", None) == MODE_LIVE:
-            try:
-                _pc_pool = list(STOCKS) + [c for c in MARKET_PROXY if c not in STOCKS]
-                _pc_missing = [c for c in _pc_pool
-                               if not (context._ogr_pc_snapshot.get(c) or 0)]
-                _pc_filled = 0
-                for _c in _pc_missing:
-                    try:
-                        _his = _sdk_call("ogr_pc_prewarm", _partial(
-                            history_n, symbol=_code_to_gm(_c), frequency="1d",
-                            count=3, fields="eob,close", adjust=ADJUST_PREV))
-                        # 只取 eob 早于今日的完整日线（防盘中 forming bar 混入）
-                        _rows = [r for r in (_his or [])
-                                 if str(r.get("eob", ""))[:10] < str(today)]
-                        if _rows:
-                            _cl = float(_rows[-1]["close"])
-                            if _cl > 0:
-                                context._ogr_pc_snapshot[_c] = _cl
-                                _pc_filled += 1
-                    except Exception:
-                        continue
-                if _pc_missing:
-                    print(f"[OGR] 昨收盘前预热: 缺 {len(_pc_missing)} 只, 补齐 {_pc_filled} 只")
-                    _audit_write({"event": "ogr_pc_prewarm", "date": str(today),
-                                  "missing": len(_pc_missing), "filled": _pc_filled})
-            except Exception as _pe:
-                print(f"[OGR] ⚠️ 昨收预热失败（fail-closed，沿用空快照）: {_pe}")
-        context._ogr_legs = {}
-        context._ogr_opens = {}
+        # 策略侧按日重置（预筛候选 + 四个"每日一次"标记）——状态在策略包内
+        osc.reset_day(today)
         _audit_write({"event": "date_reset", "date": str(today)})
-        # 人工确认闸按日重置：作废旧 pending（留痕 expired）+ 清当日拒绝 + 重写空请求文件
-        _old_pending = dict(getattr(context, "_buy_confirm_pending", {}) or {})
-        if _old_pending or getattr(context, "_buy_confirm_rejected", set()):
-            try:
-                for _c, _req in _old_pending.items():
-                    write_confirm(str(now), _c, "expired",
-                                  detail=(f"跨日作废 {_req.get('action', '')} "
-                                          f"qty={_req.get('qty')}@{_req.get('price')}"),
-                                  request_id=_req.get("request_id"))
-            except Exception:
-                pass
-        context._buy_confirm_rejected = set()
-        context._buy_confirm_pending = {}
-        try:
-            write_buy_pending({"date": str(today),
-                               "updated_at": f"{now:%Y-%m-%d %H:%M:%S}",
-                               "rejected_today": [], "pending": {}})
-        except Exception:
-            pass
-
-    # ── KILL_SWITCH 检查 ──
-    _killed = check_kill_switch()
-
-    # 人工建仓武装标记（2026-08-30 手动建仓→做T衔接）：GUI 手动确认建仓/加仓后写 AUTO_BUILD.json，
-    # 本 bar 起对武装标的跳过 BASE 确认闸（不再重复弹窗），直接走完整闸链建仓→成交→做T。
-    # 每根 bar 读一次存 context（避免 17 票每票读文件）；下单成功后消费（一次性）。
-    try:
-        context._auto_build_armed = read_auto_build().get("requests") or {}
-    except Exception:
-        context._auto_build_armed = {}
-
-    # P0-4(2026-09-01): 日内巡检——confirm 已到但信号未再触发导致 pending 悬空 → 超时作废留痕
-    try:
-        _scan_pending_confirm(context, now)
-    except Exception:
-        pass
-
-    # 2026-09-15 阶段0-3（诊断D3）：BUY_PENDING 盘中超时看门狗——挂起无人确认超时自动作废留痕
-    try:
-        _scan_pending_unanswered(context, now)
-    except Exception:
-        pass
 
     # 双向看门狗：watcher 心跳缺失/过期自动重生（0806 红日整改）
     ops_guard.ensure_watcher(PROJECT_DIR)
@@ -2855,168 +800,15 @@ def on_bar(context, bars):
     if t < dtime(9, 30) or (dtime(11, 30) < t < dtime(13, 0)) or t > dtime(15, 0):
         return
 
+    # ── 唯一策略：超跌跳空确认的四时点钩子（09:31 预筛 / 10:00 早盘卖 → 10:00 买 / 14:50 卖）──
+    # 时间窗 · 每日一次 · MODE_LIVE 闸 · 逐钩子异常隔离**都在策略包内**（hooks.on_bar），
+    # 宿主不再持有任何策略状态。详见 execution/auto/oversold_gap_confirm/。
+    osc.on_bar(OSC_RT, context, now, today, t)
+
+    global _WB_DONE_DATE
     # ── 持仓真源回写（2026-09-14 并表）：收盘后一次，把账户实际 qty/cost 写回 holdings.json ──
     # 取 14:57 每日一次（on_bar 在 15:00 后 return，没有更晚的钩子）。与 superTrader 14:59 的
     # pre_close 写并发也安全：本侧是"磁盘为基 + 只补丁 qty/cost"，且对方读后再写，两个方向都不丢。
-    # ── 开盘强制对齐（2026-09-14 owner 裁决）：每个交易日一次，把实际持仓拉到目标底仓 ──
-    # 2026-10-08 复盘实证：清退挂单日 align 必须等到 09:32——on_bar 逐票回调使
-    # 调用处局部标记同秒失效，600584 因此被现金封顶只买到 400/1200；改用模块级持久标记。
-    global _OPEN_ALIGN_DONE_DATE
-    # 2026-10-10 S1 接管：s1_mode_enabled=on 时镜像对齐默认挂起（_s1_open_align_allowed），
-    # 否则镜像逻辑与 S1 调仓打架。挂起首日报一行醒目日志（不逐 bar 刷屏）。
-    if (t >= dtime(9, 31) and _OPEN_ALIGN_DONE_DATE != today
-            and getattr(context, "mode", None) == MODE_LIVE
-            and _s1_open_align_allowed()):
-        _OPEN_ALIGN_DONE_DATE = today
-        try:
-            _force_open_align(context)
-        except Exception as _oae:
-            print(f"[OPEN_ALIGN] 失败（不阻断主循环）: {_oae}")
-
-    # ── 弱转强选股 · 盘前超跌候选预筛（2026-10-10，WS3：09:31 提前把 10:00 要看的
-    #    股票从全池砍到「前 N 板块内 + 昨收<MA20」的几十只，10:00 只做一次批量取数）──
-    if (_ws_mode_on() and t >= dtime(9, 31) and _WS_PREPARE_DONE_DATE != today
-            and getattr(context, "mode", None) == MODE_LIVE):
-        _WS_PREPARE_DONE_DATE = today
-        try:
-            _ws_prepare(context, now, today)
-        except Exception as _wse:
-            print(f"[WS] 盘前预筛失败（不阻断主循环）: {_wse}")
-
-    # ── 弱转强选股 · 10:00 早盘冲高卖（2026-10-10，WS5：D+1 持仓早盘冲 ≥ +3% 就卖；
-    #    与买侧同刻，但排在买侧之前 → 先卖回笼现金再买，避免现金挤占）──
-    if (_ws_mode_on() and bool(PARAMS.get("weak_strong_sell_enabled", True))
-            and t >= _ws_morning_sell_time() and _WS_MORNING_SELL_DONE_DATE != today
-            and getattr(context, "mode", None) == MODE_LIVE):
-        _WS_MORNING_SELL_DONE_DATE = today
-        try:
-            _ws_try_morning_sell(context, now, today)
-        except Exception as _wse:
-            print(f"[WS] 10:00 早盘冲高卖失败（不阻断主循环）: {_wse}")
-
-    # ── 弱转强选股 · 10:00 买侧（2026-10-10，WS2：一次性批量拉 1800s 10:00 棒 → 决策核
-    #    → top-N 下单；复用 _S1GmGateway 的掘金模拟盘下单通道）──
-    if (_ws_mode_on() and t >= dtime(10, 0) and _WS_BUY_DONE_DATE != today
-            and getattr(context, "mode", None) == MODE_LIVE):
-        _WS_BUY_DONE_DATE = today
-        try:
-            _ws_try_buy(context, now)
-        except Exception as _wse:
-            print(f"[WS] 10:00 买侧失败（不阻断主循环）: {_wse}")
-
-    # ── 弱转强选股 · 14:50 卖侧（2026-10-10，WS4：SL5只深 close 止损 + 到期平仓；
-    #    只卖账本内持仓，先与账户真实持仓对账防 S1 清仓等外部卖出留幽灵单）──
-    if (_ws_mode_on() and bool(PARAMS.get("weak_strong_sell_enabled", True))
-            and t >= _ws_sell_time() and _WS_SELL_DONE_DATE != today
-            and getattr(context, "mode", None) == MODE_LIVE):
-        _WS_SELL_DONE_DATE = today
-        try:
-            _ws_try_sell(context, now, today)
-        except Exception as _wse:
-            print(f"[WS] 14:50 卖侧失败（不阻断主循环）: {_wse}")
-
-    # ── OGR 池开盘价逐票累积（L3 影子与 L4 实单共用；2026-09-30 复盘实证）──
-    # gm 的 on_bar 是**逐票回调**（实测每次只有 1 根 bar），单次调用看不到全池 ⇒
-    # 截面中位数必须靠跨回调累积。setdefault 幂等：L3 与 L4 复用同一个
-    # context._ogr_opens（D1 按日重置为空 dict），重复调用无副作用。
-    if _OGR_GLUE is not None:
-        _opens_store = getattr(context, "_ogr_opens", None)
-        if _opens_store is None:
-            _opens_store = context._ogr_opens = {}
-        for _b in (bars or []):
-            try:
-                _gs = (_b.get("symbol") if isinstance(_b, dict)
-                       else getattr(_b, "symbol", None))
-                _cd = _OGR_GLUE.code_of(_gs)
-                _op = float(((_b.get("open") if isinstance(_b, dict)
-                              else getattr(_b, "open", 0)) or 0))
-                if (_cd and (_cd in STOCKS or _cd in MARKET_PROXY)
-                        and _op > 0 and t >= _OGR_BUY_WINDOW[0]):
-                    _opens_store.setdefault(_cd, _op)
-            except Exception:
-                continue
-
-    # ── 开盘低开反转 L3 影子层（2026-09-22）：每个交易日一次，只记日志、不下单 ──
-    # 时点同 _OPEN_ALIGN：t >= 09:31 时本轮 on_bar 的 bars 即当日**第一根 60s bar**，
-    # 其 open 应等于集合竞价价（这正是 L3 要在真实 bar 流上验证的第一件事）。
-    # 2026-09-30 复盘实证（ogr_shadow_2026-09-30.jsonl 窗口内重试全部 snap_n=1 /
-    # pool_too_thin）：旧实现把单次回调的 bars 直接喂 run_shadow，而 live 的 on_bar
-    # 是逐票回调 ⇒ 影子层永远只能看到 1 只票。改为与 L4 同款：用上面逐票累积的
-    # context._ogr_opens + 昨收 map 走 evaluate_maps，触发时机亦与 L4 对齐
-    # （交易池集齐 or 窗口末 09:35~09:40 且 have>=5 兜底）。
-    if (_ogr_shadow_enabled() and _OGR_SHADOW_DONE_DATE != today
-            and getattr(context, "mode", None) == MODE_LIVE):
-        # ⚠️ 只数**交易池**的开盘价（代理池的数不算），与 L4 同款口径
-        _sh_have = len([c for c in (getattr(context, "_ogr_opens", {}) or {}) if c in STOCKS])
-        _sh_ready = (_sh_have >= max(5, len(STOCKS))
-                     and _OGR_BUY_WINDOW[0] <= t <= _OGR_BUY_WINDOW[1])
-        # 兜底：窗口末仍未集齐（个别票缺当日 bar）→ 用已到的算，不整日放弃
-        if not _sh_ready and _sh_have >= 5 and _OGR_BUY_WINDOW[1] <= t <= dtime(9, 40):
-            _sh_ready = True
-        if _sh_ready:
-            # 2026-09-29 复盘实证（dd1253c）：rec 非空才置 DONE；None / 异常窗口内
-            # 下一根 bar 自动重试，均补 audit 留痕。
-            try:
-                _sh_opens = dict(getattr(context, "_ogr_opens", {}) or {})
-                _sh_pool = list(STOCKS) + [c for c in MARKET_PROXY if c not in STOCKS]
-                # prev_close 优先用自冻结的昨收快照；太薄再退回 holdings.json::pre_close
-                _sh_pcm = _ogr_prev_close_map(context, _sh_pool)
-                if len(_sh_pcm) < 5:
-                    _sh_pcm = _OGR_GLUE.pool_prev_close(_OGR_GLUE.read_holdings())
-                # ⚠️ median_codes 必须传代理池（防自指，见 glue.evaluate_maps docstring）
-                _ogr_rec = _OGR_GLUE.evaluate_maps(
-                    _sh_opens, _sh_pcm, now,
-                    codes=list(STOCKS), median_codes=_OGR_GLUE.proxy_codes())
-                # evaluate_maps 不落日志 ⇒ 影子块拿到 rec 后自己补落盘
-                if _ogr_rec:
-                    _ogr_rec = {**_ogr_rec, "layer": "L3_shadow", "note": "只记日志，未下单"}
-                    _OGR_GLUE.append_log(_ogr_rec, _OGR_LOG_DIR)
-            except Exception as _oe:
-                print(f"[OGR] 影子层失败（不阻断主循环）: {_oe}")
-                _audit_write({"event": "ogr_shadow_error", "date": today, "bar": str(t),
-                              "error": f"{type(_oe).__name__}: {_oe}"[:300]})
-                _ogr_rec = None
-            if _ogr_rec:
-                _OGR_SHADOW_DONE_DATE = today
-                print(f"[OGR] 影子 {today} mkt_gap={_ogr_rec.get('mkt_gap')} "
-                      f"池={_ogr_rec.get('pool_n')} 触发={_ogr_rec.get('n_tradable')} "
-                      f"{_ogr_rec.get('tradable')}")
-            else:
-                _audit_write({"event": "ogr_shadow_none", "date": today, "bar": str(t),
-                              "have": _sh_have})
-
-    # ── 开盘低开反转 L4 实单（2026-09-22）：09:31 买（每日一次）／10:00 起卖 ──
-    # C4 定序：本块位于 `_force_open_align` **之后** ⇒ 先对齐底仓、后本策略买入。
-    # 时点同 L3：t >= 09:31 时本轮 bars 即当日第一根 60s bar（其 open 应≈集合竞价价，
-    # 该假设由 L4 日志里的 px_bar_open / 实际成交回报对照验证）。
-    # 回测第 1 天整日跳过 OGR（见 D1 重置处的说明）：底仓当日现买 ⇒ 卖腿必被 T+1 拒 ⇒ 腿丢失加厚底仓
-    _ogr_skip_today = (getattr(context, "mode", None) == MODE_BACKTEST
-                       and getattr(context, "_bt_first_day", None) == today)
-    if _ogr_active(context) and not _ogr_skip_today:
-        # 池开盘价累积已上移到 L3 影子块之前（L3/L4 共用，见上方注释）。
-        _need = len(STOCKS)
-        # ⚠️ 只数**交易池**的开盘价：代理池的数不算（否则可能 20 个都来自代理、篮子还没到就触发）
-        _have = len([c for c in (getattr(context, "_ogr_opens", {}) or {}) if c in STOCKS])
-        _can_buy = (_OGR_LIVE_BUY_DONE_DATE != today and _have >= max(5, _need)
-                    and t <= _OGR_BUY_WINDOW[1])
-        # 兜底：窗口末仍未集齐（个别票缺当日 bar）→ 用已到的算，不整日放弃
-        if (not _can_buy and _OGR_LIVE_BUY_DONE_DATE != today and _have >= 5
-                and _OGR_BUY_WINDOW[1] <= t <= dtime(9, 40)):
-            _can_buy = True
-        if _can_buy:
-            _OGR_LIVE_BUY_DONE_DATE = today
-            try:
-                _ogr_try_buy(context, now)
-            except Exception as _oe:
-                print(f"[OGR] 实单买入失败（不阻断主循环）: {_oe}")
-        elif t >= _OGR_SELL_FROM and _OGR_SELL_DONE_DATE != today:
-            _OGR_SELL_DONE_DATE = today
-            try:
-                _ogr_try_sell(context, now)
-            except Exception as _oe:
-                print(f"[OGR] 实单卖出失败（不阻断主循环）: {_oe}")
-
-    global _WB_DONE_DATE
     # ⚠️ 必须 MODE_LIVE 才回写：回测/回放里的持仓是模拟的，写回会污染生产 holdings.json
     # （2026-09-14 实证：跑回测把 588170 cost 从 0.914 改成回测播种价 0.8951）。
     if (t >= dtime(14, 57) and _WB_DONE_DATE != today
@@ -3129,681 +921,8 @@ def on_bar(context, bars):
             index_score=context.last_index_score,
         )
 
-    for bar in bars:
-        gm_sym = str(bar["symbol"])
-        code = _raw_code(gm_sym)
-        # ⚠️ 市场代理池放行到「累积 bar」为止（要它的**昨收**），之后立刻跳过全部交易逻辑
-        if code not in STOCKS and code not in MARKET_PROXY:
-            continue
-        # F9: 同 eob 重复 bar 去重（2026-07-31 模拟盘同秒 4 次重复投递
-        # 导致 PANIC 连发 4 单；同时防止 bar_cache 重复累积）
-        if _dedup_bar(context, gm_sym, str(bar["eob"])):
-            continue
-
-        # 累积 bar
-        row = {
-            "time": str(bar["eob"]),
-            "open": float(bar["open"]),
-            "high": float(bar["high"]),
-            "low": float(bar["low"]),
-            "close": float(bar["close"]),
-            "volume": float(bar["volume"]) if bar["volume"] is not None else 0,
-            "amount": float(bar["amount"]) if bar["amount"] is not None else 0,
-        }
-        context.bar_cache.setdefault(gm_sym, []).append(row)
-        if len(context.bar_cache[gm_sym]) > 480:
-            context.bar_cache[gm_sym] = context.bar_cache[gm_sym][-480:]
-        # WP-B18 M3: 缓存当日首根 bar 开盘价（跳空判断用）
-        if not hasattr(context, "_day_open"):
-            context._day_open = {}
-        context._day_open.setdefault(code, row["open"])
-
-        # 自维护「昨收」缓存：每根 bar 收盘后写 close。**OGR 触发点在逐票循环之前**，故触发那一刻
-        # 本缓存里仍是**昨天**的收盘 —— 这正是 `_ogr_prev_close_map` 要的东西。
-        # ⚠️ 2026-09-24 修：此前直接取 `bar_cache[sym][-1]['close']`，而 OGR 触发要等全池开盘价
-        #    集齐（那是在**本轮循环末尾**）⇒ 末根早已是**今天 09:31 那根**，等于拿「同一天 bar 的
-        #    收盘」当昨收 ⇒ `gap` 退化成第一分钟涨跌、规则变成「选开盘一分钟已拉起的票」= look-ahead。
-        if not isinstance(getattr(context, "_ogr_pc_cache", None), dict):
-            context._ogr_pc_cache = {}
-        context._ogr_pc_cache[code] = row["close"]
-        # 代理池到此为止：不建仓、不信号、不卖出（只贡献 mkt_gap 的截面）
-        if code in MARKET_PROXY and code not in STOCKS:
-            continue
-
-        # ── S1 接管（2026-10-10）：s1_mode_enabled=on 时旧镜像做T引擎挂起——
-        # BASE 建仓/做T信号/卖出门链（含 TAIL 尾盘归位）对本票全部跳过。
-        # 位置刻意放在「bar 累积 + _ogr_pc_cache 更新」**之后**：心跳、指数态势、
-        # OGR 影子（在逐票循环之前触发）与滑点观测照常，仅交易决策链断开。
-        # 开关回退：params.py s1_mode_enabled=False（或 s1_legacy_engine_enabled=True）；
-        # 2026-10-12 起另有**总闸** `legacy_engine_enabled=False` ⇒ 无论 S1 开关都挂起旧引擎。
-        if not _s1_legacy_active():
-            continue
-
-        df = _build_bar_df(context, code, gm_sym, now=now)
-        if df.empty:
-            continue
-
-        cp = float(bar["close"])
-
-        # ── D6: VWAP 单位验证（首次 bar 打一行） ──
-        if not getattr(context, "_vwap_checked", False) and row["amount"] > 0 and row["volume"] > 0:
-            ratio = row["amount"] / row["volume"]
-            print(f"[D6] amount/volume={ratio:.2f} close={cp:.2f} → VWAP单位比={ratio/cp:.4f}")
-            if ratio / cp < 0.1:
-                print(f"[D6] 结论: volume单位为股，需移除×100")
-            context._vwap_checked = True
-
-        # ── D2: 底仓（按镜像持仓表逐股建仓 + F7择时回补缺口） ──
-        _topup_qty = _base_topup_qty(context, code, gm_sym)
-        if code not in context._base_ordered and (code not in context._base_settled or _topup_qty >= 100):
-            mirror = MIRROR_HOLDINGS.get(code, {})
-            base_qty = mirror.get("qty", 0) if code not in context._base_settled else _topup_qty
-            _is_topup = code in context._base_settled  # F8: 已持仓标的走回补路径——闸门拦截不得中断持仓信号评估(0730盲区事故)
-            # 2026-08-31 修复：GUI 手动武装建仓/加仓，表示用户已人工确认，应跳过自动闸直接执行。
-            # 此标记在 build_decision 等闸之前读取，确保「武装」真正生效而不只是跳过确认弹窗。
-            _armed = bool((getattr(context, "_auto_build_armed", {}) or {}).get(code))
-            if base_qty < 100:
-                print(f"[{now:%H:%M:%S}] BASE {code} 跳过: MIRROR_HOLDINGS 中无此标的或 qty<100")
-                context._base_settled.add(code)
-                if not _is_topup:
-                    return
-            # M2: 做T门槛检查（底仓建仓前置）
-            _dc = _refresh_daily_ctx(context, code, gm_sym, now)
-            # R1/A3: 底仓过趋势闸——TREND_BREAKDOWN 延迟到次日（F5: 回退61a19e6激进模式）
-            _trend = _dc.get("_stock_trend_state", "TREND_RANGE")
-            _topup_blocked = False
-            # WP-B19-rev(2026-08-28): 硬止损触发日禁 BASE 建仓/回补（最先执行，任何门槛前拦截；每票每日去重留痕）
-            _hs_today_base = (getattr(context, "_hard_stop_today", {}) or {}).get(code)
-            if not _topup_blocked and _hs_today_base == now.strftime("%Y-%m-%d"):
-                if _armed:
-                    print(f"[{now:%H:%M:%S}] BASE {code} 已人工武装→跳过硬止损日禁")
-                else:
-                    _bhs_k = f'_hard_stop_block_{code}'
-                    if getattr(context, _bhs_k, '') != now.strftime("%Y-%m-%d"):
-                        setattr(context, _bhs_k, now.strftime("%Y-%m-%d"))
-                        try:
-                            write_risk(str(now), "hard_stop_block",
-                                       f"BASE blocked after HARD_STOP today", code=code)
-                        except Exception:
-                            pass
-                        _audit_write({"event": "buy_blocked", "code": code, "reason": "hard_stop",
-                                      "where": "base", "cp": cp,
-                                      "time": str(now)})
-                        print(f"[{now:%H:%M:%S}] BASE {code} 硬止损触发日→禁建仓 cp={cp:.2f}")
-                    if not _is_topup:
-                        return
-                    _topup_blocked = True
-            if _trend == "TREND_BREAKDOWN":
-                if _armed:
-                    print(f"[{now:%H:%M:%S}] BASE {code} 已人工武装→跳过 TREND_BREAKDOWN 延迟")
-                else:
-                    _defer_key = f'_base_deferred_{code}'
-                    if getattr(context, _defer_key, '') != now.strftime("%Y-%m-%d"):
-                        setattr(context, _defer_key, now.strftime("%Y-%m-%d"))
-                        print(f'[{now:%H:%M:%S}] BASE {code} {STOCK_NAMES.get(code,code)} TREND_BREAKDOWN→延迟建仓')
-                        try: write_risk(str(now), "base_deferred", f"_stock_trend_state={_trend}", code=code)
-                        except: pass
-                    if _hb_live:
-                        try: write_snapshot(str(now), code, cp, bar=f"{now:%H:%M}",
-                                            gate="trend_breakdown", gate_detail=_trend)
-                        except Exception: pass
-                    if not _is_topup:
-                        return
-                    _topup_blocked = True  # F8: 回补被趋势闸拦截，但持仓信号评估照常落地
-            # WP-E3: 持仓槽位闸（底仓建仓块）——该票当前持仓为 0（建仓=新增持票数）
-            # 且槽满 → 以 base_deferred(reason=slot_full) 延迟，下一根 bar 自然重试
-            # （复用既有延迟机制，不新建重试）；该票已持仓的 topup 回补不受限。
-            _held_now = int(context.manual_position.get(gm_sym, {}).get("qty", 0) or 0)
-            if not _topup_blocked and _held_now <= 0 and _slot_full(context):
-                if _armed:
-                    print(f"[{now:%H:%M:%S}] BASE {code} 已人工武装→跳过槽满限制")
-                else:
-                    _emit_slot_full(context, code, now, "base")
-                    if not _is_topup:
-                        return
-                    _topup_blocked = True
-            # 默认 False: 数据不足时保守不放行（F5: 恢复M2门槛）
-            if not _topup_blocked and not _dc.get("_m2_pool_pass", False):
-                if _armed:
-                    print(f"[{now:%H:%M:%S}] BASE {code} 已人工武装→跳过 M2 门槛未过")
-                else:
-                    # O-03(2026-08-07 W32表决): pool_gate 每票每日只报一次（0807 实战:3票×237bar=711条刷屏）
-                    _pg_key = f'_pool_gate_{code}'
-                    if getattr(context, _pg_key, '') != now.strftime("%Y-%m-%d"):
-                        setattr(context, _pg_key, now.strftime("%Y-%m-%d"))
-                        print(f"[{now:%H:%M:%S}] BASE {code} {STOCK_NAMES.get(code,code)} 门槛未过→仅观察 "
-                              f"(amp={_dc.get('_m2_amp20',0):.1%} amt={_dc.get('_m2_amount20',0)/1e8:.1f}亿 "
-                              f"lot={_dc.get('_m2_lot_value',0):.0f}元)")
-                        try: write_risk(str(now), "pool_gate", f"amp={_dc.get('_m2_amp20',0):.1%} 仅观察", code=code)
-                        except: pass
-                    if _hb_live:
-                        try: write_snapshot(str(now), code, cp, bar=f"{now:%H:%M}", gate="pool_gate",
-                                            gate_detail=(f"amp={_dc.get('_m2_amp20',0):.1%} "
-                                                         f"amt={_dc.get('_m2_amount20',0)/1e8:.1f}亿 "
-                                                         f"lot={_dc.get('_m2_lot_value',0):.0f}元"))
-                        except Exception: pass
-                    if not _is_topup:
-                        context._base_settled.add(code)
-                        return
-                    _topup_blocked = True  # F8: 回补被M2闸拦截，信号评估照常
-            # P4-6: auto 建仓判定接 core/build_decision（P3 双侧单一真源）。
-            # 数据适配：_daily_df（个股日线）+ ir.GM_INDEX_CACHE（指数日线）+ bar_cache 1m → 决策核；
-            # 数据不足 fail-closed；WP-B20 双通道降为参考留痕（与 manual 侧 result["channels"] 同定位）。
-            # 2026-08-31（owner批复）: 回补(topup)走轻量闸——豁免 build_decision=signal 要求，
-            # 个股非 TREND_BREAKDOWN（上方 :1075 趋势闸已拦）即允许补回 MIRROR 目标。
-            # 语义：回补是恢复既有持仓配置，不是新建仓决策；震荡市 go 恒 False 曾致止损后
-            # 5 个月空仓踏空（run8 实证：588170 硬止损后 +160% 行情全程未回补）。
-            # 全新建仓（非 topup）仍走下方全闸不变。
-            if not _topup_blocked and not _is_topup:
-                from signals import position_builder as _pb
-                from build_decision_auto import decide as _bd_decide
-                _idx_df = None
-                try:
-                    # A-7: 建仓时机闸按个股所属板取对应指数（60→上证/688·588→科创50/300→创业板/00x→深成），
-                    # 不再恒传上证。板指数缺失 fail-closed（数据不足不建仓），不回退上证冒充。
-                    import analysis.index_regime as _ir
-                    _ic, _ig = _code_board_index(code)
-                    _idx_df = _ir.GM_INDEX_CACHE.get(_ig)
-                except Exception:
-                    _idx_df = None
-                _daily_df = _dc.get("_daily_df")
-                if _daily_df is None or _daily_df.empty or _idx_df is None or _idx_df.empty:
-                    _dec = {"go": False, "veto": [], "verdict": "weak", "reasons": ["数据不足(日线/指数缺失) fail-closed"],
-                            "data_insufficient": True}
-                else:
-                    _bars = context.bar_cache.get(gm_sym, []) or []
-                    _today_bars = [b for b in _bars if str(b.get("time", "")).startswith(now.strftime("%Y-%m-%d"))]
-                    _df1m = None
-                    try:
-                        _src = _today_bars if _today_bars else _bars
-                        if _src:
-                            _df1m = pd.DataFrame(_src)
-                    except Exception:
-                        _df1m = None
-                    _dec = _bd_decide(_daily_df, _idx_df, now.strftime("%Y-%m-%d"), None, df_1min=_df1m)
-                _bd_verdict = _dec["verdict"]
-                # WP-B20 双通道 → 参考留痕（不再驱动放行）
-                _pb_res = _pb.eval_dual_channels(
-                    _dc, cp, m5_df=_pb.build_m5_df(context.bar_cache.get(gm_sym, [])),
-                    scan_type="intraday")
-                _pb_verdict = _pb_res["verdict"]
-                _pb_channel = _pb_res["channel"]
-                _pb_score = _pb_res["composite_score"]
-                if _bd_verdict != "signal":
-                    if _armed:
-                        print(f"[{now:%H:%M:%S}] BASE {code} 已人工武装→跳过 build_decision({_bd_verdict}) 直接建仓")
-                        _topup_blocked = False
-                    else:
-                        _bd_key = f'_bd_last_{code}'
-                        _bd_sig = f"{_bd_verdict}|go={_dec.get('go')}|{'、'.join(_dec.get('veto', []))}"
-                        if getattr(context, _bd_key, None) != _bd_sig:
-                            setattr(context, _bd_key, _bd_sig)
-                            print(f"[{now:%H:%M:%S}] BASE {code} {STOCK_NAMES.get(code,code)} "
-                                  f"build_decision={_bd_verdict}(go={_dec.get('go')}, "
-                                  f"veto={'、'.join(_dec.get('veto', [])) or '无'})→仅观察 "
-                                  f"(双通道参考:{_pb_channel}={_pb_verdict}/{_pb_score})")
-                            try:
-                                write_risk(str(now), "build_gate",
-                                           f"verdict={_bd_verdict} go={_dec.get('go')} "
-                                           f"veto={'、'.join(_dec.get('veto', [])) or '无'}", code=code)
-                            except Exception:
-                                pass
-                            _audit_write({"event": "build_gate_block", "code": code,
-                                          "verdict": _bd_verdict, "go": _dec.get("go"),
-                                          "veto": _dec.get("veto"), "cp": cp, "time": str(now),
-                                          "channels": f"{_pb_channel}={_pb_verdict}({_pb_score})"})
-                        if _hb_live:
-                            try: write_snapshot(str(now), code, cp, bar=f"{now:%H:%M}",
-                                                gate="build_gate",
-                                                gate_detail=f"{_bd_verdict}(go={_dec.get('go')})")
-                            except Exception: pass
-                        if not _is_topup:
-                            return
-                        _topup_blocked = True  # build_decision 拦截回补，信号评估照常（F8 同模式）
-                else:
-                    if _hb_live:
-                        try: write_snapshot(str(now), code, cp, bar=f"{now:%H:%M}",
-                                            gate="build_gate_pass", gate_detail=f"signal(score={_dec.get('score')})")
-                        except Exception: pass
-                    if getattr(context, f'_bd_last_{code}', None) is not None:
-                        setattr(context, f'_bd_last_{code}', None)
-                        print(f"[{now:%H:%M:%S}] BASE {code} {STOCK_NAMES.get(code,code)} build_decision=signal")
-            if not _topup_blocked:
-                # 2026-08-30 手动建仓/加仓衔接：GUI 已人工确认（武装标记）→ 跳过确认闸，直接走完整闸链建仓→做T
-                # _armed 已在上方 BASE 块开头读取
-                _needs_confirm = (not _is_topup) or PARAMS.get("human_confirm_base_topup", True)
-                if _armed:
-                    _needs_confirm = False
-                _cg = _buy_confirm_gate(
-                    context, code, now, action="BASE", price=cp, qty_proj=base_qty,
-                    pos_qty=(0 if not _is_topup else int(mirror.get("qty", 0) or 0)),
-                    reasons=["初始建仓" if not _is_topup else "镜像底仓 F7回补"],
-                    needs_confirm=_needs_confirm,
-                    kind=("build" if not _is_topup else "topup"))
-                if _cg in ("pending", "rejected_today"):
-                    # 待人工确认/当日已拒绝：不下单。topup 沿用 F8 语义继续信号评估（可卖）；
-                    # 初始建仓 pos_qty<=0 走下方 return 自然退出本标的本 bar（非阻塞挂起等待）。
-                    _topup_blocked = True
-                else:
-                    # 2026-09-15 阶段0-6（诊断D3旁注）：贴涨停买单=确定性拒单，跳过并留痕。
-                    # 不消费 armed 标记、不进 _base_ordered——下一根 bar 价格离开贴板带可重试（同拒单语义）。
-                    if _limit_clamp_should_skip(context, code, gm_sym, "BUY", base_qty, cp, now, "base"):
-                        return
-                    try:
-                        try:
-                            write_order(str(now), code, "BUY", base_qty, cp, order_id="base")
-                        except Exception:
-                            pass
-                        _base_orders = _sdk_call("order_volume_base", _partial(
-                            order_volume, symbol=gm_sym, volume=base_qty,
-                            side=OrderSide_Buy,
-                            order_type=OrderType_Market,
-                            position_effect=PositionEffect_Open))
-                        # 掘金 SDK order_volume 同步返回 List[Dict]；status=8 等表示拒单，
-                        # 不能当成已下单，否则武装标记会被误消费且 N5 重试也会丢标记。
-                        _base_first = _base_orders[0] if isinstance(_base_orders, list) and _base_orders else {}
-                        _base_status = _base_first.get("status") if isinstance(_base_first, dict) else None
-                        if _base_status in (4, 5, 6, 8, 12):
-                            _rej_detail = _base_first.get("ord_rej_reason_detail", "") or ""
-                            print(f"[{now:%H:%M:%S}] BASE {code} 下单被拒 status={_base_status} {_rej_detail}")
-                            try:
-                                write_risk(str(now), "order_rejected",
-                                           f"BASE BUY {base_qty}@{cp:.2f} status={_base_status} {_rej_detail}", code=code)
-                            except Exception:
-                                pass
-                            # 不加入 _base_ordered，不消费武装标记，下一根 bar  armed 仍在，继续尝试
-                        else:
-                            context._base_ordered.add(code)
-                            _mark_pending_recon(context, code, gm_sym, "BUY", base_qty, cp, _base_orders)
-                            if _armed:
-                                # 人工建仓武装标记：下单成功即消费（一次性），防止损离场后残留标记自动无确认重入
-                                try:
-                                    consume_auto_build(code)
-                                except Exception:
-                                    pass
-                            print(f"[{now:%H:%M:%S}] BASE {code} {STOCK_NAMES.get(code,code)} 下单 {base_qty}股@{cp:.2f}")
-                            _audit_write({"event": "base_order", "code": code, "qty": base_qty, "price": cp, "time": str(now)})
-                            if _hb_live:
-                                try: write_snapshot(str(now), code, cp, bar=f"{now:%H:%M}",
-                                                    gate="base_order", action="BUY",
-                                                    gate_detail=f"qty={base_qty}")
-                                except Exception: pass
-                    except Exception as e:
-                        print(f"[{now:%H:%M:%S}] BASE {code} 下单失败: {e}")
-                        try:
-                            write_risk(str(now), "order_failed", f"BASE BUY {base_qty}@{cp:.2f} err={e}", code=code)
-                        except Exception:
-                            pass
-                    return
-            # F8: _topup_blocked=True 时不下单，继续走下方信号评估流程
-
-        if code not in context._base_settled and code in context._base_ordered:
-            # 已下单未成交，跳过
-            return
-
-        # ── 日线上下文刷新（每日首根有效 bar） ──
-        daily_ctx = _refresh_daily_ctx(context, code, gm_sym, now)
-        # 注入指数态势（market 级字段保持现状；C-2/C-3 数据就位：按股补所属板块 regime 归因，决策开关留周六对照）
-        daily_ctx["index_circuit_state"] = "clear" if context.last_index_regime == "uni_down" else "normal"
-        daily_ctx["index_gate_advice"] = "defensive_t" if context.last_index_regime == "uni_down" else "normal_t"
-        try:
-            _bic, _big = _code_board_index(code)
-            _brv = (getattr(context, "board_regime", {}) or {}).get(_big) or context.last_index_regime
-            daily_ctx["index_board_code"] = _bic
-            daily_ctx["index_board_regime"] = _brv      # 该股所属板块 regime（上证=市场级恒有）
-            daily_ctx["index_regime"] = daily_ctx.get("index_regime") or context.last_index_regime
-        except Exception:
-            pass
-
-        # 持仓读取
-        holding = _get_holding(context, code, gm_sym)
-        pos_qty = int(holding.get("qty", 0) or 0)
-        if pos_qty <= 0:
-            return
-
-        # N6: 开盘5分钟买入隔离
-        morning_no_buy = now.hour == 9 and now.minute <= 35
-
-        # T+1 结转
-        if now.hour == T1_AUTO_UNLOCK_HOUR and now.minute == T1_AUTO_UNLOCK_MINUTE:
-            mp = context.manual_position.get(gm_sym)
-            if mp:
-                mp["available"] = mp.get("qty", 0)
-                mp["t_qty"] = mp.get("qty", 0)
-
-        # 补上 today_ret
-        prev_close = float(daily_ctx.get("daily_prev_close", 0) or 0)
-        if prev_close > 0:
-            daily_ctx["daily_day_ret"] = (cp - prev_close) / prev_close
-
-        # ── 信号引擎 ──
-        try:
-            buy_score, sell_score, sig = context.engine.evaluate(
-                code, STOCK_NAMES.get(code, code), df, holding, daily_ctx)
-        except Exception as e:
-            print(f"[{now:%H:%M:%S}] {code} evaluate err: {e}")
-            continue
-        # 修正 profit_pct: engine 读 DataFrame 最后一行可能不是当前 bar
-        _holding_cost = float(holding.get("cost", 0) or 0)
-        _last_f = context.engine._last_feats.get(code, {})
-        if _last_f and _holding_cost > 0:
-            _last_f["price"] = cp
-            _last_f["profit_pct"] = (cp - _holding_cost) / _holding_cost
-            _last_f["vwap"] = cp
-            _daily_atr = float(daily_ctx.get("daily_atr", 0.02) or 0.02)
-            _panic_trigger = max(-5 * _daily_atr, -0.12)
-            _last_f["is_deep_loss"] = _holding_cost > 0 and _last_f["profit_pct"] < _panic_trigger
-            _last_f["panic_trigger"] = _panic_trigger
-
-        # ── D5/G2: uni_down 熔断 ──
-        if context.last_index_regime == "uni_down" and sig and sig.action in ("BUY_LOW", "ADD_POS"):
-            sig = None
-
-        # ── R1/G3: 个股趋势熔断（一票一闸） ──
-        _trend = daily_ctx.get("_stock_trend_state", "TREND_RANGE")
-        # 2026-08-31: G3 闸接入个股放行开关（与 RiskManager 同源语义）——此前此处硬拦，
-        # 588170 配了 allow_breakdown_buy=True 仍被掐（回测 run8 实证：23 次 BUY_LOW 全灭）
-        _g3_allow_bd = bool(STOCK_PARAMS.get(code, {}).get("allow_breakdown_buy"))
-        if (_trend == "TREND_BREAKDOWN" and not _g3_allow_bd
-                and sig and sig.action in ("BUY_LOW", "ADD_POS")):
-            sig = None
-            try: write_risk(str(now), "stock_trend_gate", f"{_trend} 禁买", code=code)
-            except: pass
-        elif _trend == "TREND_DOWN" and sig and sig.action == "ADD_POS":
-            sig = None
-
-        # ── D5: 尾盘回转（14:50-15:00，先于 PANIC_SELL 检查） ──
-        is_tail = now.hour == 14 and now.minute >= 50
-        if is_tail and sig and sig.action in ("BUY_LOW", "ADD_POS"):
-            sig = None
-
-        # 2026-09-22：原「尾盘强制回补（数量不变硬约束）」已随做T引擎删除——
-        # 该约束是反T回补义务（awaiting_buyback）的兜底，义务机制已整删，故无回补可做。
-        # 尾盘「归位卖出」（TAIL，把持仓还原到目标底仓）仍在下方门链内，未受影响。
-
-        # ── P0-P6 卖出通道门链（P4-1 迁至 sell_channels._sell_channel_gate，行为逐字一致）──
-        feats_cache = getattr(context.engine, "_last_feats", {}).get(code, {})
-        sig, tail_done = sell_channels._sell_channel_gate(
-            context, code, gm_sym, cp, now, sig, pos_qty, holding, daily_ctx,
-            feats_cache, is_tail, morning_no_buy)
-        if tail_done:
-            continue
-
-        if sig is None:
-            # P0-4(2026-09-01): 信号褪化留痕——confirm 已到达但信号消失/score 掉阈，
-            # pending 不再有消费机会 → 作废并留痕 signal_faded（防悬空）
-            if code in getattr(context, "_buy_confirm_pending", {}):
-                try:
-                    _d_fade = (read_buy_decision().get("decisions") or {}).get(code)
-                    _pend_fade = context._buy_confirm_pending.get(code)
-                    if _d_fade and _pend_fade and _d_fade.get("request_id") == _pend_fade.get("request_id") \
-                            and _d_fade.get("decision") == "confirm":
-                        context._buy_confirm_pending.pop(code, None)
-                        write_confirm(str(now), code, "signal_faded",
-                                      detail="confirm 已到但信号褪化，pending 作废",
-                                      request_id=_pend_fade.get("request_id"),
-                                      action=_pend_fade.get("action"))
-                        write_buy_pending({"date": f"{now:%Y-%m-%d}",
-                                           "updated_at": f"{now:%Y-%m-%d %H:%M:%S}",
-                                           "rejected_today": sorted(context._buy_confirm_rejected),
-                                           "pending": context._buy_confirm_pending})
-                except Exception:
-                    pass
-            _last_dec = context.engine.last_decision.get(code, {})
-            # 2026-09-22：原「高接延迟事件（WP-B07）」已随做T引擎删除
-            # （buyback_above_sell_delayed 不再产生）。
-            _audit_write({
-                "event": "no_signal", "code": code, "time": str(now),
-                "buy_score": buy_score, "sell_score": sell_score,
-                "pos_qty": pos_qty, "price": cp,
-                "index_regime": context.last_index_regime,
-                "buy_blocks": _last_dec.get("buy_blocks", []),
-                "sell_blocks": _last_dec.get("sell_blocks", []),
-                "decision_reason": _last_dec.get("reason", ""),
-                "profit_pct": feats_cache.get("profit_pct", 0),
-                "daily_atr": feats_cache.get("daily_atr", 0),
-                "is_deep_loss": feats_cache.get("is_deep_loss", False),
-            })
-            if _hb_live:
-                try: write_snapshot(str(now), code, cp, bar=f"{now:%H:%M}",
-                                    buy_score=buy_score, sell_score=sell_score,
-                                    gate="evaluated", pos_qty=pos_qty,
-                                    gate_detail=_last_dec.get("reason", ""))
-                except Exception: pass
-            continue
-
-        # ── 信号事件写入 ──
-        if sig is not None:
-            # WP-B15: 信号事件去重——被下游拦截点（地板/到顶）mute 的同源信号静默，
-            # 首条照写；mute 键含日期，日切自清；持仓变化由成交/对账回调清键。
-            # 快照(snapshot)不受 mute 影响（监控底座，非事件流）。
-            _mute_key = f'_sig_muted_{code}_{sig.action}'
-            if getattr(context, _mute_key, '') != now.strftime("%Y-%m-%d"):
-                try:
-                    write_signal(str(now), code, sig.action, sig.score,
-                                 reasons=sig.reasons, pos_qty=pos_qty)
-                except Exception:
-                    pass
-            if _hb_live:
-                try: write_snapshot(str(now), code, cp, bar=f"{now:%H:%M}",
-                                    buy_score=buy_score, sell_score=sell_score,
-                                    gate="signal", action=sig.action, pos_qty=pos_qty,
-                                    gate_detail=";".join(sig.reasons or []))
-                except Exception: pass
-
-        # ── 参数准备 ──
-        stock_params = STOCK_PARAMS.get(code, {})
-        max_buys = stock_params.get("max_buy_times_per_stock", 3)
-
-        # ── D1: 引擎冷却/计数 ──
-        threshold = stock_params.get("notify_sell_threshold", 65) if sig.action in ("SELL_HIGH", "PANIC_SELL", "TRAIL_SELL", "TREND_EXIT", "TARGET_SELL", "HARD_STOP_EXIT") else \
-                    stock_params.get("notify_buy_threshold", 43)
-
-        if sig.score < threshold:
-            continue
-
-        # 执行交易
-        if sig.action in ("BUY_LOW", "ADD_POS"):
-            # WP-B19-rev(2026-08-28): 硬止损触发日禁一切买入（BUY_LOW/buyback/ADD_POS 一视同仁；每票每日去重留痕）
-            _hs_today = (getattr(context, "_hard_stop_today", {}) or {}).get(code)
-            if _hs_today == now.strftime("%Y-%m-%d"):
-                _mbk = f'_hard_stop_block_{code}'
-                if getattr(context, _mbk, '') != now.strftime("%Y-%m-%d"):
-                    setattr(context, _mbk, now.strftime("%Y-%m-%d"))
-                    try:
-                        write_risk(str(now), "hard_stop_block",
-                                   f"BUY {sig.action} blocked after HARD_STOP today", code=code)
-                    except Exception:
-                        pass
-                    _audit_write({"event": "buy_blocked", "code": code, "reason": "hard_stop",
-                                  "action": sig.action, "cp": cp,
-                                  "time": str(now)})
-                    print(f"[{now:%H:%M:%S}] BUY {code} 硬止损触发日→禁买 {sig.action} cp={cp:.2f}")
-                continue
-            if _killed:
-                try:
-                    write_risk(str(now), "kill_switch", f"KILL_SWITCH 阻止 {code} 买入", code=code)
-                except Exception:
-                    pass
-                continue
-            bc = context.daily_buy_count.get(code, 0)
-            if bc >= max_buys:
-                continue
-            # WP-B18 3.2: 回补记忆互斥矩阵（M1-M4）——仅该票有回补记忆时检查
-            # 人工确认闸（2026-08-30 建仓/加仓人工把关）：加仓/信号建仓 → 弹窗确认后才下单。
-            # pending/当日已拒绝 → 本 bar 跳过（非阻塞挂起）。位于信号级闸之后（无假弹窗）、
-            # 容量闸（slot/cash/sizer/pos_limit）之前（确认放行时全量重查）。
-            # 2026-09-22：原「做T回补记忆态豁免弹窗 / 回补路径绕过确认闸」两分支已随做T引擎删除
-            # （awaiting_buyback 恒空 ⇒ 回补豁免永不适用，一律走确认闸）。
-            _cg = _buy_confirm_gate(
-                context, code, now, action=sig.action, price=cp,
-                qty_proj=_project_buy_qty(context, code, holding, sig, threshold, pos_qty),
-                pos_qty=pos_qty, reasons=list(getattr(sig, "reasons", []) or []),
-                needs_confirm=True)
-            if _cg in ("pending", "rejected_today"):
-                continue
-
-            # N3: 现金预检（移到 sizer 之前，供 target_t 计算）
-            available_cash = INITIAL_CASH
-            _cash_ok = False
-            try:
-                _acct = _sdk_call("account", context.account)
-                _c = getattr(_acct, 'cash', None)
-                if _c is not None:
-                    _c = _c() if callable(_c) else _c
-                    if isinstance(_c, dict):
-                        # gm3 account().cash 返回 dict，键名可能是 available/available_cash/total
-                        _v = _c.get('available') or _c.get('available_cash') or _c.get('cash') or _c.get('total') or 0
-                        available_cash = float(_v)
-                    else:
-                        available_cash = float(_c)
-                    _cash_ok = True
-            except Exception:
-                pass
-            if not _cash_ok:
-                available_cash = 0  # N15: fail-closed 每 bar 生效
-                if not getattr(context, '_cash_warned', False):
-                    context._cash_warned = True
-                    print(f'[N8] WARN: 无法读取可用现金 → fail-closed: 禁止买入')
-
-            # N10/WP-E2: 算 target_t（总权益预算制下的个股最大仓位，供 sizer 算 max_buyable）
-            pos_limit_pct = float(PARAMS.get('max_single_position_pct', 0.80))
-            # WP-E2: 总权益 = 现金 + Σ全部持仓市值（旧口径用 available_cash 等权分，无视其他票持仓）
-            _total_eq = _total_equity(context, available_cash)
-            _stock_budget, max_pos_shares = _stock_budget_cap(context, code, cp, _total_eq)
-            _base_ref = getattr(context, f'_base_ref_{code}', 0) or pos_qty
-            # 2026-08-31（owner批复）: 做T买入顶帽加一档T余量——做T语义即「底仓之上加一档、
-            # 日内了结」，旧口径 ceiling=max(预算帽,底仓) 在持仓=底仓时恒到顶、
-            # 做T加仓永远被拦（run8 实证: 002451 底仓1300=顶帽1300，3 次 BUY_LOW 全灭）
-            _t_head = 0
-            if sig.action in ("BUY_LOW", "ADD_POS") and _base_ref > 0:
-                _t_pct = float(context.engine._get_params(code).get("stock_qty_base_pct", 0.3) or 0.3)
-                _t_head = max(100, int(_base_ref * _t_pct / 100) * 100)
-            # P0-1(2026-09-10 修): 原来把个股预算上限 max_pos_shares(≈20400) 当 sizer 目标仓位传入
-            # → 目标虚高、按 30% 出量失控（600481 BUY 6100）。目标应为「底仓+一档T」，上限防护由
-            # 下方 _check_max_pos_cap 承担。
-            target_t = max(_base_ref + _t_head, pos_qty)
-            holding_with_target = dict(holding, target_t=target_t)
-
-            # WP-E2: 个股最大仓位闸——到顶直接拦截（堵 sizer 内部 1.5× 兜底洞）
-            if _check_max_pos_cap(context, code, now, pos_qty, _base_ref,
-                                  max_pos_shares, _stock_budget, _total_eq,
-                                  action=sig.action, t_headroom=_t_head):
-                continue
-
-            qty = context.sizer.calc_buy_qty(code, holding_with_target, sig.score, threshold)
-            if qty <= 0:
-                # WP-E2: 已有持仓 sizer 返回 0 = 已到个股上限 → max_pos_cap（pos_qty 恒>0，无 300 兜底分支）
-                _check_max_pos_cap(context, code, now, pos_qty, _base_ref,
-                                   max_pos_shares, _stock_budget, _total_eq,
-                                   force=True, action=sig.action, t_headroom=_t_head)
-                continue
-
-            # 2026-09-22：回补量硬帽（_buyback_cap_qty）与「高接降档」（_apply_buyback_downgrade）
-            # 已随做T引擎删除——两者都只作用于反T回补（awaiting_buyback 记忆态），该记忆态恒空。
-
-            # N3: 现金预检
-            max_by_cash = int(available_cash * 0.95 / cp / 100) * 100 if cp > 0 else 0
-            qty = min(qty, max_by_cash) if max_by_cash > 0 else qty
-            if qty < 100:
-                if bc == 0:
-                    print(f'[{now:%H:%M:%S}] BUY {code} 现金不足跳过: 可用={available_cash:.0f}')
-                try:
-                    write_risk(str(now), "cash_insufficient",
-                               f"available={available_cash:.0f} needed={qty*cp:.0f}", code=code)
-                except Exception:
-                    pass
-                continue
-
-            # N2: 仓位上限检查（WP-E2: 分母修正为总权益——现金+全部持仓市值，
-            # 旧口径只算本票市值，"账户总权益"名不副实；max_single_position_pct=0.80 保留为外层安全帽）
-            current_pos_value = pos_qty * cp
-            new_pos_value = current_pos_value + qty * cp
-            total_equity_value = _total_eq if _total_eq > 0 else (available_cash + current_pos_value)
-            if total_equity_value > 0 and new_pos_value / total_equity_value > pos_limit_pct:
-                print(f'[{now:%H:%M:%S}] BUY {code} 仓位上限拦截: {new_pos_value/total_equity_value:.0%}>{pos_limit_pct:.0%}')
-                try:
-                    write_risk(str(now), "position_limit",
-                               f"{new_pos_value/total_equity_value:.1%}>{pos_limit_pct:.0%} qty={qty}", code=code)
-                except Exception:
-                    pass
-                continue
-            # 2026-09-15 阶段0-6（诊断D3旁注）：贴涨停买单=确定性拒单，跳过并留痕（不下单、不计数）
-            if _limit_clamp_should_skip(context, code, gm_sym, "BUY", qty, cp, now, "buy"):
-                continue
-            try:
-                write_order(str(now), code, "BUY", qty, cp)
-            except Exception:
-                pass
-            try:
-                _oid = _sdk_call("order_volume_buy", _partial(
-                    order_volume, symbol=gm_sym, volume=qty,
-                    side=OrderSide_Buy,
-                    order_type=OrderType_Market,
-                    position_effect=PositionEffect_Open))
-                _mark_pending_recon(context, code, gm_sym, "BUY", qty, cp, _oid)
-                # 2026-09-14: 把本笔 T 腿**实际下单量**记回 entry——平腿按原量卖，保证数量不变。
-                # ⚠️ t_entry_price 在**决策核**上（context.engine 是适配器 SignalEngine，
-                #    内核是它的 ._core）；早先误写成 context.engine.t_entry_price → getattr
-                #    恒返回 {} → qty 从未记录 → 下游 t_lot_qty 恒 0、平腿按原量卖与成本锚豁免双双空转。
-                if sig.action in ("BUY_LOW", "ADD_POS"):
-                    _core = getattr(context.engine, "_core", None)
-                    _ent = (getattr(_core, "t_entry_price", {}) or {}).get(code) if _core else None
-                    if isinstance(_ent, dict):
-                        _ent["qty"] = int(qty)
-                # WP-A1: 下单副作用之前留存 manual_position 条目快照（含"无此条目"状态）。
-                # 快照法而非逆运算，避免成本加权逆推的浮点漂移；纯日内状态，无需落盘。
-                if not hasattr(context, "_pending_buy_snapshot") or context._pending_buy_snapshot is None:
-                    context._pending_buy_snapshot = {}
-                # 2026-08-30: order_volume 返回 List[Dict]（同步下单回报），非单值——此前
-                # 直接把整个 list 当 dict 键 → TypeError: unhashable type: 'list'，
-                # 做T买入(BUY_LOW/ADD_POS)下单成功后记账全崩、manual_position 永不更新
-                # （run9 实证 90 次，并连锁 16 次 status=8 仓位不足卖单拒单）。取首单
-                # cl_ord_id 作快照键，空/异常回退 gm_sym（与 _pop_buy_snapshot 的 symbol 兜底一致）。
-                _orders = _oid if isinstance(_oid, list) else []
-                _first = _orders[0] if _orders and isinstance(_orders[0], dict) else {}
-                _snap_key = (_first.get("cl_ord_id") or _first.get("order_id")) or gm_sym
-                _snap = context.manual_position.get(gm_sym)
-                context._pending_buy_snapshot[_snap_key] = copy.deepcopy(_snap) if _snap else None
-                context.daily_buy_count[code] = bc + 1
-                context.daily_trade_price[code] = cp
-                context.total_trade_count += 1
-                # 手动跟踪买入（T+1: 只加 qty，不加 available）
-                old = context.manual_position.get(gm_sym, {"qty": 0, "available": 0, "cost": cp, "t_qty": 0})
-                old_q = int(old.get("qty", 0))
-                old_c = float(old.get("cost", cp))
-                new_q = old_q + qty
-                new_c = (old_c * old_q + cp * qty) / new_q if new_q > 0 else cp
-                context.manual_position[gm_sym] = dict(old, **{"qty": new_q, "t_qty": new_q, "cost": new_c})
-                context.engine.buy_count_per_stock[code] = context.daily_buy_count.get(code, 0)
-                print(f"[{now:%H:%M:%S}] BUY {code} {qty}@{cp:.2f} score={sig.score:.0f} regime={context.last_index_regime}")
-                _audit_write({"event": "buy", "code": code, "qty": qty, "price": cp, "score": sig.score,
-                              "time": str(now), "regime": context.last_index_regime,
-                              "pos_after_buy": new_q, "buy_count": bc + 1})
-                # 2026-09-22：原「降档成交事件（WP-B07）」已随做T引擎删除。
-            except Exception as e:
-                print(f"[{now:%H:%M:%S}] BUY {code} 失败: {e}")
-
-        elif sig.action in ("SELL_HIGH", "PANIC_SELL", "TRAIL_SELL", "TREND_EXIT", "TARGET_SELL", "HARD_STOP_EXIT"):
-            # T4: 仲裁器统一处理（地板 + 阈值 + sizer + 下单 + 审计）——sell_channels._sell_arbiter
-            sell_channels._sell_arbiter(context, code, sig, pos_qty, cp, now, holding,
-                                        threshold, stock_params, gm_sym)
-
-
-# WP-A1: 买向拒单对称回滚哨兵——用于区分"无快照（键缺失）"与"快照为 None（下单前无此条目）"
-_MISSING = object()
-
-
-def _pop_buy_snapshot(context, order, symbol):
-    """WP-A1: 按 委托id(cl_ord_id/order_id)→symbol 顺序弹出买向快照。
-
-    下单侧以 order_volume 返回值键控（无返回值时回退 symbol），回报侧可能有
-    cl_ord_id/order_id 差异，按序尝试；均未命中返回 _MISSING（无快照）。"""
-    pbs = getattr(context, "_pending_buy_snapshot", None) or {}
-    for _k in (order.get("cl_ord_id"), order.get("order_id"), symbol):
-        if _k and _k in pbs:
-            return pbs.pop(_k)
-    return _MISSING
+    # ⚠️ 2026-10-12：逐票循环（bar 累积 / `_ogr_pc_cache` / 旧引擎决策链）已随旧引擎删除。
+    #    超跌跳空确认链路不读 `bar_cache`（自取 1800s/60s 棒），故此处不再累积任何 per-bar 状态。
 
 
 def _strategy_ordered_today(code: str) -> bool:
@@ -3838,15 +957,9 @@ def on_order_status(context, order):
     # ①-1/F6: 成交价优先 filled_vwap —— 掘金市价单 order["price"] 携带涨跌停保护价
     # (2026-07-29 C1: 600481卖出真实成交4.01被记为跌停价3.52；买入路径会用此价计算cost，错误价会毒化成本)
     price = order.get("filled_vwap") or order.get("vwap") or order.get("price") or 0
-    if price <= 0:
-        price = context.latest_pre_close.get(code, 0)
+    # 注：原「price<=0 回退到 context.latest_pre_close（昨收）」的取数源随旧引擎（_refresh_daily_ctx）
+    # 删除 ⇒ 保留 0 并交由下游（_get_holding 的 cost=0 → gm vwap 修正）兜底。
     side = order["side"]
-
-    # F9: 在途卖单释放（成交/拒单/撤单/过期均归还额度）
-    if side == 2 and status in (3, 4, 5, 6, 8, 12):
-        _ifl = getattr(context, "_inflight_sell", None)
-        if _ifl and symbol in _ifl:
-            _ifl[symbol] = max(0, int(_ifl[symbol]) - int(volume))
 
     if status == 3:  # 全部成交
         # P2-3A(2026-09-10): 孤儿闸——账户级回调对非本策略成交（掘金仿真终端手工单）也触发，
@@ -3873,8 +986,6 @@ def on_order_status(context, order):
             print(f"[fill] 重复成交已跳过 {code} {_side} {volume}@{price}")
             return
         _done.add(_fk)
-        # WP-B15: 持仓变化（成交）→ 解除信号 mute / 地板去重键（单点清理，防解封后忘清键）
-        _clear_signal_mute_keys(context, code)
         # O-06(2026-08-11 复盘①轻)：台账在本回调内尚未更新（更新在下方），
         # SELL 分支直接读台账得到的是成交前持仓（0811 实战：卖 200 后 pos_after 仍报 1400）。
         _pre_qty = int(context.executed_orders.get(symbol, {}).get("qty", 0))
@@ -3889,7 +1000,7 @@ def on_order_status(context, order):
                 _fee, _fsrc = round(float(price) * int(volume) * _fee_rate, 2), "estimated"
             # 2026-09-15 阶段0-5 接线（诊断D3，W4 已在 writer.write_fill 加可空字段）：
             # 补真实委托价/成交均价。口径注意——市价单 order["price"] 是**涨跌停保护价**
-            # （非期望价，见 :2728 既有注释），slippage=fill_vwap-order_price 的方向解读归下游；
+            # （非期望价），slippage=fill_vwap-order_price 的方向解读归下游；
             # 无真实值的字段传 None（writer 落 null，禁止编造）；0 值经 or None 归一防假滑点。
             write_fill(str(datetime.now()), _raw_code(symbol), _side, volume, price,
                        order_id=str(order.get("id") or ""), pos_after=_pos_after,
@@ -3899,30 +1010,7 @@ def on_order_status(context, order):
         except Exception:
             pass
         _pending_recon_close(context, symbol)   # Fix B: 该 symbol 已完成对账，轮询不再兜底
-        # P0-2: 成交回调接线冷却（只有真的成交了才计冷却，避免下单即计）
-        # WP-B07: 捕获返回值——卖成交建回补记忆(armed) / 买成交清记忆(buyback_filled)
-        _rta = None
-        if code in STOCKS:
-            _action = 'BUY_LOW' if side == 1 else 'SELL_HIGH'
-            _rta = context.engine.record_trade_action(code, _action, volume, price)
-            # 2026-09-22：原「HARD_STOP_EXIT / T_LEG_CLOSE 不生成回补记忆」两个清除分支
-            # 已随做T引擎删除（回补记忆机制整体不存在了）。
-        _rta = _rta or {}
         if side == 1:  # 买入
-            # WP-A1: 成交即真实，快照使命结束（快照仅服务"纯拒单"场景）
-            _pop_buy_snapshot(context, order, symbol)
-            # 2026-09-23: OGR 买腿**成交才建账**（下单时只挂 pending，避免拒单留幽灵腿）。
-            _lgb = getattr(context, "_ogr_pending_buy", None)
-            if _lgb and symbol in _lgb:
-                _lb = _lgb.pop(symbol)
-                _audit_write({"event": "ogr_buy", "code": _lb["code"], "gm_symbol": symbol,
-                              "qty": volume, "px_bar_open": _lb.get("px_bar_open"),
-                              "prev_close": _lb.get("prev_close"), "gap": _lb.get("gap"),
-                              "ref_px": _lb.get("buy_px"), "fill_px": price,
-                              "order_id": str(order.get("id") or ""), "time": _lb.get("buy_time")})
-                _ogr_legs(context)[_lb["code"]] = {
-                    "gm_symbol": symbol, "qty": volume, "buy_px": _lb.get("buy_px"),
-                    "buy_time": _lb.get("buy_time"), "date": _lb.get("date")}
             old = context.executed_orders.get(symbol, {"qty": 0, "available": 0, "cost": price})
             old_qty = int(old.get("qty", 0))
             old_cost = float(old.get("cost", price))
@@ -3938,21 +1026,6 @@ def on_order_status(context, order):
                 "type": "stock",
                 "pre_close": price,
             }
-            # 2026-09-22：原「买入成交 → 回补闭环完成写 filled 事件」已随做T引擎删除。
-            # 底仓确认（含F7回补单：已settled标的回补成交同样同步台账并释放_base_ordered）
-            if code in context._base_ordered:
-                context._base_settled.add(code)
-                # F12: 同步台账时保留做T状态键——直接整体替换会清空
-                # _target_filled_l1/_trail_state/_trail_peak，导致同一持仓期内
-                # TARGET 同档重复触发、TRAIL 状态机重置（WP-B 回放包 fix3 实证）
-                _keep = {k: v for k, v in context.manual_position.get(symbol, {}).items()
-                         if k.startswith("_target_") or k.startswith("_trail_")}
-                context.manual_position[symbol] = dict(context.executed_orders[symbol], **_keep)
-                # 底仓参考量=镜像目标值（供 sizer/sell_floor/tail 使用）
-                setattr(context, f'_base_ref_{code}',
-                        int(MIRROR_HOLDINGS.get(code, {}).get("qty", 0) or volume))
-                context._base_ordered.discard(code)
-                print(f"[BASE] {code} 底仓成交 {volume}股@{price:.2f}")
         elif side == 2:  # 卖出
             old = context.executed_orders.get(symbol, {"qty": 0, "available": 0})
             old_qty = int(old.get("qty", 0))
@@ -3969,41 +1042,10 @@ def on_order_status(context, order):
                 "pre_close": price,
             }
             # N26+N28: 成交时写入审计(含通道信息)
-            _act, _sc = getattr(context, "_pending_sell_action", {}).pop(symbol, ("", 0))
             # WP-B回放包: 回测下用仿真时钟(context.now)，否则验收无法对齐窗口日期
             _ts_now = str(getattr(context, "now", None) or datetime.now())
             _audit_write({"event": "sell", "code": code, "qty": volume, "price": price,
-                          "time": _ts_now, "pos_after_sell": new_qty,
-                          "action": _act, "score": _sc})
-            # WP-B14: TARGET 成交 → 置 filled 落盘（真实落袋才封档）
-            if _act == "TARGET_SELL" and symbol in context.manual_position:
-                context.manual_position[symbol]["_target_l1_state"] = "filled"
-                _sell_state_persist(context, _raw_code(symbol), symbol)
-            # 2026-09-23: OGR 平腿**成交才落账**（下单时只标记+虚减）。成交价=真实 fill，
-            # 供 bt_ogr_fills.py 的成交口径核算；被拒的单不会走到这里（腿保留在 _ogr_legs）。
-            if _act == "OGR_SELL":
-                _lg = _ogr_legs(context).pop(code, None) or {}
-                _refp = (getattr(context, "_ogr_sell_ref", {}) or {}).pop(symbol, None)
-                _audit_write({"event": "ogr_sell", "code": code, "gm_symbol": symbol,
-                              "qty": volume, "leg_qty": _lg.get("qty"),
-                              "buy_px": _lg.get("buy_px"),
-                              "ref_px": _refp if _refp else price, "fill_px": price,
-                              "time": _ts_now})
-            # 2026-09-22：原「卖出成交 → 建立回补价格记忆并写 armed 事件」已随做T引擎删除。
-        # O-10(2026-08-17 复盘①轻)：成交回调同步刷新 sell_state 指纹（pos_key）。
-        # 活跃 TRAIL/TARGET 状态期间成交会使 qty/cost 变化，但状态字段不变、
-        # 不触发落盘 → 次日 INIT pos_key 校验不符，活跃状态被静默作废
-        # （0817 实锤：603667 买 200 后文件指纹仍 400@51.9962，0818 将误作废 ARMED）。
-        # 只刷指纹不动状态：persist 镜像的内存状态字段在此刻均未变化。
-        if symbol in (getattr(context, "manual_position", None) or {}):
-            try:
-                _sell_state_persist(context, code, symbol)
-            except Exception:
-                pass
-    elif status == 2 and side == 1:
-        # WP-A1: 部分成交亦真实——部分成交量按实计，快照仅服务"纯拒单"场景，此处丢弃；
-        # 防止随后剩余量被拒时误按整笔回滚
-        _pop_buy_snapshot(context, order, symbol)
+                          "time": _ts_now, "pos_after_sell": new_qty})
     elif status in (4, 5, 6, 8, 12):  # 拒单/撤单/待撤/已拒绝(8)/已过期(12) —— F2修复: 2026-07-28前漏掉8导致所有拒单静默
         _rej_detail = ""
         try:
@@ -4011,97 +1053,16 @@ def on_order_status(context, order):
         except Exception:
             pass
         context.rejected_order_count = getattr(context, 'rejected_order_count', 0) + 1
-        # N5: 底仓拒单恢复
-        # WP-A1: _is_base_reject 须在 N5 的 discard 之前求值——N5 会把 code 移出
-        # _base_ordered 允许重发，若在其后再判 `code not in _base_ordered` 会误把底仓
-        # 拒单当做T买入拒单回滚（T-A1 实证：1400 条目被兜底逆减误删）
-        _is_base_reject = code in getattr(context, '_base_ordered', set())
-        if _is_base_reject:
-            if not hasattr(context, '_base_retry_count'):
-                context._base_retry_count = {}
-            retry = context._base_retry_count.get(code, 0) + 1
-            context._base_retry_count[code] = retry
-            if retry <= MAX_BASE_RETRY:
-                context._base_ordered.discard(code)
-                print(f'[ORDER] {code} 底仓拒单 status={status} 重试 #{retry} {_rej_detail}')
-            else:
-                print(f'[ORDER] {code} 底仓拒单已达上限({MAX_BASE_RETRY})，停止重试')
         print(f"[ORDER] {symbol} 被拒 status={status} {_rej_detail}")
-        # 2026-08-31: 卖单拒单退避——拒单回滚后本地状态复原，若不记冷却，保护通道
-        # （HARD_STOP 无冷却检查）会下一分钟同单重发形成订单风暴（run6 实证 2524 次
-        # status=8 仓位不足）。用仿真时钟(_now)，回测压缩时间下仍按行情时间计 30 分钟。
-        if side == 2:
-            if not hasattr(context, "_protect_sell_reject_until") or context._protect_sell_reject_until is None:
-                context._protect_sell_reject_until = {}
-            context._protect_sell_reject_until[code] = _now() + timedelta(minutes=30)
-        # 2026-09-23: OGR 平腿拒单留痕——腿**保留**在 _ogr_legs（成交回调才 pop）；
-        # 下单时的虚减由紧随其后的 N25-2 同口径回滚。
-        if side == 2 and getattr(context, "_pending_sell_action", {}).get(
-                symbol, ("", 0))[0] == "OGR_SELL":
-            _audit_write({"event": "ogr_sell_rejected", "code": code, "qty": volume,
-                          "status": status,
-                          "time": str(getattr(context, "now", None) or datetime.now())})
-        # N25-2: 卖出拒单回滚manual_position(下单时已虚减)
+        # N25-2: 卖出拒单回滚 manual_position（下单方在 on_order_status 之外只更 executed_orders，
+        # 但 OPEN_ALIGN 时代的虚减已随其删除；超跌跳空确认的腿账本自成一套，不走 manual_position）
         if side == 2 and symbol in context.manual_position:
-            # WP-B15: 持仓回滚 → 解除信号 mute / 地板去重键
-            _clear_signal_mute_keys(context, code)
             mp = context.manual_position[symbol]
             mp["qty"] = mp.get("qty", 0) + volume
             mp["available"] = mp.get("available", 0) + volume
             mp["t_qty"] = mp.get("t_qty", 0) + volume
             _audit_write({"event": "sell_rollback", "code": code, "qty": volume,
                           "time": str(getattr(context, "now", None) or datetime.now())})
-            # WP-B14: TARGET 拒单 → 状态清回 None 落盘（拒单不耗档，条件满足后可再触发）
-            _pending_act = getattr(context, "_pending_sell_action", {}).get(symbol, ("", 0))[0]
-            if _pending_act == "TARGET_SELL":
-                mp["_target_l1_state"] = None
-                _sell_state_persist(context, _raw_code(symbol), symbol)
-            # F14: 拒单不消耗日卖出配额/总成交计数（防止误耗挤占信号通道）
-            if hasattr(context, "daily_sell_count") and context.daily_sell_count is not None:
-                context.daily_sell_count[code] = max(0, context.daily_sell_count.get(code, 0) - 1)
-            if hasattr(context, "total_trade_count"):
-                context.total_trade_count = max(0, context.total_trade_count - 1)
-            # OBS-1(WP-A1): _pending_sell_action 拒单残留顺手清理——卖成交分支(:2135)才读该键，
-            # 残留无下游影响，但避免同票新卖单覆盖语义歧义
-            getattr(context, "_pending_sell_action", {}).pop(symbol, None)
-        # WP-A1: 做T买入拒单对称回滚（底仓 BASE 走 N5 重试路径，不碰 manual_position，排除）
-        elif side == 1 and not _is_base_reject:
-            # 2026-09-23: OGR 买腿拒单 → 撤掉 pending（成交回调不会再建腿）
-            _lgb = getattr(context, "_ogr_pending_buy", None)
-            if _lgb and symbol in _lgb:
-                _lb = _lgb.pop(symbol)
-                _audit_write({"event": "ogr_buy_rejected", "code": _lb["code"],
-                              "qty": _lb["qty"], "status": status,
-                              "time": str(getattr(context, "now", None) or datetime.now())})
-            _snap = _pop_buy_snapshot(context, order, symbol)
-            _fb = 0
-            if _snap is _MISSING:
-                # 无快照兜底：按 volume 逆减 qty/t_qty，结果 ≤0 删除条目（进程内遗留/版本热切换防御）
-                _fb = 1
-                if symbol in context.manual_position:
-                    _mp = context.manual_position[symbol]
-                    _nq = int(_mp.get("qty", 0)) - int(volume)
-                    if _nq <= 0:
-                        context.manual_position.pop(symbol, None)
-                    else:
-                        _mp["qty"] = _nq
-                        _mp["t_qty"] = _nq
-            elif _snap is None:
-                # 下单前无 manual_position 条目 → 整条删除
-                context.manual_position.pop(symbol, None)
-            else:
-                # 有快照：deepcopy 恢复（_pending_buy_snapshot 存的即为 deepcopy 副本）
-                context.manual_position[symbol] = copy.deepcopy(_snap)
-            # F14 买向对称：拒单不消耗日买入配额/总成交计数（下限 0）
-            if hasattr(context, "daily_buy_count") and context.daily_buy_count is not None:
-                context.daily_buy_count[code] = max(0, context.daily_buy_count.get(code, 0) - 1)
-            if hasattr(context, "total_trade_count"):
-                context.total_trade_count = max(0, context.total_trade_count - 1)
-            if hasattr(context, "engine") and hasattr(context.engine, "buy_count_per_stock"):
-                context.engine.buy_count_per_stock[code] = context.daily_buy_count.get(code, 0)
-            _audit_write({"event": "buy_rollback", "code": code, "qty": volume,
-                          "time": str(getattr(context, "now", None) or datetime.now()),
-                          "fallback": _fb})
         try:
             _r_code = _raw_code(symbol)
             _r_side = "BUY" if side == 1 else "SELL"
@@ -4125,7 +1086,6 @@ def on_backtest_finished(context, indicator):
                 print(f"  {k}: {v}")
             except Exception:
                 print(f"  {k}: {v}")
-    print(f"  手动统计: 成交笔数={getattr(context, 'total_trade_count', 0)}")
     print(f"  拒单笔数={getattr(context, 'rejected_order_count', 0)}")
     print("*" * 50)
 
