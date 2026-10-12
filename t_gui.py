@@ -2594,6 +2594,42 @@ class Api:
             _th.Thread(target=_bg, name="ob-analysis", daemon=True).start()
         return _c[1] if _c is not None else {"stocks": [], "pending": True}
 
+    def _kick_cold_chart_warm(self, codes):
+        """给**图表不在内存缓存**的持仓补一次后台取数（2026-10-12）。
+
+        为什么必须有：`_load_ob_analysis_impl` 只读 `self._stock_chart_cache`、**从不补取**，
+        所以 `prewarm_holdings_charts` 一旦漏掉某只（启动预热失败 / 新增持仓 / 重启后未预热完），
+        那只就会**永远不出现**在持仓体检表里 —— 界面上只表现为"少了一行"，
+        owner 实测报「少了江西铜业(600362)」，而数据侧（holdings_manual / holdings_daily /
+        load_quotes / load_stock_chart）**全都在**，查起来毫无线索。
+
+        ⚠️ **必须节流**：OB 在 `pending>0` 期间 TTL 只有 10s，会反复重算 ⇒ 不节流就会反复起线程池
+        （本仓被"线程数爆炸"咬过，见 memory `gui_cold_start_burst`）。这里 30s 内至多一次，
+        且只对**缺的那几只**取数（不重复整池预热），并发压到 2。
+        """
+        now = _time_mod.time()
+        if now - getattr(self, "_cold_warm_at", 0.0) < 30:
+            return
+        self._cold_warm_at = now
+        codes = [c for c in dict.fromkeys(codes or []) if c]
+        if not codes:
+            return
+
+        def _bg():
+            try:
+                from concurrent.futures import ThreadPoolExecutor
+
+                def _one(c):
+                    try:
+                        self.load_stock_chart(c)      # 当日内存缓存命中则秒回
+                    except Exception:
+                        pass
+                with ThreadPoolExecutor(max_workers=2) as ex:
+                    list(ex.map(_one, codes))
+            except Exception:
+                pass
+        _th.Thread(target=_bg, name="ob-cold-warm", daemon=True).start()
+
     def _load_ob_analysis_impl(self, date=None):
         """每只持仓：**30min 趋势 / 30min 背离 / 30min 顶部特征(T1–T4)风险提醒** + 日线超买(RSI/KDJ-J/CCI/BOLL)。
 
@@ -2614,6 +2650,7 @@ class Api:
         _chart_cache = getattr(self, "_stock_chart_cache", {})
         pending = 0
         m30_pending = False          # 有持仓的 30min 判定尚未热（前端稍后重拉，不等 12s）
+        _cold = []                   # 图表不在内存缓存 ⇒ 本轮跳过（下面兜底补取，见 _kick_cold_chart_warm）
 
         for code, info in cur.items():
             if not isinstance(info, dict) or code.startswith("_"):
@@ -2624,7 +2661,8 @@ class Api:
             _hit = _chart_cache.get(f"{_today}_{base_code}")
             if _hit is None:
                 pending += 1          # 图表尚未预热好：跳过，不计入本轮（前端会重拉）
-                continue
+                _cold.append(base_code)   # ⚠️ 记下来：本路径**只读缓存、从不补取**，
+                continue                  #    预热漏过一次就永远不出现（2026-10-12 见下）
             h = _hit[1]
             if not h.get("available"):
                 out["stocks"].append({"code": code, "name": info.get("name", code),
@@ -2671,6 +2709,12 @@ class Api:
             boll_up = d["boll"]["up"]
             n = len(closes)
             if n < 30:
+                # ⚠️ 原来这里**直接 continue**：不加分析、也**不留行** ⇒ 界面上"少了一只"，
+                # 没有任何线索（owner 2026-10-12 报「持仓体检少了江西铜业」就是这么消失的：
+                # 日线缓存被短窗口覆盖成 21 根 → payload 存 21 根 → 这里静默丢）。
+                # 改为**留一行并写明原因**（与上面 `available=False` 分支同款，前端可渲染）。
+                out["stocks"].append({"code": code, "name": info.get("name", code),
+                                      "error": f"日线不足({n}根，需≥30) —— 缓存可能被短窗口写入截短"})
                 continue
 
             # KDJ(9,3,3)
@@ -2772,6 +2816,18 @@ class Api:
             })
         if pending:
             out["pending"] = pending      # 未就绪的持仓数（>0 ⇒ 前端稍后重拉）
+        if _cold:
+            # 2026-10-12 owner 报「持仓体检少了江西铜业」：本路径**只读** `_stock_chart_cache`、
+            # **从不补取** ⇒ 预热一旦漏掉某只（启动预热失败/新增持仓/重启），那只就**永远不出现**，
+            # 且界面上只表现为"少了一行"，没有任何线索。⇒ 兜底：对它**补一次后台取数**
+            # （带节流，见 `_kick_cold_chart_warm`），下一轮（≤10s，pending 期间 TTL 就是这么短）即出现。
+            # 同时把 code 列出来，让"少了谁"可见。
+            out["chart_pending"] = len(_cold)
+            out["chart_pending_codes"] = list(_cold)
+            try:
+                self._kick_cold_chart_warm(_cold)
+            except Exception:
+                pass
         if m30_pending:
             out["m30_pending"] = True     # 30min 判定未热（>0 ⇒ 前端 3s 快速重拉，不等 12s）
         # 仓位结构未热：后台预热持仓（每 30min 时段一轮），前端按 struct_pending 快速重拉
@@ -3286,6 +3342,15 @@ class Api:
                 _dfc = _cc.load_daily_display(code)
                 if _dfc is not None and not _dfc.empty:
                     if str(hit.get("last_daily_date") or "") < str(_dfc["date"].iloc[-1])[:10]:
+                        return None
+                    # 2026-10-12: 除了"更新"，还要看"**更少**"。日线缓存被短窗口写入截短过之后
+                    # （`save_daily_cache` 曾是盲覆盖），payload 会带着**残缺序列**被当成新鲜直接回放
+                    # —— 日期闸拦不住（实测 600362：缓存 801 根、payload 只 21 根，
+                    # 两者末根都是 10-12 ⇒ 判"不旧" ⇒ 回放 21 根 ⇒ 持仓体检 `n < 30` 静默丢行，
+                    # owner 报「少了江西铜业」）。这里顺手判长度 ⇒ 触发重建。
+                    # 正常情况两者**同为完整序列**（长度≈相等），只有被截短才会差出量级。
+                    _prows = hit.get("daily_rows") or []
+                    if _prows and len(_prows) * 2 < len(_dfc):
                         return None
             except Exception:
                 pass

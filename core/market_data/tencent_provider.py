@@ -44,10 +44,27 @@ def _idx_ensure_cols(df, source):
 
 def save_daily_cache(code: str, df, days: int = 800):
     """写个股日线缓存（不变式 {date, saved_at, rows:[{date,open,close,high,low,volume}]}）。
-    gm 结果也写缓存（审核 P1 阻断6：gm 路径不能每次直拉）。"""
+    gm 结果也写缓存（审核 P1 阻断6：gm 路径不能每次直拉）。
+
+    ⚠️ **不许截短既有历史**（2026-10-12 加）：本函数是**整体覆盖**，调用方只拉了短窗口
+    （如 1 个月）时会把长历史**静默**写没。本仓已被这一类咬过两次：
+      · `t_io/cache/daily_kline/index_*.json`（见 memory「指数日线缓存会被静默截短」）
+      · **600362 个股：801 根 → 21 根** ⇒ 图表 payload 存了 21 根 ⇒ 持仓体检的
+        `if n < 30: continue` 把该股**静默丢掉**（owner 报「持仓体检少了江西铜业」）
+    既有缓存更长时改走 `merge_daily_cache`（按日期并集，不缩短）—— 语义上严格更安全。
+    """
     if df is None or df.empty:
         return
     code = str(code).split("_")[0]
+    try:
+        _fp0 = os.path.join(_DAILY_CACHE_DIR, f"{code}.json")
+        if os.path.exists(_fp0):
+            _old = (_read_json(_fp0) or {}).get("rows") or []
+            if len(_old) > len(df):
+                merge_daily_cache(code, df)      # 新数据更短 ⇒ 并集而不是覆盖
+                return
+    except Exception:
+        pass
     recs = []
     for r in df.itertuples():
         recs.append({"date": r.date, "open": float(r.open), "close": float(r.close),
