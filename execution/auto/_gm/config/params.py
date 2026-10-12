@@ -263,10 +263,16 @@ PARAMS = {
     # OGR 影子记录保持 on（只读日志，与 S1 下单无冲突）；滑点观测保持。
     # ⚠️ 挂起方式是**开关**不是删代码：s1_mode_enabled=False 即整体回退旧引擎。
     # ⚠️ 必须落在 PARAMS（gm_main 闸函数读这张表；B7 开关错放 INDEX_REGIME_PARAMS 的前科）。
-    "s1_mode_enabled": True,            # S1 总闸：on=S1 驱动 auto 账本（下三项默认挂起）
+    # ⚠️ 2026-10-12 owner 决策（选 C）：**改由弱转强接管，S1 关闭，旧引擎一并停**。
+    #    · s1_mode_enabled=False 单独用**不够** —— 它的语义是"整体回退旧引擎"（镜像对齐
+    #      + TAIL + 旧镜像做T引擎会全部复活，按手动 A/B 实盘账户下单）。
+    #    · 故同时置 `legacy_engine_enabled=False`（新增总闸，见 gm_main._legacy_engine_allowed）：
+    #      **无论 S1 开关如何**，旧引擎一律挂起 ⇒ 真正"停干净"。
+    "s1_mode_enabled": False,           # S1 总闸：off（2026-10-12 起由弱转强接管）
     "s1_open_align_enabled": False,     # S1 on 时镜像对齐挂起（True=强制恢复，调试用）
     "s1_tail_enabled": False,           # S1 on 时 TAIL 尾盘归位挂起（随旧引擎门链一并跳过）
     "s1_legacy_engine_enabled": False,  # S1 on 时旧镜像做T引擎（BASE/信号/卖出门链）挂起
+    "legacy_engine_enabled": False,     # **旧镜像引擎总闸**：False=无论 S1 开关都挂起（2026-10-12 停用）
     # 执行参数（s1_executor.py DEFAULTS 的覆盖入口）：
     "s1_exec_time_hhmm": 931,           # 盘初执行时点（首根 60s bar，≈09:31）
     "s1_proceeds_haircut": 0.999,       # 卖出预计回款折扣（对齐 OPEN_ALIGN ×0.999）
@@ -286,7 +292,7 @@ PARAMS = {
     #    top-N 板块，exp15/21 定稿，非 daily_summary 排名）。翻启后只在掘金模拟盘下单，与 S1
     #    共享账户 ⇒ 用 weak_strong_daily_budget 封顶，避免挤占 S1 轮动。
     # ⚠️ 必须落在 PARAMS（gm_main 闸函数读这张表；B7 开关错放 INDEX_REGIME_PARAMS 的前科）。
-    "weak_strong_paper_enabled": False,  # 弱转强 10:00 买侧总闸（默认 off，owner 翻启）
+    "weak_strong_paper_enabled": True,   # 弱转强 10:00 买侧总闸（2026-10-12 owner 决策 C：翻启，接替 S1）
     "weak_strong_top_n": 4,              # 每日按 gap 取最强前 N（exp9 Sharpe 顶点）
     "weak_strong_board_top_n": 5,        # 盘前取猎手前 N 热门板块的成分股为候选范围
     "weak_strong_single_budget": 100000.0,  # 单票名义上限（元，对齐 OGR 10 万/腿）

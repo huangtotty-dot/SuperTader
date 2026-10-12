@@ -716,14 +716,29 @@ def _s1_mode_on() -> bool:
     return bool(PARAMS.get("s1_mode_enabled", False))
 
 
+def _legacy_engine_allowed() -> bool:
+    """**旧镜像引擎总闸**（2026-10-12 owner 选 C 时新增）。
+
+    为什么必须有：原先两个闸都是 `(not _s1_mode_on()) or <开关>` —— 语义是"**S1 关掉 =
+    整体回退旧引擎**"。于是想"关 S1 但不要旧引擎"时**做不到**：那两个开关的语义是
+    "S1 **on** 时强制恢复（调试用）"，没有"off 时强制挂起"的入口。
+
+    现在：本总闸为 False ⇒ **无论 S1 开关如何**，镜像对齐 / TAIL / 旧镜像做T引擎一律挂起。
+    缺键默认 **True** ⇒ 保持历史语义（关 S1 即回退旧引擎），不影响既有配置与测试。
+    """
+    return bool(PARAMS.get("legacy_engine_enabled", True))
+
+
 def _s1_open_align_allowed() -> bool:
     """S1 接管后镜像对齐默认挂起（否则镜像逻辑与 S1 调仓打架）。"""
-    return (not _s1_mode_on()) or bool(PARAMS.get("s1_open_align_enabled", False))
+    return _legacy_engine_allowed() and (
+        (not _s1_mode_on()) or bool(PARAMS.get("s1_open_align_enabled", False)))
 
 
 def _s1_legacy_active() -> bool:
     """旧镜像做T引擎（BASE 建仓/信号/卖出门链，含 TAIL 尾盘归位）是否放行。"""
-    return (not _s1_mode_on()) or bool(PARAMS.get("s1_legacy_engine_enabled", False))
+    return _legacy_engine_allowed() and (
+        (not _s1_mode_on()) or bool(PARAMS.get("s1_legacy_engine_enabled", False)))
 
 
 class _S1GmGateway:
@@ -3367,7 +3382,8 @@ def on_bar(context, bars):
         # BASE 建仓/做T信号/卖出门链（含 TAIL 尾盘归位）对本票全部跳过。
         # 位置刻意放在「bar 累积 + _ogr_pc_cache 更新」**之后**：心跳、指数态势、
         # OGR 影子（在逐票循环之前触发）与滑点观测照常，仅交易决策链断开。
-        # 开关回退：params.py s1_mode_enabled=False（或 s1_legacy_engine_enabled=True）。
+        # 开关回退：params.py s1_mode_enabled=False（或 s1_legacy_engine_enabled=True）；
+        # 2026-10-12 起另有**总闸** `legacy_engine_enabled=False` ⇒ 无论 S1 开关都挂起旧引擎。
         if not _s1_legacy_active():
             continue
 

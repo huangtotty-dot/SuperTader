@@ -474,9 +474,16 @@ class TestT5ParamsWiring(unittest.TestCase):
             self.assertNotIn(k, self.p.INDEX_REGIME_PARAMS, f"{k} 不得在 INDEX_REGIME_PARAMS")
             self.assertIsInstance(self.p.PARAMS[k], bool, f"{k} 应为布尔")
 
-    def test_s1_on_suspends_align_tail_legacy_by_default(self):
-        """owner 账本切换裁决：S1_MODE=on 时 align/tail/旧引擎默认挂起。"""
-        self.assertTrue(self.p.PARAMS["s1_mode_enabled"])
+    def test_switch_state_s1_off_legacy_stopped(self):
+        """owner 2026-10-12 决策 C：**启弱转强 + 关 S1 + 停旧引擎**。
+
+        原断言钉的是上一版裁决（S1=on、align/tail/旧引擎挂起）。owner 改主意后 S1 关闭，
+        这里改钉**关键不变式**：S1 关掉**不会**让旧引擎复活 —— 靠新增总闸
+        `legacy_engine_enabled=False` 兜住（否则旧引擎会按**手动 A/B 实盘账户**下单）。
+        """
+        self.assertFalse(self.p.PARAMS["s1_mode_enabled"], "S1 已关（2026-10-12 起由弱转强接管）")
+        self.assertFalse(self.p.PARAMS["legacy_engine_enabled"],
+                         "⚠️ S1 关掉后必须由总闸停住旧引擎，否则它会按手动账户下单")
         self.assertFalse(self.p.PARAMS["s1_open_align_enabled"])
         self.assertFalse(self.p.PARAMS["s1_tail_enabled"])
         self.assertFalse(self.p.PARAMS["s1_legacy_engine_enabled"])
