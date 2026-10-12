@@ -1257,6 +1257,7 @@ def _maybe_run_daily_review(now: datetime) -> None:
 
 # 2026-10-04: 收盘后 K线缓存预下载（小池日线+分钟 → 全池日线兜底）。子进程隔离、幂等。
 _chart_prefetch_state = {"date": "", "next_try": 0.0}
+_freshness_patrol_state = {"date": ""}   # 产物新鲜度巡检（2026-10-12）当日占位
 
 
 def _maybe_run_chart_prefetch(now: datetime) -> None:
@@ -1311,6 +1312,47 @@ def _maybe_run_chart_prefetch(now: datetime) -> None:
     except Exception as e:
         _chart_prefetch_state["next_try"] = _now().timestamp() + 600
         log.warning(f"⚠️ K线预下载触发失败（10 分钟重试）: {str(e)[:120]}")
+
+
+def _maybe_run_freshness_patrol(now: datetime) -> None:
+    """15:40 后每日一次**产物新鲜度巡检** → 飞书（2026-10-12 owner P1）。
+
+    为什么在 15:40 而不是 15:10：要等 `_maybe_run_chart_prefetch` 把当日日线/分钟线写完，
+    否则会把"预下载还没跑完"误报成"陈旧"。
+    为什么每类**恰好一条**：owner 说「直接推飞书，同步检查误报率」⇒ 每日一张卡（含全部数字），
+    并落历史 JSONL 供事后算误报率；⚠️ 只给"与上一轮相比**新出现**"的陈旧，持续陈旧标"持续"。
+
+    幂等：`core.freshness_patrol.run_once` 用当日标记文件判（跨重启也成立）。
+    巡检本体**零网络**，在后台线程跑（读几千个小 JSON，别占主循环）。
+    """
+    global _freshness_patrol_state
+    try:
+        t = now.time()
+        if now.weekday() >= 5 or t < dtime(15, 40):
+            return
+        today = now.strftime("%Y-%m-%d")
+        if _freshness_patrol_state.get("date") == today:
+            return
+
+        def _worker(day: str) -> None:
+            try:
+                from core.freshness_patrol import run_once
+                res = run_once()
+                if res.get("skipped"):
+                    _freshness_patrol_state.update({"date": day})   # 已跑过也占位，免得每轮都起线程
+                    log.info(f"产物新鲜度巡检：{day} 已跑过，跳过")
+                elif res.get("error"):
+                    log.warning(f"⚠️ 产物新鲜度巡检失败: {res['error']}")
+                else:
+                    _freshness_patrol_state.update({"date": day})
+                    log.info(f"产物新鲜度巡检完成（{day}）pushed={res.get('pushed')} "
+                             f"新出现陈旧={res.get('newly_stale')}")
+            except Exception as e:                 # 不吞：链路失败必须留痕
+                log.error(f"❌ 产物新鲜度巡检链路异常: {type(e).__name__}: {e}")
+
+        _threading.Thread(target=_worker, args=(today,), name="freshness-patrol", daemon=True).start()
+    except Exception as e:
+        log.warning(f"⚠️ 产物新鲜度巡检触发失败: {str(e)[:120]}")
 
 
 def _maybe_run_position_builder(now: datetime) -> None:
@@ -2084,6 +2126,7 @@ def scan_once():
         _maybe_run_position_builder(now)                # 15:05-15:15 建仓信号扫描（每日一次）
         _maybe_run_daily_review(now)                    # P0-7(2026-09-01): 15:10 后自动每日复盘（子进程隔离）
         _maybe_run_chart_prefetch(now)                  # 2026-10-04: 15:10 后 K线缓存预下载（与 t_gui 幂等）
+        _maybe_run_freshness_patrol(now)                # 2026-10-12: 15:40 后产物新鲜度巡检 → 飞书（零网络）
 
         if now.weekday() >= 5 or t < dtime(9, 30) or (dtime(11, 30) < t < dtime(13, 0)) or t > dtime(15, 0):
             if _last_idle_log is None or (_now() - _last_idle_log).total_seconds() >= PARAMS["idle_log_minutes"] * 60:
@@ -2103,7 +2146,6 @@ def scan_once():
         if not HOLDINGS:
             return
         _scan_count += 1
-        panel_rows = []
         minute_issue_stats = {}
 
         # V1.28: 暴跌模式优先生成跌幅最大标的的信号
@@ -2139,7 +2181,6 @@ def scan_once():
             dec["_signal_whitelist"] = _wl
             if not (_wl.get("eval_buy") or _wl.get("eval_sell")):
                 dec["last_status"] = "已清仓跳过(白名单)"
-                panel_rows.append([label(code, holding), "-", "-", "-", "-", "已清仓跳过"])
                 log.info(f"🚫 {label(code, holding)} qty=0 已清仓，跳过信号评估（C-5/C27）")
                 try:
                     _append_jsonl(_trace_path("data_quality"), {
@@ -2164,7 +2205,6 @@ def scan_once():
                 if df.empty:
                     dec["last_status"] = f"分钟线断流({minute_label})"
                     dec["last_status_detail"] = minute_detail
-                    panel_rows.append([label(code, holding), "-", "-", "-", "-", f"分钟线断流({minute_label})"])
                     bucket = _minute_issue_bucket(minute_status)
                     minute_issue_stats.setdefault(bucket, {})
                     minute_issue_stats[bucket][minute_label] = minute_issue_stats[bucket].get(minute_label, 0) + 1
@@ -2173,7 +2213,6 @@ def scan_once():
                 if minute_status not in {"ok", "cache_hit"}:
                     dec["last_status"] = f"分钟线异常({minute_label})"
                     dec["last_status_detail"] = minute_detail
-                    panel_rows.append([label(code, holding), "-", "-", "-", "-", f"分钟线异常({minute_label})"])
                     bucket = _minute_issue_bucket(minute_status)
                     minute_issue_stats.setdefault(bucket, {})
                     minute_issue_stats[bucket][minute_label] = minute_issue_stats[bucket].get(minute_label, 0) + 1
@@ -2204,7 +2243,6 @@ def scan_once():
                 dec["last_amp"] = amp
                 if len(df) < 2:
                     dec["last_status"] = "数据预热"
-                    panel_rows.append([label(code, holding), f"{price:.2f}", f"{vwap:.2f}", f"{amp*100:.1f}%", "-", "数据预热"])
                     continue
 
                 can_t = holding.get("t_qty", 0) > 0
@@ -2296,7 +2334,6 @@ def scan_once():
                 if sig and sig.action in {"BUY_LOW", "ADD_POS", "SELL_HIGH", "PANIC_SELL"}:
                     stat = f"{stat}|{sig.action}"
                 dec["last_status"] = stat
-                panel_rows.append([label(code, holding), f"{price:.2f}", f"{vwap:.2f}", f"{amp*100:.1f}%", f"多{buy_score}/空{sell_score}", stat])
 
                 _snapshot_write(code, holding, df, {
                     "price": price,
@@ -2574,12 +2611,10 @@ def scan_once():
                 log.warning(f"⚠️  {label(code, holding)} 扫描异常: {str(e)[:120]}")
                 continue
 
-        if _scan_count % 4 == 1:
-            lines = [f"\n📊 护城河防御面板 第{_scan_count}轮\n" + "─"*70]
-            lines.append(f"{'标的':<16}{'现价':>8}{'均价(VWAP)':>10}{'振幅':>8} {'多买/空卖评分':>13}  {'状态'}")
-            for r in panel_rows:
-                lines.append(f"{r[0]:<16}{r[1]:>8}{r[2]:>10}{r[3]:>8} {r[4]:>13}  {r[5]:<8}")
-            log.info("\n".join(lines))
+        # 2026-10-12 owner：「console 里对持仓股的轮询显示没有任何必要」⇒ 移除「护城河防御面板」
+        # （每 4 轮一张 7 行表：标的/现价/VWAP/振幅/买卖评分/状态）。`panel_rows` 的收集点一并清掉：
+        # 它只喂这张表，没有任何其它消费者（也无测试依赖）。逐股信号决策照旧落 trace/snapshot，
+        # 只是不再往 console 刷这张表；`_scan_count % 4` 的**另一处**用途（暴跌优先模式单行提示）保留。
     finally:
         _scan_lock = False
 
