@@ -340,14 +340,20 @@ async function refreshLive(reset) {
       updateSidebarSummary((q && q.quotes) || []);
       state.quotes = (q && q.quotes) || [];
       if (state.payload) {
-        // PB 表价格实时更新
+        // PB 表价格/涨幅实时更新（2026-10-12 owner：「建仓信号扫描没有显示个股实时涨幅」。
+        // 根因=此处原先**只搬了 price、把 change_pct 丢了**，而 scan trace 里本就没有涨跌幅
+        // ⇒ 不叠加就永远没有。现已收进 `applyQuotesToPB`，与 refresh_pb 路径共用。）
         const pbRows = state.payload.position_builder;
         if (pbRows && pbRows.rows) {
-          const pxMap = {};
-          state.quotes.forEach(x => pxMap[x.code] = x.price);
-          pbRows.rows.forEach(r => { if (pxMap[r.code] != null) r.price = pxMap[r.code]; });
-          renderPB(pbRows);
+          renderPB(applyQuotesToPB(pbRows));
         }
+      }
+      // 自动盘建仓扫描表同款（缓存了最近一次 payload 才刷，没打开过该页就不做无用功）
+      if (window._autoLastPayload) renderAutoScan(applyQuotesToAuto(window._autoLastPayload));
+      // 猎手展开页的实时价/涨幅：只刷**当前可见**的展开板块（TTL 15s 节流；
+      // 猎手页没打开/没展开任何板块时是零成本 —— 别为看不见的东西出网）
+      if (hunterOpenSectors.size && _hunterTabActive()) {
+        loadHunterQuotes();          // 一次覆盖全部展开板块（不再每板块一次）
       }
     }).catch(() => {});
     // 2026-10-10: 「今日盘中 S」已下线，连带的 10s 重拉一并删除（跨日 S 是日频，改日期时拉一次即可）
@@ -388,7 +394,7 @@ async function refreshLive(reset) {
       // 关键：把带技术标签的结果合并回 state.payload，否则后续 load_quotes 路径
       // 用无 tags 的旧 payload 重新 renderPB，会覆盖掉已显示的技术标签（一会有一会无）
       if (pb && pb.rows && state.payload) state.payload.position_builder = pb;
-      renderPB(pb || {});
+      renderPB(applyQuotesToPB(pb || {}));   // 叠加实时价/涨幅，别让新 payload 把它洗掉
       updateRefreshAlarm();
     }).catch(() => {
       pbFailCnt++;
@@ -1580,6 +1586,25 @@ function dayStageCellHtml(st) {
   return `<td style="text-align:center" title="${esc(st.stage_daily + "。" + DAY_STAGE_TIP)}"><span style="font-size:12px">${esc(st.stage_daily)}</span></td>`;
 }
 
+/* 实时涨幅（2026-10-12，owner 要求）：**建仓表** 与 **猎手个股行** 共用同一渲染。
+   两处数据源不同（建仓表=load_quotes 每 10s 叠加；猎手=后端本轮行情快照的 change_pct），
+   但展示口径必须一致 ⇒ 收成一个 helper，别各写一份。
+   ⚠️ 取不到必须显示 "—" 而不是 0.00%：本仓踩过"把无数据画成平盘"的坑
+      （盘前假当日根就让 600362 误报破 5 日线），涨跌幅尤其不能猜。 */
+function pctHtml(v, tip) {
+  if (v === null || v === undefined || v === "" || isNaN(Number(v))) {
+    return `<span class="cell-dim" title="${esc(tip ? tip + "；本行暂未取到" : "暂未取到")}">—</span>`;
+  }
+  const n = Number(v);
+  const cls = n > 0.05 ? "up" : n < -0.05 ? "down" : "cell-dim";
+  // ⚠️ 用 toFixed(2) 而**不是** `fmt(n,2)`：后者是 `maximumFractionDigits`（最多两位），
+  //    会把 +3.50% 打成 +3.5%、0 打成 +0%。涨跌幅一列必须**定宽两位**，否则数字对不齐、
+  //    且 0 与 0.00 看起来像两种东西（冒烟测试实测踩到）。
+  const txt = `${n >= 0 ? "+" : ""}${n.toFixed(2)}%`;
+  return tip ? `<span class="${cls}" title="${esc(tip)}">${txt}</span>`
+             : `<span class="${cls}">${txt}</span>`;
+}
+
 /* 「5日线」观察列（2026-10-11，owner 要求）：显示**得分**里那个 −70 扣分的触发标志，
    便于看"被砍到 0 的那批票后来怎么样"——它是决定是否保留该扣分的观察依据。
    ⚠️ 实测（977只×2265日）「站上MA5」的横截面 IC 为**负**（−0.018, t=−6.9，两半窗一致），
@@ -1617,6 +1642,42 @@ function tierRowStyle(t) {
   if (t === "龙头") return "box-shadow:inset 4px 0 0 #f85149;background:rgba(248,81,73,.10);";
   if (t === "中军") return "box-shadow:inset 3px 0 0 #58a6ff;background:rgba(88,166,255,.07);";
   return "";
+}
+
+/* 把实时行情叠加到建仓表行（价 + 涨幅）。**两处都必须调**：
+   ① 10s 的 `load_quotes` 路径；② `refresh_pb` 回来的新 payload —— 后者会**整体替换**
+   `state.payload.position_builder`，不叠的话刚填上的实时值会被下一次渲染洗掉（本文件既有
+   同类教训：技术标签曾因同样的"覆盖再渲染"一会儿有一会儿无，见 refresh_pb 处注释）。
+   ⚠️ 不新增涨跌幅到 scan trace：那是扫描时刻的快照，与"实时"语义不同，两者别混。 */
+function applyQuotesToPB(pb) {
+  const qs = state.quotes || [];
+  if (!pb || !pb.rows || !qs.length) return pb;
+  const pxMap = {};
+  qs.forEach(x => { pxMap[x.code] = { price: x.price, pct: x.change_pct }; });
+  pb.rows.forEach(r => {
+    const q = pxMap[r.code];
+    if (!q) return;
+    if (q.price != null) r.price = q.price;
+    r.change_pct = q.pct;
+  });
+  return pb;
+}
+
+/* 自动盘扫描表的同款叠加（2026-10-12）。该表的「价」列此前**恒为空** —— `renderAutoScan`
+   读 `r.price`，但 `auto_scan_{date}.jsonl` 里根本没有价格字段 ⇒ 后端已把 auto 池并进
+   `load_quotes` 的取数清单（见 `_load_quotes_build`），这里负责叠加「价 + 涨幅」。 */
+function applyQuotesToAuto(d) {
+  const qs = state.quotes || [];
+  if (!d || !d.rows || !qs.length) return d;
+  const pxMap = {};
+  qs.forEach(x => { pxMap[x.code] = { price: x.price, pct: x.change_pct }; });
+  d.rows.forEach(r => {
+    const q = pxMap[r.code];
+    if (!q) return;
+    if (q.price != null) r.price = q.price;
+    r.change_pct = q.pct;
+  });
+  return d;
 }
 
 function renderPB(pb) {
@@ -1786,7 +1847,7 @@ function renderPB(pb) {
         <td class="num ${metCls}"><b>${isNoData ? "—" : metCount + "/3"}</b></td>
         ${dayStageCellHtml(r.structure)}
         ${ma5FlagCellHtml((r.timing_features || {}).above_ma5)}
-        <td class="num">${fmt(r.price)}</td>
+        <td class="num">${fmt(r.price)}<div style="font-size:10px">${pctHtml(r.change_pct, "实时涨幅（随行情每 10s 刷新）")}</div></td>
         <td style="text-align:center">${boxStr}</td>
         <td style="max-width:220px;line-height:1.7">${tagsTxt}</td>
         <td><span class="cond" title="${esc(condTitle)}">${condStr}${vetoDot}</span></td>
@@ -1822,7 +1883,7 @@ function renderPB(pb) {
           <th>股票</th><th title="P3-2 池分管：人工=manual侧扫描 / 自动=auto侧管理">池</th><th>判定</th><th class="num">得分</th><th class="num">通过</th>
           <th title="日线四阶段（描述状态，紧挨得分便于对照）：②抬升/③派发/④下跌/①蓄势。⚠️ 实测横截面IC与直觉相反——抬升/追高前瞻更差(IC −0.031~−0.042, t=−12~−15)、下跌/超跌前瞻更好(IC +0.020~+0.034, t=+7~+12)，分半窗两段同号；效应量小(IC≈0.04)仅作相对强弱参照">日线阶段</th>
           <th title="是否站上 5 日线——「得分」−70 扣分的触发标志（观察用）。⚠️ 实测该项横截面IC为负(站上MA5 −0.018, t=−6.9)：被扣的这批后续反而略好；扣分保留与否待观察">5日线<br><span style="font-size:9px;opacity:.6">观察</span></th>
-          <th class="num">价</th>
+          <th class="num" title="实时价 + 实时涨幅（随行情每 10s 刷新）。取不到显示 — 而不是 0.00%：不把「无数据」画成「平盘」">价<br><span style="font-size:9px;opacity:.6">涨幅</span></th>
           <th title="突破箱体=第一优先级">突破</th>
           <th title="通道/箱体/背离等技术形态（此列的顶/底背离是**日线**口径，与右侧『30min判定』的 30 分钟口径不同源）">技术标签</th>
           <th title="时机门控：市场有方向/多头结构/回撤到位（GO→signal，震荡→降频）">时机条件</th>
@@ -2160,11 +2221,12 @@ function initBuyConfirmEvents() {
 async function loadAutoScan() {
   try {
     const d = await apiCall("load_auto_scan");
-    renderAutoScan(d);
+    renderAutoScan(applyQuotesToAuto(d));
   } catch (e) { /* pywebview 未就绪忽略 */ }
 }
 
 function renderAutoScan(d) {
+  window._autoLastPayload = d;   // 供 10s 行情路径叠加实时价/涨幅后重渲染（同 _pbLastPayload 用法）
   // 显示对齐手动盘建仓表（2026-08-31）：池/判定/得分(ceiling锁)/通过X/3/价/条件圆点/时机门控/否决 + 双击看K线
   const el = document.getElementById("autoScanBody");
   if (!el) return;
@@ -2237,7 +2299,7 @@ function renderAutoScan(d) {
       <td>${verdictBadge(r.verdict)}</td>
       <td class="num" title="综合得分">${scoreCell}</td>
       <td class="num ${metCls}"><b>${isNoData ? "—" : metCount + "/3"}</b></td>
-      <td class="num">${r.price != null ? fmt(r.price) : "—"}</td>
+      <td class="num">${r.price != null ? fmt(r.price) : "—"}<div style="font-size:10px">${pctHtml(r.change_pct, "实时涨幅（随行情每 10s 刷新）")}</div></td>
       <td><span class="cond" title="${esc(condTitle)}">${condStr}${vetoDot}</span></td>
       <td class="cell-dim" style="font-size:11px;max-width:230px;line-height:1.5">${reasonTxt}</td>
       <td class="num">${r.base ? fmt(r.base, 0) : "—"}</td>
@@ -2249,7 +2311,7 @@ function renderAutoScan(d) {
       ${countBadge("signal")}${countBadge("approaching")}${countBadge("watch_signal")}${countBadge("weak")}${countBadge("scan_error")}
       <span class="cell-dim" style="margin-left:auto">共 ${rows.length} 只 · ${esc(d.date || "")} · 双击看K线</span>
     </div>
-    <table><thead><tr><th>股票</th><th>池</th><th>判定</th><th class="num">得分</th><th class="num">通过</th><th class="num">价</th><th>条件</th><th>理由</th><th class="num">目标底仓</th><th>操作</th></tr></thead>
+    <table><thead><tr><th>股票</th><th>池</th><th>判定</th><th class="num">得分</th><th class="num">通过</th><th class="num" title="实时价 + 实时涨幅；该「价」列此前恒为空（trace 里无价格字段），2026-10-12 已由行情叠加补上">价<br><span style="font-size:9px;opacity:.6">涨幅</span></th><th>条件</th><th>理由</th><th class="num">目标底仓</th><th>操作</th></tr></thead>
     <tbody>${trs}</tbody></table>`;
 }
 
@@ -3344,6 +3406,17 @@ const hunterOpenSectors = new Set();
 const hunterTagsCache = {};
 
 const hunterTagsRetry = {};   // 空结果重试计数（防死循环）
+/* 猎手展开行的**实时**行情缓存（2026-10-12）。
+   ⚠️ 为什么必须有它：猎手 payload 里的 `change_pct` / `build_price` 是**扫描时**快照
+   （实测 300821 显示 10-09 收盘的 +20.01%，当天实时只有 +5.83%）⇒ 直接把 payload 的值
+   当"当前涨幅"显示就是**错的**。这里按展开页取实时值就地补，带 TTL 便于 10s 轮询刷新。 */
+const hunterQuoteCache = {};   // 平铺：code -> {price, change_pct}（一次请求覆盖所有展开板块）
+let hunterQuoteInflight = false;   // **全局单飞**：展开与 10s 轮询会同时触发，必须拦
+const HUNTER_QUOTE_TTL_MS = 15000;
+/* 诊断钩子：`_diagReport` 定义在 `DOMContentLoaded` 的箭头函数**内部**（顶层调不到），
+   故在那里把它赋给这个顶层变量。行情这条链"到底断在后端返空还是 DOM 没命中"，
+   光看界面分不出来 —— 这条诊断就是为分辨它而留（2026-10-12）。 */
+let _hqDiag = null;
 /* 只取**当前渲染出来的行**（分页 → 一页 50 行）。板块可达 200 只，全量取数要等很久，
    而用户此刻只看得到这一页。翻页时 `hunterPage` 会重渲染，本函数会被再次调用去补下一页。 */
 function _renderedCodesFor(category) {
@@ -3397,6 +3470,100 @@ async function loadSectorTags(category) {
   } catch (e) { return {}; }
 }
 
+/* 取**所有展开板块**当前渲染行的并集 code（去重）。一次请求覆盖全部展开板块 ——
+   原先是"每个板块各发一次"，展开 5 个板块就是 5 次并发，抢前端在飞位（上限 6）互相排队，
+   而这个 GUI 的单次 js_api 基线开销就有 ~1s ⇒ 展开越多越慢。并成一次 = 与展开数无关。 */
+function _allRenderedHunterCodes() {
+  const out = [];
+  const seen = new Set();
+  const el = document.getElementById("hunterBody");
+  if (!el) return out;
+  hunterOpenSectors.forEach(cat => {
+    _renderedCodesFor(cat).forEach(c => { if (c && !seen.has(c)) { seen.add(c); out.push(c); } });
+  });
+  return out;
+}
+
+/* 猎手展开行「价 / 实时涨幅」格的**内容**（初始渲染与实时补值**共用同一个函数**
+   ⇒ 两条路径的口径不可能不一致）。
+   ⚠️ `q` 为空 = 行情还没到 ⇒ **绝不回落到扫描时的旧值**：猎手 payload 是"跑扫描那一刻"的快照，
+      可能隔了几天。owner 实测 300821 显示 **+20.01%**（10-09 涨停那天的），而当天实时只有 **+5.83%** ——
+      把旧值当现值渲染就是严重误导。所以给不出来就明说 ⏳/—。 */
+function hunterPriceHtml(q) {
+  if (!q || q.price == null) {
+    return '<span class="h-px">—</span>'
+      + '<div style="font-size:10px" class="h-pct"><span class="cell-dim">⏳</span></div>';
+  }
+  return `<span class="h-px">${fmt(q.price)}</span>`
+    + `<div style="font-size:10px" class="h-pct">${pctHtml(q.change_pct, "实时涨幅（随行情每 10s 刷新）")}</div>`;
+}
+
+/* 猎手页当前是否可见（10s 刷实时行情前判一下，别给看不见的面板出网）。 */
+function _hunterTabActive() {
+  const p = document.getElementById("tab-hunter");
+  return !!(p && p.classList && p.classList.contains("active"));
+}
+
+/* 取**实时**价/涨幅（2026-10-12 改：一次覆盖全部展开板块）。
+   ⚠️ 三条约束都在这里解决，别退回"每板块一次"：
+     ① **一次请求**覆盖所有展开板块（`_allRenderedHunterCodes` 并集去重）⇒ 与展开数无关；
+     ② **全局单飞**：展开与 10s 轮询会同时触发，不拦就会并发，而这个 GUI 每次 js_api 基线
+        ~1s、前端在飞上限 6 ⇒ 一并发就互相排队，越点越慢；
+     ③ **全局 TTL**：10s 轮询下 15s 内不重复取，避免自己和上一轮打架。 */
+let hunterQuoteLast = 0;
+let hunterQuoteRetry = 0;
+async function loadHunterQuotes(force) {
+  if (hunterQuoteInflight) return;                 // ② 全局单飞
+  const now = Date.now();
+  if (!force && now - hunterQuoteLast < HUNTER_QUOTE_TTL_MS) { _applyHunterQuotes(); return; }
+  const codes = _allRenderedHunterCodes();
+  if (!codes.length) return;
+  const t0 = Date.now();
+  hunterQuoteInflight = true;
+  try {
+    const r = await apiCall("load_quotes_for", codes);
+    // 契约：`{quotes: {code: {price, change_pct}}, count}`（与 load_quotes 同款包法）。
+    // ⚠️ 后端**必须**包 `quotes` 键 —— 曾经返回裸字典 ⇒ 这里永远读到 {} ⇒ 整列永远 ⏳。
+    const qm = (r && r.quotes) || {};
+    const got = Object.keys(qm).length;
+    // ⚠️ 只认**非空**结果：冷启动/网络抖动会回空 map，若拿空当成功会把 TTL 刷新掉、
+    //    之后 15s 内不再重试 ⇒ 整块面板干等。
+    if (got) {
+      Object.assign(hunterQuoteCache, qm);         // 平铺：code -> {price, change_pct}
+      hunterQuoteLast = Date.now();
+      hunterQuoteRetry = 0;
+    } else if (hunterQuoteRetry < 3) {
+      hunterQuoteRetry++;
+      if (_hqDiag) _hqDiag("hunter_hq_js", Date.now() - t0,
+                           `req=${codes.length} got=0 将重试${hunterQuoteRetry}`);
+      setTimeout(() => { if (hunterOpenSectors.size) loadHunterQuotes(true); }, 3000);
+      return;                                       // 本轮不 apply（拿不到就别刷成 —）
+    }
+    const patched = _applyHunterQuotes();
+    if (_hqDiag) _hqDiag("hunter_hq_js", Date.now() - t0,
+                         `req=${codes.length} got=${got} patched=${patched}`);
+  } catch (e) {
+    // 静默会让人无从判断（本仓踩过"告警从未发出"的坑）⇒ 只记诊断，不打断面板
+    if (_hqDiag) _hqDiag("hunter_hq_js", Date.now() - t0,
+                         `EXC ${String(e && e.message || e).slice(0, 50)}`);
+  }
+  finally { hunterQuoteInflight = false; }
+}
+
+/* 就地补价/涨幅到**所有**展开行。**用 data-hcode 定位**，不按 `td.textContent`
+   （列序一改就填错位，本文件在标签列上吃过这个亏，见 applySectorTags 注释）。 */
+function _applyHunterQuotes() {
+  const el = document.getElementById("hunterBody");
+  if (!el) return 0;
+  let n = 0;
+  el.querySelectorAll(".h-expand-row td.h-price[data-hcode]").forEach(td => {
+    // 与初始渲染共用 `hunterPriceHtml`；取不到就回落成 ⏳/—（**不回落到扫描时的旧值**）
+    td.innerHTML = hunterPriceHtml(hunterQuoteCache[td.getAttribute("data-hcode")]);
+    n++;
+  });
+  return n;   // 返回命中格数 ⇒ 诊断能分辨"没拿到值"与"没命中 DOM"
+}
+
 function applySectorTags(tbody, category) {
   const wrap = tbody.querySelector(".h-expand-wrap");
   const stageEl = tbody.querySelector(".h-stage-badge");
@@ -3444,6 +3611,9 @@ async function toggleSectorExpand(tr, category) {
   if (opening) hunterOpenSectors.add(category); else hunterOpenSectors.delete(category);
   if (!opening) return;
   const tbody = tr.parentElement;
+  // 实时价/涨幅：**先发**，与标签**并行**跑（2026-10-12）。⚠️ 上一版误把它放在 `await` 之后 ⇒
+  // 白等标签 4~7 秒才发请求，等于没优化。必须在这行 await **之前**。
+  loadHunterQuotes();
   await loadSectorTags(category);
   applySectorTags(tbody, category);
 }
@@ -4340,7 +4510,7 @@ function renderHunter(h) {
         <td class="num">${_metTxt}</td>
         <td style="text-align:center" title="${esc("日线阶段" + "。" + DAY_STAGE_TIP)}">${_stageTxt}</td>
         ${ma5FlagCellHtml(s.build_above_ma5)}
-        <td class="num">${_px}</td>
+        <td class="num h-price" data-hcode="${esc(s.code)}" title="**实时**价/涨幅（展开时取、10s 刷新）。⚠️ 刻意不显示扫描时的旧值：扫描可能隔了几天，旧涨幅会严重误导（实测 300821 旧值 +20.01% vs 实时 +5.83%）">${hunterPriceHtml(null)}</td>
         <td class="h-tags">${tagsTxt}</td>
         <td class="cond" title="${esc(s.build_reason || "")}">${condTxt}</td>
         <td class="cell-dim" style="max-width:240px;font-size:11px">${esc(s.build_reason || "")}</td>
@@ -4377,11 +4547,27 @@ function renderHunter(h) {
     const gPaged = groupKeys.slice(gStart, gStart + PAGE);
     const stockRows = gPaged.map(gk => {
       const gs = subGroups[gk];
-      const gAvg = Math.round(gs.reduce((a, s) => a + (s.score || 0), 0) / gs.length);
+      // 2026-10-12 owner：「二级板块没有显示得分情况」。根因=原来的 **`gAvg` 取的是 `s.score`**，
+      // 那是**韭研 D1–D11 总得分**（全池均值仅 ~0.8）⇒ 组头显示"均分1"，
+      // 与它正下方那一列「得分」（建仓综合得分 0~100）**根本不是同一个数**，看着就像没得分。
+      // 改为取**行内同一个 `build_score`**，并显式区分「还没算到(⏳)」与「算了但无值(—)」。
+      const _scored = gs.filter(s => typeof s.build_score === "number");
+      const gScore = _scored.length
+        ? Math.round(_scored.reduce((a, s) => a + s.build_score, 0) / _scored.length) : null;
       const gUp = gs.filter(s => s.limit_up).length;
+      const gScoreTxt = gScore !== null
+        ? `均分 <b title="本二级板块内「得分」列（建仓综合得分）的平均值">${gScore}</b>`
+          + (_scored.length < gs.length
+             ? `<span class="cell-dim" style="font-size:10px">（${_scored.length}/${gs.length}只已算）</span>` : "")
+        : (gs.some(s => !_buildReady && s.build_verdict === undefined)
+           // ⚠️ 不能读 `s._buildMissing`：那是 `hunterRow()` **渲染时才置位**的，
+           //    而组头在 `gs.map(hunterRow)` **之前**算 ⇒ 首帧会读到 stale/undefined。
+           //    这里用与 hunterRow 完全相同的谓词直接判。
+           ? '均分 <span class="cell-dim" title="建仓符合度后台计算中，算完自动填上">⏳更新中</span>'
+           : '均分 <span class="cell-dim" title="该二级板块内没有可用的建仓得分">—</span>');
       const head = `<tr class="h-subgroup-head"><td colspan="12">
         <span class="h-subgroup-name">📂 ${esc(gk)}</span>
-        <span class="cell-dim" style="font-size:10px">${gs.length}只 · 均分${gAvg}${gUp ? ` · 涨停${gUp}` : ""}</span>
+        <span class="cell-dim" style="font-size:10px">${gs.length}只 · ${gScoreTxt}${gUp ? ` · 涨停${gUp}` : ""}</span>
       </td></tr>`;
       return head + gs.map(hunterRow).join("");
     }).join("");
@@ -4453,7 +4639,7 @@ function renderHunter(h) {
             <th class="num" title="时机门控通过数（市场有方向/多头结构/回撤到位）">通过</th>
             <th title="日线四阶段（描述状态，紧挨得分/通过便于对照）：②抬升/③派发/④下跌/①蓄势。⚠️ 实测横截面IC与直觉相反——抬升/追高前瞻更差(IC −0.031~−0.042, t=−12~−15)、下跌/超跌前瞻更好(IC +0.020~+0.034, t=+7~+12)，分半窗两段同号；效应量小(IC≈0.04)仅作相对强弱参照">日线阶段</th>
             <th title="是否站上 5 日线——「得分」−70 扣分的触发标志（观察用）。⚠️ 实测该项横截面IC为负(站上MA5 −0.018, t=−6.9)：被扣的这批后续反而略好；扣分保留与否待观察">5日线<br><span style="font-size:9px;opacity:.6">观察</span></th>
-            <th class="num">价</th>
+            <th class="num" title="**实时**价 + 实时涨幅（展开时取、10s 刷新；取不到显示 ⏳/—）。⚠️ 刻意不显示扫描时的旧价旧涨幅——扫描可能隔了几天，旧涨幅会严重误导">价<br><span style="font-size:9px;opacity:.6">实时涨幅</span></th>
             <th>技术标签</th>
             <th title="时机条件：市场有方向/多头结构/回撤到位 · 末位🚫=否决因子（爆量≥3倍或偏离MA60>+20%）">时机条件</th>
             <th>理由</th>
@@ -5494,6 +5680,7 @@ document.addEventListener("DOMContentLoaded", () => {
   // ⚠️ 必须节流：jsblock 在卡顿时可能**每 250ms 就触发一次**，而每次上报都是一次 js_api 调用
   // （新起线程 + 占用 UI 线程返回通道）⇒ 埋点自己会变成主要负载来源。2s 内至多一次。
   let _lastDiagAt = 0;
+  _hqDiag = _diagReport;   // 给顶层（猎手实时行情那条链）用，见 hunterQuoteCache 处注释
   function _diagReport(kind, value, note) {
     const now = Date.now();
     if (now - _lastDiagAt < 2000) return;

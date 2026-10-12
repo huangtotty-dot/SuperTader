@@ -1944,6 +1944,58 @@ class Api:
         self._quotes_cache = (_time_mod.time(), _r)
         return _r
 
+    # 单次批量实时快照的代码上限：只服务"当前渲染的行"（猎手展开页），**绝不整池**。
+    # 2026-10-12 由 120 提到 400：前端已改为**把所有展开板块并成一次请求**，
+    # 多个板块展开时并集会超 120 ⇒ 原来的截断会让"排在 120 之后"的股票**永远显示 ⏳**（静默）。
+    # 400 覆盖 8~10 个板块 × 每板块 20~50 行的常见情形；服务端再分块（`snapshot_auction_many`）。
+    _QUOTES_FOR_MAX = 400
+
+    def load_quotes_for(self, codes):
+        """一批代码的**实时快照** → {6位码: {price, change_pct, ts_date}}。2026-10-12 新增。
+
+        为什么必须单独有：猎手面板的行是**扫描时**的快照 —— 价与涨跌幅都停在"跑扫描那一刻"
+        （实测 300821 显示 10-09 收盘的 +20.01%，而当天实时只有 +5.83%）
+        ⇒ 展示层需要一个能按需取**当下**值的入口。只给当前渲染页用（上限 `_QUOTES_FOR_MAX`）、
+        **不缓存不落盘**、**永不抛**（失败回空 dict，前端保持"⏳"并重试）。
+        """
+        out = {}
+        _t0 = _time_mod.time()
+        try:
+            want = []
+            for c in (codes or []):
+                b = str(c).split("_")[0].strip()
+                if b and b not in want:
+                    want.append(b)
+            want = want[:self._QUOTES_FOR_MAX]
+            if not want:
+                return out
+            from core.market_data.tencent_provider import TencentProvider
+            # ⚠️ 必须走**分块**版：`snapshot_auction` 的 URL 一长就被腾讯**静默返空**
+            #（实测 800 只过、1000 只返 0）。这里上限 400 本就在悬崖之下，但用分块版
+            # 可以把这个上限当成纯业务约束、不必再惦记传输层的长度限制。
+            snaps = TencentProvider().snapshot_auction_many(want) or {}
+            for base, d in snaps.items():
+                px = d.get("price") or 0
+                if not px:
+                    continue          # 取不到就不给值（别拿 0 冒充"平盘"）
+                out[str(base)] = {"price": round(float(px), 3),
+                                  "change_pct": round(float(d.get("pct") or 0.0), 2),
+                                  "ts_date": d.get("ts_date")}
+        except Exception as e:
+            # ⚠️ **不许静默**（2026-10-12）：这条链断在哪一层，光看界面分不出来。
+            # 写进与 jsblock/ping 同一个诊断通道 —— t_gui 没有日志处理器，`log.info` 落不到文件。
+            self.report_client_diag("hunter_hq", (_time_mod.time() - _t0) * 1000,
+                                    f"EXC {type(e).__name__}: {str(e)[:50]}")
+            return {}
+        # 每次都记一条：req=请求只数 / got=拿到几只。断点在后端还是前端，一眼可判。
+        self.report_client_diag("hunter_hq", (_time_mod.time() - _t0) * 1000,
+                                f"req={len(want)} got={len(out)}")
+        # ⚠️ **契约必须与 `load_quotes` 一致**（都包在 `quotes` 键里）。
+        # 2026-10-12 踩过：本方法原先返回**裸字典**，而前端照 `load_quotes` 的写法读 `r.quotes`
+        # ⇒ 永远读到空 ⇒ 重试耗尽 ⇒ 整列永远 ⏳。诊断日志一次就定死了：
+        # `hunter_hq req=47 got=47` 对上 `hunter_hq_js req=47 got=0 patched=2438`。
+        return {"quotes": out, "count": len(out)}
+
     def _load_quotes_build(self):
         """拉腾讯实时行情（持仓 + watchlist 候选股），失败回退 pre_close。"""
         cur = dict(_load_json(HOLDINGS_MANUAL, {}))
@@ -1953,6 +2005,17 @@ class Api:
             if code not in cur and isinstance(info, dict):
                 cur[code] = {"name": info.get("name", code), "qty": 0, "cost": None,
                              "pre_close": 0, "in_watchlist": True}
+        # 合并**自动盘池**（2026-10-12）：自动盘建仓扫描表的「价」列此前**恒为空**
+        # （`renderAutoScan` 读 `r.price`，而 auto_scan trace 里根本没有价格字段），
+        # 顺带补上 owner 要的实时涨幅。与 watchlist_buy 同款形状（qty=0/无成本）⇒
+        # 只参与行情拉取，不进"持仓"语义（侧栏汇总只按 price×qty 累加，qty=0 无影响）。
+        try:
+            for code in self._auto_pool_codes():
+                if code not in cur:
+                    cur[code] = {"name": code, "qty": 0, "cost": None,
+                                 "pre_close": 0, "in_watchlist": True}
+        except Exception:
+            pass
         out = {"source": "fallback", "ts": None, "quotes": []}
         if not cur:
             return out
