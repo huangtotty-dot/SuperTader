@@ -116,3 +116,32 @@ class TestShippedConfigCoherent(unittest.TestCase):
         if self.p.get("weak_strong_paper_enabled"):
             self.assertTrue(self.p.get("weak_strong_sell_enabled"),
                             "买侧开了卖侧必须开 —— 否则弱转强的持仓没有任何卖出路径")
+
+
+class TestGmMainStructuralGuards(unittest.TestCase):
+    """从已删除的 `test_s1_executor.py::TestT6GmMainStatics` **搬过来**的两条结构守卫。
+
+    那个文件随 S1 执行器一起删了，但这**两条与 S1 无关、仍然有效**：
+    ① 旧引擎跳过点的**定序**（必须在 bar 累积 / OGR 影子缓存更新之后，否则打断 OGR
+       影子与心跳的数据链）；
+    ② `_S1GmGateway` 下单前必须 `write_order`（**孤儿闸**登记；6a96829c 前科）——
+       而该类 2026-10-12 起由**弱转强**共用，所以这条更要留着。
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.src = _GMM.read_text(encoding="utf-8")
+
+    def test_legacy_skip_after_bar_accumulation(self):
+        i_cache = self.src.find('context._ogr_pc_cache[code] = row["close"]')
+        i_skip = self.src.find("if not _s1_legacy_active():")
+        self.assertGreater(i_cache, 0, "OGR 影子缓存写入点应存在")
+        self.assertGreater(i_skip, i_cache,
+                           "旧引擎跳过点必须在 bar 累积/_ogr_pc_cache 之后（保 OGR 影子/心跳数据链）")
+
+    def test_gateway_writes_order_before_ordering(self):
+        i = self.src.find("class _S1GmGateway")
+        self.assertGreater(i, 0, "gateway 类应存在（弱转强在共用）")
+        seg = self.src[i:i + 5200]
+        self.assertGreater(seg.find("write_order(str(now), code, side"), 0,
+                           "下单前必须 write_order（孤儿闸登记）")

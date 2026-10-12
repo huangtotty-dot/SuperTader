@@ -673,44 +673,6 @@ def _force_open_align(context) -> int:
     return n
 
 
-# ══════════════════════════════════════════════════════════════════════
-# S1 终选选股策略 · 执行集成（2026-10-10 施工，W3）
-# owner 决策：2026-10-12 起掘金模拟盘 auto 账本由 S1 终选（N4/M8/H1/TP-A/score_eq）
-# 直接驱动，无影子期。账本切换 ⇒ 镜像对齐(OPEN_ALIGN)/TAIL/旧镜像做T引擎**挂起**
-# （开关制，非删代码；s1_mode_enabled=False 即整体回退）。
-# OGR 影子（只读日志）与滑点观测不受影响。执行逻辑真源 = 同目录 s1_executor.py
-# （不 import gm.api，可单测/干跑）；本侧只做「gm 原语 → Gateway」适配与盘初挂载。
-# 文档：doc/solutions/2026-10-10_S1执行集成.md
-# ══════════════════════════════════════════════════════════════════════
-# 2026-10-12：盘初执行的**补单窗口**。原实现"跑一次就置 done" ⇒ 卖单回款未到账时，
-# 被顺延的买单**当天再也不会补**（S1 首日实测：4 只买 2 只被 GM 判资金不足拒单，半仓过一天）。
-# 现在：窗口内每根 bar 以 phase="buys" 补一次（执行器天然幂等：已买的目标权重会抵扣），
-# 到 09:35 仍补不齐则**明确告警**并收工（不静默）。当日一次的语义由 `done` 承担。
-_S1_RETRY_STATE = {"date": None, "attempts": 0, "done": False, "gave_up": False}
-_S1_RETRY_DEADLINE = dtime(9, 35)
-
-
-def _s1_retry_reset(st: dict, today) -> bool:
-    """跨日重置 S1 当日补单状态；返回 True 表示"本轮是该日首轮"。
-
-    ⚠️ 为什么必须显式重置（2026-10-12 自查发现的缺陷）：`_st["date"]` 只在**执行成功**分支里更新，
-    而 `gave_up` 只增不减 ⇒ 一旦某天补单失败置了 `gave_up=True`，**之后每一天**的
-    「窗口已过、买单未补齐」告警都会被 `if not _st.get("gave_up")` 静默吞掉
-    （连控制台那行也不打），恰好在最需要告警的日子里失声。attempts 同理要按日归零，
-    否则告警里的 attempts 是累计值。
-    """
-    if st.get("date") == today:
-        return False
-    st.update({"date": today, "attempts": 0, "done": False, "gave_up": False})
-    return True
-
-
-_WS_PREPARE_DONE_DATE = None                  # 弱转强盘前预筛 · 每日一次
-_WS_BUY_DONE_DATE = None                      # 弱转强 10:00 买侧 · 每日一次
-_WS_MORNING_SELL_DONE_DATE = None             # 弱转强 10:00 早盘冲高卖 · 每日一次
-_WS_SELL_DONE_DATE = None                     # 弱转强 14:50 卖侧 · 每日一次
-
-
 def _s1_mode_on() -> bool:
     """S1 总闸（读 PARAMS；缺键 fail-safe 回退 False=旧引擎，与 T2 接线测试同口径）。"""
     return bool(PARAMS.get("s1_mode_enabled", False))
@@ -742,7 +704,10 @@ def _s1_legacy_active() -> bool:
 
 
 class _S1GmGateway:
-    """s1_executor Gateway 的掘金实现（仅 MODE_LIVE 实例化）。
+    """掘金下单 Gateway（仅 MODE_LIVE 实例化）。
+
+    ⚠️ 类名带 `_S1` 是历史命名（原为 S1 执行器而建）；**2026-10-12 S1 退役后由弱转强共用**
+    （`_ws_try_buy` / `_ws_try_sell` / `_ws_try_morning_sell`）⇒ **不要因为"名字里有 S1"就删它**。
 
     下单风格沿用 gm_main 既有惯例：市价单（GM 自带涨跌停保护价）、先 write_order
     落 order 事件（否则 on_order_status 孤儿闸丢成交）、_mark_pending_recon 待对账。
@@ -825,6 +790,10 @@ class _S1GmGateway:
         now = self.context.now if hasattr(self.context, "now") else datetime.now()
         px = float(price or 0)
         # ① 先落 order 事件（孤儿闸登记，6a96829c 前科）——order_type="S1" 供下游区分账本
+        # ⚠️ 2026-10-12：S1 已退役，但**这个类与这个标签是弱转强在共用的**（`_ws_try_buy/sell/
+        # morning_sell` 都走 `_S1GmGateway`），且 `order_type="S1"` 被孤儿闸 `_strategy_ordered_today`
+        # 读取 ⇒ **改名必须连带动孤儿闸**，别只为"命名干净"单独改（漏一处 ⇒ 孤儿成交认不出）。
+        # 同理 `s1_limit_slippage_bp` 也是共用参数（0=市价单）。
         write_order(str(now), code, side, int(qty), px, order_type="S1")
         _slip_bp = int(PARAMS.get("s1_limit_slippage_bp", 0) or 0)
         if _slip_bp > 0 and px > 0:
@@ -883,49 +852,6 @@ class _S1GmGateway:
                 continue
         return {"order_id": order_id, "status": "submitted", "filled_qty": 0,
                 "filled_price": None, "message": "order_not_found"}
-
-
-def _s1_open_exec(context, now, today, phase: str = "all"):
-    """S1 盘初执行（每日一次，09:31 首根 bar 触发）。
-
-    fail-closed 语义：picks 缺失/陈旧/非法 ⇒ 当日 S1 不下单（**不回退旧引擎**——
-    账本已切换，回退等于让镜像逻辑与 S1 调仓打架）；写 risk 告警等次日。
-    """
-    import s1_executor as _s1e            # execution/auto/ 已在 sys.path（init 处插入）
-    _root = os.environ.get("SUPERTRADER_ROOT", r"E:\superTrader")
-    _book = os.path.join(_root, "t_io", "state", "s1_book")
-    _metrics = os.path.join(_root, "t_io", "metrics")
-    _params = {
-        "proceeds_haircut": float(PARAMS.get("s1_proceeds_haircut", 0.999)),
-        "min_lot": int(PARAMS.get("s1_min_lot", 100)),
-        "order_poll_rounds": int(PARAMS.get("s1_order_poll_rounds", 3)),
-        "order_poll_sleep_sec": float(PARAMS.get("s1_order_poll_sleep_sec", 2.0)),
-        "sell_retries": int(PARAMS.get("s1_sell_retries", 1)),
-    }
-    try:
-        _res = _s1e.run_open_exec(_S1GmGateway(context), str(today),
-                                  book_dir=_book, metrics_dir=_metrics,
-                                  params=_params, dry_run=False, log=print,
-                                  phase=phase)
-        _sm = (_res or {}).get("summary") or {}
-        _audit_write({"event": "s1_open_exec", "date": str(today), "phase": phase,
-                      "sells": _sm.get("sells_placed"), "buys": _sm.get("buys_placed"),
-                      "buys_filled": _sm.get("buys_filled"),
-                      "deferred": _sm.get("deferred_count"),
-                      "needs_retry": _sm.get("needs_retry"),
-                      "rejected": _sm.get("rejected_count"),
-                      "liquidation": _sm.get("liquidation_count")})
-        return _res
-    except _s1e.PicksError as _pe:
-        print(f"[S1] ⛔ picks 不可用（fail-closed 当日不下单）: {_pe}")
-        _audit_write({"event": "s1_picks_error", "date": str(today), "error": str(_pe)[:300]})
-        try:
-            write_risk(str(now), "s1_picks_missing",
-                       f"S1 picks 不可用,当日不下单: {str(_pe)[:200]}", code="")
-        except Exception:
-            pass
-        # fail-closed：picks 不可用是**当日不下单**的终态，不是"待补" ⇒ 明确不需要重试
-        return {"summary": {"needs_retry": False, "picks_error": True}}
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -3043,43 +2969,6 @@ def on_bar(context, bars):
             _force_open_align(context)
         except Exception as _oae:
             print(f"[OPEN_ALIGN] 失败（不阻断主循环）: {_oae}")
-
-    # ── S1 终选选股策略 · 盘初执行（2026-10-10 owner 决策：10-12 起模拟盘 auto 账本由
-    #    S1 驱动，先卖后买、开盘成交）。位置刻意放在 OPEN_ALIGN 原位：S1 on 时 align 已挂起，
-    #    S1 接管同一时点；picks 缺失 fail-closed（当日不下单、不回退旧引擎）。──
-    if (_s1_mode_on() and t >= dtime(9, 31)
-            and getattr(context, "mode", None) == MODE_LIVE):
-        _st = _S1_RETRY_STATE
-        _first = _s1_retry_reset(_st, today)          # ⚠️ 跨日必须重置，否则告警会被吞（见函数注释）
-        if _first or not _st.get("done"):
-            if (not _first) and t > _S1_RETRY_DEADLINE:
-                # 补单窗口已过：**明确告警**，别静默留下半仓（2026-10-12 S1 首日：4 只买 2 只被拒）
-                if not _st.get("gave_up"):
-                    _st["gave_up"] = True
-                    _st["done"] = True        # 当日终态 ⇒ 后续 bar 直接跳过（与告警文案"当日不再重试"一致）
-                    print(f"[S1] ⚠️ 补单窗口({_S1_RETRY_DEADLINE.strftime('%H:%M')})已过，"
-                          f"仍有买单未完成 ⇒ 当日不再重试（详见 exec_report）")
-                    try:
-                        write_risk(str(now), "s1_buy_incomplete",
-                                   f"S1 当日买单未补完（attempts={_st.get('attempts')}），见 exec_report",
-                                   code="")
-                    except Exception:
-                        pass
-            else:
-                _phase = "all" if _first else "buys"
-                _need = True
-                try:
-                    _rep = _s1_open_exec(context, now, today, phase=_phase)
-                    _need = bool(((_rep or {}).get("summary") or {}).get("needs_retry"))
-                except Exception as _s1e:
-                    print(f"[S1] 开盘执行失败（不阻断主循环，窗口内可重试）: {_s1e}")
-                    try:
-                        write_risk(str(now), "s1_exec_error",
-                                   f"S1 开盘执行异常: {str(_s1e)[:200]}", code="")
-                    except Exception:
-                        pass
-                _st.update({"attempts": int(_st.get("attempts") or 0) + 1,
-                            "done": not _need})
 
     # ── 弱转强选股 · 盘前超跌候选预筛（2026-10-10，WS3：09:31 提前把 10:00 要看的
     #    股票从全池砍到「前 N 板块内 + 昨收<MA20」的几十只，10:00 只做一次批量取数）──

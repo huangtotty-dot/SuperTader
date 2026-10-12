@@ -12,7 +12,7 @@ entry_date/entry_price/dev20/gap/board；每日收盘检查——深超跌(dev20
 与 S1 共用掘金模拟盘账户 ⇒ 本执行器**不带独立净值链**（避免与 S1 账本双记），只落
 fills/exec_report；每日名义总额度由 `weak_strong_daily_budget` 封顶，避免挤占 S1 轮动。
 
-**不 import gm.api**——券商/仿真通道全部经注入的 Gateway 鸭子类型（与 s1_executor 同款，
+**不 import gm.api**——券商/仿真通道全部经注入的 Gateway 鸭子类型（与已退役的 s1_executor 同款，
 gm_main 直接复用 `_S1GmGateway`），因此 gm_main / 干跑脚本 / 单测共用同一套执行逻辑。
 
 Gateway 接口（鸭子类型，全部必需，poll_order 可选）::

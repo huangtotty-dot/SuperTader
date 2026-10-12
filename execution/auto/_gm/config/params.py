@@ -273,13 +273,8 @@ PARAMS = {
     "s1_tail_enabled": False,           # S1 on 时 TAIL 尾盘归位挂起（随旧引擎门链一并跳过）
     "s1_legacy_engine_enabled": False,  # S1 on 时旧镜像做T引擎（BASE/信号/卖出门链）挂起
     "legacy_engine_enabled": False,     # **旧镜像引擎总闸**：False=无论 S1 开关都挂起（2026-10-12 停用）
-    # 执行参数（s1_executor.py DEFAULTS 的覆盖入口）：
-    "s1_exec_time_hhmm": 931,           # 盘初执行时点（首根 60s bar，≈09:31）
-    "s1_proceeds_haircut": 0.999,       # 卖出预计回款折扣（对齐 OPEN_ALIGN ×0.999）
-    "s1_min_lot": 100,                  # 最小交易单位
-    "s1_order_poll_rounds": 3,          # submitted/partial 轮询次数
-    "s1_order_poll_sleep_sec": 2.0,     # 轮询间隔秒
-    "s1_sell_retries": 1,               # 卖单异常重试次数
+    # ⚠️ 2026-10-12：S1 执行器（s1_executor.py + on_bar 钩子）已删除 ⇒ 下列执行参数一并移除。
+    #    仍保留 `s1_limit_slippage_bp`：它被 `_S1GmGateway.place_order` 读取，而**弱转强共用该类**。
     "s1_limit_slippage_bp": 0,          # 0=市价单（沿用 gm_main 风格）；>0=限价 开盘价±bp
     # 文档：doc/solutions/2026-10-10_S1执行集成.md（含周一 runbook 与失败应急）
 
