@@ -275,6 +275,45 @@ def _place_and_poll(gateway, code, side, qty, price, poll_rounds, poll_sleep, sl
     return rep
 
 
+def _reconcile_terminal(gateway, recs, cfg, sleep_fn, log, rounds=None) -> int:
+    """对**仍在途**的单再轮询终态，把异步到达的拒单/成交落进 rec。返回仍有在途的单数。
+
+    ⚠️ 为什么必须做（2026-10-12 S1 首日实测）：GM 的**资金不足拒单是异步到达**的 ——
+    `place_order` 当场返回 `"submitted"`，拒单（status=8）过一会儿才由 `on_order_status` 送到。
+    只按"提交时状态"写摘要就会**虚报**：当日摘要写的是 `buys_placed=4 / rejected_count=0`，
+    而实际只有 2 只成交（301160、603950 被拒）。这一步把在途单据补对账。
+    """
+    if not hasattr(gateway, "poll_order"):
+        return 0
+    n = int(rounds if rounds is not None else max(1, int(cfg.get("order_poll_rounds", 3))))
+    pend = [r for r in recs if r.get("status") in ("submitted", "partial") and r.get("order_id")]
+    for _ in range(n):
+        if not pend:
+            break
+        sleep_fn(float(cfg.get("order_poll_sleep_sec", 2.0)))
+        still = []
+        for r in pend:
+            try:
+                rep2 = gateway.poll_order(r["order_id"], r["code"])
+            except Exception as e:
+                log(f"[S1] poll_order {r['code']} 异常（保持上一状态）: {e}")
+                still.append(r)
+                continue
+            if not rep2:
+                still.append(r)
+                continue
+            r.update({"status": rep2.get("status") or r["status"],
+                      "filled_qty": int(rep2.get("filled_qty") or r.get("filled_qty") or 0),
+                      "filled_price": rep2.get("filled_price") or r.get("filled_price"),
+                      "message": rep2.get("message") or r.get("message") or ""})
+            if r["status"] in ("submitted", "partial"):
+                still.append(r)
+            elif r["status"] in _TERMINAL_BAD or r["status"] == "error":
+                log(f"[S1] ⚠️ {r.get('side')} {r['code']} 终态={r['status']}: {r['message']}（已计入 rejected）")
+        pend = still
+    return len(pend)
+
+
 def _fee_of(side: str, qty: int, price) -> float:
     if not qty or not price:
         return 0.0
@@ -334,10 +373,14 @@ def write_equity_s1(date: str, equity, cash, market_value,
 
 def run_open_exec(gateway, date: str, book_dir: str = BOOK_DIR_DEFAULT,
                   metrics_dir: str = METRICS_DIR_DEFAULT, params: dict | None = None,
-                  dry_run: bool = False, sleep_fn=time.sleep, log=print) -> dict:
+                  dry_run: bool = False, sleep_fn=time.sleep, log=print,
+                  phase: str = "all") -> dict:
     """S1 开盘执行主流程。返回 fills dict（同时落盘）。picks 异常向上抛 PicksError。
 
     dry_run=True：仍调用 Gateway（由调用方给 mock），仅产物目录标记 mode=dry。
+    phase="buys"：**只补买腿**（跳过卖腿）——供"回款未到账/资金未落"时在后续 bar 重试；
+                 本函数对账户状态**天然幂等**（已卖的无卖可卖、已买的目标权重已抵扣），
+                  故重试不会重复下单。重试时与当日既有 fills 文件**合并**（不覆盖卖腿留痕）。
     """
     cfg = {**DEFAULTS, **(params or {})}
     lot = int(cfg["min_lot"])
@@ -386,6 +429,10 @@ def run_open_exec(gateway, date: str, book_dir: str = BOOK_DIR_DEFAULT,
 
     # ── ① 先卖（picks.sells ∪ 清仓计划）──
     sell_plan = build_sell_plan(picks, positions, min_lot=lot)
+    if phase == "buys":
+        # 补单轮：**不重跑卖腿**（已卖的无卖可卖；显式跳过可彻底排除重复卖出风险）
+        sell_plan = []
+        log("[S1] phase=buys：本轮只补买腿（跳过卖出）")
     n_liq = sum(1 for s in sell_plan if s["source"] == "liquidation")
     if n_liq:
         log(f"[S1] ⚠️ 清仓计划: {n_liq} 只非 S1 名单旧持仓将全卖（bootstrap 账本切换）")
@@ -418,6 +465,9 @@ def run_open_exec(gateway, date: str, book_dir: str = BOOK_DIR_DEFAULT,
                                   cfg["order_poll_rounds"], cfg["order_poll_sleep_sec"],
                                   sleep_fn, log)
         rec.update({"qty_placed": s["qty_place"], "status": rep.get("status"),
+                    # order_id 必须落进 rec：否则 `_reconcile_terminal` 找不到在途单、
+                    # 异步拒单无法对账（2026-10-12 加对账时实测踩到）
+                    "order_id": rep.get("order_id"),
                     "filled_qty": int(rep.get("filled_qty") or 0),
                     "filled_price": rep.get("filled_price"),
                     "message": rep.get("message") or ""})
@@ -432,9 +482,25 @@ def run_open_exec(gateway, date: str, book_dir: str = BOOK_DIR_DEFAULT,
             f"{' t1_blocked=' + str(s['t1_blocked']) if s['t1_blocked'] else ''} {rec['message']}")
         sells_out.append(rec)
 
-    cash_budget = cash0 + proceeds * float(cfg["proceeds_haircut"])
-    log(f"[S1] 买侧预算: 期初现金 {cash0:.0f} + 预计回款 {proceeds:.0f}×{cfg['proceeds_haircut']}"
-        f" = {cash_budget:.0f}")
+    cash_budget_est = cash0 + proceeds * float(cfg["proceeds_haircut"])
+    # ⚠️ 2026-10-12 修（S1 首日 4 只买单被拒 2 只）：**能花的钱以券商"实时可用"为准**，
+    #    不能拿"期初现金 + 预计回款"直接下单 —— **卖单成交 ≠ 回款立刻可用**，且 GM 按约 120% 冻结委托。
+    #    实测：09:31:01-02 四笔卖单已成交，09:31:03 买单一提交即被拒（可用仅 76,744 vs 冻结 136,708）。
+    #    同类失效本仓早有记录：gm_main OPEN_ALIGN 的 C-08「回款时序」，对策同款=等回款落账再买。
+    #    预算取 min(估计, 实时可用)；**缺口部分改记 deferred（不提交、不被拒）**，由调用方在后续 bar 补。
+    _cash_live = None
+    try:
+        _c = gateway.get_cash()
+        _cash_live = float(_c) if _c is not None else None
+    except Exception as e:
+        log(f"[S1] ⚠️ 买侧实时可用查询失败（按估计预算走）: {e}")
+    cash_budget = cash_budget_est if _cash_live is None else min(cash_budget_est, _cash_live)
+    log(f"[S1] 买侧预算: 估计 {cash_budget_est:.0f}（现金 {cash0:.0f} + 预计回款 {proceeds:.0f}"
+        f"×{cfg['proceeds_haircut']}）/ 券商实时可用 "
+        f"{'未知' if _cash_live is None else format(_cash_live, '.0f')} → **采用 {cash_budget:.0f}**")
+    if _cash_live is not None and (cash_budget_est - _cash_live) > max(1000.0, 0.02 * cash_budget_est):
+        log(f"[S1] ⚠️ 回款尚未到账（估计比实时可用多 {cash_budget_est - _cash_live:.0f}）"
+            f"⇒ 本次按实时可用折算，缺口记为 deferred，等待补单窗口内下一轮")
 
     # ── ② 后买（rank 顺序，现金截断）──
     buy_plan = build_buy_plan(picks, positions, prices, cash_budget, equity_est, min_lot=lot)
@@ -457,6 +523,7 @@ def run_open_exec(gateway, date: str, book_dir: str = BOOK_DIR_DEFAULT,
                               cfg["order_poll_rounds"], cfg["order_poll_sleep_sec"],
                               sleep_fn, log)
         rec.update({"qty_placed": b["qty_place"], "status": rep.get("status"),
+                    "order_id": rep.get("order_id"),     # 同上：供终态对账用
                     "filled_qty": int(rep.get("filled_qty") or 0),
                     "filled_price": rep.get("filled_price"),
                     "message": rep.get("message") or ""})
@@ -468,6 +535,31 @@ def run_open_exec(gateway, date: str, book_dir: str = BOOK_DIR_DEFAULT,
             f"(tw={b['target_weight']:.2%}) → {rec['status']}"
             f"{' [truncated]' if b['truncated'] else ''} {rec['message']}")
         buys_out.append(rec)
+
+    # ── ②b 终态对账（见 _reconcile_terminal 注释）：把异步到达的拒单/成交补进 rec ──
+    n_inflight = _reconcile_terminal(gateway, sells_out + buys_out, cfg, sleep_fn, log)
+
+    # ── ②c 补单轮合并：**不覆盖首轮留痕**（首轮的卖腿/账户快照/清仓计数必须保留，
+    #      否则补买一轮就把"当日怎么清的仓"这份证据洗掉了）──
+    _runs, _prior_sum = [], None
+    fp_fills = os.path.join(book_dir, f"fills_{date}.json")
+    if phase == "buys" and os.path.exists(fp_fills):
+        try:
+            with open(fp_fills, encoding="utf-8") as _f:
+                _prior = json.load(_f) or {}
+        except Exception as _e:
+            _prior = {}
+            log(f"[S1] ⚠️ 读取既有 fills 失败（本轮按独立记录写）: {_e}")
+        _prior_sum = (_prior.get("summary") or {}) or None
+        if _prior_sum:
+            _runs = list(_prior.get("runs") or []) + [
+                {"phase": _prior_sum.get("phase", "all"),
+                 "finished_at": _prior.get("finished_at"), "summary": _prior_sum}]
+            if not sells_out and (_prior.get("sells") or []):
+                sells_out = _prior["sells"]
+                n_liq = int(_prior_sum.get("liquidation_count") or n_liq)
+            prices = {**(_prior.get("prices") or {}), **prices}
+            log(f"[S1] 补单轮：合并首轮留痕（保留卖腿 {len(sells_out)} 单，attempt={len(_runs) + 1}）")
 
     # ── ③ 落盘：fills / exec_report / equity_s1 ──
     finished = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -482,11 +574,24 @@ def run_open_exec(gateway, date: str, book_dir: str = BOOK_DIR_DEFAULT,
                "sells_placed": sum(1 for r in sells_out if r["qty_placed"] > 0),
                "buys_planned": len(buy_plan),
                "buys_placed": sum(1 for r in buys_out if r["qty_placed"] > 0),
+               # 2026-10-12 新增：**真成交数**与**是否还要补单** —— 光看 buys_placed 会虚报
+               #   （"提交成功"≠"已建仓"：S1 首日 4 只提交、实际只成交 2 只）
+               "buys_filled": sum(1 for r in buys_out if r["filled_qty"] > 0),
+               "needs_retry": bool(n_defer or n_inflight),
+               "inflight_count": n_inflight,
                "liquidation_count": n_liq, "rejected_count": n_rej,
                "t1_blocked_count": n_t1, "deferred_count": n_defer,
                "proceeds_expected": round(proceeds, 2),
                "cash_before": round(cash0, 2), "cash_after_est": round(cash_after_est, 2),
+               "cash_budget_used": round(cash_budget, 2),
+               "phase": phase,
                "equity_est": round(equity_est, 2)}
+    if _prior_sum:                      # 补单轮：卖腿口径以首轮为准（本轮没跑卖腿）
+        for _k in ("sells_planned", "sells_placed", "proceeds_expected",
+                   "cash_before", "liquidation_count"):
+            if _k in _prior_sum:
+                summary[_k] = _prior_sum[_k]
+        summary["attempts"] = len(_runs) + 1
     fills = {"date": str(date), "mode": mode, "started_at": started, "finished_at": finished,
              "account": {"cash_before": round(cash0, 2),
                          "positions_before": {k: v for k, v in sorted(positions.items())},
@@ -496,6 +601,7 @@ def run_open_exec(gateway, date: str, book_dir: str = BOOK_DIR_DEFAULT,
              "sells": sells_out, "buys": buys_out,
              "bootstrap_liquidation": n_liq > 0,
              "summary": summary, "picks_meta": meta,
+             "runs": _runs + [{"phase": phase, "finished_at": finished, "summary": summary}],
              "fee_model": _FEE_SRC,
              "params": {k: cfg[k] for k in DEFAULTS}}
     os.makedirs(book_dir, exist_ok=True)

@@ -297,17 +297,95 @@ class TestT4RunBranches(unittest.TestCase):
         self.assertEqual(res["buys"][0]["qty_placed"], 0)
         self.assertEqual(res["summary"]["rejected_count"], 1)
 
-    def test_sell_proceeds_fund_buys(self):
-        """卖出回款当日可用：现金 0 也能用预计回款×haircut 买入。"""
+    def test_sell_proceeds_fund_buys_after_settled(self):
+        """**回款到账后**才能用回款买入（2026-10-12 修正）。
+
+        旧断言写的是"卖出回款**当日可用**：现金 0 也能用预计回款买"——**这条假设是错的**：
+        S1 首日实测四笔卖单 09:31:01-02 已成交，09:31:03 买单仍被 GM 判"资金不足"
+        （可用 76,744 < 冻结 136,708）⇒ 4 只买单被拒 2 只。
+        新语义：**能花的钱 = 券商实时可用**，回款到账后才买得到。
+        """
         _write_picks(self.book,
                      sells=[{"symbol": "600276", "qty": 2000}],
                      buys=[{"symbol": "300456", "target_weight": 0.8}])
-        gw = FakeGateway(cash=0,
+        class _SettleAfterSell(FakeGateway):
+            """卖单**成交后**回款才计入可用资金（模拟券商结算时序；旧用例假设"立刻可用"）。"""
+
+            def place_order(self, code, side, qty, price):
+                rep = super().place_order(code, side, qty, price)
+                if side == "SELL" and rep.get("status") == "filled":
+                    self.cash += float(qty) * float(price)
+                return rep
+
+        gw = _SettleAfterSell(cash=0,         # ← 期初 0：钱是**卖完之后**才到账的
+                              positions={"600276": {"qty": 2000, "available": 2000, "cost": 44.0}},
+                              prices={"600276": 44.0, "300456": 45.0})
+        res = _run(gw, self.book, self.metrics)
+        # target 0.8×88000=70400 ⇒ 1500 股（67500 ≤ 实时可用 88000）
+        self.assertEqual(res["buys"][0]["qty_placed"], 1500)
+        self.assertFalse(res["summary"]["needs_retry"])
+
+    def test_pending_settlement_defers_instead_of_rejecting(self):
+        """回款未到账 ⇒ 买单**顺延(deferred)，不再提交后被拒**（2026-10-12 修，对齐 C-08）。"""
+        _write_picks(self.book,
+                     sells=[{"symbol": "600276", "qty": 2000}],
+                     buys=[{"symbol": "300456", "target_weight": 0.8}])
+        gw = FakeGateway(cash=0,              # ← 卖单成交了，但钱还没到账
                          positions={"600276": {"qty": 2000, "available": 2000, "cost": 44.0}},
                          prices={"600276": 44.0, "300456": 45.0})
         res = _run(gw, self.book, self.metrics)
-        # 回款 88000×0.999=87912；target 0.8×88000=70400 ⇒ 1500 股（67500 ≤ 87912）
-        self.assertEqual(res["buys"][0]["qty_placed"], 1500)
+        self.assertEqual(res["sells"][0]["status"], "filled")
+        self.assertEqual(res["buys"][0]["qty_placed"], 0, "钱没到账就不该提交买单")
+        self.assertTrue(res["buys"][0]["defer_reason"], "应记顺延，而不是提交后被拒")
+        self.assertEqual(res["summary"]["rejected_count"], 0, "不该产生任何拒单")
+        self.assertTrue(res["summary"]["needs_retry"], "应提示仍需补单")
+        self.assertEqual(res["summary"]["buys_filled"], 0)
+
+    def test_retry_phase_buys_skips_sells_and_merges(self):
+        """补单轮(phase="buys")：只补买腿、不重卖，且**不覆盖首轮卖腿留痕**。"""
+        _write_picks(self.book,
+                     sells=[{"symbol": "600276", "qty": 2000}],
+                     buys=[{"symbol": "300456", "target_weight": 0.8}])
+        # 第一轮：回款未到账 ⇒ 卖腿成交、买腿顺延
+        r1 = _run(FakeGateway(cash=0,
+                              positions={"600276": {"qty": 2000, "available": 2000, "cost": 44.0}},
+                              prices={"600276": 44.0, "300456": 45.0}),
+                  self.book, self.metrics)
+        self.assertTrue(r1["summary"]["needs_retry"])
+        # 第二轮：钱到账、账户已空仓（旧持仓已卖）⇒ 只补买
+        gw2 = FakeGateway(cash=88000, positions={}, prices={"300456": 45.0})
+        r2 = _run(gw2, self.book, self.metrics, phase="buys")
+        self.assertGreater(r2["buys"][0]["filled_qty"], 0, "补单轮应真的买到")
+        self.assertNotIn("600276", [o["code"] for o in gw2.orders], "补单轮不得再卖")
+        self.assertEqual(len(r2["sells"]), len(r1["sells"]), "首轮卖腿留痕必须保留")
+        self.assertEqual(r2["summary"]["sells_placed"], r1["summary"]["sells_placed"],
+                         "卖腿口径应沿用首轮")
+        self.assertGreaterEqual(r2["summary"]["attempts"], 2, "应记录 attempt 次数")
+        self.assertFalse(r2["summary"]["needs_retry"])
+
+    def test_async_reject_counted_in_summary(self):
+        """提交时 submitted、**稍后**才被 broker 拒 ⇒ 必须对账计入 rejected（别虚报）。"""
+        _write_picks(self.book, buys=[{"symbol": "300456", "target_weight": 0.8}])
+
+        class _AsyncReject(FakeGateway):
+            def place_order(self, code, side, qty, price):
+                self._seq += 1
+                self.orders.append({"code": code, "side": side, "qty": int(qty)})
+                return {"order_id": f"A{self._seq}", "status": "submitted", "filled_qty": 0,
+                        "filled_price": None, "message": ""}
+
+            def poll_order(self, order_id, code):
+                self._polls = getattr(self, "_polls", 0) + 1
+                if self._polls <= 3:            # place_and_poll 窗口内：仍是 submitted
+                    return {"order_id": order_id, "status": "submitted", "filled_qty": 0,
+                            "filled_price": None, "message": ""}
+                return {"order_id": order_id, "status": "rejected", "filled_qty": 0,
+                        "filled_price": None, "message": "status=8 资金不足"}
+
+        res = _run(_AsyncReject(cash=200000, prices={"300456": 45.0}), self.book, self.metrics)
+        self.assertEqual(res["buys"][0]["status"], "rejected", "异步拒单应被对账抓到")
+        self.assertEqual(res["summary"]["rejected_count"], 1, "不得再虚报 rejected_count=0")
+        self.assertEqual(res["summary"]["buys_filled"], 0)
 
     def test_t1_blocked_recorded_in_fills(self):
         _write_picks(self.book, sells=[{"symbol": "300456", "qty": 1200}])
@@ -434,13 +512,64 @@ class TestT6GmMainStatics(unittest.TestCase):
                       "OPEN_ALIGN 必须由 _s1_open_align_allowed() 门控（S1 接管挂起）")
 
     def test_s1_hook_has_double_gate(self):
-        """S1 盘初钩子：s1_mode + MODE_LIVE 双闸 + 每日一次标记。"""
-        i = self.src.rfind("_s1_open_exec(context, now, today)")   # rfind=调用点（非 def 行）
+        """S1 盘初钩子：s1_mode + MODE_LIVE 双闸 + **当日一次**。
+
+        2026-10-12：调用点多了 `phase=` 参数（补单轮），故不再匹配尾括号。
+        「当日一次」原先由 `_S1_EXEC_DONE_DATE` 承担，现改为 `_S1_RETRY_STATE["done"]`
+        （跨日由 `_s1_retry_reset` 重置）——旧变量已成**只写不读**的死变量，故一并去掉，
+        断言改钉真机制（同 2026-10-11 `test_slots` 那次的改法：不钉已失效的旧常量）。
+        """
+        i = self.src.rfind("_s1_open_exec(context, now, today")   # rfind=调用点（非 def 行）
         self.assertGreater(i, 0)
-        window = self.src[max(0, i - 500):i]
+        window = self.src[max(0, i - 1500):i]
         self.assertIn("_s1_mode_on()", window)
         self.assertIn("MODE_LIVE", window)
-        self.assertIn("_S1_EXEC_DONE_DATE", window)
+        self.assertIn('_st.get("done")', window, "当日一次须由 _S1_RETRY_STATE['done'] 承担")
+
+    def test_s1_retry_state_resets_across_days(self):
+        """⚠️ 回归：`gave_up` 必须**按日重置**，否则昨天的"补不齐"会吞掉今天的告警。
+
+        缺陷（2026-10-12 自查）：`_st["date"]` 原只在执行成功分支更新、`gave_up` 只增不减
+        ⇒ 补单失败过**一次**之后，之后每一天的 `s1_buy_incomplete` 告警都被
+        `if not _st.get("gave_up")` 静默吞掉（连控制台那行也不打）。
+        """
+        # ⚠️ 不能 `import gm_main`（它顶部 `from gm.api import *`，无 SDK 环境会挂）。
+        #    照本文件既有做法从源码 AST 里取出该纯函数单独 exec —— 它只用 st/today，无模块依赖。
+        _mod = ast.Module(
+            body=[n for n in self.tree.body
+                  if isinstance(n, ast.FunctionDef) and n.name == "_s1_retry_reset"],
+            type_ignores=[])
+        self.assertEqual(len(_mod.body), 1, "gm_main 中应存在模块级 _s1_retry_reset")
+        _ns = {}
+        exec(compile(_mod, GMM_PATH, "exec"), _ns)          # noqa: S102 测试内自取源码
+        reset = _ns["_s1_retry_reset"]
+
+        st = {"date": "2026-10-12", "attempts": 3, "done": False, "gave_up": True}
+        self.assertTrue(reset(st, "2026-10-13"), "跨日应报『首轮』")
+        self.assertFalse(st["gave_up"], "跨日后 gave_up 必须归零，否则告警失声")
+        self.assertEqual(st["attempts"], 0, "attempts 应按日归零（否则告警里的数字是累计值）")
+        self.assertFalse(st["done"], "跨日应回到未完成态，当日重新走一遍")
+        self.assertEqual(st["date"], "2026-10-13")
+        # 同日再调：不再重复重置，且不得把当日的 done/gave_up 抹掉
+        st.update({"done": True, "gave_up": True, "attempts": 2})
+        self.assertFalse(reset(st, "2026-10-13"), "同日应报『非首轮』")
+        self.assertTrue(st["done"], "同日不得抹掉 done（否则会重复下单）")
+        self.assertTrue(st["gave_up"], "同日不得抹掉 gave_up（否则每根 bar 都刷告警）")
+        self.assertEqual(st["attempts"], 2)
+
+    def test_s1_hook_retries_buys_within_deadline(self):
+        """2026-10-12 修：被顺延的买单必须在**窗口内自动补**，且过窗后明确告警。
+
+        背景：S1 首日 4 只买单被 GM 判"资金不足"拒 2 只（卖单成交 ≠ 回款立刻可用），
+        原实现"跑一次即置 done" ⇒ 当天再也不会补，半仓过一天。
+        """
+        i = self.src.rfind("_s1_open_exec(context, now, today")
+        window = self.src[max(0, i - 1500):i + 900]
+        self.assertIn('phase=_phase', window, "补单轮须以 phase=buys 调用")
+        self.assertIn('"buys"', window, "第二次起应走 buys 补单轮")
+        self.assertIn("_S1_RETRY_DEADLINE", window, "补单必须有窗口上界")
+        self.assertIn("needs_retry", window, "是否还需补单要由执行器回报决定")
+        self.assertIn("s1_buy_incomplete", window, "过窗未补完必须告警，不得静默")
 
     def test_s1_hook_fail_closed_on_picks_error(self):
         """picks 不可用 → 当日不下单 + risk 告警，绝不回退旧引擎。"""

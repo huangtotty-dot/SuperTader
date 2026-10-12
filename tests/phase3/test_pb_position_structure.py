@@ -538,9 +538,20 @@ class TestOfflineTagPath(unittest.TestCase):
 
     @staticmethod
     def _rows(n=40):
-        return [{"date": f"2026-{9 + i // 28:02d}-{i % 28 + 1:02d}", "open": 10.0 + i * 0.05,
-                 "close": 10.0 + i * 0.05, "high": 10.2 + i * 0.05, "low": 9.8 + i * 0.05,
-                 "volume": 1e5} for i in range(n)]
+        """n 天日线，**末日 = 昨天**。
+
+        ⚠️ 必须与"今天"解耦：`_append_today_forming_bar` 只在"末根不是今天"时才去打实时快照。
+        原先写死 `2026-09/10-xx`，等真实日期走到与末行重合（2026-10-12）时该分支被跳过，
+        断言就随日历飘（本仓既有 `test_buyback_chains_persist::test_08` 同型日期腐烂）。
+        """
+        today = datetime.now().date()
+        rows = []
+        for k in range(n, 0, -1):
+            d = today - timedelta(days=k)
+            px = 10.0 + (n - k) * 0.05
+            rows.append({"date": d.strftime("%Y-%m-%d"), "open": px,
+                         "close": px, "high": px + 0.2, "low": px - 0.2, "volume": 1e5})
+        return rows
 
     def test_offline_does_not_fall_back_to_network(self):
         import core.position_builder as _pb
