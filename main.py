@@ -1522,12 +1522,19 @@ _closure_audit_ts = ""     # F3-3: 主审计完成时刻（尾部过滤 fill.tim
 
 
 def _maybe_audit_closure(now: datetime) -> None:
-    """V3.0: 14:50-15:05 每日一次 买卖闭环审计
-    逐股核对：auto 通道（bridge events fill）卖出 vs 接回（未接回>0 → 告警行）、
-    holdings qty vs base 一致性；有异常推飞书红卡，无异常落日志；
-    无论有无异常均写 logs/closure_audit.jsonl。
-    2026-09-14: manual 做T 台账（VIRTUAL_TRADES / virtual_qty 视图）已随 manual 做T 下线删除，
-    本审计只保留 auto 模拟盘缺口监控与 qty/base 一致性检查。"""
+    """14:50-15:05 每日一次：**只记数据、不告警**（2026-10-12 起）。
+
+    逐股按 auto 通道（bridge events fill）的卖出/接回量算当日做T估算盈亏 `est_pnl`，
+    连同 qty/base/参考价落盘 `logs/closure_audit.jsonl`（一行/日）。
+
+    2026-10-12 owner：「已经没有手动做T了 ⇒ 这些提示以及相关的代码可以删除」——
+    原先的**告警**（qty/base 不一致、模拟盘缺口、虚报闭环）与两张飞书卡
+    （做T收益明细、闭环异常红卡）已**全部移除**，本函数不再推任何飞书。
+
+    ⚠️ **数据记录不能删**：`closure_audit.jsonl` 是
+    `execution/daily_sentiment.load_loss_streaks`（V2c 连亏熔断：同一标的连续 N 日
+    做T亏损 → 次日 hold）的**唯一数据源**。删函数前先确认还有谁在读它。
+    """
     global _closure_audit_date, _closure_tail_date, _closure_audit_ts
     try:
         t = now.time()
@@ -1545,15 +1552,12 @@ def _maybe_audit_closure(now: datetime) -> None:
             return
         _closure_audit_date = today                          # 先占位防重复触发（无论成败）
 
-        problems = []
         details = []
         # 2026-09-15 阶段0-1（诊断D1/F2）：弃用 PARAMS["commission_rate"] 单费率（0.00025×双腿 ≈ 真实双边 37%），
         # est_pnl 改按真实双边分腿（卖出腿 0.00121 / 买入腿 0.00015，见 compute_t0_pnl 头部常量与注释）。
-        # F-20260903-1: 读 auto 通道成交（bridge events fill）——auto 侧 SELL/BUY fill 的
-        # "卖而未接"缺口监控（09-03 实证：002451 缺400、600481 缺5500 盲区）。
+        # 读 auto 通道成交（bridge events fill）→ 逐股算当日做T估算盈亏 est_pnl（供连亏熔断）。
         # 2026-09-14: manual 做T 下线后，本审计的成交来源仅剩 auto bridge events。
         _auto_events = {}
-        _bb_filled_events = []   # 2026-09-15 阶段0-1（诊断D1/F3）：buyback_filled 记账一致性检查用
         try:
             _ev_fp = os.path.join(BASE_DIR, "t_io", "bridge", f"events_{now.strftime('%Y%m%d')}.jsonl")
             if os.path.exists(_ev_fp):
@@ -1566,11 +1570,7 @@ def _maybe_audit_closure(now: datetime) -> None:
                     except Exception:
                         continue
                     if _e.get("event") != "fill":
-                        # 2026-09-15 阶段0-1（诊断D1/F3）：旁路收集 buyback_filled 事件，
-                        # 供下方 matched>fill 钳制+告警（不改变 fill 配对主流程）
-                        if _e.get("event") == "buyback_filled":
-                            _bb_filled_events.append(_e)
-                        continue
+                        continue     # 只取 fill（buyback_filled 的钳制+告警已于 2026-10-12 移除）
                     _c = str(_e.get("code") or "")
                     _side = str(_e.get("side") or "")
                     _q = int(_e.get("qty") or 0)
@@ -1601,22 +1601,13 @@ def _maybe_audit_closure(now: datetime) -> None:
             abought = sum(tr.get("qty", 0) for tr in _ae_buys)
             a_unrebuilt = max(0, asold - abought)            # auto 模拟盘口径
             a_unclosed = max(0, abought - asold)
-            # V1.30: 价格字段完整性守卫 —— 缺 price/price<=0 的历史记录不进入利润公式
-            # （07-24 事故：V1.29 之前记录无 price 字段，avg_buy=0 把卖出成交额全额记成利润 +13018）
-            _sells_all = _merged["SELL_HIGH"]
-            _buys_all = _merged["BUY_LOW"]
-            valid_sells = [tr for tr in _sells_all if float(tr.get("price", 0) or 0) > 0]
-            valid_buys = [tr for tr in _buys_all if float(tr.get("price", 0) or 0) > 0]
-            n_price_missing = (len(_sells_all) - len(valid_sells)) + (len(_buys_all) - len(valid_buys))
+            # V1.30 的价格守卫（缺 price / price<=0 不计入利润）在 `compute_t0_pnl` 内部已实现，
+            # 此处原先只为"缺价格记录"计数并告警；告警已随手动做T下线移除（2026-10-12），计数一并删。
             # V2c 数据源：当日做T估算盈亏（统一配对口径 P0-5：各自总量加权均价 + 费用只计 matched 双腿；
             # 2026-10-09 任务COST：费率改走 core/cost_model 单一真源，按标的类型区分 stock/etf）
             _sr, _br = _t0_fee_rates(code=code, holding=holding)
             _p = compute_t0_pnl(_merged, sell_fee_rate=_sr, buy_fee_rate=_br)
             est_pnl = _p["t0_pnl"]
-            if n_price_missing:
-                problems.append(
-                    f"• {name}({code}) {n_price_missing} 条 auto 成交记录缺价格字段，"
-                    f"已隔离不计入利润（旧版本数据损坏）")
             qty = int(holding.get("qty", 0) or 0)
             base = int(holding.get("base", 0) or 0)
             qty_diff = qty - base
@@ -1631,43 +1622,14 @@ def _maybe_audit_closure(now: datetime) -> None:
                             "ref_price": round(ref, 3),
                             "auto_sim": {"sold": asold, "bought": abought,
                                          "unrebuilt": a_unrebuilt, "unclosed_buy": a_unclosed}})
-            if a_unrebuilt > 0:
-                problems.append(
-                    f"• {name}({code}) 【模拟盘 auto】卖出 {asold} / 未接回 {a_unrebuilt}"
-                    f" → 模拟盘缺口，不入实盘台账")
-            if a_unclosed > 0:
-                problems.append(
-                    f"• {name}({code}) 【模拟盘 auto】买入 {abought} / 未卖出 {a_unclosed}"
-                    f" → 模拟盘缺口，不入实盘台账")
-            if qty_diff != 0:
-                problems.append(
-                    f"• {name}({code}) 持仓 qty={qty} 与 base={base} 不一致（差 {qty_diff:+d}）→ 请核对 holdings_manual.json")
 
-        # 2026-09-15 阶段0-1（诊断D1/F3）：buyback_filled 记账一致性检查——matched（事件 qty，记的是
-        # armed sell_qty）不得超过实际买入成交 fill_qty（09-11 实证：600176 matched=600 > fill=300，虚报闭环 300 股）。
-        # 根因在 execution/auto/t_engine_auto.py record_trade_action（部分回补即整链 pop，余量静默丢链）
-        # 与 execution/auto/gm_main.py（matched 记 armed sell_qty 而非 min(sell_qty, fill)）——非本文件可改，
-        # 此处审计侧只做钳制口径+告警留痕；匹配算法修复见当日施工报告建议项。
-        _bb_mismatch = 0
-        for _be in _bb_filled_events:
-            try:
-                _bm = int(_be.get("qty") or 0)          # matched（事件口径，可能虚高）
-                _bf = int(_be.get("fill_qty") or 0)     # 实际买入成交股数
-            except Exception:
-                continue
-            if _bf > 0 and _bm > _bf:
-                _bb_mismatch += 1
-                _bc = str(_be.get("code") or "?")
-                _bn = ((HOLDINGS or {}).get(_bc) or {}).get("name", _bc)
-                problems.append(
-                    f"• {_bn}({_bc}) 【回补记账】buyback_filled matched={_bm} > 实际fill={_bf}"
-                    f" → 虚报闭环 {_bm - _bf} 股，复盘请按 fill={_bf} 钳制口径；"
-                    f"根因=t_engine_auto 部分回补整链清除（待修）")
-
+        # 2026-10-12 owner：「已经没有手动做T了 ⇒ 这些提示以及相关代码可以删除」。
+        # 提示类（qty/base 不一致、模拟盘缺口、虚报闭环、做T收益明细卡）**全部移除**；
+        # **数据记录保留**：`details[].est_pnl` 是 `execution/daily_sentiment.load_loss_streaks`
+        #（V2c 连亏熔断）的唯一数据源，删掉会**静默掐断**那条闸。
         record = {"date": today, "time": now.strftime("%H:%M:%S"),
-                  "ok": not problems, "problems": problems, "details": details,
-                  "buyback_mismatch": _bb_mismatch,   # 2026-09-15 阶段0-1：新增字段（不删旧）
-                  "fee_model": "bilateral_v3",        # 2026-10-09 任务COST：est_pnl 走 core/cost_model（stock/etf 分标的），旧标记 bilateral_v2=废止口径
+                  "ok": True, "details": details,
+                  "fee_model": "bilateral_v3",        # est_pnl 走 core/cost_model（stock/etf 分标的）
                   }
         try:
             _append_jsonl(os.path.join(LOG_DIR, "closure_audit.jsonl"), record)
@@ -1675,25 +1637,9 @@ def _maybe_audit_closure(now: datetime) -> None:
             pass
         _closure_audit_ts = now.strftime("%Y-%m-%d %H:%M:%S")   # F3-3: 供尾部过滤 fill.time > 该时刻
 
-        # 15:00 推送当日做T收益明细飞书卡
-        try:
-            _push_daily_pnl_feishu(record, today)
-        except Exception as e:
-            log.debug(f"pnl 推送异常（已吞）: {str(e)[:80]}")
-
-        if problems:
-            lines = [f"**日期**：{today}（14:50 闭环审计）", ""] + problems \
-                  + ["", "请尾盘手动处理，确保卖出=接回、qty=base 闭环。"]
-            card = {"config": {"wide_screen_mode": True},
-                    "header": _feishu_card_header(f"🚨 闭环审计异常 - {FEISHU_KEYWORD}", "red"),
-                    "elements": [_feishu_md_div(x) for x in lines]}
-            send_feishu_payload(
-                payload={"msg_type": "interactive", "card": card, "notify_type": 1},
-                success_log=f"✅ 闭环审计异常告警已推送: {len(problems)} 条",
-                error_prefix="闭环审计告警推送",
-            )
-        else:
-            log.info(f"✅ 闭环审计通过（{len(details)} 只：卖出=接回，qty=base）")
+        # 2026-10-12：飞书提示（做T收益明细卡 / 闭环异常红卡）已随手动做T下线移除；
+        # 只留一行日志 + 落盘，供 load_loss_streaks 与事后复盘取数。
+        log.info(f"📋 闭环审计落盘完成（{len(details)} 只，仅记录不告警）")
     except Exception as e:
         log.warning(f"⚠️ 闭环审计钩子异常（已吞掉，不影响主循环）: {str(e)[:120]}")
 
@@ -1754,53 +1700,6 @@ def _closure_tail_reconcile(now: datetime, today: str) -> None:
         log.info(f"✅ 尾部二次归账(auto 尾盘成交记录)完成: 尾部成交 {len(details)} 票；实盘台账未动")
     except Exception as e:
         log.warning(f"⚠️ 尾部二次归账异常: {str(e)[:120]}")
-
-
-def _push_daily_pnl_feishu(record: dict, date_str: str) -> None:
-    """15:00 推送当日做T收益明细飞书卡（基于闭环审计数据）"""
-    if not FEISHU_WEBHOOK:
-        return
-    details = record.get("details") or []
-    traded = [d for d in details if d.get("sold", 0) > 0 or d.get("bought", 0) > 0]
-    if not traded and not record.get("problems"):
-        log.info("📊 做T收益：今日无交易，跳过推送")
-        return
-
-    total_pnl = sum(d.get("est_pnl", 0) for d in details)
-    # 2026-10-09 任务COST：费用估算走 core/cost_model 单一真源，按标的 code 区分 stock/etf
-    # （替换 2026-09-15 阶段0-1 的废止口径 卖0.00121/买0.00015）。
-    total_fees = sum(d.get("sold", 0) * d.get("ref_price", 0) * _t0_fee_rates(code=d.get("code"))[0]
-                     + d.get("bought", 0) * d.get("ref_price", 0) * _t0_fee_rates(code=d.get("code"))[1]
-                     for d in traded)
-    total_trades = sum(d.get("sold", 0) for d in details) + sum(d.get("bought", 0) for d in details)
-
-    lines = [f"📅 {date_str} 做T收益明细"]
-    if record.get("problems"):
-        lines.append("⚠️ **闭环异常**：")
-        lines.extend(record["problems"])
-        lines.append("")
-    lines.append(f"| 标的 | 买卖(股) | 预估盈亏 |")
-    lines.append(f"|------|----------|----------|")
-    for d in details:
-        if d.get("sold", 0) == 0 and d.get("bought", 0) == 0:
-            continue
-        pnl = d.get("est_pnl", 0)
-        pnl_str = f"{pnl:+.0f}" if abs(pnl) >= 1 else f"{pnl:+.2f}"
-        lines.append(f"| {d['name']}({d['code']}) | 卖{d['sold']}/买{d['bought']} | {pnl_str} |")
-    lines.append(f"| **合计** | **{total_trades}股** | **{total_pnl:+.0f}** |")
-    if len(details) > len(traded):
-        idle = len(details) - len(traded)
-        lines.append(f"\n*无交易的持仓：{idle}只*")
-
-    card = {"config": {"wide_screen_mode": True},
-            "header": _feishu_card_header(f"📊 做T收益明细 - {FEISHU_KEYWORD}",
-                                          "red" if total_pnl < 0 else "green"),
-            "elements": [_feishu_md_div(x) for x in lines]}
-    send_feishu_payload(
-        payload={"msg_type": "interactive", "card": card, "notify_type": 1},
-        success_log=f"✅ 做T收益明细已推送（{len(traded)}只有交易，合计{total_pnl:+.0f}）",
-        error_prefix="做T收益明细推送",
-    )
 
 
 def _code_intraday_board(code: str) -> str:
