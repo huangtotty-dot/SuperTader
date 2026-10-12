@@ -357,7 +357,15 @@ class MarketDataFetcher:
                 _df = _cc.load_daily_display(_c6)
                 if _df is not None and not _df.empty:
                     self._bulk_kline[_c6] = _df
-                    self._bulk_from_cache.add(_c6)
+                    # ⚠️ **只有缓存里已经有当日 bar** 才算"值未变"、才省回写（2026-10-12 修）。
+                    # 原来是无条件 add ⇒ 而 `load_daily_display` 的新鲜度闸放到 **12 个自然日**，
+                    # 于是"末根停在上一交易日"的缓存也会被当成"值未变"⇒ **跳过回写** ⇒
+                    # 共享缓存永远补不上当日 bar ⇒ 零网络的消费端（技术标签 / 建仓符合度）
+                    # 一直按陈旧序列算 ⇒ 误报"破5日线"。
+                    # 实测（owner 报视觉中国 000681）：缓存末根 10-09 close=14.98 ⇒ MA5=15.48 ⇒ 报破位；
+                    # 而当日实时 16.69 ⇒ 实为**站上**。本类问题本仓已第 3 次（600362 两次）。
+                    if str(_df["date"].iloc[-1])[:10] == str(target_date_str)[:10]:
+                        self._bulk_from_cache.add(_c6)
             print(f"  [BULK] 本地日线缓存命中 {len(self._bulk_kline)}/{len(codes)} 只")
         except Exception:
             pass
@@ -378,11 +386,16 @@ class MarketDataFetcher:
             from datetime import datetime as _dtlive
             if str(target_date_str) == _dtlive.now().strftime("%Y-%m-%d"):
                 from core.market_data.tencent_provider import TencentProvider as _TP
-                _sn = _TP().snapshot_auction(list(dict.fromkeys(_c6map.values()))) or {}
+                # ⚠️ 必须走**分块**版（2026-10-12）：整池 1200~1500 只拼成一个 URL 会被腾讯
+                #    **静默拒绝**（返回空 body）⇒ 这里常年 patch 到 0 只，扫描的价/涨跌幅只能
+                #    取日线历史，而日线盘中不含当日 bar ⇒ 整个面板退回上一交易日。
+                _tp = _TP()
+                _sn = _tp.snapshot_auction_many(list(dict.fromkeys(_c6map.values())))
                 for _c, _v in _sn.items():
                     if _v.get("ts_date") == str(target_date_str):
                         self._live_snap[_c] = _v
-                print(f"  [LIVE] 盘中快照 patch {len(self._live_snap)}/{len(_c6map)} 只")
+                print(f"  [LIVE] 盘中快照 patch {len(self._live_snap)}/{len(_c6map)} 只"
+                      + (f" ⚠️{_tp.last_chunk_failures} 个分块返空" if _tp.last_chunk_failures else ""))
         except Exception as _e:
             print(f"  [LIVE] 快照失败(忽略): {str(_e)[:80]}")
 
@@ -469,7 +482,11 @@ class MarketDataFetcher:
                     # ⚠️ 只在当日写：历史日回写会把当天新数据挤掉（用 merge 而非覆盖，且不缩历史）。
                     from datetime import datetime as _dtm
                     _c6 = code[-6:] if str(code)[-6:].isdigit() else str(code)
+                    # 只在**手上确实有当日 bar** 时才回写（避免无谓 I/O）：末根不是当日时回写没意义。
+                    # 配合上面 `_bulk_from_cache` 的收紧 ⇒ 盘中每次扫描都会把当日实时 bar 补进共享缓存，
+                    # 零网络的消费端（技术标签 / 建仓符合度）才拿得到"今天"。
                     if (str(target_date_str) == _dtm.now().strftime("%Y-%m-%d")
+                            and str(df["date"].iloc[-1])[:10] == str(target_date_str)[:10]
                             and _c6 not in getattr(self, "_bulk_from_cache", set())):
                         try:
                             from core.market_data.tencent_provider import merge_daily_cache

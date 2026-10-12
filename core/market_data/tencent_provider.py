@@ -125,12 +125,34 @@ def _clear_proxy():
     os.environ["NO_PROXY"] = "*"
 
 
+# 单只快照的 socket 超时。2026-10-12 由 8s 收紧到 2s：
+# `facade.daily()` 盘中会对**每只**额外调一次本函数补当日 bar，实测中位仅 0.232s，
+# 但 3/40 会**打满**旧超时值（8.25/8.25/8.22s，正是 8s+开销）⇒ 整条 daily() 被腾讯这一步拖住
+# （40 只耗时分解：GM 合计 2.4s、本步 34.0s，**93%** 在这）。打满=请求本就在挂，
+# 收紧只是**更快失败**（失败路径同样是"不补当日 bar"，语义不变），不会丢原本能拿到的数据。
+_QT_SNAPSHOT_TIMEOUT = 2
+
+# 批量实时快照（`snapshot_auction` / `index_auction`，qt.gtimg.cn）的 socket 超时。
+# 2026-10-12 由 8s 收紧到 3s：同一现象已实测两次 —— **批量**请求也会偶发挂满 ~8.2s
+# （实测 n=200 那次耗时 8.33s，但数据其实回来了；n=50/400 只要 0.29/0.56s）
+# ⇒ 8s 不是"等待合法慢响应"，而是把"偶发挂死"放大成"阻塞 8 秒"。
+# 影响面：`load_quotes`（10s 轮询）+ 猎手展开取实时价 + 指数板，全都吃这条尾巴；
+# 前端在飞上限只有 6 ⇒ 一次 8.5s 就够把整块界面拖慢（实测 gui_slow_calls.log:
+# `load_quotes_for 8639ms / 8496ms`）。成功路径 0.3s，3s 有 10 倍余量。
+_QT_AUCTION_TIMEOUT = 3
+
+# 单次批量快照的 symbol 上限。⚠️ qt.gtimg.cn 的 URL 一长就**静默返回空 body**（不是报错）——
+# 实测悬崖：n=800（URL≈12000 字符）正常返 800 条；**n=1000（≈15000 字符）返回 0 条**，耗时 0.2s。
+# 200 与 `sector_rotation.SNAPSHOT_BATCH` / `hunter MAX_CODES_PER_REQUEST` 同口径。
+_SNAPSHOT_CHUNK = 200
+
+
 def _qt_snapshot_raw(symbol: str):
     """腾讯 qt.gtimg.cn 实时快照 → fields 列表；失败返回 None。"""
     _clear_proxy()
     req = urllib.request.Request(f"https://qt.gtimg.cn/q={symbol}",
                                  headers={"User-Agent": "Mozilla/5.0", "Referer": "https://gu.qq.com/"})
-    raw = urllib.request.urlopen(req, timeout=8).read().decode("gbk", errors="replace")
+    raw = urllib.request.urlopen(req, timeout=_QT_SNAPSHOT_TIMEOUT).read().decode("gbk", errors="replace")
     if "~" not in raw:
         return None
     f = raw.split('"')[1].split("~")
@@ -501,7 +523,7 @@ class TencentProvider:
             q = ",".join(syms)
             req = urllib.request.Request(f"https://qt.gtimg.cn/q={q}",
                                          headers={"User-Agent": "Mozilla/5.0", "Referer": "https://gu.qq.com/"})
-            txt = urllib.request.urlopen(req, timeout=8).read().decode("gbk", errors="replace")
+            txt = urllib.request.urlopen(req, timeout=_QT_AUCTION_TIMEOUT).read().decode("gbk", errors="replace")
             for part in txt.strip().split(";"):
                 part = part.strip()
                 if not part or "=" not in part:
@@ -530,6 +552,38 @@ class TencentProvider:
             pass
         return out
 
+    def snapshot_auction_many(self, codes: list, chunk_size: int = None) -> dict:
+        """**分块**批量实时快照（2026-10-12）。为什么必须有：
+
+        `snapshot_auction` 把全部 symbol 拼进一个 URL，**URL 一长就被静默拒绝** ——
+        返回空 body，函数里 `except: pass` ⇒ 表现为**空 dict**，调用方完全看不出出错。
+        实测悬崖：n=800（≈12000 字符）正常，**n=1000（≈15000 字符）返回 0 条**。
+
+        而受伤的是**猎手盘中 live patch**：它传的是**整池**（1200~1500 只）⇒ 常年 patch 到 **0 只**，
+        扫描的价/涨跌幅只能取日线历史，而日线盘中不含当日 bar ⇒ **整块面板退回上一交易日**
+        （实测：300821 显示 10-09 的 +20.01%，而当天只有 +4.6%）。
+        `facade._append_forming_batch` 按 900 只/批，也贴着同一悬崖。
+
+        本函数分块调用并合并。**失败可见**：把空块数记在 `self.last_chunk_failures`，
+        由调用方打印（不用 logging —— 本仓实测 `core.market_data.*` 的 log 到不了主日志）。
+        """
+        out = {}
+        codes = [c for c in dict.fromkeys(codes or []) if c]
+        self.last_chunk_failures = 0
+        if not codes:
+            return out
+        n = int(chunk_size or _SNAPSHOT_CHUNK)
+        for i in range(0, len(codes), n):
+            chunk = codes[i:i + n]
+            try:
+                got = self.snapshot_auction(chunk) or {}
+            except Exception:
+                got = {}
+            if not got:
+                self.last_chunk_failures += 1      # 空块 ⇒ 这一批彻底没拿到
+            out.update(got)
+        return out
+
     def index_auction(self, codes: list) -> dict:
         """指数竞价快照（qt.gtimg.cn 批量，字段[3]=虚拟匹配价，[4]=昨收）。
         返回 {code: {name, auction_price, pre_close, gap_pct}}。"""
@@ -541,7 +595,7 @@ class TencentProvider:
             q = ",".join(codes)
             req = urllib.request.Request(f"https://qt.gtimg.cn/q={q}",
                                          headers={"User-Agent": "Mozilla/5.0", "Referer": "https://gu.qq.com/"})
-            txt = urllib.request.urlopen(req, timeout=8).read().decode("gbk", errors="replace")
+            txt = urllib.request.urlopen(req, timeout=_QT_AUCTION_TIMEOUT).read().decode("gbk", errors="replace")
             for part in txt.strip().split(";"):
                 part = part.strip()
                 if not part or "=" not in part:

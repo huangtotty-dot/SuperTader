@@ -5,6 +5,7 @@
 import concurrent.futures as _cf
 import logging
 import threading
+import time as _time
 from datetime import datetime, timedelta
 
 import pandas as pd
@@ -72,6 +73,15 @@ class MarketDataFacade:
     # 超时照旧走腾讯兜底。批量仍用 _GM_BATCH_TIMEOUT(60s)。
     _GM_CALL_TIMEOUT = 4.0
 
+    # 探针窗被占时，`_gm_ok_wait()` 最多等这么久再降级腾讯（2026-10-12）。
+    # 依据：健康 GM 调用 ~14ms、整条 daily() ~0.3s 即清窗 ⇒ 1.5s 足够等到 4~5 轮腾挪；
+    # 真挂死时窗口是 4.5s，等不到就按原语义走腾讯，不无限等。
+    _GM_PROBE_WAIT_SEC = 1.5
+    # 批量调用（daily_many）是**一次**调用取多只，不存在"并发羊群"问题 ⇒ 值得等更久，
+    # 避免"窗口正被别人占着"就整批返空（2026-10-12 复现：窗口被占 ⇒ daily_many 返回 0/3，
+    # 而同一时刻逐只 daily() 照样有数据）。
+    _GM_PROBE_WAIT_BATCH_SEC = 6.0
+
     def __init__(self):
         # H1/G2(2026-09-09): GmProvider 构造容错——gm SDK/解释器不可用时置 None，腾讯兜底不再被绑架
         # （09-08/09-09 事故：无 gm 解释器重启 → facade 构造期 import gm 爆炸 → 腾讯兜底陪葬 → 盘后全 0）
@@ -118,6 +128,34 @@ class MarketDataFacade:
             self._gm_probe_until = now + timedelta(seconds=self._GM_CALL_TIMEOUT + 0.5)
             return True
 
+    def _gm_ok_wait(self, wait_sec: float = None) -> bool:
+        """`_gm_ok()` + **短暂等待在飞的探针清窗**，而不是立刻降级腾讯。
+
+        为什么（2026-10-12 实测）：`_gm_ok()` 的探针窗是 `now+4.5s`，但**健康**的一次 GM 调用
+        只要 ~14ms、整条 `daily()` ~0.3s 就会 `_gm_ok_reset()` 清窗。于是并发下"窗被别人占着"
+        几乎总是"马上就空"，可调用方却**立即**改走腾讯 ⇒ 6 线程实测 150 只里**只有 17% 用了 GM**
+        （gm 25 / tencent 74 / cache 51），与"GM 优先、与自动盘对齐"的既定语义相悖。
+
+        现在：窗被占时**小睡重试**，最多等 `wait_sec`（缺省 `_GM_PROBE_WAIT_SEC`）；
+        等到就真打 GM，等不到才降级腾讯 —— 延迟有上界，且不再把并发静默推给腾讯。
+
+        ⚠️ **不排队进 `_gm_pool`**：那道闸当初是为修 GUI 冷启动线程爆炸加的（见 `_gm_ok` 注释），
+        本函数只是在**调用方**等一个短窗，既不额外提交任务、也不会让池里堆积（池仍是单 worker）。
+        冷却窗（`_gm_down_until`）命中时**立即**返回 False，不等 —— 那才是真的不用 GM。
+        """
+        if self._gm_ready() and self._gm_down_until is not None \
+                and datetime.now() < self._gm_down_until:
+            return False               # 冷却窗内：不等，直接腾讯
+        waited = 0.0
+        deadline = (self._GM_PROBE_WAIT_SEC if wait_sec is None else float(wait_sec))
+        while True:
+            if self._gm_ok():
+                return True
+            if waited >= deadline:
+                return False
+            _time.sleep(0.02)
+            waited += 0.02
+
     def _gm_ok_reset(self) -> None:
         self._gm_down_until = None
         # 探针成功 ⇒ 立即放开窗口，让后续并发正常用 gm（健康时不误降级腾讯）
@@ -153,14 +191,20 @@ class MarketDataFacade:
             raise TimeoutError(f"gm {desc} 调用超时>{self._GM_CALL_TIMEOUT}s（SDK 无超时挂死）")
 
     def _note_gm_down(self, ctx: str, key: str, exc: Exception) -> None:
-        """gm 调用失败（多为终端服务不可达）→ 置冷却窗并每窗只告警一次。"""
+        """gm 调用失败 → 置冷却窗并每窗只告警一次。
+
+        ⚠️ **措辞很重要**（2026-10-12）：原消息一律说"gm 服务不可达"，实测 GM 其实一直是好的
+        （裸调用中位 14ms）—— 那条消息曾被当成"GM 常挂"的证据，误导了一轮排查。现在按异常类型
+        区分「超时(慢/挂)」与「异常」，且明确写清影响面（冷却窗内**所有** gm 调用都会走腾讯）。
+        """
         now = datetime.now()
         with self._gm_probe_lock:            # 探针已失败 ⇒ 撤半开窗，后续直接吃冷却窗
             self._gm_probe_until = None
+        _kind = "调用超时(GM 慢或挂死)" if isinstance(exc, _cf.TimeoutError) else "调用异常"
         if self._gm_down_until is None or now >= self._gm_down_until:
             self._gm_down_until = now + timedelta(seconds=self._GM_COOLDOWN_SECONDS)
-            log.warning("gm 服务不可达(%s %s: %s) → %ds 内直接走腾讯，不再逐调用重试",
-                        ctx, key, str(exc)[:100], self._GM_COOLDOWN_SECONDS)
+            log.warning("gm %s(%s %s: %s) → 冷却 %ds：窗内**所有** gm 调用都走腾讯兜底",
+                        _kind, ctx, key, str(exc)[:100], self._GM_COOLDOWN_SECONDS)
         else:
             self._gm_down_until = now + timedelta(seconds=self._GM_COOLDOWN_SECONDS)  # 续窗
 
@@ -178,6 +222,11 @@ class MarketDataFacade:
         # 2026-08-31 手动盘数据源与自动盘对齐：去掉腾讯 cache-first，gm 优先（腾讯仅降级兜底）。
         # 自动盘(gm_main)纯 gm 直拉；手动盘此处同样优先 gm，保证两侧数据/判定一致。
         if self._gm_ok():
+            # ⚠️ 这里**刻意**不用 `_gm_ok_wait()`（2026-10-12 实测否证）：改成"等探针窗"后，
+            #    6 线程 150 只的 GM 使用率 17%→73%，但**墙钟 10.6s→43.8s（+313%）** —— 因为
+            #    GM 池单 worker ⇒ 逐只 GM 串行，293ms/只。这正是 2026-10-11 记录过的
+            #    「150 只 44.0s」，当时的正解是**批量路径绕开 daily() 读本地缓存**，
+            #    而不是让 daily() 排队等 GM。⇒ 保持"窗被占即刻走腾讯/缓存"的原语义。
             try:
                 df = self._gm_call("daily", self._gm.daily, code, days)
                 if df is not None and not df.empty:
@@ -230,7 +279,7 @@ class MarketDataFacade:
         bj = [c for c in codes if market_of(c) == "BJ"]
         rest = [c for c in codes if market_of(c) != "BJ"]
         out = {}
-        if rest and self._gm_ok():
+        if rest and self._gm_ok_wait(self._GM_PROBE_WAIT_BATCH_SEC):
             for i in range(0, len(rest), self._BATCH_MAX):
                 chunk = rest[i:i + self._BATCH_MAX]
                 try:
@@ -243,7 +292,14 @@ class MarketDataFacade:
                     self._note_gm_down("daily_batch", f"{len(chunk)}只", e)
                     break          # GM 不可达：不再逐批重试刷屏，剩余码由调用方补空
         elif rest:
-            log.warning("daily_many: GM 不可用，%d 只非北交所码本轮无日线", len(rest))
+            # 走到这里 = 已在冷却窗内，或等满 `_GM_PROBE_WAIT_BATCH_SEC` 仍拿不到 GM。
+            # ⚠️ 别再写"GM 不可用"就完事：本方法**没有逐只腾讯兜底**，调用方拿到的是**整批缺号**，
+            #    必须让日志能区分"真降级"与"只是没轮到"（2026-10-12 排查中此消息曾误导过一次）。
+            _why = ("冷却窗内" if (self._gm_down_until is not None
+                                  and datetime.now() < self._gm_down_until)
+                    else f"等满 {self._GM_PROBE_WAIT_BATCH_SEC}s 未拿到探针窗")
+            log.warning("daily_many: 未使用 GM（%s），%d 只非北交所码本轮**无日线**"
+                        "（本方法无逐只兜底，调用方需自行补）", _why, len(rest))
         if bj:
             from . import bj_daily
             for idx, c in enumerate(bj):
@@ -279,7 +335,10 @@ class MarketDataFacade:
         if not todo:
             return frames
         try:
-            snaps = self._tx.snapshot_auction(todo)
+            # ⚠️ 分块版（2026-10-12）：本函数按 `_BATCH_MAX=900` 只/批被调，URL≈13500 字符，
+            #    正贴着 qt.gtimg.cn 静默拒绝的悬崖（实测 800 过、1000 挂）⇒ 一旦越界，
+            #    当日 bar 会**静默**补不上（表现为数据退回上一交易日）。
+            snaps = self._tx.snapshot_auction_many(todo)
         except Exception:
             return frames
         for code in todo:
@@ -304,14 +363,14 @@ class MarketDataFacade:
         except Exception:
             return df
 
-    def _maybe_append_forming(self, df: pd.DataFrame, code: str) -> pd.DataFrame:
+    def _maybe_append_forming(self, df: pd.DataFrame, code: str, now=None) -> pd.DataFrame:
         """对 gm 日线补当日 bar（P1 审核阻断5+重审#7）。
         gm history_n 盘中/盘后初段不含当日 daily bar（实测 14:11/14:29 end_time=当日23:59:59 仍只返回到昨日），
         故窗口覆盖至收盘后 16:00：盘后快照=当日收盘（ts_date=当日），补入即为完整当日 bar。
         ts_date 新鲜度闸：快照时间戳非当日（盘前/节假日）不补，避免伪造 bar（08-28 教训）。
         注：gm 结算（~15:35）后是否已含当日 bar 待 15:35 后实测确认；无论是否，本窗口在 16:00 前均可靠补全。"""
         import datetime as _dt
-        _now = _dt.datetime.now()
+        _now = now or _dt.datetime.now()      # now 可注入 ⇒ 单测能确定性覆盖窗口/异常分支
         today = _now.strftime("%Y-%m-%d")
         # F-1(2026-09-04): 窗口延至 23:59——16:00 后 gm 日线仍无当日 bar，eod 重扫(16:04)会退回昨日
         # 判出伪 signal(688037)；盘后快照 ts_date=当日闸已防伪造 bar，延窗只补真实收盘。
@@ -320,7 +379,16 @@ class MarketDataFacade:
         if df is None or df.empty or str(df["date"].iloc[-1]) >= today:
             return df
         base = str(code).split("_")[0]
-        snap = self._tx.snapshot([base]).get(base)
+        # ⚠️ 必须兜异常（2026-10-12 修）：本步是**腾讯 HTTP**，而它整个挂在 `daily()` 的
+        #    `try: ... except Exception as e: self._note_gm_down("daily", code, e)` 里 ——
+        #    一旦腾讯抖动抛出来，就会被**记成"gm 服务不可达"并置 60s GM 冷却窗**
+        #    （GM 完全健康却被熔断）。对齐 `_maybe_append_index_forming` 的写法（它一直有兜底）。
+        try:
+            snap = self._tx.snapshot([base]).get(base)
+        except Exception as e:
+            log.warning("补当日 bar 的腾讯快照失败(%s): %s（保持原 df，不影响 GM 判定）",
+                        base, str(e)[:80])
+            return df
         if not snap or snap.get("ts_date") != today or not snap.get("price"):
             return df
         px = snap["price"]
