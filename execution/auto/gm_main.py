@@ -367,6 +367,39 @@ def _get_holding(context, code: str, gm_symbol: str) -> dict:
     return default
 
 
+def _account_positions_all(context) -> dict:
+    """全账户持仓快照 {gm_symbol: {qty, cost}}（**不按 STOCKS 池过滤**）。
+
+    2026-10-13 修复：心跳与 [OWN] 归属诊断原先只逐票轮询 STOCKS 池内标的，
+    池外真实持仓（旧引擎 10-12 留下的 605198×1800 / 688003×1700）被读成
+    「账户空仓」（positions={} / 账户持有 0 只），而 cash 是全账户口径所以一直准。
+    本函数与现金同一口径（`account().positions()` 无 symbol 过滤）。
+    仅用于监控/诊断展示（心跳、[OWN] 启动行），不参与任何交易决策；
+    失败静默返回 {}（调用方按原池内口径继续）。
+    """
+    out = {}
+    try:
+        _is_live = context.mode == MODE_LIVE
+    except Exception:
+        _is_live = False
+    if not _is_live:
+        return out
+    try:
+        poss = _sdk_call("positions_all", lambda: context.account().positions())
+        for p in (poss or []):
+            try:
+                vol = int(getattr(p, "volume", 0) or 0)
+                sym = str(getattr(p, "symbol", "") or "")
+                if vol <= 0 or not sym:
+                    continue
+                out[sym] = {"qty": vol, "cost": float(getattr(p, "vwap", 0) or 0)}
+            except Exception:
+                continue
+    except Exception as _e:
+        print(f"[hb] 全账户持仓查询失败（按池内口径继续）: {_e}")
+    return out
+
+
 # ── 审计 JSONL ──
 # P0-2(2026-08-31): backtrace 实际落盘 gmcache/backtrace.jsonl；复盘清单期待 t_io/logs/auto_backtrace.jsonl。
 # 双写镜像到清单路径（口径修复，历史不回改；当日已 281 条在 gmcache，明日 B-2 起清单路径可查）。
@@ -615,6 +648,12 @@ def init(context):
                     _held[_c] = int(_h.get("qty", 0))
             except Exception:
                 continue
+        # 2026-10-13 修复：补池外全账户真实持仓——否则旧引擎遗留单被报成
+        # 「账户持有 0 只」，unclaimed（LEGACY 锁定）告警也不会触发。
+        for _as, _ap in _account_positions_all(context).items():
+            _ac = _raw_code(_as)
+            if _ac and _ac not in _held and int(_ap.get("qty", 0) or 0) > 0:
+                _held[_ac] = int(_ap["qty"])
         print(f"[OWN] 归属表(账本认领)={_snap or '{}'}｜账户持有 {len(_held)} 只")
         _unclaimed = sorted(set(_held) - set(_snap))
         if _unclaimed:
@@ -900,6 +939,12 @@ def on_bar(context, bars):
             if int(_h.get("qty", 0) or 0) > 0:
                 _hb_positions[_hs] = {"qty": int(_h.get("qty", 0)),
                                       "cost": float(_h.get("cost", 0) or 0)}
+        # 2026-10-13 修复：合并**池外**全账户真实持仓（旧引擎遗留单不过滤），
+        # 池内口径不变（仍走 _get_holding 多源对账，含我们跟踪的成本）。
+        for _as, _ap in _account_positions_all(context).items():
+            if _as not in _hb_positions and int(_ap.get("qty", 0) or 0) > 0:
+                _hb_positions[_as] = {"qty": int(_ap["qty"]),
+                                      "cost": float(_ap.get("cost", 0) or 0)}
         # ①-3: 实时读取可用现金
         _hb_cash = INITIAL_CASH
         try:

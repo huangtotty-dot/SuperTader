@@ -526,7 +526,13 @@ def run_buy_exec(gateway, date: str, prev_close: dict, ma20: dict, bars: dict,
                            allowed_boards=allowed_boards, top_n=top_n)
     if not picks:
         log(f"[WS] {date} 无超跌跳空确认候选（fail-closed，当日不下单） pool_n={len(prev_close)}")
-        return _write_fills(date, mode, started, [], [], 0.0, 0.0, cfg, book_dir,
+        # 2026-10-13 修复：无候选日 cash_before 原先写死 0.0，会被误读成「现金查询失败」
+        # （10-13 实际现金 24.3 万）。改为如实读取——纯报告字段，不影响 fail-closed 语义。
+        try:
+            cash0 = float(gateway.get_cash() or 0)
+        except Exception:
+            cash0 = 0.0
+        return _write_fills(date, mode, started, [], [], cash0, 0.0, cfg, book_dir,
                             note="no_picks")
 
     cash0 = float(gateway.get_cash() or 0)
