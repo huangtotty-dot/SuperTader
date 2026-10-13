@@ -1094,51 +1094,18 @@ function renderLive(live, isToday) {
       </div>`;
   }).join("");
 
-  // 实时信号流
-  const signals = live.signals || [];
-  const sigRows = signals.map(s => {
-    const dec = s.decision || "HOLD";
-    const isSig = dec !== "HOLD";
-    const isNear = s.near && !isSig;  // 近阈但未触发
-    const nearInfo = isNear
-      ? `距买阈${fmt((s.buy_threshold||0)-(s.buy_score||0),0)}/卖阈${fmt((s.sell_threshold||0)-(s.sell_score||0),0)}` : "";
-    const sw = s.swing_meta || {};
-    const renkoTxt = (!isSig && sw.brick_count != null)
-      ? ` <span class="cell-dim" style="font-size:10px">砖${sw.brick_dir || "?"}:${sw.brick_count} MACD15:${fmt(sw.m15, 2)}</span>`
-      : "";
-    return `
-      <tr class="${isSig ? "live-signal-row sig" : isNear ? "live-signal-row near" : ""}">
-        <td class="mono">${esc((s.scan_time || "").slice(11, 19))}</td>
-        <td>${esc(s.name || s.code || "")} <span class="mono cell-dim">${esc(s.code || "")}</span></td>
-        <td class="num">${fmt(s.price, 3)}</td>
-        <td class="num ${clsOf((s.buy_score || 0) - (s.buy_threshold || 36))}">${fmt(s.buy_score, 1)}</td>
-        <td class="num ${clsOf((s.sell_score || 0) - (s.sell_threshold || 55))}">${fmt(s.sell_score, 1)}</td>
-        <td><span class="badge ${isSig ? "signal" : isNear ? "approach" : "chop"}">${isNear ? "接近" : esc(dec)}</span></td>
-        <td class="cell-dim" style="font-size:11px">${esc(nearInfo || s.reason || "")}${renkoTxt}</td>
-      </tr>`;
-  }).join("");
-
   el.innerHTML = `
-    <div class="live-grid">
-      <div class="card">
-        <div class="card-title">盘中状态
-          <span class="cell-dim" style="font-weight:normal;font-size:11px">上：近60日全市场成交额 · 下：个股趋势（intraday_state.json · 10s 刷新）</span>
-        </div>
-        <div id="turnoverHistChart" style="height:130px"></div>
-        <div class="cell-dim" style="font-size:10px;margin:-2px 0 8px">
-          <span style="color:${TURNOVER_UP}">■</span> 放量（较前一交易日）
-          <span style="color:${TURNOVER_DOWN};margin-left:8px">■</span> 缩量
-          <span style="color:${TURNOVER_LIVE};margin-left:8px">■</span> 今日进行中（不判放缩）
-        </div>
-        ${trendCards || '<div class="empty">无趋势状态</div>'}
+    <div class="card">
+      <div class="card-title">盘中状态
+        <span class="cell-dim" style="font-weight:normal;font-size:11px">上：近60日全市场成交额 · 下：个股趋势（intraday_state.json · 10s 刷新）</span>
       </div>
-      <div class="card">
-        <div class="card-title">实时信号流（decision_trace 尾部 20）· 信号 ${signals.filter(s => s.decision !== "HOLD").length} 条 · <span class="cell-dim" style="font-weight:normal">Renko触发式:0=等待/100=触发(0分正常)·约15s刷新</span></div>
-        <table>
-          <thead><tr><th>时间</th><th>股票</th><th class="num">价</th><th class="num">买分</th><th class="num">卖分</th><th>决策</th><th>原因</th></tr></thead>
-          <tbody>${sigRows || '<tr><td colspan="7" class="empty">暂无信号（盘中数据写入中）</td></tr>'}</tbody>
-        </table>
+      <div id="turnoverHistChart" style="height:130px"></div>
+      <div class="cell-dim" style="font-size:10px;margin:-2px 0 8px">
+        <span style="color:${TURNOVER_UP}">■</span> 放量（较前一交易日）
+        <span style="color:${TURNOVER_DOWN};margin-left:8px">■</span> 缩量
+        <span style="color:${TURNOVER_LIVE};margin-left:8px">■</span> 今日进行中（不判放缩）
       </div>
+      ${trendCards || '<div class="empty">无趋势状态</div>'}
     </div>
     <div class="card" style="margin-top:12px">
       <div class="console-toggle">
@@ -1775,10 +1742,14 @@ function renderPB(pb) {
     const scoreCellHtml = _reachable
       ? `<b>${r.composite_score}</b>`
       : `<b>${r.composite_score}</b><span class="cell-dim" style="font-size:10px">/${_ceiling}🔒</span>`;
-    // 2026-10-08 owner：0 分 / >0 分 用背景色区分（0=红底、>0=淡绿底），一眼看出被扣到 0 的票
-    const _scNum = (typeof r.composite_score === "number") ? r.composite_score : null;
-    const _scoreBg = (_scNum === 0) ? "background:rgba(248,81,73,.12);"
-      : (_scNum !== null && _scNum > 0) ? "background:rgba(63,185,80,.07);" : "";
+    // 2026-10-13 owner：改按 **20 分档**着色（<20 红底 / ≥20 淡绿底），
+    //   取代 2026-10-08 的「只有 0 分才红底、>0 一律淡绿底」——那一版把 1~19 分也染成"看起来还行"。
+    //   非数值/NaN 不着色（与旧版一致，避免坏数据被染绿）。
+    const _scNum = (typeof r.composite_score === "number" && isFinite(r.composite_score))
+      ? r.composite_score : null;
+    const _scoreBg = (_scNum === null) ? ""
+      : (_scNum < 20) ? "background:rgba(248,81,73,.12);"
+        : "background:rgba(63,185,80,.07);";
     // 建仓/加仓时机门控徽章（timing_gate: 多头追强/空头抄底/震荡降频）
     const _tm = r.timing || {};
     let tmBadge = "";
@@ -3363,8 +3334,10 @@ const TAG_DESC = {
   "底背离": "价格创新低但MACD(DIF)走强，下跌动能衰减，可能反弹（背离≠立刻反转）",
   "超买": "RSI(14)>70，短期涨幅过大，追高风险高，等回踩",
   "超卖": "RSI(14)<30，短期跌幅过大，可能有反弹，但趋势向下时不抢反弹",
-  "破5日线": "现价跌破5日均线（破五日线只卖不买）",
-  "破10日线": "现价跌破10日均线，中期走弱",
+  "破5日线": "【日线口径】今收 < 日线5日均线（破五日线只卖不买）。"
+    + "⚠️ 这是**日线**的5日线，不是30分钟图上的 MA5 —— 两者经常一个在上一个在下。",
+  "破10日线": "【日线口径】今收 < 日线10日均线，中期走弱。"
+    + "⚠️ 这是**日线**的10日线，不是30分钟图上的 MA10。",
 };
 function tagBadge(t) {
   const colorMap = {
@@ -3377,7 +3350,12 @@ function tagBadge(t) {
     "顶背离": "⛔", "底背离": "✅", "超买": "⚠", "超卖": "📉",
   };
   const icon = iconMap[t.label] || "";
-  const desc = TAG_DESC[t.label] || t.label;
+  // 2026-10-13：破(N)日线 带上**实测数字**（后端 `cur`/`ma`，日线口径）。
+  //   owner 三次拿 30 分钟图的 MA5 当"5日线"对账（600362 最近一次：图上 30min MA5=40.94
+  //   「站上」，日线 5 日线=41.712「在下方」）。有数字可当场核对，不必反过来怀疑系统。
+  const _num = (t.ma != null && t.cur != null && isFinite(t.ma) && isFinite(t.cur))
+    ? `　实测：现价 ${t.cur} < 日线均线 ${t.ma}` : "";
+  const desc = (TAG_DESC[t.label] || t.label) + _num;
   return `<span class="badge ${colorMap[t.color] || "chop"}" title="${esc(desc)}">${icon}${esc(t.label)}</span>`;
 }
 // 建仓信号符合度徽章（时机门控：市场有方向/多头结构/回撤到位/金叉加分；盘后计算，实盘盘中显示"—"）
@@ -4255,153 +4233,6 @@ function toggleBkGroup(headEl) {
   const arrow = headEl.querySelector(".bk-arrow");
   if (arrow) arrow.textContent = collapsed ? "▸" : "▼";
 }
-// ---- 全市场「刚刚站上5日线」（2026-10-09）----
-let reclaimLoaded = false;
-let reclaimLoadedDate = null;
-async function loadReclaimStocks(force, date) {
-  const body = document.getElementById("hunterReclaimBody");
-  if (!body) return;
-  const _di = document.getElementById("hunterReclaimDate");
-  const _date = date || (_di && _di.value) || todayStr();
-  if (!force && reclaimLoaded && reclaimLoadedDate === _date) return;
-  const btn = document.getElementById("hunterReclaimBtn");
-  if (btn) { btn.disabled = true; btn.textContent = "⏳ 扫描中..."; }
-  body.innerHTML = '<div class="empty">⏳ 准备扫描...</div>';
-  try {
-    const st = await apiCall("start_reclaim_scan", !!force, _date);
-    if (st.status === "done") {
-      renderReclaim(st);
-      if (!st.fetch_failed) { reclaimLoaded = true; reclaimLoadedDate = _date; }
-      if (btn) { btn.disabled = false; btn.textContent = "🔄 扫描该日"; }
-      return;
-    }
-    if (st.status === "error") {
-      body.innerHTML = `<div class="empty">扫描失败: ${esc(st.error || '未知')}</div>`;
-      if (btn) { btn.disabled = false; btn.textContent = "🔄 扫描该日"; }
-      return;
-    }
-    await pollReclaimScan(body, btn, _date);
-  } catch (e) {
-    const cur = document.getElementById("hunterReclaimBody");
-    if (cur) cur.innerHTML = `<div class="empty">站上5日线扫描失败: ${esc(e.message)}</div>`;
-    if (btn) { btn.disabled = false; btn.textContent = "🔄 扫描该日"; }
-  }
-}
-async function pollReclaimScan(body, btn, date) {
-  const t0 = Date.now();
-  const MAX = 1200000;
-  while (Date.now() - t0 < MAX) {
-    await sleep(800);
-    if (!document.body.contains(body)) return;
-    let st;
-    try { st = await apiCall("get_reclaim_scan", date); } catch (e) { break; }
-    if (st.status === "done") {
-      renderReclaim(st);
-      if (!st.fetch_failed) reclaimLoaded = true;
-      if (btn) { btn.disabled = false; btn.textContent = "🔄 扫描该日"; }
-      return;
-    }
-    if (st.status === "error") {
-      body.innerHTML = `<div class="empty">扫描失败: ${esc(st.error || '未知')}</div>`;
-      if (btn) { btn.disabled = false; btn.textContent = "🔄 扫描该日"; }
-      return;
-    }
-    if (st.status === "running") {
-      const pct = st.total ? Math.max(2, Math.round(st.done / st.total * 100)) : 0;
-      const found = st.found || 0;
-      const preview = (st.stocks || []).slice(0, 5).map(x => esc(x.name)).join('、');
-      body.innerHTML = `
-        <div class="bk-scan">
-          <div class="bk-scan-row"><span>⏳ 站上5日线扫描中</span>
-            <span class="cell-dim mono">${st.done}/${st.total} 只 · ${pct}%</span></div>
-          <div class="h-bar-track" style="height:6px;margin-top:4px">
-            <div class="h-bar-fill up" style="width:${pct}%"></div></div>
-          <div class="bk-scan-row" style="margin-top:6px">
-            <span class="cell-dim">已发现 <b class="up">${found}</b> 只</span>
-            ${preview ? `<span class="cell-dim" style="margin-left:8px">${preview}${found > 5 ? '…' : ''}</span>` : ''}
-          </div>
-        </div>`;
-    }
-  }
-  const mins = Math.round((Date.now() - t0) / 60000);
-  body.innerHTML = `<div class="empty">⏳ 扫描仍在后台运行（已 ${mins} 分钟）<br>
-    <span class="cell-dim" style="font-size:11px">点「🔄 扫描该日」会作废本轮并重开</span></div>`;
-  if (btn) { btn.disabled = false; btn.textContent = "🔄 扫描该日"; }
-}
-// 站上5日线「条件」徽章：显式核对「昨在昨MA5下 → 今价上穿今MA5」，让口径可复核
-// （MA5 下行时昨收可能 > 今MA5，单看今MA5 会误以为违反条件；比较基准是昨MA5）。
-function _reclaimCondBadge(s) {
-  const ok = s.prev_close != null && s.ma5_prev != null && s.price != null && s.ma5 != null
-    && s.prev_close < s.ma5_prev && s.price > s.ma5;
-  const tip = `昨收 ${s.prev_close != null ? fmt(s.prev_close, 2) : '—'} ${s.prev_close != null && s.ma5_prev != null && s.prev_close < s.ma5_prev ? '<' : '≥'} 昨MA5 ${s.ma5_prev != null ? fmt(s.ma5_prev, 2) : '—'} 且 现价 ${s.price != null ? fmt(s.price, 2) : '—'} ${s.price != null && s.ma5 != null && s.price > s.ma5 ? '>' : '≤'} 今MA5 ${s.ma5 != null ? fmt(s.ma5, 2) : '—'}`;
-  return ok
-    ? `<span class="up" title="${esc(tip)}">✓ 昨在MA5下→今上穿</span>`
-    : `<span class="warn" title="${esc(tip)}">⚠ 不满足</span>`;
-}
-
-function renderReclaim(b) {
-  const body = document.getElementById("hunterReclaimBody");
-  if (!body) return;
-  const stocks = (b && b.stocks) || [];
-  const restNd = (b && b.rest_no_data) || 0;
-  const bjNd = (b && b.bj_no_data) || 0;
-  const stale = (b && b.stale) || 0;
-  const meta = document.getElementById("hunterReclaimMeta");
-  const _parts = [];
-  if (b && b.date) _parts.push('· ' + esc(b.date));
-  _parts.push(`· 共 ${stocks.length} 只`);
-  if (restNd) _parts.push(`· <span class="warn">⚠ ${restNd} 只取数失败</span>`);
-  if (bjNd) _parts.push(`· ${bjNd} 只北交所无日线`);
-  if (meta) meta.innerHTML = _parts.join(" ");
-  if (b && b.fetch_failed) {
-    const why = restNd > 0
-      ? `非北交所 ${restNd} 只无日线 —— 掘金终端可能未连接/行情未就绪`
-      : `全池 ${stale} 只无当日行情 —— 可能非交易日或当日行情未就绪`;
-    body.innerHTML = `<div class="empty" style="color:var(--warn,#d29922)">
-      ⚠ 本次扫描**取数失败，结果不可信**：${esc(why)}<br>
-      <span class="cell-dim" style="font-size:11px">已跳过判定且未缓存；点「🔄 扫描该日」重试。</span></div>`;
-    return;
-  }
-  if (!stocks.length) {
-    body.innerHTML = '<div class="empty">池内暂无「刚站上5日线」的股票'
-      + (bjNd ? `<div class="cell-dim" style="font-size:10px;margin-top:4px">${bjNd} 只北交所股在当前环境取不到日线，已跳过</div>` : "")
-      + (restNd ? `<div class="cell-dim" style="font-size:10px;margin-top:2px;color:var(--warn,#d29922)">另有 ${restNd} 只非北交所取数失败，可能漏报</div>` : "")
-      + "</div>";
-    return;
-  }
-  const groups = {};
-  stocks.forEach(s => { const k = s.industry || "未分类"; (groups[k] = groups[k] || []).push(s); });
-  const gkeys = Object.keys(groups).sort((a, b) => groups[b].length - groups[a].length || a.localeCompare(b, "zh"));
-  const bodyHtml = gkeys.map(k => {
-    const arr = groups[k].slice().sort((x, y) => (y.dev5_pct || 0) - (x.dev5_pct || 0));
-    return `<tbody class="bk-group">
-    <tr class="bk-group-head" onclick="toggleBkGroup(this)" title="点击收起/展开">
-      <td colspan="10"><span class="bk-arrow">▼</span> <b>${esc(k)}</b>
-        <span class="cell-dim">· ${arr.length} 只</span></td>
-    </tr>
-    ${arr.map(s => `<tr class="bk-member h-expand-row" ondblclick="openStockChart('${esc(s.code)}','${esc(s.name)}')">
-      <td class="mono cell-dim" title="双击看技术分析">${esc(s.code)}</td>
-      <td title="双击看技术分析">${esc(s.name)} <button class="mini-btn" style="font-size:10px;padding:0 5px"
-        onclick="event.stopPropagation();addToWatchlist('${esc(s.code)}','${esc(s.name)}',this)" title="加入建仓股池监控买点">+股池</button></td>
-      <td class="num">${s.price != null ? fmt(s.price, 2) : '—'}</td>
-      <td class="num cell-dim">${s.prev_close != null ? fmt(s.prev_close, 2) : '—'}</td>
-      <td class="num cell-dim" title="昨日 MA5（比较基准）">${s.ma5_prev != null ? fmt(s.ma5_prev, 2) : '—'}</td>
-      <td class="num" title="今日 MA5">${s.ma5 != null ? fmt(s.ma5, 2) : '—'}</td>
-      <td class="num up">+${s.dev5_pct != null ? fmt(s.dev5_pct, 2) : '—'}%</td>
-      <td>${_reclaimCondBadge(s)}</td>
-      <td>${(s.tags || []).map(t => tagBadge(t)).join(" ")}</td>
-      <td class="bk-concepts-cell">${conceptsCell(s)}</td>
-    </tr>`).join("")}
-  </tbody>`;
-  }).join("");
-  body.innerHTML = `<table class="h-table"><thead><tr>
-    <th>代码</th><th>名称</th><th class="num">现价</th><th class="num">昨收</th>
-    <th class="num">昨MA5</th><th class="num">今MA5</th><th class="num">超MA5</th><th>条件</th><th>标签</th><th>概念</th>
-  </tr></thead>${bodyHtml}</table>
-  <div class="cell-dim" style="font-size:10px;margin-top:3px">口径：昨收 &lt; <b>昨MA5</b> 且 现价 &gt; <b>今MA5</b>（昨日在5日线下、今日刚上穿）· 共 ${gkeys.length} 个行业 · 组按只数降序 · 组内按超MA5幅度降序 · 双击看技术分析</div>
-  ${bjNd ? `<div class="cell-dim" style="font-size:10px;margin-top:2px">另有 ${bjNd} 只北交所股无日线、未参与判定</div>` : ""}
-  ${restNd ? `<div class="cell-dim" style="font-size:10px;margin-top:2px;color:var(--warn,#d29922)">⚠ 另有 ${restNd} 只非北交所取数失败、未参与判定</div>` : ""}`;
-}
 // 概念列（2026-09-30）。离线口径（韭研概念 + 东财板块概念段）只盖约一半股票 ⇒
 // 没数据时显示「—」而不是空白，避免看起来像渲染失败；全量概念在 title 里，
 // 想要东财全量可用双击弹窗的「📋 公司资料」。
@@ -4667,19 +4498,6 @@ function renderHunter(h) {
       <div id="hunterBreakoutBody"><div class="empty">选日期后点「🔄 扫描该日」（全池 5000+ 只，约 1~2 分钟）；结果会按日保存，再选同一天直接秒回。</div></div>
     </div>`;
 
-  const reclaimCard = `
-    <div class="card" style="margin-bottom:10px;padding:10px 14px">
-      <div class="card-title">📈 站上5日线·全市场（昨收 &lt; 昨MA5 且 现价 &gt; 今MA5：昨日在5日线下、今日刚上穿）
-        <input type="date" id="hunterReclaimDate" value="${esc(h.date || todayStr())}"
-          style="margin-left:8px;background:transparent;color:inherit;border:1px solid var(--border-soft);border-radius:4px;padding:1px 4px;font-size:12px"
-          title="选择任意交易日扫描（结果按日保存）；选日期不会自动扫，点右侧按钮">
-        <button class="mini-btn" id="hunterReclaimBtn" style="margin-left:8px"
-          onclick="loadReclaimStocks(true, document.getElementById('hunterReclaimDate').value)">🔄 扫描该日</button>
-        <span class="cell-dim" id="hunterReclaimMeta" style="font-size:11px"></span>
-      </div>
-      <div id="hunterReclaimBody"><div class="empty">选日期后点「🔄 扫描该日」（全池 5000+ 只，约 1~2 分钟）；结果会按日保存，再选同一天直接秒回。</div></div>
-    </div>`;
-
   el.innerHTML = `
     <div class="cell-dim" style="margin-bottom:8px;display:flex;gap:16px;flex-wrap:wrap">
       <span>打分池: <b>${h.pool_size}</b> 只</span>
@@ -4694,7 +4512,6 @@ function renderHunter(h) {
       </div>`}
 
     ${breakoutCard}
-    ${reclaimCard}
 
     <div class="card" style="overflow-x:auto">
     <table class="h-table">

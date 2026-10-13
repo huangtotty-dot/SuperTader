@@ -5087,12 +5087,18 @@ class Api:
             tags.append({"label": "超卖", "color": "neutral"})
 
         # 破5日线/破10日线（现价处于均线下方）
+        # 2026-10-13：标签带上**实测数字**（`cur`/`ma`，均为**日线**口径）。
+        #   owner 第 3 次拿 30 分钟图的 MA5 来对账（600362：图上 30min MA5=40.94「站上」，
+        #   而日线 5 日线=41.712「在下方」——两个数根本不是一个东西）。悬停即见数字，
+        #   不必再问；这也是本仓第 3 次因这一列产生"系统报错了"的误判。
         _ma5_s = pd.Series(closes).rolling(5).mean()
         _ma10_s = pd.Series(closes).rolling(10).mean()
         if not np.isnan(_ma5_s.iloc[-1]) and cur < _ma5_s.iloc[-1]:
-            tags.append({"label": "破5日线", "color": "down"})
+            tags.append({"label": "破5日线", "color": "down",
+                         "cur": round(cur, 3), "ma": round(float(_ma5_s.iloc[-1]), 3)})
         if not np.isnan(_ma10_s.iloc[-1]) and cur < _ma10_s.iloc[-1]:
-            tags.append({"label": "破10日线", "color": "down"})
+            tags.append({"label": "破10日线", "color": "down",
+                         "cur": round(cur, 3), "ma": round(float(_ma10_s.iloc[-1]), 3)})
 
         # 通道标签（放最前）
         trend_label = {"up": {"label": "上行", "color": "up"},

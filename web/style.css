@@ -223,17 +223,11 @@ tr:hover td { background: rgba(243,93,43,.03); }
 
 
 /* ===== 盘中实时 ===== */
-.live-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-@media (max-width: 1100px) { .live-grid { grid-template-columns: 1fr; } }
 .regime-chip-live { font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 3px; }
 .regime-uni_up { color: var(--red); background: var(--red-bg); }
 .regime-uni_down { color: var(--green); background: var(--green-bg); }
 .regime-range { color: var(--warn); background: var(--yellow-bg); }
 .cool-tag { color: var(--warn); font-family: var(--mono); font-size: 10px; }
-.live-signal-row.sig { background: var(--red-bg); }
-.live-signal-row.sig td { color: var(--red-soft); }
-.live-signal-row.near { background: var(--yellow-bg); }
-.live-signal-row.near td { color: var(--warn); }
 .console-toggle { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; font-size: 12px; color: var(--text-dim); }
 .console-box { background: rgba(244,246,250,.7); border: 1px solid var(--border-soft); border-radius: 6px; padding: 4px 6px; height: 280px; overflow-y: auto; font-family: var(--mono); font-size: 11px; line-height: 1.45; color: var(--text); }
 .con-line { display: flex; align-items: baseline; gap: 6px; padding: 3px 6px; border-left: 3px solid transparent; border-radius: 0 4px 4px 0; margin: 1px 0; }
