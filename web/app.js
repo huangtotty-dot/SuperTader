@@ -2556,6 +2556,33 @@ function renderAddWatch(aw) {
   el.innerHTML = summaryHtml + cards;
 }
 
+// ---- 建仓信号扫描 · 「🔄 刷新」（2026-10-13 owner）----
+// **只拉最新状态**（重读后端已写结果 `refresh_pb` + 就地重绘，秒级）。
+// 与下面「🔄 扫描该日」严格区分：那个是按所选日期**重放**建仓扫描（日线口径，1~2 分钟）。
+// 两者**不要共用一个繁忙标记/按钮类**：否则点刷新会把"重跑中…"的样式抢过来。
+let pbRefreshRunning = false;
+async function refreshPBNow() {
+  if (pbRefreshRunning) return;
+  const _di = document.getElementById("pbScanDate");
+  const date = (_di && _di.value) || state.date;      // 与 recomputePB 同口径
+  if (!date) return;
+  const btn = document.getElementById("pbRefreshBtn");
+  pbRefreshRunning = true;
+  if (btn) { btn.disabled = true; btn.textContent = "⏳ 刷新中"; }
+  try {
+    const pb = await apiCall("refresh_pb", date);
+    // 叠加已轮询到的最新价/涨幅（同 app.js:397 的周期刷新口径）——
+    // 不叠的话 `refresh_pb` 的返回会把「价/涨幅」列洗成空，与"刷新"的意图刚好相反。
+    renderPB(applyQuotesToPB(pb || {}));
+    statusEl(`已刷新建仓扫描（${date}｜刷新于 ${(pb && pb.refreshed_at) || "?"}）`, "ok");
+  } catch (e) {
+    statusEl(`刷新建仓扫描失败: ${e.message}`, "err");
+  } finally {
+    pbRefreshRunning = false;
+    if (btn) { btn.disabled = false; btn.textContent = "🔄 刷新"; }
+  }
+}
+
 // ---- 建仓扫描：按面板所选日期重放（日线口径，支持历史任意一天）----
 let pbRecomputeRunning = false;
 function _pbSyncScanDate() {   // 面板日期选择器跟随全局选中日
@@ -4562,7 +4589,28 @@ async function loadOBAnalysis() {
       else if (ob.pending) delay = 5000;   // 2026-10-10：体检改 SWR，后台算通常数秒可好
       _obRetryTimer = setTimeout(loadOBAnalysis, delay);
     }
-  } catch (e) { /* 静默：体检非关键路径 */ }
+    return ob;                              // 2026-10-13：供「🔄 刷新」判断成败（原来吞错无法回报）
+  } catch (e) { /* 静默：体检非关键路径 */ return null; }
+}
+
+// 持仓体检 · 「🔄 刷新」（2026-10-13 owner）：**只重拉最新状态并就地重绘**，不做任何重算。
+let obRefreshRunning = false;
+async function refreshOBNow() {
+  if (obRefreshRunning) return;
+  const btn = document.getElementById("obRefreshBtn");
+  obRefreshRunning = true;
+  if (btn) { btn.disabled = true; btn.textContent = "⏳ 刷新中"; }
+  try {
+    const ob = await loadOBAnalysis();
+    if (ob) {
+      statusEl(`已刷新持仓体检${ob.pending ? "（后台仍在算，稍后自动补齐）" : ""}`, "ok");
+    } else {
+      statusEl("刷新持仓体检失败（后端未返回，详见日志）", "err");
+    }
+  } finally {
+    obRefreshRunning = false;
+    if (btn) { btn.disabled = false; btn.textContent = "🔄 刷新"; }
+  }
 }
 
 function renderOB(ob) {

@@ -168,7 +168,10 @@
   <!-- ====== Tab 3: 手动盘 ====== -->
   <div class="tab-page" id="tab-signals">
     <div class="section" id="ob-analysis">
-      <h2>持仓 30 分钟风险体检（30min 顶部特征 → 减仓/避坑提醒）</h2>
+      <h2>持仓 30 分钟风险体检（30min 顶部特征 → 减仓/避坑提醒）
+        <button class="mini-btn" id="obRefreshBtn" onclick="refreshOBNow()"
+                title="只重新拉取最新行情/状态并就地重绘（秒级）；不做任何重算">🔄 刷新</button>
+      </h2>
       <div id="obBody"></div>
     </div>
     <div class="section" id="live">
@@ -200,6 +203,8 @@
           <option value="manual">人工池</option>
           <option value="auto">自动池</option>
         </select>
+        <button class="mini-btn" id="pbRefreshBtn" style="margin-left:8px" onclick="refreshPBNow()"
+                title="只重新拉取最新行情/状态并就地重绘（秒级），不动所选日期；要按所选日期重放请用左侧「🔄 扫描该日」（日线口径，1~2 分钟）">🔄 刷新</button>
       </h2>
       <div id="pbBody"></div>
     </div>
