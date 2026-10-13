@@ -1,0 +1,8 @@
+{
+  "note": "一票一策略人工豁免通道（execution/auto/framework/ownership.py 读取；重启/启动时生效）。overrides: {code: strategy_id|\"legacy\"}。",
+  "updated_at": "2026-10-13 15:33:37",
+  "overrides": {
+    "605198": "osc",
+    "688003": "osc"
+  }
+}
