@@ -285,6 +285,63 @@ def find_prev_equity(date: str):
     return None, None
 
 
+def _apply_fill_overlay(date: str, positions: dict):
+    """fill 回报覆盖 heartbeat 台账（就地修改 positions）。返回 (overlay_notes, ev_name)。
+
+    依据（2026-09-30 复盘实证）：heartbeat positions 是引擎台账，ALIGN 卖出曾不扣减
+    （d97cdf0 前的 bug）⇒ 台账残影压住账户真值；fill 事件的 pos_after 来自 GM 成交回报，
+    是真值 ⇒ 以末笔 fill 覆盖。
+    P0(2026-10-13 实证)：台账还会**丢新票**——10-12 早盘买入 605198×1800/688003×1700，
+    全天 heartbeat positions={}（同 09-09 丢 588170 一类，现金流水与 fill 完全吻合）。
+    两处加固：
+      ① 覆盖对象从「仅台账已有票」扩到「fill 证实但台账缺失的票补入」；
+      ② events 取 ≤date 全部文件按时间序合并「逐票末笔 fill」（10-13 实证：当日 events
+         只有 risk 记录零 fill，持仓只经 fill 变动 ⇒ 逐票最近一次 fill 的 pos_after
+         仍是该票真值；10-13 的持仓真值即 10-12 末笔 fill 状态）。
+    """
+    _ev_day = date.replace("-", "")
+    _ev_fps = sorted(fp for fp in glob.glob(os.path.join(_BRIDGE_DIR, "events_*.jsonl"))
+                     if os.path.basename(fp)[len("events_"):-len(".jsonl")] <= _ev_day)
+    last_fill = {}   # code → (pos_after, src_file)：逐票最近一次 fill（后文件覆盖先文件）
+    for ev_fp in _ev_fps:
+        try:
+            with open(ev_fp, encoding="utf-8") as f:
+                for line in f:
+                    try:
+                        e = json.loads(line)
+                    except Exception:
+                        continue
+                    if e.get("event") == "fill" and e.get("pos_after") is not None:
+                        last_fill[str(e.get("code"))] = (int(e.get("pos_after")),
+                                                         os.path.basename(ev_fp))
+        except Exception:
+            continue
+    overlay = []
+    src_name = None
+    for c, (pa, src) in last_fill.items():
+        hit = None
+        for gs in list(positions.keys()):
+            if str(gs).split(".")[-1].split("_")[0] == c:
+                hit = gs
+                break
+        if hit is None:
+            if pa > 0:  # fill 证实持仓但台账缺失 → 补入（丢票修复，qty 是唯一被消费字段）
+                mkt = "SHSE" if c[0] in "56" else "SZSE"
+                positions[f"{mkt}.{c}"] = {"qty": pa, "cost": 0.0}
+                overlay.append(f"{c}:台账缺失→补入{pa}")
+                src_name = max(src_name, src) if src_name else src
+            continue
+        old = int((positions[hit] or {}).get("qty") or 0)
+        if pa != old:
+            overlay.append(f"{c}:{old}→{pa}")
+            src_name = max(src_name, src) if src_name else src
+            if pa > 0:
+                positions[hit] = {**(positions[hit] or {}), "qty": pa}
+            else:
+                positions.pop(hit, None)
+    return overlay, src_name
+
+
 def compute(date: str, prev_override=None, extra_note: str = None) -> dict:
     """单日计算。prev_override=(value, date) 时跳过文件链（回填模式内部链接用）。"""
     notes = [_SIM_TAG + "(heartbeat尾行+K线重估)"]
@@ -307,36 +364,11 @@ def compute(date: str, prev_override=None, extra_note: str = None) -> dict:
         positions = hb.get("positions") or {}
         raw_cash = hb.get("cash")
         cash = float(raw_cash) if isinstance(raw_cash, (int, float)) else None
-        # 成交回报覆盖层（2026-09-30 复盘实证）：heartbeat positions 是引擎台账，
-        # ALIGN 卖出曾不扣减（d97cdf0 前的 bug）⇒ 台账残影压住账户真值。
-        # 当日 fill 事件的 pos_after 来自 GM 成交回报，是真值 ⇒ 以末笔 fill 覆盖。
-        _ev_fp = os.path.join(_BASE, "t_io", "bridge", f"events_{date.replace('-', '')}.jsonl")
-        _overlay = []
-        if os.path.exists(_ev_fp):
-            _last_fill = {}
-            try:
-                with open(_ev_fp, encoding="utf-8") as _f:
-                    for _l in _f:
-                        try:
-                            _e = json.loads(_l)
-                        except Exception:
-                            continue
-                        if _e.get("event") == "fill" and _e.get("pos_after") is not None:
-                            _last_fill[str(_e.get("code"))] = int(_e.get("pos_after"))
-            except Exception:
-                _last_fill = {}
-            for _c, _pa in _last_fill.items():
-                for _gs in list(positions.keys()):
-                    if str(_gs).split(".")[-1].split("_")[0] == _c:
-                        _old = int((positions[_gs] or {}).get("qty") or 0)
-                        if _pa != _old:
-                            _overlay.append(f"{_c}:{_old}→{_pa}")
-                            if _pa > 0:
-                                                                positions[_gs] = {**(positions[_gs] or {}), "qty": _pa}
-                            else:
-                                positions.pop(_gs, None)
+        # 成交回报覆盖层（细节见 _apply_fill_overlay docstring）：fill pos_after 是 GM 真值，
+        # 修正台账残影（卖出不扣减）与台账丢票（新买入不入账）。
+        _overlay, _ev_name = _apply_fill_overlay(date, positions)
         if _overlay:
-            notes.append(f"fill回报覆盖heartbeat台账:{','.join(_overlay)}")
+            notes.append(f"fill回报覆盖heartbeat台账({_ev_name}):{','.join(_overlay)}")
         if not positions:
             notes.append("heartbeat末行positions为空→equity/account_ret/alpha置null,杜绝现金流静默错误")
         else:

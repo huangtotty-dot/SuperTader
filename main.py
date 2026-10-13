@@ -1139,7 +1139,9 @@ _daily_review_state = {"date": "", "next_try": 0.0}
 
 def _maybe_run_daily_review(now: datetime) -> None:
     """15:10 后交易日自动触发每日复盘——子进程 fire-and-forget，内部串行跑
-    daily_review → forward_tracker（后者读前者产出）；成功才占位，失败 10 分钟节流重试。"""
+    equity_daily → daily_review → forward_tracker（后者读前者产出）；成功才占位，失败 10 分钟节流重试。
+    P0(2026-10-13): 链首补 equity_daily——主基准 sh000300 仅被该脚本刷新（其余四指数
+    走 facade 盘中路径），脚本不跑则指数缓存断更 + 净值文件缺日（10-12/10-13 实证断档）。"""
     global _daily_review_state
     try:
         t = now.time()
@@ -1155,7 +1157,7 @@ def _maybe_run_daily_review(now: datetime) -> None:
         log_dir = os.path.join(BASE_DIR, "t_io", "logs")
         os.makedirs(log_dir, exist_ok=True)
         log_fp = os.path.join(log_dir, f"daily_review_{today}.log")
-        # 子进程内部串行：daily_review → forward_tracker（同一进程不阻塞主循环）
+        # 子进程内部串行：equity_daily → daily_review → forward_tracker（同一进程不阻塞主循环）
         # T-1(2026-09-02): 内嵌 -c 用换行分隔（此前分号后接 for 是语法错误，子进程启动即 SyntaxError）
         _dr_dir = os.path.join(BASE_DIR, "t_io", "validation", "daily_review")
         # Q-20260914-4': forward_tracker 回填源改真实复盘路径 doc/review/复盘清单.md（owner 拍板 09-14）。
@@ -1168,8 +1170,9 @@ def _maybe_run_daily_review(now: datetime) -> None:
             f"log = open({log_fp!r}, 'a', encoding='utf-8')\n"
             "date = sys.argv[1]\n"
             "failed = []\n"
-            "for sp in ['daily_review.py', 'forward_tracker.py']:\n"
-            "    cmd = [sys.executable, os.path.join(dr, sp), '--date', date]\n"
+            "for sp in ['equity_daily.py', 'daily_review.py', 'forward_tracker.py']:\n"
+            "    path = os.path.join(base, 'scripts', sp) if sp == 'equity_daily.py' else os.path.join(dr, sp)\n"
+            "    cmd = [sys.executable, path, '--date', date]\n"
             "    if sp == 'forward_tracker.py':\n"
             "        cmd += ['--report', os.path.join(base, 'doc', 'review', '复盘清单.md')]\n"
             "    p = subprocess.Popen(cmd, stdout=log, stderr=subprocess.STDOUT)\n"
@@ -1204,7 +1207,7 @@ def _maybe_run_daily_review(now: datetime) -> None:
                     _daily_review_state.update({"date": "", "next_try": _now().timestamp() + 600})
 
         _threading.Thread(target=_watch_daily_review, daemon=True).start()
-        log.info(f"📊 收盘复盘已自动触发: daily_review+forward_tracker → {log_fp} (pid={proc.pid})")
+        log.info(f"📊 收盘复盘已自动触发: equity_daily+daily_review+forward_tracker → {log_fp} (pid={proc.pid})")
     except Exception as e:
         _daily_review_state["next_try"] = _now().timestamp() + 600
         log.warning(f"⚠️ 收盘复盘自动触发失败（10 分钟重试）: {str(e)[:120]}")
