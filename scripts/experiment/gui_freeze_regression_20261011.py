@@ -37,10 +37,30 @@ EPISODE_GAP_SEC = 45          # 相邻记录间隔 ≤ 此值 → 归为同一�
 TRADING_OPEN = dtime(9, 30)
 TRADING_CLOSE = dtime(15, 0)
 
-_HDR = re.compile(
+# ── header 解析（**两种顺序都收**）──────────────────────────────────────────
+# 历史形状：`===== 疑似界面卡死 <日期> <时间>（主线程心跳停 Ns）线程栈 =====`
+# 2026-10-14 一度被改成「心跳停在前、时间在后」（加哨兵时重排了 header），
+# 而当时的正则只认第一种 ⇒ **当天下午起所有卡死段对本看板静默不可见**（仍报 39 段、看着正常）。
+# ⇒ 两条正则并列，任何一边命中即可；写入侧（t_gui._dump）已恢复历史形状。
+_HDR_A = re.compile(
     r"疑似界面卡死\s+(\d{4}-\d{2}-\d{2})\s+(\d{2}:\d{2}:\d{2})\s*"
     r"[（(]\s*主线程心跳停\s*(\d+)\s*s"
 )
+_HDR_B = re.compile(
+    r"疑似界面卡死\s*[（(]\s*主线程心跳停\s*(\d+)\s*s\s*[）)]\s*"
+    r"(\d{4}-\d{2}-\d{2})\s+(\d{2}:\d{2}:\d{2})"
+)
+
+
+def _match_hdr(line: str):
+    """→ (日期, 时间, 心跳停秒数) 或 None。两种 header 顺序都接受。"""
+    m = _HDR_A.search(line)
+    if m:
+        return m.group(1), m.group(2), m.group(3)
+    m = _HDR_B.search(line)
+    if m:
+        return m.group(2), m.group(3), m.group(1)     # B 形：秒数在前，日期时间在后
+    return None
 
 
 def parse_events(path: str) -> list[tuple[datetime, int]]:
@@ -51,14 +71,14 @@ def parse_events(path: str) -> list[tuple[datetime, int]]:
             for line in f:
                 if "疑似界面卡死" not in line:
                     continue
-                m = _HDR.search(line)
-                if not m:
+                g = _match_hdr(line)
+                if not g:
                     continue
                 try:
-                    ts = datetime.strptime(f"{m.group(1)} {m.group(2)}", "%Y-%m-%d %H:%M:%S")
+                    ts = datetime.strptime(f"{g[0]} {g[1]}", "%Y-%m-%d %H:%M:%S")
                 except ValueError:
                     continue
-                events.append((ts, int(m.group(3))))
+                events.append((ts, int(g[2])))
     except FileNotFoundError:
         return []
     events.sort(key=lambda x: x[0])

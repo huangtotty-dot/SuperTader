@@ -8289,12 +8289,19 @@ def _start_gui_freeze_watchdog(threshold_s=12.0):
     _DUMP_REQ = Path(_os.environ.get("TRADER_DUMP_REQ")
                      or (BASE / "t_io" / "state" / "gui_dump_request"))
 
-    def _dump(reason):
+    def _dump(head, tail=""):
+        """落一份全线程栈。header 格式 = `===== {head} {时间}{tail} 线程栈 =====`。
+
+        ⚠️ **时间必须在 head 之后、尾巴之前** —— 这是 `gui_freeze_regression_20261011.py`
+        解析卡死段所依赖的固定形状。2026-10-14 我为加哨兵把 header 重排成"心跳停在前、
+        时间在后"，**当天下午起的所有卡死段对看板直接不可见**（看板仍报 39 段、看着正常）
+        —— 静默失效，正是本仓最忌讳的那类。此处恢复原形状，解析侧同时放宽成"两种顺序都收"。
+        """
         try:
             log_fp.parent.mkdir(parents=True, exist_ok=True)
             with open(log_fp, "a", encoding="utf-8") as f:
-                f.write(f"\n===== {reason} {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
-                        f" 线程栈 =====\n")
+                f.write(f"\n===== {head} {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+                        f"{tail} 线程栈 =====\n")
                 faulthandler.dump_traceback(file=f, all_threads=True)
         except Exception:
             pass
@@ -8315,7 +8322,7 @@ def _start_gui_freeze_watchdog(threshold_s=12.0):
                 _now = _time_mod.time()
                 if _ts and (_now - _ts) > threshold_s and (_now - _last) > 30:
                     _last = _now
-                    _dump(f"疑似界面卡死（主线程心跳停 {_now - _ts:.0f}s）")
+                    _dump("疑似界面卡死", f"（主线程心跳停 {_now - _ts:.0f}s）")
             except Exception:
                 pass
 
