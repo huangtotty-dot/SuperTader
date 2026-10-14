@@ -137,6 +137,15 @@
       <div id="thAccounts" style="margin-top:12px"></div>
       <div class="card" style="margin-top:12px">
         <div class="card-title">累计收益趋势（含浮动） <span class="cell-dim" id="thCumPctTotal" style="font-weight:normal"></span></div>
+        <!-- 两条线的口径（2026-10-14 owner 问「黄线代表什么」时补）：
+             蓝实线=左轴**收益率%**（累计已实现 ÷ 累计买入成本）；黄虚线=右轴**金额元**
+             （累计总盈亏，**含持仓浮动**）。两者不是同一条线的两种刻度 ——
+             所以会出现"蓝线贴近 0 而黄线明显为负"（那是尚未卖出的浮亏）。 -->
+        <div class="cell-dim" style="font-size:11px;line-height:1.7;margin:-2px 0 6px">
+          <b style="color:#8ad4ff">━ 累计收益率(左·%)</b> = 累计已实现 ÷ 累计买入成本　·
+          <b style="color:#d29922">┄ 累计总盈亏(右·元)</b> = 已实现 + 持仓浮盈浮亏（**含浮动**）
+          <span style="opacity:.75">—— 两条口径不同，别混读；悬停看当日明细</span>
+        </div>
         <div id="echThCumPct" class="echart" style="height:340px"></div>
       </div>
       <div class="chart-grid2" style="margin-top:12px">

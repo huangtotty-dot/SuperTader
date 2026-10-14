@@ -924,7 +924,18 @@ function renderTradeHistory(d) {
   } else echClear("echThCum");
 
   // 2b) 累计收益趋势 —— 两账户合计（选了单账户就画那个账户）
-  //     口径：收益率 = 累计已实现 ÷ 累计买入成本（与账户汇总同源）；同时叠一条累计盈亏(元)
+  //
+  // 【两条线分别是什么】（2026-10-14 owner 问「黄线代表什么」—— 它此前**没有图例**，见下）
+  //   · 蓝实线 `累计收益率(左·%)` —— 左轴。口径：累计已实现 ÷ **累计买入成本**（与账户汇总同源）。
+  //   · 黄虚线 `累计总盈亏(右·元)` —— 右轴。口径：**含浮动**的累计总盈亏（元）= 已实现 + 持仓浮盈浮亏。
+  //   两条都不是同一条线的两种刻度：蓝线是"相对投入成本的比例"，黄线是"绝对金额且含未实现部分"。
+  //   所以会出现"蓝线接近 0 而黄线大幅为负"—— 那是浮亏（卖出前不体现在已实现里）。
+  //
+  // ⚠️ **历史 bug（已于 2026-10-14 修）**：`legend.data` 里写的是 `"累计总盈亏(右)"`，
+  //    而下面 series 的 `name` 是 `"累计盈亏(右)"` —— **两个字符串不同** ⇒ ECharts 按 name 匹配，
+  //    匹配不到就**整条从图例里去掉**（且不报错）⇒ 图上只有一条线有图例，黄线成了"无名线"。
+  //    修法：两者统一成 `"累计总盈亏(右·元)"`。**改 series.name 时必须同步改 legend.data**（反之亦然），
+  //    否则会再次静默丢图例 —— 这类"名字对不上就消失"的细节，`node --check` 查不出来。
   echGuard("累计收益趋势", () => {
     const curve = (acc ? v.cum : (d.cum_all || [])).filter(x => x.cum_total != null);
     const cpTotal = document.getElementById("thCumPctTotal");
@@ -939,7 +950,9 @@ function renderTradeHistory(d) {
       echRender("echThCumPct", {
         ...ECH_BASE,
         grid: { left: 56, right: 62, top: 34, bottom: 34 },
-        legend: { data: ["累计收益率(左)", "累计总盈亏(右)"], textStyle: { color: "#8b949e", fontSize: 11 }, top: 0 },
+        // ⚠️ legend.data 与 series[].name 必须**逐字相同**（ECharts 按 name 匹配；
+        //    对不上就静默丢掉该图例项，本图 2026-10-14 前就是这样丢了黄线的图例）。改一处必改另一处。
+        legend: { data: ["累计收益率(左·%)", "累计总盈亏(右·元)"], textStyle: { color: "#8b949e", fontSize: 11 }, top: 0 },
         tooltip: { ...ECH_BASE.tooltip, trigger: "axis", formatter: p => {
           const r = curve[p[0].dataIndex];
           return `<b>${r.date}</b><br>累计收益: <b style="color:${pnlColor(r.pct_total ?? r.pct)}">`
@@ -956,11 +969,13 @@ function renderTradeHistory(d) {
             axisLabel: { color: "#8b949e", fontSize: 10, formatter: v => (v >= 0 ? "+" : "") + fmt(v, 0) } },
         ],
         series: [
-          { name: "累计收益率(左)", type: "line", yAxisIndex: 0, smooth: true, symbolSize: 3,
+          { name: "累计收益率(左·%)", type: "line", yAxisIndex: 0, smooth: true, symbolSize: 3,
             data: curve.map(x => x.pct_total ?? x.pct), lineStyle: { color: "#8ad4ff", width: 2 }, itemStyle: { color: "#8ad4ff" },
             markLine: { silent: true, symbol: "none", lineStyle: { color: "#8b949e", type: "dashed" },
               data: [{ yAxis: 0 }] } },
-          { name: "累计盈亏(右)", type: "line", yAxisIndex: 1, smooth: true, symbol: "none",
+          // 黄色虚线 = 右轴(元)的**累计总盈亏（含浮动）**。颜色 #d29922（琥珀）刻意与蓝线拉
+          // 开色相：蓝=比例、黄=金额，两个口径别混读（详见上方注释块与「历史 bug」）。
+          { name: "累计总盈亏(右·元)", type: "line", yAxisIndex: 1, smooth: true, symbol: "none",
             data: curve.map(x => x.cum_total ?? x.cum_realized), lineStyle: { color: "rgba(210,153,34,.8)", width: 1, type: "dashed" },
             itemStyle: { color: "#d29922" } },
         ],
