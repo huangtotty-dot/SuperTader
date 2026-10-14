@@ -184,6 +184,19 @@
       </div>
       <div id="liveBody"><div class="empty">非今日日期或尚无盘中数据</div></div>
     </div>
+    <div class="section" id="market-beacon">
+      <!-- ⚠️ **必须是独立 section、不能长在 `#liveBody` 里**（2026-10-13 实测教训）：
+           `refreshLive` 每 10s 整体覆写 `#liveBody` ⇒ 卡片连同 23 个板块表每 10s 被销毁重建
+           ⇒ 用户点开板块后**一直跳闪**。与 `#indexBoardWrap` 同一处置（那边注释已写明）。
+           本板自带调度（`_scheduleBeacon`），不依赖任何轮询去驱动它。 -->
+      <h2>🧭 市场风向标
+        <span class="cell-dim" style="font-weight:normal;font-size:12px">人气概念板块（按板块均分降序，与「选股猎手」板块表同口径）× 代表公司（龙头 + 中军）· 列沿用「建仓信号扫描」</span>
+      </h2>
+      <div class="cell-dim" style="font-size:11px;line-height:1.8;margin-bottom:8px;padding:5px 9px;background:rgba(210,153,34,.12);border-left:3px solid #d29922">
+        ⚠️ <b>描述性看盘，无前瞻信息量</b> —— 实测「龙头/中军」对后续收益<b>无区分度</b>（977 池 × 2009 日、行业口径、同板块同日配对、按日聚类 t、分半窗符号翻转；涨幅头名 vs 杂毛 H=5 仅 −0.021pp t=−0.40，<b>成交额头名反而 −0.302pp t=−5.7</b>）。本面板只回答「<b>今天的钱在哪个板块、谁在场</b>」，<b>不要当买卖依据</b>。
+      </div>
+      <div id="beaconBody"><div class="empty">加载中…</div></div>
+    </div>
     <div class="section" id="position-builder">
       <h2>建仓信号扫描
         <span style="display:inline-flex;align-items:center;gap:6px;margin-left:12px;font-weight:400;font-size:12px">
@@ -195,7 +208,7 @@
           <label class="cell-dim" style="font-size:12px">扫描日期</label>
           <input type="date" id="pbScanDate" class="mini-input" style="width:140px"
                  title="选择任意历史交易日 → 点『扫描该日』按该日重放建仓扫描（日线口径、无未来函数）">
-          <button class="mini-btn primary" onclick="recomputePB()" title="按左侧所选日期重放建仓扫描+加仓观察（日线口径）">🔄 扫描该日</button>
+          <button class="mini-btn primary" onclick="recomputePB()" title="按左侧所选日期重放建仓扫描（日线口径）">🔄 扫描该日</button>
         </span>
         <select id="pbPoolFilter" class="mini-btn" style="margin-left:8px;font-size:11px"
                 onchange="setPoolFilter(this.value)" title="P3-2 池分管：manual=人工池 / auto=自动盘池">
@@ -207,12 +220,6 @@
                 title="只重新拉取最新行情/状态并就地重绘（秒级），不动所选日期；要按所选日期重放请用左侧「🔄 扫描该日」（日线口径，1~2 分钟）">🔄 刷新</button>
       </h2>
       <div id="pbBody"></div>
-    </div>
-    <div class="section" id="add-watch">
-      <h2>加仓观察（回踩支撑）
-        <button class="mini-btn recompute-pb-btn" onclick="recomputePB()" title="按『建仓信号扫描』左侧所选日期重放该日扫描+加仓观察">🔄 扫描该日</button>
-      </h2>
-      <div id="addWatchBody"></div>
     </div>
   </div>
 
@@ -356,23 +363,6 @@
         <button class="mini-btn primary" onclick="addAutoStock()">+ 添加</button>
       </div>
       <div id="asResult" class="cell-dim" style="margin-top:6px"></div>
-    </div>
-    <div class="section">
-      <h2>手动建仓/加仓（引擎做T衔接）
-        <span class="cell-dim" style="font-size:12px;font-weight:normal">人工确认后引擎跳过确认闸 · 重启掘金策略后自动建仓并开始做T（仅限 auto 池内）</span>
-      </h2>
-      <div style="display:inline-flex;align-items:center;gap:6px;font-size:12px">
-        <select id="abCode" class="mini-btn" style="width:170px;font-size:11px" onchange="onAbCodeChange()"></select>
-        <input type="text" id="abQty" class="mini-input" placeholder="数量(100整数倍)" style="width:130px">
-        <select id="abAction" class="mini-btn" style="width:90px;font-size:11px">
-          <option value="build">建仓</option>
-          <option value="add">加仓</option>
-        </select>
-        <button class="mini-btn primary" onclick="manualAutoBuild()">确认并武装</button>
-        <button class="mini-btn" onclick="clearAutoBuild()" title="撤销武装标记">清除标记</button>
-      </div>
-      <div id="abInfo" class="cell-dim" style="margin-top:6px"></div>
-      <div id="abResult" class="cell-dim" style="margin-top:6px"></div>
     </div>
   </div>
 

@@ -18,7 +18,9 @@
 import json
 import os
 import sys
+import threading
 import time
+from collections import OrderedDict
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -244,12 +246,102 @@ def _norm_minutes(df):
     return df.reset_index(drop=True)
 
 
+# ── 分时帧解析缓存（2026-10-14）────────────────────────────────────────────
+# 为什么必须有：`load_minute_asof` 每次调用都要 **json.load 整个档 + 建 DataFrame +
+#   dropna/sort/dedup**。实测（600362.SH，`_d540` 档 2.38MB / 17689 行，热进程取 3 次最小值）：
+#     json.load 89.5ms + DataFrame 33.8ms + _norm_minutes 53.6ms ≈ 180ms/次；
+#   而 `load_structure(一只票)` 要调它 **4 次**（5min/30min × 取数前、取数后各一次）⇒ ~0.7s/只。
+#   再叠加 GUI 侧「仓位结构」预热池（2 线程 × ≤240 只/30min 槽位）⇒ GUI 进程 CPU 长期 ~45%，
+#   GIL 争抢拖住 pywebview 的**结果投递**（线程栈实测：3 个线程堵在 `evaluate_js` 的信号量上），
+#   用户可见症状就是**界面卡死**（见 doc/research 与本仓 GUI 卡死排查史）。
+# 契约：这些文件是**只读缓存**，两次写之间内容恒定 ⇒ 按 (路径, mtime_ns, size) 记忆化；
+#   写入侧改文件后键自然失效（`save_minute_history` 另有一条「没变就不写」的闸兜底）。
+_MIN_FRAME_CACHE: "OrderedDict" = OrderedDict()
+_MIN_FRAME_LOCK = threading.Lock()
+_MIN_FRAME_MAX_ROWS = 600_000        # 行数预算（≈24MB）—— 本机仅 4GB 内存，必须封顶
+_MIN_FRAME_MAX_ENTRIES = 128
+_MIN_FRAME_ROWS = 0
+
+
+def _norm_frame_cached(fp):
+    """读一个分时档 → 规范帧（带记忆化）。
+
+    ⚠️ 返回的是**缓存本体**，调用方**不得就地修改**（`load_minute_asof` 走 concat/sort，
+    产出的帧已与缓存脱钩，故那里安全）。异常/空 → 空 DataFrame（与 `_norm_minutes` 同契约）。
+    """
+    import pandas as pd
+    global _MIN_FRAME_ROWS
+    try:
+        st = os.stat(fp)
+        key = (str(fp), st.st_mtime_ns, st.st_size)
+    except OSError:
+        return pd.DataFrame()
+    with _MIN_FRAME_LOCK:
+        hit = _MIN_FRAME_CACHE.get(key)
+        if hit is not None:
+            _MIN_FRAME_CACHE.move_to_end(key)
+            return hit
+    rows = (_read_json(fp, {}) or {}).get("rows") or []
+    if not rows:
+        return pd.DataFrame()
+    try:
+        d = _norm_minutes(pd.DataFrame(rows))
+    except Exception:
+        return pd.DataFrame()
+    if d.empty:
+        return pd.DataFrame()
+    del rows
+    with _MIN_FRAME_LOCK:
+        # 同路径的旧版本先逐出（一轮写入只留最新版，别让废帧吃掉行数预算）
+        for k in [k for k in _MIN_FRAME_CACHE if k[0] == key[0] and k != key]:
+            _MIN_FRAME_ROWS -= int(_MIN_FRAME_CACHE[k].shape[0])
+            del _MIN_FRAME_CACHE[k]
+        _MIN_FRAME_CACHE[key] = d
+        _MIN_FRAME_ROWS += int(d.shape[0])
+        while _MIN_FRAME_CACHE and (len(_MIN_FRAME_CACHE) > _MIN_FRAME_MAX_ENTRIES
+                                    or _MIN_FRAME_ROWS > _MIN_FRAME_MAX_ROWS):
+            _, ev = _MIN_FRAME_CACHE.popitem(last=False)
+            _MIN_FRAME_ROWS -= int(ev.shape[0])
+    return d
+
+
+def _invalidate_path(fp):
+    """按**路径**逐出该档的解析缓存（写入侧用）。
+
+    ⚠️ 为什么要显式逐出、不能只靠 (mtime,size) 键：Windows 的文件时间戳粒度约 15.6ms，
+    同一 tick 内「等长改写两次」会得到**完全相同的键** ⇒ 缓存会回旧数据。`save_minute_history`
+    是本目录唯一写入口，落盘后调本函数即可根治。"""
+    global _MIN_FRAME_ROWS
+    key0 = str(fp)
+    with _MIN_FRAME_LOCK:
+        for k in [k for k in _MIN_FRAME_CACHE if k[0] == key0]:
+            _MIN_FRAME_ROWS -= int(_MIN_FRAME_CACHE[k].shape[0])
+            del _MIN_FRAME_CACHE[k]
+
+
+def invalidate_minute_cache(ts_code=None):
+    """丢弃解析缓存：`ts_code=None` 全清；给了就只清该码（`ts_code_freq...`）的档。"""
+    global _MIN_FRAME_ROWS
+    with _MIN_FRAME_LOCK:
+        if ts_code is None:
+            _MIN_FRAME_CACHE.clear()
+            _MIN_FRAME_ROWS = 0
+            return
+        pref = f"{ts_code}_"
+        for k in [k for k in _MIN_FRAME_CACHE if os.path.basename(k[0]).startswith(pref)]:
+            _MIN_FRAME_ROWS -= int(_MIN_FRAME_CACHE[k].shape[0])
+            del _MIN_FRAME_CACHE[k]
+
+
 def load_minute_asof(ts_code, freq, date_str=None, keep=None):
     """**零网络**：合并 plain（近月，新鲜）+ `_d540`（长历史）两档分钟缓存，按 time 去重后
     只留 `<= date_str`（当日 23:59:59）的根。date_str=None → 全量。空/缺 → 空 DataFrame。
 
     对应 `t_gui._min_bars_asof` 的 core 版：GUI 侧版本供「历史日 30min 判定」列用，
-    本函数供结构层/回放复用，避免 core→t_gui 反向依赖。"""
+    本函数供结构层/回放复用，避免 core→t_gui 反向依赖。
+
+    ⚠️ 2026-10-14：单档解析走 `_norm_frame_cached` 记忆化（见该函数上方注释——这是 GUI
+    卡死的主因之一）。返回帧经 concat/sort 重建，**与缓存脱钩**，调用方可安全就地改。"""
     import pandas as pd
     if not ts_code:
         return pd.DataFrame()
@@ -260,13 +352,7 @@ def load_minute_asof(ts_code, freq, date_str=None, keep=None):
         fp = _MINUTE_CACHE_DIR / name
         if not fp.exists():
             continue
-        rows = (_read_json(fp, {}) or {}).get("rows") or []
-        if not rows:
-            continue
-        try:
-            d = _norm_minutes(pd.DataFrame(rows))
-        except Exception:
-            continue
+        d = _norm_frame_cached(fp)      # 命中缓存时**不再 json.load**（那正是主成本）
         if not d.empty:
             frames.append(d)
     if not frames:
@@ -282,7 +368,9 @@ def load_minute_asof(ts_code, freq, date_str=None, keep=None):
 
 
 def save_minute_history(ts_code, freq, df, cap=920) -> bool:
-    """把分钟 df **并入** plain 档 `{ts_code}_{freq}.json`（按 time 去重、cap 截尾、原子写）。"""
+    """把分钟 df **并入** plain 档 `{ts_code}_{freq}.json`（按 time 去重、cap 截尾、原子写）。
+
+    返回 True=落盘、False=**没写成**（入参空 / 合并后内容与盘上一致 ⇒ 刻意跳过，见函数内注释）。"""
     import pandas as pd
     if df is None or getattr(df, "empty", True) or not ts_code:
         return False
@@ -304,12 +392,19 @@ def save_minute_history(ts_code, freq, df, cap=920) -> bool:
         rows = [by_time[k] for k in sorted(by_time)]
         if cap and len(rows) > cap:
             rows = rows[-cap:]
+        # 2026-10-14：**内容没变就不写**。原先无条件重写（`saved_at` 每次都是新值）⇒
+        #   文件 mtime 每轮都变 ⇒ 上游 `_norm_frame_cached` 的 (mtime,size) 键每轮失效、白解析，
+        #   且 240 只/槽位地刷盘。实测盘中 20 分钟内 **245 个 plain 档被改写而内容一根没多**
+        #   （数据源盘中只到上一交易日 ⇒ merge 进来全是已有时刻）。返回 False = 未写。
+        if rows == old_rows:
+            return False
         tmp = _MINUTE_CACHE_DIR / f".{ts_code}_{freq}.tmp"
         with open(tmp, "w", encoding="utf-8") as f:
             f.write(json.dumps({"date": datetime.now().strftime("%Y-%m-%d"),
                                 "saved_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                                 "rows": rows}, ensure_ascii=False))
         os.replace(tmp, fp)
+        _invalidate_path(fp)          # 显式逐出解析缓存（不赌文件时间戳粒度，见该函数注释）
         return True
     except Exception:
         return False

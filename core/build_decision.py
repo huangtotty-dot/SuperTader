@@ -125,6 +125,9 @@ def features_from_daily(df: pd.DataFrame, date_str: str) -> dict:
         "rsi": round(_rsi, 1),
         "ma5": round(ma5, 3),
         "above_ma5": bool(price > ma5),
+        # 2026-10-14：**纯新增**（不参与任何打分）—— GUI「20日线观察」列用。
+        # 得分里的 −70 扣分仍走 above_ma5（owner 决定保留），两者**刻意不联动**。
+        "above_ma20": bool(price > ma20),
         "ma20": round(ma20, 3), "ma60": round(ma60, 3),
         "vol_ratio20": _vol_ratio20,
         "dist_ma60": round(price / ma60 - 1, 4),

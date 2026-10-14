@@ -793,6 +793,30 @@ OWNERSHIP = Ownership(
     override_path=_ownership_path_fn(os.environ.get("SUPERTRADER_ROOT", r"E:\superTrader")),
 )
 
+def _safe_log(*a, **kw):
+    """**GBK 安全的 print** —— 日志永远不许中断交易。
+
+    ⚠️ 2026-10-14 真事故：`rt.log` 直接就是 `print`，而掘金终端控制台是 **GBK** ⇒ 策略里
+    任何一个 GBK 编不出的字符（实测 `−`(U+2212) / `⚠` / `⇒` / `⛔`）都会让 `print` **抛异常**。
+    而 `rt.log` 是在钩子体内被调用的 ⇒ **一行日志能把整个钩子打断**：
+    实测预筛那条日志行抛了 ⇒ `_STATE["candidates"]` 没被赋值 ⇒ **当日买侧完全不下单**。
+    ⇒ 兜底：编不出就按 replace 降级（打 `?`），仍然失败就整条吞掉。**绝不外泄异常。**
+    """
+    msg = " ".join(str(x) for x in a)
+    try:
+        print(msg, **kw)
+        return
+    except UnicodeEncodeError:
+        pass
+    except Exception:
+        return
+    try:
+        enc = getattr(sys.stdout, "encoding", None) or "gbk"
+        print(msg.encode(enc, "replace").decode(enc, "replace"), **kw)
+    except Exception:
+        pass
+
+
 SERVICES = GmServices(
     gm=_GmPrimitives(),
     sdk_call=_sdk_call,
@@ -814,7 +838,7 @@ OSC_RT = osc.Runtime(
     services=SERVICES,
     book_dir=_OSC_BOOK_DIR,
     is_live=lambda ctx: getattr(ctx, "mode", None) == MODE_LIVE,
-    log=print,
+    log=_safe_log,
 )
 
 

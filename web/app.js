@@ -244,14 +244,12 @@ async function loadAndRender(date, silent) {
     // 账户详细信息（统一源头）
     state.accountsDetail = (payload.accounts_detail) || {};
     renderAll(payload);
-    // 加仓观察冷启动补齐：后端首帧不阻塞算（联网慢），空则短轮询补齐
-    if (_awHasData(payload.add_watch)) { if (_awRetryTimer) { clearTimeout(_awRetryTimer); _awRetryTimer = null; } }
-    else loadAddWatch(payload.date || date, 0);
 
     // K1 KPI（manual 做T 已于 2026-09-14 下线）；2026-10-10 KPI 区块整体删除，不再渲染
     // 行情条 + 大盘趋势（静态，一次拉取）
     // 持仓日线体检（超买/顶背离）
     loadOBAnalysis();
+    loadMarketBeacon();          // 🧭 市场风向标（独立 section，自带调度）
     apiCall("load_quotes").then(q => updateSidebarSummary((q && q.quotes) || [])).catch(() => {});
     apiCall("load_position_manager").then(pm => renderPositionManager(pm || {})).catch(() => {});
     apiCall("load_market_score").then(ms => renderMarket(ms || {})).catch(() => {});
@@ -272,7 +270,6 @@ async function loadAndRender(date, silent) {
       stopLivePoll();
       stopSignalPoll();
       renderLive(null, false);       // 显示"非今日"
-      consoleBuf = []; consoleOffset = 0; consoleDate = null;
       refreshIndexDivergence();      // 全局背离条：非今日视图也反映实时告警
     }
     statusEl(`已加载 ${payload.date}${isToday ? " · 实时模式" : ""} · ${nowTime()}`, "ok");
@@ -306,25 +303,6 @@ function updateRefreshAlarm() {
   window._refreshAlarmWas = interrupted;
 }
 
-async function refreshConsole(reset) {
-  // 2026-09-02: console 独立 2s 增量刷新（从 refreshLive 解耦）。
-  // reset=true(切日期/首次) 才清空从头读；日期变化但未 reset → 自动按 reset 处理。
-  const date = state.date;
-  if (!date) return;
-  if (consoleDate && consoleDate !== date) reset = true;
-  try {
-    const since = reset ? 0 : consoleOffset;
-    const c = await apiCall("load_console", date, since);
-    if (reset) { consoleBuf = []; consoleOffset = 0; consoleDate = date; }
-    if (c.exists && c.lines && c.lines.length) {
-      consoleOffset = c.offset;
-      consoleDate = date;
-      const keyOnly = (document.getElementById("consoleKeyOnly") || {}).checked !== false;
-      appendConsole(c.lines, keyOnly);
-    }
-  } catch (e) {}
-}
-
 async function refreshLive(reset) {
   const date = state.date;
   if (!date) return;
@@ -350,6 +328,11 @@ async function refreshLive(reset) {
       }
       // 自动盘建仓扫描表同款（缓存了最近一次 payload 才刷，没打开过该页就不做无用功）
       if (window._autoLastPayload) renderAutoScan(applyQuotesToAuto(window._autoLastPayload));
+      // 持仓体检表「现价」列同款：OB 表 45~60s 才整体重拉，现价用 10s quotes 就地叠加
+      applyQuotesToOB();
+      // 风向标「价/涨幅」列：面板就绪后自身轮询降到 60s，挂在 10s live 轮询上才能 ~15s 刷新
+      // （内部有 tab 可见性 + 15s TTL + 单飞闸，不在该页/在飞中都是零成本）
+      loadBeaconQuotes();
       // 猎手展开页的实时价/涨幅：只刷**当前可见**的展开板块（TTL 15s 节流；
       // 猎手页没打开/没展开任何板块时是零成本 —— 别为看不见的东西出网）
       if (hunterOpenSectors.size && _hunterTabActive()) {
@@ -358,34 +341,6 @@ async function refreshLive(reset) {
     }).catch(() => {});
     // 2026-10-10: 「今日盘中 S」已下线，连带的 10s 重拉一并删除（跨日 S 是日频，改日期时拉一次即可）
 
-    // 加仓条件全满足检测（与飞书推送无关，纯 GUI 报警）
-    // 2026-10-10：后端 load_live 的 add_watch 首帧可能为空 {}（非阻塞算，见 load_add_watch），
-    // 空对象是真值 ⇒ 不能用 `||` 兜底，须显式判空后回退 payload。
-    const _awLive = live.add_watch || {};
-    const aw = _awHasData(_awLive) ? _awLive : ((state.payload && state.payload.add_watch) || {});
-    // fix P0-4: 满分告警需 box_boost（突破加成），或真实 met==total 且 not_applicable 为空（排除盘中占位改写）
-    const allMet = Object.entries(aw).filter(([code, v]) => {
-      if (code === "_progress" || !v) return false;
-      const conds = v.conditions || [];
-      const notApp = v.not_applicable || [];
-      const realFull = conds.length > 0 && (v.met_count || 0) >= conds.length && notApp.length === 0;
-      return v.box_boost === true || realFull;
-    });
-    if (allMet.length && !window._awAlerted) window._awAlerted = {};
-    allMet.forEach(([code, v]) => {
-      const key = date + "_" + code;
-      if (!window._awAlerted[key]) {
-        window._awAlerted[key] = true;
-        pushAlert({
-          scan_time: nowTime(), code, name: v.name, type: "加仓条件",
-          decision: "JIACANG_COND", composite_score: v.met_count * 25,
-          suggested_qty: null, suggested_price: null,
-        });
-      }
-    });
-
-    // console 由独立 2s 定时器(refreshConsole)刷新；reset=true(切日期/首次) 时从头读一次
-    if (reset) refreshConsole(true);
 
     // 建仓/加仓扫描表实时刷新（position_builder 盘中每5分钟有新数据）
     // fix P1-6: refresh_pb 成败纳入轮询告警计数
@@ -408,13 +363,227 @@ async function refreshLive(reset) {
   }
 }
 
+/* ================= 🧭 市场风向标（人气板块 × 龙头/中军） ================= */
+// ⚠️ **描述性看盘，无前瞻信息量** —— 依据见后端 `t_gui.load_market_beacon` 的 docstring：
+//    实测「龙头/中军」对后续收益**无区分度**（977 池 × 2009 日、行业口径、同板块同日配对、
+//    按日聚类 t、分半窗符号翻转；涨幅头名 vs 杂毛 H=5 仅 −0.021pp t=−0.40，成交额头名反而
+//    −0.302pp t=−5.7）。本面板只回答「今天钱在哪个板块、谁在场」，**不是买卖依据**。
+//
+// 列沿用「建仓信号扫描」那套（判定/得分/通过/日线阶段/20日线观察/价涨幅/技术标签/时机条件/
+// 30min判定/仓位结构/30m MA5/依据），另加「梯队」。**刻意不含「池」与「扫描」两列**：
+// 本面板不是扫描产物 —— 没有池归属、也没有 scan_time（后端返回里就没有这两个字段）。
+let _beacon = { ts: 0, data: null, inflight: false };
+const _beaconOpen = new Set();   // 已展开的板块下标 —— **必须跨重渲染保持**：未齐时每 3s 重渲染一次，否则展开会被收回
+const BEACON_TTL_MS = 60000;      // 后端一次 ~5s（88 只 × 日线缓存 + 标签批算）⇒ 不能跟 10s 轮询同频
+const BEACON_TTL_PENDING_MS = 3000;  // 未齐（重列/标签还在补）时短轮询，见 _beaconReady
+let _beaconQ = { cache: {}, last: 0, inflight: false };
+const BEACON_Q_TTL_MS = 15000;
+
+/* 面板是否"已经齐了"：重列算完 **且** 每行都拿到标签、30min 判定与结构层都不在 pending。
+   没齐就短轮询 —— 后端是 SWR（首帧只给轻列），实测 t+8s 出判定、t+12s 出标签。
+   ⚠️ 别用固定 60s TTL：那会让首帧的空壳**钉住整整一分钟**（本仓"标签一会儿有一会儿无"同源）。
+   2026-10-13：纳入 m30_verdict/structure —— 原来只看 tags，标签一到就掉 60s 轮询，
+   「30min 判定/仓位结构」列要在预热完成后多等至多 60s 才显示。 */
+function _beaconReady(d) {
+  if (!d || d.available === false) return true;
+  if (d.pending || d.enrich_pending) return false;
+  const rows = (d.sectors || []).reduce((a, s) => a.concat(s.rows || []), []);
+  return rows.length > 0 && rows.every(r => (r.tags || []).length > 0
+    && r.m30_verdict && r.m30_verdict.level && r.m30_verdict.level !== "pending"
+    && r.structure && !r.structure.pending);
+}
+
+/* 自带调度：本面板**不依赖任何轮询去驱动**（原来长在 #liveBody 里，被 10s 重渲染拖着走）。
+   齐了就 60s 一次，没齐 3s 一次。 */
+let _beaconTimer = null;
+function _scheduleBeacon() {
+  if (_beaconTimer) clearTimeout(_beaconTimer);
+  const ttl = _beaconReady(_beacon.data) ? BEACON_TTL_MS : BEACON_TTL_PENDING_MS;
+  _beaconTimer = setTimeout(() => loadMarketBeacon(true), ttl);
+}
+
+async function loadMarketBeacon(force) {
+  const el = document.getElementById("beaconBody");
+  if (!el) return;
+  const now = Date.now();
+  const ttl = _beaconReady(_beacon.data) ? BEACON_TTL_MS : BEACON_TTL_PENDING_MS;
+  if (!force && _beacon.data && (now - _beacon.ts) < ttl) {
+    renderMarketBeacon(_beacon.data);         // TTL 内复用（会走"没变就不重建"的闸）
+    _scheduleBeacon();
+    return;
+  }
+  if (_beacon.inflight) return;
+  _beacon.inflight = true;
+  try {
+    const d = await apiCall("load_market_beacon");
+    _beacon = { ts: Date.now(), data: d || {}, inflight: false };
+    renderMarketBeacon(d || {});
+  } catch (e) {
+    _beacon.inflight = false;
+    // ⚠️ 这里原来写的是 `if (!_beacon.data)` —— 而 data 在 renderMarketBeacon **之前**就赋了值
+    //    ⇒ 一旦渲染抛异常，异常被吞、界面永远停在"加载中…"、**一条线索都不留**。
+    //    改成：没数据报错，有数据但渲染又炸则单独标出来（两种都要看得见）。
+    const why = (e && e.message) ? e.message : String(e);
+    el.innerHTML = `<div class="empty">${_beacon.data ? "风向标渲染失败" : "风向标加载失败"}：${esc(why)}</div>`;
+    console.error("[风向标]", e);
+  } finally {
+    _scheduleBeacon();
+  }
+}
+
+function beaconRowHtml(s) {
+  const _sc = (s.build_score != null) ? s.build_score : null;
+  const _ceil = (s.build_ceiling != null) ? s.build_ceiling : 100;
+  const _reach = (s.build_reachable != null) ? s.build_reachable : true;
+  const scoreTxt = _sc == null ? '<span class="cell-dim">—</span>'
+    : (_reach ? `<b>${_sc}</b>` : `<b>${_sc}</b><span class="cell-dim" style="font-size:10px">/${_ceil}🔒</span>`);
+  const _cd = s.build_conds || {};
+  const _met = (s.build_met != null) ? `${s.build_met}/3` : "—";
+  const condTxt = ["t_regime", "t_trend", "t_drawdown"].map(k =>
+    _cd[k] === undefined ? '<span class="cell-dim">·</span>'
+      : (_cd[k] ? '<span class="on">●</span>' : '<span class="off">○</span>')).join("")
+    + (_cd.t_veto === false
+      ? `<span title="否决因子触发：${esc((s.build_veto || []).join("、") || "爆量/偏离MA60")}">🚫</span>`
+      : '<span class="cell-dim" title="否决因子未触发">·</span>');
+  const tagsTxt = (s.tags && s.tags.length)
+    ? s.tags.map(t => tagBadge(t)).join(" ")
+    : '<span class="cell-dim" style="font-size:10px" title="技术标签后台批算，约 10~20s 自填">⏳ 标签</span>';
+  const _mv = s.m30_verdict || {};
+  const _MVCLS = { high: "badge signal", watch: "badge approach", bull: "badge bear" };
+  const m30Txt = !_mv.level || _mv.level === "pending"
+    ? '<span class="cell-dim" title="30min 判定后台计算中">⏳</span>'
+    : `<span class="${_MVCLS[_mv.level] || "cell-dim"}" title="${esc(_mv.reason || "")}">${esc(_mv.label || _mv.level)}</span>`;
+  const _rowBg = tierRowStyle(s.tier)
+    || ((_sc === 0) ? "background:rgba(248,81,73,.12);"
+      : (_sc !== null && _sc > 0) ? "background:rgba(63,185,80,.07);" : "");
+  return `<tr class="h-expand-row" style="${_rowBg}" ondblclick="openStockChart('${esc(s.code)}','${esc(s.name)}')">
+    <td>${esc(s.name)} <span class="mono cell-dim">${esc(s.code)}</span></td>
+    <td style="text-align:center">${tierBadge(s.tier)}</td>
+    <td>${verdictBadge(s.build_verdict)}</td>
+    <td class="num">${scoreTxt}</td>
+    <td class="num">${_met}</td>
+    ${dayStageCellHtml(s.structure)}
+    ${ma20FlagCellHtml(s.build_above_ma20)}
+    <td class="num h-price" data-hcode="${esc(s.code)}" title="实时价/涨幅（10s 刷新）；未取到显示 ⏳ 而不是 0.00%">${hunterPriceHtml(null)}</td>
+    <td class="h-tags" style="max-width:200px;line-height:1.7">${tagsTxt}</td>
+    <td class="cond" title="${esc(s.build_reason || "")}">${condTxt}</td>
+    <td style="text-align:center" title="${esc(_mv.reason || "")}">${m30Txt}</td>
+    ${structCellHtml(s.structure)}
+    ${ma5CellHtml(s.structure)}
+    <td class="cell-dim" style="max-width:240px;font-size:11px">${esc(s.build_reason || "—")}</td>
+  </tr>`;
+}
+
+let _beaconEl = null, _beaconSig = null;
+function renderMarketBeacon(d) {
+  const el = document.getElementById("beaconBody");
+  if (!el) return;
+  // ⚠️ **没变就不重建**：3s 轮询下每次都重建 23 张卡 + 332 行表 ⇒ 即使折叠着也看得见跳闪。
+  //    容器换过（页面上别处重渲染过）则必须重建 —— 所以签名要和**元素身份**一起判。
+  const sig = [d && d.date, d && d.pending ? "P" : "", d && d.enrich_pending ? "E" : "",
+               ((d && d.sectors) || []).length, JSON.stringify(d || {}).length].join("|");
+  if (el === _beaconEl && sig === _beaconSig) return;
+  _beaconEl = el; _beaconSig = sig;
+  if (!d || d.available === false) {
+    el.innerHTML = `<div class="empty">${esc((d && d.error) || "无数据")}</div>`;
+    return;
+  }
+  if (d.pending) {                     // 骨架还没算完（后台，实测 ~6s）
+    el.innerHTML = '<div class="empty">板块骨架计算中…（全部板块要读全池日线缓存，约 6 秒；算完自动填）</div>';
+    return;
+  }
+  const secs = d.sectors || [];
+  if (!secs.length) { el.innerHTML = '<div class="empty">当日无「有分层」的人气板块</div>'; return; }
+  const total = secs.reduce((a, s) => a + (s.rows || []).length, 0);
+  const head = `<thead><tr>
+    <th>股票</th><th>梯队</th><th>判定</th><th class="num">得分</th><th class="num">通过</th>
+    <th>日线阶段</th><th title="是否站上 20 日线（观察列，不驱动判定）。⚠️ 得分里的 −70 扣分走的是 5 日线口径，与本列无关 ⇒ 本列不显示 −70">20日线<br><span style="font-size:9px;opacity:.6">观察</span></th><th class="num">价<br><span style="font-size:9px;opacity:.6">涨幅</span></th>
+    <th>技术标签</th><th>时机条件</th><th>30min判定</th><th>仓位结构</th><th>30m MA5<br><span style="font-size:9px;opacity:.6">仅展示</span></th><th>依据</th>
+  </tr></thead>`;
+  // 板块名自带信息：龙头名字直接写在标题行 ⇒ **不展开也能一眼看到"谁在场"**
+  el.innerHTML = `
+    <div style="display:flex;align-items:center;gap:8px;margin:2px 0 8px;flex-wrap:wrap">
+      <button class="mini-btn" onclick="beaconToggleAll(true)">全部展开</button>
+      <button class="mini-btn" onclick="beaconToggleAll(false)">全部收起</button>
+      <span class="cell-dim">共 <b>${secs.length}</b> 个板块 · <b>${total}</b> 只代表股（默认收起，点板块名展开）</span>
+    </div>` + secs.map((sec, i) => {
+    const leads = (sec.rows || []).filter(r => r.tier === "龙头").map(r => r.name);
+    const mids = (sec.rows || []).filter(r => r.tier === "中军").length;
+    return `<div class="card" style="margin-bottom:6px;overflow-x:hidden">
+      <div class="card-title" style="cursor:pointer;padding:6px 10px;border-left:5px solid #f85149;background:rgba(248,81,73,.06)"
+           onclick="beaconToggle(${i})" title="点击展开/收起该板块明细">
+        <span class="bk-arrow" id="beaconArrow_${i}" style="display:inline-block;width:14px;color:var(--text-dim)">${_beaconOpen.has(i) ? "▾" : "▸"}</span>
+        <b style="font-size:17px;letter-spacing:.5px;color:#ff9d95">${esc(sec.name)}</b>
+        <span class="cell-dim" style="font-weight:normal;font-size:11px;margin-left:6px">均分 <b>${fmt(sec.avg, 2)}</b> · 涨停 <b>${fmt(sec.limitup, 0)}</b> · 成分 ${fmt(sec.members, 0)} 只 · 代表 ${sec.rows.length} 只</span>
+        <span class="cell-dim" style="font-weight:normal;font-size:11px;margin-left:8px">
+          ${leads.length ? `龙头 <b style="color:#ff9d95">${esc(leads.join("/"))}</b>` : '<span title="该板块当日无最强一档（不硬凑）">无龙头</span>'}
+          ${mids ? ` · 中军 ${mids} 只` : ""}
+        </span>
+      </div>
+      <div id="beaconSec_${i}" style="display:${_beaconOpen.has(i) ? "" : "none"};overflow-x:auto">
+        <table class="h-table">${head}<tbody>${sec.rows.map(beaconRowHtml).join("")}</tbody></table>
+      </div>
+    </div>`;
+  }).join("");
+  loadBeaconQuotes();
+}
+
+/* 板块折叠：默认**全部收起** —— 全部板块有 20+ 个、300+ 行，默认展开就是一堵墙。 */
+function beaconToggle(i, force) {
+  const box = document.getElementById(`beaconSec_${i}`);
+  const arw = document.getElementById(`beaconArrow_${i}`);
+  if (!box) return;
+  const show = (force === undefined) ? (box.style.display === "none") : !!force;
+  box.style.display = show ? "" : "none";
+  if (arw) arw.textContent = show ? "▾" : "▸";
+  if (show) _beaconOpen.add(Number(i)); else _beaconOpen.delete(Number(i));
+}
+
+function beaconToggleAll(open) {
+  document.querySelectorAll("#beaconBody [id^='beaconSec_']").forEach(b => {
+    beaconToggle(b.id.replace("beaconSec_", ""), open);
+  });
+}
+
+/* 实时价：与猎手同款（单飞 + TTL + **非空才认**，避免冷启动回空把 TTL 刷掉导致整列干等）。 */
+async function loadBeaconQuotes(force) {
+  if (_beaconQ.inflight) return;
+  const now = Date.now();
+  if (!force && now - _beaconQ.last < BEACON_Q_TTL_MS) { _applyBeaconQuotes(); return; }
+  if (!_tabActive("tab-signals")) return;     // 看不见就不出网（⚠️ 风向标在 tab-signals 里；
+                                              // 原来写成 "tab-live"——**根本不存在这个页面 id**，
+                                              // 恒 false ⇒ 价/涨幅列永远 ⏳，2026-10-13 修）
+  const tds = document.querySelectorAll("#beaconBody td.h-price[data-hcode]");
+  if (!tds.length) return;
+  const codes = Array.from(tds).map(td => td.getAttribute("data-hcode"));
+  _beaconQ.inflight = true;
+  try {
+    const r = await apiCall("load_quotes_for", codes);
+    const qm = (r && r.quotes) || {};
+    if (Object.keys(qm).length) { Object.assign(_beaconQ.cache, qm); _beaconQ.last = Date.now(); }
+    _applyBeaconQuotes();
+  } catch (e) { /* 静默：拿不到就保持 ⏳，不刷成 — */ }
+  finally { _beaconQ.inflight = false; }
+}
+
+function _applyBeaconQuotes() {
+  document.querySelectorAll("#beaconBody td.h-price[data-hcode]").forEach(td => {
+    const q = _beaconQ.cache[td.getAttribute("data-hcode")];
+    if (q) td.innerHTML = hunterPriceHtml(q);
+  });
+}
+
+function _tabActive(id) {
+  const p = document.getElementById(id);
+  return !!(p && p.classList && p.classList.contains("active"));
+}
+
 /* ================= 各区块渲染 ================= */
 function renderAll(p, tradePnl) {
   // 2026-10-10: KPI 日快照 / 各股信号数 / K4 胜率 区块已按 owner 需求删除。
   // 2026-10-10: 「shadow 近阈 · 仓控与推送」整块按 owner 需求删除（renderShadow 已移除）。
   // 2026-08-23: 持仓对照/盘中结算/系统看板已从"每日复盘"tab移除
   renderPB(p.position_builder);
-  renderAddWatch(p.add_watch);
   // P4-3: 概览页自动盘持仓卡片 + 全页 KILL_SWITCH 横幅
   loadAutoStatus();
 }
@@ -424,10 +593,21 @@ const echarts = window.echarts;
 const echInstances = {};
 function echRender(id, opt) {
   if (!echarts) return;
+  const el = document.getElementById(id);
+  if (!el) return;
   let inst = echInstances[id];
+  // ⚠️ 2026-10-13：容器被 `innerHTML` 重建后，缓存实例仍绑在**已脱离文档的旧节点**上；
+  //   再 setOption 只会画进那个看不见的节点 ⇒ 界面留白。
+  //   实测症状：交割单台账「逐股盈亏」图**先显示再消失** —— `renderTradeHistory` 每次都
+  //   先 `thBars.innerHTML = ""` 重建容器（598 行），而容器 id 是按下标生成的
+  //   (`echThBar_0/1`)，第二次渲染 id 不变 ⇒ 命中陈旧实例。
+  //   修法：实例的 DOM 与当前节点不一致 ⇒ 弃掉重建（不 dispose 会同时泄漏旧的 canvas）。
+  if (inst && typeof inst.getDom === "function" && inst.getDom() !== el) {
+    try { inst.dispose(); } catch (e) { /* 已销毁，忽略 */ }
+    inst = null;
+    delete echInstances[id];
+  }
   if (!inst) {
-    const el = document.getElementById(id);
-    if (!el) return;
     // 不可见时也 init（ECharts 容错零宽），切换 tab 时 resize
     inst = echarts.init(el);
     echInstances[id] = inst;
@@ -1107,21 +1287,13 @@ function renderLive(live, isToday) {
       </div>
       ${trendCards || '<div class="empty">无趋势状态</div>'}
     </div>
-    <div class="card" style="margin-top:12px">
-      <div class="console-toggle">
-        <span>实时 Console</span>
-        <label><input type="checkbox" id="consoleKeyOnly" checked> 仅关键行</label>
-        <span class="console-meta" id="consoleMeta"></span>
-      </div>
-      <div class="console-box" id="consoleBox"></div>
     </div>`;
 
   // 近60日成交额柱状图（容器刚随 innerHTML 重建 → 内部会 dispose 旧实例再 init）
   drawTurnoverHist();
 
-  // 绑定 console 过滤切换
-  const keyOnly = document.getElementById("consoleKeyOnly");
-  if (keyOnly) keyOnly.addEventListener("change", () => reflowConsole());
+  // 🧭 市场风向标已**搬出** #liveBody（独立 section，自带调度）—— 原来长在这里，
+  //   被 refreshLive 每 10s 整体覆写 ⇒ 点开板块后一直跳闪（2026-10-13 实测）。
 
   // 概览仪表盘简版
   const prev = document.getElementById("livePreview");
@@ -1199,10 +1371,10 @@ function pushAlert(s) {
   item.className = "alert-item";
   // 建仓/加仓信号：s.type ∈ {"建仓","加仓"}，用 score=composite_score；盘中信号用 decision
   let icon, label, scoreTxt, extraTxt, alertKind;
-  if (s.type === "建仓" || s.type === "加仓" || s.type === "加仓条件") {
-    icon = s.type === "建仓" ? "🔵" : s.type === "加仓条件" ? "✅" : "🟡";
+  if (s.type === "建仓" || s.type === "加仓") {
+    icon = s.type === "建仓" ? "🔵" : "🟡";
     label = s.type;
-    alertKind = s.type === "建仓" ? "JIANCANG" : s.type === "加仓条件" ? "JIACANG" : "JIACANG";
+    alertKind = "JIACANG";
     scoreTxt = `${fmt(s.composite_score, 0)}分`;
     extraTxt = s.suggested_qty ? ` 建议 ${fmt(s.suggested_qty, 0)}股@${fmt(s.suggested_price, 3)}` : "";
   } else {
@@ -1261,46 +1433,6 @@ async function pollSignals() {
       p.signals.forEach(pushAlert);
     }
   } catch (e) { /* 静默 */ }
-}
-
-let consoleBuf = [];     // 全量行缓存
-let consoleOffset = 0;
-let consoleDate = null;
-
-function appendConsole(rows, isKeyOnly) {
-  consoleBuf.push(...rows);
-  // 只保留最近 1000 行防内存
-  if (consoleBuf.length > 1000) consoleBuf = consoleBuf.slice(-1000);
-  reflowConsole(isKeyOnly);
-}
-
-function reflowConsole(isKeyOnly) {
-  const box = document.getElementById("consoleBox");
-  if (!box) return;
-  const keyOnly = isKeyOnly !== undefined ? isKeyOnly
-    : (document.getElementById("consoleKeyOnly") || {}).checked;
-  const meta = document.getElementById("consoleMeta");
-  let shown = consoleBuf;
-  if (keyOnly) shown = shown.filter(l => l.key);
-  if (meta) meta.textContent = `显示 ${shown.length}/${consoleBuf.length} 行`;
-  const auto = box.scrollTop + box.clientHeight >= box.scrollHeight - 40;
-
-  // 卡片流：时间左列 + 级别芯片 + 消息内容，关键行左色条
-  box.innerHTML = shown.map(l => {
-    const lv = l.level || "";
-    const lvCls = lv === "ERROR" ? "clv-err" : lv === "WARNING" ? "clv-warn" : "";
-    const keyCls = l.key ? "con-key" : "con-noise";
-    // 截断长消息（>120字符），hover 展开
-    const msgText = l.msg || "";
-    const truncated = msgText.length > 120;
-    const displayMsg = truncated ? msgText.slice(0, 120) + "…" : msgText;
-    return `<div class="con-line ${keyCls} ${lvCls}">
-      <span class="con-time">${esc(l.t)}</span>
-      ${lv ? `<span class="con-lv ${lvCls}">${esc(lv)}</span>` : ""}
-      <span class="con-msg"${truncated ? ` title="${esc(msgText)}"` : ""}>${esc(displayMsg)}</span>
-    </div>`;
-  }).join("");
-  if (auto) box.scrollTop = box.scrollHeight;
 }
 
 /* ---- ② 图表 ---- */
@@ -1576,14 +1708,20 @@ function pctHtml(v, tip) {
    便于看"被砍到 0 的那批票后来怎么样"——它是决定是否保留该扣分的观察依据。
    ⚠️ 实测（977只×2265日）「站上MA5」的横截面 IC 为**负**（−0.018, t=−6.9，两半窗一致），
    即被扣分的那批（未站上）后续反而略好。扣分按 owner 决定**暂不修改**。 */
-const MA5_PENALTY_TIP = "是否站上 5 日线——「得分」中 −70 悬崖扣分的触发标志（未站上 → 扣 70 分，多数落到 0）。"
-  + "⚠️ 实测横截面 IC 为负（站上MA5 −0.018, t=−6.9，两半窗一致）：被扣分的这批后续反而略好。"
-  + "保留与否待观察后再定。依据 doc/research/2026-10-11_日线四阶段_得分区分度实验.md";
-function ma5FlagCellHtml(v, missingTip) {
-  if (v === true) return `<td style="text-align:center" title="${esc("站上 5 日线（不触发扣分）。" + MA5_PENALTY_TIP)}"><span class="cell-dim">站上</span></td>`;
-  if (v === false) return `<td style="text-align:center" title="${esc("未站上 5 日线 → 得分扣 70。" + MA5_PENALTY_TIP)}"><b class="down">破位</b><div class="cell-dim" style="font-size:10px">−70</div></td>`;
+/* 【20日线观察】（2026-10-14 owner：由「5日线观察」改口径）。
+   ⚠️ **刻意不显示 −70**：得分里那个 −70 悬崖扣分走的是 **5 日线**（owner 决定保留），
+   与本列看的 20 日线**不是同一条线** —— 挂在一起就是误导。 */
+const MA20_OBS_TIP = "是否站上 20 日线。**观察列，不驱动任何判定**。"
+  + "⚠️ 「得分」里那个 −70 悬崖扣分走的是 **5 日线**口径（owner 决定保留），与本列无关，故本列不显示 −70。";
+/* `detail`（可选，2026-10-14）：把 MA20 具体数值等明细挂到**所有**分支的 tooltip 尾部。
+   持仓体检列要显示 MA20 现值；建仓表/猎手表不传 → 行为与原来完全一致。 */
+function ma20FlagCellHtml(v, missingTip, detail) {
+  const _d = detail ? "　" + detail + "。" : "";
+  if (v === true) return `<td style="text-align:center" title="${esc("站上 20 日线。" + _d + MA20_OBS_TIP)}"><span class="cell-dim">站上</span></td>`;
+  if (v === false) return `<td style="text-align:center" title="${esc("未站上 20 日线。" + _d + MA20_OBS_TIP)}"><b class="down">破位</b></td>`;
   return `<td style="text-align:center" title="${esc(missingTip || "无该特征（旧数据/未扫描）")}"><span class="cell-dim">—</span></td>`;
 }
+
 
 /* 板块内 龙头/中军/杂毛（2026-10-11，owner 需求）：**描述性方位标签**，不是信号。
    规则：龙头=板块内当日涨幅第1；中军=其余成交额前3（资金核心）；杂毛=其余；板块<8只不标。
@@ -1645,6 +1783,20 @@ function applyQuotesToAuto(d) {
     r.change_pct = q.pct;
   });
   return d;
+}
+
+/* 持仓体检表「现价」列的 10s 级 DOM 叠加（2026-10-13）：OB 表自身 45~60s 才整体重拉一次，
+   现价原先冻结到手动「🔄 刷新」。数据本来就在 `state.quotes`（10s live 轮询顺手拉的），
+   直接 patching 单元格，零后端成本。单元格由 renderOB 打 data-obcode 标记。 */
+function applyQuotesToOB() {
+  const qs = state.quotes || [];
+  if (!qs.length) return;
+  const pxMap = {};
+  qs.forEach(x => { if (x.price != null) pxMap[x.code] = x.price; });
+  document.querySelectorAll("#obBody td[data-obcode]").forEach(td => {
+    const px = pxMap[String(td.getAttribute("data-obcode") || "").split("_")[0]];
+    if (px != null) td.textContent = fmt(px, 2);
+  });
 }
 
 function renderPB(pb) {
@@ -1817,7 +1969,7 @@ function renderPB(pb) {
         <td class="num" title="${esc(scoreCellTitle)}">${scoreCellHtml}</td>
         <td class="num ${metCls}"><b>${isNoData ? "—" : metCount + "/3"}</b></td>
         ${dayStageCellHtml(r.structure)}
-        ${ma5FlagCellHtml((r.timing_features || {}).above_ma5)}
+        ${ma20FlagCellHtml((r.timing_features || {}).above_ma20)}
         <td class="num">${fmt(r.price)}<div style="font-size:10px">${pctHtml(r.change_pct, "实时涨幅（随行情每 10s 刷新）")}</div></td>
         <td style="text-align:center">${boxStr}</td>
         <td style="max-width:220px;line-height:1.7">${tagsTxt}</td>
@@ -1853,7 +2005,7 @@ function renderPB(pb) {
         <thead><tr>
           <th>股票</th><th title="P3-2 池分管：人工=manual侧扫描 / 自动=auto侧管理">池</th><th>判定</th><th class="num">得分</th><th class="num">通过</th>
           <th title="日线四阶段（描述状态，紧挨得分便于对照）：②抬升/③派发/④下跌/①蓄势。⚠️ 实测横截面IC与直觉相反——抬升/追高前瞻更差(IC −0.031~−0.042, t=−12~−15)、下跌/超跌前瞻更好(IC +0.020~+0.034, t=+7~+12)，分半窗两段同号；效应量小(IC≈0.04)仅作相对强弱参照">日线阶段</th>
-          <th title="是否站上 5 日线——「得分」−70 扣分的触发标志（观察用）。⚠️ 实测该项横截面IC为负(站上MA5 −0.018, t=−6.9)：被扣的这批后续反而略好；扣分保留与否待观察">5日线<br><span style="font-size:9px;opacity:.6">观察</span></th>
+          <th title="是否站上 20 日线（观察列，不驱动任何判定）。⚠️「得分」里的 −70 悬崖扣分走的是 **5 日线**口径（owner 决定保留），与本列无关 ⇒ 本列不显示 −70。另注：5 日线该项实测横截面 IC 为负(站上MA5 −0.018, t=−6.9)">20日线<br><span style="font-size:9px;opacity:.6">观察</span></th>
           <th class="num" title="实时价 + 实时涨幅（随行情每 10s 刷新）。取不到显示 — 而不是 0.00%：不把「无数据」画成「平盘」">价<br><span style="font-size:9px;opacity:.6">涨幅</span></th>
           <th title="突破箱体=第一优先级">突破</th>
           <th title="通道/箱体/背离等技术形态（此列的顶/底背离是**日线**口径，与右侧『30min判定』的 30 分钟口径不同源）">技术标签</th>
@@ -2292,7 +2444,6 @@ async function removeAutoStock(code) {
     const r = await apiCall("remove_auto_stock", code);
     if (r && r.ok) {
       loadAutoScan();
-      loadAutoBuildOptions();
     } else {
       statusEl("删除失败: " + ((r && r.error) || "未知"), "err");
     }
@@ -2306,7 +2457,6 @@ async function recomputeAutoScan() {
     const d = await apiCall("run_auto_scan");
     renderAutoScan(d);
     if (d && d.error) statusEl("自动盘扫描失败: " + d.error, "err");
-    loadAutoBuildOptions();
   } catch (e) { statusEl("自动盘扫描失败: " + e.message, "err"); }
 }
 
@@ -2325,242 +2475,10 @@ async function addAutoStock() {
       document.getElementById("asCode").value = "";
       document.getElementById("asMirrorQty").value = "";
       loadAutoScan();          // 刷新扫描表（合并全量后新标的立即显示）
-      loadAutoBuildOptions();  // 刷新手动建仓下拉
     }
   } catch (e) { if (el) el.textContent = "添加失败: " + e.message; }
 }
 
-async function loadAutoBuildOptions() {
-  const sel = document.getElementById("abCode");
-  if (!sel) return;
-  try {
-    const [scan, armed] = await Promise.all([
-      apiCall("load_auto_scan"),
-      apiCall("load_auto_build_armed").catch(() => ({ requests: {} })),
-    ]);
-    window._autoBuildArmed = (armed && armed.requests) || {};
-    const rows = (scan && scan.rows) || [];
-    window._autoScanRows = rows;  // 供 onAbCodeChange 显示选中标的详情
-    if (!rows.length) {
-      sel.innerHTML = '<option value="">暂无 auto 池数据，先跑一次盘后重跑</option>';
-      onAbCodeChange();
-      return;
-    }
-    sel.innerHTML = rows.map(r =>
-      `<option value="${esc(r.code)}">${esc(r.name || r.code)} ${esc(r.code)}${r.base ? " 底仓" + fmt(r.base, 0) : ""}${r.held ? " 持有" : ""}</option>`).join("");
-    onAbCodeChange();
-  } catch (e) { /* ignore */ }
-}
-
-function onAbCodeChange() {
-  // 选择建仓/加仓标的后，下方显示对应标的详情（2026-08-30）
-  const el = document.getElementById("abInfo");
-  const sel = document.getElementById("abCode");
-  if (!el || !sel) return;
-  const code = (sel.value || "").trim();
-  if (!code) { el.innerHTML = ""; return; }
-  const r = (window._autoScanRows || []).find(x => x.code === code);
-  if (!r) { el.innerHTML = `<span class="mono">${esc(code)}</span>`; return; }
-  const armed = (window._autoBuildArmed || {})[code];
-  const parts = [
-    `<b>${esc(r.name || r.code)}</b> <span class="mono cell-dim">${esc(r.code)}</span>`,
-    r.held ? '<span class="badge hold">持仓</span>' : '<span class="badge">候选</span>',
-    `目标底仓 <b>${r.base ? fmt(r.base, 0) : "未设"}</b>`,
-    r.verdict !== "pending" ? `判定 ${esc(r.verdict)}${r.score != null ? " / " + r.score : ""}` : "",
-  ].filter(Boolean).join(" · ");
-  const armedTxt = armed
-    ? `<div style="margin-top:4px"><span class="badge" style="background:#f85149;color:#fff">已武装 ${armed.action === "add" ? "加仓" : "建仓"} → 重启引擎后自动执行</span> <button class="mini-btn" onclick="clearAutoBuild()">撤销</button></div>`
-    : "";
-  el.innerHTML = `<div style="color:var(--text)">${parts}</div>${armedTxt}`;
-}
-
-async function manualAutoBuild() {
-  const code = (document.getElementById("abCode").value || "").trim();
-  const qty = (document.getElementById("abQty").value || "").trim();
-  const action = (document.getElementById("abAction").value || "build");
-  const el = document.getElementById("abResult");
-  if (!code) { if (el) el.innerHTML = '<span style="color:#f85149">✘ 请先选择股票</span>'; return; }
-  if (!qty) { if (el) el.innerHTML = '<span style="color:#f85149">✘ 请输入数量</span>'; return; }
-  try {
-    const r = await apiCall("manual_auto_build", code, qty, action);
-    if (el) el.innerHTML = r && r.ok
-      ? `<span style="color:#3fb950">✔ ${esc(r.msg)}</span>`
-      : `<span style="color:#f85149">✘ ${esc((r && r.error) || "失败")}</span>`;
-    if (r && r.ok) loadAutoBuildOptions();  // 刷新武装状态 + 标的详情
-  } catch (e) { if (el) el.textContent = "失败: " + e.message; }
-}
-
-async function clearAutoBuild() {
-  const code = (document.getElementById("abCode").value || "").trim();
-  const el = document.getElementById("abResult");
-  if (!code) { if (el) el.textContent = "请先选择股票"; return; }
-  try {
-    const r = await apiCall("clear_auto_build", code);
-    if (el) el.innerHTML = r && r.ok ? "已清除武装标记" : "清除失败: " + ((r && r.error) || "");
-    if (r && r.ok) loadAutoBuildOptions();  // 刷新武装状态 + 标的详情
-  } catch (e) { if (el) el.textContent = "清除失败: " + e.message; }
-}
-
-/* ---- ⑦ 加仓观察 ---- */
-// 冷启动补齐（2026-10-10）：后端 compute_add_watch 首帧非阻塞（起后台算、立即返回空），
-// 此处空则短轮询 load_add_watch 补齐，避免为它整页 load_day，也避免主线程被联网计算冻住。
-let _awRetryTimer = null;
-function _awHasData(aw) { return Object.keys(aw || {}).some(c => c[0] !== "_"); }
-async function loadAddWatch(date, tries) {
-  tries = tries || 0;
-  try {
-    const r = await apiCall("load_add_watch", date);
-    const aw = (r && r.add_watch) || {};
-    if (_awHasData(aw)) {
-      renderAddWatch(aw);
-      if (state.payload) state.payload.add_watch = aw;
-      return;
-    }
-  } catch (e) { return; }
-  if (tries < 12) {                       // 3s × 12 = 36s 上限（后台算完即止）
-    if (_awRetryTimer) clearTimeout(_awRetryTimer);
-    _awRetryTimer = setTimeout(() => loadAddWatch(date, tries + 1), 3000);
-  }
-}
-function renderAddWatch(aw) {
-  const el = document.getElementById("addWatchBody");
-  // fix P0-13 防护：过滤 `_progress` 等下划线伪股票键，避免混入卡片与『共 N 只』计数
-  const codes = Object.keys(aw || {}).filter(c => c[0] !== "_");
-  if (!codes.length) {
-    el.innerHTML = '<div class="empty">无加仓观察数据（盘中实时计算，需分钟快照；历史日依赖 daily_review）</div>';
-    return;
-  }
-
-  // fix P2-1: 前后对比改为按 code→met_count 字典 diff（原字符位置比对在列表变化/两位数时会错乱）
-  const currMap = {};
-  codes.forEach(c => { currMap[c] = (aw[c] || {}).met_count || 0; });
-  const prevMap = (window._awLast || {}).metMap || null;
-  window._awLast = { metMap: currMap, ts: nowTime() };
-  let awDelta = "";
-  if (prevMap) {
-    const ups = [], downs = [];
-    codes.forEach(c => {
-      const p = prevMap[c];
-      if (p === undefined || p === currMap[c]) return;
-      (currMap[c] > p ? ups : downs).push(c);
-    });
-    if (ups.length) awDelta += ` 🟢 ${ups.join(",")} 条件改善`;
-    if (downs.length) awDelta += ` 🔴 ${downs.join(",")} 条件退化`;
-  }
-  if (!awDelta && prevMap) awDelta = " ✓ 无变化";
-
-  // 汇总统计
-  let holdCnt = 0, breakCnt = 0, nearCnt = 0, noEventCnt = 0;
-  codes.forEach(code => {
-    const w = aw[code];
-    const evts = w.events || [];
-    const hasHold = evts.some(e => e.status === "守住");
-    const hasBreak = evts.some(e => e.status === "破位");
-    if (hasHold) holdCnt++;
-    if (hasBreak) breakCnt++;
-    if (!hasHold && !hasBreak && (w.near || []).length > 0) nearCnt++;
-    if (!hasHold && !hasBreak && !(w.near || []).length) noEventCnt++;
-  });
-  const total = codes.length;
-  const bar = (cnt, cls, label) =>
-    cnt > 0 ? `<span class="aw-bar-seg ${cls}" style="width:${(cnt/total*100).toFixed(1)}%" title="${label}: ${cnt}/${total}">${cnt}</span>` : "";
-
-  const now = nowTime();
-  window._awLastRefresh = now;
-  const summaryHtml = `
-    <div class="card" style="margin-bottom:10px;padding:10px 14px">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
-        <span class="cell-dim">回踩支撑满足程度（共 ${total} 只）</span>
-        <span class="cell-dim mono" style="font-size:10px" title="随盘中实时数据自动刷新"><span class="live-dot"></span> ${now}${awDelta ? ` <span class="aw-delta">${awDelta}</span>` : ""}</span>
-      </div>
-      <div class="aw-bar">
-        ${bar(holdCnt, "aw-hold", "守住支撑")}
-        ${bar(breakCnt, "aw-break", "破位")}
-        ${bar(nearCnt, "aw-near", "近阈未触")}
-        ${bar(noEventCnt, "aw-none", "无事件")}
-      </div>
-      <div style="display:flex;gap:14px;margin-top:6px;font-size:11px">
-        <span><span class="aw-dot hold"></span>守住 ${holdCnt}只</span>
-        <span><span class="aw-dot break"></span>破位 ${breakCnt}只</span>
-        <span><span class="aw-dot near"></span>近阈 ${nearCnt}只</span>
-        <span><span class="aw-dot none"></span>无事件 ${noEventCnt}只</span>
-      </div>
-      <div class="cell-dim" style="font-size:10px;margin-top:4px">回踩支撑不破是加仓前提 · 守住=触及支撑且收盘站回 · 盘中实时计算</div>
-      ${aw._progress ? `<div class="cell-dim" style="font-size:10px;margin-top:2px">快照覆盖: <b>${aw._progress.snapshots_ok}/${aw._progress.total_holdings}</b> 只${aw._progress.snapshots_miss > 0 ? ` · <span class="warn">${aw._progress.snapshots_miss} 只缺快照</span>` : ""}</div>` : ""}
-    </div>`;
-
-  const cards = codes.map(code => {
-    const w = aw[code];
-    const conds = w.conditions || [];
-    const met = w.met_count || 0;
-    const totalConds = conds.length || 4;
-    const metPct = totalConds ? met / totalConds * 100 : 0;
-    const metCls = metPct >= 75 ? "up" : metPct >= 50 ? "warn" : "down";
-
-    // 分组：左侧=冰点(4日线+5分钟确认)，右侧=突破箱体
-    const rightIdx = conds.findIndex(c => c.name === "右侧突破箱体");
-    const leftConds = rightIdx >= 0 ? conds.slice(0, rightIdx) : conds;
-    const rightConds = rightIdx >= 0 ? conds.slice(rightIdx) : [];
-    const condRow = c => {
-      // P2改进：为"右侧突破箱体"条件添加突破等级显示
-      let levelBadge = "";
-      if (c.name === "右侧突破箱体" && c.met && c.detail) {
-        // 从detail中提取突破等级信息（格式：突破箱体上沿XXX，超出X.XX%，等级:reliable）
-        const levelMatch = c.detail.match(/等级:(\w+)/);
-        if (levelMatch) {
-          const level = levelMatch[1];
-          const levelColor = level === "reliable" ? "#3fb950" : level === "strong" ? "#f85149" : "#9a6200";
-          levelBadge = `<span style="color:${levelColor};font-weight:bold;margin-left:4px">[${level}]</span>`;
-        }
-      }
-      return `<div class="aw-cond ${c.met ? "met" : "wait"}" title="${esc(c.detail)}">
-        <span class="aw-cond-icon">${c.met ? "✓" : "○"}</span>
-        <span>${esc(c.name)}${levelBadge}</span>
-        <span class="aw-cond-detail">${esc(c.detail)}</span>
-      </div>`;
-    };
-    const leftRows = leftConds.map(condRow).join("");
-    const rightRows = rightConds.map(condRow).join("");
-
-    // 可加仓徽章：左侧冰点(日线+5分钟) 或 右侧突破箱体 任一满足
-    // P2改进：过滤掉signal级的突破（只保留reliable/strong）
-    const canAdd = w.left_iceberg || (w.right_breakout && !w.right_detail.includes("等级:signal"));
-    const addBadge = canAdd
-      ? `<span class="badge signal" style="margin-left:6px">🔼 可加仓</span>`
-      : "";
-    // 加仓时机门控徽章（timing_gate）
-    const _atm = w.timing || {};
-    let tmBadge = "";
-    if (_atm.regime) {
-      const _rc = {trend_up: "多头", trend_dn: "空头", range: "震荡"}[_atm.regime] || _atm.regime;
-      const _cls = _atm.go ? "#1f6f3f" : "#7a2a2a";
-      const _t = _atm.go ? "GO" : "NO-GO";
-      tmBadge = `<span class="badge" title="时机门控: ${esc(_atm.reason || "")}" style="background:${_cls};color:#fff;margin-left:6px">${esc(_rc)}·${_t}</span>`;
-    }
-
-    return `
-      <div class="card" style="margin-bottom:10px;padding:12px 14px">
-        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:8px">
-          <div>
-            <b>${esc(w.name || code)}</b> <span class="mono cell-dim">${esc(code)}</span>${addBadge}${tmBadge}
-            <span class="aw-score ${metCls}">${met}/${totalConds} 条件满足</span>
-          </div>
-          <div class="cell-dim mono" style="font-size:11px">低${fmt(w.day_low, 3)} 收${fmt(w.close, 3)} VWAP${fmt(w.vwap, 3)}</div>
-        </div>
-        <div class="aw-group-title">左侧·情绪冰点</div>
-        <div class="aw-cond-list">${leftRows || '<div class="cell-dim" style="font-size:10px">无</div>'}</div>
-        ${rightRows ? `<div class="aw-group-title" style="margin-top:6px">右侧·突破箱体</div>
-        <div class="aw-cond-list">${rightRows}</div>` : ""}
-      </div>`;
-  }).join("");
-  el.innerHTML = summaryHtml + cards;
-}
-
-// ---- 建仓信号扫描 · 「🔄 刷新」（2026-10-13 owner）----
-// **只拉最新状态**（重读后端已写结果 `refresh_pb` + 就地重绘，秒级）。
-// 与下面「🔄 扫描该日」严格区分：那个是按所选日期**重放**建仓扫描（日线口径，1~2 分钟）。
-// 两者**不要共用一个繁忙标记/按钮类**：否则点刷新会把"重跑中…"的样式抢过来。
-let pbRefreshRunning = false;
 async function refreshPBNow() {
   if (pbRefreshRunning) return;
   const _di = document.getElementById("pbScanDate");
@@ -2609,10 +2527,8 @@ async function recomputePB() {
     const r = await apiCall("recompute_pb", date);
     if (r && r.position_builder) {
       renderPB(r.position_builder);
-      renderAddWatch(r.add_watch || {});
       if (state.payload) {
         state.payload.position_builder = r.position_builder;
-        state.payload.add_watch = r.add_watch;
       }
       const cnt = r.position_builder.counts || {};
       const cntTxt = Object.keys(cnt).filter(k => cnt[k] > 0)
@@ -3849,6 +3765,9 @@ async function loadHunterHistory(date) {
       renderHunter(h, true);
       hunterLoaded = true;
       statusEl(`已加载 ${date} 选股猎手数据`, "ok");
+      // 2026-10-13：猎手跑完会重写 daily_summary.json ⇒ 立即强刷风向标，
+      // 让其板块排名与猎手对齐（后端骨架缓存键已含该文件 mtime，会即刻重算）
+      loadMarketBeacon(true);
     } else {
       el.innerHTML = `<div class="empty">${esc(h.error || '无数据')}</div>`;
     }
@@ -4367,7 +4286,7 @@ function renderHunter(h) {
         <td class="num">${scoreTxt}</td>
         <td class="num">${_metTxt}</td>
         <td style="text-align:center" title="${esc("日线阶段" + "。" + DAY_STAGE_TIP)}">${_stageTxt}</td>
-        ${ma5FlagCellHtml(s.build_above_ma5)}
+        ${ma20FlagCellHtml(s.build_above_ma20)}
         <td class="num h-price" data-hcode="${esc(s.code)}" title="**实时**价/涨幅（展开时取、10s 刷新）。⚠️ 刻意不显示扫描时的旧值：扫描可能隔了几天，旧涨幅会严重误导（实测 300821 旧值 +20.01% vs 实时 +5.83%）">${hunterPriceHtml(null)}</td>
         <td class="h-tags">${tagsTxt}</td>
         <td class="cond" title="${esc(s.build_reason || "")}">${condTxt}</td>
@@ -4496,7 +4415,7 @@ function renderHunter(h) {
             <th class="num" title="综合得分（与建仓表同口径；破5日线扣70且不给signal）">得分</th>
             <th class="num" title="时机门控通过数（市场有方向/多头结构/回撤到位）">通过</th>
             <th title="日线四阶段（描述状态，紧挨得分/通过便于对照）：②抬升/③派发/④下跌/①蓄势。⚠️ 实测横截面IC与直觉相反——抬升/追高前瞻更差(IC −0.031~−0.042, t=−12~−15)、下跌/超跌前瞻更好(IC +0.020~+0.034, t=+7~+12)，分半窗两段同号；效应量小(IC≈0.04)仅作相对强弱参照">日线阶段</th>
-            <th title="是否站上 5 日线——「得分」−70 扣分的触发标志（观察用）。⚠️ 实测该项横截面IC为负(站上MA5 −0.018, t=−6.9)：被扣的这批后续反而略好；扣分保留与否待观察">5日线<br><span style="font-size:9px;opacity:.6">观察</span></th>
+            <th title="是否站上 20 日线（观察列，不驱动任何判定）。⚠️「得分」里的 −70 悬崖扣分走的是 **5 日线**口径（owner 决定保留），与本列无关 ⇒ 本列不显示 −70。另注：5 日线该项实测横截面 IC 为负(站上MA5 −0.018, t=−6.9)">20日线<br><span style="font-size:9px;opacity:.6">观察</span></th>
             <th class="num" title="**实时**价 + 实时涨幅（展开时取、10s 刷新；取不到显示 ⏳/—）。⚠️ 刻意不显示扫描时的旧价旧涨幅——扫描可能隔了几天，旧涨幅会严重误导">价<br><span style="font-size:9px;opacity:.6">实时涨幅</span></th>
             <th>技术标签</th>
             <th title="时机条件：市场有方向/多头结构/回撤到位 · 末位🚫=否决因子（爆量≥3倍或偏离MA60>+20%）">时机条件</th>
@@ -4578,17 +4497,20 @@ function renderHunter(h) {
 // 会返回 pending>0 ⇒ 稍后自动重拉补全，避免冷启动时把主线程同步冻住 14s。
 let _obRetryTimer = null;
 async function loadOBAnalysis() {
+  if (_obRetryTimer) { clearTimeout(_obRetryTimer); _obRetryTimer = null; }
   try {
     const ob = await apiCall("load_ob_analysis");
     renderOB(ob || {});
+    // 2026-10-13：**总是**排下一次（原来全就绪后永久停轮 ⇒ 现价/判定/标签冻结到手动刷新）。
+    // 30min 判定/仓位结构未热（后台预热）→ 3s；体检后台算未回 → 5s；仅图表未热 → 12s；
+    // 全就绪 → 60s 低频自刷（后端 45s TTL + 缓存路径就地覆盖 structure/price，成本极低）。
+    let delay = 60000;
     if (ob && (ob.pending || ob.m30_pending || ob.struct_pending)) {
-      if (_obRetryTimer) clearTimeout(_obRetryTimer);
-      // 30min 判定/仓位结构未热（后台预热）→ 3s；体检后台算未回 → 5s；两者皆无仅图表未热 → 12s
-      let delay = 12000;
       if ((ob.m30_pending || ob.struct_pending) && !ob.pending) delay = 3000;
-      else if (ob.pending) delay = 5000;   // 2026-10-10：体检改 SWR，后台算通常数秒可好
-      _obRetryTimer = setTimeout(loadOBAnalysis, delay);
+      else if (ob.pending) delay = 5000;
+      else delay = 12000;
     }
+    _obRetryTimer = setTimeout(loadOBAnalysis, delay);
     return ob;                              // 2026-10-13：供「🔄 刷新」判断成败（原来吞错无法回报）
   } catch (e) { /* 静默：体检非关键路径 */ return null; }
 }
@@ -4622,7 +4544,7 @@ function renderOB(ob) {
   }
   const _VCLS = { high: "badge signal", watch: "badge approach", bull: "badge bear" };
   const rows = ob.stocks.map(s => {
-    if (s.error) return `<tr><td colspan="13" class="cell-dim">${esc(s.code)}: ${esc(s.error)}</td></tr>`;
+    if (s.error) return `<tr><td colspan="14" class="cell-dim">${esc(s.code)}: ${esc(s.error)}</td></tr>`;
     const ob_ = s.overbought || {};
     const vd = s.verdict || {};           // 2026-10-09：30min 综合判定 {level,label,reason}
     const dv = s.divergence || {};        // 30min {type,bars_ago}（进 tooltip）
@@ -4643,9 +4565,12 @@ function renderOB(ob) {
       ? "background:rgba(248,81,73,.10);" : "";
     return `<tr ondblclick="openStockChart('${esc(s.code)}','${esc(s.name)}')" style="cursor:pointer;${_obBg}" title="双击看K线">
       <td>${esc(s.name)} <span class="mono cell-dim">${esc(s.code)}</span></td>
-      <td class="num">${fmt(s.price, 2)}</td>
+      <td class="num" data-obcode="${esc(s.code)}">${fmt(s.price, 2)}</td>
       <td title="30min 三层状态机趋势${s.trend_src === 'daily' ? '（30min不可用，已回退日线）' : ''}">${trendTxt}${trendSrc}</td>
       ${dayStageCellHtml(s.structure)}
+      ${ma20FlagCellHtml(s.above_ma20,
+        "日线不足 20 根或未预热 —— 显示 — 而不当作「未站上」",
+        s.ma20_daily ? `MA20=${s.ma20_daily}，现价=${s.price}` : "")}
       <td class="num ${rsiHot ? 'up' : 'cell-dim'}" title="日线 RSI>70 提示 / >80 高危">${fmt(ob_.rsi, 0)} ${rsiHot ? `<span class="badge ${rsiExtreme ? 'signal' : 'approach'}">⚠</span>` : ''}</td>
       <td class="num ${kdjHot ? 'up' : 'cell-dim'}" title="日线 KDJ-J>100 属动能(不计风险)">${fmt(ob_.kdj, 0)}</td>
       <td class="num ${cciHot ? 'up' : 'cell-dim'}" title="日线 CCI>100 属动能(不计风险)">${fmt(ob_.cci, 0)}</td>
@@ -4668,6 +4593,7 @@ function renderOB(ob) {
       <table><thead><tr>
         <th>股票</th><th class="num">现价</th><th>趋势(30m)</th>
         <th title="日线四阶段（描述状态）：②抬升/③派发/④下跌/①蓄势。⚠️ 实测横截面IC与直觉相反——抬升/追高前瞻更差(t=−12~−15)、下跌/超跌前瞻更好(t=+7~+12)，效应量小(IC≈0.04)仅作相对强弱参照">日线阶段</th>
+        <th title="是否站上 20 日线（观察列，不驱动判定）。口径与「建仓信号扫描」/「选股猎手」同款：收盘价 > 20 日简单均线。⚠️ 本表不做 −70 悬崖扣分（那是建仓表 5 日线的口径），本列纯展示">20日线<br><span style="font-size:9px;opacity:.6">观察</span></th>
         <th class="num" title="日线 RSI>70超买">RSI</th>
         <th class="num" title="日线 KDJ J>100超买">KDJ-J</th>
         <th class="num" title="日线 CCI>100超买">CCI</th>
@@ -4678,7 +4604,7 @@ function renderOB(ob) {
         <th title="30min MA5 状态（**纯展示**）：站上/跌破 5×30min 均线，及距上次翻转几根。⚠️ 实测**无前瞻信息量**（同日同bar-of-day对照 |diff|≤0.03pp）⇒ 仅供参考，不参与任何判定">30m MA5<br><span style="font-size:9px;opacity:.6">仅展示</span></th>
         <th title="判定依据">依据</th>
       </tr></thead><tbody>${rows}</tbody></table>
-      <div class="cell-dim" style="font-size:10px;margin-top:4px">口径(2026-10-09)：判定=30min顶部/底背离特征综合（依据 t_io/validation/m30_top 981只×540日离线验证）· 趋势=30min三层状态机 · RSI/KDJ/CCI/BOLL 为日线超买指标（不驱动判定）· 双击行看K线</div>
+      <div class="cell-dim" style="font-size:10px;margin-top:4px">口径(2026-10-09)：判定=30min顶部/底背离特征综合（依据 t_io/validation/m30_top 981只×540日离线验证）· 趋势=30min三层状态机 · RSI/KDJ/CCI/BOLL 为日线超买指标（不驱动判定）· <b>20日线</b>=收盘价 vs 20 日简单均线（2026-10-14 新增，与建仓表/猎手表同口径；**观察列，不驱动判定**）· 双击行看K线</div>
     </div>`;
 }
 
@@ -5272,11 +5198,10 @@ function switchTab(tab) {
   if (tab === "archive") renderDailyReview();
   // 图表分析：交割单台账懒加载（未导入过则只显示「点导入」提示，不弹窗）
   if (tab === "charts") loadTradeHistory();
-  // P4-3 切到自动盘：加载 t_io/bridge 状态 + 建仓扫描 + 手动建仓下拉
+  // P4-3 切到自动盘：加载 t_io/bridge 状态 + 建仓扫描
   if (tab === "auto") {
     loadAutoStatus();
     loadAutoScan();
-    loadAutoBuildOptions();
     if (state.autoLedger) renderAutoLedger(state.autoLedger);   // 已有数据先渲染，避免空白
   }
 }
@@ -5330,7 +5255,7 @@ let pollTimer = null;      // 60s 盘后轮询
 // 盘中轮询定时器：统一由 _startStaggered/_stopStaggered 管理（错开相位，见 startLivePoll）
 const _liveTimers = {};    // name -> { kick: timeoutId, interval: intervalId }
 // ⚠️ 2026-10-10 **改为「完成后才排下一次」**，这是本次卡顿修复的核心。
-// 原来用 `setInterval(fn, periodMs)`，而 fn 是 async（refreshLive/refreshConsole…）——
+// 原来用 `setInterval(fn, periodMs)`，而 fn 是 async（refreshLive…）——
 // setInterval **不 await**，所以只要单次耗时 > 间隔就会**并发叠加**。实测投递层单次往返
 // 16-20s 时：load_console(2s 间隔) 叠 8 个、signals(5s) 叠 4 个、live/auto/buyConfirm(10s) 各叠 2 个
 // ⇒ 常驻 18+ 个调用同时在飞，全挤进 pywebview 的 UI 线程队列 ⇒ 每次更慢 ⇒ 叠得更多。
@@ -5416,13 +5341,6 @@ function startLivePoll() {
   _startStaggered("live", () => {
     if (state.date) return refreshLive(false);
   }, 10000, 0);
-  // 2026-09-02: 实时 Console 2s 独立刷新（不随 10s live 轮询）。
-  // 不在此 refreshConsole(true)——首次/切日期的从头拉由 refreshLive(reset) 负责，避免每次
-  // startLivePoll 都清空 consoleBuf 导致已显示信息被重置。
-  _startStaggered("console", () => {
-    if (state.date) return refreshConsole(false);
-  }, 2000, 400);
-  if (!consoleDate) refreshConsole(true);  // 仅首次(consoleDate 未初始化)从头拉
   // P4-3: 自动盘 10s 轮询（自动盘 tab 或概览页（含自动盘持仓卡片）激活时拉取 bridge）
   _startStaggered("auto", () => {
     const act = document.querySelector(".sidebar-item.active");

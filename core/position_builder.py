@@ -1106,7 +1106,7 @@ def scan_stock(code: str, stock_info: dict, date_str: str = None,
                 "price", "ma20", "ma60", "drawdown", "rsi", "vol_ratio20", "dist_ma60",
                 # 2026-10-11：above_ma5 / stage_daily_code 是**得分**的两个输入（GUI 观察列要读），
                 # 此前未投影 ⇒ 面板看不到「为什么这只被扣了 70 分」。
-                "above_ma5", "stage_daily_code")}
+                "above_ma5", "above_ma20", "stage_daily_code")}
 
             # W35(2026-08-25) 日内右侧确认闸门 + 例外出口（两年验证：回撤保护稳健，fwd5 样本外打平）。
             #   仅 intraday 扫描且 go=true 时生效：确认通过→保持 signal(即时可建)；

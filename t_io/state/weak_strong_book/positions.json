@@ -1,5 +1,5 @@
 {
-  "updated_at": "2026-10-13 15:33:37",
+  "updated_at": "2026-10-14 10:00:01",
   "open": {
     "605198": {
       "entry_date": "2026-10-12",
@@ -22,6 +22,36 @@
       "days_held": 0,
       "last_check_date": null,
       "backfill_note": "owner 2026-10-13 决策：S1 遗留持仓 override 认领 osc 并补入卖侧账本。真实成交 2026-10-12 09:31 买入 1700 股 @65.662（费 23.44，费用不计入 entry_price）。dev20 无法离线回填 → null（非深超跌，不挂 -5% 止损，仅早盘冲高卖 + 到期平仓）。days_held=0 使 2026-10-14 10:00 早盘冲高卖生效。"
+    },
+    "600097": {
+      "entry_date": "2026-10-14",
+      "entry_price": 10.2,
+      "qty": 9800,
+      "dev20": -0.009562,
+      "gap": 0.10032362459546929,
+      "board": "大农业",
+      "days_held": 0,
+      "last_check_date": null
+    },
+    "000823": {
+      "entry_date": "2026-10-14",
+      "entry_price": 24.55,
+      "qty": 4000,
+      "dev20": -0.009453,
+      "gap": 0.09991039426523307,
+      "board": "PCB",
+      "days_held": 0,
+      "last_check_date": null
+    },
+    "301373": {
+      "entry_date": "2026-10-14",
+      "entry_price": 108.81,
+      "qty": 300,
+      "dev20": -0.114199,
+      "gap": 0.07946428571428577,
+      "board": "PCB",
+      "days_held": 0,
+      "last_check_date": null
     }
   }
 }

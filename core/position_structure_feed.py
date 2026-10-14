@@ -21,6 +21,8 @@
 """
 from __future__ import annotations
 
+import threading
+import time
 from datetime import datetime
 
 import pandas as pd
@@ -79,10 +81,44 @@ def _fresh_enough(df: pd.DataFrame, now: datetime = None) -> bool:
     return (now - last).days <= _FRESH_GAP_DAYS
 
 
+# ── 出网冷却（2026-10-14）──────────────────────────────────────────────────
+# 病根：`_fresh_enough` 在**盘中**要求末根是**当日**，而 tushare `stk_mins` 盘中只给到
+#   **上一交易日**收盘（实测 2026-10-14 14:13 取回来仍止于 10-13 15:00）⇒ 该判据盘中
+#   **永远不可能满足** ⇒ 每轮预热都对同一只票重打网络 + 重写盘 + 重解析，永不收敛。
+#   实测：20 分钟内 245 个 plain 档被改写、GUI 进程 CPU 长期 ~45%、pywebview 结果投递被拖死。
+# 处置：**「出网了还是不够新」就冷一段时间**（数据源滞后不是本进程能修的）。
+#   ⚠️ 不是关闭出网：冷却期一过照样重试，盘后源追上了自然恢复 `disk+net`。
+_NET_RETRY_COOLDOWN_S = 600.0
+_NET_COOLDOWN: dict = {}
+_NET_COOLDOWN_LOCK = threading.Lock()
+
+
+def _net_cooling(ts_code: str, freq: str) -> bool:
+    with _NET_COOLDOWN_LOCK:
+        t = _NET_COOLDOWN.get((ts_code, freq))
+    return t is not None and (time.monotonic() - t) < _NET_RETRY_COOLDOWN_S
+
+
+def _net_cooldown_start(ts_code: str, freq: str) -> None:
+    with _NET_COOLDOWN_LOCK:
+        if len(_NET_COOLDOWN) > 5000:          # 防无界增长（全池也才几千只）
+            _NET_COOLDOWN.clear()
+        _NET_COOLDOWN[(ts_code, freq)] = time.monotonic()
+
+
+def _net_cooldown_reset() -> None:
+    """清空冷却表（测试/排障用）。"""
+    with _NET_COOLDOWN_LOCK:
+        _NET_COOLDOWN.clear()
+
+
 def _minute_bars(ts_code: str, freq: str, days: int, date_str=None,
                  allow_network: bool = True) -> tuple:
     """磁盘优先（含长历史档），live 路径不新鲜且允许时出网补并落盘。
-    返回 (df, source)：source ∈ {disk, net, disk+net, none}。"""
+    返回 (df, source)：source ∈ {disk, net, disk+net, none}。
+
+    `disk` 也覆盖「**刚试过出网没拿到更新的**」——那属于数据源滞后，不重复打网络（见上方冷却块）。
+    """
     df = _cc.load_minute_asof(ts_code, freq, date_str)
     if date_str:                       # 历史日：只读磁盘（零网络），不做新鲜度判断
         return df, ("disk" if not df.empty else "none")
@@ -90,17 +126,22 @@ def _minute_bars(ts_code: str, freq: str, days: int, date_str=None,
         return df, "disk"
     if not allow_network:
         return df, ("disk" if not df.empty else "none")
+    if _net_cooling(ts_code, freq):    # 刚出网过、源还是老的 ⇒ 本轮直接吃磁盘
+        return df, ("disk" if not df.empty else "none")
     try:
         net = _cc.fetch_minute_online(ts_code, freq, days)
     except Exception:
         net = None
     if net is None or net.empty:
+        _net_cooldown_start(ts_code, freq)
         return df, ("disk" if not df.empty else "none")
     try:
-        _cc.save_minute_history(ts_code, freq, net)      # 并入 plain 档
+        _cc.save_minute_history(ts_code, freq, net)      # 并入 plain 档（内容没变则不落盘）
     except Exception:
         pass
     merged = _cc.load_minute_asof(ts_code, freq, date_str)
+    if not _fresh_enough(merged):
+        _net_cooldown_start(ts_code, freq)               # 拿了还是不够新 ⇒ 源滞后，冷却
     return merged, ("disk+net" if not df.empty else "net")
 
 

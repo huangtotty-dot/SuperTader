@@ -21,6 +21,8 @@
 from __future__ import annotations
 
 import json
+import time as _time
+from collections import Counter
 from datetime import time as dtime
 from functools import partial
 
@@ -50,6 +52,8 @@ def sell_enabled(rt) -> bool:
 def prepare(rt, context, now, today):
     """盘前盘前预筛（每日一次，09:31 触发；取数须在 10:00 之前完成）。"""
     _top = int(rt.param("osc_board_top_n", 5))
+    _t0 = _time.time()
+    rt.log(f"[OSC] ── 盘前预筛开始 ──（前{_top}热门板块 ∩ 韭研池 ∩ 昨收<MA20）")
     try:
         _cand = prescreen.premarket_candidates(_top, str(today))
     except Exception as _e:
@@ -58,7 +62,19 @@ def prepare(rt, context, now, today):
                       "error": str(_e)[:200]})
         _cand = {}
     _STATE["candidates"] = _cand
-    rt.log(f"[OSC] 盘前超跌候选 {len(_cand)} 只（前{_top}板块内 且 昨收<MA20）")
+    _el = _time.time() - _t0
+    rt.log(f"[OSC] 盘前超跌候选 {len(_cand)} 只（前{_top}板块内 且 昨收<MA20）· 耗时 {_el:.1f}s")
+    if _cand:
+        # 板块分布 + 最超跌样例：让人一眼看出"池子长什么样"，而不是只有一个数字
+        _bc = Counter(v.get("board", "") for v in _cand.values())
+        rt.log("[OSC]   板块分布: " + " / ".join(f"{b} {n}只" for b, n in _bc.most_common(8)))
+        _deep = sorted(_cand.items(),
+                       key=lambda kv: (kv[1].get("prev_close", 0) / (kv[1].get("ma20") or 1))
+                       if kv[1].get("ma20") else 0)[:5]
+        rt.log("[OSC]   最超跌 5 只(昨收/MA20-1): " + " / ".join(
+            f"{c} {v['prev_close'] / v['ma20'] - 1:+.1%}" for c, v in _deep if v.get("ma20")))
+    else:
+        rt.log("[OSC]   [!] 0 只候选 -> 今日买侧不下单（fail-closed）")
     rt.audit({"event": "osc_prepare", "date": str(today), "candidates": len(_cand)})
 
 
@@ -100,7 +116,7 @@ def try_buy(rt, context, now) -> int:
     # 删后由本条（**本策略唯一的开仓路径**）承接，避免整个系统失去这道人工闸。
     try:
         if rt.kill_switch():
-            rt.log(f"[OSC] ⛔ KILL_SWITCH 存在 → 今日不开新仓")
+            rt.log(f"[OSC] [X] KILL_SWITCH 存在 -> 今日不开新仓")
             rt.audit({"event": "osc_skip", "reason": "kill_switch", "time": str(now)})
             return 0
     except Exception:
@@ -125,6 +141,8 @@ def try_buy(rt, context, now) -> int:
         rt.audit({"event": "osc_fetch_fail", "error": str(_e)[:200], "time": str(now)})
         return 0
     _bars = bars_from_10am_df(_df, _codes, now)
+    rt.log(f"[OSC] 10:00 取数: 拿到 {len(_bars)}/{len(_codes)} 只的 10:00 棒"
+           + (f"（缺 {len(_codes) - len(_bars)} 只，fail-closed 跳过）" if len(_bars) < len(_codes) else ""))
     if not _bars:
         rt.audit({"event": "osc_skip", "reason": "no_bars", "time": str(now)})
         return 0
@@ -147,6 +165,12 @@ def try_buy(rt, context, now) -> int:
                       "candidates": _sm.get("candidates"), "buys": _sm.get("buys_placed"),
                       "rejected": _sm.get("rejected_count"),
                       "picks": [p["code"] for p in (_res or {}).get("picks") or []]})
+        _pk = (_res or {}).get("picks") or []
+        if _pk:
+            rt.log("[OSC] 10:00 选中(gap 降序): " + " / ".join(
+                f"{p['code']} gap{p['gap']:+.1%}" for p in _pk))
+        else:
+            rt.log("[OSC] 10:00 无信号触发（缺口未守住/未站上昨收或 VWAP）-> 今日不买")
         rt.log(f"[OSC] 10:00 买侧执行: {json.dumps(_sm, ensure_ascii=False)}")
         return int(_sm.get("buys_placed") or 0)
     except Exception as _e:
@@ -203,9 +227,12 @@ def sell_time(rt):
 def try_sell(rt, context, now, today) -> int:
     """14:50 超跌跳空确认卖侧（每日一次）：SL5只深 close 止损 + 到期平仓。返回已下单腿数。"""
     _exec = executor
+    _reconcile_book(rt, context)                 # ⚠️ 必须先对账（同上）
     _codes = sell_codes(rt)
     if not _codes:
+        rt.log("[OSC] 14:50 卖侧: 账本无持仓，跳过")
         return 0
+    rt.log(f"[OSC] 14:50 卖侧: 持仓 {len(_codes)} 只 → {_codes}")
     _syms = [rt.code_to_gm(c) for c in _codes]
     _start = now.strftime("%Y-%m-%d 09:25:00")
     _end = now.strftime("%Y-%m-%d %H:%M:%S")
@@ -278,6 +305,22 @@ def morning_sell_time(rt):
     return dtime(_hhmm // 100, _hhmm % 100)
 
 
+def _reconcile_book(rt, context) -> None:
+    """卖前先把账本按**账户实际持仓**夹紧（挂单未成交/部分成交都会让账本虚高）。
+
+    见 `executor.reconcile_book` 的说明 —— 上线首日实测出现过「账本 5 只 / 账户 3 只」。
+    """
+    try:
+        _gw = rt.gateway(context)
+        _acct = {str(c).split(".")[-1]: int((v or {}).get("qty") or 0)
+                 for c, v in (_gw.get_positions() or {}).items()}
+        _n = executor.reconcile_book(rt.book_dir, _acct)
+        if _n:
+            rt.log(f"[OSC] 账本对账: 按账户夹紧/剔除 {_n} 笔（挂单未成交 or 部分成交）")
+    except Exception as _e:
+        rt.log(f"[OSC] 账本对账失败（不阻断本次卖出）: {_e}")
+
+
 def try_morning_sell(rt, context, now, today) -> int:
     """10:00 超跌跳空确认早盘冲高卖（每日一次，先于买侧）：D+1 持仓早盘冲 ≥ entry×(1+target) 就卖。
 
@@ -285,9 +328,12 @@ def try_morning_sell(rt, context, now, today) -> int:
     但钩子排在买侧之前，先卖回笼现金再买。
     """
     _exec = executor
+    _reconcile_book(rt, context)                 # ⚠️ 必须先对账：挂单未成交会让账本虚高
     _codes = sell_codes(rt)
     if not _codes:
+        rt.log("[OSC] 10:00 早盘冲高卖: 账本无持仓，跳过")
         return 0
+    rt.log(f"[OSC] 10:00 早盘冲高卖: 持仓 {len(_codes)} 只 → {_codes}")
     _syms = [rt.code_to_gm(c) for c in _codes]
     _start = now.strftime("%Y-%m-%d 09:25:00")
     _end = now.strftime("%Y-%m-%d %H:%M:%S")
@@ -362,3 +408,20 @@ def on_bar(rt, context, now, today, t) -> None:
             try_sell(rt, context, now, today)
         except Exception as _e:
             rt.log(f"[OSC] 14:50 卖侧失败（不阻断主循环）: {_e}")
+
+    # ── 周期心跳（每 30 分钟一格）────────────────────────────────────────────
+    # 为什么要有：四个钩子都是"每日一次"，盘前 09:31 到 10:00、10:00 到 14:50 之间**一行日志都没有**
+    # ⇒ owner 2026-10-14 反馈「log 更新太少，不知道它具体在干什么」。这里每半小时报一行"我还活着 +
+    # 手里有什么 + 今天做完哪些动作"，把信息真空填掉，且**不碰任何判定**。
+    # 60s 的 bar 循环里靠**槽位去重**（不然每个 bar 打一行、240 行/天）。
+    if live and t >= dtime(9, 31):
+        _slot = "%02d:%s" % (now.hour, "00" if now.minute < 30 else "30")
+        if _STATE.get("hb_slot") != _slot:
+            _STATE["hb_slot"] = _slot
+            try:
+                _done = [k for k in ("prepare", "morning", "buy", "sell") if _STATE.get(k)]
+                _t = {"prepare": "预筛", "morning": "早盘卖", "buy": "买侧", "sell": "收盘卖"}
+                rt.log(f"[OSC] {_slot} 心跳 · 持仓 {len(sell_codes(rt))} 只 · "
+                       f"今日已完成 {'/'.join(_t[k] for k in _done) if _done else '无'}")
+            except Exception:
+                pass

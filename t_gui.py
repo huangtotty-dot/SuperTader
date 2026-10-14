@@ -44,12 +44,79 @@ PORTFOLIO_LEGACY = STATE_DIR / "portfolio_config.json"  # 旧部署回退（.gsz
 BRIDGE_DIR = BASE / "t_io" / "bridge"  # P4-2/3: 自动盘事件总线（heartbeat.json + events_*.jsonl + KILL_SWITCH）
 TRADE_HISTORY_LEDGER = STATE_DIR / "trade_history_ledger.json"  # 券商交割单解析后的逐股盈亏台账（2026-10-10 owner 需求3）
 
-# 内置名称映射（数据缺失 code 时兜底；可由 holdings/add_watch/trace 补充）
+# 内置名称映射（数据缺失 code 时兜底；可由 holdings/sig_stat/trace 补充）
 NAMES = {
     "000988": "华工科技", "588170": "科创半导体ETF华夏", "600176": "中国巨石",
     "600481": "双良节能", "603667": "五洲新春", "002639": "雪人集团",
     "300153": "科泰电源", "300364": "中文在线",
 }
+
+# 名称**兜底层**（2026-10-13）：韭研 watchlist 覆盖 **5382 个代码**，含持仓/auto 池之外的票。
+# 为什么需要：逐笔流水的 name 是"读取端反查补"的（引擎 write_fill 不带股票名），
+# 而原来源只有 `NAMES` + `holdings_auto.json` 两处 ⇒ 两处都没有的代码（实测 auto 流水里的
+# **605198 安德利 / 688003 天准科技**）只能渲染成"605198 605198"，看起来像坏了。
+# ⚠️ 该文件 **2MB**，必须按 mtime 缓存 —— 否则每轮 `_compute_auto_pnl` 都要解析一次。
+_JY_NAMES_CACHE = {"mtime": None, "map": {}}
+
+
+def _jiuyan_board() -> dict:
+    """韭研 watchlist → {6位码: 主板块}。**与 `oversold_gap_confirm.prescreen.sym2board_map()`
+    同口径**（取第 1 个有值的 `jiuyan_category{1..9}`，再过 MERGES；全空则按 `jiuyan_category`
+    的 `|` 拆分取首段）。
+
+    ⚠️ 这是**刻意的第二份实现**，不是疏漏：t_gui 不该 import 策略包（`execution/auto/` 是
+    实盘宿主目录、且策略包只在一个部署里存在）。两份口径由
+    `tests/phase3/test_market_beacon.py::TestBoardMapSingleSource` 逐码比对守卫 ——
+    **改任一侧都要同步另一侧**，否则测试红。这是 2026-10-13 背离那次的教训（副本漂移无人知）。
+    """
+    fp = BASE / "stock_hunter" / "watchlist_jiuyan.json"
+    try:
+        if _JY_BOARD_CACHE["mtime"] == fp.stat().st_mtime:
+            return _JY_BOARD_CACHE["map"]
+    except OSError:
+        return _JY_BOARD_CACHE["map"]
+    merges = {"创新药": "医药", "中药": "医药"}
+    out = {}
+    try:
+        d = json.loads(fp.read_text(encoding="utf-8"))
+        for code, info in d.items():
+            if not isinstance(info, dict) or not str(code).isdigit():
+                continue
+            cats = []
+            for i in range(1, 10):
+                c = str(info.get(f"jiuyan_category{i}", "") or "").strip()
+                if c:
+                    cats.append(merges.get(c, c))
+            if not cats:
+                c0 = str(info.get("jiuyan_category", "") or "")
+                cats = [merges.get(x.strip(), x.strip()) for x in c0.split("|") if x.strip()]
+            out[str(code)] = cats[0] if cats else ""
+        _JY_BOARD_CACHE.update({"mtime": fp.stat().st_mtime, "map": out})
+    except Exception:
+        pass
+    return _JY_BOARD_CACHE["map"]
+
+
+_JY_BOARD_CACHE = {"mtime": None, "map": {}}
+
+
+def _jiuyan_names() -> dict:
+    """韭研 watchlist → {6位码: 名称}。首次/文件变更时解析一次，之后走缓存；失败返回上次结果。"""
+    fp = BASE / "stock_hunter" / "watchlist_jiuyan.json"
+    try:
+        _mt = fp.stat().st_mtime
+    except OSError:
+        return _JY_NAMES_CACHE["map"]
+    if _JY_NAMES_CACHE["mtime"] == _mt:
+        return _JY_NAMES_CACHE["map"]
+    try:
+        _d = json.loads(fp.read_text(encoding="utf-8"))
+        _m = {str(k).split("_")[0]: v["name"]
+              for k, v in _d.items() if isinstance(v, dict) and v.get("name")}
+        _JY_NAMES_CACHE.update({"mtime": _mt, "map": _m})
+    except Exception:
+        pass
+    return _JY_NAMES_CACHE["map"]
 
 # W33 A1: 双通道 8 键标签（与 position_builder.CHANNEL_COND_KEYS 同序）
 # 方案A (2026-08-15): 建仓条件=时机门控，与 position_builder.COND_LABELS 一致
@@ -445,7 +512,20 @@ _M30_DISPLAY_MAX_GAP_DAYS = 12                         # 与 chart_cache.MAX_DIS
 _PB_M30_CACHE: dict = {}
 _PB_M30_LOCK = threading.Lock()
 _PB_M30_MAX = 3000
-_PB_M30_WARM: dict = {"slot": None}                    # 每 30min 时段只起一次后台预热
+_PB_M30_WARM: dict = {"slot": None, "queued": set(), "running": False}   # 按 code 排队（原"每时段一轮"闸会被建仓表 10s 轮询抢走 ⇒ 风向标 30min 判定整列卡 ⏳ 30min）
+_PB_M30_WARM_LOCK = threading.Lock()
+_PB_M30_QUEUE_MAX = 500                              # 单槽位排队上限（风向标 ~323 只 + 建仓池）
+
+# ---- 市场风向标「重列」的 SWR 缓存（2026-10-13）----
+# 88 只 × `_hunter_build_conformance` ≈ 4.8s，**绝不能在 pywebview 主线程同步算**（见
+# `load_market_beacon` 的注释）。首帧只给轻列、重列后台算完落这里、前端短轮询补齐。
+# key = (数据日, 代表股元组)；换板块/换日自然失配 ⇒ 重算。
+_BEACON_ENRICH: dict = {"key": None, "ts": 0.0, "rows": None, "running": False}
+# 骨架（成分/涨幅/分档）SWR：全部板块要读 ~1300 个日线缓存 ≈6s ⇒ 同样后台算
+_BEACON_SKELETON: dict = {"key": None, "ts": 0.0, "val": None, "running": False}
+_BEACON_LOCK = threading.Lock()
+# 成分股 涨幅/成交额 的 mtime 缓存（见 load_market_beacon 内 _daily_stats 的注释）
+_BEACON_STATS: dict = {}
 # 历史日「30min 判定」（2026-10-10）：键 {base}_{date}，值 = {level,label,reason,asof} 或 None。
 # 由「扫描该日」时从**磁盘 30min 缓存**截到该日预算好（零网络），load_day 浏览历史只回填、不现算。
 _PB_M30_HIST: dict = {}
@@ -461,7 +541,12 @@ _PB_M30_HIST_MAX = 5000
 _PB_STRUCT_CACHE: dict = {}
 _PB_STRUCT_LOCK = threading.Lock()
 _PB_STRUCT_MAX = 3000
-_PB_STRUCT_WARM: dict = {"slot": None}
+# 预热队列（2026-10-13 改造）：原来是「全局每 30min 时段只放一轮」的闸 —— 建仓表 10s 轮询
+# 总是先抢到名额，OB 表/风向标的预热请求同一时段内被静默丢弃 ⇒ 结构列最长卡 30 分钟。
+# 改为按 code 排队：槽位内去重、worker 循环分批排干（每轮 ≤_PB_STRUCT_POOL_MAX、2 线程）。
+_PB_STRUCT_WARM: dict = {"slot": None, "queued": set(), "running": False}
+_PB_STRUCT_WARM_LOCK = threading.Lock()
+_PB_STRUCT_QUEUE_MAX = 240                              # 单槽位排队上限（防误传全池打爆 tushare）
 # 历史日「仓位结构」：键 {base}_{date}。由「扫描该日」时**纯磁盘、零网络**截到该日预算好。
 _PB_STRUCT_HIST: dict = {}
 _PB_STRUCT_HIST_LOCK = threading.Lock()
@@ -1116,8 +1201,6 @@ class Api:
         `_agg_position_builder`，且前端 `_startStaggered("live", …, offset=0)` 在
         `init()` 之后**几乎立即**触发 `refreshLive` → `refresh_pb`，把结果**覆盖**回去
         （而且它的版本还多带个股技术标签）。即冷启动那次同步计算**算了就扔**。
-        与既有 `add_watch` 的「后端首帧不阻塞算、前端短轮询补齐」同款（见 web/app.js
-        的 `loadAddWatch(payload.date, 0)`）。
 
         ⚠️ 只在**模块尚未导入**时跳过。稳态（已导入）仍同步计算 ⇒ 切日期等既有路径
         行为**完全不变**，不引入"切日期后建仓表空 10s"的回归。
@@ -1147,7 +1230,6 @@ class Api:
                     "sig_stat": {}, "shadow": {"total": None, "near": {}},
                     "qty_freeze": {}, "closed_loop": {}, "audit_problems": None,
                     "settle": {}, "watch": {}, "kpi": {},
-                    "add_watch": self.compute_add_watch(date, block=False),
                     "positions": self._load_positions(date, {}),
                     # 冷启动（模块未导入）跳过同步聚合 → 首帧不等那 ~1.8s 首次导入；
                     # 前端 init 后立即调 refresh_pb 补齐（同款见上方 _pb_cold_start_ready）
@@ -1173,12 +1255,6 @@ class Api:
         out["closed_loop"] = dr.get("closed_loop", {})
         out["audit_problems"] = dr.get("audit_problems")
         out["settle"] = dr.get("settle", {})
-        out["add_watch"] = dr.get("add_watch", {})
-        # 加仓观察为空 或 缺 conditions（突破箱体条件）→ 实时计算
-        dr_aw = out["add_watch"]
-        if not dr_aw or not any(
-            isinstance(v, dict) and "conditions" in v for v in dr_aw.values()):
-            out["add_watch"] = self.compute_add_watch(date, block=False)
         out["watch"] = dr.get("watch", {})
 
         # KPI：优先独立文件，缺失时回退到日复盘内嵌 kpi
@@ -1198,15 +1274,15 @@ class Api:
 
         out["portfolio_config"] = self.load_portfolio_config()
         out["name_map"] = self._build_name_map(
-            out["sig_stat"], out["add_watch"], out["position_builder"], out["positions"]["current"]
+            out["sig_stat"], out["position_builder"], out["positions"]["current"]
         )
         return _clean(out)
 
-    def _build_name_map(self, sig_stat, add_watch, pb, current):
+    def _build_name_map(self, sig_stat, pb, current):
         """汇总各数据源构建 {code: name} 映射，供信号条/持仓/结算显示股票名。
         （828fcea6 误删本方法只留调用，load_day 完整路径会 AttributeError；此处恢复原实现）"""
         names = dict(NAMES)
-        for src in (sig_stat, add_watch, current):
+        for src in (sig_stat, current):
             for code, info in (src or {}).items():
                 nm = info.get("name") if isinstance(info, dict) else None
                 if nm:
@@ -2192,264 +2268,13 @@ class Api:
             pass
         return out
 
-    # ---------- 加仓观察（实时计算，不依赖 daily_review） ----------
-    _ADD_WATCH_TTL = 120.0   # 加仓观察缓存新鲜期（秒）
-
-    def compute_add_watch(self, date, block=True):
-        """加仓观察（SWR 包装，2026-10-09；2026-10-10 加 `block`）。
-
-        `block=True`（盘后重跑/启动预热）：冷启动同步算，返回真实结果。
-        `block=False`（GUI load_day 首帧）：冷启动**绝不阻塞主线程**——起后台算并立即返回
-        （有旧值则先给旧值），由前端 `load_add_watch` 轮询补齐。原因：该计算逐只 `timing_verdict`
-        走网络（GM 不可达时每只 4s 超时 → 整轮 30~60s），同步跑会冻死 pywebview 主线程（看门狗实测）。"""
-        now = _time_mod.time()
-        _h = (getattr(self, "_add_watch_cache", None) or {}).get(date)
-        if _h and (now - _h[0]) < self._ADD_WATCH_TTL:
-            return _h[1]
-        if _h is not None:
-            self._kick_add_watch_bg(date)      # 过期：后台刷新，先给旧值（SWR）
-            return _h[1]
-        if block:                              # 冷启动 + 显式要求：同步算
-            _r = self._compute_add_watch_impl(date)
-            self._add_watch_cache = {date: (_time_mod.time(), _r)}
-            return _r
-        self._kick_add_watch_bg(date)          # 冷启动 + 首帧：后台算，立即返回空
-        return {}
-
-    def _kick_add_watch_bg(self, date):
-        """起后台算加仓观察（按 date 去重，避免启动预热与首帧 load_day 重复算）。"""
-        _inflight = getattr(self, "_add_watch_inflight", None)
-        if _inflight is None:
-            _inflight = self._add_watch_inflight = set()
-        if date in _inflight:
-            return
-        _inflight.add(date)
-
-        def _bg():
-            try:
-                _r = self._compute_add_watch_impl(date)
-                self._add_watch_cache = {date: (_time_mod.time(), _r)}
-            except Exception:
-                pass
-            finally:
-                _inflight.discard(date)
-        _th.Thread(target=_bg, name="add-watch-compute", daemon=True).start()
-
-    def load_add_watch(self, date=None):
-        """轻量端点（2026-10-10）：只取加仓观察，供前端在冷启动后轮询补齐——避免为它整页 load_day。
-        非阻塞：未算好返回 {}（前端 3s 后重试）。"""
-        date = date or datetime.now().strftime("%Y-%m-%d")
-        try:
-            return _clean({"add_watch": self.compute_add_watch(date, block=False)})
-        except Exception as e:
-            return _clean({"add_watch": {}, "error": str(e)[:120]})
-
-    def _compute_add_watch_impl(self, date):
-        """从分钟快照+最新价实时计算支撑位距离，返回 add_watch 同结构数据。
-        替代 daily_review 收盘后才生成的静态 add_watch。"""
-        out = {}
-        cur = _load_json(HOLDINGS_MANUAL, {})
-        if not cur:
-            return out
-
-        # 先尝试加载当前快照获取 daily_context（含 MA 支撑位）
-        for code, info in cur.items():
-            if not isinstance(info, dict):
-                continue
-            if not (info.get("qty") or 0):
-                continue  # fix 2026-08-20: 已清仓(qty=0)不进加仓观察
-            # 找分钟快照
-            ym = datetime.strptime(date, "%Y-%m-%d").strftime("%Y/%m") if len(date) == 10 else datetime.now().strftime("%Y/%m")
-            snap_dir = SNAPSHOT_DIR = BASE / "t_io" / "minute_snapshots" / ym
-            snap_fp = snap_dir / f"{code}_{date}.json"
-            if not snap_fp.exists():
-                # 尝试带后缀
-                candidates = list(snap_dir.glob(f"{code}*{date}.json"))
-                snap_fp = candidates[0] if candidates else None
-            if not snap_fp or not snap_fp.exists():
-                continue
-
-            try:
-                snap = json.loads(open(snap_fp, encoding="utf-8").read())
-            except Exception:
-                continue
-
-            daily_ctx = snap.get("daily_context", {}) if isinstance(snap, dict) else {}
-            bars = snap.get("bars", []) if isinstance(snap, dict) else (snap if isinstance(snap, list) else [])
-            # 补算日线指标（旧快照缺 daily_macd_golden/trend 等字段时，用日线现算）
-            if daily_ctx.get("daily_macd_golden") is None or not daily_ctx.get("daily_trend_bg"):
-                self._ensure_daily_ctx_indicators(code, daily_ctx)
-
-            # fix P0-3: 日低改用 bars 的真实 low 最小值（分钟收盘价会丢下影线）；
-            # 15:00 前"收盘"实为盘中现价，打 is_intraday 标志，文案统一"现价(盘中暂定)"
-            closes = [float(b.get("close", 0)) for b in bars if b.get("close")]
-            lows = [float(b.get("low", 0)) for b in bars if b.get("low")]
-            if not closes:
-                continue
-            day_low = min(lows) if lows else min(closes)
-            day_close = closes[-1]
-            is_intraday = (date == datetime.now().strftime("%Y-%m-%d")
-                           and datetime.now().strftime("%H:%M") < "15:00")
-            px_word = "现" if is_intraday else "收"
-            sfx = "(盘中暂定)" if is_intraday else ""
-            # fix P2-16: ETF 标识，缺 MA/VWAP 时写"不适用(ETF)"
-            is_etf = str(cur[code].get("type", "")).lower() == "etf"
-            # fix P0-6/P1-8: VWAP 只读快照根级 last_vwap，缺失不回退 MA 冒充
-            vwap_raw = snap.get("last_vwap") if isinstance(snap, dict) else None
-            vwap_val = (float(vwap_raw) if vwap_raw
-                        and not (isinstance(vwap_raw, float) and math.isnan(vwap_raw)) else None)
-
-            # 支撑位
-            raw_supports = {}
-            for key, label in [("daily_ma5", "MA5"), ("daily_ma10", "MA10"),
-                               ("daily_ma20", "MA20"), ("daily_ma60", "MA60")]:
-                val = daily_ctx.get(key)
-                if val and not (isinstance(val, float) and math.isnan(val)):
-                    raw_supports[label] = float(val)
-            # 近20日低点（fix P1-8: daily_20d_low 无生产端，不再回退 daily_support_level 冒充）
-            low20 = daily_ctx.get("daily_20d_low")
-            if low20 and not (isinstance(low20, float) and math.isnan(low20)):
-                raw_supports["近20日低点"] = float(low20)
-            if vwap_val:
-                raw_supports["日内VWAP"] = float(vwap_val)
-            # fix P1-8: 同一价位(差<0.1%)多标签去重合并为一个标签，如 "MA20/日内VWAP"
-            supports = {}
-            for label, val in raw_supports.items():
-                hit = None
-                for k, v in supports.items():
-                    if v and abs(val - v) / v < 0.001:
-                        hit = k
-                        break
-                if hit is not None:
-                    if label not in hit.split("/"):
-                        supports[hit + "/" + label] = supports.pop(hit)
-                else:
-                    supports[label] = val
-
-            # 回踩事件：fix P1-6 触及窗放宽到 ±1.0%，基于修复后的真实日低(bars low)判定
-            events, near = [], []
-            for label, level in supports.items():
-                dist = (day_low - level) / level * 100 if level else 0
-                abs_dist = abs(dist)
-                if abs_dist <= 1.0:
-                    status = "守住" if day_close >= level else "破位"
-                    events.append({"level": label, "support": round(level, 3),
-                                   "dist%": round(dist, 2), "status": status})
-                elif abs_dist <= 3:
-                    stype = "刺穿收回" if (day_low < level and day_close >= level) else \
-                            ("刺穿破位" if day_low < level else "临近未触")
-                    near.append({"level": label, "support": round(level, 3),
-                                 "dist%": round(dist, 2), "type": stype})
-
-            # ===== 加仓两组判定：左侧(冰点) + 右侧(突破箱体) =====
-            not_applicable = []
-            # ---- 右侧加仓：突破箱体 ----
-            bx = self.check_box_breakout(code)
-            # P0修复：改为分级突破判定，仅"可靠级"及以上作为加仓条件
-            right_breakout = bx.get("level") in ("reliable", "strong")  # 排除signal级的误报
-            right_detail = (f"突破箱体上沿{bx.get('box',{}).get('high')}，"
-                           f"超出{bx.get('pct_above')}%，等级:{bx.get('level')}"
-                           if bx.get("broken") else "未突破箱体")
-
-            # ---- 左侧加仓：情绪冰点（W33 A1 判据 + 5分钟确认）----
-            # 日线冰点: 转向确认(金叉或站上MA5) AND BOLL冰点 AND 缩量；RSI 降展示层
-            _mc_golden = bool(daily_ctx.get("daily_macd_golden"))
-            _mc_rsi = daily_ctx.get("daily_rsi")
-            _mc_boll = daily_ctx.get("daily_boll_pct")
-            _mc_vol = daily_ctx.get("daily_vol_today")
-            _mc_volma = daily_ctx.get("daily_vol_ma5")
-            _mc_ma5 = daily_ctx.get("daily_ma5")
-            _mc_price = daily_ctx.get("daily_price_ref")
-            d_turn = _mc_golden or (_mc_ma5 is not None and _mc_price is not None
-                                    and float(_mc_ma5) > 0 and float(_mc_price) > float(_mc_ma5))
-            d_rsi = (_mc_rsi is not None and not (isinstance(_mc_rsi, float) and math.isnan(_mc_rsi)) and float(_mc_rsi) < 35)
-            d_boll = (_mc_boll is not None and not (isinstance(_mc_boll, float) and math.isnan(_mc_boll)) and float(_mc_boll) <= 0.15)
-            d_shrink = (_mc_vol is not None and _mc_volma is not None and _mc_volma > 0 and float(_mc_vol) / float(_mc_volma) < 0.8)
-            daily_iceberg = d_turn and d_boll and d_shrink   # 转向 + 冰点2项全过（W33 冰点通道 signal 判据）
-
-            # 5分钟冰点确认（盘中快照有分钟数据时）
-            m5_iceberg = True
-            m5_note = "盘后(无分钟数据)"
-            if bars and len(bars) >= 30:
-                try:
-                    import pandas as _pd
-                    from core.position_builder import resample_to_5min, add_5min_indicators
-                    _df = _pd.DataFrame(bars)
-                    if "time" in _df.columns:
-                        _df["time"] = _pd.to_datetime(_df["time"], errors="coerce")
-                    _df5 = add_5min_indicators(resample_to_5min(_df))
-                    m5_hits = 0
-                    if "dif_5m" in _df5.columns and "dea_5m" in _df5.columns:
-                        _up = (_df5["dif_5m"] > _df5["dea_5m"]) & (_df5["dif_5m"].shift(1) <= _df5["dea_5m"].shift(1))
-                        if bool(_up.tail(5).any()): m5_hits += 1
-                    if "rsi_5m" in _df5.columns and not _pd.isna(_df5["rsi_5m"].iloc[-1]) and float(_df5["rsi_5m"].iloc[-1]) < 30:
-                        m5_hits += 1
-                    if "bb_pct_5m" in _df5.columns and float(_df5["bb_pct_5m"].iloc[-1]) <= 0.15:
-                        m5_hits += 1
-                    if "volume" in _df5.columns and len(_df5) >= 25:
-                        _recent = _df5["volume"].tail(5).mean()
-                        _prior = _df5["volume"].iloc[-25:-5].mean()
-                        if _prior > 0 and _recent / _prior < 0.8:
-                            m5_hits += 1
-                    m5_iceberg = m5_hits >= 3
-                    m5_note = f"5分钟冰点 {m5_hits}/4"
-                except Exception:
-                    m5_iceberg = True
-                    m5_note = "5分钟计算失败"
-
-            left_iceberg = daily_iceberg and m5_iceberg   # 左侧加仓 = 日线冰点 + 5分钟冰点
-
-            left_conditions = [
-                {"name": "转向确认", "met": d_turn,
-                 "detail": "金叉或站上MA5=通过" if d_turn else "金叉/站上MA5=未过"},
-                {"name": "RSI超卖(展示)", "met": d_rsi,
-                 "detail": f"日线RSI={float(_mc_rsi):.1f}" if d_rsi or (_mc_rsi is not None and not math.isnan(_mc_rsi)) else "日线RSI=无"},
-                {"name": "BOLL冰点", "met": d_boll,
-                 "detail": f"日线bb_pct={float(_mc_boll):.3f}" if d_boll or (_mc_boll is not None and not math.isnan(_mc_boll)) else "日线BOLL=无"},
-                {"name": "缩量止跌", "met": d_shrink,
-                 "detail": "日线量<5日均量×0.8" if d_shrink else "日线量未缩"},
-                {"name": "5分钟确认", "met": bool(m5_iceberg), "detail": m5_note},
-            ]
-
-            conditions = left_conditions + [{"name": "右侧突破箱体", "met": right_breakout, "detail": right_detail}]
-            met_count = sum(1 for c in conditions if c["met"])
-            # 加仓时机判定（timing_gate: 多头追强/空头抄底/震荡降频）——仅供 GUI 展示加仓是否被时机门控
-            _tm = {}
-            try:
-                from core.timing_gate import timing_verdict as _timing_verdict
-                _g = _timing_verdict(str(code).split("_")[0], datetime.now().strftime("%Y-%m-%d"))
-                _tm = {"regime": _g["regime"], "go": _g["go"], "reason": _g["reason"]}
-            except Exception:
-                _tm = {}
-            out[code] = {
-                "name": cur[code].get("name", code),
-                "day_low": round(day_low, 3), "close": round(day_close, 3),
-                "is_intraday": bool(is_intraday),  # fix P0-3: True 时 close 实为现价
-                "box_boost": right_breakout,  # 右侧突破箱体
-                "left_iceberg": bool(left_iceberg),  # 左侧冰点(日线+5分钟)
-                "daily_iceberg": bool(daily_iceberg),
-                "right_breakout": right_breakout,
-                "not_applicable": not_applicable,
-                "vwap": round(float(vwap_val), 3) if vwap_val else None,
-                "supports": {k: round(v, 3) for k, v in supports.items()},
-                "events": events, "near": near,
-                "conditions": conditions, "met_count": met_count,
-                "timing": _tm,
-            }
-
-        total = len([c for c in cur if isinstance(cur.get(c), dict) and (cur.get(c, {}).get("qty") or 0) > 0])
-        ok = len(out)
-        # fix P1-10: _progress 为内部统计键，以 _ 前缀标识，前端按 _ 前缀过滤，不计入股票数
-        out["_progress"] = {"total_holdings": total, "snapshots_ok": ok, "snapshots_miss": total - ok}
-        return _clean(out)
-
     def _ensure_daily_ctx_indicators(self, code, daily_ctx):
         """补算 daily_ctx 的日线 MACD/趋势字段（旧快照缺失时）。就地更新 daily_ctx。"""
         try:
             import pandas as pd
             _c6 = str(code).split("_")[0]
             # 2026-10-09: **本地日线缓存优先**——原来逐只 `fetch_daily_kline` 走 GM（实测 ~1.8s/只），
-            # `compute_add_watch` 在 `load_day`（主线程）上跑 9 只 ⇒ 17.3s 冻界面（看门狗抓到）。
+            # 在 `load_day`（主线程）上跑 9 只 ⇒ 17.3s 冻界面（看门狗抓到）。
             df = None
             try:
                 import core.chart_cache as _cc
@@ -2499,7 +2324,7 @@ class Api:
         """
         # 2026-10-09: 本函数只用到 `boxes` 与 `current_price`（**都是日线派生**）——改读**本地日线缓存**
         # + `_detect_boxes`，不再走 `load_stock_chart` 全量建图（含分钟/指标；盘中每 2 分钟重建，
-        # 9 只持仓 ⇒ `load_day→compute_add_watch` 阻塞 17s，看门狗抓到）。缓存 miss 才回退原路径。
+        # 9 只持仓 ⇒ `load_day` 主线程阻塞 17s，看门狗抓到）。缓存 miss 才回退原路径。
         boxes, _h_price = [], None
         try:
             import core.chart_cache as _cc
@@ -2566,18 +2391,27 @@ class Api:
 
     # ---------- 持仓日线超买/顶背离体检 ----------
     _OB_TTL = 45.0          # 体检结果缓存新鲜期（秒）
+    _BEACON_TTL = 120.0      # 风向标「重列」缓存新鲜期（秒）；未热时前端短轮询（见 load_market_beacon）
+    _BEACON_SKELETON_TTL = 90.0   # 骨架缓存新鲜期（秒）；过期后台重算，先给旧值
 
     def load_ob_analysis(self, date=None):
         """持仓体检（SWR 包装，2026-10-10）：逐只算 KDJ/CCI/标签/30min 判定是**纯 Python 重活**
         （9 只 ~3~11s，叠加预热线程竞争更久），同步跑会冻 pywebview 主线程（看门狗实测 9~11s）。
 
         改为：命中缓存直返；冷启动/过期起**后台算 + 立即返回**（冷启动返回 `pending`，前端已有
-        重试补拉）。判定口径见 `_load_ob_analysis_impl`。"""
+        重试补拉）。判定口径见 `_load_ob_analysis_impl`。
+
+        2026-10-13：返缓存前**就地覆盖易变字段**（`_ob_overlay_live`：structure/price 都是纯内存
+        读，µs 级）——否则 45s TTL 会把"后台已预热好"的结构列继续钉成 ⏳、把现价钉旧；
+        struct/m30 pending 也改用短 TTL，让 30min 判定及时重算。"""
         now = _time_mod.time()
         _c = getattr(self, "_ob_cache", None)
         if _c is not None:
-            # 结果不完整（部分持仓图表未热）时用短 TTL：前端重试即重算，直到补齐；完整则 45s 内直返。
-            _ttl = 10.0 if _c[1].get("pending") else self._OB_TTL
+            self._ob_overlay_live(_c[1])
+            # 结果不完整（图表未热 / 结构层未热 / 30min 判定未热）时用短 TTL：前端重试即重算；
+            # 完整则 45s 内直返（结构列/现价由上面的覆盖保持新鲜，不受 TTL 钉住）。
+            _stale = _c[1].get("pending") or _c[1].get("struct_pending") or _c[1].get("m30_pending")
+            _ttl = 10.0 if _stale else self._OB_TTL
             if (now - _c[0]) < _ttl:
                 return _c[1]
         if not getattr(self, "_ob_running", False):
@@ -2592,7 +2426,51 @@ class Api:
                 finally:
                     self._ob_running = False
             _th.Thread(target=_bg, name="ob-analysis", daemon=True).start()
-        return _c[1] if _c is not None else {"stocks": [], "pending": True}
+        if _c is not None:
+            self._ob_overlay_live(_c[1])
+            return _c[1]
+        return {"stocks": [], "pending": True}
+
+    def _ob_overlay_live(self, out):
+        """返缓存前就地覆盖每行的 structure/price（**全部纯内存读、零网络零重算**）。
+
+        structure：`_pb_struct_get` 只读内存缓存——后台预热一好，下一轮 3s 重试立即显示，
+        不等 45s TTL 过期重算；未热则 kick 预热队列。price：`_today_forming_bar` 读
+        `load_quotes` 每 10s 的快照缓存，现价随调用即新。"""
+        try:
+            stocks = (out or {}).get("stocks") or []
+        except Exception:
+            return
+        if not stocks:
+            return
+        _struct_pending = False
+        for s in stocks:
+            if not isinstance(s, dict):
+                continue
+            _base = str(s.get("code") or "").split("_")[0]
+            if not _base:
+                continue
+            try:
+                _st = _clean(self._pb_struct_get(_base))   # 缓存在 _clean 之后注入 ⇒ 这里补清洗
+                s["structure"] = _st
+                if _st.get("pending"):
+                    _struct_pending = True
+            except Exception:
+                pass
+            try:
+                _live = self._today_forming_bar(_base, allow_network=False)
+                if _live and _live.get("close"):
+                    s["price"] = float(_live["close"])
+            except Exception:
+                pass
+        if _struct_pending:
+            out["struct_pending"] = True
+            try:
+                self._kick_pb_struct_warm([s.get("code") for s in stocks if isinstance(s, dict)])
+            except Exception:
+                pass
+        else:
+            out.pop("struct_pending", None)
 
     def _kick_cold_chart_warm(self, codes):
         """给**图表不在内存缓存**的持仓补一次后台取数（2026-10-12）。
@@ -2700,8 +2578,36 @@ class Api:
                 _tags = self._stock_tags_from_df(
                     _tdf, base_code,
                     t30=(_t30 if _t30.get("trend") else False)).get("tags", [])
+                # 20 日线观察（2026-10-14 owner 需求：体检表补「是否站上20日线」列，
+                # 与建仓表/猎手表同口径）。口径 = 收盘价 > 20 日简单均线。
+                # ⚠️ 必须先剔**尾部假当日根**（盘前快照造的 price=开盘价/vol=0 占位根）再算——
+                # 与 `_stock_tags_from_df` 同一处自愈逻辑，否则那根假 bar 会把 MA20 和参照收盘
+                # 一起带偏（2026-10-11 实测 600362 就是这么误报「破5日线」的）。
+                # 现价优先用实时快照校正后的 `_live_close`（同现价列），未校正则用末根收盘。
+                _d20 = _tdf
+                while len(_d20) > 0:
+                    _l20 = _d20.iloc[-1]
+                    if (float(_l20.get("volume") or 0) <= 0
+                            and float(_l20.get("high") or 0) == float(_l20.get("low") or 0)):
+                        _d20 = _d20.iloc[:-1]
+                    else:
+                        break
+                if len(_d20) >= 20:
+                    _c20 = _pd.to_numeric(_d20["close"], errors="coerce").tail(20)
+                    _m20raw = float(_c20.mean()) if _c20.notna().all() else float("nan")
+                    _r20 = float(_live_close) if _live_close else float(_d20["close"].iloc[-1])
+                    # 非有限值一律当「数据不足」→ None（前端显示「—」）。
+                    # **绝不**让 NaN 比较落成 False：那会在界面上变成「破位」这个断言。
+                    if _m20raw == _m20raw and _r20 == _r20 and _m20raw > 0:   # NaN != NaN
+                        _above_ma20 = bool(_r20 > _m20raw)
+                        _ma20_d = round(_m20raw, 3)
+                    else:
+                        _ma20_d, _above_ma20 = None, None
+                else:
+                    _ma20_d, _above_ma20 = None, None      # 不足 20 根 → 前端显示「—」，不猜
             except Exception:
                 _tags = []
+                _ma20_d, _above_ma20 = None, None
             closes = [x[1] for x in d["ohlc"]]
             highs = [x[3] for x in d["ohlc"]]
             lows = [x[2] for x in d["ohlc"]]
@@ -2810,6 +2716,10 @@ class Api:
                 "bar_time": (_m30 or {}).get("bar_time"),
                 "advice": advice,
                 "tags": _tags,
+                # 20 日线观察（2026-10-14）：`above_ma20` True/False/None(数据不足)，
+                # `ma20_daily` 供 tooltip。**观察列、不驱动任何判定**（前端 ma20FlagCellHtml 同款）。
+                "above_ma20": _above_ma20,
+                "ma20_daily": _ma20_d,
                 # 仓位结构（2026-10-11）：与建仓表**同一真源**（`_pb_struct_get` 只读缓存，
                 # 主线程零计算零网络）。是**结构参考、不是买卖信号**（见 core/position_structure.py）。
                 "structure": self._pb_struct_get(base_code),
@@ -2830,7 +2740,7 @@ class Api:
                 pass
         if m30_pending:
             out["m30_pending"] = True     # 30min 判定未热（>0 ⇒ 前端 3s 快速重拉，不等 12s）
-        # 仓位结构未热：后台预热持仓（每 30min 时段一轮），前端按 struct_pending 快速重拉
+        # 仓位结构未热：后台预热持仓（按 code 排队、槽位内去重），前端按 struct_pending 快速重拉
         _struct_pending = any((s.get("structure") or {}).get("pending") for s in out["stocks"])
         if _struct_pending:
             out["struct_pending"] = True
@@ -3439,6 +3349,7 @@ class Api:
                     pass
         return payload
 
+    @staticmethod
     def _mk_forming_bar(today, px, o, h, l, v):
         """造「当日 forming bar」；**无成交且无振幅 ⇒ 返回 None**（视为还没开始交易）。
 
@@ -3477,8 +3388,8 @@ class Api:
                         return None       # 快照非当日 ⇒ 休市/假期，不补（免无谓网络）
                     _px = _s.get("price") or 0
                     if _px > 0:
-                        return _mk_forming_bar(today, _px, _s.get("open"), _s.get("high"),
-                                               _s.get("low"), _s.get("vol_hand"))
+                        return self._mk_forming_bar(today, _px, _s.get("open"), _s.get("high"),
+                                                    _s.get("low"), _s.get("vol_hand"))
             if not allow_network:
                 return None               # 快路径：不在批量快照内即不补（不打网络）
             # 回退：单只快照（网络）
@@ -3489,8 +3400,8 @@ class Api:
             if snap.get("ts_date") != today:
                 return None
             px = snap["price"]
-            return _mk_forming_bar(today, px, snap.get("open"), snap.get("high"),
-                                   snap.get("low"), snap.get("volume"))
+            return self._mk_forming_bar(today, px, snap.get("open"), snap.get("high"),
+                                        snap.get("low"), snap.get("volume"))
         except Exception:
             return None
 
@@ -4237,6 +4148,7 @@ class Api:
                         "score": int(_score), "score_ceiling": 100,
                         "signal_reachable": bool(_reachable), "verdict": _verdict,
                         "veto": list(_dec["veto"]), "above_ma5": _f.get("above_ma5"),
+                        "above_ma20": _f.get("above_ma20"),
                         "price": _f.get("price"),
                         # 日线四阶段：**本函数已算出**（features_from_daily 的副产品）⇒ 白给，零额外取数。
                         # 猎手池 5000+ 只，30min/10min 那两列要逐只出网（实测 ~1.5s/只、400 只 >5min），
@@ -4497,6 +4409,7 @@ class Api:
                                 s["build_verdict"] = c.get("verdict")
                                 s["build_veto"] = c.get("veto") or []
                                 s["build_above_ma5"] = c.get("above_ma5")
+                                s["build_above_ma20"] = c.get("above_ma20")
                                 s["build_stage"] = c.get("stage")
                                 s["build_price"] = c.get("price")
             except Exception:
@@ -4544,8 +4457,23 @@ class Api:
                 pass
 
             # 2026-08-16: 自动保存 heat history 快照（板块汇总），日期列表/历史视图随运行积累
+            # 2026-10-13：保存前**合并回 热度分/热度版本/成交额总额** —— 本文件还有一个写入方
+            # （CLI 管线 `_save_sector_history`，带热度分字段，供 `_get_past_scores` 趋势回归用）。
+            # GUI 这份 sum_rows 没有热度分，直接覆盖会把 CLI 算好的当日热度分**抹掉**
+            # （趋势回归对缺字段的条目直接跳过 ⇒ 热度趋势断档）。按板块名合并保住。
             try:
                 from modules.heat_tracker import save_daily_summary as _save_hs
+                from modules.heat_tracker import load_history as _load_hs
+                _exist = {s.get("板块"): s for s in (_load_hs().get(date.replace("-", "")) or [])
+                          if isinstance(s, dict) and "热度分" in s}
+                if _exist:
+                    for _r in sum_rows:
+                        _e = _exist.get(_r.get("板块"))
+                        if _e:
+                            for _k in ("热度分", "热度版本", "成交额总额", "成交额放大倍数",
+                                       "上涨家数占比%", "前排率%"):
+                                if _k in _e:
+                                    _r[_k] = _e[_k]
                 _save_hs(date.replace("-", ""), list(sum_rows))
             except Exception:
                 pass
@@ -4686,42 +4614,285 @@ class Api:
         return _v
 
     def _kick_pb_m30_warm(self, codes):
-        """后台预热建仓表整池的轻量 30min 快照（每 30min 时段只起一次，守护线程）。
-        `_build_m30_light` ~17ms/只 ⇒ 53 只 ≈ 0.9s CPU，不拖慢启动。"""
+        """后台预热 30min 轻量快照（守护线程）。`_build_m30_light` ~17ms/只 ⇒ 53 只 ≈ 0.9s CPU。
+
+        2026-10-13 队列化（与 `_kick_pb_struct_warm` 同形）：原来是「全局每 30min 时段只起一轮」
+        ——建仓表 10s 轮询总是先抢到名额，风向标的 323 只同一时段内被静默丢弃 ⇒ 「30min 判定」
+        整列卡 ⏳ 最长 30 分钟。改为按 code 排队、槽位内去重，worker 循环分批排干（每轮 ≤200 只，
+        3 线程；`_fetch_min_bars` 有 per-slot 内存缓存，重复入队天然去重）。"""
         codes = [str(c).split("_")[0] for c in (codes or []) if c]
         if not codes:
             return
         slot = _min_bars_slot()
-        if _PB_M30_WARM.get("slot") == slot:
-            return
-        _PB_M30_WARM["slot"] = slot
+        with _PB_M30_WARM_LOCK:
+            if _PB_M30_WARM.get("slot") != slot:
+                _PB_M30_WARM.update({"slot": slot, "queued": set()})
+            queued = _PB_M30_WARM["queued"]
+            with _PB_M30_LOCK:
+                todo = [c for c in dict.fromkeys(codes)
+                        if f"{c}_{slot}" not in _PB_M30_CACHE and c not in queued]
+            if not todo:
+                return
+            room = max(0, _PB_M30_QUEUE_MAX - len(queued))
+            queued.update(todo[:room])
+            if _PB_M30_WARM.get("running"):
+                return                                # worker 会排干队列（含新入队的）
+            _PB_M30_WARM["running"] = True
 
         def _run():
+            from concurrent.futures import ThreadPoolExecutor
             try:
-                from concurrent.futures import ThreadPoolExecutor
-
-                def _one(bc):
-                    key = f"{bc}_{slot}"
-                    with _PB_M30_LOCK:
-                        if key in _PB_M30_CACHE:
+                while True:
+                    with _PB_M30_WARM_LOCK:
+                        batch = []
+                        for c in list(_PB_M30_WARM["queued"]):
+                            if len(batch) >= 200:
+                                break
+                            _PB_M30_WARM["queued"].discard(c)
+                            batch.append(c)
+                        if not batch:
+                            _PB_M30_WARM["running"] = False
                             return
-                    try:
-                        df = _fetch_min_bars(bc, "30min")       # 在线→磁盘兜底（后台线程）
-                    except Exception:
-                        df = None
-                    snap = _build_m30_light(df)
-                    with _PB_M30_LOCK:
-                        if len(_PB_M30_CACHE) > _PB_M30_MAX:
-                            _PB_M30_CACHE.clear()
-                        _PB_M30_CACHE[key] = snap
-                with ThreadPoolExecutor(max_workers=3) as ex:
-                    list(ex.map(_one, codes))
+
+                    def _one(bc):
+                        key = f"{bc}_{slot}"
+                        with _PB_M30_LOCK:
+                            if key in _PB_M30_CACHE:
+                                return
+                        try:
+                            df = _fetch_min_bars(bc, "30min")       # 在线→磁盘兜底（后台线程）
+                        except Exception:
+                            df = None
+                        snap = _build_m30_light(df)
+                        with _PB_M30_LOCK:
+                            if len(_PB_M30_CACHE) > _PB_M30_MAX:
+                                _PB_M30_CACHE.clear()
+                            _PB_M30_CACHE[key] = snap
+                    with ThreadPoolExecutor(max_workers=3) as ex:
+                        list(ex.map(_one, batch))
             except Exception:
-                pass
+                with _PB_M30_WARM_LOCK:
+                    _PB_M30_WARM["running"] = False
 
         _th.Thread(target=_run, daemon=True, name="pb-m30-warm").start()
 
     # ---------------- 仓位结构（30min/10min 结构参考）----------------
+    def load_market_beacon(self, date=None, top_n=None):
+        """**市场风向标**：人气概念板块 × 该板块的代表公司（龙头 + 中军），列沿用建仓信号扫描。
+
+        ⚠️⚠️ **纯描述性看盘，不是信号**。`_tier_sector_stocks` 的实测结论是
+        「龙头/中军**无前瞻区分度**」（977 池 × 2009 日、行业口径、同板块同日配对、按日聚类 t、
+        分半窗翻号；涨幅头名 vs 杂毛 H=5 仅 −0.021pp t=−0.40，**成交额头名反而 −0.302pp t=−5.7**）。
+        ⇒ 本面板只回答「**今天的钱在哪个板块、谁在场**」，**不要当买卖依据**。
+
+        口径
+          · 人气板块 = `stock_hunter/history/daily_summary.json` 里 **≤ date 的最近一日**，按
+            `平均分` 降序（与「选股猎手」GUI 板块表同口径）；`top_n=None/0` ⇒ **全部板块**
+            （owner 2026-10-13：不再只取前 N）。
+          · 成分股 = `_jiuyan_board()`（韭研主板块，与 `prescreen.sym2board_map()` 同口径）。
+          · 每只的 涨幅/成交额 从**本地日线缓存**算（零网络）——`_tier_sector_stocks` 只用
+            `amount` 参与**比值**（板块中位数 × 5），故单位因子整体约掉，不必纠结手/股。
+          · 代表公司 = **龙头(全部) + 中军(全部)**（owner 2026-10-13 明确：中军不做截断）。
+
+        **两级 SWR**（2026-10-13）—— 两级都**不在 pywebview 主线程上算**，这是本仓每次 GUI
+        冻死的老形状。量级实测：
+          · **骨架**（成分 → 涨幅/成交额 → 分档 → 龙头/中军）：全部板块要读 ~1300 个日线缓存 ≈ **6s**
+          · **重列**（建仓判定/得分/通过/阶段 + 技术标签）：~330 只 ≈ **18s**
+        主线程只做**缓存读**（骨架/重列命中 + 仓位结构 + 30min 判定），稳态实测 **~50ms**。
+        前端按"齐没齐"切 TTL：未齐 3s 短轮询、齐了 60s（见 `web/app.js::_beaconReady`）。
+        """
+        # 键里带 daily_summary.json 的 mtime：猎手跑完重写该文件 ⇒ 骨架缓存立即失效、
+        # 下一轮轮询即重算，板块排名与选股猎手对齐（原来要等 90s TTL + 前端 60s 轮询）。
+        try:
+            _sum_mt = (BASE / "stock_hunter" / "history" / "daily_summary.json").stat().st_mtime
+        except OSError:
+            _sum_mt = 0.0
+        key = (str(date or ""), int(top_n or 0), datetime.now().strftime("%Y-%m-%d"), _sum_mt)
+        with _BEACON_LOCK:
+            sk = _BEACON_SKELETON
+            have = sk.get("val") if sk.get("key") == key else None
+            fresh = have is not None and (_time_mod.time() - sk.get("ts", 0.0)) < self._BEACON_SKELETON_TTL
+            running = bool(sk.get("running"))
+        if not fresh and not running:
+            with _BEACON_LOCK:
+                _BEACON_SKELETON["running"] = True
+
+            def _bg_sk(_k=key, _d=date, _t=top_n):
+                try:
+                    v = self._beacon_skeleton(_d, _t)
+                    with _BEACON_LOCK:
+                        _BEACON_SKELETON.update({"key": _k, "ts": _time_mod.time(), "val": v})
+                except Exception:
+                    pass
+                finally:
+                    with _BEACON_LOCK:
+                        _BEACON_SKELETON["running"] = False
+            threading.Thread(target=_bg_sk, name="beacon-skel", daemon=True).start()
+        if have is None:
+            # 骨架还没算完：返回 pending（**不是**空错误）—— 前端短轮询即可（实测 ~6s 出）
+            return _clean({"available": True, "pending": True, "sectors": [],
+                           "date": "", "n_codes": 0, "enrich_pending": True})
+        _day, sectors, all_codes = have
+        if not all_codes:
+            return _clean({"available": True, "date": _day, "trade_date": str(date or ""),
+                           "pending": False, "top_n": int(top_n or 0), "sectors": sectors,
+                           "n_codes": 0, "enrich_pending": False})
+        # ── 重列：同样后台算 ──
+        ekey = (_day, tuple(sorted(all_codes)))
+        with _BEACON_LOCK:
+            en = _BEACON_ENRICH
+            rows = en.get("rows") if en.get("key") == ekey else None
+            efresh = rows is not None and (_time_mod.time() - en.get("ts", 0.0)) < self._BEACON_TTL
+            erunning = bool(en.get("running"))
+        if not efresh and not erunning:
+            with _BEACON_LOCK:
+                _BEACON_ENRICH["running"] = True
+
+            def _bg_en(_codes=list(all_codes), _date=str(date or _day), _k=ekey):
+                try:
+                    r = self._beacon_enrich(_codes, _date)
+                    with _BEACON_LOCK:
+                        _BEACON_ENRICH.update({"key": _k, "ts": _time_mod.time(), "rows": r})
+                except Exception:
+                    pass
+                finally:
+                    with _BEACON_LOCK:
+                        _BEACON_ENRICH["running"] = False
+            threading.Thread(target=_bg_en, name="beacon-enrich", daemon=True).start()
+        # ── 主线程只做缓存读 ──
+        try:
+            _tags_map = (self.load_stock_tags_batch(all_codes) or {}).get("tags") or {}
+        except Exception:
+            _tags_map = {}
+        for sec in sectors:
+            for m in sec["rows"]:
+                m.update((rows or {}).get(m["code"]) or {})
+                m["structure"] = self._pb_struct_get(m["code"])
+                m["m30_verdict"] = self._m30_verdict_pb(m["code"])
+                m["tags"] = (_tags_map.get(m["code"]) or {}).get("tags") or []
+        try:
+            self._kick_pb_m30_warm(all_codes)      # 每 30min 时段节流一次
+            # 仓位结构列（日线阶段/仓位结构/30m MA5 同源）：原来只读不预热 ⇒ 风向标本面板
+            # 这三列永远 ⏳。2026-10-13 预热队列化（按 code 去重、60只/轮×2线程渐进排干、
+            # 磁盘优先）后补上路，不再抢闸/饿死。
+            self._kick_pb_struct_warm(all_codes)
+        except Exception:
+            pass
+        return _clean({"available": True, "date": _day, "trade_date": str(date or ""),
+                       "pending": False, "top_n": int(top_n or 0), "sectors": sectors,
+                       "n_codes": len(all_codes), "enrich_pending": rows is None})
+
+    def _beacon_skeleton(self, date, top_n):
+        """（**只许后台线程调**）人气板块 + 成分 + 分档 → `(day, sectors, all_codes)`。
+
+        本面板最贵的一段：全部板块要读 ~1300 个日线缓存（实测 ~6s）。
+        """
+        from collections import defaultdict
+        try:
+            _sum = json.loads((BASE / "stock_hunter" / "history" / "daily_summary.json")
+                              .read_text(encoding="utf-8"))
+        except Exception:
+            return "", [], []
+        _d0 = str(date or datetime.now().strftime("%Y-%m-%d")).replace("-", "")[:8]
+        _days = sorted(k for k in _sum if str(k) <= _d0)
+        if not _days:
+            return "", [], []
+        _day = _days[-1]
+        # 排序口径 = 「选股猎手」GUI 板块表：`load_concept_summary` 按 **平均分** 降序
+        # （data_loader.py），前端按后端顺序渲染 ⇒ 这里必须同口径按平均分，否则两边排名错位。
+        # ⚠️ 不要改成文件顺序或热度分：daily_summary.json 有两个写入方（GUI 保存=平均分序、
+        #    CLI 管线=_save_sector_history=热度分序），文件顺序不稳定；只有重排平均分才恒定对齐。
+        _rank = sorted((x for x in (_sum.get(_day) or []) if isinstance(x, dict)),
+                       key=lambda x: -(x.get("平均分") or 0))
+        if top_n:
+            _rank = _rank[:max(1, int(top_n))]
+        bmap = _jiuyan_board()
+        members = defaultdict(list)
+        for c, b in bmap.items():
+            if b:
+                members[b].append(c)
+        names = _jiuyan_names()
+
+        def _daily_stats(code):
+            """→ (change_pct 百分数, amount)。读不到 → (None, None)（`_tier_sector_stocks` 会跳过）。
+
+            ⚠️ 必须按 **文件 mtime** 缓存：逐只读 JSON ≈ 12ms、全池 ≈6s。mtime 既判新旧
+            （盘中日线缓存会被回写），又避免同一轮里重复解析。
+            """
+            fp = _DAILY_KLINE_DIR / f"{code}.json"
+            try:
+                mt = fp.stat().st_mtime
+            except OSError:
+                return None, None
+            hit = _BEACON_STATS.get(code)
+            if hit and hit[0] == mt:
+                return hit[1], hit[2]
+            try:
+                rows = json.loads(fp.read_text(encoding="utf-8")).get("rows") or []
+                if len(rows) < 2:
+                    return None, None
+                cur, prev = rows[-1], rows[-2]
+                pc, cc = float(prev.get("close") or 0), float(cur.get("close") or 0)
+                if pc <= 0 or cc <= 0:
+                    return None, None
+                vol = float(cur.get("volume") or 0)
+                _BEACON_STATS[code] = (mt, round((cc / pc - 1) * 100, 2), cc * vol)
+                if len(_BEACON_STATS) > 8000:      # 无界增长防护（全池也就 5000+）
+                    _BEACON_STATS.clear()
+                return _BEACON_STATS[code][1], _BEACON_STATS[code][2]
+            except Exception:
+                return None, None
+
+        sectors, all_codes = [], []
+        for x in _rank:
+            name = str(x.get("板块") or "")
+            if not name:
+                continue
+            ms = []
+            for c in members.get(name, []):
+                pct, amt = _daily_stats(c)
+                if pct is None:
+                    continue
+                ms.append({"code": c, "name": names.get(c, c),
+                           "change_pct": pct, "amount": amt})
+            _tier_sector_stocks(ms)                      # 就地打 tier
+            reps = [m for m in ms if m.get("tier") in ("龙头", "中军")]
+            if not reps:
+                continue                                  # 该板块无分层 ⇒ 如实不显示（不硬凑）
+            reps.sort(key=lambda m: (m["tier"] != "龙头", -(m.get("amount") or 0)))
+            sectors.append({"name": name, "avg": x.get("平均分"), "limitup": x.get("涨停数"),
+                            "members": len(members.get(name, [])), "rows": reps})
+            all_codes += [m["code"] for m in reps]
+        return _day, sectors, all_codes
+    def _beacon_enrich(self, codes, date):
+        """后台补「重列」：建仓判定/得分/通过/阶段/时机 + 技术标签。**只许后台线程调。**"""
+        out = {}
+        try:
+            conf = self._hunter_build_conformance(codes, date) or {}
+        except Exception:
+            conf = {}
+        # ⚠️ tags **不在这里取**：`load_stock_tags_batch` 冷启动是"起后台算 + 立即返空"，
+        # 在这里取会把**空 tags 钉进 120s 缓存**（实测踩到）。它本身设计成可 10s 轮询的
+        # 便宜调用（命中缓存即时返回）⇒ 放主线程，见调用点。
+        for c in codes:
+            g = conf.get(c) or {}
+            out[c] = {
+                "build_go": g.get("go"), "build_regime": g.get("regime"),
+                "build_met": g.get("met"), "build_conds": g.get("conds"),
+                "build_reason": g.get("reason"), "build_score": g.get("score"),
+                "build_ceiling": g.get("score_ceiling"),
+                "build_reachable": g.get("signal_reachable"),
+                "build_verdict": g.get("verdict"), "build_veto": g.get("veto") or [],
+                "build_above_ma5": g.get("above_ma5"),
+                "build_above_ma20": g.get("above_ma20"), "build_stage": g.get("stage"),
+                "build_price": g.get("price"),
+            }
+        try:
+            self._kick_pb_m30_warm(codes)      # 每 30min 时段节流一次
+        except Exception:
+            pass
+        return out
+
     def _pb_struct_get(self, code):
         """建仓表「仓位结构」：读缓存（**主线程零计算零网络**）。未热 → pending。"""
         base = str(code).split("_")[0]
@@ -4758,40 +4929,64 @@ class Api:
         """后台预热「仓位结构」（守护线程）。磁盘优先（`load_structure` 内部：新鲜 plain 档 →
         陈旧才出网补并落盘）。`max_workers=2`：比 30min 判定列克制——本层每只要多打一次 5min（~0.5s）。
 
-        force=False（默认，建仓表轮询用）：每 30min 时段只起一轮，避免每 10s 轮询重复排队。
-        force=True（猎手板块展开/批量接口用）：跳过"每时段一次"闸——**不同板块是不同代码集**，
-        共用一道闸会让第二个板块永远排不上；重复调用由 `_one` 内的 per-code 缓存命中天然去重。"""
-        codes = [str(c).split("_")[0] for c in (codes or []) if c][:_PB_STRUCT_POOL_MAX]
+        2026-10-13 队列化：原来是「全局每 30min 时段只放一轮」——建仓表 10s 轮询总是先抢到
+        名额，OB 表/风向标的请求同一时段内被静默丢弃 ⇒ 持仓股结构列最长卡 30 分钟全 ⏳。
+        改为**按 code 排队**：槽位内去重（已缓存/已排队的跳过），worker 循环分批排干
+        （每轮 ≤`_PB_STRUCT_POOL_MAX` 只）。`force` 保留兼容（新设计下 per-code 去重已幂等，
+        两种调用等价）。"""
+        codes = [str(c).split("_")[0] for c in (codes or []) if c]
         if not codes:
             return
         slot = _min_bars_slot()
-        if not force:
-            if _PB_STRUCT_WARM.get("slot") == slot:
+        with _PB_STRUCT_WARM_LOCK:
+            if _PB_STRUCT_WARM.get("slot") != slot:
+                _PB_STRUCT_WARM.update({"slot": slot, "queued": set()})
+            queued = _PB_STRUCT_WARM["queued"]
+            with _PB_STRUCT_LOCK:
+                todo = [c for c in dict.fromkeys(codes)
+                        if f"{c}_{slot}" not in _PB_STRUCT_CACHE and c not in queued]
+            if not todo:
                 return
-            _PB_STRUCT_WARM["slot"] = slot
+            room = max(0, _PB_STRUCT_QUEUE_MAX - len(queued))
+            queued.update(todo[:room])
+            if _PB_STRUCT_WARM.get("running"):
+                return                                # worker 会排干队列（含新入队的）
+            _PB_STRUCT_WARM["running"] = True
 
         def _run():
+            from concurrent.futures import ThreadPoolExecutor
+            from core.position_structure_feed import load_structure
             try:
-                from concurrent.futures import ThreadPoolExecutor
-                from core.position_structure_feed import load_structure
-
-                def _one(bc):
-                    key = f"{bc}_{slot}"
-                    with _PB_STRUCT_LOCK:
-                        if key in _PB_STRUCT_CACHE:
+                while True:
+                    with _PB_STRUCT_WARM_LOCK:
+                        batch = []
+                        for c in list(_PB_STRUCT_WARM["queued"]):
+                            if len(batch) >= _PB_STRUCT_POOL_MAX:
+                                break
+                            _PB_STRUCT_WARM["queued"].discard(c)
+                            batch.append(c)
+                        if not batch:
+                            _PB_STRUCT_WARM["running"] = False
                             return
-                    try:
-                        st = load_structure(bc)          # 后台线程，允许出网
-                    except Exception as e:
-                        st = {"ok": False, "reason": str(e)[:80]}
-                    with _PB_STRUCT_LOCK:
-                        if len(_PB_STRUCT_CACHE) > _PB_STRUCT_MAX:
-                            _PB_STRUCT_CACHE.clear()
-                        _PB_STRUCT_CACHE[key] = st
-                with ThreadPoolExecutor(max_workers=2) as ex:
-                    list(ex.map(_one, codes))
+
+                    def _one(bc):
+                        key = f"{bc}_{slot}"
+                        with _PB_STRUCT_LOCK:
+                            if key in _PB_STRUCT_CACHE:
+                                return
+                        try:
+                            st = load_structure(bc)          # 后台线程，允许出网
+                        except Exception as e:
+                            st = {"ok": False, "reason": str(e)[:80]}
+                        with _PB_STRUCT_LOCK:
+                            if len(_PB_STRUCT_CACHE) > _PB_STRUCT_MAX:
+                                _PB_STRUCT_CACHE.clear()
+                            _PB_STRUCT_CACHE[key] = st
+                    with ThreadPoolExecutor(max_workers=2) as ex:
+                        list(ex.map(_one, batch))
             except Exception:
-                pass
+                with _PB_STRUCT_WARM_LOCK:
+                    _PB_STRUCT_WARM["running"] = False
 
         _th.Thread(target=_run, daemon=True, name="pb-struct-warm").start()
 
@@ -6193,8 +6388,10 @@ class Api:
     def _compute_auto_pnl(self, today):
         """账本体（纯函数式磁盘读，无副作用）。"""
         _DAILY_CACHE_DIR = _DAILY_KLINE_DIR   # 本地常量（2026-10-11）：原 import 会连带 pandas 进首帧
-        # 名称源：holdings_auto.json → NAMES 兜底
-        names = dict(NAMES)
+        # 名称源三层（后者覆盖前者，最权威的放最后）：
+        #   韭研 watchlist（5382 码，最广）→ NAMES 常量 → holdings_auto.json（用户自己的名字）
+        names = dict(_jiuyan_names())
+        names.update(NAMES)
         try:
             for code, h in (_load_json(STATE_DIR / "holdings_auto.json", {}) or {}).items():
                 if isinstance(h, dict) and h.get("name"):
@@ -6789,93 +6986,6 @@ class Api:
                 "base": base, "restart_required": True,
                 "msg": f"已加入 auto 池（目标底仓 {base}），重启掘金策略后生效"}
 
-    def manual_auto_build(self, code, qty, action="build"):
-        """自动盘手动建仓/加仓入口（仅限 auto 池内）：写自动侧 holdings_auto.json（base 设/加）+
-        写 AUTO_BUILD.json 武装标记（引擎重启后 BASE 建仓跳过确认闸直接做T）。
-        同时清除该 code 既有 BUY_PENDING 请求（防双通道）。"""
-        code = str(code or "").strip()
-        if action not in ("build", "add"):
-            return {"ok": False, "error": "action 必须为 build/add"}
-        if not (code.isdigit() and len(code) == 6):
-            return {"ok": False, "error": "代码须为 6 位数字"}
-        try:
-            qty = int(qty)
-        except (TypeError, ValueError):
-            return {"ok": False, "error": "数量须为整数"}
-        if qty < 100 or qty % 100 != 0:
-            return {"ok": False, "error": "数量须 ≥100 且为 100 的整数倍"}
-        _ap = self._auto_pool_module()
-        if _ap is not None and _ap.is_manual(code):
-            return {"ok": False, "error": f"{code} 不在 auto 池（仅限 auto 池内已有股票）"}
-        try:
-            from src.holdings_repo import load_auto, save_auto
-        except Exception as e:
-            return {"ok": False, "error": str(e)}
-        full = load_auto()
-        entry = dict(full.get(code) or {})
-        if not entry:
-            return {"ok": False, "error": f"{code} 不在自动侧持仓真源"}
-        old_base = int(entry.get("base") or 0)
-        new_base = qty if action == "build" else old_base + qty
-        entry["base"] = new_base
-        if str(entry.get("pool") or "") == "manual":
-            entry["pool"] = "auto"
-        try:
-            save_auto({code: entry}, actor="gui", reason="手动建仓/加仓武装")
-        except Exception as e:
-            return {"ok": False, "error": f"写 holdings_auto 失败: {e}"}
-        # 写 AUTO_BUILD.json 武装标记（GUI 直读直写 bridge，与 respond_buy_confirm 同款原子写）
-        try:
-            ab_fp = BRIDGE_DIR / "AUTO_BUILD.json"
-            ab = _load_json(ab_fp, {}) or {}
-            ab.setdefault("requests", {})
-            ab["requests"][code] = {"action": action, "qty": new_base,
-                                    "ts": datetime.now().timestamp()}
-            ab["updated_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            tmp = ab_fp.with_suffix(".tmp")
-            with open(tmp, "w", encoding="utf-8") as f:
-                json.dump(ab, f, ensure_ascii=False, indent=2)
-            tmp.replace(ab_fp)
-        except Exception as e:
-            return {"ok": False, "error": f"写武装标记失败: {e}"}
-        # 清除该 code 的既有 BUY_PENDING 请求（防"武装"与"旧请求"双通道）
-        try:
-            bp_fp = BRIDGE_DIR / "BUY_PENDING.json"
-            bp = _load_json(bp_fp, {}) or {}
-            if code in (bp.get("pending") or {}):
-                bp["pending"].pop(code, None)
-                tmp = bp_fp.with_suffix(".tmp")
-                with open(tmp, "w", encoding="utf-8") as f:
-                    json.dump(bp, f, ensure_ascii=False, indent=2)
-                tmp.replace(bp_fp)
-        except Exception:
-            pass
-        return {"ok": True, "code": code, "action": action, "base": new_base,
-                "restart_required": True,
-                "msg": f"已武装 {'建仓' if action == 'build' else '加仓'} {new_base} 股，"
-                       "重启掘金策略后引擎将自动建仓并开始做T"}
-
-    def clear_auto_build(self, code):
-        """撤销自动盘手动建仓/加仓武装标记（从 AUTO_BUILD.json 删除该 code）。"""
-        try:
-            ab_fp = BRIDGE_DIR / "AUTO_BUILD.json"
-            ab = _load_json(ab_fp, {}) or {}
-            if code in (ab.get("requests") or {}):
-                ab["requests"].pop(code, None)
-                ab["updated_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                tmp = ab_fp.with_suffix(".tmp")
-                with open(tmp, "w", encoding="utf-8") as f:
-                    json.dump(ab, f, ensure_ascii=False, indent=2)
-                tmp.replace(ab_fp)
-            return {"ok": True}
-        except Exception as e:
-            return {"ok": False, "error": str(e)}
-
-    def load_auto_build_armed(self):
-        """读 AUTO_BUILD.json 武装标记（手动建仓/加仓，引擎待消费，一次性）。"""
-        ab = _load_json(BRIDGE_DIR / "AUTO_BUILD.json", {}) or {}
-        return _clean({"requests": ab.get("requests") or {}})
-
     def remove_auto_stock(self, code):
         """从 auto 池删除标的（仅 qty/base 均为 0 的候选；有持仓拒绝）。同步 watchlist pool 改回 manual。
         引擎需重启后不再含该标的。"""
@@ -7055,7 +7165,6 @@ class Api:
         # 2026-10-10: 「今日盘中 S」图表下线 ⇒ 删掉这里的 market_intraday。它每次 10s 轮询都要
         # 解析整个 index_regime_{date}.jsonl（50~220KB / 约 4400 行）且**跑在主线程**，
         # 是纯浪费。跨日 S 由图表的 load_market_score 单独提供。
-        out["add_watch"] = self.compute_add_watch(date, block=False)   # 10s 轮询：绝不阻塞主线程
         return _clean(out)
 
     # ---------- 建仓/加仓信号增量轮询 ----------
@@ -7744,7 +7853,7 @@ class Api:
             return {"error": str(e)[:120]}
 
     def recompute_pb(self, date):
-        """盘后重跑建仓扫描 + 重算加仓观察。返回 {position_builder, add_watch, error?}。
+        """盘后重跑建仓扫描。返回 {position_builder, error?}。
         重跑用 eod 档、不推送飞书（避免重复打扰）；run_position_scan 会更新 watchlist_buy。
         fix 2026-08-27: 不再静默吞异常——失败记录并随返回带 error，前端可见。
         fix 2026-08-27(2): 重跑前热重载 config/timing_gate/position_builder——GUI 进程常驻，
@@ -7784,10 +7893,9 @@ class Api:
                     [_r.get("code") for _r in _rows if _r.get("code")], date)
             except Exception:
                 pass
-        # 3) 聚合新 trace（含技术标签）+ 重算加仓
+        # 3) 聚合新 trace（含技术标签）
         pb = self.refresh_pb(date)
-        aw = self.compute_add_watch(date)
-        out = {"position_builder": pb, "add_watch": aw}
+        out = {"position_builder": pb}
         if err:
             out["error"] = err
         return _clean(out)
@@ -8169,27 +8277,45 @@ def _start_gui_freeze_watchdog(threshold_s=12.0):
     """界面卡死看门狗（2026-10-08 需求①）：js_api 全在 pywebview 主线程串行执行，任何长阻塞都会冻界面。
     高频轮询（`load_console` 2s / `load_live` 10s）每次给 `_GUI_HB` 打点；本守护线程发现心跳停
     >threshold_s 秒即判「卡死」，把**全部线程栈**追加到 `t_io/logs/gui_freeze.log`
-    （含主线程当前卡在哪一帧），供后续持续改进。单次卡死最多 30s 记一次，避免刷屏。"""
+    （含主线程当前卡在哪一帧），供后续持续改进。单次卡死最多 30s 记一次，避免刷屏。
+
+    另（2026-10-14）：**按需落栈** —— 建一个哨兵文件（默认路径见 `_DUMP_REQ`）等 ≤2s 即落一份
+    全线程栈并自动删掉哨兵。用途：CPU 高但**没卡死**时也想知道"到底哪条线程在烧"——那种情况下
+    上面的心跳判据永远不会触发（心跳一直被续着），此前只能干瞪眼。哨兵路径可用环境变量
+    `TRADER_DUMP_REQ` 覆盖。"""
     import faulthandler
+    import os as _os
     log_fp = BASE / "t_io" / "logs" / "gui_freeze.log"
+    _DUMP_REQ = Path(_os.environ.get("TRADER_DUMP_REQ")
+                     or (BASE / "t_io" / "state" / "gui_dump_request"))
+
+    def _dump(reason):
+        try:
+            log_fp.parent.mkdir(parents=True, exist_ok=True)
+            with open(log_fp, "a", encoding="utf-8") as f:
+                f.write(f"\n===== {reason} {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+                        f" 线程栈 =====\n")
+                faulthandler.dump_traceback(file=f, all_threads=True)
+        except Exception:
+            pass
 
     def _loop():
         _last = 0.0
         while True:
             try:
                 _time_mod.sleep(2.0)
+                # 按需落栈（哨兵文件；用完即删，天然幂等）
+                try:
+                    if _DUMP_REQ.exists():
+                        _DUMP_REQ.unlink()
+                        _dump("按需线程栈（哨兵触发，未卡死）")
+                except Exception:
+                    pass
                 _ts = _GUI_HB.get("ts") or 0.0
                 _now = _time_mod.time()
                 if _ts and (_now - _ts) > threshold_s and (_now - _last) > 30:
                     _last = _now
-                    try:
-                        log_fp.parent.mkdir(parents=True, exist_ok=True)
-                        with open(log_fp, "a", encoding="utf-8") as f:
-                            f.write(f"\n===== 疑似界面卡死 {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
-                                    f"（主线程心跳停 {_now - _ts:.0f}s）线程栈 =====\n")
-                            faulthandler.dump_traceback(file=f, all_threads=True)
-                    except Exception:
-                        pass
+                    _dump(f"疑似界面卡死（主线程心跳停 {_now - _ts:.0f}s）")
             except Exception:
                 pass
 
@@ -8305,9 +8431,6 @@ if __name__ == "__main__":
     _th.Thread(target=api.prewarm_holdings_charts, daemon=True).start()
     _th.Thread(target=api.prewarm_stock_tags, daemon=True).start()
     _th.Thread(target=api.prewarm_overview, daemon=True).start()   # 总览页重端点（指数板/成交额/背离）
-    # 预热「加仓观察」：消除首次 load_day 的 ~5.6s 冷算（看门狗抓到的主线程卡点）
-    _th.Thread(target=lambda: api.compute_add_watch(datetime.now().strftime("%Y-%m-%d")),
-               daemon=True).start()
 
     def _prewarm_chart_build():
         """建图冷启动预热（2026-10-06）：首次 `_build_chart_from_df` 含懒加载 import

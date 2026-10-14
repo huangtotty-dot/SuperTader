@@ -209,6 +209,37 @@ def save_book(book: dict, book_dir: str = BOOK_DIR_DEFAULT) -> str:
     return fp
 
 
+def reconcile_book(book_dir: str, acct_qty: dict) -> int:
+    """把账本按**账户实际持仓**夹紧：账户没有的整条剔除、数量超出的削到账户数量。返回改动笔数。
+
+    ⚠️ 为什么必须有（2026-10-14 **上线首日实测**）：
+      `register_buys_to_book` 在买单 `status="submitted"`（**挂单未成交**）时就会入账本，
+      而 `qty` 取的是 `filled_qty or qty_placed` ⇒ **一股没成交也按计划数量全额记进去**。
+      当天实测：候选 4 只，gap 最高的两只 **涨停买不到**（+10.03% / +9.99%）⇒ 一直挂在委托上；
+      结果 **账本 5 只 / 账户 3 只**。不夹紧的话，14:50 卖侧会对那两只下**无券可卖**的单。
+
+    反过来**也不能**改成"只认 filled_qty"：成交回调（宿主 `on_order_status`）**不写账本**
+    ⇒ 后来成交的挂单会**永远进不了账本**（变成无人认领持仓 ⇒ 被归属锁锁死）。
+    故取「**挂单即入账 + 每次卖前按账户夹紧**」：没成交就掉，成交了就留。
+    """
+    book = load_book(book_dir)
+    open_pos = book.get("open") or {}
+    n = 0
+    for code in list(open_pos):
+        have = int(acct_qty.get(code) or 0)
+        rec = open_pos[code]
+        if have <= 0:
+            open_pos.pop(code, None)
+            n += 1
+        elif int(rec.get("qty") or 0) > have:
+            rec["qty"] = have
+            n += 1
+    if n:
+        book["open"] = open_pos
+        save_book(book, book_dir)
+    return n
+
+
 def register_buys_to_book(book_dir: str, date: str, buys_out: list, picks: list,
                           prev_close: dict, ma20: dict, log=print) -> dict:
     """把当日已成交买单并入持仓账本（卖侧真源）。拒单/废单不入账。返回合并后的账本。"""
