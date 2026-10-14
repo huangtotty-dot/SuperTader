@@ -56,6 +56,7 @@ def _heartbeat_path() -> str:
 # ── 飞书推送（0817 内移：项目内 gm_bridge/feishu.py 优先，去除 E:\06_T 硬依赖） ──
 FEISHU_AVAILABLE = False
 _send_feishu = None
+_send_feishu_ex = None
 _FEISHU_KEYWORD = "掘金模拟盘"
 
 try:
@@ -67,14 +68,28 @@ try:
 except Exception as e:
     print(f"[watcher] 飞书不可用 ({e}), 降级为 stdout")
 
+# 2026-10-14: 可选增强接口（带重试+错误带出）；旧 feishu 模块无此函数时回退旧调用
+if FEISHU_AVAILABLE:
+    try:
+        try:
+            from gm_bridge.feishu import send_feishu_payload_ex as _send_feishu_ex
+        except ImportError:
+            from feishu import send_feishu_payload_ex as _send_feishu_ex
+    except Exception:
+        _send_feishu_ex = None
 
-def _log_push(title: str, content: str, level: str, sent: bool):
+
+def _log_push(title: str, content: str, level: str, sent: bool, error: str = ""):
     """推送留痕（0806 红日整改）：每次推送尝试落 pushes_YYYYMMDD.jsonl，
-    C1-5 对账不再依赖做T系统共用的 sender 日志。"""
+    C1-5 对账不再依赖做T系统共用的 sender 日志。
+    2026-10-14 起失败记录附 error 字段——当日成交推送 sent=false 无任何错误信息，
+    watcher stdout 又未落盘（非 ops_guard 拉起），故障完全不可观测。"""
     try:
         rec = {"time": datetime.now().isoformat(timespec="seconds"),
                "title": title, "level": level, "sent": sent,
                "content": content[:300]}
+        if error:
+            rec["error"] = error[:300]
         path = os.path.join(BRIDGE_DIR, f"pushes_{datetime.now().strftime('%Y%m%d')}.jsonl")
         with open(path, "a", encoding="utf-8") as f:
             f.write(json.dumps(rec, ensure_ascii=False) + "\n")
@@ -98,13 +113,22 @@ def _push(title: str, content: str, level: str = "info") -> bool:
                     "elements": [{"tag": "markdown", "content": content}],
                 },
             }
-            sent = bool(_send_feishu(payload=card, success_log="", error_prefix="watcher",
-                                     trigger_urgent_alarm_after_success=(level == "red")))
-            _log_push(title, content, level, sent)
+            if _send_feishu_ex is not None:
+                sent, err = _send_feishu_ex(
+                    payload=card, success_log="", error_prefix="watcher",
+                    trigger_urgent_alarm_after_success=(level == "red"))
+                sent = bool(sent)
+            else:  # 旧版 feishu 模块（无 _ex）兼容回退
+                sent = bool(_send_feishu(payload=card, success_log="", error_prefix="watcher",
+                                         trigger_urgent_alarm_after_success=(level == "red")))
+                err = ""
+            _log_push(title, content, level, sent, "" if sent else err)
             return sent
-        except Exception:
-            pass
-    _log_push(title, content, level, False)
+        except Exception as e:
+            _log_push(title, content, level, False, f"{type(e).__name__}: {e}")
+            print(f"[watcher] 推送异常 {title}: {e}")
+            return False
+    _log_push(title, content, level, False, "feishu_unavailable")
     print(f"[watcher] {level.upper()} {title}: {content[:200]}")
     return False
 
