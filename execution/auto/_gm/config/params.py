@@ -213,6 +213,11 @@ PARAMS = {
 
     # ── 超跌跳空确认选股策略 · 10:00 买侧（2026-10-10 施工，WS2；owner 决策：直接接掘金模拟盘
     #    实单，选股范围=猎手靠前板块成分股，无影子期）──
+    # ⚠️ 2026-10-14 owner 决策：**选股宇宙扩展为全 A 股**（剔 ST/退市/北交所/B股，见
+    #    prescreen.universe_board_map）；板块强度排名保留但按全市场口径现算。
+    #    ⚠️ exp24 的 86% 触发率、exp9 的 Sharpe 顶点（top_n=4）、exp15 的板块口径均基于
+    #    **猎手池**标定 —— 宇宙扩展后原标定结论需重验证，下列 top_n/board_top_n 数值
+    #    **暂保持不动**（owner 未批准改数值），待全市场回测后再调。
     # 规则（冻结，见 execution/auto/oversold_gap_confirm/decision.py）：日线超跌(昨收<MA20) + 盘中 10:00 跳空高开守住
     #   (10:00棒 low≥昨收 且 close>昨收 且 close>VWAP) ⇒ 10:00 收盘买入，按 gap 取 top-N。
     # ⚠️ 默认 off（owner 翻启）：买+卖两侧全通。卖侧三件套已接线（次日早盘冲高卖 10:00 +
@@ -222,7 +227,7 @@ PARAMS = {
     # ⚠️ 必须落在 PARAMS（gm_main 闸函数读这张表；B7 开关错放 INDEX_REGIME_PARAMS 的前科）。
     "osc_enabled": True,   # 超跌跳空确认 10:00 买侧总闸（2026-10-12 owner 决策 C：翻启，接替 S1）
     "osc_top_n": 4,              # 每日按 gap 取最强前 N（exp9 Sharpe 顶点）
-    "osc_board_top_n": 5,        # 盘前取猎手前 N 热门板块的成分股为候选范围
+    "osc_board_top_n": 5,        # 盘前取全市场前 N 热门板块的成分股为候选范围（2026-10-14 起全市场口径；数值沿用猎手池标定，待重验证）
     "osc_single_budget": 100000.0,  # 单票名义上限（元，对齐 OGR 10 万/腿）
     "osc_daily_budget": 400000.0,   # 每日名义总额度（元）
     "osc_cash_headroom": 0.95,      # 单票占用现金封顶比例

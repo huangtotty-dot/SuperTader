@@ -53,7 +53,7 @@ def prepare(rt, context, now, today):
     """盘前盘前预筛（每日一次，09:31 触发；取数须在 10:00 之前完成）。"""
     _top = int(rt.param("osc_board_top_n", 5))
     _t0 = _time.time()
-    rt.log(f"[OSC] ── 盘前预筛开始 ──（前{_top}热门板块 ∩ 韭研池 ∩ 昨收<MA20）")
+    rt.log(f"[OSC] ── 盘前预筛开始 ──（前{_top}热门板块 ∩ 全市场 ∩ 昨收<MA20）")
     try:
         _cand = prescreen.premarket_candidates(_top, str(today))
     except Exception as _e:
