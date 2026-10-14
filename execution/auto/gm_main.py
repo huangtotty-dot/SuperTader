@@ -10,6 +10,26 @@ gm_main.py — 掘金量化策略入口（P4-1 迁入自 goldminer main.py，v1.
 
 from __future__ import print_function, absolute_import, division
 from gm.api import *
+
+
+def _gm_primitive_or_none(_name):
+    """从 `gm.api` 模块取一个原语，**取不到返回 None**（不抛）。
+
+    为什么需要它：`from gm.api import *` 是**通配导入** ⇒ 拿不到模块对象本身，没法对
+    "版本间可能不存在"的原语做 getattr。而把原语**直接写进 `_GmPrimitives` 类体**
+    （如 `order_cancel = staticmethod(order_cancel)`）会在**类定义时** NameError ⇒
+    连 `import gm_main` 都失败 ⇒ 整个引擎起不来。撤单原语（2026-10-14 新增）正属此类：
+    本机 `gm` 是**空命名空间桩**（`site-packages/gm` 无成员），名字无从验证。
+    ⇒ 统一走本函数：缺席置 None，消费方（`GmGateway.cancel_order`）据此降级。
+
+    ⚠️ 测试打桩：`from gm.api import *` 之后**类属性在定义时已固定**，故桩要写
+    `GM._GmPrimitives.order_cancel = staticmethod(fake)`（与既有 `order_volume` 打桩同款）。
+    """
+    import sys as _sys
+    _mod = _sys.modules.get("gm.api")
+    return getattr(_mod, _name, None) if _mod is not None else None
+
+
 import pandas as pd
 from datetime import datetime, time as dtime
 import os
@@ -760,6 +780,16 @@ class _GmPrimitives(object):
     PositionEffect_Open = PositionEffect_Open
     PositionEffect_Close = PositionEffect_Close
     ADJUST_PREV = ADJUST_PREV
+
+    # ── 撤单（2026-10-14，买不进替补机制要用）──────────────────────────
+    # ⚠️ **必须 getattr 防御式绑定，不能写裸名字**：
+    #   ① 本机 `gm` 是**空命名空间桩**（`site-packages/gm` 无成员）⇒ 撤单原语的确切名字
+    #      **本机无法验证**；`from gm.api import *` 的通配导入在这里拿不到该名字。
+    #   ② 开发/回测机上直接写 `order_cancel = staticmethod(order_cancel)` 会在**类定义时**
+    #      抛 NameError ⇒ 连 `import gm_main` 都失败 ⇒ 整个引擎起不来（fail-loud 但代价太大）。
+    #    缺席 ⇒ 置 None，`GmGateway.cancel_order` 据此降级成 `cancel_unavailable`
+    #    （补单静默不生效、**不会**误下单），只在上线后看日志确认一次。
+    order_cancel = staticmethod(_gm_primitive_or_none("order_cancel"))
 
 
 class _OscBookOwner(object):

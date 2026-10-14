@@ -196,7 +196,18 @@ class GmGateway(object):
                 "filled_price": None, "message": ""}
 
     def poll_order(self, order_id, code: str) -> dict:
-        """get_orders 轮询终态（掘金拒单/成交异步，与 _poll_pending_recon 同款渠道）。"""
+        """get_orders 轮询终态（掘金拒单/成交异步，与 _poll_pending_recon 同款渠道）。
+
+        ⚠️ 2026-10-14 修正：**`status=6`(PendingCancel) 不再归入 `rejected`**。
+        原先 `6` 落在 `reject_statuses` 里 ⇒ 被映射成 `rejected`，而上层（买不进替补的撤单确认）
+        据此会认为"**资金已解冻**"⇒ 用同一笔钱再下单 ⇒ 超买。
+        6 的真实语义是「撤单在途、**钱还冻着**」（语义出处：
+        `doc/review/archive/goldminer/backlog/Phase-A_合成拒单注入验证方案.md:19-22`）
+        ⇒ 单列为 `pending_cancel`。
+
+        另：返回里带 `raw_status`（原始数字状态码），供调用方按**码**而不是按字符串判终态
+        （字符串会被上面这类映射改变含义）。
+        """
         gm = self._gm
         sym = self.sv.code_to_gm(code)
         try:
@@ -213,20 +224,60 @@ class GmGateway(object):
                 _fp = float(_od.get("filled_vwap") or _od.get("vwap")
                             or _od.get("price") or 0) or None
                 if _st == 3:
-                    return {"order_id": order_id, "status": "filled",
+                    return {"order_id": order_id, "status": "filled", "raw_status": _st,
                             "filled_qty": _fq, "filled_price": _fp, "message": ""}
+                if _st == 6:                       # 撤单在途：钱**未**解冻
+                    return {"order_id": order_id, "status": "pending_cancel", "raw_status": _st,
+                            "filled_qty": _fq, "filled_price": _fp, "message": "status=6"}
                 if _st in self.sv.reject_statuses:
-                    return {"order_id": order_id, "status": "rejected",
+                    return {"order_id": order_id, "status": "rejected", "raw_status": _st,
                             "filled_qty": 0, "filled_price": None,
                             "message": "status=%s" % _st}
                 if _fq > 0:
-                    return {"order_id": order_id, "status": "partial",
+                    return {"order_id": order_id, "status": "partial", "raw_status": _st,
                             "filled_qty": _fq, "filled_price": _fp,
                             "message": "status=%s" % _st}
-                return {"order_id": order_id, "status": "submitted",
+                return {"order_id": order_id, "status": "submitted", "raw_status": _st,
                         "filled_qty": 0, "filled_price": None,
                         "message": "status=%s" % _st}
             except Exception:
                 continue
-        return {"order_id": order_id, "status": "submitted", "filled_qty": 0,
-                "filled_price": None, "message": "order_not_found"}
+        return {"order_id": order_id, "status": "submitted", "raw_status": None,
+                "filled_qty": 0, "filled_price": None, "message": "order_not_found"}
+
+    # ── 撤单（2026-10-14 新增：买不进替补机制要用）────────────────
+    def cancel_order(self, order_id, code: str) -> dict:
+        """撤单。返回 `{ok, order_id, message}`；**任何失败都不抛**（原语缺席/异常都降级）。
+
+        ⚠️ 本机 `gm` 是**空命名空间桩**（`site-packages/gm` 无成员）⇒ 撤单原语的**确切函数名
+        未经本机验证**，生产侧靠 `gm_main._GmPrimitives` 的 getattr 防御式绑定兜住。
+        原语缺席 ⇒ `{ok: False, message: "cancel_unavailable"}`，上层据此"不做补单"
+        （**绝不会**误下单、误释放额度），只在日志里报一行。
+
+        ⚠️ 撤单**不写 `write_order`**：那是孤儿闸 `_strategy_ordered_today` 判"本策略今日是否对
+        code 下过单"的判据，撤单不是新委托；写了会让孤儿闸误判归属。
+        """
+        gm = self._gm
+        _oc = getattr(gm, "order_cancel", None)
+        if _oc is None:
+            return {"ok": False, "order_id": order_id, "message": "cancel_unavailable"}
+        try:
+            _rep = self.sv.sdk_call("%s_cancel" % self.strategy_id,
+                                    partial(_oc, order_id=order_id))
+        except Exception as _e:
+            return {"ok": False, "order_id": order_id,
+                    "message": "%s: %s" % (type(_e).__name__, str(_e)[:80])}
+        # 掘金撤单同步返回形态未定：列表/字典/对象都容忍，取到"有没有明确失败"即可；
+        # 真正的终态由 `poll_order` 确认（见 backfill.cancel_and_confirm）。
+        _bad = None
+        for _od in (_rep if isinstance(_rep, list) else [_rep]):
+            _st = None
+            if isinstance(_od, dict):
+                _st = _od.get("status")
+            else:
+                _st = getattr(_od, "status", None)
+            if _st is not None and int(_st) in self.sv.reject_statuses:
+                _bad = int(_st)
+        if _bad is not None:
+            return {"ok": False, "order_id": order_id, "message": "cancel_rejected:status=%s" % _bad}
+        return {"ok": True, "order_id": order_id, "message": ""}

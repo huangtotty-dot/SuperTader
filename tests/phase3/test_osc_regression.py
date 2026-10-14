@@ -121,6 +121,28 @@ class TestPoolEvaluate(unittest.TestCase):
                          allowed_boards=allow, top_n=4)
             self.assertEqual(len(r["picks"]), 3, "allowed_boards 为空 ⇒ 不过滤")
 
+    def test_n_tradable_and_signals_relation(self):
+        """2026-10-14 补：`n_tradable` / `signals` / `picks` 三者的关系**此前零覆盖**，
+        而买不进替补机制正是靠 `signals`（全排序候选）取顺移候补 ⇒ 必须先钉死。
+
+        不变量：`signals ⊇ 可交易候选`；`n_tradable == #{signals | decision=='trade'}`；
+        `picks == 可交易候选的前 top_n`。
+        """
+        pc, ma, bars = self._pool(5)
+        # 4 只落在允许板块内、1 只被过滤 ⇒ top_n=2 后还剩 2 只候补（顺移要有米下锅）
+        board = {"600000": "半导体", "600001": "半导体", "600002": "半导体",
+                 "600003": "半导体", "600004": "电力"}
+        r = evaluate(pc, ma, bars, board=board, allowed_boards=["半导体"], top_n=2)
+        tradable = [s for s in r["signals"] if s["decision"] == "trade"]
+        self.assertEqual(r["n_tradable"], len(tradable))
+        self.assertEqual([p["code"] for p in r["picks"]],
+                         [s["code"] for s in tradable[:2]])
+        # 顺移候补 = signals 里去掉 picks 之后的可交易候选（gap 降序）
+        spare_codes = [s["code"] for s in tradable[2:]]
+        self.assertTrue(spare_codes, "本 fixture 应留下候补，否则顺移无米下锅")
+        gaps = [s["gap"] for s in tradable]
+        self.assertEqual(gaps, sorted(gaps, reverse=True), "signals 必须 gap 降序")
+
 
 class TestBuyBudgetGates(unittest.TestCase):
     """C. 额度闸：单票 10 万 / 现金×0.95 / 整手 / T+1 / 无价。"""
@@ -167,6 +189,72 @@ class TestBuyBudgetGates(unittest.TestCase):
                                   cash_budget=1e6, single_budget=100000.0)
         self.assertEqual(plan[0]["qty_place"], 0)
         self.assertIn("no_price", plan[0]["defer_reason"])
+
+    def test_code_committed_subtracts_single_budget(self):
+        """2026-10-14（买不进替补）：`code_committed` 扣的是**单票**额度 ——
+        顺移时同一票今日已下过单，不能再给它满额。"""
+        picks = self._picks("600000", px=10.0)          # 满额 10 万 ⇒ 10000 股
+        base = wse.build_buy_plan(picks, {}, cash_budget=1e9, single_budget=100000.0)
+        self.assertEqual(base[0]["qty_place"], 10000)
+        # 已占用 6 万 ⇒ 只剩 4 万 ⇒ 4000 股
+        part = wse.build_buy_plan(picks, {}, cash_budget=1e9, single_budget=100000.0,
+                                  code_committed={"600000": 60000.0})
+        self.assertEqual(part[0]["qty_place"], 4000)
+        # 已占满 ⇒ 一股不买（且要显式记账，不是静默跳过）
+        full = wse.build_buy_plan(picks, {}, cash_budget=1e9, single_budget=100000.0,
+                                  code_committed={"600000": 100000.0})
+        self.assertEqual(full[0]["qty_place"], 0)
+        self.assertTrue(full[0]["defer_reason"])
+
+    def test_code_committed_default_none_unchanged(self):
+        """默认 None ⇒ 与加该参数**之前逐位一致**（防回归）。"""
+        picks = self._picks("600000", "600001", px=10.0)
+        a = wse.build_buy_plan(picks, {}, cash_budget=150000.0, single_budget=100000.0)
+        b = wse.build_buy_plan(picks, {}, cash_budget=150000.0, single_budget=100000.0,
+                               code_committed=None)
+        self.assertEqual(a, b)
+        # 首票吃满单票上限 10 万（10000 股）；余 5 万现金 ×0.95 = 47500 ⇒ 4700 股
+        self.assertEqual([r["qty_place"] for r in a], [10000, 4700])
+
+
+class TestEvaluateFullAndSparesStamp(unittest.TestCase):
+    """2026-10-14：`evaluate_full` 保留全排序候选 + `_write_fills` 落 spares。"""
+
+    @staticmethod
+    def _pc_ma_bars(n=6):
+        pc, ma, bars = {}, {}, {}
+        for i in range(n):
+            c = f"60{i:04d}"
+            pc[c], ma[c] = 10.0, 12.0
+            bars[c] = _bar(low=10.0, close=11.0 + i * 0.1,
+                           amount=(11.0 + i * 0.1 - 0.1) * 1000)
+        return pc, ma, bars
+
+    def test_evaluate_full_keeps_signals_and_matches_picks(self):
+        pc, ma, bars = self._pc_ma_bars()
+        full = wse.evaluate_full(pc, ma, bars, top_n=2)
+        self.assertEqual([p["code"] for p in full["picks"]],
+                         [p["code"] for p in wse.evaluate_picks(pc, ma, bars, top_n=2)])
+        self.assertEqual(len(full["signals"]), 6, "signals 必须是全排序候选，不能只有 top-N")
+        self.assertEqual(full["n_tradable"], 6)
+
+    def test_write_fills_stamps_spares(self):
+        """spares 必须落进 fills —— 进程重启后补单钩子靠它回读（否则挂单冻结到 15:00）。"""
+        import json as _json
+        import tempfile
+        with tempfile.TemporaryDirectory() as td:
+            f = wse._write_fills("2026-10-15", "dry", "t0", [], [], 1e6, 0.0,
+                                 dict(wse.DEFAULTS), td, note="x",
+                                 spares=[{"code": "600005", "gap": 0.06,
+                                          "board": "半导体", "price": 11.5}])
+            self.assertEqual(f["spares"][0]["code"], "600005")
+            with open(f["_paths"]["fills"], encoding="utf-8") as _fh:
+                on_disk = _json.loads(_fh.read())
+            self.assertEqual(on_disk["spares"][0]["price"], 11.5)
+            # 不传 spares ⇒ 落空表（向后兼容：老 fills 没有这个键，新代码读时按空处理）
+            f2 = wse._write_fills("2026-10-15", "dry", "t0", [], [], 1e6, 0.0,
+                                  dict(wse.DEFAULTS), td)
+            self.assertEqual(f2["spares"], [])
 
 
 class TestSellTrio(unittest.TestCase):

@@ -105,16 +105,35 @@ def evaluate_picks(prev_close: dict, ma20: dict, bars: dict,
     return list(r["picks"])
 
 
+def evaluate_full(prev_close: dict, ma20: dict, bars: dict,
+                  board: dict | None = None, allowed_boards=None,
+                  top_n: int = DEFAULTS["top_n"]) -> dict:
+    """决策核入口（**整字典**）：返回 `{pool_n, signals, picks, rejected_board, n_tradable}`。
+
+    与 `evaluate_picks` 的差别只有一处：**保留 `signals`（全排序候选）**。
+    买不进替补机制靠它取"下一名候选"——`evaluate_picks` 把 signals 丢了，
+    所以顺移此前无米下锅（2026-10-14）。
+    """
+    from . import decision as _dec
+    return _dec.evaluate(prev_close, ma20, bars, board=board,
+                         allowed_boards=allowed_boards, top_n=top_n)
+
+
 # ════════════════════════ 计划构建（纯函数，可单测） ════════════════════════
 
 def build_buy_plan(picks: list, positions: dict, cash_budget: float,
                    single_budget: float, min_lot: int = 100,
-                   cash_headroom: float = 0.95) -> list:
+                   cash_headroom: float = 0.95, code_committed: dict | None = None) -> list:
     """按 gap 顺序（picks 已排序）折算买入量并做现金截断。纯函数。
+
+    `code_committed`（2026-10-14，买不进替补用）：`{code: 已占用名义}` —— 该票**今日已下单**
+    （成交 + 未确认撤单的冻结）的名义。单票上限扣掉它 ⇒ 顺移时不会把同一票买超 `single_budget`。
+    **默认 None ⇒ 行为与加此参数之前逐位一致**（现有额度测试原样通过）。
 
     返回 [{code, gap, price, qty_target, qty_place, truncated, defer_reason, cash_left}]。
     """
     plan, cash_left = [], float(cash_budget)
+    _committed = code_committed or {}
     for p in picks:
         code = p["code"]
         px = float((p.get("price") or p.get("close") or 0))
@@ -132,7 +151,12 @@ def build_buy_plan(picks: list, positions: dict, cash_budget: float,
             rec["defer_reason"] = "t1_locked(当日已持无可卖,加仓暂缓)"
             plan.append(rec)
             continue
-        cap = min(single_budget, cash_left * cash_headroom)
+        try:
+            _used = max(0.0, float(_committed.get(code) or 0))
+        except (TypeError, ValueError):
+            _used = 0.0
+        _single_left = max(0.0, float(single_budget) - _used)
+        cap = min(_single_left, cash_left * cash_headroom)
         qty_target = int(cap / px / min_lot) * min_lot
         rec["qty_target"] = qty_target
         afford = int(cash_left / px / min_lot) * min_lot
@@ -540,10 +564,15 @@ def run_morning_sell_exec(gateway, date: str, morning_highs: dict,
 def run_buy_exec(gateway, date: str, prev_close: dict, ma20: dict, bars: dict,
                  board: dict | None = None, allowed_boards=None,
                  book_dir: str = BOOK_DIR_DEFAULT, params: dict | None = None,
-                 dry_run: bool = False, sleep_fn=time.sleep, log=print) -> dict:
+                 dry_run: bool = False, sleep_fn=time.sleep, log=print,
+                 exclude_codes=None, code_committed=None) -> dict:
     """超跌跳空确认 10:00 买侧执行主流程。返回 fills dict（同时落盘）。
 
     fail-closed：决策核因缺数据/min_pool 不足返回空 picks ⇒ 当日不下单（不抛异常）。
+
+    `exclude_codes` / `code_committed`（2026-10-14 买不进替补用）：补单轮调用时，
+    把"今日已碰过的票"排除、并按**已占用名义**扣单票额度（详见 `backfill.py`）。
+    **默认 None ⇒ 行为与加这两参之前逐位一致。**
     """
     cfg = {**DEFAULTS, **(params or {})}
     lot = int(cfg["min_lot"])
@@ -553,8 +582,17 @@ def run_buy_exec(gateway, date: str, prev_close: dict, ma20: dict, bars: dict,
     started = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     mode = "dry" if dry_run else "live"
 
-    picks = evaluate_picks(prev_close, ma20, bars, board=board,
-                           allowed_boards=allowed_boards, top_n=top_n)
+    _full = evaluate_full(prev_close, ma20, bars, board=board,
+                          allowed_boards=allowed_boards, top_n=top_n)
+    picks = list(_full["picks"])
+    _picks_raw = list(picks)
+    _excl = set(exclude_codes or ())
+    if _excl:
+        picks = [p for p in picks if str(p.get("code")) not in _excl]
+    # 顺移候补：全排序候选里去掉**本轮 picks** 与"今日已碰过"的票
+    from . import backfill as _bf
+    spares = _bf.build_spares(_full.get("signals"), [p["code"] for p in _picks_raw],
+                              _excl, bars=bars)
     if not picks:
         log(f"[WS] {date} 无超跌跳空确认候选（fail-closed，当日不下单） pool_n={len(prev_close)}")
         # 2026-10-13 修复：无候选日 cash_before 原先写死 0.0，会被误读成「现金查询失败」
@@ -564,7 +602,7 @@ def run_buy_exec(gateway, date: str, prev_close: dict, ma20: dict, bars: dict,
         except Exception:
             cash0 = 0.0
         return _write_fills(date, mode, started, [], [], cash0, 0.0, cfg, book_dir,
-                            note="no_picks")
+                            note="no_picks", spares=spares)
 
     cash0 = float(gateway.get_cash() or 0)
     positions = {code_of(k) or str(k): {"qty": int((v or {}).get("qty") or 0),
@@ -582,7 +620,8 @@ def run_buy_exec(gateway, date: str, prev_close: dict, ma20: dict, bars: dict,
         p["price"] = p.get("price") or float(b.get("close") or 0)
 
     buy_plan = build_buy_plan(picks, positions, cash_budget, single_budget,
-                              min_lot=lot, cash_headroom=float(cfg["cash_headroom"]))
+                              min_lot=lot, cash_headroom=float(cfg["cash_headroom"]),
+                              code_committed=code_committed)
     buys_out, total_placed = [], 0.0
     for b in buy_plan:
         code = b["code"]
@@ -591,7 +630,10 @@ def run_buy_exec(gateway, date: str, prev_close: dict, ma20: dict, bars: dict,
                "qty_target": b["qty_target"], "qty_placed": 0,
                "truncated": b["truncated"], "defer_reason": b["defer_reason"],
                "status": "skipped", "filled_qty": 0, "filled_price": None,
-               "fee_est": 0.0, "message": ""}
+               "fee_est": 0.0, "message": "",
+               # 2026-10-14 买不进替补：撤单+顺移要靠这两个字段重建"待补单"，
+               # 原先 rec 里没有 order_id ⇒ 挂单在内存外就找不回来了。
+               "order_id": None, "qty_remaining": 0}
         if b["defer_reason"] or b["qty_place"] <= 0:
             rec["message"] = b["defer_reason"] or "无需买入"
             buys_out.append(rec)
@@ -602,7 +644,10 @@ def run_buy_exec(gateway, date: str, prev_close: dict, ma20: dict, bars: dict,
         rec.update({"qty_placed": b["qty_place"], "status": rep.get("status"),
                     "filled_qty": int(rep.get("filled_qty") or 0),
                     "filled_price": rep.get("filled_price"),
-                    "message": rep.get("message") or ""})
+                    "message": rep.get("message") or "",
+                    "order_id": rep.get("order_id"),
+                    "qty_remaining": max(0, int(b["qty_place"])
+                                         - int(rep.get("filled_qty") or 0))})
         eff_px = rec["filled_price"] or b["price"]
         rec["fee_est"] = round(float(rec["filled_qty"] or b["qty_place"]) * float(eff_px or 0) * _FEE_BUY, 2)
         if rep.get("status") in _TERMINAL_BAD or rep.get("status") == "error":
@@ -615,7 +660,7 @@ def run_buy_exec(gateway, date: str, prev_close: dict, ma20: dict, bars: dict,
         buys_out.append(rec)
 
     fills = _write_fills(date, mode, started, buys_out, picks, cash0, total_placed,
-                         cfg, book_dir)
+                         cfg, book_dir, spares=spares)
     if not dry_run:
         try:
             register_buys_to_book(book_dir, date, buys_out, picks, prev_close, ma20, log)
@@ -625,7 +670,7 @@ def run_buy_exec(gateway, date: str, prev_close: dict, ma20: dict, bars: dict,
 
 
 def _write_fills(date, mode, started, buys_out, picks, cash0, total_placed,
-                 cfg, book_dir, note: str = "") -> dict:
+                 cfg, book_dir, note: str = "", spares=None) -> dict:
     finished = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     # ⚠️ 2026-10-12：`buys_placed` 原先只数 `qty_placed>0`，把**被拒/被锁**的单也算成"已下单"
     # （与 S1 复盘里 `buys_placed=4/rejected=0` 的虚报同源）。改为只数未被终态否决的。
@@ -641,6 +686,12 @@ def _write_fills(date, mode, started, buys_out, picks, cash0, total_placed,
              "strategy": "oversold_gap_confirm", "note": note or "",
              "picks": [{"code": p["code"], "gap": p.get("gap"),
                         "board": p.get("board", "")} for p in picks],
+             # 2026-10-14 买不进替补：把**顺移候补**一并落盘。
+             # 为什么必须落盘：`hooks._STATE` 在内存里，掘金策略中途重启就没了 ⇒
+             # 挂单会一直冻结到 15:00（正是 10-14 的事故形态）。落盘后补单钩子能回读。
+             "spares": [{"code": s["code"], "gap": s.get("gap"),
+                         "board": s.get("board", ""), "price": s.get("price")}
+                        for s in (spares or [])],
              "buys": buys_out, "summary": summary,
              "fee_model": _FEE_SRC,
              "params": {k: cfg[k] for k in DEFAULTS}}

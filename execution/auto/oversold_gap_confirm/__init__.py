@@ -11,7 +11,8 @@
 | `decision.py` | 信号核（纯函数、零 IO）：`signal_ok` / `evaluate` | ❌ |
 | `prescreen.py` | 预筛两层漏斗：韭研板块 → 涨停家数 top-N → 昨收<MA20 | ❌（facade 绝对路径加载/注入） |
 | `executor.py` | 买/卖/早盘卖三条腿 + 持仓账本 + 留痕（注入式网关，可干跑） | ❌ |
-| `hooks.py` | 四个时点钩子 + 每日一次状态 + `on_bar` 分发 | ❌ |
+| `backfill.py` | **买不进替补核**（纯函数 + 编排）：涨停价/封死判据/时效复检/额度顺移/撤单确认 | ❌ |
+| `hooks.py` | 六个时点钩子 + 每日一次状态 + `on_bar` 分发 + 当日状态落盘 | ❌ |
 | `gateway.py` | `OscGateway(GmGateway)`：策略 id 绑 `osc` 的下单通道 | ❌ |
 | `runtime.py` | `Runtime`：宿主注入件（services/账本目录/时钟/日志） | ❌ |
 
@@ -37,7 +38,7 @@ osc.executor.load_book(dir)                 # 账本（宿主归属判定也读�
 """
 from __future__ import annotations
 
-from . import decision, executor, gateway, hooks, prescreen
+from . import backfill, decision, executor, gateway, hooks, prescreen
 from .hooks import enabled, on_bar, reset_day, sell_enabled
 from .runtime import Runtime
 
@@ -49,6 +50,9 @@ PARAM_PREFIX = "osc_"
 BOOK_DIRNAME = "weak_strong_book"   # ⚠️ 在线账本目录**刻意沿用历史名**（改名会让在途持仓失联）
 HOOKS = (
     ("prepare", 931), ("morning_sell", 1000), ("buy", 1000), ("sell", 1450),
+    # 买不进替补（2026-10-14）：总闸 `osc_backfill_enabled` **默认 False**，回测过关才开。
+    # 时点由 `osc_backfill_first_hhmm`/`_interval_min`/`_rounds` 派生，默认 10:08 / 10:14。
+    ("backfill", 1008),
 )
 
 __all__ = ["ID", "NAME", "ORDER_TYPE", "PARAM_PREFIX", "BOOK_DIRNAME", "HOOKS",

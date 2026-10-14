@@ -228,12 +228,30 @@ PARAMS = {
     "osc_enabled": True,   # 超跌跳空确认 10:00 买侧总闸（2026-10-12 owner 决策 C：翻启，接替 S1）
     "osc_top_n": 4,              # 每日按 gap 取最强前 N（exp9 Sharpe 顶点）
     "osc_board_top_n": 5,        # 盘前取全市场前 N 热门板块的成分股为候选范围（2026-10-14 起全市场口径；数值沿用猎手池标定，待重验证）
+    # 宇宙总闸（2026-10-14 新增）：True=全市场（当前行为）；False=退回猎手池（扩展前）。
+    # 为什么留这个闸：宇宙扩展只有**行为证据**（候选 292→357、热门板块换成医药生物/军工），
+    #   没有**通过的回测证据** —— exp9/exp24 的标定都在猎手池上，而补做的那次 A/B
+    #   （t_io/validation/weak_strong/exp27_osc_universe.py）因"窄臂用今天的韭研快照"带事后选择偏差
+    #   而**判为无效**（ΔSharpe −0.964 不可采信）。⇒ 要一个当天能翻的回退闸，
+    #   不必改代码、也不必动 industry_map.csv（那会让入库文件变成工作区改动）。
+    "osc_universe_full_market": True,
     "osc_single_budget": 100000.0,  # 单票名义上限（元，对齐 OGR 10 万/腿）
     "osc_daily_budget": 400000.0,   # 每日名义总额度（元）
     "osc_cash_headroom": 0.95,      # 单票占用现金封顶比例
     "osc_exec_time_hhmm": 1000,     # 10:00 触发（GM 1800s 首根 10:00 棒）
     "osc_order_poll_rounds": 3,
     "osc_order_poll_sleep_sec": 2.0,
+    # ── 买不进替补（顺移）：2026-10-14 首日事故对策 ────────────────────────────
+    # 事故：gap 最大的两只全天封死涨停，市价单排巨量封单后到 15:00 才过期，19.8 万冻结一天。
+    # 方案：10:00 首单未成交 ⇒ 撤单 ⇒ 候补**时效复检**（现价≥昨收 且 ≥当日累计VWAP 且非封死）
+    #       ⇒ 通过才顺移额度。依据 doc/solutions/2026-10-14_OSC买不进替补机制设计.md（推荐 B）。
+    # ⚠️ **默认 False**：owner 决策「回测对齐（exp26）证明 Sharpe 不被稀释后才上线」。
+    #    代码在、行为不变；回测过关再把这一行翻 True。
+    "osc_backfill_enabled": False,   # 总闸（回测过关前保持关）
+    "osc_backfill_rounds": 2,        # 最多补 N 轮
+    "osc_backfill_first_hhmm": 1008,  # 首轮补单时点（10:08）
+    "osc_backfill_interval_min": 6,   # 轮次间隔（分钟）
+    "osc_backfill_deadline_hhmm": 1020,  # 此点之后**不再开新仓**（与"最多N轮"双保险）
     # ── 卖侧（2026-10-10 接线，exp19 owner 拍板 SL5只深；只动掘金模拟盘）──
     "osc_sell_enabled": True,        # 卖侧总闸（随 paper_enabled 一起生效）
     "osc_stop_pct": 0.05,            # 深超跌 close 止损线（−5%）

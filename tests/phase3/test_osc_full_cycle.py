@@ -84,6 +84,18 @@ class TestFullCycle(unittest.TestCase):
         self.assertEqual(self.d1["summary"]["rejected_count"], 0)
         self.assertEqual(self.d1["order_event_types"], ["osc"])
 
+    def test_t2b_backfill_hooks_wired_and_noop_when_all_filled(self):
+        """2026-10-14 买不进替补：10:08 / 10:14 两格必须在**真 gm_main.on_bar** 里被分发到；
+        本场景三笔首单全部回报成交 ⇒ 补单轮应**空转**（不撤单、不下新单、不留 pending）。"""
+        self.assertEqual(self.d1["backfill_rounds_done"], [0, 1],
+                         "两个补单时点都应跑到（接线证据）")
+        self.assertEqual(self.d1["backfill_pending_left"], 0,
+                         "首轮全成 ⇒ 无待补单")
+        self.assertEqual(len(self.d1["orders"]), 3,
+                         "补单轮不得凭空多下单")
+        self.assertTrue(self.d1["day_state_exists"],
+                        "当日状态必须落盘（进程重启后靠它防重复下单/找回挂单）")
+
     def test_t3_book_records_entry_price_date_dev20(self):
         """成交后入账本：entry_date=当日、entry_price=10:00 收盘、qty、dev20（SL5 判据）。"""
         bk = self.d1["book_after_fill"]

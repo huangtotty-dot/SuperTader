@@ -283,7 +283,11 @@ def events():
 
 
 # ══════════════ 第 1 天 ══════════════
-d1 = drive(0, [(9, 31), (10, 0), (14, 50)])
+# 2026-10-14：把**买不进替补**的总闸打开并补上 10:08 / 10:14 两格 —— 本场景里三笔首单
+# 都会回报成交（`_get_orders` 恒回 status=3）⇒ `pending` 为空 ⇒ 补单轮**空转**（不撤单、
+# 不下新单）。用途：验证两个新钩子在**真 gm_main.on_bar** 里确实被分发到，且不影响既有行为。
+GM.PARAMS["osc_backfill_enabled"] = True
+d1 = drive(0, [(9, 31), (10, 0), (10, 8), (10, 14), (14, 50)])
 f1 = jload("fills_%s.json" % d1)
 out["days"]["d1"] = {
     "date": d1,
@@ -299,6 +303,11 @@ out["days"]["d1"]["acct"] = {s: v["qty"] for s, v in ACCT.pos.items()}
 out["days"]["d1"]["book_after_fill"] = {c: {k: v[k] for k in ("entry_date", "entry_price", "qty", "dev20")}
                                         for c, v in book().items()}
 out["days"]["d1"]["order_event_types"] = sorted({t for _c, t, _s in events()})
+# 2026-10-14：补单轮的接线证据（两格都跑到 ⇒ [0,1]）+ 当日状态落盘存在
+out["days"]["d1"]["backfill_rounds_done"] = sorted(OSC.hooks._STATE.get("backfill", {}).keys())
+out["days"]["d1"]["backfill_pending_left"] = len(OSC.hooks._STATE.get("pending") or [])
+out["days"]["d1"]["day_state_exists"] = os.path.exists(
+    os.path.join(BOOK, "day_state_%s.json" % d1))
 
 # ══════════════ 第 2 天 ══════════════
 unlock_all()

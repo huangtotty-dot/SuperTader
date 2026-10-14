@@ -113,7 +113,7 @@ def full_market_meta() -> dict:
     return out
 
 
-def universe_board_map() -> dict:
+def universe_board_map(full_market: bool = True) -> dict:
     """**全市场口径** code -> 板块标签（2026-10-14 宇宙扩展）。
 
     两层来源，**韭研主板块优先**：
@@ -126,9 +126,18 @@ def universe_board_map() -> dict:
     全市场扩展」的保守折中，exp15 的板块排名口径结论需在全市场下重验证（见模块 docstring）。
 
     industry_map.csv 缺失 ⇒ 退化为旧行为（仅猎手表有韭研板块的票）。
+
+    `full_market=False`（2026-10-14 新增，由参数 `osc_universe_full_market` 驱动）
+    ⇒ **只返回猎手池那份映射**（扩展前的宇宙）。用途：宇宙扩展目前**只有行为证据、
+    没有通过的回测证据**（exp9/exp24 的标定都在猎手池上；`doc/research/2026-10-14_OSC
+    买不进替补_回测判词.md` 里那次 A/B 因事后选择偏差而无效）⇒ 需要一个**不改代码、不改数据文件**
+    的当天回退闸。**默认 True = 与扩展后的行为逐位一致**。
     """
+    _jy = sym2board_map()
+    if not full_market:
+        return {c: b for c, b in _jy.items() if b}
     m = {c: v["sw"] for c, v in full_market_meta().items() if v.get("sw")}
-    for code, board in sym2board_map().items():
+    for code, board in _jy.items():
         if board:
             m[code] = board        # 韭研主板块优先（猎手池口径不变式）
     return m
@@ -139,7 +148,8 @@ def _codes_with_board(board_map: dict) -> list:
     return [c for c in board_map if board_map.get(c)]
 
 
-def premarket_candidates(top_n: int, date: str = None, provider=None) -> dict:
+def premarket_candidates(top_n: int, date: str = None, provider=None,
+                         full_market: bool = True) -> dict:
     """盘前超跌候选 → {code: {'prev_close','ma20','board','name'}}。
 
     **板块口径（exp15 全池复验定稿，2026-10-10）**：取「前一日大涨(≥9.5%)家数」top-N 板块
@@ -164,7 +174,7 @@ def premarket_candidates(top_n: int, date: str = None, provider=None) -> dict:
                   f"{type(_e).__name__}: {_e}")
             return {}
     meta = full_market_meta()
-    board_map = universe_board_map()
+    board_map = universe_board_map(full_market=full_market)
     if not meta:
         print("[OSC] ⚠️ industry_map.csv 缺失/读坏 ⇒ 宇宙退化为猎手池（旧行为），"
               "全市场扩展未生效")

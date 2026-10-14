@@ -1,11 +1,13 @@
 # -*- coding: utf-8 -*-
 """超跌跳空确认 · 时点钩子（包内模块 `hooks`）—— 从 gm_main 搬入（2026-10-12）。
 
-## 四个时点（都是**每日一次**，仅 MODE_LIVE）
+## 六个时点（都是**每日一次**，仅 MODE_LIVE）
 
     09:31  prepare           盘前预筛：前一日涨停家数 top-N 板块 ∩ 昨收<MA20 → 候选
     10:00  try_morning_sell  D+1 持仓早盘冲高 ≥ 入场价×(1+target) → 卖（**先于买侧**）
     10:00  try_buy           10:00 棒 → 决策核 → gap top-N → 下单
+    10:08  try_backfill #1   未成交 → 撤单 → 候补复检 → 顺移（2026-10-14 新增）
+    10:14  try_backfill #2   同上第二轮；**10:20 后不再开新仓**
     14:50  try_sell          SL5只深 close 止损 + 满 N 日到期平仓
 
 由 `on_bar(rt, context, now, today, t)` 统一分发：内部做**时间窗 + 每日一次 + 模式**闸，
@@ -16,11 +18,19 @@
 本模块**不 import gm.api**（仓规：只有 gm_main 能）。全部掘金能力与宿主服务经 `Runtime`（`rt`）
 传入：`rt.gm.*`（原语）/ `rt.sdk_call` / `rt.gateway(context)` / `rt.param` / `rt.audit` /
 `rt.risk` / `rt.log` / `rt.book_dir` / `rt.kill_switch` / `rt.is_live`。
-执行核与预筛是同包模块（`executor` / `prescreen`），决策核是同包 `decision`。
+执行核与预筛是同包模块（`executor` / `prescreen`），决策核是同包 `decision`，
+买不进替补的纯函数在 `backfill`。
+
+## ⚠️ 为什么补单做成**新时点钩子**而不是在 `try_buy` 里循环
+
+`_place_and_poll` 会 sleep；要在 `try_buy` 里等到 10:08 就得阻塞约 480s，而
+`gm_main` 顶部注释（2026-09-11 事故）明写 **`on_bar` 阻塞会连坐 SDK 事件派发线程、让 fill 永久排队**。
+bar 循环本就 60s 一跳 ⇒ 10:08/10:14 是**免费定时器**，且与首轮解耦后任一补单轮失败都不影响首轮留痕。
 """
 from __future__ import annotations
 
 import json
+import os
 import time as _time
 from collections import Counter
 from datetime import time as dtime
@@ -28,17 +38,76 @@ from functools import partial
 
 import pandas as pd
 
-from . import executor, prescreen
+from . import backfill, executor, prescreen
 
 # 每日一次状态（原先散在 gm_main 的模块级全局 `_OSC_*_DONE_DATE` + `context._osc_candidates`）
 _STATE = {"date": None, "prepare": False, "buy": False, "sell": False,
-          "morning": False, "candidates": {}}
+          "morning": False, "candidates": {},
+          # ── 买不进替补（2026-10-14）──
+          "fills": None,      # 当日首轮 fills dict（额度账 committed 由它算）
+          "pending": [],      # 待补单（未成交买单）
+          "spares": [],       # 顺移候补（gap 降序）
+          "done_codes": set(),  # 今日已碰过的 code（防重复顺移/追价）
+          "backfill": {},     # {round_idx: True} 每日一次标记
+          "buy_done": False,  # 首轮已执行（落盘，防进程重启后重复下单）
+          }
 
 
 def reset_day(today) -> None:
-    """按日重置（宿主在日期切换时调用；同时清空预筛候选）。"""
+    """按日重置（宿主在日期切换时调用；同时清空预筛候选与替补状态）。"""
     _STATE.update(date=today, prepare=False, buy=False, sell=False,
-                  morning=False, candidates={})
+                  morning=False, candidates={}, fills=None, pending=[], spares=[],
+                  done_codes=set(), backfill={}, buy_done=False)
+
+
+# ── 当日状态落盘（2026-10-14）────────────────────────────────────────────
+# 为什么必须落盘：`_STATE` 在内存里，掘金策略中途重启就全没了 ⇒
+#   ① 挂单会一直冻结到 15:00（**正是 10-14 的事故形态**）；
+#   ② `buy` 标记被清 ⇒ 下一根 bar 会**再跑一次首轮**（可能重复下单）。
+# 落在账本目录（与 `fills_{date}.json` 同处），文件名 `day_state_{date}.json`。
+def _day_state_fp(rt, date):
+    return os.path.join(str(rt.book_dir), "day_state_%s.json" % str(date))
+
+
+def save_day_state(rt, date) -> bool:
+    """把补单相关状态落盘。异常吞掉（落盘失败不该拖垮主循环），返回是否成功。"""
+    try:
+        fp = _day_state_fp(rt, date)
+        os.makedirs(os.path.dirname(fp), exist_ok=True)
+        tmp = fp + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump({"date": str(date), "buy_done": bool(_STATE.get("buy_done")),
+                       "pending": _STATE.get("pending") or [],
+                       "spares": _STATE.get("spares") or [],
+                       "done_codes": sorted(_STATE.get("done_codes") or []),
+                       "backfill": {str(k): v for k, v in (_STATE.get("backfill") or {}).items()}},
+                      f, ensure_ascii=False)
+        os.replace(tmp, fp)
+        return True
+    except Exception:
+        return False
+
+
+def load_day_state(rt, date) -> bool:
+    """回读当日状态（仅当**同日**且内存里还没有时）。返回是否载入。"""
+    if _STATE.get("pending") or _STATE.get("buy_done"):
+        return False
+    try:
+        fp = _day_state_fp(rt, date)
+        if not os.path.exists(fp):
+            return False
+        with open(fp, encoding="utf-8") as f:
+            d = json.load(f) or {}
+        if str(d.get("date")) != str(date):
+            return False
+        _STATE["buy_done"] = bool(d.get("buy_done"))
+        _STATE["pending"] = list(d.get("pending") or [])
+        _STATE["spares"] = list(d.get("spares") or [])
+        _STATE["done_codes"] = set(d.get("done_codes") or [])
+        _STATE["backfill"] = {int(k): v for k, v in (d.get("backfill") or {}).items()}
+        return True
+    except Exception:
+        return False
 
 
 def enabled(rt) -> bool:
@@ -52,10 +121,15 @@ def sell_enabled(rt) -> bool:
 def prepare(rt, context, now, today):
     """盘前盘前预筛（每日一次，09:31 触发；取数须在 10:00 之前完成）。"""
     _top = int(rt.param("osc_board_top_n", 5))
+    # 宇宙总闸（2026-10-14）：True=全市场扩展（当前行为）；False=退回猎手池。
+    # 存在的理由：扩展只有行为证据、**没有通过的回测证据**（见 prescreen.universe_board_map 注释）
+    # ⇒ 要一个当天可翻、不用改代码也不用动数据文件（industry_map.csv）的回退闸。
+    _full = bool(rt.param("osc_universe_full_market", True))
     _t0 = _time.time()
-    rt.log(f"[OSC] ── 盘前预筛开始 ──（前{_top}热门板块 ∩ 全市场 ∩ 昨收<MA20）")
+    rt.log(f"[OSC] ── 盘前预筛开始 ──（前{_top}热门板块 ∩ "
+           f"{'全市场' if _full else '猎手池(已回退)'} ∩ 昨收<MA20）")
     try:
-        _cand = prescreen.premarket_candidates(_top, str(today))
+        _cand = prescreen.premarket_candidates(_top, str(today), full_market=_full)
     except Exception as _e:
         rt.log(f"[OSC] 盘前预筛失败（fail-closed，当日不下单）: {_e}")
         rt.audit({"event": "osc_prepare_fail", "date": str(today),
@@ -75,7 +149,8 @@ def prepare(rt, context, now, today):
             f"{c} {v['prev_close'] / v['ma20'] - 1:+.1%}" for c, v in _deep if v.get("ma20")))
     else:
         rt.log("[OSC]   [!] 0 只候选 -> 今日买侧不下单（fail-closed）")
-    rt.audit({"event": "osc_prepare", "date": str(today), "candidates": len(_cand)})
+    rt.audit({"event": "osc_prepare", "date": str(today), "candidates": len(_cand),
+              "universe": "full_market" if _full else "hunter_pool"})
 
 
 
@@ -172,6 +247,7 @@ def try_buy(rt, context, now) -> int:
         else:
             rt.log("[OSC] 10:00 无信号触发（缺口未守住/未站上昨收或 VWAP）-> 今日不买")
         rt.log(f"[OSC] 10:00 买侧执行: {json.dumps(_sm, ensure_ascii=False)}")
+        _stamp_after_buy(rt, now, _res, _pc)
         return int(_sm.get("buys_placed") or 0)
     except Exception as _e:
         rt.log(f"[OSC] 买侧执行失败（不阻断主循环）: {_e}")
@@ -180,6 +256,221 @@ def try_buy(rt, context, now) -> int:
         except Exception:
             pass
         return 0
+
+
+def _stamp_after_buy(rt, now, res, prev_close) -> None:
+    """首轮买侧跑完 → 把补单所需状态存进 `_STATE` 并落盘（2026-10-14）。
+
+    存什么：
+      · `fills`      —— 额度账真源（`backfill.committed_notional` 用它算"已占用名义"）
+      · `pending`    —— 未成交买单（撤单对象）
+      · `spares`     —— 顺移候补（executor 落盘的那份）
+      · `done_codes` —— 今日已碰过的票（防重复顺移/追价）
+      · `buy_done`   —— 首轮已执行（**落盘**，防进程重启后重复下单）
+
+    无候补 / 无未成交时也照样落盘 `buy_done` —— 那是"今日首轮已完成"的证据。
+    """
+    try:
+        _res = res or {}
+        _fills = dict(_res)
+        # fills 里的 buys 才够重建待补单；`_write_fills` 已带 order_id/qty_remaining
+        try:
+            _pend = backfill.pending_from_fills(_fills)
+        except Exception:
+            _pend = []
+        _spares = list(_res.get("spares") or [])
+        # 无未成交 ⇒ 没有可撤的、也没必要顺移（首轮全成）
+        if not _pend:
+            _spares = []
+        _done = set(_STATE.get("done_codes") or ())
+        for p in (_res.get("picks") or []):
+            if p.get("code"):
+                _done.add(str(p["code"]))
+        for b in (_res.get("buys") or []):
+            if b.get("code"):
+                _done.add(str(b["code"]))
+        _STATE["fills"] = _fills
+        _STATE["pending"] = _pend
+        _STATE["spares"] = _spares
+        _STATE["done_codes"] = _done
+        _STATE["buy_done"] = True
+        save_day_state(rt, str(now.date()))
+        if _pend:
+            rt.log("[OSC] 10:00 未成交 %d 只（%s）→ 等候补轮（%d 只候补、%s 起）" % (
+                len(_pend), "/".join(p["code"] for p in _pend), len(_spares),
+                _hhmm_str(backfill_times(rt)[0]) if backfill_times(rt) else "-"))
+        elif _spares:
+            rt.log("[OSC] 10:00 首轮全部成交，无需补单（已备候补 %d 只）" % len(_spares))
+    except Exception as _e:
+        rt.log(f"[OSC] ⚠️ 补单状态登记失败（不阻断）: {_e}")
+
+
+def backfill_times(rt) -> list:
+    """补单轮次时点列表（由参数派生）。总闸关闭 ⇒ 返回空表（等于没有这个机制）。"""
+    if not bool(rt.param("osc_backfill_enabled", False)):
+        return []
+    try:
+        first = int(rt.param("osc_backfill_first_hhmm", 1008))
+        gap = int(rt.param("osc_backfill_interval_min", 6))
+        rounds = int(rt.param("osc_backfill_rounds", 2))
+    except (TypeError, ValueError):
+        return []
+    out = []
+    for i in range(max(0, rounds)):
+        hhmm = first + i * gap
+        out.append(dtime(hhmm // 100, hhmm % 100))
+    return out
+
+
+def backfill_deadline(rt):
+    """补单截止时点（**此点之后不再开新仓**，与"最多 N 轮"双保险）。"""
+    try:
+        v = int(rt.param("osc_backfill_deadline_hhmm", 1020))
+    except (TypeError, ValueError):
+        return dtime(10, 20)
+    return dtime(v // 100, v % 100)
+
+
+def _hhmm_str(t):
+    return "%02d:%02d" % (t.hour, t.minute)
+
+
+def fetch_current_snapshot(rt, codes, now) -> dict:
+    """盘中实时快照（**一次调用拿全复检三样**）：{code: {price, vwap, ask_v}}。
+
+    用 `gm.current` 而不是 `history(1800s)`：前者一次往返同时给出现价、**当日累计量额**
+    （`cum_amount`/`cum_volume`）与盘口 `quotes[0].ask_v` —— 补单是加在轮询里的，
+    多打一次接口就是多一次冻结风险（本仓对轮询速度是硬约束）。
+    取数失败/字段缺失 → 该 code 不入表 ⇒ 复检 fail-closed 跳过。
+    """
+    codes = [c for c in (codes or []) if c]
+    if not codes:
+        return {}
+    syms = [rt.code_to_gm(c) for c in codes]
+    try:
+        rows = rt.sdk_call("osc_backfill_current",
+                           partial(rt.gm.current, symbols=syms))
+    except Exception as _e:
+        rt.log(f"[OSC] ⚠️ 补单取数失败（本轮放弃补单）: {_e}")
+        return {}
+    out = {}
+    for r in (rows if isinstance(rows, (list, tuple)) else [rows]):
+        if r is None:
+            continue
+        try:
+            sym = (r.get("symbol") if isinstance(r, dict) else getattr(r, "symbol", None))
+            if not sym:
+                continue
+            code = str(sym).split(".")[-1]
+            def _g(k):
+                return r.get(k) if isinstance(r, dict) else getattr(r, k, None)
+            price = float(_g("price") or 0)
+            if price <= 0:
+                continue
+            q0 = (_g("quotes") or [{}])
+            q0 = q0[0] if q0 else {}
+            out[str(code)] = {
+                "price": price,
+                "vwap": backfill.day_vwap(_g("cum_amount"), _g("cum_volume")),
+                "ask_v": (q0.get("ask_v") if isinstance(q0, dict)
+                          else getattr(q0, "ask_v", None)),
+            }
+        except Exception:
+            continue
+    return out
+
+
+def try_backfill(rt, context, now, today, round_idx) -> int:
+    """一轮补单：**未成交 ⇒ 撤单 ⇒ 候补复检 ⇒ 顺移**（2026-10-14）。
+
+    返回本轮新下单腿数。全程 fail-closed：取数失败/无候补/额度不足 ⇒ 这轮不动（既不撤也不买）。
+    """
+    if not bool(rt.param("osc_backfill_enabled", False)):
+        return 0
+    try:
+        if rt.kill_switch():
+            rt.log("[OSC] [X] KILL_SWITCH 存在 -> 补单轮中止（不撤单、不开新仓）")
+            rt.audit({"event": "osc_backfill_skip", "reason": "kill_switch",
+                      "round": int(round_idx), "time": str(now)})
+            return 0
+    except Exception:
+        pass
+    load_day_state(rt, str(now.date()))
+    _pend = list(_STATE.get("pending") or [])
+    if not _pend:
+        return 0                              # 首轮全成 / 无挂单 ⇒ 空转（不写日志刷屏）
+    _spares = list(_STATE.get("spares") or [])
+    _fills = _STATE.get("fills") or {}
+    if not _spares:
+        rt.log(f"[OSC] 补单第{int(round_idx) + 1}轮：有 {len(_pend)} 只未成交但**候补已耗尽** "
+               f"⇒ 只撤单不再开仓")
+    _codes = [p["code"] for p in _pend] + [s["code"] for s in _spares]
+    _pc = prescreen.split_into_prev_close_ma20(_STATE.get("candidates") or {})[0]
+    _quotes = fetch_current_snapshot(rt, _codes, now)
+    if not _quotes:
+        rt.log(f"[OSC] 补单第{int(round_idx) + 1}轮：取数失败 ⇒ 本轮放弃（挂单保持不动）")
+        rt.audit({"event": "osc_backfill_skip", "reason": "no_quotes",
+                  "round": int(round_idx), "time": str(now)})
+        return 0
+    _params = {
+        "single_budget": float(rt.param("osc_single_budget", 100000.0)),
+        "daily_budget": float(rt.param("osc_daily_budget", 400000.0)),
+        "cash_headroom": float(rt.param("osc_cash_headroom", 0.95)),
+        "order_poll_rounds": int(rt.param("osc_order_poll_rounds", 3)),
+        "order_poll_sleep_sec": float(rt.param("osc_order_poll_sleep_sec", 2.0)),
+    }
+    try:
+        _res = backfill.run_backfill_exec(
+            rt.gateway(context), str(now.date()), _fills, _pend, _spares, _pc, _quotes,
+            positions=None, params=_params, dry_run=False,
+            sleep_fn=_time.sleep, log=print)
+    except Exception as _e:
+        rt.log(f"[OSC] 补单第{int(round_idx) + 1}轮执行失败（不阻断主循环）: {_e}")
+        return 0
+
+    _cr = _res.get("cancel") or {}
+    _placed = _res.get("placed") or []
+    rt.log("[OSC] 补单第%d轮: 撤单确认 %d / 未确认 %d / 失败 %d · 释放额度 %s · "
+           "顺移下单 %d 只 · 跳过 %s" % (
+               int(round_idx) + 1, len(_cr.get("released") or []),
+               len(_cr.get("unconfirmed") or []), len(_cr.get("failed") or []),
+               _res.get("cash_budget"), len(_placed),
+               ",".join("%s:%s" % (s["code"], s["reason"]) for s in
+                        (_res.get("skipped") or [])[:6]) or "-"))
+    rt.audit({"event": "osc_backfill", "date": str(now.date()), "round": int(round_idx),
+              "released": _cr.get("released"), "unconfirmed": _cr.get("unconfirmed"),
+              "failed": _cr.get("failed"), "cash_budget": _res.get("cash_budget"),
+              "placed": [{"code": p["code"], "qty": p["qty"], "status": p["status"]}
+                         for p in _placed],
+              "skipped": _res.get("skipped"), "note": _res.get("note"),
+              "time": str(now)})
+
+    # 状态推进：撤单确认的不再挂账；本轮下单的票若仍未成交，进下一轮 pending
+    _released = set(_cr.get("released") or [])
+    for _f in (_cr.get("filled") or []):      # 竞态成交的委托也算"已了结"，不再挂账
+        if _f.get("code"):
+            _released.add(_f["code"])
+    _done = set(_STATE.get("done_codes") or ())
+    _next_pend = []
+    for p in _pend:
+        if p["code"] in _released:
+            continue                          # 已撤成 / 已竞态成交 ⇒ 不再挂账
+        _next_pend.append(p)                  # 未确认的撤单**继续挂账**（额度不释放）
+    for p in _placed:
+        _done.add(str(p["code"]))
+        if p.get("qty_remaining") and p.get("order_id") and p.get("status") not in (
+                "filled", "rejected", "expired", "cancelled", "error"):
+            _next_pend.append({"code": p["code"], "order_id": p["order_id"],
+                               "gap": None, "price": float(p.get("price") or 0),
+                               "qty_placed": int(p.get("qty") or 0),
+                               "filled_qty": int(p.get("filled_qty") or 0),
+                               "qty_remaining": int(p.get("qty_remaining") or 0),
+                               "ref_price": float(p.get("filled_price")
+                                                  or p.get("price") or 0)})
+    _STATE["pending"] = _next_pend
+    _STATE["done_codes"] = _done
+    save_day_state(rt, str(now.date()))
+    return len(_placed)
 
 
 def sell_codes(rt) -> list:
@@ -395,12 +686,32 @@ def on_bar(rt, context, now, today, t) -> None:
         except Exception as _e:
             rt.log(f"[OSC] 10:00 早盘冲高卖失败（不阻断主循环）: {_e}")
     # 10:00 买侧
+    # ⚠️ `buy_done` 是**落盘**标记：进程在 10:00 之后重启时 `_STATE["buy"]` 已被 `reset_day`
+    #    清掉，下一根 bar 会**再跑一次首轮**（可能重复下单）。回读当日状态后据此跳过。
     if live and t >= dtime(10, 0) and not _STATE["buy"]:
-        _STATE["buy"] = True
-        try:
-            try_buy(rt, context, now)
-        except Exception as _e:
-            rt.log(f"[OSC] 10:00 买侧失败（不阻断主循环）: {_e}")
+        load_day_state(rt, today)
+        if _STATE.get("buy_done"):
+            _STATE["buy"] = True
+            rt.log("[OSC] 10:00 买侧：当日状态显示首轮已执行（重启回读）⇒ 跳过，不重复下单")
+        else:
+            _STATE["buy"] = True
+            try:
+                try_buy(rt, context, now)
+            except Exception as _e:
+                rt.log(f"[OSC] 10:00 买侧失败（不阻断主循环）: {_e}")
+    # 10:08 / 10:14 补单轮（买不进替补，2026-10-14）—— 这两格是"每日一次 + 时间窗"
+    for _i, _bt in enumerate(backfill_times(rt)):
+        if (live and _STATE.get("buy") and t < backfill_deadline(rt)
+                and t >= _bt and not (_STATE["backfill"] or {}).get(_i)):
+            _STATE.setdefault("backfill", {})[_i] = True
+            try:
+                try_backfill(rt, context, now, today, _i)
+            except Exception as _e:
+                rt.log(f"[OSC] 补单第{_i + 1}轮失败（不阻断主循环）: {_e}")
+            try:
+                save_day_state(rt, today)
+            except Exception:
+                pass
     # 14:50 止损/到期
     if (live and sell_enabled(rt) and t >= sell_time(rt) and not _STATE["sell"]):
         _STATE["sell"] = True
@@ -419,8 +730,10 @@ def on_bar(rt, context, now, today, t) -> None:
         if _STATE.get("hb_slot") != _slot:
             _STATE["hb_slot"] = _slot
             try:
-                _done = [k for k in ("prepare", "morning", "buy", "sell") if _STATE.get(k)]
-                _t = {"prepare": "预筛", "morning": "早盘卖", "buy": "买侧", "sell": "收盘卖"}
+                _done = [k for k in ("prepare", "morning", "buy", "backfill", "sell")
+                         if _STATE.get(k)]
+                _t = {"prepare": "预筛", "morning": "早盘卖", "buy": "买侧",
+                      "backfill": "补单", "sell": "收盘卖"}
                 rt.log(f"[OSC] {_slot} 心跳 · 持仓 {len(sell_codes(rt))} 只 · "
                        f"今日已完成 {'/'.join(_t[k] for k in _done) if _done else '无'}")
             except Exception:

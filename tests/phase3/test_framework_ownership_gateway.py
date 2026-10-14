@@ -55,9 +55,14 @@ class FakeGm(object):
     PositionEffect_Open, PositionEffect_Close = 1, 2
     ADJUST_PREV = 1
 
-    def __init__(self, orders=None, positions=None, cash=1000000.0):
+    def __init__(self, orders=None, positions=None, cash=1000000.0,
+                 get_orders=None, cancel_ok=True):
         self.calls = []
         self._orders = orders if orders is not None else [{"id": "o1", "status": 0}]
+        # `get_orders` 原先**写死返回 []**（只够 place_order 用）；撤单确认要按状态码回报 ⇒
+        # 改成可编程，默认仍是 []（保持既有用例行为逐位不变）。
+        self._get_orders = get_orders if get_orders is not None else []
+        self._cancel_ok = cancel_ok
         self._positions = positions or {}
         self._cash = cash
 
@@ -67,7 +72,14 @@ class FakeGm(object):
 
     def get_orders(self, **kw):
         self.calls.append(("get_orders", kw))
-        return []
+        return list(self._get_orders)
+
+    def order_cancel(self, **kw):
+        """撤单原语（2026-10-14 新增）。`_cancel_ok=False` 模拟"下游拒绝撤单"。"""
+        self.calls.append(("order_cancel", kw))
+        if not self._cancel_ok:
+            return [{"id": kw.get("order_id"), "status": 8}]
+        return [{"id": kw.get("order_id"), "status": 0}]
 
     def current(self, **kw):
         return [{"open": 10.0}]
@@ -290,6 +302,88 @@ class TestGatewayHardLock(unittest.TestCase):
         kw = [c[1] for c in gm.calls if c[0] == "order_volume"][0]
         self.assertEqual(kw["order_type"], FakeGm.OrderType_Market)
         self.assertNotIn("price", kw)
+
+
+class TestGatewayCancelAndRawStatus(unittest.TestCase):
+    """撤单通道 + `poll_order` 的原始状态码（2026-10-14，买不进替补机制的前置）。
+
+    ⚠️ 这里钉的是一个**既有隐患的修正**：`poll_order` 原先把 `status=6`(PendingCancel)
+    归进 `reject_statuses` ⇒ 映射成 `rejected`。而上层撤单确认若据此判"资金已释放"，
+    就会**用同一笔钱再下第二单 = 超买**。6 的真实语义是「撤单在途、钱还冻着」。
+    """
+
+    def _gw(self, ownership, **kw):
+        acct_pos = kw.pop("acct_positions", None) or {}
+        gm = FakeGm(**kw)
+        acc = FakeAccount(positions=acct_pos, cash=1000000.0)
+        ev, rk, au = [], [], []
+        sv, order = _services(gm, ownership, events=ev, risks=rk, audits=au,
+                              params={"osc_limit_slippage_bp": 0})
+        gw = GmGateway(FakeCtx(acc), "osc", sv, log=lambda *a: None)
+        return gw, gm, ev, rk, au, order
+
+    def test_cancel_order_calls_primitive_with_order_id(self):
+        own = Ownership(strategies=[])
+        gw, gm, ev, rk, au, order = self._gw(own)
+        rep = gw.cancel_order("o123", "600001")
+        self.assertTrue(rep["ok"])
+        calls = [c[1] for c in gm.calls if c[0] == "order_cancel"]
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(calls[0]["order_id"], "o123")
+
+    def test_cancel_is_not_written_as_new_order(self):
+        """撤单**不能**落 order 事件 —— 那是孤儿闸判"本策略今日对该 code 下过单"的判据，
+        写了会让孤儿闸把别人的成交认成自己的。"""
+        own = Ownership(strategies=[])
+        gw, gm, ev, rk, au, order = self._gw(own)
+        gw.cancel_order("o123", "600001")
+        self.assertEqual([o for o in order if o[0] != "recon"], [],
+                         "撤单不应写 write_order")
+
+    def test_cancel_primitive_missing_degrades(self):
+        """本机 gm 是空档 ⇒ `order_cancel` 取不到 ⇒ 必须降级返回 ok=False，**不抛**。"""
+        own = Ownership(strategies=[])
+
+        class _NoCancel(FakeGm):
+            order_cancel = None
+        gm = _NoCancel()
+        sv, order = _services(gm, own)
+        gw = GmGateway(FakeCtx(FakeAccount()), "osc", sv, log=lambda *a: None)
+        rep = gw.cancel_order("o123", "600001")
+        self.assertFalse(rep["ok"])
+        self.assertEqual(rep["message"], "cancel_unavailable")
+
+    def test_cancel_downstream_reject(self):
+        own = Ownership(strategies=[])
+        gw, gm, ev, rk, au, order = self._gw(own, cancel_ok=False)
+        rep = gw.cancel_order("o123", "600001")
+        self.assertFalse(rep["ok"])
+        self.assertIn("cancel_rejected", rep["message"])
+
+    def test_poll_order_raw_status_for_every_terminal(self):
+        """`raw_status` 必须原样带出状态码，供上层按**码**判终态（字符串会被映射改义）。"""
+        own = Ownership(strategies=[])
+        for st, expect in ((0, "submitted"), (2, "partial"), (3, "filled"),
+                           (5, "rejected"), (6, "pending_cancel"), (8, "rejected"),
+                           (12, "rejected")):
+            gw, gm, ev, rk, au, order = self._gw(
+                own, get_orders=[{"id": "o1", "status": st,
+                                  "filled_volume": 100 if st == 2 else 0,
+                                  "filled_vwap": 10.0}])
+            rep = gw.poll_order("o1", "600001")
+            self.assertEqual(rep["raw_status"], st, f"status={st} 应原样带出")
+            self.assertEqual(rep["status"], expect, f"status={st} 映射错")
+
+    def test_pending_cancel_is_not_rejected(self):
+        """单拎出来钉死：6 → pending_cancel（**不是** rejected）。
+
+        这条若回退，撤单确认会把"撤单中"当成"已解冻"。
+        """
+        own = Ownership(strategies=[])
+        gw, gm, ev, rk, au, order = self._gw(own, get_orders=[{"id": "o1", "status": 6}])
+        rep = gw.poll_order("o1", "600001")
+        self.assertEqual(rep["status"], "pending_cancel")
+        self.assertNotIn("rejected", rep["status"])
 
 
 if __name__ == "__main__":
