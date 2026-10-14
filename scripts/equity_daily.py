@@ -342,6 +342,68 @@ def _apply_fill_overlay(date: str, positions: dict):
     return overlay, src_name
 
 
+def _reject_unfreeze_cash(date: str, hb: dict):
+    """收盘后拒单/撤单解冻回补（2026-10-14 实弹事故根修）。
+
+    事故：OSC 两笔限价买单（600097×9800@10.20、000823×4000@24.55）全天未成交、
+    ≈19.8 万冻结，15:00 才被拒（status=12），而 heartbeat 末行现金快照写在 14:58
+    → 现金仍含冻结 → equity 虚亏 43.5%（真实约 -1.1%）。
+    口径（钉死）：
+    - 仅当拒单/撤单事件的 _ts 晚于 heartbeat 末行 _ts（解冻发生在现金快照之后）
+      才回补 qty×委托价；早于快照的拒单（S1 时代 status=8 盘中即时拒单，资金当时
+      即解冻、末行现金已含）不回补 → 天然幂等、不重补旧事件。
+    - 只回补 BUY 侧（SELL 拒单解冻的是持仓不是现金）。
+    - 委托价取自当日同 code BUY order 事件；无 order 记录/无价格 → 跳过不硬算。
+    返回 (amount, parts)。
+    """
+    hb_ts = (hb or {}).get("_ts")
+    if not isinstance(hb_ts, (int, float)):
+        return 0.0, []
+    fp = os.path.join(_BRIDGE_DIR, f"events_{date.replace('-', '')}.jsonl")
+    if not os.path.exists(fp):
+        return 0.0, []
+
+    def _is_buy(e):
+        side = e.get("side")
+        if side:
+            return side == "BUY"
+        raw = e.get("raw")
+        if isinstance(raw, str):  # raw 是 GM 回报 dict 的 repr，side:1=BUY
+            try:
+                import ast
+                return (ast.literal_eval(raw) or {}).get("side") == 1
+            except Exception:
+                return False
+        return False
+
+    order_px = {}   # code → 最近一次 BUY 委托价
+    restores = {}   # code → 收盘后被拒/撤未成交 qty 累计
+    with open(fp, encoding="utf-8") as f:
+        for line in f:
+            try:
+                e = json.loads(line)
+            except Exception:
+                continue
+            code = str(e.get("code") or "")
+            if not code:
+                continue
+            if e.get("event") == "order" and _is_buy(e):
+                px = e.get("price")
+                if isinstance(px, (int, float)) and px > 0:
+                    order_px[code] = float(px)
+            elif (e.get("event") in ("reject", "cancel") and _is_buy(e)
+                  and isinstance(e.get("_ts"), (int, float)) and e["_ts"] > hb_ts):
+                restores[code] = restores.get(code, 0) + int(e.get("qty") or 0)
+    amount, parts = 0.0, []
+    for code, qty in sorted(restores.items()):
+        px = order_px.get(code)
+        if not qty or px is None:
+            continue
+        amount += qty * px
+        parts.append(f"{code}×{qty}@{px}")
+    return amount, parts
+
+
 def compute(date: str, prev_override=None, extra_note: str = None) -> dict:
     """单日计算。prev_override=(value, date) 时跳过文件链（回填模式内部链接用）。"""
     notes = [_SIM_TAG + "(heartbeat尾行+K线重估)"]
@@ -364,6 +426,15 @@ def compute(date: str, prev_override=None, extra_note: str = None) -> dict:
         positions = hb.get("positions") or {}
         raw_cash = hb.get("cash")
         cash = float(raw_cash) if isinstance(raw_cash, (int, float)) else None
+        # 收盘后拒单/撤单解冻回补（细节见 _reject_unfreeze_cash docstring）：
+        # heartbeat 现金快照早于解冻（如 15:00 status=12 拒单 vs 14:58 快照）→
+        # 未成交买单的冻结资金回补现金口径；早于快照的拒单不回补（幂等）。
+        if cash is not None:
+            _unfreeze, _unfreeze_parts = _reject_unfreeze_cash(date, hb)
+            if _unfreeze > 0:
+                cash += _unfreeze
+                notes.append(f"收盘后拒单解冻回补{len(_unfreeze_parts)}笔合计{_unfreeze:.2f}"
+                             f"({','.join(_unfreeze_parts)})→cash已含解冻")
         # 成交回报覆盖层（细节见 _apply_fill_overlay docstring）：fill pos_after 是 GM 真值，
         # 修正台账残影（卖出不扣减）与台账丢票（新买入不入账）。
         _overlay, _ev_name = _apply_fill_overlay(date, positions)
