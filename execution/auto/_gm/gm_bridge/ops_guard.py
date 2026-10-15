@@ -19,9 +19,11 @@ gm_bridge/ops_guard.py — 运维自举与双向看门狗（2026-08-06 红日整
 """
 
 import os
+import queue
 import re
 import subprocess
 import sys
+import threading
 import time
 from datetime import datetime
 
@@ -80,11 +82,85 @@ except ImportError:
 
 class _TeeStream:
     """同时写原控制台与日志文件的流。F2(2026-09-09): 每次写前做跨日滚动——旧句柄定死首日日期，
-    进程跨日运行时日志仍全写首日文件，新增按日滚动（仿 watcher._roll_events_path）。"""
+    进程跨日运行时日志仍全写首日文件，新增按日滚动（仿 watcher._roll_events_path）。
+
+    2026-10-15 管道堵塞事故整改（终端22516死亡 → stdout 管道写满 64KB → write 永久阻塞 →
+    策略主线程静默挂死 2 小时，14:50 卖侧缺席）：
+      ① **文件日志先行**：先 `_fh.write + flush`（落盘可靠性最高优先级），再碰控制台；
+      ② 控制台写入改走**后台 daemon 线程 + 有界队列**：队列满 → 丢弃控制台输出并计数
+         （降级告警落文件），**绝不阻塞主线程**；消费者线程阻塞也只堵它自己；
+      ③ 全路径线程安全（GM 回调线程模型：on_bar/print 可能来自 SDK 线程）。
+    """
+
+    _QUEUE_MAX = 4096        # 控制台输出队列上限（条）。约覆盖数小时密集日志
+    _FH_LOCK = threading.RLock()   # stdout/stderr 两个 Tee 共享同一文件句柄 ⇒ 类级互斥
 
     def __init__(self, stream, fh):
         self._stream = stream
         self._fh = fh
+        self._q = queue.Queue(maxsize=self._QUEUE_MAX)
+        self._dropped = 0            # 因队列满被丢弃的控制台输出条数
+        self._console_dead = False   # 消费者确认管道已断（异常）⇒ 之后不再入队
+        self._worker = threading.Thread(target=self._console_consumer,
+                                        name="tee-console-%d" % id(self),
+                                        daemon=True)
+        self._worker.start()
+
+    # ── 控制台：后台消费者（唯一会碰 self._stream 的地方）────────────
+    def _console_consumer(self):
+        """从队列取数据写控制台。write/flush 永久阻塞（管道写满）也只堵本 daemon 线程。"""
+        while True:
+            try:
+                data = self._q.get()
+            except Exception:
+                return
+            try:
+                if data is not None and not self._console_dead:
+                    self._stream.write(data)
+                    try:
+                        self._stream.flush()
+                    except Exception:
+                        pass
+            except Exception as e:
+                # 管道已断（BrokenPipeError 等）：标记死亡，write 侧不再入队；
+                # 降级告警落文件（此时控制台已不可达）。
+                self._console_dead = True
+                self._file_notice("⚠️ 控制台写入异常（%s: %s），后续控制台输出已停用；"
+                                  "文件日志不受影响" % (type(e).__name__, str(e)[:80]))
+            finally:
+                try:
+                    self._q.task_done()
+                except Exception:
+                    pass
+
+    def _enqueue_console(self, data):
+        """非阻塞入队；满 ⇒ 丢弃 + 计数（周期性落文件告警）。任何路径都不抛。"""
+        if self._console_dead:
+            return
+        try:
+            self._q.put_nowait(data)
+            return
+        except queue.Full:
+            pass
+        except Exception:
+            return
+        with self._FH_LOCK:
+            self._dropped += 1
+            n = self._dropped
+        if n == 1 or n % 1000 == 0:
+            self._file_notice("⚠️ 控制台输出队列已满(>%d条)，已丢弃 %d 条 "
+                              "（终端失联/管道堵塞？交易链路不受影响）" % (self._QUEUE_MAX, n))
+
+    # ── 文件：主线程直写（先行），全在类级锁内 ─────────────────────
+    def _file_notice(self, msg):
+        """降级/异常告警落文件（自带时间戳）。best-effort，不抛。"""
+        try:
+            with self._FH_LOCK:
+                self._fh.write("\n[ops] %s %s\n"
+                               % (datetime.now().strftime("%H:%M:%S"), msg))
+                self._fh.flush()
+        except Exception:
+            pass
 
     def _roll_if_needed(self):
         today = datetime.now().strftime("%Y%m%d")
@@ -107,33 +183,47 @@ class _TeeStream:
                 old.close()
             except Exception:
                 pass
-            sys.__stdout__.write("  [ops] 日志已跨日滚动: %s\n" % log_path)
+            # ⚠️ 2026-10-15：不再 `sys.__stdout__.write` —— 那正是会永久阻塞的坏管道。
+            #    滚动通告走「文件 + 控制台队列」两条安全通道。
+            self._enqueue_console("  [ops] 日志已跨日滚动: %s\n" % log_path)
         except Exception:
             pass
 
     def write(self, data):
+        # ① 文件先行：落盘可靠是第一优先级（控制台堵死也不许拖累文件）。
         try:
-            self._stream.write(data)
+            with self._FH_LOCK:
+                if getattr(self._fh, "closed", False):
+                    # stdout/stderr 两个 Tee 共享句柄，一方跨日滚动关了旧句柄 ⇒ 另一方收养新句柄
+                    self._fh = _state.get("_log_fh") or self._fh
+                self._roll_if_needed()
+                # 2026-10-15：日志文件剥掉 ANSI 色码（控制台原样透传）。
+                # 色码由策略侧（oversold_gap_confirm.style）产生，写盘这份必须是纯文本，
+                # 否则 strategy_*.log 会被塞满转义序列、grep/复盘全废。
+                # ⚠️ 分层：本模块**不** import 策略包，自带等价正则（口径见 style.ANSI_RE）。
+                self._fh.write(_ANSI_RE.sub("", data) if "\x1b" in data else data)
+                self._fh.flush()
         except Exception:
             pass
-        try:
-            self._roll_if_needed()
-            # 2026-10-15：日志文件剥掉 ANSI 色码（控制台原样透传）。
-            # 色码由策略侧（oversold_gap_confirm.style）产生，写盘这份必须是纯文本，
-            # 否则 strategy_*.log 会被塞满转义序列、grep/复盘全废。
-            # ⚠️ 分层：本模块**不** import 策略包，自带等价正则（口径见 style.ANSI_RE）。
-            self._fh.write(_ANSI_RE.sub("", data) if "\x1b" in data else data)
-            self._fh.flush()
-        except Exception:
-            pass
+        # ② 控制台：异步队列，满即丢，绝不阻塞主线程
+        self._enqueue_console(data)
         return len(data)
 
     def flush(self):
-        for s in (self._stream, self._fh):
-            try:
-                s.flush()
-            except Exception:
-                pass
+        # ⚠️ 刻意**不**碰 self._stream：管道写满时 flush 同样永久阻塞。
+        #    控制台的 flush 由消费者线程在每次 write 后负责（堵也只堵线程）。
+        try:
+            with self._FH_LOCK:
+                self._fh.flush()
+        except Exception:
+            pass
+
+    def __getattr__(self, name):
+        # 透传 encoding/isatty/writelines 等属性到原流（print/file= 之外的鸭子接口）。
+        # 注意：只补属性访问；write/flush 已在上面对防阻塞做过专门处理。
+        if name.startswith("_"):
+            raise AttributeError(name)
+        return getattr(self._stream, name)
 
 
 def watcher_heartbeat_path():
