@@ -1,0 +1,40 @@
+{
+  "updated_at": "2026-10-15 15:44:53",
+  "open": {
+    "605198": {
+      "entry_date": "2026-10-12",
+      "entry_price": 62.043,
+      "qty": 1800,
+      "dev20": null,
+      "gap": null,
+      "board": "",
+      "days_held": 2,
+      "last_check_date": "2026-10-15",
+      "backfill_note": "owner 2026-10-13 决策：S1 遗留持仓 override 认领 osc 并补入卖侧账本。真实成交 2026-10-12 09:31 买入 1800 股 @62.043（费 23.45，费用不计入 entry_price）。dev20 无法离线回填 → null（非深超跌，不挂 -5% 止损，仅早盘冲高卖 + 到期平仓）。",
+      "days_held_backfill_2026_10_15": "2026-10-15 13:00 策略进程管道堵塞挂死，14:50 卖侧缺席 ⇒ days_held 手工补记 1→2（与正常轨迹一致：10-16→3、10-19→4、10-20→5 到期）。详见 RECONCILE_2026-10-15.md 附录B。"
+    },
+    "688003": {
+      "entry_date": "2026-10-12",
+      "entry_price": 65.662,
+      "qty": 1700,
+      "dev20": null,
+      "gap": null,
+      "board": "",
+      "days_held": 2,
+      "last_check_date": "2026-10-15",
+      "backfill_note": "owner 2026-10-13 决策：S1 遗留持仓 override 认领 osc 并补入卖侧账本。真实成交 2026-10-12 09:31 买入 1700 股 @65.662（费 23.44，费用不计入 entry_price）。dev20 无法离线回填 → null（非深超跌，不挂 -5% 止损，仅早盘冲高卖 + 到期平仓）。",
+      "days_held_backfill_2026_10_15": "2026-10-15 13:00 策略进程管道堵塞挂死，14:50 卖侧缺席 ⇒ days_held 手工补记 1→2（与正常轨迹一致：10-16→3、10-19→4、10-20→5 到期）。详见 RECONCILE_2026-10-15.md 附录B。"
+    },
+    "301373": {
+      "entry_date": "2026-10-14",
+      "entry_price": 108.81,
+      "qty": 300,
+      "dev20": -0.114199,
+      "gap": 0.07946428571428577,
+      "board": "PCB",
+      "days_held": 1,
+      "last_check_date": "2026-10-15",
+      "days_held_backfill_2026_10_15": "2026-10-15 13:00 策略进程管道堵塞挂死，14:50 卖侧缺席 ⇒ days_held 手工补记 0→1。10-15 10:00 早盘冲高卖已按 days_held==0 判定过（sells_morning_2026-10-15.json: hold），补 1 与正常轨迹一致（明早起 not_next_day，交 14:50 止损/到期）。详见 RECONCILE_2026-10-15.md 附录B。"
+    }
+  }
+}
