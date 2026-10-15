@@ -120,10 +120,19 @@ def _jiuyan_names() -> dict:
 
 # W33 A1: 双通道 8 键标签（与 position_builder.CHANNEL_COND_KEYS 同序）
 # 方案A (2026-08-15): 建仓条件=时机门控，与 position_builder.COND_LABELS 一致
+# 条件详情卡「按当前规则实时重算」的进程内缓存（2026-10-15）：{(code,date): scan_stock 结果}。
+# ⚠️ 进程级 ⇒ **规则改动本来就要求重启 GUI**，重启即自动失效，故不需要再挂版本号。
+_COND_FRESH_CACHE = {}
+
 COND_LABELS = {
     "t_regime": "市场有方向",
     "t_trend": "多头结构",
     "t_drawdown": "回撤到位",
+    # 2026-10-15：GO 与得分口径一致新增的两条**硬约束**（timing_decision 的
+    # go_require_above_ma20 / go_require_above_ma5）——不加进来，面板/条件卡就少显示两条，
+    # 用户看到 NO-GO 却找不到原因。与 position_builder 写入侧、condition_detail 渲染侧三处同步。
+    "t_ma20": "站上MA20(硬约束)",
+    "t_ma5": "站上MA5(硬约束)",
     "t_golden": "MACD金叉(加分)",
 }
 
@@ -7778,6 +7787,33 @@ class Api:
         if not latest_record:
             return {"available": False, "error": f"未找到 {code} 的扫描记录"}
 
+        # 2026-10-15 owner：「卡片中的信息要和现在的实现保持一致」。
+        # 记录是**扫描当时的快照** ⇒ 规则改动后老记录永远显示旧口径（用户点开 09-15 的卡
+        # 仍看到旧得分/旧条件）。故打开时**按当前规则实时重算这一天**。
+        # fail-safe：重算失败就退回快照，并在卡上标明（不静默把旧值当现值）。
+        _live_ok = False
+        try:
+            from core import position_builder as _pb
+            _si = {"代码": str(code), "名称": str(latest_record.get("name") or code)}
+            # 进程内缓存：同一 (code,date) 重复点开秒回（实测单只 1~3.5s）。
+            # 规则改动必须重启 GUI 才生效 ⇒ 进程重启即自动失效，不必再挂版本号。
+            _ck = (str(code), str(date))
+            _fresh = _COND_FRESH_CACHE.get(_ck)
+            if _fresh is None:
+                _fresh = _pb.scan_stock(str(code), _si, str(date))
+                if _fresh:
+                    if len(_COND_FRESH_CACHE) > 200:
+                        _COND_FRESH_CACHE.clear()
+                    _COND_FRESH_CACHE[_ck] = _fresh
+            if _fresh:
+                _stored_scan_time = latest_record.get("scan_time")
+                latest_record = {**latest_record, **_fresh}
+                latest_record["scan_time"] = _stored_scan_time      # 保留"哪次扫的"
+                latest_record["recomputed_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                _live_ok = True
+        except Exception:
+            _live_ok = False
+
         # 构建条件详情列表：先时机门控条件（现行判定，2026-08-27 对齐），再旧双通道（参考级）
         conditions_detail = []
         channels = latest_record.get("channels", {})
@@ -7794,6 +7830,9 @@ class Api:
                 ("t_regime", "市场有方向", True),
                 ("t_trend", "多头结构", True),
                 ("t_drawdown", "回撤到位", True),
+                # 2026-10-15：GO 与得分口径一致新增的两条硬约束（与 position_builder 写入侧同步）
+                ("t_ma20", "站上MA20", True),
+                ("t_ma5", "站上MA5", True),
                 ("t_golden", "MACD金叉(近5日)", False)):
             if _k not in conditions:
                 continue
@@ -7878,6 +7917,9 @@ class Api:
             "conditions_detail": conditions_detail,
             "blockers": blockers_detail,
             "divergence": latest_record.get("divergence_detail", {}),
+            # 2026-10-15：卡片是否按**当前规则**实时重算过（false=重算失败、显示的是扫描快照）
+            "live_recomputed": bool(_live_ok),
+            "recomputed_at": latest_record.get("recomputed_at") or "",
         }
 
     def _compute_regime_targets(self, record: dict) -> dict:

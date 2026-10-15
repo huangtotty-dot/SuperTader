@@ -1074,6 +1074,15 @@ def scan_stock(code: str, stock_info: dict, date_str: str = None,
             result["conditions"]["t_veto"] = (
                 {"passed": False, "detail": f"否决因子触发: {'、'.join(_vetoes)}"} if _vetoes
                 else {"passed": True, "detail": f"否决因子(爆量/远离MA60)未触发"})
+            # 2026-10-15：**GO 与得分口径一致**新增两条硬约束（`timing_decision` 的
+            # go_require_above_ma20 / go_require_above_ma5）。必须写进 conditions ——
+            # 否则条件详情卡少两条、用户看到 NO-GO 却找不到原因（卡片的唯一数据源就是它）。
+            _ma20_ok = _f.get("above_ma20") is True
+            _ma5_ok = _f.get("above_ma5") is True
+            result["conditions"]["t_ma20"] = {
+                "passed": _ma20_ok, "detail": f"站上MA20(硬约束)={'是' if _ma20_ok else '否'}"}
+            result["conditions"]["t_ma5"] = {
+                "passed": _ma5_ok, "detail": f"站上MA5(硬约束)={'是' if _ma5_ok else '否'}"}
             if _data_insufficient:
                 result["errors"].append("个股日线数据不足(timing features为空)")
             # P3 同源：verdict/score 映射委托 build_decision.verdict_from_timing（单一真源）。

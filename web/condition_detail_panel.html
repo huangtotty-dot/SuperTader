@@ -423,7 +423,12 @@
                 'insufficient_data': '📭 数据不足'
             }[detail.verdict] || detail.verdict;
             document.getElementById('score-value').textContent = detail.composite_score ?? '—';
-            document.getElementById('scan-time').textContent = detail.scan_time || '—';
+            // 2026-10-15：卡片默认按**当前规则**实时重算（后端 recompute）；重算失败才退回扫描快照。
+            // 必须显式区分，否则"旧快照被当现值看"（本仓安全契约：不得静默展示过期值）。
+            document.getElementById('scan-time').textContent = (detail.scan_time || '—')
+                + (detail.live_recomputed
+                    ? `　· 已按当前规则重算 ${detail.recomputed_at || ''}`
+                    : '　· ⚠ 重算失败，显示的是扫描快照');
 
             // 条件详情（2026-08-27：时机门控条件(必要/加分/否决) + 旧双通道参考）
             if (detail.conditions_detail && detail.conditions_detail.length > 0) {

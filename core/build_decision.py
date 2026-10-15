@@ -35,6 +35,15 @@ DEFAULT_TIMING_PARAMS = {
     "veto_dist_ma60_max": 0.20,
     "ma5_below_penalty": 70,          # 2026-10-08：未站上5日线 → 综合得分扣减
     "ma5_below_block_signal": True,   # 破 MA5 时把 signal 压成 approaching
+    # 2026-10-15 owner：「站上 MA20」作为**硬性约束**——不站上则综合得分悬崖式扣减。
+    # 为什么光靠 +权重(W_MA20=3)不够：那 +30 分会被**逆向**的「日线阶段」项（④下跌 +30）
+    # 正好抵消（实测 艾力斯 破位+④下跌 = 长江电力 站上+企稳 = 50 分，分不开）。
+    "ma20_below_penalty": 40,     # 不站上 MA20 → 扣减（比 MA5 那条 70 轻一档）
+    # 2026-10-15 owner：「GO 与得分口径必须一致」——GO 也要求站上 MA20（否则出现"GO 但得分 0"）
+    # ⚠️ 打开它 = **废止 trend_dn 的抄底腿**（深回撤必然跌破 MA20）。设为 False 可回退。
+    "go_require_above_ma20": True,
+    # 同上：GO 也要求站上 MA5（否则"GO 但 0 分"仍有残留——破 MA5 的 −70 悬崖）
+    "go_require_above_ma5": True,
 }
 
 
@@ -108,6 +117,15 @@ def features_from_daily(df: pd.DataFrame, date_str: str) -> dict:
     _ma20_5ago = float(c.rolling(20).mean().iloc[-6])
     _up20 = _m20 > _ma20_5ago
     _dn20 = _m20 < _ma20_5ago
+    # 2026-10-15（owner）：关键支撑企稳 = 收盘站上 MA60 且近 3 日最低价都没跌破 MA60。
+    # 取「近 3 日**最低价**」而不是只看收盘：要的是"整段都站在支撑上"（真企稳），
+    # 而不是"最后一根恰好收在上面"（可能是刚反抽）。缺 low 列 ⇒ False（fail-closed）。
+    _support_hold = False
+    if "low" in sub.columns and len(sub) >= 3:
+        _low3 = pd.to_numeric(sub["low"], errors="coerce").tail(3).min()
+        _m60_now = float(c.rolling(60).mean().iloc[-1])
+        _support_hold = bool(_m60_now > 0 and _low3 == _low3
+                             and price > _m60_now and float(_low3) >= _m60_now)
     _stage = 1                                              # ①蓄势（默认）
     if price > _m20 > _m60 and _up20:
         _stage = 2                                          # ②抬升
@@ -117,6 +135,10 @@ def features_from_daily(df: pd.DataFrame, date_str: str) -> dict:
         _stage = 4                                          # ④下跌
     return {
         "price": round(price, 3),
+        # 2026-10-15（owner 得分细则重构）：「关键支撑企稳」——**regime 无关**，
+        # 用来顶替原来那个随大盘 regime 变阈值的「回撤到位」。见 timing_score docstring。
+        # 支撑 = MA60（长期支撑）；企稳 = 收盘站上 MA60 **且**近 3 个交易日最低价都没跌破它。
+        "support_hold": bool(_support_hold),
         "stage_daily_code": _stage,
         "trend_multihead": bool(price > ma20 and price > ma60),
         "above_ma60": bool(price > ma60),
@@ -185,6 +207,22 @@ def timing_decision(features: dict, regime: str, params: dict = None) -> dict:
         # 震荡/unknown → 降频
         go = False
         reasons.append("震荡市: 降频，暂不建仓/加仓")
+    # 2026-10-15 owner：「**GO 与得分口径必须一致**」——站上 MA20 是硬性前提。
+    # 没有这条会出现「GO 但得分 0」，两列互相打脸（2026-10-15 实测：13 只 GO **全部** 0 分，
+    # 因为空头市 GO 走的是「抄底」=要求深回撤/跌破均线，而得分要求站上 MA20，方向天然相反）。
+    # 效果：trend_up 无变化（trend_multihead 已隐含站上 MA20）；**trend_dn 的抄底腿被废止**
+    #       （深回撤 ⇒ 必然跌破 MA20 ⇒ 永远不 GO）；range 本来就是 False。
+    if bool(p.get("go_require_above_ma20", True)) and f.get("above_ma20") is not True:
+        if go:
+            reasons.append("未站上MA20(硬约束): 得分口径要求站上MA20 ⇒ 不给GO")
+        go = False
+    # 同理 MA5：`trend_multihead`（站上 MA20&MA60）**不蕴含**站上 MA5（刚回踩就可能破），
+    # 而破 MA5 有 −70 悬崖 ⇒ 只闸 MA20 仍有残留的「GO 但 0 分」（实测 2026-08-31：248 只里
+    # 还有 14 只）。要"GO ⟹ 得分>0"完全成立，MA5 也必须一起闸。
+    if bool(p.get("go_require_above_ma5", True)) and f.get("above_ma5") is not True:
+        if go:
+            reasons.append("未站上MA5(硬约束): 得分有 −70 悬崖 ⇒ 不给GO")
+        go = False
     return {"go": bool(go), "veto": vetoes, "reasons": reasons}
 
 
@@ -192,14 +230,35 @@ def timing_decision(features: dict, regime: str, params: dict = None) -> dict:
 # verdict 映射（scan_stock 生产口径）
 # ═══════════════════════════════════════════
 
-_STAGE_REV_ORD = {4: 3, 3: 2, 1: 1, 2: 0}   # ④下跌最高 … ②抬升最低（证据：两半窗同号）
+_STAGE_REV_ORD = {4: 3, 3: 2, 1: 1, 2: 0}
+
+# 2026-10-15 owner：「站上 MA20」在综合得分里的权重（其余项均 ±1）。
+_W_MA20 = 3   # ④下跌最高 … ②抬升最低（证据：两半窗同号）
 
 
-def timing_score(features: dict, trend_ok: bool, dd_ok: bool, golden_ok: bool,
+def timing_score(features: dict, trend_ok: bool, golden_ok: bool,
                  data_insufficient: bool = False) -> int:
-    """建仓「综合得分」= **横截面相对强弱/状态分**（0~100），符号由实测证据定。
+    """建仓「综合得分」（0~100）。
 
-    2026-10-11 重构。原式 = 30×市场有方向 + 30×多头结构 + 30×回撤到位 + 10×MACD金叉 − 70×破MA5。
+    ## 2026-10-15 owner 重构（两条要求）
+    ① **取消大盘在得分中的计算**：原式「回撤到位」项是 `dd_threshold_ok(drawdown, regime)`，
+       阈值**随 regime 变** ⇒ 大盘仍从这条路**间接进分**。实测同一只票（回撤 −12%）：
+       `trend_dn` 得 **16**、`trend_up`/`range` 得 **30**。
+       ⇒ 该项**整项替换为 regime-无关**的「关键支撑企稳」(`support_hold`)。
+    ② **「站上 MA20」加大权重**：作为独立正项进分，权重 **`_W_MA20 = 3`**（其余项均 ±1）。
+       方向取**正向**（站上=加分）——依据 owner 现场：得分最高的是"破位+④下跌"的票，
+       他要把「站上 MA20」这条拉起来。
+
+    ## 新式
+        raw = −(多头结构) −(MACD金叉) −(站上MA5) + 3×(站上MA20) + (支撑企稳) + 日线阶段分
+        score = round((raw + 3) / 10 × 100)          # raw ∈ [−3, 7] → 0~100
+
+    ⚠️ 与旧式相比，本式**方向是混合的**：`−多头结构/−金叉/−站上MA5` 仍是 2026-10-11 那批
+    **逆向**分量（实测"看起来越强反而越差"），而 `+站上MA20/+支撑企稳` 是 owner 新加的正向项。
+    这是 owner 的明确选择，不是笔误；若实测发现两端互相抵消，应按 owner 再拍。
+
+    ## 2026-10-11 的实测依据（保留，供追溯）
+    原式 = 30×市场有方向 + 30×多头结构 + 30×回撤到位 + 10×MACD金叉 − 70×破MA5。
 
     实测（977 只 × 2265 日；**横截面 IC**，h1 定符号 → h2 **样本外**检验）：
       · **四个分量全为负 IC**，且两个半窗符号一致：
@@ -217,10 +276,13 @@ def timing_score(features: dict, trend_ok: bool, dd_ok: bool, golden_ok: bool,
         return 0
     f = features or {}
     stage = int(f.get("stage_daily_code") or 1)
-    raw = (-(1 if trend_ok else 0) - (1 if dd_ok else 0) - (1 if golden_ok else 0)
+    raw = (-(1 if trend_ok else 0)
+           - (1 if golden_ok else 0)
            - (1 if f.get("above_ma5") is True else 0)
+           + _W_MA20 * (1 if f.get("above_ma20") is True else 0)      # 2026-10-15：加大权重项
+           + (1 if f.get("support_hold") is True else 0)              # 2026-10-15：替代原「回撤到位」
            + _STAGE_REV_ORD.get(stage, 0))
-    return int(round((raw + 4) / 7.0 * 100))
+    return int(round((raw + 3) / 10.0 * 100))
 
 
 def verdict_from_timing(go: bool, regime: str, features: dict, data_insufficient: bool = False,
@@ -238,7 +300,9 @@ def verdict_from_timing(go: bool, regime: str, features: dict, data_insufficient
         _dd_ok = dd_threshold_ok(float(f["drawdown"]), regime) if "drawdown" in f else False
     _golden = bool(f.get("macd_golden_5d"))
     # 2026-10-11 重构：证据化横截面分（见 timing_score）。市场项不再进分（IC 恒为 0）。
-    _score = timing_score(f, _trend, _dd_ok, _golden, data_insufficient)
+    # 2026-10-15：**不再传 `_dd_ok`** —— 它随 regime 变，是把大盘带进得分的唯一通路。
+    # `_dd_ok` 本身仍算（门控/verdict 要用），只是不进分。
+    _score = timing_score(f, _trend, _golden, data_insufficient)
     _p = params or DEFAULT_TIMING_PARAMS
     # 2026-10-08 owner：**未站上5日线**（收盘 ≤ MA5）→ ①综合得分大幅扣减 ②不给 signal（压成 approaching）。
     # ⚠️ 2026-10-11：本扣分**按 owner 决定保持不变**（先观察）。实测它把证据化增益砍掉约一半
@@ -247,6 +311,10 @@ def verdict_from_timing(go: bool, regime: str, features: dict, data_insufficient
     _below_ma5 = f.get("above_ma5") is False
     if _below_ma5:
         _score = max(0, _score - int(_p.get("ma5_below_penalty", 70)))
+    # 2026-10-15 owner：「站上 MA20」硬性约束 —— 不站上则悬崖式扣减。
+    # 与上面 MA5 那条同款、但幅度轻一档；两条可叠加（都破 ⇒ 更沉底）。
+    if f.get("above_ma20") is False:
+        _score = max(0, _score - int(_p.get("ma20_below_penalty", 40)))
     if go:
         _v = "signal"
     elif regime == "range" and _trend and _dd_ok:

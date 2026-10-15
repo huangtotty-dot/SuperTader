@@ -2179,9 +2179,14 @@ function renderPB(pb) {
     //   score 上限70）。用 score_ceiling/signal_reachable 诚实呈现，避免"70分"看着像"离signal一步"。
     const _ceiling = (r.score_ceiling != null) ? r.score_ceiling : 100;
     const _reachable = (r.signal_reachable != null) ? r.signal_reachable : true;
+    // 2026-10-15：得分口径已两度重构（10-11 移出市场项；10-15 移除随 regime 变的「回撤到位」、
+    //   加入「站上MA20(权重3)」与「关键支撑企稳」），**得分与大盘 regime 完全无关** ⇒
+    //   旧文案「震荡市 市场有方向那30分锁死、上限70」早已不成立，删掉。
     const scoreCellTitle = _reachable
-      ? "综合得分（满分100，signal 可达）"
-      : `综合得分 · 当前市况(震荡)下 signal 结构性不可达：市场有方向那30分锁死，得分上限 ${_ceiling}`;
+      ? "综合得分(0~100) = −多头结构 −MACD金叉 −站上MA5 + 3×站上MA20 + 支撑企稳 + 日线阶段分"
+        + "（不站上MA5扣70、不站上MA20扣40；GO ⟹ 两条都站上 ⟹ 得分>0）"
+      : `综合得分 · 当前市况(震荡)下 signal 结构性不可达（t_regime 不过）；`
+        + `得分本身**与大盘无关**、仍可 0~100`;
     const scoreCellHtml = _reachable
       ? `<b>${r.composite_score}</b>`
       : `<b>${r.composite_score}</b><span class="cell-dim" style="font-size:10px">/${_ceiling}🔒</span>`;
@@ -2652,7 +2657,10 @@ function renderAutoScan(d) {
   const counts = d.counts || {};
   const countBadge = k => counts[k] ? `<span class="badge">${esc(k)}: ${counts[k]}</span>` : "";
   // 条件圆点标签（与手动盘 COND_LABELS 同口径）
-  const AUTO_COND_LABELS = { t_regime: "市场有方向", t_trend: "多头结构", t_drawdown: "回撤到位", t_golden: "MACD金叉(加分)" };
+  // 2026-10-15：与后端 COND_LABELS 同步（新增两条硬约束；否则圆点/悬停会漏显示）
+  const AUTO_COND_LABELS = { t_regime: "市场有方向", t_trend: "多头结构", t_drawdown: "回撤到位",
+                             t_ma20: "站上MA20(硬约束)", t_ma5: "站上MA5(硬约束)",
+                             t_golden: "MACD金叉(加分)" };
   const trs = rows.map(r => {
     const poolBadge = '<span class="badge" style="background:#2a4a5a;color:#8ad4ff" title="自动盘池（goldminer auto 侧管理）">自动</span>';
     const holdBadge = r.held ? '<span class="badge hold">持仓</span>' : "";

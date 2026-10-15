@@ -848,6 +848,13 @@ ENTRY_TIMING_PARAMS = {
     # 2026-10-08 owner：未站上5日线（收盘≤MA5）→ 综合得分大幅扣减 + 不给 signal（压一级）
     "ma5_below_penalty": 70,          # 扣分幅度（满分 100；70 = 几乎清零、沉到榜底）
     "ma5_below_block_signal": True,   # 破 MA5 时把 signal 压成 approaching（不给建仓信号）
+    # 2026-10-15 owner：「站上 MA20」硬性约束 → 不站上则综合得分悬崖式扣减
+    # （光加权重不够：+30 分会被逆向的「日线阶段」项 ④下跌 +30 正好抵消）
+    "ma20_below_penalty": 40,
+    # 2026-10-15 owner：GO 也要求站上 MA20（GO 与得分口径一致）
+    # ⚠️ True = 废止 trend_dn 抄底腿。回退改 False。
+    "go_require_above_ma20": True,
+    "go_require_above_ma5": True,     # 同上（保证 GO ⟹ 得分>0 完全成立）
 }
 
 # ==================== 30min 趋势建仓许可闸（2026-10-04） ====================

@@ -408,6 +408,14 @@ class TestStageDaily(unittest.TestCase):
         self.assertGreaterEqual(len(seen), 2, f"样本应覆盖多个阶段，实际 {seen}")
 
 
+# 2026-10-15：`_mk_forming_bar` 的**生产调用点是 `self._mk_forming_bar(...)`**，
+# 而它的签名一度漏写 `self`（⇒ 生产路径 TypeError、守卫静默失效），当日已补正。
+# 本测试原先按"无绑定"方式调用（`Api._mk_forming_bar(...)`），签名补正后少一个参数 ⇒
+# 改为绑定调用。⚠️ 别再改回无绑定 —— 那会和生产口径脱节（函数体不用 self，
+# 用 `__new__` 拿实例即可，跳过 __init__ 无副作用）。
+_API = t_gui.Api.__new__(t_gui.Api)
+
+
 class TestFormingBarPlaceholderGuard(unittest.TestCase):
     """盘前快照造出的「假当日根」不得污染标签（2026-10-11 事故：600362 误报破5日线）。
 
@@ -417,17 +425,17 @@ class TestFormingBarPlaceholderGuard(unittest.TestCase):
     """
 
     def test_01_writer_rejects_preopen_placeholder(self):
-        self.assertIsNone(t_gui.Api._mk_forming_bar("2026-10-09", 41.5, 41.5, 41.5, 41.5, 0),
+        self.assertIsNone(_API._mk_forming_bar("2026-10-09", 41.5, 41.5, 41.5, 41.5, 0),
                           "盘前占位(O=H=L=C 且 vol=0)必须拒绝")
-        self.assertIsNone(t_gui.Api._mk_forming_bar("2026-10-09", 41.5, 41.5, 41.5, 41.5, None))
+        self.assertIsNone(_API._mk_forming_bar("2026-10-09", 41.5, 41.5, 41.5, 41.5, None))
 
     def test_02_writer_keeps_real_intraday_bars(self):
         # 正常盘中
-        self.assertIsNotNone(t_gui.Api._mk_forming_bar("2026-10-09", 42.0, 41.5, 42.6, 41.4, 12000))
+        self.assertIsNotNone(_API._mk_forming_bar("2026-10-09", 42.0, 41.5, 42.6, 41.4, 12000))
         # 一字板：O=H=L=C 但**有成交** ⇒ 必须放行（否则会误杀）
-        self.assertIsNotNone(t_gui.Api._mk_forming_bar("2026-10-09", 41.5, 41.5, 41.5, 41.5, 500))
+        self.assertIsNotNone(_API._mk_forming_bar("2026-10-09", 41.5, 41.5, 41.5, 41.5, 500))
         # 缺 vol 但有振幅 ⇒ 放行（不能因字段缺失误杀）
-        self.assertIsNotNone(t_gui.Api._mk_forming_bar("2026-10-09", 42.0, 41.5, 42.6, 41.4, None))
+        self.assertIsNotNone(_API._mk_forming_bar("2026-10-09", 42.0, 41.5, 42.6, 41.4, None))
 
     def test_03_consumer_heals_bad_payload(self):
         """磁盘上**已存在**的坏 payload 也要能自愈（只修写入侧不够）。"""
