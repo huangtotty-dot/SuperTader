@@ -1456,7 +1456,11 @@ async function drawHunterGoChart() {
     }
     return;
   }
-  if (!box.clientWidth || !box.clientHeight) { _hunterGoFail("容器尺寸为 0"); return; }
+  if (!box.clientWidth || !box.clientHeight) {
+    // 本页未激活（宽 0）。**不记签名** ⇒ 切到本页时 switchTab 会再调一次。
+    _hunterGoFail("⏳ 本页未激活，切到「概念评分排名」即自动绘制");
+    return;
+  }
   if (hunterGoInst && !_same) {
     try { hunterGoInst.dispose(); } catch (e) { }
     hunterGoInst = null; hunterGoNode = null;
@@ -5550,6 +5554,11 @@ function switchTab(tab) {
   if (tab === "archive") renderDailyReview();
   // 图表分析：交割单台账懒加载（未导入过则只显示「点导入」提示，不弹窗）
   if (tab === "charts") loadTradeHistory();
+  // 选股猎手：切到本页时**重画 GO 图**。
+  // 页面加载时本页是隐藏的（`display:none` ⇒ 容器宽 0），首次绘制必然失败；
+  // 而本页**没有** 10s 轮询（成交额图在盘中状态页、有 10s 轮询兜底），不给这个钩子就会
+  // **永远**停在"容器尺寸为 0"（2026-10-15 实测踩到）。不记签名 ⇒ 任何一次再调用都会重试。
+  if (tab === "hunter") { drawHunterGoChart(); renderHunterGoList(); }
   // P4-3 切到自动盘：加载 t_io/bridge 状态 + 建仓扫描
   if (tab === "auto") {
     loadAutoStatus();

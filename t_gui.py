@@ -856,6 +856,19 @@ _GO_HIST_FP = BASE / "t_io" / "cache" / "hunter_go_daily.json"
 _GO_HIST_LOCK = threading.Lock()
 _GO_HIST_INFLIGHT = {"running": False, "done": 0, "total": 0}
 _GO_NM_MAP = None            # {code:{name,sector}} 内存缓存（读清单时才建，一次）
+_GO_HIST_V = 2               # 记录 schema 版本。v1=只有个数；v2=带 codes（明细用）。
+#                             ⚠️ 改这个数 ⇒ 全部历史重算一遍（约 20~25 分钟）。
+
+
+def _go_hist_todo(got, trade_days):
+    """哪些交易日需要（重）算 —— **版本不符即算**，不是"缺失才算"。
+
+    ⚠️ 2026-10-15 实测踩到的坑：早先版本只存 GO 个数、没存 `codes`。若按"缺失才算"，
+    这些日子**永远补不上**（缓存 31 天、计数全对、点柱子却是"0 只符合"）。
+    升级 `_GO_HIST_V` ⇒ 旧记录视同缺失 ⇒ 整体重算一遍（约 20~25 分钟，一次性）。
+    顺序**新→旧**：最新一天最先可用（约 25s），前端逐步长出柱子与明细。
+    """
+    return [d for d in reversed(trade_days) if (got.get(d) or {}).get("v") != _GO_HIST_V]
 
 
 def _go_hist_read(n):
@@ -4168,8 +4181,13 @@ class Api:
 
             rec = _load_json(_GO_HIST_FP, None) or {}
             got = dict(rec.get("days") or {})
-            todo = [d for d in reversed(trade_days) if d not in got]     # 新→旧
-            _GO_HIST_INFLIGHT.update({"total": len(trade_days), "done": len(got)})
+            # ⚠️ 判据是「版本对不对」而**不是**「在不在」：早先版本只存了 GO 个数、没存 `codes`，
+            #    若按"缺失才算"这些日子**永远补不上**（2026-10-15 实测踩到：缓存 31 天、计数全对、
+            #    但点柱子全是"0 只符合"）。升级 schema ⇒ 旧记录视同缺失、重算一遍。
+            todo = _go_hist_todo(got, trade_days)                   # 新→旧
+            _GO_HIST_INFLIGHT.update({"total": len(trade_days),
+                                      "done": sum(1 for d in trade_days
+                                                  if (got.get(d) or {}).get("v") == _GO_HIST_V)})
             for d in todo:
                 try:
                     conf = self._hunter_build_conformance(codes, d) or {}
@@ -4177,7 +4195,7 @@ class Api:
                         # 存下 GO 的**代码**（不只存个数）：前端点柱子要展开"那天符合的是哪些票"。
                         # 一天最多几百个 6 位码，体积可忽略。
                         _goc = sorted(c for c, v in conf.items() if v.get("go"))
-                        got[d] = {"go": len(_goc), "n_ok": int(len(conf)),
+                        got[d] = {"v": _GO_HIST_V, "go": len(_goc), "n_ok": int(len(conf)),
                                   "regime": regime_by_date.get(d, "range"), "codes": _goc}
                 except Exception:
                     pass
