@@ -862,6 +862,47 @@ _GO_LAST_REFRESH_SEC = 300   # 最新交易日多久重算一次（盘中它的�
 #                             但不能每次前端轮询都算 ⇒ 按 ts 节流）
 
 
+def _golog(msg):
+    """GO 历史回算的专用日志（2026-10-15 加，owner 要求"你记 log 我按 log 排查"）。
+
+    为什么单开一个文件：这段跑在**后台线程**里，异常原先被 `except Exception: pass` 静默吞掉，
+    界面上只表现为"永远 0/60" —— 没有日志就只能猜。写到 `t_io/logs/go_hist_YYYYMMDD.log`，
+    便于整份抓下来分析；同时 print 一份进 GUI 控制台。
+    """
+    line = "%s %s" % (datetime.now().strftime("%H:%M:%S"), msg)
+    try:
+        d = BASE / "t_io" / "logs"
+        d.mkdir(parents=True, exist_ok=True)
+        with open(d / ("go_hist_%s.log" % datetime.now().strftime("%Y%m%d")),
+                  "a", encoding="utf-8") as f:
+            f.write(line + "\n")
+    except Exception:
+        pass
+    try:
+        print("[GO-HIST] " + line, flush=True)
+    except Exception:
+        pass
+
+
+def _go_hist_write(got):
+    """原子落盘（tmp + replace）。只写有效项；fail-open。
+
+    ⚠️ 2026-10-15：本函数一度**留在 Api 类里**、而调用点用的是模块级名字 ⇒ 运行时 NameError
+    （`py_compile` 查不出未定义名）。后果：每天算完写盘时抛异常、被外层 `except: pass` 吞掉、
+    线程当场死掉，界面上只看到"永远 0/60"。已挪到模块级并加了专用日志。
+    """
+    try:
+        _GO_HIST_FP.parent.mkdir(parents=True, exist_ok=True)
+        blob = json.dumps({"updated_at": _time_mod.time(), "days": got},
+                          ensure_ascii=False, default=str)
+        with _GO_HIST_LOCK:
+            tmp = _GO_HIST_FP.with_suffix(".tmp")
+            tmp.write_text(blob, encoding="utf-8")
+            tmp.replace(_GO_HIST_FP)
+    except Exception as _e:
+        _golog("❌ 落盘失败 %s: %s" % (type(_e).__name__, str(_e)[:150]))
+
+
 def _go_hist_todo(got, trade_days):
     """哪些交易日需要（重）算 —— **版本不符即算**，不是"缺失才算"。
 
@@ -4150,6 +4191,8 @@ class Api:
         #    改成"只要没在算就踢一次"，由 `_go_hist_compute` 自己判有没有活干（无活时秒退）。
         with _GO_HIST_LOCK:
             if not _GO_HIST_INFLIGHT.get("running"):
+                _golog("KICK 启动后台回算 n=%d（读到的缓存 %d 天）"
+                       % (n, len((_go_hist_read(n).get("days") or []))))
                 _GO_HIST_INFLIGHT.update({"running": True, "done": 0, "total": n})
                 threading.Thread(target=self._go_hist_compute, args=(n,), daemon=True).start()
         out = _go_hist_read(n)
@@ -4191,20 +4234,29 @@ class Api:
                 if _stale and _last not in todo:      # 没算过的本来就在 todo 里，这里管"算过但旧了"
                     todo = [_last] + todo
 
+            _golog("START n=%d 交易日 %d 天(%s~%s) 缓存 %d 天 待算 %d 天 %s"
+                   % (n, len(trade_days), trade_days[0] if trade_days else "-",
+                      trade_days[-1] if trade_days else "-", len(got), len(todo),
+                      (todo[:3] + ["..."] + todo[-1:]) if len(todo) > 4 else todo))
+
             # 没活干就**立刻返回**（下面要 load_watchlist，约 1s —— 空轮询不该付这个代价）
             if not todo:
+                _golog("无待算日期 ⇒ 直接返回")
                 return
 
             # 池子：与生产同源（loader.load_watchlist + 韭研概念非空）
+            _t0 = _time_mod.time()
             from modules.data_loader import DataLoader as _HL
             _wl = _HL().load_watchlist()
             codes = [str(c) for c in _wl[_wl["韭研概念"].astype(str).str.strip().ne("")]["代码"].astype(str).tolist()]
             codes = list(dict.fromkeys(codes))
+            _golog("池子 %d 只（load_watchlist 用时 %.1fs）" % (len(codes), _time_mod.time() - _t0))
 
             _GO_HIST_INFLIGHT.update({"total": len(trade_days),
                                       "done": sum(1 for d in trade_days
                                                   if (got.get(d) or {}).get("v") == _GO_HIST_V)})
-            for d in todo:
+            for _i, d in enumerate(todo):
+                _td = _time_mod.time()
                 try:
                     conf = self._hunter_build_conformance(codes, d) or {}
                     if conf:
@@ -4214,13 +4266,24 @@ class Api:
                         got[d] = {"v": _GO_HIST_V, "go": len(_goc), "n_ok": int(len(conf)),
                                   "regime": regime_by_date.get(d, "range"), "codes": _goc,
                                   "ts": _time_mod.time()}      # ts 供"最新日周期性重算"节流
-                except Exception:
-                    pass
+                        _golog("  [%d/%d] %s 算出 %d 只 / GO %d 只 · %.1fs"
+                               % (_i + 1, len(todo), d, len(conf), len(_goc), _time_mod.time() - _td))
+                    else:
+                        _golog("  [%d/%d] %s ⚠️ conf 为空（未落盘，下次会重试） · %.1fs"
+                               % (_i + 1, len(todo), d, _time_mod.time() - _td))
+                except Exception as _e1:
+                    # ⚠️ 这里以前是 `pass` —— 异常被吞掉，界面上只表现为"永远 0/60"，无从排查。
+                    import traceback as _tb
+                    _golog("  [%d/%d] %s ❌ 异常 %s: %s\n%s"
+                           % (_i + 1, len(todo), d, type(_e1).__name__, str(_e1)[:200],
+                              _tb.format_exc()[-600:]))
                 _GO_HIST_INFLIGHT["done"] = _GO_HIST_INFLIGHT.get("done", 0) + 1
                 _go_hist_write(got)
             _go_hist_write(got)
-        except Exception:
-            pass
+            _golog("END 待算 %d 天全部走完，缓存现有 %d 天" % (len(todo), len(got)))
+        except Exception as _e:
+            import traceback as _tb
+            _golog("❌ 外层异常 %s: %s\n%s" % (type(_e).__name__, str(_e)[:300], _tb.format_exc()[-1200:]))
         finally:
             with _GO_HIST_LOCK:
                 _GO_HIST_INFLIGHT["running"] = False
@@ -4250,19 +4313,6 @@ class Api:
                 "go": rec.get("go"), "n_ok": rec.get("n_ok"), "stocks": stocks}
 
 
-
-    def _go_hist_write(got):
-        """原子落盘（tmp + replace）。只写有效项；fail-open。"""
-        try:
-            _GO_HIST_FP.parent.mkdir(parents=True, exist_ok=True)
-            blob = json.dumps({"updated_at": _time_mod.time(), "days": got},
-                              ensure_ascii=False, default=str)
-            with _GO_HIST_LOCK:
-                tmp = _GO_HIST_FP.with_suffix(".tmp")
-                tmp.write_text(blob, encoding="utf-8")
-                tmp.replace(_GO_HIST_FP)
-        except Exception:
-            pass
 
     def load_hunter(self, date=None):
         """选股猎手数据。运行中→running；有该日结果→返回；都没有→返回空（**不再懒触发扫描**）。
