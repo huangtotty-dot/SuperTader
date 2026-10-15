@@ -230,10 +230,18 @@ def timing_decision(features: dict, regime: str, params: dict = None) -> dict:
 # verdict 映射（scan_stock 生产口径）
 # ═══════════════════════════════════════════
 
-_STAGE_REV_ORD = {4: 3, 3: 2, 1: 1, 2: 0}
+_STAGE_REV_ORD = {4: 3, 3: 2, 1: 1, 2: 0}   # ④下跌最高 … ②抬升最低（证据：两半窗同号）
 
 # 2026-10-15 owner：「站上 MA20」在综合得分里的权重（其余项均 ±1）。
-_W_MA20 = 3   # ④下跌最高 … ②抬升最低（证据：两半窗同号）
+_W_MA20 = 3
+
+# ⚠️ **go/得分口径的版本戳**（2026-10-15 加）：任何会改变 `timing_decision` 的 go 判定、
+#    或 `timing_score` 数值的改动，**必须把这里改一下**。
+#    理由：下游有**按日缓存**（如 GUI 的「每日 GO 只数」回算缓存 `t_io/cache/hunter_go_daily.json`、
+#    以及 position_builder 的 trace 快照）。缓存只按"有没有/结构版本"判要不要重算，
+#    **不跟规则走** ⇒ 改了口径不 bump，界面会长期显示旧口径的数（2026-10-15 实测：
+#    总览说 GO 0 只、GO 历史图却说 13 只，两处打脸）。
+GO_RULES_VERSION = "2026-10-15a"
 
 
 def timing_score(features: dict, trend_ok: bool, golden_ok: bool,

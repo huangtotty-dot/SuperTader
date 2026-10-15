@@ -865,6 +865,7 @@ _GO_HIST_FP = BASE / "t_io" / "cache" / "hunter_go_daily.json"
 _GO_HIST_LOCK = threading.Lock()
 _GO_HIST_INFLIGHT = {"running": False, "done": 0, "total": 0}
 _GO_NM_MAP = None            # {code:{name,sector}} 内存缓存（读清单时才建，一次）
+_GO_RULES_VERSION = "2026-10-15a"   # = build_decision.GO_RULES_VERSION（口径一改这里也要跟）
 _GO_HIST_V = 2               # 记录 schema 版本。v1=只有个数；v2=带 codes（明细用）。
 #                             ⚠️ 改这个数 ⇒ 全部历史重算一遍（约 20~25 分钟）。
 _GO_LAST_REFRESH_SEC = 300   # 最新交易日多久重算一次（盘中它的值是"进行中"的，必须刷新；
@@ -920,7 +921,11 @@ def _go_hist_todo(got, trade_days):
     升级 `_GO_HIST_V` ⇒ 旧记录视同缺失 ⇒ 整体重算一遍（约 20~25 分钟，一次性）。
     顺序**新→旧**：最新一天最先可用（约 25s），前端逐步长出柱子与明细。
     """
-    return [d for d in reversed(trade_days) if (got.get(d) or {}).get("v") != _GO_HIST_V]
+    # ⚠️ 判据有**两**条：结构版本 `v` **且** 规则版本 `rv`。只看 `v` 会让"改了 go 口径
+    #    但记录结构没变"的日子永不重算（2026-10-15 实测：总览 GO 0 只 / 历史图却 13 只）。
+    return [d for d in reversed(trade_days)
+            if (got.get(d) or {}).get("v") != _GO_HIST_V
+            or (got.get(d) or {}).get("rv") != _GO_RULES_VERSION]
 
 
 def _go_hist_read(n):
@@ -4361,7 +4366,8 @@ class Api:
                         # 存下 GO 的**代码**（不只存个数）：前端点柱子要展开"那天符合的是哪些票"。
                         # 一天最多几百个 6 位码，体积可忽略。
                         _goc = sorted(c for c, v in conf.items() if v.get("go"))
-                        got[d] = {"v": _GO_HIST_V, "go": len(_goc), "n_ok": int(len(conf)),
+                        got[d] = {"v": _GO_HIST_V, "rv": _GO_RULES_VERSION,
+                                  "go": len(_goc), "n_ok": int(len(conf)),
                                   "regime": regime_by_date.get(d, "range"), "codes": _goc,
                                   "ts": _time_mod.time()}      # ts 供"最新日周期性重算"节流
                         _golog("  [%d/%d] %s 算出 %d 只 / GO %d 只 · %.1fs"
