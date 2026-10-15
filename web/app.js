@@ -1318,6 +1318,138 @@ async function drawTurnoverHist() {
   turnoverHistSig = sig;                       // **画成功之后**才记签名
 }
 
+/* ══ DOM 节点回收（2026-10-15）══════════════════════════════════════════════
+   renderLive / renderHunter 每轮都 `el.innerHTML = ...` 重建整块，图表容器每次都是**新节点**，
+   而 ECharts 实例绑在节点上 ⇒ 不回收就得 dispose+init，容器里的 canvas 被拆掉再建 = 肉眼可见的闪。
+   做法：重建**前**把节点摘下来（脱离文档，但节点与实例都活着），重建后按占位放回。
+   ⚠️ 两侧必须配对使用：摘了不放回 = 图凭空消失。 */
+function _keepNode(id) {
+  const n = document.getElementById(id);
+  if (n && n.parentNode) n.parentNode.removeChild(n);
+  return n;
+}
+function _putBackNode(slotId, node, fallbackHtml) {
+  const s = document.getElementById(slotId);
+  if (!s) return;
+  if (node) s.parentNode.replaceChild(node, s);
+  else s.outerHTML = fallbackHtml;             // 首次渲染没有旧节点 ⇒ 就地新建同 id 容器
+}
+
+/* ---- 猎手「每日建仓符合(GO)只数」图（2026-10-15）----
+   owner：每日建仓符合的股票数量做成柱状图 + 5日均线，显示 60 天。
+   ⚠️ **0 柱是设计使然不是 bug**：`timing_decision` 在 regime=range 时 go 恒 False（震荡市降频），
+      实测近 60 日 range 占 36 天全 0。故 tooltip **必须**带 regime 说明，否则看着像图坏了。
+   ⚠️ 首次计算要 20~25 分钟（全池 1530 只 × 60 日，逐日落盘）⇒ 未就绪时显示进度并轮询。 */
+const HUNTER_GO_BAR = "#e8531f";   // = 主题 --red。与 MA5 蓝经 dataviz 校验器在浅底全项通过(CVD ΔE 30.4)
+const HUNTER_GO_MA = "#388bfd";    // = 成交额图那条均线的蓝，同一套视觉语言
+const HUNTER_GO_MA_N = 5;
+const HUNTER_GO_REGIME_CN = {
+  trend_up: "多头趋势", trend_dn: "空头趋势", range: "震荡市（降频不建仓）",
+};
+let hunterGoInst = null, hunterGoNode = null, hunterGoSig = "";
+let _hunterGoTimer = null;
+
+function _hunterGoFail(msg) {
+  const box = document.getElementById("hunterGoChart");
+  if (box) box.innerHTML = `<div class="empty" style="font-size:11px">${esc(msg)}</div>`;
+}
+
+function hunterGoMa(go) {
+  const out = [];
+  for (let i = 0; i < go.length; i++) {
+    if (i < HUNTER_GO_MA_N - 1) { out.push(null); continue; }
+    let s = 0;
+    for (let k = i - HUNTER_GO_MA_N + 1; k <= i; k++) s += go[k];
+    out.push(s / HUNTER_GO_MA_N);
+  }
+  return out;
+}
+
+async function drawHunterGoChart() {
+  const box = document.getElementById("hunterGoChart");
+  if (!box) return;
+  if (!window.echarts) { _hunterGoFail("ECharts 未加载"); return; }
+  let d = null;
+  try {
+    d = await apiCall("load_hunter_go_history", 60);
+  } catch (e) {
+    _hunterGoFail(`接口调用失败（${e && e.message ? e.message : e}）· 若刚改过 t_gui.py 请重启它`);
+    return;
+  }
+  if (document.getElementById("hunterGoChart") !== box) return;   // 期间被重建
+  const days = (d && d.days) || [];
+  if (!days.length) {
+    // 无数据：计算中→显示进度并轮询；否则报错
+    const pr = (d && d.progress) || {};
+    if (d && d.computing) {
+      _hunterGoFail(`⏳ 首次计算中 ${pr.done || 0}/${pr.total || 60} 天（全池逐日回算，约 20~25 分钟；算完自动出现）`);
+      if (!_hunterGoTimer) {
+        _hunterGoTimer = setInterval(() => { drawHunterGoChart(); }, 20000);
+      }
+      return;
+    }
+    _hunterGoFail((d && d.error) || "暂无数据");
+    return;
+  }
+  if (_hunterGoTimer) { clearInterval(_hunterGoTimer); _hunterGoTimer = null; }
+
+  const go = days.map(x => Number(x.go) || 0);
+  const ma5 = hunterGoMa(go);
+  const _isToday = (s) => s === todayStr();
+  const sig = `${days.length}|${days[days.length - 1].date}|${go.join(",")}|${box.clientWidth}`;
+  const _same = !!(hunterGoInst && box === hunterGoNode);
+  if (_same && sig === hunterGoSig) {
+    if (hunterGoInst.getWidth() !== box.clientWidth) {
+      try { hunterGoInst.resize(); } catch (e) { }
+    }
+    return;
+  }
+  if (!box.clientWidth || !box.clientHeight) { _hunterGoFail("容器尺寸为 0"); return; }
+  if (hunterGoInst && !_same) {
+    try { hunterGoInst.dispose(); } catch (e) { }
+    hunterGoInst = null; hunterGoNode = null;
+  }
+  if (!hunterGoInst) { hunterGoInst = echarts.init(box); hunterGoNode = box; }
+  hunterGoInst.setOption({
+    grid: { left: 40, right: 34, top: 8, bottom: 18 },
+    tooltip: {
+      trigger: "axis",
+      formatter: (ps) => {
+        const x = days[ps[0].dataIndex];
+        const i = ps[0].dataIndex;
+        let s = `${x.date}${_isToday(x.date) ? "（今日，盘中数值会变）" : ""}<br>`
+          + `建仓符合 <b>${go[i]}</b> 只 / 池内可算 ${x.n_ok || 0} 只<br>`
+          + `<span style="opacity:.8">市场 ${HUNTER_GO_REGIME_CN[x.regime] || x.regime || "—"}</span>`;
+        if (ma5[i] != null) s += `<br><span style="color:${HUNTER_GO_MA}">${HUNTER_GO_MA_N}日均</span> ${ma5[i].toFixed(1)} 只`;
+        return s;
+      },
+    },
+    xAxis: {
+      type: "category", data: days.map(x => x.date.slice(5)),
+      axisLabel: { fontSize: 9, interval: 9, color: "#6b7280" },
+      axisTick: { show: false }, axisLine: { lineStyle: { color: "rgba(107,114,128,.3)" } },
+    },
+    yAxis: {
+      type: "value", minInterval: 1,
+      axisLabel: { fontSize: 9, color: "#6b7280" },
+      splitLine: { lineStyle: { color: "rgba(107,114,128,.15)" } },
+    },
+    series: [
+      { type: "bar", data: go, barMaxWidth: 12, itemStyle: { color: HUNTER_GO_BAR }, silent: true },
+      {
+        name: `${HUNTER_GO_MA_N}日均`, type: "line", data: ma5, smooth: false, symbol: "none",
+        connectNulls: false, lineStyle: { width: 2, color: HUNTER_GO_MA },
+        itemStyle: { color: HUNTER_GO_MA }, z: 3, silent: true,
+        endLabel: {
+          show: true, formatter: `MA${HUNTER_GO_MA_N}`,
+          color: HUNTER_GO_MA, fontSize: 9, distance: 4,
+        },
+      },
+    ],
+  }, { notMerge: true });
+  hunterGoSig = sig;
+}
+
 /* ---- 盘中实时 ---- */
 function renderLive(live, isToday) {
   const el = document.getElementById("liveBody");
@@ -1363,8 +1495,7 @@ function renderLive(live, isToday) {
   // 做法：先把图节点**摘下来**（脱离文档但对象活着、实例也活着），重建后原样**放回占位处**。
   // 这样 10s 一轮里节点与实例都不换，drawTurnoverHist 走"同节点 → 原地 setOption"分支，不闪。
   // 与 2026-10-13「市场风向标搬出 #liveBody」是同一病根，这里用了代价更小的保守修法。
-  const _keepChart = document.getElementById("turnoverHistChart");
-  if (_keepChart && _keepChart.parentNode) _keepChart.parentNode.removeChild(_keepChart);
+  const _keepChart = _keepNode("turnoverHistChart");
 
   el.innerHTML = `
     <div class="card">
@@ -1383,11 +1514,7 @@ function renderLive(live, isToday) {
     </div>`;
 
   // 把（上面摘下来的）图节点放回占位处。首次渲染没有旧节点 ⇒ 就地新建一个同 id 的容器。
-  const _slot = document.getElementById("turnoverHistSlot");
-  if (_slot) {
-    if (_keepChart) _slot.parentNode.replaceChild(_keepChart, _slot);
-    else _slot.outerHTML = '<div id="turnoverHistChart" style="height:130px"></div>';
-  }
+  _putBackNode("turnoverHistSlot", _keepChart, '<div id="turnoverHistChart" style="height:130px"></div>');
   // 近60日成交额柱状图，容器节点已复用 ⇒ 同节点走原地 setOption，不再每次 dispose+init
   drawTurnoverHist();
 
@@ -4588,8 +4715,23 @@ function renderHunter(h) {
       </div>
     </div>`;
 
+  // 保住「GO 只数图」的 DOM 节点（同 renderLive 的闪烁修法）：下面 innerHTML 每轮重建，
+  // 节点一换就得 dispose+init，canvas 被拆掉再建 = 闪。
+  const _keepGoChart = _keepNode("hunterGoChart");
+
   el.innerHTML = `
     ${overviewCard}
+    <div class="card" style="margin-bottom:10px;padding:10px 14px">
+      <div class="card-title">📊 每日建仓符合（GO）只数 · 近 60 日
+        <span class="cell-dim" style="font-weight:normal;font-size:11px">柱=当日 GO 只数（池内可算 ${h.pool_size || 0} 只口径）· 线=5日均线 · 悬停看当日市场态势</span>
+      </div>
+      <div id="hunterGoSlot"></div>
+      <div class="cell-dim" style="font-size:10px;margin-top:4px">
+        <span style="color:${HUNTER_GO_BAR}">■</span> 当日 GO 只数
+        <span style="color:${HUNTER_GO_MA};margin-left:8px">━</span> ${HUNTER_GO_MA_N}日均线
+        <span style="margin-left:8px">· <b>震荡市 GO 恒为 0</b>（策略降频，非故障）—— 悬停看当日 regime</span>
+      </div>
+    </div>
     ${(_buildReady && (h.build_n || 0) >= (h.build_total || 0)) ? "" : `
       <div class="cell-dim" style="font-size:11px;margin-bottom:8px;padding:5px 9px;background:rgba(210,153,34,.12);border-left:3px solid #d29922">
         ${_buildReady
@@ -4609,6 +4751,10 @@ function renderHunter(h) {
     </table></div>
 
     <div class="cell-dim" style="font-size:10px;margin-top:6px">数据源: stock_hunter (韭研概念打分) · 点击板块展开个股明细(D5/D6异常) · 热度趋势vs前日</div>`;
+
+  // GO 图容器放回占位处（复用旧节点 ⇒ 同节点走原地 setOption，不闪）
+  _putBackNode("hunterGoSlot", _keepGoChart, '<div id="hunterGoChart" style="height:130px"></div>');
+  drawHunterGoChart();
 
   // 分页/重渲染后恢复此前展开的板块（避免跳页收起），并重填已缓存的技术标签
   if (hunterOpenSectors.size) {

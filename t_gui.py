@@ -850,6 +850,12 @@ _SNAPSHOT_LOCK = threading.Lock()
 _OVERVIEW_INFLIGHT = {}
 _OVERVIEW_INFLIGHT_LOCK = threading.Lock()
 
+# 「近 N 日 GO 只数」落盘缓存与单飞（2026-10-15）。见 Api.load_hunter_go_history。
+# 首次要算 20~25 分钟，故**逐日落盘 + 前端轮询**，不做 _bounded 那种短等待（等不来）。
+_GO_HIST_FP = BASE / "t_io" / "cache" / "hunter_go_daily.json"
+_GO_HIST_LOCK = threading.Lock()
+_GO_HIST_INFLIGHT = {"running": False, "done": 0, "total": 0}
+
 
 def _snapshot_read(key):
     """读磁盘快照 → {"written_at","snapshot_day","age_sec","payload"} 或 None。
@@ -4063,6 +4069,110 @@ class Api:
             "total": int(mp.get("total") or 0),
             "msg": mp.get("msg", ""),
         }
+
+    # ── 近 N 日「建仓符合度 GO 只数」（2026-10-15，owner：每日建仓符合数做成柱状图+5日均线，60天）──
+    # ⚠️ 这个量**没有历史留存**：`stock_hunter/history/daily_summary.json` 只存概念级汇总
+    #    （板块/热度/平均分/涨停数），拿不到逐股 GO ⇒ 只能现算。
+    #    实测**生产方法**（`_hunter_build_conformance`）21~27s/日 ⇒ 全池 1530 只 × 60 日 ≈ **20~25 分钟**
+    #    （一次性；之后逐日增量只要 ~25s。逐日落盘 ⇒ 中途重启 GUI 不丢进度、自动续算）。
+    # ⚠️ **稀疏是设计使然，不是 bug**：`build_decision.timing_decision` 在 regime=range 时
+    #    go **恒 False**（震荡市降频不建仓），trend_dn 要求 回撤<-10% 且 RSI<20。
+    #    实测近 60 日：range 36 天全 0 · trend_dn 17 天 0~12 · trend_up 7 天 129~290。
+    #    ⇒ 前端 tooltip **必须**带 regime 与"震荡市降频"说明，否则 0 柱看着像图坏了。
+    # 口径：**直接调** `_hunter_build_conformance`（猎手面板同一个方法）⇒ 与面板逐位同口径，
+    #       不复制判定逻辑（复制必漂移）。
+    def load_hunter_go_history(self, days=60):
+        """近 N 日 GO 只数序列。首次调用触发后台计算（**约 20~25 分钟**），逐日增量落盘，之后增量秒级。"""
+        try:
+            n = max(5, min(250, int(days)))
+        except Exception:
+            n = 60
+        snap = self._go_hist_read(n)
+        if snap.get("available"):
+            return snap
+        # 无数据/不足 → 后台单飞补算，**立即返回**（前端轮询）
+        with _GO_HIST_LOCK:
+            if not _GO_HIST_INFLIGHT.get("running"):
+                _GO_HIST_INFLIGHT.update({"running": True, "done": 0, "total": n})
+                threading.Thread(target=self._go_hist_compute, args=(n,), daemon=True).start()
+        out = self._go_hist_read(n)
+        out["computing"] = True
+        out["progress"] = dict(_GO_HIST_INFLIGHT)
+        return out
+
+    def _go_hist_read(self, n):
+        """读落盘缓存 → {available, days:[{date,go,n_ok,regime}], stale, partial}。fail-open。"""
+        try:
+            rec = _load_json(_GO_HIST_FP, None)
+            got = (rec or {}).get("days") or {}
+            all_days = sorted(got)
+            want = all_days[-n:]
+            if not want:
+                return {"available": False, "days": [], "error": ""}
+            return {"available": True,
+                    "days": [{"date": d, **got[d]} for d in want],
+                    "updated_at": (rec or {}).get("updated_at"),
+                    "stale": _time_mod.time() - float((rec or {}).get("updated_at") or 0) > 26 * 3600.0,
+                    "partial": len(all_days) < n}
+        except Exception as e:
+            return {"available": False, "days": [], "error": f"{type(e).__name__}: {str(e)[:80]}"}
+
+    def _go_hist_compute(self, n):
+        """后台：按需补算缺失交易日（**从新到旧**，每天落一次盘 ⇒ 前端逐步看到柱子）。"""
+        try:
+            idx_rows = _load_json(BASE / "t_io" / "cache" / "daily_kline" / "index_sh000001.json", {}).get("rows", [])
+            import pandas as _pd
+            _idf = _pd.DataFrame(idx_rows)
+            _idf["close"] = _pd.to_numeric(_idf["close"])
+            _idf["ma60"] = _idf["close"].rolling(60).mean()
+            _idf["date"] = _idf["date"].astype(str)
+            regime_by_date = {}
+            for _, _r in _idf.iterrows():
+                regime_by_date[str(_r["date"])] = (
+                    "trend_up" if _r["close"] > _r["ma60"]
+                    else ("trend_dn" if _r["close"] < _r["ma60"] * 0.97 else "range"))
+            trade_days = sorted(regime_by_date)[-n:]
+
+            # 池子：与生产同源（loader.load_watchlist + 韭研概念非空）
+            from modules.data_loader import DataLoader as _HL
+            _wl = _HL().load_watchlist()
+            codes = [str(c) for c in _wl[_wl["韭研概念"].astype(str).str.strip().ne("")]["代码"].astype(str).tolist()]
+            codes = list(dict.fromkeys(codes))
+
+            rec = _load_json(_GO_HIST_FP, None) or {}
+            got = dict(rec.get("days") or {})
+            todo = [d for d in reversed(trade_days) if d not in got]     # 新→旧
+            _GO_HIST_INFLIGHT.update({"total": len(trade_days), "done": len(got)})
+            for d in todo:
+                try:
+                    conf = self._hunter_build_conformance(codes, d) or {}
+                    if conf:
+                        got[d] = {"go": int(sum(1 for v in conf.values() if v.get("go"))),
+                                  "n_ok": int(len(conf)), "regime": regime_by_date.get(d, "range")}
+                except Exception:
+                    pass
+                _GO_HIST_INFLIGHT["done"] = _GO_HIST_INFLIGHT.get("done", 0) + 1
+                self._go_hist_write(got)
+            _go_hist_write(got)
+        except Exception:
+            pass
+        finally:
+            with _GO_HIST_LOCK:
+                _GO_HIST_INFLIGHT["running"] = False
+
+    @staticmethod
+    def _go_hist_write(got):
+        """原子落盘（tmp + replace）。只写有效项；fail-open。"""
+        try:
+            _GO_HIST_FP.parent.mkdir(parents=True, exist_ok=True)
+            blob = json.dumps({"updated_at": _time_mod.time(), "days": got},
+                              ensure_ascii=False, default=str)
+            with _GO_HIST_LOCK:
+                tmp = _GO_HIST_FP.with_suffix(".tmp")
+                tmp.write_text(blob, encoding="utf-8")
+                tmp.replace(_GO_HIST_FP)
+        except Exception:
+            pass
 
     def load_hunter(self, date=None):
         """选股猎手数据。运行中→running；有该日结果→返回；都没有→返回空（**不再懒触发扫描**）。
