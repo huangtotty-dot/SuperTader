@@ -1211,11 +1211,12 @@ async function drawTurnoverHist() {
   // ⚠️ 必须带上节点判等：renderLive 每 10s 覆写 #liveBody.innerHTML，`box` 每次都是**新节点**，
   // 而旧实例仍绑在**已脱离文档**的旧节点上。若只看数据签名就早返回，新节点永远拿不到图
   // ⇒ 成交额图渲染几秒后消失（2026-10-04 修）。节点变了即强制重画。
-  if (turnoverHistInst && box === turnoverHistNode && sig === turnoverHistSig) {
+  const _sameNode = !!(turnoverHistInst && box === turnoverHistNode);
+  if (_sameNode && sig === turnoverHistSig) {
     if (turnoverHistInst.getWidth() !== box.clientWidth) {
       try { turnoverHistInst.resize(); } catch (e) { }
     }
-    return;                                   // 同节点 + 数据与尺寸都没变 → 不重绘（防闪烁）
+    return;                                   // 同节点 + 数据与尺寸都没变 → 什么都不做（防闪烁）
   }
   if (!box.clientWidth || !box.clientHeight) {
     // 容器零尺寸时 ECharts 会画出"空图"且**不报错**。此时**不记签名**，
@@ -1223,9 +1224,20 @@ async function drawTurnoverHist() {
     _turnoverFail(`容器尺寸为 0（${box.clientWidth}×${box.clientHeight}）`);
     return;
   }
-  if (turnoverHistInst) { try { turnoverHistInst.dispose(); } catch (e) { } turnoverHistInst = null; turnoverHistNode = null; }
-  turnoverHistInst = echarts.init(box);
-  turnoverHistNode = box;
+  // 2026-10-15 闪烁修复（关键）：**同节点时不再 dispose + init**。
+  // dispose 会把容器里的 canvas 整个拆掉、init 再建一个新的 ⇒ 每次数据变化都闪一下；
+  // 原来只在 renderLive 重建 DOM（10s 一次）时走这条路，现在节点已被 renderLive 回收复用，
+  // 数据每 10s 都在变，若仍 dispose+init 就是"每 10s 稳定闪一次"。改为原地 setOption：
+  // 实例与 canvas 都活着，只重画内容 ⇒ 不闪。
+  if (turnoverHistInst && !_sameNode) {
+    try { turnoverHistInst.dispose(); } catch (e) { }
+    turnoverHistInst = null;
+    turnoverHistNode = null;
+  }
+  if (!turnoverHistInst) {
+    turnoverHistInst = echarts.init(box);
+    turnoverHistNode = box;
+  }
   const data = days.map(x => ({
     value: Math.round(x.amount / 1e8),
     itemStyle: {
@@ -1233,6 +1245,9 @@ async function drawTurnoverHist() {
         : (x.delta_pct == null ? "#8b949e" : (x.delta_pct > 0 ? TURNOVER_UP : TURNOVER_DOWN)),
     },
   }));
+  // `notMerge: true`：整体替换配置。**关键**——`title` 在非 stale 时是 `undefined`，
+  // 而 setOption 的默认合并语义**不会清掉**已存在的 title ⇒ 快照标题会粘在图上不走。
+  // notMerge 只是重算配置并重绘画布，**不拆实例/canvas**，所以不引起闪烁。
   turnoverHistInst.setOption({
     // 冷启动快照（2026-10-10）：stale 时在图上点名"这是快照、非实时"，并让出顶部空间。
     // 注意：stale 快照的 `available` 为 true，所以上面「warming → 8s 重试」分支不会触发——
@@ -1299,7 +1314,7 @@ async function drawTurnoverHist() {
         },
       },
     ],
-  });
+  }, { notMerge: true });
   turnoverHistSig = sig;                       // **画成功之后**才记签名
 }
 
@@ -1342,12 +1357,21 @@ function renderLive(live, isToday) {
       </div>`;
   }).join("");
 
+  // ── 闪烁修复（2026-10-15）────────────────────────────────────────────────
+  // 下面这句 innerHTML 每 10s 把整卡重建，`#turnoverHistChart` 每次都是**新节点**，
+  // 而 ECharts 实例绑在节点上 ⇒ 每次都得 dispose+init，容器里的 canvas 被拆掉再建 = 肉眼可见的闪。
+  // 做法：先把图节点**摘下来**（脱离文档但对象活着、实例也活着），重建后原样**放回占位处**。
+  // 这样 10s 一轮里节点与实例都不换，drawTurnoverHist 走"同节点 → 原地 setOption"分支，不闪。
+  // 与 2026-10-13「市场风向标搬出 #liveBody」是同一病根，这里用了代价更小的保守修法。
+  const _keepChart = document.getElementById("turnoverHistChart");
+  if (_keepChart && _keepChart.parentNode) _keepChart.parentNode.removeChild(_keepChart);
+
   el.innerHTML = `
     <div class="card">
       <div class="card-title">盘中状态
         <span class="cell-dim" style="font-weight:normal;font-size:11px">上：近60日全市场成交额 · 下：个股趋势（intraday_state.json · 10s 刷新）</span>
       </div>
-      <div id="turnoverHistChart" style="height:130px"></div>
+      <div id="turnoverHistSlot"></div>
       <div class="cell-dim" style="font-size:10px;margin:-2px 0 8px">
         <span style="color:${TURNOVER_UP}">■</span> 放量（较前一交易日）
         <span style="color:${TURNOVER_DOWN};margin-left:8px">■</span> 缩量
@@ -1358,7 +1382,13 @@ function renderLive(live, isToday) {
     </div>
     </div>`;
 
-  // 近60日成交额柱状图（容器刚随 innerHTML 重建 → 内部会 dispose 旧实例再 init）
+  // 把（上面摘下来的）图节点放回占位处。首次渲染没有旧节点 ⇒ 就地新建一个同 id 的容器。
+  const _slot = document.getElementById("turnoverHistSlot");
+  if (_slot) {
+    if (_keepChart) _slot.parentNode.replaceChild(_keepChart, _slot);
+    else _slot.outerHTML = '<div id="turnoverHistChart" style="height:130px"></div>';
+  }
+  // 近60日成交额柱状图，容器节点已复用 ⇒ 同节点走原地 setOption，不再每次 dispose+init
   drawTurnoverHist();
 
   // 🧭 市场风向标已**搬出** #liveBody（独立 section，自带调度）—— 原来长在这里，
