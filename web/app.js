@@ -4543,12 +4543,53 @@ function renderHunter(h) {
       <div id="hunterBreakoutBody"><div class="empty">选日期后点「🔄 扫描该日」（全池 5000+ 只，约 1~2 分钟）；结果会按日保存，再选同一天直接秒回。</div></div>
     </div>`;
 
+  // ── 猎手总览（2026-10-15，owner：「选股猎手完成后在头部有一个总览」）──────────────
+  // 口径：**只给结论**（三个数 + 最强三块 + 两个计数），**刻意不重复下表**——下表已经把
+  // 全部概念逐行列出来了，总览再堆一遍就等于没有总览（沿用 owner「要结论不要信号堆料」）。
+  // GO 计数：`build_go === true`（`buildBadge` 同源判据）。**未算出时显示 ⏳ 而不是 0**——
+  // `_buildReady` 为假时 `build_go` 全是 undefined，此时报 0 是撒谎。
+  const _goCount = Object.keys(ss).reduce((n, k) =>
+    n + ((ss[k] || []).filter(s => s && s.build_go === true).length), 0);
+  const _trendNum = (v) => {                       // 与下表 trendNum 同一正则口径
+    const m = String(v == null ? "" : v).match(/[+-]?\d+/);
+    return m ? parseInt(m[0], 10) : null;
+  };
+  const _top3 = sumRows.slice()
+    .sort((a, b) => (Number(b["平均分"]) || 0) - (Number(a["平均分"]) || 0)).slice(0, 3);
+  const _heatUp = sumRows.filter(r => { const n = _trendNum(r["趋势"]); return n != null && n > 0; }).length;
+  const _heatDn = sumRows.filter(r => { const n = _trendNum(r["趋势"]); return n != null && n < 0; }).length;
+  const _buildDone = _buildReady && (h.build_n || 0) >= (h.build_total || 0);
+  const overviewCard = `
+    <div class="card" style="margin-bottom:10px;padding:10px 14px">
+      <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;align-items:baseline">
+        <div style="font-size:13px">
+          <span class="cell-dim">打分池</span> <b>${h.pool_size}</b> 只
+          <span class="cell-dim" style="margin-left:12px">概念</span> <b>${sumRows.length}</b> 个
+          <span class="cell-dim" style="margin-left:12px">GO</span>
+          <b style="color:${(_buildReady && _goCount) ? "var(--green)" : "var(--text-faint)"}"
+             title="建仓符合度判定为 GO 的个股数（全概念合计）">${_buildReady ? _goCount : "⏳"}</b> 只
+        </div>
+        <div class="cell-dim mono" style="font-size:11px">
+          <span class="live-dot"></span> ${esc(h.refreshed_at || '')}
+        </div>
+      </div>
+      <div style="margin-top:8px;font-size:12px;display:flex;gap:18px;flex-wrap:wrap;align-items:baseline">
+        <span class="cell-dim">最强</span>
+        ${_top3.map((r, i) => `<span title="按均分排序">
+            <span class="cell-dim">${i + 1}</span>
+            <b>${esc(r["板块"] || "")}</b>
+            <span class="cell-dim">${Number(r["平均分"]) || 0}分 · 涨停${Number(r["涨停数"]) || 0}</span>
+          </span>`).join("") || '<span class="cell-dim">—</span>'}
+      </div>
+      <div class="cell-dim" style="margin-top:6px;font-size:11px">
+        热度 <span class="up">↑${_heatUp}</span> 个概念
+        <span class="down" style="margin-left:6px">↓${_heatDn}</span>
+        <span style="margin-left:14px">建仓符合度 ${h.build_n || 0}/${h.build_total || 0}${_buildDone ? "" : " ⏳"}</span>
+      </div>
+    </div>`;
+
   el.innerHTML = `
-    <div class="cell-dim" style="margin-bottom:8px;display:flex;gap:16px;flex-wrap:wrap">
-      <span>打分池: <b>${h.pool_size}</b> 只</span>
-      <span>概念: <b>${sumRows.length}</b> 个</span>
-      <span class="mono"><span class="live-dot"></span> ${esc(h.refreshed_at || '')}</span>
-    </div>
+    ${overviewCard}
     ${(_buildReady && (h.build_n || 0) >= (h.build_total || 0)) ? "" : `
       <div class="cell-dim" style="font-size:11px;margin-bottom:8px;padding:5px 9px;background:rgba(210,153,34,.12);border-left:3px solid #d29922">
         ${_buildReady
