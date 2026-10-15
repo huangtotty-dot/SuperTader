@@ -4185,6 +4185,12 @@ class Api:
             #    若按"缺失才算"这些日子**永远补不上**（2026-10-15 实测踩到：缓存 31 天、计数全对、
             #    但点柱子全是"0 只符合"）。升级 schema ⇒ 旧记录视同缺失、重算一遍。
             todo = _go_hist_todo(got, trade_days)                   # 新→旧
+            # ⚠️ **最新一个交易日始终重算**：盘中它是"进行中"的值（bar 一直在动），算过一次就
+            #    被版本判据跳过的话，会**永远停在盘中快照**上（2026-10-15 实测：13:56 算得 12 只，
+            #    14:03 面板同一算法已是 18 只）。收盘后再算一次即覆盖为收盘口径。代价 ~25s。
+            _last = trade_days[-1] if trade_days else None
+            if _last and _last not in todo:
+                todo = [_last] + todo
             _GO_HIST_INFLIGHT.update({"total": len(trade_days),
                                       "done": sum(1 for d in trade_days
                                                   if (got.get(d) or {}).get("v") == _GO_HIST_V)})
