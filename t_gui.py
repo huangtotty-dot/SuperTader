@@ -858,6 +858,8 @@ _GO_HIST_INFLIGHT = {"running": False, "done": 0, "total": 0}
 _GO_NM_MAP = None            # {code:{name,sector}} 内存缓存（读清单时才建，一次）
 _GO_HIST_V = 2               # 记录 schema 版本。v1=只有个数；v2=带 codes（明细用）。
 #                             ⚠️ 改这个数 ⇒ 全部历史重算一遍（约 20~25 分钟）。
+_GO_LAST_REFRESH_SEC = 300   # 最新交易日多久重算一次（盘中它的值是"进行中"的，必须刷新；
+#                             但不能每次前端轮询都算 ⇒ 按 ts 节流）
 
 
 def _go_hist_todo(got, trade_days):
@@ -4143,17 +4145,17 @@ class Api:
             n = max(5, min(250, int(days)))
         except Exception:
             n = 60
-        snap = _go_hist_read(n)
-        if snap.get("available"):
-            return snap
-        # 无数据/不足 → 后台单飞补算，**立即返回**（前端轮询）
+        # ⚠️ **不能**"有数据就直接返回"：缓存里可能全是**旧 schema**（缺 codes）或天数不足，
+        #    那样重算永远起不来 —— 2026-10-15 实测踩到：图能画（计数是对的）但明细永远"0 只"。
+        #    改成"只要没在算就踢一次"，由 `_go_hist_compute` 自己判有没有活干（无活时秒退）。
         with _GO_HIST_LOCK:
             if not _GO_HIST_INFLIGHT.get("running"):
                 _GO_HIST_INFLIGHT.update({"running": True, "done": 0, "total": n})
                 threading.Thread(target=self._go_hist_compute, args=(n,), daemon=True).start()
         out = _go_hist_read(n)
-        out["computing"] = True
-        out["progress"] = dict(_GO_HIST_INFLIGHT)
+        out["computing"] = bool(_GO_HIST_INFLIGHT.get("running"))
+        if out["computing"]:
+            out["progress"] = dict(_GO_HIST_INFLIGHT)
         return out
 
 
@@ -4173,24 +4175,32 @@ class Api:
                     else ("trend_dn" if _r["close"] < _r["ma60"] * 0.97 else "range"))
             trade_days = sorted(regime_by_date)[-n:]
 
-            # 池子：与生产同源（loader.load_watchlist + 韭研概念非空）
-            from modules.data_loader import DataLoader as _HL
-            _wl = _HL().load_watchlist()
-            codes = [str(c) for c in _wl[_wl["韭研概念"].astype(str).str.strip().ne("")]["代码"].astype(str).tolist()]
-            codes = list(dict.fromkeys(codes))
-
             rec = _load_json(_GO_HIST_FP, None) or {}
             got = dict(rec.get("days") or {})
             # ⚠️ 判据是「版本对不对」而**不是**「在不在」：早先版本只存了 GO 个数、没存 `codes`，
             #    若按"缺失才算"这些日子**永远补不上**（2026-10-15 实测踩到：缓存 31 天、计数全对、
             #    但点柱子全是"0 只符合"）。升级 schema ⇒ 旧记录视同缺失、重算一遍。
             todo = _go_hist_todo(got, trade_days)                   # 新→旧
-            # ⚠️ **最新一个交易日始终重算**：盘中它是"进行中"的值（bar 一直在动），算过一次就
-            #    被版本判据跳过的话，会**永远停在盘中快照**上（2026-10-15 实测：13:56 算得 12 只，
-            #    14:03 面板同一算法已是 18 只）。收盘后再算一次即覆盖为收盘口径。代价 ~25s。
+            # ⚠️ **最新一个交易日要周期性重算**：盘中它是"进行中"的值（bar 一直在动），只算一次会
+            #    永远停在盘中快照上（实测 13:56 得 12 只、14:03 同一算法已 18 只）。但也不能每次
+            #    轮询都算（前端 20s 一轮 ⇒ 会变成无限重算）⇒ **按 ts 节流**，N 分钟内算过就跳过。
             _last = trade_days[-1] if trade_days else None
-            if _last and _last not in todo:
-                todo = [_last] + todo
+            if _last:
+                _lr = got.get(_last) or {}
+                _stale = (_time_mod.time() - float(_lr.get("ts") or 0)) > _GO_LAST_REFRESH_SEC
+                if _stale and _last not in todo:      # 没算过的本来就在 todo 里，这里管"算过但旧了"
+                    todo = [_last] + todo
+
+            # 没活干就**立刻返回**（下面要 load_watchlist，约 1s —— 空轮询不该付这个代价）
+            if not todo:
+                return
+
+            # 池子：与生产同源（loader.load_watchlist + 韭研概念非空）
+            from modules.data_loader import DataLoader as _HL
+            _wl = _HL().load_watchlist()
+            codes = [str(c) for c in _wl[_wl["韭研概念"].astype(str).str.strip().ne("")]["代码"].astype(str).tolist()]
+            codes = list(dict.fromkeys(codes))
+
             _GO_HIST_INFLIGHT.update({"total": len(trade_days),
                                       "done": sum(1 for d in trade_days
                                                   if (got.get(d) or {}).get("v") == _GO_HIST_V)})
@@ -4202,7 +4212,8 @@ class Api:
                         # 一天最多几百个 6 位码，体积可忽略。
                         _goc = sorted(c for c, v in conf.items() if v.get("go"))
                         got[d] = {"v": _GO_HIST_V, "go": len(_goc), "n_ok": int(len(conf)),
-                                  "regime": regime_by_date.get(d, "range"), "codes": _goc}
+                                  "regime": regime_by_date.get(d, "range"), "codes": _goc,
+                                  "ts": _time_mod.time()}      # ts 供"最新日周期性重算"节流
                 except Exception:
                     pass
                 _GO_HIST_INFLIGHT["done"] = _GO_HIST_INFLIGHT.get("done", 0) + 1

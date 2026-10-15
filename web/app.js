@@ -4750,7 +4750,6 @@ function renderHunter(h) {
     .sort((a, b) => (Number(b["平均分"]) || 0) - (Number(a["平均分"]) || 0)).slice(0, 3);
   const _heatUp = sumRows.filter(r => { const n = _trendNum(r["趋势"]); return n != null && n > 0; }).length;
   const _heatDn = sumRows.filter(r => { const n = _trendNum(r["趋势"]); return n != null && n < 0; }).length;
-  const _buildDone = _buildReady && (h.build_n || 0) >= (h.build_total || 0);
   const overviewCard = `
     <div class="card" style="margin-bottom:10px;padding:10px 14px">
       <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;align-items:baseline">
@@ -4776,7 +4775,10 @@ function renderHunter(h) {
       <div class="cell-dim" style="margin-top:6px;font-size:11px">
         热度 <span class="up">↑${_heatUp}</span> 个概念
         <span class="down" style="margin-left:6px">↓${_heatDn}</span>
-        <span style="margin-left:14px">建仓符合度 ${h.build_n || 0}/${h.build_total || 0}${_buildDone ? "" : " ⏳"}</span>
+        <span style="margin-left:14px"
+          title="${_buildReady
+            ? `已算出 ${h.build_n || 0} 只；其余 ${Math.max(0, (h.build_total || 0) - (h.build_n || 0))} 只无本地日线缓存 ⇒ 判定/得分列显示 “—”`
+            : "建仓符合度后台计算中…"}">建仓符合度 ${h.build_n || 0}/${h.build_total || 0}${_buildReady ? "" : " ⏳"}</span>
       </div>
     </div>`;
 
