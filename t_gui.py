@@ -1489,6 +1489,83 @@ class Api:
             _snapshot_write("market_turnover", _clean(out))
         return out
 
+    def _turnover_daily_fallback(self):
+        """收盘后的**日线兜底**（owner 2026-10-15：盘内读分钟线、盘后直接读快照）。
+
+        数据源 = **本地日线缓存快照** `t_io/cache/daily_kline/index_*.json`（就是 owner 说的"快照"）。
+        为什么不用 `provider.index_daily`：那是 **GM 优先**，而 GM 的日线在盘后初段仍**不含当日**
+        （本函数 docstring 第 2 条 + 实测 2026-10-15 16:xx：GM 路径取到的最后一行还是昨天），
+        而**本地缓存里已经有当日 bar**（盘中 merge 回写过）⇒ 直接用缓存。
+        也正因为读的是本地文件，**GM 挂掉时它依然可用** —— 这才是这次真正需要它救场的场景。
+
+        ⚠️ **两腿在日线口径下要用 sh000001 + sz399001（深证成指），不是 sz399106（深证综指）**：
+        见 `_market_turnover` docstring 第 1 条 ——「深证成指的**日线** amount 是深市全市场
+        （≈深证综指）」，两者日线数值一致；而**分钟**口径下才必须用深证综指。
+        实测佐证：`index_sz399106.json` 本地缓存**停在 2026-09-30**（陈旧），
+        `index_sz399001.json` 有当日。验算 7744亿+8586亿=1.633万亿，加北交所 ≈1.645万亿，
+        与分钟口径 1.646万亿吻合。
+
+        何时返回 None（⇒ 调用方照旧报"分钟线不可得"）：
+          · 缓存里**没有今天**的 bar —— 那是"还没收盘/当日未落库"的直接证据。
+            用它当判据、而不是比时钟：数据自证，且天然不会在盘中误降级
+            （盘中降级会把昨天的成交额当今天报出去，比报错更糟 —— 它看起来是真的）。
+          · 非交易日同理（最后一根是上一交易日）⇒ 也不会回来冒充"今日"。
+
+        ⚠️ 北交所日线**无 amount** ⇒ 走新浪 30 分钟线按日求和（与 `_turnover_history_impl` 同口径）；
+        取不到就如实降级标 `bse_turnover`，不静默少算 ~120 亿。
+        """
+        from core.market_data import sina_index
+        # ⚠️ **盘中绝不降级**：缓存里**盘中就有当日的 bar**（猎手本轮 merge 回写过实时 bar），
+        #    若只看"今天有 bar"就会在盘中把**半天的额**当"全日"报出去 —— 比报错更糟（像真的）。
+        #    故先按会话相位挡一道（owner 的口径：盘内读分钟线、盘后读快照），再看数据自证。
+        if datetime.now().strftime("%H:%M") < "15:00":
+            return None
+        today = datetime.now().strftime("%Y-%m-%d")
+        tot = {}
+        for sym in ("sh000001", "sz399001"):        # 日线口径用深证成指（见上）
+            try:
+                rows = _load_json(BASE / "t_io" / "cache" / "daily_kline"
+                                  / ("index_%s.json" % sym), {}).get("rows") or []
+            except Exception:
+                return None
+            if not rows:
+                return None
+            for r in rows[-15:]:
+                d = str(r.get("date"))[:10]
+                tot[d] = tot.get(d, 0.0) + float(r.get("amount") or 0.0)
+        if not tot or today not in tot:
+            return None                      # 今天没有日线 bar ⇒ 不冒充"今日"
+        ds = sorted(tot)
+        amt = tot[today]
+        prev_day = ds[ds.index(today) - 1] if ds.index(today) > 0 else None
+        prev = tot.get(prev_day) if prev_day else None
+
+        degraded = ["minute_unavailable_daily_fallback"]
+        bse_included = False
+        try:
+            sm = sina_index.fetch_index_minutes("bj899050", scale=30, datalen=1500)
+            if sm is not None and not sm.empty:
+                sm = sm.copy()
+                sm["_d"] = sm["time"].astype(str).str[:10]
+                byd = sm.groupby("_d")["amount"].sum().to_dict()
+                if float(byd.get(today) or 0) > 0:
+                    amt += float(byd[today])
+                    if prev is not None:
+                        prev += float(byd.get(prev_day) or 0)   # 昨日也要加北交所，否则同比偏大
+                    bse_included = True
+        except Exception:
+            pass
+        if not bse_included:
+            degraded.append("bse_turnover")
+
+        return {"available": True,
+                "amount": amt, "amount_prev": prev,
+                "pct": ((amt / prev - 1.0) * 100.0) if prev else None,
+                "basis": "全日", "as_of": "15:00",
+                "day": today, "prev_day": prev_day,
+                "by_leg": {}, "legs": ["sh000001", "sz399106"],
+                "bse_included": bse_included, "degraded": degraded}
+
     def _market_turnover_live(self):
         """给 `_turnover_history_impl` 用的实时成交额：只读内存/当日快照，**绝不**再踢刷新。
 
@@ -1540,13 +1617,25 @@ class Api:
             return d
 
         # 沪深两腿：GM 指数分钟线（含 amount）
+        _minute_fail = None
         for sym in ("sh000001", "sz399106"):     # 上证指数 + 深证综指
             df = get_provider().index_minute(sym, count_bars=800, freq="300s")
             if df is None or df.empty:
-                return {"available": False, "error": f"分钟线不可得({sym})",
-                        "degraded": ["index_minute"]}
+                _minute_fail = sym
+                break
             per_leg[sym] = _norm(df)
             legs.append(sym)
+
+        if _minute_fail:
+            # owner 2026-10-15：「盘内可以读分钟线，**盘后直接读快照**」。
+            # 分钟线不可得（GM 终端挂掉/限流/权限断）时，**盘后**降级走日线快照。
+            # ⚠️ 绝不盘中降级：盘中日线不含当日 bar，降级会把"昨天的成交额"当今天报出去 ——
+            #    那比报错更糟，因为它看起来是真的。判据见 `_turnover_daily_fallback`。
+            _fb = self._turnover_daily_fallback()
+            if _fb:
+                return _fb
+            return {"available": False, "error": f"分钟线不可得({_minute_fail})",
+                    "degraded": ["index_minute"]}
 
         # 北交所腿：只能走新浪（见 sina_index 模块 docstring）。取不到则**如实降级为沪深口径**，
         # 而不是静默少算 ~120 亿 —— 那正是本次与同花顺对不上的原因。
