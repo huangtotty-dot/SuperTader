@@ -1504,7 +1504,7 @@ class Api:
         return None
 
 
-    def _market_turnover():
+    def _market_turnover(self):
         """两市成交额 + 与**昨日同期**的变化（owner 2026-09-30）。
 
         三条口径（都是实测踩过才知道的）：
@@ -3219,7 +3219,7 @@ class Api:
 
     # ---------- 公司资料（K 线弹窗「📋 公司资料」） ----------
 
-    def _em_secid(code):
+    def _em_secid(self, code):
         """6 位码 → 东财 secid。沪市=1.，深市/北交所=0.（东财北交所亦用 0.）。"""
         from core.market_data.codec import market_of
         c = str(code).split("_")[0]
@@ -3331,7 +3331,7 @@ class Api:
         self._stock_chart_cache[key] = (datetime.now(), res)
 
 
-    def _handshake(res, version):
+    def _handshake(self, res, version):
         """版本握手：数据未变只回 {unchanged:true}（省掉 ~300KB 过桥 + 重画）。"""
         _v = res.get("version")
         if version is not None and _v is not None and version == _v:
@@ -3455,7 +3455,7 @@ class Api:
         return payload
 
 
-    def _mk_forming_bar(today, px, o, h, l, v):
+    def _mk_forming_bar(self, today, px, o, h, l, v):
         """造「当日 forming bar」；**无成交且无振幅 ⇒ 返回 None**（视为还没开始交易）。
 
         ⚠️ 2026-10-11 事故：集合竞价后、开盘前（如 09:28）快照会给出 price=**开盘价**、vol=0，
@@ -3585,7 +3585,7 @@ class Api:
         return out
 
 
-    def _chart_version(period_data):
+    def _chart_version(self, period_data):
         """数据身份版本号：各周期 (末日期:根数) 串联。build 与 payload 补 bar 共用，保证握手一致。"""
         def _sig(k):
             _s = (period_data or {}).get(k)
@@ -6291,7 +6291,7 @@ class Api:
     # ---------- 板块轮动（移植自 sector-rotation-v2） ----------
 
 
-    def _rotation_df_to_rows(df):
+    def _rotation_df_to_rows(self, df):
         """DataFrame → JSON 安全行列表。"""
         if df is None or df.empty:
             return []
@@ -6933,7 +6933,7 @@ class Api:
         })
 
 
-    def _pnl_days(start, end):
+    def _pnl_days(self, start, end):
         try:
             d0 = datetime.strptime(str(start)[:10], "%Y-%m-%d")
             d1 = datetime.strptime(str(end)[:10], "%Y-%m-%d")
@@ -7341,7 +7341,7 @@ class Api:
         })
 
 
-    def _parse_log_line(line):
+    def _parse_log_line(self, line):
         """HH:MM:SS [LEVEL] msg  →  {t, level, msg}。"""
         t, level, msg = "", "", line
         try:
@@ -8425,7 +8425,7 @@ class Api:
         return filtered
 
 
-    def _format_divergence_summary(div_detail: dict) -> str:
+    def _format_divergence_summary(self, div_detail: dict) -> str:
         """格式化背离简述，供前端显示"""
         if not div_detail:
             return ""

@@ -5549,18 +5549,20 @@ function switchTab(tab) {
   const sideItem = document.querySelector(`.sidebar-item[data-tab="${tab}"]`);
   if (page) page.classList.add("active");
   if (sideItem) sideItem.classList.add("active");
-  // 延迟 resize 让 tab 的 display:block 先生效
-  setTimeout(resizeAllEch, 80);
+  // 延迟 resize 让 tab 的 display:block 先生效。
+  // ⚠️ 两张"按需绘制"的图也必须在**这个延迟里**重画，不能同步调用 —— 本函数前脚才加上
+  //    `.active`，同一 tick 里量 clientWidth 仍是 0（`display:none` 时宽高都是 0），
+  //    同步调用必然拿 0 尺寸、画不出来（2026-10-15 实测：盘中状态成交额图停在"容器尺寸为 0"）。
+  setTimeout(() => {
+    resizeAllEch();
+    if (tab === "hunter") { drawHunterGoChart(); renderHunterGoList(); }
+    if (tab === "signals") drawTurnoverHist();
+  }, 80);
   // 2026-10-10: 切到选股猎手不再自动跑扫描（owner 需求6）——一律点「▶ 运行今日数据」触发。
   // 切到每日复盘：懒加载模型配置 + 已有复盘
   if (tab === "archive") renderDailyReview();
   // 图表分析：交割单台账懒加载（未导入过则只显示「点导入」提示，不弹窗）
   if (tab === "charts") loadTradeHistory();
-  // 选股猎手：切到本页时**重画 GO 图**。
-  // 页面加载时本页是隐藏的（`display:none` ⇒ 容器宽 0），首次绘制必然失败；
-  // 而本页**没有** 10s 轮询（成交额图在盘中状态页、有 10s 轮询兜底），不给这个钩子就会
-  // **永远**停在"容器尺寸为 0"（2026-10-15 实测踩到）。不记签名 ⇒ 任何一次再调用都会重试。
-  if (tab === "hunter") { drawHunterGoChart(); renderHunterGoList(); }
   // P4-3 切到自动盘：加载 t_io/bridge 状态 + 建仓扫描
   if (tab === "auto") {
     loadAutoStatus();
