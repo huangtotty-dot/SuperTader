@@ -25,6 +25,7 @@ bar0 语义 =「09:30~10:00 那一根」，两种数据源同构。
 """
 from __future__ import annotations
 
+from collections import Counter
 from typing import Mapping, Sequence
 
 import numpy as np
@@ -32,6 +33,7 @@ import numpy as np
 # ── 信号常量（冻结）──
 MIN_POOL = 3                # 有效候选下限，低于则 fail-closed 不下单
 DEFAULT_TOP_N = 4           # 每日按 gap 取最强前 4（exp9 Sharpe 顶点）
+NEAR_K = 8                  # 「最接近」明细保留条数（**纯展示**，不参与判定）
 
 NO_TRADE = 'no_trade'
 TRADE = 'trade'
@@ -107,13 +109,51 @@ def evaluate(prev_close: Mapping[str, float],
 
     signals = []
     pool_n = 0
+    # ── 展示用逐关统计（2026-10-15 加，owner 要求控制台能看到决策过程）──
+    # ⚠️ 下面 gates/reasons/near **完全不参与判定**：谁入选仍只由 `signal_ok` 决定。
+    #    存在的理由：`signal_ok` 只回**第一个**未过的关，光看它无法回答
+    #    "到底卡在哪一关、差多远"（10-15 实盘 176 只全废，只打了一行 pool_n=176）。
+    gates = {'weak': 0, 'g1': 0, 'g2': 0, 'g3': 0, 'all': 0}
+    reasons = Counter()
+    near = []
     for code, pc in prev_close.items():
         bar = bars.get(code)
         if not (_valid(pc) and isinstance(bar, Mapping)):
             continue
         pool_n += 1
-        ok, why, gap = signal_ok(float(pc), float(ma20.get(code) or float('nan')), bar)
+        pc_f = float(pc)
+        ma_f = float(ma20.get(code) or float('nan'))
+        _low = _bar_field(bar, 'low')
+        _close = _bar_field(bar, 'close')
+        _amt = _bar_field(bar, 'amount')
+        _vol = _bar_field(bar, 'volume')
+        _vwap = _amt / _vol if (_valid(_amt) and _valid(_vol)) else float('nan')
+        # ⚠️ 下面这块跑在**实盘下单路径**里：任何异常都不得影响判定 ⇒ 整体兜底。
+        #    判定本身只由下面的 `signal_ok` 决定，这里坏了最多是 diag 少几只。
+        try:
+            _weak = bool(_valid(ma_f) and pc_f < ma_f)
+            _g1 = bool(_valid(_low) and _low >= pc_f)
+            _g2 = bool(_valid(_close) and _close > pc_f)
+            _g3 = bool(_valid(_vwap) and _valid(_close) and _close > _vwap)
+            gates['weak'] += int(_weak)
+            gates['g1'] += int(_g1)
+            gates['g2'] += int(_g2)
+            gates['g3'] += int(_g3)
+            gates['all'] += int(_weak and _g1 and _g2 and _g3)
+        except Exception:
+            pass
+        ok, why, gap = signal_ok(pc_f, ma_f, bar)
         if not ok:
+            reasons[why] += 1
+            try:
+                if _valid(_close):
+                    near.append({'code': code, 'gap': _close / pc_f - 1.0, 'reason': why,
+                                 'low': _low, 'close': _close, 'vwap': _vwap, 'prev_close': pc_f})
+                    if len(near) > 200:                   # 只留展示用的前若干名
+                        near.sort(key=lambda n: -n['gap'])
+                        del near[NEAR_K:]
+            except Exception:
+                pass
             continue
         b = str(board.get(code) or '')
         if allow is not None and b not in allow:
@@ -126,10 +166,15 @@ def evaluate(prev_close: Mapping[str, float],
     signals.sort(key=lambda s: (-(s['gap'] if np.isfinite(s['gap']) else -1e9), s['code']))
     tradable = [s for s in signals if s['decision'] == TRADE]
     picks = tradable[:max(0, int(top_n))] if pool_n >= MIN_POOL else []
+    near.sort(key=lambda n: -n['gap'])
     return {
         'pool_n': pool_n,
         'signals': signals,
         'picks': picks,
         'rejected_board': sum(1 for s in signals if s['decision'] == NO_TRADE),
         'n_tradable': len(tradable),
+        # 展示用（2026-10-15）：逐关通过数 / 首个未过关的分布 / gap 最高的未过票明细。
+        # 纯附加字段，`signals`/`picks` 语义与加它之前逐位一致。
+        'diag': {'gates': gates, 'reasons': dict(reasons.most_common()),
+                 'near': near[:NEAR_K], 'n_near': len(near)},
     }

@@ -202,6 +202,7 @@ def try_buy(rt, context, now) -> int:
         return 0
     _pc, _ma = prescreen.split_into_prev_close_ma20(_cand)
     _board = {c: v.get("board", "") for c, v in _cand.items()}
+    _names = {c: (v.get("name") or "") for c, v in _cand.items()}   # 仅用于判定过程显示
     _codes = sorted(_cand)
     _syms = [rt.code_to_gm(c) for c in _codes]
     _start = now.strftime("%Y-%m-%d 09:25:00")
@@ -234,7 +235,7 @@ def try_buy(rt, context, now) -> int:
         _res = executor.run_buy_exec(rt.gateway(context), str(now.date()),
                                  prev_close=_pc, ma20=_ma, bars=_bars, board=_board,
                                  allowed_boards=None, book_dir=_book, params=_params,
-                                 dry_run=False, log=print)
+                                 dry_run=False, log=print, names=_names)
         _sm = (_res or {}).get("summary") or {}
         rt.audit({"event": "osc_buy_exec", "date": str(now.date()),
                       "candidates": _sm.get("candidates"), "buys": _sm.get("buys_placed"),

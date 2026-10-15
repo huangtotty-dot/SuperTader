@@ -623,6 +623,13 @@ def init(context):
     # 运维自举（0806 红日整改）：控制台日志落盘 + watcher 自动拉起
     ops_guard.bootstrap_logging(PROJECT_DIR)
     ops_guard.ensure_watcher(PROJECT_DIR)
+    # 控制台着色（2026-10-15）：只有 bootstrap 确认控制台吃 ANSI 才开——否则控制台会把
+    # 转义序列当普通字符打出来，比不上色更糟。策略侧只**产生**色码；写日志文件那份由
+    # ops_guard._TeeStream 剥离，故 strategy_*.log 仍是纯文本。
+    try:
+        osc.style.enable(ops_guard.ansi_enabled())
+    except Exception:
+        pass
     # P3-2 池分管校验：manual 池与 auto 池交集冲突 → 拒绝启动（fail-closed）
     _wl = os.path.join(os.environ.get("SUPERTRADER_ROOT", r"E:\superTrader"),
                        "t_io", "state", "watchlist_buy.json")
@@ -966,7 +973,15 @@ def on_bar(context, bars):
                     except Exception: pass
                 else:
                     print(f"[ir] {str(today)} regime={context.last_index_regime} score={context.last_index_score:.1f}")
-                print(f"[ir] {str(today)} board_regime={context.board_regime}")
+                # 2026-10-15：原来直接 print(dict) 一行 ~130 字符，控制台必折行。
+                # 压成「简称=regime」空格分隔（无解析方，见 grep；context.board_regime 原样不变）。
+                _SHORT_IDX = {"SHSE.000001": "上证", "SHSE.000300": "沪深300",
+                              "SHSE.000688": "科创50", "SHSE.000905": "中证500",
+                              "SHSE.000852": "中证1000", "SZSE.399001": "深成",
+                              "SZSE.399006": "创业板", "SZSE.399005": "中小板"}
+                print(f"[ir] {str(today)} 分板: " + "  ".join(
+                    f"{_SHORT_IDX.get(_k, str(_k).split('.')[-1])}={_v}"
+                    for _k, _v in (context.board_regime or {}).items()))
         except Exception as e:
             print(f"[ir] 大盘态势判定失败: {e}")
 

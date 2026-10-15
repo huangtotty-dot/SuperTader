@@ -54,6 +54,10 @@ except Exception:                                    # pragma: no cover - 兜底
     _FEE_BUY, _FEE_SELL = 0.0000954, 0.0005954
     _FEE_SRC = "fallback_constants(=core/cost_model 同值)"
 
+# 控制台着色（2026-10-15）。默认关；宿主 gm_main 探测到控制台支持 ANSI 后调 `style.enable(True)`。
+# 只影响显示：未开启时 `style.c()` 原样返回字符串。写日志文件那份由 ops_guard._TeeStream 剥码。
+from . import style as _st                          # noqa: E402
+
 # ⚠️ 目录名沿用历史的 `weak_strong_book`（**刻意不改**）：它是**在线账本**（positions.json），
 #    改名会让在途持仓与卖侧失联。要改名须与「部署新代码」同刻做数据迁移。
 BOOK_DIR_DEFAULT = os.path.join(_ROOT, "t_io", "state", "weak_strong_book")
@@ -561,11 +565,84 @@ def run_morning_sell_exec(gateway, date: str, morning_highs: dict,
 
 # ════════════════════════ 主流程 ════════════════════════
 
+def _log_decision(log, full: dict, names: dict | None = None,
+                  boards: dict | None = None, top_k: int = 6) -> None:
+    """把 10:00 的**判定过程**打进控制台/策略日志（2026-10-15，owner 要求）。
+
+    ⚠️ 纯展示：只读 `decision.evaluate` 附加的 `diag` 字段，不参与任何下单决策。
+    存在的理由：10-15 实盘 176 只候选全废，但控制台只有一行 `pool_n=176`，
+    看不出"卡在哪一关、差多远"。这里补三样东西：
+      ① 漏斗：池 → 超跌 → ①全程不破昨收 → ②站上昨收 → ③站上VWAP → 三全过
+         （各关是**独立**通过数，所以能看出"176 只里只有 1 只没破昨收"这种话）
+      ② 首个未过关的分布（`signal_ok` 的 reason，按检查顺序即瀑布）
+      ③ gap 最高的未过票明细：差在哪一关、破了昨收多少
+    """
+    d = (full or {}).get('diag') or {}
+    g = d.get('gates') or {}
+    if not g:
+        return
+    _pool = int((full or {}).get('pool_n') or 0)
+    # 着色（未开启时 style.c 原样返回 ⇒ 纯文本，安全）
+    def _gv(name, val):
+        """漏斗里把关：通过率 <10% 标黄加粗（瓶颈），否则绿。"""
+        _n = _st.c("%s" % val, _st.YELLOW, _st.BOLD) if (_pool and val / _pool < 0.10) \
+            else _st.c("%s" % val, _st.GREEN)
+        return "%s %s" % (_st.c(name, _st.GREY), _n)
+    _all_n = int(g.get('all', 0))
+    log("%s %s 池 %s | %s | %s | %s | %s | %s" % (
+        _st.c("[OSC]", _st.CYAN), _st.c("10:00 判定漏斗:", _st.BOLD),
+        _st.c("%d" % _pool, _st.BOLD),
+        _gv("超跌(昨收<MA20)", g.get('weak', 0)), _gv("①全程不破昨收", g.get('g1', 0)),
+        _gv("②站上昨收", g.get('g2', 0)), _gv("③站上VWAP", g.get('g3', 0)),
+        _st.c("三全过 %d" % _all_n,
+              _st.GREEN, _st.BOLD) if _all_n else _st.c("三全过 0", _st.RED, _st.BOLD)))
+    _rb = int((full or {}).get('rejected_board') or 0)
+    if _rb:
+        log("%s %s" % (_st.c("[OSC]", _st.CYAN),
+                       _st.c("10:00 触发但被板块过滤掉 %d 只（可交易 %d 只）"
+                             % (_rb, int((full or {}).get('n_tradable') or 0)), _st.YELLOW)))
+    rs = d.get('reasons') or {}
+    if rs:
+        _names = {'bar_missing': '棒缺失', 'prev_close_missing': '昨收缺失',
+                  'not_weak(prev_close>=ma20)': '非超跌', 'gap_not_held(low<prev_close)': '①破昨收',
+                  'not_above_prev_close': '②未站上昨收', 'not_above_vwap': '③未站上VWAP'}
+        log("%s %s " % (_st.c("[OSC]", _st.CYAN), _st.c("10:00 首个未过关:", _st.DIM))
+            + " · ".join("%s %s" % (_names.get(k, k), _st.c("%d" % v, _st.YELLOW))
+                         for k, v in list(rs.items())[:6]))
+    near = (d.get('near') or [])[:top_k]
+    if not near:
+        return
+    nm = names or {}
+    bm = boards or {}
+    _tag = {'gap_not_held(low<prev_close)': '①破昨收', 'not_above_prev_close': '②未站上昨收',
+            'not_above_vwap': '③未站上VWAP', 'not_weak(prev_close>=ma20)': '非超跌',
+            'bar_missing': '棒缺失'}
+    log("%s %s" % (_st.c("[OSC]", _st.CYAN),
+                   _st.c("10:00 最接近(gap 降序 %d/%d 只):"
+                         % (len(near), d.get('n_near') or len(near)), _st.DIM)))
+    for n in near:
+        _c = str(n.get('code'))
+        _name = nm.get(_c) or nm.get(_c.zfill(6)) or ''
+        _why = _tag.get(n.get('reason'), str(n.get('reason')))
+        _lo = ''
+        try:
+            if n.get('low') and n.get('prev_close'):
+                _lo = " 最低/昨收%+.2f%%" % ((n['low'] / n['prev_close'] - 1.0) * 100.0)
+        except Exception:
+            pass
+        _gap = (n.get('gap') or 0) * 100
+        log("        %s %-8s %-10s %s  差:%s%s  昨收%.2f 低%.2f 收%.2f" % (
+            _st.c(_c, _st.CYAN), _name, str(bm.get(_c) or '')[:10],
+            _st.c("gap%+6.2f%%" % _gap, _st.GREEN if _gap > 0 else _st.RED),
+            _st.c(_why, _st.YELLOW), _lo,
+            n.get('prev_close') or 0, n.get('low') or 0, n.get('close') or 0))
+
+
 def run_buy_exec(gateway, date: str, prev_close: dict, ma20: dict, bars: dict,
                  board: dict | None = None, allowed_boards=None,
                  book_dir: str = BOOK_DIR_DEFAULT, params: dict | None = None,
                  dry_run: bool = False, sleep_fn=time.sleep, log=print,
-                 exclude_codes=None, code_committed=None) -> dict:
+                 exclude_codes=None, code_committed=None, names: dict | None = None) -> dict:
     """超跌跳空确认 10:00 买侧执行主流程。返回 fills dict（同时落盘）。
 
     fail-closed：决策核因缺数据/min_pool 不足返回空 picks ⇒ 当日不下单（不抛异常）。
@@ -584,6 +661,8 @@ def run_buy_exec(gateway, date: str, prev_close: dict, ma20: dict, bars: dict,
 
     _full = evaluate_full(prev_close, ma20, bars, board=board,
                           allowed_boards=allowed_boards, top_n=top_n)
+    # 判定过程落控制台/策略日志（2026-10-15，纯展示；两条分支共用同一处调用）
+    _log_decision(log, _full, names=names, boards=board)
     picks = list(_full["picks"])
     _picks_raw = list(picks)
     _excl = set(exclude_codes or ())

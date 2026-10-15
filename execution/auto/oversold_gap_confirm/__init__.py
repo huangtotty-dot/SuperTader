@@ -38,7 +38,7 @@ osc.executor.load_book(dir)                 # 账本（宿主归属判定也读�
 """
 from __future__ import annotations
 
-from . import backfill, decision, executor, gateway, hooks, prescreen
+from . import backfill, decision, executor, gateway, hooks, prescreen, style
 from .hooks import enabled, on_bar, reset_day, sell_enabled
 from .runtime import Runtime
 
