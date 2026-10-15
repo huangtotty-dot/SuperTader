@@ -1348,6 +1348,52 @@ const HUNTER_GO_REGIME_CN = {
 };
 let hunterGoInst = null, hunterGoNode = null, hunterGoSig = "";
 let _hunterGoTimer = null;
+// 「符合(GO)个股」明细：当前选中日 + 已取回的按日缓存（同一天不重复取）
+let _hunterGoDays = [];          // 最近一次画图用的 days（点柱子时按 dataIndex 反查日期）
+let _hunterGoSel = null;         // 当前展示的日期
+const _hunterGoCache = {};       // date -> {available, regime, go, n_ok, stocks}
+
+function hunterGoListHtml() {
+  if (!_hunterGoSel) return "";
+  const r = _hunterGoCache[_hunterGoSel];
+  if (!r) return `<span class="cell-dim">⏳ 取 ${esc(_hunterGoSel)} 明细…</span>`;
+  if (!r.available) return `<span class="cell-dim">${esc(r.error || "无明细")}</span>`;
+  if (!r.stocks.length) {
+    return `<span class="cell-dim">${esc(r.date)}：<b>0 只</b>符合`
+      + `（${esc(HUNTER_GO_REGIME_CN[r.regime] || r.regime || "—")}${r.regime === "range" ? " ⇒ 策略降频，当日不建仓" : ""}）</span>`;
+  }
+  const grp = {};
+  for (const s of r.stocks) (grp[s.sector || "未分类"] ||= []).push(s);
+  const secs = Object.keys(grp).sort((a, b) => grp[b].length - grp[a].length || a.localeCompare(b));
+  return `<div style="margin-bottom:3px">
+      <b>${esc(r.date)}</b> 符合 <b>${r.go}</b> 只 · ${secs.length} 个板块
+      <span class="cell-dim">（${esc(HUNTER_GO_REGIME_CN[r.regime] || r.regime || "—")}；池内可算 ${r.n_ok || 0} 只）</span>
+    </div>`
+    + secs.map(sec => `<div style="margin:2px 0">
+        <span class="badge" style="background:var(--bg-soft);color:var(--text-dim)">${esc(sec)} ${grp[sec].length}</span>
+        ${grp[sec].map(s => `<a href="javascript:void(0)" onclick="openStockChart('${esc(s.code)}','${esc(s.name)}')"
+            style="margin-right:9px;text-decoration:none;color:inherit"
+            title="点开 ${esc(s.code)} 日线图">${esc(s.code)} <b>${esc(s.name)}</b></a>`).join("")}
+      </div>`).join("");
+}
+
+function renderHunterGoList() {
+  const el = document.getElementById("hunterGoList");
+  if (el) el.innerHTML = hunterGoListHtml();
+}
+
+async function selectHunterGoDay(date) {
+  if (!date) return;
+  _hunterGoSel = date;
+  renderHunterGoList();
+  if (_hunterGoCache[date]) return;                  // 已取过
+  try {
+    _hunterGoCache[date] = await apiCall("load_hunter_go_stocks", date);
+  } catch (e) {
+    _hunterGoCache[date] = { available: false, date, stocks: [], error: (e && e.message) || String(e) };
+  }
+  renderHunterGoList();
+}
 
 function _hunterGoFail(msg) {
   const box = document.getElementById("hunterGoChart");
@@ -1393,6 +1439,12 @@ async function drawHunterGoChart() {
   }
   if (_hunterGoTimer) { clearInterval(_hunterGoTimer); _hunterGoTimer = null; }
 
+  _hunterGoDays = days;
+  // 首次（或选中的那天已不在窗口内）默认展示**最新交易日**的明细
+  if (!_hunterGoSel || !days.some(x => x.date === _hunterGoSel)) {
+    selectHunterGoDay(days[days.length - 1].date);
+  }
+
   const go = days.map(x => Number(x.go) || 0);
   const ma5 = hunterGoMa(go);
   const _isToday = (s) => s === todayStr();
@@ -1409,7 +1461,16 @@ async function drawHunterGoChart() {
     try { hunterGoInst.dispose(); } catch (e) { }
     hunterGoInst = null; hunterGoNode = null;
   }
-  if (!hunterGoInst) { hunterGoInst = echarts.init(box); hunterGoNode = box; }
+  if (!hunterGoInst) {
+    hunterGoInst = echarts.init(box);
+    hunterGoNode = box;
+    // 点柱子 → 看那天"符合(GO)的是哪些票、各属什么板块"。
+    // ⚠️ **只注册一次**：`setOption` 不会清事件，每次重画都 `on()` 会叠成 N 个处理器。
+    hunterGoInst.on("click", (pt) => {
+      const x = _hunterGoDays[pt && pt.dataIndex];
+      if (x) selectHunterGoDay(x.date);
+    });
+  }
   hunterGoInst.setOption({
     grid: { left: 40, right: 34, top: 8, bottom: 18 },
     tooltip: {
@@ -4730,7 +4791,10 @@ function renderHunter(h) {
         <span style="color:${HUNTER_GO_BAR}">■</span> 当日 GO 只数
         <span style="color:${HUNTER_GO_MA};margin-left:8px">━</span> ${HUNTER_GO_MA_N}日均线
         <span style="margin-left:8px">· <b>震荡市 GO 恒为 0</b>（策略降频，非故障）—— 悬停看当日 regime</span>
+        <span style="margin-left:8px">· 👆 <b>点柱子</b>看那天符合的个股与板块</span>
       </div>
+      <div id="hunterGoList" class="cell-dim"
+        style="font-size:11px;margin-top:8px;padding-top:7px;border-top:1px solid var(--border-soft)"></div>
     </div>
     ${(_buildReady && (h.build_n || 0) >= (h.build_total || 0)) ? "" : `
       <div class="cell-dim" style="font-size:11px;margin-bottom:8px;padding:5px 9px;background:rgba(210,153,34,.12);border-left:3px solid #d29922">
@@ -4755,6 +4819,8 @@ function renderHunter(h) {
   // GO 图容器放回占位处（复用旧节点 ⇒ 同节点走原地 setOption，不闪）
   _putBackNode("hunterGoSlot", _keepGoChart, '<div id="hunterGoChart" style="height:130px"></div>');
   drawHunterGoChart();
+  // 明细列表随 innerHTML 一起被重建 ⇒ 用缓存重填（选中日与数据都在模块级，不丢）
+  renderHunterGoList();
 
   // 分页/重渲染后恢复此前展开的板块（避免跳页收起），并重填已缓存的技术标签
   if (hunterOpenSectors.size) {

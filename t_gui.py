@@ -855,6 +855,49 @@ _OVERVIEW_INFLIGHT_LOCK = threading.Lock()
 _GO_HIST_FP = BASE / "t_io" / "cache" / "hunter_go_daily.json"
 _GO_HIST_LOCK = threading.Lock()
 _GO_HIST_INFLIGHT = {"running": False, "done": 0, "total": 0}
+_GO_NM_MAP = None            # {code:{name,sector}} 内存缓存（读清单时才建，一次）
+
+
+def _go_hist_read(n):
+    """读落盘缓存 → {available, days:[{date,go,n_ok,regime}], stale, partial}。fail-open。"""
+    try:
+        rec = _load_json(_GO_HIST_FP, None)
+        got = (rec or {}).get("days") or {}
+        all_days = sorted(got)
+        want = all_days[-n:]
+        if not want:
+            return {"available": False, "days": [], "error": ""}
+        return {"available": True,
+                "days": [{"date": d, **got[d]} for d in want],
+                "updated_at": (rec or {}).get("updated_at"),
+                "stale": _time_mod.time() - float((rec or {}).get("updated_at") or 0) > 26 * 3600.0,
+                "partial": len(all_days) < n}
+    except Exception as e:
+        return {"available": False, "days": [], "error": f"{type(e).__name__}: {str(e)[:80]}"}
+
+def _go_name_sector_map():
+    """{6位码: {name, sector}}（sector = 韭研分类，与猎手面板分组同口径）。带内存缓存。"""
+    global _GO_NM_MAP
+    if _GO_NM_MAP is not None:
+        return _GO_NM_MAP
+    m = {}
+    try:
+        from modules.data_loader import DataLoader as _HL
+        _wl = _HL().load_watchlist()
+        _cc = "代码" if "代码" in _wl.columns else None
+        _nc = "名称" if "名称" in _wl.columns else None
+        _sc = "韭研分类" if "韭研分类" in _wl.columns else None
+        if _cc:
+            for _, r in _wl.iterrows():
+                c = str(r[_cc]).zfill(6)
+                m[c] = {"name": str(r[_nc]) if _nc else "",
+                        "sector": (str(r[_sc]).strip() if _sc else "") or "未分类"}
+    except Exception:
+        m = {}
+    _GO_NM_MAP = m
+    return m
+
+@staticmethod
 
 
 def _snapshot_read(key):
@@ -1404,7 +1447,7 @@ class Api:
             return snap["payload"]
         return None
 
-    @staticmethod
+
     def _market_turnover():
         """两市成交额 + 与**昨日同期**的变化（owner 2026-09-30）。
 
@@ -1466,7 +1509,7 @@ class Api:
             out["degraded"] = degraded
         return out
 
-    @staticmethod
+
     def _turnover_from_minutes(per_leg, now):
         """纯计算（无 IO，便于离线单测）：{腿: 分钟线} + 当前时刻 → 成交额与变化。
 
@@ -1595,7 +1638,7 @@ class Api:
 
         return Api._assemble_turnover_history(hs, bse, days, live_day, live_amount, datetime.now())
 
-    @staticmethod
+
     def _assemble_turnover_history(hs, bse, days, live_day, live_amount, now):
         """纯计算（无 IO，便于离线单测）：沪深/北交所按日成交额 + 实时值 → 柱状图数据。
 
@@ -3119,7 +3162,7 @@ class Api:
         return result
 
     # ---------- 公司资料（K 线弹窗「📋 公司资料」） ----------
-    @staticmethod
+
     def _em_secid(code):
         """6 位码 → 东财 secid。沪市=1.，深市/北交所=0.（东财北交所亦用 0.）。"""
         from core.market_data.codec import market_of
@@ -3231,7 +3274,7 @@ class Api:
             self._stock_chart_cache.clear()
         self._stock_chart_cache[key] = (datetime.now(), res)
 
-    @staticmethod
+
     def _handshake(res, version):
         """版本握手：数据未变只回 {unchanged:true}（省掉 ~300KB 过桥 + 重画）。"""
         _v = res.get("version")
@@ -3355,7 +3398,7 @@ class Api:
                     pass
         return payload
 
-    @staticmethod
+
     def _mk_forming_bar(today, px, o, h, l, v):
         """造「当日 forming bar」；**无成交且无振幅 ⇒ 返回 None**（视为还没开始交易）。
 
@@ -3485,7 +3528,7 @@ class Api:
         out["available"] = True
         return out
 
-    @staticmethod
+
     def _chart_version(period_data):
         """数据身份版本号：各周期 (末日期:根数) 串联。build 与 payload 补 bar 共用，保证握手一致。"""
         def _sig(k):
@@ -4087,7 +4130,7 @@ class Api:
             n = max(5, min(250, int(days)))
         except Exception:
             n = 60
-        snap = self._go_hist_read(n)
+        snap = _go_hist_read(n)
         if snap.get("available"):
             return snap
         # 无数据/不足 → 后台单飞补算，**立即返回**（前端轮询）
@@ -4095,27 +4138,11 @@ class Api:
             if not _GO_HIST_INFLIGHT.get("running"):
                 _GO_HIST_INFLIGHT.update({"running": True, "done": 0, "total": n})
                 threading.Thread(target=self._go_hist_compute, args=(n,), daemon=True).start()
-        out = self._go_hist_read(n)
+        out = _go_hist_read(n)
         out["computing"] = True
         out["progress"] = dict(_GO_HIST_INFLIGHT)
         return out
 
-    def _go_hist_read(self, n):
-        """读落盘缓存 → {available, days:[{date,go,n_ok,regime}], stale, partial}。fail-open。"""
-        try:
-            rec = _load_json(_GO_HIST_FP, None)
-            got = (rec or {}).get("days") or {}
-            all_days = sorted(got)
-            want = all_days[-n:]
-            if not want:
-                return {"available": False, "days": [], "error": ""}
-            return {"available": True,
-                    "days": [{"date": d, **got[d]} for d in want],
-                    "updated_at": (rec or {}).get("updated_at"),
-                    "stale": _time_mod.time() - float((rec or {}).get("updated_at") or 0) > 26 * 3600.0,
-                    "partial": len(all_days) < n}
-        except Exception as e:
-            return {"available": False, "days": [], "error": f"{type(e).__name__}: {str(e)[:80]}"}
 
     def _go_hist_compute(self, n):
         """后台：按需补算缺失交易日（**从新到旧**，每天落一次盘 ⇒ 前端逐步看到柱子）。"""
@@ -4147,12 +4174,15 @@ class Api:
                 try:
                     conf = self._hunter_build_conformance(codes, d) or {}
                     if conf:
-                        got[d] = {"go": int(sum(1 for v in conf.values() if v.get("go"))),
-                                  "n_ok": int(len(conf)), "regime": regime_by_date.get(d, "range")}
+                        # 存下 GO 的**代码**（不只存个数）：前端点柱子要展开"那天符合的是哪些票"。
+                        # 一天最多几百个 6 位码，体积可忽略。
+                        _goc = sorted(c for c, v in conf.items() if v.get("go"))
+                        got[d] = {"go": len(_goc), "n_ok": int(len(conf)),
+                                  "regime": regime_by_date.get(d, "range"), "codes": _goc}
                 except Exception:
                     pass
                 _GO_HIST_INFLIGHT["done"] = _GO_HIST_INFLIGHT.get("done", 0) + 1
-                self._go_hist_write(got)
+                _go_hist_write(got)
             _go_hist_write(got)
         except Exception:
             pass
@@ -4160,7 +4190,32 @@ class Api:
             with _GO_HIST_LOCK:
                 _GO_HIST_INFLIGHT["running"] = False
 
-    @staticmethod
+    def load_hunter_go_stocks(self, date=None):
+        """某日 GO 明细 → {available, date, regime, go, stocks:[{code,name,sector}]}。
+
+        代码→名称/板块 在**读取时**解析（`_go_name_sector_map` 有内存缓存），不写进落盘文件
+        （1530 只的名称+板块复制 60 遍是白占地方，且 watchlist 一改就对不上了）。
+        """
+        days = (_go_hist_read(60).get("days") or [])
+        if not days:
+            return {"available": False, "date": date, "stocks": [], "error": "GO 历史尚未算出"}
+        want = str(date) if date else days[-1]["date"]
+        rec = next((x for x in days if x["date"] == want), None)
+        if rec is None:
+            return {"available": False, "date": want, "stocks": [],
+                    "error": f"缓存里没有 {want}（只覆盖 {days[0]['date']} ~ {days[-1]['date']}）"}
+        nm = _go_name_sector_map()
+        stocks = []
+        for c in (rec.get("codes") or []):
+            info = nm.get(c) or {}
+            stocks.append({"code": c, "name": info.get("name") or "",
+                           "sector": info.get("sector") or "未分类"})
+        stocks.sort(key=lambda s: (s["sector"], s["code"]))
+        return {"available": True, "date": want, "regime": rec.get("regime"),
+                "go": rec.get("go"), "n_ok": rec.get("n_ok"), "stocks": stocks}
+
+
+
     def _go_hist_write(got):
         """原子落盘（tmp + replace）。只写有效项；fail-open。"""
         try:
@@ -6150,7 +6205,7 @@ class Api:
 
     # ---------- 板块轮动（移植自 sector-rotation-v2） ----------
 
-    @staticmethod
+
     def _rotation_df_to_rows(df):
         """DataFrame → JSON 安全行列表。"""
         if df is None or df.empty:
@@ -6792,7 +6847,7 @@ class Api:
             "daily": daily,
         })
 
-    @staticmethod
+
     def _pnl_days(start, end):
         try:
             d0 = datetime.strptime(str(start)[:10], "%Y-%m-%d")
@@ -7200,7 +7255,7 @@ class Api:
             "sum_pct": round(sum(r["pct"] for r in rows), 1),
         })
 
-    @staticmethod
+
     def _parse_log_line(line):
         """HH:MM:SS [LEVEL] msg  →  {t, level, msg}。"""
         t, level, msg = "", "", line
@@ -7217,7 +7272,7 @@ class Api:
         return {"t": t, "level": level, "msg": msg,
                 "key": Api._is_key_line(line)}
 
-    @staticmethod
+
     def _is_key_line(line):
         for w in Api.KEY_LINE_WORDS:
             if w in line:
@@ -8284,7 +8339,7 @@ class Api:
         ))
         return filtered
 
-    @staticmethod
+
     def _format_divergence_summary(div_detail: dict) -> str:
         """格式化背离简述，供前端显示"""
         if not div_detail:
