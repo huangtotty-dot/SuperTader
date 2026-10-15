@@ -1147,6 +1147,11 @@ let turnoverHistNode = null;   // 实例绑定的 DOM 节点；节点被重建�
 const TURNOVER_UP = "#f85149";     // 放量（与 .h-bar-fill.up 同色）
 const TURNOVER_DOWN = "#3fb950";   // 缩量
 const TURNOVER_LIVE = "#d29922";   // 进行中：今日未走完，**不参与**放量/缩量判定（否则盘中看着像大幅缩量）
+// 5 日均量线（2026-10-15 加）。**刻意不用**上面三色：那三色是"状态"语义（放量/缩量/进行中），
+// 均线是"另一个系列"，拿状态色当系列色是 anti-pattern。选蓝色相与三色分离；
+// 该值经 dataviz 校验器在暗底(surface #1a1a19)下通过亮度带 L 0.48–0.67 / 色度 / 对比度三项。
+const TURNOVER_MA5 = "#388bfd";
+const TURNOVER_MA5_N = 5;          // 均线窗口（交易日）
 
 // 把失败原因**写在卡片里**：此前各条失败路径都是静默 return ⇒ 界面只剩空白，
 // 分不清是"没数据""没 echarts"还是"后端没这个接口"。空白本身不携带任何信息。
@@ -1184,9 +1189,25 @@ async function drawTurnoverHist() {
   if (_turnoverRetry) { clearTimeout(_turnoverRetry); _turnoverRetry = null; }
   const days = d.days;
   const last = days[days.length - 1];
+  // ── 5 日均量（2026-10-15）──
+  // ⚠️ 只统计**已完成**的交易日：今日那根是"进行中"的半日额，把它算进均线会让均线盘中一路
+  //    下坠、今天看着像大幅缩量（正是 TURNOVER_LIVE 那条注释在防的同一个坑）。
+  //    因此今日 x 上的均线值 = "前 5 个完整交易日的均量"，正好当横比基准用。
+  const ma5 = [];
+  {
+    const done = [];
+    for (let i = 0; i < days.length; i++) {
+      if (!days[i].in_progress) done.push(days[i].amount);
+      ma5.push(done.length >= TURNOVER_MA5_N
+        ? done.slice(-TURNOVER_MA5_N).reduce((a, b) => a + b, 0) / TURNOVER_MA5_N / 1e8
+        : null);                                   // 前 4 根凑不满窗口 → null，不画半截均线
+    }
+  }
   // 签名含**容器宽度**：面板隐藏时首次渲染拿到 0 宽，切到该 tab 后宽度变化必须触发重画，
   // 否则会永远停在 0 宽的"空图"上。宽度变化 = 需要重画。
-  const sig = `${days.length}|${last.date}|${Math.round(last.amount)}|${box.clientWidth}`;
+  // 签名带 MA5：均线只由**已完成日**决定（盘中恒定），在这里带上是为防"历史某日被修正"时漏重画。
+  const sig = `${days.length}|${last.date}|${Math.round(last.amount)}|`
+    + `${Math.round(ma5[ma5.length - 1] || 0)}|${box.clientWidth}`;
   // ⚠️ 必须带上节点判等：renderLive 每 10s 覆写 #liveBody.innerHTML，`box` 每次都是**新节点**，
   // 而旧实例仍绑在**已脱离文档**的旧节点上。若只看数据签名就早返回，新节点永远拿不到图
   // ⇒ 成交额图渲染几秒后消失（2026-10-04 修）。节点变了即强制重画。
@@ -1222,14 +1243,26 @@ async function drawTurnoverHist() {
         textStyle: { fontSize: 10, color: "#d29922", fontWeight: "normal" },
       }
       : undefined,
-    grid: { left: 46, right: 8, top: d.stale ? 22 : 8, bottom: 18 },
+    grid: { left: 46, right: 34, top: d.stale ? 22 : 8, bottom: 18 },   // right 34 = 给均线末端直接标注留位
     tooltip: {
       trigger: "axis",
       formatter: (ps) => {
         const x = days[ps[0].dataIndex];
         const dt = x.delta_pct == null ? "—" : `${x.delta_pct >= 0 ? "+" : ""}${x.delta_pct.toFixed(2)}%`;
-        return `${x.date}${x.in_progress ? "（进行中）" : ""}<br>`
+        let s = `${x.date}${x.in_progress ? "（进行中）" : ""}<br>`
           + `全市场 ${fmtAmount(x.amount)}<br>环比前一交易日 ${dt}`;
+        const m = ma5[ps[0].dataIndex];
+        if (m != null) {
+          s += `<br><span style="color:${TURNOVER_MA5}">${TURNOVER_MA5_N}日均量</span> ${m.toFixed(0)}亿`;
+          if (x.in_progress) {
+            // 半日额除以全日均量必然大幅为负 ⇒ 不做偏离数，只说明均线口径
+            s += `<br><span style="opacity:.7">（均线不含今日；今日未走完，暂不可比）</span>`;
+          } else {
+            const dev = (x.amount / 1e8 / m - 1) * 100;
+            s += `<br>偏离均线 ${dev >= 0 ? "+" : ""}${dev.toFixed(1)}%`;
+          }
+        }
+        return s;
       },
     },
     xAxis: {
@@ -1245,7 +1278,27 @@ async function drawTurnoverHist() {
       },
       splitLine: { lineStyle: { color: "rgba(139,148,158,.15)" } },
     },
-    series: [{ type: "bar", data, barMaxWidth: 12 }],
+    series: [
+      { type: "bar", data, barMaxWidth: 12 },
+      {
+        // 5 日均量线。**共用同一个 y 轴（亿元）**——不是双轴图（anti-pattern 明令禁止双 y 轴；
+        // 两者单位相同，本就不需要第二条轴）。
+        name: `${TURNOVER_MA5_N}日均量`,
+        type: "line",
+        data: ma5,
+        smooth: false,
+        symbol: "none",
+        connectNulls: false,               // 前 4 根凑不满窗口 ⇒ 线段从第 5 根起，不往前接
+        lineStyle: { width: 2, color: TURNOVER_MA5 },   // 2px 线（规范线宽）
+        itemStyle: { color: TURNOVER_MA5 },
+        z: 3,                              // 压住柱顶
+        silent: true,                      // 悬停由柱的统一 axis tooltip 承担，线不抢命中
+        endLabel: {                        // 末端直接标注 ⇒ 身份不靠颜色单独承担
+          show: true, formatter: `MA${TURNOVER_MA5_N}`,
+          color: TURNOVER_MA5, fontSize: 9, distance: 4,
+        },
+      },
+    ],
   });
   turnoverHistSig = sig;                       // **画成功之后**才记签名
 }
@@ -1299,6 +1352,7 @@ function renderLive(live, isToday) {
         <span style="color:${TURNOVER_UP}">■</span> 放量（较前一交易日）
         <span style="color:${TURNOVER_DOWN};margin-left:8px">■</span> 缩量
         <span style="color:${TURNOVER_LIVE};margin-left:8px">■</span> 今日进行中（不判放缩）
+        <span style="color:${TURNOVER_MA5};margin-left:8px">━</span> ${TURNOVER_MA5_N}日均量（不含今日）
       </div>
       ${trendCards || '<div class="empty">无趋势状态</div>'}
     </div>
