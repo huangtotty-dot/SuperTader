@@ -211,7 +211,15 @@ def premarket_candidates(top_n: int, date: str = None, provider=None,
         pasts[c] = past
         if float(past.iloc[-1]) / float(past.iloc[-2]) - 1 >= _LU_THRESHOLD:
             lu[board_map[c]] += 1
-    hot = {b for b, n in lu.most_common(int(top_n)) if n > 0}
+    # top-N 排名（2026-10-16 tie-break 稳定化，owner 已拍板）：
+    # `Counter.most_common` 并列时按**插入序**破 tie，而插入序受 industry_map.csv 行序、
+    # 猎手表覆盖序、取数抖动（哪只票缺日线）影响 ⇒ 大涨家数稀疏日（并列家数仅个位数）
+    # 干跑/实跑会破出不同的第 4/5 名板块，板块大小方差把名次噪声放大成候选量 ~2x 摆动
+    # （doc/research/2026-10-16_全市场宇宙标定重验证_干跑357vs实跑176.md）。
+    # 改为确定性二次排序键「家数降序 + 板块名升序」：同一输入任何环境下名次唯一确定、
+    # 可复现；名次仍会随家数变化而变，但变得有依据（板块名为 Counter 键、天然唯一）。
+    ranked = sorted(lu.items(), key=lambda kv: (-kv[1], kv[0]))
+    hot = {b for b, n in ranked[:int(top_n)] if n > 0}
     if not hot:
         return {}
 
