@@ -1874,6 +1874,10 @@ def build_ma_break_card(events: list, date_str: str = "") -> dict:
     """构建破5/10日线提醒飞书卡片。无事件返回 None。"""
     if not events:
         return None
+    # 2026-10-16 owner：「飞书消息要有代码 + 中文名称 + 所属行业」⇒ 标签统一由
+    # `core.stock_meta.stock_label` 出（真源 industry_map.csv，取不到行业就只给名称(代码)，
+    # **不编造**）。原来这里只写 `**{code}** {name}`，没有行业。
+    from core.stock_meta import stock_label as _stock_label
     lines = [
         f"**破5/10日线提醒 · 可关注建仓**",
         f"📅 {date_str or datetime.now().strftime('%Y-%m-%d')}（刚跌破事件，盘中实时）",
@@ -1889,7 +1893,7 @@ def build_ma_break_card(events: list, date_str: str = "") -> dict:
         if r.get("ma10"):
             devs.append(f"MA10 {r['ma10']}({r['dev10_pct']:+.2f}%)")
         lines.append(
-            f"🔻 **{r['code']}** {r['name']}{hold} {tags}\n"
+            f"🔻 **{_stock_label(r['code'], r['name'])}**{hold} {tags}\n"
             f"　现价 {r['price']} ｜ {' ｜ '.join(devs)}"
         )
     lines += [
@@ -1932,6 +1936,8 @@ def build_ma_reclaim_card(events: list, date_str: str = "") -> dict:
     """构建**站上5/10日线**提醒飞书卡片（绿色）。无事件返回 None。"""
     if not events:
         return None
+    # 2026-10-16 owner：飞书标签要带**所属行业**（同 `build_ma_break_card`）。
+    from core.stock_meta import stock_label as _stock_label
     lines = [
         "**站上5/10日线提醒 · 破线回站**",
         f"📅 {date_str or datetime.now().strftime('%Y-%m-%d')}（刚由破线转为站上，盘中实时）",
@@ -1947,7 +1953,7 @@ def build_ma_reclaim_card(events: list, date_str: str = "") -> dict:
         if r.get("ma10"):
             devs.append(f"MA10 {r['ma10']}({r['dev10_pct']:+.2f}%)")
         lines.append(
-            f"🔺 **{r['code']}** {r['name']}{hold} {tags}\n"
+            f"🔺 **{_stock_label(r['code'], r['name'])}**{hold} {tags}\n"
             f"　现价 {r['price']} ｜ {' ｜ '.join(devs)}"
         )
     lines += [

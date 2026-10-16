@@ -215,17 +215,21 @@ def build_card(events: list, top_n: int = None, date: str = None) -> dict:
     if n_vrev:
         head += f"（隔夜回站 {n_over} · 盘内V反转 {n_vrev}）"
     lines = [f"**选股猎手·热门板块内「刚站上5日线」**（前 {tn} 板块）", head, ""]
+    # 2026-10-16 owner：「飞书消息要有代码 + 中文名称 + 所属行业」——
+    # 原来这里只写 `**{code}** {name}`（无行业）。真源 `core.stock_meta`（industry_map.csv）。
+    from core.stock_meta import stock_label as _stock_label
     shown = events[:_CARD_MAX_ROWS]
     for e in shown:
         tag = " ｜盘内V反转" if e.get("kind") == "vrev" else ""
-        lines.append(f"⬆️ **{e['code']}** {e['name']}  "
+        lines.append(f"⬆️ **{_stock_label(e['code'], e['name'])}**  "
                      f"现价 {e['price']} ｜ MA5 {e['ma5']}（+{e['dev5_pct']}%）{tag}")
     rest = events[_CARD_MAX_ROWS:]
     if rest:
-        # 折叠而不是丢弃：只给代码，省版面又不丢信息（按偏离幅度已在上面排过序）
+        # 折叠而不是丢弃：**同样给全 名称/代码/行业**（owner 要求的是"飞书消息要有"，
+        # 不留例外）。这一段动辄几十只、行会很长，但它本来就是"扫一眼还有谁"的折叠区。
         lines.append("")
         lines.append(f"**另有 {len(rest)} 只**（偏离幅度较小）："
-                     + " ".join(e["code"] for e in rest))
+                     + " ".join(_stock_label(e["code"], e["name"]) for e in rest))
     lines += ["",
               "📌 口径：**隔夜回站**=昨收在 MA5 下、今日站上；**盘内V反转**=今日曾跌破 MA5 又拉回站上。",
               f"🔎 明细仅列前 {_CARD_MAX_ROWS} 只（按偏离幅度降序）。",

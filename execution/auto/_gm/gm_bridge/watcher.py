@@ -26,21 +26,88 @@ try:
 except ImportError:  # python -m gm_bridge.watcher 方式启动
     from gm_bridge.writer import BRIDGE_DIR
 
-# ── 股票名称映射 ──
-STOCK_NAMES = {
-    "000988": "华工科技",
-    "600481": "双良节能",
-    "600176": "中国巨石",
-    "603667": "五洲新春",
+# ── 股票「名称 + 代码 + 所属行业」标签（2026-10-16 owner 要求）──────────────
+# owner：「发送的飞书消息，要有股票代码同时要有股票的中文名称以及所属行业」。
+#
+# 原实现是**硬编码 7 只**的 `STOCK_NAMES`（旧引擎时代的遗留）⇒ 2026-10-16 买入的
+# 603168/600127/601118/601949 **一个都不在表里**，推出去的标题只有光秃秃的 6 位码
+# （`🔵 成交 — 603168`），**行业从来没有过**。
+#
+# 真源改读 `t_io/rotation/industry_map.csv`（列：代码/名称/行业名称，5593 行）——
+# 与 `prescreen.full_market_meta()` 和 GUI 的行业列**同一个文件**，不另建一份。
+# ⚠️ 必须 **stdlib 直读 csv**：watcher 是独立进程（`python watcher.py`、cwd=execution/auto），
+#    走 `core.market_data.*` 会把 pandas/facade 整条链拖进来（启动变重、且可能缺依赖）。
+# ⚠️ 该表是**静态快照**：未收录/新上市的码取不到名 ⇒ **如实退回纯代码，不编造**
+#    （本仓忌讳"把无数据画成有数据"）。
+_META_TTL_SEC = 300          # 表几乎不变，5 分钟足够；读失败时**保留旧缓存**
+_META: dict = {}             # 6 位码 -> (名称, 行业)
+_META_AT = 0.0
+
+# 兜底名表：industry_map 里没有的码（ETF/指数/未收录）。**只放确定知道的**，
+# 取不到就只显示代码。588170 这类 ETF 本来就不在该表（申万行业表只含个股）。
+_FALLBACK_NAMES = {
     "588170": "科创芯片ETF",
-    "300153": "科泰电源",
-    "300364": "中文在线",
 }
 
 
+def _meta_path() -> str:
+    """行业表路径。仓根**自解析**（勿硬编码本机路径）：
+    本文件在 `execution/auto/_gm/gm_bridge/watcher.py` ⇒ 从文件本身向上 **5 层**
+    （gm_bridge → _gm → auto → execution → 仓根）。⚠️ 层数错一层会**静默**落到
+    `execution/t_io/...`（不存在）⇒ 标签全退化裸码——本条的单元测试就是钉这个。"""
+    root = os.path.abspath(__file__)
+    for _ in range(5):
+        root = os.path.dirname(root)
+    if os.environ.get("SUPERTRADER_ROOT"):
+        root = os.environ["SUPERTRADER_ROOT"]
+    return os.path.join(root, "t_io", "rotation", "industry_map.csv")
+
+
+def _load_meta() -> dict:
+    """读行业表 → {6位码: (名称, 行业)}。带 TTL 缓存。
+
+    ⚠️ 读失败/文件缺失 ⇒ **保留旧缓存**（别把已知名字清空成裸码）；
+    首次就失败则返回空 dict ⇒ 标签退回纯代码（降级但不崩，也不编造）。
+    """
+    global _META, _META_AT
+    _now = time.time()
+    if _META and (_now - _META_AT) < _META_TTL_SEC:
+        return _META
+    out = {}
+    try:
+        import csv
+        with open(_meta_path(), encoding="utf-8-sig", newline="") as f:
+            for row in csv.DictReader(f):
+                code = str(row.get("代码") or "").strip().zfill(6)
+                if not (code.isdigit() and len(code) == 6):
+                    continue
+                out[code] = (str(row.get("名称") or "").strip(),
+                             str(row.get("行业名称") or "").strip())
+    except Exception as e:
+        print(f"[watcher] 行业表读取失败（沿用旧缓存）: {type(e).__name__}: {e}")
+    if out:
+        _META = out
+        _META_AT = _now
+    return _META
+
+
 def _stock_label(code: str) -> str:
-    name = STOCK_NAMES.get(code, "")
-    return f"{name}({code})" if name else code
+    """飞书里的股票标识 → `名称(代码｜行业)`。
+
+    降级链（**不编造**）：有名称+行业 → `名称(代码｜行业)`；只有名称 → `名称(代码)`；
+    都没有 → 纯 6 位码。空 code → 空串（调用方自己会看出问题）。
+    """
+    _c = str(code or "").strip()
+    if not _c:
+        return ""
+    _name, _ind = _load_meta().get(_c, ("", ""))
+    if not _name:
+        _name = _FALLBACK_NAMES.get(_c, "")
+    if _name and _ind:
+        return f"{_name}({_c}｜{_ind})"
+    if _name:
+        return f"{_name}({_c})"
+    return _c
 
 
 def _events_path(date_str: str = None) -> str:
@@ -189,7 +256,10 @@ def _track_position(rec: dict):
         total_mv = sum(p["qty"] * p["cost"] for p in _positions.values())
         total_eq = _cash_estimate + total_mv
         if total_eq > 0 and total_mv / total_eq > 0.80:
-            _push("⚠️ 仓位超限", f"{code} 市值占比 {total_mv/total_eq:.0%} > 80%", "orange")
+            # 2026-10-16：原来这里塞的是**裸 6 位码**（标题里连股票都没有）⇒ 与其它
+            # 推送统一走 `_stock_label`（名称+代码+行业）。
+            _push("⚠️ 仓位超限", f"{_stock_label(code)} 市值占比 {total_mv/total_eq:.0%} > 80%",
+                  "orange")
 
 
 # ── 心跳监控 ──
