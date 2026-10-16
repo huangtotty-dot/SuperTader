@@ -6,6 +6,7 @@ _live_quote_forming），不改变行为，只加契约断言与 attrs["source"]
 """
 import json
 import os
+import threading
 import urllib.request
 from datetime import datetime
 
@@ -164,12 +165,94 @@ _QT_AUCTION_TIMEOUT = 3
 _SNAPSHOT_CHUNK = 200
 
 
+# ── qt.gtimg.cn 连接复用（2026-10-16）────────────────────────────────────────
+# **为什么必须做**：本模块原先每个请求都走 `urllib.request.urlopen`，它**每次都新建**
+# DNS + TCP + TLS。本机实测**建连本身 ≈290ms**（同一 URL 连打 12 次：裸 urlopen 中位
+# 350.9ms，复用同一连接中位 61.4ms ⇒ **5.7×**）。而 `snapshot()` 是**逐只**调的
+# （`t_gui._live_quote_forming` → `snapshot([code])`）⇒ 一屏 50 只票 = **50 次握手 ≈14.5s**，
+# 全部落在后台线程上。2026-10-16 的卡死线程栈里**实测 5 个线程同时卡在
+# `socket.create_connection`**（另有 1 个在读 TLS），这就是"打开 GUI 卡顿"的直接来源。
+#
+# **为什么用 stdlib 而不是 requests**：本模块会被 **gm 策略进程**里的
+# `core.market_data.facade` 加载（盘前预筛走它），不能给策略进程引入新依赖；
+# 且 raw `http.client` 天然不走环境代理，等价于既有的 `_clear_proxy()`。
+_QT_HOST = "qt.gtimg.cn"
+_QT_HEADERS = {"User-Agent": "Mozilla/5.0", "Referer": "https://gu.qq.com/",
+               "Connection": "keep-alive"}
+_QT_POOL_MAX = 8                 # 空闲连接上限（并发峰值只有个位数，8 足够且不堆积 fd）
+_QT_POOL = []
+_QT_POOL_LOCK = threading.Lock()
+
+
+def _qt_conn_take(timeout):
+    """取一条空闲 keep-alive 连接；池空则新建。"""
+    with _QT_POOL_LOCK:
+        while _QT_POOL:
+            _c = _QT_POOL.pop()
+            try:
+                # 池里混着 2s（单只）与 3s（批量）两种来源 ⇒ 按本次调用重设超时
+                if _c.sock is not None:
+                    _c.sock.settimeout(timeout)
+                return _c
+            except Exception:
+                try:
+                    _c.close()
+                except Exception:
+                    pass
+    import http.client as _hc
+    return _hc.HTTPSConnection(_QT_HOST, timeout=timeout)
+
+
+def _qt_conn_put(conn):
+    """把**已完整读完**响应体的连接放回池；池满则关掉（不无限攒 fd）。"""
+    with _QT_POOL_LOCK:
+        if len(_QT_POOL) < _QT_POOL_MAX:
+            _QT_POOL.append(conn)
+            return
+    try:
+        conn.close()
+    except Exception:
+        pass
+
+
+def _qt_get(path, timeout):
+    """GET `https://qt.gtimg.cn{path}` → 文本（gbk 解码）。**复用连接**，失败抛异常。
+
+    失败自动**换新连接重试一次**：keep-alive 连接被对端静默关掉后，下一次请求会抛
+    `RemoteDisconnected`/`BadStatusLine` —— 这是 keep-alive 的固有代价，不是故障，
+    不能让它把"本来能拿到的数据"变成拿不到。重试仍失败才抛给调用方
+    （三个调用点的语义都是"失败即当作没数据"，与改前一致）。
+    """
+    import http.client as _hc
+    last = None
+    for attempt in (0, 1):
+        _conn = (_qt_conn_take(timeout) if attempt == 0
+                 else _hc.HTTPSConnection(_QT_HOST, timeout=timeout))
+        try:
+            _conn.request("GET", path, headers=_QT_HEADERS)
+            _resp = _conn.getresponse()
+            _data = _resp.read()
+            if _resp.will_close:
+                try:
+                    _conn.close()
+                except Exception:
+                    pass
+            else:
+                _qt_conn_put(_conn)
+            return _data.decode("gbk", errors="replace")
+        except Exception as _e:
+            last = _e
+            try:
+                _conn.close()
+            except Exception:
+                pass
+    raise last
+
+
 def _qt_snapshot_raw(symbol: str):
     """腾讯 qt.gtimg.cn 实时快照 → fields 列表；失败返回 None。"""
     _clear_proxy()
-    req = urllib.request.Request(f"https://qt.gtimg.cn/q={symbol}",
-                                 headers={"User-Agent": "Mozilla/5.0", "Referer": "https://gu.qq.com/"})
-    raw = urllib.request.urlopen(req, timeout=_QT_SNAPSHOT_TIMEOUT).read().decode("gbk", errors="replace")
+    raw = _qt_get(f"/q={symbol}", _QT_SNAPSHOT_TIMEOUT)
     if "~" not in raw:
         return None
     f = raw.split('"')[1].split("~")
@@ -538,9 +621,7 @@ class TencentProvider:
         try:
             _clear_proxy()
             q = ",".join(syms)
-            req = urllib.request.Request(f"https://qt.gtimg.cn/q={q}",
-                                         headers={"User-Agent": "Mozilla/5.0", "Referer": "https://gu.qq.com/"})
-            txt = urllib.request.urlopen(req, timeout=_QT_AUCTION_TIMEOUT).read().decode("gbk", errors="replace")
+            txt = _qt_get(f"/q={q}", _QT_AUCTION_TIMEOUT)
             for part in txt.strip().split(";"):
                 part = part.strip()
                 if not part or "=" not in part:
@@ -610,9 +691,7 @@ class TencentProvider:
         try:
             _clear_proxy()
             q = ",".join(codes)
-            req = urllib.request.Request(f"https://qt.gtimg.cn/q={q}",
-                                         headers={"User-Agent": "Mozilla/5.0", "Referer": "https://gu.qq.com/"})
-            txt = urllib.request.urlopen(req, timeout=_QT_AUCTION_TIMEOUT).read().decode("gbk", errors="replace")
+            txt = _qt_get(f"/q={q}", _QT_AUCTION_TIMEOUT)
             for part in txt.strip().split(";"):
                 part = part.strip()
                 if not part or "=" not in part:

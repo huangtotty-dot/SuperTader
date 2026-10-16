@@ -14,6 +14,11 @@
      40 只合计 34.0s→10.4s（占 daily() 耗时 93%）。**失败语义不变**（打满=本就在挂）。
   T4 `_note_gm_down` 措辞分「超时」与「异常」，不再一律说"服务不可达"
      （那条消息曾误导成"GM 常挂"）。
+  T6 qt.gtimg.cn **复用 keep-alive 连接**（2026-10-16）：原来每个请求都裸
+     `urlopen` ⇒ 每次都新建 DNS+TCP+TLS，实测**建连本身 ≈290ms**（同一 URL 连打 12 次：
+     裸 urlopen 中位 350.9ms → 复用连接中位 61.4ms，**5.7×**；走真实函数
+     `_qt_snapshot_raw` 顺序 20 次 350.9→73.3ms，**4.8×**）。`snapshot()` 是**逐只**调的
+     ⇒ 一屏 50 只 ≈14.5s 握手；10-16 卡死栈里实测 5 个线程同时卡在 `socket.create_connection`。
 
 ⚠️ **刻意不测**（已实测否证，写在这里防日后有人"顺手改回去"）：
    把 `daily()` 也改成 `_gm_ok_wait()` ⇒ 6 线程 150 只 GM 使用率 17%→73%，
@@ -372,6 +377,126 @@ class TestGmDownMessage(unittest.TestCase):
             f._note_gm_down("daily", "000001", TimeoutError("x"))
         self.assertIsNotNone(f._gm_down_until)
         self.assertFalse(f._gm_ok(), "冷却窗内不再尝试 GM")
+
+
+class _FakeQtResp:
+    def __init__(self, body, will_close=False):
+        self._body = body
+        self.will_close = will_close
+
+    def read(self):
+        return self._body
+
+
+class _FakeQtConn:
+    """假 `http.client.HTTPSConnection`：**记下"一共新建了几条连接"** + 可控地让某条连接失效。
+
+    这是本组测试的核心观测点 —— "复用"这件事只能靠"建了几条"来证，不能靠"没报错"。
+    """
+
+    made = []
+
+    def __init__(self, host=None, timeout=None):
+        self.host = host
+        self.timeout = timeout
+        self.sock = None            # `_qt_conn_take` 命中池时据此决定要不要重设超时
+        self.closed = False
+        self.n_req = 0
+        self.broken = False         # True ⇒ 模拟"被对端静默关闭"，请求时抛
+        _FakeQtConn.made.append(self)
+
+    def request(self, method, path, headers=None):
+        self.n_req += 1
+        if self.broken:
+            raise OSError("模拟 keep-alive 连接被对端静默关闭")
+
+    def getresponse(self):
+        return _FakeQtResp(b'v_sh600000="1~x~9.60~";\n')
+
+    def close(self):
+        self.closed = True
+
+
+class TestTencentQtConnectionReuse(unittest.TestCase):
+    """T6（2026-10-16）：qt.gtimg.cn **必须复用连接**，不许每个请求新建 TLS。
+
+    实测（本机，同一 URL 连打 12 次）：裸 `urlopen` 中位 **350.9ms**、复用连接 **61.4ms**
+    ⇒ 建连本身 ≈290ms/次。而 `snapshot()` 是**逐只**调的（`t_gui._live_quote_forming`
+    → `snapshot([code])`）⇒ 一屏 50 只票 = 50 次握手 ≈14.5s，全压在后台线程上。
+    2026-10-16 的卡死线程栈里**实测 5 个线程同时卡在 `socket.create_connection`**
+    （另有 1 个在读 TLS）—— 这就是"打开 GUI 卡顿"的直接来源。
+
+    ⚠️ 本组**全离线**：把 `http.client.HTTPSConnection` 换成桩，不发任何网络请求。
+    """
+
+    def setUp(self):
+        import http.client
+        TP._QT_POOL.clear()
+        _FakeQtConn.made = []
+        self._orig_conn = http.client.HTTPSConnection
+        http.client.HTTPSConnection = _FakeQtConn
+
+    def tearDown(self):
+        import http.client
+        http.client.HTTPSConnection = self._orig_conn
+        TP._QT_POOL.clear()
+        _FakeQtConn.made = []
+
+    def test_reuses_the_same_connection(self):
+        """连打 3 次只许建 1 条连接（这就是"5.7×"的来源）。"""
+        for _ in range(3):
+            TP._qt_get("/q=sh600000", 2)
+        self.assertEqual(len(_FakeQtConn.made), 1,
+                         "3 次请求建了 %d 条连接 —— 连接池没生效" % len(_FakeQtConn.made))
+        self.assertEqual(_FakeQtConn.made[0].n_req, 3, "同一条连接上应发了 3 个请求")
+
+    def test_stale_connection_recovers(self):
+        """池里的连接被对端关掉后，下一次调用**必须仍然成功**（换新连接重试）。
+
+        这是连接复用唯一的真实风险：keep-alive 的固有代价，不能让它把"本来能拿到的
+        数据"变成拿不到。
+        """
+        self.assertTrue(TP._qt_get("/q=sh600000", 2))
+        _FakeQtConn.made[0].broken = True       # 把池里那条弄脏
+        out = TP._qt_get("/q=sh600000", 2)      # 不许抛
+        self.assertIn("~", out)
+        self.assertEqual(len(_FakeQtConn.made), 2, "脏连接应被弃用、另建一条")
+        self.assertTrue(_FakeQtConn.made[0].closed, "弃用的连接要关掉（别漏 fd）")
+
+    def test_failure_still_raises_when_both_attempts_fail(self):
+        """两次都失败才抛 —— 调用方三个点的语义都是"失败即当作没数据"，与改前一致。"""
+        import http.client
+
+        class _AlwaysBroken(_FakeQtConn):
+            def request(self, method, path, headers=None):
+                raise OSError("boom")
+
+        http.client.HTTPSConnection = _AlwaysBroken
+        with self.assertRaises(OSError):
+            TP._qt_get("/q=sh600000", 2)
+
+    def test_pool_is_bounded(self):
+        """池必须有上限 —— 否则每次并发峰值都留一条 fd，长期跑会把句柄耗光。"""
+        conns = [_FakeQtConn() for _ in range(TP._QT_POOL_MAX + 5)]
+        for c in conns:
+            TP._qt_conn_put(c)
+        self.assertLessEqual(len(TP._QT_POOL), TP._QT_POOL_MAX)
+        self.assertTrue(all(c.closed for c in conns[TP._QT_POOL_MAX:]),
+                        "超出上限的连接应当被关掉")
+
+    def test_all_qt_endpoints_go_through_the_pool(self):
+        """三个 qt.gtimg.cn 调用点都不许再裸 `urlopen`（每次新建 TLS）。
+
+        ⚠️ 别只改一处：`_qt_snapshot_raw` 是**逐只**调的那个，漏了它等于没修。
+        """
+        import inspect
+        for fn in (TP._qt_snapshot_raw,
+                   TP.TencentProvider.snapshot_auction,
+                   TP.TencentProvider.index_auction):
+            src = inspect.getsource(fn)
+            self.assertNotIn("urlopen", src,
+                             f"{fn.__name__} 仍在裸 urlopen（每次新建 TLS 连接）")
+            self.assertIn("_qt_get", src, f"{fn.__name__} 应走 _qt_get 复用连接")
 
 
 if __name__ == "__main__":
