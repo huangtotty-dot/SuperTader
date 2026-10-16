@@ -3362,7 +3362,22 @@ function renderStockChart() {
   stockChartInst.setOption({
     backgroundColor: "transparent",
     animation: false,
-    legend: { top: 0, textStyle: { color: "#8b949e", fontSize: 10 }, type: "scroll" },
+    // 2026-10-16 owner：「打开K线图只默认开启 5日/10日/20日均线」。
+    // ⚠️ 两条纪律：
+    //   ① `selected` **只列要关掉的项** —— ECharts 对未列出的项默认 true，所以 K线/成交量/
+    //      MACD/RSI/支撑压力/通道 不受影响（列全了反而会把它们一起关掉）。
+    //   ② `selected` **只在首帧给** —— 图每 10s 会 `setOption` 重绘一次，每次都带
+    //      `selected` 会把**用户手动勾的图例选择冲掉**。首帧 = `echarts.init` 那一次，
+    //      而"换票/关窗"都会 dispose ⇒ 每次**重新打开**都回到这套默认，正是 owner 要的。
+    legend: {
+      top: 0, textStyle: { color: "#8b949e", fontSize: 10 }, type: "scroll",
+      ...(_firstInit ? {
+        selected: {
+          MA30: false, MA60: false, MA180: false, MA365: false,
+          BOLL中: false, BOLL上: false, BOLL下: false,
+        },
+      } : {}),
+    },
     // 恒常给 title（哪怕空数组）：实例复用后不再 dispose，缺省时旧标题会残留在图上
     title: titles,
     tooltip: { trigger: "axis", axisPointer: { type: "cross" }, backgroundColor: "#161b22",
