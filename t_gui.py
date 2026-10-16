@@ -1270,7 +1270,8 @@ class Api:
     _PROFILE_TTL = 600.0
     # 两市成交额缓存 {"payload": (ts, payload)}，见 load_market_turnover
     _turnover_cache = {}
-    # 近 N 日成交额缓存，见 load_turnover_history
+    # 近 N 日成交额缓存 {天数: (ts, payload)} —— **按天数分槽**（2026-10-16）：
+    # 单槽时"60 天先预热、250 天请求"会拿到 60 天的数据。见 load_turnover_history
     _turnover_hist_cache = {}
     # 指数板缓存 {"payload": (ts, payload)}，见 load_indices（2026-10-10：原先**无** TTL，
     # 每 10s 轮询都重打 GM index_snapshot，是冷启动窗口 GM 负载的直接来源）
@@ -1715,42 +1716,60 @@ class Api:
 
     # ---------- 近 N 日成交额（「盘中状态」卡柱状图，2026-09-30） ----------
     _TURNOVER_HIST_TTL = 120.0
+    # 柱状图窗口（交易日）。2026-10-16 owner：「增加到一年」⇒ 60 → 250（≈1 年）。
+    # ⚠️ **它必须是默认值**：`prewarm_overview` 用裸调 `self.load_turnover_history`
+    #    预热，若默认仍是 60，预热出来的那份 60 天缓存会顶掉前端要的 250 天
+    #    （缓存键当年不含 days，见下）。
+    _TURNOVER_HIST_DAYS = 250
 
-    def load_turnover_history(self, days=60):
+    def load_turnover_history(self, days=None):
         """近 N 日全市场成交额。三段式（2026-10-10，同 load_market_turnover，见其 docstring）。
 
-        与前两者**跨日规则不同**：60 日柱状图跨日依然有意义，故快照**允许跨日**显示——
+        与前两者**跨日规则不同**：柱状图跨日依然有意义，故快照**允许跨日**显示——
         但存的 `in_progress`/`day`/`as_of`/`basis` 必须**原样重放**（`_stale_wrap` 只加 stale 元信息、
         不重算任何字段），否则昨天的最后一根会被当成今天正在走的实时柱。
+
+        ⚠️ **`days` 必须进缓存键（内存 + 磁盘快照 + 单飞 key 三处）**，2026-10-16 修：
+        原实现是**单槽** `_turnover_hist_cache["payload"]` + 单名快照 `turnover_history.json`，
+        `days` 完全不参与 ⇒ **谁先填谁说了算，一填管 120 秒**。而 `prewarm_overview` 启动时
+        用**裸调**（当时默认 60）预热 ⇒ 前端问 250 却拿到那份 60 天的缓存，
+        表现就是**图上只有 ~60 根、标题却写着"近1年"**（owner 当场截图报回来的）。
         """
+        days = int(self._TURNOVER_HIST_DAYS if days is None else days)
+        _k = "turnover_history_%d" % days
         now = _time_mod.time()
-        hit = Api._turnover_hist_cache.get("payload")
+        hit = Api._turnover_hist_cache.get(days)
         if hit and (now - hit[0]) < self._TURNOVER_HIST_TTL:
-            return hit[1]                                      # 1) 内存热
+            return hit[1]                                      # 1) 内存热（按天数分槽）
         _, ev = _kick_overview_refresh(
-            "turnover_history", lambda: self._turnover_history_cached(days))
-        snap = _snapshot_read("turnover_history")
+            _k, lambda: self._turnover_history_cached(days))
+        snap = _snapshot_read(_k)
         if snap:
             return _stale_wrap(snap)                           # 2) 快照（可跨日）+ stale
         if ev.wait(0.8):                                       # 3) 首次运行：短等真实值
-            hit = Api._turnover_hist_cache.get("payload")
+            hit = Api._turnover_hist_cache.get(days)
             if hit:
                 return hit[1]
         return {"available": False, "warming": True, "days": []}
 
-    def _turnover_history_cached(self, days=60):
-        """近 N 个交易日的**全市场**成交额（柱状图用）。失败返回 {available: False, error}，永不抛。"""
+    def _turnover_history_cached(self, days=None):
+        """近 N 个交易日的**全市场**成交额（柱状图用）。失败返回 {available: False, error}，永不抛。
+
+        ⚠️ 缓存与快照**都按天数分槽**（2026-10-16，理由见 `load_turnover_history` docstring）：
+        单槽时"60 天先预热、250 天请求"会拿到 60 天的数据。
+        """
+        days = int(self._TURNOVER_HIST_DAYS if days is None else days)
         now = _time_mod.time()
-        hit = Api._turnover_hist_cache.get("payload")
+        hit = Api._turnover_hist_cache.get(days)
         if hit and (now - hit[0]) < self._TURNOVER_HIST_TTL:
             return hit[1]
         try:
             out = self._turnover_history_impl(days)
         except Exception as e:
             out = {"available": False, "error": f"{type(e).__name__}: {str(e)[:80]}"}
-        Api._turnover_hist_cache["payload"] = (now, out)
+        Api._turnover_hist_cache[days] = (now, out)
         if out.get("available") is True:            # 只落盘有效结果（安全契约第 3 条）
-            _snapshot_write("turnover_history", _clean(out))
+            _snapshot_write("turnover_history_%d" % days, _clean(out))
         return out
 
     def _turnover_history_impl(self, days):

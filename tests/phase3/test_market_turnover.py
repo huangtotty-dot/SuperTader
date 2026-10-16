@@ -28,6 +28,7 @@ if _ROOT not in sys.path:
 import pandas as pd  # noqa: E402
 
 import t_gui  # noqa: E402
+import time as _time  # noqa: E402
 
 CALC = t_gui.Api._turnover_from_minutes
 
@@ -324,6 +325,66 @@ class TestSinaParsing(unittest.TestCase):
     def test_空帧列齐备(self):
         self.assertEqual(list(self.si.parse_jsonp("").columns),
                          ["time", "open", "high", "low", "close", "volume", "amount"])
+
+
+class TestTurnoverHistoryCacheKey(unittest.TestCase):
+    """⚠️ 缓存必须**按天数分键**（2026-10-16 修的**实盘可见**缺陷）。
+
+    症状（owner 截图报回来）：图从"近60日"改成"近1年"后，**标题变了但柱子还是 ~60 根**。
+    根因：`_turnover_hist_cache` 是**单槽** `["payload"]`、磁盘快照是**单名**
+    `turnover_history.json`，`days` 完全不参与；而 `prewarm_overview` 启动时**裸调**
+    `self.load_turnover_history`（当时默认 60）把缓存填满 ⇒ 前端问 250 拿到 60。
+
+    本组用桩替换真实现（全离线），钉住：① 60 天的旧缓存**不能**满足 250 的请求；
+    ② 反过来也不能；③ 默认值就是图窗口（裸调预热必须与前端同宽）。
+    """
+
+    def setUp(self):
+        self._cache = t_gui.Api._turnover_hist_cache
+        self._snap = t_gui._snapshot_read
+        self._fn = t_gui.Api._turnover_history_cached
+        self.calls = []
+        t_gui.Api._turnover_hist_cache = {}
+
+        def _stub(days=None):
+            d = int(t_gui.Api._TURNOVER_HIST_DAYS if days is None else days)
+            self.calls.append(d)
+            out = {"available": True, "days": [{"date": "D%04d" % i} for i in range(d)]}
+            t_gui.Api._turnover_hist_cache[d] = (_time.time(), out)   # 与真实现同：写自己的槽
+            return out
+
+        t_gui.Api._turnover_history_cached = _stub
+        t_gui._snapshot_read = lambda k: None
+
+    def tearDown(self):
+        t_gui.Api._turnover_hist_cache = self._cache
+        t_gui._snapshot_read = self._snap
+        t_gui.Api._turnover_history_cached = self._fn
+
+    def test_stale_60d_cache_does_not_satisfy_250d(self):
+        t_gui.Api._turnover_hist_cache[60] = (_time.time(),
+                                             {"available": True, "days": [{"date": "x"}] * 60})
+        got = t_gui.Api.load_turnover_history(t_gui.Api, 250)
+        self.assertEqual(len(got["days"]), 250,
+                         "250 的请求被 60 天的旧缓存顶掉了 —— 就是 owner 截图那个症状")
+
+    def test_250d_cache_does_not_satisfy_60d(self):
+        got = t_gui.Api.load_turnover_history(t_gui.Api, 250)     # 先填 250
+        self.assertEqual(len(got["days"]), 250)
+        got2 = t_gui.Api.load_turnover_history(t_gui.Api, 60)
+        self.assertEqual(len(got2["days"]), 60, "反向也不能串槽")
+
+    def test_second_call_hits_the_same_slot(self):
+        t_gui.Api.load_turnover_history(t_gui.Api, 250)
+        n = len(self.calls)
+        t_gui.Api.load_turnover_history(t_gui.Api, 250)
+        self.assertEqual(len(self.calls), n, "同宽度的第二次调用应命中缓存、不再算")
+
+    def test_default_is_the_chart_window(self):
+        """裸调（`prewarm_overview` 就这么调）必须与图窗口同宽，否则预热是白热。"""
+        self.assertEqual(t_gui.Api._TURNOVER_HIST_DAYS, 250)
+        got = t_gui.Api.load_turnover_history(t_gui.Api)
+        self.assertEqual(len(got["days"]), 250)
 
 
 if __name__ == "__main__":
