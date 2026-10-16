@@ -435,6 +435,49 @@ def _execute_sell_decisions(gateway, open_pos: dict, positions: dict, decisions:
         log(f"[WS] SELL {code} {s['reason']} {sellable}股@{s['price']:.3f} → "
             f"{rep.get('status')} {base['message']}")
         sells_out.append(base)
+
+    # ── 未知态卖单迟确认（2026-10-16 修）────────────────────────────────
+    # 根因：GM 仿真终端同步下单回报里 order_id 为空 ⇒ `_place_and_poll` 的轮询
+    # 前置条件 `rep.get("order_id")` 为假 ⇒ 一轮都不轮询；而成交回报是异步的
+    # （当日实测 0.5~6 秒后才到）⇒ status 停在 submitted、filled_qty=0
+    # ⇒ 明明卖出成交了，账本却不剔除（2026-10-16 实测：301373/605198/688003
+    # 三笔全部成交，positions.json 仍挂 6 只，需手工回填）。
+    # 处置：对仍停在 submitted 的卖单，按「账户持仓变化」做迟确认——
+    # 复用轮询参数等待 + 重取持仓快照，数量下降即视为成交，同步回填账本。
+    # 订单真没成交（挂在限价上）⇒ 账户持仓不变 ⇒ 保留账本条目，行为正确。
+    pending = [r for r in sells_out if r["status"] == "submitted" and r["qty_placed"] > 0]
+    if pending:
+        rounds = max(1, int(cfg.get("order_poll_rounds", 3)))
+        for _ in range(rounds):
+            sleep_fn(float(cfg.get("order_poll_sleep_sec", 2.0)))
+            snap = _snapshot_positions(gateway)
+            still = []
+            for r in pending:
+                code = r["code"]
+                rec = open_pos.get(code)
+                if rec is None:
+                    continue
+                before = int((positions.get(code) or {}).get("qty") or 0)
+                now_qty = int((snap.get(code) or {}).get("qty") or 0)
+                filled = max(0, before - now_qty)
+                if filled > 0:
+                    r["status"] = "filled_by_position"
+                    r["filled_qty"] = int(r.get("filled_qty") or 0) + filled
+                    r["message"] = (r["message"] + " 按账户持仓变化迟确认成交").strip()
+                    remaining = int(rec.get("qty") or 0) - filled
+                    if remaining <= 0:
+                        open_pos.pop(code, None)
+                    else:
+                        rec["qty"] = remaining
+                        still.append(r)   # 部分成交：剩余委托可能仍在途，下轮继续跟
+                    log(f"[WS] SELL {code} 迟确认: 账户持仓 {before}→{now_qty} "
+                        f"⇒ 本轮成交 {filled} 股，账本已回填")
+                else:
+                    still.append(r)
+            positions = snap          # 滚动基准，防下轮重复计数
+            pending = still
+            if not pending:
+                break
     return sells_out
 
 

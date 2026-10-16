@@ -49,6 +49,15 @@ import sys
 import tempfile
 from datetime import datetime, time as dtime
 
+# 2026-10-16 修：计划任务（schtasks）控制台是 GBK，print "⇒" 直接抛
+# UnicodeEncodeError 致看门狗 14:52 崩溃缺席 ⇒ 入口强制 stdout/stderr 转 UTF-8
+# （老 Python 无 reconfigure 也不崩，errors=replace 兜底）。
+for _s in (sys.stdout, sys.stderr):
+    try:
+        _s.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 for _p in (ROOT, os.path.join(ROOT, "execution", "auto"), os.path.join(ROOT, "execution", "auto", "_gm")):
     if _p not in sys.path:
