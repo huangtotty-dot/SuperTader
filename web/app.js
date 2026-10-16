@@ -3341,7 +3341,11 @@ function renderStockChart() {
 
   const maSeries = period.ma.map((maArr, i) => ({
     name: `MA${[5,10,20,30,60,180,365][i]}`, type: "line", data: maArr, symbol: "none",
-    lineStyle: { width: 1, color: MA_COLORS[i] }, connectNulls: true,
+    lineStyle: { width: 1, color: MA_COLORS[i] },
+    // ⚠️ **必须同时给 itemStyle.color**（2026-10-16 owner 报"图例颜色和线不一样"）：
+    //    ECharts 的**图例图标**取 `itemStyle.color`，只给 `lineStyle.color` 时图例回落到
+    //    默认调色板 ⇒ 图例是 A 色、线是 B 色。凡是想让图例跟着线走的 series 都要两处同色。
+    itemStyle: { color: MA_COLORS[i] }, connectNulls: true,
   }));
 
   // 复用实例：原来每次渲染都 dispose+init 整个 ECharts（每 10s 一次 + 每次勾选图层一次），
@@ -3516,11 +3520,14 @@ function renderStockChart() {
       ...(showMA ? maSeries.map(s => ({ ...s, xAxisIndex: 0, yAxisIndex: 0 })) : []),
       // BOLL 叠加主图
       { name: "BOLL中", type: "line", data: period.boll.mid, xAxisIndex: 0, yAxisIndex: 0, symbol: "none",
-        lineStyle: { color: "rgba(139,148,158,.5)", width: 1 } },
+        lineStyle: { color: "rgba(139,148,158,.5)", width: 1 },
+        itemStyle: { color: "rgba(139,148,158,.5)" } },
       { name: "BOLL上", type: "line", data: period.boll.up, xAxisIndex: 0, yAxisIndex: 0, symbol: "none",
-        lineStyle: { color: "rgba(139,148,158,.3)", width: 1 } },
+        lineStyle: { color: "rgba(139,148,158,.3)", width: 1 },
+        itemStyle: { color: "rgba(139,148,158,.3)" } },
       { name: "BOLL下", type: "line", data: period.boll.dn, xAxisIndex: 0, yAxisIndex: 0, symbol: "none",
-        lineStyle: { color: "rgba(139,148,158,.3)", width: 1 } },
+        lineStyle: { color: "rgba(139,148,158,.3)", width: 1 },
+        itemStyle: { color: "rgba(139,148,158,.3)" } },
       // 黄金分割比例位：用**独立载体 series** 承载 markLine。
       // 挂在 K线 自身的 markLine 上会被K线柱体压住，标签读不清（实测 markLine.zlevel
       // 也无效）；改挂到 K线 之后的独立 series 并把 z 抬高 ⇒ 标签才画在柱体之上。
