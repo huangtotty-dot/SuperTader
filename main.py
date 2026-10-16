@@ -1771,6 +1771,85 @@ def _feishu_card_header(title: str, template: str) -> dict:
     return {"template": template, "title": {"tag": "plain_text", "content": title}}
 
 
+# ── scan_once 逐阶段计时（2026-10-16）────────────────────────────────────────
+# **为什么加**：owner 2026-10-16 报「建仓信号扫描没有实时更新，刷新频率要相对高」。
+# 查明**不是扫描慢** —— 同一轮 52 只单独测得 **66.5s**；真凶是 **main.py 主循环一整轮
+# 要跑 ~15 分钟**：同一循环里所有"每 5 分钟"任务的实测间隔全掉到 15 分钟
+# （猎手站上5日线 09:41→09:58→10:13→10:28→10:46；猎手轮询心跳 09:33→10:15→10:49，
+#  名义 30 分钟；大盘分时预警 09:40→10:12，名义 300s）⇒ 建仓扫描自然只能每 ~15 分钟
+# 被调到一次，而它自己的 300s 节流根本没机会生效。
+#
+# ⚠️ **看不到 15 分钟切在哪一步**：原有一行 `log.debug("⏳ 本轮耗时 …")` 是 debug 级，
+#    本仓日志级别 INFO ⇒ **从未落盘**（"日志里没有"曾被误读成"没发生"，本仓踩过）。
+#    本段**只计时、只打日志，不改任何行为**：阶段判据/调用顺序/节流一律不动，
+#    `_ScanStage.__exit__` 返回 `False` ⇒ **异常照常抛出**（计时不许改变控制流）。
+_SCAN_STAGES: dict = {}          # 阶段名 -> [累计秒, 次数, 最慢一次秒]
+_SCAN_ROUND_INFO_SEC = 60.0      # 单轮超过它 → INFO 落一行归因（正常轮次不该到）
+_SCAN_ROUND_SUMMARY_EVERY = 20   # 另每 N 轮无条件落一行累计均值（拿基线，别只看异常轮）
+_SCAN_ROUNDS = [0, 0.0, 0.0]     # [轮数, 累计秒, 最慢一轮秒]（进程内累计，不清零）
+
+
+def _scan_stage_add(name: str, dt: float) -> None:
+    row = _SCAN_STAGES.setdefault(name, [0.0, 0, 0.0])
+    row[0] += dt
+    row[1] += 1
+    if dt > row[2]:
+        row[2] = dt
+
+
+class _ScanStage:
+    """`with _ScanStage("名字"):` —— 给 scan_once 的一个阶段计时。
+
+    ⚠️ `__exit__` 返回 `False`：**不吞异常**（计时是观测，不许改变控制流）。
+    """
+
+    __slots__ = ("_name", "_t0")
+
+    def __init__(self, name: str):
+        self._name = name
+        self._t0 = 0.0
+
+    def __enter__(self):
+        self._t0 = _time.perf_counter()
+        return self
+
+    def __exit__(self, *exc):
+        try:
+            _scan_stage_add(self._name, _time.perf_counter() - self._t0)
+        except Exception:
+            pass
+        return False
+
+
+def _scan_stage_report() -> str:
+    """各阶段**均值/最慢**（只列均 ≥0.5s 的，降序，最多 8 条）—— 一行能读完。"""
+    items = [(n, v[0] / max(1, v[1]), v[2]) for n, v in _SCAN_STAGES.items()]
+    items.sort(key=lambda x: -x[1])
+    parts = ["%s 均%.1f/最慢%.1fs" % (n, a, m) for n, a, m in items if a >= 0.5][:8]
+    return " | ".join(parts) if parts else "（无 ≥0.5s 的阶段）"
+
+
+def _log_scan_round(elapsed: float) -> None:
+    """主循环每轮收尾调用（2026-10-16）。**只读累计值，不改行为**。
+
+    超过 `_SCAN_ROUND_INFO_SEC` 就无条件落 INFO（要归因）；
+    否则每 `_SCAN_ROUND_SUMMARY_EVERY` 轮落一行基线（否则只看到异常轮、没有对照）。
+    """
+    try:
+        _SCAN_ROUNDS[0] += 1
+        _SCAN_ROUNDS[1] += elapsed
+        if elapsed > _SCAN_ROUNDS[2]:
+            _SCAN_ROUNDS[2] = elapsed
+        if elapsed >= _SCAN_ROUND_INFO_SEC:
+            log.info("⏳ 本轮耗时 %.1fs ⇒ 慢阶段归因: %s", elapsed, _scan_stage_report())
+        elif _SCAN_ROUNDS[0] % _SCAN_ROUND_SUMMARY_EVERY == 0:
+            log.info("⏳ 累计 %d 轮 · 均值 %.1fs · 最慢一轮 %.1fs · 阶段: %s",
+                     _SCAN_ROUNDS[0], _SCAN_ROUNDS[1] / _SCAN_ROUNDS[0], _SCAN_ROUNDS[2],
+                     _scan_stage_report())
+    except Exception:
+        pass
+
+
 def scan_once():
     global _last_idle_log, _scan_count, _scan_lock, _BUY_FUSE_NOTIFY_DATE
     global _SWING_DEDUP_DATE
@@ -1783,20 +1862,28 @@ def scan_once():
         now = _now()
         t = now.time()
 
-        _maybe_push_index_regime_morning(now)          # 09:26-09:31 早盘大盘基调（须在 <9:30 早退之前）
+        with _ScanStage("①早盘基调"):
+            _maybe_push_index_regime_morning(now)      # 09:26-09:31 早盘大盘基调（须在 <9:30 早退之前）
 
         if dtime(14, 55) <= t <= dtime(15, 5):
             pass  # EOD复盘已移除（V2简化）
-        _maybe_record_daily_pnl(now)                   # 14:59 后每日一次：仅落盘 daily_pnl.jsonl + 收盘 pre_close（推送已删）
-        _maybe_push_index_regime_eod(now)              # 14:30-14:55 尾盘大盘评分预判 mode="tail"（须在 >15:00 早退之前）
+        with _ScanStage("②收盘pnl"):
+            _maybe_record_daily_pnl(now)               # 14:59 后每日一次：仅落盘 daily_pnl.jsonl + 收盘 pre_close（推送已删）
+        with _ScanStage("③尾盘基调"):
+            _maybe_push_index_regime_eod(now)          # 14:30-14:55 尾盘大盘评分预判 mode="tail"（须在 >15:00 早退之前）
 
         if dtime(14, 50) <= t <= dtime(15, 5):
-            pivot_audit(now)                           # 14:50-15:05 pivot 支撑/压力复盘
+            with _ScanStage("④pivot复盘"):
+                pivot_audit(now)                       # 14:50-15:05 pivot 支撑/压力复盘
 
-        _maybe_run_position_builder(now)                # 15:05-15:15 建仓信号扫描（每日一次）
-        _maybe_run_daily_review(now)                    # P0-7(2026-09-01): 15:10 后自动每日复盘（子进程隔离）
-        _maybe_run_chart_prefetch(now)                  # 2026-10-04: 15:10 后 K线缓存预下载（与 t_gui 幂等）
-        _maybe_run_freshness_patrol(now)                # 2026-10-12: 15:40 后产物新鲜度巡检 → 飞书（零网络）
+        with _ScanStage("⑤盘后建仓扫描"):
+            _maybe_run_position_builder(now)           # 15:05-15:15 建仓信号扫描（每日一次）
+        with _ScanStage("⑥每日复盘"):
+            _maybe_run_daily_review(now)               # P0-7(2026-09-01): 15:10 后自动每日复盘（子进程隔离）
+        with _ScanStage("⑦K线预下载"):
+            _maybe_run_chart_prefetch(now)             # 2026-10-04: 15:10 后 K线缓存预下载（与 t_gui 幂等）
+        with _ScanStage("⑧新鲜度巡检"):
+            _maybe_run_freshness_patrol(now)           # 2026-10-12: 15:40 后产物新鲜度巡检 → 飞书（零网络）
 
         if now.weekday() >= 5 or t < dtime(9, 30) or (dtime(11, 30) < t < dtime(13, 0)) or t > dtime(15, 0):
             if _last_idle_log is None or (_now() - _last_idle_log).total_seconds() >= PARAMS["idle_log_minutes"] * 60:
@@ -1804,14 +1891,22 @@ def scan_once():
                 _last_idle_log = _now()
             return
 
-        _maybe_check_index_intraday_alert(now)         # 09:35-14:55 大盘分时预警（300s 节流）
-        _maybe_check_index_divergence(now)             # 09:35-14:55 指数背离提醒（300s 节流，事件去重）
-        _maybe_run_position_builder_intraday(now)      # 09:30-11:30/13:00-14:55 盘中建仓信号扫描（每5分钟）
-        _maybe_run_ma_break_alert(now)                 # 09:30-14:55 盘中破5/10日线报警（每5分钟，提醒建仓）
-        _maybe_run_ma_reclaim_alert(now)               # 09:30-14:55 盘中站上5/10日线报警（破线回站，2026-10-08）
-        _maybe_check_trend30_alert(now)                # 09:30-14:55 30min趋势翻转告警（每5分钟，纯通知）
-        _maybe_check_hunter_ma5_alert(now)             # 09:30-14:55 猎手热门板块站上5日线告警（每5分钟，纯通知）
-        _maybe_run_hunter_poll(now)                    # 09:30-15:00 猎手 30 分钟轮询 + **异常必发飞书**（2026-10-11）
+        with _ScanStage("A大盘分时预警"):
+            _maybe_check_index_intraday_alert(now)     # 09:35-14:55 大盘分时预警（300s 节流）
+        with _ScanStage("B指数背离 ←嫌疑"):
+            _maybe_check_index_divergence(now)         # 09:35-14:55 指数背离提醒（300s 节流，事件去重）
+        with _ScanStage("C盘中建仓扫描(起线程)"):
+            _maybe_run_position_builder_intraday(now)  # 09:30-11:30/13:00-14:55 盘中建仓信号扫描（每5分钟）
+        with _ScanStage("D破线告警"):
+            _maybe_run_ma_break_alert(now)             # 09:30-14:55 盘中破5/10日线报警（每5分钟，提醒建仓）
+        with _ScanStage("E站上告警"):
+            _maybe_run_ma_reclaim_alert(now)           # 09:30-14:55 盘中站上5/10日线报警（破线回站，2026-10-08）
+        with _ScanStage("F趋势告警"):
+            _maybe_check_trend30_alert(now)            # 09:30-14:55 30min趋势翻转告警（每5分钟，纯通知）
+        with _ScanStage("G猎手MA5告警"):
+            _maybe_check_hunter_ma5_alert(now)         # 09:30-14:55 猎手热门板块站上5日线告警（每5分钟，纯通知）
+        with _ScanStage("H猎手轮询(起线程)"):
+            _maybe_run_hunter_poll(now)                # 09:30-15:00 猎手 30 分钟轮询 + **异常必发飞书**（2026-10-11）
 
         if not HOLDINGS:
             return
@@ -1843,6 +1938,7 @@ def scan_once():
         else:
             HOLDINGS_SORTED = list(HOLDINGS.items())
 
+        _hold_t0 = _time.perf_counter()          # 逐阶段计时（2026-10-16，见 _ScanStage）
         for code, holding in HOLDINGS_SORTED:
             _ensure_ai_review_stats(code, holding)
             dec = _ensure_daily_decision_stats(code, holding)
@@ -1863,7 +1959,8 @@ def scan_once():
 
             try:
                 time.sleep(0.5)
-                df = fetch_minute_bar(code, is_etf=holding.get("type") == "etf")
+                with _ScanStage("I1分钟线取数"):
+                    df = fetch_minute_bar(code, is_etf=holding.get("type") == "etf")
 
                 dec["minute_status"] = MINUTE_FETCH_STATUS.get(code, "unknown")
                 dec["minute_detail"] = MINUTE_FETCH_DETAIL.get(code, "")
@@ -1959,7 +2056,8 @@ def scan_once():
                 dec["last_daily_support_gap"] = daily_ctx.get("daily_support_gap", 0.0)
                 dec["last_daily_overheated"] = daily_ctx.get("daily_overheated", False)
                 # 2026-09-22：_attach_dynamic_t_decision（T 模式选择）已随做T引擎删除。
-                buy_score, sell_score, sig = engine.evaluate(code, holding.get("name", code), df, holding, daily_ctx=daily_ctx)
+                with _ScanStage("I2engine.evaluate"):
+                    buy_score, sell_score, sig = engine.evaluate(code, holding.get("name", code), df, holding, daily_ctx=daily_ctx)
 
                 dec["last_benchmark_code"] = sig.indicators.get("benchmark_code", "") if sig else dec.get("last_benchmark_code", "")
                 dec["last_benchmark_name"] = sig.indicators.get("benchmark_name", "") if sig else dec.get("last_benchmark_name", "")
@@ -2280,6 +2378,8 @@ def scan_once():
             except Exception as e:
                 log.warning(f"⚠️  {label(code, holding)} 扫描异常: {str(e)[:120]}")
                 continue
+
+        _scan_stage_add("I0持仓循环(全部)", _time.perf_counter() - _hold_t0)
 
         # 2026-10-12 owner：「console 里对持仓股的轮询显示没有任何必要」⇒ 移除「护城河防御面板」
         # （每 4 轮一张 7 行表：标的/现价/VWAP/振幅/买卖评分/状态）。`panel_rows` 的收集点一并清掉：
@@ -2732,6 +2832,7 @@ def run_watch():
             elapsed = (_now() - cycle_start).total_seconds()
             sleep_seconds = max(0, PARAMS["poll_interval"])
             log.debug(f"⏳ 本轮耗时 {elapsed:.1f}s，等待 {sleep_seconds}s 后进入下一轮")
+            _log_scan_round(elapsed)      # 2026-10-16: 超阈值才 INFO 落盘（debug 那行本仓从未落过盘）
             time.sleep(sleep_seconds)
     except KeyboardInterrupt:
         log.info("已停止盯盘")
