@@ -471,10 +471,23 @@ _LAST_SPOT_VWAP_REFRESH = 0.0
 
 
 def _refresh_spot_vwap_cache() -> None:
-    """拉取 akshare 全市场实时快照，提取持仓股的真实 VWAP（成交额/成交量）。
+    """刷**持仓股**的实时 VWAP（成交额 ÷ 成交量，交易所官方口径）。
 
-    akshare stock_zh_a_spot_em 每次返回全市场 ~5000 只，一次请求即可更新所有持仓。
-    VWAP = 成交额 / 成交量（交易所官方口径），比腾讯分钟线自算更准确。
+    2026-10-16 owner 拍板 A 方案：数据源由 **akshare 全市场快照** 换成 **腾讯逐只快照**。
+
+    **为什么必须换**：akshare `stock_zh_a_spot_em()` 要翻 **59 页**，实测
+    **97.7s + import akshare 11.2s ≈ 109s/次**；而本函数在**逐只持仓循环里**被调、
+    节流阈值只有 **60s < 109s** ⇒ **节流形同虚设，每只持仓重拉一次**（7 只 ≈ 763s）
+    —— 这正是 main.py 主循环一轮 ~15 分钟的来源（逐阶段计时实测 `I0持仓循环(全部) 均941s`）。
+    腾讯侧走 `snapshot_auction_many`（同日已改 keep-alive 连接复用）：**持仓 7 只 <1s**，
+    且**新鲜度更好** —— 同一轮内各持仓共享同一份快照，而不是散布在 13 分钟里。
+
+    ⚠️ **缓存只装持仓**：全仓唯一的消费点是本文件下方 `_SPOT_VWAP_CACHE.get(api_code)`
+    （逐只持仓），原来装全市场 5000 只是白装。**若将来出现查非持仓码的消费方，必须改回取数口径。**
+
+    ⚠️ 成交量单位按板块不同（科创板是"股"、其余是"手"，差 100 倍）——
+    统一交给 `tencent_provider.qt_vwap` 处理（用"VWAP 必落在当日 [low,high] 内"判），
+    **别在这里自己算**。
     """
     global _LAST_SPOT_VWAP_REFRESH, _SPOT_VWAP_CACHE
     now_ts = time.time()
@@ -482,29 +495,26 @@ def _refresh_spot_vwap_cache() -> None:
         return
     _LAST_SPOT_VWAP_REFRESH = now_ts
     try:
-        import akshare as ak
-        import pandas as pd
-        spot = ak.stock_zh_a_spot_em()
-        if spot is None or spot.empty:
+        _codes = []
+        for _c in (HOLDINGS or {}):
+            _b = clean_code(_c)
+            if _b and _b not in _codes:
+                _codes.append(_b)
+        if not _codes:
             return
-        codes_col = "代码"
-        amt_col = "成交额"
-        vol_col = "成交量"
-        if codes_col not in spot.columns or amt_col not in spot.columns or vol_col not in spot.columns:
+        from core.market_data.tencent_provider import TencentProvider, qt_vwap
+        snaps = TencentProvider().snapshot_auction_many(_codes) or {}
+        if not snaps:
+            # 与旧实现同语义：**整批取不到就保留旧缓存**（旧版 `spot is None/empty → return`），
+            # 别把好缓存清成空、让引擎退回分钟自算口径。
             return
-        spot[vol_col] = pd.to_numeric(spot[vol_col], errors="coerce").fillna(0)
-        spot[amt_col] = pd.to_numeric(spot[amt_col], errors="coerce").fillna(0)
-        mask = (spot[vol_col] > 0) & (spot[amt_col] > 0)
-        # 2026-10-11 向量化：原 `spot[mask].iterrows()` 逐行建 dict，5000 只实测 391ms，
-        # 而这一路每分钟就要跑一次。改批量算式后 2.4ms（159.6×）。
-        # 等价性已验（含零量/NaN/带空格代码/重复代码/空表/银行家舍入边界，0 不符）。
-        _sub = spot.loc[mask]
-        _vals = (spot.loc[mask, amt_col].to_numpy(dtype=float)
-                 / (spot.loc[mask, vol_col].to_numpy(dtype=float) * 100.0))
-        cache = dict(zip(_sub[codes_col].astype(str).str.strip(),
-                         np.round(_vals, 2).tolist()))  # 成交量单位是"手"(×100股)，还原为股
+        cache = {}
+        for _c in _codes:
+            _v = qt_vwap(snaps.get(_c) or {})
+            if _v is not None and _v > 0:
+                cache[_c] = _v
         _SPOT_VWAP_CACHE = cache
-        log.debug(f"📡 VWAP 实时缓存刷新: {len(cache)} 只")
+        log.debug(f"📡 VWAP 实时缓存刷新: {len(cache)}/{len(_codes)} 只（腾讯逐只）")
     except Exception as e:
         log.debug(f"VWAP 缓存刷新失败: {str(e)[:80]}")
 

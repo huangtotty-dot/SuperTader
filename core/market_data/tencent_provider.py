@@ -259,6 +259,51 @@ def _qt_snapshot_raw(symbol: str):
     return f
 
 
+def qt_vwap(quote: dict):
+    """由 qt.gtimg.cn 快照字典算**当日 VWAP**（元/股，2 位）—— 口径 = 成交额 ÷ 成交量。
+
+    入参 = `snapshot_auction` / `snapshot_auction_many` 的**单只**值
+    （用到 `vol_hand`(f[6]) / `amount_wan`(f[37]) / `low`(f[34]) / `high`(f[33])）。
+
+    ⚠️⚠️ **成交量单位按板块不同，差 100 倍**（2026-10-16 实测 7 只全命中）：
+
+    | 板块 | `f[6]` 单位 | 公式 |
+    |---|---|---|
+    | 主板 / 创业板 / ETF | **手** | `成交额 ÷ (f[6] × 100)` |
+    | **科创板 `688xxx`** | **股** | `成交额 ÷ f[6]` |
+
+    实测：`600362` 手口径 39.438（akshare 39.44 ✅）、`515120` 0.609（0.61 ✅）、
+    `688008` **股**口径 169.229（akshare 169.23 ✅ 分毫吻合）、`688111` 230.289（230.29 ✅）。
+
+    **判据刻意不用代码前缀**（前缀表迟早漏板块），改用**不变量**：VWAP 是当日成交价的
+    加权平均 ⇒ **必落在当日 [low, high] 内**；两个候选差 100 倍 ⇒ 至多一个在区间内。
+    `low`/`high` 不可用时退回"手"口径（常见情形，且这是下面分支的默认）。
+
+    返回 `None` = **算不出来**（量或额非正 / 两个候选都越界）⇒ **调用方不得写缓存**，
+    与旧 akshare 实现 `mask=(vol>0)&(amt>0)` 同语义：**宁缺勿假**。
+    """
+    try:
+        vh = float(quote.get("vol_hand") or 0)
+        aw = float(quote.get("amount_wan") or 0)
+        if not (vh > 0 and aw > 0):
+            return None
+        amount = aw * 10000.0            # 万元 → 元
+        lots = amount / (vh * 100.0)     # f[6] 当"手"
+        shares = amount / vh             # f[6] 当"股"
+        lo = float(quote.get("low") or 0)
+        hi = float(quote.get("high") or 0)
+        if lo > 0 and hi > 0:
+            # 两个候选相差 100 倍 ⇒ 同时落进当日区间的概率可忽略；真出现时取"手"（多数板块）
+            if lo <= lots <= hi:
+                return round(lots, 2)
+            if lo <= shares <= hi:
+                return round(shares, 2)
+            return None
+        return round(lots, 2)
+    except Exception:
+        return None
+
+
 class TencentProvider:
     source = "tencent"
 
