@@ -431,20 +431,13 @@ async function loadMarketBeacon(force) {
   }
 }
 
-function beaconRowHtml(s) {
+function beaconRowHtml(s, labels) {
   const _sc = (s.build_score != null) ? s.build_score : null;
   const _ceil = (s.build_ceiling != null) ? s.build_ceiling : 100;
   const _reach = (s.build_reachable != null) ? s.build_reachable : true;
   const scoreTxt = _sc == null ? '<span class="cell-dim">—</span>'
     : (_reach ? `<b>${_sc}</b>` : `<b>${_sc}</b><span class="cell-dim" style="font-size:10px">/${_ceil}🔒</span>`);
-  const _cd = s.build_conds || {};
   const _met = (s.build_met != null) ? `${s.build_met}/3` : "—";
-  const condTxt = ["t_regime", "t_trend", "t_drawdown"].map(k =>
-    _cd[k] === undefined ? '<span class="cell-dim">·</span>'
-      : (_cd[k] ? '<span class="on">●</span>' : '<span class="off">○</span>')).join("")
-    + (_cd.t_veto === false
-      ? `<span title="否决因子触发：${esc((s.build_veto || []).join("、") || "爆量/偏离MA60")}">🚫</span>`
-      : '<span class="cell-dim" title="否决因子未触发">·</span>');
   const tagsTxt = (s.tags && s.tags.length)
     ? s.tags.map(t => tagBadge(t)).join(" ")
     : '<span class="cell-dim" style="font-size:10px" title="技术标签后台批算，约 10~20s 自填">⏳ 标签</span>';
@@ -466,7 +459,7 @@ function beaconRowHtml(s) {
     ${ma20FlagCellHtml(s.build_above_ma20)}
     <td class="num h-price" data-hcode="${esc(s.code)}" title="实时价/涨幅（10s 刷新）；未取到显示 ⏳ 而不是 0.00%">${hunterPriceHtml(null)}</td>
     <td class="h-tags" style="max-width:200px;line-height:1.7">${tagsTxt}</td>
-    <td class="cond" title="${esc(s.build_reason || "")}">${condTxt}</td>
+    ${condCellHtml(s.build_conds, labels, s.build_verdict === "insufficient_data", s.build_veto)}
     <td style="text-align:center" title="${esc(_mv.reason || "")}">${m30Txt}</td>
     ${structCellHtml(s.structure)}
     ${ma5CellHtml(s.structure)}
@@ -521,7 +514,7 @@ function renderMarketBeacon(d) {
         </span>
       </div>
       <div id="beaconSec_${i}" style="display:${_beaconOpen.has(i) ? "" : "none"};overflow-x:auto">
-        <table class="h-table">${head}<tbody>${sec.rows.map(beaconRowHtml).join("")}</tbody></table>
+        <table class="h-table">${head}<tbody>${sec.rows.map(s => beaconRowHtml(s, d.cond_labels)).join("")}</tbody></table>
       </div>
     </div>`;
   }).join("");
@@ -2013,6 +2006,32 @@ function ma20FlagCellHtml(v, missingTip, detail) {
   return `<td style="text-align:center" title="${esc(missingTip || "无该特征（旧数据/未扫描）")}"><span class="cell-dim">—</span></td>`;
 }
 
+/* 时机条件列（2026-10-16 owner：「选股猎手的时机条件列与建仓信号扫描的该列保持一致」）。
+   **建仓信号扫描 / 选股猎手 共用本渲染**（同 `structCellHtml`/`dayStageCellHtml`/`pctHtml` 的做法），
+   别再各写一份 —— 此前猎手侧**硬编码只列 3 个条件键**，与真源脱钩，代价是：
+     · 10-15 给真源 `t_gui.COND_LABELS` 加了 `t_ma20`/`t_ma5` 两条**硬约束**（正是"解释 NO-GO
+       为什么 NO-GO"的两条），猎手侧漏改 ⇒ **同一只票在猎手表里 4 个圆点、在建仓表里 7 个**；
+     · tooltip 也不同源（猎手拿 `build_reason` 当 title，与建仓表的逐条「通过/未过」不是一回事）。
+   `labels` 一律传**后端下发的 `cond_labels`**（`t_gui.COND_LABELS` 单一真源），前端不再维护副本。
+   `isNoData` ⇒ 整格 `—`：**数据不足 ≠ 全部未通过**（画成 6 个空心圆是在编造结论）。 */
+function condCellHtml(conds, labels, isNoData, vetoList) {
+  const _c = conds || {};
+  const _keys = Object.keys(labels || {});
+  if (isNoData) {
+    return `<td><span class="cond" title="数据不足：未参与条件判定">—</span></td>`;
+  }
+  const dots = _keys.map(k =>
+    _c[k] === undefined ? `<span class="cell-dim">·</span>`
+      : _c[k] ? `<span class="on">●</span>` : `<span class="off">○</span>`).join("");
+  const vetoed = _c.t_veto === false;
+  const vetoDot = vetoed
+    ? `<span title="否决因子触发：${esc((vetoList || []).join("、") || "爆量/偏离MA60")}">🚫</span>`
+    : `<span class="cell-dim" title="否决因子（爆量≥3倍20日均量 / 偏离MA60>+20%）：未触发">·</span>`;
+  const title = _keys.map(k => `${labels[k]}:${_c[k] ? "通过" : "未过"}`).join(" · ")
+    + ` · 否决因子:${vetoed ? "触发" : "未触发"}`;
+  return `<td><span class="cond" title="${esc(title)}">${dots}${vetoDot}</span></td>`;
+}
+
 
 /* 板块内 龙头/中军/杂毛（2026-10-11，owner 需求）：**描述性方位标签**，不是信号。
    规则：龙头=板块内当日涨幅第1；中军=其余成交额前3（资金核心）；杂毛=其余；板块<8只不标。
@@ -2138,20 +2157,8 @@ function renderPB(pb) {
       : `<span class="badge" style="background:#3a3a3a;color:#bbb" title="人工池（superTrader manual 侧管理）">人工</span>`;
     const conds = r.conditions || {};
     // fix P1-3: insufficient_data 行圆点区显示『—』而非 5 个空心圆
+    // （2026-10-16：圆点/tooltip 的渲染已收进 `condCellHtml`，与猎手表共用，见该函数注释）
     const isNoData = r.verdict === "insufficient_data";
-    const condStr = isNoData
-      ? `<span class="cell-dim">—</span>`
-      : Object.keys(condLabels).map(k =>
-          conds[k] === undefined ? `<span class="cell-dim">·</span>`
-            : conds[k] ? `<span class="on">●</span>` : `<span class="off">○</span>`).join("");
-    // 2026-08-27: 圆点行第 5 槽位 = 否决因子（t_veto 仅触发时由后端写入 false）。
-    //   未触发=暗点·，触发=🚫——让"条件全过但被否决"在圆点行直接可见（此前与全通过无差别）。
-    const vetoDot = isNoData ? "" : (conds.t_veto === false
-      ? `<span title="否决因子触发：${esc((((r.timing || {}).veto) || []).join("、") || "爆量/偏离MA60")}">🚫</span>`
-      : `<span class="cell-dim" title="否决因子（爆量≥3倍20日均量 / 偏离MA60>+20%）：未触发">·</span>`);
-    const condTitle = Object.keys(condLabels).map(k =>
-      `${condLabels[k]}:${conds[k] ? "通过" : "未过"}`).join(" · ")
-      + (isNoData ? "" : ` · 否决因子:${conds.t_veto === false ? "触发" : "未触发"}`);
     const boxMet = conds[boxKey] || false;
     const boxStr = boxMet ? `<span class="badge signal">🚀突破</span>` : `<span class="off">—</span>`;
     // 方案A (2026-08-15): 建仓条件=时机门控（市场有方向/多头结构/回撤到位）→ "X/3"（金叉为加分不计）
@@ -2269,7 +2276,7 @@ function renderPB(pb) {
         <td class="num">${fmt(r.price)}<div style="font-size:10px">${pctHtml(r.change_pct, "实时涨幅（随行情每 10s 刷新）")}</div></td>
         <td style="text-align:center">${boxStr}</td>
         <td style="max-width:220px;line-height:1.7">${tagsTxt}</td>
-        <td><span class="cond" title="${esc(condTitle)}">${condStr}${vetoDot}</span></td>
+        ${condCellHtml(conds, condLabels, isNoData, (r.timing || {}).veto)}
         ${mvCell}
         ${stCell}
         ${ma5CellHtml(r.structure)}
@@ -2656,11 +2663,9 @@ function renderAutoScan(d) {
   }
   const counts = d.counts || {};
   const countBadge = k => counts[k] ? `<span class="badge">${esc(k)}: ${counts[k]}</span>` : "";
-  // 条件圆点标签（与手动盘 COND_LABELS 同口径）
-  // 2026-10-15：与后端 COND_LABELS 同步（新增两条硬约束；否则圆点/悬停会漏显示）
-  const AUTO_COND_LABELS = { t_regime: "市场有方向", t_trend: "多头结构", t_drawdown: "回撤到位",
-                             t_ma20: "站上MA20(硬约束)", t_ma5: "站上MA5(硬约束)",
-                             t_golden: "MACD金叉(加分)" };
+  // 条件圆点标签：**已删掉本文件里那份 `AUTO_COND_LABELS` 副本**（2026-10-16）——
+  // 副本正是漂移源：10-15 后端 `COND_LABELS` 扩到 6 条时，猎手侧的硬编码就漏改了。
+  // 现在四张表（建仓/自动盘/猎手/风向标）一律吃 payload 的 `cond_labels`（后端真源）。
   const trs = rows.map(r => {
     const poolBadge = '<span class="badge" style="background:#2a4a5a;color:#8ad4ff" title="自动盘池（goldminer auto 侧管理）">自动</span>';
     const holdBadge = r.held ? '<span class="badge hold">持仓</span>' : "";
@@ -2688,19 +2693,9 @@ function renderAutoScan(d) {
     const _scNum2 = (typeof r.score === "number") ? r.score : null;
     const _scoreBg2 = (_scNum2 === 0) ? "background:rgba(248,81,73,.12);"
       : (_scNum2 !== null && _scNum2 > 0) ? "background:rgba(63,185,80,.07);" : "";
-    // 条件圆点（对齐手动盘 renderPB：condStr + vetoDot，hover 看标签）
+    // 条件圆点：与手动盘 renderPB / 猎手 / 风向标**共用 `condCellHtml`**（2026-10-16 统一）。
     const conds = r.conditions || {};
     const isNoData = r.verdict === "insufficient_data" || r.verdict === "pending";
-    const condStr = isNoData
-      ? `<span class="cell-dim">—</span>`
-      : Object.keys(AUTO_COND_LABELS).map(k =>
-          conds[k] === undefined ? `<span class="cell-dim">·</span>`
-            : conds[k] ? `<span class="on">●</span>` : `<span class="off">○</span>`).join("");
-    const vetoDot = isNoData ? "" : (conds.t_veto === false
-      ? `<span title="否决因子触发：${esc((r.veto || []).join("、") || "爆量/偏离MA60")}">🚫</span>`
-      : `<span class="cell-dim" title="否决因子（爆量≥3倍20日均量 / 偏离MA60>+20%）：未触发">·</span>`);
-    const condTitle = Object.keys(AUTO_COND_LABELS).map(k =>
-      `${AUTO_COND_LABELS[k]}:${conds[k] ? "通过" : "未过"}`).join(" · ");
     // 通过 X/3（t_regime/t_trend/t_drawdown 通过数，金叉为加分不计，与手动盘同口径）
     const iceKeys = ["t_regime", "t_trend", "t_drawdown"];
     const metCount = iceKeys.filter(k => conds[k]).length;
@@ -2722,7 +2717,7 @@ function renderAutoScan(d) {
       <td class="num" title="综合得分">${scoreCell}</td>
       <td class="num ${metCls}"><b>${isNoData ? "—" : metCount + "/3"}</b></td>
       <td class="num">${r.price != null ? fmt(r.price) : "—"}<div style="font-size:10px">${pctHtml(r.change_pct, "实时涨幅（随行情每 10s 刷新）")}</div></td>
-      <td><span class="cond" title="${esc(condTitle)}">${condStr}${vetoDot}</span></td>
+      ${condCellHtml(conds, d.cond_labels, isNoData, r.veto)}
       <td class="cell-dim" style="font-size:11px;max-width:230px;line-height:1.5">${reasonTxt}</td>
       <td class="num">${r.base ? fmt(r.base, 0) : "—"}</td>
       <td style="text-align:center">${delBtn}</td>
@@ -4523,6 +4518,9 @@ function renderHunter(h) {
 
   const sumRows = h.summary_rows || [];
     const ss = h.sector_stocks || {};
+    // 时机条件列的标签真源（后端 `t_gui.COND_LABELS` 经 payload 下发）——猎手侧**不再自己列条件键**，
+    // 见 `condCellHtml` 注释（硬编码 3 键曾被 10-15 的真源扩到 6 条时漏改）。
+    const condLabels = h.cond_labels || {};
     // 存储板块成分股供展开标注/翻页
     window._hunterSectors = ss || {};
     window._hunterData = h;
@@ -4576,13 +4574,6 @@ function renderHunter(h) {
       const scoreTxt = _sc == null ? (_pend ? UPDATING_HTML : '<span class="cell-dim">—</span>')
         : (_reach ? `<b>${_sc}</b>` : `<b>${_sc}</b><span class="cell-dim" style="font-size:10px">/${_ceil}🔒</span>`);
       const _metTxt = (s.build_met != null) ? `${s.build_met}/3` : (_pend ? UPDATING_HTML : "—");
-      const _cd = s.build_conds || {};
-      const condTxt = ["t_regime", "t_trend", "t_drawdown"].map(k =>
-        _cd[k] === undefined ? '<span class="cell-dim">·</span>'
-          : (_cd[k] ? '<span class="on">●</span>' : '<span class="off">○</span>')).join("")
-        + (_cd.t_veto === false
-          ? `<span title="否决因子触发：${esc((s.build_veto || []).join("、") || "爆量/偏离MA60")}">🚫</span>`
-          : '<span class="cell-dim" title="否决因子未触发">·</span>');
       const tagsTxt = s.tags && s.tags.length
         ? s.tags.map(t => tagBadge(t)).join(" ")
         : `<span class="cell-dim" style="font-size:11px" title="技术标签按板块后台批量计算（约 30~60 秒），完成后自动填上">⏳ 标签</span>`;
@@ -4610,7 +4601,7 @@ function renderHunter(h) {
         ${ma20FlagCellHtml(s.build_above_ma20)}
         <td class="num h-price" data-hcode="${esc(s.code)}" title="**实时**价/涨幅（展开时取、10s 刷新）。⚠️ 刻意不显示扫描时的旧值：扫描可能隔了几天，旧涨幅会严重误导（实测 300821 旧值 +20.01% vs 实时 +5.83%）">${hunterPriceHtml(null)}</td>
         <td class="h-tags">${tagsTxt}</td>
-        <td class="cond" title="${esc(s.build_reason || "")}">${condTxt}</td>
+        ${condCellHtml(s.build_conds, condLabels, s.build_verdict === "insufficient_data", s.build_veto)}
         <td class="cell-dim" style="max-width:240px;font-size:11px">${esc(s.build_reason || "")}</td>
       </tr>`;
     };

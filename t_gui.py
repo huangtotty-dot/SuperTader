@@ -4491,8 +4491,17 @@ class Api:
                     _trend = bool(_f.get("trend_multihead"))
                     _dd_ok = _bd.dd_threshold_ok(float(_f["drawdown"]), _regime) if "drawdown" in _f else False
                     _golden = bool(_f.get("macd_golden_5d"))
+                    # 2026-10-16 owner：「选股猎手的时机条件列与建仓信号扫描保持一致」。
+                    # 缺口在**键集**：本处原先只给 5 键，而真源 COND_LABELS 已是 6 条 ——
+                    # 10-15 新增的 t_ma20/t_ma5 两条硬约束正是"解释 NO-GO 为什么 NO-GO"的两条，
+                    # 猎手侧没有 ⇒ 同一只票在猎手表里 4 个圆点、在建仓表里 7 个（少 3 个，
+                    # 其中 2 个是本次新增），且 tooltip 与建仓表不同源。
+                    # ⇒ 与 `core/position_builder.py` 逐字同口径（那里也是 `is True`）补齐。
+                    _ma20_ok = _f.get("above_ma20") is True
+                    _ma5_ok = _f.get("above_ma5") is True
                     conds = {"t_regime": bool(_reachable), "t_trend": _trend, "t_drawdown": _dd_ok,
-                             "t_golden": _golden, "t_veto": not _dec["veto"]}
+                             "t_golden": _golden, "t_veto": not _dec["veto"],
+                             "t_ma20": _ma20_ok, "t_ma5": _ma5_ok}
                     result[str(code)] = {
                         "go": bool(_dec["go"]), "regime": _regime,
                         "met": int(_reachable) + int(_trend) + int(_dd_ok),
@@ -4839,6 +4848,10 @@ class Api:
             out["top5"] = top5_list
             out["heat_trends"] = heat_trends
             out["sector_stocks"] = sector_stocks
+            # 2026-10-16：时机条件列的**标签真源**下发给前端（与建仓表 payload 的 `cond_labels` 同一个
+            # `COND_LABELS`）。此前猎手前端**自己硬编码只列 3 个条件键**，与真源（6 条）脱钩 ⇒
+            # 10-15 新增 t_ma20/t_ma5 时漏改，同一只票在两张表里圆点数不同。下发后端真源即消除重复。
+            out["cond_labels"] = COND_LABELS
             # 2026-10-11：把"建仓符合度算了多少"报给前端 —— 表格渲染后这段时间界面**没有反馈**
             # （owner：展开板块后各列空着，不知道是不是在更新）。前端据此显示进度/原因。
             out["build_n"] = _build_n
@@ -5090,7 +5103,8 @@ class Api:
         if not all_codes:
             return _clean({"available": True, "date": _day, "trade_date": str(date or ""),
                            "pending": False, "top_n": int(top_n or 0), "sectors": sectors,
-                           "n_codes": 0, "enrich_pending": False})
+                           "n_codes": 0, "enrich_pending": False,
+                           "cond_labels": COND_LABELS})
         # ── 重列：同样后台算 ──
         ekey = (_day, tuple(sorted(all_codes)))
         with _BEACON_LOCK:
@@ -5134,7 +5148,10 @@ class Api:
             pass
         return _clean({"available": True, "date": _day, "trade_date": str(date or ""),
                        "pending": False, "top_n": int(top_n or 0), "sectors": sectors,
-                       "n_codes": len(all_codes), "enrich_pending": rows is None})
+                       "n_codes": len(all_codes), "enrich_pending": rows is None,
+                       # 2026-10-16：时机条件列的**标签真源**（同猎手表 payload）。本表列沿用
+                       # 「建仓信号扫描」那套，该列也必须同源，否则同一只票三张表三种圆点数。
+                       "cond_labels": COND_LABELS})
 
     def _beacon_skeleton(self, date, top_n):
         """（**只许后台线程调**）人气板块 + 成分 + 分档 → `(day, sectors, all_codes)`。
@@ -6365,6 +6382,9 @@ class Api:
             out["summary_cols"] = ["排名", "板块", "股票数量", "平均分", "涨停数", "热度", "趋势", "前三强"]
             out["summary_rows"] = rows
             out["sector_stocks"] = sector_stocks
+            # 2026-10-16：历史视图**没有** build_* 字段（`sector_stocks` 是现搭的），
+            # 但"时机条件"列仍要画出一致的圆点槽位 ⇒ 标签真源照样下发，否则该列会退化成空白。
+            out["cond_labels"] = COND_LABELS
             out["is_history"] = True
             out["refreshed_at"] = date
             return _clean(out)
@@ -7237,7 +7257,11 @@ class Api:
             }
         rows = sorted(latest.values(), key=lambda r: -(r.get("score") or 0))
         counts = Counter(r.get("verdict", "weak") for r in rows)
-        return _clean({"has_data": True, "date": date, "rows": rows, "counts": dict(counts)})
+        return _clean({"has_data": True, "date": date, "rows": rows, "counts": dict(counts),
+                       # 2026-10-16：时机条件列的**标签真源**（与建仓表/猎手表/风向标同一个
+                       # `COND_LABELS`）。此前本表在前端自带一份 `AUTO_COND_LABELS` 副本 ——
+                       # 副本是漂移来源（10-15 真源扩到 6 条时，猎手侧的硬编码就漏改了）。
+                       "cond_labels": COND_LABELS})
 
     def run_auto_scan(self, date=None):
         """对 auto 池全量跑建仓判定（EOD 口径，df_1min=None 跳过 W35 日内确认），
