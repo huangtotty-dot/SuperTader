@@ -246,6 +246,57 @@ class GmGateway(object):
                 "filled_qty": 0, "filled_price": None, "message": "order_not_found"}
 
     # ── 撤单（2026-10-14 新增：买不进替补机制要用）────────────────
+    def _resolve_open_buy_order_id(self, code: str):
+        """`order_id` 缺失时按 symbol 找回**在途买单**的 id（2026-10-16 生产施工）。
+
+        为什么需要：GM 仿真终端的**同步下单回报里 order_id 恒为空**（2026-10-14/10-16
+        两天 bridge events 里 `"order_id"` 无一非空；卖侧 10-16 的迟确认修复同源），
+        而 fills 账本只有这个空 id ⇒ 买不进替补的撤单链路"有单号才能撤"会**整体静默失效**。
+        但 `get_orders(symbol)` 能列出当日委托（`_poll_pending_recon` 同款渠道，已验证可用）
+        ⇒ 按「在途（非终态）且方向=买」筛出唯一候选，拿它的 id 去撤。
+
+        返回 `(order_id, reason)`；reason ∈ {"", no_open_order, ambiguous_open_orders,
+        order_id_unavailable, resolve_error}。**任何失败都不抛**。
+        """
+        gm = self._gm
+        sym = self.sv.code_to_gm(code)
+        try:
+            _orders = self.sv.sdk_call("%s_get_orders_resolve" % self.strategy_id,
+                                       partial(gm.get_orders, symbol=sym))
+        except TypeError:
+            try:
+                _orders = self.sv.sdk_call("%s_get_orders_resolve_all" % self.strategy_id,
+                                           gm.get_orders)
+            except Exception:
+                return None, "resolve_error"
+        except Exception:
+            return None, "resolve_error"
+        # 终态 = 拒单码 ∪ {3=Filled}；在途 = 1/2/6 等。**买单** side=1（与拒单事件 raw 口径一致）。
+        terminal = set(self.sv.reject_statuses or ()) | {3}
+        cands = []
+        for _od in (_orders if isinstance(_orders, list) else [_orders]):
+            try:
+                _st = int((_od.get("status") if isinstance(_od, dict)
+                           else getattr(_od, "status", 0)) or 0)
+                _side = int((_od.get("side") if isinstance(_od, dict)
+                             else getattr(_od, "side", 0)) or 0)
+                if _st in terminal or _side != 1:
+                    continue
+                _id = ((_od.get("id") if isinstance(_od, dict)
+                        else getattr(_od, "id", None))
+                       or (_od.get("order_id") if isinstance(_od, dict)
+                           else getattr(_od, "order_id", None)))
+                cands.append(_id)
+            except Exception:
+                continue
+        if not cands:
+            return None, "no_open_order"           # 已成交/已拒/已撤 ⇒ 不在途
+        if len(cands) > 1:
+            return None, "ambiguous_open_orders"   # 多在途买单 ⇒ 不猜，交人工
+        if not cands[0]:
+            return None, "order_id_unavailable"    # 找到了在途单但它也没 id ⇒ 撤不了
+        return cands[0], ""
+
     def cancel_order(self, order_id, code: str) -> dict:
         """撤单。返回 `{ok, order_id, message}`；**任何失败都不抛**（原语缺席/异常都降级）。
 
@@ -254,9 +305,20 @@ class GmGateway(object):
         原语缺席 ⇒ `{ok: False, message: "cancel_unavailable"}`，上层据此"不做补单"
         （**绝不会**误下单、误释放额度），只在日志里报一行。
 
+        `order_id` 为空（GM 仿真同步回报无 id 是常态）⇒ 先经 `_resolve_open_buy_order_id`
+        按 symbol 找回在途买单 id 再撤；找回失败按 reason 降级：
+          · `no_open_order` ⇒ 返回带 `not_found=True`（单已不在途：成交/拒/撤），
+            上层据此归入"未确认"而**不是**"撤单失败"（不触发补单中止）；
+          · 其余 ⇒ `{ok: False}`，上层按"撤单失败 ⇒ 本轮不补单"处理。
+
         ⚠️ 撤单**不写 `write_order`**：那是孤儿闸 `_strategy_ordered_today` 判"本策略今日是否对
         code 下过单"的判据，撤单不是新委托；写了会让孤儿闸误判归属。
         """
+        if not order_id:
+            order_id, _why = self._resolve_open_buy_order_id(code)
+            if not order_id:
+                return {"ok": False, "order_id": None, "message": _why,
+                        "not_found": _why == "no_open_order"}
         gm = self._gm
         _oc = getattr(gm, "order_cancel", None)
         if _oc is None:

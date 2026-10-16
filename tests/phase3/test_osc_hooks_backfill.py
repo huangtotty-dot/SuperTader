@@ -366,7 +366,7 @@ class TestParamsWiring(unittest.TestCase):
 
     为什么单列一条：`rt.param` 只读 `PARAMS` 这一张表，而本仓有过**B7 前科**——
     三个开关被放进 `INDEX_REGIME_PARAMS`，闸函数却读 `PARAMS` ⇒ 从上线起**从未生效**、
-    日志零事件。补单总闸默认关（等回测），若再放错表，翻开关时同样会静默不生效。
+    日志零事件。补单总闸 2026-10-16 owner 拍板上线（默认开），若放错表，开关同样会静默不生效。
     """
 
     @staticmethod
@@ -386,11 +386,13 @@ class TestParamsWiring(unittest.TestCase):
                   "osc_backfill_interval_min", "osc_backfill_deadline_hhmm"):
             self.assertIn(k, p, f"{k} 必须在 PARAMS（放 INDEX_REGIME_PARAMS 读不到）")
 
-    def test_backfill_total_switch_off_by_default(self):
-        """owner 决策：回测（exp26）证明 Sharpe 不被稀释**之前**，总闸必须关着。"""
+    def test_backfill_total_switch_on_after_owner_approval(self):
+        """owner 2026-10-16 拍板上线：回测过闸（Sharpe 0.384→0.518、年化不降，
+        doc/solutions/2026-10-16_替补机制B方案回测验证.md）⇒ 总闸**默认开启**；
+        开关保留可关（翻 False = 回到"不撤不补"现状，见下方 rt 级断言）。"""
         p = self._params_literal()
-        self.assertFalse(p["osc_backfill_enabled"],
-                         "回测过关前不得默认开启买不进替补")
+        self.assertTrue(p["osc_backfill_enabled"],
+                        "owner 2026-10-16 已拍板上线，总闸必须默认 True")
 
     def test_universe_switch_in_PARAMS_and_defaults_to_full_market(self):
         """宇宙回退闸（2026-10-14）：默认必须是**全市场**（= 与扩展后行为逐位一致），
@@ -423,10 +425,12 @@ class TestParamsWiring(unittest.TestCase):
             def param(self, k, d=None):
                 return p.get(k, d)
         rt = _RT()
-        self.assertEqual(osc_hooks.backfill_times(rt), [])   # 默认关 ⇒ 空表
-        p2 = dict(p, osc_backfill_enabled=True)
+        # owner 2026-10-16 拍板上线后：PARAMS 默认开 ⇒ 时点表就位（10:08/10:14 两轮）
+        self.assertEqual(osc_hooks.backfill_times(rt), [dtime(10, 8), dtime(10, 14)])
+        # 开关保留可关：翻 False ⇒ 空表（行为与上线前逐位一致）
+        p2 = dict(p, osc_backfill_enabled=False)
         rt2 = type("_RT2", (), {"param": lambda self, k, d=None: p2.get(k, d)})()
-        self.assertEqual(osc_hooks.backfill_times(rt2), [dtime(10, 8), dtime(10, 14)])
+        self.assertEqual(osc_hooks.backfill_times(rt2), [])
 
 
 if __name__ == "__main__":

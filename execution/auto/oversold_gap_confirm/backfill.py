@@ -191,6 +191,13 @@ def pending_from_fills(fills) -> list:
 
     返回 [{code, order_id, gap, price, qty_placed, filled_qty, qty_remaining, ref_price}]。
     `ref_price` = 成交均价优先、否则 10:00 收盘参考价（市价单常无 filled_price）。
+
+    ⚠️ 2026-10-16 生产施工：`order_id` 缺失的买单**也保留**（原先直接丢弃）。
+    GM 仿真终端同步下单回报里 order_id 恒为空（10-14/10-16 bridge events 无一非空），
+    丢弃 ⇒ 整个替补机制在生产上**静默失效**。改为保留，撤单时由
+    `gateway.cancel_order` 按 symbol 解析在途单号（解析不到 ⇒ 未确认/失败，不补单）。
+    连带效果：fills json 里"已成交但 filled_qty 未回填"的票（失真前科）也会进 pending
+    —— 解析时它们已不在在途委托里（`no_open_order` ⇒ 未确认，不释放不误撤），安全。
     """
     out = []
     for r in ((fills or {}).get("buys") or []):
@@ -201,7 +208,7 @@ def pending_from_fills(fills) -> list:
             qp = int(r.get("qty_placed") or 0)
             fq = int(r.get("filled_qty") or 0)
             rem = qp - fq
-            if rem <= 0 or not r.get("order_id"):
+            if rem <= 0:
                 continue
             ref = r.get("filled_price") or r.get("price") or 0
             out.append({"code": str(r.get("code") or ""), "order_id": r.get("order_id"),
@@ -287,7 +294,7 @@ def cancel_and_confirm(gateway, pending, poll_rounds=3, poll_sleep=2.0, sleep_fn
     res = {"released": [], "filled": [], "unconfirmed": [], "failed": []}
     for p in (pending or []):
         code, oid = p.get("code"), p.get("order_id")
-        if not code or not oid:
+        if not code:
             continue
         try:
             rep = gateway.cancel_order(oid, code)
@@ -295,9 +302,17 @@ def cancel_and_confirm(gateway, pending, poll_rounds=3, poll_sleep=2.0, sleep_fn
             log(f"[OSC] ⚠️ 撤单下发异常 {code} {oid}: {type(e).__name__}: {e}")
             res["failed"].append(code)
             continue
+        # order_id 缺省时 gateway 会按 symbol 解析在途单（2026-10-16）⇒ 后续轮询用**解析后**的 id
+        oid = (rep or {}).get("order_id") or oid
         if not (rep or {}).get("ok"):
-            log(f"[OSC] ⚠️ 撤单未成功 {code} {oid}: {(rep or {}).get('message')}")
-            res["failed"].append(code)
+            if (rep or {}).get("not_found"):
+                # 该 code 已无在途买单（成交/已拒/已撤）：既不是"撤成了"也不是"撤单失败"，
+                # 钱的去向不明 ⇒ 保守按**未确认**处理（额度不释放，但不中止本轮补单）。
+                log(f"[OSC] ℹ️ {code} 无在途买单（已成交/已终态）⇒ 不按撤成处理")
+                res["unconfirmed"].append(code)
+            else:
+                log(f"[OSC] ⚠️ 撤单未成功 {code} {oid}: {(rep or {}).get('message')}")
+                res["failed"].append(code)
             continue
         # 轮询确认
         st, filled_qty, filled_px = None, 0, None
@@ -363,6 +378,18 @@ def run_backfill_exec(gateway, date, fills, pending, spares, prev_close, quotes,
     # ② 额度账：撤单确认后才释放（owner 决策 #4）
     committed = committed_notional(fills, released_codes=cres.get("released"))
     out["committed"] = committed
+
+    # ②′ 安全闸（2026-10-16 生产施工，owner 拍板）：**撤单失败 ⇒ 本轮不补单**。
+    # 「撤单下发失败」意味着账户委托状态不可知（原语缺席/拒撤/解析不到单号）——
+    # 此时账户里可能仍挂着有效买单，再补单就是拿"以为释放了、实际没释放"的额度超买。
+    # 与 gateway.cancel_order 的防御式降级口径一致：`cancel_unavailable` ⇒ 不做补单。
+    # 注意只闸 `failed`：`unconfirmed`（含 PendingCancel 钱未解冻、无在途单）**不**中止——
+    # 它们只是"那笔额度不释放"，剩余额度内的补单仍允许（既有测试钉住此口径）。
+    if cres.get("failed"):
+        out["note"] = "cancel_failed_abort"
+        log(f"[OSC] ⛔ 撤单失败 {cres['failed']} ⇒ 本轮中止补单（挂单保持不动，等下轮/15:00 拒单）")
+        return out
+
     try:
         cash_free = float(gateway.get_cash() or 0)     # 已扣在途冻结 ⇒ 天然不超买
     except Exception:

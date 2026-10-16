@@ -791,19 +791,35 @@ def run_buy_exec(gateway, date: str, prev_close: dict, ma20: dict, bars: dict,
     return fills
 
 
+def _buys_summary(buys_out: list) -> dict:
+    """从 buys 记录列表重算执行摘要（首轮 `_write_fills` 与补单轮合并**同一口径**）。
+
+    与首轮 `run_buy_exec` 内联口径逐位一致：未终态否决（rejected/expired/cancelled/error）
+    且 qty_placed>0 才算 placed；名义额 = Σ (filled_qty or qty_placed) × (filled_price or price)。
+    """
+    _ok = [r for r in (buys_out or [])
+           if not (r.get("status") in _TERMINAL_BAD or r.get("status") == "error")]
+    notional = 0.0
+    for r in _ok:
+        if not (r.get("qty_placed") or 0):
+            continue
+        eff_px = r.get("filled_price") or r.get("price") or 0
+        notional += float(r.get("filled_qty") or r.get("qty_placed") or 0) * float(eff_px or 0)
+    return {"buys_planned": len(buys_out or []),
+            "buys_placed": sum(1 for r in _ok if (r.get("qty_placed") or 0) > 0),
+            "rejected_count": len(buys_out or []) - len(_ok),
+            "deferred_count": sum(1 for r in (buys_out or []) if r.get("defer_reason")),
+            "notional_placed": round(notional, 2)}
+
+
 def _write_fills(date, mode, started, buys_out, picks, cash0, total_placed,
                  cfg, book_dir, note: str = "", spares=None) -> dict:
     finished = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     # ⚠️ 2026-10-12：`buys_placed` 原先只数 `qty_placed>0`，把**被拒/被锁**的单也算成"已下单"
     # （与 S1 复盘里 `buys_placed=4/rejected=0` 的虚报同源）。改为只数未被终态否决的。
-    _ok = [r for r in buys_out
-           if not (r["status"] in _TERMINAL_BAD or r["status"] == "error")]
-    n_rej = len(buys_out) - len(_ok)
-    n_defer = sum(1 for r in buys_out if r["defer_reason"])
-    summary = {"candidates": len(picks), "buys_planned": len(buys_out),
-               "buys_placed": sum(1 for r in _ok if r["qty_placed"] > 0),
-               "rejected_count": n_rej, "deferred_count": n_defer,
-               "notional_placed": round(total_placed, 2), "cash_before": round(cash0, 2)}
+    # （2026-10-16：口径抽成 `_buys_summary` 与补单轮合并共用；数值不变，由单测钉住。）
+    summary = {**_buys_summary(buys_out),
+               "candidates": len(picks), "cash_before": round(cash0, 2)}
     fills = {"date": str(date), "mode": mode, "started_at": started, "finished_at": finished,
              "strategy": "oversold_gap_confirm", "note": note or "",
              "picks": [{"code": p["code"], "gap": p.get("gap"),
@@ -827,3 +843,94 @@ def _write_fills(date, mode, started, buys_out, picks, cash0, total_placed,
                             "fills_file": fp_fills}, ensure_ascii=False, indent=2))
     fills["_paths"] = {"fills": fp_fills, "report": fp_rep}
     return fills
+
+
+# ════════════════════════ 买不进替补 · 补单轮留痕合并（2026-10-16 生产施工） ════════════════════════
+
+def merge_backfill_fills(book_dir: str, date: str, round_no: int, round_res: dict,
+                         placed=None, shift_from=None, log=print):
+    """把一轮**补单（顺移）**结果并入 `fills_{date}.json`。返回归一化后的本轮 buys 记录列表；
+    fills 文件缺失/读坏 ⇒ None（**不新建**——首轮都没跑就没有可合并的底账）。
+
+    做什么：
+      · 本轮下单记录追加进 `buys`，带 `round`（1 起）/`shift_from`（本轮撤单确认释放的 code）
+        两个留痕字段——首轮记录**没有**这两键，以此区分「10:00 首单」与「顺移补单」；
+      · 本轮撤单/额度/跳过明细记进 `backfill_rounds`；
+      · summary 按合并后的 buys 全量重算（`_buys_summary`，与首轮同一口径）；
+      · **幂等**：同 `round_no` 重入 ⇒ 先剔除该轮旧记录再写入，不会重复追加
+        （钩子侧本就"每轮每日一次"，这里是进程重启/重放时的第二道保险）。
+    不做什么：不碰 `picks`/`spares`（那是 10:00 首单的证据快照）；不写持仓账本
+    （那是 `register_buys_to_book` 的事，调用方自行决定）。
+    """
+    fp = os.path.join(book_dir, f"fills_{date}.json")
+    if not os.path.exists(fp):
+        log(f"[WS] ⚠️ 补单轮留痕：{fp} 不存在（首轮 fills 缺失）⇒ 跳过合并")
+        return None
+    try:
+        with open(fp, encoding="utf-8") as f:
+            fills = json.load(f)
+    except Exception as e:
+        log(f"[WS] ⚠️ 补单轮留痕：fills 读坏（跳过合并）: {e}")
+        return None
+
+    rn = int(round_no)
+    shift = [str(c) for c in (shift_from or []) if c]
+    recs = []
+    for p in (placed or []):
+        qty = int(p.get("qty") or p.get("qty_placed") or 0)
+        filled = int(p.get("filled_qty") or 0)
+        eff_px = p.get("filled_price") or p.get("price") or 0
+        recs.append({"code": p.get("code"), "symbol": gm_symbol_of(str(p.get("code") or "")),
+                     "side": "BUY", "gap": p.get("gap"), "price": p.get("price"),
+                     "qty_target": qty, "qty_placed": qty,
+                     "truncated": False, "defer_reason": None,
+                     "status": p.get("status"), "filled_qty": filled,
+                     "filled_price": p.get("filled_price"),
+                     "fee_est": round(float(filled or qty) * float(eff_px or 0) * _FEE_BUY, 2),
+                     "message": p.get("message") or "",
+                     "order_id": p.get("order_id"),
+                     "qty_remaining": int(p.get("qty_remaining") or max(0, qty - filled)),
+                     # ★ 留痕字段：第几轮补的、顶了谁的额度
+                     "round": rn, "shift_from": shift})
+
+    buys = [b for b in (fills.get("buys") or []) if int(b.get("round") or 0) != rn]
+    buys.extend(recs)
+    fills["buys"] = buys
+
+    rounds = [r for r in (fills.get("backfill_rounds") or []) if int(r.get("round") or 0) != rn]
+    _cr = (round_res or {}).get("cancel") or {}
+    rounds.append({"round": rn,
+                   "cancel": {"released": _cr.get("released") or [],
+                              "unconfirmed": _cr.get("unconfirmed") or [],
+                              "failed": _cr.get("failed") or [],
+                              "race_filled": _cr.get("filled") or []},
+                   "cash_budget": (round_res or {}).get("cash_budget"),
+                   "shift_from": shift,
+                   "placed": [{"code": r["code"], "qty": r["qty_placed"], "status": r["status"]}
+                              for r in recs],
+                   "skipped": (round_res or {}).get("skipped") or [],
+                   "note": (round_res or {}).get("note") or ""})
+    rounds.sort(key=lambda r: int(r.get("round") or 0))
+    fills["backfill_rounds"] = rounds
+
+    # summary 全量重算（candidates/cash_before 是首轮现场，保留原值）
+    summary = dict(fills.get("summary") or {})
+    summary.update(_buys_summary(buys))
+    summary["backfill_rounds_done"] = len(rounds)
+    fills["summary"] = summary
+
+    tmp = fp + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        f.write(json.dumps(fills, ensure_ascii=False, indent=2))
+    os.replace(tmp, fp)
+    fp_rep = os.path.join(book_dir, f"exec_report_{date}.json")
+    try:
+        with open(fp_rep, "w", encoding="utf-8") as f:
+            f.write(json.dumps({"date": str(date), "mode": fills.get("mode"),
+                                "summary": summary, "fills_file": fp},
+                               ensure_ascii=False, indent=2))
+    except Exception:
+        pass
+    log(f"[WS] 补单第{rn}轮留痕：fills 合并 buys+{len(recs)}（shift_from={shift or '-'}）⇒ "
+        f"buys_placed={summary.get('buys_placed')}")
+    return recs

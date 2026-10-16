@@ -104,7 +104,13 @@ def load_day_state(rt, date) -> bool:
         _STATE["pending"] = list(d.get("pending") or [])
         _STATE["spares"] = list(d.get("spares") or [])
         _STATE["done_codes"] = set(d.get("done_codes") or [])
-        _STATE["backfill"] = {int(k): v for k, v in (d.get("backfill") or {}).items()}
+        # ⚠️ 2026-10-16 修：**合并**而不是覆盖轮次标记。`on_bar` 在调 `try_backfill` **之前**
+        #    就把本轮标 True；而 `try_backfill` 开头的 `load_day_state` 若整体覆盖，
+        #    会把刚打的标记冲掉 ⇒ 同一轮在后续 bar 被**重复触发**（生产上 buy_done=True
+        #    恰好挡住，10-16 单测以 buy_done=False + 空 pending 复现了这条潜伏路径）。
+        _bf = _STATE.setdefault("backfill", {})
+        for k, v in (d.get("backfill") or {}).items():
+            _bf.setdefault(int(k), v)
         return True
     except Exception:
         return False
@@ -400,7 +406,12 @@ def try_backfill(rt, context, now, today, round_idx) -> int:
     _pend = list(_STATE.get("pending") or [])
     if not _pend:
         return 0                              # 首轮全成 / 无挂单 ⇒ 空转（不写日志刷屏）
-    _spares = list(_STATE.get("spares") or [])
+    # 候补按 done_codes 剪枝（2026-10-16 生产施工）：上一轮已顺移买过的票**不得再买**——
+    # 「顺移下一名」的语义是往候补列表**下游**走，不是撤了上一轮的挂单再原票追回
+    # （那是方案 A 的追价，owner 已否决）。done_codes 在首轮登记与每轮下单后更新。
+    _done0 = set(_STATE.get("done_codes") or ())
+    _spares = [s for s in (_STATE.get("spares") or []) if str(s.get("code")) not in _done0]
+    _STATE["spares"] = _spares
     _fills = _STATE.get("fills") or {}
     if not _spares:
         rt.log(f"[OSC] 补单第{int(round_idx) + 1}轮：有 {len(_pend)} 只未成交但**候补已耗尽** "
@@ -445,6 +456,32 @@ def try_backfill(rt, context, now, today, round_idx) -> int:
                          for p in _placed],
               "skipped": _res.get("skipped"), "note": _res.get("note"),
               "time": str(now)})
+
+    # ── 留痕 + 入账（2026-10-16 生产施工）────────────────────────────────
+    # ① 本轮结果并入 fills_{date}.json：buys 带 round/shift_from，撤单明细进 backfill_rounds；
+    # ② 顺移买入**并入持仓账本**——不并的话，顺移买到的票 14:50 止损/次日早盘冲高卖
+    #    根本看不见（卖侧真源 = positions.json）⇒ 孤儿持仓。纪律与首轮一致：
+    #    「挂单即入账 + 每次卖前按账户夹紧」（executor.reconcile_book）。
+    _shift_from = list(_cr.get("released") or [])
+    _gap_of = {str(s.get("code")): s.get("gap") for s in _spares}
+    _recs = None
+    try:
+        _recs = executor.merge_backfill_fills(
+            rt.book_dir, str(now.date()), int(round_idx) + 1, _res,
+            placed=[dict(p, gap=_gap_of.get(str(p.get("code")))) for p in _placed],
+            shift_from=_shift_from, log=print)
+    except Exception as _e:
+        rt.log(f"[OSC] ⚠️ 补单轮 fills 留痕失败（不阻断）: {_e}")
+    if _recs:
+        try:
+            _pc_all, _ma_all = prescreen.split_into_prev_close_ma20(
+                _STATE.get("candidates") or {})
+            _picks_like = [{"code": str(s.get("code")), "board": s.get("board", "")}
+                           for s in _spares]
+            executor.register_buys_to_book(rt.book_dir, str(now.date()), _recs,
+                                           _picks_like, _pc_all, _ma_all, print)
+        except Exception as _e:
+            rt.log(f"[OSC] ⚠️ 顺移买入入账失败（不阻断；卖前对账会夹紧）: {_e}")
 
     # 状态推进：撤单确认的不再挂账；本轮下单的票若仍未成交，进下一轮 pending
     _released = set(_cr.get("released") or [])

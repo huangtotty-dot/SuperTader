@@ -245,9 +245,11 @@ PARAMS = {
     # 事故：gap 最大的两只全天封死涨停，市价单排巨量封单后到 15:00 才过期，19.8 万冻结一天。
     # 方案：10:00 首单未成交 ⇒ 撤单 ⇒ 候补**时效复检**（现价≥昨收 且 ≥当日累计VWAP 且非封死）
     #       ⇒ 通过才顺移额度。依据 doc/solutions/2026-10-14_OSC买不进替补机制设计.md（推荐 B）。
-    # ⚠️ **默认 False**：owner 决策「回测对齐（exp26）证明 Sharpe 不被稀释后才上线」。
-    #    代码在、行为不变；回测过关再把这一行翻 True。
-    "osc_backfill_enabled": False,   # 总闸（回测过关前保持关）
+    # ✅ 2026-10-16 owner 拍板上线：回测过闸（Sharpe 0.384→0.518、年化 17.8%→24.0%，
+    #    8 点稳健性网格全过，doc/solutions/2026-10-16_替补机制B方案回测验证.md）⇒ 默认开启。
+    #    开关保留：翻 False 即回到"不撤不补"现状（行为与上线前逐位一致，单测钉住）。
+    # ⚠️ 翻此键需重启策略进程（.gszq 壳一次性加载 PARAMS）。
+    "osc_backfill_enabled": True,    # 总闸（owner 2026-10-16 拍板上线）
     "osc_backfill_rounds": 2,        # 最多补 N 轮
     "osc_backfill_first_hhmm": 1008,  # 首轮补单时点（10:08）
     "osc_backfill_interval_min": 6,   # 轮次间隔（分钟）
