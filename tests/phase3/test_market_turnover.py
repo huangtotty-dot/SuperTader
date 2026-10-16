@@ -217,6 +217,40 @@ class TestTurnoverHistory(unittest.TestCase):
         self.assertFalse(r["bse_included"], "北交所缺数据必须显式标记（否则会以为数值正常）")
         self.assertAlmostEqual(r["days"][0]["amount"], 100e8)
 
+    # ── 2026-10-16：图从"近 60 日"扩到"近 1 年"，北交所腿**够不到一年**（源硬上限）──
+    # 新浪 bj899050 的 30 分钟线 `datalen` 实测上限 1500 根 = **188 个交易日**，
+    # 再往上（2500/3000/5000）直接返反爬桩。缺的那段 amount 只含沪深两腿 ⇒
+    # 少算约 120 亿/日（~0.6%），图上只有 ~1 像素 —— **必须能看出来，不许静默**。
+
+    def test_北交所部分覆盖时逐日标注(self):
+        hs = {f"2026-07-0{d}": 100e8 for d in range(1, 6)}
+        bse = {"2026-07-04": 12e8, "2026-07-05": 12e8}          # 只覆盖最后两天
+        r = self.asm(hs, bse, 60, None, None, datetime(2026, 7, 6, 16, 0))
+        d = r["days"]
+        self.assertEqual([x["bse_missing"] for x in d], [True, True, True, False, False])
+        self.assertEqual(r["bse_days"], 2)
+        self.assertEqual(r["bse_from"], "2026-07-04")
+        self.assertAlmostEqual(d[0]["amount"], 100e8, msg="缺腿那几天就只有沪深两腿")
+        self.assertAlmostEqual(d[3]["amount"], 112e8)
+
+    def test_北交所整腿不可得时不逐日报缺(self):
+        """整腿都取不到时由 `bse_included=False` 承担说明，不必逐日刷同一句。"""
+        r = self.asm({f"2026-07-0{d}": 100e8 for d in range(1, 4)}, {}, 60, None, None,
+                     datetime(2026, 7, 4, 16, 0))
+        self.assertFalse(r["bse_included"])
+        self.assertFalse(any(x["bse_missing"] for x in r["days"]))
+        self.assertEqual(r["bse_days"], 0)
+        self.assertIsNone(r["bse_from"])
+
+    def test_一年窗口能取满250根(self):
+        """「近 1 年」= 250 个交易日：源给足时应取满、升序、且末根最新。"""
+        hs = {f"D{i:04d}": 1e12 for i in range(310)}
+        r = self.asm(hs, {}, 250, None, None, datetime(2026, 10, 16, 16, 0))
+        ds = [x["date"] for x in r["days"]]
+        self.assertEqual(len(ds), 250)
+        self.assertEqual(ds, sorted(ds))
+        self.assertEqual(ds[-1], "D0309")
+
     def test_环比前一交易日_首日为None(self):
         hs = {"2026-07-01": 100e8, "2026-07-02": 150e8, "2026-07-03": 120e8}
         r = self.asm(hs, {}, 60, None, None, datetime(2026, 7, 4, 16, 0))

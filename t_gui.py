@@ -1818,8 +1818,17 @@ class Api:
             r["delta_pct"] = ((r["amount"] / prev - 1.0) * 100.0) if prev else None
             r["in_progress"] = bool(in_progress and i == len(rows) - 1)
             r["bse"] = float(bse.get(r["date"], 0.0))
+            # 2026-10-16（owner 要「近 1 年」）：北交所腿**够不到一年**，必须逐日如实标注。
+            # 源 = 新浪 bj899050 **30 分钟**线，`datalen` 硬上限 1500 根 = **188 个交易日**
+            # （实测再往上（2500/3000/5000）直接返反爬桩 "新浪指数K线响应异常"）。
+            # 缺的那段 `amount` 只有沪深两腿 ⇒ 比真实值**少约 120 亿/日（~0.6%）**。
+            # ⚠️ 0.6% 在图上只有 ~1 像素，**静默**过去就会被当成"那阵子缩量" ⇒ 必须能看出来。
+            r["bse_missing"] = bool(bse) and (r["date"] not in bse)
         return {"available": True, "days": rows, "in_progress": in_progress,
-                "bse_included": bool(bse), "legs": ["sh000001", "sz399106", "bj899050"]}
+                "bse_included": bool(bse),
+                # 北交所腿的覆盖区间（前端据此说明"哪一段少算了北交所"）
+                "bse_days": len(bse), "bse_from": (min(bse) if bse else None),
+                "legs": ["sh000001", "sz399106", "bj899050"]}
 
     # ---------- 主要指数概览（2026-09-28：GUI_INDEX_BOARD 单一真源 + 掘金主源） ----------
     # 2026-10-10: 原 `_bounded(fn, timeout, default)`（每调用新建 max_workers=1 池 + 超时

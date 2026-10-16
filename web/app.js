@@ -1160,7 +1160,11 @@ async function drawTurnoverHist() {
   if (!window.echarts) { _turnoverFail("ECharts 未加载"); return; }
   let d = null;
   try {
-    d = await apiCall("load_turnover_history", 60);
+    // 2026-10-16 owner：「要紧密，这样可以显示更多」+「增加到一年」⇒ 250 个交易日 ≈ 1 年。
+    // ⚠️ 后端**北交所腿只够 188 个交易日**（新浪 30min datalen 硬上限 1500 根），
+    //    更早的日子 amount 只有沪深两腿、少算约 120 亿/日（~0.6%）⇒ 由后端逐日标
+    //    `bse_missing`，图上必须**看得出来**（图例下方那条提示），不许静默。
+    d = await apiCall("load_turnover_history", 250);
   } catch (e) {
     // 最常见：后端进程还是旧代码（没有 load_turnover_history 这个接口）⇒ 必须重启 t_gui.py
     _turnoverFail(`接口调用失败（${e && e.message ? e.message : e}）· 若刚改过 t_gui.py 请重启它`);
@@ -1196,6 +1200,25 @@ async function drawTurnoverHist() {
         : null);                                   // 前 4 根凑不满窗口 → null，不画半截均线
     }
   }
+  // ── 北交所腿的覆盖披露（2026-10-16）──────────────────────────────
+  // 为什么必须显示：北交所源（新浪 bj899050 30min）**硬上限 188 个交易日**，而图要给一年。
+  // 缺的那段 amount 只有沪深两腿 ⇒ 少约 120 亿/日（~0.6%）。0.6% 在图上只有 ~1 像素，
+  // **静默**过去就会被读成"那阵子缩量" —— 本仓最忌讳的就是这种"看不出是缺数据"。
+  // ⚠️ 必须在下面的 `sig` 早返回**之前**设置：否则签名没变时早返回，提示会是空的。
+  {
+    const noteEl = document.getElementById("turnoverBseNote");
+    if (noteEl) {
+      const miss = days.filter(x => x.bse_missing).length;
+      if (!d.bse_included) {
+        noteEl.innerHTML = `　<span style="color:#d29922">⚠ 北交所腿不可得（该段仅沪深两市）</span>`;
+      } else if (miss > 0) {
+        noteEl.innerHTML = `　<span style="color:#d29922" title="北交所源=新浪 bj899050 30分钟线，datalen 硬上限 1500 根 = 188 个交易日；再往上取会返反爬桩。缺的这段成交额只含沪深两市。">⚠ 最早 ${miss} 日缺北交所（源上限 188 日）· 那几日少算约 120 亿/日（~0.6%）</span>`;
+      } else {
+        noteEl.innerHTML = "";
+      }
+    }
+  }
+
   // 签名含**容器宽度**：面板隐藏时首次渲染拿到 0 宽，切到该 tab 后宽度变化必须触发重画，
   // 否则会永远停在 0 宽的"空图"上。宽度变化 = 需要重画。
   // 签名带 MA5：均线只由**已完成日**决定（盘中恒定），在这里带上是为防"历史某日被修正"时漏重画。
@@ -1259,6 +1282,8 @@ async function drawTurnoverHist() {
         const dt = x.delta_pct == null ? "—" : `${x.delta_pct >= 0 ? "+" : ""}${x.delta_pct.toFixed(2)}%`;
         let s = `${x.date}${x.in_progress ? "（进行中）" : ""}<br>`
           + `全市场 ${fmtAmount(x.amount)}<br>环比前一交易日 ${dt}`;
+        // 该日北交所腿缺失 ⇒ 逐日点名（否则这天的柱子会看起来"缩量"，其实是少了一腿）
+        if (x.bse_missing) s += `<br><span style="color:#d29922">⚠ 该日缺北交所（少算约 120 亿）</span>`;
         const m = ma5[ps[0].dataIndex];
         if (m != null) {
           s += `<br><span style="color:${TURNOVER_MA5}">${TURNOVER_MA5_N}日均量</span> ${m.toFixed(0)}亿`;
@@ -1275,7 +1300,13 @@ async function drawTurnoverHist() {
     },
     xAxis: {
       type: "category", data: days.map(x => x.date.slice(5)),
-      axisLabel: { fontSize: 9, interval: 9, color: "#8b949e" },
+      // 日期标签数**随根数自适应**（2026-10-16）：写死 interval:9 是按 60 根调的，
+      // 换成 250 根后只显示 6 个标签、还挤在左侧。目标 ≈12 个标签 ⇒ interval = ceil(n/12)-1。
+      // （ECharts 语义：interval=n 表示每隔 n 个类目显示一个 ⇒ 显示数 ≈ n_cat/(n+1)。）
+      axisLabel: {
+        fontSize: 9, color: "#8b949e",
+        interval: Math.max(0, Math.ceil(days.length / 12) - 1),
+      },
       axisTick: { show: false }, axisLine: { lineStyle: { color: "rgba(139,148,158,.3)" } },
     },
     yAxis: {
@@ -1287,7 +1318,12 @@ async function drawTurnoverHist() {
       splitLine: { lineStyle: { color: "rgba(139,148,158,.15)" } },
     },
     series: [
-      { type: "bar", data, barMaxWidth: 12 },
+      {
+        // 2026-10-16 owner：「柱之间要紧密，这样可以显示更多」⇒ `barCategoryGap: "0%"`（默认 20%）。
+        // 250 根下类目宽 ≈6px，紧密后每根都画得出来、不留空档。
+        // `barMaxWidth` 保留：它只在**类目很宽**（根数少/面板超宽）时生效，防柱子胖成色块。
+        type: "bar", data, barMaxWidth: 12, barCategoryGap: "0%",
+      },
       {
         // 5 日均量线。**共用同一个 y 轴（亿元）**——不是双轴图（anti-pattern 明令禁止双 y 轴；
         // 两者单位相同，本就不需要第二条轴）。
@@ -1558,7 +1594,7 @@ function renderLive(live, isToday) {
   el.innerHTML = `
     <div class="card">
       <div class="card-title">盘中状态
-        <span class="cell-dim" style="font-weight:normal;font-size:11px">上：近60日全市场成交额 · 下：个股趋势（intraday_state.json · 10s 刷新）</span>
+        <span class="cell-dim" style="font-weight:normal;font-size:11px">上：近1年全市场成交额 · 下：个股趋势（intraday_state.json · 10s 刷新）</span>
       </div>
       <div id="turnoverHistSlot"></div>
       <div class="cell-dim" style="font-size:10px;margin:-2px 0 8px">
@@ -1566,6 +1602,7 @@ function renderLive(live, isToday) {
         <span style="color:${TURNOVER_DOWN};margin-left:8px">■</span> 缩量
         <span style="color:${TURNOVER_LIVE};margin-left:8px">■</span> 今日进行中（不判放缩）
         <span style="color:${TURNOVER_MA5};margin-left:8px">━</span> ${TURNOVER_MA5_N}日均量（不含今日）
+        <span id="turnoverBseNote"></span>
       </div>
       ${trendCards || '<div class="empty">无趋势状态</div>'}
     </div>
@@ -1573,7 +1610,7 @@ function renderLive(live, isToday) {
 
   // 把（上面摘下来的）图节点放回占位处。首次渲染没有旧节点 ⇒ 就地新建一个同 id 的容器。
   _putBackNode("turnoverHistSlot", _keepChart, '<div id="turnoverHistChart" style="height:130px"></div>');
-  // 近60日成交额柱状图，容器节点已复用 ⇒ 同节点走原地 setOption，不再每次 dispose+init
+  // 近1年成交额柱状图，容器节点已复用 ⇒ 同节点走原地 setOption，不再每次 dispose+init
   drawTurnoverHist();
 
   // 🧭 市场风向标已**搬出** #liveBody（独立 section，自带调度）—— 原来长在这里，
