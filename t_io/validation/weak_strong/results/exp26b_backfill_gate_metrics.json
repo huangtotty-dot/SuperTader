@@ -1,0 +1,214 @@
+{
+  "window": [
+    "2026-04-14",
+    "2026-09-24"
+  ],
+  "n_days": 114,
+  "baseline_point": {
+    "seal_tol": 0.001,
+    "entry_proxy": "conservative_1030"
+  },
+  "fill_rate": {
+    "intended_legs": 280,
+    "status_quo_filled": 220,
+    "status_quo_rate": 0.7857142857142857,
+    "backfill_filled": 269,
+    "backfill_rate": 0.9607142857142857,
+    "uplift_legs": 49,
+    "unfilled_even_with_backfill": 11,
+    "note": "顺移后仍缺口的腿 = 当日候补池耗尽（候选深度不足），非机制失败"
+  },
+  "freeze": {
+    "sealed_legs_total": 60,
+    "days_with_sealed": 41,
+    "max_sealed_in_one_day": 4,
+    "single_budget": 100000.0,
+    "status_quo": {
+      "freeze_minutes_per_leg": 300,
+      "max_daily_frozen_nominal": 400000.0,
+      "total_capital_time_yuan_min": 1800000000.0
+    },
+    "backfill_B": {
+      "freeze_minutes_per_leg": 8,
+      "max_daily_frozen_nominal": 400000.0,
+      "total_capital_time_yuan_min": 48000000.0,
+      "note": "名义峰值相同（10:00~10:08 仍冻），但 10:08 撤单释放；顺移单只打给非封死候选，假设秒成，不再产生新冻结"
+    },
+    "capital_time_reduction": 0.9733333333333334
+  },
+  "gap_bucket_sealed": {
+    "gap<5%": {
+      "n": 83,
+      "sealed": 0,
+      "sealed_rate": 0.0
+    },
+    "gap 5~8%": {
+      "n": 65,
+      "sealed": 0,
+      "sealed_rate": 0.0
+    },
+    "gap>=8%": {
+      "n": 132,
+      "sealed": 60,
+      "sealed_rate": 0.45454545454545453
+    }
+  },
+  "gate_primary_C_vs_B": {
+    "sharpe_base": 0.3838253029384439,
+    "sharpe_c": 0.5181508955908529,
+    "delta_sharpe": 0.134325592652409,
+    "delta_sharpe_rel": 0.34996544423740483,
+    "ann_base": 0.17821010732893372,
+    "ann_c": 0.24036378602947628,
+    "delta_ann": 0.06215367870054256,
+    "mdd_base": -0.3782958531344359,
+    "mdd_c": -0.36314627852622783,
+    "pass": true
+  },
+  "gate_reference_C_vs_A_fantasy": {
+    "sharpe_base": 0.6201780025501825,
+    "sharpe_c": 0.5181508955908529,
+    "delta_sharpe": -0.1020271069593296,
+    "delta_sharpe_rel": -0.1645126182157258,
+    "ann_base": 0.28637456422893837,
+    "ann_c": 0.24036378602947628,
+    "delta_ann": -0.04601077819946209,
+    "mdd_base": -0.32196460746369915,
+    "mdd_c": -0.36314627852622783,
+    "pass": false,
+    "note": "A 是幻想臂（假设买不进的也按 10:00 收盘成交），仅作上限参照，不驱动闸门"
+  },
+  "robustness_grid_C_vs_B": [
+    {
+      "sharpe_base": 0.3470411434756083,
+      "sharpe_c": 0.43830236559171853,
+      "delta_sharpe": 0.09126122211611021,
+      "delta_sharpe_rel": 0.2629694600534431,
+      "ann_base": 0.15953128986486376,
+      "ann_c": 0.20084035642379616,
+      "delta_ann": 0.041309066558932406,
+      "mdd_base": -0.37791835275945906,
+      "mdd_c": -0.36737403358529264,
+      "pass": true,
+      "seal_tol": 0.0,
+      "entry_proxy": "conservative_1030",
+      "sealed_legs": 55
+    },
+    {
+      "sharpe_base": 0.3470411434756083,
+      "sharpe_c": 0.407797176621798,
+      "delta_sharpe": 0.06075603314618966,
+      "delta_sharpe_rel": 0.17506867496377956,
+      "ann_base": 0.15953128986486376,
+      "ann_c": 0.1861287585559488,
+      "delta_ann": 0.026597468691085036,
+      "mdd_base": -0.37791835275945906,
+      "mdd_c": -0.3710044629026271,
+      "pass": true,
+      "seal_tol": 0.0,
+      "entry_proxy": "optimistic_1000",
+      "sealed_legs": 55
+    },
+    {
+      "sharpe_base": 0.3838253029384439,
+      "sharpe_c": 0.5181508955908529,
+      "delta_sharpe": 0.134325592652409,
+      "delta_sharpe_rel": 0.34996544423740483,
+      "ann_base": 0.17821010732893372,
+      "ann_c": 0.24036378602947628,
+      "delta_ann": 0.06215367870054256,
+      "mdd_base": -0.3782958531344359,
+      "mdd_c": -0.36314627852622783,
+      "pass": true,
+      "seal_tol": 0.001,
+      "entry_proxy": "conservative_1030",
+      "sealed_legs": 60
+    },
+    {
+      "sharpe_base": 0.3838253029384439,
+      "sharpe_c": 0.49013977317016105,
+      "delta_sharpe": 0.10631447023171714,
+      "delta_sharpe_rel": 0.27698661192424656,
+      "ann_base": 0.17821010732893372,
+      "ann_c": 0.22664041748097552,
+      "delta_ann": 0.0484303101520418,
+      "mdd_base": -0.3782958531344359,
+      "mdd_c": -0.36523761263602006,
+      "pass": true,
+      "seal_tol": 0.001,
+      "entry_proxy": "optimistic_1000",
+      "sealed_legs": 60
+    },
+    {
+      "sharpe_base": 0.42405404739448843,
+      "sharpe_c": 0.5453404694659376,
+      "delta_sharpe": 0.12128642207144918,
+      "delta_sharpe_rel": 0.2860164236532307,
+      "ann_base": 0.19740428926237064,
+      "ann_c": 0.2534077779784518,
+      "delta_ann": 0.056003488716081185,
+      "mdd_base": -0.3733975494433702,
+      "mdd_c": -0.3599120362035624,
+      "pass": true,
+      "seal_tol": 0.003,
+      "entry_proxy": "conservative_1030",
+      "sealed_legs": 61
+    },
+    {
+      "sharpe_base": 0.42405404739448843,
+      "sharpe_c": 0.5146956734327714,
+      "delta_sharpe": 0.09064162603828302,
+      "delta_sharpe_rel": 0.21375017310932784,
+      "ann_base": 0.19740428926237064,
+      "ann_c": 0.23839007690484726,
+      "delta_ann": 0.04098578764247662,
+      "mdd_base": -0.3733975494433702,
+      "mdd_c": -0.3623061110962904,
+      "pass": true,
+      "seal_tol": 0.003,
+      "entry_proxy": "optimistic_1000",
+      "sealed_legs": 61
+    },
+    {
+      "sharpe_base": 0.42405404739448843,
+      "sharpe_c": 0.5453404694659376,
+      "delta_sharpe": 0.12128642207144918,
+      "delta_sharpe_rel": 0.2860164236532307,
+      "ann_base": 0.19740428926237064,
+      "ann_c": 0.2534077779784518,
+      "delta_ann": 0.056003488716081185,
+      "mdd_base": -0.3733975494433702,
+      "mdd_c": -0.3599120362035624,
+      "pass": true,
+      "seal_tol": 0.005,
+      "entry_proxy": "conservative_1030",
+      "sealed_legs": 61
+    },
+    {
+      "sharpe_base": 0.42405404739448843,
+      "sharpe_c": 0.5146956734327714,
+      "delta_sharpe": 0.09064162603828302,
+      "delta_sharpe_rel": 0.21375017310932784,
+      "ann_base": 0.19740428926237064,
+      "ann_c": 0.23839007690484726,
+      "delta_ann": 0.04098578764247662,
+      "mdd_base": -0.3733975494433702,
+      "mdd_c": -0.3623061110962904,
+      "pass": true,
+      "seal_tol": 0.005,
+      "entry_proxy": "optimistic_1000",
+      "sealed_legs": 61
+    }
+  ],
+  "robustness_summary": {
+    "all_pass": true,
+    "min_delta_sharpe_rel": 0.17506867496377956,
+    "max_delta_sharpe_rel": 0.34996544423740483
+  },
+  "known_approximations": [
+    "可成交性=30min 棒贴涨停（方案原文要 5/15min，面板只有 30min ⇒ 对顺移偏保守）",
+    "顺移入场价=10:30 收盘代理 10:08~10:14（偏晚 ⇒ 对 C 偏保守）",
+    "稳健性网格含 10:00 收盘乐观端，C vs B 结论在两个端点间夹逼",
+    "非封死候选假设市价单秒成（10-14 凌玮科技实证：市价单 10:00:02 成交）"
+  ]
+}
