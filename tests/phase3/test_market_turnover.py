@@ -387,5 +387,81 @@ class TestTurnoverHistoryCacheKey(unittest.TestCase):
         self.assertEqual(len(got["days"]), 250)
 
 
+class TestHsLegValidation(unittest.TestCase):
+    """⚠️ 沪深两腿**必须都是"真成交额"**才可信（2026-10-16 实盘缺陷）。
+
+    症状（owner 截图）：图上一半高、tooltip 环比 **+99.14%**、5 日均量 9108 亿
+    （真值 1.65 万亿）—— 而「两市成交额」卡片是**对的** 1.57 万亿。
+    根因：`facade.index_daily` 回退腾讯时，腾讯 ifzq 的指数日线**只有 6 列没有成交额**，
+    `tencent_provider` 用 `volume` 顶替 `amount`（`:445` / `_idx_ensure_cols`，
+    那条为 ratio 口径刻意保留）⇒ 该腿 "成交额" 只有 ~1e8（成交量级），
+    与另一腿真值 ~1e11 **相加 = 当天腰斩**，且完全静默。
+    """
+
+    @staticmethod
+    def frames(sh_amount, sz_amount, day="2026-10-15"):
+        def one(a):
+            return pd.DataFrame([{"date": day, "open": 1.0, "high": 1.0, "low": 1.0,
+                                  "close": 1.0, "volume": 1.0, "amount": a}])
+        return [one(sh_amount), one(sz_amount)]
+
+    def test_both_legs_good_sums(self):
+        good, bad = t_gui.Api._hs_daily_from_frames(self.frames(7.744e11, 8.586e11))
+        self.assertAlmostEqual(good["2026-10-15"], 1.633e12, delta=1e9)
+        self.assertEqual(bad, [])
+
+    def test_degraded_leg_rejects_the_whole_day(self):
+        """一腿是成交量级（腾讯回退）⇒ **整条拒收**，绝不吐一个腰斩的值。"""
+        good, bad = t_gui.Api._hs_daily_from_frames(self.frames(7.744e11, 5.10e8))
+        self.assertEqual(good, {}, "半截值必须被拒 —— 它就是 owner 截图里那个 +99% 的来源")
+        self.assertEqual(bad, ["2026-10-15"])
+
+    def test_single_leg_missing_date_rejected(self):
+        """某天只有一条腿有数据（另一腿未覆盖）⇒ 同样拒收，不拿单腿充总数。"""
+        sh = pd.DataFrame([{"date": "2026-10-15", "amount": 7.744e11}])
+        sz = pd.DataFrame([{"date": "2026-10-16", "amount": 8.229e11}])
+        good, bad = t_gui.Api._hs_daily_from_frames([sh, sz])
+        self.assertEqual(good, {})
+        self.assertEqual(bad, ["2026-10-15", "2026-10-16"])
+
+    def test_threshold_is_about_magnitude_not_source_label(self):
+        """判据是**量级**（真成交额 ≥1e10 元），不是 source 标签 —— 标签分不出"缓存里的旧值"。"""
+        good, _ = t_gui.Api._hs_daily_from_frames(self.frames(1.0e10, 1.0e10))
+        self.assertIn("2026-10-15", good, "正好卡在阈值上的应算可信")
+        good2, bad2 = t_gui.Api._hs_daily_from_frames(self.frames(9.9e9, 9.9e9))
+        self.assertEqual(good2, {})
+        self.assertEqual(bad2, ["2026-10-15"])
+
+
+class TestHsFreezeCache(unittest.TestCase):
+    """历史成交额是**事实** ⇒ 算对一次就冻结；降级的计算**不许覆盖**。"""
+
+    def setUp(self):
+        import tempfile
+        from pathlib import Path
+        self._fp = t_gui._HS_DAILY_CACHE_FP
+        t_gui._HS_DAILY_CACHE_FP = Path(tempfile.mkdtemp()) / "hs.json"
+
+    def tearDown(self):
+        t_gui._HS_DAILY_CACHE_FP = self._fp
+
+    def test_round_trip(self):
+        t_gui._save_hs_daily_cache({"2026-10-15": 1.6461e12, "2026-10-16": 1.5692e12})
+        got = t_gui._load_hs_daily_cache()
+        self.assertAlmostEqual(got["2026-10-15"], 1.6461e12, delta=1e8)
+        self.assertEqual(len(got), 2)
+
+    def test_missing_file_is_empty_not_raise(self):
+        self.assertEqual(t_gui._load_hs_daily_cache(), {})
+
+    def test_corrupt_file_is_empty_not_raise(self):
+        t_gui._HS_DAILY_CACHE_FP.write_text("{ not json", encoding="utf-8")
+        self.assertEqual(t_gui._load_hs_daily_cache(), {})
+
+    def test_capped_at_400_days(self):
+        t_gui._save_hs_daily_cache({f"D{i:04d}": 1e12 for i in range(500)})
+        self.assertEqual(len(t_gui._load_hs_daily_cache()), 400, "别无限长，够 1 年窗口 + 裕度")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

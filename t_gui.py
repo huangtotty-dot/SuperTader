@@ -1016,6 +1016,44 @@ def _snapshot_write(key, payload):
         pass
 
 
+# ── 沪深逐日成交额「冻结」缓存（2026-10-16）────────────────────────────────
+# **为什么需要**：历史日成交额是**事实**，算对一次就永远对；而算它的两条腿会被
+# `facade.index_daily` 的**降级**污染 —— 腾讯 ifzq 的指数日线**只有 6 列、没有成交额**，
+# `tencent_provider` 在缺字段时**用 volume 顶替 amount**（`:445` 与 `_idx_ensure_cols`，
+# 那条为 ratio 口径刻意保留，不能动）⇒ 一旦某腿回退腾讯，该腿 amount 只剩 ~1e8~1e9，
+# 与另一腿（GM 真值 ~1e11）相加 = **当天腰斩**且完全静默（owner 2026-10-16 截图：
+# 图上一半高、环比 +99%、5 日均量 9108 亿 —— 而真值 1.65 万亿）。
+# ⇒ 只把「两腿都可信」的值写进本缓存，**降级的计算绝不覆盖已冻结的好值**。
+_HS_DAILY_CACHE_FP = BASE / "t_io" / "state" / "turnover_hs_daily.json"
+_HS_CACHE_LOCK = threading.Lock()
+
+
+def _load_hs_daily_cache() -> dict:
+    """{日期: 沪深合计成交额(元)}。文件坏/缺 ⇒ {}（fail-open，绝不抛）。"""
+    try:
+        d = json.loads(_HS_DAILY_CACHE_FP.read_text(encoding="utf-8"))
+        rows = d.get("days") if isinstance(d, dict) else None
+        return {str(k): float(v) for k, v in (rows or {}).items()}
+    except Exception:
+        return {}
+
+
+def _save_hs_daily_cache(days: dict) -> None:
+    """原子写 + 截到最近 400 日（够 1 年窗口 + 裕度，别无限长）。失败静默。"""
+    try:
+        _items = sorted(days.items())[-400:]
+        rec = {"updated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+               "note": "沪深两市逐日成交额（元）。**只写入两腿都可信的值**，降级计算不覆盖。",
+               "days": dict(_items)}
+        with _HS_CACHE_LOCK:
+            _HS_DAILY_CACHE_FP.parent.mkdir(parents=True, exist_ok=True)
+            tmp = _HS_DAILY_CACHE_FP.with_suffix(".tmp")
+            tmp.write_text(json.dumps(rec, ensure_ascii=False), encoding="utf-8")
+            tmp.replace(_HS_DAILY_CACHE_FP)
+    except Exception:
+        pass
+
+
 def _kick_overview_refresh(key, fn):
     """按 key **单飞**起一次后台刷新；返回 (本次是否由我起, Event)。
 
@@ -1791,15 +1829,24 @@ class Api:
         today = datetime.now().strftime("%Y-%m-%d")
         prov = get_provider()
 
-        hs = {}
+        # ── 沪深两腿：**必须两腿都是"真成交额"才可信**（2026-10-16 修，见 `_HS_DAILY_CACHE_FP` 注释）
+        # 判据用**量级**而不是 source 标签：真·指数日成交额必 ≥ 1e10 元；腾讯回退塞进来的
+        # volume 只有 ~1e8~1e9。低量级那一腿记为不可信，**当天整条不进 hs**（宁缺勿假）。
+        _frames = []
         for sym in ("sh000001", "sz399106"):
             df = prov.index_daily(sym, days=int(days) + 60, end_date=today)
             if df is None or df.empty:
                 return {"available": False, "error": f"指数日线不可得({sym})",
                         "degraded": ["index_daily"]}
-            for _, r in df.iterrows():
-                d = str(r["date"])
-                hs[d] = hs.get(d, 0.0) + float(r.get("amount") or 0.0)
+            _frames.append(df)
+        _good, _bad = Api._hs_daily_from_frames(_frames)
+
+        _cache = _load_hs_daily_cache()
+        _new = {d: v for d, v in _good.items() if _cache.get(d) != v}
+        if _new:
+            _cache.update(_new)
+            _save_hs_daily_cache(_cache)
+        hs = dict(_cache)                            # 用**冻结**值（含本次补上的好值）
         if not hs:
             return {"available": False, "error": "沪深日线为空", "degraded": ["index_daily"]}
 
@@ -1814,10 +1861,37 @@ class Api:
             sm["_d"] = sm["time"].astype(str).str[:10]
             bse = sm.groupby("_d")["amount"].sum().to_dict()
 
-        return Api._assemble_turnover_history(hs, bse, days, live_day, live_amount, datetime.now())
+        return Api._assemble_turnover_history(hs, bse, days, live_day, live_amount,
+                                             datetime.now(), _bad)
 
 
-    def _assemble_turnover_history(hs, bse, days, live_day, live_amount, now):
+    def _hs_daily_from_frames(frames, min_leg_amt=1e10):
+        """两条腿（沪/深）的日线帧 → `({date: 沪深合计}, [不可信日期])`。**纯函数，可离线单测**。
+
+        ⚠️ **为什么要有它**（2026-10-16 实盘缺陷）：`facade.index_daily` 会回退到腾讯，而腾讯
+        ifzq 的指数日线**只有 6 列、没有成交额** ⇒ `tencent_provider` 用 `volume` 顶替 `amount`
+        （那条为 ratio 口径刻意保留）。于是某腿的"成交额"只有 ~1e8~1e9（成交量级），
+        与另一腿的真值 ~1e11 **相加 = 当天腰斩**，且完全静默 —— owner 当场截图：图上一半高、
+        环比 +99%、5 日均量 9108 亿（真值 1.65 万亿）。
+
+        判据用**量级**而不是 source 标签：真·指数日成交额必 ≥ `min_leg_amt`(1e10 元)。
+
+        **两腿不全可信的日子整条不进结果**（宁缺勿假 —— 宁可少一根柱，不画半截的柱）。
+        调用方再用「逐日冻结缓存」把算对过的历史值补回来（历史成交额是事实，算对一次就永远对）。
+        """
+        legs = {}
+        for df in frames:
+            try:
+                for _, r in df.iterrows():
+                    a = float(r.get("amount") or 0.0)
+                    legs.setdefault(str(r["date"]), []).append(a if a >= min_leg_amt else None)
+            except Exception:
+                continue
+        good = {d: sum(v) for d, v in legs.items() if len(v) == 2 and all(x is not None for x in v)}
+        bad = sorted(d for d in legs if d not in good)
+        return good, bad
+
+    def _assemble_turnover_history(hs, bse, days, live_day, live_amount, now, hs_bad=None):
         """纯计算（无 IO，便于离线单测）：沪深/北交所按日成交额 + 实时值 → 柱状图数据。
 
         · 交易日集合 = 沪深日线日期 ∪ {实时交易日}（盘中 GM 日线不含当日 ⇒ 必须补这一根）
@@ -1844,6 +1918,9 @@ class Api:
             # ⚠️ 0.6% 在图上只有 ~1 像素，**静默**过去就会被当成"那阵子缩量" ⇒ 必须能看出来。
             r["bse_missing"] = bool(bse) and (r["date"] not in bse)
         return {"available": True, "days": rows, "in_progress": in_progress,
+                # ⚠️ 2026-10-16：某日沪深两腿不全可信（腾讯回退塞 volume）⇒ 该日**不进 hs**、
+                # 自然从序列里消失（宁缺勿假，不画半截的柱）。这里只报个数供前端提示。
+                "hs_leg_unreliable_days": len(hs_bad or []),
                 "bse_included": bool(bse),
                 # 北交所腿的覆盖区间（前端据此说明"哪一段少算了北交所"）
                 "bse_days": len(bse), "bse_from": (min(bse) if bse else None),

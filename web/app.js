@@ -1208,14 +1208,20 @@ async function drawTurnoverHist() {
   {
     const noteEl = document.getElementById("turnoverBseNote");
     if (noteEl) {
+      const _notes = [];
       const miss = days.filter(x => x.bse_missing).length;
       if (!d.bse_included) {
-        noteEl.innerHTML = `　<span style="color:#d29922">⚠ 北交所腿不可得（该段仅沪深两市）</span>`;
+        _notes.push(`<span style="color:#d29922">⚠ 北交所腿不可得（该段仅沪深两市）</span>`);
       } else if (miss > 0) {
-        noteEl.innerHTML = `　<span style="color:#d29922" title="北交所源=新浪 bj899050 30分钟线，datalen 硬上限 1500 根 = 188 个交易日；再往上取会返反爬桩。缺的这段成交额只含沪深两市。">⚠ 最早 ${miss} 日缺北交所（源上限 188 日）· 那几日少算约 120 亿/日（~0.6%）</span>`;
-      } else {
-        noteEl.innerHTML = "";
+        _notes.push(`<span style="color:#d29922" title="北交所源=新浪 bj899050 30分钟线，datalen 硬上限 1500 根 = 188 个交易日；再往上取会返反爬桩。缺的这段成交额只含沪深两市。">⚠ 最早 ${miss} 日缺北交所（源上限 188 日）· 那几日少算约 120 亿/日（~0.6%）</span>`);
       }
+      // 沪深两腿不可信的日子（2026-10-16）：腾讯回退时会把 volume 塞进 amount，量级差 ~1000 倍，
+      // 相加会让当天**腰斩**（owner 截图：图上一半高、环比 +99%）。后端已整根略去、不画半截柱，
+      // 并把算对过的历史值**冻结**起来 ⇒ 这里如实报个数。
+      if (d.hs_leg_unreliable_days > 0) {
+        _notes.push(`<span style="color:#d29922" title="沪深两腿里有一腿的量级像“成交量”而非“成交额”（腾讯 ifzq 指数日线没有成交额字段，回退时用 volume 顶替）⇒ 该日整根已略去。历史值一旦算对会被冻结，不再被降级计算覆盖。">⚠ ${d.hs_leg_unreliable_days} 日沪深数据不可信·已略去</span>`);
+      }
+      noteEl.innerHTML = _notes.length ? "　" + _notes.join("　") : "";
     }
   }
 
