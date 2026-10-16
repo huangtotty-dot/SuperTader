@@ -4535,7 +4535,7 @@ class Api:
             return HUNTER_RUN_STATE["result"]
         return {"available": False, "running": False, "date": date}
 
-    def _hunter_build_conformance(self, codes, date):
+    def _hunter_build_conformance(self, codes, date, report_progress=False):
         """计算各股建仓信号符合度（时机门控 GO：市场有方向/多头结构/回撤到位/金叉加分）。
 
         读 t_io/cache/daily_kline 日线缓存算特征（零网络；全池约 20s；未缓存跳过显示"—"）。
@@ -4544,7 +4544,15 @@ class Api:
         盘中点按钮即按当时实时 K 线算出建仓符合度。之所以敢放开：该缓存已由猎手本轮拉取
         **回写当日实时 bar**（见 market_data 的 merge_daily_cache 调用），零网络也能拿到实时价；
         此前不放开的后半段理由（缓存陈旧、GO 列是昨天的）已随回写一并消除。
-        返回 {code: {go, regime, met, conds:{t_*:bool}, reason}}。"""
+        返回 {code: {go, regime, met, conds:{t_*:bool}, reason}}。
+
+        ⚠️ **`report_progress=True` 只有猎手主流程（`_load_hunter_impl`）该传**：
+        进度写的是**进程内全局** `MARKET_PROGRESS`，而本函数另有两个调用方各带**自己的**码表 ——
+        `_beacon_enrich`（风向标：各板块龙头+中军，约 **264** 只）与 `_go_hist_compute`（GO 回算）。
+        它们一写，猎手进度条的 `total` 就变成对方的规模 ⇒ **面板显示"只有 200 多支"、
+        而池子其实是 1575**（owner 2026-10-16 报的就是这个：截图两次分别是 257 / 264，
+        换个时刻数字还会变，因为那是**风向标的码表**在写同一条进度）。
+        """
         result = {}
         try:
             import pandas as _pd
@@ -4569,7 +4577,9 @@ class Api:
                 pass
             _regime = regime_by_date.get(str(date), "range")
             for i, code in enumerate(codes):
-                if i % 50 == 0:
+                # ⚠️ 只有猎手主流程才写进度：另两个调用方（风向标/GO 回算）的码表与猎手无关，
+                #    写了就会把猎手进度条的 total 顶成它们的规模（owner 2026-10-16 报的"只有 200 多支"）。
+                if report_progress and i % 50 == 0:
                     try:
                         from modules.market_data import MARKET_PROGRESS as _MP
                         _MP.update({"done": i, "total": len(codes), "msg": f"计算建仓符合度 {i}/{len(codes)}"})
@@ -4859,7 +4869,7 @@ class Api:
                 pass
             _build_n = 0
             try:
-                build_conf = self._hunter_build_conformance(codes, date)
+                build_conf = self._hunter_build_conformance(codes, date, report_progress=True)
                 _build_n = len(build_conf or {})
                 if build_conf:
                     for cat, stocks in sector_stocks.items():
