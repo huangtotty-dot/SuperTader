@@ -37,6 +37,7 @@ Gateway 接口（鸭子类型，全部必需，poll_order 可选）::
 from __future__ import annotations
 
 import json
+import math
 import os
 import time
 from datetime import datetime
@@ -685,7 +686,8 @@ def run_buy_exec(gateway, date: str, prev_close: dict, ma20: dict, bars: dict,
                  board: dict | None = None, allowed_boards=None,
                  book_dir: str = BOOK_DIR_DEFAULT, params: dict | None = None,
                  dry_run: bool = False, sleep_fn=time.sleep, log=print,
-                 exclude_codes=None, code_committed=None, names: dict | None = None) -> dict:
+                 exclude_codes=None, code_committed=None, names: dict | None = None,
+                 prescreen_meta: dict | None = None) -> dict:
     """超跌跳空确认 10:00 买侧执行主流程。返回 fills dict（同时落盘）。
 
     fail-closed：决策核因缺数据/min_pool 不足返回空 picks ⇒ 当日不下单（不抛异常）。
@@ -715,6 +717,14 @@ def run_buy_exec(gateway, date: str, prev_close: dict, ma20: dict, bars: dict,
     from . import backfill as _bf
     spares = _bf.build_spares(_full.get("signals"), [p["code"] for p in _picks_raw],
                               _excl, bars=bars)
+    # 10:00 判定全貌 + 逐只原因落盘（2026-10-17）。**必须在这里**：`picks` 已过 exclude
+    # 过滤、`spares` 已建好，且位于 no-picks 早返回**之前** ⇒ 两条分支都写。
+    # 纯展示留痕：内部全兜底，写失败绝不影响下单（fail-closed 语义不在这里）。
+    decision_fp = _write_decision(date, mode, started, _full, picks, spares,
+                                  prev_close=prev_close, ma20=ma20, board=board,
+                                  names=names, book_dir=book_dir,
+                                  prescreen_meta=prescreen_meta,
+                                  note=("no_picks" if not picks else ""), log=log)
     if not picks:
         log(f"[WS] {date} 无超跌跳空确认候选（fail-closed，当日不下单） pool_n={len(prev_close)}")
         # 2026-10-13 修复：无候选日 cash_before 原先写死 0.0，会被误读成「现金查询失败」
@@ -789,6 +799,96 @@ def run_buy_exec(gateway, date: str, prev_close: dict, ma20: dict, bars: dict,
         except Exception as e:
             log(f"[WS] ⚠️ 买入入账失败（不阻断）: {e}")
     return fills
+
+
+def _san(x):
+    """NaN/inf → None（落盘安全：`json.dump` 默认把 NaN 写成非法 JSON 字面量）。"""
+    try:
+        v = float(x)
+    except (TypeError, ValueError):
+        return None
+    return v if math.isfinite(v) else None
+
+
+def _write_decision(date, mode, started, full, picks, spares, *,
+                    prev_close=None, ma20=None, board=None, names=None,
+                    book_dir=BOOK_DIR_DEFAULT, prescreen_meta=None,
+                    note: str = "", log=print) -> str | None:
+    """10:00 判定全貌 + **逐只原因** → `decision_{date}.json`（2026-10-17）。
+
+    为什么值得单独落盘：`_log_decision` 只把漏斗 + 最接近的 6 只打进控制台/日志，
+    逐只原因（`decision.evaluate` 的 `diag['failures']`）出过内存就没了 ⇒
+    GUI 无法回答「某只票为什么没被选上」。
+
+    ⚠️ **纯展示留痕，绝不抛**：整段兜底；写失败只记一行日志，不影响下单。
+    ⚠️ 原子写（tmp+replace）：GUI 可能正在读，普通写会让它读到半截 JSON。
+    ⚠️ 本文件记的是 **10:00 的决策**；后续补单轮不改写它（见 `merge_backfill_fills`）。
+    """
+    try:
+        d = (full or {}).get('diag') or {}
+        g = d.get('gates') or {}
+        _bd = board or {}
+        _nm = names or {}
+        _rank = {str(p.get('code')): i + 1 for i, p in enumerate(picks or [])}
+
+        rows = []
+        for p in (picks or []):
+            _c = str(p.get('code'))
+            rows.append({'code': _c, 'name': _nm.get(_c, ''), 'board': p.get('board', ''),
+                         'gap': _san(p.get('gap')), 'status': 'picked',
+                         'rank': _rank.get(_c), 'reason': 'ok'})
+        for s in (spares or []):
+            _c = str(s.get('code'))
+            rows.append({'code': _c, 'name': _nm.get(_c, ''), 'board': s.get('board', ''),
+                         'gap': _san(s.get('gap')), 'status': 'spare',
+                         'rank': None, 'reason': 'ok', 'price': _san(s.get('price'))})
+        for f in (d.get('failures') or []):
+            _c = str(f.get('code'))
+            rows.append({'code': _c, 'name': _nm.get(_c, ''),
+                         'board': f.get('board') or _bd.get(_c, ''),
+                         'gap': _san(f.get('gap')), 'status': 'failed',
+                         'rank': None, 'reason': f.get('reason'),
+                         'gates': f.get('gates'), 'low': _san(f.get('low')),
+                         'close': _san(f.get('close')), 'vwap': _san(f.get('vwap')),
+                         'prev_close': _san(f.get('prev_close')),
+                         'ma20': _san(f.get('ma20'))})
+        # gap 降序、None 垫底（None 与数字不可比 ⇒ 用 -inf 替）
+        rows.sort(key=lambda r: (-(r['gap'] if r['gap'] is not None else -1e9), r['code']))
+
+        payload = {
+            "date": str(date), "generated_at": started, "mode": mode,
+            "strategy": "oversold_gap_confirm", "note": note or "",
+            "premarket": ({"universe": (prescreen_meta or {}).get("universe", ""),
+                           "board_top_n": (prescreen_meta or {}).get("board_top_n")}
+                          if prescreen_meta else None),
+            "funnel": {"pool_n": int((full or {}).get('pool_n') or 0),
+                       "weak": g.get('weak'), "g1": g.get('g1'), "g2": g.get('g2'),
+                       "g3": g.get('g3'), "all": g.get('all'),
+                       "n_tradable": int((full or {}).get('n_tradable') or 0),
+                       "n_failures": d.get('n_failures')},
+            # ⚠️ 各关是**独立通过数**，不是"上一关的幸存者"（见 decision.evaluate 注释）
+            "reason_counts": d.get('reasons') or {},
+            "picks": [{"code": r['code'], "name": r['name'], "board": r['board'],
+                       "gap": r['gap'], "rank": r['rank'], "status": "picked",
+                       "reason": "ok"}
+                      for r in rows if r['status'] == 'picked'],
+            "spares": [{"code": r['code'], "gap": r['gap'], "board": r['board']}
+                       for r in rows if r['status'] == 'spare'],
+            "stocks": rows,
+        }
+        os.makedirs(book_dir, exist_ok=True)
+        fp = os.path.join(book_dir, "decision_%s.json" % str(date))
+        tmp = fp + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(payload, f, ensure_ascii=False, allow_nan=False)
+        os.replace(tmp, fp)
+        return fp
+    except Exception as e:                                        # noqa: BLE001
+        try:
+            log(f"[WS] ⚠️ 决策留痕写入失败（不阻断）: {e}")
+        except Exception:
+            pass
+        return None
 
 
 def _buys_summary(buys_out: list) -> dict:

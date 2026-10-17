@@ -355,23 +355,13 @@
       <div id="autoFillsBody" style="margin-top:10px"><div class="empty">加载中…</div></div>
     </div>
     <div class="section">
-      <h2>自动盘建仓信号扫描
-        <span class="cell-dim" style="font-size:12px;font-weight:normal">对 auto 池跑建仓判定（EOD 口径 · 仅供参考，以引擎闸链为准）</span>
-        <button class="mini-btn primary" onclick="recomputeAutoScan()" title="盘后对 auto 池全量重跑建仓判定">🔄 盘后重跑</button>
+      <h2>每日选股记录
+        <span class="cell-dim" style="font-size:12px;font-weight:normal">超跌跳空确认 · 盘前候选 → 10:00 三关漏斗 → 最终选中（选日期回看）</span>
+        <input type="date" id="oscDayDate" class="mini-input" style="width:140px;margin-left:8px"
+               title="选择交易日 → 查看该日候选/漏斗/选中及原因">
+        <button class="mini-btn primary" onclick="loadOscDay(true)" title="读取所选交易日的选股记录（强制重新读取）">↻ 读取</button>
       </h2>
-      <div id="autoScanBody"><div class="empty">尚无扫描结果，点击「盘后重跑」生成</div></div>
-    </div>
-    <div class="section">
-      <h2>添加自动盘标的
-        <span class="cell-dim" style="font-size:12px;font-weight:normal">写入 holdings.json（pool=auto + 目标底仓）· 需重启掘金策略生效</span>
-      </h2>
-      <div style="display:inline-flex;align-items:center;gap:6px;font-size:12px">
-        <input type="text" id="asCode" class="mini-input" placeholder="代码(6位)" style="width:100px">
-        <input type="text" id="asName" class="mini-input" placeholder="名称" style="width:110px">
-        <input type="text" id="asMirrorQty" class="mini-input" placeholder="目标底仓(股)" style="width:110px">
-        <button class="mini-btn primary" onclick="addAutoStock()">+ 添加</button>
-      </div>
-      <div id="asResult" class="cell-dim" style="margin-top:6px"></div>
+      <div id="oscDayBody"><div class="empty">选择日期后点「读取」</div></div>
     </div>
   </div>
 

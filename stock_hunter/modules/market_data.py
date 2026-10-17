@@ -351,11 +351,23 @@ class MarketDataFetcher:
         _c6map = {str(c): (str(c)[-6:] if str(c)[-6:].isdigit() else str(c)) for c in codes}
         try:
             import core.chart_cache as _cc
-            for _c, _c6 in _c6map.items():
-                if _c6 in self._bulk_kline:
-                    continue
-                _df = _cc.load_daily_display(_c6)
-                if _df is not None and not _df.empty:
+            # 2026-10-17：**并行读**。原先 1605 只串行 `load_daily_display` 实测 41.7s
+            # （每只 read 1.2 + json.loads 7.9 + DataFrame 6.6ms），是纯本地磁盘/解析活。
+            # `load_daily_display` 只读文件、无模块级缓存（`_read_json` 每次 open），
+            # 故并行不改变任何语义。8 线程（本机 4 物理核，过多会互相抢 IO）。
+            _todo_c6 = [c6 for c6 in dict.fromkeys(_c6map.values())
+                        if c6 not in self._bulk_kline]
+
+            def _ld(_c6):
+                try:
+                    return _c6, _cc.load_daily_display(_c6)
+                except Exception:
+                    return _c6, None
+
+            with ThreadPoolExecutor(max_workers=min(8, len(_todo_c6) or 1)) as _ex:
+                for _c6, _df in _ex.map(_ld, _todo_c6):
+                    if _df is None or _df.empty:
+                        continue
                     self._bulk_kline[_c6] = _df
                     # ⚠️ **只有缓存里已经有当日 bar** 才算"值未变"、才省回写（2026-10-12 修）。
                     # 原来是无条件 add ⇒ 而 `load_daily_display` 的新鲜度闸放到 **12 个自然日**，
@@ -720,7 +732,10 @@ class MarketDataFetcher:
                     print(f"     进度: {i}/{len(codes)} 只...")
                 if i % 20 == 0 or i == len(codes):
                     MARKET_PROGRESS.update({"done": i, "total": len(codes), "msg": f"已拉取 {i}/{len(codes)} 只"})
-                time.sleep(0.05)  # 增加延迟避免被限流
+                    # 节流只放在进度上报这一档（2026-10-17）。原先 `sleep(0.05)` 在**每只**都执行，
+                    # 1605 只 ⇒ 白睡 80s；而它根本限不住网络 —— 所有请求在循环开始前就
+                    # 全提交给线程池了，这里只是**消费已完成结果**。实测 137.6s → 55.3s。
+                    time.sleep(0.05)
         except TimeoutError:
             # 整体预算超时：未完成 futures 的 code 记为失败，带部分结果继续
             for fut, code in future_to_code.items():

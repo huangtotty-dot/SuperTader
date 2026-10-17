@@ -109,16 +109,20 @@ class TestHunterCondsKeysMatchSource(unittest.TestCase):
 
 
 class TestSharedRendererUsedByAllTables(unittest.TestCase):
-    """四张表的圆点/tooltip 必须走同一个渲染函数。"""
+    """各表的圆点/tooltip 必须走同一个渲染函数。
+
+    2026-10-17：自动盘「建仓信号扫描」整块已删 ⇒ 用它的表从 4 张减到 3 张
+    （建仓 / 猎手 / 风向标）。新增表必须继续走这个渲染器，别各写一份。
+    """
 
     def test_condCellHtml_defined_once(self):
         self.assertEqual(_APPJS_SRC.count("function condCellHtml("), 1,
                          "condCellHtml 应只有一份定义")
 
     def test_every_table_uses_it(self):
-        # 建仓表 / 自动盘 / 猎手行 / 风向标行 各一处调用（+1 处定义本身）
-        self.assertGreaterEqual(_APPJS_SRC.count("condCellHtml("), 5,
-                                "应有 4 张表调用 + 1 处定义")
+        # 建仓表 / 猎手行 / 风向标行 各一处调用（+1 处定义本身）
+        self.assertGreaterEqual(_APPJS_SRC.count("condCellHtml("), 4,
+                                "应有 3 张表调用 + 1 处定义")
 
     def test_legacy_inline_dots_removed(self):
         """旧的 `condStr`/`condTitle`/`AUTO_COND_LABELS` 内联实现必须清干净。

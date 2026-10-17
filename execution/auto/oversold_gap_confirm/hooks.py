@@ -29,6 +29,7 @@ bar 循环本就 60s 一跳 ⇒ 10:08/10:14 是**免费定时器**，且与首�
 """
 from __future__ import annotations
 
+import datetime as _dt
 import json
 import os
 import time as _time
@@ -50,6 +51,8 @@ _STATE = {"date": None, "prepare": False, "buy": False, "sell": False,
           "done_codes": set(),  # 今日已碰过的 code（防重复顺移/追价）
           "backfill": {},     # {round_idx: True} 每日一次标记
           "buy_done": False,  # 首轮已执行（落盘，防进程重启后重复下单）
+          # 盘前宇宙/板块档位（2026-10-17）：只给「每日选股记录」落盘用
+          "prescreen_meta": {},
           }
 
 
@@ -57,7 +60,39 @@ def reset_day(today) -> None:
     """按日重置（宿主在日期切换时调用；同时清空预筛候选与替补状态）。"""
     _STATE.update(date=today, prepare=False, buy=False, sell=False,
                   morning=False, candidates={}, fills=None, pending=[], spares=[],
-                  done_codes=set(), backfill={}, buy_done=False)
+                  done_codes=set(), backfill={}, buy_done=False, prescreen_meta={})
+
+
+def _write_prescreen(rt, date, cand, meta) -> str | None:
+    """盘前候选名单 → `prescreen_{date}.json`（2026-10-17，供 GUI「每日选股记录」）。
+
+    ⚠️ **绝不抛**：这是纯展示留痕，写失败不该影响预筛/下单（fail-closed 语义不在这里）。
+    ⚠️ 原子写（tmp+replace）：GUI 可能正在读，普通写会让它读到半截 JSON。
+    """
+    try:
+        fp = os.path.join(str(rt.book_dir), "prescreen_%s.json" % str(date))
+        os.makedirs(os.path.dirname(fp), exist_ok=True)
+        payload = {"date": str(date),
+                   "generated_at": _dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                   "universe": (meta or {}).get("universe", ""),
+                   "board_top_n": (meta or {}).get("board_top_n"),
+                   "candidates_n": len(cand or {}),
+                   "candidates": {str(c): {"prev_close": v.get("prev_close"),
+                                           "ma20": v.get("ma20"),
+                                           "board": v.get("board", ""),
+                                           "name": v.get("name", "")}
+                                  for c, v in (cand or {}).items() if isinstance(v, dict)}}
+        tmp = fp + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(payload, f, ensure_ascii=False, allow_nan=False)
+        os.replace(tmp, fp)
+        return fp
+    except Exception as e:
+        try:
+            rt.log(f"[OSC] ⚠️ 盘前候选留痕写入失败（不阻断）: {e}")
+        except Exception:
+            pass
+        return None
 
 
 # ── 当日状态落盘（2026-10-14）────────────────────────────────────────────
@@ -157,6 +192,11 @@ def prepare(rt, context, now, today):
         rt.log("[OSC]   [!] 0 只候选 -> 今日买侧不下单（fail-closed）")
     rt.audit({"event": "osc_prepare", "date": str(today), "candidates": len(_cand),
               "universe": "full_market" if _full else "hunter_pool"})
+    # 2026-10-17：盘前候选**名单**落盘（此前只有审计里的一个数量，名单只在内存
+    # `_STATE["candidates"]` ⇒ 进程重启即丢，GUI 也无从回看）。供「每日选股记录」用。
+    _STATE["prescreen_meta"] = {"universe": "full_market" if _full else "hunter_pool",
+                                "board_top_n": _top}
+    _write_prescreen(rt, today, _cand, _STATE["prescreen_meta"])
 
 
 
@@ -241,7 +281,8 @@ def try_buy(rt, context, now) -> int:
         _res = executor.run_buy_exec(rt.gateway(context), str(now.date()),
                                  prev_close=_pc, ma20=_ma, bars=_bars, board=_board,
                                  allowed_boards=None, book_dir=_book, params=_params,
-                                 dry_run=False, log=print, names=_names)
+                                 dry_run=False, log=print, names=_names,
+                                 prescreen_meta=_STATE.get("prescreen_meta") or {})
         _sm = (_res or {}).get("summary") or {}
         rt.audit({"event": "osc_buy_exec", "date": str(now.date()),
                       "candidates": _sm.get("candidates"), "buys": _sm.get("buys_placed"),

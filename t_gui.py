@@ -16,6 +16,7 @@ t_gui.py — 做T实盘·盘后复盘决策看板（pywebview 桌面壳）
 """
 import json
 import math
+import re
 import sys
 import threading
 import time as _time_mod
@@ -118,6 +119,113 @@ def _jiuyan_names() -> dict:
         pass
     return _JY_NAMES_CACHE["map"]
 
+# ── 每日选股记录（OSC 超跌跳空确认）读取/还原（2026-10-17）────────────────────
+# 数据优先吃新落盘（decision_/prescreen_），历史日从 fills + 策略日志还原。
+OSC_BOOK = STATE_DIR / "weak_strong_book"
+OSC_LOG_DIR = BASE / "execution" / "auto" / "logs"
+_OSC_BT_CACHE = {"key": None, "map": {}}     # auto_backtrace 解析缓存（~28MB，勿每次读）
+
+_OSC_RE_PREP = re.compile(r"^\[OSC\] 盘前超跌候选 (\d+) 只", re.M)
+_OSC_RE_PREP_START = re.compile(r"盘前预筛开始 ──（前(\d+)热门板块 ∩ (全市场|猎手池\(已回退\))")
+_OSC_RE_BARS = re.compile(r"\[OSC\] 10:00 取数: 拿到 (\d+)/(\d+) 只的 10:00 棒")
+_OSC_RE_FUNNEL = re.compile(
+    r"\[OSC\] 10:00 判定漏斗: 池 (\d+) \| 超跌\(昨收<MA20\) (\d+) \| "
+    r"①全程不破昨收 (\d+) \| ②站上昨收 (\d+) \| ③站上VWAP (\d+) \| 三全过 (\d+)")
+_OSC_RE_REASONS = re.compile(r"\[OSC\] 10:00 首个未过关: (.+)")
+_OSC_RE_NEAR_HDR = re.compile(r"最接近\(gap 降序 (\d+)/(\d+) 只\)")
+_OSC_RE_NEAR_ROW = re.compile(
+    r"^\s{4,}(\d{6})\s+(\S+)\s+(\S+)\s+gap\s*([+-][\d.]+)%\s+差:(\S+)", re.M)
+_OSC_RE_PICKS = re.compile(r"\[OSC\] 10:00 选中\(gap 降序\): (.+)")
+_OSC_RE_PICK_ITEM = re.compile(r"(\d{6}) gap([+-][\d.]+)%")
+
+
+def _osc_parse_log(date):
+    """解析 `execution/auto/logs/strategy_YYYYMMDD.log` 的 [OSC] 段（只读、纯文本）。
+
+    ⚠️ 漏斗/首个未过关/最接近 三段是 **2026-10-15 才上线的日志** ⇒ 更早的日期解析不到，
+    调用方须把缺失项如实置 None（**不要填 0**，那会把"没记录"误读成"没有"）。
+    ⚠️ 同日可能有多段（进程重启）⇒ 取**最后一段**。
+    """
+    fp = OSC_LOG_DIR / ("strategy_%s.log" % str(date).replace("-", ""))
+    out = {"premarket_n": None, "universe": None, "board_top_n": None,
+           "bars_n": None, "bars_want": None, "funnel": None, "reason_counts": None,
+           "near": None, "picks": None, "runs": 0}
+    try:
+        txt = fp.read_text(encoding="utf-8", errors="replace")
+    except Exception:
+        return out
+    m = _OSC_RE_PREP.findall(txt)
+    if m:
+        out["premarket_n"] = int(m[-1])          # 多段 ⇒ 最后一次
+        out["runs"] = len(m)
+    ms = _OSC_RE_PREP_START.findall(txt)
+    if ms:
+        out["board_top_n"] = int(ms[-1][0])
+        out["universe"] = "full_market" if ms[-1][1] == "全市场" else "hunter_pool"
+    mb = _OSC_RE_BARS.findall(txt)
+    if mb:
+        out["bars_n"], out["bars_want"] = int(mb[-1][0]), int(mb[-1][1])
+    mf = _OSC_RE_FUNNEL.findall(txt)
+    if mf:
+        p, w, g1, g2, g3, a = [int(x) for x in mf[-1]]
+        out["funnel"] = {"pool_n": p, "weak": w, "g1": g1, "g2": g2, "g3": g3, "all": a}
+    mr = _OSC_RE_REASONS.findall(txt)
+    if mr:
+        rc = {}
+        for part in mr[-1].split("·"):
+            mm = re.match(r"\s*(\S+)\s+(\d+)\s*$", part)
+            if mm:
+                rc[mm.group(1)] = int(mm.group(2))
+        out["reason_counts"] = rc
+    if _OSC_RE_NEAR_HDR.search(txt):
+        out["near"] = [{"code": c, "name": n, "board": b,
+                        "gap": float(g) / 100.0, "reason_cn": why}
+                       for c, n, b, g, why in _OSC_RE_NEAR_ROW.findall(txt)]
+    mp = _OSC_RE_PICKS.findall(txt)
+    if mp:
+        out["picks"] = [{"code": c, "gap": float(g) / 100.0}
+                        for c, g in _OSC_RE_PICK_ITEM.findall(mp[-1])]
+    return out
+
+
+def _osc_backtrace_candidates(date):
+    """**最后手段**：从审计镜像取该日盘前候选数。
+
+    ⚠️ 只读 `t_io/logs/auto_backtrace.jsonl`（镜像）；`execution/auto/gmcache/backtrace.jsonl`
+    含**离线测试伪造事件**（600001/600002/600003 那批），绝不能读。
+    ⚠️ 该文件 ~28MB / 8 万行 ⇒ 按 (mtime,size) 缓存解析结果，且只在日志解析不到时才走到这里。
+    """
+    fp = LOGS_DIR / "auto_backtrace.jsonl"
+    try:
+        st = fp.stat()
+    except OSError:
+        return None
+    key = (st.st_mtime, st.st_size)
+    if _OSC_BT_CACHE.get("key") != key:
+        idx = {}
+        try:
+            with open(fp, encoding="utf-8", errors="replace") as f:
+                for line in f:
+                    if "osc_prepare" not in line:
+                        continue
+                    try:
+                        o = json.loads(line)
+                    except Exception:
+                        continue
+                    if o.get("event") != "osc_prepare":
+                        continue
+                    d = str(o.get("date") or "")
+                    rid = str(o.get("_run_id") or "")
+                    # 回放/测试污染：_run_id 的日期前缀与事件日期对不上 ⇒ 丢
+                    if rid and rid[:8] != d.replace("-", ""):
+                        continue
+                    idx[d] = int(o.get("candidates") or 0)
+        except Exception:
+            idx = {}
+        _OSC_BT_CACHE.update({"key": key, "map": idx})
+    return _OSC_BT_CACHE.get("map", {}).get(str(date))
+
+
 # W33 A1: 双通道 8 键标签（与 position_builder.CHANNEL_COND_KEYS 同序）
 # 方案A (2026-08-15): 建仓条件=时机门控，与 position_builder.COND_LABELS 一致
 # 条件详情卡「按当前规则实时重算」的进程内缓存（2026-10-15）：{(code,date): scan_stock 结果}。
@@ -175,6 +283,12 @@ _ROTATION_CACHE_DIR = BASE / "t_io" / "cache" / "sector_rotation"
 # `_compute_auto_pnl` 只用它拼 `{code}.json` 路径，却把整条 pandas 链拖进首帧的 import 锁。
 # 值必须与 core/position_builder.py::_DAILY_CACHE_DIR 一致（同为 BASE/t_io/cache/daily_kline）。
 _DAILY_KLINE_DIR = BASE / "t_io" / "cache" / "daily_kline"
+# 建仓符合度（GO/时机列）的进程内结果缓存（2026-10-17 提速）。
+# 键 = (6位码, 日期, regime, 文件 mtime_ns)：**任何一项变就重算** ⇒ 猎手回写当日 bar 后
+# mtime 变 ⇒ 自动失效，不会拿陈旧序列算（那正是「误报破5日线」的老坑）。
+# ⚠️ 曾试过把日线截到尾 120 根再算，实测只快 1.17x（真正的成本是整份 json.loads），
+#    却会让 Wilder RSI/EMA 的预热种子产生微小漂移 ⇒ **不做截尾**，保持逐位同结果。
+_HUNTER_CONF_CACHE = {}
 _ROTATION_CACHE_MEM = {}
 # 2026-08-23: 每日大盘复盘（LLM）后台线程状态
 _REVIEW_RUN_STATE = {"running": False, "error": None}
@@ -2394,17 +2508,8 @@ class Api:
             if code not in cur and isinstance(info, dict):
                 cur[code] = {"name": info.get("name", code), "qty": 0, "cost": None,
                              "pre_close": 0, "in_watchlist": True}
-        # 合并**自动盘池**（2026-10-12）：自动盘建仓扫描表的「价」列此前**恒为空**
-        # （`renderAutoScan` 读 `r.price`，而 auto_scan trace 里根本没有价格字段），
-        # 顺带补上 owner 要的实时涨幅。与 watchlist_buy 同款形状（qty=0/无成本）⇒
-        # 只参与行情拉取，不进"持仓"语义（侧栏汇总只按 price×qty 累加，qty=0 无影响）。
-        try:
-            for code in self._auto_pool_codes():
-                if code not in cur:
-                    cur[code] = {"name": code, "qty": 0, "cost": None,
-                                 "pre_close": 0, "in_watchlist": True}
-        except Exception:
-            pass
+        # 2026-10-17：原先这里把**自动盘池**并进行情清单，只为「自动盘建仓信号扫描」表的
+        # 「价」列服务；该表已删 ⇒ 一并移除（不再为它多拉一批行情）。
         out = {"source": "fallback", "ts": None, "quotes": []}
         if not cur:
             return out
@@ -4575,8 +4680,19 @@ class Api:
                         _MP.update({"done": i, "total": len(codes), "msg": f"计算建仓符合度 {i}/{len(codes)}"})
                     except Exception:
                         pass
-                _fp = _DAILY_CACHE_DIR / f"{str(code).split('_')[0]}.json"
-                if not _fp.exists():
+                _c6 = str(code).split("_")[0]
+                _fp = _DAILY_CACHE_DIR / f"{_c6}.json"
+                try:
+                    _mt = _fp.stat().st_mtime_ns
+                except OSError:
+                    continue
+                _ck = (_c6, str(date), _regime, _mt)
+                _hit = _HUNTER_CONF_CACHE.get(_ck)
+                if _hit is not None:
+                    # 同一 (票, 日期, regime, 文件版本) 已算过 ⇒ 直接复用。
+                    # 猎手 / 风向标 `_beacon_enrich` / GO 历史回算 三条路径共用这份结果，
+                    # 正是它们同时跑同一算法把耗时放大 2~4 倍的解药（2026-10-17）。
+                    result[str(code)] = _hit
                     continue
                 try:
                     rows = json.loads(_fp.read_text(encoding="utf-8")).get("rows", [])
@@ -4623,6 +4739,11 @@ class Api:
                         # 故猎手个股表**只给这一列**（见 doc/solutions §5.10）。
                         "stage": _f.get("stage_daily_code"),
                     }
+                    # 写进进程内缓存（键含 mtime ⇒ 缓存文件一变就重算）。
+                    # 只存"算成功"的；条数上限防进程长跑无限增长（每周新日期都会进来）。
+                    if len(_HUNTER_CONF_CACHE) > 50000:
+                        _HUNTER_CONF_CACHE.clear()
+                    _HUNTER_CONF_CACHE[_ck] = result[str(code)]
                 except Exception:
                     continue
         except Exception:
@@ -6762,6 +6883,119 @@ class Api:
             "realized_loss": data.get("realized_loss", {}),
         })
 
+    def load_osc_day(self, date=None):
+        """每日选股记录（OSC 超跌跳空确认）：盘前候选 → 10:00 三关漏斗 → 选中 + 逐只原因。
+
+        来源优先级：
+          ① `decision_{date}.json`（2026-10-17 起由策略落盘）⇒ `source="recorded"`
+          ② 否则**读时还原**（`prescreen_`/`fills_` + 策略日志 [+ 审计镜像]）⇒ `source="reconstructed"`
+
+        ⚠️ 拿不到的字段一律返回 `None`（前端显示「未记录」），**绝不填 0** ——
+           "没记录"与"确实是 0 只"是两件事。
+        ⚠️ 判定漏斗各关是**独立通过数**，不是"上一关的幸存者"（见 decision.evaluate 注释）。
+        ⚠️ `fills.summary.candidates` = `len(picks)`，**不是**盘前候选数，别用。
+        """
+        date = str(date or datetime.now().strftime("%Y-%m-%d"))
+        names = _jiuyan_names()
+        rec = _load_json(OSC_BOOK / f"decision_{date}.json", None)
+        pre = _load_json(OSC_BOOK / f"prescreen_{date}.json", None)
+        fills = _load_json(OSC_BOOK / f"fills_{date}.json", None) or {}
+
+        def _nm(code):
+            return names.get(str(code), "")
+
+        # 实际下单/成交（10:00 决策 ≠ 成交：可能被拒/资金不足/顺移）
+        buys = {}
+        try:
+            for b in (fills.get("buys") or []):
+                c = str(b.get("code"))
+                if c:
+                    buys[c] = {"status": b.get("status"), "filled_qty": b.get("filled_qty"),
+                               "filled_price": b.get("filled_price"),
+                               "qty_placed": b.get("qty_placed"),
+                               "defer_reason": b.get("defer_reason"), "round": b.get("round")}
+        except Exception:
+            buys = {}
+
+        if isinstance(rec, dict) and rec.get("stocks") is not None:
+            pm = rec.get("premarket") or {}
+            pre_d = (pre or {})
+            cand = pre_d.get("candidates") or {}
+            bd = {}
+            for v in cand.values():
+                if isinstance(v, dict) and v.get("board"):
+                    bd[v["board"]] = bd.get(v["board"], 0) + 1
+            return _clean({
+                "available": True, "date": date, "source": "recorded", "partial": False,
+                "missing": [],
+                "premarket": {"candidates_n": pre_d.get("candidates_n"),
+                              "universe": pm.get("universe") or pre_d.get("universe"),
+                              "board_top_n": pm.get("board_top_n") or pre_d.get("board_top_n"),
+                              "board_dist": dict(sorted(bd.items(), key=lambda kv: -kv[1])[:8])},
+                "funnel": rec.get("funnel"), "reason_counts": rec.get("reason_counts"),
+                "n_failures": (rec.get("funnel") or {}).get("n_failures"),
+                "picks": [dict(p, name=p.get("name") or _nm(p.get("code")))
+                          for p in (rec.get("picks") or [])],
+                "stocks": [dict(s, name=s.get("name") or _nm(s.get("code")))
+                           for s in (rec.get("stocks") or [])],
+                "buys": buys,
+            })
+
+        # ── 还原：历史日（10-13~10-16）只有部分字段 ──
+        lg = _osc_parse_log(date)
+        n_cand = (pre or {}).get("candidates_n")
+        if n_cand is None:
+            n_cand = lg.get("premarket_n")
+        if n_cand is None:
+            n_cand = _osc_backtrace_candidates(date)     # 最后手段（28MB，带缓存）
+        universe = (pre or {}).get("universe") or lg.get("universe")
+        top_n = (pre or {}).get("board_top_n") or lg.get("board_top_n")
+
+        picks = []
+        if fills.get("picks"):
+            picks = [{"code": str(p.get("code")), "gap": p.get("gap"),
+                      "board": p.get("board", "")} for p in fills["picks"]]
+        elif lg.get("picks"):
+            picks = lg["picks"]
+        for i, p in enumerate(picks):
+            p["rank"] = i + 1
+            p["status"] = "picked"
+            p["reason"] = "ok"
+            p["name"] = _nm(p.get("code"))
+
+        rows = []
+        for s in (fills.get("spares") or []):
+            rows.append({"code": str(s.get("code")), "name": _nm(s.get("code")),
+                         "board": s.get("board", ""), "gap": s.get("gap"),
+                         "status": "spare", "reason": "ok"})
+        for r in (lg.get("near") or []):                 # 只有当日日志记下的若干只
+            rows.append({"code": r["code"], "name": r.get("name") or _nm(r["code"]),
+                         "board": r.get("board", ""), "gap": r.get("gap"),
+                         "status": "failed", "reason": r.get("reason_cn")})
+        rows = picks + rows
+        rows.sort(key=lambda r: -((r.get("gap") if r.get("gap") is not None else -1e9)))
+
+        missing = []
+        if n_cand is None:
+            missing.append("盘前候选数")
+        if not lg.get("funnel"):
+            missing.append("10:00 判定漏斗")
+        if not rows:
+            missing.append("逐只原因")
+        available = bool(n_cand is not None or picks or lg.get("funnel") or fills)
+        return _clean({
+            "available": available, "date": date,
+            "source": "reconstructed" if available else "none",
+            "partial": bool(missing), "missing": missing,
+            "premarket": {"candidates_n": n_cand, "universe": universe,
+                          "board_top_n": top_n, "board_dist": {}},
+            "funnel": lg.get("funnel"),
+            "reason_counts": lg.get("reason_counts"),
+            "n_failures": None,
+            "bars": {"got": lg.get("bars_n"), "want": lg.get("bars_want")},
+            "picks": picks, "stocks": rows, "buys": buys,
+        })
+
     def load_auto_status(self):
         """P4-3 自动盘页：读 t_io/bridge（heartbeat.json + 当日 events + KILL_SWITCH）。
         返回 heartbeat{positions/cash/index_regime/index_score} + order/fill/reject/risk 计数
@@ -7301,202 +7535,6 @@ class Api:
         _ACCT_MAP_CACHE.update({"ts": 0.0, "map": {}})   # 账户名以新台账为准，立即失效重算
         led.pop("trades", None)                          # 原始成交行只落盘，不下发前端
         return _clean(led)
-
-    # ---------- 自动盘：建仓扫描 / 添加标的 / 手动建仓做T衔接（2026-08-30） ----------
-
-    def _auto_pool_module(self):
-        """加载 config/auto_pool.py（config 无 __init__.py，需把 config 目录入 path）。"""
-        if str(BASE / "config") not in sys.path:
-            sys.path.insert(0, str(BASE / "config"))
-        try:
-            import auto_pool
-            return auto_pool
-        except Exception:
-            return None
-
-    def _auto_pool_codes(self):
-        """当前 auto 池 6 位码（基于自动侧真源 holdings_auto.json 实时派生，不依赖 auto_pool 模块缓存——新增标的立即可见）。"""
-        try:
-            from src.holdings_repo import load_auto_pool
-            return list(load_auto_pool().keys())
-        except Exception:
-            return []
-
-    def load_auto_scan(self, date=None):
-        """自动盘建仓扫描结果：读 TRACES/auto_scan_{date}.jsonl 聚合 + 合并 auto 池全量
-        （未扫描/新增标的 → verdict=pending 待扫描行，保证添加后立即显示）。"""
-        date = date or datetime.now().strftime("%Y-%m-%d")
-        fp = TRACES / f"auto_scan_{date}.jsonl"
-        latest = {}
-        if fp.exists():
-            for line in open(fp, encoding="utf-8").read().splitlines():
-                line = line.strip()
-                if not line:
-                    continue
-                try:
-                    r = json.loads(line)
-                except Exception:
-                    continue
-                code = r.get("code")
-                if not code:
-                    continue
-                if code not in latest or (r.get("scan_time") or "") > (latest[code].get("scan_time") or ""):
-                    latest[code] = r
-        # 合并 auto 池全量：不在 trace 的（新增/未扫）→ pending 待扫描行
-        try:
-            from src.holdings_repo import load_auto
-            full = load_auto()
-        except Exception:
-            full = {}
-        for code in self._auto_pool_codes():
-            if code in latest:
-                continue
-            h = full.get(code) or {}
-            latest[code] = {
-                "code": code, "scan_time": "", "date": date,
-                "name": h.get("name", code),
-                "base": int(h.get("base") or 0),
-                "held": bool(int(h.get("qty") or 0)),
-                "verdict": "pending", "score": 0,
-                "regime": "", "go": False, "reasons": [], "veto": [],
-            }
-        rows = sorted(latest.values(), key=lambda r: -(r.get("score") or 0))
-        counts = Counter(r.get("verdict", "weak") for r in rows)
-        return _clean({"has_data": True, "date": date, "rows": rows, "counts": dict(counts),
-                       # 2026-10-16：时机条件列的**标签真源**（与建仓表/猎手表/风向标同一个
-                       # `COND_LABELS`）。此前本表在前端自带一份 `AUTO_COND_LABELS` 副本 ——
-                       # 副本是漂移来源（10-15 真源扩到 6 条时，猎手侧的硬编码就漏改了）。
-                       "cond_labels": COND_LABELS})
-
-    def run_auto_scan(self, date=None):
-        """对 auto 池全量跑建仓判定（EOD 口径，df_1min=None 跳过 W35 日内确认），
-        逐行追加 TRACES/auto_scan_{date}.jsonl，返回聚合结果。咨询性扫描，以引擎闸链为准。"""
-        date = date or datetime.now().strftime("%Y-%m-%d")
-        try:
-            from src.holdings_repo import load_auto
-            from execution.auto.build_decision_auto import decide
-            from core.market_data import get_provider
-            from config import ENTRY_TIMING_PARAMS
-        except Exception as e:
-            return {"has_data": False, "error": f"依赖导入失败: {e}"}
-        if self._auto_pool_module() is None:
-            return {"has_data": False, "error": "auto_pool 不可用"}
-        hold = load_auto()
-        try:
-            prov = get_provider()
-            idx = prov.index_daily("sh000001", 400)
-        except Exception as e:
-            return {"has_data": False, "error": f"指数数据获取失败: {e}"}
-        fp = TRACES / f"auto_scan_{date}.jsonl"
-        fp.parent.mkdir(parents=True, exist_ok=True)
-        _scan_time = datetime.now().strftime("%H:%M:%S")
-        for code in self._auto_pool_codes():  # 基于 holdings 实时派生（新增标的也扫），非 auto_pool 模块缓存
-            row = {"code": code, "scan_time": _scan_time, "date": date,
-                   "name": (hold.get(code) or {}).get("name", code),
-                   "base": int((hold.get(code) or {}).get("base") or 0),
-                   "held": bool(int((hold.get(code) or {}).get("qty") or 0))}
-            try:
-                df = prov.daily(code, 400)
-                dec = decide(df, idx, date, params=ENTRY_TIMING_PARAMS, df_1min=None)
-                row.update({"verdict": dec.get("verdict", "weak"),
-                            "go": bool(dec.get("go")), "score": dec.get("score", 0),
-                            "regime": dec.get("regime"), "reasons": dec.get("reasons", []),
-                            "veto": dec.get("veto", []),
-                            "data_insufficient": bool(dec.get("data_insufficient"))})
-                _f = dec.get("features") or {}
-                if _f.get("price"):
-                    row["price"] = _f["price"]
-                # 2026-08-31: 构造与手动盘建仓表一致的条件圆点（t_regime/t_trend/t_drawdown/t_golden + t_veto）
-                _cond = {}
-                _regime = dec.get("regime")
-                _cond["t_regime"] = _regime in ("trend_up", "trend_dn")
-                _cond["t_trend"] = bool(_f.get("trend_multihead"))
-                _dd = _f.get("drawdown")
-                if _dd is not None:
-                    _cond["t_drawdown"] = (float(_dd) >= -0.03 if _regime != "trend_dn" else float(_dd) < -0.10)
-                else:
-                    _cond["t_drawdown"] = False
-                _cond["t_golden"] = bool(_f.get("macd_golden_5d"))
-                if dec.get("veto"):
-                    _cond["t_veto"] = False
-                row["conditions"] = _cond
-            except Exception as e:
-                row.update({"verdict": "scan_error", "error": str(e)[:80]})
-            try:
-                with open(fp, "a", encoding="utf-8") as f:
-                    f.write(json.dumps(row, ensure_ascii=False) + "\n")
-            except Exception:
-                pass
-        return self.load_auto_scan(date)
-
-    def add_auto_stock(self, code, name, base, type=None):
-        """添加新股票到 auto 池（pool=auto + base 目标底仓）→ 原子写自动侧 holdings_auto.json；
-        若 code 在 watchlist 且 pool=manual → 改 auto（防引擎 validate_pool_split 拒绝启动）。
-        引擎需重启才含该标的。"""
-        code = str(code or "").strip()
-        if not (code.isdigit() and len(code) == 6):
-            return {"ok": False, "error": "代码须为 6 位数字"}
-        try:
-            base = int(base)
-        except (TypeError, ValueError):
-            return {"ok": False, "error": "目标底仓须为整数"}
-        if base < 100 or base % 100 != 0:
-            return {"ok": False, "error": "目标底仓须 ≥100 且为 100 的整数倍"}
-        _ap = self._auto_pool_module()
-        if _ap is not None and not _ap.is_manual(code):
-            return {"ok": False, "error": f"{code} 已在 auto 池"}
-        try:
-            from src.holdings_repo import upsert_auto_entry, get_entry
-            from core.market_data.codec import to_gm
-        except Exception as e:
-            return {"ok": False, "error": str(e)}
-        # 已在 auto/both 池 → 拒绝（基于当前自动侧而非 auto_pool 模块缓存，防重复添加）
-        _cur = get_entry(code) or {}
-        if str(_cur.get("pool") or "") in ("auto", "both"):
-            return {"ok": False, "error": f"{code} 已在 auto 池"}
-        try:
-            gm_symbol = to_gm(code)
-        except Exception:
-            gm_symbol = ("SHSE." if code.startswith(("6", "5")) else "SZSE.") + code
-        if type is None:
-            type = "etf" if code.startswith("5") else "stock"
-        try:  # 一步写入：身份 + pool=auto + 目标底仓 base（经网关统一审计）
-            upsert_auto_entry(code, name=name or code, gm_symbol=gm_symbol,
-                              type=type, base=base, actor="gui", reason="添加自动盘标的")
-        except Exception as e:
-            return {"ok": False, "error": f"写 holdings_auto 失败: {e}"}
-        return {"ok": True, "code": code, "gm_symbol": gm_symbol, "type": type,
-                "base": base, "restart_required": True,
-                "msg": f"已加入 auto 池（目标底仓 {base}），重启掘金策略后生效"}
-
-    def remove_auto_stock(self, code):
-        """从 auto 池删除标的（仅 qty/base 均为 0 的候选；有持仓拒绝）。同步 watchlist pool 改回 manual。
-        引擎需重启后不再含该标的。"""
-        code = str(code or "").strip()
-        if not (code.isdigit() and len(code) == 6):
-            return {"ok": False, "error": "代码须为 6 位数字"}
-        try:
-            from src.holdings_repo import load_auto, delete_entry, sync_watchlist_pool
-        except Exception as e:
-            return {"ok": False, "error": str(e)}
-        full = load_auto()
-        entry = full.get(code)
-        if not entry:
-            return {"ok": False, "error": f"{code} 不在自动侧持仓真源"}
-        if int(entry.get("qty") or 0) > 0 or int(entry.get("base") or 0) > 0:
-            return {"ok": False, "error": f"{code} 有持仓（qty>0），不能从 auto 池删除"}
-        try:
-            # side="auto"：仅从自动文件移除；both 码保留手动副本并降 pool=manual
-            delete_entry(code, side="auto", actor="gui", reason="删除auto标的")
-        except Exception as e:
-            return {"ok": False, "error": f"写 holdings_auto 失败: {e}"}
-        # watchlist 该 code pool 改回 manual（已离开 auto 池，防悬空 auto/both 标记）
-        try:
-            sync_watchlist_pool(code, "manual")
-        except Exception:
-            pass
-        return {"ok": True, "code": code,
-                "msg": f"已从 auto 池删除 {code}（重启掘金策略后生效）"}
 
     def load_position_manager(self):
         """仓位管理器：每只持仓的目标/当前市值、资金占比、超配欠配。

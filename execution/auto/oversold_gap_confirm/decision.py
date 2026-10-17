@@ -34,6 +34,7 @@ import numpy as np
 MIN_POOL = 3                # 有效候选下限，低于则 fail-closed 不下单
 DEFAULT_TOP_N = 4           # 每日按 gap 取最强前 4（exp9 Sharpe 顶点）
 NEAR_K = 8                  # 「最接近」明细保留条数（**纯展示**，不参与判定）
+_FAIL_K = 20000             # 未过票全量落盘上限（**纯展示**；全市场 ~5000 只，实际远到不了）
 
 NO_TRADE = 'no_trade'
 TRADE = 'trade'
@@ -45,6 +46,15 @@ def _valid(x) -> bool:
     except (TypeError, ValueError):
         return False
     return bool(np.isfinite(v) and v > 0)
+
+
+def _num(x):
+    """NaN/inf → None。**落盘安全**：`json.dump` 默认把 NaN 写成非法 JSON 字面量。"""
+    try:
+        v = float(x)
+    except (TypeError, ValueError):
+        return None
+    return v if np.isfinite(v) else None
 
 
 def _bar_field(bar, key: str):
@@ -116,6 +126,9 @@ def evaluate(prev_close: Mapping[str, float],
     gates = {'weak': 0, 'g1': 0, 'g2': 0, 'g3': 0, 'all': 0}
     reasons = Counter()
     near = []
+    # 2026-10-17：**全部**未过票（不只 near 的 top-K），供「每日选股记录」落盘逐只原因。
+    # ⚠️ 与 gates/reasons/near 一样是**纯展示**，不参与判定；上限只是防病态输入撑爆内存。
+    failures = []
     for code, pc in prev_close.items():
         bar = bars.get(code)
         if not (_valid(pc) and isinstance(bar, Mapping)):
@@ -154,6 +167,18 @@ def evaluate(prev_close: Mapping[str, float],
                         del near[NEAR_K:]
             except Exception:
                 pass
+            try:
+                if len(failures) < _FAIL_K:
+                    failures.append({'code': str(code), 'board': str(board.get(code) or ''),
+                                     'gap': (_close / pc_f - 1.0) if _valid(_close) else None,
+                                     'reason': why,
+                                     # 逐关布尔值：让人一眼看出"卡在第几关"，比 reason 更细
+                                     'gates': {'weak': _weak, 'g1': _g1, 'g2': _g2, 'g3': _g3},
+                                     'low': _num(_low), 'close': _num(_close),
+                                     'vwap': _num(_vwap), 'prev_close': pc_f,
+                                     'ma20': _num(ma_f)})
+            except Exception:
+                pass
             continue
         b = str(board.get(code) or '')
         if allow is not None and b not in allow:
@@ -162,6 +187,22 @@ def evaluate(prev_close: Mapping[str, float],
             continue
         signals.append({'code': code, 'gap': gap, 'board': b,
                         'decision': TRADE, 'reason': why})
+
+    # 10:00 棒缺失的候选：主循环在 `pool_n` 递增**之前**就 continue 了，所以它既不进
+    # gates/reasons，也不进 near/failures。单独补一轮，让逐只名单覆盖**盘前候选**
+    # （10-16 实例：候选 304 / pool_n 297 / 缺 7 只）而不只覆盖 pool_n。
+    try:
+        for code, pc in prev_close.items():
+            if code in bars or not _valid(pc):
+                continue
+            if len(failures) >= _FAIL_K:
+                break
+            failures.append({'code': str(code), 'board': str(board.get(code) or ''),
+                             'gap': None, 'reason': 'bar_missing',
+                             'gates': None, 'low': None, 'close': None,
+                             'vwap': None, 'prev_close': float(pc), 'ma20': None})
+    except Exception:
+        pass
 
     signals.sort(key=lambda s: (-(s['gap'] if np.isfinite(s['gap']) else -1e9), s['code']))
     tradable = [s for s in signals if s['decision'] == TRADE]
@@ -176,5 +217,9 @@ def evaluate(prev_close: Mapping[str, float],
         # 展示用（2026-10-15）：逐关通过数 / 首个未过关的分布 / gap 最高的未过票明细。
         # 纯附加字段，`signals`/`picks` 语义与加它之前逐位一致。
         'diag': {'gates': gates, 'reasons': dict(reasons.most_common()),
-                 'near': near[:NEAR_K], 'n_near': len(near)},
+                 'near': near[:NEAR_K], 'n_near': len(near),
+                 # 2026-10-17：全部未过票（逐只原因）—— 仅供「每日选股记录」落盘；
+                 # `_log_decision` 不读这个键，判定只由上面的 signals/picks 决定。
+                 # ⚠️ `n_near` **不是**未过总数（near 在 201 条后会裁到 NEAR_K）⇒ 用 n_failures。
+                 'failures': failures, 'n_failures': len(failures)},
     }

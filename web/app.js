@@ -326,8 +326,6 @@ async function refreshLive(reset) {
           renderPB(applyQuotesToPB(pbRows));
         }
       }
-      // 自动盘建仓扫描表同款（缓存了最近一次 payload 才刷，没打开过该页就不做无用功）
-      if (window._autoLastPayload) renderAutoScan(applyQuotesToAuto(window._autoLastPayload));
       // 持仓体检表「现价」列同款：OB 表 45~60s 才整体重拉，现价用 10s quotes 就地叠加
       applyQuotesToOB();
       // 风向标「价/涨幅」列：面板就绪后自身轮询降到 60s，挂在 10s live 轮询上才能 ~15s 刷新
@@ -2121,23 +2119,6 @@ function applyQuotesToPB(pb) {
   return pb;
 }
 
-/* 自动盘扫描表的同款叠加（2026-10-12）。该表的「价」列此前**恒为空** —— `renderAutoScan`
-   读 `r.price`，但 `auto_scan_{date}.jsonl` 里根本没有价格字段 ⇒ 后端已把 auto 池并进
-   `load_quotes` 的取数清单（见 `_load_quotes_build`），这里负责叠加「价 + 涨幅」。 */
-function applyQuotesToAuto(d) {
-  const qs = state.quotes || [];
-  if (!d || !d.rows || !qs.length) return d;
-  const pxMap = {};
-  qs.forEach(x => { pxMap[x.code] = { price: x.price, pct: x.change_pct }; });
-  d.rows.forEach(r => {
-    const q = pxMap[r.code];
-    if (!q) return;
-    if (q.price != null) r.price = q.price;
-    r.change_pct = q.pct;
-  });
-  return d;
-}
-
 /* 持仓体检表「现价」列的 10s 级 DOM 叠加（2026-10-13）：OB 表自身 45~60s 才整体重拉一次，
    现价原先冻结到手动「🔄 刷新」。数据本来就在 `state.quotes`（10s live 轮询顺手拉的），
    直接 patching 单元格，零后端成本。单元格由 renderOB 打 data-obcode 标记。 */
@@ -2523,6 +2504,7 @@ function renderAutoPnl(d) {
 
 /* ---- 自动盘成交流水 · 每日盈亏（2026-10-10 需求2）：自动盘无交割单，靠事件总线反推 ---- */
 const AUTO_FILLS_SHOW = 200;   // 流水表只显示最近 N 笔
+let _autoFillsOpen = false;    // 逐笔流水默认折叠（owner 2026-10-17）；展开状态跨重渲染保留
 
 function renderAutoLedger(d) {
   const sumEl = document.getElementById("autoLedgerSummary");
@@ -2591,10 +2573,16 @@ function renderAutoLedger(d) {
       <td class="num cell-dim">${fmt(f.pos_after, 0)}</td>
     </tr>`;
   }).join("");
-  bodyEl.innerHTML = `<div class="card-title">逐笔流水（近 ${shown.length}/${fills.length} 笔，倒序）`
-    + `<span class="cell-dim" style="font-weight:normal;font-size:11px;margin-left:8px">净发生金额＝成交金额∓手续费；余额＝该笔成交后持仓</span></div>`
-    + `<table><thead><tr><th>时间</th><th>股票</th><th>方向</th><th class="num">数量</th><th class="num">均价</th>`
-    + `<th class="num">成交金额</th><th class="num">净发生金额</th><th class="num">余额</th></tr></thead><tbody>${rows}</tbody></table>`;
+  // 2026-10-17 owner：逐笔流水**默认折叠**（表格本体很长，日常看的是上面的每日盈亏与汇总）。
+  // 用原生 <details>：不引入新样式/脚本；`_autoFillsOpen` 记住展开状态，
+  // 否则每次数据刷新重渲染都会把它重新收起。
+  bodyEl.innerHTML = `<details${_autoFillsOpen ? " open" : ""} ontoggle="_autoFillsOpen=this.open">`
+    + `<summary class="card-title" style="cursor:pointer;user-select:none">`
+    + `逐笔流水（近 ${shown.length}/${fills.length} 笔，倒序）`
+    + `<span class="cell-dim" style="font-weight:normal;font-size:11px;margin-left:8px">`
+    + `点击展开 / 收起 · 净发生金额＝成交金额∓手续费；余额＝该笔成交后持仓</span></summary>`
+    + `<table style="margin-top:6px"><thead><tr><th>时间</th><th>股票</th><th>方向</th><th class="num">数量</th><th class="num">均价</th>`
+    + `<th class="num">成交金额</th><th class="num">净发生金额</th><th class="num">余额</th></tr></thead><tbody>${rows}</tbody></table></details>`;
 }
 
 /* ---- 自动盘买入人工确认闸（2026-08-30 建仓/加仓/底仓回补人工把关） ---- */
@@ -2686,134 +2674,130 @@ function initBuyConfirmEvents() {
   });
 }
 
-/* ---- 自动盘：建仓扫描 + 添加标的 + 手动建仓做T衔接（2026-08-30） ---- */
-async function loadAutoScan() {
+/* ---- 每日选股记录（2026-10-17）：盘前候选 → 10:00 三关漏斗 → 选中 + 逐只原因 ----
+   owner：要能回答「每天早上候选了多少、最后选了哪些、原因是什么」，且能选日期回看。
+   数据源见 t_gui.Api.load_osc_day：优先 decision_{date}.json（新落盘），
+   否则从 backtrace/fills/策略日志读时还原（缺的字段如实显示「未记录」，绝不显示成 0）。 */
+let _oscDayCache = {};        // date -> payload（同一天不重复取）
+let _oscDayCur = null;        // 当前渲染的 payload（筛选时复用，不重新请求）
+
+const OSC_REASON_CN = {
+  "ok": "三关全过",
+  "not_weak(prev_close>=ma20)": "非超跌(昨收≥MA20)",
+  "gap_not_held(low<prev_close)": "①破昨收",
+  "not_above_prev_close": "②未站上昨收",
+  "not_above_vwap": "③未站上VWAP",
+  "bar_missing": "10:00棒缺失",
+  "prev_close_missing": "昨收缺失",
+  "board_filtered": "板块过滤",
+};
+const OSC_STATUS_CN = { picked: "✓ 选中", spare: "候补", failed: "未过" };
+
+function oscReasonCn(r) { return OSC_REASON_CN[r] || r || "—"; }
+
+async function loadOscDay(force) {
+  const _di = document.getElementById("oscDayDate");
+  const date = (_di && _di.value) || state.date;      // 面板日期优先，回退全局选中日（同 #pbScanDate）
+  const el = document.getElementById("oscDayBody");
+  if (!date) { if (el) el.innerHTML = '<div class="empty">未选定日期</div>'; return; }
+  if (!force && _oscDayCache[date]) { renderOscDay(_oscDayCache[date]); return; }
+  if (el) el.innerHTML = '<div class="empty">读取中…</div>';
   try {
-    const d = await apiCall("load_auto_scan");
-    renderAutoScan(applyQuotesToAuto(d));
-  } catch (e) { /* pywebview 未就绪忽略 */ }
+    const d = await apiCall("load_osc_day", date);
+    _oscDayCache[date] = d;
+    renderOscDay(d);
+  } catch (e) {
+    if (el) el.innerHTML = `<div class="empty">读取失败: ${esc(e.message)}</div>`;
+  }
 }
 
-function renderAutoScan(d) {
-  window._autoLastPayload = d;   // 供 10s 行情路径叠加实时价/涨幅后重渲染（同 _pbLastPayload 用法）
-  // 显示对齐手动盘建仓表（2026-08-31）：池/判定/得分(ceiling锁)/通过X/3/价/条件圆点/时机门控/否决 + 双击看K线
-  const el = document.getElementById("autoScanBody");
+function _oscVal(v) { return (v === null || v === undefined) ? '<span class="cell-dim">未记录</span>' : v; }
+
+function _oscStockRows(rows, buys) {
+  if (!rows || !rows.length) return '<tr><td colspan="7" class="cell-dim">无</td></tr>';
+  buys = buys || {};
+  return rows.map(s => {
+    // 10:00 决策 ≠ 成交：可能被拒/资金不足/顺移。买侧结果取自 fills.buys。
+    const b = buys[s.code];
+    const deal = b
+      ? (b.filled_qty ? `成交 ${b.filled_qty}股` : `${esc(b.status || "?")}${b.defer_reason ? "·" + esc(b.defer_reason) : ""}`)
+      : "—";
+    return `<tr style="cursor:pointer" ondblclick="openStockChart('${esc(s.code)}','${esc(s.name || s.code)}')" title="双击看K线">
+    <td>${esc(s.name || s.code)} <span class="mono cell-dim">${esc(s.code)}</span></td>
+    <td class="cell-dim">${esc(s.board || "—")}</td>
+    <td class="num">${s.gap != null ? pctHtml(s.gap * 100, "10:00 缺口") : "—"}</td>
+    <td class="num">${s.rank != null ? s.rank : "—"}</td>
+    <td>${esc(OSC_STATUS_CN[s.status] || s.status || "—")}</td>
+    <td class="cell-dim">${esc(oscReasonCn(s.reason))}</td>
+    <td class="cell-dim">${deal}</td>
+  </tr>`; }).join("");
+}
+
+function filterOscStocks() {
+  const body = document.getElementById("oscStocksBody");
+  if (!body || !_oscDayCur) return;
+  const kw = ((document.getElementById("oscStockFilter") || {}).value || "").trim().toLowerCase();
+  const rc = ((document.getElementById("oscReasonFilter") || {}).value || "");
+  let rows = _oscDayCur.stocks || [];
+  if (kw) rows = rows.filter(s => (s.code || "").includes(kw)
+    || (s.name || "").includes(kw) || (s.board || "").includes(kw));
+  if (rc) rows = rows.filter(s => (s.reason || "") === rc);
+  body.innerHTML = _oscStockRows(rows, _oscDayCur.buys);
+  const cnt = document.getElementById("oscStockCount");
+  if (cnt) cnt.textContent = `${rows.length}/${(_oscDayCur.stocks || []).length} 只`;
+}
+
+function renderOscDay(d) {
+  const el = document.getElementById("oscDayBody");
   if (!el) return;
-  const rows = (d && d.rows) || [];
-  if (!rows.length) {
-    el.innerHTML = '<div class="empty">暂无 auto 池标的，可在下方「添加自动盘标的」加入</div>';
+  _oscDayCur = d || {};
+  if (!d || !d.available) {
+    const miss = (d && d.missing && d.missing.length) ? `（缺：${esc(d.missing.join("、"))}）` : "";
+    el.innerHTML = `<div class="empty">${esc((d && d.date) || "")} 无选股记录${miss}</div>`;
     return;
   }
-  const counts = d.counts || {};
-  const countBadge = k => counts[k] ? `<span class="badge">${esc(k)}: ${counts[k]}</span>` : "";
-  // 条件圆点标签：**已删掉本文件里那份 `AUTO_COND_LABELS` 副本**（2026-10-16）——
-  // 副本正是漂移源：10-15 后端 `COND_LABELS` 扩到 6 条时，猎手侧的硬编码就漏改了。
-  // 现在四张表（建仓/自动盘/猎手/风向标）一律吃 payload 的 `cond_labels`（后端真源）。
-  const trs = rows.map(r => {
-    const poolBadge = '<span class="badge" style="background:#2a4a5a;color:#8ad4ff" title="自动盘池（goldminer auto 侧管理）">自动</span>';
-    const holdBadge = r.held ? '<span class="badge hold">持仓</span>' : "";
-    // 时机门控徽章（对齐手动盘 tmBadge：多头/空头/震荡 + GO/NO-GO）
-    let tmBadge = "";
-    if (r.regime) {
-      const _regimeCn = { trend_up: "多头", trend_dn: "空头", range: "震荡" }[r.regime] || r.regime;
-      const _goCls = r.go ? "#1f6f3f" : "#7a2a2a";
-      const _goTxt = r.go ? "GO" : "NO-GO";
-      tmBadge = `<span class="badge" title="时机门控: ${esc((r.reasons || []).join("；"))}" style="background:${_goCls};color:#fff">${esc(_regimeCn)}·${_goTxt}</span>`;
-    }
-    // 否决徽章（对齐手动盘 vetoBadge）
-    let vetoBadge = "";
-    if (r.veto && r.veto.length) {
-      vetoBadge = `<span class="badge" title="否决因子: ${esc(r.veto.join("、"))}" style="background:#7a2a2a;color:#ffd98a">🚫否决</span>`;
-    }
-    // 数据不足徽章
-    let nodataBadge = "";
-    if (r.data_insufficient) nodataBadge = '<span class="badge nodata">数据不足</span>';
-    // 得分含 ceiling 语义（对齐手动盘：震荡市 signal 结构性不可达，得分上限锁定）
-    const scoreCell = r.score != null
-      ? `<b>${r.score}</b>${!r.go && r.regime === "range" ? '<span class="cell-dim" style="font-size:10px">/70🔒</span>' : ""}`
-      : "—";
-    // 2026-10-08 owner：0 分 / >0 分 用背景色区分（对齐手动盘 renderPB）
-    const _scNum2 = (typeof r.score === "number") ? r.score : null;
-    const _scoreBg2 = (_scNum2 === 0) ? "background:rgba(248,81,73,.12);"
-      : (_scNum2 !== null && _scNum2 > 0) ? "background:rgba(63,185,80,.07);" : "";
-    // 条件圆点：与手动盘 renderPB / 猎手 / 风向标**共用 `condCellHtml`**（2026-10-16 统一）。
-    const conds = r.conditions || {};
-    const isNoData = r.verdict === "insufficient_data" || r.verdict === "pending";
-    // 通过 X/3（t_regime/t_trend/t_drawdown 通过数，金叉为加分不计，与手动盘同口径）
-    const iceKeys = ["t_regime", "t_trend", "t_drawdown"];
-    const metCount = iceKeys.filter(k => conds[k]).length;
-    const metCls = metCount >= 3 ? "up" : metCount >= 2 ? "warn" : "cell-dim";
-    // 条件/理由列：reasons 简述 + 错误
-    const reasonTxt = (r.reasons || []).slice(0, 2).map(esc).join("<br>")
-      || (r.verdict === "pending" ? '<span class="cell-dim">待扫描（盘后重跑出判定）</span>'
-        : '<span class="cell-dim">—</span>');
-    const errTxt = r.error ? `<div class="cell-dim" style="font-size:10px;line-height:1.4">⚠ ${esc(r.error)}</div>` : "";
-    // 删除按钮（有持仓则禁用）
-    const delBtn = r.held
-      ? '<button class="mini-btn" disabled title="有持仓不能删除">✕</button>'
-      : `<button class="mini-btn" onclick="removeAutoStock('${esc(r.code)}')" title="从 auto 池删除（需无持仓）">✕</button>`;
-    return `<tr style="cursor:pointer;${_scoreBg2}" ondblclick="openStockChart('${esc(r.code)}','${esc(r.name || r.code)}')" title="双击看K线">
-      <td>${esc(r.name || r.code)} <span class="mono cell-dim">${esc(r.code)}</span>
-        ${holdBadge}${tmBadge}${vetoBadge}${nodataBadge}${errTxt}</td>
-      <td style="text-align:center">${poolBadge}</td>
-      <td>${verdictBadge(r.verdict)}</td>
-      <td class="num" title="综合得分">${scoreCell}</td>
-      <td class="num ${metCls}"><b>${isNoData ? "—" : metCount + "/3"}</b></td>
-      <td class="num">${r.price != null ? fmt(r.price) : "—"}<div style="font-size:10px">${pctHtml(r.change_pct, "实时涨幅（随行情每 10s 刷新）")}</div></td>
-      ${condCellHtml(conds, d.cond_labels, isNoData, r.veto)}
-      <td class="cell-dim" style="font-size:11px;max-width:230px;line-height:1.5">${reasonTxt}</td>
-      <td class="num">${r.base ? fmt(r.base, 0) : "—"}</td>
-      <td style="text-align:center">${delBtn}</td>
-    </tr>`;
-  }).join("");
+  const pm = d.premarket || {};
+  const fn = d.funnel || {};
+  const src = d.source === "recorded"
+    ? '<span class="badge" style="background:#1f6f3f;color:#fff" title="当日 10:00 落盘的结构化记录">已记录</span>'
+    : '<span class="badge" style="background:#7a5c1f;color:#fff" title="当日未落盘，由审计/成交/策略日志还原；缺失项显示「未记录」">还原</span>';
+  const reasonOpts = ["", ...Object.keys(d.reason_counts || {})]
+    .map(k => `<option value="${esc(k)}">${k ? esc(oscReasonCn(k)) : "全部原因"}</option>`).join("");
   el.innerHTML = `
-    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:6px">
-      ${countBadge("signal")}${countBadge("approaching")}${countBadge("watch_signal")}${countBadge("weak")}${countBadge("scan_error")}
-      <span class="cell-dim" style="margin-left:auto">共 ${rows.length} 只 · ${esc(d.date || "")} · 双击看K线</span>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px">
+      <b>${esc(d.date || "")}</b> ${src}
+      <span class="cell-dim">盘前候选 <b>${_oscVal(pm.candidates_n)}</b> 只</span>
+      <span class="cell-dim">拿到10:00棒 <b>${_oscVal(fn.pool_n)}</b></span>
+      <span class="cell-dim">三关全过 <b>${_oscVal(fn.all)}</b></span>
+      <span class="cell-dim">最终选中 <b>${(d.picks || []).length}</b></span>
+      ${pm.universe ? `<span class="cell-dim">宇宙: ${esc(pm.universe === "full_market" ? "全市场" : "猎手池")}</span>` : ""}
     </div>
-    <table><thead><tr><th>股票</th><th>池</th><th>判定</th><th class="num">得分</th><th class="num">通过</th><th class="num" title="实时价 + 实时涨幅；该「价」列此前恒为空（trace 里无价格字段），2026-10-12 已由行情叠加补上">价<br><span style="font-size:9px;opacity:.6">涨幅</span></th><th>条件</th><th>理由</th><th class="num">目标底仓</th><th>操作</th></tr></thead>
-    <tbody>${trs}</tbody></table>`;
-}
-
-async function removeAutoStock(code) {
-  if (!window.confirm(`确定从 auto 池删除 ${code}？`)) return;
-  try {
-    const r = await apiCall("remove_auto_stock", code);
-    if (r && r.ok) {
-      loadAutoScan();
-    } else {
-      statusEl("删除失败: " + ((r && r.error) || "未知"), "err");
-    }
-  } catch (e) { statusEl("删除失败: " + e.message, "err"); }
-}
-
-async function recomputeAutoScan() {
-  const el = document.getElementById("autoScanBody");
-  if (el) el.innerHTML = '<div class="empty">盘后重跑中（对 auto 池全量建仓判定，秒级~30s）...</div>';
-  try {
-    const d = await apiCall("run_auto_scan");
-    renderAutoScan(d);
-    if (d && d.error) statusEl("自动盘扫描失败: " + d.error, "err");
-  } catch (e) { statusEl("自动盘扫描失败: " + e.message, "err"); }
-}
-
-async function addAutoStock() {
-  const code = (document.getElementById("asCode").value || "").trim();
-  const name = (document.getElementById("asName").value || "").trim();
-  const mirrorQty = (document.getElementById("asMirrorQty").value || "").trim();
-  const el = document.getElementById("asResult");
-  if (!code) { if (el) el.innerHTML = '<span style="color:#f85149">✘ 请输入股票代码</span>'; return; }
-  try {
-    const r = await apiCall("add_auto_stock", code, name, mirrorQty);
-    if (el) el.innerHTML = r && r.ok
-      ? `<span style="color:#3fb950">✔ ${esc(r.msg)}</span>`
-      : `<span style="color:#f85149">✘ ${esc((r && r.error) || "添加失败")}</span>`;
-    if (r && r.ok) {
-      document.getElementById("asCode").value = "";
-      document.getElementById("asMirrorQty").value = "";
-      loadAutoScan();          // 刷新扫描表（合并全量后新标的立即显示）
-    }
-  } catch (e) { if (el) el.textContent = "添加失败: " + e.message; }
+    ${fn.pool_n != null ? `<div class="cell-dim" style="font-size:12px;margin-bottom:8px">
+      漏斗（各关<b>独立</b>通过数，不是上一关的幸存者）：
+      超跌 ${_oscVal(fn.weak)} · ①全程不破昨收 <b>${_oscVal(fn.g1)}</b>/${fn.pool_n}
+      · ②站上昨收 <b>${_oscVal(fn.g2)}</b>/${fn.pool_n}
+      · ③站上VWAP <b>${_oscVal(fn.g3)}</b>/${fn.pool_n}
+      ${d.bars && d.bars.got != null ? ` · 10:00棒 ${d.bars.got}/${d.bars.want}` : ""}
+    </div>` : ""}
+    ${pm.board_dist && Object.keys(pm.board_dist).length ? `<div class="cell-dim" style="font-size:12px;margin-bottom:8px">板块分布：
+      ${Object.entries(pm.board_dist).map(([b, n]) => `${esc(b)} ${n}只`).join(" / ")}</div>` : ""}
+    ${d.partial && d.missing && d.missing.length ? `<div class="cell-dim" style="font-size:11px;margin-bottom:6px">
+      ⚠ 该日缺：${esc(d.missing.join("、"))}（显示为「未记录」；这些数据从下一交易日起自动落盘）</div>` : ""}
+    <div class="card-title" style="margin-top:6px">最终选中（gap 降序）· 成交列取自 fills</div>
+    <table><thead><tr><th>股票</th><th>板块</th><th class="num">gap</th><th class="num">排名</th><th>状态</th><th>原因</th><th>成交</th></tr></thead>
+      <tbody>${_oscStockRows(d.picks || [], d.buys)}</tbody></table>
+    <div class="card-title" style="margin-top:14px;display:flex;gap:8px;align-items:center">
+      全部候选
+      <span id="oscStockCount" class="cell-dim" style="font-weight:normal"></span>
+      <input type="text" id="oscStockFilter" class="mini-input" placeholder="筛选 代码/名称/板块"
+             style="width:160px;margin-left:auto" oninput="filterOscStocks()">
+      <select id="oscReasonFilter" class="mini-btn" style="font-size:11px" onchange="filterOscStocks()">${reasonOpts}</select>
+    </div>
+    <table><thead><tr><th>股票</th><th>板块</th><th class="num">gap</th><th class="num">排名</th><th>状态</th><th>原因</th><th>成交</th></tr></thead>
+      <tbody id="oscStocksBody">${_oscStockRows(d.stocks || [], d.buys)}</tbody></table>
+    ${(d.stocks || []).length && d.source !== "recorded"
+      ? '<div class="cell-dim" style="font-size:11px;margin-top:4px">⚠ 还原模式下逐只明细不完整（只有当日策略日志记下的「最接近」若干只 + 已触发的 picks/spares），完整名单从下一交易日起自动记录。</div>' : ""}`;
+  filterOscStocks();
 }
 
 async function refreshPBNow() {
@@ -2842,6 +2826,10 @@ async function refreshPBNow() {
 let pbRecomputeRunning = false;
 function _pbSyncScanDate() {   // 面板日期选择器跟随全局选中日
   const el = document.getElementById("pbScanDate");
+  if (el && state.date && el.value !== state.date) el.value = state.date;
+}
+function _oscSyncDayDate() {   // 每日选股记录的面板日期，同款跟随全局选中日
+  const el = document.getElementById("oscDayDate");
   if (el && state.date && el.value !== state.date) el.value = state.date;
 }
 async function recomputePB() {
@@ -5627,10 +5615,10 @@ function switchTab(tab) {
   if (tab === "archive") renderDailyReview();
   // 图表分析：交割单台账懒加载（未导入过则只显示「点导入」提示，不弹窗）
   if (tab === "charts") loadTradeHistory();
-  // P4-3 切到自动盘：加载 t_io/bridge 状态 + 建仓扫描
+  // P4-3 切到自动盘：加载 t_io/bridge 状态 + 每日选股记录
   if (tab === "auto") {
     loadAutoStatus();
-    loadAutoScan();
+    loadOscDay(true);                                           // 每日选股记录（日期跟随全局选中日，强制刷新）
     if (state.autoLedger) renderAutoLedger(state.autoLedger);   // 已有数据先渲染，避免空白
   }
 }
@@ -5808,6 +5796,8 @@ async function init() {
       if (dateSelect.value !== todayStr()) userPinnedDate = true;
       const _pd = document.getElementById("pbScanDate");   // 建仓面板日期跟随全局选中日
       if (_pd) _pd.value = dateSelect.value;
+      const _od = document.getElementById("oscDayDate");   // 每日选股记录面板同款跟随
+      if (_od) _od.value = dateSelect.value;
       loadAndRender(dateSelect.value, false);
     }
   });
@@ -5861,6 +5851,7 @@ async function init() {
 
   await loadAndRender(dates[0], false);
   _pbSyncScanDate();   // 建仓面板日期选择器默认=当前选中日
+  _oscSyncDayDate();   // 每日选股记录面板日期默认=当前选中日
   startPoll();
   // 启动时今天可能尚无数据导致停在历史日 → 立即检查一次，今天就绪则自动切回
   maybeAutoSwitchToToday();
