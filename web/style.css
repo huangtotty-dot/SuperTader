@@ -282,6 +282,11 @@ tr:hover td { background: rgba(243,93,43,.03); }
 .prof-sec { margin-bottom: 6px; }
 .prof-note { color: var(--text-faint); font-size: 11px; font-weight: 400; }
 .prof-none { color: var(--text-faint); }
+/* 公司简介长文（2026-10-17）：正文用正文色、行高放宽；经营范围默认折叠，避免吞掉半屏。 */
+.prof-details { margin-top: 4px; }
+.prof-details > summary { cursor: pointer; color: var(--text-dim); font-size: 11px; user-select: none; }
+.prof-details > div { margin-top: 4px; padding: 6px 8px; background: var(--bg-soft);
+  border-radius: 6px; color: var(--text-dim); font-size: 11px; line-height: 1.75; }
 .prof-loading { color: var(--text-faint); }
 .prof-grp { margin-top: 3px; display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
 .prof-kind { font-size: 10px; color: var(--text-faint); border: 1px solid var(--border-soft); border-radius: 3px; padding: 0 5px; margin-right: 2px; }

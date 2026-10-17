@@ -3591,6 +3591,88 @@ class Api:
         Api._profile_cache[c] = (_t.time(), [])   # 负缓存：别让每次点开都等 8 次重试
         return []
 
+    # ---------- 公司简介（2026-10-17）：东财 F10「核心题材」补全 ----------
+    # 本地 `business_summary` 只有一句"主营专用设备制造业"（东财旧 F10 被风控 ⇒ 长期没更新），
+    # owner 要求"通过查询提前补充"。数据源实测可用：
+    #   https://emweb.securities.eastmoney.com/PC_HSF10/CoreConception/PageAjax?code=SH688499
+    #   → hxtc[] = [{KEYWORD, MAINPOINT_CONTENT}]，第 1 项是**经营范围**，第 2 项起是
+    #     "主营业务/业务描述"（三只样本一致：关键词就是业务名），后面是行业/竞争优势条目。
+    # 落盘缓存 `t_io/cache/company_profile.json`；GUI 读缓存，缺的**后台补**（不阻塞主线程）。
+    def _fetch_company_profile(self, code):
+        """抓一只票的简介。**网络调用** ⇒ 只许在后台线程/预取脚本里调。返回 dict 或 None。"""
+        import urllib.request
+        c = str(code).split("_")[0]
+        if len(c) != 6 or not c.isdigit():
+            return None
+        secucode = ("SH" if c[0] in "56" else ("BJ" if c[0] in "48" or c.startswith("920") else "SZ")) + c
+        url = ("https://emweb.securities.eastmoney.com/PC_HSF10/CoreConception/PageAjax?code="
+               + secucode)
+        try:
+            # ⚠️ 东财**有些响应是 gzip 压缩的**（实测 002639/601318 等 4/52 只返回 `\x1f\x8b`），
+            # urllib 不会自动解压 ⇒ 直接 decode 会得到乱码、json 解析失败。
+            # 双保险：请求头显式要 identity，再加魔数兜底解压。
+            req = urllib.request.Request(url, headers={
+                "User-Agent": "Mozilla/5.0", "Referer": "http://quote.eastmoney.com/",
+                "Accept-Encoding": "identity"})
+            with urllib.request.urlopen(req, timeout=10) as r:
+                raw = r.read()
+            if raw[:2] == b"\x1f\x8b":
+                import gzip
+                raw = gzip.decompress(raw)
+            d = json.loads(raw.decode("utf-8", "replace"))
+        except Exception:
+            return None
+        items = [{"kw": str(x.get("KEYWORD") or "").strip(),
+                  "text": str(x.get("MAINPOINT_CONTENT") or "").strip()}
+                 for x in (d.get("hxtc") or []) if isinstance(x, dict)]
+        items = [x for x in items if x["kw"] and x["text"]]
+        if not items:
+            return None
+        scope = next((x["text"] for x in items if x["kw"] == "经营范围"), "")
+        rest = [x for x in items if x["kw"] != "经营范围"]
+        brief = rest[0] if rest else {"kw": "", "text": ""}
+        return {"code": c,
+                "updated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                "brief": brief["text"], "brief_title": brief["kw"],
+                "scope": scope,
+                "points": rest[1:9]}          # 行业/竞争优势，最多 8 条
+
+    def _company_profile(self, code, allow_fetch=True):
+        """读简介缓存；未命中则（可选）kick 后台抓取，返回 (profile|None, pending)。"""
+        c = str(code).split("_")[0]
+        cache = _load_json(BASE / "t_io" / "cache" / "company_profile.json", {}) or {}
+        hit = cache.get(c)
+        if isinstance(hit, dict) and hit.get("brief"):
+            return hit, False
+        if not allow_fetch:
+            return None, False
+        # 单飞：同一只票不并发重复抓
+        inflight = getattr(self, "_prof_inflight", None)
+        if inflight is None:
+            inflight = self._prof_inflight = set()
+        if c in inflight:
+            return None, True
+        inflight.add(c)
+
+        def _bg():
+            try:
+                p = self._fetch_company_profile(c)
+                if p:
+                    _cur = _load_json(BASE / "t_io" / "cache" / "company_profile.json", {}) or {}
+                    _cur[c] = p
+                    _fp = BASE / "t_io" / "cache" / "company_profile.json"
+                    _fp.parent.mkdir(parents=True, exist_ok=True)
+                    _tmp = str(_fp) + ".tmp"
+                    with open(_tmp, "w", encoding="utf-8") as f:
+                        json.dump(_cur, f, ensure_ascii=False)
+                    os.replace(_tmp, str(_fp))
+            except Exception:
+                pass
+            finally:
+                inflight.discard(c)
+        threading.Thread(target=_bg, name="company-profile", daemon=True).start()
+        return None, True
+
     def load_stock_profile(self, code, live=False):
         """公司资料。两层（owner 2026-09-29：本地先显示 + 按钮拉实时）：
 
@@ -3609,6 +3691,7 @@ class Api:
         out = {"code": str(code), "name": None, "ok": False, "error": None,
                "business_summary": "", "sector": "", "sector_list": [],
                "local_concepts": [], "boards": [], "boards_source": None,
+               "profile": None, "profile_pending": False,
                "boards_note": "东财口径；行业/概念/地域按板块名启发式划分"}
         try:
             jy = _load_json(HUNTER_DIR / "watchlist_jiuyan.json", {})
@@ -3624,6 +3707,15 @@ class Api:
         except Exception as e:
             out["error"] = f"读取本地资料失败: {e}"
             return _clean(out)
+
+        # 公司简介（2026-10-17）：本地一句“主营X”太薄 ⇒ 读 F10 缓存；没缓存就后台补
+        try:
+            _prof, _pend = self._company_profile(str(code))
+            out["profile"] = _prof
+            out["profile_pending"] = bool(_pend)
+        except Exception:
+            out["profile"] = None
+            out["profile_pending"] = False
 
         if live:
             try:
@@ -5872,36 +5964,38 @@ class Api:
             elif cur_box and cur > (cur_box["low"] + cur_box["high"]) / 2:
                 tags.append({"label": "筑顶", "color": "warn"})
 
-        # 背离（近60日局部高低点）
-        win_idx = range(max(2, n - 60), n)
-        idxs = list(win_idx)
-        price_peaks = []
-        price_troughs = []
-        for i in range(2, len(idxs) - 2):
-            idx = idxs[i]
-            if highs[idx] >= highs[idx - 1] and highs[idx] >= highs[idx - 2] and \
-               highs[idx] >= highs[idx + 1] and highs[idx] >= highs[idx + 2]:
-                price_peaks.append(idx)
-            if lows[idx] <= lows[idx - 1] and lows[idx] <= lows[idx - 2] and \
-               lows[idx] <= lows[idx + 1] and lows[idx] <= lows[idx + 2]:
-                price_troughs.append(idx)
-        # MACD
-        ema12 = pd.Series(closes).ewm(span=12, adjust=False).mean()
-        ema26 = pd.Series(closes).ewm(span=26, adjust=False).mean()
-        dif = (ema12 - ema26).values
+        # 背离（**日线**口径，2026-10-17 重写）
+        #
+        # ⚠️ 这里原先是 `analysis/divergence.py` 的**一份手抄副本**（只比"最后两个局部高点"），
+        #    漏掉了主模块早已补上的三道闸，实测把 owner 坑了：
+        #      ① **没有新鲜度** ⇒ 13 个交易日前的顶背离一直挂在标签上
+        #         （002536 飞龙股份：09-21 的高点，10-16 已从 56.8 跌到 40.6，标签还在报顶背离）；
+        #      ② **没有摆动门槛** ⇒ 同一段筑顶里的两个小峰被当成"两个顶"
+        #         （300475 案例：两谷仅隔 5 根、中间只反弹 2.26%）；
+        #      ③ **没有价格超出量** ⇒ 高出 0.1% 就算新高（002202 案例）。
+        #    ⇒ 改为**直接调用** `analysis.divergence.detect_daily_divergence`
+        #      （内部 = detect_divergence_events：DIF 分区 + PRICE_EXCESS 0.3% +
+        #       SWING_MULT_TOP 4.0 摆动深度 + DAILY_ALERT_MAX_AGE_BARS=4 新鲜度）。
+        #    模块 docstring 已声明「日线单次 MACD 背离本身未验证」⇒ 标签只是参考，不是信号。
+        try:
+            from analysis.divergence import detect_daily_divergence as _det_daily
+            _dv = _det_daily(df) or {}
+        except Exception:
+            _dv = {}
+        # 标签**必须带周期**（owner 2026-10-17：否则看不出是日线还是 30 分钟，而右边
+        # 「30min判定」用的是 30 分钟口径 —— 两列不一致时根本无从对账）。
+        if _dv.get("type") == "顶背离":
+            tags.append({"label": "日线顶背离", "color": "warn",
+                         "title": "日线 MACD 顶背离（近 60 个交易日高低点）· 确认于 %s 根前（%s）"
+                                  % (_dv.get("bars_ago"), _dv.get("time", ""))})
+        elif _dv.get("type") == "底背离":
+            tags.append({"label": "日线底背离", "color": "neutral",
+                         "title": "日线 MACD 底背离（近 60 个交易日高低点）· 确认于 %s 根前（%s）"
+                                  % (_dv.get("bars_ago"), _dv.get("time", ""))})
+
         # RSI — Wilder 平滑（2026-09-21 统一口径）
         from analysis.indicators import wilder_rsi as _wilder_rsi2
         rsi = _wilder_rsi2(pd.Series(closes), 14).values
-        # 顶背离
-        if len(price_peaks) >= 2:
-            p2, p1 = price_peaks[-2], price_peaks[-1]
-            if highs[p1] > highs[p2] and dif[p1] < dif[p2]:
-                tags.append({"label": "顶背离", "color": "warn"})
-        # 底背离
-        if len(price_troughs) >= 2:
-            t2, t1 = price_troughs[-2], price_troughs[-1]
-            if lows[t1] < lows[t2] and dif[t1] > dif[t2]:
-                tags.append({"label": "底背离", "color": "neutral"})
 
         # 超买/超卖
         cur_rsi = rsi[-1] if not np.isnan(rsi[-1]) else 50
@@ -8643,14 +8737,28 @@ class Api:
         def _is_holding(code: str) -> bool:
             return bool((holdings.get(code) or {}).get("qty") or 0) or \
                 bool((holdings.get(code.split("_")[0]) or {}).get("qty") or 0)
-        # 手动盘建仓表可见性（2026-09-20 owner 拍板调整）：
-        # 持仓股 + **显式加进股池的都显示** —— 不再按池隐藏 auto 标的。
-        # 人工盘/自动盘互不阻塞，同一只票两边都能加、都看得到；行的 pool 字段仍带
-        # 「自动」徽章，可用池筛选器（全部/人工/自动）分开看。
-        # （此前 2026-08-30 曾用 auto_pool.is_manual 把 auto 池+未持有的隐藏，
-        #   导致「添加成功却看不到」——600584 长电科技实例。）
+        # 建仓表可见性（**2026-10-17 owner 再次调整：持仓股一律不出现**）
+        #
+        # 沿革：2026-08-30 曾用 auto_pool.is_manual 隐藏 auto 标的 → 导致「添加成功却看不到」
+        #       （600584）；2026-09-20 改成「持仓股 + 股池里的都显示」。
+        # 现在 owner 要求：**已有底仓的票不该出现在"建仓候选"里** —— 它属于「持仓体检」，
+        # 列在这里会让人误以为还要再建一次（同一个代码同时出现在两张表里也确实矛盾）。
+        # 手动盘 / 自动盘**任一** qty>0 都算持仓（自动盘目前是仿真，但口径一致）。
+        _auto_hold = set()
+        try:
+            from src.holdings_repo import load_auto as _load_auto
+            _auto_hold = {str(c) for c, h in (_load_auto() or {}).items()
+                          if int((h or {}).get("qty") or 0) > 0}
+        except Exception:
+            _auto_hold = set()
+
+        def _held(code: str) -> bool:
+            c0 = str(code).split("_")[0]
+            return _is_holding(code) or c0 in _auto_hold or str(code) in _auto_hold
+
         def _visible(code: str) -> bool:
-            return _is_holding(code) or code in wl_stocks
+            # 必须还在股池里（watchlist_buy），且**不是持仓**
+            return (code in wl_stocks) and not _held(code)
 
         for code, r in latest_by_code.items():
             if not _visible(code):

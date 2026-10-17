@@ -2554,7 +2554,7 @@ function renderPB(pb) {
           <th title="是否站上 20 日线（观察列，不驱动任何判定）。⚠️「得分」里的 −70 悬崖扣分走的是 **5 日线**口径（owner 决定保留），与本列无关 ⇒ 本列不显示 −70。另注：5 日线该项实测横截面 IC 为负(站上MA5 −0.018, t=−6.9)">20日线<br><span style="font-size:9px;opacity:.6">观察</span></th>
           <th class="num" title="实时价 + 实时涨幅（随行情每 10s 刷新）。取不到显示 — 而不是 0.00%：不把「无数据」画成「平盘」">价<br><span style="font-size:9px;opacity:.6">涨幅</span></th>
           <th title="突破箱体=第一优先级">突破</th>
-          <th title="通道/箱体/背离等技术形态（此列的顶/底背离是**日线**口径，与右侧『30min判定』的 30 分钟口径不同源）">技术标签</th>
+          <th title="通道/箱体/背离等技术形态。背离标签已**自带周期**（如「日线顶背离」），与右侧『30min判定』的 30 分钟口径不同源 —— 悬停标签可见确认日期">技术标签</th>
           <th title="时机门控：市场有方向/多头结构/回撤到位（GO→signal，震荡→降频）">时机条件</th>
           <th title="30分钟综合判定（与『持仓 30min 风险体检』同口径）：🔴减仓/避高=30min 顶背离(T1/T2)；🟠盯紧=T3顶分型+T4均线压制同现；🟢偏好=无顶信号且有新鲜底背离(≤16根)；⚪中性=其余。依据 981只×540日 离线验证；T3/T4 无前瞻区分度、单个不报警">30min判定</th>
           <th title="仓位结构（30min/10min，供仓位管理参考）：止损=10min 最近已确认摆动低点；阶段=10min 四阶段(①蓄势/②抬升/③派发/④下跌)；30m=30min MA65 中期方向；折价=现价/止损-1（到-4.3%记满）。破位时给出三档下档支撑挂单价与5日成交率估计。⚠️ 是**结构参考、不是买卖信号**——机械按阶段加减仓经实测无正贡献(纯择时-1.4~+2.7pp不显著)，「破前低就清仓」-30pp强有害；唯一有证据的是破位后在下档支撑挂限价补仓(改善成本结构、不提高期望)。悬停看明细">仓位结构</th>
@@ -3281,6 +3281,41 @@ async function loadStockProfile() {
   } catch (e) { /* 保留本地层 */ }
 }
 
+/* 业务简介 HTML：长文优先，兜底本地一句话。 */
+function stockBizHtml(d) {
+  const p = d && d.profile;
+  if (p && p.brief) {
+    let h = `<b>业务简介</b>`
+      + (p.brief_title ? ` <span class="prof-note">${esc(p.brief_title)}</span>` : "")
+      + `：${esc(p.brief)}`;
+    if (p.scope) {
+      h += `<details class="prof-details"><summary>经营范围（${p.scope.length} 字）</summary>`
+        + `<div>${esc(p.scope)}</div></details>`;
+    }
+    return h;
+  }
+  const pend = d && d.profile_pending;
+  return `<b>业务简介</b>：`
+    + (d && d.business_summary ? esc(d.business_summary)
+                               : '<span class="prof-none">本地表无记录</span>')
+    + (pend ? ' <span class="prof-note">⏳ 正在查询完整简介（约 2 秒后自动补上）</span>' : "");
+}
+
+/* 后台补完后再去取一次，只替换「业务简介」那一块（不重渲染整个弹窗）。 */
+let _bizRetryTimer = null;
+function _scheduleBizProfileRetry(code) {
+  if (_bizRetryTimer) clearTimeout(_bizRetryTimer);
+  _bizRetryTimer = setTimeout(async () => {
+    _bizRetryTimer = null;
+    if (!code || code !== stockChartCode) return;
+    try {
+      const d = await apiCall("load_stock_profile", code, false);
+      const el = document.getElementById("profBiz");
+      if (el && d && d.profile && d.profile.brief) el.innerHTML = stockBizHtml(d);
+    } catch (e) { /* 保留兜底文案 */ }
+  }, 2600);
+}
+
 function renderStockProfile(body, d, live) {
   if (!body) return;
   if (!d || d.ok === false) {
@@ -3294,9 +3329,10 @@ function renderStockProfile(body, d, live) {
   if (d.boards_source === "em") h += '<span class="prof-src">东财实时</span>';
   else if (!live) h += '<span class="prof-src prof-src-local">本地表</span>';
   h += "</div>";
-  h += `<div class="prof-sec"><b>业务简介</b>：`
-     + (d.business_summary ? esc(d.business_summary)
-                           : '<span class="prof-none">本地表无记录</span>') + "</div>";
+  // 业务简介（2026-10-17）：优先用东财 F10「核心题材」补全的长文（后端缓存），
+  // 本地那句"主营专用设备制造业"只在没抓到简介时兜底。挂 id 供后台补完后定点替换。
+  h += `<div class="prof-sec" id="profBiz">${stockBizHtml(d)}</div>`;
+  if (d && d.profile_pending) _scheduleBizProfileRetry(d.code || stockChartCode);
   h += `<div class="prof-sec"><b>所属行业/板块</b>：`
      + ((d.sector_list && d.sector_list.length) ? chips(d.sector_list) : none) + "</div>";
   h += `<div class="prof-sec"><b>韭研概念</b>：`
@@ -3430,8 +3466,16 @@ function renderStockChart() {
     yAxis: r.price, lineStyle: { color: "#f85149", type: "dashed", width: 1 },
     label: { formatter: `${r.price}`, color: "#f85149", fontSize: 9, position: "insideEndTop" },
   })));
-  const currentLine = { yAxis: cur, lineStyle: { color: "#e3b341", width: 1, type: "solid" },
-    label: { formatter: `${cur}`, color: "#e3b341", fontSize: 9, position: "insideEndTop" } };
+  // 现价线（2026-10-17）：原来是不管涨跌都金色的细实线，几乎读不出来。
+  // 改成**按当日涨跌着色**的虚线 + 右端价格胶囊，一眼看到"现在在哪、比昨天红还是绿"。
+  const _oC = (period.ohlc && period.ohlc.length) ? period.ohlc[period.ohlc.length - 1] : null;
+  const _pC = (period.ohlc && period.ohlc.length > 1) ? period.ohlc[period.ohlc.length - 2][1] : null;
+  const _nowUp = _oC && _pC != null ? _oC[1] >= _pC : true;
+  const _nowCol = _nowUp ? "#e5484d" : "#12a150";
+  const currentLine = { yAxis: cur,
+    lineStyle: { color: _nowCol, width: 1, type: "dashed", opacity: .85 },
+    label: { formatter: ` ${cur} `, color: "#fff", backgroundColor: _nowCol,
+             padding: [2, 6], borderRadius: 3, fontSize: 9, position: "insideEndTop" } };
 
   // 黄金分割（斐波那契回撤/扩展）：跟随当前 Tab；后端已按周期各算一份
   const fib = (period.fib && period.fib.available) ? period.fib : null;
@@ -3610,7 +3654,8 @@ function renderStockChart() {
   stockChartAppliedZoom = { start: zStart, end: zEnd };
   stockChartInst.setOption({
     backgroundColor: "transparent",
-    animation: false,
+    // 2026-10-17：首帧播一次入场动画（只有初次 init 时），后续 10s 重绘保持静态，避免闪。
+    animation: _firstInit, animationDuration: 340, animationEasing: "cubicOut",
     // 2026-10-16 owner：「打开K线图只默认开启 5日/10日/20日均线」。
     // ⚠️ 两条纪律：
     //   ① `selected` **只列要关掉的项** —— ECharts 对未列出的项默认 true，所以 K线/成交量/
@@ -3619,7 +3664,10 @@ function renderStockChart() {
     //      `selected` 会把**用户手动勾的图例选择冲掉**。首帧 = `echarts.init` 那一次，
     //      而"换票/关窗"都会 dispose ⇒ 每次**重新打开**都回到这套默认，正是 owner 要的。
     legend: {
-      top: 0, textStyle: { color: "#8b949e", fontSize: 10 }, type: "scroll",
+      // 2026-10-17：原 top:0 且无 left/right —— 和左上角的「通道/黄金分割」标题**叠在一起**，
+      // 一长串图例挤成一坨（用户截图里的"显示不够好"有一半是这个）。挪到标题下方并限宽。
+      top: 20, left: 8, right: 8, itemGap: 9, itemWidth: 14, itemHeight: 8,
+      textStyle: { color: "#6b7280", fontSize: 10 }, type: "scroll",
       ...(_firstInit ? {
         selected: {
           MA30: false, MA60: false, MA180: false, MA365: false,
@@ -3629,8 +3677,10 @@ function renderStockChart() {
     },
     // 恒常给 title（哪怕空数组）：实例复用后不再 dispose，缺省时旧标题会残留在图上
     title: titles,
-    tooltip: { trigger: "axis", axisPointer: { type: "cross" }, backgroundColor: "#161b22",
-      borderColor: "#30363d", textStyle: { color: "#c9d1d9", fontSize: 11 },
+    tooltip: { trigger: "axis", axisPointer: { type: "cross" }, backgroundColor: "rgba(22,27,34,.96)",
+      borderColor: "#30363d", borderWidth: 1, borderRadius: 8, padding: [8, 10],
+      extraCssText: "box-shadow:0 10px 28px rgba(15,23,42,.28);backdrop-filter:blur(2px);",
+      textStyle: { color: "#e6edf3", fontSize: 11 },
       formatter: function (ps) {
         const k = ps.find(p => p.seriesName === "K线");
         if (!k) return "";
@@ -3696,35 +3746,43 @@ function renderStockChart() {
         return html;
       } },
     axisPointer: { link: [{ xAxisIndex: "all" }] },
+    // 2026-10-17：整套轴/网格原来用的是 **GitHub 深色 token**（#30363d/#8b949e），
+    // 而这个弹窗是**白底** ⇒ 轴线和标签都发灰、图像"平"。改成浅底墨色。
     grid: [
-      { left: 60, right: 20, top: 34, height: "52%" },   // 主图: K线+MA+BOLL+支撑压力+箱体
+      { left: 60, right: 20, top: 50, height: "50%" },   // 主图: K线+MA+BOLL+支撑压力+箱体
       { left: 60, right: 20, top: "60%", height: "9%" },  // 成交量(独立窗口)
       { left: 60, right: 20, top: "71%", height: "10%" }, // MACD
       { left: 60, right: 20, top: "83%", height: "10%" }, // RSI
     ],
     xAxis: [
-      { type: "category", data: period.dates, gridIndex: 0, axisLine: { lineStyle: { color: "#30363d" } },
+      { type: "category", data: period.dates, gridIndex: 0, axisLine: { lineStyle: { color: "#e2e6ee" } },
         axisLabel: { show: false } },
-      { type: "category", data: period.dates, gridIndex: 1, axisLabel: { show: false }, axisLine: { lineStyle: { color: "#30363d" } } },
-      { type: "category", data: period.dates, gridIndex: 2, axisLabel: { show: false }, axisLine: { lineStyle: { color: "#30363d" } } },
-      { type: "category", data: period.dates, gridIndex: 3, axisLabel: { color: "#8b949e", fontSize: 9 }, axisLine: { lineStyle: { color: "#30363d" } } },
+      { type: "category", data: period.dates, gridIndex: 1, axisLabel: { show: false }, axisLine: { lineStyle: { color: "#e2e6ee" } } },
+      { type: "category", data: period.dates, gridIndex: 2, axisLabel: { show: false }, axisLine: { lineStyle: { color: "#e2e6ee" } } },
+      { type: "category", data: period.dates, gridIndex: 3, axisLabel: { color: "#6b7280", fontSize: 9 }, axisLine: { lineStyle: { color: "#e2e6ee" } } },
     ],
     yAxis: [
-      { scale: true, gridIndex: 0, axisLabel: { color: "#8b949e", fontSize: 9 },
-        splitLine: { lineStyle: { color: "rgba(139,148,158,.12)" } } },
-      { scale: true, gridIndex: 1, axisLabel: { color: "#8b949e", fontSize: 9 },
-        splitLine: { show: false }, axisLabel: { show: false } },
+      { scale: true, gridIndex: 0, axisLabel: { color: "#6b7280", fontSize: 9 },
+        splitLine: { lineStyle: { color: "#eef1f6" } } },
+      { scale: true, gridIndex: 1, axisLabel: { show: false }, splitLine: { show: false } },
       { scale: true, gridIndex: 2, axisLabel: { show: false }, splitLine: { show: false } },
-      { min: 0, max: 100, gridIndex: 3, axisLabel: { color: "#8b949e", fontSize: 9 }, splitLine: { show: false } },
+      { min: 0, max: 100, gridIndex: 3, axisLabel: { color: "#9ca3af", fontSize: 9 }, splitLine: { show: false } },
     ],
     dataZoom: [
       { type: "inside", xAxisIndex: [0, 1, 2, 3], start: zStart, end: zEnd },
-      { type: "slider", xAxisIndex: [0, 1, 2, 3], bottom: 0, height: 16, start: zStart, end: zEnd },
+      { type: "slider", xAxisIndex: [0, 1, 2, 3], bottom: 0, height: 16, start: zStart, end: zEnd,
+        // 2026-10-17 视觉：滑块默认灰扑扑的一坨，给它统一的浅底 + 品牌色手柄
+        backgroundColor: "#f4f6fa", borderColor: "#e4e8ef",
+        fillerColor: "rgba(232,83,31,.12)", handleStyle: { color: "#fff", borderColor: "#e8531f" },
+        moveHandleStyle: { color: "#e8531f", opacity: .35 },
+        textStyle: { color: "#9ca3af", fontSize: 9 }, dataBackground: { lineStyle: { color: "#dfe4ec" }, areaStyle: { color: "#f0f3f8" } } },
     ],
     series: [
       { name: "K线", type: "candlestick", data: period.ohlc, xAxisIndex: 0, yAxisIndex: 0,
         barMaxWidth: 12,   // 根数很少时别把蜡烛拉成巨型方块；根数多时仍自动变细
-        itemStyle: { color: "#f85149", color0: "#3fb950", borderColor: "#f85149", borderColor0: "#3fb950" },
+        // 浅底上 #f85149/#3fb950 偏浅 ⇒ 换成对比更够的一组（涨红跌绿仍是 A 股惯例）
+        itemStyle: { color: "#e5484d", color0: "#12a150",
+                     borderColor: "#d93a3f", borderColor0: "#0f8c46", borderWidth: 1 },
         markArea: boxAreas.length && showBoxes ? {
           silent: true, data: boxAreas,
         } : undefined,
@@ -3783,8 +3841,14 @@ function renderStockChart() {
           label: { position: "insideStartTop" } },
       }] : []),
       // 成交量独立窗口
-      { name: "成交量", type: "bar", data: period.volume, xAxisIndex: 1, yAxisIndex: 1,
-        itemStyle: { color: "rgba(255,140,90,.35)" }, barWidth: "60%", barMaxWidth: 12 },
+      { name: "成交量", type: "bar", xAxisIndex: 1, yAxisIndex: 1, barWidth: "60%", barMaxWidth: 12,
+        // 2026-10-17：原来一律是半透明橙色 ⇒ 看不出放量是买还是卖。改为**按当日涨跌着色**。
+        data: period.volume.map((v, i) => {
+          const o = period.ohlc[i];
+          const prev = i > 0 ? period.ohlc[i - 1][1] : null;
+          const up = !o ? true : (prev == null ? o[1] >= o[0] : o[1] >= prev);
+          return { value: v, itemStyle: { color: up ? "rgba(229,72,77,.55)" : "rgba(18,161,80,.55)" } };
+        }) },
       // MACD 窗口
       { name: "MACD-DIF", type: "line", data: period.macd.dif, xAxisIndex: 2, yAxisIndex: 2,
         symbol: "none", lineStyle: { color: "#ff8c5a", width: 1 } },
@@ -3839,8 +3903,10 @@ const TAG_DESC = {
   "筑底": "近20日横盘缩量、价格靠近箱体下沿，可能筑底，可关注低吸",
   "筑底中": "近20日横盘、价格靠近箱体下沿，筑底进行中（尚未缩量确认）",
   "筑顶": "近20日横盘、价格靠近箱体上沿，可能筑顶，警惕回落",
-  "顶背离": "价格创新高但MACD(DIF)走弱，上涨动能衰减，警惕回调（背离≠立刻反转）",
-  "底背离": "价格创新低但MACD(DIF)走强，下跌动能衰减，可能反弹（背离≠立刻反转）",
+  "日线顶背离": "【日线】MACD：价格创新高但 DIF 走弱，上涨动能衰减，警惕回调（背离≠立刻反转）。"
+    + "⚠️ 标签带「日线」是要和右边「30min判定」的 30 分钟口径区分开；日线单次背离本身未验证，只作参考",
+  "日线底背离": "【日线】MACD：价格创新低但 DIF 走强，下跌动能衰减，可能反弹（背离≠立刻反转）。"
+    + "⚠️ 与 30 分钟口径不同源；日线单次背离本身未验证，只作参考",
   "超买": "RSI(14)>70，短期涨幅过大，追高风险高，等回踩",
   "超卖": "RSI(14)<30，短期跌幅过大，可能有反弹，但趋势向下时不抢反弹",
   "破5日线": "【日线口径】今收 < 日线5日均线（破五日线只卖不买）。"
@@ -3856,7 +3922,7 @@ function tagBadge(t) {
     "上行": "↗", "下行": "↘", "震荡": "→", "站上5日线": "⬆️",
     "箱体上沿": "🟠", "箱体下沿": "🔵", "箱体内部": "⚪",
     "向上突破": "🚀", "完全突破": "🔺", "跌破下沿": "⚠️", "筑底": "🧱", "筑顶": "⛰️",
-    "顶背离": "⛔", "底背离": "✅", "超买": "⚠", "超卖": "📉",
+    "日线顶背离": "⛔", "日线底背离": "✅", "超买": "⚠", "超卖": "📉",
   };
   const icon = iconMap[t.label] || "";
   // 2026-10-13：破(N)日线 带上**实测数字**（后端 `cur`/`ma`，日线口径）。
@@ -3864,7 +3930,9 @@ function tagBadge(t) {
   //   「站上」，日线 5 日线=41.712「在下方」）。有数字可当场核对，不必反过来怀疑系统。
   const _num = (t.ma != null && t.cur != null && isFinite(t.ma) && isFinite(t.cur))
     ? `　实测：现价 ${t.cur} < 日线均线 ${t.ma}` : "";
-  const desc = (TAG_DESC[t.label] || t.label) + _num;
+  // t.title（2026-10-17）：后端给的可选补充说明 —— 目前用于背离标签带出
+  // 「确认于 N 根前（日期）」，否则用户无法判断这条顶背离是今天的还是两周前的。
+  const desc = (TAG_DESC[t.label] || t.label) + _num + (t.title ? "　" + t.title : "");
   return `<span class="badge ${colorMap[t.color] || "chop"}" title="${esc(desc)}">${icon}${esc(t.label)}</span>`;
 }
 // 建仓信号符合度徽章（时机门控：市场有方向/多头结构/回撤到位/金叉加分；盘后计算，实盘盘中显示"—"）
