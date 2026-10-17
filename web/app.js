@@ -3130,7 +3130,10 @@ let stockChartZoom = null;
 let stockChartVersion = null;
 // 最近一次**程序化**设进 dataZoom 的视窗：dataZoom 事件里用它区分「程序设置」与「用户缩放」。
 let stockChartAppliedZoom = null;
-const MA_COLORS = ["#e6c07b", "#56b4e9", "#e91e63", "#9b59b6", "#2ecc71", "#f39c12", "#3498db"];
+// MA 线配色（2026-10-17）：K线图改深底后，原浅底那组（#e6c07b 等）亮度过高、
+// 在深底上发白刺眼。换成按深底重新选的一组（dataviz 校验器 dark 全项通过：
+// 亮度带 / 彩度 / CVD ΔE≥8.4 / 对比度≥3:1）。
+const MA_COLORS = ["#3987e5", "#d95926", "#199e70", "#c98500", "#d55181", "#9085e9", "#e66767"];
 
 /* 默认可见根数。取值贴着后端黄金分割回看期（t_gui._FIB_LOOKBACK）——daily 120 与回看期
    相等，锚点必然落在默认视窗内；weekly/monthly 因 bar 更少而略小，万一锚点更早由下面的
@@ -3436,7 +3439,7 @@ function renderStockChart() {
   if (!period || !(period.dates || []).length) {
     if (stockChartInst) { stockChartInst.dispose(); stockChartInst = null; }
     document.getElementById("stockChart").innerHTML =
-      '<div class="empty">该周期无分时数据（tushare 取不到，且本地无该标的缓存）</div>';
+      '<div class="empty" style="color:#8b949e;padding-top:120px">该周期无分时数据（tushare 取不到，且本地无该标的缓存）</div>';
     return;
   }
   const levels = data.levels;
@@ -3471,7 +3474,7 @@ function renderStockChart() {
   const _oC = (period.ohlc && period.ohlc.length) ? period.ohlc[period.ohlc.length - 1] : null;
   const _pC = (period.ohlc && period.ohlc.length > 1) ? period.ohlc[period.ohlc.length - 2][1] : null;
   const _nowUp = _oC && _pC != null ? _oC[1] >= _pC : true;
-  const _nowCol = _nowUp ? "#e5484d" : "#12a150";
+  const _nowCol = _nowUp ? "#f85149" : "#3fb950";
   const currentLine = { yAxis: cur,
     lineStyle: { color: _nowCol, width: 1, type: "dashed", opacity: .85 },
     label: { formatter: ` ${cur} `, color: "#fff", backgroundColor: _nowCol,
@@ -3653,7 +3656,8 @@ function renderStockChart() {
 
   stockChartAppliedZoom = { start: zStart, end: zEnd };
   stockChartInst.setOption({
-    backgroundColor: "transparent",
+    // 2026-10-17 owner：K线图用**深色画布**（独立的深色主题，不是把浅色反相）。
+    backgroundColor: "#0d1117",
     // 2026-10-17：首帧播一次入场动画（只有初次 init 时），后续 10s 重绘保持静态，避免闪。
     animation: _firstInit, animationDuration: 340, animationEasing: "cubicOut",
     // 2026-10-16 owner：「打开K线图只默认开启 5日/10日/20日均线」。
@@ -3667,7 +3671,7 @@ function renderStockChart() {
       // 2026-10-17：原 top:0 且无 left/right —— 和左上角的「通道/黄金分割」标题**叠在一起**，
       // 一长串图例挤成一坨（用户截图里的"显示不够好"有一半是这个）。挪到标题下方并限宽。
       top: 20, left: 8, right: 8, itemGap: 9, itemWidth: 14, itemHeight: 8,
-      textStyle: { color: "#6b7280", fontSize: 10 }, type: "scroll",
+      textStyle: { color: "#8b949e", fontSize: 10 }, type: "scroll",
       ...(_firstInit ? {
         selected: {
           MA30: false, MA60: false, MA180: false, MA365: false,
@@ -3755,34 +3759,34 @@ function renderStockChart() {
       { left: 60, right: 20, top: "83%", height: "10%" }, // RSI
     ],
     xAxis: [
-      { type: "category", data: period.dates, gridIndex: 0, axisLine: { lineStyle: { color: "#e2e6ee" } },
+      { type: "category", data: period.dates, gridIndex: 0, axisLine: { lineStyle: { color: "#2b333d" } },
         axisLabel: { show: false } },
-      { type: "category", data: period.dates, gridIndex: 1, axisLabel: { show: false }, axisLine: { lineStyle: { color: "#e2e6ee" } } },
-      { type: "category", data: period.dates, gridIndex: 2, axisLabel: { show: false }, axisLine: { lineStyle: { color: "#e2e6ee" } } },
-      { type: "category", data: period.dates, gridIndex: 3, axisLabel: { color: "#6b7280", fontSize: 9 }, axisLine: { lineStyle: { color: "#e2e6ee" } } },
+      { type: "category", data: period.dates, gridIndex: 1, axisLabel: { show: false }, axisLine: { lineStyle: { color: "#2b333d" } } },
+      { type: "category", data: period.dates, gridIndex: 2, axisLabel: { show: false }, axisLine: { lineStyle: { color: "#2b333d" } } },
+      { type: "category", data: period.dates, gridIndex: 3, axisLabel: { color: "#8b949e", fontSize: 9 }, axisLine: { lineStyle: { color: "#2b333d" } } },
     ],
     yAxis: [
-      { scale: true, gridIndex: 0, axisLabel: { color: "#6b7280", fontSize: 9 },
-        splitLine: { lineStyle: { color: "#eef1f6" } } },
+      { scale: true, gridIndex: 0, axisLabel: { color: "#8b949e", fontSize: 9 },
+        splitLine: { lineStyle: { color: "rgba(139,148,158,.14)" } } },
       { scale: true, gridIndex: 1, axisLabel: { show: false }, splitLine: { show: false } },
       { scale: true, gridIndex: 2, axisLabel: { show: false }, splitLine: { show: false } },
-      { min: 0, max: 100, gridIndex: 3, axisLabel: { color: "#9ca3af", fontSize: 9 }, splitLine: { show: false } },
+      { min: 0, max: 100, gridIndex: 3, axisLabel: { color: "#6e7681", fontSize: 9 }, splitLine: { show: false } },
     ],
     dataZoom: [
       { type: "inside", xAxisIndex: [0, 1, 2, 3], start: zStart, end: zEnd },
       { type: "slider", xAxisIndex: [0, 1, 2, 3], bottom: 0, height: 16, start: zStart, end: zEnd,
         // 2026-10-17 视觉：滑块默认灰扑扑的一坨，给它统一的浅底 + 品牌色手柄
-        backgroundColor: "#f4f6fa", borderColor: "#e4e8ef",
-        fillerColor: "rgba(232,83,31,.12)", handleStyle: { color: "#fff", borderColor: "#e8531f" },
+        backgroundColor: "#161b22", borderColor: "#30363d",
+        fillerColor: "rgba(248,81,73,.15)", handleStyle: { color: "#30363d", borderColor: "#f0a05a" },
         moveHandleStyle: { color: "#e8531f", opacity: .35 },
-        textStyle: { color: "#9ca3af", fontSize: 9 }, dataBackground: { lineStyle: { color: "#dfe4ec" }, areaStyle: { color: "#f0f3f8" } } },
+        textStyle: { color: "#6e7681", fontSize: 9 }, dataBackground: { lineStyle: { color: "#30363d" }, areaStyle: { color: "#161b22" } } },
     ],
     series: [
       { name: "K线", type: "candlestick", data: period.ohlc, xAxisIndex: 0, yAxisIndex: 0,
         barMaxWidth: 12,   // 根数很少时别把蜡烛拉成巨型方块；根数多时仍自动变细
         // 浅底上 #f85149/#3fb950 偏浅 ⇒ 换成对比更够的一组（涨红跌绿仍是 A 股惯例）
-        itemStyle: { color: "#e5484d", color0: "#12a150",
-                     borderColor: "#d93a3f", borderColor0: "#0f8c46", borderWidth: 1 },
+        itemStyle: { color: "#f85149", color0: "#3fb950",
+                     borderColor: "#ff6b62", borderColor0: "#56d364", borderWidth: 1 },
         markArea: boxAreas.length && showBoxes ? {
           silent: true, data: boxAreas,
         } : undefined,
@@ -3847,7 +3851,7 @@ function renderStockChart() {
           const o = period.ohlc[i];
           const prev = i > 0 ? period.ohlc[i - 1][1] : null;
           const up = !o ? true : (prev == null ? o[1] >= o[0] : o[1] >= prev);
-          return { value: v, itemStyle: { color: up ? "rgba(229,72,77,.55)" : "rgba(18,161,80,.55)" } };
+          return { value: v, itemStyle: { color: up ? "rgba(248,81,73,.55)" : "rgba(63,185,80,.55)" } };
         }) },
       // MACD 窗口
       { name: "MACD-DIF", type: "line", data: period.macd.dif, xAxisIndex: 2, yAxisIndex: 2,
