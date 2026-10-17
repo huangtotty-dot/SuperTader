@@ -159,7 +159,8 @@ def score_stocks(data: dict, config: dict) -> list:
     for col in ["总得分", "涨停",
                 "D1强势形态且新高", "D2强势形态",
                 "D4首板资金池", "D5潜在突破10日", "D6潜在突破5日",
-                "D7持续性", "D8情绪分数", "D9活跃程度", "大成交额额外加分"]:
+                "D7持续性", "D8情绪分数", "D9活跃程度",
+                "D11刚站上5日线", "D12趋势性", "大成交额额外加分"]:
         watchlist_df[col] = watchlist_df["代码"].map(lambda x: score_map.get(str(x), {}).get(col, 0))
     data["watchlist"] = watchlist_df
 

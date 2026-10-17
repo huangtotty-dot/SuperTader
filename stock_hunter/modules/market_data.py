@@ -674,6 +674,20 @@ class MarketDataFetcher:
                     except Exception:
                         ma5_reclaim = 0
 
+                    # 「站上20日线」趋势维度（2026-10-17 owner 新增 D12）：当日收盘 > 含今日的 MA20。
+                    # 与 D11 的分工：D11 是**事件**（刚翻上 5 日线），本项是**状态**（中期趋势向上）。
+                    # 实测池内只有 18.6% 站上（297/1598，中位偏离 −6.2%）⇒ 与布尔 MA5 的
+                    # 96% 冗余完全相反，是**高区分度**维度，故 D12 给了 8 分权重。
+                    above_ma20 = 0
+                    try:
+                        _lo20 = max(0, target_idx - 19)
+                        _w20 = [float(x) for x in df.iloc[_lo20:target_idx + 1]['close'].tolist()]
+                        if len(_w20) >= 20:
+                            _ma20 = sum(_w20[-20:]) / 20.0
+                            above_ma20 = 1 if (_ma20 > 0 and _w20[-1] > _ma20) else 0
+                    except Exception:
+                        above_ma20 = 0
+
                     return {
                         "代码": code,
                         "名称": "",
@@ -700,6 +714,7 @@ class MarketDataFetcher:
                         "连板天数": consecutive_limit,
                         "一字板涨停": is_word_limit,
                         "刚站上5日线": ma5_reclaim,
+                        "站上20日线": above_ma20,
                         "数据日期": str(target_row['date']),
                     }
 

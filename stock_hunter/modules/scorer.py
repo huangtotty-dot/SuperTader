@@ -1,7 +1,8 @@
 # -*- coding: utf-8 -*-
 """
-评分计算模块 v12 — v11 + D11刚站上5日线维度（2026-10-10）
+评分计算模块 v13 — v12 + D12趋势性（站上20日线，权重8，2026-10-17）
 满分 = 8+6+3+2+1+5+6+3+2+2+3 = 41分（D10/D11 须在 config.scoring.dimensions 里列出才计入）
+      + D12趋势性 8 分（2026-10-17）⇒ **config 实际启用 11 项，满分 47**
 
 打分标准：
   D1: 强势形态且新高（最高>近150日最高）- 8分
@@ -14,6 +15,7 @@
   D9: 活跃程度（近10日有涨停板）- 3分
   D10: 箱体突破质量（P2新增，基于改进的check_box_breakout）- 2分
   D11: 刚站上5日线（2026-10-10新增，状态跃迁：昨收<昨MA5 且今收>今MA5）- 2分
+  D12: 趋势性（2026-10-17新增，当日收盘站上20日均线）- 8分
   大成交额: 当日成交额>=50亿，额外+3分
 """
 from abc import ABC, abstractmethod
@@ -184,6 +186,30 @@ class D11刚站上5日线Scorer(ScorerBase):
         return score, f"刚站上5日线={reclaim} -> {score}分"
 
 
+class D12趋势性Scorer(ScorerBase):
+    """D12 趋势性（2026-10-17 owner 新增）：当日收盘**站上 20 日均线**。
+
+    与 D11 的分工（别混）：
+      · D11 = 事件「**刚**翻上 5 日线」（昨收<昨MA5 且今收>今MA5），2 分；
+      · D12 = 状态「**已在** 20 日线上方」（中期趋势向上），8 分。
+
+    ⚠️ 为什么敢给到 8 分（与 D1 并列最高）——实测区分度（2026-10-17，池内 1598 只）：
+        站上 MA20 **仅 297 只（18.6%）**，中位偏离 −6.2%（10 分位 −16.7%）。
+      与布尔 MA5 的「96% 冗余、方向为负」完全相反（见 D11 的 docstring），
+      它把池子切成了 18.6% / 81.4% 两群，是真正能改排序的维度，而不是人人加分。
+
+    数据来源：`market_data` 的 `站上20日线` 字段（当日收盘 vs 含今日的 20 日均线）。
+    """
+
+    name = "D12趋势性"
+    WEIGHT = 8                     # owner 2026-10-17：「这个得分应该需要增加权重比例」
+
+    def compute(self, stock_data: dict) -> Tuple[int, str]:
+        above = stock_data.get("站上20日线", 0) or 0
+        score = self.WEIGHT if above else 0
+        return score, f"站上20日线={above} -> {score}分"
+
+
 class ConceptScorer:
     def __init__(self, dimensions: list = None):
         self.scorers = [
@@ -197,6 +223,7 @@ class ConceptScorer:
             D9活跃程度Scorer(),
             D10箱体突破质量Scorer(),  # P2新增
             D11刚站上5日线Scorer(),   # 2026-10-10 新增（须同时在 config.scoring.dimensions 里列出才生效）
+            D12趋势性Scorer(),        # 2026-10-17 新增（须同时在 config.scoring.dimensions 里列出才生效）
             大成交额Scorer(),
         ]
         if dimensions:

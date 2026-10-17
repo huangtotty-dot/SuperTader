@@ -110,8 +110,9 @@ class ExcelReporter(ReporterBase):
             ["D8", "情绪分数", "6分", "当日一字板涨停"],
             ["D9", "活跃程度", "3分", "近10日有涨停板"],
             ["D11", "刚站上5日线", "2分", "昨收<昨MA5 且今收>今MA5（状态跃迁，非「是否站上」）"],
+            ["D12", "趋势性", "8分", "当日收盘站上 20 日均线（中期趋势向上；池内约 19% 命中）"],
             ["+", "大成交额额外加分", "3分", "当日成交额>=50亿"],
-            ["", "合计", "39分", "满分 = 8+6+3+2+1+5+6+3+2+3 = 39分（D10未在config启用，不计）"],
+            ["", "合计", "47分", "满分 = 8+6+3+2+1+5+6+3+2+2+8+3 = 47分（D10未在config启用，不计）"],
         ]
 
         light_green = PatternFill(start_color="90EE90", end_color="90EE90", fill_type="solid")
@@ -349,7 +350,8 @@ class ExcelReporter(ReporterBase):
                    "涨跌幅", "成交额(亿)",
                    "D1强势形态且新高", "D2强势形态", "D4首板资金池",
                    "D5潜在突破10日", "D6潜在突破5日",
-                   "D7持续性", "D8情绪分数", "D9活跃程度", "大成交额额外加分",
+                   "D7持续性", "D8情绪分数", "D9活跃程度",
+                   "D11刚站上5日线", "D12趋势性", "大成交额额外加分",
                    "板块热度分", "板块趋势"]
         rows = []
         for stock in top5_list:
@@ -371,6 +373,8 @@ class ExcelReporter(ReporterBase):
                 "D7持续性": stock.get("D7持续性", 0),
                 "D8情绪分数": stock.get("D8情绪分数", 0),
                 "D9活跃程度": stock.get("D9活跃程度", 0),
+                "D11刚站上5日线": stock.get("D11刚站上5日线", 0),
+                "D12趋势性": stock.get("D12趋势性", 0),
                 "大成交额额外加分": stock.get("大成交额额外加分", 0),
                 "板块热度分": hi.get("热度分", 0),
                 "板块趋势": hi.get("趋势", ""),
@@ -433,7 +437,8 @@ class ExcelReporter(ReporterBase):
 
         # 计算每个子概念在各维度上的打分次数（显示D1,D2,D4,D5,D6,D7,D8,D9,大成交额）
         dim_cols = ["D1强势形态且新高", "D2强势形态", "D4首板资金池", "D5潜在突破10日",
-                    "D6潜在突破5日", "D7持续性", "D8情绪分数", "D9活跃程度", "大成交额额外加分"]
+                    "D6潜在突破5日", "D7持续性", "D8情绪分数", "D9活跃程度",
+                    "D11刚站上5日线", "D12趋势性", "大成交额额外加分"]
         dim_counts = {}
         for sub_concept in sub_stats["子概念"]:
             sub_df = df_sector[df_sector["子概念"] == sub_concept]
@@ -445,7 +450,7 @@ class ExcelReporter(ReporterBase):
         # 写入子概念排名表头（浅蓝色背景）
         header_row = 2
         headers = ["排名", "子概念", "股票数量", "平均分", "最高分", "涨停数",
-                   "D1", "D2", "D4", "D5", "D6", "D7", "D8", "D9", "大成交额"]
+                   "D1", "D2", "D4", "D5", "D6", "D7", "D8", "D9", "D11", "D12", "大成交额"]
         light_blue = PatternFill(start_color="ADD8E6", end_color="ADD8E6", fill_type="solid")
         for c_idx, h in enumerate(headers, 1):
             cell = ws.cell(row=header_row, column=c_idx, value=h)
@@ -520,7 +525,8 @@ class ExcelReporter(ReporterBase):
         detail_headers = ["排名", "代码", "名称", "所属板块", "总得分",
                           "涨跌幅", "成交额(亿)", "D1强势形态且新高", "D2强势形态",
                           "D4首板资金池", "D5潜在突破10日", "D6潜在突破5日",
-                          "D7持续性", "D8情绪分数", "D9活跃程度", "大成交额额外加分"]
+                          "D7持续性", "D8情绪分数", "D9活跃程度",
+                          "D11刚站上5日线", "D12趋势性", "大成交额额外加分"]
         light_green = PatternFill(start_color="90EE90", end_color="90EE90", fill_type="solid")
         for c_idx, h in enumerate(detail_headers, 1):
             cell = ws.cell(row=current_row, column=c_idx, value=h)
@@ -539,7 +545,7 @@ class ExcelReporter(ReporterBase):
             sub_df = sub_df.sort_values("总得分", ascending=False).reset_index(drop=True)
 
             # 子概念分隔行
-            ws.merge_cells(start_row=current_row, start_column=1, end_row=current_row, end_column=16)
+            ws.merge_cells(start_row=current_row, start_column=1, end_row=current_row, end_column=18)
             cell = ws.cell(row=current_row, column=1, value=f"--- {sub_concept} ---")
             cell.fill = PatternFill(start_color="FFF2CC", end_color="FFF2CC", fill_type="solid")
             cell.font = Font(name="微软雅黑", bold=True, color="000000", size=9)
@@ -564,19 +570,21 @@ class ExcelReporter(ReporterBase):
                 ws.cell(row=current_row, column=13, value=int(row.get("D7持续性", 0)))
                 ws.cell(row=current_row, column=14, value=int(row.get("D8情绪分数", 0)))
                 ws.cell(row=current_row, column=15, value=int(row.get("D9活跃程度", 0)))
-                ws.cell(row=current_row, column=16, value=int(row.get("大成交额额外加分", 0)))
+                ws.cell(row=current_row, column=16, value=int(row.get("D11刚站上5日线", 0)))
+                ws.cell(row=current_row, column=17, value=int(row.get("D12趋势性", 0)))
+                ws.cell(row=current_row, column=18, value=int(row.get("大成交额额外加分", 0)))
                 # 应用数据样式
-                for c_idx in range(1, 17):
+                for c_idx in range(1, 19):
                     self.styler.style.apply(ws, current_row, c_idx, "data")
                 # P2: 涨停股浅红底高亮 + 高分股加粗
                 is_limit_up = int(row.get("涨停", 0)) == 1
                 score = int(row.get("总得分", 0))
                 limit_up_fill = PatternFill(start_color="FFD6D6", end_color="FFD6D6", fill_type="solid")
                 if is_limit_up:
-                    for c_idx in range(1, 17):
+                    for c_idx in range(1, 19):
                         ws.cell(row=current_row, column=c_idx).fill = limit_up_fill
                 if score >= 15:
-                    for c_idx in range(1, 17):
+                    for c_idx in range(1, 19):
                         cell = ws.cell(row=current_row, column=c_idx)
                         if cell.font:
                             cell.font = Font(

@@ -416,6 +416,8 @@ class DataLoader:
                         "D7持续性": int(row.get("D7持续性", 0)),
                         "D8情绪分数": int(row.get("D8情绪分数", 0)),
                         "D9活跃程度": int(row.get("D9活跃程度", 0)),
+                        "D11刚站上5日线": int(row.get("D11刚站上5日线", 0)),
+                        "D12趋势性": int(row.get("D12趋势性", 0)),
                         "大成交额额外加分": int(row.get("大成交额额外加分", 0)),
                     })
             sectors[category] = pd.DataFrame(rows)
