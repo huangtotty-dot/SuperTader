@@ -251,8 +251,10 @@
         <span class="cell-dim" style="font-size:12px;font-weight:normal">
           位置＝当日排名 · 星的大小＝平均分 · 轨迹＝排名变化（截至上方所选日期）
         </span>
-        <button class="mini-btn" id="oscSustainedBtn" onclick="toggleStarSustained()" style="margin-left:8px"
-                title="只看最近 10 日「排名持续提升」的板块：口径 = 至少 5 天名次变好 且 首尾净提升 ≥ 5 名">📈 连续提升</button>
+        <button class="mini-btn" id="oscFocusBtn" onclick="toggleStarFocus()" style="margin-left:8px"
+                title="按 2026-10-17 实验结论筛出该关注的板块：排名 ≥11 名（11-15 名未来 5 日超额 +0.88% t+2.92；16 名后 +0.74% t+2.87）；1-10 名实测全为负超额">🔍 该关注</button>
+        <button class="mini-btn" id="oscSustainedBtn" onclick="toggleStarSustained()" style="margin-left:4px"
+                title="只看最近 10 日「排名持续提升」的板块：口径 = 至少 5 天名次变好 且 首尾净提升 ≥ 5 名（⚠️ 实验显示该轨迹无前瞻增量，仅作观察）">📈 连续提升</button>
         <button class="mini-btn" onclick="loadSectorStars(true)" style="margin-left:4px">↻ 刷新</button>
       </h2>
       <div id="echSectorStars" class="echart" style="height:600px"></div>

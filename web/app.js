@@ -1456,12 +1456,25 @@ const SECTOR_STAR_HL = 6;                // 高亮条数（浅色下对比度 <3
    至少 5 天名次变好 且 首尾净提升 ≥5 名 —— 严格"天天变好"在这套数据里一天都没有，
    实测最长的连续严格提升只有 3 天，所以口径必须放宽到"过半天数在变好 + 最终确实上去了"。 */
 let _starSustainedOnly = false;
+let _starFocusOnly = false;                 // 「该关注」= 排名 ≥ STAR_FOCUS_RANK_MIN
 let _starLast = null;
+
+/* 「该关注」的阈值与依据（2026-10-17 实验，判词见 doc/research/2026-10-17_板块排名_前向收益_星空图判词.md）：
+   H=5 超额：1-3名 −1.07%(t−2.18) · 4-6名 −0.68%(t−2.20) · 7-10名 −0.53%(t−2.13)
+             · **11-15名 +0.88%(t+2.92)** · 16名以后 +0.74%(t+2.87)
+   非重叠检验 11 名后 +1.26%(t+2.27)；按板块大小分半两个半边都成立。
+   ⇒ 排名 1-10 是**规避**区，≥11 才是唯一有正超额的一段。 */
+const STAR_FOCUS_RANK_MIN = 11;
 
 function toggleStarSustained() {
   _starSustainedOnly = !_starSustainedOnly;
-  const btn = document.getElementById("oscSustainedBtn");
-  if (btn) btn.classList.toggle("primary", _starSustainedOnly);
+  if (_starSustainedOnly) _starFocusOnly = false;      // 两个筛选互斥
+  if (_starLast) renderSectorStars(_starLast);
+}
+
+function toggleStarFocus() {
+  _starFocusOnly = !_starFocusOnly;
+  if (_starFocusOnly) _starSustainedOnly = false;
   if (_starLast) renderSectorStars(_starLast);
 }
 
@@ -1492,13 +1505,19 @@ function renderSectorStars(d) {
   _starLast = d;
   const ymds = d.dates.map(x => x.ymd);
   const labels = d.dates.map(x => x.label);
-  // 「连续提升」筛选：开启时只画 sustained 的板块（其余整条隐藏），并让按钮保持高亮态
+  // 两个筛选互斥：连续提升 / 该关注（排名 ≥11）。开启时只画命中的板块，其余整条隐藏。
   const sust = d.sectors.filter(s => s.sustained);
-  const shownSecs = _starSustainedOnly ? sust : d.sectors;
+  const focus = d.sectors.filter(s => (s.last_rank || 0) >= STAR_FOCUS_RANK_MIN);
+  const shownSecs = _starSustainedOnly ? sust : (_starFocusOnly ? focus : d.sectors);
   const _sbtn = document.getElementById("oscSustainedBtn");
   if (_sbtn) {
     _sbtn.textContent = `📈 连续提升 (${sust.length})`;
     _sbtn.classList.toggle("primary", _starSustainedOnly);
+  }
+  const _fbtn = document.getElementById("oscFocusBtn");
+  if (_fbtn) {
+    _fbtn.textContent = `🔍 该关注 (${focus.length})`;
+    _fbtn.classList.toggle("primary", _starFocusOnly);
   }
   const hl = shownSecs.slice(0, SECTOR_STAR_HL);
   const rest = shownSecs.slice(SECTOR_STAR_HL);
@@ -1604,13 +1623,27 @@ function renderSectorStars(d) {
     const moved = d.sectors.filter(s => s.days >= 2)
       .sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta)).slice(0, 3)
       .map(s => `${esc(s.name)} ${s.delta > 0 ? "+" : ""}${s.delta}`).join(" · ");
-    const sustLine = _starSustainedOnly
-      ? `● <b>只看连续提升</b>：${sust.length} 个板块（口径：${d.dates.length} 日里至少 `
+    let line;
+    if (_starSustainedOnly) {
+      line = `● <b>只看连续提升</b>：${sust.length} 个板块（口径：${d.dates.length} 日里至少 `
         + `${Math.ceil(d.dates.length / 2)} 天名次变好、且净提升 ≥ 5 名）—— `
         + (sust.map(s => `${esc(s.name)} <b>+${s.delta}</b>（改善 ${s.ups} 天）`).join(" · ") || "无")
-      : `● 图上共 <b>${d.sectors.length}</b> 个板块（<b>全部</b>已画出）：前 ${SECTOR_STAR_HL} 名上色直标，`
+        + `<br><span class="cell-dim">⚠ 实验结论：这条轨迹**没有**前瞻增量（前进 vs 不变 t&lt;1），仅作观察。</span>`;
+    } else if (_starFocusOnly) {
+      // 依据直接写在这儿 —— 这个按钮的意义就是"照实验结论筛"，必须让人看见凭什么
+      line = `● <b>该关注</b>：${focus.length} 个板块（最新排名 ≥ ${STAR_FOCUS_RANK_MIN} 名）—— `
+        + (focus.map(s => `${esc(s.name)} <b>#${s.last_rank}</b>${s.delta != null ? `（${d.dates.length}日 ${s.delta > 0 ? "+" : ""}${s.delta}）` : ""}`).join(" · ") || "无")
+        + `<br>📊 <b>依据</b>（2026-10-17 实验：60 个交易日 · 板块内等权 · 已去大盘 beta · 持有 5 日）：`
+        + `排名 <b>1-3 名 −1.07%</b>(t−2.18) · <b>4-6 名 −0.68%</b>(t−2.20) · <b>7-10 名 −0.53%</b>(t−2.13) `
+        + `⇒ 追前面的会跑输；<b>11-15 名 +0.88%</b>(t+2.92)、16 名以后 +0.74%(t+2.87) ⇒ 只有这一段有正超额。`
+        + `非重叠检验 +1.26%(t2.27)，按板块大小分半两个半边都成立。`
+        + `<br><span class="cell-dim">⚠ 这是<b>相对</b>优势：样本期大盘下行，三档绝对收益全为负（−0.8%~−2.3%）。`
+        + `这张图只选板块、不择时；且样本仅 60 天单一 regime，别当铁律。</span>`;
+    } else {
+      line = `● 图上共 <b>${d.sectors.length}</b> 个板块（<b>全部</b>已画出）：前 ${SECTOR_STAR_HL} 名上色直标，`
         + `其余为灰星背景；星越大＝当日平均分越高（面积≈得分）。　排名变动最大：${moved || "—"}`;
-    noteEl.innerHTML = sustLine + `<br>⚠ ${esc(d.note || "")}`;
+    }
+    noteEl.innerHTML = line + `<br>⚠ ${esc(d.note || "")}`;
   }
   if (tblEl) {
     // 表格视图（无障碍兜底）：行=板块，列=日期，格子=当日名次/分数
