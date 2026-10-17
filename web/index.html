@@ -236,13 +236,33 @@
   <div class="tab-page" id="tab-hunter">
     <div class="section">
       <h2>概念评分排名
-        <select id="hunterDate" class="mini-btn" style="margin-left:12px" title="选择历史日期查看当时排名"></select>
+        <span class="cell-dim" style="font-size:12px;font-weight:normal;margin-left:12px">历史日期</span>
+        <input type="date" id="hunterDate" class="mini-input" style="width:140px;margin-left:4px"
+               title="选日期 → 点「🔄 重新生成」按该日重跑并查看当时排名">
         <button class="mini-btn" id="hunterRegenBtn" style="margin-left:4px" title="重新生成选中日期的结果(拉行情+评分)">🔄 重新生成</button>
         <button class="mini-btn primary" id="hunterRunBtn" style="margin-left:4px">▶ 运行今日数据</button>
       </h2>
       <div id="hunterBody">
         <div class="empty">点击"运行今日数据"获取最新概念评分</div>
       </div>
+    </div>
+    <div class="section">
+      <h2>板块星轨图 · 近十日
+        <span class="cell-dim" style="font-size:12px;font-weight:normal">
+          位置＝当日排名 · 星的大小＝平均分 · 轨迹＝排名变化（截至上方所选日期）
+        </span>
+        <button class="mini-btn" id="oscSustainedBtn" onclick="toggleStarSustained()" style="margin-left:8px"
+                title="只看最近 10 日「排名持续提升」的板块：口径 = 至少 5 天名次变好 且 首尾净提升 ≥ 5 名">📈 连续提升</button>
+        <button class="mini-btn" onclick="loadSectorStars(true)" style="margin-left:4px">↻ 刷新</button>
+      </h2>
+      <div id="echSectorStars" class="echart" style="height:600px"></div>
+      <div id="sectorStarsNote" class="cell-dim" style="font-size:11px;line-height:1.6;margin-top:6px"></div>
+      <details style="margin-top:8px">
+        <summary class="card-title" style="cursor:pointer;user-select:none">
+          表格视图（逐日名次/平均分 · 默认全部板块，开「连续提升」时只列命中的）<span class="cell-dim" style="font-weight:normal;font-size:11px"> · 可滚动</span>
+        </summary>
+        <div id="sectorStarsTable" style="margin-top:6px;max-height:340px;overflow:auto"></div>
+      </details>
     </div>
   </div>
 

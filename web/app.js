@@ -1444,6 +1444,192 @@ function hunterGoMa(go) {
   return out;
 }
 
+/* ---- 板块星轨图（2026-10-17）：近十日 排名(位置) × 平均分(星大小) × 轨迹(排名变化) ----
+   口径见后端 `Api.load_sector_constellation` 的 docstring：排名只在当日集合内可比、
+   平均分不能跨"入池日"直接比 —— 这两条会随图显示在 #sectorStarsNote 里，别删。 */
+const SECTOR_STAR_COLORS = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300"];
+const SECTOR_STAR_MUTED = "#b9c2cf";     // 未高亮板块：中性灰，作为背景星
+const SECTOR_STAR_HL = 6;                // 高亮条数（浅色下对比度 <3:1 的三个槽位靠直标+表格兜底）
+
+/* 「连续提升」筛选（2026-10-17 owner）：只看最近 10 日排名持续提升的板块。
+   判定在后端 `load_sector_constellation`（sector.sustained）：
+   至少 5 天名次变好 且 首尾净提升 ≥5 名 —— 严格"天天变好"在这套数据里一天都没有，
+   实测最长的连续严格提升只有 3 天，所以口径必须放宽到"过半天数在变好 + 最终确实上去了"。 */
+let _starSustainedOnly = false;
+let _starLast = null;
+
+function toggleStarSustained() {
+  _starSustainedOnly = !_starSustainedOnly;
+  const btn = document.getElementById("oscSustainedBtn");
+  if (btn) btn.classList.toggle("primary", _starSustainedOnly);
+  if (_starLast) renderSectorStars(_starLast);
+}
+
+async function loadSectorStars(force) {
+  const box = document.getElementById("echSectorStars");
+  if (!box) return;
+  if (!window.echarts) { echClear("echSectorStars"); return; }
+  try {
+    const d = await apiCall("load_sector_constellation", 10, state.date || null);
+    echGuard("板块星轨图", () => renderSectorStars(d));
+  } catch (e) {
+    console.error("[图表] 板块星轨图 取数失败：", e);
+    echClear("echSectorStars");
+    const n = document.getElementById("sectorStarsNote");
+    if (n) n.textContent = `取数失败：${e.message}`;
+  }
+}
+
+function renderSectorStars(d) {
+  const noteEl = document.getElementById("sectorStarsNote");
+  const tblEl = document.getElementById("sectorStarsTable");
+  if (!d || !d.available) {
+    echClear("echSectorStars");
+    if (noteEl) noteEl.textContent = (d && d.error) || "无板块排名记录";
+    if (tblEl) tblEl.innerHTML = "";
+    return;
+  }
+  _starLast = d;
+  const ymds = d.dates.map(x => x.ymd);
+  const labels = d.dates.map(x => x.label);
+  // 「连续提升」筛选：开启时只画 sustained 的板块（其余整条隐藏），并让按钮保持高亮态
+  const sust = d.sectors.filter(s => s.sustained);
+  const shownSecs = _starSustainedOnly ? sust : d.sectors;
+  const _sbtn = document.getElementById("oscSustainedBtn");
+  if (_sbtn) {
+    _sbtn.textContent = `📈 连续提升 (${sust.length})`;
+    _sbtn.classList.toggle("primary", _starSustainedOnly);
+  }
+  const hl = shownSecs.slice(0, SECTOR_STAR_HL);
+  const rest = shownSecs.slice(SECTOR_STAR_HL);
+  const maxS = Math.max(1e-9, d.max_score || 1);
+  // 面积编码：size ∝ √score（面积≈得分），最小 8px 满足标记下限
+  const sizeOf = (s, isHl) => (isHl ? 8 + 10 * Math.sqrt(Math.max(0, s) / maxS) : 8);
+  const at = (sec, xi) => sec.points.find(q => q.ymd === ymds[xi]) || null;
+
+  const mk = (sec, color, isHl) => ({
+    name: sec.name,
+    type: "line",
+    data: ymds.map((ymd, xi) => {
+      const p = at(sec, xi);
+      if (!p) return null;                       // 当天未上榜 ⇒ 断开轨迹（不连假线）
+      return {
+        value: [xi, p.rank],
+        symbolSize: sizeOf(p.score, isHl),
+        itemStyle: { color, borderColor: "#fff", borderWidth: 1 },
+      };
+    }),
+    connectNulls: false,
+    showSymbol: true,
+    symbol: "circle",
+    // 2026-10-17 owner：日与日之间**用曲线**（原来直线）。0.4 的张力不会过冲太夸张，
+    // 又足以让轨迹读成"走势"而不是折线；`smoothMonotone` 会给最小值/最大值那行保形，
+    // 但对**排名**这种 1..N 的离散量反而会让"掉出名次又回来"被画平 ⇒ 不用它。
+    smooth: 0.4,
+    lineStyle: { color, width: isHl ? 2 : 1, opacity: isHl ? 1 : 0.5 },
+    itemStyle: { color },
+    emphasis: { focus: "series", lineStyle: { width: isHl ? 3 : 2 } },
+    // 2026-10-17 owner：「显示不全，需要显示全」⇒ **所有板块**都在末端直标。
+    // 25 个板块五天全在榜 ⇒ 末日名次互不相同 ⇒ 右端标签各占一行、不会重叠。
+    // 高亮的用正文墨色加粗，其余用灰色小字（保持层级，但仍能认出是谁）。
+    endLabel: { show: true, formatter: sec.name,
+                color: isHl ? "#1f2937" : "#9ca3af",
+                fontSize: isHl ? 11 : 10, fontWeight: isHl ? 600 : 400,
+                distance: 8, align: "left" },
+    z: isHl ? 3 : 1,
+  });
+
+  const hlSet = new Set(hl.map(s => s.name));
+  const series = [...hl.map((s, i) => mk(s, SECTOR_STAR_COLORS[i], true)),
+                  ...rest.map(s => mk(s, SECTOR_STAR_MUTED, false))];
+
+  echRender("echSectorStars", {
+    backgroundColor: "transparent",
+    textStyle: { color: "#6b7280" },
+    // 图例只列高亮的 6 个（其余灰星不进图例，避免 20+ 项噪音）
+    legend: {
+      data: hl.map(s => s.name), top: 0, itemWidth: 14, itemHeight: 8,
+      textStyle: { color: "#6b7280", fontSize: 11 }, icon: "roundRect",
+    },
+    // 右边距留给**全部**板块的末端直标（最长 5 个汉字 ≈ 60px）+ 一点余量
+    grid: { left: 56, right: 150, top: 34, bottom: 30 },
+    tooltip: {
+      trigger: "axis",
+      backgroundColor: "#ffffff", borderColor: "#d3d9e3", borderWidth: 1,
+      textStyle: { color: "#1f2937", fontSize: 12 },
+      extraCssText: "box-shadow:0 6px 18px rgba(40,60,90,.14);",
+      axisPointer: { type: "line", lineStyle: { color: "#9ca3af", type: "dashed" } },
+      formatter: params => {
+        const xi = (params && params[0] && params[0].dataIndex) || 0;
+        const rows = shownSecs
+          .map(s => { const p = at(s, xi); return p ? { s, p } : null; })
+          .filter(Boolean).sort((a, b) => a.p.rank - b.p.rank);
+        let out = `<b>${esc(labels[xi])}</b>`
+          + `<span style="color:#6b7280;font-size:11px">　${rows.length} 个板块上榜</span>`;
+        rows.slice(0, 8).forEach(({ s, p }) => {
+          const dot = hlSet.has(s.name)
+            ? `<span style="color:${SECTOR_STAR_COLORS[hl.findIndex(x => x.name === s.name)]}">●</span>`
+            : '<span style="color:#b9c2cf">·</span>';
+          out += `<br>${dot} ${esc(s.name)}　<b>#${p.rank}</b>　`
+            + `${p.score.toFixed(2)} 分　涨停 ${p.lu}`;
+        });
+        if (rows.length > 8) {
+          out += `<br><span style="color:#9ca3af;font-size:11px">…及其余 ${rows.length - 8} 个</span>`;
+        }
+        return out;
+      },
+    },
+    xAxis: {
+      type: "category", data: labels, boundaryGap: true,
+      axisLine: { lineStyle: { color: "#d3d9e3" } },
+      axisTick: { show: false },
+      axisLabel: { color: "#6b7280", fontSize: 11 },
+    },
+    yAxis: {
+      // ⚠️ 上下各留 1 个名次的余量（0 … max+1），刻度才是整数 1..N —— 用 0.5 起始会让刻度落在
+      //    0.5/1.5/2.5…，整数过滤把它们全滤掉、纵轴一个数字都不显示。
+      type: "value", inverse: true, min: 0, max: (d.max_rank || 1) + 1, interval: 1,
+      // 轴名不画：面板副标题已写「位置＝当日排名」；`nameLocation:end` 会压在最后一个刻度上。
+      axisLine: { show: false }, axisTick: { show: false },
+      splitLine: { lineStyle: { color: "#eef1f6" } },
+      axisLabel: {
+        color: "#9ca3af", fontSize: 10,
+        formatter: v => (v >= 1 && v <= (d.max_rank || 1) ? v : ""),
+      },
+    },
+    series,
+  });
+
+  if (noteEl) {
+    const moved = d.sectors.filter(s => s.days >= 2)
+      .sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta)).slice(0, 3)
+      .map(s => `${esc(s.name)} ${s.delta > 0 ? "+" : ""}${s.delta}`).join(" · ");
+    const sustLine = _starSustainedOnly
+      ? `● <b>只看连续提升</b>：${sust.length} 个板块（口径：${d.dates.length} 日里至少 `
+        + `${Math.ceil(d.dates.length / 2)} 天名次变好、且净提升 ≥ 5 名）—— `
+        + (sust.map(s => `${esc(s.name)} <b>+${s.delta}</b>（改善 ${s.ups} 天）`).join(" · ") || "无")
+      : `● 图上共 <b>${d.sectors.length}</b> 个板块（<b>全部</b>已画出）：前 ${SECTOR_STAR_HL} 名上色直标，`
+        + `其余为灰星背景；星越大＝当日平均分越高（面积≈得分）。　排名变动最大：${moved || "—"}`;
+    noteEl.innerHTML = sustLine + `<br>⚠ ${esc(d.note || "")}`;
+  }
+  if (tblEl) {
+    // 表格视图（无障碍兜底）：行=板块，列=日期，格子=当日名次/分数
+    // 2026-10-17 owner：「只显示部分，需要显示全部」⇒ 表格列出**全部**板块（原来截前 12）。
+    // 外层给了 max-height + 滚动，所以列全不会把面板撑爆。
+    const rows = shownSecs.map(s => `<tr>
+      <td>${esc(s.name)}</td>
+      ${ymds.map((ymd, xi) => {
+        const p = at(s, xi);
+        return `<td class="num">${p ? `#${p.rank} <span class="cell-dim">${p.score.toFixed(1)}</span>` : "—"}</td>`;
+      }).join("")}
+      <td class="num">${s.delta == null ? "—" : (s.delta > 0 ? "+" : "") + s.delta}</td>
+    </tr>`).join("");
+    tblEl.innerHTML = `<table><thead><tr><th>板块</th>`
+      + labels.map(l => `<th class="num">${esc(l)}</th>`).join("")
+      + `<th class="num">五日变化</th></tr></thead><tbody>${rows}</tbody></table>`;
+  }
+}
+
 async function drawHunterGoChart() {
   const box = document.getElementById("hunterGoChart");
   if (!box) return;
@@ -3887,18 +4073,21 @@ async function toggleSectorExpand(tr, category) {
 }
 let hunterHistoryDates = [];
 
+/* 历史日期控件（2026-10-17 改造）：原来是个原生 `<select>`，在 WebView2 里**鼠标点不开**
+   （owner 反馈；后端 `available_hunter_dates` 实测返回 95 个日期，不是没数据）。
+   改用与「建仓信号扫描」同款、已验证可用的 `<input type="date">`。
+   本函数只负责给个合理默认值（最新可用日期），不再填充下拉项。 */
 async function initHunterDates() {
-  const sel = document.getElementById("hunterDate");
-  if (!sel) return;
+  const el = document.getElementById("hunterDate");
+  if (!el || el.value) return;                 // 已有值（用户手选过）就别覆盖
   try {
     const dates = await apiCall("available_hunter_dates");
     hunterHistoryDates = dates || [];
-    sel.innerHTML = '<option value="">最新</option>' +
-      hunterHistoryDates.map(d => `<option value="${d.date}">${d.date}</option>`).join("");
-    sel.addEventListener("change", () => {
-      // 2026-10-10: 选日期只记录，不自动跑扫描（owner 需求6）；跑历史结果点「🔄 重新生成」。
-    });
-  } catch (e) { /* 静默 */ }
+    el.value = (hunterHistoryDates[0] && hunterHistoryDates[0].date) || state.date || todayStr();
+  } catch (e) {
+    // 桥接失败也要可用：退回当前选中日，别留一个空控件
+    el.value = state.date || todayStr();
+  }
 }
 
 // ---- 主要指数实时状态板（2026-09-28；点击看K线，与个股一致）----
@@ -4537,6 +4726,23 @@ function conceptsCell(s) {
   const full = cs.join(" · ");
   return `<span class="bk-concepts" title="${esc(full)}">${esc(full)}</span>`;
 }
+/* 韭研 D1~D11 打分规则（2026-10-17 显示到面板上）。
+   真源 = `stock_hunter/modules/reporter.py` 的「0-说明」表 + `stock_hunter/config.json`
+   的 `scoring.dimensions`（D3/D10 未启用，故不出现在这里）。改口径时**两处一起改**。 */
+const DIM_RULES = [
+  ["D1", "强势形态且新高", "8", "最高价创近150日新高"],
+  ["D2", "强势形态", "6", "近5日涨幅>20% 且 最高价是近20日最高"],
+  ["D4", "首板资金池", "3", "当日首板涨停（前日非涨停）"],
+  ["D5", "潜在突破10日", "2", "最高价>近10日最高"],
+  ["D6", "潜在突破5日", "1", "最高价>近5日最高 且 当日非涨停（满足D5则不计）"],
+  ["D7", "持续性", "5", "二板及以上（连板天数≥2）"],
+  ["D8", "情绪分数", "6", "当日一字板涨停"],
+  ["D9", "活跃程度", "3", "近10日有涨停板"],
+  ["D11", "刚站上5日线", "2", "昨收<昨MA5 且 今收>今MA5（状态跃迁，不是「是否站上」）"],
+  ["D12", "趋势性", "8", "当日收盘站上 20 日均线（中期趋势向上；池内约 19% 命中，owner 2026-10-17 新增，权重最高档）"],
+  ["大额", "大成交额", "3", "当日成交额≥50亿"],
+];
+
 function renderHunter(h) {
   // 「建仓符合度是否已算」：`build_n` 由后端在**算完之后**回填（算了多少只）。
   // =0 说明这一步还没跑到/没跑完 ⇒ 各行显示 ⏳（更新中）而不是 —（无数据）。
@@ -4627,6 +4833,18 @@ function renderHunter(h) {
         <td style="text-align:center;white-space:nowrap">${tierBadge(s.tier)}</td>
         <td>${verdictTxt}</td>
         <td class="num">${scoreTxt}</td>
+        ${(() => {
+          // D1~D11 打分明细（2026-10-17）。后端只下发**非零**维度 ⇒ 大多数票是空的。
+          const dims = s.dims || {};
+          const ks = Object.keys(dims);
+          if (!ks.length) return '<td class="num cell-dim" title="当日没有命中任何 D 维度">0</td>';
+          const full = ks.map(k => `${k} ${dims[k]}`).join(" · ");
+          const brief = ks.slice(0, 3).map(k => `${k} ${dims[k]}`).join(" · ");
+          return `<td class="num" title="${esc(full + "　（合计 " + (s.score || 0) + " 分）")}">`
+            + `<b>${s.score || 0}</b>`
+            + `<div class="cell-dim" style="font-size:9px;line-height:1.35">${esc(brief)}${ks.length > 3 ? " …" : ""}</div>`
+            + `</td>`;
+        })()}
         <td class="num">${_metTxt}</td>
         <td style="text-align:center" title="${esc("日线阶段" + "。" + DAY_STAGE_TIP)}">${_stageTxt}</td>
         ${ma20FlagCellHtml(s.build_above_ma20)}
@@ -4685,7 +4903,7 @@ function renderHunter(h) {
            //    这里用与 hunterRow 完全相同的谓词直接判。
            ? '均分 <span class="cell-dim" title="建仓符合度后台计算中，算完自动填上">⏳更新中</span>'
            : '均分 <span class="cell-dim" title="该二级板块内没有可用的建仓得分">—</span>');
-      const head = `<tr class="h-subgroup-head"><td colspan="12">
+      const head = `<tr class="h-subgroup-head"><td colspan="13">
         <span class="h-subgroup-name">📂 ${esc(gk)}</span>
         <span class="cell-dim" style="font-size:10px">${gs.length}只 · ${gScoreTxt}${gUp ? ` · 涨停${gUp}` : ""}</span>
       </td></tr>`;
@@ -4756,6 +4974,7 @@ function renderHunter(h) {
             <th title="板块内梯队（**描述性方位标签，非信号**）：龙头=本板块当日涨幅第1；中军=其余成交额前3（资金核心）；杂毛=其余；板块<8只不标。⚠️ 实测该分层无前瞻区分度（四种定义×四个持有期≈全无差异、分半窗符号翻转、效应量远低于交易成本）⇒ 只看方位，不参与任何判定与排序。依据 doc/research/2026-10-11_板块内龙头中军杂毛_分层实验.md">梯队</th>
             <th title="与建仓信号扫描同口径（go→signal / approaching / watch_signal / weak）">判定</th>
             <th class="num" title="综合得分（与建仓表同口径；破5日线扣70且不给signal）">得分</th>
+            <th class="num" title="韭研 D1~D12 打分合计（选股猎手的原始评分，满分 47；D3/D10 未在 config 启用）。⚠️ 与左边「得分」不是一回事：那个是建仓综合得分 0~100。下方小字＝命中的维度与分数。&#10;D1 强势形态且新高 8 · D2 强势形态 6 · D4 首板资金池 3 · D5 潜在突破10日 2 · D6 潜在突破5日 1 · D7 持续性(二板+) 5 · D8 情绪分数(一字板) 6 · D9 活跃程度(近10日有涨停) 3 · D11 刚站上5日线 2 · D12 趋势性(站上20日线) 8 · 大额(成交额≥50亿) 3">D分<br><span style="font-size:9px;opacity:.6">D1~D12</span></th>
             <th class="num" title="时机门控通过数（市场有方向/多头结构/回撤到位）">通过</th>
             <th title="日线四阶段（描述状态，紧挨得分/通过便于对照）：②抬升/③派发/④下跌/①蓄势。⚠️ 实测横截面IC与直觉相反——抬升/追高前瞻更差(IC −0.031~−0.042, t=−12~−15)、下跌/超跌前瞻更好(IC +0.020~+0.034, t=+7~+12)，分半窗两段同号；效应量小(IC≈0.04)仅作相对强弱参照">日线阶段</th>
             <th title="是否站上 20 日线（观察列，不驱动任何判定）。⚠️「得分」里的 −70 悬崖扣分走的是 **5 日线**口径（owner 决定保留），与本列无关 ⇒ 本列不显示 −70。另注：5 日线该项实测横截面 IC 为负(站上MA5 −0.018, t=−6.9)">20日线<br><span style="font-size:9px;opacity:.6">观察</span></th>
@@ -4766,7 +4985,12 @@ function renderHunter(h) {
           </tr></thead>
           <tbody>${stockRows}</tbody></table>
           ${pageInfo}
-          <div class="cell-dim" style="font-size:10px;margin-top:3px">D5=潜在突破10日(≥8强) · D6=潜在突破5日(≥8强) · D9=活跃程度 · 悬停技术标签看解释 · 点击行收起
+          <div class="d-rules">
+            <b>D分规则</b><span class="cell-dim">（韭研原始评分 · 满分 47 · D3/D10 未启用）</span>
+            <div class="d-rules-grid">${DIM_RULES.map(r => `<span class="d-rule" title="${esc(r[3])}"><b>${r[0]}</b>${r[1]}<i>${r[2]}</i></span>`).join("")}</div>
+            <div class="cell-dim" style="margin-top:2px">小字＝该股命中的维度与分数，合计即「D分」列；左侧「得分」是建仓综合得分 0~100，两套口径别混。</div>
+          </div>
+          <div class="cell-dim" style="font-size:10px;margin-top:3px">悬停技术标签看解释 · 点击行收起
             ${hunterTagsCache[category] ? "" : ` · <b class="h-updating-foot warn">⏳ 技术标签更新中（本板块 ${(ss[category]||[]).length} 只，约 30~60 秒）</b>`}</div>
         </div>
       </td></tr>
@@ -5607,7 +5831,7 @@ function switchTab(tab) {
   //    同步调用必然拿 0 尺寸、画不出来（2026-10-15 实测：盘中状态成交额图停在"容器尺寸为 0"）。
   setTimeout(() => {
     resizeAllEch();
-    if (tab === "hunter") { drawHunterGoChart(); renderHunterGoList(); }
+    if (tab === "hunter") { drawHunterGoChart(); renderHunterGoList(); loadSectorStars(); }
     if (tab === "signals") drawTurnoverHist();
   }, 80);
   // 2026-10-10: 切到选股猎手不再自动跑扫描（owner 需求6）——一律点「▶ 运行今日数据」触发。
@@ -5798,6 +6022,9 @@ async function init() {
       if (_pd) _pd.value = dateSelect.value;
       const _od = document.getElementById("oscDayDate");   // 每日选股记录面板同款跟随
       if (_od) _od.value = dateSelect.value;
+      // 板块星轨图是「截至所选日期」的，切日期时若正在猎手页则重画（隐藏时画会拿到 0 尺寸）
+      const _act = document.querySelector(".sidebar-item.active");
+      if (_act && _act.dataset.tab === "hunter") loadSectorStars();
       loadAndRender(dateSelect.value, false);
     }
   });

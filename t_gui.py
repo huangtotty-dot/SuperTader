@@ -289,6 +289,9 @@ _DAILY_KLINE_DIR = BASE / "t_io" / "cache" / "daily_kline"
 # ⚠️ 曾试过把日线截到尾 120 根再算，实测只快 1.17x（真正的成本是整份 json.loads），
 #    却会让 Wilder RSI/EMA 的预热种子产生微小漂移 ⇒ **不做截尾**，保持逐位同结果。
 _HUNTER_CONF_CACHE = {}
+# 「排名持续提升」的判定阈值（load_sector_constellation）：至少过半天数名次变好 + 净提升 ≥5 名。
+_SUSTAIN_UPS_MIN = 5
+_SUSTAIN_NET_MIN = 5
 _ROTATION_CACHE_MEM = {}
 # 2026-08-23: 每日大盘复盘（LLM）后台线程状态
 _REVIEW_RUN_STATE = {"running": False, "error": None}
@@ -4750,6 +4753,30 @@ class Api:
             pass
         return result
 
+    def _score_dims(self, sm):
+        """韭研 D1~D11 打分 → {短名: 分}（只留**非零**维度 + 大成交额）。
+
+        短名取 `D<数字>` 前缀（"D11刚站上5日线" → "D11"）；"大成交额额外加分" → "大额"。
+        全池均值仅 ~0.8，绝大多数票为空 ⇒ 只传非零项，payload 体积可忽略。
+        纯函数、不抛：打分字典缺键/值非法都跳过（它只喂展示，不影响任何判定）。
+        """
+        out = {}
+        for k, v in (sm or {}).items():
+            ks = str(k)
+            try:
+                vi = int(float(v or 0))
+            except Exception:
+                continue
+            if not vi:
+                continue
+            if ks == "大成交额额外加分":
+                out["大额"] = vi
+                continue
+            m = re.match(r"^(D\d+)", ks)
+            if m:
+                out[m.group(1)] = vi
+        return out
+
     def _load_hunter_impl(self, date=None):
         """运行 stock_hunter 打分管线，返回 DataLoader 原生产出的表格数据。
         与 Excel 报告 Sheet 1/2/3 数据结构对齐。"""
@@ -4859,7 +4886,8 @@ class Api:
             score_map = {str(s.get("代码", "")): s for s in scored}
             for col in ["总得分", "涨停", "D1强势形态且新高", "D2强势形态",
                         "D4首板资金池", "D5潜在突破10日", "D6潜在突破5日",
-                        "D7持续性", "D8情绪分数", "D9活跃程度", "大成交额额外加分"]:
+                        "D7持续性", "D8情绪分数", "D9活跃程度",
+                        "D11刚站上5日线", "D12趋势性", "大成交额额外加分"]:
                 watchlist[col] = watchlist["代码"].map(
                     lambda x, c=col: score_map.get(str(x), {}).get(c, 0))
             loader.set_watchlist(watchlist)  # ← 关键：评分写入后必须回传
@@ -4951,8 +4979,12 @@ class Api:
                         except: d6 = 0
                         try: d9 = int(float(d9))
                         except: d9 = 0
+                        # 2026-10-17：逐只 D1~D11 打分明细（韭研原始评分，与「得分」列的
+                        # 建仓综合得分 0~100 是两回事）。此前只带 d5/d6/d9、且只用于板块级
+                        # 「D5×N」计数 ⇒ 展开个股后看不到明细，表尾却在解释 D5/D6/D9。
                         stocks.append({
                             "name": d.get("名称", ""), "code": code,
+                            "dims": self._score_dims(sm),
                             # 细分（韭研概念，| 分隔多分类）——供前端展开板块后按下一级分类分组
                             "concepts": [c.strip() for c in str(d.get("韭研概念", "") or "").split("|") if c.strip()],
                             "score": total, "d5": d5, "d6": d6, "d9": d9,
@@ -6551,6 +6583,113 @@ class Api:
             if _d.weekday() < 5:
                 dates.add(_d.strftime("%Y%m%d"))
         return [{"date": d[:4] + "-" + d[4:6] + "-" + d[6:8]} for d in sorted(dates, reverse=True)]
+
+    def load_sector_constellation(self, days=5, end_date=None):
+        """近 N 个交易日的板块「星轨」：位置 = 当日排名，星的大小 = 平均分，轨迹 = 排名变化。
+
+        数据源 `stock_hunter/history/daily_summary.json`（猎手每次运行后按日重写，一日一档）。
+        `end_date` 给定时只取 **≤ 该日** 的最近 N 个交易日（跟全局日期选择器走）。
+
+        ⚠️ 两条必须随图一起展示的口径（都是真的会误导人的点）：
+          ① **排名只在当日集合内可比** —— 板块数 23(10-15) → 28(10-16)，新题材一进来，
+             老板块的排名会被整体下压，这不是"变弱"。
+          ② **平均分不能跨"入池日"直接比** —— 低空经济/冰雪经济/大消费等是从加入那天起
+             才有分数，且成分股与老板块不是同一批。10-16/10-17 的 10~14 分**不是**因为
+             市场变好，而是这几只新板块的样本极小（如大消费 3 只、化工 2 只）。
+        """
+        try:
+            n = max(1, min(int(days or 5), 30))
+        except Exception:
+            n = 5
+        fp = BASE / "stock_hunter" / "history" / "daily_summary.json"
+        try:
+            d = json.loads(fp.read_text(encoding="utf-8"))
+        except Exception as e:                                  # noqa: BLE001
+            return {"available": False, "error": f"读 daily_summary.json 失败: {e}",
+                    "dates": [], "sectors": [], "max_rank": 0, "note": ""}
+        end = str(end_date or "").replace("-", "")
+        keys_all = sorted(k for k, v in d.items()
+                          if isinstance(v, list) and v and (not end or k <= end))
+        # 2026-10-17：**只保留真正的交易日**。猎手在周末/法定假日也会被手动跑
+        # （10-10 周六、10-04 周日、10-06/10-07 国庆休市…），而这些快照的行情就是
+        # **上一交易日的收盘** ⇒ 画进图里等于一段假平线、白占一个横向格子。
+        # 日历以指数日线缓存为准（`index_sh000001.json` 的真实 bar 日期），
+        # 读不到才退回"工作日"近似（会把假日当交易日，属可接受的降级）。
+        _trading = None
+        try:
+            _idx = json.loads((BASE / "t_io" / "cache" / "daily_kline" / "index_sh000001.json")
+                              .read_text(encoding="utf-8")).get("rows", [])
+            _trading = {str(r.get("date"))[:10].replace("-", "") for r in _idx if r.get("date")}
+        except Exception:
+            _trading = None
+        if _trading:
+            keys = [k for k in keys_all if k in _trading]
+        else:
+            def _weekday(k):
+                try:
+                    return datetime.strptime(k, "%Y%m%d").weekday() < 5
+                except Exception:
+                    return True
+            keys = [k for k in keys_all if _weekday(k)]
+        keys = keys[-n:]
+        if not keys:
+            return {"available": False, "error": "该日期之前没有板块排名记录",
+                    "dates": [], "sectors": [], "max_rank": 0, "note": ""}
+        per = {}
+        for k in keys:
+            for r in d[k]:
+                nm = str(r.get("板块") or "").strip()
+                if not nm:
+                    continue
+                try:
+                    per.setdefault(nm, {})[k] = {
+                        "rank": int(r.get("排名") or 0),
+                        "score": float(r.get("平均分") or 0.0),
+                        "lu": int(r.get("涨停数") or 0),
+                        "top": str(r.get("最强细分") or ""),
+                        "n": int(r.get("股票数") or 0),
+                    }
+                except Exception:
+                    continue
+        # 「排名持续提升」口径（2026-10-17 owner 要按钮筛出来）：
+        #   ① 窗口内**至少过半的天数**名次变好（`_SUSTAIN_UPS_MIN`）——排除"靠某一天暴涨"；
+        #   ② **首尾净提升 ≥ 5 名**（`_SUSTAIN_NET_MIN`）——排除天天小步上挪但最终没上去的。
+        # 实测（09-28~10-16，25 个板块）：没有任何板块做到**每天都**变好（最长的连续严格提升只有 3 天），
+        # 所以不能按"严格单调"定义，否则永远筛不出东西。
+        sectors = []
+        for nm, pts in per.items():
+            seq = [dict(pts[k], ymd=k) for k in keys if k in pts]
+            if not seq:
+                continue
+            _ups = sum(1 for i in range(1, len(seq)) if seq[i]["rank"] < seq[i - 1]["rank"])
+            _net = (seq[0]["rank"] - seq[-1]["rank"]) if len(seq) >= 2 else None
+            sectors.append({
+                "name": nm,
+                "points": seq,
+                "last_rank": seq[-1]["rank"],
+                "first_rank": seq[0]["rank"],
+                # >0 = 排名前进。只上榜 1 天的板块没有"变化"可言 ⇒ None（前端显示「—」），
+                # 别把它当 0 混进"变动最大"的排序里。
+                "delta": _net,
+                "ups": _ups,                       # 窗口内名次变好的天数
+                "sustained": bool(_net is not None and _net >= _SUSTAIN_NET_MIN
+                                  and _ups >= _SUSTAIN_UPS_MIN),
+                "max_score": max(p["score"] for p in seq),
+                "days": len(seq),
+            })
+        # 有最新一日成绩的排前面（最后一天没上榜的排后面），再按最新排名升序
+        sectors.sort(key=lambda s: (s["points"][-1]["ymd"] != keys[-1], s["last_rank"], s["name"]))
+        return _clean({
+            "available": True,
+            "dates": [{"ymd": k, "label": f"{k[4:6]}-{k[6:]}"} for k in keys],
+            "max_rank": max((p["rank"] for s in sectors for p in s["points"]), default=0),
+            "max_score": max((s["max_score"] for s in sectors), default=0.0),
+            "sectors": sectors,
+            "note": f"{len(keys)} 个交易日（周末/法定休市日的猎手快照不画 —— 那些天的行情"
+                    "就是上一交易日收盘，画进去只是一段假平线）。"
+                    "全部用当前池子重算（含 D12 趋势性），不是各日当天的池子 ⇒ 分数可跨日比较，"
+                    "但与当日实盘的历史截图会有出入；排名只在当日集合内可比。",
+        })
 
     def load_hunter_history(self, date):
         """读指定日期选股猎手数据：heat history 快照（秒级）优先；非快照日期 → 全量运行（支持扫描任意日期）。"""

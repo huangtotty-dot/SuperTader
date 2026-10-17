@@ -449,6 +449,17 @@ tr:hover td { background: rgba(243,93,43,.03); }
 .h-expand-row:hover { background: rgba(243,93,43,.04); }
 /* 板块展开后的细分分组头（板块 → 细分 → 个股） */
 .h-subgroup-head td { background: rgba(139,148,158,.08); border-top: 1px solid var(--border-soft); border-bottom: 1px solid var(--border-soft); padding: 4px 8px; font-size: 12px; }
+/* D1~D11 打分规则（2026-10-17）：直接显示在展开表下方，不藏在悬停里。
+   每个维度一个小胶囊：代号 + 名称 + 分值；悬停看判定条件。 */
+.d-rules { margin-top: 8px; padding: 7px 9px; background: rgba(244,246,250,.9);
+  border: 1px solid var(--border-soft); border-radius: 8px; font-size: 11px; color: var(--text-dim); }
+.d-rules-grid { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 5px; }
+.d-rule { display: inline-flex; align-items: center; gap: 3px; padding: 1px 7px; border-radius: 10px;
+  background: var(--bg-card); border: 1px solid var(--border-soft); font-size: 10.5px; white-space: nowrap; cursor: help; }
+.d-rule b { color: var(--accent); font-weight: 700; }
+.d-rule i { font-style: normal; color: var(--text); font-weight: 700; margin-left: 1px; }
+.d-rule i::before { content: ""; }
+
 .h-subgroup-head:first-child td { border-top: none; }
 .h-subgroup-name { font-weight: 700; margin-right: 8px; color: var(--accent); }
 
