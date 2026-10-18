@@ -7,6 +7,7 @@ _live_quote_forming），不改变行为，只加契约断言与 attrs["source"]
 import json
 import os
 import threading
+import urllib.parse
 import urllib.request
 from datetime import datetime
 
@@ -408,6 +409,46 @@ def daily_kline_raw(code: str, days: int = 5, qfq: bool = True,
     df = df.drop_duplicates(subset=["date"], keep="last").sort_values("date").reset_index(drop=True)
     df.attrs["source"] = "tencent"
     return df
+
+
+# ── 标的搜索（名称/代码 → 标的；2026-10-18，手动盘「K线速查」）────────────────
+_SEARCH_HOST = "smartbox.gtimg.cn"
+_SEARCH_HEADERS = {"User-Agent": "Mozilla/5.0", "Referer": "https://finance.qq.com/",
+                   "Connection": "keep-alive"}
+_SEARCH_POOL_MAX = 2
+
+
+def search_instruments(query: str, limit: int = 12, timeout: float = 4.0) -> list:
+    """腾讯 smartbox 按**名称/拼音/代码**搜索标的 → [{market, code, name, type}]。
+
+    实测（2026-10-18）返回 `v_hint="sh~600362~江西铜业~jxty~GP-A^hk~00358~..."`：
+      · `type`：`GP-A`=A股、`GP`=港美股、`ZS`=指数、`ETF`/`LOF`=场内基金、`KJ`=场外基金
+      · 无结果 → `v_hint="N"`
+      · 名字是 `\\uXXXX` 转义，必须 `json.loads` 反转义，否则界面上是乱码
+    失败/空 → []（调用方再退回本地表）。**不做过滤**：是否可画 K 线由调用方决定。
+    """
+    q = str(query or "").strip()
+    if not q:
+        return []
+    try:
+        path = f"/s3/?v=2&q={urllib.parse.quote(q)}&t=all&c=1"
+        raw = _pooled_get(_SEARCH_HOST, path, timeout, _SEARCH_HEADERS)
+        body = raw.split("=", 1)[1].strip() if "=" in raw else ""
+        if not body or body in ('"N"', "N"):
+            return []
+        text = json.loads(body)          # 反转义 \uXXXX
+    except Exception:
+        return []
+    out = []
+    for item in str(text).split("^"):
+        parts = item.split("~")
+        if len(parts) < 5 or not parts[1]:
+            continue
+        out.append({"market": parts[0].lower(), "code": parts[1], "name": parts[2],
+                    "pinyin": parts[3], "type": parts[4]})
+        if len(out) >= limit:
+            break
+    return out
 
 
 def qt_vwap(quote: dict):

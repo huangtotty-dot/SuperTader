@@ -332,5 +332,72 @@ class TestMinuteSourceOrderAndTushareGuard(unittest.TestCase):
         self.assertEqual(called["n"], 0, "冷却期内不许再发起调用")
 
 
+class TestInstrumentSearch(unittest.TestCase):
+    """手动盘「K线速查」：名称/代码 → 可画 K 线的标的（2026-10-18）。全离线。"""
+
+    def setUp(self):
+        t_gui._SEARCH_CACHE.clear()
+        t_gui._INSTRUMENT_NAMES["ts"] = 0.0
+        t_gui._INSTRUMENT_NAMES["map"] = {}
+        self.api = t_gui.Api()
+        self._orig_search = TP.search_instruments
+        self._orig_names_fn = self.api._instrument_names
+        self.api._instrument_names = lambda: {"600362": "江西铜业", "600519": "贵州茅台"}
+
+    def tearDown(self):
+        TP.search_instruments = self._orig_search
+        self.api._instrument_names = self._orig_names_fn
+        t_gui._SEARCH_CACHE.clear()
+        t_gui._INSTRUMENT_NAMES["ts"] = 0.0
+        t_gui._INSTRUMENT_NAMES["map"] = {}
+
+    def test_local_exact_name_hits_without_network(self):
+        calls = {"n": 0}
+
+        def _s(q, limit=12):
+            calls["n"] += 1
+            return []
+        TP.search_instruments = _s
+        r = self.api.search_instrument("江西铜业")
+        self.assertEqual([x["code"] for x in r["results"]], ["600362"])
+        self.assertEqual(r["source"], "local")
+        self.assertEqual(calls["n"], 0, "精确名命中不该再打网络")
+
+    def test_bare_code_ambiguity_resolved_by_online(self):
+        """000300 既可能是沪深300指数、也可能是场外基金 ⇒ 以在线结果的类型为准。"""
+        TP.search_instruments = lambda q, limit=12: [
+            {"market": "sh", "code": "000300", "name": "沪深300", "type": "ZS"},
+            {"market": "jj", "code": "000300", "name": "某基金", "type": "KJ-HB"},
+        ]
+        r = self.api.search_instrument("000300")
+        self.assertEqual([x["code"] for x in r["results"]], ["sh000300"])
+        self.assertEqual(r["excluded"], 1)
+        self.assertIn("场外基金", r["note"])
+
+    def test_offline_falls_back_to_bare_code(self):
+        TP.search_instruments = lambda q, limit=12: []
+        r = self.api.search_instrument("600362")
+        self.assertEqual(r["results"][0]["code"], "600362")
+        self.assertEqual(r["results"][0]["name"], "江西铜业")
+
+    def test_fund_only_query_gets_helpful_note(self):
+        TP.search_instruments = lambda q, limit=12: [
+            {"market": "jj", "code": "000001", "name": "华夏成长混合", "type": "KJ"}]
+        r = self.api.search_instrument("华夏成长")
+        self.assertEqual(r["results"], [])
+        self.assertGreaterEqual(r["excluded"], 1)
+        self.assertIn("暂无 K 线", r["note"])
+
+    def test_index_query_keeps_market_prefix(self):
+        TP.search_instruments = lambda q, limit=12: [
+            {"market": "sh", "code": "000300", "name": "沪深300", "type": "ZS"},
+            {"market": "sh", "code": "510300", "name": "沪深300ETF", "type": "ETF"},
+        ]
+        r = self.api.search_instrument("沪深300")
+        codes = [x["code"] for x in r["results"]]
+        self.assertIn("sh000300", codes)
+        self.assertIn("510300", codes)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

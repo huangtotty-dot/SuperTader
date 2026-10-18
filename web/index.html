@@ -176,6 +176,21 @@
 
   <!-- ====== Tab 3: 手动盘 ====== -->
   <div class="tab-page" id="tab-signals">
+    <div class="section" id="kline-lookup">
+      <h2>🔎 K线速查
+        <span class="cell-dim" style="font-weight:400;font-size:12px">
+          输入公司 / 基金 / 指数名称或代码，直接调出 K 线（支持 A股 · ETF · LOF · 指数）
+        </span>
+      </h2>
+      <div class="kl-bar">
+        <input type="text" id="klQuery" class="mini-input"
+               placeholder="如：江西铜业 / 沪深300 / 科创50ETF / 510300"
+               onkeydown="if(event.key==='Enter'){event.preventDefault();searchKlineInstrument();}">
+        <button class="mini-btn primary" id="klSearchBtn" onclick="searchKlineInstrument()">🔍 查K线</button>
+        <span id="klHint" class="cell-dim" style="font-size:11px"></span>
+      </div>
+      <div id="klResults"></div>
+    </div>
     <div class="section" id="ob-analysis">
       <h2>持仓 30 分钟风险体检（30min 顶部特征 → 减仓/避坑提醒）
         <button class="mini-btn" id="obRefreshBtn" onclick="refreshOBNow()"

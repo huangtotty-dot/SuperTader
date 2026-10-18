@@ -645,6 +645,17 @@ _CHART_LIVE_STATE: dict = {}
 _CHART_LIVE_LOCK = threading.Lock()
 _CHART_LIVE_MAX = 200
 
+# ---- 手动盘「K线速查」：名称/代码 → 标的（2026-10-18）----
+# 本地名称表（韭研 5382 + NAMES + 持仓）600s 缓存；在线搜索（腾讯 smartbox）结果 600s 缓存
+# （空结果只缓存 60s，网络抖动后能快速重试）。
+_SEARCH_CACHE: dict = {}
+_SEARCH_CACHE_TTL = 600.0
+_SEARCH_CACHE_LOCK = threading.Lock()
+_SEARCH_CACHE_MAX = 200
+_INSTRUMENT_NAMES = {"ts": 0.0, "map": {}}
+_INSTRUMENT_NAMES_TTL = 600.0
+_INSTRUMENT_NAMES_LOCK = threading.Lock()
+
 # ---- 持仓体检（OB）30 分钟快照层（2026-10-09）----
 # 背景：体检表趋势/背离/风险提醒改用 30min 口径。`load_ob_analysis` 跑在 pywebview 串行主线程，
 # 任何网络调用都会冻界面 ⇒ 该层**只读磁盘/内存缓存**（零网络），由后台按 30 分钟时段预热。
@@ -3911,6 +3922,174 @@ class Api:
         except Exception:
             pass
         return s
+
+    # ---------- 手动盘「K线速查」（2026-10-18） ----------
+    def _instrument_names(self):
+        """本地 名称→代码 表（韭研 watchlist 5382 + NAMES + 手动/自动持仓），600s 缓存。
+
+        只收裸 6 位码；指数/ETF 不在这里（它们留给在线搜索，腾讯 smartbox 带权威类型）。
+        多来源合并顺序：韭研 → NAMES → 持仓（后者覆盖前者，用户自己的命名最权威）。
+        """
+        now = _time_mod.time()
+        with _INSTRUMENT_NAMES_LOCK:
+            if _INSTRUMENT_NAMES["map"] and (now - _INSTRUMENT_NAMES["ts"]) < _INSTRUMENT_NAMES_TTL:
+                return _INSTRUMENT_NAMES["map"]
+        m = {}
+        try:
+            jy = _load_json(HUNTER_DIR / "watchlist_jiuyan.json", {}) or {}
+            for code, info in jy.items():
+                c = str(code).split("_")[0]
+                nm = str((info or {}).get("name") or "").strip() if isinstance(info, dict) else ""
+                if nm and len(c) == 6 and c.isdigit():
+                    m[c] = nm
+        except Exception:
+            pass
+        try:
+            for c, nm in (NAMES or {}).items():
+                c = str(c).split("_")[0]
+                if len(c) == 6 and c.isdigit() and nm:
+                    m[c] = str(nm)
+        except Exception:
+            pass
+        for fp in (HOLDINGS_MANUAL, STATE_DIR / "holdings_auto.json"):
+            try:
+                for c, info in (_load_json(fp, {}) or {}).items():
+                    c = str(c).split("_")[0]
+                    nm = str((info or {}).get("name") or "").strip() if isinstance(info, dict) else ""
+                    if nm and len(c) == 6 and c.isdigit():
+                        m[c] = nm
+            except Exception:
+                pass
+        with _INSTRUMENT_NAMES_LOCK:
+            _INSTRUMENT_NAMES["map"] = m
+            _INSTRUMENT_NAMES["ts"] = now
+        return m
+
+    @staticmethod
+    def _guess_instrument_type(code):
+        """裸 6 位码 → 粗类型（本地表没有类型字段；仅用于本地搜索结果的展示）。"""
+        c = str(code)
+        if c.startswith("bj"):
+            return "北交所"
+        if c[:2] in ("15", "16", "18") or c[:2] in ("50", "51", "52", "56", "58"):
+            return "场内基金"
+        return "A股"
+
+    def search_instrument(self, query, limit=12):
+        """手动盘「K线速查」：名称/拼音/代码 → 可画 K 线的标的列表。
+
+        口径（为什么这样裁）：
+          · **可画**：A股(GP-A，沪深/北交所) / 指数(ZS) / 场内基金(ETF、LOF)；
+          · **不可画**：场外基金(jj/KJ，无交易所 K 线)、港美股(hk/us，本仓 K 线链路不支持)
+            ⇒ 计入 `excluded` 并在 `note` 里说明，不混进结果让用户点了报错；
+          · 本地表**精确名命中**直接回（零网络、秒回）；否则打腾讯 smartbox（带硬超时 4s，
+            失败退回本地模糊匹配）。
+
+        返回 {query, results:[{code,name,type,note}], excluded, note, source, error}。**永不抛**。
+        `code` 已换成 `openStockChart` 能吃的形式（指数带 sh/sz 前缀，其余裸 6 位）。
+        """
+        import re as _re
+        q = str(query or "").strip()
+        out = {"query": q, "results": [], "excluded": 0, "note": "", "source": "", "error": ""}
+        if not q:
+            out["error"] = "请输入名称或代码"
+            return out
+        ck = q.lower()
+        with _SEARCH_CACHE_LOCK:
+            hit = _SEARCH_CACHE.get(ck)
+        if hit and (_time_mod.time() - hit[0]) < hit[1]:
+            return hit[2]
+
+        names = self._instrument_names()
+        by_code = {}
+        order = []
+
+        def _add(code, name, typ, note=""):
+            code = str(code)
+            if code in by_code:
+                x = by_code[code]
+                if name and (not x["name"] or x["name"] == code):
+                    x["name"] = name
+                if typ:
+                    x["type"] = typ
+                return
+            by_code[code] = {"code": code, "name": name or code, "type": typ or "标的",
+                             "note": note}
+            order.append(code)
+
+        mcode = _re.match(r"^(?:(sh|sz|bj))?(\d{6})$", ck)
+        _direct = None
+        if mcode:
+            _pre, _c = mcode.group(1), mcode.group(2)
+            if _pre:
+                _add(_pre + _c, names.get(_c) or "", "指数")
+            else:
+                # 裸 6 位码**有歧义**（000001=上证指数/平安银行，000300=沪深300/无此股）
+                # ⇒ 先不猜，等在线结果给权威类型；在线失败才退回本地猜测。
+                _direct = _c
+
+        # 本地名模糊匹配（精确 > 前缀 > 包含），最多 limit 条
+        _q = q.lower()
+        _local = []
+        for c, nm in names.items():
+            _nn = str(nm)
+            if _nn == q:
+                _local.append((0, c, _nn))
+            elif _nn.startswith(q):
+                _local.append((1, c, _nn))
+            elif q in _nn:
+                _local.append((2, c, _nn))
+        _local.sort(key=lambda x: (x[0], len(x[2])))
+        for _score, c, nm in _local[:limit]:
+            _add(c, nm, self._guess_instrument_type(c))
+
+        # 在线搜索：代码输入、或本地没有精确名命中时才打（精确名用户最常用，省一次网络）
+        _need_online = bool(mcode) or not any(s == 0 for s, _, _ in _local)
+        if _need_online:
+            try:
+                from core.market_data.tencent_provider import search_instruments
+                ok, got, _err = _run_bounded(
+                    lambda: search_instruments(q, max(int(limit) * 2, 12)), 4.0)
+            except Exception:
+                ok, got = False, None
+            if ok and got:
+                for it in got:
+                    mk = str(it.get("market") or "").lower()
+                    cd = str(it.get("code") or "")
+                    nm = str(it.get("name") or "")
+                    typ = str(it.get("type") or "")
+                    if typ.startswith("GP-A") and mk in ("sh", "sz", "bj") and cd.isdigit():
+                        _add(cd, nm, "北交所" if mk == "bj" else "A股",
+                             "北交所分钟数据源受限" if mk == "bj" else "")
+                    elif typ == "ZS" and mk in ("sh", "sz", "bj"):
+                        _add(mk + cd, nm, "指数")
+                    elif typ in ("ETF", "LOF") and mk in ("sh", "sz"):
+                        _add(cd, nm, typ)
+                    else:
+                        out["excluded"] += 1
+                out["source"] = "local+online" if _local else "online"
+            else:
+                out["source"] = "local"
+        else:
+            out["source"] = "local"
+
+        if _direct and not order:      # 在线没给结果（或失败）⇒ 退回裸码猜测
+            _add(_direct, names.get(_direct) or "", self._guess_instrument_type(_direct))
+
+        results = [by_code[c] for c in order][:max(int(limit), 1)]
+        out["results"] = results
+        if out["excluded"]:
+            out["note"] = f"另有 {out['excluded']} 条场外基金/港美股结果（暂无 K 线）"
+        elif not results:
+            out["note"] = "未找到可画 K 线的标的（支持 A股 / ETF / LOF / 指数）"
+        out = _clean(out)
+        with _SEARCH_CACHE_LOCK:
+            if len(_SEARCH_CACHE) > _SEARCH_CACHE_MAX:
+                _SEARCH_CACHE.clear()
+            # 有结果缓存 10 分钟；空结果只缓存 60 秒（网络抖动后能快速重试）
+            _SEARCH_CACHE[ck] = (_time_mod.time(),
+                                 _SEARCH_CACHE_TTL if results else 60.0, out)
+        return out
 
     # ---------- 公司资料（K 线弹窗「📋 公司资料」） ----------
 

@@ -3333,6 +3333,58 @@ async function openStockChart(code, name) {
   await loadStockChartNow();
   startStockChartLive();          // 盘中实时尾（3s）
 }
+/* ---- 手动盘「K线速查」（2026-10-18）----
+   输入公司/基金/指数名称或代码 → 后端 search_instrument（本地韭研名表优先 + 腾讯 smartbox）
+   → 可画 K 线的标的列表。场外基金/港美股无 K 线，后端过滤并在 hint 里注明条数。 */
+async function searchKlineInstrument() {
+  const inp = document.getElementById("klQuery");
+  const out = document.getElementById("klResults");
+  const hint = document.getElementById("klHint");
+  const btn = document.getElementById("klSearchBtn");
+  const q = ((inp && inp.value) || "").trim();
+  if (!q) { if (hint) hint.textContent = "请输入名称或代码"; return; }
+  if (hint) hint.textContent = "搜索中…";
+  if (btn) btn.disabled = true;
+  try {
+    const r = await apiCall("search_instrument", q);
+    renderKlineSearch(r || {});
+  } catch (e) {
+    if (out) out.innerHTML = `<div class="empty">搜索失败：${esc((e && e.message) || e)}</div>`;
+    if (hint) hint.textContent = "";
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+function renderKlineSearch(r) {
+  const out = document.getElementById("klResults");
+  const hint = document.getElementById("klHint");
+  const rows = (r && r.results) || [];
+  const note = (r && (r.error || r.note)) || "";
+  if (!out) return;
+  if (!rows.length) {
+    out.innerHTML = `<div class="empty">${esc(note || "未找到可画 K 线的标的")}</div>`;
+    if (hint) hint.textContent = "";
+    return;
+  }
+  // 唯一命中 ⇒ 直接开图（用户输入精确名称/代码时少点一次）
+  if (rows.length === 1) {
+    const x = rows[0];
+    if (hint) hint.textContent = `已打开 ${x.name}（${x.code}）${note ? " · " + note : ""}`;
+    openStockChart(x.code, x.name);
+    out.innerHTML = "";
+    return;
+  }
+  out.innerHTML = rows.map(x => {
+    const title = x.note ? `${x.note} · ${x.code} · ${x.type}` : `${x.code} · ${x.type}`;
+    return `<button class="mini-btn kl-item" data-code="${esc(x.code)}" data-name="${esc(x.name)}"`
+      + ` title="${esc(title)}" onclick="openStockChart(this.dataset.code,this.dataset.name)">`
+      + `${esc(x.name)} <span class="mono cell-dim" style="font-size:10px">${esc(x.code)}</span>`
+      + ` <span class="kl-type">${esc(x.type)}</span></button>`;
+  }).join("");
+  if (hint) hint.textContent = note;
+}
+
 function toggleChartHelp() {
   const el = document.getElementById("chartHelp");
   el.style.display = el.style.display === "none" ? "block" : "none";
