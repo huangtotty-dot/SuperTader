@@ -661,6 +661,11 @@ _INSTRUMENT_NAMES_LOCK = threading.Lock()
 # 任何网络调用都会冻界面 ⇒ 该层**只读磁盘/内存缓存**（零网络），由后台按 30 分钟时段预热。
 _M30_OB_ENABLED = True                                 # 回滚开关：False ⇒ 体检表退回日线口径
 _OB_M30_STATE: dict = {}                               # 刷新守护线程幂等标记 {"started": bool}
+# 磁盘预热单飞（2026-10-18）：OB 表发现当前 slot 未热时按需补算（零网络）。
+# 背景：`start_ob_m30_refresher` 的**在线**刷新已改成只在交易时段跑；周末/盘后 slot 每 30 分钟
+# 变一次而没人填充 ⇒ 体检表「30min 判定」永远停在「计算中」（owner 截图 2026-10-18）。
+_OB_M30_DISK_WARM: dict = {"running": False, "slot": None}
+_OB_M30_DISK_LOCK = threading.Lock()
 _M30_SNAP_CACHE: dict = {}                             # {f"{base}_{slot}": snapshot}
 _M30_SNAP_LOCK = threading.Lock()
 _M30_SNAP_MAX = 2000                                   # 无界增长防护
@@ -3121,6 +3126,7 @@ class Api:
         _chart_cache = getattr(self, "_stock_chart_cache", {})
         pending = 0
         m30_pending = False          # 有持仓的 30min 判定尚未热（前端稍后重拉，不等 12s）
+        _m30_cold = []               # 当前 slot 未热的持仓 ⇒ 本轮结束时补一次**磁盘**预热（零网络）
         _cold = []                   # 图表不在内存缓存 ⇒ 本轮跳过（下面兜底补取，见 _kick_cold_chart_warm）
 
         for code, info in cur.items():
@@ -3144,6 +3150,8 @@ class Api:
             # 会冻界面）；未热 → 本行判定显示「计算中」，由后台 `_warm_ob_m30_disk`/`refresh_ob_m30` 填充。
             _m30 = self._m30_top_snapshot(base_code) if _M30_OB_ENABLED else {}
             _m30_warm = _m30 is not None
+            if _M30_OB_ENABLED and not _m30_warm:
+                _m30_cold.append(base_code)
             _m30 = _m30 or {}
             _t30 = _m30.get("t30") or {}
             _feats = _m30.get("feats") or {}
@@ -3333,6 +3341,13 @@ class Api:
                 pass
         if m30_pending:
             out["m30_pending"] = True     # 30min 判定未热（>0 ⇒ 前端 3s 快速重拉，不等 12s）
+            # 2026-10-18：当前 slot 未热时**按需**补一次磁盘预热（零网络、单飞）。
+            # 在线刷新只在交易时段跑 ⇒ 周末/盘后没人翻新 slot，体检表会永远「计算中」。
+            if _m30_cold:
+                try:
+                    self._kick_ob_m30_disk(_m30_cold)
+                except Exception:
+                    pass
         # 仓位结构未热：后台预热持仓（按 code 排队、槽位内去重），前端按 struct_pending 快速重拉
         _struct_pending = any((s.get("structure") or {}).get("pending") for s in out["stocks"])
         if _struct_pending:
@@ -6353,6 +6368,32 @@ class Api:
                 list(ex.map(lambda c: self._m30_top_snapshot(c, allow_compute=True), codes))
         except Exception:
             pass
+
+    def _kick_ob_m30_disk(self, codes):
+        """**按需**磁盘预热当前 slot 的 OB 30min 快照（零网络、单飞）。
+
+        为什么必须按需：`refresh_ob_m30`（在线）现在只在交易时段跑；周末/盘后每 30 分钟
+        `_min_bars_slot()` 就变一次，若没人重算，`_M30_SNAP_CACHE` 里只有旧 slot 的键 ⇒
+        体检表「30min 判定」永远「计算中」（2026-10-18 owner 截图）。这里在 OB 表发现
+        当前 slot 未热时补一次**磁盘**计算（`load_minute_asof` 零网络），下一轮 3s 轮询即显示。"""
+        codes = [str(c).split("_")[0] for c in (codes or []) if c]
+        if not codes:
+            return
+        with _OB_M30_DISK_LOCK:
+            if _OB_M30_DISK_WARM.get("running"):
+                return
+            _OB_M30_DISK_WARM["running"] = True
+            _OB_M30_DISK_WARM["slot"] = _min_bars_slot()
+
+        def _bg():
+            try:
+                self._warm_ob_m30_disk(codes)
+            except Exception:
+                pass
+            finally:
+                with _OB_M30_DISK_LOCK:
+                    _OB_M30_DISK_WARM["running"] = False
+        _th.Thread(target=_bg, daemon=True, name="ob-m30-disk-warm").start()
 
     def refresh_ob_m30(self, codes=None):
         """后台预热当前 30min 时段内的持仓 OB 快照（走 `_fetch_min_bars` ⇒ 腾讯优先）。
