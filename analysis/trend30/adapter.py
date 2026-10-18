@@ -48,7 +48,38 @@ def _slot(dt=None) -> str:
 
 
 def _fetch_30min(code: str, days: int = 35) -> pd.DataFrame:
-    """原生 30min（tushare stk_mins freq='30min'）。返回 {time,open,high,low,close,volume(,amount)}。"""
+    """30min bars → {time,open,high,low,close,volume(,amount)}。
+
+    2026-10-18：**腾讯 mkline 优先**。原先每只票每个 30min 时段都打 tushare —
+    批量标签（猎手/风向标 300~400 只）会瞬间打出几百个 tushare 请求，叠加默认 30s 超时
+    与两次重试、且 DNS 不受 requests timeout 约束 ⇒ 卡死栈里常见 `adapter._fetch_30min`
+    卡在 `getaddrinfo`。腾讯走 keep-alive（≈60ms）、640 根 ≈ 80 日、**含未收盘根**
+    （`drop_forming_bar` 会丢掉）。
+    后备顺序：**腾讯 → 本地磁盘（零网络）→ tushare（兜底，BJ/腾讯失败时）**。"""
+    # ① 腾讯（实时）
+    try:
+        from core.market_data.tencent_provider import minute_kline
+        d = minute_kline(code, "m30", 640)
+        if d is not None and not d.empty:
+            d = d[[c for c in ("time", "open", "high", "low", "close", "volume")
+                   if c in d.columns]].copy()
+            d["time"] = pd.to_datetime(d["time"])
+            return d.sort_values("time").reset_index(drop=True)
+    except Exception:
+        pass
+    # ② 本地磁盘（零网络；可能陈旧，但比出网卡死强）
+    try:
+        from core import chart_cache as _cc
+        from analysis.divergence import _ts_code
+        d = _cc.load_minute_history(_ts_code(code), "30min")
+        if d is not None and not d.empty:
+            d = d[[c for c in ("time", "open", "high", "low", "close", "volume")
+                   if c in d.columns]].copy()
+            d["time"] = pd.to_datetime(d["time"])
+            return d.sort_values("time").reset_index(drop=True)
+    except Exception:
+        pass
+    # ③ tushare 兜底（原实现）
     from analysis.divergence import _ts_code
     from analysis.index_regime_intraday import _iri_tushare_pro
     pro = _iri_tushare_pro()

@@ -1515,6 +1515,12 @@ _TREND30_ENABLED = True
 _TAGS_CACHE: dict = {}
 _TAGS_LOCK = threading.Lock()
 _TAGS_RUNNING = False
+# 单只标签的**跨批次**缓存（2026-10-18）：批量缓存按「代码集合指纹」存，猎手(offline=True)/
+# 风向标(288 只代表股)/建仓表 的集合各不相同 ⇒ 同一只票会被重复算（每只 ~300ms 的 pandas：
+# 精密箱体 + 30min 状态机）。按 (code, offline) 单独缓存，TTL 与批量一致，三处互相复用。
+_TAGS_ONE_CACHE: dict = {}
+_TAGS_ONE_TTL = 120.0
+_TAGS_ONE_MAX = 6000
 
 # 突破扫描状态/缓存的同步锁（2026-09-29）。此前 `_breakout_scan`/`_breakout_cache` **零同步**：
 # 后台 daemon 线程写、pywebview 线程每 800ms 读 ⇒ 可读到 "status=done 但 stocks 还是上一批"
@@ -6052,7 +6058,10 @@ class Api:
             threading.Thread(target=_bg_en, name="beacon-enrich", daemon=True).start()
         # ── 主线程只做缓存读 ──
         try:
-            _tags_map = (self.load_stock_tags_batch(all_codes) or {}).get("tags") or {}
+            # 2026-10-18：**offline=True**（批量视图铁律）。288 只代表股若走在线路径，每只都会
+            # `_append_today_forming_bar` → 单只快照（2s 超时）⇒ 恢复/盘后高峰把 6 个工作线程
+            # 全压在网络上，是卡顿大户；且风向标只做展示，日线缓存 + 批量快照已够。
+            _tags_map = (self.load_stock_tags_batch(all_codes, offline=True) or {}).get("tags") or {}
         except Exception:
             _tags_map = {}
         for sec in sectors:
@@ -6402,6 +6411,26 @@ class Api:
         return r["trend"], "30min"
 
     def _stock_tags_one(self, code, offline=False):
+        """单只标签（**跨批次缓存**）→ `_stock_tags_compute`。
+
+        2026-10-18：批量缓存按代码集合指纹存 ⇒ 猎手/风向标/建仓表的集合不同，同一只票会
+        重复算（每只约 300ms 的 pandas）。这里按 `(6位码, offline)` 再缓存一层，TTL 120s，
+        三个调用方互相复用，显著降低后台 CPU 尖峰（卡顿的直接来源之一）。"""
+        _c = str(code).split("_")[0]
+        _ck = (_c, bool(offline))
+        _now = _time_mod.time()
+        with _TAGS_LOCK:
+            _hit = _TAGS_ONE_CACHE.get(_ck)
+        if _hit and (_now - _hit[0]) < _TAGS_ONE_TTL:
+            return _hit[1]
+        _res = self._stock_tags_compute(code, offline)
+        with _TAGS_LOCK:
+            if len(_TAGS_ONE_CACHE) > _TAGS_ONE_MAX:
+                _TAGS_ONE_CACHE.clear()
+            _TAGS_ONE_CACHE[_ck] = (_time_mod.time(), _res)
+        return _res
+
+    def _stock_tags_compute(self, code, offline=False):
         """单只股票技术标签 → `_stock_tags_from_df`。`offline=True`：批量视图用，**零网络**。
 
         **2026-10-11 性能修复：日线改为「本地缓存优先」，缺才回退 provider。**

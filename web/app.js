@@ -370,8 +370,17 @@ async function refreshLive(reset) {
 // 列沿用「建仓信号扫描」那套（判定/得分/通过/日线阶段/20日线观察/价涨幅/技术标签/时机条件/
 // 30min判定/仓位结构/30m MA5/依据），另加「梯队」。**刻意不含「池」与「扫描」两列**：
 // 本面板不是扫描产物 —— 没有池归属、也没有 scan_time（后端返回里就没有这两个字段）。
-let _beacon = { ts: 0, data: null, inflight: false };
-const _beaconOpen = new Set();   // 已展开的板块下标 —— **必须跨重渲染保持**：未齐时每 3s 重渲染一次，否则展开会被收回
+// date：缓存归属日期。风向标必须跟着**全局选中日**走（与选股猎手同一天），
+// 否则猎手跑历史日、风向标却总挑"≤今天的最新一天" ⇒ 两边排名对不上（2026-10-18 owner 报）。
+let _beacon = { ts: 0, data: null, inflight: false, date: null };
+// 风向标的"日期跟随"（2026-10-18）：
+//   · 默认跟随全局选中日 `state.date`（与「选股猎手」主按钮的运行日期同源）；
+//   · 猎手「重新生成」看历史日时，用 dateOverride **临时**把风向标钉到同一天；
+//   · 全局日期一变，覆盖立即作废，回到 state.date。
+let _beaconDateOverride = null;
+let _beaconGlobalDate = null;
+const _beaconOpen = new Set();   // 已展开的板块**名称** —— 必须跨重渲染保持（未齐时每 3s 重渲染）；
+                                 // 2026-10-18 由下标改名称：猎手重跑后排名变化，按下标会让展开的板块串位。
 const BEACON_TTL_MS = 60000;      // 后端一次 ~5s（88 只 × 日线缓存 + 标签批算）⇒ 不能跟 10s 轮询同频
 const BEACON_TTL_PENDING_MS = 3000;  // 未齐（重列/标签还在补）时短轮询，见 _beaconReady
 let _beaconQ = { cache: {}, last: 0, inflight: false };
@@ -400,21 +409,37 @@ function _scheduleBeacon() {
   _beaconTimer = setTimeout(() => loadMarketBeacon(true), ttl);
 }
 
-async function loadMarketBeacon(force) {
+async function loadMarketBeacon(force, dateOverride) {
   const el = document.getElementById("beaconBody");
   if (!el) return;
   const now = Date.now();
+  // 全局日期一变 ⇒ 历史视图的日期覆盖作废（见 _beaconDateOverride 注释）
+  if ((state.date || null) !== _beaconGlobalDate) {
+    _beaconGlobalDate = state.date || null;
+    _beaconDateOverride = null;
+  }
+  if (dateOverride !== undefined) _beaconDateOverride = dateOverride || null;
+  const _curDate = _beaconDateOverride || state.date || null;
   const ttl = _beaconReady(_beacon.data) ? BEACON_TTL_MS : BEACON_TTL_PENDING_MS;
-  if (!force && _beacon.data && (now - _beacon.ts) < ttl) {
+  if (!force && _beacon.data && _beacon.date === _curDate && (now - _beacon.ts) < ttl) {
     renderMarketBeacon(_beacon.data);         // TTL 内复用（会走"没变就不重建"的闸）
     _scheduleBeacon();
     return;
   }
-  if (_beacon.inflight) return;
+  if (_beacon.inflight) {
+    // 正在飞的那次可能是**另一个日期**（切日/猎手历史日）⇒ 完成后尽快补一次，
+    // 别等 finally 里按 60s TTL 排下一轮。
+    if (_beacon.date !== _curDate) {
+      if (_beaconTimer) clearTimeout(_beaconTimer);
+      _beaconTimer = setTimeout(() => loadMarketBeacon(true), 800);
+    }
+    return;
+  }
   _beacon.inflight = true;
   try {
-    const d = await apiCall("load_market_beacon");
-    _beacon = { ts: Date.now(), data: d || {}, inflight: false };
+    // 传全局选中日 ⇒ 与「选股猎手」同一天（后端取 ≤date 的最近一日）
+    const d = await apiCall("load_market_beacon", _curDate);
+    _beacon = { ts: Date.now(), data: d || {}, inflight: false, date: _curDate };
     renderMarketBeacon(d || {});
   } catch (e) {
     _beacon.inflight = false;
@@ -471,8 +496,12 @@ function renderMarketBeacon(d) {
   if (!el) return;
   // ⚠️ **没变就不重建**：3s 轮询下每次都重建 23 张卡 + 332 行表 ⇒ 即使折叠着也看得见跳闪。
   //    容器换过（页面上别处重渲染过）则必须重建 —— 所以签名要和**元素身份**一起判。
+  // 2026-10-18：签名必须带**有序板块列表**。原来只有 `JSON.stringify(d).length` —— 猎手重跑后
+  // 名次/均分变了但 JSON 长度常常一模一样 ⇒ 这里早返回、风向标停在旧排名（owner 报"排名没有对齐"）。
+  const _ord = ((d && d.sectors) || [])
+    .map(s => `${s.name}:${s.avg}:${s.limitup}:${(s.rows || []).length}`).join(",");
   const sig = [d && d.date, d && d.pending ? "P" : "", d && d.enrich_pending ? "E" : "",
-               ((d && d.sectors) || []).length, JSON.stringify(d || {}).length].join("|");
+               ((d && d.sectors) || []).length, JSON.stringify(d || {}).length, _ord].join("|");
   if (el === _beaconEl && sig === _beaconSig) return;
   _beaconEl = el; _beaconSig = sig;
   if (!d || d.available === false) {
@@ -494,10 +523,14 @@ function renderMarketBeacon(d) {
   // 板块名自带信息：龙头名字直接写在标题行 ⇒ **不展开也能一眼看到"谁在场"**
   // 2026-10-18 owner：「市场风向标使用方格显示」—— 每个板块一张**方格卡**（grid），
   // 点格子展开成整行（grid-column:1/-1）显示明细表；展开状态仍由 `_beaconOpen` 跨重绘保持。
+  const _dayTxt = d.date && String(d.date).length >= 8
+    ? `${String(d.date).slice(0, 4)}-${String(d.date).slice(4, 6)}-${String(d.date).slice(6, 8)}`
+    : (d.date || "—");
   el.innerHTML = `
     <div style="display:flex;align-items:center;gap:8px;margin:2px 0 8px;flex-wrap:wrap">
       <button class="mini-btn" onclick="beaconToggleAll(true)">全部展开</button>
       <button class="mini-btn" onclick="beaconToggleAll(false)">全部收起</button>
+      <span class="cell-dim">数据日 <b>${esc(_dayTxt)}</b>（与选股猎手同口径）</span>
       <span class="cell-dim">共 <b>${secs.length}</b> 个板块 · <b>${total}</b> 只代表股（默认收起，点方格展开）</span>
       <span class="cell-dim" style="font-size:11px">
         <span style="color:#f85149">■</span> 前 10 名
@@ -507,13 +540,15 @@ function renderMarketBeacon(d) {
     <div class="beacon-grid">` + secs.map((sec, i) => {
     const leads = (sec.rows || []).filter(r => r.tier === "龙头").map(r => r.name);
     const mids = (sec.rows || []).filter(r => r.tier === "中军").length;
-    const _open = _beaconOpen.has(i);
+    // 展开状态按**板块名**记（不是下标）：猎手重跑后排名会变，按下标记会让"展开的板块"跳到别人身上。
+    const _open = _beaconOpen.has(sec.name);
     // 2026-10-18 owner：前 10 名红色、其余绿色（列表是后端按板块均分降序 ⇒ i<10 即前10名）
     const _rankCls = i < 10 ? " beacon-top" : " beacon-rest";
-    return `<div class="card beacon-tile${_rankCls}${_open ? " open" : ""}" id="beaconCard_${i}">
+    return `<div class="card beacon-tile${_rankCls}${_open ? " open" : ""}" id="beaconCard_${i}" data-name="${esc(sec.name)}">
       <div class="beacon-tile-head" onclick="beaconToggle(${i})" title="点击展开/收起该板块明细">
         <div class="beacon-line1">
           <span class="bk-arrow" id="beaconArrow_${i}">${_open ? "▾" : "▸"}</span>
+          <span class="beacon-rank" title="板块排名（与选股猎手同一天、同一均分口径）">${i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : i + 1}</span>
           <b class="beacon-name">${esc(sec.name)}</b>
           <span class="beacon-score" title="板块均分（与选股猎手同口径）">${fmt(sec.avg, 2)}</span>
         </div>
@@ -543,7 +578,9 @@ function beaconToggle(i, force) {
   if (arw) arw.textContent = show ? "▾" : "▸";
   // 方格布局：展开的板块跨满整行（grid-column:1/-1），否则 300+ 行的明细表塞不进方格
   if (card) card.classList.toggle("open", show);
-  if (show) _beaconOpen.add(Number(i)); else _beaconOpen.delete(Number(i));
+  // 展开状态按**板块名**记（排名变化后不会串到别的板块）
+  const name = card ? card.getAttribute("data-name") : null;
+  if (name) { if (show) _beaconOpen.add(name); else _beaconOpen.delete(name); }
 }
 
 function beaconToggleAll(open) {
@@ -2062,6 +2099,30 @@ function startSignalPoll() {
 }
 function stopSignalPoll() {
   if (sigTimer) { clearTimeout(sigTimer); sigTimer = null; }
+}
+
+/* 2026-10-18：休眠/长时间挂起恢复（或 JS 主线程被饿死 >60s）后，所有 setTimeout 会**同时到期**
+   ⇒ live/console/signal/beacon/hunter 十几个接口在 1 秒内一起打到 pywebview 桥上，
+   而 `evaluate_js` 是串行的 ⇒ 恢复瞬间反而更像"卡死"。
+   处置：重新起一遍各轮询（先 stop 再 start 会清掉旧定时器、按原相位重新错开），
+   风向标延后 2.5s 再拉，别和恢复瞬间的 UI 重建抢。 */
+let _lastWakeRecovery = 0;
+function _onWakeFromSleep(gapMs) {
+  const now = Date.now();
+  if (now - _lastWakeRecovery < 30000) return;      // 防抖：每次休眠只处理一次
+  _lastWakeRecovery = now;
+  try {
+    // 实时轮询只在看"今天"时存在（历史日视图 loadAndRender 会 stopLivePoll）
+    if (state.date === todayStr()) {
+      stopLivePoll(); startLivePoll();
+      stopSignalPoll(); startSignalPoll();
+    }
+    stopPoll(); startPoll();
+    if (_beaconTimer) { clearTimeout(_beaconTimer); _beaconTimer = null; }
+    setTimeout(() => { try { loadMarketBeacon(true); } catch (e) { /* 静默 */ } }, 2500);
+    if (stockChartCode) startStockChartLive();
+    statusEl(`已从休眠/挂起恢复（间隔 ${Math.round(gapMs / 1000)}s）· 已重新错峰轮询`, "ok");
+  } catch (e) { /* 静默 */ }
 }
 async function pollSignals() {
   const date = state.date;
@@ -4459,8 +4520,13 @@ function _applyHunterQuotes() {
 }
 
 function applySectorTags(tbody, category) {
-  const wrap = tbody.querySelector(".h-expand-wrap");
-  const stageEl = tbody.querySelector(".h-stage-badge");
+  // 2026-10-18：方格布局后，阶段徽章在 `.hunter-tile-head`（tbody 外面），明细在
+  // `.hunter-detail`；旧表格结构（.h-expand-wrap）保留兜底，别让别的调用点静默失效。
+  const card = (tbody.closest && tbody.closest(".hunter-tile")) || null;
+  const wrap = (card && card.querySelector(".hunter-detail"))
+    || tbody.querySelector(".h-expand-wrap");
+  const stageEl = (card && card.querySelector(".h-stage-badge"))
+    || tbody.querySelector(".h-stage-badge");
   const tagsMap = hunterTagsCache[category] || {};
   if (!wrap) return;
   // 状态条：仅当**本次渲染出来的行全部拿到标签**才撤（增量取数下"有任意一条"不等于取完）
@@ -4504,18 +4570,25 @@ function applySectorTags(tbody, category) {
   }
 }
 
-async function toggleSectorExpand(tr, category) {
-  const wrap = tr.nextElementSibling;
+async function toggleSectorExpand(head, category) {
+  // 2026-10-18：方格布局 —— head 是 `.hunter-tile-head`（不再是 `<tr>`），
+  // 明细是同一张卡里的 `.hunter-detail`；展开时卡片跨整行（CSS `.hunter-tile.open`）。
+  const card = head.closest ? head.closest(".hunter-tile") : null;
+  const wrap = card ? card.querySelector(".hunter-detail") : head.nextElementSibling;
+  if (!wrap) return;
   const opening = !wrap.classList.contains("open");
-  wrap.classList.toggle("open");
+  wrap.classList.toggle("open", opening);
+  if (card) card.classList.toggle("open", opening);
+  const arw = card && card.querySelector(".bk-arrow");
+  if (arw) arw.textContent = opening ? "▾" : "▸";
   if (opening) hunterOpenSectors.add(category); else hunterOpenSectors.delete(category);
   if (!opening) return;
-  const tbody = tr.parentElement;
+  const tbody = wrap.querySelector("tbody.h-sector-group");
   // 实时价/涨幅：**先发**，与标签**并行**跑（2026-10-12）。⚠️ 上一版误把它放在 `await` 之后 ⇒
   // 白等标签 4~7 秒才发请求，等于没优化。必须在这行 await **之前**。
   loadHunterQuotes();
   await loadSectorTags(category);
-  applySectorTags(tbody, category);
+  if (tbody) applySectorTags(tbody, category);
 }
 let hunterHistoryDates = [];
 
@@ -4748,8 +4821,10 @@ async function loadHunterHistory(date) {
       hunterLoaded = true;
       statusEl(`已加载 ${date} 选股猎手数据`, "ok");
       // 2026-10-13：猎手跑完会重写 daily_summary.json ⇒ 立即强刷风向标，
-      // 让其板块排名与猎手对齐（后端骨架缓存键已含该文件 mtime，会即刻重算）
-      loadMarketBeacon(true);
+      // 让其板块排名与猎手对齐（后端骨架缓存键已含该文件 mtime，会即刻重算）。
+      // 2026-10-18：**把 date 一起传过去** —— 历史日「重新生成」时风向标必须跟到同一天，
+      // 否则它按全局日期挑"≤ 今天的最新一天"，两边名次对不上。
+      loadMarketBeacon(true, date);
     } else {
       el.innerHTML = `<div class="empty">${esc(h.error || '无数据')}</div>`;
     }
@@ -4994,6 +5069,9 @@ async function loadHunter(force) {
     } else {
       renderHunter(h);
       hunterLoaded = true;
+      // 猎手跑完会重写 daily_summary.json ⇒ 风向标骨架缓存按 mtime 已失效。
+      // 这里主动拉一次并**钉到同一天**，别让用户等最多 60s 的前端 TTL（否则看起来"排名没对齐"）。
+      try { loadMarketBeacon(true, date); } catch (e) { /* 静默 */ }
     }
     // 2026-10-10: 突破箱体 / 站上5日线 扫描不再自动触发，一律由各自卡片按钮发起（owner 需求6）
   } catch (e) {
@@ -5188,6 +5266,8 @@ const DIM_RULES = [
   ["D12", "趋势性", "8", "当日收盘站上 20 日均线（中期趋势向上；池内约 19% 命中，owner 2026-10-17 新增，权重最高档）"],
   ["大额", "大成交额", "3", "当日成交额≥50亿"],
 ];
+const DIM_NAME = {};
+DIM_RULES.forEach(r => { DIM_NAME[r[0]] = r[1]; });
 
 function renderHunter(h) {
   // 「建仓符合度是否已算」：`build_n` 由后端在**算完之后**回填（算了多少只）。
@@ -5372,35 +5452,67 @@ function renderHunter(h) {
     const heatVal = r["热度"] != null ? r["热度"] : 0;
     const heatBarW = Math.max(2, Math.min(100, heatVal));
 
-    return `<tbody class="h-sector-group" data-category="${esc(category)}">
-      <tr class="h-main-row" onclick="toggleSectorExpand(this,'${esc(category)}')" style="cursor:pointer">
-        <td class="num mono" style="font-size:14px;font-weight:700">${medal || rank}</td>
-        <td>
-          <div class="h-name">${esc(category)}
-            <a href="#" onclick="event.stopPropagation();showSectorHistory('${esc(category)}');return false;"
-               title="查看板块历史情况" style="text-decoration:none;color:var(--accent)">🔗</a>
-          </div>
-          <div class="h-sub">${firstLevelCount}个细分 · ${r["股票数"]||(ss[category]||[]).length||0}只
-            ${d5Hits > 0 ? ` · <b class="up">D5×${d5Hits}</b>` : ""}
-            ${d6Hits > 0 ? ` · <b class="warn">D6×${d6Hits}</b>` : ""}
-          </div>
-        </td>
-        <td style="width:140px">
-          <div class="h-score-big ${scoreCls}">${fmt(scoreVal, 1)}<span class="h-score-unit">分</span></div>
-          <div class="h-bar-track"><div class="h-bar-fill ${scoreCls}" style="width:${barW}%"></div></div>
-        </td>
-        <td class="num">${r["涨停数"]||0}</td>
-        <td style="min-width:70px"><span class="h-stage-badge cell-dim">阶段…</span></td>
-        <td style="width:100px">
-          <span class="mono cell-dim" style="font-size:10px">${trendSpark(trends[category]||[], 'heat', '#d29922')}</span><div class="h-heat-val ${heatCls}">${heatVal > 0 ? fmt(heatVal, 0) : "—"}</div>
-          <div class="h-bar-track h-bar-sm"><div class="h-bar-fill ${heatCls}" style="width:${heatBarW}%"></div></div>
-        </td>
-        <td style="min-width:70px">
+    // 板块内 D 维度「突出项」（2026-10-18 owner：每个板块打出分后要显示哪些 D 项突出）。
+    // 数据 = 每只票的 `dims`（韭研 D1~D12 的**非零项**）；板块均分就是这些分的平均。
+    // 排序：先按**贡献总分**（对均分影响最大），再按命中只数（广度），取前 3。
+    const _dimHits = {}, _dimPts = {};
+    let _hasAnyDims = false;
+    for (const _s of stocks) {
+      const _dm = _s.dims || {};
+      const _ks = Object.keys(_dm);
+      if (_ks.length) _hasAnyDims = true;
+      for (const _k of _ks) {
+        const _v = Number(_dm[_k]) || 0;
+        _dimHits[_k] = (_dimHits[_k] || 0) + 1;
+        _dimPts[_k] = (_dimPts[_k] || 0) + _v;
+      }
+    }
+    const _dimTot = Math.max(1, stocks.length);
+    const dimTop = Object.keys(_dimHits)
+      .sort((a, b) => (_dimPts[b] - _dimPts[a]) || (_dimHits[b] - _dimHits[a])
+        || a.localeCompare(b))
+      .slice(0, 3)
+      .map(k => ({ k, n: _dimHits[k], pts: _dimPts[k], name: DIM_NAME[k] || k }));
+    const dimChips = dimTop.map(x =>
+      `<span class="h-dim-chip" title="${esc(x.name)} · ${x.n} 只命中（${Math.round(x.n / _dimTot * 100)}%）`
+      + ` · 合计 ${x.pts} 分">${esc(x.k)} <b>×${x.n}</b><i>${x.pts}分</i></span>`).join("");
+
+    // 2026-10-18 owner：「选股猎手的显示方式和市场风向标风格保持一致」——
+    // 板块汇总从"全宽横条"改成**方格卡**（同 .beacon-grid 视觉），点格子跨整行展开个股明细。
+    // 前 10 名红色、其余绿色（summary_rows 由后端按平均分降序 ⇒ i<10 即前10）。
+    const _open = hunterOpenSectors.has(category);
+    const _rankCls = i < 10 ? " beacon-top" : " beacon-rest";
+    return `<div class="card hunter-tile${_rankCls}${_open ? " open" : ""}" id="hunterCard_${i}" data-category="${esc(category)}">
+      <div class="hunter-tile-head" onclick="toggleSectorExpand(this,'${esc(category)}')" title="点击展开/收起个股明细">
+        <div class="hunter-line1">
+          <span class="bk-arrow" id="hunterArrow_${i}">${_open ? "▾" : "▸"}</span>
+          <span class="hunter-rank">${medal || rank}</span>
+          <b class="hunter-name">${esc(category)}</b>
+          <a href="#" class="hunter-link" onclick="event.stopPropagation();showSectorHistory('${esc(category)}');return false;"
+             title="查看板块历史情况">🔗</a>
+          <span class="hunter-score ${scoreCls}">${fmt(scoreVal, 1)}<span class="hunter-score-unit">分</span></span>
+        </div>
+        <div class="h-bar-track"><div class="h-bar-fill ${scoreCls}" style="width:${barW}%"></div></div>
+        <div class="hunter-meta">
+          ${firstLevelCount}个细分 · ${r["股票数"]||(ss[category]||[]).length||0}只
+          ${d5Hits > 0 ? ` · <b class="up">D5×${d5Hits}</b>` : ""}
+          ${d6Hits > 0 ? ` · <b class="warn">D6×${d6Hits}</b>` : ""}
+          · 涨停 <b>${r["涨停数"]||0}</b>
+        </div>
+        <div class="hunter-dims" title="本板块最突出的 D 维度（按贡献总分降序；悬停看命中只数与占比）">
+          ${dimChips || (_hasAnyDims
+            ? '<span class="cell-dim" style="font-size:10px">无 D 命中</span>'
+            : '<span class="cell-dim" style="font-size:10px">D 明细未生成（重新运行猎手）</span>')}
+        </div>
+        <div class="hunter-meta2">
+          <span class="h-stage-badge cell-dim">阶段…</span>
           <span class="h-trend-badge ${heatChange != null ? (heatChange > 0 ? 'h-trend-up' : heatChange < 0 ? 'h-trend-down' : 'h-trend-flat') : 'h-trend-flat'}">
             ${trendIcon || '—'} ${heatChange != null ? (heatChange>=0?'+':'')+fmt(heatChange,0) : ''}
           </span>
-        </td>
-        <td style="font-size:11px;max-width:230px" title="${esc(r["前三强"]||'')}">${
+          <span class="mono cell-dim" style="font-size:10px" title="近几日热度">${trendSpark(trends[category]||[], 'heat', '#d29922')}</span>
+          <span class="h-heat-val ${heatCls}">热度 ${heatVal > 0 ? fmt(heatVal, 0) : "—"}</span>
+        </div>
+        <div class="hunter-leads" title="${esc(r["前三强"]||'')}">${
           (() => { const _lds = stocks.filter(x => x.tier === "龙头");
                    return _lds.length
                      ? `<div style="margin-bottom:2px">${tierBadge("龙头")} <b>${_lds.map(x => esc(x.name)).join(" / ")}</b></div>`
@@ -5408,9 +5520,9 @@ function renderHunter(h) {
         }${stocks.slice(0, 3).map(s =>
           `<span class="cell-dim">${esc(s.name)}</span><button class="mini-btn" style="font-size:9px;padding:0 4px;margin:0 2px 0 1px"
             onclick="event.stopPropagation();addToWatchlist('${esc(s.code)}','${esc(s.name)}',this)"
-            title="加入建仓股池监控买点">+股池</button>`).join(" ") || esc(r["前三强"] || "—")}</td>
-      </tr>
-      <tr class="h-expand-wrap"><td colspan="8" style="padding:0">
+            title="加入建仓股池监控买点">+股池</button>`).join(" ") || esc(r["前三强"] || "—")}</div>
+      </div>
+      <div class="hunter-detail${_open ? " open" : ""}">
         <div class="h-expand">
           ${(hunterTagsCache[category] || _buildReady) ? "" :
             `<div class="h-updating-strip cell-dim" style="font-size:11px;padding:4px 8px;background:rgba(210,153,34,.10);border-left:3px solid #d29922">
@@ -5431,18 +5543,13 @@ function renderHunter(h) {
             <th title="时机条件：市场有方向/多头结构/回撤到位 · 末位🚫=否决因子（爆量≥3倍或偏离MA60>+20%）">时机条件</th>
             <th>理由</th>
           </tr></thead>
-          <tbody>${stockRows}</tbody></table>
+          <tbody class="h-sector-group" data-category="${esc(category)}">${stockRows}</tbody></table>
           ${pageInfo}
-          <div class="d-rules">
-            <b>D分规则</b><span class="cell-dim">（韭研原始评分 · 满分 47 · D3/D10 未启用）</span>
-            <div class="d-rules-grid">${DIM_RULES.map(r => `<span class="d-rule" title="${esc(r[3])}"><b>${r[0]}</b>${r[1]}<i>${r[2]}</i></span>`).join("")}</div>
-            <div class="cell-dim" style="margin-top:2px">小字＝该股命中的维度与分数，合计即「D分」列；左侧「得分」是建仓综合得分 0~100，两套口径别混。</div>
-          </div>
-          <div class="cell-dim" style="font-size:10px;margin-top:3px">悬停技术标签看解释 · 点击行收起
+          <div class="cell-dim" style="font-size:10px;margin-top:3px">悬停技术标签看解释 · 点击方格收起
             ${hunterTagsCache[category] ? "" : ` · <b class="h-updating-foot warn">⏳ 技术标签更新中（本板块 ${(ss[category]||[]).length} 只，约 30~60 秒）</b>`}</div>
         </div>
-      </td></tr>
-    </tbody>`;
+      </div>
+    </div>`;
   }).join("");
 
   // 2026-10-09 owner：突破箱体支持**任选交易日**扫描，结果按日保存（breakout_{date}.json）
@@ -5535,16 +5642,25 @@ function renderHunter(h) {
 
     ${breakoutCard}
 
-    <div class="card" style="overflow-x:auto">
-    <table class="h-table">
-      <thead><tr>
-        <th class="num">#</th><th>板块</th><th class="num">均分</th><th class="num">涨停</th>
-        <th class="num">热度</th><th>趋势</th><th>前三强</th>
-      </tr></thead>
-      ${sumBody}
-    </table></div>
+    <div class="card" style="margin-bottom:10px;padding:10px 14px">
+      <div class="card-title">📐 D1~D12 打分规则
+        <span class="cell-dim" style="font-weight:normal;font-size:11px">韭研原始评分（满分 47 · D3/D10 未启用）· 与「得分」列的建仓综合得分 0~100 是两套口径</span>
+      </div>
+      <div class="d-rules-grid">${DIM_RULES.map(r => `<span class="d-rule" title="${esc(r[3])}"><b>${r[0]}</b>${r[1]}<i>${r[2]}</i></span>`).join("")}</div>
+      <div class="cell-dim" style="margin-top:4px;font-size:11px">
+        每个方格里的 <b>D..×N</b> = 本板块最突出的 3 个维度（按贡献总分降序；悬停看命中只数与合计分）；
+        个股明细「D分」列下方小字 = 该股命中的维度与分数。
+      </div>
+    </div>
 
-    <div class="cell-dim" style="font-size:10px;margin-top:6px">数据源: stock_hunter (韭研概念打分) · 点击板块展开个股明细(D5/D6异常) · 热度趋势vs前日</div>`;
+    <div class="cell-dim" style="font-size:11px;margin:2px 0 8px">
+      <span style="color:#f85149">■</span> 前 10 名
+      <span style="color:#2ea043;margin-left:6px">■</span> 其余
+      <span style="margin-left:10px">共 <b>${sumRows.length}</b> 个概念 · 点击方格展开个股明细</span>
+    </div>
+    <div class="hunter-grid">${sumBody}</div>
+
+    <div class="cell-dim" style="font-size:10px;margin-top:6px">数据源: stock_hunter (韭研概念打分) · 点击方格展开个股明细(D5/D6异常) · 热度趋势vs前日</div>`;
 
   // GO 图容器放回占位处（复用旧节点 ⇒ 同节点走原地 setOption，不闪）
   _putBackNode("hunterGoSlot", _keepGoChart, '<div id="hunterGoChart" style="height:130px"></div>');
@@ -5557,8 +5673,14 @@ function renderHunter(h) {
     el.querySelectorAll("tbody.h-sector-group").forEach(tb => {
       const cat = tb.getAttribute("data-category");
       if (hunterOpenSectors.has(cat)) {
-        const wrap = tb.querySelector(".h-expand-wrap");
+        const card = tb.closest && tb.closest(".hunter-tile");
+        const wrap = card && card.querySelector(".hunter-detail");
         if (wrap) wrap.classList.add("open");
+        if (card) {
+          card.classList.add("open");
+          const arw = card.querySelector(".bk-arrow");
+          if (arw) arw.textContent = "▾";
+        }
         applySectorTags(tb, cat);
         loadSectorTags(cat);      // 翻页后补当前页缺的 code（已缓存的跳过）
       }
@@ -6578,6 +6700,8 @@ document.addEventListener("DOMContentLoaded", () => {
     _lastTick = now;
     // 250ms 定时器被拖到 >1000ms ⇒ 主线程至少堵了 (gap-250)ms
     if (gap > 1000) _diagReport("jsblock", gap - 250, "JS main thread blocked");
+    // >60s 的间隔只可能是休眠/挂起（普通渲染不会卡这么久）⇒ 恢复后重新错峰，避免惊群
+    if (gap > 60000) _onWakeFromSleep(gap);
   }, 250);
   let _dumpedAt = 0;
   setInterval(async () => {
