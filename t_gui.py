@@ -250,11 +250,11 @@ COND_LABELS = {
 # 原来 250 会让前端为「看得见锚点」把视窗放宽，一屏塞进 250+ 根K线，蜡烛细到看不清。
 # 代价：更早的大级别摆动不再被选为锚点（用户 2026-10-04 确认接受）。
 _FIB_LOOKBACK = {"daily": 120, "weekly": 120, "monthly": 60,
-                 "min30": 160, "min60": 160}   # 分钟档与前端默认视窗根数对齐
+                 "min10": 160, "min30": 160, "min60": 160}   # 分钟档与前端默认视窗根数对齐
 _FIB_FRACTAL_N = {"daily": 3, "weekly": 2, "monthly": 1,        # 分形确认根数（越长周期 bar 越少）
-                  "min30": 2, "min60": 2}
+                  "min10": 2, "min30": 2, "min60": 2}
 _FIB_MIN_AMP = {"daily": 5.0, "weekly": 8.0, "monthly": 12.0,   # 摆动最小幅度 %（低于此视为噪声）
-                "min30": 3.0, "min60": 3.0}    # 分钟档为初始值，未标定，待图上肉眼校准
+                "min10": 3.0, "min30": 3.0, "min60": 3.0}    # 分钟档为初始值，未标定，待图上肉眼校准
 _FIB_RETRACE = [0.236, 0.382, 0.5, 0.618, 0.786]                # 回撤位（0.618 即黄金比例）
 _FIB_EXTENSION = [1.272, 1.618]                                 # 扩展位（突破后目标）
 
@@ -618,7 +618,43 @@ _MIN_BARS_DIR = BASE / "t_io" / "cache" / "tushare_mins"
 _MIN_BARS_CACHE: dict = {}
 _MIN_BARS_LOCK = threading.Lock()
 MIN_BARS_KEEP = 320                                    # 保留根数上限（前端「全部」档）
-_MIN_BARS_DAYS = {"30min": 70, "60min": 130}           # 自然日：够 320 根（8/日、4/日）
+_MIN_BARS_DAYS = {"5min": 40, "10min": 45, "30min": 70, "60min": 130}
+#                                                          ↑ 自然日：够 320 根（48/日、24/日、8/日、4/日）
+# 10min：**tushare 无原生 10min** ⇒ 由 5min 合成（复用仓位结构层同一个
+# `position_structure.resample_5min_to_10min`，保证 K 线与结构层 10min 口径一致）。
+
+# ── tushare 分钟线的熔断（2026-10-18，GUI 卡死专项）──────────────────────────
+# 卡死栈实测：`refresh_ob_m30` 的 3 个 worker 同时卡在 tushare 的
+# `socket.getaddrinfo`（DNS 解析**不受 requests 的 timeout 约束**），叠加 tushare 默认
+# 30s 超时 + 3 次重试 ⇒ 单只可挂 90s+，界面心跳被拖停。处置：①腾讯优先（见
+# `_fetch_min_bars`）；②tushare 调用放守护线程里**硬等 8s**；③失败/超时/过慢 ⇒ 冷却 5 分钟。
+_TUSHARE_MIN_COOLDOWN_S = 300.0
+_TUSHARE_MIN_STATE = {"until": 0.0}
+_TUSHARE_MIN_LOCK = threading.Lock()
+
+# ---- 盘中实时 K 线（2026-10-17）----
+# 前端在弹窗打开期间每 3s 调 `load_chart_realtime`；整图 10s 轮询也会撞进来。
+# 2 秒内同 (code, period) 只打一次网络（腾讯 mkline + 快照 ≈0.1~0.3s）。
+# 2026-10-18：改为 **SWR**（`load_chart_realtime` 只读缓存、后台线程算）——
+#   真实进程里这个入口原要 1.5~3.0s（`gui_slow_calls.log`），每 3s 投递一次会拖死
+#   pywebview 的串行 `evaluate_js`。_CHART_LIVE_STATE 记录每个键是否已有 worker 在跑。
+_CHART_LIVE_TTL = 2.0
+_CHART_LIVE_MIN_KICK = 0.8      # 两次后台刷新之间的最小间隔（防抖）
+_CHART_LIVE_CACHE: dict = {}
+_CHART_LIVE_STATE: dict = {}
+_CHART_LIVE_LOCK = threading.Lock()
+_CHART_LIVE_MAX = 200
+
+# ---- 手动盘「K线速查」：名称/代码 → 标的（2026-10-18）----
+# 本地名称表（韭研 5382 + NAMES + 持仓）600s 缓存；在线搜索（腾讯 smartbox）结果 600s 缓存
+# （空结果只缓存 60s，网络抖动后能快速重试）。
+_SEARCH_CACHE: dict = {}
+_SEARCH_CACHE_TTL = 600.0
+_SEARCH_CACHE_LOCK = threading.Lock()
+_SEARCH_CACHE_MAX = 200
+_INSTRUMENT_NAMES = {"ts": 0.0, "map": {}}
+_INSTRUMENT_NAMES_TTL = 600.0
+_INSTRUMENT_NAMES_LOCK = threading.Lock()
 
 # ---- 持仓体检（OB）30 分钟快照层（2026-10-09）----
 # 背景：体检表趋势/背离/风险提醒改用 30min 口径。`load_ob_analysis` 跑在 pywebview 串行主线程，
@@ -702,6 +738,29 @@ def _min_bars_slot():
     return now.strftime("%Y-%m-%d %H:") + ("00" if now.minute < 30 else "30")
 
 
+def _in_trading_session(now=None):
+    """**粗口径**交易时段（含 09:15 竞价与 15:05 收盘后缓冲）。
+
+    ⚠️ 只用来选**缓存策略/取数源**，不是交易闸 —— 误判的代价只是"多打一次网络"
+    或"少打一次网络"，不会影响任何下单语义。周末/节假日一律 False（节假日会被判成
+    交易日，代价同样只是一次空请求）。"""
+    now = now or datetime.now()
+    if now.weekday() >= 5:
+        return False
+    hm = now.strftime("%H:%M")
+    return ("09:15" <= hm <= "11:35") or ("12:55" <= hm <= "15:05")
+
+
+def _min_bars_slot_live(now=None):
+    """**盘中**的分钟线缓存键：10 秒一档（原 30 分钟一档会让分钟 K 线在盘中冻住半小时）。
+
+    只给 `_fetch_min_bars`（K 线弹窗的在线路径）用；体检/热身那条离线路径仍用
+    `_min_bars_slot` 的 30 分钟语义（它靠跨时段来触发重算，绝不能被改成 10 秒）。
+    """
+    now = now or datetime.now()
+    return now.strftime("%Y-%m-%d %H:%M:") + f"{now.second // 10}0"
+
+
 def _norm_min_bars(df):
     """统一分时帧列名/类型/排序；缺列或空 → 空 DataFrame。"""
     import pandas as pd
@@ -758,18 +817,59 @@ def _to_series(d, intraday=False):
     }
 
 
+def _run_bounded(fn, timeout):
+    """在**守护线程**里跑 fn，最多等 timeout 秒 → (ok, value, exc)。
+
+    ok=False 表示超时（线程留后台自生自灭，不回收）；**调用方永远不会被 DNS/网络无限期挂住**。
+    这是 GUI 卡死专项的一部分：requests 的 timeout 管不到 `getaddrinfo`。"""
+    box = {}
+    def _go():
+        try:
+            box["v"] = fn()
+        except BaseException as e:      # noqa: BLE001 —— 原样回传给调用方
+            box["e"] = e
+    t = threading.Thread(target=_go, daemon=True)
+    t.start()
+    t.join(timeout)
+    if t.is_alive():
+        return False, None, None
+    return True, box.get("v"), box.get("e")
+
+
+def _tushare_min_cooldown(why):
+    with _TUSHARE_MIN_LOCK:
+        _TUSHARE_MIN_STATE["until"] = _time_mod.time() + _TUSHARE_MIN_COOLDOWN_S
+
+
 def _fetch_min_bars_online(ts_code, freq, days):
-    """tushare 原生 30/60 分钟线。异常/空 → 空 DataFrame（由调用方回退磁盘缓存）。"""
+    """tushare 原生分钟线。异常/超时/冷却中 → 空 DataFrame（由调用方回退）。
+
+    2026-10-18：**硬超时 8s + 失败冷却 5 分钟**。此前它没有上限：tushare 默认 30s×3 次重试，
+    而 DNS 解析不受 timeout 约束 —— GUI 卡死栈里 3~4 个线程同时挂在 `getaddrinfo`，
+    `refresh_ob_m30` 的 3 个 worker 全被占死。现在最多占用调用方 8 秒。"""
     import pandas as pd
-    try:
+    with _TUSHARE_MIN_LOCK:
+        if _time_mod.time() < _TUSHARE_MIN_STATE["until"]:
+            return pd.DataFrame()
+
+    def _call():
         from analysis.index_regime_intraday import _iri_tushare_pro
         pro = _iri_tushare_pro()
         start = (datetime.now() - pd.Timedelta(days=days)).strftime("%Y-%m-%d")
         end = datetime.now().strftime("%Y-%m-%d")
-        df = pro.stk_mins(ts_code=ts_code, freq=freq,
-                          start_date=f"{start} 09:00:00", end_date=f"{end} 19:00:00")
-    except Exception:
+        return pro.stk_mins(ts_code=ts_code, freq=freq,
+                            start_date=f"{start} 09:00:00", end_date=f"{end} 19:00:00")
+
+    _t0 = _time_mod.time()
+    ok, df, err = _run_bounded(_call, 8.0)
+    if not ok:
+        _tushare_min_cooldown("timeout")
         return pd.DataFrame()
+    if err is not None:
+        _tushare_min_cooldown(type(err).__name__)
+        return pd.DataFrame()
+    if (_time_mod.time() - _t0) > 6.0:
+        _tushare_min_cooldown("slow")      # 拿到了但明显偏慢 ⇒ 下一轮别再等它
     return _norm_min_bars(df)
 
 
@@ -803,8 +903,47 @@ def _fetch_min_bars_disk(ts_code, freq):
     return best
 
 
+def _fetch_min_bars_tencent(code, freq):
+    """腾讯分钟 K 线（**盘中唯一实时源**，含未收盘根）→ 规范帧。
+
+    2026-10-17：tushare `stk_mins` 盘中只回到上一交易日（见 `position_structure_feed`
+    的实测注释），分钟 K 线在盘中是**死的**；腾讯 mkline 盘中随行情更新。
+    10min 由 m5 两两配对合成（与仓位结构层同一个 `resample_5min_to_10min`）。
+    失败/空 → 空 DataFrame（调用方回退 tushare / 磁盘）。"""
+    import pandas as pd
+    _m = {"5min": "m5", "10min": "m5", "30min": "m30", "60min": "m60"}.get(freq)
+    if not _m:
+        return pd.DataFrame()
+    try:
+        from core.market_data.tencent_provider import minute_kline
+        df = minute_kline(code, _m, 640)
+    except Exception:
+        return pd.DataFrame()
+    if df is None or df.empty:
+        return pd.DataFrame()
+    if freq == "10min":
+        try:
+            from core.position_structure import resample_5min_to_10min
+            _d10 = resample_5min_to_10min(df.rename(columns={"time": "dt"}))
+            _d10 = _d10.rename(columns={"dt": "time"})
+            # ⚠️ `resample_5min_to_10min` 的输出里还带一列 `date`（分组键）；若原样喂给
+            # `_norm_min_bars`，它会把 `date` 也 rename 成 `time` ⇒ **两个 time 列** ⇒
+            # `pd.to_datetime` 抛 "cannot assemble with duplicate keys" ⇒ 10min 永远空。
+            # （2026-10-17 打开 10 分 Tab 时才实测到；此前该路径从未被 UI 调用过。）
+            _d10 = _d10[[c for c in ("time", "open", "high", "low", "close", "volume")
+                         if c in _d10.columns]]
+            df = _d10
+        except Exception:
+            return pd.DataFrame()
+    return _norm_min_bars(df)
+
+
 def _fetch_min_bars(code, freq="30min", days=None):
-    """原生 30/60 分钟线，最近 MIN_BARS_KEEP 根。
+    """分钟线（5/10/30/60），最近 MIN_BARS_KEEP 根。
+
+    取数源（2026-10-18 起）：**腾讯 mkline 永远第一**（实时、含未收盘根、keep-alive <100ms、
+    640 根原生够用）。tushare 只作兜底，且带**熔断 + 8s 硬超时**；磁盘最后。
+    盘中缓存键用 10 秒粒度 —— 原来的 30 分钟时段键会让分钟 K 线在盘中**冻住半小时**。
     任何失败都返回空 DataFrame，调用方据此降级为「该周期无分时数据」。"""
     import pandas as pd
     ts_code = _min_bars_ts_code(code)
@@ -812,15 +951,42 @@ def _fetch_min_bars(code, freq="30min", days=None):
         return pd.DataFrame()
     days = days or _MIN_BARS_DAYS[freq]
     ck = (ts_code, freq, days)
-    slot = _min_bars_slot()
+    _live = _in_trading_session()
+    slot = _min_bars_slot_live() if _live else _min_bars_slot()
     with _MIN_BARS_LOCK:
         hit = _MIN_BARS_CACHE.get(ck)
         if hit and hit[0] == slot:
             return hit[1].copy()
 
-    df = _fetch_min_bars_online(ts_code, freq, days)
-    if df.empty:
-        df = _fetch_min_bars_disk(ts_code, freq)
+    if freq == "10min":
+        # 由 5min 合成（tushare 无 10min；合成函数与仓位结构层**同一个**）。
+        # 优先腾讯 m5：它给 640 根 ⇒ 正好 320 根 10min（≈13 日），与 MIN_BARS_KEEP 对齐；
+        # tushare 的 5min 实测只回 313 根（≈6 日）⇒ 合成后只剩 157 根，默认视窗都填不满。
+        df = _fetch_min_bars_tencent(code, "10min")
+        if df.empty:
+            b5 = _fetch_min_bars(code, "5min", _MIN_BARS_DAYS["5min"])
+            if b5 is None or b5.empty:
+                return pd.DataFrame()
+            try:
+                from core.position_structure import resample_5min_to_10min
+                _d10 = resample_5min_to_10min(b5.rename(columns={"time": "dt"}))
+                _d10 = _d10.rename(columns={"dt": "time"})
+                # 同 `_fetch_min_bars_tencent`：合成结果里的 `date` 分组列必须丢掉，
+                # 否则 rename 后出现两个 `time` 列 ⇒ 10min 永远空。
+                _d10 = _d10[[c for c in ("time", "open", "high", "low", "close", "volume")
+                             if c in _d10.columns]]
+                df = _norm_min_bars(_d10)
+            except Exception:
+                return pd.DataFrame()
+    else:
+        # 2026-10-18：**腾讯永远第一**（含盘后）。它走 keep-alive、中位 <100ms，640 根
+        # 原生全历史够 `MIN_BARS_KEEP`；tushare 退为兜底（有熔断+硬超时），磁盘最后。
+        # 原先是"盘中腾讯、盘后 tushare"——正是盘后这条把 3 个预热 worker 挂在 DNS 上。
+        df = _fetch_min_bars_tencent(code, freq)
+        if df.empty:
+            df = _fetch_min_bars_online(ts_code, freq, days)
+        if df.empty:
+            df = _fetch_min_bars_disk(ts_code, freq)
     if df.empty:
         return df
     df = df.tail(MIN_BARS_KEEP).reset_index(drop=True)
@@ -3343,8 +3509,10 @@ class Api:
             _stale = ((_new_bar_possible and _age > 120)
                       or (_last == _today and _age > 15 * 60))
             if not _stale:
-                # want_minutes 但缓存里没有分时（首帧为提速未取）⇒ 落到重建（带分时）
-                _has_min = bool((_res.get("period_data") or {}).get("min30"))
+                # want_minutes 但缓存里没有分时（首帧为提速未取）⇒ 落到重建（带分时）。
+                # 2026-10-17：**三档都要**（10min 之前因合成 bug 常缺，只查 min30 会命中残缺缓存）。
+                _pd = _res.get("period_data") or {}
+                _has_min = all(bool(_pd.get(k)) for k in ("min10", "min30", "min60"))
                 if not (want_minutes and not _has_min):
                     _v = _res.get("version")
                     if version is not None and _v is not None and version == _v:
@@ -3385,14 +3553,14 @@ class Api:
         # （GM 不可达时每次卡满 12s 超时）。miss 时行为完全不变。
         # 2026-10-06：**覆盖指数**（此前 `not is_index` 把指数排除 → 指数每次走网络、且用错取数函数）。
         if not is_em:
-            _hit = self._serve_payload_cache(code_str, version, want_minutes)
+            _hit = self._serve_payload_cache(code_str, version, want_minutes, allow_network=True)
             if _hit is not None:
                 return _hit
 
         # 本地日线缓存（个股 `{code}.json` / 指数 `index_{code}.json`）
         rows = []
         if not is_em:
-            rows = self._daily_rows_cache_first(code_str)
+            rows = self._daily_rows_cache_first(code_str, allow_network=True)
             if not rows:
                 # 北交所：日线四源全不通（memory），`bj_daily.fetch_bj_daily` 逐只重试 8 次 ≈18s
                 # ⇒ 卡死主线程。有缓存/payload 的 BJ 码已在上面命中；无缓存则**立即优雅降级**。
@@ -3532,6 +3700,396 @@ class Api:
             except Exception:
                 pass
         return result
+
+    # ---------- 盘中实时 K 线（2026-10-17） ----------
+    def load_chart_realtime(self, code, period="daily"):
+        """**盘中实时补丁**：只重算「当前显示周期」，给 K 线弹窗每 3s 一次地喂新尾。
+
+        为什么必须单开一个入口（而不是让 `load_stock_chart` 自己变实时）——三层闸
+        各自都把旧数据钉死了：
+          ① tushare `stk_mins` 盘中只回到**上一交易日收盘**（实测 2026-10-14 14:13
+             仍止于 10-13 15:00）⇒ 分钟图在盘中是死的；
+          ② `_fetch_min_bars` 的内存缓存键是**30 分钟时段**⇒ 即便源是活的也冻半小时；
+          ③ 前端版本握手只认 (末日期:根数) ⇒ 当日/当根**价格在动但签名不变**，
+             回 `unchanged`、不重画。
+        本入口绕开这三层：现取腾讯分钟 K 线（盘中的未收盘根就是实时价）+ 实时快照，
+        重算该周期的 MA/MACD/RSI/BOLL/黄金分割，回前端**整段**（几十 KB）。
+        前端只替换该周期、保留缩放。
+
+        返回：{available, period, session, ts, quote, series, sig, error}
+        `sig` = 末根 (时间:收:根数) —— 前端据此跳过没变化的重绘。
+        **永不抛**；任何失败回 available=False（前端保留上一帧）。
+
+        ⚠️ 2026-10-18 改成 **SWR（非阻塞）**：调用线程**零网络、零 pandas**，只做字典读写；
+        真正的取数/重算丢到守护线程。原因：GUI 卡死专项里实测本入口在真实进程里要
+        **1.5~3.0s**（`gui_slow_calls.log`），而它每 3s 就要投递一次结果 —— pywebview 的
+        `evaluate_js` 是串行的，慢 js_api 会把界面投递排队拖死。
+        现在：有缓存就立刻回（`stale=true`），没有就回 `warming=true`，前端快速重试。
+        """
+        base = str(code).split("_")[0]
+        period = str(period or "daily")
+        out = {"code": base, "available": False, "period": period, "session": False,
+               "ts": datetime.now().strftime("%H:%M:%S"), "quote": {}, "series": None,
+               "sig": "", "error": "", "warming": False, "stale": False}
+        if period not in ("daily", "weekly", "monthly", "min10", "min30", "min60"):
+            out["error"] = f"未知周期: {period}"
+            return out
+        ck = (base, period)
+        _t = _time_mod.time()
+        with _CHART_LIVE_LOCK:
+            hit = _CHART_LIVE_CACHE.get(ck)
+            _st = _CHART_LIVE_STATE.get(ck) or {}
+            _running = bool(_st.get("running"))
+            _last_kick = float(_st.get("ts") or 0.0)
+        if hit and (_t - hit[0]) < _CHART_LIVE_TTL:
+            return hit[1]          # 2s 内直接回（前端 3s 尾 + 10s 整图会撞车）
+        if not _running and (_t - _last_kick) > _CHART_LIVE_MIN_KICK:
+            with _CHART_LIVE_LOCK:
+                _CHART_LIVE_STATE[ck] = {"running": True, "ts": _t}
+            _th.Thread(target=self._chart_live_worker, args=(base, period),
+                       daemon=True, name=f"chart-live-{base}-{period}").start()
+        if hit:                    # 有旧快照：立刻回它（最多旧 N 秒），后端在刷新
+            _o = dict(hit[1])
+            _o["stale"] = True
+            return _o
+        out["warming"] = True
+        out["session"] = _in_trading_session()
+        return out
+
+    def _chart_live_worker(self, base, period):
+        """后台计算一次实时尾并落缓存（`load_chart_realtime` 的 SWR 写端）。失败静默。"""
+        ck = (base, period)
+        try:
+            out = self._compute_chart_live(base, period)
+            if out.get("available"):
+                with _CHART_LIVE_LOCK:
+                    if len(_CHART_LIVE_CACHE) > _CHART_LIVE_MAX:
+                        _CHART_LIVE_CACHE.clear()
+                    _CHART_LIVE_CACHE[ck] = (_time_mod.time(), out)
+        except Exception:
+            pass
+        finally:
+            with _CHART_LIVE_LOCK:
+                if len(_CHART_LIVE_STATE) > _CHART_LIVE_MAX * 3:
+                    _CHART_LIVE_STATE.clear()
+                _st = _CHART_LIVE_STATE.get(ck) or {}
+                _st["running"] = False
+                _CHART_LIVE_STATE[ck] = _st
+
+    def _compute_chart_live(self, base, period):
+        """真正干活的同步实现：快照 + 腾讯分钟K线 → 该周期序列。仅供后台线程调用。"""
+        out = {"code": base, "available": False, "period": period, "session": False,
+               "ts": datetime.now().strftime("%H:%M:%S"), "quote": {}, "series": None,
+               "sig": "", "error": "", "warming": False, "stale": False}
+        _now = datetime.now()
+        _session = _in_trading_session(_now)
+        out["session"] = _session
+
+        # ① 实时快照（涨跌幅/现价；单只、批量端点、连接复用 ≈60ms）
+        try:
+            from core.market_data.tencent_provider import TencentProvider
+            _snaps = TencentProvider().snapshot_auction([base]) or {}
+            # `snapshot_auction` 的返回键是**裸 6 位码**（它把 v_sh000001 统一剥了前缀）；
+            # 指数的 K 线弹窗传的是 sh000001 ⇒ 两个键都试。
+            _q = _snaps.get(base) or _snaps.get(base[2:] if base[:2].lower() in
+                                                  ("sh", "sz", "bj") else "") or {}
+            if _q.get("price"):
+                out["quote"] = {"price": round(float(_q["price"]), 3),
+                                "change_pct": round(float(_q.get("pct") or 0.0), 2),
+                                "pre_close": _q.get("pre_close"),
+                                "open": _q.get("open"), "high": _q.get("high"),
+                                "low": _q.get("low"), "volume": _q.get("vol_hand"),
+                                "ts_date": _q.get("ts_date")}
+        except Exception:
+            out["quote"] = {}
+
+        try:
+            if period in ("daily", "weekly", "monthly"):
+                out["series"] = self._live_bar_series(base, period, _now, _session,
+                                                      out.get("quote") or {})
+            else:
+                out["series"] = self._live_minute_series(base, period)
+            if out["series"] and (out["series"].get("dates") or []):
+                _d = out["series"]["dates"]
+                _c = out["series"]["ohlc"][-1][1] if out["series"].get("ohlc") else None
+                out["sig"] = f"{_d[-1]}:{_c}:{len(_d)}"
+                out["available"] = True
+            else:
+                out["error"] = "该周期暂无实时数据"
+        except Exception as e:
+            out["error"] = f"{type(e).__name__}: {str(e)[:80]}"
+
+        return _clean(out)         # numpy 标量/nan → JSON 可序列化（与 load_stock_chart 同纪律）
+
+    def _live_bar_series(self, code, period, now, session, quote=None):
+        """日/周/月周期的实时序列：磁盘日线缓存 + **当日 forming bar** → 指标 → 序列。
+
+        当日根优先用腾讯 `fqkline`（前复权、与日线缓存同口径、OHLCV 一次给全）；
+        拿不到再退回实时快照造的 forming bar（`_mk_forming_bar`，量的单位按快照口径）。
+        """
+        import pandas as pd
+        import core.chart_cache as _cc
+        df = None
+        try:
+            df = _cc.load_daily_display(code)
+        except Exception:
+            df = None
+        if df is None or df.empty:
+            _rows = self._daily_rows_cache_first(code, allow_network=False)
+            if _rows:
+                df = pd.DataFrame(_rows)
+        if df is None or df.empty:
+            return None
+        df = df.copy()
+        df["date"] = pd.to_datetime(df["date"])
+        df = df.sort_values("date").drop_duplicates(subset=["date"], keep="last")
+        _today = now.strftime("%Y-%m-%d")
+        _has_today_quote = bool(quote) and str(quote.get("ts_date") or "") == _today
+        # 盘中必然要补；**收盘后 15:05~缓存刷新前**也要补（否则图会停在一个"半天的当日根"上）。
+        if session or _has_today_quote:
+            today_bar = None
+            if session or _has_today_quote:
+                # 收盘后也取：用**完整**的当日根覆盖盘中的半成品（缓存刷新前图不会停在半天）
+                try:
+                    from core.market_data.tencent_provider import daily_kline_raw
+                    _dk = daily_kline_raw(code, days=3)
+                    if _dk is not None and not _dk.empty and str(_dk["date"].iloc[-1])[:10] == _today:
+                        _bar = {k: float(_dk.iloc[-1][k]) for k in
+                                ("open", "high", "low", "close", "volume")}
+                        # 与 `_mk_forming_bar` 同一条盘前防伪闸：集合竞价后开盘前的快照会给出
+                        # O=H=L=C、量=0 的假当日根（曾导致「600362 误报破 5 日线」）。
+                        if not (_bar["volume"] <= 0 and _bar["high"] == _bar["low"]):
+                            today_bar = _bar
+                except Exception:
+                    today_bar = None
+            if today_bar is None:
+                _snap = self._today_forming_bar(code, allow_network=False)
+                if _snap and str(_snap.get("date")) == _today:
+                    today_bar = {k: float(_snap[k]) for k in
+                                 ("open", "high", "low", "close", "volume")}
+            if today_bar is None and _has_today_quote:
+                # 快照兜底（fqkline 万一盘中不带当日根）：与本文件既有的 forming bar 同口径
+                # （`_mk_forming_bar`：无成交且无振幅 ⇒ 视为还没开始交易，不造根）
+                _b = self._mk_forming_bar(_today, quote.get("price"), quote.get("open"),
+                                          quote.get("high"), quote.get("low"),
+                                          quote.get("volume"))
+                if _b:
+                    today_bar = {k: float(_b[k]) for k in
+                                 ("open", "high", "low", "close", "volume")}
+            if today_bar:
+                _last = str(df["date"].iloc[-1])[:10]
+                _row = {"date": pd.Timestamp(_today), **today_bar}
+                if _last == _today:
+                    # 当日根：**以实时为准**（缓存里的当日根可能停在几十分钟前）
+                    df = df.iloc[:-1]
+                if _last <= _today:
+                    df = pd.concat([df, pd.DataFrame([_row])], ignore_index=True)
+        if period == "weekly":
+            df = df.resample("W-FRI", on="date").agg(
+                {"open": "first", "high": "max", "low": "min", "close": "last",
+                 "volume": "sum"}).dropna().reset_index()
+        elif period == "monthly":
+            _maj, _min = (int(x) for x in pd.__version__.split(".")[:2])
+            df = df.resample("ME" if (_maj, _min) >= (2, 2) else "M", on="date").agg(
+                {"open": "first", "high": "max", "low": "min", "close": "last",
+                 "volume": "sum"}).dropna().reset_index()
+        d = _calc_ma_and_indicators(df)
+        s = _to_series(d)
+        try:
+            s["fib"] = self._calc_fibonacci(d, period)
+        except Exception:
+            pass
+        return s
+
+    def _live_minute_series(self, code, period):
+        """分钟周期的实时序列：腾讯 mkline（含未收盘根）→ 该周期指标 → 序列。
+
+        10min 由 m5 合成（与仓位结构层同一个函数）。腾讯失败时退回 `_fetch_min_bars`
+        （tushare/磁盘，至少能出历史，前端会标明不是实时）。"""
+        _freq = {"min10": "10min", "min30": "30min", "min60": "60min"}.get(period)
+        if not _freq:
+            return None
+        df = _fetch_min_bars_tencent(code, _freq)
+        if df is None or df.empty:
+            df = _fetch_min_bars(code, _freq)
+        if df is None or df.empty:
+            return None
+        df = df.tail(MIN_BARS_KEEP).reset_index(drop=True)
+        d = _calc_ma_and_indicators(df.rename(columns={"time": "date"}))
+        s = _to_series(d, intraday=True)
+        try:
+            s["fib"] = self._calc_fibonacci(d, period)
+        except Exception:
+            pass
+        return s
+
+    # ---------- 手动盘「K线速查」（2026-10-18） ----------
+    def _instrument_names(self):
+        """本地 名称→代码 表（韭研 watchlist 5382 + NAMES + 手动/自动持仓），600s 缓存。
+
+        只收裸 6 位码；指数/ETF 不在这里（它们留给在线搜索，腾讯 smartbox 带权威类型）。
+        多来源合并顺序：韭研 → NAMES → 持仓（后者覆盖前者，用户自己的命名最权威）。
+        """
+        now = _time_mod.time()
+        with _INSTRUMENT_NAMES_LOCK:
+            if _INSTRUMENT_NAMES["map"] and (now - _INSTRUMENT_NAMES["ts"]) < _INSTRUMENT_NAMES_TTL:
+                return _INSTRUMENT_NAMES["map"]
+        m = {}
+        try:
+            jy = _load_json(HUNTER_DIR / "watchlist_jiuyan.json", {}) or {}
+            for code, info in jy.items():
+                c = str(code).split("_")[0]
+                nm = str((info or {}).get("name") or "").strip() if isinstance(info, dict) else ""
+                if nm and len(c) == 6 and c.isdigit():
+                    m[c] = nm
+        except Exception:
+            pass
+        try:
+            for c, nm in (NAMES or {}).items():
+                c = str(c).split("_")[0]
+                if len(c) == 6 and c.isdigit() and nm:
+                    m[c] = str(nm)
+        except Exception:
+            pass
+        for fp in (HOLDINGS_MANUAL, STATE_DIR / "holdings_auto.json"):
+            try:
+                for c, info in (_load_json(fp, {}) or {}).items():
+                    c = str(c).split("_")[0]
+                    nm = str((info or {}).get("name") or "").strip() if isinstance(info, dict) else ""
+                    if nm and len(c) == 6 and c.isdigit():
+                        m[c] = nm
+            except Exception:
+                pass
+        with _INSTRUMENT_NAMES_LOCK:
+            _INSTRUMENT_NAMES["map"] = m
+            _INSTRUMENT_NAMES["ts"] = now
+        return m
+
+    @staticmethod
+    def _guess_instrument_type(code):
+        """裸 6 位码 → 粗类型（本地表没有类型字段；仅用于本地搜索结果的展示）。"""
+        c = str(code)
+        if c.startswith("bj"):
+            return "北交所"
+        if c[:2] in ("15", "16", "18") or c[:2] in ("50", "51", "52", "56", "58"):
+            return "场内基金"
+        return "A股"
+
+    def search_instrument(self, query, limit=12):
+        """手动盘「K线速查」：名称/拼音/代码 → 可画 K 线的标的列表。
+
+        口径（为什么这样裁）：
+          · **可画**：A股(GP-A，沪深/北交所) / 指数(ZS) / 场内基金(ETF、LOF)；
+          · **不可画**：场外基金(jj/KJ，无交易所 K 线)、港美股(hk/us，本仓 K 线链路不支持)
+            ⇒ 计入 `excluded` 并在 `note` 里说明，不混进结果让用户点了报错；
+          · 本地表**精确名命中**直接回（零网络、秒回）；否则打腾讯 smartbox（带硬超时 4s，
+            失败退回本地模糊匹配）。
+
+        返回 {query, results:[{code,name,type,note}], excluded, note, source, error}。**永不抛**。
+        `code` 已换成 `openStockChart` 能吃的形式（指数带 sh/sz 前缀，其余裸 6 位）。
+        """
+        import re as _re
+        q = str(query or "").strip()
+        out = {"query": q, "results": [], "excluded": 0, "note": "", "source": "", "error": ""}
+        if not q:
+            out["error"] = "请输入名称或代码"
+            return out
+        ck = q.lower()
+        with _SEARCH_CACHE_LOCK:
+            hit = _SEARCH_CACHE.get(ck)
+        if hit and (_time_mod.time() - hit[0]) < hit[1]:
+            return hit[2]
+
+        names = self._instrument_names()
+        by_code = {}
+        order = []
+
+        def _add(code, name, typ, note=""):
+            code = str(code)
+            if code in by_code:
+                x = by_code[code]
+                if name and (not x["name"] or x["name"] == code):
+                    x["name"] = name
+                if typ:
+                    x["type"] = typ
+                return
+            by_code[code] = {"code": code, "name": name or code, "type": typ or "标的",
+                             "note": note}
+            order.append(code)
+
+        mcode = _re.match(r"^(?:(sh|sz|bj))?(\d{6})$", ck)
+        _direct = None
+        if mcode:
+            _pre, _c = mcode.group(1), mcode.group(2)
+            if _pre:
+                _add(_pre + _c, names.get(_c) or "", "指数")
+            else:
+                # 裸 6 位码**有歧义**（000001=上证指数/平安银行，000300=沪深300/无此股）
+                # ⇒ 先不猜，等在线结果给权威类型；在线失败才退回本地猜测。
+                _direct = _c
+
+        # 本地名模糊匹配（精确 > 前缀 > 包含），最多 limit 条
+        _q = q.lower()
+        _local = []
+        for c, nm in names.items():
+            _nn = str(nm)
+            if _nn == q:
+                _local.append((0, c, _nn))
+            elif _nn.startswith(q):
+                _local.append((1, c, _nn))
+            elif q in _nn:
+                _local.append((2, c, _nn))
+        _local.sort(key=lambda x: (x[0], len(x[2])))
+        for _score, c, nm in _local[:limit]:
+            _add(c, nm, self._guess_instrument_type(c))
+
+        # 在线搜索：代码输入、或本地没有精确名命中时才打（精确名用户最常用，省一次网络）
+        _need_online = bool(mcode) or not any(s == 0 for s, _, _ in _local)
+        if _need_online:
+            try:
+                from core.market_data.tencent_provider import search_instruments
+                ok, got, _err = _run_bounded(
+                    lambda: search_instruments(q, max(int(limit) * 2, 12)), 4.0)
+            except Exception:
+                ok, got = False, None
+            if ok and got:
+                for it in got:
+                    mk = str(it.get("market") or "").lower()
+                    cd = str(it.get("code") or "")
+                    nm = str(it.get("name") or "")
+                    typ = str(it.get("type") or "")
+                    if typ.startswith("GP-A") and mk in ("sh", "sz", "bj") and cd.isdigit():
+                        _add(cd, nm, "北交所" if mk == "bj" else "A股",
+                             "北交所分钟数据源受限" if mk == "bj" else "")
+                    elif typ == "ZS" and mk in ("sh", "sz", "bj"):
+                        _add(mk + cd, nm, "指数")
+                    elif typ in ("ETF", "LOF") and mk in ("sh", "sz"):
+                        _add(cd, nm, typ)
+                    else:
+                        out["excluded"] += 1
+                out["source"] = "local+online" if _local else "online"
+            else:
+                out["source"] = "local"
+        else:
+            out["source"] = "local"
+
+        if _direct and not order:      # 在线没给结果（或失败）⇒ 退回裸码猜测
+            _add(_direct, names.get(_direct) or "", self._guess_instrument_type(_direct))
+
+        results = [by_code[c] for c in order][:max(int(limit), 1)]
+        out["results"] = results
+        if out["excluded"]:
+            out["note"] = f"另有 {out['excluded']} 条场外基金/港美股结果（暂无 K 线）"
+        elif not results:
+            out["note"] = "未找到可画 K 线的标的（支持 A股 / ETF / LOF / 指数）"
+        out = _clean(out)
+        with _SEARCH_CACHE_LOCK:
+            if len(_SEARCH_CACHE) > _SEARCH_CACHE_MAX:
+                _SEARCH_CACHE.clear()
+            # 有结果缓存 10 分钟；空结果只缓存 60 秒（网络抖动后能快速重试）
+            _SEARCH_CACHE[ck] = (_time_mod.time(),
+                                 _SEARCH_CACHE_TTL if results else 60.0, out)
+        return out
 
     # ---------- 公司资料（K 线弹窗「📋 公司资料」） ----------
 
@@ -3746,18 +4304,28 @@ class Api:
             return {"code": res.get("code"), "available": True, "unchanged": True, "version": _v}
         return res
 
-    def _serve_payload_cache(self, code, version, want_minutes=False):
+    def _serve_payload_cache(self, code, version, want_minutes=False, allow_network=False):
         """盘后预下载/机会式落盘的图表 payload 命中 → 瞬开结果；未命中返回 None。
 
         want_minutes 但 payload 内无分时 ⇒ 返回 None（落到重建带分时）。
+        allow_network：payload 的日线停在上一交易日时，是否允许拉一次**单只快照**
+        补当日 forming bar（K 线弹窗自己那一只：True；批量/热路径：False）。
         """
         try:
             import core.chart_cache as _cc
             hit = _cc.load_payload(code)
             if not hit:
                 return None
-            if want_minutes and not (hit.get("payload") or {}).get("period_data", {}).get("min30"):
-                return None
+            if want_minutes:
+                # 三个分钟档缺一不可：2026-10-17 之前 10min 的合成路径有 bug（合成结果带
+                # `date` 列 → 两个 time 列 → 永远空），盘后预下载落下的 payload 里
+                # **没有 min10**。只查 min30 会让 10 分 Tab 一直显示"无分时数据"。
+                # schema<2 的旧档同样不可信（那时的 min10 就算有也不到 30 根）⇒ 重建一次。
+                if int(hit.get("schema") or 0) < 2:
+                    return None
+                _pd = (hit.get("payload") or {}).get("period_data") or {}
+                if not (_pd.get("min10") and _pd.get("min30") and _pd.get("min60")):
+                    return None
             # 2026-10-08: payload 比**日线缓存**旧 ⇒ 判过期、回落日线缓存路径（零网络、序列完整）。
             # 背景：`MAX_DISPLAY_GAP_DAYS=12` 容忍长假，会把「缺了 1 个交易日」的 payload 也当新鲜
             # 直接回放（实测 600362：payload 停在 09-30、日线缓存已到 10-08 ⇒ MA5 用旧序列 ⇒ 误报破5日线）。
@@ -3777,7 +4345,7 @@ class Api:
                         return None
             except Exception:
                 pass
-            res = self._payload_to_result(hit, code)
+            res = self._payload_to_result(hit, code, allow_network=allow_network)
             if not res or not res.get("available"):
                 return None
             self._cache_chart(f"{datetime.now().strftime('%Y-%m-%d')}_{code}", res)
@@ -3811,11 +4379,12 @@ class Api:
         finally:
             ex.shutdown(wait=False)
 
-    def _daily_rows_cache_first(self, code):
+    def _daily_rows_cache_first(self, code, allow_network=False):
         """盘后预下载的日线历史缓存（+当日 forming bar）→ rows；miss 返回 []。
 
         补当日 bar **复用 `_today_forming_bar`（走 load_quotes 批量快照）**，不用
         `facade.append_forming_bar` —— 后者会**逐只单打一次网络快照**（实测 ~1.9s/只）。
+        allow_network=True 时，不在批量快照池里的票会单独打一次快照（K 线弹窗自己那一只）。
         """
         try:
             import core.chart_cache as _cc
@@ -3826,10 +4395,14 @@ class Api:
                      "high": float(_r.high), "low": float(_r.low), "volume": float(_r.volume)}
                     for _r in df.itertuples(index=False)]
             try:
-                _today = datetime.now().strftime("%Y-%m-%d")
+                _now = datetime.now()
+                _today = _now.strftime("%Y-%m-%d")
                 _last = str(rows[-1]["date"]) if rows else ""
-                if _last < _today:
-                    bar = self._today_forming_bar(code, allow_network=False)
+                # 周末/盘前**不补**：那时的快照 `ts_date` 必然是上一交易日，白打一次网络
+                # （原来每次开图都要多 ~0.3s，周末尤其明显）。
+                _can_probe = (_now.weekday() < 5 and _now.strftime("%H:%M") >= "09:15")
+                if _last < _today and _can_probe:
+                    bar = self._today_forming_bar(code, allow_network=allow_network)
                     if bar and str(bar["date"]) > _last:
                         rows.append(bar)
             except Exception:
@@ -3838,7 +4411,7 @@ class Api:
         except Exception:
             return []
 
-    def _payload_to_result(self, hit, code):
+    def _payload_to_result(self, hit, code, allow_network=False):
         """payload 缓存 → 结果 dict。日内（可能出新 bar）把当日那根补进 daily 序列并重算日线指标；
         非交易时段直接返回收盘态（真·瞬开）。其他周期/箱体/通道沿用收盘态（≤1 根偏差）。"""
         import copy
@@ -3854,7 +4427,7 @@ class Api:
         _new_bar_possible = (last < _today and _now.weekday() < 5
                              and _now.strftime("%H:%M") >= "09:30")
         if _new_bar_possible:
-            bar = self._today_forming_bar(code, allow_network=False)
+            bar = self._today_forming_bar(code, allow_network=allow_network)
             if bar and str(bar["date"]) > last:
                 try:
                     self._rebuild_payload_daily(payload, daily_rows + [bar])
@@ -3965,13 +4538,13 @@ class Api:
             _raw = {}
             _c = str(code).split("_")[0]
             if not _c.startswith("em"):      # em 是合成标的(如A股平均股价)，无分时源
-                for _key, _freq in (("min30", "30min"), ("min60", "60min")):
+                for _key, _freq in (("min10", "10min"), ("min30", "30min"), ("min60", "60min")):
                     try:
                         _raw[_key] = _fetch_min_bars(_c, _freq)
                     except Exception:
                         _raw[_key] = None
         _frames = {"daily": daily, "weekly": weekly, "monthly": monthly}
-        for _key in ("min30", "min60"):
+        for _key in ("min10", "min30", "min60"):
             _mf = (_raw or {}).get(_key)
             # 太短算不出 MA20/BOLL，放出来只会是一片空缺
             if _mf is None or getattr(_mf, "empty", True) or len(_mf) < 30:
@@ -4000,7 +4573,7 @@ class Api:
             _d = (_s or {}).get("dates") or []
             return f"{_d[-1]}:{len(_d)}" if _d else "-:0"
         return "|".join(_sig(k) for k in
-                        ("daily", "weekly", "monthly", "min30", "min60"))
+                        ("daily", "weekly", "monthly", "min10", "min30", "min60"))
 
     def _detect_boxes(self, daily):
         """检测箱体（P1修复）：严格触及标准 + 优化置信分。
@@ -4385,7 +4958,7 @@ class Api:
         highs = d["high"].astype(float).values
         lows = d["low"].astype(float).values
         # 分钟周期的锚点日期要带时间，否则与日线格式混同、图上标不出取自哪根
-        _dfmt = "%Y-%m-%d %H:%M" if period in ("min30", "min60") else "%Y-%m-%d"
+        _dfmt = "%Y-%m-%d %H:%M" if period in ("min10", "min30", "min60") else "%Y-%m-%d"
         dates = [x.strftime(_dfmt) for x in d["date"]]
 
         peaks, troughs = _local_extrema(highs, lows, n_bars)
@@ -5703,7 +6276,11 @@ class Api:
                             if len(_PB_STRUCT_CACHE) > _PB_STRUCT_MAX:
                                 _PB_STRUCT_CACHE.clear()
                             _PB_STRUCT_CACHE[key] = st
-                    with ThreadPoolExecutor(max_workers=2) as ex:
+                    # 2026-10-17：2 → 4。每只已从 1.8s 降到 ~0.5s（见 position_structure_feed
+                    # 的日线缓存 + position_structure 的 strftime 优化），4 线程把 10 只持仓的
+                    # 排干时间从 7.3s 压到 ~2s；仍是**固定小池**（不是每请求开线程），
+                    # 不会重演「线程爆炸拖死 UI 线程」那类事故。
+                    with ThreadPoolExecutor(max_workers=4) as ex:
                         list(ex.map(_one, batch))
             except Exception:
                 with _PB_STRUCT_WARM_LOCK:
@@ -5769,8 +6346,13 @@ class Api:
             pass
 
     def refresh_ob_m30(self, codes=None):
-        """后台预热当前 30min 时段内的持仓 OB 快照（走 `_fetch_min_bars` 在线优先 ⇒ 数据最新）。
-        只在**后台线程**调用（会出网）。codes 缺省 = 持仓（qty>0）∪ 自动盘持仓。失败静默。"""
+        """后台预热当前 30min 时段内的持仓 OB 快照（走 `_fetch_min_bars` ⇒ 腾讯优先）。
+        只在**后台线程**调用（会出网）。codes 缺省 = 持仓（qty>0）∪ 自动盘持仓。失败静默。
+
+        2026-10-18：**仅交易时段出网**。周末/盘后调这条链毫无收益，而卡死栈实测
+        3 个 worker 同时卡在 tushare 的 `getaddrinfo`（DNS 不受 timeout 管）⇒ 直接返回。"""
+        if not _in_trading_session():
+            return
         try:
             from concurrent.futures import ThreadPoolExecutor
             if codes is None:
@@ -6096,20 +6678,41 @@ class Api:
                     _TAGS_RUNNING = False
             threading.Thread(target=_bg, daemon=True).start()
 
+        # 2026-10-17 owner：「选股猎手加上一列 30min MA5，与 30 分钟风险体验同源」
+        # ⇒ 随标签批算一起下发**仓位结构层**（`_pb_struct_get` 读缓存，主线程零计算零网络）。
+        #   同源 = 与持仓 30min 体检 / 风向标**同一个函数、同一份缓存**（`position_structure`）。
+        #   未热就**排队后台算**（`_kick_pb_struct_warm`），本批先回 pending，前端轮询补齐。
+        _struct = {}
+        try:
+            for c in codes:
+                _struct[str(c)] = self._pb_struct_get(c)
+            if any((v or {}).get("pending") for v in _struct.values()):
+                self._kick_pb_struct_warm(codes)
+        except Exception:
+            _struct = {}
+
+        def _with_struct(payload):
+            # 结构层走**独立键** `struct`：若塞进 tags 条目里，前端「标签是否取齐」的判据
+            # （`tagsMap[code]` 是否存在）会把"只有结构、没有标签"误判成取齐。
+            out = dict(payload or {})
+            out["struct"] = {str(c): (_struct.get(str(c)) or {"pending": True}) for c in codes}
+            return _clean(out)
+
         with _TAGS_LOCK:
             cached = _TAGS_CACHE.get(_cache_key)
             if cached and (now - cached["ts"]) < _TAGS_TTL:
-                return _clean({"tags": cached["tags"]})
+                return _with_struct({"tags": cached["tags"]})
             if cached:
                 # 缓存过期 → 后台重算，先返回旧值，界面不阻塞
                 _spawn_bg()
-                return _clean({"tags": cached["tags"]})
+                return _with_struct({"tags": cached["tags"]})
         # 冷启动（无缓存）：2026-10-04 改为后台算 + 立即返回空，不再同步阻塞。
         # 原实现首次进建仓表/破位表会同步跑 40 线程 pandas+网络（实测 23~35s），把 pywebview
         # 主线程冻住。代价：标签首次先空着，前端 10s 轮询，约 20s 后自填。调用方均 `.get(code, {})`
         # 守卫，空 map 安全。
         _spawn_bg()
-        return _clean({"tags": {}})
+        # 冷启动时标签还没算出来，但**结构**是独立缓存 —— 能拿到就先给，前端可先显示 MA5
+        return _with_struct({"tags": {}})
 
     # ---------- 突破箱体股票聚合 ----------
     # 当日有效突破参数（2026-09-29，owner 口径：昨收 ≤ 上沿 < 今价，幅度 0.3~8%）
@@ -9066,7 +9669,9 @@ def start_ob_m30_refresher(api):
                 slot = _min_bars_slot()
                 if slot != _last_slot:
                     _last_slot = slot
-                    api.refresh_ob_m30()
+                    # 周末/盘后不出网（见 refresh_ob_m30 内注释）；磁盘预热由面板按需触发
+                    if _in_trading_session():
+                        api.refresh_ob_m30()
             except Exception:
                 pass
             _time_mod.sleep(60)
