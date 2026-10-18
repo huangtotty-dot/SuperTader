@@ -171,6 +171,11 @@ def save_payload(code, payload, daily_rows) -> bool:
         rec = {
             "date": datetime.now().strftime("%Y-%m-%d"),
             "saved_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            # 2026-10-17：payload 结构版本。
+            #   1（隐式，无此键）= 10min 合成路径有 bug（带 date 列 ⇒ 永远空）
+            #   2 = 含可用的 min10
+            # `t_gui._serve_payload_cache` 要求 want_minutes 时 schema≥2，旧档自动重建一次。
+            "schema": 2,
             "version": payload.get("version"),
             "last_daily_date": last_row_date(daily_rows),
             "payload": payload,

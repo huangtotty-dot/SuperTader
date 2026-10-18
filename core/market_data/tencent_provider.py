@@ -20,9 +20,17 @@ _DAILY_COLS = ["date", "open", "high", "low", "close", "volume"]
 
 def _tx_symbol(code: str) -> str:
     """6 位码 → 腾讯符号（sh/sz/bj）。市场判定统一走 codec（本模块此前内联
-    `code[0] in "56"`，正是 codec docstring 明令禁止的写法，且完全漏掉北交所）。"""
+    `code[0] in "56"`，正是 codec docstring 明令禁止的写法，且完全漏掉北交所）。
+
+    2026-10-17：**已带前缀的代码原样返回**。`codec.to_tx` 只吃裸 6 位码，
+    传 `sh000001` 会拼成 `szsh000001`（K线弹窗的指数码就是这种形式）。
+    """
+    c = str(code).split("_")[0].strip()
+    _lo = c.lower()
+    if _lo[:2] in ("sh", "sz", "bj") and _lo[2:].isdigit():
+        return _lo
     from .codec import to_tx
-    return to_tx(code)
+    return to_tx(c)
 
 
 def _read_json(fp):
@@ -180,17 +188,46 @@ _QT_HOST = "qt.gtimg.cn"
 _QT_HEADERS = {"User-Agent": "Mozilla/5.0", "Referer": "https://gu.qq.com/",
                "Connection": "keep-alive"}
 _QT_POOL_MAX = 8                 # 空闲连接上限（并发峰值只有个位数，8 足够且不堆积 fd）
-_QT_POOL = []
-_QT_POOL_LOCK = threading.Lock()
+
+# 2026-10-17：分钟 K 线（`ifzq.gtimg.cn`）走同一套 keep-alive。盘中 K 线弹窗每 3s 打一次，
+# 每次新建 TLS 实测 ≈290ms（见上方 qt 的测量）；复用后 ≈60ms。
+_IFZQ_HOST = "ifzq.gtimg.cn"
+_WEBIFZQ_HOST = "web.ifzq.gtimg.cn"      # fqkline（日线）只在这个主机可用，ifzq 返 501
+_IFZQ_HEADERS = {"User-Agent": "Mozilla/5.0", "Referer": "https://finance.qq.com/",
+                 "Connection": "keep-alive"}
+_IFZQ_POOL_MAX = 4
+
+# ⚠️ 连接池**必须按主机分桶**：keep-alive 连接绑死在建连时的 host 上，混用会把
+# `web.ifzq` 的请求发到 `ifzq`（实测 fqkline 在 ifzq 上返 501 ⇒ 静默拿空）。
+_HTTP_POOLS = {}
+_HTTP_POOLS_LOCK = threading.Lock()
 
 
-def _qt_conn_take(timeout):
+def _host_pool(host):
+    """取/建某主机的连接池记录 {pool, lock, max}。"""
+    with _HTTP_POOLS_LOCK:
+        rec = _HTTP_POOLS.get(host)
+        if rec is None:
+            rec = {"pool": [], "lock": threading.Lock(),
+                   "max": _QT_POOL_MAX if host == _QT_HOST else _IFZQ_POOL_MAX}
+            _HTTP_POOLS[host] = rec
+        return rec
+
+
+# 兼容既有名字（测试直接 clear 这个列表）
+_QT_POOL = _host_pool(_QT_HOST)["pool"]
+_QT_POOL_LOCK = _host_pool(_QT_HOST)["lock"]
+_IFZQ_POOL = _host_pool(_IFZQ_HOST)["pool"]
+_IFZQ_POOL_LOCK = _host_pool(_IFZQ_HOST)["lock"]
+
+
+def _conn_take(host, pool, lock, timeout):
     """取一条空闲 keep-alive 连接；池空则新建。"""
-    with _QT_POOL_LOCK:
-        while _QT_POOL:
-            _c = _QT_POOL.pop()
+    with lock:
+        while pool:
+            _c = pool.pop()
             try:
-                # 池里混着 2s（单只）与 3s（批量）两种来源 ⇒ 按本次调用重设超时
+                # 池里混着不同超时的来源（2s 单只 / 3s 批量 / 4s K线）⇒ 按本次调用重设
                 if _c.sock is not None:
                     _c.sock.settimeout(timeout)
                 return _c
@@ -200,14 +237,14 @@ def _qt_conn_take(timeout):
                 except Exception:
                     pass
     import http.client as _hc
-    return _hc.HTTPSConnection(_QT_HOST, timeout=timeout)
+    return _hc.HTTPSConnection(host, timeout=timeout)
 
 
-def _qt_conn_put(conn):
+def _conn_put(pool, lock, conn, max_idle):
     """把**已完整读完**响应体的连接放回池；池满则关掉（不无限攒 fd）。"""
-    with _QT_POOL_LOCK:
-        if len(_QT_POOL) < _QT_POOL_MAX:
-            _QT_POOL.append(conn)
+    with lock:
+        if len(pool) < max_idle:
+            pool.append(conn)
             return
     try:
         conn.close()
@@ -215,21 +252,23 @@ def _qt_conn_put(conn):
         pass
 
 
-def _qt_get(path, timeout):
-    """GET `https://qt.gtimg.cn{path}` → 文本（gbk 解码）。**复用连接**，失败抛异常。
+def _pooled_get(host, path, timeout, headers):
+    """GET `https://{host}{path}` → 文本（gbk 解码）。**按主机复用连接**，失败抛异常。
 
     失败自动**换新连接重试一次**：keep-alive 连接被对端静默关掉后，下一次请求会抛
     `RemoteDisconnected`/`BadStatusLine` —— 这是 keep-alive 的固有代价，不是故障，
     不能让它把"本来能拿到的数据"变成拿不到。重试仍失败才抛给调用方
-    （三个调用点的语义都是"失败即当作没数据"，与改前一致）。
+    （调用点的语义都是"失败即当作没数据"，与改前一致）。
     """
     import http.client as _hc
+    rec = _host_pool(host)
+    pool, lock, max_idle = rec["pool"], rec["lock"], rec["max"]
     last = None
     for attempt in (0, 1):
-        _conn = (_qt_conn_take(timeout) if attempt == 0
-                 else _hc.HTTPSConnection(_QT_HOST, timeout=timeout))
+        _conn = (_conn_take(host, pool, lock, timeout) if attempt == 0
+                 else _hc.HTTPSConnection(host, timeout=timeout))
         try:
-            _conn.request("GET", path, headers=_QT_HEADERS)
+            _conn.request("GET", path, headers=headers)
             _resp = _conn.getresponse()
             _data = _resp.read()
             if _resp.will_close:
@@ -238,7 +277,7 @@ def _qt_get(path, timeout):
                 except Exception:
                     pass
             else:
-                _qt_conn_put(_conn)
+                _conn_put(pool, lock, _conn, max_idle)
             return _data.decode("gbk", errors="replace")
         except Exception as _e:
             last = _e
@@ -249,6 +288,23 @@ def _qt_get(path, timeout):
     raise last
 
 
+def _qt_conn_take(timeout):
+    return _conn_take(_QT_HOST, _QT_POOL, _QT_POOL_LOCK, timeout)
+
+
+def _qt_conn_put(conn):
+    _conn_put(_QT_POOL, _QT_POOL_LOCK, conn, _QT_POOL_MAX)
+
+
+def _qt_get(path, timeout):
+    return _pooled_get(_QT_HOST, path, timeout, _QT_HEADERS)
+
+
+def _ifzq_get(path, timeout=4.0):
+    """GET `https://ifzq.gtimg.cn{path}`（分钟 K 线专用），复用连接。"""
+    return _pooled_get(_IFZQ_HOST, path, timeout, _IFZQ_HEADERS)
+
+
 def _qt_snapshot_raw(symbol: str):
     """腾讯 qt.gtimg.cn 实时快照 → fields 列表；失败返回 None。"""
     _clear_proxy()
@@ -257,6 +313,101 @@ def _qt_snapshot_raw(symbol: str):
         return None
     f = raw.split('"')[1].split("~")
     return f
+
+
+# ── 分钟 K 线 / 裸日线（2026-10-17，盘中实时 K 线专用）───────────────────────
+_MINUTE_KLINE_COLS = ["time", "open", "high", "low", "close", "volume"]
+_MKLINE_FREQS = ("m1", "m5", "m15", "m30", "m60")     # 腾讯无 m10（10min 由 m5 合成）
+
+# 单次最多 640 根；>640 会被**静默降回 320**（实测 n=1000/2000 → 320 根）。
+_MINUTE_KLINE_MAX = 640
+
+
+def minute_kline(code: str, freq: str = "m5", count: int = _MINUTE_KLINE_MAX,
+                 timeout: float = 4.0) -> pd.DataFrame:
+    """腾讯**分钟 K 线**（含未收盘的当前根，盘中随行情更新）→ 规范帧。
+
+    为什么需要它（2026-10-17）：tushare `stk_mins` **盘中只回到上一交易日收盘**
+    （实测 2026-10-14 14:13 取回来仍止于 10-13 15:00，见 `position_structure_feed`
+    的冷却注释）⇒ 分钟 K 线在盘中是**死的**。本源是 K 线弹窗盘中实时的唯一数据源。
+
+    实测口径（周末回放，个股/指数/ETF 均可，北交所返回空）：
+      · 字段 `[时间, 开, 收, 高, 低, 量]`，**时间是 K 线右端**（10:05 的 5min 覆盖 10:00~10:05）
+      · m5 每日首根 09:35（**不含 09:30 竞价棒**）、末根 15:00；m30/m60 桶边界与 tushare 一致
+      · 量为**手**（与日线缓存/tushare 分钟同口径）
+      · 价格为**不复权**（与 tushare 分钟一致；日线用的是前复权，除权窗口内会不同）
+
+    失败 / 空 → 空 DataFrame（调用方回退 tushare 或磁盘）。
+    """
+    if freq not in _MKLINE_FREQS:
+        return pd.DataFrame(columns=_MINUTE_KLINE_COLS)
+    sym = _tx_symbol(code)
+    if not sym:
+        return pd.DataFrame(columns=_MINUTE_KLINE_COLS)
+    n = max(1, min(int(count or _MINUTE_KLINE_MAX), _MINUTE_KLINE_MAX))
+    try:
+        raw = _ifzq_get(f"/appstock/app/kline/mkline?param={sym},{freq},,{n}", timeout)
+        data = json.loads(raw)
+        node = ((data or {}).get("data") or {}).get(sym) or {}
+        rows = node.get(freq) or []
+        if not isinstance(rows, list):
+            return pd.DataFrame(columns=_MINUTE_KLINE_COLS)
+    except Exception:
+        return pd.DataFrame(columns=_MINUTE_KLINE_COLS)
+
+    out = []
+    for r in rows:
+        try:
+            t = str(r[0])
+            if len(t) < 12 or not t[:12].isdigit():
+                continue
+            out.append({
+                "time": f"{t[:4]}-{t[4:6]}-{t[6:8]} {t[8:10]}:{t[10:12]}:00",
+                "open": float(r[1]), "high": float(r[3]), "low": float(r[4]),
+                "close": float(r[2]), "volume": float(r[5] or 0),
+            })
+        except (TypeError, ValueError, IndexError):
+            continue
+    if not out:
+        return pd.DataFrame(columns=_MINUTE_KLINE_COLS)
+    df = pd.DataFrame(out)[_MINUTE_KLINE_COLS]
+    df = df.drop_duplicates(subset=["time"]).sort_values("time").reset_index(drop=True)
+    df.attrs["source"] = "tencent_minute"
+    return df
+
+
+def daily_kline_raw(code: str, days: int = 5, qfq: bool = True,
+                    timeout: float = 4.0) -> pd.DataFrame:
+    """腾讯**前复权日线**原样取数（不读写磁盘缓存），最后一根=当日 forming bar（盘中）。
+
+    与 `TencentProvider.daily()` 的区别：后者受磁盘缓存与 `date==today` 闸影响，盘中拿到的
+    可能是上一次调用时的快照。本函数**只服务 K 线弹窗的实时补丁**（每 3~10s 一次），
+    要求每次都是**此刻**的当日根。
+
+    返回 columns=[date, open, high, low, close, volume]；失败/空 → 空 DataFrame。
+    ⚠️ 用 `web.ifzq.gtimg.cn`：`ifzq.gtimg.cn` 的 fqkline 实测返回 **HTTP 501**。
+    """
+    sym = _tx_symbol(code)
+    if not sym:
+        return pd.DataFrame(columns=_DAILY_COLS)
+    suffix = ",qfq" if qfq else ","
+    path = f"/appstock/app/fqkline/get?param={sym},day,,,{int(days)}{suffix}"
+    try:
+        raw = _pooled_get(_WEBIFZQ_HOST, path, timeout, _IFZQ_HEADERS)
+        data = json.loads(raw)
+        node = ((data or {}).get("data") or {}).get(sym) or {}
+        kline = node.get("day") or node.get("qfqday") or []
+        rows = [{"date": str(i[0])[:10], "open": float(i[1]), "close": float(i[2]),
+                 "high": float(i[3]), "low": float(i[4]), "volume": float(i[5] or 0)}
+                for i in kline if len(i) >= 6]
+    except Exception:
+        return pd.DataFrame(columns=_DAILY_COLS)
+    if not rows:
+        return pd.DataFrame(columns=_DAILY_COLS)
+    df = pd.DataFrame(rows)[_DAILY_COLS]
+    df = df.drop_duplicates(subset=["date"], keep="last").sort_values("date").reset_index(drop=True)
+    df.attrs["source"] = "tencent"
+    return df
 
 
 def qt_vwap(quote: dict):

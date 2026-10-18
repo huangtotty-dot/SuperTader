@@ -118,7 +118,9 @@ def resample_5min_to_10min(df5: pd.DataFrame) -> pd.DataFrame:
     if "dt" not in d.columns and "time" in d.columns:
         d = d.rename(columns={"time": "dt"})
     d["dt"] = pd.to_datetime(d["dt"])
-    d = d[d["dt"].dt.strftime("%H:%M") != "09:30"]
+    # ⚠️ 2026-10-17：原来用 `dt.strftime("%H:%M") != "09:30"` 剔竞价棒 —— 对 1.8 万根 5min
+    # 逐条格式化字符串，cProfile 实测 **0.34s/只**（占整个结构层的 30%）。改成整数比时/分。
+    d = d[~((d["dt"].dt.hour == 9) & (d["dt"].dt.minute == 30))]
     d["date"] = d["dt"].dt.normalize()
     key = [c for c in ("symbol",) if c in d.columns]
     d["_seq"] = d.groupby(key + ["date"], sort=False).cumcount()

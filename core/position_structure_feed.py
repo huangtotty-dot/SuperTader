@@ -165,7 +165,22 @@ def load_structure(code: str, date_str: str = None, allow_network: bool = True,
     if b30.empty:
         return {"ok": False, "reason": "无 30min 数据"}
 
-    # 日线：优先复用调用方已取的，否则走市场 provider（与扫描同源）
+    # 日线：优先复用调用方已取的 → **本地日线缓存** → 最后才走 provider。
+    #
+    # ⚠️ 2026-10-17（owner：「列更新还是很慢，彻底解决」）：原来**每只票都走
+    #   `get_provider().daily(code)`**。实测同一批持仓里，有的 0.19s、有的 **3.73s** ——
+    #   后者是 GM 的 4.5s 限流窗（见 [[gm_not_unreachable_probe_window]]）把调用推给了腾讯。
+    #   而这一层是**按只串行/低并发**的（预热池 2 worker）⇒ 十只持仓就能卡出十几秒 ⏳。
+    #   本地日线缓存（`chart_cache.load_daily_display`，26ms/只、带 12 天新鲜度闸）与 provider
+    #   同源（猎手跑完会把当日 bar 回写进去），没有理由每只都去碰网络。
+    if daily_df is None or getattr(daily_df, "empty", True):
+        try:
+            from core import chart_cache as _cc_daily
+            _c6 = str(code).split("_")[0]
+            _c6 = _c6[-6:] if len(_c6) >= 6 else _c6
+            daily_df = _cc_daily.load_daily_display(_c6)
+        except Exception:
+            daily_df = None
     if daily_df is None or getattr(daily_df, "empty", True):
         try:
             from core.market_data import get_provider
@@ -191,6 +206,18 @@ def load_structure(code: str, date_str: str = None, allow_network: bool = True,
     })
     if date_str:                       # 历史日：日线也截到该日（防未来函数）
         dly = dly[dly["date"] <= pd.Timestamp(date_str)].reset_index(drop=True)
+
+    # ⚠️ 2026-10-17（owner：「列更新还是很慢，彻底解决」）：`load_minute_asof` 读回来的是
+    # **合并后的全量长历史**（5min 实测 18,326 根 = 十几年的档），而 `_DAYS_5MIN/_DAYS_30MIN`
+    # 只用于**出网补数**、从来没用它截过盘上数据。原样丢进 resample/compute ⇒ **白算 12 倍**：
+    # cProfile 单只 0.5s 里 resample 0.22s + compute 0.46s 几乎全是这堆多余数据。
+    # 按需截尾（5min 每交易日 48 根+竞价 ⇒ 按 60 根/日留余量；30min 按 9 根/日）。
+    _K5 = int(_DAYS_5MIN * 60)
+    if len(b5) > _K5:
+        b5 = b5.tail(_K5).reset_index(drop=True)
+    _K30 = int(_DAYS_30MIN * 9)
+    if len(b30) > _K30:
+        b30 = b30.tail(_K30).reset_index(drop=True)
 
     b10 = PS.resample_5min_to_10min(b5.rename(columns={"time": "dt"}))
     st = PS.compute_structure(b10, b30.rename(columns={"time": "dt"}), dly)

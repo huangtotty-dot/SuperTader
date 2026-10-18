@@ -2197,18 +2197,19 @@ function structCellHtml(st) {
    **日内时段伪影**，勿采信。⇒ 本列**不参与任何判定/评分/择时**，只是把原始状态摆出来。
    依据 doc/research/2026-10-11_30min站上MA5_作仓位依据实验.md */
 const MA5_WARN = "⚠️ 本项实测无前瞻信息量（状态与跃迁、站上与否四个口径，同日同bar-of-day对照下 |diff| ≤ 0.03pp、|t| ≤ 2.4）⇒ 仅供参考，不参与任何判定。依据：doc/research/2026-10-11_30min站上MA5_作仓位依据实验.md";
-function ma5CellHtml(st) {
+function ma5CellHtml(st, cls) {
   st = st || {};
+  const _c = cls ? ` class="${cls}"` : "";
   if (st.pending || (!st.ok && !st.reason)) {
-    return `<td style="text-align:center"><span class="cell-dim" title="结构层后台计算中">⏳</span></td>`;
+    return `<td${_c} style="text-align:center"><span class="cell-dim" title="结构层后台计算中">⏳</span></td>`;
   }
   if (!st.ok || st.ma5_30min == null) {
-    return `<td style="text-align:center" title="${esc((st.reason || "无 30min 数据") + "　" + MA5_WARN)}"><span class="cell-dim">—</span></td>`;
+    return `<td${_c} style="text-align:center" title="${esc((st.reason || "无 30min 数据") + "　" + MA5_WARN)}"><span class="cell-dim">—</span></td>`;
   }
   const up = !!st.above_ma5_30;
   const n = st.bars_since_ma5_cross;
   const title = `30min MA5 = ${st.ma5_30min}　现价${up ? "站上" : "跌破"}${n == null ? "" : `，距上次翻转 ${n} 根 30min`}。　${MA5_WARN}`;
-  return `<td style="text-align:center;line-height:1.5" title="${esc(title)}"><b class="${up ? "up" : "down"}">${up ? "站上" : "跌破"}</b><div class="cell-dim" style="font-size:10px">${n == null ? "" : n + "根"}</div></td>`;
+  return `<td${_c} style="text-align:center;line-height:1.5" title="${esc(title)}"><b class="${up ? "up" : "down"}">${up ? "站上" : "跌破"}</b><div class="cell-dim" style="font-size:10px">${n == null ? "" : n + "根"}</div></td>`;
 }
 
 /* 日线四阶段（2026-10-11）：摆**状态**，紧挨「得分/通过」便于对照。
@@ -3138,7 +3139,7 @@ const MA_COLORS = ["#3987e5", "#d95926", "#199e70", "#c98500", "#d55181", "#9085
 /* 默认可见根数。取值贴着后端黄金分割回看期（t_gui._FIB_LOOKBACK）——daily 120 与回看期
    相等，锚点必然落在默认视窗内；weekly/monthly 因 bar 更少而略小，万一锚点更早由下面的
    放宽分支兜底。核心目的：后端 800 根日线全画出来蜡烛只有 ~3px，形态根本看不清。 */
-const DEFAULT_BARS = { daily: 120, weekly: 104, monthly: 60, min30: 160, min60: 160 };
+const DEFAULT_BARS = { daily: 120, weekly: 104, monthly: 60, min10: 160, min30: 160, min60: 160 };
 // 快捷区间：按周期给不同标签；bars=null 表示全部。每个周期的默认项都在表内（高亮用）。
 // 分钟档后端各保留 320 根（30分≈8根/日、60分≈4根/日）。
 const RANGE_PRESETS = {
@@ -3147,6 +3148,9 @@ const RANGE_PRESETS = {
   weekly: [{ label: "近1年", bars: 52 }, { label: "近2年", bars: 104 }, { label: "全部", bars: null }],
   monthly: [{ label: "近1年", bars: 12 }, { label: "近3年", bars: 36 },
             { label: "近5年", bars: 60 }, { label: "全部", bars: null }],
+  // 10分：后端保留 320 根 ≈ 13 个交易日（24 根/日）
+  min10: [{ label: "近3日", bars: 72 }, { label: "近1周", bars: 120 },
+          { label: "近2周", bars: 240 }, { label: "全部", bars: null }],
   min30: [{ label: "近1周", bars: 40 }, { label: "近2周", bars: 80 },
           { label: "近1月", bars: 160 }, { label: "全部", bars: null }],
   min60: [{ label: "近1周", bars: 20 }, { label: "近2周", bars: 40 },
@@ -3193,7 +3197,8 @@ function setChartRange(period, bars) {
 function _wantMinutes() {
   const pd = stockChartData && stockChartData.period_data;
   if (pd && pd.min30) return true;
-  return stockChartPeriod === "min30" || stockChartPeriod === "min60";
+  return stockChartPeriod === "min10" || stockChartPeriod === "min30"
+      || stockChartPeriod === "min60";
 }
 
 async function loadStockChartNow() {
@@ -3210,8 +3215,93 @@ async function loadStockChartNow() {
       stockChartVersion = d.version || null;
       renderStockSummary(d);
       renderStockChart();
+      // 整图可能比实时尾旧（分钟源/缓存/版本握手三层闸）⇒ 立刻用实时尾覆盖当前周期
+      startStockChartLive();
     }
   } catch (e) { /* 静默 */ }
+}
+
+/* ---- 盘中实时尾（2026-10-17）----
+   整图 `load_stock_chart` 在盘中被三层缓存挡住，看不到**正在形成的那根**：
+   ① tushare 分钟源盘中只回到上一交易日；② 分钟线内存缓存原按 30 分钟时段；
+   ③ 版本握手只认 (末日期:根数)，价格在动但签名不变 ⇒ 回 unchanged、不重画。
+   这里每 3s（交易时段）单独要一次当前周期，后端用腾讯分钟 K 线+实时快照重算，
+   回整段序列；前端只替换该周期、保留缩放。非交易时段降到 30s。 */
+let stockChartLiveTimer = null;
+let stockChartLiveInflight = false;
+let stockChartLiveSig = {};          // period -> 上次画过的 sig
+let stockChartLiveWarm = 0;          // 连续 warming 次数（快重试要有上限，别把桥打满）
+
+function _chartLiveIntervalMs() {
+  const d = new Date();
+  const wd = d.getDay();
+  const hm = d.getHours() * 100 + d.getMinutes();
+  const open = wd >= 1 && wd <= 5
+    && ((hm >= 915 && hm <= 1135) || (hm >= 1255 && hm <= 1505));
+  if (!open) return 30000;
+  // 分钟图 3s（正在形成的那根就是实时价）；日/周/月 5s（当日一根动得慢，
+  // 而后端日线序列是 800 根全量重算+序列化，约 250ms，别按 3s 打）
+  return (stockChartPeriod === "daily" || stockChartPeriod === "weekly"
+          || stockChartPeriod === "monthly") ? 5000 : 3000;
+}
+
+function startStockChartLive() {
+  stopStockChartLive();
+  if (!stockChartCode) return;
+  stockChartLiveTimer = setTimeout(tickStockChartLive, 600);
+}
+
+function stopStockChartLive() {
+  if (stockChartLiveTimer) { clearTimeout(stockChartLiveTimer); stockChartLiveTimer = null; }
+}
+
+async function tickStockChartLive() {
+  stockChartLiveTimer = null;
+  const modal = document.getElementById("stockModal");
+  if (!stockChartCode || !stockChartData || !modal || modal.style.display === "none") return;
+  // 窗口最小化/被遮挡时停跳（夜里弹窗忘了关，别每 3s 叫醒后端）
+  if (document.visibilityState === "hidden") {
+    stockChartLiveTimer = setTimeout(tickStockChartLive, 10000);
+    return;
+  }
+  if (stockChartLiveInflight) {          // 上一跳还没回来：让开，别叠请求
+    stockChartLiveTimer = setTimeout(tickStockChartLive, 1000);
+    return;
+  }
+  stockChartLiveInflight = true;
+  const code = stockChartCode, period = stockChartPeriod;
+  let nextMs = _chartLiveIntervalMs();
+  try {
+    const r = await apiCall("load_chart_realtime", code, period);
+    if (code !== stockChartCode || !r) return;         // 期间换票/关窗
+    if (r.quote && r.quote.price) {
+      stockChartData.current_price = r.quote.price;
+      stockChartData.live = { ts: r.ts, quote: r.quote, session: !!r.session };
+    }
+    if (r.available && r.series && r.sig && period === stockChartPeriod) {
+      if (stockChartLiveSig[period] !== r.sig) {
+        stockChartLiveSig[period] = r.sig;
+        const cur = (stockChartData.period_data && stockChartData.period_data[period]) || {};
+        // 整段替换（含 MA/MACD/RSI/BOLL/fib）；保留前端可能有的额外字段
+        stockChartData.period_data[period] = Object.assign({}, cur, r.series);
+        renderStockChart();
+      }
+    }
+    // 后端是 SWR：warming=后台还在首次取数；stale=回的是上一帧、正在刷新。
+    // 这两种情况快速补拉一次（后端算完就进缓存），别按 3s/5s 干等。
+    if (r.warming) {
+      stockChartLiveWarm++;
+      nextMs = stockChartLiveWarm <= 5 ? 400 : 1500;   // 快重试最多 5 次
+    } else {
+      stockChartLiveWarm = 0;
+      if (r.stale) nextMs = Math.min(nextMs, 1200);
+    }
+    renderStockSummary(stockChartData);
+  } catch (e) { /* 静默：下一跳重试 */ }
+  finally {
+    stockChartLiveInflight = false;
+    if (stockChartCode) stockChartLiveTimer = setTimeout(tickStockChartLive, nextMs);
+  }
 }
 
 async function openStockChart(code, name) {
@@ -3222,6 +3312,8 @@ async function openStockChart(code, name) {
   stockChartName = name;
   // 换股票：回到默认/所选区间的视窗，不沿用上一只的缩放
   stockChartZoom = null;
+  stockChartLiveSig = {};
+  stockChartLiveWarm = 0;
   renderRangeButtons(stockChartPeriod);
   // 换票时收起并清空资料面板（下次点开重新拉）
   const _prof = document.getElementById("stockProfile");
@@ -3235,8 +3327,11 @@ async function openStockChart(code, name) {
   document.getElementById("stockChart").innerHTML = '<div class="empty">加载中...</div>';
   // 10s 实时刷新
   if (stockChartTimer) clearInterval(stockChartTimer);
-  stockChartTimer = setInterval(loadStockChartNow, 10000);
+  // 2026-10-18：10s → 20s。价格与最后一根由「实时尾」(3s/5s) 负责；整图轮询只剩
+  // 结构（支撑/箱体/通道/新 bar 计数）的同步，没必要每 10s 打一次慢接口。
+  stockChartTimer = setInterval(loadStockChartNow, 20000);
   await loadStockChartNow();
+  startStockChartLive();          // 盘中实时尾（3s）
 }
 function toggleChartHelp() {
   const el = document.getElementById("chartHelp");
@@ -3375,6 +3470,7 @@ function closeStockChart() {
   document.getElementById("stockModal").style.display = "none";
   if (stockChartInst) { stockChartInst.dispose(); stockChartInst = null; }
   if (stockChartTimer) { clearInterval(stockChartTimer); stockChartTimer = null; }
+  stopStockChartLive();
   stockChartCode = null;
   stockProfileCode = null;
   stockProfileLiveLoaded = false;
@@ -3382,19 +3478,22 @@ function closeStockChart() {
 function switchStockPeriod(p) {
   stockChartPeriod = p;
   stockChartZoom = null;                    // 周期换了，根数尺度不同，旧缩放作废
+  stockChartLiveWarm = 0;
   document.querySelectorAll(".stock-tab").forEach(t =>
     t.classList.toggle("active", t.dataset.period === p));
   renderRangeButtons(p);
   const pd = stockChartData && stockChartData.period_data;
-  if ((p === "min30" || p === "min60") && !(pd && pd[p])) {
+  if ((p === "min10" || p === "min30" || p === "min60") && !(pd && pd[p])) {
     // 分钟线**按需拉**（日线视图首帧不再阻塞等它）：先提示，再取数（后端此时会带上分时）
     const el = document.getElementById("stockChart");
     if (stockChartInst) { stockChartInst.dispose(); stockChartInst = null; }   // 实例绑旧 DOM，先释放
     if (el) el.innerHTML = '<div class="empty">加载分时数据中…</div>';
-    loadStockChartNow();
+    loadStockChartNow().then(() => startStockChartLive());
     return;
   }
   renderStockChart();
+  // 切周期后立刻要一次实时尾：缓存里的该周期可能是上一交易日的（分钟档尤其）
+  startStockChartLive();
 }
 function renderStockSummary(d) {
   const cur = d.current_price;
@@ -3402,7 +3501,11 @@ function renderStockSummary(d) {
   const _dl = (d.period_data && d.period_data.daily.ohlc) || [];
   const _n = _dl.length;
   let _chgPct = null;
-  if (_n >= 2) {
+  // 盘中优先用实时快照的涨跌幅：整图里的末根可能还是**上一交易日**的，
+  // 用它算出来的"今日涨跌"会整体错一天（实测这类错读很伤）。
+  if (d.live && d.live.quote && typeof d.live.quote.change_pct === "number") {
+    _chgPct = d.live.quote.change_pct;
+  } else if (_n >= 2) {
     const _prev = _dl[_n - 2][1];
     if (_prev) _chgPct = (_dl[_n - 1][1] - _prev) / _prev * 100;
   }
@@ -3428,7 +3531,9 @@ function renderStockSummary(d) {
     <span class="ss-item">关键压力: ${resTxt}</span>
     <span class="ss-item">关键支撑: ${supTxt}</span>
     <span class="ss-item">箱体: ${boxTxt}</span>
-    <span class="ss-item cell-dim mono" style="font-size:10px">10s实时更新 · <span class="live-dot"></span>${nowTime()}</span>`;
+    <span class="ss-item cell-dim mono" style="font-size:10px">${d.live && d.live.ts
+      ? `${d.live.session ? "盘中实时" : "实时快照"} ${esc(d.live.ts)}`
+      : `10s更新 · ${nowTime()}`} · <span class="live-dot"></span></span>`;
 }
 function renderStockChart() {
   const data = stockChartData;
@@ -3450,6 +3555,10 @@ function renderStockChart() {
   const showChannel = (document.getElementById("tgChannel") || {}).checked !== false;
   const showMA = (document.getElementById("tgMA") || {}).checked !== false;
   const showFib = (document.getElementById("tgFib") || {}).checked !== false;
+  // 2026-10-17 owner：缺口**取消开关、默认显示**（工具栏不再有该勾选项）。
+  // 仍保留这个常量而不是硬编码 true：将来若要再挂回开关，只需加回 checkbox 即可自动生效
+  // （元素不存在时 `|| {}` 使 `checked !== false` 恒真）。
+  const showGaps = (document.getElementById("tgGaps") || {}).checked !== false;
 
   // markLine: 支撑/压力 — 去重降密度 + 精简标签
   function dedupeLines(items) {
@@ -3582,6 +3691,49 @@ function renderStockChart() {
     }
     return i0 < 0 ? null : [i0, i1];
   };
+  /* 缺口（2026-10-17 owner：「用颜色将区域显示出来」）
+     定义：相邻两根**价格区间不重叠** —— 今低 > 昨高 = 向上跳空；今高 < 昨低 = 向下跳空。
+     · 只画**未完全回补**的：上跳缺口在后续某根 low ≤ 昨高（回到底部）时结束；下跳对称。
+     · 只画最近 `GAP_LOOKBACK` 根内的，最多 `GAP_MAX` 块，避免历史缺口把图糊满。
+     · 幅度门槛 `GAP_MIN_PCT`（0.3%）—— 与仓位结构层「摆动门槛」同一思路，滤掉十字星级的伪缺口。 */
+  const GAP_LOOKBACK = 250, GAP_MIN_PCT = 0.003, GAP_MAX = 24;
+  const gapAreas = [];
+  if (showGaps && period.ohlc && period.ohlc.length > 1) {
+    const _n = period.ohlc.length;
+    const _from = Math.max(1, _n - GAP_LOOKBACK);
+    for (let i = _from; i < _n; i++) {
+      const o = period.ohlc[i], pv = period.ohlc[i - 1];
+      if (!o || !pv) continue;
+      const lo = o[2], hi = o[3], plo = pv[2], phi = pv[3];
+      let up = null, loB = 0, hiB = 0;
+      if (phi > 0 && lo > phi && (lo - phi) / phi >= GAP_MIN_PCT) { up = true;  loB = phi; hiB = lo; }
+      else if (plo > 0 && hi < plo && (plo - hi) / plo >= GAP_MIN_PCT) { up = false; loB = hi; hiB = plo; }
+      if (up === null) continue;
+      let end = _n - 1;
+      for (let j = i + 1; j < _n; j++) {
+        const b = period.ohlc[j];
+        if (!b) continue;
+        if (up ? b[2] <= loB : b[3] >= hiB) { end = j; break; }   // 完全回补 ⇒ 色块到此为止
+      }
+      gapAreas.push({
+        up, at: period.dates[i], end,
+        area: [{
+          xAxis: i, yAxis: loB,
+          itemStyle: {
+            color: up ? "rgba(248,81,73,.13)" : "rgba(63,185,80,.13)",
+            borderColor: up ? "rgba(248,81,73,.5)" : "rgba(63,185,80,.5)",
+            borderWidth: 1, borderType: "dashed",
+          },
+          name: up ? "↑缺口" : "↓缺口",
+          // 小缺口（<1%）不写字，只留色块 —— 否则密集区一串标签互相压
+          label: { show: (hiB - loB) / (loB || 1) >= 0.01, fontSize: 9,
+                   color: up ? "rgba(248,81,73,.9)" : "rgba(63,185,80,.9)" },
+        }, { xAxis: end, yAxis: hiB }],
+      });
+    }
+    if (gapAreas.length > GAP_MAX) gapAreas.splice(0, gapAreas.length - GAP_MAX);
+  }
+
   const boxAreas = boxes
     .filter(b => b.low && b.high)
     .map(b => {
@@ -3787,9 +3939,11 @@ function renderStockChart() {
         // 浅底上 #f85149/#3fb950 偏浅 ⇒ 换成对比更够的一组（涨红跌绿仍是 A 股惯例）
         itemStyle: { color: "#f85149", color0: "#3fb950",
                      borderColor: "#ff6b62", borderColor0: "#56d364", borderWidth: 1 },
-        markArea: boxAreas.length && showBoxes ? {
-          silent: true, data: boxAreas,
-        } : undefined,
+        // 箱体 + 缺口共用一个 markArea（ECharts 每个 series 只认一个）
+        markArea: (() => {
+          const _d = [...(showBoxes ? boxAreas : []), ...gapAreas.map(g => g.area)];
+          return _d.length ? { silent: true, data: _d } : undefined;
+        })(),
         markLine: { symbol: "none",
           data: [
             ...(showLevels ? [...resistanceLines, ...supportLines] : []), currentLine,
@@ -3964,7 +4118,9 @@ function hunterPage(category, dir) {
 const hunterOpenSectors = new Set();
 const hunterTagsCache = {};
 
-const hunterTagsRetry = {};   // 空结果重试计数（防死循环）
+const hunterTagsRetry = {};      // 空结果重试计数（防死循环）
+const hunterStructRetry = {};    // 30m MA5（仓位结构）的重试计数（2026-10-17）
+const hunterStructCache = {};    // category -> {code: structure}（30m MA5 列，与标签分开存）
 /* 猎手展开行的**实时**行情缓存（2026-10-12）。
    ⚠️ 为什么必须有它：猎手 payload 里的 `change_pct` / `build_price` 是**扫描时**快照
    （实测 300821 显示 10-09 收盘的 +20.01%，当天实时只有 +5.83%）⇒ 直接把 payload 的值
@@ -4001,13 +4157,22 @@ async function loadSectorTags(category) {
   if (!want.length) return {};
   const have = hunterTagsCache[category] || {};
   const codes = want.filter(c => !(c in have));
-  if (!codes.length) return have;
+  const _sc = hunterStructCache[category] || {};
+  const _structMissing = want.some(c => !(_sc[c] && !_sc[c].pending));   // 30m MA5 还没齐
+  if (!codes.length && !_structMissing) return have;
+  const _ask = codes.length ? codes : want;
   try {
     // offline=true（2026-10-11）：猎手是**批量视图**，标签走"本地日线缓存"零网络路径
     //（原来逐只 GM 取日线，而 GM 池 max_workers=1 ⇒ 全串行，实测 150 只 44s → 9s）。
     // 建仓表/持仓体检仍走在线路径，行为不变。
-    const r = await apiCall("load_stock_tags_batch", codes, true);
+    const r = await apiCall("load_stock_tags_batch", _ask, true);
     const tagsMap = (r && r.tags) || {};
+    // 30m MA5（2026-10-17）：仓位结构层，与持仓30min体检/风向标**同源**。
+    // 走**独立缓存** —— 标签是异步批算（冷启动先空），结构是另一步，两者到达时间不同步。
+    const structMap = (r && r.struct) || {};
+    if (Object.keys(structMap).length) {
+      hunterStructCache[category] = Object.assign(hunterStructCache[category] || {}, structMap);
+    }
     // 2026-10-08: 后端**冷启动会先回空 map**（改后台算后），空 map 若被缓存 ⇒ 该板块标签永远空。
     // 故**只缓存非空**；空则稍后重试，等后台算完再填。
     if (Object.keys(tagsMap).length) {
@@ -4018,6 +4183,27 @@ async function loadSectorTags(category) {
         if (hunterOpenSectors.has(category)) loadSectorTags(category);
       }, 4000);
     }
+    // 30m MA5（仓位结构）比标签慢：只要还有 pending 就 5s 后重试，有界 12 次
+    try {
+      const _pend = Object.values(structMap).some(v => (v || {}).pending);
+      const _rn = hunterStructRetry[category] || 0;
+      if (_pend && _rn < 12) {
+        hunterStructRetry[category] = _rn + 1;
+        setTimeout(() => {
+          if (!hunterOpenSectors.has(category)) return;
+          apiCall("load_stock_tags_batch", _renderedCodesFor(category), true).then(r2 => {
+            const sm2 = (r2 && r2.struct) || {};
+            if (!Object.keys(sm2).length) return;
+            hunterStructCache[category] = Object.assign(hunterStructCache[category] || {}, sm2);
+            const el2 = document.getElementById("hunterBody");
+            if (el2) el2.querySelectorAll("tbody.h-sector-group").forEach(tb => {
+              if (tb.getAttribute("data-category") === category) applySectorTags(tb, category);
+            });
+            if (Object.values(sm2).some(v => (v || {}).pending)) loadSectorTags(category);
+          }).catch(() => {});
+        }, 5000);
+      }
+    } catch (e) { /* 忽略 */ }
     // 标签到位后，若该板块仍展开则刷新当前可见行（分页跳页后也生效）
     const el = document.getElementById("hunterBody");
     if (el && hunterOpenSectors.has(category)) {
@@ -4146,6 +4332,12 @@ function applySectorTags(tbody, category) {
       // 2026-10-08: 按 class 定位标签列（此前按 tds[2] 固定下标，列序改成建仓表同款后填错位）
       const _tagsTd = row.querySelector("td.h-tags");
       if (_tagsTd) _tagsTd.innerHTML = info.tags.map(t => tagBadge(t)).join(" ");
+    }
+    // 2026-10-17：30m MA5 走的是**仓位结构**缓存（比标签慢一拍）⇒ 这里同款回填
+    const _st = (hunterStructCache[category] || {})[code];
+    if (_st) {
+      const _ma5Td = row.querySelector("td.h-ma5");
+      if (_ma5Td) _ma5Td.outerHTML = ma5CellHtml(_st, "h-ma5");
     }
   });
   // 板块阶段判定（用 trend）
@@ -4953,6 +5145,7 @@ function renderHunter(h) {
         <td class="num">${_metTxt}</td>
         <td style="text-align:center" title="${esc("日线阶段" + "。" + DAY_STAGE_TIP)}">${_stageTxt}</td>
         ${ma20FlagCellHtml(s.build_above_ma20)}
+        ${ma5CellHtml((hunterStructCache[category] || {})[s.code], "h-ma5")}
         <td class="num h-price" data-hcode="${esc(s.code)}" title="**实时**价/涨幅（展开时取、10s 刷新）。⚠️ 刻意不显示扫描时的旧值：扫描可能隔了几天，旧涨幅会严重误导（实测 300821 旧值 +20.01% vs 实时 +5.83%）">${hunterPriceHtml(null)}</td>
         <td class="h-tags">${tagsTxt}</td>
         ${condCellHtml(s.build_conds, condLabels, s.build_verdict === "insufficient_data", s.build_veto)}
@@ -5008,7 +5201,7 @@ function renderHunter(h) {
            //    这里用与 hunterRow 完全相同的谓词直接判。
            ? '均分 <span class="cell-dim" title="建仓符合度后台计算中，算完自动填上">⏳更新中</span>'
            : '均分 <span class="cell-dim" title="该二级板块内没有可用的建仓得分">—</span>');
-      const head = `<tr class="h-subgroup-head"><td colspan="13">
+      const head = `<tr class="h-subgroup-head"><td colspan="14">
         <span class="h-subgroup-name">📂 ${esc(gk)}</span>
         <span class="cell-dim" style="font-size:10px">${gs.length}只 · ${gScoreTxt}${gUp ? ` · 涨停${gUp}` : ""}</span>
       </td></tr>`;
@@ -5083,6 +5276,7 @@ function renderHunter(h) {
             <th class="num" title="时机门控通过数（市场有方向/多头结构/回撤到位）">通过</th>
             <th title="日线四阶段（描述状态，紧挨得分/通过便于对照）：②抬升/③派发/④下跌/①蓄势。⚠️ 实测横截面IC与直觉相反——抬升/追高前瞻更差(IC −0.031~−0.042, t=−12~−15)、下跌/超跌前瞻更好(IC +0.020~+0.034, t=+7~+12)，分半窗两段同号；效应量小(IC≈0.04)仅作相对强弱参照">日线阶段</th>
             <th title="是否站上 20 日线（观察列，不驱动任何判定）。⚠️「得分」里的 −70 悬崖扣分走的是 **5 日线**口径（owner 决定保留），与本列无关 ⇒ 本列不显示 −70。另注：5 日线该项实测横截面 IC 为负(站上MA5 −0.018, t=−6.9)">20日线<br><span style="font-size:9px;opacity:.6">观察</span></th>
+            <th title="30 分钟 K 线的 5 根均线（现价站上/跌破 + 距上次翻转多少根）。**与「持仓 30 分钟风险体检」同源**（position_structure，同一缓存）。⚠️ 实测无前瞻信息量 ⇒ 只展示，不参与任何判定">30m MA5<br><span style="font-size:9px;opacity:.6">仅展示</span></th>
             <th class="num" title="**实时**价 + 实时涨幅（展开时取、10s 刷新；取不到显示 ⏳/—）。⚠️ 刻意不显示扫描时的旧价旧涨幅——扫描可能隔了几天，旧涨幅会严重误导">价<br><span style="font-size:9px;opacity:.6">实时涨幅</span></th>
             <th>技术标签</th>
             <th title="时机条件：市场有方向/多头结构/回撤到位 · 末位🚫=否决因子（爆量≥3倍或偏离MA60>+20%）">时机条件</th>

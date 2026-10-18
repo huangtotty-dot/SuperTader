@@ -227,7 +227,11 @@ def _iri_tushare_pro():
 
         p = IRI_DEFAULT_PARAMS
         token = os.environ.get(p["tushare_token_env"]) or p["tushare_token_fallback"]
-        _IRI_TUSHARE_PRO_CACHE["pro"] = ts.pro_api(token)
+        # 2026-10-18：**必须显式给 timeout**。tushare 默认 30s，叠加它自己的 3 次重试
+        # ⇒ 单只票最长可挂 90s+；GUI 卡死栈里实测 3~4 个线程同时卡在 tushare 的
+        # `socket.getaddrinfo`（DNS 不归 requests 的 timeout 管，会挂更久）。
+        # 8s 足够正常响应（实测中位 <1s），失败交给调用方的兜底/冷却。
+        _IRI_TUSHARE_PRO_CACHE["pro"] = ts.pro_api(token, timeout=8)
     return _IRI_TUSHARE_PRO_CACHE["pro"]
 
 
