@@ -517,3 +517,36 @@ tr:hover td { background: rgba(243,93,43,.03); }
 .ztd-bar-label { display: flex; justify-content: space-between; font-size: 10px; color: var(--text-dim); margin-top: 3px; }
 .ztd-sub { font-size: 12px; font-weight: 700; color: var(--accent); margin: 6px 0; }
 
+
+/* ---- 市场风向标：方格布局（2026-10-18 owner「使用方格显示」）----
+   每个板块一张方格卡；点格子展开成整行（.open → grid-column:1/-1）放明细表。
+   目标：一屏看到更多板块（原来每板块一条全宽横条，25 个板块要滚很久）。 */
+.beacon-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 8px; align-items: start; }
+.beacon-tile { margin: 0; padding: 0; overflow: hidden; border-left: 4px solid var(--border-soft); }
+/* 2026-10-18 owner：前 10 名红色、其余绿色（按后端均分降序的序号分档） */
+.beacon-tile.beacon-top { border-left-color: #f85149; background: rgba(248, 81, 73, .06); }
+.beacon-tile.beacon-rest { border-left-color: #2ea043; background: rgba(46, 160, 67, .07); }
+.beacon-tile.open { grid-column: 1 / -1; }
+.beacon-tile-head { padding: 8px 10px 9px; cursor: pointer; display: flex;
+  flex-direction: column; gap: 3px; }
+.beacon-tile.beacon-top .beacon-tile-head:hover { background: rgba(248, 81, 73, .10); }
+.beacon-tile.beacon-rest .beacon-tile-head:hover { background: rgba(63, 185, 80, .13); }
+.beacon-line1 { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.beacon-name { font-size: 16px; letter-spacing: .4px; color: #f85149;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.beacon-score { margin-left: auto; font-weight: 700; font-size: 15px; color: #f85149;
+  font-variant-numeric: tabular-nums; }
+.beacon-tile.beacon-rest .beacon-name,
+.beacon-tile.beacon-rest .beacon-score { color: #2ea043; }
+.beacon-meta { font-size: 11px; color: var(--text-dim); }
+.beacon-leads { font-size: 11px; color: var(--text-dim);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.beacon-leads b { color: #f85149; }
+.beacon-tile.beacon-rest .beacon-leads b { color: #2ea043; }
+.beacon-detail { border-top: 1px solid var(--border-soft); }
+/* 展开成整行时标题区横向排布，别让那几行信息浪费整行宽度 */
+.beacon-tile.open .beacon-tile-head { flex-direction: row; flex-wrap: wrap; align-items: baseline;
+  gap: 4px 16px; }
+.beacon-tile.open .beacon-line1 { gap: 8px; }
+.beacon-tile.open .beacon-score { margin-left: 0; }

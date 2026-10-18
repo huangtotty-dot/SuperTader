@@ -492,30 +492,43 @@ function renderMarketBeacon(d) {
     <th>技术标签</th><th>时机条件</th><th>30min判定</th><th>仓位结构</th><th>30m MA5<br><span style="font-size:9px;opacity:.6">仅展示</span></th><th>依据</th>
   </tr></thead>`;
   // 板块名自带信息：龙头名字直接写在标题行 ⇒ **不展开也能一眼看到"谁在场"**
+  // 2026-10-18 owner：「市场风向标使用方格显示」—— 每个板块一张**方格卡**（grid），
+  // 点格子展开成整行（grid-column:1/-1）显示明细表；展开状态仍由 `_beaconOpen` 跨重绘保持。
   el.innerHTML = `
     <div style="display:flex;align-items:center;gap:8px;margin:2px 0 8px;flex-wrap:wrap">
       <button class="mini-btn" onclick="beaconToggleAll(true)">全部展开</button>
       <button class="mini-btn" onclick="beaconToggleAll(false)">全部收起</button>
-      <span class="cell-dim">共 <b>${secs.length}</b> 个板块 · <b>${total}</b> 只代表股（默认收起，点板块名展开）</span>
-    </div>` + secs.map((sec, i) => {
+      <span class="cell-dim">共 <b>${secs.length}</b> 个板块 · <b>${total}</b> 只代表股（默认收起，点方格展开）</span>
+      <span class="cell-dim" style="font-size:11px">
+        <span style="color:#f85149">■</span> 前 10 名
+        <span style="color:#2ea043;margin-left:6px">■</span> 其余
+      </span>
+    </div>
+    <div class="beacon-grid">` + secs.map((sec, i) => {
     const leads = (sec.rows || []).filter(r => r.tier === "龙头").map(r => r.name);
     const mids = (sec.rows || []).filter(r => r.tier === "中军").length;
-    return `<div class="card" style="margin-bottom:6px;overflow-x:hidden">
-      <div class="card-title" style="cursor:pointer;padding:6px 10px;border-left:5px solid #f85149;background:rgba(248,81,73,.06)"
-           onclick="beaconToggle(${i})" title="点击展开/收起该板块明细">
-        <span class="bk-arrow" id="beaconArrow_${i}" style="display:inline-block;width:14px;color:var(--text-dim)">${_beaconOpen.has(i) ? "▾" : "▸"}</span>
-        <b style="font-size:17px;letter-spacing:.5px;color:#ff9d95">${esc(sec.name)}</b>
-        <span class="cell-dim" style="font-weight:normal;font-size:11px;margin-left:6px">均分 <b>${fmt(sec.avg, 2)}</b> · 涨停 <b>${fmt(sec.limitup, 0)}</b> · 成分 ${fmt(sec.members, 0)} 只 · 代表 ${sec.rows.length} 只</span>
-        <span class="cell-dim" style="font-weight:normal;font-size:11px;margin-left:8px">
-          ${leads.length ? `龙头 <b style="color:#ff9d95">${esc(leads.join("/"))}</b>` : '<span title="该板块当日无最强一档（不硬凑）">无龙头</span>'}
-          ${mids ? ` · 中军 ${mids} 只` : ""}
-        </span>
+    const _open = _beaconOpen.has(i);
+    // 2026-10-18 owner：前 10 名红色、其余绿色（列表是后端按板块均分降序 ⇒ i<10 即前10名）
+    const _rankCls = i < 10 ? " beacon-top" : " beacon-rest";
+    return `<div class="card beacon-tile${_rankCls}${_open ? " open" : ""}" id="beaconCard_${i}">
+      <div class="beacon-tile-head" onclick="beaconToggle(${i})" title="点击展开/收起该板块明细">
+        <div class="beacon-line1">
+          <span class="bk-arrow" id="beaconArrow_${i}">${_open ? "▾" : "▸"}</span>
+          <b class="beacon-name">${esc(sec.name)}</b>
+          <span class="beacon-score" title="板块均分（与选股猎手同口径）">${fmt(sec.avg, 2)}</span>
+        </div>
+        <div class="beacon-meta">
+          涨停 <b>${fmt(sec.limitup, 0)}</b> · 成分 ${fmt(sec.members, 0)} · 代表 ${sec.rows.length}${mids ? ` · 中军 ${mids}` : ""}
+        </div>
+        <div class="beacon-leads">
+          ${leads.length ? `龙头 <b>${esc(leads.join("/"))}</b>` : '<span title="该板块当日无最强一档（不硬凑）">无龙头</span>'}
+        </div>
       </div>
-      <div id="beaconSec_${i}" style="display:${_beaconOpen.has(i) ? "" : "none"};overflow-x:auto">
-        <table class="h-table">${head}<tbody>${sec.rows.map(s => beaconRowHtml(s, d.cond_labels)).join("")}</tbody></table>
+      <div id="beaconSec_${i}" class="beacon-detail" style="display:${_open ? "" : "none"}">
+        <div style="overflow-x:auto"><table class="h-table">${head}<tbody>${sec.rows.map(s => beaconRowHtml(s, d.cond_labels)).join("")}</tbody></table></div>
       </div>
     </div>`;
-  }).join("");
+  }).join("") + `</div>`;
   loadBeaconQuotes();
 }
 
@@ -523,10 +536,13 @@ function renderMarketBeacon(d) {
 function beaconToggle(i, force) {
   const box = document.getElementById(`beaconSec_${i}`);
   const arw = document.getElementById(`beaconArrow_${i}`);
+  const card = document.getElementById(`beaconCard_${i}`);
   if (!box) return;
   const show = (force === undefined) ? (box.style.display === "none") : !!force;
   box.style.display = show ? "" : "none";
   if (arw) arw.textContent = show ? "▾" : "▸";
+  // 方格布局：展开的板块跨满整行（grid-column:1/-1），否则 300+ 行的明细表塞不进方格
+  if (card) card.classList.toggle("open", show);
   if (show) _beaconOpen.add(Number(i)); else _beaconOpen.delete(Number(i));
 }
 
@@ -633,6 +649,22 @@ function resizeAllEch() {
 }
 window.addEventListener("resize", () => {
   Object.values(echInstances).forEach(i => i.resize());
+});
+// 2026-10-18：窗口恢复/切回页面时，零尺寸的图要自己重画（不能只等下一个 10s 轮询）。
+let _turnoverResizeTimer = null;
+window.addEventListener("resize", () => {
+  if (_turnoverResizeTimer) clearTimeout(_turnoverResizeTimer);
+  _turnoverResizeTimer = setTimeout(() => {
+    _turnoverResizeTimer = null;
+    _turnoverSizeRetryN = 0;
+    drawTurnoverHist();
+  }, 350);
+});
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible") {
+    _turnoverSizeRetryN = 0;
+    setTimeout(drawTurnoverHist, 150);
+  }
 });
 const ECH_BASE = {
   backgroundColor: "transparent",
@@ -1147,15 +1179,49 @@ const TURNOVER_MA5_N = 5;          // 均线窗口（交易日）
 // 把失败原因**写在卡片里**：此前各条失败路径都是静默 return ⇒ 界面只剩空白，
 // 分不清是"没数据""没 echarts"还是"后端没这个接口"。空白本身不携带任何信息。
 let _turnoverRetry = null;   // 成交额图 warming 时的重试定时器
+let _turnoverSizeRetry = null;      // 容器零尺寸（面板隐藏/窗口最小化）时的重试
+let _turnoverSizeRetryN = 0;
+/* ⚠️ 2026-10-18 修复：错误信息**绝不能写进图表容器**。
+   一旦 `box.innerHTML = ...` 把 ECharts 的 canvas 抹掉，实例还活着、节点也没换
+   ⇒ 下次可见时走"同节点 → 原地 setOption"分支，永远画不出东西，错误文案也永远留在那儿
+   （owner 截图：盘中状态成交额图停在"容器尺寸为 0 (0×0)"，切回 tab 也不恢复）。
+   现在错误写到卡片里的独立 `#turnoverHistMsg`，图表容器保持干净。 */
 function _turnoverFail(msg) {
+  const msgEl = document.getElementById("turnoverHistMsg");
+  if (msgEl) {
+    msgEl.innerHTML = `<span class="down">成交额图不可用：</span>${esc(msg)}`;
+    return;
+  }
   const box = document.getElementById("turnoverHistChart");
-  if (box) box.innerHTML = `<div class="empty" style="font-size:11px">成交额图不可用：${esc(msg)}</div>`;
+  if (box && !turnoverHistInst) {      // 没有实例才允许写进容器（否则会抹掉 canvas）
+    box.innerHTML = `<div class="empty" style="font-size:11px">成交额图不可用：${esc(msg)}</div>`;
+  }
+}
+function _turnoverMsgClear() {
+  const msgEl = document.getElementById("turnoverHistMsg");
+  if (msgEl) msgEl.innerHTML = "";
+}
+function _turnoverInfo(text) {   // 中性提示（加载中）——同样不许写进图表容器
+  const msgEl = document.getElementById("turnoverHistMsg");
+  if (msgEl) msgEl.innerHTML = `<span class="cell-dim">${esc(text)}</span>`;
+}
+function _scheduleTurnoverSizeRetry() {
+  if (_turnoverSizeRetry || _turnoverSizeRetryN >= 20) return;   // 最多约 30s，之后靠 10s 轮询
+  _turnoverSizeRetryN++;
+  _turnoverSizeRetry = setTimeout(() => { _turnoverSizeRetry = null; drawTurnoverHist(); }, 1500);
 }
 
 async function drawTurnoverHist() {
   const box = document.getElementById("turnoverHistChart");
   if (!box) return;
   if (!window.echarts) { _turnoverFail("ECharts 未加载"); return; }
+  // 面板隐藏（别的 tab / 窗口最小化）时容器宽高为 0：**连 API 都不用打**，
+  // 等可见时 switchTab / visibilitychange / 短重试会自动重画。
+  if (!box.clientWidth || !box.clientHeight) {
+    _turnoverFail(`容器尺寸为 0（${box.clientWidth}×${box.clientHeight}）`);
+    _scheduleTurnoverSizeRetry();
+    return;
+  }
   let d = null;
   try {
     // 2026-10-16 owner：「要紧密，这样可以显示更多」+「增加到一年」⇒ 250 个交易日 ≈ 1 年。
@@ -1171,8 +1237,9 @@ async function drawTurnoverHist() {
   if (document.getElementById("turnoverHistChart") !== box) return;   // 期间又被重建（下一次会画）
   if (!d || !d.available || !(d.days || []).length) {
     if (d && d.warming) {
-      // 后端还在算（冷启动/超时占位）→ 显示加载中并稍后自填，不当错误
-      box.innerHTML = '<div class="empty" style="font-size:11px">成交额图加载中…</div>';
+      // 后端还在算（冷启动/超时占位）→ 显示加载中并稍后自填，不当错误。
+      // ⚠️ 写到 #turnoverHistMsg，**不能写进图表容器**（会抹掉 ECharts 的 canvas）。
+      _turnoverInfo("成交额图加载中…");
       if (!_turnoverRetry) {
         _turnoverRetry = setTimeout(() => { _turnoverRetry = null; drawTurnoverHist(); }, 8000);
       }
@@ -1232,7 +1299,10 @@ async function drawTurnoverHist() {
   // 而旧实例仍绑在**已脱离文档**的旧节点上。若只看数据签名就早返回，新节点永远拿不到图
   // ⇒ 成交额图渲染几秒后消失（2026-10-04 修）。节点变了即强制重画。
   const _sameNode = !!(turnoverHistInst && box === turnoverHistNode);
-  if (_sameNode && sig === turnoverHistSig) {
+  // 2026-10-18：canvas 还在不在也要判。旧版本把错误文案写进容器 ⇒ canvas 被 innerHTML 抹掉、
+  // 实例却活着 ⇒ 同节点 setOption 永远画不出来。这里若发现 canvas 没了，强制重建实例。
+  const _canvasOk = !!(box.querySelector && box.querySelector("canvas"));
+  if (_sameNode && _canvasOk && sig === turnoverHistSig) {
     if (turnoverHistInst.getWidth() !== box.clientWidth) {
       try { turnoverHistInst.resize(); } catch (e) { }
     }
@@ -1241,7 +1311,9 @@ async function drawTurnoverHist() {
   if (!box.clientWidth || !box.clientHeight) {
     // 容器零尺寸时 ECharts 会画出"空图"且**不报错**。此时**不记签名**，
     // 等面板可见（宽度非 0）再画 —— 记了签名就再也不会重试了。
+    // 另外排一个短重试：窗口从最小化恢复 / tab 切回来时不必等下一个 10s 轮询。
     _turnoverFail(`容器尺寸为 0（${box.clientWidth}×${box.clientHeight}）`);
+    _scheduleTurnoverSizeRetry();
     return;
   }
   // 2026-10-15 闪烁修复（关键）：**同节点时不再 dispose + init**。
@@ -1249,12 +1321,19 @@ async function drawTurnoverHist() {
   // 原来只在 renderLive 重建 DOM（10s 一次）时走这条路，现在节点已被 renderLive 回收复用，
   // 数据每 10s 都在变，若仍 dispose+init 就是"每 10s 稳定闪一次"。改为原地 setOption：
   // 实例与 canvas 都活着，只重画内容 ⇒ 不闪。
-  if (turnoverHistInst && !_sameNode) {
+  if (turnoverHistInst && (!_sameNode || !_canvasOk)) {
     try { turnoverHistInst.dispose(); } catch (e) { }
     turnoverHistInst = null;
     turnoverHistNode = null;
   }
+  // 成功路径：清掉错误文案 + 重置零尺寸重试计数
+  _turnoverMsgClear();
+  _turnoverSizeRetryN = 0;
+  if (_turnoverSizeRetry) { clearTimeout(_turnoverSizeRetry); _turnoverSizeRetry = null; }
   if (!turnoverHistInst) {
+    // 清掉可能残留的历史错误文案（旧版本会把错误写进容器，echarts.init 是**追加**，
+    // 不清的话文字会压在图上）
+    box.innerHTML = "";
     turnoverHistInst = echarts.init(box);
     turnoverHistNode = box;
   }
@@ -1768,6 +1847,24 @@ async function drawHunterGoChart() {
 }
 
 /* ---- 盘中实时 ---- */
+/* 「无趋势状态」不能只是一句空话：`intraday_state.json` 由 core/signal_engine 写，
+   2026-09-14 之后引擎没再跑过 ⇒ 文件一直停在旧日期。这里把**源文件的日期**摆出来，
+   一眼分清"今天没趋势"还是"数据源已经一个月没更新"。 */
+function _trendEmptyHtml(st) {
+  const d = (st && st.date) ? String(st.date) : "";
+  if (!d) return '<div class="empty">无趋势状态（intraday_state.json 为空）</div>';
+  let days = null;
+  try {
+    const t = new Date(d + "T00:00:00").getTime();
+    if (!isNaN(t)) days = Math.floor((Date.now() - t) / 86400000);
+  } catch (e) { /* 忽略 */ }
+  const stale = days != null && days > 1;
+  return `<div class="empty">无趋势状态${stale
+    ? `<span class="cell-dim" style="font-size:11px">　（intraday_state.json 最后更新 ${esc(d)}，`
+      + `已 ${days} 天未刷新 —— 盘中状态引擎未运行）</span>`
+    : ""}</div>`;
+}
+
 function renderLive(live, isToday) {
   const el = document.getElementById("liveBody");
   const tag = document.getElementById("liveTag");
@@ -1819,6 +1916,7 @@ function renderLive(live, isToday) {
       <div class="card-title">盘中状态
         <span class="cell-dim" style="font-weight:normal;font-size:11px">上：近1年全市场成交额 · 下：个股趋势（intraday_state.json · 10s 刷新）</span>
       </div>
+      <div id="turnoverHistMsg" class="cell-dim" style="font-size:11px"></div>
       <div id="turnoverHistSlot"></div>
       <div class="cell-dim" style="font-size:10px;margin:-2px 0 8px">
         <span style="color:${TURNOVER_UP}">■</span> 放量（较前一交易日）
@@ -1827,8 +1925,7 @@ function renderLive(live, isToday) {
         <span style="color:${TURNOVER_MA5};margin-left:8px">━</span> ${TURNOVER_MA5_N}日均量（不含今日）
         <span id="turnoverBseNote"></span>
       </div>
-      ${trendCards || '<div class="empty">无趋势状态</div>'}
-    </div>
+      ${trendCards || _trendEmptyHtml(liveState)}
     </div>`;
 
   // 把（上面摘下来的）图节点放回占位处。首次渲染没有旧节点 ⇒ 就地新建一个同 id 的容器。
@@ -6183,7 +6280,7 @@ function switchTab(tab) {
   setTimeout(() => {
     resizeAllEch();
     if (tab === "hunter") { drawHunterGoChart(); renderHunterGoList(); loadSectorStars(); }
-    if (tab === "signals") drawTurnoverHist();
+    if (tab === "signals") { _turnoverSizeRetryN = 0; drawTurnoverHist(); }
   }, 80);
   // 2026-10-10: 切到选股猎手不再自动跑扫描（owner 需求6）——一律点「▶ 运行今日数据」触发。
   // 切到每日复盘：懒加载模型配置 + 已有复盘
