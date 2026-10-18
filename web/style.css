@@ -533,6 +533,7 @@ tr:hover td { background: rgba(243,93,43,.03); }
 .beacon-tile.beacon-top .beacon-tile-head:hover { background: rgba(248, 81, 73, .10); }
 .beacon-tile.beacon-rest .beacon-tile-head:hover { background: rgba(63, 185, 80, .13); }
 .beacon-line1 { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.beacon-rank { font-family: var(--mono); font-size: 13px; font-weight: 700; color: var(--text-dim); }
 .beacon-name { font-size: 16px; letter-spacing: .4px; color: #f85149;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .beacon-score { margin-left: auto; font-weight: 700; font-size: 15px; color: #f85149;
@@ -550,3 +551,48 @@ tr:hover td { background: rgba(243,93,43,.03); }
   gap: 4px 16px; }
 .beacon-tile.open .beacon-line1 { gap: 8px; }
 .beacon-tile.open .beacon-score { margin-left: 0; }
+
+/* ---- 选股猎手：与「市场风向标」同款方格布局（2026-10-18 owner）----
+   原来每个概念一条全宽横条；现在一张方格卡，点格子跨整行展开个股明细。
+   前 10 名红色、其余绿色（summary_rows 由后端按平均分降序）。 */
+.hunter-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  gap: 8px; align-items: start; }
+.hunter-tile { margin: 0; padding: 0; overflow: hidden; border-left: 4px solid var(--border-soft); }
+.hunter-tile.beacon-top { border-left-color: #f85149; background: rgba(248, 81, 73, .05); }
+.hunter-tile.beacon-rest { border-left-color: #2ea043; background: rgba(46, 160, 67, .06); }
+.hunter-tile.open { grid-column: 1 / -1; }
+.hunter-tile-head { padding: 8px 10px 9px; cursor: pointer; display: flex;
+  flex-direction: column; gap: 3px; }
+.hunter-tile-head:hover { background: rgba(243, 93, 43, .06); }
+.hunter-line1 { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.hunter-rank { font-family: var(--mono); font-size: 13px; font-weight: 700; color: var(--text-dim); }
+.hunter-name { font-size: 16px; letter-spacing: .4px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hunter-link { text-decoration: none; color: var(--accent); }
+.hunter-score { margin-left: auto; font-family: var(--mono); font-size: 16px; font-weight: 700; }
+.hunter-score-unit { font-size: 10px; font-weight: 400; margin-left: 1px; }
+.hunter-score.h-hot { color: #f85149; }
+.hunter-score.h-warm { color: var(--warn); }
+.hunter-score.h-cool { color: var(--text-dim); }
+.hunter-meta, .hunter-meta2 { font-size: 11px; color: var(--text-dim);
+  display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: center; }
+.hunter-meta2 .h-trend-badge { padding: 1px 5px; font-size: 11px; }
+.hunter-meta2 .h-heat-val { font-family: var(--mono); font-size: 11px; font-weight: 600; }
+.hunter-leads { font-size: 11px; color: var(--text-dim); line-height: 1.7; }
+.hunter-leads b { color: var(--accent); }
+.hunter-detail { display: none; border-top: 1px solid var(--border-soft); overflow-x: auto; }
+.hunter-detail.open { display: block; }
+.hunter-detail .h-expand { padding: 6px 8px 6px 12px; background: transparent; border-top: none; }
+/* 展开成整行时标题区横向排布，别浪费整行宽度 */
+.hunter-tile.open .hunter-tile-head { flex-direction: row; flex-wrap: wrap; align-items: baseline;
+  gap: 4px 16px; }
+.hunter-tile.open .h-bar-track { flex: 1 1 140px; min-width: 120px; }
+.hunter-tile.open .hunter-score { margin-left: 0; }
+
+/* 选股猎手方格：板块 D 维度突出项（2026-10-18）*/
+.hunter-dims { display: flex; flex-wrap: wrap; gap: 3px 5px; align-items: center; }
+.h-dim-chip { display: inline-flex; align-items: baseline; gap: 2px; padding: 0 5px;
+  border-radius: 4px; background: rgba(232, 83, 31, .08); border: 1px solid rgba(232, 83, 31, .22);
+  color: var(--accent); font-family: var(--mono); font-size: 10px; line-height: 16px; }
+.h-dim-chip b { font-size: 11px; font-weight: 700; }
+.h-dim-chip i { font-style: normal; color: var(--text-dim); margin-left: 2px; font-size: 9px; }
