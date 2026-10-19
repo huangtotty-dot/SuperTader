@@ -941,9 +941,17 @@ def on_bar(context, bars):
                                         f"指数日线刷新失败 {_gm_idx}: {str(_e2)[:120]}", code="")
                         except Exception: pass
 
-                # R-1(2026-08-07 W32表决): 实盘传 mode="live"，剔除当日未成形K线再判定
+                # R-1(2026-08-07 W32表决): 实盘剔除当日未成形K线再判定
+                # （原实现传 mode="live"，但 index_regime 不接受该值 ⇒ 2026-10-19 修）
                 try:
-                    _ir_mode = "live" if context.mode == MODE_LIVE else "eod"
+                    if context.mode == MODE_LIVE:
+                        # 2026-10-19 修：index_regime 只接受 eod/morning/tail——旧代码传 "live"
+                        # 每次都 ValueError 并被外层吞掉（策略侧 regime 从未更新成功）。
+                        # 收盘前用 morning（对齐上一已完成日，天然剔除当日 forming bar）；
+                        # 15:05 后当日已收盘，用 eod 落当日。
+                        _ir_mode = "eod" if now.time() >= dtime(15, 5) else "morning"
+                    else:
+                        _ir_mode = "eod"
                 except Exception:
                     _ir_mode = "eod"
                 # 市场级（上证腿）——context.last_index_regime 兼容字段恒 = 上证（D2 双轨：市场级保留，不替换）

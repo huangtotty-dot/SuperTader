@@ -1894,6 +1894,8 @@ def scan_once():
             _maybe_run_chart_prefetch(now)             # 2026-10-04: 15:10 后 K线缓存预下载（与 t_gui 幂等）
         with _ScanStage("⑧新鲜度巡检"):
             _maybe_run_freshness_patrol(now)           # 2026-10-12: 15:40 后产物新鲜度巡检 → 飞书（零网络）
+        with _ScanStage("⑨热度EOD"):
+            _maybe_run_sentiment_eod(now)              # 2026-10-19: 15:30 后当日 EOD 落库（跨日 S 图当天更新）
 
         if now.weekday() >= 5 or t < dtime(9, 30) or (dtime(11, 30) < t < dtime(13, 0)) or t > dtime(15, 0):
             if _last_idle_log is None or (_now() - _last_idle_log).total_seconds() >= PARAMS["idle_log_minutes"] * 60:
@@ -2756,28 +2758,39 @@ def tushare_replay(date_str=None):
     return report_path
 
 
-def _launch_sentiment_backfill(date_str: str) -> None:
-    """子进程执行热度补算（daily_sentiment.py 独立 CLI：--mode eod --no-push）。
+def _launch_sentiment_subprocess(date_str: str, mode: str = "eod", tag: str = "sentiment_backfill"):
+    """子进程跑 daily_sentiment.py 独立 CLI（默认 --mode eod --no-push）。
 
-    子进程隔离（子进程隔离）：补算链会触发 akshare 新浪/东财接口，
-    首次使用 py_mini_racer(V8) 初始化时若在后台线程执行会 FATAL 崩溃拖垮盯盘主进程
-    （2026-08-24 事故：partition_address_space Check failed），故强制独立进程，
-    V8/网络异常最多丢一个后台补算，不影响盯盘主循环。"""
+    子进程隔离：补算链会触发 akshare 新浪/东财接口，首次使用 py_mini_racer(V8) 初始化时
+    若在后台线程执行会 FATAL 崩溃拖垮盯盘主进程（2026-08-24 事故），故强制独立进程。
+
+    ⚠️ 2026-10-19 修：脚本按**绝对路径**启动时 `sys.path[0]=execution/`，`import core`
+    必然 `ModuleNotFoundError`（10-12~10-16 的 sentiment_backfill 日志全在报）⇒ 显式
+    `PYTHONPATH=BASE_DIR`。同日新增 mode 入参：收盘后 EOD 落库复用同一条链路。
+    """
     import subprocess
     script = os.path.join(BASE_DIR, "execution", "daily_sentiment.py")
     log_dir = os.path.join(BASE_DIR, "t_io", "logs")
     os.makedirs(log_dir, exist_ok=True)
-    out_fp = open(os.path.join(log_dir, f"sentiment_backfill_{date_str}.log"), "a", encoding="utf-8")
+    out_fp = open(os.path.join(log_dir, f"{tag}_{date_str}.log"), "a", encoding="utf-8")
+    _env = os.environ.copy()
+    _env["PYTHONPATH"] = BASE_DIR + (
+        os.pathsep + _env["PYTHONPATH"] if _env.get("PYTHONPATH") else "")
     try:
         flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
         proc = subprocess.Popen(
-            [sys.executable, script, "--date", date_str, "--mode", "eod", "--no-push"],
-            cwd=BASE_DIR, creationflags=flags,
+            [sys.executable, script, "--date", date_str, "--mode", mode, "--no-push"],
+            cwd=BASE_DIR, env=_env, creationflags=flags,
             stdout=out_fp, stderr=subprocess.STDOUT,
         )
     finally:
         out_fp.close()   # 子进程已持有句柄副本，父进程立即关闭
-    log.info(f"📡 热度补算子进程已启动: {date_str} (pid={proc.pid}) → t_io/logs/sentiment_backfill_{date_str}.log")
+    log.info(f"📡 热度子进程已启动({mode}): {date_str} (pid={proc.pid}) → t_io/logs/{tag}_{date_str}.log")
+    return proc
+
+
+def _launch_sentiment_backfill(date_str: str) -> None:
+    _launch_sentiment_subprocess(date_str, "eod", "sentiment_backfill")
 
 
 def _maybe_backfill_sentiment():
@@ -2803,6 +2816,51 @@ def _maybe_backfill_sentiment():
             _launch_sentiment_backfill(target_str)
     except Exception as e:
         log.warning(f"⚠️ backfill_sentiment 异常: {str(e)[:100]}")
+
+
+# 2026-10-19：收盘后 EOD 热度/regime 当日落库（修「跨日 S 图停在上一交易日」）
+_sentiment_eod_state = {"date": "", "attempts": 0, "next_try": 0.0}
+
+
+def _regime_state_last_date() -> str:
+    """读 index_regime/state.json 的最后一交易日（失败返回空串）。"""
+    try:
+        fp = os.path.join(BASE_DIR, "t_io", "index_regime", "state.json")
+        with open(fp, encoding="utf-8") as f:
+            d = json.load(f)
+        h = d.get("history") or []
+        return str((h[-1] or {}).get("date") or "") if h else ""
+    except Exception:
+        return ""
+
+
+def _maybe_run_sentiment_eod(now: datetime) -> None:
+    """15:30 后交易日每日一次：当日 EOD 热度/regime 落库。
+
+    为什么必须有：14:30 尾盘钩子用 mode="tail"，模块**明确不写** state/trace
+    （保持 EOD 状态机纯净），而 state.json 是「大盘跨日 S」图的唯一数据源 ⇒
+    没有这条，当日 S 只能等**次日启动**的 morning 推送补"上一完成日"
+    （2026-10-19 实测：图停在 10-16）。子进程隔离 + 失败 10 分钟重试（≤3 次/日）。
+    """
+    try:
+        t = now.time()
+        if now.weekday() >= 5 or not (dtime(15, 30) <= t <= dtime(17, 0)):
+            return
+        today = now.strftime("%Y-%m-%d")
+        if _regime_state_last_date() >= today:     # 已落库（ISO 日期可直接比较）
+            return
+        st = _sentiment_eod_state
+        if st.get("date") != today:
+            st.update({"date": today, "attempts": 0, "next_try": 0.0})
+        if int(st.get("attempts", 0)) >= 3:
+            return
+        if _now().timestamp() < float(st.get("next_try", 0.0)):
+            return
+        st["attempts"] = int(st.get("attempts", 0)) + 1
+        st["next_try"] = _now().timestamp() + 600
+        _launch_sentiment_subprocess(today, "eod", "sentiment_eod")
+    except Exception as e:
+        log.warning(f"⚠️ 收盘 EOD 热度/regime 落库失败（10 分钟重试）: {str(e)[:120]}")
 
 
 def run_watch():
