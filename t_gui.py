@@ -408,18 +408,25 @@ def _auto_fill_costs():
 
 def _jiuyan_concepts(info):
     """合并股票记录的所有韭研概念（编号字段 jiuyan_concept1..9 + 旧普通字段）。
-    返回用 | 连接的去重字符串；无概念返回空串。"""
+    返回用 | 连接的去重字符串；无概念返回空串。
+    2026-10-19：概念值允许 list/tuple 多标签（医药板块整合起）——逐元素展开，
+    否则 str(list) 会把 Python repr（"['临床CRO', …]"）漏进所有下游显示。"""
     if not isinstance(info, dict):
         return ""
     parts = []
+
+    def _collect(v):
+        if isinstance(v, (list, tuple)):
+            for x in v:
+                if x and str(x).strip():
+                    parts.append(str(x).strip())
+        elif v and str(v).strip():
+            parts.append(str(v).strip())
+
     for i in range(1, 10):
-        v = info.get(f"jiuyan_concept{i}")
-        if v and str(v).strip():
-            parts.append(str(v).strip())
+        _collect(info.get(f"jiuyan_concept{i}"))
     if not parts:
-        v = info.get("jiuyan_concept")
-        if v and str(v).strip():
-            parts.append(str(v).strip())
+        _collect(info.get("jiuyan_concept"))
     seen = set()
     out = []
     for p in parts:
@@ -429,6 +436,40 @@ def _jiuyan_concepts(info):
                 seen.add(c)
                 out.append(c)
     return "|".join(out)
+
+
+def _jiuyan_concept_descs(info, concepts=None):
+    """该股韭研概念的注释映射 {概念: 解释}（watchlist 的 `jiuyan_concept_desc` 字段，
+    2026-10-19 医药板块整合起写入）。concepts 给定时只保留其中出现的键；无注释返回 {}。"""
+    if not isinstance(info, dict):
+        return {}
+    d = info.get("jiuyan_concept_desc")
+    if not isinstance(d, dict) or not d:
+        return {}
+    if concepts is None:
+        return {str(k): str(v) for k, v in d.items() if k and v}
+    keep = set(concepts)
+    return {str(k): str(v) for k, v in d.items() if k in keep and v}
+
+
+def _jiuyan_all_concept_descs():
+    """全表合并的韭研概念注释 {概念: 解释}（前端分组头/概念列 tooltip 用）。
+    同 key 先见先留；读失败返回 {}（非致命）。"""
+    out = {}
+    try:
+        jy = _load_json(HUNTER_DIR / "watchlist_jiuyan.json", {})
+        for info in (jy.values() if isinstance(jy, dict) else []):
+            if not isinstance(info, dict):
+                continue
+            d = info.get("jiuyan_concept_desc")
+            if not isinstance(d, dict):
+                continue
+            for k, v in d.items():
+                if k and v and k not in out:
+                    out[str(k)] = str(v)
+    except Exception:
+        pass
+    return out
 
 
 # 行业粗分类规则（2026-09-29，突破箱体按行业分组用）。
@@ -4684,6 +4725,8 @@ class Api:
                 out["sector"] = sec
                 out["sector_list"] = [s.strip() for s in sec.split("/") if s.strip()]
                 out["local_concepts"] = [s for s in _jiuyan_concepts(info).split("|") if s]
+                # 2026-10-19：概念注释 {概念: 解释} 下发（前端 chip 悬停显示，医药板块起）
+                out["concept_descs"] = _jiuyan_concept_descs(info, out["local_concepts"])
             out["ok"] = True
         except Exception as e:
             out["error"] = f"读取本地资料失败: {e}"
@@ -6221,6 +6264,9 @@ class Api:
             out["build_n"] = _build_n
             out["build_total"] = len(codes)
             out["concept_trends"] = concept_trends
+            # 2026-10-19：韭研二级概念注释 {概念: 解释} 全局下发——前端细分分组头/概念列
+            # 悬停显示「这个标签是什么意思」（医药板块 13 个二级概念起，后续板块沿用同字段）。
+            out["concept_descs"] = _jiuyan_all_concept_descs()
             out["refreshed_at"] = datetime.now().strftime("%H:%M:%S")
             try:
                 from modules.market_data import MARKET_PROGRESS as _MP
@@ -7354,6 +7400,7 @@ class Api:
                                   "industry": _stock_industry(info),
                                   "concepts": concepts,
                                   "concepts_source": csrc,
+                                  "concept_descs": _jiuyan_concept_descs(info, concepts),
                                   "tags": [{"label": "当日有效突破", "color": "up"}], **hit})
             if state is not None:
                 with _BREAKOUT_LOCK:
@@ -7611,6 +7658,7 @@ class Api:
                 hits.append({"code": code, "name": nm,
                              "industry": _stock_industry(info),
                              "concepts": concepts, "concepts_source": csrc,
+                             "concept_descs": _jiuyan_concept_descs(info, concepts),
                              "tags": [{"label": "站上5日线", "color": "up"}], **hit})
             if state is not None:
                 with _BREAKOUT_LOCK:
@@ -7934,6 +7982,8 @@ class Api:
             out["summary_cols"] = ["排名", "板块", "股票数量", "平均分", "涨停数", "热度", "趋势", "前三强"]
             out["summary_rows"] = rows
             out["sector_stocks"] = sector_stocks
+            # 2026-10-19：历史视图同样下发概念注释（细分分组头 tooltip 与「今日数据」一致）
+            out["concept_descs"] = _jiuyan_all_concept_descs()
             # 2026-10-16：历史视图**没有** build_* 字段（`sector_stocks` 是现搭的），
             # 但"时机条件"列仍要画出一致的圆点槽位 ⇒ 标签真源照样下发，否则该列会退化成空白。
             out["cond_labels"] = COND_LABELS

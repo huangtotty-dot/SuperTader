@@ -57,6 +57,16 @@ class WatchlistLoader(DataLoaderBase):
                     return ",".join(str(v) for v in val)
                 return str(val)
 
+            # 概念字段规范化为 "|" 连接串（2026-10-19：医药板块整合后 jiuyan_concept
+            # 允许 list 多标签；直接 str(list) 会把 Python repr（"['临床CRO', …]"）
+            # 漏进猎手池「韭研概念」列和 GUI 面板，显示成乱串）。
+            def _concept_str(val):
+                if val is None:
+                    return ""
+                if isinstance(val, (list, tuple)):
+                    return "|".join(str(v).strip() for v in val if str(v).strip())
+                return str(val).strip()
+
             # 基础信息
             base_record = {
                 "代码": code,
@@ -78,7 +88,7 @@ class WatchlistLoader(DataLoaderBase):
                 cat = info.get(cat_key, "")
                 concept = info.get(concept_key, "")
                 if cat and str(cat).strip():
-                    pairs.append((str(cat).strip(), str(concept).strip()))
+                    pairs.append((str(cat).strip(), _concept_str(concept)))
                     has_multi_fields = True
 
             if not pairs:
@@ -89,7 +99,7 @@ class WatchlistLoader(DataLoaderBase):
                     # 按 | 拆分 category（兼容旧数据）
                     cats = [c.strip() for c in str(cat).split("|") if c.strip()]
                     for c in cats:
-                        pairs.append((c, str(concept).strip()))
+                        pairs.append((c, _concept_str(concept)))
 
             # 为每个 category/concept 对生成一行
             if pairs:
@@ -108,7 +118,7 @@ class WatchlistLoader(DataLoaderBase):
                     for c in cats:
                         record = base_record.copy()
                         record["韭研分类"], record["原分类"] = self._apply_merge(c)
-                        record["韭研概念"] = str(concept).strip()
+                        record["韭研概念"] = _concept_str(concept)
                         records.append(record)
                 else:
                     # 无韭研概念，保留一行（空值）

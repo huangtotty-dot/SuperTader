@@ -3822,7 +3822,11 @@ function renderStockProfile(body, d, live) {
     body.innerHTML = `<div class="empty">资料读取失败: ${esc((d && d.error) || "未知")}</div>`;
     return;
   }
-  const chips = (arr) => (arr || []).map(x => `<span class="prof-chip">${esc(x)}</span>`).join("");
+  const chips = (arr, descs) => (arr || []).map(x => {
+    // 2026-10-19：概念注释（后端 concept_descs）——有解释的 chip 悬停显示，并加点状下划线提示可悬停
+    const tip = descs && descs[x];
+    return `<span class="prof-chip"${tip ? ` title="${esc(tip)}" style="cursor:help;border-bottom:1px dotted"` : ""}>${esc(x)}</span>`;
+  }).join("");
   const none = '<span class="prof-none">无</span>';
   let h = `<div class="prof-head"><b>${esc(d.name || stockChartName || d.code)}</b>`
         + `<span class="prof-code">${esc(d.code)}</span>`;
@@ -3836,7 +3840,7 @@ function renderStockProfile(body, d, live) {
   h += `<div class="prof-sec"><b>所属行业/板块</b>：`
      + ((d.sector_list && d.sector_list.length) ? chips(d.sector_list) : none) + "</div>";
   h += `<div class="prof-sec"><b>韭研概念</b>：`
-     + ((d.local_concepts && d.local_concepts.length) ? chips(d.local_concepts) : none) + "</div>";
+     + ((d.local_concepts && d.local_concepts.length) ? chips(d.local_concepts, d.concept_descs) : none) + "</div>";
   if (live) {
     h += `<div class="prof-sec"><b>所属板块</b>`
        + `<span class="prof-note">${esc(d.boards_note || "")}</span>：`;
@@ -5481,8 +5485,17 @@ function conceptsCell(s) {
   if (!cs.length) {
     return '<span class="cell-dim" title="离线无该股概念数据（该口径约覆盖一半股票）">—</span>';
   }
+  // 2026-10-19：逐概念 chip——有注释的概念（后端 concept_descs，医药板块二级概念起）
+  // 悬停显示「概念：解释」并加点状下划线；无注释的保持原样，整格 title 仍是全量串兜底。
+  const descs = (s && s.concept_descs) || {};
   const full = cs.join(" · ");
-  return `<span class="bk-concepts" title="${esc(full)}">${esc(full)}</span>`;
+  const inner = cs.map(c => {
+    const tip = descs[c];
+    return tip
+      ? `<span title="${esc(c + "：" + tip)}" style="cursor:help;border-bottom:1px dotted">${esc(c)}</span>`
+      : `<span>${esc(c)}</span>`;
+  }).join('<span class="cell-dim"> · </span>');
+  return `<span class="bk-concepts" title="${esc(full)}">${inner}</span>`;
 }
 /* 韭研 D1~D11 打分规则（2026-10-17 显示到面板上）。
    真源 = `stock_hunter/modules/reporter.py` 的「0-说明」表 + `stock_hunter/config.json`
@@ -5522,6 +5535,15 @@ function renderHunter(h) {
     window._hunterSectors = ss || {};
     window._hunterData = h;
     const trends = h.concept_trends || {};
+    // 2026-10-19：二级概念注释 {概念: 解释}（后端全表合并下发）——细分分组头悬停显示。
+    // 分组键经过 normGk 归并（半导体设备-测试设备→半导体设备），查注释时先精确、
+    // 再按「-」首段回退匹配，保证带子级后缀的概念也能命中。
+    const conceptDescs = h.concept_descs || {};
+    const gkDesc = gk => {
+      if (conceptDescs[gk]) return conceptDescs[gk];
+      const hit = Object.keys(conceptDescs).find(k => k.split("-")[0] === gk);
+      return hit ? conceptDescs[hit] : "";
+    };
     function trendSpark(pts, key, color) {
       if (!pts || pts.length < 2) return '<span class="cell-dim">—</span>';
       const vals = pts.map(p => p[key]).filter(v => v != null);
@@ -5665,7 +5687,7 @@ function renderHunter(h) {
            ? '均分 <span class="cell-dim" title="建仓符合度后台计算中，算完自动填上">⏳更新中</span>'
            : '均分 <span class="cell-dim" title="该二级板块内没有可用的建仓得分">—</span>');
       const head = `<tr class="h-subgroup-head"><td colspan="14">
-        <span class="h-subgroup-name">📂 ${esc(gk)}</span>
+        <span class="h-subgroup-name"${gkDesc(gk) ? ` title="${esc(gk + "：" + gkDesc(gk))}" style="cursor:help"` : ""}>📂 ${esc(gk)}</span>
         <span class="cell-dim" style="font-size:10px">${gs.length}只 · ${gScoreTxt}${gUp ? ` · 涨停${gUp}` : ""}</span>
       </td></tr>`;
       return head + gs.map(hunterRow).join("");
