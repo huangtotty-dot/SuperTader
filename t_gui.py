@@ -21,7 +21,7 @@ import sys
 import threading
 import time as _time_mod
 from collections import Counter
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 # Windows 终端 UTF-8 修复（避免 GBK 乱码）
@@ -283,6 +283,22 @@ _ROTATION_CACHE_DIR = BASE / "t_io" / "cache" / "sector_rotation"
 # `_compute_auto_pnl` 只用它拼 `{code}.json` 路径，却把整条 pandas 链拖进首帧的 import 锁。
 # 值必须与 core/position_builder.py::_DAILY_CACHE_DIR 一致（同为 BASE/t_io/cache/daily_kline）。
 _DAILY_KLINE_DIR = BASE / "t_io" / "cache" / "daily_kline"
+# ---- 年限宽度：每日站上 365 日均线的股票占比（2026-10-18）----
+# 数据源 = 全部个股日线缓存（t_io/cache/daily_kline/*.json）。全量解析约 5500 个文件 ≈10s（本机
+# 单线程实测），故：**后台线程算 + 内存/磁盘 SWR**，前端未就绪时短轮询。磁盘缓存按"数据日"复用，
+# 一天只算一次（盘中猎手回写当日 bar 后由 stale 标记触发重算）。
+_MA365_CACHE_FP = BASE / "t_io" / "cache" / "ma365_breadth.json"
+# 2026-10-18 owner：「给出 2024-09-01 至今的年限宽度」——本地日线缓存只有 800 根（起点≈2023-06），
+# 2024-09 的 MA365 回看窗口不够 ⇒ 由 scripts/experiment/ma365_breadth_hist_20240901.py
+# 用 GM 批量日线（900 根）一次性补算，落这个文件；面板"自2024-09-01"档直接读它。
+_MA365_HIST_FP = BASE / "t_io" / "cache" / "ma365_breadth_20240901.json"
+_MA365_STATE: dict = {"running": False, "done": 0, "total": 0, "started": 0.0}
+_MA365_LOCK = threading.Lock()
+_MA365_MEM: dict = {"ts": 0.0, "val": None}
+_MA365_MEM_TTL = 300.0
+_MA365_MAX_DAYS = 250          # 一次最多算 250 个交易日（前端按需切片）
+_MA365_WORKERS = 1             # JSON 解析持 GIL：实测 **1 线程 9.2s 反而快于 2 线程 14s**
+                               #（两线程互抢 GIL + 与 GUI 争），且更不容易造成界面卡顿
 # 建仓符合度（GO/时机列）的进程内结果缓存（2026-10-17 提速）。
 # 键 = (6位码, 日期, regime, 文件 mtime_ns)：**任何一项变就重算** ⇒ 猎手回写当日 bar 后
 # mtime 变 ⇒ 自动失效，不会拿陈旧序列算（那正是「误报破5日线」的老坑）。
@@ -638,7 +654,7 @@ _TUSHARE_MIN_LOCK = threading.Lock()
 # 2026-10-18：改为 **SWR**（`load_chart_realtime` 只读缓存、后台线程算）——
 #   真实进程里这个入口原要 1.5~3.0s（`gui_slow_calls.log`），每 3s 投递一次会拖死
 #   pywebview 的串行 `evaluate_js`。_CHART_LIVE_STATE 记录每个键是否已有 worker 在跑。
-_CHART_LIVE_TTL = 2.0
+_CHART_LIVE_TTL = 1.2           # 2026-10-19：持仓 K 线 2s 一拉 ⇒ TTL 必须 <2s 才能每拉都刷新
 _CHART_LIVE_MIN_KICK = 0.8      # 两次后台刷新之间的最小间隔（防抖）
 _CHART_LIVE_CACHE: dict = {}
 _CHART_LIVE_STATE: dict = {}
@@ -754,6 +770,75 @@ def _in_trading_session(now=None):
         return False
     hm = now.strftime("%H:%M")
     return ("09:15" <= hm <= "11:35") or ("12:55" <= hm <= "15:05")
+
+
+def _minute_bucket_end(now, minutes):
+    """当前**正在形成/刚完成**的分钟 K 线右端时间（A股 09:30-11:30 / 13:00-15:00）。
+
+    2026-10-19：持仓 K 线实时性加固。腾讯的 m30/m60 序列**不一定**在每个 tick 都更新
+    未收盘根的 close（观察到的行为是桶边界推进），而持仓用户盯的就是最后一根 —— 用实时
+    快照把最后一根补/修成当前价格，见 `_patch_forming_minute_bar`。
+    返回 datetime；09:30 前返回 None；午休返回 11:30；收盘后返回 15:00。
+    """
+    minutes = max(1, int(minutes))
+    am0 = now.replace(hour=9, minute=30, second=0, microsecond=0)
+    am1 = now.replace(hour=11, minute=30, second=0, microsecond=0)
+    pm0 = now.replace(hour=13, minute=0, second=0, microsecond=0)
+    pm1 = now.replace(hour=15, minute=0, second=0, microsecond=0)
+    if now < am0:
+        return None
+    if now > pm1:
+        return pm1
+    if am1 < now < pm0:
+        return am1
+
+    def _ceil(base, t):
+        elapsed = (t - base).total_seconds() / 60.0
+        k = int(math.ceil(elapsed / minutes - 1e-9))
+        k = max(1, min(k, 120 // minutes))
+        return base + timedelta(minutes=k * minutes)
+
+    return _ceil(am0, now) if now <= am1 else _ceil(pm0, now)
+
+
+def _patch_forming_minute_bar(df, minutes, quote, now):
+    """用实时快照把分钟 K 线的**最后一根**修正/补齐为当前正在形成的 bar。
+
+    · 末根时间 == 当前桶 ⇒ 修正 close/high/low（不动 volume，快照只有当日累计量）；
+    · 末根时间 < 当前桶 ⇒ 补一根 O=上一根收盘（当日首根用当日开盘）、C=现价、H/L=max/min(O,C)、量=0。
+    只在 `quote.ts_date == 今天` 时动手（休市/节假日不造根）。失败原样返回。
+    """
+    import pandas as pd
+    if df is None or getattr(df, "empty", True):
+        return df
+    if not quote or not quote.get("price"):
+        return df
+    today = now.strftime("%Y-%m-%d")
+    if str(quote.get("ts_date") or "") != today:
+        return df
+    px = float(quote.get("price") or 0)
+    if px <= 0:
+        return df
+    end = _minute_bucket_end(now, minutes)
+    if end is None:
+        return df
+    _end = pd.Timestamp(end)
+    last_t = pd.Timestamp(df["time"].iloc[-1])
+    if last_t >= _end:
+        if str(last_t)[:10] == today:
+            _i = df.index[-1]
+            _c = float(df.at[_i, "close"])
+            df.at[_i, "close"] = px
+            df.at[_i, "high"] = max(float(df.at[_i, "high"]), px, _c)
+            df.at[_i, "low"] = min(float(df.at[_i, "low"]), px, _c)
+        return df
+    if str(last_t)[:10] == today:
+        op = float(df["close"].iloc[-1])
+    else:
+        op = float(quote.get("open") or px)
+    row = {"time": _end, "open": op, "high": max(op, px), "low": min(op, px),
+           "close": px, "volume": 0.0}
+    return pd.concat([df, pd.DataFrame([row])], ignore_index=True)
 
 
 def _min_bars_slot_live(now=None):
@@ -1592,6 +1677,104 @@ LEAD_GAP = 2.0      # 龙头带宽（pp）：涨幅在"板块最高 − 2pp"以�
 MID_MULT = 5.0      # 中军门槛：成交额 ≥ 板块中位数 × 此倍数（资金主战场）
 
 
+def _market_latest_date():
+    """市场最新交易日：优先读指数日线缓存末行（1 个文件、零网络）。"""
+    for name in ("index_sh000001.json", "index_sz399001.json"):
+        try:
+            rows = (_load_json(_DAILY_KLINE_DIR / name, {}) or {}).get("rows") or []
+            if rows:
+                return str(rows[-1].get("date"))[:10]
+        except Exception:
+            pass
+    return datetime.now().strftime("%Y-%m-%d")
+
+
+def _compute_ma365_breadth(days=_MA365_MAX_DAYS):
+    """全部个股日线缓存 → 每日「收盘价 > MA365（年限）」的股票占比。
+
+    口径（2026-10-18 owner「每日站上年限的股票占比」）：
+      · **样本** = 日线缓存 ≥365 根、且**末行 = 最新交易日**的个股 —— 保证是当前仍有行情的票；
+        停牌/退市/陈旧缓存不进分母，避免把"没数据"算成"跌破年限"。
+      · 每日分母 = 该日有 bar 的样本股；分子 = 当日收盘 > 365 日均线。
+      · 只算最近 `days` 个交易日；MA365 用滚动和（O(n)），不建 DataFrame。
+      · 全程后台；**单线程 JSON 解析 ~10s**（5500 个文件），2 线程压一下 I/O。
+
+    返回 {computed_at, latest_date, series:[{date,above,total,pct}], coverage:{files,cohort}}。
+    """
+    from collections import defaultdict
+    from concurrent.futures import ThreadPoolExecutor
+    latest = _market_latest_date()
+    files = [p for p in _DAILY_KLINE_DIR.glob("*.json")
+             if p.stem.isdigit() and len(p.stem) == 6]
+    total = len(files)
+    with _MA365_LOCK:
+        _MA365_STATE.update({"done": 0, "total": total, "started": _time_mod.time()})
+    counts = defaultdict(lambda: [0, 0])       # date -> [above, total]
+    cohort = 0
+
+    def _one(p):
+        try:
+            rows = (_load_json(p, {}) or {}).get("rows") or []
+            if len(rows) < 365:
+                return None
+            if str(rows[-1].get("date"))[:10] != latest:
+                return None
+            closes = [float(r.get("close") or 0) for r in rows]
+            dates = [str(r.get("date"))[:10] for r in rows]
+        except Exception:
+            return None
+        n = len(closes)
+        start = max(364, n - days)
+        s = sum(closes[start - 364:start + 1])
+        out = []
+        for i in range(start, n):
+            ma = s / 365.0
+            if ma > 0 and closes[i] > 0:
+                out.append((dates[i], closes[i] > ma))
+            if i + 1 < n:
+                s += closes[i + 1] - closes[i - 364]
+        return out
+
+    done = 0
+    try:
+        with ThreadPoolExecutor(max_workers=_MA365_WORKERS) as ex:
+            for res in ex.map(_one, files):
+                done += 1
+                if res:
+                    cohort += 1
+                    for d, above in res:
+                        c = counts[d]
+                        c[1] += 1
+                        if above:
+                            c[0] += 1
+                if done % 100 == 0:
+                    with _MA365_LOCK:
+                        _MA365_STATE["done"] = done
+    except Exception:
+        pass
+
+    series = []
+    for d in sorted(counts):
+        above, tot = counts[d]
+        if tot:
+            series.append({"date": d, "above": above, "total": tot,
+                           "pct": round(above / tot * 100, 2)})
+    series = series[-days:]
+    rec = {"computed_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+           "latest_date": latest, "series": series,
+           "coverage": {"files": total, "cohort": cohort}}
+    try:
+        _MA365_CACHE_FP.parent.mkdir(parents=True, exist_ok=True)
+        tmp = _MA365_CACHE_FP.with_suffix(".tmp")
+        tmp.write_text(json.dumps(rec, ensure_ascii=False), encoding="utf-8")
+        tmp.replace(_MA365_CACHE_FP)
+    except Exception:
+        pass
+    with _MA365_LOCK:
+        _MA365_STATE["done"] = total
+    return rec
+
+
 class Api:
     """暴露给前端的 js_api 方法（pywebview 序列化返回值）。"""
 
@@ -2226,6 +2409,96 @@ class Api:
     # load_turnover_history）全部改走「内存热 → 磁盘快照 → 单飞刷新」三段式。
     # 删它的理由：超时后遗弃的 worker 继续跑完整慢路径、结果被丢弃（弃工），且每调用漏一个线程；
     # 单飞刷新让慢路径必然跑完并写缓存+落盘，不需要再"钉时间上界"。
+
+    # ---------- 年限宽度：每日站上 365 日均线的股票占比（2026-10-18） ----------
+    def load_ma365_breadth(self, days=120, start=None):
+        """**每日站上 365 日均线（年限）的股票占比** → 柱状图数据。SWR：主线程零计算。
+
+        全量解析 5500 个日线缓存 ≈10s ⇒ 后台线程算 + 磁盘缓存（按数据日复用）。
+        未就绪回 `warming`（带进度），前端短轮询；就绪后回 `series`（按 `days` 切片）。
+        样本/分母口径见 `_compute_ma365_breadth`（停牌/陈旧缓存不进分母，避免误算）。
+
+        `start`（2026-10-18）：如 "2024-09-01" ⇒ 读**预先补算好的长历史档**
+        （`_MA365_HIST_FP`，由 scripts/experiment 用 GM 900 根一次性补算）。本地 800 根缓存
+        凑不满 2024-09 的 MA365 回看窗口，必须在别处补历史。
+        """
+        if start:
+            try:
+                _rec = json.loads(_MA365_HIST_FP.read_text(encoding="utf-8"))
+                _series = [x for x in (_rec.get("series") or [])
+                           if str(x.get("date")) >= str(start)[:10]]
+            except Exception:
+                return _clean({"available": False, "historical": True, "error":
+                               "历史区间尚未计算：先运行 scripts/experiment/"
+                               "ma365_breadth_hist_20240901.py"})
+            if not _series:
+                return _clean({"available": False, "historical": True,
+                               "error": "历史档里没有该区间数据"})
+            return _clean({"available": True, "historical": True,
+                           "start": str(start)[:10],
+                           "latest_date": _rec.get("latest_date"),
+                           "computed_at": _rec.get("computed_at"),
+                           "series": _series, "coverage": _rec.get("coverage") or {},
+                           "last": _series[-1], "stale": False})
+        try:
+            days = max(30, min(int(days or 120), _MA365_MAX_DAYS))
+        except Exception:
+            days = 120
+        now = _time_mod.time()
+        with _MA365_LOCK:
+            mem = dict(_MA365_MEM)
+        if mem.get("val") and (now - mem.get("ts", 0.0)) < _MA365_MEM_TTL:
+            return _clean(self._ma365_payload(mem["val"], days, stale=False))
+
+        disk = None
+        try:
+            if _MA365_CACHE_FP.exists():
+                disk = json.loads(_MA365_CACHE_FP.read_text(encoding="utf-8"))
+        except Exception:
+            disk = None
+        latest = _market_latest_date()
+        if disk and disk.get("series"):
+            stale = str(disk.get("latest_date") or "") < latest
+            if stale:
+                self._kick_ma365_breadth()
+            return _clean(self._ma365_payload(disk, days, stale=stale))
+
+        self._kick_ma365_breadth()
+        with _MA365_LOCK:
+            st = dict(_MA365_STATE)
+        return _clean({"available": False, "warming": True, "days": days,
+                       "progress": {"done": int(st.get("done") or 0),
+                                    "total": int(st.get("total") or 0)}})
+
+    @staticmethod
+    def _ma365_payload(rec, days, stale=False):
+        series = (rec.get("series") or [])[-days:]
+        cov = rec.get("coverage") or {}
+        last = series[-1] if series else {}
+        return {"available": True, "stale": bool(stale), "days": days,
+                "latest_date": rec.get("latest_date") or last.get("date"),
+                "computed_at": rec.get("computed_at"), "series": series,
+                "coverage": cov, "last": last}
+
+    def _kick_ma365_breadth(self):
+        """后台算一次年限宽度（单飞）。仅后台线程跑；失败静默。"""
+        with _MA365_LOCK:
+            if _MA365_STATE.get("running"):
+                return
+            _MA365_STATE.update({"running": True, "done": 0, "total": 0,
+                                 "started": _time_mod.time()})
+
+        def _bg():
+            try:
+                val = _compute_ma365_breadth(_MA365_MAX_DAYS)
+                with _MA365_LOCK:
+                    _MA365_MEM.update({"ts": _time_mod.time(), "val": val})
+            except Exception:
+                pass
+            finally:
+                with _MA365_LOCK:
+                    _MA365_STATE["running"] = False
+        _th.Thread(target=_bg, daemon=True, name="ma365-breadth").start()
 
     def ping(self):
         """**投递层探针**（2026-10-10）：什么都不做，立即返回。
@@ -3580,6 +3853,7 @@ class Api:
 
         # 本地日线缓存（个股 `{code}.json` / 指数 `index_{code}.json`）
         rows = []
+        _df = None
         if not is_em:
             rows = self._daily_rows_cache_first(code_str, allow_network=True)
             if not rows:
@@ -3605,6 +3879,12 @@ class Api:
 
         # 本地缓存不可用 → 走网络拉 400 根
         if not rows:
+            # 2026-10-18：腾讯优先的 bounded 取数**明确返空**（代码不存在/已退市）⇒ 直接失败。
+            # 不能再落到下面的 provider（GM 优先）再等 4.5s 限流窗 —— 实测手输错码开图 7~11s，
+            # owner 反馈「搜寻后加载特别慢」。超时（_df is None）仍保留原兜底路径。
+            if not is_em and _df is not None and getattr(_df, "empty", True):
+                out["error"] = "无日线数据（代码可能不存在或已退市）"
+                return _clean(out)
             import os as _os, urllib.request as _ur
             for _k in ["http_proxy", "https_proxy", "HTTP_PROXY", "HTTPS_PROXY",
                        "ALL_PROXY", "all_proxy"]:
@@ -3829,7 +4109,7 @@ class Api:
                 out["series"] = self._live_bar_series(base, period, _now, _session,
                                                       out.get("quote") or {})
             else:
-                out["series"] = self._live_minute_series(base, period)
+                out["series"] = self._live_minute_series(base, period, out.get("quote") or {})
             if out["series"] and (out["series"].get("dates") or []):
                 _d = out["series"]["dates"]
                 _c = out["series"]["ohlc"][-1][1] if out["series"].get("ohlc") else None
@@ -3922,11 +4202,15 @@ class Api:
             pass
         return s
 
-    def _live_minute_series(self, code, period):
-        """分钟周期的实时序列：腾讯 mkline（含未收盘根）→ 该周期指标 → 序列。
+    def _live_minute_series(self, code, period, quote=None):
+        """分钟周期的实时序列：腾讯 mkline（含未收盘根）→ **用实时快照修正末根** → 指标 → 序列。
 
         10min 由 m5 合成（与仓位结构层同一个函数）。腾讯失败时退回 `_fetch_min_bars`
-        （tushare/磁盘，至少能出历史，前端会标明不是实时）。"""
+        （tushare/磁盘，至少能出历史，前端会标明不是实时）。
+
+        2026-10-19（owner：持仓 K 线要更实时）：腾讯 m30/m60 的**未收盘根不一定每个 tick
+        都更新 close**，而持仓用户盯的就是最后一根 ⇒ 用快照把末根补/修成当前价格
+        （`_patch_forming_minute_bar`），并让 MA/BOLL 等指标吃到这个实时收盘。"""
         _freq = {"min10": "10min", "min30": "30min", "min60": "60min"}.get(period)
         if not _freq:
             return None
@@ -3936,6 +4220,12 @@ class Api:
         if df is None or df.empty:
             return None
         df = df.tail(MIN_BARS_KEEP).reset_index(drop=True)
+        try:
+            df = _patch_forming_minute_bar(
+                df, {"min10": 10, "min30": 30, "min60": 60}.get(period, 30),
+                quote or {}, datetime.now())
+        except Exception:
+            pass
         d = _calc_ma_and_indicators(df.rename(columns={"time": "date"}))
         s = _to_series(d, intraday=True)
         try:
@@ -4066,13 +4356,15 @@ class Api:
 
         # 在线搜索：代码输入、或本地没有精确名命中时才打（精确名用户最常用，省一次网络）
         _need_online = bool(mcode) or not any(s == 0 for s, _, _ in _local)
+        _online_ok = False          # 在线搜索**成功返回**（哪怕 0 条）：区分"没这只票" vs "网络失败"
         if _need_online:
             try:
                 from core.market_data.tencent_provider import search_instruments
                 ok, got, _err = _run_bounded(
                     lambda: search_instruments(q, max(int(limit) * 2, 12)), 4.0)
             except Exception:
-                ok, got = False, None
+                ok, got, _err = False, None, True
+            _online_ok = bool(ok and not _err)
             if ok and got:
                 for it in got:
                     mk = str(it.get("market") or "").lower()
@@ -4094,8 +4386,27 @@ class Api:
         else:
             out["source"] = "local"
 
-        if _direct and not order:      # 在线没给结果（或失败）⇒ 退回裸码猜测
-            _add(_direct, names.get(_direct) or "", self._guess_instrument_type(_direct))
+        if _direct and not order:
+            # 裸 6 位码、在线没给结果：不能无脑打开（用户手输错码 688374 会开一张等 6s 的失败图）。
+            # ⚠️ 校验放在**在线搜索之后**：000300 这类裸码可能是**指数**（sh000300），
+            #    smartbox 能解析；先做股票快照校验会把它误判成"不存在"。
+            if _direct in names:
+                _add(_direct, names.get(_direct) or "", self._guess_instrument_type(_direct))
+            elif _online_ok:
+                # 在线成功但 0 条 ⇒ 用一次腾讯快照做存在性校验（有效 ~60ms，无效也快）
+                try:
+                    from core.market_data.tencent_provider import TencentProvider
+                    _okq, _snap, _ = _run_bounded(
+                        lambda: TencentProvider().snapshot([_direct]), 2.0)
+                except Exception:
+                    _okq, _snap = False, None
+                if _okq and _snap and _snap.get(_direct):
+                    _add(_direct, names.get(_direct) or "", self._guess_instrument_type(_direct))
+                else:
+                    out["error"] = f"未找到代码 {_direct}（请确认代码是否正确）"
+            else:
+                # 在线搜索本身失败（网络抖动）⇒ 保留猜测，不因网络问题误拒可能是对的代码
+                _add(_direct, names.get(_direct) or "", self._guess_instrument_type(_direct))
 
         results = [by_code[c] for c in order][:max(int(limit), 1)]
         out["results"] = results
@@ -4376,21 +4687,38 @@ class Api:
 
     def _fetch_daily_bounded(self, code, timeout=6.0):
         """带硬超时的日线取数（2026-10-06）：防止任何慢/挂死的数据源把 pywebview 主线程冻住。
-        超时返回 None（取数线程继续在后台跑完，不回收）。指数走 `index_daily`（`daily` 解不了指数码）。"""
+        超时返回 None（取数线程继续在后台跑完，不回收）。指数走 `index_daily`（`daily` 解不了指数码）。
+
+        2026-10-18：**K 线弹窗的单只取数改为腾讯优先**。实测同一台机器 `facade.daily()`（GM 优先）
+        对单只在 **0.8~6.6s** 之间波动（GM 单 worker + 4.5s 限流窗）；而腾讯日线走 keep-alive
+        + 磁盘缓存，通常 <0.5s。K 线是展示用途，不需要 GM 的"与自动盘同源"保证。
+        对**本地名表不认识的码**（用户手输错码，如 688374）腾讯返回空即**快速失败**——
+        不再白等 GM 的限流窗（实测从 6.4s 降到 <1s）。"""
         import concurrent.futures as _cf
         _c = str(code).split("_")[0]
         _is_index = _c[:2].lower() in ("sh", "sz", "bj") and _c[2:].isdigit()
         try:
             from core.market_data import get_provider
             from core.position_builder import fetch_daily_kline
-            prov = get_provider()
         except Exception:
             return None
 
         def _go():
             if _is_index:
                 # 传 end_date ⇒ provider **不回写**共享长历史缓存（否则 400 行会静默截短 index_*.json）
-                return prov.index_daily(_c, 400, end_date=datetime.now().strftime("%Y-%m-%d"))
+                return get_provider().index_daily(_c, 400,
+                                                  end_date=datetime.now().strftime("%Y-%m-%d"))
+            try:
+                from core.market_data.tencent_provider import TencentProvider
+                d = TencentProvider().daily(_c)
+                if d is not None and not d.empty:
+                    return d
+                # 腾讯**明确返空**（源里没有这只票，如手输错码 688374）⇒ 返回**空帧**（不是 None），
+                # 让调用方区分"明确没数据"与"超时"，从而快速失败、不再等 GM 的 4.5s 限流窗。
+                return d
+            except Exception:
+                pass
+            # 腾讯**异常**（网络/WAF）才走 GM 兜底 —— 此时 GM 有可能救回
             return fetch_daily_kline(_c)
         ex = _cf.ThreadPoolExecutor(max_workers=1)
         try:

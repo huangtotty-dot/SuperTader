@@ -208,6 +208,19 @@
       </div>
       <div id="liveBody"><div class="empty">非今日日期或尚无盘中数据</div></div>
     </div>
+    <div class="section" id="ma365-breadth">
+      <h2>📈 年限宽度
+        <span class="cell-dim" style="font-weight:normal;font-size:12px">
+          每日站上 365 日均线（年限）的股票占比 · 全部个股日线缓存（后台计算）
+        </span>
+        <span style="display:inline-flex;gap:4px;margin-left:10px;font-weight:400">
+          <button class="mini-btn primary" id="ma365RangeRecent" onclick="setMa365Range('recent')">近120日</button>
+          <button class="mini-btn" id="ma365RangeHist" onclick="setMa365Range('hist')">自2024-09-01</button>
+        </span>
+      </h2>
+      <div id="ma365Meta" class="cell-dim" style="font-size:11px;margin-bottom:6px"></div>
+      <div id="ma365Chart" class="echart" style="height:220px"></div>
+    </div>
     <div class="section" id="market-beacon">
       <!-- ⚠️ **必须是独立 section、不能长在 `#liveBody` 里**（2026-10-13 实测教训）：
            `refreshLive` 每 10s 整体覆写 `#liveBody` ⇒ 卡片连同 23 个板块表每 10s 被销毁重建
