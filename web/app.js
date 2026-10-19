@@ -683,6 +683,8 @@ function tabClear(baseId) {
 // tab 切换时 resize 所有 ECharts
 function resizeAllEch() {
   Object.values(echInstances).forEach(i => i.resize());
+  // 年限宽度图是独立实例（不在 echInstances 里）
+  if (ma365Inst) { try { ma365Inst.resize(); } catch (e) { } }
 }
 window.addEventListener("resize", () => {
   Object.values(echInstances).forEach(i => i.resize());
@@ -1881,6 +1883,177 @@ async function drawHunterGoChart() {
     ],
   }, { notMerge: true });
   hunterGoSig = sig;
+}
+
+/* ---- 年限宽度：每日站上 365 日均线的股票占比（2026-10-18）----
+   数据 = 后端 load_ma365_breadth（后台解析全池日线缓存 ≈10~20s，磁盘缓存按数据日复用）。
+   柱=当日占比（红=较前日升、绿=降，A 股惯例）；蓝线=5 日均值；灰虚线=50% 参考。
+   本面板**独立调度**（不挂在 renderLive 的 10s 重建里），未就绪 2.5s 短轮询、就绪 5 分钟一次。 */
+let ma365Data = null, ma365Inst = null, ma365Node = null, ma365Sig = "";
+let ma365Timer = null, ma365Inflight = false;
+let ma365Range = "recent";        // "recent"=近120日（本地缓存现算）| "hist"=自2024-09-01（GM 补算档）
+let ma365DataRange = null;        // 当前 ma365Data 属于哪一档
+const MA365_UP = "#f85149", MA365_DOWN = "#3fb950", MA365_MA = "#388bfd";
+
+function startMa365Breadth() {
+  if (ma365Timer) clearTimeout(ma365Timer);
+  ma365Timer = setTimeout(loadMa365Breadth, 600);
+}
+
+/* 区间切换：近120日（本地缓存现算，可能 10~20s）/ 自2024-09-01（GM 补算档，首次需脚本预计算） */
+function setMa365Range(r) {
+  ma365Range = r === "hist" ? "hist" : "recent";
+  ma365Data = null;
+  ma365DataRange = null;
+  const a = document.getElementById("ma365RangeRecent");
+  const b = document.getElementById("ma365RangeHist");
+  if (a) a.classList.toggle("primary", ma365Range === "recent");
+  if (b) b.classList.toggle("primary", ma365Range === "hist");
+  const meta = document.getElementById("ma365Meta");
+  if (meta) meta.textContent = ma365Range === "hist" ? "加载历史区间…" : "加载近120日…";
+  if (ma365Timer) { clearTimeout(ma365Timer); ma365Timer = null; }
+  loadMa365Breadth();
+}
+
+function _ma365MetaHtml(d, extra) {
+  const last = (d && d.last) || {};
+  const cov = (d && d.coverage) || {};
+  const bits = [];
+  if (d && d.historical && d.start) {
+    bits.push(`区间 <b>${esc(d.start)} → ${esc(d.latest_date || "")}</b>`);
+  } else if (d && d.latest_date) {
+    bits.push(`数据日 <b>${esc(d.latest_date)}</b>`);
+  }
+  if (last && last.pct != null) {
+    bits.push(`最新 <b>${fmt(last.pct, 2)}%</b>（${last.above}/${last.total} 只）`);
+  }
+  if (cov.cohort) {
+    bits.push(`样本 <b>${cov.cohort}</b> 只（≥365日历史且有当日行情 / 缓存 ${cov.files || "—"} 只）`);
+  } else if (cov.got) {
+    bits.push(`样本 <b>${cov.got}</b> 只（GM 补算 ${cov.got}/${cov.requested || "—"}）`);
+  }
+  if (d && d.computed_at) bits.push(`计算于 ${esc(d.computed_at)}`);
+  if (extra) bits.push(extra);
+  return bits.join(" · ");
+}
+
+async function loadMa365Breadth() {
+  if (ma365Inflight) return;
+  const el = document.getElementById("ma365Chart");
+  if (!el) return;
+  ma365Inflight = true;
+  let nextMs = 300000;
+  try {
+    const d = ma365Range === "hist"
+      ? await apiCall("load_ma365_breadth", 0, "2024-09-01")
+      : await apiCall("load_ma365_breadth", 120);
+    if (d && d.available && (d.series || []).length) {
+      ma365Data = d;
+      ma365DataRange = ma365Range;
+      renderMa365(d);
+      nextMs = d.historical ? 3600000 : (d.stale ? 30000 : 300000);
+    } else if (d && d.historical) {
+      const meta = document.getElementById("ma365Meta");
+      if (meta) meta.innerHTML = `<span class="down">${esc(d.error || "历史档未计算")}</span>`;
+      nextMs = 3600000;
+    } else if (d && d.warming) {
+      const p = d.progress || {};
+      const meta = document.getElementById("ma365Meta");
+      if (meta) meta.innerHTML = `⏳ 首次计算中…（全部个股日线缓存约 5500 个，实测 10~20s）`
+        + (p.total ? `　<b>${p.done || 0}/${p.total}</b>` : "");
+      nextMs = 2500;
+    } else {
+      const meta = document.getElementById("ma365Meta");
+      if (meta) meta.innerHTML = `<span class="down">年限宽度取数失败：${esc((d && d.error) || "未知")}</span>`;
+      nextMs = 30000;
+    }
+  } catch (e) {
+    nextMs = 30000;
+  } finally {
+    ma365Inflight = false;
+    if (ma365Timer) clearTimeout(ma365Timer);
+    ma365Timer = setTimeout(loadMa365Breadth, nextMs);
+  }
+}
+
+function renderMa365(d) {
+  const el = document.getElementById("ma365Chart");
+  if (!el) return;
+  const series = d.series || [];
+  const last = d.last || series[series.length - 1] || {};
+  const meta = document.getElementById("ma365Meta");
+  if (meta) meta.innerHTML = _ma365MetaHtml(d);
+  const sig = `${d.historical ? "H:" + (d.start || "") : "R"}|${d.latest_date}|${series.length}`
+    + `|${last.date}|${last.pct}|${(d.coverage || {}).cohort || (d.coverage || {}).got || ""}`;
+  const _canvasOk = !!(el.querySelector && el.querySelector("canvas"));
+  if (ma365Inst && ma365Node === el && _canvasOk && sig === ma365Sig) return;
+  if (ma365Inst && (ma365Node !== el || !_canvasOk)) {
+    try { ma365Inst.dispose(); } catch (e) { }
+    ma365Inst = null; ma365Node = null;
+  }
+  if (!ma365Inst) {
+    el.innerHTML = "";
+    ma365Inst = echarts.init(el);
+    ma365Node = el;
+  }
+  ma365Sig = sig;
+  const dates = series.map(x => String(x.date).slice(5));
+  const bars = series.map((x, i) => {
+    const prev = i > 0 ? series[i - 1].pct : x.pct;
+    return { value: x.pct,
+      itemStyle: { color: x.pct >= prev ? MA365_UP : MA365_DOWN, borderRadius: [3, 3, 0, 0] } };
+  });
+  const ma5 = series.map((x, i) => {
+    const w = series.slice(Math.max(0, i - 4), i + 1);
+    return +(w.reduce((a, b) => a + (b.pct || 0), 0) / w.length).toFixed(2);
+  });
+  ma365Inst.setOption({
+    backgroundColor: "transparent",
+    animation: false,
+    grid: { left: 46, right: 16, top: 26, bottom: 24 },
+    legend: { top: 0, left: 6, itemGap: 10, itemWidth: 14, itemHeight: 8,
+      textStyle: { color: "#8b949e", fontSize: 10 } },
+    tooltip: {
+      trigger: "axis", axisPointer: { type: "shadow" },
+      backgroundColor: "rgba(22,27,34,.96)", borderColor: "#30363d", borderWidth: 1,
+      borderRadius: 8, textStyle: { color: "#e6edf3", fontSize: 11 },
+      formatter: (ps) => {
+        const i = ps && ps[0] ? ps[0].dataIndex : -1;
+        const x = series[i];
+        if (!x) return "";
+        const prev = i > 0 ? series[i - 1] : null;
+        const chg = prev && prev.pct != null ? x.pct - prev.pct : null;
+        return `<div style="font-weight:bold;margin-bottom:3px">${esc(x.date)}</div>`
+          + `站上年限 <b style="color:${x.pct >= (prev ? prev.pct : x.pct) ? MA365_UP : MA365_DOWN}">${fmt(x.pct, 2)}%</b>`
+          + `<br>站上 ${x.above} / ${x.total} 只`
+          + (chg != null ? `<br>较前日 ${chg >= 0 ? "+" : ""}${chg.toFixed(2)}pp` : "")
+          + `<br><span style="color:#8b949e">5日均值 ${ma5[i]}% · 50%=一半股票站上年限</span>`;
+      },
+    },
+    xAxis: {
+      type: "category", data: dates,
+      axisLine: { lineStyle: { color: "#e4e8ef" } },
+      axisLabel: { color: "#8b949e", fontSize: 9,
+        interval: Math.max(0, Math.ceil(dates.length / 12) - 1) },
+    },
+    yAxis: {
+      type: "value", min: 0, max: 100,
+      axisLabel: { color: "#8b949e", fontSize: 9, formatter: "{value}%" },
+      splitLine: { lineStyle: { color: "rgba(139,148,158,.2)" } },
+    },
+    series: [
+      { name: "站上年限占比", type: "bar", data: bars,
+        barMaxWidth: series.length > 300 ? 7 : 12, barCategoryGap: "25%" },
+      { name: "5日均值", type: "line", data: ma5, symbol: "none", connectNulls: true,
+        lineStyle: { width: 1.5, color: MA365_MA }, itemStyle: { color: MA365_MA } },
+      { name: "50%参考", type: "line", data: [], silent: true,
+        markLine: { symbol: "none", silent: true,
+          data: [{ yAxis: 50, lineStyle: { color: "#8b949e", type: "dashed", width: 1 },
+                   label: { formatter: "50%", fontSize: 9, color: "#8b949e",
+                            position: "insideEndTop" } }] } },
+    ],
+  });
+  ma365Inst.resize();
 }
 
 /* ---- 盘中实时 ---- */
@@ -3375,6 +3548,16 @@ async function loadStockChartNow() {
       renderStockChart();
       // 整图可能比实时尾旧（分钟源/缓存/版本握手三层闸）⇒ 立刻用实时尾覆盖当前周期
       startStockChartLive();
+    } else if (d && d.error) {
+      // 明确失败（代码不存在/退市/无数据）⇒ 把原因显示出来，别让弹窗永远停在「加载中...」
+      if (stockChartInst) { try { stockChartInst.dispose(); } catch (e) { } stockChartInst = null; }
+      const el = document.getElementById("stockChart");
+      if (el) {
+        el.innerHTML = `<div class="empty" style="color:#f85149;padding-top:120px">${esc(d.error)}</div>`;
+      }
+      const ss = document.getElementById("stockSummary");
+      if (ss) ss.innerHTML = "";
+      stopStockChartLive();
     }
   } catch (e) { /* 静默 */ }
 }
@@ -3399,8 +3582,15 @@ function _chartLiveIntervalMs() {
   if (!open) return 30000;
   // 分钟图 3s（正在形成的那根就是实时价）；日/周/月 5s（当日一根动得慢，
   // 而后端日线序列是 800 根全量重算+序列化，约 250ms，别按 3s 打）
-  return (stockChartPeriod === "daily" || stockChartPeriod === "weekly"
-          || stockChartPeriod === "monthly") ? 5000 : 3000;
+  const isDaily = (stockChartPeriod === "daily" || stockChartPeriod === "weekly"
+                   || stockChartPeriod === "monthly");
+  // 2026-10-19 owner：**持仓股优先**（30min 体检表里的票就是要盯的）——
+  // 分钟 2s / 日线 3.5s，比普通票快一档；后端 SWR + 快照修正末根，2s 内有新价即可见。
+  const _c = String(stockChartCode || "").split("_")[0];
+  const _holding = !!_c && (state.quotes || [])
+    .some(q => String((q && q.code) || "").split("_")[0] === _c);
+  if (_holding) return isDaily ? 3500 : 2000;
+  return isDaily ? 5000 : 3000;
 }
 
 function startStockChartLive() {
@@ -3468,6 +3658,8 @@ async function openStockChart(code, name) {
   modal.style.display = "flex";
   stockChartCode = code;
   stockChartName = name;
+  // 换票先清空旧图数据：否则新代码加载失败时，实时尾会拿着上一只票的序列乱补
+  stockChartData = null;
   // 换股票：回到默认/所选区间的视窗，不沿用上一只的缩放
   stockChartZoom = null;
   stockChartLiveSig = {};
@@ -6402,7 +6594,14 @@ function switchTab(tab) {
   setTimeout(() => {
     resizeAllEch();
     if (tab === "hunter") { drawHunterGoChart(); renderHunterGoList(); loadSectorStars(); }
-    if (tab === "signals") { _turnoverSizeRetryN = 0; drawTurnoverHist(); }
+    if (tab === "signals") {
+      _turnoverSizeRetryN = 0; drawTurnoverHist();
+      if (ma365Inst) { try { ma365Inst.resize(); } catch (e) { } }
+      // 首次进 tab 才拉（默认在总览页，别让 5500 个日线缓存的解析和首屏抢 CPU）；
+      // 已有数据则就地重画（节点若被重建过，renderMa365 会自行重建实例）。
+      if (!ma365Data || ma365DataRange !== ma365Range) loadMa365Breadth();
+      else renderMa365(ma365Data);
+    }
   }, 80);
   // 2026-10-10: 切到选股猎手不再自动跑扫描（owner 需求6）——一律点「▶ 运行今日数据」触发。
   // 切到每日复盘：懒加载模型配置 + 已有复盘
@@ -6650,6 +6849,8 @@ async function init() {
   _pbSyncScanDate();   // 建仓面板日期选择器默认=当前选中日
   _oscSyncDayDate();   // 每日选股记录面板日期默认=当前选中日
   startPoll();
+  // 📈 年限宽度懒启动：默认页面是「总览」，面板在「手动盘」里 ⇒ 切到该 tab 再拉
+  //（首次要全量解析 5500 个日线缓存 ≈10~20s，别让它和首屏抢 CPU）。
   // 启动时今天可能尚无数据导致停在历史日 → 立即检查一次，今天就绪则自动切回
   maybeAutoSwitchToToday();
 }
