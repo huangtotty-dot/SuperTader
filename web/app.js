@@ -3977,7 +3977,7 @@ function renderStockSummary(d) {
   // 2026-10-20：分钟图的 MA5 是「5 根该周期 K 线」，与日线 5 日线不同；给一行口径说明。
   const _pcnHint = ({ min10: "10分", min30: "30分", min60: "60分" })[stockChartPeriod];
   const _ma5Hint = _pcnHint
-    ? `<span class="ss-item cell-dim" style="font-size:10px">金线=MA5(${_pcnHint}) · 蓝虚线=日线MA5</span>`
+    ? `<span class="ss-item cell-dim" style="font-size:10px">金线=MA5(${_pcnHint}) · 蓝虚线=日线MA5 · 紫虚线=日线MA10</span>`
     : "";
   document.getElementById("stockSummary").innerHTML = `
     <span class="ss-item">当前价: <b class="mono">${fmt(cur, 3)}</b>${_chgHtml}</span>
@@ -4058,6 +4058,17 @@ function renderStockChart() {
   const _dma5Arr = (((data.period_data || {}).daily || {}).ma
     ? data.period_data.daily.ma[0] : null);
   const _dma5 = (_dma5Arr && _dma5Arr.length) ? _dma5Arr[_dma5Arr.length - 1] : null;
+  // 2026-10-20 owner：「10 分钟周期内也显示 10 日均线」——同样画成日线 MA10 紫色虚线，
+  // 与金色周期 MA10（10 根 10min=100 分钟）区分开。
+  const _dma10Arr = (((data.period_data || {}).daily || {}).ma
+    ? data.period_data.daily.ma[1] : null);
+  const _dma10 = (_dma10Arr && _dma10Arr.length) ? _dma10Arr[_dma10Arr.length - 1] : null;
+  const dailyMa10Line = (_isIntradayPeriod && _dma10 != null) ? {
+    yAxis: _dma10,
+    lineStyle: { color: "#bc8cff", type: "dashed", width: 1.4, opacity: .95 },
+    label: { formatter: `日线MA10 ${fmt(_dma10, 2)}`, color: "#bc8cff",
+             fontSize: 9, position: "insideStartBottom" },
+  } : null;
   const dailyMa5Line = (_isIntradayPeriod && _dma5 != null) ? {
     yAxis: _dma5,
     lineStyle: { color: "#58a6ff", type: "dashed", width: 1.4, opacity: .95 },
@@ -4490,6 +4501,7 @@ function renderStockChart() {
           data: [
             ...(showLevels ? [...resistanceLines, ...supportLines] : []), currentLine,
             ...(dailyMa5Line ? [dailyMa5Line] : []),
+            ...(dailyMa10Line ? [dailyMa10Line] : []),
           ],
           label: { position: "insideEndTop" } } },
       ...divSeries,
@@ -6937,7 +6949,7 @@ function startLivePoll() {
 async function init() {
   // 首先获取 DOM 元素（此时 DOM 已完全加载）
   // 2026-10-20：启动标记（0ms）写进慢调用日志 ⇒ 能确认 WebView2 是否加载了新版 app.js
-  try { window.pywebview.api.report_slow_call("app_boot_20261020b", 0); } catch (e) { /* 静默 */ }
+  try { window.pywebview.api.report_slow_call("app_boot_20261020c", 0); } catch (e) { /* 静默 */ }
   dateSelect = document.getElementById("dateSelect");
   refreshBtn = document.getElementById("refreshBtn");
   autoPoll = document.getElementById("autoPoll");

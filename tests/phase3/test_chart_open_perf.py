@@ -61,8 +61,8 @@ class TestChartOpenPerf(unittest.TestCase):
     def test_frontend_cache_busted_and_boot_marked(self):
         """WebView2 可能缓存旧 app.js（改了跟没改一样）⇒ 带版本号 + 启动标记落日志。"""
         _html = (_ROOT / "web" / "index.html").read_text(encoding="utf-8")
-        self.assertIn("app.js?v=20261020b", _html)
-        self.assertIn("app_boot_20261020b", _JS)
+        self.assertIn("app.js?v=20261020c", _html)
+        self.assertIn("app_boot_20261020c", _JS)
         self.assertIn("K线加载失败", _JS)
 
 

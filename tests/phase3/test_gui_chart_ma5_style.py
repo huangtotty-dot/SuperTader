@@ -56,6 +56,14 @@ class TestChartMA5Style(unittest.TestCase):
         self.assertIn("...(dailyMa5Line ? [dailyMa5Line] : [])", _JS)
         self.assertIn("金线=MA5(${_pcnHint}) · 蓝虚线=日线MA5", _JS)
 
+    def test_intraday_daily_ma10_reference_line(self):
+        """2026-10-20 owner：「10分钟周期内也显示10日均线」——紫色虚线参考线。"""
+        self.assertIn("const dailyMa10Line", _JS)
+        self.assertIn("日线MA10 ${fmt(_dma10, 2)}", _JS)
+        self.assertIn('color: "#bc8cff"', _JS)
+        self.assertIn("...(dailyMa10Line ? [dailyMa10Line] : [])", _JS)
+        self.assertIn("紫虚线=日线MA10", _JS)
+
 
 if __name__ == "__main__":
     unittest.main()
