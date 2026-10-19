@@ -1,5 +1,5 @@
 {
-  "updated_at": "2026-10-16 15:19:10",
+  "updated_at": "2026-10-19 12:17:17",
   "open": {
     "603168": {
       "entry_date": "2026-10-16",
@@ -17,16 +17,6 @@
       "qty": 7000,
       "dev20": -0.061069,
       "gap": 0.06254653760238282,
-      "board": "大农业",
-      "days_held": 0,
-      "last_check_date": null
-    },
-    "601118": {
-      "entry_date": "2026-10-16",
-      "entry_price": 6.53,
-      "qty": 100,
-      "dev20": -0.049954,
-      "gap": 0.0532258064516129,
       "board": "大农业",
       "days_held": 0,
       "last_check_date": null
@@ -72,6 +62,22 @@
       "days_held_backfill_2026_10_15": "2026-10-15 13:00 策略进程管道堵塞挂死，14:50 卖侧缺席 ⇒ days_held 手工补记 1→2（与正常轨迹一致：10-16→3、10-19→4、10-20→5 到期）。详见 RECONCILE_2026-10-15.md 附录B。",
       "forced_exit_2026_10_16": "owner 2026-10-16 决策：S1 遗留仓位**无止损保护**（dev20 无法离线回填 ⇒ 非深超跌 ⇒ executor.build_sell_plan 永不判 sl5_deep，只能等满 5 日到期），而策略对其「持有 5 日」的假设本就不成立（非 OSC 选票）⇒ 今天按到期口径清掉。days_held 由 2 手工置 5，触发 14:50 的 horizon_expired 平仓（走策略自己的卖侧通道，优于终端手工单——后者会变成 orphan_fill 污染心跳 cash）。⚠️ 本字段是**唯一**能让它今天被卖出的杠杆；若撤回，把它删掉即可。",
       "exit_note_2026_10_16": "2026-10-16 14:50:01 SELL 1700股@59.993 成交（horizon_expired，pos_after=0，费123.41）。executor 轮询漏单（order_id 空）致 filled_qty=0 未自动回填，2026-10-16 15:1x 手工按成交回报回填剔除。"
+    },
+    "601118": {
+      "entry_date": "2026-10-16",
+      "entry_price": 6.53,
+      "qty": 100,
+      "dev20": -0.049954,
+      "gap": 0.0532258064516129,
+      "board": "大农业",
+      "days_held": 0,
+      "last_check_date": null,
+      "exit_date": "2026-10-19",
+      "exit_price": 6.5,
+      "exit_qty": 100,
+      "exit_reason": "pop_sell",
+      "exit_fee": 5.0,
+      "exit_note_2026_10_19": "2026-10-19 10:00:00 SELL 100股@6.74（10:00 high 触发 pop_sell），10:00:07.386 成交 @6.50（pos_after=0，费5.00；events_20261019.jsonl）。executor 轮询漏单（order_id 空）致 filled_qty=0，sells_morning 的 open_after 仍记 3；按账户心跳（10:00:59 positions 无 601118）手工回填剔除。"
     }
   },
   "backfill_note_2026_10_16": "三只 S1 遗留/深超跌票今日 14:50 全部卖出成交（events 为真源），因 order_id 空导致 executor 未回填，手工剔除至 closed。剩余 open = 今日新买 603168/600127/601118。"

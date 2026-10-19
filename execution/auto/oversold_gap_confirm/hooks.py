@@ -39,7 +39,7 @@ from functools import partial
 
 import pandas as pd
 
-from . import backfill, executor, prescreen
+from . import backfill, executor, preplace_probe, prescreen
 
 # 每日一次状态（原先散在 gm_main 的模块级全局 `_OSC_*_DONE_DATE` + `context._osc_candidates`）
 _STATE = {"date": None, "prepare": False, "buy": False, "sell": False,
@@ -53,6 +53,8 @@ _STATE = {"date": None, "prepare": False, "buy": False, "sell": False,
           "buy_done": False,  # 首轮已执行（落盘，防进程重启后重复下单）
           # 盘前宇宙/板块档位（2026-10-17）：只给「每日选股记录」落盘用
           "prescreen_meta": {},
+          # 预挂目标限价 S0 影子探测（2026-10-19，只记录不下单）
+          "probe_plan": False, "probe_final": False,
           }
 
 
@@ -60,7 +62,8 @@ def reset_day(today) -> None:
     """按日重置（宿主在日期切换时调用；同时清空预筛候选与替补状态）。"""
     _STATE.update(date=today, prepare=False, buy=False, sell=False,
                   morning=False, candidates={}, fills=None, pending=[], spares=[],
-                  done_codes=set(), backfill={}, buy_done=False, prescreen_meta={})
+                  done_codes=set(), backfill={}, buy_done=False, prescreen_meta={},
+                  probe_plan=False, probe_final=False)
 
 
 def _write_prescreen(rt, date, cand, meta) -> str | None:
@@ -675,6 +678,85 @@ def morning_sell_time(rt):
     return dtime(_hhmm // 100, _hhmm % 100)
 
 
+# ── 预挂目标限价 · S0 影子探测（2026-10-19，只记录不下单）────────────────
+# 设计：doc/research/2026-10-19_预挂目标限价_paper实验设计.md §六 S0
+# 开关默认关；开启后 09:31 写计划、10:00 用 60s 棒回填触及/参照价，不碰任何委托。
+def preplace_probe_enabled(rt) -> bool:
+    try:
+        return bool(rt.param("osc_preplace_probe_enabled", False))
+    except Exception:
+        return False
+
+
+def probe_preplace_plan(rt, now, today) -> int:
+    """09:31：把当日 D+1 持仓的目标限价落盘（时间戳证明"盘前已知"）。"""
+    if not preplace_probe_enabled(rt):
+        return 0
+    try:
+        _book = executor.load_book(rt.book_dir)
+        _target = float(rt.param("osc_pop_target_pct", 0.03))
+        _rows = preplace_probe.build_plan(_book.get("open") or {}, today,
+                                          target_pct=_target)
+        preplace_probe.write(rt.book_dir, today, "plan", _rows, _target)
+        rt.audit({"event": "osc_preplace_probe_plan", "date": str(today),
+                  "n": len(_rows), "codes": [r["code"] for r in _rows],
+                  "time": str(now)})
+        if _rows:
+            rt.log("[OSC] 预挂探测(计划): %s" % " · ".join(
+                "%s@%.2f" % (r["code"], r["limit_px"]) for r in _rows))
+        return len(_rows)
+    except Exception as _e:
+        rt.log(f"[OSC] 预挂探测(计划)失败（不影响主循环）: {_e}")
+        return 0
+
+
+def probe_preplace_final(rt, context, now, today) -> int:
+    """10:00：只用 60s 行情回填——触及时点 / 10:00 参照价 / 保守成交口径。"""
+    if not preplace_probe_enabled(rt):
+        return 0
+    try:
+        _target = float(rt.param("osc_pop_target_pct", 0.03))
+        _payload = preplace_probe.read(rt.book_dir, today) or {}
+        _rows = _payload.get("rows") if _payload.get("phase") == "plan" else None
+        if not _rows:                      # 进程在 09:31 之后才启动：重建计划（无前视）
+            _book = executor.load_book(rt.book_dir)
+            _rows = preplace_probe.build_plan(_book.get("open") or {}, today,
+                                              target_pct=_target)
+        if not _rows:
+            preplace_probe.write(rt.book_dir, today, "final", [], _target,
+                                 extra={"note": "no_d1_positions"})
+            return 0
+        _codes = [r["code"] for r in _rows]
+        _syms = [rt.code_to_gm(c) for c in _codes]
+        _start = now.strftime("%Y-%m-%d 09:25:00")
+        _end = now.strftime("%Y-%m-%d %H:%M:%S")
+        _df = rt.sdk_call("osc_preplace_probe_bars", partial(
+            rt.gm.history, symbol=_syms, frequency="60s", start_time=_start, end_time=_end,
+            fields="symbol,eob,high,low,close", adjust=rt.gm.ADJUST_PREV, df=True))
+        _cut = _dt.datetime.combine(now.date(), morning_sell_time(rt))
+        _enriched = preplace_probe.enrich(_rows, _df, cutoff=_cut)
+        preplace_probe.write(rt.book_dir, today, "final", _enriched, _target,
+                             extra={"cutoff": _cut.strftime("%Y-%m-%d %H:%M:%S")})
+        rt.audit({"event": "osc_preplace_probe_final", "date": str(today),
+                  "n": len(_enriched),
+                  "touched": sum(1 for r in _enriched if r.get("touch_time")),
+                  "conservative": sum(1 for r in _enriched if r.get("conservative_fill")),
+                  "time": str(now)})
+        rt.log("[OSC] 预挂探测(完成): " + " · ".join(
+            "%s 目标%.2f 触及=%s 10:00=%.2f" %
+            (r["code"], r["limit_px"], r.get("touch_time") or "否",
+             r.get("px_10am_ref") or 0) for r in _enriched))
+        return len(_enriched)
+    except Exception as _e:
+        rt.log(f"[OSC] 预挂探测(完成)失败（不影响主循环）: {_e}")
+        try:
+            rt.audit({"event": "osc_preplace_probe_fail", "error": str(_e)[:200],
+                      "time": str(now)})
+        except Exception:
+            pass
+        return 0
+
+
 def _reconcile_book(rt, context) -> None:
     """卖前先把账本按**账户实际持仓**夹紧（挂单未成交/部分成交都会让账本虚高）。
 
@@ -756,6 +838,13 @@ def on_bar(rt, context, now, today, t) -> None:
             prepare(rt, context, now, today)
         except Exception as _e:
             rt.log(f"[OSC] 盘前预筛失败（不阻断主循环）: {_e}")
+    # 09:31 预挂目标限价 S0 探测（只落盘计划，不下单）
+    if live and t >= dtime(9, 31) and not _STATE["probe_plan"] and preplace_probe_enabled(rt):
+        _STATE["probe_plan"] = True
+        try:
+            probe_preplace_plan(rt, now, today)
+        except Exception as _e:
+            rt.log(f"[OSC] 预挂探测(计划)失败（不阻断主循环）: {_e}")
     # 10:00 早盘冲高卖（**先于买侧**：先回笼现金再买）
     if (live and sell_enabled(rt) and t >= morning_sell_time(rt)
             and not _STATE["morning"]):
@@ -778,6 +867,14 @@ def on_bar(rt, context, now, today, t) -> None:
                 try_buy(rt, context, now)
             except Exception as _e:
                 rt.log(f"[OSC] 10:00 买侧失败（不阻断主循环）: {_e}")
+    # 10:00 预挂目标限价 S0 探测完成（**排在卖侧/买侧之后**：交易时效优先；只读行情）
+    if (live and preplace_probe_enabled(rt) and t >= morning_sell_time(rt)
+            and not _STATE["probe_final"]):
+        _STATE["probe_final"] = True
+        try:
+            probe_preplace_final(rt, context, now, today)
+        except Exception as _e:
+            rt.log(f"[OSC] 预挂探测(完成)失败（不阻断主循环）: {_e}")
     # 10:08 / 10:14 补单轮（买不进替补，2026-10-14）—— 这两格是"每日一次 + 时间窗"
     for _i, _bt in enumerate(backfill_times(rt)):
         if (live and _STATE.get("buy") and t < backfill_deadline(rt)

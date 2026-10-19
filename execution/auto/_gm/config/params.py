@@ -262,6 +262,10 @@ PARAMS = {
     "osc_pop_target_pct": 0.03,      # 次日早盘冲高卖目标（+3%，止盈非止损）
     "osc_morning_sell_time_hhmm": 1000,  # 早盘冲高卖检查时点（10:00，与买侧同刻）
     "osc_sell_time_hhmm": 1450,      # 收盘止损检查时点（14:50）
+    # ── 预挂目标限价 S0 影子探测（2026-10-19，只记录不下单）──
+    # 开启后 09:31 落盘计划、10:00 用 60s 棒回填触及/参照价到 preplace_probe_{date}.json。
+    # 设计与判据：doc/research/2026-10-19_预挂目标限价_paper实验设计.md
+    "osc_preplace_probe_enabled": True,    # S0 影子探测（2026-10-19 owner 批准开始）；只记录不下单
     # 文档：doc/research/2026-10-10_超跌跳空确认第一轮实验结论.md §8（接线定稿）
 }
 
