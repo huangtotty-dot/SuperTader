@@ -23,7 +23,9 @@ class TestBuildScanMa5Flag(unittest.TestCase):
     def test_renderer_exists_with_green_red(self):
         self.assertIn("function ma5FlagCellHtml(", _JS)
         self.assertIn('color:#3fb950">站上', _JS)
-        self.assertIn('color:#f85149">破位', _JS)
+        # 建仓表默认红「破位」；猎手表通过参数改成黄「未站上」
+        self.assertIn('const _bc = belowColor || "#f85149";', _JS)
+        self.assertIn('const _bt = belowText || "破位";', _JS)
 
     def test_build_scan_row_uses_above_ma5(self):
         self.assertIn("${ma5FlagCellHtml(_tf.above_ma5, _tf.above_ma20)}", _JS)
@@ -42,6 +44,20 @@ class TestBuildScanMa5Flag(unittest.TestCase):
             '>20日线<br><span style="font-size:9px;opacity:.6">观察</span></th>\n'
             '          <th class="num" title="实时价 + 实时涨幅（随行情每 10s 刷新）。取不到显示 —',
             _JS, "建仓表表头应已改为 5日线")
+
+
+class TestHunterMa5Flag(unittest.TestCase):
+    """2026-10-20 owner：选股猎手个股同样按 5 日线标记——站上=绿、其它=黄。"""
+
+    def test_hunter_row_uses_ma5_green_yellow(self):
+        self.assertIn(
+            '${ma5FlagCellHtml(s.build_above_ma5, s.build_above_ma20, '
+            'undefined, "#d29922", "未站上")}', _JS)
+        self.assertIn("background:rgba(210,153,34,.14);", _JS)
+        self.assertIn('const _ab5 = s.build_above_ma5;', _JS)
+
+    def test_hunter_header_is_5day(self):
+        self.assertIn('>5日线<br><span style="font-size:9px;opacity:.6">规则口径</span></th>', _JS)
 
 
 if __name__ == "__main__":

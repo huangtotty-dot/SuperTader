@@ -2594,11 +2594,14 @@ const MA20_OBS_TIP = "是否站上 20 日线。**观察列，不驱动任何判�
 /* 【5日线状态】（2026-10-19 owner：建仓信号扫描「只要站上 5 日均线就显示绿色，其它红色」）。
    与得分里的 −70 悬崖**同一口径**（都走收盘价 vs MA5），所以本列故意用绿/红而不是灰色：
    站上=绿、未站上=红、无数据=—（不猜）。20 日线状态降级到 tooltip，不占列。 */
-function ma5FlagCellHtml(v, ma20v, missingTip) {
+function ma5FlagCellHtml(v, ma20v, missingTip, belowColor, belowText) {
+  // `belowColor/belowText`（2026-10-20）：建仓表沿用红「破位」；选股猎手用黄「未站上」。
+  const _bc = belowColor || "#f85149";
+  const _bt = belowText || "破位";
   const _m20 = (ma20v === true) ? "站上" : (ma20v === false) ? "破位" : "—";
   const _tip = "现价 vs 5 日简单均线（得分里 −70 悬崖的同一口径）。20 日线：" + _m20 + "。观察列，不参与其它判定。";
   if (v === true) return `<td style="text-align:center" title="${esc("站上 5 日线。" + _tip)}"><b style="color:#3fb950">站上</b></td>`;
-  if (v === false) return `<td style="text-align:center" title="${esc("未站上 5 日线。" + _tip)}"><b style="color:#f85149">破位</b></td>`;
+  if (v === false) return `<td style="text-align:center" title="${esc("未站上 5 日线。" + _tip)}"><b style="color:${_bc}">${_bt}</b></td>`;
   return `<td style="text-align:center" title="${esc(missingTip || "无该特征（旧数据/未扫描）")}"><span class="cell-dim">—</span></td>`;
 }
 
@@ -5630,8 +5633,12 @@ function renderHunter(h) {
       const tagsTxt = s.tags && s.tags.length
         ? s.tags.map(t => tagBadge(t)).join(" ")
         : `<span class="cell-dim" style="font-size:11px" title="技术标签按板块后台批量计算（约 30~60 秒），完成后自动填上">⏳ 标签</span>`;
-      // 行强调优先级：**梯队色 > 得分色**（梯队要显眼；其余行仍按得分着色）
-      const _rowBg = tierRowStyle(s.tier)
+      // 2026-10-20 owner：选股猎手个股行也按 5 日线着色——**站上=绿、其它=黄**。
+      // 未知（建仓符合度还没算到）才回退梯队/得分色，避免把「没数据」画成「未站上」。
+      const _ab5 = s.build_above_ma5;
+      const _ma5Bg = (_ab5 === true) ? "background:rgba(63,185,80,.10);"
+        : (_ab5 === false) ? "background:rgba(210,153,34,.14);" : "";
+      const _rowBg = _ma5Bg || tierRowStyle(s.tier)
         || ((_sc === 0) ? "background:rgba(248,81,73,.12);"
           : (_sc !== null && _sc > 0) ? "background:rgba(63,185,80,.07);" : "");
       const _px = (s.build_price != null) ? fmt(s.build_price, 2) : "—";
@@ -5663,7 +5670,7 @@ function renderHunter(h) {
         })()}
         <td class="num">${_metTxt}</td>
         <td style="text-align:center" title="${esc("日线阶段" + "。" + DAY_STAGE_TIP)}">${_stageTxt}</td>
-        ${ma20FlagCellHtml(s.build_above_ma20)}
+        ${ma5FlagCellHtml(s.build_above_ma5, s.build_above_ma20, undefined, "#d29922", "未站上")}
         ${ma5CellHtml((hunterStructCache[category] || {})[s.code], "h-ma5")}
         <td class="num h-price" data-hcode="${esc(s.code)}" title="**实时**价/涨幅（展开时取、10s 刷新）。⚠️ 刻意不显示扫描时的旧值：扫描可能隔了几天，旧涨幅会严重误导（实测 300821 旧值 +20.01% vs 实时 +5.83%）">${hunterPriceHtml(null)}</td>
         <td class="h-tags">${tagsTxt}</td>
@@ -5826,7 +5833,7 @@ function renderHunter(h) {
             <th class="num" title="韭研 D1~D12 打分合计（选股猎手的原始评分，满分 47；D3/D10 未在 config 启用）。⚠️ 与左边「得分」不是一回事：那个是建仓综合得分 0~100。下方小字＝命中的维度与分数。&#10;D1 强势形态且新高 8 · D2 强势形态 6 · D4 首板资金池 3 · D5 潜在突破10日 2 · D6 潜在突破5日 1 · D7 持续性(二板+) 5 · D8 情绪分数(一字板) 6 · D9 活跃程度(近10日有涨停) 3 · D11 刚站上5日线 2 · D12 趋势性(站上20日线) 8 · 大额(成交额≥50亿) 3">D分<br><span style="font-size:9px;opacity:.6">D1~D12</span></th>
             <th class="num" title="时机门控通过数（市场有方向/多头结构/回撤到位）">通过</th>
             <th title="日线四阶段（描述状态，紧挨得分/通过便于对照）：②抬升/③派发/④下跌/①蓄势。⚠️ 实测横截面IC与直觉相反——抬升/追高前瞻更差(IC −0.031~−0.042, t=−12~−15)、下跌/超跌前瞻更好(IC +0.020~+0.034, t=+7~+12)，分半窗两段同号；效应量小(IC≈0.04)仅作相对强弱参照">日线阶段</th>
-            <th title="是否站上 20 日线（观察列，不驱动任何判定）。⚠️「得分」里的 −70 悬崖扣分走的是 **5 日线**口径（owner 决定保留），与本列无关 ⇒ 本列不显示 −70。另注：5 日线该项实测横截面 IC 为负(站上MA5 −0.018, t=−6.9)">20日线<br><span style="font-size:9px;opacity:.6">观察</span></th>
+            <th title="现价 vs 5 日简单均线（与得分里 −70 悬崖同一口径）。选股猎手口径：**站上=绿、其它=黄**（建仓信号扫描用绿/红）；20 日线状态放在单元格 tooltip。观察列，不驱动判定">5日线<br><span style="font-size:9px;opacity:.6">规则口径</span></th>
             <th title="30 分钟 K 线的 5 根均线（现价站上/跌破 + 距上次翻转多少根）。**与「持仓 30 分钟风险体检」同源**（position_structure，同一缓存）。⚠️ 实测无前瞻信息量 ⇒ 只展示，不参与任何判定">30m MA5<br><span style="font-size:9px;opacity:.6">仅展示</span></th>
             <th class="num" title="**实时**价 + 实时涨幅（展开时取、10s 刷新；取不到显示 ⏳/—）。⚠️ 刻意不显示扫描时的旧价旧涨幅——扫描可能隔了几天，旧涨幅会严重误导">价<br><span style="font-size:9px;opacity:.6">实时涨幅</span></th>
             <th>技术标签</th>
