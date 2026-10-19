@@ -4215,6 +4215,18 @@ function renderStockChart() {
         ? { width: 2.6, color: _color, type: "solid",
             shadowBlur: 6, shadowColor: "rgba(255,209,102,.55)" }
         : { width: 1, color: _color },
+      // 2026-10-20 owner：「用文字标记出 5 日均线」——线尾挂一个金色胶囊「MA5 数值」。
+      // offset 往左上挪，避开右侧 grid 边距，也尽量不压最后一根蜡烛。
+      endLabel: _isMA5 ? {
+        show: true,
+        formatter: (p) => {
+          const v = p && p.value;
+          return (v == null || isNaN(Number(v))) ? "MA5" : `MA5 ${fmt(v, 2)}`;
+        },
+        color: "#0d1117", backgroundColor: MA5_COLOR,
+        padding: [2, 5], borderRadius: 3, fontSize: 10, fontWeight: "bold",
+        offset: [-8, -10],
+      } : undefined,
       // ⚠️ **必须同时给 itemStyle.color**（2026-10-16 owner 报"图例颜色和线不一样"）：
       //    ECharts 的**图例图标**取 `itemStyle.color`，只给 `lineStyle.color` 时图例回落到
       //    默认调色板 ⇒ 图例是 A 色、线是 B 色。凡是想让图例跟着线走的 series 都要两处同色。

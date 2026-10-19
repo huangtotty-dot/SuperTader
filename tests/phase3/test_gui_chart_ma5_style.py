@@ -31,6 +31,12 @@ class TestChartMA5Style(unittest.TestCase):
         self.assertIn("const _color = _isMA5 ? MA5_COLOR : MA_COLORS[i];", _JS)
         self.assertIn("itemStyle: { color: _color }", _JS)
 
+    def test_ma5_text_label(self):
+        """线尾文字标记（owner 2026-10-20：「用文字标记出5日均线」）。"""
+        self.assertIn("endLabel: _isMA5 ? {", _JS)
+        self.assertIn("`MA5 ${fmt(v, 2)}`", _JS)
+        self.assertIn("backgroundColor: MA5_COLOR", _JS)
+
 
 if __name__ == "__main__":
     unittest.main()
