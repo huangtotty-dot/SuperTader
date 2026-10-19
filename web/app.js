@@ -4201,14 +4201,26 @@ function renderStockChart() {
     })
     .filter(Boolean);
 
-  const maSeries = period.ma.map((maArr, i) => ({
-    name: `MA${[5,10,20,30,60,180,365][i]}`, type: "line", data: maArr, symbol: "none",
-    lineStyle: { width: 1, color: MA_COLORS[i] },
-    // ⚠️ **必须同时给 itemStyle.color**（2026-10-16 owner 报"图例颜色和线不一样"）：
-    //    ECharts 的**图例图标**取 `itemStyle.color`，只给 `lineStyle.color` 时图例回落到
-    //    默认调色板 ⇒ 图例是 A 色、线是 B 色。凡是想让图例跟着线走的 series 都要两处同色。
-    itemStyle: { color: MA_COLORS[i] }, connectNulls: true,
-  }));
+  // 2026-10-20 owner：「K线图打开任意周期，用特殊线型标记 5 日均线」。
+  // MA5 单独用**金色加粗 + 微光**（深色画布上最跳），其余均线保持 1px 细线；
+  // z 抬高让它压在蜡烛/其它均线之上，任何周期切过去都能一眼找到。
+  const MA5_COLOR = "#ffd166";
+  const maSeries = period.ma.map((maArr, i) => {
+    const _isMA5 = i === 0;
+    const _color = _isMA5 ? MA5_COLOR : MA_COLORS[i];
+    return {
+      name: `MA${[5,10,20,30,60,180,365][i]}`, type: "line", data: maArr, symbol: "none",
+      z: _isMA5 ? 5 : 2,
+      lineStyle: _isMA5
+        ? { width: 2.6, color: _color, type: "solid",
+            shadowBlur: 6, shadowColor: "rgba(255,209,102,.55)" }
+        : { width: 1, color: _color },
+      // ⚠️ **必须同时给 itemStyle.color**（2026-10-16 owner 报"图例颜色和线不一样"）：
+      //    ECharts 的**图例图标**取 `itemStyle.color`，只给 `lineStyle.color` 时图例回落到
+      //    默认调色板 ⇒ 图例是 A 色、线是 B 色。凡是想让图例跟着线走的 series 都要两处同色。
+      itemStyle: { color: _color }, connectNulls: true,
+    };
+  });
 
   // 复用实例：原来每次渲染都 dispose+init 整个 ECharts（每 10s 一次 + 每次勾选图层一次），
   // 1650 根K线 × ~16 条 series 重建一遍 ⇒ 明显卡顿。改为只 setOption，用 replaceMerge:["series"]
