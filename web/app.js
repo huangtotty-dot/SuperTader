@@ -3944,8 +3944,14 @@ function renderStockSummary(d) {
   const chDesc = ch.direction === "flat" ? ""
     : `<span class="cell-dim" style="font-size:11px">${ch.direction === "up" ? "上行" : "下行"}通道 斜率${ch.norm_slope_pct != null ? (ch.norm_slope_pct >= 0 ? '+' : '') + fmt(ch.norm_slope_pct, 2) : '—'}%/日 · 40日${ch.ret_40d >= 0 ? '+' : ''}${fmt(ch.ret_40d, 1)}% · 现价位于通道${ch.pos_pct != null ? fmt(ch.pos_pct, 0) : '—'}%</span>`
       + (ch.reversal ? `<span class="badge signal" style="margin-left:6px">↺ 通道反转${ch.reversal === "up_to_down" ? " 上→下" : " 下→上"}</span>` : "")
+  // 2026-10-20：分钟图的 MA5 是「5 根该周期 K 线」，与日线 5 日线不同；给一行口径说明。
+  const _pcnHint = ({ min10: "10分", min30: "30分", min60: "60分" })[stockChartPeriod];
+  const _ma5Hint = _pcnHint
+    ? `<span class="ss-item cell-dim" style="font-size:10px">金线=MA5(${_pcnHint}) · 蓝虚线=日线MA5</span>`
+    : "";
   document.getElementById("stockSummary").innerHTML = `
     <span class="ss-item">当前价: <b class="mono">${fmt(cur, 3)}</b>${_chgHtml}</span>
+    ${_ma5Hint}
     <span class="ss-item">通道: ${chTxt} ${chDesc}</span>
     <span class="ss-item">关键压力: ${resTxt}</span>
     <span class="ss-item">关键支撑: ${supTxt}</span>
@@ -4009,6 +4015,19 @@ function renderStockChart() {
     lineStyle: { color: _nowCol, width: 1, type: "dashed", opacity: .85 },
     label: { formatter: ` ${cur} `, color: "#fff", backgroundColor: _nowCol,
              padding: [2, 6], borderRadius: 3, fontSize: 9, position: "insideEndTop" } };
+
+  // 2026-10-20（北方华创案例）：分钟图的「MA5」= 5 根该周期 K 线（10min→50分钟），
+  // 与「日线 5 日线」不是同一条线。分钟 tab 额外画一条**日线 MA5**蓝色虚线参考线，
+  // 这样「日线站上 MA5、10 分钟落在 MA5 下方」能同时看见，不再误读。
+  const _dma5Arr = (((data.period_data || {}).daily || {}).ma
+    ? data.period_data.daily.ma[0] : null);
+  const _dma5 = (_dma5Arr && _dma5Arr.length) ? _dma5Arr[_dma5Arr.length - 1] : null;
+  const dailyMa5Line = (_isIntradayPeriod && _dma5 != null) ? {
+    yAxis: _dma5,
+    lineStyle: { color: "#58a6ff", type: "dashed", width: 1.4, opacity: .95 },
+    label: { formatter: `日线MA5 ${fmt(_dma5, 2)}`, color: "#58a6ff",
+             fontSize: 9, position: "insideStartTop" },
+  } : null;
 
   // 黄金分割（斐波那契回撤/扩展）：跟随当前 Tab；后端已按周期各算一份
   const fib = (period.fib && period.fib.available) ? period.fib : null;
@@ -4207,7 +4226,13 @@ function renderStockChart() {
   // 2026-10-20 owner：「K线图打开任意周期，用特殊线型标记 5 日均线」。
   // MA5 单独用**金色加粗 + 微光**（深色画布上最跳），其余均线保持 1px 细线；
   // z 抬高让它压在蜡烛/其它均线之上，任何周期切过去都能一眼找到。
+  // ⚠️ 分钟周期的 MA5 = **5 根该周期 K 线**（10min→50分钟），不是日线 5 日线！
+  //    文字标记必须带周期后缀，并在分钟图另画一条「日线MA5」蓝色虚线，避免两者混淆。
   const MA5_COLOR = "#ffd166";
+  const _periodCn = ({ daily: "日", weekly: "周", monthly: "月",
+    min10: "10分", min30: "30分", min60: "60分" })[stockChartPeriod] || stockChartPeriod;
+  const _isIntradayPeriod = stockChartPeriod === "min10" || stockChartPeriod === "min30"
+    || stockChartPeriod === "min60";
   const maSeries = period.ma.map((maArr, i) => {
     const _isMA5 = i === 0;
     const _color = _isMA5 ? MA5_COLOR : MA_COLORS[i];
@@ -4224,7 +4249,8 @@ function renderStockChart() {
         show: true,
         formatter: (p) => {
           const v = p && p.value;
-          return (v == null || isNaN(Number(v))) ? "MA5" : `MA5 ${fmt(v, 2)}`;
+          const name = `MA5(${_periodCn})`;
+          return (v == null || isNaN(Number(v))) ? name : `${name} ${fmt(v, 2)}`;
         },
         color: "#0d1117", backgroundColor: MA5_COLOR,
         padding: [2, 5], borderRadius: 3, fontSize: 10, fontWeight: "bold",
@@ -4431,6 +4457,7 @@ function renderStockChart() {
         markLine: { symbol: "none",
           data: [
             ...(showLevels ? [...resistanceLines, ...supportLines] : []), currentLine,
+            ...(dailyMa5Line ? [dailyMa5Line] : []),
           ],
           label: { position: "insideEndTop" } } },
       ...divSeries,

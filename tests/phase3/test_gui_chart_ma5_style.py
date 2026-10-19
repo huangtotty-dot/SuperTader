@@ -34,8 +34,18 @@ class TestChartMA5Style(unittest.TestCase):
     def test_ma5_text_label(self):
         """线尾文字标记（owner 2026-10-20：「用文字标记出5日均线」）。"""
         self.assertIn("endLabel: _isMA5 ? {", _JS)
-        self.assertIn("`MA5 ${fmt(v, 2)}`", _JS)
+        self.assertIn("const _periodCn =", _JS)
+        self.assertIn("`MA5(${_periodCn})`", _JS)
         self.assertIn("backgroundColor: MA5_COLOR", _JS)
+
+    def test_intraday_daily_ma5_reference_line(self):
+        """分钟图额外画「日线MA5」蓝虚线，避免把 5 根 10min 的 MA5 误当 5 日线。"""
+        self.assertIn("const _isIntradayPeriod", _JS)
+        self.assertIn("const dailyMa5Line", _JS)
+        self.assertIn("日线MA5 ${fmt(_dma5, 2)}", _JS)
+        self.assertIn('color: "#58a6ff"', _JS)
+        self.assertIn("...(dailyMa5Line ? [dailyMa5Line] : [])", _JS)
+        self.assertIn("金线=MA5(${_pcnHint}) · 蓝虚线=日线MA5", _JS)
 
 
 if __name__ == "__main__":
