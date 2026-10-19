@@ -6,8 +6,9 @@
 - 净值法：equity = Σ(持仓 qty × EOD 收盘价) + 账户现金；禁止持仓市值法冒充净值法。
 - 主数据源 = t_io/bridge/heartbeat_YYYY-MM-DD.jsonl 当日最后一行
   （cash: float；positions: {gm_symbol: {qty, cost}}，gm_symbol 形如 "SHSE.588170"→取点号后 6 位码）。
-- EOD 重估价：优先 t_io/cache/daily_kline/{code}.json 当日 close；缓存缺失/陈旧回退腾讯日线；
-  仍无则在 source 标注缺失票并剔除（不硬算）。
+- EOD 重估价：优先 t_io/cache/daily_kline/{code}.json 当日 close（须过完整性校验：saved_at 覆盖
+  15:00 且 high≥当日 fill 观测价，否则判残缺强制腾讯重取，仍失败标 stale_bar_warn）；缓存缺失/陈旧
+  回退腾讯日线；仍无则在 source 标注缺失票并剔除（不硬算）。
 - account_ret = (equity - flow_adjust) / prev_equity - 1；alpha = account_ret - benchmark_ret。
 - 主基准沪深300 sh000300，辅基准科创50 sh000688；费后统一（t0_realized 取费后 est_pnl）。
 - heartbeat 缺失 / positions 为空 / cash 缺失时 equity/account_ret/alpha 置 null 并在 source 标注，不许硬算。
@@ -134,12 +135,91 @@ def _kline_close(code: str, date: str):
     return (best[1], best[0]) if best else (None, None)
 
 
-def _tencent_close(code: str, date: str):
-    """腾讯日线回退：拉取（并刷新缓存）后取 date 当日收盘。返回 (close, used_date) 或 (None, None)。"""
+def _cache_today_bar(code: str, date: str):
+    """缓存当日 bar 行与落盘时间。返回 (row, saved_at)；无缓存/无当日行返回 (None, None)。"""
+    fp = os.path.join(_KLINE_DIR, f"{code}.json")
+    if not os.path.exists(fp):
+        return None, None
+    try:
+        d = _load_json(fp)
+    except Exception:
+        return None, None
+    row = next((r for r in d.get("rows") or [] if str(r.get("date")) == date), None)
+    return row, d.get("saved_at")
+
+
+def _observed_day_high(code: str, date: str):
+    """当日已观测最高价（成交真源：events 当日 fill 的 price/fill_vwap）。无观测返回 None。"""
+    fp = os.path.join(_BRIDGE_DIR, f"events_{date.replace('-', '')}.jsonl")
+    if not os.path.exists(fp):
+        return None
+    obs = None
+    with open(fp, encoding="utf-8") as f:
+        for line in f:
+            try:
+                e = json.loads(line)
+            except Exception:
+                continue
+            if e.get("event") != "fill" or str(e.get("code")) != code:
+                continue
+            for k in ("price", "fill_vwap"):
+                px = e.get(k)
+                if isinstance(px, (int, float)) and px > 0:
+                    obs = max(obs, float(px)) if obs is not None else float(px)
+    return obs
+
+
+def _bar_complete(code: str, date: str, row, saved_at) -> bool:
+    """缓存当日 bar 完整性校验（2026-10-19 复盘：600127 缓存 09:43 早盘残缺快照冒充 EOD，
+    high=14.26 < 当日 10:00 实际成交 14.35，close=13.96 vs 14:50 真实 13.16 ⇒ 净值高估 ~5.6k）。
+    判残缺（False）：① saved_at 早于当日 15:00（快照 close 是时点价，非收盘价）；
+    ② bar.high 低于当日 fill 观测价（物理不可能）。均无法证伪时放行（保住历史回填行为）。"""
+    ts = str(saved_at or "")
+    if ts and ts < f"{date} 15:00":
+        return False
+    obs = _observed_day_high(code, date)
+    try:
+        high = float((row or {}).get("high"))
+    except (TypeError, ValueError):
+        return obs is None
+    return not (obs is not None and high < obs - 1e-9)
+
+
+def _force_refresh_daily(code: str):
+    """残缺 bar 强制换源：备份→删缓存→daily()（绕过 daily_cache 15 分钟新鲜度门控）→
+    网络失败恢复旧缓存兜底。与 force_refresh_index 同 pattern。"""
+    cache_fp = os.path.join(_KLINE_DIR, f"{code}.json")
+    bak = None
+    if os.path.exists(cache_fp):
+        try:
+            with open(cache_fp, encoding="utf-8") as f:
+                bak = f.read()
+            os.remove(cache_fp)
+        except Exception:
+            bak = None
     try:
         df = TencentProvider().daily(code)
     except Exception:
-        return None, None
+        df = None
+    if (df is None or df.empty) and bak is not None:
+        try:
+            with open(cache_fp, "w", encoding="utf-8") as f:
+                f.write(bak)
+        except Exception:
+            pass
+    return df
+
+
+def _tencent_close(code: str, date: str, force: bool = False):
+    """腾讯日线回退：拉取（并刷新缓存）后取 date 当日收盘。返回 (close, used_date) 或 (None, None)。
+    force=True 时绕过本地缓存新鲜度门控强制网络重取（残缺 bar 换源用）。"""
+    if force:
+        df = _force_refresh_daily(code)
+    else:
+        try:
+            df = TencentProvider().daily(code)
+        except Exception:
+            return None, None
     if df is None or df.empty:
         return None, None
     best = None
@@ -153,11 +233,23 @@ def _tencent_close(code: str, date: str):
 
 
 def _eod_close(code: str, date: str):
-    """EOD 重估价解析：缓存当日 → 腾讯日线 → 缓存向前携带 → None。
-    返回 (close, via)；via ∈ {cache, tencent, cache-carry(used_date), None}。"""
+    """EOD 重估价解析：缓存当日(须过 bar 完整性校验) → 腾讯日线 → 缓存向前携带 → None。
+    返回 (close, via)；via ∈ {cache, tencent, tencent(stale_bar_warn…), stale_bar_warn:cache(…),
+    cache-carry(used_date), None}。残缺 bar 换源失败时带 stale_bar_warn 告警沿用并在 source 可见。"""
     close, used = _kline_close(code, date)
     if close is not None and used == date:
-        return close, "cache"
+        row, saved_at = _cache_today_bar(code, date)
+        if _bar_complete(code, date, row, saved_at):
+            return close, "cache"
+        # 残缺 bar 冒充 EOD（2026-10-19 600127 事故）→ 强制腾讯重取；仍不行带告警沿用
+        obs = _observed_day_high(code, date)
+        warn = f"stale_bar_warn:cache(saved_at={saved_at},high={(row or {}).get('high')},obs={obs})"
+        t_close, t_used = _tencent_close(code, date, force=True)
+        if t_close is not None and t_used == date:
+            return t_close, f"tencent({warn})"
+        if t_close is not None:
+            return t_close, f"tencent-carry({t_used},{warn})"
+        return close, warn
     # 缓存缺失或陈旧（无当日行）→ 腾讯日线回退
     t_close, t_used = _tencent_close(code, date)
     if t_close is not None and t_used == date:
