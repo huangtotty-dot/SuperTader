@@ -3648,6 +3648,10 @@ function _chartLiveIntervalMs() {
   // 而后端日线序列是 800 根全量重算+序列化，约 250ms，别按 3s 打）
   const isDaily = (stockChartPeriod === "daily" || stockChartPeriod === "weekly"
                    || stockChartPeriod === "monthly");
+  // 2026-10-20 owner：「盘中打开 K 线重点看 10 分钟线，实时性非常重要」——
+  // 10 分单独提到 **1s**（后端 SWR TTL 0.8s + 腾讯 m5 合成 ~0.3s，1s 能拿到新价）；
+  // 30/60 分仍 2s（持仓）/3s（非持仓），日线 3.5/5s。
+  if (!isDaily && stockChartPeriod === "min10") return 1000;
   // 2026-10-19 owner：**持仓股优先**（30min 体检表里的票就是要盯的）——
   // 分钟 2s / 日线 3.5s，比普通票快一档；后端 SWR + 快照修正末根，2s 内有新价即可见。
   const _c = String(stockChartCode || "").split("_")[0];
@@ -6988,7 +6992,7 @@ function startLivePoll() {
 async function init() {
   // 首先获取 DOM 元素（此时 DOM 已完全加载）
   // 2026-10-20：启动标记（0ms）写进慢调用日志 ⇒ 能确认 WebView2 是否加载了新版 app.js
-  try { window.pywebview.api.report_slow_call("app_boot_20261020e", 0); } catch (e) { /* 静默 */ }
+  try { window.pywebview.api.report_slow_call("app_boot_20261020f", 0); } catch (e) { /* 静默 */ }
   dateSelect = document.getElementById("dateSelect");
   refreshBtn = document.getElementById("refreshBtn");
   autoPoll = document.getElementById("autoPoll");

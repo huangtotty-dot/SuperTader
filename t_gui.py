@@ -700,6 +700,10 @@ _TUSHARE_MIN_LOCK = threading.Lock()
 #   pywebview 的串行 `evaluate_js`。_CHART_LIVE_STATE 记录每个键是否已有 worker 在跑。
 _CHART_LIVE_TTL = 1.2           # 2026-10-19：持仓 K 线 2s 一拉 ⇒ TTL 必须 <2s 才能每拉都刷新
 _CHART_LIVE_MIN_KICK = 0.8      # 两次后台刷新之间的最小间隔（防抖）
+# 2026-10-20：10 分钟图盘中按 1s 轮询（owner 重点盯的周期）⇒ SWR 也要更短，
+# 否则 1s 的请求一直吃同一个缓存帧。10/30/60 分统一用这组更短的阈值。
+_CHART_LIVE_TTL_MINUTE = 0.8
+_CHART_LIVE_MIN_KICK_MINUTE = 0.5
 _CHART_LIVE_CACHE: dict = {}
 _CHART_LIVE_STATE: dict = {}
 _CHART_LIVE_LOCK = threading.Lock()
@@ -4207,14 +4211,17 @@ class Api:
             return out
         ck = (base, period)
         _t = _time_mod.time()
+        _is_min = str(period).startswith("min")
+        _ttl = _CHART_LIVE_TTL_MINUTE if _is_min else _CHART_LIVE_TTL
+        _kick = _CHART_LIVE_MIN_KICK_MINUTE if _is_min else _CHART_LIVE_MIN_KICK
         with _CHART_LIVE_LOCK:
             hit = _CHART_LIVE_CACHE.get(ck)
             _st = _CHART_LIVE_STATE.get(ck) or {}
             _running = bool(_st.get("running"))
             _last_kick = float(_st.get("ts") or 0.0)
-        if hit and (_t - hit[0]) < _CHART_LIVE_TTL:
-            return hit[1]          # 2s 内直接回（前端 3s 尾 + 10s 整图会撞车）
-        if not _running and (_t - _last_kick) > _CHART_LIVE_MIN_KICK:
+        if hit and (_t - hit[0]) < _ttl:
+            return hit[1]          # TTL 内直接回（分钟 0.8s / 日线 1.2s）
+        if not _running and (_t - _last_kick) > _kick:
             with _CHART_LIVE_LOCK:
                 _CHART_LIVE_STATE[ck] = {"running": True, "ts": _t}
             _th.Thread(target=self._chart_live_worker, args=(base, period),

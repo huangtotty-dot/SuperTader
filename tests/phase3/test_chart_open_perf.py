@@ -68,8 +68,14 @@ class TestChartOpenPerf(unittest.TestCase):
     def test_frontend_cache_busted_and_boot_marked(self):
         """WebView2 可能缓存旧 app.js（改了跟没改一样）⇒ 带版本号 + 启动标记落日志。"""
         _html = (_ROOT / "web" / "index.html").read_text(encoding="utf-8")
-        self.assertIn("app.js?v=20261020e", _html)
-        self.assertIn("app_boot_20261020e", _JS)
+        self.assertIn("app.js?v=20261020f", _html)
+        self.assertIn("app_boot_20261020f", _JS)
+
+    def test_min10_live_poll_is_1s(self):
+        """owner：盘中重点盯 10 分钟线 ⇒ 前端 1s 轮询，后端分钟 SWR TTL 0.8s。"""
+        self.assertIn('stockChartPeriod === "min10") return 1000', _JS)
+        self.assertIn("_CHART_LIVE_TTL_MINUTE = 0.8", _PY)
+        self.assertIn("_CHART_LIVE_MIN_KICK_MINUTE = 0.5", _PY)
 
     def test_chart_has_explicit_zoom_buttons(self):
         """2026-10-20 owner：无法缩放 ⇒ 增加 ＋/－/⟲ 按钮 + 显式 inside 缩放选项。"""
