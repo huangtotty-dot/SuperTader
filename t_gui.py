@@ -3950,6 +3950,16 @@ class Api:
                                  and _now.strftime("%H:%M") >= "09:30")
             _stale = ((_new_bar_possible and _age > 120)
                       or (_last == _today and _age > 15 * 60))
+            # 2026-10-20（owner：日线只显示 40 根）：内存缓存里的日线可能来自**短缓存重建**
+            # （40 根）；只要磁盘 payload 有更长的历史就判 stale，强制走 payload/长历史路径。
+            if not _stale and len(_dates) < 120:
+                try:
+                    import core.chart_cache as _cc0
+                    _hp = _cc0.load_payload(str(code).split("_")[0]) or {}
+                    if len(_hp.get("daily_rows") or []) > len(_dates) * 2:
+                        _stale = True
+                except Exception:
+                    pass
             if not _stale:
                 # want_minutes 但缓存里没有分时（首帧为提速未取）⇒ 落到重建（带分时）。
                 # 2026-10-17：**三档都要**（10min 之前因合成 bug 常缺，只查 min30 会命中残缺缓存）。

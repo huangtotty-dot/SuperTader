@@ -3604,9 +3604,10 @@ async function loadStockChartNow() {
       const _tr0 = performance.now();
       if (Date.now() < stockChartInteractingUntil) {
         // 用户正在缩放/拖动：先更新数据，1.6s 后再重绘，别把滑杆弹回
-        setTimeout(() => { if (stockChartCode) renderStockChart(); }, 1600);
+        setTimeout(() => { if (stockChartCode) renderStockChart(false); }, 1600);
       } else {
-        renderStockChart();
+        // 20s 整图轮询也只换数据：dataZoom 只在打开/切周期/点区间时设置
+        renderStockChart(false);
       }
       const _tr = performance.now() - _tr0;
       // 2026-10-20：区分「后端慢」与「前端渲染慢」——>=500ms 单独记一行
@@ -4065,6 +4066,8 @@ function renderStockChart(applyZoom = true) {
     min10: "10分", min30: "30分", min60: "60分" })[stockChartPeriod] || stockChartPeriod;
   const _isIntradayPeriod = stockChartPeriod === "min10" || stockChartPeriod === "min30"
     || stockChartPeriod === "min60";
+  // 首次建实例 / 显式要求时才写 dataZoom；实时尾与 20s 轮询都不碰（防弹回）
+  const _applyZoom = !!applyZoom || !stockChartInst;
   const levels = data.levels;
   const cur = data.current_price;
   // 显示开关
@@ -4406,7 +4409,7 @@ function renderStockChart(applyZoom = true) {
     }),
   }] : [];
 
-  if (applyZoom) stockChartAppliedZoom = { start: zStart, end: zEnd };
+  if (_applyZoom) stockChartAppliedZoom = { start: zStart, end: zEnd };
   stockChartInst.setOption({
     // 2026-10-17 owner：K线图用**深色画布**（独立的深色主题，不是把浅色反相）。
     backgroundColor: "#0d1117",
@@ -4534,7 +4537,7 @@ function renderStockChart(applyZoom = true) {
       { scale: true, gridIndex: 2, axisLabel: { show: false }, splitLine: { show: false } },
       { min: 0, max: 100, gridIndex: 3, axisLabel: { color: "#6e7681", fontSize: 9 }, splitLine: { show: false } },
     ],
-    ...(applyZoom ? { dataZoom: [
+    ...(_applyZoom ? { dataZoom: [
       { type: "inside", xAxisIndex: [0, 1, 2, 3], start: zStart, end: zEnd,
         // 2026-10-20：显式打开滚轮缩放/拖动平移，避免被外层滚动容器吞掉
         zoomOnMouseWheel: true, moveOnMouseMove: true, moveOnMouseWheel: false,
@@ -7010,7 +7013,7 @@ function startLivePoll() {
 async function init() {
   // 首先获取 DOM 元素（此时 DOM 已完全加载）
   // 2026-10-20：启动标记（0ms）写进慢调用日志 ⇒ 能确认 WebView2 是否加载了新版 app.js
-  try { window.pywebview.api.report_slow_call("app_boot_20261020h", 0); } catch (e) { /* 静默 */ }
+  try { window.pywebview.api.report_slow_call("app_boot_20261020i", 0); } catch (e) { /* 静默 */ }
   dateSelect = document.getElementById("dateSelect");
   refreshBtn = document.getElementById("refreshBtn");
   autoPoll = document.getElementById("autoPoll");

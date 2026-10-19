@@ -68,15 +68,26 @@ class TestChartOpenPerf(unittest.TestCase):
     def test_frontend_cache_busted_and_boot_marked(self):
         """WebView2 可能缓存旧 app.js（改了跟没改一样）⇒ 带版本号 + 启动标记落日志。"""
         _html = (_ROOT / "web" / "index.html").read_text(encoding="utf-8")
-        self.assertIn("app.js?v=20261020h", _html)
-        self.assertIn("app_boot_20261020h", _JS)
+        self.assertIn("app.js?v=20261020i", _html)
+        self.assertIn("app_boot_20261020i", _JS)
+
+    def test_memory_cache_short_daily_is_invalidated(self):
+        """内存缓存里的 40 根日线必须让位给更长 payload（否则一直只显示 40 根）。"""
+        self.assertIn("len(_dates) < 120", _PY)
+        self.assertIn("_hp.get(\"daily_rows\")", _PY)
+
+    def test_full_render_first_time_applies_zoom(self):
+        """实时/20s 重绘不写 dataZoom；首次建实例仍要应用默认窗口。"""
+        self.assertIn("const _applyZoom = !!applyZoom || !stockChartInst;", _JS)
+        self.assertIn("...(_applyZoom ? { dataZoom: [", _JS)
+        self.assertIn("renderStockChart(false);", _JS)
 
     def test_live_render_does_not_touch_datazoom(self):
         """实时尾只换数据、不写 dataZoom（否则滑杆被 setOption 弹回）。"""
         self.assertIn("function renderStockChart(applyZoom = true)", _JS)
         self.assertIn("renderStockChart(false)", _JS)
         self.assertIn("applyZoom ? { dataZoom: [", _JS)
-        self.assertIn("if (applyZoom) stockChartAppliedZoom", _JS)
+        self.assertIn("if (_applyZoom) stockChartAppliedZoom", _JS)
 
     def test_live_render_pauses_while_zooming(self):
         """切到 10 分钟线（1s 重绘）后缩放失效的根因：实时重绘把滑杆弹回。
