@@ -756,8 +756,7 @@ _position_scan_lock = _threading.Lock()  # 盘中/收盘建仓扫描互斥（tra
 _ma_alert_lock = _threading.Lock()
 _ma_break_last = None  # 破5/10日线报警节流（datetime，仿盘中建仓扫描）
 _ma_break_thread = None  # 破5/10日线报警后台线程
-_hunter_ma5_last = None  # 猎手热门板块「刚站上5日线」告警节流（2026-10-09）
-_hunter_ma5_thread = None  # 猎手热门板块「刚站上5日线」告警后台线程
+_hunter_ma5_watch_thread = None  # 猎手「刚站上5日线」实时 watcher（2026-10-20 独立线程）
 _ma_reclaim_last = None  # 站上5/10日线（破线回站）报警节流（2026-10-08）
 _ma_reclaim_thread = None  # 站上5/10日线报警后台线程
 _trend30_alert_last = None  # 30min 趋势翻转告警节流（2026-10-04 方案 §4.6）
@@ -1053,40 +1052,31 @@ def _hunter_ma5_feishu_enabled() -> bool:
         return True
 
 
-def _maybe_check_hunter_ma5_alert(now: datetime) -> None:
-    """选股猎手「热门板块内个股·刚站上5日线」飞书告警（每 5 分钟；2026-10-09）。纯通知。"""
-    global _hunter_ma5_last, _hunter_ma5_thread
+def _start_hunter_ma5_watch() -> None:
+    """启动「热门板块内个股·刚站上5日线」实时 watcher（2026-10-20，独立 daemon 线程）。
+
+    为什么不再挂在主循环里：main.py 一轮 `scan_once` 实测 ~15 分钟，
+    旧路径「每 5 分钟」实际被拖成 15 分钟级 ⇒ 盘中回站提醒严重迟到。
+    新 watcher 自带 20s 节拍，与主循环完全解耦；开关仍读 feishu.enabled +
+    notify_on_hunter_ma5（关掉就不启动）。
+    """
+    global _hunter_ma5_watch_thread
     try:
         if not _hunter_ma5_feishu_enabled():
+            log.info("⬆️ 猎手站上5日线实时监控: 已在配置中关闭（feishu.notify_on_hunter_ma5）")
             return
-    except Exception:
-        return
-    t = now.time()
-    if now.weekday() >= 5:
-        return
-    in_morning = dtime(9, 30) <= t <= dtime(11, 30)
-    in_afternoon = dtime(13, 0) <= t <= dtime(14, 55)
-    if not (in_morning or in_afternoon):
-        return
-    if _hunter_ma5_last is not None and (now - _hunter_ma5_last).total_seconds() < 300:
-        return
-    if _hunter_ma5_thread is not None and _hunter_ma5_thread.is_alive():
-        return
-    _hunter_ma5_last = now
-
-    def _worker() -> None:
-        try:
-            from core.hunter_ma5_alert import run_hunter_ma5_alert
-            events = run_hunter_ma5_alert()
-            for e in events:
-                log.info(f"⬆️ 猎手热门板块·站上5日线: {e['code']} {e['name']} "
-                         f"现价{e['price']} MA5={e['ma5']}(+{e['dev5_pct']}%)")
-        except Exception as ex:
-            log.warning(f"⚠️ 猎手站上5日线告警异常（已吞掉）: {str(ex)[:200]}")
-
-    _hunter_ma5_thread = _threading.Thread(
-        target=_worker, name="hunter-ma5-alert", daemon=True)
-    _hunter_ma5_thread.start()
+        if _hunter_ma5_watch_thread is not None and _hunter_ma5_watch_thread.is_alive():
+            return
+        from core.hunter_ma5_alert import run_live_watch
+        _poll = float(PARAMS.get("hunter_ma5_poll_sec", 20) or 20)
+        _hunter_ma5_watch_thread = _threading.Thread(
+            target=run_live_watch,
+            kwargs={"poll_sec": _poll},
+            name="hunter-ma5-watch", daemon=True)
+        _hunter_ma5_watch_thread.start()
+        log.info("⬆️ 猎手站上5日线实时监控已启动（独立线程，每 %.0fs，交易时段）" % _poll)
+    except Exception as e:
+        log.warning(f"⚠️ 猎手站上5日线实时监控启动失败（不阻断主循环）: {str(e)[:160]}")
 
 
 # 2026-10-11 owner：「实盘过程中选股猎手每隔 30 分钟做轮询；**异常信息一定要通过飞书发出来**」
@@ -1915,8 +1905,7 @@ def scan_once():
             _maybe_run_ma_reclaim_alert(now)           # 09:30-14:55 盘中站上5/10日线报警（破线回站，2026-10-08）
         with _ScanStage("F趋势告警"):
             _maybe_check_trend30_alert(now)            # 09:30-14:55 30min趋势翻转告警（每5分钟，纯通知）
-        with _ScanStage("G猎手MA5告警"):
-            _maybe_check_hunter_ma5_alert(now)         # 09:30-14:55 猎手热门板块站上5日线告警（每5分钟，纯通知）
+        # G 猎手MA5告警已迁到独立 watcher（2026-10-20）：不再受主循环 15 分钟节拍拖累
         with _ScanStage("H猎手轮询(起线程)"):
             _maybe_run_hunter_poll(now)                # 09:30-15:00 猎手 30 分钟轮询 + **异常必发飞书**（2026-10-11）
 
@@ -2876,6 +2865,8 @@ def run_watch():
 
     # V3.1fix: 启动时补算昨日热度（如果缺失）
     _maybe_backfill_sentiment()
+    # 2026-10-20：猎手「刚站上5日线」实时 watcher（独立线程，20s 节拍，不再等主循环）
+    _start_hunter_ma5_watch()
 
 
     log.info("========= 做T终极护城河防御版 启动 =========")

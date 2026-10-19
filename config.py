@@ -287,6 +287,8 @@ except Exception:
 PARAMS = {
     # —— 指标周期 ——
     "poll_interval": 15,
+    # 猎手「刚站上5日线」实时 watcher 的轮询秒数（2026-10-20：独立线程，不再挂在主循环）
+    "hunter_ma5_poll_sec": 20,
     "rsi_period": 6,
     "bb_period": 20,
     "bb_std": 2.0,

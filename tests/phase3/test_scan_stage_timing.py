@@ -133,7 +133,8 @@ class TestScanStagesWired(unittest.TestCase):
         "_maybe_run_ma_break_alert",
         "_maybe_run_ma_reclaim_alert",
         "_maybe_check_trend30_alert",
-        "_maybe_check_hunter_ma5_alert",
+        # 2026-10-20：`_maybe_check_hunter_ma5_alert` 已迁到独立 watcher（不再在 scan_once 里），
+        # 见 test_hunter_ma5_watch_is_decoupled_from_main_loop
         "_maybe_run_hunter_poll",
         "_maybe_run_position_builder",
         "_maybe_run_daily_review",
@@ -145,6 +146,14 @@ class TestScanStagesWired(unittest.TestCase):
         for fn in self.MUST_WRAP:
             m = re.search(r'with _ScanStage\("[^"]*"\):\s*\n\s*' + re.escape(fn) + r'\(', _MAIN_SRC)
             self.assertIsNotNone(m, f"{fn} 没有被 _ScanStage 包住 —— 归因会漏掉它")
+
+    def test_hunter_ma5_watch_is_decoupled_from_main_loop(self):
+        """2026-10-20 owner「飞书提醒一定要及时」：MA5 watcher 必须是独立线程启动，
+        不能再挂在主循环（主循环实测 ~15 分钟一轮，会把 5 分钟告警拖成 15 分钟）。"""
+        self.assertIn("_start_hunter_ma5_watch()", _MAIN_SRC)
+        self.assertNotIn("_maybe_check_hunter_ma5_alert(", _MAIN_SRC,
+                         "旧的主循环告警路径应已删除，避免与新 watcher 重复推送")
+        self.assertIn("run_live_watch", _MAIN_SRC)
 
     def test_holdings_loop_and_inner_steps_timed(self):
         self.assertIn('_scan_stage_add("I0持仓循环(全部)"', _MAIN_SRC)

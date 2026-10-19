@@ -10,7 +10,8 @@
 import json
 import logging
 import os
-from datetime import datetime
+import time as _time
+from datetime import datetime, time as dtime
 
 log = logging.getLogger("hunter_ma5_alert")
 
@@ -205,6 +206,305 @@ def scan_hunter_ma5(date: str = None, top_n: int = None, record_below: bool = Tr
     return hits
 
 
+# ══════════════════════════════════════════════════════════════════════
+# 实时 watcher（2026-10-20 owner：飞书提醒必须及时，「彻底优化」）
+#
+# 旧路径：main.py 的 15 分钟主循环里每 5 分钟调一次 `run_hunter_ma5_alert`
+#   ⇒ 实际触发被主循环拖到 **15 分钟级**；且每轮都对 170+ 只跑 `daily_many`，
+#     数据源慢时「扫描完才发卡」会再叠一层延迟。
+# 新路径：独立 daemon 线程，每 20s 只做两件轻活：
+#   ① 完成日线 MA5 上下文（每天/每 30 分钟重建一次，`daily_many` 只跑一次）；
+#   ② 腾讯**分块批量**快照（`snapshot_auction_many`，172 只 ≈ 1 个请求）。
+#   命中即推，不再等主循环、不再等全量扫描。
+# ══════════════════════════════════════════════════════════════════════
+_LIVE_CTX = {"date": None, "ts": 0.0, "sig": None, "ctx": None}
+_LIVE_FAIL = {"n": 0, "last_alert": 0.0}
+_LIVE_CTX_TTL = 1800          # 热门板块/完成日线上下文 30 分钟重建
+_LIVE_POLL_SEC = 20           # 实时轮询间隔（秒）
+_LIVE_FAIL_ALERT_SEC = 600    # 取数失败告警节流
+
+
+def _completed_history(fr, today):
+    """日线帧 → **今日之前**的收盘价尾部（最多 10 根）；不足 5 根/陈旧返回 None。"""
+    if fr is None or getattr(fr, "empty", True):
+        return None
+    try:
+        dts = [str(x)[:10] for x in fr["date"].astype(str).values]
+        closes = [float(x) for x in fr["close"].astype(float).values]
+    except Exception:
+        return None
+    rows = [(d, c) for d, c in zip(dts, closes) if d < str(today)[:10] and c == c]
+    if len(rows) < 5:
+        return None
+    rows = rows[-10:]
+    try:
+        _last = datetime.strptime(rows[-1][0], "%Y-%m-%d").date()
+        _today_d = datetime.strptime(str(today)[:10], "%Y-%m-%d").date()
+        if (_today_d - _last).days > 15:      # 停牌/长期无数据：不做实时判定
+            return None
+    except Exception:
+        pass
+    return [c for _, c in rows]
+
+
+def build_live_context(top_n: int = None, date: str = None) -> dict:
+    """热门板块股票 + 完成日线 MA5 预计算（**每天/每 30 分钟只跑一次**）。
+
+    返回 {date, stocks, hist, codes}；hist[code] = {prev_close, prev_ma5, last4_sum}。
+    今日 MA5 = (近 4 个完成日收盘 + 实时价) / 5 —— 盘中不必再拉日线。
+    """
+    today = str(date or _today())
+    stocks = hot_board_stocks(top_n)
+    if not stocks:
+        return {"date": today, "stocks": {}, "hist": {}, "codes": []}
+    # 优先读**本地日线缓存**（172 只实测 ~1.8s、零网络）。`facade.daily_many` 是 GM-first，
+    # 收盘后/数据源异常时会卡 60s 再回退腾讯——绝不能放在 20s 轮询的第一跳上。
+    # 缓存缺失的少量票再用 daily_many 兜底（>20 只就跳过，避免整轮被慢源拖死）。
+    from core import chart_cache as _cc
+    frames, missing = {}, []
+    for c in stocks:
+        try:
+            fr = _cc.load_daily_display(c)
+        except Exception:
+            fr = None
+        if fr is None:
+            missing.append(c)
+        else:
+            frames[c] = fr
+    if missing and len(missing) <= 20:
+        try:
+            from core.market_data.facade import get_provider
+            prov = get_provider()
+            for i in range(0, len(missing), _BATCH):
+                try:
+                    frames.update(prov.daily_many(missing[i:i + _BATCH], days=10) or {})
+                except Exception:
+                    pass
+        except Exception:
+            pass
+    elif missing:
+        log.warning("[MA5实时] 本地日线缓存缺 %d/%d 只（>20）⇒ 本轮跳过这些票，不做慢源兜底"
+                    % (len(missing), len(stocks)))
+    hist = {}
+    for c in stocks:
+        closes = _completed_history(frames.get(c), today) if c in frames else None
+        if not closes:
+            continue
+        prev5 = closes[-5:]
+        hist[c] = {
+            "prev_close": float(closes[-1]),
+            "prev_ma5": float(sum(prev5) / 5.0),
+            "last4_sum": float(sum(closes[-4:])),
+        }
+    return {"date": today, "stocks": stocks, "hist": hist, "codes": list(hist)}
+
+
+def _live_ctx(top_n: int = None, date: str = None, force: bool = False) -> dict:
+    today = str(date or _today())
+    now = _time.time()
+    sig = tuple(hot_boards(top_n))
+    c = _LIVE_CTX
+    stale = (force or c["date"] != today or c["sig"] != sig
+             or c["ctx"] is None or (now - float(c["ts"] or 0)) > _LIVE_CTX_TTL)
+    # 上下文为空（首建失败/数据源没就绪）→ 最多每 5 分钟重试一次
+    if not stale and not (c["ctx"] or {}).get("codes") and (now - float(c["ts"] or 0)) > 300:
+        stale = True
+    if stale:
+        ctx = build_live_context(top_n, today)
+        _LIVE_CTX.update({"date": today, "ts": now, "sig": sig, "ctx": ctx})
+        log.info("[MA5实时] 上下文重建: %d/%d 只有完成日线（前 %s 板块）"
+                 % (len(ctx["codes"]), len(ctx["stocks"]), top_n or _TOPN_DEFAULT))
+    return _LIVE_CTX["ctx"]
+
+
+def scan_live_once(ctx: dict, below_today: set, provider=None, today: str = None):
+    """一次实时快照扫描 → (hits, ok)。命中未去重；`below_today` 原地记录今日到过 MA5 下方。
+
+    · 隔夜回站：昨收 < 昨MA5 且 现价 > 今MA5；
+    · 盘内 V 反转：今日**.任意一次轮询**到过 MA5 下方，之后回到上方。
+    `ok=False` 表示快照整体没拿到（用于失败告警），不是"没有命中"。
+    """
+    codes = (ctx or {}).get("codes") or []
+    if not codes:
+        return [], False
+    if provider is None:
+        try:
+            from core.market_data.facade import get_provider
+            provider = get_provider()
+        except Exception:
+            return [], False
+    snap = {}
+    try:
+        # **必须绕开 facade.snapshot 的 GM-first**（GM 不可用时实测卡 60s 再回退腾讯）。
+        # 优先用 facade 内部的腾讯实例 `_tx` 的分块批量接口；测试桩可直接实现该方法。
+        fn = getattr(provider, "snapshot_auction_many", None)
+        if fn is None:
+            _tx = getattr(provider, "_tx", None)
+            fn = getattr(_tx, "snapshot_auction_many", None)
+        snap = (fn(codes) if fn is not None else provider.snapshot(codes)) or {}
+    except Exception as e:
+        log.warning("[MA5实时] 快照失败: %s: %s" % (type(e).__name__, str(e)[:160]))
+        return [], False
+    today = str(today or (ctx or {}).get("date") or _today())
+    hits = []
+    for c in codes:
+        s = snap.get(c) or {}
+        try:
+            px = float(s.get("price") or 0)
+        except Exception:
+            px = 0.0
+        if px <= 0:
+            continue
+        tsd = s.get("ts_date")
+        if tsd and str(tsd)[:10] != today:
+            continue                              # 快照不是今天 ⇒ 休市/停牌，跳过
+        h = (ctx.get("hist") or {}).get(c) or {}
+        if not h:
+            continue
+        ma5 = (float(h["last4_sum"]) + px) / 5.0
+        if ma5 <= 0:
+            continue
+        above = px > ma5
+        if not above:
+            below_today.add(c)
+            continue
+        overnight = (float(h["prev_close"]) < float(h["prev_ma5"])) and above
+        vrev = (c in below_today) and above
+        if overnight or vrev:
+            hits.append({
+                "code": c, "name": ((ctx.get("stocks") or {}).get(c) or c),
+                "kind": "overnight" if overnight else "vrev",
+                "price": round(px, 3), "ma5": round(ma5, 3),
+                "dev5_pct": round((px / ma5 - 1.0) * 100.0, 2),
+                "above": True, "below": False,
+                "overnight_reclaim": bool(overnight),
+            })
+    hits.sort(key=lambda x: -(x.get("dev5_pct") or 0))
+    return hits, bool(snap)
+
+
+def push_events(events: list, date: str = None, top_n: int = None,
+                dry_run: bool = False) -> list:
+    """去重 → 发飞书；返回**本次新推**的事件。推送成功才写去重（失败下轮重试）。"""
+    target = str(date or _today())
+    if not events:
+        return []
+    dedup = _load_dedup()
+    seen = set(dedup.get(target) or [])
+    fresh = [e for e in events if e.get("code") and e["code"] not in seen]
+    if not fresh:
+        return []
+    card = build_card(fresh, top_n=top_n, date=target)
+    if dry_run:
+        return fresh
+    try:
+        from config import send_feishu_payload
+        ok = send_feishu_payload(
+            card, success_log=f"猎手热门板块站上5日线飞书推送: {len(fresh)} 只",
+            error_prefix="猎手热门板块站上5日线推送")
+    except Exception as e:
+        log.warning(f"⚠️ 猎手站上5日线推送异常（不写去重，下轮重试）: {type(e).__name__}: {str(e)[:180]}")
+        return []
+    if not ok:
+        log.warning("⚠️ 猎手站上5日线推送返回失败（不写去重，下轮重试）")
+        return []
+    seen.update(e["code"] for e in fresh)
+    dedup[target] = sorted(seen)
+    _save_dedup(dedup)
+    return fresh
+
+
+def _in_live_session(now: datetime) -> bool:
+    if now.weekday() >= 5:
+        return False
+    t = now.time()
+    return (dtime(9, 30) <= t <= dtime(11, 30)) or (dtime(13, 0) <= t <= dtime(14, 55))
+
+
+def _alert_live_failure(now: datetime) -> None:
+    """连续取数失败 → 飞书告警（owner：异常一定要发）。10 分钟节流。"""
+    if now.timestamp() - float(_LIVE_FAIL.get("last_alert") or 0) < _LIVE_FAIL_ALERT_SEC:
+        return
+    _LIVE_FAIL["last_alert"] = now.timestamp()
+    try:
+        from config import send_feishu_payload
+        card = {
+            "msg_type": "interactive",
+            "card": {
+                "header": {"template": "red",
+                           "title": {"tag": "plain_text", "content": "⚠️ 猎手站上5日线监控·取数失败"}},
+                "elements": [{"tag": "markdown", "content":
+                              "**实时快照连续 3 次未拿到**（腾讯批量）。\n"
+                              "监控仍在重试；若持续失败请检查网络/数据源。\n"
+                              f"时间：{now.strftime('%Y-%m-%d %H:%M:%S')}"}],
+            },
+        }
+        send_feishu_payload(card, success_log="猎手站上5日线监控·取数失败告警已推送",
+                            error_prefix="猎手站上5日线监控取数失败告警")
+    except Exception as e:
+        log.warning(f"⚠️ 猎手站上5日线监控失败告警推送异常: {str(e)[:120]}")
+
+
+def run_live_watch(poll_sec: float = None, top_n: int = None, stop_event=None,
+                   provider=None, sleep_fn=_time.sleep, now_fn=datetime.now,
+                   push_fn=None) -> None:
+    """独立实时 watcher：交易时段每 `poll_sec` 秒扫一次，命中即推。
+
+    由 main.py 在启动时拉起的 daemon 线程调用；**不依赖 15 分钟主循环**。
+    `provider` / `push_fn` / `sleep_fn` / `now_fn` 均为测试缝。
+    """
+    poll = float(poll_sec or _LIVE_POLL_SEC)
+    day, below = None, set()
+    saved = None
+    log.info(f"[MA5实时] watcher 启动：每 {poll:.0f}s 一轮（交易时段）")
+    while not (stop_event is not None and stop_event.is_set()):
+        now = now_fn()
+        if not _in_live_session(now):
+            if sleep_fn:
+                sleep_fn(30)
+            continue
+        today = now.strftime("%Y-%m-%d")
+        if today != day:
+            day = today
+            below = set(_load_below().get(today) or [])
+            saved = None
+        ctx = _live_ctx(top_n, today)
+        if not ctx or not ctx.get("codes"):
+            if sleep_fn:
+                sleep_fn(poll)
+            continue
+        try:
+            hits, ok = scan_live_once(ctx, below, provider=provider, today=today)
+        except Exception as e:
+            hits, ok = [], False
+            log.warning(f"[MA5实时] 扫描异常（继续下一轮）: {type(e).__name__}: {str(e)[:160]}")
+        if below and below != saved:
+            try:
+                store = _load_below()
+                store[today] = sorted(below)
+                _save_below(store)
+                saved = set(below)
+            except Exception:
+                pass
+        if ok:
+            _LIVE_FAIL["n"] = 0
+        else:
+            _LIVE_FAIL["n"] = int(_LIVE_FAIL.get("n") or 0) + 1
+            if _LIVE_FAIL["n"] >= 3:
+                _alert_live_failure(now)
+        if hits:
+            try:
+                fresh = (push_fn or push_events)(hits, date=today, top_n=top_n)
+            except Exception as e:
+                fresh = []
+                log.warning(f"[MA5实时] 推送异常（下轮重试）: {str(e)[:160]}")
+            for e in fresh or []:
+                log.info(f"⬆️ 猎手热门板块·站上5日线: {e['code']} {e['name']} "
+                         f"现价{e['price']} MA5={e['ma5']}(+{e['dev5_pct']}%) [{e['kind']}]")
+        if sleep_fn:
+            sleep_fn(poll)
+
+
 def build_card(events: list, top_n: int = None, date: str = None) -> dict:
     if not events:
         return None
@@ -245,35 +545,11 @@ def build_card(events: list, top_n: int = None, date: str = None) -> dict:
 
 
 def run_hunter_ma5_alert(top_n: int = None, date: str = None, dry_run: bool = False) -> list:
-    """检测→去重→推飞书。返回本次**新推**的事件。推送成功才写去重。"""
+    """检测→去重→推飞书（历史/离线口径）。返回本次**新推**的事件。
+
+    ⚠️ 盘中及时性由 `run_live_watch` 负责（独立线程、20s 一轮）；本函数保留给
+    历史扫描/手工 CLI 与回归测试，推送逻辑已抽到 `push_events` 共用。
+    """
     target = str(date) if date else datetime.now().strftime("%Y-%m-%d")
     hits = scan_hunter_ma5(date=date, top_n=top_n)
-    if not hits:
-        return []
-    dedup = _load_dedup()
-    seen = set(dedup.get(target) or [])
-    fresh = [h for h in hits if h["code"] not in seen]
-    if not fresh:
-        return []
-    card = build_card(fresh, top_n=top_n, date=date)
-    if dry_run:
-        return fresh
-    # ⚠️ send_feishu_payload 的签名是 (payload, success_log, error_prefix, ...)——
-    # 2026-10-10 前这里只传了 card，每次都抛 TypeError，又被裸 except 吞掉 ⇒
-    # 本告警**自 2026-10-09 上线起从未推送成功过一次**，且不留任何日志/去重痕迹。
-    # 现在：参数补齐 + 检查返回值 + 失败时把原因打出来（别再用静默 except 把这类问题藏住）。
-    try:
-        from config import send_feishu_payload
-        ok = send_feishu_payload(
-            card, success_log=f"猎手热门板块站上5日线飞书推送: {len(fresh)} 只",
-            error_prefix="猎手热门板块站上5日线推送")
-    except Exception as e:
-        log.warning(f"⚠️ 猎手站上5日线推送异常（不写去重，下轮重试）: {type(e).__name__}: {str(e)[:180]}")
-        return []
-    if not ok:
-        log.warning("⚠️ 猎手站上5日线推送返回失败（不写去重，下轮重试）")
-        return []
-    seen.update(h["code"] for h in fresh)
-    dedup[target] = sorted(seen)
-    _save_dedup(dedup)
-    return fresh
+    return push_events(hits, date=target, top_n=top_n, dry_run=dry_run)
