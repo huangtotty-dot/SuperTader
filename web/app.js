@@ -3558,7 +3558,13 @@ async function loadStockChartNow() {
       stockChartData = d;
       stockChartVersion = d.version || null;
       renderStockSummary(d);
+      const _tr0 = performance.now();
       renderStockChart();
+      const _tr = performance.now() - _tr0;
+      // 2026-10-20：区分「后端慢」与「前端渲染慢」——>=500ms 单独记一行
+      if (_tr >= 500) {
+        try { window.pywebview.api.report_slow_call("chart_render", Math.round(_tr)); } catch (e) { /* 静默 */ }
+      }
       // 整图可能比实时尾旧（分钟源/缓存/版本握手三层闸）⇒ 立刻用实时尾覆盖当前周期
       startStockChartLive();
     } else if (d && d.error) {
@@ -3693,7 +3699,13 @@ async function openStockChart(code, name) {
   // 2026-10-18：10s → 20s。价格与最后一根由「实时尾」(3s/5s) 负责；整图轮询只剩
   // 结构（支撑/箱体/通道/新 bar 计数）的同步，没必要每 10s 打一次慢接口。
   stockChartTimer = setInterval(loadStockChartNow, 20000);
+  const _open0 = performance.now();
   await loadStockChartNow();
+  const _openMs = performance.now() - _open0;
+  // 2026-10-20：端到端「点开→出图」耗时（含桥传输+渲染），>=800ms 落慢日志
+  if (_openMs >= 800) {
+    try { window.pywebview.api.report_slow_call("chart_open_total", Math.round(_openMs)); } catch (e) { /* 静默 */ }
+  }
   startStockChartLive();          // 盘中实时尾（3s）
 }
 /* ---- 手动盘「K线速查」（2026-10-18）----

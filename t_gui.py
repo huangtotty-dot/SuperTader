@@ -5030,11 +5030,25 @@ class Api:
             _raw = {}
             _c = str(code).split("_")[0]
             if not _c.startswith("em"):      # em 是合成标的(如A股平均股价)，无分时源
-                for _key, _freq in (("min10", "10min"), ("min30", "30min"), ("min60", "60min")):
-                    try:
-                        _raw[_key] = _fetch_min_bars(_c, _freq)
-                    except Exception:
-                        _raw[_key] = None
+                # 2026-10-20 提速：三个分钟档**并行取**。原来串行 3×~1.6s=4.8s，
+                # 是 `load_stock_chart 4839ms`（gui_slow_calls.log）的主要来源。
+                _jobs = (("min10", "10min"), ("min30", "30min"), ("min60", "60min"))
+                try:
+                    import concurrent.futures as _cf
+                    with _cf.ThreadPoolExecutor(max_workers=3,
+                                                thread_name_prefix="minfetch") as _ex:
+                        _futs = {k: _ex.submit(_fetch_min_bars, _c, f) for k, f in _jobs}
+                        for k, _fu in _futs.items():
+                            try:
+                                _raw[k] = _fu.result()
+                            except Exception:
+                                _raw[k] = None
+                except Exception:
+                    for _key, _freq in _jobs:      # 线程池不可用：退回串行（行为不变）
+                        try:
+                            _raw[_key] = _fetch_min_bars(_c, _freq)
+                        except Exception:
+                            _raw[_key] = None
         _frames = {"daily": daily, "weekly": weekly, "monthly": monthly}
         for _key in ("min10", "min30", "min60"):
             _mf = (_raw or {}).get(_key)
