@@ -4001,6 +4001,24 @@ class Api:
         _df = None
         if not is_em:
             rows = self._daily_rows_cache_first(code_str, allow_network=True)
+            # 2026-10-20（owner：「日线只能显示一部分」）：扫描类短窗口（如 _RC_BARS=30）
+            # 会给**没有旧缓存**的票写入 30~40 根日线 ⇒ K 线图只画得出这一小段。
+            # 这里发现缓存过短就补拉一次长历史，并 merge 回共享缓存（下次直接够用）。
+            if rows and not is_index and len(rows) < 120:
+                try:
+                    _long = self._fetch_daily_bounded(code_str, min_rows=250)
+                    if _long is not None and not _long.empty and len(_long) > len(rows):
+                        try:
+                            from core.chart_cache import write_daily_history
+                            write_daily_history(code_str, _long)   # merge，不截短
+                        except Exception:
+                            pass
+                        rows = [{"date": str(_r.date), "open": float(_r.open),
+                                 "close": float(_r.close), "high": float(_r.high),
+                                 "low": float(_r.low), "volume": float(_r.volume)}
+                                for _r in _long.itertuples(index=False)]
+                except Exception:
+                    pass
             if not rows:
                 # 北交所：日线四源全不通（memory），`bj_daily.fetch_bj_daily` 逐只重试 8 次 ≈18s
                 # ⇒ 卡死主线程。有缓存/payload 的 BJ 码已在上面命中；无缓存则**立即优雅降级**。
@@ -4144,7 +4162,12 @@ class Api:
         if result.get("available") and not is_em:
             try:
                 import core.chart_cache as _cc
-                _cc.save_payload(code_str, result, rows)
+                # 2026-10-20：**禁止用短图覆盖长 payload**。短日线缓存重建出的 40 根图
+                # 一旦落盘，下次打开就永久只剩 40 根（owner「日线只显示一部分」的成因）。
+                _old = _cc.load_payload(code_str) or {}
+                _old_n = len(_old.get("daily_rows") or [])
+                if not (_old_n and len(rows) * 2 < _old_n):
+                    _cc.save_payload(code_str, result, rows)
             except Exception:
                 pass
         return result
@@ -4818,7 +4841,14 @@ class Api:
             try:
                 _dfc = _cc.load_daily_display(code)
                 if _dfc is not None and not _dfc.empty:
-                    if str(hit.get("last_daily_date") or "") < str(_dfc["date"].iloc[-1])[:10]:
+                    _prows0 = hit.get("daily_rows") or []
+                    # 2026-10-20（owner：「日线只显示一部分」）：日线缓存可能是**短窗口**
+                    # （扫描写 30~40 根）却比 payload 新 1 天 ⇒ 旧逻辑直接重建，
+                    # 用短缓存建出 40 根图、再覆盖掉 800 根的 payload ⇒ 永久只剩一小段。
+                    # 缓存明显比 payload 短 ⇒ 不采信它的"更新"，继续回放长 payload。
+                    _cache_short = bool(_prows0) and len(_dfc) * 2 < len(_prows0)
+                    if (str(hit.get("last_daily_date") or "") < str(_dfc["date"].iloc[-1])[:10]
+                            and not _cache_short):
                         return None
                     # 2026-10-12: 除了"更新"，还要看"**更少**"。日线缓存被短窗口写入截短过之后
                     # （`save_daily_cache` 曾是盲覆盖），payload 会带着**残缺序列**被当成新鲜直接回放
@@ -4842,7 +4872,7 @@ class Api:
         except Exception:
             return None
 
-    def _fetch_daily_bounded(self, code, timeout=6.0):
+    def _fetch_daily_bounded(self, code, timeout=6.0, min_rows=0):
         """带硬超时的日线取数（2026-10-06）：防止任何慢/挂死的数据源把 pywebview 主线程冻住。
         超时返回 None（取数线程继续在后台跑完，不回收）。指数走 `index_daily`（`daily` 解不了指数码）。
 
@@ -4867,7 +4897,7 @@ class Api:
                                                   end_date=datetime.now().strftime("%Y-%m-%d"))
             try:
                 from core.market_data.tencent_provider import TencentProvider
-                d = TencentProvider().daily(_c)
+                d = TencentProvider().daily(_c, min_rows=int(min_rows or 0))
                 if d is not None and not d.empty:
                     return d
                 # 腾讯**明确返空**（源里没有这只票，如手输错码 688374）⇒ 返回**空帧**（不是 None），

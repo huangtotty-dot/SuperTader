@@ -535,10 +535,15 @@ class TencentProvider:
         except Exception:
             return None
 
-    def daily(self, code: str, days: int = 800) -> pd.DataFrame:
-        """腾讯日线（前复权 qfq），带本地缓存（t_io/cache/daily_kline/{code}.json）。"""
+    def daily(self, code: str, days: int = 800, min_rows: int = 0) -> pd.DataFrame:
+        """腾讯日线（前复权 qfq），带本地缓存（t_io/cache/daily_kline/{code}.json）。
+
+        `min_rows`（2026-10-20）：缓存行数不足时**强制走网络**拉长历史。
+        修复「日线 K 线只显示一部分」——扫描类短窗口（_RC_BARS=30）会给没有旧缓存的票
+        写入 30~40 根，而 `daily_cache` 只按新鲜度判命中 ⇒ 图表永远只画那一小段。
+        """
         cached = self.daily_cache(code)
-        if cached is not None:
+        if cached is not None and (not min_rows or len(cached) >= int(min_rows)):
             return cached
         code = str(code).split("_")[0]
         symbol = _tx_symbol(code)

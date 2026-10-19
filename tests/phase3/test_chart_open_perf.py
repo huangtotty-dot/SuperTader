@@ -58,6 +58,13 @@ class TestChartOpenPerf(unittest.TestCase):
         self.assertIn("_AUTO_PNL_TTL = 120.0", _PY)
         self.assertIn("_AUTO_COST_TTL = 120.0", _PY)
 
+    def test_short_daily_cache_cannot_shrink_payload(self):
+        """短日线缓存（扫描写 30~40 根）不得让长 payload 被判过期/被覆盖。"""
+        self.assertIn("_cache_short", _PY)
+        self.assertIn("and not _cache_short", _PY)
+        self.assertIn("len(rows) * 2 < _old_n", _PY)
+        self.assertIn("禁止用短图覆盖长 payload", _PY)
+
     def test_frontend_cache_busted_and_boot_marked(self):
         """WebView2 可能缓存旧 app.js（改了跟没改一样）⇒ 带版本号 + 启动标记落日志。"""
         _html = (_ROOT / "web" / "index.html").read_text(encoding="utf-8")
