@@ -3589,7 +3589,12 @@ async function loadStockChartNow() {
       if (ss) ss.innerHTML = "";
       stopStockChartLive();
     }
-  } catch (e) { /* 静默 */ }
+  } catch (e) {
+    // 2026-10-20：原来静默吞错 ⇒ 后端异常时弹窗永远停在「加载中...」，被误判为"慢"。
+    const el = document.getElementById("stockChart");
+    if (el) el.innerHTML = `<div class="empty" style="color:#f85149;padding-top:120px">K线加载失败：${esc((e && (e.message || e)) || "未知错误")}</div>`;
+    try { window.pywebview.api.report_slow_call("chart_error", 0); } catch (e2) { /* 静默 */ }
+  }
 }
 
 /* ---- 盘中实时尾（2026-10-17）----
@@ -6929,6 +6934,8 @@ function startLivePoll() {
 
 async function init() {
   // 首先获取 DOM 元素（此时 DOM 已完全加载）
+  // 2026-10-20：启动标记（0ms）写进慢调用日志 ⇒ 能确认 WebView2 是否加载了新版 app.js
+  try { window.pywebview.api.report_slow_call("app_boot_20261020a", 0); } catch (e) { /* 静默 */ }
   dateSelect = document.getElementById("dateSelect");
   refreshBtn = document.getElementById("refreshBtn");
   autoPoll = document.getElementById("autoPoll");
