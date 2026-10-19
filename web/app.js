@@ -2591,6 +2591,17 @@ const MA20_OBS_TIP = "是否站上 20 日线。**观察列，不驱动任何判�
   + "⚠️ 「得分」里那个 −70 悬崖扣分走的是 **5 日线**口径（owner 决定保留），与本列无关，故本列不显示 −70。";
 /* `detail`（可选，2026-10-14）：把 MA20 具体数值等明细挂到**所有**分支的 tooltip 尾部。
    持仓体检列要显示 MA20 现值；建仓表/猎手表不传 → 行为与原来完全一致。 */
+/* 【5日线状态】（2026-10-19 owner：建仓信号扫描「只要站上 5 日均线就显示绿色，其它红色」）。
+   与得分里的 −70 悬崖**同一口径**（都走收盘价 vs MA5），所以本列故意用绿/红而不是灰色：
+   站上=绿、未站上=红、无数据=—（不猜）。20 日线状态降级到 tooltip，不占列。 */
+function ma5FlagCellHtml(v, ma20v, missingTip) {
+  const _m20 = (ma20v === true) ? "站上" : (ma20v === false) ? "破位" : "—";
+  const _tip = "现价 vs 5 日简单均线（得分里 −70 悬崖的同一口径）。20 日线：" + _m20 + "。观察列，不参与其它判定。";
+  if (v === true) return `<td style="text-align:center" title="${esc("站上 5 日线。" + _tip)}"><b style="color:#3fb950">站上</b></td>`;
+  if (v === false) return `<td style="text-align:center" title="${esc("未站上 5 日线。" + _tip)}"><b style="color:#f85149">破位</b></td>`;
+  return `<td style="text-align:center" title="${esc(missingTip || "无该特征（旧数据/未扫描）")}"><span class="cell-dim">—</span></td>`;
+}
+
 function ma20FlagCellHtml(v, missingTip, detail) {
   const _d = detail ? "　" + detail + "。" : "";
   if (v === true) return `<td style="text-align:center" title="${esc("站上 20 日线。" + _d + MA20_OBS_TIP)}"><span class="cell-dim">站上</span></td>`;
@@ -2772,14 +2783,13 @@ function renderPB(pb) {
     const scoreCellHtml = _reachable
       ? `<b>${r.composite_score}</b>`
       : `<b>${r.composite_score}</b><span class="cell-dim" style="font-size:10px">/${_ceiling}🔒</span>`;
-    // 2026-10-13 owner：改按 **20 分档**着色（<20 红底 / ≥20 淡绿底），
-    //   取代 2026-10-08 的「只有 0 分才红底、>0 一律淡绿底」——那一版把 1~19 分也染成"看起来还行"。
-    //   非数值/NaN 不着色（与旧版一致，避免坏数据被染绿）。
-    const _scNum = (typeof r.composite_score === "number" && isFinite(r.composite_score))
-      ? r.composite_score : null;
-    const _scoreBg = (_scNum === null) ? ""
-      : (_scNum < 20) ? "background:rgba(248,81,73,.12);"
-        : "background:rgba(63,185,80,.07);";
+    // 2026-10-19 owner：建仓信号扫描**整行底色**改为「站上 5 日均线=绿 / 其它=红」，
+    //   与得分里 −70 悬崖的口径一致（原来按得分 <20 红/≥20 绿，会和规则脱节）。
+    //   无 MA5 特征（旧数据/未扫描）不着色，避免把"无数据"画成"破位"。
+    const _tf = r.timing_features || {};
+    const _above5 = _tf.above_ma5;
+    const _scoreBg = (_above5 === true) ? "background:rgba(63,185,80,.10);"
+      : (_above5 === false) ? "background:rgba(248,81,73,.12);" : "";
     // 建仓/加仓时机门控徽章（timing_gate: 多头追强/空头抄底/震荡降频）
     const _tm = r.timing || {};
     let tmBadge = "";
@@ -2847,7 +2857,7 @@ function renderPB(pb) {
         <td class="num" title="${esc(scoreCellTitle)}">${scoreCellHtml}</td>
         <td class="num ${metCls}"><b>${isNoData ? "—" : metCount + "/3"}</b></td>
         ${dayStageCellHtml(r.structure)}
-        ${ma20FlagCellHtml((r.timing_features || {}).above_ma20)}
+        ${ma5FlagCellHtml(_tf.above_ma5, _tf.above_ma20)}
         <td class="num">${fmt(r.price)}<div style="font-size:10px">${pctHtml(r.change_pct, "实时涨幅（随行情每 10s 刷新）")}</div></td>
         <td style="text-align:center">${boxStr}</td>
         <td style="max-width:220px;line-height:1.7">${tagsTxt}</td>
@@ -2883,7 +2893,7 @@ function renderPB(pb) {
         <thead><tr>
           <th>股票</th><th title="P3-2 池分管：人工=manual侧扫描 / 自动=auto侧管理">池</th><th>判定</th><th class="num">得分</th><th class="num">通过</th>
           <th title="日线四阶段（描述状态，紧挨得分便于对照）：②抬升/③派发/④下跌/①蓄势。⚠️ 实测横截面IC与直觉相反——抬升/追高前瞻更差(IC −0.031~−0.042, t=−12~−15)、下跌/超跌前瞻更好(IC +0.020~+0.034, t=+7~+12)，分半窗两段同号；效应量小(IC≈0.04)仅作相对强弱参照">日线阶段</th>
-          <th title="是否站上 20 日线（观察列，不驱动任何判定）。⚠️「得分」里的 −70 悬崖扣分走的是 **5 日线**口径（owner 决定保留），与本列无关 ⇒ 本列不显示 −70。另注：5 日线该项实测横截面 IC 为负(站上MA5 −0.018, t=−6.9)">20日线<br><span style="font-size:9px;opacity:.6">观察</span></th>
+          <th title="现价 vs 5 日简单均线（与得分里 −70 悬崖同一口径）。**站上=绿、未站上=红**；20 日线状态放在单元格 tooltip。观察列，不驱动判定">5日线<br><span style="font-size:9px;opacity:.6">规则口径</span></th>
           <th class="num" title="实时价 + 实时涨幅（随行情每 10s 刷新）。取不到显示 — 而不是 0.00%：不把「无数据」画成「平盘」">价<br><span style="font-size:9px;opacity:.6">涨幅</span></th>
           <th title="突破箱体=第一优先级">突破</th>
           <th title="通道/箱体/背离等技术形态。背离标签已**自带周期**（如「日线顶背离」），与右侧『30min判定』的 30 分钟口径不同源 —— 悬停标签可见确认日期">技术标签</th>
