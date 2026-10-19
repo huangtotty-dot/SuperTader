@@ -68,6 +68,16 @@ def _shallow_pullback_top():
     return c
 
 
+def _hist_fade_top():
+    """柱线动量衰减：价格新高，但红柱已从近期峰值缩短（历史 06-30/07-01 同型）。"""
+    c = []
+    c += list(np.linspace(10.0, 11.0, 30))
+    c += list(np.linspace(11.0, 11.02, 3))     # 停滞后红柱缩短
+    c += [11.08]                               # 价格再创新高
+    c += list(np.linspace(11.08, 10.8, 8))
+    return c
+
+
 def _bottom_pattern():
     c = []
     c += list(np.linspace(10.0, 9.5, 10))
@@ -110,6 +120,21 @@ class TestAttachDivergence(unittest.TestCase):
         out = self.attach({"period_data": {"daily": _series(closes)}})
         tops = [e for e in (out["divergence"].get("daily") or []) if e["type"] == "顶"]
         self.assertGreaterEqual(len(tops), 1, out)
+
+    def test_hist_fade_top_is_marked(self):
+        """第二类标注：DIF 两峰无背离，但价格新高 + 红柱缩短 ⇒ 必须标出来。"""
+        from analysis import divergence as dv
+        closes = np.asarray(_hist_fade_top(), dtype=float)
+        frame = pd.DataFrame({
+            "time": [f"2026-01-{i + 1:02d}" for i in range(len(closes))],
+            "open": closes, "close": closes,
+            "high": closes * 1.002, "low": closes * 0.998,
+        })
+        fade = dv.detect_hist_fade_events(frame)
+        self.assertTrue(any(e["type"] == "顶" and e.get("hist", 0) > 0 for e in fade), fade)
+        out = self.attach({"period_data": {"daily": _series(closes)}})
+        ev = out["divergence"].get("daily") or []
+        self.assertTrue(any(e.get("source") == "hist_fade" and e["type"] == "顶" for e in ev), ev)
 
     def test_bottom_divergence_event(self):
         payload = {"period_data": {"min30": _series(_bottom_pattern())}}

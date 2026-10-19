@@ -4227,7 +4227,8 @@ function renderStockChart() {
         symbolOffset: [0, top ? -14 : 14],
         itemStyle: { color: top ? "#f85149" : "#3fb950", borderColor: "#fff", borderWidth: 1 },
         label: {
-          show: true, formatter: (top ? "顶背离" : "底背离") + (e.consec ? "·连" : ""),
+          show: true, formatter: (top ? "顶背离" : "底背离")
+            + (e.source === "hist_fade" ? "·柱" : "") + (e.consec ? "·连" : ""),
           position: top ? "top" : "bottom", distance: 4, fontSize: 9, fontWeight: "bold",
           color: top ? "#f85149" : "#3fb950",
           backgroundColor: "rgba(255,255,255,.92)",
@@ -4297,7 +4298,9 @@ function renderStockChart() {
         if (_divE) {
           const _dc = _divE.type === "顶" ? "#f85149" : "#3fb950";
           html += `<div style="color:${_dc};font-weight:bold;margin-top:2px">`
-            + `${_divE.type}背离${_divE.consec ? "（连续）" : ""} · DIF ${_divE.dif}</div>`;
+            + `${_divE.type}背离${_divE.source === "hist_fade" ? "（柱线动量衰减）" : ""}`
+            + `${_divE.consec ? "（连续）" : ""} · DIF ${_divE.dif}`
+            + (_divE.hist != null ? ` · 柱 ${_divE.hist}` : "") + `</div>`;
         }
 
         // P2前端优化：显示当前日期所在的箱体质量信息

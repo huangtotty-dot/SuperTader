@@ -262,6 +262,67 @@ def detect_divergence_events(df: pd.DataFrame, price_excess: float = None,
     return events
 
 
+def detect_hist_fade_events(df: pd.DataFrame, lookback: int = 10,
+                            price_excess: float = None,
+                            macd_fast: int = 12, macd_slow: int = 26,
+                            macd_signal: int = 9) -> list:
+    """MACD **柱线动量衰减**顶/底背离（展示用，2026-10-19 owner 需求）。
+
+    与 `detect_divergence_events`（两个价格峰之间的 DIF 对比）是**互补的两类标注**：
+    行情软件常见的另一类「顶背离」是——价格创新高，但红柱已从近期峰值缩短
+    （指标峰比价格峰早 1~2 根）。科创50 2026-06-30/07-01 就是典型：
+    柱峰在 06-30（76.7），07-01 价格新高（2255）时柱已回落到 70.7 ⇒ 顶背离。
+
+    判定：
+      · 顶：`high` 是局部峰（n=3）+ 比前 `lookback` 根的最高价高 ≥price_excess
+        + DIF>0 + **当前柱仍为红（hist>0）但 < 前 `lookback` 根内的柱峰**；
+      · 底：对称（价格新低 + DIF<0 + **绿柱仍为负**且从近期谷值回升）。
+    返回事件与 `detect_divergence_events` 同形，额外带 `source="hist_fade"`、`hist`。
+    """
+    if df is None or df.empty or len(df) < 40:
+        return []
+    if price_excess is None:
+        price_excess = PRICE_EXCESS
+    closes = df["close"].astype(float).values
+    highs = df["high"].astype(float).values
+    lows = df["low"].astype(float).values
+    times = df["time"].values
+    e_fast = pd.Series(closes).ewm(span=int(macd_fast), adjust=False).mean().values
+    e_slow = pd.Series(closes).ewm(span=int(macd_slow), adjust=False).mean().values
+    dif = e_fast - e_slow
+    dea = pd.Series(dif).ewm(span=int(macd_signal), adjust=False).mean().values
+    hist = 2.0 * (dif - dea)
+    peaks, troughs = _local_extrema(highs, lows)
+    events = []
+    lb = max(1, int(lookback))
+    for p in peaks:
+        if p < lb:
+            continue
+        prev_hi = float(highs[p - lb:p].max())
+        prev_hist_max = float(hist[p - lb:p].max())
+        if (highs[p] > prev_hi * (1 + price_excess) and dif[p] > 0
+                and hist[p] > 0 and hist[p] < prev_hist_max):
+            events.append({"index": int(p), "time": str(times[p]), "type": "顶",
+                           "price": float(highs[p]), "dif": float(dif[p]),
+                           "hist": float(hist[p]), "consec": False,
+                           "bars_ago": int(len(closes) - 1 - p),
+                           "source": "hist_fade"})
+    for t in troughs:
+        if t < lb:
+            continue
+        prev_lo = float(lows[t - lb:t].min())
+        prev_hist_min = float(hist[t - lb:t].min())
+        if (lows[t] < prev_lo * (1 - price_excess) and dif[t] < 0
+                and hist[t] < 0 and hist[t] > prev_hist_min):
+            events.append({"index": int(t), "time": str(times[t]), "type": "底",
+                           "price": float(lows[t]), "dif": float(dif[t]),
+                           "hist": float(hist[t]), "consec": False,
+                           "bars_ago": int(len(closes) - 1 - t),
+                           "source": "hist_fade"})
+    events.sort(key=lambda e: e["index"])
+    return events
+
+
 def _latest_fresh(events: list, max_age_bars: int):
     """窗口内最新的、且未过期（bars_ago <= max_age_bars）的事件；无则 None。
     修正前一律取 events[-1]，会把数周前的背离当成当前信号。"""

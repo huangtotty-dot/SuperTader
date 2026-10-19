@@ -893,6 +893,11 @@ def _attach_divergence(payload):
     `analysis.divergence.detect_divergence_events`（价格创新高/低 + MACD DIF 未创新高/低，
     含 price_excess / DIF 价区 / 摆动门槛三道过滤）。
 
+    两类标注合并：
+      1. DIF 两峰背离（`detect_divergence_events`，经典口径）；
+      2. **柱线动量衰减**（`detect_hist_fade_events`，价格新高但红柱已缩短；标注「·柱」）。
+     科创50 2026-06-30/07-01 属于第 2 类——标准 DIF 两峰没有背离（DIF 反而创新高）。
+
     ⚠️ **展示口径 ≠ 信号口径**（2026-10-19）：摆动门槛按周期缩放，见函数内 `_PROFILE`。
     信号路径（`detect_minute_divergence_detail` / 建仓表）**保持原参数不动**。
 
@@ -937,13 +942,35 @@ def _attach_divergence(payload):
                 "high": [r[3] for r in ohlc[:n]],
             })
             ev = _dv.detect_divergence_events(df, **_kw)
-            out[name] = [{"index": int(e["index"]), "time": str(e.get("time")),
-                          "type": "顶" if e.get("type") == "顶" else "底",
-                          "price": float(e.get("price")),
-                          "consec": bool(e.get("consec")),
-                          "bars_ago": int(e.get("bars_ago", 0)),
-                          "dif": round(float(e.get("dif") or 0), 4)}
-                         for e in ev][-80:]     # 上限防极端长历史把 payload 撑大
+            # 第二类：MACD 柱线动量衰减（价格新高但红柱已缩短；行情软件常用口径）。
+            # 科创50 2026-06-30/07-01 就是这类——DIF 两峰对比无背离，柱峰却已回落。
+            fade = _dv.detect_hist_fade_events(df)
+            _by_idx = {}
+            for e in ev:
+                _by_idx[int(e["index"])] = {
+                    "index": int(e["index"]), "time": str(e.get("time")),
+                    "type": "顶" if e.get("type") == "顶" else "底",
+                    "price": float(e.get("price")),
+                    "consec": bool(e.get("consec")),
+                    "bars_ago": int(e.get("bars_ago", 0)),
+                    "dif": round(float(e.get("dif") or 0), 4),
+                    "source": "dif_swing",
+                }
+            for e in fade:                      # 同一根已有 DIF 事件时以 DIF 为准
+                _i = int(e["index"])
+                if _i in _by_idx:
+                    continue
+                _by_idx[_i] = {
+                    "index": _i, "time": str(e.get("time")),
+                    "type": "顶" if e.get("type") == "顶" else "底",
+                    "price": float(e.get("price")),
+                    "consec": bool(e.get("consec")),
+                    "bars_ago": int(e.get("bars_ago", 0)),
+                    "dif": round(float(e.get("dif") or 0), 4),
+                    "hist": round(float(e.get("hist") or 0), 4),
+                    "source": "hist_fade",
+                }
+            out[name] = [_by_idx[k] for k in sorted(_by_idx)][-80:]  # 上限防 payload 过大
         except Exception:
             continue
     payload["divergence"] = out
