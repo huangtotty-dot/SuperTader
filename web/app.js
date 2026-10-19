@@ -3484,6 +3484,9 @@ let stockChartZoom = null;
 let stockChartVersion = null;
 // 最近一次**程序化**设进 dataZoom 的视窗：dataZoom 事件里用它区分「程序设置」与「用户缩放」。
 let stockChartAppliedZoom = null;
+// 2026-10-20：用户正在拖动/滚轮缩放时，实时尾（10 分 1s）不要重绘 ——
+// setOption 会把滑杆弹回，表现为“切到 10 分钟线后缩放不工作”。
+let stockChartInteractingUntil = 0;
 // MA 线配色（2026-10-17）：K线图改深底后，原浅底那组（#e6c07b 等）亮度过高、
 // 在深底上发白刺眼。换成按深底重新选的一组（dataviz 校验器 dark 全项通过：
 // 亮度带 / 彩度 / CVD ΔE≥8.4 / 对比度≥3:1）。
@@ -3599,7 +3602,12 @@ async function loadStockChartNow() {
       stockChartVersion = d.version || null;
       renderStockSummary(d);
       const _tr0 = performance.now();
-      renderStockChart();
+      if (Date.now() < stockChartInteractingUntil) {
+        // 用户正在缩放/拖动：先更新数据，1.6s 后再重绘，别把滑杆弹回
+        setTimeout(() => { if (stockChartCode) renderStockChart(); }, 1600);
+      } else {
+        renderStockChart();
+      }
       const _tr = performance.now() - _tr0;
       // 2026-10-20：区分「后端慢」与「前端渲染慢」——>=500ms 单独记一行
       if (_tr >= 500) {
@@ -3696,11 +3704,17 @@ async function tickStockChartLive() {
     }
     if (r.available && r.series && r.sig && period === stockChartPeriod) {
       if (stockChartLiveSig[period] !== r.sig) {
-        stockChartLiveSig[period] = r.sig;
         const cur = (stockChartData.period_data && stockChartData.period_data[period]) || {};
         // 整段替换（含 MA/MACD/RSI/BOLL/fib）；保留前端可能有的额外字段
         stockChartData.period_data[period] = Object.assign({}, cur, r.series);
-        renderStockChart();
+        if (Date.now() < stockChartInteractingUntil) {
+          // 用户正在缩放/拖动：只更新数据，**不重绘**，否则滑杆会被 setOption 弹回。
+          // 不写 sig ⇒ 交互结束后下一跳会自然重绘并补上最新帧。
+          nextMs = 600;
+        } else {
+          stockChartLiveSig[period] = r.sig;
+          renderStockChart();
+        }
       }
     }
     // 后端是 SWR：warming=后台还在首次取数；stale=回的是上一帧、正在刷新。
@@ -4634,6 +4648,7 @@ function renderStockChart() {
         const a = stockChartAppliedZoom;
         if (a && Math.abs(z.start - a.start) < 0.01 && Math.abs(z.end - a.end) < 0.01) return;
         stockChartZoom = { start: z.start, end: z.end };
+        stockChartInteractingUntil = Date.now() + 1500;   // 交互期间暂停实时重绘
       });
     } catch (e) { /* 桩环境 on 不接受回调，忽略 */ }
   }
@@ -6992,7 +7007,7 @@ function startLivePoll() {
 async function init() {
   // 首先获取 DOM 元素（此时 DOM 已完全加载）
   // 2026-10-20：启动标记（0ms）写进慢调用日志 ⇒ 能确认 WebView2 是否加载了新版 app.js
-  try { window.pywebview.api.report_slow_call("app_boot_20261020f", 0); } catch (e) { /* 静默 */ }
+  try { window.pywebview.api.report_slow_call("app_boot_20261020g", 0); } catch (e) { /* 静默 */ }
   dateSelect = document.getElementById("dateSelect");
   refreshBtn = document.getElementById("refreshBtn");
   autoPoll = document.getElementById("autoPoll");

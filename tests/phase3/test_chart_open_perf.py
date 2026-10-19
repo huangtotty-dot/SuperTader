@@ -68,8 +68,15 @@ class TestChartOpenPerf(unittest.TestCase):
     def test_frontend_cache_busted_and_boot_marked(self):
         """WebView2 可能缓存旧 app.js（改了跟没改一样）⇒ 带版本号 + 启动标记落日志。"""
         _html = (_ROOT / "web" / "index.html").read_text(encoding="utf-8")
-        self.assertIn("app.js?v=20261020f", _html)
-        self.assertIn("app_boot_20261020f", _JS)
+        self.assertIn("app.js?v=20261020g", _html)
+        self.assertIn("app_boot_20261020g", _JS)
+
+    def test_live_render_pauses_while_zooming(self):
+        """切到 10 分钟线（1s 重绘）后缩放失效的根因：实时重绘把滑杆弹回。
+        交互期间必须只更新数据、不重绘。"""
+        self.assertIn("let stockChartInteractingUntil = 0;", _JS)
+        self.assertIn("stockChartInteractingUntil = Date.now() + 1500", _JS)
+        self.assertIn("if (Date.now() < stockChartInteractingUntil)", _JS)
 
     def test_min10_live_poll_is_1s(self):
         """owner：盘中重点盯 10 分钟线 ⇒ 前端 1s 轮询，后端分钟 SWR TTL 0.8s。"""
