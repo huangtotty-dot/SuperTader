@@ -27,7 +27,10 @@ _SRC = (_ROOT / "t_gui.py").read_text(encoding="utf-8")
 def _load_attach():
     a = _SRC.index("def _attach_divergence(")
     b = _SRC.index("def _to_series(", a)
-    ns = {}
+    # 函数里引用了模块级 _DIV_SCHEMA；切片 exec 要把它一起带进命名空间
+    import re
+    m = re.search(r"^_DIV_SCHEMA\s*=\s*(\d+)", _SRC, re.M)
+    ns = {"_DIV_SCHEMA": int(m.group(1)) if m else 2}
     exec(compile(_SRC[a:b], "t_gui.py:_attach_divergence", "exec"), ns)
     return ns["_attach_divergence"]
 
@@ -150,6 +153,22 @@ class TestAttachDivergence(unittest.TestCase):
     def test_bad_payload_never_raises(self):
         out = self.attach({"period_data": {"daily": {"dates": [], "ohlc": []}}})
         self.assertEqual(out.get("divergence"), {})
+
+    def test_schema_short_circuit_skips_recompute(self):
+        """2026-10-20 提速：当前口径的 payload 直接返回，不再 import/重算。"""
+        payload = {"period_data": {"daily": _series(_top_pattern())},
+                   "divergence": {"daily": [{"index": 1}]}, "divergence_schema": 2}
+        out = self.attach(payload)
+        self.assertIs(out, payload)
+        self.assertEqual(out["divergence"], {"daily": [{"index": 1}]})
+
+
+class TestChartPrewarm(unittest.TestCase):
+    def test_startup_prewarms_divergence_import(self):
+        """打开 K 线变慢的根因：首次 import pandas+analysis.divergence ~1.5s；
+        必须放在 GUI 启动的后台预热里，不能落在首次 open 的同步路径上。"""
+        self.assertIn("from analysis import divergence as _dv", _SRC)
+        self.assertIn("K 线背离标注的冷导入", _SRC)
 
 
 class TestFrontendContract(unittest.TestCase):

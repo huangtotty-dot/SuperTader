@@ -927,6 +927,9 @@ def _calc_ma_and_indicators(d):
     return d
 
 
+_DIV_SCHEMA = 2      # 2 = 2026-10-20 展示口径（周期缩放 + 柱线动量衰减）；改逻辑时 bump
+
+
 def _attach_divergence(payload):
     """给 K 线 payload 增加 `divergence`：各周期顶/底背离事件（2026-10-19 owner 需求）。
 
@@ -945,6 +948,11 @@ def _attach_divergence(payload):
     `period_data[*].ohlc` 的顺序是 **ECharts candlestick 口径 [open, close, low, high]**。
     事件携带 `index`（该周期 dates 的下标）供前端直接画点。
     """
+    # 2026-10-20 提速：payload 已是当前口径 ⇒ **先返回，连 import 都不做**。
+    # 这是「打开 K 线变慢」的直接修复——之前每次缓存命中都白 import pandas+analysis.divergence
+    # （冷 ~1.5s；热也会白算 6 个周期 ~56ms）。
+    if payload.get("divergence_schema") == _DIV_SCHEMA and isinstance(payload.get("divergence"), dict):
+        return payload
     try:
         import pandas as pd
         from analysis import divergence as _dv
@@ -1015,6 +1023,7 @@ def _attach_divergence(payload):
         except Exception:
             continue
     payload["divergence"] = out
+    payload["divergence_schema"] = _DIV_SCHEMA
     return payload
 
 
@@ -10391,6 +10400,9 @@ if __name__ == "__main__":
         后台线程，失败静默。"""
         try:
             import pandas as pd
+            # 2026-10-20：K 线背离标注的冷导入（pandas + analysis.divergence ≈1.5s）
+            # 必须在这里预热掉，否则**第一次打开任意 K 线**都会额外卡 1.5s。
+            from analysis import divergence as _dv   # noqa: F401
             _d = pd.DataFrame({
                 "date": pd.to_datetime(["2020-01-01"] * 400),
                 "open": [1.0] * 400, "high": [1.1] * 400, "low": [0.9] * 400,
