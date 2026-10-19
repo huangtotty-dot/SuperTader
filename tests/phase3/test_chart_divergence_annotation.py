@@ -14,6 +14,7 @@ import unittest
 from pathlib import Path
 
 import numpy as np
+import pandas as pd
 
 sys.stdout.reconfigure(encoding="utf-8")
 _ROOT = Path(__file__).resolve().parents[2]
@@ -52,6 +53,21 @@ def _top_pattern():
     return c
 
 
+def _shallow_pullback_top():
+    """浅回撤(2%)后创新高：DIF 走低但摆动幅度 < 信号口径 4×中位振幅。
+
+    这正是 owner 2026-10-19 报「漏掉很多」的典型：信号口径要求 4×中位 bar 振幅
+    （日线中位 ~1% ⇒ 4%）的逆向摆动，而真实背离常常只有 2% 回撤。
+    """
+    c = []
+    c += list(np.linspace(9.0, 10.0, 40))
+    c += list(np.linspace(10.0, 10.4, 5))          # 峰 1
+    c += list(np.linspace(10.4, 10.4 * (1 - 0.02), 10))   # 只回撤 2%
+    c += list(np.linspace(10.4 * (1 - 0.02), 10.45, 30))   # 慢速创新高 → 峰 2
+    c += list(np.linspace(10.45, 10.45 * 0.98, 8))
+    return c
+
+
 def _bottom_pattern():
     c = []
     c += list(np.linspace(10.0, 9.5, 10))
@@ -78,6 +94,22 @@ class TestAttachDivergence(unittest.TestCase):
         for k in ("time", "consec", "bars_ago", "dif"):
             self.assertIn(k, e)
         self.assertGreaterEqual(e["bars_ago"], 0)
+
+    def test_display_profile_catches_shallow_pullback(self):
+        """展示口径必须比信号口径宽：同一序列信号口径 0 顶，展示口径 ≥1 顶。"""
+        from analysis import divergence as dv
+        closes = np.asarray(_shallow_pullback_top(), dtype=float)
+        # test helper 的 bar 振幅固定 ±0.5%（中位 1%）
+        frame = pd.DataFrame({
+            "time": [f"2026-01-{i + 1:02d}" for i in range(len(closes))],
+            "open": closes, "close": closes,
+            "high": closes * 1.005, "low": closes * 0.995,
+        })
+        strict = [e for e in dv.detect_divergence_events(frame) if e["type"] == "顶"]
+        self.assertEqual(strict, [], "信号口径应过滤掉 2% 浅回撤")
+        out = self.attach({"period_data": {"daily": _series(closes)}})
+        tops = [e for e in (out["divergence"].get("daily") or []) if e["type"] == "顶"]
+        self.assertGreaterEqual(len(tops), 1, out)
 
     def test_bottom_divergence_event(self):
         payload = {"period_data": {"min30": _series(_bottom_pattern())}}

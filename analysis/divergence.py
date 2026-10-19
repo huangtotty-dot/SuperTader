@@ -182,7 +182,9 @@ def _local_extrema(highs, lows, n_bars=3):
 def detect_divergence_events(df: pd.DataFrame, price_excess: float = None,
                              require_dif_zone: bool = None,
                              swing_mult: float = None,
-                             swing_mult_top: float = None) -> list:
+                             swing_mult_top: float = None,
+                             min_bars: int = 40,
+                             extrema_bars: int = 3) -> list:
     """检测单分辨率 K 线全部顶/底背离事件。
     返回 [{index, time, type('顶'/'底'), price, dif, consec, bars_ago}]；事件记在最新峰/谷上。
     consec=True 表示该峰/谷与前一个峰/谷形成连续同向背离（验证显示 60min 连续底背离有区分度）。
@@ -200,7 +202,7 @@ def detect_divergence_events(df: pd.DataFrame, price_excess: float = None,
     ⚠️ `require_dif_zone=True` 会**显著减少事件数**（实测 9 只 30min：603667 3→0、
     002451 5→2、002261 5→3）。这会影响"60min 连续底背离"这一**唯一已验证信号**的
     样本口径，若要引用其 +12.5pp 结论需按新口径重跑验证（validate_divergence.py）。"""
-    if df is None or df.empty or len(df) < 40:
+    if df is None or df.empty or len(df) < int(min_bars or 40):
         return []
     # ⚠️ 用 None 哨兵而非直接把模块常量写成默认值：默认值在 **import 时求值一次**，
     # 写成 `price_excess=PRICE_EXCESS` 会让常量**运行时改不动** ——
@@ -218,7 +220,7 @@ def detect_divergence_events(df: pd.DataFrame, price_excess: float = None,
     lows = df["low"].astype(float).values
     times = df["time"].values
     dif = _macd_dif(closes)
-    peaks, troughs = _local_extrema(highs, lows)
+    peaks, troughs = _local_extrema(highs, lows, int(extrema_bars or 3))
     # 摆动门槛（相对该票自身波动）：两个极值之间的逆向幅度不足 `swing_min` 时，
     # 它们属于同一段走势，不构成"两个高点/低点"⇒ 不作背离比对。
     # ⚠️ 顶/底用**不同**门槛：顶更严（见 SWING_MULT_TOP 的标定说明），底维持宽松。

@@ -889,9 +889,12 @@ def _calc_ma_and_indicators(d):
 def _attach_divergence(payload):
     """给 K 线 payload 增加 `divergence`：各周期顶/底背离事件（2026-10-19 owner 需求）。
 
-    只做**标注**，不参与任何交易判定。口径复用已验证的
+    只做**标注**，不参与任何交易判定。口径复用
     `analysis.divergence.detect_divergence_events`（价格创新高/低 + MACD DIF 未创新高/低，
     含 price_excess / DIF 价区 / 摆动门槛三道过滤）。
+
+    ⚠️ **展示口径 ≠ 信号口径**（2026-10-19）：摆动门槛按周期缩放，见函数内 `_PROFILE`。
+    信号路径（`detect_minute_divergence_detail` / 建仓表）**保持原参数不动**。
 
     `period_data[*].ohlc` 的顺序是 **ECharts candlestick 口径 [open, close, low, high]**。
     事件携带 `index`（该周期 dates 的下标）供前端直接画点。
@@ -902,13 +905,29 @@ def _attach_divergence(payload):
     except Exception:
         payload.setdefault("divergence", {})
         return payload
+    # 展示口径 ≠ 信号口径（2026-10-19 owner：「MACD 背离漏掉很多」）：
+    #   · 摆动门槛 2.5×/4× 是**用分钟线标定**的；日线中位振幅 2.6~5.4% ⇒ 要求 7~22% 的
+    #     逆向摆动才算「两个峰」，绝大多数真实背离被误杀（实测 000988 6→10、300475 3→8、
+    #     002202 3→8）。展示时按周期缩放：日/周/月 1.0×/1.5×，分钟 1.5×/2.0×。
+    #   · 周/月线根数天然少（800 日≈38 月），最小窗口按周期放宽，否则月线永远无标注。
+    #   · price_excess / require_dif_zone 保持与信号口径一致（owner 2026-09-20 报 002202
+    #     的「微新高」与「DIF 深负区小反弹」假阳性就是这两道闸挡掉的）。
+    _PROFILE = {
+        "daily":   dict(swing_mult=1.0, swing_mult_top=1.5, min_bars=40),
+        "weekly":  dict(swing_mult=1.0, swing_mult_top=1.5, min_bars=30),
+        "monthly": dict(swing_mult=1.0, swing_mult_top=1.5, min_bars=24),
+        "min10":   dict(swing_mult=1.5, swing_mult_top=2.0, min_bars=40),
+        "min30":   dict(swing_mult=1.5, swing_mult_top=2.0, min_bars=40),
+        "min60":   dict(swing_mult=1.5, swing_mult_top=2.0, min_bars=40),
+    }
     out = {}
     for name, s in (payload.get("period_data") or {}).items():
         try:
             dates = (s or {}).get("dates") or []
             ohlc = (s or {}).get("ohlc") or []
             n = min(len(dates), len(ohlc))
-            if n < 40:                     # 与 detect_divergence_events 的最小窗口一致
+            _kw = _PROFILE.get(name, dict(swing_mult=1.5, swing_mult_top=2.0, min_bars=40))
+            if n < int(_kw["min_bars"]):
                 continue
             df = pd.DataFrame({
                 "time": dates[:n],
@@ -917,7 +936,7 @@ def _attach_divergence(payload):
                 "low": [r[2] for r in ohlc[:n]],
                 "high": [r[3] for r in ohlc[:n]],
             })
-            ev = _dv.detect_divergence_events(df)
+            ev = _dv.detect_divergence_events(df, **_kw)
             out[name] = [{"index": int(e["index"]), "time": str(e.get("time")),
                           "type": "顶" if e.get("type") == "顶" else "底",
                           "price": float(e.get("price")),
