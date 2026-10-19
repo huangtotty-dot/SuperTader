@@ -3492,7 +3492,9 @@ const MA_COLORS = ["#3987e5", "#d95926", "#199e70", "#c98500", "#d55181", "#9085
 /* 默认可见根数。取值贴着后端黄金分割回看期（t_gui._FIB_LOOKBACK）——daily 120 与回看期
    相等，锚点必然落在默认视窗内；weekly/monthly 因 bar 更少而略小，万一锚点更早由下面的
    放宽分支兜底。核心目的：后端 800 根日线全画出来蜡烛只有 ~3px，形态根本看不清。 */
-const DEFAULT_BARS = { daily: 120, weekly: 104, monthly: 60, min10: 160, min30: 160, min60: 160 };
+// 2026-10-20 owner：「日线只能显示一部分」——默认改为**全部**历史（约 800 根）；
+// 想紧凑看形态可手动切「近3月/近6月/近1年」。周/月/分钟仍保留原默认窗口。
+const DEFAULT_BARS = { daily: null, weekly: 104, monthly: 60, min10: 160, min30: 160, min60: 160 };
 // 快捷区间：按周期给不同标签；bars=null 表示全部。每个周期的默认项都在表内（高亮用）。
 // 分钟档后端各保留 320 根（30分≈8根/日、60分≈4根/日）。
 const RANGE_PRESETS = {
@@ -3514,7 +3516,12 @@ const RANGE_PRESETS = {
 let stockChartRange = {};
 try {
   const _savedRange = JSON.parse(localStorage.getItem("stockChartRange") || "null");
-  if (_savedRange && typeof _savedRange === "object") stockChartRange = _savedRange;
+  if (_savedRange && typeof _savedRange === "object") {
+    stockChartRange = _savedRange;
+    // 2026-10-20：旧默认「近6月=120」迁移为新的「全部」默认
+    // （owner 反馈日线只显示一部分；显式选过 120 的也会被重置一次）
+    if (stockChartRange.daily === 120) delete stockChartRange.daily;
+  }
 } catch (e) { /* 坏数据忽略，用默认 */ }
 
 // 根数 → dataZoom 起始百分比。bars 为 null(全部) 或 n<=bars 时整体可见(0)。
@@ -3979,9 +3986,16 @@ function renderStockSummary(d) {
   const _ma5Hint = _pcnHint
     ? `<span class="ss-item cell-dim" style="font-size:10px">金线=MA5(${_pcnHint}) · 蓝虚线=日线MA5 · 紫虚线=日线MA10</span>`
     : "";
+  // 2026-10-20：把「当前周期实际有多少根数据」写出来，避免"看起来只有一部分"时
+  // 无法区分是数据缺失还是缩放窗口。
+  const _pdCur = d.period_data && d.period_data[stockChartPeriod];
+  const _rangeHint = (_pdCur && (_pdCur.dates || []).length)
+    ? `<span class="ss-item cell-dim" style="font-size:10px">本周期 ${_pdCur.dates.length} 根 · ${esc(_pdCur.dates[0])} ~ ${esc(_pdCur.dates[_pdCur.dates.length - 1])}</span>`
+    : "";
   document.getElementById("stockSummary").innerHTML = `
     <span class="ss-item">当前价: <b class="mono">${fmt(cur, 3)}</b>${_chgHtml}</span>
     ${_ma5Hint}
+    ${_rangeHint}
     <span class="ss-item">通道: ${chTxt} ${chDesc}</span>
     <span class="ss-item">关键压力: ${resTxt}</span>
     <span class="ss-item">关键支撑: ${supTxt}</span>
@@ -6949,7 +6963,7 @@ function startLivePoll() {
 async function init() {
   // 首先获取 DOM 元素（此时 DOM 已完全加载）
   // 2026-10-20：启动标记（0ms）写进慢调用日志 ⇒ 能确认 WebView2 是否加载了新版 app.js
-  try { window.pywebview.api.report_slow_call("app_boot_20261020c", 0); } catch (e) { /* 静默 */ }
+  try { window.pywebview.api.report_slow_call("app_boot_20261020d", 0); } catch (e) { /* 静默 */ }
   dateSelect = document.getElementById("dateSelect");
   refreshBtn = document.getElementById("refreshBtn");
   autoPoll = document.getElementById("autoPoll");

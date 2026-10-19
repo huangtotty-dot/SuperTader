@@ -17,6 +17,17 @@ _ROOT = Path(__file__).resolve().parents[2]
 _JS = (_ROOT / "web" / "app.js").read_text(encoding="utf-8")
 
 
+class TestChartDailyFullRange(unittest.TestCase):
+    """2026-10-20 owner：「日线只能显示一部分」⇒ 默认展示全部历史 + 摘要显示根数。"""
+
+    def test_default_daily_is_all(self):
+        self.assertIn("const DEFAULT_BARS = { daily: null,", _JS)
+        self.assertIn("stockChartRange.daily === 120", _JS)
+
+    def test_summary_shows_bar_count(self):
+        self.assertIn("本周期 ${_pdCur.dates.length} 根", _JS)
+
+
 class TestChartMA5Style(unittest.TestCase):
     def test_ma5_special_color_and_width(self):
         self.assertIn('const MA5_COLOR = "#ffd166";', _JS)
