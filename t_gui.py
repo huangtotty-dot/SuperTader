@@ -886,6 +886,51 @@ def _calc_ma_and_indicators(d):
     return d
 
 
+def _attach_divergence(payload):
+    """给 K 线 payload 增加 `divergence`：各周期顶/底背离事件（2026-10-19 owner 需求）。
+
+    只做**标注**，不参与任何交易判定。口径复用已验证的
+    `analysis.divergence.detect_divergence_events`（价格创新高/低 + MACD DIF 未创新高/低，
+    含 price_excess / DIF 价区 / 摆动门槛三道过滤）。
+
+    `period_data[*].ohlc` 的顺序是 **ECharts candlestick 口径 [open, close, low, high]**。
+    事件携带 `index`（该周期 dates 的下标）供前端直接画点。
+    """
+    try:
+        import pandas as pd
+        from analysis import divergence as _dv
+    except Exception:
+        payload.setdefault("divergence", {})
+        return payload
+    out = {}
+    for name, s in (payload.get("period_data") or {}).items():
+        try:
+            dates = (s or {}).get("dates") or []
+            ohlc = (s or {}).get("ohlc") or []
+            n = min(len(dates), len(ohlc))
+            if n < 40:                     # 与 detect_divergence_events 的最小窗口一致
+                continue
+            df = pd.DataFrame({
+                "time": dates[:n],
+                "open": [r[0] for r in ohlc[:n]],
+                "close": [r[1] for r in ohlc[:n]],
+                "low": [r[2] for r in ohlc[:n]],
+                "high": [r[3] for r in ohlc[:n]],
+            })
+            ev = _dv.detect_divergence_events(df)
+            out[name] = [{"index": int(e["index"]), "time": str(e.get("time")),
+                          "type": "顶" if e.get("type") == "顶" else "底",
+                          "price": float(e.get("price")),
+                          "consec": bool(e.get("consec")),
+                          "bars_ago": int(e.get("bars_ago", 0)),
+                          "dif": round(float(e.get("dif") or 0), 4)}
+                         for e in ev][-80:]     # 上限防极端长历史把 payload 撑大
+        except Exception:
+            continue
+    payload["divergence"] = out
+    return payload
+
+
 def _to_series(d, intraday=False):
     """DataFrame → 前端序列 dict（与 _build_chart_from_df 同口径；抽出以复用）。"""
     import pandas as pd
@@ -4782,7 +4827,7 @@ class Api:
                     self._rebuild_payload_daily(payload, daily_rows + [bar])
                 except Exception:
                     pass
-        return payload
+        return _attach_divergence(payload)
 
 
     def _mk_forming_bar(self, today, px, o, h, l, v):
@@ -4912,6 +4957,7 @@ class Api:
         # 数据身份版本号（不是时间）：前端拿它做「没变就别重传/重画」的握手，见 load_stock_chart。
         out["version"] = self._chart_version(out["period_data"])
         out["available"] = True
+        _attach_divergence(out)      # 各周期顶/底背离标注（只读展示）
         return out
 
 

@@ -3961,6 +3961,8 @@ function renderStockChart() {
   // 仍保留这个常量而不是硬编码 true：将来若要再挂回开关，只需加回 checkbox 即可自动生效
   // （元素不存在时 `|| {}` 使 `checked !== false` 恒真）。
   const showGaps = (document.getElementById("tgGaps") || {}).checked !== false;
+  // 背离标注（2026-10-19 owner）：后端按周期算好顶/底背离事件，前端直接画在对应 K 线上。
+  const showDiv = (document.getElementById("tgDiv") || {}).checked !== false;
 
   // markLine: 支撑/压力 — 去重降密度 + 精简标签
   function dedupeLines(items) {
@@ -4208,6 +4210,34 @@ function renderStockChart() {
     window.stockChartInst = stockChartInst;  // 暴露供调试/检查
   }
 
+  // 背离点：后端按周期给 {index,type(顶/底),price,consec,dif}；只画落在当前序列内的。
+  const divEvents = (showDiv && data.divergence && data.divergence[stockChartPeriod]) || [];
+  const divByIndex = {};
+  divEvents.forEach(e => {
+    if (e && e.index >= 0 && e.index < period.dates.length) divByIndex[e.index] = e;
+  });
+  const divSeries = Object.keys(divByIndex).length ? [{
+    name: "背离", type: "scatter", xAxisIndex: 0, yAxisIndex: 0, z: 12,
+    data: Object.values(divByIndex).map(e => {
+      const top = e.type === "顶";
+      return {
+        value: [e.index, e.price],
+        // 顶背离：红色倒三角压在峰顶上方；底背离：绿色正三角托在谷底下方。
+        symbol: "triangle", symbolRotate: top ? 180 : 0, symbolSize: 12,
+        symbolOffset: [0, top ? -14 : 14],
+        itemStyle: { color: top ? "#f85149" : "#3fb950", borderColor: "#fff", borderWidth: 1 },
+        label: {
+          show: true, formatter: (top ? "顶背离" : "底背离") + (e.consec ? "·连" : ""),
+          position: top ? "top" : "bottom", distance: 4, fontSize: 9, fontWeight: "bold",
+          color: top ? "#f85149" : "#3fb950",
+          backgroundColor: "rgba(255,255,255,.92)",
+          borderColor: top ? "#f85149" : "#3fb950", borderWidth: 1,
+          borderRadius: 3, padding: [1, 3],
+        },
+      };
+    }),
+  }] : [];
+
   stockChartAppliedZoom = { start: zStart, end: zEnd };
   stockChartInst.setOption({
     // 2026-10-17 owner：K线图用**深色画布**（独立的深色主题，不是把浅色反相）。
@@ -4261,6 +4291,14 @@ function renderStockChart() {
           + `<div>开 <b>${o}</b>　收 <b style="color:${col}">${c}</b>　涨跌 <b style="color:${col}">${chgTxt}</b></div>`
           + `<div>高 <b>${hi}</b>　低 <b>${lo}</b>　量 <b>${volTxt}</b></div>`;
         if (maParts.length) html += `<div style="color:#8b949e">${maParts.join("　")}</div>`;
+
+        // 背离标注：与图上的三角标记同源（backend divergence[period]）
+        const _divE = divByIndex[i];
+        if (_divE) {
+          const _dc = _divE.type === "顶" ? "#f85149" : "#3fb950";
+          html += `<div style="color:${_dc};font-weight:bold;margin-top:2px">`
+            + `${_divE.type}背离${_divE.consec ? "（连续）" : ""} · DIF ${_divE.dif}</div>`;
+        }
 
         // P2前端优化：显示当前日期所在的箱体质量信息
         // 比到「天」：分钟周期的 curDate 带时间("2026-09-30 15:00")，直接与日线口径的
@@ -4351,6 +4389,7 @@ function renderStockChart() {
             ...(showLevels ? [...resistanceLines, ...supportLines] : []), currentLine,
           ],
           label: { position: "insideEndTop" } } },
+      ...divSeries,
       ...(fibAnchor ? [fibAnchor] : []),
       // 通道色带：上轨实线/下轨虚线 + 区域填充。红涨绿跌：上行=红，下行=绿
       ...(showChannel && data.channel && data.channel.up_line.length ? [{
