@@ -3913,7 +3913,7 @@ class Api:
         return _clean({"alerts": [], "disabled": True})
 
     # ---------- 个股技术分析弹窗 ----------
-    def load_stock_chart(self, code, version=None, want_minutes=False):
+    def load_stock_chart(self, code, version=None, want_minutes=False, period=None):
         """日线(本地缓存秒回/网络兜底) → 7 条 MA + MACD/RSI/BOLL → resample 周/月 + 30分/60分
         → 支撑压力。支持带前缀指数代码(sh000001/sz399001 等)。内存缓存：同一标的当日重复用。
 
@@ -3988,7 +3988,8 @@ class Api:
         # （GM 不可达时每次卡满 12s 超时）。miss 时行为完全不变。
         # 2026-10-06：**覆盖指数**（此前 `not is_index` 把指数排除 → 指数每次走网络、且用错取数函数）。
         if not is_em:
-            _hit = self._serve_payload_cache(code_str, version, want_minutes, allow_network=True)
+            _hit = self._serve_payload_cache(code_str, version, want_minutes,
+                                             allow_network=True, period=period)
             if _hit is not None:
                 return _hit
 
@@ -4114,8 +4115,10 @@ class Api:
             df = pd.DataFrame(rows)
             df["date"] = pd.to_datetime(df["date"])
             df = df.sort_values("date").reset_index(drop=True)
-            out = self._build_chart_from_df(df, out, code,
-                                            min_frames={} if not want_minutes else None)
+            out = self._build_chart_from_df(
+                df, out, code,
+                min_frames={} if not want_minutes else None,
+                want_min_period=period if want_minutes else None)
         except Exception as e:
             out["error"] = f"计算失败: {e}"
             return out
@@ -4779,10 +4782,14 @@ class Api:
             return {"code": res.get("code"), "available": True, "unchanged": True, "version": _v}
         return res
 
-    def _serve_payload_cache(self, code, version, want_minutes=False, allow_network=False):
+    def _serve_payload_cache(self, code, version, want_minutes=False, allow_network=False,
+                             period=None):
         """盘后预下载/机会式落盘的图表 payload 命中 → 瞬开结果；未命中返回 None。
 
         want_minutes 但 payload 内无分时 ⇒ 返回 None（落到重建带分时）。
+        `period`（2026-10-20）：只要求**当前切换到的那个分钟档**在 payload 里即可。
+        原来要求三档齐全 ⇒ 打开一个分钟 Tab 会串行抓三档（4.8s）；现在按需只抓一档。
+        period 为空（预下载/旧调用）仍按三档齐全判。
         allow_network：payload 的日线停在上一交易日时，是否允许拉一次**单只快照**
         补当日 forming bar（K 线弹窗自己那一只：True；批量/热路径：False）。
         """
@@ -4792,14 +4799,15 @@ class Api:
             if not hit:
                 return None
             if want_minutes:
-                # 三个分钟档缺一不可：2026-10-17 之前 10min 的合成路径有 bug（合成结果带
-                # `date` 列 → 两个 time 列 → 永远空），盘后预下载落下的 payload 里
-                # **没有 min10**。只查 min30 会让 10 分 Tab 一直显示"无分时数据"。
-                # schema<2 的旧档同样不可信（那时的 min10 就算有也不到 30 根）⇒ 重建一次。
+                # schema<2 的旧档不可信（那时 10min 合成有 bug/不足 30 根）⇒ 重建一次。
                 if int(hit.get("schema") or 0) < 2:
                     return None
                 _pd = (hit.get("payload") or {}).get("period_data") or {}
-                if not (_pd.get("min10") and _pd.get("min30") and _pd.get("min60")):
+                _need = period if period in ("min10", "min30", "min60") else None
+                if _need:
+                    if not _pd.get(_need):
+                        return None
+                elif not (_pd.get("min10") and _pd.get("min30") and _pd.get("min60")):
                     return None
             # 2026-10-08: payload 比**日线缓存**旧 ⇒ 判过期、回落日线缓存路径（零网络、序列完整）。
             # 背景：`MAX_DISPLAY_GAP_DAYS=12` 容忍长假，会把「缺了 1 个交易日」的 payload 也当新鲜
@@ -4820,7 +4828,10 @@ class Api:
                         return None
             except Exception:
                 pass
-            res = self._payload_to_result(hit, code, allow_network=allow_network)
+            res = self._payload_to_result(
+                hit, code, allow_network=allow_network,
+                strip_minutes=not want_minutes,
+                keep_minute=(period if want_minutes else None))
             if not res or not res.get("available"):
                 return None
             self._cache_chart(f"{datetime.now().strftime('%Y-%m-%d')}_{code}", res)
@@ -4903,9 +4914,15 @@ class Api:
         except Exception:
             return []
 
-    def _payload_to_result(self, hit, code, allow_network=False):
+    def _payload_to_result(self, hit, code, allow_network=False, strip_minutes=False,
+                           keep_minute=None):
         """payload 缓存 → 结果 dict。日内（可能出新 bar）把当日那根补进 daily 序列并重算日线指标；
-        非交易时段直接返回收盘态（真·瞬开）。其他周期/箱体/通道沿用收盘态（≤1 根偏差）。"""
+        非交易时段直接返回收盘态（真·瞬开）。其他周期/箱体/通道沿用收盘态（≤1 根偏差）。
+
+        `strip_minutes`（2026-10-20）：日/周/月视图不把 10/30/60 分序列发给前端
+        （payload 里三档 320 根 ≈ 2/3 体积，桥传输+首帧渲染都变慢）；切到分钟 Tab 时
+        前端会带 period 再取一次，这样首屏只传当前周期。
+        """
         import copy
         payload = copy.deepcopy(hit.get("payload") or {})
         if not payload:
@@ -4925,6 +4942,15 @@ class Api:
                     self._rebuild_payload_daily(payload, daily_rows + [bar])
                 except Exception:
                     pass
+        _pdta = payload.get("period_data") or {}
+        if strip_minutes:
+            for _k in ("min10", "min30", "min60"):
+                _pdta.pop(_k, None)
+        elif keep_minute in ("min10", "min30", "min60"):
+            # 分钟视图只带当前 Tab 的那一档（磁盘 payload 仍是三档齐全，切 Tab 再按需取）
+            for _k in ("min10", "min30", "min60"):
+                if _k != keep_minute:
+                    _pdta.pop(_k, None)
         return _attach_divergence(payload)
 
 
@@ -4994,7 +5020,7 @@ class Api:
         payload["current_price"] = round(float(d["close"].iloc[-1]), 3)
         payload["version"] = self._chart_version(payload["period_data"])
 
-    def _build_chart_from_df(self, df, out, code, min_frames=None):
+    def _build_chart_from_df(self, df, out, code, min_frames=None, want_min_period=None):
         """由日线 DataFrame 构建 K 线弹窗数据（MA/MACD/RSI/BOLL + 周/月/30分/60分 + 支撑箱体通道）。
 
         min_frames: {"min30": df, "min60": df} 直接注入（测试用，避免联网）；None → 自行取数
@@ -5033,6 +5059,12 @@ class Api:
                 # 2026-10-20 提速：三个分钟档**并行取**。原来串行 3×~1.6s=4.8s，
                 # 是 `load_stock_chart 4839ms`（gui_slow_calls.log）的主要来源。
                 _jobs = (("min10", "10min"), ("min30", "30min"), ("min60", "60min"))
+                if want_min_period in ("min10", "min30", "min60"):
+                    # 2026-10-20：按需只取当前 Tab 的分钟档（切到哪个抓哪个），
+                    # 不再为了一个 Tab 把三档全抓（首次切分钟从 ~4.8s 降到 ~1s 内）。
+                    _jobs = ((want_min_period,
+                              {"min10": "10min", "min30": "30min",
+                               "min60": "60min"}[want_min_period]),)
                 try:
                     import concurrent.futures as _cf
                     with _cf.ThreadPoolExecutor(max_workers=3,

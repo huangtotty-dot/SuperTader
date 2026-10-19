@@ -3548,7 +3548,9 @@ function _wantMinutes() {
 async function loadStockChartNow() {
   if (!stockChartCode) return;
   try {
-    const d = await apiCall("load_stock_chart", stockChartCode, stockChartVersion, _wantMinutes());
+    // 2026-10-20：把当前周期一起传下去 ⇒ 分钟档按需只抓当前 Tab 的那一档
+    const d = await apiCall("load_stock_chart", stockChartCode, stockChartVersion,
+                            _wantMinutes(), stockChartPeriod);
     if (d && d.unchanged) {
       // 数据没变：不重建图表，只刷新「10s实时更新」那行时间戳（renderStockSummary 只是拼串，很轻）
       if (stockChartData) renderStockSummary(stockChartData);

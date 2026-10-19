@@ -30,6 +30,23 @@ class TestChartOpenPerf(unittest.TestCase):
         self.assertIn('report_slow_call("chart_render"', _JS)
         self.assertIn('report_slow_call("chart_open_total"', _JS)
 
+    def test_minute_fetch_is_per_period(self):
+        """分钟 Tab 只抓当前周期，不再为一个 Tab 抓三档。"""
+        self.assertIn("want_min_period", _PY)
+        self.assertIn("_need = period if period in", _PY)
+        self.assertIn('apiCall("load_stock_chart", stockChartCode, stockChartVersion,', _JS)
+        self.assertIn("_wantMinutes(), stockChartPeriod);", _JS)
+
+    def test_daily_view_strips_minute_series(self):
+        """日/周/月视图不把三档分钟序列传给前端（payload 体积 ≈ -2/3）。"""
+        self.assertIn("strip_minutes", _PY)
+        self.assertIn("strip_minutes=not want_minutes", _PY)
+
+    def test_minute_view_keeps_only_current_period(self):
+        """分钟视图只带当前 Tab 的分时序列（payload ≈ -46%）。"""
+        self.assertIn("keep_minute", _PY)
+        self.assertIn("keep_minute=(period if want_minutes else None)", _PY)
+
 
 if __name__ == "__main__":
     unittest.main()
