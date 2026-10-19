@@ -68,8 +68,16 @@ class TestChartOpenPerf(unittest.TestCase):
     def test_frontend_cache_busted_and_boot_marked(self):
         """WebView2 可能缓存旧 app.js（改了跟没改一样）⇒ 带版本号 + 启动标记落日志。"""
         _html = (_ROOT / "web" / "index.html").read_text(encoding="utf-8")
-        self.assertIn("app.js?v=20261020d", _html)
-        self.assertIn("app_boot_20261020d", _JS)
+        self.assertIn("app.js?v=20261020e", _html)
+        self.assertIn("app_boot_20261020e", _JS)
+
+    def test_chart_has_explicit_zoom_buttons(self):
+        """2026-10-20 owner：无法缩放 ⇒ 增加 ＋/－/⟲ 按钮 + 显式 inside 缩放选项。"""
+        self.assertIn("function zoomStockChart(", _JS)
+        self.assertIn("function resetStockChartZoom(", _JS)
+        self.assertIn("zoomStockChart(0.7)", _JS)
+        self.assertIn("zoomStockChart(1.4)", _JS)
+        self.assertIn("zoomOnMouseWheel: true", _JS)
         self.assertIn("K线加载失败", _JS)
 
 

@@ -3542,7 +3542,29 @@ function renderRangeButtons(period) {
   host.innerHTML = presets.map(p =>
     `<button class="range-btn${(p.bars === cur || (p.bars === null && cur === null)) ? " active" : ""}"`
     + ` data-bars="${p.bars === null ? "all" : p.bars}" onclick="setChartRange('${period}',${p.bars === null ? "null" : p.bars})">${p.label}</button>`
-  ).join("");
+  ).join("")
+    // 2026-10-20 owner：「无法使用缩放放大/缩小」——滑杆两端手柄在"全部"视图下贴边不好抓，
+    // 这里给一组**明确按钮**（＋放大 / －缩小 / ⟲重置），任何设备都能用。
+    + `<button class="range-btn" onclick="zoomStockChart(0.7)" title="放大（显示更少根数）">＋</button>`
+    + `<button class="range-btn" onclick="zoomStockChart(1.4)" title="缩小（显示更多根数）">－</button>`
+    + `<button class="range-btn" onclick="resetStockChartZoom()" title="恢复默认窗口">⟲</button>`;
+}
+
+/* 以当前视窗中心为锚点缩放（factor<1 放大、>1 缩小），并记住供后续重绘沿用。 */
+function zoomStockChart(factor) {
+  const cur = stockChartZoom || { start: 0, end: 100 };
+  const span = Math.max(0.5, Math.min(100, (cur.end - cur.start) * Number(factor || 1)));
+  const center = (cur.start + cur.end) / 2;
+  let start = center - span / 2, end = center + span / 2;
+  if (start < 0) { end -= start; start = 0; }
+  if (end > 100) { start -= (end - 100); end = 100; }
+  start = Math.max(0, start);
+  stockChartZoom = { start: start, end: end };
+  renderStockChart();
+}
+function resetStockChartZoom() {
+  stockChartZoom = null;
+  renderStockChart();
 }
 function setChartRange(period, bars) {
   stockChartRange[period] = bars;
@@ -4492,7 +4514,10 @@ function renderStockChart() {
       { min: 0, max: 100, gridIndex: 3, axisLabel: { color: "#6e7681", fontSize: 9 }, splitLine: { show: false } },
     ],
     dataZoom: [
-      { type: "inside", xAxisIndex: [0, 1, 2, 3], start: zStart, end: zEnd },
+      { type: "inside", xAxisIndex: [0, 1, 2, 3], start: zStart, end: zEnd,
+        // 2026-10-20：显式打开滚轮缩放/拖动平移，避免被外层滚动容器吞掉
+        zoomOnMouseWheel: true, moveOnMouseMove: true, moveOnMouseWheel: false,
+        preventDefaultMouseMove: true },
       { type: "slider", xAxisIndex: [0, 1, 2, 3], bottom: 0, height: 16, start: zStart, end: zEnd,
         // 2026-10-17 视觉：滑块默认灰扑扑的一坨，给它统一的浅底 + 品牌色手柄
         backgroundColor: "#161b22", borderColor: "#30363d",
@@ -6963,7 +6988,7 @@ function startLivePoll() {
 async function init() {
   // 首先获取 DOM 元素（此时 DOM 已完全加载）
   // 2026-10-20：启动标记（0ms）写进慢调用日志 ⇒ 能确认 WebView2 是否加载了新版 app.js
-  try { window.pywebview.api.report_slow_call("app_boot_20261020d", 0); } catch (e) { /* 静默 */ }
+  try { window.pywebview.api.report_slow_call("app_boot_20261020e", 0); } catch (e) { /* 静默 */ }
   dateSelect = document.getElementById("dateSelect");
   refreshBtn = document.getElementById("refreshBtn");
   autoPoll = document.getElementById("autoPoll");
