@@ -313,10 +313,13 @@ _ROTATION_CACHE_MEM = {}
 _REVIEW_RUN_STATE = {"running": False, "error": None}
 # 2026-10-10: 自动盘盈亏账单缓存（load_auto_pnl；纯磁盘读，30s TTL 足够）
 _AUTO_PNL_CACHE = {"ts": 0.0, "date": None, "data": None}
-_AUTO_PNL_TTL = 30.0
+# 2026-10-20：自动盘盈亏/成本是**纯磁盘全量重算**（实测 3~5s），30s TTL 会在盘中
+# 每半分钟把 UI 线程压住一次（K 线弹窗首帧正好撞上就明显变慢）。fill 是事件驱动的，
+# 面板摘要 2 分钟刷新足够 ⇒ TTL 提到 120s，重算频率降 4 倍。
+_AUTO_PNL_TTL = 120.0
 # 2026-10-10: 自动盘持仓成本派生缓存（load_auto_status 10s 轮询，避免每轮重读 events_*.jsonl）
 _AUTO_COST_CACHE = {"ts": 0.0, "data": None}
-_AUTO_COST_TTL = 30.0
+_AUTO_COST_TTL = 120.0     # 2026-10-20：同 _AUTO_PNL_TTL（全量 fill 重算 3~5s）
 
 
 def _read_auto_fills():

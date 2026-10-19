@@ -47,6 +47,17 @@ class TestChartOpenPerf(unittest.TestCase):
         self.assertIn("keep_minute", _PY)
         self.assertIn("keep_minute=(period if want_minutes else None)", _PY)
 
+    def test_chart_modal_pauses_background_pollers(self):
+        """K 线弹窗打开时暂停 auto/ob/beacon/live 重面板，避免 3~5s 响应堵住 UI 线程。"""
+        self.assertIn("let chartModalOpen = false;", _JS)
+        self.assertIn("if (chartModalOpen) return;        // K 线弹窗打开", _JS)
+        self.assertIn("if (chartModalOpen) {                    // 弹窗打开", _JS)
+
+    def test_auto_pnl_ttl_relaxed(self):
+        """auto_pnl/auto_cost 全量重算 3~5s ⇒ TTL 从 30s 提到 120s。"""
+        self.assertIn("_AUTO_PNL_TTL = 120.0", _PY)
+        self.assertIn("_AUTO_COST_TTL = 120.0", _PY)
+
 
 if __name__ == "__main__":
     unittest.main()

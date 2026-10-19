@@ -412,6 +412,11 @@ function _scheduleBeacon() {
 async function loadMarketBeacon(force, dateOverride) {
   const el = document.getElementById("beaconBody");
   if (!el) return;
+  if (chartModalOpen) {                    // 弹窗打开：10s 后再试，别和 K 线抢 UI 线程
+    if (_beaconTimer) clearTimeout(_beaconTimer);
+    _beaconTimer = setTimeout(() => loadMarketBeacon(true), 10000);
+    return;
+  }
   const now = Date.now();
   // 全局日期一变 ⇒ 历史视图的日期覆盖作废（见 _beaconDateOverride 注释）
   if ((state.date || null) !== _beaconGlobalDate) {
@@ -3466,6 +3471,10 @@ let stockChartPeriod = "daily";
 let stockChartInst = null;
 let stockChartTimer = null;
 let stockChartCode = null;
+// 2026-10-20：K 线弹窗打开期间**暂停后台重面板轮询**（auto/ob/beacon/live）。
+// 根因：pywebview 的 evaluate_js 串行，load_auto_pnl 这类 3~5s 的大响应会把
+// K 线首帧/实时尾堵在队列里；弹窗打开时背后的面板没人看，暂停最划算。
+let chartModalOpen = false;
 let stockChartName = "";
 // 用户手动缩放（滚轮/拖拽 slider）后记住视窗，否则 10s 自动刷新重建图表时会弹回默认窗口。
 // 存 dataZoom 的百分比 {start, end}；null = 尚未手动缩放，用默认窗口。
@@ -3677,6 +3686,7 @@ async function openStockChart(code, name) {
   const modal = document.getElementById("stockModal");
   if (!modal) return;
   modal.style.display = "flex";
+  chartModalOpen = true;
   stockChartCode = code;
   stockChartName = name;
   // 换票先清空旧图数据：否则新代码加载失败时，实时尾会拿着上一只票的序列乱补
@@ -3904,6 +3914,7 @@ function closeStockChart() {
   if (stockChartInst) { stockChartInst.dispose(); stockChartInst = null; }
   if (stockChartTimer) { clearInterval(stockChartTimer); stockChartTimer = null; }
   stopStockChartLive();
+  chartModalOpen = false;      // 恢复后台面板轮询（下一次 tick 自动续上）
   stockChartCode = null;
   stockProfileCode = null;
   stockProfileLiveLoaded = false;
@@ -6040,6 +6051,10 @@ function renderHunter(h) {
 let _obRetryTimer = null;
 async function loadOBAnalysis() {
   if (_obRetryTimer) { clearTimeout(_obRetryTimer); _obRetryTimer = null; }
+  if (chartModalOpen) {                    // 弹窗打开：暂停体检重算
+    _obRetryTimer = setTimeout(loadOBAnalysis, 10000);
+    return null;
+  }
   try {
     const ob = await apiCall("load_ob_analysis");
     renderOB(ob || {});
@@ -6895,10 +6910,12 @@ function startLivePoll() {
   // ⚠️ 回调**必须 return promise**，否则 _startStaggered 的「完成后才排下一次」拿不到完成信号，
   // 背压失效（2026-10-10 改非重叠轮询时踩到的坑）。
   _startStaggered("live", () => {
+    if (chartModalOpen) return;        // K 线弹窗打开：暂停背后的大盘/持仓刷新
     if (state.date) return refreshLive(false);
   }, 10000, 0);
   // P4-3: 自动盘 10s 轮询（自动盘 tab 或概览页（含自动盘持仓卡片）激活时拉取 bridge）
   _startStaggered("auto", () => {
+    if (chartModalOpen) return;        // K 线弹窗打开：暂停 auto_pnl/auto_status（3~5s 重活）
     const act = document.querySelector(".sidebar-item.active");
     const t = act && act.dataset.tab;
     if (t !== "auto" && t !== "overview") return;
