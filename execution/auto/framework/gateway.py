@@ -24,6 +24,7 @@
 """
 from __future__ import annotations
 
+import inspect
 from datetime import datetime
 from functools import partial
 
@@ -246,6 +247,37 @@ class GmGateway(object):
                 "filled_qty": 0, "filled_price": None, "message": "order_not_found"}
 
     # ── 撤单（2026-10-14 新增：买不进替补机制要用）────────────────
+    def _find_order_record(self, order_id: str, code: str):
+        """按 order_id / cl_ord_id 找回**完整委托记录**（含 cl_ord_id/account_id）。
+
+        2026-10-19 生产事故：GM 的真实 `order_cancel(wait_cancel_orders)` 只认
+        `{"cl_ord_id", "account_id"}`，而策略侧保存的是**柜台 order_id** ⇒
+        `order_cancel(order_id=...)` 直接 TypeError，撤单失败、限价买单一直挂着、资金冻结。
+        本方法把两边对上；`get_orders()` 在新版 GM 上**不接受 symbol 参数**（旧调用会
+        TypeError），故保留"带参 → 无参"两级降级。
+        """
+        gm = self._gm
+        sym = self.sv.code_to_gm(code)
+        try:
+            _orders = self.sv.sdk_call("%s_get_orders_find" % self.strategy_id,
+                                       partial(gm.get_orders, symbol=sym))
+        except TypeError:
+            try:
+                _orders = self.sv.sdk_call("%s_get_orders_find_all" % self.strategy_id,
+                                           gm.get_orders)
+            except Exception:
+                return None
+        except Exception:
+            return None
+        for _od in (_orders if isinstance(_orders, list) else [_orders]):
+            if not isinstance(_od, dict):
+                continue
+            _oid = str(_od.get("order_id") or _od.get("id") or "")
+            _cid = str(_od.get("cl_ord_id") or "")
+            if order_id and (str(order_id) == _oid or str(order_id) == _cid):
+                return _od
+        return None
+
     def _resolve_open_buy_order_id(self, code: str):
         """`order_id` 缺失时按 symbol 找回**在途买单**的 id（2026-10-16 生产施工）。
 
@@ -324,8 +356,28 @@ class GmGateway(object):
         if _oc is None:
             return {"ok": False, "order_id": order_id, "message": "cancel_unavailable"}
         try:
-            _rep = self.sv.sdk_call("%s_cancel" % self.strategy_id,
-                                    partial(_oc, order_id=order_id))
+            # 2026-10-19：**两种 SDK 形态都要兼容**。
+            #  · 旧/假实现：`order_cancel(order_id=...)`（测试桩、部分券商适配层）
+            #  · GM 真实实现：`order_cancel(wait_cancel_orders)`，每项必须是
+            #    `{"cl_ord_id": ..., "account_id": ...}` —— 传 order_id 直接 TypeError
+            #    （今日 002368 撤单失败、99450 资金冻结的直接原因）。
+            try:
+                _params = inspect.signature(_oc).parameters
+            except Exception:
+                _params = {}
+            _kw_ok = ("order_id" in _params) or any(
+                p.kind == p.VAR_KEYWORD for p in _params.values())
+            if _kw_ok:
+                _call = partial(_oc, order_id=order_id)
+            else:
+                _od = self._find_order_record(str(order_id), code)
+                _cid = (_od or {}).get("cl_ord_id")
+                if not _cid:
+                    return {"ok": False, "order_id": order_id,
+                            "message": "cl_ord_id_unavailable"}
+                _call = partial(_oc, {"cl_ord_id": _cid,
+                                      "account_id": _od.get("account_id") or ""})
+            _rep = self.sv.sdk_call("%s_cancel" % self.strategy_id, _call)
         except Exception as _e:
             return {"ok": False, "order_id": order_id,
                     "message": "%s: %s" % (type(_e).__name__, str(_e)[:80])}

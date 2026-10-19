@@ -360,6 +360,26 @@ class TestGatewayCancelAndRawStatus(unittest.TestCase):
         self.assertFalse(rep["ok"])
         self.assertIn("cancel_rejected", rep["message"])
 
+    def test_cancel_uses_cl_ord_id_for_gm_style_primitive(self):
+        """GM 真实 `order_cancel(wait_cancel_orders)` 只认 `cl_ord_id/account_id`。
+
+        2026-10-19 生产事故：传 `order_id=...` ⇒ TypeError ⇒ 撤单失败、限价买单挂到收盘、
+        99450 资金冻结。这里钉住"按原语签名选择调用形态"的兼容层。
+        """
+        class _GmStyle(FakeGm):
+            def order_cancel(self, wait_cancel_orders):
+                self.calls.append(("order_cancel", wait_cancel_orders))
+                return None
+        gm = _GmStyle(get_orders=[{"order_id": "o123", "cl_ord_id": "c-1",
+                                   "account_id": "acc1", "status": 0, "side": 1}])
+        sv, order = _services(gm, Ownership(strategies=[]))
+        gw = GmGateway(FakeCtx(FakeAccount()), "osc", sv, log=lambda *a: None)
+        rep = gw.cancel_order("o123", "600001")
+        self.assertTrue(rep["ok"], rep)
+        calls = [c[1] for c in gm.calls if c[0] == "order_cancel"]
+        self.assertEqual(calls[-1], {"cl_ord_id": "c-1", "account_id": "acc1"},
+                         "GM 形态必须传 {cl_ord_id, account_id}，不是 order_id kwarg")
+
     def test_poll_order_raw_status_for_every_terminal(self):
         """`raw_status` 必须原样带出状态码，供上层按**码**判终态（字符串会被映射改义）。"""
         own = Ownership(strategies=[])
