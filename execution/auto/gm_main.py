@@ -68,6 +68,8 @@ from framework.services import GmServices
 
 # 唯一策略：超跌跳空确认（实现全在同名包内；本文件只做宿主与注入）
 import oversold_gap_confirm as osc
+# 2026-10-19 任务B：fill 事件驱动回填（成交回报即修 OSC 账本 + fills 留痕）。
+from oversold_gap_confirm import fillbackfill as _osc_fillbackfill
 
 # 策略账本目录（目录名由**策略包**声明：`osc.BOOK_DIRNAME` 刻意沿用历史名 weak_strong_book，
 # 改名会让在途持仓与卖侧失联）。宿主用它做归属判定与 Runtime 注入。
@@ -1168,6 +1170,40 @@ def on_order_status(context, order):
             _ts_now = str(getattr(context, "now", None) or datetime.now())
             _audit_write({"event": "sell", "code": code, "qty": volume, "price": price,
                           "time": _ts_now, "pos_after_sell": new_qty})
+        # ── 2026-10-19 任务B：fill 事件驱动回填 OSC 账本 + fills 留痕修正（主路径）──
+        # 根因：GM 仿真同步下单回报 order_id 恒空、filled_qty 恒 0，成交回报是异步事件；
+        # executor 的迟确认兜底（≈6s 窗口）10-19 再度漏单（601118 成交于窗口关闭后）。
+        # 此处回调收到成交即回填：卖出剔除/减量入 closed、买入按真实价量修正入账。
+        # 迟确认兜底保留不删（双保险；两边都幂等——谁先回填，另一个看到账本已反映即 no-op）。
+        try:
+            if getattr(context, "mode", None) == MODE_LIVE:
+                _fb_fee = None
+                try:
+                    _fb_fee = float(order.get("filled_commission")) \
+                        if order.get("filled_commission") is not None else None
+                except Exception:
+                    _fb_fee = None
+                _fb_res = _osc_fillbackfill.apply_fill(
+                    _OSC_BOOK_DIR,
+                    {"time": str(getattr(context, "now", None) or datetime.now()),
+                     "code": code, "side": _side,
+                     "qty": int(volume or 0), "price": float(price or 0),
+                     "order_id": str(order.get("id") or order.get("order_id") or ""),
+                     "fee": _fb_fee,
+                     "fill_vwap": order.get("filled_vwap") or order.get("vwap") or None},
+                    log=print)
+                if _fb_res:
+                    print(f"[FB] {code} {_side} {volume}@{price} → "
+                          f"{_fb_res.get('action')} {_fb_res.get('detail', '')}")
+        except Exception as _fbe:
+            # 回填失败绝不阻断主链（账本失真由卖前 reconcile_book/迟确认兜底）
+            print(f"[FB] ⚠️ fill 回填异常（不阻断）: {_fbe}")
+            try:
+                write_risk(str(datetime.now()), "fill_backfill_error",
+                           f"{code} {_side} {volume}@{price} 回填异常: {str(_fbe)[:150]}",
+                           code=code)
+            except Exception:
+                pass
     elif status in (4, 5, 6, 8, 12):  # 拒单/撤单/待撤/已拒绝(8)/已过期(12) —— F2修复: 2026-07-28前漏掉8导致所有拒单静默
         _rej_detail = ""
         try:

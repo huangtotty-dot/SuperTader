@@ -48,7 +48,9 @@ SPEC = {
     "600006": {"slope": 0.006, "gap": 0.00, "lu": True, "pop": 1.00, "eod": 1.00},
 }
 SECTOR_CODES = list(SPEC)
-ACCOUNT_CASH = 300000.0
+ACCOUNT_CASH = 320000.0    # 2026-10-19 任务B：fill 事件价改喂真实入场价（见 feed_fills），
+                           # d1 买入现金占用较旧口径（昨收价）多 ~1.5 万 ⇒ 期初现金补齐，
+                           # 保持 d2 现金轨道与历史断言校准点一致（600002 跨日加仓 2600 股档）。
 
 
 def prev_close(code):
@@ -207,7 +209,14 @@ FED = set()
 
 
 def feed_fills():
-    """把尚未回报的委托当作"全部成交"喂回 on_order_status（走真实入账/账本路径）。"""
+    """把尚未回报的委托当作"全部成交"喂回 on_order_status（走真实入账/账本路径）。
+
+    ⚠️ 成交价口径（2026-10-19 任务B 起必须真实）：市价委托 `od` 不带 price，原先回退
+    `prev_close` 只是"随便给个正数"（成交回报从不进账本，价格无人消费）。
+    任务B 后 `fillbackfill.apply_fill` 会把事件价**写进账本 entry_price** ⇒
+    必须喂**真实意图价**：买 = 10:00 收盘（`entry_price`，executor 的下单参考价），
+    卖 = 决策价（本驱动里卖点价格不影响后续断言，回退昨收即可）。
+    """
     for i, od in enumerate(ORDERS):
         if i in FED:
             continue
@@ -215,7 +224,9 @@ def feed_fills():
         sym = od["symbol"]
         qty = int(od["volume"])
         side = int(od["side"])
-        px = float(od.get("price") or 0) or prev_close(str(sym).split(".")[-1])
+        _c0 = str(sym).split(".")[-1]
+        px = float(od.get("price") or 0) or \
+            (entry_price(_c0) if side == 1 else prev_close(_c0))
         GM.on_order_status(ctx, {"symbol": sym, "status": 3, "volume": qty, "side": side,
                                  "filled_vwap": px, "price": px,
                                  "id": "F%d" % i})
