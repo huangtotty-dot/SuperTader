@@ -4002,6 +4002,12 @@ function renderStockChart() {
       '<div class="empty" style="color:#8b949e;padding-top:120px">该周期无分时数据（tushare 取不到，且本地无该标的缓存）</div>';
     return;
   }
+  // 2026-10-20：这两个**必须在函数最前面**——后面的「日线MA5参考线」会先用到，
+  // 放在 maSeries 附近声明会触发 TDZ（Cannot access '_isIntradayPeriod' before initialization）。
+  const _periodCn = ({ daily: "日", weekly: "周", monthly: "月",
+    min10: "10分", min30: "30分", min60: "60分" })[stockChartPeriod] || stockChartPeriod;
+  const _isIntradayPeriod = stockChartPeriod === "min10" || stockChartPeriod === "min30"
+    || stockChartPeriod === "min60";
   const levels = data.levels;
   const cur = data.current_price;
   // 显示开关
@@ -4259,10 +4265,6 @@ function renderStockChart() {
   // ⚠️ 分钟周期的 MA5 = **5 根该周期 K 线**（10min→50分钟），不是日线 5 日线！
   //    文字标记必须带周期后缀，并在分钟图另画一条「日线MA5」蓝色虚线，避免两者混淆。
   const MA5_COLOR = "#ffd166";
-  const _periodCn = ({ daily: "日", weekly: "周", monthly: "月",
-    min10: "10分", min30: "30分", min60: "60分" })[stockChartPeriod] || stockChartPeriod;
-  const _isIntradayPeriod = stockChartPeriod === "min10" || stockChartPeriod === "min30"
-    || stockChartPeriod === "min60";
   const maSeries = period.ma.map((maArr, i) => {
     const _isMA5 = i === 0;
     const _color = _isMA5 ? MA5_COLOR : MA_COLORS[i];
@@ -6935,7 +6937,7 @@ function startLivePoll() {
 async function init() {
   // 首先获取 DOM 元素（此时 DOM 已完全加载）
   // 2026-10-20：启动标记（0ms）写进慢调用日志 ⇒ 能确认 WebView2 是否加载了新版 app.js
-  try { window.pywebview.api.report_slow_call("app_boot_20261020a", 0); } catch (e) { /* 静默 */ }
+  try { window.pywebview.api.report_slow_call("app_boot_20261020b", 0); } catch (e) { /* 静默 */ }
   dateSelect = document.getElementById("dateSelect");
   refreshBtn = document.getElementById("refreshBtn");
   autoPoll = document.getElementById("autoPoll");

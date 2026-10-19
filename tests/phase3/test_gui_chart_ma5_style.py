@@ -38,6 +38,15 @@ class TestChartMA5Style(unittest.TestCase):
         self.assertIn("`MA5(${_periodCn})`", _JS)
         self.assertIn("backgroundColor: MA5_COLOR", _JS)
 
+    def test_period_vars_declared_before_use(self):
+        """防 TDZ：`_isIntradayPeriod` 必须先于 `dailyMa5Line` 声明
+        （2026-10-20 实盘报错 Cannot access '_isIntradayPeriod' before initialization）。"""
+        body = _JS.split("function renderStockChart()", 1)[1]
+        body = body.split("\nfunction ", 1)[0]
+        self.assertLess(body.index("const _isIntradayPeriod"),
+                        body.index("const dailyMa5Line"),
+                        "_isIntradayPeriod 必须声明在 dailyMa5Line 之前")
+
     def test_intraday_daily_ma5_reference_line(self):
         """分钟图额外画「日线MA5」蓝虚线，避免把 5 根 10min 的 MA5 误当 5 日线。"""
         self.assertIn("const _isIntradayPeriod", _JS)
