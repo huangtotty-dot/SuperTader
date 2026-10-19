@@ -52,7 +52,7 @@ class TestChartMA5Style(unittest.TestCase):
     def test_period_vars_declared_before_use(self):
         """防 TDZ：`_isIntradayPeriod` 必须先于 `dailyMa5Line` 声明
         （2026-10-20 实盘报错 Cannot access '_isIntradayPeriod' before initialization）。"""
-        body = _JS.split("function renderStockChart()", 1)[1]
+        body = _JS.split("function renderStockChart(", 1)[1]
         body = body.split("\nfunction ", 1)[0]
         self.assertLess(body.index("const _isIntradayPeriod"),
                         body.index("const dailyMa5Line"),

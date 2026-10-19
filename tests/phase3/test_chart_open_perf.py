@@ -68,8 +68,15 @@ class TestChartOpenPerf(unittest.TestCase):
     def test_frontend_cache_busted_and_boot_marked(self):
         """WebView2 可能缓存旧 app.js（改了跟没改一样）⇒ 带版本号 + 启动标记落日志。"""
         _html = (_ROOT / "web" / "index.html").read_text(encoding="utf-8")
-        self.assertIn("app.js?v=20261020g", _html)
-        self.assertIn("app_boot_20261020g", _JS)
+        self.assertIn("app.js?v=20261020h", _html)
+        self.assertIn("app_boot_20261020h", _JS)
+
+    def test_live_render_does_not_touch_datazoom(self):
+        """实时尾只换数据、不写 dataZoom（否则滑杆被 setOption 弹回）。"""
+        self.assertIn("function renderStockChart(applyZoom = true)", _JS)
+        self.assertIn("renderStockChart(false)", _JS)
+        self.assertIn("applyZoom ? { dataZoom: [", _JS)
+        self.assertIn("if (applyZoom) stockChartAppliedZoom", _JS)
 
     def test_live_render_pauses_while_zooming(self):
         """切到 10 分钟线（1s 重绘）后缩放失效的根因：实时重绘把滑杆弹回。

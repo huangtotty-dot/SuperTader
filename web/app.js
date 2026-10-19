@@ -3713,7 +3713,7 @@ async function tickStockChartLive() {
           nextMs = 600;
         } else {
           stockChartLiveSig[period] = r.sig;
-          renderStockChart();
+          renderStockChart(false);        // 实时尾：只换数据，不碰 dataZoom
         }
       }
     }
@@ -4044,7 +4044,10 @@ function renderStockSummary(d) {
       ? `${d.live.session ? "盘中实时" : "实时快照"} ${esc(d.live.ts)}`
       : `10s更新 · ${nowTime()}`} · <span class="live-dot"></span></span>`;
 }
-function renderStockChart() {
+function renderStockChart(applyZoom = true) {
+  // 2026-10-20：实时尾（1~5s）重绘时**不要**再写 dataZoom —— setOption 里的
+  // start/end 会把用户正在拖动的滑杆弹回，表现为「看一会儿就缩放不了」。
+  // 只有打开/切周期/点区间/点缩放按钮时才 applyZoom=true。
   const data = stockChartData;
   if (!data) return;
   const period = data.period_data[stockChartPeriod];
@@ -4403,7 +4406,7 @@ function renderStockChart() {
     }),
   }] : [];
 
-  stockChartAppliedZoom = { start: zStart, end: zEnd };
+  if (applyZoom) stockChartAppliedZoom = { start: zStart, end: zEnd };
   stockChartInst.setOption({
     // 2026-10-17 owner：K线图用**深色画布**（独立的深色主题，不是把浅色反相）。
     backgroundColor: "#0d1117",
@@ -4531,7 +4534,7 @@ function renderStockChart() {
       { scale: true, gridIndex: 2, axisLabel: { show: false }, splitLine: { show: false } },
       { min: 0, max: 100, gridIndex: 3, axisLabel: { color: "#6e7681", fontSize: 9 }, splitLine: { show: false } },
     ],
-    dataZoom: [
+    ...(applyZoom ? { dataZoom: [
       { type: "inside", xAxisIndex: [0, 1, 2, 3], start: zStart, end: zEnd,
         // 2026-10-20：显式打开滚轮缩放/拖动平移，避免被外层滚动容器吞掉
         zoomOnMouseWheel: true, moveOnMouseMove: true, moveOnMouseWheel: false,
@@ -4542,7 +4545,7 @@ function renderStockChart() {
         fillerColor: "rgba(248,81,73,.15)", handleStyle: { color: "#30363d", borderColor: "#f0a05a" },
         moveHandleStyle: { color: "#e8531f", opacity: .35 },
         textStyle: { color: "#6e7681", fontSize: 9 }, dataBackground: { lineStyle: { color: "#30363d" }, areaStyle: { color: "#161b22" } } },
-    ],
+    ] } : {}),
     series: [
       { name: "K线", type: "candlestick", data: period.ohlc, xAxisIndex: 0, yAxisIndex: 0,
         barMaxWidth: 12,   // 根数很少时别把蜡烛拉成巨型方块；根数多时仍自动变细
@@ -7007,7 +7010,7 @@ function startLivePoll() {
 async function init() {
   // 首先获取 DOM 元素（此时 DOM 已完全加载）
   // 2026-10-20：启动标记（0ms）写进慢调用日志 ⇒ 能确认 WebView2 是否加载了新版 app.js
-  try { window.pywebview.api.report_slow_call("app_boot_20261020g", 0); } catch (e) { /* 静默 */ }
+  try { window.pywebview.api.report_slow_call("app_boot_20261020h", 0); } catch (e) { /* 静默 */ }
   dateSelect = document.getElementById("dateSelect");
   refreshBtn = document.getElementById("refreshBtn");
   autoPoll = document.getElementById("autoPoll");
