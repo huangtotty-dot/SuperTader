@@ -1106,11 +1106,31 @@ def _attach_divergence(payload):
     return payload
 
 
+def _ensure_amount(df):
+    """给日线/分钟帧补 `amount`（元）—— 2026-10-20 owner：「显示成交额，我不要成交量」。
+
+    腾讯的 K 线只有 `volume`（**手**），没有成交额字段；GM 的日线同样没有。
+    用 VWAP 近似：`amount = (high+low+close)/3 × volume × 100`
+    （×100 = 每股/手；本仓缓存里 688 的 volume 也已归一到手，见 provider）。
+    精度：实测 688008 当日 41.36 亿 vs 东财 41.32 亿（差 0.1%），够看量能。
+    已有 `amount` 列的帧原样返回（将来接入真成交额时无需改这里）。
+    """
+    try:
+        if df is None or getattr(df, "empty", True) or "amount" in df.columns:
+            return df
+        d = df.copy()
+        _mid = (d["high"].astype(float) + d["low"].astype(float) + d["close"].astype(float)) / 3.0
+        d["amount"] = _mid * d["volume"].astype(float) * 100.0
+        return d
+    except Exception:
+        return df
+
+
 def _to_series(d, intraday=False):
     """DataFrame → 前端序列 dict（与 _build_chart_from_df 同口径；抽出以复用）。"""
     import pandas as pd
     _fmt = "%Y-%m-%d %H:%M" if intraday else "%Y-%m-%d"
-    return {
+    out = {
         "dates": [x.strftime(_fmt) for x in d["date"]],
         "ohlc": [[round(o, 3), round(c, 3), round(l, 3), round(h, 3)]
                  for o, c, l, h in zip(d["open"], d["close"], d["low"], d["high"])],
@@ -1125,6 +1145,10 @@ def _to_series(d, intraday=False):
                  "up": [round(x, 3) if not pd.isna(x) else None for x in d["boll_up"]],
                  "dn": [round(x, 3) if not pd.isna(x) else None for x in d["boll_dn"]]},
     }
+    # 成交额（2026-10-20）：前端「成交量」窗口改画成交额。没有该列就不下发（前端自动回落成交量）。
+    if "amount" in d.columns:
+        out["amount"] = [round(float(v), 0) if not pd.isna(v) else None for v in d["amount"]]
+    return out
 
 
 def _run_bounded(fn, timeout):
@@ -4586,11 +4610,20 @@ class Api:
                                                   ("sh", "sz", "bj") else "") or {}
             if not _q.get("price"):
                 return {}
+            # 科创板(688)的快照成交量是**股**、其余是**手** ⇒ 这里统一成"手"，
+            # 因为下游 `_mk_forming_bar` 会把它写进**手**口径的日线序列（差 100 倍会让
+            # 量能窗口整根爆掉）。实测 688008：vol_hand=24,597,313 vs 缓存 245,973 手。
+            _vol = _q.get("vol_hand")
+            if _vol is not None and str(base).split("_")[0].startswith("688"):
+                try:
+                    _vol = float(_vol) / 100.0
+                except (TypeError, ValueError):
+                    _vol = None
             return {"price": round(float(_q["price"]), 3),
                     "change_pct": round(float(_q.get("pct") or 0.0), 2),
                     "pre_close": _q.get("pre_close"),
                     "open": _q.get("open"), "high": _q.get("high"),
-                    "low": _q.get("low"), "volume": _q.get("vol_hand"),
+                    "low": _q.get("low"), "volume": _vol,
                     "ts_date": _q.get("ts_date")}
         except Exception:
             return {}
@@ -4719,15 +4752,17 @@ class Api:
                     df = df.iloc[:-1]
                 if _last <= _today:
                     df = pd.concat([df, pd.DataFrame([_row])], ignore_index=True)
+        # 成交额：补在**补完当日根之后**，当天那根也才有值（2026-10-20 面板改画成交额）
+        df = _ensure_amount(df)
         if period == "weekly":
             df = df.resample("W-FRI", on="date").agg(
                 {"open": "first", "high": "max", "low": "min", "close": "last",
-                 "volume": "sum"}).dropna().reset_index()
+                 "volume": "sum", "amount": "sum"}).dropna().reset_index()
         elif period == "monthly":
             _maj, _min = (int(x) for x in pd.__version__.split(".")[:2])
             df = df.resample("ME" if (_maj, _min) >= (2, 2) else "M", on="date").agg(
                 {"open": "first", "high": "max", "low": "min", "close": "last",
-                 "volume": "sum"}).dropna().reset_index()
+                 "volume": "sum", "amount": "sum"}).dropna().reset_index()
         d = _calc_ma_and_indicators(df)
         s = _to_series(d)
         try:
@@ -5240,7 +5275,7 @@ class Api:
                 return None
             if want_minutes:
                 # schema<2 的旧档不可信（那时 10min 合成有 bug/不足 30 根）⇒ 重建一次。
-                if int(hit.get("schema") or 0) < 2:
+                if int(hit.get("schema") or 0) < 3:
                     return None
                 _pd = (hit.get("payload") or {}).get("period_data") or {}
                 _need = period if period in _MIN_PERIODS else None
@@ -5409,6 +5444,17 @@ class Api:
             for _k in _MIN_PERIODS:
                 if _k != keep_minute:
                     _pdta.pop(_k, None)
+        # 老 payload 里没有 amount（成交额是 2026-10-20 新增的）⇒ 就地用 volume+ohlc 补，
+        # 不必等重建。口径与 `_ensure_amount` 完全一致：(high+low+close)/3 × volume × 100。
+        # `_to_series` 的 ohlc = [open, close, low, high]。
+        for _k in ("daily",) + _MIN_PERIODS:
+            _s = _pdta.get(_k) or {}
+            if _s and "amount" not in _s and _s.get("volume") and _s.get("ohlc"):
+                try:
+                    _s["amount"] = [round((o[3] + o[2] + o[1]) / 3.0 * float(v) * 100.0)
+                                    for v, o in zip(_s["volume"], _s["ohlc"])]
+                except Exception:
+                    pass
         return _attach_divergence(payload)
 
 
@@ -5539,15 +5585,18 @@ class Api:
         # 而当日实际 66.42，高 67.98）——所有均线都建立在它之上 ⇒ 整张图按 9 小时前的价算。
         # 这里在算指标**之前**用实时快照把当日根换掉（取不到就原样，绝不猜）。
         df = self._patch_daily_today(df, code)
+        df = _ensure_amount(df)          # 成交额（2026-10-20：面板改画成交额）
         daily = calc_ma_and_indicators(df)
         weekly = calc_ma_and_indicators(df.resample("W-FRI", on="date").agg(
-            {"open": "first", "high": "max", "low": "min", "close": "last", "volume": "sum"}).dropna().reset_index())
+            {"open": "first", "high": "max", "low": "min", "close": "last",
+             "volume": "sum", "amount": "sum"}).dropna().reset_index())
         # 月线频率兼容：pandas≥2.2 用 "ME"，旧版用 "M"
         # 2026-08-24 fix: pandas 3.x 次版本为 0，原 split[1]>="2" 误判为旧 "M"(已移除)；用版本元组比较
         _maj, _min = (int(x) for x in pd.__version__.split(".")[:2])
         _month_freq = "ME" if (_maj, _min) >= (2, 2) else "M"
         monthly = calc_ma_and_indicators(df.resample(_month_freq, on="date").agg(
-            {"open": "first", "high": "max", "low": "min", "close": "last", "volume": "sum"}).dropna().reset_index())
+            {"open": "first", "high": "max", "low": "min", "close": "last",
+             "volume": "sum", "amount": "sum"}).dropna().reset_index())
 
         to_series = _to_series   # 模块级（2026-10-04 抽出）
 
@@ -5594,6 +5643,7 @@ class Api:
             if _mf is None or getattr(_mf, "empty", True) or len(_mf) < 30:
                 continue
             _mf = _mf.rename(columns={"time": "date"}) if "time" in _mf.columns else _mf
+            _mf = _ensure_amount(_mf)          # 分钟档同样下发成交额
             _frames[_key] = _mf
             out["period_data"][_key] = to_series(calc_ma_and_indicators(_mf), intraday=True)
 

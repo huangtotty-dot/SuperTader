@@ -175,7 +175,9 @@ def save_payload(code, payload, daily_rows) -> bool:
             #   1（隐式，无此键）= 10min 合成路径有 bug（带 date 列 ⇒ 永远空）
             #   2 = 含可用的 min10
             # `t_gui._serve_payload_cache` 要求 want_minutes 时 schema≥2，旧档自动重建一次。
-            "schema": 2,
+            # 3 = 分钟档成交量已按科创板(688)归一（腾讯对 688 返"股"、其余"手"）；
+            # schema<3 的旧档里 688 的分钟量能大 100 倍，必须重建一次。
+            "schema": 3,
             "version": payload.get("version"),
             "last_daily_date": last_row_date(daily_rows),
             "payload": payload,

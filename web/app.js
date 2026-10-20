@@ -4898,6 +4898,9 @@ function renderStockChart(applyZoom = true) {
         const vol = period.volume[i];
         const volTxt = vol != null
           ? (vol >= 1e8 ? (vol / 1e8).toFixed(2) + "亿" : (vol / 1e4).toFixed(2) + "万") : "—";
+        // 成交额（2026-10-20 owner 要的是**成交额**不是成交量）：有就用它，没有才回落"手"
+        const _amtV = (period.amount && period.amount[i] != null) ? Number(period.amount[i]) : null;
+        const amtTxt = (_amtV != null && !isNaN(_amtV)) ? (_amtV / 1e8).toFixed(2) + " 亿" : null;
         // 2026-10-20 owner：「10 分图上的文字看不懂，更没法用来决策」⇒ 每个数字都带**标签+单位**，
         // 且把「本周期均线」与「日线虚线」分成两组讲清口径，再给两句能直接读的判定。
         // ⚠️ `_dma5/_dma10/_dma20` 是**最新**日线的值（不是这根 K 线当天的）⇒ 只在
@@ -4931,7 +4934,8 @@ function renderStockChart(applyZoom = true) {
           + `<span style="font-weight:400;opacity:.65"> · ${_periodCn}K</span></div>`
           + `<div>开 <b>${_px(o)}</b>　高 <b>${_px(hi)}</b>　低 <b>${_px(lo)}</b>　`
           + `收 <b style="color:${col}">${_px(c)}</b>　涨跌 <b style="color:${col}">${chgTxt}</b></div>`
-          + `<div>成交 <b>${volTxt}</b> 手</div>`
+          + (amtTxt ? `<div>成交额 <b>${amtTxt}</b></div>`
+                     : `<div>成交 <b>${volTxt}</b> 手</div>`)
           + (_posBarTxt ? `<div style="color:#8b949e">${_posBarTxt}${_vsMa(_ma5, "MA5")}${_vsMa(_ma20, "MA20")}</div>` : "");
         if (_maCells.length) {
           html += `<div style="border-top:1px solid #30363d;margin-top:4px;padding-top:4px;color:#8b949e;font-size:10px">`
@@ -5013,7 +5017,13 @@ function renderStockChart(applyZoom = true) {
     yAxis: [
       { scale: true, gridIndex: 0, axisLabel: { color: "#8b949e", fontSize: 9 },
         splitLine: { lineStyle: { color: "rgba(139,148,158,.14)" } } },
-      { scale: true, gridIndex: 1, axisLabel: { show: false }, splitLine: { show: false } },
+      // 成交额窗口的 y 轴：有成交额时显示「亿」刻度（否则保持不显示，避免把手当亿）
+      { scale: true, gridIndex: 1,
+        axisLabel: (Array.isArray(period.amount) && period.amount.length)
+          ? { color: "#8b949e", fontSize: 9,
+              formatter: v => (Math.abs(v) >= 10 ? v.toFixed(0) : v.toFixed(1)) + "亿" }
+          : { show: false },
+        splitLine: { show: false } },
       { scale: true, gridIndex: 2, axisLabel: { show: false }, splitLine: { show: false } },
       { min: 0, max: 100, gridIndex: 3, axisLabel: { color: "#6e7681", fontSize: 9 }, splitLine: { show: false } },
     ],
@@ -5098,15 +5108,25 @@ function renderStockChart(applyZoom = true) {
         markLine: { symbol: "none", silent: true, z: 10, data: fibLines,
           label: { position: "insideStartTop" } },
       }] : []),
-      // 成交量独立窗口
-      { name: "成交量", type: "bar", xAxisIndex: 1, yAxisIndex: 1, barWidth: "60%", barMaxWidth: 12,
-        // 2026-10-17：原来一律是半透明橙色 ⇒ 看不出放量是买还是卖。改为**按当日涨跌着色**。
-        data: period.volume.map((v, i) => {
-          const o = period.ohlc[i];
-          const prev = i > 0 ? period.ohlc[i - 1][1] : null;
-          const up = !o ? true : (prev == null ? o[1] >= o[0] : o[1] >= prev);
-          return { value: v, itemStyle: { color: up ? "rgba(248,81,73,.55)" : "rgba(63,185,80,.55)" } };
-        }) },
+      // 成交额独立窗口（2026-10-20 owner：「显示成交额，我不要成交量」）
+      // 后端下发 amount（元）；老 payload 没有时回落成交量（手），图例名会把口径写清楚，
+      // 免得把「手」当「亿元」看（这正是 owner 报「量能显然不对」的由来）。
+      (() => {
+        const _hasAmt = Array.isArray(period.amount) && period.amount.length === period.dates.length;
+        // 亿元，保留两位（41.36 这种量级对量能判断够用；btc 级别的票也不会失真）
+        const _vals = _hasAmt
+          ? period.amount.map(v => (v == null || isNaN(Number(v))) ? null : Number(v) / 1e8)
+          : period.volume;
+        return { name: _hasAmt ? "成交额(亿)" : "成交量(手)", type: "bar",
+          xAxisIndex: 1, yAxisIndex: 1, barWidth: "60%", barMaxWidth: 12,
+          // 2026-10-17：原来一律是半透明橙色 ⇒ 看不出放量是买还是卖。改为**按当日涨跌着色**。
+          data: _vals.map((v, i) => {
+            const o = period.ohlc[i];
+            const prev = i > 0 ? period.ohlc[i - 1][1] : null;
+            const up = !o ? true : (prev == null ? o[1] >= o[0] : o[1] >= prev);
+            return { value: v, itemStyle: { color: up ? "rgba(248,81,73,.55)" : "rgba(63,185,80,.55)" } };
+          }) };
+      })(),
       // MACD 窗口
       { name: "MACD-DIF", type: "line", data: period.macd.dif, xAxisIndex: 2, yAxisIndex: 2,
         symbol: "none", lineStyle: { color: "#ff8c5a", width: 1 } },

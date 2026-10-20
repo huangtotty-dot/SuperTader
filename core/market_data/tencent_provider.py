@@ -313,6 +313,12 @@ def minute_kline(code: str, freq: str = "m5", count: int = _MINUTE_KLINE_MAX,
     if not out:
         return pd.DataFrame(columns=_MINUTE_KLINE_COLS)
     df = pd.DataFrame(out)[_MINUTE_KLINE_COLS]
+    # 2026-10-20：科创板(688)腾讯按**股**返回成交量，其余按**手** ⇒ 统一归一到手。
+    # 实测 688008 当日：qt 快照 vol_hand=24,597,313（股）而日线缓存是 245,973（手），
+    # 正好 100 倍；m5 十分钟两根合计 ≈1.46M 也印证是股。
+    # 不归一的后果：K 线量能窗口上科创板比别的票大 100 倍（owner 报「澜起科技量能显然不对」）。
+    if sym[2:5] == "688":        # ⚠️ sym 带市场前缀（sh688008），不能直接 startswith("688")
+        df["volume"] = df["volume"] / 100.0
     df = df.drop_duplicates(subset=["time"]).sort_values("time").reset_index(drop=True)
     df.attrs["source"] = "tencent_minute"
     return df
