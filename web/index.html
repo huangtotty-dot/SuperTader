@@ -221,6 +221,18 @@
       <div id="ma365Meta" class="cell-dim" style="font-size:11px;margin-bottom:6px"></div>
       <div id="ma365Chart" class="echart" style="height:220px"></div>
     </div>
+    <div class="section" id="ma20-breadth">
+      <!-- 2026-10-20 owner：「在年限宽度下方加上 站上20线公司占比，周期和年限宽度保持一致」。
+           区间档位**不在这里另放按钮** —— 直接跟随上方「年限宽度」的近120日/自2024-09-01，
+           两张图同一次取数、同一横轴，避免"上面的图换了区间、下面没换"的对不上。 -->
+      <h2>📊 站上20线公司占比
+        <span class="cell-dim" style="font-weight:normal;font-size:12px">
+          每日站上 20 日均线的股票占比 · 样本与区间随上方「年限宽度」
+        </span>
+      </h2>
+      <div id="ma20BreadthMeta" class="cell-dim" style="font-size:11px;margin-bottom:6px"></div>
+      <div id="ma20BreadthChart" class="echart" style="height:220px"></div>
+    </div>
     <div class="section" id="market-beacon">
       <!-- ⚠️ **必须是独立 section、不能长在 `#liveBody` 里**（2026-10-13 实测教训）：
            `refreshLive` 每 10s 整体覆写 `#liveBody` ⇒ 卡片连同 23 个板块表每 10s 被销毁重建
@@ -293,6 +305,19 @@
         </summary>
         <div id="sectorStarsTable" style="margin-top:6px;max-height:340px;overflow:auto"></div>
       </details>
+    </div>
+    <div class="section" id="sector-ma-breadth">
+      <!-- 2026-10-20 owner：「在选股猎手星空图下方做一个多坐标轴的界面，每个坐标轴显示个板块的
+           站上5日线和站上20日线的百分比」。每个小图 = 一个板块的成分股里，当日收盘站上
+           5 日线 / 20 日线的比例（同一个 0~100 坐标，小多图靠共享尺度对读）。 -->
+      <h2>📉 板块「站上5/20日线」占比
+        <span class="cell-dim" style="font-weight:normal;font-size:12px">
+          每个小图 = 一个板块 · 蓝=站上5日线占比 · 橙=站上20日线占比（近十日，与上方星轨同窗）
+        </span>
+        <button class="mini-btn" onclick="loadSectorMaBreadth(true)" style="margin-left:8px">↻ 刷新</button>
+      </h2>
+      <div id="sectorMaMeta" class="cell-dim" style="font-size:11px;margin-bottom:6px"></div>
+      <div id="echSectorMa" class="echart" style="height:360px"></div>
     </div>
   </div>
 

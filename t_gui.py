@@ -297,6 +297,11 @@ _MA365_LOCK = threading.Lock()
 _MA365_MEM: dict = {"ts": 0.0, "val": None}
 _MA365_MEM_TTL = 300.0
 _MA365_MAX_DAYS = 250          # 一次最多算 250 个交易日（前端按需切片）
+# 2026-10-20 owner：「年限宽度下方加上 站上20线公司占比，周期和年限宽度保持一致」。
+# MA20 宽度与 MA365 **同一次解析顺手算**（滑动和 O(1)/根，几乎不增加成本），但要覆盖
+# 「自2024-09-01」那一档（≈510 个交易日）⇒ 单独用 600 天的窗口。MA20 只要 20 根回看，
+# 本地 800 根日线缓存足够，**不需要**像 MA365 那样用 GM 补算历史。
+_MA20_MAX_DAYS = 600
 _MA365_WORKERS = 1             # JSON 解析持 GIL：实测 **1 线程 9.2s 反而快于 2 线程 14s**
                                #（两线程互抢 GIL + 与 GUI 争），且更不容易造成界面卡顿
 # 建仓符合度（GO/时机列）的进程内结果缓存（2026-10-17 提速）。
@@ -1847,7 +1852,10 @@ def _compute_ma365_breadth(days=_MA365_MAX_DAYS):
       · 只算最近 `days` 个交易日；MA365 用滚动和（O(n)），不建 DataFrame。
       · 全程后台；**单线程 JSON 解析 ~10s**（5500 个文件），2 线程压一下 I/O。
 
-    返回 {computed_at, latest_date, series:[{date,above,total,pct}], coverage:{files,cohort}}。
+    返回 {computed_at, latest_date, series:[…365…], series20:[…20…], coverage:{files,cohort}}。
+
+    `series20`（2026-10-20 owner：「站上20线公司占比」）= 同一批样本、同一遍解析里顺手算的
+    「收盘价 > MA20」占比，窗口 `_MA20_MAX_DAYS`（600 个交易日，够覆盖「自2024-09-01」档）。
     """
     from collections import defaultdict
     from concurrent.futures import ThreadPoolExecutor
@@ -1858,6 +1866,7 @@ def _compute_ma365_breadth(days=_MA365_MAX_DAYS):
     with _MA365_LOCK:
         _MA365_STATE.update({"done": 0, "total": total, "started": _time_mod.time()})
     counts = defaultdict(lambda: [0, 0])       # date -> [above, total]
+    counts20 = defaultdict(lambda: [0, 0])     # 同上，但口径是 20 日均线
     cohort = 0
 
     def _one(p):
@@ -1881,7 +1890,18 @@ def _compute_ma365_breadth(days=_MA365_MAX_DAYS):
                 out.append((dates[i], closes[i] > ma))
             if i + 1 < n:
                 s += closes[i + 1] - closes[i - 364]
-        return out
+        # 站上 20 日线占比（2026-10-20）：同一次解析顺手算，样本/停牌口径与 MA365 完全一致，
+        # 只是回看窗口短（20 根）⇒ 能覆盖到本地缓存最早的那根，足以撑起「自2024-09-01」档。
+        start20 = max(19, n - _MA20_MAX_DAYS)
+        s20 = sum(closes[start20 - 19:start20 + 1])
+        out20 = []
+        for i in range(start20, n):
+            ma20 = s20 / 20.0
+            if ma20 > 0 and closes[i] > 0:
+                out20.append((dates[i], closes[i] > ma20))
+            if i + 1 < n:
+                s20 += closes[i + 1] - closes[i - 19]
+        return out, out20
 
     done = 0
     try:
@@ -1890,26 +1910,35 @@ def _compute_ma365_breadth(days=_MA365_MAX_DAYS):
                 done += 1
                 if res:
                     cohort += 1
-                    for d, above in res:
+                    for d, above in res[0]:
                         c = counts[d]
                         c[1] += 1
                         if above:
                             c[0] += 1
+                    for d, above in res[1]:
+                        c20 = counts20[d]
+                        c20[1] += 1
+                        if above:
+                            c20[0] += 1
                 if done % 100 == 0:
                     with _MA365_LOCK:
                         _MA365_STATE["done"] = done
     except Exception:
         pass
 
-    series = []
-    for d in sorted(counts):
-        above, tot = counts[d]
-        if tot:
-            series.append({"date": d, "above": above, "total": tot,
-                           "pct": round(above / tot * 100, 2)})
-    series = series[-days:]
+    def _to_series(cnt, keep):
+        out = []
+        for d in sorted(cnt):
+            above, tot = cnt[d]
+            if tot:
+                out.append({"date": d, "above": above, "total": tot,
+                            "pct": round(above / tot * 100, 2)})
+        return out[-keep:]
+
+    series = _to_series(counts, days)
+    series20 = _to_series(counts20, _MA20_MAX_DAYS)
     rec = {"computed_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-           "latest_date": latest, "series": series,
+           "latest_date": latest, "series": series, "series20": series20,
            "coverage": {"files": total, "cohort": cohort}}
     try:
         _MA365_CACHE_FP.parent.mkdir(parents=True, exist_ok=True)
@@ -1920,6 +1949,111 @@ def _compute_ma365_breadth(days=_MA365_MAX_DAYS):
         pass
     with _MA365_LOCK:
         _MA365_STATE["done"] = total
+    return rec
+
+
+# ---- 板块「站上5日线 / 20日线」成分股占比（2026-10-20 owner：星空图下方多坐标轴）----
+# 数据源 = 韭研主板块映射（`_jiuyan_board()`，与 daily_summary 的板块名同源）+ 个股日线缓存。
+# 只扫**有主板块**的代码（实测 1690 只 / 5382），单线程解析约 6~8s ⇒ 与年限宽度同一套
+# 后台 + 内存/磁盘 SWR，磁盘缓存按数据日复用。
+_SECTOR_MA_CACHE_FP = BASE / "t_io" / "cache" / "sector_ma_breadth.json"
+_SECTOR_MA_MEM: dict = {"ts": 0.0, "val": None}
+_SECTOR_MA_MEM_TTL = 300.0
+_SECTOR_MA_STATE: dict = {"running": False, "done": 0, "total": 0}
+_SECTOR_MA_LOCK = threading.Lock()
+_SECTOR_MA_MAX_DAYS = 40       # 一次算 40 个交易日（前端按 end_date 收边后取最近 N 天）
+
+
+def _compute_sector_ma_breadth(days=_SECTOR_MA_MAX_DAYS):
+    """每个板块每日「收盘站上 5 日线 / 20 日线」的成分股占比。
+
+    口径：
+      · **板块** = `_jiuyan_board()` 的韭研主板块（每只股票只归一个板块，不重复计数）；
+        与 `daily_summary.json`（星空图数据源）的板块名同源。
+      · **样本** = 该板块内**日线缓存末行 = 最新交易日**的个股 —— 停牌/陈旧缓存不进分母，
+        否则会把"没数据"算成"跌破均线"。
+      · **站上** = 当日收盘 > N 日简单均线（含当日），与得分里 −70 悬崖 / 20日线观察列同口径。
+
+    返回 {computed_at, latest_date, sectors:[{name, points:[{date,pct5,pct20,n}]}],
+          coverage:{codes, scanned}}。
+    """
+    from collections import defaultdict
+    latest = _market_latest_date()
+    board = _jiuyan_board()
+    mine = {c: s for c, s in board.items() if s}
+    files = [p for p in _DAILY_KLINE_DIR.glob("*.json")
+             if p.stem.isdigit() and len(p.stem) == 6 and p.stem in mine]
+    total = len(files)
+    with _SECTOR_MA_LOCK:
+        _SECTOR_MA_STATE.update({"done": 0, "total": total, "started": _time_mod.time()})
+    counts = defaultdict(lambda: defaultdict(lambda: [0, 0, 0]))   # sec -> date -> [a5, a20, n]
+    scanned = 0
+
+    def _one(p):
+        sec = mine.get(p.stem)
+        try:
+            rows = (_load_json(p, {}) or {}).get("rows") or []
+            if len(rows) < 20:
+                return None
+            if str(rows[-1].get("date"))[:10] != latest:
+                return None
+            closes = [float(r.get("close") or 0) for r in rows]
+            dates = [str(r.get("date"))[:10] for r in rows]
+        except Exception:
+            return None
+        n = len(closes)
+        start = max(19, n - days)
+        s5 = sum(closes[start - 4:start + 1])
+        s20 = sum(closes[start - 19:start + 1])
+        out = []
+        for i in range(start, n):
+            if closes[i] > 0:
+                out.append((dates[i], closes[i] > s5 / 5.0, closes[i] > s20 / 20.0))
+            if i + 1 < n:
+                s5 += closes[i + 1] - closes[i - 4]
+                s20 += closes[i + 1] - closes[i - 19]
+        return sec, out
+
+    done = 0
+    try:
+        for p in files:                     # 单线程（JSON 解析持 GIL，与 ma365 同一结论）
+            res = _one(p)
+            done += 1
+            if res:
+                sec, out = res
+                scanned += 1
+                per = counts[sec]
+                for d, a5, a20 in out:
+                    c = per[d]
+                    c[2] += 1
+                    if a5:
+                        c[0] += 1
+                    if a20:
+                        c[1] += 1
+            if done % 200 == 0:
+                with _SECTOR_MA_LOCK:
+                    _SECTOR_MA_STATE["done"] = done
+    except Exception:
+        pass
+
+    sectors = []
+    for sec, per in counts.items():
+        pts = [{"date": d, "pct5": round(a5 / t * 100, 2), "pct20": round(a20 / t * 100, 2), "n": t}
+               for d, (a5, a20, t) in sorted(per.items()) if t]
+        if pts:
+            sectors.append({"name": sec, "points": pts[-days:]})
+    rec = {"computed_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+           "latest_date": latest, "sectors": sectors,
+           "coverage": {"codes": len(mine), "scanned": scanned}}
+    try:
+        _SECTOR_MA_CACHE_FP.parent.mkdir(parents=True, exist_ok=True)
+        tmp = _SECTOR_MA_CACHE_FP.with_suffix(".tmp")
+        tmp.write_text(json.dumps(rec, ensure_ascii=False), encoding="utf-8")
+        tmp.replace(_SECTOR_MA_CACHE_FP)
+    except Exception:
+        pass
+    with _SECTOR_MA_LOCK:
+        _SECTOR_MA_STATE["done"] = total
     return rec
 
 
@@ -2582,12 +2716,19 @@ class Api:
             if not _series:
                 return _clean({"available": False, "historical": True,
                                "error": "历史档里没有该区间数据"})
+            # MA20 历史档不走 GM 补算：只要 20 根回看，本地 800 根缓存就够 ⇒ 直接取本地这份
+            # 计算结果，右端按 365 档的 latest_date 截齐（两张图横轴终点必须一致）。
+            _s20 = self._ma20_hist_series(str(start)[:10], _rec.get("latest_date"))
+            if not _s20:
+                self._kick_ma365_breadth()      # 旧缓存没有 series20 / 尚未算过 → 后台补一次
             return _clean({"available": True, "historical": True,
                            "start": str(start)[:10],
                            "latest_date": _rec.get("latest_date"),
                            "computed_at": _rec.get("computed_at"),
                            "series": _series, "coverage": _rec.get("coverage") or {},
-                           "last": _series[-1], "stale": False})
+                           "last": _series[-1], "stale": False,
+                           "series20": _s20, "last20": _s20[-1] if _s20 else {},
+                           "ma20_warming": not _s20})
         try:
             days = max(30, min(int(days or 120), _MA365_MAX_DAYS))
         except Exception:
@@ -2595,7 +2736,10 @@ class Api:
         now = _time_mod.time()
         with _MA365_LOCK:
             mem = dict(_MA365_MEM)
-        if mem.get("val") and (now - mem.get("ts", 0.0)) < _MA365_MEM_TTL:
+        # 内存值必须**带 series20** 才算命中（2026-10-20 之前算出来的值没有这一项）——
+        # 否则退回磁盘那份，别让用户看到"年限宽度有、下面那张空着"。
+        if (mem.get("val") and (mem["val"] or {}).get("series20")
+                and (now - mem.get("ts", 0.0)) < _MA365_MEM_TTL):
             return _clean(self._ma365_payload(mem["val"], days, stale=False))
 
         disk = None
@@ -2606,7 +2750,10 @@ class Api:
             disk = None
         latest = _market_latest_date()
         if disk and disk.get("series"):
-            stale = str(disk.get("latest_date") or "") < latest
+            # 旧缓存（2026-10-20 之前）没有 `series20` ⇒ 同样判 stale，后台补算一次；
+            # 这期间年限宽度照常出图，站上20线那张显示"计算中"。
+            stale = (str(disk.get("latest_date") or "") < latest
+                     or not (disk.get("series20") or []))
             if stale:
                 self._kick_ma365_breadth()
             return _clean(self._ma365_payload(disk, days, stale=stale))
@@ -2621,12 +2768,43 @@ class Api:
     @staticmethod
     def _ma365_payload(rec, days, stale=False):
         series = (rec.get("series") or [])[-days:]
+        series20 = (rec.get("series20") or [])[-days:]
         cov = rec.get("coverage") or {}
         last = series[-1] if series else {}
         return {"available": True, "stale": bool(stale), "days": days,
                 "latest_date": rec.get("latest_date") or last.get("date"),
                 "computed_at": rec.get("computed_at"), "series": series,
-                "coverage": cov, "last": last}
+                "coverage": cov, "last": last,
+                "series20": series20, "last20": series20[-1] if series20 else {},
+                "ma20_warming": not series20}
+
+    @staticmethod
+    def _ma20_hist_series(start, end=None):
+        """「站上20日线占比」历史档：从本地计算结果按 `[start, end]` 收边（内存优先、磁盘兜底）。
+
+        与 MA365 的历史档不同，这里**不需要** GM 补算 —— MA20 只要 20 根回看，本地 800 根
+        日线缓存足以覆盖 2024-09 至今。`end` 传 365 档的 latest_date，让两张图右端对齐。
+        """
+        rec = None
+        with _MA365_LOCK:
+            mem = dict(_MA365_MEM)
+        if (mem.get("val") or {}).get("series20"):
+            rec = mem["val"]
+        if not rec:                      # 内存没有/是旧口径 ⇒ 退回磁盘
+            try:
+                _disk = json.loads(_MA365_CACHE_FP.read_text(encoding="utf-8"))
+                rec = (_disk if _disk.get("series20") else None)
+            except Exception:
+                rec = None
+        start = str(start or "")
+        end = str(end or "")
+        out = []
+        for x in ((rec or {}).get("series20") or []):
+            d = str(x.get("date") or "")
+            if not d or (start and d < start) or (end and d > end):
+                continue
+            out.append(x)
+        return out
 
     def _kick_ma365_breadth(self):
         """后台算一次年限宽度（单飞）。仅后台线程跑；失败静默。"""
@@ -7952,6 +8130,93 @@ class Api:
             if _d.weekday() < 5:
                 dates.add(_d.strftime("%Y%m%d"))
         return [{"date": d[:4] + "-" + d[4:6] + "-" + d[6:8]} for d in sorted(dates, reverse=True)]
+
+    def load_sector_ma_breadth(self, days=10, end_date=None):
+        """**每个板块每日「站上5日线 / 20日线」的成分股占比**（2026-10-20 owner：
+        星空图下方多坐标轴小图）。SWR：主线程零计算，后台扫一次全池日线缓存（≈6~8s）。
+
+        口径见 `_compute_sector_ma_breadth`。两点与上方星轨图的耦合是刻意的：
+          ① `end_date` 同样只取 **≤ 该日** 的数据（跟全局日期选择器走）；
+          ② 板块顺序 = `daily_summary.json` 里该日的**排名**顺序 ⇒ 网格顺序与星轨图右端
+             直标一致，不用来回找板块。
+        """
+        try:
+            n = max(3, min(int(days or 10), 30))
+        except Exception:
+            n = 10
+        end = str(end_date or "").replace("-", "")[:8]
+        now = _time_mod.time()
+        with _SECTOR_MA_LOCK:
+            mem = dict(_SECTOR_MA_MEM)
+        rec = mem.get("val") if (now - mem.get("ts", 0.0)) < _SECTOR_MA_MEM_TTL else None
+        latest = _market_latest_date()
+        if not rec:
+            try:
+                if _SECTOR_MA_CACHE_FP.exists():
+                    rec = json.loads(_SECTOR_MA_CACHE_FP.read_text(encoding="utf-8"))
+            except Exception:
+                rec = None
+        if rec and rec.get("sectors"):
+            stale = str(rec.get("latest_date") or "") < latest
+            if stale:
+                self._kick_sector_ma_breadth()
+            return _clean(self._sector_ma_payload(rec, n, end, stale=stale))
+        self._kick_sector_ma_breadth()
+        with _SECTOR_MA_LOCK:
+            st = dict(_SECTOR_MA_STATE)
+        return _clean({"available": False, "warming": True,
+                       "progress": {"done": int(st.get("done") or 0),
+                                    "total": int(st.get("total") or 0)}})
+
+    @staticmethod
+    def _sector_ma_payload(rec, days, end="", stale=False):
+        # 网格顺序 = 该日板块排名（daily_summary 与星轨图同一份；不重复维护第二套排序）
+        rank = {}
+        try:
+            _d = json.loads((BASE / "stock_hunter" / "history" / "daily_summary.json")
+                            .read_text(encoding="utf-8"))
+            _ks = sorted(k for k, v in _d.items()
+                         if isinstance(v, list) and v and (not end or k <= end))
+            if _ks:
+                rank = {str(r.get("板块") or "").strip(): int(r.get("排名") or 9999)
+                        for r in _d[_ks[-1]]}
+        except Exception:
+            rank = {}
+        secs = []
+        for s in (rec.get("sectors") or []):
+            pts = [p for p in (s.get("points") or [])
+                   if not end or str(p.get("date") or "").replace("-", "") <= end]
+            pts = pts[-days:]
+            if not pts:
+                continue
+            secs.append({"name": s.get("name"), "points": pts,
+                         "last5": pts[-1].get("pct5"), "last20": pts[-1].get("pct20"),
+                         "n": pts[-1].get("n")})
+        secs.sort(key=lambda x: (rank.get(str(x.get("name") or ""), 9999),
+                                 str(x.get("name") or "")))
+        return {"available": True, "stale": bool(stale), "days": days,
+                "latest_date": rec.get("latest_date"), "computed_at": rec.get("computed_at"),
+                "sectors": secs, "coverage": rec.get("coverage") or {}}
+
+    def _kick_sector_ma_breadth(self):
+        """后台算一次板块均线占比（单飞）。仅后台线程跑；失败静默。"""
+        with _SECTOR_MA_LOCK:
+            if _SECTOR_MA_STATE.get("running"):
+                return
+            _SECTOR_MA_STATE.update({"running": True, "done": 0, "total": 0,
+                                     "started": _time_mod.time()})
+
+        def _bg():
+            try:
+                val = _compute_sector_ma_breadth(_SECTOR_MA_MAX_DAYS)
+                with _SECTOR_MA_LOCK:
+                    _SECTOR_MA_MEM.update({"ts": _time_mod.time(), "val": val})
+            except Exception:
+                pass
+            finally:
+                with _SECTOR_MA_LOCK:
+                    _SECTOR_MA_STATE["running"] = False
+        _th.Thread(target=_bg, daemon=True, name="sector-ma-breadth").start()
 
     def load_sector_constellation(self, days=5, end_date=None):
         """近 N 个交易日的板块「星轨」：位置 = 当日排名，星的大小 = 平均分，轨迹 = 排名变化。

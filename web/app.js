@@ -688,8 +688,9 @@ function tabClear(baseId) {
 // tab 切换时 resize 所有 ECharts
 function resizeAllEch() {
   Object.values(echInstances).forEach(i => i.resize());
-  // 年限宽度图是独立实例（不在 echInstances 里）
+  // 年限宽度图 / 站上20线占比图 是独立实例（不在 echInstances 里）
   if (ma365Inst) { try { ma365Inst.resize(); } catch (e) { } }
+  if (ma20Inst) { try { ma20Inst.resize(); } catch (e) { } }
 }
 window.addEventListener("resize", () => {
   Object.values(echInstances).forEach(i => i.resize());
@@ -1601,6 +1602,19 @@ function toggleStarFocus() {
   if (_starLast) renderSectorStars(_starLast);
 }
 
+/* 猎手/重新生成跑完后调用：数据源 `daily_summary.json` 已被重写，星轨图必须跟着重画。
+   只在猎手页可见时画 —— 隐藏容器拿到 0 尺寸，画了也是空白；切回该 tab 时 switchTab
+   里本来就会再调一次 `loadSectorStars()`。 */
+function refreshSectorStarsIfVisible() {
+  const act = document.querySelector(".sidebar-item.active");
+  const box = document.getElementById("echSectorStars");
+  if (!box || !document.body.contains(box)) return;
+  if (act && act.dataset.tab !== "hunter") return;
+  loadSectorStars();
+  // 猎手跑完也会回写当日 bar（MA5/MA20 随之改变）⇒ 下方「站上5/20日线」小题板一起刷新
+  loadSectorMaBreadth();
+}
+
 async function loadSectorStars(force) {
   const box = document.getElementById("echSectorStars");
   if (!box) return;
@@ -1786,6 +1800,186 @@ function renderSectorStars(d) {
   }
 }
 
+/* ---- 板块「站上5日线 / 20日线」成分股占比（2026-10-20 owner：星空图下方多坐标轴）----
+   一个 ECharts 实例里每个板块一个 grid（小多图），**共享 0~100 的 y 尺度** ⇒ 格子之间能直接
+   对读"哪个板块在走强/走弱"，这比 25 张各自缩放的小图有意义得多。
+   数据 = 后端 `load_sector_ma_breadth`（全池日线缓存后台扫一次 ≈6s，磁盘缓存按数据日复用；
+   首次 `warming`，3s 短轮询）。与上方星轨图**同截止日、同窗口、同板块顺序**。 */
+const SECMA_5 = "#388bfd";      // 站上5日线（蓝；dataviz 校验 dark：与橙 ΔE 32.1/35.6 全项过）
+const SECMA_20 = "#e3b341";     // 站上20日线（琥珀）
+let sectorMaInst = null, sectorMaNode = null, sectorMaSig = "";
+let sectorMaData = null, sectorMaTimer = null, sectorMaInflight = false;
+
+// 窗口宽度变化 ⇒ 列数/格子尺寸都变，必须**重算布局**（不是单纯 resize）。
+// 抽稀后重画；数据没变时 setOption 很便宜（25 格 × 2 条线）。
+let _sectorMaResizeTimer = null;
+window.addEventListener("resize", () => {
+  if (_sectorMaResizeTimer) clearTimeout(_sectorMaResizeTimer);
+  _sectorMaResizeTimer = setTimeout(() => {
+    _sectorMaResizeTimer = null;
+    if (sectorMaData) renderSectorMaBreadth(sectorMaData);
+  }, 300);
+});
+
+async function loadSectorMaBreadth(force) {
+  const box = document.getElementById("echSectorMa");
+  if (!box) return;
+  if (sectorMaInflight) return;
+  sectorMaInflight = true;
+  let nextMs = 0;
+  try {
+    const d = await apiCall("load_sector_ma_breadth", 10, state.date || null);
+    sectorMaData = d || null;
+    renderSectorMaBreadth(d);
+    if (d && d.warming) nextMs = 3000;          // 首次计算/数据日变了 → 短轮询
+    else if (d && d.stale) nextMs = 60000;
+  } catch (e) {
+    const meta = document.getElementById("sectorMaMeta");
+    if (meta) meta.innerHTML = `<span class="down">取数失败：${esc(e.message || e)}</span>`;
+  } finally {
+    sectorMaInflight = false;
+    if (sectorMaTimer) clearTimeout(sectorMaTimer);
+    sectorMaTimer = nextMs ? setTimeout(() => loadSectorMaBreadth(), nextMs) : null;
+  }
+}
+
+function renderSectorMaBreadth(d) {
+  const el = document.getElementById("echSectorMa");
+  const meta = document.getElementById("sectorMaMeta");
+  if (!el) return;
+  const secs = (d && d.sectors) || [];
+  if (!secs.length) {
+    if (meta) {
+      const pr = (d && d.progress) || {};
+      meta.innerHTML = (d && d.warming)
+        ? `⏳ 首次计算中…（全池有概念标签的个股，实测 6~8s）`
+          + (pr.total ? `　<b>${pr.done || 0}/${pr.total}</b>` : "")
+        : `<span class="down">${esc((d && d.error) || "暂无数据")}</span>`;
+    }
+    if (sectorMaInst) { try { sectorMaInst.dispose(); } catch (e) { } sectorMaInst = null; sectorMaNode = null; }
+    sectorMaSig = "";
+    el.innerHTML = '<div class="empty">暂无数据</div>';
+    return;
+  }
+  const w = el.clientWidth || 0;
+  if (!w) return;        // 隐藏 tab：容器宽 0，等 switchTab 里重画（同星轨图）
+  if (meta) {
+    const cov = (d && d.coverage) || {};
+    meta.innerHTML = `数据日 <b>${esc(d.latest_date || "—")}</b>`
+      + ` · 截至 <b>${esc(state.date || d.latest_date || "—")}</b>（与上方星轨同截止日）`
+      + ` · ${secs.length} 个板块 · 样本 <b>${cov.scanned || "—"}</b> 只（末行=最新交易日，停牌不进分母）`
+      + (d.computed_at ? ` · 计算于 ${esc(d.computed_at)}` : "")
+      + `<br>口径：站上 N 日线 = 当日收盘 &gt; N 日简单均线（含当日），与得分里 −70 悬崖 / 20日线观察列同源；`
+      + `每只个股只归一个韭研主板块，不重复计数。`;
+  }
+  // 列数随宽度自适应；每格高度固定 132px（含标题），整体高度随之变化
+  const cols = w >= 1200 ? 4 : (w >= 880 ? 3 : 2);
+  const cellH = 132, padL = 30, padR = 10, padT = 34, padB = 18, topPad = 22;
+  const rows = Math.ceil(secs.length / cols);
+  const H = topPad + rows * cellH + 6;
+  // 签名带**整条轨迹的粗略校验和**：后端重算后中间值可能变而末值不变，只比末值会漏重画
+  const sig = secs.map(s => `${s.name}:${s.points.length}:`
+    + s.points.reduce((a, p) => a + (p.pct5 || 0) + (p.pct20 || 0), 0).toFixed(1)).join("|")
+    + `|${w}|${cols}`;
+  if (sectorMaInst && sectorMaNode === el && sig === sectorMaSig) return;
+  if (el.style.height !== H + "px") el.style.height = H + "px";
+  const cellW = w / cols;
+  const grids = [], xAxes = [], yAxes = [], series = [], titles = [];
+  secs.forEach((s, i) => {
+    const r = Math.floor(i / cols), c = i % cols;
+    const x0 = c * cellW, y0 = topPad + r * cellH;
+    grids.push({ left: x0 + padL, top: y0 + padT,
+                 width: Math.max(40, cellW - padL - padR), height: cellH - padT - padB });
+    xAxes.push({
+      type: "category", gridIndex: i, boundaryGap: false,
+      data: s.points.map(p => String(p.date).slice(5)),
+      axisLine: { lineStyle: { color: "#30363d" } }, axisTick: { show: false },
+      // 2026-10-20 owner：「横轴需要有日期」——**每一格都标**（原来只有最后一行标）。
+      // 10 个点按 ~3 个间隔抽样，不至于糊成一片；鼠标所指的那天再由 axisPointer 的
+      // 胶囊标签精确显示（snap 到最近的 K 线，见 tooltip.axisPointer）。
+      axisLabel: { show: true, color: "#6e7681", fontSize: 8, hideOverlap: true,
+        interval: Math.max(1, Math.ceil(s.points.length / 3) - 1) },
+      axisPointer: { show: true, snap: true,
+        label: { show: true, backgroundColor: "#30363d", borderColor: "#484f58",
+                 borderWidth: 1, color: "#e6edf3", fontSize: 9, padding: [2, 5] } },
+      splitLine: { show: false },
+    });
+    yAxes.push({
+      type: "value", gridIndex: i, min: 0, max: 100, interval: 50,
+      // 只在最左列标 0/50/100：所有格子共享同一尺度，标一次就够
+      axisLabel: { show: c === 0, color: "#6e7681", fontSize: 8, formatter: "{value}" },
+      axisLine: { show: false }, axisTick: { show: false },
+      splitLine: { lineStyle: { color: "rgba(139,148,158,.14)" } },
+    });
+    titles.push({
+      text: `${i + 1}. ${s.name}`,
+      subtext: `5日 ${fmt(s.last5, 0)}% · 20日 ${fmt(s.last20, 0)}% · ${s.n || "—"}只`,
+      left: x0 + padL - 2, top: y0 + 2,
+      textStyle: { color: "#c9d1d9", fontSize: 11, fontWeight: 600 },
+      subtextStyle: { color: "#8b949e", fontSize: 9 },
+    });
+    /* 2026-10-20 owner：「对应的天的竖线有交点，显示出具体的数值」。
+       ① 竖线 = tooltip.axisPointer（line + snap，对齐到最近的 K 线）；
+       ② 交点 = 每个数据点画实心小圆（原来 symbol:none 看不到交点），悬停时放大加白描边；
+       ③ 具体数值 = axisPointer 的日期胶囊 + tooltip 里两项百分比 + 下方 y 轴读数（0~100 网格）。 */
+    const mk = (vals, color, name) => ({
+      name, type: "line", xAxisIndex: i, yAxisIndex: i,
+      data: vals, smooth: 0.25, connectNulls: false,
+      showSymbol: true, symbol: "circle", symbolSize: 3.2,
+      lineStyle: { width: 1.5, color },
+      itemStyle: { color, borderColor: "#0d1117", borderWidth: 1 },
+      // 不加 focus:"series" —— 那会把另一条线在悬停时变暗，两条线的对比正是这张图的意义
+      emphasis: { scale: 2.2,
+                  itemStyle: { color, borderColor: "#fff", borderWidth: 1.5 } },
+    });
+    series.push(mk(s.points.map(p => p.pct5), SECMA_5, "站上5日线"));
+    series.push(mk(s.points.map(p => p.pct20), SECMA_20, "站上20日线"));
+  });
+  if (!sectorMaInst || sectorMaNode !== el || !el.querySelector("canvas")) {
+    if (sectorMaInst) { try { sectorMaInst.dispose(); } catch (e) { } }
+    el.innerHTML = "";
+    sectorMaInst = echarts.init(el);
+    sectorMaNode = el;
+  }
+  sectorMaInst.setOption({
+    backgroundColor: "transparent",
+    animation: false,
+    // 图例按**系列名**筛选 ⇒ 点一下可以把全部板块的 5日线/20日线一起关掉（不是 50 个条目）
+    legend: { data: ["站上5日线", "站上20日线"], top: 2, right: 10,
+      itemWidth: 14, itemHeight: 8, icon: "roundRect", itemGap: 12,
+      textStyle: { color: "#8b949e", fontSize: 10 } },
+    title: titles,
+    grid: grids,
+    xAxis: xAxes,
+    yAxis: yAxes,
+    tooltip: {
+      trigger: "axis",
+      // 竖线对齐到最近的 K 线（snap），并在横轴上挂一个日期胶囊 —— 这是"对应那天的竖线"
+      axisPointer: { type: "line", snap: true,
+        lineStyle: { color: "#8b949e", type: "dashed", width: 1 },
+        label: { show: true, backgroundColor: "#30363d", borderColor: "#484f58",
+                 borderWidth: 1, color: "#e6edf3", fontSize: 10, padding: [2, 5] } },
+      backgroundColor: "rgba(22,27,34,.96)", borderColor: "#30363d", borderWidth: 1,
+      borderRadius: 8, textStyle: { color: "#e6edf3", fontSize: 11 },
+      formatter: (ps) => {
+        if (!ps || !ps.length) return "";
+        const si = Math.floor((ps[0].seriesIndex || 0) / 2);   // 每板块 2 条系列
+        const s = secs[si];
+        if (!s) return "";
+        const p = s.points[ps[0].dataIndex];
+        if (!p) return "";
+        return `<div style="font-weight:bold;margin-bottom:3px">${esc(s.name)} · ${esc(p.date)}</div>`
+          + `<span style="color:${SECMA_5}">●</span> 站上5日线 <b>${fmt(p.pct5, 1)}%</b>`
+          + `<br><span style="color:${SECMA_20}">●</span> 站上20日线 <b>${fmt(p.pct20, 1)}%</b>`
+          + `<br><span style="opacity:.7">样本 ${p.n} 只（当日有行情）</span>`;
+      },
+    },
+    series,
+  }, { notMerge: true });
+  sectorMaSig = sig;
+  sectorMaInst.resize();
+}
+
 async function drawHunterGoChart() {
   const box = document.getElementById("hunterGoChart");
   if (!box) return;
@@ -1916,6 +2110,9 @@ function setMa365Range(r) {
   if (b) b.classList.toggle("primary", ma365Range === "hist");
   const meta = document.getElementById("ma365Meta");
   if (meta) meta.textContent = ma365Range === "hist" ? "加载历史区间…" : "加载近120日…";
+  // 站上20线占比与年限宽度**同一档区间**（owner 2026-10-20：周期保持一致）⇒ 一起给加载态
+  const meta20 = document.getElementById("ma20BreadthMeta");
+  if (meta20) meta20.textContent = ma365Range === "hist" ? "加载历史区间…" : "加载近120日…";
   if (ma365Timer) { clearTimeout(ma365Timer); ma365Timer = null; }
   loadMa365Breadth();
 }
@@ -1956,20 +2153,27 @@ async function loadMa365Breadth() {
       ma365Data = d;
       ma365DataRange = ma365Range;
       renderMa365(d);
-      nextMs = d.historical ? 3600000 : (d.stale ? 30000 : 300000);
+      renderMa20Breadth(d);      // 同一份 payload 的 series20（同区间、同刷新节奏）
+      // `ma20_warming`：旧缓存没有 series20 / 历史档还没补算 ⇒ 5s 后再问，
+      // 否则历史档的"计算中"要等一小时（正常历史档按 1 小时复用）。
+      nextMs = d.ma20_warming ? 5000
+        : (d.historical ? 3600000 : (d.stale ? 30000 : 300000));
     } else if (d && d.historical) {
       const meta = document.getElementById("ma365Meta");
       if (meta) meta.innerHTML = `<span class="down">${esc(d.error || "历史档未计算")}</span>`;
+      renderMa20Breadth(d || {});
       nextMs = 3600000;
     } else if (d && d.warming) {
       const p = d.progress || {};
       const meta = document.getElementById("ma365Meta");
       if (meta) meta.innerHTML = `⏳ 首次计算中…（全部个股日线缓存约 5500 个，实测 10~20s）`
         + (p.total ? `　<b>${p.done || 0}/${p.total}</b>` : "");
+      renderMa20Breadth(d || {});
       nextMs = 2500;
     } else {
       const meta = document.getElementById("ma365Meta");
       if (meta) meta.innerHTML = `<span class="down">年限宽度取数失败：${esc((d && d.error) || "未知")}</span>`;
+      renderMa20Breadth(d || {});
       nextMs = 30000;
     }
   } catch (e) {
@@ -2002,6 +2206,15 @@ function renderMa365(d) {
     ma365Node = el;
   }
   ma365Sig = sig;
+  ma365Inst.setOption(_breadthChartOption(series, "站上年限", "50%=一半股票站上年限"));
+  ma365Inst.resize();
+}
+
+/* 宽度图共用骨架（年限宽度 / 站上20线占比 2026-10-20）：
+   柱=每日占比（较前日升=红、降=绿，A 股惯例）· 蓝线=5 日均值 · 灰虚线=50% 参考。
+   `label` 进 tooltip 与图例（"站上年限" / "站上20日线"），`note` 是 5 日均值那行的尾注。
+   ⚠️ 两张图必须同骨架同配色 —— 它们是同一套指标的不同窗口，视觉上要能直接对读。 */
+function _breadthChartOption(series, label, note) {
   const dates = series.map(x => String(x.date).slice(5));
   const bars = series.map((x, i) => {
     const prev = i > 0 ? series[i - 1].pct : x.pct;
@@ -2012,7 +2225,7 @@ function renderMa365(d) {
     const w = series.slice(Math.max(0, i - 4), i + 1);
     return +(w.reduce((a, b) => a + (b.pct || 0), 0) / w.length).toFixed(2);
   });
-  ma365Inst.setOption({
+  return {
     backgroundColor: "transparent",
     animation: false,
     grid: { left: 46, right: 16, top: 26, bottom: 24 },
@@ -2029,10 +2242,10 @@ function renderMa365(d) {
         const prev = i > 0 ? series[i - 1] : null;
         const chg = prev && prev.pct != null ? x.pct - prev.pct : null;
         return `<div style="font-weight:bold;margin-bottom:3px">${esc(x.date)}</div>`
-          + `站上年限 <b style="color:${x.pct >= (prev ? prev.pct : x.pct) ? MA365_UP : MA365_DOWN}">${fmt(x.pct, 2)}%</b>`
+          + `${label} <b style="color:${x.pct >= (prev ? prev.pct : x.pct) ? MA365_UP : MA365_DOWN}">${fmt(x.pct, 2)}%</b>`
           + `<br>站上 ${x.above} / ${x.total} 只`
           + (chg != null ? `<br>较前日 ${chg >= 0 ? "+" : ""}${chg.toFixed(2)}pp` : "")
-          + `<br><span style="color:#8b949e">5日均值 ${ma5[i]}% · 50%=一半股票站上年限</span>`;
+          + `<br><span style="color:#8b949e">5日均值 ${ma5[i]}% · ${note}</span>`;
       },
     },
     xAxis: {
@@ -2047,7 +2260,7 @@ function renderMa365(d) {
       splitLine: { lineStyle: { color: "rgba(139,148,158,.2)" } },
     },
     series: [
-      { name: "站上年限占比", type: "bar", data: bars,
+      { name: `${label}占比`, type: "bar", data: bars,
         barMaxWidth: series.length > 300 ? 7 : 12, barCategoryGap: "25%" },
       { name: "5日均值", type: "line", data: ma5, symbol: "none", connectNulls: true,
         lineStyle: { width: 1.5, color: MA365_MA }, itemStyle: { color: MA365_MA } },
@@ -2057,8 +2270,71 @@ function renderMa365(d) {
                    label: { formatter: "50%", fontSize: 9, color: "#8b949e",
                             position: "insideEndTop" } }] } },
     ],
-  });
-  ma365Inst.resize();
+  };
+}
+
+/* ---- 站上20线公司占比（2026-10-20 owner：「在年限宽度下方加上 站上20线公司占比，
+   周期和年限宽度保持一致」）----
+   数据同源：`load_ma365_breadth` 一次调用同时回 `series`(MA365) 与 `series20`(MA20)
+   ⇒ 区间档位（近120日/自2024-09-01）与刷新节奏天然与上方那张一致，也不会为多一张图
+   再把 5500 个日线缓存扫第二遍。样本口径与年限宽度**同一批**（≥365 根且末行=最新交易日），
+   两张图的分母因此可直接对读。 */
+let ma20Inst = null, ma20Node = null, ma20Sig = "";
+
+function _ma20MetaHtml(d, series, last) {
+  const bits = [];
+  if (d && d.historical && d.start) {
+    bits.push(`区间 <b>${esc(d.start)} → ${esc((last && last.date) || d.latest_date || "")}</b>`);
+  } else if (d && d.latest_date) {
+    bits.push(`数据日 <b>${esc(d.latest_date)}</b>`);
+  }
+  if (last && last.pct != null) {
+    bits.push(`最新 <b>${fmt(last.pct, 2)}%</b>（${last.above}/${last.total} 只）`);
+  }
+  const cov = (d && d.coverage) || {};
+  if (cov.cohort) bits.push(`样本 <b>${cov.cohort}</b> 只（与年限宽度同一批）`);
+  else if (cov.got) bits.push(`样本 <b>${cov.got}</b> 只`);
+  if (d && d.computed_at) bits.push(`计算于 ${esc(d.computed_at)}`);
+  bits.push("区间随上方「年限宽度」");
+  return bits.join(" · ");
+}
+
+function renderMa20Breadth(d) {
+  const el = document.getElementById("ma20BreadthChart");
+  const meta = document.getElementById("ma20BreadthMeta");
+  if (!el) return;
+  const series = (d && d.series20) || [];
+  if (!series.length) {
+    const _warming = !!(d && (d.ma20_warming || d.warming));
+    if (meta) {
+      meta.innerHTML = _warming
+        ? "⏳ 计算中：与「年限宽度」同一次后台扫描（全池日线缓存，约 10~20s），算完自动出现"
+        : `<span class="down">${esc((d && d.error) || "暂无数据")}</span>`;
+    }
+    if (ma20Inst) { try { ma20Inst.dispose(); } catch (e) { } ma20Inst = null; ma20Node = null; }
+    ma20Sig = "";
+    el.innerHTML = _warming ? '<div class="empty">⏳ 计算中…</div>'
+      : '<div class="empty">暂无数据</div>';
+    return;
+  }
+  const last = (d && d.last20) || series[series.length - 1] || {};
+  if (meta) meta.innerHTML = _ma20MetaHtml(d, series, last);
+  const sig = `${d.historical ? "H:" + (d.start || "") : "R"}|${d.latest_date}|${series.length}`
+    + `|${last.date}|${last.pct}`;
+  const _canvasOk = !!(el.querySelector && el.querySelector("canvas"));
+  if (ma20Inst && ma20Node === el && _canvasOk && sig === ma20Sig) return;
+  if (ma20Inst && (ma20Node !== el || !_canvasOk)) {
+    try { ma20Inst.dispose(); } catch (e) { }
+    ma20Inst = null; ma20Node = null;
+  }
+  if (!ma20Inst) {
+    el.innerHTML = "";
+    ma20Inst = echarts.init(el);
+    ma20Node = el;
+  }
+  ma20Sig = sig;
+  ma20Inst.setOption(_breadthChartOption(series, "站上20日线", "50%=一半股票站上20日线"));
+  ma20Inst.resize();
 }
 
 /* ---- 盘中实时 ---- */
@@ -2596,17 +2872,18 @@ const MA20_OBS_TIP = "是否站上 20 日线。**观察列，不驱动任何判�
   + "⚠️ 「得分」里那个 −70 悬崖扣分走的是 **5 日线**口径（owner 决定保留），与本列无关，故本列不显示 −70。";
 /* `detail`（可选，2026-10-14）：把 MA20 具体数值等明细挂到**所有**分支的 tooltip 尾部。
    持仓体检列要显示 MA20 现值；建仓表/猎手表不传 → 行为与原来完全一致。 */
-/* 【5日线状态】（2026-10-19 owner：建仓信号扫描「只要站上 5 日均线就显示绿色，其它红色」）。
-   与得分里的 −70 悬崖**同一口径**（都走收盘价 vs MA5），所以本列故意用绿/红而不是灰色：
-   站上=绿、未站上=红、无数据=—（不猜）。20 日线状态降级到 tooltip，不占列。 */
-function ma5FlagCellHtml(v, ma20v, missingTip, belowColor, belowText) {
-  // `belowColor/belowText`（2026-10-20）：建仓表沿用红「破位」；选股猎手用黄「未站上」。
+/* 【均线状态列·通用】（2026-10-19 起先只做 5 日线；2026-10-20 owner：选股猎手该列改用 **20 日线**）。
+   口径：`v` 决定颜色/文字（站上=绿、未站上=`belowColor`、无数据=— 不猜），
+   `otherV` 只是**另一条**均线的状态，降级进 tooltip、不占列。
+   ⚠️ 得分里那个 −70 悬崖走的是 **5 日线**；本列看哪条线由调用方传 `n` 决定，别在 tooltip 里
+   把两条线说成同源（那正是误导）。 */
+function maStateCellHtml(v, n, otherV, otherN, missingTip, belowColor, belowText) {
   const _bc = belowColor || "#f85149";
   const _bt = belowText || "破位";
-  const _m20 = (ma20v === true) ? "站上" : (ma20v === false) ? "破位" : "—";
-  const _tip = "现价 vs 5 日简单均线（得分里 −70 悬崖的同一口径）。20 日线：" + _m20 + "。观察列，不参与其它判定。";
-  if (v === true) return `<td style="text-align:center" title="${esc("站上 5 日线。" + _tip)}"><b style="color:#3fb950">站上</b></td>`;
-  if (v === false) return `<td style="text-align:center" title="${esc("未站上 5 日线。" + _tip)}"><b style="color:${_bc}">${_bt}</b></td>`;
+  const _o = (otherV === true) ? "站上" : (otherV === false) ? "破位" : "—";
+  const _tip = `现价 vs ${n} 日简单均线。${otherN} 日线：${_o}。观察列，不参与其它判定。`;
+  if (v === true) return `<td style="text-align:center" title="${esc("站上 " + n + " 日线。" + _tip)}"><b style="color:#3fb950">站上</b></td>`;
+  if (v === false) return `<td style="text-align:center" title="${esc("未站上 " + n + " 日线。" + _tip)}"><b style="color:${_bc}">${_bt}</b></td>`;
   return `<td style="text-align:center" title="${esc(missingTip || "无该特征（旧数据/未扫描）")}"><span class="cell-dim">—</span></td>`;
 }
 
@@ -4167,6 +4444,23 @@ function renderStockChart(applyZoom = true) {
     label: { formatter: `日线MA5 ${fmt(_dma5, 2)}`, color: "#58a6ff",
              fontSize: 9, position: "insideStartTop" },
   } : null;
+  // 2026-10-20 owner：「除了日线图，其它周期的图也画出 20 日均线」——
+  // 与上面两条同口径，画的是**日线 MA20**（20 个交易日）的水平参考线，不是「20 根本周期 K 线」
+  // 的周期 MA20（那条 maSeries 里一直有，别混淆）。**周/月/10/30/60 分全画**；
+  // 日线 tab 本身就是真正的 MA20 曲线，不重复叠线。
+  // 颜色选 teal：与蓝(日线MA5)/紫(日线MA10)/金(周期MA5)/绿(周期MA20) 五个在用色
+  // 两两 CVD ΔE≥12.7、常视觉 ΔE≥16.9（dataviz 校验器 dark 口径实测），且带直标"日线MA20"。
+  const _dma20Arr = (((data.period_data || {}).daily || {}).ma
+    ? data.period_data.daily.ma[2] : null);
+  const _dma20 = (_dma20Arr && _dma20Arr.length) ? _dma20Arr[_dma20Arr.length - 1] : null;
+  const dailyMa20Line = (stockChartPeriod !== "daily" && _dma20 != null) ? {
+    yAxis: _dma20,
+    lineStyle: { color: "#2dd4bf", type: "dashed", width: 1.4, opacity: .95 },
+    label: { formatter: `日线MA20 ${fmt(_dma20, 2)}`, color: "#2dd4bf",
+             // 与日线MA10 同用左下角 ⇒ 用 distance 再往下让（markLine 标签只认
+             // `distance`，`offset` 在这条渲染路径里不被读取），两条价位接近时不叠字。
+             fontSize: 9, position: "insideStartBottom", distance: 17 },
+  } : null;
 
   // 黄金分割（斐波那契回撤/扩展）：跟随当前 Tab；后端已按周期各算一份
   const fib = (period.fib && period.fib.available) ? period.fib : null;
@@ -4603,6 +4897,7 @@ function renderStockChart(applyZoom = true) {
             ...(showLevels ? [...resistanceLines, ...supportLines] : []), currentLine,
             ...(dailyMa5Line ? [dailyMa5Line] : []),
             ...(dailyMa10Line ? [dailyMa10Line] : []),
+            ...(dailyMa20Line ? [dailyMa20Line] : []),
           ],
           label: { position: "insideEndTop" } } },
       ...divSeries,
@@ -5281,6 +5576,7 @@ async function loadHunterHistory(date) {
       // 2026-10-18：**把 date 一起传过去** —— 历史日「重新生成」时风向标必须跟到同一天，
       // 否则它按全局日期挑"≤ 今天的最新一天"，两边名次对不上。
       loadMarketBeacon(true, date);
+      refreshSectorStarsIfVisible();   // 同上：重新生成也重写了 daily_summary.json
     } else {
       el.innerHTML = `<div class="empty">${esc(h.error || '无数据')}</div>`;
     }
@@ -5528,6 +5824,10 @@ async function loadHunter(force) {
       // 猎手跑完会重写 daily_summary.json ⇒ 风向标骨架缓存按 mtime 已失效。
       // 这里主动拉一次并**钉到同一天**，别让用户等最多 60s 的前端 TTL（否则看起来"排名没对齐"）。
       try { loadMarketBeacon(true, date); } catch (e) { /* 静默 */ }
+      // 2026-10-20：星轨图的数据源**也是** daily_summary.json，不重拉就停在跑之前的旧轨迹
+      // （2026-10-20 owner 报「跑完猎手星轨图没更新」——它原来只在切 tab / 改日期时刷新）。
+      // 隐藏时画会拿到 0 尺寸 ⇒ 只在猎手页画；其它页切回来时 switchTab 会再拉一次。
+      refreshSectorStarsIfVisible();
     }
     // 2026-10-10: 突破箱体 / 站上5日线 扫描不再自动触发，一律由各自卡片按钮发起（owner 需求6）
   } catch (e) {
@@ -5851,7 +6151,7 @@ function renderHunter(h) {
         })()}
         <td class="num">${_metTxt}</td>
         <td style="text-align:center" title="${esc("日线阶段" + "。" + DAY_STAGE_TIP)}">${_stageTxt}</td>
-        ${ma5FlagCellHtml(s.build_above_ma5, s.build_above_ma20, undefined, "#d29922", "未站上")}
+        ${maStateCellHtml(s.build_above_ma20, 20, s.build_above_ma5, 5, undefined, "#d29922", "未站上")}
         ${ma5CellHtml((hunterStructCache[category] || {})[s.code], "h-ma5")}
         <td class="num h-price" data-hcode="${esc(s.code)}" title="**实时**价/涨幅（展开时取、10s 刷新）。⚠️ 刻意不显示扫描时的旧值：扫描可能隔了几天，旧涨幅会严重误导（实测 300821 旧值 +20.01% vs 实时 +5.83%）">${hunterPriceHtml(null)}</td>
         <td class="h-tags">${tagsTxt}</td>
@@ -6014,7 +6314,7 @@ function renderHunter(h) {
             <th class="num" title="韭研 D1~D12 打分合计（选股猎手的原始评分，满分 47；D3/D10 未在 config 启用）。⚠️ 与左边「得分」不是一回事：那个是建仓综合得分 0~100。下方小字＝命中的维度与分数。&#10;D1 强势形态且新高 8 · D2 强势形态 6 · D4 首板资金池 3 · D5 潜在突破10日 2 · D6 潜在突破5日 1 · D7 持续性(二板+) 5 · D8 情绪分数(一字板) 6 · D9 活跃程度(近10日有涨停) 3 · D11 刚站上5日线 2 · D12 趋势性(站上20日线) 8 · 大额(成交额≥50亿) 3">D分<br><span style="font-size:9px;opacity:.6">D1~D12</span></th>
             <th class="num" title="时机门控通过数（市场有方向/多头结构/回撤到位）">通过</th>
             <th title="日线四阶段（描述状态，紧挨得分/通过便于对照）：②抬升/③派发/④下跌/①蓄势。⚠️ 实测横截面IC与直觉相反——抬升/追高前瞻更差(IC −0.031~−0.042, t=−12~−15)、下跌/超跌前瞻更好(IC +0.020~+0.034, t=+7~+12)，分半窗两段同号；效应量小(IC≈0.04)仅作相对强弱参照">日线阶段</th>
-            <th title="现价 vs 5 日简单均线（与得分里 −70 悬崖同一口径）。选股猎手口径：**站上=绿、其它=黄**（建仓信号扫描用绿/红）；20 日线状态放在单元格 tooltip。观察列，不驱动判定">5日线<br><span style="font-size:9px;opacity:.6">规则口径</span></th>
+            <th title="现价 vs 20 日简单均线（观察列，不驱动判定）。选股猎手口径：**站上=绿、其它=黄**（建仓信号扫描用绿/红）；5 日线状态放在单元格 tooltip。⚠️「得分」里那个 −70 悬崖扣分走的是 **5 日线**口径（owner 决定保留），与本列不是同一条线；行底色也仍按 5 日线">20日线<br><span style="font-size:9px;opacity:.6">规则口径</span></th>
             <th title="30 分钟 K 线的 5 根均线（现价站上/跌破 + 距上次翻转多少根）。**与「持仓 30 分钟风险体检」同源**（position_structure，同一缓存）。⚠️ 实测无前瞻信息量 ⇒ 只展示，不参与任何判定">30m MA5<br><span style="font-size:9px;opacity:.6">仅展示</span></th>
             <th class="num" title="**实时**价 + 实时涨幅（展开时取、10s 刷新；取不到显示 ⏳/—）。⚠️ 刻意不显示扫描时的旧价旧涨幅——扫描可能隔了几天，旧涨幅会严重误导">价<br><span style="font-size:9px;opacity:.6">实时涨幅</span></th>
             <th>技术标签</th>
@@ -6883,14 +7183,15 @@ function switchTab(tab) {
   //    同步调用必然拿 0 尺寸、画不出来（2026-10-15 实测：盘中状态成交额图停在"容器尺寸为 0"）。
   setTimeout(() => {
     resizeAllEch();
-    if (tab === "hunter") { drawHunterGoChart(); renderHunterGoList(); loadSectorStars(); }
+    if (tab === "hunter") { drawHunterGoChart(); renderHunterGoList(); loadSectorStars(); loadSectorMaBreadth(); }
     if (tab === "signals") {
       _turnoverSizeRetryN = 0; drawTurnoverHist();
       if (ma365Inst) { try { ma365Inst.resize(); } catch (e) { } }
+      if (ma20Inst) { try { ma20Inst.resize(); } catch (e) { } }
       // 首次进 tab 才拉（默认在总览页，别让 5500 个日线缓存的解析和首屏抢 CPU）；
-      // 已有数据则就地重画（节点若被重建过，renderMa365 会自行重建实例）。
+      // 已有数据则就地重画（节点若被重建过，renderMa365 / renderMa20Breadth 会自行重建实例）。
       if (!ma365Data || ma365DataRange !== ma365Range) loadMa365Breadth();
-      else renderMa365(ma365Data);
+      else { renderMa365(ma365Data); renderMa20Breadth(ma365Data); }
     }
   }, 80);
   // 2026-10-10: 切到选股猎手不再自动跑扫描（owner 需求6）——一律点「▶ 运行今日数据」触发。
@@ -7087,7 +7388,7 @@ async function init() {
       if (_od) _od.value = dateSelect.value;
       // 板块星轨图是「截至所选日期」的，切日期时若正在猎手页则重画（隐藏时画会拿到 0 尺寸）
       const _act = document.querySelector(".sidebar-item.active");
-      if (_act && _act.dataset.tab === "hunter") loadSectorStars();
+      if (_act && _act.dataset.tab === "hunter") { loadSectorStars(); loadSectorMaBreadth(); }
       loadAndRender(dateSelect.value, false);
     }
   });

@@ -20,7 +20,8 @@ _JS = (_ROOT / "web" / "app.js").read_text(encoding="utf-8")
 
 class TestBuildScanMa5Flag(unittest.TestCase):
     def test_renderer_exists_with_green_red(self):
-        self.assertIn("function ma5FlagCellHtml(", _JS)
+        # 2026-10-20：渲染器泛化成「哪条均线由调用方传 n」⇒ ma5FlagCellHtml → maStateCellHtml
+        self.assertIn("function maStateCellHtml(", _JS)
         self.assertIn('color:#3fb950">站上', _JS)
         # 建仓表默认红「破位」；猎手表通过参数改成黄「未站上」
         self.assertIn('const _bc = belowColor || "#f85149";', _JS)
@@ -44,17 +45,23 @@ class TestBuildScanMa5Flag(unittest.TestCase):
 
 
 class TestHunterMa5Flag(unittest.TestCase):
-    """2026-10-20 owner：选股猎手个股同样按 5 日线标记——站上=绿、其它=黄。"""
+    """选股猎手个股：站上=绿、其它=黄（`belowColor` 黄「未站上」）。
 
-    def test_hunter_row_uses_ma5_green_yellow(self):
+    2026-10-20 owner：「选股猎手图中的该列换成 20 日均线」⇒
+      · **列**改为 20 日线状态（`build_above_ma20`），5 日线状态降级进 tooltip；
+      · **行底色**仍是 5 日线口径（与建仓表同一套：列看 20 日线、底色看 5 日线）。
+    """
+
+    def test_hunter_row_uses_ma20_green_yellow(self):
         self.assertIn(
-            '${ma5FlagCellHtml(s.build_above_ma5, s.build_above_ma20, '
+            '${maStateCellHtml(s.build_above_ma20, 20, s.build_above_ma5, 5, '
             'undefined, "#d29922", "未站上")}', _JS)
         self.assertIn("background:rgba(210,153,34,.14);", _JS)
+        # 行底色仍按 5 日线
         self.assertIn('const _ab5 = s.build_above_ma5;', _JS)
 
-    def test_hunter_header_is_5day(self):
-        self.assertIn('>5日线<br><span style="font-size:9px;opacity:.6">规则口径</span></th>', _JS)
+    def test_hunter_header_is_20day(self):
+        self.assertIn('>20日线<br><span style="font-size:9px;opacity:.6">规则口径</span></th>', _JS)
 
 
 if __name__ == "__main__":
