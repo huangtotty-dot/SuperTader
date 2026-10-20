@@ -4317,6 +4317,13 @@ function toggleMaxStockChart() {
     box.classList.add("modal-max");
   }
   // 最大化后 resize 图表
+  // ⚠️ 2026-10-20 owner：「点最大化后图形没有自适应填满」——`.modal-lg` 的尺寸变化是
+  //    **CSS transition .25s**，原来这里只等 **60ms** 就 resize ⇒ ECharts 量到的是
+  //    过渡中途的半大尺寸，之后没有任何事件再纠正它（`.stock-chart` 不在 `echInstances`
+  //    的窗口 resize 监听里）⇒ 图就停在"放大了一点但没填满"。
+  //    根治：给图表容器挂 **ResizeObserver**（见 `_attachChartResize`），尺寸**只要变了**
+  //    就重算，跟过渡时长/触发原因（最大化、还原、窗口拉伸）全都无关。
+  //    这里的 60ms 只作为老 WebView2 不支持 RO 时的兜底。
   setTimeout(() => {
     if (stockChartInst) stockChartInst.resize();
     // resize 改了画布高度 ⇒ 现价胶囊的像素位置也要跟着重算（否则会停在旧高度上）
@@ -4328,6 +4335,8 @@ function toggleMaxStockChart() {
 function closeStockChart() {
   document.getElementById("stockModal").style.display = "none";
   if (stockChartInst) { stockChartInst.dispose(); stockChartInst = null; }
+  // 关窗时断开尺寸监听（否则它还会对着已 dispose 的实例触发，且随 open/close 累积）
+  if (_chartRO) { try { _chartRO.disconnect(); } catch (e) { /* 忽略 */ } _chartRO = null; }
   if (stockChartTimer) { clearInterval(stockChartTimer); stockChartTimer = null; }
   stopStockChartLive();
   chartModalOpen = false;      // 恢复后台面板轮询（下一次 tick 自动续上）
@@ -4472,6 +4481,40 @@ function _updateNowTag(inst, price, color) {
                  align: "center", verticalAlign: "middle" } },
     ],
   }] });
+}
+
+/* 图表容器尺寸自适应（2026-10-20 owner：「最大化后图形没有自适应填满」）。
+
+   根因：`.modal-lg` 的宽高变化是 **CSS transition .25s**，而 `toggleMaxStockChart`
+   只等 60ms 就 `resize()` ⇒ ECharts 量到的是过渡中途的半大尺寸；之后没有任何事件
+   再纠正（`.stock-chart` 不在 `echInstances` 的 window.resize 监听里）⇒ 停在那儿。
+
+   这里改用 **ResizeObserver**：只认容器的实际尺寸，跟"过渡多久、谁触发的"全都无关；
+   rAF 节流 —— 过渡期间尺寸每帧都变，逐帧 resize 跟得上动画，也不会把主线程打爆。 */
+let _chartRO = null;
+function _attachChartResize(el) {
+  try {
+    if (_chartRO) { try { _chartRO.disconnect(); } catch (e) { /* 忽略 */ } _chartRO = null; }
+    if (!el || typeof ResizeObserver !== "function") return;   // 老 WebView2：退回 60ms 兜底
+    let _raf = 0;
+    _chartRO = new ResizeObserver(() => {
+      if (_raf) return;
+      _raf = requestAnimationFrame(() => {
+        _raf = 0;
+        const inst = stockChartInst;
+        if (!inst) return;
+        // 弹窗隐藏时容器尺寸变 0 ⇒ 别拿 0 去 resize（ECharts 会画成空画布并报尺寸告警）；
+        // 重新显示时 RO 还会再触发一次，那时尺寸就正常了。
+        if (!el.clientWidth || !el.clientHeight) return;
+        try { inst.resize(); } catch (e) { return; }
+        // 画布尺寸变了 ⇒ 现价胶囊的像素位置也要重算
+        if (_nowTagState.price != null) {
+          _scheduleNowTag(inst, _nowTagState.price, _nowTagState.color);
+        }
+      });
+    });
+    _chartRO.observe(el);
+  } catch (e) { /* 忽略：保留 toggleMax 里的 60ms 兜底 */ }
 }
 
 function _scheduleNowTag(inst, price, color) {
@@ -4838,6 +4881,8 @@ function renderStockChart(applyZoom = true) {
     el.innerHTML = "";
     stockChartInst = echarts.init(el);
     window.stockChartInst = stockChartInst;  // 暴露供调试/检查
+    // 容器尺寸一变就 resize（最大化 / 还原 / 窗口拉伸都覆盖；见 _attachChartResize 注释）
+    _attachChartResize(el);
   }
 
   // 背离点：后端按周期给 {index,type(顶/底),price,consec,dif}；只画落在当前序列内的。

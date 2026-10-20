@@ -67,6 +67,28 @@ class TestNowPriceTagOutsideGrid(unittest.TestCase):
         self.assertIn("stockChartInst.resize();", _JS)
 
 
+class TestChartAutoResize(unittest.TestCase):
+    """2026-10-20 owner：「点最大化后图形没有自适应填满窗口」。
+
+    根因：`.modal-lg` 的尺寸变化是 **CSS transition .25s**，而旧的实现只等 **60ms** 就
+    `resize()` ⇒ ECharts 量到过渡中途的半大尺寸，之后没有任何事件纠正它。
+    现在改为容器上挂 ResizeObserver（只认实际尺寸，跟过渡时长/触发原因无关）。
+    """
+
+    def test_modal_has_css_transition(self):
+        # 前提没变：这条 transition 在，任何"固定延时 resize"都会量错
+        self.assertIn("transition: all .25s ease", (_ROOT / "web" / "style.css").read_text(encoding="utf-8"))
+
+    def test_resize_observer_attached_and_detached(self):
+        self.assertIn("function _attachChartResize(el)", _JS)
+        self.assertIn("new ResizeObserver(", _JS)
+        self.assertIn("_chartRO.observe(el);", _JS)
+        self.assertIn("_attachChartResize(el);", _JS)          # 在 init 分支里挂上
+        self.assertIn("_chartRO.disconnect();", _JS)           # 关窗时断开，别随开关累积
+        # rAF 节流：过渡期间逐帧 resize 跟得上动画
+        self.assertIn("requestAnimationFrame(() => {", _JS)
+
+
 class TestChartMA5Style(unittest.TestCase):
     """MA5 的特殊标记已于 2026-10-20 晚按 owner「纯属多余，去掉」**撤销**。
 
