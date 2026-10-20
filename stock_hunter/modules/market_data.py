@@ -11,9 +11,10 @@ import time
 import json
 import subprocess
 import pandas as pd
-import urllib.request
 from typing import List, Dict, Optional
 from concurrent.futures import ThreadPoolExecutor, as_completed
+
+from core.market_data.http_pool import pooled_get
 
 
 # 2026-08-15: 拉取进度上报（供 t_gui 选股猎手前端轮询显示进度条）
@@ -312,15 +313,15 @@ class MarketDataFetcher:
                 return {"code": 0, "data": {symbol: {"qfqday": rows}}}
         headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-            'Referer': 'https://finance.qq.com/'
+            'Referer': 'https://finance.qq.com/',
+            'Connection': 'keep-alive'
         }
+        path = f"/appstock/app/fqkline/get?param={symbol},day,,,1000,qfq"
         for host in self.KLINE_HOSTS:
             try:
-                url = f"https://{host}/appstock/app/fqkline/get?param={symbol},day,,,1000,qfq"
-                req = urllib.request.Request(url, headers=headers)
-                with urllib.request.urlopen(req, timeout=10) as response:
-                    content = response.read().decode('utf-8', errors='ignore')
-                    data = json.loads(content)
+                content = pooled_get(host, path, 10, headers,
+                                     encoding='utf-8', errors='ignore')
+                data = json.loads(content)
                 if data.get('code') == 0 and data.get('data'):
                     return data
             except Exception:

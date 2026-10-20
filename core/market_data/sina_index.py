@@ -15,14 +15,16 @@
 """
 import json
 import logging
-import urllib.request
 
 import pandas as pd
 
+from .http_pool import pooled_get
+
 log = logging.getLogger("market_data.sina_index")
 
-_URL = ("https://quotes.sina.cn/cn/api/jsonp_v2.php/var%20_=/"
-        "CN_MarketDataService.getKLineData?symbol={sym}&scale={scale}&ma=no&datalen={n}")
+_HOST = "quotes.sina.cn"
+_PATH = ("/cn/api/jsonp_v2.php/var%20_=/"
+         "CN_MarketDataService.getKLineData?symbol={sym}&scale={scale}&ma=no&datalen={n}")
 
 #: 最近一次失败原因（供数据健康/测试观测；成功置 None）
 LAST_ERROR = None
@@ -66,13 +68,13 @@ def fetch_index_minutes(symbol: str, scale: int = 5, datalen: int = 400) -> pd.D
     `scale` 为分钟数（5=5分钟，240=日线）。**永不抛**；失败返回空帧并记 `LAST_ERROR`。
     """
     global LAST_ERROR
-    url = _URL.format(sym=symbol, scale=int(scale), n=int(datalen))
+    path = _PATH.format(sym=symbol, scale=int(scale), n=int(datalen))
     try:
-        req = urllib.request.Request(url, headers={
+        raw = pooled_get(_HOST, path, 12, {
             "User-Agent": "Mozilla/5.0",
             "Referer": "https://finance.sina.com.cn",
-        })
-        raw = urllib.request.urlopen(req, timeout=12).read().decode("utf-8", errors="replace")
+            "Connection": "keep-alive",
+        }, encoding="utf-8", errors="replace")
         out = parse_jsonp(raw)
         if out.empty:
             LAST_ERROR = "响应不可解析或为空"

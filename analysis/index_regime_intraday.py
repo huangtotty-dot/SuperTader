@@ -51,10 +51,12 @@ import argparse
 import json
 import os
 import time as _iri_time_mod
-import urllib.request
+import urllib.parse
 from datetime import datetime, timedelta
 
 import pandas as pd
+
+from core.market_data.http_pool import pooled_get
 
 # 时间源：宿主项目若注入全局 _now 则沿用，否则用系统 datetime.now
 _iri_now = globals().get("_now") or datetime.now
@@ -114,10 +116,12 @@ def _iri_http_get_json(url: str) -> dict:
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
         "Referer": "https://finance.qq.com/",
+        "Connection": "keep-alive",
     }
-    req = urllib.request.Request(url, headers=headers)
-    with urllib.request.urlopen(req, timeout=p["http_timeout"]) as resp:
-        content = resp.read().decode("utf-8", errors="ignore")
+    parts = urllib.parse.urlsplit(url)
+    path = parts.path + ("?" + parts.query if parts.query else "")
+    content = pooled_get(parts.hostname, path, p["http_timeout"], headers,
+                         encoding="utf-8", errors="ignore")
     if not content.strip() or "<html" in content.lower() or "<!doctype html" in content.lower():
         raise ValueError("http response not json")
     return json.loads(content)

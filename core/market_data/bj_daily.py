@@ -20,10 +20,11 @@
 import json
 import logging
 import time
-import urllib.request
 from datetime import datetime, timedelta
 
 import pandas as pd
+
+from .http_pool import pooled_get
 
 log = logging.getLogger("market_data.bj_daily")
 
@@ -47,10 +48,10 @@ def _secid(code: str) -> str:
     return "0." + str(code).split("_")[0]
 
 
-def _kline_url(code: str, days: int) -> str:
+def _kline_path(code: str, days: int) -> str:
     # klt=101 日线；fqt=1 前复权（与 GmProvider 的 ADJUST_PREV 口径一致）
     beg = (datetime.now() - timedelta(days=int(days * 1.6) + 30)).strftime("%Y%m%d")
-    return (f"https://{_HOST}/api/qt/stock/kline/get?secid={_secid(code)}"
+    return (f"/api/qt/stock/kline/get?secid={_secid(code)}"
             f"&fields1=f1,f2,f3&fields2=f51,f52,f53,f54,f55,f56&klt=101&fqt=1"
             f"&beg={beg}&end=20500101")
 
@@ -78,15 +79,15 @@ def _parse(raw: str) -> pd.DataFrame:
 def fetch_bj_daily(code: str, days: int = 250) -> pd.DataFrame:
     """北交所日线。**永不抛**；取不到返回空帧并记 LAST_ERROR/FAIL_COUNT。"""
     global LAST_ERROR, FAIL_COUNT
-    url = _kline_url(code, days)
+    path = _kline_path(code, days)
     last = None
     for _ in range(_RETRIES):
         try:
-            req = urllib.request.Request(url, headers={
+            raw = pooled_get(_HOST, path, 10, {
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
                 "Referer": "https://quote.eastmoney.com/",
-            })
-            raw = urllib.request.urlopen(req, timeout=10).read().decode("utf-8", errors="replace")
+                "Connection": "keep-alive",
+            }, encoding="utf-8", errors="replace")
             df = _parse(raw)
             if not df.empty:
                 LAST_ERROR = None

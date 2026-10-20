@@ -51,13 +51,12 @@
 from __future__ import annotations
 
 import json
-import os
-import urllib.request
 from datetime import datetime, timedelta
 
 import pandas as pd
 
 from analysis import divergence as dv
+from core.market_data.http_pool import pooled_get
 
 # 参与检测的三个分辨率（"日线" 非 bar 周期名，仅作标签）
 FREQS = ("30min", "60min", "日线")
@@ -196,16 +195,14 @@ def _em_kline(secid: str, klt: int, lmt: int = 400, attempts: int = 8) -> list:
     push2his **有风控**（间歇断连），仓库既有做法是重试 8 次（多数 3-6 次内成功，
     见 t_gui.load_stock_chart 的 em 分支）。返回原始 klines 字符串列表，失败返回 []。
     """
-    for k in ("http_proxy", "https_proxy", "HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "all_proxy"):
-        os.environ.pop(k, None)
-    os.environ["NO_PROXY"] = "*"
-    url = (f"https://push2his.eastmoney.com/api/qt/stock/kline/get?secid={secid}"
-           f"&fields1=f1,f2,f3,f4,f5,f6&fields2=f51,f52,f53,f54,f55,f56,f57"
-           f"&klt={klt}&fqt=1&beg=0&end=20500101&lmt={lmt}")
+    # 连接复用（2026-10-20）：raw http.client 天然不走环境代理，等价于旧的手动清代理。
+    path = (f"/api/qt/stock/kline/get?secid={secid}"
+            f"&fields1=f1,f2,f3,f4,f5,f6&fields2=f51,f52,f53,f54,f55,f56,f57"
+            f"&klt={klt}&fqt=1&beg=0&end=20500101&lmt={lmt}")
     for _ in range(max(1, attempts)):
         try:
-            req = urllib.request.Request(url, headers=_UA)
-            raw = urllib.request.urlopen(req, timeout=10).read().decode("utf-8", errors="ignore")
+            raw = pooled_get("push2his.eastmoney.com", path, 10, _UA,
+                             encoding="utf-8", errors="ignore")
             data = json.loads(raw)
             kl = (data.get("data") or {}).get("klines") or []
             if kl:

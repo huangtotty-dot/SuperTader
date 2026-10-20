@@ -6,7 +6,6 @@ _live_quote_forming），不改变行为，只加契约断言与 attrs["source"]
 """
 import json
 import os
-import threading
 import urllib.parse
 import urllib.request
 from datetime import datetime
@@ -200,19 +199,14 @@ _IFZQ_POOL_MAX = 4
 
 # ⚠️ 连接池**必须按主机分桶**：keep-alive 连接绑死在建连时的 host 上，混用会把
 # `web.ifzq` 的请求发到 `ifzq`（实测 fqkline 在 ifzq 上返 501 ⇒ 静默拿空）。
-_HTTP_POOLS = {}
-_HTTP_POOLS_LOCK = threading.Lock()
+# 池实现 2026-10-20 起统一到 `core/market_data/http_pool.py`（全仓库共享），这里只留薄封装，
+# 保留 `_QT_POOL` 等既有名字（测试与 tmp 探针直接引用）。
+from . import http_pool as _hp
 
 
 def _host_pool(host):
-    """取/建某主机的连接池记录 {pool, lock, max}。"""
-    with _HTTP_POOLS_LOCK:
-        rec = _HTTP_POOLS.get(host)
-        if rec is None:
-            rec = {"pool": [], "lock": threading.Lock(),
-                   "max": _QT_POOL_MAX if host == _QT_HOST else _IFZQ_POOL_MAX}
-            _HTTP_POOLS[host] = rec
-        return rec
+    """取/建某主机的连接池记录 {pool, lock, max}。qt=8 路、其余=4 路。"""
+    return _hp.host_pool(host, _QT_POOL_MAX if host == _QT_HOST else _IFZQ_POOL_MAX)
 
 
 # 兼容既有名字（测试直接 clear 这个列表）
@@ -223,70 +217,17 @@ _IFZQ_POOL_LOCK = _host_pool(_IFZQ_HOST)["lock"]
 
 
 def _conn_take(host, pool, lock, timeout):
-    """取一条空闲 keep-alive 连接；池空则新建。"""
-    with lock:
-        while pool:
-            _c = pool.pop()
-            try:
-                # 池里混着不同超时的来源（2s 单只 / 3s 批量 / 4s K线）⇒ 按本次调用重设
-                if _c.sock is not None:
-                    _c.sock.settimeout(timeout)
-                return _c
-            except Exception:
-                try:
-                    _c.close()
-                except Exception:
-                    pass
-    import http.client as _hc
-    return _hc.HTTPSConnection(host, timeout=timeout)
+    return _hp.conn_take(host, pool, lock, timeout)
 
 
 def _conn_put(pool, lock, conn, max_idle):
-    """把**已完整读完**响应体的连接放回池；池满则关掉（不无限攒 fd）。"""
-    with lock:
-        if len(pool) < max_idle:
-            pool.append(conn)
-            return
-    try:
-        conn.close()
-    except Exception:
-        pass
+    _hp.conn_put(pool, lock, conn, max_idle)
 
 
 def _pooled_get(host, path, timeout, headers):
-    """GET `https://{host}{path}` → 文本（gbk 解码）。**按主机复用连接**，失败抛异常。
-
-    失败自动**换新连接重试一次**：keep-alive 连接被对端静默关掉后，下一次请求会抛
-    `RemoteDisconnected`/`BadStatusLine` —— 这是 keep-alive 的固有代价，不是故障，
-    不能让它把"本来能拿到的数据"变成拿不到。重试仍失败才抛给调用方
-    （调用点的语义都是"失败即当作没数据"，与改前一致）。
-    """
-    import http.client as _hc
-    rec = _host_pool(host)
-    pool, lock, max_idle = rec["pool"], rec["lock"], rec["max"]
-    last = None
-    for attempt in (0, 1):
-        _conn = (_conn_take(host, pool, lock, timeout) if attempt == 0
-                 else _hc.HTTPSConnection(host, timeout=timeout))
-        try:
-            _conn.request("GET", path, headers=headers)
-            _resp = _conn.getresponse()
-            _data = _resp.read()
-            if _resp.will_close:
-                try:
-                    _conn.close()
-                except Exception:
-                    pass
-            else:
-                _conn_put(pool, lock, _conn, max_idle)
-            return _data.decode("gbk", errors="replace")
-        except Exception as _e:
-            last = _e
-            try:
-                _conn.close()
-            except Exception:
-                pass
-    raise last
+    """GET `https://{host}{path}` → 文本（gbk 解码）。**按主机复用连接**，失败抛异常。"""
+    _host_pool(host)   # 确保按正确 max 分桶（qt=8 / 其余=4）后再委托
+    return _hp.pooled_get(host, path, timeout, headers, encoding="gbk", errors="replace")
 
 
 def _qt_conn_take(timeout):
