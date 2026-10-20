@@ -5380,11 +5380,22 @@ class Api:
         last = str(hit.get("last_daily_date") or "")
         _now = datetime.now()
         _today = _now.strftime("%Y-%m-%d")
-        _new_bar_possible = (last < _today and _now.weekday() < 5
-                             and _now.strftime("%H:%M") >= "09:30")
-        if _new_bar_possible:
+        _in_session = (_now.weekday() < 5 and _now.strftime("%H:%M") >= "09:30")
+        _new_bar_possible = (last < _today and _in_session)
+        # 2026-10-20（688003 天准科技：已站上 10 日线但日线显示在下方）：
+        # **payload 里已经带了今天那一根**时，原来这条分支直接跳过 —— 可那根是开盘时
+        # 写下的半成品（实测 09:31 的 close=61.08，当日实际 66.42），而 payload 的新鲜度
+        # 只看 `last_daily_date == 今天` ⇒ 一整天不再更新，均线全按 9 小时前的价算。
+        # 所以 **last == 今天** 时同样要拿实时快照把那一根**替换**掉。
+        _today_bar_refresh = (last == _today and _in_session)
+        if _new_bar_possible or _today_bar_refresh:
             bar = self._today_forming_bar(code, allow_network=allow_network)
-            if bar and str(bar["date"]) > last:
+            if bar and str(bar["date"]) == last and daily_rows:
+                try:
+                    self._rebuild_payload_daily(payload, daily_rows[:-1] + [bar])   # 覆盖半成品
+                except Exception:
+                    pass
+            elif bar and str(bar["date"]) > last:
                 try:
                     self._rebuild_payload_daily(payload, daily_rows + [bar])
                 except Exception:
@@ -5467,6 +5478,51 @@ class Api:
         payload["current_price"] = round(float(d["close"].iloc[-1]), 3)
         payload["version"] = self._chart_version(payload["period_data"])
 
+    def _patch_daily_today(self, df, code):
+        """日线序列里「今天那一根」用**实时快照**覆盖掉缓存里的半成品（2026-10-20）。
+
+        为什么必须有（owner 报 688003 天准科技「已经爬上了 10 日均线，日线显示不对」）：
+        本地日线缓存/图表 payload 的当日根是**开盘那会儿**写下的快照（实测 688003 的缓存
+        09:31:26 落盘，close=61.08 / high=61.99），而 `daily_kline` 的新鲜度闸只看
+        `date == 今天` ⇒ 一整天都被当成"新鲜"不再更新。于是 MA5/MA10/MA20、current_price、
+        支撑压力/箱体全部按 9 小时前的价格算；真实当日 66.42、high 67.98 ⇒ 明明站上 MA10
+        却画在下方。
+
+        边界：只在「末根 == 今天 且 已开盘」时动手；同票 20 秒内复用快照（体检会逐只调用，
+        别把批量快照打爆）。**取不到快照 / 日期对不上 ⇒ 原样返回**，绝不猜、不造根
+        （沿用 `_mk_forming_bar` 的盘前假根闸）。
+        """
+        try:
+            if df is None or getattr(df, "empty", True) or "date" not in df.columns:
+                return df
+            _now = datetime.now()
+            if _now.weekday() >= 5 or _now.strftime("%H:%M") < "09:30":
+                return df
+            _today = _now.strftime("%Y-%m-%d")
+            if str(df["date"].iloc[-1])[:10] != _today:
+                return df          # 末根不是今天 ⇒ 交给"补当日根"那套逻辑，本函数不造根
+            _key = str(code).split("_")[0]
+            _memo = getattr(self, "_daily_patch_memo", None)
+            if _memo is None:
+                _memo = self._daily_patch_memo = {}
+            _ts = _time_mod.time()
+            _hit = _memo.get(_key)
+            if _hit is not None and (_ts - _hit[0]) < 20:
+                bar = _hit[1]
+            else:
+                bar = self._today_forming_bar(code, allow_network=True)
+                _memo[_key] = (_ts, bar)
+            if not bar or str(bar.get("date")) != _today:
+                return df
+            out = df.copy()
+            _i = out.index[-1]
+            for _k in ("open", "high", "low", "close", "volume"):
+                if _k in out.columns and bar.get(_k) is not None:
+                    out.at[_i, _k] = float(bar[_k])
+            return out
+        except Exception:
+            return df
+
     def _build_chart_from_df(self, df, out, code, min_frames=None, want_min_period=None):
         """由日线 DataFrame 构建 K 线弹窗数据（MA/MACD/RSI/BOLL + 周/月/30分/60分 + 支撑箱体通道）。
 
@@ -5478,6 +5534,11 @@ class Api:
 
         calc_ma_and_indicators = _calc_ma_and_indicators   # 模块级（2026-10-04 抽出，供 payload 补 bar 复用）
 
+        # 2026-10-20（owner 报 688003 天准科技「已经站上 10 日线，日线却显示不对」）：
+        # 日线序列里**今天那一根**常常是缓存里 **09:3x 写下的半成品**（实测 close 61.08，
+        # 而当日实际 66.42，高 67.98）——所有均线都建立在它之上 ⇒ 整张图按 9 小时前的价算。
+        # 这里在算指标**之前**用实时快照把当日根换掉（取不到就原样，绝不猜）。
+        df = self._patch_daily_today(df, code)
         daily = calc_ma_and_indicators(df)
         weekly = calc_ma_and_indicators(df.resample("W-FRI", on="date").agg(
             {"open": "first", "high": "max", "low": "min", "close": "last", "volume": "sum"}).dropna().reset_index())
