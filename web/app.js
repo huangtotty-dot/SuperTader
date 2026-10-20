@@ -3487,6 +3487,10 @@ let stockChartAppliedZoom = null;
 // 2026-10-20：用户正在拖动/滚轮缩放时，实时尾（10 分 1s）不要重绘 ——
 // setOption 会把滑杆弹回，表现为“切到 10 分钟线后缩放不工作”。
 let stockChartInteractingUntil = 0;
+// 2026-10-20：setOption 之后 ECharts 会补发一次 dataZoom 事件（百分比可能是默认 0/100）。
+// 若把它当成"用户缩放"，就会把 stockChartZoom 覆盖成默认值 ⇒ 下一次重绘把用户缩放弹回。
+// 每次程序化 setOption 后短暂忽略 dataZoom 事件（用户手势在 500ms 内不会开始）。
+let stockChartZoomGuardUntil = 0;
 // MA 线配色（2026-10-17）：K线图改深底后，原浅底那组（#e6c07b 等）亮度过高、
 // 在深底上发白刺眼。换成按深底重新选的一组（dataviz 校验器 dark 全项通过：
 // 亮度带 / 彩度 / CVD ΔE≥8.4 / 对比度≥3:1）。
@@ -4410,6 +4414,7 @@ function renderStockChart(applyZoom = true) {
   }] : [];
 
   if (_applyZoom) stockChartAppliedZoom = { start: zStart, end: zEnd };
+  stockChartZoomGuardUntil = Date.now() + 500;   // 忽略本次 setOption 补发的 dataZoom 事件
   stockChartInst.setOption({
     // 2026-10-17 owner：K线图用**深色画布**（独立的深色主题，不是把浅色反相）。
     backgroundColor: "#0d1117",
@@ -4651,6 +4656,7 @@ function renderStockChart(applyZoom = true) {
       stockChartInst.on("dataZoom", (ev) => {
         const z = (ev && ev.batch && ev.batch[0]) || ev || {};
         if (typeof z.start !== "number" || typeof z.end !== "number") return;
+        if (Date.now() < stockChartZoomGuardUntil) return;   // 程序化 setOption 的回声，忽略
         const a = stockChartAppliedZoom;
         if (a && Math.abs(z.start - a.start) < 0.01 && Math.abs(z.end - a.end) < 0.01) return;
         stockChartZoom = { start: z.start, end: z.end };
@@ -7013,7 +7019,7 @@ function startLivePoll() {
 async function init() {
   // 首先获取 DOM 元素（此时 DOM 已完全加载）
   // 2026-10-20：启动标记（0ms）写进慢调用日志 ⇒ 能确认 WebView2 是否加载了新版 app.js
-  try { window.pywebview.api.report_slow_call("app_boot_20261020i", 0); } catch (e) { /* 静默 */ }
+  try { window.pywebview.api.report_slow_call("app_boot_20261020j", 0); } catch (e) { /* 静默 */ }
   dateSelect = document.getElementById("dateSelect");
   refreshBtn = document.getElementById("refreshBtn");
   autoPoll = document.getElementById("autoPoll");

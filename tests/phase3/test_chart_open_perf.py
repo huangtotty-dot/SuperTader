@@ -68,8 +68,14 @@ class TestChartOpenPerf(unittest.TestCase):
     def test_frontend_cache_busted_and_boot_marked(self):
         """WebView2 可能缓存旧 app.js（改了跟没改一样）⇒ 带版本号 + 启动标记落日志。"""
         _html = (_ROOT / "web" / "index.html").read_text(encoding="utf-8")
-        self.assertIn("app.js?v=20261020i", _html)
-        self.assertIn("app_boot_20261020i", _JS)
+        self.assertIn("app.js?v=20261020j", _html)
+        self.assertIn("app_boot_20261020j", _JS)
+
+    def test_programmatic_datazoom_echo_is_ignored(self):
+        """setOption 补发的 dataZoom 事件不能被当成用户缩放（否则 stockChartZoom 被覆盖）。"""
+        self.assertIn("let stockChartZoomGuardUntil = 0;", _JS)
+        self.assertIn("stockChartZoomGuardUntil = Date.now() + 500", _JS)
+        self.assertIn("Date.now() < stockChartZoomGuardUntil) return;", _JS)
 
     def test_memory_cache_short_daily_is_invalidated(self):
         """内存缓存里的 40 根日线必须让位给更长 payload（否则一直只显示 40 根）。"""
