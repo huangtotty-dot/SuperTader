@@ -4367,9 +4367,10 @@ function renderStockSummary(d) {
       + (_chPos ? `；${_chPos}` : "") + `</span>`
       + (ch.reversal ? `<span class="badge signal" style="margin-left:6px">↺ 通道反转${ch.reversal === "up_to_down" ? " 上→下" : " 下→上"}</span>` : "")
   // 2026-10-20：分钟图的 MA5 是「5 根该周期 K 线」，与日线 5 日线不同；给一行口径说明。
+  // 同日晚上 owner 去掉 MA5 的特殊金线后，那个「把 MA5 说成金线」的前缀已失效 ⇒ 只说两条虚线。
   const _pcnHint = ({ min5: "5分", min10: "10分", min30: "30分", min60: "60分" })[stockChartPeriod];
   const _ma5Hint = _pcnHint
-    ? `<span class="ss-item cell-dim" style="font-size:10px">金线=MA5(${_pcnHint}) · 蓝虚线=日线MA5 · 紫虚线=日线MA10</span>`
+    ? `<span class="ss-item cell-dim" style="font-size:10px">MA5(${_pcnHint})=5 根该周期K · 蓝虚线=日线MA5 · 紫虚线=日线MA10</span>`
     : "";
   // 2026-10-20：把「当前周期实际有多少根数据」写出来，避免"看起来只有一部分"时
   // 无法区分是数据缺失还是缩放窗口。
@@ -4750,35 +4751,18 @@ function renderStockChart(applyZoom = true) {
     })
     .filter(Boolean);
 
-  // 2026-10-20 owner：「K线图打开任意周期，用特殊线型标记 5 日均线」。
-  // MA5 单独用**金色加粗 + 微光**（深色画布上最跳），其余均线保持 1px 细线；
-  // z 抬高让它压在蜡烛/其它均线之上，任何周期切过去都能一眼找到。
-  // ⚠️ 分钟周期的 MA5 = **5 根该周期 K 线**（10min→50分钟），不是日线 5 日线！
-  //    文字标记必须带周期后缀，并在分钟图另画一条「日线MA5」蓝色虚线，避免两者混淆。
-  const MA5_COLOR = "#ffd166";
+  // 2026-10-20 owner：「K线中显示5日均线纯属多余，去掉」——**撤掉当天上午加的 MA5 特殊标记**
+  // （金色加粗+微光 / z 抬到蜡烛之上 / 线尾「MA5(日) xx」胶囊）。
+  // 理由：MA5 本来就在图例和 tooltip 里，再单独描一条金线加个数字胶囊只是噪声，
+  // 而且那个胶囊正好挂在右端、跟现价胶囊抢位置。
+  // ⚠️ **MA5 这条均线本身保留**（它是标准均线之一），只是恢复成与其它均线同款细线。
+  //    「分钟周期 MA5 = 5 根该周期 K 线」这个口径仍由 tooltip 和「日线MA5」蓝虚线解释。
   const maSeries = period.ma.map((maArr, i) => {
-    const _isMA5 = i === 0;
-    const _color = _isMA5 ? MA5_COLOR : MA_COLORS[i];
+    const _color = MA_COLORS[i];
     return {
       name: `MA${[5,10,20,30,60,180,365][i]}`, type: "line", data: maArr, symbol: "none",
-      z: _isMA5 ? 5 : 2,
-      lineStyle: _isMA5
-        ? { width: 2.6, color: _color, type: "solid",
-            shadowBlur: 6, shadowColor: "rgba(255,209,102,.55)" }
-        : { width: 1, color: _color },
-      // 2026-10-20 owner：「用文字标记出 5 日均线」——线尾挂一个金色胶囊「MA5 数值」。
-      // offset 往左上挪，避开右侧 grid 边距，也尽量不压最后一根蜡烛。
-      endLabel: _isMA5 ? {
-        show: true,
-        formatter: (p) => {
-          const v = p && p.value;
-          const name = `MA5(${_periodCn})`;
-          return (v == null || isNaN(Number(v))) ? name : `${name} ${fmt(v, 2)}`;
-        },
-        color: "#0d1117", backgroundColor: MA5_COLOR,
-        padding: [2, 5], borderRadius: 3, fontSize: 10, fontWeight: "bold",
-        offset: [-8, -10],
-      } : undefined,
+      z: 2,
+      lineStyle: { width: 1, color: _color },
       // ⚠️ **必须同时给 itemStyle.color**（2026-10-16 owner 报"图例颜色和线不一样"）：
       //    ECharts 的**图例图标**取 `itemStyle.color`，只给 `lineStyle.color` 时图例回落到
       //    默认调色板 ⇒ 图例是 A 色、线是 B 色。凡是想让图例跟着线走的 series 都要两处同色。

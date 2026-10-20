@@ -68,25 +68,29 @@ class TestNowPriceTagOutsideGrid(unittest.TestCase):
 
 
 class TestChartMA5Style(unittest.TestCase):
-    def test_ma5_special_color_and_width(self):
-        self.assertIn('const MA5_COLOR = "#ffd166";', _JS)
-        self.assertIn("const _isMA5 = i === 0;", _JS)
-        self.assertIn("width: 2.6", _JS)
-        self.assertIn("shadowBlur: 6", _JS)
+    """MA5 的特殊标记已于 2026-10-20 晚按 owner「纯属多余，去掉」**撤销**。
 
-    def test_ma5_above_other_series(self):
-        self.assertIn("z: _isMA5 ? 5 : 2", _JS)
+    MA5 这条均线本身保留（标准均线之一），恢复成与 MA10/20/30/60… 同款的 1px 细线；
+    金线 / 微光 / z 抬升 / 线尾「MA5(日) xx」胶囊全部移除 —— 那个胶囊不仅多余，
+    还挂在右端跟「现价胶囊」抢位置。
+    """
+
+    def test_ma5_special_marker_is_gone(self):
+        self.assertNotIn("MA5_COLOR", _JS)
+        self.assertNotIn("_isMA5", _JS)
+        self.assertNotIn("shadowBlur: 6", _JS)
+        # 只查 maSeries 那一段 —— 别的图（板块星轨等）本来就在用 endLabel
+        _body = _JS.split("const maSeries = period.ma.map", 1)[1].split("});", 1)[0]
+        self.assertNotIn("endLabel", _body)
+
+    def test_ma5_still_rendered_as_normal_ma(self):
+        # 均线本身还在（别把整条 MA5 也删了）
+        self.assertIn("const maSeries = period.ma.map((maArr, i) => {", _JS)
+        self.assertIn("const _color = MA_COLORS[i];", _JS)
+        self.assertIn("lineStyle: { width: 1, color: _color },", _JS)
 
     def test_legend_color_matches_line(self):
-        self.assertIn("const _color = _isMA5 ? MA5_COLOR : MA_COLORS[i];", _JS)
         self.assertIn("itemStyle: { color: _color }", _JS)
-
-    def test_ma5_text_label(self):
-        """线尾文字标记（owner 2026-10-20：「用文字标记出5日均线」）。"""
-        self.assertIn("endLabel: _isMA5 ? {", _JS)
-        self.assertIn("const _periodCn =", _JS)
-        self.assertIn("`MA5(${_periodCn})`", _JS)
-        self.assertIn("backgroundColor: MA5_COLOR", _JS)
 
     def test_period_vars_declared_before_use(self):
         """防 TDZ：`_isIntradayPeriod` 必须先于 `dailyMa5Line` 声明
@@ -104,7 +108,9 @@ class TestChartMA5Style(unittest.TestCase):
         self.assertIn("日线MA5 ${fmt(_dma5, 2)}", _JS)
         self.assertIn('color: "#58a6ff"', _JS)
         self.assertIn("...(dailyMa5Line ? [dailyMa5Line] : [])", _JS)
-        self.assertIn("金线=MA5(${_pcnHint}) · 蓝虚线=日线MA5", _JS)
+        # 金线撤销后，口径说明改成直接讲 MA5 的根数含义（不再有"金线"前缀）
+        self.assertIn("MA5(${_pcnHint})=5 根该周期K", _JS)
+        self.assertNotIn("金线=MA5", _JS)
 
     def test_intraday_daily_ma10_reference_line(self):
         """2026-10-20 owner：「10分钟周期内也显示10日均线」——紫色虚线参考线。"""
