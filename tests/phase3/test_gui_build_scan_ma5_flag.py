@@ -1,12 +1,11 @@
 # -*- coding: utf-8 -*-
-"""建仓信号扫描：5 日线状态着色（2026-10-19 owner）。
+"""建仓信号扫描：行底色 5 日线 / 列显示 20 日线（2026-10-19~20 owner）。
 
-规则：**站上 5 日均线=绿色、其它=红色**；与得分里 −70 悬崖同一口径。
-本测试只做源码契约（前端渲染），不启动 GUI：
-  · `ma5FlagCellHtml` 存在，且 true/false 分别用绿/红；
-  · 建仓表行用 `above_ma5` 渲染该列，**不再**用 `above_ma20`；
-  · 整行底色按 `above_ma5`，无数据不着色；
-  · 表头是「5日线」。
+2026-10-19：建仓表整行底色按 5 日线——站上=绿、其它=红（与 −70 悬崖同口径）。
+2026-10-20：owner 澄清「图中的列应该是是否站上 20 日线」⇒
+  · **列**恢复为「20日线」观察列（`above_ma20`）；
+  · **行底色**仍是 5 日线口径。
+本测试只做源码契约，不启动 GUI。
 
 运行：python -m unittest tests.phase3.test_gui_build_scan_ma5_flag -v
 """
@@ -27,23 +26,21 @@ class TestBuildScanMa5Flag(unittest.TestCase):
         self.assertIn('const _bc = belowColor || "#f85149";', _JS)
         self.assertIn('const _bt = belowText || "破位";', _JS)
 
-    def test_build_scan_row_uses_above_ma5(self):
-        self.assertIn("${ma5FlagCellHtml(_tf.above_ma5, _tf.above_ma20)}", _JS)
-        self.assertNotIn(
-            "${ma20FlagCellHtml((r.timing_features || {}).above_ma20)}", _JS,
-            "建仓表该列已改为 5 日线，不应再渲染 20 日线")
+    def test_build_scan_column_is_ma20_row_color_is_ma5(self):
+        """列 = 20 日线观察；行底色 = 5 日线（两者刻意分开）。"""
+        self.assertIn("${ma20FlagCellHtml(_tf.above_ma20)}", _JS)
+        self.assertIn("const _above5 = _tf.above_ma5;", _JS)
 
     def test_row_background_is_ma5_based(self):
         self.assertIn("const _above5 = _tf.above_ma5;", _JS)
         self.assertIn('(_above5 === true) ? "background:rgba(63,185,80,.10);"', _JS)
         self.assertIn('(_above5 === false) ? "background:rgba(248,81,73,.12);"', _JS)
 
-    def test_header_is_5day(self):
-        self.assertIn(">5日线<br>", _JS)
-        self.assertNotIn(
+    def test_build_scan_header_is_20day(self):
+        self.assertIn(
             '>20日线<br><span style="font-size:9px;opacity:.6">观察</span></th>\n'
             '          <th class="num" title="实时价 + 实时涨幅（随行情每 10s 刷新）。取不到显示 —',
-            _JS, "建仓表表头应已改为 5日线")
+            _JS, "建仓表表头应为 20日线（行底色才是 5 日线口径）")
 
 
 class TestHunterMa5Flag(unittest.TestCase):

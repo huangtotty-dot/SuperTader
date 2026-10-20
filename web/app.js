@@ -2865,7 +2865,7 @@ function renderPB(pb) {
         <td class="num" title="${esc(scoreCellTitle)}">${scoreCellHtml}</td>
         <td class="num ${metCls}"><b>${isNoData ? "—" : metCount + "/3"}</b></td>
         ${dayStageCellHtml(r.structure)}
-        ${ma5FlagCellHtml(_tf.above_ma5, _tf.above_ma20)}
+        ${ma20FlagCellHtml(_tf.above_ma20)}
         <td class="num">${fmt(r.price)}<div style="font-size:10px">${pctHtml(r.change_pct, "实时涨幅（随行情每 10s 刷新）")}</div></td>
         <td style="text-align:center">${boxStr}</td>
         <td style="max-width:220px;line-height:1.7">${tagsTxt}</td>
@@ -2901,7 +2901,7 @@ function renderPB(pb) {
         <thead><tr>
           <th>股票</th><th title="P3-2 池分管：人工=manual侧扫描 / 自动=auto侧管理">池</th><th>判定</th><th class="num">得分</th><th class="num">通过</th>
           <th title="日线四阶段（描述状态，紧挨得分便于对照）：②抬升/③派发/④下跌/①蓄势。⚠️ 实测横截面IC与直觉相反——抬升/追高前瞻更差(IC −0.031~−0.042, t=−12~−15)、下跌/超跌前瞻更好(IC +0.020~+0.034, t=+7~+12)，分半窗两段同号；效应量小(IC≈0.04)仅作相对强弱参照">日线阶段</th>
-          <th title="现价 vs 5 日简单均线（与得分里 −70 悬崖同一口径）。**站上=绿、未站上=红**；20 日线状态放在单元格 tooltip。观察列，不驱动判定">5日线<br><span style="font-size:9px;opacity:.6">规则口径</span></th>
+          <th title="是否站上 20 日线（观察列，不驱动判定）。⚠️ 行底色才是 5 日线口径（站上=绿、其它=红，得分 −70 悬崖同源）；本列只看 20 日线。">20日线<br><span style="font-size:9px;opacity:.6">观察</span></th>
           <th class="num" title="实时价 + 实时涨幅（随行情每 10s 刷新）。取不到显示 — 而不是 0.00%：不把「无数据」画成「平盘」">价<br><span style="font-size:9px;opacity:.6">涨幅</span></th>
           <th title="突破箱体=第一优先级">突破</th>
           <th title="通道/箱体/背离等技术形态。背离标签已**自带周期**（如「日线顶背离」），与右侧『30min判定』的 30 分钟口径不同源 —— 悬停标签可见确认日期">技术标签</th>
@@ -7059,7 +7059,7 @@ function startLivePoll() {
 async function init() {
   // 首先获取 DOM 元素（此时 DOM 已完全加载）
   // 2026-10-20：启动标记（0ms）写进慢调用日志 ⇒ 能确认 WebView2 是否加载了新版 app.js
-  try { window.pywebview.api.report_slow_call("app_boot_20261020l", 0); } catch (e) { /* 静默 */ }
+  try { window.pywebview.api.report_slow_call("app_boot_20261020m", 0); } catch (e) { /* 静默 */ }
   dateSelect = document.getElementById("dateSelect");
   refreshBtn = document.getElementById("refreshBtn");
   autoPoll = document.getElementById("autoPoll");
