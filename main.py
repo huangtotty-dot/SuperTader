@@ -1038,16 +1038,48 @@ def _maybe_check_trend30_alert(now: datetime) -> None:
     _trend30_alert_thread.start()
 
 
-def _hunter_ma5_feishu_enabled() -> bool:
-    """读取 config.json 的 feishu.enabled + notify_on_hunter_ma5 开关。"""
+def _hunter_ma5_feishu_enabled(key: str = "notify_on_hunter_ma5") -> bool:
+    """读取 config.json 的 feishu.enabled + 指定 notify_on_* 开关（默认猎手站上5日线）。
+
+    2026-10-20：「回踩5日线不破」复用同一把开关，`key="notify_on_ma5_pullback"`。
+    """
     try:
         runtime_config = load_runtime_config()
         feishu_cfg = runtime_config.get("feishu", {}) if isinstance(runtime_config, dict) else {}
         if not bool(feishu_cfg.get("enabled", True)):
             return False
-        return bool(feishu_cfg.get("notify_on_hunter_ma5", True))
+        return bool(feishu_cfg.get(key, True))
     except Exception:
         return True
+
+
+def _start_ma5_pullback_watch() -> None:
+    """2026-10-20 owner：「每天 30 分钟轮询，把回踩 5 日线不破的票发飞书」
+    —— 范围 = 体检持仓 + 建仓池 + 猎手前 10 热门板块。
+
+    独立 daemon 线程（**不挂主循环**）：main.py 一轮可达 15 分钟，挂上去会把 30 分钟
+    稀释成 30+；这与「猎手站上5日线」watcher 同样的理由（见内存主循环节流那条）。
+    开关：feishu.enabled + feishu.notify_on_ma5_pullback。
+    """
+    global _ma5_pullback_thread
+    try:
+        if not _hunter_ma5_feishu_enabled("notify_on_ma5_pullback"):
+            log.info("📉 回踩5日线不破轮询: 已在配置中关闭（feishu.notify_on_ma5_pullback）")
+            return
+        if _ma5_pullback_thread is not None and _ma5_pullback_thread.is_alive():
+            return
+        from core.ma5_pullback import run_loop, POLL_SEC
+        _interval = float(PARAMS.get("ma5_pullback_poll_sec", POLL_SEC) or POLL_SEC)
+        _ma5_pullback_thread = _threading.Thread(
+            target=run_loop, kwargs={"poll_sec": _interval},
+            name="ma5-pullback-watch", daemon=True)
+        _ma5_pullback_thread.start()
+        log.info("📉 回踩5日线不破轮询已启动（独立线程，每 %.0f 分钟，交易时段）" % (_interval / 60.0))
+    except Exception as e:
+        log.warning(f"⚠️ 回踩5日线不破轮询启动失败（不阻断主循环）: {str(e)[:160]}")
+
+
+_ma5_pullback_thread = None
 
 
 def _start_hunter_ma5_watch() -> None:
@@ -2861,6 +2893,8 @@ def run_watch():
     _maybe_backfill_sentiment()
     # 2026-10-20：猎手「刚站上5日线」实时 watcher（独立线程，20s 节拍，不再等主循环）
     _start_hunter_ma5_watch()
+    # 2026-10-20：回踩5日线不破 · 30 分钟轮询（体检持仓 + 建仓池 + 猎手前10板块）
+    _start_ma5_pullback_watch()
 
 
     log.info("========= 做T终极护城河防御版 启动 =========")
