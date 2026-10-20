@@ -1,5 +1,5 @@
 {
-  "updated_at": "2026-10-19 12:17:17",
+  "updated_at": "2026-10-20 14:50:04",
   "open": {
     "603168": {
       "entry_date": "2026-10-16",
@@ -8,8 +8,8 @@
       "dev20": -0.028111,
       "gap": 0.0793650793650793,
       "board": "医药生物",
-      "days_held": 0,
-      "last_check_date": null
+      "days_held": 2,
+      "last_check_date": "2026-10-20"
     },
     "600127": {
       "entry_date": "2026-10-16",
@@ -18,6 +18,56 @@
       "dev20": -0.061069,
       "gap": 0.06254653760238282,
       "board": "大农业",
+      "days_held": 2,
+      "last_check_date": "2026-10-20"
+    },
+    "688322": {
+      "entry_date": "2026-10-20",
+      "entry_price": 85.9927,
+      "qty": 1100,
+      "dev20": -0.067901,
+      "gap": 0.09890109890109877,
+      "board": "机器人",
+      "days_held": 0,
+      "last_check_date": null
+    },
+    "300503": {
+      "entry_date": "2026-10-20",
+      "entry_price": 55.4978,
+      "qty": 900,
+      "dev20": -0.130298,
+      "gap": 0.03888677087304604,
+      "board": "机器人",
+      "days_held": 0,
+      "last_check_date": null
+    },
+    "000887": {
+      "entry_date": "2026-10-20",
+      "entry_price": 17.37,
+      "qty": 100,
+      "dev20": -0.074276,
+      "gap": 0.020000000000000018,
+      "board": "机器人",
+      "days_held": 0,
+      "last_check_date": null
+    },
+    "301667": {
+      "entry_date": "2026-10-20",
+      "entry_price": 49.63,
+      "qty": 100,
+      "dev20": -0.12533,
+      "gap": 0.02223594811612095,
+      "board": "底盘与发动机系统",
+      "days_held": 0,
+      "last_check_date": null
+    },
+    "300587": {
+      "entry_date": "2026-10-20",
+      "entry_price": 4.1,
+      "qty": 200,
+      "dev20": -0.112335,
+      "gap": 0.014888337468982549,
+      "board": "基础化工",
       "days_held": 0,
       "last_check_date": null
     }
