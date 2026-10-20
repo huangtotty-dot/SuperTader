@@ -416,53 +416,79 @@ class MarketDataFetcher:
             for attempt in range(1, self.HISTORICAL_RETRIES + 1):
                 try:
                     symbol = self._normalize_qt_symbol(code)
-                    data = self._fetch_kline_multi(symbol)
-                    if not data:
-                        continue
-
-                    stock_data = data['data'].get(symbol)
-                    if not stock_data:
-                        continue
-
-                    kline_data = stock_data.get('day') or stock_data.get('qfqday')
-                    if not kline_data:
-                        continue
-
-                    parsed = []
-                    for item in kline_data:
-                        try:
-                            if isinstance(item, list) and len(item) >= 6:
-                                _close = float(item[2])
-                                _volume = float(item[5])
-                                _high = float(item[3])
-                                _low = float(item[4])
-                                # 腾讯K线接口：len=6 时无 amount 字段
-                                # 注意：不同板块的 volume 单位可能不同
-                                # 主板/创业板：volume 单位是手（1手=100股），需 *100
-                                # 科创板（688）：volume 单位是股，无需 *100
-                                is_kcb = code.startswith("688")
-                                volume_unit = 1.0 if is_kcb else 100.0
-                                if len(item) >= 7:
-                                    _amount = float(item[6])
-                                else:
-                                    derived_price = (_high + _low + _close) / 3.0
-                                    _amount = derived_price * _volume * volume_unit
-                                parsed.append({
-                                    'date': item[0],
-                                    'open': float(item[1]),
-                                    'close': _close,
-                                    'high': _high,
-                                    'low': _low,
-                                    'volume': _volume,
-                                    'amount': _amount,
-                                })
-                        except (ValueError, IndexError, TypeError):
+                    # 2026-10-20 提速：本地批量帧**直接用**，免掉
+                    # 「DataFrame → 行列表(`_df_to_kline_rows`) → 再解析回 DataFrame」这趟往返。
+                    # cProfile 实测：400 只 1.03s+0.05s ⇒ 全池约 **4.5s**（占数据阶段 ~15%）；
+                    # 且往返里的 `df["date"].astype(str)` 在 pandas 3 的 Arrow 字符串上是
+                    # 4.5ms/只的重活（单线程 profile 里 to_numpy 占 0.67s/150 只）。
+                    # 等价性：`_df_to_kline_rows(_bulk[c6])` 再按下面同一套逻辑解析回来，
+                    # 得到的 date/open/close/high/low/volume 逐元素相等（见
+                    # tests/phase3/test_hunter_bulk_fastpath.py）。
+                    _c6k = code[-6:] if str(code)[-6:].isdigit() else str(code)
+                    _bulk_df = (getattr(self, "_bulk_kline", None) or {}).get(_c6k)
+                    if _bulk_df is not None and not getattr(_bulk_df, "empty", True):
+                        df = _bulk_df.copy()
+                        if "date" in df.columns:
+                            df["date"] = df["date"].astype(str)
+                        # `load_daily_display` 只有 OHLCV、没有 amount；这里按与下面解析分支
+                        # **完全相同**的口径补上（腾讯 fqkline 返回 6 列 ⇒ 原路径也是推导出来的）：
+                        # amount = ((high+low+close)/3) × volume × 单位（688=股、其余=手×100）。
+                        # ⚠️ 不能留空列：下游 `float(target_row.get('amount', 0) or 0)` 拿到 NaN
+                        #    时 `NaN <= 0` 是 False ⇒ 成交额会一路 NaN 进筛选/排名，静默算错。
+                        if "amount" not in df.columns:
+                            _u = 1.0 if str(code).startswith("688") else 100.0
+                            _mid = (df["high"].astype(float) + df["low"].astype(float)
+                                    + df["close"].astype(float)) / 3.0
+                            df["amount"] = _mid * df["volume"].astype(float) * _u
+                        df = df.sort_values("date").reset_index(drop=True)
+                    else:
+                        data = self._fetch_kline_multi(symbol)
+                        if not data:
                             continue
 
-                    if not parsed:
-                        continue
+                        stock_data = data['data'].get(symbol)
+                        if not stock_data:
+                            continue
 
-                    df = pd.DataFrame(parsed).sort_values('date').reset_index(drop=True)
+                        kline_data = stock_data.get('day') or stock_data.get('qfqday')
+                        if not kline_data:
+                            continue
+
+                        parsed = []
+                        for item in kline_data:
+                            try:
+                                if isinstance(item, list) and len(item) >= 6:
+                                    _close = float(item[2])
+                                    _volume = float(item[5])
+                                    _high = float(item[3])
+                                    _low = float(item[4])
+                                    # 腾讯K线接口：len=6 时无 amount 字段
+                                    # 注意：不同板块的 volume 单位可能不同
+                                    # 主板/创业板：volume 单位是手（1手=100股），需 *100
+                                    # 科创板（688）：volume 单位是股，无需 *100
+                                    is_kcb = code.startswith("688")
+                                    volume_unit = 1.0 if is_kcb else 100.0
+                                    if len(item) >= 7:
+                                        _amount = float(item[6])
+                                    else:
+                                        derived_price = (_high + _low + _close) / 3.0
+                                        _amount = derived_price * _volume * volume_unit
+                                    parsed.append({
+                                        'date': item[0],
+                                        'open': float(item[1]),
+                                        'close': _close,
+                                        'high': _high,
+                                        'low': _low,
+                                        'volume': _volume,
+                                        'amount': _amount,
+                                    })
+                            except (ValueError, IndexError, TypeError):
+                                continue
+
+                        if not parsed:
+                            continue
+
+                        df = pd.DataFrame(parsed).sort_values('date').reset_index(drop=True)
                     # 2026-10-08 需求②：盘中实时——用批量快照 patch 当日 bar（或补一根）
                     _c6k = code[-6:] if str(code)[-6:].isdigit() else str(code)
                     _snap = (getattr(self, "_live_snap", {}) or {}).get(_c6k)
