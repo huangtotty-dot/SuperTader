@@ -33,6 +33,22 @@ def _tx_symbol(code: str) -> str:
     return to_tx(c)
 
 
+def _vol_div(sym) -> float:
+    """腾讯按**板块**给成交量不同单位：科创板(688)是**股**，其余是**手**。
+    返回归一到「手」所需的除数（688 → 100，其余 → 1）。
+
+    实测 2026-10-20 688008：qt 快照 vol_hand = 24,597,313、m5 十分钟两根 ≈1.46M（都是**股**），
+    而 GM/日线缓存是 245,973（**手**）—— 正好 100 倍。不归一的后果：
+    科创板的量能/成交额在整个 K 线图上大 100 倍（owner 报「澜起科技量能显然不对」，
+    成交额一度画出 2000 亿的量级）。
+
+    ⚠️ 入参可以是 `sh688008` 这种带前缀的符号，也可以是裸 6 位码。
+    """
+    s = str(sym)
+    c = s[-6:] if s[-6:].isdigit() else s
+    return 100.0 if c.startswith("688") else 1.0
+
+
 def _read_json(fp):
     with open(fp, encoding="utf-8") as f:
         return json.load(f)
@@ -317,8 +333,9 @@ def minute_kline(code: str, freq: str = "m5", count: int = _MINUTE_KLINE_MAX,
     # 实测 688008 当日：qt 快照 vol_hand=24,597,313（股）而日线缓存是 245,973（手），
     # 正好 100 倍；m5 十分钟两根合计 ≈1.46M 也印证是股。
     # 不归一的后果：K 线量能窗口上科创板比别的票大 100 倍（owner 报「澜起科技量能显然不对」）。
-    if sym[2:5] == "688":        # ⚠️ sym 带市场前缀（sh688008），不能直接 startswith("688")
-        df["volume"] = df["volume"] / 100.0
+    _vd = _vol_div(sym)          # ⚠️ sym 带市场前缀（sh688008），_vol_div 内部已兼容
+    if _vd != 1.0:
+        df["volume"] = df["volume"] / _vd
     df = df.drop_duplicates(subset=["time"]).sort_values("time").reset_index(drop=True)
     df.attrs["source"] = "tencent_minute"
     return df
@@ -345,8 +362,9 @@ def daily_kline_raw(code: str, days: int = 5, qfq: bool = True,
         data = json.loads(raw)
         node = ((data or {}).get("data") or {}).get(sym) or {}
         kline = node.get("day") or node.get("qfqday") or []
+        _vd = _vol_div(sym)          # 688 的成交量腾讯按股返回 ⇒ 归一到手
         rows = [{"date": str(i[0])[:10], "open": float(i[1]), "close": float(i[2]),
-                 "high": float(i[3]), "low": float(i[4]), "volume": float(i[5] or 0)}
+                 "high": float(i[3]), "low": float(i[4]), "volume": float(i[5] or 0) / _vd}
                 for i in kline if len(i) >= 6]
     except Exception:
         return pd.DataFrame(columns=_DAILY_COLS)
@@ -509,8 +527,9 @@ class TencentProvider:
                 data = json.loads(raw)
                 kline = data.get("data", {}).get(symbol, {}).get("day") or \
                         data.get("data", {}).get(symbol, {}).get("qfqday") or []
+                _vd = _vol_div(symbol)   # 688 的成交量腾讯按股返回 ⇒ 归一到手
                 rows = [{"date": i[0], "open": float(i[1]), "close": float(i[2]),
-                         "high": float(i[3]), "low": float(i[4]), "volume": float(i[5])}
+                         "high": float(i[3]), "low": float(i[4]), "volume": float(i[5]) / _vd}
                         for i in kline if len(i) >= 6]
                 if not rows:
                     continue
@@ -584,8 +603,9 @@ class TencentProvider:
                 data = json.loads(raw)
                 kline = data.get("data", {}).get(symbol, {}).get("day") or \
                         data.get("data", {}).get(symbol, {}).get("qfqday") or []
+                _vd = _vol_div(symbol)   # 688 归一到手（指数恒为 1，不影响）
                 rows = [{"date": i[0], "open": float(i[1]), "close": float(i[2]),
-                         "high": float(i[3]), "low": float(i[4]), "volume": float(i[5]),
+                         "high": float(i[3]), "low": float(i[4]), "volume": float(i[5]) / _vd,
                          "amount": float(i[6]) if len(i) >= 7 and str(i[6]).replace(".", "").isdigit() else float(i[5])}
                         for i in kline if len(i) >= 6]
                 if end_date:  # 审核 #8: 历史查询按 end_date 截止（此前静默退化）

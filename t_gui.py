@@ -5273,10 +5273,14 @@ class Api:
             hit = _cc.load_payload(code)
             if not hit:
                 return None
+            # schema<3 的旧档一律不可信 ⇒ 重建一次（2026-10-20）：
+            #   · <2：10min 合成有 bug / 不足 30 根；
+            #   · <3：科创板(688)的**成交量单位没归一**（腾讯按股、其余按手，差 100 倍）⇒
+            #     那一档算出来的成交额能到 2000 亿（owner 截图）。这条闸原来只判在
+            #     `want_minutes` 里面，日 K 视图照样会回放旧档 ⇒ 现在**所有视图**都拦。
+            if int(hit.get("schema") or 0) < 3:
+                return None
             if want_minutes:
-                # schema<2 的旧档不可信（那时 10min 合成有 bug/不足 30 根）⇒ 重建一次。
-                if int(hit.get("schema") or 0) < 3:
-                    return None
                 _pd = (hit.get("payload") or {}).get("period_data") or {}
                 _need = period if period in _MIN_PERIODS else None
                 if _need:
@@ -5496,8 +5500,18 @@ class Api:
                         return None       # 快照非当日 ⇒ 休市/假期，不补（免无谓网络）
                     _px = _s.get("price") or 0
                     if _px > 0:
+                        # ⚠️ 批量快照的 `vol_hand` 对**科创板(688)是「股」**（腾讯按板块给不同单位），
+                        #    而 forming bar 要写进按「手」的日线序列 ⇒ 这里必须 ÷100。
+                        #    这就是 owner 截图里「10-20 那根成交额画到 2000 亿」的直接来源：
+                        #    该票在批量快照池里（持仓/watchlist），拿到的是 24,597,313 股。
+                        _v = _s.get("vol_hand")
+                        if _v and base.startswith("688"):
+                            try:
+                                _v = float(_v) / 100.0
+                            except (TypeError, ValueError):
+                                _v = None
                         return self._mk_forming_bar(today, _px, _s.get("open"), _s.get("high"),
-                                                    _s.get("low"), _s.get("vol_hand"))
+                                                    _s.get("low"), _v)
             if not allow_network:
                 return None               # 快路径：不在批量快照内即不补（不打网络）
             # 回退：单只快照（网络）

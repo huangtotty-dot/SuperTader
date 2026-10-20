@@ -111,3 +111,80 @@ class TestPanelStyling:
         # 主图 50→48%、MACD 10→12%：柱 + 两条线 + 零轴塞进 10% 太挤
         assert 'top: 50, height: "48%"' in _JS
         assert 'top: "69%", height: "12%"' in _JS
+
+
+class TestKcbVolumeUnit:
+    """科创板(688)成交量单位归一 —— 2026-10-20 owner 截图：10-20 那根成交额画到 2000 亿。
+
+    腾讯按**板块**给不同单位：688 是**股**、其余是**手**（差 100 倍）。
+    日线缓存/GM 都是手，所以任何"从腾讯进来"的路径都必须 ÷100，否则整根柱子大 100 倍。
+    """
+
+    def test_divisor(self):
+        from core.market_data.tencent_provider import _vol_div
+        assert _vol_div("sh688008") == 100.0
+        assert _vol_div("688008") == 100.0
+        assert _vol_div("sh600000") == 1.0
+        assert _vol_div("sz000001") == 1.0
+        assert _vol_div("sh000001") == 1.0        # 指数
+        assert _vol_div("bj920008") == 1.0
+
+    def test_daily_kline_raw_normalizes_688(self, monkeypatch):
+        """fqkline 真返回时（WAF 间歇放行）也不能把「股」直接写进按「手」的序列。"""
+        import json
+        from core.market_data import tencent_provider as TP
+
+        payload = {"data": {"sh688008": {"qfqday": [
+            ["2026-10-20", "165.26", "169.27", "171.11", "164.02", "24597313.0"]]}}}
+        monkeypatch.setattr(TP, "_pooled_get", lambda *a, **k: json.dumps(payload), raising=False)
+        df = TP.daily_kline_raw("688008", days=3)
+        assert len(df) == 1
+        assert float(df["volume"].iloc[0]) == pytest.approx(245973.13, rel=1e-6)
+
+    def test_daily_kline_raw_leaves_mainboard_alone(self, monkeypatch):
+        import json
+        from core.market_data import tencent_provider as TP
+
+        payload = {"data": {"sh600000": {"qfqday": [
+            ["2026-10-20", "9.79", "9.76", "9.86", "9.68", "605133.0"]]}}}
+        monkeypatch.setattr(TP, "_pooled_get", lambda *a, **k: json.dumps(payload), raising=False)
+        df = TP.daily_kline_raw("600000", days=3)
+        assert float(df["volume"].iloc[0]) == pytest.approx(605133.0, rel=1e-9)
+
+
+class TestPayloadSchemaGate:
+    def test_gate_applies_to_every_view(self):
+        """schema<3 的旧档不许回放 —— 原来这道闸只写在 `want_minutes` 里面，
+        日 K 视图照样回放旧档，于是 688 的成交额还是 2000 亿。"""
+        import inspect
+        src = inspect.getsource(t_gui.Api._serve_payload_cache)
+        # 闸必须在 `if want_minutes:` 之前
+        assert src.index('int(hit.get("schema") or 0) < 3') < src.index("if want_minutes:")
+
+    def test_forming_bar_from_batch_snapshot_normalizes_688(self):
+        """`_today_forming_bar` 走**批量快照**那条路时同样要 ÷100。
+
+        这是 owner 截图里「10-20 那根成交额画到 2000 亿」的直接来源：该票在持仓/watchlist
+        里 ⇒ 命中 `_quotes_snaps` 批量缓存 ⇒ vol_hand 是**股**（24,597,313），
+        直接写进按「手」的日线序列 ⇒ 那一根大 100 倍。
+        """
+        import time as _t
+        from datetime import datetime as _dt
+        today = _dt.now().strftime("%Y-%m-%d")
+        api = t_gui.Api()
+        api._quotes_snaps = (_t.time(), {"688008": {
+            "price": 169.27, "open": 165.26, "high": 171.11, "low": 164.02,
+            "vol_hand": 24597313.0, "ts_date": today}})
+        bar = api._today_forming_bar("688008", allow_network=False)
+        assert bar and abs(float(bar["volume"]) - 245973.13) < 1
+
+    def test_forming_bar_leaves_mainboard_alone(self):
+        import time as _t
+        from datetime import datetime as _dt
+        today = _dt.now().strftime("%Y-%m-%d")
+        api = t_gui.Api()
+        api._quotes_snaps = (_t.time(), {"600000": {
+            "price": 9.76, "open": 9.79, "high": 9.86, "low": 9.68,
+            "vol_hand": 605133.0, "ts_date": today}})
+        bar = api._today_forming_bar("600000", allow_network=False)
+        assert bar and abs(float(bar["volume"]) - 605133.0) < 1
