@@ -60,21 +60,38 @@ class _FakeConn:
         self.closed = True
 
 
+def _reset_shared_pools():
+    """**就地清空**每个主机桶的空闲连接，而不是把 `_POOLS` 的键删掉。
+
+    ⚠️ 2026-10-20 踩到的坑：`tencent_provider` 在 import 时就绑定了
+    `_QT_POOL = host_pool(_QT_HOST)["pool"]`（一个 list 的别名）。若这里 `pop` 掉整个桶，
+    别名就指向一个**孤儿列表** ⇒ 下一家测试 `TP._QT_POOL.clear()` 清的是孤儿，
+    真正的池里还留着本文件造的假连接 ⇒ `test_market_data_gm_gate` 的连接复用断言
+    “3 次请求建了 0 条连接”而红（单跑却全绿，典型的跨文件污染）。
+    只要桶还在、只清空里面的连接，别名就始终有效。
+    """
+    for _h, rec in list(HP._POOLS.items()):
+        for c in list(rec.get("pool") or []):
+            try:
+                c.close()
+            except Exception:
+                pass
+        (rec.get("pool") or []).clear()
+
+
 class TestPooledGet(unittest.TestCase):
     def setUp(self):
         import http.client
         _FakeConn.made = []
         _FakeConn.resp_body = b""
-        for h in list(HP._POOLS.keys()):
-            HP._POOLS.pop(h, None)
+        _reset_shared_pools()
         self._orig = http.client.HTTPSConnection
         http.client.HTTPSConnection = _FakeConn
 
     def tearDown(self):
         import http.client
         http.client.HTTPSConnection = self._orig
-        for h in list(HP._POOLS.keys()):
-            HP._POOLS.pop(h, None)
+        _reset_shared_pools()
         _FakeConn.made = []
         _FakeConn.resp_body = b""
 
