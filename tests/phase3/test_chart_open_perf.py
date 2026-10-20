@@ -68,14 +68,23 @@ class TestChartOpenPerf(unittest.TestCase):
     def test_frontend_cache_busted_and_boot_marked(self):
         """WebView2 可能缓存旧 app.js（改了跟没改一样）⇒ 带版本号 + 启动标记落日志。"""
         _html = (_ROOT / "web" / "index.html").read_text(encoding="utf-8")
-        self.assertIn("app.js?v=20261020j", _html)
-        self.assertIn("app_boot_20261020j", _JS)
+        self.assertIn("app.js?v=20261020k", _html)
+        self.assertIn("app_boot_20261020k", _JS)
+
+    def test_chart_zoom_diagnostic_log(self):
+        """前端缩放/重绘事件写 chart_zoom.log，供定位"1 分钟后失效"。"""
+        self.assertIn("def report_chart_event(self, event, detail=\"\")", _PY)
+        self.assertIn("chart_zoom.log", _PY)
+        self.assertIn("function _chartLog(event, detail)", _JS)
+        self.assertIn('_chartLog("render"', _JS)
+        self.assertIn('_chartLog("dz"', _JS)
+        self.assertIn('_chartLog("load_resp"', _JS)
 
     def test_programmatic_datazoom_echo_is_ignored(self):
         """setOption 补发的 dataZoom 事件不能被当成用户缩放（否则 stockChartZoom 被覆盖）。"""
         self.assertIn("let stockChartZoomGuardUntil = 0;", _JS)
         self.assertIn("stockChartZoomGuardUntil = Date.now() + 500", _JS)
-        self.assertIn("Date.now() < stockChartZoomGuardUntil) return;", _JS)
+        self.assertIn("const _guard = Date.now() < stockChartZoomGuardUntil;", _JS)
 
     def test_memory_cache_short_daily_is_invalidated(self):
         """内存缓存里的 40 根日线必须让位给更长 payload（否则一直只显示 40 根）。"""
@@ -84,7 +93,7 @@ class TestChartOpenPerf(unittest.TestCase):
 
     def test_full_render_first_time_applies_zoom(self):
         """实时/20s 重绘不写 dataZoom；首次建实例仍要应用默认窗口。"""
-        self.assertIn("const _applyZoom = !!applyZoom || !stockChartInst;", _JS)
+        self.assertIn("const _applyZoom = !!applyZoom || !_hadInst;", _JS)
         self.assertIn("...(_applyZoom ? { dataZoom: [", _JS)
         self.assertIn("renderStockChart(false);", _JS)
 
@@ -92,7 +101,7 @@ class TestChartOpenPerf(unittest.TestCase):
         """实时尾只换数据、不写 dataZoom（否则滑杆被 setOption 弹回）。"""
         self.assertIn("function renderStockChart(applyZoom = true)", _JS)
         self.assertIn("renderStockChart(false)", _JS)
-        self.assertIn("applyZoom ? { dataZoom: [", _JS)
+        self.assertIn("_applyZoom ? { dataZoom: [", _JS)
         self.assertIn("if (_applyZoom) stockChartAppliedZoom", _JS)
 
     def test_live_render_pauses_while_zooming(self):

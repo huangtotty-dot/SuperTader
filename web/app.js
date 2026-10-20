@@ -3491,6 +3491,10 @@ let stockChartInteractingUntil = 0;
 // 若把它当成"用户缩放"，就会把 stockChartZoom 覆盖成默认值 ⇒ 下一次重绘把用户缩放弹回。
 // 每次程序化 setOption 后短暂忽略 dataZoom 事件（用户手势在 500ms 内不会开始）。
 let stockChartZoomGuardUntil = 0;
+// 2026-10-20 诊断：把缩放/重绘事件写进 t_io/logs/chart_zoom.log（失败静默）
+function _chartLog(event, detail) {
+  try { window.pywebview.api.report_chart_event(event, String(detail || "")); } catch (e) { /* 静默 */ }
+}
 // MA 线配色（2026-10-17）：K线图改深底后，原浅底那组（#e6c07b 等）亮度过高、
 // 在深底上发白刺眼。换成按深底重新选的一组（dataviz 校验器 dark 全项通过：
 // 亮度带 / 彩度 / CVD ΔE≥8.4 / 对比度≥3:1）。
@@ -3567,15 +3571,18 @@ function zoomStockChart(factor) {
   if (end > 100) { start -= (end - 100); end = 100; }
   start = Math.max(0, start);
   stockChartZoom = { start: start, end: end };
+  _chartLog("zoom_btn", JSON.stringify({factor: factor, zoom: stockChartZoom}));
   renderStockChart();
 }
 function resetStockChartZoom() {
   stockChartZoom = null;
+  _chartLog("zoom_reset", "");
   renderStockChart();
 }
 function setChartRange(period, bars) {
   stockChartRange[period] = bars;
   stockChartZoom = null;                    // 换了区间，旧的缩放作废
+  _chartLog("set_range", JSON.stringify({period: period, bars: bars}));
   try { localStorage.setItem("stockChartRange", JSON.stringify(stockChartRange)); } catch (e) {}
   renderRangeButtons(period);
   renderStockChart();
@@ -3594,8 +3601,13 @@ async function loadStockChartNow() {
   if (!stockChartCode) return;
   try {
     // 2026-10-20：把当前周期一起传下去 ⇒ 分钟档按需只抓当前 Tab 的那一档
+    _chartLog("load_req", JSON.stringify({code: stockChartCode, version: stockChartVersion,
+      period: stockChartPeriod, wantMin: _wantMinutes()}));
     const d = await apiCall("load_stock_chart", stockChartCode, stockChartVersion,
                             _wantMinutes(), stockChartPeriod);
+    _chartLog("load_resp", JSON.stringify({unchanged: !!(d && d.unchanged),
+      available: !!(d && d.available), version: (d && d.version) || "",
+      dailyN: (d && d.period_data && d.period_data.daily && (d.period_data.daily.dates || []).length) || 0}));
     if (d && d.unchanged) {
       // 数据没变：不重建图表，只刷新「10s实时更新」那行时间戳（renderStockSummary 只是拼串，很轻）
       if (stockChartData) renderStockSummary(stockChartData);
@@ -3715,9 +3727,12 @@ async function tickStockChartLive() {
         if (Date.now() < stockChartInteractingUntil) {
           // 用户正在缩放/拖动：只更新数据，**不重绘**，否则滑杆会被 setOption 弹回。
           // 不写 sig ⇒ 交互结束后下一跳会自然重绘并补上最新帧。
+          _chartLog("live_skip_interacting", JSON.stringify({period: period, sig: r.sig}));
           nextMs = 600;
         } else {
           stockChartLiveSig[period] = r.sig;
+          _chartLog("live_render", JSON.stringify({period: period, sig: r.sig,
+            zoom: stockChartZoom}));
           renderStockChart(false);        // 实时尾：只换数据，不碰 dataZoom
         }
       }
@@ -3745,6 +3760,7 @@ async function openStockChart(code, name) {
   modal.style.display = "flex";
   chartModalOpen = true;
   stockChartCode = code;
+  _chartLog("open", JSON.stringify({code: code, period: stockChartPeriod}));
   stockChartName = name;
   // 换票先清空旧图数据：否则新代码加载失败时，实时尾会拿着上一只票的序列乱补
   stockChartData = null;
@@ -3979,6 +3995,7 @@ function closeStockChart() {
 function switchStockPeriod(p) {
   stockChartPeriod = p;
   stockChartZoom = null;                    // 周期换了，根数尺度不同，旧缩放作废
+  _chartLog("switch_period", JSON.stringify({period: p}));
   stockChartLiveWarm = 0;
   document.querySelectorAll(".stock-tab").forEach(t =>
     t.classList.toggle("active", t.dataset.period === p));
@@ -4071,7 +4088,8 @@ function renderStockChart(applyZoom = true) {
   const _isIntradayPeriod = stockChartPeriod === "min10" || stockChartPeriod === "min30"
     || stockChartPeriod === "min60";
   // 首次建实例 / 显式要求时才写 dataZoom；实时尾与 20s 轮询都不碰（防弹回）
-  const _applyZoom = !!applyZoom || !stockChartInst;
+  const _hadInst = !!stockChartInst;
+  const _applyZoom = !!applyZoom || !_hadInst;
   const levels = data.levels;
   const cur = data.current_price;
   // 显示开关
@@ -4415,6 +4433,11 @@ function renderStockChart(applyZoom = true) {
 
   if (_applyZoom) stockChartAppliedZoom = { start: zStart, end: zEnd };
   stockChartZoomGuardUntil = Date.now() + 500;   // 忽略本次 setOption 补发的 dataZoom 事件
+  _chartLog("render", JSON.stringify({
+    applyZoom: !!applyZoom, _applyZoom: _applyZoom, hadInst: _hadInst,
+    period: stockChartPeriod, zoom: stockChartZoom, zStart: zStart, zEnd: zEnd,
+    n: nBars, first: (period.dates || [])[0], last: (period.dates || []).slice(-1)[0],
+  }));
   stockChartInst.setOption({
     // 2026-10-17 owner：K线图用**深色画布**（独立的深色主题，不是把浅色反相）。
     backgroundColor: "#0d1117",
@@ -4656,10 +4679,17 @@ function renderStockChart(applyZoom = true) {
       stockChartInst.on("dataZoom", (ev) => {
         const z = (ev && ev.batch && ev.batch[0]) || ev || {};
         if (typeof z.start !== "number" || typeof z.end !== "number") return;
-        if (Date.now() < stockChartZoomGuardUntil) return;   // 程序化 setOption 的回声，忽略
+        const _guard = Date.now() < stockChartZoomGuardUntil;
+        _chartLog("dz", JSON.stringify({start: z.start, end: z.end, guard: _guard,
+          applied: stockChartAppliedZoom, zoom: stockChartZoom}));
+        if (_guard) return;                                 // 程序化 setOption 的回声，忽略
         const a = stockChartAppliedZoom;
-        if (a && Math.abs(z.start - a.start) < 0.01 && Math.abs(z.end - a.end) < 0.01) return;
+        if (a && Math.abs(z.start - a.start) < 0.01 && Math.abs(z.end - a.end) < 0.01) {
+          _chartLog("dz_skip_applied", "");
+          return;
+        }
         stockChartZoom = { start: z.start, end: z.end };
+        _chartLog("dz_accept", JSON.stringify(stockChartZoom));
         stockChartInteractingUntil = Date.now() + 1500;   // 交互期间暂停实时重绘
       });
     } catch (e) { /* 桩环境 on 不接受回调，忽略 */ }
@@ -7019,7 +7049,7 @@ function startLivePoll() {
 async function init() {
   // 首先获取 DOM 元素（此时 DOM 已完全加载）
   // 2026-10-20：启动标记（0ms）写进慢调用日志 ⇒ 能确认 WebView2 是否加载了新版 app.js
-  try { window.pywebview.api.report_slow_call("app_boot_20261020j", 0); } catch (e) { /* 静默 */ }
+  try { window.pywebview.api.report_slow_call("app_boot_20261020k", 0); } catch (e) { /* 静默 */ }
   dateSelect = document.getElementById("dateSelect");
   refreshBtn = document.getElementById("refreshBtn");
   autoPoll = document.getElementById("autoPoll");

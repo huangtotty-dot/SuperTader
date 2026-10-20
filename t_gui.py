@@ -2706,6 +2706,24 @@ class Api:
             pass
         return {"ok": True}
 
+    def report_chart_event(self, event, detail=""):
+        """前端 K 线缩放/重绘事件 → `t_io/logs/chart_zoom.log`（每行一条 JSON）。
+
+        2026-10-20：日线缩放"约 1 分钟后失效"反复复现，前端状态是黑盒 ⇒ 加专用事件流，
+        用来对齐「render / dataZoom 事件 / 缩放按钮 / 周期切换 / 20s 轮询」的时序。
+        纯诊断，失败静默，不参与任何判定。
+        """
+        try:
+            fp = BASE / "t_io" / "logs" / "chart_zoom.log"
+            fp.parent.mkdir(parents=True, exist_ok=True)
+            rec = {"ts": datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3],
+                   "event": str(event)[:60], "detail": str(detail)[:600]}
+            with open(fp, "a", encoding="utf-8") as f:
+                f.write(json.dumps(rec, ensure_ascii=False) + "\n")
+        except Exception:
+            pass
+        return {"ok": True}
+
     def load_indices(self):
         """指数状态板。三段式（2026-10-10）：内存热 → 当日磁盘快照(stale) → 踢单飞刷新+短等。
 
