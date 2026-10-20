@@ -125,10 +125,8 @@ def _make_engine_ctx():
 # ── 建仓信号扫描（收盘后自动执行）──
 try:
     from core.position_builder import run_position_scan as _run_position_scan
-    from core.position_builder import push_summary_feishu as _push_summary_feishu
 except Exception as _e:
     _run_position_scan = None
-    _push_summary_feishu = None
     print(f"[WARN] position_builder 加载失败（建仓扫描不可用）: {_e}")
 
 # ── 指数5分钟共振过滤（做T信号，2026-08-14 新增）──
@@ -1351,10 +1349,6 @@ def _maybe_run_position_builder(now: datetime) -> None:
         else:
             log.info(f"🏗️ 建仓信号扫描完成{_tag}: 0/{len(results)} 只触发 signal")
 
-        # 盘后汇总推送
-        if _push_summary_feishu and results:
-            _push_summary_feishu(results, date_str=today)
-            log.info(f"📋 建仓扫描汇总已推送")
         # F-7(2026-09-04): C18 收盘待确认清单推送（读 manual_signals 全量触发）
         try:
             from core.position_builder import push_pending_confirm_list as _push_confirm_list
