@@ -4286,6 +4286,10 @@ function toggleMaxStockChart() {
   // 最大化后 resize 图表
   setTimeout(() => {
     if (stockChartInst) stockChartInst.resize();
+    // resize 改了画布高度 ⇒ 现价胶囊的像素位置也要跟着重算（否则会停在旧高度上）
+    if (_nowTagState.price != null) {
+      _scheduleNowTag(stockChartInst, _nowTagState.price, _nowTagState.color);
+    }
   }, 60);
 }
 function closeStockChart() {
@@ -4385,6 +4389,62 @@ function renderStockSummary(d) {
       ? `${d.live.session ? "盘中实时" : "实时快照"} ${esc(d.live.ts)}`
       : `10s更新 · ${nowTime()}`} · <span class="live-dot"></span></span>`;
 }
+/* ---- 现价胶囊（2026-10-20 owner：「价格显示的位置会遮挡 K 线的更新」）----
+   原实现：markLine 的 `insideEndTop` 标签 —— 画在**网格内部右端**，正压最新那几根 K 线，
+   而盘中 0.5s 刷一次 ⇒ 一直挡着最该看的地方。
+   现实现：网格 right 20→58 腾出右侧留白，胶囊画在**留白里**（ECharts graphic），
+   竖直位置跟现价走（convertToPixel），水平固定在网格外 ⇒ 不再占用任何数据区。
+   ⚠️ 两个坑：
+     ① 主 setOption 带 `lazyUpdate:true`，**同一 tick 里** convertToPixel 拿到的还是旧坐标
+        ⇒ 必须等一帧（rAF）再定位，否则胶囊会跳一下；
+     ② 用户缩放/滚动后 y 轴范围变了，像素位置跟着变 ⇒ dataZoom 回调里要重新定位。
+   模块级保存最后的价格/颜色，供 dataZoom 回调复用（处理器只注册一次，闭包拿不到新值）。 */
+let _nowTagState = { price: null, color: "#f85149", inst: null, top: null, text: null };
+
+function _updateNowTag(inst, price, color) {
+  if (!inst || price == null || price === "" || isNaN(Number(price))) return;
+  const _p = Number(price);
+  const _txt = String(_p);
+  const _col = color || "#f85149";
+  let yPx = null;
+  try { yPx = inst.convertToPixel({ yAxisIndex: 0 }, _p); } catch (e) { yPx = null; }
+  const _h = 18, _w = 52;
+  // 主图 grid：top=50、height=50% ⇒ 可见区间 [50, 50+0.5H]
+  const _H = inst.getHeight ? inst.getHeight() : 0;
+  const _lo = 50, _lo2 = _H > 0 ? 50 + _H * 0.5 : 1e9;
+  // ⚠️ 现价**不在可视 y 区间**时（用户缩放去看历史某段，现价在窗口外）必须**隐藏**，
+  //    不能把它 clamp 到边缘 —— 那等于谎报"现价就在这个价位"。
+  const _ok = yPx != null && isFinite(yPx) && yPx >= _lo && yPx <= _lo2;
+  const _top = _ok ? Math.round(Math.min(_lo2 - _h, Math.max(_lo, yPx - _h / 2))) : _lo;
+  // 价格没动 ⇒ 像素位置/文字/颜色全都没变：**跳过这一次 setOption**。
+  // 分钟图 0.5s 一帧，若每帧都额外 setOption 一次，等于把整画布重绘成本翻倍；
+  // 加上实例身份判断，换票/重建实例后不会被"看起来没变"的旧状态挡住。
+  if (_nowTagState.inst === inst && _nowTagState.top === _top
+      && _nowTagState.text === _txt && _nowTagState.color === _col
+      && _nowTagState.visible === _ok) {
+    return;
+  }
+  _nowTagState = { price: _p, color: _col, inst: inst, top: _top, text: _txt, visible: _ok };
+  inst.setOption({ graphic: [{
+    id: "nowTag", type: "group", silent: true, visible: _ok,
+    right: 3, top: _top,
+    children: [
+      { type: "rect", shape: { x: 0, y: 0, width: _w, height: _h, r: 3 },
+        style: { fill: _col } },
+      { type: "text", x: _w / 2, y: _h / 2,
+        style: { text: _txt, fill: "#fff",
+                 font: "10px 'Segoe UI', 'Microsoft YaHei', sans-serif",
+                 align: "center", verticalAlign: "middle" } },
+    ],
+  }] });
+}
+
+function _scheduleNowTag(inst, price, color) {
+  const _run = () => { try { _updateNowTag(inst, price, color); } catch (e) { /* 忽略 */ } };
+  if (typeof requestAnimationFrame === "function") requestAnimationFrame(_run);
+  else setTimeout(_run, 16);
+}
+
 function renderStockChart(applyZoom = true) {
   // 2026-10-20：实时尾（1~5s）重绘时**不要**再写 dataZoom —— setOption 里的
   // start/end 会把用户正在拖动的滑杆弹回，表现为「看一会儿就缩放不了」。
@@ -4447,10 +4507,13 @@ function renderStockChart(applyZoom = true) {
   const _pC = (period.ohlc && period.ohlc.length > 1) ? period.ohlc[period.ohlc.length - 2][1] : null;
   const _nowUp = _oC && _pC != null ? _oC[1] >= _pC : true;
   const _nowCol = _nowUp ? "#f85149" : "#3fb950";
+  // 2026-10-20 owner：「价格显示的位置会遮挡 K 线的更新」——原来价格胶囊是 markLine 的
+  // `insideEndTop` 标签，画在网格**内部右端**，正好压住最新那几根 K 线；盘中每 0.5s 刷一次
+  // 等于一直挡着最该看的那几根。现在**只留虚线**，价格胶囊改画在网格右侧留白里（见
+  // `_updateNowTag` + grid.right 20→58），不再占数据区。
   const currentLine = { yAxis: cur,
     lineStyle: { color: _nowCol, width: 1, type: "dashed", opacity: .85 },
-    label: { formatter: ` ${cur} `, color: "#fff", backgroundColor: _nowCol,
-             padding: [2, 6], borderRadius: 3, fontSize: 9, position: "insideEndTop" } };
+    label: { show: false } };
 
   // 2026-10-20（北方华创案例）：分钟图的「MA5」= 5 根该周期 K 线（10min→50分钟），
   // 与「日线 5 日线」不是同一条线。分钟 tab 额外画一条**日线 MA5**蓝色虚线参考线，
@@ -4915,11 +4978,13 @@ function renderStockChart(applyZoom = true) {
     axisPointer: { link: [{ xAxisIndex: "all" }] },
     // 2026-10-17：整套轴/网格原来用的是 **GitHub 深色 token**（#30363d/#8b949e），
     // 而这个弹窗是**白底** ⇒ 轴线和标签都发灰、图像"平"。改成浅底墨色。
+    // right: 20→58（2026-10-20）：给「现价胶囊」腾出**网格外**的位置，四个 grid 必须同值
+    // 否则四个窗口的 x 轴刻度会错位（它们共享 dataZoom，左边界同源）。
     grid: [
-      { left: 60, right: 20, top: 50, height: "50%" },   // 主图: K线+MA+BOLL+支撑压力+箱体
-      { left: 60, right: 20, top: "60%", height: "9%" },  // 成交量(独立窗口)
-      { left: 60, right: 20, top: "71%", height: "10%" }, // MACD
-      { left: 60, right: 20, top: "83%", height: "10%" }, // RSI
+      { left: 60, right: 58, top: 50, height: "50%" },   // 主图: K线+MA+BOLL+支撑压力+箱体
+      { left: 60, right: 58, top: "60%", height: "9%" },  // 成交量(独立窗口)
+      { left: 60, right: 58, top: "71%", height: "10%" }, // MACD
+      { left: 60, right: 58, top: "83%", height: "10%" }, // RSI
     ],
     xAxis: [
       { type: "category", data: period.dates, gridIndex: 0, axisLine: { lineStyle: { color: "#2b333d" } },
@@ -5040,6 +5105,10 @@ function renderStockChart(applyZoom = true) {
     ],
   }, { replaceMerge: ["series", "title"], lazyUpdate: true });
 
+  // 现价胶囊：**等一帧**再定位 —— 主 setOption 是 lazyUpdate，同一 tick 里 convertToPixel
+  // 拿到的还是上一帧的 y 轴刻度，直接定位会看到胶囊先跳一下再归位。
+  _scheduleNowTag(stockChartInst, cur, _nowCol);
+
   // 记住用户手动缩放。注意：**不要用 getOption()** —— 它会深拷贝整个 option
   // （1650 根K线 × ~16 条 series），而拖动/滚轮缩放会连续触发本事件 ⇒ 实测就是卡顿主因之一。
   // dataZoom 事件本身带 start/end 百分比，直接读。
@@ -5062,6 +5131,10 @@ function renderStockChart(applyZoom = true) {
         stockChartZoom = { start: z.start, end: z.end };
         _chartLog("dz_accept", JSON.stringify(stockChartZoom));
         stockChartInteractingUntil = Date.now() + 1500;   // 交互期间暂停实时重绘
+        // 缩放改了 y 轴范围 ⇒ 现价胶囊的**像素**位置也得跟着重算（价格本身没变）
+        if (_nowTagState.price != null) {
+          _scheduleNowTag(stockChartInst, _nowTagState.price, _nowTagState.color);
+        }
       });
     } catch (e) { /* 桩环境 on 不接受回调，忽略 */ }
   }

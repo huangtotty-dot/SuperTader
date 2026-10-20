@@ -35,6 +35,38 @@ class TestChartDailyFullRange(unittest.TestCase):
         self.assertIn("本周期 ${_pdCur.dates.length} 根", _JS)
 
 
+class TestNowPriceTagOutsideGrid(unittest.TestCase):
+    """2026-10-20 owner：「价格显示的位置会遮挡 K 线的更新」。
+
+    原来现价胶囊是 markLine 的 `insideEndTop` 标签 —— 画在网格**内部右端**，正压最新那几根
+    K 线；而盘中 0.5s 刷一次 ⇒ 一直挡着最该看的地方。改成画在网格右侧留白里。
+    任何一条丢了，胶囊就会重新压回数据区：
+      · 网格右侧留白（right 58）· markLine 标签关掉 · graphic 标签 + convertToPixel 定位
+      · dataZoom / 最大化 后要重新定位（否则停在旧像素高度上）
+    """
+
+    def test_grid_reserves_right_margin(self):
+        self.assertIn("left: 60, right: 58, top: 50", _JS)
+
+    def test_markline_label_is_off(self):
+        # 现价那条线只留虚线，标签交给 graphic
+        self.assertIn("label: { show: false } };", _JS)
+
+    def test_graphic_tag_uses_convert_to_pixel(self):
+        self.assertIn("function _updateNowTag(inst, price, color)", _JS)
+        self.assertIn('id: "nowTag"', _JS)
+        self.assertIn("inst.convertToPixel({ yAxisIndex: 0 }, _p)", _JS)
+        # 主 setOption 是 lazyUpdate ⇒ 必须等一帧再定位
+        self.assertIn("function _scheduleNowTag(inst, price, color)", _JS)
+        self.assertIn("requestAnimationFrame(_run)", _JS)
+
+    def test_tag_repositioned_after_zoom_and_resize(self):
+        # dataZoom：缩放改了 y 轴范围 ⇒ 像素位置要重算
+        self.assertIn("_scheduleNowTag(stockChartInst, _nowTagState.price, _nowTagState.color)", _JS)
+        # 最大化：resize 改了画布高度，同理
+        self.assertIn("stockChartInst.resize();", _JS)
+
+
 class TestChartMA5Style(unittest.TestCase):
     def test_ma5_special_color_and_width(self):
         self.assertIn('const MA5_COLOR = "#ffd166";', _JS)
