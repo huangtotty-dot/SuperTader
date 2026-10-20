@@ -46,6 +46,37 @@ class TestBucketLabel:
         assert _bucket_label("abc") is None
 
 
+class TestBucketLabel5min:
+    """5 分档（2026-10-20）：桶边界与 K 线弹窗的 5 分周期（腾讯原生 m5）同口径。"""
+
+    def test_open_side(self):
+        assert _bucket_label("09:25:01", 5) == "09:35"   # 集合竞价 → 第一根 m5
+        assert _bucket_label("09:30:00", 5) == "09:35"
+        assert _bucket_label("09:35:00", 5) == "09:35"
+        assert _bucket_label("09:35:01", 5) == "09:40"
+
+    def test_lunch(self):
+        assert _bucket_label("11:30:00", 5) == "11:30"
+        assert _bucket_label("12:00:00", 5) == "13:05"
+        assert _bucket_label("13:00:00", 5) == "13:05"
+        assert _bucket_label("13:05:00", 5) == "13:05"
+        assert _bucket_label("13:05:01", 5) == "13:10"
+
+    def test_close(self):
+        assert _bucket_label("14:50:30", 5) == "14:55"
+        assert _bucket_label("15:00:30", 5) == "15:00"
+        assert _bucket_label("15:01:00", 5) is None
+
+    def test_bad_step_falls_back_to_10(self):
+        assert _bucket_label("09:31:00", 7) == "09:40"
+
+    def test_parse_tick_respects_step(self):
+        tk = _parse_tick("1/09:31:00/29.54/0.00/100/50000/B", 5)
+        assert tk["label"] == "09:35"
+        tk10 = _parse_tick("1/09:31:00/29.54/0.00/100/50000/B", 10)
+        assert tk10["label"] == "09:40"
+
+
 class TestParseTick:
     def test_normal_buy(self):
         tk = _parse_tick("1/09:30:02/29.54/0.00/1803/5323919/B")

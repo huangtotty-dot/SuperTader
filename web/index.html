@@ -458,6 +458,7 @@
         <button class="stock-tab active" data-period="daily" onclick="switchStockPeriod('daily')">日K</button>
         <button class="stock-tab" data-period="weekly" onclick="switchStockPeriod('weekly')">周K</button>
         <button class="stock-tab" data-period="monthly" onclick="switchStockPeriod('monthly')">月K</button>
+        <button class="stock-tab" data-period="min5" onclick="switchStockPeriod('min5')">5分</button>
         <button class="stock-tab" data-period="min10" onclick="switchStockPeriod('min10')">10分</button>
         <button class="stock-tab" data-period="min30" onclick="switchStockPeriod('min30')">30分</button>
         <button class="stock-tab" data-period="min60" onclick="switchStockPeriod('min60')">60分</button>
@@ -495,6 +496,10 @@
         · <b>点线</b>=扩展位 127.2/161.8%（落在摆动区间外）：突破后常见的目标位/阻力<br>
         · 标签只写比例（价格看左侧 Y 轴刻度）；<b>鼠标悬停任意 K 线</b>可看各比例位的精确价格、支撑/阻力与距现价 %<br>
         · 局限：结果为纯技术参考，锚点由算法自动选取，可能与你心中的那一段不同——以锚点连线为准自行核对</div>
+      <div class="help-sec"><b>【5 分钟】</b>
+        · 数据源=腾讯原生 <b>m5</b>：每日 48 根，首根 09:35、末根 15:00（<b>不含 09:30 竞价棒</b>）<br>
+        · 盘中含<b>正在形成</b>的最后一根，1 秒刷新（与 10 分同一取数，成本一样）<br>
+        · 10 分就是由它<b>两两配对合成</b>的，所以两档的量能逐根对得上</div>
       <div class="help-sec"><b>【10 分钟】</b>
         · 由 <b>5 分钟两两配对合成</b>（tushare 无原生 10 分钟）：每日 24 根，桶边界 09:40 / 09:50 … 15:00<br>
         · 与建仓表/持仓体检的「仓位结构」列<b>同一个合成函数</b>（剔除 09:30 竞价棒），10min 阶段与止损口径一致</div>

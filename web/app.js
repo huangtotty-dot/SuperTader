@@ -3782,7 +3782,11 @@ const MA_COLORS = ["#3987e5", "#d95926", "#199e70", "#c98500", "#d55181", "#9085
    放宽分支兜底。核心目的：后端 800 根日线全画出来蜡烛只有 ~3px，形态根本看不清。 */
 // 2026-10-20 owner：「日线只能显示一部分」——默认改为**全部**历史（约 800 根）；
 // 想紧凑看形态可手动切「近3月/近6月/近1年」。周/月/分钟仍保留原默认窗口。
-const DEFAULT_BARS = { daily: null, weekly: 104, monthly: 60, min10: 160, min30: 160, min60: 160 };
+// K 线弹窗的分钟档（2026-10-20 加 5 分）——**与后端 t_gui._MIN_PERIODS 同一份清单**，
+// 加档位时两边都要动；漏改的症状是"某个 Tab 永远空白"。
+const MIN_PERIODS = ["min5", "min10", "min30", "min60"];
+const DEFAULT_BARS = { daily: null, weekly: 104, monthly: 60,
+                       min5: 160, min10: 160, min30: 160, min60: 160 };
 // 快捷区间：按周期给不同标签；bars=null 表示全部。每个周期的默认项都在表内（高亮用）。
 // 分钟档后端各保留 320 根（30分≈8根/日、60分≈4根/日）。
 const RANGE_PRESETS = {
@@ -3791,6 +3795,9 @@ const RANGE_PRESETS = {
   weekly: [{ label: "近1年", bars: 52 }, { label: "近2年", bars: 104 }, { label: "全部", bars: null }],
   monthly: [{ label: "近1年", bars: 12 }, { label: "近3年", bars: 36 },
             { label: "近5年", bars: 60 }, { label: "全部", bars: null }],
+  // 5分：后端保留 320 根 ≈ 6.7 个交易日（48 根/日）
+  min5: [{ label: "近2日", bars: 96 }, { label: "近4日", bars: 192 },
+         { label: "近1周", bars: 240 }, { label: "全部", bars: null }],
   // 10分：后端保留 320 根 ≈ 13 个交易日（24 根/日）
   min10: [{ label: "近3日", bars: 72 }, { label: "近1周", bars: 120 },
           { label: "近2周", bars: 240 }, { label: "全部", bars: null }],
@@ -3870,8 +3877,7 @@ function setChartRange(period, bars) {
 function _wantMinutes() {
   const pd = stockChartData && stockChartData.period_data;
   if (pd && pd.min30) return true;
-  return stockChartPeriod === "min10" || stockChartPeriod === "min30"
-      || stockChartPeriod === "min60";
+  return MIN_PERIODS.includes(stockChartPeriod);
 }
 
 async function loadStockChartNow() {
@@ -3953,7 +3959,10 @@ function _chartLiveIntervalMs() {
   // 2026-10-20 owner：「盘中打开 K 线重点看 10 分钟线，实时性非常重要」——
   // 10 分单独提到 **1s**（后端 SWR TTL 0.8s + 腾讯 m5 合成 ~0.3s，1s 能拿到新价）；
   // 30/60 分仍 2s（持仓）/3s（非持仓），日线 3.5/5s。
-  if (!isDaily && stockChartPeriod === "min10") return 1000;
+  // 5/10 分：0.5s 一跳（2026-10-20 二轮，owner「极其实时」）。
+  // 后端 worker 已拆成并行两跳（≈200ms），SWR TTL 0.4s ⇒ 每跳都拿到新一帧；
+  // 而**行情没动时后端只回 sig（<1KB，不带 102KB 序列）**，所以快轮询不会把桥压垮。
+  if (!isDaily && (stockChartPeriod === "min10" || stockChartPeriod === "min5")) return 500;
   // 2026-10-19 owner：**持仓股优先**（30min 体检表里的票就是要盯的）——
   // 分钟 2s / 日线 3.5s，比普通票快一档；后端 SWR + 快照修正末根，2s 内有新价即可见。
   const _c = String(stockChartCode || "").split("_")[0];
@@ -3990,7 +3999,9 @@ async function tickStockChartLive() {
   const code = stockChartCode, period = stockChartPeriod;
   let nextMs = _chartLiveIntervalMs();
   try {
-    const r = await apiCall("load_chart_realtime", code, period);
+    // 把**本地已持有的 sig** 传上去：后端据此在"没变"时只回 sig/quote（不带 102KB 序列）
+    const r = await apiCall("load_chart_realtime", code, period,
+                            stockChartLiveSig[period] || "");
     if (code !== stockChartCode || !r) return;         // 期间换票/关窗
     if (r.quote && r.quote.price) {
       stockChartData.current_price = r.quote.price;
@@ -4064,7 +4075,7 @@ async function openStockChart(code, name) {
   // 多空分布面板同理：换票后旧票的数字必须立刻消失（缓存也按 code 失效）
   const _flowEl = document.getElementById("stockFlow");
   if (_flowEl) { _flowEl.style.display = "none"; document.getElementById("stockFlowBody").innerHTML = ""; }
-  _flowCache = { code: null, data: null, ts: 0 };
+  _flowCache = { code: null, step: 0, data: null, ts: 0 };
   document.getElementById("stockModalTitle").textContent = `${name} (${code}) 技术分析`;
   // 必须先 dispose 再清 innerHTML：实例复用后它绑在旧 DOM 上，节点被换掉会让 setOption 报错
   if (stockChartInst) { stockChartInst.dispose(); stockChartInst = null; }
@@ -4295,7 +4306,7 @@ function switchStockPeriod(p) {
     t.classList.toggle("active", t.dataset.period === p));
   renderRangeButtons(p);
   const pd = stockChartData && stockChartData.period_data;
-  if ((p === "min10" || p === "min30" || p === "min60") && !(pd && pd[p])) {
+  if (MIN_PERIODS.includes(p) && !(pd && pd[p])) {
     // 分钟线**按需拉**（日线视图首帧不再阻塞等它）：先提示，再取数（后端此时会带上分时）
     const el = document.getElementById("stockChart");
     if (stockChartInst) { stockChartInst.dispose(); stockChartInst = null; }   // 实例绑旧 DOM，先释放
@@ -4348,7 +4359,7 @@ function renderStockSummary(d) {
       + (_chPos ? `；${_chPos}` : "") + `</span>`
       + (ch.reversal ? `<span class="badge signal" style="margin-left:6px">↺ 通道反转${ch.reversal === "up_to_down" ? " 上→下" : " 下→上"}</span>` : "")
   // 2026-10-20：分钟图的 MA5 是「5 根该周期 K 线」，与日线 5 日线不同；给一行口径说明。
-  const _pcnHint = ({ min10: "10分", min30: "30分", min60: "60分" })[stockChartPeriod];
+  const _pcnHint = ({ min5: "5分", min10: "10分", min30: "30分", min60: "60分" })[stockChartPeriod];
   const _ma5Hint = _pcnHint
     ? `<span class="ss-item cell-dim" style="font-size:10px">金线=MA5(${_pcnHint}) · 蓝虚线=日线MA5 · 紫虚线=日线MA10</span>`
     : "";
@@ -4388,9 +4399,8 @@ function renderStockChart(applyZoom = true) {
   // 2026-10-20：这两个**必须在函数最前面**——后面的「日线MA5参考线」会先用到，
   // 放在 maSeries 附近声明会触发 TDZ（Cannot access '_isIntradayPeriod' before initialization）。
   const _periodCn = ({ daily: "日", weekly: "周", monthly: "月",
-    min10: "10分", min30: "30分", min60: "60分" })[stockChartPeriod] || stockChartPeriod;
-  const _isIntradayPeriod = stockChartPeriod === "min10" || stockChartPeriod === "min30"
-    || stockChartPeriod === "min60";
+    min5: "5分", min10: "10分", min30: "30分", min60: "60分" })[stockChartPeriod] || stockChartPeriod;
+  const _isIntradayPeriod = MIN_PERIODS.includes(stockChartPeriod);
   // 首次建实例 / 显式要求时才写 dataZoom；实时尾与 20s 轮询都不碰（防弹回）
   const _hadInst = !!stockChartInst;
   const _applyZoom = !!applyZoom || !_hadInst;
@@ -4842,7 +4852,7 @@ function renderStockChart(applyZoom = true) {
         if (_maCells.length) {
           html += `<div style="border-top:1px solid #30363d;margin-top:4px;padding-top:4px;color:#8b949e;font-size:10px">`
             + `均线（本周期口径：MA5 = 5 根${_periodCn}K${_isIntradayPeriod
-              ? "，" + ({"min10": 50, "min30": 150, "min60": 300})[stockChartPeriod] + " 分钟" : ""}）</div>`
+              ? "，" + ({"min5": 25, "min10": 50, "min30": 150, "min60": 300})[stockChartPeriod] + " 分钟" : ""}）</div>`
             + `<div>${_maCells.join("　")}</div>`;
         }
         html += _dailyRef;
@@ -5071,7 +5081,7 @@ function renderStockChart(applyZoom = true) {
       历史桶靠后端每天落盘累积（`core/order_flow.py`）。所以点老 K 线时就明说"没有分笔"，
       绝不拿别的口径的数糊上去 —— 与本仓「取不到就显示 —」的一贯做法一致。 */
 const FLOW_TTL_MS = 30000;
-let _flowCache = { code: null, data: null, ts: 0 };
+let _flowCache = { code: null, step: 0, data: null, ts: 0 };
 
 /* 画布点击 → 当前周期的数据下标。-1 = 没点在任何一根上。 */
 function _chartClickIndex(ev) {
@@ -5099,9 +5109,12 @@ async function showOrderFlowAt(index) {
   const body = document.getElementById("stockFlowBody");
   if (!el || !body) return;
   el.style.display = "block";
-  if (stockChartPeriod !== "min10") {
-    body.innerHTML = `<div class="cell-dim">多空分布只做 <b>10 分</b>周期（后端按 10 分钟桶聚合分笔）；`
-      + `当前是 <b>${esc(stockChartPeriod)}</b>，切到「10分」再点 K 线。</div>`;
+  // 只有 5 分 / 10 分两档有分桶（后端按同名周期聚合分笔）；其余周期给明确提示，别静默无反应
+  const _step = ({ min5: 5, min10: 10 })[stockChartPeriod];
+  if (!_step) {
+    body.innerHTML = `<div class="cell-dim">多空分布只做 <b>5 分 / 10 分</b>周期（按同名周期的桶聚合分笔）；`
+      + `当前是 <b>${esc(({ daily: "日", weekly: "周", monthly: "月", min30: "30分", min60: "60分" })[stockChartPeriod] || stockChartPeriod)}</b>，`
+      + `切到「5分」或「10分」再点 K 线。</div>`;
     return;
   }
   const pd = stockChartData && stockChartData.period_data
@@ -5109,13 +5122,14 @@ async function showOrderFlowAt(index) {
   const label = ((pd && pd.dates) || [])[index];
   if (!label) return;
   const code = stockChartCode;
-  body.innerHTML = '<div class="cell-dim">正在取分笔…（首次要翻约 68 页 ≈ 5~6s，之后走增量）</div>';
+  body.innerHTML = '<div class="cell-dim">正在取分笔…（首次要翻约 68 页 ≈ 1~2s，之后走增量）</div>';
   try {
     const now = Date.now();
     let r = _flowCache.data;
-    if (!r || _flowCache.code !== code || now - _flowCache.ts > FLOW_TTL_MS) {
-      r = await apiCall("load_order_flow", code);
-      _flowCache = { code, data: r, ts: Date.now() };
+    if (!r || _flowCache.code !== code || _flowCache.step !== _step
+        || now - _flowCache.ts > FLOW_TTL_MS) {
+      r = await apiCall("load_order_flow", code, false, _step);
+      _flowCache = { code, step: _step, data: r, ts: Date.now() };
     }
     renderOrderFlow(r, label);
   } catch (e) {
@@ -5152,7 +5166,7 @@ function renderOrderFlow(r, label) {
     return `<span class="${cls}">${k} ${net >= 0 ? "+" : ""}${fmt(net, 0)}万</span>`;
   }).join(" · ");
   body.innerHTML =
-    `<div style="font-weight:700;margin-bottom:4px">📊 ${esc(r.date)} ${esc(b.time)} 这根 10 分钟的多空分布`
+    `<div style="font-weight:700;margin-bottom:4px">📊 ${esc(r.date)} ${esc(b.time)} 这根 ${r.step || 10} 分钟的多空分布`
     + ` <span class="cell-dim" style="font-weight:400;font-size:11px">（主动买=多单 / 主动卖=空单 · 逐笔 ${b.n} 笔）</span></div>`
     + `<div style="display:flex;height:8px;border-radius:4px;overflow:hidden;background:#30363d;margin:4px 0 6px">`
     + `<div style="width:${br.toFixed(1)}%;background:#e8531f"></div>`

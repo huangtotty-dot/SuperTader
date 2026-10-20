@@ -1,8 +1,9 @@
 # -*- coding: utf-8 -*-
-"""10min K 线的「多单 / 空单」分布（2026-10-20 owner）。
+"""5 / 10 分钟 K 线的「多单 / 空单」分布（2026-10-20 owner）。
 
-**需求**：K 线弹窗切到 10 分周期后，十字光标点某根 K 线 → 显示那根 K 线里
-主动买（多单）与主动卖（空单）的分布。
+**需求**：K 线弹窗切到 5 分 / 10 分周期后，十字光标点某根 K 线 → 显示那根 K 线里
+主动买（多单）与主动卖（空单）的分布。两档共用同一份分笔，只是**分桶宽度不同**
+（`step=5/10`），缓存也分开存。
 
 ## 数据可行性（2026-10-20 实测，别重复考古）
   · **腾讯分笔明细**（本模块用的就是它）
@@ -27,7 +28,9 @@
   · 单笔金额分档沿用东财口径：超大单 ≥100 万 / 大单 20~100 万 / 中单 4~20 万 / 小单 <4 万。
   · ⚠️ 腾讯的"分笔"是**约 3 秒聚合的一笔**（实测 600900 全天 4749 笔 ≈ 18.5 笔/分钟），
     不是交易所逐笔 ⇒ 分档是**近似**（同一 3 秒内的多笔小单会被算成一笔大单）。
-    但**量是准的**：24 根桶的分笔量合计与 K 线 10min 的 volume 逐根相等（实测 0.00% 差异）。
+  · 但**量是准的**：实测 600900 全天，10 分档 24 桶 / 5 分档 48 桶，逐根与 K 线同周期的
+    `volume` 比对 —— 根数全对、绝大多数**逐位相等**，个别边界根差 ≤0.35%
+    （一根 tick 正落在分钟边界上，归属差一根）。
   · 盘后固定价格交易（15:01 起）**不属于任何 K 线桶**，直接丢弃。
 """
 import json
@@ -69,24 +72,29 @@ class OrderFlowError(Exception):
 
 
 # ---------------------------------------------------------------- 时间分桶
-def _bucket_label(hhmmss):
-    """`HH:MM:SS` → 10min 桶标签（桶右端时刻）；不属于任何桶返回 None。"""
+def _bucket_label(hhmmss, step=10):
+    """`HH:MM:SS` → `step` 分钟桶的标签（桶**右端**时刻）；不属于任何桶返回 None。
+
+    `step` 与 K 线弹窗的周期对齐（10 分档=10、5 分档=5）：两档的量能逐根对得上，
+    K 线弹窗里点哪根、这里就回哪根（见 `tmp/` 里与 m5 逐根比对的实测）。
+    """
     try:
         hh, mm, ss = hhmmss.split(":")
         mins = int(hh) * 60 + int(mm)
         sec = int(ss)
     except (ValueError, AttributeError):
         return None
+    step = int(step) if int(step) in (5, 10) else 10
     if mins > _LAST_MIN:
         return None                       # 15:01 起是盘后定价，不属于任何 K 线
     if mins == _LAST_MIN:
         return "15:00"                    # 15:00:xx（收盘竞价成交）都归最后一根
-    if sec > 0 or mins % 10 != 0:
-        mins = (mins // 10 + 1) * 10      # 向上取到下一个 10 分钟边界
+    if sec > 0 or mins % step != 0:
+        mins = (mins // step + 1) * step  # 向上取到下一个 step 分钟边界
     if mins <= _OPEN_MIN:
-        mins = _OPEN_MIN + 10             # 09:25 竞价 → 第一根 09:40
+        mins = _OPEN_MIN + step           # 09:25 竞价 → 第一根（10分→09:40 / 5分→09:35）
     if 11 * 60 + 30 < mins <= 13 * 60:
-        mins = 13 * 60 + 10               # 午休 → 下午第一根 13:10
+        mins = 13 * 60 + step             # 午休 → 下午第一根（10分→13:10 / 5分→13:05）
     return f"{mins // 60:02d}:{mins % 60:02d}"
 
 
@@ -97,7 +105,7 @@ def _tier_of(amount):
     return "小单"
 
 
-def _parse_tick(line):
+def _parse_tick(line, step=10):
     """一行分笔 → {idx,time,vol,amt,flag,label}；解析不了返回 None。"""
     f = str(line).split("/")
     if len(f) < 7:
@@ -112,7 +120,7 @@ def _parse_tick(line):
     flag = f[6].strip().upper()
     if flag not in ("B", "S", "M"):
         return None
-    label = _bucket_label(tm)
+    label = _bucket_label(tm, step)
     if label is None:
         return None
     # 09:25 集合竞价：腾讯给的方向无意义，按中性计
@@ -223,12 +231,14 @@ def _round_bucket(b):
 
 
 # ---------------------------------------------------------------- 缓存
-def _cache_fp(code, date_str):
-    return _CACHE_DIR / f"{code}_{date_str}.json"
+def _cache_fp(code, date_str, step=10):
+    """10 分档沿用旧文件名（既有落盘不作废）；其它档加 `_m{step}` 后缀分开存。"""
+    suffix = "" if int(step) == 10 else f"_m{int(step)}"
+    return _CACHE_DIR / f"{code}_{date_str}{suffix}.json"
 
 
-def _read_cache(code, date_str):
-    fp = _cache_fp(code, date_str)
+def _read_cache(code, date_str, step=10):
+    fp = _cache_fp(code, date_str, step)
     try:
         if not fp.exists():
             return None
@@ -238,10 +248,10 @@ def _read_cache(code, date_str):
         return None
 
 
-def _write_cache(code, date_str, rec):
+def _write_cache(code, date_str, rec, step=10):
     try:
         _CACHE_DIR.mkdir(parents=True, exist_ok=True)
-        fp = _cache_fp(code, date_str)
+        fp = _cache_fp(code, date_str, step)
         tmp = fp.with_suffix(".tmp")
         with open(tmp, "w", encoding="utf-8") as f:
             json.dump(rec, f, ensure_ascii=False)
@@ -256,20 +266,22 @@ def _view(rec):
     keys = sorted(bars)
     return {"ok": bool(keys), "code": rec.get("code"), "date": rec.get("date"),
             "saved_at": rec.get("saved_at"), "n_ticks": rec.get("n_ticks"),
-            "pages": rec.get("pages"),
+            "pages": rec.get("pages"), "step": rec.get("step") or 10,
             "bars": [bars[k] for k in keys],
             "note": rec.get("note") or ""}
 
 
-def load(code, force=False, date_str=None, timeout=6.0):
-    """取某只票**当天**的 10min 多空分布。**永不抛**：失败回 `{"ok": False, ...}`。
+def load(code, force=False, date_str=None, timeout=6.0, step=10):
+    """取某只票**当天**的 `step` 分钟多空分布。**永不抛**：失败回 `{"ok": False, ...}`。
 
+    `step`：10（10 分档，默认）或 5（5 分档）。两档**各自独立缓存**（分桶不同，不能共用）。
     增量：缓存里有 `n_ticks` ⇒ 只从 `n_ticks // 70` 那页往后翻（通常 0~3 页），
     重算最后一根桶、补齐新桶；不重抓全天那 68 页。
     """
     code = str(code).split("_")[0].strip()
+    step = int(step) if int(step) in (5, 10) else 10
     today = date_str or datetime.now().strftime("%Y-%m-%d")
-    rec = None if force else _read_cache(code, today)
+    rec = None if force else _read_cache(code, today, step)
     if rec and rec.get("date") == today:
         # 收盘后落过盘 ⇒ 当天数据已完整，直接回缓存（不再出网）
         saved_hm = str(rec.get("saved_at") or "")[11:16]
@@ -306,7 +318,7 @@ def load(code, force=False, date_str=None, timeout=6.0):
     # 尾部原始分笔与新抓到的合并（按 idx 去重：增量起点那页会与已存的尾巴重叠）
     tick_map = {}
     for ln in tail_lines + lines:
-        tk = _parse_tick(ln)
+        tk = _parse_tick(ln, step)
         if tk:
             tick_map[tk["idx"]] = tk
     if not tick_map:
@@ -327,7 +339,7 @@ def load(code, force=False, date_str=None, timeout=6.0):
 
     # 只保留最后一根桶的原始分笔供下次增量重算（其余桶已封闭，存档即可）
     tail = [ln for ln in (tail_lines + lines)
-            if (_parse_tick(ln) or {}).get("label") == last] if last else []
+            if (_parse_tick(ln, step) or {}).get("label") == last] if last else []
 
     # `n_ticks` 必须**单日内单调不减**：本轮若一页没抓到（网络抖动），max(tick_map) 只是
     # 尾巴那几笔的序号，直接写会把它缩回去 ⇒ 下次增量从很早的页重翻，白抓几十页。
@@ -337,16 +349,31 @@ def load(code, force=False, date_str=None, timeout=6.0):
                "n_ticks": n_ticks,
                "pages": int((rec or {}).get("pages") or 0) + pages,
                "last": last,
+               "step": step,
                "tail": tail,
                "bars": {k: _round_bucket(v) for k, v in bars.items()}}
-    _write_cache(code, today, rec_new)
+    _write_cache(code, today, rec_new, step)
     return _view(rec_new)
 
 
-def available_dates(code):
-    """已落盘的历史日期（升序）。历史只有**本模块上线后**的日子。"""
+_DATE_RE = re.compile(r"_(\d{4}-\d{2}-\d{2})(?:_m(\d+))?$")
+
+
+def available_dates(code, step=10):
+    """已落盘的历史日期（升序）。历史只有**本模块上线后**的日子。
+
+    ⚠️ 必须按 `step` 过滤：5 分档的档名是 `{code}_{date}_m5.json`，
+    直接取 `stem.split("_")[-1]` 会把 "m5" 当成日期。
+    """
     code = str(code).split("_")[0].strip()
+    out = []
     try:
-        return sorted(p.stem.split("_")[-1] for p in _CACHE_DIR.glob(f"{code}_*.json"))
+        for p in _CACHE_DIR.glob(f"{code}_*.json"):
+            m = _DATE_RE.search(p.stem)
+            if not m:
+                continue
+            if int(m.group(2) or 10) == int(step):
+                out.append(m.group(1))
     except Exception:
         return []
+    return sorted(out)

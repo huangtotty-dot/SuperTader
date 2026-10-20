@@ -119,11 +119,24 @@ class TestChartOpenPerf(unittest.TestCase):
         self.assertIn("stockChartInteractingUntil = Date.now() + 1500", _JS)
         self.assertIn("if (Date.now() < stockChartInteractingUntil)", _JS)
 
-    def test_min10_live_poll_is_1s(self):
-        """owner：盘中重点盯 10 分钟线 ⇒ 前端 1s 轮询，后端分钟 SWR TTL 0.8s。"""
-        self.assertIn('stockChartPeriod === "min10") return 1000', _JS)
-        self.assertIn("_CHART_LIVE_TTL_MINUTE = 0.8", _PY)
-        self.assertIn("_CHART_LIVE_MIN_KICK_MINUTE = 0.5", _PY)
+    def test_min5_min10_live_poll_is_half_second(self):
+        """owner 2026-10-20：「5/10 分要极其实时」⇒ 前端 **0.5s** 轮询。
+
+        后端配合改了三处（缺一条这条链就退化回 1s+）：
+          · worker 拆并行两跳（快照 ∥ 分钟取数）⇒ 实测 ~270ms → ~200ms
+          · 分钟 SWR TTL 0.4s / kick 0.35s（原来 0.8/0.5，1s 轮询会连吃同一帧）
+          · 前端把已知 sig 传上去 ⇒ 行情没动时后端只回 sig（<1KB）而不是 102KB 整帧
+        """
+        self.assertIn('stockChartPeriod === "min5")) return 500', _JS)
+        self.assertIn("_CHART_LIVE_TTL_MINUTE = 0.4", _PY)
+        self.assertIn("_CHART_LIVE_MIN_KICK_MINUTE = 0.35", _PY)
+        # 并行两跳：两个取数函数必须各自存在，否则又变回串行
+        self.assertIn("def _fetch_live_quote(self, base)", _PY)
+        self.assertIn("def _fetch_min_df(self, code, period)", _PY)
+        self.assertIn("ThreadPoolExecutor(max_workers=2", _PY)
+        # 不变就不传序列
+        self.assertIn("def _slim_if_same(frame, known_sig)", _PY)
+        self.assertIn("stockChartLiveSig[period] || \"\"", _JS)
 
     def test_chart_has_explicit_zoom_buttons(self):
         """2026-10-20 owner：无法缩放 ⇒ 增加 ＋/－/⟲ 按钮 + 显式 inside 缩放选项。"""
