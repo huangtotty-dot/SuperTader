@@ -18,11 +18,18 @@ _JS = (_ROOT / "web" / "app.js").read_text(encoding="utf-8")
 
 
 class TestChartDailyFullRange(unittest.TestCase):
-    """2026-10-20 owner：「日线只能显示一部分」⇒ 默认展示全部历史 + 摘要显示根数。"""
+    """日线默认视窗：2026-10-20 上午曾改成「全部」，当晚 owner 改口要**近6个月**。
 
-    def test_default_daily_is_all(self):
-        self.assertIn("const DEFAULT_BARS = { daily: null,", _JS)
-        self.assertIn("stockChartRange.daily === 120", _JS)
+    教训：这条默认值一天内被改了两遍，所以把"为什么是 120"钉进测试 ——
+    120 == 后端黄金分割回看期（`t_gui._FIB_LOOKBACK["daily"]`），锚点必然在视窗内。
+    """
+
+    def test_default_daily_is_six_months(self):
+        self.assertIn("const DEFAULT_BARS = { daily: 120,", _JS)
+        # 「全部」仍必须可显式选择（null 与"未设"要能区分）
+        self.assertIn('{ label: "全部", bars: null }', _JS)
+        # 那条把用户存的 120 删掉的迁移已作废，别再回来
+        self.assertNotIn("stockChartRange.daily === 120", _JS)
 
     def test_summary_shows_bar_count(self):
         self.assertIn("本周期 ${_pdCur.dates.length} 根", _JS)

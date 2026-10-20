@@ -3780,12 +3780,16 @@ const MA_COLORS = ["#3987e5", "#d95926", "#199e70", "#c98500", "#d55181", "#9085
 /* 默认可见根数。取值贴着后端黄金分割回看期（t_gui._FIB_LOOKBACK）——daily 120 与回看期
    相等，锚点必然落在默认视窗内；weekly/monthly 因 bar 更少而略小，万一锚点更早由下面的
    放宽分支兜底。核心目的：后端 800 根日线全画出来蜡烛只有 ~3px，形态根本看不清。 */
-// 2026-10-20 owner：「日线只能显示一部分」——默认改为**全部**历史（约 800 根）；
-// 想紧凑看形态可手动切「近3月/近6月/近1年」。周/月/分钟仍保留原默认窗口。
+// 2026-10-20 owner：日线默认 **近 6 个月**（120 根）。
+//   · 曾经是"全部"（约 800 根）—— 那是为了回「日线只能显示一部分」做的过度修正，
+//     800 根蜡烛只有 ~3px、形态根本看不清，owner 现在改口要 6 个月；
+//   · 120 同时等于后端黄金分割的回看期（`t_gui._FIB_LOOKBACK["daily"]=120`），
+//     锚点必然落在默认视窗内，不会出现"标了锚点却看不见"；
+//   · 想更长/更短仍可点「近3月 / 近1年 / 全部」。
 // K 线弹窗的分钟档（2026-10-20 加 5 分）——**与后端 t_gui._MIN_PERIODS 同一份清单**，
 // 加档位时两边都要动；漏改的症状是"某个 Tab 永远空白"。
 const MIN_PERIODS = ["min5", "min10", "min30", "min60"];
-const DEFAULT_BARS = { daily: null, weekly: 104, monthly: 60,
+const DEFAULT_BARS = { daily: 120, weekly: 104, monthly: 60,
                        min5: 160, min10: 160, min30: 160, min60: 160 };
 // 快捷区间：按周期给不同标签；bars=null 表示全部。每个周期的默认项都在表内（高亮用）。
 // 分钟档后端各保留 320 根（30分≈8根/日、60分≈4根/日）。
@@ -3813,9 +3817,9 @@ try {
   const _savedRange = JSON.parse(localStorage.getItem("stockChartRange") || "null");
   if (_savedRange && typeof _savedRange === "object") {
     stockChartRange = _savedRange;
-    // 2026-10-20：旧默认「近6月=120」迁移为新的「全部」默认
-    // （owner 反馈日线只显示一部分；显式选过 120 的也会被重置一次）
-    if (stockChartRange.daily === 120) delete stockChartRange.daily;
+    // 2026-10-20：默认已回到「近6月=120」（见 DEFAULT_BARS 上方注释）⇒ 原先那条
+    // 「把存着的 120 删掉」的迁移已经多余，去掉：显式选过 120 的用户保持 120 即可。
+    // 显式选过「全部」的存的是 null，仍然照旧保留（null 与"未设"必须可区分）。
   }
 } catch (e) { /* 坏数据忽略，用默认 */ }
 
