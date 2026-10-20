@@ -3722,6 +3722,15 @@ async function tickStockChartLive() {
     if (r.available && r.series && r.sig && period === stockChartPeriod) {
       if (stockChartLiveSig[period] !== r.sig) {
         const cur = (stockChartData.period_data && stockChartData.period_data[period]) || {};
+        const _curN = (cur.dates || []).length;
+        const _newN = (r.series.dates || []).length;
+        if (_curN >= 120 && _newN * 2 < _curN) {
+          // 2026-10-20：实时尾返回的序列**明显更短**（如日线 801→40，来自短日线缓存）
+          // 绝不整段替换，否则图会被越刷越短，最终只能在 40 根里缩放。
+          _chartLog("live_skip_short", JSON.stringify({period: period,
+            curN: _curN, newN: _newN, sig: r.sig}));
+          nextMs = 600;
+        } else {
         // 整段替换（含 MA/MACD/RSI/BOLL/fib）；保留前端可能有的额外字段
         stockChartData.period_data[period] = Object.assign({}, cur, r.series);
         if (Date.now() < stockChartInteractingUntil) {
@@ -3735,6 +3744,7 @@ async function tickStockChartLive() {
             zoom: stockChartZoom}));
           renderStockChart(false);        // 实时尾：只换数据，不碰 dataZoom
         }
+        }   // end: 长度正常，允许替换
       }
     }
     // 后端是 SWR：warming=后台还在首次取数；stale=回的是上一帧、正在刷新。
@@ -7049,7 +7059,7 @@ function startLivePoll() {
 async function init() {
   // 首先获取 DOM 元素（此时 DOM 已完全加载）
   // 2026-10-20：启动标记（0ms）写进慢调用日志 ⇒ 能确认 WebView2 是否加载了新版 app.js
-  try { window.pywebview.api.report_slow_call("app_boot_20261020k", 0); } catch (e) { /* 静默 */ }
+  try { window.pywebview.api.report_slow_call("app_boot_20261020l", 0); } catch (e) { /* 静默 */ }
   dateSelect = document.getElementById("dateSelect");
   refreshBtn = document.getElementById("refreshBtn");
   autoPoll = document.getElementById("autoPoll");

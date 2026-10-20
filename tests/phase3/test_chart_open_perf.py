@@ -68,8 +68,16 @@ class TestChartOpenPerf(unittest.TestCase):
     def test_frontend_cache_busted_and_boot_marked(self):
         """WebView2 可能缓存旧 app.js（改了跟没改一样）⇒ 带版本号 + 启动标记落日志。"""
         _html = (_ROOT / "web" / "index.html").read_text(encoding="utf-8")
-        self.assertIn("app.js?v=20261020k", _html)
-        self.assertIn("app_boot_20261020k", _JS)
+        self.assertIn("app.js?v=20261020l", _html)
+        self.assertIn("app_boot_20261020l", _JS)
+
+    def test_live_daily_series_uses_long_payload(self):
+        """chart_zoom.log 实证：实时尾 n=40 把 801 根整段替换 ⇒ 先缩成 40 根、再谈缩放。
+        后端必须优先用 payload 的长日线；前端再兜一层「明显更短不替换」。"""
+        self.assertIn('_hit = _cc.load_payload(str(code).split("_")[0])', _PY)
+        self.assertIn('if len(_prows) >= 120:', _PY)
+        self.assertIn('_chartLog("live_skip_short"', _JS)
+        self.assertIn("_newN * 2 < _curN", _JS)
 
     def test_chart_zoom_diagnostic_log(self):
         """前端缩放/重绘事件写 chart_zoom.log，供定位"1 分钟后失效"。"""

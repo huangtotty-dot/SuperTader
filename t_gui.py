@@ -4336,10 +4336,21 @@ class Api:
         import pandas as pd
         import core.chart_cache as _cc
         df = None
+        # 2026-10-20（chart_zoom.log：实时尾 n=40 把 801 根整段替换）：
+        # `load_daily_display` 可能只有扫描类写入的 40 根；实时尾必须优先用 payload 的
+        # **长日线**（801 根），否则盘中每 5s 一次的日线尾会把整图从 801 根缩成 40 根。
         try:
-            df = _cc.load_daily_display(code)
+            _hit = _cc.load_payload(str(code).split("_")[0]) or {}
+            _prows = _hit.get("daily_rows") or []
+            if len(_prows) >= 120:
+                df = pd.DataFrame(_prows)
         except Exception:
             df = None
+        if df is None or df.empty:
+            try:
+                df = _cc.load_daily_display(code)
+            except Exception:
+                df = None
         if df is None or df.empty:
             _rows = self._daily_rows_cache_first(code, allow_network=False)
             if _rows:
