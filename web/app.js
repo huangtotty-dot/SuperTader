@@ -479,7 +479,7 @@ function beaconRowHtml(s, labels) {
       : (_sc !== null && _sc > 0) ? "background:rgba(63,185,80,.07);" : "");
   return `<tr class="h-expand-row" style="${_rowBg}" ondblclick="openStockChart('${esc(s.code)}','${esc(s.name)}')">
     <td>${esc(s.name)} <span class="mono cell-dim">${esc(s.code)}</span></td>
-    <td style="text-align:center">${tierBadge(s.tier)}</td>
+    <td style="text-align:center">${tierBadge(s.tier, s.tier_static, s.tier_reason)}</td>
     <td>${verdictBadge(s.build_verdict)}</td>
     <td class="num">${scoreTxt}</td>
     <td class="num">${_met}</td>
@@ -2934,10 +2934,17 @@ const UPDATING_HTML = '<span class="cell-dim" style="font-size:11px" title="正�
 
 const TIER_TIP = "板块内方位标签（描述性，非信号）：龙头=本板块当日涨幅第1；中军=其余成交额前3（资金核心）；杂毛=其余。"
   + "⚠️ 实测该分层**无前瞻区分度**（四种定义×四个持有期≈全无差异，分半窗符号翻转，效应量远低于交易成本）⇒ 仅供盘面方位感，不参与任何判定与排序。";
-function tierBadge(t) {
-  if (t === "龙头") return `<span style="display:inline-block;padding:1px 8px;border-radius:10px;background:rgba(248,81,73,.22);border:1px solid #f85149;color:#ff9d95;font-weight:700;font-size:11px;letter-spacing:1px" title="${esc("【龙头】" + TIER_TIP)}">龙头</span>`;
-  if (t === "中军") return `<span style="display:inline-block;padding:1px 8px;border-radius:10px;background:rgba(88,166,255,.20);border:1px solid #58a6ff;color:#9ecbff;font-weight:700;font-size:11px;letter-spacing:1px" title="${esc("【中军】" + TIER_TIP)}">中军</span>`;
-  if (t === "杂毛") return `<span style="display:inline-block;padding:1px 7px;border-radius:10px;background:rgba(139,148,158,.13);color:#8b949e;font-size:10px" title="${esc("【杂毛】" + TIER_TIP)}">杂毛</span>`;
+// 2026-10-20：静态 龙头/中军（后端 tier_static，机器人/军工板块整治的研究定性标签）。
+// ◆ 前缀 + tooltip 带定性理由，与动态当日分层徽章区分；静态标签与当日涨跌无关。
+const TIER_STATIC_TIP = "研究定性标签（2026-10-20 板块整治，机器人/军工）：按产业链地位核实，与当日涨跌无关。";
+function tierBadge(t, isStatic, reason) {
+  const st = isStatic ? "◆" : "";
+  const tip = isStatic
+    ? `【研究定性·${t}】${reason ? reason + "。" : ""}${TIER_STATIC_TIP}`
+    : `【${t}】${TIER_TIP}`;
+  if (t === "龙头") return `<span style="display:inline-block;padding:1px 8px;border-radius:10px;background:rgba(248,81,73,.22);border:1px solid #f85149;color:#ff9d95;font-weight:700;font-size:11px;letter-spacing:1px" title="${esc(tip)}">${st}龙头</span>`;
+  if (t === "中军") return `<span style="display:inline-block;padding:1px 8px;border-radius:10px;background:rgba(88,166,255,.20);border:1px solid #58a6ff;color:#9ecbff;font-weight:700;font-size:11px;letter-spacing:1px" title="${esc(tip)}">${st}中军</span>`;
+  if (t === "杂毛") return `<span style="display:inline-block;padding:1px 7px;border-radius:10px;background:rgba(139,148,158,.13);color:#8b949e;font-size:10px" title="${esc(tip)}">杂毛</span>`;
   return '<span class="cell-dim">—</span>';
 }
 /* 整行强调：龙头/中军用左侧色条 + 淡底色 —— 扫一列股票时能一眼挑出来 */
@@ -4256,6 +4263,12 @@ function renderStockProfile(body, d, live) {
   h += `<div class="prof-sec"><b>所属行业/板块</b>：`
      + ((d.sector_list && d.sector_list.length) ? chips(d.sector_list) : none) + "</div>";
   h += `<div class="prof-sec"><b>韭研概念</b>：`
+     // 2026-10-20：研究核实的静态 龙头/中军徽章（机器人/军工板块整治起），悬停显示定性理由
+     + (d.local_role ? `<span style="display:inline-block;margin-right:6px;padding:1px 8px;border-radius:10px;font-weight:700;font-size:11px;letter-spacing:1px;`
+       + (d.local_role === "龙头"
+         ? `background:rgba(248,81,73,.22);border:1px solid #f85149;color:#ff9d95`
+         : `background:rgba(88,166,255,.20);border:1px solid #58a6ff;color:#9ecbff`)
+       + `" title="${esc("【研究定性·" + d.local_role + "】" + (d.local_role_reason ? d.local_role_reason + "。" : "") + "按产业链地位核实，与当日涨跌无关。")}">◆${esc(d.local_role)}</span>` : "")
      + ((d.local_concepts && d.local_concepts.length) ? chips(d.local_concepts, d.concept_descs) : none) + "</div>";
   if (live) {
     h += `<div class="prof-sec"><b>所属板块</b>`
@@ -6393,7 +6406,7 @@ function renderHunter(h) {
         <td title="双击看技术分析">${esc(s.name)} <button class="mini-btn" style="font-size:10px;padding:0 5px"
           onclick="event.stopPropagation();addToWatchlist('${esc(s.code)}','${esc(s.name)}',this)"
           title="加入建仓股池监控买点">+股池</button></td>
-        <td style="text-align:center;white-space:nowrap">${tierBadge(s.tier)}</td>
+        <td style="text-align:center;white-space:nowrap">${tierBadge(s.tier, s.tier_static, s.tier_reason)}</td>
         <td>${verdictTxt}</td>
         <td class="num">${scoreTxt}</td>
         ${(() => {

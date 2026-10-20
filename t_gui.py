@@ -119,6 +119,43 @@ def _jiuyan_names() -> dict:
         pass
     return _JY_NAMES_CACHE["map"]
 
+
+_JY_ROLE_CACHE = {"mtime": None, "map": {}}
+
+
+def _jiuyan_roles() -> dict:
+    """韭研 watchlist → {6位码: {"role": 龙头/中军, "reason": 定性理由}}。
+
+    2026-10-20 机器人/军工板块整治起写入（`stock_hunter/tag_robot_military_fix_20261020.py`）：
+    研究核实的**真龙头/中军**静态标签，与 `_tier_sector_stocks` 的当日动态分层**互补**——
+    梯队列静态优先（有静态用静态、跳过算法），个股资料面板同步下发。
+    与 `_jiuyan_names` 同构：按 mtime 缓存，失败返回上次结果。
+    """
+    fp = BASE / "stock_hunter" / "watchlist_jiuyan.json"
+    try:
+        _mt = fp.stat().st_mtime
+    except OSError:
+        return _JY_ROLE_CACHE["map"]
+    if _JY_ROLE_CACHE["mtime"] == _mt:
+        return _JY_ROLE_CACHE["map"]
+    out = {}
+    try:
+        _d = json.loads(fp.read_text(encoding="utf-8"))
+        for code, info in _d.items():
+            if not isinstance(info, dict):
+                continue
+            r = str(info.get("jiuyan_role") or "").strip()
+            if r in ("龙头", "中军"):
+                out[str(code).split("_")[0]] = {
+                    "role": r,
+                    "reason": str(info.get("jiuyan_role_reason") or "").strip(),
+                }
+        _JY_ROLE_CACHE.update({"mtime": _mt, "map": out})
+    except Exception:
+        pass
+    return _JY_ROLE_CACHE["map"]
+
+
 # ── 每日选股记录（OSC 超跌跳空确认）读取/还原（2026-10-17）────────────────────
 # 数据优先吃新落盘（decision_/prescreen_），历史日从 fills + 策略日志还原。
 OSC_BOOK = STATE_DIR / "weak_strong_book"
@@ -1835,10 +1872,25 @@ def _tier_sector_stocks(stocks, min_members=5):
       连板龙头限定"板块内有连板"时 H=1 **−0.112pp(t=−1.71)**；**分半窗符号翻转**
       （龙头 h1 +0.282 / h2 −0.217）。效应量 ±0.05~0.13pp 远低于往返成本 0.13~0.35pp。
     ⇒ 它的价值在**能不能买到 / 是不是这个板块的钱**（可执行性），**不在预测收益**。
+
+    2026-10-20 静态优先（机器人/军工板块整治）：watchlist 里带 `jiuyan_role`
+    （研究核实的真龙头/中军，见 `_jiuyan_roles`）的票**直接用静态标签、跳过动态算法**，
+    也不参与阈值统计；`tier_static=True` + `tier_reason` 供前端区分徽章。
+    无静态标签的票照旧走下方动态分层（其它板块的唯一来源）。
     """
+    roles = _jiuyan_roles()
     for s in stocks:
-        s["tier"] = ""
-    ok = [s for s in stocks if s.get("amount") and s.get("change_pct") is not None]
+        st = roles.get(str(s.get("code", "")))
+        if st:
+            s["tier"] = st["role"]
+            s["tier_static"] = True
+            if st.get("reason"):
+                s["tier_reason"] = st["reason"]
+        else:
+            s["tier"] = ""
+    # 动态分层只覆盖**无静态标签**的票（静态票不进阈值统计、不被改写）
+    ok = [s for s in stocks
+          if not s.get("tier_static") and s.get("amount") and s.get("change_pct") is not None]
     if len(stocks) < min_members or len(ok) < min_members:
         return
     chgs = [float(s.get("change_pct") or 0) for s in ok]
@@ -1852,9 +1904,9 @@ def _tier_sector_stocks(stocks, min_members=5):
     for s in ok:
         if not s["tier"] and float(s.get("amount") or 0) >= mid_thr:
             s["tier"] = "中军"
-    # 整个板块**一只都没分层**（无龙头且无中军）⇒ 全不标。
+    # 整个板块**一只都没分层**（无静态、无动态龙头且无中军）⇒ 全不标。
     # 否则会把这批票一律打成"杂毛"——它们只是"板块成员"，不是杂毛（不硬凑的反面同样适用）。
-    if not any(s["tier"] for s in ok):
+    if not any(s["tier"] for s in stocks):
         return
     for s in ok:
         if not s["tier"]:
@@ -5080,6 +5132,7 @@ class Api:
         out = {"code": str(code), "name": None, "ok": False, "error": None,
                "business_summary": "", "sector": "", "sector_list": [],
                "local_concepts": [], "boards": [], "boards_source": None,
+               "local_role": None, "local_role_reason": None,
                "profile": None, "profile_pending": False,
                "boards_note": "东财口径；行业/概念/地域按板块名启发式划分"}
         try:
@@ -5094,6 +5147,11 @@ class Api:
                 out["local_concepts"] = [s for s in _jiuyan_concepts(info).split("|") if s]
                 # 2026-10-19：概念注释 {概念: 解释} 下发（前端 chip 悬停显示，医药板块起）
                 out["concept_descs"] = _jiuyan_concept_descs(info, out["local_concepts"])
+                # 2026-10-20：研究核实的静态 龙头/中军（机器人/军工板块整治起）——资料面板徽章
+                _role = str(info.get("jiuyan_role") or "").strip()
+                if _role in ("龙头", "中军"):
+                    out["local_role"] = _role
+                    out["local_role_reason"] = str(info.get("jiuyan_role_reason") or "").strip()
             out["ok"] = True
         except Exception as e:
             out["error"] = f"读取本地资料失败: {e}"
@@ -8471,11 +8529,20 @@ class Api:
                         matched = any(sector == p or sector in p or p in sector
                                       for p in parts)
                         if matched:
-                            sector_stocks.setdefault(sector, []).append(
-                                {"code": code, "name": nm,
-                                 "concepts": [c.strip() for c in str(concepts).split("|") if c.strip()],
-                                 "score": 0, "d5": 0, "d6": 0,
-                                 "d9": 0, "change_pct": 0, "limit_up": 0})
+                            # 2026-10-20：历史视图无实时价、不走 _tier_sector_stocks，
+                            # 静态 龙头/中军（jiuyan_role）直接落到 tier 字段，前端徽章照出。
+                            _role = str(info.get("jiuyan_role") or "").strip()
+                            _stk = {"code": code, "name": nm,
+                                    "concepts": [c.strip() for c in str(concepts).split("|") if c.strip()],
+                                    "score": 0, "d5": 0, "d6": 0,
+                                    "d9": 0, "change_pct": 0, "limit_up": 0}
+                            if _role in ("龙头", "中军"):
+                                _stk["tier"] = _role
+                                _stk["tier_static"] = True
+                                _rsn = str(info.get("jiuyan_role_reason") or "").strip()
+                                if _rsn:
+                                    _stk["tier_reason"] = _rsn
+                            sector_stocks.setdefault(sector, []).append(_stk)
                             break
             except Exception:
                 pass
