@@ -17,6 +17,7 @@ from openpyxl.utils.dataframe import dataframe_to_rows
 
 from .styler import ExcelStyler, V8Style
 from .ranker import Top5Ranker, SectorRanker, DetailRanker
+from .data_loader import load_config
 
 
 def _fmt_stat(val):
@@ -61,20 +62,13 @@ class ExcelReporter(ReporterBase):
         return title[:31]
 
     def __init__(self, config: dict = None, styler: ExcelStyler = None):
-        self.config = config or self._load_config()
+        self.config = config or load_config()
         self.styler = styler or ExcelStyler(V8Style(
             header_bg=self.config.get("style", {}).get("header_bg", "4472C4"),
             header_font=self.config.get("style", {}).get("header_font", "FFFFFF")
         ))
         self.sheets_cfg = self.config.get("sheets", {})
         self.scoring_cfg = self.config.get("scoring", {})
-
-    @staticmethod
-    def _load_config() -> dict:
-        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        config_path = os.path.join(base_dir, "config.json")
-        with open(config_path, "r", encoding="utf-8") as f:
-            return json.load(f)
 
     def _write_dataframe(self, ws, df: pd.DataFrame, start_row: int = 1,
                          header_style: bool = True, data_style: bool = True):
@@ -656,7 +650,7 @@ class ReportBuilder:
             with open(config_path, "r", encoding="utf-8") as f:
                 self.config = json.load(f)
         else:
-            self.config = ExcelReporter._load_config()
+            self.config = load_config()
         self.reporter = ExcelReporter(self.config)
         self.top5_ranker = Top5Ranker(
             max_same_sector=self.config.get("ranking", {}).get("max_same_sector_in_top5", 2),

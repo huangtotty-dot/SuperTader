@@ -6,7 +6,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from .taxonomy import enrich_theme_structure
+from .taxonomy import enrich_theme_structure, _rank_score
 from .universe import append_market_universe_columns
 
 
@@ -44,13 +44,6 @@ def direction_label(dx: float, dy: float) -> str:
     if dx >= 0 > dy:
         return "右下降温"
     return "左下退潮"
-
-
-def _rank_score(series: pd.Series) -> pd.Series:
-    numeric = pd.to_numeric(series, errors="coerce")
-    if numeric.notna().sum() <= 1:
-        return pd.Series(50.0, index=series.index)
-    return (numeric.rank(pct=True) * 100).fillna(0.0)
 
 
 def _safe_pct_change(frame: pd.DataFrame, periods: int) -> pd.Series:

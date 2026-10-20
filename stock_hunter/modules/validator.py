@@ -10,6 +10,8 @@ from abc import ABC, abstractmethod
 from typing import List, Tuple, Dict
 from openpyxl import load_workbook
 
+from .data_loader import load_config
+
 
 class ValidatorBase(ABC):
     """验证规则基类"""
@@ -162,15 +164,8 @@ class ReportValidator:
     def __init__(self, checks: List[ValidatorBase] = None, config: dict = None):
         self.checks = checks or self.DEFAULT_CHECKS
         if config is None:
-            config = self._load_config()
+            config = load_config()
         self.config = config
-
-    @staticmethod
-    def _load_config() -> dict:
-        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        config_path = os.path.join(base_dir, "config.json")
-        with open(config_path, "r", encoding="utf-8") as f:
-            return json.load(f)
 
     def validate(self, workbook_path: str) -> Tuple[bool, List[str]]:
         """

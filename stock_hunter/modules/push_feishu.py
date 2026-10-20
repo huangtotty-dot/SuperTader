@@ -10,6 +10,8 @@ import time
 import pandas as pd
 from datetime import datetime, timedelta
 
+from .heat_tracker import load_history
+
 
 # ==================== 历史数据管理 ====================
 
@@ -18,21 +20,10 @@ def _history_path() -> str:
     return os.path.join(base, "history", "daily_summary.json")
 
 
-def _load_history() -> dict:
-    path = _history_path()
-    if os.path.exists(path):
-        try:
-            with open(path, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except Exception:
-            pass
-    return {}
-
-
 def _save_history_entry(date_str: str, sectors: list) -> None:
     path = _history_path()
     os.makedirs(os.path.dirname(path), exist_ok=True)
-    history = _load_history()
+    history = load_history()
     history[date_str] = sectors
     with open(path, "w", encoding="utf-8") as f:
         json.dump(history, f, ensure_ascii=False, indent=2)
@@ -233,7 +224,7 @@ def send_report_summary(config: dict, data: dict, output_path: str, date_str: st
     chat_id = feishu_cfg.get("chat_id", "")
 
     # 1. 读取历史摘要（由 heat_tracker 模块无条件保存）
-    history = _load_history()
+    history = load_history()
     past_date = _find_5_days_ago(history, date_str)
     past_sectors = {s["板块"]: s for s in history.get(past_date, [])} if past_date else {}
 

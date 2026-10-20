@@ -852,39 +852,6 @@ def add_indicators(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-def resample_to_15min(df: pd.DataFrame) -> pd.DataFrame:
-    """将1分钟K线聚合为15分钟K线，用于更高时间框架的技术分析
-
-    聚合规则：
-    - open: 15分钟区间内第一根1分钟线的open
-    - high: 15分钟区间内最高high
-    - low: 15分钟区间内最低low
-    - close: 15分钟区间内最后一根1分钟线的close
-    - volume/amount: 15分钟区间内累加
-    """
-    if df.empty or len(df) < 15:
-        return pd.DataFrame()
-
-    df = df.copy()
-    df["time"] = pd.to_datetime(df["time"], errors="coerce")
-    df = df.dropna(subset=["time"]).sort_values("time").reset_index(drop=True)
-
-    # 15分钟频率分组（自动处理11:30-13:00休市间隔）
-    df["time_15m"] = df["time"].dt.floor("15min")
-
-    agg = df.groupby("time_15m").agg({
-        "open": "first",
-        "high": "max",
-        "low": "min",
-        "close": "last",
-        "volume": "sum",
-        "amount": "sum",
-    }).reset_index()
-    agg = agg.rename(columns={"time_15m": "time"})
-
-    return agg
-
-
 def add_15min_indicators(df_15min: pd.DataFrame) -> pd.DataFrame:
     """为15分钟K线计算技术指标：MACD、RSI、EMA、成交量比"""
     if df_15min.empty or len(df_15min) < 3:
@@ -923,26 +890,6 @@ def add_15min_indicators(df_15min: pd.DataFrame) -> pd.DataFrame:
 
     return df_15min
 
-
-
-def resample_to_5min(df: pd.DataFrame) -> pd.DataFrame:
-    """将1分钟K线聚合为5分钟K线，用于低吸时的量能缩量+企稳反转确认"""
-    if df.empty or len(df) < 5:
-        return pd.DataFrame()
-    df = df.copy()
-    df["time"] = pd.to_datetime(df["time"], errors="coerce")
-    df = df.dropna(subset=["time"]).sort_values("time").reset_index(drop=True)
-    df["time_5m"] = df["time"].dt.floor("5min")
-    agg = df.groupby("time_5m").agg({
-        "open": "first",
-        "high": "max",
-        "low": "min",
-        "close": "last",
-        "volume": "sum",
-        "amount": "sum",
-    }).reset_index()
-    agg = agg.rename(columns={"time_5m": "time"})
-    return agg
 
 
 def add_5min_indicators(df_5min: pd.DataFrame) -> pd.DataFrame:

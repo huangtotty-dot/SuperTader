@@ -141,6 +141,13 @@ class WatchlistLoader(DataLoaderBase):
         return (parent, c) if parent else (c, "")
 
 
+def load_config() -> dict:
+    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    config_path = os.path.join(base_dir, "config.json")
+    with open(config_path, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+
 class DataLoader:
     """
     统一数据加载入口 —— 以 watchlist_jiuyan.json 为唯一数据源
@@ -148,19 +155,12 @@ class DataLoader:
 
     def __init__(self, data_dir: str = None, config: dict = None):
         if config is None:
-            config = self._load_config()
+            config = load_config()
         self.config = config
         self.base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # = stock_hunter/
         self.data_dir = data_dir or config.get("base_dir", ".") + "/" + config.get("data_dir", "data")
         self._watchlist_path = os.path.join(self.base_dir, "watchlist_jiuyan.json")
         self._watchlist_df: Optional[pd.DataFrame] = None
-
-    @staticmethod
-    def _load_config() -> dict:
-        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        config_path = os.path.join(base_dir, "config.json")
-        with open(config_path, "r", encoding="utf-8") as f:
-            return json.load(f)
 
     def _load_watchlist(self) -> pd.DataFrame:
         """内部缓存：只加载一次 watchlist"""
