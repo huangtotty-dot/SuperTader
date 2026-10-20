@@ -4445,7 +4445,8 @@ function _updateNowTag(inst, price, color) {
   const _h = 18, _w = 52;
   // 主图 grid：top=50、height=50% ⇒ 可见区间 [50, 50+0.5H]
   const _H = inst.getHeight ? inst.getHeight() : 0;
-  const _lo = 50, _lo2 = _H > 0 ? 50 + _H * 0.5 : 1e9;
+  // 主图 grid：top=50、height=48%（2026-10-20 让出 2% 给 MACD）⇒ 可见带 [50, 50+0.48H]
+  const _lo = 50, _lo2 = _H > 0 ? 50 + _H * 0.48 : 1e9;
   // ⚠️ 现价**不在可视 y 区间**时（用户缩放去看历史某段，现价在窗口外）必须**隐藏**，
   //    不能把它 clamp 到边缘 —— 那等于谎报"现价就在这个价位"。
   const _ok = yPx != null && isFinite(yPx) && yPx >= _lo && yPx <= _lo2;
@@ -4790,6 +4791,28 @@ function renderStockChart(applyZoom = true) {
   // 而且那个胶囊正好挂在右端、跟现价胶囊抢位置。
   // ⚠️ **MA5 这条均线本身保留**（它是标准均线之一），只是恢复成与其它均线同款细线。
   //    「分钟周期 MA5 = 5 根该周期 K 线」这个口径仍由 tooltip 和「日线MA5」蓝虚线解释。
+  /* 成交额（亿元）+ 它的 5/10 均线（2026-10-20 owner：量能窗口要「美化、醒目」）。
+     单根柱子只能看出"今天放没放量"，**均线才看得出量能趋势**（东财的量能面板就是
+     柱子 + 两条均线）。单位统一换成亿 —— 和 y 轴刻度同一口径，不用心算。
+     没有成交额（老 payload）时整块为 null，下面的 series 自动回落成交量。 */
+  const _amtYi = (Array.isArray(period.amount) && period.amount.length === period.dates.length)
+    ? period.amount.map(v => (v == null || isNaN(Number(v))) ? null : Number(v) / 1e8)
+    : null;
+  const _maOf = (arr, n) => {
+    if (!arr) return null;
+    const out = new Array(arr.length).fill(null);
+    let sum = 0, cnt = 0;
+    for (let i = 0; i < arr.length; i++) {
+      const v = arr[i];
+      if (v != null) { sum += v; cnt++; }
+      if (i >= n) { const old = arr[i - n]; if (old != null) { sum -= old; cnt--; } }
+      if (i >= n - 1 && cnt === n) out[i] = Math.round(sum / n * 100) / 100;
+    }
+    return out;
+  };
+  const _amtMa5 = _maOf(_amtYi, 5);
+  const _amtMa10 = _maOf(_amtYi, 10);
+
   const maSeries = period.ma.map((maArr, i) => {
     const _color = MA_COLORS[i];
     return {
@@ -5001,11 +5024,13 @@ function renderStockChart(applyZoom = true) {
     // 而这个弹窗是**白底** ⇒ 轴线和标签都发灰、图像"平"。改成浅底墨色。
     // right: 20→58（2026-10-20）：给「现价胶囊」腾出**网格外**的位置，四个 grid 必须同值
     // 否则四个窗口的 x 轴刻度会错位（它们共享 dataZoom，左边界同源）。
+    // 2026-10-20：量能窗口 9%→10%、MACD 10%→12%（主图让出 2%）—— MACD 要同时放
+    // 柱 + 两条线 + 零轴，10% 太挤，柱子几乎贴着线看不出形态。
     grid: [
-      { left: 60, right: 58, top: 50, height: "50%" },   // 主图: K线+MA+BOLL+支撑压力+箱体
-      { left: 60, right: 58, top: "60%", height: "9%" },  // 成交量(独立窗口)
-      { left: 60, right: 58, top: "71%", height: "10%" }, // MACD
-      { left: 60, right: 58, top: "83%", height: "10%" }, // RSI
+      { left: 60, right: 58, top: 50, height: "48%" },   // 主图: K线+MA+BOLL+支撑压力+箱体
+      { left: 60, right: 58, top: "58%", height: "10%" }, // 成交额(独立窗口)
+      { left: 60, right: 58, top: "69%", height: "12%" }, // MACD
+      { left: 60, right: 58, top: "82%", height: "10%" }, // RSI
     ],
     xAxis: [
       { type: "category", data: period.dates, gridIndex: 0, axisLine: { lineStyle: { color: "#2b333d" } },
@@ -5108,32 +5133,50 @@ function renderStockChart(applyZoom = true) {
         markLine: { symbol: "none", silent: true, z: 10, data: fibLines,
           label: { position: "insideStartTop" } },
       }] : []),
-      // 成交额独立窗口（2026-10-20 owner：「显示成交额，我不要成交量」）
+      // 成交额独立窗口（2026-10-20 owner：「显示成交额，我不要成交量」+「更美化、醒目」）
       // 后端下发 amount（元）；老 payload 没有时回落成交量（手），图例名会把口径写清楚，
       // 免得把「手」当「亿元」看（这正是 owner 报「量能显然不对」的由来）。
       (() => {
         const _hasAmt = Array.isArray(period.amount) && period.amount.length === period.dates.length;
-        // 亿元，保留两位（41.36 这种量级对量能判断够用；btc 级别的票也不会失真）
-        const _vals = _hasAmt
-          ? period.amount.map(v => (v == null || isNaN(Number(v))) ? null : Number(v) / 1e8)
-          : period.volume;
+        const _vals = _hasAmt ? _amtYi : period.volume;
         return { name: _hasAmt ? "成交额(亿)" : "成交量(手)", type: "bar",
           xAxisIndex: 1, yAxisIndex: 1, barWidth: "60%", barMaxWidth: 12,
           // 2026-10-17：原来一律是半透明橙色 ⇒ 看不出放量是买还是卖。改为**按当日涨跌着色**。
+          // 2026-10-20：不透明度 .55→.82 提亮（深底上 .55 发灰、量能看不清），圆角 2px。
+          itemStyle: { borderRadius: [2, 2, 0, 0] },
           data: _vals.map((v, i) => {
             const o = period.ohlc[i];
             const prev = i > 0 ? period.ohlc[i - 1][1] : null;
             const up = !o ? true : (prev == null ? o[1] >= o[0] : o[1] >= prev);
-            return { value: v, itemStyle: { color: up ? "rgba(248,81,73,.55)" : "rgba(63,185,80,.55)" } };
+            return { value: v, itemStyle: { color: up ? "rgba(248,81,73,.82)" : "rgba(63,185,80,.82)" } };
           }) };
       })(),
-      // MACD 窗口
+      // 量能均线（只在有成交额时出现）：柱看"这一根"，线看"趋势"。
+      // 配色跑过 dataviz 校验器（dark：#c98500↔#9085e9，CVD ΔE 27.3 / 常视觉 27.5，全通过）。
+      ...(_amtMa5 ? [
+        { name: "成交额MA5", type: "line", xAxisIndex: 1, yAxisIndex: 1, data: _amtMa5,
+          symbol: "none", connectNulls: true, z: 3,
+          lineStyle: { width: 1.3, color: "#c98500", opacity: .95 }, itemStyle: { color: "#c98500" } },
+        { name: "成交额MA10", type: "line", xAxisIndex: 1, yAxisIndex: 1, data: _amtMa10,
+          symbol: "none", connectNulls: true, z: 2,
+          lineStyle: { width: 1.3, color: "#9085e9", opacity: .9 }, itemStyle: { color: "#9085e9" } },
+      ] : []),
+      // MACD 窗口（2026-10-20 owner：更美化、醒目）
+      // ⚠️ 原来 DIF `#ff8c5a` / DEA `#f85149` 是**两个几乎一样的暖红** —— 深底细线上
+      //    根本分不出哪条是哪条（这是真正的可读性缺陷，不只是"不好看"）。
+      //    换成 dataviz 校验器验过的 蓝 `#3987e5` ↔ 品红 `#d55181`（dark：CVD ΔE 15.9、
+      //    常视觉 26.5，亮度带/对比度全 PASS）。柱仍按正负红绿，与全图涨跌语义一致。
       { name: "MACD-DIF", type: "line", data: period.macd.dif, xAxisIndex: 2, yAxisIndex: 2,
-        symbol: "none", lineStyle: { color: "#ff8c5a", width: 1 } },
+        symbol: "none", z: 3, lineStyle: { color: "#3987e5", width: 1.4 } },
       { name: "MACD-DEA", type: "line", data: period.macd.dea, xAxisIndex: 2, yAxisIndex: 2,
-        symbol: "none", lineStyle: { color: "#f85149", width: 1 } },
+        symbol: "none", z: 3, lineStyle: { color: "#d55181", width: 1.4 } },
       { name: "MACD柱", type: "bar", data: period.macd.hist, xAxisIndex: 2, yAxisIndex: 2,
-        itemStyle: { color: p => p.value >= 0 ? "#f85149" : "#3fb950" } },
+        z: 1, itemStyle: { color: p => p.value >= 0 ? "rgba(248,81,73,.9)" : "rgba(63,185,80,.9)",
+          borderRadius: [1, 1, 0, 0] },
+        // 零轴：MACD 的正负分界，没这条基准线时柱子的"翻红/翻绿"只能靠猜
+        markLine: { silent: true, symbol: "none",
+          data: [{ yAxis: 0, lineStyle: { color: "rgba(139,148,158,.45)", type: "dashed", width: 1 },
+                   label: { show: false } }] } },
       // RSI 窗口
       { name: "RSI", type: "line", data: period.rsi, xAxisIndex: 3, yAxisIndex: 3,
         symbol: "none", lineStyle: { color: "#bc8cff", width: 1 },

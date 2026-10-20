@@ -83,3 +83,31 @@ class TestFrontendRendersAmount:
         assert '`<div>成交额 <b>${amtTxt}</b></div>`' in _JS
         # 没有成交额时仍准确标"手"，不能把成交量当成交额显示
         assert '`<div>成交 <b>${volTxt}</b> 手</div>`' in _JS
+
+
+class TestPanelStyling:
+    """2026-10-20 owner：成交额/MACD 两个副图「更美化、醒目」。
+
+    配色不是拍脑袋选的 —— 都过了 dataviz 校验器（dark 面，CVD ΔE / 常视觉 ΔE / 亮度带 / 对比度）：
+      · 成交额MA5 `#c98500` ↔ MA10 `#9085e9`：CVD 27.3 / 常视觉 27.5
+      · MACD DIF `#3987e5` ↔ DEA `#d55181`：CVD 15.9 / 常视觉 26.5
+    原来 MACD 两条线是 `#ff8c5a` / `#f85149` —— 两个几乎一样的暖红，深底细线上分不出谁是谁。
+    """
+
+    def test_amount_ma_overlay_present(self):
+        assert '"成交额MA5"' in _JS and '"成交额MA10"' in _JS
+        assert '"#c98500"' in _JS and '"#9085e9"' in _JS
+
+    def test_macd_lines_were_separated(self):
+        # 只看 MACD 那一段（`#ff8c5a` 在别的图里还有用）
+        _macd = _JS.split("// MACD 窗口")[1].split('{ name: "RSI"')[0]
+        assert '"#ff8c5a"' not in _macd, "MACD-DIF 又回到与 DEA 几乎同色的旧配色"
+        assert '"#3987e5"' in _macd and '"#d55181"' in _macd
+
+    def test_macd_has_zero_line(self):
+        assert "yAxis: 0, lineStyle" in _JS
+
+    def test_subplot_heights_give_macd_room(self):
+        # 主图 50→48%、MACD 10→12%：柱 + 两条线 + 零轴塞进 10% 太挤
+        assert 'top: 50, height: "48%"' in _JS
+        assert 'top: "69%", height: "12%"' in _JS
