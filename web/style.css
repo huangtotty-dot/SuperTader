@@ -200,6 +200,8 @@ tr:hover td { background: rgba(243,93,43,.03); }
 .badge.hold { color:var(--accent); border-color:rgba(243,93,43,.5); background:rgba(243,93,43,.1) }
 .badge.monitor { color:#79c0ff; border-color:rgba(121,192,255,.5); background:rgba(121,192,255,.1) }
 .badge.t-long { color:var(--red); border-color:rgba(248,81,73,.4) }
+/* 涨幅 >9% 特殊标记（2026-10-20）：猎手个股行实时涨幅旁的 🔥，金色醒目但不抢涨跌红绿语义 */
+.badge.hot { color:#000; border-color:#d29922; background:#d29922; font-weight:700; padding:0 4px }
 .badge.t-short { color:var(--green); border-color:rgba(63,185,80,.4) }
 .cond { font-size: 12px; letter-spacing: 2px; white-space: nowrap; }
 .cond .on { color: var(--red); font-weight: 700; }

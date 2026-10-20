@@ -4061,6 +4061,10 @@ async function openStockChart(code, name) {
   if (_prof) { _prof.style.display = "none"; document.getElementById("stockProfileBody").innerHTML = ""; }
   stockProfileCode = null;
   stockProfileLiveLoaded = false;
+  // 多空分布面板同理：换票后旧票的数字必须立刻消失（缓存也按 code 失效）
+  const _flowEl = document.getElementById("stockFlow");
+  if (_flowEl) { _flowEl.style.display = "none"; document.getElementById("stockFlowBody").innerHTML = ""; }
+  _flowCache = { code: null, data: null, ts: 0 };
   document.getElementById("stockModalTitle").textContent = `${name} (${code}) 技术分析`;
   // 必须先 dispose 再清 innerHTML：实例复用后它绑在旧 DOM 上，节点被换掉会让 setOption 报错
   if (stockChartInst) { stockChartInst.dispose(); stockChartInst = null; }
@@ -4282,6 +4286,9 @@ function closeStockChart() {
 function switchStockPeriod(p) {
   stockChartPeriod = p;
   stockChartZoom = null;                    // 周期换了，根数尺度不同，旧缩放作废
+  // 多空分布是**某根 10 分 K 线**的结论 ⇒ 周期一换就作废（别让旧数字挂在新周期上）
+  const _flowEl = document.getElementById("stockFlow");
+  if (_flowEl) _flowEl.style.display = "none";
   _chartLog("switch_period", JSON.stringify({period: p}));
   stockChartLiveWarm = 0;
   document.querySelectorAll(".stock-tab").forEach(t =>
@@ -4327,8 +4334,18 @@ function renderStockSummary(d) {
   const ch = d.channel || {};
   const chTxt = ch.direction === "up" ? `<b class="up">上行 ↗</b>`
     : ch.direction === "down" ? `<b class="down">下行 ↘</b>` : `<span class="cell-dim">震荡 →</span>`;
+  // 2026-10-20 owner：「文字看不懂，更没法用来决策」⇒ 通道那串不再甩术语和裸数字：
+  // 先说**40 日涨跌**（人话：这段时间涨了多少），再说现价在通道的**位置百分比对应哪条轨**。
+  // 斜率属于诊断量，降级进 tooltip，不占视线。
+  const _chPos = ch.pos_pct == null ? "" :
+    `现价在通道 <b>${fmt(ch.pos_pct, 0)}%</b> 处（0%=下轨、100%=上轨${
+      ch.pos_pct <= 25 ? " → 贴近下轨" : ch.pos_pct >= 75 ? " → 贴近上轨" : " → 中段"}）`;
+  const _chSlopeTip = "通道斜率"
+    + (ch.norm_slope_pct != null ? (ch.norm_slope_pct >= 0 ? " +" : " ") + fmt(ch.norm_slope_pct, 2) + "%/日" : " —");
   const chDesc = ch.direction === "flat" ? ""
-    : `<span class="cell-dim" style="font-size:11px">${ch.direction === "up" ? "上行" : "下行"}通道 斜率${ch.norm_slope_pct != null ? (ch.norm_slope_pct >= 0 ? '+' : '') + fmt(ch.norm_slope_pct, 2) : '—'}%/日 · 40日${ch.ret_40d >= 0 ? '+' : ''}${fmt(ch.ret_40d, 1)}% · 现价位于通道${ch.pos_pct != null ? fmt(ch.pos_pct, 0) : '—'}%</span>`
+    : `<span class="cell-dim" style="font-size:11px" title="${esc(_chSlopeTip)}">`
+      + `近40日 <b class="${ch.ret_40d >= 0 ? "up" : "down"}">${ch.ret_40d >= 0 ? "+" : ""}${fmt(ch.ret_40d, 1)}%</b>`
+      + (_chPos ? `；${_chPos}` : "") + `</span>`
       + (ch.reversal ? `<span class="badge signal" style="margin-left:6px">↺ 通道反转${ch.reversal === "up_to_down" ? " 上→下" : " 下→上"}</span>` : "")
   // 2026-10-20：分钟图的 MA5 是「5 根该周期 K 线」，与日线 5 日线不同；给一行口径说明。
   const _pcnHint = ({ min10: "10分", min30: "30分", min60: "60分" })[stockChartPeriod];
@@ -4787,13 +4804,48 @@ function renderStockChart(applyZoom = true) {
         const vol = period.volume[i];
         const volTxt = vol != null
           ? (vol >= 1e8 ? (vol / 1e8).toFixed(2) + "亿" : (vol / 1e4).toFixed(2) + "万") : "—";
-        const maIdx = [5, 10, 20, 30, 60, 180, 365];
-        const maParts = (period.ma || []).map((arr, j) =>
-          arr[i] != null ? `${maIdx[j]}:${arr[i]}` : null).filter(Boolean);
-        let html = `<div style="font-weight:bold;margin-bottom:3px">${period.dates[i]}</div>`
-          + `<div>开 <b>${o}</b>　收 <b style="color:${col}">${c}</b>　涨跌 <b style="color:${col}">${chgTxt}</b></div>`
-          + `<div>高 <b>${hi}</b>　低 <b>${lo}</b>　量 <b>${volTxt}</b></div>`;
-        if (maParts.length) html += `<div style="color:#8b949e">${maParts.join("　")}</div>`;
+        // 2026-10-20 owner：「10 分图上的文字看不懂，更没法用来决策」⇒ 每个数字都带**标签+单位**，
+        // 且把「本周期均线」与「日线虚线」分成两组讲清口径，再给两句能直接读的判定。
+        // ⚠️ `_dma5/_dma10/_dma20` 是**最新**日线的值（不是这根 K 线当天的）⇒ 只在
+        //    悬停的是最后一个交易日的桶时才显示，否则等于把未来的线画到过去上。
+        // 价格**定宽**输出（与本仓「涨跌幅必须两位」同一条纪律）：`fmt` 是最大小数位，
+        // 会把 58.10 打成 58.1、几行数字对不齐；ETF/低价标的（<5 元）用三位小数，别把 0.612 压成 0.61。
+        const _px = (v) => (v == null || v === "" || isNaN(Number(v))) ? "—"
+          : Number(v).toFixed(Math.abs(Number(v)) < 5 ? 3 : 2);
+        const _maLab = ["MA5", "MA10", "MA20", "MA30", "MA60", "MA180", "MA365"];
+        const _maCells = (period.ma || []).map((arr, j) =>
+          arr[i] != null ? `${_maLab[j]} <b>${_px(arr[i])}</b>` : null).filter(Boolean);
+        const _ma5 = (period.ma && period.ma[0]) ? period.ma[0][i] : null;
+        const _ma20 = (period.ma && period.ma[2]) ? period.ma[2][i] : null;
+        // 这根 K 线自身的强度：收盘落在当根区间的哪个位置（0%=最低，100%=最高）
+        const _posBar = (hi != null && lo != null && hi > lo) ? (c - lo) / (hi - lo) * 100 : null;
+        const _posBarTxt = _posBar == null ? ""
+          : `收在当根区间 <b>${_posBar.toFixed(0)}%</b>`
+            + (_posBar >= 70 ? "（贴住上沿，盘中偏强）"
+              : _posBar <= 30 ? "（贴住下沿，盘中偏弱）" : "（中段）");
+        const _vsMa = (ma, name) => (ma == null) ? ""
+          : `　·　收在 ${name} <b>${c >= ma ? "上方" : "下方"} ${Math.abs((c - ma) / ma * 100).toFixed(2)}%</b>`;
+        const _dayTxt = _dayOf(period.dates[i]);
+        const _lastDaily = (((data.period_data || {}).daily || {}).dates || []).slice(-1)[0];
+        const _dailyRef = (_dma5 != null && _lastDaily && _dayTxt === _dayOf(_lastDaily))
+          ? `<div style="color:#8b949e;font-size:10px;margin-top:3px">日线参考（图上蓝/紫/青虚线，取最新收盘）：`
+            + `MA5 <b>${_px(_dma5)}</b>`
+            + (_dma10 != null ? ` · MA10 <b>${_px(_dma10)}</b>` : "")
+            + (_dma20 != null ? ` · MA20 <b>${_px(_dma20)}</b>` : "") + `</div>`
+          : "";
+        let html = `<div style="font-weight:bold;margin-bottom:3px">${period.dates[i]}`
+          + `<span style="font-weight:400;opacity:.65"> · ${_periodCn}K</span></div>`
+          + `<div>开 <b>${_px(o)}</b>　高 <b>${_px(hi)}</b>　低 <b>${_px(lo)}</b>　`
+          + `收 <b style="color:${col}">${_px(c)}</b>　涨跌 <b style="color:${col}">${chgTxt}</b></div>`
+          + `<div>成交 <b>${volTxt}</b> 手</div>`
+          + (_posBarTxt ? `<div style="color:#8b949e">${_posBarTxt}${_vsMa(_ma5, "MA5")}${_vsMa(_ma20, "MA20")}</div>` : "");
+        if (_maCells.length) {
+          html += `<div style="border-top:1px solid #30363d;margin-top:4px;padding-top:4px;color:#8b949e;font-size:10px">`
+            + `均线（本周期口径：MA5 = 5 根${_periodCn}K${_isIntradayPeriod
+              ? "，" + ({"min10": 50, "min30": 150, "min60": 300})[stockChartPeriod] + " 分钟" : ""}）</div>`
+            + `<div>${_maCells.join("　")}</div>`;
+        }
+        html += _dailyRef;
 
         // 背离标注：与图上的三角标记同源（backend divergence[period]）
         const _divE = divByIndex[i];
@@ -4999,6 +5051,125 @@ function renderStockChart(applyZoom = true) {
       });
     } catch (e) { /* 桩环境 on 不接受回调，忽略 */ }
   }
+
+  // 多空分布（2026-10-20 owner）：十字光标点某根 K 线 → 显示这根里的主动买/主动卖分布。
+  // ⚠️ 挂 **zr(画布)** 的 click 而不是 series 的 click：K线/均线/成交量/指标分属不同 grid，
+  //    只挂 series 会在副图与空白处漏事件（数据区比蜡烛宽得多）。
+  if (_firstInit) {
+    try {
+      stockChartInst.getZr().on("click", (ev) => {
+        const idx = _chartClickIndex(ev);
+        if (idx >= 0) showOrderFlowAt(idx);
+      });
+    } catch (e) { /* 桩环境忽略 */ }
+  }
+}
+
+/* ---- 10 分周期「多空分布」（2026-10-20 owner）----
+   点某根 K 线 → 这根里的主动买(多单) / 主动卖(空单) 分布。
+   ⚠️ **只有当天**：腾讯逐笔明细的日期参数实测全被忽略（`&d=`/`&date=`/`&t=` 都回当天），
+      历史桶靠后端每天落盘累积（`core/order_flow.py`）。所以点老 K 线时就明说"没有分笔"，
+      绝不拿别的口径的数糊上去 —— 与本仓「取不到就显示 —」的一贯做法一致。 */
+const FLOW_TTL_MS = 30000;
+let _flowCache = { code: null, data: null, ts: 0 };
+
+/* 画布点击 → 当前周期的数据下标。-1 = 没点在任何一根上。 */
+function _chartClickIndex(ev) {
+  if (!stockChartInst || !ev) return -1;
+  const pd = stockChartData && stockChartData.period_data
+    && stockChartData.period_data[stockChartPeriod];
+  const dates = (pd && pd.dates) || [];
+  if (!dates.length) return -1;
+  try {
+    let v = stockChartInst.convertFromPixel({ xAxisIndex: 0 }, [ev.offsetX, ev.offsetY]);
+    if (Array.isArray(v)) v = v[0];
+    if (v === null || v === undefined) return -1;
+    // 类目轴：不同 ECharts 版本可能回下标（number）或类目值（string），两种都收
+    if (typeof v === "string" && isNaN(Number(v))) {
+      const i = dates.indexOf(v);
+      return i;
+    }
+    const i = Math.round(Number(v));
+    return (i >= 0 && i < dates.length) ? i : -1;
+  } catch (e) { return -1; }
+}
+
+async function showOrderFlowAt(index) {
+  const el = document.getElementById("stockFlow");
+  const body = document.getElementById("stockFlowBody");
+  if (!el || !body) return;
+  el.style.display = "block";
+  if (stockChartPeriod !== "min10") {
+    body.innerHTML = `<div class="cell-dim">多空分布只做 <b>10 分</b>周期（后端按 10 分钟桶聚合分笔）；`
+      + `当前是 <b>${esc(stockChartPeriod)}</b>，切到「10分」再点 K 线。</div>`;
+    return;
+  }
+  const pd = stockChartData && stockChartData.period_data
+    && stockChartData.period_data[stockChartPeriod];
+  const label = ((pd && pd.dates) || [])[index];
+  if (!label) return;
+  const code = stockChartCode;
+  body.innerHTML = '<div class="cell-dim">正在取分笔…（首次要翻约 68 页 ≈ 5~6s，之后走增量）</div>';
+  try {
+    const now = Date.now();
+    let r = _flowCache.data;
+    if (!r || _flowCache.code !== code || now - _flowCache.ts > FLOW_TTL_MS) {
+      r = await apiCall("load_order_flow", code);
+      _flowCache = { code, data: r, ts: Date.now() };
+    }
+    renderOrderFlow(r, label);
+  } catch (e) {
+    body.innerHTML = `<div class="down">多空分布取数失败：${esc((e && e.message) || e)}</div>`;
+  }
+}
+
+function renderOrderFlow(r, label) {
+  const body = document.getElementById("stockFlowBody");
+  if (!body) return;
+  if (!r || !r.ok) {
+    body.innerHTML = `<div class="cell-dim">多空分布：${esc((r && r.note) || "无数据")}</div>`;
+    return;
+  }
+  const day = String(label).slice(0, 10);
+  const hm = String(label).slice(11, 16);
+  const b = (r.bars || []).find(x => x.time === hm);
+  if (day !== r.date || !b) {
+    body.innerHTML = `<div class="cell-dim">多空分布：<b>${esc(label)}</b> 这根没有分笔 —— `
+      + `腾讯逐笔只提供<b>当天（${esc(r.date)}）</b>明细，历史要多等几天（后端每天落盘累积）。</div>`;
+    return;
+  }
+  const buy = b.buy_vol, sell = b.sell_vol, neu = b.neutral_vol;
+  const tot = buy + sell;
+  const br = tot ? (buy / tot * 100) : 0;
+  // 净额优先用后端算好的；缺失时用买额−卖额兜底（不为 0 冒充"平盘"）
+  const netAmt = (typeof b.net_amt === "number") ? b.net_amt
+    : ((b.buy_amt || 0) - (b.sell_amt || 0));
+  const netWan = netAmt / 1e4;
+  const tierTxt = ["超大单", "大单", "中单", "小单"].map(k => {
+    const t = (b.tiers || {})[k] || { buy: 0, sell: 0 };
+    const net = (t.buy - t.sell) / 1e4;
+    const cls = net > 0 ? "up" : net < 0 ? "down" : "cell-dim";
+    return `<span class="${cls}">${k} ${net >= 0 ? "+" : ""}${fmt(net, 0)}万</span>`;
+  }).join(" · ");
+  body.innerHTML =
+    `<div style="font-weight:700;margin-bottom:4px">📊 ${esc(r.date)} ${esc(b.time)} 这根 10 分钟的多空分布`
+    + ` <span class="cell-dim" style="font-weight:400;font-size:11px">（主动买=多单 / 主动卖=空单 · 逐笔 ${b.n} 笔）</span></div>`
+    + `<div style="display:flex;height:8px;border-radius:4px;overflow:hidden;background:#30363d;margin:4px 0 6px">`
+    + `<div style="width:${br.toFixed(1)}%;background:#e8531f"></div>`
+    + `<div style="flex:1;background:#229652"></div></div>`
+    + `<div>主动买 <b class="up">${fmt(buy, 0)}</b> 手（${br.toFixed(1)}%）　`
+    + `主动卖 <b class="down">${fmt(sell, 0)}</b> 手（${(100 - br).toFixed(1)}%）　`
+    + `<span class="cell-dim">中性 ${fmt(neu, 0)} 手</span></div>`
+    + `<div style="margin-top:2px">净额 <b class="${netWan > 0 ? "up" : netWan < 0 ? "down" : "cell-dim"}">`
+    + `${netWan >= 0 ? "+" : ""}${fmt(netWan, 0)} 万</b>`
+    + `<span class="cell-dim">（买额 − 卖额）</span></div>`
+    + `<div style="margin-top:2px">分档净额：${tierTxt}</div>`
+    + `<div class="cell-dim" style="margin-top:4px;font-size:11px">`
+    + `分档口径：单笔成交额 超大单≥100万 / 大单20~100万 / 中单4~20万 / 小单&lt;4万；`
+    + `⚠️ 腾讯「分笔」是约 <b>3 秒聚合的一笔</b>（非交易所逐笔），故分档是近似；`
+    + `但 24 根桶的合计<b>与 K 线成交量逐根相等</b>。`
+    + `中性含 09:25 集合竞价与 14:57~15:00 收盘竞价（方向无意义，不并入买卖）。`
+    + `单位：手/万元；数据源=腾讯分笔（<b>只有当天</b>，历史靠每日落盘累积）。</div>`;
 }
 
 /* ---- 选股猎手 ---- */
@@ -5190,6 +5361,19 @@ function _allRenderedHunterCodes() {
   return out;
 }
 
+/* 涨幅 >9% 的**特殊标记**（2026-10-20 owner：「选股猎手中涨幅大于 9% 的股票用特殊 logo 标注出来」）。
+   数据源**只认真实行情**（`hunterQuoteCache`）：猎手 payload 里的 `change_pct` 是**扫描时**快照，
+   可能隔了几天，拿旧值打「大涨」标记就是误导（300821 旧 +20.01% vs 实时 +5.83%）——
+   与 `hunterPriceHtml` 同一条铁律：给不出来就什么都不标，不猜。
+   阈值 9%：主板涨停 10% / 创业板·科创板 20% ⇒ 9% 统一当「接近涨停」观察线，不按板块区分。 */
+const HOT_PCT = 9;
+function hotBadgeHtml(pct) {
+  if (pct === null || pct === undefined || pct === "") return "";
+  const n = Number(pct);
+  if (isNaN(n) || n <= HOT_PCT) return "";
+  return `<span class="badge hot" title="实时涨幅 +${n.toFixed(2)}% &gt; 9%（接近涨停）">🔥</span>`;
+}
+
 /* 猎手展开行「价 / 实时涨幅」格的**内容**（初始渲染与实时补值**共用同一个函数**
    ⇒ 两条路径的口径不可能不一致）。
    ⚠️ `q` 为空 = 行情还没到 ⇒ **绝不回落到扫描时的旧值**：猎手 payload 是"跑扫描那一刻"的快照，
@@ -5200,7 +5384,7 @@ function hunterPriceHtml(q) {
     return '<span class="h-px">—</span>'
       + '<div style="font-size:10px" class="h-pct"><span class="cell-dim">⏳</span></div>';
   }
-  return `<span class="h-px">${fmt(q.price)}</span>`
+  return `<span class="h-px">${hotBadgeHtml(q.change_pct)}${fmt(q.price)}</span>`
     + `<div style="font-size:10px" class="h-pct">${pctHtml(q.change_pct, "实时涨幅（随行情每 10s 刷新）")}</div>`;
 }
 
@@ -5611,7 +5795,7 @@ async function showSectorHistory(sector) {
     body.innerHTML = `<div class="empty">加载失败: ${esc(e.message)}</div>`;
   }
 }
-// 扫描结论 → 人话（取值同 position_builder.VERDICT_ICON，勿显示英文枚举给用户）
+// 扫描结论 → 人话（勿显示英文枚举给用户）
 const PB_VERDICT_TXT = {
   signal: "报买(signal)",
   approaching: "接近买点",

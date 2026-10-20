@@ -3296,6 +3296,21 @@ class Api:
         # `hunter_hq req=47 got=47` 对上 `hunter_hq_js req=47 got=0 patched=2438`。
         return {"quotes": out, "count": len(out)}
 
+    def load_order_flow(self, code, force=False):
+        """10min K 线的「多单/空单」分布（2026-10-20 owner）。
+
+        **只在 10 分周期、且当天有分笔时才给得出数**：腾讯逐笔明细只有当天、无历史日期参数
+        （`&d=`/`&date=` 实测全被忽略），所以历史桶靠 `core.order_flow` 每天落盘累积。
+        慢：首次抓全天约 68 页 ≈ 5~6s（keep-alive），之后走增量/缓存 0.3s 以内。
+        **永不抛**（前端按 `ok` 分支显示原因，不把它当致命错误）。
+        """
+        try:
+            from core.order_flow import load as _load_flow
+            return _load_flow(code, force=bool(force))
+        except Exception as e:
+            return {"ok": False, "code": str(code), "bars": [],
+                    "note": f"{type(e).__name__}: {str(e)[:100]}"}
+
     def _load_quotes_build(self):
         """拉腾讯实时行情（持仓 + watchlist 候选股），失败回退 pre_close。"""
         cur = dict(_load_json(HOLDINGS_MANUAL, {}))

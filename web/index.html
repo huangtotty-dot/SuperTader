@@ -498,6 +498,18 @@
       <div class="help-sec"><b>【10 分钟】</b>
         · 由 <b>5 分钟两两配对合成</b>（tushare 无原生 10 分钟）：每日 24 根，桶边界 09:40 / 09:50 … 15:00<br>
         · 与建仓表/持仓体检的「仓位结构」列<b>同一个合成函数</b>（剔除 09:30 竞价棒），10min 阶段与止损口径一致</div>
+      <div class="help-sec"><b class="warn">【鼠标悬停 / 点击一根 K 线，各字段怎么读】</b>
+        · <b>开·高·低·收·涨跌</b>：这一根自己的四个价，涨跌是相对<b>上一根收盘</b><br>
+        · <b>成交</b>：这一根的手数（1 手 = 100 股）<br>
+        · <b>收在当根区间 X%</b>：收盘价落在「本根最低→最高」的位置。
+          <b>≥70%</b> 贴住上沿 = 盘中偏强、<b>≤30%</b> 贴住下沿 = 盘中偏弱。
+          比只看涨跌更能回答「这根是谁在收」<br>
+        · <b>收在 MA5 / MA20 上方 X%</b>：收盘相对那条均线偏了多少<br>
+        · <b>均线（本周期口径）</b>：MA5 = <b>5 根 10 分 K = 50 分钟</b>，<b>不是</b>日线 5 日线<br>
+        · <b>日线参考</b>（图上蓝/紫/青虚线）：用<b>最新收盘</b>算的日线 MA5/MA10/MA20；
+          只在悬停<b>最后一个交易日</b>时显示 —— 老 K 线上写最新的日线值等于把未来的线画到过去上<br>
+        · <b>10 分周期里点一根 K 线</b> → 图下方出现这根里的<b>主动买(多单) / 主动卖(空单)</b>分布
+          （超大单/大单/中单/小单分档）</div>
       <div class="help-sec"><b class="warn">【盘中实时】</b>
         · 交易时段：分钟图每 <b>3 秒</b>、日/周/月每 <b>5 秒</b>自动刷新；最后一根是<b>正在形成</b>的实时 K 线，
           其上沿/下沿/收盘随行情走，现价线同步<br>
@@ -507,6 +519,10 @@
     </div>
     <div id="stockProfile" class="chart-help" style="display:none">
       <div id="stockProfileBody">加载中…</div>
+    </div>
+    <!-- 10分周期的多空分布（2026-10-20 owner）：点某根 K 线后出现 -->
+    <div id="stockFlow" class="chart-help" style="display:none">
+      <div id="stockFlowBody"></div>
     </div>
     <div id="stockChart" class="echart stock-chart"></div>
   </div>
