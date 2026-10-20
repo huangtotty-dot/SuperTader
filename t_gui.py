@@ -16,6 +16,7 @@ t_gui.py — 做T实盘·盘后复盘决策看板（pywebview 桌面壳）
 """
 import json
 import math
+import os
 import re
 import sys
 import threading
@@ -5041,22 +5042,22 @@ class Api:
     # 落盘缓存 `t_io/cache/company_profile.json`；GUI 读缓存，缺的**后台补**（不阻塞主线程）。
     def _fetch_company_profile(self, code):
         """抓一只票的简介。**网络调用** ⇒ 只许在后台线程/预取脚本里调。返回 dict 或 None。"""
-        import urllib.request
         c = str(code).split("_")[0]
         if len(c) != 6 or not c.isdigit():
             return None
         secucode = ("SH" if c[0] in "56" else ("BJ" if c[0] in "48" or c.startswith("920") else "SZ")) + c
-        url = ("https://emweb.securities.eastmoney.com/PC_HSF10/CoreConception/PageAjax?code="
-               + secucode)
+        path = "/PC_HSF10/CoreConception/PageAjax?code=" + secucode
         try:
             # ⚠️ 东财**有些响应是 gzip 压缩的**（实测 002639/601318 等 4/52 只返回 `\x1f\x8b`），
             # urllib 不会自动解压 ⇒ 直接 decode 会得到乱码、json 解析失败。
             # 双保险：请求头显式要 identity，再加魔数兜底解压。
-            req = urllib.request.Request(url, headers={
+            # 2026-10-20：改走共享 keep-alive 连接池 —— 原来裸 urlopen 每只票都要重新
+            # DNS+TCP+TLS，实测首只 **969ms**、复用连接后 **140~170ms**（差 6 倍）。
+            # "业务简介特别慢"就是这一跳。
+            from core.market_data.http_pool import pooled_get_raw
+            raw = pooled_get_raw("emweb.securities.eastmoney.com", path, 10, {
                 "User-Agent": "Mozilla/5.0", "Referer": "http://quote.eastmoney.com/",
                 "Accept-Encoding": "identity"})
-            with urllib.request.urlopen(req, timeout=10) as r:
-                raw = r.read()
             if raw[:2] == b"\x1f\x8b":
                 import gzip
                 raw = gzip.decompress(raw)
@@ -5081,6 +5082,10 @@ class Api:
     def _company_profile(self, code, allow_fetch=True):
         """读简介缓存；未命中则（可选）kick 后台抓取，返回 (profile|None, pending)。"""
         c = str(code).split("_")[0]
+        # 指数/东财合成标的（sh000001、em47.800005…）没有 F10 简介 ⇒ 直接判无，
+        # 别为它起一个必然失败的后台线程、再打一条"抓取为空"的警告。
+        if len(c) != 6 or not c.isdigit():
+            return None, False
         cache = _load_json(BASE / "t_io" / "cache" / "company_profile.json", {}) or {}
         hit = cache.get(c)
         if isinstance(hit, dict) and hit.get("brief"):
@@ -5096,6 +5101,11 @@ class Api:
         inflight.add(c)
 
         def _bg():
+            # ⚠️ 这里**不许裸 except: pass**（2026-10-20 排查"业务简介一直不补上"时踩到）：
+            #    线上真凶是本函数里 `os.replace` 抛 NameError —— **t_gui 当时没有 module 级
+            #    `import os`**，而异常被 `except: pass` 吞掉 ⇒ 缓存从 2026-10-17 起**一次都没写进去过**，
+            #    界面永远停在「⏳ 正在查询完整简介」。静默失败查了两小时，最后靠"手工复刻这段代码"
+            #    才看出差一个 import。教训：后台线程的失败必须留痕。
             try:
                 p = self._fetch_company_profile(c)
                 if p:
@@ -5107,8 +5117,10 @@ class Api:
                     with open(_tmp, "w", encoding="utf-8") as f:
                         json.dump(_cur, f, ensure_ascii=False)
                     os.replace(_tmp, str(_fp))
-            except Exception:
-                pass
+                else:
+                    print(f"[WARN] [公司简介] {c} 抓取为空（东财风控/网络），本次不缓存")
+            except Exception as e:
+                print(f"[WARN] [公司简介] {c} 后台抓取/落盘失败: {type(e).__name__}: {str(e)[:160]}")
             finally:
                 inflight.discard(c)
         threading.Thread(target=_bg, name="company-profile", daemon=True).start()
@@ -5186,6 +5198,21 @@ class Api:
         if len(self._stock_chart_cache) > 500:
             self._stock_chart_cache.clear()
         self._stock_chart_cache[key] = (datetime.now(), res)
+
+
+    def warm_stock_profile(self, code):
+        """**后台**预取公司简介（K 线弹窗一打开就调）。立即返回，不等网络。
+
+        2026-10-20 owner：「业务简介特别的慢」。慢在**缓存没命中**：`_company_profile`
+        发现 miss 才 kick 后台抓取，而用户往往开图后立刻点「📋 公司资料」⇒ 正好撞在
+        "还没抓完"那一段上。开图就先预取，把这段等待挪到用户看图的几秒里。
+        已在缓存/正在抓 ⇒ 什么都不做（`inflight` 单飞）。
+        """
+        try:
+            self._company_profile(str(code))
+        except Exception:
+            pass
+        return {"ok": True, "code": str(code)}
 
 
     def _handshake(self, res, version):

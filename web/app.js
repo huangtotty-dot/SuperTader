@@ -4105,6 +4105,10 @@ async function openStockChart(code, name) {
     try { window.pywebview.api.report_slow_call("chart_open_total", Math.round(_openMs)); } catch (e) { /* 静默 */ }
   }
   startStockChartLive();          // 盘中实时尾（3s）
+  // 2026-10-20 owner：「业务简介特别的慢」——**开图就在后台预取公司资料**。
+  // 用户通常是先看图、过几秒才点「📋 公司资料」，那时缓存已经写好了 ⇒ 点开即出。
+  // 只 kick 后台线程、立即返回；失败无所谓（打开资料面板时还会再兜底抓一次）。
+  try { apiCall("warm_stock_profile", code).catch(() => {}); } catch (e) { /* 忽略 */ }
 }
 /* ---- 手动盘「K线速查」（2026-10-18）----
    输入公司/基金/指数名称或代码 → 后端 search_instrument（本地韭研名表优先 + 腾讯 smartbox）
@@ -4221,22 +4225,38 @@ function stockBizHtml(d) {
   return `<b>业务简介</b>：`
     + (d && d.business_summary ? esc(d.business_summary)
                                : '<span class="prof-none">本地表无记录</span>')
-    + (pend ? ' <span class="prof-note">⏳ 正在查询完整简介（约 2 秒后自动补上）</span>' : "");
+    // 不再承诺"约 2 秒"——实际取决于网络，说死了就是假承诺
+    + (pend ? ' <span class="prof-note">⏳ 正在联网补全…</span>' : "");
 }
 
-/* 后台补完后再去取一次，只替换「业务简介」那一块（不重渲染整个弹窗）。 */
+/* 后台补完后再去取，只替换「业务简介」那一块（不重渲染整个弹窗）。
+   2026-10-20 owner：「业务简介特别的慢」。原来只**重试一次、固定等 2.6 秒** ——
+   而后端那一跳实测 140~1000ms 就能回来 ⇒ 白等 2 秒多；万一慢一点/失败一次，
+   面板就永远停在「⏳」上（那个"约 2 秒后自动补上"其实是假承诺）。
+   改成**递增间隔多次重试**（累计约 6.7s），拿到就停、换票就停。 */
+const _BIZ_RETRY_MS = [400, 600, 900, 1200, 1600, 2000];
 let _bizRetryTimer = null;
+let _bizRetryIdx = 0;
+
 function _scheduleBizProfileRetry(code) {
   if (_bizRetryTimer) clearTimeout(_bizRetryTimer);
-  _bizRetryTimer = setTimeout(async () => {
-    _bizRetryTimer = null;
-    if (!code || code !== stockChartCode) return;
-    try {
-      const d = await apiCall("load_stock_profile", code, false);
-      const el = document.getElementById("profBiz");
-      if (el && d && d.profile && d.profile.brief) el.innerHTML = stockBizHtml(d);
-    } catch (e) { /* 保留兜底文案 */ }
-  }, 2600);
+  _bizRetryIdx = 0;
+  const _next = () => {
+    if (!code || code !== stockChartCode || _bizRetryIdx >= _BIZ_RETRY_MS.length) return;
+    const _wait = _BIZ_RETRY_MS[_bizRetryIdx++];
+    _bizRetryTimer = setTimeout(async () => {
+      _bizRetryTimer = null;
+      if (!code || code !== stockChartCode) return;
+      try {
+        const d = await apiCall("load_stock_profile", code, false);
+        if (code !== stockChartCode) return;
+        const el = document.getElementById("profBiz");
+        if (el && d && d.profile && d.profile.brief) { el.innerHTML = stockBizHtml(d); return; }
+      } catch (e) { /* 继续下一轮 */ }
+      _next();
+    }, _wait);
+  };
+  _next();
 }
 
 function renderStockProfile(body, d, live) {

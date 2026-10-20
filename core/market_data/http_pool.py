@@ -65,15 +65,11 @@ def conn_put(pool, lock, conn, max_idle):
         pass
 
 
-def pooled_get(host, path, timeout, headers, encoding="gbk", errors="replace"):
-    """GET `https://{host}{path}` → 文本。**按主机复用连接**，失败抛异常。
+def pooled_get_raw(host, path, timeout, headers):
+    """GET `https://{host}{path}` → **bytes**。**按主机复用连接**，失败抛异常。
 
-    失败自动**换新连接重试一次**：keep-alive 连接被对端静默关掉后，下一次请求会抛
-    `RemoteDisconnected`/`BadStatusLine` —— 这是 keep-alive 的固有代价，不是故障，
-    不能让它把"本来能拿到的数据"变成拿不到。重试仍失败才抛给调用方
-    （调用点的语义都是"失败即当作没数据"，与改前一致）。
-
-    `encoding`/`errors` 与各调用点原先的 `.decode(...)` 逐点对齐（腾讯 gbk、东财/新浪 utf-8）。
+    与 `pooled_get` 同一条重试纪律，只是不解码 —— 给需要自己判
+    `\\x1f\\x8b`（gzip 魔数）或自己选编码的调用点用（东财 F10 就会回 gzip）。
     """
     rec = host_pool(host)
     pool, lock, max_idle = rec["pool"], rec["lock"], rec["max"]
@@ -92,7 +88,7 @@ def pooled_get(host, path, timeout, headers, encoding="gbk", errors="replace"):
                     pass
             else:
                 conn_put(pool, lock, conn, max_idle)
-            return data.decode(encoding, errors=errors)
+            return data
         except Exception as e:
             last = e
             try:
@@ -100,3 +96,16 @@ def pooled_get(host, path, timeout, headers, encoding="gbk", errors="replace"):
             except Exception:
                 pass
     raise last
+
+
+def pooled_get(host, path, timeout, headers, encoding="gbk", errors="replace"):
+    """GET `https://{host}{path}` → 文本。**按主机复用连接**，失败抛异常。
+
+    失败自动**换新连接重试一次**：keep-alive 连接被对端静默关掉后，下一次请求会抛
+    `RemoteDisconnected`/`BadStatusLine` —— 这是 keep-alive 的固有代价，不是故障，
+    不能让它把"本来能拿到的数据"变成拿不到。重试仍失败才抛给调用方
+    （调用点的语义都是"失败即当作没数据"，与改前一致）。
+
+    `encoding`/`errors` 与各调用点原先的 `.decode(...)` 逐点对齐（腾讯 gbk、东财/新浪 utf-8）。
+    """
+    return pooled_get_raw(host, path, timeout, headers).decode(encoding, errors=errors)
