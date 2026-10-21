@@ -1,5 +1,5 @@
 {
-  "updated_at": "2026-10-20 14:50:04",
+  "updated_at": "2026-10-21 10:00:09",
   "open": {
     "603168": {
       "entry_date": "2026-10-16",
@@ -20,16 +20,6 @@
       "board": "大农业",
       "days_held": 2,
       "last_check_date": "2026-10-20"
-    },
-    "688322": {
-      "entry_date": "2026-10-20",
-      "entry_price": 85.9927,
-      "qty": 1100,
-      "dev20": -0.067901,
-      "gap": 0.09890109890109877,
-      "board": "机器人",
-      "days_held": 0,
-      "last_check_date": null
     },
     "300503": {
       "entry_date": "2026-10-20",
@@ -68,6 +58,26 @@
       "dev20": -0.112335,
       "gap": 0.014888337468982549,
       "board": "基础化工",
+      "days_held": 0,
+      "last_check_date": null
+    },
+    "301486": {
+      "entry_date": "2026-10-21",
+      "entry_price": 214.87,
+      "qty": 400,
+      "dev20": -0.119406,
+      "gap": 0.19998883055958894,
+      "board": "半导体",
+      "days_held": 0,
+      "last_check_date": null
+    },
+    "002591": {
+      "entry_date": "2026-10-21",
+      "entry_price": 6.88,
+      "qty": 1100,
+      "dev20": -0.023056,
+      "gap": 0.1008,
+      "board": "AI应用",
       "days_held": 0,
       "last_check_date": null
     }
@@ -128,6 +138,22 @@
       "exit_reason": "pop_sell",
       "exit_fee": 5.0,
       "exit_note_2026_10_19": "2026-10-19 10:00:00 SELL 100股@6.74（10:00 high 触发 pop_sell），10:00:07.386 成交 @6.50（pos_after=0，费5.00；events_20261019.jsonl）。executor 轮询漏单（order_id 空）致 filled_qty=0，sells_morning 的 open_after 仍记 3；按账户心跳（10:00:59 positions 无 601118）手工回填剔除。"
+    },
+    "688322": {
+      "entry_date": "2026-10-20",
+      "entry_price": 85.9927,
+      "qty": 1100,
+      "dev20": -0.067901,
+      "gap": 0.09890109890109877,
+      "board": "机器人",
+      "days_held": 0,
+      "last_check_date": null,
+      "exit_date": "2026-10-21",
+      "exit_price": 93.25,
+      "exit_qty": 1100,
+      "exit_reason": "pop_sell",
+      "exit_fee": 124.12,
+      "closed_by": "fill_event"
     }
   },
   "backfill_note_2026_10_16": "三只 S1 遗留/深超跌票今日 14:50 全部卖出成交（events 为真源），因 order_id 空导致 executor 未回填，手工剔除至 closed。剩余 open = 今日新买 603168/600127/601118。"

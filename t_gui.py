@@ -828,6 +828,15 @@ _CHART_LIVE_STATE: dict = {}
 _CHART_LIVE_LOCK = threading.Lock()
 _CHART_LIVE_MAX = 200
 
+# ---- 多窗口看盘的**轻量帧**缓存（2026-10-21）----
+# 六宫格不复用单图的实时尾：那条现在建立在 3 个月深档（近 3000 根）上，~1s/只，
+# 6 只并发全卡 GIL ⇒ 一帧几十秒，界面上就是"K 线几乎不更新"。这里另开一套只算
+# K 线/MA5/成交额（120 根），TTL 2s。
+_MW_CACHE: dict = {}
+_MW_RUN: dict = {}
+_MW_LOCK = threading.Lock()
+_MW_TTL = 2.0
+
 
 def _slim_if_same(frame, known_sig):
     """前端已持有同一帧（`known_sig` == 帧的 sig）⇒ **不重复传序列**。
@@ -4766,12 +4775,13 @@ class Api:
         return None, "warming"
 
     def load_multi_chart(self, codes, period="min5", tail=90):
-        """**多窗口看盘**（2026-10-21 owner）：一次给多只票的实时尾。
+        """**多窗口看盘**：一次给多只票的实时尾。
 
-        · 每只票复用单图的 SWR（`_chart_live_frame`）：缓存新鲜就秒回、过期就后台刷新、
-          本次先回旧帧 ⇒ 6 个窗口互不阻塞，也不会有任何一个把主线程拖住；
-        · **只回最后 `tail` 根**：六宫格里每格只有 ~1/6 屏宽，90 根足够看形态，
-          桥传输从 6×100KB 降到 ~6×25KB；
+        ⚠️ 2026-10-21 改走 `_mw_frame`（**多窗口专用轻量帧**），不再复用单图的 SWR。
+        原因：单图实时尾现在建立在「3 个月深档」（近 3000 根）上，实测约 **1s/只**；
+        六宫格 6 只并发全卡在 GIL 上 ⇒ 一帧要好几十秒，owner 看到的就是
+        「K 线几乎不更新」。细胞只要 ~48 根，深档对它纯属浪费。
+
         · 单次最多 12 只（防误传整池）；**永不抛**。
         """
         items = []
@@ -4781,31 +4791,90 @@ class Api:
             if not _c:
                 continue
             try:
-                fr, st = self._chart_live_frame(_c, period)
+                fr, st = self._mw_frame(_c)
                 if not fr:
                     items.append({"code": _c, "ok": False, "warming": True})
                     continue
-                _s = fr.get("series") or {}
                 _at = lambda a: (a[-_tail:] if isinstance(a, list) else a)   # noqa: E731
                 _q = fr.get("quote") or {}
                 items.append({
-                    "code": _c, "ok": bool(_s.get("dates")),
+                    "code": _c, "ok": bool(fr.get("dates")),
                     "stale": st == "stale",
                     "name": self._instrument_name(_c),
-                    "quote": _q, "sig": fr.get("sig"),
+                    "quote": _q,
                     # 日线 MA5/10/20：六宫格与单图一样要画「日线均线」参考线
                     "dma": self._daily_ma_bundle(_c, _q.get("price")),
                     "series": {
-                        "dates": _at(_s.get("dates")), "ohlc": _at(_s.get("ohlc")),
-                        "volume": _at(_s.get("volume")), "amount": _at(_s.get("amount")),
-                        # ma 是「7 条均线的数组的数组」⇒ 每条各裁一次（别只裁外层）
-                        "ma": [_at(x) for x in (_s.get("ma") or [])],
+                        "dates": _at(fr.get("dates")), "ohlc": _at(fr.get("ohlc")),
+                        "volume": _at(fr.get("volume")), "amount": _at(fr.get("amount")),
+                        "ma5": _at(fr.get("ma5")),
                     },
                 })
             except Exception as e:
                 items.append({"code": _c, "ok": False,
                               "error": f"{type(e).__name__}: {str(e)[:60]}"})
         return {"items": items, "period": period}
+
+    def _mw_frame(self, code):
+        """多窗口专用的**轻量帧**（SWR 取）：返回 `(frame|None, state)`。
+
+        只算 K 线 / MA5 / 成交额，**不碰** MACD/RSI/BOLL/黄金分割/深档 ——
+        细胞只有 1/6 屏宽，48 根就够，深档的代价（~1s/只 × 6 只并发）直接把它拖成"不动"。
+        TTL 2s：一轮 6 只各算一次约 1.2s，够跟上 3 秒轮询。
+        """
+        _c = str(code).split("_")[0]
+        _now = _time_mod.time()
+        with _MW_LOCK:
+            hit = _MW_CACHE.get(_c)
+            _run = bool(_MW_RUN.get(_c))
+        if hit is not None and (_now - hit[0]) < _MW_TTL:
+            return hit[1], "fresh"
+        if not _run:
+            with _MW_LOCK:
+                _MW_RUN[_c] = True
+            _th.Thread(target=self._mw_worker, args=(_c,), daemon=True,
+                       name=f"mw-{_c}").start()
+        if hit is not None:
+            return hit[1], "stale"
+        return None, "warming"
+
+    def _mw_worker(self, code):
+        try:
+            fr = self._mw_compute(code)
+            if fr:
+                with _MW_LOCK:
+                    if len(_MW_CACHE) > 200:
+                        _MW_CACHE.clear()
+                    _MW_CACHE[code] = (_time_mod.time(), fr)
+        except Exception as e:
+            print(f"[WARN] [多窗口] {code} 取帧失败: {type(e).__name__}: {str(e)[:120]}")
+        finally:
+            with _MW_LOCK:
+                _MW_RUN[code] = False
+
+    def _mw_compute(self, code):
+        """轻量帧本体：腾讯 m5 尾（340 根，含未收盘根=实时）→ 最近 120 根 + MA5 + 成交额。"""
+        df = self._fetch_min_df(code, "min5")
+        if df is None or getattr(df, "empty", True):
+            return None
+        df = df.tail(120).reset_index(drop=True)
+        _closes = [float(x) for x in df["close"].astype(float).values]
+        _ma5 = []
+        for i in range(len(_closes)):
+            w = _closes[max(0, i - 4): i + 1]
+            _ma5.append(round(sum(w) / len(w), 3) if len(w) == 5 else None)
+        _amt = [round(((float(h) + float(l) + float(c)) / 3.0) * float(v) * 100.0)
+                for h, l, c, v in zip(df["high"], df["low"], df["close"], df["volume"])]
+        return {
+            "dates": [str(x)[:16] for x in df["time"].astype(str).values],
+            "ohlc": [[round(float(o), 3), round(float(c), 3), round(float(lo), 3),
+                      round(float(hi), 3)]
+                     for o, c, lo, hi in zip(df["open"], df["close"], df["low"], df["high"])],
+            "volume": [round(float(v)) for v in df["volume"]],
+            "amount": _amt,
+            "ma5": _ma5,
+            "quote": self._fetch_live_quote(code) or {},
+        }
 
     def _instrument_name(self, code):
         """6 位码 → 名称（本地名表，600s 缓存）。取不到回空串，前端就显示代码。"""

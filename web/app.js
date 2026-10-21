@@ -8063,7 +8063,7 @@ document.addEventListener("DOMContentLoaded", () => {
    ══════════════════════════════════════════════════════════════════════ */
 const MW_N = 6;                 // 3×2
 const MW_LS_KEY = "multiWatchCodes";
-const MW_PERIOD_MS = 4000;      // 刷新间隔（6 只票 × 每次约 1s 计算，4s 是 CPU 与实时性的折中）
+const MW_PERIOD_MS = 3000;      // 刷新间隔：轻量帧（只算 K线/MA5/成交额，120根）稳态一跳 ~0ms，3s 跟得上
 const MW_TAIL = 48;             // 每格只画最后 48 根 = 5 分 K 的一个交易日（owner：别显示太多 K 线）
 let mwCodes = [], mwInsts = [], mwTimer = null, mwBusy = false;
 
@@ -8246,7 +8246,7 @@ function _mwOption(s, dma) {
     _dmaLine(dma && dma.ma10, "#bc8cff", "日MA10"),
     _dmaLine(dma && dma.ma20, "#2dd4bf", "日MA20"),
   ].filter(Boolean);
-  const dates = s.dates || [], ohlc = s.ohlc || [], ma = s.ma || [];
+  const dates = s.dates || [], ohlc = s.ohlc || [];
   const amtYi = (s.amount && s.amount.length === dates.length)
     ? s.amount.map(v => (v == null || isNaN(Number(v))) ? null : +(Number(v) / 1e8).toFixed(2))
     : null;
@@ -8284,7 +8284,7 @@ function _mwOption(s, dma) {
         markLine: _dmaData.length ? { silent: true, symbol: "none", data: _dmaData } : undefined,
         itemStyle: { color: "#f85149", color0: "#3fb950",
                      borderColor: "#ff6b62", borderColor0: "#56d364", borderWidth: 1 } },
-      line(ma[0], "#e3b341", 1.2),   // 本周期 MA5（5 根 5 分 K = 25 分钟）
+      line(s.ma5, "#e3b341", 1.2),   // 本周期 MA5（5 根 5 分 K = 25 分钟）
       { name: "量能", type: "bar", xAxisIndex: 1, yAxisIndex: 1, data: volSer, barMaxWidth: 10 },
     ],
   };

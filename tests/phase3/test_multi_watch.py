@@ -18,43 +18,40 @@ _JS = (_ROOT / "web" / "app.js").read_text(encoding="utf-8")
 _HTML = (_ROOT / "web" / "index.html").read_text(encoding="utf-8")
 
 
-def _frame(n=300):
+def _frame(n=120):
+    """多窗口**轻量帧**的形状（不是单图的整帧）：只到 K线/MA5/成交额。"""
     return {
-        "series": {
-            "dates": [f"d{i}" for i in range(n)],
-            "ohlc": [[1.0, 2.0, 0.5, 2.5]] * n,
-            "volume": [100.0] * n,
-            "amount": [1e8] * n,
-            # ma 是「7 条均线的数组的数组」—— 裁尾巴时**每条都要裁**，只裁外层是经典坑
-            "ma": [[float(i) for i in range(n)] for _ in range(7)],
-        },
+        "dates": [f"d{i}" for i in range(n)],
+        "ohlc": [[1.0, 2.0, 0.5, 2.5]] * n,
+        "volume": [100.0] * n,
+        "amount": [1e8] * n,
+        "ma5": [float(i) for i in range(n)],
         "quote": {"price": 10.0, "change_pct": 1.25},
-        "sig": "2026-10-21 09:35:10.0:300",
     }
 
 
 class TestLoadMultiChart:
     def test_trims_every_series_to_tail(self, monkeypatch):
         api = t_gui.Api()
-        monkeypatch.setattr(api, "_chart_live_frame", lambda c, p: (_frame(300), "fresh"))
+        monkeypatch.setattr(api, "_mw_frame", lambda c: (_frame(120), "fresh"))
         r = api.load_multi_chart(["600000"], "min5", 90)
         it = r["items"][0]
         assert it["ok"] and it["code"] == "600000"
         assert len(it["series"]["dates"]) == 90
-        assert it["series"]["dates"][-1] == "d299"
-        assert all(len(x) == 90 for x in it["series"]["ma"]), "ma 必须逐条裁"
+        assert it["series"]["dates"][-1] == "d119"
+        assert len(it["series"]["ma5"]) == 90, "MA5 也要跟着裁"
         assert it["quote"]["price"] == 10.0
 
     def test_warming_item_is_reported_not_raised(self, monkeypatch):
         api = t_gui.Api()
-        monkeypatch.setattr(api, "_chart_live_frame", lambda c, p: (None, "warming"))
+        monkeypatch.setattr(api, "_mw_frame", lambda c: (None, "warming"))
         r = api.load_multi_chart(["600000"], "min5", 90)
         it = r["items"][0]
         assert it["ok"] is False and it["warming"] is True
 
     def test_capped_at_12_and_strips_underscore_suffix(self, monkeypatch):
         api = t_gui.Api()
-        monkeypatch.setattr(api, "_chart_live_frame", lambda c, p: (_frame(50), "fresh"))
+        monkeypatch.setattr(api, "_mw_frame", lambda c: (_frame(60), "fresh"))
         codes = [f"{600000 + i}" for i in range(20)]
         r = api.load_multi_chart(codes, "min5", 40)
         assert len(r["items"]) == 12                     # 防误传整池
@@ -66,9 +63,9 @@ class TestLoadMultiChart:
     def test_never_raises_on_bad_frame(self, monkeypatch):
         api = t_gui.Api()
 
-        def _boom(c, p):
+        def _boom(c):
             raise RuntimeError("x")
-        monkeypatch.setattr(api, "_chart_live_frame", _boom)
+        monkeypatch.setattr(api, "_mw_frame", _boom)
         r = api.load_multi_chart(["600000"], "min5", 90)
         assert r["items"][0]["ok"] is False and "error" in r["items"][0]
 
@@ -134,7 +131,7 @@ class TestFrontend:
         assert '"#58a6ff"' in _JS and '"#bc8cff"' in _JS and '"#2dd4bf"' in _JS
 
     def test_realtime_polling(self):
-        assert "MW_PERIOD_MS = 4000" in _JS
+        assert "MW_PERIOD_MS = 3000" in _JS
         assert "mwTimer = setInterval(mwTick, MW_PERIOD_MS)" in _JS
         # 每格只画 48 根（5 分 K 的一个交易日）—— owner：「不要显示太多的 K 线」
         assert "MW_TAIL = 48" in _JS
@@ -150,3 +147,26 @@ class TestFrontend:
         assert "function closeMultiWatch()" in _JS
         assert "mwTimer = null" in _JS
         assert "i.dispose()" in _JS
+
+
+class TestLightweightFrame:
+    def test_uses_light_frame_not_deep_base(self):
+        """owner 2026-10-21：「多窗口 K 线更新明显不对，很慢，几乎看不到实时变化」。
+
+        根因：六宫格原复用**单图实时尾**，而单图现在建在「3 个月深档」（近 3000 根）上，
+        实测 ~1s/只；6 只并发全卡在 GIL 上 ⇒ 一帧几十秒，等于不动。
+        现在改走 `_mw_frame`：只取 m5 尾 120 根 + MA5 + 成交额，
+        **不碰** MACD/RSI/BOLL/黄金分割（细胞只有 1/6 屏宽，用不着）。
+        """
+        import inspect
+        src = inspect.getsource(t_gui.Api._mw_compute)
+        assert "_fetch_min_df" in src
+        assert "tail(120)" in src
+        assert "_calc_ma_and_indicators" not in src, "轻量帧不该跑整套指标"
+        assert "_calc_fibonacci" not in src, "轻量帧不该算黄金分割"
+
+    def test_multi_does_not_use_single_chart_cache(self):
+        import inspect
+        src = inspect.getsource(t_gui.Api.load_multi_chart)
+        assert "_mw_frame" in src
+        assert "_chart_live_frame" not in src, "别再复用单图的深档帧"
