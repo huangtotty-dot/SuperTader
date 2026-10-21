@@ -1232,6 +1232,30 @@ def on_order_status(context, order):
                          f"{_r_side} {volume}股被拒 status={status} {_rej_detail}", code=_r_code)
         except Exception:
             pass
+        # ── 2026-10-21 拒单回填：OSC 买侧「挂单即入账」⇒ 拒单必须回滚账本虚挂份额
+        # 并把 fills/sells 留痕改 rejected（否则留痕永远 submitted、summary 虚报、
+        # 账本虚挂到次日 10:00 卖前 reconcile 才剔除——10-21 002591/688028 实证）。
+        # 卖侧下单不扣账 ⇒ apply_reject 内部对 SELL 只修留痕不动账本。
+        try:
+            if getattr(context, "mode", None) == MODE_LIVE:
+                _rj_res = _osc_fillbackfill.apply_reject(
+                    _OSC_BOOK_DIR,
+                    {"time": str(getattr(context, "now", None) or datetime.now()),
+                     "code": _r_code, "side": _r_side, "qty": int(volume or 0),
+                     "order_id": str(order.get("id") or order.get("order_id") or ""),
+                     "status": status, "rej_detail": _rej_detail}, log=print)
+                if _rj_res:
+                    print(f"[FB] 拒单回填 {_r_code} {_r_side} {volume} → "
+                          f"{_rj_res.get('action')} {_rj_res.get('detail', '')}")
+        except Exception as _rje:
+            # 回填失败绝不阻断主链（账本残差由卖前 reconcile_book 夹紧兜底）
+            print(f"[FB] ⚠️ 拒单回填异常（不阻断）: {_rje}")
+            try:
+                write_risk(str(datetime.now()), "reject_backfill_error",
+                           f"{code} {volume}股拒单回填异常: {str(_rje)[:150]}",
+                           code=code)
+            except Exception:
+                pass
 
 
 def on_backtest_finished(context, indicator):

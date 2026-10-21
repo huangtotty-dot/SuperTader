@@ -27,6 +27,15 @@ GM 仿真终端**同步下单回报**里 `order_id` 恒空、`filled_qty` 恒 0�
 
 executor 的迟确认兜底**保留不删**（双保险）；两者叠加安全——见下「并发与幂等」。
 
+## 2026-10-21 拒单回填（apply_reject）
+
+根因：宿主拒单分支（`gm_main.on_order_status` status∈4/5/6/8/12）只写 write_reject/
+write_risk，从不回填 OSC——而买侧「挂单即入账」，拒单 ⇒ 账本虚挂 + fills 留痕永远
+submitted + summary `rejected_count=0` 虚报（10-21 002591/688028 实证）。
+`apply_reject(book_dir, event)` 对称于 `apply_fill`：留痕 status→rejected（summary
+按 `_buys_summary` 重算即自动正确）、BUY 时把该笔「qty_placed@委托价」份额从账本
+剔除（加权反算还原旧成本）、SELL 时账本不动（卖侧下单不扣账，无账可回滚）。
+
 ## 并发与幂等
 
   · GM SDK 单一事件派发线程（2026-09-11 事故注释实证：on_bar 阻塞会让 fill 排队）⇒
@@ -445,3 +454,189 @@ def _apply_buy(book, open_pos, book_dir, date, code, qty, price, fee, order_id, 
         % (code, oq, placed))
     return {"action": "buy_price_corrected", "code": code, "qty": qty, "price": price,
             "detail": "账本已被夹紧(qty=%d)，只修价" % oq}
+
+
+# ════════════════════════ 拒单回填（2026-10-21） ════════════════════════
+
+# 留痕上表示「已确认成交」的状态——拒单事件与它们矛盾 ⇒ 语义守卫跳过
+_CONFIRMED_STATUS = {"filled", "filled_by_event", "filled_by_position"}
+
+
+def reject_key(event: dict) -> str:
+    """拒单事件唯一键（幂等锚）——side 加 REJECT_ 前缀，与同参数 fill 事件不撞键。"""
+    side = str(event.get("side") or "").upper()
+    return fill_key({**event, "side": "REJECT_" + side, "price": 0})
+
+
+def _reject_buy_fills_file(book_dir: str, date: str, code: str,
+                           status, rej_detail: str, log):
+    """fills_{date}.json 匹配买单留痕 → rejected + summary 重算 + exec_report 同步。
+    返回被修正的 rec；无命中/语义守卫 → None（只读不改）。"""
+    fp = os.path.join(book_dir, "fills_%s.json" % date)
+    fills = _load_json(fp)
+    if not isinstance(fills, dict):
+        return None
+    rec = _find_unconfirmed_buy_rec(fills, code)
+    if rec is None:
+        return None                       # 孤儿/手工单或留痕已终态（rejected/全成）
+    if str(rec.get("status")) in _CONFIRMED_STATUS:
+        # 语义守卫：留痕已确认成交却来拒单（事件乱序/重复）⇒ 跳过，不得改回 rejected
+        log("[FB] BUY 拒单 %s：留痕已 %s（成交与拒单矛盾）⇒ 语义守卫跳过"
+            % (code, rec.get("status")))
+        return None
+    rec["status"] = "rejected"
+    rec["message"] = "柜台拒单 status=%s %s" % (status, rej_detail)
+    rec["reject_confirmed_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    rec["qty_remaining"] = 0
+    # summary 按合并口径全量重算：status→rejected 后 buys_placed 自动减、rejected_count 自动加
+    try:
+        summary = dict(fills.get("summary") or {})
+        summary.update(executor._buys_summary(fills.get("buys") or []))
+        fills["summary"] = summary
+    except Exception:
+        pass
+    try:
+        _atomic_dump(fills, fp)
+        _rep_fp = os.path.join(book_dir, "exec_report_%s.json" % date)
+        _rep = _load_json(_rep_fp)
+        if isinstance(_rep, dict):
+            _rep["summary"] = fills.get("summary")
+            _atomic_dump(_rep, _rep_fp)
+    except Exception as e:
+        log("[FB] ⚠️ 拒单 fills 留痕落盘失败（账本照修）: %s" % e)
+    return rec
+
+
+def _reject_sell_fills_file(book_dir: str, date: str, code: str,
+                            status, rej_detail: str, log) -> bool:
+    """sells_morning_/sells_close_ 匹配卖单留痕 → rejected + 该文件 summary 重算。
+    返回是否修正。账本不动——卖侧 executor 下单时不扣账本，拒单无账可回滚。"""
+    fills, fp, hit = _find_sell_rec(book_dir, date, code)
+    if hit is None:
+        return False                        # 孤儿/手工单或留痕已终态
+    if str(hit.get("status")) in _CONFIRMED_STATUS \
+            or int(hit.get("filled_qty") or 0) > 0:
+        # 语义守卫：留痕已确认成交却来拒单 ⇒ 跳过（与 _fix_sell_fills_file 同纪律）
+        log("[FB] SELL 拒单 %s：留痕已 %s（成交与拒单矛盾）⇒ 语义守卫跳过"
+            % (code, hit.get("status")))
+        return False
+    hit["status"] = "rejected"
+    hit["message"] = "柜台拒单 status=%s %s" % (status, rej_detail)
+    hit["reject_confirmed_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    hit["qty_remaining"] = 0
+    try:
+        summary = dict(fills.get("summary") or {})
+        summary["rejected_count"] = sum(
+            1 for r in (fills.get("sells") or [])
+            if r.get("status") in _BAD_STATUS or r.get("status") == "error")
+        fills["summary"] = summary
+        _atomic_dump(fills, fp)
+    except Exception as e:
+        log("[FB] ⚠️ 拒单 sells 留痕落盘失败: %s" % e)
+    return True
+
+
+def apply_reject(book_dir: str, event: dict, log=print) -> dict | None:
+    """把一条拒单事件回填：留痕 → rejected（summary 重算）+ BUY 时回滚账本虚挂份额。
+    幂等；全程 fail-open（单条失败 log 后继续，由调用方兜底）。
+
+    event 字段（宿主拒单分支构造）：
+        time / code / side∈{BUY,SELL} / qty / order_id / status(原始数字码) / rej_detail
+    返回动作描述 dict（跳过返回 {"action": "skipped", ...}；事件非法返回 None）。
+    """
+    code = executor.code_of(event.get("code")) or str(event.get("code") or "")
+    side = str(event.get("side") or "").upper()
+    ts = str(event.get("time") or datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+    date = ts[:10]
+    try:
+        qty = int(event.get("qty") or 0)
+    except (TypeError, ValueError):
+        return None
+    if not code or side not in ("BUY", "SELL") or qty <= 0 or len(date) != 10:
+        return None
+    status = event.get("status")
+    rej_detail = str(event.get("rej_detail") or "")
+    order_id = str(event.get("order_id") or "")
+
+    key = reject_key({"time": ts, "code": code, "side": side, "qty": qty})
+
+    # ── 幂等①：日志键去重 ──
+    if key in _journal_keys(book_dir):
+        return {"action": "skipped", "reason": "duplicate_key", "key": key,
+                "code": code, "side": side}
+
+    book = executor.load_book(book_dir)
+    open_pos = book.setdefault("open", {})
+    book_dirty = False
+
+    if side == "SELL":
+        if _reject_sell_fills_file(book_dir, date, code, status, rej_detail, log):
+            log("[FB] SELL 拒单 %s %d股：留痕→rejected（账本不动，卖侧下单不扣账）"
+                % (code, qty))
+            result = {"action": "sell_rejected", "code": code, "qty": qty,
+                      "detail": "卖单留痕→rejected；账本不动"}
+        else:
+            result = {"action": "skipped", "reason": "semantic_guard",
+                      "code": code, "side": side, "qty": qty,
+                      "detail": "无匹配在途卖单留痕（孤儿/手工单或已终态）"}
+    else:
+        rec = _reject_buy_fills_file(book_dir, date, code, status, rej_detail, log)
+        if rec is None:
+            result = {"action": "skipped", "reason": "semantic_guard",
+                      "code": code, "side": side, "qty": qty,
+                      "detail": "无匹配在途买单留痕（孤儿/手工单或已终态）"}
+        else:
+            placed = int(rec.get("qty_placed") or 0)
+            rec_px = float(rec.get("price") or 0)
+            entry = open_pos.get(code)
+            if entry is None:
+                # 账本已无该 code（卖前 reconcile 已夹紧）⇒ no-op，留痕已修
+                log("[FB] BUY 拒单 %s %d股：留痕→rejected；账本已无该票"
+                    "（reconcile 已夹紧）⇒ 账本 no-op" % (code, placed))
+                result = {"action": "buy_rejected_book_missing", "code": code,
+                          "qty": placed,
+                          "detail": "留痕→rejected；账本已无条目 no-op"}
+            else:
+                # 关键：OSC 买侧「挂单即入账」，该 code 条目含本笔 qty_placed@委托价
+                # 份额（可能被加权合并进旧持仓）⇒ 剔除并反算加权价还原旧成本。
+                oq = int(entry.get("qty") or 0)
+                opx = float(entry.get("entry_price") or 0)
+                nq = oq - placed
+                book_dirty = True
+                if oq < placed:
+                    # 异常态：账本数量 < 委托量（外部夹紧过）⇒ 删条目并警示
+                    open_pos.pop(code, None)
+                    log("[FB] ⚠️ BUY 拒单 %s：账本数量 %d < 委托量 %d（异常态）⇒ 删条目"
+                        % (code, oq, placed))
+                    result = {"action": "buy_rejected_removed_abnormal", "code": code,
+                              "qty": placed,
+                              "detail": "账本 %d < 委托 %d（异常），删条目" % (oq, placed)}
+                elif nq == 0:
+                    open_pos.pop(code, None)
+                    log("[FB] BUY 拒单 %s %d股@%s：整条虚挂剔除" % (code, placed, rec_px))
+                    result = {"action": "buy_rejected_removed", "code": code,
+                              "qty": placed,
+                              "detail": "open %d→0，剔除条目" % oq}
+                else:
+                    npx = (opx * oq - rec_px * placed) / nq
+                    entry["qty"] = nq
+                    entry["entry_price"] = round(npx, 4)
+                    log("[FB] BUY 拒单 %s %d股@%.4f：账本 %d→%d，"
+                        "entry_price %.4f→%.4f（还原旧成本）"
+                        % (code, placed, rec_px, oq, nq, opx, npx))
+                    result = {"action": "buy_rejected_unweighted", "code": code,
+                              "qty": placed,
+                              "detail": "账本 %d→%d，entry_price %.4f→%.4f"
+                                        % (oq, nq, opx, npx)}
+
+    if book_dirty:
+        _atomic_dump(book, os.path.join(book_dir, executor.BOOK_FILE))
+
+    result["key"] = key
+    _journal_append(book_dir, {**result,
+                               "event": {"time": ts, "code": code, "side": side,
+                                         "qty": qty, "status": status,
+                                         "order_id": order_id,
+                                         "rej_detail": rej_detail},
+                               "applied_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")})
+    return result
