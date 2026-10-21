@@ -546,9 +546,7 @@
         <button class="mini-btn" onclick="closeMultiWatch()">×</button>
       </div>
     </div>
-    <!-- 选股候选（体检持仓）。用 input+datalist 而不是 select：体检数据还没到时
-         列表可能是空的，那时用户仍能**直接敲代码**；列表到了再当提示用。 -->
-    <datalist id="mwNames"></datalist>
+    <!-- 每格两个控件：下拉（体检持仓，只显示名称）+ 手输框（不在持仓里的票直接敲代码） -->
     <div id="multiWatchGrid" class="mw-grid"></div>
   </div>
 </div>

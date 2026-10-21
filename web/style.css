@@ -318,7 +318,11 @@ tr:hover td { background: rgba(243,93,43,.03); }
 .mw-head { display: flex; align-items: center; gap: 6px; padding: 4px 6px;
   border-bottom: 1px solid rgba(139,148,158,.15); flex: 0 0 auto; }
 .mw-sel { flex: 1; min-width: 0; background: #161b22; color: #c9d1d9; border: 1px solid #30363d;
-  border-radius: 4px; font-size: 11px; padding: 2px 4px; }
+  border-radius: 4px; font-size: 11px; padding: 2px 4px; cursor: pointer; }
+/* 备用手输框：下拉里没有的票（不在持仓里）直接敲代码 */
+.mw-inp { flex: 0 0 58px; width: 58px; background: #161b22; color: #c9d1d9;
+  border: 1px solid #30363d; border-radius: 4px; font-size: 11px; padding: 2px 4px;
+  font-family: var(--mono, monospace); }
 .mw-name { font-size: 11px; color: #c9d1d9; white-space: nowrap; overflow: hidden;
   text-overflow: ellipsis; max-width: 96px; }
 .mw-px { font-size: 11px; font-family: var(--mono, monospace); white-space: nowrap; }

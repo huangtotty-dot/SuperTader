@@ -4525,6 +4525,50 @@ function _scheduleNowTag(inst, price, color) {
   else setTimeout(_run, 16);
 }
 
+/* 缺口色块（单一真源）：相邻两根**价格区间不重叠** = 跳空；只画**未完全回补**的。
+   · 上跳：今低 > 昨高且幅度 ≥ 0.3%；下跳对称。
+   · 回补终点：后续某根 low ≤ 昨高（上跳）/ high ≥ 昨低（下跳）⇒ 色块到那根为止。
+   · 只画最近 `lookback` 根、最多 `maxN` 块，避免历史缺口把图糊满。
+   2026-10-21：从 renderStockChart 里抽出来 —— 六宫格要用**同一套口径**（owner 报
+   「多窗口里缺口信息没有显示」，各写一份必然漂移）。 */
+function buildGapAreas(ohlc, lookback, minPct, maxN) {
+  const out = [];
+  if (!ohlc || ohlc.length < 2) return out;
+  const n = ohlc.length;
+  const from = Math.max(1, n - (lookback || 250));
+  const MIN = (minPct == null) ? 0.003 : minPct;
+  for (let i = from; i < n; i++) {
+    const o = ohlc[i], pv = ohlc[i - 1];
+    if (!o || !pv) continue;
+    const lo = o[2], hi = o[3], plo = pv[2], phi = pv[3];
+    let up = null, loB = 0, hiB = 0;
+    if (phi > 0 && lo > phi && (lo - phi) / phi >= MIN) { up = true; loB = phi; hiB = lo; }
+    else if (plo > 0 && hi < plo && (plo - hi) / plo >= MIN) { up = false; loB = hi; hiB = plo; }
+    if (up === null) continue;
+    let end = n - 1;
+    for (let j = i + 1; j < n; j++) {
+      const b = ohlc[j];
+      if (!b) continue;
+      if (up ? b[2] <= loB : b[3] >= hiB) { end = j; break; }   // 完全回补 ⇒ 色块到此为止
+    }
+    out.push([{
+      xAxis: i, yAxis: loB,
+      itemStyle: {
+        color: up ? "rgba(248,81,73,.13)" : "rgba(63,185,80,.13)",
+        borderColor: up ? "rgba(248,81,73,.5)" : "rgba(63,185,80,.5)",
+        borderWidth: 1, borderType: "dashed",
+      },
+      name: up ? "↑缺口" : "↓缺口",
+      // 小缺口（<1%）不写字，只留色块 —— 否则密集区一串标签互相压
+      label: { show: (hiB - loB) / (loB || 1) >= 0.01, fontSize: 9,
+               color: up ? "rgba(248,81,73,.9)" : "rgba(63,185,80,.9)" },
+    }, { xAxis: end, yAxis: hiB }]);
+  }
+  const MAX = maxN || 24;
+  if (out.length > MAX) out.splice(0, out.length - MAX);
+  return out;
+}
+
 function renderStockChart(applyZoom = true) {
   // 2026-10-20：实时尾（1~5s）重绘时**不要**再写 dataZoom —— setOption 里的
   // start/end 会把用户正在拖动的滑杆弹回，表现为「看一会儿就缩放不了」。
@@ -4738,48 +4782,9 @@ function renderStockChart(applyZoom = true) {
     }
     return i0 < 0 ? null : [i0, i1];
   };
-  /* 缺口（2026-10-17 owner：「用颜色将区域显示出来」）
-     定义：相邻两根**价格区间不重叠** —— 今低 > 昨高 = 向上跳空；今高 < 昨低 = 向下跳空。
-     · 只画**未完全回补**的：上跳缺口在后续某根 low ≤ 昨高（回到底部）时结束；下跳对称。
-     · 只画最近 `GAP_LOOKBACK` 根内的，最多 `GAP_MAX` 块，避免历史缺口把图糊满。
-     · 幅度门槛 `GAP_MIN_PCT`（0.3%）—— 与仓位结构层「摆动门槛」同一思路，滤掉十字星级的伪缺口。 */
-  const GAP_LOOKBACK = 250, GAP_MIN_PCT = 0.003, GAP_MAX = 24;
-  const gapAreas = [];
-  if (showGaps && period.ohlc && period.ohlc.length > 1) {
-    const _n = period.ohlc.length;
-    const _from = Math.max(1, _n - GAP_LOOKBACK);
-    for (let i = _from; i < _n; i++) {
-      const o = period.ohlc[i], pv = period.ohlc[i - 1];
-      if (!o || !pv) continue;
-      const lo = o[2], hi = o[3], plo = pv[2], phi = pv[3];
-      let up = null, loB = 0, hiB = 0;
-      if (phi > 0 && lo > phi && (lo - phi) / phi >= GAP_MIN_PCT) { up = true;  loB = phi; hiB = lo; }
-      else if (plo > 0 && hi < plo && (plo - hi) / plo >= GAP_MIN_PCT) { up = false; loB = hi; hiB = plo; }
-      if (up === null) continue;
-      let end = _n - 1;
-      for (let j = i + 1; j < _n; j++) {
-        const b = period.ohlc[j];
-        if (!b) continue;
-        if (up ? b[2] <= loB : b[3] >= hiB) { end = j; break; }   // 完全回补 ⇒ 色块到此为止
-      }
-      gapAreas.push({
-        up, at: period.dates[i], end,
-        area: [{
-          xAxis: i, yAxis: loB,
-          itemStyle: {
-            color: up ? "rgba(248,81,73,.13)" : "rgba(63,185,80,.13)",
-            borderColor: up ? "rgba(248,81,73,.5)" : "rgba(63,185,80,.5)",
-            borderWidth: 1, borderType: "dashed",
-          },
-          name: up ? "↑缺口" : "↓缺口",
-          // 小缺口（<1%）不写字，只留色块 —— 否则密集区一串标签互相压
-          label: { show: (hiB - loB) / (loB || 1) >= 0.01, fontSize: 9,
-                   color: up ? "rgba(248,81,73,.9)" : "rgba(63,185,80,.9)" },
-        }, { xAxis: end, yAxis: hiB }],
-      });
-    }
-    if (gapAreas.length > GAP_MAX) gapAreas.splice(0, gapAreas.length - GAP_MAX);
-  }
+  /* 缺口（2026-10-17 owner：「用颜色将区域显示出来」）—— 逻辑已抽到 `buildGapAreas`，
+     六宫格复用同一套口径（2026-10-21 owner：多窗口里也要看到缺口）。 */
+  const gapAreas = showGaps ? buildGapAreas(period.ohlc) : [];
 
   const boxAreas = boxes
     .filter(b => b.low && b.high)
@@ -5219,7 +5224,7 @@ function renderStockChart(applyZoom = true) {
                      borderColor: "#ff6b62", borderColor0: "#56d364", borderWidth: 1 },
         // 箱体 + 缺口共用一个 markArea（ECharts 每个 series 只认一个）
         markArea: (() => {
-          const _d = [...(showBoxes ? boxAreas : []), ...gapAreas.map(g => g.area)];
+          const _d = [...(showBoxes ? boxAreas : []), ...gapAreas];
           return _d.length ? { silent: true, data: _d } : undefined;
         })(),
         markLine: { symbol: "none",
@@ -8128,16 +8133,25 @@ function _mwBuildCells() {
   if (dl) {
     dl.innerHTML = hs.map(h => `<option value="${esc(h.code)}">${esc(h.name || h.code)}</option>`).join("");
   }
-  host.innerHTML = mwCodes.map((c, i) => `<div class="mw-cell">
+  host.innerHTML = mwCodes.map((c, i) => {
+    // 下拉**只显示名称**（owner：不要显示代码）；已保存但不持仓的票补一个占位项
+    const opts = ['<option value="">— 选股 —</option>']
+      .concat(hs.map(h => `<option value="${esc(h.code)}"${h.code === c ? " selected" : ""}>`
+        + `${esc(h.name || h.code)}</option>`));
+    if (c && !hs.some(h => h.code === c)) {
+      opts.push(`<option value="${esc(c)}" selected>${esc(c)}</option>`);
+    }
+    return `<div class="mw-cell">
       <div class="mw-head">
-        <input class="mw-sel" list="mwNames" value="${esc(c || "")}" placeholder="代码 / 从列表选"
-               title="输入 6 位代码，或从下拉里选体检持仓；回车立即生效"
+        <select class="mw-sel" title="从体检持仓里选" onchange="mwPick(${i}, this.value)">${opts.join("")}</select>
+        <input class="mw-inp" value="${esc(c || "")}" placeholder="代码" title="也可以直接敲 6 位代码"
                onchange="mwPick(${i}, this.value)"
                onkeydown="if(event.key==='Enter'){this.blur();}">
         <span class="mw-px" id="mwPx${i}"></span>
       </div>
       <div class="mw-chart" id="mwChart${i}"></div>
-    </div>`).join("");
+    </div>`;
+  }).join("");
   for (let i = 0; i < MW_N; i++) {
     const el = document.getElementById("mwChart" + i);
     if (el && window.echarts) {
@@ -8155,8 +8169,11 @@ function mwPick(i, raw) {
   const code = m ? m[1] : "";
   mwCodes[i] = code;
   _mwSaveCodes();
-  const inp = document.querySelectorAll(".mw-sel")[i];
-  if (inp) inp.value = code;                 // 回填成裸码，与格子里的图对齐
+  // 两个控件都回填成裸码：`select` 负责"从持仓里点选"，`input` 负责"敲任意代码"
+  const sel = document.querySelectorAll(".mw-sel")[i];
+  if (sel) sel.value = code;
+  const inp = document.querySelectorAll(".mw-inp")[i];
+  if (inp) inp.value = code;
   // 换票先清掉旧图，别让上一只票的线留在格子里
   const inst = mwInsts[i];
   if (inst) {
@@ -8168,9 +8185,23 @@ function mwPick(i, raw) {
   if (code) mwTick();
 }
 
-/* 六宫格里的迷你 K 线：K 线 + 本周期 MA5/MA20 + 成交额。刻意不画 MACD/RSI/箱体 ——
-   每格只有 ~1/6 屏宽，塞满就成了噪声；要看细节双击/点开大图。 */
-function _mwOption(s) {
+/* 六宫格里的迷你 K 线：K 线 + **日线 MA5/10/20**（虚线，与单图同款）+ 缺口色块 + 成交额。
+   刻意不画 MACD/RSI/箱体 —— 每格只有 ~1/6 屏宽，塞满就成了噪声；要看细节点开大图。
+   2026-10-21 owner：① 缺口没显示 ② 5日/10日/20日均线没显示 ⇒ 都补上，
+   且缺口与单图**共用** `buildGapAreas`，口径不会漂。 */
+function _mwOption(s, dma) {
+  const gaps = buildGapAreas(s.ohlc, 250, 0.003, 8);   // 一格只画最近 8 块，别糊满
+  const _dmaLine = (y, color, txt) => (y == null || !isFinite(y)) ? null : {
+    yAxis: y,
+    lineStyle: { color, type: "dashed", width: 1, opacity: .9 },
+    label: { formatter: `${txt} ${Number(y).toFixed(2)}`, color, fontSize: 8,
+             position: "insideStartTop" },
+  };
+  const _dmaData = [
+    _dmaLine(dma && dma.ma5, "#58a6ff", "日MA5"),
+    _dmaLine(dma && dma.ma10, "#bc8cff", "日MA10"),
+    _dmaLine(dma && dma.ma20, "#2dd4bf", "日MA20"),
+  ].filter(Boolean);
   const dates = s.dates || [], ohlc = s.ohlc || [], ma = s.ma || [];
   const amtYi = (s.amount && s.amount.length === dates.length)
     ? s.amount.map(v => (v == null || isNaN(Number(v))) ? null : +(Number(v) / 1e8).toFixed(2))
@@ -8204,10 +8235,12 @@ function _mwOption(s) {
     ],
     series: [
       { name: "K线", type: "candlestick", data: ohlc, barMaxWidth: 10,
+        // 缺口色块 + 日线均线（与单图同一套口径/颜色）
+        markArea: gaps.length ? { silent: true, data: gaps } : undefined,
+        markLine: _dmaData.length ? { silent: true, symbol: "none", data: _dmaData } : undefined,
         itemStyle: { color: "#f85149", color0: "#3fb950",
                      borderColor: "#ff6b62", borderColor0: "#56d364", borderWidth: 1 } },
       line(ma[0], "#e3b341", 1.2),   // 本周期 MA5（5 根 5 分 K = 25 分钟）
-      line(ma[2], "#58a6ff", 1.0),   // 本周期 MA20
       { name: "量能", type: "bar", xAxisIndex: 1, yAxisIndex: 1, data: volSer, barMaxWidth: 10 },
     ],
   };
@@ -8243,7 +8276,7 @@ async function mwTick() {
         if (!el || !window.echarts) return;
         inst = mwInsts[i] = echarts.init(el);
       }
-      try { inst.setOption(_mwOption(s), { notMerge: true }); } catch (e) { /* 单格失败不影响别的格 */ }
+      try { inst.setOption(_mwOption(s, it.dma), { notMerge: true }); } catch (e) { /* 单格失败不影响别的格 */ }
     });
   } catch (e) { /* 静默：下一跳重试 */ }
   finally { mwBusy = false; }

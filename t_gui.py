@@ -4787,10 +4787,14 @@ class Api:
                     continue
                 _s = fr.get("series") or {}
                 _at = lambda a: (a[-_tail:] if isinstance(a, list) else a)   # noqa: E731
+                _q = fr.get("quote") or {}
                 items.append({
                     "code": _c, "ok": bool(_s.get("dates")),
                     "stale": st == "stale",
-                    "quote": fr.get("quote") or {}, "sig": fr.get("sig"),
+                    "name": self._instrument_name(_c),
+                    "quote": _q, "sig": fr.get("sig"),
+                    # 日线 MA5/10/20：六宫格与单图一样要画「日线均线」参考线
+                    "dma": self._daily_ma_bundle(_c, _q.get("price")),
                     "series": {
                         "dates": _at(_s.get("dates")), "ohlc": _at(_s.get("ohlc")),
                         "volume": _at(_s.get("volume")), "amount": _at(_s.get("amount")),
@@ -4802,6 +4806,48 @@ class Api:
                 items.append({"code": _c, "ok": False,
                               "error": f"{type(e).__name__}: {str(e)[:60]}"})
         return {"items": items, "period": period}
+
+    def _instrument_name(self, code):
+        """6 位码 → 名称（本地名表，600s 缓存）。取不到回空串，前端就显示代码。"""
+        try:
+            return str(self._instrument_names().get(str(code).split("_")[0]) or "")
+        except Exception:
+            return ""
+
+    def _daily_ma_bundle(self, code, price=None):
+        """日线 MA5/10/20（**含当日**）：`MA_n = (前 n-1 个完成日收盘 + 现价) / n`。
+
+        与 `core.ma_reclaim.ma5_state` 同口径（日线均线该把当日算进去），数据走本地
+        日线缓存 ⇒ **零网络**。60 秒记忆：六宫格每 4 秒轮询，日线基准一天只变一次，
+        没必要每跳读 6 个文件。
+        """
+        try:
+            _c = str(code).split("_")[0]
+            _now = _time_mod.time()
+            _memo = getattr(self, "_dma_memo", None)
+            if _memo is None:
+                _memo = self._dma_memo = {}
+            _hit = _memo.get(_c)
+            if _hit is not None and (_now - _hit[0]) < 60:
+                return _hit[1]
+            import core.chart_cache as _cc
+            df = _cc.load_daily_display(_c)
+            if df is None or getattr(df, "empty", True):
+                return None
+            _today = datetime.now().strftime("%Y-%m-%d")
+            _dts = [str(x)[:10] for x in df["date"].astype(str).values]
+            _cls = [float(x) for x in df["close"].astype(float).values]
+            _basis = [c for d, c in zip(_dts, _cls) if d < _today and c == c]
+            if len(_basis) < 19:
+                return None
+            _px = float(price) if price else float(_cls[-1])
+            if _px <= 0:
+                return None
+            out = {f"ma{n}": round((sum(_basis[-(n - 1):]) + _px) / n, 3) for n in (5, 10, 20)}
+            _memo[_c] = (_now, out)
+            return out
+        except Exception:
+            return None
 
     def _chart_live_worker(self, base, period):
         """后台计算一次实时尾并落缓存（`load_chart_realtime` 的 SWR 写端）。失败静默。"""
