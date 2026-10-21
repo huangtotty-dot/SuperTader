@@ -3972,10 +3972,12 @@ function _chartLiveIntervalMs() {
   // 2026-10-20 owner：「盘中打开 K 线重点看 10 分钟线，实时性非常重要」——
   // 10 分单独提到 **1s**（后端 SWR TTL 0.8s + 腾讯 m5 合成 ~0.3s，1s 能拿到新价）；
   // 30/60 分仍 2s（持仓）/3s（非持仓），日线 3.5/5s。
-  // 5/10 分：0.5s 一跳（2026-10-20 二轮，owner「极其实时」）。
-  // 后端 worker 已拆成并行两跳（≈200ms），SWR TTL 0.4s ⇒ 每跳都拿到新一帧；
-  // 而**行情没动时后端只回 sig（<1KB，不带 102KB 序列）**，所以快轮询不会把桥压垮。
-  if (!isDaily && (stockChartPeriod === "min10" || stockChartPeriod === "min5")) return 500;
+  // 5/10 分：**1s**（2026-10-21 由 0.5s 回调）。
+  // 2026-10-20 定 0.5s 时后端一帧 ~173ms；后来 5/10 分改成「3 个月深档（近 3000 根）」，
+  // 一帧实测 **532ms** ⇒ 0.5s 轮询让 worker **背靠背跑**：GUI 进程钉在 **~94% 单核**、
+  // 空 ping 都要 1.3s（gui_slow_calls.log / cpu_samples 实证）。
+  // 1s 仍比 worker 快一倍余量：每跳都能拿到新帧，CPU 占用减半。
+  if (!isDaily && (stockChartPeriod === "min10" || stockChartPeriod === "min5")) return 1000;
   // 2026-10-19 owner：**持仓股优先**（30min 体检表里的票就是要盯的）——
   // 分钟 2s / 日线 3.5s，比普通票快一档；后端 SWR + 快照修正末根，2s 内有新价即可见。
   const _c = String(stockChartCode || "").split("_")[0];
@@ -8063,7 +8065,7 @@ document.addEventListener("DOMContentLoaded", () => {
    ══════════════════════════════════════════════════════════════════════ */
 const MW_N = 9;                 // 3×3（2026-10-21 owner：六宫格→九宫格）
 const MW_LS_KEY = "multiWatchCodes";
-const MW_PERIOD_MS = 3000;      // 刷新间隔：轻量帧（只算 K线/MA5/成交额，120根）稳态一跳 ~0ms，3s 跟得上
+const MW_PERIOD_MS = 4000;      // 刷新间隔：九宫格 9 只 × 每轮 ~130ms 计算，4s 是 CPU 与实时性的折中（2026-10-21 抗卡顿）
 const MW_TAIL = 48;
 /* 各大指数（2026-10-21 owner：多窗口要能看指数）。带市场前缀，后端 `_tx_symbol`
    原样吃；⚠️ 不能用「裸 6 位」表示 —— `000001` 是平安银行，不是上证指数。 */

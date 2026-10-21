@@ -119,15 +119,14 @@ class TestChartOpenPerf(unittest.TestCase):
         self.assertIn("stockChartInteractingUntil = Date.now() + 1500", _JS)
         self.assertIn("if (Date.now() < stockChartInteractingUntil)", _JS)
 
-    def test_min5_min10_live_poll_is_half_second(self):
-        """owner 2026-10-20：「5/10 分要极其实时」⇒ 前端 **0.5s** 轮询。
+    def test_min5_min10_live_poll_is_one_second(self):
+        """5/10 分轮询 **1s**（2026-10-21 由 0.5s 回调）。
 
-        后端配合改了三处（缺一条这条链就退化回 1s+）：
-          · worker 拆并行两跳（快照 ∥ 分钟取数）⇒ 实测 ~270ms → ~200ms
-          · 分钟 SWR TTL 0.4s / kick 0.35s（原来 0.8/0.5，1s 轮询会连吃同一帧）
-          · 前端把已知 sig 传上去 ⇒ 行情没动时后端只回 sig（<1KB）而不是 102KB 整帧
+        2026-10-20 定 0.5s 时后端一帧 ~173ms；后来 5/10 分改成「3 个月深档（近 3000 根）」，
+        一帧实测 **532ms** ⇒ 0.5s 轮询让 worker 背靠背跑：GUI 进程钉在 ~94% 单核、
+        空 ping 都要 1.3s（gui_slow_calls.log + cpu_samples 实证）。
         """
-        self.assertIn('stockChartPeriod === "min5")) return 500', _JS)
+        self.assertIn('stockChartPeriod === "min5")) return 1000', _JS)
         self.assertIn("_CHART_LIVE_TTL_MINUTE = 0.4", _PY)
         self.assertIn("_CHART_LIVE_MIN_KICK_MINUTE = 0.35", _PY)
         # 并行两跳：两个取数函数必须各自存在，否则又变回串行

@@ -149,7 +149,7 @@ class TestFrontend:
         assert '"#58a6ff"' in _JS and '"#bc8cff"' in _JS and '"#2dd4bf"' in _JS
 
     def test_realtime_polling(self):
-        assert "MW_PERIOD_MS = 3000" in _JS
+        assert "MW_PERIOD_MS = 4000" in _JS
         assert "mwTimer = setInterval(mwTick, MW_PERIOD_MS)" in _JS
         # 每格只画 48 根（5 分 K 的一个交易日）—— owner：「不要显示太多的 K 线」
         assert "MW_TAIL = 48" in _JS

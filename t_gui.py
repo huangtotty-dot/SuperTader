@@ -835,7 +835,7 @@ _CHART_LIVE_MAX = 200
 _MW_CACHE: dict = {}
 _MW_RUN: dict = {}
 _MW_LOCK = threading.Lock()
-_MW_TTL = 2.0
+_MW_TTL = 4.0
 
 
 def _slim_if_same(frame, known_sig):
@@ -4917,7 +4917,12 @@ class Api:
         ⚠️ MACD 在**完整 340 根**上算完再截尾，不能只喂 120 根：EMA12/26 的头几十根
         严重受种子影响，只给 120 根会让 MACD 与单图对不上。截尾只切数组、不重算。
         """
-        df = self._fetch_min_df(code, "min5")
+        # ⚠️ 直接用**腾讯 m5 尾 340 根**，不走 `_fetch_min_df`：后者会再跟「3 个月深档」
+        # （近 3000 行）做一次 concat+去重，而九宫格每格只要 120 根 —— 实测白烧 ~80ms/只/轮。
+        # 340 根也够 MACD 收敛（EMA26 的 3 倍预热期 ≈ 78 根），与单图逐位一致（见测试）。
+        df = _fetch_min_bars_tencent(code, "5min")
+        if df is None or getattr(df, "empty", True):
+            df = self._fetch_min_df(code, "min5")     # 兜底：含深底/磁盘
         if df is None or getattr(df, "empty", True):
             return None
         _closes_all = [float(x) for x in df["close"].astype(float).values]
