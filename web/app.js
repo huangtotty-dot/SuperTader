@@ -8102,22 +8102,69 @@ function _mwSaveCodes() {
 }
 
 function openMultiWatch() {
-  const modal = document.getElementById("multiWatchModal");
-  if (!modal) return;
-  modal.style.display = "flex";
+  const win = document.getElementById("multiWatchWin");
+  if (!win) return;
+  win.style.display = "flex";
   mwCodes = _mwLoadCodes();
   _mwBuildCells();
+  _mwBindDrag(win);
   mwTick();
   if (mwTimer) clearInterval(mwTimer);
   mwTimer = setInterval(mwTick, MW_PERIOD_MS);
 }
 
 function closeMultiWatch() {
-  const modal = document.getElementById("multiWatchModal");
-  if (modal) modal.style.display = "none";
+  const win = document.getElementById("multiWatchWin");
+  if (win) win.style.display = "none";
   if (mwTimer) { clearInterval(mwTimer); mwTimer = null; }
+  if (mwRO) { try { mwRO.disconnect(); } catch (e) { /* 忽略 */ } mwRO = null; }
   mwInsts.forEach(i => { try { i.dispose(); } catch (e) { /* 忽略 */ } });
   mwInsts = [];
+}
+
+/* 浮窗拖动（2026-10-21）：按标题栏拖。用 px 定位（拖过之后再也不用 right/bottom），
+   否则 right/top 混着改会跳。 */
+function _mwBindDrag(win) {
+  const bar = document.getElementById("mwTitle");
+  if (!bar || bar._mwDragBound) return;
+  bar._mwDragBound = true;
+  bar.addEventListener("mousedown", (ev) => {
+    if (ev.target && ev.target.tagName === "BUTTON") return;   // 别抢刷新/关闭按钮
+    const r = win.getBoundingClientRect();
+    const dx = ev.clientX - r.left, dy = ev.clientY - r.top;
+    win.style.right = "auto"; win.style.left = r.left + "px"; win.style.top = r.top + "px";
+    const move = (e) => {
+      const w = win.offsetWidth, h = win.offsetHeight;
+      // 夹在窗口内，别拖丢了
+      const x = Math.max(0, Math.min(window.innerWidth - w, e.clientX - dx));
+      const y = Math.max(0, Math.min(window.innerHeight - 40, e.clientY - dy));
+      win.style.left = x + "px"; win.style.top = y + "px";
+    };
+    const up = () => {
+      window.removeEventListener("mousemove", move);
+      window.removeEventListener("mouseup", up);
+    };
+    window.addEventListener("mousemove", move);
+    window.addEventListener("mouseup", up);
+    ev.preventDefault();
+  });
+}
+
+/* 浮窗右下角可缩放（CSS resize:both）⇒ 里面的 6 个小图要跟着重排 */
+let mwRO = null;
+function _mwBindResize() {
+  const grid = document.getElementById("multiWatchGrid");
+  if (!grid || typeof ResizeObserver !== "function") return;
+  if (mwRO) { try { mwRO.disconnect(); } catch (e) { /* 忽略 */ } }
+  let _raf = 0;
+  mwRO = new ResizeObserver(() => {
+    if (_raf) return;
+    _raf = requestAnimationFrame(() => {
+      _raf = 0;
+      mwInsts.forEach(i => { try { i && i.resize(); } catch (e) { /* 忽略 */ } });
+    });
+  });
+  mwRO.observe(grid);
 }
 
 function mwRefreshAll() { mwTick(); }
@@ -8143,10 +8190,8 @@ function _mwBuildCells() {
     }
     return `<div class="mw-cell">
       <div class="mw-head">
-        <select class="mw-sel" title="从体检持仓里选" onchange="mwPick(${i}, this.value)">${opts.join("")}</select>
-        <input class="mw-inp" value="${esc(c || "")}" placeholder="代码" title="也可以直接敲 6 位代码"
-               onchange="mwPick(${i}, this.value)"
-               onkeydown="if(event.key==='Enter'){this.blur();}">
+        <select class="mw-sel" title="从「持仓 30 分钟风险体检」的股票里选"
+                onchange="mwPick(${i}, this.value)">${opts.join("")}</select>
         <span class="mw-px" id="mwPx${i}"></span>
       </div>
       <div class="mw-chart" id="mwChart${i}"></div>
@@ -8161,6 +8206,7 @@ function _mwBuildCells() {
       } catch (e) { mwInsts[i] = null; }
     }
   }
+  _mwBindResize();   // 浮窗右下角一缩放，6 个小图跟着重排
 }
 
 function mwPick(i, raw) {
@@ -8169,11 +8215,9 @@ function mwPick(i, raw) {
   const code = m ? m[1] : "";
   mwCodes[i] = code;
   _mwSaveCodes();
-  // 两个控件都回填成裸码：`select` 负责"从持仓里点选"，`input` 负责"敲任意代码"
+  // 下拉回填成裸码（与格子里的图对齐）；下拉里没有该码时它自然显示空，不影响出图
   const sel = document.querySelectorAll(".mw-sel")[i];
   if (sel) sel.value = code;
-  const inp = document.querySelectorAll(".mw-inp")[i];
-  if (inp) inp.value = code;
   // 换票先清掉旧图，别让上一只票的线留在格子里
   const inst = mwInsts[i];
   if (inst) {

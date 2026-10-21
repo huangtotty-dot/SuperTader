@@ -78,17 +78,31 @@ class TestFrontend:
         assert "openMultiWatch()" in _HTML
         assert "多窗口看盘" in _HTML
 
-    def test_modal_is_3x2(self):
-        assert 'id="multiWatchModal"' in _HTML
+    def test_window_is_3x2_float(self):
+        """owner 2026-10-21：「点开后直接阻断了我看 GUI，需要独立」。
+
+        原来用的是 `.modal-mask`（`position:fixed; inset:0` 的全屏遮罩，z-index 400）——
+        后面的界面全被挡住、点不动。现在改成**独立浮窗**：只占自己那一块，后面照常可点。
+        """
+        _CSS = (_ROOT / "web" / "style.css").read_text(encoding="utf-8")
+        assert 'id="multiWatchWin"' in _HTML
         assert 'id="multiWatchGrid"' in _HTML
-        assert "grid-template-columns: repeat(3" in (_ROOT / "web" / "style.css").read_text(encoding="utf-8")
-        assert "grid-template-rows: repeat(2" in (_ROOT / "web" / "style.css").read_text(encoding="utf-8")
+        assert 'class="mw-win"' in _HTML
+        assert 'class="modal-mask"' not in _HTML.split('id="multiWatchWin"')[1].split("</div>")[0]
+        # 浮窗：定位 + 可拖 + 可缩放 + 不被全屏遮罩包住
+        assert ".mw-win { position: fixed;" in _CSS
+        assert "resize: both;" in _CSS
+        assert "grid-template-columns: repeat(3" in _CSS
+        assert "grid-template-rows: repeat(2" in _CSS
+        # 标题栏拖动 + 尺寸变化后小图重排
+        assert "function _mwBindDrag(win)" in _JS
+        assert "function _mwBindResize()" in _JS
 
     def test_cells_have_selector_and_chart(self):
         assert "function _mwBuildCells()" in _JS
-        # 两个控件：select 负责"从持仓点选"，input 负责"敲任意代码"（下拉里没有的票）
+        # owner：「不要让我输入代码，直接下拉框选体检里的股票」⇒ 只手输框已移除
         assert 'class="mw-sel"' in _JS
-        assert 'class="mw-inp"' in _JS
+        assert 'class="mw-inp"' not in _JS
         assert "function mwPick(i, raw)" in _JS
         assert 'id="mwChart' in _JS
 
@@ -96,9 +110,8 @@ class TestFrontend:
         """owner 2026-10-21 报「点了多窗口看盘无法选择股票」。
 
         根因：候选只取 `_obLast`（体检结果），而体检首帧常常是 pending（stocks 为空）
-        ⇒ 下拉里只剩一个占位项，等于没得选。现在：
-          · 候选退回 `state.quotes`（10s 轮询顺手拉的持仓行情，比体检先到）；
-          · 另给一个手输框 ⇒ 列表空着也能直接敲代码。
+        ⇒ 下拉里只剩一个占位项，等于没得选。现在候选会退回 `state.quotes`
+        （10s 轮询顺手拉的持仓行情，比体检先到）—— 但**下拉仍是唯一入口**，不给手输。
         """
         assert "(state.quotes || []).forEach" in _JS
         # 宽容解析：600000 / sh600000 / "600000 浦发银行" 都要能认

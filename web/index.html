@@ -536,19 +536,17 @@
   </div>
 </div>
 
-<!-- 多窗口看盘（2026-10-21 owner）：3×2 六格，每格自选一只票的 5 分 K，实时刷新 -->
-<div id="multiWatchModal" class="modal-mask" style="display:none">
-  <div class="modal modal-lg modal-max" style="height:94vh">
-    <div class="modal-title">
-      <span>🔲 多窗口看盘 <span class="cell-dim" style="font-size:11px;font-weight:400">5 分 K · 每 3 秒刷新（收盘后自动降频）</span></span>
-      <div style="display:flex;gap:6px">
-        <button class="mini-btn" onclick="mwRefreshAll()" title="立即刷新一次">🔄</button>
-        <button class="mini-btn" onclick="closeMultiWatch()">×</button>
-      </div>
-    </div>
-    <!-- 每格两个控件：下拉（体检持仓，只显示名称）+ 手输框（不在持仓里的票直接敲代码） -->
-    <div id="multiWatchGrid" class="mw-grid"></div>
+<!-- 多窗口看盘（2026-10-21 owner）：**独立浮窗** —— 不铺全屏遮罩，
+     看盘时照样能操作后面的 GUI；标题栏可拖动，右下角可缩放。 -->
+<div id="multiWatchWin" class="mw-win" style="display:none">
+  <div class="mw-title" id="mwTitle">
+    <span>🔲 多窗口看盘 <span class="cell-dim" style="font-size:11px;font-weight:400">5 分 K · 每 4 秒刷新</span></span>
+    <span style="display:flex;gap:6px">
+      <button class="mini-btn" onclick="mwRefreshAll()" title="立即刷新一次">🔄</button>
+      <button class="mini-btn" onclick="closeMultiWatch()" title="关闭（不影响 GUI 其它操作）">×</button>
+    </span>
   </div>
+  <div id="multiWatchGrid" class="mw-grid"></div>
 </div>
 
 <!-- 自动盘买入人工确认 modal（2026-08-30 建仓/加仓人工把关） -->

@@ -308,7 +308,19 @@ tr:hover td { background: rgba(243,93,43,.03); }
 .stock-chart { flex: 1; min-height: 300px; background: #0d1117; border-radius: 10px;
   padding: 2px; }   /* 2026-10-17 owner：K线图改深色画布 —— 容器也铺同色底，避免圆角处露白 */
 
-/* ---- 多窗口看盘（2026-10-21 owner）：3×2 六格 ---- */
+/* ---- 多窗口看盘（2026-10-21 owner）：**独立浮窗** + 3×2 六格 ----
+   ⚠️ 刻意**不用** `.modal-mask`（那是 position:fixed; inset:0 的全屏遮罩，z-index 400）：
+   owner 报「点开后直接阻断了我看 GUI」—— 遮罩把后面的界面全挡住、点不动。
+   这里只铺一个**可见范围内的浮层**：后面照常可点，标题栏可拖、右下角可缩放。 */
+.mw-win { position: fixed; right: 16px; top: 56px; z-index: 380;
+  width: 64vw; height: 70vh; min-width: 520px; min-height: 300px;
+  display: flex; flex-direction: column;
+  background: #0d1117; border: 1px solid var(--border); border-radius: 10px;
+  box-shadow: 0 14px 44px rgba(0,0,0,.6); overflow: hidden; resize: both; }
+.mw-title { display: flex; align-items: center; justify-content: space-between;
+  gap: 8px; padding: 6px 10px; background: #161b22;
+  border-bottom: 1px solid #30363d; font-size: 13px; font-weight: 700;
+  cursor: move; user-select: none; flex: 0 0 auto; }
 .mw-grid { flex: 1; min-height: 0; display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   grid-template-rows: repeat(2, minmax(0, 1fr));
@@ -319,10 +331,6 @@ tr:hover td { background: rgba(243,93,43,.03); }
   border-bottom: 1px solid rgba(139,148,158,.15); flex: 0 0 auto; }
 .mw-sel { flex: 1; min-width: 0; background: #161b22; color: #c9d1d9; border: 1px solid #30363d;
   border-radius: 4px; font-size: 11px; padding: 2px 4px; cursor: pointer; }
-/* 备用手输框：下拉里没有的票（不在持仓里）直接敲代码 */
-.mw-inp { flex: 0 0 58px; width: 58px; background: #161b22; color: #c9d1d9;
-  border: 1px solid #30363d; border-radius: 4px; font-size: 11px; padding: 2px 4px;
-  font-family: var(--mono, monospace); }
 .mw-name { font-size: 11px; color: #c9d1d9; white-space: nowrap; overflow: hidden;
   text-overflow: ellipsis; max-width: 96px; }
 .mw-px { font-size: 11px; font-family: var(--mono, monospace); white-space: nowrap; }
