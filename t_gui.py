@@ -4726,6 +4726,24 @@ class Api:
         if period not in ("daily", "weekly", "monthly") + _MIN_PERIODS:
             out["error"] = f"未知周期: {period}"
             return out
+        _fr, _state = self._chart_live_frame(base, period)
+        if _state == "fresh":
+            return _slim_if_same(_fr, known_sig)   # TTL 内直接回（分钟 0.4s / 日线 1.2s）
+        if _state == "stale":                      # 有旧快照：立刻回它，后端在刷新
+            _o = dict(_fr)
+            _o["stale"] = True
+            return _slim_if_same(_o, known_sig)
+        out["warming"] = True
+        out["session"] = _in_trading_session()
+        return out
+
+    def _chart_live_frame(self, base, period):
+        """SWR 取帧（**零网络、零 pandas**）：返回 `(frame|None, state)`。
+
+        state: `fresh`（TTL 内，可直接用）/ `stale`（旧帧，已顺手 kick 刷新）/ `warming`（还没有帧）。
+        抽出来是为了让**多窗口看盘**（`load_multi_chart`，一次 6 只票）复用它 ——
+        否则那 6 个窗口要么各写一份 SWR、要么绕开缓存直接算，两条都会把主线程拖住。
+        """
         ck = (base, period)
         _t = _time_mod.time()
         _is_min = str(period).startswith("min")
@@ -4737,19 +4755,53 @@ class Api:
             _running = bool(_st.get("running"))
             _last_kick = float(_st.get("ts") or 0.0)
         if hit and (_t - hit[0]) < _ttl:
-            return _slim_if_same(hit[1], known_sig)   # TTL 内直接回（分钟 0.4s / 日线 1.2s）
+            return hit[1], "fresh"
         if not _running and (_t - _last_kick) > _kick:
             with _CHART_LIVE_LOCK:
                 _CHART_LIVE_STATE[ck] = {"running": True, "ts": _t}
             _th.Thread(target=self._chart_live_worker, args=(base, period),
                        daemon=True, name=f"chart-live-{base}-{period}").start()
-        if hit:                    # 有旧快照：立刻回它（最多旧 N 秒），后端在刷新
-            _o = dict(hit[1])
-            _o["stale"] = True
-            return _slim_if_same(_o, known_sig)
-        out["warming"] = True
-        out["session"] = _in_trading_session()
-        return out
+        if hit:
+            return hit[1], "stale"
+        return None, "warming"
+
+    def load_multi_chart(self, codes, period="min5", tail=90):
+        """**多窗口看盘**（2026-10-21 owner）：一次给多只票的实时尾。
+
+        · 每只票复用单图的 SWR（`_chart_live_frame`）：缓存新鲜就秒回、过期就后台刷新、
+          本次先回旧帧 ⇒ 6 个窗口互不阻塞，也不会有任何一个把主线程拖住；
+        · **只回最后 `tail` 根**：六宫格里每格只有 ~1/6 屏宽，90 根足够看形态，
+          桥传输从 6×100KB 降到 ~6×25KB；
+        · 单次最多 12 只（防误传整池）；**永不抛**。
+        """
+        items = []
+        _tail = max(20, int(tail or 90))
+        for c in (codes or [])[:12]:
+            _c = str(c).split("_")[0].strip()
+            if not _c:
+                continue
+            try:
+                fr, st = self._chart_live_frame(_c, period)
+                if not fr:
+                    items.append({"code": _c, "ok": False, "warming": True})
+                    continue
+                _s = fr.get("series") or {}
+                _at = lambda a: (a[-_tail:] if isinstance(a, list) else a)   # noqa: E731
+                items.append({
+                    "code": _c, "ok": bool(_s.get("dates")),
+                    "stale": st == "stale",
+                    "quote": fr.get("quote") or {}, "sig": fr.get("sig"),
+                    "series": {
+                        "dates": _at(_s.get("dates")), "ohlc": _at(_s.get("ohlc")),
+                        "volume": _at(_s.get("volume")), "amount": _at(_s.get("amount")),
+                        # ma 是「7 条均线的数组的数组」⇒ 每条各裁一次（别只裁外层）
+                        "ma": [_at(x) for x in (_s.get("ma") or [])],
+                    },
+                })
+            except Exception as e:
+                items.append({"code": _c, "ok": False,
+                              "error": f"{type(e).__name__}: {str(e)[:60]}"})
+        return {"items": items, "period": period}
 
     def _chart_live_worker(self, base, period):
         """后台计算一次实时尾并落缓存（`load_chart_realtime` 的 SWR 写端）。失败静默。"""

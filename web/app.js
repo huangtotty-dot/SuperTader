@@ -7024,7 +7024,9 @@ async function refreshOBNow() {
   }
 }
 
+let _obLast = null;      // 最近一次体检结果（多窗口看盘的选股列表用它）
 function renderOB(ob) {
+  if (ob && ob.stocks && ob.stocks.length) _obLast = ob;   // 多窗口看盘的选股列表用它
   const el = document.getElementById("obBody");
   if (!ob || !ob.stocks || !ob.stocks.length) {
     el.innerHTML = `<div class="empty">${ob && ob.pending
@@ -8043,3 +8045,182 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }, 8000);
 });
+
+/* ══════════════════════════════════════════════════════════════════════
+   多窗口看盘（2026-10-21 owner）
+   「持仓 30 分钟风险体检」上的按钮 → 3×2 六宫格，每格自选一只票的 **5 分 K**，
+   开着就每 4 秒刷新一次（收盘后后端不再出网，自然降频）。
+
+   数据走 `load_multi_chart(codes, "min5", 90)`：一次请求拿 6 只票的实时尾，
+   每只**只回 90 根**（单图是 3200 根深档）⇒ 6 格一轮约 60KB，而不是 6×100KB。
+   后端复用单图那套 SWR（缓存新鲜秒回、过期后台刷、本次先回旧帧）⇒ 任何一格卡住
+   都不会拖住别的格，也不会把主线程冻住。
+   ══════════════════════════════════════════════════════════════════════ */
+const MW_N = 6;                 // 3×2
+const MW_LS_KEY = "multiWatchCodes";
+const MW_PERIOD_MS = 4000;      // 刷新间隔（6 只票 × 每次约 1s 计算，4s 是 CPU 与实时性的折中）
+let mwCodes = [], mwInsts = [], mwTimer = null, mwBusy = false;
+
+function _mwHoldings() {
+  const st = (_obLast && _obLast.stocks) || [];
+  return st.filter(s => s && s.code)
+           .map(s => ({ code: String(s.code).split("_")[0], name: s.name || "" }));
+}
+
+function _mwLoadCodes() {
+  let saved = [];
+  try { saved = JSON.parse(localStorage.getItem(MW_LS_KEY) || "[]"); } catch (e) { saved = []; }
+  if (!Array.isArray(saved) || saved.length !== MW_N) {
+    saved = _mwHoldings().slice(0, MW_N).map(h => h.code);
+  }
+  while (saved.length < MW_N) saved.push("");
+  return saved.slice(0, MW_N);
+}
+
+function _mwSaveCodes() {
+  try { localStorage.setItem(MW_LS_KEY, JSON.stringify(mwCodes)); } catch (e) { /* 忽略 */ }
+}
+
+function openMultiWatch() {
+  const modal = document.getElementById("multiWatchModal");
+  if (!modal) return;
+  modal.style.display = "flex";
+  mwCodes = _mwLoadCodes();
+  _mwBuildCells();
+  mwTick();
+  if (mwTimer) clearInterval(mwTimer);
+  mwTimer = setInterval(mwTick, MW_PERIOD_MS);
+}
+
+function closeMultiWatch() {
+  const modal = document.getElementById("multiWatchModal");
+  if (modal) modal.style.display = "none";
+  if (mwTimer) { clearInterval(mwTimer); mwTimer = null; }
+  mwInsts.forEach(i => { try { i.dispose(); } catch (e) { /* 忽略 */ } });
+  mwInsts = [];
+}
+
+function mwRefreshAll() { mwTick(); }
+
+function _mwBuildCells() {
+  const host = document.getElementById("multiWatchGrid");
+  if (!host) return;
+  mwInsts.forEach(i => { try { i.dispose(); } catch (e) { /* 忽略 */ } });
+  mwInsts = [];
+  const hs = _mwHoldings();
+  host.innerHTML = mwCodes.map((c, i) => {
+    const opts = ['<option value="">— 选择股票 —</option>']
+      .concat(hs.map(h => `<option value="${esc(h.code)}"${h.code === c ? " selected" : ""}>`
+        + `${esc(h.code)} ${esc(h.name)}</option>`));
+    // 存过但已不在持仓里的票也要能显示（否则下拉显示空白、图却还在画）
+    if (c && !hs.some(h => h.code === c)) {
+      opts.push(`<option value="${esc(c)}" selected>${esc(c)}</option>`);
+    }
+    return `<div class="mw-cell">
+      <div class="mw-head">
+        <select class="mw-sel" onchange="mwPick(${i}, this.value)">${opts.join("")}</select>
+        <span class="mw-px" id="mwPx${i}"></span>
+      </div>
+      <div class="mw-chart" id="mwChart${i}"></div>
+    </div>`;
+  }).join("");
+  for (let i = 0; i < MW_N; i++) {
+    const el = document.getElementById("mwChart" + i);
+    if (el && window.echarts) {
+      try {
+        mwInsts[i] = echarts.init(el);
+        mwInsts[i].setOption({ backgroundColor: "#0d1117", animation: false });
+      } catch (e) { mwInsts[i] = null; }
+    }
+  }
+}
+
+function mwPick(i, code) {
+  mwCodes[i] = code || "";
+  _mwSaveCodes();
+  // 换票先清掉旧图，别让上一只票的线留在格子里
+  const inst = mwInsts[i];
+  if (inst) { try { inst.clear(); inst.setOption({ backgroundColor: "#0d1117", animation: false }); } catch (e) {} }
+  if (code) mwTick();
+}
+
+/* 六宫格里的迷你 K 线：K 线 + 本周期 MA5/MA20 + 成交额。刻意不画 MACD/RSI/箱体 ——
+   每格只有 ~1/6 屏宽，塞满就成了噪声；要看细节双击/点开大图。 */
+function _mwOption(s) {
+  const dates = s.dates || [], ohlc = s.ohlc || [], ma = s.ma || [];
+  const amtYi = (s.amount && s.amount.length === dates.length)
+    ? s.amount.map(v => (v == null || isNaN(Number(v))) ? null : +(Number(v) / 1e8).toFixed(2))
+    : null;
+  const vals = amtYi || s.volume || [];
+  const volSer = vals.map((v, i) => {
+    const o = ohlc[i];
+    const prev = i > 0 ? ohlc[i - 1][1] : null;
+    const up = !o ? true : (prev == null ? o[1] >= o[0] : o[1] >= prev);
+    return { value: v, itemStyle: { color: up ? "rgba(248,81,73,.8)" : "rgba(63,185,80,.8)" } };
+  });
+  const line = (arr, color, w) => ({
+    type: "line", data: arr || [], symbol: "none", connectNulls: true,
+    lineStyle: { width: w, color }, itemStyle: { color },
+  });
+  return {
+    animation: false, backgroundColor: "#0d1117",
+    grid: [{ left: 46, right: 8, top: 8, height: "62%" },
+           { left: 46, right: 8, top: "74%", height: "18%" }],
+    xAxis: [
+      { type: "category", data: dates, axisLine: { lineStyle: { color: "#2b333d" } },
+        axisLabel: { show: false } },
+      { type: "category", data: dates, gridIndex: 1, axisLine: { lineStyle: { color: "#2b333d" } },
+        axisLabel: { color: "#8b949e", fontSize: 8,
+                     interval: Math.max(1, Math.floor(dates.length / 4)) } },
+    ],
+    yAxis: [
+      { scale: true, splitNumber: 3, axisLabel: { color: "#8b949e", fontSize: 8 },
+        splitLine: { lineStyle: { color: "rgba(139,148,158,.12)" } } },
+      { scale: true, gridIndex: 1, axisLabel: { show: false }, splitLine: { show: false } },
+    ],
+    series: [
+      { name: "K线", type: "candlestick", data: ohlc, barMaxWidth: 8,
+        itemStyle: { color: "#f85149", color0: "#3fb950",
+                     borderColor: "#ff6b62", borderColor0: "#56d364", borderWidth: 1 } },
+      line(ma[0], "#e3b341", 1.2),   // 本周期 MA5（5 根 5 分 K = 25 分钟）
+      line(ma[2], "#58a6ff", 1.0),   // 本周期 MA20
+      { name: "量能", type: "bar", xAxisIndex: 1, yAxisIndex: 1, data: volSer, barMaxWidth: 8 },
+    ],
+  };
+}
+
+async function mwTick() {
+  if (mwBusy) return;                       // 单飞：上一轮没回来就别叠
+  // 窗口最小化/切后台时跳过：6 只票每轮 ~6s 的计算量，没必要喂给看不见的窗口
+  if (document.visibilityState === "hidden") return;
+  const codes = mwCodes.filter(Boolean);
+  if (!codes.length) return;
+  mwBusy = true;
+  try {
+    const r = await apiCall("load_multi_chart", codes, "min5", 90);
+    const items = (r && r.items) || [];
+    items.forEach(it => {
+      const i = mwCodes.indexOf(it.code);
+      if (i < 0) return;
+      const px = document.getElementById("mwPx" + i);
+      const q = it.quote || {};
+      if (px && q.price != null) {
+        const p = q.change_pct;
+        const cls = (p == null || p === 0) ? "cell-dim" : (p > 0 ? "up" : "down");
+        px.innerHTML = `<span class="${cls}">${fmt(q.price)}`
+          + (p == null ? "" : ` ${p >= 0 ? "+" : ""}${Number(p).toFixed(2)}%`) + `</span>`;
+      }
+      if (!it.ok) return;
+      const s = it.series || {};
+      if (!s.dates || !s.dates.length) return;
+      let inst = mwInsts[i];
+      if (!inst) {
+        const el = document.getElementById("mwChart" + i);
+        if (!el || !window.echarts) return;
+        inst = mwInsts[i] = echarts.init(el);
+      }
+      try { inst.setOption(_mwOption(s), { notMerge: true }); } catch (e) { /* 单格失败不影响别的格 */ }
+    });
+  } catch (e) { /* 静默：下一跳重试 */ }
+  finally { mwBusy = false; }
+}

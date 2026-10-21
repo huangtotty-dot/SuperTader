@@ -195,6 +195,9 @@
       <h2>持仓 30 分钟风险体检（30min 顶部特征 → 减仓/避坑提醒）
         <button class="mini-btn" id="obRefreshBtn" onclick="refreshOBNow()"
                 title="只重新拉取最新行情/状态并就地重绘（秒级）；不做任何重算">🔄 刷新</button>
+        <!-- 2026-10-21 owner：3×2 的看盘大框，每格一只票的 5 分 K，实时刷新 -->
+        <button class="mini-btn" id="obMultiBtn" onclick="openMultiWatch()"
+                title="多窗口看盘：3×2 六个格，每格自选一只股票的 5 分 K（实时刷新）">🔲 多窗口看盘</button>
       </h2>
       <div id="obBody"></div>
     </div>
@@ -530,6 +533,20 @@
       <div id="stockFlowBody"></div>
     </div>
     <div id="stockChart" class="echart stock-chart"></div>
+  </div>
+</div>
+
+<!-- 多窗口看盘（2026-10-21 owner）：3×2 六格，每格自选一只票的 5 分 K，实时刷新 -->
+<div id="multiWatchModal" class="modal-mask" style="display:none">
+  <div class="modal modal-lg modal-max" style="height:94vh">
+    <div class="modal-title">
+      <span>🔲 多窗口看盘 <span class="cell-dim" style="font-size:11px;font-weight:400">5 分 K · 每 3 秒刷新（收盘后自动降频）</span></span>
+      <div style="display:flex;gap:6px">
+        <button class="mini-btn" onclick="mwRefreshAll()" title="立即刷新一次">🔄</button>
+        <button class="mini-btn" onclick="closeMultiWatch()">×</button>
+      </div>
+    </div>
+    <div id="multiWatchGrid" class="mw-grid"></div>
   </div>
 </div>
 
