@@ -8357,14 +8357,24 @@ function _mwOption(s, dma) {
     type: "line", data: arr || [], symbol: "none", connectNulls: true,
     lineStyle: { width: w, color }, itemStyle: { color },
   });
+  // MACD（2026-10-21 owner：多窗口也要 MACD）。配色与单图一致（已过 dataviz 校验器）：
+  // DIF 蓝 #3987e5 / DEA 品红 #d55181，柱按正负红绿。
+  const _macd = s.macd || {};
+  const _histSer = (_macd.hist || []).map(v => ({
+    value: v, itemStyle: { color: v >= 0 ? "rgba(248,81,73,.9)" : "rgba(63,185,80,.9)" },
+  }));
   return {
     animation: false, backgroundColor: "#0d1117",
-    grid: [{ left: 46, right: 8, top: 8, height: "62%" },
-           { left: 46, right: 8, top: "74%", height: "18%" }],
+    // 三窗：主图 50% / 成交额 10% / MACD 18%（格子里地方小，MACD 不能太薄）
+    grid: [{ left: 46, right: 8, top: 6, height: "50%" },
+           { left: 46, right: 8, top: "60%", height: "10%" },
+           { left: 46, right: 8, top: "72%", height: "18%" }],
     xAxis: [
       { type: "category", data: dates, axisLine: { lineStyle: { color: "#2b333d" } },
         axisLabel: { show: false } },
       { type: "category", data: dates, gridIndex: 1, axisLine: { lineStyle: { color: "#2b333d" } },
+        axisLabel: { show: false } },
+      { type: "category", data: dates, gridIndex: 2, axisLine: { lineStyle: { color: "#2b333d" } },
         axisLabel: { color: "#8b949e", fontSize: 8,
                      interval: Math.max(1, Math.floor(dates.length / 4)) } },
     ],
@@ -8372,6 +8382,8 @@ function _mwOption(s, dma) {
       { scale: true, splitNumber: 3, axisLabel: { color: "#8b949e", fontSize: 8 },
         splitLine: { lineStyle: { color: "rgba(139,148,158,.12)" } } },
       { scale: true, gridIndex: 1, axisLabel: { show: false }, splitLine: { show: false } },
+      { scale: true, splitNumber: 2, gridIndex: 2, axisLabel: { show: false },
+        splitLine: { show: false } },
     ],
     series: [
       { name: "K线", type: "candlestick", data: ohlc, barMaxWidth: 10,
@@ -8382,6 +8394,18 @@ function _mwOption(s, dma) {
                      borderColor: "#ff6b62", borderColor0: "#56d364", borderWidth: 1 } },
       line(s.ma5, "#e3b341", 1.2),   // 本周期 MA5（5 根 5 分 K = 25 分钟）
       { name: "量能", type: "bar", xAxisIndex: 1, yAxisIndex: 1, data: volSer, barMaxWidth: 10 },
+      // MACD：柱 + DIF/DEA 两条线 + 零轴
+      { name: "MACD柱", type: "bar", xAxisIndex: 2, yAxisIndex: 2, data: _histSer,
+        barMaxWidth: 8, z: 1,
+        markLine: { silent: true, symbol: "none", data: [{
+          yAxis: 0, label: { show: false },
+          lineStyle: { color: "rgba(139,148,158,.45)", type: "dashed", width: 1 } }] } },
+      { name: "DIF", type: "line", xAxisIndex: 2, yAxisIndex: 2, data: _macd.dif || [],
+        symbol: "none", connectNulls: true, z: 3,
+        lineStyle: { width: 1.1, color: "#3987e5" } },
+      { name: "DEA", type: "line", xAxisIndex: 2, yAxisIndex: 2, data: _macd.dea || [],
+        symbol: "none", connectNulls: true, z: 3,
+        lineStyle: { width: 1.1, color: "#d55181" } },
     ],
   };
 }

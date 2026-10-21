@@ -26,6 +26,9 @@ def _frame(n=120):
         "volume": [100.0] * n,
         "amount": [1e8] * n,
         "ma5": [float(i) for i in range(n)],
+        "macd": {"dif": [float(i) for i in range(n)],
+                 "dea": [float(i) / 2 for i in range(n)],
+                 "hist": [float(i) / 3 for i in range(n)]},
         "quote": {"price": 10.0, "change_pct": 1.25},
     }
 
@@ -40,6 +43,7 @@ class TestLoadMultiChart:
         assert len(it["series"]["dates"]) == 90
         assert it["series"]["dates"][-1] == "d119"
         assert len(it["series"]["ma5"]) == 90, "MA5 也要跟着裁"
+        assert len(it["series"]["macd"]["dif"]) == 90, "MACD 三条线也要跟着裁"
         assert it["quote"]["price"] == 10.0
 
     def test_warming_item_is_reported_not_raised(self, monkeypatch):
@@ -218,3 +222,35 @@ class TestWindowMaxMin:
     def test_browser_resize_refills_when_maxed(self):
         assert 'win.classList.contains("mw-max")' in _JS
         assert "window.innerWidth - 16" in _JS
+
+
+class TestMacdPanel:
+    """owner 2026-10-21：多窗口显示要有 MACD。"""
+
+    def test_light_frame_has_macd(self):
+        """后端轻量帧必须带 MACD，且**在完整 340 根上算完再截尾** ——
+        EMA12/26 的头几十根严重受种子影响，只喂 120 根算出来与单图对不上。"""
+        import inspect
+        src = inspect.getsource(t_gui.Api._mw_compute)
+        assert "_ema_macd" in src
+        assert "df.tail(120)" in src
+        # 先算（用 _closes_all）再截尾
+        assert "_closes_all" in src and "_cut" in src
+
+    def test_ema_macd_matches_main_chart(self):
+        """与单图 `_calc_ma_and_indicators` 的 MACD 同口径（EMA12/26/9，hist=(dif-dea)×2）。"""
+        import pandas as pd
+        closes = [10.0, 10.2, 10.1, 10.4, 10.3, 10.6, 10.5, 10.8, 10.7, 11.0] * 6
+        dif, dea, hist = t_gui._ema_macd(closes)
+        assert len(dif) == len(dea) == len(hist) == len(closes)
+        for d, e, h in zip(dif, dea, hist):
+            assert h == pytest.approx((d - e) * 2.0, rel=1e-9)
+
+    def test_frontend_draws_macd_panel(self):
+        assert 's.macd || {}' in _JS
+        assert 'name: "MACD柱"' in _JS
+        assert 'name: "DIF"' in _JS and 'name: "DEA"' in _JS
+        # 第三个网格（主图/成交额/MACD）
+        assert 'gridIndex: 2' in _JS
+        # 配色与单图一致
+        assert '"#3987e5"' in _JS and '"#d55181"' in _JS

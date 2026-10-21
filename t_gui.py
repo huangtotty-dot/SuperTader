@@ -1226,6 +1226,27 @@ def _ensure_amount(df, code=None):
         return df
 
 
+def _ema_macd(closes, fast=12, slow=26, signal=9):
+    """收盘价 → (DIF, DEA, HIST)。`HIST = (DIF - DEA) × 2`（国内行情软件口径）。
+
+    与单图 `_calc_ma_and_indicators` 里的 MACD 同参数。⚠️ 多窗口只展示 120 根，
+    但**必须先把完整序列喂进来**再截尾：EMA 的头几十根严重受种子影响，
+    只喂 120 根算出来的 MACD 与单图对不上。
+    """
+    dif, dea, hist = [], [], []
+    _ef = _es = _ed = None
+    _kf, _ks, _kd = 2.0 / (fast + 1), 2.0 / (slow + 1), 2.0 / (signal + 1)
+    for c in closes:
+        _ef = c if _ef is None else c * _kf + _ef * (1 - _kf)
+        _es = c if _es is None else c * _ks + _es * (1 - _ks)
+        _d = _ef - _es
+        _ed = _d if _ed is None else _d * _kd + _ed * (1 - _kd)
+        dif.append(_d)
+        dea.append(_ed)
+        hist.append((_d - _ed) * 2.0)
+    return dif, dea, hist
+
+
 def _to_series(d, intraday=False):
     """DataFrame → 前端序列 dict（与 _build_chart_from_df 同口径；抽出以复用）。"""
     import pandas as pd
@@ -4842,6 +4863,8 @@ class Api:
                         "dates": _at(fr.get("dates")), "ohlc": _at(fr.get("ohlc")),
                         "volume": _at(fr.get("volume")), "amount": _at(fr.get("amount")),
                         "ma5": _at(fr.get("ma5")),
+                        # MACD 三条线也要按 tail 截齐（2026-10-21 owner：多窗口要 MACD）
+                        "macd": {k: _at(v) for k, v in (fr.get("macd") or {}).items()},
                     },
                 })
             except Exception as e:
@@ -4887,12 +4910,20 @@ class Api:
                 _MW_RUN[code] = False
 
     def _mw_compute(self, code):
-        """轻量帧本体：腾讯 m5 尾（340 根，含未收盘根=实时）→ 最近 120 根 + MA5 + 成交额。"""
+        """轻量帧本体：腾讯 m5 尾（340 根，含未收盘根=实时）→ 最近 120 根 + MA5 + MACD + 成交额。
+
+        ⚠️ MACD 在**完整 340 根**上算完再截尾，不能只喂 120 根：EMA12/26 的头几十根
+        严重受种子影响，只给 120 根会让 MACD 与单图对不上。截尾只切数组、不重算。
+        """
         df = self._fetch_min_df(code, "min5")
         if df is None or getattr(df, "empty", True):
             return None
+        _closes_all = [float(x) for x in df["close"].astype(float).values]
+        _dif, _dea, _hist = _ema_macd(_closes_all)
+        n = len(df)
         df = df.tail(120).reset_index(drop=True)
-        _closes = [float(x) for x in df["close"].astype(float).values]
+        _cut = max(0, n - 120)
+        _closes = _closes_all[_cut:]
         _ma5 = []
         for i in range(len(_closes)):
             w = _closes[max(0, i - 4): i + 1]
@@ -4909,6 +4940,10 @@ class Api:
             "volume": [round(float(v)) for v in df["volume"]],
             "amount": _amt,
             "ma5": _ma5,
+            # MACD（2026-10-21 owner：多窗口也要 MACD）—— 与单图同口径 EMA12/26/9，hist 取 (DIF-DEA)×2
+            "macd": {"dif": [round(x, 4) for x in _dif[_cut:]],
+                     "dea": [round(x, 4) for x in _dea[_cut:]],
+                     "hist": [round(x, 4) for x in _hist[_cut:]]},
             "quote": self._fetch_live_quote(code) or {},
         }
 
