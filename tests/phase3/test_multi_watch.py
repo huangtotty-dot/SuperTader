@@ -320,12 +320,12 @@ class TestSupportResistance:
         assert api._daily_levels("600000") is None
 
     def test_frontend_draws_levels(self):
-        assert "function _mwOption(s, dma, levels)" in _JS
+        assert "function _mwOption(s, dma, levels, trades)" in _JS
         assert '`${up ? "压" : "支"} ${Number(y).toFixed(2)}`' in _JS
         # 支撑绿、压力红（与单图一致）；标签在右侧（日线MA 在左，两拨不打架）
         assert '"#f85149", type: "dashed"' in _JS and '"#3fb950", type: "dashed"' in _JS
         assert 'position: up ? "insideEndTop" : "insideEndBottom"' in _JS
-        assert "it.dma, it.levels" in _JS
+        assert "it.dma, it.levels, it.trades" in _JS
 
 
 class TestKlineSearchFuzzy:
@@ -365,3 +365,26 @@ class TestKlineSearchFuzzy:
         """模糊结果必须让用户点一下确认 —— 自动开图等于把猜的结果当用户意图。"""
         assert "const _isFuzzy = x =>" in _JS
         assert "if (rows.length === 1 && !_isFuzzy(rows[0]))" in _JS
+
+
+class TestTradeMarkersInCells:
+    """owner 2026-10-21：K 线的买卖点要显示在 5 分钟线上（九宫格每格也要）。"""
+
+    def test_backend_slices_trades_to_window(self):
+        import inspect
+        src = inspect.getsource(t_gui.Api._mw_trades)
+        assert "_chart_trades" in src
+        assert "dates[0]" in src          # 只取窗口内的
+        assert "_out[-200:]" in src       # 上限，九宫格 9 只也不至于把包撑大
+        src2 = inspect.getsource(t_gui.Api.load_multi_chart)
+        assert '"trades"' in src2
+
+    def test_frontend_buckets_same_as_main_chart(self):
+        # 与单图同口径：成交落进 (bar_t - 5min, bar_t]
+        assert "function _mwOption(s, dma, levels, trades)" in _JS
+        assert "_be[bi] - 5 >= tm" in _JS
+        # 买=红▲托在 low 下、卖=绿▼压在 high 上（与单图同色同形）
+        assert 'color: "#f85149", borderColor: "#fff"' in _JS
+        assert 'color: "#3fb950", borderColor: "#fff"' in _JS
+        assert "symbolRotate: 180" in _JS
+        assert "it.dma, it.levels, it.trades" in _JS

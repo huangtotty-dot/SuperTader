@@ -8341,7 +8341,7 @@ function mwPick(i, raw) {
    刻意不画 MACD/RSI/箱体 —— 每格只有 ~1/6 屏宽，塞满就成了噪声；要看细节点开大图。
    2026-10-21 owner：① 缺口没显示 ② 5日/10日/20日均线没显示 ⇒ 都补上，
    且缺口与单图**共用** `buildGapAreas`，口径不会漂。 */
-function _mwOption(s, dma, levels) {
+function _mwOption(s, dma, levels, trades) {
   const gaps = buildGapAreas(s.ohlc, 250, 0.003, 8);   // 一格只画最近 8 块，别糊满
   const _dmaLine = (y, color, txt) => (y == null || !isFinite(y)) ? null : {
     yAxis: y,
@@ -8383,6 +8383,44 @@ function _mwOption(s, dma, levels) {
     type: "line", data: arr || [], symbol: "none", connectNulls: true,
     lineStyle: { width: w, color }, itemStyle: { color },
   });
+  /* 买卖点（2026-10-21 owner：K 线的买卖点要显示在 5 分钟线上）。
+     与单图**同一归桶口径**：K 线时间是右端，成交落进 (bar_t - 5min, bar_t]；
+     买=红 ▲ 托在该根 low 下方、卖=绿 ▼ 压在该根 high 上方（与单图同色同形）。 */
+  const _tm = {};
+  if (Array.isArray(trades) && trades.length && dates.length) {
+    const _bd = dates.map(x => String(x).slice(0, 10));
+    const _be = dates.map(x => Number(String(x).slice(11, 13)) * 60 + Number(String(x).slice(14, 16)));
+    let bi = 0;                                   // 双指针：trades 与 bar 同为升序
+    for (const t of trades) {
+      const ts = String((t && t.ts) || "");
+      if (ts.length < 19) continue;               // 老行没有成交时间 ⇒ 分钟图落不了桶
+      const td = ts.slice(0, 10);
+      const tm = Number(ts.slice(11, 13)) * 60 + Number(ts.slice(14, 16))
+        + (Number(ts.slice(17, 19)) || 0) / 60;
+      while (bi < dates.length && (_bd[bi] < td || (_bd[bi] === td && _be[bi] < tm))) bi++;
+      if (bi >= dates.length) break;
+      if (_bd[bi] !== td || _be[bi] - 5 >= tm) continue;   // 落在桶外（早于首根/午休空档）
+      const side = t.side === "S" ? "S" : "B";
+      const e = _tm[bi] || (_tm[bi] = { B: 0, S: 0 });
+      e[side] += Number(t.qty) || 0;
+    }
+  }
+  const _tradePts = [];
+  Object.keys(_tm).forEach(k => {
+    const i = Number(k), bar = ohlc[i];
+    if (!bar) return;
+    if (_tm[k].B > 0) {
+      _tradePts.push({ value: [i, bar[2]], symbol: "triangle", symbolRotate: 0,
+        symbolSize: 8, symbolOffset: [0, 8],
+        itemStyle: { color: "#f85149", borderColor: "#fff", borderWidth: 1 } });
+    }
+    if (_tm[k].S > 0) {
+      _tradePts.push({ value: [i, bar[3]], symbol: "triangle", symbolRotate: 180,
+        symbolSize: 8, symbolOffset: [0, -8],
+        itemStyle: { color: "#3fb950", borderColor: "#fff", borderWidth: 1 } });
+    }
+  });
+
   // MACD（2026-10-21 owner：多窗口也要 MACD）。配色与单图一致（已过 dataviz 校验器）：
   // DIF 蓝 #3987e5 / DEA 品红 #d55181，柱按正负红绿。
   const _macd = s.macd || {};
@@ -8448,6 +8486,9 @@ function _mwOption(s, dma, levels) {
         itemStyle: { color: "#f85149", color0: "#3fb950",
                      borderColor: "#ff6b62", borderColor0: "#56d364", borderWidth: 1 } },
       line(s.ma5, "#e3b341", 1.2),   // 本周期 MA5（5 根 5 分 K = 25 分钟）
+      // 买卖点（只在该格窗口里有成交时才建这个系列）
+      ...(_tradePts.length ? [{ name: "成交", type: "scatter", data: _tradePts, z: 13,
+                               symbol: "triangle", symbolSize: 8 }] : []),
       { name: "量能", type: "bar", xAxisIndex: 1, yAxisIndex: 1, data: volSer, barMaxWidth: 10 },
       // MACD：柱 + DIF/DEA 两条线 + 零轴
       { name: "MACD柱", type: "bar", xAxisIndex: 2, yAxisIndex: 2, data: _histSer,
@@ -8504,7 +8545,7 @@ async function mwTick() {
         if (!el || !window.echarts) return;
         inst = mwInsts[i] = echarts.init(el);
       }
-      try { inst.setOption(_mwOption(s, it.dma, it.levels), { notMerge: true }); } catch (e) { /* 单格失败不影响别的格 */ }
+      try { inst.setOption(_mwOption(s, it.dma, it.levels, it.trades), { notMerge: true }); } catch (e) { /* 单格失败不影响别的格 */ }
     });
   } catch (e) { /* 静默：下一跳重试 */ }
   finally { mwBusy = false; }

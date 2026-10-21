@@ -4861,6 +4861,8 @@ class Api:
                     "dma": self._daily_ma_bundle(_c, _q.get("price")),
                     # 支撑/压力位（同单图同一个 `_calc_support_resistance`）
                     "levels": self._daily_levels(_c),
+                    # 买卖点（券商成交台账）—— 裁到本格窗口内，前端按 5 分钟桶归位
+                    "trades": self._mw_trades(_c, fr.get("dates")),
                     "series": {
                         "dates": _at(fr.get("dates")), "ohlc": _at(fr.get("ohlc")),
                         "volume": _at(fr.get("volume")), "amount": _at(fr.get("amount")),
@@ -4873,6 +4875,21 @@ class Api:
                 items.append({"code": _c, "ok": False,
                               "error": f"{type(e).__name__}: {str(e)[:60]}"})
         return {"items": items, "period": period}
+
+    def _mw_trades(self, code, dates):
+        """该 code 的成交行，**裁到九宫格窗口内**（只画最近 48 根 5 分 K）。
+
+        台账本身按 mtime 缓存（见 `_chart_trades`），这里只是过滤 + 截断，零 IO。
+        """
+        try:
+            if not dates:
+                return []
+            _from = str(dates[0])[:10]
+            _t = _chart_trades(code) or []
+            _out = [x for x in _t if str((x or {}).get("ts") or "")[:10] >= _from]
+            return _out[-200:]
+        except Exception:
+            return []
 
     def _mw_frame(self, code):
         """多窗口专用的**轻量帧**（SWR 取）：返回 `(frame|None, state)`。
