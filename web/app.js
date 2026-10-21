@@ -4955,7 +4955,23 @@ function renderStockChart(applyZoom = true) {
       const tDate = ts.slice(0, 10);
       if (!tDate) continue;
       if (_pMin) {
-        if (ts.length < 19) continue;              // 老行无成交时间 ⇒ 分钟图跳过
+        if (ts.length < 19) {
+          // ⚠️ 2026-10-21：老台账很多行**只有日期没有成交时间**（实测 74 只有成交的票里
+          //    只有 7 只带时间）。原来这些在分钟图上直接跳过 ⇒ owner 打开 5 分钟线
+          //    「一条买卖点都没有」。现在落到**当日首根**占位，并标 `approx`
+          //    （半透明 + tooltip 注明"时间未知"），既不丢信息也不假装精确。
+          while (bi < _n && _barDate[bi] < tDate) bi++;
+          if (bi >= _n) break;
+          if (_barDate[bi] !== tDate) continue;
+          const side0 = t.side === "S" ? "S" : "B";
+          const k0 = bi + "|" + side0;
+          const q0 = Number(t.qty) || 0, p0 = Number(t.price) || 0;
+          const a0 = tradeByIndex[k0] || (tradeByIndex[k0] = {
+            side: side0, qty: 0, amt: 0, count: 0, accounts: {}, approx: false });
+          a0.qty += q0; a0.amt += p0 * q0; a0.count += 1; a0.approx = true;
+          if (t.account) a0.accounts[t.account] = true;
+          continue;
+        }
         const tMin = Number(ts.slice(11, 13)) * 60 + Number(ts.slice(14, 16))
           + (Number(ts.slice(17, 19)) || 0) / 60;
         while (bi < _n && (_barDate[bi] < tDate
@@ -5005,7 +5021,8 @@ function renderStockChart(applyZoom = true) {
         symbol: "triangle", symbolRotate: buy ? 0 : 180, symbolSize: 11,
         symbolOffset: [0, buy ? 13 : -13],
         itemStyle: { color: buy ? "#f85149" : "#3fb950",
-                     borderColor: "#fff", borderWidth: 1 },
+                     borderColor: "#fff", borderWidth: 1,
+                     opacity: a.approx ? 0.55 : 1 },   // 时间未知（按当日首根占位）⇒ 半透明
       };
     }).filter(Boolean),
   }] : [];
@@ -5129,7 +5146,9 @@ function renderStockChart(applyZoom = true) {
             return `<div style="color:${buy ? "#f85149" : "#3fb950"};font-weight:bold">`
               + `${buy ? "▲ 买入" : "▼ 卖出"} <b>${a.qty}</b> 股 @ <b>${_px(avg)}</b>`
               + `<span style="font-weight:400;opacity:.7">`
-              + ` · ${a.count > 1 ? a.count + " 笔" : "1 笔"}${accs ? " · " + accs : ""}</span></div>`;
+              + ` · ${a.count > 1 ? a.count + " 笔" : "1 笔"}${accs ? " · " + accs : ""}</span>`
+              + (a.approx ? `<span style="opacity:.7"> · 时间未知（按当日首根占位）</span>` : "")
+              + `</div>`;
           };
           html += `<div style="border-top:1px solid #30363d;margin-top:4px;padding-top:4px">`
             + (_trB ? _trRow(_trB, true) : "") + (_trS ? _trRow(_trS, false) : "") + `</div>`;
