@@ -1436,6 +1436,15 @@ def _min_bars_deep_base(code, freq="5min", allow_topup=True):
                     pass
     if base is None:
         base = pd.DataFrame()
+    # ⚠️ **单位归一（2026-10-21）**：磁盘/tushare 的分钟成交量是**股**，而腾讯尾与本仓日线
+    #    都是**手** —— 差 100 倍（实测 600000 14:55 `base=3,395,200` vs `tail=33,952`；
+    #    688008 同样 100 倍）。不归一就直接 merge ⇒ 历史那几百根的量能/成交额大 100 倍，
+    #    y 轴被拉爆、当天那几根反而贴地（owner 报「多窗口成交额不对」就是这么来的）。
+    #    只在**返回前**复制一份换算：磁盘档（`save_minute_history` 存的是股）与其它消费端
+    #    （仓位结构按比值用成交量，量纲无关）一律不动。
+    if not base.empty and "volume" in base.columns:
+        base = base.copy()
+        base["volume"] = base["volume"].astype(float) / 100.0
     # 缓存/返回前截尾到「目标深度 + 400 余量」：`_d540` 长历史档合并后可达 ~1.8 万行
     # （实测 600584 = 18424 行 / 0.84MB），而展示档最多只要 3200 根 —— 余量只为
     # 实时尾合并后仍能截满目标深度。⚠️ 截尾必须放在**落盘之后**（上面存的是完整历史）。

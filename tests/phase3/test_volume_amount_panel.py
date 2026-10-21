@@ -189,3 +189,40 @@ class TestPayloadSchemaGate:
             "vol_hand": 605133.0, "ts_date": today}})
         bar = api._today_forming_bar("600000", allow_network=False)
         assert bar and abs(float(bar["volume"]) - 605133.0) < 1
+
+
+class TestDeepBaseVolumeUnit:
+    """分钟**历史底座**的成交量必须归一到「手」（2026-10-21，owner 报多窗口成交额不对）。
+
+    磁盘/tushare 的分钟成交量是**股**，腾讯实时尾是**手** —— 实测同时间点差 100 倍
+    （600000 14:55 `base=3,395,200` vs `tail=33,952`；688008 同样 100 倍）。
+    两者一 merge，历史那几百根的量能/成交额就大 100 倍，y 轴被拉爆、当天那几根贴地。
+    """
+
+    def test_base_volume_is_divided_by_100(self, monkeypatch):
+        import pandas as pd
+        import core.chart_cache as cc
+        import t_gui as G
+
+        fake = pd.DataFrame([
+            {"time": "2026-10-20 14:55:00", "open": 9.9, "high": 9.95, "low": 9.85,
+             "close": 9.92, "volume": 3395200.0},          # 股
+        ])
+        monkeypatch.setattr(cc, "load_minute_asof", lambda ts, f: fake.copy())
+        G._MIN_DEEP_BASE_CACHE.clear()
+        out = G._min_bars_deep_base("600000", "5min", allow_topup=False)
+        assert len(out) == 1
+        assert float(out["volume"].iloc[0]) == pytest.approx(33952.0, rel=1e-9)
+
+    def test_does_not_mutate_disk_frame(self, monkeypatch):
+        """归一必须**复制**再算 —— 缓存本体被就地改掉会污染其它消费端。"""
+        import pandas as pd
+        import core.chart_cache as cc
+        import t_gui as G
+
+        fake = pd.DataFrame([{"time": "2026-10-20 14:55:00", "open": 9.9, "high": 9.95,
+                              "low": 9.85, "close": 9.92, "volume": 1000.0}])
+        monkeypatch.setattr(cc, "load_minute_asof", lambda ts, f: fake)
+        G._MIN_DEEP_BASE_CACHE.clear()
+        G._min_bars_deep_base("600000", "5min", allow_topup=False)
+        assert float(fake["volume"].iloc[0]) == 1000.0, "磁盘帧被就地改了"
