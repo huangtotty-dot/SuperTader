@@ -4859,6 +4859,8 @@ class Api:
                     "quote": _q,
                     # 日线 MA5/10/20：六宫格与单图一样要画「日线均线」参考线
                     "dma": self._daily_ma_bundle(_c, _q.get("price")),
+                    # 支撑/压力位（同单图同一个 `_calc_support_resistance`）
+                    "levels": self._daily_levels(_c),
                     "series": {
                         "dates": _at(fr.get("dates")), "ohlc": _at(fr.get("ohlc")),
                         "volume": _at(fr.get("volume")), "amount": _at(fr.get("amount")),
@@ -4984,6 +4986,49 @@ class Api:
             if _px <= 0:
                 return None
             out = {f"ma{n}": round((sum(_basis[-(n - 1):]) + _px) / n, 3) for n in (5, 10, 20)}
+            _memo[_c] = (_now, out)
+            return out
+        except Exception:
+            return None
+
+    def _daily_levels(self, code):
+        """日线口径的**支撑/压力位**（与单图同一个 `_calc_support_resistance`），60 秒记忆。
+
+        六宫格每格也要画支撑压力（2026-10-21 owner）。走本地日线缓存 ⇒ **零网络**；
+        该函数需要 ma20/ma60/ma180 列，故先过一次 `_calc_ma_and_indicators`（~20ms/只），
+        60 秒内同票复用，3 秒轮询下等于白送。
+        每方向只回**最近 2 个**（格子里画 4 条线已经不少了）。
+        """
+        try:
+            _c = str(code).split("_")[0]
+            _now = _time_mod.time()
+            _memo = getattr(self, "_lvl_memo", None)
+            if _memo is None:
+                _memo = self._lvl_memo = {}
+            _hit = _memo.get(_c)
+            if _hit is not None and (_now - _hit[0]) < 60:
+                return _hit[1]
+            import core.chart_cache as _cc
+            df = _cc.load_daily_display(_c)
+            if df is None or getattr(df, "empty", True) or len(df) < 30:
+                _memo[_c] = (_now, None)
+                return None
+            # ⚠️ **不要**为了 3 条均线去跑 `_calc_ma_and_indicators`：实测 800 行要 **1.26s/只**
+            #    （pandas 3 的 Arrow 字符串 + 一整套指标），9 宫格就是 11 秒。
+            #    `_calc_support_resistance` 只用到 close/high/low + ma20/60/180，这里就地算，
+            #    ~2ms 拿齐。⚠️ 历史不足 180 根时 ma 是 NaN ⇒ 结果里过滤掉（x==x 是 NaN 判据）。
+            _d = df.copy()
+            _close_s = _d["close"].astype(float)     # ⚠️ 别叫 _c —— 上面 `_c` 是代码，会被覆盖
+            for _n in (20, 60, 180):
+                _d[f"ma{_n}"] = _close_s.rolling(_n).mean()
+            _lv = self._calc_support_resistance(_d) or {}
+            _ok = lambda x: (x.get("price") == x.get("price"))   # noqa: E731  NaN 过滤
+            out = {
+                "supports": [round(float(x["price"]), 3)
+                             for x in (_lv.get("supports") or []) if _ok(x)][:2],
+                "resistances": [round(float(x["price"]), 3)
+                                for x in (_lv.get("resistances") or []) if _ok(x)][:2],
+            }
             _memo[_c] = (_now, out)
             return out
         except Exception:

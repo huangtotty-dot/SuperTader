@@ -145,7 +145,7 @@ class TestFrontend:
         assert "markArea: gaps.length" in _JS
         # 日线均线三条（颜色与单图的「日线MA5/10/20」一致）
         assert '"日MA5"' in _JS and '"日MA10"' in _JS and '"日MA20"' in _JS
-        assert "markLine: _dmaData.length" in _JS
+        assert "markLine: _lines.length" in _JS
         assert '"#58a6ff"' in _JS and '"#bc8cff"' in _JS and '"#2dd4bf"' in _JS
 
     def test_realtime_polling(self):
@@ -285,3 +285,44 @@ class TestCrosshair:
         assert "DIF ${dif}" in _JS and "DEA ${dea}" in _JS
         # 小格子里弹窗要夹在图内，别飘到隔壁格
         assert "confine: true" in _JS
+
+
+class TestSupportResistance:
+    """owner 2026-10-21：多窗口要把支撑位/压力位画出来。"""
+
+    def _fake_daily(self, n=260):
+        import pandas as pd
+        base = [10.0 + (i % 20) * 0.05 for i in range(n)]
+        return pd.DataFrame({
+            "date": pd.date_range("2025-01-01", periods=n, freq="D"),
+            "open": base, "high": [x * 1.01 for x in base],
+            "low": [x * 0.99 for x in base], "close": base,
+            "volume": [1e5] * n,
+        })
+
+    def test_levels_are_computed_offline(self, monkeypatch):
+        import core.chart_cache as cc
+        api = t_gui.Api()
+        monkeypatch.setattr(cc, "load_daily_display", lambda code: self._fake_daily())
+        monkeypatch.setattr(api, "_lvl_memo", {}, raising=False)
+        lv = api._daily_levels("600000")
+        assert lv is not None and isinstance(lv.get("supports"), list)
+        assert len(lv["supports"]) <= 2 and len(lv["resistances"]) <= 2
+        for v in lv["supports"] + lv["resistances"]:
+            assert isinstance(v, float) and v == v      # 不能是 NaN
+
+    def test_short_history_returns_none(self, monkeypatch):
+        """历史不足 30 根 ⇒ 直接判无，别拿 NaN 均线去算。"""
+        import core.chart_cache as cc
+        api = t_gui.Api()
+        monkeypatch.setattr(cc, "load_daily_display", lambda code: self._fake_daily(10))
+        monkeypatch.setattr(api, "_lvl_memo", {}, raising=False)
+        assert api._daily_levels("600000") is None
+
+    def test_frontend_draws_levels(self):
+        assert "function _mwOption(s, dma, levels)" in _JS
+        assert '`${up ? "压" : "支"} ${Number(y).toFixed(2)}`' in _JS
+        # 支撑绿、压力红（与单图一致）；标签在右侧（日线MA 在左，两拨不打架）
+        assert '"#f85149", type: "dashed"' in _JS and '"#3fb950", type: "dashed"' in _JS
+        assert 'position: up ? "insideEndTop" : "insideEndBottom"' in _JS
+        assert "it.dma, it.levels" in _JS

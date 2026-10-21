@@ -8336,7 +8336,7 @@ function mwPick(i, raw) {
    刻意不画 MACD/RSI/箱体 —— 每格只有 ~1/6 屏宽，塞满就成了噪声；要看细节点开大图。
    2026-10-21 owner：① 缺口没显示 ② 5日/10日/20日均线没显示 ⇒ 都补上，
    且缺口与单图**共用** `buildGapAreas`，口径不会漂。 */
-function _mwOption(s, dma) {
+function _mwOption(s, dma, levels) {
   const gaps = buildGapAreas(s.ohlc, 250, 0.003, 8);   // 一格只画最近 8 块，别糊满
   const _dmaLine = (y, color, txt) => (y == null || !isFinite(y)) ? null : {
     yAxis: y,
@@ -8349,6 +8349,20 @@ function _mwOption(s, dma) {
     _dmaLine(dma && dma.ma10, "#bc8cff", "日MA10"),
     _dmaLine(dma && dma.ma20, "#2dd4bf", "日MA20"),
   ].filter(Boolean);
+  // 支撑/压力位（2026-10-21 owner：多窗口也要画）。颜色与单图一致：支撑绿、压力红。
+  // 标签放**右侧**（日线MA 的标签在左），两拨不打架；每方向最多 2 条（格子里地方小）。
+  const _lvlLine = (y, up) => (y == null || !isFinite(y)) ? null : {
+    yAxis: y,
+    lineStyle: { color: up ? "#f85149" : "#3fb950", type: "dashed", width: 1, opacity: .8 },
+    label: { formatter: `${up ? "压" : "支"} ${Number(y).toFixed(2)}`,
+             color: up ? "#f85149" : "#3fb950", fontSize: 8,
+             position: up ? "insideEndTop" : "insideEndBottom" },
+  };
+  const _lvlData = [].concat(
+    ((levels && levels.resistances) || []).map(y => _lvlLine(y, true)),
+    ((levels && levels.supports) || []).map(y => _lvlLine(y, false)),
+  ).filter(Boolean);
+  const _lines = _dmaData.concat(_lvlData);
   const dates = s.dates || [], ohlc = s.ohlc || [];
   const amtYi = (s.amount && s.amount.length === dates.length)
     ? s.amount.map(v => (v == null || isNaN(Number(v))) ? null : +(Number(v) / 1e8).toFixed(2))
@@ -8425,7 +8439,7 @@ function _mwOption(s, dma) {
       { name: "K线", type: "candlestick", data: ohlc, barMaxWidth: 10,
         // 缺口色块 + 日线均线（与单图同一套口径/颜色）
         markArea: gaps.length ? { silent: true, data: gaps } : undefined,
-        markLine: _dmaData.length ? { silent: true, symbol: "none", data: _dmaData } : undefined,
+        markLine: _lines.length ? { silent: true, symbol: "none", data: _lines } : undefined,
         itemStyle: { color: "#f85149", color0: "#3fb950",
                      borderColor: "#ff6b62", borderColor0: "#56d364", borderWidth: 1 } },
       line(s.ma5, "#e3b341", 1.2),   // 本周期 MA5（5 根 5 分 K = 25 分钟）
@@ -8485,7 +8499,7 @@ async function mwTick() {
         if (!el || !window.echarts) return;
         inst = mwInsts[i] = echarts.init(el);
       }
-      try { inst.setOption(_mwOption(s, it.dma), { notMerge: true }); } catch (e) { /* 单格失败不影响别的格 */ }
+      try { inst.setOption(_mwOption(s, it.dma, it.levels), { notMerge: true }); } catch (e) { /* 单格失败不影响别的格 */ }
     });
   } catch (e) { /* 静默：下一跳重试 */ }
   finally { mwBusy = false; }
