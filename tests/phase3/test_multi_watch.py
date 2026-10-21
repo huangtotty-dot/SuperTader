@@ -79,7 +79,7 @@ class TestFrontend:
         assert "openMultiWatch()" in _HTML
         assert "多窗口看盘" in _HTML
 
-    def test_window_is_3x2_float(self):
+    def test_window_is_3x3_float(self):
         """owner 2026-10-21：「点开后直接阻断了我看 GUI，需要独立」。
 
         原来用的是 `.modal-mask`（`position:fixed; inset:0` 的全屏遮罩，z-index 400）——
@@ -94,7 +94,7 @@ class TestFrontend:
         assert ".mw-win { position: fixed;" in _CSS
         assert "resize: both;" in _CSS
         assert "grid-template-columns: repeat(3" in _CSS
-        assert "grid-template-rows: repeat(2" in _CSS
+        assert "grid-template-rows: repeat(3" in _CSS
         # 标题栏拖动 + 尺寸变化后小图重排
         assert "function _mwBindDrag(win)" in _JS
         assert "function _mwBindResize()" in _JS
@@ -254,3 +254,17 @@ class TestMacdPanel:
         assert 'gridIndex: 2' in _JS
         # 配色与单图一致
         assert '"#3987e5"' in _JS and '"#d55181"' in _JS
+
+
+class TestNineCells:
+    """owner 2026-10-21：多窗口增加到 9 宫格。"""
+
+    def test_nine_cells(self):
+        assert "const MW_N = 9;" in _JS
+        assert "grid-template-rows: repeat(3" in (_ROOT / "web" / "style.css").read_text(encoding="utf-8")
+
+    def test_legacy_six_codes_are_kept_not_dropped(self):
+        """老版本 localStorage 存的是 6 格 ⇒ 升级到 9 格时**不能把用户选的全丢掉**：
+        截到 9 后空位用体检持仓里还没选过的票补齐。"""
+        assert "saved = saved.slice(0, MW_N)" in _JS
+        assert "空位依次用体检持仓里还没选过的票补齐" in _JS

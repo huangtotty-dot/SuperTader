@@ -8061,7 +8061,7 @@ document.addEventListener("DOMContentLoaded", () => {
    后端复用单图那套 SWR（缓存新鲜秒回、过期后台刷、本次先回旧帧）⇒ 任何一格卡住
    都不会拖住别的格，也不会把主线程冻住。
    ══════════════════════════════════════════════════════════════════════ */
-const MW_N = 6;                 // 3×2
+const MW_N = 9;                 // 3×3（2026-10-21 owner：六宫格→九宫格）
 const MW_LS_KEY = "multiWatchCodes";
 const MW_PERIOD_MS = 3000;      // 刷新间隔：轻量帧（只算 K线/MA5/成交额，120根）稳态一跳 ~0ms，3s 跟得上
 const MW_TAIL = 48;
@@ -8112,8 +8112,15 @@ function _mwHoldings() {
 function _mwLoadCodes() {
   let saved = [];
   try { saved = JSON.parse(localStorage.getItem(MW_LS_KEY) || "[]"); } catch (e) { saved = []; }
-  if (!Array.isArray(saved) || saved.length !== MW_N) {
-    saved = _mwHoldings().slice(0, MW_N).map(h => h.code);
+  if (!Array.isArray(saved)) saved = [];
+  // 老版本存的是 6 格 ⇒ **别因为长度变了就把用户选的全丢掉**：截到 9 后，
+  // 空位依次用体检持仓里还没选过的票补齐。
+  saved = saved.slice(0, MW_N).map(x => (typeof x === "string" ? x : ""));
+  const used = new Set(saved.filter(Boolean));
+  for (const h of _mwHoldings()) {
+    if (saved.length >= MW_N) break;
+    if (used.has(h.code)) continue;
+    saved.push(h.code); used.add(h.code);
   }
   while (saved.length < MW_N) saved.push("");
   return saved.slice(0, MW_N);
