@@ -112,6 +112,15 @@ def load_daily_display(code, now=None):
     rows = (cached or {}).get("rows") or []
     if not rows or not is_display_fresh(rows, now):
         return None
+    # 2026-10-21：档里有**不可能存在的隔夜跳空** ⇒ 含盘中半成品根（002929：10-20 显示"跌 0.65%"，
+    # 实际涨停 51.04，因为那根是 10-20 上午的快照）。判 None 让调用方重新取数，
+    # 取回的真数据会把坏根合并覆盖掉（`merge_daily_cache` 按日期以新为准）。
+    try:
+        from core.market_data.tencent_provider import has_impossible_gap
+        if has_impossible_gap(rows, code):
+            return None
+    except Exception:
+        pass
     try:
         df = pd.DataFrame(rows)[_DAILY_COLS]
         df.attrs["source"] = "cache"

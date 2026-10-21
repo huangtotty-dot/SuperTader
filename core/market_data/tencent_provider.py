@@ -8,7 +8,7 @@ import json
 import os
 import urllib.parse
 import urllib.request
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import pandas as pd
 
@@ -31,6 +31,70 @@ def _tx_symbol(code: str) -> str:
         return _lo
     from .codec import to_tx
     return to_tx(c)
+
+
+def _limit_pct(code) -> float:
+    """单日涨跌幅上限（%）：主板 10 / 创业板·科创板 20 / 北交所 30。ST 是 5，按 10 判（保守）。
+
+    ⚠️ 北交所的判定**必须走 codec**：除 4xxxxx/8xxxxx 外还有 **920xxx**（新代码段）。
+    2026-10-21 手写 `c[0] in ("4","8")` 漏了 920 ⇒ 把北交所 -16% 的正常波动判成"不可能跳空"，
+    全池扫出 3 个假阳性。
+    """
+    c = str(code).split("_")[0]
+    try:
+        from .codec import market_of
+        if market_of(c) == "BJ":
+            return 30.0
+    except Exception:
+        pass
+    if c.startswith(("688", "300", "301")):
+        return 20.0
+    return 10.0
+
+
+#: 跳空判据的容差（百分点）：留出四舍五入 / 长期停牌复牌 / 复权小数误差
+_GAP_TOL = 0.8
+
+
+def has_impossible_gap(rows, code, n: int = 3) -> bool:
+    """最近 n 根日线里是否有**超过涨跌停的隔夜跳空** ⇒ 该档不可信。永不抛。
+
+    为什么这是判据：A 股单日涨跌幅有硬上限（主板 10% / 创业板·科创板 20% / 北交所 30%），
+    而前复权序列会把历史价按除权因子**一并缩放** ⇒ 正常数据不可能出现超过上限的隔夜跳空
+    （`open[t] / close[t-1] - 1`）。
+
+    2026-10-21 实证（owner 报「润建股份 10-20 是涨停的，图上却显示跌」）：
+    002929 的 10-20 根是**盘中快照**（收 46.10），而 10-20 真实收盘 51.04（涨停）；
+    10-21 开 53.12 相对 46.10 是 +15.2% —— 图上一根"跌 0.65%"的阴线，实际是涨停。
+    全池扫描：5520 只有 **36 只**命中（都写于 10-21 09:31~09:33 那一批），
+    详见 `tmp/` 的排查脚本与 commit。
+    """
+    try:
+        if not rows or len(rows) < 2:
+            return False
+        # 只看**近期**档：退市/长期停牌票的历史序列（如 000556 的 2002 年数据）不参与判定，
+        # 否则它们的旧除权跳空会被永久当成"坏档"，每次读都白重取一次。
+        try:
+            _last = str(rows[-1].get("date") or "")[:10]
+            if _last and _last < (datetime.now() - timedelta(days=20)).strftime("%Y-%m-%d"):
+                return False
+        except Exception:
+            pass
+        tail = rows[-(n + 1):]
+        _lim = _limit_pct(code) + _GAP_TOL
+        for i in range(1, len(tail)):
+            try:
+                pc = float(tail[i - 1]["close"])
+                o = float(tail[i]["open"])
+            except (KeyError, TypeError, ValueError):
+                continue
+            if pc <= 0 or o <= 0:
+                continue
+            if abs(o / pc - 1.0) * 100.0 > _lim:
+                return True
+        return False
+    except Exception:
+        return False
 
 
 def _vol_div(sym) -> float:
@@ -67,7 +131,7 @@ def _idx_ensure_cols(df, source):
     return df
 
 
-def save_daily_cache(code: str, df, days: int = 800):
+def save_daily_cache(code: str, df, days: int = 800, forming_date: str = None):
     """写个股日线缓存（不变式 {date, saved_at, rows:[{date,open,close,high,low,volume}]}）。
     gm 结果也写缓存（审核 P1 阻断6：gm 路径不能每次直拉）。
 
@@ -86,7 +150,8 @@ def save_daily_cache(code: str, df, days: int = 800):
         if os.path.exists(_fp0):
             _old = (_read_json(_fp0) or {}).get("rows") or []
             if len(_old) > len(df):
-                merge_daily_cache(code, df)      # 新数据更短 ⇒ 并集而不是覆盖
+                # 新数据更短 ⇒ 并集而不是覆盖
+                merge_daily_cache(code, df, forming_date=forming_date)
                 return
     except Exception:
         pass
@@ -99,12 +164,13 @@ def save_daily_cache(code: str, df, days: int = 800):
         with open(os.path.join(_DAILY_CACHE_DIR, f"{code}.json"), "w", encoding="utf-8") as f:
             f.write(json.dumps({"date": datetime.now().strftime("%Y-%m-%d"),
                                 "saved_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                                "forming": [str(forming_date)] if forming_date else [],
                                 "rows": recs}, ensure_ascii=False))
     except Exception:
         pass
 
 
-def merge_daily_cache(code: str, df, cap: int = 800):
+def merge_daily_cache(code: str, df, cap: int = 800, forming_date: str = None):
     """把 df 的日线**并入**共享缓存（按日期去重合并，不缩短既有历史）。
 
     与 `save_daily_cache` 的区别——后者是**整体覆盖**：若调用方只拉了 150 根而缓存里
@@ -119,14 +185,22 @@ def merge_daily_cache(code: str, df, cap: int = 800):
     code = str(code).split("_")[0]
     fp = os.path.join(_DAILY_CACHE_DIR, f"{code}.json")
     try:
-        old_rows = []
-        if os.path.exists(fp):
-            old_rows = (_read_json(fp).get("rows") or [])
+        _old = _read_json(fp) if os.path.exists(fp) else {}
+        old_rows = (_old.get("rows") or [])
+        old_forming = {str(x) for x in (_old.get("forming") or [])}
+        in_dates = {str(r.date) for r in df.itertuples() if str(r.date)}
         by_date = {}
         for r in old_rows:
             d = str(r.get("date") or "")
-            if d:
-                by_date[d] = r
+            if not d:
+                continue
+            # 2026-10-21：**未被真数据确认的"盘中快照根"不许被复制到未来**。
+            # 事故（002929）：10-20 盘中的快照根（收 46.10）在后续 merge 里被当成 10-20 的
+            # 历史一路带下去，而 10-20 真实是涨停 51.04 ⇒ K 线图上那根显示"跌 0.65%"。
+            # 判据：旧档把它标成 forming，而这次的真数据里**没有这一天** ⇒ 宁可缺一根也不留错值。
+            if d in old_forming and d not in in_dates:
+                continue
+            by_date[d] = r
         for r in df.itertuples():
             d = str(r.date)
             if not d:
@@ -136,10 +210,14 @@ def merge_daily_cache(code: str, df, cap: int = 800):
         rows = [by_date[k] for k in sorted(by_date)]
         if cap and len(rows) > cap:
             rows = rows[-cap:]
+        # 旧标记一律作废：没被确认的已被丢弃（上面 continue），被确认的已用真数据覆盖。
+        # 本次若又追加了"当日快照根"，由调用方通过 forming_date 重新标上。
+        forming = {str(forming_date)} if forming_date else set()
         os.makedirs(_DAILY_CACHE_DIR, exist_ok=True)
         with open(fp, "w", encoding="utf-8") as f:
             f.write(json.dumps({"date": datetime.now().strftime("%Y-%m-%d"),
                                 "saved_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                                "forming": sorted(forming),
                                 "rows": rows}, ensure_ascii=False))
     except Exception:
         pass
@@ -494,6 +572,14 @@ class TencentProvider:
                       or (_last_date == _today and (_now - _ts).total_seconds() > 15 * 60))
             if _stale:
                 return None
+            # 2026-10-21：**历史日上还挂着"盘中快照"标记** ⇒ 那根从未被真数据确认过
+            # （见 `save_daily_cache(forming_date=…)`）⇒ 整档不可信，逼上层重新取数。
+            # 取数成功后该标记会随真数据一起被清掉（merge 里 `old_forming ∩ incoming`）。
+            if any(str(d) < _today for d in (cached.get("forming") or [])):
+                return None
+            # 2026-10-21：**不可能存在的隔夜跳空** ⇒ 档里有半成品根（002929 事故），重取。
+            if has_impossible_gap(rows, code):
+                return None
             df = pd.DataFrame(rows)[_DAILY_COLS]
             df.attrs["source"] = "cache"
             return df
@@ -533,16 +619,14 @@ class TencentProvider:
                         for i in kline if len(i) >= 6]
                 if not rows:
                     continue
-                if cache_fp:
-                    try:
-                        with open(cache_fp, "w", encoding="utf-8") as f:
-                            f.write(json.dumps(
-                                {"date": _today, "saved_at": _now.strftime("%Y-%m-%d %H:%M:%S"),
-                                 "rows": rows}, ensure_ascii=False))
-                    except Exception:
-                        pass
                 df = pd.DataFrame(rows)[_DAILY_COLS]
                 df.attrs["source"] = "tencent"
+                # 2026-10-21：**走 `save_daily_cache`，不在这里裸写**。
+                # 裸写没有任何"不许截短"的闸：调用方只要传了短窗口（如 `daily(code, 30)`）
+                # 且在缓存未命中时走到这里，就会把 800 行历史静默截成 30 行 —— 与本仓
+                # 「指数日线缓存会被静默截短」同一类事故（个股侧也已咬过：600362 801→21 根）。
+                # `save_daily_cache` 在新数据更短时自动改走 `merge_daily_cache`（按日期并集）。
+                save_daily_cache(code, df)
                 return df
             except Exception:
                 continue

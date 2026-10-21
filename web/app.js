@@ -5923,7 +5923,9 @@ function fmtAmount(v) {
 // 后端已按「盘中比昨日同期 / 收盘比全日」算好，此处只渲染并如实标出 basis。
 function turnoverCard(t) {
   if (!t || !t.available) {
-    const why = (t && t.error) || "不可用";
+    // 2026-10-21：区分「还在首次取数(warming)」与「真失败」——两者都渲染成"不可用"会让人以为
+    //   数据断了，而 warming 其实下一秒就回来（后端单飞刷新 + 8s 失败短缓存）。
+    const why = (t && t.error) ? t.error : (t && t.warming ? "取数中…" : "不可用");
     return `<div class="idx-card idx-card-err" style="min-width:150px;text-align:center"
         title="${esc("两市成交额：" + why)}">
       <div style="font-size:13px;color:var(--text-dim)">两市成交额</div>

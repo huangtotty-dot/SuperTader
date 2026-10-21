@@ -2640,6 +2640,15 @@ class Api:
     # 成交额只看分钟线（见 _market_turnover 的三条口径说明），60s 去重：GUI 10s 轮询不至于每轮打两次 GM。
     _TURNOVER_TTL = 60.0
 
+    @staticmethod
+    def _turnover_ttl_for(payload):
+        """内存去重窗口：**有效结果 60s，失败结果只压 8s**（2026-10-21）。
+
+        原来失败也按 60s 缓存 ⇒ 一次瞬时 GM 失败就让卡片空白整整一分钟，而下一分钟还要再
+        付一次 GM 超时（12s×2 腿）。失败不是有价值的信息，不该长期占坑。
+        """
+        return Api._TURNOVER_TTL if (payload or {}).get("available") is True else 8.0
+
     def load_market_turnover(self):
         """两市成交额。三段式（2026-10-10）：内存热 → 磁盘快照(stale) → 踢单飞刷新+短等。
 
@@ -2650,7 +2659,7 @@ class Api:
         """
         now = _time_mod.time()
         hit = Api._turnover_cache.get("payload")
-        if hit and (now - hit[0]) < self._TURNOVER_TTL:
+        if hit and (now - hit[0]) < self._turnover_ttl_for(hit[1]):
             return hit[1]                                      # 1) 内存热
         _, ev = _kick_overview_refresh("market_turnover", self._market_turnover_impl)
         snap = _snapshot_read("market_turnover")
@@ -2665,7 +2674,7 @@ class Api:
     def _market_turnover_impl(self):
         now = _time_mod.time()
         hit = Api._turnover_cache.get("payload")
-        if hit and (now - hit[0]) < self._TURNOVER_TTL:
+        if hit and (now - hit[0]) < self._turnover_ttl_for(hit[1]):
             return hit[1]
         try:
             out = self._market_turnover()
@@ -2803,11 +2812,66 @@ class Api:
             d["_hm"] = d["time"].astype(str).str[11:16]
             return d
 
-        # 沪深两腿：GM 指数分钟线（含 amount）
+        _today = datetime.now().strftime("%Y-%m-%d")
+        _hm_now = datetime.now().strftime("%H:%M")
+        _in_session = datetime.now().weekday() < 5 and "09:15" <= _hm_now <= "15:05"
+
+        def _stale_day(df):
+            """盘中却停在上一交易日 ⇒ 该源"新鲜度"不合格（不能拿昨天的额当今天报）。"""
+            try:
+                return _in_session and str(df["time"].astype(str).max())[:10] < _today
+            except Exception:
+                return False
+
+        def _leg_frame(sym):
+            """一条腿的分钟线：**GM 优先 → 新浪兜底**（2026-10-21，owner 报"盘中经常读不到"）。
+
+            原来两腿**只走 GM**，终端重启/令牌轮换/冷却窗一命中，整张卡片就是空白
+            （卡片只剩一行「分钟线不可得(sh000001)」）。新浪这条源实测与 GM **逐日完全一致**
+            —— 2026-10-19/20/21 三天：沪 6870.1/6999.7/6427.5 亿、深 7505.0/7561.4/7865.9 亿，
+            浮点都不差（`tmp/probe_turnover_sources.py`）。同口径 ⇒ 可以直接顶替，无需换算。
+
+            优先级：GM 且新鲜 → 新浪且新鲜 → **两者都不新鲜时仍回退给已有的那一份**
+            （节假日/长假里"今天"本来就没有 bar，此时显示上一交易日**全日**额是对的，
+             不能因为"不是今天"就把卡片打成空白 —— 那等于每逢假期就坏）。
+            """
+            _empty = lambda d: d is None or getattr(d, "empty", True)     # noqa: E731
+            gm = None
+            try:
+                _prov = get_provider()
+                # 冷却窗内直接走新浪：这张是**展示卡片**，不该为它再付一次 12s 的 GM 硬超时
+                # （那正是"等半天还是空白"的体感来源）。
+                # ⚠️ 只能读 `_gm_down_until`，**不能**先调 `_gm_ok_wait()` 探一句 ——
+                #    那会占掉半开探针窗，`index_minute` 内部的 `_gm_ok()` 随即判"窗被占"⇒
+                #    直接返空表，等于把本来健康的 GM 也废掉（实测踩到：正常态被判成 sina 兜底）。
+                _down = getattr(_prov, "_gm_down_until", None)
+                if _down is None or datetime.now() >= _down:
+                    gm = _prov.index_minute(sym, count_bars=800, freq="300s")
+            except Exception:
+                gm = None
+            if not _empty(gm) and not _stale_day(gm):
+                return gm
+            sdf = None
+            try:
+                sdf = sina_index.fetch_index_minutes(sym, scale=5, datalen=400)
+            except Exception:
+                sdf = None
+            if not _empty(sdf) and not _stale_day(sdf):
+                degraded.append("index_minute_sina")
+                return sdf
+            if not _empty(gm):
+                degraded.append("index_minute_prevday")      # 假期/盘前：用上一交易日整日值
+                return gm
+            if not _empty(sdf):
+                degraded.append("index_minute_prevday")
+                return sdf
+            return None
+
+        # 沪深两腿：指数分钟线（含 amount）
         _minute_fail = None
         for sym in ("sh000001", "sz399106"):     # 上证指数 + 深证综指
-            df = get_provider().index_minute(sym, count_bars=800, freq="300s")
-            if df is None or df.empty:
+            df = _leg_frame(sym)
+            if df is None:
                 _minute_fail = sym
                 break
             per_leg[sym] = _norm(df)
@@ -2827,7 +2891,8 @@ class Api:
         # 北交所腿：只能走新浪（见 sina_index 模块 docstring）。取不到则**如实降级为沪深口径**，
         # 而不是静默少算 ~120 亿 —— 那正是本次与同花顺对不上的原因。
         bse = sina_index.fetch_index_minutes("bj899050", scale=5, datalen=400)
-        bse_included = bse is not None and not bse.empty and float(bse["amount"].sum()) > 0
+        bse_included = (bse is not None and not bse.empty
+                        and float(bse["amount"].sum()) > 0 and not _stale_day(bse))
         if bse_included:
             per_leg["bj899050"] = _norm(bse)
             legs.append("bj899050")
@@ -2838,7 +2903,7 @@ class Api:
         out["legs"] = legs
         out["bse_included"] = bse_included
         if degraded:
-            out["degraded"] = degraded
+            out["degraded"] = list(dict.fromkeys(degraded))   # 去重（两腿各记一次会出现重复）
         return out
 
 
@@ -5837,6 +5902,15 @@ class Api:
             #     （MIN_BARS_CHART 3200/1600），旧档切到 5/10 分 Tab 时按需重建一次。
             if int(hit.get("schema") or 0) < 4:
                 return None
+            # 2026-10-21：payload 里若含**盘中半成品根**（相邻日跳空超过涨跌停上限）⇒ 不可回放。
+            # 现场：002929 的 payload 存着 10-20 收 46.10（真实是涨停 51.04），而日线缓存已修好；
+            # 若只比"日期/长度"，payload 看着仍是当日的、会被直接回放 ⇒ 图上永远显示错的那根。
+            try:
+                from core.market_data.tencent_provider import has_impossible_gap
+                if has_impossible_gap(hit.get("daily_rows") or [], code):
+                    return None
+            except Exception:
+                pass
             if want_minutes:
                 _pd = (hit.get("payload") or {}).get("period_data") or {}
                 _need = period if period in _MIN_PERIODS else None

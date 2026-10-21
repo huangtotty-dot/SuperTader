@@ -284,10 +284,17 @@ class MarketDataFacade:
                 df = self._gm_call("daily", self._gm.daily, code, days)
                 if df is not None and not df.empty:
                     # 阻断5: gm 日线对当日 forming bar（带 ts_date 新鲜度闸；窗口至收盘后16:00，重审#7）
+                    _last_before = str(df["date"].iloc[-1]) if not df.empty else ""
                     df = self._maybe_append_forming(df, code)
+                    # 2026-10-21：**把"这根是快照造的"记进缓存**（forming_date）。不记的话，
+                    # 盘中那根半成品会在后续 merge 里被当成历史一路带下去，而它永远不会被
+                    # 任何真数据确认 —— 002929 的 10-20 就是这么变成"跌 0.65%"的（真实是涨停）。
+                    _forming = (str(df["date"].iloc[-1])
+                                if (not df.empty and str(df["date"].iloc[-1]) != _last_before)
+                                else None)
                     # 阻断6: gm 结果写缓存（供 gm 不可用时段兜底；含盘中 15 分钟新鲜度/B-1，由 tencent 缓存读取端执行）
                     from .tencent_provider import save_daily_cache
-                    save_daily_cache(code, df)
+                    save_daily_cache(code, df, forming_date=_forming)
                     self._gm_ok_reset()   # 连通成功 → 复位熔断
                     return self._mark(_resample_period(df, period), "gm")
                 # F-6(2026-09-04): gm 静默返空（588170 ETF 疑单点依赖腾讯）——补 warning 可观测

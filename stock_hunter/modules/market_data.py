@@ -529,7 +529,10 @@ class MarketDataFetcher:
                             and _c6 not in getattr(self, "_bulk_from_cache", set())):
                         try:
                             from core.market_data.tencent_provider import merge_daily_cache
-                            merge_daily_cache(code, df)
+                            # 2026-10-21：当日那根是**盘中数据**（上面刚用快照补/改过）⇒ 标记为
+                            # forming。万一它没被后续真数据确认，merge 会把它丢掉，而不是当收盘
+                            # 一路带下去（002929：10-20 的盘中根被当成收盘，图上显示"跌"实际涨停）。
+                            merge_daily_cache(code, df, forming_date=str(target_date_str)[:10])
                         except Exception:
                             pass
                     target_rows = df[df['date'] == target_date_str]
