@@ -8372,6 +8372,35 @@ function _mwOption(s, dma) {
   }));
   return {
     animation: false, backgroundColor: "#0d1117",
+    // 十字光标 + 悬停明细（2026-10-21 owner：多窗口要十字光标）。
+    // `axisPointer.link` 让**同一格的三窗**共享一条竖线（K线/成交额/MACD 对齐），
+    // 但**不跨格**联动 —— 九宫格里跨格跟着动会看花眼。
+    axisPointer: { link: [{ xAxisIndex: "all" }],
+                   label: { fontSize: 8, backgroundColor: "#30363d", color: "#e6edf3" } },
+    tooltip: {
+      trigger: "axis",
+      axisPointer: { type: "cross", label: { fontSize: 8, backgroundColor: "#30363d", color: "#e6edf3" } },
+      backgroundColor: "rgba(22,27,34,.96)", borderColor: "#30363d", borderWidth: 1,
+      borderRadius: 6, padding: [4, 6], confine: true,
+      textStyle: { color: "#e6edf3", fontSize: 10 },
+      formatter: (ps) => {
+        const i = ps && ps[0] ? ps[0].dataIndex : -1;
+        const o = i >= 0 ? ohlc[i] : null;
+        if (!o) return "";
+        const prev = i > 0 ? ohlc[i - 1][1] : null;
+        const chg = prev ? (o[1] - prev) / prev * 100 : null;
+        const _c = chg == null ? "#c9d1d9" : (chg >= 0 ? "#f85149" : "#3fb950");
+        const amt = (amtYi && amtYi[i] != null) ? `${amtYi[i].toFixed(2)} 亿` : null;
+        const m = s.macd || {};
+        const dif = m.dif ? m.dif[i] : null, dea = m.dea ? m.dea[i] : null;
+        return `<div style="font-weight:700;margin-bottom:2px">${esc(dates[i])}</div>`
+          + `开 ${o[0]}　高 ${o[3]}<br>低 ${o[2]}　收 <b>${o[1]}</b>`
+          + (chg != null ? ` <span style="color:${_c}">${chg >= 0 ? "+" : ""}${chg.toFixed(2)}%</span>` : "")
+          + (amt ? `<br>成交额 <b>${amt}</b>` : "")
+          + (dif != null ? `<br><span style="color:#3987e5">DIF ${dif}</span>　`
+              + `<span style="color:#d55181">DEA ${dea}</span>` : "");
+      },
+    },
     // 三窗：主图 50% / 成交额 10% / MACD 18%（格子里地方小，MACD 不能太薄）
     grid: [{ left: 46, right: 8, top: 6, height: "50%" },
            { left: 46, right: 8, top: "60%", height: "10%" },

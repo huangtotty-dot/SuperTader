@@ -268,3 +268,20 @@ class TestNineCells:
         截到 9 后空位用体检持仓里还没选过的票补齐。"""
         assert "saved = saved.slice(0, MW_N)" in _JS
         assert "空位依次用体检持仓里还没选过的票补齐" in _JS
+
+
+class TestCrosshair:
+    """owner 2026-10-21：多窗口看盘要十字光标。"""
+
+    def test_crosshair_and_linked_grids(self):
+        assert 'axisPointer: { type: "cross"' in _JS
+        # 同一格的三窗共享竖线（K线/成交额/MACD 对齐）
+        assert 'axisPointer: { link: [{ xAxisIndex: "all" }]' in _JS
+
+    def test_tooltip_shows_bar_details(self):
+        assert 'trigger: "axis"' in _JS
+        assert "formatter: (ps) => {" in _JS
+        assert "成交额 <b>${amt}</b>" in _JS
+        assert "DIF ${dif}" in _JS and "DEA ${dea}" in _JS
+        # 小格子里弹窗要夹在图内，别飘到隔壁格
+        assert "confine: true" in _JS
