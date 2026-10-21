@@ -98,6 +98,9 @@ class MarketDataFacade:
         self._gm_probe_until = None
         # P1-2: 单 worker 池承载 gm 调用，超时即弃池重建（挂死线程不可回收）
         self._gm_pool = _cf.ThreadPoolExecutor(max_workers=1, thread_name_prefix="gm-call")
+        # 2026-10-21：池句柄的读/换都走这把锁（并发超时熔断时曾把 submit 打到已关闭的池上，
+        # 见 `_gm_call` docstring）
+        self._gm_pool_lock = threading.Lock()
 
     def _gm_ready(self) -> bool:
         return bool(self._gm is not None and getattr(self._gm, "_ready", False))
@@ -167,28 +170,78 @@ class MarketDataFacade:
         由调用点既有 `except Exception → _note_gm_down → 腾讯兜底` 接住；超时后丢弃该池重建。
 
         `timeout` 缺省用 `_GM_CALL_TIMEOUT`（12s，单标的调用）；批量调用（daily_batch）
-        单次 350 只要 ~19s，必须显式放宽，否则会被 12s 误杀。"""
+        单次 350 只要 ~19s，必须显式放宽，否则会被 12s 误杀。
+
+        **2026-10-21：池的取用/替换全部进锁，并在 submit 撞到已关闭池时就地重建重试。**
+        现场（`bench_boot2` / 真实进程都复现）：报
+        `gm 连接异常(snapshot 002176: cannot schedule new futures after shutdown)` ⇒
+        `_note_gm_down` 置 60s 冷却 ⇒ 之后**所有**取数降级腾讯（慢）。成因是原写法的
+        check-then-set 竞态：T1 超时 → `shutdown(cancel_futures=True)` → 建新池；
+        T2 恰在这两步之间 `submit` 到**已关闭**的池 ⇒ RuntimeError 被当成"GM 挂了"。
+        这不是 GM 的问题（GM 本身中位 14ms），把它记成故障会让整轮排查跑偏。
+        现在：①共享池句柄读写加锁；②撞到 shutdown 就换新池**重试一次**（任务从未执行过，
+        重试安全）；③排队中被 `cancel_futures` 取消的任务（CancelledError）同样重试一次
+        ——它根本没打到 GM，不该熔断。
+        """
+        _tmo = self._GM_CALL_TIMEOUT if timeout is None else timeout
+        _tmo_msg = f"gm {desc} 调用超时>{_tmo}s（SDK 无超时挂死）"
+        fut = self._gm_submit(fn, args, kwargs)
+        try:
+            return fut.result(timeout=_tmo)
+        except _cf.CancelledError:
+            # 排队中被"别人超时→cancel_futures"取消：**根本没打到 GM** ⇒ 不应熔断。
+            # 换池重排一次；还是被取消才认输。
+            try:
+                return self._gm_submit(fn, args, kwargs).result(timeout=_tmo)
+            except _cf.CancelledError:
+                raise TimeoutError(f"gm {desc} 排队被取消（重试亦被取消）")
+        except _cf.TimeoutError:
+            self._gm_drop_pool()
+            raise TimeoutError(_tmo_msg)
+
+    def _gm_pool_get(self):
+        """取共享单 worker 池（必要时新建）。调用方必须持 `_gm_pool_lock`。"""
         if self._gm_pool is None:
             self._gm_pool = _cf.ThreadPoolExecutor(max_workers=1, thread_name_prefix="gm-call")
-        fut = self._gm_pool.submit(fn, *args, **kwargs)
+        return self._gm_pool
+
+    def _gm_submit(self, fn, args, kwargs):
+        """向共享单 worker 池提交；池已被别人超时熔断关掉 ⇒ 换新池重试一次。
+
+        "cannot schedule new futures after shutdown" 是**本进程内的竞态**，不是 GM 故障
+        （见 `_gm_call` 注释）——绝不能让它冒到调用点被记成 `_note_gm_down`。
+        """
+        with self._gm_pool_lock:
+            pool = self._gm_pool_get()
         try:
-            return fut.result(timeout=self._GM_CALL_TIMEOUT if timeout is None else timeout)
-        except _cf.TimeoutError:
+            return pool.submit(fn, *args, **kwargs)
+        except RuntimeError as e:
+            if "shutdown" not in str(e).lower():
+                raise
+            with self._gm_pool_lock:
+                if self._gm_pool is pool:        # 还是那个死池 ⇒ 换掉
+                    self._gm_pool = None
+                return self._gm_pool_get().submit(fn, *args, **kwargs)
+
+    def _gm_drop_pool(self):
+        """超时熔断：丢弃当前池（连带取消排队任务）并换新池。加锁，避免换池与提交打架。"""
+        with self._gm_pool_lock:
+            old = self._gm_pool
+            self._gm_pool = None
+            self._gm_pool_get()
+        if old is None:
+            return
+        # cancel_futures（2026-10-10）：探针超时说明 gm 挂死，池里可能已排着一串等待中的
+        # 任务——不取消就会逐个再付满超时。被取消的任务由 `_gm_call` 的重排分支接住。
+        try:
+            old.shutdown(wait=False, cancel_futures=True)
+        except TypeError:                        # Python < 3.9 无 cancel_futures
             try:
-                # cancel_futures（2026-10-10）：探针超时说明 gm 挂死，此时池里可能已排着一串
-                # 等待中的任务——不取消它们就会逐个再付满 4s。取消后未启动的任务立即抛
-                # CancelledError → 调用点既有 `except Exception → _note_gm_down → 腾讯兜底`，
-                # 快速失败而不是排队。
-                self._gm_pool.shutdown(wait=False, cancel_futures=True)
-            except TypeError:            # Python < 3.9 无 cancel_futures
-                try:
-                    self._gm_pool.shutdown(wait=False)
-                except Exception:
-                    pass
+                old.shutdown(wait=False)
             except Exception:
                 pass
-            self._gm_pool = _cf.ThreadPoolExecutor(max_workers=1, thread_name_prefix="gm-call")
-            raise TimeoutError(f"gm {desc} 调用超时>{self._GM_CALL_TIMEOUT}s（SDK 无超时挂死）")
+        except Exception:
+            pass
 
     def _note_gm_down(self, ctx: str, key: str, exc: Exception) -> None:
         """gm 调用失败 → 置冷却窗并每窗只告警一次。
@@ -583,11 +636,24 @@ class MarketDataFacade:
 
 
 _facade_singleton = None
+_facade_build_lock = threading.Lock()
 
 
 def get_provider():
-    """返回数据源门面（单例）。默认 gm 主源，失败降级腾讯。"""
+    """返回数据源门面（单例）。默认 gm 主源，失败降级腾讯。
+
+    **2026-10-21：加锁（原来是裸的 check-then-set）。**
+    GUI 的首帧/预热是几十个线程同时扇出，原写法在构造完成前每个线程都看到 `None`
+    ⇒ **各建一个 Facade**。实测 6 线程并发 `get_provider()` ⇒ **构造 6 份**，每份
+    **~1.5s**（大头是 `GmProvider → gm_token.load_token → psutil.process_iter` 扫全部进程），
+    而线程池/连接/`_gm_pool` 各自独立 ⇒ 后建的把前建的覆盖成孤儿；孤儿池里的超时熔断还会
+    把**别人**正在用的池 shut down ⇒ 报 `cannot schedule new futures after shutdown`
+    ⇒ `_note_gm_down` 置 60s 冷却 ⇒ 全站降级腾讯（慢）。这正是开 K 线时看到的那串。
+    加锁后并发构造只有 1 次，其余线程等它（~1.5s 一次性），不再有孤儿池。
+    """
     global _facade_singleton
     if _facade_singleton is None:
-        _facade_singleton = MarketDataFacade()
+        with _facade_build_lock:
+            if _facade_singleton is None:
+                _facade_singleton = MarketDataFacade()
     return _facade_singleton

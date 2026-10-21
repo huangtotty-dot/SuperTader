@@ -4513,7 +4513,18 @@ class Api:
         want_minutes（2026-10-06）：**默认 False ⇒ 不取 30/60分**。分钟线只能逐只打 tushare
         （实测 1.6s/周期、无法批量），是日线视图首次打开的主延迟。前端仅在切到 30分/60分 Tab
         时才传 True，日线/周/月视图因此不再被分钟取数阻塞。
+
+        **2026-10-21：want_minutes 在非分钟视图上一律降级为 False。**
+        现场（`chart_zoom.log` 15:28:22）：前端在**月线 Tab**上仍传 `wantMin=true`
+        （`_wantMinutes()` 只要上一份 payload 带过 min30 就为真），而后端判"period 不是分钟档
+        ⇒ 无从知道要哪一档 ⇒ **四档全抓**。这一次重建实测 **12.5s**（min5 3200 + min10 1600
+        + min30/60 各 320 根，逐周期取数 + 指标），并发时直接越过前端 20s ⇒ owner 截图里的
+        「K线加载失败 … 投递层积压」。日线/周/月视图根本不渲染分钟序列（`strip_minutes` 还会
+        把它剥掉）⇒ 在这里收口，任何旧前端/缓存都不再触发全量分钟重建。
         """
+        if period is not None and period not in _MIN_PERIODS:
+            want_minutes = False
+
         out = {"code": code, "name": code, "available": False, "error": ""}
         if not hasattr(self, "_stock_chart_cache"):
             self._stock_chart_cache = {}
@@ -6064,16 +6075,39 @@ class Api:
                                                     _s.get("low"), _v)
             if not allow_network:
                 return None               # 快路径：不在批量快照内即不补（不打网络）
-            # 回退：单只快照（网络）
-            from core.market_data import get_provider
-            snap = get_provider().snapshot([base]).get(base)
+            # 回退：单只快照（网络）。**2026-10-21：腾讯优先，GM 只做兜底。**
+            # 为什么：`get_provider().snapshot()` 是 GM 优先，而 GM 调用池**只有 1 个 worker**
+            # （`facade._gm_call`，为硬超时故意如此）。开 K 线时若后台预热/标签/扫描正在排队，
+            # 这一只快照就得排在**它们后面**——实测开图时本函数耗时 **8.5s**（单独跑只要 0.3s），
+            # 是 `load_stock_chart` 越过前端 20s 投递上限的主项（`bench_boot5` 分阶段计时）。
+            # K 线弹窗是展示用途，不需要"与自动盘同源"的 GM 保证 —— 与 2026-10-18 日线取数
+            # 改腾讯优先同一取舍；腾讯直连也绕开 `_gm_ok` 的半开探针窗。
+            snap, _from_tx = None, False
+            try:
+                from core.market_data.tencent_provider import TencentProvider
+                snap = TencentProvider().snapshot([base]).get(base)
+                _from_tx = True
+            except Exception:
+                snap = None
+            if not snap or not snap.get("price"):
+                from core.market_data import get_provider
+                snap, _from_tx = get_provider().snapshot([base]).get(base), False
             if not snap or not snap.get("price"):
                 return None
             if snap.get("ts_date") != today:
                 return None
             px = snap["price"]
+            _v = snap.get("volume")
+            # 腾讯 f[6] 成交量**按板块不同单位**：主板/创业板/ETF 是「手」、科创板 688 是「股」，
+            # 差 100 倍（memory: qt_quote_volume_unit_by_board）。forming bar 要写进按「手」的
+            # 日线序列 ⇒ 688 必须 ÷100（与上面批量快照分支同口径）。GM 那份本来就是手，别再除。
+            if _from_tx and _v and str(base).startswith("688"):
+                try:
+                    _v = float(_v) / 100.0
+                except (TypeError, ValueError):
+                    _v = None
             return self._mk_forming_bar(today, px, snap.get("open"), snap.get("high"),
-                                        snap.get("low"), snap.get("volume"))
+                                        snap.get("low"), _v)
         except Exception:
             return None
 
@@ -11675,9 +11709,29 @@ if __name__ == "__main__":
     # 启动预热（均为后台 daemon 线程，不阻塞启动；失败静默）：
     #  · 持仓图表：低并发(3)，消除 load_ob_analysis 的 14s 冷启动阻塞
     #  · 技术标签：走其内置后台分支，消除首次进建仓表/破位表的标签冷算等待
-    _th.Thread(target=api.prewarm_holdings_charts, daemon=True).start()
-    _th.Thread(target=api.prewarm_stock_tags, daemon=True).start()
-    _th.Thread(target=api.prewarm_overview, daemon=True).start()   # 总览页重端点（指数板/成交额/背离）
+    #
+    # **2026-10-21：先「单线程付一次冷启动」，再并行。**
+    # 为什么（`tmp/bench_boot*.py` 实测，同一台机器）：
+    #   · 三路预热 + 用户开图**同时**起 ⇒ 首次开图 **20.0s**，其中
+    #     `_rebuild_payload_daily` 16s、`_today_forming_bar` 8.5s——而单独跑只要 0.07s / 0.3s；
+    #   · 先让**一个线程**完整跑一遍 `load_stock_chart`（5.0s，把 import 链 / provider 单例 /
+    #     pandas 首次调用全付掉），再起三路并行 ⇒ 同样场景下开图 **1.37s**。
+    # 根因不是"后台太多"，而是**冷启动的懒加载在多线程里互相抢 import 锁 + 重复构造 provider**。
+    # 所以把并发的起点挪到"冷启动已付完"之后。
+    def _boot_warmup():
+        try:
+            _cur = _load_json(HOLDINGS_MANUAL, {})
+            _first = next((str(_c).split("_")[0] for _c, _i in (_cur or {}).items()
+                           if isinstance(_i, dict) and not str(_c).startswith("_")
+                           and (_i.get("qty") or 0)), None)
+            if _first:
+                api.load_stock_chart(_first)      # 冷启动一次性：import + provider + 建图全链
+        except Exception:
+            pass
+        for _fn in (api.prewarm_holdings_charts, api.prewarm_stock_tags, api.prewarm_overview):
+            _th.Thread(target=_fn, daemon=True).start()
+
+    _th.Thread(target=_boot_warmup, daemon=True, name="boot-warmup").start()
 
     def _prewarm_chart_build():
         """建图冷启动预热（2026-10-06）：首次 `_build_chart_from_df` 含懒加载 import

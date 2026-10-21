@@ -3888,11 +3888,13 @@ function setChartRange(period, bars) {
   renderStockChart();
 }
 
-// 是否请求 30/60分：日线/周/月视图不取（分钟线逐只打 tushare，是首帧主延迟）；
-// 仅当切到分钟 Tab，或本票已加载过分时（轮询时保持），才请求。
+// 是否要分钟线：**只看当前 Tab**。
+// 2026-10-21：删掉「本票已加载过分时就在日/周/月 Tab 上继续要」那条（原 `pd.min30 ⇒ true`）。
+// 它和"按需只抓当前档"的改造冲突：带着它，后端在月线 Tab 上收到 wantMin=true 却拿不到具体档位
+// ⇒ **四档全抓**（min5 3200 根 + min10 1600 + min30/60），实测 12.5s，并发时越过 20s 投递上限
+// ⇒ owner 截图「K线加载失败」那次失败的就是 `period=monthly` 的请求（chart_zoom.log 15:28:22）。
+// 现在日线/周/月视图不传分钟（后端也会把它们剥掉），切到分钟 Tab 才按档抓一次。
 function _wantMinutes() {
-  const pd = stockChartData && stockChartData.period_data;
-  if (pd && pd.min30) return true;
   return MIN_PERIODS.includes(stockChartPeriod);
 }
 
