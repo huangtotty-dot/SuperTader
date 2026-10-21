@@ -170,3 +170,37 @@ class TestLightweightFrame:
         src = inspect.getsource(t_gui.Api.load_multi_chart)
         assert "_mw_frame" in src
         assert "_chart_live_frame" not in src, "别再复用单图的深档帧"
+
+
+class TestWindowMaxMin:
+    """owner 2026-10-21：多窗口看盘要支持最大化与最小化。"""
+
+    def test_buttons_present(self):
+        assert 'id="mwMaxBtn"' in _HTML
+        assert 'id="mwMinBtn"' in _HTML
+        assert "mwToggleMax()" in _HTML and "mwToggleMin()" in _HTML
+
+    def test_max_saves_and_restores_geometry(self):
+        """最大化要**记住原来的位置尺寸**，再点还原回去（不能回到默认位置）。"""
+        assert "let mwGeomSaved = null;" in _JS
+        assert "mwGeomSaved = { left: r.left + \"px\"" in _JS
+        assert "win.classList.add(\"mw-max\")" in _JS
+        assert "win.classList.remove(\"mw-max\")" in _JS
+        # 最大化时禁用拖拽（否则会把全屏窗拖出屏幕）
+        assert 'if (win.classList.contains("mw-max")) return;' in _JS
+        # 最大化时禁用缩放手柄
+        assert ".mw-win.mw-max { resize: none; }" in (_ROOT / "web" / "style.css").read_text(encoding="utf-8")
+
+    def test_minimize_keeps_titlebar(self):
+        assert "grid.style.display = \"none\"" in _JS
+        assert "mwMinH = win.style.height" in _JS
+        # 还原时把高度放回去
+        assert 'win.style.height = mwMinH || "70vh";' in _JS
+
+    def test_resize_guard_when_hidden(self):
+        """最小化时格子 display:none ⇒ 尺寸为 0，不能拿 0 去 resize（会画成空画布）。"""
+        assert "if (el && el.clientWidth && el.clientHeight) i.resize();" in _JS
+
+    def test_browser_resize_refills_when_maxed(self):
+        assert 'win.classList.contains("mw-max")' in _JS
+        assert "window.innerWidth - 16" in _JS

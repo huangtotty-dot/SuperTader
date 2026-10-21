@@ -543,6 +543,8 @@
     <span>🔲 多窗口看盘 <span class="cell-dim" style="font-size:11px;font-weight:400">5 分 K · 每 4 秒刷新</span></span>
     <span style="display:flex;gap:6px">
       <button class="mini-btn" onclick="mwRefreshAll()" title="立即刷新一次">🔄</button>
+      <button class="mini-btn" id="mwMinBtn" onclick="mwToggleMin()" title="最小化：只留标题栏（再点展开）">—</button>
+      <button class="mini-btn" id="mwMaxBtn" onclick="mwToggleMax()" title="最大化 / 还原（也可双击标题栏）">🗖</button>
       <button class="mini-btn" onclick="closeMultiWatch()" title="关闭（不影响 GUI 其它操作）">×</button>
     </span>
   </div>

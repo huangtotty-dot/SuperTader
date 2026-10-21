@@ -8123,13 +8123,14 @@ function closeMultiWatch() {
 }
 
 /* 浮窗拖动（2026-10-21）：按标题栏拖。用 px 定位（拖过之后再也不用 right/bottom），
-   否则 right/top 混着改会跳。 */
+   否则 right/top 混着改会跳。双击标题栏 = 最大化/还原（见 mwToggleMax）。 */
 function _mwBindDrag(win) {
   const bar = document.getElementById("mwTitle");
   if (!bar || bar._mwDragBound) return;
   bar._mwDragBound = true;
   bar.addEventListener("mousedown", (ev) => {
     if (ev.target && ev.target.tagName === "BUTTON") return;   // 别抢刷新/关闭按钮
+    if (win.classList.contains("mw-max")) return;              // 最大化时别拖（会拖出屏幕）
     const r = win.getBoundingClientRect();
     const dx = ev.clientX - r.left, dy = ev.clientY - r.top;
     win.style.right = "auto"; win.style.left = r.left + "px"; win.style.top = r.top + "px";
@@ -8148,6 +8149,75 @@ function _mwBindDrag(win) {
     window.addEventListener("mouseup", up);
     ev.preventDefault();
   });
+  // 双击标题栏 = 最大化 / 还原（常见窗口习惯）
+  bar.addEventListener("dblclick", (ev) => {
+    if (ev.target && ev.target.tagName === "BUTTON") return;
+    mwToggleMax();
+  });
+}
+
+/* ---- 最大化 / 最小化（2026-10-21 owner）----
+   最大化：铺满整个窗口（留 8px 边），并**记住原来的位置尺寸**，再点还原回去。
+   最小化：只留标题栏（小图 display:none），再点展开。
+   两者都不影响「浮窗不遮 GUI」这条：最大化时它仍是独立窗口（没有遮罩），
+   只是尺寸大；下面的界面依旧可点。 */
+let mwGeomSaved = null;      // 最大化前的位置/尺寸
+let mwMinimized = false;     // 是否最小化中
+let mwMinH = "";             // 最小化前的高度
+
+function _mwResizeCharts() {
+  mwInsts.forEach(i => {
+    try {
+      if (!i) return;
+      const el = i.getDom && i.getDom();
+      if (el && el.clientWidth && el.clientHeight) i.resize();
+    } catch (e) { /* 忽略 */ }
+  });
+}
+
+function mwToggleMax() {
+  const win = document.getElementById("multiWatchWin");
+  if (!win) return;
+  if (mwMinimized) mwToggleMin();            // 最小化状态先展开，否则最大化看不出效果
+  if (win.classList.contains("mw-max")) {
+    win.classList.remove("mw-max");
+    if (mwGeomSaved) {
+      win.style.left = mwGeomSaved.left;
+      win.style.top = mwGeomSaved.top;
+      win.style.width = mwGeomSaved.w;
+      win.style.height = mwGeomSaved.h;
+      win.style.right = "auto";
+    }
+  } else {
+    const r = win.getBoundingClientRect();
+    mwGeomSaved = { left: r.left + "px", top: r.top + "px",
+                    w: r.width + "px", h: r.height + "px" };
+    win.classList.add("mw-max");
+    win.style.right = "auto";
+    win.style.left = "8px";
+    win.style.top = "8px";
+    win.style.width = Math.max(320, window.innerWidth - 16) + "px";
+    win.style.height = Math.max(240, window.innerHeight - 16) + "px";
+  }
+  setTimeout(_mwResizeCharts, 60);           // 让浏览器先把尺寸落定
+}
+
+function mwToggleMin() {
+  const win = document.getElementById("multiWatchWin");
+  const grid = document.getElementById("multiWatchGrid");
+  if (!win || !grid) return;
+  mwMinimized = !mwMinimized;
+  if (mwMinimized) {
+    mwMinH = win.style.height || "";
+    grid.style.display = "none";
+    win.style.height = "auto";
+    win.style.minHeight = "0";
+  } else {
+    grid.style.display = "";
+    win.style.height = mwMinH || "70vh";
+    win.style.minHeight = "300px";
+  }
+  setTimeout(_mwResizeCharts, 60);
 }
 
 /* 浮窗右下角可缩放（CSS resize:both）⇒ 里面的 6 个小图要跟着重排 */
@@ -8161,7 +8231,7 @@ function _mwBindResize() {
     if (_raf) return;
     _raf = requestAnimationFrame(() => {
       _raf = 0;
-      mwInsts.forEach(i => { try { i && i.resize(); } catch (e) { /* 忽略 */ } });
+      _mwResizeCharts();   // 带零尺寸守卫：最小化时格子 display:none，别拿 0 去 resize
     });
   });
   mwRO.observe(grid);
@@ -8289,6 +8359,15 @@ function _mwOption(s, dma) {
     ],
   };
 }
+
+// 浏览器窗口尺寸变了：最大化状态要跟着重新铺满
+window.addEventListener("resize", () => {
+  const win = document.getElementById("multiWatchWin");
+  if (!win || win.style.display === "none" || !win.classList.contains("mw-max")) return;
+  win.style.width = Math.max(320, window.innerWidth - 16) + "px";
+  win.style.height = Math.max(240, window.innerHeight - 16) + "px";
+  _mwResizeCharts();
+});
 
 async function mwTick() {
   if (mwBusy) return;                       // 单飞：上一轮没回来就别叠

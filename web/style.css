@@ -317,6 +317,8 @@ tr:hover td { background: rgba(243,93,43,.03); }
   display: flex; flex-direction: column;
   background: #0d1117; border: 1px solid var(--border); border-radius: 10px;
   box-shadow: 0 14px 44px rgba(0,0,0,.6); overflow: hidden; resize: both; }
+/* 最大化：铺满（尺寸由 JS 按窗口算），此时禁用拖拽把手 —— 尺寸已固定 */
+.mw-win.mw-max { resize: none; }
 .mw-title { display: flex; align-items: center; justify-content: space-between;
   gap: 8px; padding: 6px 10px; background: #161b22;
   border-bottom: 1px solid #30363d; font-size: 13px; font-weight: 700;
