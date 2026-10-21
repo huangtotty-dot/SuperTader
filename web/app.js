@@ -3075,9 +3075,27 @@ function renderPB(pb) {
         + "（不站上MA5扣70、不站上MA20扣40；GO ⟹ 两条都站上 ⟹ 得分>0）"
       : `综合得分 · 当前市况(震荡)下 signal 结构性不可达（t_regime 不过）；`
         + `得分本身**与大盘无关**、仍可 0~100`;
+    // 2026-10-21 owner：得分旁加 ↑/↓ = 相比**上一个有扫描记录的交易日**在升还是在降。
+    //   数据源 `r.score_prev`（后端 `_prev_day_score_map`，口径=该日 scan_time 最新那条的得分）。
+    //   null ⇒ 昨天没扫过这只票，**不画箭头**（画成"—"会被误读成"持平"）。
+    //   配色沿用本仓 A 股口径（`.up`=红 / `.down`=绿，见 style.css）。
+    const _sp = (r.score_prev === null || r.score_prev === undefined) ? null : Number(r.score_prev);
+    const _sc = Number(r.composite_score || 0);
+    let scoreTrend = "";
+    if (_sp !== null && !isNaN(_sp) && !isNaN(_sc)) {
+      const _dd = _sc - _sp;
+      const _fmt = v => (Number.isInteger(v) ? String(v) : v.toFixed(1));
+      if (_dd > 0) {
+        scoreTrend = `<span class="up" style="font-size:11px;margin-left:2px" title="较上一交易日上升：${_fmt(_sp)} → ${_fmt(_sc)}（+${_fmt(_dd)}）">▲</span>`;
+      } else if (_dd < 0) {
+        scoreTrend = `<span class="down" style="font-size:11px;margin-left:2px" title="较上一交易日下降：${_fmt(_sp)} → ${_fmt(_sc)}（${_fmt(_dd)}）">▼</span>`;
+      } else {
+        scoreTrend = `<span class="cell-dim" style="font-size:11px;margin-left:2px" title="与上一交易日持平（${_fmt(_sc)}）">—</span>`;
+      }
+    }
     const scoreCellHtml = _reachable
-      ? `<b>${r.composite_score}</b>`
-      : `<b>${r.composite_score}</b><span class="cell-dim" style="font-size:10px">/${_ceiling}🔒</span>`;
+      ? `<b>${r.composite_score}</b>${scoreTrend}`
+      : `<b>${r.composite_score}</b>${scoreTrend}<span class="cell-dim" style="font-size:10px">/${_ceiling}🔒</span>`;
     // 2026-10-19 owner：建仓信号扫描**整行底色**改为「站上 5 日均线=绿 / 其它=红」，
     //   与得分里 −70 悬崖的口径一致（原来按得分 <20 红/≥20 绿，会和规则脱节）。
     //   无 MA5 特征（旧数据/未扫描）不着色，避免把"无数据"画成"破位"。
@@ -3086,14 +3104,11 @@ function renderPB(pb) {
     const _scoreBg = (_above5 === true) ? "background:rgba(63,185,80,.10);"
       : (_above5 === false) ? "background:rgba(248,81,73,.12);" : "";
     // 建仓/加仓时机门控徽章（timing_gate: 多头追强/空头抄底/震荡降频）
+    // ⚠️ 2026-10-21 owner：「空头·NO-GO」这个徽章不要了，相关代码删除。
+    //   它和右侧「时机条件」列（●/○ 圆点 + 悬停说明）重复，且 `空头·NO-GO` 是常态（震荡/空头
+    //   本来就降频），一屏全是同一个徽章只是噪音。判定/条件仍由「判定」「时机条件」两列表达。
+    //   `_tm` 还要给下面的「🚫否决」徽章取 reason，故保留引用。
     const _tm = r.timing || {};
-    let tmBadge = "";
-    if (_tm.regime) {
-      const _regimeCn = {trend_up: "多头", trend_dn: "空头", range: "震荡"}[_tm.regime] || _tm.regime;
-      const _goCls = _tm.go ? "#1f6f3f" : "#7a2a2a";
-      const _goTxt = _tm.go ? "GO" : "NO-GO";
-      tmBadge = `<span class="badge" title="时机门控: ${esc(_tm.reason || "")}" style="background:${_goCls};color:#fff">${esc(_regimeCn)}·${_goTxt}</span>`;
-    }
     // W35(2026-08-25) 日内右侧确认徽章：GO 后是否已过 15分钟确认（站上EMA8+放量+站上VWAP）。
     //   未确认 → GO 被降级为 approaching(待日内确认)，此徽章说明差在哪。
     const _ic = r.intraday_confirm;
@@ -3146,7 +3161,7 @@ function renderPB(pb) {
     return `
       <tr id="pb-row-${esc(r.code || '')}" ondblclick="openStockChart('${esc(r.code||'')}','${esc(r.name||r.code||'')}')" style="cursor:pointer;${_scoreBg}${isStale ? "opacity:.45;" : ""}" title="双击看K线${isStale ? "（数据陈旧，距今超过10分钟）" : ""}">
         <td>${esc(r.name || "")} <span class="mono cell-dim">${esc(r.code || "")}</span>
-          ${monitorBadge}${chBadge}${apBadge}${tmBadge}${icBadge}${vetoBadge}${r.in_holdings ? `<span class="badge hold">持仓</span>` : ""}${errTxt}${blockLine}</td>
+          ${monitorBadge}${chBadge}${apBadge}${icBadge}${vetoBadge}${r.in_holdings ? `<span class="badge hold">持仓</span>` : ""}${errTxt}${blockLine}</td>
         <td style="text-align:center">${poolBadge}</td>
         <td>${verdictBadge(r.verdict)}</td>
         <td class="num" title="${esc(scoreCellTitle)}">${scoreCellHtml}</td>

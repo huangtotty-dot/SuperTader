@@ -2121,6 +2121,10 @@ _TAGS_ONE_CACHE: dict = {}
 _TAGS_ONE_TTL = 120.0
 _TAGS_ONE_MAX = 6000
 
+# 「得分相比上一交易日 ↑/↓」用的上一日得分表（2026-10-21）。
+# key = 日期字符串，value = (trace 文件 mtime, {code: score})。见 `Api._prev_day_score_map`。
+_PREV_SCORE_CACHE: dict = {}
+
 # 突破扫描状态/缓存的同步锁（2026-09-29）。此前 `_breakout_scan`/`_breakout_cache` **零同步**：
 # 后台 daemon 线程写、pywebview 线程每 800ms 读 ⇒ 可读到 "status=done 但 stocks 还是上一批"
 # 的中间态；force 重扫还能与残留线程重叠写同一 state/磁盘。
@@ -11157,6 +11161,58 @@ class Api:
         sb = _load_json(OUT / "stage_board.json", {})
         return sb.get("stages", [])
 
+    def _prev_day_score_map(self, date):
+        """**上一个有 trace 的交易日**里每只票的综合得分 → {code: score}。
+
+        2026-10-21 owner：建仓表「得分」旁要一个 ↑/↓，表示**相比昨天**在升还是在降。
+        口径与表格里的「得分」同源：同一只票取该日 `scan_time` **最新**那条记录的
+        `composite_score`（不是当日最高分快照 —— 那张是 `_eod_best_score` 的老口径）。
+
+        性能：单日 trace 5~6MB / 2700+ 行，按 `(日期, mtime)` 缓存 ⇒ 上一交易日的文件当天
+        不会再变，整个进程生命周期里最多解析一次；`refresh_pb` 每 10s 调一次也不会重读。
+        """
+        try:
+            d0 = str(date)
+            files = sorted(TRACES.glob("position_builder_*.jsonl"),
+                           key=lambda p: p.stem.rsplit("_", 1)[-1])
+            prev = None
+            for fp in files:
+                d = fp.stem.rsplit("_", 1)[-1]
+                if d < d0:
+                    prev = (d, fp)          # 取"最近的一个更早日期"（跳过周末/节假日）
+            if prev is None:
+                return {}
+            _d, _fp = prev
+            try:
+                _mt = _fp.stat().st_mtime
+            except Exception:
+                return {}
+            hit = _PREV_SCORE_CACHE.get(_d)
+            if hit and hit[0] == _mt:
+                return hit[1]
+            out, _last_t = {}, {}
+            for line in _fp.read_text(encoding="utf-8", errors="replace").splitlines():
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    r = json.loads(line)
+                except Exception:
+                    continue
+                c = r.get("code")
+                if not c:
+                    continue
+                t = r.get("scan_time") or ""
+                if c not in _last_t or t > _last_t[c]:
+                    _last_t[c] = t
+                    out[c] = r.get("composite_score")
+            if len(_PREV_SCORE_CACHE) >= 3:
+                _PREV_SCORE_CACHE.clear()          # 只留最近几天，别无限长
+            _PREV_SCORE_CACHE[_d] = (_mt, out)
+            return out
+        except Exception:
+            return {}
+
     def _agg_position_builder(self, date, filter_high_confidence=False):
         fp = TRACES / f"position_builder_{date}.jsonl"
         wl = _load_json(STATE_DIR / "watchlist_buy.json", {})
@@ -11231,6 +11287,8 @@ class Api:
             verdicts[r.get("verdict", "")] += 1
 
         # 扫描过的：正常聚合
+        # 2026-10-21：上一交易日的得分（前端在得分旁画 ↑/↓）。取一次即可，函数内部按日缓存。
+        _prev_scores = self._prev_day_score_map(date)
         rows = []
         for code, rec in by_code.items():
             if not _visible(code):
@@ -11243,6 +11301,14 @@ class Api:
             row["_intraday_best_score"] = (intraday or {}).get("composite_score")
             row["_scans"] = sum(v.get("scans", 0) for v in rec.values())
             row.setdefault("scan_time", "")  # fix P0-14: 每行确保带 scan_time 字段
+            # 上一个有 trace 的交易日得分（None = 昨日没扫过这只票 ⇒ 前端不画箭头，别画成"持平"）
+            _p = _prev_scores.get(code)
+            if isinstance(_p, str):           # 旧 trace 里偶有字符串分数
+                try:
+                    _p = float(_p)
+                except ValueError:
+                    _p = None
+            row["score_prev"] = _p if isinstance(_p, (int, float)) and not isinstance(_p, bool) else None
             # fix 2026-08-20: in_holdings 实时对齐 holdings.json（qty>0 才算持仓，trace/watchlist 字段可能陈旧）
             row["in_holdings"] = _is_holding(code)
             # P3-2 池分管：pool 标注（优先 holdings 权威源，回退 watchlist，缺省 manual），供 GUI 池筛选
