@@ -169,7 +169,10 @@ const _API_TIMEOUT_MS = 20000;
 // 少数**本质长时**的后端方法不能套 20s：`recompute_pb` 要重放整日建仓扫描（自身注释即写
 // 「约需 1-2 分钟」）⇒ 套 20s 必然报「重跑失败: 超时」而后端其实已经算完、结果被丢弃。
 // 这类方法要么走轮询（如全池突破扫描 get_breakout_scan），要么在此显式放宽上限（仅防后端僵死）。
-const _API_TIMEOUT_OVERRIDE = { recompute_pb: 300000 };
+// 2026-10-21：`load_stock_chart` 单独放宽到 45s。栈证据（gui_freeze.log 15:29）：进程被
+// 技术标签批算（get_trend30/背离）吃满时，开图请求会在队列里等到 20s 超时并**丢弃结果**，
+// 用户看到「K线加载失败」。放宽后同一场景只是慢，不会白开一次。
+const _API_TIMEOUT_OVERRIDE = { recompute_pb: 300000, load_stock_chart: 45000 };
 const _API_MAX_INFLIGHT = 6;
 let _apiInflight = 0;
 let _apiTimeoutCnt = 0;

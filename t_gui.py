@@ -2092,6 +2092,28 @@ _TREND30_ENABLED = True
 _TAGS_CACHE: dict = {}
 _TAGS_LOCK = threading.Lock()
 _TAGS_RUNNING = False
+
+
+def _tags_ttl_now() -> float:
+    """标签缓存 TTL —— **盘中 120s、收盘后 6 小时**（2026-10-21）。
+
+    实证：15:28 打开 K 线报「load_stock_chart 超时 20000ms」，`gui_freeze.log` 的现场栈里
+    6 个线程全在 `_stock_tags_one → get_trend30 → _ir_adx/_ir_atr_wilder`（pandas ewm）
+    与 `detect_daily_divergence`（numpy median）—— **盘后每 2 分钟一次的全量标签重算**
+    把 GIL 吃满，图表请求排在后面等到超时。
+
+    盘后日线已定稿，标签（30min 状态机 / 背离 / 箱体）**不会再变** ⇒ 没有理由还按 120s 重算。
+    """
+    try:
+        now = datetime.now()
+        if now.weekday() >= 5:
+            return 6 * 3600.0
+        hm = now.strftime("%H:%M")
+        if hm >= "15:00" or hm < "09:15":
+            return 6 * 3600.0
+    except Exception:
+        pass
+    return _TAGS_TTL
 # 单只标签的**跨批次**缓存（2026-10-18）：批量缓存按「代码集合指纹」存，猎手(offline=True)/
 # 风向标(288 只代表股)/建仓表 的集合各不相同 ⇒ 同一只票会被重复算（每只 ~300ms 的 pandas：
 # 精密箱体 + 30min 状态机）。按 (code, offline) 单独缓存，TTL 与批量一致，三处互相复用。
@@ -8095,7 +8117,7 @@ class Api:
         _now = _time_mod.time()
         with _TAGS_LOCK:
             _hit = _TAGS_ONE_CACHE.get(_ck)
-        if _hit and (_now - _hit[0]) < _TAGS_ONE_TTL:
+        if _hit and (_now - _hit[0]) < _tags_ttl_now():
             return _hit[1]
         _res = self._stock_tags_compute(code, offline)
         with _TAGS_LOCK:
@@ -8348,7 +8370,7 @@ class Api:
             #   为什么降到 6 几乎不损吞吐：这些线程大部分时间在等 facade 那个**单 worker 的 GM 池**
             #   （栈里可见 `facade.py:_gm_call`），40 并发换不到并行度，只换来 40 倍线程压力。
             #   代价：标签批算整体变慢，首次进建仓表/破位表时标签"稍后才自填"（前端本就轮询补齐）。
-            with ThreadPoolExecutor(max_workers=6) as ex:
+            with ThreadPoolExecutor(max_workers=3) as ex:   # 6→3（2026-10-21）：纯 GIL 活，别和 UI 抢
                 futures = {ex.submit(self._stock_tags_one, c, offline): c for c in codes}
                 for fut in as_completed(futures, timeout=90):
                     code = futures[fut]
@@ -8403,7 +8425,7 @@ class Api:
 
         with _TAGS_LOCK:
             cached = _TAGS_CACHE.get(_cache_key)
-            if cached and (now - cached["ts"]) < _TAGS_TTL:
+            if cached and (now - cached["ts"]) < _tags_ttl_now():
                 return _with_struct({"tags": cached["tags"]})
             if cached:
                 # 缓存过期 → 后台重算，先返回旧值，界面不阻塞
