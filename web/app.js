@@ -8059,12 +8059,27 @@ document.addEventListener("DOMContentLoaded", () => {
 const MW_N = 6;                 // 3×2
 const MW_LS_KEY = "multiWatchCodes";
 const MW_PERIOD_MS = 4000;      // 刷新间隔（6 只票 × 每次约 1s 计算，4s 是 CPU 与实时性的折中）
+const MW_TAIL = 48;             // 每格只画最后 48 根 = 5 分 K 的一个交易日（owner：别显示太多 K 线）
 let mwCodes = [], mwInsts = [], mwTimer = null, mwBusy = false;
 
+/* 选股候选：**优先体检持仓**（带名称），体检还没回来时退回 `state.quotes`
+   （那是 10s 轮询顺手拉的持仓+股池行情，通常比体检先到）。
+   2026-10-21 owner 报「点了多窗口看盘无法选择股票」—— 根因就是只认 `_obLast`，
+   而体检首帧常常是 pending（`ob.stocks` 为空）⇒ 下拉里只剩一个占位项。 */
 function _mwHoldings() {
+  const out = [];
+  const seen = new Set();
+  const push = (code, name) => {
+    const c = String(code || "").split("_")[0].trim();
+    const m = c.match(/^(\d{6})$/);
+    if (!m || seen.has(m[1])) return;
+    seen.add(m[1]);
+    out.push({ code: m[1], name: String(name || "") });
+  };
   const st = (_obLast && _obLast.stocks) || [];
-  return st.filter(s => s && s.code)
-           .map(s => ({ code: String(s.code).split("_")[0], name: s.name || "" }));
+  st.forEach(s => push(s && s.code, (s && s.name) || ""));
+  (state.quotes || []).forEach(q => push(q && q.code, (q && (q.name || q.名称)) || ""));
+  return out;
 }
 
 function _mwLoadCodes() {
@@ -8108,22 +8123,21 @@ function _mwBuildCells() {
   mwInsts.forEach(i => { try { i.dispose(); } catch (e) { /* 忽略 */ } });
   mwInsts = [];
   const hs = _mwHoldings();
-  host.innerHTML = mwCodes.map((c, i) => {
-    const opts = ['<option value="">— 选择股票 —</option>']
-      .concat(hs.map(h => `<option value="${esc(h.code)}"${h.code === c ? " selected" : ""}>`
-        + `${esc(h.code)} ${esc(h.name)}</option>`));
-    // 存过但已不在持仓里的票也要能显示（否则下拉显示空白、图却还在画）
-    if (c && !hs.some(h => h.code === c)) {
-      opts.push(`<option value="${esc(c)}" selected>${esc(c)}</option>`);
-    }
-    return `<div class="mw-cell">
+  // 候选写进共享 datalist：输入框有提示、也能直接敲别的代码
+  const dl = document.getElementById("mwNames");
+  if (dl) {
+    dl.innerHTML = hs.map(h => `<option value="${esc(h.code)}">${esc(h.name || h.code)}</option>`).join("");
+  }
+  host.innerHTML = mwCodes.map((c, i) => `<div class="mw-cell">
       <div class="mw-head">
-        <select class="mw-sel" onchange="mwPick(${i}, this.value)">${opts.join("")}</select>
+        <input class="mw-sel" list="mwNames" value="${esc(c || "")}" placeholder="代码 / 从列表选"
+               title="输入 6 位代码，或从下拉里选体检持仓；回车立即生效"
+               onchange="mwPick(${i}, this.value)"
+               onkeydown="if(event.key==='Enter'){this.blur();}">
         <span class="mw-px" id="mwPx${i}"></span>
       </div>
       <div class="mw-chart" id="mwChart${i}"></div>
-    </div>`;
-  }).join("");
+    </div>`).join("");
   for (let i = 0; i < MW_N; i++) {
     const el = document.getElementById("mwChart" + i);
     if (el && window.echarts) {
@@ -8135,12 +8149,22 @@ function _mwBuildCells() {
   }
 }
 
-function mwPick(i, code) {
-  mwCodes[i] = code || "";
+function mwPick(i, raw) {
+  // 宽容解析：用户可能敲 "600000"、"sh600000"、"600000 浦发银行"
+  const m = String(raw || "").match(/(\d{6})/);
+  const code = m ? m[1] : "";
+  mwCodes[i] = code;
   _mwSaveCodes();
+  const inp = document.querySelectorAll(".mw-sel")[i];
+  if (inp) inp.value = code;                 // 回填成裸码，与格子里的图对齐
   // 换票先清掉旧图，别让上一只票的线留在格子里
   const inst = mwInsts[i];
-  if (inst) { try { inst.clear(); inst.setOption({ backgroundColor: "#0d1117", animation: false }); } catch (e) {} }
+  if (inst) {
+    try { inst.clear(); inst.setOption({ backgroundColor: "#0d1117", animation: false }); }
+    catch (e) { /* 忽略 */ }
+  }
+  const px = document.getElementById("mwPx" + i);
+  if (px) px.innerHTML = "";
   if (code) mwTick();
 }
 
@@ -8179,12 +8203,12 @@ function _mwOption(s) {
       { scale: true, gridIndex: 1, axisLabel: { show: false }, splitLine: { show: false } },
     ],
     series: [
-      { name: "K线", type: "candlestick", data: ohlc, barMaxWidth: 8,
+      { name: "K线", type: "candlestick", data: ohlc, barMaxWidth: 10,
         itemStyle: { color: "#f85149", color0: "#3fb950",
                      borderColor: "#ff6b62", borderColor0: "#56d364", borderWidth: 1 } },
       line(ma[0], "#e3b341", 1.2),   // 本周期 MA5（5 根 5 分 K = 25 分钟）
       line(ma[2], "#58a6ff", 1.0),   // 本周期 MA20
-      { name: "量能", type: "bar", xAxisIndex: 1, yAxisIndex: 1, data: volSer, barMaxWidth: 8 },
+      { name: "量能", type: "bar", xAxisIndex: 1, yAxisIndex: 1, data: volSer, barMaxWidth: 10 },
     ],
   };
 }
@@ -8197,7 +8221,7 @@ async function mwTick() {
   if (!codes.length) return;
   mwBusy = true;
   try {
-    const r = await apiCall("load_multi_chart", codes, "min5", 90);
+    const r = await apiCall("load_multi_chart", codes, "min5", MW_TAIL);
     const items = (r && r.items) || [];
     items.forEach(it => {
       const i = mwCodes.indexOf(it.code);

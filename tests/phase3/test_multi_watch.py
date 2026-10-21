@@ -86,14 +86,29 @@ class TestFrontend:
 
     def test_cells_have_selector_and_chart(self):
         assert "function _mwBuildCells()" in _JS
-        assert 'class="mw-sel"' in _JS
-        assert "function mwPick(i, code)" in _JS
+        assert 'class="mw-sel" list="mwNames"' in _JS      # input+datalist，不是 select
+        assert "function mwPick(i, raw)" in _JS
         assert 'id="mwChart' in _JS
+
+    def test_selector_works_without_ob_data(self):
+        """owner 2026-10-21 报「点了多窗口看盘无法选择股票」。
+
+        根因：候选只取 `_obLast`（体检结果），而体检首帧常常是 pending（stocks 为空）
+        ⇒ 下拉里只剩一个占位项，等于没得选。现在：
+          · 候选退回 `state.quotes`（10s 轮询顺手拉的持仓行情，比体检先到）；
+          · 控件换成 **input + datalist** ⇒ 列表空着也能直接敲代码。
+        """
+        assert "(state.quotes || []).forEach" in _JS
+        assert 'datalist id="mwNames"' in (_ROOT / "web" / "index.html").read_text(encoding="utf-8")
+        # 宽容解析：600000 / sh600000 / "600000 浦发银行" 都要能认
+        assert r'String(raw || "").match(/(\d{6})/)' in _JS
 
     def test_realtime_polling(self):
         assert "MW_PERIOD_MS = 4000" in _JS
         assert "mwTimer = setInterval(mwTick, MW_PERIOD_MS)" in _JS
-        assert '"load_multi_chart", codes, "min5", 90' in _JS
+        # 每格只画 48 根（5 分 K 的一个交易日）—— owner：「不要显示太多的 K 线」
+        assert "MW_TAIL = 48" in _JS
+        assert '"load_multi_chart", codes, "min5", MW_TAIL' in _JS
         # 单飞：上一轮没回来不叠请求（6 格 × 每格 ~1s 计算，叠起来会拖死）
         assert "if (mwBusy) return;" in _JS
 
