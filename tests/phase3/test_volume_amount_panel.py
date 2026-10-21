@@ -226,3 +226,35 @@ class TestDeepBaseVolumeUnit:
         G._MIN_DEEP_BASE_CACHE.clear()
         G._min_bars_deep_base("600000", "5min", allow_topup=False)
         assert float(fake["volume"].iloc[0]) == 1000.0, "磁盘帧被就地改了"
+
+
+class TestIndexHasNoAmount:
+    """指数**不造成交额**（2026-10-21）。
+
+    `amount = (h+l+c)/3 × volume × 100` 里的 `close` 对指数是**点位**不是股价 ——
+    实测上证指数 5 分钟能算出 **2.7 万亿**。指数没有 amount 就原样返回，
+    前端自动回落「成交量(手)」并如实标注口径。
+    """
+
+    def test_index_code_detection(self):
+        from t_gui import _index_code
+        assert _index_code("sh000001") and _index_code("sz399001") and _index_code("sh000300")
+        assert _index_code("bj899050")
+        # ⚠️ 裸 000001 是平安银行，不是上证指数
+        assert not _index_code("000001")
+        assert not _index_code("600000")
+
+    def test_no_amount_for_index(self):
+        out = t_gui._ensure_amount(_df(), "sh000001")
+        assert "amount" not in out.columns
+
+    def test_amount_still_for_stock(self):
+        out = t_gui._ensure_amount(_df(), "600000")
+        assert "amount" in out.columns
+
+    def test_resample_agg_tolerates_missing_amount(self):
+        """指数没有 amount 列 ⇒ 周/月聚合字典不能写死 "amount": "sum"（否则 pandas 报 Label 不存在）。"""
+        import inspect
+        src = inspect.getsource(t_gui.Api._build_chart_from_df)
+        assert 'if "amount" in df.columns:' in src
+        assert '"volume": "sum", "amount": "sum"' not in src

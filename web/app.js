@@ -8064,7 +8064,29 @@ document.addEventListener("DOMContentLoaded", () => {
 const MW_N = 6;                 // 3×2
 const MW_LS_KEY = "multiWatchCodes";
 const MW_PERIOD_MS = 3000;      // 刷新间隔：轻量帧（只算 K线/MA5/成交额，120根）稳态一跳 ~0ms，3s 跟得上
-const MW_TAIL = 48;             // 每格只画最后 48 根 = 5 分 K 的一个交易日（owner：别显示太多 K 线）
+const MW_TAIL = 48;
+/* 各大指数（2026-10-21 owner：多窗口要能看指数）。带市场前缀，后端 `_tx_symbol`
+   原样吃；⚠️ 不能用「裸 6 位」表示 —— `000001` 是平安银行，不是上证指数。 */
+const MW_INDEXES = [
+  { code: "sh000001", name: "上证指数" },
+  { code: "sz399001", name: "深证成指" },
+  { code: "sz399006", name: "创业板指" },
+  { code: "sh000688", name: "科创50" },
+  { code: "sh000300", name: "沪深300" },
+  { code: "sh000905", name: "中证500" },
+  { code: "sh000852", name: "中证1000" },
+  { code: "sh000016", name: "上证50" },
+  { code: "bj899050", name: "北证50" },
+];
+
+/* 选中的值 → 规范码：`sh000001` 原样保留（指数），裸 6 位当个股。 */
+function _mwNormCode(raw) {
+  const s = String(raw || "").trim().toLowerCase();
+  const m = s.match(/^(sh|sz|bj)(\d{6})$/);
+  if (m) return m[1] + m[2];
+  const d = s.match(/(\d{6})/);
+  return d ? d[1] : "";
+}             // 每格只画最后 48 根 = 5 分 K 的一个交易日（owner：别显示太多 K 线）
 let mwCodes = [], mwInsts = [], mwTimer = null, mwBusy = false;
 
 /* 选股候选：**优先体检持仓**（带名称），体检还没回来时退回 `state.quotes`
@@ -8251,17 +8273,22 @@ function _mwBuildCells() {
     dl.innerHTML = hs.map(h => `<option value="${esc(h.code)}">${esc(h.name || h.code)}</option>`).join("");
   }
   host.innerHTML = mwCodes.map((c, i) => {
-    // 下拉**只显示名称**（owner：不要显示代码）；已保存但不持仓的票补一个占位项
-    const opts = ['<option value="">— 选股 —</option>']
-      .concat(hs.map(h => `<option value="${esc(h.code)}"${h.code === c ? " selected" : ""}>`
-        + `${esc(h.name || h.code)}</option>`));
-    if (c && !hs.some(h => h.code === c)) {
-      opts.push(`<option value="${esc(c)}" selected>${esc(c)}</option>`);
-    }
+    // 下拉**只显示名称**（owner：不要显示代码），分两组：📈 指数 / 体检持仓
+    const _opt = (code, text) => `<option value="${esc(code)}"${code === c ? " selected" : ""}>`
+      + `${esc(text)}</option>`;
+    const idxOpts = MW_INDEXES.map(x => _opt(x.code, "📈 " + x.name)).join("");
+    const holdOpts = hs.map(h => _opt(h.code, h.name || h.code)).join("");
+    // 存过但当前两组里都没有的码，补一个占位项（否则下拉显示空白、图却还在画）
+    const _known = hs.some(h => h.code === c) || MW_INDEXES.some(x => x.code === c);
+    const extra = (c && !_known) ? _opt(c, c) : "";
+    const opts = `<option value="">— 选择标的 —</option>`
+      + `<optgroup label="📈 指数">${idxOpts}</optgroup>`
+      + `<optgroup label="体检持仓">${holdOpts}</optgroup>`
+      + extra;
     return `<div class="mw-cell">
       <div class="mw-head">
-        <select class="mw-sel" title="从「持仓 30 分钟风险体检」的股票里选"
-                onchange="mwPick(${i}, this.value)">${opts.join("")}</select>
+        <select class="mw-sel" title="大盘指数，或「持仓 30 分钟风险体检」里的股票"
+                onchange="mwPick(${i}, this.value)">${opts}</select>
         <span class="mw-px" id="mwPx${i}"></span>
       </div>
       <div class="mw-chart" id="mwChart${i}"></div>
@@ -8280,9 +8307,8 @@ function _mwBuildCells() {
 }
 
 function mwPick(i, raw) {
-  // 宽容解析：用户可能敲 "600000"、"sh600000"、"600000 浦发银行"
-  const m = String(raw || "").match(/(\d{6})/);
-  const code = m ? m[1] : "";
+  // 规范码：`sh000001` 这类**指数**要原样保留（剥成 000001 就变成平安银行了）
+  const code = _mwNormCode(raw);
   mwCodes[i] = code;
   _mwSaveCodes();
   // 下拉回填成裸码（与格子里的图对齐）；下拉里没有该码时它自然显示空，不影响出图

@@ -111,8 +111,22 @@ class TestFrontend:
         （10s 轮询顺手拉的持仓行情，比体检先到）—— 但**下拉仍是唯一入口**，不给手输。
         """
         assert "(state.quotes || []).forEach" in _JS
-        # 宽容解析：600000 / sh600000 / "600000 浦发银行" 都要能认
-        assert r'String(raw || "").match(/(\d{6})/)' in _JS
+        # 码归一：`sh000001` 原样保留（指数），裸 6 位当个股
+        assert "function _mwNormCode(raw)" in _JS
+        assert r"/^(sh|sz|bj)(\d{6})$/" in _JS
+
+    def test_supports_major_indices(self):
+        """owner 2026-10-21：多窗口要能选各大指数。
+
+        ⚠️ 指数必须带市场前缀：裸 `000001` 是**平安银行**，不是上证指数
+        ⇒ `mwPick` 的老解析（取第一个 6 位数）会把 `sh000001` 剥成平安银行。
+        """
+        assert "const MW_INDEXES = [" in _JS
+        for c in ("sh000001", "sz399001", "sz399006", "sh000300", "sh000905",
+                  "sh000016", "sh000688", "sh000852", "bj899050"):
+            assert f'code: "{c}"' in _JS, f"缺指数 {c}"
+        assert '<optgroup label="📈 指数">' in _JS
+        assert '<optgroup label="体检持仓">' in _JS
 
     def test_cells_show_name_not_code(self):
         """owner：窗口里不要显示代码，直接显示名字。下拉项文案 = 名称（取不到才回退代码）。"""
