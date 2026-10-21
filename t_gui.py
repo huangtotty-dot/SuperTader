@@ -2337,6 +2337,17 @@ _SECTOR_MA_MEM_TTL = 300.0
 _SECTOR_MA_STATE: dict = {"running": False, "done": 0, "total": 0}
 _SECTOR_MA_LOCK = threading.Lock()
 _SECTOR_MA_MAX_DAYS = 40       # 一次算 40 个交易日（前端按 end_date 收边后取最近 N 天）
+# 缓存口径版本：**改样本口径/板块来源时 +1**（否则旧磁盘档会被当新鲜直接回放）。
+# 2（2026-10-21）：样本容忍 5 个自然日滞后 + 缓存键加板块指纹 board_fp。
+_SECTOR_MA_SCHEMA = 2
+
+
+def _watchlist_fp():
+    """韭研 watchlist 的 mtime 指纹（打标/改板块后必变）。读不到返回 ""。"""
+    try:
+        return str((BASE / "stock_hunter" / "watchlist_jiuyan.json").stat().st_mtime)
+    except Exception:
+        return ""
 
 
 def _compute_sector_ma_breadth(days=_SECTOR_MA_MAX_DAYS):
@@ -2370,8 +2381,22 @@ def _compute_sector_ma_breadth(days=_SECTOR_MA_MAX_DAYS):
             rows = (_load_json(p, {}) or {}).get("rows") or []
             if len(rows) < 20:
                 return None
-            if str(rows[-1].get("date"))[:10] != latest:
-                return None
+            _last = str(rows[-1].get("date"))[:10]
+            # 2026-10-21：**容忍 5 个自然日的滞后**（原来要求"末行=最新交易日"，一刀切）。
+            # 起因：owner 新加的大消费/黄金/数据要素 194 只此前不在猎手池 ⇒ 从没被扫过 ⇒
+            # 缓存停在 T-1，被这条闸整批剔除 ⇒ 新能源板块样本塌成 n=6 / n=1 / n=0，占比看着像坏了。
+            # 停牌/长期不更新的仍排除（超过 5 天不进分母，否则会把"没数据"算成"跌破均线"）。
+            if _last != latest:
+                try:
+                    _lag = (datetime.strptime(latest, "%Y-%m-%d")
+                            - datetime.strptime(_last, "%Y-%m-%d")).days
+                except Exception:
+                    _lag = 99
+                if _lag > 5:
+                    return None
+                _carry = True
+            else:
+                _carry = False
             closes = [float(r.get("close") or 0) for r in rows]
             dates = [str(r.get("date"))[:10] for r in rows]
         except Exception:
@@ -2387,6 +2412,12 @@ def _compute_sector_ma_breadth(days=_SECTOR_MA_MAX_DAYS):
             if i + 1 < n:
                 s5 += closes[i + 1] - closes[i - 4]
                 s20 += closes[i + 1] - closes[i - 19]
+        # 2026-10-21：缓存停在 T-1 的（停牌 / 还没被本轮扫描刷到）**把最后状态顺延到今天**。
+        # 不顺延的话，最新那一天的分子分母只算到"当天有 bar 的股票"——新加的板块 123 只里
+        # 只有 6 只有今日 bar ⇒ 图上显示"50%（6只）"，看着像坏了。顺延用的是它自己的收盘与均线
+        # （停牌股价格本来就不动），不是把"没数据"当成"跌破均线"。
+        if _carry and out:
+            out.append((latest, out[-1][1], out[-1][2]))
         return sec, out
 
     done = 0
@@ -2417,8 +2448,13 @@ def _compute_sector_ma_breadth(days=_SECTOR_MA_MAX_DAYS):
                for d, (a5, a20, t) in sorted(per.items()) if t]
         if pts:
             sectors.append({"name": sec, "points": pts[-days:]})
-    rec = {"computed_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+    rec = {"schema": _SECTOR_MA_SCHEMA,
+           "computed_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
            "latest_date": latest, "sectors": sectors,
+           # 2026-10-21：**把板块映射的指纹一起存**。原来只比 `latest_date` ⇒ owner 新加
+           # 「大消费/黄金/数据要素」后，数据日没变 ⇒ 永远判"新鲜" ⇒ 面板一直显示旧板块集，
+           # 新板块不出现（"占比没有更新"）。指纹 = watchlist mtime，任何打标都会变。
+           "board_fp": _watchlist_fp(),
            "coverage": {"codes": len(mine), "scanned": scanned}}
     try:
         _SECTOR_MA_CACHE_FP.parent.mkdir(parents=True, exist_ok=True)
@@ -9149,7 +9185,12 @@ class Api:
             except Exception:
                 rec = None
         if rec and rec.get("sectors"):
-            stale = str(rec.get("latest_date") or "") < latest
+            # 两个失效条件：数据日过期（明天了）**或板块映射变了**（新加/改板块）。
+            # 后者 2026-10-21 补：owner 加了大消费/黄金/数据要素后，数据日没变 ⇒ 面板一直
+            # 显示旧板块集 ⇒ "占比没有更新"。
+            stale = (str(rec.get("latest_date") or "") < latest
+                     or str(rec.get("board_fp") or "") != _watchlist_fp()
+                     or int(rec.get("schema") or 0) != _SECTOR_MA_SCHEMA)
             if stale:
                 self._kick_sector_ma_breadth()
             return _clean(self._sector_ma_payload(rec, n, end, stale=stale))

@@ -1870,7 +1870,8 @@ function renderSectorMaBreadth(d) {
     const cov = (d && d.coverage) || {};
     meta.innerHTML = `数据日 <b>${esc(d.latest_date || "—")}</b>`
       + ` · 截至 <b>${esc(state.date || d.latest_date || "—")}</b>（与上方星轨同截止日）`
-      + ` · ${secs.length} 个板块 · 样本 <b>${cov.scanned || "—"}</b> 只（末行=最新交易日，停牌不进分母）`
+      + ` · ${secs.length} 个板块 · 样本 <b>${cov.scanned || "—"}</b> 只（停牌/超 5 日未更新的不进分母；`
+      + `缓存停在 T-1 的按最后状态顺延到今天）`
       + (d.computed_at ? ` · 计算于 ${esc(d.computed_at)}` : "")
       + `<br>口径：站上 N 日线 = 当日收盘 &gt; N 日简单均线（含当日），与得分里 −70 悬崖 / 20日线观察列同源；`
       + `每只个股只归一个韭研主板块，不重复计数。`;
@@ -1914,28 +1915,65 @@ function renderSectorMaBreadth(d) {
       axisLine: { show: false }, axisTick: { show: false },
       splitLine: { lineStyle: { color: "rgba(139,148,158,.14)" } },
     });
+    // 2026-10-21 owner：「占比显示不够美观直观」——数值从一行灰字改成**两块带底色的胶囊**
+    //   （按强弱上色：≥55% 绿 / 40~55% 琥珀 / <40% 红），并带上**较前一日的变化箭头**，
+    //   一眼能扫出"哪个板块在变强"；格子内再画一条 50% 虚线参考线，强弱分界不用算。
+    const _prev = s.points.length >= 2 ? s.points[s.points.length - 2] : null;
+    const _pctColor = v => (v == null ? "#8b949e" : v >= 55 ? "#3fb950" : v >= 40 ? "#d29922" : "#f85149");
+    const _arrow = (cur, prev) => {
+      if (cur == null || prev == null) return "";
+      const d = cur - prev;
+      if (Math.abs(d) < 0.05) return " —";
+      return d > 0 ? " ▲" : " ▼";
+    };
+    const _chip = (label, cur, prev) => {
+      if (cur == null) return `{n|${label} —}`;
+      const c = _pctColor(cur);
+      return `{${c === "#3fb950" ? "g" : c === "#d29922" ? "a" : "r"}|${label} ${fmt(cur, 0)}%${_arrow(cur, prev)}}`;
+    };
     titles.push({
       text: `${i + 1}. ${s.name}`,
-      subtext: `5日 ${fmt(s.last5, 0)}% · 20日 ${fmt(s.last20, 0)}% · ${s.n || "—"}只`,
+      subtext: _chip("5日", s.last5, _prev && _prev.pct5)
+        + " " + _chip("20日", s.last20, _prev && _prev.pct20)
+        + ` {n|${s.n || "—"}只}`,
       left: x0 + padL - 2, top: y0 + 2,
       textStyle: { color: "#c9d1d9", fontSize: 11, fontWeight: 600 },
-      subtextStyle: { color: "#8b949e", fontSize: 9 },
+      subtextStyle: {
+        fontSize: 9,
+        rich: {
+          g: { color: "#3fb950", backgroundColor: "rgba(63,185,80,.14)", padding: [1, 4], borderRadius: 3 },
+          a: { color: "#d29922", backgroundColor: "rgba(210,153,34,.14)", padding: [1, 4], borderRadius: 3 },
+          r: { color: "#f85149", backgroundColor: "rgba(248,81,73,.14)", padding: [1, 4], borderRadius: 3 },
+          n: { color: "#6e7681" },
+        },
+      },
     });
     /* 2026-10-20 owner：「对应的天的竖线有交点，显示出具体的数值」。
        ① 竖线 = tooltip.axisPointer（line + snap，对齐到最近的 K 线）；
        ② 交点 = 每个数据点画实心小圆（原来 symbol:none 看不到交点），悬停时放大加白描边；
        ③ 具体数值 = axisPointer 的日期胶囊 + tooltip 里两项百分比 + 下方 y 轴读数（0~100 网格）。 */
-    const mk = (vals, color, name) => ({
+    const mk = (vals, color, name, opts) => ({
       name, type: "line", xAxisIndex: i, yAxisIndex: i,
       data: vals, smooth: 0.25, connectNulls: false,
       showSymbol: true, symbol: "circle", symbolSize: 3.2,
       lineStyle: { width: 1.5, color },
       itemStyle: { color, borderColor: "#0d1117", borderWidth: 1 },
+      // 2026-10-21：5 日线加**极淡的面积填充**（两条线叠在一起时更容易分清主次）；
+      // 再画一条 **50% 参考虚线**——强弱分界不用心算。只画一次（挂 5 日线上）。
+      ...(opts && opts.area ? { areaStyle: { opacity: 0.10, color } } : {}),
+      ...(opts && opts.half ? {
+        markLine: {
+          silent: true, symbol: "none", animation: false,
+          label: { show: false },
+          lineStyle: { color: "rgba(139,148,158,.38)", type: "dashed", width: 1 },
+          data: [{ yAxis: 50 }],
+        },
+      } : {}),
       // 不加 focus:"series" —— 那会把另一条线在悬停时变暗，两条线的对比正是这张图的意义
       emphasis: { scale: 2.2,
                   itemStyle: { color, borderColor: "#fff", borderWidth: 1.5 } },
     });
-    series.push(mk(s.points.map(p => p.pct5), SECMA_5, "站上5日线"));
+    series.push(mk(s.points.map(p => p.pct5), SECMA_5, "站上5日线", { area: true, half: true }));
     series.push(mk(s.points.map(p => p.pct20), SECMA_20, "站上20日线"));
   });
   if (!sectorMaInst || sectorMaNode !== el || !el.querySelector("canvas")) {

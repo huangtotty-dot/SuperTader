@@ -68,9 +68,25 @@ class MarketDataFetcher:
         if _use_cache and os.path.exists(cache_path):
             try:
                 df = pd.read_csv(cache_path, dtype={"代码": str}, encoding="utf-8-sig")
+                _want = [str(c) for c in codes]
                 if "代码" in df.columns:
-                    df = df[df["代码"].astype(str).isin([str(c) for c in codes])]
+                    df = df[df["代码"].astype(str).isin(_want)]
                 if len(df) > 0:
+                    # 2026-10-21：**补齐缓存里没有的票**。老 CSV 只含当时的池子，owner 新加进
+                    # 池子的标的（如「大消费/黄金/数据要素」194 只）不在里面 ⇒ 原来直接 return，
+                    # 这些票行情全 NaN ⇒ 打分 0 ⇒ 新板块的"平均分"被系统性拉低。
+                    # 只补缺的那部分（有上限，防止整池重拉）。
+                    try:
+                        _have = set(df["代码"].astype(str))
+                        _miss = [c for c in _want if c not in _have]
+                        if 0 < len(_miss) <= 600:
+                            print(f"  [CACHE+] {date_str} 缓存缺 {len(_miss)} 只 → 只补这些")
+                            _add, _ = self._fetch_historical_tencent(_miss, date_str)
+                            if _add is not None and not _add.empty:
+                                df = pd.concat([df, _add], ignore_index=True)
+                                print(f"  [CACHE+] 补齐 {len(_add)} 只（合计 {len(df)} 只）")
+                    except Exception as _e:
+                        print(f"  [WARN] 补拉缺失标的失败({type(_e).__name__}: {str(_e)[:60]})，按无数据处理")
                     print(f"  [CACHE] 复用 {date_str} 历史行情缓存 ({len(df)} 只，省去全量拉取)")
                     return df
             except Exception:
