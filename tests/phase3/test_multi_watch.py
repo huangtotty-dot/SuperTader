@@ -326,3 +326,42 @@ class TestSupportResistance:
         assert '"#f85149", type: "dashed"' in _JS and '"#3fb950", type: "dashed"' in _JS
         assert 'position: up ? "insideEndTop" : "insideEndBottom"' in _JS
         assert "it.dma, it.levels" in _JS
+
+
+class TestKlineSearchFuzzy:
+    """owner 2026-10-21：K线速查搜「领益制造」0 条 —— 实为「领益智造」，打错一个字。
+
+    精确 / 前缀 / 包含 三种匹配 + 腾讯 smartbox **全是字面匹配** ⇒ 错一个字就全空。
+    加一层「共同字」兜底（仅在前面全空时启用），并且**模糊结果不自动开图**。
+    """
+
+    def _api(self, monkeypatch):
+        import t_gui as G
+        api = G.Api()
+        monkeypatch.setattr(api, "_instrument_names",
+                            lambda: {"002600": "领益智造", "600519": "贵州茅台",
+                                     "000589": "贵州轮胎", "900901": "云赛B股"})
+        # 在线搜索返回空（真实环境里 smartbox 对错字同样 0 条）
+        import core.market_data.tencent_provider as TP
+        monkeypatch.setattr(TP, "search_instruments", lambda q, limit=12: [])
+        G._SEARCH_CACHE.clear()
+        return api
+
+    def test_typo_finds_closest_name(self, monkeypatch):
+        api = self._api(monkeypatch)
+        r = api.search_instrument("领益制造")
+        assert r["results"], "错一个字也应该能兜到候选"
+        assert r["results"][0]["code"] == "002600"
+        assert r["results"][0]["note"] == "模糊匹配"
+        assert "原词没搜到" in r["note"]
+
+    def test_exact_name_still_exact(self, monkeypatch):
+        api = self._api(monkeypatch)
+        r = api.search_instrument("领益智造")
+        assert r["results"][0]["code"] == "002600"
+        assert r["results"][0]["note"] == ""      # 精确命中不带模糊标记
+
+    def test_fuzzy_does_not_auto_open(self):
+        """模糊结果必须让用户点一下确认 —— 自动开图等于把猜的结果当用户意图。"""
+        assert "const _isFuzzy = x =>" in _JS
+        assert "if (rows.length === 1 && !_isFuzzy(rows[0]))" in _JS

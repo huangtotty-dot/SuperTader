@@ -4148,8 +4148,11 @@ function renderKlineSearch(r) {
     if (hint) hint.textContent = "";
     return;
   }
-  // 唯一命中 ⇒ 直接开图（用户输入精确名称/代码时少点一次）
-  if (rows.length === 1) {
+  // 唯一命中 ⇒ 直接开图（用户输入精确名称/代码时少点一次）。
+  // ⚠️ **模糊匹配不算**：那是"原词没搜到、按相近名称猜的"（例：打「领益制造」→ 猜「领益智造」），
+  //    直接开图会把猜的结果当成用户的意图 ⇒ 必须让用户点一下确认。
+  const _isFuzzy = x => String((x && x.note) || "").indexOf("模糊") === 0;
+  if (rows.length === 1 && !_isFuzzy(rows[0])) {
     const x = rows[0];
     if (hint) hint.textContent = `已打开 ${x.name}（${x.code}）${note ? " · " + note : ""}`;
     openStockChart(x.code, x.name);

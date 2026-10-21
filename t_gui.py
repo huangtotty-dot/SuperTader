@@ -5470,6 +5470,32 @@ class Api:
                 # 在线搜索本身失败（网络抖动）⇒ 保留猜测，不因网络问题误拒可能是对的代码
                 _add(_direct, names.get(_direct) or "", self._guess_instrument_type(_direct))
 
+        # 2026-10-21 owner：搜「领益制造」0 条（实为「领益智造」，打错一个字）。
+        # 精确/前缀/包含 + 腾讯 smartbox **都只做字面匹配** ⇒ 错一个字就全空。
+        # 这里再兜一层**共同字**匹配（仅在前面全空时启用，不污染正常搜索）。
+        if not order and not mcode and len(q) >= 2:
+            _fz = []
+            _qs = set(q)
+            for c, nm in names.items():
+                _nn = str(nm or "")
+                if not _nn:
+                    continue
+                _pre = 0
+                for _a, _b in zip(q, _nn):
+                    if _a != _b:
+                        break
+                    _pre += 1
+                _shared = sum(1 for ch in _qs if ch in _nn)
+                # ≥2 字共同前缀，或「几乎全部字都在名字里」——两个条件都偏严，避免噪声
+                if _pre >= 2 or _shared >= max(3, len(q) - 1):
+                    _fz.append((_pre, _shared, len(_nn), c, _nn))
+            _fz.sort(key=lambda x: (-x[0], -x[1], x[2]))
+            for _pre, _sh, _ln, c, nm in _fz[:max(int(limit), 1)]:
+                _add(c, nm, self._guess_instrument_type(c), "模糊匹配")
+            if order:
+                out["source"] = (out.get("source") or "local") + "+fuzzy"
+                out["note"] = "原词没搜到，以下是名称最接近的（请确认是不是这只）"
+
         results = [by_code[c] for c in order][:max(int(limit), 1)]
         out["results"] = results
         if out["excluded"]:
