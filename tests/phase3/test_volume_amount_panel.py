@@ -154,12 +154,13 @@ class TestKcbVolumeUnit:
 
 class TestPayloadSchemaGate:
     def test_gate_applies_to_every_view(self):
-        """schema<3 的旧档不许回放 —— 原来这道闸只写在 `want_minutes` 里面，
-        日 K 视图照样回放旧档，于是 688 的成交额还是 2000 亿。"""
+        """schema 低于当前版本（现为 4：min5/min10 加深近3月）的旧档不许回放 ——
+        原来这道闸只写在 `want_minutes` 里面，日 K 视图照样回放旧档，
+        于是 688 的成交额还是 2000 亿。"""
         import inspect
         src = inspect.getsource(t_gui.Api._serve_payload_cache)
         # 闸必须在 `if want_minutes:` 之前
-        assert src.index('int(hit.get("schema") or 0) < 3') < src.index("if want_minutes:")
+        assert src.index('int(hit.get("schema") or 0) < 4') < src.index("if want_minutes:")
 
     def test_forming_bar_from_batch_snapshot_normalizes_688(self):
         """`_today_forming_bar` 走**批量快照**那条路时同样要 ÷100。

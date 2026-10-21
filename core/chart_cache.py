@@ -177,7 +177,9 @@ def save_payload(code, payload, daily_rows) -> bool:
             # `t_gui._serve_payload_cache` 要求 want_minutes 时 schema≥2，旧档自动重建一次。
             # 3 = 分钟档成交量已按科创板(688)归一（腾讯对 688 返"股"、其余"手"）；
             # schema<3 的旧档里 688 的分钟量能大 100 倍，必须重建一次。
-            "schema": 3,
+            # 4 = min5/min10 分钟档已加深到近 3 个月（约 3200/1600 根，见 t_gui.MIN_BARS_CHART）；
+            # schema<4 的旧档 5/10 分只有 320 根 ⇒ 切到这两个 Tab 时按需重建一次。
+            "schema": 4,
             "version": payload.get("version"),
             "last_daily_date": last_row_date(daily_rows),
             "payload": payload,
@@ -374,11 +376,23 @@ def load_minute_asof(ts_code, freq, date_str=None, keep=None):
     return df
 
 
-def save_minute_history(ts_code, freq, df, cap=920) -> bool:
+# 2026-10-30：落盘 cap 按周期分档 —— K 线弹窗的 5/10 分钟档支持**近 3 个月**深度
+# （5min：65 交易日 × 48 根 ≈ 3120 ⇒ cap 3600 留余量；10min 由深 5min 合成、磁盘不单独存，
+#  这里仍给 1800 档以防将来直存）。其余周期维持 920（30/60min 计算口径不需要更深）。
+# 内存评估（本机 4GB，`_MIN_FRAME_MAX_ROWS=600_000` 的解析缓存预算不变）：
+#   单条 3600 行规范帧 ≈ 0.2MB（6 列 × 8B/格 + 索引开销）；即便 128 个缓存条目全是
+#   深 5min 档 ≈ 22MB，仍远低于 600k 行（≈29MB）的逐出阈值，LRU 逐出兜底。
+_MIN_SAVE_CAP = {"5min": 3600, "10min": 1800}
+
+
+def save_minute_history(ts_code, freq, df, cap=None) -> bool:
     """把分钟 df **并入** plain 档 `{ts_code}_{freq}.json`（按 time 去重、cap 截尾、原子写）。
 
+    cap=None ⇒ 按 `_MIN_SAVE_CAP` 分档（5min 3600 / 10min 1800 / 其它 920）。
     返回 True=落盘、False=**没写成**（入参空 / 合并后内容与盘上一致 ⇒ 刻意跳过，见函数内注释）。"""
     import pandas as pd
+    if cap is None:
+        cap = _MIN_SAVE_CAP.get(freq, 920)
     if df is None or getattr(df, "empty", True) or not ts_code:
         return False
     try:
@@ -539,9 +553,11 @@ def prefetch_minute(codes, freqs=("30min", "60min"), sleep_s=0.35) -> dict:
     """逐只拉分钟线写 plain 档（tushare 单只、无法批量）。返回 {requested, got}。不抛。
 
     `5min`：结构层（10min 由 5min 降采样而来）的唯一磁盘源。tushare 无原生 10min。
-    取 30 自然日 ≈ 21 交易日 ≈ 1000 根，落盘时被 `save_minute_history(cap=920)` 截到 ≈19 日。"""
+    2026-10-30：5min 窗口 30→95 自然日（≈65 交易日 ≈ 3100+ 根），给 K 线弹窗「近3月」档
+    铺磁盘底座；单只仍是**一次** `stk_mins` 调用，只是时间窗更宽，不增加请求次数。
+    落盘 cap 按 `_MIN_SAVE_CAP` 分档（5min 3600），深度留得住。"""
     from analysis.divergence import _ts_code as _div_ts_code
-    days_map = {"30min": 70, "60min": 130, "5min": 30}
+    days_map = {"30min": 70, "60min": 130, "5min": 95}
     codes = _dedup_valid(codes)
     stat = {"requested": len(codes) * len(freqs), "got": 0}
     for c in codes:

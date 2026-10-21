@@ -121,6 +121,60 @@ def _jiuyan_names() -> dict:
     return _JY_NAMES_CACHE["map"]
 
 
+# ── K线弹窗「买卖点标记」数据源（2026-10-21 owner）────────────────────────────
+# 券商成交台账 → 某 code 的成交行 [{ts, side, qty, price, account}]。
+# ⚠️ **直接读文件**：`load_trade_history()` 下发前端前会把 `trades` 字段 pop 掉，
+#    K线路径要的恰恰是这批原始成交行。文件 <1MB（2MB 内），按 mtime 缓存，
+#    与上面 `_JY_NAMES_CACHE` 同款模式，热路径不重复解析。
+_TRADE_LEDGER_CACHE = {"mtime": None, "map": {}}
+
+
+def _chart_trades(code):
+    """台账 → 该 code 的成交行（时间升序）：[{ts, side:"B"/"S", qty, price, account}]。
+
+    `ts` 有成交时间时为 "YYYY-MM-DD HH:MM:SS"；老行 time 为空 ⇒ ts 只带日期
+    （分钟图无法落桶、前端跳过；日线仍按日期落点）。
+    文件不存在/解析失败 ⇒ 返回上次缓存（或空表），绝不抛异常卡住图表链路。
+    """
+    _c = str(code).split("_")[0]
+    try:
+        _mt = TRADE_HISTORY_LEDGER.stat().st_mtime
+    except OSError:
+        return _TRADE_LEDGER_CACHE["map"].get(_c, [])
+    if _TRADE_LEDGER_CACHE["mtime"] != _mt:
+        _m = {}
+        try:
+            _d = json.loads(TRADE_HISTORY_LEDGER.read_text(encoding="utf-8"))
+            for _t in (_d.get("trades") or []):
+                if not isinstance(_t, dict) or _t.get("non_trade"):
+                    continue
+                _side = {"买入": "B", "卖出": "S"}.get(str(_t.get("op") or ""))
+                if not _side:
+                    continue
+                _code = str(_t.get("code") or "").split("_")[0]
+                _date = str(_t.get("date") or "")
+                if not _code or not _date:
+                    continue
+                # `_clean` 同款防护：qty/price 出现 None/NaN/inf 时给 None，不污染 JSON 桥
+                _qty = _t.get("qty")
+                _px = _t.get("price")
+                if isinstance(_qty, float) and (math.isnan(_qty) or math.isinf(_qty)):
+                    _qty = None
+                if isinstance(_px, float) and (math.isnan(_px) or math.isinf(_px)):
+                    _px = None
+                _tm = str(_t.get("time") or "").strip()
+                _m.setdefault(_code, []).append({
+                    "ts": f"{_date} {_tm}" if _tm else _date,
+                    "side": _side, "qty": _qty, "price": _px,
+                    "account": str(_t.get("account") or "")})
+            for _rows in _m.values():
+                _rows.sort(key=lambda r: r["ts"])
+            _TRADE_LEDGER_CACHE.update({"mtime": _mt, "map": _m})
+        except Exception:
+            pass
+    return _TRADE_LEDGER_CACHE["map"].get(_c, [])
+
+
 _JY_ROLE_CACHE = {"mtime": None, "map": {}}
 
 
@@ -720,11 +774,23 @@ def _tail_last_json_line(fp, max_bytes=65536):
 _MIN_BARS_DIR = BASE / "t_io" / "cache" / "tushare_mins"
 _MIN_BARS_CACHE: dict = {}
 _MIN_BARS_LOCK = threading.Lock()
-MIN_BARS_KEEP = 320                                    # 保留根数上限（前端「全部」档）
+MIN_BARS_KEEP = 320                                    # 计算口径保留根数（OB 体检/历史判定热路径）
 _MIN_BARS_DAYS = {"5min": 40, "10min": 45, "30min": 70, "60min": 130}
 #                                                          ↑ 自然日：够 320 根（48/日、24/日、8/日、4/日）
 # 10min：**tushare 无原生 10min** ⇒ 由 5min 合成（复用仓位结构层同一个
 # `position_structure.resample_5min_to_10min`，保证 K 线与结构层 10min 口径一致）。
+
+# ── 图表展示档深度（2026-10-30，仅 K 线弹窗取数链用）──────────────────────────
+# owner：5/10 分钟图要能回看**近 3 个月**（≈65 交易日：5min ≈ 48 根/日 × 65 ≈ 3120，
+# 10min ≈ 24 根/日 × 65 ≈ 1560）。30/60min 维持 320（与 MIN_BARS_KEEP 相同，行为不变）。
+# ⚠️ 为什么单独一张表、不改 MIN_BARS_KEEP：后者被**计算热路径**复用
+#    （`_m30_bars_cache_only` / `_min_bars_asof` 等的 tail 截断），那里变深会拖慢体检。
+#    而 `_fetch_min_bars` 的 5/10min 调用方**全部是**图表路径（弹窗建图 / 实时尾 /
+#    10min 合成兜底），已逐处核实（2026-10-30），故在 `_fetch_min_bars` 尾部按本表加深。
+MIN_BARS_CHART = {"5min": 3200, "10min": 1600, "30min": 320, "60min": 320}
+# 历史深度来源：磁盘 plain+_d540 合并档；不足时**一次性** tushare 补 95 自然日（≈65 交易日）。
+# 只列 5min —— 10min 严禁单独请求 tushare（无此 freq），由深 5min 合成。
+_MIN_CHART_DEEP_DAYS = {"5min": 95}
 
 # K 线弹窗的分钟档 **单一真源**（2026-10-20 加 5 分档）。
 # ⚠️ 档位清单只在这里写一次：payload 键、按需取数、strip/keep 白名单、版本签名、周期校验
@@ -1279,13 +1345,116 @@ def _fetch_min_bars_tencent(code, freq):
     return _norm_min_bars(df)
 
 
+# ── 图表展示档：深底座 + 实时尾合并（2026-10-30）──────────────────────────────
+_MIN_DEEP_BASE_CACHE: dict = {}   # (ts_code, freq) -> (YYYY-MM-DD, df)；当日内存缓存（零网络底座）
+_MIN_DEEP_TRIED: dict = {}        # (ts_code, freq, YYYY-MM-DD) -> True；tushare 补深当日至多一次
+_MIN_DEEP_LOCK = threading.Lock()
+
+
+def _merge_min_frames(base, tail, keep=0):
+    """历史底座 + 实时尾按 time 去重合并（**尾覆盖历史**），keep>0 时截尾。空 → 空 DataFrame。"""
+    import pandas as pd
+    frames = [d for d in (base, tail) if d is not None and not getattr(d, "empty", True)]
+    if not frames:
+        return pd.DataFrame()
+    df = pd.concat(frames, ignore_index=True)
+    df = df.sort_values("time").drop_duplicates(subset=["time"], keep="last").reset_index(drop=True)
+    if keep and len(df) > keep:
+        df = df.tail(keep).reset_index(drop=True)
+    return df
+
+
+def _resample_10min(df5):
+    """5min 规范帧 → 10min（与仓位结构层**同一个** `resample_5min_to_10min`）。
+
+    ⚠️ 合成结果带 `date` 分组列，必须丢掉再 rename —— 否则出现两个 `time` 列，
+    `pd.to_datetime` 抛 "cannot assemble with duplicate keys"（2026-10-17 实测坑）。"""
+    import pandas as pd
+    if df5 is None or getattr(df5, "empty", True):
+        return pd.DataFrame()
+    try:
+        from core.position_structure import resample_5min_to_10min
+        d10 = resample_5min_to_10min(df5.rename(columns={"time": "dt"}))
+        d10 = d10.rename(columns={"dt": "time"})
+        d10 = d10[[c for c in ("time", "open", "high", "low", "close", "volume")
+                   if c in d10.columns]]
+        return _norm_min_bars(d10)
+    except Exception:
+        return pd.DataFrame()
+
+
+def _min_bars_deep_base(code, freq="5min", allow_topup=True):
+    """图表展示档的**历史底座**（仅 5min；10min 底座由它合成）：磁盘 plain+`_d540` 合并
+    （`chart_cache.load_minute_asof`，零网络、单档解析有记忆化），不足目标深度 85% 时
+    **一次性** tushare 补 `_MIN_CHART_DEEP_DAYS` 自然日并落盘（之后零网络）。
+
+    「当日已试过」闸：新股/长期停牌票 tushare 也拿不出更多，不能每次开图都白等 8s 硬超时。
+    ⚠️ 返回的可能是**缓存本体**，调用方不得就地修改（本模块消费方都经 `_merge_min_frames`
+    concat 出新帧，安全）。空/缺 → 空 DataFrame。"""
+    import pandas as pd
+    import core.chart_cache as _cc
+    ts_code = _min_bars_ts_code(code)
+    if not ts_code:
+        return pd.DataFrame()
+    today = datetime.now().strftime("%Y-%m-%d")
+    ck = (ts_code, freq)
+    with _MIN_DEEP_LOCK:
+        hit = _MIN_DEEP_BASE_CACHE.get(ck)
+        if hit and hit[0] == today:
+            return hit[1]
+    try:
+        base = _cc.load_minute_asof(ts_code, freq)       # 纯磁盘合并（plain 覆盖 _d540）
+    except Exception:
+        base = pd.DataFrame()
+    target = MIN_BARS_CHART.get(freq, MIN_BARS_KEEP)
+    if allow_topup and (base is None or base.empty or len(base) < int(target * 0.85)):
+        tk = (ts_code, freq, today)
+        with _MIN_DEEP_LOCK:
+            tried = tk in _MIN_DEEP_TRIED
+            if not tried:
+                _MIN_DEEP_TRIED[tk] = True
+                if len(_MIN_DEEP_TRIED) > 5000:          # 防无界（全池轮流开图）
+                    _MIN_DEEP_TRIED.clear()
+        if not tried and freq in _MIN_CHART_DEEP_DAYS:
+            # 一次性补深：tushare stk_mins 95 自然日 ≈ 65 交易日（沿用 8s 硬超时 + 熔断）。
+            net = _fetch_min_bars_online(ts_code, freq, _MIN_CHART_DEEP_DAYS[freq])
+            if net is not None and not net.empty:
+                base = _merge_min_frames(base, net)      # 不截尾：完整落盘
+                try:
+                    # cap 按 chart_cache._MIN_SAVE_CAP 分档（5min 3600），深度留得住
+                    _cc.save_minute_history(ts_code, freq, base)
+                except Exception:
+                    pass
+    if base is None:
+        base = pd.DataFrame()
+    # 缓存/返回前截尾到「目标深度 + 400 余量」：`_d540` 长历史档合并后可达 ~1.8 万行
+    # （实测 600584 = 18424 行 / 0.84MB），而展示档最多只要 3200 根 —— 余量只为
+    # 实时尾合并后仍能截满目标深度。⚠️ 截尾必须放在**落盘之后**（上面存的是完整历史）。
+    _base_keep = int(target) + 400
+    if len(base) > _base_keep:
+        base = base.tail(_base_keep).reset_index(drop=True)
+    with _MIN_DEEP_LOCK:
+        # 防无界：截尾后单帧 ≤3600 行 ≈ 0.17MB，120 条上限 ≈ 20MB 封顶（4GB 机器须克制）；
+        # 实际同时打开的票屈指可数，这里只是兜底。清整表最简单可靠。
+        if len(_MIN_DEEP_BASE_CACHE) > 120:
+            _MIN_DEEP_BASE_CACHE.clear()
+        _MIN_DEEP_BASE_CACHE[ck] = (today, base)
+    return base
+
+
 def _fetch_min_bars(code, freq="30min", days=None):
-    """分钟线（5/10/30/60），最近 MIN_BARS_KEEP 根。
+    """分钟线（5/10/30/60）。30/60min 最近 MIN_BARS_KEEP 根；5/10min 走**图表展示档**
+    （`MIN_BARS_CHART`：3200/1600 根 ≈ 近 3 个月，2026-10-30）。
 
     取数源（2026-10-18 起）：**腾讯 mkline 永远第一**（实时、含未收盘根、keep-alive <100ms、
     640 根原生够用）。tushare 只作兜底，且带**熔断 + 8s 硬超时**；磁盘最后。
     盘中缓存键用 10 秒粒度 —— 原来的 30 分钟时段键会让分钟 K 线在盘中**冻住半小时**。
-    任何失败都返回空 DataFrame，调用方据此降级为「该周期无分时数据」。"""
+    任何失败都返回空 DataFrame，调用方据此降级为「该周期无分时数据」。
+
+    深度合并（仅 5/10min）：腾讯实时尾 + `_min_bars_deep_base` 的磁盘历史底座按 time 去重
+    （实时尾覆盖历史）。⚠️ 本函数的 5/10min 调用方已逐处核实**全是图表路径**（弹窗建图 /
+    实时尾 / 10min 合成兜底）；OB 体检等计算热路径只用 30min 且走 `_m30_bars_cache_only`
+    / `_min_bars_asof`（仍 tail(MIN_BARS_KEEP)=320），不受此处加深影响。"""
     import pandas as pd
     ts_code = _min_bars_ts_code(code)
     if not ts_code or freq not in _MIN_BARS_DAYS:
@@ -1301,23 +1470,15 @@ def _fetch_min_bars(code, freq="30min", days=None):
 
     if freq == "10min":
         # 由 5min 合成（tushare 无 10min；合成函数与仓位结构层**同一个**）。
-        # 优先腾讯 m5：它给 640 根 ⇒ 正好 320 根 10min（≈13 日），与 MIN_BARS_KEEP 对齐；
-        # tushare 的 5min 实测只回 313 根（≈6 日）⇒ 合成后只剩 157 根，默认视窗都填不满。
+        # 优先腾讯 m5：它给 640 根 ⇒ 320 根 10min 实时尾（≈13 日）；
+        # 3 个月深度由下方「深底座合并」从磁盘 5min 深档合成补全（不单独请求 tushare 10min）。
         df = _fetch_min_bars_tencent(code, "10min")
         if df.empty:
             b5 = _fetch_min_bars(code, "5min", _MIN_BARS_DAYS["5min"])
             if b5 is None or b5.empty:
                 return pd.DataFrame()
-            try:
-                from core.position_structure import resample_5min_to_10min
-                _d10 = resample_5min_to_10min(b5.rename(columns={"time": "dt"}))
-                _d10 = _d10.rename(columns={"dt": "time"})
-                # 同 `_fetch_min_bars_tencent`：合成结果里的 `date` 分组列必须丢掉，
-                # 否则 rename 后出现两个 `time` 列 ⇒ 10min 永远空。
-                _d10 = _d10[[c for c in ("time", "open", "high", "low", "close", "volume")
-                             if c in _d10.columns]]
-                df = _norm_min_bars(_d10)
-            except Exception:
+            df = _resample_10min(b5)
+            if df.empty:
                 return pd.DataFrame()
     else:
         # 2026-10-18：**腾讯永远第一**（含盘后）。它走 keep-alive、中位 <100ms，640 根
@@ -1330,7 +1491,18 @@ def _fetch_min_bars(code, freq="30min", days=None):
             df = _fetch_min_bars_disk(ts_code, freq)
     if df.empty:
         return df
-    df = df.tail(MIN_BARS_KEEP).reset_index(drop=True)
+    keep = MIN_BARS_CHART.get(freq, MIN_BARS_KEEP)
+    if freq == "5min":
+        # 展示档深底：磁盘 plain+_d540（近3月级），不足时一次性 tushare 补 95 日并落盘；
+        # 腾讯实时尾（含未收盘根）覆盖历史同刻根。
+        df = _merge_min_frames(_min_bars_deep_base(code, "5min"), df, keep)
+    elif freq == "10min":
+        # 10min 深底 = 深 5min 底座两两合成（tushare 无 10min，严禁单独请求）。
+        df = _merge_min_frames(_resample_10min(_min_bars_deep_base(code, "5min")), df, keep)
+    else:
+        df = df.tail(keep).reset_index(drop=True)
+    if df.empty:
+        return df
     with _MIN_BARS_LOCK:
         if len(_MIN_BARS_CACHE) > 2000:      # 无界增长防护（2026-10-04）：超限整表清空
             _MIN_BARS_CACHE.clear()
@@ -4776,6 +4948,11 @@ class Api:
 
         拆出来的理由（2026-10-20 实测）：一次实时尾 = 快照 43ms + m5 取数 165ms + CPU 55ms，
         原来三者串行 ~270ms；快照与取数互不依赖，并行后只花 max(43,165)+55 ≈ 220ms。
+
+        2026-10-30（展示档深底）：5/10min 的实时尾必须与**历史底座**合并后再下发 ——
+        只回 320 根会被前端「明显更短」闸挡掉（live_skip_short），「近3月/全部」档也需要
+        完整深度。底座走 `_min_bars_deep_base`（当日内存缓存 + 磁盘深档，**零网络**），
+        每跳只现取腾讯尾（5min 340 根 / 10min 640 根 m5 合成），不重复拉 3 个月历史。
         """
         _freq = _MIN_PERIOD_FREQ.get(period)
         if not _freq:
@@ -4783,10 +4960,20 @@ class Api:
         # 根数由 `_fetch_min_bars_tencent` 按 freq 决定（10min 需 640 根 m5，其它够 320 即可）
         df = _fetch_min_bars_tencent(code, _freq)
         if df is None or df.empty:
-            df = _fetch_min_bars(code, _freq)
+            df = _fetch_min_bars(code, _freq)      # 兜底链内部已含深底合并与截尾
+            if df is None or df.empty:
+                return None
+            return df
+        keep = MIN_BARS_CHART.get(_freq, MIN_BARS_KEEP)
+        if _freq == "5min":
+            df = _merge_min_frames(_min_bars_deep_base(code, "5min"), df, keep)
+        elif _freq == "10min":
+            df = _merge_min_frames(_resample_10min(_min_bars_deep_base(code, "5min")), df, keep)
+        else:
+            df = df.tail(MIN_BARS_KEEP).reset_index(drop=True)
         if df is None or df.empty:
             return None
-        return df.tail(MIN_BARS_KEEP).reset_index(drop=True)
+        return df
 
     def _build_min_series(self, code, period, df, quote=None):
         """已完成帧 + 实时快照 → 该周期序列（修末根 + 指标 + 黄金分割）。纯 CPU ≈ 55ms。
@@ -5273,12 +5460,14 @@ class Api:
             hit = _cc.load_payload(code)
             if not hit:
                 return None
-            # schema<3 的旧档一律不可信 ⇒ 重建一次（2026-10-20）：
+            # schema<4 的旧档一律不可信 ⇒ 重建一次：
             #   · <2：10min 合成有 bug / 不足 30 根；
             #   · <3：科创板(688)的**成交量单位没归一**（腾讯按股、其余按手，差 100 倍）⇒
             #     那一档算出来的成交额能到 2000 亿（owner 截图）。这条闸原来只判在
             #     `want_minutes` 里面，日 K 视图照样会回放旧档 ⇒ 现在**所有视图**都拦。
-            if int(hit.get("schema") or 0) < 3:
+            #   · <4（2026-10-30）：min5/min10 只有 320 根；展示档已加深到近 3 个月
+            #     （MIN_BARS_CHART 3200/1600），旧档切到 5/10 分 Tab 时按需重建一次。
+            if int(hit.get("schema") or 0) < 4:
                 return None
             if want_minutes:
                 _pd = (hit.get("payload") or {}).get("period_data") or {}
@@ -5415,6 +5604,9 @@ class Api:
             return None
         payload["code"] = code
         payload.setdefault("name", code)
+        # 买卖点标记（2026-10-21 owner）：成交台账按 code 精简行挂顶层 trades 键。
+        # 放最前面：后面 `_rebuild_payload_daily` 重算 version 时要把它混进签名。
+        payload["trades"] = _chart_trades(code)
         daily_rows = list(hit.get("daily_rows") or [])
         last = str(hit.get("last_daily_date") or "")
         _now = datetime.now()
@@ -5459,6 +5651,9 @@ class Api:
                                     for v, o in zip(_s["volume"], _s["ohlc"])]
                 except Exception:
                     pass
+        # 重算 version：磁盘 payload 里的旧版本号不含 trades 段；必须混入成交签名
+        # （条数 + 末笔 ts），否则新导入的成交被前端「unchanged 不刷新」握手吞掉。
+        payload["version"] = self._chart_version(_pdta, payload.get("trades"))
         return _attach_divergence(payload)
 
 
@@ -5536,7 +5731,9 @@ class Api:
         d = _calc_ma_and_indicators(df)
         payload["period_data"]["daily"] = _to_series(d)
         payload["current_price"] = round(float(d["close"].iloc[-1]), 3)
-        payload["version"] = self._chart_version(payload["period_data"])
+        # trades 段必须与两条建图路径同口径（`_payload_to_result` 已先把 trades 挂进 payload）
+        payload["version"] = self._chart_version(payload["period_data"],
+                                                 payload.get("trades"))
 
     def _patch_daily_today(self, df, code):
         """日线序列里「今天那一根」用**实时快照**覆盖掉缓存里的半成品（2026-10-20）。
@@ -5668,21 +5865,31 @@ class Api:
         out["boxes"] = self._detect_boxes(daily)
         out["channel"] = self._detect_channel(daily)
         out["current_price"] = round(float(daily["close"].iloc[-1]), 3)
+        # 买卖点标记（2026-10-21 owner）：券商成交台账 → 顶层 trades 键，前端在 K 线主图
+        # 叠 B/S 三角。读文件带 mtime 缓存；台账没导入过 ⇒ 空表，图表照常。
+        out["trades"] = _chart_trades(code)
         # 数据身份版本号（不是时间）：前端拿它做「没变就别重传/重画」的握手，见 load_stock_chart。
-        out["version"] = self._chart_version(out["period_data"])
+        out["version"] = self._chart_version(out["period_data"], out["trades"])
         out["available"] = True
         _attach_divergence(out)      # 各周期顶/底背离标注（只读展示）
         return out
 
 
-    def _chart_version(self, period_data):
-        """数据身份版本号：各周期 (末日期:根数) 串联。build 与 payload 补 bar 共用，保证握手一致。"""
+    def _chart_version(self, period_data, trades=None):
+        """数据身份版本号：各周期 (末日期:根数) 串联 + 成交标记签名（t<条数>:<末笔ts>）。
+        build 与 payload 补 bar 共用，保证握手一致。
+        trades 段是 2026-10-21 加的——版本号原来只覆盖 period_data，新导入的成交会被
+        前端「unchanged 不刷新」握手吞掉，图上看不到新买卖点。trades=None（老调用）
+        保持旧格式，行为不变。"""
         def _sig(k):
             _s = (period_data or {}).get(k)
             _d = (_s or {}).get("dates") or []
             return f"{_d[-1]}:{len(_d)}" if _d else "-:0"
-        return "|".join(_sig(k) for k in
-                        ("daily", "weekly", "monthly") + _MIN_PERIODS)
+        _v = "|".join(_sig(k) for k in
+                      ("daily", "weekly", "monthly") + _MIN_PERIODS)
+        if trades is not None:
+            _v += f"|t{len(trades)}:{trades[-1]['ts'] if trades else '-'}"
+        return _v
 
     def _detect_boxes(self, daily):
         """检测箱体（P1修复）：严格触及标准 + 优化置信分。

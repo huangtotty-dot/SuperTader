@@ -3799,19 +3799,21 @@ const MIN_PERIODS = ["min5", "min10", "min30", "min60"];
 const DEFAULT_BARS = { daily: 120, weekly: 104, monthly: 60,
                        min5: 160, min10: 160, min30: 160, min60: 160 };
 // 快捷区间：按周期给不同标签；bars=null 表示全部。每个周期的默认项都在表内（高亮用）。
-// 分钟档后端各保留 320 根（30分≈8根/日、60分≈4根/日）。
+// 分钟档后端保留根数（2026-10-30 起 5/10 分加深，见 t_gui.MIN_BARS_CHART）：
+//   5分 3200 根 ≈ 近3月（48 根/日）；10分 1600 根 ≈ 近3月（24 根/日）；
+//   30分 320 根 ≈ 8根/日×40日；60分 320 根 ≈ 4根/日×80日。
 const RANGE_PRESETS = {
   daily: [{ label: "近3月", bars: 60 }, { label: "近6月", bars: 120 },
           { label: "近1年", bars: 250 }, { label: "全部", bars: null }],
   weekly: [{ label: "近1年", bars: 52 }, { label: "近2年", bars: 104 }, { label: "全部", bars: null }],
   monthly: [{ label: "近1年", bars: 12 }, { label: "近3年", bars: 36 },
             { label: "近5年", bars: 60 }, { label: "全部", bars: null }],
-  // 5分：后端保留 320 根 ≈ 6.7 个交易日（48 根/日）
+  // 5分：后端保留 3200 根 ≈ 66 个交易日（48 根/日）
   min5: [{ label: "近2日", bars: 96 }, { label: "近4日", bars: 192 },
-         { label: "近1周", bars: 240 }, { label: "全部", bars: null }],
-  // 10分：后端保留 320 根 ≈ 13 个交易日（24 根/日）
+         { label: "近1周", bars: 240 }, { label: "近3月", bars: 3120 }, { label: "全部", bars: null }],
+  // 10分：后端保留 1600 根 ≈ 66 个交易日（24 根/日）
   min10: [{ label: "近3日", bars: 72 }, { label: "近1周", bars: 120 },
-          { label: "近2周", bars: 240 }, { label: "全部", bars: null }],
+          { label: "近2周", bars: 240 }, { label: "近3月", bars: 1560 }, { label: "全部", bars: null }],
   min30: [{ label: "近1周", bars: 40 }, { label: "近2周", bars: 80 },
           { label: "近1月", bars: 160 }, { label: "全部", bars: null }],
   min60: [{ label: "近1周", bars: 20 }, { label: "近2周", bars: 40 },
@@ -4914,6 +4916,90 @@ function renderStockChart(applyZoom = true) {
     }),
   }] : [];
 
+  /* ---- 成交买卖点 B/S 标记（2026-10-21 owner）----
+     后端 payload.trades = [{ts, side:"B"/"S", qty, price, account}]（当前图表 code 的
+     券商真实成交行，时间升序）。叠在 K 线主图的 scatter 系列（不用 markPoint ——
+     bar 索引映射更稳）。
+     归桶口径：分钟 K 线时间是**右端**（14:55 的 5min 根覆盖 14:50~14:55），
+     成交按 (bar_t - period分钟, bar_t] 归桶（14:55:27 ⇒ 15:00 那根）；
+     日线按日期精确落；周/月落进 (上一根日期, 本根日期] 区间。
+     序列范围外的成交不画；time 为空的老行（ts 只带日期）分钟图跳过。 */
+  const _trades = Array.isArray(data.trades) ? data.trades : [];
+  const _pMin = ({ min5: 5, min10: 10, min30: 30, min60: 60 })[stockChartPeriod] || 0;
+  const tradeByIndex = {};   // "barIndex|B"/"barIndex|S" → {side, qty, amt, count, accounts}
+  if (_trades.length) {
+    const _dates = period.dates, _n = _dates.length;
+    // 预计算每根的 (日期, 右端分钟数)；日/周/月只用日期比，右端分钟恒 0 不参与。
+    const _barDate = new Array(_n), _barEnd = new Array(_n);
+    for (let i = 0; i < _n; i++) {
+      const s = String(_dates[i]);
+      _barDate[i] = s.slice(0, 10);
+      _barEnd[i] = _pMin
+        ? Number(s.slice(11, 13)) * 60 + Number(s.slice(14, 16))
+          + (Number(s.slice(17, 19)) || 0) / 60
+        : 0;
+    }
+    let bi = 0;   // 双指针：trades 与 bar 同为升序，单边推进不回退
+    for (const t of _trades) {
+      const ts = String((t && t.ts) || "");
+      const tDate = ts.slice(0, 10);
+      if (!tDate) continue;
+      if (_pMin) {
+        if (ts.length < 19) continue;              // 老行无成交时间 ⇒ 分钟图跳过
+        const tMin = Number(ts.slice(11, 13)) * 60 + Number(ts.slice(14, 16))
+          + (Number(ts.slice(17, 19)) || 0) / 60;
+        while (bi < _n && (_barDate[bi] < tDate
+          || (_barDate[bi] === tDate && _barEnd[bi] < tMin))) bi++;
+        if (bi >= _n) break;                        // 之后的成交更晚，必然也出界
+        // 落在 (bar_t - p, bar_t] 之外（如早于当日首根 / 午休空档）⇒ 不属于任何桶
+        if (_barDate[bi] !== tDate || _barEnd[bi] - _pMin >= tMin) continue;
+      } else {
+        while (bi < _n && _barDate[bi] < tDate) bi++;
+        if (bi >= _n) break;
+        if (stockChartPeriod === "daily") {
+          if (_barDate[bi] !== tDate) continue;     // 日线按日期精确落
+        } else if (bi === 0) {
+          // 周/月首根起点未知 ⇒ 按周期估下界（周 7 天 / 月 31 天），早于它的不画
+          const _lb = new Date(_barDate[0] + "T00:00:00");
+          _lb.setDate(_lb.getDate() - (stockChartPeriod === "weekly" ? 7 : 31));
+          const _lbS = _lb.getFullYear() + "-" + String(_lb.getMonth() + 1).padStart(2, "0")
+            + "-" + String(_lb.getDate()).padStart(2, "0");
+          if (tDate < _lbS) continue;
+        }
+      }
+      const side = t.side === "S" ? "S" : "B";
+      const k = bi + "|" + side;
+      const q = Number(t.qty) || 0, p = Number(t.price) || 0;
+      // 同一根 bar 同方向多笔 ⇒ 聚合成一个标记：数量合计、均价按数量加权、笔数进 tooltip
+      const agg = tradeByIndex[k]
+        || (tradeByIndex[k] = { side, qty: 0, amt: 0, count: 0, accounts: {} });
+      agg.qty += q; agg.amt += p * q; agg.count += 1;
+      if (t.account) agg.accounts[t.account] = true;
+    }
+  }
+  // 买=红 ▲ 托在该根 low 下方；卖=绿 ▼ 压在该根 high 上方。
+  // 配色依据：与全图涨跌语义同源的 #f85149/#3fb950（涨红跌绿 A 股惯例，K线柱体、
+  // 背离三角、支撑压力线同一对色，已在该深底画布 #0d1117 上通过 dataviz 校验），
+  // 白描边保证压在红/绿蜡烛上仍读得出。
+  const tradeSeries = Object.keys(tradeByIndex).length ? [{
+    name: "成交", type: "scatter", xAxisIndex: 0, yAxisIndex: 0, z: 13,
+    data: Object.keys(tradeByIndex).map(k => {
+      const i = Number(k.split("|")[0]);
+      const a = tradeByIndex[k];
+      const buy = a.side === "B";
+      const bar = period.ohlc[i] || [];
+      const anchor = buy ? bar[2] : bar[3];          // ohlc=[open,close,low,high]
+      if (anchor == null) return null;
+      return {
+        value: [i, anchor],
+        symbol: "triangle", symbolRotate: buy ? 0 : 180, symbolSize: 11,
+        symbolOffset: [0, buy ? 13 : -13],
+        itemStyle: { color: buy ? "#f85149" : "#3fb950",
+                     borderColor: "#fff", borderWidth: 1 },
+      };
+    }).filter(Boolean),
+  }] : [];
+
   if (_applyZoom) stockChartAppliedZoom = { start: zStart, end: zEnd };
   stockChartZoomGuardUntil = Date.now() + 500;   // 忽略本次 setOption 补发的 dataZoom 事件
   _chartLog("render", JSON.stringify({
@@ -5023,6 +5109,22 @@ function renderStockChart(applyZoom = true) {
             + (_divE.hist != null ? ` · 柱 ${_divE.hist}` : "") + `</div>`;
         }
 
+        // 成交买卖点（2026-10-21）：与图上 ▲/▼ 三角同源（payload.trades 按桶聚合）。
+        // 同根同向多笔已合并 ⇒ 显示合计数量、数量加权均价、笔数与账户。
+        const _trB = tradeByIndex[i + "|B"], _trS = tradeByIndex[i + "|S"];
+        if (_trB || _trS) {
+          const _trRow = (a, buy) => {
+            const avg = a.qty ? a.amt / a.qty : 0;
+            const accs = Object.keys(a.accounts).join("/");
+            return `<div style="color:${buy ? "#f85149" : "#3fb950"};font-weight:bold">`
+              + `${buy ? "▲ 买入" : "▼ 卖出"} <b>${a.qty}</b> 股 @ <b>${_px(avg)}</b>`
+              + `<span style="font-weight:400;opacity:.7">`
+              + ` · ${a.count > 1 ? a.count + " 笔" : "1 笔"}${accs ? " · " + accs : ""}</span></div>`;
+          };
+          html += `<div style="border-top:1px solid #30363d;margin-top:4px;padding-top:4px">`
+            + (_trB ? _trRow(_trB, true) : "") + (_trS ? _trRow(_trS, false) : "") + `</div>`;
+        }
+
         // P2前端优化：显示当前日期所在的箱体质量信息
         // 比到「天」：分钟周期的 curDate 带时间("2026-09-30 15:00")，直接与日线口径的
         // b.end("2026-09-30") 比字符串会因空格排在末尾而判 false ⇒ 末根K线漏判箱体。
@@ -5129,6 +5231,7 @@ function renderStockChart(applyZoom = true) {
           ],
           label: { position: "insideEndTop" } } },
       ...divSeries,
+      ...tradeSeries,
       ...(fibAnchor ? [fibAnchor] : []),
       // 通道色带：上轨实线/下轨虚线 + 区域填充。红涨绿跌：上行=红，下行=绿
       ...(showChannel && data.channel && data.channel.up_line.length ? [{
