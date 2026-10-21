@@ -11636,6 +11636,15 @@ if __name__ == "__main__":
             pass
     _th.Thread(target=_prewarm_gm_probe, name="gm-health-probe", daemon=True).start()
 
+    # 2026-10-21：进程内**线程级** CPU 归因（外部采样拿不到别的进程的线程名，见 core/thread_watch.py）。
+    # 每 5s 读一次、每 60s 落一行到 t_io/logs/thread_cpu.jsonl；只读、纯本地 syscall。
+    try:
+        from core import thread_watch as _tw
+        if _tw.start(interval=float(PARAMS.get("thread_watch_sec", 5) or 5)):
+            log.info("🧵 线程级 CPU 归因已启动（5s 采样 / 60s 落盘 → t_io/logs/thread_cpu.jsonl）")
+    except Exception as _e:
+        log.warning(f"⚠️ 线程级 CPU 归因启动失败（不阻断）: {str(_e)[:120]}")
+
     # 2026-10-10: 后端「猎手定时自动运行」已停（owner 需求6，扫描一律按钮触发）。
     _start_gui_freeze_watchdog()      # 卡死看门狗：心跳停 >12s → 落线程栈到 t_io/logs/gui_freeze.log
     _start_ctrlc_abort_watchdog()     # Ctrl+C 连带关掉 GUI（不依赖 UI 线程响应，见其 docstring）

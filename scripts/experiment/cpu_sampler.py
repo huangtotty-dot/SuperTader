@@ -46,6 +46,7 @@ sys.stdout.reconfigure(encoding="utf-8")
 
 _BASE = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 DEFAULT_JSONL = os.path.join(_BASE, "t_io", "logs", "cpu_samples.jsonl")
+THREAD_JSONL = os.path.join(_BASE, "t_io", "logs", "thread_cpu.jsonl")
 
 # 进程角色识别（按命令行关键字 → 角色名），顺序即优先级
 ROLE_RULES = [
@@ -195,6 +196,47 @@ def cmd_report(path: str) -> int:
     return 0
 
 
+def cmd_report_threads(path: str) -> int:
+    """读**线程级**采样（`core/thread_watch.py` 落盘）→ 按天 × 按线程组汇总。
+
+    为什么单独一个入口：进程级采样只能告诉你"GUI 很忙"，而 2026-10-21 的复盘发现
+    CPU 是**双峰**（43% 的采样点 >90% 单核）且带 **30 分钟周期** —— 到底是
+    `chart-live-*`（K线实时尾）、`mw-*`（多窗口）、还是别的线程在吃核，
+    只有线程级数据能回答。
+    """
+    if not os.path.exists(path):
+        print(f"⛔ 无线程级数据：{path}")
+        print("   （需重启 t_gui.py —— 采样在进程内跑，见 core/thread_watch.py）")
+        return 0
+    by_day: dict[str, dict[str, list[float]]] = {}
+    n = 0
+    with open(path, encoding="utf-8") as f:
+        for line in f:
+            try:
+                rec = json.loads(line)
+            except Exception:
+                continue
+            n += 1
+            day = str(rec.get("ts", ""))[:10]
+            for r in rec.get("top", []) or []:
+                by_day.setdefault(day, {}).setdefault(r.get("name") or "?", []).append(
+                    float(r.get("pct") or 0))
+    if not by_day:
+        print("⛔ 线程级 JSONL 里没有可用样本")
+        return 0
+    print(f"线程级样本 {n} 条，覆盖 {len(by_day)} 天：{path}")
+    print()
+    print(f"{'日期':<12}{'线程组':<26}{'窗口数':>7}{'均值%':>9}{'峰值%':>9}")
+    for day in sorted(by_day):
+        for name, vals in sorted(by_day[day].items(), key=lambda kv: -sum(kv[1]) / len(kv[1])):
+            avg = sum(vals) / len(vals)
+            if avg < 1.0:
+                continue
+            print(f"{day:<12}{name:<26}{len(vals):>7}{avg:>9.2f}{max(vals):>9.2f}")
+        print()
+    return 0
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--duration", type=float, default=60.0, help="采样时长秒（0=无限）")
@@ -205,10 +247,16 @@ def main() -> int:
     ap.add_argument("--jsonl", default=DEFAULT_JSONL)
     ap.add_argument("--quiet", action="store_true", help="不刷屏，只落盘")
     ap.add_argument("--report", action="store_true", help="只读历史出按天汇总，不采样")
+    ap.add_argument("--threads-report", action="store_true",
+                    help="读线程级采样（t_io/logs/thread_cpu.jsonl）出按天×线程组汇总")
+    ap.add_argument("--threads-jsonl", default=THREAD_JSONL,
+                    help="线程级采样文件路径（默认 t_io/logs/thread_cpu.jsonl）")
     args = ap.parse_args()
 
     if args.report:
         return cmd_report(args.jsonl)
+    if args.threads_report:
+        return cmd_report_threads(args.threads_jsonl)
 
     duration = 0.0 if args.watch else args.duration
     os.makedirs(os.path.dirname(args.jsonl), exist_ok=True)
