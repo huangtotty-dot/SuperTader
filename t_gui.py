@@ -7181,17 +7181,20 @@ class Api:
             watchlist = loader.load_watchlist()
             if watchlist is None or watchlist.empty:
                 # 诊断信息：输出更多细节帮助排查问题
+                # ⚠️ 2026-10-21：这里原来写的是 `log.warning(...)`，而 t_gui.py **没有 `log`**
+                # （没有模块级 logger）⇒ 这条"加载失败"分支自己会抛 NameError，把
+                # `out["error"]` 的干净返回变成异常。本文件日志口径是 print(flush=True)。
                 watchlist_path = HUNTER_DIR / "watchlist_jiuyan.json"
-                log.warning(f"[HUNTER] watchlist 加载失败")
-                log.warning(f"  - watchlist_path: {watchlist_path}")
-                log.warning(f"  - exists: {watchlist_path.exists()}")
+                print("[HUNTER] watchlist 加载失败", flush=True)
+                print(f"  - watchlist_path: {watchlist_path}", flush=True)
+                print(f"  - exists: {watchlist_path.exists()}", flush=True)
                 if watchlist_path.exists():
                     try:
                         test_data = json.loads(watchlist_path.read_text(encoding='utf-8'))
-                        log.warning(f"  - file size: {watchlist_path.stat().st_size} bytes")
-                        log.warning(f"  - records: {len(test_data)}")
+                        print(f"  - file size: {watchlist_path.stat().st_size} bytes", flush=True)
+                        print(f"  - records: {len(test_data)}", flush=True)
                     except Exception as e:
-                        log.warning(f"  - read error: {e}")
+                        print(f"  - read error: {e}", flush=True)
                 out["error"] = f"watchlist 加载失败 (path: {watchlist_path}, exists: {watchlist_path.exists()})"
                 return out
 
@@ -11694,12 +11697,20 @@ if __name__ == "__main__":
 
     # 2026-10-21：进程内**线程级** CPU 归因（外部采样拿不到别的进程的线程名，见 core/thread_watch.py）。
     # 每 5s 读一次、每 60s 落一行到 t_io/logs/thread_cpu.jsonl；只读、纯本地 syscall。
+    # ⚠️ 2026-10-21 修：这段原本写的是 `PARAMS.get(...)` 与 `log.info/warning` —— 那两个名字
+    # 在 t_gui.py 里**都不存在**（本文件没有模块级 `PARAMS`/`log`，配置在 `config.PARAMS`）。
+    # 结果：`try` 里 NameError → 被 `except` 接住 → `log.warning` 再抛 NameError → **GUI 秒退**，
+    # 而 main.py 拉起子进程时 stdout/stderr 都是 DEVNULL（见 main._launch_gui）⇒ 窗口不出现、
+    # 也没有任何提示。此文件的日志口径是 `print(..., flush=True)`（同 Ctrl+C 看门狗）。
     try:
+        import config as _cfg              # 本文件没有模块级 config（各处都是函数内 import）
         from core import thread_watch as _tw
-        if _tw.start(interval=float(PARAMS.get("thread_watch_sec", 5) or 5)):
-            log.info("🧵 线程级 CPU 归因已启动（5s 采样 / 60s 落盘 → t_io/logs/thread_cpu.jsonl）")
+        _tw_sec = float(_cfg.PARAMS.get("thread_watch_sec", 5) or 5)
+        if _tw.start(interval=_tw_sec):
+            print(f"🧵 线程级 CPU 归因已启动（{_tw_sec:g}s 采样 / 60s 落盘 → "
+                  f"t_io/logs/thread_cpu.jsonl）", flush=True)
     except Exception as _e:
-        log.warning(f"⚠️ 线程级 CPU 归因启动失败（不阻断）: {str(_e)[:120]}")
+        print(f"⚠️ 线程级 CPU 归因启动失败（不阻断）: {str(_e)[:120]}", flush=True)
 
     # 2026-10-10: 后端「猎手定时自动运行」已停（owner 需求6，扫描一律按钮触发）。
     _start_gui_freeze_watchdog()      # 卡死看门狗：心跳停 >12s → 落线程栈到 t_io/logs/gui_freeze.log
