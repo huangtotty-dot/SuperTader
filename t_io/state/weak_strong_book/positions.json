@@ -1,5 +1,5 @@
 {
-  "updated_at": "2026-10-21 10:00:09",
+  "updated_at": "2026-10-21 14:50:03",
   "open": {
     "603168": {
       "entry_date": "2026-10-16",
@@ -8,8 +8,8 @@
       "dev20": -0.028111,
       "gap": 0.0793650793650793,
       "board": "医药生物",
-      "days_held": 2,
-      "last_check_date": "2026-10-20"
+      "days_held": 3,
+      "last_check_date": "2026-10-21"
     },
     "600127": {
       "entry_date": "2026-10-16",
@@ -18,8 +18,8 @@
       "dev20": -0.061069,
       "gap": 0.06254653760238282,
       "board": "大农业",
-      "days_held": 2,
-      "last_check_date": "2026-10-20"
+      "days_held": 3,
+      "last_check_date": "2026-10-21"
     },
     "300503": {
       "entry_date": "2026-10-20",
@@ -28,8 +28,8 @@
       "dev20": -0.130298,
       "gap": 0.03888677087304604,
       "board": "机器人",
-      "days_held": 0,
-      "last_check_date": null
+      "days_held": 1,
+      "last_check_date": "2026-10-21"
     },
     "000887": {
       "entry_date": "2026-10-20",
@@ -38,8 +38,8 @@
       "dev20": -0.074276,
       "gap": 0.020000000000000018,
       "board": "机器人",
-      "days_held": 0,
-      "last_check_date": null
+      "days_held": 1,
+      "last_check_date": "2026-10-21"
     },
     "301667": {
       "entry_date": "2026-10-20",
@@ -48,8 +48,8 @@
       "dev20": -0.12533,
       "gap": 0.02223594811612095,
       "board": "底盘与发动机系统",
-      "days_held": 0,
-      "last_check_date": null
+      "days_held": 1,
+      "last_check_date": "2026-10-21"
     },
     "300587": {
       "entry_date": "2026-10-20",
@@ -58,8 +58,8 @@
       "dev20": -0.112335,
       "gap": 0.014888337468982549,
       "board": "基础化工",
-      "days_held": 0,
-      "last_check_date": null
+      "days_held": 1,
+      "last_check_date": "2026-10-21"
     },
     "301486": {
       "entry_date": "2026-10-21",
@@ -71,12 +71,32 @@
       "days_held": 0,
       "last_check_date": null
     },
-    "002591": {
+    "300857": {
       "entry_date": "2026-10-21",
-      "entry_price": 6.88,
-      "qty": 1100,
-      "dev20": -0.023056,
-      "gap": 0.1008,
+      "entry_price": 216.37,
+      "qty": 400,
+      "dev20": -0.169453,
+      "gap": 0.0804769001490313,
+      "board": "半导体",
+      "days_held": 0,
+      "last_check_date": null
+    },
+    "002549": {
+      "entry_date": "2026-10-21",
+      "entry_price": 13.68,
+      "qty": 500,
+      "dev20": -0.023337,
+      "gap": 0.07137315748642359,
+      "board": "半导体",
+      "days_held": 0,
+      "last_check_date": null
+    },
+    "600228": {
+      "entry_date": "2026-10-21",
+      "entry_price": 10.22,
+      "qty": 100,
+      "dev20": -0.0785,
+      "gap": 0.06964656964656957,
       "board": "AI应用",
       "days_held": 0,
       "last_check_date": null
