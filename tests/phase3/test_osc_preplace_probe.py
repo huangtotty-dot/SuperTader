@@ -96,6 +96,25 @@ class TestEnrich(unittest.TestCase):
         self.assertFalse(r["would_trigger_control"])
         self.assertEqual(r["n_bars"], 0)
 
+    def test_tz_aware_eob_vs_naive_cutoff(self):
+        """回归（2026-10-21 生产事故）：GM 实盘返回 datetime64[us, Asia/Shanghai]
+        的 eob，与 naive cutoff 比较曾 TypeError 导致完成钩子整日断流。"""
+        bars = _bars()
+        bars["eob"] = pd.to_datetime(bars["eob"]).dt.tz_localize("Asia/Shanghai")
+        out = pp.enrich([self.ROW], bars,
+                        cutoff=_dt.datetime(2026, 10, 19, 10, 0))
+        r = out[0]
+        self.assertEqual(r["touch_time"], "2026-10-19 10:00:00")
+        self.assertAlmostEqual(r["px_10am_ref"], 6.71)
+        self.assertEqual(r["n_bars"], 2, "10:00 之后的 bar 仍必须被 cutoff 排除")
+
+    def test_tz_aware_cutoff_also_safe(self):
+        """防御：cutoff 带时区也不应炸（统一剥成 naive 北京墙钟）。"""
+        cut = pd.Timestamp("2026-10-19 10:00:00", tz="Asia/Shanghai")
+        r = pp.enrich([self.ROW], _bars(), cutoff=cut)[0]
+        self.assertEqual(r["n_bars"], 2)
+        self.assertEqual(r["touch_time"], "2026-10-19 10:00:00")
+
 
 class TestPersistence(unittest.TestCase):
     def test_roundtrip_and_phase(self):

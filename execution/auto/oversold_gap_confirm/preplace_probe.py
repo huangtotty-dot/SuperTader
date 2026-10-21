@@ -61,7 +61,15 @@ def _norm_bars(df) -> pd.DataFrame:
         return pd.DataFrame(columns=["_code", "_eob", "high", "low", "close"])
     d = df.copy()
     d["_code"] = d["symbol"].astype(str).str.split(".").str[-1]
-    d["_eob"] = pd.to_datetime(d.get("eob"), errors="coerce")
+    _eob = pd.to_datetime(d.get("eob"), errors="coerce")
+    try:
+        # GM 实盘返回带时区的 eob（datetime64[us, Asia/Shanghai]），墙钟值本身
+        # 就是北京时间 ⇒ 去掉时区变 naive，才能和 naive 的 cutoff 比较
+        # （2026-10-21 生产事故：tz-aware vs naive 比较 TypeError，完成钩子整日断流）
+        _eob = _eob.dt.tz_localize(None)
+    except (TypeError, AttributeError):
+        pass                                            # 本来就是 naive：无需处理
+    d["_eob"] = _eob
     for c in ("high", "low", "close"):
         d[c] = pd.to_numeric(d.get(c), errors="coerce")
     return d.dropna(subset=["_eob"]).sort_values("_eob")
@@ -71,7 +79,10 @@ def enrich(rows: list, bars, cutoff=None) -> list:
     """用 60s 棒回填探测字段。`cutoff` = 只统计 eob ≤ cutoff 的 bar（通常 10:00:00）。"""
     d = _norm_bars(bars)
     if cutoff is not None:
-        d = d[d["_eob"] <= pd.Timestamp(cutoff)]
+        _cut = pd.Timestamp(cutoff)
+        if _cut.tzinfo is not None:                     # 防御：cutoff 带时区同样剥掉
+            _cut = _cut.tz_localize(None)
+        d = d[d["_eob"] <= _cut]
     out = []
     for r in rows or []:
         row = dict(r)
