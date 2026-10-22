@@ -514,7 +514,13 @@ class MarketDataFetcher:
                             _shi = float(_snap.get("high") or _spx)
                             _slo = float(_snap.get("low") or _spx)
                             _svol = float(_snap.get("vol_hand") or 0) or 0.0
-                            _u = 1.0 if str(code).startswith("688") else 100.0
+                            # ⚠️ 2026-10-22 修：腾讯 `f[6]` 对**科创板(688) 是「股」**、其余是「手」
+                            # （memory: qt_quote_volume_unit_by_board）。这里必须归一到手，
+                            # 否则写进共享日线缓存的 688 当日根会大 100 倍 —— 图上的成交额
+                            # 直接算出 600+ 亿（实测 688543 的 10-20 那根，全科创 360 只同病）。
+                            if str(code).startswith(("688", "689")):
+                                _svol = _svol / 100.0
+                            _u = 100.0          # volume 已归一到手 ⇒ 成交额一律 ×100
                             if str(df["date"].iloc[-1])[:10] == str(target_date_str):
                                 _i = df.index[-1]
                                 df.at[_i, "close"] = _spx

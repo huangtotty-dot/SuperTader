@@ -97,6 +97,35 @@ def has_impossible_gap(rows, code, n: int = 3) -> bool:
         return False
 
 
+def has_volume_unit_error(rows, code, n: int = 6) -> bool:
+    """科创板日线里有没有「股被当手」的成交量（差 100 倍）。永不抛。
+
+    为什么只查 688/689：腾讯 `f[6]` 对**科创板是「股」**、其余板块是「手」——补 forming bar
+    的几条路径如果忘了归一，那根的量就会是真实值的 100 倍，下游 `_ensure_amount`（按手算）
+    直接把成交额放大 100 倍（2026-10-22 现场：688543 的 10-20 显示 **671 亿**，同日其余 6~8 亿）。
+
+    判据收紧到 **70~140 倍**（只抓"恰好一个数量级"的错），真实行情里不可能出现
+    （那意味着换手率上千倍）；只看**最近 n 根**，老数据不追。
+    """
+    try:
+        if not str(code).startswith(("688", "689")):
+            return False
+        vols = [float(r.get("volume") or 0) for r in (rows or [])]
+        if len(vols) < 12:
+            return False
+        for i in range(max(10, len(vols) - n), len(vols)):
+            ref = sorted(vols[i - 10:i])[5]          # 前 10 根中位数
+            v = vols[i]
+            if ref <= 0 or v <= 0:
+                continue
+            r = v / ref
+            if 70.0 <= r <= 140.0:
+                return True
+        return False
+    except Exception:
+        return False
+
+
 def _vol_div(sym) -> float:
     """腾讯按**板块**给成交量不同单位：科创板(688)是**股**，其余是**手**。
     返回归一到「手」所需的除数（688 → 100，其余 → 1）。
@@ -579,6 +608,9 @@ class TencentProvider:
                 return None
             # 2026-10-21：**不可能存在的隔夜跳空** ⇒ 档里有半成品根（002929 事故），重取。
             if has_impossible_gap(rows, code):
+                return None
+            # 2026-10-22：科创板「股被当手」⇒ 成交额会大 100 倍，重取（腾讯日线本身已归一到手）。
+            if has_volume_unit_error(rows, code):
                 return None
             df = pd.DataFrame(rows)[_DAILY_COLS]
             df.attrs["source"] = "cache"

@@ -406,9 +406,15 @@ class MarketDataFacade:
             if not snap or snap.get("ts_date") != today or not snap.get("price"):
                 continue
             px = snap["price"]
+            # ⚠️ 2026-10-22：`vol_hand` 对**科创板是「股」**、其余是「手」⇒ 归一，否则这根
+            # forming bar 进共享缓存后成交额大 100 倍（688543 的 10-20 就冲到 671 亿）。
+            # 这条**批量**路径是那天全池 360 只 688 同时被写坏的真凶（`daily_many` 一站补全池）。
+            _v = float(snap.get("vol_hand") or 0.0)
+            if str(code).startswith(("688", "689")):
+                _v = _v / 100.0
             fb = pd.DataFrame([{"date": today, "open": snap.get("open") or px,
                                 "high": snap.get("high") or px, "low": snap.get("low") or px,
-                                "close": px, "volume": snap.get("vol_hand") or 0.0}])
+                                "close": px, "volume": _v}])
             frames[code] = pd.concat([frames[code], fb], ignore_index=True)
         return frames
 
@@ -452,9 +458,14 @@ class MarketDataFacade:
         if not snap or snap.get("ts_date") != today or not snap.get("price"):
             return df
         px = snap["price"]
+        # 2026-10-22：腾讯快照的 volume 对**科创板是「股」**（其余是「手」）⇒ 归一，
+        # 否则这根 forming bar 进共享缓存后，下游按「手」算成交额会大 100 倍。
+        _v = float(snap.get("volume") or 0.0)
+        if base.startswith(("688", "689")):
+            _v = _v / 100.0
         fb = pd.DataFrame([{"date": today, "open": snap.get("open") or px,
                             "high": snap.get("high") or px, "low": snap.get("low") or px,
-                            "close": px, "volume": snap.get("volume") or 0.0}])
+                            "close": px, "volume": _v}])
         return pd.concat([df, fb], ignore_index=True)
 
     def _maybe_append_index_forming(self, df: pd.DataFrame, index: str = "sh000001") -> pd.DataFrame:
