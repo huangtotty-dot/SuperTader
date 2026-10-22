@@ -645,3 +645,11 @@ body.mw-winmode #multiWatchWin {
   color: var(--accent); font-family: var(--mono); font-size: 10px; line-height: 16px; }
 .h-dim-chip b { font-size: 11px; font-weight: 700; }
 .h-dim-chip i { font-style: normal; color: var(--text-dim); margin-left: 2px; font-size: 9px; }
+
+/* ---- 区块折叠（2026-10-22 owner：建仓信号扫描 / 异常监控池 要能收起）----
+   折叠时只留 <h2> 标题行（含区块内的操作按钮），其余内容整块不显示。
+   状态存 localStorage，刷新/重启后保持。 */
+.section.collapsed > *:not(h2) { display: none !important; }
+.sec-toggle { padding: 0 6px; font-size: 11px; line-height: 1.5; margin-right: 4px;
+  transition: transform .15s ease; }
+.section.collapsed > h2 > .sec-toggle { transform: rotate(-90deg); }

@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>trader pannel</title>
-<link rel="stylesheet" href="style.css?v=20261022o">
+<link rel="stylesheet" href="style.css?v=20261022p">
 </head>
 <body>
 <header class="topbar">
@@ -252,7 +252,8 @@
       <div id="beaconBody"><div class="empty">加载中…</div></div>
     </div>
     <div class="section" id="position-builder">
-      <h2>建仓信号扫描
+      <h2><button class="mini-btn sec-toggle" data-sec="position-builder" onclick="toggleSection('position-builder')"
+              title="折叠 / 展开本区块">▾</button> 建仓信号扫描
         <span style="display:inline-flex;align-items:center;gap:6px;margin-left:12px;font-weight:400;font-size:12px">
           <input type="text" id="pbSearchCode" class="mini-input" placeholder="代码(如 600519)" style="width:110px">
           <input type="text" id="pbSearchName" class="mini-input" placeholder="名称(可选)" style="width:90px">
@@ -280,7 +281,8 @@
          判定/得分/通过/日线阶段/时机条件 与建仓表**同一真源**（`_hunter_build_conformance` →
          build_decision），只读本地日线缓存、零网络。 -->
     <div class="section" id="abnormal-pool">
-      <h2>🚨 异常监控池
+      <h2><button class="mini-btn sec-toggle" data-sec="abnormal-pool" onclick="toggleSection('abnormal-pool')"
+              title="折叠 / 展开本区块">▾</button> 🚨 异常监控池
         <span style="display:inline-flex;align-items:center;gap:6px;margin-left:12px;font-weight:400;font-size:12px">
           <input type="text" id="abnSearch" class="mini-input" placeholder="代码 或 名称" style="width:140px"
                  onkeydown="if(event.key==='Enter'){event.preventDefault();abnormalAdd();}">
@@ -586,6 +588,6 @@
 <script src="vendor/echarts.min.js"></script>
 <!-- 2026-10-20：带版本号强制 WebView2 重新取 app.js（否则可能命中旧缓存，
      K 线提速/埋点改动不生效——表现为"改了跟没改一样"） -->
-<script src="app.js?v=20261022o"></script>
+<script src="app.js?v=20261022p"></script>
 </body>
 </html>

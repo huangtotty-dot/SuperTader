@@ -2978,6 +2978,42 @@ async function abnormalRemove(code) {
   await loadAbnormalPool(true);
 }
 
+/* ================= 区块折叠（2026-10-22 owner）=================
+   「建仓信号扫描」「异常监控池」这类长表可以整块收起，只留标题行。
+   · 状态存 localStorage（`secCollapsed`），刷新/重启后保持；
+   · 按钮上的 ▾ 折叠后转成 ▸（CSS 旋转），点标题行里的按钮即可切换；
+   · **只隐藏，不销毁**：内容仍在 DOM 里，展开即见，不会因为折叠丢掉已加载的数据/滚动位置。 */
+const SEC_LS_KEY = "secCollapsed";
+function _secCollapsedSet() {
+  try { const v = JSON.parse(localStorage.getItem(SEC_LS_KEY) || "[]"); return new Set(Array.isArray(v) ? v : []); }
+  catch (e) { return new Set(); }
+}
+function _secApply(id, collapsed) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.classList.toggle("collapsed", !!collapsed);
+  const btn = el.querySelector(":scope > h2 > .sec-toggle");
+  if (btn) btn.textContent = collapsed ? "▸" : "▾";
+}
+function toggleSection(id) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  const next = !el.classList.contains("collapsed");
+  _secApply(id, next);
+  const st = _secCollapsedSet();
+  if (next) st.add(id); else st.delete(id);
+  try { localStorage.setItem(SEC_LS_KEY, JSON.stringify(Array.from(st))); } catch (e) { /* 忽略 */ }
+}
+function _secRestore() {
+  const st = _secCollapsedSet();
+  document.querySelectorAll(".section[id] > h2 > .sec-toggle").forEach(b => {
+    const id = b.getAttribute("data-sec");
+    if (id) _secApply(id, st.has(id));
+  });
+}
+// app.js 在 </body> 前加载 ⇒ 此刻 DOM 已就绪，可直接恢复上次的折叠状态
+try { _secRestore(); } catch (e) { /* 忽略 */ }
+
 function renderPB(pb) {
   window._pbLastPayload = pb;  // P3-2 池筛选：切换下拉时用最近一次 payload 重渲染
   const el = document.getElementById("pbBody");
