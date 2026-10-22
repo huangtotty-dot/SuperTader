@@ -4576,9 +4576,12 @@ function renderStockChart(applyZoom = true) {
   // 日线 tab 本身就是真正的 MA20 曲线，不重复叠线。
   // 颜色选 teal：与蓝(日线MA5)/紫(日线MA10)/金(周期MA5)/绿(周期MA20) 五个在用色
   // 两两 CVD ΔE≥12.7、常视觉 ΔE≥16.9（dataviz 校验器 dark 口径实测），且带直标"日线MA20"。
-  const _dma20Arr = (((data.period_data || {}).daily || {}).ma
-    ? data.period_data.daily.ma[2] : null);
-  const _dma20 = (_dma20Arr && _dma20Arr.length) ? _dma20Arr[_dma20Arr.length - 1] : null;
+  const _dailyMa = (((data.period_data || {}).daily || {}).ma) || [];
+  const _lastMa = (i) => {
+    const a = _dailyMa[i];
+    return (a && a.length) ? a[a.length - 1] : null;
+  };
+  const _dma20 = _lastMa(2);
   const dailyMa20Line = (stockChartPeriod !== "daily" && _dma20 != null) ? {
     yAxis: _dma20,
     lineStyle: { color: "#2dd4bf", type: "dashed", width: 1.4, opacity: .95 },
@@ -4586,6 +4589,24 @@ function renderStockChart(applyZoom = true) {
              // 与日线MA10 同用左下角 ⇒ 用 distance 再往下让（markLine 标签只认
              // `distance`，`offset` 在这条渲染路径里不被读取），两条价位接近时不叠字。
              fontSize: 9, position: "insideStartBottom", distance: 17 },
+  } : null;
+  /* 2026-10-22 owner：「其它周期也画出 30 日、60 日均线」——与上面 MA20 完全同口径：
+     画的是**日线** MA30/MA60（30/60 个交易日）的水平参考线，不是"30 根本周期 K 线"的周期均线
+     （那条在 maSeries 里本来就有）。周/月/分钟全画，日线 tab 不重复。
+     标签用 distance 错开：左上 MA5→MA30，左下 MA10→MA20→MA60，价位接近也不叠。 */
+  const _dma30 = _lastMa(3);
+  const dailyMa30Line = (stockChartPeriod !== "daily" && _dma30 != null) ? {
+    yAxis: _dma30,
+    lineStyle: { color: "#f0883e", type: "dashed", width: 1.4, opacity: .95 },
+    label: { formatter: `日线MA30 ${fmt(_dma30, 2)}`, color: "#f0883e",
+             fontSize: 9, position: "insideStartTop", distance: 17 },
+  } : null;
+  const _dma60 = _lastMa(4);
+  const dailyMa60Line = (stockChartPeriod !== "daily" && _dma60 != null) ? {
+    yAxis: _dma60,
+    lineStyle: { color: "#a371f7", type: "dashed", width: 1.4, opacity: .95 },
+    label: { formatter: `日线MA60 ${fmt(_dma60, 2)}`, color: "#a371f7",
+             fontSize: 9, position: "insideStartBottom", distance: 34 },
   } : null;
 
   // 黄金分割（斐波那契回撤/扩展）：跟随当前 Tab；后端已按周期各算一份
@@ -5183,6 +5204,8 @@ function renderStockChart(applyZoom = true) {
             ...(dailyMa5Line ? [dailyMa5Line] : []),
             ...(dailyMa10Line ? [dailyMa10Line] : []),
             ...(dailyMa20Line ? [dailyMa20Line] : []),
+            ...(dailyMa30Line ? [dailyMa30Line] : []),
+            ...(dailyMa60Line ? [dailyMa60Line] : []),
           ],
           label: { position: "insideEndTop" } } },
       ...divSeries,
