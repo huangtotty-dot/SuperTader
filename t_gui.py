@@ -3756,6 +3756,12 @@ class Api:
                     continue          # 取不到就不给值（别拿 0 冒充"平盘"）
                 out[str(base)] = {"price": round(float(px), 3),
                                   "change_pct": round(float(d.get("pct") or 0.0), 2),
+                                  # 市值（亿元）：猎手「市值」列用。取不到就是 None（前端显示 —），
+                                  # 绝不填 0 冒充"零市值"。
+                                  "mktcap": (round(float(d.get("mktcap") or 0.0), 1)
+                                             if d.get("mktcap") else None),
+                                  "float_mktcap": (round(float(d.get("float_mktcap") or 0.0), 1)
+                                                   if d.get("float_mktcap") else None),
                                   "ts_date": d.get("ts_date")}
         except Exception as e:
             # ⚠️ **不许静默**（2026-10-12）：这条链断在哪一层，光看界面分不出来。

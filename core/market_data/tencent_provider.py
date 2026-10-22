@@ -937,6 +937,10 @@ class TencentProvider:
                              "high": _f(33), "low": _f(34), "vol_hand": _f(6),
                              "amount_wan": _f(37), "pct": _f(32),
                              "turnover": _f(38), "amplitude": _f(43),
+                             # 2026-10-22：市值（**亿元**）。腾讯 qt 字段 44=流通市值、45=总市值。
+                             # 猎手要加「市值」列；历史 market_{date}.csv 里没有换手率可反推
+                             # （实测全 0），只能走实时快照这条。
+                             "float_mktcap": _f(44), "mktcap": _f(45),
                              "limit_up": _f(47), "limit_down": _f(48), "vol_ratio": _f(49),
                              "ts_raw": ts, "ts_date": ts_date}
         except Exception:

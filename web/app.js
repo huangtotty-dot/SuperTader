@@ -5794,6 +5794,19 @@ function hunterPriceHtml(q) {
     + `<div style="font-size:10px" class="h-pct">${pctHtml(q.change_pct, "实时涨幅（随行情每 10s 刷新）")}</div>`;
 }
 
+/* 猎手展开行「市值」格（2026-10-22 owner 要加一列）。
+   单位亿元，来自腾讯快照 f[45]=总市值；`float_mktcap`（流通市值）放 tooltip。
+   ⚠️ 与 `hunterPriceHtml` 同一纪律：**取不到就显示 ⏳/—，不回落到任何旧值**。 */
+function hunterMktcapHtml(q) {
+  if (!q || q.mktcap == null) return '<span class="cell-dim">⏳</span>';
+  const v = Number(q.mktcap);
+  const txt = v >= 10000 ? (v / 10000).toFixed(2) + "万亿" : Math.round(v).toLocaleString("en-US") + "亿";
+  const tip = q.float_mktcap != null
+    ? `总市值 ${v.toFixed(0)} 亿 · 流通市值 ${Number(q.float_mktcap).toFixed(0)} 亿`
+    : `总市值 ${v.toFixed(0)} 亿`;
+  return `<span class="mono" title="${esc(tip)}">${txt}</span>`;
+}
+
 /* 猎手页当前是否可见（10s 刷实时行情前判一下，别给看不见的面板出网）。 */
 function _hunterTabActive() {
   const p = document.getElementById("tab-hunter");
@@ -5855,6 +5868,11 @@ function _applyHunterQuotes() {
   el.querySelectorAll(".h-expand-row td.h-price[data-hcode]").forEach(td => {
     // 与初始渲染共用 `hunterPriceHtml`；取不到就回落成 ⏳/—（**不回落到扫描时的旧值**）
     td.innerHTML = hunterPriceHtml(hunterQuoteCache[td.getAttribute("data-hcode")]);
+    n++;
+  });
+  // 市值列与价同源（同一次 load_quotes_for 的返回），一起补
+  el.querySelectorAll(".h-expand-row td.h-mktcap[data-hcode]").forEach(td => {
+    td.innerHTML = hunterMktcapHtml(hunterQuoteCache[td.getAttribute("data-hcode")]);
     n++;
   });
   return n;   // 返回命中格数 ⇒ 诊断能分辨"没拿到值"与"没命中 DOM"
@@ -6746,6 +6764,7 @@ function renderHunter(h) {
         ${maStateCellHtml(s.build_above_ma20, 20, s.build_above_ma5, 5, undefined, "#d29922", "未站上")}
         ${ma5CellHtml((hunterStructCache[category] || {})[s.code], "h-ma5")}
         <td class="num h-price" data-hcode="${esc(s.code)}" title="**实时**价/涨幅（展开时取、10s 刷新）。⚠️ 刻意不显示扫描时的旧值：扫描可能隔了几天，旧涨幅会严重误导（实测 300821 旧值 +20.01% vs 实时 +5.83%）">${hunterPriceHtml(null)}</td>
+        <td class="num h-mktcap" data-hcode="${esc(s.code)}" title="总市值（亿元，腾讯实时快照；悬停看流通市值）。随行情 10s 刷新">${hunterMktcapHtml(null)}</td>
         <td class="h-tags">${tagsTxt}</td>
         ${condCellHtml(s.build_conds, condLabels, s.build_verdict === "insufficient_data", s.build_veto)}
         <td class="cell-dim" style="max-width:240px;font-size:11px">${esc(s.build_reason || "")}</td>
@@ -6909,6 +6928,7 @@ function renderHunter(h) {
             <th title="现价 vs 20 日简单均线（观察列，不驱动判定）。选股猎手口径：**站上=绿、其它=黄**（建仓信号扫描用绿/红）；5 日线状态放在单元格 tooltip。⚠️「得分」里那个 −70 悬崖扣分走的是 **5 日线**口径（owner 决定保留），与本列不是同一条线；行底色也仍按 5 日线">20日线<br><span style="font-size:9px;opacity:.6">规则口径</span></th>
             <th title="30 分钟 K 线的 5 根均线（现价站上/跌破 + 距上次翻转多少根）。**与「持仓 30 分钟风险体检」同源**（position_structure，同一缓存）。⚠️ 实测无前瞻信息量 ⇒ 只展示，不参与任何判定">30m MA5<br><span style="font-size:9px;opacity:.6">仅展示</span></th>
             <th class="num" title="**实时**价 + 实时涨幅（展开时取、10s 刷新；取不到显示 ⏳/—）。⚠️ 刻意不显示扫描时的旧价旧涨幅——扫描可能隔了几天，旧涨幅会严重误导">价<br><span style="font-size:9px;opacity:.6">实时涨幅</span></th>
+            <th class="num" title="总市值（亿元，腾讯实时快照；悬停看流通市值）。与「价」同一轮 10s 刷新；取不到显示 ⏳/—。⚠️ 历史 market_{date}.csv 里没有换手率可反推，只能走实时快照">市值<br><span style="font-size:9px;opacity:.6">亿</span></th>
             <th>技术标签</th>
             <th title="时机条件：市场有方向/多头结构/回撤到位 · 末位🚫=否决因子（爆量≥3倍或偏离MA60>+20%）">时机条件</th>
             <th>理由</th>
