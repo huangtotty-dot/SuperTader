@@ -6744,6 +6744,8 @@ function renderHunter(h) {
         <td title="双击看技术分析">${esc(s.name)} <button class="mini-btn" style="font-size:10px;padding:0 5px"
           onclick="event.stopPropagation();addToWatchlist('${esc(s.code)}','${esc(s.name)}',this)"
           title="加入建仓股池监控买点">+股池</button></td>
+        <!-- 2026-10-22 owner：市值挪到名称右边（放在「价」旁边太靠右，注意不到） -->
+        <td class="num h-mktcap" data-hcode="${esc(s.code)}" title="总市值（亿元，腾讯实时快照；悬停看流通市值）。随行情 10s 刷新">${hunterMktcapHtml(null)}</td>
         <td style="text-align:center;white-space:nowrap">${tierBadge(s.tier, s.tier_static, s.tier_reason)}</td>
         <td>${verdictTxt}</td>
         <td class="num">${scoreTxt}</td>
@@ -6764,7 +6766,6 @@ function renderHunter(h) {
         ${maStateCellHtml(s.build_above_ma20, 20, s.build_above_ma5, 5, undefined, "#d29922", "未站上")}
         ${ma5CellHtml((hunterStructCache[category] || {})[s.code], "h-ma5")}
         <td class="num h-price" data-hcode="${esc(s.code)}" title="**实时**价/涨幅（展开时取、10s 刷新）。⚠️ 刻意不显示扫描时的旧值：扫描可能隔了几天，旧涨幅会严重误导（实测 300821 旧值 +20.01% vs 实时 +5.83%）">${hunterPriceHtml(null)}</td>
-        <td class="num h-mktcap" data-hcode="${esc(s.code)}" title="总市值（亿元，腾讯实时快照；悬停看流通市值）。随行情 10s 刷新">${hunterMktcapHtml(null)}</td>
         <td class="h-tags">${tagsTxt}</td>
         ${condCellHtml(s.build_conds, condLabels, s.build_verdict === "insufficient_data", s.build_veto)}
         <td class="cell-dim" style="max-width:240px;font-size:11px">${esc(s.build_reason || "")}</td>
@@ -6919,6 +6920,7 @@ function renderHunter(h) {
              </div>`}
           <table><thead><tr>
             <th>代码</th><th>名称</th>
+            <th class="num" title="总市值（亿元，腾讯实时快照；悬停看流通市值）。与「价」同一轮 10s 刷新；取不到显示 ⏳。⚠️ 历史 market_{date}.csv 里没有换手率可反推，只能走实时快照">市值<br><span style="font-size:9px;opacity:.6">亿</span></th>
             <th title="板块内梯队（**描述性方位标签，非信号**）：龙头=本板块当日涨幅第1；中军=其余成交额前3（资金核心）；杂毛=其余；板块<8只不标。⚠️ 实测该分层无前瞻区分度（四种定义×四个持有期≈全无差异、分半窗符号翻转、效应量远低于交易成本）⇒ 只看方位，不参与任何判定与排序。依据 doc/research/2026-10-11_板块内龙头中军杂毛_分层实验.md">梯队</th>
             <th title="与建仓信号扫描同口径（go→signal / approaching / watch_signal / weak）">判定</th>
             <th class="num" title="综合得分（与建仓表同口径；破5日线扣70且不给signal）">得分</th>
@@ -6928,7 +6930,6 @@ function renderHunter(h) {
             <th title="现价 vs 20 日简单均线（观察列，不驱动判定）。选股猎手口径：**站上=绿、其它=黄**（建仓信号扫描用绿/红）；5 日线状态放在单元格 tooltip。⚠️「得分」里那个 −70 悬崖扣分走的是 **5 日线**口径（owner 决定保留），与本列不是同一条线；行底色也仍按 5 日线">20日线<br><span style="font-size:9px;opacity:.6">规则口径</span></th>
             <th title="30 分钟 K 线的 5 根均线（现价站上/跌破 + 距上次翻转多少根）。**与「持仓 30 分钟风险体检」同源**（position_structure，同一缓存）。⚠️ 实测无前瞻信息量 ⇒ 只展示，不参与任何判定">30m MA5<br><span style="font-size:9px;opacity:.6">仅展示</span></th>
             <th class="num" title="**实时**价 + 实时涨幅（展开时取、10s 刷新；取不到显示 ⏳/—）。⚠️ 刻意不显示扫描时的旧价旧涨幅——扫描可能隔了几天，旧涨幅会严重误导">价<br><span style="font-size:9px;opacity:.6">实时涨幅</span></th>
-            <th class="num" title="总市值（亿元，腾讯实时快照；悬停看流通市值）。与「价」同一轮 10s 刷新；取不到显示 ⏳/—。⚠️ 历史 market_{date}.csv 里没有换手率可反推，只能走实时快照">市值<br><span style="font-size:9px;opacity:.6">亿</span></th>
             <th>技术标签</th>
             <th title="时机条件：市场有方向/多头结构/回撤到位 · 末位🚫=否决因子（爆量≥3倍或偏离MA60>+20%）">时机条件</th>
             <th>理由</th>
