@@ -4532,10 +4532,9 @@ function renderStockChart(applyZoom = true) {
   const showGaps = (document.getElementById("tgGaps") || {}).checked !== false;
   // 背离标注（2026-10-19 owner）：后端按周期算好顶/底背离事件，前端直接画在对应 K 线上。
   const showDiv = (document.getElementById("tgDiv") || {}).checked !== false;
-  // 趋势线（2026-10-22 owner）：日线摆动高低点连线。**只有日线视图画**——端点索引是按日线
-  // 序列算的，画到周/月/分钟上会整体错位。
-  const showTrend = (document.getElementById("tgTrend") || {}).checked !== false
-    && stockChartPeriod === "daily";
+  // 趋势线（2026-10-22 owner）：摆动高低点连线，**每个周期各算一份**
+  // （后端 `trendlines` 按 period 分键）——端点索引是该周期自己的 K 线下标，按当前 Tab 取即可。
+  const showTrend = (document.getElementById("tgTrend") || {}).checked !== false;
 
   // markLine: 支撑/压力 — 去重降密度 + 精简标签
   function dedupeLines(items) {
@@ -4852,7 +4851,11 @@ function renderStockChart(applyZoom = true) {
   /* 趋势线（2026-10-22 owner）：后端 `_attach_trendlines` 给的是**两端点**（日线序列索引 + 价），
      这里用 markLine 两点式画线段；线一直延伸到**最新一根**，标签挂右端显示当前线位。
      配色与通道同源：上升（支撑）= 红、下降（压力）= 绿。 */
-  const _tl = data.trendlines || {};
+  // 后端按周期分键（daily/weekly/monthly/min5…）；老 payload 是"单份"结构 ⇒ 兜底当日线用
+  const _tlAll = data.trendlines || {};
+  const _tl = _tlAll[stockChartPeriod]
+    || (!_tlAll.schema && _tlAll)          // 旧结构（只有一份，就是日线）
+    || {};
   const _trendSegs = [];
   const _pushTrend = (o, color, name) => {
     if (!o || o.i0 == null || o.i_now == null || !showTrend) return;

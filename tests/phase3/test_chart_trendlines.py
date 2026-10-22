@@ -42,8 +42,7 @@ def _zigzag(n=60, start=10.0, step=1.0):
 class TestTrendLines:
     def test_uptrend_line_found(self):
         lows, highs = _zigzag()
-        tl = t_gui._attach_trendlines(_payload(lows, highs))["trendlines"]
-        assert tl["schema"] == 1
+        tl = t_gui._attach_trendlines(_payload(lows, highs))["trendlines"]["daily"]
         up = tl["up"]
         assert up is not None, "逐级抬高的低点必须画得出上升趋势线"
         assert up["y1"] > up["y0"], "上升趋势线的后点必须更高"
@@ -55,7 +54,7 @@ class TestTrendLines:
     def test_downtrend_line_found(self):
         lows = [20.0 - 0.2 * (i // 6) for i in range(60)]
         highs = [22.0 - 0.5 * (i // 6) for i in range(60)]
-        tl = t_gui._attach_trendlines(_payload(lows, highs))["trendlines"]
+        tl = t_gui._attach_trendlines(_payload(lows, highs))["trendlines"]["daily"]
         dn = tl["dn"]
         assert dn is not None
         assert dn["y1"] < dn["y0"] and dn["slope_pct"] < 0
@@ -65,19 +64,41 @@ class TestTrendLines:
         """一条直线：没有"依次抬高/降低"的摆动点 ⇒ 两条线都可以是 None，不能抛。"""
         lows = [10.0] * 60
         highs = [10.0] * 60
-        tl = t_gui._attach_trendlines(_payload(lows, highs))["trendlines"]
+        tl = t_gui._attach_trendlines(_payload(lows, highs))["trendlines"]["daily"]
         assert tl["up"] is None and tl["dn"] is None
 
     def test_short_series_no_crash(self):
-        tl = t_gui._attach_trendlines(_payload([1.0] * 5, [2.0] * 5))["trendlines"]
+        tl = t_gui._attach_trendlines(_payload([1.0] * 5, [2.0] * 5))["trendlines"]["daily"]
         assert tl["up"] is None and tl["dn"] is None
 
     def test_min_gap_between_points(self):
         """两个摆动点挨得太近（<5 根）不能连线 —— 那只是同一根小反弹的两端。"""
         lows, highs = _zigzag()
-        tl = t_gui._attach_trendlines(_payload(lows, highs))["trendlines"]
+        tl = t_gui._attach_trendlines(_payload(lows, highs))["trendlines"]["daily"]
         up = tl["up"]
         assert up["i1"] - up["i0"] >= 5
+
+
+class TestPerPeriod:
+    def test_backend_keys_by_period(self):
+        lows, highs = _zigzag()
+        p = _payload(lows, highs)
+        p["period_data"]["weekly"] = p["period_data"]["daily"]
+        p["period_data"]["min5"] = p["period_data"]["daily"]
+        tl = t_gui._attach_trendlines(p)["trendlines"]
+        assert tl["schema"] == 2
+        assert set(p["period_data"]) <= set(tl), "每个有序列的周期都要有一份"
+        assert tl["weekly"]["up"] is not None and tl["min5"]["up"] is not None
+
+    def test_missing_periods_skipped(self):
+        lows, highs = _zigzag()
+        tl = t_gui._attach_trendlines(_payload(lows, highs))["trendlines"]
+        assert "daily" in tl and "min30" not in tl, "没有序列的周期不塞空壳"
+
+    def test_version_includes_trend_schema(self):
+        """口径一改，版本号要变 —— 否则「unchanged 不刷新」握手会让前端永远拿旧 payload。"""
+        src = (_ROOT / "t_gui.py").read_text(encoding="utf-8")
+        assert "|tr{_TREND_SCHEMA}" in src
 
 
 class TestFrontend:
@@ -86,8 +107,13 @@ class TestFrontend:
         i = _HTML.index('id="tgTrend"')
         assert "checked" in _HTML[i:i + 120], "默认勾选（打开就能看到线）"
 
-    def test_only_daily_view(self):
-        assert 'stockChartPeriod === "daily"' in _JS, "趋势线只画日线：端点索引是按日线序列算的"
+    def test_per_period(self):
+        """2026-10-22 二轮：**每个周期各算一份**，前端按当前 Tab 取（端点索引是各周期自己的下标）。"""
+        assert "_tlAll[stockChartPeriod]" in _JS, "前端必须按当前周期取 trendlines"
+        # 开关那段不能再带日线限定（别处仍可能有 daily 专属逻辑，只盯这一段）
+        i = _JS.index("const showTrend =")
+        seg = _JS[i:i + 200]
+        assert 'stockChartPeriod === "daily"' not in seg, "趋势线不再限制只画日线"
 
     def test_series_wired(self):
         assert "...trendSeries," in _JS, "构造出来的 trendSeries 必须进 series 数组"
