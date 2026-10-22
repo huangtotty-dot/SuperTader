@@ -3839,6 +3839,7 @@ class Api:
                 out["quotes"].append({
                     "code": code, "name": info.get("name", code),
                     "price": pc, "pre_close": pc, "change": 0.0, "change_pct": 0.0,
+                    "mktcap": None, "float_mktcap": None,
                     "cost": info.get("cost"), "pnl_pct": None, "offline": True,
                     "qty": info.get("qty", 0), "base": info.get("base", 0),
                     "t_qty": info.get("t_qty", 0),
@@ -3856,6 +3857,11 @@ class Api:
                 "price": price, "pre_close": pre_close,
                 "change": round(price - pre_close, 3) if price and pre_close else 0.0,
                 "change_pct": d.get("pct") or 0.0,
+                # 2026-10-22：市值（亿元）——建仓表 / 持仓体检 / 风向标三张表的「市值」列都用它，
+                # 与 `load_quotes_for` 同源（腾讯快照 f45=总市值、f44=流通市值）。
+                "mktcap": (round(float(d.get("mktcap") or 0.0), 1) if d.get("mktcap") else None),
+                "float_mktcap": (round(float(d.get("float_mktcap") or 0.0), 1)
+                                 if d.get("float_mktcap") else None),
             }
 
         # 2) 按 holdings 条目驱动 → 每个条目用自己的 code/cost/qty，查同一个 base 的价格
@@ -3872,6 +3878,7 @@ class Api:
                 "code": code, "name": info.get("name", code),
                 "price": p["price"], "pre_close": p["pre_close"],
                 "change": p["change"], "change_pct": p["change_pct"],
+                "mktcap": p.get("mktcap"), "float_mktcap": p.get("float_mktcap"),
                 "cost": cost, "pnl_pct": pnl, "offline": False,
                 "qty": info.get("qty", 0), "base": info.get("base", 0),
                 "t_qty": info.get("t_qty", 0),

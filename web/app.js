@@ -482,6 +482,7 @@ function beaconRowHtml(s, labels) {
       : (_sc !== null && _sc > 0) ? "background:rgba(63,185,80,.07);" : "");
   return `<tr class="h-expand-row" style="${_rowBg}" ondblclick="openStockChart('${esc(s.code)}','${esc(s.name)}')">
     <td>${esc(s.name)} <span class="mono cell-dim">${esc(s.code)}</span></td>
+    <td class="num h-mktcap" data-hcode="${esc(s.code)}" title="总市值（亿元，随行情 10s 刷新）">${hunterMktcapHtml(null)}</td>
     <td style="text-align:center">${tierBadge(s.tier, s.tier_static, s.tier_reason)}</td>
     <td>${verdictBadge(s.build_verdict)}</td>
     <td class="num">${scoreTxt}</td>
@@ -524,7 +525,8 @@ function renderMarketBeacon(d) {
   if (!secs.length) { el.innerHTML = '<div class="empty">当日无「有分层」的人气板块</div>'; return; }
   const total = secs.reduce((a, s) => a + (s.rows || []).length, 0);
   const head = `<thead><tr>
-    <th>股票</th><th>梯队</th><th>判定</th><th class="num">得分</th><th class="num">通过</th>
+    <th>股票</th><th class="num" title="总市值（亿元，腾讯实时快照，与「价」同一轮 10s 刷新；悬停看流通市值）。取不到显示 ⏳">市值<br><span style="font-size:9px;opacity:.6">亿</span></th>
+    <th>梯队</th><th>判定</th><th class="num">得分</th><th class="num">通过</th>
     <th>日线阶段</th><th title="是否站上 20 日线（观察列，不驱动判定）。⚠️ 得分里的 −70 扣分走的是 5 日线口径，与本列无关 ⇒ 本列不显示 −70">20日线<br><span style="font-size:9px;opacity:.6">观察</span></th><th class="num">价<br><span style="font-size:9px;opacity:.6">涨幅</span></th>
     <th>技术标签</th><th>时机条件</th><th>30min判定</th><th>仓位结构</th><th>30m MA5<br><span style="font-size:9px;opacity:.6">仅展示</span></th><th>依据</th>
   </tr></thead>`;
@@ -622,6 +624,11 @@ function _applyBeaconQuotes() {
   document.querySelectorAll("#beaconBody td.h-price[data-hcode]").forEach(td => {
     const q = _beaconQ.cache[td.getAttribute("data-hcode")];
     if (q) td.innerHTML = hunterPriceHtml(q);
+  });
+  // 市值列（2026-10-22）：与价同源（同一次 load_quotes_for 返回）
+  document.querySelectorAll("#beaconBody td.h-mktcap[data-hcode]").forEach(td => {
+    const q = _beaconQ.cache[td.getAttribute("data-hcode")];
+    if (q) td.innerHTML = hunterMktcapHtml(q);
   });
 }
 
@@ -3004,12 +3011,13 @@ function applyQuotesToPB(pb) {
   const qs = state.quotes || [];
   if (!pb || !pb.rows || !qs.length) return pb;
   const pxMap = {};
-  qs.forEach(x => { pxMap[x.code] = { price: x.price, pct: x.change_pct }; });
+  qs.forEach(x => { pxMap[x.code] = { price: x.price, pct: x.change_pct, mktcap: x.mktcap }; });
   pb.rows.forEach(r => {
     const q = pxMap[r.code];
     if (!q) return;
     if (q.price != null) r.price = q.price;
     r.change_pct = q.pct;
+    if (q.mktcap != null) r.mktcap = q.mktcap;      // 市值列（2026-10-22）
   });
   return pb;
 }
@@ -3020,11 +3028,19 @@ function applyQuotesToPB(pb) {
 function applyQuotesToOB() {
   const qs = state.quotes || [];
   if (!qs.length) return;
-  const pxMap = {};
-  qs.forEach(x => { if (x.price != null) pxMap[x.code] = x.price; });
+  const pxMap = {}, mcMap = {};
+  qs.forEach(x => {
+    const c = String(x.code || "").split("_")[0];
+    if (x.price != null) pxMap[c] = x.price;
+    if (x.mktcap != null) mcMap[c] = x.mktcap;      // 市值列（2026-10-22）
+  });
   document.querySelectorAll("#obBody td[data-obcode]").forEach(td => {
     const px = pxMap[String(td.getAttribute("data-obcode") || "").split("_")[0]];
     if (px != null) td.textContent = fmt(px, 2);
+  });
+  document.querySelectorAll("#obBody td[data-obmkt]").forEach(td => {
+    const mc = mcMap[String(td.getAttribute("data-obmkt") || "").split("_")[0]];
+    if (mc != null) td.innerHTML = hunterMktcapHtml({ mktcap: mc });
   });
 }
 
@@ -3201,6 +3217,7 @@ function renderPB(pb) {
         <td>${esc(r.name || "")} <span class="mono cell-dim">${esc(r.code || "")}</span>
           ${monitorBadge}${chBadge}${apBadge}${icBadge}${vetoBadge}${r.in_holdings ? `<span class="badge hold">持仓</span>` : ""}${errTxt}${blockLine}</td>
         <td style="text-align:center">${poolBadge}</td>
+        <td class="num">${r.mktcap != null ? hunterMktcapHtml({ mktcap: r.mktcap }) : '<span class="cell-dim">—</span>'}</td>
         <td>${verdictBadge(r.verdict)}</td>
         <td class="num" title="${esc(scoreCellTitle)}">${scoreCellHtml}</td>
         <td class="num ${metCls}"><b>${isNoData ? "—" : metCount + "/3"}</b></td>
@@ -3239,7 +3256,9 @@ function renderPB(pb) {
   ${pb.progress ? `<div class="cell-dim" style="font-size:10px;margin-bottom:6px">扫描进度: <b>${pb.progress.scanned}/${pb.progress.total_candidates}</b> 只已扫${pb.progress.pending ? ` · <b class="warn">${pb.progress.pending}</b> 只待扫描` : ''} · 已扫描 <b>${pb.progress.online_fetched}</b> 只 · 无数据 <b class="warn" title="insufficient_data：5分钟K线/快照不足，未参与条件判定">${pb.progress.no_data}</b> 只<span class="cell-dim">（K线/快照不足）</span></div>` : ""}
       <table>
         <thead><tr>
-          <th>股票</th><th title="P3-2 池分管：人工=manual侧扫描 / 自动=auto侧管理">池</th><th>判定</th><th class="num">得分</th><th class="num">通过</th>
+          <th>股票</th><th title="P3-2 池分管：人工=manual侧扫描 / 自动=auto侧管理">池</th>
+          <th class="num" title="总市值（亿元，腾讯实时快照，与「价」同一轮 10s 刷新；悬停看流通市值）。取不到显示 —">市值<br><span style="font-size:9px;opacity:.6">亿</span></th>
+          <th>判定</th><th class="num">得分</th><th class="num">通过</th>
           <th title="日线四阶段（描述状态，紧挨得分便于对照）：②抬升/③派发/④下跌/①蓄势。⚠️ 实测横截面IC与直觉相反——抬升/追高前瞻更差(IC −0.031~−0.042, t=−12~−15)、下跌/超跌前瞻更好(IC +0.020~+0.034, t=+7~+12)，分半窗两段同号；效应量小(IC≈0.04)仅作相对强弱参照">日线阶段</th>
           <th title="是否站上 20 日线（观察列，不驱动判定）。⚠️ 行底色才是 5 日线口径（站上=绿、其它=红，得分 −70 悬崖同源）；本列只看 20 日线。">20日线<br><span style="font-size:9px;opacity:.6">观察</span></th>
           <th class="num" title="实时价 + 实时涨幅（随行情每 10s 刷新）。取不到显示 — 而不是 0.00%：不把「无数据」画成「平盘」">价<br><span style="font-size:9px;opacity:.6">涨幅</span></th>
@@ -3251,7 +3270,7 @@ function renderPB(pb) {
           <th title="30min MA5 状态（**纯展示**）：现价相对 5×30min 均线 站上/跌破，及距上次翻转几根。⚠️ 实测**无前瞻信息量**（状态/跃迁 × 站上/跌破 四口径，同日同bar-of-day对照 |diff|≤0.03pp、|t|≤2.4）⇒ 仅供参考，不参与任何判定。朴素对照的 −0.343pp(t=−25.5) 是日内时段伪影">30m MA5<br><span style="font-size:9px;opacity:.6">仅展示</span></th>
           <th>扫描</th><th></th>
         </tr></thead>
-        <tbody>${rows || '<tr><td colspan="16" class="empty">无扫描结果</td></tr>'}</tbody>
+        <tbody>${rows || '<tr><td colspan="17" class="empty">无扫描结果</td></tr>'}</tbody>
       </table>
       <div class="cell-dim" style="font-size:11px;margin-top:8px">●=通过 ○=未通过 · 时机条件：${Object.values(condLabels).join(" / ")} · 第5位🚫=否决因子(爆量≥3倍或偏离MA60超+20%) · GO(多头追强/空头抄底)→signal，震荡→降频 · 观察=震荡市结构达标(不推送) · 盘中每10s刷新</div>
     </div>`;
@@ -6820,7 +6839,7 @@ function renderHunter(h) {
            //    这里用与 hunterRow 完全相同的谓词直接判。
            ? '均分 <span class="cell-dim" title="建仓符合度后台计算中，算完自动填上">⏳更新中</span>'
            : '均分 <span class="cell-dim" title="该二级板块内没有可用的建仓得分">—</span>');
-      const head = `<tr class="h-subgroup-head"><td colspan="14">
+      const head = `<tr class="h-subgroup-head"><td colspan="15">
         <span class="h-subgroup-name"${gkDesc(gk) ? ` title="${esc(gk + "：" + gkDesc(gk))}" style="cursor:help"` : ""}>📂 ${esc(gk)}</span>
         <span class="cell-dim" style="font-size:10px">${gs.length}只 · ${gScoreTxt}${gUp ? ` · 涨停${gUp}` : ""}</span>
       </td></tr>`;
@@ -7145,7 +7164,7 @@ function renderOB(ob) {
   }
   const _VCLS = { high: "badge signal", watch: "badge approach", bull: "badge bear" };
   const rows = ob.stocks.map(s => {
-    if (s.error) return `<tr><td colspan="14" class="cell-dim">${esc(s.code)}: ${esc(s.error)}</td></tr>`;
+    if (s.error) return `<tr><td colspan="15" class="cell-dim">${esc(s.code)}: ${esc(s.error)}</td></tr>`;
     const ob_ = s.overbought || {};
     const vd = s.verdict || {};           // 2026-10-09：30min 综合判定 {level,label,reason}
     const dv = s.divergence || {};        // 30min {type,bars_ago}（进 tooltip）
@@ -7167,6 +7186,7 @@ function renderOB(ob) {
     return `<tr ondblclick="openStockChart('${esc(s.code)}','${esc(s.name)}')" style="cursor:pointer;${_obBg}" title="双击看K线">
       <td>${esc(s.name)} <span class="mono cell-dim">${esc(s.code)}</span></td>
       <td class="num" data-obcode="${esc(s.code)}">${fmt(s.price, 2)}</td>
+      <td class="num" data-obmkt="${esc(s.code)}" title="总市值（亿元，随行情 10s 刷新）"><span class="cell-dim">—</span></td>
       <td title="30min 三层状态机趋势${s.trend_src === 'daily' ? '（30min不可用，已回退日线）' : ''}">${trendTxt}${trendSrc}</td>
       ${dayStageCellHtml(s.structure)}
       ${ma20FlagCellHtml(s.above_ma20,
@@ -7192,7 +7212,9 @@ function renderOB(ob) {
         <span class="cell-dim">⚪ 中性</span>＝其余（<b>单个</b> T3/T4 不报警：实测无前瞻区分度）
       </div>
       <table><thead><tr>
-        <th>股票</th><th class="num">现价</th><th>趋势(30m)</th>
+        <th>股票</th><th class="num">现价</th>
+        <th class="num" title="总市值（亿元，腾讯实时快照；悬停看流通市值）。与「现价」同一轮 10s 刷新；取不到显示 —">市值<br><span style="font-size:9px;opacity:.6">亿</span></th>
+        <th>趋势(30m)</th>
         <th title="日线四阶段（描述状态）：②抬升/③派发/④下跌/①蓄势。⚠️ 实测横截面IC与直觉相反——抬升/追高前瞻更差(t=−12~−15)、下跌/超跌前瞻更好(t=+7~+12)，效应量小(IC≈0.04)仅作相对强弱参照">日线阶段</th>
         <th title="是否站上 20 日线（观察列，不驱动判定）。口径与「建仓信号扫描」/「选股猎手」同款：收盘价 > 20 日简单均线。⚠️ 本表不做 −70 悬崖扣分（那是建仓表 5 日线的口径），本列纯展示">20日线<br><span style="font-size:9px;opacity:.6">观察</span></th>
         <th class="num" title="日线 RSI>70超买">RSI</th>
