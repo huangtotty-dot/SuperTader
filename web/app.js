@@ -5177,10 +5177,11 @@ function renderStockChart(applyZoom = true) {
       top: 20, left: 8, right: 8, itemGap: 9, itemWidth: 14, itemHeight: 8,
       textStyle: { color: "#8b949e", fontSize: 10 }, type: "scroll",
       ...(_firstInit ? {
-        selected: {
-          MA30: false, MA60: false, MA180: false, MA365: false,
-          BOLL中: false, BOLL上: false, BOLL下: false,
-        },
+        // 2026-10-22 owner：「均线显示不正常 / 线没画出来」——根因是这里**默认把
+        // MA30/MA60/MA180/MA365 设成 hidden**（2026-10-17 为少点杂乱），可图例上仍列着、
+        // tooltip 也照报 MA180=23.23，看着就像"画丢了"。
+        // 现在**均线默认全显示**（7 条），只把 BOLL 三轨继续默认关；想清爽就在图例上点掉。
+        selected: { BOLL中: false, BOLL上: false, BOLL下: false },
       } : {}),
     },
     // 恒常给 title（哪怕空数组）：实例复用后不再 dispose，缺省时旧标题会残留在图上
