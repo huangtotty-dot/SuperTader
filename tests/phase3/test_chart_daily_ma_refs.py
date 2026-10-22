@@ -36,6 +36,17 @@ class TestDailyMa30And60:
         assert "distance: 17" in _block("dailyMa30Line")
         assert "distance: 34" in _block("dailyMa60Line")
 
+    def test_toggle_controls_all_five(self):
+        """2026-10-22 owner：五条线统一由「日线均线」开关控制，**默认打开**，非日线全周期显示。"""
+        html = (_ROOT / "web" / "index.html").read_text(encoding="utf-8")
+        i = html.index('id="tgDailyMA"')
+        assert "checked" in html[i:i + 120], "默认勾选"
+        for n in ("5", "10", "20", "30", "60"):
+            blk = _block(f"dailyMa{n}Line")
+            assert "showDailyMA" in blk, f"日线MA{n} 必须受开关控制"
+            assert 'stockChartPeriod !== "daily"' in blk, f"日线MA{n} 在非日线周期显示"
+            assert "_isIntradayPeriod" not in blk, f"日线MA{n} 不再只限分钟周期"
+
     def test_wired_into_markline(self):
         assert "...(dailyMa30Line ? [dailyMa30Line] : [])" in _JS
         assert "...(dailyMa60Line ? [dailyMa60Line] : [])" in _JS

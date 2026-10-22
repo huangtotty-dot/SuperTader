@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>trader pannel</title>
-<link rel="stylesheet" href="style.css?v=20261022m">
+<link rel="stylesheet" href="style.css?v=20261022n">
 </head>
 <body>
 <header class="topbar">
@@ -475,6 +475,7 @@
         <label class="toggle-item"><input type="checkbox" id="tgChannel" onchange="renderStockChart()"> 通道</label>
         <label class="toggle-item" title="日线趋势线：最近两个依次抬高的摆动低点连成**上升趋势线**（红，支撑）、两个依次降低的摆动高点连成**下降趋势线**（绿，压力），线延伸到最新一根；标签里的「N触点」= 线附近被反复验证的次数。只在日线视图显示"><input type="checkbox" id="tgTrend" checked onchange="renderStockChart()"> 趋势线</label>
         <label class="toggle-item"><input type="checkbox" id="tgMA" onchange="renderStockChart()"> 均线</label>
+        <label class="toggle-item" title="非日线周期上叠的**日线** MA5/10/20/30/60 水平虚线（5/10/20/30/60 个交易日）。与「均线」开关不同：那个是当前周期自己的均线（分钟图的 MA5 = 5 根该周期 K 线）。日线周期不显示这组参考线"><input type="checkbox" id="tgDailyMA" checked onchange="renderStockChart()"> 日线均线</label>
         <label class="toggle-item"><input type="checkbox" id="tgFib" onchange="renderStockChart()"> 黄金分割</label>
         <label class="toggle-item" title="MACD 背离：DIF 两峰背离 + 柱线动量衰减（标记「·柱」）；展示口径按周期放宽（日/周/月 1.0×/1.5×，分钟 1.5×/2.0×），与信号口径不同"><input type="checkbox" id="tgDiv" checked onchange="renderStockChart()"> 背离</label>
         <button class="mini-btn" onclick="toggleChartHelp()" title="上行/下行区域使用说明">?</button>
@@ -567,6 +568,6 @@
 <script src="vendor/echarts.min.js"></script>
 <!-- 2026-10-20：带版本号强制 WebView2 重新取 app.js（否则可能命中旧缓存，
      K 线提速/埋点改动不生效——表现为"改了跟没改一样"） -->
-<script src="app.js?v=20261022m"></script>
+<script src="app.js?v=20261022n"></script>
 </body>
 </html>

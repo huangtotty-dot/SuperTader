@@ -4532,6 +4532,11 @@ function renderStockChart(applyZoom = true) {
   const showGaps = (document.getElementById("tgGaps") || {}).checked !== false;
   // 背离标注（2026-10-19 owner）：后端按周期算好顶/底背离事件，前端直接画在对应 K 线上。
   const showDiv = (document.getElementById("tgDiv") || {}).checked !== false;
+  /* 日线均线参考线开关（2026-10-22 owner）：非日线周期上叠的 日线 MA5/10/20/30/60 五条
+     水平虚线，统一由工具栏「日线均线」控制，**默认打开**。
+     ⚠️ 别和 `maSeries`（当前周期自己的均线）混：分钟图上的 MA5 是"5 根 10min=50 分钟"，
+     这里的"日线MA5"是 5 个交易日。 */
+  const showDailyMA = (document.getElementById("tgDailyMA") || {}).checked !== false;
   // 趋势线（2026-10-22 owner）：摆动高低点连线，**每个周期各算一份**
   // （后端 `trendlines` 按 period 分键）——端点索引是该周期自己的 K 线下标，按当前 Tab 取即可。
   const showTrend = (document.getElementById("tgTrend") || {}).checked !== false;
@@ -4579,13 +4584,13 @@ function renderStockChart(applyZoom = true) {
   const _dma10Arr = (((data.period_data || {}).daily || {}).ma
     ? data.period_data.daily.ma[1] : null);
   const _dma10 = (_dma10Arr && _dma10Arr.length) ? _dma10Arr[_dma10Arr.length - 1] : null;
-  const dailyMa10Line = (_isIntradayPeriod && _dma10 != null) ? {
+  const dailyMa10Line = (showDailyMA && stockChartPeriod !== "daily" && _dma10 != null) ? {
     yAxis: _dma10,
     lineStyle: { color: "#bc8cff", type: "dashed", width: 1.4, opacity: .95 },
     label: { formatter: `日线MA10 ${fmt(_dma10, 2)}`, color: "#bc8cff",
              fontSize: 9, position: "insideStartBottom" },
   } : null;
-  const dailyMa5Line = (_isIntradayPeriod && _dma5 != null) ? {
+  const dailyMa5Line = (showDailyMA && stockChartPeriod !== "daily" && _dma5 != null) ? {
     yAxis: _dma5,
     lineStyle: { color: "#58a6ff", type: "dashed", width: 1.4, opacity: .95 },
     label: { formatter: `日线MA5 ${fmt(_dma5, 2)}`, color: "#58a6ff",
@@ -4603,7 +4608,7 @@ function renderStockChart(applyZoom = true) {
     return (a && a.length) ? a[a.length - 1] : null;
   };
   const _dma20 = _lastMa(2);
-  const dailyMa20Line = (stockChartPeriod !== "daily" && _dma20 != null) ? {
+  const dailyMa20Line = (showDailyMA && stockChartPeriod !== "daily" && _dma20 != null) ? {
     yAxis: _dma20,
     lineStyle: { color: "#2dd4bf", type: "dashed", width: 1.4, opacity: .95 },
     label: { formatter: `日线MA20 ${fmt(_dma20, 2)}`, color: "#2dd4bf",
@@ -4616,14 +4621,14 @@ function renderStockChart(applyZoom = true) {
      （那条在 maSeries 里本来就有）。周/月/分钟全画，日线 tab 不重复。
      标签用 distance 错开：左上 MA5→MA30，左下 MA10→MA20→MA60，价位接近也不叠。 */
   const _dma30 = _lastMa(3);
-  const dailyMa30Line = (stockChartPeriod !== "daily" && _dma30 != null) ? {
+  const dailyMa30Line = (showDailyMA && stockChartPeriod !== "daily" && _dma30 != null) ? {
     yAxis: _dma30,
     lineStyle: { color: "#f0883e", type: "dashed", width: 1.4, opacity: .95 },
     label: { formatter: `日线MA30 ${fmt(_dma30, 2)}`, color: "#f0883e",
              fontSize: 9, position: "insideStartTop", distance: 17 },
   } : null;
   const _dma60 = _lastMa(4);
-  const dailyMa60Line = (stockChartPeriod !== "daily" && _dma60 != null) ? {
+  const dailyMa60Line = (showDailyMA && stockChartPeriod !== "daily" && _dma60 != null) ? {
     yAxis: _dma60,
     lineStyle: { color: "#a371f7", type: "dashed", width: 1.4, opacity: .95 },
     label: { formatter: `日线MA60 ${fmt(_dma60, 2)}`, color: "#a371f7",
