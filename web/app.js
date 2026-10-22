@@ -6485,13 +6485,35 @@ const DIM_RULES = [
 const DIM_NAME = {};
 DIM_RULES.forEach(r => { DIM_NAME[r[0]] = r[1]; });
 
+/* 突破箱体卡片（2026-10-22 从 renderHunter 里抽出来）：**猎手数据没跑出来时也要显示**。
+   owner 反馈"没发现突破箱体"——原来它只在这张表有数据时才渲染，而刚打开页面/当日还没跑
+   「运行今日数据」时整块都不出现，看上去就像功能没了。它是**独立按钮触发**的扫描，不该被
+   主表的空状态连坐。 */
+function hunterBreakoutCard(dateStr) {
+  return `
+    <div class="card" style="margin-bottom:10px;padding:10px 14px">
+      <div class="card-title">🚀 突破箱体·有效突破（昨收 ≤ 箱体上沿 &lt; 今价，幅度 0.3~8%）
+        <input type="date" id="hunterBreakoutDate" value="${esc(dateStr || todayStr())}"
+          style="margin-left:8px;background:transparent;color:inherit;border:1px solid var(--border-soft);border-radius:4px;padding:1px 4px;font-size:12px"
+          title="选择任意交易日扫描（结果按日保存）；选日期不会自动扫，点右侧按钮">
+        <button class="mini-btn" id="hunterBreakoutBtn" style="margin-left:8px"
+          onclick="loadBreakoutStocks(true, document.getElementById('hunterBreakoutDate').value)">🔄 扫描该日</button>
+        <span class="cell-dim" id="hunterBreakoutMeta" style="font-size:11px"></span>
+      </div>
+      <div id="hunterBreakoutBody"><div class="empty">选日期后点「🔄 扫描该日」（全池 5000+ 只，约 1~2 分钟）；结果会按日保存，再选同一天直接秒回。</div></div>
+    </div>`;
+}
+
 function renderHunter(h) {
   // 「建仓符合度是否已算」：`build_n` 由后端在**算完之后**回填（算了多少只）。
   // =0 说明这一步还没跑到/没跑完 ⇒ 各行显示 ⏳（更新中）而不是 —（无数据）。
   const _buildReady = (h.build_n || 0) > 0;
   const el = document.getElementById("hunterBody");
   if (!h || !h.available) {
-    el.innerHTML = `<div class="empty">选股猎手数据不可用${h && h.error ? ': ' + esc(h.error) : ''}</div>`;
+    // ⚠️ 突破箱体卡片**不受这里连坐**（它是独立按钮触发的扫描，不依赖本表的当日评分）
+    el.innerHTML = `<div class="empty">选股猎手数据不可用${h && h.error ? ': ' + esc(h.error) : ''}`
+      + `（点上方「▶ 运行今日数据」生成；下方的突破箱体扫描可以独立跑）</div>`
+      + hunterBreakoutCard(todayStr());
     return;
   }
 
@@ -6784,19 +6806,7 @@ function renderHunter(h) {
     </div>`;
   }).join("");
 
-  // 2026-10-09 owner：突破箱体支持**任选交易日**扫描，结果按日保存（breakout_{date}.json）
-  const breakoutCard = `
-    <div class="card" style="margin-bottom:10px;padding:10px 14px">
-      <div class="card-title">🚀 突破箱体·有效突破（昨收 ≤ 箱体上沿 &lt; 今价，幅度 0.3~8%）
-        <input type="date" id="hunterBreakoutDate" value="${esc(h.date || todayStr())}"
-          style="margin-left:8px;background:transparent;color:inherit;border:1px solid var(--border-soft);border-radius:4px;padding:1px 4px;font-size:12px"
-          title="选择任意交易日扫描（结果按日保存）；选日期不会自动扫，点右侧按钮">
-        <button class="mini-btn" id="hunterBreakoutBtn" style="margin-left:8px"
-          onclick="loadBreakoutStocks(true, document.getElementById('hunterBreakoutDate').value)">🔄 扫描该日</button>
-        <span class="cell-dim" id="hunterBreakoutMeta" style="font-size:11px"></span>
-      </div>
-      <div id="hunterBreakoutBody"><div class="empty">选日期后点「🔄 扫描该日」（全池 5000+ 只，约 1~2 分钟）；结果会按日保存，再选同一天直接秒回。</div></div>
-    </div>`;
+  const breakoutCard = hunterBreakoutCard(h.date || todayStr());
 
   // ── 猎手总览（2026-10-15，owner：「选股猎手完成后在头部有一个总览」）──────────────
   // 口径：**只给结论**（三个数 + 最强三块 + 两个计数），**刻意不重复下表**——下表已经把
