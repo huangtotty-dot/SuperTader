@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>trader pannel</title>
-<link rel="stylesheet" href="style.css?v=20261022h">
+<link rel="stylesheet" href="style.css?v=20261022i">
 </head>
 <body>
 <header class="topbar">
@@ -473,6 +473,7 @@
         <label class="toggle-item"><input type="checkbox" id="tgLevels" onchange="renderStockChart()"> 支撑压力</label>
         <label class="toggle-item"><input type="checkbox" id="tgBoxes" onchange="renderStockChart()"> 箱体</label>
         <label class="toggle-item"><input type="checkbox" id="tgChannel" onchange="renderStockChart()"> 通道</label>
+        <label class="toggle-item" title="日线趋势线：最近两个依次抬高的摆动低点连成**上升趋势线**（红，支撑）、两个依次降低的摆动高点连成**下降趋势线**（绿，压力），线延伸到最新一根；标签里的「N触点」= 线附近被反复验证的次数。只在日线视图显示"><input type="checkbox" id="tgTrend" checked onchange="renderStockChart()"> 趋势线</label>
         <label class="toggle-item"><input type="checkbox" id="tgMA" onchange="renderStockChart()"> 均线</label>
         <label class="toggle-item"><input type="checkbox" id="tgFib" onchange="renderStockChart()"> 黄金分割</label>
         <label class="toggle-item" title="MACD 背离：DIF 两峰背离 + 柱线动量衰减（标记「·柱」）；展示口径按周期放宽（日/周/月 1.0×/1.5×，分钟 1.5×/2.0×），与信号口径不同"><input type="checkbox" id="tgDiv" checked onchange="renderStockChart()"> 背离</label>
@@ -566,6 +567,6 @@
 <script src="vendor/echarts.min.js"></script>
 <!-- 2026-10-20：带版本号强制 WebView2 重新取 app.js（否则可能命中旧缓存，
      K 线提速/埋点改动不生效——表现为"改了跟没改一样"） -->
-<script src="app.js?v=20261022h"></script>
+<script src="app.js?v=20261022i"></script>
 </body>
 </html>

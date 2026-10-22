@@ -4510,6 +4510,10 @@ function renderStockChart(applyZoom = true) {
   const showGaps = (document.getElementById("tgGaps") || {}).checked !== false;
   // 背离标注（2026-10-19 owner）：后端按周期算好顶/底背离事件，前端直接画在对应 K 线上。
   const showDiv = (document.getElementById("tgDiv") || {}).checked !== false;
+  // 趋势线（2026-10-22 owner）：日线摆动高低点连线。**只有日线视图画**——端点索引是按日线
+  // 序列算的，画到周/月/分钟上会整体错位。
+  const showTrend = (document.getElementById("tgTrend") || {}).checked !== false
+    && stockChartPeriod === "daily";
 
   // markLine: 支撑/压力 — 去重降密度 + 精简标签
   function dedupeLines(items) {
@@ -4802,6 +4806,29 @@ function renderStockChart(applyZoom = true) {
   divEvents.forEach(e => {
     if (e && e.index >= 0 && e.index < period.dates.length) divByIndex[e.index] = e;
   });
+  /* 趋势线（2026-10-22 owner）：后端 `_attach_trendlines` 给的是**两端点**（日线序列索引 + 价），
+     这里用 markLine 两点式画线段；线一直延伸到**最新一根**，标签挂右端显示当前线位。
+     配色与通道同源：上升（支撑）= 红、下降（压力）= 绿。 */
+  const _tl = data.trendlines || {};
+  const _trendSegs = [];
+  const _pushTrend = (o, color, name) => {
+    if (!o || o.i0 == null || o.i_now == null || !showTrend) return;
+    _trendSegs.push([
+      { coord: [o.i0, o.y0], lineStyle: { color, type: "dashed", width: 1.5 } },
+      { coord: [o.i_now, o.y_now],
+        label: { show: true, position: "end", color, fontSize: 10,
+                 backgroundColor: "rgba(13,17,23,.72)", padding: [2, 4], borderRadius: 3,
+                 formatter: `${name} ${fmt(o.y_now)}（${o.touches}触点）` } },
+    ]);
+  };
+  _pushTrend(_tl.up, "#f85149", "上升趋势线");
+  _pushTrend(_tl.dn, "#3fb950", "下降趋势线");
+  const trendSeries = _trendSegs.length ? [{
+    name: "趋势线", type: "line", xAxisIndex: 0, yAxisIndex: 0, data: [],
+    symbol: "none", silent: true, lineStyle: { opacity: 0 },
+    markLine: { silent: true, symbol: "none", animation: false, data: _trendSegs },
+  }] : [];
+
   const divSeries = Object.keys(divByIndex).length ? [{
     name: "背离", type: "scatter", xAxisIndex: 0, yAxisIndex: 0, z: 12,
     data: Object.values(divByIndex).map(e => {
@@ -5160,6 +5187,7 @@ function renderStockChart(applyZoom = true) {
           label: { position: "insideEndTop" } } },
       ...divSeries,
       ...tradeSeries,
+      ...trendSeries,
       ...(fibAnchor ? [fibAnchor] : []),
       // 通道色带：上轨实线/下轨虚线 + 区域填充。红涨绿跌：上行=红，下行=绿
       ...(showChannel && data.channel && data.channel.up_line.length ? [{
