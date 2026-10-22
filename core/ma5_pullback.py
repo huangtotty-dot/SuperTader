@@ -6,7 +6,9 @@
   · `ob`     **30 分钟风险体检**里那批票 = `holdings_manual.json` 中 qty>0 的持仓
              （与 `t_gui._load_ob_analysis_impl` 同一个口径：跳过 `_` 开头的键与已清仓）
   · `pb`     **建仓信号扫描**那批票 = `watchlist_buy.json` 的 stocks
-  · `hunter` **选股猎手前 10 热门板块**的成分股（`hunter_ma5_alert.hot_board_stocks`）
+  · `pool`   **异常监控池**（GUI 手动维护，`t_io/state/abnormal_pool.json`）
+             —— 2026-10-22 owner：「取消选股猎手的推送飞书，异常监控池需要实时播报」，
+             原来的 `hunter`（猎手前 10 热门板块）源已换成它。
 
 ## 判定口径（owner 2026-10-20 拍板：触线 0.5% + 现价不超过 MA5+2%）
   · 今 MA5 = (前 4 个**完成日**收盘 + 现价) / 5 —— 与 `core.ma_reclaim.ma5_state` 同口径
@@ -56,9 +58,9 @@ CARD_MAX_ROWS = 20       # 每张卡明细行上限（其余折叠成代码串�
 DEDUP_KEEP = 10          # 去重文件保留最近 N 天
 
 # 来源展示顺序与标题（命中多源时按第一个作为主分组，其余标在括号里）
-_SRC_ORDER = ("ob", "pb", "hunter")
-_SRC_TITLE = {"ob": "🏥 体检持仓", "pb": "🏗️ 建仓池", "hunter": "🎯 猎手前10板块"}
-_SRC_SHORT = {"ob": "体检", "pb": "建仓", "hunter": "猎手"}
+_SRC_ORDER = ("ob", "pb", "pool")
+_SRC_TITLE = {"ob": "🏥 体检持仓", "pb": "🏗️ 建仓池", "pool": "🚨 异常监控池"}
+_SRC_SHORT = {"ob": "体检", "pb": "建仓", "pool": "监控池"}
 
 
 # ---------------------------------------------------------------- 三源名单
@@ -101,13 +103,16 @@ def pb_codes() -> dict:
     return out
 
 
-def hunter_codes(top_n: int = None) -> dict:
-    """选股猎手前 N 热门板块的成分股并集。→ {code: name}"""
+def pool_codes(top_n: int = None) -> dict:
+    """**异常监控池** → {code: name}（2026-10-22 起取代原来的「猎手前 10 板块」源）。
+
+    池空 ⇒ {}，这一源就不参与并集（猎手那套已经不发飞书了）。
+    """
     try:
-        from core.hunter_ma5_alert import hot_board_stocks
-        return {str(c): str(n) for c, n in (hot_board_stocks(top_n or HUNTER_TOP_N) or {}).items()}
+        from core.hunter_ma5_alert import pool_stocks
+        return {str(c): str(n) for c, n in (pool_stocks() or {}).items()}
     except Exception as e:
-        log.warning(f"⚠️ [回踩MA5] 猎手板块取数失败（本轮跳过猎手源）: {type(e).__name__}: {str(e)[:120]}")
+        log.warning(f"⚠️ [回踩MA5] 异常监控池取数失败（本轮跳过该源）: {type(e).__name__}: {str(e)[:120]}")
         return {}
 
 
@@ -115,7 +120,7 @@ def universe(top_n: int = None) -> dict:
     """三源并集 → {code: {"name": 名称, "sources": ["ob", ...]}}。"""
     out = {}
     for key, mp in (("ob", holdings_codes()), ("pb", pb_codes()),
-                    ("hunter", hunter_codes(top_n))):
+                    ("pool", pool_codes(top_n))):
         for c, n in (mp or {}).items():
             e = out.setdefault(c, {"name": n or c, "sources": []})
             if key not in e["sources"]:
@@ -226,7 +231,7 @@ def build_card(hits: list, now: datetime = None, uni: dict = None) -> dict:
     date_str = now.strftime("%Y-%m-%d")
     by_src = {k: [] for k in _SRC_ORDER}
     for h in hits:
-        srcs = (uni.get(h["code"]) or {}).get("sources") or ["hunter"]
+        srcs = (uni.get(h["code"]) or {}).get("sources") or ["pool"]
         by_src[srcs[0]].append((h, srcs))
 
     rows, shown = [], 0

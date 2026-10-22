@@ -1055,7 +1055,7 @@ def _hunter_ma5_feishu_enabled(key: str = "notify_on_hunter_ma5") -> bool:
 
 def _start_ma5_pullback_watch() -> None:
     """2026-10-20 owner：「每天 30 分钟轮询，把回踩 5 日线不破的票发飞书」
-    —— 范围 = 体检持仓 + 建仓池 + 猎手前 10 热门板块。
+    —— 范围 = 体检持仓 + 建仓池 + **异常监控池**（2026-10-22 起取代「猎手前 10 热门板块」）。
 
     独立 daemon 线程（**不挂主循环**）：main.py 一轮可达 15 分钟，挂上去会把 30 分钟
     稀释成 30+；这与「猎手站上5日线」watcher 同样的理由（见内存主循环节流那条）。
@@ -1083,7 +1083,12 @@ _ma5_pullback_thread = None
 
 
 def _start_hunter_ma5_watch() -> None:
-    """启动「热门板块内个股·刚站上5日线」实时 watcher（2026-10-20，独立 daemon 线程）。
+    """启动「**异常监控池**内个股·刚站上5日线」实时 watcher（2026-10-20 建，2026-10-22 换名单）。
+
+    owner 2026-10-22：「取消选股猎手的推送飞书，但是异常监控池需要实时播报」——
+    观察名单由 `hunter_ma5_alert.pool_stocks()`（`t_io/state/abnormal_pool.json`）决定，
+    池空则这一路不推送。原来的「猎手前 N 热门板块」口径仍保留（`universe="hunter"`）但不再默认启用。
+
 
     为什么不再挂在主循环里：main.py 一轮 `scan_once` 实测 ~15 分钟，
     旧路径「每 5 分钟」实际被拖成 15 分钟级 ⇒ 盘中回站提醒严重迟到。
@@ -1093,7 +1098,7 @@ def _start_hunter_ma5_watch() -> None:
     global _hunter_ma5_watch_thread
     try:
         if not _hunter_ma5_feishu_enabled():
-            log.info("⬆️ 猎手站上5日线实时监控: 已在配置中关闭（feishu.notify_on_hunter_ma5）")
+            log.info("⬆️ 异常监控池站上5日线实时播报: 已在配置中关闭（feishu.notify_on_hunter_ma5）")
             return
         if _hunter_ma5_watch_thread is not None and _hunter_ma5_watch_thread.is_alive():
             return
@@ -1101,12 +1106,12 @@ def _start_hunter_ma5_watch() -> None:
         _poll = float(PARAMS.get("hunter_ma5_poll_sec", 20) or 20)
         _hunter_ma5_watch_thread = _threading.Thread(
             target=run_live_watch,
-            kwargs={"poll_sec": _poll},
-            name="hunter-ma5-watch", daemon=True)
+            kwargs={"poll_sec": _poll, "universe": "pool"},
+            name="pool-ma5-watch", daemon=True)
         _hunter_ma5_watch_thread.start()
-        log.info("⬆️ 猎手站上5日线实时监控已启动（独立线程，每 %.0fs，交易时段）" % _poll)
+        log.info("⬆️ 异常监控池「刚站上5日线」实时播报已启动（独立线程，每 %.0fs，交易时段）" % _poll)
     except Exception as e:
-        log.warning(f"⚠️ 猎手站上5日线实时监控启动失败（不阻断主循环）: {str(e)[:160]}")
+        log.warning(f"⚠️ 异常监控池实时播报启动失败（不阻断主循环）: {str(e)[:160]}")
 
 
 # 2026-10-11 owner：「实盘过程中选股猎手每隔 30 分钟做轮询；**异常信息一定要通过飞书发出来**」
@@ -2893,7 +2898,7 @@ def run_watch():
     _maybe_backfill_sentiment()
     # 2026-10-20：猎手「刚站上5日线」实时 watcher（独立线程，20s 节拍，不再等主循环）
     _start_hunter_ma5_watch()
-    # 2026-10-20：回踩5日线不破 · 30 分钟轮询（体检持仓 + 建仓池 + 猎手前10板块）
+    # 2026-10-20：回踩5日线不破 · 30 分钟轮询（体检持仓 + 建仓池 + **异常监控池**）
     _start_ma5_pullback_watch()
 
 

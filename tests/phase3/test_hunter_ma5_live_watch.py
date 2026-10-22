@@ -69,7 +69,7 @@ class TestBuildLiveContext(unittest.TestCase):
         closes = [12.0, 11.0, 10.5, 10.0, 9.5, 9.0, 9.9]   # 末根=今日 forming bar
         self._patch(dates, closes)
         try:
-            ctx = h.build_live_context(date="2026-10-20")
+            ctx = h.build_live_context(date="2026-10-20", universe="hunter")
         finally:
             self.tearDown_fd()
         self.assertEqual(ctx["codes"], ["600001"])
@@ -82,7 +82,7 @@ class TestBuildLiveContext(unittest.TestCase):
         dates = ["2026-08-01", "2026-08-04", "2026-08-05", "2026-08-06", "2026-08-07"]
         self._patch(dates, [11, 10.5, 10, 9.5, 9])
         try:
-            ctx = h.build_live_context(date="2026-10-20")
+            ctx = h.build_live_context(date="2026-10-20", universe="hunter")
         finally:
             self.tearDown_fd()
         self.assertEqual(ctx["codes"], [], "超过 15 天的陈旧帧不得参与实时判定")
@@ -137,7 +137,7 @@ class TestSessionAndWatcher(unittest.TestCase):
         h._LIVE_CTX = {"date": None, "ts": 0.0, "sig": None, "ctx": None}
         _o_bl = h.build_live_context
         _o_hb = h.hot_boards
-        h.build_live_context = lambda top_n=None, date=None: dict(CTX)
+        h.build_live_context = lambda top_n=None, date=None, universe="pool": dict(CTX)
         h.hot_boards = lambda top_n=None, date=None: ["电力"]
         ev = threading.Event()
         got = []

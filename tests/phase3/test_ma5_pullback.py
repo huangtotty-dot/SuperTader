@@ -80,11 +80,11 @@ class TestUniverse:
     def test_merge_and_source_tags(self, monkeypatch):
         monkeypatch.setattr(mp, "holdings_codes", lambda: {"600000": "浦发银行"})
         monkeypatch.setattr(mp, "pb_codes", lambda: {"600000": "浦发银行", "000001": "平安银行"})
-        monkeypatch.setattr(mp, "hunter_codes", lambda top_n=None: {"000001": "平安银行"})
+        monkeypatch.setattr(mp, "pool_codes", lambda top_n=None: {"000001": "平安银行"})
         u = mp.universe(10)
         assert set(u) == {"600000", "000001"}
         assert u["600000"]["sources"] == ["ob", "pb"]
-        assert u["000001"]["sources"] == ["pb", "hunter"]
+        assert u["000001"]["sources"] == ["pb", "pool"]
 
     def test_holdings_skip_zero_qty(self, tmp_path, monkeypatch):
         fp = tmp_path / "holdings.json"
@@ -104,7 +104,7 @@ class TestRunOnce:
         monkeypatch.setattr(mp, "_DEDUP_FP", str(tmp_path / "pushed.json"))
 
     def _args(self):
-        uni = {"000001": {"name": "平安银行", "sources": ["hunter"]}}
+        uni = {"000001": {"name": "平安银行", "sources": ["pool"]}}
         ctx = {"000001": _ctx(10.5, 10.3)}
         snap = {"000001": _snap(10.2, 10.0)}
 
@@ -148,18 +148,18 @@ class TestCard:
     def _hits(self, n):
         return [{"code": f"{600000 + i}", "price": 10.0 + i / 100, "ma5": 10.0,
                  "low": 9.98, "dev5_pct": round(i / 100, 2), "touch_pct": -0.2,
-                 "pct": 0.1, "sources": ["hunter"]} for i in range(n)]
+                 "pct": 0.1, "sources": ["pool"]} for i in range(n)]
 
     def test_groups_by_source(self):
         uni = {"600000": {"name": "甲", "sources": ["ob"]},
-               "600001": {"name": "乙", "sources": ["hunter"]}}
+               "600001": {"name": "乙", "sources": ["pool"]}}
         hits = [{"code": "600000", "price": 10.0, "ma5": 9.9, "low": 9.85,
                  "dev5_pct": 1.0, "touch_pct": -0.5, "pct": 0.2, "sources": ["ob"]},
                 {"code": "600001", "price": 11.0, "ma5": 11.0, "low": 10.95,
-                 "dev5_pct": 0.0, "touch_pct": -0.45, "pct": -0.2, "sources": ["hunter"]}]
+                 "dev5_pct": 0.0, "touch_pct": -0.45, "pct": -0.2, "sources": ["pool"]}]
         md = mp.build_card(hits, datetime(2026, 10, 20, 14, 30), uni)["card"]["elements"][0]["content"]
-        assert "体检持仓" in md and "猎手前10板块" in md
-        assert md.index("体检持仓") < md.index("猎手前10板块")     # 体检优先展示
+        assert "体检持仓" in md and "异常监控池" in md
+        assert md.index("体检持仓") < md.index("异常监控池")     # 体检优先展示
         assert "甲" in md and "乙" in md
 
     def test_row_cap(self, monkeypatch):

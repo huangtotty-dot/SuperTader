@@ -18,6 +18,22 @@ log = logging.getLogger("hunter_ma5_alert")
 _BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _HUNTER_DIR = os.path.join(_BASE, "stock_hunter")
 _SUMMARY_FP = os.path.join(_HUNTER_DIR, "history", "daily_summary.json")
+# 2026-10-22 owner：「取消选股猎手的推送飞书，异常监控池需要实时播报」——
+# 实时 watcher 的观察名单从「猎手热门板块」改成**异常监控池**（GUI 手动维护）。
+_POOL_FP = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                        "t_io", "state", "abnormal_pool.json")
+
+
+def pool_stocks() -> dict:
+    """异常监控池 → {code: name}。池空 ⇒ {}（那就不推送，猎手那套已经不发了）。"""
+    try:
+        d = json.load(open(_POOL_FP, encoding="utf-8")) if os.path.exists(_POOL_FP) else {}
+        st = (d or {}).get("stocks") or {}
+        return {str(c).split("_")[0]: str((v or {}).get("name") or c)
+                for c, v in st.items() if str(c).strip()}
+    except Exception as e:
+        log.warning(f"⚠️ [MA5实时] 读异常监控池失败（本轮按空池处理）: {type(e).__name__}: {str(e)[:100]}")
+        return {}
 _WL_FP = os.path.join(_HUNTER_DIR, "watchlist_jiuyan.json")
 _DEDUP_FP = os.path.join(_BASE, "t_io", "state", "hunter_ma5_pushed.json")
 _BELOW_FP = os.path.join(_BASE, "t_io", "state", "hunter_ma5_below.json")
@@ -247,14 +263,15 @@ def _completed_history(fr, today):
     return [c for _, c in rows]
 
 
-def build_live_context(top_n: int = None, date: str = None) -> dict:
+def build_live_context(top_n: int = None, date: str = None, universe: str = "pool") -> dict:
     """热门板块股票 + 完成日线 MA5 预计算（**每天/每 30 分钟只跑一次**）。
 
     返回 {date, stocks, hist, codes}；hist[code] = {prev_close, prev_ma5, last4_sum}。
     今日 MA5 = (近 4 个完成日收盘 + 实时价) / 5 —— 盘中不必再拉日线。
     """
     today = str(date or _today())
-    stocks = hot_board_stocks(top_n)
+    # 观察名单：默认 **异常监控池**（owner 2026-10-22）；`universe="hunter"` 保留旧口径给测试/CLI。
+    stocks = pool_stocks() if universe == "pool" else hot_board_stocks(top_n)
     if not stocks:
         return {"date": today, "stocks": {}, "hist": {}, "codes": []}
     # 优先读**本地日线缓存**（172 只实测 ~1.8s、零网络）。`facade.daily_many` 是 GM-first，
@@ -299,10 +316,11 @@ def build_live_context(top_n: int = None, date: str = None) -> dict:
     return {"date": today, "stocks": stocks, "hist": hist, "codes": list(hist)}
 
 
-def _live_ctx(top_n: int = None, date: str = None, force: bool = False) -> dict:
+def _live_ctx(top_n: int = None, date: str = None, force: bool = False,
+              universe: str = "pool") -> dict:
     today = str(date or _today())
     now = _time.time()
-    sig = tuple(hot_boards(top_n))
+    sig = tuple(hot_boards(top_n)) if universe != "pool" else tuple(sorted(pool_stocks()))
     c = _LIVE_CTX
     stale = (force or c["date"] != today or c["sig"] != sig
              or c["ctx"] is None or (now - float(c["ts"] or 0)) > _LIVE_CTX_TTL)
@@ -310,10 +328,11 @@ def _live_ctx(top_n: int = None, date: str = None, force: bool = False) -> dict:
     if not stale and not (c["ctx"] or {}).get("codes") and (now - float(c["ts"] or 0)) > 300:
         stale = True
     if stale:
-        ctx = build_live_context(top_n, today)
+        ctx = build_live_context(top_n, today, universe=universe)
         _LIVE_CTX.update({"date": today, "ts": now, "sig": sig, "ctx": ctx})
-        log.info("[MA5实时] 上下文重建: %d/%d 只有完成日线（前 %s 板块）"
-                 % (len(ctx["codes"]), len(ctx["stocks"]), top_n or _TOPN_DEFAULT))
+        log.info("[MA5实时] 上下文重建: %d/%d 只有完成日线（%s）"
+                 % (len(ctx["codes"]), len(ctx["stocks"]),
+                    "异常监控池" if universe == "pool" else f"前 {top_n or _TOPN_DEFAULT} 板块"))
     return _LIVE_CTX["ctx"]
 
 
@@ -384,7 +403,7 @@ def scan_live_once(ctx: dict, below_today: set, provider=None, today: str = None
 
 
 def push_events(events: list, date: str = None, top_n: int = None,
-                dry_run: bool = False) -> list:
+                dry_run: bool = False, universe: str = "pool") -> list:
     """去重 → 发飞书；返回**本次新推**的事件。推送成功才写去重（失败下轮重试）。"""
     target = str(date or _today())
     if not events:
@@ -394,7 +413,7 @@ def push_events(events: list, date: str = None, top_n: int = None,
     fresh = [e for e in events if e.get("code") and e["code"] not in seen]
     if not fresh:
         return []
-    card = build_card(fresh, top_n=top_n, date=target)
+    card = build_card(fresh, top_n=top_n, date=target, universe=universe)
     if dry_run:
         return fresh
     try:
@@ -403,10 +422,10 @@ def push_events(events: list, date: str = None, top_n: int = None,
             card, success_log=f"猎手热门板块站上5日线飞书推送: {len(fresh)} 只",
             error_prefix="猎手热门板块站上5日线推送")
     except Exception as e:
-        log.warning(f"⚠️ 猎手站上5日线推送异常（不写去重，下轮重试）: {type(e).__name__}: {str(e)[:180]}")
+        log.warning(f"⚠️ {_uni_cn(universe)}站上5日线推送异常（不写去重，下轮重试）: {type(e).__name__}: {str(e)[:180]}")
         return []
     if not ok:
-        log.warning("⚠️ 猎手站上5日线推送返回失败（不写去重，下轮重试）")
+        log.warning(f"⚠️ {_uni_cn(universe)}站上5日线推送返回失败（不写去重，下轮重试）")
         return []
     seen.update(e["code"] for e in fresh)
     dedup[target] = sorted(seen)
@@ -447,7 +466,7 @@ def _alert_live_failure(now: datetime) -> None:
 
 def run_live_watch(poll_sec: float = None, top_n: int = None, stop_event=None,
                    provider=None, sleep_fn=_time.sleep, now_fn=datetime.now,
-                   push_fn=None) -> None:
+                   push_fn=None, universe: str = "pool") -> None:
     """独立实时 watcher：交易时段每 `poll_sec` 秒扫一次，命中即推。
 
     由 main.py 在启动时拉起的 daemon 线程调用；**不依赖 15 分钟主循环**。
@@ -456,7 +475,8 @@ def run_live_watch(poll_sec: float = None, top_n: int = None, stop_event=None,
     poll = float(poll_sec or _LIVE_POLL_SEC)
     day, below = None, set()
     saved = None
-    log.info(f"[MA5实时] watcher 启动：每 {poll:.0f}s 一轮（交易时段）")
+    log.info(f"[MA5实时] watcher 启动：每 {poll:.0f}s 一轮（交易时段）·"
+             f"观察名单={('异常监控池' if universe == 'pool' else '猎手热门板块')}")
     while not (stop_event is not None and stop_event.is_set()):
         now = now_fn()
         if not _in_live_session(now):
@@ -468,7 +488,7 @@ def run_live_watch(poll_sec: float = None, top_n: int = None, stop_event=None,
             day = today
             below = set(_load_below().get(today) or [])
             saved = None
-        ctx = _live_ctx(top_n, today)
+        ctx = _live_ctx(top_n, today, universe=universe)
         if not ctx or not ctx.get("codes"):
             if sleep_fn:
                 sleep_fn(poll)
@@ -494,18 +514,24 @@ def run_live_watch(poll_sec: float = None, top_n: int = None, stop_event=None,
                 _alert_live_failure(now)
         if hits:
             try:
-                fresh = (push_fn or push_events)(hits, date=today, top_n=top_n)
+                fresh = (push_fn or push_events)(hits, date=today, top_n=top_n,
+                                                 universe=universe)
             except Exception as e:
                 fresh = []
                 log.warning(f"[MA5实时] 推送异常（下轮重试）: {str(e)[:160]}")
             for e in fresh or []:
-                log.info(f"⬆️ 猎手热门板块·站上5日线: {e['code']} {e['name']} "
+                log.info(f"⬆️ 异常监控池·站上5日线: {e['code']} {e['name']} "
                          f"现价{e['price']} MA5={e['ma5']}(+{e['dev5_pct']}%) [{e['kind']}]")
         if sleep_fn:
             sleep_fn(poll)
 
 
-def build_card(events: list, top_n: int = None, date: str = None) -> dict:
+def _uni_cn(universe: str) -> str:
+    return "异常监控池" if universe != "hunter" else "猎手热门板块"
+
+
+def build_card(events: list, top_n: int = None, date: str = None,
+               universe: str = "pool") -> dict:
     if not events:
         return None
     tn = int(top_n or _TOPN_DEFAULT)
@@ -514,7 +540,9 @@ def build_card(events: list, top_n: int = None, date: str = None) -> dict:
     head = f"📅 {date or _today()} · 共 {len(events)} 只"
     if n_vrev:
         head += f"（隔夜回站 {n_over} · 盘内V反转 {n_vrev}）"
-    lines = [f"**选股猎手·热门板块内「刚站上5日线」**（前 {tn} 板块）", head, ""]
+    lines = ([f"**异常监控池·「刚站上5日线」**（本次命中 {len(events)} 只）",
+              head, ""] if universe != "hunter"
+             else [f"**选股猎手·热门板块内「刚站上5日线」**（前 {tn} 板块）", head, ""])
     # 2026-10-16 owner：「飞书消息要有代码 + 中文名称 + 所属行业」——
     # 原来这里只写 `**{code}** {name}`（无行业）。真源 `core.stock_meta`（industry_map.csv）。
     from core.stock_meta import stock_label as _stock_label
@@ -538,7 +566,9 @@ def build_card(events: list, top_n: int = None, date: str = None) -> dict:
         "msg_type": "interactive",
         "card": {
             "header": {"template": "green",
-                       "title": {"tag": "plain_text", "content": "📈 猎手热门板块·刚站上5日线"}},
+                       "title": {"tag": "plain_text",
+                                  "content": ("📈 异常监控池·刚站上5日线" if universe != "hunter"
+                                              else "📈 猎手热门板块·刚站上5日线")}},
             "elements": [{"tag": "markdown", "content": "\n".join(lines)}],
         },
     }
