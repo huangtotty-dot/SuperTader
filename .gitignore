@@ -39,6 +39,10 @@ doc/review/
 # ── 死归档/历史报告（已 git rm --cached，保留磁盘但不再入库）──
 # t_io 下的归档目录已由上面的 `t_io/` 覆盖，不再单列。
 stock_hunter/watchlist_jiuyan.backup_*.json
+# 2026-10-22：打标脚本写前备份用的是 `.json.bak_<日期>[_<标签>]`，与上面那行不是一个写法，
+# 之前一直漏网（每份 2.2MB），这里补齐。
+stock_hunter/*.bak_*
+
 
 # ── 大文件防护（2026-10-09：另一会话用 `git add -f` 提交了 220MB parquet，
 #    超 GitHub 100MB 硬限 ⇒ **整条推送被服务器拒绝**，11 个提交全堵住）──
