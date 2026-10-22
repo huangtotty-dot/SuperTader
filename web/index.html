@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>trader pannel</title>
-<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="style.css?v=20261022a">
 </head>
 <body>
 <header class="topbar">
@@ -196,8 +196,10 @@
         <button class="mini-btn" id="obRefreshBtn" onclick="refreshOBNow()"
                 title="只重新拉取最新行情/状态并就地重绘（秒级）；不做任何重算">🔄 刷新</button>
         <!-- 2026-10-21 owner：3×2 的看盘大框，每格一只票的 5 分 K，实时刷新 -->
-        <button class="mini-btn" id="obMultiBtn" onclick="openMultiWatch()"
-                title="多窗口看盘：3×2 六个格，每格自选一只股票的 5 分 K（实时刷新）">🔲 多窗口看盘</button>
+        <!-- 2026-10-22 owner：要能**独立于 GUI 拖动** ⇒ 优先开独立原生窗口（可挪到别的显示器），
+             原生窗口不可用时自动退回页面内浮层（见 openMultiWatchWindow）。 -->
+        <button class="mini-btn" id="obMultiBtn" onclick="openMultiWatchWindow()"
+                title="多窗口看盘：3×3 九格，每格自选一只股票的 5 分 K（实时刷新）。开成**独立窗口**，可拖到任意位置/另一个显示器">🔲 多窗口看盘</button>
       </h2>
       <div id="obBody"></div>
     </div>
@@ -564,6 +566,6 @@
 <script src="vendor/echarts.min.js"></script>
 <!-- 2026-10-20：带版本号强制 WebView2 重新取 app.js（否则可能命中旧缓存，
      K 线提速/埋点改动不生效——表现为"改了跟没改一样"） -->
-<script src="app.js?v=20261020m"></script>
+<script src="app.js?v=20261022a"></script>
 </body>
 </html>

@@ -4967,6 +4967,73 @@ class Api:
             return hit[1], "stale"
         return None, "warming"
 
+    def open_multi_window(self):
+        """把「多窗口看盘」开成**独立原生窗口**（owner 2026-10-22：要能独立于 GUI 拖动）。
+
+        为什么必须是真窗口：页面内的浮层是 DOM，**拖不出 WebView 的视口**——只能在主窗口
+        里面挪（还会被夹在边界内）。要挪到别的显示器、或者让主窗口缩到一角而看盘窗保持大，
+        只能开第二个原生窗口。
+
+        实现取巧但零重复：新窗口**加载同一个 index.html**，加载完成后由前端
+        `mwEnterWindowMode()` 把界面切进"看盘模式"（隐藏其它 DOM、停掉主界面的轮询、
+        让九宫格铺满整个窗口）。图表渲染/选股/刷新全部复用现有代码，不存在第二份实现。
+
+        失败（pywebview 版本不支持运行期建窗等）返回 ok=False，前端自动退回页面内浮层。
+        """
+        try:
+            import webview
+        except Exception as e:
+            return {"ok": False, "error": f"webview 不可用: {e}"}
+        try:
+            w = getattr(self, "_mw_window", None)
+            if w is not None:
+                try:
+                    w.show()
+                    w.restore()
+                    return {"ok": True, "reused": True}
+                except Exception:
+                    self._mw_window = None          # 旧窗口已销毁 ⇒ 重建
+            entry = Path(__file__).parent / "web" / "index.html"
+            win = webview.create_window(
+                "多窗口看盘 (5分K)",
+                str(entry),
+                js_api=self,
+                width=1180,
+                height=820,
+                min_size=(560, 380),
+            )
+            self._mw_window = win
+
+            def _on_loaded():
+                try:
+                    win.evaluate_js("mwEnterWindowMode && mwEnterWindowMode()")
+                except Exception:
+                    pass
+
+            def _on_closed():
+                self._mw_window = None
+
+            try:
+                win.events.loaded += _on_loaded
+                win.events.closed += _on_closed
+            except Exception:
+                pass
+            return {"ok": True}
+        except Exception as e:
+            return {"ok": False, "error": f"{type(e).__name__}: {str(e)[:120]}"}
+
+    def close_multi_window(self):
+        """关掉独立看盘窗（窗口模式里右上角 × 走这条，而不是隐藏浮层）。"""
+        w = getattr(self, "_mw_window", None)
+        self._mw_window = None
+        if w is None:
+            return {"ok": True, "already": True}
+        try:
+            w.destroy()
+            return {"ok": True}
+        except Exception as e:
+            return {"ok": False, "error": f"{type(e).__name__}: {str(e)[:100]}"}
+
     def load_multi_chart(self, codes, period="min5", tail=90):
         """**多窗口看盘**：一次给多只票的实时尾。
 

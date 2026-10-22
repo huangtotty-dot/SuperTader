@@ -312,6 +312,16 @@ tr:hover td { background: rgba(243,93,43,.03); }
    ⚠️ 刻意**不用** `.modal-mask`（那是 position:fixed; inset:0 的全屏遮罩，z-index 400）：
    owner 报「点开后直接阻断了我看 GUI」—— 遮罩把后面的界面全挡住、点不动。
    这里只铺一个**可见范围内的浮层**：后面照常可点，标题栏可拖、右下角可缩放。 */
+/* 独立原生窗口里的"看盘模式"（2026-10-22）：整个 body 只留九宫格，铺满窗口。
+   由 `mwEnterWindowMode()` 给 body 加 .mw-winmode 触发；关掉该窗口即恢复原样。 */
+body.mw-winmode { overflow: hidden; background: var(--bg); }
+body.mw-winmode > *:not(#multiWatchWin) { display: none !important; }
+body.mw-winmode #multiWatchWin {
+  position: fixed; inset: 0; left: 0; top: 0; right: auto;
+  width: auto; height: auto; border: none; border-radius: 0;
+  box-shadow: none; resize: none;
+}
+
 .mw-win { position: fixed; right: 16px; top: 56px; z-index: 380;
   width: 64vw; height: 70vh; min-width: 520px; min-height: 300px;
   display: flex; flex-direction: column;

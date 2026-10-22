@@ -8226,7 +8226,55 @@ function openMultiWatch() {
   mwTimer = setInterval(mwTick, MW_PERIOD_MS);
 }
 
+/* ===== 独立原生窗口模式（2026-10-22 owner：多窗口看盘要能**独立于 GUI** 拖动）=====
+   页面内浮层是 DOM，**拖不出 WebView 视口**，只能被夹在主窗口里。要挪到别的显示器、
+   或主窗口缩到一角而看盘窗保持大，只能是第二个**原生窗口**：后端 `open_multi_window()`
+   用 pywebview 开一个加载同一份 index.html 的窗口，加载完成后调本函数把界面切成看盘模式。
+   图表/选股/刷新全部复用现有代码，没有第二份实现。 */
+let MW_WINDOW_MODE = false;
+
+function mwEnterWindowMode() {
+  if (MW_WINDOW_MODE) return;
+  MW_WINDOW_MODE = true;
+  // ① 停掉主界面的所有轮询：两个窗口各跑一套 = 后端调用翻倍、CPU 翻倍
+  try {
+    Object.keys(_liveTimers || {}).forEach(k => _stopStaggered(k));
+    if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+    if (stockChartTimer) { clearInterval(stockChartTimer); stockChartTimer = null; }
+    if (_reviewPoll) { clearInterval(_reviewPoll); _reviewPoll = null; }
+    if (_hunterGoTimer) { clearInterval(_hunterGoTimer); _hunterGoTimer = null; }
+  } catch (e) { /* 忽略 */ }
+  // ② 只留看盘窗，铺满整个原生窗口
+  document.body.classList.add("mw-winmode");
+  const t = document.getElementById("mwTitle");
+  if (t) {
+    const mn = document.getElementById("mwMinBtn"), mx = document.getElementById("mwMaxBtn");
+    if (mn) mn.style.display = "none";      // 原生窗口自带最小化/最大化
+    if (mx) mx.style.display = "none";
+    t.style.cursor = "default";             // 由操作系统拖窗口，不再拖 DOM
+  }
+  openMultiWatch();
+  setTimeout(_mwResizeCharts, 250);
+}
+
+/* 主界面按钮：优先开**独立原生窗口**；后端不支持/失败则退回页面内浮层（行为不变）。 */
+async function openMultiWatchWindow() {
+  try {
+    const r = await apiCall("open_multi_window");
+    if (r && r.ok) return;
+    if (r && r.error) console.warn("[多窗口] 原生窗口不可用，退回浮层：", r.error);
+  } catch (e) {
+    console.warn("[多窗口] 原生窗口调用失败，退回浮层：", e && e.message);
+  }
+  openMultiWatch();
+}
+
 function closeMultiWatch() {
+  if (MW_WINDOW_MODE) {                 // 独立窗口里 × = 关窗口（不是隐藏浮层）
+    if (mwTimer) { clearInterval(mwTimer); mwTimer = null; }
+    try { window.pywebview.api.close_multi_window(); } catch (e) { /* 忽略 */ }
+    return;
+  }
   const win = document.getElementById("multiWatchWin");
   if (win) win.style.display = "none";
   if (mwTimer) { clearInterval(mwTimer); mwTimer = null; }
