@@ -7941,13 +7941,28 @@ async function init() {
 
   let dates;
   statusEl("初始化中...");
-  try {
-    const timeoutPromise = new Promise((_, reject) =>
-      setTimeout(() => reject(new Error("available_dates 请求超时（后端未响应）")), 10000)
-    );
-    dates = await Promise.race([apiCall("available_dates"), timeoutPromise]);
-  } catch (e) {
-    statusEl("无法连接后端：" + e.message + "（请确保用 python t_gui.py 启动）", "err");
+  /* 首次 `available_dates` 决定整页能不能起来：原来**只试一次**（10s 超时），后端冷启动
+     （import 链 + 预热线程抢 GIL）稍慢一点，页面就直接"无法连接后端"并 return —— 白开一次。
+     2026-10-22：改成**重试 4 次**（每次 8s），只有连续失败才判定真的连不上。 */
+  let _bootErr = null;
+  for (let _att = 0; _att < 4; _att++) {
+    try {
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("available_dates 请求超时（后端未响应）")), 8000)
+      );
+      dates = await Promise.race([apiCall("available_dates"), timeoutPromise]);
+      if (dates && dates.length) { _bootErr = null; break; }
+      _bootErr = new Error("后端返回空日期列表（daily_review_*.json 尚未生成？）");
+    } catch (e) {
+      _bootErr = e;
+    }
+    if (_att < 3) {
+      statusEl(`初始化中…（后端冷启动，第 ${_att + 2} 次重试）`);
+      await sleep(1500);
+    }
+  }
+  if ((!dates || !dates.length) && _bootErr) {
+    statusEl("无法连接后端：" + _bootErr.message + "（请确保用 python t_gui.py 启动）", "err");
     return;
   }
   if (!dates || !dates.length) {

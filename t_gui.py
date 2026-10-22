@@ -2466,6 +2466,16 @@ def _compute_sector_ma_breadth(days=_SECTOR_MA_MAX_DAYS):
     return rec
 
 
+
+
+# ---- 首帧信号（2026-10-22）---------------------------------------------------------
+# 开机预热（`_boot_warmup`：一只票的完整 load_stock_chart + 三路并行预热）会一口气拉起
+# 十条 GIL 重的线程；而前端首帧的 `available_dates` 也在这时到 —— 冷启动的 import 锁 +
+# 预热线程一起抢，实测首帧调用可能被拖到 20s 投递上限之外，页面直接报「无法连接后端」白开一次。
+# 这里让预热**等首帧的第一次 js_api 调用到达**再开始（最多等 20s，后端卡死时不至于永挂）。
+_UI_SEEN = threading.Event()
+
+
 class Api:
     """暴露给前端的 js_api 方法（pywebview 序列化返回值）。"""
 
@@ -2491,6 +2501,7 @@ class Api:
 
     # ---------- 日期发现 ----------
     def available_dates(self):
+        _UI_SEEN.set()          # 首帧已到 ⇒ 允许开机预热开跑（见 `_boot_warmup`）
         dates = set()
         for p in OUT.glob("daily_review_*.json"):
             stem = p.stem
@@ -11876,6 +11887,9 @@ if __name__ == "__main__":
     # 根因不是"后台太多"，而是**冷启动的懒加载在多线程里互相抢 import 锁 + 重复构造 provider**。
     # 所以把并发的起点挪到"冷启动已付完"之后。
     def _boot_warmup():
+        # 先等前端首帧打第一个 js_api（`available_dates`）再开跑：宁可预热晚 1~2 秒，
+        # 也不要和首帧抢 GIL/import 锁（见 `_UI_SEEN` 注释）。
+        _UI_SEEN.wait(20)
         try:
             _cur = _load_json(HOLDINGS_MANUAL, {})
             _first = next((str(_c).split("_")[0] for _c, _i in (_cur or {}).items()
