@@ -4967,7 +4967,7 @@ class Api:
             return hit[1], "stale"
         return None, "warming"
 
-    def open_multi_window(self):
+    def open_multi_window(self, codes=None):
         """把「多窗口看盘」开成**独立原生窗口**（owner 2026-10-22：要能独立于 GUI 拖动）。
 
         为什么必须是真窗口：页面内的浮层是 DOM，**拖不出 WebView 的视口**——只能在主窗口
@@ -5004,9 +5004,17 @@ class Api:
             )
             self._mw_window = win
 
+            # 把主窗口当前选的票带过去：独立窗口可能是**另一个 origin**（file:// vs http），
+            # localStorage 不通 ⇒ 九格会全是「— 选择标的 —」（2026-10-22 首版实测）。
+            _codes = [str(c).split("_")[0] for c in (codes or []) if str(c).strip()][:12]
+
             def _on_loaded():
                 try:
-                    win.evaluate_js("mwEnterWindowMode && mwEnterWindowMode()")
+                    import json as _json
+                    win.evaluate_js(
+                        "mwEnterWindowMode && mwEnterWindowMode(%s)"
+                        % _json.dumps(_codes)
+                    )
                 except Exception:
                     pass
 

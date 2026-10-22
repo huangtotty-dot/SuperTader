@@ -316,9 +316,12 @@ tr:hover td { background: rgba(243,93,43,.03); }
    由 `mwEnterWindowMode()` 给 body 加 .mw-winmode 触发；关掉该窗口即恢复原样。 */
 body.mw-winmode { overflow: hidden; background: var(--bg); }
 body.mw-winmode > *:not(#multiWatchWin) { display: none !important; }
+/* ⚠️ 必须显式给 width/height:100%：只写 `inset:0` 再叠一个 `right:auto` 会让 fixed 元素
+   变成 shrink-to-fit（宽度塌成内容宽）——2026-10-22 首版就是这样，九宫格只占左半边。 */
 body.mw-winmode #multiWatchWin {
-  position: fixed; inset: 0; left: 0; top: 0; right: auto;
-  width: auto; height: auto; border: none; border-radius: 0;
+  position: fixed; left: 0; top: 0;
+  width: 100%; height: 100%;
+  border: none; border-radius: 0;
   box-shadow: none; resize: none;
 }
 

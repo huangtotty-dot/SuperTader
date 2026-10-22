@@ -8195,7 +8195,13 @@ function _mwHoldings() {
 
 function _mwLoadCodes() {
   let saved = [];
-  try { saved = JSON.parse(localStorage.getItem(MW_LS_KEY) || "[]"); } catch (e) { saved = []; }
+  // 独立窗口：用后端带过来的代码表（本窗口 localStorage 可能是空的，origin 不同）
+  if (window._mwSeedCodes && window._mwSeedCodes.length) {
+    saved = window._mwSeedCodes.slice();
+    window._mwSeedCodes = null;
+  } else {
+    try { saved = JSON.parse(localStorage.getItem(MW_LS_KEY) || "[]"); } catch (e) { saved = []; }
+  }
   if (!Array.isArray(saved)) saved = [];
   // 老版本存的是 6 格 ⇒ **别因为长度变了就把用户选的全丢掉**：截到 9 后，
   // 空位依次用体检持仓里还没选过的票补齐。
@@ -8233,9 +8239,14 @@ function openMultiWatch() {
    图表/选股/刷新全部复用现有代码，没有第二份实现。 */
 let MW_WINDOW_MODE = false;
 
-function mwEnterWindowMode() {
+async function mwEnterWindowMode(codes) {
   if (MW_WINDOW_MODE) return;
   MW_WINDOW_MODE = true;
+  // 独立窗口可能是**另一个 origin**（file:// vs http://127.0.0.1）⇒ localStorage 读不到主窗口
+  // 里选的票，九格会全是「— 选择标的 —」。所以由后端把主窗口当前的代码表一起带过来。
+  if (Array.isArray(codes) && codes.length) {
+    window._mwSeedCodes = codes.slice(0, MW_N).map(x => String(x || ""));
+  }
   // ① 停掉主界面的所有轮询：两个窗口各跑一套 = 后端调用翻倍、CPU 翻倍
   try {
     Object.keys(_liveTimers || {}).forEach(k => _stopStaggered(k));
@@ -8244,7 +8255,17 @@ function mwEnterWindowMode() {
     if (_reviewPoll) { clearInterval(_reviewPoll); _reviewPoll = null; }
     if (_hunterGoTimer) { clearInterval(_hunterGoTimer); _hunterGoTimer = null; }
   } catch (e) { /* 忽略 */ }
-  // ② 只留看盘窗，铺满整个原生窗口
+  // ② 下拉框的可选项来自 `_obLast`（体检）与 `state.quotes`（持仓报价）——本窗口把轮询停了，
+  //    这两个都是空的 ⇒ 选股下拉里只有「— 选择标的 —」，等于选不了票。这里**单独拉一次报价**
+  //    把持仓填进去（轻接口，一次调用），保证下拉可用。
+  try {
+    if (!(state.quotes && state.quotes.length)) {
+      const d = await apiCall("load_quotes");
+      if (d && Array.isArray(d.quotes) && d.quotes.length) state.quotes = d.quotes;
+    }
+  } catch (e) { /* 取不到就退回只显示已带过来的票 */ }
+
+  // ③ 只留看盘窗，铺满整个原生窗口
   document.body.classList.add("mw-winmode");
   const t = document.getElementById("mwTitle");
   if (t) {
@@ -8260,7 +8281,10 @@ function mwEnterWindowMode() {
 /* 主界面按钮：优先开**独立原生窗口**；后端不支持/失败则退回页面内浮层（行为不变）。 */
 async function openMultiWatchWindow() {
   try {
-    const r = await apiCall("open_multi_window");
+    // 把当前九格里的代码带过去（独立窗口 localStorage 可能不通，见 mwEnterWindowMode）
+    const _codes = (Array.isArray(mwCodes) && mwCodes.some(Boolean)) ? mwCodes.filter(Boolean)
+      : _mwLoadCodes().filter(Boolean);
+    const r = await apiCall("open_multi_window", _codes);
     if (r && r.ok) return;
     if (r && r.error) console.warn("[多窗口] 原生窗口不可用，退回浮层：", r.error);
   } catch (e) {
