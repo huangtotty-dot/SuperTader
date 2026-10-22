@@ -917,6 +917,15 @@ _PB_M30_HIST_MAX = 5000
 # （pywebview 串行主线程，任何网络都会冻界面）。数据源 = tushare 5min(→10min)/30min + 日线。
 _PB_STRUCT_CACHE: dict = {}
 _PB_STRUCT_LOCK = threading.Lock()
+
+# ---- 后台「纯 pandas」批活的全局限额（2026-10-22）----------------------------------
+# 实测（20:37 哨兵栈）：GUI 进程 106% 单核、7 个线程同时在 `_one`（仓位结构预热 4 + 标签批 3），
+# 而 pywebview 的 UI 线程**每处理一个 js_api 调用都要 `Thread.start()` 并等新线程被调度**
+# —— 这种 GIL 争用下它会长时间拿不到时间片，界面上就是"点什么都没反应"，可 CPU 只有 1 核。
+# 本机 4 物理核；把**这两类批活合计**压到最多 2 个并发（原来最高 7），给 UI 线程让出 CPU。
+# 代价：批活墙钟≈翻倍（都是懒加载列，晚几秒自填，前端本就轮询补齐）。
+_BG_PANDAS_MAX = 2
+_BG_PANDAS_SEM = threading.BoundedSemaphore(_BG_PANDAS_MAX)
 _PB_STRUCT_MAX = 3000
 # 预热队列（2026-10-13 改造）：原来是「全局每 30min 时段只放一轮」的闸 —— 建仓表 10s 轮询
 # 总是先抢到名额，OB 表/风向标的预热请求同一时段内被静默丢弃 ⇒ 结构列最长卡 30 分钟。
@@ -7932,13 +7941,19 @@ class Api:
                             if key in _PB_STRUCT_CACHE:
                                 return
                         try:
-                            st = load_structure(bc)          # 后台线程，允许出网
+                            with _BG_PANDAS_SEM:             # 全局最多 2 个 pandas 批活并发
+                                st = load_structure(bc)      # 后台线程，允许出网
                         except Exception as e:
                             st = {"ok": False, "reason": str(e)[:80]}
                         with _PB_STRUCT_LOCK:
                             if len(_PB_STRUCT_CACHE) > _PB_STRUCT_MAX:
                                 _PB_STRUCT_CACHE.clear()
                             _PB_STRUCT_CACHE[key] = st
+                        # 2026-10-22：**每只之间让一次 GIL**。4 个 pandas 线程连续跑时，pywebview
+                        # 的 UI 线程连 `Thread.start()`（每个 js_api 调用都要新起线程、并等它被调度）
+                        # 都抢不到切换 ⇒ 界面上表现为"点什么都没反应"，而后端 CPU 才 1 核。
+                        # macOS/Win 上 sleep(0) 不保证让出，用 5ms（单只 0.5s 的量级下无感）。
+                        _time_mod.sleep(0.005)
                     # 2026-10-17：2 → 4。每只已从 1.8s 降到 ~0.5s（见 position_structure_feed
                     # 的日线缓存 + position_structure 的 strftime 优化），4 线程把 10 只持仓的
                     # 排干时间从 7.3s 压到 ~2s；仍是**固定小池**（不是每请求开线程），
@@ -8354,8 +8369,22 @@ class Api:
             #   为什么降到 6 几乎不损吞吐：这些线程大部分时间在等 facade 那个**单 worker 的 GM 池**
             #   （栈里可见 `facade.py:_gm_call`），40 并发换不到并行度，只换来 40 倍线程压力。
             #   代价：标签批算整体变慢，首次进建仓表/破位表时标签"稍后才自填"（前端本就轮询补齐）。
+            def _tags_one_yield(c):
+                """单只标签 + **让一次 GIL**（2026-10-22）。
+
+                纯 pandas 活（30min 状态机 ~0.3s/只）；3 个线程连着跑时，pywebview 的 UI 线程
+                连 `Thread.start()`（每个 js_api 调用都要新起线程并等它被调度）都可能被饿到
+                ⇒ 界面上"点什么都没反应"、后端 CPU 却只有 1 核。每只之间睡 5ms 基本无感
+                （单只 0.3s 量级），但能把 GIL 稳定让出去。
+                """
+                try:
+                    with _BG_PANDAS_SEM:                 # 与仓位结构预热**共用**这 2 个名额
+                        return self._stock_tags_one(c, offline)
+                finally:
+                    _time_mod.sleep(0.005)
+
             with ThreadPoolExecutor(max_workers=3) as ex:   # 6→3（2026-10-21）：纯 GIL 活，别和 UI 抢
-                futures = {ex.submit(self._stock_tags_one, c, offline): c for c in codes}
+                futures = {ex.submit(_tags_one_yield, c): c for c in codes}
                 for fut in as_completed(futures, timeout=90):
                     code = futures[fut]
                     try:

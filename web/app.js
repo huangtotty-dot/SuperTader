@@ -7940,11 +7940,27 @@ document.addEventListener("DOMContentLoaded", () => {
     const now = performance.now();
     const gap = now - _lastTick;
     _lastTick = now;
-    // 250ms 定时器被拖到 >1000ms ⇒ 主线程至少堵了 (gap-250)ms
-    if (gap > 1000) _diagReport("jsblock", gap - 250, "JS main thread blocked");
+    // ⚠️ **窗口不可见时 Chromium 会把定时器节流到 ~1s/次、后台久了更狠** ⇒ gap 恒 ~1000ms，
+    //    每条都记成 jsblock 751ms（2026-10-22 实测：日志里连续几十条，看着像主线程一直堵）。
+    //    节流不是卡顿，别污染诊断日志，也别拿它当"界面卡死"的证据。
+    const _vis = (document.visibilityState || "visible") === "visible";
+    if (gap > 1000 && _vis) _diagReport("jsblock", gap - 250, "JS main thread blocked");
     // >60s 的间隔只可能是休眠/挂起（普通渲染不会卡这么久）⇒ 恢复后重新错峰，避免惊群
-    if (gap > 60000) _onWakeFromSleep(gap);
+    if (gap > 60000 && _vis) _onWakeFromSleep(gap);
   }, 250);
+
+  /* 页面从后台切回前台（2026-10-22）：隐藏期间定时器被节流、轮询几乎停摆，回来时按"休眠恢复"
+     重排一次 —— 否则会看到一屏旧数据，且所有轮询在同一瞬间齐发（惊群）。 */
+  let _hiddenAt = 0;
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") {
+      const _g = _hiddenAt ? Date.now() - _hiddenAt : 0;
+      _hiddenAt = 0;
+      if (_g > 60000) _onWakeFromSleep(_g);
+    } else {
+      _hiddenAt = Date.now();
+    }
+  });
   let _dumpedAt = 0;
   setInterval(async () => {
     const t0 = performance.now();
