@@ -643,6 +643,7 @@ function renderAll(p, tradePnl) {
   // 2026-10-10: 「shadow 近阈 · 仓控与推送」整块按 owner 需求删除（renderShadow 已移除）。
   // 2026-08-23: 持仓对照/盘中结算/系统看板已从"每日复盘"tab移除
   renderPB(p.position_builder);
+  loadAbnormalPool();          // 「建仓信号扫描」下面的异常监控池（2026-10-22）
   // P4-3: 概览页自动盘持仓卡片 + 全页 KILL_SWITCH 横幅
   loadAutoStatus();
 }
@@ -2864,6 +2865,117 @@ function applyQuotesToOB() {
     const mc = mcMap[String(td.getAttribute("data-obmkt") || "").split("_")[0]];
     if (mc != null) td.innerHTML = hunterMktcapHtml({ mktcap: mc });
   });
+}
+
+/* ================= 异常监控池（2026-10-22 owner）=================
+   放在「建仓信号扫描」下面的**手动**自选监控表：上面输代码/名称加入，行内 × 删除。
+   **列与样式刻意与建仓表一致**——单元格全部复用共享 helper（verdictBadge / condCellHtml /
+   ma20FlagCellHtml / hunterPriceHtml / hunterMktcapHtml）；「时机条件」本来就是四张表一个渲染器
+   （见 condCellHtml 注释），这里绝不再抄一份。
+   数据由后端 `load_abnormal_pool` 现算（`_hunter_build_conformance` → build_decision，零网络）。 */
+let _abnRows = [];
+let _abnLoadedAt = 0;
+let _abnInflight = false;
+
+async function loadAbnormalPool(force) {
+  const box = document.getElementById("abnormalPoolBody");
+  if (!box || _abnInflight) return;
+  if (!force && _abnRows.length && (Date.now() - _abnLoadedAt) < 15000) return;
+  _abnInflight = true;
+  try {
+    const d = await apiCall("load_abnormal_pool", state.date || null);
+    _abnRows = (d && d.rows) || [];
+    _abnLoadedAt = Date.now();
+    renderAbnormalPool(d || {});
+    _patchAbnormalQuotes();
+  } catch (e) {
+    box.innerHTML = `<div class="empty down">异常监控池加载失败：${esc((e && (e.message || e)) || "未知")}</div>`;
+  } finally { _abnInflight = false; }
+}
+
+function renderAbnormalPool(d) {
+  const el = document.getElementById("abnormalPoolBody");
+  if (!el) return;
+  const rows = d.rows || [];
+  if (!rows.length) {
+    el.innerHTML = '<div class="empty">还没有加入任何股票。上面输代码/名称 → ＋加入</div>';
+    return;
+  }
+  const labels = d.cond_labels || {};
+  const _STG = { 1: "①蓄势", 2: "②抬升", 3: "③派发", 4: "④下跌" };
+  const body = rows.map(r => {
+    const stage = r.build_stage
+      ? `<span style="font-size:12px">${esc(_STG[r.build_stage] || "—")}</span>`
+      : '<span class="cell-dim">—</span>';
+    // 「通过 X/3」与建仓表同口径（t_regime + t_trend + t_drawdown），不是条件圆点总数
+    const metTxt = (r.build_met == null) ? "—" : `${r.build_met}/3`;
+    return `<tr ondblclick="openStockChart('${esc(r.code)}','${esc(r.name)}')" style="cursor:pointer"
+        title="双击看K线${r.added_at ? " · 加入于 " + esc(r.added_at) : ""}">
+      <td>${esc(r.name || "")} <span class="mono cell-dim">${esc(r.code || "")}</span></td>
+      <td>${verdictBadge(r.verdict)}</td>
+      <td class="num"><b>${r.composite_score != null ? r.composite_score : "—"}</b></td>
+      <td class="num"><b>${metTxt}</b></td>
+      <td style="text-align:center">${stage}</td>
+      ${ma20FlagCellHtml(r.build_above_ma20, "无该特征（本地日线缓存不足或尚未预热）")}
+      <td class="num" data-abncode="${esc(r.code)}" data-kind="px">${hunterPriceHtml(null)}</td>
+      <td class="num" data-abncode="${esc(r.code)}" data-kind="mc">${hunterMktcapHtml(null)}</td>
+      ${condCellHtml(r.conditions, labels, r._has_conf === false, null)}
+      <td class="cell-dim" style="max-width:260px;font-size:11px">${esc(r.build_reason || "")}</td>
+      <td style="text-align:center"><button class="mini-btn" title="从监控池移除"
+        onclick="event.stopPropagation();abnormalRemove('${esc(r.code)}')">×</button></td>
+    </tr>`;
+  }).join("");
+  el.innerHTML = `<table><thead><tr>
+      <th>股票</th><th>判定</th><th class="num">得分</th><th class="num">通过</th>
+      <th>日线阶段</th><th title="是否站上 20 日线（观察列）">20日线<br><span style="font-size:9px;opacity:.6">观察</span></th>
+      <th class="num">价<br><span style="font-size:9px;opacity:.6">实时涨幅</span></th>
+      <th class="num">市值<br><span style="font-size:9px;opacity:.6">亿</span></th>
+      <th>时机条件</th><th>理由</th><th></th>
+    </tr></thead><tbody>${body}</tbody></table>
+    <div class="cell-dim" style="font-size:11px;margin-top:6px">共 <b>${rows.length}</b> 只 · 双击行看K线 ·
+      判定/得分/时机条件与「建仓信号扫描」同源；本地日线缓存不足的票显示 —</div>`;
+}
+
+/* 价/市值：与猎手同一条链（`load_quotes_for` 一次覆盖全部行），就地补单元格。 */
+async function _patchAbnormalQuotes() {
+  const codes = Array.from(new Set(_abnRows.map(r => r.code).filter(Boolean)));
+  if (!codes.length) return;
+  try {
+    const r = await apiCall("load_quotes_for", codes);
+    const qm = (r && r.quotes) || {};
+    document.querySelectorAll("#abnormalPoolBody td[data-abncode]").forEach(td => {
+      const q = qm[td.getAttribute("data-abncode")];
+      if (!q) return;
+      td.innerHTML = td.getAttribute("data-kind") === "px"
+        ? hunterPriceHtml(q) : hunterMktcapHtml(q);
+    });
+  } catch (e) { /* 取不到就保持 ⏳，不刷成 0 */ }
+}
+
+async function abnormalAdd() {
+  const inp = document.getElementById("abnSearch");
+  const t = (inp && inp.value || "").trim();
+  if (!t) return;
+  const btn = document.getElementById("abnAddBtn");
+  if (btn) { btn.disabled = true; btn.textContent = "加入中…"; }
+  try {
+    const r = await apiCall("abnormal_pool_add", t);
+    if (r && r.ok) {
+      if (inp) inp.value = "";
+      await loadAbnormalPool(true);
+    } else {
+      statusEl("加入失败：" + ((r && r.error) || "未知错误"), "err");
+    }
+  } catch (e) {
+    statusEl("加入失败：" + ((e && (e.message || e)) || "未知"), "err");
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = "＋ 加入"; }
+  }
+}
+
+async function abnormalRemove(code) {
+  try { await apiCall("abnormal_pool_remove", code); } catch (e) { /* 静默 */ }
+  await loadAbnormalPool(true);
 }
 
 function renderPB(pb) {

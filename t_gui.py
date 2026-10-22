@@ -10589,6 +10589,112 @@ class Api:
                 pass
         return _clean({"results": results})
 
+    # ---------- 异常监控池（2026-10-22 owner）----------
+    # 「建仓信号扫描」下面的手动自选监控表：搜索代码/名称加入、逐行可删。
+    # 数据来源与建仓表/猎手**同一真源**（`_hunter_build_conformance` → `core.build_decision`），
+    # 只读本地日线缓存 ⇒ 零网络，单只 ~0.1s（有 (code,date,regime,mtime) 缓存，重复更便宜）。
+    _ABN_FP = STATE_DIR / "abnormal_pool.json"
+
+    def _abn_read(self):
+        d = _load_json(self._ABN_FP, {})
+        st = (d or {}).get("stocks") if isinstance(d, dict) else None
+        return st if isinstance(st, dict) else {}
+
+    def _abn_write(self, stocks):
+        try:
+            self._ABN_FP.parent.mkdir(parents=True, exist_ok=True)
+            tmp = self._ABN_FP.with_suffix(".tmp")
+            tmp.write_text(json.dumps({"stocks": stocks, "updated_at":
+                                       datetime.now().strftime("%Y-%m-%d %H:%M:%S")},
+                                      ensure_ascii=False, indent=1), encoding="utf-8")
+            tmp.replace(self._ABN_FP)
+            return True
+        except Exception:
+            return False
+
+    def abnormal_pool_add(self, text):
+        """按 6 位代码或名称加入异常监控池。名称在韭研表中模糊匹配，唯一才加。"""
+        t = str(text or "").strip()
+        if not t:
+            return {"ok": False, "error": "请输入代码或名称"}
+        names = _jiuyan_names()
+        code = t if (len(t) == 6 and t.isdigit()) else ""
+        if not code:
+            hits = [c for c, n in names.items() if str(n) == t] or                    [c for c, n in names.items() if t in str(n)]
+            if not hits:
+                return {"ok": False, "error": f"没找到「{t}」（韭研表里没有）"}
+            if len(hits) > 1:
+                return {"ok": False, "error": f"「{t}」匹配到多只，请输入完整代码："
+                                              + "、".join(hits[:8])}
+            code = hits[0]
+        stocks = self._abn_read()
+        if code in stocks:
+            return {"ok": True, "code": code, "already": True}
+        stocks[code] = {"name": names.get(code) or code,
+                        "added_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
+        return {"ok": self._abn_write(stocks), "code": code}
+
+    def abnormal_pool_remove(self, code):
+        stocks = self._abn_read()
+        c = str(code or "").split("_")[0]
+        if c in stocks:
+            stocks.pop(c, None)
+        return {"ok": self._abn_write(stocks), "code": c}
+
+    def load_abnormal_pool(self, date=None):
+        """异常监控池 → 与「建仓信号扫描」同列的数据。
+
+        行字段刻意做成**建仓表的形状**（verdict/composite_score/conditions/…），
+        前端直接复用同一套单元格渲染（色阶、圆点、阶段徽章），不另写一份样式。
+        """
+        date = str(date or datetime.now().strftime("%Y-%m-%d"))
+        stocks = self._abn_read()
+        codes = list(stocks.keys())
+        if not codes:
+            return _clean({"has_data": True, "date": date, "rows": [], "counts": {},
+                           "cond_labels": COND_LABELS, "note": ""})
+        conf = {}
+        try:
+            conf = self._hunter_build_conformance(codes, date) or {}
+        except Exception:
+            conf = {}
+        names = _jiuyan_names()
+        rows = []
+        for c in codes:
+            meta = stocks.get(c) or {}
+            k = conf.get(c) or {}
+            rows.append({
+                "code": c,
+                "name": meta.get("name") or names.get(c) or c,
+                "added_at": meta.get("added_at") or "",
+                # —— 以下与建仓表同名列同义 ——
+                "verdict": k.get("verdict") or ("insufficient_data" if not k else "pending"),
+                "composite_score": int(k.get("score") or 0),
+                "score_ceiling": int(k.get("score_ceiling") or 100),
+                "signal_reachable": bool(k.get("signal_reachable", False)),
+                "conditions": k.get("conds") or {},
+                "timing": None,
+                "timing_features": {"above_ma5": k.get("above_ma5"),
+                                    "above_ma20": k.get("above_ma20")},
+                "build_stage": k.get("stage"),
+                # 与建仓表「通过 X/3」同口径：t_regime + t_trend + t_drawdown 三条
+                "build_met": int(k.get("met") or 0) if k else None,
+                "build_above_ma20": k.get("above_ma20"),
+                "build_above_ma5": k.get("above_ma5"),
+                "build_reason": k.get("reason") or "",
+                "pool": "manual",
+                "in_holdings": False,
+                "scan_time": "",
+                "_scans": 0,
+                "_has_conf": bool(k),
+            })
+        rows.sort(key=lambda r: -int(r.get("composite_score") or 0))
+        return _clean({"has_data": True, "date": date, "rows": rows,
+                       "counts": {"total": len(rows)},
+                       "cond_labels": COND_LABELS,
+                       "note": "判定/得分与建仓信号扫描同源（build_decision）；"
+                               "未在本地日线缓存里的票显示 —"})
+
     def add_to_watchlist(self, code, name):
         """将股票加入 watchlist_buy.json（status=monitoring）。
 

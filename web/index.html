@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>trader pannel</title>
-<link rel="stylesheet" href="style.css?v=20261022n">
+<link rel="stylesheet" href="style.css?v=20261022o">
 </head>
 <body>
 <header class="topbar">
@@ -274,6 +274,24 @@
                 title="只重新拉取最新行情/状态并就地重绘（秒级），不动所选日期；要按所选日期重放请用左侧「🔄 扫描该日」（日线口径，1~2 分钟）">🔄 刷新</button>
       </h2>
       <div id="pbBody"></div>
+    </div>
+
+    <!-- 异常监控池（2026-10-22 owner）：**手动加入**的自选监控表，列与样式与「建仓信号扫描」一致。
+         判定/得分/通过/日线阶段/时机条件 与建仓表**同一真源**（`_hunter_build_conformance` →
+         build_decision），只读本地日线缓存、零网络。 -->
+    <div class="section" id="abnormal-pool">
+      <h2>🚨 异常监控池
+        <span style="display:inline-flex;align-items:center;gap:6px;margin-left:12px;font-weight:400;font-size:12px">
+          <input type="text" id="abnSearch" class="mini-input" placeholder="代码 或 名称" style="width:140px"
+                 onkeydown="if(event.key==='Enter'){event.preventDefault();abnormalAdd();}">
+          <button class="mini-btn primary" id="abnAddBtn" onclick="abnormalAdd()" title="按代码/名称加入监控池">＋ 加入</button>
+          <button class="mini-btn" onclick="loadAbnormalPool(true)" title="重算并重绘">🔄 刷新</button>
+        </span>
+        <span class="cell-dim" style="font-size:11px;font-weight:400;margin-left:10px">
+          自己挑票盯着；判定/得分与「建仓信号扫描」同源，取不到本地日线缓存的票显示 —
+        </span>
+      </h2>
+      <div id="abnormalPoolBody"><div class="empty">还没有加入任何股票。上面输代码/名称 → ＋加入</div></div>
     </div>
   </div>
 
@@ -568,6 +586,6 @@
 <script src="vendor/echarts.min.js"></script>
 <!-- 2026-10-20：带版本号强制 WebView2 重新取 app.js（否则可能命中旧缓存，
      K 线提速/埋点改动不生效——表现为"改了跟没改一样"） -->
-<script src="app.js?v=20261022n"></script>
+<script src="app.js?v=20261022o"></script>
 </body>
 </html>
