@@ -89,6 +89,41 @@ class TestLoad:
             [r["composite_score"] for r in rows], reverse=True)
 
 
+class TestManualReason:
+    """2026-10-22 owner：「异常监控池支持手动写入涨停原因」。只存人写的那行字，不参与判定。"""
+
+    def test_set_and_read_back(self, api):
+        api.abnormal_pool_add("002929")
+        r = api.abnormal_pool_set_reason("002929", "数据中心液冷+算力网络")
+        assert r["ok"] and r["reason"] == "数据中心液冷+算力网络"
+        row = api.load_abnormal_pool("2026-10-22")["rows"][0]
+        assert row["reason_manual"] == "数据中心液冷+算力网络"
+        assert row["reason_at"], "记一下更新时间"
+
+    def test_clear(self, api):
+        api.abnormal_pool_add("002929")
+        api.abnormal_pool_set_reason("002929", "x")
+        api.abnormal_pool_set_reason("002929", "")
+        assert api.load_abnormal_pool("2026-10-22")["rows"][0]["reason_manual"] == ""
+
+    def test_not_in_pool_rejected(self, api):
+        r = api.abnormal_pool_set_reason("600519", "x")
+        assert r["ok"] is False and "不在" in r["error"]
+
+    def test_truncated_to_120(self, api):
+        api.abnormal_pool_add("002929")
+        r = api.abnormal_pool_set_reason("002929", "长" * 300)
+        assert len(r["reason"]) == 120
+
+    def test_reason_survives_other_stocks(self, api):
+        api.abnormal_pool_add("002929")
+        api.abnormal_pool_add("600519")
+        api.abnormal_pool_set_reason("002929", "液冷")
+        rows = {x["code"]: x for x in api.load_abnormal_pool("2026-10-22")["rows"]}
+        assert rows["002929"]["reason_manual"] == "液冷"
+        assert rows["600519"]["reason_manual"] == ""
+
+
 class TestFrontendWiring:
     def test_card_below_pb(self):
         i_pb = _HTML.index('id="pbBody"')
@@ -102,3 +137,10 @@ class TestFrontendWiring:
         for fn in ("verdictBadge", "condCellHtml", "ma20FlagCellHtml",
                    "hunterPriceHtml", "hunterMktcapHtml"):
             assert fn in seg, f"单元格必须复用 {fn}（与建仓表同一套样式）"
+
+    def test_reason_cell_editable(self):
+        i = _JS.index("function renderAbnormalPool")
+        seg = _JS[i:i + 4000]
+        assert "abnormalSetReason" in seg, "涨停原因格要可编辑并保存"
+        assert "涨停原因" in seg
+        assert "event.stopPropagation()" in seg, "格内输入框别触发整行的双击看图"

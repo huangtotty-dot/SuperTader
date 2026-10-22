@@ -10641,6 +10641,26 @@ class Api:
             stocks.pop(c, None)
         return {"ok": self._abn_write(stocks), "code": c}
 
+    def abnormal_pool_set_reason(self, code, text):
+        """手动写/改**涨停原因**（2026-10-22 owner）。
+
+        只存人写的这一行字，不参与任何判定；行情/判定仍走 build_decision。
+        `text` 传空串 = 清空。
+        """
+        c = str(code or "").split("_")[0]
+        stocks = self._abn_read()
+        if c not in stocks:
+            return {"ok": False, "error": "该票不在异常监控池里"}
+        e = stocks[c] if isinstance(stocks.get(c), dict) else {"name": c}
+        txt = str(text if text is not None else "").strip()
+        if txt:
+            e["reason"] = txt[:120]              # 一句话就够，防误贴长文
+        else:
+            e.pop("reason", None)
+        e["reason_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S") if txt else ""
+        stocks[c] = e
+        return {"ok": self._abn_write(stocks), "code": c, "reason": txt[:120]}
+
     def load_abnormal_pool(self, date=None):
         """异常监控池 → 与「建仓信号扫描」同列的数据。
 
@@ -10667,6 +10687,9 @@ class Api:
                 "code": c,
                 "name": meta.get("name") or names.get(c) or c,
                 "added_at": meta.get("added_at") or "",
+                # 手动写的涨停原因（owner 2026-10-22）：只展示，不参与判定
+                "reason_manual": meta.get("reason") or "",
+                "reason_at": meta.get("reason_at") or "",
                 # —— 以下与建仓表同名列同义 ——
                 "verdict": k.get("verdict") or ("insufficient_data" if not k else "pending"),
                 "composite_score": int(k.get("score") or 0),

@@ -2921,6 +2921,13 @@ function renderAbnormalPool(d) {
       <td class="num" data-abncode="${esc(r.code)}" data-kind="mc">${hunterMktcapHtml(null)}</td>
       ${condCellHtml(r.conditions, labels, r._has_conf === false, null)}
       <td class="cell-dim" style="max-width:260px;font-size:11px">${esc(r.build_reason || "")}</td>
+      <td onclick="event.stopPropagation()" ondblclick="event.stopPropagation()">
+        <input class="mini-input" style="width:180px;font-size:11px" maxlength="120"
+               value="${esc(r.reason_manual || "")}" placeholder="手动填涨停原因…"
+               title="手动记录的涨停原因（只展示、不参与任何判定）${r.reason_at ? " · 更新于 " + esc(r.reason_at) : ""}"
+               onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}"
+               onchange="abnormalSetReason('${esc(r.code)}', this.value)">
+      </td>
       <td style="text-align:center"><button class="mini-btn" title="从监控池移除"
         onclick="event.stopPropagation();abnormalRemove('${esc(r.code)}')">×</button></td>
     </tr>`;
@@ -2930,7 +2937,9 @@ function renderAbnormalPool(d) {
       <th>日线阶段</th><th title="是否站上 20 日线（观察列）">20日线<br><span style="font-size:9px;opacity:.6">观察</span></th>
       <th class="num">价<br><span style="font-size:9px;opacity:.6">实时涨幅</span></th>
       <th class="num">市值<br><span style="font-size:9px;opacity:.6">亿</span></th>
-      <th>时机条件</th><th>理由</th><th></th>
+      <th>时机条件</th><th>理由</th>
+      <th title="**手动**记录的涨停原因（一句话，最多 120 字）。只展示、不参与任何判定；回车或点别处即保存">涨停原因<br><span style="font-size:9px;opacity:.6">手动</span></th>
+      <th></th>
     </tr></thead><tbody>${body}</tbody></table>
     <div class="cell-dim" style="font-size:11px;margin-top:6px">共 <b>${rows.length}</b> 只 · 双击行看K线 ·
       判定/得分/时机条件与「建仓信号扫描」同源；本地日线缓存不足的票显示 —</div>`;
@@ -2970,6 +2979,20 @@ async function abnormalAdd() {
     statusEl("加入失败：" + ((e && (e.message || e)) || "未知"), "err");
   } finally {
     if (btn) { btn.disabled = false; btn.textContent = "＋ 加入"; }
+  }
+}
+
+async function abnormalSetReason(code, text) {
+  try {
+    const r = await apiCall("abnormal_pool_set_reason", code, text || "");
+    if (r && r.ok) {
+      const row = _abnRows.find(x => x.code === code);
+      if (row) { row.reason_manual = (r.reason || ""); }
+    } else if (r && r.error) {
+      statusEl("保存涨停原因失败：" + r.error, "err");
+    }
+  } catch (e) {
+    statusEl("保存涨停原因失败：" + ((e && (e.message || e)) || "未知"), "err");
   }
 }
 
