@@ -4432,14 +4432,36 @@ function _scheduleNowTag(inst, price, color) {
 /* 缺口色块（单一真源）：相邻两根**价格区间不重叠** = 跳空；只画**未完全回补**的。
    · 上跳：今低 > 昨高且幅度 ≥ 0.3%；下跳对称。
    · 回补终点：后续某根 low ≤ 昨高（上跳）/ high ≥ 昨低（下跳）⇒ 色块到那根为止。
-   · 只画最近 `lookback` 根、最多 `maxN` 块，避免历史缺口把图糊满。
+   · 最多 `maxN` 块，避免历史缺口把图糊满。
+
+   ⚠️ **回看窗口按"自然日"算，不按"根数"**（2026-10-22 owner：同一个缺口在 10 分钟线上
+   看得到、5 分钟线上看不到）。原来写死 `lookback=250 根`——5 分钟线 250 根只有 **5 个交易日**，
+   10 分钟线 250 根却有 **10 个交易日** ⇒ 同一个缺口在细周期上早就被扫出窗口了。
+   现在传 `dates`，从"最后一根往前 `lookbackDays` 个自然日"开始扫；没有 dates 时才退回根数口径。
    2026-10-21：从 renderStockChart 里抽出来 —— 六宫格要用**同一套口径**（owner 报
    「多窗口里缺口信息没有显示」，各写一份必然漂移）。 */
-function buildGapAreas(ohlc, lookback, minPct, maxN) {
+function _ymdMinusDays(ymd, days) {
+  const m = String(ymd || "").match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!m) return "";
+  const t = Date.UTC(+m[1], +m[2] - 1, +m[3]) - days * 86400000;
+  const d = new Date(t);
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`;
+}
+
+function buildGapAreas(ohlc, dates, lookbackDays, minPct, maxN) {
   const out = [];
   if (!ohlc || ohlc.length < 2) return out;
   const n = ohlc.length;
-  const from = Math.max(1, n - (lookback || 250));
+  let from = Math.max(1, n - 250);      // 兜底：没有 dates 时退回"最近 250 根"
+  if (Array.isArray(dates) && dates.length === n && n) {
+    const cut = _ymdMinusDays(dates[n - 1], lookbackDays || 15);
+    if (cut) {
+      from = 1;
+      for (let i = 0; i < n; i++) {
+        if (String(dates[i]).slice(0, 10) >= cut) { from = Math.max(1, i); break; }
+      }
+    }
+  }
   const MIN = (minPct == null) ? 0.003 : minPct;
   for (let i = from; i < n; i++) {
     const o = ohlc[i], pv = ohlc[i - 1];
@@ -4713,7 +4735,7 @@ function renderStockChart(applyZoom = true) {
   };
   /* 缺口（2026-10-17 owner：「用颜色将区域显示出来」）—— 逻辑已抽到 `buildGapAreas`，
      六宫格复用同一套口径（2026-10-21 owner：多窗口里也要看到缺口）。 */
-  const gapAreas = showGaps ? buildGapAreas(period.ohlc) : [];
+  const gapAreas = showGaps ? buildGapAreas(period.ohlc, period.dates, 15) : [];
 
   const boxAreas = boxes
     .filter(b => b.low && b.high)
@@ -8411,7 +8433,7 @@ function mwPick(i, raw) {
    2026-10-21 owner：① 缺口没显示 ② 5日/10日/20日均线没显示 ⇒ 都补上，
    且缺口与单图**共用** `buildGapAreas`，口径不会漂。 */
 function _mwOption(s, dma, levels, trades) {
-  const gaps = buildGapAreas(s.ohlc, 250, 0.003, 8);   // 一格只画最近 8 块，别糊满
+  const gaps = buildGapAreas(s.ohlc, s.dates, 15, 0.003, 8);   // 最近 15 自然日的缺口，一格最多 8 块
   const _dmaLine = (y, color, txt) => (y == null || !isFinite(y)) ? null : {
     yAxis: y,
     lineStyle: { color, type: "dashed", width: 1, opacity: .9 },
