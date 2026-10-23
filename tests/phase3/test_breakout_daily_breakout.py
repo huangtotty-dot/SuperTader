@@ -93,6 +93,17 @@ class TestDailyBreakoutRule(unittest.TestCase):
         """前置自检：若检测器变了导致这里没箱子，下面的断言会变成空断言。"""
         self.assertIsNotNone(self.box_top, "合成窄幅震荡帧未构成箱体，本类断言将失效")
 
+    def test_历史切片仍判出箱体(self):
+        """2026-10-23 回归：`_detect_boxes` 的「近 45 天」必须以**切片末根**为基准，不能用 wall-clock。
+
+        原实现用 `datetime.now()` ⇒ 任何 45 天以前的历史切片，箱体全被丢掉 ⇒
+        「🔄 扫描该日」选旧日期永远扫不出突破（静默返回空），长窗口回测也被截成最后约 20 天。
+        """
+        d = self.df.copy()
+        d["date"] = (pd.to_datetime(d["date"]) - pd.Timedelta(days=90)).dt.strftime("%Y-%m-%d")
+        self.assertIsNotNone(self.api._box_top_for(d),
+                             "历史切片（末根在 90 天前）被判成无箱体 — 45 天闸又用回 wall-clock 了")
+
     def _with_today(self, px):
         d = self.df.copy()
         d.loc[d.index[-1], "close"] = round(px, 3)

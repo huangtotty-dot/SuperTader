@@ -2801,6 +2801,7 @@ class Api:
 
         return {"available": True,
                 "amount": amt, "amount_prev": prev,
+                "delta": (amt - prev) if prev else None,
                 "pct": ((amt / prev - 1.0) * 100.0) if prev else None,
                 "basis": "全日", "as_of": "15:00",
                 "day": today, "prev_day": prev_day,
@@ -2987,14 +2988,63 @@ class Api:
         amount, amount_prev = sum(per_cur.values()), sum(per_prev.values())
         if not amount or not amount_prev:
             return {"available": False, "error": "成交额累计为 0", "degraded": ["index_minute"]}
-        return {
+        out = {
             "available": True,
             "amount": amount, "amount_prev": amount_prev,
+            # 2026-10-23 owner：「要显示增量多少资金」——绝对值（元），不是只有百分比。
+            # 盘中是"比昨日同期"、收盘后是"比昨日全日"，与 pct 同分母。
+            "delta": amount - amount_prev,
             "pct": (amount / amount_prev - 1.0) * 100.0,
             "basis": "同期" if intraday else "全日",
             "as_of": as_of, "day": cur_day, "prev_day": prev_day,
             "by_leg": per_cur,          # 分腿拆解（前端 tooltip 用）
         }
+        if intraday:
+            # 2026-10-23 owner：「预测今天的成交额有多少」。
+            out.update(Api._project_full_day(per_leg, prior, hm, amount))
+        return out
+
+    # 预测口径参数：拿最近多少天的「同一时刻累计占比」做外推
+    _PROJ_DAYS = 10
+
+    @staticmethod
+    def _project_full_day(per_leg, prior_days, hm, amount):
+        """盘中按「近 N 日**同一时刻**的累计占全日比例」外推今日全日成交额。
+
+        为什么不是简单的 `amount / 已过时间占比`：A 股日内成交是 **U 型**（开盘半小时和
+        尾盘各占一大块），线性外推在上午会**系统性低估**、午后**高估**。
+        这里改用历史同日时刻的经验占比（多腿合计、取**中位数**抗单日异常），
+        精度只取决于"今天的日内节奏和最近十天像不像"，不依赖任何形态假设。
+
+        * 样本不足（分钟线只覆盖 1 天）⇒ 退回**线性时间占比**并如实标 `proj_method="elapsed"`。
+        * 返回 projected(元) / proj_frac(已走完的占比) / proj_days(样本天数) / proj_method。
+        """
+        def _frac_of(day):
+            full = cum = 0.0
+            seen = False
+            for d in per_leg.values():
+                sub = d[d["_day"] == day]
+                if not len(sub):
+                    continue
+                seen = True
+                full += float(sub["amount"].sum())
+                cum += float(sub[sub["_hm"] <= hm]["amount"].sum())
+            return (cum / full) if (seen and full > 0 and cum > 0) else None
+
+        fr = [x for x in (_frac_of(d) for d in list(prior_days)[-Api._PROJ_DAYS:]) if x]
+        if not fr:
+            # 没有"同一时刻"的历史占比就**不给数**：线性时间外推在 U 型日内系统性偏离
+            # （上午低估 ~3 倍），给一个看起来像真的假数比不给更糟。
+            return {"projected": None, "proj_frac": None, "proj_days": 0,
+                    "proj_method": "no_history"}
+        fr.sort()
+        frac = fr[len(fr) // 2] if len(fr) % 2 else (fr[len(fr) // 2 - 1] + fr[len(fr) // 2]) / 2.0
+        # 占比太小时外推是 ×20 以上的放大，噪声压过信号（09:30~09:40）⇒ 不给数，前端就不显示
+        if not (0.05 <= frac < 1.0):
+            return {"projected": None, "proj_frac": round(frac, 4),
+                    "proj_days": len(fr), "proj_method": "near_days_same_time"}
+        return {"projected": amount / frac, "proj_frac": round(frac, 4),
+                "proj_days": len(fr), "proj_method": "near_days_same_time"}
 
     # ---------- 近 N 日成交额（「盘中状态」卡柱状图，2026-09-30） ----------
     _TURNOVER_HIST_TTL = 120.0
@@ -6646,7 +6696,15 @@ class Api:
 
         # 重算 rel + center + days + 近期有效性
         import datetime as _dt
-        now_dt = _dt.datetime.now()
+        # 2026-10-23：「近期」必须以**这次判定的 as-of 日**（切片末根）为基准，不能用 wall-clock。
+        # 原来写 `datetime.now()`，于是对历史切片判箱时，凡是 45 天前结束的箱体全被丢掉 ⇒
+        # 猎手「🔄 扫描该日」选 45 天以前的日期**永远扫不出突破**（静默返回空），
+        # 回测长窗口也被截成最后约 20 个交易日（第一轮箱体研究就吃了这个）。
+        # 实时路径切片末根=今日，与原行为完全一致。
+        try:
+            now_dt = _dt.datetime.strptime(str(last_date)[:10], "%Y-%m-%d")
+        except Exception:
+            now_dt = _dt.datetime.now()
         recent_valid = []
         for b in merged:
             b["center"] = round((b["high"] + b["low"]) / 2, 3)
@@ -10678,6 +10736,13 @@ class Api:
             conf = self._hunter_build_conformance(codes, date) or {}
         except Exception:
             conf = {}
+        # 技术标签（2026-10-23 owner：「异常监控池没有显示技术标签」）—— 与建仓表**同一来源**
+        # `load_stock_tags_batch`（命中缓存即时返回；冷启动是"起后台算 + 立即返空"，前端 15s 轮询自填）。
+        # ⚠️ 不要挪到后台线程里取：那会把**空 tags** 钉进缓存（见 `_beacon_enrich` 的注释）。
+        try:
+            _tags_map = (self.load_stock_tags_batch(codes) or {}).get("tags") or {}
+        except Exception:
+            _tags_map = {}
         names = _jiuyan_names()
         rows = []
         for c in codes:
@@ -10690,6 +10755,8 @@ class Api:
                 # 手动写的涨停原因（owner 2026-10-22）：只展示，不参与判定
                 "reason_manual": meta.get("reason") or "",
                 "reason_at": meta.get("reason_at") or "",
+                # 技术标签（空数组 = 后台还在批算，前端显示 ⏳ 标签 并按 15s 轮询补）
+                "tags": ((_tags_map.get(c) or {}).get("tags") or []),
                 # —— 以下与建仓表同名列同义 ——
                 "verdict": k.get("verdict") or ("insufficient_data" if not k else "pending"),
                 "composite_score": int(k.get("score") or 0),

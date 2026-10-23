@@ -2909,7 +2909,17 @@ function renderAbnormalPool(d) {
       : '<span class="cell-dim">—</span>';
     // 「通过 X/3」与建仓表同口径（t_regime + t_trend + t_drawdown），不是条件圆点总数
     const metTxt = (r.build_met == null) ? "—" : `${r.build_met}/3`;
-    return `<tr ondblclick="openStockChart('${esc(r.code)}','${esc(r.name)}')" style="cursor:pointer"
+    // 技术标签（2026-10-23 owner：异常监控池也要有）——与建仓表**同一个渲染器** `tagBadge`。
+    // 后端冷启动返空（后台批算中）⇒ 显示 ⏳，15s 轮询自填。
+    const tagsTxt = (r.tags && r.tags.length)
+      ? r.tags.map(t => tagBadge(t)).join(" ")
+      : '<span class="cell-dim" style="font-size:10px" title="技术标签后台批算，约 10~20s 自填">⏳ 标签</span>';
+    // 整行底色：与建仓信号扫描**同一条规则**（2026-10-19 owner）：站上 5 日线=绿 / 其它=红，
+    // 无 MA5 特征（缓存不足）不着色 —— 别把"无数据"画成"破位"。
+    const _above5 = (r.timing_features || {}).above_ma5;
+    const rowBg = (_above5 === true) ? "background:rgba(63,185,80,.10);"
+      : (_above5 === false) ? "background:rgba(248,81,73,.12);" : "";
+    return `<tr ondblclick="openStockChart('${esc(r.code)}','${esc(r.name)}')" style="cursor:pointer;${rowBg}"
         title="双击看K线${r.added_at ? " · 加入于 " + esc(r.added_at) : ""}">
       <td>${esc(r.name || "")} <span class="mono cell-dim">${esc(r.code || "")}</span></td>
       <td>${verdictBadge(r.verdict)}</td>
@@ -2919,6 +2929,7 @@ function renderAbnormalPool(d) {
       ${ma20FlagCellHtml(r.build_above_ma20, "无该特征（本地日线缓存不足或尚未预热）")}
       <td class="num" data-abncode="${esc(r.code)}" data-kind="px">${hunterPriceHtml(null)}</td>
       <td class="num" data-abncode="${esc(r.code)}" data-kind="mc">${hunterMktcapHtml(null)}</td>
+      <td style="max-width:220px;line-height:1.7">${tagsTxt}</td>
       ${condCellHtml(r.conditions, labels, r._has_conf === false, null)}
       <td class="cell-dim" style="max-width:260px;font-size:11px">${esc(r.build_reason || "")}</td>
       <td onclick="event.stopPropagation()" ondblclick="event.stopPropagation()">
@@ -2937,6 +2948,7 @@ function renderAbnormalPool(d) {
       <th>日线阶段</th><th title="是否站上 20 日线（观察列）">20日线<br><span style="font-size:9px;opacity:.6">观察</span></th>
       <th class="num">价<br><span style="font-size:9px;opacity:.6">实时涨幅</span></th>
       <th class="num">市值<br><span style="font-size:9px;opacity:.6">亿</span></th>
+      <th title="通道/箱体/背离等技术形态，与「建仓信号扫描」同一来源与同一渲染">技术标签</th>
       <th>时机条件</th><th>理由</th>
       <th title="**手动**记录的涨停原因（一句话，最多 120 字）。只展示、不参与任何判定；回车或点别处即保存">涨停原因<br><span style="font-size:9px;opacity:.6">手动</span></th>
       <th></th>
@@ -6096,9 +6108,15 @@ function turnoverCard(t) {
     + (legTxt ? `分腿(亿)：${legTxt}\n` : "")
     + `今日${t.basis} ${Math.round(t.amount / 1e8).toLocaleString("en-US")}亿\n`
     + `昨日${t.basis} ${Math.round(t.amount_prev / 1e8).toLocaleString("en-US")}亿\n`
+    + (t.delta != null ? `增量 ${t.delta >= 0 ? "+" : "−"}${Math.abs(Math.round(t.delta / 1e8)).toLocaleString("en-US")}亿\n` : "")
     + (t.basis === "同期"
         ? `（盘中口径：两边都只算到 ${t.as_of}）`
         : "（已收盘口径：两边都是全日）")
+    + (t.projected != null
+        ? `\n预测全日 ${fmtAmount(t.projected)}`
+          + `\n方法：近 ${t.proj_days || 0} 个交易日「同一时刻」的累计占全日比例`
+          + `（当前已走 ${((t.proj_frac || 0) * 100).toFixed(1)}%）外推`
+        : "")
     + (t.bse_included ? "\n口径：沪(上证指数)+深(深证综指)+北(北证50，全北交所)" : "");
   // 北交所不可得 ⇒ 降级为沪深口径，明示（否则数值会比同花顺低 ~120 亿）
   const warn = t.bse_included === false
@@ -6107,11 +6125,23 @@ function turnoverCard(t) {
   const stale = t.stale
     ? `<div style="font-size:10px;color:var(--warn,#d29922)"
          title="${esc("冷启动快照，非实时；后台刷新中")}">快照 ${esc(t.snapshot_ts || "—")}</div>` : "";
+  // 2026-10-23 owner：「要显示增量多少资金」+「预测今天的成交额」。
+  // 增量 = 今日 − 昨日（与上面百分比**同分母**：盘中比同期、收盘比全日）。
+  const deltaTxt = (t.delta == null) ? ""
+    : `<div class="mono ${t.delta > 0 ? "up" : t.delta < 0 ? "down" : "cell-dim"}"
+         style="font-size:11px">增量 ${t.delta >= 0 ? "+" : "−"}${Math.abs(Math.round(t.delta / 1e8)).toLocaleString("en-US")}亿</div>`;
+  // 预测全日：只在盘中给（收盘后 amount 本身就是全日，没有"预测"这回事）
+  const projTxt = (t.projected == null) ? ""
+    : `<div class="mono" style="font-size:10px;color:var(--text-dim)"
+         title="${esc(`按近 ${t.proj_days || 0} 个交易日同一时刻(${t.as_of})的累计占比 `
+                     + `${((t.proj_frac || 0) * 100).toFixed(1)}% 外推`)}">预计全日 <b>${fmtAmount(t.projected)}</b></div>`;
   return `<div class="idx-card${t.stale ? " idx-card-stale" : ""}" style="min-width:150px;text-align:center" title="${esc(tip)}">
     <div style="font-size:13px;color:var(--text-dim)">两市成交额${t.bse_included === false ? "（缺北）" : ""}${t.stale ? "（快照）" : ""}</div>
     <div class="mono" style="font-size:16px;font-weight:700">${fmtAmount(t.amount)}</div>
     <div class="mono ${cls}" style="font-size:11px">${pctTxt}
       <span style="color:var(--text-faint);font-size:10px">${basis}</span></div>
+    ${deltaTxt}
+    ${projTxt}
     ${warn}
     ${stale}
   </div>`;
@@ -7882,7 +7912,14 @@ function switchTab(tab) {
   //    同步调用必然拿 0 尺寸、画不出来（2026-10-15 实测：盘中状态成交额图停在"容器尺寸为 0"）。
   setTimeout(() => {
     resizeAllEch();
-    if (tab === "hunter") { loadSectorStars(); loadSectorMaBreadth(); }
+    if (tab === "hunter") {
+      loadSectorStars(); loadSectorMaBreadth();
+      // 2026-10-23 owner：「打开选股猎手里面的箱体突破怎么没有了」——
+      // `#hunterBody` 的初始内容是 index.html 里那句静态提示，**只有跑过 `load_hunter` 才会被
+      // renderHunter 覆盖**；而"切到猎手页不自动跑扫描"（owner 需求6）⇒ 首次进页根本没渲染过，
+      // 连带「🚀 突破箱体」这张独立卡片也不见了。这里在缺卡片时补渲染一次空态（含该卡片）。
+      if (!document.getElementById("hunterBreakoutBody")) renderHunter(window._hunterData || null);
+    }
     if (tab === "signals") {
       _turnoverSizeRetryN = 0; drawTurnoverHist();
       if (ma365Inst) { try { ma365Inst.resize(); } catch (e) { } }

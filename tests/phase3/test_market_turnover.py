@@ -86,6 +86,70 @@ class TestBasisIntraday(unittest.TestCase):
         self.assertAlmostEqual(r["amount"] / 1e8, 200.0, places=1)
 
 
+class TestDeltaAndProjection(unittest.TestCase):
+    """2026-10-23 owner：「要显示增量多少资金」「预测今天的成交额有多少」。
+
+    * `delta` = 今日 − 昨日（与 pct **同分母**：盘中同期、收盘全日）。
+    * `projected` = 盘中按「近 N 日**同一时刻**累计占全日比例」外推的全日额。
+      A 股日内成交是 U 型，**不能**用线性时间占比（上午会系统性低估）。
+    """
+
+    # U 型：开盘半小时 400 亿，上午余下 100，午后 100，尾盘 400
+    _U = [("10:00", 400e8), ("11:30", 100e8), ("14:00", 100e8), ("15:00", 400e8)]
+
+    def _legs(self, days, bars=_BARS, scale=1.0):
+        return {"sh000001": pd.concat([_leg(d, bars, scale) for d in days]).reset_index(drop=True)}
+
+    def test_增量是绝对值且与pct同分母(self):
+        legs = {"sh000001": pd.concat([_leg("2026-09-30", scale=1.5),
+                                       _leg("2026-09-29")]).reset_index(drop=True)}
+        r = CALC(legs, datetime(2026, 9, 30, 10, 35))
+        # 今日 150 亿 vs 昨日 100 亿 ⇒ 增量 50 亿、pct +50%
+        self.assertAlmostEqual(r["delta"] / 1e8, 50.0, places=1)
+        self.assertAlmostEqual(r["pct"], 50.0, places=4)
+
+    def test_收盘后也给增量(self):
+        legs = {"sh000001": pd.concat([_leg("2026-09-30", scale=2.0),
+                                       _leg("2026-09-29")]).reset_index(drop=True)}
+        r = CALC(legs, datetime(2026, 9, 30, 16, 0))
+        self.assertEqual(r["basis"], "全日")
+        self.assertAlmostEqual(r["delta"] / 1e8, 400.0, places=1, msg="今日 800 − 昨日 400")
+        self.assertNotIn("projected", r, "收盘后 amount 就是全日，不应再加'预测'")
+
+    def test_U型日内按历史同时刻占比外推(self):
+        """10:35 时已走 40%（U 型），应外推到 1000 亿 —— 线性时间会给出 3200 亿。"""
+        days = ["2026-09-21", "2026-09-22", "2026-09-23", "2026-09-24", "2026-09-25", "2026-09-29"]
+        legs = self._legs(days, self._U)
+        today = self._legs(["2026-09-30"], self._U)
+        for k in legs:
+            legs[k] = pd.concat([legs[k], today[k]]).reset_index(drop=True)
+        r = CALC(legs, datetime(2026, 9, 30, 10, 35))
+        self.assertEqual(r["basis"], "同期")
+        self.assertAlmostEqual(r["proj_frac"], 0.4, places=3)
+        self.assertAlmostEqual(r["projected"] / 1e8, 1000.0, delta=1.0)
+        self.assertLess(r["projected"] / 1e8, 1500.0, "线性外推会给出 3200 亿 —— 明显高估")
+        self.assertEqual(r["proj_method"], "near_days_same_time")
+        self.assertEqual(r["proj_days"], 6)
+
+    def test_无同日历史时不给数(self):
+        """昨日数据从 14:00 才开始 ⇒ 10:35 拿不到"同一时刻"占比 ⇒ 给 None（不线性硬猜）。"""
+        r = t_gui.Api._project_full_day(
+            {"sh000001": _leg("2026-09-29", bars=[("14:00", 100e8), ("15:00", 100e8)])},
+            ["2026-09-29"], "10:35", 200e8)
+        self.assertIsNone(r["projected"])
+        self.assertEqual(r["proj_method"], "no_history")
+        self.assertEqual(r["proj_days"], 0)
+
+    def test_开盘瞬间不外推(self):
+        """09:35 时只走了全日的 ~1%，外推乘 100 倍 ⇒ 噪声压过信号，宁可给 None。"""
+        bars = [("09:35", 10e8), ("10:00", 400e8), ("11:30", 100e8),
+                ("14:00", 100e8), ("15:00", 400e8)]
+        legs = self._legs(["2026-09-29", "2026-09-30"], bars)
+        r = CALC(legs, datetime(2026, 9, 30, 9, 35))
+        self.assertIsNone(r.get("projected"), "占比 <5% 时外推不稳，不该给数")
+        self.assertLess(r.get("proj_frac") or 1, 0.05)
+
+
 class TestBasisFullDay(unittest.TestCase):
     """T2：收盘后按全日。"""
 

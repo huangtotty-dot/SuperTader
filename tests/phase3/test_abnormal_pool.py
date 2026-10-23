@@ -81,6 +81,26 @@ class TestLoad:
         assert r["verdict"] in ("signal", "approaching", "weak", "watch_signal",
                                 "insufficient_data", "pending")
 
+    def test_rows_carry_tags_and_ma5(self, api, monkeypatch):
+        """2026-10-23 owner：①要有「技术标签」列 ②整行底色按 5 日线（与建仓表同规则）。
+
+        tags 与建仓表**同一来源**（`load_stock_tags_batch`，冷启动返空→前端 15s 轮询自填）；
+        5 日线特征走 `timing_features.above_ma5`，前端据此着绿/红。
+        """
+        api.abnormal_pool_add("002929")
+        monkeypatch.setattr(t_gui.Api, "_hunter_build_conformance",
+                            lambda self, codes, date=None: {
+                                "002929": {"verdict": "weak", "score": 40, "met": 1,
+                                           "conds": {}, "reason": "空头趋势",
+                                           "above_ma5": True, "above_ma20": False, "stage": 1}})
+        monkeypatch.setattr(t_gui.Api, "load_stock_tags_batch",
+                            lambda self, codes, offline=False: {
+                                "tags": {"002929": {"tags": [{"label": "上行", "cls": "up"}]}}})
+        r = api.load_abnormal_pool("2026-10-22")["rows"][0]
+        assert r["tags"] == [{"label": "上行", "cls": "up"}], "技术标签要随行下发"
+        assert r["timing_features"]["above_ma5"] is True
+        assert r["build_above_ma5"] is True
+
     def test_sorted_by_score(self, api):
         for c in ("002929", "600519"):
             api.abnormal_pool_add(c)
@@ -137,6 +157,16 @@ class TestFrontendWiring:
         for fn in ("verdictBadge", "condCellHtml", "ma20FlagCellHtml",
                    "hunterPriceHtml", "hunterMktcapHtml"):
             assert fn in seg, f"单元格必须复用 {fn}（与建仓表同一套样式）"
+
+    def test_tags_column_and_ma5_row_bg(self):
+        """技术标签列 + 整行底色按 5 日线（owner 2026-10-23：颜色要与建仓信号扫描对齐）。"""
+        i = _JS.index("function renderAbnormalPool")
+        seg = _JS[i:i + 5000]
+        assert "tagBadge" in seg, "技术标签列必须复用建仓表/猎手的 tagBadge"
+        assert "above_ma5" in seg, "整行底色要按 5 日线特征"
+        assert "rgba(63,185,80" in seg and "rgba(248,81,73" in seg, \
+            "绿/红底色要与建仓表同一组色值（站上5日线绿、跌破红）"
+        assert "<th title=\"通道/箱体/背离" in seg, "表头要有「技术标签」列"
 
     def test_reason_cell_editable(self):
         i = _JS.index("function renderAbnormalPool")
