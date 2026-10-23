@@ -10588,7 +10588,68 @@ class Api:
         if not isinstance(d, dict) or not d.get("stocks"):
             return {"imported": False}
         d.pop("trades", None)                  # 原始成交行只留在磁盘里
+        try:
+            self._ledger_append_today(d)
+        except Exception:
+            pass
         return _clean(d)
+
+    @staticmethod
+    def _ledger_append_today(d, now=None):
+        """台账里**没有成交的交易日**也要有一个点（2026-10-23 owner：「图没更新到今天」）。
+
+        为什么会缺：`cum`/`cum_all` 是**按成交日**逐日累计的（`core.trade_history` 里
+        `for d in sorted(grp)`），最后一天 = 最后一个成交日。所以"今天没交易"时，
+        「累计收益趋势（含浮动）」会停在昨天 —— 可浮动那部分明明每天都变。
+
+        补法（收盘后、且今天还没有成交行时）：
+          · 已实现、累计买入成本都不变（今天没成交）；
+          · `cum_total = cum_realized + 浮动`，浮动取台账里的 `unrealized`（导入时按最新收盘价算的）；
+          · 合计口径同理：`total_realized + total_unrealized`。
+        这个点是**估算**（`today_est: true`，前端 tooltip 会标出来）：若今天其实有成交但没导入，
+        它不会包含那些成交 —— 那种情况请先导交割单。
+        """
+        now = now or datetime.now()
+        if now.weekday() >= 5 or now.strftime("%H:%M") < "15:00":
+            return                             # 盘中/周末不补：台账里的 last_price 不是今天的收盘价
+        today = now.strftime("%Y-%m-%d")
+        thru = str(d.get("data_through") or "")
+        if not thru or thru >= today:
+            return
+        cum, cum_all = d.get("cum") or [], d.get("cum_all") or []
+        if not cum or not cum_all:
+            return
+        unreal_by_acc = {}
+        for s in d.get("stocks") or []:
+            a = s.get("account") or ""
+            unreal_by_acc[a] = unreal_by_acc.get(a, 0.0) + float(s.get("unrealized") or 0.0)
+        last_by_acc = {}
+        for e in cum:
+            last_by_acc[e.get("account")] = e
+        for a, e in last_by_acc.items():
+            if str(e.get("date") or "") >= today:
+                continue
+            total = round(float(e.get("cum_realized") or 0.0) + unreal_by_acc.get(a, 0.0), 2)
+            buy = float(e.get("cum_buy") or 0.0)
+            cum.append({"account": a, "date": today,
+                        "cum_realized": e.get("cum_realized"), "cum_buy": e.get("cum_buy"),
+                        "pct": e.get("pct"),
+                        "cum_total": total,
+                        "pct_total": round(total / buy * 100.0, 3) if buy else None,
+                        "today_est": True})
+        e = cum_all[-1]
+        if str(e.get("date") or "") < today:
+            total = round(float(d.get("total_realized") or 0.0)
+                          + float(d.get("total_unrealized") or 0.0), 2)
+            buy = float(e.get("cum_buy") or 0.0)
+            cum_all.append({"date": today,
+                            "cum_realized": d.get("total_realized"), "cum_buy": e.get("cum_buy"),
+                            "pct": (round(float(d.get("total_realized") or 0.0) / buy * 100.0, 3)
+                                    if buy else None),
+                            "cum_total": total,
+                            "pct_total": round(total / buy * 100.0, 3) if buy else None,
+                            "delta_total": round(total - float(e.get("cum_total") or 0.0), 2),
+                            "today_est": True})
 
     def import_trade_history(self, path=None):
         """导入历史成交（xls/xlsx/伪-xls/PDF）：path 为空 → 弹系统文件选择器（**可多选**）。

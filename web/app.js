@@ -1009,8 +1009,12 @@ function renderTradeHistory(d) {
     echRender("echThCum", {
       ...ECH_BASE,
       tooltip: { ...ECH_BASE.tooltip, trigger: "axis",
-        formatter: p => `<b>${cum[p[0].dataIndex].date}</b><br>累计已实现: `
-          + `<b style="color:${pnlColor(cum[p[0].dataIndex].cum_realized)}">${f(cum[p[0].dataIndex].cum_realized)}</b>` },
+        formatter: p => {
+          const r = cum[p[0].dataIndex];
+          return `<b>${r.date}</b><br>累计已实现: `
+            + `<b style="color:${pnlColor(r.cum_realized)}">${f(r.cum_realized)}</b>`
+            + (r.today_est ? '<br><span style="color:#8b949e">今日点：当天无成交记录，仅为占位</span>' : "");
+        } },
       xAxis: { ...ECH_BASE.xAxis, type: "category", data: cum.map(x => x.date.slice(5)) },
       yAxis: { ...ECH_BASE.yAxis, axisLabel: { color: "#8b949e", fontSize: 10,
         formatter: v => (v >= 0 ? "+" : "") + fmt(v, 0) } },
@@ -1057,7 +1061,8 @@ function renderTradeHistory(d) {
           return `<b>${r.date}</b><br>累计收益: <b style="color:${pnlColor(r.pct_total ?? r.pct)}">`
             + `${((r.pct_total ?? r.pct) >= 0 ? "+" : "") + fmt(r.pct_total ?? r.pct, 2)}%</b>`
             + `<br>累计总盈亏: <b style="color:${pnlColor(r.cum_total)}">${f(r.cum_total)}</b>`
-            + `<br><span style="color:#8b949e">已实现 ${f(r.cum_realized)} · 累计买入 ${fmt(r.cum_buy || 0, 0)}</span>`;
+            + `<br><span style="color:#8b949e">已实现 ${f(r.cum_realized)} · 累计买入 ${fmt(r.cum_buy || 0, 0)}</span>`
+            + (r.today_est ? '<br><span style="color:#8b949e">今日点：当天无成交，浮动按台账最新收盘价估</span>' : "");
         } },
         xAxis: { ...ECH_BASE.xAxis, type: "category", data: curve.map(x => x.date.slice(5)) },
         yAxis: [
