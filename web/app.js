@@ -2785,6 +2785,29 @@ function ma20FlagCellHtml(v, missingTip, detail) {
   return `<td style="text-align:center" title="${esc(missingTip || "无该特征（旧数据/未扫描）")}"><span class="cell-dim">—</span></td>`;
 }
 
+/* 当日「均线回站」+ **突破时刻**（2026-10-23 owner：「建仓信号扫描 / 30分钟风险体检 / 异常监控池
+   里，某只票当日刚刚突破 5/10/20/30/60 日线，请标注出突破的时间」）。
+   三张表**共用本渲染器**（同 `ma20FlagCellHtml` / `structCellHtml` 的做法，别各写一份）。
+   数据 = 后端 `ma_reclaim`：`{pending}` 后台算中 | `{na}` 非当日视图 | `{ma:{5:{time,ma,dev_pct}}}`。 */
+function maReclaimCellHtml(v, missingTip) {
+  const td = (inner, extra = "") => `<td style="text-align:center;white-space:nowrap"${extra}>${inner}</td>`;
+  if (!v) return td(`<span class="cell-dim" title="${esc(missingTip || "当日均线回站：未计算")}">—</span>`);
+  if (v.pending) return td(`<span class="cell-dim" title="当日分钟数据后台计算中（约 5~20s，自动补齐）">⏳</span>`);
+  if (v.na) return td(`<span class="cell-dim" title="只有「今天」的视图才有突破时刻（历史日没有当日分钟数据）">—</span>`);
+  const ma = v.ma || {};
+  const _basis = v.basis ? `均线基准 ${v.basis}` : "";
+  const keys = Object.keys(ma).sort((a, b) => Number(a) - Number(b));
+  if (!keys.length) {
+    return td(`<span class="cell-dim" title="${esc("今天没有新站上 5/10/20/30/60 日线" + (_basis ? `（${_basis}）` : ""))}">—</span>`);
+  }
+  return td(keys.map(k => {
+    const x = ma[k] || {};
+    const tip = `${k} 日线：${x.time} 首次站上（MA=${x.ma}，现价高出 ${x.dev_pct}%`
+      + (_basis ? `；${_basis}` : "") + "）";
+    return `<span class="badge t-long" title="${esc(tip)}">${k}日 ${esc(x.time || "")}</span>`;
+  }).join(" "));
+}
+
 /* 时机条件列（2026-10-16 owner：「选股猎手的时机条件列与建仓信号扫描的该列保持一致」）。
    **建仓信号扫描 / 选股猎手 共用本渲染**（同 `structCellHtml`/`dayStageCellHtml`/`pctHtml` 的做法），
    别再各写一份 —— 此前猎手侧**硬编码只列 3 个条件键**，与真源脱钩，代价是：
@@ -2902,13 +2925,18 @@ async function loadAbnormalPool(force) {
   if (!box || _abnInflight) return;
   // 2026-10-23（GUI 卡顿排查）：这张表在「手动盘」tab 里，**切到别的 tab 就不该再轮询**——
   //   原来 `renderAll` 每 10s 无条件拉一次整表（建仓符合度 + 技术标签 + 行情），看不见也照跑。
-  if (!force && !_tabActive("tab-signals")) return;
+  // ⚠️ 但**首次必须无条件加载**：启动时停在别的 tab（默认总览页）时 `renderAll` 只跑那一次，
+  //   之后 `renderAll` 不再周期触发 ⇒ 一上来就把这张表永久卡成空表（owner 实报「股票都消失了」）。
+  if (!force && _abnRows.length && !_tabActive("tab-signals")) return;
   // 两级刷新：行情（价/涨幅/市值）15s；整行（判定/得分/条件/标签，全来自日线缓存）60s。
   //   整行那部分每轮都要走 `_hunter_build_conformance` + 标签缓存，是这张表的主要 CPU。
   if (!force && _abnRows.length) {
     const _age = Date.now() - _abnLoadedAt;
+    // 「均线突破时刻」是后台预热的（首轮 5~20s）⇒ 有 pending 时按 15s 重拉，别等满 60s
+    const _mrPending = _abnRows.some(r => (r.ma_reclaim || {}).pending);
+    const _rowTTL = _mrPending ? 15000 : 60000;
     if (_age < 15000) return;
-    if (_age < 60000) { _patchAbnormalQuotes(); return; }
+    if (_age < _rowTTL) { _patchAbnormalQuotes(); return; }
   }
   _abnInflight = true;
   try {
@@ -2945,7 +2973,11 @@ function renderAbnormalPool(d) {
       : '<span class="cell-dim" style="font-size:10px" title="技术标签后台批算，约 10~20s 自填">⏳ 标签</span>';
     // 整行底色：与建仓信号扫描**同一条规则**（2026-10-19 owner）：站上 5 日线=绿 / 其它=红，
     // 无 MA5 特征（缓存不足）不着色 —— 别把"无数据"画成"破位"。
-    const _above5 = (r.timing_features || {}).above_ma5;
+    // ⚠️ 优先用「均线突破」那份**新鲜基准**（分钟补齐的昨收 + 实时价）：监控池的票本地日线缓存
+    //    可能停在几天前，conformance 的 above_ma5 会拿几天前的收盘判 ⇒ 颜色反过来
+    //    （owner 2026-10-23 实报：深圳华强今天刚站上 5 日线，整行却是红的）。
+    const _mr5 = (r.ma_reclaim || {}).above5;
+    const _above5 = (typeof _mr5 === "boolean") ? _mr5 : (r.timing_features || {}).above_ma5;
     const rowBg = (_above5 === true) ? "background:rgba(63,185,80,.10);"
       : (_above5 === false) ? "background:rgba(248,81,73,.12);" : "";
     return `<tr ondblclick="openStockChart('${esc(r.code)}','${esc(r.name)}')" style="cursor:pointer;${rowBg}"
@@ -2959,6 +2991,7 @@ function renderAbnormalPool(d) {
       <td class="num" data-abncode="${esc(r.code)}" data-kind="px">${hunterPriceHtml(null)}</td>
       <td class="num" data-abncode="${esc(r.code)}" data-kind="mc">${hunterMktcapHtml(null)}</td>
       <td style="max-width:220px;line-height:1.7">${tagsTxt}</td>
+      ${maReclaimCellHtml(r.ma_reclaim)}
       ${condCellHtml(r.conditions, labels, r._has_conf === false, null)}
       <td class="cell-dim" style="max-width:260px;font-size:11px">${esc(r.build_reason || "")}</td>
       <td onclick="event.stopPropagation()" ondblclick="event.stopPropagation()">
@@ -2978,6 +3011,7 @@ function renderAbnormalPool(d) {
       <th class="num">价<br><span style="font-size:9px;opacity:.6">实时涨幅</span></th>
       <th class="num">市值<br><span style="font-size:9px;opacity:.6">亿</span></th>
       <th title="通道/箱体/背离等技术形态，与「建仓信号扫描」同一来源与同一渲染">技术标签</th>
+      <th title="**当日**刚站上 5/10/20/30/60 日线的**时刻**（与「建仓信号扫描」同源同渲染）">均线突破<br><span style="font-size:9px;opacity:.6">当日·时刻</span></th>
       <th>时机条件</th><th>理由</th>
       <th title="**手动**记录的涨停原因（一句话，最多 120 字）。只展示、不参与任何判定；回车或点别处即保存">涨停原因<br><span style="font-size:9px;opacity:.6">手动</span></th>
       <th></th>
@@ -3260,6 +3294,7 @@ function renderPB(pb) {
         <td class="num">${fmt(r.price)}<div style="font-size:10px">${pctHtml(r.change_pct, "实时涨幅（随行情每 10s 刷新）")}</div></td>
         <td style="text-align:center">${boxStr}</td>
         <td style="max-width:220px;line-height:1.7">${tagsTxt}</td>
+        ${maReclaimCellHtml(r.ma_reclaim)}
         ${condCellHtml(conds, condLabels, isNoData, (r.timing || {}).veto)}
         ${mvCell}
         ${stCell}
@@ -3298,13 +3333,14 @@ function renderPB(pb) {
           <th class="num" title="实时价 + 实时涨幅（随行情每 10s 刷新）。取不到显示 — 而不是 0.00%：不把「无数据」画成「平盘」">价<br><span style="font-size:9px;opacity:.6">涨幅</span></th>
           <th title="突破箱体=第一优先级">突破</th>
           <th title="通道/箱体/背离等技术形态。背离标签已**自带周期**（如「日线顶背离」），与右侧『30min判定』的 30 分钟口径不同源 —— 悬停标签可见确认日期">技术标签</th>
+          <th title="**当日**刚站上 5/10/20/30/60 日线的**时刻**（该日 5min bar 里第一次收盘价站上该均线）。口径：昨收 < 昨MA(p) 且 现价 > 今MA(p)；只看今天，历史日期无当日分钟数据所以是 —">均线突破<br><span style="font-size:9px;opacity:.6">当日·时刻</span></th>
           <th title="时机门控：市场有方向/多头结构/回撤到位（GO→signal，震荡→降频）">时机条件</th>
           <th title="30分钟综合判定（与『持仓 30min 风险体检』同口径）：🔴减仓/避高=30min 顶背离(T1/T2)；🟠盯紧=T3顶分型+T4均线压制同现；🟢偏好=无顶信号且有新鲜底背离(≤16根)；⚪中性=其余。依据 981只×540日 离线验证；T3/T4 无前瞻区分度、单个不报警">30min判定</th>
           <th title="仓位结构（30min/10min，供仓位管理参考）：止损=10min 最近已确认摆动低点；阶段=10min 四阶段(①蓄势/②抬升/③派发/④下跌)；30m=30min MA65 中期方向；折价=现价/止损-1（到-4.3%记满）。破位时给出三档下档支撑挂单价与5日成交率估计。⚠️ 是**结构参考、不是买卖信号**——机械按阶段加减仓经实测无正贡献(纯择时-1.4~+2.7pp不显著)，「破前低就清仓」-30pp强有害；唯一有证据的是破位后在下档支撑挂限价补仓(改善成本结构、不提高期望)。悬停看明细">仓位结构</th>
           <th title="30min MA5 状态（**纯展示**）：现价相对 5×30min 均线 站上/跌破，及距上次翻转几根。⚠️ 实测**无前瞻信息量**（状态/跃迁 × 站上/跌破 四口径，同日同bar-of-day对照 |diff|≤0.03pp、|t|≤2.4）⇒ 仅供参考，不参与任何判定。朴素对照的 −0.343pp(t=−25.5) 是日内时段伪影">30m MA5<br><span style="font-size:9px;opacity:.6">仅展示</span></th>
           <th>扫描</th><th></th>
         </tr></thead>
-        <tbody>${rows || '<tr><td colspan="17" class="empty">无扫描结果</td></tr>'}</tbody>
+        <tbody>${rows || '<tr><td colspan="18" class="empty">无扫描结果</td></tr>'}</tbody>
       </table>
       <div class="cell-dim" style="font-size:11px;margin-top:8px">●=通过 ○=未通过 · 时机条件：${Object.values(condLabels).join(" / ")} · 第5位🚫=否决因子(爆量≥3倍或偏离MA60超+20%) · GO(多头追强/空头抄底)→signal，震荡→降频 · 观察=震荡市结构达标(不推送) · 盘中每10s刷新</div>
     </div>`;
@@ -7244,8 +7280,10 @@ async function loadOBAnalysis() {
     // 30min 判定/仓位结构未热（后台预热）→ 3s；体检后台算未回 → 5s；仅图表未热 → 12s；
     // 全就绪 → 60s 低频自刷（后端 45s TTL + 缓存路径就地覆盖 structure/price，成本极低）。
     let delay = 60000;
-    if (ob && (ob.pending || ob.m30_pending || ob.struct_pending)) {
-      if ((ob.m30_pending || ob.struct_pending) && !ob.pending) delay = 3000;
+    // 2026-10-23：`ma_reclaim_pending`（当日均线突破时刻）同 30min 判定/结构层一样是后台预热，
+    // 未热就 3s 重拉，别让它钉到 60s 才自填。
+    if (ob && (ob.pending || ob.m30_pending || ob.struct_pending || ob.ma_reclaim_pending)) {
+      if ((ob.m30_pending || ob.struct_pending || ob.ma_reclaim_pending) && !ob.pending) delay = 3000;
       else if (ob.pending) delay = 5000;
       else delay = 12000;
     }
@@ -7285,7 +7323,7 @@ function renderOB(ob) {
   }
   const _VCLS = { high: "badge signal", watch: "badge approach", bull: "badge bear" };
   const rows = ob.stocks.map(s => {
-    if (s.error) return `<tr><td colspan="15" class="cell-dim">${esc(s.code)}: ${esc(s.error)}</td></tr>`;
+    if (s.error) return `<tr><td colspan="16" class="cell-dim">${esc(s.code)}: ${esc(s.error)}</td></tr>`;
     const ob_ = s.overbought || {};
     const vd = s.verdict || {};           // 2026-10-09：30min 综合判定 {level,label,reason}
     const dv = s.divergence || {};        // 30min {type,bars_ago}（进 tooltip）
@@ -7318,6 +7356,7 @@ function renderOB(ob) {
       <td class="num ${cciHot ? 'up' : 'cell-dim'}" title="日线 CCI>100 属动能(不计风险)">${fmt(ob_.cci, 0)}</td>
       <td>${ob_.boll ? '<span class="badge chop" title="日线破BOLL上轨=突破动能">破</span>' : '<span class="cell-dim">—</span>'}</td>
       <td style="max-width:200px;line-height:1.7">${(s.tags || []).map(t => tagBadge(t)).join(" ") || '<span class="cell-dim">—</span>'}</td>
+      ${maReclaimCellHtml(s.ma_reclaim)}
       <td title="30min 综合判定（趋势+顶部/底背离特征）&#10;${esc(tfTip)}&#10;${esc(dvTip)}">${vCell}</td>
       ${structCellHtml(s.structure)}
       ${ma5CellHtml(s.structure)}
@@ -7343,6 +7382,7 @@ function renderOB(ob) {
         <th class="num" title="日线 CCI>100超买">CCI</th>
         <th title="日线收盘破BOLL上轨">BOLL</th>
         <th title="与建仓扫描同口径（通道/箱体/筑底顶/背离/超买/破均线）">技术标签</th>
+        <th title="**当日**刚站上 5/10/20/30/60 日线的**时刻**（与「建仓信号扫描」「异常监控池」同源同渲染）。持仓票若刚回站 MA20/MA60，常是「趋势修复」的第一根证据">均线突破<br><span style="font-size:9px;opacity:.6">当日·时刻</span></th>
         <th title="30min 趋势+顶部/底背离特征 → 重视程度（读一列即可）">30min判定</th>
         <th title="仓位结构（30min/10min，与建仓信号扫描**同一真源**，供仓位管理参考）：止损=10min 最近已确认摆动低点；阶段=10min 四阶段；30m=30min MA65 中期方向；折价=现价/止损-1（到-4.3%记满）。破位时给三档下档支撑挂单价与5日成交率。⚠️ 是**结构参考、不是买卖信号**。悬停看明细">仓位结构</th>
         <th title="30min MA5 状态（**纯展示**）：站上/跌破 5×30min 均线，及距上次翻转几根。⚠️ 实测**无前瞻信息量**（同日同bar-of-day对照 |diff|≤0.03pp）⇒ 仅供参考，不参与任何判定">30m MA5<br><span style="font-size:9px;opacity:.6">仅展示</span></th>
@@ -7951,6 +7991,9 @@ function switchTab(tab) {
     }
     if (tab === "signals") {
       _turnoverSizeRetryN = 0; drawTurnoverHist();
+      // 切回本页时补一次异常监控池（内部有 TTL 节流：60s 内刚拉过就只刷行情，
+      // 有「均线突破」pending 时 15s 重拉）。它不在 10s live 轮询里，别指望自动回来。
+      loadAbnormalPool();
       if (ma365Inst) { try { ma365Inst.resize(); } catch (e) { } }
       if (ma20Inst) { try { ma20Inst.resize(); } catch (e) { } }
       // 首次进 tab 才拉（默认在总览页，别让 5500 个日线缓存的解析和首屏抢 CPU）；

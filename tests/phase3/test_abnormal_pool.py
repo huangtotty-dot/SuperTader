@@ -168,6 +168,16 @@ class TestFrontendWiring:
             "绿/红底色要与建仓表同一组色值（站上5日线绿、跌破红）"
         assert "<th title=\"通道/箱体/背离" in seg, "表头要有「技术标签」列"
 
+    def test_首帧不被tab闸挡住(self):
+        """2026-10-23 实盘：加了「不在手动盘页就不轮询」的闸之后，启动时停在总览页
+        ⇒ `renderAll` 只在首帧跑一次、被闸挡掉 ⇒ 这张表**永久空表**（owner 报「股票都消失了」）。
+        闸只能挡「已有数据之后的重复轮询」。"""
+        i = _JS.index("function loadAbnormalPool")
+        seg = _JS[i:i + 1500]
+        assert "_abnRows.length && !_tabActive" in seg, \
+            "tab 闸必须带 `_abnRows.length` 前置条件，否则首帧就被挡掉"
+        assert "loadAbnormalPool()" in _JS, "切回手动盘页要补一次（否则离开再回来不刷新）"
+
     def test_reason_cell_editable(self):
         i = _JS.index("function renderAbnormalPool")
         seg = _JS[i:i + 4000]

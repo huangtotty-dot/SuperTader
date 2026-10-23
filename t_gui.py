@@ -939,6 +939,29 @@ _PB_STRUCT_HIST_LOCK = threading.Lock()
 _PB_STRUCT_HIST_MAX = 5000
 _PB_STRUCT_POOL_MAX = 60                                # 单轮预热标的数上限（防误传全池打爆 tushare）
 
+# ---- 当日「均线回站」+ 突破时刻（2026-10-23 owner）----------------------------------
+# 「建仓信号扫描 / 持仓 30 分钟风险体检 / 异常监控池」三张表共用这一份缓存：
+#   某只票**当日**刚站上 5/10/20/30/60 日线 → 给出**突破的那一分钟**。
+# 口径见 `core/ma_reclaim.reclaim_today`（与 `ma5_state` 逐字同源，只是周期可变）；
+# 时刻用**今日 5min bar** 逐根回放（腾讯 m5，含未收盘根，约 100~300ms/只）
+# ⇒ 必须后台预热，主线程只读缓存（pywebview 主线程任何网络/重活都会冻界面）。
+_MA_RC_CACHE: dict = {}          # code -> {"date":..., "ts":..., "ma": {period: {time,ma,dev_pct}}}
+_MA_RC_LOCK = threading.Lock()
+_MA_RC_WARM: dict = {"queued": set(), "running": False}
+_MA_RC_WARM_LOCK = threading.Lock()
+_MA_RC_TTL = 120.0               # 盘中 120s；收盘后 6h（分钟已定稿）
+_MA_RC_QUEUE_MAX = 300
+_MA_RC_ERR_TTL = 600.0           # 取数失败（停牌/北交所无分时/网络）的负缓存：10 分钟就重试，
+                                 # 别用 6 小时把一列永久钉成「—」（那是"收盘后 TTL"的副作用）
+
+
+def _ma_rc_fresh(rec, date, now, ttl):
+    """缓存条目是否可用：同一日期 + 未过期；**失败条目**用更短的 `_MA_RC_ERR_TTL`。"""
+    if not rec or rec.get("date") != date:
+        return False
+    cap = _MA_RC_ERR_TTL if rec.get("err") else ttl
+    return (now - rec.get("ts", 0)) < cap
+
 
 
 def _min_bars_ts_code(code):
@@ -4220,6 +4243,12 @@ class Api:
             stocks = (out or {}).get("stocks") or []
         except Exception:
             return
+        # 每轮重算「均线突破」的 pending 标记：否则一旦某轮挂上 True 就**永远粘住**，
+        # 前端会一直按 3s 重拉（实测：算完之后 OB 表仍在 3s 轮询，白拉一整天）。
+        try:
+            out.pop("ma_reclaim_pending", None)
+        except Exception:
+            pass
         if not stocks:
             return
         _struct_pending = False
@@ -4242,6 +4271,12 @@ class Api:
                     s["price"] = float(_live["close"])
             except Exception:
                 pass
+            try:                                  # 当日均线回站 + 突破时刻（只读缓存，µs 级）
+                s["ma_reclaim"] = self._ma_reclaim_get(_base, kick=False)
+            except Exception:
+                s["ma_reclaim"] = {"pending": True}
+            if isinstance(s.get("ma_reclaim"), dict) and s["ma_reclaim"].get("pending"):
+                out["ma_reclaim_pending"] = True
         if _struct_pending:
             out["struct_pending"] = True
             try:
@@ -4250,6 +4285,13 @@ class Api:
                 pass
         else:
             out.pop("struct_pending", None)
+        if out.get("ma_reclaim_pending"):
+            try:
+                self._kick_ma_reclaim_warm([s.get("code") for s in stocks if isinstance(s, dict)])
+            except Exception:
+                pass
+        else:
+            out.pop("ma_reclaim_pending", None)
 
     def _kick_cold_chart_warm(self, codes):
         """给**图表不在内存缓存**的持仓补一次后台取数（2026-10-12）。
@@ -8042,6 +8084,207 @@ class Api:
                     "reason": "结构层后台计算中…（整池首轮约 10~30s，之后按 30min 时段刷新）"}
         return st
 
+    # ---------- 当日「均线回站」+ 突破时刻（2026-10-23 owner） ----------
+    # 「建仓信号扫描 / 持仓 30 分钟风险体检 / 异常监控池」三张表**同一份缓存、同一个渲染器**。
+    # 口径：`core.ma_reclaim.reclaim_today`；时刻 = 今日 5min bar 里**第一次**收盘价站上 MA(p) 的那根。
+    # 纪律与 30min 判定/仓位结构一致：**后台预热 + 主线程只读**、未热给 pending、前端轮询自填。
+    @staticmethod
+    def _ma_reclaim_ttl():
+        try:
+            now = datetime.now()
+            hm = now.strftime("%H:%M")
+            if now.weekday() >= 5 or hm >= "15:00" or hm < "09:15":
+                return 6 * 3600.0
+        except Exception:
+            pass
+        return _MA_RC_TTL
+
+    def _ma_reclaim_compute(self, code, date):
+        """单只：截至昨日的日线收盘 + 今日 5min bar → {"basis": 均线基准日, "ma": {period: {time, ma, dev_pct}}}。
+
+        返回 None = 取数失败（停牌/北交所无分时/网络）；worker 会给它记一条**短负缓存**，
+        避免每次轮询都重踢同几个不可能成功的码。
+        """
+        from core.ma_reclaim import reclaim_today
+        c6 = str(code).split("_")[0]
+        try:
+            blob = json.loads((_DAILY_KLINE_DIR / f"{c6}.json").read_text(encoding="utf-8"))
+        except Exception:
+            return None
+        closes, cdates = [], []
+        for r in blob.get("rows") or []:
+            d = str(r.get("date"))[:10]
+            if d >= date:                      # 基准**不含当日**（MA 用「前 p-1 日 + 今日价」）
+                break
+            try:
+                v = float(r.get("close"))
+            except (TypeError, ValueError):
+                continue
+            if v > 0:
+                closes.append(v)
+                cdates.append(d)
+        if len(closes) < 59:                   # 最长周期 60 天要 59 根做阈值
+            return {"basis": (cdates[-1] if cdates else None), "ma": {}}
+        # ⚠️ **必须先把分钟数据拿去补日线缓存缺的最近几天**，再判回站（2026-10-23 owner 实报）：
+        #    监控池里的票本地日线缓存可能停在几天前（深圳华强 002056 停在 10-20），
+        #    于是"昨收"是 10-20 的、昨 MA(p) 也是旧的 ⇒ 明明今天刚站上 5 日线却判成"不算"，
+        #    行底色（也用旧收盘算）还会显示成跌破。分钟线一次拿 340 根 ≈ 最近 7 个交易日，
+        #    按日取最后一根收盘就能把这几天补齐，零额外网络。
+        bars_all = _fetch_min_bars_tencent(c6, "5min")
+        if bars_all is None or getattr(bars_all, "empty", True):
+            return None
+        try:
+            _bd = bars_all["time"].astype(str).str[:10]
+        except Exception:
+            return None
+        _last = cdates[-1] if cdates else ""
+        for _d, _g in bars_all.assign(_d=_bd).groupby("_d", sort=True):
+            if _d <= _last or _d >= str(date):
+                continue                       # 缓存已有的、以及今天的，都不并进来
+            try:
+                _c = float(_g["close"].iloc[-1])
+            except Exception:
+                continue
+            if _c > 0:
+                closes.append(_c)
+                cdates.append(str(_d))
+        _basis = cdates[-1] if cdates else None
+        # **必要条件的廉价预筛**：回站要求「昨收 < 昨MA(p)」。用的已是**补齐后**的昨收。
+        from core.ma_reclaim import RECLAIM_PERIODS
+        prev_close = closes[-1]
+        cand = [p for p in RECLAIM_PERIODS
+                if len(closes) >= p and prev_close < float(sum(closes[-p:]) / p)]
+        # 行底色要用的「现价 vs 5 日线」也用同一份新鲜基准（前端优先读这个，见 abnormal pool）
+        bars = bars_all.assign(_d=_bd)
+        bars = bars[bars["_d"] == str(date)]
+        if bars.empty:
+            return None                        # 今天还没分钟数据（盘前/停牌/北交所）
+        try:
+            _price = float(bars["close"].iloc[-1])
+        except Exception:
+            return None
+        out = {"basis": _basis, "ma": {}, "price": round(_price, 3)}
+        for _p, _k in ((5, "above5"), (20, "above20")):
+            if len(closes) >= _p:
+                _thr = float(sum(closes[-(_p - 1):]) / (_p - 1))
+                out[_k] = bool(_price > _thr)
+                out[_k + "_ma"] = round((_thr * (_p - 1) + _price) / _p, 3)
+        if not cand:
+            return out
+        try:
+            # 只算预筛剩的那几条均线；basis = 均线基准日（缓存陈旧时前端 tooltip 会如实标出）
+            out["ma"] = reclaim_today(closes, bars, periods=cand)
+            return out
+        except Exception:
+            return None
+
+    def _ma_reclaim_get(self, code, date=None, kick=True):
+        """读缓存；过期/未热则踢预热并（有过期值时）先给旧值（SWR）。
+
+        `kick=False`：调用方已经批量踢过（`_attach_ma_reclaim` / OB 覆盖层），这里只读，
+        避免每次轮询对每只票各加一次锁（76 只 × 每 10s 是无谓开销）。
+        """
+        date = str(date or datetime.now().strftime("%Y-%m-%d"))
+        if date != datetime.now().strftime("%Y-%m-%d"):
+            return {"na": True}                # 历史视图没有当日分钟，"突破时刻"无从谈起
+        key = str(code).split("_")[0]
+        with _MA_RC_LOCK:
+            rec = _MA_RC_CACHE.get(key)
+        now = _time_mod.time()
+        fresh = _ma_rc_fresh(rec, date, now, self._ma_reclaim_ttl())
+        if not fresh and kick:
+            self._kick_ma_reclaim_warm([key], date)
+        if rec and rec.get("date") == date:
+            return {"date": date, "basis": rec.get("basis"), "ma": rec.get("ma") or {},
+                    "above5": rec.get("above5"), "above20": rec.get("above20"),
+                    "price": rec.get("price")}
+        return {"pending": True}
+
+    def _kick_ma_reclaim_warm(self, codes, date=None):
+        """按 code 排队预热（同一 code 在队列里只排一次；单 worker 循环排干）。
+
+        ⚠️ **必须先剔掉缓存仍然新鲜的码**（2026-10-23 实盘修）：原来只按"在不在队列里"去重，
+        而建仓表每 10s 就 `_attach_ma_reclaim` 踢一次 48 只 ⇒ 缓存明明没过期也被重新排队重算
+        ⇒ worker **永不停歇**（实测常驻 5~12% 单核），新来的票（持仓体检那 10 只）排在后面等一分钟，
+        界面上就是「均线突破时刻更新太慢」。
+        """
+        date = str(date or datetime.now().strftime("%Y-%m-%d"))
+        code_list = [str(c).split("_")[0] for c in (codes or []) if c][:_MA_RC_QUEUE_MAX]
+        if not code_list:
+            return
+        _now = _time_mod.time()
+        _ttl = self._ma_reclaim_ttl()
+        with _MA_RC_LOCK:
+            fresh = {c for c in code_list
+                     if _ma_rc_fresh(_MA_RC_CACHE.get(c), date, _now, _ttl)}
+        todo_all = [c for c in dict.fromkeys(code_list) if c not in fresh]
+        if not todo_all:
+            return                            # 全都新鲜 ⇒ 一次都不排
+        with _MA_RC_WARM_LOCK:
+            todo = [c for c in todo_all if c not in _MA_RC_WARM["queued"]]
+            room = max(0, _MA_RC_QUEUE_MAX - len(_MA_RC_WARM["queued"]))
+            _MA_RC_WARM["queued"].update(todo[:room])
+            if _MA_RC_WARM["running"] or not _MA_RC_WARM["queued"]:
+                return
+            _MA_RC_WARM["running"] = True
+
+        def _run():
+            global _MA_RC_CACHE
+            try:
+                while True:
+                    with _MA_RC_WARM_LOCK:
+                        batch = list(_MA_RC_WARM["queued"])[:20]
+                        for c in batch:
+                            _MA_RC_WARM["queued"].discard(c)
+                        if not batch:
+                            _MA_RC_WARM["running"] = False
+                            return
+                    for c in batch:
+                        try:
+                            # ⚠️ **不抢 `_BG_PANDAS_SEM`**：本活 95% 在等网络（腾讯 m5 约 150ms/只），
+                            #    pandas 部分只有一次 JSON 解析 + 极小数组。抢那 2 个名额会和标签批
+                            #   排在一起 ⇒ 实测「突破时刻」要等一分钟才自填（owner 报"更新太慢"）。
+                            #   GIL 用「每只之间睡 5ms」让出（同 `_tags_one_yield` 的做法）。
+                            ma = self._ma_reclaim_compute(c, date)
+                        except Exception:
+                            ma = None
+                        finally:
+                            _time_mod.sleep(0.005)
+                        if ma is None:
+                            # 取数失败（停牌/北交所无分时/网络）⇒ 记一个 **短负缓存**，
+                            # 否则每次轮询都会重踢、把队列打满（失败的重试没有收益）
+                            with _MA_RC_LOCK:
+                                _MA_RC_CACHE[c] = {"date": date, "ts": _time_mod.time(),
+                                                   "basis": None, "ma": {}, "err": True}
+                            continue
+                        with _MA_RC_LOCK:
+                            if len(_MA_RC_CACHE) > 2000:
+                                _MA_RC_CACHE.clear()
+                            _MA_RC_CACHE[c] = {"date": date, "ts": _time_mod.time(),
+                                               "basis": ma.get("basis"), "ma": ma.get("ma") or {},
+                                               "above5": ma.get("above5"), "above20": ma.get("above20"),
+                                               "price": ma.get("price")}
+            except Exception:
+                pass
+            finally:
+                with _MA_RC_WARM_LOCK:
+                    _MA_RC_WARM["running"] = False
+
+        _th.Thread(target=_run, name="ma-reclaim-warm", daemon=True).start()
+
+    def _attach_ma_reclaim(self, rows, date=None):
+        """给一批行（dict，含 code）挂上 `ma_reclaim` 字段，并踢预热。"""
+        rows = [r for r in (rows or []) if isinstance(r, dict) and r.get("code")]
+        if not rows:
+            return
+        date = str(date or datetime.now().strftime("%Y-%m-%d"))
+        self._kick_ma_reclaim_warm([r["code"] for r in rows], date)
+        for r in rows:
+            try:
+                r["ma_reclaim"] = self._ma_reclaim_get(r["code"], date, kick=False)
+            except Exception:
+                r["ma_reclaim"] = {"pending": True}
+
     def _pb_struct_hist(self, code, date, compute=False):
         """历史日「仓位结构」：**纯磁盘、零网络**、截到该日（`load_structure(allow_network=False)`）。
         compute=False 时未算过返回 None（浏览历史不触发计算，由「扫描该日」预算好）。"""
@@ -10781,6 +11024,11 @@ class Api:
                 "_scans": 0,
                 "_has_conf": bool(k),
             })
+        # 当日「均线回站」+ 突破时刻（2026-10-23 owner，三张表同源）
+        try:
+            self._attach_ma_reclaim(rows, date)
+        except Exception:
+            pass
         rows.sort(key=lambda r: -int(r.get("composite_score") or 0))
         return _clean({"has_data": True, "date": date, "rows": rows,
                        "counts": {"total": len(rows)},
@@ -11263,6 +11511,11 @@ class Api:
                     if info:
                         r["tags"] = info.get("tags", [])
                         r["trend"] = info.get("trend")
+        except Exception:
+            pass
+        # 当日「均线回站」+ 突破时刻（2026-10-23 owner，三张表同源）
+        try:
+            self._attach_ma_reclaim(result.get("rows") or [], date)
         except Exception:
             pass
         return result
