@@ -296,6 +296,10 @@ function _apiReady() {
 
 // fix P1-6: 实时轮询失败计数，连续失败 ≥3 次在状态栏红色告警，恢复后自动消除
 let liveFailCnt = 0, pbFailCnt = 0;
+// 2026-10-23（GUI 卡顿排查）：这两个 10s 轮询里的重活在 `refreshLive` 里是**不 await** 的，
+// 轮询器只管 `load_live` 是否返回 ⇒ 慢的时候（实测峰值 refresh_pb 19.4s）会并发叠加。
+// 加单飞闸做背压：上一次没回来，这一拍就跳过。
+let _loadQuotesInflight = false, _refreshPbInflight = false;
 function updateRefreshAlarm() {
   const interrupted = liveFailCnt >= 3 || pbFailCnt >= 3;
   if (interrupted) {
@@ -317,45 +321,31 @@ async function refreshLive(reset) {
     refreshIndexBoard();
 
     // 实时行情（10s 刷新）：更新侧栏汇总 + 存 quotes 供 PB 价格更新
-    apiCall("load_quotes").then(q => {
-      updateSidebarSummary((q && q.quotes) || []);
-      state.quotes = (q && q.quotes) || [];
-      if (state.payload) {
-        // PB 表价格/涨幅实时更新（2026-10-12 owner：「建仓信号扫描没有显示个股实时涨幅」。
-        // 根因=此处原先**只搬了 price、把 change_pct 丢了**，而 scan trace 里本就没有涨跌幅
-        // ⇒ 不叠加就永远没有。现已收进 `applyQuotesToPB`，与 refresh_pb 路径共用。）
-        const pbRows = state.payload.position_builder;
-        if (pbRows && pbRows.rows) {
-          renderPB(applyQuotesToPB(pbRows));
-        }
-      }
-      // 持仓体检表「现价」列同款：OB 表 45~60s 才整体重拉，现价用 10s quotes 就地叠加
-      applyQuotesToOB();
-      // 风向标「价/涨幅」列：面板就绪后自身轮询降到 60s，挂在 10s live 轮询上才能 ~15s 刷新
-      // （内部有 tab 可见性 + 15s TTL + 单飞闸，不在该页/在飞中都是零成本）
-      loadBeaconQuotes();
-      // 猎手展开页的实时价/涨幅：只刷**当前可见**的展开板块（TTL 15s 节流；
-      // 猎手页没打开/没展开任何板块时是零成本 —— 别为看不见的东西出网）
-      if (hunterOpenSectors.size && _hunterTabActive()) {
-        loadHunterQuotes();          // 一次覆盖全部展开板块（不再每板块一次）
-      }
-    }).catch(() => {});
+    // 2026-10-23（GUI 卡顿排查）：**单飞闸**。这两条原来在 `refreshLive` 里**不 await** ⇒
+    //   轮询器只等 `load_live` 就排下一拍，它们还在飞 ⇒ 慢的时候并发叠加（正是 2026-10-10
+    //   注释里那个正反馈，只是这两条漏在链外；`poll_new_position_signals` 走 `startSignalPoll`，
+    //   那边本来就有背压，不在此列）。实测 `refresh_pb` 峰值 19.4s。
+    //   上一次没回来就跳过这一次（背压），表格最多晚一拍更新。
+    if (!_loadQuotesInflight) _refreshQuotesAndSidebar();
     // 2026-10-10: 「今日盘中 S」已下线，连带的 10s 重拉一并删除（跨日 S 是日频，改日期时拉一次即可）
 
 
     // 建仓/加仓扫描表实时刷新（position_builder 盘中每5分钟有新数据）
     // fix P1-6: refresh_pb 成败纳入轮询告警计数
-    apiCall("refresh_pb", date).then(pb => {
-      pbFailCnt = 0;
-      // 关键：把带技术标签的结果合并回 state.payload，否则后续 load_quotes 路径
-      // 用无 tags 的旧 payload 重新 renderPB，会覆盖掉已显示的技术标签（一会有一会无）
-      if (pb && pb.rows && state.payload) state.payload.position_builder = pb;
-      renderPB(applyQuotesToPB(pb || {}));   // 叠加实时价/涨幅，别让新 payload 把它洗掉
-      updateRefreshAlarm();
-    }).catch(() => {
-      pbFailCnt++;
-      updateRefreshAlarm();
-    });
+    if (!_refreshPbInflight) {             // 单飞闸（同上）：上一轮还没回来就别再叠一个
+      _refreshPbInflight = true;
+      apiCall("refresh_pb", date).then(pb => {
+        pbFailCnt = 0;
+        // 关键：把带技术标签的结果合并回 state.payload，否则后续 load_quotes 路径
+        // 用无 tags 的旧 payload 重新 renderPB，会覆盖掉已显示的技术标签（一会有一会无）
+        if (pb && pb.rows && state.payload) state.payload.position_builder = pb;
+        renderPB(applyQuotesToPB(pb || {}));   // 叠加实时价/涨幅，别让新 payload 把它洗掉
+        updateRefreshAlarm();
+      }).catch(() => {
+        pbFailCnt++;
+        updateRefreshAlarm();
+      }).then(() => { _refreshPbInflight = false; });
+    }
     updateRefreshAlarm();   // fix P1-6: 主链路成功后收敛告警状态
   } catch (e) {
     // fix P1-6: 实时轮询失败计数（仍不打断主界面），≥3 次状态栏红色告警
@@ -363,6 +353,36 @@ async function refreshLive(reset) {
     updateRefreshAlarm();
   }
 }
+
+// 2026-10-23（GUI 卡顿排查）：从 `refreshLive` 里抽出来，便于套**单飞闸**（见 `_loadQuotesInflight`）。
+// 原来这段是 `refreshLive` 里不 await 的内联调用 ⇒ 慢的时候与下一拍并发叠加。
+function _refreshQuotesAndSidebar() {
+  _loadQuotesInflight = true;
+  apiCall("load_quotes").then(q => {
+    updateSidebarSummary((q && q.quotes) || []);
+    state.quotes = (q && q.quotes) || [];
+    if (state.payload) {
+      // PB 表价格/涨幅实时更新（2026-10-12 owner：「建仓信号扫描没有显示个股实时涨幅」。
+      // 根因=此处原先**只搬了 price、把 change_pct 丢了**，而 scan trace 里本就没有涨跌幅
+      // ⇒ 不叠加就永远没有。现已收进 `applyQuotesToPB`，与 refresh_pb 路径共用。）
+      const pbRows = state.payload.position_builder;
+      if (pbRows && pbRows.rows) {
+        renderPB(applyQuotesToPB(pbRows));
+      }
+    }
+    // 持仓体检表「现价」列同款：OB 表 45~60s 才整体重拉，现价用 10s quotes 就地叠加
+    applyQuotesToOB();
+    // 风向标「价/涨幅」列：面板就绪后自身轮询降到 60s，挂在 10s live 轮询上才能 ~15s 刷新
+    // （内部有 tab 可见性 + 15s TTL + 单飞闸，不在该页/在飞中都是零成本）
+    loadBeaconQuotes();
+    // 猎手展开页的实时价/涨幅：只刷**当前可见**的展开板块（TTL 15s 节流；
+    // 猎手页没打开/没展开任何板块时是零成本 —— 别为看不见的东西出网）
+    if (hunterOpenSectors.size && _hunterTabActive()) {
+      loadHunterQuotes();          // 一次覆盖全部展开板块（不再每板块一次）
+    }
+  }).catch(() => {}).then(() => { _loadQuotesInflight = false; });
+}
+
 
 /* ================= 🧭 市场风向标（人气板块 × 龙头/中军） ================= */
 // ⚠️ **描述性看盘，无前瞻信息量** —— 依据见后端 `t_gui.load_market_beacon` 的 docstring：
@@ -2880,7 +2900,16 @@ let _abnInflight = false;
 async function loadAbnormalPool(force) {
   const box = document.getElementById("abnormalPoolBody");
   if (!box || _abnInflight) return;
-  if (!force && _abnRows.length && (Date.now() - _abnLoadedAt) < 15000) return;
+  // 2026-10-23（GUI 卡顿排查）：这张表在「手动盘」tab 里，**切到别的 tab 就不该再轮询**——
+  //   原来 `renderAll` 每 10s 无条件拉一次整表（建仓符合度 + 技术标签 + 行情），看不见也照跑。
+  if (!force && !_tabActive("tab-signals")) return;
+  // 两级刷新：行情（价/涨幅/市值）15s；整行（判定/得分/条件/标签，全来自日线缓存）60s。
+  //   整行那部分每轮都要走 `_hunter_build_conformance` + 标签缓存，是这张表的主要 CPU。
+  if (!force && _abnRows.length) {
+    const _age = Date.now() - _abnLoadedAt;
+    if (_age < 15000) return;
+    if (_age < 60000) { _patchAbnormalQuotes(); return; }
+  }
   _abnInflight = true;
   try {
     const d = await apiCall("load_abnormal_pool", state.date || null);

@@ -10737,10 +10737,13 @@ class Api:
         except Exception:
             conf = {}
         # 技术标签（2026-10-23 owner：「异常监控池没有显示技术标签」）—— 与建仓表**同一来源**
-        # `load_stock_tags_batch`（命中缓存即时返回；冷启动是"起后台算 + 立即返空"，前端 15s 轮询自填）。
+        # `load_stock_tags_batch`（命中缓存即时返回；冷启动是"起后台算 + 立即返空"，前端轮询自填）。
         # ⚠️ 不要挪到后台线程里取：那会把**空 tags** 钉进缓存（见 `_beacon_enrich` 的注释）。
+        # ⚠️ **offline=True**（批量视图铁律，同风向标 7896 行）：这张是**展示表**，若走在线路径
+        #    每只都会 `_trend30_trend` → GM（池子 max_workers=1，串行）⇒ 18 只排满 GM，
+        #    把 K 线/指数/成交额等**真正需要实时的**调用全堵在后面（2026-10-23 GUI 卡顿排查）。
         try:
-            _tags_map = (self.load_stock_tags_batch(codes) or {}).get("tags") or {}
+            _tags_map = (self.load_stock_tags_batch(codes, offline=True) or {}).get("tags") or {}
         except Exception:
             _tags_map = {}
         names = _jiuyan_names()
