@@ -2789,23 +2789,25 @@ function ma20FlagCellHtml(v, missingTip, detail) {
    里，某只票当日刚刚突破 5/10/20/30/60 日线，请标注出突破的时间」）。
    三张表**共用本渲染器**（同 `ma20FlagCellHtml` / `structCellHtml` 的做法，别各写一份）。
    数据 = 后端 `ma_reclaim`：`{pending}` 后台算中 | `{na}` 非当日视图 | `{ma:{5:{time,ma,dev_pct}}}`。 */
-function maReclaimCellHtml(v, missingTip) {
-  const td = (inner, extra = "") => `<td style="text-align:center;white-space:nowrap"${extra}>${inner}</td>`;
-  if (!v) return td(`<span class="cell-dim" title="${esc(missingTip || "当日均线回站：未计算")}">—</span>`);
-  if (v.pending) return td(`<span class="cell-dim" title="当日分钟数据后台计算中（约 5~20s，自动补齐）">⏳</span>`);
-  if (v.na) return td(`<span class="cell-dim" title="只有「今天」的视图才有突破时刻（历史日没有当日分钟数据）">—</span>`);
+function maReclaimInnerHtml(v, missingTip) {
+  if (!v) return `<span class="cell-dim" title="${esc(missingTip || "当日均线回站：未计算")}">—</span>`;
+  if (v.pending) return `<span class="cell-dim" title="当日分钟数据后台计算中（约 5~20s，自动补齐）">⏳</span>`;
+  if (v.na) return `<span class="cell-dim" title="只有「今天」的视图才有突破时刻（历史日没有当日分钟数据）">—</span>`;
   const ma = v.ma || {};
   const _basis = v.basis ? `均线基准 ${v.basis}` : "";
   const keys = Object.keys(ma).sort((a, b) => Number(a) - Number(b));
   if (!keys.length) {
-    return td(`<span class="cell-dim" title="${esc("今天没有新站上 5/10/20/30/60 日线" + (_basis ? `（${_basis}）` : ""))}">—</span>`);
+    return `<span class="cell-dim" title="${esc("今天没有新站上 5/10/20/30/60 日线" + (_basis ? `（${_basis}）` : ""))}">—</span>`;
   }
-  return td(keys.map(k => {
+  return keys.map(k => {
     const x = ma[k] || {};
     const tip = `${k} 日线：${x.time} 首次站上（MA=${x.ma}，现价高出 ${x.dev_pct}%`
       + (_basis ? `；${_basis}` : "") + "）";
     return `<span class="badge t-long" title="${esc(tip)}">${k}日 ${esc(x.time || "")}</span>`;
-  }).join(" "));
+  }).join(" ");
+}
+function maReclaimCellHtml(v, missingTip) {
+  return `<td style="text-align:center;white-space:nowrap">${maReclaimInnerHtml(v, missingTip)}</td>`;
 }
 
 /* 时机条件列（2026-10-16 owner：「选股猎手的时机条件列与建仓信号扫描的该列保持一致」）。
@@ -5812,6 +5814,37 @@ function buildBadge(s) {
   }
   return `<span class="badge" title="建仓符合度: ${esc(s.build_reason || "")}" style="background:#5a5a6a;color:#ccc">${metTxt}</span>`;
 }
+/* 猎手「均线突破（当日·时刻）」：**只对展开板块当前渲染出来的个股**现算。
+   猎手池 2000+ 只，全量算要 5 分钟；表格每页 50 只 ⇒ 把页面上真实存在的 `td.h-mr` 收集起来
+   一次问后端（后端只读缓存 + 踢预热队列）。有 pending 的 4 秒后补一次。 */
+const _hunterMrRetry = {};
+async function loadHunterMaReclaim(category) {
+  const tds = [];
+  document.querySelectorAll("tbody.h-sector-group").forEach(tb => {
+    if (tb.getAttribute("data-category") !== category) return;
+    tb.querySelectorAll("td.h-mr[data-mrcode]").forEach(td => tds.push(td));
+  });
+  if (!tds.length) return;
+  const codes = Array.from(new Set(tds.map(td => td.getAttribute("data-mrcode"))));
+  try {
+    const r = await apiCall("load_ma_reclaim", codes);
+    const items = (r && r.items) || {};
+    let pend = 0;
+    tds.forEach(td => {
+      const v = items[td.getAttribute("data-mrcode")];
+      if (!v) return;
+      td.innerHTML = maReclaimInnerHtml(v);
+      if (v.pending) pend++;
+    });
+    if (pend && !_hunterMrRetry[category]) {
+      _hunterMrRetry[category] = setTimeout(() => {
+        _hunterMrRetry[category] = null;
+        loadHunterMaReclaim(category);
+      }, 4000);
+    }
+  } catch (e) { /* 静默：非关键列 */ }
+}
+
 // 板块分页翻页
 function hunterPage(category, dir) {
   if (!window._hunterPage) window._hunterPage = {};
@@ -6117,6 +6150,7 @@ async function toggleSectorExpand(head, category) {
   // 实时价/涨幅：**先发**，与标签**并行**跑（2026-10-12）。⚠️ 上一版误把它放在 `await` 之后 ⇒
   // 白等标签 4~7 秒才发请求，等于没优化。必须在这行 await **之前**。
   loadHunterQuotes();
+  loadHunterMaReclaim(category);        // 与标签并行：只算本板块当前页渲染出来的那些码
   await loadSectorTags(category);
   if (tbody) applySectorTags(tbody, category);
 }
@@ -6978,6 +7012,8 @@ function renderHunter(h) {
         ${ma5CellHtml((hunterStructCache[category] || {})[s.code], "h-ma5")}
         <td class="num h-price" data-hcode="${esc(s.code)}" title="**实时**价/涨幅（展开时取、10s 刷新）。⚠️ 刻意不显示扫描时的旧值：扫描可能隔了几天，旧涨幅会严重误导（实测 300821 旧值 +20.01% vs 实时 +5.83%）">${hunterPriceHtml(null)}</td>
         <td class="h-tags">${tagsTxt}</td>
+        <td class="h-mr" data-mrcode="${esc(s.code)}" style="text-align:center;white-space:nowrap"
+            title="当日刚站上 5/10/20/30/60 日线的时刻（展开板块后按可见个股现算）">${maReclaimInnerHtml(s.ma_reclaim, "展开板块后自动加载")}</td>
         ${condCellHtml(s.build_conds, condLabels, s.build_verdict === "insufficient_data", s.build_veto)}
         <td class="cell-dim" style="max-width:240px;font-size:11px">${esc(s.build_reason || "")}</td>
       </tr>`;
@@ -7142,6 +7178,7 @@ function renderHunter(h) {
             <th title="30 分钟 K 线的 5 根均线（现价站上/跌破 + 距上次翻转多少根）。**与「持仓 30 分钟风险体检」同源**（position_structure，同一缓存）。⚠️ 实测无前瞻信息量 ⇒ 只展示，不参与任何判定">30m MA5<br><span style="font-size:9px;opacity:.6">仅展示</span></th>
             <th class="num" title="**实时**价 + 实时涨幅（展开时取、10s 刷新；取不到显示 ⏳/—）。⚠️ 刻意不显示扫描时的旧价旧涨幅——扫描可能隔了几天，旧涨幅会严重误导">价<br><span style="font-size:9px;opacity:.6">实时涨幅</span></th>
             <th>技术标签</th>
+            <th title="**当日**刚站上 5/10/20/30/60 日线的**时刻**（与「建仓信号扫描」「持仓 30 分钟风险体检」「异常监控池」同源同渲染）。猎手池 2000+ 只，只对**展开板块当前页**的股票现算">均线突破<br><span style="font-size:9px;opacity:.6">当日·时刻</span></th>
             <th title="时机条件：市场有方向/多头结构/回撤到位 · 末位🚫=否决因子（爆量≥3倍或偏离MA60>+20%）">时机条件</th>
             <th>理由</th>
           </tr></thead>
@@ -7250,6 +7287,7 @@ function renderHunter(h) {
         }
         applySectorTags(tb, cat);
         loadSectorTags(cat);      // 翻页后补当前页缺的 code（已缓存的跳过）
+        loadHunterMaReclaim(cat); // 翻页/重渲染后补「均线突破时刻」（只算当前页渲染出来的码）
       }
     });
   }

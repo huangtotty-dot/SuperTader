@@ -350,6 +350,36 @@ class TestObOverlayWiring(unittest.TestCase):
         self.assertNotIn("ma_reclaim_pending", out)
 
 
+class TestHunterEndpoint(unittest.TestCase):
+    """选股猎手：池子 2000+ 只，不能全量算 ⇒ 前端只把**展开板块当前页**的码传上来。"""
+
+    def setUp(self):
+        import t_gui
+        self.t_gui = t_gui
+        self._cache = dict(t_gui._MA_RC_CACHE)
+        t_gui._MA_RC_CACHE.clear()
+
+    def tearDown(self):
+        self.t_gui._MA_RC_CACHE.clear()
+        self.t_gui._MA_RC_CACHE.update(self._cache)
+
+    def test_只算传入的码_去重_封顶(self):
+        from unittest import mock
+        kicked = []
+        api = self.t_gui.Api()
+        with mock.patch.object(self.t_gui.Api, "_kick_ma_reclaim_warm",
+                               lambda self_, codes, date=None: kicked.extend(codes)):
+            r = api.load_ma_reclaim(["600000", "600000_1", "000001"])
+            self.assertEqual(sorted(r["items"]), ["000001", "600000"], "重复码要去重")
+            self.assertEqual(kicked, ["600000", "000001"])
+            self.assertTrue(all(v.get("pending") for v in r["items"].values()))
+            r2 = api.load_ma_reclaim([f"{i:06d}" for i in range(300)])
+            self.assertEqual(len(r2["items"]), 200, "单次上限 200（防前端误传全池打爆预热队列）")
+
+    def test_空输入不炸(self):
+        self.assertEqual(self.t_gui.Api().load_ma_reclaim([]), {"items": {}})
+
+
 class TestFrontendWiring(unittest.TestCase):
     """三张表必须共用同一个渲染器（别再各写一份）。"""
 
@@ -366,10 +396,29 @@ class TestFrontendWiring(unittest.TestCase):
             self.assertIn("maReclaimCellHtml(", seg, f"{fn} 没接入「均线突破时刻」列")
 
     def test_渲染器本身(self):
-        i = self.js.index("function maReclaimCellHtml")
+        i = self.js.index("function maReclaimInnerHtml")
         seg = self.js[i:i + 1200]
         for k in ("pending", "na", "badge t-long"):
             self.assertIn(k, seg)
+
+    def test_选股猎手也接了这一列(self):
+        """2026-10-23 owner：「选股猎手增加均线突破时间这一列」。
+        猎手池 2000+ 只 ⇒ 只对**展开板块当前页**的码现算（`load_ma_reclaim` 端点）。"""
+        i = self.js.index("function renderHunter(h)")
+        nxt = self.js.index("\nfunction ", i + 10)
+        seg = self.js[i:nxt]
+        self.assertIn("h-mr", seg, "猎手个股行要有均线突破单元格")
+        self.assertIn("maReclaimInnerHtml", seg)
+        self.assertIn("function loadHunterMaReclaim", self.js)
+        self.assertIn('apiCall("load_ma_reclaim"', self.js)
+        # 展开板块 / 翻页重渲染后都要补一次
+        self.assertGreaterEqual(self.js.count("loadHunterMaReclaim("), 3)
+
+    def test_趋势线默认不显示(self):
+        """owner 2026-10-23：K 线图「趋势线」默认关。"""
+        from pathlib import Path
+        html = (Path(_ROOT) / "web" / "index.html").read_text(encoding="utf-8")
+        self.assertNotIn('id="tgTrend" checked', html, "趋势线勾选框不能默认勾上")
 
 
 if __name__ == "__main__":

@@ -7173,6 +7173,32 @@ class Api:
         }
 
 
+    def load_ma_reclaim(self, codes):
+        """给「选股猎手」**展开板块的可见个股**补「当日均线突破时刻」（2026-10-23 owner）。
+
+        为什么单独开一个端点：猎手池 2000+ 只，全量算要 ~5 分钟；这张表一次只展开一两个板块、
+        每页 50 只 ⇒ 由前端把**当前渲染出来的那些码**传上来，只算这些（主线程只读缓存 + 踢预热）。
+        """
+        code_list = []
+        for c in (codes or []):
+            b = str(c).split("_")[0]
+            if b and b not in code_list:
+                code_list.append(b)
+        code_list = code_list[:200]
+        if not code_list:
+            return _clean({"items": {}})
+        try:
+            self._kick_ma_reclaim_warm(code_list)
+        except Exception:
+            pass
+        items = {}
+        for c in code_list:
+            try:
+                items[c] = self._ma_reclaim_get(c, kick=False)
+            except Exception:
+                items[c] = {"pending": True}
+        return _clean({"items": items})
+
     def load_hunter(self, date=None):
         """选股猎手数据。运行中→running；有该日结果→返回；都没有→返回空（**不再懒触发扫描**）。
 
