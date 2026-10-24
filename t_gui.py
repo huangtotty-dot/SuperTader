@@ -638,7 +638,7 @@ def _jiuyan_all_concept_reasons():
                     continue
                 v = str(d.get(k) or "").strip() or fallback
                 if v:
-                    out.setdefault(k, []).append([nm, v])
+                    out.setdefault(k, []).append([nm, v, str(info.get("jiuyan_tag_verdict") or "")])
     except Exception:
         pass
     return out

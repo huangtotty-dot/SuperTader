@@ -687,3 +687,11 @@ body.mw-winmode #multiWatchWin {
 .sec-toggle { padding: 0 6px; font-size: 11px; line-height: 1.5; margin-right: 4px;
   transition: transform .15s ease; }
 .section.collapsed > h2 > .sec-toggle { transform: rotate(-90deg); }
+
+/* 人工判词小标（面板里跟在股票名后）：核心/相关/边缘/错标 */
+.h-verdict { display: inline-block; margin: 0 3px 0 5px; padding: 0 5px; border-radius: 8px;
+  font-size: 9.5px; line-height: 15px; font-weight: 600; vertical-align: 1px; }
+.h-verdict.v-核心 { color: #3fb950; background: rgba(63,185,80,.14); }
+.h-verdict.v-相关 { color: #58a6ff; background: rgba(88,166,255,.14); }
+.h-verdict.v-边缘 { color: #d29922; background: rgba(210,153,34,.16); }
+.h-verdict.v-错标 { color: #f85149; background: rgba(248,81,73,.16); }

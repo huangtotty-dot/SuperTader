@@ -7270,8 +7270,11 @@ function renderHunter(h) {
       // 改成**可折叠面板**：分组头一个按钮，点开列出全组成员 + 每只的入选理由。
       const _whyAll = gkReasons(gk);
       const _nameOf = s => s.name || s["名称"] || s.code;
-      const _reasonMap = new Map(_whyAll);
-      const _members = gs.map(s => [_nameOf(s), _reasonMap.get(_nameOf(s)) || ""]);
+      const _reasonMap = new Map(_whyAll.map(x => [x[0], x]));
+      const _members = gs.map(s => {
+        const a = _reasonMap.get(_nameOf(s)) || [];
+        return [_nameOf(s), a[1] || "", a[2] || ""];
+      });
       const _withWhy = _members.filter(m => m[1]).length;
       const _noteId = ("hnote-" + category + "-" + gk).replace(/[^\w一-龥-]/g, "_");
       const _gTip = [_gDesc ? `${gk}：${_gDesc}` : ""].filter(Boolean).join("");
@@ -7284,8 +7287,9 @@ function renderHunter(h) {
       <tr class="h-subgroup-note" id="${_noteId}" style="display:none"><td colspan="15">
         <div class="h-note-desc">${esc(_gDesc || "（该细分概念暂无解释）")}</div>
         <div class="h-note-hint cell-dim">本组 ${gs.length} 只，其中 ${_withWhy} 只有入选理由；再点一次按钮收起</div>
-        <ul class="h-note-list">${_members.slice(0, 80).map(([n, r]) =>
-          `<li><b>${esc(n)}</b> — ${r ? esc(r) : '<span class="cell-dim">—</span>'}</li>`).join("")}</ul>
+        <ul class="h-note-list">${_members.slice(0, 80).map(([n, r, v]) =>
+          `<li><b>${esc(n)}</b>${v ? `<span class="h-verdict v-${esc(v)}">${esc(v)}</span>` : ""} — ${r ? esc(r) : '<span class="cell-dim">—</span>'}</li>`
+        ).join("")}</ul>
       </td></tr>`;
       return head + gs.map(hunterRow).join("");
     }).join("");
