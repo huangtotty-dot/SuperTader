@@ -9148,9 +9148,14 @@ class Api:
         return _with_struct({"tags": self._tags_partial(codes, offline, date)})
 
     # ---------- 突破箱体股票聚合 ----------
-    # 当日有效突破参数（2026-09-29，owner 口径：昨收 ≤ 上沿 < 今价，幅度 0.3~8%）
+    # 当日有效突破参数（2026-09-29 owner 口径：昨收 ≤ 上沿 < 今价）
+    # 2026-10-25 收紧（依据 doc/research/2026-10-23_箱体突破_第二轮_回踩与站稳.md §3）：
+    #   · 幅度 3~5% 档 T+5 超额 −0.65%，0.3~1% 档只有 −0.15% ⇒ 上限 8% → 3%
+    #   · 当日涨幅 >7% 档 −0.58%（最差）⇒ 显式剔除
+    #   · 量比 >2.5 档 −0.47%、缩量档 +0.05%（唯一不亏）⇒ 不打"放量确认"，改成缩量加分
     _BK_MIN_PCT = 0.3
-    _BK_MAX_PCT = 8.0
+    _BK_MAX_PCT = 3.0
+    _BK_MAX_CHG = 0.07
     _BK_MIN_BARS = 30      # _detect_boxes 在 <30 根时静默返回 []，必须显式挡在前面
     _BK_SCAN_BARS = 200    # 取数窗口：_detect_boxes 只用 tail(150)，200 根足够且能开大 batch
     # 2026-10-08：900 → 200。900 只×200 根 ≈ 18 万行，GM SDK 里 pandas 由 list-of-dicts 拼表 +
@@ -9169,6 +9174,91 @@ class Api:
         """
         jy = _load_json(HUNTER_DIR / "watchlist_jiuyan.json", {})
         return [c for c, i in jy.items() if isinstance(i, dict) and c.isdigit()]
+
+    _BK_CACHE_DIR = BASE / "t_io" / "cache" / "daily_kline"
+
+    def _bk_daily_many(self, chunk, budget_s=25):
+        """带硬超时的 daily_many（2026-10-25）。
+
+        GM 未连接时 facade 会「报错 → 冷却 60s → 逐只走腾讯兜底」，一批 200 只要好几分钟，
+        整轮扫描看着就是卡死。这里给单批一个预算，超时直接放弃 GM（后续批走本地缓存）。
+        """
+        from core.market_data.facade import get_provider
+        box = {}
+
+        def _run():
+            try:
+                box["v"] = get_provider().daily_many(chunk, days=self._BK_SCAN_BARS)
+            except Exception as e:
+                box["e"] = e
+
+        th = threading.Thread(target=_run, daemon=True, name="bk-daily-many")
+        th.start()
+        th.join(budget_s)
+        if th.is_alive():
+            print(f"[WARN] breakout daily_many 超时({budget_s}s, {len(chunk)}只) ⇒ 放弃 GM，改用本地缓存",
+                  flush=True)
+            return {}
+        if "e" in box:
+            print(f"[WARN] breakout daily_many 失败({len(chunk)}只): "
+                  f"{type(box['e']).__name__}: {str(box['e'])[:80]}", flush=True)
+            return {}
+        return box.get("v") or {}
+
+    def _bk_cache_covers(self, codes, target, sample=80):
+        """本地日线缓存对目标交易日的覆盖率（抽样 ≤sample 只）。
+
+        2026-10-25：owner 报「突破箱体经常跑不出结果」，实测卡在 `daily_many`（GM 不可达时
+        整批阻塞数分钟）。**缓存能覆盖就不该等 GM** —— 猎手每天本来就在更新这份缓存。
+        覆盖率 ≥80% 直接走缓存（快、可离线、结果稳定）；低于则仍以 GM 为主、缓存兜底。
+        """
+        picked = codes[:sample] if len(codes) > sample else codes
+        if not picked:
+            return 0.0
+        hit = 0
+        for c in picked:
+            p = self._BK_CACHE_DIR / f"{c}.json"
+            try:
+                rows = (_load_json(p, {}) or {}).get("rows") or []
+                if rows and str(rows[-1].get("date"))[:10] >= target:
+                    hit += 1
+            except Exception:
+                pass
+        return hit / len(picked)
+
+    def _bk_cache_last(self, code):
+        """只读末根日期（不建 DataFrame）—— 全池扫描时绝大多数票在"stale"这一步就被筛掉。"""
+        p = self._BK_CACHE_DIR / f"{code}.json"
+        try:
+            rows = (_load_json(p, {}) or {}).get("rows") or []
+        except Exception:
+            return None
+        return str(rows[-1].get("date"))[:10] if rows else None
+
+    def _bk_cached_df(self, code, days):
+        """本地日线缓存兜底（2026-10-25）。
+
+        GM 批量取数不可用时（owner 报「经常跑不出结果」），过去整批记 no_data ⇒ 全池 0 命中。
+        猎手本身每天在读这份缓存，所以直接拿它当兜底：字段与 daily_many 同形
+        （date/open/high/low/close/volume），`_detect_boxes` 与判定口径不用改。
+        """
+        p = self._BK_CACHE_DIR / f"{code}.json"
+        try:
+            rows = (_load_json(p, {}) or {}).get("rows") or []
+        except Exception:
+            return None
+        if len(rows) < self._BK_MIN_BARS + 1:
+            return None
+        try:
+            import pandas as pd
+            df = pd.DataFrame(rows[-days:])
+            need = {"date", "open", "high", "low", "close", "volume"}
+            if not need.issubset(df.columns):
+                return None
+            df["date"] = df["date"].astype(str)
+            return df
+        except Exception:
+            return None
 
     def _box_top_for(self, hist):
         """as-of 上一交易日的箱体上沿：取**含昨收**那只箱体（rel==0）的 high。
@@ -9219,8 +9309,30 @@ class Api:
         pct = (cur - box_top) / box_top * 100
         if not (self._BK_MIN_PCT <= pct <= self._BK_MAX_PCT):
             return None
+        # 当日涨幅闸（2026-10-25）：>7% 档 T+5 超额 −0.58%，是分档里最差的一组 ⇒ 直接剔除
+        chg = (cur / prev_close - 1.0) if prev_close > 0 else 0.0
+        if chg > self._BK_MAX_CHG:
+            return None
+        # 量比（今日量 / 过去 20 日均量）：研究里放量是反指、缩量档唯一不亏 ⇒ 只做展示与排序，不做放量确认
+        vol_ratio = None
+        try:
+            vol = [float(x) for x in df["volume"].tolist()]
+            if len(vol) >= 21:
+                base = sum(vol[-21:-1]) / 20.0
+                if base > 0:
+                    vol_ratio = round(vol[-1] / base, 2)
+        except Exception:
+            vol_ratio = None
+        q = 0
+        if vol_ratio is not None and vol_ratio < 1.0:
+            q += 2
+        if pct <= 1.5:
+            q += 2
+        if chg <= 0.03:
+            q += 1
         return {"price": round(cur, 3), "prev_close": round(prev_close, 3),
-                "box_top": round(box_top, 3), "pct_above": round(pct, 2)}
+                "box_top": round(box_top, 3), "pct_above": round(pct, 2),
+                "day_chg": round(chg * 100, 2), "vol_ratio": vol_ratio, "quality": q}
 
     def _breakout_disk_path(self, today):
         return BASE / "t_io" / "cache" / f"breakout_{today}.json"
@@ -9245,17 +9357,20 @@ class Api:
         dt_target = str(date) if date else datetime.now().strftime("%Y-%m-%d")
         rest_total = sum(1 for c in codes if market_of(c) != "BJ")
         # no_data 拆分成因（2026-10-09）：整池取数失败（GM 不可达）≠ 北交所取不到 ≠ 无当日 bar。
-        no_data = rest_missing = bj_missing = stale = ok = 0
+        no_data = rest_missing = bj_missing = stale = ok = cached_used = 0
         BATCH = self._BK_BATCH
         _waited = False
+        # 缓存能覆盖目标日 ⇒ 直接走缓存，不碰 GM（GM 不可达时会整批阻塞好几分钟）
+        _cov = self._bk_cache_covers(codes, dt_target)
+        _gm_off = _cov >= 0.8
+        if _gm_off:
+            print(f"[INFO] breakout: 本地日线缓存覆盖 {_cov:.0%}，本轮只用缓存", flush=True)
         for i in range(0, total, BATCH):
             chunk = codes[i:i + BATCH]
-            try:
-                frames = get_provider().daily_many(chunk, days=self._BK_SCAN_BARS)
-            except Exception as e:      # 兜底：单批异常绝不终止整轮
-                print(f"[WARN] breakout daily_many 失败({len(chunk)}只): "
-                      f"{type(e).__name__}: {str(e)[:80]}", flush=True)
+            if _gm_off:
                 frames = {}
+            else:
+                frames = self._bk_daily_many(chunk)
             if not frames and chunk and not _waited:
                 # 整批空 ⇒ 疑 GM 冷却窗/瞬时不可达（facade 60s 冷却内后续批全跳过）→ 等窗后重试一次
                 # （只等一次，避免 GM 真下线时逐批 62s 打转；仍空则由 fetch_failed 如实汇报）
@@ -9265,8 +9380,26 @@ class Api:
                     frames = get_provider().daily_many(chunk, days=self._BK_SCAN_BARS)
                 except Exception:
                     frames = {}
+            _from_gm = 0
             for code in chunk:
                 fr = frames.get(code)
+                if fr is not None and not getattr(fr, "empty", True):
+                    _from_gm += 1
+                if fr is None or getattr(fr, "empty", True):
+                    # 2026-10-25：GM 不可用时的兜底——读本地日线缓存（猎手每天本来就在读它）。
+                    # 先只读末根日期，末根早于目标日 ⇒ 直接算 stale，不建 DataFrame（全池扫描的主要开销）。
+                    _cl = self._bk_cache_last(code)
+                    if _cl is not None and _cl == dt_target:
+                        fr = self._bk_cached_df(code, self._BK_SCAN_BARS)
+                        if fr is not None:
+                            cached_used += 1
+                    elif _cl is not None and _cl > dt_target:
+                        fr = self._bk_cached_df(code, self._BK_SCAN_BARS)
+                        if fr is not None:
+                            cached_used += 1
+                    elif _cl is not None:
+                        stale += 1
+                        continue
                 if fr is None or getattr(fr, "empty", True):
                     no_data += 1
                     if market_of(code) == "BJ":
@@ -9275,10 +9408,19 @@ class Api:
                         rest_missing += 1
                     continue
                 # 有帧但**无当日 bar** → 未就绪/非交易日/停牌（区别于"取数失败"）
-                _sl = fr[fr["date"].astype(str) <= dt_target]
-                if _sl.empty or str(_sl["date"].iloc[-1]) != dt_target:
+                # 2026-10-25 快路径：末根就是目标日时不用再切片（全池扫时这一步占大头）
+                _dates = fr["date"].astype(str)
+                _last_d = str(_dates.iloc[-1])
+                if _last_d == dt_target:
+                    _sl = fr
+                elif _last_d < dt_target:
                     stale += 1
                     continue
+                else:
+                    _sl = fr[_dates <= dt_target]
+                    if _sl.empty or str(_sl["date"].iloc[-1]) != dt_target:
+                        stale += 1
+                        continue
                 ok += 1
                 hit = self._breakout_probe_one(code, fr, date)
                 if not hit:
@@ -9305,8 +9447,15 @@ class Api:
                                   "stocks": list(breakouts), "no_data": no_data,
                                   "rest_no_data": rest_missing, "bj_no_data": bj_missing,
                                   "stale": stale, "ok": ok})
+            if i == 0 and _from_gm == 0 and cached_used > 0:
+                _gm_off = True   # 首批 GM 全空但缓存顶上了 ⇒ 后面直接走缓存，不再逐批等 GM
+                print("[INFO] breakout: GM 批量不可用，本轮改用本地日线缓存", flush=True)
             _time_mod.sleep(0.05)   # 2026-10-08：批间显式让出，避免连续持 GIL 把主线程饿死
-        breakouts.sort(key=lambda x: -(x.get("pct_above") or 0))
+        # 2026-10-25：按质量分排序（缩量 + 小幅突破 + 当日涨幅温和），
+        # **不再按"超出上沿越多越前"**——研究显示幅度 3~5% 档最差，原排序正好把差的排前面。
+        breakouts.sort(key=lambda x: (-(x.get("quality") or 0),
+                                      (x.get("vol_ratio") if x.get("vol_ratio") is not None else 9.9),
+                                      x.get("pct_above") or 0))
         # 整池不可用判据（任一成立即视为"取数失败，结果不可信"）：
         #   ① 无一只带当日 bar（ok==0）—— GM 整池不可达 / 非交易日 / 行情未就绪；
         #   ② 非北交所码大面积无帧（≥50%）—— GM `daily_batch` 不可达（批量路径无腾讯兜底）。
@@ -9317,7 +9466,8 @@ class Api:
                 state.update({"done": total, "found": len(breakouts),
                               "stocks": list(breakouts), "no_data": no_data,
                               "rest_no_data": rest_missing, "bj_no_data": bj_missing,
-                              "stale": stale, "ok": ok, "fetch_failed": bool(fetch_failed)})
+                              "stale": stale, "ok": ok, "cached": cached_used,
+                              "fetch_failed": bool(fetch_failed)})
         return breakouts
 
     def _bk_cache_get(self, key):
@@ -9508,7 +9658,7 @@ class Api:
         total = len(codes)
         dt_target = str(date) if date else datetime.now().strftime("%Y-%m-%d")
         rest_total = sum(1 for c in codes if market_of(c) != "BJ")
-        no_data = rest_missing = bj_missing = stale = ok = 0
+        no_data = rest_missing = bj_missing = stale = ok = cached_used = 0
         BATCH = self._RC_BATCH
         _waited = False
         for i in range(0, total, BATCH):

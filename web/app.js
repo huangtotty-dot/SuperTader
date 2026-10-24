@@ -6976,8 +6976,11 @@ function renderBreakout(b) {
       <td class="num">${s.box_top != null ? fmt(s.box_top, 2) : '—'}</td>
       <td class="num cell-dim">${s.prev_close != null ? fmt(s.prev_close, 2) : '—'}</td>
       <td class="num">${s.price != null ? fmt(s.price, 2) : '—'}</td>
-      <td class="num up">+${s.pct_above != null ? fmt(s.pct_above, 2) : '—'}%</td>
-      <td>${(s.tags || []).map(t => tagBadge(t)).join(" ")}</td>
+      <td class="num up" title="超出箱体上沿的幅度${s.day_chg != null ? `；当日涨幅 ${s.day_chg}%` : ""}${s.vol_ratio != null ? `；量比 ${s.vol_ratio}（缩量=当日量/20日均量<1）` : ""}${s.quality != null ? `；质量分 ${s.quality}` : ""}">+${s.pct_above != null ? fmt(s.pct_above, 2) : '—'}%</td>
+      <td>${(s.tags || []).map(t => tagBadge(t)).join(" ")}${s.vol_ratio != null ? (s.vol_ratio < 1
+        ? `<span class="tag" style="margin-left:4px;background:rgba(63,185,80,.15);color:#3fb950" title="缩量突破：T+5 超额 +0.05%，是分档里唯一不亏的一组">缩量 ${s.vol_ratio}x</span>`
+        : (s.vol_ratio >= 2.5 ? `<span class="tag" style="margin-left:4px;background:rgba(248,81,73,.15);color:#f85149" title="放量突破：T+5 超额 −0.47%，研究里是反指">放量 ${s.vol_ratio}x</span>`
+          : `<span class="tag cell-dim" style="margin-left:4px" title="量比 ${s.vol_ratio}">量比 ${s.vol_ratio}</span>`)) : ""}</td>
       <td class="bk-concepts-cell">${conceptsCell(s)}</td>
     </tr>`).join("")}
   </tbody>`;
@@ -6987,7 +6990,7 @@ function renderBreakout(b) {
     <th>代码</th><th>名称</th><th class="num">箱体上沿</th><th class="num">昨收</th>
     <th class="num">现价</th><th class="num">超出</th><th>标签</th><th>概念</th>
   </tr></thead>${bodyHtml}</table>
-  <div class="cell-dim" style="font-size:10px;margin-top:3px">共 ${gkeys.length} 个行业 · 组按只数降序 · 组内按超出幅度降序 · 双击看技术分析</div>
+  <div class="cell-dim" style="font-size:10px;margin-top:3px">共 ${gkeys.length} 个行业 · 组按只数降序 · 组内按质量分排序（缩量>放量、小幅>大幅）· 双击看技术分析</div>
   <div class="cell-dim" style="font-size:10px;margin-top:2px">概念为离线口径（韭研概念 + 东财板块概念段），仅覆盖约一半股票；无概念的显示「—」，双击看技术分析可点「📋 公司资料」拉东财全量板块</div>
   ${bjNd ? `<div class="cell-dim" style="font-size:10px;margin-top:2px">另有 ${bjNd} 只北交所股无日线、未参与判定（当前环境取不到）</div>` : ""}
   ${restNd ? `<div class="cell-dim" style="font-size:10px;margin-top:2px;color:var(--warn,#d29922)">⚠ 另有 ${restNd} 只非北交所取数失败、未参与判定，结果可能漏报</div>` : ""}`;
@@ -7048,7 +7051,7 @@ DIM_RULES.forEach(r => { DIM_NAME[r[0]] = r[1]; });
 function hunterBreakoutCard(dateStr) {
   return `
     <div class="card" style="margin-bottom:10px;padding:10px 14px">
-      <div class="card-title">🚀 突破箱体·有效突破（昨收 ≤ 箱体上沿 &lt; 今价，幅度 0.3~8%）
+      <div class="card-title">🚀 突破箱体·有效突破（昨收 ≤ 箱体上沿 &lt; 今价，幅度 0.3~3%｜剔除当日涨幅&gt;7%｜缩量优先）
         <input type="date" id="hunterBreakoutDate" value="${esc(dateStr || todayStr())}"
           style="margin-left:8px;background:transparent;color:inherit;border:1px solid var(--border-soft);border-radius:4px;padding:1px 4px;font-size:12px"
           title="选择任意交易日扫描（结果按日保存）；选日期不会自动扫，点右侧按钮">
