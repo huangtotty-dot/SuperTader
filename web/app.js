@@ -7002,11 +7002,14 @@ function conceptsCell(s) {
   // 2026-10-19：逐概念 chip——有注释的概念（后端 concept_descs，医药板块二级概念起）
   // 悬停显示「概念：解释」并加点状下划线；无注释的保持原样，整格 title 仍是全量串兜底。
   const descs = (s && s.concept_descs) || {};
+  const rsn = (s && s.concept_reasons) || {};
   const full = cs.join(" · ");
   const inner = cs.map(c => {
-    const tip = descs[c];
-    return tip
-      ? `<span title="${esc(c + "：" + tip)}" style="cursor:help;border-bottom:1px dotted">${esc(c)}</span>`
+    // 2026-10-24：概念解释 + 该股为什么算这个概念的简要理由（数据要素板块起）
+    const tip = [descs[c] ? `${c}：${descs[c]}` : c, rsn[c] ? `本股：${rsn[c]}` : ""]
+      .filter(Boolean).join(String.fromCharCode(10));
+    return (descs[c] || rsn[c])
+      ? `<span title="${esc(tip)}" style="cursor:help;border-bottom:1px dotted">${esc(c)}</span>`
       : `<span>${esc(c)}</span>`;
   }).join('<span class="cell-dim"> · </span>');
   return `<span class="bk-concepts" title="${esc(full)}">${inner}</span>`;
@@ -7080,12 +7083,26 @@ function renderHunter(h) {
     // 分组键经过 normGk 归并（半导体设备-测试设备→半导体设备），查注释时先精确、
     // 再按「-」首段回退匹配，保证带子级后缀的概念也能命中。
     const conceptDescs = h.concept_descs || {};
+    // 2026-10-24：逐股「为什么算这个概念」{概念: [[名称, 理由], ...]}（后端全表合并下发，
+    // 数据要素板块起）——挂在二级分组头 tooltip 里，解释下面列本组各股的入选理由。
+    const conceptReasons = h.concept_reasons || {};
     // 2026-10-24：板块生命周期阶段（后端 modules/sector_phase.py 计算，韭研复盘广度驱动）
     const sectorPhase = h.sector_phase || {};
+    // 概念键匹配：精确 → 「-」前段 → 「_」末段（数据要素_数据存储 ↔ 分组名 数据存储）
+    const _keyIn = (obj, gk) => {
+      if (obj[gk]) return gk;
+      const keys = Object.keys(obj);
+      let hit = keys.find(k => k.split("-")[0] === gk);
+      if (!hit) hit = keys.find(k => k.split("_").pop() === gk);
+      return hit || "";
+    };
     const gkDesc = gk => {
-      if (conceptDescs[gk]) return conceptDescs[gk];
-      const hit = Object.keys(conceptDescs).find(k => k.split("-")[0] === gk);
-      return hit ? conceptDescs[hit] : "";
+      const k = _keyIn(conceptDescs, gk);
+      return k ? conceptDescs[k] : "";
+    };
+    const gkReasons = gk => {
+      const k = _keyIn(conceptReasons, gk);
+      return k ? (conceptReasons[k] || []).filter(x => x && x[0] && x[1]) : [];
     };
     function trendSpark(pts, key, color) {
       if (!pts || pts.length < 2) return '<span class="cell-dim">—</span>';
@@ -7241,10 +7258,19 @@ function renderHunter(h) {
       // 2026-10-24 owner：「在我画红色框的地方补充这个板块的解释」——概念注释从仅悬停
       // 改为**直接显示在分组头右侧**（有注释才显示；过长省略，悬停看全文）。
       const _gDesc = gkDesc(gk);
+      // 2026-10-24：本组各股「为什么算这个概念」——拼进同一个 tooltip（概念解释 → 个股理由），
+      // 只列当前分组里的票，避免把全表成员都塞进来。
+      const _whyAll = gkReasons(gk);
+      const _inGroup = new Set(gs.map(s => s.name || s["名称"] || s.code));
+      const _why = _whyAll.filter(x => _inGroup.has(x[0])).slice(0, 15);
+      const _gTip = [
+        _gDesc ? `${gk}：${_gDesc}` : "",
+        _why.length ? "个股理由：" + _why.map(x => `${x[0]}—${x[1]}`).join("；") : "",
+      ].filter(Boolean).join("\n");
       const head = `<tr class="h-subgroup-head"><td colspan="15">
-        <span class="h-subgroup-name"${_gDesc ? ` title="${esc(gk + "：" + _gDesc)}" style="cursor:help"` : ""}>📂 ${esc(gk)}</span>
+        <span class="h-subgroup-name"${_gTip ? ` title="${esc(_gTip)}" style="cursor:help"` : ""}>📂 ${esc(gk)}</span>
         <span class="cell-dim" style="font-size:10px">${gs.length}只 · ${gScoreTxt}${gUp ? ` · 涨停${gUp}` : ""}</span>
-        ${_gDesc ? `<span class="h-subgroup-desc" title="${esc(gk + "：" + _gDesc)}">${esc(_gDesc)}</span>` : ""}
+        ${_gDesc ? `<span class="h-subgroup-desc" title="${esc(_gTip)}">${esc(_gDesc)}</span>` : ""}
       </td></tr>`;
       return head + gs.map(hunterRow).join("");
     }).join("");

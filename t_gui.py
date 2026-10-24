@@ -572,6 +572,41 @@ def _jiuyan_all_concept_descs():
     return out
 
 
+def _jiuyan_concept_reasons(info, concepts=None):
+    """该股「为什么算这个概念」{概念: 理由}（watchlist 的 `jiuyan_concept_reason`，
+    2026-10-24 数据要素板块纯正性排查起写入）。concepts 给定时只保留其中出现的键。"""
+    if not isinstance(info, dict):
+        return {}
+    d = info.get("jiuyan_concept_reason")
+    if not isinstance(d, dict) or not d:
+        return {}
+    if concepts is None:
+        return {str(k): str(v) for k, v in d.items() if k and v}
+    keep = set(concepts)
+    return {str(k): str(v) for k, v in d.items() if k in keep and v}
+
+
+def _jiuyan_all_concept_reasons():
+    """全表合并的 {概念: [[名称, 理由], ...]}（猎手二级分组头 tooltip 用）。
+    同概念下按 watchlist 顺序追加；读失败返回 {}（非致命）。"""
+    out = {}
+    try:
+        jy = _load_json(HUNTER_DIR / "watchlist_jiuyan.json", {})
+        for code, info in (jy.items() if isinstance(jy, dict) else []):
+            if not isinstance(info, dict):
+                continue
+            d = info.get("jiuyan_concept_reason")
+            if not isinstance(d, dict):
+                continue
+            nm = str(info.get("name") or code)
+            for k, v in d.items():
+                if k and v:
+                    out.setdefault(str(k), []).append([nm, str(v)])
+    except Exception:
+        pass
+    return out
+
+
 # 行业粗分类规则（2026-09-29，突破箱体按行业分组用）。
 #
 # 为什么需要它：watchlist 的 `sector` 首段是**国民经济行业分类大类**（约 90 个，且部分条目
@@ -6077,6 +6112,8 @@ class Api:
                 out["local_concepts"] = [s for s in _jiuyan_concepts(info).split("|") if s]
                 # 2026-10-19：概念注释 {概念: 解释} 下发（前端 chip 悬停显示，医药板块起）
                 out["concept_descs"] = _jiuyan_concept_descs(info, out["local_concepts"])
+                # 2026-10-24：逐股「为什么算这个概念」（数据要素板块起），资料面板 chip 悬停用
+                out["concept_reasons"] = _jiuyan_concept_reasons(info, out["local_concepts"])
                 # 2026-10-20：研究核实的静态 龙头/中军（机器人/军工板块整治起）——资料面板徽章
                 _role = str(info.get("jiuyan_role") or "").strip()
                 if _role in ("龙头", "中军"):
@@ -7735,6 +7772,8 @@ class Api:
             # 2026-10-19：韭研二级概念注释 {概念: 解释} 全局下发——前端细分分组头/概念列
             # 悬停显示「这个标签是什么意思」（医药板块 13 个二级概念起，后续板块沿用同字段）。
             out["concept_descs"] = _jiuyan_all_concept_descs()
+            # 2026-10-24：逐股理由 {概念: [[名称, 理由], ...]} ——二级分组头 tooltip 里列本组成员为什么入选
+            out["concept_reasons"] = _jiuyan_all_concept_reasons()
             out["refreshed_at"] = datetime.now().strftime("%H:%M:%S")
             try:
                 from modules.market_data import MARKET_PROGRESS as _MP
