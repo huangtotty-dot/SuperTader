@@ -32,6 +32,12 @@ _CACHE = {}
 _LOCK = threading.Lock()
 _SEM = threading.Semaphore(8)
 _RETRY = 2
+# 原始 30min 帧的**预取缓存**（2026-10-23，owner 报「猎手技术标签太慢」）：
+#   批量标签原先逐只「取数(190ms 纯网络) → 状态机(77ms)」串在 2 个 pandas 名额里
+#   ⇒ 取数那段白占名额，50 只要 30~40 秒。`prefetch_30min` 把取数拆出来 8 路并发，
+#   `get_trend30` 命中这里的原始帧就不再出网，名额只用来跑状态机。
+_RAW = {}                 # code -> {"slot": 30min 时段, "df": DataFrame}
+_RAW_MAX = 400            # ≈ 400×640 行 ≈ 12MB，够一屏板块翻页用
 
 _STATE2TREND = {"BULL": "up", "BEAR": "down", "RANGE": "flat"}
 
@@ -132,6 +138,49 @@ def evaluate_bars(df, cfg: Trend30Config = None) -> dict:
             "er10": (None if pd.isna(_er) else round(float(_er), 3))}
 
 
+def prefetch_30min(codes, workers: int = 8) -> int:
+    """**并发预取** 30min bars（只取数、不跑状态机），供 `get_trend30` 直接命中。
+
+    为什么要有：批量标签（猎手展开板块 ≤50 只）原先逐只「取数 → 状态机」串在
+    `_BG_PANDAS_SEM` 的 2 个名额里，而取数 190ms/只**纯网络**、白占 pandas 名额
+    ⇒ 一个 50 只的板块要 30~40 秒才出标签。拆出来 8 路并发后，每只只剩 ~80ms 的计算。
+    返回实际发起取数的只数（同 30min 时段内已有的跳过）。
+    """
+    import threading as _th
+
+    slot = _slot()
+    todo = []
+    with _LOCK:
+        for c in codes or []:
+            c = str(c).split("_")[0]
+            if not c:
+                continue
+            r = _RAW.get(c)
+            if r and r.get("slot") == slot and r.get("df") is not None:
+                continue
+            if c not in todo:
+                todo.append(c)
+    if not todo:
+        return 0
+
+    def _one(c):
+        try:
+            with _SEM:
+                df = _fetch_30min(c)
+        except Exception:
+            return
+        if df is not None and not df.empty:
+            with _LOCK:
+                if len(_RAW) > _RAW_MAX:
+                    _RAW.clear()
+                _RAW[c] = {"slot": slot, "df": df}
+
+    from concurrent.futures import ThreadPoolExecutor
+    with ThreadPoolExecutor(max_workers=max(1, int(workers))) as ex:
+        list(ex.map(_one, todo))
+    return len(todo)
+
+
 def get_trend30(code: str, days: int = 35, cfg: Trend30Config = None, use_cache: bool = True) -> dict:
     """一站式：取数 → 指标 → 状态机 → 最新快照。
     返回 {state, trend('up'/'down'/'flat'), confidence, adx, bar_time, n_bars, gate_ok, source}；
@@ -146,16 +195,21 @@ def get_trend30(code: str, days: int = 35, cfg: Trend30Config = None, use_cache:
                 return c["value"]
 
     df = None
-    with _SEM:
-        for att in range(_RETRY + 1):
-            try:
-                df = _fetch_30min(code, days)
-                if df is not None and not df.empty:
-                    break
-            except Exception:
-                df = None
-            if att < _RETRY:
-                time.sleep(0.4 * (att + 1))
+    with _LOCK:
+        _r = _RAW.get(code)
+        if _r and _r.get("slot") == slot:
+            df = _r["df"]                    # 预取命中（同 30min 时段）⇒ 零网络
+    if df is None:
+        with _SEM:
+            for att in range(_RETRY + 1):
+                try:
+                    df = _fetch_30min(code, days)
+                    if df is not None and not df.empty:
+                        break
+                except Exception:
+                    df = None
+                if att < _RETRY:
+                    time.sleep(0.4 * (att + 1))
 
     if df is None or df.empty:
         return {"source": "error", "trend": None, "state": None, "code": code}

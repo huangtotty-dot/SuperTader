@@ -1576,12 +1576,42 @@ function refreshSectorStarsIfVisible() {
   loadSectorMaBreadth();
 }
 
+/* 2026-10-23 owner：「运行了 4月8日的选股猎手，星轨图 / 站上5-20日线占比 还是显示最近 10 日」。
+   根因：猎手有**自己的日期选择器**（`#hunterDate`），「重新生成」只影响猎手表本体；
+   下面两块板块图一直跟**全局日期选择器**（state.date）走。
+   这里加一个"猎手日期覆盖"：重新生成历史日时把两块图钉到同一天；
+   全局日期一变则覆盖立即作废、回到 state.date（同 `_beaconDateOverride` 的取法）。 */
+let _hunterPanelDate = null;        // 由 loadHunterHistory(date) 设置
+let _hunterPanelDateGlobal = null;  // 设置时的全局日期快照
+/** 猎手表格的「技术标签 / 30m MA5」缓存是按**板块**存的、不含日期 ⇒ 换日期必须清空，
+    否则看 4月8日 时拿到的还是今天算好的标签（2026-10-23）。 */
+function _clearHunterDayCaches() {
+  try {
+    Object.keys(hunterTagsCache).forEach(k => delete hunterTagsCache[k]);
+    Object.keys(hunterStructCache).forEach(k => delete hunterStructCache[k]);
+  } catch (e) { /* 模块初始化前调用：跳过 */ }
+}
+function _setHunterPanelDate(d) {
+  const nd = d || null;
+  if (nd !== _hunterPanelDate) _clearHunterDayCaches();
+  _hunterPanelDate = nd;
+  _hunterPanelDateGlobal = state.date || null;
+}
+function _panelDate() {
+  if ((state.date || null) !== _hunterPanelDateGlobal) {
+    _hunterPanelDateGlobal = state.date || null;      // 全局日期变了 ⇒ 覆盖作废
+    if (_hunterPanelDate) _clearHunterDayCaches();
+    _hunterPanelDate = null;
+  }
+  return _hunterPanelDate || state.date || null;
+}
+
 async function loadSectorStars(force) {
   const box = document.getElementById("echSectorStars");
   if (!box) return;
   if (!window.echarts) { echClear("echSectorStars"); return; }
   try {
-    const d = await apiCall("load_sector_constellation", 10, state.date || null);
+    const d = await apiCall("load_sector_constellation", 10, _panelDate());
     echGuard("板块星轨图", () => renderSectorStars(d));
   } catch (e) {
     console.error("[图表] 板块星轨图 取数失败：", e);
@@ -1768,6 +1798,7 @@ function renderSectorStars(d) {
    首次 `warming`，3s 短轮询）。与上方星轨图**同截止日、同窗口、同板块顺序**。 */
 const SECMA_5 = "#388bfd";      // 站上5日线（蓝；dataviz 校验 dark：与橙 ΔE 32.1/35.6 全项过）
 const SECMA_20 = "#e3b341";     // 站上20日线（琥珀）
+const SECMA_CONV = "#a371f7";   // 均线粘合占比（紫；右轴 0-50%）—— 2026-10-23 owner
 let sectorMaInst = null, sectorMaNode = null, sectorMaSig = "";
 let sectorMaData = null, sectorMaTimer = null, sectorMaInflight = false;
 
@@ -1789,7 +1820,7 @@ async function loadSectorMaBreadth(force) {
   sectorMaInflight = true;
   let nextMs = 0;
   try {
-    const d = await apiCall("load_sector_ma_breadth", 10, state.date || null);
+    const d = await apiCall("load_sector_ma_breadth", 10, _panelDate());
     sectorMaData = d || null;
     renderSectorMaBreadth(d);
     if (d && d.warming) nextMs = 3000;          // 首次计算/数据日变了 → 短轮询
@@ -1832,7 +1863,10 @@ function renderSectorMaBreadth(d) {
       + `缓存停在 T-1 的按最后状态顺延到今天）`
       + (d.computed_at ? ` · 计算于 ${esc(d.computed_at)}` : "")
       + `<br>口径：站上 N 日线 = 当日收盘 &gt; N 日简单均线（含当日），与得分里 −70 悬崖 / 20日线观察列同源；`
-      + `每只个股只归一个韭研主板块，不重复计数。`;
+      + `每只个股只归一个韭研主板块，不重复计数。`
+      + `<br><span style="color:${SECMA_CONV}">▬</span> 均线粘合 = 当日该板块里 <b>五线(5/10/20/30/60)离散度 ≤3% 或 短线(5/10/20)≤2%</b> 的个股占比`
+      + `（与「均线粘合」技术标签同源；分母只算有 60 根以上历史的票）。`
+      + `<span class="cell-dim">⚠️ 该比例是描述性状态：实测粘合后 T+5 超额 −0.07%(t=−2.75)，无正向 alpha。</span>`;
   }
   // 列数随宽度自适应；每格高度固定 132px（含标题），整体高度随之变化
   const cols = w >= 1200 ? 4 : (w >= 880 ? 3 : 2);
@@ -1841,7 +1875,7 @@ function renderSectorMaBreadth(d) {
   const H = topPad + rows * cellH + 6;
   // 签名带**整条轨迹的粗略校验和**：后端重算后中间值可能变而末值不变，只比末值会漏重画
   const sig = secs.map(s => `${s.name}:${s.points.length}:`
-    + s.points.reduce((a, p) => a + (p.pct5 || 0) + (p.pct20 || 0), 0).toFixed(1)).join("|")
+    + s.points.reduce((a, p) => a + (p.pct5 || 0) + (p.pct20 || 0) + (p.pct_conv || 0), 0).toFixed(1)).join("|")
     + `|${w}|${cols}`;
   if (sectorMaInst && sectorMaNode === el && sig === sectorMaSig) return;
   if (el.style.height !== H + "px") el.style.height = H + "px";
@@ -1866,6 +1900,8 @@ function renderSectorMaBreadth(d) {
                  borderWidth: 1, color: "#e6edf3", fontSize: 9, padding: [2, 5] } },
       splitLine: { show: false },
     });
+    // 三条线**共用 0~100 尺度**（跨板块可对读）。粘合率改用「五线≤3% 或 短线≤2%」口径后
+    // 实测中位 20.6%、p90 42.9%、最高 66.7%，与另两条同处一个量级，不再需要单独右轴。
     yAxes.push({
       type: "value", gridIndex: i, min: 0, max: 100, interval: 50,
       // 只在最左列标 0/50/100：所有格子共享同一尺度，标一次就够
@@ -1873,6 +1909,7 @@ function renderSectorMaBreadth(d) {
       axisLine: { show: false }, axisTick: { show: false },
       splitLine: { lineStyle: { color: "rgba(139,148,158,.14)" } },
     });
+
     // 2026-10-21 owner：「占比显示不够美观直观」——数值从一行灰字改成**两块带底色的胶囊**
     //   （按强弱上色：≥55% 绿 / 40~55% 琥珀 / <40% 红），并带上**较前一日的变化箭头**，
     //   一眼能扫出"哪个板块在变强"；格子内再画一条 50% 虚线参考线，强弱分界不用算。
@@ -1893,6 +1930,10 @@ function renderSectorMaBreadth(d) {
       text: `${i + 1}. ${s.name}`,
       subtext: _chip("5日", s.last5, _prev && _prev.pct5)
         + " " + _chip("20日", s.last20, _prev && _prev.pct20)
+        // 2026-10-23 owner：「板块当天粘合占比也显示具体数值」——紫色胶囊，与图里那条线同色
+        + " " + (s.last_conv == null
+          ? "{n|粘合 —}"
+          : `{v|粘合 ${fmt(s.last_conv, 0)}%${_arrow(s.last_conv, _prev && _prev.pct_conv)}}`)
         + ` {n|${s.n || "—"}只}`,
       left: x0 + padL - 2, top: y0 + 2,
       textStyle: { color: "#c9d1d9", fontSize: 11, fontWeight: 600 },
@@ -1903,6 +1944,7 @@ function renderSectorMaBreadth(d) {
           a: { color: "#d29922", backgroundColor: "rgba(210,153,34,.14)", padding: [1, 4], borderRadius: 3 },
           r: { color: "#f85149", backgroundColor: "rgba(248,81,73,.14)", padding: [1, 4], borderRadius: 3 },
           n: { color: "#6e7681" },
+          v: { color: "#a371f7", backgroundColor: "rgba(163,113,247,.14)", padding: [1, 4], borderRadius: 3 },
         },
       },
     });
@@ -1919,6 +1961,8 @@ function renderSectorMaBreadth(d) {
       // 2026-10-21：5 日线加**极淡的面积填充**（两条线叠在一起时更容易分清主次）；
       // 再画一条 **50% 参考虚线**——强弱分界不用心算。只画一次（挂 5 日线上）。
       ...(opts && opts.area ? { areaStyle: { opacity: 0.10, color } } : {}),
+      // 虚线（粘合那条用）：一眼区分"另一套刻度"的系列
+      ...(opts && opts.dash ? { lineStyle: { width: 1.5, color, type: "dashed" } } : {}),
       ...(opts && opts.half ? {
         markLine: {
           silent: true, symbol: "none", animation: false,
@@ -1933,6 +1977,10 @@ function renderSectorMaBreadth(d) {
     });
     series.push(mk(s.points.map(p => p.pct5), SECMA_5, "站上5日线", { area: true, half: true }));
     series.push(mk(s.points.map(p => p.pct20), SECMA_20, "站上20日线"));
+    // 2026-10-23 owner：「这个部分再加一个，统计均线粘合在坐标轴中占板块的比例」
+    //   ⇒ 紫线（右轴 0~50%）：当日该板块里 MA5/10/20/30/60 离散度 ≤3% 的个股占比。
+    //   口径与「均线粘合」技术标签同源（core.ma_reclaim.convergence_state）。
+    series.push(mk(s.points.map(p => p.pct_conv), SECMA_CONV, "均线粘合", { dash: true }));
   });
   if (!sectorMaInst || sectorMaNode !== el || !el.querySelector("canvas")) {
     if (sectorMaInst) { try { sectorMaInst.dispose(); } catch (e) { } }
@@ -1944,7 +1992,7 @@ function renderSectorMaBreadth(d) {
     backgroundColor: "transparent",
     animation: false,
     // 图例按**系列名**筛选 ⇒ 点一下可以把全部板块的 5日线/20日线一起关掉（不是 50 个条目）
-    legend: { data: ["站上5日线", "站上20日线"], top: 2, right: 10,
+    legend: { data: ["站上5日线", "站上20日线", "均线粘合"], top: 2, right: 10,
       itemWidth: 14, itemHeight: 8, icon: "roundRect", itemGap: 12,
       textStyle: { color: "#8b949e", fontSize: 10 } },
     title: titles,
@@ -1962,7 +2010,7 @@ function renderSectorMaBreadth(d) {
       borderRadius: 8, textStyle: { color: "#e6edf3", fontSize: 11 },
       formatter: (ps) => {
         if (!ps || !ps.length) return "";
-        const si = Math.floor((ps[0].seriesIndex || 0) / 2);   // 每板块 2 条系列
+        const si = Math.floor((ps[0].seriesIndex || 0) / 3);   // 每板块 3 条系列（5日/20日/粘合）
         const s = secs[si];
         if (!s) return "";
         const p = s.points[ps[0].dataIndex];
@@ -1970,6 +2018,8 @@ function renderSectorMaBreadth(d) {
         return `<div style="font-weight:bold;margin-bottom:3px">${esc(s.name)} · ${esc(p.date)}</div>`
           + `<span style="color:${SECMA_5}">●</span> 站上5日线 <b>${fmt(p.pct5, 1)}%</b>`
           + `<br><span style="color:${SECMA_20}">●</span> 站上20日线 <b>${fmt(p.pct20, 1)}%</b>`
+          + `<br><span style="color:${SECMA_CONV}">●</span> 均线粘合 <b>${p.pct_conv == null ? "—" : fmt(p.pct_conv, 1) + "%"}</b>`
+          + `<span style="opacity:.7">（${p.n60 || 0} 只有 60 日以上历史）</span>`
           + `<br><span style="opacity:.7">样本 ${p.n} 只（当日有行情）</span>`;
       },
     },
@@ -2815,6 +2865,47 @@ function maReclaimCellHtml(v, missingTip) {
   return `<td style="text-align:center;white-space:nowrap">${maReclaimInnerHtml(v, missingTip)}</td>`;
 }
 
+/* 偏离 365 日线（2026-10-23 owner：「把四张表的『理由/依据』列改成偏离365日线百分比」）
+   = (现价 − MA365) / MA365 × 100。A 股口径：正=红、负=绿；日线不足 365 根 → —（不猜）。
+   注意 `reason` 不丢：塞进同一格的 tooltip。 */
+/* 偏离 365 日线的**"偏离过大"提醒**（2026-10-24 owner：「不是超买超卖，是偏离太大了直接提醒」）。
+   阈值同一次实验（doc/research/2026-10-24_偏离365日线_超买超卖阈值实验.md）：
+   257,054 股票·日 / 931 只 / 425 天，偏离度分布 p50 +12%、p90 +70%、p95 +99%。
+   ⚠️ 两侧阈值不对称是**故意的**：样本里 ≥+60% 占 12.8%、而 ≤−60% 一只都没有（下跌很少离年线这么远），
+   所以下方用 −20%（覆盖 6.3%）才拿到同量级的"极端"。**只提示"离年线太远"，不含涨跌方向判断**
+   —— 实测两个方向都没有可用的反转 alpha（上方 +0.19%/t=0.79；下方 +0.66%/t≈0 且分年符号翻转）。 */
+const DEV365_WARN_UP = 60;      // 偏离 ≥ +60%（约 13% 的股票·日）
+const DEV365_WARN_DOWN = -20;   // 偏离 ≤ −20%（约 6% 的股票·日）
+function dev365Warn(n) {
+  if (n >= DEV365_WARN_UP) {
+    return { dir: "↑", pct: "约 13%", text: "年线上方偏离 ≥+" + DEV365_WARN_UP + "%" };
+  }
+  if (n <= DEV365_WARN_DOWN) {
+    return { dir: "↓", pct: "约 6%", text: "年线下方偏离 ≤" + DEV365_WARN_DOWN + "%" };
+  }
+  return null;
+}
+function dev365InnerHtml(v) {
+  if (v == null || v === "" || isNaN(Number(v))) return '<span class="cell-dim">—</span>';
+  const n = Number(v);
+  const cls = n > 0 ? "up" : n < 0 ? "down" : "cell-dim";
+  const base = `<b class="${cls}">${n >= 0 ? "+" : ""}${n.toFixed(2)}%</b>`;
+  const w = dev365Warn(n);
+  if (!w) return base;
+  const tip = w.text + `（全市场 ${w.pct} 的股票·日）
+只提示「离年线太远」，不含涨跌方向判断`;
+  return base + ` <span class="badge approach" title="${esc(tip)}">⚠${w.dir} 偏离过大</span>`;
+}
+function dev365Tip(v, extra) {
+  return "偏离 365 日线 = (现价 − 365 日均线) / 365 日均线"
+    + (v == null ? "　（该票日线不足 365 根，无法计算）" : "")
+    + (extra ? String.fromCharCode(10) + extra : "");
+}
+function dev365CellHtml(v, extra, cls) {
+  return `<td class="num ${cls || ""}" style="text-align:center" title="${esc(dev365Tip(v, extra))}">`
+    + dev365InnerHtml(v) + `</td>`;
+}
+
 /* 时机条件列（2026-10-16 owner：「选股猎手的时机条件列与建仓信号扫描的该列保持一致」）。
    **建仓信号扫描 / 选股猎手 共用本渲染**（同 `structCellHtml`/`dayStageCellHtml`/`pctHtml` 的做法），
    别再各写一份 —— 此前猎手侧**硬编码只列 3 个条件键**，与真源脱钩，代价是：
@@ -3000,7 +3091,7 @@ function renderAbnormalPool(d) {
       <td style="max-width:220px;line-height:1.7">${tagsTxt}</td>
       ${maReclaimCellHtml(r.ma_reclaim)}
       ${condCellHtml(r.conditions, labels, r._has_conf === false, null)}
-      <td class="cell-dim" style="max-width:260px;font-size:11px">${esc(r.build_reason || "")}</td>
+      ${dev365CellHtml(r.dev365, r.build_reason || "")}
       <td onclick="event.stopPropagation()" ondblclick="event.stopPropagation()">
         <input class="mini-input" style="width:180px;font-size:11px" maxlength="120"
                value="${esc(r.reason_manual || "")}" placeholder="手动填涨停原因…"
@@ -3019,7 +3110,7 @@ function renderAbnormalPool(d) {
       <th class="num">市值<br><span style="font-size:9px;opacity:.6">亿</span></th>
       <th title="通道/箱体/背离等技术形态，与「建仓信号扫描」同一来源与同一渲染">技术标签</th>
       <th title="**当日**刚站上 5/10/20/30/60 日线的**时刻**（与「建仓信号扫描」同源同渲染）">均线突破<br><span style="font-size:9px;opacity:.6">当日·时刻</span></th>
-      <th>时机条件</th><th>理由</th>
+      <th>时机条件</th><th title="(现价 − 365 日均线)/365 日均线（正=红、负=绿）；原来的「理由」已挪到本格 tooltip">偏离365日线</th>
       <th title="**手动**记录的涨停原因（一句话，最多 120 字）。只展示、不参与任何判定；回车或点别处即保存">涨停原因<br><span style="font-size:9px;opacity:.6">手动</span></th>
       <th></th>
     </tr></thead><tbody>${body}</tbody></table>
@@ -3306,6 +3397,7 @@ function renderPB(pb) {
         ${mvCell}
         ${stCell}
         ${ma5CellHtml(r.structure)}
+        ${dev365CellHtml(r.dev365)}
         <td class="cell-dim">${esc(r.scan_type || "")}${r._scans > 1 ? `×${r._scans}` : ""}${scanTimeTxt ? ` <span class="mono">${esc(scanTimeTxt)}</span>` : ""}${staleBadge}</td>
         <td>${!r.in_holdings ? `<button class="mini-btn" style="font-size:10px;padding:0 5px;color:#3fb950" onclick="confirmPosition('${esc(r.code||'')}',document.getElementById('pb-row-${esc(r.code||'')}'))" title="人工确认建仓（回写 signal_history）">✓确认</button><button class="mini-btn" style="font-size:10px;padding:0 5px;color:#f85149" onclick="removeFromWatchlist('${esc(r.code||'')}',document.getElementById('pb-row-${esc(r.code||'')}'))" title="从股池移除">✕</button>` : ""}</td>
       </tr>`;
@@ -3345,9 +3437,10 @@ function renderPB(pb) {
           <th title="30分钟综合判定（与『持仓 30min 风险体检』同口径）：🔴减仓/避高=30min 顶背离(T1/T2)；🟠盯紧=T3顶分型+T4均线压制同现；🟢偏好=无顶信号且有新鲜底背离(≤16根)；⚪中性=其余。依据 981只×540日 离线验证；T3/T4 无前瞻区分度、单个不报警">30min判定</th>
           <th title="仓位结构（30min/10min，供仓位管理参考）：止损=10min 最近已确认摆动低点；阶段=10min 四阶段(①蓄势/②抬升/③派发/④下跌)；30m=30min MA65 中期方向；折价=现价/止损-1（到-4.3%记满）。破位时给出三档下档支撑挂单价与5日成交率估计。⚠️ 是**结构参考、不是买卖信号**——机械按阶段加减仓经实测无正贡献(纯择时-1.4~+2.7pp不显著)，「破前低就清仓」-30pp强有害；唯一有证据的是破位后在下档支撑挂限价补仓(改善成本结构、不提高期望)。悬停看明细">仓位结构</th>
           <th title="30min MA5 状态（**纯展示**）：现价相对 5×30min 均线 站上/跌破，及距上次翻转几根。⚠️ 实测**无前瞻信息量**（状态/跃迁 × 站上/跌破 四口径，同日同bar-of-day对照 |diff|≤0.03pp、|t|≤2.4）⇒ 仅供参考，不参与任何判定。朴素对照的 −0.343pp(t=−25.5) 是日内时段伪影">30m MA5<br><span style="font-size:9px;opacity:.6">仅展示</span></th>
+          <th title="(现价 − 365 日均线)/365 日均线（A股口径：正=红、负=绿）。日线不足 365 根显示 —">偏离365日线</th>
           <th>扫描</th><th></th>
         </tr></thead>
-        <tbody>${rows || '<tr><td colspan="18" class="empty">无扫描结果</td></tr>'}</tbody>
+        <tbody>${rows || '<tr><td colspan="19" class="empty">无扫描结果</td></tr>'}</tbody>
       </table>
       <div class="cell-dim" style="font-size:11px;margin-top:8px">●=通过 ○=未通过 · 时机条件：${Object.values(condLabels).join(" / ")} · 第5位🚫=否决因子(爆量≥3倍或偏离MA60超+20%) · GO(多头追强/空头抄底)→signal，震荡→降频 · 观察=震荡市结构达标(不推送) · 盘中每10s刷新</div>
     </div>`;
@@ -3491,18 +3584,35 @@ function renderAutoPnl(d) {
         ${c.irregular ? '<span class="badge" style="background:#5a3a2a;color:#ffb454" title="该周期含非策略/孤儿成交（pos_after 与逐笔不连续）">含非策略成交</span>' : ""}
       </div>`;
     }).join("");
-    const tot = st.realized_pnl + (st.unreal_pnl || 0);
+    // 2026-10-24 owner：「自动盘根据逐步流水模仿手动盘给出每支股票的盈亏状态」
+    //   ⇒ 列与「手动盘 · 逐股明细」对齐（已实现/浮动/合计/收益率/买入额/卖出额/费用/笔数/仍持有/区间），
+    //   末尾保留自动盘特有的「周期明细」。数据全部来自 fill 流（不动 heartbeat）。
+    const _f = v => v == null ? "—" : ((v >= 0 ? "+" : "") + fmt(v, 0));
+    const tot = st.total_pnl != null ? st.total_pnl : (st.realized_pnl + (st.unreal_pnl || 0));
     return `<tr>
       <td>${esc(st.name || st.code)} <span class="mono cell-dim">${esc(st.code)}</span></td>
-      <td class="num ${clsOf(st.realized_pnl)}">${(st.realized_pnl >= 0 ? "+" : "") + fmt(st.realized_pnl, 0)}</td>
-      <td class="num ${clsOf(st.unreal_pnl)}">${st.unreal_pnl ? (st.unreal_pnl >= 0 ? "+" : "") + fmt(st.unreal_pnl, 0) : "—"}</td>
-      <td class="num">${st.open_qty || "—"}</td>
-      <td class="num ${clsOf(tot)}">${(tot >= 0 ? "+" : "") + fmt(tot, 0)}</td>
+      <td class="num ${clsOf(st.realized_pnl)}">${_f(st.realized_pnl)}</td>
+      <td class="num ${clsOf(st.unreal_pnl || 0)}">${st.unreal_pnl ? _f(st.unreal_pnl) : "—"}</td>
+      <td class="num ${clsOf(tot)}"><b>${_f(tot)}</b></td>
+      <td class="num">${st.pnl_pct == null ? "—" : (st.pnl_pct >= 0 ? "+" : "") + fmt(st.pnl_pct, 2) + "%"}</td>
+      <td class="num cell-dim">${fmt(st.buy_amt, 0)}</td>
+      <td class="num cell-dim">${fmt(st.sell_amt, 0)}</td>
+      <td class="num cell-dim">${fmt(st.fees, 0)}</td>
+      <td class="num">${st.trades_n || 0}</td>
+      <td class="num">${st.open_qty ? fmt(st.open_qty, 0) : "—"}</td>
+      <td class="num">${st.last_price == null ? "—" : fmt(st.last_price, 2)}
+        ${st.cost_price == null ? "" : `<div class="cell-dim" style="font-size:10px">成本 ${fmt(st.cost_price, 3)}</div>`}</td>
+      <td class="mono cell-dim" style="font-size:11px">${esc(st.first || "")} ~ ${esc(st.last || "")}</td>
       <td>${cycles}</td>
     </tr>`;
   }).join("");
   body.innerHTML = `<table><thead><tr>
-    <th>股票</th><th class="num">已实现</th><th class="num">在场浮盈</th><th class="num">在场股数</th><th class="num">合计</th>
+    <th>股票</th><th class="num">已实现</th><th class="num" title="未平仓部分按日线缓存最新收盘估">浮动</th>
+    <th class="num">合计</th><th class="num" title="合计 ÷ 买入额">收益率</th>
+    <th class="num">买入额</th><th class="num">卖出额</th><th class="num">费用</th>
+    <th class="num">笔数</th><th class="num">仍持有</th>
+    <th class="num" title="日线缓存最新收盘；小字＝券商口径持仓成本（fill 派生、不含手续费）">现价<br><span style="font-size:9px;opacity:.6">/成本</span></th>
+    <th>区间</th>
     <th>周期明细（建仓→清仓 / 天数 / 量 / 均价 / 盈亏）</th>
   </tr></thead><tbody>${rows}</tbody></table>`;
 }
@@ -5797,6 +5907,7 @@ function tagBadge(t) {
     "箱体上沿": "🟠", "箱体下沿": "🔵", "箱体内部": "⚪",
     "向上突破": "🚀", "完全突破": "🔺", "跌破下沿": "⚠️", "筑底": "🧱", "筑顶": "⛰️",
     "日线顶背离": "⛔", "日线底背离": "✅", "超买": "⚠", "超卖": "📉",
+    "均线粘合": "≈",       // 2026-10-23：MA5/10/20/30/60 离散度 ≤3%（描述性，非信号）
   };
   const icon = iconMap[t.label] || "";
   // 2026-10-13：破(N)日线 带上**实测数字**（后端 `cur`/`ma`，日线口径）。
@@ -5912,7 +6023,8 @@ async function loadSectorTags(category) {
     // offline=true（2026-10-11）：猎手是**批量视图**，标签走"本地日线缓存"零网络路径
     //（原来逐只 GM 取日线，而 GM 池 max_workers=1 ⇒ 全串行，实测 150 只 44s → 9s）。
     // 建仓表/持仓体检仍走在线路径，行为不变。
-    const r = await apiCall("load_stock_tags_batch", _ask, true);
+    // 2026-10-23：带上全局选中日 ⇒ 猎手看历史日时标签按**那一天**的日线算（原来永远是今天的）
+    const r = await apiCall("load_stock_tags_batch", _ask, true, _panelDate());
     const tagsMap = (r && r.tags) || {};
     // 30m MA5（2026-10-17）：仓位结构层，与持仓30min体检/风向标**同源**。
     // 走**独立缓存** —— 标签是异步批算（冷启动先空），结构是另一步，两者到达时间不同步。
@@ -5924,11 +6036,21 @@ async function loadSectorTags(category) {
     // 故**只缓存非空**；空则稍后重试，等后台算完再填。
     if (Object.keys(tagsMap).length) {
       hunterTagsCache[category] = Object.assign(have, tagsMap);   // 增量并入（翻页不丢已取的）
-    } else if ((hunterTagsRetry[category] || 0) < 8) {
-      hunterTagsRetry[category] = (hunterTagsRetry[category] || 0) + 1;
-      setTimeout(() => {
-        if (hunterOpenSectors.has(category)) loadSectorTags(category);
-      }, 4000);
+    }
+    // 2026-10-23（owner：「技术标签更新实在太慢」）：后端改成了**增量交付**（算完一只给一只），
+    // 所以这里要「**只要还有缺的码就继续问**」——原来只在"整张 map 为空"时重试 8 次，
+    // 拿到第一批就不再问，剩下的永远空着。
+    {
+      const _hv = hunterTagsCache[category] || {};
+      const _miss = want.filter(c => !_hv[c]);
+      if (!_miss.length) {
+        hunterTagsRetry[category] = 0;
+      } else if ((hunterTagsRetry[category] || 0) < 40) {
+        hunterTagsRetry[category] = (hunterTagsRetry[category] || 0) + 1;
+        setTimeout(() => {
+          if (hunterOpenSectors.has(category)) loadSectorTags(category);
+        }, 3000);
+      }
     }
     // 30m MA5（仓位结构）比标签慢：只要还有 pending 就 5s 后重试，有界 12 次
     try {
@@ -5938,7 +6060,7 @@ async function loadSectorTags(category) {
         hunterStructRetry[category] = _rn + 1;
         setTimeout(() => {
           if (!hunterOpenSectors.has(category)) return;
-          apiCall("load_stock_tags_batch", _renderedCodesFor(category), true).then(r2 => {
+          apiCall("load_stock_tags_batch", _renderedCodesFor(category), true, _panelDate()).then(r2 => {
             const sm2 = (r2 && r2.struct) || {};
             if (!Object.keys(sm2).length) return;
             hunterStructCache[category] = Object.assign(hunterStructCache[category] || {}, sm2);
@@ -6115,6 +6237,9 @@ function applySectorTags(tbody, category) {
       // 2026-10-08: 按 class 定位标签列（此前按 tds[2] 固定下标，列序改成建仓表同款后填错位）
       const _tagsTd = row.querySelector("td.h-tags");
       if (_tagsTd) _tagsTd.innerHTML = info.tags.map(t => tagBadge(t)).join(" ");
+      // 2026-10-23：偏离365日线随标签批一起回来（同一份 payload），就地回填
+      const _d365Td = row.querySelector("td.h-dev365");
+      if (_d365Td) _d365Td.innerHTML = dev365InnerHtml(info.dev365);
     }
     // 2026-10-17：30m MA5 走的是**仓位结构**缓存（比标签慢一拍）⇒ 这里同款回填
     const _st = (hunterStructCache[category] || {})[code];
@@ -6406,6 +6531,11 @@ async function loadHunterHistory(date) {
       hg++;
     }
     if (h.available) {
+      // ⚠️ 必须**在 renderHunter 之前**钉住日期：renderHunter 里"恢复已展开板块"那段会调用
+      //    `loadSectorTags()`（取技术标签），它按 `_panelDate()` 决定算哪天的。放在渲染之后的话
+      //    标签仍按旧日期算，随后 setter 又把缓存清掉 ⇒ 界面上永远停在"今天"的标签
+      //    （owner 2026-10-23 实报：跑 4月8日，技术标签还是今天的）。
+      _setHunterPanelDate(date);
       renderHunter(h, true);
       hunterLoaded = true;
       statusEl(`已加载 ${date} 选股猎手数据`, "ok");
@@ -6414,7 +6544,9 @@ async function loadHunterHistory(date) {
       // 2026-10-18：**把 date 一起传过去** —— 历史日「重新生成」时风向标必须跟到同一天，
       // 否则它按全局日期挑"≤ 今天的最新一天"，两边名次对不上。
       loadMarketBeacon(true, date);
+      // 2026-10-23：两块板块图也跟着这次跑的日期（已在上面 renderHunter 之前钉好）
       refreshSectorStarsIfVisible();   // 同上：重新生成也重写了 daily_summary.json
+      loadSectorMaBreadth();
     } else {
       el.innerHTML = `<div class="empty">${esc(h.error || '无数据')}</div>`;
     }
@@ -7020,7 +7152,8 @@ function renderHunter(h) {
         <td class="h-mr" data-mrcode="${esc(s.code)}" style="text-align:center;white-space:nowrap"
             title="当日刚站上 5/10/20/30/60 日线的时刻（展开板块后按可见个股现算）">${maReclaimInnerHtml(s.ma_reclaim, "展开板块后自动加载")}</td>
         ${condCellHtml(s.build_conds, condLabels, s.build_verdict === "insufficient_data", s.build_veto)}
-        <td class="cell-dim" style="max-width:240px;font-size:11px">${esc(s.build_reason || "")}</td>
+        <td class="num h-dev365" style="text-align:center"
+            title="${esc(dev365Tip((hunterTagsCache[category] || {})[s.code] && (hunterTagsCache[category] || {})[s.code].dev365, s.build_reason || ""))}">${dev365InnerHtml((hunterTagsCache[category] || {})[s.code] && (hunterTagsCache[category] || {})[s.code].dev365)}</td>
       </tr>`;
     };
     // 板块 → 细分（按第一层级归并：半导体设备-测试设备 汇入 半导体设备；多概念股多组重复）→ 个股。
@@ -7185,7 +7318,7 @@ function renderHunter(h) {
             <th>技术标签</th>
             <th title="**当日**刚站上 5/10/20/30/60 日线的**时刻**（与「建仓信号扫描」「持仓 30 分钟风险体检」「异常监控池」同源同渲染）。猎手池 2000+ 只，只对**展开板块当前页**的股票现算">均线突破<br><span style="font-size:9px;opacity:.6">当日·时刻</span></th>
             <th title="时机条件：市场有方向/多头结构/回撤到位 · 末位🚫=否决因子（爆量≥3倍或偏离MA60>+20%）">时机条件</th>
-            <th>理由</th>
+            <th title="(现价 − 365 日均线) / 365 日均线（A股口径：正=红、负=绿）。原来这列是「理由」，已挪到本格 tooltip">偏离365日线</th>
           </tr></thead>
           <tbody class="h-sector-group" data-category="${esc(category)}">${stockRows}</tbody></table>
           ${pageInfo}
@@ -7403,7 +7536,7 @@ function renderOB(ob) {
       <td title="30min 综合判定（趋势+顶部/底背离特征）&#10;${esc(tfTip)}&#10;${esc(dvTip)}">${vCell}</td>
       ${structCellHtml(s.structure)}
       ${ma5CellHtml(s.structure)}
-      <td class="cell-dim" style="max-width:280px;line-height:1.7">${esc(vd.reason || "—")}</td>
+      ${dev365CellHtml(s.dev365, vd.reason || "")}
     </tr>`;
   }).join("");
   el.innerHTML = `
@@ -7429,7 +7562,7 @@ function renderOB(ob) {
         <th title="30min 趋势+顶部/底背离特征 → 重视程度（读一列即可）">30min判定</th>
         <th title="仓位结构（30min/10min，与建仓信号扫描**同一真源**，供仓位管理参考）：止损=10min 最近已确认摆动低点；阶段=10min 四阶段；30m=30min MA65 中期方向；折价=现价/止损-1（到-4.3%记满）。破位时给三档下档支撑挂单价与5日成交率。⚠️ 是**结构参考、不是买卖信号**。悬停看明细">仓位结构</th>
         <th title="30min MA5 状态（**纯展示**）：站上/跌破 5×30min 均线，及距上次翻转几根。⚠️ 实测**无前瞻信息量**（同日同bar-of-day对照 |diff|≤0.03pp）⇒ 仅供参考，不参与任何判定">30m MA5<br><span style="font-size:9px;opacity:.6">仅展示</span></th>
-        <th title="判定依据">依据</th>
+        <th title="(现价 − 365 日均线)/365 日均线（正=红、负=绿）；原来的「依据」已挪到本格 tooltip">偏离365日线</th>
       </tr></thead><tbody>${rows}</tbody></table>
       <div class="cell-dim" style="font-size:10px;margin-top:4px">口径(2026-10-09)：判定=30min顶部/底背离特征综合（依据 t_io/validation/m30_top 981只×540日离线验证）· 趋势=30min三层状态机 · RSI/KDJ/CCI/BOLL 为日线超买指标（不驱动判定）· <b>20日线</b>=收盘价 vs 20 日简单均线（2026-10-14 新增，与建仓表/猎手表同口径；**观察列，不驱动判定**）· 双击行看K线</div>
     </div>`;

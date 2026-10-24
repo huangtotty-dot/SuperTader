@@ -264,10 +264,19 @@ class TestKickDedupe(unittest.TestCase):
         self.t_gui = t_gui
         self._cache = dict(t_gui._MA_RC_CACHE)
         t_gui._MA_RC_CACHE.clear()
+        # ⚠️ 预热 worker 是**进程内全局**的：同一次 pytest 里别的用例（或真实计算）可能正让它
+        #    running=True，此时本用例的 kick 会被当成"已有 worker 在跑"直接 return ⇒ 假失败。
+        self._warm = (set(t_gui._MA_RC_WARM["queued"]), t_gui._MA_RC_WARM["running"])
+        t_gui._MA_RC_WARM["queued"].clear()
+        t_gui._MA_RC_WARM["running"] = False
 
     def tearDown(self):
         self.t_gui._MA_RC_CACHE.clear()
         self.t_gui._MA_RC_CACHE.update(self._cache)
+        q, run = self._warm
+        self.t_gui._MA_RC_WARM["queued"].clear()
+        self.t_gui._MA_RC_WARM["queued"].update(q)
+        self.t_gui._MA_RC_WARM["running"] = run
 
     def _drain(self, timeout=5.0):
         import time
@@ -320,10 +329,19 @@ class TestObOverlayWiring(unittest.TestCase):
         self.t_gui = t_gui
         self._cache = dict(t_gui._MA_RC_CACHE)
         t_gui._MA_RC_CACHE.clear()
+        # ⚠️ 预热 worker 是**进程内全局**的：同一次 pytest 里别的用例（或真实计算）可能正让它
+        #    running=True，此时本用例的 kick 会被当成"已有 worker 在跑"直接 return ⇒ 假失败。
+        self._warm = (set(t_gui._MA_RC_WARM["queued"]), t_gui._MA_RC_WARM["running"])
+        t_gui._MA_RC_WARM["queued"].clear()
+        t_gui._MA_RC_WARM["running"] = False
 
     def tearDown(self):
         self.t_gui._MA_RC_CACHE.clear()
         self.t_gui._MA_RC_CACHE.update(self._cache)
+        q, run = self._warm
+        self.t_gui._MA_RC_WARM["queued"].clear()
+        self.t_gui._MA_RC_WARM["queued"].update(q)
+        self.t_gui._MA_RC_WARM["running"] = run
 
     def test_get_可省略date(self):
         """覆盖层不传 date —— 缺默认值会 TypeError，被 except 吞成 pending。"""
@@ -358,10 +376,19 @@ class TestHunterEndpoint(unittest.TestCase):
         self.t_gui = t_gui
         self._cache = dict(t_gui._MA_RC_CACHE)
         t_gui._MA_RC_CACHE.clear()
+        # ⚠️ 预热 worker 是**进程内全局**的：同一次 pytest 里别的用例（或真实计算）可能正让它
+        #    running=True，此时本用例的 kick 会被当成"已有 worker 在跑"直接 return ⇒ 假失败。
+        self._warm = (set(t_gui._MA_RC_WARM["queued"]), t_gui._MA_RC_WARM["running"])
+        t_gui._MA_RC_WARM["queued"].clear()
+        t_gui._MA_RC_WARM["running"] = False
 
     def tearDown(self):
         self.t_gui._MA_RC_CACHE.clear()
         self.t_gui._MA_RC_CACHE.update(self._cache)
+        q, run = self._warm
+        self.t_gui._MA_RC_WARM["queued"].clear()
+        self.t_gui._MA_RC_WARM["queued"].update(q)
+        self.t_gui._MA_RC_WARM["running"] = run
 
     def test_只算传入的码_去重_封顶(self):
         from unittest import mock

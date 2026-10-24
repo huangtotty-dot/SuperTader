@@ -2358,9 +2358,14 @@ _SECTOR_MA_MEM_TTL = 300.0
 _SECTOR_MA_STATE: dict = {"running": False, "done": 0, "total": 0}
 _SECTOR_MA_LOCK = threading.Lock()
 _SECTOR_MA_MAX_DAYS = 40       # 一次算 40 个交易日（前端按 end_date 收边后取最近 N 天）
+# 历史 end 的单独缓存（2026-10-23 owner：「选了 4月8日，面板没跟着变」）。
+# 磁盘档只存**最新**那档；历史日按需后台算、只进内存（cap 12 档，LRU 淘汰）。
+_SECTOR_MA_BY_END: dict = {}
+_SECTOR_MA_END_RUNNING: set = set()
+_SECTOR_MA_END_MAX = 12
 # 缓存口径版本：**改样本口径/板块来源时 +1**（否则旧磁盘档会被当新鲜直接回放）。
 # 2（2026-10-21）：样本容忍 5 个自然日滞后 + 缓存键加板块指纹 board_fp。
-_SECTOR_MA_SCHEMA = 2
+_SECTOR_MA_SCHEMA = 3   # v3: 新增「均线粘合占比」pct_conv（2026-10-23）
 
 
 def _watchlist_fp():
@@ -2371,7 +2376,7 @@ def _watchlist_fp():
         return ""
 
 
-def _compute_sector_ma_breadth(days=_SECTOR_MA_MAX_DAYS):
+def _compute_sector_ma_breadth(days=_SECTOR_MA_MAX_DAYS, end=None):
     """每个板块每日「收盘站上 5 日线 / 20 日线」的成分股占比。
 
     口径：
@@ -2385,7 +2390,8 @@ def _compute_sector_ma_breadth(days=_SECTOR_MA_MAX_DAYS):
           coverage:{codes, scanned}}。
     """
     from collections import defaultdict
-    latest = _market_latest_date()
+    # `end` 给定时窗口锚在**那一天**（历史日期回看），否则锚在最新交易日。
+    latest = str(end).strip()[:10] if end else _market_latest_date()
     board = _jiuyan_board()
     mine = {c: s for c, s in board.items() if s}
     files = [p for p in _DAILY_KLINE_DIR.glob("*.json")
@@ -2393,13 +2399,17 @@ def _compute_sector_ma_breadth(days=_SECTOR_MA_MAX_DAYS):
     total = len(files)
     with _SECTOR_MA_LOCK:
         _SECTOR_MA_STATE.update({"done": 0, "total": total, "started": _time_mod.time()})
-    counts = defaultdict(lambda: defaultdict(lambda: [0, 0, 0]))   # sec -> date -> [a5, a20, n]
+    # sec -> date -> [a5, a20, n, aconv, n60]（n60 = 当日**有 60 根以上历史**的只数，粘合的分母）
+    counts = defaultdict(lambda: defaultdict(lambda: [0, 0, 0, 0, 0]))
     scanned = 0
 
     def _one(p):
         sec = mine.get(p.stem)
         try:
             rows = (_load_json(p, {}) or {}).get("rows") or []
+            # 历史 end：只取 ≤ 该日的 bar（否则算的还是最新那段）
+            if end:
+                rows = [r for r in rows if str(r.get("date"))[:10] <= latest]
             if len(rows) < 20:
                 return None
             _last = str(rows[-1].get("date"))[:10]
@@ -2426,19 +2436,38 @@ def _compute_sector_ma_breadth(days=_SECTOR_MA_MAX_DAYS):
         start = max(19, n - days)
         s5 = sum(closes[start - 4:start + 1])
         s20 = sum(closes[start - 19:start + 1])
+        # 2026-10-23 owner：「这个面板再加一个**均线粘合占比**」。
+        # 口径与 `core.ma_reclaim.convergence_state` 完全一致：MA5/10/20/30/60 的相对离散度
+        # (max-min)/close ≤ 3%。⚠️ 需要 ≥60 根历史 ⇒ 分母单独算（`n60`），
+        # 上市不足 60 天的票不算进粘合的分母（否则会把"没数据"算成"不粘合"）。
+        from core.ma_reclaim import (CONV_THR as _CONV_THR,
+                                     CONV_THR_SHORT as _CONV_THR_S,
+                                     RECLAIM_PERIODS as _MAS)
+        rolls = {p: sum(closes[start - p + 1:start + 1]) for p in _MAS if start - p + 1 >= 0}
+        _can_conv = len(rolls) == len(_MAS)
         out = []
         for i in range(start, n):
             if closes[i] > 0:
-                out.append((dates[i], closes[i] > s5 / 5.0, closes[i] > s20 / 20.0))
+                conv = None
+                if _can_conv:
+                    _m = [rolls[p] / p for p in _MAS]
+                    _sp5 = (max(_m) - min(_m)) / closes[i] * 100.0
+                    _ms = _m[:3]
+                    _sps = (max(_ms) - min(_ms)) / closes[i] * 100.0
+                    # 与「均线粘合」标签同一条规则：五线≤3% **或** 短线(5/10/20)≤2%
+                    conv = (_sp5 <= _CONV_THR) or (_sps <= _CONV_THR_S)
+                out.append((dates[i], closes[i] > s5 / 5.0, closes[i] > s20 / 20.0, conv))
             if i + 1 < n:
                 s5 += closes[i + 1] - closes[i - 4]
                 s20 += closes[i + 1] - closes[i - 19]
+                for _p in rolls:
+                    rolls[_p] += closes[i + 1] - closes[i + 1 - _p]
         # 2026-10-21：缓存停在 T-1 的（停牌 / 还没被本轮扫描刷到）**把最后状态顺延到今天**。
         # 不顺延的话，最新那一天的分子分母只算到"当天有 bar 的股票"——新加的板块 123 只里
         # 只有 6 只有今日 bar ⇒ 图上显示"50%（6只）"，看着像坏了。顺延用的是它自己的收盘与均线
         # （停牌股价格本来就不动），不是把"没数据"当成"跌破均线"。
         if _carry and out:
-            out.append((latest, out[-1][1], out[-1][2]))
+            out.append((latest, out[-1][1], out[-1][2], out[-1][3]))
         return sec, out
 
     done = 0
@@ -2450,13 +2479,17 @@ def _compute_sector_ma_breadth(days=_SECTOR_MA_MAX_DAYS):
                 sec, out = res
                 scanned += 1
                 per = counts[sec]
-                for d, a5, a20 in out:
+                for d, a5, a20, conv in out:
                     c = per[d]
                     c[2] += 1
                     if a5:
                         c[0] += 1
                     if a20:
                         c[1] += 1
+                    if conv is not None:
+                        c[4] += 1                      # n60：有 60 根历史、可判粘合的只数
+                        if conv:
+                            c[3] += 1
             if done % 200 == 0:
                 with _SECTOR_MA_LOCK:
                     _SECTOR_MA_STATE["done"] = done
@@ -2465,25 +2498,27 @@ def _compute_sector_ma_breadth(days=_SECTOR_MA_MAX_DAYS):
 
     sectors = []
     for sec, per in counts.items():
-        pts = [{"date": d, "pct5": round(a5 / t * 100, 2), "pct20": round(a20 / t * 100, 2), "n": t}
-               for d, (a5, a20, t) in sorted(per.items()) if t]
+        pts = [{"date": d, "pct5": round(a5 / t * 100, 2), "pct20": round(a20 / t * 100, 2), "n": t,
+                "pct_conv": (round(ac / n60 * 100, 2) if n60 else None), "n60": n60}
+               for d, (a5, a20, t, ac, n60) in sorted(per.items()) if t]
         if pts:
             sectors.append({"name": sec, "points": pts[-days:]})
     rec = {"schema": _SECTOR_MA_SCHEMA,
            "computed_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-           "latest_date": latest, "sectors": sectors,
+           "latest_date": latest, "end_date": latest, "sectors": sectors,
            # 2026-10-21：**把板块映射的指纹一起存**。原来只比 `latest_date` ⇒ owner 新加
            # 「大消费/黄金/数据要素」后，数据日没变 ⇒ 永远判"新鲜" ⇒ 面板一直显示旧板块集，
            # 新板块不出现（"占比没有更新"）。指纹 = watchlist mtime，任何打标都会变。
            "board_fp": _watchlist_fp(),
            "coverage": {"codes": len(mine), "scanned": scanned}}
-    try:
-        _SECTOR_MA_CACHE_FP.parent.mkdir(parents=True, exist_ok=True)
-        tmp = _SECTOR_MA_CACHE_FP.with_suffix(".tmp")
-        tmp.write_text(json.dumps(rec, ensure_ascii=False), encoding="utf-8")
-        tmp.replace(_SECTOR_MA_CACHE_FP)
-    except Exception:
-        pass
+    if not end:                       # 只有"最新"那档写磁盘；历史档只进内存
+        try:
+            _SECTOR_MA_CACHE_FP.parent.mkdir(parents=True, exist_ok=True)
+            tmp = _SECTOR_MA_CACHE_FP.with_suffix(".tmp")
+            tmp.write_text(json.dumps(rec, ensure_ascii=False), encoding="utf-8")
+            tmp.replace(_SECTOR_MA_CACHE_FP)
+        except Exception:
+            pass
     with _SECTOR_MA_LOCK:
         _SECTOR_MA_STATE["done"] = total
     return rec
@@ -4399,9 +4434,10 @@ class Api:
                     _tdf.at[_li, "high"] = max(float(_tdf.at[_li, "high"]), float(_live["high"]))
                     _tdf.at[_li, "low"] = min(float(_tdf.at[_li, "low"]), float(_live["low"]))
                     _live_close = float(_live["close"])
-                _tags = self._stock_tags_from_df(
+                _tagres = self._stock_tags_from_df(
                     _tdf, base_code,
-                    t30=(_t30 if _t30.get("trend") else False)).get("tags", [])
+                    t30=(_t30 if _t30.get("trend") else False))
+                _tags = _tagres.get("tags", [])
                 # 20 日线观察（2026-10-14 owner 需求：体检表补「是否站上20日线」列，
                 # 与建仓表/猎手表同口径）。口径 = 收盘价 > 20 日简单均线。
                 # ⚠️ 必须先剔**尾部假当日根**（盘前快照造的 price=开盘价/vol=0 占位根）再算——
@@ -4540,6 +4576,8 @@ class Api:
                 "bar_time": (_m30 or {}).get("bar_time"),
                 "advice": advice,
                 "tags": _tags,
+                # 偏离 365 日线（2026-10-23 owner：把「依据」列换成它）
+                "dev365": _tagres.get("dev365"),
                 # 20 日线观察（2026-10-14）：`above_ma20` True/False/None(数据不足)，
                 # `ma20_daily` 供 tooltip。**观察列、不驱动任何判定**（前端 ma20FlagCellHtml 同款）。
                 "above_ma20": _above_ma20,
@@ -8546,27 +8584,29 @@ class Api:
             return None, str(r.get("source") or "error")
         return r["trend"], "30min"
 
-    def _stock_tags_one(self, code, offline=False):
+    def _stock_tags_one(self, code, offline=False, date=None):
         """单只标签（**跨批次缓存**）→ `_stock_tags_compute`。
 
         2026-10-18：批量缓存按代码集合指纹存 ⇒ 猎手/风向标/建仓表的集合不同，同一只票会
-        重复算（每只约 300ms 的 pandas）。这里按 `(6位码, offline)` 再缓存一层，TTL 120s，
-        三个调用方互相复用，显著降低后台 CPU 尖峰（卡顿的直接来源之一）。"""
+        重复算（每只约 300ms 的 pandas）。这里按 `(6位码, offline, 日期)` 再缓存一层，TTL 120s，
+        三个调用方互相复用，显著降低后台 CPU 尖峰（卡顿的直接来源之一）。
+        `date`（2026-10-23）：猎手看历史日时必须按**那一天**的日线切片算，键里必须带日期，
+        否则今天的标签会被当成历史日的。"""
         _c = str(code).split("_")[0]
-        _ck = (_c, bool(offline))
+        _ck = (_c, bool(offline), str(date or "")[:10])
         _now = _time_mod.time()
         with _TAGS_LOCK:
             _hit = _TAGS_ONE_CACHE.get(_ck)
         if _hit and (_now - _hit[0]) < _tags_ttl_now():
             return _hit[1]
-        _res = self._stock_tags_compute(code, offline)
+        _res = self._stock_tags_compute(code, offline, date)
         with _TAGS_LOCK:
             if len(_TAGS_ONE_CACHE) > _TAGS_ONE_MAX:
                 _TAGS_ONE_CACHE.clear()
             _TAGS_ONE_CACHE[_ck] = (_time_mod.time(), _res)
         return _res
 
-    def _stock_tags_compute(self, code, offline=False):
+    def _stock_tags_compute(self, code, offline=False, date=None):
         """单只股票技术标签 → `_stock_tags_from_df`。`offline=True`：批量视图用，**零网络**。
 
         **2026-10-11 性能修复：日线改为「本地缓存优先」，缺才回退 provider。**
@@ -8580,8 +8620,13 @@ class Api:
         import pandas as pd
         # ① 本地缓存优先（`_daily_rows_cache_first` 内部还会用**批量快照**补当日 forming bar，零网络）
         df = None
+        _today = datetime.now().strftime("%Y-%m-%d")
+        _d = str(date or "")[:10]
+        _hist = bool(_d and _d < _today)          # 历史日回看（2026-10-23）
         try:
             _rows = self._daily_rows_cache_first(code)
+            if _hist and _rows:
+                _rows = [r for r in _rows if str(r.get("date"))[:10] <= _d]
             if _rows and len(_rows) >= 30:
                 df = pd.DataFrame(_rows)
         except Exception:
@@ -8592,9 +8637,10 @@ class Api:
             #   （逐只网络快照，且同为 GM 优先 ⇒ 又串行化，~1.9s/只），会把刚拿到的提速全还回去。
             # `offline=False`（建仓表/持仓体检，小池且喂决策）：缓存只省了"取日线"，
             #   当日 bar 仍按老逻辑用实时快照补，**行为与此前一致**。
-            if not offline:
+            if not offline and not _hist:
                 df = self._append_today_forming_bar(df, code)
-            return self._stock_tags_from_df(df, code)
+            # 历史日：30min 趋势拿不到当天的（那接口只有实时）⇒ 显式转日线斜率，别拿今天的冒充
+            return self._stock_tags_from_df(df, code, t30=False if _hist else None)
         # ② 本地无缓存（或过旧被新鲜度闸拦掉）→ 回退网络；这类标的数量少，不拖累批量
         from core.position_builder import fetch_daily_kline
         df = fetch_daily_kline(code)
@@ -8771,13 +8817,65 @@ class Api:
                        "flat": {"label": "震荡", "color": "neutral"}}[trend]
         tags.insert(0, trend_label)
 
+        # 均线粘合（2026-10-23 owner）：MA5/10/20/30/60 的相对离散度 ≤3%。
+        # ⚠️ **描述性标签，不参与任何打分/排序** —— 先做的实验（666,205 股票·日 / 1932 只 /
+        #    700 天）显示它描述的是"低波动蓄势"，没有正向 alpha：
+        #      spread≤3% 的 T+5 超额 −0.07%(t=−2.75)，越紧越差（≤1.5% 时 −0.22%, t=−3.62），
+        #      未来 5 日振幅 7.1% vs 非粘合 10.9%；分年符号还翻转（2023 +0.12 / 2026 −0.11）。
+        #    见 doc/research/2026-10-23_均线粘合_前向收益实验.md。
+        try:
+            from core.ma_reclaim import convergence_state as _conv_state
+            _cv = _conv_state(closes) if n >= 60 else None
+            if _cv and _cv.get("conv"):
+                # 两种口径：五线(5/10/20/30/60)≤3% 或 短线(5/10/20)≤2%（2026-10-23 补短口径，
+                # 股民说的"粘合"多半指短三条；实测两者都无正向 alpha，只是描述）
+                tags.insert(1, {"label": "均线粘合", "color": "neutral",
+                                "title": "%s粘合：五线(5/10/20/30/60) 离散 %.1f%%（≤3%%）· "
+                                         "短线(5/10/20) %.1f%%（≤2%%）· 低波动蓄势；"
+                                         "实测无正向 alpha（五线≤3%% 时 T+5 超额 −0.07%%），仅描述"
+                                         % (_cv.get("why") or "均线", _cv["spread"],
+                                            _cv.get("spread_short") or 0.0)})
+        except Exception:
+            pass
+
         box_pos = None
         if cur_box and cur_box["high"] > cur_box["low"]:
             box_pos = round((cur - cur_box["low"]) / (cur_box["high"] - cur_box["low"]), 2)
+        # 2026-10-23 owner：四张表把「理由/依据」列换成**偏离 365 日线**
+        # =（现价 − MA365）/ MA365 × 100。不足 365 根 → None（前端显示 —，不猜）。
+        dev365 = None
+        try:
+            if n >= 365:
+                _m365 = float(np.mean(closes[-365:]))
+                if _m365 > 0:
+                    dev365 = round((cur - _m365) / _m365 * 100, 2)
+        except Exception:
+            dev365 = None
         return {"trend": trend, "box_pos": box_pos, "price": round(cur, 3),
-                "trend_src": _trend_src, "tags": tags[:6]}
+                "dev365": dev365, "trend_src": _trend_src, "tags": tags[:7]}
 
-    def load_stock_tags_batch(self, codes, offline=False):
+    @staticmethod
+    def _tags_partial(codes, offline, date=None):
+        """从**逐只**缓存里捞已经算好的标签（`_TAGS_ONE_CACHE`，TTL 同 `_tags_ttl_now`）。
+
+        批量路径的 `_TAGS_CACHE` 是整批算完才落盘的，而 `_stock_tags_one` 每算完一只就写
+        逐只缓存 ⇒ 用这个做**增量交付**：前端每 3s 来问一次，能拿几只拿几只。
+        """
+        now = _time_mod.time()
+        try:
+            ttl = _tags_ttl_now()
+        except Exception:
+            ttl = 120.0
+        out = {}
+        with _TAGS_LOCK:
+            for c in codes or []:
+                base = str(c).split("_")[0]
+                hit = _TAGS_ONE_CACHE.get((base, bool(offline), str(date or "")[:10]))
+                if hit and (now - hit[0]) < ttl and isinstance(hit[1], dict):
+                    out[c] = hit[1]
+        return out
+
+    def load_stock_tags_batch(self, codes, offline=False, date=None):
         """批量拉技术标签（并发，ThreadPoolExecutor），带 TTL 缓存 + 后台异步重算。
         返回 {code: {trend, box_pos, tags}}。GUI 每 10s 轮询 refresh_pb 时走缓存即时返回，
         避免 7-12s 的批量计算（pandas + 网络）阻塞 pywebview 主线程冻结界面。"""
@@ -8792,7 +8890,8 @@ class Api:
         # 全部命中第 1 批缓存，只扫前 80 只且互相污染标签。改为 (today, codes指纹) 隔离各批次。
         import hashlib
         _codes_fp = hashlib.md5(",".join(sorted(set(codes))).encode()).hexdigest()[:12]
-        _cache_key = f"{today}:{_codes_fp}"
+        _dkey = str(date or "")[:10]
+        _cache_key = f"{today}:{_dkey}:{_codes_fp}"
 
         def _compute():
             result = {}
@@ -8820,10 +8919,18 @@ class Api:
                 """
                 try:
                     with _BG_PANDAS_SEM:                 # 与仓位结构预热**共用**这 2 个名额
-                        return self._stock_tags_one(c, offline)
+                        return self._stock_tags_one(c, offline, date)
                 finally:
                     _time_mod.sleep(0.005)
 
+            # ① 先把 30min bars **8 路并发取回来**（纯网络 I/O，不占 pandas 名额）。
+            #    不拆的话，每只 190ms 的取数会占满 `_BG_PANDAS_SEM` 的 2 个名额
+            #    ⇒ 50 只的板块 30~40s 才出标签（owner 2026-10-23 报「技术标签太慢」）。
+            try:
+                from analysis.trend30.adapter import prefetch_30min as _pf30
+                _pf30(codes, workers=8)
+            except Exception:
+                pass
             with ThreadPoolExecutor(max_workers=3) as ex:   # 6→3（2026-10-21）：纯 GIL 活，别和 UI 抢
                 futures = {ex.submit(_tags_one_yield, c): c for c in codes}
                 for fut in as_completed(futures, timeout=90):
@@ -8832,6 +8939,11 @@ class Api:
                         result[code] = fut.result()
                     except Exception:
                         result[code] = {"trend": "flat", "tags": []}
+            # 标签算完，再排结构层（它要出网，别在标签期间抢那 2 个 pandas 名额）
+            try:
+                self._kick_pb_struct_warm(codes)
+            except Exception:
+                pass
             return result
 
         def _cache_store(tags):
@@ -8862,13 +8974,26 @@ class Api:
         #   同源 = 与持仓 30min 体检 / 风向标**同一个函数、同一份缓存**（`position_structure`）。
         #   未热就**排队后台算**（`_kick_pb_struct_warm`），本批先回 pending，前端轮询补齐。
         _struct = {}
+        _struct_pending = False
         try:
             for c in codes:
                 _struct[str(c)] = self._pb_struct_get(c)
-            if any((v or {}).get("pending") for v in _struct.values()):
-                self._kick_pb_struct_warm(codes)
+            _struct_pending = any((v or {}).get("pending") for v in _struct.values())
         except Exception:
             _struct = {}
+
+        def _maybe_kick_struct():
+            """⚠️ 2026-10-23：标签批在跑时**先不排**结构层预热。两者共用 `_BG_PANDAS_SEM` 的
+            2 个名额，而结构层每只都要出网取 5min/30min（且是在**持有名额**的情况下等网络）
+            ⇒ 实测把 50 只板块的标签从 7.5s 拖到 19.5s。
+            ⚠️ 必须在 `_spawn_bg()` **之后**调用：`_TAGS_RUNNING` 是 `_spawn_bg` 里置的，
+            先置后判才有效（先前放在算 `_struct` 那一坨里 ⇒ 首帧永远是 False ⇒ 照排）。
+            """
+            if _struct_pending and not _TAGS_RUNNING:
+                try:
+                    self._kick_pb_struct_warm(codes)
+                except Exception:
+                    pass
 
         def _with_struct(payload):
             # 结构层走**独立键** `struct`：若塞进 tags 条目里，前端「标签是否取齐」的判据
@@ -8880,18 +9005,24 @@ class Api:
         with _TAGS_LOCK:
             cached = _TAGS_CACHE.get(_cache_key)
             if cached and (now - cached["ts"]) < _tags_ttl_now():
+                _maybe_kick_struct()
                 return _with_struct({"tags": cached["tags"]})
             if cached:
                 # 缓存过期 → 后台重算，先返回旧值，界面不阻塞
                 _spawn_bg()
+                _maybe_kick_struct()
                 return _with_struct({"tags": cached["tags"]})
         # 冷启动（无缓存）：2026-10-04 改为后台算 + 立即返回空，不再同步阻塞。
         # 原实现首次进建仓表/破位表会同步跑 40 线程 pandas+网络（实测 23~35s），把 pywebview
         # 主线程冻住。代价：标签首次先空着，前端 10s 轮询，约 20s 后自填。调用方均 `.get(code, {})`
         # 守卫，空 map 安全。
         _spawn_bg()
-        # 冷启动时标签还没算出来，但**结构**是独立缓存 —— 能拿到就先给，前端可先显示 MA5
-        return _with_struct({"tags": {}})
+        _maybe_kick_struct()
+        # 冷启动时标签还没算出来，但**结构**是独立缓存 —— 能拿到就先给，前端可先显示 MA5。
+        # ⚠️ 2026-10-23：批量缓存是「整批算完才落」，而逐只结果早就在 `_TAGS_ONE_CACHE` 里了
+        #   ⇒ 这里先回**已算好的那部分**（增量交付）。否则 50 只的板块要等最慢那只（30~40s）
+        #   才一次性出现，owner 报「技术标签更新实在太慢」就是它。
+        return _with_struct({"tags": self._tags_partial(codes, offline, date)})
 
     # ---------- 突破箱体股票聚合 ----------
     # 当日有效突破参数（2026-09-29，owner 口径：昨收 ≤ 上沿 < 今价，幅度 0.3~8%）
@@ -9476,6 +9607,18 @@ class Api:
         except Exception:
             n = 10
         end = str(end_date or "").replace("-", "")[:8]
+        latest_now = _market_latest_date()
+        _end_d = str(end_date or "").strip()[:10]
+        # 2026-10-23 owner：「选了 4月8日，站上5/20日线占比没跟着变」。
+        # 磁盘/内存档只覆盖**最新**那 40 天；历史日必须**锚在那一天重算**（只进内存）。
+        if _end_d and _end_d < latest_now:
+            with _SECTOR_MA_LOCK:
+                hit = _SECTOR_MA_BY_END.get(_end_d)
+            if (hit and int(hit.get("schema") or 0) == _SECTOR_MA_SCHEMA
+                    and str(hit.get("board_fp") or "") == _watchlist_fp()):
+                return _clean(self._sector_ma_payload(hit, n, end, stale=False))
+            self._kick_sector_ma_breadth(_end_d)
+            return _clean({"available": False, "warming": True, "end_date": _end_d})
         now = _time_mod.time()
         with _SECTOR_MA_LOCK:
             mem = dict(_SECTOR_MA_MEM)
@@ -9527,6 +9670,7 @@ class Api:
                 continue
             secs.append({"name": s.get("name"), "points": pts,
                          "last5": pts[-1].get("pct5"), "last20": pts[-1].get("pct20"),
+                         "last_conv": pts[-1].get("pct_conv"),      # 2026-10-23 标题里也显示具体数值
                          "n": pts[-1].get("n")})
         secs.sort(key=lambda x: (rank.get(str(x.get("name") or ""), 9999),
                                  str(x.get("name") or "")))
@@ -9534,8 +9678,31 @@ class Api:
                 "latest_date": rec.get("latest_date"), "computed_at": rec.get("computed_at"),
                 "sectors": secs, "coverage": rec.get("coverage") or {}}
 
-    def _kick_sector_ma_breadth(self):
-        """后台算一次板块均线占比（单飞）。仅后台线程跑；失败静默。"""
+    def _kick_sector_ma_breadth(self, end=None):
+        """后台算一次板块均线占比（单飞）。仅后台线程跑；失败静默。
+
+        `end` 给定 = **历史档**：窗口锚在那一天，结果只进内存（`_SECTOR_MA_BY_END`）。
+        """
+        if end:
+            with _SECTOR_MA_LOCK:
+                if end in _SECTOR_MA_END_RUNNING:
+                    return
+                _SECTOR_MA_END_RUNNING.add(end)
+
+            def _bg_hist():
+                try:
+                    val = _compute_sector_ma_breadth(_SECTOR_MA_MAX_DAYS, end=end)
+                    with _SECTOR_MA_LOCK:
+                        _SECTOR_MA_BY_END[end] = val
+                        while len(_SECTOR_MA_BY_END) > _SECTOR_MA_END_MAX:
+                            _SECTOR_MA_BY_END.pop(next(iter(_SECTOR_MA_BY_END)))
+                except Exception:
+                    pass
+                finally:
+                    with _SECTOR_MA_LOCK:
+                        _SECTOR_MA_END_RUNNING.discard(end)
+            _th.Thread(target=_bg_hist, daemon=True, name="sector-ma-hist").start()
+            return
         with _SECTOR_MA_LOCK:
             if _SECTOR_MA_STATE.get("running"):
                 return
@@ -10354,6 +10521,12 @@ class Api:
             stock_mv = 0.0
             stock_cost = 0.0
             open_qty_total = 0
+            # 2026-10-24 owner：「自动盘根据逐步流水模仿手动盘给出每支股票的盈亏状态」
+            # ⇒ 补上手动盘那张逐股表有的列：买入额/卖出额/费用/收益率/区间/现价/持仓成本
+            stock_buy_amt = 0.0
+            stock_sell_amt = 0.0
+            stock_fees = 0.0
+            _starts, _ends = [], []
             for c in cycles:
                 closed = c["end"] is not None
                 matched = min(c["buy_qty"], c["sell_qty"])
@@ -10375,6 +10548,12 @@ class Api:
                     stock_cost += remain_cost
                     open_qty_total += residual
                 stock_realized += realized
+                stock_buy_amt += c["buy_amt"]
+                stock_sell_amt += c["sell_amt"]
+                stock_fees += c["buy_fee"] + c["sell_fee"]
+                if c["start"]:
+                    _starts.append(c["start"])
+                _ends.append(c["end"] or today)
                 cost_basis = matched * unit_cost
                 out_cycles.append({
                     "start": c["start"], "end": c["end"],
@@ -10398,13 +10577,24 @@ class Api:
             tot_unreal += stock_unreal
             tot_mv += stock_mv
             tot_cost += stock_cost
+            _tot = stock_realized + stock_unreal
+            _dv = cost_map.get(code) or {}
             stocks.append({
                 "code": code,
                 "name": names.get(code, code),
                 "realized_pnl": round(stock_realized, 2),
                 "unreal_pnl": round(stock_unreal, 2),
+                "total_pnl": round(_tot, 2),
+                "pnl_pct": round(_tot / stock_buy_amt * 100, 2) if stock_buy_amt else None,
                 "open_qty": open_qty_total,
                 "market_value": round(stock_mv, 2),
+                "buy_amt": round(stock_buy_amt, 2),
+                "sell_amt": round(stock_sell_amt, 2),
+                "fees": round(stock_fees, 2),
+                "last_price": round(float(last_px or 0), 3) if last_px else None,
+                "cost_price": round(float(_dv.get("cost") or 0), 3) if _dv.get("qty") else None,
+                "first": min(_starts) if _starts else "",
+                "last": max(_ends) if _ends else "",
                 "trades_n": len(evs),
                 "round_trips": sum(1 for c in cycles if c["end"] is not None),
                 "cycles": out_cycles,
@@ -11073,7 +11263,7 @@ class Api:
         #    每只都会 `_trend30_trend` → GM（池子 max_workers=1，串行）⇒ 18 只排满 GM，
         #    把 K 线/指数/成交额等**真正需要实时的**调用全堵在后面（2026-10-23 GUI 卡顿排查）。
         try:
-            _tags_map = (self.load_stock_tags_batch(codes, offline=True) or {}).get("tags") or {}
+            _tags_map = (self.load_stock_tags_batch(codes, offline=True, date=date) or {}).get("tags") or {}
         except Exception:
             _tags_map = {}
         names = _jiuyan_names()
@@ -11090,6 +11280,7 @@ class Api:
                 "reason_at": meta.get("reason_at") or "",
                 # 技术标签（空数组 = 后台还在批算，前端显示 ⏳ 标签 并按 15s 轮询补）
                 "tags": ((_tags_map.get(c) or {}).get("tags") or []),
+                "dev365": (_tags_map.get(c) or {}).get("dev365"),
                 # —— 以下与建仓表同名列同义 ——
                 "verdict": k.get("verdict") or ("insufficient_data" if not k else "pending"),
                 "composite_score": int(k.get("score") or 0),
@@ -11564,7 +11755,7 @@ class Api:
         try:
             codes = [r.get("code") for r in result.get("rows", []) if r.get("code")]
             if codes:
-                tag_res = self.load_stock_tags_batch(codes)
+                tag_res = self.load_stock_tags_batch(codes, date=date)
                 tags_map = tag_res.get("tags", {})
                 for r in result.get("rows", []):
                     code = r.get("code")
@@ -11572,6 +11763,7 @@ class Api:
                     if info:
                         r["tags"] = info.get("tags", [])
                         r["trend"] = info.get("trend")
+                        r["dev365"] = info.get("dev365")
         except Exception:
             pass
         return result
@@ -11598,6 +11790,7 @@ class Api:
                     if info:
                         r["tags"] = info.get("tags", [])
                         r["trend"] = info.get("trend")
+                        r["dev365"] = info.get("dev365")
         except Exception:
             pass
         # 当日「均线回站」+ 突破时刻（2026-10-23 owner，三张表同源）
@@ -11843,6 +12036,52 @@ class Api:
         except Exception:
             return {}
 
+    # 2026-10-24 owner：「建仓信号扫描 站上5日线该绿、破了该红，现在全是白的」。
+    # 根因：整行底色读的是 trace 里的 `timing_features.above_ma5`，而**历史日/旧 trace 根本没有这个字段**
+    # （4月8日那天 49 行全是 None）⇒ 不着色。这里按**该日期**的本地日线补齐，带 (码,日期,mtime) 缓存。
+    _PB_TF_CACHE: dict = {}
+
+    @classmethod
+    def _backfill_timing_features(cls, rows, date):
+        """给缺 `above_ma5` 的行补上（用 ≤ 该日的本地日线收盘算 MA5/MA20）。"""
+        d = str(date)[:10]
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            tf = row.get("timing_features")
+            if isinstance(tf, dict) and tf.get("above_ma5") is not None:
+                continue
+            code = str(row.get("code") or "").split("_")[0]
+            if not code:
+                continue
+            try:
+                fp = _DAILY_KLINE_DIR / f"{code}.json"
+                mt = fp.stat().st_mtime_ns
+                ck = (code, d, mt)
+                hit = cls._PB_TF_CACHE.get(ck)
+                if hit is None:
+                    rs = json.loads(fp.read_text(encoding="utf-8")).get("rows") or []
+                    rs = [r for r in rs if str(r.get("date"))[:10] <= d]
+                    if len(rs) < 20:
+                        continue
+                    cs = [float(r.get("close") or 0) for r in rs]
+                    cur = cs[-1]
+                    if not (cur > 0):
+                        continue
+                    hit = (bool(cur > sum(cs[-5:]) / 5.0),
+                           bool(cur > sum(cs[-20:]) / 20.0) if len(cs) >= 20 else None)
+                    if len(cls._PB_TF_CACHE) > 4000:
+                        cls._PB_TF_CACHE.clear()
+                    cls._PB_TF_CACHE[ck] = hit
+                tf = dict(tf) if isinstance(tf, dict) else {}
+                if tf.get("above_ma5") is None:
+                    tf["above_ma5"] = hit[0]
+                if tf.get("above_ma20") is None:
+                    tf["above_ma20"] = hit[1]
+                row["timing_features"] = tf
+            except Exception:
+                continue
+
     def _agg_position_builder(self, date, filter_high_confidence=False):
         fp = TRACES / f"position_builder_{date}.jsonl"
         wl = _load_json(STATE_DIR / "watchlist_buy.json", {})
@@ -11974,6 +12213,15 @@ class Api:
             })
             if is_archived: archived_cnt += 1
             else: pending += 1
+
+        # 2026-10-24 owner：「建仓表站上5日线该绿、破了该红，现在全是白的」。
+        # 两个原因都要补：① 历史日/旧 trace 没有 `timing_features`；② 那天**根本没扫过**
+        # （4月8日 traces 里没有 position_builder 文件 ⇒ 49 行全是"等待扫描"行，天然没有特征）。
+        # 统一用**该日期的本地日线**补 above_ma5/above_ma20（带 mtime 缓存，49 行毫秒级）。
+        try:
+            self._backfill_timing_features(rows, date)
+        except Exception:
+            pass
 
         rows.sort(key=lambda x: -(x.get("composite_score") or 0))
         verdicts["pending"] = pending

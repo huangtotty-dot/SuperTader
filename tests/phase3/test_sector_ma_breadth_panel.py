@@ -122,7 +122,45 @@ class TestFrontend(unittest.TestCase):
         self.assertIn("if (_act && _act.dataset.tab === \"hunter\") { loadSectorStars(); loadSectorMaBreadth(); }", _JS)
 
     def test_uses_same_end_date_as_star_map(self):
-        self.assertIn('apiCall("load_sector_ma_breadth", 10, state.date || null)', _JS)
+        # 2026-10-23：两块图都改走 `_panelDate()`（= 猎手「重新生成」那天的覆盖 || 全局日期）
+        self.assertIn('apiCall("load_sector_ma_breadth", 10, _panelDate())', _JS)
+        self.assertIn('apiCall("load_sector_constellation", 10, _panelDate())', _JS)
+
+    def test_猎手跑历史日时两块图跟到同一天(self):
+        """owner：「运行了 4月8日的选股猎手，星轨图 / 占比图还是显示最近 10 日」。"""
+        self.assertIn("_setHunterPanelDate(date)", _JS, "猎手跑完要把两块图钉到同一天")
+        self.assertIn("function _clearHunterDayCaches()", _JS,
+                      "换日期要清掉按板块缓存的标签/结构（否则拿到今天算的）")
+
+
+class TestConvergenceSeries(unittest.TestCase):
+    """2026-10-23 owner：「这个部分再加一个，统计均线粘合在坐标轴中占板块的比例」。"""
+
+    def test_后端给出粘合占比与独立分母(self):
+        import inspect
+        src = inspect.getsource(t_gui._compute_sector_ma_breadth)
+        self.assertIn("pct_conv", src)
+        self.assertIn("n60", src, "粘合需要 ≥60 根历史，分母必须单独算")
+        self.assertIn("CONV_THR as _CONV_THR", src)
+        self.assertIn("CONV_THR_SHORT as _CONV_THR_S", src,
+                      "口径必须与「均线粘合」技术标签同源（五线≤3% 或 短线≤2%）")
+
+    def test_前端第三条序列(self):
+        self.assertIn('const SECMA_CONV = "#a371f7"', _JS)
+        self.assertIn('series.push(mk(s.points.map(p => p.pct_conv), SECMA_CONV, "均线粘合"', _JS)
+        # 改用「五线≤3% 或 短线≤2%」后中位 20.6%/p90 42.9%，与另两条同量级 ⇒ 共用 0~100 尺度
+        self.assertIn('legend: { data: ["站上5日线", "站上20日线", "均线粘合"]', _JS)
+        self.assertNotIn('position: "right"', _JS.split("function renderSectorMaBreadth")[1].split("function ")[0],
+                         "粘合率已与另两条同量级，不需要单独右轴")
+
+    def test_标题显示粘合具体数值(self):
+        """owner：「板块当天的粘合占比显示具体数值」。"""
+        self.assertIn("last_conv", _JS)
+        self.assertIn("粘合 ${fmt(s.last_conv, 0)}%", _JS)
+
+    def test_提示框按每板块3条系列取索引(self):
+        self.assertIn("Math.floor((ps[0].seriesIndex || 0) / 3)", _JS,
+                      "每板块现在是 3 条系列，除 2 会串板块")
 
 
 if __name__ == "__main__":

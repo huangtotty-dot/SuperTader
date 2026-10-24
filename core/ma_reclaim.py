@@ -78,6 +78,54 @@ def reclaim5_frame(df, target) -> dict:
 # ══════════════════════════════════════════════════════════════════════
 RECLAIM_PERIODS = (5, 10, 20, 30, 60)
 
+# ══════════════════════════════════════════════════════════════════════
+# 均线粘合（MA5/10/20/30/60 收敛）—— 2026-10-23 owner 要的"均线是否粘合"
+#
+# 先做了实验（`scripts/experiment/ma_convergence_forward_20261023.py`，
+# doc/research/2026-10-23_均线粘合_前向收益实验.md）：666,205 股票·日 / 1932 只 / 700 天
+#   · 粘合(spread≤3%) T+5 超额 **−0.07%**(t=−2.75)、越紧越差（≤1.5% 时 −0.22%, t=−3.62）
+#   · 未来 5 日振幅 7.07% vs 非粘合 10.85% ⇒ **它描述的是"低波动蓄势"，不是方向**
+#   · 分年不稳（2023 +0.12% / 2024 −0.00% / 2025 −0.08% / 2026 −0.11%）
+# ⇒ 结论：**只能当描述性标签，不能当买入信号**（量级也小于一次往返成本）。
+# ══════════════════════════════════════════════════════════════════════
+CONV_THR = 3.0                       # 五线（5/10/20/30/60）离散度阈值（%）
+# 2026-10-23 owner 复核：有研新材 2026-04-08 五线离散 7.6%（MA30/60 还远），但 **MA5/10/20 只差 1.9%**
+# —— 股民口中的"均线粘合"多半指短三条。实测（同一次实验，`二B` 表）：
+#   短线(5/10/20) ≤2% 覆盖 26% 的股票·日、T+5 超额 −0.03%(t=−0.45)；≤3% 覆盖 42%、−0.00%(t=−0.73)。
+# ⇒ 短口径同样没有正向 alpha，只是"看起来更像粘合"。故定义改为 **五线≤3% 或 短线≤2%**。
+CONV_THR_SHORT = 2.0
+
+
+def convergence_state(closes, thr: float = CONV_THR):
+    """均线粘合状态。`closes` 末根 = 当日收盘（与下面 reclaim_state 同约定）。
+
+    返回 {"spread", "conv", "arr", "ma": {p: MA}}；不足 60 根 → None。
+      · spread = (max(MA5/10/20/30/60) - min(...)) / close × 100（%）
+      · conv   = spread <= thr
+      · arr    = "bull"（多头排列）/ "bear"（空头排列）/ "mix"
+    """
+    if closes is None or len(closes) < 60:
+        return None
+    arr = np.asarray(closes, dtype=float)
+    price = float(arr[-1])
+    if not (price > 0):
+        return None
+    ma = {p: float(np.mean(arr[-p:])) for p in RECLAIM_PERIODS}
+    vals = np.array([ma[p] for p in RECLAIM_PERIODS])
+    spread = float(vals.max() - vals.min()) / price * 100.0
+    _sv = vals[:3]                                        # MA5/10/20（短口径）
+    spread_s = float(_sv.max() - _sv.min()) / price * 100.0
+    conv5 = bool(spread <= thr)
+    convs = bool(spread_s <= CONV_THR_SHORT)
+    seq = [ma[p] for p in RECLAIM_PERIODS]
+    ordered = all(seq[i] > seq[i + 1] for i in range(len(seq) - 1))
+    reversed_ = all(seq[i] < seq[i + 1] for i in range(len(seq) - 1))
+    return {"spread": round(spread, 3), "spread_short": round(spread_s, 3),
+            "conv5": conv5, "convs": convs, "conv": bool(conv5 or convs),
+            "why": ("五线" if conv5 else ("短线" if convs else "")),
+            "arr": "bull" if ordered else ("bear" if reversed_ else "mix"),
+            "ma": {p: round(v, 3) for p, v in ma.items()}}
+
 
 def reclaim_state(closes, period: int):
     """`ma5_state` 的任意周期版。closes 末根 = 今日最新价（与 ma5_state 同约定）。

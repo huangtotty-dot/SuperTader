@@ -94,7 +94,7 @@ class TestLoad:
                                            "conds": {}, "reason": "空头趋势",
                                            "above_ma5": True, "above_ma20": False, "stage": 1}})
         monkeypatch.setattr(t_gui.Api, "load_stock_tags_batch",
-                            lambda self, codes, offline=False: {
+                            lambda self, codes, offline=False, date=None: {
                                 "tags": {"002929": {"tags": [{"label": "上行", "cls": "up"}]}}})
         r = api.load_abnormal_pool("2026-10-22")["rows"][0]
         assert r["tags"] == [{"label": "上行", "cls": "up"}], "技术标签要随行下发"
