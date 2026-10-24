@@ -61,6 +61,10 @@ NAMES = {
 _JY_NAMES_CACHE = {"mtime": None, "map": {}}
 
 
+# 不是题材、只作标记的「板块」名（不进星空图/站上均线占比）
+NON_BOARD_LABELS = {"北交所", "央企"}
+
+
 def _jiuyan_board() -> dict:
     """韭研 watchlist → {6位码: 主板块}。**与 `oversold_gap_confirm.prescreen.sym2board_map()`
     同口径**（取第 1 个有值的 `jiuyan_category{1..9}`，再过 MERGES；全空则按 `jiuyan_category`
@@ -92,6 +96,8 @@ def _jiuyan_board() -> dict:
             if not cats:
                 c0 = str(info.get("jiuyan_category", "") or "")
                 cats = [merges.get(x.strip(), x.strip()) for x in c0.split("|") if x.strip()]
+            # 2026-10-25：「北交所 / 央企」是**机构/市场标签**，不是题材板块 ⇒ 不参与板块统计
+            cats = [c for c in cats if c not in NON_BOARD_LABELS]
             out[str(code)] = cats[0] if cats else ""
         _JY_BOARD_CACHE.update({"mtime": fp.stat().st_mtime, "map": out})
     except Exception:
@@ -2468,7 +2474,7 @@ _SECTOR_MA_END_RUNNING: set = set()
 _SECTOR_MA_END_MAX = 12
 # 缓存口径版本：**改样本口径/板块来源时 +1**（否则旧磁盘档会被当新鲜直接回放）。
 # 2（2026-10-21）：样本容忍 5 个自然日滞后 + 缓存键加板块指纹 board_fp。
-_SECTOR_MA_SCHEMA = 3   # v3: 新增「均线粘合占比」pct_conv（2026-10-23）
+_SECTOR_MA_SCHEMA = 4   # v4: 板块来源剔除「北交所/央企」机构标签（2026-10-25）
 
 
 def _watchlist_fp():

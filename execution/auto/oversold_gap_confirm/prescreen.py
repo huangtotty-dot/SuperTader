@@ -78,6 +78,8 @@ def sym2board_map() -> dict:
         if not cats:
             c = str(info.get("jiuyan_category", "") or "").strip()
             cats = [MERGES.get(cc.strip(), cc.strip()) for cc in c.split("|") if cc.strip()]
+        # 2026-10-25：与 t_gui._jiuyan_board 同口径——「北交所/央企」是机构标签不是题材
+        cats = [c for c in cats if c not in ("北交所", "央企")]
         m[str(code)] = cats[0] if cats else ""
     return m
 
