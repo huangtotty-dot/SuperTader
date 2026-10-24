@@ -3589,8 +3589,15 @@ function renderAutoPnl(d) {
     //   末尾保留自动盘特有的「周期明细」。数据全部来自 fill 流（不动 heartbeat）。
     const _f = v => v == null ? "—" : ((v >= 0 ? "+" : "") + fmt(v, 0));
     const tot = st.total_pnl != null ? st.total_pnl : (st.realized_pnl + (st.unreal_pnl || 0));
-    return `<tr>
-      <td>${esc(st.name || st.code)} <span class="mono cell-dim">${esc(st.code)}</span></td>
+    // 2026-10-24 owner：「自动盘我没有看到每支股票的历史盈利状态」——
+    //   根因是 #autoPnlBody 那段在 `overflow-x:hidden` 的主区里，13 列把最右边的「周期明细」**裁掉了**
+    //   （不是没算，是看不见）。改成**点行展开**：主行只放汇总，历史（逐个周期）收在下方一行里。
+    const _nCyc = (st.cycles || []).length;
+    return `<tr class="auto-pnl-row" onclick="toggleAutoCycles(this)" style="cursor:pointer"
+        title="点一下看这只票的**历史**（每次建仓→清仓的盈亏）">
+      <td><span class="ac-arrow cell-dim">${_nCyc > 1 ? "▸" : "·"}</span>
+        ${esc(st.name || st.code)} <span class="mono cell-dim">${esc(st.code)}</span>
+        ${_nCyc > 1 ? `<span class="badge" style="font-size:9px">${_nCyc}段</span>` : ""}</td>
       <td class="num ${clsOf(st.realized_pnl)}">${_f(st.realized_pnl)}</td>
       <td class="num ${clsOf(st.unreal_pnl || 0)}">${st.unreal_pnl ? _f(st.unreal_pnl) : "—"}</td>
       <td class="num ${clsOf(tot)}"><b>${_f(tot)}</b></td>
@@ -3603,18 +3610,34 @@ function renderAutoPnl(d) {
       <td class="num">${st.last_price == null ? "—" : fmt(st.last_price, 2)}
         ${st.cost_price == null ? "" : `<div class="cell-dim" style="font-size:10px">成本 ${fmt(st.cost_price, 3)}</div>`}</td>
       <td class="mono cell-dim" style="font-size:11px">${esc(st.first || "")} ~ ${esc(st.last || "")}</td>
-      <td>${cycles}</td>
+    </tr>
+    <tr class="auto-cyc-row" style="display:none">
+      <td colspan="12" style="padding:2px 10px 8px 26px;background:rgba(139,148,158,.05)">
+        <div class="cell-dim" style="font-size:10px;margin-bottom:2px">历史（建仓→清仓 / 天数 / 量 / 均价 / 盈亏）</div>
+        ${cycles || '<div class="cell-dim">无周期</div>'}
+      </td>
     </tr>`;
   }).join("");
-  body.innerHTML = `<table><thead><tr>
+  // 外层加水平滚动兜底：窄窗口下别再把右边的列裁掉
+  body.innerHTML = `<div style="overflow-x:auto"><table><thead><tr>
     <th>股票</th><th class="num">已实现</th><th class="num" title="未平仓部分按日线缓存最新收盘估">浮动</th>
     <th class="num">合计</th><th class="num" title="合计 ÷ 买入额">收益率</th>
     <th class="num">买入额</th><th class="num">卖出额</th><th class="num">费用</th>
     <th class="num">笔数</th><th class="num">仍持有</th>
     <th class="num" title="日线缓存最新收盘；小字＝券商口径持仓成本（fill 派生、不含手续费）">现价<br><span style="font-size:9px;opacity:.6">/成本</span></th>
     <th>区间</th>
-    <th>周期明细（建仓→清仓 / 天数 / 量 / 均价 / 盈亏）</th>
-  </tr></thead><tbody>${rows}</tbody></table>`;
+  </tr></thead><tbody>${rows}</tbody></table></div>
+  <div class="cell-dim" style="font-size:10px;margin-top:4px">点任意一行展开该票的**历史**（每次建仓→清仓一段）</div>`;
+}
+
+/* 展开/收起某只票的历史周期（数据本来就随 payload 下来，纯前端切换） */
+function toggleAutoCycles(tr) {
+  const next = tr && tr.nextElementSibling;
+  if (!next || !next.classList.contains("auto-cyc-row")) return;
+  const open = next.style.display !== "none";
+  next.style.display = open ? "none" : "";
+  const arw = tr.querySelector(".ac-arrow");
+  if (arw) arw.textContent = open ? "▸" : "▾";
 }
 
 /* ---- 自动盘成交流水 · 每日盈亏（2026-10-10 需求2）：自动盘无交割单，靠事件总线反推 ---- */
@@ -6249,6 +6272,9 @@ function applySectorTags(tbody, category) {
     }
   });
   // 板块阶段判定（用 trend）
+  // 2026-10-24：若后端已下发韭研广度阶段（data-breadth=1），**不要**用个股趋势覆盖它——
+  // 两者口径不同：breadth=板块涨停家数生命周期；trend=板块内个股趋势占比。后者只是兜底。
+  if (stageEl && stageEl.dataset && stageEl.dataset.breadth === "1") return;
   const vals = Object.values(tagsMap).map(x => x && x.trend).filter(Boolean);
   const up = vals.filter(v => v === "up").length;
   const down = vals.filter(v => v === "down").length;
@@ -7023,6 +7049,11 @@ function hunterBreakoutCard(dateStr) {
     </div>`;
 }
 
+/* 板块生命周期阶段（2026-10-24）：与后端 modules/sector_phase.py 的 PHASES 一一对应。
+   只做颜色映射；真正的判定在 Python（单一真源），前端不重复逻辑。 */
+const PHASE_CLS = {"首现": "p-first", "发酵": "p-ferment", "高潮": "p-peak",
+                   "退潮": "p-ebb", "扩散": "p-spread", "观察": "p-watch", "—": "p-none"};
+
 function renderHunter(h) {
   // 「建仓符合度是否已算」：`build_n` 由后端在**算完之后**回填（算了多少只）。
   // =0 说明这一步还没跑到/没跑完 ⇒ 各行显示 ⏳（更新中）而不是 —（无数据）。
@@ -7049,6 +7080,8 @@ function renderHunter(h) {
     // 分组键经过 normGk 归并（半导体设备-测试设备→半导体设备），查注释时先精确、
     // 再按「-」首段回退匹配，保证带子级后缀的概念也能命中。
     const conceptDescs = h.concept_descs || {};
+    // 2026-10-24：板块生命周期阶段（后端 modules/sector_phase.py 计算，韭研复盘广度驱动）
+    const sectorPhase = h.sector_phase || {};
     const gkDesc = gk => {
       if (conceptDescs[gk]) return conceptDescs[gk];
       const hit = Object.keys(conceptDescs).find(k => k.split("-")[0] === gk);
@@ -7205,9 +7238,13 @@ function renderHunter(h) {
            //    这里用与 hunterRow 完全相同的谓词直接判。
            ? '均分 <span class="cell-dim" title="建仓符合度后台计算中，算完自动填上">⏳更新中</span>'
            : '均分 <span class="cell-dim" title="该二级板块内没有可用的建仓得分">—</span>');
+      // 2026-10-24 owner：「在我画红色框的地方补充这个板块的解释」——概念注释从仅悬停
+      // 改为**直接显示在分组头右侧**（有注释才显示；过长省略，悬停看全文）。
+      const _gDesc = gkDesc(gk);
       const head = `<tr class="h-subgroup-head"><td colspan="15">
-        <span class="h-subgroup-name"${gkDesc(gk) ? ` title="${esc(gk + "：" + gkDesc(gk))}" style="cursor:help"` : ""}>📂 ${esc(gk)}</span>
+        <span class="h-subgroup-name"${_gDesc ? ` title="${esc(gk + "：" + _gDesc)}" style="cursor:help"` : ""}>📂 ${esc(gk)}</span>
         <span class="cell-dim" style="font-size:10px">${gs.length}只 · ${gScoreTxt}${gUp ? ` · 涨停${gUp}` : ""}</span>
+        ${_gDesc ? `<span class="h-subgroup-desc" title="${esc(gk + "：" + _gDesc)}">${esc(_gDesc)}</span>` : ""}
       </td></tr>`;
       return head + gs.map(hunterRow).join("");
     }).join("");
@@ -7280,7 +7317,13 @@ function renderHunter(h) {
             : '<span class="cell-dim" style="font-size:10px">D 明细未生成（重新运行猎手）</span>')}
         </div>
         <div class="hunter-meta2">
-          <span class="h-stage-badge cell-dim">阶段…</span>
+          ${(() => {
+            const p = sectorPhase[category];
+            if (!p) return '<span class="h-stage-badge cell-dim" title="尚未录入该板块的韭研复盘广度（每日复盘上传后自动生成）">阶段…</span>';
+            const cls = PHASE_CLS[p.phase] || "p-none";
+            const tip = `${p.phase} · 今日${p.count}只 · 3日${p.delta3 >= 0 ? "+" : ""}${p.delta3} · 5日峰值${p.peak5} · 最高${p.max_board}板\n${p.reason || ""}`;
+            return `<span class="h-stage-badge ${cls}" data-breadth="1" title="${esc(tip)}">${esc(p.phase)}</span>`;
+          })()}
           <span class="h-trend-badge ${heatChange != null ? (heatChange > 0 ? 'h-trend-up' : heatChange < 0 ? 'h-trend-down' : 'h-trend-flat') : 'h-trend-flat'}">
             ${trendIcon || '—'} ${heatChange != null ? (heatChange>=0?'+':'')+fmt(heatChange,0) : ''}
           </span>
@@ -8117,6 +8160,91 @@ function renderZtDtPanel(emo, hist) {
   });
 }
 
+/* ===== 主线广度（2026-10-24）：韭研复盘 → 每日复盘页 ===== */
+function _breadthShade(v, vmax) {
+  if (!v) return { bg: "", fg: "var(--text-faint)" };
+  const t = Math.min(1, v / Math.max(1, vmax));
+  const a = 0.10 + 0.72 * t;
+  return { bg: `rgba(42,120,214,${a.toFixed(3)})`, fg: a > 0.55 ? "#ffffff" : "var(--text)" };
+}
+
+function _phaseChip(ph) {
+  const cls = PHASE_CLS[ph] || "p-none";
+  return `<span class="h-stage-badge ${cls}" style="font-size:11px;white-space:nowrap">${esc(ph || "—")}</span>`;
+}
+
+function renderBreadthTable(rows, dates, opts) {
+  const vmax = Math.max(1, ...rows.flatMap(r => (r.series || []).map(v => Number(v) || 0)));
+  const head = `<tr><th style="text-align:left">${esc((opts && opts.name) || "板块")}</th>`
+    + dates.map(d => `<th class="num" style="font-size:10px;font-weight:400">${esc(d.slice(5))}</th>`).join("")
+    + `<th>今日</th><th>阶段</th><th class="num">3日</th><th class="num">5日峰</th></tr>`;
+  const body = rows.map(r => {
+    const vals = r.series || [];
+    const cells = dates.map((d, i) => {
+      const raw = vals[i];
+      const has = raw !== null && raw !== undefined && raw !== "";
+      const v = has ? Number(raw) : null;
+      const s = has ? _breadthShade(v, vmax) : { bg: "", fg: "" };
+      return `<td class="num" style="text-align:center;font-size:11px;min-width:26px;`
+        + `${s.bg ? `background:${s.bg};` : ""}color:${s.fg}">${has ? (v || "") : ""}</td>`;
+    }).join("");
+    const d3 = Number(r.delta3) || 0;
+    return `<tr><td style="font-weight:600;white-space:nowrap">${esc(r.name)}</td>${cells}`
+      + `<td class="num"><b>${Number(r.count) || 0}</b></td><td>${_phaseChip(r.phase)}</td>`
+      + `<td class="num cell-dim">${d3 >= 0 ? "+" : ""}${d3}</td>`
+      + `<td class="num cell-dim">${Number(r.peak5) || 0}</td></tr>`;
+  }).join("");
+  return `<div style="overflow-x:auto" title="横向滚动查看更早的交易日"><table class="rv-table rb-table" style="width:max-content;min-width:100%">`
+    + `<thead>${head}</thead><tbody>${body}</tbody></table></div>`;
+}
+
+async function loadReviewBreadth(date) {
+  const body = document.getElementById("reviewBreadthBody");
+  const meta = document.getElementById("reviewBreadthMeta");
+  if (!body) return;
+  try {
+    const r = await apiCall("get_sector_breadth", 500, date || null);
+    if (!r || r.error || !((r.dates || []).length)) {
+      body.innerHTML = `<div class="empty">暂无复盘广度数据。上传当日韭研涨停图后运行 `
+        + `<code>python scripts/daily_recap_ingest.py --file tmp/recap_YYYYMMDD.json</code> 入库。</div>`;
+      if (meta) meta.textContent = (r && r.error) ? r.error : "";
+      return;
+    }
+    const dates = (r.dates || []);
+    const shrink = x => ({ ...x, series: (x.series || []).slice(-dates.length) });
+    const themes = (r.themes || []).map(shrink).map(t => ({ ...t, name: t.theme }));
+    const ai = (r.ai_chain || []).map(shrink).map(t => ({
+      ...t, name: t.label || (t.sections || []).join("+")
+    }));
+    const others = (r.others || []).map(shrink).map(t => ({
+      ...t, name: t.label || "-"
+    }));
+    const _dataSet = new Set(r.data_dates || []);
+    const _miss = dates.filter(d => !_dataSet.has(d)).length;
+    if (meta) meta.textContent = `截至 ${r.asof} · 数据更新 ${r.updated_at || "—"} · 共 ${dates.length} 个交易日（横向滚动看更早）`
+      + (_miss ? ` · 其中 ${_miss} 天未录入（空白）` : "");
+    body.innerHTML = `
+      <div class="cell-dim" style="font-size:10px;margin-bottom:4px">← 横向滚动查看更早的交易日 →</div>
+      <div class="cell-dim" style="font-size:11px;margin-bottom:4px">主题聚合（跨分类）</div>
+      ${renderBreadthTable(themes, dates, { name: "主题" })}
+      <div class="cell-dim" style="font-size:11px;margin:10px 0 4px">AI链内部分支</div>
+      ${renderBreadthTable(ai, dates, { name: "分支" })}
+      ${others.length ? `<div class="cell-dim" style="font-size:11px;margin:10px 0 4px">其他板块（按窗口总量前12）</div>
+        ${renderBreadthTable(others, dates, { name: "板块" })}` : ""}
+      <div class="cell-dim" style="font-size:10px;margin-top:6px">
+        数字=当日该板块涨停家数；<b>空白=该交易日未录入复盘图（不是0）</b>；
+        阶段＝首现/发酵/高潮/退潮/扩散（口径见 <code>modules/sector_phase.py</code>）。
+        数据源：韭研公社全天涨停复盘简图。
+      </div>`;
+    // 默认滚到最右（最新交易日），向左滚动看历史；首列冻结
+    body.querySelectorAll('div[title="横向滚动查看更早的交易日"]').forEach(w => {
+      w.scrollLeft = w.scrollWidth;
+    });
+  } catch (e) {
+    body.innerHTML = `<div class="empty">主线广度加载失败：${esc(String(e && e.message || e))}</div>`;
+  }
+}
+
 async function refreshDailyReview() {
   const date = document.getElementById("reviewDate").value || new Date().toISOString().slice(0, 10);
   const el = document.getElementById("reviewResult");
@@ -8130,6 +8258,7 @@ async function refreshDailyReview() {
     renderDataHealth(health);                      // 数据健康条
     renderZtDtPanel(emo, hist);                    // 涨停/跌停面板
     renderMarginBalance(margin);                   // 两融余额面板（独立刷新，不依赖 LLM）
+    loadReviewBreadth(date);                       // 主线广度（韭研复盘，独立刷新）
     if (r && r.exists) {
       renderSummary(r.text);                     // 复盘总结卡（置顶）
       renderReviewCharts(r.text, r.data || {});   // 可视化（玻璃卡 + 条形图 + 关键位）
@@ -8188,6 +8317,9 @@ function switchTab(tab) {
     loadAutoStatus();
     loadOscDay(true);                                           // 每日选股记录（日期跟随全局选中日，强制刷新）
     if (state.autoLedger) renderAutoLedger(state.autoLedger);   // 已有数据先渲染，避免空白
+    // 2026-10-24：逐股盈亏账单已挪进本页 ⇒ 切进来立刻拉一次（后端 120s 缓存，便宜），
+    // 不然要等下面 10s 的 auto 轮询才出表
+    loadAutoPnl();
   }
 }
 

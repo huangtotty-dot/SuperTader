@@ -39,7 +39,9 @@ _WL_FP = os.path.join(_ROOT, "stock_hunter", "watchlist_jiuyan.json")
 _INDUSTRY_MAP_FP = os.environ.get("OSC_INDUSTRY_MAP_FP") or os.path.join(
     _ROOT, "t_io", "rotation", "industry_map.csv")
 
-MERGES = {"创新药": "医药", "中药": "医药"}
+MERGES = {"创新药": "医药", "中药": "医药",
+          # 2026-10-24 分类改名/合并的兼容别名
+          "锂电池": "电池", "算力金属": "有色金属"}
 _BATCH = 200          # daily_many 分片（对齐 hunter_ma5_alert）
 _DAYS = 40            # 日线根数（MA20 预热 + 裕度）
 

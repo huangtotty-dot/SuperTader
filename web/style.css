@@ -382,6 +382,15 @@ body.mw-winmode #multiWatchWin {
 .h-top5 { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
 .h-top-item { font-size: 11px; background: var(--bg); border: 1px solid var(--border-soft); border-radius: 4px; padding: 2px 8px; white-space: nowrap; }
 .h-stage-badge { font-size: 12px; font-weight: 700; white-space: nowrap; }
+/* 2026-10-24 板块生命周期阶段（韭研复盘广度：首现/发酵/高潮/退潮/扩散）
+   颜色只做识别，不替代文字；判定真源在后端 modules/sector_phase.py */
+.h-stage-badge.p-first  { color: #2a78d6; }
+.h-stage-badge.p-ferment { color: #1baf7a; }
+.h-stage-badge.p-peak   { color: #eb6834; background: rgba(235,104,52,.12); padding: 0 6px; border-radius: 8px; }
+.h-stage-badge.p-ebb    { color: #898781; }
+.h-stage-badge.p-spread { color: #6250d6; background: rgba(98,80,214,.10); padding: 0 6px; border-radius: 8px; }
+.h-stage-badge.p-watch  { color: #898781; }
+.h-stage-badge.p-none   { color: var(--text-faint); }
 .h-pager { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-dim); padding: 6px 0; }
 .h-score { font-family: var(--mono); font-weight: 700; margin-left: 4px; }
 .h-table { font-size: 13px; width: 100%; border-collapse: separate; border-spacing: 0 2px; }
@@ -402,6 +411,15 @@ body.mw-winmode #multiWatchWin {
 .rv-table tr.rv-th td { background: var(--bg-soft); color: var(--text); font-weight: 700; border-color: var(--border); }
 .rv-table tr.rv-alt td { background: rgba(139, 148, 158, .06); }
 .rv-table td.num { text-align: right; font-variant-numeric: tabular-nums; font-family: var(--mono); }
+/* 2026-10-24 主线广度表：全历史横向滚动，首列冻结（owner：用滑轮往前看） */
+.rb-table { border-collapse: separate; border-spacing: 0; }
+.rb-table th, .rb-table td { border: 1px solid var(--border-soft); padding: 3px 5px; }
+.rb-table th { background: var(--bg-soft); color: var(--text-dim); font-weight: 600; white-space: nowrap; }
+.rb-table th:first-child, .rb-table td:first-child {
+  position: sticky; left: 0; z-index: 3; background: var(--bg-card);
+  box-shadow: 1px 0 0 var(--border-soft);
+}
+.rb-table th:first-child { z-index: 4; }
 .rv-conclusion { background: rgba(243, 93, 43, .08); border-left: 3px solid var(--accent); padding: 8px 12px; margin: 8px 0; border-radius: 4px; font-size: 13px; color: var(--text); font-weight: 500; }
 .rv-summary { background-image: linear-gradient(162deg, rgba(243,93,43,.16), rgba(243,93,43,.04)); border: 1px solid rgba(243,93,43,.35); border-radius: 14px; padding: 12px 14px; box-shadow: 0 10px 26px rgba(40,60,90,.08), inset 0 1px 0 var(--glass-hi); }
 .rv-summary-concl { font-size: 14px; font-weight: 700; color: var(--text); line-height: 1.6; margin-bottom: 8px; }
@@ -523,6 +541,11 @@ body.mw-winmode #multiWatchWin {
 
 .h-subgroup-head:first-child td { border-top: none; }
 .h-subgroup-name { font-weight: 700; margin-right: 8px; color: var(--accent); }
+/* 2026-10-24 owner：分组头右侧直接显示该二级板块的解释（原来只在标题悬停里）。
+   过长用省略号，悬停看全文；无注释的板块不渲染这个 span。 */
+.h-subgroup-desc { display: inline-block; margin-left: 10px; font-size: 11px; font-weight: 400;
+  color: var(--text-dim); max-width: calc(100% - 260px); overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; cursor: help; }
 
 /* 加仓条件 checklist */
 .aw-score { display: inline-block; margin-left: 10px; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 10px; }

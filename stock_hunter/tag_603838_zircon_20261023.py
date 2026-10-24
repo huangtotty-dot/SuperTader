@@ -32,7 +32,7 @@ SRC = BASE / "stock_hunter" / "watchlist_jiuyan.json"
 BAK = SRC.with_suffix(".json.bak_20261023_603838")
 
 CODE = "603838"
-CATEGORY = "算力金属"
+CATEGORY = "有色金属"   # 2026-10-24 起「算力金属」并入「有色金属」
 CONCEPT = "锆"
 
 

@@ -55,3 +55,6 @@ stock_hunter/*.bak_*
 *.hdf5
 *.pkl
 *.pickle
+
+# ── 本地打标脚本的 watchlist 快照备份（2026-10-24：17MB，不入库）──
+backup/

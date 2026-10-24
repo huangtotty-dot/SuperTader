@@ -14,7 +14,9 @@ from typing import Dict, Optional, List
 #   中药 / 创新药 → 医药，在「医药」下以「创新药」「中药」两个子概念呈现；
 #   个股行保留原有细标签（种植/百年老字号/GLP…）在「所属板块」列作解释。
 # 可用 config.json 的 "category_merge": {"子": "父"} 覆盖或扩展；缺省用下面这份。
-DEFAULT_CATEGORY_MERGE = {"创新药": "医药", "中药": "医药"}
+DEFAULT_CATEGORY_MERGE = {"创新药": "医药", "中药": "医药",
+                          # 2026-10-24 改名/合并的兼容别名（老备份、外部拷贝仍可能带旧名）
+                          "锂电池": "电池", "算力金属": "有色金属"}
 
 
 class DataLoaderBase(ABC):

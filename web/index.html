@@ -100,12 +100,6 @@
       <div id="autoOverviewBody"><div class="empty">无自动盘持仓数据</div></div>
     </div>
 
-    <div class="section" id="auto-pnl">
-      <h2>自动盘盈亏账单 <span class="cell-dim" style="font-size:12px;font-weight:normal">每次建仓→清仓为一个周期（同一只票清仓后再次建仓重新计数）· 未平仓周期按最新收盘算浮盈</span></h2>
-      <div id="autoPnlSummary" class="cell-dim" style="font-size:12px;margin-bottom:8px"></div>
-      <div id="autoPnlBody"><div class="empty">加载中…</div></div>
-    </div>
-
     <div class="section">
       <h2>图表速览</h2>
       <div class="overview-grid">
@@ -411,6 +405,17 @@
         </div>
       </div>
 
+      <!-- 主线广度（2026-10-24）：韭研涨停复盘 → 跨分类主题聚合 + 生命周期阶段。
+           数据源 stock_hunter/data/sector_breadth.json；每个交易日上传复盘图后由
+           scripts/daily_recap_ingest.py 入库，本卡片自动显示最近 15 个交易日。 -->
+      <div class="card" id="reviewBreadthCard" style="padding:10px 14px;margin-bottom:10px">
+        <div class="card-title" style="display:flex;justify-content:space-between;align-items:baseline;gap:8px">
+          <span>📊 主线广度（韭研涨停复盘）</span>
+          <span id="reviewBreadthMeta" class="cell-dim" style="font-size:11px;font-weight:normal"></span>
+        </div>
+        <div id="reviewBreadthBody"><div class="empty">加载中…</div></div>
+      </div>
+
       <div id="reviewStatus" class="cell-dim" style="margin:10px 0 8px;user-select:text"></div>
 
       <!-- 复盘可视化（条形图 + 关键位） -->
@@ -443,6 +448,16 @@
       </h2>
       <div id="autoPositionsBody"><div class="empty">无自动盘持仓数据</div></div>
     </div>
+    <!-- 2026-10-24 owner：「自动盘我没有看到每支股票的盈亏」——
+         这张**逐股盈亏账单**原来挂在「概览仪表盘」页，自动盘页里根本没有 ⇒ 挪到这里（持仓之后、流水之前）。 -->
+    <div class="section" id="auto-pnl">
+      <h2>自动盘逐股盈亏（点行展开历史）
+        <span class="cell-dim" style="font-size:12px;font-weight:normal">每次建仓→清仓为一个周期（同一只票清仓后再次建仓重新计数）· 未平仓周期按最新收盘算浮盈 · 点任意一行展开该票的历史周期</span>
+      </h2>
+      <div id="autoPnlSummary" class="cell-dim" style="font-size:12px;margin-bottom:8px"></div>
+      <div id="autoPnlBody"><div class="empty">加载中…</div></div>
+    </div>
+
     <div class="section" id="auto-ledger">
       <h2>自动盘成交流水 · 每日盈亏
         <span class="cell-dim" style="font-size:12px;font-weight:normal">自动盘为仿真盘、无券商交割单 ⇒ 逐笔取自 events_*.jsonl（引擎不写名称/净发生金额，读取端补齐）· 每日取自 heartbeat_*.jsonl 末条心跳</span>

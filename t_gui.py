@@ -7724,6 +7724,14 @@ class Api:
             out["build_n"] = _build_n
             out["build_total"] = len(codes)
             out["concept_trends"] = concept_trends
+            # 2026-10-24：板块生命周期阶段（首现/发酵/高潮/退潮/扩散）——数据源 = 韭研复盘广度
+            # （stock_hunter/data/sector_breadth.json），与「每日复盘 → 主线广度」同一真源。
+            # 取不到/没录入当日复盘时返回 {}，前端回退到原来的趋势阶段，不影响渲染。
+            try:
+                from modules.sector_phase import all_category_phases
+                out["sector_phase"] = all_category_phases(date)
+            except Exception:
+                out["sector_phase"] = {}
             # 2026-10-19：韭研二级概念注释 {概念: 解释} 全局下发——前端细分分组头/概念列
             # 悬停显示「这个标签是什么意思」（医药板块 13 个二级概念起，后续板块沿用同字段）。
             out["concept_descs"] = _jiuyan_all_concept_descs()
@@ -9893,6 +9901,12 @@ class Api:
             out["summary_cols"] = ["排名", "板块", "股票数量", "平均分", "涨停数", "热度", "趋势", "前三强"]
             out["summary_rows"] = rows
             out["sector_stocks"] = sector_stocks
+            # 2026-10-24：历史视图同样下发板块阶段（asof=查看日，口径与今日数据一致）
+            try:
+                from modules.sector_phase import all_category_phases
+                out["sector_phase"] = all_category_phases(date)
+            except Exception:
+                out["sector_phase"] = {}
             # 2026-10-19：历史视图同样下发概念注释（细分分组头 tooltip 与「今日数据」一致）
             out["concept_descs"] = _jiuyan_all_concept_descs()
             # 2026-10-16：历史视图**没有** build_* 字段（`sector_stocks` 是现搭的），
@@ -10122,6 +10136,21 @@ class Api:
         except Exception:
             pass
         return {"dates": dates}
+
+    def get_sector_breadth(self, days=25, asof=None):
+        """韭研复盘广度/阶段（2026-10-24）。
+
+        数据源 `stock_hunter/data/sector_breadth.json`（每日复盘入口：
+        `scripts/daily_recap_ingest.py`）。供**每日复盘页的主线广度表**与
+        **选股猎手的板块阶段徽章**共用同一套口径（`modules/sector_phase.py`）。
+        asof 给定时按该日截断（历史复盘日期可回看当时的阶段）。
+        """
+        try:
+            from modules.sector_phase import snapshot
+            return snapshot(max_days=int(days or 25), asof=asof or None)
+        except Exception as e:
+            return {"error": str(e), "asof": "", "dates": [], "themes": [],
+                    "ai_chain": [], "categories": {}}
 
     def get_margin_balance(self, days=30):
         """近 N 日两融余额（融资融券余额），供每日复盘两融面板（2026-08-29）。"""
