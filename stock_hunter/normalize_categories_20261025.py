@@ -134,6 +134,7 @@ def main():
         if code in SPECIAL:
             out = list(SPECIAL[code])
         needs = (out != raw
+                 or any(t in CATEGORY_MERGE for c, _ in raw_slots for t in c.split("|"))
                  or any("|" in c or "|" in n for c, n in raw_slots)
                  or (str(rec.get("jiuyan_category") or "").strip()
                      and any(str(rec.get(CAT_KEYS[i]) or "").strip() for i in range(1, 10))))
