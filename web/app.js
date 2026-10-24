@@ -7395,6 +7395,14 @@ function renderHunter(h) {
       </div>
       <div class="hunter-detail${_open ? " open" : ""}">
         <div class="h-expand">
+          <div class="h-legend" title="个股名字后面的小标 = 该股所挂标签与它主营的相关度（2026-10-24 起逐板块人工核）">
+            <span class="h-legend-title">标签相关度</span>
+            <span class="h-legend-item"><span class="h-verdict v-核心">核心</span>概念就是它的主营业务</span>
+            <span class="h-legend-item"><span class="h-verdict v-相关">相关</span>主营里的一块或明确配套</span>
+            <span class="h-legend-item"><span class="h-verdict v-边缘">边缘</span>只有支线/参股/同名不同物</span>
+            <span class="h-legend-item"><span class="h-verdict v-有据">有据</span>业务文本能对上，未人工核</span>
+            <span class="h-legend-item"><span class="h-verdict v-错标">错标</span>与主营不符（已摘牌）</span>
+          </div>
           ${(hunterTagsCache[category] || _buildReady) ? "" :
             `<div class="h-updating-strip cell-dim" style="font-size:11px;padding:4px 8px;background:rgba(210,153,34,.10);border-left:3px solid #d29922">
                ⏳ 正在更新：${(!_buildReady) ? "建仓符合度（判定/得分/通过/日线阶段）" : ""}${(!_buildReady && !hunterTagsCache[category]) ? " 与 " : ""}${hunterTagsCache[category] ? "" : "技术标签"} —— 后台算完自动填上，无需操作

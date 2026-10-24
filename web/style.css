@@ -696,3 +696,11 @@ body.mw-winmode #multiWatchWin {
 .h-verdict.v-边缘 { color: #d29922; background: rgba(210,153,34,.16); }
 .h-verdict.v-错标 { color: #f85149; background: rgba(248,81,73,.16); }
 .h-verdict.v-有据 { color: #8b949e; background: rgba(139,148,158,.12); font-weight: 500; }
+
+/* 2026-10-24：猎手展开区顶部的「标签相关度」图例（颜色含义） */
+.h-legend { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 14px;
+  padding: 6px 10px 8px; font-size: 10.5px; color: var(--text-dim);
+  border-bottom: 1px dashed var(--border); margin-bottom: 4px; }
+.h-legend-title { font-weight: 600; color: var(--text); }
+.h-legend-item { white-space: nowrap; }
+.h-legend-item .h-verdict { margin: 0 3px 0 0; }
