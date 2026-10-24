@@ -547,6 +547,17 @@ body.mw-winmode #multiWatchWin {
   color: var(--text-dim); max-width: calc(100% - 260px); overflow: hidden;
   text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; cursor: help; }
 
+/* 2026-10-24：二级分组的「说明 · 个股理由」折叠面板（悬停版看不清，改成点开看全部） */
+.h-note-btn { margin-left: 8px; font-size: 10px; padding: 1px 6px; vertical-align: bottom; }
+.h-subgroup-note td { background: rgba(88, 166, 255, .05); padding: 8px 14px 10px 22px;
+  border-bottom: 1px solid var(--border); }
+.h-note-desc { font-size: 11.5px; color: var(--text); line-height: 1.6; margin-bottom: 4px; }
+.h-note-hint { font-size: 10px; margin-bottom: 6px; }
+.h-note-list { margin: 0; padding-left: 16px; column-count: 3; column-gap: 22px; font-size: 11px;
+  line-height: 1.65; color: var(--text-dim); }
+.h-note-list li { break-inside: avoid; margin-bottom: 2px; }
+.h-note-list b { color: var(--text); font-weight: 600; }
+
 /* 加仓条件 checklist */
 .aw-score { display: inline-block; margin-left: 10px; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 10px; }
 .aw-score.up { color: #3fb950; background: rgba(63,185,80,.12); }

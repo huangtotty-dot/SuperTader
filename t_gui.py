@@ -586,6 +586,27 @@ def _jiuyan_concept_reasons(info, concepts=None):
     return {str(k): str(v) for k, v in d.items() if k in keep and v}
 
 
+_PROFILE_CACHE = {"mtime": None, "data": {}}
+
+
+def _company_profiles():
+    """`t_io/cache/company_profile.json`（东财 F10 一句话业务）按 mtime 缓存。
+    只用于「个股为什么在这个板块」的兜底理由——brief_title 一句话，比 watchlist 里
+    「主营XX制造业」有用得多。"""
+    fp = BASE / "t_io" / "cache" / "company_profile.json"
+    try:
+        mt = fp.stat().st_mtime
+    except OSError:
+        return {}
+    if _PROFILE_CACHE["mtime"] == mt and _PROFILE_CACHE["data"]:
+        return _PROFILE_CACHE["data"]
+    d = _load_json(fp, {})
+    if not isinstance(d, dict):
+        d = {}
+    _PROFILE_CACHE.update({"mtime": mt, "data": d})
+    return d
+
+
 def _jiuyan_all_concept_reasons():
     """全表合并的 {概念: [[名称, 理由], ...]}（猎手二级分组头 tooltip 用）。
     同概念下按 watchlist 顺序追加；读失败返回 {}（非致命）。"""
@@ -595,13 +616,29 @@ def _jiuyan_all_concept_reasons():
         for code, info in (jy.items() if isinstance(jy, dict) else []):
             if not isinstance(info, dict):
                 continue
+            nm = str(info.get("name") or code)
             d = info.get("jiuyan_concept_reason")
             if not isinstance(d, dict):
-                continue
-            nm = str(info.get("name") or code)
-            for k, v in d.items():
-                if k and v:
-                    out.setdefault(str(k), []).append([nm, str(v)])
+                d = {}
+            # 兜底理由（2026-10-24）：没人工写过的，用「主营」原文——只认**具体**的主营，
+            # 「主营XX制造业」这种空话不要（会变成一屏废话）。
+            biz = str(info.get("business_summary") or "").strip()
+            fallback = ""
+            prof = _company_profiles().get(code) or {}
+            ptxt = str(prof.get("brief_title") or "").strip()
+            if not ptxt:
+                ptxt = str(prof.get("brief") or "").strip()[:58]
+            if ptxt:
+                fallback = "主营：" + ptxt[:58]
+            elif biz and not biz.startswith("主营") and len(biz) > 8:
+                fallback = "主营：" + biz[:46]
+            for k in _jiuyan_concepts(info).split("|"):
+                k = k.strip()
+                if not k:
+                    continue
+                v = str(d.get(k) or "").strip() or fallback
+                if v:
+                    out.setdefault(k, []).append([nm, v])
     except Exception:
         pass
     return out

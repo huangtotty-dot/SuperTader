@@ -5985,6 +5985,14 @@ async function loadHunterMaReclaim(category) {
 }
 
 // 板块分页翻页
+// 2026-10-24：二级分组的「说明 · 个股理由」折叠面板（owner：悬停不好用，要能点开看全部）
+function hunterToggleNote(id, btn) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  const show = el.style.display === "none";
+  el.style.display = show ? "" : "none";
+  if (btn) btn.textContent = (show ? "▾" : "▸") + " 说明 · 个股理由";
+}
 function hunterPage(category, dir) {
   if (!window._hunterPage) window._hunterPage = {};
   window._hunterPage[category] = (window._hunterPage[category] || 0) + dir;
@@ -7258,19 +7266,26 @@ function renderHunter(h) {
       // 2026-10-24 owner：「在我画红色框的地方补充这个板块的解释」——概念注释从仅悬停
       // 改为**直接显示在分组头右侧**（有注释才显示；过长省略，悬停看全文）。
       const _gDesc = gkDesc(gk);
-      // 2026-10-24：本组各股「为什么算这个概念」——拼进同一个 tooltip（概念解释 → 个股理由），
-      // 只列当前分组里的票，避免把全表成员都塞进来。
+      // 2026-10-24：本组各股「为什么算这个概念」。悬停版被 owner 否掉（截断、看不清），
+      // 改成**可折叠面板**：分组头一个按钮，点开列出全组成员 + 每只的入选理由。
       const _whyAll = gkReasons(gk);
-      const _inGroup = new Set(gs.map(s => s.name || s["名称"] || s.code));
-      const _why = _whyAll.filter(x => _inGroup.has(x[0])).slice(0, 15);
-      const _gTip = [
-        _gDesc ? `${gk}：${_gDesc}` : "",
-        _why.length ? "个股理由：" + _why.map(x => `${x[0]}—${x[1]}`).join("；") : "",
-      ].filter(Boolean).join("\n");
+      const _nameOf = s => s.name || s["名称"] || s.code;
+      const _reasonMap = new Map(_whyAll);
+      const _members = gs.map(s => [_nameOf(s), _reasonMap.get(_nameOf(s)) || ""]);
+      const _withWhy = _members.filter(m => m[1]).length;
+      const _noteId = ("hnote-" + category + "-" + gk).replace(/[^\w一-龥-]/g, "_");
+      const _gTip = [_gDesc ? `${gk}：${_gDesc}` : ""].filter(Boolean).join("");
       const head = `<tr class="h-subgroup-head"><td colspan="15">
         <span class="h-subgroup-name"${_gTip ? ` title="${esc(_gTip)}" style="cursor:help"` : ""}>📂 ${esc(gk)}</span>
         <span class="cell-dim" style="font-size:10px">${gs.length}只 · ${gScoreTxt}${gUp ? ` · 涨停${gUp}` : ""}</span>
         ${_gDesc ? `<span class="h-subgroup-desc" title="${esc(_gTip)}">${esc(_gDesc)}</span>` : ""}
+        <button class="mini-btn h-note-btn" onclick="hunterToggleNote('${_noteId}', this)">▸ 说明 · 个股理由</button>
+      </td></tr>
+      <tr class="h-subgroup-note" id="${_noteId}" style="display:none"><td colspan="15">
+        <div class="h-note-desc">${esc(_gDesc || "（该细分概念暂无解释）")}</div>
+        <div class="h-note-hint cell-dim">本组 ${gs.length} 只，其中 ${_withWhy} 只有入选理由；再点一次按钮收起</div>
+        <ul class="h-note-list">${_members.slice(0, 80).map(([n, r]) =>
+          `<li><b>${esc(n)}</b> — ${r ? esc(r) : '<span class="cell-dim">—</span>'}</li>`).join("")}</ul>
       </td></tr>`;
       return head + gs.map(hunterRow).join("");
     }).join("");
