@@ -9318,9 +9318,16 @@ class Api:
         try:
             vol = [float(x) for x in df["volume"].tolist()]
             if len(vol) >= 21:
-                base = sum(vol[-21:-1]) / 20.0
-                if base > 0:
-                    vol_ratio = round(vol[-1] / base, 2)
+                win = vol[-21:]          # 当日 + 前 20 日
+                # 单位一致性闸（2026-10-25）：日线缓存在 10-22 做过一次成交量单位迁移，
+                # 前后段可能一手一股混在一起（实测 600887 相邻日差 27 倍）⇒ 这种票的量比不报，
+                # 否则会把"换了单位"误判成"缩量"，反而给质量分加分。
+                _ok = all(a > 0 and b > 0 and 0.1 <= b / a <= 10.0
+                          for a, b in zip(win, win[1:]))
+                if _ok:
+                    base = sum(win[:-1]) / 20.0
+                    if base > 0:
+                        vol_ratio = round(win[-1] / base, 2)
         except Exception:
             vol_ratio = None
         q = 0
