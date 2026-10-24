@@ -7094,6 +7094,9 @@ function renderHunter(h) {
     // 2026-10-24：逐股「为什么算这个概念」{概念: [[名称, 理由], ...]}（后端全表合并下发，
     // 数据要素板块起）——挂在二级分组头 tooltip 里，解释下面列本组各股的入选理由。
     const conceptReasons = h.concept_reasons || {};
+    // 2026-10-24：逐股判词 {代码: [判词, 理由]}——直接把「标签与主营的相关度」标在个股名字后面，
+    // 不用展开面板就能一眼看出这只票是核心还是蹭概念。
+    const tagVerdicts = h.tag_verdicts || {};
     // 2026-10-24：板块生命周期阶段（后端 modules/sector_phase.py 计算，韭研复盘广度驱动）
     const sectorPhase = h.sector_phase || {};
     // 概念键匹配：精确 → 「-」前段 → 「_」末段（数据要素_数据存储 ↔ 分组名 数据存储）
@@ -7181,7 +7184,12 @@ function renderHunter(h) {
         : '<span class="cell-dim">—</span>';
       return `<tr class="h-expand-row" style="${_rowBg}" ondblclick="openStockChart('${esc(s.code)}','${esc(s.name)}')">
         <td class="mono cell-dim" title="双击看技术分析">${esc(s.code)}</td>
-        <td title="双击看技术分析">${esc(s.name)} <button class="mini-btn" style="font-size:10px;padding:0 5px"
+        <td title="双击看技术分析">${esc(s.name)}${(() => {
+          const tv = tagVerdicts[s.code];
+          if (!tv) return "";
+          const tip = `标签相关度：${tv[0]}${tv[1] ? "｜" + tv[1] : ""}`;
+          return `<span class="h-verdict v-${esc(tv[0])}" title="${esc(tip)}">${esc(tv[0])}</span>`;
+        })()} <button class="mini-btn" style="font-size:10px;padding:0 5px"
           onclick="event.stopPropagation();addToWatchlist('${esc(s.code)}','${esc(s.name)}',this)"
           title="加入建仓股池监控买点">+股池</button></td>
         <!-- 2026-10-22 owner：市值挪到名称右边（放在「价」旁边太靠右，注意不到） -->

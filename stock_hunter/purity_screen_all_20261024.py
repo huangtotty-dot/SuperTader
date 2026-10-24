@@ -16,6 +16,7 @@
 """
 import csv
 import json
+import os
 import sys
 from collections import Counter, defaultdict
 
@@ -142,6 +143,7 @@ def keywords(concept):
 
 
 def main():
+    apply = "--apply" in sys.argv
     wl = json.load(open(WL, encoding="utf-8"))
     try:
         prof = json.load(open(PROF, encoding="utf-8"))
@@ -174,6 +176,8 @@ def main():
             continue
         hit = any(kw in text for kw in kws)
         per_cat[cat][0 if hit else 1] += 1
+        if hit:
+            rec["jiuyan_tag_evidence"] = "text"
         if not hit:
             rows.append([code, rec.get("name") or "", cat, "|".join(dict.fromkeys(cons)),
                          text.strip()[:80]])
@@ -183,6 +187,13 @@ def main():
         tot = a + b
         print(f"{cat:10s} {a:5d} {b:5d} {a / tot * 100:6.1f}%")
     print(f"\n无据候选 {len(rows)} 只 → {OUT}")
+    if apply:
+        import shutil
+        bak = WL + ".bak_20261024_evidence"
+        if not os.path.exists(bak):
+            shutil.copy2(WL, bak)
+        json.dump(wl, open(WL, "w", encoding="utf-8"), ensure_ascii=False, indent=1)
+        print(f"已写入 jiuyan_tag_evidence。备份: {bak}")
     with open(OUT.replace(".csv", "_板块汇总.csv"), "w", newline="", encoding="utf-8-sig") as f:
         w = csv.writer(f)
         w.writerow(["板块", "有据", "无据", "支持率%"])

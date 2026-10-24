@@ -695,3 +695,4 @@ body.mw-winmode #multiWatchWin {
 .h-verdict.v-相关 { color: #58a6ff; background: rgba(88,166,255,.14); }
 .h-verdict.v-边缘 { color: #d29922; background: rgba(210,153,34,.16); }
 .h-verdict.v-错标 { color: #f85149; background: rgba(248,81,73,.16); }
+.h-verdict.v-有据 { color: #8b949e; background: rgba(139,148,158,.12); font-weight: 500; }

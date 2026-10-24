@@ -607,6 +607,37 @@ def _company_profiles():
     return d
 
 
+def _jiuyan_tag_verdicts():
+    """{代码: [判词, 理由]} —— 逐股「标签与主营的相关度」，猎手个股行名字后面直接显示小标。
+
+    来源：watchlist 的 `jiuyan_tag_verdict`（核心/相关/边缘/错标，2026-10-24 起逐批人工判）
+    + `jiuyan_concept_reason` 里该股第一条理由（做 tooltip）。没判过的票不下发。
+    """
+    out = {}
+    try:
+        jy = _load_json(HUNTER_DIR / "watchlist_jiuyan.json", {})
+        for code, info in (jy.items() if isinstance(jy, dict) else []):
+            if not isinstance(info, dict):
+                continue
+            v = str(info.get("jiuyan_tag_verdict") or "").strip()
+            if not v:
+                # 没人工判过的：只给一个弱信号「有据」（业务文本里能对上该概念，自动筛查）
+                if str(info.get("jiuyan_tag_evidence") or "") == "text":
+                    out[str(code)] = ["有据", "业务文本里能对上该概念（自动筛查，未人工判）"]
+                continue
+            reason = ""
+            d = info.get("jiuyan_concept_reason")
+            if isinstance(d, dict):
+                for k in _jiuyan_concepts(info).split("|"):
+                    reason = str(d.get(k) or "").strip()
+                    if reason:
+                        break
+            out[str(code)] = [v, reason]
+    except Exception:
+        pass
+    return out
+
+
 def _jiuyan_all_concept_reasons():
     """全表合并的 {概念: [[名称, 理由], ...]}（猎手二级分组头 tooltip 用）。
     同概念下按 watchlist 顺序追加；读失败返回 {}（非致命）。"""
@@ -7811,6 +7842,8 @@ class Api:
             out["concept_descs"] = _jiuyan_all_concept_descs()
             # 2026-10-24：逐股理由 {概念: [[名称, 理由], ...]} ——二级分组头 tooltip 里列本组成员为什么入选
             out["concept_reasons"] = _jiuyan_all_concept_reasons()
+            # 2026-10-24：逐股判词 {代码: [核心/相关/边缘/错标, 理由]}——个股行名字后直接显示小标
+            out["tag_verdicts"] = _jiuyan_tag_verdicts()
             out["refreshed_at"] = datetime.now().strftime("%H:%M:%S")
             try:
                 from modules.market_data import MARKET_PROGRESS as _MP
