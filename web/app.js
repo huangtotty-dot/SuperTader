@@ -7400,7 +7400,7 @@ function renderHunter(h) {
             <span class="h-legend-item"><span class="h-verdict v-核心">核心</span>概念就是它的主营业务</span>
             <span class="h-legend-item"><span class="h-verdict v-相关">相关</span>主营里的一块或明确配套</span>
             <span class="h-legend-item"><span class="h-verdict v-边缘">边缘</span>只有支线/参股/同名不同物</span>
-            <span class="h-legend-item"><span class="h-verdict v-有据">有据</span>业务文本能对上，未人工核</span>
+            <span class="h-legend-item"><span class="h-verdict v-未核">未核</span>还没逐一核过（自动比对仅供参考）</span>
             <span class="h-legend-item"><span class="h-verdict v-错标">错标</span>与主营不符（已摘牌）</span>
           </div>
           ${(hunterTagsCache[category] || _buildReady) ? "" :

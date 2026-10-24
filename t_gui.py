@@ -621,9 +621,9 @@ def _jiuyan_tag_verdicts():
                 continue
             v = str(info.get("jiuyan_tag_verdict") or "").strip()
             if not v:
-                # 没人工判过的：只给一个弱信号「有据」（业务文本里能对上该概念，自动筛查）
+                # 没人工判过的：给「未核」（业务文本能对上该概念，仅是自动比对的参考）
                 if str(info.get("jiuyan_tag_evidence") or "") == "text":
-                    out[str(code)] = ["有据", "业务文本里能对上该概念（自动筛查，未人工判）"]
+                    out[str(code)] = ["未核", "还没逐只核过（业务文本能对上该概念，仅供参考）"]
                 continue
             reason = ""
             d = info.get("jiuyan_concept_reason")
