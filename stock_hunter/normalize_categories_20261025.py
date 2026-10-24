@@ -78,6 +78,18 @@ def toks(v):
     return out
 
 
+def pairs_raw(rec):
+    """原始槽位（**不拆** `|`），用于判断是否需要重写。"""
+    out = []
+    for i in range(10):
+        cat = rec.get(CAT_KEYS[i])
+        if isinstance(cat, str) and cat.strip():
+            con = rec.get(CON_KEYS[i])
+            con_s = "|".join(con) if isinstance(con, list) else str(con or "")
+            out.append((cat.strip(), con_s.strip()))
+    return out
+
+
 def pairs_of(rec):
     out = []
     for i in range(10):
@@ -103,6 +115,7 @@ def main():
         raw = pairs_of(rec)
         if not raw:
             continue
+        raw_slots = pairs_raw(rec)
         out = []
         for cat, con in raw:
             if cat in CATEGORY_MERGE.values() and cat not in ("有色金属", "电力"):
@@ -120,7 +133,11 @@ def main():
         out = [p for p in out if not (p in seen or seen.add(p))]
         if code in SPECIAL:
             out = list(SPECIAL[code])
-        if out == raw:
+        needs = (out != raw
+                 or any("|" in c or "|" in n for c, n in raw_slots)
+                 or (str(rec.get("jiuyan_category") or "").strip()
+                     and any(str(rec.get(CAT_KEYS[i]) or "").strip() for i in range(1, 10))))
+        if not needs:
             continue
         changed += 1
         if len(samples) < 8:
