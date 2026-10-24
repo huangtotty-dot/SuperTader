@@ -90,7 +90,13 @@ class WatchlistLoader(DataLoaderBase):
                 cat = info.get(cat_key, "")
                 concept = info.get(concept_key, "")
                 if cat and str(cat).strip():
-                    pairs.append((str(cat).strip(), _concept_str(concept)))
+                    # 2026-10-25：槽位里可能出现 `煤化工|电力` / `煤化工|风电设备` 这种复合串
+                    # ⇒ **按位置拆开配对**，否则下游会把「电力的板块」和「煤化工的概念」串在一起。
+                    _cats = [c.strip() for c in str(cat).split("|") if c.strip()]
+                    _cons = [c.strip() for c in _concept_str(concept).split("|") if c.strip()]
+                    for _i, _c in enumerate(_cats):
+                        _v = _cons[_i] if _i < len(_cons) else ""
+                        pairs.append((_c, _v))
                     has_multi_fields = True
 
             if not pairs:
