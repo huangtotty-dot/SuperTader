@@ -5226,6 +5226,52 @@ function renderStockChart(applyZoom = true) {
     };
   });
 
+  /* 2026-10-25 owner：5 分钟档加两条参考线 —— ① 当日 VWAP ② 当日 0 轴（昨收）。
+     · VWAP = 日内累计成交额 / 累计成交量（每天开盘重置）；amount 缺失时用典型价×量回落。
+       ⚠️ volume 是「手」、amount 是「元」⇒ 每股均价要 /(量×100)。
+     · 0 轴 = 每个交易日的**昨收**（用分钟序列自己推：换日时取前一日最后一根收盘），
+       step 线连接 ⇒ 跨日跳空看得见；窗口第一个交易日没有昨收 ⇒ null 不画。
+     只对 min5 生效（owner 指定），其它周期保持原样。 */
+  const _isMin5 = String(stockChartPeriod || "") === "min5";
+  let vwapSeries = null, zeroSeries = null;
+  if (_isMin5) {
+    const _ds = period.dates || [];
+    const _dk = (x) => String(x).slice(0, 10);
+    const _amtA = (Array.isArray(period.amount) && period.amount.length === _ds.length) ? period.amount : null;
+    const _vw = new Array(_ds.length).fill(null);
+    let _ca = 0, _cv = 0, _day = null;
+    for (let i = 0; i < _ds.length; i++) {
+      const d = _dk(_ds[i]);
+      if (d !== _day) { _day = d; _ca = 0; _cv = 0; }
+      const v = Number((period.volume || [])[i] || 0);
+      const o = (period.ohlc || [])[i] || null;
+      if (!o || !(v > 0)) { _vw[i] = _cv > 0 ? Math.round(_ca / (_cv * 100) * 1000) / 1000 : null; continue; }
+      const tp = (Number(o[1]) + Number(o[2]) + Number(o[3])) / 3;   // ohlc = [o,c,l,h]
+      _ca += (_amtA && _amtA[i] != null) ? Number(_amtA[i]) : tp * v * 100;
+      _cv += v;
+      _vw[i] = Math.round(_ca / (_cv * 100) * 1000) / 1000;
+    }
+    const _zero = new Array(_ds.length).fill(null);
+    let _ld = null, _prevC = null, _dayC = null;
+    for (let i = 0; i < _ds.length; i++) {
+      const d = _dk(_ds[i]);
+      const c = Number(((period.ohlc || [])[i] || [])[1]);
+      if (d !== _ld) { _prevC = _dayC; _ld = d; }
+      _zero[i] = _prevC;
+      if (!isNaN(c)) _dayC = c;
+    }
+    if (_vw.some(v => v != null)) {
+      vwapSeries = { name: "VWAP(日内)", type: "line", data: _vw, symbol: "none", z: 3,
+        xAxisIndex: 0, yAxisIndex: 0, connectNulls: false,
+        lineStyle: { width: 2, color: "#f0b429" }, itemStyle: { color: "#f0b429" } };
+    }
+    if (_zero.some(v => v != null)) {
+      zeroSeries = { name: "昨收(0轴)", type: "line", data: _zero, symbol: "none", z: 1,
+        xAxisIndex: 0, yAxisIndex: 0, connectNulls: false, step: "end",
+        lineStyle: { width: 1, color: "#8b949e", type: "dashed" }, itemStyle: { color: "#8b949e" } };
+    }
+  }
+
   // 复用实例：原来每次渲染都 dispose+init 整个 ECharts（每 10s 一次 + 每次勾选图层一次），
   // 1650 根K线 × ~16 条 series 重建一遍 ⇒ 明显卡顿。改为只 setOption，用 replaceMerge:["series"]
   // 处理勾选导致的 series 数量变化，实例/DOM/dataZoom/交互状态全部保留。
@@ -5497,6 +5543,22 @@ function renderStockChart(applyZoom = true) {
               ? "，" + ({"min5": 25, "min10": 50, "min30": 150, "min60": 300})[stockChartPeriod] + " 分钟" : ""}）</div>`
             + `<div>${_maCells.join("　")}</div>`;
         }
+        if (_isMin5) {
+          const _pick = (nm) => {
+            const q = (ps || []).find(p => p.seriesName === nm);
+            if (!q) return null;
+            const v = Array.isArray(q.value) ? q.value[1] : q.value;
+            return (v == null || isNaN(Number(v))) ? null : Number(v);
+          };
+          const _v = _pick("VWAP(日内)"), _z = _pick("昨收(0轴)");
+          if (_v != null || _z != null) {
+            html += `<div style="color:#8b949e;font-size:10px;margin-top:3px">`
+              + (_v != null ? `VWAP <b style="color:#f0b429">${_px(_v)}</b>` : "")
+              + (_v != null && _z != null ? "　" : "")
+              + (_z != null ? `昨收(0轴) <b>${_px(_z)}</b>　偏离 <b style="color:${c >= _z ? "#f85149" : "#3fb950"}">${((c - _z) / _z * 100).toFixed(2)}%</b>` : "")
+              + `</div>`;
+          }
+        }
         html += _dailyRef;
 
         // 背离标注：与图上的三角标记同源（backend divergence[period]）
@@ -5667,6 +5729,8 @@ function renderStockChart(applyZoom = true) {
           width: 1, type: "dashed" },
       }] : []),
       ...(showMA ? maSeries.map(s => ({ ...s, xAxisIndex: 0, yAxisIndex: 0 })) : []),
+      ...(vwapSeries ? [vwapSeries] : []),
+      ...(zeroSeries ? [zeroSeries] : []),
       // BOLL 叠加主图
       { name: "BOLL中", type: "line", data: period.boll.mid, xAxisIndex: 0, yAxisIndex: 0, symbol: "none",
         lineStyle: { color: "rgba(139,148,158,.5)", width: 1 },
