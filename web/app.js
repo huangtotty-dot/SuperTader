@@ -4856,24 +4856,43 @@ function buildIntradayVwapZero(dates, ohlc, volume, amount) {
   if (!n) return { vwap, zero };
   const dk = (x) => String(x).slice(0, 10);
   const amtA = (Array.isArray(amount) && amount.length === n) ? amount : null;
-  let ca = 0, cv = 0, day = null;
+  let ca = 0, cv = 0, day = null, dLo = null, dHi = null, badBars = 0;
   for (let i = 0; i < n; i++) {
     const d = dk(dates[i]);
-    if (d !== day) { day = d; ca = 0; cv = 0; }
+    if (d !== day) { day = d; ca = 0; cv = 0; dLo = null; dHi = null; }
     const v = Number((volume || [])[i] || 0);
     const o = (ohlc || [])[i] || null;
     if (!o || !(v > 0)) { vwap[i] = cv > 0 ? Math.round(ca / (cv * 100) * 1000) / 1000 : null; continue; }
-    const tp = (Number(o[1]) + Number(o[2]) + Number(o[3])) / 3;
-    ca += (amtA && amtA[i] != null) ? Number(amtA[i]) : tp * v * 100;
-    cv += v;
-    vwap[i] = Math.round(ca / (cv * 100) * 1000) / 1000;
+    const c = Number(o[1]), lo = Number(o[2]), hi = Number(o[3]);
+    dLo = (dLo == null) ? lo : Math.min(dLo, lo);
+    dHi = (dHi == null) ? hi : Math.max(dHi, hi);
+    const tp = (c + lo + hi) / 3;
+    let a = (amtA && amtA[i] != null) ? Number(amtA[i]) : tp * v * 100;
+    /* 脏数据闸（2026-10-25 owner 截图：5 分钟图上 VWAP 冒出 400 的尖刺，整张图被压成一条线）。
+       成因是多源合并后**单根**的成交额/成交量不是同一口径（深底 vs 实时尾、手 vs 股、复权差异），
+       表现为 `amount/(volume×100)` 与该根收盘相差几倍。判定 >20% 即视为不自洽，
+       该根改用典型价×量（保持累计口径连续，不用脏值污染整条线）。 */
+    if (amtA && amtA[i] != null && c > 0) {
+      const imputed = a / (v * 100);
+      if (Math.abs(imputed / c - 1) > 0.2) { a = tp * v * 100; badBars++; }
+    }
+    ca += a; cv += v;
+    let val = Math.round(ca / (cv * 100) * 1000) / 1000;
+    // 二次兜底：日内 VWAP 不可能跑出当日价格区间太远（多源的复权差异可能整体平移）
+    if (dLo != null && (val < dLo * 0.85 || val > dHi * 1.15)) {
+      val = vwap[i - 1] != null ? vwap[i - 1] : null;
+      badBars++;
+    }
+    vwap[i] = val;
   }
+  if (badBars) console.warn(`[VWAP] 丢弃/修正 ${badBars} 根不自洽的成交额数据（多源合并口径差异）`);
   let ld = null, prevC = null, dayC = null;
   for (let i = 0; i < n; i++) {
     const d = dk(dates[i]);
     const c = Number(((ohlc || [])[i] || [])[1]);
     if (d !== ld) { prevC = dayC; ld = d; }
-    zero[i] = prevC;
+    // 昨收与当根收盘差 >30% ⇒ 多半是前复权/源切换造成的错位，留空比画错强
+    zero[i] = (prevC != null && c > 0 && Math.abs(prevC / c - 1) > 0.3) ? null : prevC;
     if (!isNaN(c)) dayC = c;
   }
   return { vwap, zero };
