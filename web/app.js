@@ -4068,6 +4068,10 @@ function _chartLog(event, detail) {
 // 在深底上发白刺眼。换成按深底重新选的一组（dataviz 校验器 dark 全项通过：
 // 亮度带 / 彩度 / CVD ΔE≥8.4 / 对比度≥3:1）。
 const MA_COLORS = ["#3987e5", "#d95926", "#199e70", "#c98500", "#d55181", "#9085e9", "#e66767"];
+// 2026-10-25 owner：「365 均线换一个颜色和其他均线区分开」。
+// 原 MA365 用的是 #e66767（红），与 A 股「涨=红」和蜡烛涨色 #f85149 撞车，看着像另一根上涨信号。
+// 改成**青色 + 虚线 + 2px**：与涨跌语义无关，且虚线在深底上不会被当成普通均线。
+const MA365_COLOR = "#22d3ee";
 
 /* 默认可见根数。取值贴着后端黄金分割回看期（t_gui._FIB_LOOKBACK）——daily 120 与回看期
    相等，锚点必然落在默认视窗内；weekly/monthly 因 bar 更少而略小，万一锚点更早由下面的
@@ -5207,11 +5211,14 @@ function renderStockChart(applyZoom = true) {
   const _amtMa10 = _maOf(_amtYi, 10);
 
   const maSeries = period.ma.map((maArr, i) => {
-    const _color = MA_COLORS[i];
+    const _isYear = i === 6;                       // 第 7 条 = MA365（年线）
+    const _color = _isYear ? MA365_COLOR : MA_COLORS[i];
     return {
-      name: `MA${[5,10,20,30,60,180,365][i]}`, type: "line", data: maArr, symbol: "none",
+      name: `MA${[5,10,20,30,60,180,365][i]}` + (_isYear ? "（年线）" : ""),
+      type: "line", data: maArr, symbol: "none",
       z: 2,
-      lineStyle: { width: 1, color: _color },
+      lineStyle: _isYear ? { width: 2, color: _color, type: "dashed" }
+                         : { width: 1, color: _color },
       // ⚠️ **必须同时给 itemStyle.color**（2026-10-16 owner 报"图例颜色和线不一样"）：
       //    ECharts 的**图例图标**取 `itemStyle.color`，只给 `lineStyle.color` 时图例回落到
       //    默认调色板 ⇒ 图例是 A 色、线是 B 色。凡是想让图例跟着线走的 series 都要两处同色。
