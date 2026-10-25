@@ -4987,9 +4987,6 @@ function renderStockChart(applyZoom = true) {
      ⚠️ 别和 `maSeries`（当前周期自己的均线）混：分钟图上的 MA5 是"5 根 10min=50 分钟"，
      这里的"日线MA5"是 5 个交易日。 */
   const showDailyMA = (document.getElementById("tgDailyMA") || {}).checked !== false;
-  // 趋势线（2026-10-22 owner）：摆动高低点连线，**每个周期各算一份**
-  // （后端 `trendlines` 按 period 分键）——端点索引是该周期自己的 K 线下标，按当前 Tab 取即可。
-  const showTrend = (document.getElementById("tgTrend") || {}).checked !== false;
 
   // markLine: 支撑/压力 — 去重降密度 + 精简标签
   function dedupeLines(items) {
@@ -5328,33 +5325,6 @@ function renderStockChart(applyZoom = true) {
   divEvents.forEach(e => {
     if (e && e.index >= 0 && e.index < period.dates.length) divByIndex[e.index] = e;
   });
-  /* 趋势线（2026-10-22 owner）：后端 `_attach_trendlines` 给的是**两端点**（日线序列索引 + 价），
-     这里用 markLine 两点式画线段；线一直延伸到**最新一根**，标签挂右端显示当前线位。
-     配色与通道同源：上升（支撑）= 红、下降（压力）= 绿。 */
-  // 后端按周期分键（daily/weekly/monthly/min5…）；老 payload 是"单份"结构 ⇒ 兜底当日线用
-  const _tlAll = data.trendlines || {};
-  const _tl = _tlAll[stockChartPeriod]
-    || (!_tlAll.schema && _tlAll)          // 旧结构（只有一份，就是日线）
-    || {};
-  const _trendSegs = [];
-  const _pushTrend = (o, color, name) => {
-    if (!o || o.i0 == null || o.i_now == null || !showTrend) return;
-    _trendSegs.push([
-      { coord: [o.i0, o.y0], lineStyle: { color, type: "dashed", width: 1.5 } },
-      { coord: [o.i_now, o.y_now],
-        label: { show: true, position: "end", color, fontSize: 10,
-                 backgroundColor: "rgba(13,17,23,.72)", padding: [2, 4], borderRadius: 3,
-                 formatter: `${name} ${fmt(o.y_now)}（${o.touches}触点）` } },
-    ]);
-  };
-  _pushTrend(_tl.up, "#f85149", "上升趋势线");
-  _pushTrend(_tl.dn, "#3fb950", "下降趋势线");
-  const trendSeries = _trendSegs.length ? [{
-    name: "趋势线", type: "line", xAxisIndex: 0, yAxisIndex: 0, data: [],
-    symbol: "none", silent: true, lineStyle: { opacity: 0 },
-    markLine: { silent: true, symbol: "none", animation: false, data: _trendSegs },
-  }] : [];
-
   const divSeries = Object.keys(divByIndex).length ? [{
     name: "背离", type: "scatter", xAxisIndex: 0, yAxisIndex: 0, z: 12,
     data: Object.values(divByIndex).map(e => {
@@ -5732,7 +5702,6 @@ function renderStockChart(applyZoom = true) {
           label: { position: "insideEndTop" } } },
       ...divSeries,
       ...tradeSeries,
-      ...trendSeries,
       ...(fibAnchor ? [fibAnchor] : []),
       // 通道色带：上轨实线/下轨虚线 + 区域填充。红涨绿跌：上行=红，下行=绿
       ...(showChannel && data.channel && data.channel.up_line.length ? [{

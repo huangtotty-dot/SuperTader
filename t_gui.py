@@ -1224,105 +1224,6 @@ def _calc_ma_and_indicators(d):
 _DIV_SCHEMA = 2      # 2 = 2026-10-20 展示口径（周期缩放 + 柱线动量衰减）；改逻辑时 bump
 
 
-_TREND_SCHEMA = 2    # 趋势线口径版本：2=按周期各算一份（2026-10-22 二轮）。
-#                     改摆动定义/容差/结构时 bump —— 它会混进 `_chart_version`，
-#                     迫使前端丢掉「unchanged」握手、重新取一次 payload。
-
-
-def _trendlines_from_series(dates, ohlc):
-    """一条序列（任意周期）→ 趋势线两端点。口径见 `_attach_trendlines`。"""
-    n = min(len(dates or []), len(ohlc or []))
-    if n < 30:
-        return {"up": None, "dn": None}
-    lows = [float(o[2]) for o in ohlc[:n]]
-    highs = [float(o[3]) for o in ohlc[:n]]
-    k = 3
-    base = max(0, n - 160)          # 只在最近 160 根里找摆动点（更早的与当前趋势无关）
-
-    def _pivots(vals, is_low):
-        out = []
-        for i in range(base + k, n - k):
-            seg = vals[i - k:i + k + 1]
-            if is_low:
-                if vals[i] <= min(seg):
-                    out.append(i)
-            elif vals[i] >= max(seg):
-                out.append(i)
-        return out
-
-    pl = _pivots(lows, True)
-    ph = _pivots(highs, False)
-
-    def _pick(points, vals, want_up):
-        """从最近的摆动点往回找一对：方向一致（依次抬高/降低）且间隔 ≥5 根。"""
-        for a in range(len(points) - 1, 0, -1):
-            i1 = points[a]
-            for b in range(a - 1, -1, -1):
-                i0 = points[b]
-                if i1 - i0 < 5:
-                    continue
-                if want_up and vals[i1] <= vals[i0]:
-                    continue
-                if (not want_up) and vals[i1] >= vals[i0]:
-                    continue
-                return i0, i1
-        return None
-
-    def _mk(pair, vals, kind):
-        i0, i1 = pair
-        y0, y1 = vals[i0], vals[i1]
-        slope = (y1 - y0) / max(1, (i1 - i0))
-        y_now = y1 + slope * (n - 1 - i1)
-        src = pl if kind == "up" else ph
-        tol = max(1e-9, 0.015 * abs(y0))
-        touches = sum(1 for p in src
-                      if abs(vals[p] - (y0 + slope * (p - i0))) <= tol)
-        return {"i0": i0, "y0": round(y0, 3), "i1": i1, "y1": round(y1, 3),
-                "i_now": n - 1, "y_now": round(y_now, 3),
-                "slope_pct": round(slope / (abs(y0) or 1.0) * 100.0, 4),
-                "touches": int(touches),
-                "date0": str(dates[i0])[:10], "date1": str(dates[i1])[:10]}
-
-    up_pair = _pick(pl, lows, True)
-    dn_pair = _pick(ph, highs, False)
-    return {"up": _mk(up_pair, lows, "up") if up_pair else None,
-            "dn": _mk(dn_pair, highs, "dn") if dn_pair else None,
-            "n": n}
-
-
-def _attach_trendlines(payload):
-    """给 K 线 payload 增加 `trendlines`：**摆动高低点**连出的趋势线（2026-10-22 owner）。
-
-    两条线各自独立判断，可以只有一条、也可以都没有：
-      · **上升趋势线**（支撑）：最近两个**依次抬高**的摆动低点连线；
-      · **下降趋势线**（压力）：最近两个**依次降低**的摆动高点连线。
-    摆动点 = 局部极值（左右各 `k=3` 根都不越过它）；两点之间至少隔 5 根，避免把一根小
-    反弹的两端当成趋势。线**从第一个摆动点画到最新一根**——交易上要的是"这条线现在在哪"。
-    每条线带 `touches`：线 ±1.5% 范围内还有多少个同类摆动点。只做**标注**，不参与任何判定。
-
-    结构：**每个周期各算一份** —— `{"schema":1, "daily":{up,dn,n}, "weekly":…, "min5":…}`。
-    2026-10-22 二轮（owner：其它周期也要同步显示）：端点索引是**该周期自己的 K 线下标**，
-    前端按当前 Tab 取对应那份即可；不同周期混用会整体错位（这也是先前只画日线的原因）。
-    """
-    try:
-        pd_all = payload.get("period_data") or {}
-        out = {"schema": _TREND_SCHEMA}
-        for key in ("daily", "weekly", "monthly") + tuple(_MIN_PERIODS):
-            s = pd_all.get(key) or {}
-            dates = s.get("dates") or []
-            ohlc = s.get("ohlc") or []
-            if not dates or not ohlc:
-                continue
-            out[key] = _trendlines_from_series(dates, ohlc)
-        if len(out) == 1:                      # 一个周期都没有（异常 payload）
-            out["daily"] = {"up": None, "dn": None}
-        payload["trendlines"] = out
-    except Exception:
-        payload.setdefault("trendlines", {"schema": _TREND_SCHEMA,
-                                          "daily": {"up": None, "dn": None}})
-    return payload
-
-
 def _attach_divergence(payload):
     """给 K 线 payload 增加 `divergence`：各周期顶/底背离事件（2026-10-19 owner 需求）。
 
@@ -6472,7 +6373,7 @@ class Api:
         # 重算 version：磁盘 payload 里的旧版本号不含 trades 段；必须混入成交签名
         # （条数 + 末笔 ts），否则新导入的成交被前端「unchanged 不刷新」握手吞掉。
         payload["version"] = self._chart_version(_pdta, payload.get("trades"))
-        return _attach_trendlines(_attach_divergence(payload))
+        return _attach_divergence(payload)
 
 
     def _mk_forming_bar(self, today, px, o, h, l, v):
@@ -6715,7 +6616,6 @@ class Api:
         out["version"] = self._chart_version(out["period_data"], out["trades"])
         out["available"] = True
         _attach_divergence(out)      # 各周期顶/底背离标注（只读展示）
-        _attach_trendlines(out)      # 日线趋势线（摆动高低点连线，只读展示）
         return out
 
 
@@ -6733,9 +6633,6 @@ class Api:
                       ("daily", "weekly", "monthly") + _MIN_PERIODS)
         if trades is not None:
             _v += f"|t{len(trades)}:{trades[-1]['ts'] if trades else '-'}"
-            # 2026-10-22：趋势线口径版本也混进签名 —— 否则改了 trendlines 的形状/口径后，
-            # 前端因「unchanged 不刷新」握手继续用旧 payload（新字段永远到不了前端）。
-            _v += f"|tr{_TREND_SCHEMA}"
         return _v
 
     def _detect_boxes(self, daily):
