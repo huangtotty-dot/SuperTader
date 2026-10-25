@@ -72,7 +72,9 @@ def natural_gap_days(last_date, now=None) -> int:
         d = datetime.strptime(str(last_date)[:10], "%Y-%m-%d").date()
     except Exception:
         return 9999
-    today = (now or datetime.now()).date()
+    # now 允许传字符串（老调用方/测试），统一转 datetime
+    _n = _as_dt(now) if not isinstance(now, datetime) else now
+    today = (_n or datetime.now()).date()
     return (today - d).days
 
 
@@ -148,6 +150,21 @@ def write_daily_history(code, df) -> bool:
 # ---------------------------------------------------------------------------
 # 图表 payload 缓存（小池「瞬开」）
 # ---------------------------------------------------------------------------
+def _as_dt(x):
+    """now 参数可能是 datetime / 字符串 / None（老调用方）——统一成 datetime。"""
+    if isinstance(x, datetime):
+        return x
+    if isinstance(x, str) and x:
+        try:
+            return datetime.strptime(x[:19], "%Y-%m-%d %H:%M:%S")
+        except Exception:
+            try:
+                return datetime.strptime(x[:10], "%Y-%m-%d")
+            except Exception:
+                return None
+    return None
+
+
 def load_payload(code, now=None):
     """读 `chart_payload/{code}.json`。命中且展示新鲜 → 返回 `{payload, daily_rows, last_daily_date, version}`；
     否则 None。"""
@@ -160,6 +177,41 @@ def load_payload(code, now=None):
         return None
     if not payload_display_fresh(hit, now):
         return None
+    # 2026-10-25：**盘中半成品根**闸（owner 报「五洲新春 10-23 那根日线不对」）。
+    # 现场：payload 于 10-23 11:37 写入，最后一行是当时的快照（收 43.09/高 45.29），
+    # 当天真实收盘 48.39（+8.35%）。`payload_display_fresh` 只看日期新不新鲜 ⇒ 周末照旧命中。
+    # 判据两条，任一成立即判旧、让它重建：
+    #   ① payload 标记为 provisional（写入时当天还没收盘）且现在已经过了收盘；或
+    #   ② 最后一行日线与**权威日线缓存**同一天但收盘价差 >0.3%。
+    try:
+        _rows = hit.get("daily_rows") or []
+        _nd = _as_dt(now) or datetime.now()
+        if hit.get("provisional"):
+            _saved = str(hit.get("saved_at") or "")
+            _day = str(hit.get("last_daily_date") or "")[:10]
+            if _day and _saved[:10] == _day and _nd.strftime("%Y-%m-%d") >= _day                     and _nd.strftime("%H:%M") >= "15:10":
+                return None
+        if _rows:
+            _last = _rows[-1]
+            _d = str(_last.get("date"))[:10]
+            _fp = daily_fp(code)
+            if _fp.exists():
+                _c = _read_json(_fp, None) or {}
+                _crows = _c.get("rows") or []
+                # ③ 权威缓存已经比 payload 更新（payload 少一天）⇒ 也判旧，别让图停在上一交易日
+                if _crows and str(_crows[-1].get("date"))[:10] > _d:
+                    return None
+                for _r in reversed(_crows):
+                    if str(_r.get("date"))[:10] == _d:
+                        try:
+                            _a = float(_last.get("close")); _b = float(_r.get("close"))
+                            if _b > 0 and abs(_a / _b - 1) > 0.003:
+                                return None
+                        except Exception:
+                            pass
+                        break
+    except Exception:
+        pass
     return hit
 
 
@@ -191,6 +243,11 @@ def save_payload(code, payload, daily_rows) -> bool:
             "schema": 4,
             "version": payload.get("version"),
             "last_daily_date": last_row_date(daily_rows),
+            # 2026-10-25：当天**未收盘**时落的 payload 记为 provisional，
+            # 收盘后再读会被 `load_payload` 判旧并重建（否则盘中快照根会一直顶替真收盘）。
+            "provisional": bool(str(last_row_date(daily_rows) or "")[:10]
+                                == datetime.now().strftime("%Y-%m-%d")
+                                and datetime.now().strftime("%H:%M") < "15:00"),
             "payload": payload,
             "daily_rows": daily_rows or [],
         }
