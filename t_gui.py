@@ -9264,12 +9264,18 @@ class Api:
         hit = 0
         for c in picked:
             p = self._BK_CACHE_DIR / f"{c}.json"
+            last = None
             try:
                 rows = (_load_json(p, {}) or {}).get("rows") or []
-                if rows and str(rows[-1].get("date"))[:10] >= target:
-                    hit += 1
+                last = str(rows[-1].get("date"))[:10] if rows else None
             except Exception:
-                pass
+                last = None
+            if (last is None or last < target):
+                t = self._tdx_last(c)      # 通达信 parquet 兜底（~3ms/只）
+                if t and (last is None or t > last):
+                    last = t
+            if last and last >= target:
+                hit += 1
         return hit / len(picked)
 
     def _bk_cache_last(self, code):
@@ -9450,7 +9456,9 @@ class Api:
                 frames = {}
             else:
                 frames = self._bk_daily_many(chunk)
-            if not frames and chunk and not _waited:
+            # ⚠️ `_gm_off=True` 时 frames 本来就是空的（我们主动没调 GM）⇒ 不能再进"等窗重试"，
+            # 否则白等 60s（2026-10-25 实测：7 只票扫了 69.8s，全耗在这）。
+            if not frames and chunk and not _waited and not _gm_off:
                 # 整批空 ⇒ 疑 GM 冷却窗/瞬时不可达（facade 60s 冷却内后续批全跳过）→ 等窗后重试一次
                 # （只等一次，避免 GM 真下线时逐批 62s 打转；仍空则由 fetch_failed 如实汇报）
                 _time_mod.sleep(self._GM_BATCH_RETRY_WAIT)
@@ -9526,7 +9534,7 @@ class Api:
                                   "stocks": list(breakouts), "no_data": no_data,
                                   "rest_no_data": rest_missing, "bj_no_data": bj_missing,
                                   "stale": stale, "ok": ok})
-            if i == 0 and _from_gm == 0 and cached_used > 0:
+            if i == 0 and not _gm_off and _from_gm == 0 and cached_used > 0:
                 _gm_off = True   # 首批 GM 全空但缓存顶上了 ⇒ 后面直接走缓存，不再逐批等 GM
                 print("[INFO] breakout: GM 批量不可用，本轮改用本地日线缓存", flush=True)
             _time_mod.sleep(0.05)   # 2026-10-08：批间显式让出，避免连续持 GIL 把主线程饿死
