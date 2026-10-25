@@ -4840,6 +4840,45 @@ function _ymdMinusDays(ymd, days) {
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`;
 }
 
+/* 2026-10-25：5 分钟档的两条日内参考线 —— VWAP 与 0 轴（昨收）。
+   抽成共享函数是因为**单图和九宫格必须同口径**（缺口那次也是这么修的：
+   各写一份必然漂移）。返回 {vwap, zero}，两个数组与 dates 等长，无值处为 null。
+
+   · VWAP = 日内累计成交额 / 累计成交量，每天开盘重置。
+     `volume` 是「手」、`amount` 是「元」⇒ 每股均价 = amount / (volume × 100)；
+     amount 缺失（指数）时用典型价 (H+L+C)/3 × 量 累计回落。
+   · 0 轴 = 每个交易日的**昨收**：换日时取"前一交易日最后一根收盘"，
+     用 step 线连接，跨日跳空因此可见；窗口第一日没有昨收 ⇒ null。
+   ohlc 元素顺序是 [open, close, low, high]（全仓统一口径，别改成 OHLC）。 */
+function buildIntradayVwapZero(dates, ohlc, volume, amount) {
+  const n = (dates || []).length;
+  const vwap = new Array(n).fill(null), zero = new Array(n).fill(null);
+  if (!n) return { vwap, zero };
+  const dk = (x) => String(x).slice(0, 10);
+  const amtA = (Array.isArray(amount) && amount.length === n) ? amount : null;
+  let ca = 0, cv = 0, day = null;
+  for (let i = 0; i < n; i++) {
+    const d = dk(dates[i]);
+    if (d !== day) { day = d; ca = 0; cv = 0; }
+    const v = Number((volume || [])[i] || 0);
+    const o = (ohlc || [])[i] || null;
+    if (!o || !(v > 0)) { vwap[i] = cv > 0 ? Math.round(ca / (cv * 100) * 1000) / 1000 : null; continue; }
+    const tp = (Number(o[1]) + Number(o[2]) + Number(o[3])) / 3;
+    ca += (amtA && amtA[i] != null) ? Number(amtA[i]) : tp * v * 100;
+    cv += v;
+    vwap[i] = Math.round(ca / (cv * 100) * 1000) / 1000;
+  }
+  let ld = null, prevC = null, dayC = null;
+  for (let i = 0; i < n; i++) {
+    const d = dk(dates[i]);
+    const c = Number(((ohlc || [])[i] || [])[1]);
+    if (d !== ld) { prevC = dayC; ld = d; }
+    zero[i] = prevC;
+    if (!isNaN(c)) dayC = c;
+  }
+  return { vwap, zero };
+}
+
 function buildGapAreas(ohlc, dates, lookbackDays, minPct, maxN) {
   const out = [];
   if (!ohlc || ohlc.length < 2) return out;
@@ -5235,38 +5274,14 @@ function renderStockChart(applyZoom = true) {
   const _isMin5 = String(stockChartPeriod || "") === "min5";
   let vwapSeries = null, zeroSeries = null;
   if (_isMin5) {
-    const _ds = period.dates || [];
-    const _dk = (x) => String(x).slice(0, 10);
-    const _amtA = (Array.isArray(period.amount) && period.amount.length === _ds.length) ? period.amount : null;
-    const _vw = new Array(_ds.length).fill(null);
-    let _ca = 0, _cv = 0, _day = null;
-    for (let i = 0; i < _ds.length; i++) {
-      const d = _dk(_ds[i]);
-      if (d !== _day) { _day = d; _ca = 0; _cv = 0; }
-      const v = Number((period.volume || [])[i] || 0);
-      const o = (period.ohlc || [])[i] || null;
-      if (!o || !(v > 0)) { _vw[i] = _cv > 0 ? Math.round(_ca / (_cv * 100) * 1000) / 1000 : null; continue; }
-      const tp = (Number(o[1]) + Number(o[2]) + Number(o[3])) / 3;   // ohlc = [o,c,l,h]
-      _ca += (_amtA && _amtA[i] != null) ? Number(_amtA[i]) : tp * v * 100;
-      _cv += v;
-      _vw[i] = Math.round(_ca / (_cv * 100) * 1000) / 1000;
-    }
-    const _zero = new Array(_ds.length).fill(null);
-    let _ld = null, _prevC = null, _dayC = null;
-    for (let i = 0; i < _ds.length; i++) {
-      const d = _dk(_ds[i]);
-      const c = Number(((period.ohlc || [])[i] || [])[1]);
-      if (d !== _ld) { _prevC = _dayC; _ld = d; }
-      _zero[i] = _prevC;
-      if (!isNaN(c)) _dayC = c;
-    }
-    if (_vw.some(v => v != null)) {
-      vwapSeries = { name: "VWAP(日内)", type: "line", data: _vw, symbol: "none", z: 3,
+    const _iz = buildIntradayVwapZero(period.dates, period.ohlc, period.volume, period.amount);
+    if (_iz.vwap.some(v => v != null)) {
+      vwapSeries = { name: "VWAP(日内)", type: "line", data: _iz.vwap, symbol: "none", z: 3,
         xAxisIndex: 0, yAxisIndex: 0, connectNulls: false,
         lineStyle: { width: 2, color: "#f0b429" }, itemStyle: { color: "#f0b429" } };
     }
-    if (_zero.some(v => v != null)) {
-      zeroSeries = { name: "昨收(0轴)", type: "line", data: _zero, symbol: "none", z: 1,
+    if (_iz.zero.some(v => v != null)) {
+      zeroSeries = { name: "昨收(0轴)", type: "line", data: _iz.zero, symbol: "none", z: 1,
         xAxisIndex: 0, yAxisIndex: 0, connectNulls: false, step: "end",
         lineStyle: { width: 1, color: "#8b949e", type: "dashed" }, itemStyle: { color: "#8b949e" } };
     }
@@ -8836,7 +8851,10 @@ document.addEventListener("DOMContentLoaded", () => {
 const MW_N = 9;                 // 3×3（2026-10-21 owner：六宫格→九宫格）
 const MW_LS_KEY = "multiWatchCodes";
 const MW_PERIOD_MS = 4000;      // 刷新间隔：九宫格 9 只 × 每轮 ~130ms 计算，4s 是 CPU 与实时性的折中（2026-10-21 抗卡顿）
-const MW_TAIL = 48;
+// 2026-10-25：48 → 96。48 根 5 分钟 = 正好一个交易日 ⇒ 窗口里没有"前一日收盘"，
+// 新加的「0 轴（昨收）」会整条为空（VWAP 不受影响）。96 根 = 2 个交易日，
+// 今天那条 0 轴才拿得到基准；代价是每格多 ~48 根，9 格也就多几十 KB。
+const MW_TAIL = 96;
 /* 各大指数（2026-10-21 owner：多窗口要能看指数）。带市场前缀，后端 `_tx_symbol`
    原样吃；⚠️ 不能用「裸 6 位」表示 —— `000001` 是平安银行，不是上证指数。 */
 const MW_INDEXES = [
@@ -9217,6 +9235,7 @@ function _mwOption(s, dma, levels, trades) {
     const up = !o ? true : (prev == null ? o[1] >= o[0] : o[1] >= prev);
     return { value: v, itemStyle: { color: up ? "rgba(248,81,73,.8)" : "rgba(63,185,80,.8)" } };
   });
+  const _mz = buildIntradayVwapZero(dates, ohlc, s.volume, s.amount);
   const line = (arr, color, w) => ({
     type: "line", data: arr || [], symbol: "none", connectNulls: true,
     lineStyle: { width: w, color }, itemStyle: { color },
@@ -9292,6 +9311,10 @@ function _mwOption(s, dma, levels, trades) {
           + `开 ${o[0]}　高 ${o[3]}<br>低 ${o[2]}　收 <b>${o[1]}</b>`
           + (chg != null ? ` <span style="color:${_c}">${chg >= 0 ? "+" : ""}${chg.toFixed(2)}%</span>` : "")
           + (amt ? `<br>成交额 <b>${amt}</b>` : "")
+          + ((_mz.vwap[i] != null || _mz.zero[i] != null) ? `<br>`
+              + (_mz.vwap[i] != null ? `VWAP <b style="color:#f0b429">${_mz.vwap[i]}</b>` : "")
+              + (_mz.vwap[i] != null && _mz.zero[i] != null ? "　" : "")
+              + (_mz.zero[i] != null ? `0轴 ${_mz.zero[i]}` : "") : "")
           + (dif != null ? `<br><span style="color:#3987e5">DIF ${dif}</span>　`
               + `<span style="color:#d55181">DEA ${dea}</span>` : "");
       },
@@ -9324,6 +9347,11 @@ function _mwOption(s, dma, levels, trades) {
         itemStyle: { color: "#f85149", color0: "#3fb950",
                      borderColor: "#ff6b62", borderColor0: "#56d364", borderWidth: 1 } },
       line(s.ma5, "#e3b341", 1.2),   // 本周期 MA5（5 根 5 分 K = 25 分钟）
+      // 2026-10-25 owner：「多窗口也要支持」——VWAP 与 0 轴，口径与单图同一函数
+      ...(_mz.vwap.some(v => v != null) ? [line(_mz.vwap, "#f0b429", 1.6)] : []),
+      ...(_mz.zero.some(v => v != null) ? [{ name: "昨收(0轴)", type: "line", data: _mz.zero,
+        symbol: "none", connectNulls: false, step: "end",
+        lineStyle: { width: 1, color: "#8b949e", type: "dashed" }, itemStyle: { color: "#8b949e" } }] : []),
       // 买卖点（只在该格窗口里有成交时才建这个系列）
       ...(_tradePts.length ? [{ name: "成交", type: "scatter", data: _tradePts, z: 13,
                                symbol: "triangle", symbolSize: 8 }] : []),
