@@ -9176,6 +9176,52 @@ class Api:
         return [c for c, i in jy.items() if isinstance(i, dict) and c.isdigit()]
 
     _BK_CACHE_DIR = BASE / "t_io" / "cache" / "daily_kline"
+    _TDX_FP = BASE / "t_io" / "tdx" / "tdx_daily.parquet"
+    _TDX_IDX = {"mtime": None, "map": {}, "pf": None}
+
+    def _tdx_index(self):
+        """通达信 parquet 的 code → row_group 索引（按 row group 的 code 统计建，只读元数据）。"""
+        try:
+            mt = self._TDX_FP.stat().st_mtime
+        except OSError:
+            return None
+        if self._TDX_IDX["mtime"] == mt and self._TDX_IDX["map"]:
+            return self._TDX_IDX["pf"]
+        try:
+            import pyarrow.parquet as pq
+            pf = pq.ParquetFile(str(self._TDX_FP))
+            md = pf.metadata          # ⚠️ 必须取一次；每次 `pf.metadata` 都会重新解析元数据（9506 组会卡死）
+            idx = {}
+            for rg in range(md.num_row_groups):
+                st = md.row_group(rg).column(0).statistics
+                if st is None or st.min is None:
+                    continue
+                lo, hi = str(st.min), str(st.max)
+                if lo == hi:
+                    idx[lo] = rg
+            self._TDX_IDX.update({"mtime": mt, "map": idx, "pf": pf})
+            return pf
+        except Exception:
+            return None
+
+    def _tdx_df(self, code, days=200):
+        """从通达信 parquet 取单只日线（不复权，成交量=股）。表结构与 daily_kline 缓存同形。"""
+        pf = self._tdx_index()
+        if pf is None:
+            return None
+        rg = self._TDX_IDX["map"].get(str(code))
+        if rg is None:
+            return None
+        try:
+            t = pf.read_row_group(rg, columns=["date", "open", "high", "low", "close", "volume"])
+            df = t.to_pandas()
+            if df.empty:
+                return None
+            df = df.tail(days).reset_index(drop=True)
+            df["date"] = df["date"].astype(str)
+            return df
+        except Exception:
+            return None
 
     def _bk_daily_many(self, chunk, budget_s=25):
         """带硬超时的 daily_many（2026-10-25）。
@@ -9227,15 +9273,37 @@ class Api:
         return hit / len(picked)
 
     def _bk_cache_last(self, code):
-        """只读末根日期（不建 DataFrame）—— 全池扫描时绝大多数票在"stale"这一步就被筛掉。"""
+        """只读末根日期（不建 DataFrame）—— 全池扫描时绝大多数票在"stale"这一步就被筛掉。
+
+        2026-10-25：JSON 缓存没有时再看通达信 parquet（一次 row-group 读，毫秒级）。
+        """
         p = self._BK_CACHE_DIR / f"{code}.json"
+        last = None
         try:
             rows = (_load_json(p, {}) or {}).get("rows") or []
+            last = str(rows[-1].get("date"))[:10] if rows else None
+        except Exception:
+            last = None
+        t = self._tdx_last(code)
+        if t and (last is None or t > last):
+            return t
+        return last
+
+    def _tdx_last(self, code):
+        pf = self._tdx_index()
+        if pf is None:
+            return None
+        rg = self._TDX_IDX["map"].get(str(code))
+        if rg is None:
+            return None
+        try:
+            t = pf.read_row_group(rg, columns=["date"])
+            col = t.column("date")
+            return str(col[col.length() - 1].as_py())[:10]
         except Exception:
             return None
-        return str(rows[-1].get("date"))[:10] if rows else None
 
-    def _bk_cached_df(self, code, days):
+    def _bk_cached_df(self, code, days, target=None):
         """本地日线缓存兜底（2026-10-25）。
 
         GM 批量取数不可用时（owner 报「经常跑不出结果」），过去整批记 no_data ⇒ 全池 0 命中。
@@ -9246,9 +9314,13 @@ class Api:
         try:
             rows = (_load_json(p, {}) or {}).get("rows") or []
         except Exception:
-            return None
-        if len(rows) < self._BK_MIN_BARS + 1:
-            return None
+            rows = []
+        if len(rows) < self._BK_MIN_BARS + 1 or (target and str(rows[-1].get("date"))[:10] < target):
+            # JSON 缓存缺目标日（或太短）⇒ 用通达信 parquet 顶（不复权，但同一序列内部自洽）
+            t = self._tdx_df(code, days)
+            if t is not None and len(t) >= self._BK_MIN_BARS + 1:
+                if not target or str(t["date"].iloc[-1]) >= target:
+                    return t
         try:
             import pandas as pd
             df = pd.DataFrame(rows[-days:])
@@ -9397,11 +9469,11 @@ class Api:
                     # 先只读末根日期，末根早于目标日 ⇒ 直接算 stale，不建 DataFrame（全池扫描的主要开销）。
                     _cl = self._bk_cache_last(code)
                     if _cl is not None and _cl == dt_target:
-                        fr = self._bk_cached_df(code, self._BK_SCAN_BARS)
+                        fr = self._bk_cached_df(code, self._BK_SCAN_BARS, dt_target)
                         if fr is not None:
                             cached_used += 1
                     elif _cl is not None and _cl > dt_target:
-                        fr = self._bk_cached_df(code, self._BK_SCAN_BARS)
+                        fr = self._bk_cached_df(code, self._BK_SCAN_BARS, dt_target)
                         if fr is not None:
                             cached_used += 1
                     elif _cl is not None:
