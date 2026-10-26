@@ -10,6 +10,7 @@ import os
 import time
 import json
 import subprocess
+import threading
 import pandas as pd
 from typing import List, Dict, Optional
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -65,6 +66,131 @@ def _df_to_kline_rows(df):
                  float(r.volume)] for r in df.itertuples(index=False)]
     except Exception:
         return []
+
+
+# ── P2-14 逐只加工 · 历史段记忆化（2026-07-29）──────────────────────────────────
+# 背景：hunter_poll 每 30min 一轮**完整重跑**。盘中两轮之间，个股的历史日线（D-1 及之前）
+# **不变**，变的只有当日 forming bar（快照价格每轮都在跳）；但 fetch_one 每只每轮都对全部
+# 历史重做「copy → date 转 str → 推导 amount → sort」这套加工（pandas3 Arrow 的 astype(str)
+# 实测 4.5ms/只，全池约占数据阶段 15%）。
+#
+# 逐字节等价的依据（切分口径）：
+#   · 原始批量帧**末根日期 == 目标日**时（上一轮回写的 forming bar 会被 load_daily_display
+#     重新读出来），把末根**剥出**单独加工；其余 = 历史段。
+#   · 加工的三个动作（astype / amount 推导 / sort）全部**逐行独立**，且目标日恒为最大日期
+#     ⇒ process(历史段) + process(当日根) 逐值等于 process(全帧)。
+#     历史段混入 ≥目标日 的行属病理数据（sort 后末根未必是当日根）⇒ 直接回退全量加工。
+#   · 历史段按**内容签名**（行数 + 列序 + 列型 + 全量单元格字节哈希，见 `_bulk_frame_sig`）
+#     记忆化；签名不同 ⇒ 重算，**不容忍**任何内容漂移（打分结果逐字节等价是硬约束）。
+#   · 快照 patch / merge 回写 / 全部派生指标仍在**重建出的等价帧**上走 fetch_one 原代码，
+#     打分输入契约与共享缓存回写副作用均不变。
+# 线程安全：fetch_one 在 20 线程池里跑，dict 的 get/set/clear 在 GIL 下各自原子，
+# 计数器走锁；最坏后果是同日多付一次重算（幂等），与 P0-4 负缓存同一策略。
+_FETCH_MEMO = {"date": None, "map": {}}
+_FETCH_MEMO_STATS = {"hit": 0, "miss": 0}
+_FETCH_MEMO_LOCK = threading.Lock()
+_FETCH_MEMO_MAX = 3000          # 防无界增长（池 ~1700 只，留一倍余量）
+
+
+def _process_bulk_frame(raw, code: str):
+    """批量快路径的加工动作**原样抽取**：copy → date 转 str → 缺 amount 按同口径推导 → 按日期排序。
+
+    ⚠️ 等价性靠「同一份代码、同一份输入」保证：fetch_one 的全量回退也走这里，
+    记忆化路径只是把输入切成「历史段 + 当日根」分别喂给它再按序拼接。
+    """
+    df = raw.copy()
+    if "date" in df.columns:
+        df["date"] = df["date"].astype(str)
+    # 缺 amount 时按与腾讯解析分支完全相同的口径推导：
+    # amount = ((high+low+close)/3) × volume × 单位（688=股、其余=手×100）。
+    if "amount" not in df.columns:
+        _u = 1.0 if str(code).startswith("688") else 100.0
+        _mid = (df["high"].astype(float) + df["low"].astype(float)
+                + df["close"].astype(float)) / 3.0
+        df["amount"] = _mid * df["volume"].astype(float) * _u
+    return df.sort_values("date").reset_index(drop=True)
+
+
+def _bulk_frame_sig(df) -> tuple:
+    """历史段内容签名：行数 + 列序 + 列型 + 全量单元格字节哈希（精确到每个值，不容忍漂移）。
+
+    用 tobytes/join + 进程内 `hash()` 而非 `hash_pandas_object`：后者 800 行实测 ~3ms/只，
+    会把热路径省下的时间吃回去一半；`hash()` 只需**进程内稳定**（本缓存本就是进程级）。
+    数值列走字节级哈希；非数值列（date / object / Arrow 字符串）逐值 str 后拼接。
+    碰撞或类型识别失误的最坏后果是**多付一次重算**（miss 永远安全）。
+    """
+    parts = []
+    for c in df.columns:
+        v = df[c]
+        if pd.api.types.is_numeric_dtype(v.dtype):
+            parts.append(v.to_numpy().tobytes())
+        else:
+            parts.append("\x1f".join(map(str, v.tolist())).encode("utf-8", "ignore"))
+    return (len(df), tuple(str(c) for c in df.columns),
+            tuple(str(df[c].dtype) for c in df.columns),
+            hash(b"\x1e".join(parts)))
+
+
+def _process_today_row(today_raw, code: str):
+    """当日根（单行）的加工快路径：逐字段标量复刻 `_process_bulk_frame` 的三个动作。
+
+    单行走完整 pandas 管线实测 ~4ms（copy/astype/sort 的固定开销主导，与行数无关），
+    标量路径 ~10µs。口径对齐：
+      · date 列必须是 str（`load_daily_display` 的 JSON 来源恒为 str ⇒ astype(str) 是恒等）；
+        否则 str(Timestamp) 与 astype(str) 口径不同（"2026-10-26 00:00:00" vs "2026-10-26"），
+        回退慢路径（provider 补缺帧可能带 Timestamp，属少数票）。
+      · amount 推导与向量化公式同序同型（Python float == float64 标量，IEEE 结果逐位相同）。
+    """
+    r = today_raw.iloc[0]
+    if not isinstance(r["date"], str):
+        return _process_bulk_frame(today_raw, code)
+    row = {str(c): r[c] for c in today_raw.columns}
+    if "amount" not in today_raw.columns:
+        _u = 1.0 if str(code).startswith("688") else 100.0
+        row["amount"] = ((float(r["high"]) + float(r["low"]) + float(r["close"])) / 3.0
+                         * float(r["volume"]) * _u)
+    return pd.DataFrame([row])
+
+
+def _processed_bulk_df(raw_df, code: str, target_date_str: str):
+    """返回与批量快路径**逐字节等价**的加工帧；盘中后续轮次复用历史段加工产物。
+
+    任何意外（病理日期 / 哈希失败 / 结构不符）⇒ 回退全量加工 —— 宁可慢，不能错。
+    """
+    try:
+        _today = str(target_date_str)[:10]
+        if str(raw_df["date"].iloc[-1])[:10] == _today:
+            _hist_raw, _today_raw = raw_df.iloc[:-1], raw_df.iloc[-1:]
+        else:
+            _hist_raw, _today_raw = raw_df, None
+        # 病理闸：历史段混入 ≥目标日 的行 ⇒ 切分口径不再等价，回退全量
+        if len(_hist_raw) and str(_hist_raw["date"].max())[:10] >= _today:
+            raise ValueError("hist rows reach/past target date")
+        _sig = _bulk_frame_sig(_hist_raw)
+        if _FETCH_MEMO["date"] != _today:          # 跨交易日自动失效（同 P0-4 策略）
+            _FETCH_MEMO["date"] = _today
+            _FETCH_MEMO["map"] = {}
+        _ent = _FETCH_MEMO["map"].get(code)
+        if _ent is not None and _ent[0] == _sig:
+            # 必须 copy：调用方（快照 patch）会就地改末根，缓存本体不能被污染
+            _hist = _ent[1].copy()
+            _hit = True
+        else:
+            _hist = _process_bulk_frame(_hist_raw, code)
+            if len(_FETCH_MEMO["map"]) >= _FETCH_MEMO_MAX:
+                _FETCH_MEMO["map"] = {}
+            _FETCH_MEMO["map"][code] = (_sig, _hist)
+            _hit = False
+        with _FETCH_MEMO_LOCK:
+            _FETCH_MEMO_STATS["hit" if _hit else "miss"] += 1
+        if _today_raw is not None:
+            return pd.concat([_hist, _process_today_row(_today_raw, code)],
+                             ignore_index=True)
+        return _hist
+    except Exception:
+        with _FETCH_MEMO_LOCK:
+            _FETCH_MEMO_STATS["miss"] += 1
+        return _process_bulk_frame(raw_df, code)
 
 
 class MarketDataFetcher:
@@ -484,20 +610,12 @@ class MarketDataFetcher:
                     _c6k = code[-6:] if str(code)[-6:].isdigit() else str(code)
                     _bulk_df = (getattr(self, "_bulk_kline", None) or {}).get(_c6k)
                     if _bulk_df is not None and not getattr(_bulk_df, "empty", True):
-                        df = _bulk_df.copy()
-                        if "date" in df.columns:
-                            df["date"] = df["date"].astype(str)
-                        # `load_daily_display` 只有 OHLCV、没有 amount；这里按与下面解析分支
-                        # **完全相同**的口径补上（腾讯 fqkline 返回 6 列 ⇒ 原路径也是推导出来的）：
-                        # amount = ((high+low+close)/3) × volume × 单位（688=股、其余=手×100）。
-                        # ⚠️ 不能留空列：下游 `float(target_row.get('amount', 0) or 0)` 拿到 NaN
-                        #    时 `NaN <= 0` 是 False ⇒ 成交额会一路 NaN 进筛选/排名，静默算错。
-                        if "amount" not in df.columns:
-                            _u = 1.0 if str(code).startswith("688") else 100.0
-                            _mid = (df["high"].astype(float) + df["low"].astype(float)
-                                    + df["close"].astype(float)) / 3.0
-                            df["amount"] = _mid * df["volume"].astype(float) * _u
-                        df = df.sort_values("date").reset_index(drop=True)
+                        # P2-14（2026-07-29）：加工动作原样收进 `_processed_bulk_df`，盘中轮次
+                        # 按历史段内容签名记忆化（两轮之间历史不变，只有当日 forming 根在变）。
+                        # ⚠️ amount 不能留空列：下游 `float(target_row.get('amount', 0) or 0)`
+                        #    拿到 NaN 时 `NaN <= 0` 是 False ⇒ 成交额会一路 NaN 进筛选/排名。
+                        #    该守卫已随加工动作一并收进 `_process_bulk_frame`，口径不变。
+                        df = _processed_bulk_df(_bulk_df, code, target_date_str)
                     else:
                         data = self._fetch_kline_multi(symbol)
                         if not data:
@@ -818,6 +936,11 @@ class MarketDataFetcher:
             return {"_error": code, "_msg": "all retries failed"}
 
         max_workers = min(self.HISTORICAL_WORKERS, len(codes))
+        # P2-14：本轮记忆化统计清零 + 加工段计时（供 [MEMO] 日志行与复盘验证）
+        with _FETCH_MEMO_LOCK:
+            _FETCH_MEMO_STATS["hit"] = 0
+            _FETCH_MEMO_STATS["miss"] = 0
+        _proc_t0 = time.time()
         # 硬限时兜底（2026-08-25）：个别 urllib 在 Windows 网络抖动时不遵守 timeout 会卡死，
         # future.result() 无超时 + as_completed 等最后一个 future → 前端进度条卡"100%"永远无结果。
         # 给整体预算，超时带部分结果返回，不让卡死拖住选股猎手。
@@ -853,6 +976,13 @@ class MarketDataFetcher:
         finally:
             executor.shutdown(wait=False, cancel_futures=True)  # 不等卡死线程，由 urllib 超时自愈
 
+        # P2-14：每轮报告历史段记忆化命中情况（供复盘验证；[MEMO] 不匹配 [WARN]/[ERR] 判据，
+        # 不会触发 hunter_poll 的 data_warn 误报）
+        with _FETCH_MEMO_LOCK:
+            _mh, _mm = _FETCH_MEMO_STATS["hit"], _FETCH_MEMO_STATS["miss"]
+        if _mh or _mm:
+            print(f"  [MEMO] 逐只加工: 历史段复用 {_mh} 只 / 重算 {_mm} 只 "
+                  f"/ 加工段耗时 {time.time() - _proc_t0:.1f}s")
         if failed:
             print(f"  [WARN] {len(failed)} 只获取失败（已跳过）: {', '.join(failed[:20])}{'...' if len(failed) > 20 else ''}")
         if results:

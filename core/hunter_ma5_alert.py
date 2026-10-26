@@ -346,21 +346,22 @@ def scan_live_once(ctx: dict, below_today: set, provider=None, today: str = None
     codes = (ctx or {}).get("codes") or []
     if not codes:
         return [], False
-    if provider is None:
-        try:
-            from core.market_data.facade import get_provider
-            provider = get_provider()
-        except Exception:
-            return [], False
     snap = {}
     try:
-        # **必须绕开 facade.snapshot 的 GM-first**（GM 不可用时实测卡 60s 再回退腾讯）。
-        # 优先用 facade 内部的腾讯实例 `_tx` 的分块批量接口；测试桩可直接实现该方法。
-        fn = getattr(provider, "snapshot_auction_many", None)
-        if fn is None:
-            _tx = getattr(provider, "_tx", None)
-            fn = getattr(_tx, "snapshot_auction_many", None)
-        snap = (fn(codes) if fn is not None else provider.snapshot(codes)) or {}
+        if provider is None:
+            # P2-13(2026-10-23)：默认快照走进程级 **QuoteBus**（共享档+跨进程锁+stale 兜底，
+            # 新鲜 <10s 零网络）——与 main.py/t_gui 共用同一份腾讯快照，不再每 20s
+            # 独自打 qt.gtimg.cn；也顺带绕开了 facade.snapshot 的 GM-first 60s 卡顿。
+            from core.market_data.quote_bus import get_quotes as _bus_get_quotes
+            snap = _bus_get_quotes(codes, max_age_sec=10.0) or {}
+        else:
+            # **必须绕开 facade.snapshot 的 GM-first**（GM 不可用时实测卡 60s 再回退腾讯）。
+            # 优先用 facade 内部的腾讯实例 `_tx` 的分块批量接口；测试桩可直接实现该方法。
+            fn = getattr(provider, "snapshot_auction_many", None)
+            if fn is None:
+                _tx = getattr(provider, "_tx", None)
+                fn = getattr(_tx, "snapshot_auction_many", None)
+            snap = (fn(codes) if fn is not None else provider.snapshot(codes)) or {}
     except Exception as e:
         log.warning("[MA5实时] 快照失败: %s: %s" % (type(e).__name__, str(e)[:160]))
         return [], False

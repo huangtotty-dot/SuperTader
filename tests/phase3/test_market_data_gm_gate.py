@@ -314,7 +314,28 @@ class TestLoadQuotesForContract(unittest.TestCase):
     最坑的是**两侧各自的单测都发现不了**（后端返回的是它自己承诺的形状、前端读的是它以为的形状）
     —— 缺的是**跨边界的契约测试**。诊断日志一次定死：
       `hunter_hq req=47 got=47`  ←→  `hunter_hq_js req=47 got=0 patched=2438`
+
+    2026-10-26（P2-13）：`load_quotes_for` 改走 quote_bus 总线后，必须把总线的共享档
+    重定向到临时目录——否则桩数据会写进**真实** `t_io/state/quote_bus.json` 污染生产，
+    且上一用例的鲜 ts 桩值会被下一用例当新鲜命中读回来（跨用例串扰）。
     """
+
+    def setUp(self):
+        import os as _os
+        import tempfile as _tf
+        from core.market_data import quote_bus as _QB
+        self._QB = _QB
+        self._saved = (_QB._BUS_FP, _QB._LOCK_FP)
+        self._tmp = _tf.mkdtemp()
+        _QB._BUS_FP = _os.path.join(self._tmp, "quote_bus.json")
+        _QB._LOCK_FP = _os.path.join(self._tmp, "quote_bus.lock")
+        _QB._MEMO["ts"] = 0.0
+        _QB._MEMO["store"] = None
+
+    def tearDown(self):
+        self._QB._BUS_FP, self._QB._LOCK_FP = self._saved
+        self._QB._MEMO["ts"] = 0.0
+        self._QB._MEMO["store"] = None
 
     def _call(self, payload):
         import t_gui

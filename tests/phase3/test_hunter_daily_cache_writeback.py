@@ -47,15 +47,19 @@ class TestDailyCacheWriteback(unittest.TestCase):
                       "会被当成『值未变』⇒ 共享缓存永远补不上当日 bar ⇒ 误报破5日线")
 
     def test_writeback_requires_today_bar(self):
-        """② 回写处要确认手上真有当日 bar（否则是白写 I/O）。"""
-        i = self.src.index("merge_daily_cache(code, df)")
-        window = self.src[max(0, i - 500):i]
+        """② 回写处要确认手上真有当日 bar（否则是白写 I/O）。
+
+        ⚠️ 针串不得带右括号：调用点带 `forming_date=` 实参（2026-10-21 加），
+        写 `merge_daily_cache(code, df)` 会 ValueError 让本守卫**整个死掉**（曾经漂移过一次）。
+        窗口 500→700：forming 注释两行把日期闸推到了 500 之外。"""
+        i = self.src.index("merge_daily_cache(code, df,")
+        window = self.src[max(0, i - 700):i]
         self.assertIn('str(df["date"].iloc[-1])[:10]', window,
                       "回写前应确认末根是目标日")
 
     def test_writeback_still_guarded_by_cache_membership(self):
         """别把优化整个删掉：来自缓存**且缓存已含当日**的码仍应跳过回写（省 I/O）。"""
-        i = self.src.index("merge_daily_cache(code, df)")
+        i = self.src.index("merge_daily_cache(code, df,")
         window = self.src[max(0, i - 500):i]
         self.assertIn("_bulk_from_cache", window, "回写仍应受 _bulk_from_cache 豁免")
 

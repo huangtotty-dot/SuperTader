@@ -2337,6 +2337,12 @@ def _compute_ma365_breadth(days=_MA365_MAX_DAYS):
     """
     from collections import defaultdict
     from concurrent.futures import ThreadPoolExecutor
+    # P2-15（2026-10-26）：整目录 JSON 解析改走 core.chart_cache 的共享记忆化层
+    # （dates+closes 轻量投影，键=(路径,mtime_ns,size)）。与板块 MA 宽度共用同一份解析结果，
+    # 文件没变 ⇒ 零重解析；猎手回写当日 bar ⇒ mtime 变 ⇒ 只重解析改动的那批。
+    # 语义与旧实现逐位一致：len<365 跳过、末行日期闸、close=float(r.get("close") or 0)、
+    # 任一行转不动 = 整档跳过（原 try/except → None，层内吞异常 → ((),()) → n<365 → None）。
+    from core.chart_cache import daily_close_series as _daily_close_series
     latest = _market_latest_date()
     files = [p for p in _DAILY_KLINE_DIR.glob("*.json")
              if p.stem.isdigit() and len(p.stem) == 6]
@@ -2348,17 +2354,12 @@ def _compute_ma365_breadth(days=_MA365_MAX_DAYS):
     cohort = 0
 
     def _one(p):
-        try:
-            rows = (_load_json(p, {}) or {}).get("rows") or []
-            if len(rows) < 365:
-                return None
-            if str(rows[-1].get("date"))[:10] != latest:
-                return None
-            closes = [float(r.get("close") or 0) for r in rows]
-            dates = [str(r.get("date"))[:10] for r in rows]
-        except Exception:
-            return None
+        dates, closes = _daily_close_series(p)
         n = len(closes)
+        if n < 365:
+            return None
+        if dates[-1] != latest:
+            return None
         start = max(364, n - days)
         s = sum(closes[start - 364:start + 1])
         out = []
@@ -2472,6 +2473,10 @@ def _compute_sector_ma_breadth(days=_SECTOR_MA_MAX_DAYS, end=None):
           coverage:{codes, scanned}}。
     """
     from collections import defaultdict
+    # P2-15（2026-10-26）：JSON 解析改走 core.chart_cache 共享记忆化层（详见
+    # `_compute_ma365_breadth` 注释）。两个全目录扫描面板共用同一份 (mtime,size) 键的
+    # dates+closes 投影 ⇒ 先跑的面板把整池解析热好，后跑的 6~8s → 近零。
+    from core.chart_cache import daily_close_series as _daily_close_series
     # `end` 给定时窗口锚在**那一天**（历史日期回看），否则锚在最新交易日。
     latest = str(end).strip()[:10] if end else _market_latest_date()
     board = _jiuyan_board()
@@ -2487,33 +2492,35 @@ def _compute_sector_ma_breadth(days=_SECTOR_MA_MAX_DAYS, end=None):
 
     def _one(p):
         sec = mine.get(p.stem)
-        try:
-            rows = (_load_json(p, {}) or {}).get("rows") or []
-            # 历史 end：只取 ≤ 该日的 bar（否则算的还是最新那段）
-            if end:
-                rows = [r for r in rows if str(r.get("date"))[:10] <= latest]
-            if len(rows) < 20:
-                return None
-            _last = str(rows[-1].get("date"))[:10]
-            # 2026-10-21：**容忍 5 个自然日的滞后**（原来要求"末行=最新交易日"，一刀切）。
-            # 起因：owner 新加的大消费/黄金/数据要素 194 只此前不在猎手池 ⇒ 从没被扫过 ⇒
-            # 缓存停在 T-1，被这条闸整批剔除 ⇒ 新能源板块样本塌成 n=6 / n=1 / n=0，占比看着像坏了。
-            # 停牌/长期不更新的仍排除（超过 5 天不进分母，否则会把"没数据"算成"跌破均线"）。
-            if _last != latest:
-                try:
-                    _lag = (datetime.strptime(latest, "%Y-%m-%d")
-                            - datetime.strptime(_last, "%Y-%m-%d")).days
-                except Exception:
-                    _lag = 99
-                if _lag > 5:
-                    return None
-                _carry = True
-            else:
-                _carry = False
-            closes = [float(r.get("close") or 0) for r in rows]
-            dates = [str(r.get("date"))[:10] for r in rows]
-        except Exception:
+        # dates/closes 是**缓存本体**（tuple / array）⇒ 只读；end 过滤另行产出新列表，
+        # 与原「rows = [r for r in rows if date <= latest]」保序过滤同义。
+        # ⚠️ 已知边角差异（实务不发生）：若某档在 end 之后存在非数值 close 串，
+        # 旧实现先过滤再转换 ⇒ 能逃过；本层解析期转换 ⇒ 整档跳过。两者都是"该档不计入"，
+        # 且本缓存由自有管线 json.dumps 数值写出，不会产生非数值 close。
+        dates, closes = _daily_close_series(p)
+        # 历史 end：只取 ≤ 该日的 bar（否则算的还是最新那段）
+        if end:
+            _f = [(d, c) for d, c in zip(dates, closes) if d <= latest]
+            dates = [d for d, _ in _f]
+            closes = [c for _, c in _f]
+        if len(dates) < 20:
             return None
+        _last = dates[-1]
+        # 2026-10-21：**容忍 5 个自然日的滞后**（原来要求"末行=最新交易日"，一刀切）。
+        # 起因：owner 新加的大消费/黄金/数据要素 194 只此前不在猎手池 ⇒ 从没被扫过 ⇒
+        # 缓存停在 T-1，被这条闸整批剔除 ⇒ 新能源板块样本塌成 n=6 / n=1 / n=0，占比看着像坏了。
+        # 停牌/长期不更新的仍排除（超过 5 天不进分母，否则会把"没数据"算成"跌破均线"）。
+        if _last != latest:
+            try:
+                _lag = (datetime.strptime(latest, "%Y-%m-%d")
+                        - datetime.strptime(_last, "%Y-%m-%d")).days
+            except Exception:
+                _lag = 99
+            if _lag > 5:
+                return None
+            _carry = True
+        else:
+            _carry = False
         n = len(closes)
         start = max(19, n - days)
         s5 = sum(closes[start - 4:start + 1])
@@ -3953,11 +3960,20 @@ class Api:
             want = want[:self._QUOTES_FOR_MAX]
             if not want:
                 return out
-            from core.market_data.tencent_provider import TencentProvider
-            # ⚠️ 必须走**分块**版：`snapshot_auction` 的 URL 一长就被腾讯**静默返空**
-            #（实测 800 只过、1000 只返 0）。这里上限 400 本就在悬崖之下，但用分块版
-            # 可以把这个上限当成纯业务约束、不必再惦记传输层的长度限制。
-            snaps = TencentProvider().snapshot_auction_many(want) or {}
+            # 2026-10-26（P2）：直调腾讯改走 QuoteBus 总线（进程内共享快照缓存，
+            # max_age=8s）。**fail-open**：总线不可用/抛错 ⇒ 回退原直调，行为不变。
+            snaps = None
+            try:
+                from core.market_data.quote_bus import get_quotes as _bus_get_quotes
+                snaps = _bus_get_quotes(want, max_age_sec=8.0)
+            except Exception:
+                snaps = None
+            if snaps is None:
+                from core.market_data.tencent_provider import TencentProvider
+                # ⚠️ 必须走**分块**版：`snapshot_auction` 的 URL 一长就被腾讯**静默返空**
+                #（实测 800 只过、1000 只返 0）。这里上限 400 本就在悬崖之下，但用分块版
+                # 可以把这个上限当成纯业务约束、不必再惦记传输层的长度限制。
+                snaps = TencentProvider().snapshot_auction_many(want) or {}
             for base, d in snaps.items():
                 px = d.get("price") or 0
                 if not px:
@@ -4025,9 +4041,19 @@ class Api:
             sym = _to_symbol(code)
             if sym not in symbols.values():  # 同一只股票（如 000988/000988_B）只请求一次
                 symbols[code] = sym
-        # P1-2 收敛：tencent_provider.snapshot_auction（快照/竞价专用保留腾讯）
-        from core.market_data.tencent_provider import TencentProvider
-        snaps = TencentProvider().snapshot_auction(list(symbols.keys()))
+        # 2026-10-26（P2）：直调腾讯改走 QuoteBus 总线（core.market_data.quote_bus.get_quotes，
+        # 进程内共享快照缓存，max_age 与下方 SWR 新鲜窗同为 8s）。**fail-open**：总线模块
+        # 不存在 / 调用抛错 ⇒ 回退原有直调路径，行为与接入前完全一致。
+        snaps = None
+        try:
+            from core.market_data.quote_bus import get_quotes as _bus_get_quotes
+            snaps = _bus_get_quotes(list(symbols.keys()), max_age_sec=8.0)
+        except Exception:
+            snaps = None
+        if snaps is None:
+            # P1-2 收敛：tencent_provider.snapshot_auction（快照/竞价专用保留腾讯）
+            from core.market_data.tencent_provider import TencentProvider
+            snaps = TencentProvider().snapshot_auction(list(symbols.keys()))
         # 2026-10-06: 保留批量快照（含 ts_date/open/high/low/vol_hand）供 K线「补当日 bar」复用，
         # 免去每只票单独打一次快照（假期/首帧实测 1.9s/只）。
         try:

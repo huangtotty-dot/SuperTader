@@ -723,3 +723,81 @@ def run_prefetch(small=True, full=True, minutes=True, days_full=200,
         return out
     finally:
         _release_lock()
+
+
+# ── 日线缓存「日期+收盘」共享解析层（2026-10-26，P2-15）────────────────────
+# 为什么必须有：GUI 进程内「年限宽度（_compute_ma365_breadth，~5500 档）」与
+#   「板块站上5/20线（_compute_sector_ma_breadth，~1700 档）」各自整目录 json.loads
+#   同一批日线缓存（单线程 ~10s / 6~8s），彼此不共享 ⇒ 同一文件一天被重复解析多次。
+#   实测单档解析后驻留 ~270KB（rows 原始 dict 列表），整池裸缓存 ~1.5GB，本机 4GB
+#   内存扛不住 ⇒ 本层只缓存**轻量投影**（dates + closes）：
+#     · dates 用 sys.intern 跨文件共享同一批日期字符串（≈8B/行引用）；
+#     · closes 用 array('d')（8B/行，与 Python float 同精度）。
+#   ≈16B/行 + tuple 开销，6000 档 × 800 行 ≈ 77MB 封顶（双闸：条数 + 总行数）。
+# 转换语义与调用方原实现逐位一致：date → str(r.get("date"))[:10]；
+#   close → float(r.get("close") or 0)；**任一行转换失败 = 整档解析失败**（不缓存、
+#   返回 ((), ())），调用方按"样本不足"跳过 —— 与原 try/except → None 同向。
+# 契约与 _norm_frame_cached 相同：键 = (路径, mtime_ns, size)，文件改写 ⇒ 键自然失效；
+#   同路径旧版本先逐出。⚠️ 返回的 closes 是 array（可变）⇒ 调用方**不得就地修改**。
+from array import array as _array
+
+_DAILY_KV_CACHE: "OrderedDict" = OrderedDict()
+_DAILY_KV_LOCK = threading.Lock()
+_DAILY_KV_MAX_ENTRIES = 6000           # 略大于全池（~5537），保证一轮全量扫描后整池在缓存内
+_DAILY_KV_MAX_ROWS = 4_800_000         # 行数预算 ≈ 77MB（6000 档 × 800 行 × ~16B）
+_DAILY_KV_ROWS = 0
+
+
+def daily_close_series(fp):
+    """读一个日线缓存档 → (dates tuple, closes array('d'))，全进程共享记忆化。
+
+    解析失败 / 无 rows / 任一行 close 转不动 → ((), ())（调用方按样本不足跳过，永不抛）。
+    """
+    global _DAILY_KV_ROWS
+    try:
+        st = os.stat(fp)
+        key = (str(fp), st.st_mtime_ns, st.st_size)
+    except OSError:
+        return (), _array("d")
+    with _DAILY_KV_LOCK:
+        hit = _DAILY_KV_CACHE.get(key)
+        if hit is not None:
+            _DAILY_KV_CACHE.move_to_end(key)
+            return hit
+    try:
+        rows = (_read_json(fp, {}) or {}).get("rows") or []
+        if not rows:
+            return (), _array("d")
+        # intern：全池 5500 档的日期字符串其实只有 ~900 个不同值，共享后 dates 只剩指针
+        dates = tuple(sys.intern(str(r.get("date"))[:10]) for r in rows)
+        closes = _array("d", (float(r.get("close") or 0) for r in rows))
+    except Exception:
+        return (), _array("d")
+    del rows
+    n = len(dates)
+    with _DAILY_KV_LOCK:
+        # 同路径的旧版本先逐出（一轮回写只留最新版，别让废数据吃行数预算）
+        for k in [k for k in _DAILY_KV_CACHE if k[0] == key[0] and k != key]:
+            _DAILY_KV_ROWS -= len(_DAILY_KV_CACHE[k][0])
+            del _DAILY_KV_CACHE[k]
+        _DAILY_KV_CACHE[key] = (dates, closes)
+        _DAILY_KV_ROWS += n
+        while _DAILY_KV_CACHE and (len(_DAILY_KV_CACHE) > _DAILY_KV_MAX_ENTRIES
+                                   or _DAILY_KV_ROWS > _DAILY_KV_MAX_ROWS):
+            _, ev = _DAILY_KV_CACHE.popitem(last=False)
+            _DAILY_KV_ROWS -= len(ev[0])
+    return dates, closes
+
+
+def invalidate_daily_close_cache(fp=None):
+    """丢弃本层缓存：`fp=None` 全清；给了路径就只清该档（测试/写入口用）。"""
+    global _DAILY_KV_ROWS
+    with _DAILY_KV_LOCK:
+        if fp is None:
+            _DAILY_KV_CACHE.clear()
+            _DAILY_KV_ROWS = 0
+            return
+        key0 = str(fp)
+        for k in [k for k in _DAILY_KV_CACHE if k[0] == key0]:
+            _DAILY_KV_ROWS -= len(_DAILY_KV_CACHE[k][0])
+            del _DAILY_KV_CACHE[k]

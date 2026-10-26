@@ -480,6 +480,10 @@ def _refresh_spot_vwap_cache() -> None:
     腾讯侧走 `snapshot_auction_many`（同日已改 keep-alive 连接复用）：**持仓 7 只 <1s**，
     且**新鲜度更好** —— 同一轮内各持仓共享同一份快照，而不是散布在 13 分钟里。
 
+    P2-13(2026-10-23)：快照来源再换 **QuoteBus**（`core.market_data.quote_bus.get_quotes`）——
+    跨进程共享档 + 文件锁 + stale 兜底；新鲜（<8s）命中零网络，过期才由总线经腾讯
+    `snapshot_auction_many` 补齐。本地 60s 节流与「整批取不到保留旧缓存」语义不变。
+
     ⚠️ **缓存只装持仓**：全仓唯一的消费点是本文件下方 `_SPOT_VWAP_CACHE.get(api_code)`
     （逐只持仓），原来装全市场 5000 只是白装。**若将来出现查非持仓码的消费方，必须改回取数口径。**
 
@@ -500,8 +504,9 @@ def _refresh_spot_vwap_cache() -> None:
                 _codes.append(_b)
         if not _codes:
             return
-        from core.market_data.tencent_provider import TencentProvider, qt_vwap
-        snaps = TencentProvider().snapshot_auction_many(_codes) or {}
+        from core.market_data.tencent_provider import qt_vwap
+        from core.market_data.quote_bus import get_quotes as _bus_get_quotes
+        snaps = _bus_get_quotes(_codes, max_age_sec=8.0) or {}
         if not snaps:
             # 与旧实现同语义：**整批取不到就保留旧缓存**（旧版 `spot is None/empty → return`），
             # 别把好缓存清成空、让引擎退回分钟自算口径。
