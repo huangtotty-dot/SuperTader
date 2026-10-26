@@ -4257,6 +4257,7 @@ function closeDayIntraday() {
   const m = document.getElementById("dayModal");
   if (m) m.style.display = "none";
   if (dayInst) { try { dayInst.dispose(); } catch (e) { /* 忽略 */ } dayInst = null; }
+  _clearGapFocus();          // 关掉日内窗，日线上的缺口标记也撤掉
 }
 
 /* 2026-10-26：**双击日 K 的某根 → 那天**的 5 分钟图。
@@ -4481,10 +4482,14 @@ async function openDayIntraday(code, name, date) {
     label: { formatter: `MA${k} ${Number(MA[k]).toFixed(2)}`, color: _maColors[k], fontSize: 9,
              position: _posOf.get(`MA${k} ${Number(MA[k]).toFixed(2)}`) || "insideEndTop" },
   }));
+  /* 2026-10-26 owner：「零轴线被其它线遮挡很难看出来」。
+     原来 #8b949e 点线 1.2px，夹在一堆均线里根本看不见。改成：
+     亮白虚线 1.6px + 标签带深色底/描边（chip），压在任何线上都能读。 */
   const zero = (d.prev_close != null) ? {
     yAxis: d.prev_close,
-    lineStyle: { color: "#8b949e", type: "dotted", width: 1.2 },
-    label: { formatter: `昨收 ${d.prev_close}`, color: "#8b949e", fontSize: 9,
+    lineStyle: { color: "#e6edf3", type: "dashed", width: 1.6, opacity: .95 },
+    label: { formatter: `昨收 ${d.prev_close}`, color: "#0d1117", fontSize: 9,
+             backgroundColor: "#e6edf3", padding: [1, 4], borderRadius: 2,
              position: _posOf.get(`昨收 ${d.prev_close}`) || "insideStartTop" },
   } : null;
   // ⚠️ markLine 不会把 y 轴撑开 —— 不显式给 min/max，线会被裁掉。
@@ -4509,8 +4514,9 @@ async function openDayIntraday(code, name, date) {
       data: d.macd.hist, z: 1,
       itemStyle: { color: (p) => (p.value >= 0 ? "rgba(248,81,73,.9)" : "rgba(63,185,80,.9)"),
                    borderRadius: [1, 1, 0, 0] },
+      // 零轴提亮（原来 rgba(139,148,158,.45) 被柱子压住看不见）
       markLine: { silent: true, symbol: "none", data: [{ yAxis: 0, label: { show: false },
-        lineStyle: { color: "rgba(139,148,158,.45)", type: "dashed", width: 1 } }] } });
+        lineStyle: { color: "rgba(230,237,243,.65)", type: "dashed", width: 1.2 } }] } });
     _macdSeries.push({ name: "MACD-DIF", type: "line", xAxisIndex: 2, yAxisIndex: 2,
       data: d.macd.dif, symbol: "none", z: 3,
       lineStyle: { color: "#3987e5", width: 1.2 }, itemStyle: { color: "#3987e5" } });
@@ -4567,6 +4573,52 @@ async function openDayIntraday(code, name, date) {
     if (info) info.innerHTML = `<span style="color:#f85149">渲染失败：${esc((e && (e.message || e)) || "未知")}</span>`;
     try { window.pywebview.api.report_slow_call("day_render_err", 0); } catch (e2) { /* 静默 */ }
   }
+  // 2026-10-26 owner：「5分钟显示的缺口我不知道在日线级别的哪个缺口，请在日线相应位置也显示出来」
+  // ⇒ 把这次看到的缺口记下来，日线图上标同一根（并自动跳到那天），关弹窗时清掉。
+  const _o0g = (d.ohlc && d.ohlc[0]) ? Number(d.ohlc[0][0]) : null;
+  const _gpg = (d.prev_close != null && _o0g) ? (_o0g / d.prev_close - 1) * 100 : null;
+  _setGapFocus(code, date, d.prev_close, _o0g, _gpg);
+}
+
+/* 日线上的「缺口定位」：`_gapFocus` 由 openDayIntraday 设置，renderStockChart 负责画。
+   day 取不到缺口（幅度 <0.3% 或没有昨收）时也要清掉，免得上一次的标记赖在图上。 */
+let _gapFocus = null;
+function _setGapFocus(code, day, prev, open, pct) {
+  const pd = (stockChartData && stockChartData.period_data || {}).daily || {};
+  const dates = (pd.dates || []).map(x => String(x).slice(0, 10));
+  const i = dates.indexOf(String(day).slice(0, 10));
+  // 幅度 <0.3% 不算缺口（与日内图的规则一致）⇒ 不标
+  const _ok = (pct != null && isFinite(pct) && Math.abs(pct) >= 0.3
+               && prev != null && open != null);
+  _gapFocus = (i >= 0 && code === stockChartCode && _ok)
+    ? { code: code, day: String(day).slice(0, 10), prev: Number(prev), open: Number(open),
+        pct: Number(pct) } : null;
+  if (_gapFocus) {
+    // 那天不在当前视窗里 ⇒ 把视窗挪过去（±30 根），否则标了也看不见
+    const n = dates.length;
+    if (n > 5) {
+      // 可见窗口要按**默认区间**算：没有手动缩放时 `stockChartZoom` 是 null，
+      // 但图上其实只画最近 N 根（`stockChartRange.daily`），不能当成 0~100 全可见。
+      let zs = 0, ze = 100;
+      if (stockChartZoom) { zs = stockChartZoom.start; ze = stockChartZoom.end; }
+      else {
+        try { zs = barsToZStart(n, stockChartRange["daily"]); } catch (e) { zs = 0; }
+      }
+      const i0 = Math.round(zs / 100 * (n - 1)), i1 = Math.round(ze / 100 * (n - 1));
+      if (i < i0 || i > i1) {
+        const w = Math.min(60, n);
+        let s0 = Math.max(0, Math.min(n - w, i - Math.floor(w / 2)));
+        const s1 = Math.min(n - 1, s0 + w - 1);
+        stockChartZoom = { start: s0 / (n - 1) * 100, end: s1 / (n - 1) * 100 };
+      }
+    }
+  }
+  try { renderStockChart(true); } catch (e) { /* 忽略 */ }
+}
+function _clearGapFocus() {
+  if (!_gapFocus) return;
+  _gapFocus = null;
+  try { renderStockChart(false); } catch (e) { /* 忽略 */ }
 }
 
 /* 2026-10-26 owner：「加一个手动刷新，下载完分钟线不用重开图」。
@@ -5535,6 +5587,31 @@ function renderStockChart(applyZoom = true) {
      六宫格复用同一套口径（2026-10-21 owner：多窗口里也要看到缺口）。 */
   const gapAreas = showGaps ? buildGapAreas(period.ohlc, period.dates, 15) : [];
 
+  /* 2026-10-26 owner：「5分钟显示的缺口我不知道在日线级别的哪个缺口」——
+     双击看日内后，把那个 **昨收↔今开** 的缺口在日线同一根上标出来（色带 + 竖线标签）。
+     没有 _gapFocus（或幅度不够）时什么都不加。 */
+  let _focusAreas = [], _focusLines = [];
+  if (_gapFocus && _gapFocus.code === stockChartCode && stockChartPeriod === "daily") {
+    const _fi = (period.dates || []).findIndex(
+      x => String(x).slice(0, 10) === _gapFocus.day);
+    if (_fi >= 0) {
+      const _up = _gapFocus.pct > 0;
+      const _col = _up ? "248,81,73" : "63,185,80";
+      _focusAreas = [[
+        { xAxis: _fi - 0.5, yAxis: _gapFocus.prev,
+          itemStyle: { color: `rgba(${_col},.22)`, borderColor: `rgba(${_col},.95)`,
+                       borderWidth: 1.5, borderType: "solid" } },
+        { xAxis: _fi + 0.5, yAxis: _gapFocus.open },
+      ]];
+      _focusLines = [{
+        xAxis: _fi,
+        lineStyle: { color: `rgba(${_col},.85)`, type: "dashed", width: 1.2 },
+        label: { formatter: `缺口 ${_gapFocus.pct > 0 ? "+" : ""}${_gapFocus.pct.toFixed(2)}%`,
+                 color: `rgb(${_col})`, fontSize: 9, position: "insideEndTop" },
+      }];
+    }
+  }
+
   const boxAreas = boxes
     .filter(b => b.low && b.high)
     .map(b => {
@@ -6085,7 +6162,7 @@ function renderStockChart(applyZoom = true) {
                      borderColor: "#ff6b62", borderColor0: "#56d364", borderWidth: 1 },
         // 箱体 + 缺口共用一个 markArea（ECharts 每个 series 只认一个）
         markArea: (() => {
-          const _d = [...(showBoxes ? boxAreas : []), ...gapAreas];
+          const _d = [...(showBoxes ? boxAreas : []), ...gapAreas, ..._focusAreas];
           return _d.length ? { silent: true, data: _d } : undefined;
         })(),
         markLine: { symbol: "none",
@@ -6096,6 +6173,7 @@ function renderStockChart(applyZoom = true) {
             ...(dailyMa20Line ? [dailyMa20Line] : []),
             ...(dailyMa30Line ? [dailyMa30Line] : []),
             ...(dailyMa60Line ? [dailyMa60Line] : []),
+            ..._focusLines,
           ],
           label: { position: "insideEndTop" } } },
       ...divSeries,
