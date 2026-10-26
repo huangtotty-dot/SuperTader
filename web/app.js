@@ -4268,23 +4268,6 @@ function closeDayIntraday() {
    监听器内部还要**再查一次** `stockChartCode`（关窗后会置空），避免误触发。 */
 /* 鼠标在图上的像素坐标 → 日线序列下标 → 交易日。
    双击、悬停跟踪、工具栏按钮三处共用，口径只有这一份。 */
-/* 前端脚本构建号 —— 显示在 K 线工具栏（#appVer）。
-   用途：owner 报"双击没反应"时，一眼就能看出 app.js 到底有没有加载到新版；
-   为空 = 脚本没跑（WebView 缓存/没重启），不是逻辑问题。 */
-const APP_BUILD = "20261026-dbl7";
-
-function _stampAppVer() {
-  try {
-    const el = document.getElementById("appVer");
-    if (el) el.textContent = "JS " + APP_BUILD;
-  } catch (e) { /* 忽略 */ }
-}
-if (document.readyState === "loading") {
-  document.addEventListener("DOMContentLoaded", _stampAppVer);
-} else {
-  _stampAppVer();
-}
-
 function _chartIdxFromEvent(ev) {
   const dbg = _chartIdxDebug(ev);
   return dbg.idx;
@@ -4381,18 +4364,6 @@ let _chartHoverDay = null;
   }, true);
 })();
 
-/* 工具栏「日内」按钮：没悬停过就取最后一根。这是**不依赖双击**的兜底入口，
-   也用来区分"事件没绑上" vs "数据取不到"。 */
-function openDayIntradayFromCursor() {
-  if (!stockChartCode) return;
-  const pd = (stockChartData && stockChartData.period_data || {}).daily || {};
-  const dates = pd.dates || [];
-  const last = dates.length ? String(dates[dates.length - 1]).slice(0, 10) : null;
-  const day = _chartHoverDay || last;
-  if (!day) { _dayModalError("还没有日线数据"); return; }
-  openDayIntraday(stockChartCode, (stockChartData || {}).name, day);
-}
-
 /* 弹窗 DOM 兜底：index.html 若还是旧版/* 弹窗 DOM 兜底：index.html 若还是旧版（WebView 缓存 / 没重启），这里直接建一份，
    避免"双击没反应"这种无声失败。 */
 function _ensureDayModal() {
@@ -4439,8 +4410,18 @@ async function openDayIntraday(code, name, date) {
      这样线始终贴着价格、标签放得开，数字一个不丢。
      ⚠️ 这段必须在下面 `info.innerHTML` **之前**：那里要用 `_hidden`，
         放到后面就是 TDZ（`const` 初始化前访问）——owner 第五轮「永远加载中」的真因。 */
-  const _ref = d.last_close || d.prev_close || d.ohlc[0][1];
-  const _inRange = (v) => v != null && Math.abs(v / _ref - 1) <= 0.15;
+  /* 均线**画哪几根**（2026-10-26 owner：「365 日均线太难看，只显示离得近的几根」）：
+     用**当日振幅**当尺子 —— 只画落在「当日最高/最低再各外扩 1.5 倍振幅」以内的均线。
+     比原来的「收盘 ±15%」更贴合"近不近"：安静的一天（指数常见）振幅很小，
+     远处那些线（MA180/MA365）自然就不画了，蜡烛也不会被压扁；
+     波动大的日子振幅大，能同时容下 5/10/20/30/60 好几根。
+     没画的那几根仍然在信息栏列出来（写明"超出当日振幅 N 倍，未画线"）。 */
+  const _hiD = Math.max(...d.ohlc.map(o => o[3]));
+  const _loD = Math.min(...d.ohlc.map(o => o[2]));
+  const _amp = Math.max(_hiD - _loD, Math.abs(d.last_close || _hiD) * 0.004);  // 防振幅为 0
+  const _bandLo = _loD - 1.5 * _amp;
+  const _bandHi = _hiD + 1.5 * _amp;
+  const _inRange = (v) => v != null && v >= _bandLo && v <= _bandHi;
   const _shown = _maKeys.filter(k => _inRange(MA[k]));
   const _hidden = _maKeys.filter(k => MA[k] != null && !_inRange(MA[k]));
   if (info) {
@@ -4450,7 +4431,7 @@ async function openDayIntraday(code, name, date) {
       + `　日线均线（<b>该日</b>）：`
       + _maKeys.map(k => MA[k] == null ? "" :
           `<span style="color:${_maColors[k]}">MA${k} <b>${MA[k]}</b></span>`).filter(Boolean).join("　")
-      + (_hidden.length ? `　<span style="color:#6e7681">（MA${_hidden.join("/MA")} 超出现价 ±15%，未画线）</span>` : "");
+      + (_hidden.length ? `　<span style="color:#6e7681">（MA${_hidden.join("/MA")} 离当日振幅太远，未画线）</span>` : "");
   }
   const _posRound = ["insideEndTop", "insideStartTop", "insideEndBottom", "insideStartBottom"];
   // 标签位置按**数值从小到大**轮流分配四个方位：这样"数值相邻"的两条线一定落在不同方位，
