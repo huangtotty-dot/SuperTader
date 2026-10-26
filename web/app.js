@@ -4245,6 +4245,125 @@ async function loadStockChartNow(force) {
   }
 }
 
+/* ---- 双击日 K 的某根 → 当天的 5 分钟图（2026-10-26 owner）-------------------
+   ⚠️ 三条参考线都是**那一天**的口径，不是最新值：
+     · MA5/10/20/30/60/180/365 —— 后端按「≤该日的日线序列」算，含当日收盘
+     · 0 轴 = **昨收**（日线缓存里该日之前最后一根收盘）
+     · VWAP = 当日累计成交额 / 累计成交量（开盘重置）
+   历史那天如果不在 5 分钟窗口（腾讯约回溯 3 个月）⇒ 后端返回 error，这里如实显示。 */
+let dayInst = null;
+
+function closeDayIntraday() {
+  const m = document.getElementById("dayModal");
+  if (m) m.style.display = "none";
+  if (dayInst) { try { dayInst.dispose(); } catch (e) { /* 忽略 */ } dayInst = null; }
+}
+
+async function openDayIntraday(code, name, date) {
+  const m = document.getElementById("dayModal");
+  if (!m) return;
+  m.style.display = "flex";
+  const title = document.getElementById("dayModalTitle");
+  const info = document.getElementById("dayModalInfo");
+  const box = document.getElementById("dayModalChart");
+  if (title) title.textContent = `${name || code} · ${date} 日内（5 分钟）`;
+  if (info) info.textContent = "加载中…";
+  if (box) box.innerHTML = "";
+  if (dayInst) { try { dayInst.dispose(); } catch (e) { /* 忽略 */ } dayInst = null; }
+  let d;
+  try { d = await apiCall("load_day_intraday", code, date); } catch (e) { d = { error: String(e && e.message || e) }; }
+  if (!d || !d.available) {
+    if (info) info.innerHTML = `<span style="color:#f85149">${esc((d && d.error) || "取不到该日分时")}</span>`;
+    return;
+  }
+  const MA = d.ma || {};
+  const _maKeys = ["5", "10", "20", "30", "60", "180", "365"];
+  const _maColors = { "5": "#e3b341", "10": "#d95926", "20": "#199e70", "30": "#c98500",
+                      "60": "#d55181", "180": "#9085e9", "365": "#22d3ee" };
+  if (info) {
+    info.innerHTML = `开 ${d.ohlc[0][0]} · 收 ${d.last_close ?? "—"} · 昨收 <b>${d.prev_close ?? "—"}</b>`
+      + `　日线均线（<b>该日</b>）：`
+      + _maKeys.map(k => MA[k] == null ? "" :
+          `<span style="color:${_maColors[k]}">MA${k} <b>${MA[k]}</b></span>`).filter(Boolean).join("　")
+      + (_hidden.length ? `　<span style="color:#6e7681">（MA${_hidden.join("/MA")} 超出现价 ±15%，未画线）</span>` : "");
+  }
+  /* 均线**画几条**取舍（2026-10-26 实测 300821 10-23）：
+     7 条全画时 MA365(12.81) 把 y 轴从 15~16.3 拉到 12.7~17.5，蜡烛只剩 30% 高度看不清；
+     而 MA20/30/60/180/昨收 又都挤在 0.4 元内、标签糊成一团。
+     规则：**离当日收盘 ±15% 以内的画线**，超出的只在信息栏列值并注明未画。
+     这样线始终贴着价格、标签放得开，数字一个不丢。 */
+  const _ref = d.last_close || d.prev_close || d.ohlc[0][1];
+  const _inRange = (v) => v != null && Math.abs(v / _ref - 1) <= 0.15;
+  const _shown = _maKeys.filter(k => _inRange(MA[k]));
+  const _hidden = _maKeys.filter(k => MA[k] != null && !_inRange(MA[k]));
+  const _posRound = ["insideEndTop", "insideStartTop", "insideEndBottom", "insideStartBottom"];
+  // 标签位置按**数值从小到大**轮流分配四个方位：这样"数值相邻"的两条线一定落在不同方位，
+  // 不会像按 MA 编号分配那样出现 MA180(15.65)/昨收(15.66) 两个标签叠在一起。
+  const _lab = _shown.map(k => ({ v: MA[k], txt: `MA${k} ${Number(MA[k]).toFixed(2)}`,
+                                  c: _maColors[k] }));
+  if (d.prev_close != null) _lab.push({ v: d.prev_close, txt: `昨收 ${d.prev_close}`, c: "#8b949e" });
+  _lab.sort((a, b) => a.v - b.v);
+  const _posOf = new Map();
+  _lab.forEach((x, i) => _posOf.set(x.txt, _posRound[i % 4]));
+  const _maLines = _shown.map(k => ({
+    yAxis: MA[k],
+    lineStyle: { color: _maColors[k], type: "dashed", width: 1, opacity: .85 },
+    label: { formatter: `MA${k} ${Number(MA[k]).toFixed(2)}`, color: _maColors[k], fontSize: 9,
+             position: _posOf.get(`MA${k} ${Number(MA[k]).toFixed(2)}`) || "insideEndTop" },
+  }));
+  // ⚠️ markLine 不会把 y 轴撑开 —— 不显式给 min/max，也画不全。
+  const _maVals = _shown.map(k => MA[k]);
+  const _lo = Math.min(...d.ohlc.map(o => o[2]), ..._maVals,
+                      ...(d.prev_close != null ? [d.prev_close] : []));
+  const _hi = Math.max(...d.ohlc.map(o => o[3]), ..._maVals,
+                      ...(d.prev_close != null ? [d.prev_close] : []));
+  const _pad = ((_hi - _lo) || 1) * 0.02;
+  const zero = (d.prev_close != null) ? {
+    yAxis: d.prev_close,
+    lineStyle: { color: "#8b949e", type: "dotted", width: 1.2 },
+    label: { formatter: `昨收 ${d.prev_close}`, color: "#8b949e", fontSize: 9,
+             position: _posOf.get(`昨收 ${d.prev_close}`) || "insideStartTop" },
+  } : null;
+  const _vol = d.volume.map((v, i) => {
+    const o = d.ohlc[i] || [];
+    const prev = i > 0 ? d.ohlc[i - 1][1] : d.prev_close;
+    const up = prev == null ? true : o[1] >= prev;
+    return { value: v, itemStyle: { color: up ? "rgba(248,81,73,.82)" : "rgba(63,185,80,.82)" } };
+  });
+  dayInst = echarts.init(box);
+  dayInst.setOption({
+    backgroundColor: "#0d1117", animation: false,
+    legend: { top: 4, left: 8, textStyle: { color: "#8b949e", fontSize: 10 } },
+    tooltip: { trigger: "axis", axisPointer: { type: "cross" },
+      backgroundColor: "rgba(22,27,34,.96)", borderColor: "#30363d", borderWidth: 1,
+      borderRadius: 8, textStyle: { color: "#e6edf3", fontSize: 11 } },
+    grid: [{ left: 58, right: 76, top: 34, height: "58%" },
+           { left: 58, right: 76, top: "72%", height: "16%" }],
+    xAxis: [
+      { type: "category", data: d.dates, axisLabel: { show: false }, axisLine: { lineStyle: { color: "#2b333d" } } },
+      { type: "category", data: d.dates, gridIndex: 1, axisLabel: { color: "#8b949e", fontSize: 9 },
+        axisLine: { lineStyle: { color: "#2b333d" } } },
+    ],
+    yAxis: [
+      { min: +(_lo - _pad).toFixed(3), max: +(_hi + _pad).toFixed(3),
+        axisLabel: { color: "#8b949e", fontSize: 9 },
+        splitLine: { lineStyle: { color: "rgba(139,148,158,.14)" } } },
+      { scale: true, gridIndex: 1, axisLabel: { show: false }, splitLine: { show: false } },
+    ],
+    series: [
+      { name: "K线", type: "candlestick", data: d.ohlc, barMaxWidth: 10,
+        itemStyle: { color: "#f85149", color0: "#3fb950",
+                     borderColor: "#ff6b62", borderColor0: "#56d364", borderWidth: 1 },
+        markLine: { symbol: "none", silent: true,
+          data: [..._maLines, ...(zero ? [zero] : [])], label: { show: true } } },
+      { name: "VWAP(日内)", type: "line", data: d.vwap, symbol: "none", connectNulls: true,
+        lineStyle: { color: "#f0b429", width: 1.6 }, itemStyle: { color: "#f0b429" } },
+      { name: "成交量(手)", type: "bar", xAxisIndex: 1, yAxisIndex: 1, data: _vol,
+        barMaxWidth: 10, itemStyle: { borderRadius: [1, 1, 0, 0] } },
+    ],
+  });
+}
+
 /* 2026-10-26 owner：「加一个手动刷新，下载完分钟线不用重开图」。
    force=true 时：版本号置空（不吃 unchanged 握手）+ 后端跳过内存/磁盘 payload 缓存，
    直接重读数据源（通达信本地 .day/.lc5、日线缓存）。
@@ -5931,6 +6050,17 @@ function renderStockChart(applyZoom = true) {
       stockChartInst.getZr().on("click", (ev) => {
         const idx = _chartClickIndex(ev);
         if (idx >= 0) showOrderFlowAt(idx);
+      });
+      // 2026-10-26 owner：**双击日 K 的某根 → 看那天的 5 分钟图**。
+      // 只在日线周期生效（周/月/分钟的"某根"不是一天）。日期取该根在日线序列里的日期。
+      stockChartInst.getZr().on("dblclick", (ev) => {
+        if (stockChartPeriod !== "daily") return;
+        const idx = _chartClickIndex(ev);
+        if (idx < 0) return;
+        const pd = (stockChartData && stockChartData.period_data || {}).daily || {};
+        const day = String((pd.dates || [])[idx] || "").slice(0, 10);
+        if (!day || !stockChartCode) return;
+        openDayIntraday(stockChartCode, stockChartData.name, day);
       });
     } catch (e) { /* 桩环境忽略 */ }
   }

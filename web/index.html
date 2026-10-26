@@ -577,6 +577,22 @@
   </div>
 </div>
 
+<!-- 双击日 K 的某根 → 当天的 5 分钟图（2026-10-26 owner）
+     · 日线 MA5/10/20/30/60/180/365 用**那一天**的值画水平参考线
+     · 另带当日 VWAP（累计均价）与 0 轴（昨收） -->
+<div id="dayModal" class="modal-mask" style="display:none">
+  <div class="modal" style="width:1020px;max-width:94vw;height:660px;display:flex;flex-direction:column">
+    <div class="modal-title">
+      <span id="dayModalTitle">日内 5 分钟</span>
+      <div style="display:flex;gap:6px">
+        <button class="mini-btn" onclick="closeDayIntraday()">×</button>
+      </div>
+    </div>
+    <div id="dayModalInfo" class="cell-dim" style="font-size:11px;padding:2px 10px;line-height:1.6"></div>
+    <div id="dayModalChart" style="flex:1;min-height:0;background:#0d1117"></div>
+  </div>
+</div>
+
 <!-- 多窗口看盘（2026-10-21 owner）：**独立浮窗** —— 不铺全屏遮罩，
      看盘时照样能操作后面的 GUI；标题栏可拖动，右下角可缩放。 -->
 <div id="multiWatchWin" class="mw-win" style="display:none">

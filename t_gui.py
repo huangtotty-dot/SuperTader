@@ -5082,6 +5082,78 @@ class Api:
         return _clean({"alerts": [], "disabled": True})
 
     # ---------- 个股技术分析弹窗 ----------
+    def load_day_intraday(self, code, date):
+        """**某一天**的 5 分钟图（2026-10-26 owner：双击日 K 的某根 → 看那天的分时）。
+
+        返回：
+          dates/ohlc/volume/amount —— 该日的 5 分钟序列
+          vwap  —— 当日**累计**成交额 / 累计成交量（每股均价，当日开盘重置）
+          zero  —— **昨收**（0 轴）。从**日线缓存**取该日之前最后一根收盘，不用分钟序列自己推：
+                   5 分钟窗口只有近几个月，历史那天可能压根不在窗里。
+          ma    —— **当天**的日线 MA5/10/20/30/60/180/365（含当日收盘），拿来做水平参考线
+          prev_close / last_close —— 展示与核对用
+        取不到该日 5 分钟数据时 available=False + error，前端如实显示原因。
+        """
+        import pandas as pd
+        day = str(date)[:10]
+        out = {"code": code, "name": code, "date": day, "available": False, "error": "",
+               "dates": [], "ohlc": [], "volume": [], "amount": [], "vwap": [],
+               "zero": None, "prev_close": None, "last_close": None, "ma": {}}
+        try:
+            jy = _load_json(HUNTER_DIR / "watchlist_jiuyan.json", {})
+            _e = jy.get(code) if isinstance(jy.get(code), dict) else {}
+            out["name"] = (_e or {}).get("name") or code
+        except Exception:
+            pass
+        try:
+            # ── 日线：昨收 + 当日均线 ───────────────────────────────────────
+            import core.chart_cache as _cc
+            _fp = _cc.daily_fp(code)
+            _rows = (_load_json(_fp, {}) or {}).get("rows") or []
+            _rows = [r for r in _rows if str(r.get("date"))[:10] <= day]
+            if _rows:
+                _closes = [float(r["close"]) for r in _rows]
+                out["last_close"] = round(_closes[-1], 3)
+                if len(_closes) >= 2:
+                    out["prev_close"] = round(_closes[-2], 3)
+                for n in (5, 10, 20, 30, 60, 180, 365):
+                    out["ma"][str(n)] = (round(sum(_closes[-n:]) / n, 3)
+                                         if len(_closes) >= n else None)
+            # ── 5 分钟 ────────────────────────────────────────────────────
+            df = _fetch_min_bars(code, "5min")
+            if df is None or getattr(df, "empty", True):
+                out["error"] = "取不到 5 分钟数据（腾讯/tushare/本地都没有）"
+                return out
+            _tcol = "time" if "time" in df.columns else "date"
+            _t = pd.to_datetime(df[_tcol])
+            df = df[_t.dt.strftime("%Y-%m-%d") == day]
+            if df.empty:
+                out["error"] = f"{day} 不在 5 分钟数据窗口内（腾讯只回溯约 3 个月）"
+                return out
+            df = _ensure_amount(df, code)
+            _amt = df["amount"].astype(float).tolist() if "amount" in df.columns else [None] * len(df)
+            _dates = [pd.Timestamp(x).strftime("%Y-%m-%d %H:%M") for x in df[_tcol]]
+            _ohlc = [[round(float(o), 3), round(float(c), 3), round(float(l), 3), round(float(h), 3)]
+                     for o, c, l, h in zip(df["open"], df["close"], df["low"], df["high"])]
+            _vol = [round(float(v)) for v in df["volume"]]
+            out["dates"], out["ohlc"], out["volume"], out["amount"] = _dates, _ohlc, _vol, _amt
+            # VWAP：当日累计成交额 / 累计成交量（手→股要 ×100）
+            _vw, _ca, _cv = [], 0.0, 0.0
+            for i, v in enumerate(_vol):
+                a = _amt[i]
+                if a is None:
+                    o = _ohlc[i]
+                    a = (o[0] + o[1] + o[2]) / 3 * v * 100
+                _ca += float(a)
+                _cv += v * 100.0
+                _vw.append(round(_ca / _cv, 3) if _cv > 0 else None)
+            out["vwap"] = _vw
+            out["available"] = True
+            return out
+        except Exception as e:
+            out["error"] = f"构建失败: {e}"
+            return out
+
     def load_stock_chart(self, code, version=None, want_minutes=False, period=None, force=False):
         """日线(本地缓存秒回/网络兜底) → 7 条 MA + MACD/RSI/BOLL → resample 周/月 + 30分/60分
         → 支撑压力。支持带前缀指数代码(sh000001/sz399001 等)。内存缓存：同一标的当日重复用。
