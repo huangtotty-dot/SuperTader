@@ -4271,7 +4271,7 @@ function closeDayIntraday() {
 /* 前端脚本构建号 —— 显示在 K 线工具栏（#appVer）。
    用途：owner 报"双击没反应"时，一眼就能看出 app.js 到底有没有加载到新版；
    为空 = 脚本没跑（WebView 缓存/没重启），不是逻辑问题。 */
-const APP_BUILD = "20261026-dbl5";
+const APP_BUILD = "20261026-dbl7";
 
 function _stampAppVer() {
   try {
@@ -4427,10 +4427,22 @@ async function openDayIntraday(code, name, date) {
     if (info) info.innerHTML = `<span style="color:#f85149">${esc((d && d.error) || "取不到该日分时")}</span>`;
     return;
   }
+  try {
   const MA = d.ma || {};
   const _maKeys = ["5", "10", "20", "30", "60", "180", "365"];
   const _maColors = { "5": "#e3b341", "10": "#d95926", "20": "#199e70", "30": "#c98500",
                       "60": "#d55181", "180": "#9085e9", "365": "#22d3ee" };
+  /* 均线**画几条**取舍（2026-10-26 实测 300821 10-23）：
+     7 条全画时 MA365(12.81) 把 y 轴从 15~16.3 拉到 12.7~17.5，蜡烛只剩 30% 高度看不清；
+     而 MA20/30/60/180/昨收 又都挤在 0.4 元内、标签糊成一团。
+     规则：**离当日收盘 ±15% 以内的画线**，超出的只在信息栏列值并注明未画。
+     这样线始终贴着价格、标签放得开，数字一个不丢。
+     ⚠️ 这段必须在下面 `info.innerHTML` **之前**：那里要用 `_hidden`，
+        放到后面就是 TDZ（`const` 初始化前访问）——owner 第五轮「永远加载中」的真因。 */
+  const _ref = d.last_close || d.prev_close || d.ohlc[0][1];
+  const _inRange = (v) => v != null && Math.abs(v / _ref - 1) <= 0.15;
+  const _shown = _maKeys.filter(k => _inRange(MA[k]));
+  const _hidden = _maKeys.filter(k => MA[k] != null && !_inRange(MA[k]));
   if (info) {
     info.innerHTML = `开 ${d.ohlc[0][0]} · 收 ${d.last_close ?? "—"} · 昨收 <b>${d.prev_close ?? "—"}</b>`
       + `　<span style="color:#6e7681">数据源：${d.source === "tdx" ? "通达信本地"
@@ -4440,15 +4452,6 @@ async function openDayIntraday(code, name, date) {
           `<span style="color:${_maColors[k]}">MA${k} <b>${MA[k]}</b></span>`).filter(Boolean).join("　")
       + (_hidden.length ? `　<span style="color:#6e7681">（MA${_hidden.join("/MA")} 超出现价 ±15%，未画线）</span>` : "");
   }
-  /* 均线**画几条**取舍（2026-10-26 实测 300821 10-23）：
-     7 条全画时 MA365(12.81) 把 y 轴从 15~16.3 拉到 12.7~17.5，蜡烛只剩 30% 高度看不清；
-     而 MA20/30/60/180/昨收 又都挤在 0.4 元内、标签糊成一团。
-     规则：**离当日收盘 ±15% 以内的画线**，超出的只在信息栏列值并注明未画。
-     这样线始终贴着价格、标签放得开，数字一个不丢。 */
-  const _ref = d.last_close || d.prev_close || d.ohlc[0][1];
-  const _inRange = (v) => v != null && Math.abs(v / _ref - 1) <= 0.15;
-  const _shown = _maKeys.filter(k => _inRange(MA[k]));
-  const _hidden = _maKeys.filter(k => MA[k] != null && !_inRange(MA[k]));
   const _posRound = ["insideEndTop", "insideStartTop", "insideEndBottom", "insideStartBottom"];
   // 标签位置按**数值从小到大**轮流分配四个方位：这样"数值相邻"的两条线一定落在不同方位，
   // 不会像按 MA 编号分配那样出现 MA180(15.65)/昨收(15.66) 两个标签叠在一起。
@@ -4499,7 +4502,9 @@ async function openDayIntraday(code, name, date) {
     ],
     yAxis: [
       { min: +(_lo - _pad).toFixed(3), max: +(_hi + _pad).toFixed(3),
-        axisLabel: { color: "#8b949e", fontSize: 9 },
+        // 指数三四千点、个股十几块，统一 3 位小数会让 y 轴标签变成「3,999.338」
+        axisLabel: { color: "#8b949e", fontSize: 9,
+                     formatter: (v) => (Math.abs(v) >= 100 ? v.toFixed(0) : v.toFixed(2)) },
         splitLine: { lineStyle: { color: "rgba(139,148,158,.14)" } } },
       { scale: true, gridIndex: 1, axisLabel: { show: false }, splitLine: { show: false } },
     ],
@@ -4515,6 +4520,12 @@ async function openDayIntraday(code, name, date) {
         barMaxWidth: 10, itemStyle: { borderRadius: [1, 1, 0, 0] } },
     ],
   });
+  } catch (e) {
+    // ⚠️ 之前这里没有 try/catch —— async 函数抛错会变成**未处理的 rejection**，
+    // 界面就永远停在「加载中…」，看起来像后端挂了（实际后端 3.2s 就返回了）。
+    if (info) info.innerHTML = `<span style="color:#f85149">渲染失败：${esc((e && (e.message || e)) || "未知")}</span>`;
+    try { window.pywebview.api.report_slow_call("day_render_err", 0); } catch (e2) { /* 静默 */ }
+  }
 }
 
 /* 2026-10-26 owner：「加一个手动刷新，下载完分钟线不用重开图」。
