@@ -4190,14 +4190,15 @@ function _wantMinutes() {
   return MIN_PERIODS.includes(stockChartPeriod);
 }
 
-async function loadStockChartNow() {
+async function loadStockChartNow(force) {
   if (!stockChartCode) return;
   try {
     // 2026-10-20：把当前周期一起传下去 ⇒ 分钟档按需只抓当前 Tab 的那一档
     _chartLog("load_req", JSON.stringify({code: stockChartCode, version: stockChartVersion,
-      period: stockChartPeriod, wantMin: _wantMinutes()}));
-    const d = await apiCall("load_stock_chart", stockChartCode, stockChartVersion,
-                            _wantMinutes(), stockChartPeriod);
+      period: stockChartPeriod, wantMin: _wantMinutes(), force: !!force}));
+    const d = await apiCall("load_stock_chart", stockChartCode,
+                            force ? null : stockChartVersion,
+                            _wantMinutes(), stockChartPeriod, !!force);
     _chartLog("load_resp", JSON.stringify({unchanged: !!(d && d.unchanged),
       available: !!(d && d.available), version: (d && d.version) || "",
       dailyN: (d && d.period_data && d.period_data.daily && (d.period_data.daily.dates || []).length) || 0}));
@@ -4241,6 +4242,22 @@ async function loadStockChartNow() {
     const el = document.getElementById("stockChart");
     if (el) el.innerHTML = `<div class="empty" style="color:#f85149;padding-top:120px">K线加载失败：${esc((e && (e.message || e)) || "未知错误")}</div>`;
     try { window.pywebview.api.report_slow_call("chart_error", 0); } catch (e2) { /* 静默 */ }
+  }
+}
+
+/* 2026-10-26 owner：「加一个手动刷新，下载完分钟线不用重开图」。
+   force=true 时：版本号置空（不吃 unchanged 握手）+ 后端跳过内存/磁盘 payload 缓存，
+   直接重读数据源（通达信本地 .day/.lc5、日线缓存）。
+   ⚠️ 只在用户点按钮时用 —— 20s 轮询仍走缓存，否则每分钟重建一次图。 */
+async function reloadStockChart(force) {
+  if (!stockChartCode) return;
+  const btn = document.getElementById("chartReloadBtn");
+  if (btn) { btn.disabled = true; btn.textContent = "⏳"; }
+  try {
+    if (force) stockChartVersion = null;
+    await loadStockChartNow(!!force);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = "🔄 重读"; }
   }
 }
 

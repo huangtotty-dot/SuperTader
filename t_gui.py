@@ -5082,7 +5082,7 @@ class Api:
         return _clean({"alerts": [], "disabled": True})
 
     # ---------- 个股技术分析弹窗 ----------
-    def load_stock_chart(self, code, version=None, want_minutes=False, period=None):
+    def load_stock_chart(self, code, version=None, want_minutes=False, period=None, force=False):
         """日线(本地缓存秒回/网络兜底) → 7 条 MA + MACD/RSI/BOLL → resample 周/月 + 30分/60分
         → 支撑压力。支持带前缀指数代码(sh000001/sz399001 等)。内存缓存：同一标的当日重复用。
 
@@ -5108,7 +5108,12 @@ class Api:
         if not hasattr(self, "_stock_chart_cache"):
             self._stock_chart_cache = {}
         cache_key = f"{datetime.now().strftime('%Y-%m-%d')}_{code}"
-        if cache_key in self._stock_chart_cache:
+        # 2026-10-26：`force=True` = 前端「🔄 重读」按钮。跳过内存缓存与 em 磁盘缓存，
+        # 直接重读数据源（通达信本地 .day/.lc5、日线缓存），用于用户在通达信下载完
+        # 分钟数据后立即看到新图，而不用关窗重开或等 15 分钟 TTL。
+        if force:
+            self._stock_chart_cache.pop(cache_key, None)
+        if (not force) and cache_key in self._stock_chart_cache:
             _ts, _res = self._stock_chart_cache[cache_key]
             # fix P0-15: 盘前缓存的图缺今日K线(最后日期<今天)，或盘中超15分钟 → 重算，避免图停在昨日。
             # 2026-10-04 卡顿修复：原来只看「最后日期<今天」就判 stale ⇒ 周末/假期**每次轮询都全量重建**
@@ -5149,7 +5154,8 @@ class Api:
                     return _res
 
         # 东财标的(em前缀)磁盘缓存：K线静态(每日更新)，当日缓存避免东财接口重试
-        if str(code).startswith("em"):
+        # ⚠️ force 时跳过 —— 否则「🔄 重读」读到的还是这份当天旧档。
+        if str(code).startswith("em") and not force:
             try:
                 _em_cache = BASE / "t_io" / "cache" / f"em_kline_{str(code)[2:]}.json"
                 if _em_cache.exists():

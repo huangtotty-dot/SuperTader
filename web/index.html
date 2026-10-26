@@ -514,6 +514,9 @@
         <label class="toggle-item" title="MACD 背离：DIF 两峰背离 + 柱线动量衰减（标记「·柱」）；展示口径按周期放宽（日/周/月 1.0×/1.5×，分钟 1.5×/2.0×），与信号口径不同"><input type="checkbox" id="tgDiv" checked onchange="renderStockChart()"> 背离</label>
         <button class="mini-btn" onclick="toggleChartHelp()" title="上行/下行区域使用说明">?</button>
         <button class="mini-btn" onclick="toggleStockProfile()" title="公司业务简介 / 所属行业 / 概念板块">📋 公司资料</button>
+        <!-- 2026-10-26 owner：通达信本地分钟数据下载完之后，不用关窗重开 -->
+        <button class="mini-btn" id="chartReloadBtn" onclick="reloadStockChart(true)"
+                title="强制重读数据：绕过内存/磁盘缓存，重新读通达信本地 .day/.lc5 与日线缓存（下载完分钟线后点这个）">🔄 重读</button>
       </div>
     </div>
     <div id="chartHelp" class="chart-help" style="display:none">
