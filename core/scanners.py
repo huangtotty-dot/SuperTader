@@ -206,14 +206,19 @@ def _scan_breakout(codes, state, date=None, *, jy, daily_many, retry_daily_many,
             except Exception:
                 frames = {}
         _from_gm = 0
-        for code in chunk:
+        for _n, code in enumerate(chunk):
+            # 2026-10-26（owner 报「跑突破箱体卡顿」）：每 64 只显式让出一次，
+            # 主线程（10s 轮询 / 图表重绘）不会被连续占死。全池 5400 只 ⇒ 84 次 × 3ms ≈ 0.25s。
+            if _n and _n % 64 == 0:
+                _time_mod.sleep(0.003)
             fr = frames.get(code)
             if fr is not None and not getattr(fr, "empty", True):
                 _from_gm += 1
             if fr is None or getattr(fr, "empty", True):
                 # 2026-10-25：GM 不可用时的兜底——读本地日线缓存（猎手每天本来就在读它）。
                 # 先只读末根日期，末根早于目标日 ⇒ 直接算 stale，不建 DataFrame（全池扫描的主要开销）。
-                _cl = cache_last(code)
+                # 2026-10-26：把目标日传下去 —— 缓存文件头已经够新时，注入方**不必再查通达信**。
+                _cl = cache_last(code, dt_target)
                 if _cl is not None and _cl == dt_target:
                     fr = cached_df(code, scan_bars, dt_target)
                     if fr is not None:

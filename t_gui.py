@@ -8760,7 +8760,8 @@ class Api:
 
     _BK_CACHE_DIR = BASE / "t_io" / "cache" / "daily_kline"
     _TDX_FP = BASE / "t_io" / "tdx" / "tdx_daily.parquet"
-    _TDX_IDX = {"mtime": None, "map": {}, "pf": None}
+    # `last` = code → 该 row group 的**最大日期**（parquet 元数据自带），供 `_tdx_last` 查表
+    _TDX_IDX = {"mtime": None, "map": {}, "pf": None, "last": {}}
 
     def _tdx_index(self):
         """通达信 parquet 的 code → row_group 索引（按 row group 的 code 统计建，只读元数据）。"""
@@ -8774,7 +8775,12 @@ class Api:
             import pyarrow.parquet as pq
             pf = pq.ParquetFile(str(self._TDX_FP))
             md = pf.metadata          # ⚠️ 必须取一次；每次 `pf.metadata` 都会重新解析元数据（9506 组会卡死）
-            idx = {}
+            # date 列**按名字定位**，不写死 1 —— 列顺序变了不能静默取到别的列
+            try:
+                _dcol = [md.schema.column(i).name for i in range(md.num_columns)].index("date")
+            except Exception:
+                _dcol = None
+            idx, idx_last = {}, {}
             for rg in range(md.num_row_groups):
                 st = md.row_group(rg).column(0).statistics
                 if st is None or st.min is None:
@@ -8782,7 +8788,13 @@ class Api:
                 lo, hi = str(st.min), str(st.max)
                 if lo == hi:
                     idx[lo] = rg
-            self._TDX_IDX.update({"mtime": mt, "map": idx, "pf": pf})
+                    # 2026-10-26：顺手记下该组的**最大日期**（同一份元数据里就有），
+                    # 供 `_tdx_last` 查表 —— 不再为"末根是哪天"去 read_row_group。
+                    if _dcol is not None:
+                        sd = md.row_group(rg).column(_dcol).statistics
+                        if sd is not None and sd.max is not None:
+                            idx_last[lo] = str(sd.max)[:10]
+            self._TDX_IDX.update({"mtime": mt, "map": idx, "pf": pf, "last": idx_last})
             return pf
         except Exception:
             return None
@@ -8861,36 +8873,58 @@ class Api:
                 hit += 1
         return hit / len(picked)
 
-    def _bk_cache_last(self, code):
-        """只读末根日期（不建 DataFrame）—— 全池扫描时绝大多数票在"stale"这一步就被筛掉。
+    def _bk_head_date(self, code):
+        """`daily_kline/{code}.json` 的**截止日** —— 只读文件头 256 字节。
 
-        2026-10-25：JSON 缓存没有时再看通达信 parquet（一次 row-group 读，毫秒级）。
+        2026-10-26（owner 报「跑突破箱体卡顿」）：原来为了拿"末根是哪天"把 53KB 的 rows
+        全 `json.load` 一遍，实测 6.2ms/只；顶层 `date` 就在前 ~30 字节，只读 256B 是
+        0.48ms/只（13x）。
+
+        ⚠️ 顶层 `date` 是 `rows[-1].date` 的**上界**，不是等号：抽样 1200 只里有 27 只
+        （2.3%）顶层更新 —— 全是停牌/退市票（例 `000024` 顶层 2026-08-07、末根 2015-12-07）。
+        所以这里只当"够不够新"的判断，真正的末根仍由 `_bk_cached_df` 从 rows 里取。
         """
-        p = self._BK_CACHE_DIR / f"{code}.json"
-        last = None
         try:
-            rows = (_load_json(p, {}) or {}).get("rows") or []
-            last = str(rows[-1].get("date"))[:10] if rows else None
+            with open(self._BK_CACHE_DIR / f"{code}.json", "r", encoding="utf-8") as f:
+                head = f.read(256)
         except Exception:
-            last = None
+            return None
+        i = head.find('"date"')
+        if i < 0:
+            return None
+        j = head.find('"', i + 7)
+        k = head.find('"', j + 1) if j > 0 else -1
+        if not (0 < j < k):
+            return None
+        return head[j + 1:k][:10]
+
+    def _bk_cache_last(self, code, target=None):
+        """本地缓存的**可用截止日**（不建 DataFrame）—— 全池扫描时绝大多数票在这步就被筛掉。
+
+        2026-10-26 改：**一个调用只读一次盘**
+          · 日期来自文件头（`_bk_head_date`），不再解析整个 rows；
+          · 传了 `target` 且文件头已经够新 ⇒ **完全不碰通达信**（省一次 row group 读）；
+          · 不够新时才查 `_tdx_last`，而它现在走 parquet 元数据（0.0005ms，见该函数）。
+        返回值是"上界"语义（见 `_bk_head_date` 的警告），调用方必须再用 rows 核一遍。
+        """
+        hd = self._bk_head_date(code)
+        if target is not None and hd is not None and hd >= target:
+            return hd
         t = self._tdx_last(code)
-        if t and (last is None or t > last):
+        if t and (hd is None or t > hd):
             return t
-        return last
+        return hd
 
     def _tdx_last(self, code):
-        pf = self._tdx_index()
-        if pf is None:
+        """通达信日线的末根日期 —— 查 parquet **元数据**，不读数据。
+
+        2026-10-26：原来是 `read_row_group(rg, columns=["date"])`，1.37ms/只，
+        全池 5400 只就是 7.4s。row group 的 date 统计本来就存着 min/max，
+        `_tdx_index()` 建索引时顺手记下 ⇒ 这里只剩一次 dict 查表（0.0005ms，快 2709x）。
+        """
+        if self._tdx_index() is None:
             return None
-        rg = self._TDX_IDX["map"].get(str(code))
-        if rg is None:
-            return None
-        try:
-            t = pf.read_row_group(rg, columns=["date"])
-            col = t.column("date")
-            return str(col[col.length() - 1].as_py())[:10]
-        except Exception:
-            return None
+        return self._TDX_IDX.get("last", {}).get(str(code))
 
     def _bk_cached_df(self, code, days, target=None):
         return _scanners._bk_cached_df(
