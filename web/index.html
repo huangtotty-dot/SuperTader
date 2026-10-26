@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>trader pannel</title>
-<link rel="stylesheet" href="style.css?v=20261026a">
+<link rel="stylesheet" href="style.css?v=20261026b">
 </head>
 <body>
 <header class="topbar">
@@ -517,6 +517,10 @@
         <!-- 2026-10-26 owner：通达信本地分钟数据下载完之后，不用关窗重开 -->
         <button class="mini-btn" id="chartReloadBtn" onclick="reloadStockChart(true)"
                 title="强制重读数据：绕过内存/磁盘缓存，重新读通达信本地 .day/.lc5 与日线缓存（下载完分钟线后点这个）">🔄 重读</button>
+        <!-- 2026-10-26：不依赖双击的日内入口。它的存在也用来判定 app.js 是不是最新 -->
+        <button class="mini-btn" id="dayIntradayBtn" onclick="openDayIntradayFromCursor()"
+                title="打开鼠标所指那一天的 5 分钟图（也可以直接双击那根 K 线）">日内5分</button>
+        <span id="appVer" class="cell-dim" style="font-size:10px" title="前端脚本版本；为空=app.js 没加载/是旧缓存"></span>
       </div>
     </div>
     <div id="chartHelp" class="chart-help" style="display:none">
@@ -629,6 +633,6 @@
 <script src="vendor/echarts.min.js"></script>
 <!-- 2026-10-20：带版本号强制 WebView2 重新取 app.js（否则可能命中旧缓存，
      K 线提速/埋点改动不生效——表现为"改了跟没改一样"） -->
-<script src="app.js?v=20261026a"></script>
+<script src="app.js?v=20261026b"></script>
 </body>
 </html>

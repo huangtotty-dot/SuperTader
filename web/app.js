@@ -4266,35 +4266,114 @@ function closeDayIntraday() {
      ③ 挂在 `#stockChart` 的 on* 上也不行 —— 容器是 echarts.init 的宿主，重开窗时属性会被覆盖。
    ⇒ 改成 **document 级 addEventListener + contains 判定**，模块加载时装一次，永不失效。
    监听器内部还要**再查一次** `stockChartCode`（关窗后会置空），避免误触发。 */
+/* 鼠标在图上的像素坐标 → 日线序列下标 → 交易日。
+   双击、悬停跟踪、工具栏按钮三处共用，口径只有这一份。 */
+/* 前端脚本构建号 —— 显示在 K 线工具栏（#appVer）。
+   用途：owner 报"双击没反应"时，一眼就能看出 app.js 到底有没有加载到新版；
+   为空 = 脚本没跑（WebView 缓存/没重启），不是逻辑问题。 */
+const APP_BUILD = "20261026-dbl4";
+
+function _stampAppVer() {
+  try {
+    const el = document.getElementById("appVer");
+    if (el) el.textContent = "JS " + APP_BUILD;
+  } catch (e) { /* 忽略 */ }
+}
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", _stampAppVer);
+} else {
+  _stampAppVer();
+}
+
+function _chartIdxFromEvent(ev) {
+  try {
+    const el = document.getElementById("stockChart");
+    if (!el || !stockChartInst || !ev) return -1;
+    const pd = (stockChartData && stockChartData.period_data || {}).daily || {};
+    const dates = pd.dates || [];
+    if (!dates.length) return -1;
+    const r = el.getBoundingClientRect();
+    let v = stockChartInst.convertFromPixel(
+      { xAxisIndex: 0 }, [ev.clientX - r.left, ev.clientY - r.top]);
+    if (Array.isArray(v)) v = v[0];
+    if (typeof v === "number" && v >= -0.5 && v <= dates.length - 0.5) return Math.round(v);
+    if (typeof v === "string") return dates.indexOf(v);
+  } catch (e) { /* 忽略 */ }
+  return -1;
+}
+
+function _chartDayFromEvent(ev) {
+  const idx = _chartIdxFromEvent(ev);
+  if (idx < 0) return null;
+  const pd = (stockChartData && stockChartData.period_data || {}).daily || {};
+  return String((pd.dates || [])[idx] || "").slice(0, 10) || null;
+}
+
+/* 出问题时**在弹窗里显示**，不再静默吞掉（之前就是吞了才"完全没反应"查不出原因）。 */
+function _dayModalError(msg) {
+  try {
+    const m = _ensureDayModal();
+    m.style.display = "flex";
+    const t = document.getElementById("dayModalTitle");
+    if (t) t.textContent = "日内 5 分钟 · 出错";
+    const i = document.getElementById("dayModalInfo");
+    if (i) i.innerHTML = `<span style="color:#f85149">${esc(msg)}</span>`;
+  } catch (e) { /* 连弹窗都建不出来就只能忽略 */ }
+}
+
+/* 2026-10-26：**双击日 K 的某根 → 那天的 5 分钟图**。
+   ⚠️ 三条路都试过失败过，最后定成 document 级捕获监听（页面加载装一次）：
+     · zrender 的 dblclick 自判 300ms，慢双击被吞；
+     · `_firstInit` 块里绑 —— 只在实例刚建时走一次；
+     · 容器 on* 属性 —— 重开窗被 echarts.init 覆盖。
+   document 级不受上面任何一条影响。 */
 (function _installChartDblClick() {
   if (window.__chartDblClickInstalled) return;
   window.__chartDblClickInstalled = true;
   document.addEventListener("dblclick", (ev) => {
     try {
       const el = document.getElementById("stockChart");
-      if (!el || !stockChartCode || stockChartPeriod !== "daily") return;
+      if (!el || !stockChartCode) return;
       if (!(el === ev.target || el.contains(ev.target))) return;
-      if (!window.echarts || !stockChartInst) return;
-      const pd = (stockChartData && stockChartData.period_data || {}).daily || {};
-      const dates = pd.dates || [];
-      if (!dates.length) return;
-      const r = el.getBoundingClientRect();
-      let v = stockChartInst.convertFromPixel(
-        { xAxisIndex: 0 }, [ev.clientX - r.left, ev.clientY - r.top]);
-      if (Array.isArray(v)) v = v[0];
-      let idx = -1;
-      if (typeof v === "number" && v >= -0.5 && v <= dates.length - 0.5) idx = Math.round(v);
-      else if (typeof v === "string") idx = dates.indexOf(v);
-      if (idx < 0) return;
-      const day = String(dates[idx] || "").slice(0, 10);
-      if (day) openDayIntraday(stockChartCode, (stockChartData || {}).name, day);
+      if (stockChartPeriod !== "daily") {
+        _dayModalError(`当前是「${stockChartPeriod}」周期，只有日K能按"某一天"看日内。`);
+        return;
+      }
+      const day = _chartDayFromEvent(ev);
+      if (!day) { _dayModalError("双击位置换算不出交易日（坐标没落在K线区）"); return; }
+      openDayIntraday(stockChartCode, (stockChartData || {}).name, day);
     } catch (e) {
-      try { window.pywebview.api.report_slow_call("dblclick_err", 0); } catch (e2) { /* 静默 */ }
+      _dayModalError("双击处理出错：" + ((e && (e.message || e)) || "未知"));
     }
   }, true);
 })();
 
-/* 弹窗 DOM 兜底：index.html 若还是旧版（WebView 缓存 / 没重启），这里直接建一份，
+/* 跟踪鼠标所在的交易日 —— 给工具栏「日内」按钮用（不依赖任何双击判定）。 */
+let _chartHoverDay = null;
+(function _installChartHoverTrack() {
+  if (window.__chartHoverTracked) return;
+  window.__chartHoverTracked = true;
+  document.addEventListener("mousemove", (ev) => {
+    const el = document.getElementById("stockChart");
+    if (!el || !stockChartCode || !el.contains(ev.target)) return;
+    const d = _chartDayFromEvent(ev);
+    if (d) _chartHoverDay = d;
+  }, true);
+})();
+
+/* 工具栏「日内」按钮：没悬停过就取最后一根。这是**不依赖双击**的兜底入口，
+   也用来区分"事件没绑上" vs "数据取不到"。 */
+function openDayIntradayFromCursor() {
+  if (!stockChartCode) return;
+  const pd = (stockChartData && stockChartData.period_data || {}).daily || {};
+  const dates = pd.dates || [];
+  const last = dates.length ? String(dates[dates.length - 1]).slice(0, 10) : null;
+  const day = _chartHoverDay || last;
+  if (!day) { _dayModalError("还没有日线数据"); return; }
+  openDayIntraday(stockChartCode, (stockChartData || {}).name, day);
+}
+
+/* 弹窗 DOM 兜底：index.html 若还是旧版/* 弹窗 DOM 兜底：index.html 若还是旧版（WebView 缓存 / 没重启），这里直接建一份，
    避免"双击没反应"这种无声失败。 */
 function _ensureDayModal() {
   let m = document.getElementById("dayModal");
