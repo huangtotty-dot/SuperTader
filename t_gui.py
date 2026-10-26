@@ -3765,6 +3765,84 @@ class Api:
         except Exception:
             return []
 
+    def _tdx_min_df(self, symbol: str, minutes: int = 5):
+        """通达信本地分钟线（`.lc5`/`.lc1`）→ DataFrame；没有就返回 None。
+
+        2026-10-26（owner：「这个在我通达信打开的情况下能否直接读取」）：平均股价这类合成标的
+        腾讯/tushare 都没有分时源，但**通达信本地有** —— `vipdoc/*/fzline/{mk}{code}.lc5`
+        （5 分钟）与 `minline/{mk}{code}.lc1`（1 分钟）。
+
+        记录格式 32 字节 `<HHfffffII>`：
+            date  = (year-2004)*2048 + month*100 + day
+            minute= 当日第几分钟（570 = 09:30）
+            o/h/l/c 为 float，amount 为 float（元），volume 为 uint32（**股**）
+
+        ⚠️ 通达信**默认不下载**分钟数据 —— 本机 2026-10-26 实测 `vipdoc/*/fzline` 与
+        `minline` 全是空目录。用户需在通达信里「盘后数据下载 → 5分钟线」后才有；
+        读不到就返回 None，行为与现在完全一致（前端仍显示「该周期无分时数据」）。
+        """
+        try:
+            from core.board_index import tdx_code_for
+            code = tdx_code_for(symbol)
+            if not code:
+                return None
+            import struct
+            import pandas as pd
+            fp = self._tdx_day_path(code)
+            if fp is None:
+                return None
+            base = fp.parent.parent          # vipdoc/{mk}
+            mk = fp.name[:2]
+            cand = (base / ("fzline" if minutes >= 5 else "minline") /
+                    f"{mk}{code}.{'lc5' if minutes >= 5 else 'lc1'}")
+            if not cand.exists() or cand.stat().st_size < 32 * 2:
+                return None
+            raw = cand.read_bytes()
+            recs = []
+            for i in range(0, len(raw) - 31, 32):
+                d, t, o, h, l, c, amt, vol, _ = struct.unpack("<HHfffffII", raw[i:i + 32])
+                if d < 1:
+                    continue
+                y, md = divmod(d, 2048)
+                mo, dy = divmod(md, 100)
+                try:
+                    ts = pd.Timestamp(year=2004 + y, month=mo, day=dy,
+                                      hour=t // 60, minute=t % 60)
+                except Exception:
+                    continue
+                recs.append({"time": ts, "open": o, "high": h, "low": l, "close": c,
+                             "volume": vol / 100.0, "amount": float(amt)})
+            if len(recs) < 2:
+                return None
+            df = pd.DataFrame(recs).sort_values("time").reset_index(drop=True)
+            if minutes > 5:
+                # 5→10/30/60 重采样：按**交易时段**切桶（上午 09:30 起、下午 13:00 起各自数），
+                # 并用**桶起点**做标签（09:30/10:00/10:30…），与腾讯/tushare 那套口径一致。
+                # ⚠️ 不能用 `minute // N`：它会把 60 分钟切在 09:30-09:59 / 10:00-10:59…
+                #    而 A 股 60min 的标准边界是 10:30 / 11:30 / 14:00 / 15:00。
+                _m = df["time"].dt.hour * 60 + df["time"].dt.minute
+
+                def _bucket(t):
+                    m = int(t)
+                    if m <= 690:                     # 上午 09:30-11:30
+                        m = min(max(m - 1, 570), 689) if m > 570 else 570
+                        return 570 + ((m - 570) // minutes) * minutes
+                    m = min(max(m - 1, 780), 899) if m > 780 else 780
+                    return 780 + ((m - 780) // minutes) * minutes
+
+                _bs = _m.map(_bucket)
+                _d = df["time"].dt.normalize()
+                _start = _d + pd.to_timedelta(_bs, unit="m")
+                df = (df.assign(_s=_start)
+                        .groupby("_s", as_index=False)
+                        .agg(open=("open", "first"), high=("high", "max"),
+                             low=("low", "min"), close=("close", "last"),
+                             volume=("volume", "sum"), amount=("amount", "sum"))
+                        .rename(columns={"_s": "time"}))
+            return df
+        except Exception:
+            return None
+
     def _tdx_index_last(self, code: str):
         """通达信本地 `.day` 的最后两根 → (price, pre_close, asof)；读不到返回 (None, None, None)。
 
@@ -6853,6 +6931,16 @@ class Api:
                             _raw[_key] = _fetch_min_bars(_c, _freq)
                         except Exception:
                             _raw[_key] = None
+            else:
+                # 2026-10-26：em 合成标的（平均股价等）没有腾讯/tushare 分时源，但**通达信本地**
+                # 可能下载过 5 分钟线（`vipdoc/*/fzline/*.lc5`）。读不到就什么都不放 ⇒
+                # 仍走原来的「该周期无分时数据」，行为不变。
+                _keys = ([want_min_period] if want_min_period in _MIN_PERIODS
+                         else list(_MIN_PERIODS))
+                for _key in _keys:
+                    _mf = self._tdx_min_df(_c, _MIN_PERIOD_MINUTES[_key])
+                    if _mf is not None and not _mf.empty:
+                        _raw[_key] = _mf
         _frames = {"daily": daily, "weekly": weekly, "monthly": monthly}
         for _key in _MIN_PERIODS:
             _mf = (_raw or {}).get(_key)
