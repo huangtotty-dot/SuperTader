@@ -125,7 +125,7 @@ def run_independent(code, df):
     sys.path.insert(0, str(BASE))
     from scripts.intraday_t_backtest_1year import StockData, sig_renko
     from datetime import timedelta
-    from analysis.renko_builder import RenkoBuilder
+    from scripts.renko_builder import RenkoBuilder
 
     sd = StockData(df)
     buy_times = sig_renko(sd)[0]

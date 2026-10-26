@@ -29,7 +29,7 @@ import pandas as pd
 import numpy as np
 
 from analysis.indicators import resample_to_15min, add_15min_indicators
-from analysis.renko_builder import RenkoBuilder
+from scripts.renko_builder import RenkoBuilder
 
 COST = 0.0005
 TRAIN_END = pd.Timestamp("2026-06-26")

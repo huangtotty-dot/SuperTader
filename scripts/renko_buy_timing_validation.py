@@ -30,7 +30,7 @@ import numpy as np
 import glob
 
 from analysis.indicators import resample_to_15min, add_15min_indicators, resample_to_5min, add_5min_indicators
-from analysis.renko_builder import RenkoBuilder
+from scripts.renko_builder import RenkoBuilder
 
 OUT_FILE = BASE / "t_io" / "backtest_1year" / "renko_buy_timing_validation.txt"
 
