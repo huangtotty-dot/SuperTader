@@ -95,7 +95,11 @@ class TestPanelStyling:
     """
 
     def test_amount_ma_overlay_present(self):
-        assert '"成交额MA5"' in _JS and '"成交额MA10"' in _JS
+        # 2026-10-26：图例名改成模板字面量 `${_voltUnit}MA5` —— 线画在**实际画出来的那条序列**
+        # 上（有成交额画成交额、没有画成交量·手），不再写死「成交额」。所以这里断言
+        # 「单位变量 + MA5/MA10 模板」同时成立，等价于原来的口径且覆盖成交量回落分支。
+        assert 'const _voltUnit = _hasAmt ? "成交额" : "成交量";' in _JS
+        assert "`${_voltUnit}MA5`" in _JS and "`${_voltUnit}MA10`" in _JS
         assert '"#c98500"' in _JS and '"#9085e9"' in _JS
 
     def test_macd_lines_were_separated(self):

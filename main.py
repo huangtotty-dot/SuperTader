@@ -1,6 +1,13 @@
 # -*- coding: utf-8 -*-
 """做T盯盘脚本主入口；所有依赖均通过正常 import 获取唯一模块对象。"""
 import sys, os, io
+# 2026-10-26（D 轮「消灭 exec 共享命名空间」回归）：正文里大量出现**裸名** `json.` / `time.` /
+# `traceback.`，而顶层只 import 了 `_json` / `_time` / `_traceback` 这几个别名 ——
+# 以前靠 exec 的共享 namespace 顺手带进来，改成正常 import 后全成了 NameError。
+# 最严重的一处是主循环末尾的 `time.sleep(...)`：跑完第一轮就抛 NameError，
+# 而 except 分支里的 `traceback.format_exc()` 同样 NameError ⇒ 进程**静默退出**
+# （2026-10-26 15:07:03 实测：最后一轮日志后再无输出、进程消失）。
+import json, time, traceback
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
 
 # 确保运行路径
@@ -29,7 +36,7 @@ from config import (
     FEISHU_KEYWORD, FEISHU_WEBHOOK, HOLDINGS, INDEX_REGIME_CONTEXT,
     INDEX_RESONANCE_PARAMS, MORNING_ALERT_PARAMS, PARAMS, SESSION_CONTEXT,
     SIGNAL_OUTCOME_TRACKER, SNAPSHOT_DIR, STOCK_PARAMS, SYS_ALERT_AVAILABLE,
-    TRACE_DIR, log, send_feishu_payload, send_startup_self_test,
+    TRACE_DIR, load_runtime_config, log, send_feishu_payload, send_startup_self_test,
     should_run_startup_self_test,
 )
 from core.utils import (
@@ -45,7 +52,12 @@ from src.data_fetcher import (
 from analysis.indicators import (
     add_indicators, add_5min_indicators, add_15min_indicators,
 )
-from core.signal_engine import EngineContext, PERSIST_INTRADAY_STATE, SignalEngine
+# 2026-10-26（D 轮回归）：`scan_once` 里用到 `_minute_issue_bucket` / `_minute_status_label` /
+# `write_shadow_signal` —— 以前由 exec 共享命名空间带进来，改正常 import 后漏了。
+from core.signal_engine import (
+    EngineContext, PERSIST_INTRADAY_STATE, SignalEngine,
+    _minute_issue_bucket, _minute_status_label, write_shadow_signal,
+)
 from optimization.support_resistance import pivot_audit
 from analysis.index_regime import (
     detect_index_regime, index_regime_name, push_index_regime_context,
@@ -58,7 +70,8 @@ from core.position_sizer import (
     calc_buy_qty, calc_sell_qty, last_buy_state, set_all_holdings,
 )
 from execution.daily_sentiment import (
-    compute_daily_sentiment, push_daily_sentiment, save_sentiment_record,
+    compute_daily_sentiment, load_sentiment_history, push_daily_sentiment,
+    save_sentiment_record, sentiment_log_dir,
 )
 
 # 回测时间仍由 main 持有；SignalEngine 通过 EngineContext 获取时钟。
@@ -578,6 +591,13 @@ def _build_board_index_lines(as_of_date: str) -> list:
         except Exception:
             continue
     return out
+
+
+# 2026-10-26（D 轮回归）：两个「当日已推送」去重标记只在函数里 `global` 声明后**先读后写**，
+# 模块级从来没初始化过 ⇒ 当日第一次调用必然 NameError，被函数的 except 吞掉
+# ⇒ 早盘/尾盘大盘基调推送**一次都不会发**。这里补上模块级初值。
+_index_regime_morning_pushed_date = ""
+_index_regime_eod_pushed_date = ""
 
 
 def _maybe_push_index_regime_morning(now: datetime) -> None:
@@ -1507,10 +1527,15 @@ def _maybe_check_index_intraday_alert(now: datetime) -> None:
         if not _index_regime_feishu_enabled():
             return
         # 宿主调参合并：index_regime_intraday 无 globals 合并机制，调用前把
-        # config.py 的 INDEX_INTRADAY_PARAMS 合入模块内 IRI_DEFAULT_PARAMS
+        # config.py 的 INDEX_INTRADAY_PARAMS 合入模块内 IRI_DEFAULT_PARAMS。
+        # 2026-10-26：config.py:694 已把 `INDEX_INTRADAY_PARAMS` **删除**（9 个键与模块默认值
+        # 全相同，merge 本就是空操作），这里保留"有则合、没有就跳过"的写法：
+        # 以前裸名靠 exec 命名空间带进来，改成正常 import 后是 NameError（并被 except 吞掉），
+        # 现在显式从 config 取，没定义就为空 dict。
         try:
-            if isinstance(INDEX_INTRADAY_PARAMS, dict):
-                IRI_DEFAULT_PARAMS.update(INDEX_INTRADAY_PARAMS)
+            _iip = getattr(sys.modules.get("config"), "INDEX_INTRADAY_PARAMS", None)
+            if isinstance(_iip, dict):
+                IRI_DEFAULT_PARAMS.update(_iip)
         except Exception:
             pass
         # B-3(2026-09-07): 按持仓所属板块逐指数盘中预警（不再只盯上证）

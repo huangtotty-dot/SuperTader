@@ -76,7 +76,8 @@ class TestLoadMultiChart:
 
 class TestFrontend:
     def test_button_on_ob_panel(self):
-        assert "openMultiWatch()" in _HTML
+        # 2026-10-26：按钮改成优先开**独立原生窗口**，不可用才退回浮层（见 openMultiWatchWindow）
+        assert "openMultiWatchWindow()" in _HTML
         assert "多窗口看盘" in _HTML
 
     def test_window_is_3x3_float(self):
@@ -139,9 +140,9 @@ class TestFrontend:
     def test_gap_and_daily_ma_drawn(self):
         """owner：① 缺口没显示 ② 5/10/20 日均线没显示。"""
         # 缺口与单图共用同一个函数，口径不会漂
-        assert "function buildGapAreas(ohlc, lookback, minPct, maxN)" in _JS
-        assert "buildGapAreas(period.ohlc)" in _JS          # 单图
-        assert "buildGapAreas(s.ohlc, 250, 0.003, 8)" in _JS  # 六宫格
+        assert "function buildGapAreas(ohlc, dates, lookbackDays, minPct, maxN)" in _JS
+        assert "buildGapAreas(period.ohlc, period.dates, 15)" in _JS   # 单图（最近 15 自然日）
+        assert "buildGapAreas(s.ohlc, s.dates, 15, 0.003, 8)" in _JS   # 九宫格
         assert "markArea: gaps.length" in _JS
         # 日线均线三条（颜色与单图的「日线MA5/10/20」一致）
         assert '"日MA5"' in _JS and '"日MA10"' in _JS and '"日MA20"' in _JS
@@ -151,8 +152,8 @@ class TestFrontend:
     def test_realtime_polling(self):
         assert "MW_PERIOD_MS = 4000" in _JS
         assert "mwTimer = setInterval(mwTick, MW_PERIOD_MS)" in _JS
-        # 每格只画 48 根（5 分 K 的一个交易日）—— owner：「不要显示太多的 K 线」
-        assert "MW_TAIL = 48" in _JS
+        # 2026-10-21 起每格画 96 根（两个交易日）；更早是 48 根
+        assert "MW_TAIL = 96" in _JS
         assert '"load_multi_chart", codes, "min5", MW_TAIL' in _JS
         # 单飞：上一轮没回来不叠请求（6 格 × 每格 ~1s 计算，叠起来会拖死）
         assert "if (mwBusy) return;" in _JS
@@ -213,7 +214,7 @@ class TestWindowMaxMin:
         assert "grid.style.display = \"none\"" in _JS
         assert "mwMinH = win.style.height" in _JS
         # 还原时把高度放回去
-        assert 'win.style.height = mwMinH || "70vh";' in _JS
+        assert 'win.style.height = mwMinH || "88vh";' in _JS
 
     def test_resize_guard_when_hidden(self):
         """最小化时格子 display:none ⇒ 尺寸为 0，不能拿 0 去 resize（会画成空画布）。"""
@@ -320,7 +321,7 @@ class TestSupportResistance:
         assert api._daily_levels("600000") is None
 
     def test_frontend_draws_levels(self):
-        assert "function _mwOption(s, dma, levels, trades)" in _JS
+        assert "function _mwOption(s, dma, levels, trades, zoom)" in _JS
         assert '`${up ? "压" : "支"} ${Number(y).toFixed(2)}`' in _JS
         # 支撑绿、压力红（与单图一致）；标签在右侧（日线MA 在左，两拨不打架）
         assert '"#f85149", type: "dashed"' in _JS and '"#3fb950", type: "dashed"' in _JS
@@ -381,7 +382,7 @@ class TestTradeMarkersInCells:
 
     def test_frontend_buckets_same_as_main_chart(self):
         # 与单图同口径：成交落进 (bar_t - 5min, bar_t]
-        assert "function _mwOption(s, dma, levels, trades)" in _JS
+        assert "function _mwOption(s, dma, levels, trades, zoom)" in _JS
         assert "_be[bi] - 5 >= tm" in _JS
         # 买=红▲托在 low 下、卖=绿▼压在 high 上（与单图同色同形）
         assert 'color: "#f85149", borderColor: "#fff"' in _JS

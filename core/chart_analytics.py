@@ -27,6 +27,12 @@ def _detect_boxes(daily):
     4. 合并逻辑改进：避免过度合并历史箱体
     """
     import numpy as np
+    # 2026-10-26：`pd` 漏了局部导入。本模块刻意不在顶层 import pandas（见模块 docstring），
+    # 而下面第 96/103 行要用 `pd.Timestamp` 算「距箱体结束多少天」。在 t_gui.py 时代
+    # `pd` 是顶层全局名所以没暴露；下迁到本模块后变成 NameError，被两处 `except` 吞掉
+    # ⇒ `days_since` 恒为 999 ⇒ **`recently_broke` 永远 False、`rel=1（刚突破上方）` 永不出现**。
+    # 错误是静默的（不报错、只是结果偏保守），所以必须显式导入。
+    import pandas as pd
     d = daily
     if len(d) < 30:
         return []
