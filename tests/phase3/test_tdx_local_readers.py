@@ -78,3 +78,34 @@ def test_minute_resample_bucket_edges(tdx_root):
     assert len(df30) == 16 and len(df60) == 8
     assert [str(t)[11:16] for t in df30["time"].head(4)] == ["09:30", "10:00", "10:30", "11:00"]
     assert [str(t)[11:16] for t in df60["time"].head(4)] == ["09:30", "10:30", "13:00", "14:00"]
+
+
+def test_lc1_fallback_builds_5min(tdx_root):
+    """`.lc5` 不存在时（本机常态）要用 `.lc1` 合成 5 分钟，而不是直接放弃。"""
+    recs = []
+    for day in (11, 12):
+        d = (2026 - 2004) * 2048 + 8 * 100 + day
+        for i in range(240):                       # 一个交易日 240 根 1 分钟
+            recs.append(_lc_rec(d, 570 + i if i < 120 else 780 + (i - 120), 10.0 + i * 0.001))
+    (tdx_root / "sh" / "minline" / "sh880003.lc1").write_bytes(b"".join(recs))
+    (tdx_root / "sh" / "lday" / "sh880003.day").write_bytes(_day_rec(20261026, 1, 1, 1, 1, 0, 0) * 2)
+    api = _api(); api._TDX_VIPDOC = tdx_root
+    df = api._tdx_min_df("em47.800005", 5)
+    assert df is not None and len(df) == 2 * 48, "两天 × 48 根 5 分钟"
+    assert [str(t)[11:16] for t in df["time"].head(3)] == ["09:30", "09:35", "09:40"]
+
+
+def test_day_slice_returns_only_that_date(tdx_root):
+    """`day=` 只解析那一天（深历史文件很大，不能整份解析）。"""
+    recs = []
+    for day in (11, 12, 13):
+        d = (2026 - 2004) * 2048 + 8 * 100 + day
+        for i in range(240):
+            recs.append(_lc_rec(d, 570 + i if i < 120 else 780 + (i - 120), 10.0))
+    (tdx_root / "sh" / "minline" / "sh880003.lc1").write_bytes(b"".join(recs))
+    (tdx_root / "sh" / "lday" / "sh880003.day").write_bytes(_day_rec(20261026, 1, 1, 1, 1, 0, 0) * 2)
+    api = _api(); api._TDX_VIPDOC = tdx_root
+    df = api._tdx_min_df("em47.800005", 5, day="2026-08-12")
+    assert df is not None and len(df) == 48
+    assert str(df["time"].iloc[0])[:10] == "2026-08-12"
+    assert str(df["time"].iloc[-1])[:10] == "2026-08-12"
