@@ -8904,6 +8904,13 @@ document.addEventListener("DOMContentLoaded", () => {
    都不会拖住别的格，也不会把主线程冻住。
    ══════════════════════════════════════════════════════════════════════ */
 const MW_N = 9;                 // 3×3（2026-10-21 owner：六宫格→九宫格）
+/* 2026-10-26 owner：「需要有按钮我可以选择 3×3 / 3×2」。
+   ⚠️ MW_N 仍是**存票上限**（9 个位置都保存），布局只决定这一屏画几只：
+      切到 3×2 时后 3 只的选择不丢，切回 3×3 原样回来；也**不去请求**看不见的那 3 只
+      （每轮少 1/3 的取数与渲染，见 mwTick）。 */
+const MW_LS_LAYOUT = "multiWatchLayout";
+let mwLayout = "3x3";
+const mwN = () => (mwLayout === "3x2" ? 6 : 9);
 const MW_LS_KEY = "multiWatchCodes";
 const MW_PERIOD_MS = 4000;      // 刷新间隔：九宫格 9 只 × 每轮 ~130ms 计算，4s 是 CPU 与实时性的折中（2026-10-21 抗卡顿）
 // 2026-10-25：48 → 96。48 根 5 分钟 = 正好一个交易日 ⇒ 窗口里没有"前一日收盘"，
@@ -8999,11 +9006,38 @@ function _mwSaveCodes() {
   try { localStorage.setItem(MW_LS_KEY, JSON.stringify(mwCodes)); } catch (e) { /* 忽略 */ }
 }
 
+function _mwLoadLayout() {
+  try {
+    const v = localStorage.getItem(MW_LS_LAYOUT);
+    if (v === "3x2" || v === "3x3") mwLayout = v;
+  } catch (e) { /* 独立窗口 localStorage 不通，用默认 3×3 */ }
+}
+
+/* 布局落到 DOM：格子的行数 + 两个按钮的选中态（不重建格子，重建由调用方负责）。 */
+function _mwApplyLayoutUI() {
+  const grid = document.getElementById("multiWatchGrid");
+  if (grid) grid.classList.toggle("mw-r2", mwLayout === "3x2");
+  const a = document.getElementById("mwLay3x3"), b = document.getElementById("mwLay3x2");
+  if (a) a.classList.toggle("primary", mwLayout === "3x3");
+  if (b) b.classList.toggle("primary", mwLayout === "3x2");
+}
+
+/* 标题栏按钮：切换 3×3 / 3×2。重建格子（6↔9）后立刻拉一轮数据。 */
+function mwSetLayout(lay) {
+  const v = (lay === "3x2") ? "3x2" : "3x3";
+  if (v === mwLayout) return;
+  mwLayout = v;
+  try { localStorage.setItem(MW_LS_LAYOUT, v); } catch (e) { /* 忽略 */ }
+  _mwBuildCells();       // 重建 6/9 格并落布局类；顺带把 mwZoom 归位（几何变了，旧缩放没意义）
+  mwTick();
+}
+
 function openMultiWatch() {
   const win = document.getElementById("multiWatchWin");
   if (!win) return;
   win.style.display = "flex";
   mwCodes = _mwLoadCodes();
+  _mwLoadLayout();
   _mwBuildCells();
   _mwBindDrag(win);
   mwTick();
@@ -9214,7 +9248,8 @@ function _mwBuildCells() {
   if (dl) {
     dl.innerHTML = hs.map(h => `<option value="${esc(h.code)}">${esc(h.name || h.code)}</option>`).join("");
   }
-  host.innerHTML = mwCodes.map((c, i) => {
+  _mwApplyLayoutUI();                    // 行数（3 行 / 2 行）+ 按钮选中态
+  host.innerHTML = mwCodes.slice(0, mwN()).map((c, i) => {
     // 下拉**只显示名称**（owner：不要显示代码），分两组：📈 指数 / 体检持仓
     const _opt = (code, text) => `<option value="${esc(code)}"${code === c ? " selected" : ""}>`
       + `${esc(text)}</option>`;
@@ -9236,7 +9271,7 @@ function _mwBuildCells() {
       <div class="mw-chart" id="mwChart${i}"></div>
     </div>`;
   }).join("");
-  for (let i = 0; i < MW_N; i++) {
+  for (let i = 0; i < mwN(); i++) {
     const el = document.getElementById("mwChart" + i);
     if (el && window.echarts) {
       try {
@@ -9495,7 +9530,8 @@ async function mwTick() {
   if (mwBusy) return;                       // 单飞：上一轮没回来就别叠
   // 窗口最小化/切后台时跳过：6 只票每轮 ~6s 的计算量，没必要喂给看不见的窗口
   if (document.visibilityState === "hidden") return;
-  const codes = mwCodes.filter(Boolean);
+  // 只请求**当前布局可见**的那几只：3×2 时后 3 只不下发（省 1/3 的取数与渲染）
+  const codes = mwCodes.slice(0, mwN()).filter(Boolean);
   if (!codes.length) return;
   mwBusy = true;
   try {
