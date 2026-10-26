@@ -3765,42 +3765,81 @@ class Api:
         except Exception:
             return []
 
-    def _tdx_min_df(self, symbol: str, minutes: int = 5):
-        """通达信本地分钟线（`.lc5`/`.lc1`）→ DataFrame；没有就返回 None。
+    def _tdx_min_df(self, symbol: str, minutes: int = 5, day=None):
+        """通达信本地分钟线 → DataFrame；没有就返回 None。
 
-        2026-10-26（owner：「这个在我通达信打开的情况下能否直接读取」）：平均股价这类合成标的
-        腾讯/tushare 都没有分时源，但**通达信本地有** —— `vipdoc/*/fzline/{mk}{code}.lc5`
-        （5 分钟）与 `minline/{mk}{code}.lc1`（1 分钟）。
+        2026-10-26 owner：「5 分钟离现在太远会读不到，我用通达信下载到了 2015 年」。
+        实测本机：`vipdoc/*/fzline`（5 分钟 .lc5）**是空目录**，但 `minline`（1 分钟 .lc1）
+        有 1.2 万个文件、每个约 3 个月（2026-07 起）—— 所以这里**先用 .lc5，没有就从 .lc1 合成**。
+
+        `day`（YYYY-MM-DD）：只取那一天。分钟文件是**按日期排序**的，这里二分定位后只读当天
+        那几百条，不再把整个文件（深历史可达几十 MB）全解析一遍。
 
         记录格式 32 字节 `<HHfffffII>`：
             date  = (year-2004)*2048 + month*100 + day
             minute= 当日第几分钟（570 = 09:30）
-            o/h/l/c 为 float，amount 为 float（元），volume 为 uint32（**股**）
-
-        ⚠️ 通达信**默认不下载**分钟数据 —— 本机 2026-10-26 实测 `vipdoc/*/fzline` 与
-        `minline` 全是空目录。用户需在通达信里「盘后数据下载 → 5分钟线」后才有；
-        读不到就返回 None，行为与现在完全一致（前端仍显示「该周期无分时数据」）。
+            o/h/l/c float，amount float（元），volume uint32（**股**）⇒ 本仓口径 ÷100 转**手**
         """
         try:
-            from core.board_index import tdx_code_for
-            code = tdx_code_for(symbol)
-            if not code:
-                return None
+            code = str(symbol)
+            try:
+                from core.board_index import tdx_code_for
+                code = tdx_code_for(symbol) or code
+            except Exception:
+                pass
+            code = code.split("_")[0]
             import struct
             import pandas as pd
-            fp = self._tdx_day_path(code)
-            if fp is None:
+            fp_day = self._tdx_day_path(code)
+            if fp_day is None:
                 return None
-            base = fp.parent.parent          # vipdoc/{mk}
-            mk = fp.name[:2]
-            cand = (base / ("fzline" if minutes >= 5 else "minline") /
-                    f"{mk}{code}.{'lc5' if minutes >= 5 else 'lc1'}")
-            if not cand.exists() or cand.stat().st_size < 32 * 2:
+            base = fp_day.parent.parent            # vipdoc/{mk}
+            mk = fp_day.name[:2]
+            # 优先 5 分钟原生档；没有就从 1 分钟合成
+            src, src_min = None, None
+            if minutes >= 5:
+                c5 = base / "fzline" / f"{mk}{code}.lc5"
+                if c5.exists() and c5.stat().st_size >= 64:
+                    src, src_min = c5, 5
+            if src is None:
+                c1 = base / "minline" / f"{mk}{code}.lc1"
+                if c1.exists() and c1.stat().st_size >= 64:
+                    src, src_min = c1, 1
+            if src is None:
                 return None
-            raw = cand.read_bytes()
+
+            raw = src.read_bytes()
+            n = len(raw) // 32
+            i0, i1 = 0, n
+            if day:
+                try:
+                    _y, _m, _d = (int(x) for x in str(day)[:10].split("-"))
+                    dk = (_y - 2004) * 2048 + _m * 100 + _d
+                    # 二分：日期字段在记录头 2 字节，单调递增
+                    lo, hi = 0, n
+                    while lo < hi:
+                        mid = (lo + hi) // 2
+                        if struct.unpack_from("<H", raw, mid * 32)[0] < dk:
+                            lo = mid + 1
+                        else:
+                            hi = mid
+                    i0 = lo
+                    lo, hi = i0, n
+                    while lo < hi:
+                        mid = (lo + hi) // 2
+                        if struct.unpack_from("<H", raw, mid * 32)[0] <= dk:
+                            lo = mid + 1
+                        else:
+                            hi = mid
+                    i1 = lo
+                except Exception:
+                    i0, i1 = 0, n
+            if i1 <= i0:
+                return None
+
             recs = []
-            for i in range(0, len(raw) - 31, 32):
-                d, t, o, h, l, c, amt, vol, _ = struct.unpack("<HHfffffII", raw[i:i + 32])
+            for i in range(i0, i1):
+                d, t, o, h, l, c, amt, vol, _ = struct.unpack("<HHfffffII", raw[i * 32:(i + 1) * 32])
                 if d < 1:
                     continue
                 y, md = divmod(d, 2048)
@@ -3815,24 +3854,21 @@ class Api:
             if len(recs) < 2:
                 return None
             df = pd.DataFrame(recs).sort_values("time").reset_index(drop=True)
-            if minutes > 5:
-                # 5→10/30/60 重采样：按**交易时段**切桶（上午 09:30 起、下午 13:00 起各自数），
-                # 并用**桶起点**做标签（09:30/10:00/10:30…），与腾讯/tushare 那套口径一致。
-                # ⚠️ 不能用 `minute // N`：它会把 60 分钟切在 09:30-09:59 / 10:00-10:59…
-                #    而 A 股 60min 的标准边界是 10:30 / 11:30 / 14:00 / 15:00。
-                _m = df["time"].dt.hour * 60 + df["time"].dt.minute
+            if minutes > src_min or (minutes >= 5 and src_min == 1):
+                # 重采样：按**交易时段**切桶（上午 09:30 起、下午 13:00 起各自数），
+                # 用桶起点做标签 ⇒ 与 A 股标准边界（10:30/11:30/14:00/15:00）一致。
+                m_ = df["time"].dt.hour * 60 + df["time"].dt.minute
 
-                def _bucket(t):
-                    m = int(t)
-                    if m <= 690:                     # 上午 09:30-11:30
-                        m = min(max(m - 1, 570), 689) if m > 570 else 570
-                        return 570 + ((m - 570) // minutes) * minutes
-                    m = min(max(m - 1, 780), 899) if m > 780 else 780
-                    return 780 + ((m - 780) // minutes) * minutes
+                def _bucket(t, _n=minutes):
+                    t = int(t)
+                    if t <= 690:
+                        t = 570 if t <= 570 else min(t - 1, 689)
+                        return 570 + ((t - 570) // _n) * _n
+                    t = 780 if t <= 780 else min(t - 1, 899)
+                    return 780 + ((t - 780) // _n) * _n
 
-                _bs = _m.map(_bucket)
-                _d = df["time"].dt.normalize()
-                _start = _d + pd.to_timedelta(_bs, unit="m")
+                _bs = m_.map(_bucket)
+                _start = df["time"].dt.normalize() + pd.to_timedelta(_bs, unit="m")
                 df = (df.assign(_s=_start)
                         .groupby("_s", as_index=False)
                         .agg(open=("open", "first"), high=("high", "max"),
@@ -5119,17 +5155,24 @@ class Api:
                 for n in (5, 10, 20, 30, 60, 180, 365):
                     out["ma"][str(n)] = (round(sum(_closes[-n:]) / n, 3)
                                          if len(_closes) >= n else None)
-            # ── 5 分钟 ────────────────────────────────────────────────────
-            df = _fetch_min_bars(code, "5min")
+            # ── 5 分钟：**通达信本地优先**（深度取决于用户在通达信里下载到哪年），腾讯兜底 ──
+            df = self._tdx_min_df(code, 5, day=day)
+            out["source"] = "tdx"
             if df is None or getattr(df, "empty", True):
-                out["error"] = "取不到 5 分钟数据（腾讯/tushare/本地都没有）"
-                return out
+                out["source"] = "tencent"
+                _raw = _fetch_min_bars(code, "5min")
+                if _raw is None or getattr(_raw, "empty", True):
+                    out["error"] = "取不到该日 5 分钟数据（通达信本地、腾讯都没有）"
+                    return out
+                _tc = "time" if "time" in _raw.columns else "date"
+                _t = pd.to_datetime(_raw[_tc])
+                df = _raw[_t.dt.strftime("%Y-%m-%d") == day]
+                if df.empty:
+                    out["error"] = (f"{day} 没有 5 分钟数据：通达信本地缺这天，腾讯只回溯约 3 个月"
+                                    f" —— 在通达信「盘后数据下载 → 1分钟线/5分钟线」里把起始日期调早")
+                    return out
+                out["source"] = "tencent"
             _tcol = "time" if "time" in df.columns else "date"
-            _t = pd.to_datetime(df[_tcol])
-            df = df[_t.dt.strftime("%Y-%m-%d") == day]
-            if df.empty:
-                out["error"] = f"{day} 不在 5 分钟数据窗口内（腾讯只回溯约 3 个月）"
-                return out
             df = _ensure_amount(df, code)
             _amt = df["amount"].astype(float).tolist() if "amount" in df.columns else [None] * len(df)
             _dates = [pd.Timestamp(x).strftime("%Y-%m-%d %H:%M") for x in df[_tcol]]

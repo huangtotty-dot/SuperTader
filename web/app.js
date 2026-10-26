@@ -4282,6 +4282,7 @@ async function openDayIntraday(code, name, date) {
                       "60": "#d55181", "180": "#9085e9", "365": "#22d3ee" };
   if (info) {
     info.innerHTML = `开 ${d.ohlc[0][0]} · 收 ${d.last_close ?? "—"} · 昨收 <b>${d.prev_close ?? "—"}</b>`
+      + `　<span style="color:#6e7681">数据源：${d.source === "tdx" ? "通达信本地" : "腾讯"}</span>`
       + `　日线均线（<b>该日</b>）：`
       + _maKeys.map(k => MA[k] == null ? "" :
           `<span style="color:${_maColors[k]}">MA${k} <b>${MA[k]}</b></span>`).filter(Boolean).join("　")
