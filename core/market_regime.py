@@ -180,6 +180,9 @@ class RegimeDetector:
         return MarketRegime.NORMAL, "综合判断：正常状态"
 
 
+_detector = None
+
+
 def get_detector() -> RegimeDetector:
     global _detector
     if _detector is None:

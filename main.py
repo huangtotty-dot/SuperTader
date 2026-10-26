@@ -1,8 +1,5 @@
 # -*- coding: utf-8 -*-
-"""
-做T盯盘脚本主入口（拆分版）
-通过共享命名空间加载所有模块，确保原始代码中的跨函数引用无需修改。
-"""
+"""做T盯盘脚本主入口；所有依赖均通过正常 import 获取唯一模块对象。"""
 import sys, os, io
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
 
@@ -11,7 +8,6 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 if BASE_DIR not in sys.path:
     sys.path.insert(0, BASE_DIR)
 
-# 预加载所有必要的第三方库到共享命名空间
 import os as _os, sys as _sys, json as _json, time as _time, logging as _logging, traceback as _traceback, importlib.util as _importlib_util
 import urllib.request as _urllib_request
 from dataclasses import dataclass, field
@@ -23,89 +19,54 @@ import numpy as np, pandas as pd, requests, urllib.request, urllib.error
 for _k in ['http_proxy','https_proxy','HTTP_PROXY','HTTPS_PROXY','ALL_PROXY','all_proxy']:
     _os.environ.pop(_k, None)
 _os.environ['NO_PROXY'] = '*'; _os.environ['no_proxy'] = '*'
-# 强制 urllib 全局无代理
 _urllib_request.install_opener(_urllib_request.build_opener(_urllib_request.ProxyHandler({})))
-# 强制 requests 全局无代理（trust_env=False 覆盖 Windows IE 系统代理）
 import requests as _mreq
 _MREQ_SESSION = _mreq.Session(); _MREQ_SESSION.trust_env = False
 _mreq.post = lambda url, **kw: _MREQ_SESSION.request('POST', url, **kw)
 _mreq.get = lambda url, **kw: _MREQ_SESSION.request('GET', url, **kw)
 
-# 共享命名空间：所有模块在此空间中执行，共享所有变量和函数
-shared = {
-    '__name__': '__main__',
-    '__file__': __file__,
-    'os': _os,
-    'sys': _sys,
-    'json': _json,
-    'time': _time,
-    'logging': _logging,
-    'traceback': _traceback,
-    'importlib': _importlib_util,
-    'importlib.util': _importlib_util,
-    'dataclass': dataclass,
-    'field': field,
-    'datetime': datetime,
-    'timedelta': timedelta,
-    'dtime': dtime,
-    'Dict': Dict,
-    'List': List,
-    'Optional': Optional,
-    'Any': Any,
-    'np': np,
-    'pd': pd,
-    'requests': requests,
-    'urllib': urllib,
-    'urllib.request': urllib.request,
-    'urllib.error': urllib.error,
-}
+from config import (
+    FEISHU_KEYWORD, FEISHU_WEBHOOK, HOLDINGS, INDEX_REGIME_CONTEXT,
+    INDEX_RESONANCE_PARAMS, MORNING_ALERT_PARAMS, PARAMS, SESSION_CONTEXT,
+    SIGNAL_OUTCOME_TRACKER, SNAPSHOT_DIR, STOCK_PARAMS, SYS_ALERT_AVAILABLE,
+    TRACE_DIR, log, send_feishu_payload, send_startup_self_test,
+    should_run_startup_self_test,
+)
+from core.utils import (
+    AI_REVIEW_STATS, DAILY_DECISION_STATS, _append_jsonl,
+    _default_daily_context, _ensure_ai_review_stats,
+    _ensure_daily_decision_stats, _snapshot_write, _trace_path,
+)
+from src.data_fetcher import (
+    DAILY_CONTEXT_CACHE, MINUTE_FETCH_DETAIL, MINUTE_FETCH_STATUS, Signal,
+    _now, clean_code, cleanup_expired_minute_cache, fetch_minute_bar,
+    get_daily_context, get_today_str, label, load_holdings,
+)
+from analysis.indicators import (
+    add_indicators, add_5min_indicators, add_15min_indicators,
+)
+from core.signal_engine import EngineContext, PERSIST_INTRADAY_STATE, SignalEngine
+from optimization.support_resistance import pivot_audit
+from analysis.index_regime import (
+    detect_index_regime, index_regime_name, push_index_regime_context,
+)
+from analysis.index_regime_intraday import (
+    IRI_DEFAULT_PARAMS, detect_intraday_alert, fetch_index_minutes_live,
+)
+from core.market_regime import MarketRegime, detect_regime
+from core.position_sizer import (
+    calc_buy_qty, calc_sell_qty, last_buy_state, set_all_holdings,
+)
+from execution.daily_sentiment import (
+    compute_daily_sentiment, push_daily_sentiment, save_sentiment_record,
+)
 
-# 尝试导入 akshare（某些环境可能没有，但 t_trader 需要）
-try:
-    import akshare as ak
-    shared['akshare'] = ak
-    shared['ak'] = ak
-except Exception:
-    pass
-
-# 按顺序加载模块：后面的模块可以引用前面的模块
-# 格式: (模块名, 相对路径)
-module_order = [
-    ('config', 'config.py'),
-    ('utils', 'core/utils.py'),
-    ('data_fetcher', 'src/data_fetcher.py'),
-    ('indicators', 'analysis/indicators.py'),
-    ('signal_engine', 'core/signal_engine.py'),
-    ('support_resistance', 'optimization/support_resistance.py'),
-    ('index_regime', 'analysis/index_regime.py'),
-    ('index_regime_intraday', 'analysis/index_regime_intraday.py'),
-    ('market_regime', 'core/market_regime.py'),
-    ('position_sizer', 'core/position_sizer.py'),
-    ('daily_sentiment', 'execution/daily_sentiment.py'),
-]
-for mod_name, mod_rel_path in module_order:
-    mod_path = _os.path.join(BASE_DIR, mod_rel_path)
-    if not _os.path.exists(mod_path):
-        print(f"[WARN] 模块不存在: {mod_path}")
-        continue
-    with open(mod_path, 'r', encoding='utf-8') as f:
-        code = f.read()
-    # 在共享命名空间中执行模块代码
-    # exec 期间把 __name__ 置为模块名，防止模块内 if __name__ == "__main__" 守卫
-    # （如 index_regime / index_regime_intraday 的 CLI）在加载时被误触发
-    shared['__name__'] = mod_name
-    exec(compile(code, mod_path, 'exec'), shared)
-    try:
-        print(f"[OK] 模块已加载: {mod_rel_path}")
-    except UnicodeEncodeError:
-        print(f"[OK] 模块已加载: {mod_rel_path}")
-shared['__name__'] = '__main__'  # 恢复：main.py 尾部自身的 __main__ 启动守卫依赖该值
+# 回测时间仍由 main 持有；SignalEngine 通过 EngineContext 获取时钟。
+SIM_NOW = None
 
 
 def _make_engine_ctx():
-    """构造 SignalEngine 的 EngineContext（合并实施方案 P2-1：显式依赖注入）。
-    从 exec 共享命名空间取对象引用（ctx.holdings 即 HOLDINGS 本体，非拷贝）。"""
-    from core.signal_engine import EngineContext
+    """构造 EngineContext；各可变状态均为对应真模块中的同一对象。"""
     # 个别全局仅在回测/特定模块存在（如 BACKTEST_DAY_CACHE），缺失时用空默认，不阻断实盘
     def _g(name, default):
         return globals().get(name, default)
@@ -217,14 +178,6 @@ def _resonance_gate(code, sig, now):
         return True, r  # fail-open：数据缺失放行
     return bool(r.get("gate_pass")), r
 
-# 将共享命名空间中的关键变量暴露到当前模块的 globals，使 main.py 的代码可以运行
-# ⚠️ 先记下**真正的导入名**：`shared` 里带着 `'__name__': '__main__'`（给 exec 进去的模块用），
-#    update 之后 main.py 自己的 `__name__` 也会变成 '__main__' ⇒ 尾部启动守卫**变成恒真**，
-#    **任何 `import main`（测试/脚本/IDE）都会启动实盘主循环并推一条 @所有人 自检**（2026-10-11 实测：
-#    推送留痕里 11 条 @所有人 全是这么来的）。此处留存真名，尾部守卫改用 `_TRUE_NAME`。
-_TRUE_NAME = __name__
-globals().update(shared)
-
 # ==================== C-2/C-3: 个股MA5闸 + 拦截可见性（2026-08-21） ====================
 def _below_ma5(code):
     """个股日线最新收盘 < MA5（盘中用最新可得收盘，通常为昨日；docstring 注明边界）。
@@ -291,22 +244,6 @@ def _signal_whitelist(code, holding):
         return {"eval_buy": True, "eval_sell": True, "push": False}
     return {"eval_buy": True, "eval_sell": True, "push": True}
 
-
-# ==================== notify 信号通知（拆分后补充） ====================
-def _route_auto_signal(sig, holding):
-    """P2-3 auto 通道路由（P4 迁入 execution/auto/ 的闸链+下单适配器）。
-    当前公共引擎不产出 auto 信号，此为显式分叉占位；auto 执行层迁移后在此接线。"""
-    return
-
-
-def notify(sig, holding):
-    """当信号触发时发送飞书通知（V1.14 增强版：含市场状态/组合拳/预计接回价位）。
-    P2-3 双消费分叉点：manual → 现有飞书链路（不动）；auto → 执行层闸链+下单（P4 迁入，当前不推送）。"""
-    # 显式 channel 分叉：auto 信号走执行层，不进入人工飞书链路（避免隐式共享副作用）
-    if getattr(sig, "channel", "manual") == "auto":
-        _route_auto_signal(sig, holding)
-        return
-    # manual 做T 飞书卡片推送（原 V1.14 增强版 notify 卡片体）已随 manual 做T 一并删除（2026-09-14）。
 
 # ==================== V1.25: 早盘预警飞书推送 ====================
 def build_alert_card(code, name, alert_level, triggered_rules, morning_stats, oneway_ratio="N/A", avg_decline="N/A"):
@@ -1901,8 +1838,6 @@ def scan_once():
         with _ScanStage("①早盘基调"):
             _maybe_push_index_regime_morning(now)      # 09:26-09:31 早盘大盘基调（须在 <9:30 早退之前）
 
-        if dtime(14, 55) <= t <= dtime(15, 5):
-            pass  # EOD复盘已移除（V2简化）
         with _ScanStage("②收盘pnl"):
             _maybe_record_daily_pnl(now)               # 14:59 后每日一次：仅落盘 daily_pnl.jsonl + 收盘 pre_close（推送已删）
         with _ScanStage("③尾盘基调"):
@@ -2588,8 +2523,9 @@ def tushare_replay(date_str=None):
     global DAILY_DECISION_STATS, AI_REVIEW_STATS, SIGNAL_OUTCOME_TRACKER
 
     today = date_str or get_today_str()
-    HOLDINGS = load_holdings()
-    shared['HOLDINGS'] = HOLDINGS  # V1.19: 更新共享命名空间中的HOLDINGS
+    # 原地更新，保持 config.HOLDINGS、EngineContext 与 daily_sentiment 的对象同一性。
+    HOLDINGS.clear()
+    HOLDINGS.update(load_holdings())
     holdings = HOLDINGS
 
     results = []
@@ -2890,8 +2826,9 @@ def _maybe_run_sentiment_eod(now: datetime) -> None:
 
 def run_watch():
     global HOLDINGS, engine
-    HOLDINGS = load_holdings()
-    shared['HOLDINGS'] = HOLDINGS  # V1.12: 更新共享命名空间中的HOLDINGS，供signal_engine使用
+    # 原地更新，保持 config.HOLDINGS、EngineContext 与 daily_sentiment 的对象同一性。
+    HOLDINGS.clear()
+    HOLDINGS.update(load_holdings())
     # 引擎初始化（2026-10-09 修复：此前的 `engine = SignalEngine(_make_engine_ctx())`
     # 随「移除竞价模块」误删，导致 scan_once 里 engine.evaluate 报 NameError → 每只持仓"扫描异常"）
     engine = SignalEngine(_make_engine_ctx())
@@ -3029,7 +2966,7 @@ def _validate_pool_split_or_exit():
         sys.exit(1)
 
 
-if _TRUE_NAME == "__main__":        # 只有**直接运行**才启动（import 不再误启动，见上）
+if __name__ == "__main__":
     import atexit
     atexit.register(_close_gui)
     # V8 预热(2026-09-08): akshare 的 py_mini_racer(V8) 首次初始化必须在主线程，否则后台扫描线程内

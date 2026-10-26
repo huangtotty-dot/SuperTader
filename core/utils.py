@@ -8,10 +8,10 @@ import pandas as pd
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional, Any
+from config import log
 
-# T-2(2026-09-02): main.py exec 加载只切 __name__ 不切 __file__ → 自解析算到 E:\（仓库外）→ 快照误写 E:\t_io。
-# 免疫模式（同 index_regime/daily_sentiment）：优先宿主注入的 BASE_DIR，回落自解析。
-BASE = Path(globals().get("BASE_DIR") or Path(__file__).resolve().parents[1])
+# 正常 import 下直接由本文件定位仓库根，不再读取宿主注入的 BASE_DIR。
+BASE = Path(__file__).resolve().parents[1]
 TRACE_DIR = BASE / "t_io" / "traces"
 SNAPSHOT_DIR = BASE / "t_io" / "minute_snapshots"
 _now = datetime.now
@@ -192,7 +192,7 @@ def _snapshot_write(code: str, holding: dict, df: pd.DataFrame, indicators: dict
             os.remove(tmp)
         except Exception:
             pass
-        _lg = globals().get("log")
+        _lg = log
         if _lg is not None:
             _lg.warning(f"⚠️ 快照写 tmp 失败（不再静默）: {type(_se).__name__}: {str(_se)[:120]} → {path}")
         else:
@@ -209,7 +209,7 @@ def _snapshot_write(code: str, holding: dict, df: pd.DataFrame, indicators: dict
     try:
         _ORPHAN_TMP_COUNT = globals().get("_ORPHAN_TMP_COUNT", 0) + 1
         globals()["_ORPHAN_TMP_COUNT"] = _ORPHAN_TMP_COUNT
-        _lg = globals().get("log")
+        _lg = log
         if _lg is not None:
             _lg.warning(f"⚠️ 快照写盘失败（保留 tmp 供恢复）: {tmp} → {path}；孤儿 tmp 累计 {_ORPHAN_TMP_COUNT}（C19 修复）")
         else:

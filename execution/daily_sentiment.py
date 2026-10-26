@@ -53,123 +53,44 @@ from datetime import datetime, timedelta, time as dtime
 from typing import Any, Dict, List, Optional, Tuple
 
 # ============================================================================
-# 宿主 / 独立 双模兼容层
+# 正常 import 依赖：宿主与独立 CLI 共用同一组模块对象，消除双份模块身份。
 # ============================================================================
+import pandas as _pd
 
-_IN_HOST = callable(globals().get("detect_index_regime"))
+from analysis.index_regime import (
+    detect_index_regime as _detect_index_regime,
+    index_regime_name as _index_regime_name,
+)
+from config import (
+    FEISHU_KEYWORD as _FEISHU_KEYWORD,
+    FEISHU_WEBHOOK as _FEISHU_WEBHOOK,
+    HOLDINGS,
+    SENTIMENT_PARAMS,
+    log as _log,
+    send_feishu_payload as _ds_send_feishu,
+)
+from core.paths import BASE_DIR as _BASE_DIR
+from core.utils import _append_jsonl as _append_jsonl_fn
 
-if _IN_HOST:
-    _BASE_DIR = globals().get("BASE_DIR") or os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # 2026-08-28 复审修复：宿主未注入 BASE_DIR 时回落到仓库根（本模块在 execution/ 下，dirname×2），原写法会写盘错位于 execution/t_io
-    _log = globals().get("log")
-    _now_fn = globals().get("_now") or datetime.now
-    _detect_index_regime = globals().get("detect_index_regime")
-    _index_regime_name = globals().get("index_regime_name")
-    _ds_send_feishu = globals().get("send_feishu_payload")
-    _feishu_md_div_fn = globals().get("_feishu_md_div")
-    _feishu_card_header_fn = globals().get("_feishu_card_header")
-    _feishu_hr_fn = globals().get("_feishu_hr") or (lambda: {"tag": "hr"})
-    _append_jsonl_fn = globals().get("_append_jsonl")
-    _FEISHU_KEYWORD = globals().get("FEISHU_KEYWORD") or "做T猎手预警"
-    _FEISHU_WEBHOOK = globals().get("FEISHU_WEBHOOK") or ""
-    _pd = globals().get("pd")
-    if _pd is None:
-        import pandas as _pd  # noqa
-else:
-    _BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # 项目根（本模块位于 execution/ 下）
-    import logging as _logging
-    import pandas as _pd  # noqa
+_now_fn = datetime.now
 
-    _log = _logging.getLogger("daily_sentiment")
-    if not _log.handlers:
-        _h = _logging.StreamHandler()
-        _h.setFormatter(_logging.Formatter("[%(asctime)s] %(levelname)s %(message)s", "%H:%M:%S"))
-        _log.addHandler(_h)
-        _log.setLevel(_logging.INFO)
 
-    _now_fn = datetime.now
-    _FEISHU_KEYWORD = "做T猎手预警"
-    _FEISHU_WEBHOOK = ""
+def _feishu_md_div_fn(content: str) -> dict:
+    return {"tag": "div", "text": {"content": content, "tag": "lark_md"}}
 
-    # —— 独立模式：按文件路径加载 index_regime.py（只读，不改动）——
-    def _load_index_regime_module():
-        candidates = [
-            os.path.join(_BASE_DIR, "analysis", "index_regime.py"),
-            os.path.join(_BASE_DIR, "index_regime.py"),
-            os.path.join(os.path.dirname(os.path.abspath(__file__)), "index_regime.py"),
-        ]
-        for path in candidates:
-            if os.path.exists(path):
-                spec = importlib.util.spec_from_file_location("index_regime_standalone", path)
-                mod = importlib.util.module_from_spec(spec)
-                spec.loader.exec_module(mod)
-                return mod
-        raise FileNotFoundError(f"index_regime.py 未找到（尝试: {candidates}）")
 
-    _ir_mod = _load_index_regime_module()
-    _detect_index_regime = _ir_mod.detect_index_regime
-    _index_regime_name = _ir_mod.index_regime_name
+def _feishu_card_header_fn(title: str, template: str) -> dict:
+    return {"template": template, "title": {"tag": "plain_text", "content": title}}
 
-    def _feishu_md_div_fn(content: str) -> dict:
-        return {"tag": "div", "text": {"content": content, "tag": "lark_md"}}
 
-    def _feishu_card_header_fn(title: str, template: str) -> dict:
-        return {"template": template, "title": {"tag": "plain_text", "content": title}}
-
-    def _feishu_hr_fn() -> dict:
-        return {"tag": "hr"}
-
-    def _append_jsonl_fn(path: str, record: dict) -> None:
-        try:
-            os.makedirs(os.path.dirname(path), exist_ok=True)
-            with open(path, "a", encoding="utf-8") as f:
-                f.write(json.dumps(record, ensure_ascii=False, default=str) + "\n")
-        except Exception:
-            pass
-
-    def _load_standalone_feishu() -> Tuple[str, str]:
-        """独立模式推送时才读取 config.json 的 webhook/keyword（--no-push 不调用；C17-1 修复：自解析路径替代旧 06_T 硬编码）"""
-        webhook, keyword = "", "做T猎手预警"
-        for cfg_path in (os.path.join(_BASE_DIR, "t_io", "state", "config.json"),
-                         os.path.join(_BASE_DIR, "config.json"),
-                         os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.json")):
-            try:
-                if os.path.exists(cfg_path):
-                    with open(cfg_path, "r", encoding="utf-8") as f:
-                        cfg = json.load(f)
-                    webhook = (cfg.get("feishu", {}).get("webhook_url", "") or "").strip()
-                    keyword = (cfg.get("feishu", {}).get("keyword", "") or keyword).strip() or keyword
-                    if webhook:
-                        break
-            except Exception:
-                continue
-        return webhook, keyword
-
-    def _ds_send_feishu(payload: dict, success_log: str, error_prefix: str,
-                             trigger_urgent_alarm_after_success: bool = False) -> bool:
-        webhook, _ = _load_standalone_feishu()
-        if not webhook:
-            _log.warning(f"⚠️  {error_prefix}：飞书 Webhook 未配置")
-            return False
-        try:
-            import requests as _requests
-            resp = _requests.post(webhook, json=payload, timeout=8)
-            resp.raise_for_status()
-            result = resp.json()
-            if isinstance(result, dict) and result.get("code", 0) != 0:
-                _log.warning(f"⚠️  {error_prefix}失败: {result}")
-                return False
-            _log.info(success_log)
-            return True
-        except Exception as e:
-            _log.error(f"❌ {error_prefix}发送异常: {str(e)[:120]}")
-            return False
+def _feishu_hr_fn() -> dict:
+    return {"tag": "hr"}
 
 
 def _holdings() -> Dict[str, dict]:
-    """持仓 dict：宿主模式取 HOLDINGS 全局；独立模式读手动侧 BASE_DIR/holdings_manual.json"""
-    h = globals().get("HOLDINGS")
-    if isinstance(h, dict) and h:
-        return h
+    """优先取 config 中的实时持仓；独立 CLI 空仓时读手动侧文件。"""
+    if isinstance(HOLDINGS, dict) and HOLDINGS:
+        return HOLDINGS
     path = os.path.join(_BASE_DIR, "t_io", "state", "holdings_manual.json")
     try:
         if os.path.exists(path):
@@ -245,9 +166,8 @@ DEFAULT_SENTIMENT_PARAMS: Dict[str, Any] = {
 
 def sentiment_params() -> Dict[str, Any]:
     p = dict(DEFAULT_SENTIMENT_PARAMS)
-    host_p = globals().get("SENTIMENT_PARAMS")
-    if isinstance(host_p, dict):
-        p.update(host_p)
+    if isinstance(SENTIMENT_PARAMS, dict):
+        p.update(SENTIMENT_PARAMS)
     return p
 
 

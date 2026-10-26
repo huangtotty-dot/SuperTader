@@ -189,18 +189,17 @@ import numpy as np
 import pandas as pd
 
 # ============================================================================
-# 宿主兼容层（风格B）：时间 / 日志 —— 绝不重定义宿主已有名字
+# 正常 import 依赖：时间独立，日志/配置/共享上下文来自唯一 config 模块。
 # ============================================================================
+from config import (
+    INDEX_REGIME_PARAMS,
+    INDEX_REGIME_CONTEXT,
+    SESSION_CONTEXT,
+    log as _ir_log,
+)
+from core.paths import BASE_DIR as _IR_BASE_DIR
 
-_ir_now = globals().get("_now") or datetime.now          # 宿主 exec 环境有 _now（SIM_NOW 注入）
-_ir_log = globals().get("log")                            # 宿主 exec 环境有 log
-if _ir_log is None:                                       # 独立运行时自建 logging
-    _ir_log = logging.getLogger("index_regime")
-    if not _ir_log.handlers:
-        _h = logging.StreamHandler()
-        _h.setFormatter(logging.Formatter("[%(asctime)s] %(levelname)s %(message)s", "%H:%M:%S"))
-        _ir_log.addHandler(_h)
-        _ir_log.setLevel(logging.INFO)
+_ir_now = datetime.now
 
 # ============================================================================
 # 参数（宿主可用全局 INDEX_REGIME_PARAMS dict 注入覆盖）
@@ -327,23 +326,21 @@ IR_DEFAULT_PARAMS: Dict[str, Any] = {
 
 
 def _ir_params() -> Dict[str, Any]:
-    """参数解析：默认值 ← 宿主注入的全局 INDEX_REGIME_PARAMS（若存在）"""
+    """参数解析：模块默认值 ← config.INDEX_REGIME_PARAMS。"""
     p = dict(IR_DEFAULT_PARAMS)
-    host_p = globals().get("INDEX_REGIME_PARAMS")
-    if isinstance(host_p, dict):
-        p.update(host_p)
+    if isinstance(INDEX_REGIME_PARAMS, dict):
+        p.update(INDEX_REGIME_PARAMS)
     return p
 
 
 def _ir_state_dir(p: Dict[str, Any]) -> str:
-    """状态目录优先级：环境变量 IR_STATE_DIR > 参数 state_dir > 宿主 BASE_DIR > E:\\06_T 默认"""
+    """状态目录优先级：环境变量 IR_STATE_DIR > 参数 state_dir > 仓库根。"""
     env = os.environ.get("IR_STATE_DIR")
     if env:
         return env
     if p.get("state_dir"):
         return p["state_dir"]
-    base = globals().get("BASE_DIR") or os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # C17-1 修复(2026-08-18): 自解析替代 06_T；2026-08-28 复审修复：包导入场景 __file__ 在 analysis/ 下，需 dirname×2 到仓库根，否则写盘错位于 analysis/t_io
-    return os.path.join(base, "t_io", "index_regime")
+    return os.path.join(_IR_BASE_DIR, "t_io", "index_regime")
 
 
 # ============================================================================
@@ -390,26 +387,17 @@ def get_regime_position_factor(regime) -> float:
 
 
 def push_index_regime_context(ctx: dict) -> None:
-    """把 detect 结果发布到宿主共享命名空间（若目标全局存在）。
-
-    - globals()["INDEX_REGIME_CONTEXT"]：整包更新（仿 PREOPEN_CONTEXT 范式）；
-    - globals()["SESSION_CONTEXT"]：同步 index_regime / index_regime_score 两个键，
-      供 signal_engine / position_sizer 读取（设计文档 5.3）。
-    独立运行时两者皆不存在，静默跳过。
-    """
-    g = globals()
+    """把 detect 结果发布到 config 持有的唯一共享上下文对象。"""
     try:
-        tgt = g.get("INDEX_REGIME_CONTEXT")
-        if isinstance(tgt, dict) and isinstance(ctx, dict):
-            tgt.clear()
-            tgt.update(ctx)
+        if isinstance(ctx, dict):
+            INDEX_REGIME_CONTEXT.clear()
+            INDEX_REGIME_CONTEXT.update(ctx)
     except Exception as e:  # 发布失败不影响主流程
         _ir_log.warning(f"[index_regime] push INDEX_REGIME_CONTEXT 失败: {e}")
     try:
-        sess = g.get("SESSION_CONTEXT")
-        if isinstance(sess, dict) and isinstance(ctx, dict):
-            sess["index_regime"] = ctx.get("regime")
-            sess["index_regime_score"] = ctx.get("score")
+        if isinstance(ctx, dict):
+            SESSION_CONTEXT["index_regime"] = ctx.get("regime")
+            SESSION_CONTEXT["index_regime_score"] = ctx.get("score")
     except Exception as e:
         _ir_log.warning(f"[index_regime] sync SESSION_CONTEXT 失败: {e}")
 

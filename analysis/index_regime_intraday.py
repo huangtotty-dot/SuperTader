@@ -58,8 +58,8 @@ import pandas as pd
 
 from core.market_data.http_pool import pooled_get
 
-# 时间源：宿主项目若注入全局 _now 则沿用，否则用系统 datetime.now
-_iri_now = globals().get("_now") or datetime.now
+# 独立模块时间源；回测通过函数参数传递时间，不再探测宿主全局。
+_iri_now = datetime.now
 
 # ---------------------------------------------------------------------------
 # 集中参数（全部可调）

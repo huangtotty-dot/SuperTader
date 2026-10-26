@@ -10,8 +10,16 @@ support_resistance.py — 支撑位/压力位（简化版）
 """
 
 from typing import Dict, Any, List, Optional
+from datetime import datetime, time as dtime
 import json
+import logging
 import os
+import pandas as pd
+
+from config import T_IO_DIR, log
+from src.data_fetcher import fetch_minute_bar, get_daily_context, load_holdings
+
+_now = datetime.now
 
 
 def calc_pivot_levels(code: str, holding: dict, daily_ctx: dict) -> Dict[str, Any]:

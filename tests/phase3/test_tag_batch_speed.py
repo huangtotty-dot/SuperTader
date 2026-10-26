@@ -71,6 +71,8 @@ class TestPrefetch30min(unittest.TestCase):
         self.ad._CACHE.update(self._cache)
 
     def test_预取后_get_trend30_不再取数(self):
+        # 用测试专属假代码（990xxx）：全套件运行时 t_gui 后台线程可能并发调用
+        # 被 mock 的 _fetch_30min 取真实股票（600000 等），全局计数会被污染。
         calls = []
 
         def _fake(c, days=35):
@@ -78,11 +80,11 @@ class TestPrefetch30min(unittest.TestCase):
             return _bars()
 
         with mock.patch.object(self.ad, "_fetch_30min", _fake):
-            self.ad.prefetch_30min(["600000", "600001"], workers=2)
+            self.ad.prefetch_30min(["990001", "990002"], workers=2)
             n1 = len(calls)
             self.assertEqual(n1, 2)
-            r = self.ad.get_trend30("600000")
-            self.assertEqual(len(calls), n1, "预取命中后不能再出网取数")
+            r = self.ad.get_trend30("990001")
+            self.assertEqual(len(calls), n1, f"预取命中后不能再出网取数: {calls}")
             self.assertEqual(r.get("source"), "30min")
 
     def test_同一时段重复预取会跳过(self):
@@ -93,9 +95,9 @@ class TestPrefetch30min(unittest.TestCase):
             return _bars()
 
         with mock.patch.object(self.ad, "_fetch_30min", _fake):
-            self.ad.prefetch_30min(["600000"])
+            self.ad.prefetch_30min(["990003"])
             n1 = len(calls)
-            self.ad.prefetch_30min(["600000"])
+            self.ad.prefetch_30min(["990003"])
             self.assertEqual(len(calls), n1, "同一 30min 时段不该重复取")
 
 
