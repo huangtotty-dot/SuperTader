@@ -344,18 +344,15 @@ COND_LABELS = {
 }
 
 
-# 黄金分割（斐波那契回撤/扩展）参数 —— 按周期分档，越长的周期要求越大的摆动幅度
-# 回看根数（决定锚点搜索范围）。2026-10-04: daily 250→120，与前端默认视窗根数对齐——
-# 原来 250 会让前端为「看得见锚点」把视窗放宽，一屏塞进 250+ 根K线，蜡烛细到看不清。
-# 代价：更早的大级别摆动不再被选为锚点（用户 2026-10-04 确认接受）。
-_FIB_LOOKBACK = {"daily": 120, "weekly": 120, "monthly": 60,
-                 "min5": 160, "min10": 160, "min30": 160, "min60": 160}  # 分钟档与前端默认视窗根数对齐
-_FIB_FRACTAL_N = {"daily": 3, "weekly": 2, "monthly": 1,        # 分形确认根数（越长周期 bar 越少）
-                  "min5": 2, "min10": 2, "min30": 2, "min60": 2}
-_FIB_MIN_AMP = {"daily": 5.0, "weekly": 8.0, "monthly": 12.0,   # 摆动最小幅度 %（低于此视为噪声）
-                "min5": 3.0, "min10": 3.0, "min30": 3.0, "min60": 3.0}  # 分钟档为初始值，未标定，待图上肉眼校准
-_FIB_RETRACE = [0.236, 0.382, 0.5, 0.618, 0.786]                # 回撤位（0.618 即黄金比例）
-_FIB_EXTENSION = [1.272, 1.618]                                 # 扩展位（突破后目标）
+# 图表算法与全市场扫描器：实现位于轻量 core 模块，这里仅保留兼容别名。
+from core import chart_analytics as _chart_analytics
+from core import scanners as _scanners
+
+_FIB_LOOKBACK = _chart_analytics._FIB_LOOKBACK
+_FIB_FRACTAL_N = _chart_analytics._FIB_FRACTAL_N
+_FIB_MIN_AMP = _chart_analytics._FIB_MIN_AMP
+_FIB_RETRACE = _chart_analytics._FIB_RETRACE
+_FIB_EXTENSION = _chart_analytics._FIB_EXTENSION
 
 HUNTER_DIR = BASE / "stock_hunter"
 if str(BASE) not in sys.path:
@@ -2231,7 +2228,7 @@ _PREV_SCORE_CACHE: dict = {}
 # 突破扫描状态/缓存的同步锁（2026-09-29）。此前 `_breakout_scan`/`_breakout_cache` **零同步**：
 # 后台 daemon 线程写、pywebview 线程每 800ms 读 ⇒ 可读到 "status=done 但 stocks 还是上一批"
 # 的中间态；force 重扫还能与残留线程重叠写同一 state/磁盘。
-_BREAKOUT_LOCK = threading.Lock()
+_BREAKOUT_LOCK = _scanners._BREAKOUT_LOCK  # 同一锁保护 core.scanners 内的结果缓存
 
 
 def _tier_sector_stocks(stocks, min_members=5):
@@ -6788,480 +6785,17 @@ class Api:
         return _v
 
     def _detect_boxes(self, daily):
-        """检测箱体（P1修复）：严格触及标准 + 优化置信分。
-        分位数(88/12)定义初期边界，严格触及验证，置信分=触及质量+时间持久度+宽度合理性。
-
-        P1修复内容：
-        1. 触及标准从松散(±0.8-8.8%)改为精确：必须在边界±0.5%内触及
-        2. 置信分权重调整：触及质量优先于触及次数
-        3. 宽度范围分类：<5%(微箱) 5-12%(正常) 12-22%(宽幅)，权重不同
-        4. 合并逻辑改进：避免过度合并历史箱体
-        """
-        import numpy as np
-        d = daily
-        if len(d) < 30:
-            return []
-
-        recent = d.tail(150).reset_index(drop=True)
-        closes = recent["close"].values
-        highs = recent["high"].values
-        lows = recent["low"].values
-        dates = recent["date"].values
-        n = len(recent)
-        last_close = float(closes[-1])
-        last_date = dates[-1]
-
-        WIN = 30
-        # 向量化滑窗：分位数/斜率/触及全窗口一次算完（与逐窗循环结果一致，快 ~15x）
-        from numpy.lib.stride_tricks import sliding_window_view
-        wh = sliding_window_view(highs, WIN)
-        wl = sliding_window_view(lows, WIN)
-        wc = sliding_window_view(closes, WIN)
-        ups = np.percentile(wh, 88, axis=1)
-        dns = np.percentile(wl, 12, axis=1)
-        _xc = np.arange(WIN) - (WIN - 1) / 2.0
-        _denom = float(np.sum(_xc * _xc))
-        _slopes = (wc @ _xc) / _denom
-        _means = wc.mean(axis=1)
-        _rel_slopes = np.abs(_slopes) / np.where(_means == 0, 1e-9, _means)
-        # P1修复：触及标准从±0.8-8.8%改为±0.5%(更精确)
-        _up_touches = np.sum(wh >= (ups * 0.995)[:, None], axis=1)  # 99.5% 以上算"精确触及"
-        _dn_touches = np.sum(wl <= (dns * 1.005)[:, None], axis=1)  # 100.5% 以下算"精确触及"
-        _widths = (ups - dns) / np.where(_means == 0, 1e-9, _means) * 100
-        # 滑窗收集候选箱体（用区间位置唯一标识，避免重复）
-        boxes = {}
-        for start in range(0, n - WIN + 1, 3):
-            up = float(ups[start])
-            dn = float(dns[start])
-            rel_slope = float(_rel_slopes[start])
-            up_touch = int(_up_touches[start])
-            dn_touch = int(_dn_touches[start])
-            width_pct = float(_widths[start])
-            # P1修复：候选条件更严格 — 横盘<0.3%/天(rather than 0.5%) + 宽度3-22% + 双边精确触及≥2
-            if rel_slope < 0.003 and 3.0 <= width_pct <= 22.0 and up_touch >= 2 and dn_touch >= 2:
-                key = (round(up, 3), round(dn, 3))
-                # P1修复：置信分优化 — 触及质量(precision)优先于触及次数
-                # 触及质量分 = (精确触及数 * 2)，其次是横盘度，最后是宽度适中
-                touch_quality = (up_touch + dn_touch) * 2.0  # 优先权最高
-                flatness = max(0, (0.003 - rel_slope) / 0.003) * 2.0  # 越横盘越好
-                # 宽度权重分化：正常箱体(5-15%)得分最高
-                if 5 <= width_pct <= 15:
-                    width_score = 1.5
-                elif 3 <= width_pct < 5 or 15 < width_pct <= 22:
-                    width_score = 0.5
-                else:
-                    width_score = 0
-                conf = touch_quality + flatness + width_score
-                if key not in boxes or conf > boxes[key]["conf"]:
-                    s = dates[start].strftime("%Y-%m-%d") if hasattr(dates[start], "strftime") else str(dates[start])[:10]
-                    e = dates[start + WIN - 1].strftime("%Y-%m-%d") if hasattr(dates[start+WIN-1], "strftime") else str(dates[start+WIN-1])[:10]
-                    boxes[key] = {"start": s, "end": e, "low": round(dn, 3), "high": round(up, 3),
-                                  "touches": (up_touch, dn_touch), "width": round(width_pct, 1),
-                                  "conf": round(conf, 1), "rel": 0}
-
-        # 关联现价关系 + 刚突破判定（改进）
-        # 刚突破的定义现在基于箱体宽度动态调整，而不是固定的20天+15%
-        result = []
-        today_days = 999
-        try:
-            today_days = int(pd.Timestamp(last_date).timestamp() / 86400 - pd.Timestamp(dates[0]).timestamp() / 86400)
-        except Exception:
-            pass
-        for key, b in boxes.items():
-            end_date = b["end"]
-            try:
-                end_dt = pd.Timestamp(end_date)
-                days_since = int((pd.Timestamp(last_date) - end_dt).days)
-            except Exception:
-                days_since = 999
-
-            # P1修复：刚突破判定改为动态，基于箱体宽度
-            width = b["width"]
-            if width < 5:
-                # 微箱体(宽度<5%)：突破后5天内+10%以内算"刚突破"
-                recently_broke = days_since <= 5 and (last_close - b["high"]) / b["high"] < 0.10 if b["high"] else False
-            elif width < 15:
-                # 正常箱体(5-15%)：突破后10天内+12%以内算"刚突破"
-                recently_broke = days_since <= 10 and (last_close - b["high"]) / b["high"] < 0.12 if b["high"] else False
-            else:
-                # 宽幅箱体(>15%)：突破后15天内+15%以内算"刚突破"
-                recently_broke = days_since <= 15 and (last_close - b["high"]) / b["high"] < 0.15 if b["high"] else False
-
-            if b["low"] <= last_close <= b["high"]:
-                b["rel"] = 0  # 现价在箱体内
-            elif last_close > b["high"] and recently_broke:
-                b["rel"] = 1  # 刚突破上方
-            elif last_close > b["high"]:
-                b["rel"] = -1  # 上方历史箱体
-            else:
-                b["rel"] = -2  # 下方历史箱体
-            # 距现价距离（用于排序）
-            b["dist"] = abs(b["center"] if "center" in b else (b["high"] + b["low"]) / 2 - last_close)
-            result.append(b)
-
-        # 合并重叠箱体（P1改进：更严格的重叠条件，避免过度合并）
-        def overlap(a, b):
-            price_overlap = min(a["high"], b["high"]) - max(a["low"], b["low"])
-            price_span = min(a["high"] - a["low"], b["high"] - b["low"])
-            # P1修复：价格重叠从>50%改为>80%（更严格，保留历史分阶段特征）
-            price_overlap_pct = price_overlap / max(price_span, 1e-9) if price_span > 0 else 0
-            # 时间重叠条件也更严格：不仅要有交集，还要至少重叠5天
-            try:
-                s1 = pd.Timestamp(a["start"])
-                e1 = pd.Timestamp(a["end"])
-                s2 = pd.Timestamp(b["start"])
-                e2 = pd.Timestamp(b["end"])
-                overlap_days = (min(e1, e2) - max(s1, s2)).days
-                t_overlap = overlap_days >= 5
-            except Exception:
-                t_overlap = a["end"] > b["start"] and b["end"] > a["start"]
-            return price_overlap_pct > 0.8 and t_overlap
-
-        merged = []
-        for b in result:
-            hit = None
-            for m in merged:
-                if overlap(m, b):
-                    hit = m
-                    break
-            if hit:
-                hit["low"] = min(hit["low"], b["low"])
-                hit["high"] = max(hit["high"], b["high"])
-                hit["start"] = min(hit["start"], b["start"])
-                hit["end"] = max(hit["end"], b["end"])
-                hit["conf"] = round(hit["conf"] + b["conf"], 1)
-                hit["touches"] = (max(hit["touches"][0], b["touches"][0]), max(hit["touches"][1], b["touches"][1]))
-            else:
-                merged.append(dict(b))
-
-        # 重算 rel + center + days + 近期有效性
-        import datetime as _dt
-        # 2026-10-23：「近期」必须以**这次判定的 as-of 日**（切片末根）为基准，不能用 wall-clock。
-        # 原来写 `datetime.now()`，于是对历史切片判箱时，凡是 45 天前结束的箱体全被丢掉 ⇒
-        # 猎手「🔄 扫描该日」选 45 天以前的日期**永远扫不出突破**（静默返回空），
-        # 回测长窗口也被截成最后约 20 个交易日（第一轮箱体研究就吃了这个）。
-        # 实时路径切片末根=今日，与原行为完全一致。
-        try:
-            now_dt = _dt.datetime.strptime(str(last_date)[:10], "%Y-%m-%d")
-        except Exception:
-            now_dt = _dt.datetime.now()
-        recent_valid = []
-        for b in merged:
-            b["center"] = round((b["high"] + b["low"]) / 2, 3)
-            try:
-                s = _dt.datetime.strptime(b["start"][:10], "%Y-%m-%d")
-                e = _dt.datetime.strptime(b["end"][:10], "%Y-%m-%d")
-                b["days"] = (e - s).days
-                b["days_since_end"] = (now_dt - e).days
-            except Exception:
-                b["days"] = 0
-                b["days_since_end"] = 999
-            # 只保留近期箱体（结束距今 ≤45 天），远历史箱体无参考意义
-            if b["days_since_end"] > 45:
-                continue
-            if b["low"] <= last_close <= b["high"]:
-                b["rel"] = 0
-            elif last_close > b["high"]:
-                b["rel"] = -1
-            else:
-                b["rel"] = -2
-            recent_valid.append(b)
-
-        # 排序：现价箱体(rel=0) > 上方历史(rel=-1) > 下方历史(rel=-2)；再按置信分
-        recent_valid.sort(key=lambda b: (
-            0 if b["rel"] == 0 else 1 if b["rel"] == -1 else 2,
-            -b["conf"]))
-
-        # P1改进：为K线图添加箱体质量评分信息
-        for b in recent_valid:
-            # 质量评分维度
-            width = b["width"]
-            touches = b["touches"]
-            days = b["days"]
-
-            # 宽度评级
-            if width < 5:
-                width_grade = "微"  # 微箱体，敏感但容易假突破
-            elif width < 15:
-                width_grade = "优"  # 正常箱体，最稳定
-            else:
-                width_grade = "宽"  # 宽幅箱体，波动大
-
-            # 触及质量评级（基于精确触及次数）
-            touch_quality = touches[0] + touches[1]
-            if touch_quality >= 6:
-                touch_grade = "极强"  # 4+次精确触及，非常稳定
-            elif touch_quality >= 4:
-                touch_grade = "强"    # 2-3次精确触及，较稳定
-            else:
-                touch_grade = "弱"    # 1次精确触及，可能噪音
-
-            # 综合质量评分（1-10分）
-            quality_score = (touch_quality * 1.5 + max(0, 15 - width) * 0.3 + max(0, 30 - days) * 0.1)
-            quality_score = min(10, max(1, round(quality_score, 1)))
-
-            b["width_grade"] = width_grade
-            b["touch_grade"] = touch_grade
-            b["quality_score"] = quality_score
-            # 用于K线图显示的关键字段
-            b["display"] = f"{width_grade}箱({width:.1f}%) 触及{touch_grade}({touch_quality}次) 质量{quality_score}/10"
-
-        return recent_valid[:3]
+        """箱体检测薄封装；as-of 规则为 now_dt = _dt.datetime.strptime(str(last_date)[:10], "%Y-%m-%d")。"""
+        return _chart_analytics._detect_boxes(daily)
 
     def _detect_channel(self, daily):
-        """检测上行/下行通道：最近 40 日高点/低点线性回归 → 上下轨。
-        斜率>0 上行通道，<0 下行通道。返回双轨线端点 + 方向。"""
-        import numpy as np
-        d = daily
-        if len(d) < 25:
-            return {"direction": "flat", "slope": 0, "up_line": [], "dn_line": []}
-        recent = d.tail(40).reset_index(drop=True)
-        n = len(recent)
-        x = np.arange(n)
-        highs = recent["high"].values
-        lows = recent["low"].values
-
-        def regline(vals):
-            slope, intercept = np.polyfit(x, vals, 1)
-            return slope, intercept, slope * (n - 1) + intercept
-
-        up_slope, up_i, up_end = regline(highs)
-        dn_slope, dn_i, dn_end = regline(lows)
-
-        slope = (up_slope + dn_slope) / 2
-        # 归一化斜率：每日变化 / 均价，>0.15%/天 = 上行
-        avg_price = float(recent["close"].mean()) or 1e-9
-        norm_slope = slope / avg_price
-        direction = "up" if norm_slope > 0.0015 else ("down" if norm_slope < -0.0015 else "flat")
-
-        # 通道方向反转检测：用更早的 40 日（第 40~80 根往前）回归，与当前方向对比
-        reversal = None
-        try:
-            if len(d) >= 80:
-                prev = d.iloc[-80:-40].reset_index(drop=True)
-                if len(prev) >= 25:
-                    px = np.arange(len(prev))
-                    ph = prev["high"].values
-                    pl = prev["low"].values
-                    p_slope, _ = np.polyfit(px, ph, 1)
-                    p_slope2, _ = np.polyfit(px, pl, 1)
-                    p_norm = (p_slope + p_slope2) / 2 / (float(prev["close"].mean()) or 1e-9)
-                    prev_dir = "up" if p_norm > 0.0015 else ("down" if p_norm < -0.0015 else "flat")
-                    if direction in ("up", "down") and prev_dir in ("up", "down") and direction != prev_dir:
-                        reversal = "up_to_down" if prev_dir == "up" else "down_to_up"
-        except Exception:
-            reversal = None
-
-        # 趋势描述补充
-        start_price = float(recent["close"].iloc[0])
-        end_price = float(recent["close"].iloc[-1])
-        ret_40d = (end_price - start_price) / start_price * 100 if start_price else 0
-        # 现价在通道中的位置（0=下轨, 100=上轨）：用回归线在当前 x(n-1) 处的值
-        up_here, dn_here = up_end, dn_end
-        pos_pct = (end_price - dn_here) / (up_here - dn_here) * 100 if up_here != dn_here else 50
-
-        return {
-            "direction": direction,
-            "slope": round(float(slope), 4),
-            "norm_slope_pct": round(norm_slope * 100, 3),
-            "up_line": [round(float(up_i), 3), round(float(up_end), 3)],
-            "dn_line": [round(float(dn_i), 3), round(float(dn_end), 3)],
-            "ret_40d": round(float(ret_40d), 1),
-            "pos_pct": round(max(0, min(100, float(pos_pct))), 0),
-            "reversal": reversal,   # up_to_down / down_to_up / None
-        }
+        return _chart_analytics._detect_channel(daily)
 
     def _calc_support_resistance(self, daily):
-        """按现价强制分类 + 聚类合并 + 强度排序 → 每个方向保留最重要的 3 个。"""
-        import pandas as pd
-        d = daily
-        last_close = float(d["close"].iloc[-1])
-        H, L, C = float(d["high"].iloc[-1]), float(d["low"].iloc[-1]), last_close
-        PP = (H + L + C) / 3
-        candidates = []  # (price, label, strength)
-
-        def add(price, label, strength):
-            if not price or price <= 0 or price is None: return
-            candidates.append((round(float(price), 2), label, strength))
-
-        # pivot 中枢（注意: R1=2PP-L 才是上方压力, S1=2PP-H 是下方支撑, 但都可能失效）
-        add(2 * PP - L, "R1中枢", 2)
-        add(2 * PP - H, "S1中枢", 2)
-        # 均线（近价均线更有效）
-        for n, label, base_strength in ((20, "MA20", 2), (60, "MA60", 2), (180, "MA180", 1)):
-            val = d[f"ma{n}"].iloc[-1]
-            if not pd.isna(val):
-                add(float(val), label, base_strength)
-        # 前高/前低（120日局部极值）
-        recent = d.tail(120)
-        for idx in range(5, len(recent) - 1):
-            r = recent.iloc[idx]
-            win = recent.iloc[max(0, idx - 3):idx + 4]
-            if r["high"] == win["high"].max() and float(r["high"]) > 0:
-                add(float(r["high"]), "前高", 2)
-            if r["low"] == win["low"].min() and float(r["low"]) > 0:
-                add(float(r["low"]), "前低", 2)
-        # 量密集区（成交量大的价位，参考性强）
-        top_vol = d.nlargest(8, "volume")
-        for _, r in top_vol.iterrows():
-            add(float(r["close"]), "量密集", 3)
-
-        # 1) 按现价强制分类 + 过滤太近的
-        sep = last_close * 0.003  # 0.3% 内忽略
-        sup_cand = [(p, l, s) for p, l, s in candidates if p < last_close - sep]
-        res_cand = [(p, l, s) for p, l, s in candidates if p > last_close + sep]
-
-        # 2) 聚类合并：价格差 <1.5% 的归一组，取强度最高 + 距现价最近的代表
-        def cluster(items):
-            items = sorted(items, key=lambda x: x[0])
-            groups = []
-            for p, l, s in items:
-                if groups and abs(p - groups[-1][0]) / groups[-1][0] < 0.015:
-                    gp, gl, gs = groups[-1]
-                    new_s = max(s, gs)
-                    rep_p = p if abs(p - last_close) < abs(gp - last_close) else gp
-                    groups[-1] = (rep_p, gl if gs >= s else l, new_s)
-                else:
-                    groups.append((p, l, s))
-            return groups
-
-        sup_cand = cluster(sup_cand)
-        res_cand = cluster(res_cand)
-
-        # 3) 强度 = 原始强度 + 距现价近的加成（近的更有参考价值）
-        def score(item):
-            p, l, s = item
-            dist_pct = abs(p - last_close) / last_close * 100
-            near_bonus = max(0, 3 - dist_pct * 0.15)  # 距现价越近加分越多
-            return s * 0.6 + near_bonus
-
-        sup_cand.sort(key=score, reverse=True)
-        res_cand.sort(key=score, reverse=True)
-
-        def fmt(items):
-            # 每方向只保留 score 最高的 1 个（最重要）
-            if not items:
-                return []
-            best = max(items, key=lambda it: score(it))
-            p, l, s = best
-            return [{"price": p, "label": l, "strength": s}]
-
-        return {"supports": fmt(sup_cand), "resistances": fmt(res_cand)}
+        return _chart_analytics._calc_support_resistance(daily)
 
     def _calc_fibonacci(self, daily, period="daily"):
-        """黄金分割：自动锚定该周期**最显著的一段摆动** → 回撤位/扩展位。
-
-        锚点选择：回看 N 根（见 _FIB_LOOKBACK，daily=120 与前端默认视窗对齐）
-        → 分形找摆动点（复用 analysis.divergence._local_extrema）
-        → 合成"高-低"交替序列 → 滤掉幅度不足的噪声摆动 → 取幅度最大的一段。
-        全部不达标时降级为回看区间的最高/最低价（fallback=True）。
-
-        比例位公式（L=摆动低点, H=摆动高点, rng=H-L）：
-          上涨（低在前）：回撤 H-rng*ratio，扩展 L+rng*ext
-          下跌（高在前）：回撤 L+rng*ratio，扩展 H-rng*ext
-        side 按现价分：低于现价=支撑，高于现价=阻力。
-        """
-        from analysis.divergence import _local_extrema
-
-        n_bars = _FIB_FRACTAL_N.get(period, 3)
-        lookback = _FIB_LOOKBACK.get(period, 250)
-        min_amp = _FIB_MIN_AMP.get(period, 5.0)
-        if daily is None or len(daily) < 2 * n_bars + 5:
-            return {"available": False, "reason": "样本不足"}
-
-        d = daily.tail(lookback).reset_index(drop=True)
-        n = len(d)
-        if n < 2 * n_bars + 5:
-            return {"available": False, "reason": "样本不足"}
-        # 锚点索引要相对**完整周期序列**（前端 period.dates 是全量），故补齐偏移
-        off = len(daily) - n
-        highs = d["high"].astype(float).values
-        lows = d["low"].astype(float).values
-        # 分钟周期的锚点日期要带时间，否则与日线格式混同、图上标不出取自哪根
-        _dfmt = "%Y-%m-%d %H:%M" if period in _MIN_PERIODS else "%Y-%m-%d"
-        dates = [x.strftime(_dfmt) for x in d["date"]]
-
-        peaks, troughs = _local_extrema(highs, lows, n_bars)
-
-        # 1) 合成交替序列：同类型相邻只保留更极端者（否则两者属同一段走势，不构成摆动）
-        piv = sorted([(i, "H") for i in peaks] + [(i, "L") for i in troughs])
-        seq = []
-        for idx, kind in piv:
-            px = float(highs[idx]) if kind == "H" else float(lows[idx])
-            if seq and seq[-1][1] == kind:
-                if (px > seq[-1][2]) if kind == "H" else (px < seq[-1][2]):
-                    seq[-1] = (idx, kind, px)
-                continue
-            seq.append((idx, kind, px))
-
-        def amp(lo_pt, hi_pt):
-            base = lo_pt[2]
-            return (hi_pt[2] - lo_pt[2]) / base * 100 if base else 0.0
-
-        # 2) 相邻两点对 → 规范成 (低点, 高点) + 方向；3) 过滤幅度不足的噪声摆动
-        cands = []
-        for a, b in zip(seq, seq[1:]):
-            lo_pt, hi_pt = (a, b) if a[1] == "L" else (b, a)
-            if hi_pt[2] <= lo_pt[2]:
-                continue
-            cands.append((lo_pt, hi_pt, "up" if a[1] == "L" else "down", amp(lo_pt, hi_pt)))
-
-        fallback = False
-        ok = [c for c in cands if c[3] >= min_amp]
-        if ok:
-            # 幅度最大者；幅度接近(差<2%)时取更近的一段
-            best = max(c[3] for c in ok)
-            lo_pt, hi_pt, direction, amplitude = max(
-                [c for c in ok if c[3] >= best * 0.98], key=lambda c: c[1][0])
-        elif cands:
-            lo_pt, hi_pt, direction, amplitude = max(cands, key=lambda c: c[3])
-            fallback = True
-        else:
-            # 无交替摆动点（单边行情）→ 降级为回看区间最高/最低
-            hi_i, lo_i = int(d["high"].idxmax()), int(d["low"].idxmin())
-            lo_pt, hi_pt = (lo_i, "L", float(lows[lo_i])), (hi_i, "H", float(highs[hi_i]))
-            direction = "up" if lo_i < hi_i else "down"
-            amplitude = amp(lo_pt, hi_pt)
-            fallback = True
-
-        L, H = lo_pt[2], hi_pt[2]
-        rng = H - L
-        if rng <= 0:
-            return {"available": False, "reason": "摆动幅度为零"}
-
-        cur = float(d["close"].iloc[-1])
-        levels = []
-
-        def add(ratio, price, kind):
-            price = round(float(price), 3)
-            if price <= 0:
-                return  # 大幅下跌摆动时扩展位可能算到 0 以下，无意义 → 丢弃
-            levels.append({
-                "ratio": ratio, "price": price, "kind": kind,
-                "label": f"{ratio * 100:.1f}%".replace(".0%", "%"),
-                "side": "support" if price < cur else "resistance",
-                "golden": abs(ratio - 0.618) < 1e-9,
-            })
-
-        up = direction == "up"
-        for rt in _FIB_RETRACE:
-            add(rt, (H - rng * rt) if up else (L + rng * rt), "retracement")
-        for ex in _FIB_EXTENSION:
-            add(ex, (L + rng * ex) if up else (H - rng * ex), "extension")
-
-        return {
-            "available": True,
-            "direction": direction,
-            "fallback": fallback,
-            "swing": {
-                "low": {"price": round(L, 3), "index": int(lo_pt[0]) + off, "date": dates[lo_pt[0]]},
-                "high": {"price": round(H, 3), "index": int(hi_pt[0]) + off, "date": dates[hi_pt[0]]},
-                "amplitude_pct": round(amplitude, 2),
-                "bars": int(abs(hi_pt[0] - lo_pt[0])),
-                "lookback": int(n),
-            },
-            "levels": levels,
-        }
+        return _chart_analytics._calc_fibonacci(daily, period)
 
     # ---------- 选股猎手（概念评分，与 Excel 报告一致） ----------
     def run_hunter(self, date=None, auto=False):
@@ -9359,262 +8893,49 @@ class Api:
             return None
 
     def _bk_cached_df(self, code, days, target=None):
-        """本地日线缓存兜底（2026-10-25）。
-
-        GM 批量取数不可用时（owner 报「经常跑不出结果」），过去整批记 no_data ⇒ 全池 0 命中。
-        猎手本身每天在读这份缓存，所以直接拿它当兜底：字段与 daily_many 同形
-        （date/open/high/low/close/volume），`_detect_boxes` 与判定口径不用改。
-        """
-        p = self._BK_CACHE_DIR / f"{code}.json"
-        try:
-            rows = (_load_json(p, {}) or {}).get("rows") or []
-        except Exception:
-            rows = []
-        if len(rows) < self._BK_MIN_BARS + 1 or (target and str(rows[-1].get("date"))[:10] < target):
-            # JSON 缓存缺目标日（或太短）⇒ 用通达信 parquet 顶（不复权，但同一序列内部自洽）
-            t = self._tdx_df(code, days)
-            if t is not None and len(t) >= self._BK_MIN_BARS + 1:
-                if not target or str(t["date"].iloc[-1]) >= target:
-                    return t
-        try:
-            import pandas as pd
-            df = pd.DataFrame(rows[-days:])
-            need = {"date", "open", "high", "low", "close", "volume"}
-            if not need.issubset(df.columns):
-                return None
-            df["date"] = df["date"].astype(str)
-            return df
-        except Exception:
-            return None
+        return _scanners._bk_cached_df(
+            code, days, target, cache_dir=self._BK_CACHE_DIR,
+            min_bars=self._BK_MIN_BARS, load_json=_load_json, tdx_df=self._tdx_df)
 
     def _box_top_for(self, hist):
-        """as-of 上一交易日的箱体上沿：取**含昨收**那只箱体（rel==0）的 high。
-
-        `_detect_boxes` 在 `low <= last_close <= high` 时置 rel=0；此处 last_close 即昨收，
-        故 rel==0 的箱体正是"昨收还在里面"的那只 —— 它的上沿就是今日要突破的线。
-        必须用**排除当日**的切片：带上当日跳空的话上沿会被抬高，今天反而判不出突破。
-        """
-        if hist is None or len(hist) < self._BK_MIN_BARS:
-            return None
-        for b in self._detect_boxes(hist):
-            if b.get("rel") == 0 and b.get("high"):
-                return float(b["high"])
-        return None
+        return _scanners._box_top_for(hist, min_bars=self._BK_MIN_BARS)
 
     def _breakout_probe_one(self, code, df, date=None):
-        """单只「当日有效突破」判定，命中返回 dict，否则 None。
-
-        口径（owner 2026-09-29）：上沿取自 as-of 上一交易日的箱体，命中条件
-        `昨收 ≤ 上沿 < 今价` 且幅度 ∈ [0.3%, 8%]。
-
-        两道**必须**的闸：
-          - **交易日闸**：`df` 末根必须就是今日。`daily_many` 只在交易日 09:15-23:59 且快照
-            ts_date=当日 时才补 forming bar，故周末/盘前末根=上一交易日 → 此处返回 None。
-            没有这道闸，周六会把**周五**的突破当成"今天"报出去。
-          - **长度闸**：切片后需 ≥ `_BK_MIN_BARS` 根（恰好 30 根全量的票切完只剩 29，
-            `_detect_boxes` 会静默返回 [] 而无声漏掉）。
-        """
-        if df is None or df.empty:
-            return None
-        today = str(date) if date else datetime.now().strftime("%Y-%m-%d")
-        # 2026-10-09：支持**任选日期**扫描——先按目标日 as-of 切片（去掉目标日之后的 bar，
-        # 否则历史日扫描会用到"今天"的末根 = 前视），再要求切片末根**恰好等于目标日**。
-        df = df[df["date"].astype(str) <= today]
-        if df.empty or str(df["date"].iloc[-1]) != today:
-            return None
-        if len(df) < self._BK_MIN_BARS + 1:
-            return None
-        box_top = self._box_top_for(df.iloc[:-1])
-        if not box_top:
-            return None
-        prev_close = float(df["close"].iloc[-2])
-        cur = float(df["close"].iloc[-1])
-        # 对 rel==0 的箱体 `low ≤ 昨收 ≤ high` 恒成立 ⇒ `prev_close <= box_top` 恒真，
-        # 真正起作用的是"今价站上上沿"。两半都留着以对齐 owner 的表述口径。
-        if not (prev_close <= box_top < cur):
-            return None
-        pct = (cur - box_top) / box_top * 100
-        if not (self._BK_MIN_PCT <= pct <= self._BK_MAX_PCT):
-            return None
-        # 当日涨幅闸（2026-10-25）：>7% 档 T+5 超额 −0.58%，是分档里最差的一组 ⇒ 直接剔除
-        chg = (cur / prev_close - 1.0) if prev_close > 0 else 0.0
-        if chg > self._BK_MAX_CHG:
-            return None
-        # 量比（今日量 / 过去 20 日均量）：研究里放量是反指、缩量档唯一不亏 ⇒ 只做展示与排序，不做放量确认
-        vol_ratio = None
-        try:
-            vol = [float(x) for x in df["volume"].tolist()]
-            if len(vol) >= 21:
-                win = vol[-21:]          # 当日 + 前 20 日
-                # 单位一致性闸（2026-10-25）：日线缓存在 10-22 做过一次成交量单位迁移，
-                # 前后段可能一手一股混在一起（实测 600887 相邻日差 27 倍）⇒ 这种票的量比不报，
-                # 否则会把"换了单位"误判成"缩量"，反而给质量分加分。
-                _ok = all(a > 0 and b > 0 and 0.1 <= b / a <= 10.0
-                          for a, b in zip(win, win[1:]))
-                if _ok:
-                    base = sum(win[:-1]) / 20.0
-                    if base > 0:
-                        vol_ratio = round(win[-1] / base, 2)
-        except Exception:
-            vol_ratio = None
-        q = 0
-        if vol_ratio is not None and vol_ratio < 1.0:
-            q += 2
-        if pct <= 1.5:
-            q += 2
-        if chg <= 0.03:
-            q += 1
-        return {"price": round(cur, 3), "prev_close": round(prev_close, 3),
-                "box_top": round(box_top, 3), "pct_above": round(pct, 2),
-                "day_chg": round(chg * 100, 2), "vol_ratio": vol_ratio, "quality": q}
+        return _scanners._breakout_probe_one(
+            code, df, date, min_bars=self._BK_MIN_BARS,
+            min_pct=self._BK_MIN_PCT, max_pct=self._BK_MAX_PCT,
+            max_chg=self._BK_MAX_CHG)
 
     def _breakout_disk_path(self, today):
         return BASE / "t_io" / "cache" / f"breakout_{today}.json"
 
     def _scan_breakout(self, codes, state, date=None):
-        """全池扫描「当日有效突破」。state 非空时更新进度（done/total/found/stocks/no_data）。
-
-        2026-09-29 重写要点：
-          - 取数改 `facade.daily_many`（GM `history` 列表式，350 只/批 + 批量 forming bar），
-            取代逐只 `load_stock_tags_batch` —— 后者走 GM **单线程串行** + 90s 批超时**静默丢票**，
-            全池 5000+ 只不可行。
-          - 判定改「当日有效突破」，取代旧 `向上突破`（旧标签只看"当前价在箱体上沿之上"，
-            没有任何当日成分 ⇒ 三周前突破的票每天照旧被扫出来）。
-          - 北交所：`daily_many` 分流到 bj_daily，取不到的码**不出现在返回里** ⇒ 此处计入 no_data
-            如实汇报，而不是静默当成"没突破"。
-        """
+        """注入批量 daily_many 与缓存数据源，调用 core.scanners 完成扫描。"""
         jy = _load_json(HUNTER_DIR / "watchlist_jiuyan.json", {})
         from core.market_data.facade import get_provider
         from core.market_data.codec import market_of
-        breakouts = []
-        total = len(codes)
-        dt_target = str(date) if date else datetime.now().strftime("%Y-%m-%d")
-        rest_total = sum(1 for c in codes if market_of(c) != "BJ")
-        # no_data 拆分成因（2026-10-09）：整池取数失败（GM 不可达）≠ 北交所取不到 ≠ 无当日 bar。
-        no_data = rest_missing = bj_missing = stale = ok = cached_used = 0
-        BATCH = self._BK_BATCH
-        _waited = False
-        # 缓存能覆盖目标日 ⇒ 直接走缓存，不碰 GM（GM 不可达时会整批阻塞好几分钟）
-        _cov = self._bk_cache_covers(codes, dt_target)
-        _gm_off = _cov >= 0.8
-        if _gm_off:
-            print(f"[INFO] breakout: 本地日线缓存覆盖 {_cov:.0%}，本轮只用缓存", flush=True)
-        for i in range(0, total, BATCH):
-            chunk = codes[i:i + BATCH]
-            if _gm_off:
-                frames = {}
-            else:
-                frames = self._bk_daily_many(chunk)
-            # ⚠️ `_gm_off=True` 时 frames 本来就是空的（我们主动没调 GM）⇒ 不能再进"等窗重试"，
-            # 否则白等 60s（2026-10-25 实测：7 只票扫了 69.8s，全耗在这）。
-            if not frames and chunk and not _waited and not _gm_off:
-                # 整批空 ⇒ 疑 GM 冷却窗/瞬时不可达（facade 60s 冷却内后续批全跳过）→ 等窗后重试一次
-                # （只等一次，避免 GM 真下线时逐批 62s 打转；仍空则由 fetch_failed 如实汇报）
-                _time_mod.sleep(self._GM_BATCH_RETRY_WAIT)
-                _waited = True
-                try:
-                    frames = get_provider().daily_many(chunk, days=self._BK_SCAN_BARS)
-                except Exception:
-                    frames = {}
-            _from_gm = 0
-            for code in chunk:
-                fr = frames.get(code)
-                if fr is not None and not getattr(fr, "empty", True):
-                    _from_gm += 1
-                if fr is None or getattr(fr, "empty", True):
-                    # 2026-10-25：GM 不可用时的兜底——读本地日线缓存（猎手每天本来就在读它）。
-                    # 先只读末根日期，末根早于目标日 ⇒ 直接算 stale，不建 DataFrame（全池扫描的主要开销）。
-                    _cl = self._bk_cache_last(code)
-                    if _cl is not None and _cl == dt_target:
-                        fr = self._bk_cached_df(code, self._BK_SCAN_BARS, dt_target)
-                        if fr is not None:
-                            cached_used += 1
-                    elif _cl is not None and _cl > dt_target:
-                        fr = self._bk_cached_df(code, self._BK_SCAN_BARS, dt_target)
-                        if fr is not None:
-                            cached_used += 1
-                    elif _cl is not None:
-                        stale += 1
-                        continue
-                if fr is None or getattr(fr, "empty", True):
-                    no_data += 1
-                    if market_of(code) == "BJ":
-                        bj_missing += 1
-                    else:
-                        rest_missing += 1
-                    continue
-                # 有帧但**无当日 bar** → 未就绪/非交易日/停牌（区别于"取数失败"）
-                # 2026-10-25 快路径：末根就是目标日时不用再切片（全池扫时这一步占大头）
-                _dates = fr["date"].astype(str)
-                _last_d = str(_dates.iloc[-1])
-                if _last_d == dt_target:
-                    _sl = fr
-                elif _last_d < dt_target:
-                    stale += 1
-                    continue
-                else:
-                    _sl = fr[_dates <= dt_target]
-                    if _sl.empty or str(_sl["date"].iloc[-1]) != dt_target:
-                        stale += 1
-                        continue
-                ok += 1
-                hit = self._breakout_probe_one(code, fr, date)
-                if not hit:
-                    continue
-                info = jy.get(code) if isinstance(jy.get(code), dict) else None
-                nm = (info or {}).get("name", code)
-                concepts = _stock_concepts(info)
-                csrc = "offline" if concepts else "none"
-                if not concepts:
-                    # 离线两源为空：东财磁盘缓存层补拉（仅命中票，~30只/天，fail-open 不阻塞扫描）
-                    concepts = _stock_concepts(
-                        info, em_boards=_em_boards_disk_cached(self, code))
-                    if concepts:
-                        csrc = "em"
-                breakouts.append({"code": code, "name": nm,
-                                  "industry": _stock_industry(info),
-                                  "concepts": concepts,
-                                  "concepts_source": csrc,
-                                  "concept_descs": _jiuyan_concept_descs(info, concepts),
-                                  "tags": [{"label": "当日有效突破", "color": "up"}], **hit})
-            if state is not None:
-                with _BREAKOUT_LOCK:
-                    state.update({"done": min(i + BATCH, total), "found": len(breakouts),
-                                  "stocks": list(breakouts), "no_data": no_data,
-                                  "rest_no_data": rest_missing, "bj_no_data": bj_missing,
-                                  "stale": stale, "ok": ok})
-            if i == 0 and not _gm_off and _from_gm == 0 and cached_used > 0:
-                _gm_off = True   # 首批 GM 全空但缓存顶上了 ⇒ 后面直接走缓存，不再逐批等 GM
-                print("[INFO] breakout: GM 批量不可用，本轮改用本地日线缓存", flush=True)
-            _time_mod.sleep(0.05)   # 2026-10-08：批间显式让出，避免连续持 GIL 把主线程饿死
-        # 2026-10-25：按质量分排序（缩量 + 小幅突破 + 当日涨幅温和），
-        # **不再按"超出上沿越多越前"**——研究显示幅度 3~5% 档最差，原排序正好把差的排前面。
-        breakouts.sort(key=lambda x: (-(x.get("quality") or 0),
-                                      (x.get("vol_ratio") if x.get("vol_ratio") is not None else 9.9),
-                                      x.get("pct_above") or 0))
-        # 整池不可用判据（任一成立即视为"取数失败，结果不可信"）：
-        #   ① 无一只带当日 bar（ok==0）—— GM 整池不可达 / 非交易日 / 行情未就绪；
-        #   ② 非北交所码大面积无帧（≥50%）—— GM `daily_batch` 不可达（批量路径无腾讯兜底）。
-        fetch_failed = total > 0 and (ok == 0
-                                      or (rest_total > 0 and rest_missing >= 0.5 * rest_total))
+        result = _scanners._scan_breakout(
+            codes, state, date, jy=jy,
+            daily_many=self._bk_daily_many,
+            retry_daily_many=lambda chunk: get_provider().daily_many(
+                chunk, days=self._BK_SCAN_BARS),
+            market_of=market_of, cache_covers=self._bk_cache_covers,
+            cache_last=self._bk_cache_last, cached_df=self._bk_cached_df,
+            probe_one=self._breakout_probe_one,
+            stock_concepts=_stock_concepts, stock_industry=_stock_industry,
+            concept_descs=_jiuyan_concept_descs,
+            em_boards=lambda code: _em_boards_disk_cached(self, code),
+            batch=self._BK_BATCH, scan_bars=self._BK_SCAN_BARS,
+            retry_wait=self._GM_BATCH_RETRY_WAIT)
         if state is not None:
-            with _BREAKOUT_LOCK:
-                state.update({"done": total, "found": len(breakouts),
-                              "stocks": list(breakouts), "no_data": no_data,
-                              "rest_no_data": rest_missing, "bj_no_data": bj_missing,
-                              "stale": stale, "ok": ok, "cached": cached_used,
-                              "fetch_failed": bool(fetch_failed)})
-        return breakouts
+            state.setdefault("no_data", 0)
+        return result
 
     def _bk_cache_get(self, key):
-        with _BREAKOUT_LOCK:
-            return (getattr(self, "_breakout_cache", None) or {}).get(key)
+        return _scanners._bk_cache_get(key)
 
     def _bk_cache_put(self, key, val):
-        with _BREAKOUT_LOCK:
-            if not hasattr(self, "_breakout_cache"):
-                self._breakout_cache = {}
-            self._breakout_cache[key] = val
+        _scanners._bk_cache_put(key, val)
 
     def load_breakout_stocks(self, date=None):
         """同步全量扫描突破箱体（前端走后端后台线程时用 start_breakout_scan）。
@@ -9699,8 +9020,7 @@ class Api:
                 # 否则前端 poll 第一次就拿到上一轮结果、判为 done 并停止轮询 ⇒
                 # 用户看到的是旧数据，"重新扫描"形同无效。
                 # （状态已在上方置 running，故此刻起 poll 会读到 running 而非 idle。）
-                if hasattr(self, "_breakout_cache"):
-                    self._breakout_cache.pop(cache_key, None)
+                _scanners._bk_cache_pop(cache_key)
                 try:
                     self._breakout_disk_path(today).unlink(missing_ok=True)
                 except Exception:
@@ -9767,99 +9087,31 @@ class Api:
     _RC_BATCH = 200
 
     def _reclaim_probe_one(self, code, df, date=None):
-        """单只「刚刚站上5日线」判定（口径单一源 core/ma_reclaim.reclaim5_frame），命中返回 dict 否则 None。"""
-        from core.ma_reclaim import reclaim5_frame
-        target = str(date) if date else datetime.now().strftime("%Y-%m-%d")
-        return reclaim5_frame(df, target)
+        return _scanners._reclaim_probe_one(code, df, date)
 
     def _reclaim_disk_path(self, today):
         return BASE / "t_io" / "cache" / f"reclaim_{today}.json"
 
     def _rc_cache_get(self, key):
-        with _BREAKOUT_LOCK:
-            return (getattr(self, "_reclaim_cache", None) or {}).get(key)
+        return _scanners._rc_cache_get(key)
 
     def _rc_cache_put(self, key, val):
-        with _BREAKOUT_LOCK:
-            if not hasattr(self, "_reclaim_cache"):
-                self._reclaim_cache = {}
-            self._reclaim_cache[key] = val
+        _scanners._rc_cache_put(key, val)
 
     def _scan_reclaim(self, codes, state, date=None):
-        """全市场扫描「刚刚站上5日线」。state 非空时更新进度（分类同突破扫描）。"""
+        """注入批量 daily_many；state 进度与 fetch_failed 结构保持不变。"""
         jy = _load_json(HUNTER_DIR / "watchlist_jiuyan.json", {})
         from core.market_data.facade import get_provider
         from core.market_data.codec import market_of
-        hits = []
-        total = len(codes)
-        dt_target = str(date) if date else datetime.now().strftime("%Y-%m-%d")
-        rest_total = sum(1 for c in codes if market_of(c) != "BJ")
-        no_data = rest_missing = bj_missing = stale = ok = cached_used = 0
-        BATCH = self._RC_BATCH
-        _waited = False
-        for i in range(0, total, BATCH):
-            chunk = codes[i:i + BATCH]
-            try:
-                frames = get_provider().daily_many(chunk, days=self._RC_BARS)
-            except Exception as e:      # 兜底：单批异常绝不终止整轮
-                print(f"[WARN] reclaim daily_many 失败({len(chunk)}只): "
-                      f"{type(e).__name__}: {str(e)[:80]}", flush=True)
-                frames = {}
-            if not frames and chunk and not _waited:
-                _time_mod.sleep(self._GM_BATCH_RETRY_WAIT)
-                _waited = True
-                try:
-                    frames = get_provider().daily_many(chunk, days=self._RC_BARS)
-                except Exception:
-                    frames = {}
-            for code in chunk:
-                fr = frames.get(code)
-                if fr is None or getattr(fr, "empty", True):
-                    no_data += 1
-                    if market_of(code) == "BJ":
-                        bj_missing += 1
-                    else:
-                        rest_missing += 1
-                    continue
-                _sl = fr[fr["date"].astype(str) <= dt_target]
-                if _sl.empty or str(_sl["date"].iloc[-1]) != dt_target:
-                    stale += 1
-                    continue
-                ok += 1
-                hit = self._reclaim_probe_one(code, fr, date)
-                if not hit:
-                    continue
-                info = jy.get(code) if isinstance(jy.get(code), dict) else None
-                nm = (info or {}).get("name", code)
-                concepts = _stock_concepts(info)
-                csrc = "offline" if concepts else "none"
-                if not concepts:
-                    concepts = _stock_concepts(
-                        info, em_boards=_em_boards_disk_cached(self, code))
-                    if concepts:
-                        csrc = "em"
-                hits.append({"code": code, "name": nm,
-                             "industry": _stock_industry(info),
-                             "concepts": concepts, "concepts_source": csrc,
-                             "concept_descs": _jiuyan_concept_descs(info, concepts),
-                             "tags": [{"label": "站上5日线", "color": "up"}], **hit})
-            if state is not None:
-                with _BREAKOUT_LOCK:
-                    state.update({"done": min(i + BATCH, total), "found": len(hits),
-                                  "stocks": list(hits), "no_data": no_data,
-                                  "rest_no_data": rest_missing, "bj_no_data": bj_missing,
-                                  "stale": stale, "ok": ok})
-            _time_mod.sleep(0.05)
-        hits.sort(key=lambda x: -(x.get("dev5_pct") if x.get("dev5_pct") is not None else -1e9))
-        fetch_failed = total > 0 and (ok == 0
-                                      or (rest_total > 0 and rest_missing >= 0.5 * rest_total))
-        if state is not None:
-            with _BREAKOUT_LOCK:
-                state.update({"done": total, "found": len(hits), "stocks": list(hits),
-                              "no_data": no_data, "rest_no_data": rest_missing,
-                              "bj_no_data": bj_missing, "stale": stale, "ok": ok,
-                              "fetch_failed": bool(fetch_failed)})
-        return hits
+        return _scanners._scan_reclaim(
+            codes, state, date, jy=jy,
+            daily_many=lambda chunk: get_provider().daily_many(
+                chunk, days=self._RC_BARS),
+            market_of=market_of, probe_one=self._reclaim_probe_one,
+            stock_concepts=_stock_concepts, stock_industry=_stock_industry,
+            concept_descs=_jiuyan_concept_descs,
+            em_boards=lambda code: _em_boards_disk_cached(self, code),
+            batch=self._RC_BATCH, retry_wait=self._GM_BATCH_RETRY_WAIT)
 
     def load_reclaim_stocks(self, date=None):
         """同步全市场扫描「刚刚站上5日线」。结果缓存内存+磁盘（按日）；取数失败不落盘。"""
@@ -9932,8 +9184,7 @@ class Api:
                      "stocks": [], "no_data": 0}
             self._reclaim_scan = state
             if force:
-                if hasattr(self, "_reclaim_cache"):
-                    self._reclaim_cache.pop(cache_key, None)
+                _scanners._rc_cache_pop(cache_key)
                 try:
                     self._reclaim_disk_path(today).unlink(missing_ok=True)
                 except Exception:
