@@ -4271,7 +4271,7 @@ function closeDayIntraday() {
 /* 前端脚本构建号 —— 显示在 K 线工具栏（#appVer）。
    用途：owner 报"双击没反应"时，一眼就能看出 app.js 到底有没有加载到新版；
    为空 = 脚本没跑（WebView 缓存/没重启），不是逻辑问题。 */
-const APP_BUILD = "20261026-dbl4";
+const APP_BUILD = "20261026-dbl5";
 
 function _stampAppVer() {
   try {
@@ -4286,23 +4286,38 @@ if (document.readyState === "loading") {
 }
 
 function _chartIdxFromEvent(ev) {
+  const dbg = _chartIdxDebug(ev);
+  return dbg.idx;
+}
+
+function _chartIdxDebug(ev) {
+  const out = { idx: -1, v: null, x: null, y: null, n: 0, err: "", hover: _chartHoverDay };
   try {
     const el = document.getElementById("stockChart");
-    if (!el || !stockChartInst || !ev) return -1;
+    if (!el || !stockChartInst || !ev) { out.err = "无实例/无事件"; return out; }
     const pd = (stockChartData && stockChartData.period_data || {}).daily || {};
     const dates = pd.dates || [];
-    if (!dates.length) return -1;
+    out.n = dates.length;
+    if (!dates.length) { out.err = "日线无数据"; return out; }
     const r = el.getBoundingClientRect();
-    let v = stockChartInst.convertFromPixel(
-      { xAxisIndex: 0 }, [ev.clientX - r.left, ev.clientY - r.top]);
+    out.x = Math.round(ev.clientX - r.left);
+    out.y = Math.round(ev.clientY - r.top);
+    let v = stockChartInst.convertFromPixel({ xAxisIndex: 0 }, [out.x, out.y]);
     if (Array.isArray(v)) v = v[0];
-    if (typeof v === "number" && v >= -0.5 && v <= dates.length - 0.5) return Math.round(v);
-    if (typeof v === "string") return dates.indexOf(v);
-  } catch (e) { /* 忽略 */ }
-  return -1;
+    out.v = v;
+    if (typeof v === "number" && v >= -0.5 && v <= dates.length - 0.5) { out.idx = Math.round(v); return out; }
+    if (typeof v === "string") { out.idx = dates.indexOf(v); return out; }
+    out.err = "convertFromPixel 无有效值";
+  } catch (e) {
+    out.err = "异常: " + ((e && (e.message || e)) || "未知");
+  }
+  return out;
 }
 
 function _chartDayFromEvent(ev) {
+  // ① 优先：`updateAxisPointer` 记下的**光标所在交易日**（ECharts 自己算的，不碰像素）
+  if (_chartHoverDay) return _chartHoverDay;
+  // ② 兜底：像素换算
   const idx = _chartIdxFromEvent(ev);
   if (idx < 0) return null;
   const pd = (stockChartData && stockChartData.period_data || {}).daily || {};
@@ -4340,7 +4355,12 @@ function _dayModalError(msg) {
         return;
       }
       const day = _chartDayFromEvent(ev);
-      if (!day) { _dayModalError("双击位置换算不出交易日（坐标没落在K线区）"); return; }
+      if (!day) {
+        const g = _chartIdxDebug(ev);
+        _dayModalError(`换算不出交易日。诊断：x=${g.x} y=${g.y} v=${JSON.stringify(g.v)} `
+          + `日线根数=${g.n} 悬停日=${g.hover || "无"} ${g.err}`);
+        return;
+      }
       openDayIntraday(stockChartCode, (stockChartData || {}).name, day);
     } catch (e) {
       _dayModalError("双击处理出错：" + ((e && (e.message || e)) || "未知"));
@@ -6143,6 +6163,32 @@ function renderStockChart(applyZoom = true) {
 
   // 现价胶囊：**等一帧**再定位 —— 主 setOption 是 lazyUpdate，同一 tick 里 convertToPixel
   // 拿到的还是上一帧的 y 轴刻度，直接定位会看到胶囊先跳一下再归位。
+  /* 2026-10-26：记录「光标所在的交易日」—— ECharts 自己的轴指针事件，**不碰像素换算**。
+     为什么：`convertFromPixel` 在本机 pywebview 里换算不出来（owner 三次"双击没反应"，
+     第四次终于看到诊断：x/y 都正常、v 无有效值）。轴指针给的 `axesInfo[0].value`
+     就是那个类目值（日期字符串）或下标，双击和「日内5分」按钮都直接用它。 */
+  if (stockChartInst && !stockChartInst.__apBound) {
+    stockChartInst.__apBound = true;
+    try {
+      stockChartInst.on("updateAxisPointer", (ev) => {
+        try {
+          const ax = (ev && ev.axesInfo || [])[0];
+          if (!ax || ax.value == null) return;
+          let day = "";
+          if (typeof ax.value === "string") {
+            day = ax.value.slice(0, 10);
+          } else if (typeof ax.value === "number") {
+            const pd = (stockChartData && stockChartData.period_data || {}).daily || {};
+            const ds = pd.dates || [];
+            const v = Math.round(ax.value);
+            if (v >= 0 && v < ds.length) day = String(ds[v]).slice(0, 10);
+          }
+          if (day && /^\d{4}-\d{2}-\d{2}$/.test(day)) _chartHoverDay = day;
+        } catch (e) { /* 忽略 */ }
+      });
+    } catch (e) { /* 桩环境忽略 */ }
+  }
+
   _scheduleNowTag(stockChartInst, cur, _nowCol);
 
   // 记住用户手动缩放。注意：**不要用 getOption()** —— 它会深拷贝整个 option
