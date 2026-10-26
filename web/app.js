@@ -4073,6 +4073,12 @@ const MA_COLORS = ["#3987e5", "#d95926", "#199e70", "#c98500", "#d55181", "#9085
 // 改成**青色 + 虚线 + 2px**：与涨跌语义无关，且虚线在深底上不会被当成普通均线。
 const MA365_COLOR = "#22d3ee";
 
+/* 量能基准窗口（2026-10-25 owner：「成交量部分画一条平均成交量，用来测主力行为」）。
+   定 60 的依据见 doc/research/2026-10-25_成交量均线窗口实验.md —— 量比(当日/前N日均量)
+   的横截面 IC 随 N 单调变负，60 已吃掉大部分；再长剩下的只是"长期高换手股跑输"这个慢变量。
+   ⚠️ 单图和九宫格共用这一个值，改窗口在两处同时生效。 */
+const VOL_MA_BASE = 60;
+
 /* 默认可见根数。取值贴着后端黄金分割回看期（t_gui._FIB_LOOKBACK）——daily 120 与回看期
    相等，锚点必然落在默认视窗内；weekly/monthly 因 bar 更少而略小，万一锚点更早由下面的
    放宽分支兜底。核心目的：后端 800 根日线全画出来蜡烛只有 ~3px，形态根本看不清。 */
@@ -5243,11 +5249,12 @@ function renderStockChart(applyZoom = true) {
   // 而且那个胶囊正好挂在右端、跟现价胶囊抢位置。
   // ⚠️ **MA5 这条均线本身保留**（它是标准均线之一），只是恢复成与其它均线同款细线。
   //    「分钟周期 MA5 = 5 根该周期 K 线」这个口径仍由 tooltip 和「日线MA5」蓝虚线解释。
-  /* 成交额（亿元）+ 它的 5/10 均线（2026-10-20 owner：量能窗口要「美化、醒目」）。
+  /* 成交额（亿元）+ 量能均线（2026-10-20 owner：量能窗口要「美化、醒目」）。
      单根柱子只能看出"今天放没放量"，**均线才看得出量能趋势**（东财的量能面板就是
      柱子 + 两条均线）。单位统一换成亿 —— 和 y 轴刻度同一口径，不用心算。
      没有成交额（老 payload）时整块为 null，下面的 series 自动回落成交量。 */
-  const _amtYi = (Array.isArray(period.amount) && period.amount.length === period.dates.length)
+  const _hasAmt = Array.isArray(period.amount) && period.amount.length === period.dates.length;
+  const _amtYi = _hasAmt
     ? period.amount.map(v => (v == null || isNaN(Number(v))) ? null : Number(v) / 1e8)
     : null;
   const _maOf = (arr, n) => {
@@ -5262,8 +5269,35 @@ function renderStockChart(applyZoom = true) {
     }
     return out;
   };
-  const _amtMa5 = _maOf(_amtYi, 5);
-  const _amtMa10 = _maOf(_amtYi, 10);
+
+  /* 2026-10-25 owner：「成交量部分画一条平均成交量，用来测主力行为」——窗口定 **60**。
+     依据是全市场前复权日线的实测（doc/research/2026-10-25_成交量均线窗口实验.md）：
+       · 量比 = 当日量 / 前 N 日均量（**不含当日**），N 从 5→60→250 量比的横截面 IC
+         单调变负；N=60 已吃掉大部分（IC5 −0.053 / t −11.7），再拉长剩下的只是
+         「长期高换手股本来就跑输」这个慢变量（MA20/MA120 那一半），对看单张图没用。
+       · 实测档位（556 只 × 3512 日，减当日全市场均值去 beta）：量比 <1.5 未来 5 日不跑输；
+         ≥2.0 超额 −0.31%（t −4.6）；≥3.0 超额 −0.97%（t −9.7）。分年 2023~2026 全为负。
+       · 60 日基准**不会被单日异动自身抬高** ⇒ 持续几周的「量堆」能一直站在线上，
+         这正是看主力吸筹/出货要的形状；MA5 那种短基准第二周就把异动吸收进基准了。
+     ⚠️ 线画在**实际画出来的那条序列**上（有成交额画成交额、没有画成交量·手），
+        不是固定成交量 —— 否则和柱子不同口径，看着像两条互相矛盾的量。 */
+  const _voltSeries = _hasAmt ? _amtYi
+    : (Array.isArray(period.volume)
+        ? period.volume.map(v => (v == null || isNaN(Number(v))) ? null : Number(v))
+        : []);
+  const _voltUnit = _hasAmt ? "成交额" : "成交量";
+  const _voltMa5 = _maOf(_voltSeries, 5);
+  const _voltMa10 = _maOf(_voltSeries, 10);
+  const _voltMaBase = _maOf(_voltSeries, VOL_MA_BASE);
+  /* 量比 = 当日 / **前** N 日均量（**不含当日**）—— 与实验口径一致；直接用线上的值
+     （含当日的 N 日均量）会把今天的量自己也算进分母，放量日会被系统性地低估。
+     所以取前一格的线值：`_maOf` 在第 i-1 格 = mean(i-N … i-1)。 */
+  const _volRatio = (i) => {
+    const v = _voltSeries ? _voltSeries[i] : null;
+    const b = _voltMaBase && i > 0 ? _voltMaBase[i - 1] : null;
+    if (v == null || b == null || !(b > 0)) return null;
+    return v / b;
+  };
 
   const maSeries = period.ma.map((maArr, i) => {
     const _isYear = i === 6;                       // 第 7 条 = MA365（年线）
@@ -5534,12 +5568,35 @@ function renderStockChart(applyZoom = true) {
             + (_dma10 != null ? ` · MA10 <b>${_px(_dma10)}</b>` : "")
             + (_dma20 != null ? ` · MA20 <b>${_px(_dma20)}</b>` : "") + `</div>`
           : "";
+        /* 2026-10-25 owner：量比 —— 这根柱子相对「近 60 根均量」是多大，才是测主力行为的读数。
+           阈值来自全市场实测（doc/research/2026-10-25_成交量均线窗口实验.md）：
+             <0.7 缩量 / 0.7~1.3 正常 / 1.3~1.5 温和放量 / 1.5~2 明显放量 /
+             ≥2.0 巨量（此档未来 5 日超额 −0.31%，t −4.6）/ ≥3.0 极端（−0.97%，t −9.7）
+           ⚠️ 分档边界是**全样本分位**（P25≈0.59 / P50≈0.84 / P90≈1.92 / P95≈2.58），
+              不是拍脑袋的整数，改阈值时请回看那份报告。 */
+        const _vr = _volRatio(i);
+        const _vrTag = _vr == null ? null
+          : _vr < 0.7 ? { t: "缩量", c: "#8b949e" }
+          : _vr < 1.3 ? { t: "正常", c: "#8b949e" }
+          : _vr < 1.5 ? { t: "温和放量", c: "#c3c2b7" }
+          : _vr < 2.0 ? { t: "明显放量", c: "#fab219" }
+          : _vr < 3.0 ? { t: "巨量", c: "#d03b3b" }
+          : { t: "极端放量", c: "#d03b3b" };
+        const _vrBase = `前 ${VOL_MA_BASE} ${_isIntradayPeriod ? "根" : _periodCn}均量`;
+        const _vrTxt = _vr == null ? ""
+          : `<div>量比 <b style="color:${_vrTag.c}">${_vr.toFixed(2)}×</b>`
+            + `<span style="color:#6e7681"> ${_vrBase}</span>`
+            + `　<span style="color:${_vrTag.c}">${_vrTag.t}</span>`
+            + (_vr >= 2.0 ? `<span style="color:#6e7681"> · 此档历史未来 5 日跑输</span>` : "")
+            + `</div>`;
+
         let html = `<div style="font-weight:bold;margin-bottom:3px">${period.dates[i]}`
           + `<span style="font-weight:400;opacity:.65"> · ${_periodCn}K</span></div>`
           + `<div>开 <b>${_px(o)}</b>　高 <b>${_px(hi)}</b>　低 <b>${_px(lo)}</b>　`
           + `收 <b style="color:${col}">${_px(c)}</b>　涨跌 <b style="color:${col}">${chgTxt}</b></div>`
           + (amtTxt ? `<div>成交额 <b>${amtTxt}</b></div>`
                      : `<div>成交 <b>${volTxt}</b> 手</div>`)
+          + _vrTxt
           + (_posBarTxt ? `<div style="color:#8b949e">${_posBarTxt}${_vsMa(_ma5, "MA5")}${_vsMa(_ma20, "MA20")}</div>` : "");
         if (_maCells.length) {
           html += `<div style="border-top:1px solid #30363d;margin-top:4px;padding-top:4px;color:#8b949e;font-size:10px">`
@@ -5757,8 +5814,7 @@ function renderStockChart(applyZoom = true) {
       // 后端下发 amount（元）；老 payload 没有时回落成交量（手），图例名会把口径写清楚，
       // 免得把「手」当「亿元」看（这正是 owner 报「量能显然不对」的由来）。
       (() => {
-        const _hasAmt = Array.isArray(period.amount) && period.amount.length === period.dates.length;
-        const _vals = _hasAmt ? _amtYi : period.volume;
+        const _vals = _voltSeries;
         return { name: _hasAmt ? "成交额(亿)" : "成交量(手)", type: "bar",
           xAxisIndex: 1, yAxisIndex: 1, barWidth: "60%", barMaxWidth: 12,
           // 2026-10-17：原来一律是半透明橙色 ⇒ 看不出放量是买还是卖。改为**按当日涨跌着色**。
@@ -5771,16 +5827,27 @@ function renderStockChart(applyZoom = true) {
             return { value: v, itemStyle: { color: up ? "rgba(248,81,73,.82)" : "rgba(63,185,80,.82)" } };
           }) };
       })(),
-      // 量能均线（只在有成交额时出现）：柱看"这一根"，线看"趋势"。
-      // 配色跑过 dataviz 校验器（dark：#c98500↔#9085e9，CVD ΔE 27.3 / 常视觉 27.5，全通过）。
-      ...(_amtMa5 ? [
-        { name: "成交额MA5", type: "line", xAxisIndex: 1, yAxisIndex: 1, data: _amtMa5,
+      // 量能均线：柱看"这一根"，线看"趋势"。
+      // 三色一起跑过 dataviz 校验器（dark surface #0d1117）：
+      //   亮度带 / 彩度 / 对比度全 PASS，最差相邻对 青 #0e9aa7 ↔ 紫 #9085e9 CVD ΔE 9.5、
+      //   常视觉 17.1（都在闸上）。别随手改这三个色 —— 换色要重跑校验器。
+      ...(_voltMa5 ? [
+        { name: `${_voltUnit}MA5`, type: "line", xAxisIndex: 1, yAxisIndex: 1, data: _voltMa5,
           symbol: "none", connectNulls: true, z: 3,
           lineStyle: { width: 1.3, color: "#c98500", opacity: .95 }, itemStyle: { color: "#c98500" } },
-        { name: "成交额MA10", type: "line", xAxisIndex: 1, yAxisIndex: 1, data: _amtMa10,
+        { name: `${_voltUnit}MA10`, type: "line", xAxisIndex: 1, yAxisIndex: 1, data: _voltMa10,
           symbol: "none", connectNulls: true, z: 2,
           lineStyle: { width: 1.3, color: "#9085e9", opacity: .9 }, itemStyle: { color: "#9085e9" } },
       ] : []),
+      // 2026-10-25 owner：**主力基准线**（60 根均量）。刻意画成**青色虚线 + 2px**：
+      // 实线是"跟着走的均线"(MA5/MA10)，虚线是"参照水平"，一眼能分开；2px 是因为
+      // 1.5px 在深底 + 红绿柱子之间实测会糊掉（用 000001 近 80 根跑过 headless 截图对比）。
+      ...(_voltMaBase ? [{
+        name: `${_voltUnit}均量${VOL_MA_BASE}`, type: "line", xAxisIndex: 1, yAxisIndex: 1,
+        data: _voltMaBase, symbol: "none", connectNulls: true, z: 3,
+        lineStyle: { width: 2, color: "#0e9aa7", type: "dashed", opacity: .95 },
+        itemStyle: { color: "#0e9aa7" },
+      }] : []),
       // MACD 窗口（2026-10-20 owner：更美化、醒目）
       // ⚠️ 原来 DIF `#ff8c5a` / DEA `#f85149` 是**两个几乎一样的暖红** —— 深底细线上
       //    根本分不出哪条是哪条（这是真正的可读性缺陷，不只是"不好看"）。
@@ -8866,6 +8933,24 @@ function _mwNormCode(raw) {
   return d ? d[1] : "";
 }             // 每格只画最后 48 根 = 5 分 K 的一个交易日（owner：别显示太多 K 线）
 let mwCodes = [], mwInsts = [], mwTimer = null, mwBusy = false;
+/* 2026-10-26 owner：「可以通过鼠标滚轮放大或者缩小」——每格独立的 dataZoom 状态。
+   ⚠️ 必须**存在外面**：`mwTick` 每 4 秒用 `notMerge:true` 重画一次，
+      不把 start/end 重新喂进去，用户滚出来的缩放每一跳都会被冲掉。
+   换票 / 重开窗口时清空（见 `mwPick` 与 `_mwBuildCells`）。 */
+let mwZoom = [];
+
+/* 记住某一格用户滚出来的缩放窗口，供下一次 `mwTick` 重画时还原。
+   只在用户交互时更新；程序化 setOption 若也触发，带回的是同一个 start/end，存回去无害。 */
+function _mwBindZoom(i, inst) {
+  try {
+    inst.on("dataZoom", (ev) => {
+      const z = (ev && ev.batch && ev.batch[0]) || ev || {};
+      if (typeof z.start === "number" && typeof z.end === "number") {
+        mwZoom[i] = { start: z.start, end: z.end };
+      }
+    });
+  } catch (e) { /* 桩环境忽略 */ }
+}
 
 /* 选股候选：**优先体检持仓**（带名称），体检还没回来时退回 `state.quotes`
    （那是 10s 轮询顺手拉的持仓+股池行情，通常比体检先到）。
@@ -9092,8 +9177,8 @@ function mwToggleMin() {
     win.style.minHeight = "0";
   } else {
     grid.style.display = "";
-    win.style.height = mwMinH || "70vh";
-    win.style.minHeight = "300px";
+    win.style.height = mwMinH || "88vh";     // 与 .mw-win 的默认高度同步（2026-10-26 放大）
+    win.style.minHeight = "560px";
   }
   setTimeout(_mwResizeCharts, 60);
 }
@@ -9122,6 +9207,7 @@ function _mwBuildCells() {
   if (!host) return;
   mwInsts.forEach(i => { try { i.dispose(); } catch (e) { /* 忽略 */ } });
   mwInsts = [];
+  mwZoom = [];                 // 重开窗口 / 重建格子 ⇒ 缩放归位（换票同理，见 mwPick）
   const hs = _mwHoldings();
   // 候选写进共享 datalist：输入框有提示、也能直接敲别的代码
   const dl = document.getElementById("mwNames");
@@ -9156,6 +9242,7 @@ function _mwBuildCells() {
       try {
         mwInsts[i] = echarts.init(el);
         mwInsts[i].setOption({ backgroundColor: "#0d1117", animation: false });
+        _mwBindZoom(i, mwInsts[i]);
       } catch (e) { mwInsts[i] = null; }
     }
   }
@@ -9166,6 +9253,7 @@ function mwPick(i, raw) {
   // 规范码：`sh000001` 这类**指数**要原样保留（剥成 000001 就变成平安银行了）
   const code = _mwNormCode(raw);
   mwCodes[i] = code;
+  mwZoom[i] = null;            // 换票 ⇒ 缩放归位（上一只票的窗口对这只没意义）
   _mwSaveCodes();
   // 下拉回填成裸码（与格子里的图对齐）；下拉里没有该码时它自然显示空，不影响出图
   const sel = document.querySelectorAll(".mw-sel")[i];
@@ -9185,7 +9273,7 @@ function mwPick(i, raw) {
    刻意不画 MACD/RSI/箱体 —— 每格只有 ~1/6 屏宽，塞满就成了噪声；要看细节点开大图。
    2026-10-21 owner：① 缺口没显示 ② 5日/10日/20日均线没显示 ⇒ 都补上，
    且缺口与单图**共用** `buildGapAreas`，口径不会漂。 */
-function _mwOption(s, dma, levels, trades) {
+function _mwOption(s, dma, levels, trades, zoom) {
   const gaps = buildGapAreas(s.ohlc, s.dates, 15, 0.003, 8);   // 最近 15 自然日的缺口，一格最多 8 块
   const _dmaLine = (y, color, txt) => (y == null || !isFinite(y)) ? null : {
     yAxis: y,
@@ -9217,6 +9305,20 @@ function _mwOption(s, dma, levels, trades) {
     ? s.amount.map(v => (v == null || isNaN(Number(v))) ? null : +(Number(v) / 1e8).toFixed(2))
     : null;
   const vals = amtYi || s.volume || [];
+  /* 2026-10-25：量能基准线（VOL_MA_BASE 根均量），与单图同窗口、同色（青色虚线）。
+     ⚠️ 九宫格是 5 分钟口径 ⇒ "60 根" = 5 小时，只当"当日量能中枢"看，别按日线的 60 日读。 */
+  const _volMaBaseM = (() => {
+    const n = VOL_MA_BASE, out = new Array(vals.length).fill(null);
+    if (vals.length < n) return out;
+    let sum = 0, cnt = 0;
+    for (let i = 0; i < vals.length; i++) {
+      const v = vals[i];
+      if (v != null) { sum += v; cnt++; }
+      if (i >= n) { const old = vals[i - n]; if (old != null) { sum -= old; cnt--; } }
+      if (i >= n - 1 && cnt === n) out[i] = Math.round(sum / n * 100) / 100;
+    }
+    return out;
+  })();
   const volSer = vals.map((v, i) => {
     const o = ohlc[i];
     const prev = i > 0 ? ohlc[i - 1][1] : null;
@@ -9278,13 +9380,13 @@ function _mwOption(s, dma, levels, trades) {
     // `axisPointer.link` 让**同一格的三窗**共享一条竖线（K线/成交额/MACD 对齐），
     // 但**不跨格**联动 —— 九宫格里跨格跟着动会看花眼。
     axisPointer: { link: [{ xAxisIndex: "all" }],
-                   label: { fontSize: 8, backgroundColor: "#30363d", color: "#e6edf3" } },
+                   label: { fontSize: 9, backgroundColor: "#30363d", color: "#e6edf3" } },
     tooltip: {
       trigger: "axis",
-      axisPointer: { type: "cross", label: { fontSize: 8, backgroundColor: "#30363d", color: "#e6edf3" } },
+      axisPointer: { type: "cross", label: { fontSize: 9, backgroundColor: "#30363d", color: "#e6edf3" } },
       backgroundColor: "rgba(22,27,34,.96)", borderColor: "#30363d", borderWidth: 1,
       borderRadius: 6, padding: [4, 6], confine: true,
-      textStyle: { color: "#e6edf3", fontSize: 10 },
+      textStyle: { color: "#e6edf3", fontSize: 11 },   // 10→11（2026-10-26 放大九宫格同步）
       formatter: (ps) => {
         const i = ps && ps[0] ? ps[0].dataIndex : -1;
         const o = i >= 0 ? ohlc[i] : null;
@@ -9307,21 +9409,36 @@ function _mwOption(s, dma, levels, trades) {
               + `<span style="color:#d55181">DEA ${dea}</span>` : "");
       },
     },
-    // 三窗：主图 50% / 成交额 10% / MACD 18%（格子里地方小，MACD 不能太薄）
-    grid: [{ left: 46, right: 8, top: 6, height: "50%" },
-           { left: 46, right: 8, top: "60%", height: "10%" },
-           { left: 46, right: 8, top: "72%", height: "18%" }],
+    /* 2026-10-26 owner：「可以通过鼠标滚轮放大或者缩小」。
+       格子里的 5 分 K 只有 96 根，一根 5 分钟；滚轮 = **时间轴缩放**（与单图同一套手势：
+       滚轮缩放、按住拖动平移）。`xAxisIndex: [0,1,2]` 让 K线/量能/MACD 三个窗一起缩，
+       否则三窗会错位（十字光标已经把三窗 link 起来了，缩放必须同源）。
+       ⚠️ 没有 slider：格子太小，滑块会吃掉 16px 还挡 MACD；要还原就往外滚到底。 */
+    dataZoom: [{
+      type: "inside", xAxisIndex: [0, 1, 2],
+      start: (zoom && typeof zoom.start === "number") ? zoom.start : 0,
+      end: (zoom && typeof zoom.end === "number") ? zoom.end : 100,
+      zoomOnMouseWheel: true, moveOnMouseMove: true, moveOnMouseWheel: false,
+      preventDefaultMouseMove: true,
+    }],
+    // 三窗：主图 52% / 成交额 10% / MACD 18%。
+    // 2026-10-26：左轴留白 46→40、右边距 8→6、顶部 6→4 —— 窗口放大后格子变宽，
+    // 这 14px 全部让给绘图区（百分比没动，格子变高时三窗等比变高）。
+    grid: [{ left: 40, right: 6, top: 4, height: "52%" },
+           { left: 40, right: 6, top: "62%", height: "10%" },
+           { left: 40, right: 6, top: "75%", height: "18%" }],
     xAxis: [
       { type: "category", data: dates, axisLine: { lineStyle: { color: "#2b333d" } },
         axisLabel: { show: false } },
       { type: "category", data: dates, gridIndex: 1, axisLine: { lineStyle: { color: "#2b333d" } },
         axisLabel: { show: false } },
       { type: "category", data: dates, gridIndex: 2, axisLine: { lineStyle: { color: "#2b333d" } },
-        axisLabel: { color: "#8b949e", fontSize: 8,
-                     interval: Math.max(1, Math.floor(dates.length / 4)) } },
+        // 不写死 interval：滚轮缩放后根数会变，固定的"每 dates.length/4 根一个"在放大后
+        // 会只剩一两个标签。交给 ECharts 自动避让（默认 auto）。
+        axisLabel: { color: "#8b949e", fontSize: 9 } },   // 8→9（2026-10-26 owner：太小看不清）
     ],
     yAxis: [
-      { scale: true, splitNumber: 3, axisLabel: { color: "#8b949e", fontSize: 8 },
+      { scale: true, splitNumber: 3, axisLabel: { color: "#8b949e", fontSize: 9 },
         splitLine: { lineStyle: { color: "rgba(139,148,158,.12)" } } },
       { scale: true, gridIndex: 1, axisLabel: { show: false }, splitLine: { show: false } },
       { scale: true, splitNumber: 2, gridIndex: 2, axisLabel: { show: false },
@@ -9344,6 +9461,11 @@ function _mwOption(s, dma, levels, trades) {
       ...(_tradePts.length ? [{ name: "成交", type: "scatter", data: _tradePts, z: 13,
                                symbol: "triangle", symbolSize: 8 }] : []),
       { name: "量能", type: "bar", xAxisIndex: 1, yAxisIndex: 1, data: volSer, barMaxWidth: 10 },
+      { name: `均量${VOL_MA_BASE}`, type: "line", xAxisIndex: 1, yAxisIndex: 1, data: _volMaBaseM,
+        symbol: "none", connectNulls: true, z: 3,
+        // 格子里只有 ~120 根、又小，2px 会盖住柱子 ⇒ 这里收成 1.4px，同一色系不换色
+        lineStyle: { width: 1.4, color: "#0e9aa7", type: "dashed", opacity: .95 },
+        itemStyle: { color: "#0e9aa7" } },
       // MACD：柱 + DIF/DEA 两条线 + 零轴
       { name: "MACD柱", type: "bar", xAxisIndex: 2, yAxisIndex: 2, data: _histSer,
         barMaxWidth: 8, z: 1,
@@ -9398,8 +9520,12 @@ async function mwTick() {
         const el = document.getElementById("mwChart" + i);
         if (!el || !window.echarts) return;
         inst = mwInsts[i] = echarts.init(el);
+        _mwBindZoom(i, inst);
       }
-      try { inst.setOption(_mwOption(s, it.dma, it.levels, it.trades), { notMerge: true }); } catch (e) { /* 单格失败不影响别的格 */ }
+      try {
+        // 把该格当前的缩放窗口喂回去 —— `notMerge:true` 会把上一步的 dataZoom 一起清掉
+        inst.setOption(_mwOption(s, it.dma, it.levels, it.trades, mwZoom[i]), { notMerge: true });
+      } catch (e) { /* 单格失败不影响别的格 */ }
     });
   } catch (e) { /* 静默：下一跳重试 */ }
   finally { mwBusy = false; }
