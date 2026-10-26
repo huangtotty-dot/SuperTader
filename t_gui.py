@@ -3713,6 +3713,58 @@ class Api:
     # `TDX_HOME` 与 `scripts/import_tdx_all.py` 同一个约定（默认 C:\new_tdx）。
     _TDX_VIPDOC = Path(os.environ.get("TDX_HOME") or r"C:\new_tdx") / "vipdoc"
 
+    def _tdx_day_path(self, code: str):
+        """通达信 `.day` 路径（按代码段判市场）。找不到返回 None。
+
+        880xxx/999xxx 是通达信的**板块/指数**段（880003 = 平均股价、999999 = 上证指数），
+        都在 sh 下；沪市个股 6 开头、深市 0/3 开头、北交所 4/8/920 开头。
+        """
+        code = str(code)
+        if code.startswith(("88", "99")):
+            mk = "sh"
+        elif code.startswith(("60", "68", "56", "51", "58")):
+            mk = "sh"
+        elif code.startswith(("43", "83", "87", "92", "920")):
+            mk = "bj"
+        elif code.startswith(("39", "15", "16", "00", "30", "12")):
+            mk = "sz"
+        else:
+            mk = "sh"
+        fp = self._TDX_VIPDOC / mk / "lday" / f"{mk}{code}.day"
+        return fp if fp.exists() else None
+
+    def _tdx_index_rows(self, symbol: str, limit: int = 900):
+        """GUI 指数板 symbol（如 `em47.800005`）→ 通达信本地日线 rows。
+
+        ⚠️ 通达信 volume 是**股**、amount 是**元**；本仓图表口径 volume 用**手**
+        （与 `save_daily_cache` 一致）⇒ volume ÷100。带上 amount，免得下游再用
+        「典型价 × 量 × 100」去估（对 880003 这种合成指数没意义）。
+        """
+        try:
+            from core.board_index import tdx_code_for
+            code = tdx_code_for(symbol)
+            if not code:
+                return []
+            fp = self._tdx_day_path(code)
+            if fp is None:
+                return []
+            import struct
+            raw = fp.read_bytes()
+            n = len(raw) // 32
+            rows = []
+            for i in range(max(0, n - limit), n):
+                d, o, h, l, c, amt, vol, _ = struct.unpack("<IIIIIfII", raw[i * 32:(i + 1) * 32])
+                ds = str(d)
+                if len(ds) != 8:
+                    continue
+                rows.append({"date": f"{ds[:4]}-{ds[4:6]}-{ds[6:]}",
+                             "open": o / 100.0, "close": c / 100.0,
+                             "high": h / 100.0, "low": l / 100.0,
+                             "volume": vol / 100.0, "amount": float(amt)})
+            return rows
+        except Exception:
+            return []
+
     def _tdx_index_last(self, code: str):
         """通达信本地 `.day` 的最后两根 → (price, pre_close, asof)；读不到返回 (None, None, None)。
 
@@ -3726,17 +3778,8 @@ class Api:
         """
         import struct
         try:
-            code = str(code)
-            if code.startswith(("88", "99", "56")):
-                mk = "sh"
-            elif code.startswith(("39", "15", "16", "00", "30")):
-                mk = "sz"
-            elif code.startswith(("43", "83", "87", "92")):
-                mk = "bj"
-            else:
-                mk = "sh"
-            fp = self._TDX_VIPDOC / mk / "lday" / f"{mk}{code}.day"
-            if not fp.exists():
+            fp = self._tdx_day_path(code)
+            if fp is None:
                 return None, None, None
             n = fp.stat().st_size // 32
             if n < 2:
@@ -5128,8 +5171,11 @@ class Api:
                 # 东财 secid (em47.800005 → 47.800005)，平均股价等腾讯无代码的标的
                 # push2his 间歇断连(风控)，重试 8 次，多数 3-6 次内成功
                 data = {}
-                rows = []
-                for _att in range(8):
+                # 2026-10-26 owner：「平均股价请使用通达信进行读取修复」——卡片已经改读通达信，
+                # 点开 K 线却还走东财 push2his（风控时 8 次重试 × 10s 才报「东财拉取日线失败」）。
+                # 这里**通达信本地优先**：磁盘读、毫秒级；读不到才退回东财那套重试。
+                rows = self._tdx_index_rows(code_str)
+                for _att in range(0 if rows else 8):
                     try:
                         secid = code_str[2:]
                         url = (f"https://push2his.eastmoney.com/api/qt/stock/kline/get?secid={secid}"
@@ -5156,9 +5202,17 @@ class Api:
                         import time as _t
                         _t.sleep(1)
                 if rows:
-                    out["name"] = (data.get("data") or {}).get("name") or code
+                    _nm = (data.get("data") or {}).get("name")
+                    if not _nm:      # 走的是通达信本地 ⇒ 东财那边没返回，名字从指数板条目取
+                        try:
+                            from core.board_index import gui_board
+                            _nm = next((b["name"] for b in gui_board()
+                                        if b.get("symbol") == code_str), None)
+                        except Exception:
+                            _nm = None
+                    out["name"] = _nm or code
                 elif not out["error"]:
-                    out["error"] = "东财拉取日线失败"
+                    out["error"] = "通达信本地与东财均取不到日线"
                     return out
             else:
                 # P1-2 收敛：market_data provider（gm 主源/腾讯兜底）；指数走 index_daily

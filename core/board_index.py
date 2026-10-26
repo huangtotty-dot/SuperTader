@@ -84,6 +84,20 @@ GUI_INDEX_BOARD = [
 ]
 
 
+def tdx_code_for(symbol: str):
+    """GUI 指数板条目 → 通达信本地代码（读 `vipdoc/*/lday/*.day` 用）。无映射返回 None。
+
+    2026-10-26：平均股价在通达信里是 **880003**，在通达信客户端本地就有；
+    东财 push2delay/push2his 常年风控，卡片和 K 线都取不到。映射只写在这里，
+    t_gui 那边通过本函数取，避免符号表散落两处。
+    """
+    s = str(symbol or "")
+    for it in GUI_INDEX_BOARD:
+        if it.get("symbol") == s:
+            return it.get("tdx")
+    return None
+
+
 def gui_board(source: str | None = None) -> list:
     """GUI 指数板条目。source 给定时只返回该类（"gm"/"em"）。"""
     if source is None:
