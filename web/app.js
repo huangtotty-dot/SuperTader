@@ -7311,11 +7311,15 @@ function renderHunter(h) {
       const tagsTxt = s.tags && s.tags.length
         ? s.tags.map(t => tagBadge(t)).join(" ")
         : `<span class="cell-dim" style="font-size:11px" title="技术标签按板块后台批量计算（约 30~60 秒），完成后自动填上">⏳ 标签</span>`;
-      // 2026-10-20 owner：选股猎手个股行也按 5 日线着色——**站上=绿、其它=黄**。
-      // 未知（建仓符合度还没算到）才回退梯队/得分色，避免把「没数据」画成「未站上」。
+      // 2026-10-20 owner：选股猎手个股行也按 5 日线着色。
+      // 2026-10-26 owner：「在选股猎手中如果破5日线，应该和其它的例如建仓信号扫描一样显示红色」
+      //   —— 原来这里是**黄色**（站上=绿、其它=黄），与建仓信号扫描/异常监控池的
+      //   「站上=绿、破位=红」不一致；同一张屏上两张表对同一只票给出两种颜色，读起来像两套口径。
+      //   现在统一成红 `rgba(248,81,73,.12)`（与 pb 表的 `_scoreBg`、监控池的 `rowBg` 同值）。
+      // 未知（建仓符合度还没算到）才回退梯队/得分色，避免把「没数据」画成「破位」。
       const _ab5 = s.build_above_ma5;
       const _ma5Bg = (_ab5 === true) ? "background:rgba(63,185,80,.10);"
-        : (_ab5 === false) ? "background:rgba(210,153,34,.14);" : "";
+        : (_ab5 === false) ? "background:rgba(248,81,73,.12);" : "";
       const _rowBg = _ma5Bg || tierRowStyle(s.tier)
         || ((_sc === 0) ? "background:rgba(248,81,73,.12);"
           : (_sc !== null && _sc > 0) ? "background:rgba(63,185,80,.07);" : "");

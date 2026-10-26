@@ -125,11 +125,33 @@ class TestReadersRejectPoison:
         assert tp.TencentProvider().daily_cache("600900") is None
 
     def test_today_forming_marker_is_fine(self, cache_dir):
-        """当天那根是快照根很正常（盘中），不该因此拒绝整档。"""
-        _write(cache_dir, "600900", _rows(("2026-10-20", 10.0, 10.2),
-                                          ("2026-10-21", 10.2, 10.4)),
+        """当天那根是快照根很正常（盘中），不该因此拒绝整档。
+
+        ⚠️ 日期必须是**真·今天**（2026-10-26 修）：原来行写死 `2026-10-21`，
+        而 `daily_cache` 的 15 分钟 TTL 只在「末根==今天」时生效 ⇒ 隔天起
+        `_last_date < today and now>=09:15` 判 stale，用例就再也绿不了（日期腐烂）。
+        """
+        _write(cache_dir, "600900", _rows((_YDAY, 10.0, 10.2), (_TODAY, 10.2, 10.4)),
                forming=[_TODAY])
         assert tp.TencentProvider().daily_cache("600900") is not None
+
+    # ---- 2026-10-26 603200 事故：当日「收盘前写入、又没标 forming」的快照根 -------------
+    def test_unconfirmed_today_partial_rejected(self, cache_dir):
+        """10-26 09:36 写入的当日快照根（没标 forming）被当收盘 ⇒ 必须判 None 重取。
+
+        现场：603200 上海洗霸存成 close=46.44，当天实为涨停 50.41 ⇒ MA5 算成 47.57
+        ⇒ 技术标签报「破5日线」、猎手整行按未站上染色（owner 实报）。
+        """
+        _write(cache_dir, "603200", _rows((_YDAY, 10.0, 10.1), (_TODAY, 10.1, 10.2)),
+               saved_at=f"{_TODAY} 09:36:14")
+        assert cc.load_daily_display("603200") is None
+
+    def test_confirmed_today_close_accepted(self, cache_dir):
+        """收盘后（≥15:10）写入的同日根是真收盘，不能被误杀。"""
+        _write(cache_dir, "603200", _rows((_YDAY, 10.0, 10.1), (_TODAY, 10.1, 10.2)),
+               saved_at=f"{_TODAY} 15:30:00")
+        df = cc.load_daily_display("603200")
+        assert df is not None and str(df["date"].iloc[-1])[:10] == _TODAY
 
 
 class TestMergeDropsUnconfirmedForming:

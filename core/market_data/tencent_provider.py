@@ -192,6 +192,38 @@ def _idx_ensure_cols(df, source):
     return df
 
 
+_CLOSE_SETTLED_HHMM = "15:10"
+
+
+def is_unconfirmed_today_bar(rows, cached=None, now=None) -> bool:
+    """末行是不是「收盘前写入、又没标 forming」的**盘中快照**（2026-10-26 603200 事故）。
+
+    现场：`write_daily_history` 合并日线时没带 `forming_date`，而 `daily_many` 盘中会把
+    当日快照根一起返回 ⇒ 09:36 那根（close=46.44、量只有平时的 1/8）被当收盘留档，
+    MA5 随之算成 47.57 ⇒ 技术标签报「破5日线」、猎手整行染黄。而当天实际涨停。
+
+    判据三条同时成立：
+      ① 末行日期 == 今天；② `saved_at` 是**同一个日期、且在 15:10 之前**；
+      ③ `forming` 里没有记这一天（记了就是"已知半成品"，下游自会按 15 分钟 TTL 重取）。
+    """
+    try:
+        if not rows:
+            return False
+        _n = now or datetime.now()
+        _today = _n.strftime("%Y-%m-%d")
+        _last = str(rows[-1].get("date"))[:10]
+        if _last != _today:
+            return False
+        _saved = str(((cached or {}).get("saved_at")) or "")
+        _form = {str(x) for x in (((cached or {}).get("forming")) or [])}
+        return (_saved[:10] == _last
+                and bool(_saved[11:16])
+                and _saved[11:16] < _CLOSE_SETTLED_HHMM
+                and _last not in _form)
+    except Exception:
+        return False
+
+
 def save_daily_cache(code: str, df, days: int = 800, forming_date: str = None):
     """写个股日线缓存（不变式 {date, saved_at, rows:[{date,open,close,high,low,volume}]}）。
     gm 结果也写缓存（审核 P1 阻断6：gm 路径不能每次直拉）。
@@ -727,6 +759,12 @@ class TencentProvider:
                 cached = _read_json(cache_fp)
                 if cached.get("rows"):
                     rows = cached["rows"]
+                    # 2026-10-26（603200 事故）：这条兜底**绕过了 `daily_cache` 的全部闸**，
+                    # 会把「收盘前的盘中快照根」当收盘直接交出去 ⇒ 这里至少把那一根丢掉
+                    # （宁可今天缺一根，也不给下游一个错的收盘价）。
+                    if is_unconfirmed_today_bar(rows, cached):
+                        print(f"[WARN] tencent.daily 兜底丢弃未确认的当日快照根({code})", flush=True)
+                        rows = rows[:-1]
                     live = self.snapshot([code]).get(code)
                     if live and str(live.get("ts_date")) == _today and live.get("price"):
                         # F-6(2026-09-04): 防重复日期行——缓存末行已是 today 则不追加（实测 347 行含两行 09-04）

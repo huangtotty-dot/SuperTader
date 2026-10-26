@@ -56,7 +56,11 @@ class TestHunterMa5Flag(unittest.TestCase):
         self.assertIn(
             '${maStateCellHtml(s.build_above_ma20, 20, s.build_above_ma5, 5, '
             'undefined, "#d29922", "未站上")}', _JS)
-        self.assertIn("background:rgba(210,153,34,.14);", _JS)
+        # 2026-10-26 owner：「破5日线应该和建仓信号扫描一样显示红色」——行底色从
+        # 琥珀 rgba(210,153,34,.14) 改成与 pb 表 `_scoreBg` / 监控池 `rowBg` 同值的红。
+        # ⚠️ 上面那条 `"#d29922"` 是**20 日线列**的颜色（未站上 20 日线用琥珀提示），
+        # 与行底色是两回事，别一起改。
+        self.assertIn("background:rgba(248,81,73,.12);", _JS)
         # 行底色仍按 5 日线
         self.assertIn('const _ab5 = s.build_above_ma5;', _JS)
 

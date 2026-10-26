@@ -122,6 +122,17 @@ def load_daily_display(code, now=None):
             return None
     except Exception:
         pass
+    # 2026-10-26（603200 事故）：**当日那根如果是收盘前写入、又没标 forming** ⇒ 它是盘中快照，
+    # 不是收盘。上面的隔夜跳空闸抓不到它（当日根后面还没有下一根可比），旧的新鲜度闸只看
+    # 日期差（≤12 自然日）也放行 ⇒ 半成品一路当收盘用。判 None 逼调用方重取。
+    # 判据与 `tencent.daily` 兜底共用同一个函数，避免两处漂移。
+    try:
+        from core.market_data.tencent_provider import is_unconfirmed_today_bar
+        _n = _as_dt(now) if not isinstance(now, datetime) else now
+        if is_unconfirmed_today_bar(rows, cached, now=_n):
+            return None
+    except Exception:
+        pass
     try:
         df = pd.DataFrame(rows)[_DAILY_COLS]
         df.attrs["source"] = "cache"
@@ -138,9 +149,24 @@ def write_daily_history(code, df) -> bool:
     """
     if df is None or getattr(df, "empty", True):
         return False
+    # 2026-10-26（owner 报「上海洗霸已站上 5/10 日线却显示破位、整行是黄的」）：
+    # 这里原来**不带 forming_date** 就把 df 并进缓存，而 `daily_many` 在盘中会把
+    # **当日快照根**一起返回 ⇒ merge 既把快照值写成收盘、又顺手把 forming 标记清空
+    # （`forming = {forming_date} if forming_date else set()`）⇒ 那根半成品被当成真收盘永久留档。
+    # 实测（2026-10-26 09:3x 写入）：603200 存成 close=46.44（当天实为涨停），
+    # MA5=47.57 ⇒ 技术标签报「破5日线」、猎手整行按未站上染黄。全池同批 **61 只**中招。
+    # 判据：**末行就是今天** ⇒ 它只能来自快照（历史日不会变），必须标 forming；
+    # 后续真数据确认时会覆盖并清标记（merge 的 `old_forming ∩ incoming` 分支）。
+    _forming = None
+    try:
+        _last = str(df["date"].iloc[-1])[:10]
+        if _last == datetime.now().strftime("%Y-%m-%d"):
+            _forming = _last
+    except Exception:
+        _forming = None
     try:
         from core.market_data.tencent_provider import merge_daily_cache
-        merge_daily_cache(str(code).split("_")[0], df)
+        merge_daily_cache(str(code).split("_")[0], df, forming_date=_forming)
         return True
     except Exception:
         return False
