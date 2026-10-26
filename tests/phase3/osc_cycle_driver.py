@@ -193,6 +193,9 @@ GM._OSC_BOOK_DIR = BOOK
 GM.OSC_RT.book_dir = BOOK
 OSC.prescreen.default_provider = lambda: FakeProvider()
 OSC.prescreen.sym2board_map = lambda: {c: "半导体" for c in SECTOR_CODES}
+# P0-3（2026-10-26）：init 预筛主路径置 no-op——本驱动验的是逐日全周期交易行为，
+# 不让 init 预筛抢跑 09:31 钩子的戏份；prescreen_init 自身由 test_osc_prescreen_init 覆盖。
+OSC.prescreen_init = lambda *a, **k: False
 
 
 class Ctx(object):

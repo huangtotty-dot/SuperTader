@@ -164,6 +164,23 @@ class TestNoBareUrlopen(unittest.TestCase):
         from stock_hunter.modules import market_data
         self._assert_pooled(market_data.MarketDataFetcher._fetch_kline_multi)
 
+    # ── P0-5(2026-07-29)：tencent_provider 最后 4 处裸直连收编进连接池 ──
+    def test_tencent_daily(self):
+        from core.market_data.tencent_provider import TencentProvider
+        self._assert_pooled(TencentProvider.daily)
+
+    def test_tencent_index_daily(self):
+        from core.market_data.tencent_provider import TencentProvider
+        self._assert_pooled(TencentProvider.index_daily)
+
+    def test_tencent_minute(self):
+        from core.market_data.tencent_provider import TencentProvider
+        self._assert_pooled(TencentProvider.minute)
+
+    def test_tencent_index_minute(self):
+        from core.market_data.tencent_provider import TencentProvider
+        self._assert_pooled(TencentProvider.index_minute)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

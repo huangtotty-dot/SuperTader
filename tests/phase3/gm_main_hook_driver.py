@@ -81,6 +81,9 @@ calls = []
 for _n in ("prepare", "try_buy", "try_sell", "try_morning_sell"):
     setattr(OSC.hooks, _n, (lambda n: (lambda *a, **k: calls.append(n)))(_n))
 setattr(GM, "_writeback_holdings", lambda *a, **k: calls.append("_writeback_holdings"))
+# P0-3（2026-10-26）：init 阶段的盘前预筛主路径置 no-op——本驱动只验「闸 + 定序」，
+# 不能让它在 init 里真跑全市场批量取数；prescreen_init 自身行为由 test_osc_prescreen_init 覆盖。
+OSC.prescreen_init = lambda *a, **k: False
 
 
 class _Pos(object):

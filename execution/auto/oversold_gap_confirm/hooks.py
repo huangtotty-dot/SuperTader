@@ -3,7 +3,12 @@
 
 ## 六个时点（都是**每日一次**，仅 MODE_LIVE）
 
-    09:31  prepare           盘前预筛：前一日涨停家数 top-N 板块 ∩ 昨收<MA20 → 候选
+    init   prescreen_init    P0-3（2026-10-26）：盘前预筛**主路径前移到 init**（事件循环开始前
+                             跑完全市场批量取数；原来在 09:31 钩子里跑，实测 169s~472s、
+                             最差 1344.5s，阻塞期间 fill 回调排队、心跳停写——10-15/17/18/22
+                             的 09:43 心跳中断红告警根因）。预筛只用 D-1 及之前日线、
+                             与盘中行情无关 ⇒ 前移完全等价。fail-open：失败不阻止启动。
+    09:31  prepare           盘前预筛**兜底**（init 已成功 ⇒ 跳过；init 未跑/失败 ⇒ 照旧执行）
     10:00  try_morning_sell  D+1 持仓早盘冲高 ≥ 入场价×(1+target) → 卖（**先于买侧**）
     10:00  try_buy           10:00 棒 → 决策核 → gap top-N → 下单
     10:08  try_backfill #1   未成交 → 撤单 → 候补复检 → 顺移（2026-10-14 新增）
@@ -53,6 +58,9 @@ _STATE = {"date": None, "prepare": False, "buy": False, "sell": False,
           "buy_done": False,  # 首轮已执行（落盘，防进程重启后重复下单）
           # 盘前宇宙/板块档位（2026-10-17）：只给「每日选股记录」落盘用
           "prescreen_meta": {},
+          # P0-3（2026-10-26）：init 前移主路径的标记
+          "prepare_via": None,        # "init" = init 阶段已成功（09:31 钩子据此跳过）
+          "prepare_skip_logged": False,  # 09:31 钩子「跳过」日志只打一行（不刷屏）
           # 预挂目标限价 S0 影子探测（2026-10-19，只记录不下单）
           "probe_plan": False, "probe_final": False,
           }
@@ -63,20 +71,24 @@ def reset_day(today) -> None:
     _STATE.update(date=today, prepare=False, buy=False, sell=False,
                   morning=False, candidates={}, fills=None, pending=[], spares=[],
                   done_codes=set(), backfill={}, buy_done=False, prescreen_meta={},
+                  prepare_via=None, prepare_skip_logged=False,
                   probe_plan=False, probe_final=False)
 
 
-def _write_prescreen(rt, date, cand, meta) -> str | None:
+def _write_prescreen(rt, date, cand, meta, ok=True) -> str | None:
     """盘前候选名单 → `prescreen_{date}.json`（2026-10-17，供 GUI「每日选股记录」）。
 
     ⚠️ **绝不抛**：这是纯展示留痕，写失败不该影响预筛/下单（fail-closed 语义不在这里）。
     ⚠️ 原子写（tmp+replace）：GUI 可能正在读，普通写会让它读到半截 JSON。
+    `ok=False`（P0-3）：本次预筛**异常失败**的标记——`_read_prescreen_cache` 据此
+    不把这份空名单当「当日新鲜结果」（否则 init 失败写出的空缓存会在重启时骗过兜底）。
     """
     try:
         fp = os.path.join(str(rt.book_dir), "prescreen_%s.json" % str(date))
         os.makedirs(os.path.dirname(fp), exist_ok=True)
         payload = {"date": str(date),
                    "generated_at": _dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                   "ok": bool(ok),
                    "universe": (meta or {}).get("universe", ""),
                    "board_top_n": (meta or {}).get("board_top_n"),
                    "candidates_n": len(cand or {}),
@@ -163,7 +175,11 @@ def sell_enabled(rt) -> bool:
 
 
 def prepare(rt, context, now, today):
-    """盘前盘前预筛（每日一次，09:31 触发；取数须在 10:00 之前完成）。"""
+    """盘前预筛（每日一次）。返回是否**成功跑完**（异常 ⇒ False；0 只候选仍是成功）。
+
+    P0-3（2026-10-26）起有两条入口：init 前移主路径（`prescreen_init`，开盘前跑）与
+    09:31 钩子兜底。候选语义不变：fail-closed——取数失败 ⇒ 空候选 ⇒ 当日不下单。
+    """
     _top = int(rt.param("osc_board_top_n", 5))
     # 宇宙总闸（2026-10-14）：True=全市场扩展（当前行为）；False=退回猎手池。
     # 存在的理由：扩展只有行为证据、**没有通过的回测证据**（见 prescreen.universe_board_map 注释）
@@ -172,6 +188,7 @@ def prepare(rt, context, now, today):
     _t0 = _time.time()
     rt.log(f"[OSC] ── 盘前预筛开始 ──（前{_top}热门板块 ∩ "
            f"{'全市场' if _full else '猎手池(已回退)'} ∩ 昨收<MA20）")
+    _ok = True
     try:
         _cand = prescreen.premarket_candidates(_top, str(today), full_market=_full)
     except Exception as _e:
@@ -179,6 +196,7 @@ def prepare(rt, context, now, today):
         rt.audit({"event": "osc_prepare_fail", "date": str(today),
                       "error": str(_e)[:200]})
         _cand = {}
+        _ok = False
     _STATE["candidates"] = _cand
     _el = _time.time() - _t0
     rt.log(f"[OSC] 盘前超跌候选 {len(_cand)} 只（前{_top}板块内 且 昨收<MA20）· 耗时 {_el:.1f}s")
@@ -199,7 +217,100 @@ def prepare(rt, context, now, today):
     # `_STATE["candidates"]` ⇒ 进程重启即丢，GUI 也无从回看）。供「每日选股记录」用。
     _STATE["prescreen_meta"] = {"universe": "full_market" if _full else "hunter_pool",
                                 "board_top_n": _top}
-    _write_prescreen(rt, today, _cand, _STATE["prescreen_meta"])
+    _write_prescreen(rt, today, _cand, _STATE["prescreen_meta"], ok=_ok)
+    return _ok
+
+
+def _read_prescreen_cache(rt, today):
+    """读 `{book_dir}/prescreen_{today}.json`——**仅当 date==今日 且 ok 不为 False** 才算新鲜。
+
+    返回候选 dict（合法的「0 只候选」结果返回 {}）；文件缺失/读坏/隔日/失败标记 ⇒ None。
+    配套 P0-3：进程盘中重启时 init 预筛直接装载缓存（秒级），不再重复全市场批量取数；
+    顺带恢复 `prescreen_meta`（重启后 10:00 买侧的 prescreen_meta 留痕不断档）。
+    """
+    try:
+        fp = os.path.join(str(rt.book_dir), "prescreen_%s.json" % str(today))
+        if not os.path.exists(fp):
+            return None
+        with open(fp, encoding="utf-8") as f:
+            d = json.load(f) or {}
+        if str(d.get("date")) != str(today):
+            return None
+        if d.get("ok") is False:            # 失败写出的空名单不算「新鲜结果」（2026-10-26 P0-3）
+            return None
+        cand = {}
+        for c, v in (d.get("candidates") or {}).items():
+            if not isinstance(v, dict):
+                continue
+            try:
+                pc, ma = float(v.get("prev_close")), float(v.get("ma20"))
+            except (TypeError, ValueError):
+                continue
+            if pc > 0 and ma > 0:
+                cand[str(c)] = {"prev_close": pc, "ma20": ma,
+                                "board": v.get("board", ""), "name": v.get("name", "")}
+        _STATE["prescreen_meta"] = {"universe": d.get("universe", ""),
+                                    "board_top_n": d.get("board_top_n")}
+        return cand
+    except Exception:
+        return None
+
+
+def prescreen_init(rt, today=None) -> bool:
+    """P0-3 实时性修复（2026-10-26）：盘前预筛从 09:31 事件钩子**前移到策略 init**。
+
+    等价性：`prescreen.premarket_candidates` 只用 D-1 及之前的完整日线（date 闸剔除
+    当日 forming bar），与盘中行情无关 ⇒ init（开盘前、事件循环开始前）跑与 09:31 跑
+    结果一致；而 init 阶段跑 169s~472s 的全市场批量取数**不会**连坐 fill 派发与心跳。
+
+    语义：
+      · 有当日新鲜缓存（重启场景）⇒ **只装载不重跑**，置 `prepare`/`prepare_via="init"`；
+      · 无缓存 ⇒ 现场执行 `prepare`；成功（含 0 只候选）同样置位，09:31 钩子跳过；
+      · 失败/异常 ⇒ **不动任何状态**（fail-open：绝不阻止策略启动），
+        09:31 钩子看到 `prepare` 未置位会照旧执行（兜底重跑一次）。
+    返回是否拿到当日可用结果。
+    """
+    if not enabled(rt):
+        return False
+    _today = str(today or _dt.date.today())
+    _t0 = _time.time()
+    _ok = False
+    _src = "init_run"
+    try:
+        _cached = _read_prescreen_cache(rt, _today)
+        if _cached is not None:
+            _STATE["candidates"] = _cached
+            _ok = True
+            _src = "cache"
+            rt.log(f"[OSC] init 预筛：发现当日新鲜缓存（{_today}）⇒ 直接装载 "
+                   f"{len(_cached)} 只候选（进程重启补载，不再重复取数）")
+        else:
+            rt.log("[OSC] init 预筛：无当日缓存 ⇒ 开盘前现场执行"
+                   "（P0-3 主路径，事件循环开始前完成，不再占用 09:31 事件线程）")
+            _ok = bool(prepare(rt, None, None, _today))
+    except Exception as _e:
+        rt.log(f"[OSC] ⚠️ init 预筛异常: {_e}")
+        _ok = False
+    _el = _time.time() - _t0
+    if _ok:
+        _STATE["prepare"] = True
+        _STATE["prepare_via"] = "init"
+        rt.log(f"[OSC] init 预筛完成：{len(_STATE.get('candidates') or {})} 只候选 · "
+               f"来源 {_src} · 总耗时 {_el:.1f}s（09:31 钩子将跳过）")
+        try:
+            rt.audit({"event": "osc_prescreen_init", "date": _today, "source": _src,
+                      "candidates": len(_STATE.get("candidates") or {}),
+                      "elapsed_sec": round(_el, 1)})
+        except Exception:
+            pass
+        return True
+    rt.log("[OSC] ⚠️ init 预筛未成功（fail-open：策略照常启动，09:31 钩子兜底重跑一次）")
+    try:
+        rt.audit({"event": "osc_prescreen_init_fail", "date": _today,
+                  "elapsed_sec": round(_el, 1)})
+    except Exception:
+        pass
+    return False
 
 
 
@@ -832,12 +943,20 @@ def on_bar(rt, context, now, today, t) -> None:
         return
     live = rt.is_live(context)
     # 09:31 盘前预筛（候选要先于 10:00 备好）
+    # P0-3（2026-10-26）：主路径已前移到 init（`prescreen_init`，由宿主 gm_main.init 调）。
+    # 本钩子保留为**兜底**：`prepare` 未置位（init 未跑/失败，或进程盘中重启且当日无结果）
+    # 时照旧执行；init 已成功（`prepare_via=="init"`，含当日新鲜缓存装载）时跳过——
+    # 不再在事件派发线程上重复跑全市场批量取数（169s~472s 阻塞的原始事故现场）。
     if live and t >= dtime(9, 31) and not _STATE["prepare"]:
         _STATE["prepare"] = True
         try:
             prepare(rt, context, now, today)
         except Exception as _e:
             rt.log(f"[OSC] 盘前预筛失败（不阻断主循环）: {_e}")
+    elif (live and t >= dtime(9, 31) and _STATE.get("prepare_via") == "init"
+          and not _STATE.get("prepare_skip_logged")):
+        _STATE["prepare_skip_logged"] = True
+        rt.log("[OSC] 09:31 预筛钩子：init 阶段已成功（候选已就绪）⇒ 跳过兜底重跑")
     # 09:31 预挂目标限价 S0 探测（只落盘计划，不下单）
     if live and t >= dtime(9, 31) and not _STATE["probe_plan"] and preplace_probe_enabled(rt):
         _STATE["probe_plan"] = True

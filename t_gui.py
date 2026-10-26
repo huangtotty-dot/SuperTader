@@ -14,6 +14,7 @@ t_gui.py — 做T实盘·盘后复盘决策看板（pywebview 桌面壳）
   doc/每日复盘/{date}_复盘.md                              复盘报告 markdown
   holdings.json / t_io/state/holdings_daily_{date}.json     持仓（当前 + GUI 日快照；旧 holdings_{date}.json 已于 2026-08-30 清理）
 """
+import copy
 import json
 import math
 import os
@@ -876,6 +877,55 @@ def _tail_last_json_line(fp, max_bytes=65536):
     return None
 
 
+def _parse_jsonl_text(text):
+    """jsonl 文本 → dict 行列表（跳过空行/坏行），与 load_live 原全量读的解析口径一致。"""
+    rows = []
+    for line in text.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            rows.append(json.loads(line))
+        except Exception:
+            continue
+    return rows
+
+
+def _tail_decision_rows(fp, chunk_bytes=524288):
+    """P0-1：decision_trace 尾部读（load_live 10s 轮询热路径，禁整文件读）。
+
+    load_live 的结果尾部由「非HOLD + 近阈HOLD + 全部HOLD」拼接后取 [-20:] 构成：
+    当文件里 HOLD 行 ≥20 时，结果**恰为最后 20 条 HOLD 行**，与靠前的非HOLD/近阈行无关。
+    因此尾块（默认 512KB）内只要数出 ≥20 条 HOLD 行，用尾块算出的结果与全量读**完全一致**；
+    否则（早盘文件还小、或尾块 HOLD 不足 20 条）回退全量读，保证返回契约逐字节不变。
+    """
+    try:
+        size = fp.stat().st_size
+        if size <= 0:
+            return []
+        with open(fp, "rb") as f:
+            if size <= chunk_bytes:          # 小文件直接全读（≡原逻辑）
+                return _parse_jsonl_text(f.read().decode("utf-8", "replace"))
+            f.seek(size - chunk_bytes)
+            buf = f.read()
+        text = buf.decode("utf-8", "replace")
+        nl = text.find("\n")
+        if nl < 0:                            # 尾块内没有一条完整行 → 回退全量读
+            raise ValueError("no full line in tail chunk")
+        rows = _parse_jsonl_text(text[nl + 1:])
+        n_hold = sum(1 for r in rows if r.get("decision") == "HOLD")
+        if n_hold >= 20:                      # 尾块已足够复现「最后 20 条 HOLD」⇒ 与全量读等价
+            return rows
+    except Exception:
+        pass
+    # 回退：全量读（仅早盘/异常时触发）
+    try:
+        with open(fp, encoding="utf-8") as f:
+            return _parse_jsonl_text(f.read())
+    except Exception:
+        return []
+
+
 # ---- K线弹窗「30分/60分」分时取数（2026-10-04）----
 # 在线走 tushare **原生** freq；不复用 divergence._resample_minutes（它用 dt.floor，
 # A股午休会把 60min 桶错位）。无 token / 超频 → 回退本地 tushare_mins 缓存（零网络）。
@@ -1047,6 +1097,23 @@ _PB_STRUCT_HIST: dict = {}
 _PB_STRUCT_HIST_LOCK = threading.Lock()
 _PB_STRUCT_HIST_MAX = 5000
 _PB_STRUCT_POOL_MAX = 60                                # 单轮预热标的数上限（防误传全池打爆 tushare）
+
+# ---- P0-2：_agg_position_builder 整文件指纹缓存（refresh_pb 10s 轮询热路径）-----------
+# 原实现每次轮询都 open().read().splitlines() 全量解析 position_builder_{date}.jsonl
+# （单调增长，越到尾盘越卡），外加 watchlist_buy.json / holdings_manual.json / holdings_auto.json
+# 三次 _load_json。改为按 4 个文件的 (mtime, size) 元组做指纹：任一变化才重算，否则返回上次结果。
+# 缓存 key 含 date ⇒ 跨天天然失效；命中/写入都走 deepcopy，隔绝调用方对 rows 的原位改写。
+_PB_AGG_CACHE: dict = {}         # (date, filter_high_confidence) -> (fingerprint, deepcopy(result))
+_PB_AGG_LOCK = threading.Lock()
+
+
+def _file_sig(p):
+    """(mtime, size) 指纹；文件不存在/ stat 失败返回 None（None 本身也是合法指纹位）。"""
+    try:
+        st = os.stat(p)
+        return (st.st_mtime, st.st_size)
+    except Exception:
+        return None
 
 # ---- 当日「均线回站」+ 突破时刻（2026-10-23 owner）----------------------------------
 # 「建仓信号扫描 / 持仓 30 分钟风险体检 / 异常监控池」三张表共用这一份缓存：
@@ -5156,13 +5223,30 @@ class Api:
                 except Exception:
                     self._mw_window = None          # 旧窗口已销毁 ⇒ 重建
             entry = Path(__file__).parent / "web" / "index.html"
+            # 2026-10-26 owner：「多窗口显示感觉太小了，适当放大」。
+            # 原来硬编码 1180×820 —— 比主窗口（1440×920）还小，九宫格每格只剩 ~380×250，
+            # K线/量能/MACD 三个窗挤在一起根本看不清。改成按**主屏物理分辨率**铺 94%。
+            # ⚠️ 用 physical_* 而不是 width/height：本机 150% 缩放，Screen.width 是逻辑
+            #    1280×720、physical 才是 1920×1080，而 create_window 收的是物理像素
+            #    （主窗口 1440×920 就是按物理给的）。
+            _sw, _sh = 1920, 1080
+            try:
+                _scr = webview.screens[0]
+                _sw = int(getattr(_scr, "physical_width", 0) or _scr.width or _sw)
+                _sh = int(getattr(_scr, "physical_height", 0) or _scr.height or _sh)
+            except Exception:
+                pass
+            # 再留出**任务栏 + 标题栏**的余量（按比例算会顶到屏幕边，拖不动）：
+            # 实测 1080p 上 0.94 会得到 1015，加上标题栏就出屏了 ⇒ 另加 -120 / -80 的硬约束。
+            _mw_w = max(1200, min(int(_sw * 0.94), _sw - 80, 2600))
+            _mw_h = max(780, min(int(_sh * 0.94), _sh - 120, 1500))
             win = webview.create_window(
                 "多窗口看盘 (5分K)",
                 str(entry),
                 js_api=self,
-                width=1180,
-                height=820,
-                min_size=(560, 380),
+                width=_mw_w,
+                height=_mw_h,
+                min_size=(900, 620),
             )
             self._mw_window = win
 
@@ -11295,15 +11379,9 @@ class Api:
 
         fp = TRACES / f"decision_trace_{date}.jsonl"
         if fp.exists():
-            rows = []
-            for line in open(fp, encoding="utf-8"):
-                line = line.strip()
-                if not line:
-                    continue
-                try:
-                    rows.append(json.loads(line))
-                except Exception:
-                    continue
+            # P0-1：尾部读（默认尾 512KB），不再整文件逐行 json.loads；
+            # 尾块 HOLD ≥20 条时与全量读结果完全一致，否则内部自动回退全量读。
+            rows = _tail_decision_rows(fp)
             # 取尾部：非 HOLD 优先 + 近阈 HOLD（差 5 分内）+ 普通 HOLD 补足到 20
             non_hold = [r for r in rows if r.get("decision") not in ("HOLD", None)]
             near_hold = [
@@ -12362,6 +12440,21 @@ class Api:
 
     def _agg_position_builder(self, date, filter_high_confidence=False):
         fp = TRACES / f"position_builder_{date}.jsonl"
+        # P0-2：指纹缓存命中 → 直接返回上次聚合结果（deepcopy，防调用方原位改写污染缓存）。
+        # 指纹 = position_builder jsonl + watchlist_buy.json + holdings_manual.json
+        #        + holdings_auto.json（load_auto 底层文件）4 个 (mtime, size) 元组；
+        # key 含 (date, filter_high_confidence) ⇒ 跨天/参数变化天然失效。
+        _cache_key = (str(date), bool(filter_high_confidence))
+        _fp_now = (
+            _file_sig(fp),
+            _file_sig(STATE_DIR / "watchlist_buy.json"),
+            _file_sig(HOLDINGS_MANUAL),
+            _file_sig(STATE_DIR / "holdings_auto.json"),
+        )
+        with _PB_AGG_LOCK:
+            _hit = _PB_AGG_CACHE.get(_cache_key)
+            if _hit is not None and _hit[0] == _fp_now:
+                return copy.deepcopy(_hit[1])
         wl = _load_json(STATE_DIR / "watchlist_buy.json", {})
         wl_stocks = wl.get("stocks", {})
         holdings = _load_json(HOLDINGS_MANUAL, {})
@@ -12623,6 +12716,11 @@ class Api:
         }
         if _pb_m30_pending:
             _out["pb_m30_pending"] = True
+        # P0-2：写入指纹缓存（只留最新一次，避免历史日期/参数组合堆积；
+        # 存 deepcopy，之后调用方对 _out/rows 的改写不影响缓存副本）
+        with _PB_AGG_LOCK:
+            _PB_AGG_CACHE.clear()
+            _PB_AGG_CACHE[_cache_key] = (_fp_now, copy.deepcopy(_out))
         return _out
 
     def _filter_high_confidence_signals(self, rows: list) -> list:

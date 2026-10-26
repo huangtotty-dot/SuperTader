@@ -26,6 +26,7 @@ import oversold_gap_confirm as osc
 OSC_RT = osc.Runtime(services=SERVICES, book_dir=_OSC_BOOK_DIR, is_live=_is_live, log=print)
 ...
 osc.reset_day(today)                       # 按日重置（宿主在日期切换时调用）
+osc.prescreen_init(OSC_RT)                 # P0-3：盘前预筛主路径（init 阶段调用，fail-open）
 osc.on_bar(OSC_RT, context, now, today, t)  # 四个时点的时间窗/每日一次/模式闸都在包内
 osc.executor.load_book(dir)                 # 账本（宿主归属判定也读它）
 ```
@@ -39,7 +40,7 @@ osc.executor.load_book(dir)                 # 账本（宿主归属判定也读�
 from __future__ import annotations
 
 from . import backfill, decision, executor, gateway, hooks, prescreen, style
-from .hooks import enabled, on_bar, reset_day, sell_enabled
+from .hooks import enabled, on_bar, prescreen_init, reset_day, sell_enabled
 from .runtime import Runtime
 
 # 策略元信息（宿主/框架按此登记；目前只有这一条策略）
@@ -57,4 +58,4 @@ HOOKS = (
 
 __all__ = ["ID", "NAME", "ORDER_TYPE", "PARAM_PREFIX", "BOOK_DIRNAME", "HOOKS",
            "Runtime", "decision", "executor", "gateway", "hooks", "prescreen",
-           "on_bar", "reset_day", "enabled", "sell_enabled"]
+           "on_bar", "reset_day", "enabled", "sell_enabled", "prescreen_init"]

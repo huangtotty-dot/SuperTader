@@ -620,8 +620,8 @@ def _needed_index_gm_symbols():
 def init(context):
     global _AUDIT_RUN_ID
     _AUDIT_RUN_ID = datetime.now().strftime("%Y%m%d_%H%M%S")
-    # 版本探针：用于确认掘金策略加载的是哪一版 gm_main.py（2026-10-12 = 超跌跳空确认单链版）
-    print(f"[INIT] gm_main.py 2026-10-12 ws-only loaded")
+    # 版本探针：用于确认掘金策略加载的是哪一版 gm_main.py（2026-10-26 = P0-3 预筛前移 init 版）
+    print(f"[INIT] gm_main.py 2026-10-26 ws-only+P0-3 loaded")
     # 运维自举（0806 红日整改）：控制台日志落盘 + watcher 自动拉起
     ops_guard.bootstrap_logging(PROJECT_DIR)
     ops_guard.ensure_watcher(PROJECT_DIR)
@@ -650,6 +650,19 @@ def init(context):
     except Exception as _fe:
         print(f"⚠️⚠️ [init] core.market_data.facade 不可导入（盘前预筛将 fail-closed、当日不下单）: "
               f"{type(_fe).__name__}: {_fe}｜sys.path={sys.path[:3]}")
+
+    # ── P0-3 实时性修复（2026-10-26）：盘前预筛从 09:31 事件钩子前移到 init ──
+    # 原 09:31 钩子在 SDK 事件派发线程上串行跑全市场 ~5000 只 × 25 批日线
+    # （实测 169s~472s，最差 1344.5s），阻塞期间 fill 回调排队、心跳停写
+    # （10-15/17/18/22 的 09:43 心跳中断红告警根因）。预筛只用 D-1 及之前日线、
+    # 与盘中行情无关 ⇒ 前移到 init（事件循环开始前）完全等价。
+    # fail-open：osc.prescreen_init 内部全兜底，失败绝不阻止策略启动；
+    # 09:31 钩子保留兜底（init 失败 / 盘中重启且当日无新鲜缓存时补跑一次）。
+    try:
+        if context.mode == MODE_LIVE:
+            osc.prescreen_init(OSC_RT)
+    except Exception as _pse:
+        print(f"[init] ⚠️ P0-3 init 预筛异常（不阻止启动，09:31 钩子兜底）: {_pse}")
     context.executed_orders = {}
     context.last_index_regime = "range"
     context.last_index_score = 0.0

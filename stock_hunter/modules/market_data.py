@@ -21,6 +21,37 @@ from core.market_data.http_pool import pooled_get
 MARKET_PROGRESS = {"running": False, "phase": "", "done": 0, "total": 0, "msg": ""}
 
 
+# ── P0-4 北交所日内负缓存（2026-07-29）──────────────────────────────────────
+# 北交所日线在当前环境四源全不通（腾讯 ifzq / GM / 东财 / akshare，见 bj_daily docstring），
+# 而 `_fetch_kline_multi` 的 provider 兜底会把每只北交所码送进 `fetch_bj_daily` 的
+# 8 次 × (0.8s sleep + 最长 10s 超时) 重试 ⇒ 321 只每轮猎手扫描最坏 ~2 分钟纯等待且必然全失败。
+# 故：本轮已确认「全部数据源均不可得」的北交所码记入**进程级**集合，同一交易日内后续轮次
+# 直接按失败处理（返回 None，失败契约不变）；key 带日期，跨交易日自动失效。
+# 线程安全：fetch_one 在 20 线程池里跑，set 的 add/in 在 GIL 下各自原子，
+# 最坏后果是同日多付一次网络重试（幂等），不加锁。
+_BJ_NEG_CACHE = {"date": None, "codes": set()}
+
+
+def _bj_neg_cache_hit(code6: str) -> bool:
+    """北交所码今日是否已确认四源全失败（命中则本轮直接按失败处理）。"""
+    from datetime import datetime as _dt
+    _today = _dt.now().strftime("%Y-%m-%d")
+    if _BJ_NEG_CACHE["date"] != _today:      # 跨交易日自动失效
+        _BJ_NEG_CACHE["date"] = _today
+        _BJ_NEG_CACHE["codes"] = set()
+        return False
+    return code6 in _BJ_NEG_CACHE["codes"]
+
+
+def _bj_neg_cache_add(code6: str) -> None:
+    from datetime import datetime as _dt
+    _today = _dt.now().strftime("%Y-%m-%d")
+    if _BJ_NEG_CACHE["date"] != _today:
+        _BJ_NEG_CACHE["date"] = _today
+        _BJ_NEG_CACHE["codes"] = set()
+    _BJ_NEG_CACHE["codes"].add(code6)
+
+
 def _df_to_kline_rows(df):
     """provider 日线 DataFrame → 腾讯 fqkline 6 列形态 [[date,open,close,high,low,volume]]。
     2026-10-08：ifzq 主机被 WAF 拦截后，改由 provider（GM/腾讯）供数，下游解析保持不变。"""
@@ -327,6 +358,12 @@ class MarketDataFetcher:
             rows = _df_to_kline_rows(_bulk[_c6])
             if rows:
                 return {"code": 0, "data": {symbol: {"qfqday": rows}}}
+        # P0-4：北交所日内负缓存——本交易日已确认四源全失败的码直接按失败返回，
+        # 不再逐只重试 8 次 × (0.8s + 最长 10s)（provider 兜底对北交所走 bj_daily）。
+        from core.market_data.codec import market_of as _market_of
+        _is_bj = (_market_of(_c6) == "BJ")
+        if _is_bj and _bj_neg_cache_hit(_c6):
+            return None
         headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
             'Referer': 'https://finance.qq.com/',
@@ -351,6 +388,10 @@ class MarketDataFetcher:
                 return {"code": 0, "data": {symbol: {"qfqday": rows}}}
         except Exception:
             pass
+        # P0-4：走到这里 = 本地缓存 / ifzq 双机 / provider 兜底**全部失败**。
+        # 北交所码记入日内负缓存，同一交易日内后续轮次不再逐只重试（见模块头注释）。
+        if _is_bj:
+            _bj_neg_cache_add(_c6)
         return None
 
     def _fetch_historical_tencent(self, codes: List[str], date_str: str) -> tuple:

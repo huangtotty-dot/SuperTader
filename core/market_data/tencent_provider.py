@@ -320,6 +320,10 @@ _IFZQ_HEADERS = {"User-Agent": "Mozilla/5.0", "Referer": "https://finance.qq.com
                  "Connection": "keep-alive"}
 _IFZQ_POOL_MAX = 4
 
+# 分时/minute 接口原调用点的 UA（P0-5 收编进连接池时保留原样，仅补 keep-alive）
+_MINUTE_HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+                   "Referer": "https://finance.qq.com/", "Connection": "keep-alive"}
+
 # ⚠️ 连接池**必须按主机分桶**：keep-alive 连接绑死在建连时的 host 上，混用会把
 # `web.ifzq` 的请求发到 `ifzq`（实测 fqkline 在 ifzq 上返 501 ⇒ 静默拿空）。
 # 池实现 2026-10-20 起统一到 `core/market_data/http_pool.py`（全仓库共享），这里只留薄封装，
@@ -351,6 +355,13 @@ def _pooled_get(host, path, timeout, headers):
     """GET `https://{host}{path}` → 文本（gbk 解码）。**按主机复用连接**，失败抛异常。"""
     _host_pool(host)   # 确保按正确 max 分桶（qt=8 / 其余=4）后再委托
     return _hp.pooled_get(host, path, timeout, headers, encoding="gbk", errors="replace")
+
+
+def _pooled_get_utf8(host, path, timeout, headers):
+    """同上，但 utf-8/ignore 解码 —— 逐点对齐 P0-5 四处原调用点的
+    `.decode("utf-8", errors="ignore")`（daily / index_daily / minute / index_minute）。"""
+    _host_pool(host)
+    return _hp.pooled_get(host, path, timeout, headers, encoding="utf-8", errors="ignore")
 
 
 def _qt_conn_take(timeout):
@@ -636,12 +647,12 @@ class TencentProvider:
         _now = datetime.now()
         _today = _now.strftime("%Y-%m-%d")
         _clear_proxy()  # 审核 #7: daily 路径代理清除恢复
-        for host in ("ifzq.gtimg.cn", "web.ifzq.gtimg.cn"):
+        for host in (_IFZQ_HOST, _WEBIFZQ_HOST):
             try:
-                url = f"https://{host}/appstock/app/fqkline/get?param={symbol},day,,,{days},qfq"
-                req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0",
-                                                           "Referer": "https://finance.qq.com/"})
-                raw = urllib.request.urlopen(req, timeout=8).read().decode("utf-8", errors="ignore")
+                # P0-5(2026-07-29)：裸直连 → 连接池（复用 TLS 连接；失败自动换新连接重试 1 次）。
+                # 超时口径 8s、utf-8/ignore 解码与改前逐点对齐。
+                path = f"/appstock/app/fqkline/get?param={symbol},day,,,{days},qfq"
+                raw = _pooled_get_utf8(host, path, 8, _IFZQ_HEADERS)
                 data = json.loads(raw)
                 kline = data.get("data", {}).get(symbol, {}).get("day") or \
                         data.get("data", {}).get(symbol, {}).get("qfqday") or []
@@ -710,12 +721,11 @@ class TencentProvider:
                 pass
         symbol = idx.replace("sh", "sh").replace("sz", "sz")
         _clear_proxy()  # 审核 #7: index_daily 路径代理清除恢复
-        for host in ("ifzq.gtimg.cn", "web.ifzq.gtimg.cn"):
+        for host in (_IFZQ_HOST, _WEBIFZQ_HOST):
             try:
-                url = f"https://{host}/appstock/app/fqkline/get?param={symbol},day,,,{days},qfq"
-                req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0",
-                                                           "Referer": "https://finance.qq.com/"})
-                raw = urllib.request.urlopen(req, timeout=10).read().decode("utf-8", errors="ignore")
+                # P0-5(2026-07-29)：裸直连 → 连接池，超时口径 10s 与解码方式不变。
+                path = f"/appstock/app/fqkline/get?param={symbol},day,,,{days},qfq"
+                raw = _pooled_get_utf8(host, path, 10, _IFZQ_HEADERS)
                 data = json.loads(raw)
                 kline = data.get("data", {}).get(symbol, {}).get("day") or \
                         data.get("data", {}).get(symbol, {}).get("qfqday") or []
@@ -789,11 +799,10 @@ class TencentProvider:
         _clear_proxy()  # 审核 #7: minute 路径代理清除恢复
         for _ in range(3):
             try:
-                url = f"https://ifzq.gtimg.cn/appstock/app/minute/query?code={symbol}"
-                req = urllib.request.Request(url, headers={
-                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-                    "Referer": "https://finance.qq.com/"})
-                content = urllib.request.urlopen(req, timeout=10).read().decode("utf-8", errors="ignore")
+                # P0-5(2026-07-29)：裸直连 → 连接池（外层 3 次重试语义不变；
+                # 池内另带"换新连接重试 1 次"），超时口径 10s 不变。
+                content = _pooled_get_utf8(
+                    _IFZQ_HOST, f"/appstock/app/minute/query?code={symbol}", 10, _MINUTE_HEADERS)
                 if not content.strip() or "<html" in content.lower():
                     last_error = "empty_or_html"
                     continue
@@ -860,10 +869,9 @@ class TencentProvider:
         _cols = ["time", "open", "high", "low", "close", "volume", "amount"]
         try:
             _clear_proxy()
-            url = f"https://ifzq.gtimg.cn/appstock/app/minute/query?code={code}"
-            req = urllib.request.Request(url, headers={
-                "User-Agent": "Mozilla/5.0", "Referer": "https://finance.qq.com/"})
-            content = urllib.request.urlopen(req, timeout=10).read().decode("utf-8", errors="ignore")
+            # P0-5(2026-07-29)：裸直连 → 连接池，超时口径 10s 与解码方式不变。
+            content = _pooled_get_utf8(
+                _IFZQ_HOST, f"/appstock/app/minute/query?code={code}", 10, _IFZQ_HEADERS)
             data = json.loads(content)
             node = data.get("data", {}).get(code) or {}
             pack = node.get("data") or {}
