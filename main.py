@@ -241,7 +241,7 @@ def _below_ma5(code):
         return None
 
 
-_INTERCEPT_STATE_FILE = os.path.join(BASE_DIR, "t_io", "state", "intercept_notice_pushed.json")
+from core.paths import INTERCEPT_NOTICE_PUSHED_FILE as _INTERCEPT_STATE_FILE
 
 
 def _push_intercept_notice(code, sig, now, reason):
@@ -1705,7 +1705,7 @@ def _maybe_check_index_intraday_alert(now: datetime) -> None:
 
 # ---- 指数背离提醒（2026-09-28）------------------------------------------------
 _DIV_LAST_FETCH_TS = 0.0
-_DIV_SEEN_FP = os.path.join(BASE_DIR, "t_io", "state", "index_divergence_seen.json")
+from core.paths import INDEX_DIVERGENCE_SEEN_FILE as _DIV_SEEN_FP
 _DIV_SEEN_TTL_DAYS = 10
 
 

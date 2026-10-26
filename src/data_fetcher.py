@@ -40,12 +40,9 @@ MINUTE_FETCH_STATUS: Dict[str, str] = {}
 STRATEGY_MEMORY: Dict[str, dict] = {}
 
 def clean_code(code: str) -> str:
-    """去除 _A/_B 等账户后缀，返回纯数字代码供数据接口使用"""
-    if not code:
-        return ""
-    if "_" in code:
-        return code.split("_")[0]
-    return code
+    """去除 _A/_B 等账户后缀；保留原有空值与其他文本原样返回的语义。"""
+    from core.market_data.codec import strip_account
+    return strip_account(code) if code else ""
 
 
 def _fnum(v, default: float = 0.0) -> float:

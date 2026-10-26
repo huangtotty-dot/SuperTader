@@ -6,6 +6,8 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
+from core.rules import limit_pct
+
 from .taxonomy import enrich_theme_structure, _rank_score
 from .universe import append_market_universe_columns
 
@@ -111,11 +113,12 @@ def _build_market_benchmark(merged: pd.DataFrame) -> pd.Series:
 
 
 def _build_index_reference_daily(merged: pd.DataFrame) -> pd.DataFrame:
+    # 全 A/沪深主板保留本管线既有 9.8 口径；创业板/科创板复用共享 19.5 阈值。
     specs = [
         ("全A等权指数", None, 9.8),
         ("沪深主板指数", "沪深主板", 9.8),
-        ("创业板指数", "创业板", 19.5),
-        ("科创板指数", "科创板", 19.5),
+        ("创业板指数", "创业板", limit_pct("300000")),
+        ("科创板指数", "科创板", limit_pct("688000")),
     ]
     unique_daily = _unique_stock_daily(merged)
     records: list[pd.DataFrame] = []

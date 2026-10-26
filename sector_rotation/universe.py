@@ -4,14 +4,17 @@ from typing import Any
 
 import pandas as pd
 
-
-MAIN_BOARD_PREFIXES = ("000", "001", "002", "003", "600", "601", "603", "605")
-CHINEXT_PREFIXES = ("300", "301")
-STAR_PREFIXES = ("688", "689")
-BSE_PREFIXES = ("4", "8", "9")
+from core.market_data.codec import (
+    BSE_PREFIXES,
+    CHINEXT_PREFIXES,
+    MAIN_BOARD_PREFIXES,
+    STAR_PREFIXES,
+    market_of,
+)
 
 
 def clean_code(value: Any) -> str:
+    # 与 codec.normalize_code 刻意不同：本管线要把数值型代码补齐 6 位，并清理 Excel 的 .0。
     return str(value or "").replace(".0", "").strip().zfill(6)
 
 
@@ -28,7 +31,7 @@ def board_segment(code: Any) -> str:
         return "科创板"
     if cleaned.startswith(MAIN_BOARD_PREFIXES):
         return "沪深主板"
-    if cleaned.startswith(BSE_PREFIXES):
+    if market_of(cleaned) == "BJ":
         return "北交所"
     return "其他"
 

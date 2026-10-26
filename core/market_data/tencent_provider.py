@@ -143,8 +143,8 @@ def _vol_div(sym) -> float:
 
 
 def _read_json(fp):
-    with open(fp, encoding="utf-8") as f:
-        return json.load(f)
+    from core.utils import read_json
+    return read_json(fp, None)
 
 
 # P1-12：盘前「昨日档」判定的参照系缓存（(文件路径, mtime) → 末根日期）。
@@ -221,12 +221,13 @@ def save_daily_cache(code: str, df, days: int = 800, forming_date: str = None):
         recs.append({"date": r.date, "open": float(r.open), "close": float(r.close),
                      "high": float(r.high), "low": float(r.low), "volume": float(r.volume)})
     try:
-        os.makedirs(_DAILY_CACHE_DIR, exist_ok=True)
-        with open(os.path.join(_DAILY_CACHE_DIR, f"{code}.json"), "w", encoding="utf-8") as f:
-            f.write(json.dumps({"date": datetime.now().strftime("%Y-%m-%d"),
-                                "saved_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                                "forming": [str(forming_date)] if forming_date else [],
-                                "rows": recs}, ensure_ascii=False))
+        from core.utils import write_json_atomic
+        write_json_atomic(os.path.join(_DAILY_CACHE_DIR, f"{code}.json"), {
+            "date": datetime.now().strftime("%Y-%m-%d"),
+            "saved_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "forming": [str(forming_date)] if forming_date else [],
+            "rows": recs,
+        })
     except Exception:
         pass
 
@@ -274,12 +275,13 @@ def merge_daily_cache(code: str, df, cap: int = 800, forming_date: str = None):
         # 旧标记一律作废：没被确认的已被丢弃（上面 continue），被确认的已用真数据覆盖。
         # 本次若又追加了"当日快照根"，由调用方通过 forming_date 重新标上。
         forming = {str(forming_date)} if forming_date else set()
-        os.makedirs(_DAILY_CACHE_DIR, exist_ok=True)
-        with open(fp, "w", encoding="utf-8") as f:
-            f.write(json.dumps({"date": datetime.now().strftime("%Y-%m-%d"),
-                                "saved_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                                "forming": sorted(forming),
-                                "rows": rows}, ensure_ascii=False))
+        from core.utils import write_json_atomic
+        write_json_atomic(fp, {
+            "date": datetime.now().strftime("%Y-%m-%d"),
+            "saved_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "forming": sorted(forming),
+            "rows": rows,
+        })
     except Exception:
         pass
 
@@ -293,9 +295,8 @@ def save_index_daily_cache(index: str, df):
              "high": float(r.high), "low": float(r.low), "volume": float(r.volume),
              "amount": float(r.amount)} for r in df.itertuples()]
     try:
-        os.makedirs(_DAILY_CACHE_DIR, exist_ok=True)
-        with open(os.path.join(_DAILY_CACHE_DIR, f"index_{idx}.json"), "w", encoding="utf-8") as f:
-            f.write(json.dumps({"rows": recs}, ensure_ascii=False))
+        from core.utils import write_json_atomic
+        write_json_atomic(os.path.join(_DAILY_CACHE_DIR, f"index_{idx}.json"), {"rows": recs})
     except Exception:
         pass
 
@@ -785,9 +786,8 @@ class TencentProvider:
                 if not rows:
                     continue
                 if end_date is None:
-                    os.makedirs(_DAILY_CACHE_DIR, exist_ok=True)
-                    with open(cache_fp, "w", encoding="utf-8") as f:
-                        f.write(json.dumps({"rows": rows}, ensure_ascii=False))
+                    from core.utils import write_json_atomic
+                    write_json_atomic(cache_fp, {"rows": rows})
                 return _idx_ensure_cols(pd.DataFrame(rows), "tencent")
             except Exception:
                 continue

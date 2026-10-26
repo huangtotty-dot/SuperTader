@@ -41,10 +41,10 @@ import time as _time
 
 log = logging.getLogger("quote_bus")
 
-_BASE = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-_STATE_DIR = os.path.join(_BASE, "t_io", "state")
-_BUS_FP = os.path.join(_STATE_DIR, "quote_bus.json")
-_LOCK_FP = os.path.join(_STATE_DIR, "quote_bus.lock")
+from core.paths import QUOTE_BUS_FILE, QUOTE_BUS_LOCK_FILE, STATE_DIR as _STATE_DIR
+
+_BUS_FP = QUOTE_BUS_FILE
+_LOCK_FP = QUOTE_BUS_LOCK_FILE
 
 _MAX_ENTRIES = 2000          # 共享档容量上限；超出按 ts 最旧淘汰
 _MEMO_TTL_SEC = 1.0          # 进程内 memo：1s 内不重读共享档
@@ -65,11 +65,9 @@ def bus_stats() -> dict:
 
 
 def _norm(code) -> str:
-    """归一到裸码（'sh600001' / '600001_SH' / '600001.SH' → '600001'）；无法归一原样返回。"""
-    s = str(code or "").strip().split("_")[0].split(".")[0]
-    if len(s) > 2 and s[:2].isalpha():
-        s = s[2:]
-    return s
+    """归一到裸码（'sh600001' / '600001_SH' / '600001.SH' → '600001'）。"""
+    from core.market_data.codec import normalize_code
+    return normalize_code(code)
 
 
 def _load_store() -> dict:

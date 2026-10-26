@@ -14,10 +14,24 @@ log = logging.getLogger("market_data.codec")
 _GM_PREFIX = {"SH": "SHSE.", "SZ": "SZSE.", "BJ": "BJSE."}
 _TX_PREFIX = {"SH": "sh", "SZ": "sz", "BJ": "bj"}
 
+# 各管线共用的代码段规则；900xxx 是沪 B，不归北交所。
+MAIN_BOARD_PREFIXES = ("000", "001", "002", "003", "600", "601", "603", "605")
+CHINEXT_PREFIXES = ("300", "301")
+STAR_PREFIXES = ("688", "689")
+BSE_PREFIXES = ("920", "4", "8")
+
 
 def strip_account(code: str) -> str:
     """"600481_A"→"600481"；无后缀原样返回。"""
     return str(code).split("_")[0]
+
+
+def normalize_code(code) -> str:
+    """归一到裸码：剥账户/点分后缀及两位英文字母前缀；无法归一时保留剩余文本。"""
+    s = str(code or "").strip().split("_")[0].split(".")[0]
+    if len(s) > 2 and s[:2].isalpha():
+        s = s[2:]
+    return s
 
 
 def market_of(code: str) -> str:
@@ -31,7 +45,7 @@ def market_of(code: str) -> str:
     c = strip_account(str(code))
     if not c:
         return "SZ"
-    if c.startswith("920") or c[0] in "48":
+    if c.startswith(BSE_PREFIXES):
         return "BJ"
     return "SH" if c[0] in "569" else "SZ"
 

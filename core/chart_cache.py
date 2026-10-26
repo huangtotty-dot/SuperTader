@@ -28,10 +28,12 @@ _BASE = Path(__file__).resolve().parents[1]
 if str(_BASE) not in sys.path:
     sys.path.insert(0, str(_BASE))
 
+from core.paths import STATE_DIR as _STATE_DIR_STR
+
 _DAILY_CACHE_DIR = _BASE / "t_io" / "cache" / "daily_kline"
 _PAYLOAD_DIR = _BASE / "t_io" / "cache" / "chart_payload"
 _MINUTE_CACHE_DIR = _BASE / "t_io" / "cache" / "tushare_mins"
-_STATE_DIR = _BASE / "t_io" / "state"
+_STATE_DIR = Path(_STATE_DIR_STR)
 _HUNTER_DIR = _BASE / "stock_hunter"
 
 _STATE_FP = _STATE_DIR / "chart_prefetch_state.json"
@@ -46,11 +48,8 @@ PREFETCH_CURRENT_GAP_DAYS = 5
 
 
 def _read_json(fp, default=None):
-    try:
-        with open(fp, encoding="utf-8") as f:
-            return json.load(f)
-    except Exception:
-        return default
+    from core.utils import read_json
+    return read_json(fp, default)
 
 
 # ---------------------------------------------------------------------------

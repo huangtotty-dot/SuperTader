@@ -67,10 +67,8 @@ def _symbol_of(name: str) -> str | None:
 
 
 def _read_json(fp: Path):
-    try:
-        return json.loads(fp.read_text(encoding="utf-8"))
-    except Exception:
-        return None
+    from core.utils import read_json
+    return read_json(fp, None)
 
 
 def _p75(vals) -> float | None:

@@ -45,9 +45,7 @@ import urllib.request
 import urllib.error
 
 # ==================== 路径与常量 ====================
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-T_IO_DIR = os.path.join(BASE_DIR, "t_io")
-STATE_DIR = os.path.join(T_IO_DIR, "state")
+from core.paths import BASE_DIR, T_IO_DIR, STATE_DIR
 # 2026-10-04 手动/自动持仓文件拆分：原单一 holdings.json 拆为两份独立真源。
 # HOLDINGS_FILE 保留旧名并指向手动侧（无其它模块导入，仅向后兼容）。
 HOLDINGS_FILE = os.path.join(STATE_DIR, "holdings_manual.json")

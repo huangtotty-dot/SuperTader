@@ -16,6 +16,7 @@ from typing import List, Dict, Optional
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from core.market_data.http_pool import pooled_get
+from core.rules import MAIN_BOARD_LIMIT_PCT, limit_pct
 
 
 # 2026-08-15: 拉取进度上报（供 t_gui 选股猎手前端轮询显示进度条）
@@ -289,14 +290,7 @@ class MarketDataFetcher:
                 # 涨停列恢复 0/1 布尔旗标（审核 P1 阻断4）：按板块分档阈值，heat_tracker 按 0/1 计数
                 name = str(d.get("name", ""))
                 is_st = name.startswith(("*ST", "ST", "SST", "S*ST"))
-                if is_st:
-                    is_limit = 1 if pct >= 4.5 else 0
-                elif code.startswith(("30", "68")):
-                    is_limit = 1 if pct >= 19.5 else 0
-                elif code.startswith(("8", "9")):
-                    is_limit = 1 if pct >= 29.5 else 0
-                else:
-                    is_limit = 1 if pct >= 9.5 else 0
+                is_limit = 1 if pct >= limit_pct(code, is_st=is_st) else 0
                 snapshot_map[code] = {
                     "代码": code, "名称": name, "现价": d.get("price", 0.0),
                     "涨跌幅": pct, "涨停": is_limit,
@@ -416,21 +410,9 @@ class MarketDataFetcher:
         except Exception:
             open_price = 0.0
 
-        is_limit = 0
         stock_name = str(fields[1]).strip()
         is_st = stock_name.startswith(("*ST", "ST", "SST", "S*ST"))
-        if is_st:
-            if change_pct >= 4.5:
-                is_limit = 1
-        elif code.startswith(("30", "68")):
-            if change_pct >= 19.5:
-                is_limit = 1
-        elif code.startswith(("8", "9")):
-            if change_pct >= 29.5:
-                is_limit = 1
-        else:
-            if change_pct >= 9.5:
-                is_limit = 1
+        is_limit = 1 if change_pct >= limit_pct(code, is_st=is_st) else 0
 
         return code, {
             "symbol": symbol,
@@ -770,20 +752,8 @@ class MarketDataFetcher:
                         volume = float(target_row['volume'])
                         amount = close * volume * volume_unit
 
-                    is_limit = 0
                     is_st = code in self._st_codes
-                    if is_st:
-                        if change_pct >= 4.5:
-                            is_limit = 1
-                    elif code.startswith(("30", "68")):
-                        if change_pct >= 19.5:
-                            is_limit = 1
-                    elif code.startswith(("8", "9")):
-                        if change_pct >= 29.5:
-                            is_limit = 1
-                    else:
-                        if change_pct >= 9.5:
-                            is_limit = 1
+                    is_limit = 1 if change_pct >= limit_pct(code, is_st=is_st) else 0
 
                     # 派生指标
                     idx_5 = target_idx - 5
@@ -816,6 +786,7 @@ class MarketDataFetcher:
                         else:
                             limit_up_price = round(prev_close * 1.1, 2)
 
+                    # 近10日/前日/连板历史判断沿用统一 9.5 口径（非当日的四档分板口径），刻意不改行为。
                     # 近10日是否有涨停
                     limit_10 = 0
                     for i in range(max(0, target_idx - 10), target_idx):
@@ -824,7 +795,7 @@ class MarketDataFetcher:
                         prev_close_i = float(df.iloc[i-1]['close']) if i > 0 else 0
                         if prev_close_i > 0:
                             pct_i = (close_i - prev_close_i) / prev_close_i * 100
-                            if pct_i >= 9.5:
+                            if pct_i >= MAIN_BOARD_LIMIT_PCT:
                                 limit_10 = 1
                                 break
 
@@ -835,7 +806,7 @@ class MarketDataFetcher:
                         prev_prev_close = float(df.iloc[prev_prev_idx]['close']) if prev_prev_idx >= 0 else 0
                         if prev_prev_close > 0:
                             prev_pct = (prev_close - prev_prev_close) / prev_prev_close * 100
-                            if prev_pct >= 9.5:
+                            if prev_pct >= MAIN_BOARD_LIMIT_PCT:
                                 prev_limit = 1
 
                     # 首板涨停：当日涨停且前日非涨停
@@ -853,7 +824,7 @@ class MarketDataFetcher:
                             prev_close_i = float(df.iloc[i-1]['close'])
                             if prev_close_i > 0:
                                 pct_i = (close_i - prev_close_i) / prev_close_i * 100
-                                if pct_i >= 9.5:
+                                if pct_i >= MAIN_BOARD_LIMIT_PCT:
                                     consecutive_limit += 1
                                 else:
                                     break

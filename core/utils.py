@@ -91,6 +91,45 @@ def _json_safe(obj):
     return obj
 
 
+def read_json(path, default=None):
+    """读取 UTF-8 JSON；缺失、损坏或类型转换失败时返回 default。"""
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return default
+
+
+def write_json_atomic(path, obj, indent=None) -> None:
+    """以唯一 tmp + os.replace 原子写 JSON，替换冲突按既有口径退避重试。
+
+    序列化失败会清理 tmp；替换重试耗尽则保留 tmp 供恢复并抛出最后异常。
+    """
+    fp = os.fspath(path)
+    parent = os.path.dirname(fp)
+    if parent:
+        os.makedirs(parent, exist_ok=True)
+    tmp = f"{fp}.{os.getpid()}.{time.time_ns()}.tmp"
+    try:
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(_json_safe(obj), f, ensure_ascii=False, default=str, indent=indent)
+    except Exception:
+        try:
+            os.remove(tmp)
+        except OSError:
+            pass
+        raise
+    for attempt in range(5):
+        try:
+            os.replace(tmp, fp)
+            return
+        except OSError:
+            if attempt < 4:
+                time.sleep(0.2 * (2 ** attempt))
+            else:
+                raise
+
+
 def _append_jsonl(path: str, record: dict) -> None:
     try:
         with open(path, "a", encoding="utf-8") as f:

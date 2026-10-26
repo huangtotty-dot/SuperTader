@@ -91,11 +91,8 @@ def _atomic_dump(payload: dict, fp: str) -> None:
 
 
 def _load_json(fp: str):
-    try:
-        with open(fp, encoding="utf-8") as f:
-            return json.load(f)
-    except Exception:
-        return None
+    from core.utils import read_json
+    return read_json(fp, None)
 
 
 def _journal_keys(book_dir: str) -> set:

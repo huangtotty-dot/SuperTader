@@ -65,11 +65,8 @@ _SRC_SHORT = {"ob": "体检", "pb": "建仓", "pool": "监控池"}
 
 # ---------------------------------------------------------------- 三源名单
 def _load_json(fp, default):
-    try:
-        with open(fp, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except Exception:
-        return default
+    from core.utils import read_json
+    return read_json(fp, default)
 
 
 def _norm_code(code):
