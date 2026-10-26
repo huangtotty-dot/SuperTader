@@ -4424,6 +4424,34 @@ async function openDayIntraday(code, name, date) {
   const _inRange = (v) => v != null && v >= _bandLo && v <= _bandHi;
   const _shown = _maKeys.filter(k => _inRange(MA[k]));
   const _hidden = _maKeys.filter(k => MA[k] != null && !_inRange(MA[k]));
+
+  /* 2026-10-26 owner：「要显示缺口」。
+     日内图上唯一成立的缺口 = **昨收 ↔ 今日开盘**那一段的跳空。画成色块
+     （高开红 / 低开绿），并标注当天有没有回补：
+       高开：当日最低 ≤ 昨收 ⇒ 已回补；低开：当日最高 ≥ 昨收 ⇒ 已回补
+     幅度 < 0.3% 不画（噪音）。文字放信息栏，图上只留淡色块 + 边框，不压蜡烛。 */
+  let _gapArea = null, _gapTxt = "";
+  if (d.prev_close != null && d.ohlc.length) {
+    const _o0 = Number(d.ohlc[0][0]);
+    const _gp = (_o0 / d.prev_close - 1) * 100;
+    if (isFinite(_gp) && Math.abs(_gp) >= 0.3) {
+      const _up = _gp > 0;
+      const _filled = _up ? (_loD <= d.prev_close) : (_hiD >= d.prev_close);
+      const _col = _up ? "248,81,73" : "63,185,80";
+      _gapTxt = `<span style="color:rgb(${_col})">跳空${_up ? "高" : "低"}开 `
+        + `<b>${_gp.toFixed(2)}%</b>${_filled ? "（已回补）" : "（未回补）"}</span>`;
+      _gapArea = [[{
+        xAxis: 0, yAxis: d.prev_close,
+        itemStyle: {
+          color: `rgba(${_col},${_filled ? .06 : .13})`,
+          borderColor: `rgba(${_col},${_filled ? .35 : .7})`,
+          borderWidth: 1, borderType: _filled ? "dashed" : "solid",
+        },
+        label: { show: false },
+      }, { xAxis: d.dates.length - 1, yAxis: _o0 }]];
+    }
+  }
+
   if (info) {
     info.innerHTML = `开 ${d.ohlc[0][0]} · 收 ${d.last_close ?? "—"} · 昨收 <b>${d.prev_close ?? "—"}</b>`
       + `　<span style="color:#6e7681">数据源：${d.source === "tdx" ? "通达信本地"
@@ -4431,11 +4459,13 @@ async function openDayIntraday(code, name, date) {
       + `　日线均线（<b>该日</b>）：`
       + _maKeys.map(k => MA[k] == null ? "" :
           `<span style="color:${_maColors[k]}">MA${k} <b>${MA[k]}</b></span>`).filter(Boolean).join("　")
-      + (_hidden.length ? `　<span style="color:#6e7681">（MA${_hidden.join("/MA")} 离当日振幅太远，未画线）</span>` : "");
+      + (_hidden.length ? `　<span style="color:#6e7681">（MA${_hidden.join("/MA")} 离当日振幅太远，未画线）</span>` : "")
+      + (_gapTxt ? `　${_gapTxt}` : "");
   }
+
   const _posRound = ["insideEndTop", "insideStartTop", "insideEndBottom", "insideStartBottom"];
-  // 标签位置按**数值从小到大**轮流分配四个方位：这样"数值相邻"的两条线一定落在不同方位，
-  // 不会像按 MA 编号分配那样出现 MA180(15.65)/昨收(15.66) 两个标签叠在一起。
+  // 标签位置按**数值从小到大**轮流分配四个方位：数值相邻的两条线一定落在不同方位，
+  // 不会像按 MA 编号分配那样出现 MA180/昨收 两个标签叠在一起。
   const _lab = _shown.map(k => ({ v: MA[k], txt: `MA${k} ${Number(MA[k]).toFixed(2)}`,
                                   c: _maColors[k] }));
   if (d.prev_close != null) _lab.push({ v: d.prev_close, txt: `昨收 ${d.prev_close}`, c: "#8b949e" });
@@ -4448,19 +4478,20 @@ async function openDayIntraday(code, name, date) {
     label: { formatter: `MA${k} ${Number(MA[k]).toFixed(2)}`, color: _maColors[k], fontSize: 9,
              position: _posOf.get(`MA${k} ${Number(MA[k]).toFixed(2)}`) || "insideEndTop" },
   }));
-  // ⚠️ markLine 不会把 y 轴撑开 —— 不显式给 min/max，也画不全。
-  const _maVals = _shown.map(k => MA[k]);
-  const _lo = Math.min(...d.ohlc.map(o => o[2]), ..._maVals,
-                      ...(d.prev_close != null ? [d.prev_close] : []));
-  const _hi = Math.max(...d.ohlc.map(o => o[3]), ..._maVals,
-                      ...(d.prev_close != null ? [d.prev_close] : []));
-  const _pad = ((_hi - _lo) || 1) * 0.02;
   const zero = (d.prev_close != null) ? {
     yAxis: d.prev_close,
     lineStyle: { color: "#8b949e", type: "dotted", width: 1.2 },
     label: { formatter: `昨收 ${d.prev_close}`, color: "#8b949e", fontSize: 9,
              position: _posOf.get(`昨收 ${d.prev_close}`) || "insideStartTop" },
   } : null;
+  // ⚠️ markLine 不会把 y 轴撑开 —— 不显式给 min/max，线会被裁掉。
+  const _maVals = _shown.map(k => MA[k]);
+  const _lo = Math.min(...d.ohlc.map(o => o[2]), ..._maVals,
+                      ...(d.prev_close != null ? [d.prev_close] : []));
+  const _hi = Math.max(...d.ohlc.map(o => o[3]), ..._maVals,
+                      ...(d.prev_close != null ? [d.prev_close] : []));
+  const _pad = ((_hi - _lo) || 1) * 0.02;
+
   const _vol = d.volume.map((v, i) => {
     const o = d.ohlc[i] || [];
     const prev = i > 0 ? d.ohlc[i - 1][1] : d.prev_close;
@@ -4493,6 +4524,8 @@ async function openDayIntraday(code, name, date) {
       { name: "K线", type: "candlestick", data: d.ohlc, barMaxWidth: 10,
         itemStyle: { color: "#f85149", color0: "#3fb950",
                      borderColor: "#ff6b62", borderColor0: "#56d364", borderWidth: 1 },
+        // 缺口色块（zn 放在 K 线之下，别盖住蜡烛）
+        markArea: _gapArea ? { silent: true, z: -1, data: _gapArea } : undefined,
         markLine: { symbol: "none", silent: true,
           data: [..._maLines, ...(zero ? [zero] : [])], label: { show: true } } },
       { name: "VWAP(日内)", type: "line", data: d.vwap, symbol: "none", connectNulls: true,
