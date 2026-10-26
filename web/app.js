@@ -4460,7 +4460,10 @@ async function openDayIntraday(code, name, date) {
       + _maKeys.map(k => MA[k] == null ? "" :
           `<span style="color:${_maColors[k]}">MA${k} <b>${MA[k]}</b></span>`).filter(Boolean).join("　")
       + (_hidden.length ? `　<span style="color:#6e7681">（MA${_hidden.join("/MA")} 离当日振幅太远，未画线）</span>` : "")
-      + (_gapTxt ? `　${_gapTxt}` : "");
+      + (_gapTxt ? `　${_gapTxt}` : "")
+      + ((d.macd && d.macd_warm === false)
+          ? `　<span style="color:#d29922" title="该日只有当天 48 根数据（tushare 单日取数），EMA 没预热，DIF/DEA 前半段偏差大">MACD 未预热</span>`
+          : "");
   }
 
   const _posRound = ["insideEndTop", "insideStartTop", "insideEndBottom", "insideStartBottom"];
@@ -4498,6 +4501,24 @@ async function openDayIntraday(code, name, date) {
     const up = prev == null ? true : o[1] >= prev;
     return { value: v, itemStyle: { color: up ? "rgba(248,81,73,.82)" : "rgba(63,185,80,.82)" } };
   });
+  /* MACD（12,26,9；HIST=(DIF-DEA)×2）—— 顺序与配色与主图一致。
+     后端用「截至该日」的整段 5 分钟算（EMA 预热），单日取数时 macd_warm=false 会在信息栏提示。 */
+  const _macdSeries = [];
+  if (d.macd && Array.isArray(d.macd.dif) && d.macd.dif.length === d.dates.length) {
+    _macdSeries.push({ name: "MACD柱", type: "bar", xAxisIndex: 2, yAxisIndex: 2,
+      data: d.macd.hist, z: 1,
+      itemStyle: { color: (p) => (p.value >= 0 ? "rgba(248,81,73,.9)" : "rgba(63,185,80,.9)"),
+                   borderRadius: [1, 1, 0, 0] },
+      markLine: { silent: true, symbol: "none", data: [{ yAxis: 0, label: { show: false },
+        lineStyle: { color: "rgba(139,148,158,.45)", type: "dashed", width: 1 } }] } });
+    _macdSeries.push({ name: "MACD-DIF", type: "line", xAxisIndex: 2, yAxisIndex: 2,
+      data: d.macd.dif, symbol: "none", z: 3,
+      lineStyle: { color: "#3987e5", width: 1.2 }, itemStyle: { color: "#3987e5" } });
+    _macdSeries.push({ name: "MACD-DEA", type: "line", xAxisIndex: 2, yAxisIndex: 2,
+      data: d.macd.dea, symbol: "none", z: 3,
+      lineStyle: { color: "#d55181", width: 1.2 }, itemStyle: { color: "#d55181" } });
+  }
+
   dayInst = echarts.init(box);
   dayInst.setOption({
     backgroundColor: "#0d1117", animation: false,
@@ -4505,11 +4526,15 @@ async function openDayIntraday(code, name, date) {
     tooltip: { trigger: "axis", axisPointer: { type: "cross" },
       backgroundColor: "rgba(22,27,34,.96)", borderColor: "#30363d", borderWidth: 1,
       borderRadius: 8, textStyle: { color: "#e6edf3", fontSize: 11 } },
-    grid: [{ left: 58, right: 76, top: 34, height: "58%" },
-           { left: 58, right: 76, top: "72%", height: "16%" }],
+    // 三窗：K线 46% / 成交量 10% / MACD 15%（2026-10-26 owner：「画出MACD」）
+    grid: [{ left: 58, right: 76, top: 30, height: "46%" },
+           { left: 58, right: 76, top: "68%", height: "10%" },
+           { left: 58, right: 76, top: "81%", height: "15%" }],
     xAxis: [
       { type: "category", data: d.dates, axisLabel: { show: false }, axisLine: { lineStyle: { color: "#2b333d" } } },
-      { type: "category", data: d.dates, gridIndex: 1, axisLabel: { color: "#8b949e", fontSize: 9 },
+      { type: "category", data: d.dates, gridIndex: 1, axisLabel: { show: false },
+        axisLine: { lineStyle: { color: "#2b333d" } } },
+      { type: "category", data: d.dates, gridIndex: 2, axisLabel: { color: "#8b949e", fontSize: 9 },
         axisLine: { lineStyle: { color: "#2b333d" } } },
     ],
     yAxis: [
@@ -4519,6 +4544,7 @@ async function openDayIntraday(code, name, date) {
                      formatter: (v) => (Math.abs(v) >= 100 ? v.toFixed(0) : v.toFixed(2)) },
         splitLine: { lineStyle: { color: "rgba(139,148,158,.14)" } } },
       { scale: true, gridIndex: 1, axisLabel: { show: false }, splitLine: { show: false } },
+      { scale: true, gridIndex: 2, axisLabel: { show: false }, splitLine: { show: false } },
     ],
     series: [
       { name: "K线", type: "candlestick", data: d.ohlc, barMaxWidth: 10,
@@ -4532,6 +4558,7 @@ async function openDayIntraday(code, name, date) {
         lineStyle: { color: "#f0b429", width: 1.6 }, itemStyle: { color: "#f0b429" } },
       { name: "成交量(手)", type: "bar", xAxisIndex: 1, yAxisIndex: 1, data: _vol,
         barMaxWidth: 10, itemStyle: { borderRadius: [1, 1, 0, 0] } },
+      ..._macdSeries,
     ],
   });
   } catch (e) {

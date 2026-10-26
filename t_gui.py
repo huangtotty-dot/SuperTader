@@ -5189,29 +5189,37 @@ class Api:
             # ── 5 分钟：通达信本地 → 近 3 个月（腾讯/tushare 窗口）→ **tushare 单日（近三年）** ──
             # 顺序理由：通达信是磁盘读（毫秒级）；3 个月内的日期走常规取数（有内存/磁盘缓存）；
             # 更早的日期常规取数**根本覆盖不到**，直接打 tushare 单日接口，省掉一次白等的取数。
-            df = self._tdx_min_df(code, 5, day=day)
+            # ⚠️ 这里要留住**整段序列** `ser`，不只是当天：MACD 的 EMA 需要预热，
+            #    只用当天 48 根算出来的 DIF/DEA 前后半天都是错的。
+            ser = self._tdx_min_df(code, 5)
             out["source"] = "tdx"
-            if df is None or getattr(df, "empty", True):
-                df = None
+            df = None
+            if ser is not None and not getattr(ser, "empty", True):
+                _tc = "time" if "time" in ser.columns else "date"
+                _t = pd.to_datetime(ser[_tc])
+                _d = ser[_t.dt.strftime("%Y-%m-%d") == day]
+                if not _d.empty:
+                    df = _d
+            if df is None:
                 _age = 9999
                 try:
                     _age = (datetime.now() - datetime.strptime(day, "%Y-%m-%d")).days
                 except Exception:
                     pass
                 if _age <= 100:
-                    _raw = _fetch_min_bars(code, "5min")
-                    if _raw is not None and not getattr(_raw, "empty", True):
-                        _tc = "time" if "time" in _raw.columns else "date"
-                        _t = pd.to_datetime(_raw[_tc])
-                        _s = _raw[_t.dt.strftime("%Y-%m-%d") == day]
-                        if not _s.empty:
-                            df, out["source"] = _s, "tencent"
+                    _r = _fetch_min_bars(code, "5min")
+                    if _r is not None and not getattr(_r, "empty", True):
+                        _tc = "time" if "time" in _r.columns else "date"
+                        _t = pd.to_datetime(_r[_tc])
+                        _d = _r[_t.dt.strftime("%Y-%m-%d") == day]
+                        if not _d.empty:
+                            ser, df, out["source"] = _r, _d, "tencent"
                 if df is None:
                     _ts = _min_bars_ts_code(code)
                     if _ts:
-                        _s = _fetch_min_bars_day(_ts, "5min", day)
-                        if _s is not None and not getattr(_s, "empty", True):
-                            df, out["source"] = _s, "tushare"
+                        _s3 = _fetch_min_bars_day(_ts, "5min", day)
+                        if _s3 is not None and not getattr(_s3, "empty", True):
+                            ser, df, out["source"] = _s3, _s3, "tushare"
             if df is None or getattr(df, "empty", True):
                 out["error"] = (f"{day} 没有 5 分钟数据：通达信本地没有这天，tushare 也没取到"
                                 f"（权限/交易日/停牌）。可在通达信「盘后数据下载 → 分钟线」里补，"
@@ -5236,6 +5244,23 @@ class Api:
                 _cv += v * 100.0
                 _vw.append(round(_ca / _cv, 3) if _cv > 0 else None)
             out["vwap"] = _vw
+            # ── MACD（12,26,9；HIST=(DIF-DEA)×2，与主图同口径）────────────────────
+            # 用**截至该日**的整段收盘算，再取当日那几十个点 —— EMA 要预热，
+            # 只用当天算出来的前半段会整段偏。
+            try:
+                _tc = "time" if "time" in ser.columns else "date"
+                _tt = pd.to_datetime(ser[_tc])
+                _w = ser[_tt <= pd.Timestamp(day + " 23:59:59")]
+                _cl = [float(x) for x in _w["close"]]
+                _n = len(df)
+                if len(_cl) >= _n and _n:
+                    _dif, _dea, _hist = _ema_macd(_cl)
+                    out["macd"] = {"dif": [round(x, 3) for x in _dif[-_n:]],
+                                   "dea": [round(x, 3) for x in _dea[-_n:]],
+                                   "hist": [round(x, 3) for x in _hist[-_n:]]}
+                    out["macd_warm"] = len(_cl) >= 60
+            except Exception:
+                pass
             out["available"] = True
             return out
         except Exception as e:
