@@ -5251,6 +5251,53 @@ function buildIntradayVwapZero(dates, ohlc, volume, amount) {
   return { vwap, zero };
 }
 
+/* 2026-10-26 owner：「我十字光标的位置为什么没有画出来缺口？」
+   那天（sh000001 2026-07-17）按**缺口=区间不重叠**的定义确实不是缺口 ——
+   今高 3869.22 只比昨低 3867.60 高 1.6 点，两根 K 线重叠了。但**开盘价**从
+   昨收 3882.41 跳到 3865.32（−0.44%），肉眼看就是"跳空"。
+   ⇒ 补一条独立口径：**跳空开盘** |今开/昨收−1| ≥ 1% 时，在那根 K 线上画一条
+     从昨收到今开的**细窄条**（无填充、无标签），和"真缺口"的虚线框区分开：
+       真缺口 = 有宽度、有虚线边框、≥1% 时带字
+       跳空开盘 = 只有那一根的细条
+   阈值 1%（实测近 250 日：指数 8 次、个股 121 次，取最近的 MAX 个）。 */
+function buildOpenGapAreas(ohlc, dates, lookbackDays, minPct, maxN) {
+  const out = [];
+  if (!ohlc || ohlc.length < 2) return out;
+  const n = ohlc.length;
+  let from = Math.max(1, n - 250);
+  if (Array.isArray(dates) && dates.length === n && n) {
+    const cut = _ymdMinusDays(dates[n - 1], lookbackDays || 250);
+    if (cut) {
+      from = 1;
+      for (let i = 0; i < n; i++) {
+        if (String(dates[i]).slice(0, 10) >= cut) { from = Math.max(1, i); break; }
+      }
+    }
+  }
+  const MIN = (minPct == null) ? 0.01 : minPct;
+  for (let i = from; i < n; i++) {
+    const o = ohlc[i], pv = ohlc[i - 1];
+    if (!o || !pv) continue;
+    const pc = Number(pv[1]), op = Number(o[0]);
+    if (!(pc > 0) || !(op > 0)) continue;
+    const g = op / pc - 1;
+    if (Math.abs(g) < MIN) continue;
+    const up = g > 0;
+    out.push([{
+      xAxis: i - 0.3, yAxis: pc,
+      itemStyle: {
+        color: up ? "rgba(248,81,73,.30)" : "rgba(63,185,80,.30)",
+        borderColor: up ? "rgba(248,81,73,.75)" : "rgba(63,185,80,.75)",
+        borderWidth: 1,
+      },
+      label: { show: false }, name: up ? "跳空高开" : "跳空低开",
+    }, { xAxis: i + 0.3, yAxis: op }]);
+  }
+  const MAX = maxN || 24;
+  if (out.length > MAX) out.splice(0, out.length - MAX);
+  return out;
+}
+
 function buildGapAreas(ohlc, dates, lookbackDays, minPct, maxN) {
   const out = [];
   if (!ohlc || ohlc.length < 2) return out;
@@ -5542,6 +5589,8 @@ function renderStockChart(applyZoom = true) {
   // 2026-10-26 owner：「在日线级别要把缺口显示出来」——窗口从 15 天放宽到 250 天
   // （默认视窗是近 6 月 ≈120 根，15 天只看得到最近两周的缺口，大半屏都没有）。
   const gapAreas = showGaps ? buildGapAreas(period.ohlc, period.dates, 250) : [];
+  // 跳空开盘（昨收→今开，≥1%）——与「真缺口（区间不重叠）」分开画，见 buildOpenGapAreas 注释
+  const openGapAreas = showGaps ? buildOpenGapAreas(period.ohlc, period.dates, 250) : [];
 
   /* 成交额（亿元）+ 量能均线（2026-10-20 owner：量能窗口要「美化、醒目」）。
      单根柱子只能看出"今天放没放量"，**均线才看得出量能趋势**（东财的量能面板就是
@@ -5868,6 +5917,14 @@ function renderStockChart(applyZoom = true) {
              ≥2.0 巨量（此档未来 5 日超额 −0.31%，t −4.6）/ ≥3.0 极端（−0.97%，t −9.7）
            ⚠️ 分档边界是**全样本分位**（P25≈0.59 / P50≈0.84 / P90≈1.92 / P95≈2.58），
               不是拍脑袋的整数，改阈值时请回看那份报告。 */
+        /* 2026-10-26：**每根都给出跳空读数**（昨收→今开），不受"≥1% 才画"的限制 ——
+           owner 拿十字光标停在一根上问「为什么这里没缺口」，答案是那天区间重叠、
+           只是跳空开盘。有这个读数就不用去数缺口框了。 */
+        const _ogp = (prevC && o) ? (Number(o) / Number(prevC) - 1) * 100 : null;
+        const _ogTxt = (_ogp == null || Math.abs(_ogp) < 0.05) ? ""
+          : `<div style="color:${_ogp > 0 ? "#f85149" : "#3fb950"}">跳空`
+            + `<b>${_ogp > 0 ? "+" : ""}${_ogp.toFixed(2)}%</b>`
+            + `<span style="color:#6e7681">（昨收 ${_px(prevC)} → 今开 ${_px(o)}）</span></div>`;
         const _vr = _volRatio(i);
         const _vrTag = _vr == null ? null
           : _vr < 0.7 ? { t: "缩量", c: "#8b949e" }
@@ -5890,6 +5947,7 @@ function renderStockChart(applyZoom = true) {
           + `收 <b style="color:${col}">${_px(c)}</b>　涨跌 <b style="color:${col}">${chgTxt}</b></div>`
           + (amtTxt ? `<div>成交额 <b>${amtTxt}</b></div>`
                      : `<div>成交 <b>${volTxt}</b> 手</div>`)
+          + _ogTxt
           + _vrTxt
           + (_posBarTxt ? `<div style="color:#8b949e">${_posBarTxt}${_vsMa(_ma5, "MA5")}${_vsMa(_ma20, "MA20")}</div>` : "");
         if (_maCells.length) {
@@ -6038,7 +6096,7 @@ function renderStockChart(applyZoom = true) {
                      borderColor: "#ff6b62", borderColor0: "#56d364", borderWidth: 1 },
         // 箱体 + 缺口共用一个 markArea（ECharts 每个 series 只认一个）
         markArea: (() => {
-          const _d = [...(showBoxes ? boxAreas : []), ...gapAreas];
+          const _d = [...(showBoxes ? boxAreas : []), ...openGapAreas, ...gapAreas];
           return _d.length ? { silent: true, data: _d } : undefined;
         })(),
         markLine: { symbol: "none",
