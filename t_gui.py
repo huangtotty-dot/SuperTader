@@ -3660,12 +3660,23 @@ class Api:
                         "source": d.get("source") or "gm",
                     })
                 elif src == "em":
-                    # 东财特殊条目（A股平均股价等）：非交易所指数，掘金无此标的
+                    # 东财特殊条目（A股平均股价等）：非交易所指数，掘金无此标的。
+                    # 2026-10-26 owner：「平均股价请使用通达信进行读取修复」——东财 push2delay
+                    # 间歇风控时卡片长期是「—」；而通达信本地 vipdoc 就有 880003（平均股价）。
+                    # 顺序：通达信本地 → 东财 → 置灰。
                     secid = str(sym)[2:] if str(sym).startswith("em") else str(sym)
-                    price, pre_close, esrc = self._em_last_price_bounded(secid)
+                    price = pre_close = esrc = e_asof = None
+                    _tcode = i.get("tdx")
+                    if _tcode:
+                        price, pre_close, e_asof = self._tdx_index_last(_tcode)
+                        if price:
+                            esrc = "tdx"
+                    if not price:
+                        price, pre_close, esrc = self._em_last_price_bounded(secid)
+                        e_asof = None
                     if not price:
                         out["indices"].append({"symbol": sym, "name": name,
-                                               "error": "东财风控/不可达", "source": "em"})
+                                               "error": "通达信本地/东财均取不到", "source": "em"})
                         continue
                     chg = (price - pre_close) if pre_close else None
                     out["indices"].append({
@@ -3674,6 +3685,10 @@ class Api:
                         "change_pct": (round(chg / pre_close * 100.0, 2)
                                        if (chg is not None and pre_close) else None),
                         "source": esrc,
+                        # 通达信本地数据的**日期**（它只在客户端下载后才更新）⇒ 前端要能看出
+                        # 这一格是不是滞后一天，而不是把昨天的收盘当实时价。
+                        "asof": e_asof,
+                        "stale": bool(e_asof) and str(e_asof) != datetime.now().strftime("%Y-%m-%d"),
                     })
             out["ts"] = datetime.now().strftime("%H:%M:%S")
         except Exception:
@@ -3693,6 +3708,50 @@ class Api:
             Api._indices_cache["payload"] = (_time_mod.time(), clean)
             _snapshot_write("indices", clean)
         return clean
+
+    # ---------- 通达信本地指数报价（平均股价等；2026-10-26） ----------
+    # `TDX_HOME` 与 `scripts/import_tdx_all.py` 同一个约定（默认 C:\new_tdx）。
+    _TDX_VIPDOC = Path(os.environ.get("TDX_HOME") or r"C:\new_tdx") / "vipdoc"
+
+    def _tdx_index_last(self, code: str):
+        """通达信本地 `.day` 的最后两根 → (price, pre_close, asof)；读不到返回 (None, None, None)。
+
+        为什么读 vipdoc 而不是 `t_io/tdx/tdx_daily.parquet`：那个 parquet 是
+        `scripts/import_tdx_all.py` **手动导入的快照**（2026-10-26 时点是 10-23），
+        而 vipdoc 下的 .day 由**通达信客户端自己更新** —— 用户打开一次通达信下载，
+        这里就是最新的。两者都不新鲜时，`asof` 会让前端把"数据日"标出来，不冒充实时。
+
+        `.day` 记录格式：32 字节/条，`<IIIIIfII` = 日期/开/高/低/收/成交额/成交量/保留，
+        价格 ×100（880003 平均股价同理）。⚠️ 单位与个股一致，别再除一次。
+        """
+        import struct
+        try:
+            code = str(code)
+            if code.startswith(("88", "99", "56")):
+                mk = "sh"
+            elif code.startswith(("39", "15", "16", "00", "30")):
+                mk = "sz"
+            elif code.startswith(("43", "83", "87", "92")):
+                mk = "bj"
+            else:
+                mk = "sh"
+            fp = self._TDX_VIPDOC / mk / "lday" / f"{mk}{code}.day"
+            if not fp.exists():
+                return None, None, None
+            n = fp.stat().st_size // 32
+            if n < 2:
+                return None, None, None
+            with open(fp, "rb") as f:
+                f.seek((n - 2) * 32)
+                a = struct.unpack("<IIIIIfII", f.read(32))
+                b = struct.unpack("<IIIIIfII", f.read(32))
+            _d = str(b[0])
+            if len(_d) != 8:
+                return None, None, None
+            return (round(b[4] / 100.0, 3), round(a[4] / 100.0, 3),
+                    f"{_d[:4]}-{_d[4:6]}-{_d[6:]}")
+        except Exception:
+            return None, None, None
 
     # ---------- 东财特殊标的报价（平均股价等；2026-09-28） ----------
     def _em_last_price(self, secid: str):

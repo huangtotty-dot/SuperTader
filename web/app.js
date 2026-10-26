@@ -6598,19 +6598,29 @@ async function loadIndices() {
             </div>`;
           }
           const pct = i.change_pct;
-          const cls = pct > 0.05 ? "up" : pct < -0.05 ? "down" : "cell-dim";
+          // 数据不是今天的（通达信本地没更新）⇒ 涨跌幅不上红绿，避免把上周五的涨跌
+          // 混进今天的一排实时数字里（下面另有「数据日」小字标注）。
+          const cls = i.stale ? "cell-dim" : (pct > 0.05 ? "up" : pct < -0.05 ? "down" : "cell-dim");
           const pctTxt = (pct == null) ? "—" : `${pct >= 0 ? '+' : ''}${fmt(pct, 2)}%`;
           const div = divBySym[i.symbol];
           const badge = div
             ? `<div class="div-badge ${div.type === "顶" ? "div-badge-top" : "div-badge-bottom"}"
                  title="${esc(div.freq + div.type + "背离｜" + div.evidence + "｜" + div.disclaimer)}">${div.type}背离 ${esc(div.freq)}</div>`
             : "";
-          const srcTxt = i.source === "tencent" ? "腾讯" : (i.source === "em" ? "东财" : "");
+          const srcTxt = i.source === "tencent" ? "腾讯"
+            : (i.source === "em" ? "东财" : (i.source === "tdx" ? "通达信" : ""));
+          // 2026-10-26：平均股价改由**通达信本地**读取。通达信的 .day 只在客户端下载后才更新，
+          // 所以可能滞后一天 —— 这种情况必须把「数据日」写出来，不能把昨天的收盘当实时价。
+          const _asofTxt = i.stale && i.asof
+            ? `<div style="font-size:9px;color:#d29922" title="通达信本地数据停在 ${esc(i.asof)}，打开通达信下载后会自动更新">数据日 ${esc(i.asof)}</div>`
+            : "";
+          const _tip = `点击查看K线${i.asof ? `｜数据日 ${i.asof}` : ""}${i.stale ? "（通达信未更新到今日，下方数值为该日收盘）" : ""}`;
           return `<div class="idx-card" style="cursor:pointer;min-width:132px;text-align:center;position:relative"
-              onclick="openStockChart('${i.symbol}','${esc(i.name)}')" title="点击查看K线">
+              onclick="openStockChart('${i.symbol}','${esc(i.name)}')" title="${esc(_tip)}">
             <div style="font-size:13px;color:var(--text-dim)">${esc(i.name)}${srcTxt ? `<span class="idx-src">${srcTxt}</span>` : ""}</div>
             <div class="mono" style="font-size:16px;font-weight:700">${fmt(i.price, 2)}</div>
             <div class="mono ${cls}" style="font-size:11px">${pctTxt}</div>
+            ${_asofTxt}
             ${badge}
           </div>`;
         }).join("")}

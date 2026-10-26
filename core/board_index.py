@@ -75,7 +75,11 @@ GUI_INDEX_BOARD = [
     {"name": "科创50",   "symbol": "sh000688",     "gm": "SHSE.000688", "ts_code": "000688.SH", "source": "gm"},
     {"name": "中证500",  "symbol": "sh000905",     "gm": "SHSE.000905", "ts_code": "000905.SH", "source": "gm"},
     {"name": "中证1000", "symbol": "sh000852",     "gm": "SHSE.000852", "ts_code": "000852.SH", "source": "gm"},
-    {"name": "平均股价", "symbol": "em47.800005",  "gm": None,          "ts_code": None,        "source": "em"},
+    # 2026-10-26 owner：「平均股价请使用通达信进行读取修复」——东财 push2delay 常被风控，
+    # 卡片长期显示「—」。通达信本地 `vipdoc/sh/lday/sh880003.day` 就有这条（880003 = 平均股价），
+    # 由通达信客户端自己更新 ⇒ 优先读它，读不到才退回东财。`tdx` 字段就是映射。
+    {"name": "平均股价", "symbol": "em47.800005",  "gm": None,          "ts_code": None,        "source": "em",
+     "tdx": "880003"},
     {"name": "创业板指", "symbol": "sz399006",     "gm": "SZSE.399006", "ts_code": "399006.SZ", "source": "gm"},
 ]
 
