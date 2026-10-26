@@ -4257,7 +4257,6 @@ function closeDayIntraday() {
   const m = document.getElementById("dayModal");
   if (m) m.style.display = "none";
   if (dayInst) { try { dayInst.dispose(); } catch (e) { /* 忽略 */ } dayInst = null; }
-  _clearGapFocus();          // 关掉日内窗，日线上的缺口标记也撤掉
 }
 
 /* 2026-10-26：**双击日 K 的某根 → 那天**的 5 分钟图。
@@ -4573,53 +4572,8 @@ async function openDayIntraday(code, name, date) {
     if (info) info.innerHTML = `<span style="color:#f85149">渲染失败：${esc((e && (e.message || e)) || "未知")}</span>`;
     try { window.pywebview.api.report_slow_call("day_render_err", 0); } catch (e2) { /* 静默 */ }
   }
-  // 2026-10-26 owner：「5分钟显示的缺口我不知道在日线级别的哪个缺口，请在日线相应位置也显示出来」
-  // ⇒ 把这次看到的缺口记下来，日线图上标同一根（并自动跳到那天），关弹窗时清掉。
-  const _o0g = (d.ohlc && d.ohlc[0]) ? Number(d.ohlc[0][0]) : null;
-  const _gpg = (d.prev_close != null && _o0g) ? (_o0g / d.prev_close - 1) * 100 : null;
-  _setGapFocus(code, date, d.prev_close, _o0g, _gpg);
 }
 
-/* 日线上的「缺口定位」：`_gapFocus` 由 openDayIntraday 设置，renderStockChart 负责画。
-   day 取不到缺口（幅度 <0.3% 或没有昨收）时也要清掉，免得上一次的标记赖在图上。 */
-let _gapFocus = null;
-function _setGapFocus(code, day, prev, open, pct) {
-  const pd = (stockChartData && stockChartData.period_data || {}).daily || {};
-  const dates = (pd.dates || []).map(x => String(x).slice(0, 10));
-  const i = dates.indexOf(String(day).slice(0, 10));
-  // 幅度 <0.3% 不算缺口（与日内图的规则一致）⇒ 不标
-  const _ok = (pct != null && isFinite(pct) && Math.abs(pct) >= 0.3
-               && prev != null && open != null);
-  _gapFocus = (i >= 0 && code === stockChartCode && _ok)
-    ? { code: code, day: String(day).slice(0, 10), prev: Number(prev), open: Number(open),
-        pct: Number(pct) } : null;
-  if (_gapFocus) {
-    // 那天不在当前视窗里 ⇒ 把视窗挪过去（±30 根），否则标了也看不见
-    const n = dates.length;
-    if (n > 5) {
-      // 可见窗口要按**默认区间**算：没有手动缩放时 `stockChartZoom` 是 null，
-      // 但图上其实只画最近 N 根（`stockChartRange.daily`），不能当成 0~100 全可见。
-      let zs = 0, ze = 100;
-      if (stockChartZoom) { zs = stockChartZoom.start; ze = stockChartZoom.end; }
-      else {
-        try { zs = barsToZStart(n, stockChartRange["daily"]); } catch (e) { zs = 0; }
-      }
-      const i0 = Math.round(zs / 100 * (n - 1)), i1 = Math.round(ze / 100 * (n - 1));
-      if (i < i0 || i > i1) {
-        const w = Math.min(60, n);
-        let s0 = Math.max(0, Math.min(n - w, i - Math.floor(w / 2)));
-        const s1 = Math.min(n - 1, s0 + w - 1);
-        stockChartZoom = { start: s0 / (n - 1) * 100, end: s1 / (n - 1) * 100 };
-      }
-    }
-  }
-  try { renderStockChart(true); } catch (e) { /* 忽略 */ }
-}
-function _clearGapFocus() {
-  if (!_gapFocus) return;
-  _gapFocus = null;
-  try { renderStockChart(false); } catch (e) { /* 忽略 */ }
-}
 
 /* 2026-10-26 owner：「加一个手动刷新，下载完分钟线不用重开图」。
    force=true 时：版本号置空（不吃 unchanged 握手）+ 后端跳过内存/磁盘 payload 缓存，
@@ -5329,8 +5283,8 @@ function buildGapAreas(ohlc, dates, lookbackDays, minPct, maxN) {
     out.push([{
       xAxis: i, yAxis: loB,
       itemStyle: {
-        color: up ? "rgba(248,81,73,.13)" : "rgba(63,185,80,.13)",
-        borderColor: up ? "rgba(248,81,73,.5)" : "rgba(63,185,80,.5)",
+        color: up ? "rgba(248,81,73,.17)" : "rgba(63,185,80,.17)",
+        borderColor: up ? "rgba(248,81,73,.8)" : "rgba(63,185,80,.8)",
         borderWidth: 1, borderType: "dashed",
       },
       name: up ? "↑缺口" : "↓缺口",
@@ -5585,137 +5539,9 @@ function renderStockChart(applyZoom = true) {
   };
   /* 缺口（2026-10-17 owner：「用颜色将区域显示出来」）—— 逻辑已抽到 `buildGapAreas`，
      六宫格复用同一套口径（2026-10-21 owner：多窗口里也要看到缺口）。 */
-  const gapAreas = showGaps ? buildGapAreas(period.ohlc, period.dates, 15) : [];
-
-  /* 2026-10-26 owner：「5分钟显示的缺口我不知道在日线级别的哪个缺口」——
-     双击看日内后，把那个 **昨收↔今开** 的缺口在日线同一根上标出来（色带 + 竖线标签）。
-     没有 _gapFocus（或幅度不够）时什么都不加。 */
-  let _focusAreas = [], _focusLines = [];
-  if (_gapFocus && _gapFocus.code === stockChartCode && stockChartPeriod === "daily") {
-    const _fi = (period.dates || []).findIndex(
-      x => String(x).slice(0, 10) === _gapFocus.day);
-    if (_fi >= 0) {
-      const _up = _gapFocus.pct > 0;
-      const _col = _up ? "248,81,73" : "63,185,80";
-      _focusAreas = [[
-        { xAxis: _fi - 0.5, yAxis: _gapFocus.prev,
-          itemStyle: { color: `rgba(${_col},.22)`, borderColor: `rgba(${_col},.95)`,
-                       borderWidth: 1.5, borderType: "solid" } },
-        { xAxis: _fi + 0.5, yAxis: _gapFocus.open },
-      ]];
-      _focusLines = [{
-        xAxis: _fi,
-        lineStyle: { color: `rgba(${_col},.85)`, type: "dashed", width: 1.2 },
-        label: { formatter: `缺口 ${_gapFocus.pct > 0 ? "+" : ""}${_gapFocus.pct.toFixed(2)}%`,
-                 color: `rgb(${_col})`, fontSize: 9, position: "insideEndTop" },
-      }];
-    }
-  }
-
-  const boxAreas = boxes
-    .filter(b => b.low && b.high)
-    .map(b => {
-      const _r = _boxRange(boxIdx, b.start, b.end);
-      if (!_r) return null;
-      const i0 = _r[0], i1 = _r[1];
-      const isCur = b.rel === 0;
-
-      // P2前端适配：根据quality_score判定颜色
-      let boxColor, borderColor, borderWidth;
-      let qualityLabel = "";
-
-      if (b.quality_score !== undefined) {
-        // 有质量评分（新字段）
-        qualityLabel = ` [${b.quality_score.toFixed(1)}/10]`;
-        if (b.quality_score >= 7) {
-          // 绿色：高质量，非常可靠
-          boxColor = isCur ? "rgba(63, 185, 80, .35)" : "rgba(63, 185, 80, .15)";
-          borderColor = isCur ? "#3fb950" : "#238636";
-          borderWidth = isCur ? 2 : 1;
-        } else if (b.quality_score >= 5) {
-          // 黄色：中等质量，可参考
-          boxColor = isCur ? "rgba(227, 179, 65, .35)" : "rgba(227, 179, 65, .15)";
-          borderColor = isCur ? "#e3b341" : "#d29922";
-          borderWidth = isCur ? 2 : 1;
-        } else {
-          // 红色：低质量或信号级，谨慎
-          boxColor = isCur ? "rgba(248, 81, 73, .35)" : "rgba(248, 81, 73, .12)";
-          borderColor = isCur ? "#f85149" : "#da3633";
-          borderWidth = isCur ? 2 : 1;
-        }
-      } else {
-        // 无质量评分（历史数据兼容）
-        boxColor = isCur ? "rgba(210,153,34,.35)" : "rgba(139,148,158,.12)";
-        borderColor = isCur ? "#d29922" : "#484f58";
-        borderWidth = isCur ? 2 : 1;
-      }
-
-      // 显示标签：包含完整的质量信息
-      const displayLabel = b.display || `${fmt(b.low, 2)}~${fmt(b.high, 2)}`;
-      const tag = isCur ? "当前箱体" : (b.rel === -1 ? "上方箱体" : "下方箱体");
-
-      return [{ name: `${tag} ${displayLabel} (${b.days || ""}天)${qualityLabel}`,
-                xAxis: i0, yAxis: b.low, itemStyle: { color: boxColor,
-                  borderColor: borderColor, borderWidth: borderWidth, borderType: isCur ? "solid" : "dashed" } },
-              { xAxis: i1, yAxis: b.high }];
-    })
-    .filter(Boolean);
-
-  // 2026-10-20 owner：「K线中显示5日均线纯属多余，去掉」——**撤掉当天上午加的 MA5 特殊标记**
-  // （金色加粗+微光 / z 抬到蜡烛之上 / 线尾「MA5(日) xx」胶囊）。
-  // 理由：MA5 本来就在图例和 tooltip 里，再单独描一条金线加个数字胶囊只是噪声，
-  // 而且那个胶囊正好挂在右端、跟现价胶囊抢位置。
-  // ⚠️ **MA5 这条均线本身保留**（它是标准均线之一），只是恢复成与其它均线同款细线。
-  //    「分钟周期 MA5 = 5 根该周期 K 线」这个口径仍由 tooltip 和「日线MA5」蓝虚线解释。
-  /* 成交额（亿元）+ 量能均线（2026-10-20 owner：量能窗口要「美化、醒目」）。
-     单根柱子只能看出"今天放没放量"，**均线才看得出量能趋势**（东财的量能面板就是
-     柱子 + 两条均线）。单位统一换成亿 —— 和 y 轴刻度同一口径，不用心算。
-     没有成交额（老 payload）时整块为 null，下面的 series 自动回落成交量。 */
-  const _hasAmt = Array.isArray(period.amount) && period.amount.length === period.dates.length;
-  const _amtYi = _hasAmt
-    ? period.amount.map(v => (v == null || isNaN(Number(v))) ? null : Number(v) / 1e8)
-    : null;
-  const _maOf = (arr, n) => {
-    if (!arr) return null;
-    const out = new Array(arr.length).fill(null);
-    let sum = 0, cnt = 0;
-    for (let i = 0; i < arr.length; i++) {
-      const v = arr[i];
-      if (v != null) { sum += v; cnt++; }
-      if (i >= n) { const old = arr[i - n]; if (old != null) { sum -= old; cnt--; } }
-      if (i >= n - 1 && cnt === n) out[i] = Math.round(sum / n * 100) / 100;
-    }
-    return out;
-  };
-
-  /* 2026-10-25 owner：「成交量部分画一条平均成交量，用来测主力行为」——窗口定 **60**。
-     依据是全市场前复权日线的实测（doc/research/2026-10-25_成交量均线窗口实验.md）：
-       · 量比 = 当日量 / 前 N 日均量（**不含当日**），N 从 5→60→250 量比的横截面 IC
-         单调变负；N=60 已吃掉大部分（IC5 −0.053 / t −11.7），再拉长剩下的只是
-         「长期高换手股本来就跑输」这个慢变量（MA20/MA120 那一半），对看单张图没用。
-       · 实测档位（556 只 × 3512 日，减当日全市场均值去 beta）：量比 <1.5 未来 5 日不跑输；
-         ≥2.0 超额 −0.31%（t −4.6）；≥3.0 超额 −0.97%（t −9.7）。分年 2023~2026 全为负。
-       · 60 日基准**不会被单日异动自身抬高** ⇒ 持续几周的「量堆」能一直站在线上，
-         这正是看主力吸筹/出货要的形状；MA5 那种短基准第二周就把异动吸收进基准了。
-     ⚠️ 线画在**实际画出来的那条序列**上（有成交额画成交额、没有画成交量·手），
-        不是固定成交量 —— 否则和柱子不同口径，看着像两条互相矛盾的量。 */
-  const _voltSeries = _hasAmt ? _amtYi
-    : (Array.isArray(period.volume)
-        ? period.volume.map(v => (v == null || isNaN(Number(v))) ? null : Number(v))
-        : []);
-  const _voltUnit = _hasAmt ? "成交额" : "成交量";
-  const _voltMa5 = _maOf(_voltSeries, 5);
-  const _voltMa10 = _maOf(_voltSeries, 10);
-  const _voltMaBase = _maOf(_voltSeries, VOL_MA_BASE);
-  /* 量比 = 当日 / **前** N 日均量（**不含当日**）—— 与实验口径一致；直接用线上的值
-     （含当日的 N 日均量）会把今天的量自己也算进分母，放量日会被系统性地低估。
-     所以取前一格的线值：`_maOf` 在第 i-1 格 = mean(i-N … i-1)。 */
-  const _volRatio = (i) => {
-    const v = _voltSeries ? _voltSeries[i] : null;
-    const b = _voltMaBase && i > 0 ? _voltMaBase[i - 1] : null;
-    if (v == null || b == null || !(b > 0)) return null;
-    return v / b;
-  };
+  // 2026-10-26 owner：「在日线级别要把缺口显示出来」——窗口从 15 天放宽到 250 天
+  // （默认视窗是近 6 月 ≈120 根，15 天只看得到最近两周的缺口，大半屏都没有）。
+  const gapAreas = showGaps ? buildGapAreas(period.ohlc, period.dates, 250) : [];
 
   const maSeries = period.ma.map((maArr, i) => {
     const _isYear = i === 6;                       // 第 7 条 = MA365（年线）
@@ -6162,7 +5988,7 @@ function renderStockChart(applyZoom = true) {
                      borderColor: "#ff6b62", borderColor0: "#56d364", borderWidth: 1 },
         // 箱体 + 缺口共用一个 markArea（ECharts 每个 series 只认一个）
         markArea: (() => {
-          const _d = [...(showBoxes ? boxAreas : []), ...gapAreas, ..._focusAreas];
+          const _d = [...(showBoxes ? boxAreas : []), ...gapAreas];
           return _d.length ? { silent: true, data: _d } : undefined;
         })(),
         markLine: { symbol: "none",
@@ -6173,7 +5999,6 @@ function renderStockChart(applyZoom = true) {
             ...(dailyMa20Line ? [dailyMa20Line] : []),
             ...(dailyMa30Line ? [dailyMa30Line] : []),
             ...(dailyMa60Line ? [dailyMa60Line] : []),
-            ..._focusLines,
           ],
           label: { position: "insideEndTop" } } },
       ...divSeries,
