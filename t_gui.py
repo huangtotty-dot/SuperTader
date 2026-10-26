@@ -1538,6 +1538,37 @@ def _fetch_min_bars_online(ts_code, freq, days):
     return _norm_min_bars(df)
 
 
+def _fetch_min_bars_day(ts_code, freq, day):
+    """**指定某一天**的分钟线（2026-10-26，owner 有 tushare 权限，要近三年）。
+
+    为什么单开一个：`_fetch_min_bars_online` 按「最近 N 天」取，窗口只有约 3 个月
+    （`_MIN_BARS_DAYS`），再早的日期整条链都拿不到。这里用
+    `start_date=end_date=当天` 只拉 48 根 —— 一次调用就够，既解锁深历史又不拖慢。
+
+    超时/冷却沿用同一套（8s 硬超时 + 失败冷却），拿不到就返回空表由调用方降级。
+    """
+    import pandas as pd
+    with _TUSHARE_MIN_LOCK:
+        if _time_mod.time() < _TUSHARE_MIN_STATE["until"]:
+            return pd.DataFrame()
+
+    def _call():
+        from analysis.index_regime_intraday import _iri_tushare_pro
+        pro = _iri_tushare_pro()
+        d = str(day)[:10]
+        return pro.stk_mins(ts_code=ts_code, freq=freq,
+                            start_date=f"{d} 09:00:00", end_date=f"{d} 19:00:00")
+
+    ok, df, err = _run_bounded(_call, 10.0)
+    if not ok:
+        _tushare_min_cooldown("timeout")
+        return pd.DataFrame()
+    if err is not None:
+        _tushare_min_cooldown(type(err).__name__)
+        return pd.DataFrame()
+    return _norm_min_bars(df)
+
+
 def _fetch_min_bars_disk(ts_code, freq):
     """本地缓存兜底。2026-10-04：优先读**新鲜**的 plain 档（盘后预下载写这里），
     再回退历史档；多档间按末行时间取**最新者**（原来固定优先陈旧的 `_d540`，
@@ -5155,23 +5186,37 @@ class Api:
                 for n in (5, 10, 20, 30, 60, 180, 365):
                     out["ma"][str(n)] = (round(sum(_closes[-n:]) / n, 3)
                                          if len(_closes) >= n else None)
-            # ── 5 分钟：**通达信本地优先**（深度取决于用户在通达信里下载到哪年），腾讯兜底 ──
+            # ── 5 分钟：通达信本地 → 近 3 个月（腾讯/tushare 窗口）→ **tushare 单日（近三年）** ──
+            # 顺序理由：通达信是磁盘读（毫秒级）；3 个月内的日期走常规取数（有内存/磁盘缓存）；
+            # 更早的日期常规取数**根本覆盖不到**，直接打 tushare 单日接口，省掉一次白等的取数。
             df = self._tdx_min_df(code, 5, day=day)
             out["source"] = "tdx"
             if df is None or getattr(df, "empty", True):
-                out["source"] = "tencent"
-                _raw = _fetch_min_bars(code, "5min")
-                if _raw is None or getattr(_raw, "empty", True):
-                    out["error"] = "取不到该日 5 分钟数据（通达信本地、腾讯都没有）"
-                    return out
-                _tc = "time" if "time" in _raw.columns else "date"
-                _t = pd.to_datetime(_raw[_tc])
-                df = _raw[_t.dt.strftime("%Y-%m-%d") == day]
-                if df.empty:
-                    out["error"] = (f"{day} 没有 5 分钟数据：通达信本地缺这天，腾讯只回溯约 3 个月"
-                                    f" —— 在通达信「盘后数据下载 → 1分钟线/5分钟线」里把起始日期调早")
-                    return out
-                out["source"] = "tencent"
+                df = None
+                _age = 9999
+                try:
+                    _age = (datetime.now() - datetime.strptime(day, "%Y-%m-%d")).days
+                except Exception:
+                    pass
+                if _age <= 100:
+                    _raw = _fetch_min_bars(code, "5min")
+                    if _raw is not None and not getattr(_raw, "empty", True):
+                        _tc = "time" if "time" in _raw.columns else "date"
+                        _t = pd.to_datetime(_raw[_tc])
+                        _s = _raw[_t.dt.strftime("%Y-%m-%d") == day]
+                        if not _s.empty:
+                            df, out["source"] = _s, "tencent"
+                if df is None:
+                    _ts = _min_bars_ts_code(code)
+                    if _ts:
+                        _s = _fetch_min_bars_day(_ts, "5min", day)
+                        if _s is not None and not getattr(_s, "empty", True):
+                            df, out["source"] = _s, "tushare"
+            if df is None or getattr(df, "empty", True):
+                out["error"] = (f"{day} 没有 5 分钟数据：通达信本地没有这天，tushare 也没取到"
+                                f"（权限/交易日/停牌）。可在通达信「盘后数据下载 → 分钟线」里补，"
+                                f"起始日期调到该日之前")
+                return out
             _tcol = "time" if "time" in df.columns else "date"
             df = _ensure_amount(df, code)
             _amt = df["amount"].astype(float).tolist() if "amount" in df.columns else [None] * len(df)

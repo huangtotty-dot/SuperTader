@@ -4259,6 +4259,41 @@ function closeDayIntraday() {
   if (dayInst) { try { dayInst.dispose(); } catch (e) { /* 忽略 */ } dayInst = null; }
 }
 
+/* 2026-10-26：**双击日 K 的某根 → 那天**的 5 分钟图。
+   ⚠️ 三个坑，逐个绕开：
+     ① 用 zrender 的 `dblclick` 不行 —— 它自己判"两次点击 300ms 内"，慢一点就吞掉；
+     ② 挂在 `_firstInit` 块里不行 —— 那条路径只在实例刚建时走一次，前面任一步抛错就再也不绑；
+     ③ 挂在 `#stockChart` 的 on* 上也不行 —— 容器是 echarts.init 的宿主，重开窗时属性会被覆盖。
+   ⇒ 改成 **document 级 addEventListener + contains 判定**，模块加载时装一次，永不失效。
+   监听器内部还要**再查一次** `stockChartCode`（关窗后会置空），避免误触发。 */
+(function _installChartDblClick() {
+  if (window.__chartDblClickInstalled) return;
+  window.__chartDblClickInstalled = true;
+  document.addEventListener("dblclick", (ev) => {
+    try {
+      const el = document.getElementById("stockChart");
+      if (!el || !stockChartCode || stockChartPeriod !== "daily") return;
+      if (!(el === ev.target || el.contains(ev.target))) return;
+      if (!window.echarts || !stockChartInst) return;
+      const pd = (stockChartData && stockChartData.period_data || {}).daily || {};
+      const dates = pd.dates || [];
+      if (!dates.length) return;
+      const r = el.getBoundingClientRect();
+      let v = stockChartInst.convertFromPixel(
+        { xAxisIndex: 0 }, [ev.clientX - r.left, ev.clientY - r.top]);
+      if (Array.isArray(v)) v = v[0];
+      let idx = -1;
+      if (typeof v === "number" && v >= -0.5 && v <= dates.length - 0.5) idx = Math.round(v);
+      else if (typeof v === "string") idx = dates.indexOf(v);
+      if (idx < 0) return;
+      const day = String(dates[idx] || "").slice(0, 10);
+      if (day) openDayIntraday(stockChartCode, (stockChartData || {}).name, day);
+    } catch (e) {
+      try { window.pywebview.api.report_slow_call("dblclick_err", 0); } catch (e2) { /* 静默 */ }
+    }
+  }, true);
+})();
+
 /* 弹窗 DOM 兜底：index.html 若还是旧版（WebView 缓存 / 没重启），这里直接建一份，
    避免"双击没反应"这种无声失败。 */
 function _ensureDayModal() {
@@ -4299,7 +4334,8 @@ async function openDayIntraday(code, name, date) {
                       "60": "#d55181", "180": "#9085e9", "365": "#22d3ee" };
   if (info) {
     info.innerHTML = `开 ${d.ohlc[0][0]} · 收 ${d.last_close ?? "—"} · 昨收 <b>${d.prev_close ?? "—"}</b>`
-      + `　<span style="color:#6e7681">数据源：${d.source === "tdx" ? "通达信本地" : "腾讯"}</span>`
+      + `　<span style="color:#6e7681">数据源：${d.source === "tdx" ? "通达信本地"
+          : d.source === "tushare" ? "tushare" : "腾讯"}</span>`
       + `　日线均线（<b>该日</b>）：`
       + _maKeys.map(k => MA[k] == null ? "" :
           `<span style="color:${_maColors[k]}">MA${k} <b>${MA[k]}</b></span>`).filter(Boolean).join("　")
@@ -6069,31 +6105,9 @@ function renderStockChart(applyZoom = true) {
         const idx = _chartClickIndex(ev);
         if (idx >= 0) showOrderFlowAt(idx);
       });
-      /* 2026-10-26 owner：**双击日 K 的某根 → 看那天的 5 分钟图**。
-         ⚠️ 挂在**容器 DOM 的 dblclick**上，不用 zrender 的 `dblclick`：
-            zrender 是自己判定"两次点击在 300ms 内"，慢一点的双击就吞掉了
-            （owner 实测「双击后没有任何反应」）。DOM 事件走系统的双击阈值，稳得多。 */
-      const _ccEl = document.getElementById("stockChart");
-      if (_ccEl) {
-        _ccEl.ondblclick = (ev) => {
-          if (stockChartPeriod !== "daily" || !stockChartCode) return;
-          const pd = (stockChartData && stockChartData.period_data || {}).daily || {};
-          const dates = pd.dates || [];
-          if (!dates.length) return;
-          let idx = -1;
-          try {
-            const r = _ccEl.getBoundingClientRect();
-            let v = stockChartInst.convertFromPixel(
-              { xAxisIndex: 0 }, [ev.clientX - r.left, ev.clientY - r.top]);
-            if (Array.isArray(v)) v = v[0];
-            if (typeof v === "number" && v >= -0.5 && v <= dates.length - 0.5) idx = Math.round(v);
-            else if (typeof v === "string") idx = dates.indexOf(v);
-          } catch (e) { idx = -1; }
-          if (idx < 0) return;
-          const day = String(dates[idx] || "").slice(0, 10);
-          if (day) openDayIntraday(stockChartCode, (stockChartData || {}).name, day);
-        };
-      }
+      /* 双击日 K → 日内 5 分钟（2026-10-26）。监听器在**模块级**装一次，
+         见文件下面的 `_installChartDblClick()` —— 不再挂在 `_firstInit` 里：
+         那条路径只在"实例刚建出来"时走一次，任何一步抛错就再也不会绑上。 */
     } catch (e) { /* 桩环境忽略 */ }
   }
 }
