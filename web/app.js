@@ -5543,6 +5543,56 @@ function renderStockChart(applyZoom = true) {
   // （默认视窗是近 6 月 ≈120 根，15 天只看得到最近两周的缺口，大半屏都没有）。
   const gapAreas = showGaps ? buildGapAreas(period.ohlc, period.dates, 250) : [];
 
+  /* 成交额（亿元）+ 量能均线（2026-10-20 owner：量能窗口要「美化、醒目」）。
+     单根柱子只能看出"今天放没放量"，**均线才看得出量能趋势**（东财的量能面板就是
+     柱子 + 两条均线）。单位统一换成亿 —— 和 y 轴刻度同一口径，不用心算。
+     没有成交额（老 payload）时整块为 null，下面的 series 自动回落成交量。 */
+  const _hasAmt = Array.isArray(period.amount) && period.amount.length === period.dates.length;
+  const _amtYi = _hasAmt
+    ? period.amount.map(v => (v == null || isNaN(Number(v))) ? null : Number(v) / 1e8)
+    : null;
+  const _maOf = (arr, n) => {
+    if (!arr) return null;
+    const out = new Array(arr.length).fill(null);
+    let sum = 0, cnt = 0;
+    for (let i = 0; i < arr.length; i++) {
+      const v = arr[i];
+      if (v != null) { sum += v; cnt++; }
+      if (i >= n) { const old = arr[i - n]; if (old != null) { sum -= old; cnt--; } }
+      if (i >= n - 1 && cnt === n) out[i] = Math.round(sum / n * 100) / 100;
+    }
+    return out;
+  };
+
+  /* 2026-10-25 owner：「成交量部分画一条平均成交量，用来测主力行为」——窗口定 **60**。
+     依据是全市场前复权日线的实测（doc/research/2026-10-25_成交量均线窗口实验.md）：
+       · 量比 = 当日量 / 前 N 日均量（**不含当日**），N 从 5→60→250 量比的横截面 IC
+         单调变负；N=60 已吃掉大部分（IC5 −0.053 / t −11.7），再拉长剩下的只是
+         「长期高换手股本来就跑输」这个慢变量（MA20/MA120 那一半），对看单张图没用。
+       · 实测档位（556 只 × 3512 日，减当日全市场均值去 beta）：量比 <1.5 未来 5 日不跑输；
+         ≥2.0 超额 −0.31%（t −4.6）；≥3.0 超额 −0.97%（t −9.7）。分年 2023~2026 全为负。
+       · 60 日基准**不会被单日异动自身抬高** ⇒ 持续几周的「量堆」能一直站在线上，
+         这正是看主力吸筹/出货要的形状；MA5 那种短基准第二周就把异动吸收进基准了。
+     ⚠️ 线画在**实际画出来的那条序列**上（有成交额画成交额、没有画成交量·手），
+        不是固定成交量 —— 否则和柱子不同口径，看着像两条互相矛盾的量。 */
+  const _voltSeries = _hasAmt ? _amtYi
+    : (Array.isArray(period.volume)
+        ? period.volume.map(v => (v == null || isNaN(Number(v))) ? null : Number(v))
+        : []);
+  const _voltUnit = _hasAmt ? "成交额" : "成交量";
+  const _voltMa5 = _maOf(_voltSeries, 5);
+  const _voltMa10 = _maOf(_voltSeries, 10);
+  const _voltMaBase = _maOf(_voltSeries, VOL_MA_BASE);
+  /* 量比 = 当日 / **前** N 日均量（**不含当日**）—— 与实验口径一致；直接用线上的值
+     （含当日的 N 日均量）会把今天的量自己也算进分母，放量日会被系统性地低估。
+     所以取前一格的线值：`_maOf` 在第 i-1 格 = mean(i-N … i-1)。 */
+  const _volRatio = (i) => {
+    const v = _voltSeries ? _voltSeries[i] : null;
+    const b = _voltMaBase && i > 0 ? _voltMaBase[i - 1] : null;
+    if (v == null || b == null || !(b > 0)) return null;
+    return v / b;
+  };
+
   const maSeries = period.ma.map((maArr, i) => {
     const _isYear = i === 6;                       // 第 7 条 = MA365（年线）
     const _color = _isYear ? MA365_COLOR : MA_COLORS[i];
