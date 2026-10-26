@@ -147,6 +147,38 @@ def _read_json(fp):
         return json.load(f)
 
 
+# P1-12：盘前「昨日档」判定的参照系缓存（(文件路径, mtime) → 末根日期）。
+# 指数档被盘后 prefetch 重写后 mtime 变化 ⇒ 自动失效，不会跨交易日钉死旧值。
+_IDX_BAR_MEMO = {"key": None, "date": ""}
+
+
+def _latest_index_bar_date() -> str:
+    """最近已知交易日 = 上证指数日线缓存（index_sh000001.json）末根日期；读不到返回 ""。
+
+    仓库**没有全局交易日历**（`core/chart_cache.py` 明写"无全局交易日历"），通行惯例是
+    「以指数 bar 为交易日历」——周末/节假日自动排除（见
+    `scripts/experiment/star_map_rank_forward_20261017.py` 的 trading_days()）。
+    `sector_rotation.data_fetch.is_trading_day` 依赖轮动引擎自己的 CSV 缓存，
+    core 层不宜反向依赖 app 层，故不采用。
+
+    永不抛；任何异常返回 ""（调用方按"不确定 ⇒ 维持原硬闸"的保守策略处理）。
+    """
+    try:
+        fp = os.path.join(_DAILY_CACHE_DIR, "index_sh000001.json")
+        if not os.path.exists(fp):
+            return ""
+        key = (fp, os.path.getmtime(fp))
+        if _IDX_BAR_MEMO["key"] == key:
+            return _IDX_BAR_MEMO["date"]
+        rows = (_read_json(fp) or {}).get("rows") or []
+        d = str(rows[-1].get("date") or "")[:10] if rows else ""
+        _IDX_BAR_MEMO["key"] = key
+        _IDX_BAR_MEMO["date"] = d
+        return d
+    except Exception:
+        return ""
+
+
 _IDX_COLS_ = ["date", "open", "high", "low", "close", "volume", "amount"]
 
 
@@ -585,7 +617,9 @@ class TencentProvider:
     # ---------- 日线 ----------
     def daily_cache(self, code: str):
         """读个股日线缓存（每日 + 盘中 15 分钟新鲜度）。命中返回 df(source=cache)，否则 None。
-        供 facade gm 路径 cache-first 快读（审核残留建议，削减 10× 负载）。"""
+        供 facade gm 路径 cache-first 快读（审核残留建议，削减 10× 负载）。
+        P1-12：盘前（<09:15）额外接受「末根=最近已知交易日」的昨日档（详见下方分支注释），
+        盘中判定（date==today 硬闸 + 15 分钟 TTL）完全不变。"""
         code = str(code).split("_")[0]
         cache_fp = os.path.join(_DAILY_CACHE_DIR, f"{code}.json")
         _now = datetime.now()
@@ -598,10 +632,22 @@ class TencentProvider:
             return None
         try:
             cached = _read_json(cache_fp)
-            if not (cached.get("date") == _today and cached.get("rows")):
+            rows = cached.get("rows") or []
+            if not rows:
                 return None
-            rows = cached["rows"]
-            _last_date = str(rows[-1].get("date", "")) if rows else ""
+            _last_date = str(rows[-1].get("date", ""))
+            if cached.get("date") != _today:
+                # P1-12(2026-10-26)：盘前（<09:15）接受「末根=最近已知交易日」的昨日档。
+                # 原硬闸 `cached["date"]==today` 让全部 ~5400 档在每日 00:00 集体失效，
+                # 早盘首波取数尖峰全压给 prefetch/猎手首轮。盘前市场未开盘，昨日收盘档
+                # 本身就是最新数据，命中可直接用；≥09:15 后下方 `_stale` 闸照旧逼重取，
+                # 盘中语义不变 ⇒ 不会拿旧数据当新数据。
+                # 「最近交易日」以指数缓存末根判定（见 `_latest_index_bar_date`）；
+                # 指数档缺失、或个股末根落后于指数末根（如停牌）⇒ 维持原硬闸，保守重取。
+                if not (_now.strftime("%H:%M") < "09:15"
+                        and _last_date
+                        and _last_date == _latest_index_bar_date()):
+                    return None
             _saved_at = cached.get("saved_at")
             try:
                 _ts = datetime.strptime(_saved_at, "%Y-%m-%d %H:%M:%S") if _saved_at \

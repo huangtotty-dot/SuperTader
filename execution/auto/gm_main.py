@@ -278,6 +278,18 @@ def _writeback_holdings(context) -> int:
 # 旧引擎的预算表/个股预算已随其删除）。
 INITIAL_CASH = 150000
 
+# ── P1-6(2026-10-26)：心跳降频 ──
+# 原实现每根 60s bar 都打 2 次 SDK（全账户 positions + account cash），~480 次/日，
+# 全挤在 max_workers=1 的 SDK 池里，是池排队的主要来源（纯监控产物不参与决策，
+# 见 doc/research/2026-10-26_auto链路性能分析_实时性与负载.md H4）。
+# 现改为**快照缓存**：距上次 SDK 刷新 ≥ _HB_SNAPSHOT_INTERVAL_SEC 才重取，其余 bar 写缓存值。
+# ⚠️ 配套结论：heartbeat.json 的**文件写节拍不变**（仍每根 bar 覆写）——
+#    watcher._check_heartbeat（gap>600s 告警）与 scripts/auto_process_guardian.py
+#    （HEARTBEAT_STALE_SEC=180 判死拉起）都以文件 mtime 判活，mtime 节拍不变 ⇒
+#    两处看门狗阈值**无需**联动放宽。SDK 调用量 480 → ~100 次/日。
+_HB_SNAPSHOT_INTERVAL_SEC = 300
+_HB_CACHE = {"ts": None, "positions": {}, "cash": float(INITIAL_CASH)}
+
 
 def _raw_code(symbol: str) -> str:
     return symbol.replace("SHSE.", "").replace("SZSE.", "").replace("BJ.", "")
@@ -1014,46 +1026,54 @@ def on_bar(context, bars):
     except Exception:
         pass
 
-    # ── 心跳（每分钟写一次；仅模拟盘/实盘，回测跳过省I/O——纯监控产物不参与决策） ──
+    # ── 心跳（每根 bar 写文件；账户/持仓快照每 5 分钟才经 SDK 刷新一次——P1-6 降频） ──
     try:
         _hb_live = context.mode == MODE_LIVE
     except Exception:
         _hb_live = False
     if _hb_live:
-        # F11: 心跳持仓改走 _get_holding 多源对账（含终端空仓向下同步），
-        # 不再裸读 manual_position（0731 心跳报000988=300 实际=0 事故）
-        _hb_positions = {}
-        for _hc, _hs in STOCKS.items():
+        _hb_now = datetime.now()
+        _hb_ts = _HB_CACHE.get("ts")
+        if _hb_ts is None or (_hb_now - _hb_ts).total_seconds() >= _HB_SNAPSHOT_INTERVAL_SEC:
+            # F11: 心跳持仓改走 _get_holding 多源对账（含终端空仓向下同步），
+            # 不再裸读 manual_position（0731 心跳报000988=300 实际=0 事故）
+            _hb_positions = {}
+            for _hc, _hs in STOCKS.items():
+                try:
+                    _h = _get_holding(context, _hc, _hs)
+                except Exception:
+                    continue
+                if int(_h.get("qty", 0) or 0) > 0:
+                    _hb_positions[_hs] = {"qty": int(_h.get("qty", 0)),
+                                          "cost": float(_h.get("cost", 0) or 0)}
+            # 2026-10-13 修复：合并**池外**全账户真实持仓（旧引擎遗留单不过滤），
+            # 池内口径不变（仍走 _get_holding 多源对账，含我们跟踪的成本）。
+            for _as, _ap in _account_positions_all(context).items():
+                if _as not in _hb_positions and int(_ap.get("qty", 0) or 0) > 0:
+                    _hb_positions[_as] = {"qty": int(_ap["qty"]),
+                                          "cost": float(_ap.get("cost", 0) or 0)}
+            # ①-3: 实时读取可用现金
+            _hb_cash = INITIAL_CASH
             try:
-                _h = _get_holding(context, _hc, _hs)
+                _acct = _sdk_call("account", context.account)
+                _c = getattr(_acct, 'cash', None)
+                if _c is not None:
+                    _c = _c() if callable(_c) else _c
+                    if isinstance(_c, dict):
+                        _hb_cash = float(_c.get('available', _c.get('total', INITIAL_CASH)))
+                    else:
+                        _hb_cash = float(_c)
             except Exception:
-                continue
-            if int(_h.get("qty", 0) or 0) > 0:
-                _hb_positions[_hs] = {"qty": int(_h.get("qty", 0)),
-                                      "cost": float(_h.get("cost", 0) or 0)}
-        # 2026-10-13 修复：合并**池外**全账户真实持仓（旧引擎遗留单不过滤），
-        # 池内口径不变（仍走 _get_holding 多源对账，含我们跟踪的成本）。
-        for _as, _ap in _account_positions_all(context).items():
-            if _as not in _hb_positions and int(_ap.get("qty", 0) or 0) > 0:
-                _hb_positions[_as] = {"qty": int(_ap["qty"]),
-                                      "cost": float(_ap.get("cost", 0) or 0)}
-        # ①-3: 实时读取可用现金
-        _hb_cash = INITIAL_CASH
-        try:
-            _acct = _sdk_call("account", context.account)
-            _c = getattr(_acct, 'cash', None)
-            if _c is not None:
-                _c = _c() if callable(_c) else _c
-                if isinstance(_c, dict):
-                    _hb_cash = float(_c.get('available', _c.get('total', INITIAL_CASH)))
-                else:
-                    _hb_cash = float(_c)
-        except Exception:
-            pass
+                pass
+            _HB_CACHE["ts"] = _hb_now
+            _HB_CACHE["positions"] = _hb_positions
+            _HB_CACHE["cash"] = _hb_cash
+        # 文件写**每根 bar 照走**（成本极低；watcher/guardian 以 mtime 判活，节拍不变）。
+        # positions/cash 距上次 SDK 刷新最多陈旧 5 分钟（纯监控展示，不参与决策）。
         write_heartbeat(
             time_str=str(now), bar=f"{now:%H:%M}",
-            positions=_hb_positions,
-            cash=_hb_cash,
+            positions=_HB_CACHE["positions"],
+            cash=_HB_CACHE["cash"],
             index_regime=context.last_index_regime,
             index_score=context.last_index_score,
         )

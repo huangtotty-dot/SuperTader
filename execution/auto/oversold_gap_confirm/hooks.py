@@ -14,6 +14,9 @@
     10:08  try_backfill #1   未成交 → 撤单 → 候补复检 → 顺移（2026-10-14 新增）
     10:14  try_backfill #2   同上第二轮；**10:20 后不再开新仓**
     14:50  try_sell          SL5只深 close 止损 + 满 N 日到期平仓
+                             （P1-7，2026-10-26：每日一次标记改「成功才置位」——
+                             抛异常 ⇒ 下一根 bar 重试，上限 3 次 / 最晚 14:58，
+                             耗尽 ⇒ 放弃 + risk 告警；早盘冲高卖同型，最晚 10:30）
 
 由 `on_bar(rt, context, now, today, t)` 统一分发：内部做**时间窗 + 每日一次 + 模式**闸，
 每个钩子各自 try/except（一条钩子炸不影响别的，也不阻断主循环）。
@@ -49,6 +52,8 @@ from . import backfill, executor, preplace_probe, prescreen
 # 每日一次状态（原先散在 gm_main 的模块级全局 `_OSC_*_DONE_DATE` + `context._osc_candidates`）
 _STATE = {"date": None, "prepare": False, "buy": False, "sell": False,
           "morning": False, "candidates": {},
+          # P1-7（2026-10-26）：卖侧「成功才置位」的重试计数（见 on_bar 卖侧两格）
+          "sell_retries": 0, "morning_retries": 0,
           # ── 买不进替补（2026-10-14）──
           "fills": None,      # 当日首轮 fills dict（额度账 committed 由它算）
           "pending": [],      # 待补单（未成交买单）
@@ -72,6 +77,7 @@ def reset_day(today) -> None:
                   morning=False, candidates={}, fills=None, pending=[], spares=[],
                   done_codes=set(), backfill={}, buy_done=False, prescreen_meta={},
                   prepare_via=None, prepare_skip_logged=False,
+                  sell_retries=0, morning_retries=0,
                   probe_plan=False, probe_final=False)
 
 
@@ -708,8 +714,34 @@ def sell_time(rt):
     return dtime(_hhmm // 100, _hhmm % 100)
 
 
+# ── P1-7（2026-10-26）：卖侧每日一次标记「成功才置位」──────────────────────
+# 缺陷原型（10-26 性能审计 H7）：标记原先在钩子执行**前置位**
+# （`_STATE["sell"] = True` 先于 try_sell）——钩子一抛异常，卖侧**当日永久缺席**
+# （与历史「14:55 尾盘归位未执行」事故同型；卖侧是风控腿，缺席 = 止损/到期不执行）。
+# 现改为：执行成功才置位；抛异常 ⇒ 不置位 + 计一次重试，下一根 60s bar 再试；
+# **重试上限 + 最晚时限双保险**防死循环；耗尽 ⇒ 置位放弃 + risk 告警（让 watcher 推出去）。
+SELL_RETRY_MAX = 3          # 14:50 卖侧：首次失败后的最大重试次数（60s bar ⇒ ~3 分钟内耗尽）
+
+
+def sell_retry_deadline(rt):
+    """卖侧重试最晚时限（过了不再重试；默认 14:58，给 14:50 首试留 ~8 分钟窗）。
+
+    注意：首试**不受此时限限制**（14:59 才启动的进程也该卖一次）；时限只闸重试。
+    """
+    try:
+        v = int(rt.param("osc_sell_retry_deadline_hhmm", 1458))
+    except (TypeError, ValueError):
+        return dtime(14, 58)
+    return dtime(v // 100, v % 100)
+
+
 def try_sell(rt, context, now, today) -> int:
-    """14:50 超跌跳空确认卖侧（每日一次）：SL5只深 close 止损 + 到期平仓。返回已下单腿数。"""
+    """14:50 超跌跳空确认卖侧（每日一次）：SL5只深 close 止损 + 到期平仓。返回已下单腿数。
+
+    P1-7（2026-10-26）：取数/执行失败**记证后 re-raise** 给 on_bar——由它回滚每日标记
+    并在下一根 bar 重试（原 fail-closed「一次失败当日不卖」= 卖侧当日永久缺席）。
+    正常路径（含「无持仓」「无价格」）依旧返回 int，不抛。
+    """
     _exec = executor
     _reconcile_book(rt, context)                 # ⚠️ 必须先对账（同上）
     _codes = sell_codes(rt)
@@ -725,9 +757,9 @@ def try_sell(rt, context, now, today) -> int:
             rt.gm.history, symbol=_syms, frequency="60s", start_time=_start, end_time=_end,
             fields="symbol,eob,close", adjust=rt.gm.ADJUST_PREV, df=True))
     except Exception as _e:
-        rt.log(f"[OSC] 卖侧现价取数失败（fail-closed，当日不卖）: {_e}")
+        rt.log(f"[OSC] 卖侧现价取数失败（本次放弃，下一根 bar 重试）: {_e}")
         rt.audit({"event": "osc_sell_fetch_fail", "error": str(_e)[:200], "time": str(now)})
-        return 0
+        raise
     _prices = latest_close_from_df(_df, _codes, now)
     if not _prices:
         rt.audit({"event": "osc_sell_skip", "reason": "no_prices", "time": str(now)})
@@ -752,12 +784,12 @@ def try_sell(rt, context, now, today) -> int:
         rt.log(f"[OSC] 卖侧执行: {json.dumps(_sm, ensure_ascii=False)}")
         return int(_sm.get("sells_placed") or 0)
     except Exception as _e:
-        rt.log(f"[OSC] 卖侧执行失败（不阻断主循环）: {_e}")
+        rt.log(f"[OSC] 卖侧执行失败（本次放弃，下一根 bar 重试）: {_e}")
         try:
             rt.risk(str(now), "osc_sell_error", f"超跌跳空确认卖侧异常: {str(_e)[:200]}", code="")
         except Exception:
             pass
-        return 0
+        raise
 
 
 def morning_high_from_df(df, codes, now):
@@ -787,6 +819,21 @@ def morning_sell_time(rt):
     """早盘冲高卖检查时点（dtime）。"""
     _hhmm = int(rt.param("osc_morning_sell_time_hhmm", 1000))
     return dtime(_hhmm // 100, _hhmm % 100)
+
+
+MORNING_SELL_RETRY_MAX = 3      # P1-7：早盘冲高卖首次失败后的最大重试次数
+
+
+def morning_sell_retry_deadline(rt):
+    """早盘冲高卖重试最晚时限（默认 10:30；「早盘冲高」语义只适用于上午，防全天死循环）。
+
+    与卖侧同款：首试不受时限限制，时限只闸重试。
+    """
+    try:
+        v = int(rt.param("osc_morning_sell_retry_deadline_hhmm", 1030))
+    except (TypeError, ValueError):
+        return dtime(10, 30)
+    return dtime(v // 100, v % 100)
 
 
 # ── 预挂目标限价 · S0 影子探测（2026-10-19，只记录不下单）────────────────
@@ -905,9 +952,9 @@ def try_morning_sell(rt, context, now, today) -> int:
             rt.gm.history, symbol=_syms, frequency="1800s", start_time=_start, end_time=_end,
             fields="symbol,eob,high", adjust=rt.gm.ADJUST_PREV, df=True))
     except Exception as _e:
-        rt.log(f"[OSC] 早盘最高价取数失败（fail-closed，当日不卖）: {_e}")
+        rt.log(f"[OSC] 早盘最高价取数失败（本次放弃，下一根 bar 重试）: {_e}")
         rt.audit({"event": "osc_morning_sell_fetch_fail", "error": str(_e)[:200], "time": str(now)})
-        return 0
+        raise
     _highs = morning_high_from_df(_df, _codes, now)
     if not _highs:
         rt.audit({"event": "osc_morning_sell_skip", "reason": "no_highs", "time": str(now)})
@@ -929,11 +976,12 @@ def try_morning_sell(rt, context, now, today) -> int:
         rt.log(f"[OSC] 早盘冲高卖执行: {json.dumps(_sm, ensure_ascii=False)}")
         return int(_sm.get("sells_placed") or 0)
     except Exception as _e:
-        rt.log(f"[OSC] 早盘冲高卖执行失败（不阻断主循环）: {_e}")
+        rt.log(f"[OSC] 早盘冲高卖执行失败（本次放弃，下一根 bar 重试）: {_e}")
         try:
             rt.risk(str(now), "osc_morning_sell_error", f"超跌跳空确认早盘卖侧异常: {str(_e)[:200]}", code="")
         except Exception:
             pass
+        raise
 
 # ════════════════════════ 分发（宿主唯一入口）════════════════════════
 
@@ -965,16 +1013,36 @@ def on_bar(rt, context, now, today, t) -> None:
         except Exception as _e:
             rt.log(f"[OSC] 预挂探测(计划)失败（不阻断主循环）: {_e}")
     # 10:00 早盘冲高卖（**先于买侧**：先回笼现金再买）
+    # P1-7（2026-10-26）：每日一次标记改为「成功才置位」——原前置位写法令
+    # 钩子一抛异常就当日上午永久缺席。抛异常 ⇒ 不置位 + 计重试，下一根 bar 再试；
+    # 重试上限/最晚时限（默认 10:30）耗尽 ⇒ 置位放弃 + risk 告警。首试不受时限限制。
     if (live and sell_enabled(rt) and t >= morning_sell_time(rt)
             and not _STATE["morning"]):
-        _STATE["morning"] = True
-        try:
-            try_morning_sell(rt, context, now, today)
-        except Exception as _e:
-            rt.log(f"[OSC] 10:00 早盘冲高卖失败（不阻断主循环）: {_e}")
+        _mr = int(_STATE.get("morning_retries") or 0)
+        if _mr > 0 and (_mr >= MORNING_SELL_RETRY_MAX
+                        or t > morning_sell_retry_deadline(rt)):
+            _STATE["morning"] = True
+            rt.log(f"[OSC] 10:00 早盘冲高卖：已重试 {_mr} 次仍失败 / 已过重试时限 ⇒ 今日放弃"
+                   f"（D+1 持仓交 14:50 卖侧兜底）")
+            try:
+                rt.risk(str(now), "osc_morning_sell_giveup",
+                        f"早盘冲高卖重试 {_mr} 次仍失败，今日放弃该钩子", code="")
+            except Exception:
+                pass
+        else:
+            try:
+                try_morning_sell(rt, context, now, today)
+                _STATE["morning"] = True
+            except Exception as _e:
+                _STATE["morning_retries"] = _mr + 1
+                rt.log(f"[OSC] 10:00 早盘冲高卖失败（第 {_mr + 1} 次，下一根 bar 重试，"
+                       f"不阻断主循环）: {_e}")
     # 10:00 买侧
     # ⚠️ `buy_done` 是**落盘**标记：进程在 10:00 之后重启时 `_STATE["buy"]` 已被 `reset_day`
     #    清掉，下一根 bar 会**再跑一次首轮**（可能重复下单）。回读当日状态后据此跳过。
+    # P1-7 审视结论（2026-10-26）：买侧**刻意保留前置位**，不做失败重试——try_buy 内部
+    #    部分下单后才抛异常的场景下，重试 = 重复下单（卖侧重试是减仓、幂等方向安全；
+    #    买侧重试是加仓、方向不安全）。候选/取数失败本就是 fail-closed「当日不下单」设计。
     if live and t >= dtime(10, 0) and not _STATE["buy"]:
         load_day_state(rt, today)
         if _STATE.get("buy_done"):
@@ -1008,12 +1076,31 @@ def on_bar(rt, context, now, today, t) -> None:
             except Exception:
                 pass
     # 14:50 止损/到期
+    # P1-7（2026-10-26）：每日一次标记改为「成功才置位」——卖侧是风控腿，前置位写法
+    # 令 try_sell 一抛异常就当日永久缺席（与历史「14:55 尾盘归位未执行」事故同型）。
+    # 抛异常 ⇒ 不置位 + 计重试，下一根 bar 再试；重试上限（SELL_RETRY_MAX）/
+    # 最晚时限（默认 14:58）耗尽 ⇒ 置位放弃 + risk 告警。首试不受时限限制
+    # （14:59 才启动的进程也该卖一次）。
     if (live and sell_enabled(rt) and t >= sell_time(rt) and not _STATE["sell"]):
-        _STATE["sell"] = True
-        try:
-            try_sell(rt, context, now, today)
-        except Exception as _e:
-            rt.log(f"[OSC] 14:50 卖侧失败（不阻断主循环）: {_e}")
+        _sr = int(_STATE.get("sell_retries") or 0)
+        if _sr > 0 and (_sr >= SELL_RETRY_MAX or t > sell_retry_deadline(rt)):
+            _STATE["sell"] = True
+            rt.log(f"[OSC] 14:50 卖侧：已重试 {_sr} 次仍失败 / 已过 {_hhmm_str(sell_retry_deadline(rt))} "
+                   f"重试时限 ⇒ 今日放弃（持仓未平，需人工介入）")
+            try:
+                rt.risk(str(now), "osc_sell_giveup",
+                        f"14:50 卖侧重试 {_sr} 次仍失败，今日放弃：止损/到期未执行，持仓过夜",
+                        code="")
+            except Exception:
+                pass
+        else:
+            try:
+                try_sell(rt, context, now, today)
+                _STATE["sell"] = True
+            except Exception as _e:
+                _STATE["sell_retries"] = _sr + 1
+                rt.log(f"[OSC] 14:50 卖侧失败（第 {_sr + 1} 次，下一根 bar 重试，"
+                       f"不阻断主循环）: {_e}")
 
     # ── 周期心跳（每 30 分钟一格）────────────────────────────────────────────
     # 为什么要有：四个钩子都是"每日一次"，盘前 09:31 到 10:00、10:00 到 14:50 之间**一行日志都没有**

@@ -42,7 +42,10 @@ _INDUSTRY_MAP_FP = os.environ.get("OSC_INDUSTRY_MAP_FP") or os.path.join(
 MERGES = {"创新药": "医药", "中药": "医药",
           # 2026-10-24 分类改名/合并的兼容别名
           "锂电池": "电池", "算力金属": "有色金属"}
-_BATCH = 200          # daily_many 分片（对齐 hunter_ma5_alert）
+_BATCH = 800          # daily_many 分片（P1-11，2026-10-26：200→800。契约依据：
+                      # facade.daily_many 内部上限 _BATCH_MAX=900 只/批——GM history 总行数
+                      # ~200k 闸按 days=250 标定；本处 days=40 ⇒ 800×40=32k 行远未到顶。
+                      # 全市场 ~5000 只的盘前预筛从 ~25 次批量调用降到 ~7 次）
 _DAYS = 40            # 日线根数（MA20 预热 + 裕度）
 
 

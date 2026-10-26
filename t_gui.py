@@ -990,11 +990,16 @@ _CHART_LIVE_MAX = 200
 # ---- 多窗口看盘的**轻量帧**缓存（2026-10-21）----
 # 六宫格不复用单图的实时尾：那条现在建立在 3 个月深档（近 3000 根）上，~1s/只，
 # 6 只并发全卡 GIL ⇒ 一帧几十秒，界面上就是"K 线几乎不更新"。这里另开一套只算
-# K 线/MA5/成交额（120 根），TTL 2s。
+# K 线/MA5/成交额（120 根）。
+# P1-8（2026-10-25）：TTL 4.0 → 4.6。前端 mwTick 4s 一跳（app.js MW_PERIOD_MS），
+# TTL == 轮询周期时相位对齐：每拍 age 都顶在过期边界 ⇒ 9 只全部重算（~1.2s 网络+CPU/轮），
+# 是九宫格常开时盘中最大的固定后台负载。TTL 略大于轮询周期后，worker 完成（~1.2s）的帧
+# 在下一拍仍新鲜（age ≈ 4-1.2 = 2.8 < 4.6），隔一拍才过期 ⇒ 重算频率减半（~8s 一轮），
+# worker 仍按 SWR 顺手刷新，前端无感、不用动。
 _MW_CACHE: dict = {}
 _MW_RUN: dict = {}
 _MW_LOCK = threading.Lock()
-_MW_TTL = 4.0
+_MW_TTL = 4.6
 
 
 def _slim_if_same(frame, known_sig):
@@ -2627,7 +2632,16 @@ class Api:
     # 指数板缓存 {"payload": (ts, payload)}，见 load_indices（2026-10-10：原先**无** TTL，
     # 每 10s 轮询都重打 GM index_snapshot，是冷启动窗口 GM 负载的直接来源）
     _indices_cache = {}
-    _INDICES_TTL = 10.0
+    # P1-9（2026-10-25）：TTL 10.0 → 12.0。前端 refreshIndexBoard 挂在 refreshLive 的
+    # 10s 非重叠轮询上（app.js startLivePoll），TTL == 轮询周期即相位对齐。
+    # ⚠️ 方向必须是 TTL **大于**轮询周期：SWR 的 miss 条件是 age >= TTL，worker
+    # （GM index_snapshot + 东财兜底，~1-2s）完成后才写时间戳 ⇒ 下一拍缓存年龄
+    # ≈ 10 - 1.5 ≈ 8.5s。TTL=8.0 会让**每一拍**都 miss（每 10s 必重拉，比现状更差）；
+    # TTL=12.0 > 8.5s ⇒ 隔拍命中内存热缓存，实际约 20s 才重拉一次，负载减半。
+    _INDICES_TTL = 12.0
+    # 持仓日快照落盘指纹 {str(fp): fingerprint}（P1-10，见 _write_daily_holdings）：
+    # 内容没变就跳过全量重写。dict 读写靠 GIL 即可，竞态最坏多写一次、绝不丢写。
+    _holdings_write_fp = {}
 
     def __init__(self):
         self._dates_cache = None
@@ -4081,14 +4095,24 @@ class Api:
         return _clean(out)
 
     def save_daily_holdings(self):
-        """写今日持仓每日快照（含数量/成本/盈亏）。走同步路径取**新鲜**报价，不用 SWR 旧值。"""
-        return self._write_daily_holdings(self._load_quotes_sync())
+        """写今日持仓每日快照（含数量/成本/盈亏）。走同步路径取**新鲜**报价，不用 SWR 旧值。
 
-    def _write_daily_holdings(self, q):
+        显式保存 = 关键时点 ⇒ force=True **绕过内容指纹节流**（P1-10），保证立即落盘。"""
+        return self._write_daily_holdings(self._load_quotes_sync(), force=True)
+
+    def _write_daily_holdings(self, q, force=False):
         """数量/成本读用户每天更新的 holdings.json，盈亏按盘中实时价计算。
         2026-09-27 净值法改造：summary 增加 cash/available/cash_source（现金口径
         = accounts_config 各启用账户 available 之和，取不到为 null + "missing"）；
-        顶层增加 eod 标志（交易日 15:00 后写 = true，复盘只认 eod=true 的行）。"""
+        顶层增加 eod 标志（交易日 15:00 后写 = true，复盘只认 eod=true 的行）。
+
+        P1-10（2026-10-25）落盘节流：原来每次行情 SWR 刷新（~8s 一拍）都全量重写
+        整个 holdings_daily_{today}.json（indent=2 + tmp/replace）。现在先算**内容指纹**
+        （序列化剔除 updated_at，sort_keys 定序），与上次写入一致且文件仍在 ⇒ 跳过写盘。
+        · EOD 不丢：eod 标志本身参与指纹，15:00 边界那一拍 false→true 必然变指纹 ⇒ 必写；
+          进程重启后指纹缓存为空，首次调用也必写。
+        · 显式保存（save_daily_holdings）走 force=True，任何情况立即写。
+        返回值新增 "skipped": true 表示本次被节流（向后兼容，原调用方只看 ok/path）。"""
         today = datetime.now().strftime("%Y-%m-%d")
         fp = STATE_DIR / f"holdings_daily_{today}.json"
         cur = _load_json(HOLDINGS_MANUAL, {})
@@ -4140,12 +4164,30 @@ class Api:
             "holdings": rows,
             "summary": summary,
         }
+        clean = _clean(data)
+        # P1-10 内容指纹：剔除 updated_at（每拍必变），其余字段 sort_keys 定序序列化。
+        # eod 标志参与指纹 ⇒ 15:00 边界 false→true 必变 ⇒ "收盘后必写"那一拍不会丢。
+        try:
+            fp_payload = dict(clean)
+            fp_payload.pop("updated_at", None)
+            fingerprint = json.dumps(fp_payload, ensure_ascii=False, sort_keys=True,
+                                     separators=(",", ":"), default=str)
+        except Exception:
+            fingerprint = None
+        key = str(fp)
+        if not force and fingerprint is not None and fp.exists() \
+                and Api._holdings_write_fp.get(key) == fingerprint:
+            return {"ok": True, "path": key, "skipped": True}
         try:
             tmp = fp.with_suffix(".tmp")
             with open(tmp, "w", encoding="utf-8") as f:
-                json.dump(_clean(data), f, ensure_ascii=False, indent=2)
+                json.dump(clean, f, ensure_ascii=False, indent=2)
             tmp.replace(fp)
-            return {"ok": True, "path": str(fp)}
+            if fingerprint is not None:
+                if len(Api._holdings_write_fp) > 8:   # 跨日滚存，防无限增长
+                    Api._holdings_write_fp.clear()
+                Api._holdings_write_fp[key] = fingerprint
+            return {"ok": True, "path": key}
         except Exception as e:
             return {"ok": False, "error": str(e)}
 
@@ -5355,7 +5397,7 @@ class Api:
 
         只算 K 线 / MA5 / 成交额，**不碰** MACD/RSI/BOLL/黄金分割/深档 ——
         细胞只有 1/6 屏宽，48 根就够，深档的代价（~1s/只 × 6 只并发）直接把它拖成"不动"。
-        TTL 2s：一轮 6 只各算一次约 1.2s，够跟上 3 秒轮询。
+        TTL 见 `_MW_TTL`（4.6s，须略大于前端 4s 轮询，否则相位对齐每拍全量重算，见 P1-8）。
         """
         _c = str(code).split("_")[0]
         _now = _time_mod.time()
