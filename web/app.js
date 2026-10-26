@@ -4259,8 +4259,25 @@ function closeDayIntraday() {
   if (dayInst) { try { dayInst.dispose(); } catch (e) { /* 忽略 */ } dayInst = null; }
 }
 
+/* 弹窗 DOM 兜底：index.html 若还是旧版（WebView 缓存 / 没重启），这里直接建一份，
+   避免"双击没反应"这种无声失败。 */
+function _ensureDayModal() {
+  let m = document.getElementById("dayModal");
+  if (m) return m;
+  m = document.createElement("div");
+  m.id = "dayModal"; m.className = "modal-mask"; m.style.display = "none";
+  m.innerHTML = `<div class="modal" style="width:1020px;max-width:94vw;height:660px;display:flex;flex-direction:column">
+      <div class="modal-title"><span id="dayModalTitle">日内 5 分钟</span>
+        <div style="display:flex;gap:6px"><button class="mini-btn" onclick="closeDayIntraday()">×</button></div></div>
+      <div id="dayModalInfo" class="cell-dim" style="font-size:11px;padding:2px 10px;line-height:1.6"></div>
+      <div id="dayModalChart" style="flex:1;min-height:0;background:#0d1117"></div>
+    </div>`;
+  document.body.appendChild(m);
+  return m;
+}
+
 async function openDayIntraday(code, name, date) {
-  const m = document.getElementById("dayModal");
+  const m = _ensureDayModal();
   if (!m) return;
   m.style.display = "flex";
   const title = document.getElementById("dayModalTitle");
@@ -6052,17 +6069,31 @@ function renderStockChart(applyZoom = true) {
         const idx = _chartClickIndex(ev);
         if (idx >= 0) showOrderFlowAt(idx);
       });
-      // 2026-10-26 owner：**双击日 K 的某根 → 看那天的 5 分钟图**。
-      // 只在日线周期生效（周/月/分钟的"某根"不是一天）。日期取该根在日线序列里的日期。
-      stockChartInst.getZr().on("dblclick", (ev) => {
-        if (stockChartPeriod !== "daily") return;
-        const idx = _chartClickIndex(ev);
-        if (idx < 0) return;
-        const pd = (stockChartData && stockChartData.period_data || {}).daily || {};
-        const day = String((pd.dates || [])[idx] || "").slice(0, 10);
-        if (!day || !stockChartCode) return;
-        openDayIntraday(stockChartCode, stockChartData.name, day);
-      });
+      /* 2026-10-26 owner：**双击日 K 的某根 → 看那天的 5 分钟图**。
+         ⚠️ 挂在**容器 DOM 的 dblclick**上，不用 zrender 的 `dblclick`：
+            zrender 是自己判定"两次点击在 300ms 内"，慢一点的双击就吞掉了
+            （owner 实测「双击后没有任何反应」）。DOM 事件走系统的双击阈值，稳得多。 */
+      const _ccEl = document.getElementById("stockChart");
+      if (_ccEl) {
+        _ccEl.ondblclick = (ev) => {
+          if (stockChartPeriod !== "daily" || !stockChartCode) return;
+          const pd = (stockChartData && stockChartData.period_data || {}).daily || {};
+          const dates = pd.dates || [];
+          if (!dates.length) return;
+          let idx = -1;
+          try {
+            const r = _ccEl.getBoundingClientRect();
+            let v = stockChartInst.convertFromPixel(
+              { xAxisIndex: 0 }, [ev.clientX - r.left, ev.clientY - r.top]);
+            if (Array.isArray(v)) v = v[0];
+            if (typeof v === "number" && v >= -0.5 && v <= dates.length - 0.5) idx = Math.round(v);
+            else if (typeof v === "string") idx = dates.indexOf(v);
+          } catch (e) { idx = -1; }
+          if (idx < 0) return;
+          const day = String(dates[idx] || "").slice(0, 10);
+          if (day) openDayIntraday(stockChartCode, (stockChartData || {}).name, day);
+        };
+      }
     } catch (e) { /* 桩环境忽略 */ }
   }
 }
