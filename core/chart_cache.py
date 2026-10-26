@@ -226,14 +226,31 @@ def load_payload(code, now=None):
                 # ③ 权威缓存已经比 payload 更新（payload 少一天）⇒ 也判旧，别让图停在上一交易日
                 if _crows and str(_crows[-1].get("date"))[:10] > _d:
                     return None
-                for _r in reversed(_crows):
-                    if str(_r.get("date"))[:10] == _d:
-                        try:
-                            _a = float(_last.get("close")); _b = float(_r.get("close"))
-                            if _b > 0 and abs(_a / _b - 1) > 0.003:
-                                return None
-                        except Exception:
-                            pass
+                # ④ 2026-10-26（300821 成交额对不上）：上面**只比最后一根**。实测 300821 的
+                #    payload 最后一根（10-26）是对的，中间 10-19~10-23 是盘中快照 ⇒ 整份 payload
+                #    被判"新鲜"，日线缓存修好了图上还是旧的。改成逐根比最近 5 个重叠交易日：
+                #    收盘差 >0.3% 或 量比不在 [0.5,2] ⇒ 判旧，让调用方按权威缓存重建。
+                _cmap = {str(r.get("date"))[:10]: r for r in _crows}
+                _checked = 0
+                for _r in reversed(_rows):
+                    _dt = str(_r.get("date"))[:10]
+                    _cr = _cmap.get(_dt)
+                    if _cr is None:
+                        continue
+                    _checked += 1
+                    try:
+                        _a = float(_r.get("close")); _b = float(_cr.get("close"))
+                        if _b > 0 and abs(_a / _b - 1) > 0.003:
+                            return None
+                    except Exception:
+                        pass
+                    try:
+                        _va = float(_r.get("volume") or 0); _vb = float(_cr.get("volume") or 0)
+                        if _va > 0 and _vb > 0 and not (0.5 <= _va / _vb <= 2.0):
+                            return None
+                    except Exception:
+                        pass
+                    if _checked >= 5:
                         break
     except Exception:
         pass

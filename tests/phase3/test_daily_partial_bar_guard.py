@@ -186,3 +186,44 @@ class TestMergeDropsUnconfirmedForming:
                             forming_date=_TODAY)
         rec = json.loads((cache_dir / "600900.json").read_text(encoding="utf-8"))
         assert rec["forming"] == [_TODAY]
+
+
+class TestPayloadStaleMiddleRows:
+    """2026-10-26：payload 的**中间几根**坏了、最后一根却是对的 ⇒ 旧闸只比最后一根会放行。"""
+
+    def _mk(self, tmp_path, monkeypatch, payload_rows, daily_rows):
+        import core.chart_cache as _cc
+        pdir = tmp_path / "payload"
+        ddir = tmp_path / "daily"
+        pdir.mkdir(); ddir.mkdir()
+        (pdir / "300821.json").write_text(json.dumps(
+            {"payload": {"code": "300821", "period_data": {}}, "daily_rows": payload_rows,
+             "last_daily_date": payload_rows[-1]["date"], "saved_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+             "version": "x"}), encoding="utf-8")
+        (ddir / "300821.json").write_text(json.dumps(
+            {"date": daily_rows[-1]["date"], "forming": [], "rows": daily_rows}), encoding="utf-8")
+        monkeypatch.setattr(_cc, "_PAYLOAD_DIR", pdir)
+        monkeypatch.setattr(_cc, "_DAILY_CACHE_DIR", ddir)
+        monkeypatch.setattr(_cc, "daily_fp", lambda c: ddir / f"{str(c).split('_')[0]}.json")
+        return _cc
+
+    def _row(self, d, close, vol):
+        return {"date": d, "open": close, "high": close, "low": close, "close": close, "volume": vol}
+
+    def test_middle_row_mismatch_rebuilds(self, tmp_path, monkeypatch):
+        day = datetime.now().strftime("%Y-%m-%d")
+        good = self._row(day, 16.94, 1405729)
+        bad_mid = self._row("2026-10-20", 16.98, 19386)      # 量只有真实的 1.7%
+        payload = [bad_mid, self._row("2026-10-21", 17.61, 1273691), good]
+        daily = [self._row("2026-10-20", 16.98, 1149158),
+                 self._row("2026-10-21", 17.61, 1273691), good]
+        cc = self._mk(tmp_path, monkeypatch, payload, daily)
+        assert cc.load_payload("300821") is None, "中间那根量不对 ⇒ 必须判旧重建"
+
+    def test_all_rows_match_kept(self, tmp_path, monkeypatch):
+        day = datetime.now().strftime("%Y-%m-%d")
+        rows = [self._row("2026-10-20", 16.98, 1149158),
+                self._row("2026-10-21", 17.61, 1273691),
+                self._row(day, 16.94, 1405729)]
+        cc = self._mk(tmp_path, monkeypatch, rows, rows)
+        assert cc.load_payload("300821") is not None, "逐根都对 ⇒ 应命中"
