@@ -94,6 +94,26 @@ def _sample(files, cap):
     return [files[int(i * step)] for i in range(cap)]
 
 
+def _count_partial_bars(rows, lookback=20, look=12, cut=0.15) -> int:
+    """最近 `look` 根里「量 < 前 `lookback` 日中位数的 15%」的根数（2026-10-26 加）。
+
+    这是**盘中快照根被当收盘**的指纹：2026-10-26 实测 300821 的 10-20 只存了 19,386 手
+    （真实 1,149,158 手），全池 2151 只中招。纯本地判定，不需要网络 —— 巡检先报警，
+    再跑 `tmp/repair_daily_cache_drift_*.py` 用网络核对并覆盖。真·缩量/一字板不会长期
+    连续落在 15% 以下，所以单根命中只作"疑似"，多根命中才算。
+    """
+    import statistics
+    vol = [float(r.get("volume") or 0) for r in rows]
+    n = 0
+    for i in range(max(0, len(vol) - look), len(vol)):
+        if i < lookback + 1:
+            continue
+        base = statistics.median(vol[i - lookback:i])
+        if base > 0 and 0 < vol[i] < base * cut:
+            n += 1
+    return n
+
+
 def survey_daily_kline(now=None, sample=_SAMPLE_DAILY) -> list:
     """日线缓存：个股 `{code}.json` 与指数 `index_{code}.json` 分开统计。"""
     now = _now(now)
@@ -111,10 +131,15 @@ def survey_daily_kline(now=None, sample=_SAMPLE_DAILY) -> list:
             rec = _safe_json(fp)
             rows = (rec or {}).get("rows") or []
             g = _cc.natural_gap_days(_cc.last_row_date(rows), now) if rows else 9999
-            entries.append((fp.stem, g, "" if rows else " 无可读行"))
+            note = "" if rows else " 无可读行"
+            _pb = _count_partial_bars(rows) if (rows and label == "daily_kline") else 0
+            if _pb >= 2:      # 单根可能是真·缩量/一字板，两根以上才报
+                note += f" 疑似盘中根{_pb}根"
+            entries.append((fp.stem, g, note))
         st = _stats(label, entries)
         st["files_total"] = len(files)
         st["sampled"] = len(entries)
+        st["partial_suspects"] = sum(1 for _, _, e in entries if "疑似盘中根" in e)
         out.append(st)
     return out
 
