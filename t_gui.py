@@ -5735,6 +5735,145 @@ class Api:
         except Exception as e:
             return {"ok": False, "error": f"{type(e).__name__}: {str(e)[:100]}"}
 
+    def _log_turnover_win(self, msg: str) -> None:
+        """成交额独立窗口的留痕（2026-10-27）。
+
+        为什么必须有：这条链的任何失败原本都只是前端 `console.warn`，界面上什么都看不见，
+        表现为"点了按钮没反应"——本仓最忌讳的静默失败。写进文件，出问题时能直接看。
+        """
+        try:
+            fp = BASE / "t_io" / "logs" / "turnover_window.log"
+            fp.parent.mkdir(parents=True, exist_ok=True)
+            with open(fp, "a", encoding="utf-8") as f:
+                f.write(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} {msg}\n")
+        except Exception:
+            pass
+
+    def open_turnover_window(self):
+        """薄壳：js_api 方法**绝不能把 traceback 抛给前端**（前端只会看到"调用失败"，
+        真正的异常反而丢了）。这里兜住所有意外异常并落盘，实现见 `_open_turnover_window_impl`。"""
+        try:
+            return self._open_turnover_window_impl()
+        except Exception as e:
+            self._log_turnover_win(f"FAIL unexpected: {type(e).__name__}: {e}")
+            return {"ok": False, "error": f"{type(e).__name__}: {str(e)[:150]}"}
+
+    def _open_turnover_window_impl(self):
+        """把「两市成交额」开成**独立原生窗口**（owner 2026-10-27：要能拖到另一个显示器）。
+
+        与 `open_multi_window` 同源、同理由：页面内的浮层是 DOM，**拖不出 WebView 视口**，
+        也就不可能跨显示器。想要第二个显示器上常驻一张成交额图，只能是第二个原生窗口。
+
+        ⚠️ 与多窗口看盘的一处**关键差异**：那边是"接管整个 App"（停掉主窗口所有轮询、
+        铺满屏幕）；这边是**旁挂一个视图**——主 GUI 在主窗口里照常跑，副窗口只管画成交额。
+        所以这里用 `?mode=turnover` 让前端**跳过整个 init()**（否则副窗口会白跑一遍
+        available_dates / loadAndRender / 全套轮询，把 apiCall 通道和 CPU 都占掉），
+        而不是"加载完再切模式"。
+
+        ⚠️ 2026-10-27 实测更正：**不要**用 `screen=` 自动丢到第二块屏。pywebview 会按
+        `webview.screens` 的顺序定位，一旦系统枚举出幽灵屏/顺序不合预期，窗口就开在
+        **屏幕外**——用户看到的就是"点了没反应"。这里改成固定在主屏可见位置打开，
+        跨屏由用户拖过去（原生窗口本来就随便拖）。
+
+        失败返回 ok=False + 原因，前端**把原因显示在界面上**（不再静默退回浮层）。
+        """
+        try:
+            import webview
+        except Exception as e:
+            self._log_turnover_win(f"FAIL import webview: {type(e).__name__}: {e}")
+            return {"ok": False, "error": f"webview 不可用: {e}"}
+        w = getattr(self, "_turnover_window", None)
+        if w is not None:
+            try:
+                w.show()
+                w.restore()
+                self._log_turnover_win("REUSE 已有窗口")
+                return {"ok": True, "reused": True}
+            except Exception as e:
+                self._log_turnover_win(f"旧窗口不可用，重建: {type(e).__name__}: {e}")
+                self._turnover_window = None
+
+        entry = Path(__file__).parent / "web" / "index.html"
+        self._turnover_loaded = False
+        # ① 带 ?mode=turnover：副窗口跳过 init（最省）
+        # ② 不带查询串 + loaded 事件切模式：多窗口看盘验证过的兜底路径
+        attempts = [
+            ("query", str(entry) + "?mode=turnover", True),
+            ("loaded", str(entry), False),
+        ]
+        errs = []
+        for name, url, use_query in attempts:
+            win = None
+            try:
+                win = webview.create_window(
+                    "两市成交额",
+                    url,
+                    js_api=self,
+                    width=460,             # 只显示三行数字，不需要大窗
+                    height=240,
+                    min_size=(220, 120),
+                )
+            except Exception as e:
+                errs.append(f"{name}: {type(e).__name__}: {str(e)[:150]}")
+                self._log_turnover_win(f"FAIL {name}: {type(e).__name__}: {e}")
+                continue
+            if win is None:
+                errs.append(f"{name}: create_window 返回 None")
+                self._log_turnover_win(f"FAIL {name}: create_window 返回 None")
+                continue
+            self._turnover_window = win
+            self._turnover_window_via = name
+
+            def _on_loaded(_w=win, _use_query=use_query):
+                self._turnover_loaded = True
+                self._log_turnover_win(f"LOADED via={self._turnover_window_via}")
+                if not _use_query:     # 兜底路径：加载完再把界面切进成交额模式
+                    try:
+                        _w.evaluate_js(
+                            "turnoverEnterWindowMode && turnoverEnterWindowMode()")
+                    except Exception as ee:
+                        self._log_turnover_win(f"evaluate_js 失败: {ee}")
+
+            def _on_closed():
+                self._turnover_window = None
+                self._log_turnover_win("CLOSED")
+
+            try:
+                win.events.loaded += _on_loaded
+                win.events.closed += _on_closed
+            except Exception as e:
+                self._log_turnover_win(f"事件绑定失败: {type(e).__name__}: {e}")
+            self._log_turnover_win(f"OK via={name}")
+            return {"ok": True, "via": name}
+
+        msg = " | ".join(errs)[:400]
+        self._log_turnover_win(f"FAIL all: {msg}")
+        return {"ok": False, "error": msg}
+
+    def turnover_window_status(self):
+        """独立成交额窗的自检（前端点完 ⧉ 约 2.5s 后来问一次）。
+
+        `exists` = 后端手里有窗口对象；`loaded` = 页面真的加载完成过。
+        两者都要真，否则前端要把原因写在界面上（窗口开在屏幕外/白屏时只能靠这个发现）。
+        """
+        return {"exists": getattr(self, "_turnover_window", None) is not None,
+                "loaded": bool(getattr(self, "_turnover_loaded", False)),
+                "via": getattr(self, "_turnover_window_via", "")}
+
+    def close_turnover_window(self):
+        """关掉独立成交额窗（窗口模式里右上角 × 走这条，而不是隐藏浮层）。"""
+        w = getattr(self, "_turnover_window", None)
+        self._turnover_window = None
+        if w is None:
+            return {"ok": True, "already": True}
+        try:
+            w.destroy()
+            self._log_turnover_win("DESTROY by user")
+            return {"ok": True}
+        except Exception as e:
+            self._log_turnover_win(f"DESTROY FAIL: {type(e).__name__}: {e}")
+            return {"ok": False, "error": f"{type(e).__name__}: {str(e)[:100]}"}
+
     def load_multi_chart(self, codes, period="min5", tail=90):
         """**多窗口看盘**：一次给多只票的实时尾。
 

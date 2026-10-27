@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>trader pannel</title>
-<link rel="stylesheet" href="style.css?v=20261026k">
+<link rel="stylesheet" href="style.css?v=20261027g">
 </head>
 <body>
 <header class="topbar">
@@ -594,6 +594,23 @@
   </div>
 </div>
 
+<!-- 两市成交额·数字浮窗（2026-10-27 owner 改需求：**只要数字，不要图**）
+     双击成交额图/成交额卡片弹出。复用 .mw-win 外壳：标题栏可拖、右下角可改大小。
+     图表仍留在「盘中状态」卡里；这里只显示今日成交额/涨跌/增量/预计全日。
+     ⚠️ 数字与指数板「两市成交额」卡片同接口同格式化 ⇒ 两处必然一致。 -->
+<div id="turnoverWin" class="mw-win" style="display:none;width:380px;height:132px;min-width:220px;min-height:100px">
+  <div class="mw-title" id="turnoverWinTitle">
+    <span style="min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis">📊 两市成交额</span>
+    <span style="display:flex;gap:6px">
+      <button class="mini-btn" id="turnoverWinDetachBtn" onclick="openTurnoverWindow()"
+              title="开成独立窗口 —— 可拖到另一个显示器（主界面照常可用）">⧉</button>
+      <button class="mini-btn" onclick="closeTurnoverWin()" title="关闭">×</button>
+    </span>
+  </div>
+  <div id="turnoverWinHead" class="mono"></div>
+  <div id="turnoverWinMsg" class="cell-dim" style="font-size:11px;padding:0 12px 6px"></div>
+</div>
+
 <!-- 多窗口看盘（2026-10-21 owner）：**独立浮窗** —— 不铺全屏遮罩，
      看盘时照样能操作后面的 GUI；标题栏可拖动，右下角可缩放。 -->
 <div id="multiWatchWin" class="mw-win" style="display:none">
@@ -630,6 +647,6 @@
 <script src="vendor/echarts.min.js"></script>
 <!-- 2026-10-20：带版本号强制 WebView2 重新取 app.js（否则可能命中旧缓存，
      K 线提速/埋点改动不生效——表现为"改了跟没改一样"） -->
-<script src="app.js?v=20261026k"></script>
+<script src="app.js?v=20261027g"></script>
 </body>
 </html>

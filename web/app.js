@@ -1295,6 +1295,10 @@ function _scheduleTurnoverSizeRetry() {
 async function drawTurnoverHist() {
   const box = document.getElementById("turnoverHistChart");
   if (!box) return;
+  // 2026-10-27：双击 → 独立窗口（见 `_installTurnoverDblClick`）。这里只挂提示与光标，
+  // 节点每 10s 会被回收复用，所以每次画都刷一遍（幂等）。
+  box.style.cursor = "zoom-in";
+  box.title = "双击放大为独立窗口";
   if (!window.echarts) { _turnoverFail("ECharts 未加载"); return; }
   // 面板隐藏（别的 tab / 窗口最小化）时容器宽高为 0：**连 API 都不用打**，
   // 等可见时 switchTab / visibilitychange / 短重试会自动重画。
@@ -1418,6 +1422,29 @@ async function drawTurnoverHist() {
     turnoverHistInst = echarts.init(box);
     turnoverHistNode = box;
   }
+  turnoverHistInst.setOption(_turnoverOption(d, days, ma5), { notMerge: true });
+  turnoverHistSig = sig;                       // **画成功之后**才记签名
+}
+
+/* 5 日均量（2026-10-15）：**只统计已完成交易日**。
+   今日那根是"进行中"的半日额，把它算进均线会让均线盘中一路下坠、今天看着像大幅缩量
+   （正是 TURNOVER_LIVE 那条注释在防的同一个坑）。今日 x 上的均线值 = 前 5 个完整交易日的均量。
+   2026-10-27 抽成独立函数：卡片小图与独立窗口**共用同一份口径**。 */
+function _turnoverMa5(days) {
+  const ma5 = [];
+  const done = [];
+  for (let i = 0; i < days.length; i++) {
+    if (!days[i].in_progress) done.push(days[i].amount);
+    ma5.push(done.length >= TURNOVER_MA5_N
+      ? done.slice(-TURNOVER_MA5_N).reduce((a, b) => a + b, 0) / TURNOVER_MA5_N / 1e8
+      : null);                                   // 前 4 根凑不满窗口 → null，不画半截均线
+  }
+  return ma5;
+}
+
+/* 成交额柱状图配置（2026-10-27 抽出）：**只服务「盘中状态」卡片里那张小图**。
+   独立浮窗改成只显示数字后不再画图（owner 同日改需求），所以这里没有缩放/紧凑排版参数。 */
+function _turnoverOption(d, days, ma5) {
   const data = days.map(x => ({
     value: Math.round(x.amount / 1e8),
     itemStyle: {
@@ -1425,10 +1452,10 @@ async function drawTurnoverHist() {
         : (x.delta_pct == null ? "#8b949e" : (x.delta_pct > 0 ? TURNOVER_UP : TURNOVER_DOWN)),
     },
   }));
-  // `notMerge: true`：整体替换配置。**关键**——`title` 在非 stale 时是 `undefined`，
-  // 而 setOption 的默认合并语义**不会清掉**已存在的 title ⇒ 快照标题会粘在图上不走。
-  // notMerge 只是重算配置并重绘画布，**不拆实例/canvas**，所以不引起闪烁。
-  turnoverHistInst.setOption({
+  // 配置整体返回给调用方 setOption（`notMerge: true`：整体替换配置）。**关键**——`title` 在非
+  // stale 时是 `undefined`，而 setOption 的默认合并语义**不会清掉**已存在的 title ⇒ 快照标题会
+  // 粘在图上不走。notMerge 只是重算配置并重绘画布，**不拆实例/canvas**，所以不引起闪烁。
+  const opt = {
     // 冷启动快照（2026-10-10）：stale 时在图上点名"这是快照、非实时"，并让出顶部空间。
     // 注意：stale 快照的 `available` 为 true，所以上面「warming → 8s 重试」分支不会触发——
     // 必须靠这条标题让用户知道看到的不是实时值（安全契约：不得静默当实时）。
@@ -1507,9 +1534,186 @@ async function drawTurnoverHist() {
         },
       },
     ],
-  }, { notMerge: true });
-  turnoverHistSig = sig;                       // **画成功之后**才记签名
+  };
+  return opt;
 }
+
+/* ══ 两市成交额·数字浮窗（2026-10-27 owner 改需求：**只要数字**，不要图）══════════
+   双击「盘中状态」里的成交额图（或指数板上的成交额卡片）弹出一个小窗，只显示：
+   今日成交额 / 涨跌（较昨日同期或全日）/ 增量 / 预计全日。
+   图表本身仍留在「盘中状态」卡里，这里不再重复画（所以这个窗口没有 ECharts）。
+   ⚠️ 数字与指数板「两市成交额」卡片**同接口、同格式化**（`load_market_turnover` + `fmtAmount`），
+      两处永远一致；错误/加载文案写在 `#turnoverWinMsg`，不静默。 */
+let turnoverWinTimer = null;
+let _turnoverWinBusy = false;
+let TURNOVER_WINDOW_MODE = false;
+const TURNOVER_WIN_PERIOD_MS = 10000;   // 与「盘中状态」卡片同节拍；后端本身 60s 去重
+
+function openTurnoverWin() {
+  const win = document.getElementById("turnoverWin");
+  if (!win) return;
+  win.style.display = "flex";
+  // 只绑拖动：没有图了，所以不带"双击标题栏最大化"，缩放/重置按钮也从标题栏撤掉。
+  _bindHeaderDrag(win, document.getElementById("turnoverWinTitle"), null, true);
+  _turnoverWinMsg("");
+  drawTurnoverWin();
+  if (turnoverWinTimer) clearInterval(turnoverWinTimer);
+  turnoverWinTimer = setInterval(drawTurnoverWin, TURNOVER_WIN_PERIOD_MS);
+}
+
+function closeTurnoverWin() {
+  if (TURNOVER_WINDOW_MODE) {          // 原生窗口里 × = 关窗口（不是隐藏浮层）
+    if (turnoverWinTimer) { clearInterval(turnoverWinTimer); turnoverWinTimer = null; }
+    try { window.pywebview.api.close_turnover_window(); } catch (e) { /* 忽略 */ }
+    return;
+  }
+  const win = document.getElementById("turnoverWin");
+  if (win) win.style.display = "none";
+  if (turnoverWinTimer) { clearInterval(turnoverWinTimer); turnoverWinTimer = null; }
+  _turnoverWinMsg("");
+}
+
+function _turnoverWinMsg(html) {
+  const el = document.getElementById("turnoverWinMsg");
+  if (el) el.innerHTML = html;
+}
+
+/* 数字面板（唯一的渲染函数）。
+   「万亿」是四舍五入后的读数 ⇒ 精确到亿的写法放 tooltip，避免被当成两处数字不一致。 */
+function _turnoverWinHead(t) {
+  const el = document.getElementById("turnoverWinHead");
+  if (!el) return;
+  if (!t || !t.available) {
+    const why = (t && t.error) ? t.error : (t && t.warming ? "取数中…" : "不可用");
+    el.innerHTML = `<div class="tw-row"><b class="tw-amount cell-dim">—</b></div>`
+      + `<div class="tw-row tw-sub cell-dim">${esc(why)}</div>`;
+    el.title = "";
+    return;
+  }
+  const pct = t.pct;
+  const cls = pct > 0.05 ? "up" : pct < -0.05 ? "down" : "cell-dim";
+  const pctTxt = (pct == null) ? "—" : `${pct >= 0 ? "+" : ""}${fmt(pct, 2)}%`;
+  const basis = t.basis === "同期" ? "vs昨日同期" : "vs昨日全日";
+  const sub = [`<span>${basis}</span>`];
+  if (t.delta != null) {
+    const _dcls = t.delta > 0 ? "up" : t.delta < 0 ? "down" : "cell-dim";
+    sub.push(`<span class="${_dcls}">增量 ${t.delta >= 0 ? "+" : "−"}`
+      + `${Math.abs(Math.round(t.delta / 1e8)).toLocaleString("en-US")}亿</span>`);
+  }
+  if (t.projected != null) {
+    sub.push(`<span>预计全日 <b>${fmtAmount(t.projected)}</b></span>`);
+  }
+  // 安全标记：缺一腿 / 快照都会让数字偏小或过期，**任何尺寸都不隐藏**
+  if (t.bse_included === false) sub.push(`<span class="tw-warn">缺北交所</span>`);
+  if (t.stale) sub.push(`<span class="tw-warn">快照 ${esc(t.snapshot_ts || "—")}</span>`);
+  el.innerHTML =
+    `<div class="tw-row"><b class="tw-amount">${fmtAmount(t.amount)}</b>`
+      + `<span class="tw-pct ${cls}">${pctTxt}</span></div>`
+    + `<div class="tw-row tw-sub cell-dim">${sub.join("")}</div>`;
+  el.title = `今日 ${t.day}　${Math.round(t.amount / 1e8).toLocaleString("en-US")}亿`
+    + `\n昨日${t.basis}　`
+    + (t.amount_prev == null ? "—" : `${Math.round(t.amount_prev / 1e8).toLocaleString("en-US")}亿`)
+    + `\n与指数板「两市成交额」卡片同源（同接口 / 同口径 / 同格式化）`
+    + (t.basis === "同期" ? `\n（盘中口径：两边都只算到 ${t.as_of}）` : "\n（已收盘口径：两边都是全日）");
+}
+
+/* 每 10s 刷新一次。只打 `load_market_turnover`（与卡片同一个接口），不再取历史序列。 */
+async function drawTurnoverWin() {
+  if (_turnoverWinBusy) return;
+  const win = document.getElementById("turnoverWin");
+  if (!win || win.style.display === "none") return;
+  _turnoverWinBusy = true;
+  try {
+    let t = null;
+    try {
+      t = await apiCall("load_market_turnover");
+    } catch (e) {
+      _turnoverWinMsg(`<span class="down">取数失败：</span>`
+        + esc(e && e.message ? e.message : e));
+      return;
+    }
+    if (win.style.display === "none") return;   // 期间被关掉了
+    _turnoverWinMsg("");
+    _turnoverWinHead(t);
+  } finally {
+    _turnoverWinBusy = false;
+  }
+}
+
+/* ===== 独立原生窗口（2026-10-27 owner：要能拖到**另一个显示器**）=====
+   页面内浮层是 DOM，拖不出 WebView 视口；只能像「多窗口看盘」那样由后端开第二个原生窗口
+   （`open_turnover_window`），它加载 `index.html?mode=turnover`。
+   两个窗口各自独立：主 GUI 在主窗口照常跑，副窗口只显示这几个数字。 */
+function turnoverEnterWindowMode() {
+  if (TURNOVER_WINDOW_MODE) return;
+  TURNOVER_WINDOW_MODE = true;
+  document.body.classList.add("twin-winmode");
+  const win = document.getElementById("turnoverWin");
+  if (!win) return;
+  win.style.display = "flex";
+  // ⚠️ 必须清掉 inline 尺寸：浮层那套 width/min-width 是 inline 的，优先级高于 CSS。
+  win.style.left = "0"; win.style.top = "0"; win.style.right = "auto";
+  win.style.width = "100%"; win.style.height = "100%";
+  win.style.minWidth = "0"; win.style.minHeight = "0";
+  drawTurnoverWin();
+  if (turnoverWinTimer) clearInterval(turnoverWinTimer);
+  turnoverWinTimer = setInterval(drawTurnoverWin, TURNOVER_WIN_PERIOD_MS);
+}
+
+/* 浮层标题栏的 ⧉：开成**原生窗口**（可拖到另一个显示器）。
+   ⚠️ 失败必须**写在界面上**：这条链每一步（桥接没就绪 / create_window 抛错 /
+   窗口建了但页面没加载）原本只有 console.warn，用户看到的就是"点了没反应"。 */
+async function openTurnoverWindow() {
+  _turnoverWinMsg(`<span class="cell-dim">正在打开独立窗口…</span>`);
+  let r = null;
+  try {
+    r = await apiCall("open_turnover_window");
+  } catch (e) {
+    _turnoverWinMsg(`<span class="down">独立窗口调用失败：</span>`
+      + esc(e && e.message ? e.message : e));
+    return;
+  }
+  if (!r || !r.ok) {
+    _turnoverWinMsg(`<span class="down">独立窗口打开失败：</span>`
+      + esc((r && r.error) || "后端未返回原因"));
+    return;
+  }
+  _turnoverWinMsg(`<span class="cell-dim">独立窗口已创建，等待页面加载…</span>`);
+  // 二次自检：`create_window` 返回对象 ≠ 窗口真的看得见。
+  // ⚠️ 冷启动 WebView2 建窗+加载实测要 5~8s ⇒ 轮询最多 ~16s，不能用一次性判断。
+  for (let i = 0; i < 12; i++) {
+    await sleep(1300);
+    let s = null;
+    try {
+      s = await apiCall("turnover_window_status");
+    } catch (e) {
+      closeTurnoverWin();          // 老后端没这个接口 ⇒ 按成功处理，别误判
+      return;
+    }
+    if (s && s.exists && s.loaded) {
+      closeTurnoverWin();          // 收掉浮层，别同一组数字两份
+      return;
+    }
+    if (s && !s.exists) break;     // 窗口已经没了（被关掉 / 建完就销毁）
+  }
+  _turnoverWinMsg(`<span class="down">独立窗口没有显示出来：</span>`
+    + esc("窗口可能开在屏幕外，或被系统拦下"
+      + "（排查记录见 t_io/logs/turnover_window.log）"));
+}
+
+/* 双击成交额图 → 打开独立窗口。
+   ⚠️ 走 **document 级捕获监听**，与日K双击同一套理由：`#turnoverHistChart` 会被
+   renderLive 每 10s 重建、容器上的 on* 属性会被 ECharts 覆盖 ⇒ 绑在节点上会失效。 */
+(function _installTurnoverDblClick() {
+  if (window.__turnoverDblClickInstalled) return;
+  window.__turnoverDblClickInstalled = true;
+  document.addEventListener("dblclick", (ev) => {
+    const el = document.getElementById("turnoverHistChart");
+    if (!el) return;
+    if (!(el === ev.target || el.contains(ev.target))) return;
+    openTurnoverWin();
+  }, true);
+})();
 
 /* ══ DOM 节点回收（2026-10-15）══════════════════════════════════════════════
    renderLive / renderHunter 每轮都 `el.innerHTML = ...` 重建整块，图表容器每次都是**新节点**，
@@ -6920,7 +7124,9 @@ function turnoverCard(t) {
     : `<div class="mono" style="font-size:10px;color:var(--text-dim)"
          title="${esc(`按近 ${t.proj_days || 0} 个交易日同一时刻(${t.as_of})的累计占比 `
                      + `${((t.proj_frac || 0) * 100).toFixed(1)}% 外推`)}">预计全日 <b>${fmtAmount(t.projected)}</b></div>`;
-  return `<div class="idx-card${t.stale ? " idx-card-stale" : ""}" style="min-width:150px;text-align:center" title="${esc(tip)}">
+  // 2026-10-27：双击这张卡 = 打开两市成交额独立窗口（可缩放/放大）。
+  return `<div class="idx-card${t.stale ? " idx-card-stale" : ""}" style="min-width:150px;text-align:center;cursor:zoom-in"
+      ondblclick="openTurnoverWin()" title="${esc(tip + "\n\n双击放大为独立窗口")}">
     <div style="font-size:13px;color:var(--text-dim)">两市成交额${t.bse_included === false ? "（缺北）" : ""}${t.stale ? "（快照）" : ""}</div>
     <div class="mono" style="font-size:16px;font-weight:700">${fmtAmount(t.amount)}</div>
     <div class="mono ${cls}" style="font-size:11px">${pctTxt}
@@ -9262,14 +9468,23 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // pywebview 桥接脚本可能在 DOMContentLoaded 之后才注入，等待 pywebviewready / 轮询兜底
   statusEl("尝试连接后端...");
+  /* 2026-10-27：独立「两市成交额」窗口（后端 `open_turnover_window` 用 `?mode=turnover` 打开）
+     走的是一条**极简启动路径** —— 不跑 init()。
+     原因：init() 会拉 available_dates、loadAndRender、起全套轮询；副窗口只需要画成交额，
+     白跑一遍会把 apiCall 通道和 CPU 都占掉（主窗口还要正常用）。用 URL 判定而不是
+     "加载完再切模式"，才能连这次初始化都省掉。 */
+  let _bootMode = "";
+  try { _bootMode = new URLSearchParams(location.search || "").get("mode") || ""; }
+  catch (e) { _bootMode = ""; }
+  const _bootEntry = () => ((_bootMode === "turnover") ? turnoverEnterWindowMode() : init());
   if (_apiReady()) {
-    init();
+    _bootEntry();
     return;
   }
   let booted = false;
   const doBoot = () => {
     if (booted) return;
-    if (_apiReady()) { booted = true; init(); }
+    if (_apiReady()) { booted = true; _bootEntry(); }
   };
   window.addEventListener("pywebviewready", doBoot);
   const t = setInterval(() => { doBoot(); if (booted) clearInterval(t); }, 250);
@@ -9515,11 +9730,13 @@ function closeMultiWatch() {
 }
 
 /* 浮窗拖动（2026-10-21）：按标题栏拖。用 px 定位（拖过之后再也不用 right/bottom），
-   否则 right/top 混着改会跳。双击标题栏 = 最大化/还原（见 mwToggleMax）。 */
-function _mwBindDrag(win) {
-  const bar = document.getElementById("mwTitle");
-  if (!bar || bar._mwDragBound) return;
-  bar._mwDragBound = true;
+   否则 right/top 混着改会跳。双击标题栏 = 最大化/还原（见 mwToggleMax）。
+   2026-10-27：抽成通用 `_bindHeaderDrag`，两市成交额窗复用同一套拖动。
+   `freeMove=true`（成交额窗）：**允许大半拖出视口**，只留一角抓手能拖回来；
+   默认（多窗口看盘）仍夹在视口内，保持原行为不变。 */
+function _bindHeaderDrag(win, bar, onDblClick, freeMove) {
+  if (!win || !bar || bar._dragBound) return;
+  bar._dragBound = true;
   bar.addEventListener("mousedown", (ev) => {
     if (ev.target && ev.target.tagName === "BUTTON") return;   // 别抢刷新/关闭按钮
     if (win.classList.contains("mw-max")) return;              // 最大化时别拖（会拖出屏幕）
@@ -9528,9 +9745,14 @@ function _mwBindDrag(win) {
     win.style.right = "auto"; win.style.left = r.left + "px"; win.style.top = r.top + "px";
     const move = (e) => {
       const w = win.offsetWidth, h = win.offsetHeight;
-      // 夹在窗口内，别拖丢了
-      const x = Math.max(0, Math.min(window.innerWidth - w, e.clientX - dx));
-      const y = Math.max(0, Math.min(window.innerHeight - 40, e.clientY - dy));
+      // 默认：夹在窗口内，别拖丢了。
+      // freeMove：左右各允许拖出 (w-80) / (视口-80)，**始终留 80px 宽 × 24px 高的抓手**；
+      //           上下仍不让标题栏越过顶边（越过去就再也抓不回来了）。
+      const minX = freeMove ? 80 - w : 0;
+      const maxX = freeMove ? window.innerWidth - 80 : window.innerWidth - w;
+      const maxY = freeMove ? window.innerHeight - 24 : window.innerHeight - 40;
+      const x = Math.max(minX, Math.min(maxX, e.clientX - dx));
+      const y = Math.max(0, Math.min(maxY, e.clientY - dy));
       win.style.left = x + "px"; win.style.top = y + "px";
     };
     const up = () => {
@@ -9544,8 +9766,12 @@ function _mwBindDrag(win) {
   // 双击标题栏 = 最大化 / 还原（常见窗口习惯）
   bar.addEventListener("dblclick", (ev) => {
     if (ev.target && ev.target.tagName === "BUTTON") return;
-    mwToggleMax();
+    if (onDblClick) onDblClick();
   });
+}
+
+function _mwBindDrag(win) {
+  _bindHeaderDrag(win, document.getElementById("mwTitle"), mwToggleMax);
 }
 
 /* ---- 最大化 / 最小化（2026-10-21 owner）----

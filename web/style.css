@@ -716,3 +716,32 @@ body.mw-winmode #multiWatchWin {
 .h-legend-title { font-weight: 600; color: var(--text); }
 .h-legend-item { white-space: nowrap; }
 .h-legend-item .h-verdict { margin: 0 3px 0 0; }
+
+/* ---- 两市成交额·数字浮窗（2026-10-27 owner 改需求：只要数字，不要图）----
+   这个窗口没有 ECharts，内容就是三行文字：大数字 + 涨跌 + 一行明细。
+   所以不再需要"缩小到某个阈值换排版"那套——把字号定死、允许明细换行即可。 */
+#turnoverWinHead { flex: 1; min-height: 0; overflow: hidden;
+  display: flex; flex-direction: column; justify-content: center;
+  gap: 3px; padding: 8px 12px; }
+#turnoverWinHead .tw-row { display: flex; align-items: baseline; flex-wrap: wrap; gap: 0 8px; }
+#turnoverWinHead .tw-amount { font-size: 26px; font-weight: 700; line-height: 1.15; }
+#turnoverWinHead .tw-pct { font-size: 15px; }
+#turnoverWinHead .tw-sub { font-size: 11px; }
+#turnoverWinHead .tw-sub > span { white-space: nowrap; }
+#turnoverWinHead .tw-warn { color: #d29922; }
+
+/* ---- 独立原生窗口里的「两市成交额」模式（2026-10-27 owner：要能拖到另一个显示器）----
+   与多窗口看盘的 `body.mw-winmode` 同一套做法：整个 body 只留成交额窗，铺满原生窗口。
+   ⚠️ 这里的 width/height 只是 CSS 兜底 —— 浮层那套尺寸是 **inline style**（优先级更高），
+      真正清掉它们的是 `turnoverEnterWindowMode()`，改这里不会生效，别只看 CSS。 */
+body.twin-winmode { overflow: hidden; background: var(--bg); }
+body.twin-winmode > *:not(#turnoverWin) { display: none !important; }
+body.twin-winmode #turnoverWin {
+  position: fixed; left: 0; top: 0; width: 100%; height: 100%;
+  min-width: 0; min-height: 0;       /* 铺满时别被 .mw-win 的下限顶出屏幕 */
+  border: none; border-radius: 0;
+  box-shadow: none; resize: none;    /* 尺寸交给操作系统窗口边缘 */
+}
+/* 原生窗口里「脱离」按钮没有意义（已经在独立窗口里了）；标题栏也不该显示"可拖"手势 */
+body.twin-winmode #turnoverWinDetachBtn { display: none; }
+body.twin-winmode #turnoverWinTitle { cursor: default; }

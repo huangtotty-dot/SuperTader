@@ -2973,6 +2973,79 @@ def _close_gui():
             pass
 
 
+# ── 两市成交额·桌面浮窗（2026-10-27 owner：独立于 GUI、可自由拖动/置顶）──────────
+# 为什么要独立进程：DOM 浮层出不了 WebView 视口，拖不到别的显示器、也压不到别的软件上面。
+# 浮窗只显示数字，跟 GUI 窗口没有任何关系（GUI 关了它照样在）。
+_WIDGET_PROC = None
+_WIDGET_LOG_FP = None
+
+
+def _launch_turnover_widget():
+    """拉起成交额浮窗。失败**静默降级**：绝不能因为一个挂件拖住交易主循环。
+
+    ⚠️ 子进程输出**不丢 DEVNULL**（与 `_launch_gui` 同一教训，2026-10-21）：
+    挂件起不来时（tkinter 缺失/脚本语法错）如果输出进了黑洞，主日志会干净得像没事发生。
+    这里落 `t_io/logs/turnover_widget.log`，并在 2s 后巡一次：秒退就把日志尾巴打进主日志。
+    """
+    global _WIDGET_PROC, _WIDGET_LOG_FP
+    if "--no-widget" in sys.argv:
+        log.info("🪟 成交额浮窗: 已通过 --no-widget 禁用")
+        return
+    try:
+        import subprocess
+        path = os.path.join(BASE_DIR, "scripts", "turnover_widget.py")
+        if not os.path.exists(path):
+            log.warning(f"🪟 成交额浮窗: 脚本不存在 {path}")
+            return
+        try:
+            _logdir = os.path.join(BASE_DIR, "t_io", "logs")
+            os.makedirs(_logdir, exist_ok=True)
+            _WIDGET_LOG_FP = open(os.path.join(_logdir, "turnover_widget.log"), "a",
+                                  encoding="utf-8", errors="replace")
+            _WIDGET_LOG_FP.write(f"\n===== {datetime.now():%Y-%m-%d %H:%M:%S} 启动 =====\n")
+            _WIDGET_LOG_FP.flush()
+        except Exception:
+            _WIDGET_LOG_FP = None
+        flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)   # 别弹出黑框
+        _WIDGET_PROC = subprocess.Popen(
+            [sys.executable, path],
+            cwd=BASE_DIR,
+            creationflags=flags,
+            stdout=(_WIDGET_LOG_FP or subprocess.DEVNULL),
+            stderr=(subprocess.STDOUT if _WIDGET_LOG_FP else subprocess.DEVNULL),
+        )
+        log.info(f"🪟 成交额浮窗: 已启动 (pid={_WIDGET_PROC.pid})；--no-widget 可禁用")
+
+        def _check_alive():
+            _time.sleep(2)
+            if _WIDGET_PROC is None or _WIDGET_PROC.poll() is None:
+                return
+            tail = ""
+            try:
+                with open(os.path.join(BASE_DIR, "t_io", "logs", "turnover_widget.log"),
+                          encoding="utf-8", errors="replace") as f:
+                    tail = "".join(f.readlines()[-8:]).strip()
+            except Exception:
+                pass
+            log.warning(f"🪟 成交额浮窗: 启动后秒退 (rc={_WIDGET_PROC.returncode})"
+                        + (f"｜日志尾部:\n{tail}" if tail else ""))
+
+        _threading.Thread(target=_check_alive, daemon=True, name="widget-check").start()
+    except Exception as e:
+        log.warning(f"🪟 成交额浮窗: 拉起失败（不影响主循环）: {e}")
+
+
+def _close_turnover_widget():
+    global _WIDGET_PROC
+    if _WIDGET_PROC is not None and _WIDGET_PROC.poll() is None:
+        try:
+            _WIDGET_PROC.terminate()
+            log.info("🪟 成交额浮窗: 已随盯盘结束关闭")
+        except Exception:
+            pass
+    _WIDGET_PROC = None
+
+
 def _validate_pool_split_or_exit():
     """P3-2 池分管启动校验：manual 池与 auto 池交集冲突则拒绝启动并提示（fail-closed）。"""
     try:
@@ -2994,6 +3067,7 @@ def _validate_pool_split_or_exit():
 if __name__ == "__main__":
     import atexit
     atexit.register(_close_gui)
+    atexit.register(_close_turnover_widget)
     # V8 预热(2026-09-08): akshare 的 py_mini_racer(V8) 首次初始化必须在主线程，否则后台扫描线程内
     # 首用（如 stock_zh_a_hist 兜底）会 FATAL 拖垮整进程——启动最先预热，见 core/v8guard.py
     try:
@@ -3016,4 +3090,5 @@ if __name__ == "__main__":
     else:
         _validate_pool_split_or_exit()
         _launch_gui()
+        _launch_turnover_widget()
         run_watch()
