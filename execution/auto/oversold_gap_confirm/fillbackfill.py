@@ -91,8 +91,12 @@ def _atomic_dump(payload: dict, fp: str) -> None:
 
 
 def _load_json(fp: str):
-    from core.utils import read_json
-    return read_json(fp, None)
+    """读取 UTF-8 JSON；缺失、损坏或读取失败时返回 None。"""
+    try:
+        with open(fp, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return None
 
 
 def _journal_keys(book_dir: str) -> set:
@@ -266,6 +270,20 @@ def _fix_sell_fills_file(book_dir: str, date: str, code: str, qty: int,
     return reason
 
 
+def _fix_sell_open_after(book_dir: str, date: str, code: str, open_after: int, log) -> None:
+    """卖出账本更新后补写终态持仓数；重读文件以保留已落盘的成交确认字段。"""
+    fills, fp, hit = _find_sell_rec(book_dir, date, code)
+    if hit is None:
+        return
+    try:
+        summary = dict(fills.get("summary") or {})
+        summary["open_after"] = int(open_after)
+        fills["summary"] = summary
+        _atomic_dump(fills, fp)
+    except Exception as e:
+        log("[FB] ⚠️ sells open_after 落盘失败（账本已修）: %s" % e)
+
+
 # ════════════════════════ 主入口 ════════════════════════
 
 def apply_fill(book_dir: str, event: dict, log=print) -> dict | None:
@@ -310,6 +328,8 @@ def apply_fill(book_dir: str, event: dict, log=print) -> dict | None:
         result = {"action": "skipped", "reason": "semantic_guard",
                   "code": code, "side": side, "qty": qty, "price": price}
     else:
+        if side == "SELL":
+            _fix_sell_open_after(book_dir, date, code, len(open_pos), log)
         _atomic_dump(book, os.path.join(book_dir, executor.BOOK_FILE))
 
     result["key"] = key

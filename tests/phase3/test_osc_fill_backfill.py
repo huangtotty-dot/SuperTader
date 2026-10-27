@@ -309,5 +309,68 @@ class TestIdempotency(_CaseBase):
                        "side": "HOLD", "qty": 100, "price": 6.5}, log=self._log))
 
 
+class TestAutoConfigShadow(_CaseBase):
+    """auto 宿主的 config 不导出 log 时，三类回填仍只能使用临时账本。"""
+
+    def setUp(self):
+        super().setUp()
+        missing = object()
+        self._missing = missing
+        self._old_config = sys.modules.get("config", missing)
+        self._old_core_utils = sys.modules.get("core.utils", missing)
+        sys.modules.pop("core.utils", None)
+        # 复刻 auto 的 config 阴影：模块存在，但没有 core.utils 所需的 log。
+        sys.modules["config"] = type(sys)("config")
+
+    def tearDown(self):
+        for name, old in (("config", self._old_config),
+                          ("core.utils", self._old_core_utils)):
+            if old is self._missing:
+                sys.modules.pop(name, None)
+            else:
+                sys.modules[name] = old
+        super().tearDown()
+
+    def test_fill_buy_sell_and_reject_without_config_log(self):
+        self._set_book({"updated_at": "", "open": {
+            "600001": {"entry_date": _DATE, "entry_price": 10.0, "qty": 100},
+            "600002": {"entry_date": _DATE, "entry_price": 20.0, "qty": 200},
+            "600003": {"entry_date": _DATE, "entry_price": 30.0, "qty": 300}}})
+        self._set_fills([_buy_rec("600001", 100, 10.0),
+                         _buy_rec("600003", 300, 30.0)])
+        self._set_sells("close", [
+            {"code": "600002", "side": "SELL", "reason": "sl5_deep",
+             "qty_placed": 200, "status": "submitted", "filled_qty": 0,
+             "filled_price": None}])
+        sells_fp = os.path.join(self.dir, "sells_close_%s.json" % _DATE)
+        sells_payload = self._read_json(sells_fp)
+        sells_payload["summary"]["open_after"] = 3
+        _write_json(sells_fp, sells_payload)
+
+        buy = fillbackfill.apply_fill(
+            self.dir, self._ev("600001", "BUY", 100, 10.1,
+                               "2026-10-19 10:00:01.000"), log=self._log)
+        sell = fillbackfill.apply_fill(
+            self.dir, self._ev("600002", "SELL", 200, 19.9,
+                               "2026-10-19 14:50:01.000"), log=self._log)
+        sells_after = self._read_json(sells_fp)
+        self.assertEqual(sells_after["summary"]["open_after"], 2)
+        self.assertEqual(sells_after["summary"]["sells_filled"], 1)
+        self.assertEqual(sells_after["sells"][0]["filled_qty"], 200)
+
+        reject = fillbackfill.apply_reject(
+            self.dir, {"time": "2026-10-19 10:00:02.000", "code": "600003",
+                       "side": "BUY", "qty": 300, "status": 8,
+                       "rej_detail": "柜台拒绝"}, log=self._log)
+
+        self.assertEqual(buy["action"], "buy_corrected")
+        self.assertEqual(sell["action"], "sell_closed")
+        self.assertEqual(reject["action"], "buy_rejected_removed")
+        book = self._book()
+        self.assertAlmostEqual(book["open"]["600001"]["entry_price"], 10.1, places=4)
+        self.assertNotIn("600002", book["open"])
+        self.assertNotIn("600003", book["open"])
+
+
 if __name__ == "__main__":
     unittest.main()
