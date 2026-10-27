@@ -1,0 +1,373 @@
+[
+  {
+    "code": "002878",
+    "name": "元隆雅图",
+    "pairs": [
+      {
+        "category": "AI应用",
+        "concepts": [
+          "AI营销"
+        ]
+      }
+    ],
+    "verdict": "核心",
+    "reasons": {
+      "AI营销": "元隆雅图：全案营销/礼赠品"
+    },
+    "business_summary": "主营商务服务业",
+    "sector": "商务服务业"
+  },
+  {
+    "code": "002952",
+    "name": "亚世光电",
+    "pairs": [
+      {
+        "category": "AI应用",
+        "concepts": [
+          "AI终端"
+        ]
+      }
+    ],
+    "verdict": "相关",
+    "reasons": {
+      "AI终端": "亚世光电：液晶/电子纸模组，AI 终端属性弱"
+    },
+    "business_summary": "主营光学光电子",
+    "sector": "光学光电子/电子纸/柔性屏(折叠屏)/汽车电子"
+  },
+  {
+    "code": "002981",
+    "name": "朝阳科技",
+    "pairs": [
+      {
+        "category": "AI应用",
+        "concepts": [
+          "AI终端"
+        ]
+      }
+    ],
+    "verdict": "相关",
+    "reasons": {
+      "AI终端": "朝阳科技：声学产品"
+    },
+    "business_summary": "声学产品（耳机、音响）业务、精密零组件业务等。",
+    "sector": "消费电子/一带一路/医疗器械概念"
+  },
+  {
+    "code": "002995",
+    "name": "天地在线",
+    "pairs": [
+      {
+        "category": "AI应用",
+        "concepts": [
+          "AI营销"
+        ]
+      }
+    ],
+    "verdict": "核心",
+    "reasons": {
+      "AI营销": "天地在线：数字营销"
+    },
+    "business_summary": "提供互联网广告及企业级SaaS营销服务。",
+    "sector": "广告营销/快手概念/小红书概念/拼多多概念"
+  },
+  {
+    "code": "003032",
+    "name": "传智教育",
+    "pairs": [
+      {
+        "category": "AI应用",
+        "concepts": [
+          "AI教育"
+        ]
+      }
+    ],
+    "verdict": "核心",
+    "reasons": {
+      "AI教育": "传智教育：IT 职业教育+AI 课程"
+    },
+    "business_summary": "",
+    "sector": ""
+  },
+  {
+    "code": "300002",
+    "name": "神州泰岳",
+    "pairs": [
+      {
+        "category": "AI应用",
+        "concepts": [
+          "AI游戏"
+        ]
+      }
+    ],
+    "verdict": "相关",
+    "reasons": {
+      "AI游戏": "神州泰岳：游戏+通信运维"
+    },
+    "business_summary": "主营互联网和相关服务",
+    "sector": "互联网和相关服务"
+  },
+  {
+    "code": "300058",
+    "name": "蓝色光标",
+    "pairs": [
+      {
+        "category": "AI应用",
+        "concepts": [
+          "AI营销"
+        ]
+      }
+    ],
+    "verdict": "核心",
+    "reasons": {
+      "AI营销": "蓝色光标：营销龙头+AI 内容"
+    },
+    "business_summary": "主营商务服务业",
+    "sector": "商务服务业"
+  },
+  {
+    "code": "300063",
+    "name": "天龙集团",
+    "pairs": [
+      {
+        "category": "AI应用",
+        "concepts": [
+          "AI营销"
+        ]
+      }
+    ],
+    "verdict": "核心",
+    "reasons": {
+      "AI营销": "天龙集团：互联网营销"
+    },
+    "business_summary": "主营商务服务业",
+    "sector": "商务服务业"
+  },
+  {
+    "code": "300071",
+    "name": "福石控股",
+    "pairs": [
+      {
+        "category": "AI应用",
+        "concepts": [
+          "AI营销"
+        ]
+      }
+    ],
+    "verdict": "核心",
+    "reasons": {
+      "AI营销": "福石控股：数字营销"
+    },
+    "business_summary": "主营商务服务业",
+    "sector": "商务服务业"
+  },
+  {
+    "code": "300133",
+    "name": "华策影视",
+    "pairs": [
+      {
+        "category": "AI应用",
+        "concepts": [
+          "AI影视短剧"
+        ]
+      }
+    ],
+    "verdict": "核心",
+    "reasons": {
+      "AI影视短剧": "华策影视：影视内容龙头",
+      "培训": "华策影视：影视内容龙头"
+    },
+    "business_summary": "影视项目的投资、制作、发行及基于影视内容的衍生业务。",
+    "sector": "影视院线/算力租赁/短剧游戏/AI视频"
+  },
+  {
+    "code": "300170",
+    "name": "汉得信息",
+    "pairs": [
+      {
+        "category": "AI应用",
+        "concepts": [
+          "AI办公"
+        ]
+      }
+    ],
+    "verdict": "核心",
+    "reasons": {
+      "AI办公": "汉得信息：企业数字化与 AI 应用"
+    },
+    "business_summary": "主营软件和信息技术服务业",
+    "sector": "软件和信息技术服务业"
+  },
+  {
+    "code": "300182",
+    "name": "捷成股份",
+    "pairs": [
+      {
+        "category": "AI应用",
+        "concepts": [
+          "AI影视短剧"
+        ]
+      }
+    ],
+    "verdict": "核心",
+    "reasons": {
+      "AI影视短剧": "捷成股份：影视版权运营"
+    },
+    "business_summary": "影视内容制作与发行、新媒体版权运营及数字化营销服务。",
+    "sector": "影视院线/短剧游戏/AI视频/快手概念"
+  },
+  {
+    "code": "300242",
+    "name": "佳云科技",
+    "pairs": [
+      {
+        "category": "AI应用",
+        "concepts": [
+          "AI营销"
+        ]
+      }
+    ],
+    "verdict": "核心",
+    "reasons": {
+      "AI营销": "佳云科技：互联网营销"
+    },
+    "business_summary": "主营商务服务业",
+    "sector": "商务服务业"
+  },
+  {
+    "code": "300248",
+    "name": "新开普",
+    "pairs": [
+      {
+        "category": "AI应用",
+        "concepts": [
+          "AI教育"
+        ]
+      }
+    ],
+    "verdict": "相关",
+    "reasons": {
+      "AI教育": "新开普：智慧校园",
+      "SaaS软件与服务": "新开普：智慧校园"
+    },
+    "business_summary": "主营软件和信息技术服务业",
+    "sector": "软件和信息技术服务业"
+  },
+  {
+    "code": "300291",
+    "name": "百纳千成",
+    "pairs": [
+      {
+        "category": "AI应用",
+        "concepts": [
+          "AI影视短剧"
+        ]
+      }
+    ],
+    "verdict": "核心",
+    "reasons": {
+      "AI影视短剧": "百纳千成：影视内容"
+    },
+    "business_summary": "主营广播、电视、电影和录音制作业",
+    "sector": "广播、电视、电影和录音制作业"
+  },
+  {
+    "code": "300353",
+    "name": "东土科技",
+    "pairs": [
+      {
+        "category": "AI应用",
+        "concepts": [
+          "AI制造"
+        ]
+      }
+    ],
+    "verdict": "核心",
+    "reasons": {
+      "AI制造": "东土科技：工业操作系统与工业软件"
+    },
+    "business_summary": "工业互联网核心硬件及软件技术的研发、生产与销售。",
+    "sector": "通信设备/人形机器人/工业母机/新型工业化"
+  },
+  {
+    "code": "300364",
+    "name": "中文在线",
+    "pairs": [
+      {
+        "category": "AI应用",
+        "concepts": [
+          "AI影视短剧"
+        ]
+      }
+    ],
+    "verdict": "核心",
+    "reasons": {
+      "AI影视短剧": "数字阅读与语料版权",
+      "数据要素_内容数据": "公司聚合出版物、原创文学、音频、视频及平行语料等版权数据，向大模型企业签数据内容及服务合同，同时通过阅读、IP授权变现。多模态语料已是可独立授权产品。"
+    },
+    "business_summary": "主营数字媒体",
+    "sector": "数字媒体/AI视频/快手概念/短剧游戏"
+  },
+  {
+    "code": "300413",
+    "name": "芒果超媒",
+    "pairs": [
+      {
+        "category": "AI应用",
+        "concepts": [
+          "短剧"
+        ]
+      },
+      {
+        "category": "AI应用",
+        "concepts": [
+          "AI影视短剧"
+        ]
+      }
+    ],
+    "verdict": "核心",
+    "reasons": {
+      "AI影视短剧": "芒果超媒：芒果 TV 内容平台",
+      "短剧": "芒果超媒：芒果 TV 内容平台"
+    },
+    "business_summary": "主营互联网和相关服务",
+    "sector": "互联网和相关服务"
+  },
+  {
+    "code": "300418",
+    "name": "昆仑万维",
+    "pairs": [
+      {
+        "category": "AI应用",
+        "concepts": [
+          "AI影视短剧"
+        ]
+      }
+    ],
+    "verdict": "核心",
+    "reasons": {
+      "AI影视短剧": "昆仑万维：天工大模型与 AI 应用",
+      "AI大模型": "昆仑万维：天工大模型与 AI 应用"
+    },
+    "business_summary": "主营互联网和相关服务",
+    "sector": "互联网和相关服务"
+  },
+  {
+    "code": "300426",
+    "name": "华智数媒",
+    "pairs": [
+      {
+        "category": "AI应用",
+        "concepts": [
+          "AI营销"
+        ]
+      }
+    ],
+    "verdict": "边缘",
+    "reasons": {
+      "AI营销": "华智数媒：影视剧内容生产"
+    },
+    "business_summary": "主营广播、电视、电影和录音制作业",
+    "sector": "广播、电视、电影和录音制作业"
+  }
+]

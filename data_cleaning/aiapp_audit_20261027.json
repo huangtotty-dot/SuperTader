@@ -1,0 +1,2022 @@
+[
+  {
+    "code": "000526",
+    "name": "学大教育",
+    "action": "摘除",
+    "pairs": [],
+    "verdict": "摘除",
+    "reason": "公司主营个性化教育培训，2025年半年报披露约330所学习中心及“双螺旋”线上线下融合教学模式，但未见可核验的自营AI教育产品、AI客户交付或AI收入。“个性化教学”和数字化授课不能直接等同于人工智能应用，缺少真实AI产品及商业化证据，因此原AI教育关联属于概念误推，应予摘除。",
+    "evidence_title": "学大（厦门）教育科技集团股份有限公司2025年半年度报告",
+    "evidence_date": "2025-08-28",
+    "evidence_url": "https://static.cninfo.com.cn/finalpage/2025-08-28/1224598398.PDF"
+  },
+  {
+    "code": "000607",
+    "name": "华媒控股",
+    "action": "摘除",
+    "pairs": [],
+    "verdict": "摘除",
+    "reason": "公司主营广告、报刊、印刷及教育业务，2025年报虽提及数字人、“审点芯”“杭州迹忆”等探索，但仍属初步尝试且暂无明显业绩贡献，未披露可核验的AI短剧产品、客户项目或收入。AIGC内容工具体验不能直接认定为AI影视短剧商业化，更不足以支撑核心定级，因此摘除原有关联。",
+    "evidence_title": "浙江华媒控股股份有限公司2025年年度报告摘要",
+    "evidence_date": "2026-04-24",
+    "evidence_url": "https://static.cninfo.com.cn/finalpage/2026-04-24/1225163833.PDF"
+  },
+  {
+    "code": "000676",
+    "name": "智度股份",
+    "action": "保留",
+    "pairs": [
+      {
+        "category": "AI应用",
+        "concepts": [
+          "AI营销"
+        ]
+      }
+    ],
+    "verdict": "相关",
+    "reason": "公司主营互联网媒体与数字营销，2025年半年报披露已在营销内容生产中使用文心一言、DeepSeek及文生文、文生图、文生视频和Agent能力提升客户营销效果，并有Wave AI Assistant等真实产品。AI直接服务于主营营销流程，但AIGC商业模式仍在探索、独立收入未披露，故保留AI营销并定为相关而非核心。",
+    "evidence_title": "智度股份：2025年半年度报告",
+    "evidence_date": "2025-08-28",
+    "evidence_url": "https://money.finance.sina.com.cn/corp/view/vCB_AllBulletinDetail.php?stockid=000676&id=11397020"
+  },
+  {
+    "code": "000681",
+    "name": "视觉中国",
+    "action": "迁移",
+    "pairs": [
+      {
+        "category": "AI应用",
+        "concepts": [
+          "AI视觉"
+        ]
+      },
+      {
+        "category": "数据要素",
+        "concepts": [
+          "数据要素_训练数据",
+          "数据要素_内容数据"
+        ]
+      }
+    ],
+    "verdict": "核心",
+    "reason": "公司主营正版视觉内容及增值服务，2025年报已将数据服务列为主营产品，拥有超7亿多模态合规数据，提供采集、确权、标注、授权及API、沙箱交付，并与阿里、腾讯、微软、快手等签署训练数据服务协议、完成上游授权收益分配；AIGC创意定制亦已向荣耀、奔驰等客户交付。真实主营、产品交付和收入均成立，故取消“字节生态”，保留AI视觉并新增训练数据、内容数据，定核心。",
+    "evidence_title": "视觉中国：2025年年度报告",
+    "evidence_date": "2026-03-31",
+    "evidence_url": "https://money.finance.sina.com.cn/corp/view/vCB_AllBulletinDetail.php?stockid=000681&id=12047786"
+  },
+  {
+    "code": "000802",
+    "name": "北京文化",
+    "action": "摘除",
+    "pairs": [],
+    "verdict": "摘除",
+    "reason": "公司主营电影、电视剧、网剧、演艺经纪及旅游业务，2025年年度报告摘要仍围绕影视内容投资、制作与发行披露经营情况，未见公司自研AI影视产品、AI短剧项目、客户交付或相关收入。传统影视制作及行业“人工智能+视听”政策不能替代公司层面的业务证据，原核心定级主要由影视主业误推，因此应予摘除。",
+    "evidence_title": "北京文化：2025年年度报告摘要",
+    "evidence_date": "2026-04-18",
+    "evidence_url": "https://data.eastmoney.com/notices/detail/000802/AN202604171821301219,JUU1JThDJTk3JUU0JUJBJUFDJUU2JTk2JTg3JUU1JThDJTk2.html"
+  },
+  {
+    "code": "000892",
+    "name": "欢瑞世纪",
+    "action": "纠错",
+    "pairs": [
+      {
+        "category": "AI应用",
+        "concepts": [
+          "AI影视短剧"
+        ]
+      }
+    ],
+    "verdict": "相关",
+    "reason": "公司主营影视剧制作发行及艺人经纪，2025年报披露与阶跃星辰共建“麟跃”AI联合实验室，技术覆盖剧本、分镜、制作、剪辑和配音，已上线《十州三境》AI短剧概念片及江西人文宣传片《传承江西》，并引入Glowave X平台。产品与项目真实存在，但公司明确AI收入占比极低，故合并“短剧”和“AI影视短剧”为后者，并由核心降为相关。",
+    "evidence_title": "欢瑞世纪：2025年年度报告",
+    "evidence_date": "2026-04-30",
+    "evidence_url": "https://money.finance.sina.com.cn/corp/view/vCB_AllBulletinDetail.php?stockid=000892&id=12287047"
+  },
+  {
+    "code": "000917",
+    "name": "电广传媒",
+    "action": "摘除",
+    "pairs": [],
+    "verdict": "摘除",
+    "reason": "公司业务涵盖文旅、投资、广告及游戏，广告运营虽是2025年主要收入来源，但年报对人工智能仅表述为“探索AI赋能广告业务转型路径”，其余多为行业泛述、文旅内容工具或达晨投资项目，未形成可核验的自有AI营销产品和客户交付。普通信息流广告不能直接贴AI标签，探索性表述亦不足以支持商业化定级，因此摘除。",
+    "evidence_title": "电广传媒：2025年年度报告",
+    "evidence_date": "2026-04-28",
+    "evidence_url": "https://money.finance.sina.com.cn/corp/view/vCB_AllBulletinDetail.php?stockid=000917&id=12233295"
+  },
+  {
+    "code": "001229",
+    "name": "魅视科技",
+    "action": "迁移",
+    "pairs": [
+      {
+        "category": "物理AI",
+        "concepts": [
+          "物理AI_机器视觉"
+        ]
+      }
+    ],
+    "verdict": "相关",
+    "reason": "公司主营专业视听产品，AI边缘智能分析平台面向高速路段、收费场景等真实物理视频环境，具备人、车、物、环境检测、抓拍和告警能力，并已有交投集团项目案例。2025年AI系列收入2534.22万元、同比增长212.59%，但仍处推广期且约占总营收11%，故将泛AI应用细化为物理环境机器视觉，迁移至物理AI_机器视觉并定为相关。",
+    "evidence_title": "广东魅视科技股份有限公司投资者关系活动记录表",
+    "evidence_date": "2026-06-10",
+    "evidence_url": "http://pdf.dfcfw.com/pdf/H2_AN202606101823425361_1.PDF"
+  },
+  {
+    "code": "001314",
+    "name": "亿道信息",
+    "action": "迁移",
+    "pairs": [
+      {
+        "category": "物理AI",
+        "concepts": [
+          "物理AI_智能终端"
+        ]
+      }
+    ],
+    "verdict": "相关",
+    "reason": "公司主营智能硬件研发制造，子公司亿境虚拟已布局AI音频、拍照、显示眼镜、多模态记录设备及SW3035方案和端边云系统，具备较短周期量产交付能力。2025年XR及AIoT收入4.208亿元、占比9.18%，但未单列AI眼镜收入，整体仍以传统智能硬件为主，因此由原AI终端规范迁移为物理AI_智能终端，并由核心降为相关。",
+    "evidence_title": "亿道信息：2025年年度报告",
+    "evidence_date": "2026-04-23",
+    "evidence_url": "https://money.finance.sina.com.cn/corp/view/vCB_AllBulletinDetail.php?stockid=001314&id=12154989"
+  },
+  {
+    "code": "001330",
+    "name": "博纳影业",
+    "action": "纠错",
+    "pairs": [
+      {
+        "category": "AI应用",
+        "concepts": [
+          "AI影视短剧"
+        ]
+      }
+    ],
+    "verdict": "相关",
+    "reason": "公司主营电影投资制作、发行及影院业务，已建设AIGMS、博越星纪蓝图和博卡云片场等AI影视能力，推出《三星堆：未来启示录》，AI长片《三星堆：未来往事》取得公映许可并于2026年10月23日上映。相关业务具备真实产品和商业发行，但2025年AI影视剧收入仅238.7万元，尚非主要收入来源，故合并重复短剧标签并保留AI影视短剧，由核心降为相关。",
+    "evidence_title": "AI造电影|博纳影业|三星堆",
+    "evidence_date": "2026-10-24",
+    "evidence_url": "https://k.sina.com.cn/article_5953466437_162dab0450670bfuxm.html?from=ent"
+  },
+  {
+    "code": "002027",
+    "name": "分众传媒",
+    "action": "保留",
+    "pairs": [
+      {
+        "category": "AI应用",
+        "concepts": [
+          "AI营销"
+        ]
+      }
+    ],
+    "verdict": "相关",
+    "reason": "公司主营楼宇及影院等生活圈媒体，已基于通义百炼推出“众智AI”，覆盖客户洞察、创意生成、策略制定和投放优化；后续“分众智投”面向本地生活客户提供潜客筛选、点位优选、智能监播及效果评估，“众小智”已在内部使用。AI产品直接服务主营广告营销且已有客户应用，但AI收入未单独披露，故保留AI营销并定为相关。",
+    "evidence_title": "分众传媒2025年财报：主营业务稳健增长多维亮点赋能未来",
+    "evidence_date": "2026-04-29",
+    "evidence_url": "https://www.xinhuanet.com/tech/20260429/d6d2346440414e388f9a2c55d5d5ba9a/c.html"
+  },
+  {
+    "code": "002093",
+    "name": "国脉科技",
+    "action": "纠错",
+    "pairs": [
+      {
+        "category": "AI应用",
+        "concepts": [
+          "AI养老"
+        ]
+      }
+    ],
+    "verdict": "相关",
+    "reason": "公司主营ICT、物联网咨询及教育业务，2025年6月发布居家养老AI智能体，可依据长者健康状况和兴趣推荐活动，并率先用于“国脉大学养老”社区；2025年报进一步确认智能体与身联网社区形成协同生态。该产品具有明确养老服务场景和实际载体，但仍处商业化早期，未见可验证的规模收入，因此删除重复泛标签，细化为AI养老并定为相关。",
+    "evidence_title": "国脉科技股份有限公司2025年年度报告全文",
+    "evidence_date": "2026-04-24",
+    "evidence_url": "http://static.cninfo.com.cn/finalpage/2026-04-24/1225169085.PDF"
+  },
+  {
+    "code": "002103",
+    "name": "广博股份",
+    "action": "摘除",
+    "pairs": [],
+    "verdict": "摘除",
+    "reason": "公司主营文教办公用品、文创潮玩及跨境电商，原依据互联网营销业务推导AI营销缺乏公司事实支持。公司已在互动平台明确说明子公司灵云传媒不涉及AI营销相关业务，亦未披露其他可核验的AI营销产品、客户交付或收入，因此不能把一般互联网营销、内容推广或文具业务直接贴成AI应用，原标签应整体摘除。",
+    "evidence_title": "广博股份：子公司灵云传媒不涉及AI营销相关业务",
+    "evidence_date": "2026-04-20",
+    "evidence_url": "https://news.qq.com/rain/a/20260420A063ZK00"
+  },
+  {
+    "code": "002131",
+    "name": "利欧股份",
+    "action": "纠错",
+    "pairs": [
+      {
+        "category": "AI应用",
+        "concepts": [
+          "AI营销"
+        ]
+      }
+    ],
+    "verdict": "相关",
+    "reason": "公司形成机械制造与互联网服务双主业，数字营销板块已推出AI创意工厂、AI广告投手及策略、创意、投放、运营智能体，并在汽车、金融、电商、母婴客户落地，LEO AIAD完成算法备案。产品直接嵌入主营营销流程，但年报明确AI主要以间接方式融入业务，直接收入很小且难以拆分，因此将原“边缘”纠正为“相关”，不定核心。",
+    "evidence_title": "利欧股份：2025年年度报告",
+    "evidence_date": "2026-04-29",
+    "evidence_url": "https://money.finance.sina.com.cn/corp/view/vCB_AllBulletinDetail.php?stockid=002131&id=12249389"
+  },
+  {
+    "code": "002174",
+    "name": "游族网络",
+    "action": "纠错",
+    "pairs": [
+      {
+        "category": "AI应用",
+        "concepts": [
+          "AI游戏"
+        ]
+      }
+    ],
+    "verdict": "相关",
+    "reason": "公司主营游戏研发与运营，2025年YOOZOO.AI已覆盖美术、代码、翻译、测试和投放等研运环节，AI玩伴“小游酱”覆盖国内15款游戏，《绯色回响》上线AI NPC“魔女之间”，具备真实游戏内应用。可是AI原生游戏《我的三体：2277》仍在研发，AI收入未单列，主要收入仍来自传统游戏，因此纠正核心定级，保留AI游戏并定为相关。",
+    "evidence_title": "游族网络股份有限公司2025年年度报告全文",
+    "evidence_date": "2026-04-29",
+    "evidence_url": "http://file.finance.sina.com.cn/211.154.219.97:9494/MRGG/CNSESZ_STOCK/2026/2026-4/2026-04-29/12254629.PDF"
+  },
+  {
+    "code": "002178",
+    "name": "延华智能",
+    "action": "纠错",
+    "pairs": [
+      {
+        "category": "AI应用",
+        "concepts": [
+          "AI运维"
+        ]
+      }
+    ],
+    "verdict": "相关",
+    "reason": "公司主营智慧城市设计施工运维、智慧医疗及智慧能源，自研云平台融合大模型，具备智能决策、自学习和可视化运维能力；智慧康养平台完成公测并加入自然语言AI助手，碳排放预测算法项目进入验收，且存在建筑和园区实际运维场景。AI属于新嵌入的产品能力，未披露独立收入，故删除泛标签并细化为AI运维，定为相关而非核心。",
+    "evidence_title": "延华智能：2025年年度报告",
+    "evidence_date": "2026-04-23",
+    "evidence_url": "https://money.finance.sina.com.cn/corp/view/vCB_AllBulletinDetail.php?stockid=002178&id=12153543"
+  },
+  {
+    "code": "002181",
+    "name": "粤传媒",
+    "action": "纠错",
+    "pairs": [
+      {
+        "category": "AI应用",
+        "concepts": [
+          "AI影视短剧",
+          "AI营销"
+        ]
+      }
+    ],
+    "verdict": "相关",
+    "reason": "公司主营广告、印刷及媒体业务，2025年报单列AI视频影视业务，自研“妙音”AI音乐模型已完成算法及大模型备案，G视频建立AI视频工作流，数字人产品已有销售，广报智媒空间支持订阅、托管和本地部署；同时组建真人短剧与AI漫剧团队。AI短剧仍处拓展早期、整体收入贡献有限，故补充AI影视短剧并保留AI营销，统一定为相关。",
+    "evidence_title": "粤传媒：2025年年度报告摘要",
+    "evidence_date": "2026-04-02",
+    "evidence_url": "https://money.finance.sina.com.cn/corp/view/vCB_AllBulletinDetail.php?stockid=002181&id=12056308"
+  },
+  {
+    "code": "002195",
+    "name": "岩山科技",
+    "action": "纠错",
+    "pairs": [
+      {
+        "category": "AI应用",
+        "concepts": [
+          "AI大模型"
+        ]
+      }
+    ],
+    "verdict": "相关",
+    "reason": "公司原主营互联网信息服务并开展多元投资，RockAI已自研非Transformer、非Attention的Yan架构，2024年完成备案，2025年发布Yan 2.0 Preview；技术已用于企业本地部署、定制AI PC海外销售及多家医院生成式智慧病历。原“边缘、依据弱”判断已过时，但2025年全部AI业务收入仅1587.80万元、占2.43%，商业化不及预期，因此纠正为AI大模型相关而非核心。",
+    "evidence_title": "岩山科技：2025年年度报告",
+    "evidence_date": "2026-04-28",
+    "evidence_url": "http://money.finance.sina.com.cn/corp/view/vCB_AllBulletinDetail.php?stockid=002195&id=12230671"
+  },
+  {
+    "code": "002230",
+    "name": "科大讯飞",
+    "action": "保留",
+    "pairs": [
+      {
+        "category": "AI应用",
+        "concepts": [
+          "AI大模型"
+        ]
+      }
+    ],
+    "verdict": "核心",
+    "reason": "公司主营即人工智能核心技术、产品及行业应用，星火大模型已广泛用于教育、医疗、央国企、金融及消费者软硬件。2025年AI平台及授权收入12.52亿元，其中大模型API及MaaS收入3.85亿元、同比增长263%，并有企业级项目规模化落地。主营方向、真实产品、客户交付和可量化收入相互印证，因此保留AI大模型并维持核心定级。",
+    "evidence_title": "科大讯飞股份有限公司2025年年度报告摘要",
+    "evidence_date": "2026-04-29",
+    "evidence_url": "http://static.cninfo.com.cn/finalpage/2026-04-29/1225233580.PDF"
+  },
+  {
+    "code": "002235",
+    "name": "安妮股份",
+    "action": "摘除",
+    "pairs": [],
+    "verdict": "摘除",
+    "reason": "公司主营防伪溯源、商务信息用纸及“版权家”版权综合服务，“版权家”使用AI和区块链进行确权、存证，并不等于拥有AI影视短剧产品；公司也未披露面向模型厂商的训练数据授权、数据标注或数据集交付。版权数据资源不能在没有实际交易证据时硬迁数据要素，传统营销和用纸业务亦不构成AI应用，因此原标签应摘除。",
+    "evidence_title": "厦门安妮股份有限公司2025年年度报告摘要",
+    "evidence_date": "2026-04-28",
+    "evidence_url": "http://static.cninfo.com.cn/finalpage/2026-04-28/1225215247.PDF"
+  },
+  {
+    "code": "002291",
+    "name": "遥望科技",
+    "action": "纠错",
+    "pairs": [
+      {
+        "category": "AI应用",
+        "concepts": [
+          "AI营销"
+        ]
+      }
+    ],
+    "verdict": "相关",
+    "reason": "公司主营社交电商和新媒体广告，2025年互联网广告收入占94.53%。遥望云AI已用于经营管理、内部协同及直播业务，多人AI协作平台仍处内测，属于人工智能赋能既有数字营销主业，尚未单列独立AI收入。因此保留AI营销方向，但由原核心降为相关，纠正将平台能力等同于主营AI产品的定级。",
+    "evidence_title": "遥望科技：2025年年度报告",
+    "evidence_date": "2026-04-28",
+    "evidence_url": "https://money.finance.sina.com.cn/corp/view/vCB_AllBulletinDetail.php?stockid=002291&id=12218528"
+  },
+  {
+    "code": "002292",
+    "name": "奥飞娱乐",
+    "action": "迁移",
+    "pairs": [
+      {
+        "category": "物理AI",
+        "concepts": [
+          "物理AI_智能终端"
+        ]
+      }
+    ],
+    "verdict": "相关",
+    "reason": "公司主营IP内容、玩具及婴童产品，已推出并实际销售“AI智趣喜羊羊”“AI智趣懒羊羊”等产品，具备对话交互等AI玩具属性，属于真实新品线而非仅有概念。不过相关产品尚非公司主要收入来源，且其核心载体是实体玩具，不宜继续泛列AI应用，故迁移至物理AI_智能终端并定为相关。",
+    "evidence_title": "奥飞娱乐：公司已推出“AI智趣喜羊羊”、“AI智趣懒羊羊”等产品",
+    "evidence_date": "2025-08-07",
+    "evidence_url": "http://m.10jqka.com.cn/20250807/c670220612.shtml"
+  },
+  {
+    "code": "002313",
+    "name": "日海智能",
+    "action": "迁移",
+    "pairs": [
+      {
+        "category": "物理AI",
+        "concepts": [
+          "物理AI_通信模组"
+        ]
+      }
+    ],
+    "verdict": "相关",
+    "reason": "公司主营通信模组、通信设备及工程服务，已推出不同算力的智能模组，并应用于视觉分拣、割草机器人和陪伴机器人，体现真实AIoT模组能力。相关产品仍依托端侧硬件与模组交付，未单列AI收入，不能仅凭普通通信模组认定为AI核心标的，故迁移至物理AI_通信模组并定为相关。",
+    "evidence_title": "日海智能：以AI+IoT 重构万物智联未来",
+    "evidence_date": "2025-03-24",
+    "evidence_url": "http://www.xinhuanet.com/info/20250324/26292d4d85df4e349a2de3157dc11543/c.html"
+  },
+  {
+    "code": "002322",
+    "name": "理工能科",
+    "action": "纠错",
+    "pairs": [
+      {
+        "category": "AI应用",
+        "concepts": [
+          "AI办公"
+        ]
+      }
+    ],
+    "verdict": "相关",
+    "reason": "公司主营电力软件以及环保、电力监测，智能辅助评标和围串标识别已形成成熟应用，AI还用于工程评审、造价测算与流程管控，小模型已在招标评审等场景规模化应用。上述产品属于面向办公与评审流程的实际软件能力，但尚不能证明AI收入成为主要收入，故以AI办公替换泛化标签并保持相关。",
+    "evidence_title": "宁波理工环境能源科技股份有限公司2025年年度报告摘要",
+    "evidence_date": "2026-03-31",
+    "evidence_url": "http://static.cninfo.com.cn/finalpage/2026-03-31/1225054908.PDF"
+  },
+  {
+    "code": "002343",
+    "name": "慈文传媒",
+    "action": "摘除",
+    "pairs": [],
+    "verdict": "摘除",
+    "reason": "公司主营影视IP投资制作发行及游戏渠道，普通微短剧不能直接等同于AI影视。公告明确短剧业务规模较小且2025年亏损，AIGC平台尚未形成收入，无法证明AI影视产品已经商业化或成为主营。因此原“短剧+AI影视短剧”标签存在重复且核心定级依据不足，应整只摘除而非继续保留概念标签。",
+    "evidence_title": "7天6板！AI短剧热门股，紧急提示",
+    "evidence_date": "2026-10-19",
+    "evidence_url": "https://jnzstatic.cs.com.cn/zzb/htmlInfo/135468.html"
+  },
+  {
+    "code": "002351",
+    "name": "漫步者",
+    "action": "迁移",
+    "pairs": [
+      {
+        "category": "物理AI",
+        "concepts": [
+          "物理AI_智能终端"
+        ]
+      }
+    ],
+    "verdict": "相关",
+    "reason": "公司主营耳机和音响产品，Lolli Pro 3i已正式发布并具备AI翻译功能，属于在售智能终端而非纯概念布局。不过该能力仍是传统音频产品的功能延伸，未证明AI产品已经成为主要收入来源，也不宜继续泛归软件类AI应用，故迁移至物理AI_智能终端并定为相关。",
+    "evidence_title": "漫步者发布新款蓝牙耳机Lolli Pro 3i：蓝牙6.0与AI翻译功能加持",
+    "evidence_date": "2025-04-13",
+    "evidence_url": "https://finance.sina.com.cn/tech/roll/2025-04-13/doc-inesyumu2952545.shtml"
+  },
+  {
+    "code": "002354",
+    "name": "天娱数科",
+    "action": "纠错",
+    "pairs": [
+      {
+        "category": "AI应用",
+        "concepts": [
+          "AI营销"
+        ]
+      }
+    ],
+    "verdict": "核心",
+    "reason": "公司以数据流量业务为主，2025年相关收入20.49亿元、占98.67%，并以天星大模型为底座构建AI营销、应用分发和空间智能MaaS。AI营销已生成超12.5万支视频并服务保险、美妆及跨境客户，商业化已深入主营，故由相关升级为核心；空间智能仍在研发和场景验证阶段，不另增训练数据或大模型标签。",
+    "evidence_title": "天娱数科：2025年年度报告",
+    "evidence_date": "2026-04-21",
+    "evidence_url": "https://money.finance.sina.com.cn/corp/view/vCB_AllBulletinDetail.php?stockid=002354&id=12121578"
+  },
+  {
+    "code": "002400",
+    "name": "省广集团",
+    "action": "保留",
+    "pairs": [
+      {
+        "category": "AI应用",
+        "concepts": [
+          "AI营销"
+        ]
+      }
+    ],
+    "verdict": "核心",
+    "reason": "公司主营品牌管理、媒介代理、数字及出海营销，GIMC云、灵犀AI和鲸鹏投放构成数智营销产品矩阵，已服务全球超过300家客户。2025年数字营销收入189.07亿元、占88.54%，说明AI能力已嵌入规模化主营交付，并非仅凭普通营销业务贴标，因此保留AI营销及核心定级。",
+    "evidence_title": "广东省广告集团股份有限公司2025年年度报告摘要",
+    "evidence_date": "2026-03-31",
+    "evidence_url": "https://disc.static.szse.cn/disc/disk03/finalpage/2026-03-31/e0a195f4-46e7-49b3-a13b-dd9398bc40f0.PDF"
+  },
+  {
+    "code": "002421",
+    "name": "达实智能",
+    "action": "迁移",
+    "pairs": [
+      {
+        "category": "物理AI",
+        "concepts": [
+          "物理AI_智能控制"
+        ]
+      }
+    ],
+    "verdict": "核心",
+    "reason": "公司主营自研AIoT平台及智慧空间服务，V7平台内嵌AI Agent，已在银行总部、汽车园区和酒企上线，可整合空间与设备数据实施智慧管控。2025年上半年直接相关平台收入1355.99万元、签约2504.39万元，已有明确商业交付，核心能力是物理空间智能控制，故由泛AIoT迁移至物理AI_智能控制并保持核心。",
+    "evidence_title": "达实智能2025半年报出炉：短期承压 AI业务成增长新引擎",
+    "evidence_date": "2025-08-15",
+    "evidence_url": "https://finance.eastmoney.com/a/202508153485207823.html"
+  },
+  {
+    "code": "002474",
+    "name": "榕基软件",
+    "action": "保留",
+    "pairs": [
+      {
+        "category": "AI应用",
+        "concepts": [
+          "AI办公"
+        ]
+      }
+    ],
+    "verdict": "相关",
+    "reason": "公司主营政务、海关和司法等软件，已发布信创协同办公智能体平台，提供AI助手以及公文、档案、会议智能体，并协助襄阳上线“隆中AI政务大模型”和智能公文。相关产品已有示范应用，但AI事业部新设且AI收入未单列，尚不足以认定为核心收入来源，因此保留AI办公标签和相关定级。",
+    "evidence_title": "福建榕基软件股份有限公司2025年年度报告摘要",
+    "evidence_date": "2026-04-24",
+    "evidence_url": "http://file.finance.sina.com.cn/211.154.219.97:9494/MRGG/CNSESZ_STOCK/2026/2026-4/2026-04-24/12171532.PDF"
+  },
+  {
+    "code": "002530",
+    "name": "金财互联",
+    "action": "纠错",
+    "pairs": [
+      {
+        "category": "AI应用",
+        "concepts": [
+          "AI制造"
+        ]
+      }
+    ],
+    "verdict": "相关",
+    "reason": "公司2025年收入全部来自热处理，原数字化板块自2024年末不再并表，因此原财税AI办公标签必须删除。不过FMS+AI持续迭代并拓展场景，LMS、FAMS已服务比亚迪等客户，FURNACEDOCTOR炉子医生已完成并用于预测性维护，证明热处理AI产品真实存在且已有交付，故按AI制造保留相关而非整只摘除。",
+    "evidence_title": "金财互联：2025年年度报告",
+    "evidence_date": "2026-03-24",
+    "evidence_url": "https://money.finance.sina.com.cn/corp/view/vCB_AllBulletinDetail.php?stockid=002530&id=12010568"
+  },
+  {
+    "code": "002555",
+    "name": "三七互娱",
+    "action": "纠错",
+    "pairs": [
+      {
+        "category": "AI应用",
+        "concepts": [
+          "AI游戏"
+        ]
+      }
+    ],
+    "verdict": "相关",
+    "reason": "公司主营游戏研发与运营，自研游戏垂类模型“小七”和智能体平台已深入研发运营，AI数值平衡测试也用于多款自研游戏。但智能NPC、AI游戏家园仍属研究探索，当前价值主要体现为生产运营提效，尚未形成可单列的独立AI游戏收入。因此保留AI游戏方向，但将原核心定级下调为相关。",
+    "evidence_title": "三七互娱：2025年年度报告",
+    "evidence_date": "2026-04-17",
+    "evidence_url": "https://money.finance.sina.com.cn/corp/view/vCB_AllBulletinDetail.php?stockid=002555&id=12099018"
+  },
+  {
+    "code": "002558",
+    "name": "巨人网络",
+    "action": "保留",
+    "pairs": [
+      {
+        "category": "AI应用",
+        "concepts": [
+          "AI游戏"
+        ]
+      }
+    ],
+    "verdict": "核心",
+    "reason": "公司主营游戏，《超自然行动组》已上线原生AI玩法“AI假人”，截至2026年一季度参与对局超过4亿场，该产品累计流水超过50亿元，说明AI已进入主力游戏实际玩法并形成大规模用户使用，而非仅用于内部研发提效。公司另有千影模型和VibeMe AI布局，因此保留AI游戏标签及核心定级。",
+    "evidence_title": "巨人网络2025年营收超50亿元，营收净利均创上市以来新高",
+    "evidence_date": "2026-04-26",
+    "evidence_url": "https://m.caizhongshe.cn/news-1843067719767710722.html"
+  },
+  {
+    "code": "002599",
+    "name": "盛通股份",
+    "action": "纠错",
+    "pairs": [
+      {
+        "category": "AI应用",
+        "concepts": [
+          "AI教育"
+        ]
+      }
+    ],
+    "verdict": "相关",
+    "reason": "公司主营印刷为主、科技教育为辅，全资子公司已发布AI教育创新平台，提供覆盖多学段的人工智能通识课程和教学工具，已有真实教育产品与交付场景，而非单纯概念布局。不过科技教育并非公司主要收入来源，AI业务也未单独披露规模，因此将不合规范的原“边缘”定级纠正为相关，并保留AI教育方向。",
+    "evidence_title": "盛通股份推出AI教育创新平台面向中小学生群体",
+    "evidence_date": "2025-07-18",
+    "evidence_url": "http://www.eeo.com.cn/2025/0718/739519.shtml"
+  },
+  {
+    "code": "002624",
+    "name": "完美世界",
+    "action": "纠错",
+    "pairs": [
+      {
+        "category": "AI应用",
+        "concepts": [
+          "AI游戏"
+        ]
+      }
+    ],
+    "verdict": "相关",
+    "reason": "公司主营游戏和影视，2025年游戏收入57.11亿元。完美AIGC平台集成AI生图、大模型角色扮演、数字人视频和2D转3D，自研大模型智能体平台已赋能游戏生产，但现有证据主要体现研发提效，未证明AI游戏收入已成为主要收入。因此保留AI游戏方向，同时纠正原核心定级并下调为相关。",
+    "evidence_title": "完美世界发布2025年报及2026一季报 经营态势稳步向好",
+    "evidence_date": "2026-04-27",
+    "evidence_url": "https://www.wanmei.com/wmnews/wmnews2026/20260428/261966.shtml"
+  },
+  {
+    "code": "002712",
+    "name": "思美传媒",
+    "action": "保留",
+    "pairs": [
+      {
+        "category": "AI应用",
+        "concepts": [
+          "AI营销"
+        ]
+      }
+    ],
+    "verdict": "核心",
+    "reason": "公司2025年营销服务收入占99.76%，数字营销占总营收九成以上。八方腾泰自研AdPex覆盖策略、投放和归因，已成为Apple Ads官方合作伙伴，并有境外客户实际投放，AI广告创意视频合成系统也已完成。AI能力已形成主营商业化产品矩阵而非普通营销贴标，因此保留AI营销及核心定级。",
+    "evidence_title": "思美传媒：2025年年度报告",
+    "evidence_date": "2026-04-24",
+    "evidence_url": "https://money.finance.sina.com.cn/corp/view/vCB_AllBulletinDetail.php?stockid=002712&id=12171884"
+  },
+  {
+    "code": "002739",
+    "name": "儒意电影",
+    "action": "摘除",
+    "pairs": [],
+    "verdict": "摘除",
+    "reason": "公司主营院线放映、影视剧、潮玩和游戏，观影餐饮商品收入占73.73%，影视剧制作发行仅占3.62%。年报未披露公司自身AI影视短剧产品或收入，数字化经营平台及参股“拍立方”也不足以构成AI影视业务，港股关联公司的产品更不能归入本A股公司。因此原AI影视标签缺乏直接主营和商业化依据，应整只摘除。",
+    "evidence_title": "儒意电影：2025年年度报告",
+    "evidence_date": "2026-04-27",
+    "evidence_url": "https://vip.stock.finance.sina.com.cn/corp/view/vCB_AllBulletinDetail.php?stockid=002739&id=12204536"
+  },
+  {
+    "code": "002835",
+    "name": "同为股份",
+    "action": "迁移",
+    "pairs": [
+      {
+        "category": "物理AI",
+        "concepts": [
+          "物理AI_机器视觉"
+        ]
+      }
+    ],
+    "verdict": "核心",
+    "reason": "公司主营安防摄像机、录像机和视频管理平台，已量产全系列场景智能摄像机、边缘分析盒子和服务器。2025年大模型在摄像机、NVR等嵌入式终端规模化落地，AI视觉感知已成为主要产品能力并随硬件实现商业交付。原AI视觉方向具有真实依据，但本质属于端侧机器视觉，故迁移至物理AI_机器视觉并保持核心。",
+    "evidence_title": "深圳市同为数码科技股份有限公司2025年年度报告摘要",
+    "evidence_date": "2026-04-24",
+    "evidence_url": "http://static.cninfo.com.cn/finalpage/2026-04-24/1225170506.PDF"
+  },
+  {
+    "code": "002841",
+    "name": "视源股份",
+    "action": "迁移",
+    "pairs": [
+      {
+        "category": "物理AI",
+        "concepts": [
+          "物理AI_智能终端"
+        ]
+      }
+    ],
+    "verdict": "核心",
+    "reason": "公司主营显示板卡和交互智能平板，希沃教学大模型已部署在教室AI设备端并生成课堂反馈。截至2025年末，AI备课激活用户超过100万，课堂反馈系统建成19个重点示范区，希沃全年收入55.81亿元，说明AI已随智能终端规模部署并深度嵌入主营产品，故由泛AI应用迁至物理AI_智能终端并保持核心。",
+    "evidence_title": "视源股份2025年营收244亿：教室里的AI",
+    "evidence_date": "2026-03-27",
+    "evidence_url": "http://www.eeo.com.cn/2026/0327/820207.shtml"
+  },
+  {
+    "code": "002862",
+    "name": "实丰文化",
+    "action": "迁移",
+    "pairs": [
+      {
+        "category": "物理AI",
+        "concepts": [
+          "物理AI_智能终端"
+        ]
+      }
+    ],
+    "verdict": "相关",
+    "reason": "公司2025年玩具、游戏和光伏收入分别占58.07%、33.01%和6.92%，AI魔法星、AI飞飞兔及多款AI+IP玩具已经推出销售，具备对话、情感陪伴和多模态交互能力。相关产品属于传统玩具主业的新产品线，但尚未单列AI收入，核心载体也是实体玩具，故迁移至物理AI_智能终端并将原核心降为相关。",
+    "evidence_title": "实丰文化：2025年年度报告",
+    "evidence_date": "2026-04-25",
+    "evidence_url": "http://money.finance.sina.com.cn/corp/view/vCB_AllBulletinDetail.php?stockid=002862&id=12193762"
+  },
+  {
+    "code": "002878",
+    "name": "元隆雅图",
+    "action": "纠错",
+    "pairs": [
+      {
+        "category": "AI应用",
+        "concepts": [
+          "AI营销"
+        ]
+      }
+    ],
+    "verdict": "相关",
+    "reason": "公司2025年营销收入28.74亿元、占95.54%，基本盘仍是礼赠品、促销及新媒体广告。谦观AI已覆盖洞察、投放和复盘，UOVAMETA整合AIGC为客户提供IP数字营销，属于真实业务工具和客户交付；但AI主要赋能传统营销流程，未披露独立AI产品收入或足够规模占比，不能认定AI已成为核心主营，因此保留AI营销并由核心纠错为相关。",
+    "evidence_title": "北京元隆雅图文化传播股份有限公司2025年年度报告全文",
+    "evidence_date": "2026-04-25",
+    "evidence_url": "http://static.cninfo.com.cn/finalpage/2026-04-25/1225190946.PDF"
+  },
+  {
+    "code": "002952",
+    "name": "亚世光电",
+    "action": "摘除",
+    "pairs": [],
+    "verdict": "摘除",
+    "reason": "公司主营定制化液晶显示器件和电子纸显示模组，产品用于智慧零售、智慧办公等下游场景，但终端应用场景包含智能化并不等于公司自身拥有AI产品。2025年披露的研发项目仍集中于显示、检测、切割及贴合等工艺，未见可核验的AI终端产品、AI客户项目或AI收入，原有AI应用标签缺乏业务证据，因此应从AI应用池摘除而非继续按相关保留。",
+    "evidence_title": "亚世光电(集团)股份有限公司2025年年度报告全文",
+    "evidence_date": "2026-04-27",
+    "evidence_url": "http://file.finance.sina.com.cn/211.154.219.97:9494/MRGG/CNSESZ_STOCK/2026/2026-4/2026-04-27/12203335.PDF"
+  },
+  {
+    "code": "002981",
+    "name": "朝阳科技",
+    "action": "迁移",
+    "pairs": [
+      {
+        "category": "物理AI",
+        "concepts": [
+          "物理AI_智能终端"
+        ]
+      }
+    ],
+    "verdict": "相关",
+    "reason": "公司主营耳机、音响及精密零组件，2025年耳机收入占66.67%，传统声学硬件仍是基本盘。AI智能拍摄头戴耳机和AI拍摄眼镜已完成开发，具备AI对话、翻译、识物及总结功能，AR眼镜仍在研发，说明存在真实的端侧交互硬件项目；但尚未证明规模量产和收入贡献，故不定核心，并由泛化的AI终端概念迁移至更准确的物理AI_智能终端、维持相关。",
+    "evidence_title": "朝阳科技：2025年年度报告",
+    "evidence_date": "2026-03-10",
+    "evidence_url": "https://money.finance.sina.com.cn/corp/view/vCB_AllBulletinDetail.php?stockid=002981&id=11987457"
+  },
+  {
+    "code": "002995",
+    "name": "天地在线",
+    "action": "纠错",
+    "pairs": [
+      {
+        "category": "AI应用",
+        "concepts": [
+          "AI营销",
+          "AI办公"
+        ]
+      }
+    ],
+    "verdict": "相关",
+    "reason": "公司2025年数字化营销收入10.23亿元、占90.50%，数智化综合服务占9.29%，主营仍以广告投放和代运营为主。年报披露智构大模型应用中台可通过自然语言调用大模型并连接企业应用，天地智能办公平台、财税有问必答APP也在试运行，已超出普通数字人及XR服务范畴；但这些AI项目未披露外部客户合同或独立收入，商业验证仍不足，因此补充AI办公、保留AI营销并由核心纠错为相关。",
+    "evidence_title": "天地在线：2025年年度报告",
+    "evidence_date": "2026-04-29",
+    "evidence_url": "https://money.finance.sina.com.cn/corp/view/vCB_AllBulletinDetail.php?stockid=002995&id=12261618"
+  },
+  {
+    "code": "003032",
+    "name": "传智教育",
+    "action": "保留",
+    "pairs": [
+      {
+        "category": "AI应用",
+        "concepts": [
+          "AI教育"
+        ]
+      }
+    ],
+    "verdict": "核心",
+    "reason": "公司主营即收费IT教育培训，2025年培训服务收入3.46亿元、占91.15%，并非以普通学历教育或学校信息化蹭AI概念。其正式交付课程已覆盖AI智能应用开发、AI大模型及AI鸿蒙等方向，全部短期课程完成AI化改造，AI直接构成核心教学产品和收费内容，学员报名及课程交付即形成商业化，因此AI教育属于主营业务本身，维持核心定级且无需纠错或迁移。",
+    "evidence_title": "江苏传智播客教育科技股份有限公司2025年年度报告全文",
+    "evidence_date": "2026-04-27",
+    "evidence_url": "http://file.finance.sina.com.cn/211.154.219.97:9494/MRGG/CNSESZ_STOCK/2026/2026-4/2026-04-28/12229292.PDF"
+  },
+  {
+    "code": "300002",
+    "name": "神州泰岳",
+    "action": "纠错",
+    "pairs": [
+      {
+        "category": "AI应用",
+        "concepts": [
+          "AI运维",
+          "AI大模型"
+        ]
+      }
+    ],
+    "verdict": "相关",
+    "reason": "公司主营软件信息技术服务和游戏，2025年已推出泰岳灯塔、岳擎IT运营大模型、泰岳泰斗安全大模型及avavox语音数字员工，面向电信、金融、能源等既有企业客户交付，具备真实产品和企业应用基础。但游戏仍是独立大板块，AI收入未单独披露，原AI游戏标签主要依据AI辅助游戏创作，并非独立AI游戏产品，故改为AI运维和AI大模型，并由核心纠错为相关。",
+    "evidence_title": "神州泰岳：2025年年度报告",
+    "evidence_date": "2026-04-28",
+    "evidence_url": "http://money.finance.sina.com.cn/corp/view/vCB_AllBulletinDetail.php?stockid=300002&id=12231260"
+  },
+  {
+    "code": "300058",
+    "name": "蓝色光标",
+    "action": "保留",
+    "pairs": [
+      {
+        "category": "AI应用",
+        "concepts": [
+          "AI营销"
+        ]
+      }
+    ],
+    "verdict": "核心",
+    "reason": "公司主营营销传播服务，2025年BlueAI实现规模化落地，AI驱动收入达到37.25亿元、同比增长210.42%，全年Token调用量超过万亿；星合AI订单额超过10亿元，并已向品牌客户交付AI广告。尽管AI驱动收入占总营收约5.42%，但已形成独立披露口径、可量化订单和规模化收入，且直接嵌入核心营销主业，明显区别于一般数字营销工具应用，因此保留AI营销及核心定级。",
+    "evidence_title": "蓝色光标2025 AI驱动收入37.25亿元，Token调用量进入万亿时代",
+    "evidence_date": "2026-04-16",
+    "evidence_url": "https://api3.cls.cn/share/article/2345557?os=andr&sv=841&app="
+  },
+  {
+    "code": "300063",
+    "name": "天龙集团",
+    "action": "纠错",
+    "pairs": [
+      {
+        "category": "AI应用",
+        "concepts": [
+          "AI营销"
+        ]
+      }
+    ],
+    "verdict": "相关",
+    "reason": "公司互联网营销业务约占八成，另有油墨和林产化工等传统板块。品学·兼优AIGC工具矩阵和OpenUAD已实际服务宝马MINI、长安、雀巢、惠普及哈啰等客户，图片与视频批量生产进入客户项目，商业化落地真实；但年报未单列AI收入，现阶段主要是利用AI改造广告素材生产和营销交付流程，尚不足以证明AI成为独立核心主业，因此保留AI营销并由核心纠错为相关。",
+    "evidence_title": "天龙集团：2025年年度报告",
+    "evidence_date": "2026-04-29",
+    "evidence_url": "https://money.finance.sina.com.cn/corp/view/vCB_AllBulletinDetail.php?stockid=300063&id=12250030"
+  },
+  {
+    "code": "300071",
+    "name": "福石控股",
+    "action": "纠错",
+    "pairs": [
+      {
+        "category": "AI应用",
+        "concepts": [
+          "AI营销"
+        ]
+      }
+    ],
+    "verdict": "相关",
+    "reason": "公司主营体验营销、公关广告及数字营销，FlinkAI多智能体平台已具备创作、编辑、媒介、分发和分析功能，AI智链、DS-AI VIDEO等产品亦有实体及科技企业客户落地，不能按普通数字营销直接摘除。不过，传统营销仍构成主要收入来源，公司未披露AI独立收入，平台仍处于客户拓展和商业化放量阶段，因此保留AI营销标签，但将原先核心定级纠错为相关。",
+    "evidence_title": "福石控股：2025年年度报告",
+    "evidence_date": "2026-04-29",
+    "evidence_url": "https://money.finance.sina.com.cn/corp/view/vCB_AllBulletinDetail.php?stockid=300071&id=12263651"
+  },
+  {
+    "code": "300133",
+    "name": "华策影视",
+    "action": "纠错",
+    "pairs": [
+      {
+        "category": "AI应用",
+        "concepts": [
+          "AI影视短剧"
+        ]
+      }
+    ],
+    "verdict": "相关",
+    "reason": "公司主营影视剧制作、发行及版权运营，有风、国色模型和AIGC研究院已实际用于剧本评估、IP筛选、渲染及多语种译制，《太平年》跑通AI全流程并生成数字场景和模型，另有AI毛毡动态漫等内容探索。上述项目证明AI已进入实际生产，但主要作用是提升内容制作效率和拓展内容形态，收入仍主要来自传统影视及短剧，未形成独立规模AI收入，因此保留AI影视短剧并由核心纠错为相关。",
+    "evidence_title": "浙江华策影视股份有限公司2025年年度报告全文",
+    "evidence_date": "2026-04-23",
+    "evidence_url": "http://file.finance.sina.com.cn/211.154.219.97:9494/MRGG/CNSESZ_STOCK/2026/2026-4/2026-04-23/12151301.PDF"
+  },
+  {
+    "code": "300170",
+    "name": "汉得信息",
+    "action": "纠错",
+    "pairs": [
+      {
+        "category": "AI应用",
+        "concepts": [
+          "AI办公"
+        ]
+      }
+    ],
+    "verdict": "相关",
+    "reason": "公司主营企业数字化和ERP实施服务，2025年总营收34.15亿元，其中企业AI智能化应用收入约3.1亿元，已连续季度放量。公司依托PaaS平台、AI中台和智能体向既有企业客户交付，具备真实合同收入而非泛泛的数字化概念；但AI收入约占总营收9%，仍被定位为战略新兴第二曲线，传统数字化服务仍占主导，因此保留AI办公应用方向，并由核心纠错为相关。",
+    "evidence_title": "汉得信息：2025年年度报告",
+    "evidence_date": "2026-04-14",
+    "evidence_url": "https://money.finance.sina.com.cn/corp/view/vCB_AllBulletinDetail.php?stockid=300170&id=12085750"
+  },
+  {
+    "code": "300182",
+    "name": "捷成股份",
+    "action": "纠错",
+    "pairs": [
+      {
+        "category": "AI应用",
+        "concepts": [
+          "AI影视短剧"
+        ]
+      }
+    ],
+    "verdict": "相关",
+    "reason": "公司主营影视版权运营，ChatPV、灵犀等工具已用于AI短剧、动态漫和影视二创，ChatPV已在广电及影视机构应用，具备真实行业客户和内容生产场景。2025年完成约2万小时版权内容结构化、向量化，但主要供自研平台内部调用，未证明对外授权训练语料或形成数据交付，故不新增数据要素。AI仍属一体两翼中的新业务，收入未单列，因此保留AI影视短剧并由核心纠错为相关。",
+    "evidence_title": "捷成股份：2025年年度报告",
+    "evidence_date": "2026-04-25",
+    "evidence_url": "https://vip.stock.finance.sina.com.cn/corp/view/vCB_AllBulletinDetail.php?stockid=300182&id=12197902"
+  },
+  {
+    "code": "300242",
+    "name": "佳云科技",
+    "action": "摘除",
+    "pairs": [],
+    "verdict": "摘除",
+    "reason": "公司2025年互联网营销收入17.07亿元、占94.24%，成本中98.95%为媒介采购，收入本质仍来自主流媒体广告投放和流量代理。年报涉及AI的内容主要是行业趋势描述，研发投入为零，未披露自有AI产品、具体AI客户项目或AI收入，不能把普通广告消耗及平台算法能力归作公司的AI营销能力。原标签缺少可核验业务支撑，因此直接摘除，而非以相关等级继续保留。",
+    "evidence_title": "广东佳云科技股份有限公司2025年年度报告全文",
+    "evidence_date": "2026-04-08",
+    "evidence_url": "http://static.cninfo.com.cn/finalpage/2026-04-08/1225083243.PDF"
+  },
+  {
+    "code": "300248",
+    "name": "新开普",
+    "action": "保留",
+    "pairs": [
+      {
+        "category": "AI应用",
+        "concepts": [
+          "AI教育"
+        ]
+      }
+    ],
+    "verdict": "相关",
+    "reason": "公司主营智慧校园和一卡通系统，星普教育垂类大模型已完成备案，AI中台、星工场及校级AI助手已在西安交通大学、西北民族大学、海南大学和贵州民族大学等高校交付，多所高校上线校园卡AI助手，属于真实教育AI项目。不过，这些应用主要依托存量校园信息化客户升级，AI收入尚未单列，也未取代传统主营，因此维持AI教育和相关定级，不拔高为核心。",
+    "evidence_title": "新开普：2025年年度报告",
+    "evidence_date": "2026-04-24",
+    "evidence_url": "http://money.finance.sina.com.cn/corp/view/vCB_AllBulletinDetail.php?stockid=300248&id=12172365"
+  },
+  {
+    "code": "300291",
+    "name": "百纳千成",
+    "action": "摘除",
+    "pairs": [],
+    "verdict": "摘除",
+    "reason": "公司主营电影、剧集、动漫、文旅和营销，已披露项目主要是传统影视剧、动画电影及真人互动影游。半年报虽提出围绕互动加战略构建涵盖影视、游戏、AIGC的内容生态，但这属于合作方向和战略表述，未对应公司自有AI产品、明确AI影视作品、客户合同或收入，合作方采用AIGC也不能直接归作百纳千成的AI能力。原核心判断主要由影视内容推断，证据不足，故直接摘除。",
+    "evidence_title": "百纳千成：2025年半年度报告",
+    "evidence_date": "2025-08-26",
+    "evidence_url": "http://money.finance.sina.com.cn/corp/view/vCB_AllBulletinDetail.php?stockid=300291&id=11354447"
+  },
+  {
+    "code": "300353",
+    "name": "东土科技",
+    "action": "迁移",
+    "pairs": [
+      {
+        "category": "AI应用",
+        "concepts": [
+          "AI制造"
+        ]
+      },
+      {
+        "category": "物理AI",
+        "concepts": [
+          "物理AI_智能控制"
+        ]
+      }
+    ],
+    "verdict": "相关",
+    "reason": "公司2025年智能控制器收入1.45亿元、订单1.92亿元，NewPre310XC集成PLC、运动控制、机器视觉和工业AI，已在半导体设备批量应用；AI交通服务器落地50多个城市，北京部署超过1000台。相关产品直接参与物理环境感知、决策和控制，不只是通用工业软件，因此由单一AI制造迁移为AI制造与物理AI_智能控制并列。工业网络等传统业务仍占较大比重，具身机器人架构仅小批量，故定相关。",
+    "evidence_title": "东土科技：2025年年度报告",
+    "evidence_date": "2026-04-28",
+    "evidence_url": "https://money.finance.sina.com.cn/corp/view/vCB_AllBulletinDetail.php?stockid=300353&id=12234934"
+  },
+  {
+    "code": "300364",
+    "name": "中文在线",
+    "action": "纠错",
+    "pairs": [
+      {
+        "category": "AI应用",
+        "concepts": [
+          "AI影视短剧"
+        ]
+      },
+      {
+        "category": "数据要素",
+        "concepts": [
+          "数据要素_训练数据"
+        ]
+      }
+    ],
+    "verdict": "相关",
+    "reason": "公司2025年AI漫剧在九个月内产生数千万元增量收入并量产数百部，逍遥模型支持14语种创作，AI制作与分发已商业化；同时与多家头部大模型开展语料合作并形成新增收入，内容版权具备训练数据变现路径，因此新增数据要素_训练数据。可是短剧及IP收入中包含大量非AI内容，AI收入总体仍较小，不能把全部IP业务视为AI主营，故保留AI影视短剧、补充训练数据并由核心纠错为相关。",
+    "evidence_title": "中文在线集团股份有限公司2025年年度报告摘要",
+    "evidence_date": "2026-04-22",
+    "evidence_url": "https://pdf.dfcfw.com/pdf/H2_AN202604221821468163_1.pdf"
+  },
+  {
+    "code": "300413",
+    "name": "芒果超媒",
+    "action": "纠错",
+    "pairs": [
+      {
+        "category": "AI应用",
+        "concepts": [
+          "AI影视短剧"
+        ]
+      }
+    ],
+    "verdict": "相关",
+    "reason": "公司主营芒果TV视频、内容制作和电商，芒果大模型及山海AIGC平台已产出《坐标》《台湾岛纪》等内容，AIGC中心继续布局AI真人剧和漫剧，属于真实AI影视项目而非单纯行业概念。原短剧与AI影视短剧标签语义重复，应合并为AI影视短剧；2025年视频主业收入约101.26亿元，AI收入未单独披露，整体仍处产业化探索期，因此完成标签去重并由核心纠错为相关。",
+    "evidence_title": "芒果超媒股价涨停背后：AI长剧首登卫视黄金档",
+    "evidence_date": "2026-08-31",
+    "evidence_url": "https://m.bjnews.com.cn/detail/1788175681129477.html"
+  },
+  {
+    "code": "300418",
+    "name": "昆仑万维",
+    "action": "新增",
+    "pairs": [
+      {
+        "category": "AI应用",
+        "concepts": [
+          "AI影视短剧",
+          "AI大模型"
+        ]
+      }
+    ],
+    "verdict": "核心",
+    "reason": "公司2025年短剧及AI短剧平台收入16.17亿元、同比增长864.92%，占总收入近20%，年末月流水近3600万美元、ARR超过4亿美元；SkyReels、Mureka和天工智能体等模型及产品持续商业化，并已明确API、定制模型和订阅等AI收入确认方式。原标签遗漏AI大模型，应予新增，同时保留AI影视短剧；规模收入、全球用户商业化及明确主营方向共同支持核心定级。",
+    "evidence_title": "昆仑万维：2025年年度报告",
+    "evidence_date": "2026-04-24",
+    "evidence_url": "https://vip.stock.finance.sina.com.cn/corp/view/vCB_AllBulletinDetail.php?stockid=300418&id=12170820"
+  },
+  {
+    "code": "300426",
+    "name": "华智数媒",
+    "action": "纠错",
+    "pairs": [
+      {
+        "category": "AI应用",
+        "concepts": [
+          "AI影视短剧"
+        ]
+      }
+    ],
+    "verdict": "相关",
+    "reason": "公司主营电视剧、电影及衍生业务，原AI营销分类与主营及实际产品不符。公司与合作方推出影视AI换脸模型DeepEmotion、短剧AI剪辑系统DramaFlow，并启动AI漫剧共创计划，说明存在真实的影视AI产品和内容生产探索，应纠正为AI影视短剧。不过，公司明确相关新赛道仍处培育期、收入占比较低，AI生成剧也在尝试阶段，尚无规模商业化证据，因此只定相关而不定核心。",
+    "evidence_title": "浙江华智数媒传媒股份有限公司2025年年度报告摘要",
+    "evidence_date": "2026-03-31",
+    "evidence_url": "http://static.cninfo.com.cn/finalpage/2026-03-31/1225058983.PDF"
+  },
+  {
+    "code": "300459",
+    "name": "汤姆猫",
+    "action": "迁移",
+    "pairs": [
+      {
+        "category": "物理AI",
+        "concepts": [
+          "物理AI_智能终端"
+        ]
+      }
+    ],
+    "verdict": "相关",
+    "reason": "公司主营移动游戏、广告及IP运营，2025年线上游戏贡献84.14%营收。汤姆猫AI机器人、随身AI已上市并铺设线上线下渠道，以智能硬件销售变现，直接对应AI终端；但年报称相关业务仍处培育期、尚未形成规模收入，故由AI应用、AI玩具迁移至物理AI_智能终端并定相关。",
+    "evidence_title": "汤姆猫：2025年年度报告",
+    "evidence_date": "2026-04-29",
+    "evidence_url": "https://money.finance.sina.com.cn/corp/view/vCB_AllBulletinDetail.php?stockid=300459&id=12264625"
+  },
+  {
+    "code": "300479",
+    "name": "神思电子",
+    "action": "纠错",
+    "pairs": [
+      {
+        "category": "AI应用",
+        "concepts": [
+          "AI智慧城市"
+        ]
+      }
+    ],
+    "verdict": "核心",
+    "reason": "公司聚焦AI与智慧城市融合，2025年AI+智慧城市收入7.14亿元、占营收79.28%，覆盖城市安全、智慧能源、数字低空和数据要素，并交付济南城市可信数据空间、数字低空平台等项目。相关收入已成为主营主体，原AI办公不能准确概括业务，故细化为AI智慧城市并定核心。",
+    "evidence_title": "神思电子：2025年经营质效稳步提升，AI+场景化转型成效显著",
+    "evidence_date": "2026-04-10",
+    "evidence_url": "https://stock.10jqka.com.cn/20260410/c675895140.shtml"
+  },
+  {
+    "code": "300528",
+    "name": "幸福蓝海",
+    "action": "纠错",
+    "pairs": [
+      {
+        "category": "AI应用",
+        "concepts": [
+          "AI影视短剧"
+        ]
+      }
+    ],
+    "verdict": "相关",
+    "reason": "公司主营电视剧、电影制作发行及院线放映，主投主控的AI微短剧《苏小游之星河遨游录》已于2026年3月上线，属于真实落地的AI影视内容项目，与原有业务直接相关。但目前仅能确认单个项目，尚不足以证明AI业务成为主要收入，故删除普通短剧标签、保留AI影视短剧并由核心降为相关。",
+    "evidence_title": "幸福蓝海：2025年年度报告",
+    "evidence_date": "2026-04-11",
+    "evidence_url": "http://money.finance.sina.com.cn/corp/view/vCB_AllBulletinDetail.php?stockid=300528&id=12079979"
+  },
+  {
+    "code": "300571",
+    "name": "平治信息",
+    "action": "摘除",
+    "pairs": [],
+    "verdict": "摘除",
+    "reason": "公司2025年主营算力服务、通信设备及运营商权益业务，算力收入2.809亿元，未披露已经制作、上线或交付的AI短剧产品。情感陪护机器人、AI血压仪仍处研发、试点和商业推广探索阶段，与原标AI影视短剧没有直接产品、客户或收入关联，不能以泛AI研发替代AI影视落地，故摘除原概念。",
+    "evidence_title": "平治信息：2025年年度报告",
+    "evidence_date": "2026-04-29",
+    "evidence_url": "http://money.finance.sina.com.cn/corp/view/vCB_AllBulletinDetail.php?stockid=300571&id=12260009"
+  },
+  {
+    "code": "300612",
+    "name": "宣亚国际",
+    "action": "摘除",
+    "pairs": [],
+    "verdict": "摘除",
+    "reason": "公司主营数智营销和数字广告，但普通数字营销不能自动等同AI营销。OrangeGPT仍处研发初期，2025年数据技术产品服务收入仅47169.81元，巨浪升级项目已经终止，Infinity Agent属于后续募投规划，现有材料未证明形成规模商用客户、持续交付或可观收入，原AI营销依据不足，故予以摘除。",
+    "evidence_title": "财说| 宣亚国际连亏三年，AI转型难解近渴",
+    "evidence_date": "2026-05-06",
+    "evidence_url": "https://www.jiemian.com/article/14362467.html"
+  },
+  {
+    "code": "300622",
+    "name": "博士眼镜",
+    "action": "迁移",
+    "pairs": [
+      {
+        "category": "物理AI",
+        "concepts": [
+          "物理AI_智能终端"
+        ]
+      }
+    ],
+    "verdict": "相关",
+    "reason": "公司主营眼镜连锁零售，与阿里、雷鸟、星纪魅族、XREAL、界环、李未可、小米mijia、雷神等合作，提供智能眼镜销售、验光配镜及售后服务，已开设1家概念店并在160余家门店设专柜。业务直接服务AI智能终端验配，但相关收入规模和占比极小，故由AI应用迁移至物理AI_智能终端并定相关。",
+    "evidence_title": "博士眼镜：2025年年度报告摘要",
+    "evidence_date": "2026-04-24",
+    "evidence_url": "https://www.9fzt.com/detail/sz_300622_9_70f27c95ef47151a44ffdf87771ed613.html"
+  },
+  {
+    "code": "300624",
+    "name": "万兴科技",
+    "action": "保留",
+    "pairs": [
+      {
+        "category": "AI应用",
+        "concepts": [
+          "AI影视短剧"
+        ]
+      }
+    ],
+    "verdict": "相关",
+    "reason": "公司主营数字创意软件，万兴剧厂已形成从剧本、角色资产、分镜到成片的Agent化创作闭环，按AI积分或Token收费并支持数万集内容创作，直接服务AI影视短剧生产。2025年AI原生应用收入超过1.3亿元、同比增长90%以上，已有商业化收入但未证明占整体主营主要部分，故保留概念及相关定级。",
+    "evidence_title": "AI原生应用加速兑现引关注，万兴科技涨近5%",
+    "evidence_date": "2026-07-10",
+    "evidence_url": "http://news.10jqka.com.cn/field/20260710/678089819.shtml"
+  },
+  {
+    "code": "300654",
+    "name": "世纪天鸿",
+    "action": "保留",
+    "pairs": [
+      {
+        "category": "AI应用",
+        "concepts": [
+          "AI教育"
+        ]
+      }
+    ],
+    "verdict": "相关",
+    "reason": "公司主营教辅图书策划发行，推出的小鸿助教基于大模型，覆盖备课、命题、作文与口算批改及教学事务处理，已在部分区域开展试点，产品与公司教育内容和教师用户直接关联。当前仍处规模化商业推广前阶段，教辅主业未变，也没有证据显示AI收入占主要部分，故保留AI教育概念及相关定级。",
+    "evidence_title": "世纪天鸿：2025年年度报告",
+    "evidence_date": "2026-04-24",
+    "evidence_url": "https://money.finance.sina.com.cn/corp/view/vCB_AllBulletinDetail.php?stockid=300654&id=12161548"
+  },
+  {
+    "code": "300687",
+    "name": "赛意信息",
+    "action": "纠错",
+    "pairs": [
+      {
+        "category": "AI应用",
+        "concepts": [
+          "AI制造"
+        ]
+      }
+    ],
+    "verdict": "相关",
+    "reason": "公司主营泛ERP、智能制造及工业互联网实施，自研善谋GPT、PCB行业大模型和工业智能体已有商业落地，2025年4月签署4846.92万元AI中台合同，直接服务制造业数智化。年报仍要求加速工业AI商业化，传统MES、ERP收入不能全部视作AI收入，现有证据不足以支持核心，故保留AI制造并降为相关。",
+    "evidence_title": "赛意信息：2025年年度报告",
+    "evidence_date": "2026-04-29",
+    "evidence_url": "https://money.finance.sina.com.cn/corp/view/vCB_AllBulletinDetail.php?stockid=300687&id=12259153"
+  },
+  {
+    "code": "300770",
+    "name": "新媒股份",
+    "action": "纠错",
+    "pairs": [
+      {
+        "category": "AI应用",
+        "concepts": [
+          "AI电视"
+        ]
+      }
+    ],
+    "verdict": "相关",
+    "reason": "公司主营IPTV和互联网视听，两项合计贡献约九成收入。IPTV AI智能电视已完成产品规划并在部分运营商渠道落地，同时应用AIGC智能运营、多方言语音搜索和智能内容安全，直接作用于电视视听服务。普通中短剧投资及探索智能内容生产不能证明AI短剧业务，故改贴AI电视并定相关。",
+    "evidence_title": "新媒股份：2025年年度报告",
+    "evidence_date": "2026-04-11",
+    "evidence_url": "https://money.finance.sina.com.cn/corp/view/vCB_AllBulletinDetail.php?stockid=300770&id=12078801"
+  },
+  {
+    "code": "300781",
+    "name": "因赛集团",
+    "action": "纠错",
+    "pairs": [
+      {
+        "category": "AI应用",
+        "concepts": [
+          "AI营销"
+        ]
+      }
+    ],
+    "verdict": "相关",
+    "reason": "公司主营整合营销传播，因赛AI已服务腾讯游戏、PUBG、魅族、朴朴超市等客户，AI能力直接用于营销内容生产与投放，具备真实客户和项目交付。不过2025年AI营销业务收入仅99.87万元，仍处标杆客户打造和商业模式验证期，相对整体营销主业体量很小，故保留AI营销概念并由核心降为相关。",
+    "evidence_title": "因赛集团：2025年度公司AI营销业务收入为99.87万元",
+    "evidence_date": "2026-07-24",
+    "evidence_url": "https://finance.eastmoney.com/a/202607243820752232.html"
+  },
+  {
+    "code": "300785",
+    "name": "值得买",
+    "action": "纠错",
+    "pairs": [
+      {
+        "category": "AI应用",
+        "concepts": [
+          "AI购物"
+        ]
+      }
+    ],
+    "verdict": "相关",
+    "reason": "公司主营导购、信息推广、效果营销及代运营，AI购物助手小值已升级为AI购物管家张大妈并于2025年9月上线独立App，海纳MCP Server还与Kimi、理想、联想、华为等40余家伙伴合作。2025年AI相关收入8716.60万元，但相对12.88亿元总营收仍非主体，故将AI营销细化为AI购物并由核心降为相关。",
+    "evidence_title": "值得买：2025年年度报告",
+    "evidence_date": "2026-04-24",
+    "evidence_url": "https://money.finance.sina.com.cn/corp/view/vCB_AllBulletinDetail.php?stockid=300785&id=12164435"
+  },
+  {
+    "code": "300792",
+    "name": "壹网壹创",
+    "action": "纠错",
+    "pairs": [
+      {
+        "category": "AI应用",
+        "concepts": [
+          "AI营销"
+        ]
+      }
+    ],
+    "verdict": "相关",
+    "reason": "公司主营品牌线上管理、营销、分销及内容电商，2025年营收10.73亿元。大师生图、AI客服、数素投、云见构成Agent矩阵，四类垂类应用已产生商业化收入，客户包括宝洁、迪士尼、沃尔玛等，直接服务电商营销。但代运营及营销总收入不能全部视为AI收入，AI占比未证明达到主体水平，故保留AI营销并由核心降为相关。",
+    "evidence_title": "壹网壹创：2025年年度报告",
+    "evidence_date": "2026-03-31",
+    "evidence_url": "https://money.finance.sina.com.cn/corp/view/vCB_AllBulletinDetail.php?stockid=300792&id=12043727"
+  },
+  {
+    "code": "300795",
+    "name": "米奥会展",
+    "action": "纠错",
+    "pairs": [
+      {
+        "category": "AI应用",
+        "concepts": [
+          "AI会展"
+        ]
+      }
+    ],
+    "verdict": "相关",
+    "reason": "公司主营境外自办展和代理展，2025年自办展收入占91.27%。AI慧展集成慧搜、慧译、慧记、慧写等模块，并提供AI眼镜和TradeChina Assistant，多智能体已在印尼、沙特、迪拜展会规模化验证，整体买家渗透率达76%。产品直接服务会展获客和交付，但收入仍主要来自线下展会，故将AI营销细化为AI会展并定相关。",
+    "evidence_title": "米奥会展：2025年年度报告",
+    "evidence_date": "2026-03-26",
+    "evidence_url": "https://money.finance.sina.com.cn/corp/view/vCB_AllBulletinDetail.php?stockid=300795&id=12018375"
+  },
+  {
+    "code": "300822",
+    "name": "贝仕达克",
+    "action": "迁移",
+    "pairs": [
+      {
+        "category": "物理AI",
+        "concepts": [
+          "物理AI_智能终端"
+        ]
+      }
+    ],
+    "verdict": "相关",
+    "reason": "公司主营智能控制器和智能产品，2025年两类收入占比分别为61.36%和24.75%。宠物移动摄像机可自动跟踪并结合AI完成拍摄剪辑，宠物动态跟拍载具项目已完结并量产，属于面向养宠场景的智能硬件终端，而非泛AI应用或AI玩具。尚未证明宠物AI产品成为主要收入来源，故迁移至物理AI_智能终端并定相关。",
+    "evidence_title": "贝仕达克：2025年年度报告",
+    "evidence_date": "2026-03-16",
+    "evidence_url": "https://money.finance.sina.com.cn/corp/view/vCB_AllBulletinDetail.php?stockid=300822&id=11996144"
+  },
+  {
+    "code": "300840",
+    "name": "酷特智能",
+    "action": "保留",
+    "pairs": [
+      {
+        "category": "AI应用",
+        "concepts": [
+          "AI制造"
+        ]
+      }
+    ],
+    "verdict": "相关",
+    "reason": "公司主营定制服装和数智化产品服务，KTOS AI企业应用操作系统及智能体集群已对外部署，直接服务制造流程和企业管理。2026年上半年新增AI智能体产品及数智咨询改造收入2258.62万元，其中AI智能体产品及服务收入1592.92万元，商业模式已初步验证，但服装仍占绝大部分收入，故保留AI制造概念及相关定级。",
+    "evidence_title": "酷特智能：2026年半年度报告",
+    "evidence_date": "2026-08-29",
+    "evidence_url": "https://money.finance.sina.com.cn/corp/view/vCB_AllBulletinDetail.php?stockid=300840&id=12566690"
+  },
+  {
+    "code": "301052",
+    "name": "果麦文化",
+    "action": "纠错",
+    "pairs": [
+      {
+        "category": "AI应用",
+        "concepts": [
+          "AI影视短剧",
+          "AI出版"
+        ]
+      }
+    ],
+    "verdict": "相关",
+    "reason": "公司主营图书策划发行及IP运营，书世界智能出版平台已于2026年1月发布；子公司果麦智娱还联合星剧通推出原创AI短剧《三界反骨仔，天庭刀枪炮》，第一季于6月30日上线并取得热度表现。两项产品分别直接关联AI出版和AI影视短剧，但均属新业务，尚不足以定核心，故删除普通短剧标签、补充AI出版并定相关。",
+    "evidence_title": "全球第四大视听形态来袭！短剧搅动A股，IP版权成核心筹码",
+    "evidence_date": "2026-10-21",
+    "evidence_url": "https://www.donews.com/article/detail/7331/108639.html"
+  },
+  {
+    "code": "301102",
+    "name": "兆讯传媒",
+    "action": "纠错",
+    "pairs": [
+      {
+        "category": "AI应用",
+        "concepts": [
+          "AI营销"
+        ]
+      }
+    ],
+    "verdict": "相关",
+    "reason": "公司主营高铁数字媒体及户外LED广告，2026年10月发布裸眼3D创意AI Agent跃然AI，整合AIGC定制创作、裸眼3D制作和屏幕适配，面向品牌广告主与屏主，已有《诞生》及北京、成都屏幕演示，并由专业团队按项目报价交付。产品直接服务广告创意，但刚进入项目制商业交付，不能把全部媒体广告收入视作AI收入，故由核心降为相关。",
+    "evidence_title": "兆讯传媒发布“跃然AI” 以专业积累推动AI与媒体主业融合",
+    "evidence_date": "2026-10-19",
+    "evidence_url": "https://news.pedaily.cn/20261019/140994.shtml"
+  },
+  {
+    "code": "301171",
+    "name": "易点天下",
+    "action": "纠错",
+    "pairs": [
+      {
+        "category": "AI应用",
+        "concepts": [
+          "AI营销"
+        ]
+      }
+    ],
+    "verdict": "相关",
+    "reason": "公司主营出海整合数字营销与广告平台，通过Cyberklick、Yeahmobi、zMaticoo交付服务，KreadoAI、AI数字人及Intelick等已用于真实营销项目，两个AI文化出海项目入选国家文化出口重点项目，和营销主业直接关联。不过传统效果广告仍是主要收入来源，未披露AI独立收入已占主体，故保留AI营销概念并由核心降为相关。",
+    "evidence_title": "易点天下网络科技股份有限公司2025年年度报告摘要",
+    "evidence_date": "2026-03-25",
+    "evidence_url": "http://static.cninfo.com.cn/finalpage/2026-03-25/1225029139.PDF"
+  },
+  {
+    "code": "301262",
+    "name": "海看股份",
+    "action": "纠错",
+    "pairs": [
+      {
+        "category": "AI应用",
+        "concepts": [
+          "AI影视短剧"
+        ]
+      }
+    ],
+    "verdict": "相关",
+    "reason": "公司主营IPTV和移动媒体平台服务，海看鲸灵AI影视创作平台已经上线，覆盖剧本生成、镜头拆解和成片剪辑，聚焦漫剧、微短剧一站式生产，并向创作者、影视传媒企业、主流媒体及高校开放技术服务，具备真实产品和技术输出。公司已明确AIGC业务营收占比较小，故删除普通短剧标签，保留AI影视短剧并维持相关定级。",
+    "evidence_title": "“海看鲸灵AI影视创作平台”已上线运行，AIGC业务营收占比较小",
+    "evidence_date": "2026-09-04",
+    "evidence_url": "https://jnzstatic.cs.com.cn/zzb/htmlInfo/132488.html"
+  },
+  {
+    "code": "600228",
+    "name": "返利科技",
+    "action": "保留",
+    "pairs": [
+      {
+        "category": "AI应用",
+        "concepts": [
+          "AI营销"
+        ]
+      }
+    ],
+    "verdict": "相关",
+    "reason": "公司主营在线导购、广告推广及平台技术服务，已推出如意及海外AI导购、营销工具，具备真实产品形态，与现有导购营销场景直接关联。现阶段AI主要用于提升导购效率和营销服务，尚未证明形成主要收入来源，商业化仍处升级拓展阶段，因此保留AI营销并定为相关，而非核心。",
+    "evidence_title": "*ST返利：2025年年度报告",
+    "evidence_date": "2026-04-18",
+    "evidence_url": "http://money.finance.sina.com.cn/corp/view/vCB_AllBulletinDetail.php?stockid=600228&id=12109893"
+  },
+  {
+    "code": "600556",
+    "name": "天下秀",
+    "action": "纠错",
+    "pairs": [
+      {
+        "category": "AI应用",
+        "concepts": [
+          "AI营销"
+        ]
+      }
+    ],
+    "verdict": "相关",
+    "reason": "公司主营红人经济平台及营销服务，WEIQ的BOSS红人智投和灵感岛已上线，海外版完成首个客户交付，属于直接服务红人营销的AI产品。不过相关产品仍属创新业务，传统红人营销仍是经营主体，尚无依据证明AI收入占主导，因此保留AI营销概念但由核心纠正为相关。",
+    "evidence_title": "天下秀：2025年年度报告",
+    "evidence_date": "2026-04-10",
+    "evidence_url": "https://money.finance.sina.com.cn/corp/view/vCB_AllBulletinDetail.php?stockid=600556&id=12074579"
+  },
+  {
+    "code": "600588",
+    "name": "用友网络",
+    "action": "保留",
+    "pairs": [
+      {
+        "category": "AI应用",
+        "concepts": [
+          "AI办公"
+        ]
+      }
+    ],
+    "verdict": "核心",
+    "reason": "公司主营企业软件与云服务，用友BIP企业AI产品矩阵覆盖财务、人力、采购、生产等经营管理环节，与企业数字化主业直接融合。2025年AI合同达到16.7亿元、客户超过400家，已形成合同和批量客户验证的规模商业化，故保留更精确的AI办公概念并定为核心，不是泛化AI应用贴标。",
+    "evidence_title": "用友网络科技股份有限公司2025年年度报告",
+    "evidence_date": "2026-04-18",
+    "evidence_url": "https://static.cninfo.com.cn/finalpage/2026-04-18/1225120765.PDF"
+  },
+  {
+    "code": "600640",
+    "name": "国脉文化",
+    "action": "纠错",
+    "pairs": [
+      {
+        "category": "AI应用",
+        "concepts": [
+          "AI影视短剧"
+        ]
+      }
+    ],
+    "verdict": "相关",
+    "reason": "公司业务包含酒店、数字权益及数字文化内容，2025年制作AIGC内容超过1000集，其中包含已经上线的AI短剧，证明其具备真实内容生产项目而非普通影视贴标。但AI短剧尚未被证明贡献主要收入，且其他传统业务并存，商业化仍处培育放量阶段，因此细化保留AI影视短剧并由核心纠正为相关。",
+    "evidence_title": "新国脉数字文化股份有限公司2025年年度报告",
+    "evidence_date": "2026-04-23",
+    "evidence_url": "https://static.cninfo.com.cn/finalpage/2026-04-23/1225150356.PDF"
+  },
+  {
+    "code": "600715",
+    "name": "文投控股",
+    "action": "纠错",
+    "pairs": [
+      {
+        "category": "AI应用",
+        "concepts": [
+          "AI影视短剧"
+        ]
+      }
+    ],
+    "verdict": "相关",
+    "reason": "公司主营影院、游戏及漫剧等文化业务，2026年上半年已上线漫剧34部并储备92部，AI漫剧与内容主业具有直接产品和项目关联。不过公司公告明确相关业务尚未大规模商业化、收入较少，不能把整体影视或游戏业务视作AI收入，故保留AI影视短剧概念，同时由核心纠正为相关。",
+    "evidence_title": "文投控股：关于2026年半年度业绩说明会召开情况的公告",
+    "evidence_date": "2026-10-14",
+    "evidence_url": "http://money.finance.sina.com.cn/corp/view/vCB_AllBulletinDetail.php?stockid=600715&id=12637945"
+  },
+  {
+    "code": "600825",
+    "name": "新华传媒",
+    "action": "纠错",
+    "pairs": [
+      {
+        "category": "AI应用",
+        "concepts": [
+          "AI教育"
+        ]
+      }
+    ],
+    "verdict": "相关",
+    "reason": "公司主营图书及文教用品发行，解放教育传媒推出智悦通AI学习工具并嵌入报刊产品线，形成读、练、测、评学习路径，属于与文教业务直接结合的真实AI教育产品。公司将该业务定位为第二增长曲线，尚未成为核心收入来源，且没有依据支持原AI影视短剧标签，因此改为AI教育并定为相关。",
+    "evidence_title": "上海新华传媒股份有限公司2025年年度报告",
+    "evidence_date": "2026-03-31",
+    "evidence_url": "https://stockmc.xueqiu.com/202603/600825_20260331_XXDE.pdf"
+  },
+  {
+    "code": "600880",
+    "name": "博瑞传播",
+    "action": "纠错",
+    "pairs": [
+      {
+        "category": "AI应用",
+        "concepts": [
+          "AI营销",
+          "AI教育"
+        ]
+      }
+    ],
+    "verdict": "相关",
+    "reason": "公司业务涵盖广告、教育及数字文化，控股每经数智的雨燕智宣AIGC和智能媒资库面向真实客户，生学教育又与成都七中万达学校推出思慧AI辅学空间并入选省级典型案例，分别直接对应AI营销和AI教育。两项均属新业务，普通广告代理不是认定依据，尚未证明AI贡献主要收入，故保留双概念并定为相关。",
+    "evidence_title": "成都博瑞传播股份有限公司2025年年度报告",
+    "evidence_date": "2026-04-24",
+    "evidence_url": "http://file.finance.sina.com.cn/211.154.219.97:9494/MRGG/CNSESH_STOCK/2026/2026-4/2026-04-24/12166891.PDF"
+  },
+  {
+    "code": "600892",
+    "name": "大晟文化",
+    "action": "摘除",
+    "pairs": [],
+    "verdict": "摘除",
+    "reason": "公司2025年短剧收入1.311亿元来自普通真人短剧制作发行，不能据此认定为AI影视收入。星梦之缘仍处于开发调测和申请版号阶段，漫剧也仅是开始布局，未核到已经交付的AI产品、外部商业项目或AI收入，现有业务与AI应用缺乏可验证的直接商业关联，因此摘除原概念而非按普通短剧贴标。",
+    "evidence_title": "*ST大晟：关于2025年年度报告的信息披露监管问询函的回复公告",
+    "evidence_date": "2026-06-30",
+    "evidence_url": "https://vip.stock.finance.sina.com.cn/corp/view/vCB_AllBulletinDetail.php?stockid=600892&id=12419718"
+  },
+  {
+    "code": "600986",
+    "name": "浙文互联",
+    "action": "保留",
+    "pairs": [
+      {
+        "category": "AI应用",
+        "concepts": [
+          "AI营销"
+        ]
+      }
+    ],
+    "verdict": "核心",
+    "reason": "公司以数智营销为核心主业，好奇系列AIGC工具矩阵已实现商业化，并用于北京现代文章生成、沃尔沃视频生产等真实客户项目，AI能力与营销内容生产直接结合。相关工具和项目不是对普通数字营销的泛化贴标，而是嵌入核心经营流程并已产生商业应用，因此保留AI营销概念并定为核心。",
+    "evidence_title": "浙文互联集团股份有限公司2025年年度报告",
+    "evidence_date": "2026-03-31",
+    "evidence_url": "http://static.cninfo.com.cn/finalpage/2026-03-31/1225064065.PDF"
+  },
+  {
+    "code": "601360",
+    "name": "三六零",
+    "action": "保留",
+    "pairs": [
+      {
+        "category": "AI应用",
+        "concepts": [
+          "AI大模型"
+        ]
+      }
+    ],
+    "verdict": "相关",
+    "reason": "公司主营互联网安全及相关服务，360智脑、纳米AI、360AI办公、安全大模型和安全智能体均为真实产品，并已有政企交付，与安全和办公场景直接关联。不过互联网广告等仍是主要收入来源，AI收入未单独证明占据主体，商业化虽落地但占比依据不足，因此保留AI大模型概念并定为相关而非核心。",
+    "evidence_title": "三六零：2025年年度报告摘要",
+    "evidence_date": "2026-04-30",
+    "evidence_url": "https://money.finance.sina.com.cn/corp/view/vCB_AllBulletinDetail.php?stockid=601360&id=12277652"
+  },
+  {
+    "code": "601595",
+    "name": "上海电影",
+    "action": "保留",
+    "pairs": [
+      {
+        "category": "AI应用",
+        "concepts": [
+          "AI影视短剧"
+        ]
+      }
+    ],
+    "verdict": "相关",
+    "reason": "公司主营电影发行、放映及IP运营，上影已设专业AIGC厂牌，AI作品灵探上线后播放破千万，伐神录等项目采用AIGC制作流程，具备明确产品、项目和传播验证。相较于传统电影及IP主业，AIGC影视仍属新业务，尚未证明成为主要收入来源，因此保留AI影视短剧概念并定为相关。",
+    "evidence_title": "上影“科技＋影视”融合赛道最新成果落地 助力打造全球顶级影视与数字内容产业高地",
+    "evidence_date": "2026-06-12",
+    "evidence_url": "http://sh.people.com.cn/n2/2026/0612/c134768-41609071.html"
+  },
+  {
+    "code": "601599",
+    "name": "浙文影业",
+    "action": "摘除",
+    "pairs": [],
+    "verdict": "摘除",
+    "reason": "公司主营毛纺织和影视业务，帧想目前主要服务内部剧本评估，AI真人剧仅处于创制合作和孵化阶段，未核到已经上线的AI影视作品、外部客户或相应收入。内部工具探索不足以证明形成可商业化的AI应用业务，更不能把普通影视收入视为AI收入，因此摘除原有AI相关概念。",
+    "evidence_title": "浙文影业：2026年半年度报告",
+    "evidence_date": "2026-08-27",
+    "evidence_url": "https://money.finance.sina.com.cn/corp/view/vCB_AllBulletinDetail.php?stockid=601599&id=12548167"
+  },
+  {
+    "code": "601811",
+    "name": "新华文轩",
+    "action": "纠错",
+    "pairs": [
+      {
+        "category": "AI应用",
+        "concepts": [
+          "AI教育"
+        ]
+      }
+    ],
+    "verdict": "相关",
+    "reason": "公司主营出版发行，AI伴我学采用纸质图书加AI数字平台，包含作文、文言文、英语等五个系列并覆盖三个学段，文轩优学覆盖超过6000所学校，产品与教育出版主业直接关联。出版发行收入仍占绝对主体，AI教育未成为主要收入，同时原AI影视短剧标签缺乏依据，因此纠正为AI教育并定为相关。",
+    "evidence_title": "新华文轩出版传媒股份有限公司2025年年度报告",
+    "evidence_date": "2026-03-27",
+    "evidence_url": "https://static.cninfo.com.cn/finalpage/2026-03-27/1225038033.PDF"
+  },
+  {
+    "code": "601949",
+    "name": "中国出版",
+    "action": "纠错",
+    "pairs": [
+      {
+        "category": "AI应用",
+        "concepts": [
+          "AI大模型"
+        ]
+      }
+    ],
+    "verdict": "相关",
+    "reason": "公司主营出版、发行和印刷，人民美术出版社的中国连环画生成垂类模型已升级2.0，训练三种风格模型并开发定制画和国风插图服务，中华古籍大模型初步完成，属于真实AI产品。百科语料与华为小艺合作仍在拓展商业化渠道，未证明AI贡献主要收入；49集连漫微短剧也未说明使用AI，故改为AI大模型、定为相关并删除AI影视短剧。",
+    "evidence_title": "中国出版：2026年半年度报告",
+    "evidence_date": "2026-08-29",
+    "evidence_url": "https://money.finance.sina.com.cn/corp/view/vCB_AllBulletinDetail.php?stockid=601949&id=12568920"
+  },
+  {
+    "code": "603000",
+    "name": "人民网",
+    "action": "纠错",
+    "pairs": [
+      {
+        "category": "AI应用",
+        "concepts": [
+          "AI内容审核"
+        ]
+      }
+    ],
+    "verdict": "核心",
+    "reason": "公司主营互联网新闻及内容科技服务，内容科技以AI、大数据和云计算为底座，提供内容风控审核、全模态治理和AIGC合规应用，与内容安全主业直接关联。2025年该板块收入5.38亿元、占营收25.94%，已有明确收入和业务占比，是核心创新板块，因此将泛化AI应用细化为AI内容审核并定为核心。",
+    "evidence_title": "人民网：2025年年度报告",
+    "evidence_date": "2026-04-25",
+    "evidence_url": "https://vip.stock.finance.sina.com.cn/corp/view/vCB_AllBulletinDetail.php?stockid=603000&id=12183015"
+  },
+  {
+    "code": "603106",
+    "name": "恒银科技",
+    "action": "迁移",
+    "pairs": [
+      {
+        "category": "物理AI",
+        "concepts": [
+          "物理AI_智能终端"
+        ]
+      }
+    ],
+    "verdict": "相关",
+    "reason": "公司主营金融智能终端，智能柜台和票据终端集成钞票及证件识别、人脸活体检测、行为分析和智能风控，并已在银行等客户应用，AI能力直接嵌入实体终端感知与决策流程，不是普通ATM贴标。因AI收入未单列且未证明占主体，定为相关；其产品本质属于物理AI智能终端，故从AI应用迁出。",
+    "evidence_title": "恒银科技：2025年年度报告",
+    "evidence_date": "2026-04-28",
+    "evidence_url": "https://money.finance.sina.com.cn/corp/view/vCB_AllBulletinDetail.php?stockid=603106&id=12222281"
+  },
+  {
+    "code": "603171",
+    "name": "税友股份",
+    "action": "纠错",
+    "pairs": [
+      {
+        "category": "AI应用",
+        "concepts": [
+          "AI财税"
+        ]
+      }
+    ],
+    "verdict": "核心",
+    "reason": "公司主营数智财税服务，以犀友垂域大模型和财赢Agentic数智工场形成真实产品，直接服务财税专业场景。2025年AI产品及业务回款4.21亿元，占数智财税业务回款28%、同比增长60%，已经实现规模商业化和明确收入验证，因此将较宽泛的AI办公细化为AI财税，并由相关提升为核心。",
+    "evidence_title": "税友股份：2025年年度报告",
+    "evidence_date": "2026-04-23",
+    "evidence_url": "https://money.finance.sina.com.cn/corp/view/vCB_AllBulletinDetail.php?stockid=603171&id=12144301"
+  },
+  {
+    "code": "603230",
+    "name": "内蒙新华",
+    "action": "摘除",
+    "pairs": [],
+    "verdict": "摘除",
+    "reason": "公司教材图书和一般图书贡献93.57%收入，主营仍是传统出版发行。智慧新华主要体现ERP、报订和运营数字化，不属于可独立认定的AI产品；年报出现的AI漫剧属于行业趋势描述，并非公司自己的AI影视作品、客户项目或收入，未核到直接商业关联，因此摘除原AI概念，避免将数字化和行业趋势误当AI落地。",
+    "evidence_title": "内蒙新华：2025年年度报告",
+    "evidence_date": "2026-04-10",
+    "evidence_url": "https://vip.stock.finance.sina.com.cn/corp/view/vCB_AllBulletinDetail.php?stockid=603230&id=12075274"
+  },
+  {
+    "code": "603258",
+    "name": "电魂网络",
+    "action": "新增",
+    "pairs": [
+      {
+        "category": "AI应用",
+        "concepts": [
+          "AI游戏"
+        ]
+      }
+    ],
+    "verdict": "相关",
+    "reason": "公司主营网络游戏研发运营，吾家有女Ai是已经运营的AI驱动古风修仙多结局养成游戏，具备明确产品形态和运营状态，与游戏主业直接关联。梦三国等传统产品仍贡献主要收入，AI游戏尚属新业务，未证明成为主要收入来源，因此重建原先重复的裸AI应用标签，新增更准确的AI游戏概念并定为相关。",
+    "evidence_title": "财报解读｜身处高景气行业，电魂网络为何上市十年来首度亏损？",
+    "evidence_date": "2026-04-05",
+    "evidence_url": "https://tidenews.com.cn/news.html?id=3411800"
+  },
+  {
+    "code": "603533",
+    "name": "掌阅科技",
+    "action": "纠错",
+    "pairs": [
+      {
+        "category": "AI应用",
+        "concepts": [
+          "AI影视短剧"
+        ]
+      }
+    ],
+    "verdict": "相关",
+    "reason": "公司主营数字阅读及短剧等衍生业务，泡漫确实是AI漫剧一站式生成平台，与内容生产直接关联，具备真实产品依据。但2025年短剧等衍生业务收入18.55亿元、占57.20%，不能全部视作AI收入；公司明确公告2025年AI短剧业务收入预计不超过主营收入1%，商业化占比仍小，因此保留AI影视短剧但由核心纠正为相关。",
+    "evidence_title": "5连板掌阅科技：2025年度AI短剧业务收入预计不超过2025年度主营业务收入的1%",
+    "evidence_date": "2026-02-13",
+    "evidence_url": "https://api3.cls.cn/share/article/2289744?os=ios&sv=884&app=&source=&selected="
+  },
+  {
+    "code": "603598",
+    "name": "引力传媒",
+    "action": "纠错",
+    "pairs": [
+      {
+        "category": "AI应用",
+        "concepts": [
+          "AI营销"
+        ]
+      }
+    ],
+    "verdict": "相关",
+    "reason": "iFinD资料显示公司主营仍是传播策略、媒介代理及专项广告服务，并非AI软件。2025年报披露自研“九合创意2.0”AIGC平台，已用于创意、脚本、视频和投放等营销流程，属于真实AI产品与客户服务落地；但收入仍主要来自广告营销，未披露AI独立收入达到主要占比，因此保留AI营销并由核心下调为相关。",
+    "evidence_title": "引力传媒股份有限公司2025年年度报告",
+    "evidence_date": "2026-04-28",
+    "evidence_url": "http://file.finance.sina.com.cn/211.154.219.97:9494/MRGG/CNSESH_STOCK/2026/2026-4/2026-04-28/12224573.PDF"
+  },
+  {
+    "code": "603636",
+    "name": "南威软件",
+    "action": "纠错",
+    "pairs": [
+      {
+        "category": "AI应用",
+        "concepts": [
+          "AI政务"
+        ]
+      }
+    ],
+    "verdict": "相关",
+    "reason": "公司主营电子政务软件、系统集成及政务服务，2025年已推出南威DeepSeek智能体推理机、智启Agent、AI助手和高效办事智能体，并以政务数据治理支撑实际交付，不能按普通信息化摘除。原“AI办公”过泛且未准确指向应用场景，改为“AI政务”；鉴于AI未单独构成已披露主要收入，维持相关。",
+    "evidence_title": "南威软件股份有限公司2025年半年度报告",
+    "evidence_date": "2025-08-28",
+    "evidence_url": "http://static.cninfo.com.cn/finalpage/2025-08-28/1224593784.PDF"
+  },
+  {
+    "code": "603859",
+    "name": "能科科技",
+    "action": "纠错",
+    "pairs": [
+      {
+        "category": "AI应用",
+        "concepts": [
+          "AI制造"
+        ]
+      }
+    ],
+    "verdict": "核心",
+    "reason": "公司由工业节能与数字化业务扩展至工业软件和AI Agent，年报明确“灵系列”覆盖研发、生产、运维等制造环节，2025年AI业务收入占比已由2023年不足3%升至30%，已不是单纯研发预期或传统工业软件贴标。AI产品与工业客户交付直接对应并形成重要收入，故保留AI制造，并由相关上调为核心。",
+    "evidence_title": "能科科技：2025年年度报告",
+    "evidence_date": "2026-04-24",
+    "evidence_url": "https://money.finance.sina.com.cn/corp/view/vCB_AllBulletinDetail.php?stockid=603859&id=12166829"
+  },
+  {
+    "code": "605168",
+    "name": "三人行",
+    "action": "纠错",
+    "pairs": [
+      {
+        "category": "AI应用",
+        "concepts": [
+          "AI营销"
+        ]
+      }
+    ],
+    "verdict": "相关",
+    "reason": "iFinD主营为数字营销、场景活动及校园媒体，普通数字营销本身不能等同AI营销；但公司2025年报明确持续迭代多模态“一个”AI全链路营销智能体，用于广告客户内容、洞察及投放服务，具备真实产品和客户应用。AI仍主要赋能既有广告业务，未披露独立主要收入，故保留AI营销并由核心降为相关。",
+    "evidence_title": "三人行未来科技集团股份有限公司2025年年度报告",
+    "evidence_date": "2026-04-17",
+    "evidence_url": "http://dataclouds.cninfo.com.cn/shgonggao/hsomarket/2026/20260417/1455b636130c43468fe98e803d034d27.PDF"
+  },
+  {
+    "code": "605577",
+    "name": "龙版传媒",
+    "action": "摘除",
+    "pairs": [],
+    "verdict": "摘除",
+    "reason": "iFinD及2025年报显示，公司主营教材教辅、一般图书出版印刷发行和物资贸易，数字出版属于出版业态延伸。年报仅将人工智能列为影响数字出版行业的外部技术趋势，未披露自制或联合制作AI短剧、AI影视产品、相关客户、项目或收入，原有“出版业务”理由也不能证明AI影视关联，因此摘除AI影视短剧。",
+    "evidence_title": "黑龙江出版传媒股份有限公司2025年年度报告",
+    "evidence_date": "2026-04-25",
+    "evidence_url": "https://static.cninfo.com.cn/finalpage/2026-04-25/1225195929.PDF"
+  },
+  {
+    "code": "688004",
+    "name": "博汇科技",
+    "action": "纠错",
+    "pairs": [
+      {
+        "category": "AI应用",
+        "concepts": [
+          "AI内容审核"
+        ]
+      }
+    ],
+    "verdict": "核心",
+    "reason": "公司面向广电、融媒体、教育等客户交付视听信息技术产品，2025年报披露“慧视”多模态内容分析大模型及AI+视听安全能力矩阵，可对文本、音频、视频进行识别审核；微短剧仅是被监管审核的内容对象，并非公司制作短剧。故删除“短剧”，改为更准确的“AI内容审核”，AI已嵌入主力解决方案，定为核心。",
+    "evidence_title": "博汇科技：2025年年度报告",
+    "evidence_date": "2026-04-17",
+    "evidence_url": "http://money.finance.sina.com.cn/corp/view/vCB_AllBulletinDetail.php?stockid=688004&id=12102137"
+  },
+  {
+    "code": "688083",
+    "name": "中望软件",
+    "action": "纠错",
+    "pairs": [
+      {
+        "category": "AI应用",
+        "concepts": [
+          "AI制造"
+        ]
+      }
+    ],
+    "verdict": "相关",
+    "reason": "公司主营ZWCAD、ZW3D及CAE/CAM等研发设计工业软件，2025年报披露ZWCAD 2026已集成AI智能匹配、相似查找等功能，属于真实可用的AI设计工具，不能按传统CAD直接摘除。但AI主要是核心CAD产品的新增功能，未形成独立主要收入，原先按CAD主营直接定核心过宽，因此保留AI制造并下调为相关。",
+    "evidence_title": "广州中望龙腾软件股份有限公司2025年年度报告",
+    "evidence_date": "2026-04-23",
+    "evidence_url": "http://static.cninfo.com.cn/finalpage/2026-04-23/1225144244.PDF"
+  },
+  {
+    "code": "688088",
+    "name": "虹软科技",
+    "action": "新增",
+    "pairs": [
+      {
+        "category": "AI应用",
+        "concepts": [
+          "AI视觉"
+        ]
+      },
+      {
+        "category": "物理AI",
+        "concepts": [
+          "物理AI_机器视觉"
+        ]
+      }
+    ],
+    "verdict": "核心",
+    "reason": "公司主营即视觉人工智能算法及解决方案，2025年移动智能终端视觉收入7.15亿元、车载AI视觉收入1.92亿元，客户覆盖三星、小米、OPPO、vivo等，商业化已规模化，维持核心。手机影像等保留AI视觉；车载舱内舱外感知直接处理物理环境视觉信息，新增物理AI_机器视觉，并非仅因终端名称贴标签。",
+    "evidence_title": "虹软科技：2025年年度报告",
+    "evidence_date": "2026-04-21",
+    "evidence_url": "https://money.finance.sina.com.cn/corp/view/vCB_AllBulletinDetail.php?stockid=688088&id=12123649"
+  },
+  {
+    "code": "688095",
+    "name": "福昕软件",
+    "action": "纠错",
+    "pairs": [
+      {
+        "category": "AI应用",
+        "concepts": [
+          "AI办公"
+        ]
+      }
+    ],
+    "verdict": "相关",
+    "reason": "公司主营PDF/OFD文档软件，PDF Editor已集成AI助手，提供总结、问答、研究智能体等功能，且海外AI Assistant已单独订阅收费，属于真实AI办公产品。可是2026年8月投资者关系记录明确其付费用户规模尚小，AI尚非主要收入来源，不能仅凭PDF主营定为AI核心，故保留AI办公并由核心下调为相关。",
+    "evidence_title": "福建福昕软件开发股份有限公司投资者关系活动记录表",
+    "evidence_date": "2026-08-28",
+    "evidence_url": "https://pdf.dfcfw.com/pdf/H2_AN202608281828616234_1.pdf"
+  },
+  {
+    "code": "688111",
+    "name": "金山办公",
+    "action": "保留",
+    "pairs": [
+      {
+        "category": "AI应用",
+        "concepts": [
+          "AI办公"
+        ]
+      }
+    ],
+    "verdict": "核心",
+    "reason": "公司主营WPS Office及WPS 365，AI已深度嵌入文档、表格、演示、协作等核心办公流程，并推出WPS灵犀办公智能体。2025年末WPS AI国内月活超过8013万、同比增长307%，同时个人订阅和WPS 365持续商业化，属于主营产品的规模化AI应用而非规划或普通办公贴标，因此保留AI办公并维持核心。",
+    "evidence_title": "金山办公：2025年年度报告",
+    "evidence_date": "2026-03-26",
+    "evidence_url": "https://vip.stock.finance.sina.com.cn/corp/view/vCB_AllBulletinDetail.php?stockid=688111&id=12019050"
+  },
+  {
+    "code": "688228",
+    "name": "开普云",
+    "action": "纠错",
+    "pairs": [
+      {
+        "category": "AI应用",
+        "concepts": [
+          "AI大模型",
+          "AI内容审核"
+        ]
+      }
+    ],
+    "verdict": "核心",
+    "reason": "公司2025年业务已按AI大模型与算力、AI内容安全及AI行业应用划分，其中AI大模型与算力收入4086.37万元、AI内容安全收入7821.39万元，另有数智政务等交付，AI是明确主营且有收入。原AI办公不能概括其实际产品，改列AI大模型和AI内容审核，维持核心。",
+    "evidence_title": "开普云信息科技股份有限公司2025年年度报告摘要",
+    "evidence_date": "2026-04-24",
+    "evidence_url": "http://static.cninfo.com.cn/finalpage/2026-04-24/1225173146.PDF"
+  },
+  {
+    "code": "688229",
+    "name": "博睿数据",
+    "action": "保留",
+    "pairs": [
+      {
+        "category": "AI应用",
+        "concepts": [
+          "AI运维"
+        ]
+      }
+    ],
+    "verdict": "核心",
+    "reason": "公司主营业态就是应用性能监测、可观测性软件及企业IT运维服务，Bonree ONE将动态基线、知识图谱和大模型用于告警收敛、根因定位和运维处置，2025年上半年该产品收入同比增长97.93%，说明AI运维已有客户付费和规模交付，并非传统监控换名。AI能力与主营产品直接一体，保留AI运维及核心。",
+    "evidence_title": "北京博睿宏远数据科技股份有限公司2025年年度报告摘要",
+    "evidence_date": "2026-04-28",
+    "evidence_url": "https://static.cninfo.com.cn/finalpage/2026-04-28/1225214463.PDF"
+  },
+  {
+    "code": "688327",
+    "name": "云从科技-UW",
+    "action": "纠错",
+    "pairs": [
+      {
+        "category": "AI应用",
+        "concepts": [
+          "AI视觉",
+          "AI大模型"
+        ]
+      }
+    ],
+    "verdict": "核心",
+    "reason": "iFinD及年报均明确公司为人机协同操作系统和人工智能解决方案供应商，收入来自智慧治理、出行、金融、商业等AI项目，并已有从容多模态大模型、智能客服及大模型智用一体机等交付，AI不是新增探索业务。原“相关”低估主营属性，故上调核心；保留AI视觉，并补列已有产品依据的AI大模型。此前物理AI_仿真训练标签继续保留且单独维持相关，不用AI应用核心判词覆盖。",
+    "evidence_title": "云从科技集团股份有限公司2025年年度报告摘要",
+    "evidence_date": "2026-04-23",
+    "evidence_url": "https://static.cninfo.com.cn/finalpage/2026-04-23/1225149947.PDF"
+  },
+  {
+    "code": "688369",
+    "name": "致远互联",
+    "action": "保留",
+    "pairs": [
+      {
+        "category": "AI应用",
+        "concepts": [
+          "AI办公"
+        ]
+      }
+    ],
+    "verdict": "核心",
+    "reason": "公司主营协同管理软件及云服务，AI-COP、CoMi智能体和30余类业务Agent已用于智能公文、合同、会议、问数等政企场景。2025年AI关联合同订单达2.07亿元，相当于当年9.03亿元营收的约23%，已进入规模商业化且与主平台深度绑定，不是一般协同办公贴AI，因此保留AI办公并维持核心。",
+    "evidence_title": "致远互联2025年报&2026年一季报：AI业务加速落地 年度相关订单突破2亿元",
+    "evidence_date": "2026-04-21",
+    "evidence_url": "https://caijing.chinadaily.com.cn/a/202604/21/WS69e71462a310942cc49a89c9.html"
+  },
+  {
+    "code": "688500",
+    "name": "慧辰股份",
+    "action": "纠错",
+    "pairs": [
+      {
+        "category": "AI应用",
+        "concepts": [
+          "AI数据分析"
+        ]
+      }
+    ],
+    "verdict": "相关",
+    "reason": "公司主营基于数据的经营分析和行业解决方案，已推出慧AI、ChatBI、DataAgent及定性研究智能体，服务企业数据分析与决策，存在真实产品和客户交付；但2025年半年报仍将AIGC、Agent等列为创新业务战略重点，未证明AI营销成为主要收入。原AI营销范围过窄，改为AI数据分析，并由核心下调为相关。",
+    "evidence_title": "北京慧辰资道资讯股份有限公司2025年半年度报告",
+    "evidence_date": "2025-08-29",
+    "evidence_url": "http://static.cninfo.com.cn/finalpage/2025-08-29/1224610112.PDF"
+  },
+  {
+    "code": "688507",
+    "name": "索辰科技",
+    "action": "迁移",
+    "pairs": [
+      {
+        "category": "物理AI",
+        "concepts": [
+          "物理AI_仿真训练"
+        ]
+      }
+    ],
+    "verdict": "核心",
+    "reason": "公司传统主营为CAE软件，2025年推出“天工·开物”物理AI应用开发平台、机器人设计训练平台等，可完成物理仿真、合成数据和训练优化，且开物平台当年实现5815.89万元收入，属于真实商业交付。其直接标的是物理世界仿真训练而非泛AI制造，故从AI应用迁出并保留既有物理AI_仿真训练标签及核心判词；新收入证据进一步补足商业化理由，不与此前审计结论冲突。",
+    "evidence_title": "索辰科技卡位物理AI稀缺赛道：主业失血未解",
+    "evidence_date": "2026-06-11",
+    "evidence_url": "https://www.time-weekly.com/post/330174"
+  },
+  {
+    "code": "688787",
+    "name": "海天瑞声",
+    "action": "迁移",
+    "pairs": [
+      {
+        "category": "数据要素",
+        "concepts": [
+          "数据要素_训练数据"
+        ]
+      }
+    ],
+    "verdict": "核心",
+    "reason": "公司主营就是AI训练数据研发、生产和销售，语音、视觉及自然语言数据集经采集、清洗、标注后交付；标准数据集按使用授权收费，定制数据集按项目收取服务费，客户和商业模式清晰，维持核心。原AI语料属于AI应用泛化标签，实际直接产品为可授权及定制交付的训练数据，因此迁移至数据要素_训练数据。",
+    "evidence_title": "海天瑞声：2025年年度报告",
+    "evidence_date": "2026-04-24",
+    "evidence_url": "https://money.finance.sina.com.cn/corp/view/vCB_AllBulletinDetail.php?stockid=688787&id=12167706"
+  }
+]

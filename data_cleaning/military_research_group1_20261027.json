@@ -1,0 +1,1625 @@
+[
+ {
+  "code": "000519",
+  "name": "中兵红箭",
+  "pairs": [
+   {
+    "category": "军工",
+    "concept": "陆军",
+    "slot": 1
+   }
+  ],
+  "verdict": "核心",
+  "reasons": {
+   "陆军": "中兵红箭：特种装备（弹药）+超硬材料"
+  },
+  "business_summary": "民品和特种装备的生产和销售。",
+  "sector": "地面兵装Ⅱ/培育钻石/军民融合/军工",
+  "ifind_profile": {
+   "main_products": "超硬材料及其制品、专用汽车、汽车零部件、特种装备",
+   "main_business": "超硬材料及其制品和内燃机配件的研发、生产、销售",
+   "controller": "国务院国有资产监督管理委员会",
+   "website": "zbhj.norincogroup.com.cn"
+  },
+  "ifind_2025_segments": [
+   {
+    "industry_composition": "特种装备制造业:78.3856%;非金属矿物制品业:17.4223%;汽车制造业:4.1921%",
+    "industry": "特种装备制造业",
+    "industry_revenue_yi": 72.6944,
+    "industry_gross_margin_pct": "11.3984",
+    "product": "特种装备",
+    "product_revenue_yi": 72.6944,
+    "product_gross_margin_pct": "11.3984"
+   },
+   {
+    "industry_composition": "",
+    "industry": "非金属矿物制品业",
+    "industry_revenue_yi": 16.1573,
+    "industry_gross_margin_pct": "31.2211",
+    "product": "超硬材料",
+    "product_revenue_yi": 16.1573,
+    "product_gross_margin_pct": "31.2211"
+   },
+   {
+    "industry_composition": "",
+    "industry": "汽车制造业",
+    "industry_revenue_yi": 3.8877,
+    "industry_gross_margin_pct": "-0.6736",
+    "product": "汽车零部件",
+    "product_revenue_yi": 2.3608,
+    "product_gross_margin_pct": "-1.7851"
+   },
+   {
+    "industry_composition": "",
+    "industry": "",
+    "industry_revenue_yi": null,
+    "industry_gross_margin_pct": "",
+    "product": "改装汽车",
+    "product_revenue_yi": 1.5269,
+    "product_gross_margin_pct": "1.0449"
+   }
+  ]
+ },
+ {
+  "code": "000547",
+  "name": "航天发展",
+  "pairs": [
+   {
+    "category": "商业航天",
+    "concept": "国家队",
+    "slot": 1
+   },
+   {
+    "category": "军工",
+    "concept": "军工电子-电子对抗",
+    "slot": 2
+   }
+  ],
+  "verdict": "核心",
+  "reasons": {
+   "国家队": "航天发展：蓝军装备/电子对抗",
+   "军工电子-电子对抗": "航天发展：蓝军装备/电子对抗",
+   "军工电子-网络信息安全": "航天发展：蓝军装备/电子对抗"
+  },
+  "business_summary": "主营计算机、通信和其他电子设备制造业",
+  "sector": "计算机、通信和其他电子设备制造业",
+  "ifind_profile": {
+   "main_products": "蓝军体系及装备、新一代通信与指控装备、数据智能与安全",
+   "main_business": "电子蓝军、指控通信、电磁安防和发电设备四大主营业务",
+   "controller": "国务院国有资产监督管理委员会",
+   "website": "www.addsino.casic.cn"
+  },
+  "ifind_2025_segments": [
+   {
+    "industry_composition": "装备制造产业:47.0120%;防务装备产业:43.0536%;信息技术产业:9.3389%;其他民用三产:0.5955%",
+    "industry": "装备制造产业",
+    "industry_revenue_yi": 11.7573,
+    "industry_gross_margin_pct": "1.5079",
+    "product": "海洋装备、电力装备等产品",
+    "product_revenue_yi": 11.9187,
+    "product_gross_margin_pct": "2.0976"
+   },
+   {
+    "industry_composition": "",
+    "industry": "防务装备产业",
+    "industry_revenue_yi": 10.7674,
+    "industry_gross_margin_pct": "-11.1983",
+    "product": "新一代通信与指控装备产品",
+    "product_revenue_yi": 5.6032,
+    "product_gross_margin_pct": "29.6511"
+   },
+   {
+    "industry_composition": "",
+    "industry": "信息技术产业",
+    "industry_revenue_yi": 2.3356,
+    "industry_gross_margin_pct": "17.6789",
+    "product": "数字蓝军与蓝军装备产品",
+    "product_revenue_yi": 5.5495,
+    "product_gross_margin_pct": "-48.5304"
+   },
+   {
+    "industry_composition": "",
+    "industry": "其他民用三产",
+    "industry_revenue_yi": 0.1489,
+    "industry_gross_margin_pct": "57.4881",
+    "product": "网络信息安全产品",
+    "product_revenue_yi": 1.8767,
+    "product_gross_margin_pct": "54.7776"
+   },
+   {
+    "industry_composition": "",
+    "industry": "",
+    "industry_revenue_yi": null,
+    "industry_gross_margin_pct": "",
+    "product": "空间信息应用类产品",
+    "product_revenue_yi": 0.061,
+    "product_gross_margin_pct": "-1271.4907"
+   }
+  ]
+ },
+ {
+  "code": "000561",
+  "name": "烽火电子",
+  "pairs": [
+   {
+    "category": "军工",
+    "concept": "军工电子",
+    "slot": 1
+   }
+  ],
+  "verdict": "核心",
+  "reasons": {
+   "军工电子": "主营：通信装备、雷达及电声器材科；与本标签一致"
+  },
+  "business_summary": "主营计算机、通信和其他电子设备制造业",
+  "sector": "计算机、通信和其他电子设备制造业",
+  "ifind_profile": {
+   "main_products": "无线通信设备、航空搜救定位设备、车机内音频控制系统、无线电高度表、多普勒雷达、导航设备、电声器材",
+   "main_business": "从事通信装备及电声器材的科研、生产、销售。",
+   "controller": "陕西省人民政府国有资产监督管理委员会",
+   "website": "www.fenghuo.cn"
+  },
+  "ifind_2025_segments": [
+   {
+    "industry_composition": "通信行业:56.4544%;雷达行业:39.1250%;其他:4.4206%",
+    "industry": "通信行业",
+    "industry_revenue_yi": 9.4464,
+    "industry_gross_margin_pct": "34.1794",
+    "product": "通信产品及配套",
+    "product_revenue_yi": 6.908,
+    "product_gross_margin_pct": "36.4964"
+   },
+   {
+    "industry_composition": "",
+    "industry": "雷达行业",
+    "industry_revenue_yi": 6.5467,
+    "industry_gross_margin_pct": "30.2252",
+    "product": "雷达产品及配套",
+    "product_revenue_yi": 6.5467,
+    "product_gross_margin_pct": "30.2252"
+   },
+   {
+    "industry_composition": "",
+    "industry": "其他",
+    "industry_revenue_yi": 0.7397,
+    "industry_gross_margin_pct": "51.7983",
+    "product": "电声器材",
+    "product_revenue_yi": 2.5384,
+    "product_gross_margin_pct": "27.8738"
+   },
+   {
+    "industry_composition": "",
+    "industry": "",
+    "industry_revenue_yi": null,
+    "industry_gross_margin_pct": "",
+    "product": "其他",
+    "product_revenue_yi": 0.7397,
+    "product_gross_margin_pct": "51.7983"
+   }
+  ]
+ },
+ {
+  "code": "000576",
+  "name": "甘化科工",
+  "pairs": [
+   {
+    "category": "军工",
+    "concept": "军工电子",
+    "slot": 1
+   }
+  ],
+  "verdict": "相关",
+  "reasons": {
+   "军工电子": "甘化科工：电源/合金材料+军工光电"
+  },
+  "business_summary": "主营计算机、通信和其他电子设备制造业",
+  "sector": "计算机、通信和其他电子设备制造业",
+  "ifind_profile": {
+   "main_products": "高性能特种合金材料制品、电源及相关产品、光电成像系统",
+   "main_business": "电源及相关产品、高性能特种合金材料制品等军工产品的研发、生产、销售。",
+   "controller": "胡成中",
+   "website": "www.gdganhua.com"
+  },
+  "ifind_2025_segments": [
+   {
+    "industry_composition": "制造业:97.0509%;其他:2.9491%",
+    "industry": "制造业",
+    "industry_revenue_yi": 4.9056,
+    "industry_gross_margin_pct": "44.7634",
+    "product": "电源及相关产品",
+    "product_revenue_yi": 2.509,
+    "product_gross_margin_pct": "65.8916"
+   },
+   {
+    "industry_composition": "",
+    "industry": "其他业务",
+    "industry_revenue_yi": 0.1491,
+    "industry_gross_margin_pct": "60.5298",
+    "product": "高性能特种合金材料制品",
+    "product_revenue_yi": 2.1078,
+    "product_gross_margin_pct": "19.2828"
+   },
+   {
+    "industry_composition": "",
+    "industry": "",
+    "industry_revenue_yi": null,
+    "industry_gross_margin_pct": "",
+    "product": "光电成像系统",
+    "product_revenue_yi": 0.2888,
+    "product_gross_margin_pct": "47.1765"
+   },
+   {
+    "industry_composition": "",
+    "industry": "",
+    "industry_revenue_yi": null,
+    "industry_gross_margin_pct": "",
+    "product": "其他业务",
+    "product_revenue_yi": 0.1491,
+    "product_gross_margin_pct": "60.5298"
+   }
+  ]
+ },
+ {
+  "code": "000733",
+  "name": "振华科技",
+  "pairs": [
+   {
+    "category": "PCB",
+    "concept": "MLCC",
+    "slot": 1
+   },
+   {
+    "category": "军工",
+    "concept": "军工电子",
+    "slot": 2
+   }
+  ],
+  "verdict": "核心",
+  "reasons": {
+   "MLCC": "振华科技：军用元器件/MLCC",
+   "军工电子": "振华科技：军用元器件/MLCC",
+   "军工电子-军用MLCC": "振华科技：军用元器件/MLCC"
+  },
+  "business_summary": "主营军工电子Ⅱ",
+  "sector": "军工电子Ⅱ/超级电容/第三代半导体/共封装光学(CPO)",
+  "ifind_profile": {
+   "main_products": "基础元器件、电子功能材料、混合集成电路、应用开发",
+   "main_business": "一是以移动通信终端、电子电话机、通信天线等为主的专用整机板块；二是以片式电阻、电容、电感、半导体二三极管、集成电路等为主的高新电子板块；三是以高压真空灭弧室、手机／动力电池、电子材料等为主的集成电路与关键元器件板块；四是以进出口贸易、信息化服务等为主的现代电子商贸与园区服务板块。",
+   "controller": "国务院国有资产监督管理委员会",
+   "website": "www.czst.com.cn"
+  },
+  "ifind_2025_segments": [
+   {
+    "industry_composition": "电子元器件制造业:100.0000%",
+    "industry": "电子元器件制造业",
+    "industry_revenue_yi": 57.5497,
+    "industry_gross_margin_pct": "45.9501",
+    "product": "新型电子元器件",
+    "product_revenue_yi": 57.0999,
+    "product_gross_margin_pct": "46.0205"
+   },
+   {
+    "industry_composition": "",
+    "industry": "",
+    "industry_revenue_yi": null,
+    "industry_gross_margin_pct": "",
+    "product": "现代服务业",
+    "product_revenue_yi": 0.4499,
+    "product_gross_margin_pct": "37.0112"
+   }
+  ]
+ },
+ {
+  "code": "000738",
+  "name": "航发控制",
+  "pairs": [
+   {
+    "category": "军工",
+    "concept": "航空发动机",
+    "slot": 1
+   },
+   {
+    "category": "低空经济",
+    "concept": "动力系统",
+    "slot": 2
+   }
+  ],
+  "verdict": "核心",
+  "reasons": {
+   "航空发动机": "航发控制：航空发动机控制系统",
+   "航空装备-航发控制系统": "航发控制：航空发动机控制系统",
+   "动力系统": "航发控制：航空发动机控制系统"
+  },
+  "business_summary": "主营铁路、船舶、航空航天和其他运输设备制造业",
+  "sector": "铁路、船舶、航空航天和其他运输设备制造业",
+  "ifind_profile": {
+   "main_products": "航空发动机及燃气轮机控制系统、国际合作、控制系统技术衍生产品",
+   "main_business": "航空与防务、燃机与非航空民品、国际合作三大业务",
+   "controller": "国务院国有资产监督管理委员会",
+   "website": "www.aaec.com.cn"
+  },
+  "ifind_2025_segments": [
+   {
+    "industry_composition": "制造业:100.0000%",
+    "industry": "制造业",
+    "industry_revenue_yi": 51.7163,
+    "industry_gross_margin_pct": "23.1291",
+    "product": "发动机控制系统及部件",
+    "product_revenue_yi": 45.819,
+    "product_gross_margin_pct": "23.2918"
+   },
+   {
+    "industry_composition": "",
+    "industry": "",
+    "industry_revenue_yi": null,
+    "industry_gross_margin_pct": "",
+    "product": "国际合作业务",
+    "product_revenue_yi": 4.0232,
+    "product_gross_margin_pct": "17.7270"
+   },
+   {
+    "industry_composition": "",
+    "industry": "",
+    "industry_revenue_yi": null,
+    "industry_gross_margin_pct": "",
+    "product": "控制系统技术衍生产品",
+    "product_revenue_yi": 1.8741,
+    "product_gross_margin_pct": "30.7483"
+   }
+  ]
+ },
+ {
+  "code": "000768",
+  "name": "中航西飞",
+  "pairs": [
+   {
+    "category": "军工",
+    "concept": "军贸",
+    "slot": 1
+   }
+  ],
+  "verdict": "核心",
+  "reasons": {
+   "军贸": "主营：军用飞机整机；与本标签一致",
+   "空军": "主营：军用飞机整机；与本标签一致"
+  },
+  "business_summary": "主营铁路、船舶、航空航天和其他运输设备制造业",
+  "sector": "铁路、船舶、航空航天和其他运输设备制造业",
+  "ifind_profile": {
+   "main_products": "军用飞机整机、飞机零部件",
+   "main_business": "军民用大中型飞机整机及航空零部件等航空产品的研发、生产和销售,此外公司亦从事运输设备工业、建材工业相关产品及其他产品的生产和销售。",
+   "controller": "国务院国有资产监督管理委员会",
+   "website": "www.xac.com.cn"
+  },
+  "ifind_2025_segments": [
+   {
+    "industry_composition": "航空制造业:98.8645%;其他:1.1355%",
+    "industry": "航空工业产品",
+    "industry_revenue_yi": 405.4801,
+    "industry_gross_margin_pct": "6.4046",
+    "product": "飞机产品",
+    "product_revenue_yi": 405.4801,
+    "product_gross_margin_pct": "6.4046"
+   },
+   {
+    "industry_composition": "",
+    "industry": "其他工业产品",
+    "industry_revenue_yi": 4.6572,
+    "industry_gross_margin_pct": "39.2346",
+    "product": "其他产品",
+    "product_revenue_yi": 4.6572,
+    "product_gross_margin_pct": "39.2346"
+   }
+  ]
+ },
+ {
+  "code": "000901",
+  "name": "航天科技",
+  "pairs": [
+   {
+    "category": "商业航天",
+    "concept": "国家队",
+    "slot": 1
+   },
+   {
+    "category": "军工",
+    "concept": "惯性导航",
+    "slot": 2
+   }
+  ],
+  "verdict": "核心",
+  "reasons": {
+   "国家队": "航天科技：航天应用产品",
+   "惯性导航": "航天科技：航天应用产品",
+   "航天-航天配套": "航天科技：航天应用产品"
+  },
+  "business_summary": "主营汽车制造业",
+  "sector": "汽车制造业",
+  "ifind_profile": {
+   "main_products": "航天应用产品、汽车电子产品、平台软件、感知设备",
+   "main_business": "从事汽车电子、环保监测产品、航天产品、光机电测控及电网配套设备的研发、生产和销售等。",
+   "controller": "国务院国有资产监督管理委员会",
+   "website": "www.as-hitech.com"
+  },
+  "ifind_2025_segments": [
+   {
+    "industry_composition": "汽车电子制造业:76.9282%;航天制造业:15.8971%;其他制造业(信息系统集成和物联网技术服务业):6.7526%;其他业务收入/成本:0.4220%",
+    "industry": "仪表制造业",
+    "industry_revenue_yi": 42.4814,
+    "industry_gross_margin_pct": "20.2532",
+    "product": "汽车电子仪表",
+    "product_revenue_yi": 42.4814,
+    "product_gross_margin_pct": "20.2532"
+   },
+   {
+    "industry_composition": "",
+    "industry": "航空航天器制造业",
+    "industry_revenue_yi": 8.7787,
+    "industry_gross_margin_pct": "15.6346",
+    "product": "航天产品",
+    "product_revenue_yi": 8.7787,
+    "product_gross_margin_pct": "15.6346"
+   },
+   {
+    "industry_composition": "",
+    "industry": "信息系统集成和物联网技术服务业",
+    "industry_revenue_yi": 3.7289,
+    "industry_gross_margin_pct": "28.5166",
+    "product": "平台软件及感知设备",
+    "product_revenue_yi": 3.7289,
+    "product_gross_margin_pct": "28.5166"
+   },
+   {
+    "industry_composition": "",
+    "industry": "其他行业",
+    "industry_revenue_yi": 0.233,
+    "industry_gross_margin_pct": "72.9668",
+    "product": "其他",
+    "product_revenue_yi": 0.233,
+    "product_gross_margin_pct": "72.9668"
+   },
+   {
+    "industry_composition": "",
+    "industry": "内部抵销",
+    "industry_revenue_yi": -0.2821,
+    "industry_gross_margin_pct": "",
+    "product": "内部抵销",
+    "product_revenue_yi": -0.2821,
+    "product_gross_margin_pct": ""
+   }
+  ]
+ },
+ {
+  "code": "002025",
+  "name": "航天电器",
+  "pairs": [
+   {
+    "category": "商业航天",
+    "concept": "国家队",
+    "slot": 1
+   },
+   {
+    "category": "军工",
+    "concept": "军工电子",
+    "slot": 2
+   },
+   {
+    "category": "超节点",
+    "concept": "连接器",
+    "slot": 3
+   }
+  ],
+  "verdict": "核心",
+  "reasons": {
+   "国家队": "航天电器：连接器",
+   "军工电子": "航天电器：连接器",
+   "军工电子-军用连接器": "航天电器：连接器",
+   "连接器": "航天电器：连接器",
+   "液冷散热": "航天电器：连接器"
+  },
+  "business_summary": "高端连接器与互连一体化产品、微特电机与控制组件、继电器、光电器件等产品的研制和销售，以及为客户提供系统集成互连一体化解决方案。",
+  "sector": "军工电子Ⅱ/铜缆高速连接/共封装光学(CPO)/液冷服务器",
+  "ifind_profile": {
+   "main_products": "连接器及互连一体化产品、电机与控制组件、继电器、光通信器件",
+   "main_business": "高端继电器、连接器、微特电机、光电子产品、电缆组件的研制、生产和销售",
+   "controller": "国务院国有资产监督管理委员会",
+   "website": "www.gzhtdq.com.cn"
+  },
+  "ifind_2025_segments": [
+   {
+    "industry_composition": "电子元器件制造业:98.1864%;其他业务:1.8136%",
+    "industry": "电子元器件制造业",
+    "industry_revenue_yi": 57.1429,
+    "industry_gross_margin_pct": "30.0436",
+    "product": "连接器",
+    "product_revenue_yi": 39.842,
+    "product_gross_margin_pct": "29.0740"
+   },
+   {
+    "industry_composition": "",
+    "industry": "其他业务",
+    "industry_revenue_yi": 1.0555,
+    "industry_gross_margin_pct": "60.5915",
+    "product": "电机",
+    "product_revenue_yi": 13.5794,
+    "product_gross_margin_pct": "30.6726"
+   },
+   {
+    "industry_composition": "",
+    "industry": "",
+    "industry_revenue_yi": null,
+    "industry_gross_margin_pct": "",
+    "product": "继电器",
+    "product_revenue_yi": 2.404,
+    "product_gross_margin_pct": "44.8768"
+   },
+   {
+    "industry_composition": "",
+    "industry": "",
+    "industry_revenue_yi": null,
+    "industry_gross_margin_pct": "",
+    "product": "光通信器件",
+    "product_revenue_yi": 1.3175,
+    "product_gross_margin_pct": "25.8137"
+   },
+   {
+    "industry_composition": "",
+    "industry": "",
+    "industry_revenue_yi": null,
+    "industry_gross_margin_pct": "",
+    "product": "其他业务",
+    "product_revenue_yi": 1.0555,
+    "product_gross_margin_pct": "60.5915"
+   }
+  ]
+ },
+ {
+  "code": "002049",
+  "name": "紫光国微",
+  "pairs": [
+   {
+    "category": "军工",
+    "concept": "军工电子-军工芯片",
+    "slot": 1
+   }
+  ],
+  "verdict": "核心",
+  "reasons": {
+   "军工电子-军工芯片": "主营：特种集成电路业务；与本标签一致",
+   "军工电子-特种集成电路": "主营：特种集成电路业务；与本标签一致"
+  },
+  "business_summary": "特种集成电路、智能安全芯片为两大主业。",
+  "sector": "半导体/存储芯片/汽车芯片/MCU芯片",
+  "ifind_profile": {
+   "main_products": "特种集成电路、智能安全芯片、石英晶体频率器件",
+   "main_business": "集成电路芯片设计与销售,压电石英晶体元器件的开发、生产和销售,LED蓝宝石衬底材料生产和销售。",
+   "controller": "",
+   "website": "www.gosinoic.com"
+  },
+  "ifind_2025_segments": [
+   {
+    "industry_composition": "集成电路:93.7084%;电子元器件:5.2116%;其他业务:1.0801%",
+    "industry": "集成电路",
+    "industry_revenue_yi": 57.5915,
+    "industry_gross_margin_pct": "58.0851",
+    "product": "集成电路",
+    "product_revenue_yi": 32.1201,
+    "product_gross_margin_pct": "70.2623"
+   },
+   {
+    "industry_composition": "",
+    "industry": "电子元器件制造业",
+    "industry_revenue_yi": 3.2029,
+    "industry_gross_margin_pct": "11.8175",
+    "product": "智能安全芯片",
+    "product_revenue_yi": 25.4714,
+    "product_gross_margin_pct": "42.7292"
+   },
+   {
+    "industry_composition": "",
+    "industry": "其他业务",
+    "industry_revenue_yi": 0.6638,
+    "industry_gross_margin_pct": "47.4547",
+    "product": "晶体元器件",
+    "product_revenue_yi": 3.2029,
+    "product_gross_margin_pct": "11.8175"
+   },
+   {
+    "industry_composition": "",
+    "industry": "",
+    "industry_revenue_yi": null,
+    "industry_gross_margin_pct": "",
+    "product": "其他",
+    "product_revenue_yi": 0.6638,
+    "product_gross_margin_pct": "47.4547"
+   }
+  ]
+ },
+ {
+  "code": "002111",
+  "name": "威海广泰",
+  "pairs": [
+   {
+    "category": "军工",
+    "concept": "航空地面装备",
+    "slot": 1
+   },
+   {
+    "category": "低空经济",
+    "concept": "运维",
+    "slot": 2
+   }
+  ],
+  "verdict": "相关",
+  "reasons": {
+   "航空地面装备": "威海广泰：空港装备+无人机",
+   "无人机": "威海广泰：空港装备+无人机",
+   "运维": "威海广泰：空港地面装备+无人机",
+   "应急": "威海广泰：空港地面装备+无人机"
+  },
+  "business_summary": "主营大飞机",
+  "sector": "大飞机/成飞概念",
+  "ifind_profile": {
+   "main_products": "飞机集装货物装载机、飞机牵引车、旅客摆渡车、飞机除冰车、气源车、飞机罐式加油车、机场除雪车、400Hz飞机用电源、旅客登机桥",
+   "main_business": "航空产业、消防产业和军工业务。",
+   "controller": "李光太,李文轩",
+   "website": "www.guangtai.com.cn"
+  },
+  "ifind_2025_segments": [
+   {
+    "industry_composition": "保障装备制造业:99.8768%;其他行业:0.1232%",
+    "industry": "保障装备制造业",
+    "industry_revenue_yi": 33.192,
+    "industry_gross_margin_pct": "24.3786",
+    "product": "空港地面设备",
+    "product_revenue_yi": 21.0201,
+    "product_gross_margin_pct": "32.3403"
+   },
+   {
+    "industry_composition": "",
+    "industry": "其他设备",
+    "industry_revenue_yi": 0.0409,
+    "industry_gross_margin_pct": "67.6177",
+    "product": "消防设备",
+    "product_revenue_yi": 10.7719,
+    "product_gross_margin_pct": "11.7901"
+   },
+   {
+    "industry_composition": "",
+    "industry": "",
+    "industry_revenue_yi": null,
+    "industry_gross_margin_pct": "",
+    "product": "其他设备",
+    "product_revenue_yi": 1.4409,
+    "product_gross_margin_pct": "3.5697"
+   }
+  ]
+ },
+ {
+  "code": "002149",
+  "name": "西部材料",
+  "pairs": [
+   {
+    "category": "可控核聚变",
+    "concept": "第一壁产品",
+    "slot": 1
+   },
+   {
+    "category": "商业航天",
+    "concept": "spacex-供应商",
+    "slot": 2
+   },
+   {
+    "category": "军工",
+    "concept": "军工材料",
+    "slot": 3
+   }
+  ],
+  "verdict": "核心",
+  "reasons": {
+   "第一壁产品": "西部材料：钛/锆加工材，航天用材",
+   "spacex-供应商": "西部材料：钛/锆加工材，航天用材",
+   "军工材料": "西部材料：钛/锆加工材，航天用材",
+   "军工材料-钛材": "西部材料：钛/锆加工材，航天用材"
+  },
+  "business_summary": "主营有色金属冶炼和压延加工业",
+  "sector": "有色金属冶炼和压延加工业",
+  "ifind_profile": {
+   "main_products": "钛制品、其他稀有金属",
+   "main_business": "稀有金属材料的研发、生产和销售",
+   "controller": "陕西省财政厅",
+   "website": "www.c-wmm.com"
+  },
+  "ifind_2025_segments": [
+   {
+    "industry_composition": "稀有金属压延加工:100.0000%",
+    "industry": "稀有金属压延加工",
+    "industry_revenue_yi": 32.3054,
+    "industry_gross_margin_pct": "17.6242",
+    "product": "钛制品",
+    "product_revenue_yi": 22.0974,
+    "product_gross_margin_pct": "17.0958"
+   },
+   {
+    "industry_composition": "",
+    "industry": "",
+    "industry_revenue_yi": null,
+    "industry_gross_margin_pct": "",
+    "product": "其他金属产品",
+    "product_revenue_yi": 8.6894,
+    "product_gross_margin_pct": "21.2779"
+   },
+   {
+    "industry_composition": "",
+    "industry": "",
+    "industry_revenue_yi": null,
+    "industry_gross_margin_pct": "",
+    "product": "其他业务",
+    "product_revenue_yi": 1.5185,
+    "product_gross_margin_pct": "4.4068"
+   }
+  ]
+ },
+ {
+  "code": "002151",
+  "name": "北斗星通",
+  "pairs": [
+   {
+    "category": "军工",
+    "concept": "卫星-北斗导航",
+    "slot": 1
+   }
+  ],
+  "verdict": "相关",
+  "reasons": {
+   "卫星-北斗导航": "北斗星通：北斗芯片与数据服务",
+   "卫星-卫星应用": "北斗星通：北斗芯片与数据服务"
+  },
+  "business_summary": "主营军工电子Ⅱ",
+  "sector": "军工电子Ⅱ/军工信息化/卫星导航/商业航天",
+  "ifind_profile": {
+   "main_products": "行业及车载应用类芯片、消费类芯片、云增强服务、云辅助服务、海洋渔业位置数据服务、天线产品、代理产品、微波介质元器件、LTCC元器件、HTCC陶瓷产品",
+   "main_business": "导航定位产品、基于位置的信息系统应用、基于位置的运营服务。",
+   "controller": "周儒欣",
+   "website": "www.bdstar.com"
+  },
+  "ifind_2025_segments": [
+   {
+    "industry_composition": "芯片及数据服务:52.8603%;导航产品:38.8703%;陶瓷元器件:8.2694%",
+    "industry": "芯片及数据服务",
+    "industry_revenue_yi": 11.6959,
+    "industry_gross_margin_pct": "41.9570",
+    "product": "产品销售",
+    "product_revenue_yi": 20.8788,
+    "product_gross_margin_pct": "37.8618"
+   },
+   {
+    "industry_composition": "",
+    "industry": "导航产品",
+    "industry_revenue_yi": 8.6004,
+    "industry_gross_margin_pct": "31.0208",
+    "product": "运营服务",
+    "product_revenue_yi": 0.8174,
+    "product_gross_margin_pct": "23.8510"
+   },
+   {
+    "industry_composition": "",
+    "industry": "陶瓷元器件",
+    "industry_revenue_yi": 1.8297,
+    "industry_gross_margin_pct": "13.4094",
+    "product": "系统项目",
+    "product_revenue_yi": 0.4297,
+    "product_gross_margin_pct": "-65.0519"
+   }
+  ]
+ },
+ {
+  "code": "002179",
+  "name": "中航光电",
+  "pairs": [
+   {
+    "category": "光通信",
+    "concept": "MPO/连接器",
+    "slot": 1
+   },
+   {
+    "category": "超节点",
+    "concept": "连接器",
+    "slot": 2
+   },
+   {
+    "category": "军工",
+    "concept": "军工电子",
+    "slot": 3
+   },
+   {
+    "category": "光通信",
+    "concept": "MPO/连接器",
+    "slot": 0
+   },
+   {
+    "category": "光通信",
+    "concept": "连接器",
+    "slot": 0
+   },
+   {
+    "category": "光通信",
+    "concept": "军工电子",
+    "slot": 0
+   },
+   {
+    "category": "超节点",
+    "concept": "MPO/连接器",
+    "slot": 0
+   },
+   {
+    "category": "超节点",
+    "concept": "连接器",
+    "slot": 0
+   },
+   {
+    "category": "超节点",
+    "concept": "军工电子",
+    "slot": 0
+   },
+   {
+    "category": "军工",
+    "concept": "MPO/连接器",
+    "slot": 0
+   },
+   {
+    "category": "军工",
+    "concept": "连接器",
+    "slot": 0
+   },
+   {
+    "category": "军工",
+    "concept": "军工电子",
+    "slot": 0
+   }
+  ],
+  "verdict": "核心",
+  "reasons": {
+   "MPO": "主营：中高端光、电、流体连接技术与产品的研究与开发；与本标签一致",
+   "连接器": "主营：中高端光、电、流体连接技术与产品的研究与开发；与本标签一致",
+   "军工电子": "主营：中高端光、电、流体连接技术与产品的研究与开发；与本标签一致",
+   "军工电子-军用连接器": "主营：中高端光、电、流体连接技术与产品的研究与开发；与本标签一致"
+  },
+  "business_summary": "中高端光、电、流体连接技术与产品的研究与开发。",
+  "sector": "军工电子Ⅱ/铜缆高速连接/光纤概念/6G概念",
+  "ifind_profile": {
+   "main_products": "光、电、流体连接器、光电子器件、线缆组件、集成化设备",
+   "main_business": "光电元器件及电子信息产品的生产销售",
+   "controller": "中国航空工业集团有限公司",
+   "website": "www.jonhon.cn"
+  },
+  "ifind_2025_segments": [
+   {
+    "industry_composition": "连接器行业:98.5352%;其他行业:1.4648%",
+    "industry": "连接器行业",
+    "industry_revenue_yi": 210.728,
+    "industry_gross_margin_pct": "29.0304",
+    "product": "电连接器及集成互连组件",
+    "product_revenue_yi": 159.4267,
+    "product_gross_margin_pct": "31.7169"
+   },
+   {
+    "industry_composition": "",
+    "industry": "医疗行业",
+    "industry_revenue_yi": 3.1326,
+    "industry_gross_margin_pct": "39.9697",
+    "product": "光连接器及其他光器件以及光电设备",
+    "product_revenue_yi": 36.5877,
+    "product_gross_margin_pct": "23.4398"
+   },
+   {
+    "industry_composition": "",
+    "industry": "",
+    "industry_revenue_yi": null,
+    "industry_gross_margin_pct": "",
+    "product": "流体连接器及组件、齿科及其他产品",
+    "product_revenue_yi": 17.8462,
+    "product_gross_margin_pct": "18.4133"
+   }
+  ]
+ },
+ {
+  "code": "002190",
+  "name": "成飞集成",
+  "pairs": [
+   {
+    "category": "军工",
+    "concept": "军工配套",
+    "slot": 0
+   }
+  ],
+  "verdict": "相关",
+  "reasons": {
+   "军工配套": "成飞集成：工装模具/汽车零部件，航空配套为延伸"
+  },
+  "business_summary": "主营汽车制造业",
+  "sector": "汽车制造业",
+  "ifind_profile": {
+   "main_products": "工装模具及汽车零部件、航空零部件",
+   "main_business": "工模具设计与制造、汽车零部件生产、航空零部件数控加工。",
+   "controller": "中国航空工业集团有限公司",
+   "website": "www.cac-citc.com"
+  },
+  "ifind_2025_segments": [
+   {
+    "industry_composition": "制造业:100.0000%",
+    "industry": "制造业",
+    "industry_revenue_yi": 23.0812,
+    "industry_gross_margin_pct": "7.9500",
+    "product": "工装模具及汽车零部件",
+    "product_revenue_yi": 21.8668,
+    "product_gross_margin_pct": "7.8295"
+   },
+   {
+    "industry_composition": "",
+    "industry": "",
+    "industry_revenue_yi": null,
+    "industry_gross_margin_pct": "",
+    "product": "航空零部件",
+    "product_revenue_yi": 1.0342,
+    "product_gross_margin_pct": "-0.3056"
+   },
+   {
+    "industry_composition": "",
+    "industry": "",
+    "industry_revenue_yi": null,
+    "industry_gross_margin_pct": "",
+    "product": "其他业务",
+    "product_revenue_yi": 0.1801,
+    "product_gross_margin_pct": "69.9655"
+   }
+  ]
+ },
+ {
+  "code": "002222",
+  "name": "福晶科技",
+  "pairs": [
+   {
+    "category": "军工",
+    "concept": "军工电子-激光晶体",
+    "slot": 1
+   }
+  ],
+  "verdict": "核心",
+  "reasons": {
+   "军工电子-激光晶体": "主营：晶体元器件、精密光学元件和激光器件；与本标签一致"
+  },
+  "business_summary": "晶体元器件、精密光学元件及激光器件等产品的研发、制造和销售。",
+  "sector": "光学光电子/光纤概念/共封装光学(CPO)/海峡两岸",
+  "ifind_profile": {
+   "main_products": "晶体元器件、精密光学元件、激光器件",
+   "main_business": "晶体元器件、精密光学元件及激光器件等产品的研发、生产和销售。",
+   "controller": "中国科学院福建物质结构研究所",
+   "website": "www.castech.com"
+  },
+  "ifind_2025_segments": [
+   {
+    "industry_composition": "光电子行业:100.0000%",
+    "industry": "光电子行业",
+    "industry_revenue_yi": 11.5778,
+    "industry_gross_margin_pct": "51.1820",
+    "product": "激光光学元器件",
+    "product_revenue_yi": 4.5501,
+    "product_gross_margin_pct": "45.3260"
+   },
+   {
+    "industry_composition": "",
+    "industry": "",
+    "industry_revenue_yi": null,
+    "industry_gross_margin_pct": "",
+    "product": "非线性光学晶体",
+    "product_revenue_yi": 2.6669,
+    "product_gross_margin_pct": "74.0341"
+   },
+   {
+    "industry_composition": "",
+    "industry": "",
+    "industry_revenue_yi": null,
+    "industry_gross_margin_pct": "",
+    "product": "激光器件",
+    "product_revenue_yi": 2.0405,
+    "product_gross_margin_pct": "28.3633"
+   },
+   {
+    "industry_composition": "",
+    "industry": "",
+    "industry_revenue_yi": null,
+    "industry_gross_margin_pct": "",
+    "product": "激光晶体",
+    "product_revenue_yi": 2.0194,
+    "product_gross_margin_pct": "61.2574"
+   },
+   {
+    "industry_composition": "",
+    "industry": "",
+    "industry_revenue_yi": null,
+    "industry_gross_margin_pct": "",
+    "product": "其他",
+    "product_revenue_yi": 0.3008,
+    "product_gross_margin_pct": "24.3087"
+   }
+  ]
+ },
+ {
+  "code": "002265",
+  "name": "建设工业",
+  "pairs": [
+   {
+    "category": "军工",
+    "concept": "军工配套",
+    "slot": 0
+   }
+  ],
+  "verdict": "核心",
+  "reasons": {
+   "军工配套": "主营：特品；与本标签一致"
+  },
+  "business_summary": "主营汽车制造业",
+  "sector": "汽车制造业",
+  "ifind_profile": {
+   "main_products": "轻型武器装备、汽车动力系统、传动系统、转向系统、安全系统、机械转向器、脚踏板、转向轴、中间轴、驱动半轴、连杆、电机轴、商用车钢活塞、减速机齿坯",
+   "main_business": "枪械类轻武器、汽车零部件和战略性新兴业务的研发、生产和销售。",
+   "controller": "国务院国有资产监督管理委员会",
+   "website": "jianshe.csgc.com.cn"
+  },
+  "ifind_2025_segments": [
+   {
+    "industry_composition": "制造业:100.0000%",
+    "industry": "机械制造业",
+    "industry_revenue_yi": 45.0998,
+    "industry_gross_margin_pct": "17.0344",
+    "product": "",
+    "product_revenue_yi": null,
+    "product_gross_margin_pct": ""
+   }
+  ]
+ },
+ {
+  "code": "002342",
+  "name": "巨力索具",
+  "pairs": [
+   {
+    "category": "军工",
+    "concept": "军工材料",
+    "slot": 1
+   }
+  ],
+  "verdict": "边缘",
+  "reasons": {
+   "军工材料": "巨力索具：索具为主，军工材料只是客户场景"
+  },
+  "business_summary": "主营金属制品业",
+  "sector": "金属制品业",
+  "ifind_profile": {
+   "main_products": "软索具系列、链条系列、钢丝绳系列、钢丝绳索具系列、夹具吊梁系列、锻造索具系列、缆索系列、钢拉杆系列、重型装备系列、索具设备",
+   "main_business": "索具及相关产品的研发、设计、生产和销售",
+   "controller": "杨建忠,杨子,杨会德,杨建国",
+   "website": "www.julisling.com"
+  },
+  "ifind_2025_segments": [
+   {
+    "industry_composition": "金属制品业:39.8764%;通用设备制造业:38.8350%;纺织业:15.5301%;其他:5.7585%",
+    "industry": "金属制品业",
+    "industry_revenue_yi": 10.2495,
+    "industry_gross_margin_pct": "15.2568",
+    "product": "工程及金属索具",
+    "product_revenue_yi": 12.4897,
+    "product_gross_margin_pct": "15.8773"
+   },
+   {
+    "industry_composition": "",
+    "industry": "通用设备制造业",
+    "industry_revenue_yi": 9.9819,
+    "industry_gross_margin_pct": "14.1166",
+    "product": "钢丝绳及钢丝绳索具",
+    "product_revenue_yi": 7.306,
+    "product_gross_margin_pct": "13.4053"
+   },
+   {
+    "industry_composition": "",
+    "industry": "纺织业",
+    "industry_revenue_yi": 3.9918,
+    "industry_gross_margin_pct": "32.0459",
+    "product": "合成纤维吊装带索具",
+    "product_revenue_yi": 3.9918,
+    "product_gross_margin_pct": "32.0459"
+   },
+   {
+    "industry_composition": "",
+    "industry": "其他",
+    "industry_revenue_yi": 1.4801,
+    "industry_gross_margin_pct": "32.6786",
+    "product": "其他",
+    "product_revenue_yi": 1.4801,
+    "product_gross_margin_pct": "32.6786"
+   },
+   {
+    "industry_composition": "",
+    "industry": "",
+    "industry_revenue_yi": null,
+    "industry_gross_margin_pct": "",
+    "product": "链条及链条索具",
+    "product_revenue_yi": 0.4357,
+    "product_gross_margin_pct": "2.3949"
+   }
+  ]
+ },
+ {
+  "code": "002383",
+  "name": "合众思壮",
+  "pairs": [
+   {
+    "category": "军工",
+    "concept": "军工电子",
+    "slot": 0
+   }
+  ],
+  "verdict": "相关",
+  "reasons": {
+   "军工电子": "合众思壮：导航定位，军民两用"
+  },
+  "business_summary": "主营军工电子Ⅱ",
+  "sector": "军工电子Ⅱ/卫星导航/时空大数据/商业航天",
+  "ifind_profile": {
+   "main_products": "测量测绘与建筑工程类、资源与公共事业类、智能制造类",
+   "main_business": "卫星导航定位软硬件产品及相关技术开发与服务。",
+   "controller": "河南省财政厅",
+   "website": "www.unistrong.com"
+  },
+  "ifind_2025_segments": [
+   {
+    "industry_composition": "测量测绘与建筑工程:41.7133%;资源与公共事业:31.6855%;智能制造:14.6188%;其他:11.9823%",
+    "industry": "测量测绘与建筑工程",
+    "industry_revenue_yi": 5.7122,
+    "industry_gross_margin_pct": "52.7131",
+    "product": "卫星导航系统技术及设备",
+    "product_revenue_yi": 13.6941,
+    "product_gross_margin_pct": "39.0945"
+   },
+   {
+    "industry_composition": "",
+    "industry": "资源与公共事业",
+    "industry_revenue_yi": 4.339,
+    "industry_gross_margin_pct": "22.6532",
+    "product": "",
+    "product_revenue_yi": null,
+    "product_gross_margin_pct": ""
+   },
+   {
+    "industry_composition": "",
+    "industry": "智能制造",
+    "industry_revenue_yi": 2.0019,
+    "industry_gross_margin_pct": "10.0602",
+    "product": "",
+    "product_revenue_yi": null,
+    "product_gross_margin_pct": ""
+   },
+   {
+    "industry_composition": "",
+    "industry": "其他",
+    "industry_revenue_yi": 1.6409,
+    "industry_gross_margin_pct": "70.5842",
+    "product": "",
+    "product_revenue_yi": null,
+    "product_gross_margin_pct": ""
+   }
+  ]
+ },
+ {
+  "code": "002389",
+  "name": "航天彩虹",
+  "pairs": [
+   {
+    "category": "可控核聚变",
+    "concept": "其他",
+    "slot": 1
+   },
+   {
+    "category": "军工",
+    "concept": "无人机",
+    "slot": 2
+   },
+   {
+    "category": "低空经济",
+    "concept": "无人机",
+    "slot": 3
+   }
+  ],
+  "verdict": "核心",
+  "reasons": {
+   "其他": "航天彩虹：无人机",
+   "无人机": "航天彩虹：无人机",
+   "军贸": "航天彩虹：无人机"
+  },
+  "business_summary": "主营铁路、船舶、航空航天和其他运输设备制造业",
+  "sector": "铁路、船舶、航空航天和其他运输设备制造业",
+  "ifind_profile": {
+   "main_products": "CH-3低成本中程多用途无人机、CH-4系列中空察打一体无人机、CH-5中高空长航时无人机、CH-9中高空长航时无人机、CH-817单兵便携式无人机蜂群系统、专为无人机研制的AR系列导弹、聚酯薄膜、光学膜",
+   "main_business": "无人机整机产品和应用服务；电容器专用电子薄膜的制造和销售。",
+   "controller": "国务院国有资产监督管理委员会",
+   "website": "www.htchuav.com"
+  },
+  "ifind_2025_segments": [
+   {
+    "industry_composition": "航空航天产品制造:73.8671%;塑料薄膜制造:24.8915%;其他:1.2414%",
+    "industry": "航空航天产品制造",
+    "industry_revenue_yi": 21.6465,
+    "industry_gross_margin_pct": "23.8558",
+    "product": "无人机及相关产品",
+    "product_revenue_yi": 18.3798,
+    "product_gross_margin_pct": "25.7578"
+   },
+   {
+    "industry_composition": "",
+    "industry": "电子元器件制品",
+    "industry_revenue_yi": 7.2944,
+    "industry_gross_margin_pct": "1.5457",
+    "product": "光学膜",
+    "product_revenue_yi": 3.6741,
+    "product_gross_margin_pct": "17.2631"
+   },
+   {
+    "industry_composition": "",
+    "industry": "其他",
+    "industry_revenue_yi": 0.3638,
+    "industry_gross_margin_pct": "67.2151",
+    "product": "背材膜及绝缘材料",
+    "product_revenue_yi": 3.6203,
+    "product_gross_margin_pct": "-14.4051"
+   },
+   {
+    "industry_composition": "",
+    "industry": "",
+    "industry_revenue_yi": null,
+    "industry_gross_margin_pct": "",
+    "product": "技术服务",
+    "product_revenue_yi": 3.2668,
+    "product_gross_margin_pct": "13.1549"
+   },
+   {
+    "industry_composition": "",
+    "industry": "",
+    "industry_revenue_yi": null,
+    "industry_gross_margin_pct": "",
+    "product": "其他",
+    "product_revenue_yi": 0.3638,
+    "product_gross_margin_pct": "67.2151"
+   }
+  ]
+ },
+ {
+  "code": "002414",
+  "name": "高德红外",
+  "pairs": [
+   {
+    "category": "军工",
+    "concept": "红外探测",
+    "slot": 1
+   }
+  ],
+  "verdict": "核心",
+  "reasons": {
+   "红外探测": "主营：红外焦平面探测器芯片板块；与本标签一致",
+   "导弹": "主营：红外焦平面探测器芯片板块；与本标签一致",
+   "军贸": "主营：红外焦平面探测器芯片板块；与本标签一致"
+  },
+  "business_summary": "主营军工电子Ⅱ",
+  "sector": "军工电子Ⅱ/军民融合/毫米波雷达/商业航天",
+  "ifind_profile": {
+   "main_products": "红外综合光电及完整装备系统、传统DY及信息化DY、房屋出租、技术服务",
+   "main_business": "红外热像仪产品的研发、生产和销售，并提供技术服务",
+   "controller": "黄立",
+   "website": "www.wuhan-guide.com"
+  },
+  "ifind_2025_segments": [
+   {
+    "industry_composition": "其他电子设备制造业:99.3737%;其他:0.3724%;租赁业:0.2299%;技术服务业:0.0240%",
+    "industry": "其他电子设备制造业",
+    "industry_revenue_yi": 45.899,
+    "industry_gross_margin_pct": "56.4765",
+    "product": "红外热成像仪及综合光电系统",
+    "product_revenue_yi": 44.8877,
+    "product_gross_margin_pct": "57.8093"
+   },
+   {
+    "industry_composition": "",
+    "industry": "其他",
+    "industry_revenue_yi": 0.172,
+    "industry_gross_margin_pct": "-1.5051",
+    "product": "传统弹药及信息化弹药",
+    "product_revenue_yi": 1.0113,
+    "product_gross_margin_pct": "-2.6795"
+   },
+   {
+    "industry_composition": "",
+    "industry": "租赁业",
+    "industry_revenue_yi": 0.1062,
+    "industry_gross_margin_pct": "89.2984",
+    "product": "其他",
+    "product_revenue_yi": 0.172,
+    "product_gross_margin_pct": "-1.5051"
+   },
+   {
+    "industry_composition": "",
+    "industry": "技术服务业",
+    "industry_revenue_yi": 0.0111,
+    "industry_gross_margin_pct": "13.0210",
+    "product": "房屋出租",
+    "product_revenue_yi": 0.1062,
+    "product_gross_margin_pct": "89.2984"
+   },
+   {
+    "industry_composition": "",
+    "industry": "",
+    "industry_revenue_yi": null,
+    "industry_gross_margin_pct": "",
+    "product": "技术服务",
+    "product_revenue_yi": 0.0111,
+    "product_gross_margin_pct": "13.0210"
+   }
+  ]
+ },
+ {
+  "code": "002465",
+  "name": "海格通信",
+  "pairs": [
+   {
+    "category": "商业航天",
+    "concept": "卫星-地面设备",
+    "slot": 1
+   },
+   {
+    "category": "军工",
+    "concept": "军工电子-军用通信",
+    "slot": 2
+   }
+  ],
+  "verdict": "核心",
+  "reasons": {
+   "卫星-地面设备": "海格通信：无线通信/北斗终端",
+   "卫星": "海格通信：无线通信/北斗终端",
+   "军工电子-军用通信": "海格通信：无线通信/北斗终端",
+   "卫星-北斗导航": "海格通信：无线通信/北斗终端"
+  },
+  "business_summary": "无线通信设备、北斗导航产品、模拟仿真器、民航通导设备等产品的研发、生产、销售、工程建设和提供相关的技术服务，飞机零部件加工服务和通信技术服务。",
+  "sector": "军工电子Ⅱ/军工信息化/卫星导航/国产航母",
+  "ifind_profile": {
+   "main_products": "无线通信、北斗导航、航空航天、数智生态",
+   "main_business": "通信设备、导航设备的研制、生产、销售和服务",
+   "controller": "广州市人民政府",
+   "website": "www.haige.com"
+  },
+  "ifind_2025_segments": [
+   {
+    "industry_composition": "服务业:58.3158%;工业:41.6842%",
+    "industry": "服务业",
+    "industry_revenue_yi": 25.5891,
+    "industry_gross_margin_pct": "15.4393",
+    "product": "数智生态",
+    "product_revenue_yi": 23.3478,
+    "product_gross_margin_pct": "12.2670"
+   },
+   {
+    "industry_composition": "",
+    "industry": "工业",
+    "industry_revenue_yi": 18.2911,
+    "industry_gross_margin_pct": "35.3431",
+    "product": "无线通信",
+    "product_revenue_yi": 10.999,
+    "product_gross_margin_pct": "32.1807"
+   },
+   {
+    "industry_composition": "",
+    "industry": "",
+    "industry_revenue_yi": null,
+    "industry_gross_margin_pct": "",
+    "product": "北斗导航",
+    "product_revenue_yi": 5.1539,
+    "product_gross_margin_pct": "46.8345"
+   },
+   {
+    "industry_composition": "",
+    "industry": "",
+    "industry_revenue_yi": null,
+    "industry_gross_margin_pct": "",
+    "product": "模拟仿真",
+    "product_revenue_yi": 3.5764,
+    "product_gross_margin_pct": "25.3022"
+   },
+   {
+    "industry_composition": "",
+    "industry": "",
+    "industry_revenue_yi": null,
+    "industry_gross_margin_pct": "",
+    "product": "其他业务",
+    "product_revenue_yi": 0.8031,
+    "product_gross_margin_pct": "86.2964"
+   }
+  ]
+ },
+ {
+  "code": "002519",
+  "name": "银河电子",
+  "pairs": [
+   {
+    "category": "商业航天",
+    "concept": "卫星",
+    "slot": 1
+   },
+   {
+    "category": "军工",
+    "concept": "陆军-装备配套",
+    "slot": 2
+   }
+  ],
+  "verdict": "核心",
+  "reasons": {
+   "卫星": "银河电子：智能机电/机顶盒",
+   "陆军-装备配套": "银河电子：智能机电/机顶盒"
+  },
+  "business_summary": "主营计算机、通信和其他电子设备制造业",
+  "sector": "计算机、通信和其他电子设备制造业",
+  "ifind_profile": {
+   "main_products": "智能特种装备、新能源精密结构件、智能终端、智能网关",
+   "main_business": "以军工装备为主的智能机电、新能源电动汽车关键部件及数字电视智能终端三大业务。",
+   "controller": "",
+   "website": "www.yinhe.com"
+  },
+  "ifind_2025_segments": [
+   {
+    "industry_composition": "工业:100.0000%",
+    "industry": "工业",
+    "industry_revenue_yi": 5.4778,
+    "industry_gross_margin_pct": "22.3581",
+    "product": "智能机电产品",
+    "product_revenue_yi": 2.7406,
+    "product_gross_margin_pct": "27.2325"
+   },
+   {
+    "industry_composition": "",
+    "industry": "",
+    "industry_revenue_yi": null,
+    "industry_gross_margin_pct": "",
+    "product": "新能源产品",
+    "product_revenue_yi": 2.3714,
+    "product_gross_margin_pct": "7.9603"
+   },
+   {
+    "industry_composition": "",
+    "industry": "",
+    "industry_revenue_yi": null,
+    "industry_gross_margin_pct": "",
+    "product": "其他业务",
+    "product_revenue_yi": 0.3659,
+    "product_gross_margin_pct": "79.1667"
+   }
+  ]
+ },
+ {
+  "code": "002535",
+  "name": "林州重机",
+  "pairs": [
+   {
+    "category": "军工",
+    "concept": "军工配套",
+    "slot": 0
+   }
+  ],
+  "verdict": "边缘",
+  "reasons": {
+   "军工配套": "林州重机：煤矿机械为主"
+  },
+  "business_summary": "主营专用设备制造业",
+  "sector": "专用设备制造业",
+  "ifind_profile": {
+   "main_products": "煤矿机械、煤矿综合服务、军工产品系列",
+   "main_business": "煤矿机械、防爆电器、机器人产品制造、销售、维修及租赁服务;煤炭销售;矿建工程服务和生铁及铁精粉业务",
+   "controller": "郭现生,韩录云,郭浩,郭钏",
+   "website": "www.lzzj.com"
+  },
+  "ifind_2025_segments": [
+   {
+    "industry_composition": "煤矿机械及综合服务:95.9168%;其他业务:2.4516%;军工产品系列:1.6316%",
+    "industry": "煤矿机械及综合服务",
+    "industry_revenue_yi": 10.8184,
+    "industry_gross_margin_pct": "24.1653",
+    "product": "矿山机械",
+    "product_revenue_yi": 9.7466,
+    "product_gross_margin_pct": "21.9738"
+   },
+   {
+    "industry_composition": "",
+    "industry": "其他业务",
+    "industry_revenue_yi": 0.2765,
+    "industry_gross_margin_pct": "74.9886",
+    "product": "矿建服务",
+    "product_revenue_yi": 1.0718,
+    "product_gross_margin_pct": "44.0943"
+   },
+   {
+    "industry_composition": "",
+    "industry": "军工产品系列",
+    "industry_revenue_yi": 0.184,
+    "industry_gross_margin_pct": "18.2904",
+    "product": "其他业务",
+    "product_revenue_yi": 0.2765,
+    "product_gross_margin_pct": "74.9886"
+   },
+   {
+    "industry_composition": "",
+    "industry": "",
+    "industry_revenue_yi": null,
+    "industry_gross_margin_pct": "",
+    "product": "军工产品系列",
+    "product_revenue_yi": 0.184,
+    "product_gross_margin_pct": "18.2904"
+   }
+  ]
+ },
+ {
+  "code": "002625",
+  "name": "光启技术",
+  "pairs": [
+   {
+    "category": "军工",
+    "concept": "军工材料",
+    "slot": 1
+   }
+  ],
+  "verdict": "核心",
+  "reasons": {
+   "军工材料": "主营：超材料功能结构件的设计与制造；与本标签一致"
+  },
+  "business_summary": "超材料复杂功能结构件的研发、生产及销售。",
+  "sector": "航空装备Ⅱ/商业航天/军民融合/智能穿戴",
+  "ifind_profile": {
+   "main_products": "超材料功能结构件、先进高分子材料、功能预浸料、柔性超材料载体、复合材料结构件、超材料蜂窝芯材",
+   "main_business": "超材料尖端装备的研制与生产。",
+   "controller": "刘若鹏",
+   "website": ""
+  },
+  "ifind_2025_segments": [
+   {
+    "industry_composition": "超材料行业:99.4965%;其他:0.5035%",
+    "industry": "超材料行业",
+    "industry_revenue_yi": 20.3542,
+    "industry_gross_margin_pct": "49.1278",
+    "product": "超材料产品",
+    "product_revenue_yi": 17.9587,
+    "product_gross_margin_pct": "52.2206"
+   },
+   {
+    "industry_composition": "",
+    "industry": "其他",
+    "industry_revenue_yi": 0.103,
+    "industry_gross_margin_pct": "17.6678",
+    "product": "超材料研发业务",
+    "product_revenue_yi": 2.3955,
+    "product_gross_margin_pct": "25.9417"
+   },
+   {
+    "industry_composition": "",
+    "industry": "",
+    "industry_revenue_yi": null,
+    "industry_gross_margin_pct": "",
+    "product": "下角料等",
+    "product_revenue_yi": 0.0566,
+    "product_gross_margin_pct": "-23.7032"
+   },
+   {
+    "industry_composition": "",
+    "industry": "",
+    "industry_revenue_yi": null,
+    "industry_gross_margin_pct": "",
+    "product": "其他",
+    "product_revenue_yi": 0.0464,
+    "product_gross_margin_pct": "68.0482"
+   }
+  ]
+ }
+]

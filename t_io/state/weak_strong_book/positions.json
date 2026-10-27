@@ -1,36 +1,6 @@
 {
-  "updated_at": "2026-10-23 14:50:07",
+  "updated_at": "2026-10-27 14:50:08",
   "open": {
-    "300503": {
-      "entry_date": "2026-10-20",
-      "entry_price": 55.4978,
-      "qty": 900,
-      "dev20": -0.130298,
-      "gap": 0.03888677087304604,
-      "board": "机器人",
-      "days_held": 3,
-      "last_check_date": "2026-10-23"
-    },
-    "000887": {
-      "entry_date": "2026-10-20",
-      "entry_price": 17.37,
-      "qty": 100,
-      "dev20": -0.074276,
-      "gap": 0.020000000000000018,
-      "board": "机器人",
-      "days_held": 3,
-      "last_check_date": "2026-10-23"
-    },
-    "300587": {
-      "entry_date": "2026-10-20",
-      "entry_price": 4.1,
-      "qty": 200,
-      "dev20": -0.112335,
-      "gap": 0.014888337468982549,
-      "board": "基础化工",
-      "days_held": 3,
-      "last_check_date": "2026-10-23"
-    },
     "002549": {
       "entry_date": "2026-10-21",
       "entry_price": 13.68,
@@ -38,8 +8,48 @@
       "dev20": -0.023337,
       "gap": 0.07137315748642359,
       "board": "半导体",
-      "days_held": 2,
-      "last_check_date": "2026-10-23"
+      "days_held": 4,
+      "last_check_date": "2026-10-27"
+    },
+    "300014": {
+      "entry_date": "2026-10-26",
+      "entry_price": 46.4,
+      "qty": 2100,
+      "dev20": -0.072439,
+      "gap": 0.046469659372885275,
+      "board": "电池",
+      "days_held": 1,
+      "last_check_date": "2026-10-27"
+    },
+    "002520": {
+      "entry_date": "2026-10-27",
+      "entry_price": 6.41,
+      "qty": 400,
+      "dev20": -0.003895,
+      "gap": 0.06988352745424287,
+      "board": "机器人",
+      "days_held": 0,
+      "last_check_date": null
+    },
+    "600605": {
+      "entry_date": "2026-10-27",
+      "entry_price": 27.59,
+      "qty": 100,
+      "dev20": -0.035428,
+      "gap": 0.019302152932442418,
+      "board": "地产",
+      "days_held": 0,
+      "last_check_date": null
+    },
+    "000882": {
+      "entry_date": "2026-10-27",
+      "entry_price": 1.42,
+      "qty": 1800,
+      "dev20": -0.062395,
+      "gap": 0.014388489208633004,
+      "board": "大消费",
+      "days_held": 0,
+      "last_check_date": null
     }
   },
   "closed": {
@@ -209,6 +219,86 @@
       "exit_qty": 7000,
       "exit_reason": "horizon_expired",
       "exit_fee": 97.57,
+      "closed_by": "fill_event"
+    },
+    "688383": {
+      "entry_date": "2026-10-26",
+      "entry_price": 89.4246,
+      "qty": 1100,
+      "dev20": -0.248219,
+      "gap": 0.05556212318240927,
+      "board": "半导体",
+      "days_held": 1,
+      "last_check_date": "2026-10-27",
+      "exit_date": "2026-10-27",
+      "exit_price": 80.5242,
+      "exit_qty": 1100,
+      "exit_reason": "sl5_deep",
+      "exit_fee": 107.18,
+      "closed_by": "fill_event"
+    },
+    "000887": {
+      "entry_date": "2026-10-20",
+      "entry_price": 17.37,
+      "qty": 100,
+      "dev20": -0.074276,
+      "gap": 0.020000000000000018,
+      "board": "机器人",
+      "days_held": 5,
+      "last_check_date": "2026-10-27",
+      "exit_date": "2026-10-27",
+      "exit_price": 17.09,
+      "exit_qty": 100,
+      "exit_reason": "horizon_expired",
+      "exit_fee": 5.0,
+      "closed_by": "fill_event"
+    },
+    "688228": {
+      "entry_date": "2026-10-26",
+      "entry_price": 90.1267,
+      "qty": 1100,
+      "dev20": -0.10107,
+      "gap": 0.19368421052631568,
+      "board": "AI应用",
+      "days_held": 1,
+      "last_check_date": "2026-10-27",
+      "exit_date": "2026-10-27",
+      "exit_price": 72.2,
+      "exit_qty": 1100,
+      "exit_reason": "sl5_deep",
+      "exit_fee": 96.1,
+      "closed_by": "fill_event"
+    },
+    "300503": {
+      "entry_date": "2026-10-20",
+      "entry_price": 55.4978,
+      "qty": 900,
+      "dev20": -0.130298,
+      "gap": 0.03888677087304604,
+      "board": "机器人",
+      "days_held": 5,
+      "last_check_date": "2026-10-27",
+      "exit_date": "2026-10-27",
+      "exit_price": 60.4622,
+      "exit_qty": 900,
+      "exit_reason": "horizon_expired",
+      "exit_fee": 65.84,
+      "closed_by": "fill_event"
+    },
+    "300587": {
+      "entry_date": "2026-10-20",
+      "entry_price": 4.1,
+      "qty": 200,
+      "dev20": -0.112335,
+      "gap": 0.014888337468982549,
+      "board": "基础化工",
+      "days_held": 5,
+      "last_check_date": "2026-10-27",
+      "exit_date": "2026-10-27",
+      "exit_price": 3.84,
+      "exit_qty": 200,
+      "exit_reason": "horizon_expired",
+      "exit_fee": 5.0,
       "closed_by": "fill_event"
     }
   },

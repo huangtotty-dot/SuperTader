@@ -717,6 +717,27 @@ body.mw-winmode #multiWatchWin {
 .h-legend-item { white-space: nowrap; }
 .h-legend-item .h-verdict { margin: 0 3px 0 0; }
 
+/* 一级板块科普指南：使用主题变量与半透明底色，同时适配浅色和深色 GUI。 */
+.h-category-guide { margin: 2px 0 9px; padding: 11px 13px; color: var(--text);
+  background: rgba(88,166,255,.07); border: 1px solid rgba(88,166,255,.28);
+  border-left: 3px solid #388bfd; border-radius: 8px; }
+.h-category-guide-title { margin-bottom: 8px; font-size: 14px; line-height: 1.5; color: var(--text); }
+.h-category-guide-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px 20px; }
+.h-category-guide-section { min-width: 0; font-size: 11.5px; line-height: 1.7; }
+.h-category-guide-section h4 { margin-bottom: 2px; font-size: 12px; color: var(--text); }
+.h-category-guide-section p { color: var(--text-dim); }
+.h-category-guide-section ul { padding-left: 17px; color: var(--text-dim); }
+.h-category-guide-section li { margin: 1px 0; padding-left: 2px; }
+.h-category-guide-section li::marker { color: #388bfd; }
+@media (max-width: 900px) { .h-category-guide-grid { grid-template-columns: 1fr; } }
+@media (prefers-color-scheme: dark) {
+  .h-category-guide { color: #e6edf3; background: rgba(22,27,34,.96);
+    border-color: #30363d; border-left-color: #58a6ff; }
+  .h-category-guide-title, .h-category-guide-section h4 { color: #e6edf3; }
+  .h-category-guide-section p, .h-category-guide-section ul { color: #b1bac4; }
+  .h-category-guide-section li::marker { color: #58a6ff; }
+}
+
 /* ---- 两市成交额·数字浮窗（2026-10-27 owner 改需求：只要数字，不要图）----
    这个窗口没有 ECharts，内容就是三行文字：大数字 + 涨跌 + 一行明细。
    所以不再需要"缩小到某个阈值换排版"那套——把字号定死、允许明细换行即可。 */

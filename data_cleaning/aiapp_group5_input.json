@@ -1,0 +1,373 @@
+[
+  {
+    "code": "600228",
+    "name": "返利科技",
+    "pairs": [
+      {
+        "category": "AI应用",
+        "concepts": [
+          "AI营销"
+        ]
+      }
+    ],
+    "verdict": "相关",
+    "reasons": {
+      "AI营销": "返利科技：在线导购"
+    },
+    "business_summary": "",
+    "sector": ""
+  },
+  {
+    "code": "600556",
+    "name": "天下秀",
+    "pairs": [
+      {
+        "category": "AI应用",
+        "concepts": [
+          "AI营销"
+        ]
+      }
+    ],
+    "verdict": "核心",
+    "reasons": {
+      "AI营销": "天下秀：红人营销平台"
+    },
+    "business_summary": "主营互联网和相关服务",
+    "sector": "互联网和相关服务"
+  },
+  {
+    "code": "600588",
+    "name": "用友网络",
+    "pairs": [
+      {
+        "category": "AI应用",
+        "concepts": [
+          "AI办公"
+        ]
+      }
+    ],
+    "verdict": "核心",
+    "reasons": {
+      "AI办公": "用友网络：企业管理软件+AI",
+      "SaaS软件与服务": "用友网络：企业管理软件+AI"
+    },
+    "business_summary": "主营软件和信息技术服务业",
+    "sector": "软件和信息技术服务业"
+  },
+  {
+    "code": "600640",
+    "name": "国脉文化",
+    "pairs": [
+      {
+        "category": "AI应用",
+        "concepts": [
+          "AI影视短剧"
+        ]
+      }
+    ],
+    "verdict": "核心",
+    "reasons": {
+      "AI影视短剧": "国脉文化：数字内容"
+    },
+    "business_summary": "主营互联网和相关服务",
+    "sector": "互联网和相关服务"
+  },
+  {
+    "code": "600715",
+    "name": "文投控股",
+    "pairs": [
+      {
+        "category": "AI应用",
+        "concepts": [
+          "AI影视短剧"
+        ]
+      }
+    ],
+    "verdict": "核心",
+    "reasons": {
+      "AI影视短剧": "文投控股：院线+游戏+漫剧"
+    },
+    "business_summary": "主营广播、电视、电影和录音制作业",
+    "sector": "广播、电视、电影和录音制作业"
+  },
+  {
+    "code": "600825",
+    "name": "新华传媒",
+    "pairs": [
+      {
+        "category": "AI应用",
+        "concepts": [
+          "AI影视短剧"
+        ]
+      }
+    ],
+    "verdict": "相关",
+    "reasons": {
+      "AI影视短剧": "新华传媒：图书文教，短剧为衍生"
+    },
+    "business_summary": "主营新闻和出版业",
+    "sector": "新闻和出版业"
+  },
+  {
+    "code": "600880",
+    "name": "博瑞传播",
+    "pairs": [
+      {
+        "category": "AI应用",
+        "concepts": [
+          "AI营销"
+        ]
+      }
+    ],
+    "verdict": "相关",
+    "reasons": {
+      "AI营销": "博瑞传播：智慧管理/媒体"
+    },
+    "business_summary": "主营新闻和出版业",
+    "sector": "新闻和出版业"
+  },
+  {
+    "code": "600892",
+    "name": "大晟文化",
+    "pairs": [
+      {
+        "category": "AI应用",
+        "concepts": [
+          "AI影视短剧"
+        ]
+      }
+    ],
+    "verdict": "核心",
+    "reasons": {
+      "AI影视短剧": "大晟文化：影视+游戏"
+    },
+    "business_summary": "",
+    "sector": ""
+  },
+  {
+    "code": "600986",
+    "name": "浙文互联",
+    "pairs": [
+      {
+        "category": "AI应用",
+        "concepts": [
+          "AI营销"
+        ]
+      }
+    ],
+    "verdict": "核心",
+    "reasons": {
+      "AI营销": "浙文互联：数智营销"
+    },
+    "business_summary": "主营互联网和相关服务",
+    "sector": "互联网和相关服务"
+  },
+  {
+    "code": "601360",
+    "name": "三六零",
+    "pairs": [
+      {
+        "category": "AI应用",
+        "concepts": [
+          "AI大模型"
+        ]
+      }
+    ],
+    "verdict": "相关",
+    "reasons": {
+      "AI安全": "三六零：安全+大模型",
+      "AI大模型": "三六零：安全+大模型"
+    },
+    "business_summary": "主营互联网和相关服务",
+    "sector": "互联网和相关服务"
+  },
+  {
+    "code": "601595",
+    "name": "上海电影",
+    "pairs": [
+      {
+        "category": "AI应用",
+        "concepts": [
+          "AI影视短剧"
+        ]
+      }
+    ],
+    "verdict": "相关",
+    "reasons": {
+      "AI影视短剧": "上海电影：院线经营，AI 影视为延伸"
+    },
+    "business_summary": "主营广播、电视、电影和录音制作业",
+    "sector": "广播、电视、电影和录音制作业"
+  },
+  {
+    "code": "601599",
+    "name": "浙文影业",
+    "pairs": [
+      {
+        "category": "AI应用",
+        "concepts": [
+          "AI影视短剧"
+        ]
+      }
+    ],
+    "verdict": "核心",
+    "reasons": {
+      "AI影视短剧": "浙文影业：影视业务"
+    },
+    "business_summary": "主营纺织业",
+    "sector": "纺织业"
+  },
+  {
+    "code": "601811",
+    "name": "新华文轩",
+    "pairs": [
+      {
+        "category": "AI应用",
+        "concepts": [
+          "AI影视短剧"
+        ]
+      }
+    ],
+    "verdict": "相关",
+    "reasons": {
+      "AI影视短剧": "新华文轩：出版业务"
+    },
+    "business_summary": "出版物的编辑和出版、图书及影音产品零售、分销以及教材和助学类读物发行业务等。",
+    "sector": "出版/高股息精选/IP经济(谷子经济)/NFT概念"
+  },
+  {
+    "code": "601949",
+    "name": "中国出版",
+    "pairs": [
+      {
+        "category": "AI应用",
+        "concepts": [
+          "AI影视短剧"
+        ]
+      }
+    ],
+    "verdict": "相关",
+    "reasons": {
+      "AI影视短剧": "中国出版：出版主业，短剧为衍生"
+    },
+    "business_summary": "主营新闻和出版业",
+    "sector": "新闻和出版业"
+  },
+  {
+    "code": "603000",
+    "name": "人民网",
+    "pairs": [
+      {
+        "category": "AI应用",
+        "concepts": [
+          "AI应用"
+        ]
+      }
+    ],
+    "verdict": "核心",
+    "reasons": {
+      "数据要素_数据确权": "控股子公司人民数据处理政企数据资源，提供数据资产确权、登记核验、入表一站式方案及公司披露口径的“三证”服务。数据及信息服务已形成独立收入板块，确权服务是明确产品。",
+      "AI应用": "人民网：内容平台，AI 审核与数据要素",
+      "AI监管-内容审核": "人民网：内容平台，AI 审核与数据要素",
+      "AI应用|AI监管-内容审核": "人民网：内容平台，AI 审核与数据要素"
+    },
+    "business_summary": "主营其他",
+    "sector": "其他"
+  },
+  {
+    "code": "603106",
+    "name": "恒银科技",
+    "pairs": [
+      {
+        "category": "AI应用",
+        "concepts": [
+          "AI应用"
+        ]
+      }
+    ],
+    "verdict": "相关",
+    "reasons": {
+      "AI应用": "恒银科技：金融自助机具，AI 为功能"
+    },
+    "business_summary": "主营计算机设备",
+    "sector": "计算机设备/互联网金融/人脸识别/智慧政务"
+  },
+  {
+    "code": "603171",
+    "name": "税友股份",
+    "pairs": [
+      {
+        "category": "AI应用",
+        "concepts": [
+          "AI办公"
+        ]
+      }
+    ],
+    "verdict": "相关",
+    "reasons": {
+      "金融IT": "税友股份：财税软件，AI 为功能",
+      "AI办公": "税友股份：财税软件，AI 为功能"
+    },
+    "business_summary": "主营互联网和相关服务",
+    "sector": "互联网和相关服务"
+  },
+  {
+    "code": "603230",
+    "name": "内蒙新华",
+    "pairs": [
+      {
+        "category": "AI应用",
+        "concepts": [
+          "AI影视短剧"
+        ]
+      }
+    ],
+    "verdict": "相关",
+    "reasons": {
+      "AI影视短剧": "内蒙新华：文化消费/出版，短剧为衍生"
+    },
+    "business_summary": "主营新闻和出版业",
+    "sector": "新闻和出版业"
+  },
+  {
+    "code": "603258",
+    "name": "电魂网络",
+    "pairs": [
+      {
+        "category": "AI应用",
+        "concepts": [
+          "AI应用"
+        ]
+      },
+      {
+        "category": "AI应用",
+        "concepts": [
+          "AI应用"
+        ]
+      }
+    ],
+    "verdict": "",
+    "reasons": {},
+    "business_summary": "主营互联网和相关服务",
+    "sector": "互联网和相关服务"
+  },
+  {
+    "code": "603533",
+    "name": "掌阅科技",
+    "pairs": [
+      {
+        "category": "AI应用",
+        "concepts": [
+          "AI影视短剧"
+        ]
+      }
+    ],
+    "verdict": "核心",
+    "reasons": {
+      "AI影视短剧": "数字阅读内容",
+      "数据要素_内容数据": "掌阅、得间等数字阅读平台提供电子书等内容，通过付费阅读、增值服务及版权授权变现。用户购买和平台交付的核心对象就是数字内容及其使用权益，内容数据不是附属资源。"
+    },
+    "business_summary": "主营互联网和相关服务",
+    "sector": "互联网和相关服务"
+  }
+]

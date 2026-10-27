@@ -1,0 +1,564 @@
+[
+  {
+    "code": "300724",
+    "name": "捷佳伟创",
+    "pairs": [
+      {
+        "category": "PCB",
+        "concept": "电镀",
+        "slot": 1
+      },
+      {
+        "category": "太空光伏",
+        "concept": "太空光伏设备",
+        "slot": 2
+      }
+    ],
+    "verdict": "边缘",
+    "reasons": {
+      "电镀": "捷佳伟创：光伏电池设备",
+      "太空光伏设备": "捷佳伟创：光伏电池设备",
+      "特斯拉拟采购厂商": "捷佳伟创：光伏电池设备"
+    },
+    "business_summary": "主营专用设备制造业",
+    "sector": "专用设备制造业"
+  },
+  {
+    "code": "300758",
+    "name": "七彩化学",
+    "pairs": [
+      {
+        "category": "PCB",
+        "concept": "苊烯树脂",
+        "slot": 0
+      }
+    ],
+    "verdict": "边缘",
+    "reasons": {
+      "苊烯树脂": "七彩化学：有机颜料，苊烯树脂为新材料延伸"
+    },
+    "business_summary": "主营化学原料和化学制品制造业",
+    "sector": "化学原料和化学制品制造业"
+  },
+  {
+    "code": "300814",
+    "name": "中富电路",
+    "pairs": [
+      {
+        "category": "PCB",
+        "concept": "AI服务器相关",
+        "slot": 0
+      }
+    ],
+    "verdict": "核心",
+    "reasons": {
+      "AI服务器相关": "中富电路：PCB 制造"
+    },
+    "business_summary": "中国综合PCB百强企业，深耕供电模块PCB",
+    "sector": "元件/先进封装/共封装光学(CPO)/铜缆高速连接"
+  },
+  {
+    "code": "300903",
+    "name": "科翔股份",
+    "pairs": [
+      {
+        "category": "PCB",
+        "concept": "AI服务器相关",
+        "slot": 0
+      }
+    ],
+    "verdict": "核心",
+    "reasons": {
+      "AI服务器相关": "科翔股份：高密度 PCB"
+    },
+    "business_summary": "主营元件",
+    "sector": "元件/共封装光学(CPO)/PCB概念/先进封装"
+  },
+  {
+    "code": "301013",
+    "name": "利和兴",
+    "pairs": [
+      {
+        "category": "PCB",
+        "concept": "MLCC",
+        "slot": 1
+      },
+      {
+        "category": "超节点",
+        "concept": "其他",
+        "slot": 2
+      }
+    ],
+    "verdict": "边缘",
+    "reasons": {
+      "MLCC": "利和兴：自动化设备，MLCC 产线配套",
+      "其他": "利和兴：自动化设备，MLCC 产线配套"
+    },
+    "business_summary": "主营专用设备制造、MLCC(多层陶瓷电容器)等，国内移动智能终端检测领域行业较为领先",
+    "sector": "专用设备/PCB概念/存储芯片/共封装光学(CPO)"
+  },
+  {
+    "code": "301021",
+    "name": "英诺激光",
+    "pairs": [
+      {
+        "category": "PCB",
+        "concept": "钻孔",
+        "slot": 0
+      }
+    ],
+    "verdict": "相关",
+    "reasons": {
+      "钻孔": "英诺激光：激光器，PCB 钻孔设备光源"
+    },
+    "business_summary": "激光器和激光解决方案的研发、生产和销售。",
+    "sector": "自动化设备/MicroLED概念/第三代半导体/先进封装"
+  },
+  {
+    "code": "301132",
+    "name": "满坤科技",
+    "pairs": [
+      {
+        "category": "PCB",
+        "concept": "AI服务器相关",
+        "slot": 0
+      }
+    ],
+    "verdict": "相关",
+    "reasons": {
+      "AI服务器相关": "满坤科技：PCB，汽车电子为主"
+    },
+    "business_summary": "主营计算机、通信和其他电子设备制造业",
+    "sector": "计算机、通信和其他电子设备制造业"
+  },
+  {
+    "code": "301176",
+    "name": "逸豪新材",
+    "pairs": [
+      {
+        "category": "PCB",
+        "concept": "HVLP",
+        "slot": 0
+      }
+    ],
+    "verdict": "核心",
+    "reasons": {
+      "HVLP": "逸豪新材：高性能铜箔（HVLP）"
+    },
+    "business_summary": "拥有电子电路铜箔、PCB及铝基覆铜板各个生产环节的核心技术",
+    "sector": "元件/PCB概念/MiniLED/汽车电子"
+  },
+  {
+    "code": "301200",
+    "name": "大族数控",
+    "pairs": [
+      {
+        "category": "PCB",
+        "concept": "钻孔",
+        "slot": 0
+      }
+    ],
+    "verdict": "核心",
+    "reasons": {
+      "钻孔": "大族数控：PCB 专用设备（钻孔）"
+    },
+    "business_summary": "PCB专用设备的研发、生产和销售。",
+    "sector": "自动化设备/PCB概念/先进封装/工业母机"
+  },
+  {
+    "code": "301217",
+    "name": "铜冠铜箔",
+    "pairs": [
+      {
+        "category": "电池",
+        "concept": "其他关键材料及设备",
+        "slot": 1
+      },
+      {
+        "category": "PCB",
+        "concept": "HVLP",
+        "slot": 2
+      }
+    ],
+    "verdict": "相关",
+    "reasons": {
+      "其他关键材料及设备": "铜冠铜箔：电子铜箔",
+      "HVLP": "铜冠铜箔：电子铜箔"
+    },
+    "business_summary": "各类高精度电子铜箔的研发、制造和销售等。",
+    "sector": "电池/PET铜箔/PCB概念/固态电池"
+  },
+  {
+    "code": "301251",
+    "name": "威尔高",
+    "pairs": [
+      {
+        "category": "PCB",
+        "concept": "AI服务器相关",
+        "slot": 0
+      }
+    ],
+    "verdict": "核心",
+    "reasons": {
+      "AI服务器相关": "威尔高：PCB"
+    },
+    "business_summary": "主营计算机、通信和其他电子设备制造业",
+    "sector": "计算机、通信和其他电子设备制造业"
+  },
+  {
+    "code": "301338",
+    "name": "凯格精机",
+    "pairs": [
+      {
+        "category": "PCB",
+        "concept": "贴片",
+        "slot": 0
+      }
+    ],
+    "verdict": "核心",
+    "reasons": {
+      "贴片": "凯格精机：锡膏印刷设备（SMT/PCB）"
+    },
+    "business_summary": "全球锡膏印刷设备龙头，聚焦PCB领域SMT(表面贴装技术)设备，已进入富士康、华为",
+    "sector": "专用设备/共封装光学(CPO)/PCB概念/华为手机"
+  },
+  {
+    "code": "301366",
+    "name": "一博科技",
+    "pairs": [
+      {
+        "category": "PCB",
+        "concept": "PCB",
+        "slot": 0
+      }
+    ],
+    "verdict": "核心",
+    "reasons": {
+      "PCB": "一博科技：PCB 设计服务"
+    },
+    "business_summary": "PCB研发设计服务、PCB和PCBA制造服务及其销售。",
+    "sector": "元件/PCB概念/汽车电子/苹果概念"
+  },
+  {
+    "code": "301373",
+    "name": "凌玮科技",
+    "pairs": [
+      {
+        "category": "PCB",
+        "concept": "硅微粉",
+        "slot": 0
+      }
+    ],
+    "verdict": "核心",
+    "reasons": {
+      "硅微粉": "凌玮科技：纳米二氧化硅（硅微粉）"
+    },
+    "business_summary": "主营化学原料和化学制品制造业",
+    "sector": "化学原料和化学制品制造业"
+  },
+  {
+    "code": "301377",
+    "name": "鼎泰高科",
+    "pairs": [
+      {
+        "category": "PCB",
+        "concept": "钻针",
+        "slot": 0
+      }
+    ],
+    "verdict": "核心",
+    "reasons": {
+      "钻针": "鼎泰高科：PCB 微钻与刀具"
+    },
+    "business_summary": "为PCB、数控精密机件等领域的企业提供工具、材料、装备的一体化解决方案。",
+    "sector": "PCB概念/工业母机"
+  },
+  {
+    "code": "301389",
+    "name": "隆扬电子",
+    "pairs": [
+      {
+        "category": "PCB",
+        "concept": "HVLP",
+        "slot": 0
+      }
+    ],
+    "verdict": "相关",
+    "reasons": {
+      "HVLP": "隆扬电子：电磁屏蔽材料，PCB 配套"
+    },
+    "business_summary": "主营计算机、通信和其他电子设备制造业",
+    "sector": "计算机、通信和其他电子设备制造业"
+  },
+  {
+    "code": "301511",
+    "name": "德福科技",
+    "pairs": [
+      {
+        "category": "PCB",
+        "concept": "HVLP",
+        "slot": 0
+      }
+    ],
+    "verdict": "相关",
+    "reasons": {
+      "HVLP": "德福科技：铜箔，HVLP 为高端产品线"
+    },
+    "business_summary": "各类高性能电解铜箔的研发、生产和销售。",
+    "sector": "电池/PET铜箔/PCB概念/共封装光学(CPO)"
+  },
+  {
+    "code": "301526",
+    "name": "国际复材",
+    "pairs": [
+      {
+        "category": "PCB",
+        "concept": "电子布",
+        "slot": 0
+      }
+    ],
+    "verdict": "核心",
+    "reasons": {
+      "电子布": "国际复材：电子级玻璃纤维布"
+    },
+    "business_summary": "主营玻璃玻纤",
+    "sector": "玻璃玻纤/PCB概念/华为手机/特高压"
+  },
+  {
+    "code": "301566",
+    "name": "达利凯普",
+    "pairs": [
+      {
+        "category": "PCB",
+        "concept": "MLCC",
+        "slot": 1
+      }
+    ],
+    "verdict": "核心",
+    "reasons": {
+      "MLCC": "达利凯普：射频微波瓷介电容"
+    },
+    "business_summary": "射频微波瓷介电容器的研发、制造及销售。射频微波MLCC市占率全球前五、中国第一，是为数不多的具有国际市场射频微波MLCC产品供应商",
+    "sector": "元件/5G/军工/专精特新"
+  },
+  {
+    "code": "301678",
+    "name": "新恒汇",
+    "pairs": [
+      {
+        "category": "PCB",
+        "concept": "曝光",
+        "slot": 0
+      }
+    ],
+    "verdict": "边缘",
+    "reasons": {
+      "曝光": "新恒汇：智能卡，曝光工序为延伸"
+    },
+    "business_summary": "主营芯片概念",
+    "sector": "芯片概念/消费电子概念"
+  },
+  {
+    "code": "600110",
+    "name": "诺德股份",
+    "pairs": [
+      {
+        "category": "电池",
+        "concept": "其他关键材料及设备",
+        "slot": 1
+      },
+      {
+        "category": "PCB",
+        "concept": "HVLP",
+        "slot": 2
+      }
+    ],
+    "verdict": "相关",
+    "reasons": {
+      "其他关键材料及设备": "诺德股份：锂电铜箔",
+      "HVLP": "诺德股份：锂电铜箔"
+    },
+    "business_summary": "主营电池",
+    "sector": "电池/PET铜箔/固态电池/PCB概念"
+  },
+  {
+    "code": "600176",
+    "name": "中国巨石",
+    "pairs": [
+      {
+        "category": "PCB",
+        "concept": "电子布",
+        "slot": 0
+      }
+    ],
+    "verdict": "相关",
+    "reasons": {
+      "电子布": "中国巨石：玻纤龙头，电子布为一块"
+    },
+    "business_summary": "主营玻璃玻纤.中国建材集团旗下，产能规模全球第一的玻璃纤维生产企业",
+    "sector": "玻璃玻纤/PCB概念/2026一季报预增/风电"
+  },
+  {
+    "code": "600183",
+    "name": "生益科技",
+    "pairs": [
+      {
+        "category": "PCB",
+        "concept": "硅微粉",
+        "slot": 1
+      }
+    ],
+    "verdict": "核心",
+    "reasons": {
+      "硅微粉": "生益科技：覆铜板龙头",
+      "覆铜板": "生益科技：覆铜板龙头"
+    },
+    "business_summary": "设计、生产和销售覆铜板和粘结片、印制线路板。",
+    "sector": "元件/PCB概念/共封装光学(CPO)/先进封装"
+  },
+  {
+    "code": "600552",
+    "name": "凯盛科技",
+    "pairs": [
+      {
+        "category": "PCB",
+        "concept": "硅微粉",
+        "slot": 1
+      },
+      {
+        "category": "太空光伏",
+        "concept": "太空光伏辅材",
+        "slot": 2
+      }
+    ],
+    "verdict": "边缘",
+    "reasons": {
+      "硅微粉": "凯盛科技：显示材料为主",
+      "太空光伏辅材": "凯盛科技：显示材料为主"
+    },
+    "business_summary": "显示材料板块和应用材料板块。",
+    "sector": "光学光电子/先进封装/OLED/柔性屏(折叠屏)"
+  },
+  {
+    "code": "600601",
+    "name": "方正科技",
+    "pairs": [
+      {
+        "category": "PCB",
+        "concept": "AI服务器相关",
+        "slot": 1
+      },
+      {
+        "category": "超节点",
+        "concept": "PCB",
+        "slot": 2
+      }
+    ],
+    "verdict": "核心",
+    "reasons": {
+      "AI服务器相关": "方正科技：PCB",
+      "PCB": "方正科技：PCB"
+    },
+    "business_summary": "印制电路板（PCB）的研发设计、生产制造及销售。",
+    "sector": "元件/PCB概念/共封装光学(CPO)/5G"
+  },
+  {
+    "code": "601208",
+    "name": "东材科技",
+    "pairs": [
+      {
+        "category": "PCB",
+        "concept": "环氧树脂",
+        "slot": 1
+      },
+      {
+        "category": "可控核聚变",
+        "concept": "其他",
+        "slot": 2
+      }
+    ],
+    "verdict": "相关",
+    "reasons": {
+      "其他": "东材科技：绝缘与环氧材料，可用于磁体绝缘",
+      "环氧树脂": "东材科技：绝缘与环氧材料，可用于磁体绝缘",
+      "碳氢树脂M9": "东材科技：绝缘与环氧材料，可用于磁体绝缘"
+    },
+    "business_summary": "化工新材料的研发、生产和销售业务。",
+    "sector": "塑料/PET铜箔/PCB概念/苹果概念"
+  },
+  {
+    "code": "603002",
+    "name": "宏昌电子",
+    "pairs": [
+      {
+        "category": "PCB",
+        "concept": "环氧树脂",
+        "slot": 1
+      }
+    ],
+    "verdict": "核心",
+    "reasons": {
+      "环氧树脂": "宏昌电子：环氧树脂（覆铜板上游）",
+      "覆铜板": "宏昌电子：环氧树脂（覆铜板上游）"
+    },
+    "business_summary": "主营环氧树脂、覆铜板，下游已覆盖服务器及AI算力设备领域",
+    "sector": "电子化学品Ⅱ/PCB概念/先进封装/5G"
+  },
+  {
+    "code": "603124",
+    "name": "江南新材",
+    "pairs": [
+      {
+        "category": "PCB",
+        "concept": "其他关键材料及设备",
+        "slot": 0
+      }
+    ],
+    "verdict": "核心",
+    "reasons": {
+      "其他关键材料及设备": "江南新材：铜球（PCB 电镀耗材）"
+    },
+    "business_summary": "铜球系列产品市占率国内第一、全球居前，客户主要为境内外知名PCB厂商",
+    "sector": "金属新材料/PCB概念/PET铜箔/液冷服务器"
+  },
+  {
+    "code": "603175",
+    "name": "超颖电子",
+    "pairs": [
+      {
+        "category": "PCB",
+        "concept": "AI服务器相关",
+        "slot": 0
+      }
+    ],
+    "verdict": "核心",
+    "reasons": {
+      "AI服务器相关": "超颖电子：PCB"
+    },
+    "business_summary": "主营计算机、通信和其他电子设备制造业",
+    "sector": "计算机、通信和其他电子设备制造业"
+  },
+  {
+    "code": "603186",
+    "name": "华正新材",
+    "pairs": [
+      {
+        "category": "PCB",
+        "concept": "覆铜板",
+        "slot": 1
+      },
+      {
+        "category": "超节点",
+        "concept": "CCL",
+        "slot": 2
+      }
+    ],
+    "verdict": "核心",
+    "reasons": {
+      "覆铜板": "华正新材：覆铜板",
+      "CCL": "华正新材：覆铜板"
+    },
+    "business_summary": "覆铜板及粘结片、复合材料和膜材料等产品的设计、研发、生产及销售。",
+    "sector": "元件/先进封装/PCB概念/MiniLED"
+  }
+]

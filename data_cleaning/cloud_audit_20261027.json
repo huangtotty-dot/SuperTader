@@ -1,0 +1,784 @@
+[
+  {
+    "code": "000034",
+    "name": "神州数码",
+    "action": "纠错",
+    "pairs": [
+      {
+        "category": "云计算",
+        "concepts": [
+          "云平台与多云管理"
+        ]
+      }
+    ],
+    "verdict": "相关",
+    "reason": "公司主营仍以IT分销及增值服务为主，真实云业务是面向企业客户的云管理、云迁移、云原生改造和持续运维服务，并非旧标签暗示的通用SaaS软件。2025年数云服务及软件收入36.73亿元、同比增长23.87%，已持续商业化且覆盖医疗、制造、汽车、零售等客户，但该板块仅占总营收2.56%，且还包含非云数字化方案，故改标云平台与多云管理并维持相关。",
+    "evidence_title": "神州数码：2025年年度报告",
+    "evidence_date": "2026-03-31",
+    "evidence_url": "http://vip.stock.finance.sina.com.cn/corp/view/vCB_AllBulletinDetail.php?stockid=000034&id=12044900"
+  },
+  {
+    "code": "000815",
+    "name": "美利云",
+    "action": "纠错",
+    "pairs": [
+      {
+        "category": "云计算",
+        "concepts": [
+          "IDC与云基础设施"
+        ]
+      }
+    ],
+    "verdict": "核心",
+    "reason": "公司已于2024年底停止造纸，现由誉成云创经营中卫数据中心，通过机柜、网络接入及运维合同向客户收费，属于真实IDC云基础设施服务，不能直接称为IaaS计算资源平台。2025年云业务收入3.24亿元，占总营收94.65%，E1、E3、C1已交付客户使用，云业务已是绝对主营和主要利润来源，因此将旧IaaS标签纠正为IDC与云基础设施，并由相关升级为核心。",
+    "evidence_title": "美利云：2025年年度报告",
+    "evidence_date": "2026-04-24",
+    "evidence_url": "https://money.finance.sina.com.cn/corp/view/vCB_AllBulletinDetail.php?stockid=000815&id=12164556"
+  },
+  {
+    "code": "000938",
+    "name": "紫光股份",
+    "action": "纠错",
+    "pairs": [
+      {
+        "category": "云计算",
+        "concepts": [
+          "云平台与多云管理",
+          "IaaS计算与存储"
+        ]
+      }
+    ],
+    "verdict": "核心",
+    "reason": "新华三明确将云与智能列为主要产品线，自研CloudOS云操作系统、CAS虚拟化、UIS超融合、桌面云及分布式存储，为政府、能源、交通、运营商等客户交付私有云、混合云和多云场景，并非单纯销售服务器。CloudOS已广泛行业落地，超融合市场份额位居前列，属于规模化核心产品；虽然云收入未单独拆分，但符合核心产品标准，故以云平台及IaaS能力替代笼统国资云标签。",
+    "evidence_title": "紫光股份有限公司2025年年度报告摘要",
+    "evidence_date": "2026-04-15",
+    "evidence_url": "http://static.cninfo.com.cn/finalpage/2026-04-15/1225101865.PDF"
+  },
+  {
+    "code": "002123",
+    "name": "梦网科技",
+    "action": "纠错",
+    "pairs": [
+      {
+        "category": "云计算",
+        "concepts": [
+          "云通信与消息服务"
+        ]
+      }
+    ],
+    "verdict": "核心",
+    "reason": "公司通过自有云通信平台向企业客户提供行业短信、5G阅信、5G RCS及国际消息触达服务，本质是按消息和通信能力交付的CPaaS，而非泛化的开发运行PaaS。2025年云通信服务业收入26.09亿元，占营业收入100%，国际通信收入同比增长25.80%，5G阅信平台已在三大运营商建成并商用上线，虽有传统短信收缩和新产品培育压力，仍属明确主营和规模化收入，故改标并升级为核心。",
+    "evidence_title": "梦网科技：2025年年度报告",
+    "evidence_date": "2026-04-29",
+    "evidence_url": "https://money.finance.sina.com.cn/corp/view/vCB_AllBulletinDetail.php?stockid=002123&id=12251556"
+  },
+  {
+    "code": "002131",
+    "name": "利欧股份",
+    "action": "摘除",
+    "pairs": [],
+    "verdict": "摘除",
+    "reason": "公司2025年主营仍为机械制造和数字营销，收入主要来自媒体代理、整合营销及泵业产品。AI创意、投放优化和智能体虽已进入营销流程，但公司明确其主要以间接方式融入既有业务，直接收入较小且难以拆分；这些属于AI营销工具，不是自营云平台、云计算资源或在线软件订阅服务。旧DeepSeek标签仅反映模型或投资联想，未形成可核验云计算产品、客户和收入，故摘除云计算标签。",
+    "evidence_title": "利欧股份：2025年年度报告",
+    "evidence_date": "2026-04-29",
+    "evidence_url": "https://money.finance.sina.com.cn/corp/view/vCB_AllBulletinDetail.php?stockid=002131&id=12249389"
+  },
+  {
+    "code": "002153",
+    "name": "石基信息",
+    "action": "纠错",
+    "pairs": [
+      {
+        "category": "云计算",
+        "concepts": [
+          "SaaS-酒店与餐饮管理"
+        ]
+      }
+    ],
+    "verdict": "核心",
+    "reason": "公司将酒店PMS、餐饮POS等主营信息系统以云架构和订阅方式交付，DAYLIGHT PMS、Infrasys POS均已在国际酒店集团实际上线，不是传统软件授权的换名。2025年末SaaS年度可重复订阅费约6.27亿元、同比增长约20%，企业客户门店超过8万家、平均续费率超过90%；DAYLIGHT PMS已上线878家酒店，云POS上线4972家门店，已达规模化核心产品标准，故细化标签并由相关升级为核心。",
+    "evidence_title": "石基信息：2025年年度报告",
+    "evidence_date": "2026-03-26",
+    "evidence_url": "https://money.finance.sina.com.cn/corp/view/vCB_AllBulletinDetail.php?stockid=002153&id=12019337"
+  },
+  {
+    "code": "002315",
+    "name": "焦点科技",
+    "action": "纠错",
+    "pairs": [
+      {
+        "category": "云计算",
+        "concepts": [
+          "SaaS-外贸营销与获客"
+        ]
+      }
+    ],
+    "verdict": "相关",
+    "reason": "中国制造网主要是按会员和认证服务收费的B2B电子商务平台，不能仅因在线运营就全部认定为SaaS；真正符合云交付的是AI麦可等面向外贸企业的在线营销、内容生成和获客工具。2025年AI麦可现金收入9083.24万元、同比增长88.49%，累计购买会员18494位，商业化和客户证据充分，但相对19.21亿元总营收仍属较小新业务，故保留真实SaaS部分并将核心下调为相关。",
+    "evidence_title": "焦点科技股份有限公司2025年年度报告",
+    "evidence_date": "2026-03-20",
+    "evidence_url": "https://static.cninfo.com.cn/finalpage/2026-03-20/1225018374.PDF"
+  },
+  {
+    "code": "002335",
+    "name": "科华数据",
+    "action": "纠错",
+    "pairs": [
+      {
+        "category": "云计算",
+        "concepts": [
+          "IDC与云基础设施"
+        ]
+      }
+    ],
+    "verdict": "核心",
+    "reason": "公司智算业务同时包括数据中心供配电、温控等产品销售和自营IDC服务，其中IDC通过专业机房、通信线路和带宽为企业及政府提供服务器托管、租用与运维，按机柜上架数和带宽用量结算，并非当然的IaaS。2025年IDC服务收入12.84亿元、占总营收15.73%，数据中心行业收入35.23亿元，已有互联网、运营商、金融和政务客户持续交付，构成重要收入板块，故改为IDC与云基础设施并保留核心。",
+    "evidence_title": "科华数据：2025年年度报告",
+    "evidence_date": "2026-04-27",
+    "evidence_url": "https://money.finance.sina.com.cn/corp/view/vCB_AllBulletinDetail.php?stockid=002335&id=12205218"
+  },
+  {
+    "code": "002410",
+    "name": "广联达",
+    "action": "纠错",
+    "pairs": [
+      {
+        "category": "云计算",
+        "concepts": [
+          "SaaS-建筑工程造价与成本管理"
+        ]
+      }
+    ],
+    "verdict": "核心",
+    "reason": "公司数字成本业务已将算量、计价、清标和成本管理产品转为在线SaaS订阅及持续服务，直接面向建筑施工和造价客户，不是传统本地授权软件的简单包装。2025年数字成本业务收入47.79亿元，其中云收入34.57亿元、占该业务72%，约占公司总营收57%，新签云合同33.8亿元，续费率稳中有升，云交付已成为主营收入主体，故保留核心并将泛SaaS标签细化为建筑工程造价与成本管理。",
+    "evidence_title": "广联达获79家机构调研：2025年数字成本业务收入是47.79亿，其中云收入34.57亿，占比72%",
+    "evidence_date": "2026-03-25",
+    "evidence_url": "https://m.10jqka.com.cn/20260325/c675521155.shtml"
+  },
+  {
+    "code": "002439",
+    "name": "启明星辰",
+    "action": "迁移",
+    "pairs": [
+      {
+        "category": "网络安全",
+        "concepts": [
+          "云安全与SaaS安全服务"
+        ]
+      }
+    ],
+    "verdict": "相关",
+    "reason": "公司主营是网络安全产品和安全运营服务，实际拥有云安全管理平台、云安全资源池、安星网站安全SaaS及云子可信等云交付产品，可向云端、IDC和传统地端提供安全订阅与运营服务，但保护对象和安全能力不等于向客户提供云计算平台或通用在线软件。2025年收入仍集中于安全产品及安全运营，未证明存在独立云计算主营，因此摘除云计算下的泛SaaS标签，迁移为更准确的网络安全云安全与SaaS安全服务。",
+    "evidence_title": "启明星辰：2025年年度报告",
+    "evidence_date": "2026-04-13",
+    "evidence_url": "http://money.finance.sina.com.cn/corp/view/vCB_AllBulletinDetail.php?stockid=002439&id=12082100"
+  },
+  {
+    "code": "002757",
+    "name": "南兴股份",
+    "action": "纠错",
+    "pairs": [
+      {
+        "category": "云计算",
+        "concepts": [
+          "IDC与云基础设施",
+          "云平台与多云管理"
+        ]
+      }
+    ],
+    "verdict": "核心",
+    "reason": "子公司唯一网络实际运营自建及租用数据中心，并提供公有云、私有云、混合云、云联网、云管理和自动化运维服务，兼有80余个边缘节点，不是仅有家具装备或普通系统集成。2025年IDC及云计算收入19.66亿元、同比增长29.79%，占总营收57.62%，首次超过传统专用设备成为第一大收入来源，已形成规模化持续经营，故由相关升级为核心，并用IDC及多云管理标签替代笼统IaaS。",
+    "evidence_title": "南兴股份：2025年年度报告",
+    "evidence_date": "2026-04-25",
+    "evidence_url": "https://vip.stock.finance.sina.com.cn/corp/view/vCB_AllBulletinDetail.php?stockid=002757&id=12190607"
+  },
+  {
+    "code": "300017",
+    "name": "网宿科技",
+    "action": "纠错",
+    "pairs": [
+      {
+        "category": "云计算",
+        "concepts": [
+          "边缘计算与CDN",
+          "IaaS计算与存储"
+        ]
+      }
+    ],
+    "verdict": "核心",
+    "reason": "公司基本盘虽是CDN，但并非仅据CDN贴云标签：其边缘计算平台ECP已实际提供边缘云主机、容器、存储和云手机，算力云亦覆盖GPU/CPU云算力、企业云、混合云及容器云，具有直接云资源交付。2025年CDN及边缘计算收入28.95亿元、占总营收62.11%，另有IDC及液冷收入2.83亿元，属于规模化核心业务；MSP剥离不影响保留真实边缘云和IaaS能力，故作精确纠错。",
+    "evidence_title": "网宿科技股份有限公司2025年年度报告全文",
+    "evidence_date": "2026-04-15",
+    "evidence_url": "https://static.cninfo.com.cn/finalpage/2026-04-15/1225101555.PDF"
+  },
+  {
+    "code": "300036",
+    "name": "超图软件",
+    "action": "纠错",
+    "pairs": [
+      {
+        "category": "云计算",
+        "concepts": [
+          "SaaS-地图选址与物流调度"
+        ]
+      }
+    ],
+    "verdict": "相关",
+    "reason": "公司主体收入仍来自GIS基础平台授权、行业应用软件及定制项目，不能将全部GIS软件视为SaaS；真实云交付证据主要是地图慧在线平台，为企业提供门店选址、智能分单、路线规划和人员轨迹管理。2025年地图慧用户和合同连续三年双增长，累计注册用户74万家，发布5.0 SaaS平台并签约海信集团，商业落地明确，但SaaS收入未单列且不足以证明占主营重要比重，故由核心下调为相关并细化场景。",
+    "evidence_title": "超图软件：2025年年度报告",
+    "evidence_date": "2026-04-17",
+    "evidence_url": "https://money.finance.sina.com.cn/corp/view/vCB_AllBulletinDetail.php?stockid=300036&id=12100106"
+  },
+  {
+    "code": "300052",
+    "name": "中青宝",
+    "action": "纠错",
+    "pairs": [
+      {
+        "category": "云计算",
+        "concepts": [
+          "IDC与云基础设施"
+        ]
+      }
+    ],
+    "verdict": "核心",
+    "reason": "公司云计算板块当前核心是数据中心机柜租赁及配套运维，客户上架和合同服务真实存在，但机柜租赁不能直接等同IaaS；新增智算业务仍处探索培育期，尚未形成有效收入利润支撑。2025年云计算业务收入1.216亿元、占总营收66.23%，其中机柜租赁1.135亿元、运维服务706万元，尽管收入和毛利下滑，仍是第一大主营板块，因此保留核心并将旧IaaS标签纠正为IDC与云基础设施。",
+    "evidence_title": "深圳中青宝互动网络股份有限公司2025年年度报告",
+    "evidence_date": "2026-04-29",
+    "evidence_url": "https://static.cninfo.com.cn/finalpage/2026-04-29/1225235367.PDF"
+  },
+  {
+    "code": "300075",
+    "name": "数字政通",
+    "action": "摘除",
+    "pairs": [],
+    "verdict": "摘除",
+    "reason": "公司主营为智慧城市应用软件、系统集成及城市运营服务，2025年系统软件、系统集成和运营服务收入占比分别为47.94%、5.31%和46.74%，交付对象是城市治理、地下管网等具体项目。相关产品虽可部署于政务云或采用平台架构，但属于行业应用软件和项目运营，不等于公司自营国资云、通用云平台或订阅制云服务；年报亦未披露可核验的云资源产品、独立云客户及云收入，故摘除旧国资云标签。",
+    "evidence_title": "数字政通：2025年年度报告",
+    "evidence_date": "2026-04-16",
+    "evidence_url": "http://money.finance.sina.com.cn/corp/view/vCB_AllBulletinDetail.php?stockid=300075&id=12095162"
+  },
+  {
+    "code": "300130",
+    "name": "新国都",
+    "action": "纠错",
+    "pairs": [
+      {
+        "category": "云计算",
+        "concepts": [
+          "SaaS-商户经营与餐饮门店"
+        ]
+      }
+    ],
+    "verdict": "相关",
+    "reason": "公司主营仍是支付收单、支付终端及场景数字化服务，不能把支付业务整体等同于云计算。但全资子公司嘉联支付已以SaaS模式提供会员、门店、营销和报表管理，嘉联云店累计服务超过10万家中小餐饮商户，咕朵云开放平台入驻176家合作机构，具备真实在线产品和规模客户。因SaaS收入未单独披露且尚非主要收入来源，维持相关并将泛化标签细化为商户经营场景。",
+    "evidence_title": "新国都：2025年年度报告",
+    "evidence_date": "2026-04-01",
+    "evidence_url": "https://www.xgd.com/static/upload/file/20260401/1775027429849390.pdf"
+  },
+  {
+    "code": "300248",
+    "name": "新开普",
+    "action": "纠错",
+    "pairs": [
+      {
+        "category": "云计算",
+        "concepts": [
+          "SaaS-智慧校园与政企服务"
+        ]
+      }
+    ],
+    "verdict": "核心",
+    "reason": "公司由传统一卡通升级为智慧校园应用、云平台、政企应用和运维四类业务，云平台已不只是校园卡项目的配套描述。2025年智慧校园云平台解决方案收入1.19亿元，占营收12.16%，毛利率86.44%；面向教育、政企和农水客户的专业云平台接入近2000家客户并持续输出SaaS服务，智慧餐饮亦支持云加端模式。云业务已形成独立产品线和重要收入，故提升为核心并改用具体场景标签。",
+    "evidence_title": "新开普：2025年年度报告",
+    "evidence_date": "2026-04-24",
+    "evidence_url": "http://money.finance.sina.com.cn/corp/view/vCB_AllBulletinDetail.php?stockid=300248&id=12172365"
+  },
+  {
+    "code": "300253",
+    "name": "卫宁健康",
+    "action": "纠错",
+    "pairs": [
+      {
+        "category": "云计算",
+        "concepts": [
+          "SaaS-互联网医疗与医院云服务"
+        ]
+      }
+    ],
+    "verdict": "相关",
+    "reason": "公司主体业务仍是医院应用软件、技术服务及系统集成，WiNEX采用云架构和云交付并不当然使全部医疗IT收入成为SaaS。但纳里健康互联网医院、云医等在线医疗平台及互联网医院云平台已有真实建设运营和收入，2025年互联网医疗健康收入1.79亿元，占总收入约8.5%，同时部分业务正在关停或剥离，WiNEX升级替换也尚未形成规模收入。因此保留真实云医疗部分并定为相关，不能按全部医院软件拔高为核心。",
+    "evidence_title": "卫宁健康：2025年年度报告",
+    "evidence_date": "2026-04-15",
+    "evidence_url": "https://money.finance.sina.com.cn/corp/view/vCB_AllBulletinDetail.php?stockid=300253&id=12089041"
+  },
+  {
+    "code": "300339",
+    "name": "润和软件",
+    "action": "摘除",
+    "pairs": [],
+    "verdict": "摘除",
+    "reason": "公司主营为金融科技、智能物联、智慧能源等软件技术服务与行业解决方案，交付方式主要包括研发项目整包、人力技术服务及软硬件项目。2025年披露的HopeOS数据中心AI版、云边协同操作系统、算力调度和私有云定制，本质是服务器操作系统及云基础设施建设配套，并非公司自营IaaS、通用PaaS或在线SaaS；云桌面和DeepSeek适配也不能单独证明云服务商业化。未见独立云计算产品收入或规模云客户证据，故摘除原SaaS标签。",
+    "evidence_title": "润和软件：2025年年度报告",
+    "evidence_date": "2026-04-22",
+    "evidence_url": "https://money.finance.sina.com.cn/corp/view/vCB_AllBulletinDetail.php?stockid=300339&id=12136200"
+  },
+  {
+    "code": "300378",
+    "name": "鼎捷数智",
+    "action": "纠错",
+    "pairs": [
+      {
+        "category": "云计算",
+        "concepts": [
+          "PaaS-工业低代码与数智底座",
+          "SaaS-工业企业管理"
+        ]
+      }
+    ],
+    "verdict": "核心",
+    "reason": "公司以ERP等工业软件为主业，但并非仅凭传统ERP授权认定云计算。鼎捷雅典娜是具备低代码、多端协同、业务中台、数据中台及智驱平台的企业级PaaS，承载ERP、MES、PLM并支持客户和伙伴开发应用；零部件云、装备制造云、设备云等构成云上工业应用。2025年平台继续升级，AI相关签约接近2亿元，PLM新品已获数百家客户签约，说明平台进入实际商业交付，故保留核心并拆分PaaS与具体SaaS能力。",
+    "evidence_title": "鼎捷数智：2025年年度报告",
+    "evidence_date": "2026-04-02",
+    "evidence_url": "https://vip.stock.finance.sina.com.cn/corp/view/vCB_AllBulletinDetail.php?stockid=300378&id=12056578"
+  },
+  {
+    "code": "300383",
+    "name": "光环新网",
+    "action": "纠错",
+    "pairs": [
+      {
+        "category": "云计算",
+        "concepts": [
+          "IaaS计算与存储",
+          "IDC与云基础设施"
+        ]
+      }
+    ],
+    "verdict": "核心",
+    "reason": "公司明确以IDC和云计算为双主业，不能仅依据机柜业务贴IaaS，但其另有持续经营且单列收入的云计算业务，包括公有云相关服务，具备超出数据中心租赁的直接云收入。2025年IDC收入22.31亿元、云计算收入48.36亿元，后者约占总营收三分之二，虽受客户调整和公有云经营性资产到期处置影响有所下降，仍是最大收入板块。因此维持核心，同时保留IaaS与IDC两个不同层级的标签。",
+    "evidence_title": "光环新网：2025年年度报告",
+    "evidence_date": "2026-04-28",
+    "evidence_url": "https://data.eastmoney.com/notices/detail/300383/AN202604281821688278.html"
+  },
+  {
+    "code": "300454",
+    "name": "深信服",
+    "action": "纠错",
+    "pairs": [
+      {
+        "category": "云计算",
+        "concepts": [
+          "IaaS计算与存储",
+          "云平台与多云管理"
+        ]
+      }
+    ],
+    "verdict": "核心",
+    "reason": "深信服并非只有云安全，云计算及IT基础设施已形成超融合HCI、计算虚拟化、分布式存储EDS、桌面云、云计算平台SCP和混合云等直接产品。2025年该板块收入40.10亿元，同比增长18.50%，占总收入49.86%，超过网络安全成为第一大业务；全栈超融合亦已形成领先市场地位。其产品面向企业私有云和混合云资源池化、统一治理及存储交付，属于规模化核心云基础设施业务，故将错误的SaaS标签纠正为IaaS和云平台。",
+    "evidence_title": "年报观察｜深信服：AI浪潮下的喜忧参半",
+    "evidence_date": "2026-04-02",
+    "evidence_url": "https://www.guandian.cn/article/20260402/552944.html"
+  },
+  {
+    "code": "300560",
+    "name": "中富通",
+    "action": "摘除",
+    "pairs": [],
+    "verdict": "摘除",
+    "reason": "公司主要收入来自通信网络建设维护、网络优化、公安等信息化软件服务、系统集成和渠道销售。2025年边缘计算相关产品收入约4699万元，仅占营收4.12%，产品为边缘终端、网关、服务器、AI视觉检测及云计算终端盒子，属于硬件和行业解决方案；规划建设智算中心也不能替代已经运营云服务的证据。年报未显示自营云主机、云存储、开发运行平台或在线订阅软件收入，因此原IaaS标签缺乏直接业务支撑，应予摘除。",
+    "evidence_title": "中富通：2025年年度报告",
+    "evidence_date": "2026-04-30",
+    "evidence_url": "https://stock.stockstar.com/notice/SN2026043000016182.shtml"
+  },
+  {
+    "code": "300624",
+    "name": "万兴科技",
+    "action": "纠错",
+    "pairs": [
+      {
+        "category": "云计算",
+        "concepts": [
+          "SaaS-数字创意与在线协作"
+        ]
+      }
+    ],
+    "verdict": "核心",
+    "reason": "公司主营视频、绘图、文档和实用工具软件，需区别于单纯桌面授权；年报显示其持续以订阅续约、AI会员和积分充值实现经常性收费，年度订阅续约率稳定在60%以上，并扩张移动化和云化产品。云端AI创意工具集Media.io收入增长超过90%，万兴脑图云笔记已产生付费转化，2025年AI原生应用收入突破1.3亿元。订阅和在线云交付已成为规模化主营商业模式而非附加合作，故提升为核心并细化为数字创意SaaS。",
+    "evidence_title": "万兴科技：2025年年度报告",
+    "evidence_date": "2026-04-28",
+    "evidence_url": "http://money.finance.sina.com.cn/corp/view/vCB_AllBulletinDetail.php?stockid=300624&id=12225644"
+  },
+  {
+    "code": "300730",
+    "name": "科创信息",
+    "action": "摘除",
+    "pairs": [],
+    "verdict": "摘除",
+    "reason": "公司2025年收入仍按数字政府和智慧企业划分，合计占主营绝大部分，交付内容是软件开发、系统集成及IT运维项目，并非标准化公有云或在线订阅产品。年报中个别财政项目提出由项目制交付向SaaS服务加数据运营模式转型，属于未来业务方向，不能据此认定已经形成商业SaaS；大数据平台、互联网数据服务经营范围和AI中台也不等同于自营云计算。未见独立云产品客户、订阅收入或持续云运营规模，故摘除原泛化SaaS标签。",
+    "evidence_title": "科创信息：2025年年度报告",
+    "evidence_date": "2026-04-25",
+    "evidence_url": "https://static.cninfo.com.cn/finalpage/2026-04-25/1225181172.PDF"
+  },
+  {
+    "code": "300738",
+    "name": "奥飞数据",
+    "action": "纠错",
+    "pairs": [
+      {
+        "category": "云计算",
+        "concepts": [
+          "IDC与云基础设施"
+        ]
+      }
+    ],
+    "verdict": "核心",
+    "reason": "公司核心是自建和运营大型数据中心、智算中心并提供机柜、网络及相关互联网综合服务，2025年IDC服务收入19.66亿元，占总营收77.99%，同比增长41.82%，另有其他互联网综合服务收入4.17亿元，主营业务与云基础设施关系直接且规模化。但项目名称包含云计算以及为云厂商提供机房，并不证明公司自行销售云主机、云存储等IaaS资源，因此不能把IDC或智算中心自动升级为IaaS，改为IDC与云基础设施并维持核心。",
+    "evidence_title": "奥飞数据：2025年年度报告",
+    "evidence_date": "2026-04-18",
+    "evidence_url": "http://money.finance.sina.com.cn/corp/view/vCB_AllBulletinDetail.php?stockid=300738&id=12113619"
+  },
+  {
+    "code": "300846",
+    "name": "首都在线",
+    "action": "纠错",
+    "pairs": [
+      {
+        "category": "云计算",
+        "concepts": [
+          "IaaS计算与存储",
+          "PaaS-容器与AI开发平台",
+          "IDC与云基础设施"
+        ]
+      }
+    ],
+    "verdict": "核心",
+    "reason": "公司直接提供云主机、裸金属、对象存储、计算容器云等IaaS，并有数据库、容器、MaaS、AI Infra和工作流平台，符合真实计算资源及开发运行平台定义，同时经营IDC。2025年云主机及相关服务收入6.81亿元，占总营收55.07%，已超过IDC成为第一大业务；其中智算云收入2.95亿元，同比增长61.08%，大模型及AIGC行业收入2.61亿元。云产品已是规模化核心收入，故维持核心并补齐IaaS、PaaS和IDC的层级区分。",
+    "evidence_title": "首都在线：2025年年度报告",
+    "evidence_date": "2026-03-20",
+    "evidence_url": "https://static.cninfo.com.cn/finalpage/2026-03-20/1225019832.PDF"
+  },
+  {
+    "code": "600050",
+    "name": "中国联通",
+    "action": "纠错",
+    "pairs": [
+      {
+        "category": "云计算",
+        "concepts": [
+          "IaaS计算与存储",
+          "云平台与多云管理",
+          "IDC与云基础设施"
+        ]
+      }
+    ],
+    "verdict": "核心",
+    "reason": "中国联通虽然整体主营仍包括通信连接，但联通云是直接经营的云产品体系，收入口径覆盖云IDC、云资源、云平台、云服务、云集成、云互联和云安全，不能只用国资属性概括。2025年联通云收入同比增长5.2%，支撑180多个省市级政务云、服务近40万企业客户，并具备统一编排调度、MaaS及智算资源；数据中心收入另有281亿元。其云业务规模、客户和产品深度均达到核心标准，故由相关提升为核心并替换国资云标签。",
+    "evidence_title": "中国联通：2025年年度报告",
+    "evidence_date": "2026-03-20",
+    "evidence_url": "http://money.finance.sina.com.cn/corp/view/vCB_AllBulletinDetail.php?stockid=600050&id=12005771"
+  },
+  {
+    "code": "600126",
+    "name": "杭钢股份",
+    "action": "纠错",
+    "pairs": [
+      {
+        "category": "云计算",
+        "concepts": [
+          "IDC与云基础设施"
+        ]
+      }
+    ],
+    "verdict": "相关",
+    "reason": "杭钢股份合并营收仍以钢铁及压延产品为绝对主体，数字经济业务应按并表子公司实际经营认定，不能因国企背景直接贴国资云。2025年杭钢云公司和浙江云公司分别实现收入2.02亿元、3.39亿元，业务主要是数据中心机柜、数据处理和存储基础设施，合计仅约占集团营收1%，尚未证明自营公有云IaaS或云平台软件成为重要收入。已有真实投入运营和并表收入，故保留相关，但将国资云纠正为IDC与云基础设施。",
+    "evidence_title": "杭州钢铁股份有限公司2025年年度报告",
+    "evidence_date": "2026-04-18",
+    "evidence_url": "https://static.cninfo.com.cn/finalpage/2026-04-18/1225115359.PDF"
+  },
+  {
+    "code": "600410",
+    "name": "华胜天成",
+    "action": "纠错",
+    "pairs": [
+      {
+        "category": "云计算",
+        "concepts": [
+          "IaaS计算与存储",
+          "云平台与多云管理"
+        ]
+      }
+    ],
+    "verdict": "核心",
+    "reason": "公司虽以企业IT系统集成为最大板块，但云计算并非单纯合作或参股概念：天成云体系包括全栈私有云、异构混合多云管理、云资源编排、DevOps及云运维，并有制造等客户交付案例。2025年云计算产品及服务收入9.66亿元，同比增长5.94%，占总营收20.74%，已是独立且重要的产品收入板块，符合核心标准。原国资云既未准确反映客户和产品，也忽略多云管理及私有云能力，故改为IaaS与云平台标签并提升为核心。",
+    "evidence_title": "北京华胜天成科技股份有限公司2025年年度报告",
+    "evidence_date": "2026-04-28",
+    "evidence_url": "http://file.finance.sina.com.cn/211.154.219.97:9494/MRGG/CNSESH_STOCK/2026/2026-4/2026-04-28/12215971.PDF"
+  },
+  {
+    "code": "600588",
+    "name": "用友网络",
+    "action": "纠错",
+    "pairs": [
+      {
+        "category": "云计算",
+        "concepts": [
+          "SaaS-企业管理",
+          "PaaS-企业应用开发"
+        ]
+      }
+    ],
+    "verdict": "核心",
+    "reason": "公司主营企业软件与云服务，用友BIP、YonSuite、U9cloud覆盖财务、人力、供应链、制造等在线企业管理场景，iuap则包含云技术、应用、数据、开发及连接集成平台，兼具真实SaaS与PaaS能力。2025年云服务收入70.64亿元、ARR29.0亿元，累计付费客户106.70万家，已是主要收入和规模化核心产品，故将泛化SaaS标签细化为企业管理，并补充企业应用开发PaaS。",
+    "evidence_title": "用友网络科技股份有限公司2025年年度报告",
+    "evidence_date": "2026-04-18",
+    "evidence_url": "https://static.cninfo.com.cn/finalpage/2026-04-18/1225120765.PDF"
+  },
+  {
+    "code": "600589",
+    "name": "大位科技",
+    "action": "纠错",
+    "pairs": [
+      {
+        "category": "云计算",
+        "concepts": [
+          "IDC与云基础设施",
+          "IaaS计算与存储"
+        ]
+      }
+    ],
+    "verdict": "核心",
+    "reason": "公司主营互联网综合服务，2025年机柜租赁收入3.38亿元、网络传输及增值服务0.63亿元，IDC是其核心商业化业务；同时算力与云服务按服务器规格、租期、云资源配置、存储量和流量计费，说明存在真实资源服务而非仅建机房。算力与云服务收入1516.48万元、占比3.50%，规模尚小，因此保留IaaS但不以其替代IDC主标签，整体按云基础设施主业定核心。",
+    "evidence_title": "大位数据科技（广东）集团股份有限公司2025年年度报告",
+    "evidence_date": "2026-04-22",
+    "evidence_url": "http://file.finance.sina.com.cn/211.154.219.97:9494/MRGG/CNSESH_STOCK/2026/2026-4/2026-04-22/12134776.PDF"
+  },
+  {
+    "code": "600602",
+    "name": "云赛智联",
+    "action": "纠错",
+    "pairs": [
+      {
+        "category": "云计算",
+        "concepts": [
+          "IDC与云基础设施",
+          "IaaS计算与存储",
+          "云平台与多云管理"
+        ]
+      }
+    ],
+    "verdict": "核心",
+    "reason": "公司云计算大数据板块2025年收入28.79亿元，约占主营收入45%，直接经营IDC、IaaS和算力业务，并持续建设运营上海市级及区级政务云。公司还拥有自主云管平台，提供建云、迁移、代管、运维等MSP服务，政务云服务范围覆盖上海超过三分之一行政区。云资源转售不作为保留依据，依据自营基础设施、真实云管和持续运营项目，将国资云泛标签纠错为三类具体能力并升级核心。",
+    "evidence_title": "云赛智联股份有限公司2025年年度报告",
+    "evidence_date": "2026-03-28",
+    "evidence_url": "http://dataclouds.cninfo.com.cn/shgonggao/hsomarket/2026/20260327/6164c8c429a446eb98164dd7a49006cf.PDF"
+  },
+  {
+    "code": "600666",
+    "name": "奥瑞德",
+    "action": "纠错",
+    "pairs": [
+      {
+        "category": "云计算",
+        "concepts": [
+          "IaaS计算与存储"
+        ]
+      }
+    ],
+    "verdict": "核心",
+    "reason": "公司由蓝宝石制造扩展为蓝宝石与算力服务双业务，2025年算力综合服务收入2.28亿元，同比增长97.45%，约占总收入一半。其自建算力集群稳定运营，并整合第三方资源，为大模型训练、精调和实时推理提供算力，客户包括通信运营商、人工智能企业及大中型互联网平台，已形成持续收费和规模化交付，并非战略规划或参股概念，故将原相关升级为核心，标签明确为基础算力资源服务。",
+    "evidence_title": "奥瑞德光电股份有限公司2025年年度报告",
+    "evidence_date": "2026-04-16",
+    "evidence_url": "https://vip.stock.finance.sina.com.cn/corp/view/vCB_AllBulletinDetail.php?stockid=600666&id=12096141"
+  },
+  {
+    "code": "600941",
+    "name": "中国移动",
+    "action": "纠错",
+    "pairs": [
+      {
+        "category": "云计算",
+        "concepts": [
+          "IaaS计算与存储",
+          "IDC与云基础设施"
+        ]
+      }
+    ],
+    "verdict": "核心",
+    "reason": "集团基本盘仍是通信连接，但移动云、数据中心和云算应用均为直接自营的算力服务，不是内部上云或普通集成。2025年算力服务收入898亿元，同比增长11.1%，其中云算服务收入增长13.9%，AIDC收入增长35.4%；移动云已实现通算、智算、超算等资源调度与服务，具备大规模商业客户和收入贡献。按重要收入及规模化核心产品标准，将国资云泛标签细化为IaaS和IDC，并由相关升级核心。",
+    "evidence_title": "中国移动公布2025年全年业绩",
+    "evidence_date": "2026-03-26",
+    "evidence_url": "https://www.10086.cn/aboutus/news/groupnews/index_detail_54698.html"
+  },
+  {
+    "code": "601728",
+    "name": "中国电信",
+    "action": "纠错",
+    "pairs": [
+      {
+        "category": "云计算",
+        "concepts": [
+          "IaaS计算与存储",
+          "IDC与云基础设施"
+        ]
+      }
+    ],
+    "verdict": "核心",
+    "reason": "中国电信直接运营天翼云和AIDC，为政企及公众客户提供云计算、存储、平台和数据中心服务，属于自营云资源体系而非通信业务的简单延伸。2025年天翼云收入1207亿元，公有云IaaS市场份额升至国内第二、IaaS与PaaS合计份额居国内前三，AIDC收入345亿元，收入和客户规模均达到核心标准。虽然集团仍有大量基础通信收入，不影响云业务独立重要性，故将国资云改为具体IaaS与IDC标签并升级核心。",
+    "evidence_title": "中国电信股份有限公司2025年年度报告",
+    "evidence_date": "2026-03-24",
+    "evidence_url": "https://www.chinatelecom-h.com/sc/ir/report/annual2025_ashare.pdf"
+  },
+  {
+    "code": "603019",
+    "name": "中科曙光",
+    "action": "纠错",
+    "pairs": [
+      {
+        "category": "云计算",
+        "concepts": [
+          "IaaS计算与存储",
+          "云平台与多云管理"
+        ]
+      }
+    ],
+    "verdict": "相关",
+    "reason": "公司主营仍以高性能计算机、服务器和存储设备为主，2025年IT设备收入125.03亿元，不能仅凭服务器销售认定云计算。但曙光云确实提供混合多云、全栈云和超融合管理平台，并依托城市云计算中心向政企提供云服务，2025年在政务、教育、工业制造、交通及河北港口集团等场景落地。软件、系统集成及技术服务收入24.46亿元且并非全部为云，云收入未单独披露，因此将DeepSeek纠错为真实云产品与IaaS，定相关而非核心。",
+    "evidence_title": "曙光信息产业股份有限公司2025年年度报告摘要",
+    "evidence_date": "2026-04-15",
+    "evidence_url": "https://money.finance.sina.com.cn/corp/view/vCB_AllBulletinDetail.php?stockid=603019&id=12090794"
+  },
+  {
+    "code": "603881",
+    "name": "数据港",
+    "action": "纠错",
+    "pairs": [
+      {
+        "category": "云计算",
+        "concepts": [
+          "IDC与云基础设施"
+        ]
+      }
+    ],
+    "verdict": "核心",
+    "reason": "公司核心是数据中心定制建设、服务器托管及运维，2025年IDC服务收入16.96亿元，占总收入约98.5%，运营36个数据中心、总电力容量401MW，商业化规模和主营属性明确。年报同时显示云销售业务当年收入为零，智算业务仅353.15万元，不能把IDC机柜直接表述成IaaS，也不能以渠道云销售证明自营云平台。因此保留云计算下的IDC与云基础设施核心定位，但摘除原IaaS基础设施服务口径。",
+    "evidence_title": "上海数据港股份有限公司2025年年度报告",
+    "evidence_date": "2026-04-18",
+    "evidence_url": "https://money.finance.sina.com.cn/corp/view/vCB_AllBulletinDetail.php?stockid=603881&id=12114200"
+  },
+  {
+    "code": "688023",
+    "name": "安恒信息",
+    "action": "摘除",
+    "pairs": [],
+    "verdict": "摘除",
+    "reason": "公司主营始终是网络信息安全产品及服务，2025年报所列天池云安全管理平台、云密码、云数据安全和玄武盾均用于保护客户的云环境；在线SaaS与MSS也是按订阅交付安全检测、防护和运营能力。上述产品有真实客户和项目，但不提供通用云计算、存储、开发运行平台或在线非安全软件，云安全和安全SaaS不能等同于云计算，故摘除云计算分类，现有网络安全及数据安全定位另行保留。",
+    "evidence_title": "杭州安恒信息技术股份有限公司2025年年度报告",
+    "evidence_date": "2026-03-26",
+    "evidence_url": "http://file.finance.sina.com.cn/211.154.219.97:9494/MRGG/CNSESH_STOCK/2026/2026-3/2026-03-26/12018515.PDF"
+  },
+  {
+    "code": "688031",
+    "name": "星环科技-U",
+    "action": "纠错",
+    "pairs": [
+      {
+        "category": "云计算",
+        "concepts": [
+          "PaaS-数据开发与分析"
+        ]
+      }
+    ],
+    "verdict": "相关",
+    "reason": "公司主营AI和大数据基础软件，TDC并非普通项目平台，而是基于容器、支持多租户和弹性扩展的数据云，可将数据库、大数据平台及智能分析工具以PaaS方式提供，并已在大型企业和政务数据中心落地，具备真实开发运行环境。另一方面，公司主要通过永久授权及配套服务交付，2025年未单列TDC收入，无法证明云端平台已成为主要收入，故保留精确的PaaS数据开发与分析标签，但由核心降为相关。",
+    "evidence_title": "星环信息科技（上海）股份有限公司2025年年度报告",
+    "evidence_date": "2026-03-25",
+    "evidence_url": "http://file.finance.sina.com.cn/211.154.219.97:9494/MRGG/CNSESH_STOCK/2026/2026-3/2026-03-25/12015271.PDF"
+  },
+  {
+    "code": "688111",
+    "name": "金山办公",
+    "action": "纠错",
+    "pairs": [
+      {
+        "category": "云计算",
+        "concepts": [
+          "SaaS-办公协同"
+        ]
+      }
+    ],
+    "verdict": "核心",
+    "reason": "公司主营WPS Office及WPS 365，云文档、在线协作和组织办公订阅属于真实云交付，区别于本地WPS软件授权。2025年WPS 365收入7.20亿元，同比增长64.93%；个人业务收入36.26亿元，国内累计年度付费个人用户4615万，WPS云文档数量突破2900亿份，说明在线办公已具备大规模用户、收入和持续订阅基础。云办公是主营产品的重要形态和增长板块，故将泛SaaS标签细化为办公协同并维持核心。",
+    "evidence_title": "北京金山办公软件股份有限公司2025年年度报告",
+    "evidence_date": "2026-03-26",
+    "evidence_url": "https://static.cninfo.com.cn/finalpage/2026-03-26/1225032227.PDF"
+  },
+  {
+    "code": "688118",
+    "name": "普元信息",
+    "action": "纠错",
+    "pairs": [
+      {
+        "category": "云计算",
+        "concepts": [
+          "PaaS-应用开发与运维",
+          "PaaS-应用集成"
+        ]
+      }
+    ],
+    "verdict": "核心",
+    "reason": "公司2025年软件基础平台业务收入3.15亿元，占营业收入约92.7%，低代码平台支持在线建模、服务编排和应用构建，研发云覆盖开发、发布及运维全生命周期，iPaaS提供服务、消息、文件和数据集成，均属于明确的开发运行平台而非普通项目管理或传统中间件销售。产品已在金融、通信、能源、政务等客户商业交付，虽含私有化及授权模式，仍符合PaaS实质，故将泛PaaS纠错为两项具体核心能力。",
+    "evidence_title": "普元信息技术股份有限公司2025年年度报告",
+    "evidence_date": "2026-04-27",
+    "evidence_url": "http://static.cninfo.com.cn/finalpage/2026-04-27/1225197533.PDF"
+  },
+  {
+    "code": "688158",
+    "name": "优刻得-W",
+    "action": "纠错",
+    "pairs": [
+      {
+        "category": "云计算",
+        "concepts": [
+          "IaaS计算与存储",
+          "云平台与多云管理"
+        ]
+      }
+    ],
+    "verdict": "核心",
+    "reason": "公司是独立第三方云计算服务商，直接提供公有云、私有云和混合云，产品覆盖计算、存储、网络、容器及统一资源纳管，DeepSeek接入不是本轮保留依据。2025年云计算收入16.92亿元，占总收入约99.6%，其中公有云8.31亿元、混合云5.96亿元、私有云0.57亿元，三类业务均实现增长，属于明确主营和规模化商业交付，故将DeepSeek生态纠正为IaaS及多云平台核心标签。",
+    "evidence_title": "优刻得科技股份有限公司2025年年度报告",
+    "evidence_date": "2026-04-10",
+    "evidence_url": "https://static.cninfo.com.cn/finalpage/2026-04-10/1225091061.PDF"
+  },
+  {
+    "code": "688369",
+    "name": "致远互联",
+    "action": "纠错",
+    "pairs": [
+      {
+        "category": "云计算",
+        "concepts": [
+          "SaaS-办公协同",
+          "SaaS-人力资源"
+        ]
+      }
+    ],
+    "verdict": "相关",
+    "reason": "公司主营协同管理软件，2025年协同管理软件产品收入7.80亿元，主要仍按软件许可、实施和项目验收交付，不能整体视为SaaS。真实云业务包括支持在线订阅的薪事力人力资源云平台，当年新增客户百余家；iForm亦已获得多行业客户并主要采用公有云SaaS订阅。由于云订阅收入未单独披露且传统协同授权仍占主体，保留协同办公与人力资源两个具体SaaS标签，但由核心降为相关。",
+    "evidence_title": "北京致远互联软件股份有限公司2025年年度报告",
+    "evidence_date": "2026-04-21",
+    "evidence_url": "http://money.finance.sina.com.cn/corp/view/vCB_AllBulletinDetail.php?stockid=688369&id=12123996"
+  },
+  {
+    "code": "688561",
+    "name": "奇安信-U",
+    "action": "摘除",
+    "pairs": [],
+    "verdict": "摘除",
+    "reason": "公司2025年主营业务分为网络安全产品、网络安全服务及配套硬件，信息安全行业收入43.81亿元。CSMP、CNAPP、CWPP、云安全运营中心和SaaS终端安全管理系统均用于云基础设施、云主机、容器或终端的安全防护，虽然已有正式上市版本和政企客户，但不构成独立通用云计算、存储、PaaS或非安全SaaS产品。依据云安全不等于云计算的标准，摘除云计算标签，终端安全、数据安全与云安全等网安分类不在本轮重复输出。",
+    "evidence_title": "奇安信科技集团股份有限公司2025年年度报告",
+    "evidence_date": "2026-04-30",
+    "evidence_url": "http://file.finance.sina.com.cn/211.154.219.97:9494/MRGG/CNSESH_STOCK/2026/2026-4/2026-04-30/12285369.PDF"
+  }
+]

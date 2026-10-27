@@ -1,0 +1,390 @@
+[
+  {
+    "code": "000526",
+    "name": "学大教育",
+    "pairs": [
+      {
+        "category": "AI应用",
+        "concepts": [
+          "AI教育"
+        ]
+      }
+    ],
+    "verdict": "相关",
+    "reasons": {
+      "AI教育": "学大教育：个性化教育，AI 教育为业务方向"
+    },
+    "business_summary": "主营其他",
+    "sector": "其他"
+  },
+  {
+    "code": "000607",
+    "name": "华媒控股",
+    "pairs": [
+      {
+        "category": "AI应用",
+        "concepts": [
+          "AI影视短剧"
+        ]
+      }
+    ],
+    "verdict": "边缘",
+    "reasons": {
+      "AI影视短剧": "华媒控股：报业广告为主，短剧为内容尝试"
+    },
+    "business_summary": "主营商务服务业",
+    "sector": "商务服务业"
+  },
+  {
+    "code": "000676",
+    "name": "智度股份",
+    "pairs": [
+      {
+        "category": "AI应用",
+        "concepts": [
+          "AI营销"
+        ]
+      }
+    ],
+    "verdict": "相关",
+    "reasons": {
+      "AI营销": "智度股份：互联网媒体与营销",
+      "短剧": "智度股份：互联网媒体与营销"
+    },
+    "business_summary": "主营商务服务业",
+    "sector": "商务服务业"
+  },
+  {
+    "code": "000681",
+    "name": "视觉中国",
+    "pairs": [
+      {
+        "category": "AI应用",
+        "concepts": [
+          "字节生态"
+        ]
+      }
+    ],
+    "verdict": "核心",
+    "reasons": {
+      "数据要素_图片数据": "公司拥有合规图片及多模态训练数据，提供采集、标注、审核、认证及授权服务，并通过API、沙箱等方式交付和参与分成。图片及多模态内容经过加工后形成可授权的数据产品，业务链条完整。",
+      "字节生态": "视觉中国：内容版权授权（含 AI 训练素材）",
+      "AI监管-内容标识": "视觉中国：内容版权授权（含 AI 训练素材）",
+      "字节生态|AI监管-内容标识": "视觉中国：内容版权授权（含 AI 训练素材）"
+    },
+    "business_summary": "视觉内容版权与图片素材交易（视觉中国）",
+    "sector": "传媒/图片版权/视觉内容"
+  },
+  {
+    "code": "000802",
+    "name": "北京文化",
+    "pairs": [
+      {
+        "category": "AI应用",
+        "concepts": [
+          "AI影视短剧"
+        ]
+      }
+    ],
+    "verdict": "核心",
+    "reasons": {
+      "AI影视短剧": "北京文化：影视内容制作"
+    },
+    "business_summary": "主营广播、电视、电影和录音制作业",
+    "sector": "广播、电视、电影和录音制作业"
+  },
+  {
+    "code": "000892",
+    "name": "欢瑞世纪",
+    "pairs": [
+      {
+        "category": "AI应用",
+        "concepts": [
+          "短剧"
+        ]
+      },
+      {
+        "category": "AI应用",
+        "concepts": [
+          "AI影视短剧"
+        ]
+      }
+    ],
+    "verdict": "核心",
+    "reasons": {
+      "AI影视短剧": "欢瑞世纪：电视剧业务",
+      "短剧": "欢瑞世纪：电视剧业务"
+    },
+    "business_summary": "主营广播、电视、电影和录音制作业",
+    "sector": "广播、电视、电影和录音制作业"
+  },
+  {
+    "code": "000917",
+    "name": "电广传媒",
+    "pairs": [
+      {
+        "category": "AI应用",
+        "concepts": [
+          "AI营销"
+        ]
+      }
+    ],
+    "verdict": "边缘",
+    "reasons": {
+      "AI营销": "电广传媒：文旅为主"
+    },
+    "business_summary": "主营电信、广播电视和卫星传输服务",
+    "sector": "电信、广播电视和卫星传输服务"
+  },
+  {
+    "code": "001229",
+    "name": "魅视科技",
+    "pairs": [
+      {
+        "category": "AI应用",
+        "concepts": [
+          "AI应用"
+        ]
+      }
+    ],
+    "verdict": "相关",
+    "reasons": {
+      "AI应用": "魅视科技：分布式视听与视觉应用"
+    },
+    "business_summary": "主营其他",
+    "sector": "其他"
+  },
+  {
+    "code": "001314",
+    "name": "亿道信息",
+    "pairs": [
+      {
+        "category": "AI应用",
+        "concepts": [
+          "AI终端"
+        ]
+      }
+    ],
+    "verdict": "核心",
+    "reasons": {
+      "AI终端": "亿道信息：AI 穿戴/智能终端 ODM"
+    },
+    "business_summary": "主营多模态AI",
+    "sector": "多模态AI/电子竞技"
+  },
+  {
+    "code": "001330",
+    "name": "博纳影业",
+    "pairs": [
+      {
+        "category": "AI应用",
+        "concepts": [
+          "短剧"
+        ]
+      },
+      {
+        "category": "AI应用",
+        "concepts": [
+          "AI影视短剧"
+        ]
+      }
+    ],
+    "verdict": "核心",
+    "reasons": {
+      "AI影视短剧": "博纳影业：电影+AI 影视剧",
+      "短剧": "博纳影业：电影+AI 影视剧"
+    },
+    "business_summary": "电影业务、电影院业务、剧集业务、AI影视剧业务及其他业务。",
+    "sector": "影视院线/短剧游戏/AI视频/文化传媒概念"
+  },
+  {
+    "code": "002027",
+    "name": "分众传媒",
+    "pairs": [
+      {
+        "category": "AI应用",
+        "concepts": [
+          "AI营销"
+        ]
+      }
+    ],
+    "verdict": "相关",
+    "reasons": {
+      "AI营销": "分众传媒：楼宇媒体，AI 投放为工具"
+    },
+    "business_summary": "主营商务服务业",
+    "sector": "商务服务业"
+  },
+  {
+    "code": "002093",
+    "name": "国脉科技",
+    "pairs": [
+      {
+        "category": "AI应用",
+        "concepts": [
+          "AI应用"
+        ]
+      },
+      {
+        "category": "AI应用",
+        "concepts": [
+          "AI应用"
+        ]
+      }
+    ],
+    "verdict": "",
+    "reasons": {},
+    "business_summary": "主营软件和信息技术服务业",
+    "sector": "软件和信息技术服务业"
+  },
+  {
+    "code": "002103",
+    "name": "广博股份",
+    "pairs": [
+      {
+        "category": "AI应用",
+        "concepts": [
+          "AI营销"
+        ]
+      }
+    ],
+    "verdict": "边缘",
+    "reasons": {
+      "AI营销": "广博股份：文教办公用品/文创"
+    },
+    "business_summary": "主营文教、工美、体育和娱乐用品制造业",
+    "sector": "文教、工美、体育和娱乐用品制造业"
+  },
+  {
+    "code": "002131",
+    "name": "利欧股份",
+    "pairs": [
+      {
+        "category": "AI应用",
+        "concepts": [
+          "AI营销"
+        ]
+      }
+    ],
+    "verdict": "边缘",
+    "reasons": {
+      "spacex": "利欧股份：机械制造+数字营销双主业",
+      "DeepSeek": "利欧股份：机械制造+数字营销双主业",
+      "AI营销": "利欧股份：机械制造+数字营销双主业"
+    },
+    "business_summary": "机械制造业务和数字营销业务。",
+    "sector": "通用设备/快手概念/小红书概念/多模态AI"
+  },
+  {
+    "code": "002174",
+    "name": "游族网络",
+    "pairs": [
+      {
+        "category": "AI应用",
+        "concepts": [
+          "AI游戏"
+        ]
+      }
+    ],
+    "verdict": "核心",
+    "reasons": {
+      "AI游戏": "游族网络：游戏研发发行"
+    },
+    "business_summary": "主营互联网和相关服务",
+    "sector": "互联网和相关服务"
+  },
+  {
+    "code": "002178",
+    "name": "延华智能",
+    "pairs": [
+      {
+        "category": "AI应用",
+        "concepts": [
+          "AI应用"
+        ]
+      }
+    ],
+    "verdict": "相关",
+    "reasons": {
+      "AI应用": "延华智能：智慧城市与云平台"
+    },
+    "business_summary": "主营软件和信息技术服务业",
+    "sector": "软件和信息技术服务业"
+  },
+  {
+    "code": "002181",
+    "name": "粤传媒",
+    "pairs": [
+      {
+        "category": "AI应用",
+        "concepts": [
+          "AI营销"
+        ]
+      }
+    ],
+    "verdict": "相关",
+    "reasons": {
+      "AI营销": "粤传媒：整合营销传播"
+    },
+    "business_summary": "主营商务服务业",
+    "sector": "商务服务业"
+  },
+  {
+    "code": "002195",
+    "name": "岩山科技",
+    "pairs": [
+      {
+        "category": "AI应用",
+        "concepts": [
+          "AI大模型"
+        ]
+      }
+    ],
+    "verdict": "边缘",
+    "reasons": {
+      "AI大模型": "岩山科技：互联网信息服务，大模型为依据弱"
+    },
+    "business_summary": "主营互联网和相关服务",
+    "sector": "互联网和相关服务"
+  },
+  {
+    "code": "002230",
+    "name": "科大讯飞",
+    "pairs": [
+      {
+        "category": "AI应用",
+        "concepts": [
+          "AI大模型"
+        ]
+      }
+    ],
+    "verdict": "核心",
+    "reasons": {
+      "AI大模型": "科大讯飞：AI 平台与行业应用",
+      "昇腾应用软件伙伴": "科大讯飞：AI 平台与行业应用"
+    },
+    "business_summary": "语音技术相关的计算机软、硬件开发、生产和销售及技术服务。",
+    "sector": "软件开发/ChatGPT概念/华为昇腾/互联网保险"
+  },
+  {
+    "code": "002235",
+    "name": "安妮股份",
+    "pairs": [
+      {
+        "category": "AI应用",
+        "concepts": [
+          "短剧"
+        ]
+      }
+    ],
+    "verdict": "核心",
+    "reasons": {
+      "数据要素_数据确权": "“版权家”提供确权、授权、维权、信息及资产管理，以区块链完成数字版权存证并记录授权全过程，具备明确的数据确权产品链条。版权业务收入占比有限，但产品与数据确权标签高度匹配。",
+      "短剧": "安妮股份：版权综合服务（确权）",
+      "AI监管-确权": "安妮股份：版权综合服务（确权）",
+      "短剧|AI监管-确权": "安妮股份：版权综合服务（确权）"
+    },
+    "business_summary": "主营造纸和纸制品业",
+    "sector": "造纸和纸制品业"
+  }
+]

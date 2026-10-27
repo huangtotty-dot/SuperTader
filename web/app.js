@@ -7806,6 +7806,26 @@ function hunterBreakoutCard(dateStr) {
 const PHASE_CLS = {"首现": "p-first", "发酵": "p-ferment", "高潮": "p-peak",
                    "退潮": "p-ebb", "扩散": "p-spread", "观察": "p-watch", "—": "p-none"};
 
+// 一级板块科普指南：内容完全由后端 category_guides 下发，所有文案统一转义。
+// 未配置指南的板块返回空串，不改变原有明细、图例或折叠/展开事件。
+function hunterCategoryGuideHtml(guide) {
+  if (!guide || !guide.title) return "";
+  const sections = Array.isArray(guide.sections) ? guide.sections : [];
+  const body = sections.map(section => {
+    if (!section) return "";
+    const items = Array.isArray(section.items) ? section.items : [];
+    return `<div class="h-category-guide-section">
+      ${section.heading ? `<h4>${esc(section.heading)}</h4>` : ""}
+      ${section.text ? `<p>${esc(section.text)}</p>` : ""}
+      ${items.length ? `<ul>${items.map(item => `<li>${esc(item)}</li>`).join("")}</ul>` : ""}
+    </div>`;
+  }).join("");
+  return `<section class="h-category-guide" aria-label="${esc(guide.title)}">
+    <h3 class="h-category-guide-title">☁️ ${esc(guide.title)}</h3>
+    <div class="h-category-guide-grid">${body}</div>
+  </section>`;
+}
+
 function renderHunter(h) {
   // 「建仓符合度是否已算」：`build_n` 由后端在**算完之后**回填（算了多少只）。
   // =0 说明这一步还没跑到/没跑完 ⇒ 各行显示 ⏳（更新中）而不是 —（无数据）。
@@ -8140,6 +8160,7 @@ function renderHunter(h) {
       </div>
       <div class="hunter-detail${_open ? " open" : ""}">
         <div class="h-expand">
+          ${hunterCategoryGuideHtml((h.category_guides || {})[category])}
           <div class="h-legend" title="个股名字后面的小标 = 该股所挂标签与它主营的相关度（2026-10-24 起逐板块人工核）">
             <span class="h-legend-title">标签相关度</span>
             <span class="h-legend-item"><span class="h-verdict v-核心">核心</span>概念就是它的主营业务</span>

@@ -1,0 +1,147 @@
+{
+  "status": "pass_independent_qa",
+  "metrics": {
+    "复核股票": 89,
+    "保留PCB": 76,
+    "核心": 52,
+    "相关": 24,
+    "纠错": 70,
+    "完全摘除": 13,
+    "PCB二级概念": 23,
+    "概念出现次数": 144,
+    "最短理由字符数": 267
+  },
+  "concept_occurrences_by_verdict": {
+    "核心": 116,
+    "相关": 28,
+    "合计": 144
+  },
+  "formal_equals_preview": true,
+  "backup_records": 5400,
+  "non_target_records_unchanged": 5311,
+  "other_category_pairs_and_verdicts_preserved": true,
+  "category_differences_loader": {
+    "": [
+      3109,
+      3116
+    ],
+    "PCB": [
+      90,
+      76
+    ]
+  },
+  "loader_counts": {
+    "PCB": 76,
+    "半导体": 153,
+    "光通信": 42,
+    "商业航天": 74,
+    "军工": 89,
+    "云计算": 37,
+    "网络安全": 38,
+    "AI应用": 84,
+    "物理AI": 54,
+    "数据要素": 77
+  },
+  "borderline_second_review": {
+    "verdict_changes": {
+      "301511": "相关→核心"
+    },
+    "field_change_count": 17
+  },
+  "workbook_formula_count": 78,
+  "workbook_formula_gate": "deferred_calcMode_auto; 78 formula caches unavailable; all reported values independently recomputed from JSON",
+  "workbook_independent_stats": {
+    "PCB/PCB-FPC与刚挠结合": {
+      "核心": 13,
+      "相关": 0
+    },
+    "PCB/PCB-HDI与任意层互连": {
+      "核心": 22,
+      "相关": 0
+    },
+    "PCB/PCB-IC载板": {
+      "核心": 5,
+      "相关": 0
+    },
+    "PCB/PCB-通用刚性板": {
+      "核心": 12,
+      "相关": 0
+    },
+    "PCB/PCB-高多层与服务器板": {
+      "核心": 21,
+      "相关": 0
+    },
+    "PCB/PCB刀具-钻针与铣刀": {
+      "核心": 2,
+      "相关": 1
+    },
+    "PCB/PCB化学品-电镀与湿制程": {
+      "核心": 2,
+      "相关": 1
+    },
+    "PCB/PCB材料-其他关键材料": {
+      "核心": 1,
+      "相关": 1
+    },
+    "PCB/PCB股权与产业投资": {
+      "核心": 0,
+      "相关": 1
+    },
+    "PCB/PCB设备-SMT与贴装": {
+      "核心": 1,
+      "相关": 0
+    },
+    "PCB/PCB设备-曝光与成像": {
+      "核心": 2,
+      "相关": 2
+    },
+    "PCB/PCB设备-检测与测试": {
+      "核心": 3,
+      "相关": 1
+    },
+    "PCB/PCB设备-电镀": {
+      "核心": 2,
+      "相关": 1
+    },
+    "PCB/PCB设备-钻孔与激光加工": {
+      "核心": 1,
+      "相关": 3
+    },
+    "PCB/PCB设计与SMT服务": {
+      "核心": 6,
+      "相关": 0
+    },
+    "PCB/PCB配套-精密零部件": {
+      "核心": 1,
+      "相关": 0
+    },
+    "PCB/填料-硅微粉与功能粉体": {
+      "核心": 0,
+      "相关": 6
+    },
+    "PCB/树脂-环氧与碳氢": {
+      "核心": 2,
+      "相关": 2
+    },
+    "PCB/树脂-苊烯与特种": {
+      "核心": 0,
+      "相关": 1
+    },
+    "PCB/电子布与玻纤材料": {
+      "核心": 4,
+      "相关": 3
+    },
+    "PCB/覆铜板与粘结片": {
+      "核心": 9,
+      "相关": 0
+    },
+    "PCB/铜箔-HVLP与高频高速": {
+      "核心": 3,
+      "相关": 3
+    },
+    "PCB/铜箔-通用PCB": {
+      "核心": 4,
+      "相关": 2
+    }
+  }
+}

@@ -1,0 +1,41 @@
+{
+  "status": "pass_independent_qa",
+  "metrics": {
+    "复核股票": 45,
+    "保留网络安全": 38,
+    "核心": 30,
+    "相关": 8,
+    "摘除": 7,
+    "纠错": 36,
+    "新增": 2,
+    "二级概念": 47,
+    "概念出现次数": 67,
+    "最短理由字符数": 165
+  },
+  "concept_occurrences_by_verdict": {
+    "核心": 57,
+    "相关": 10,
+    "合计": 67
+  },
+  "formal_equals_preview": true,
+  "backup_records": 5400,
+  "non_target_records_unchanged": 5355,
+  "category_differences_loader": {
+    "": [
+      3079,
+      3085
+    ],
+    "网络安全": [
+      45,
+      38
+    ]
+  },
+  "loader_counts": {
+    "网络安全": 38,
+    "AI应用": 84,
+    "物理AI": 54,
+    "数据要素": 77
+  },
+  "workbook_formula_count": 151,
+  "workbook_formula_gate": "deferred_calcMode_auto; independent QA used for all reported values"
+}

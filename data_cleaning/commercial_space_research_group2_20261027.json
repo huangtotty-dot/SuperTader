@@ -1,0 +1,1508 @@
+[
+ {
+  "code": "002985",
+  "name": "北摩高科",
+  "pairs": [
+   {
+    "category": "商业航天",
+    "concept": "千帆星座",
+    "slot": 1
+   }
+  ],
+  "verdict": "相关",
+  "reasons": {
+   "千帆星座": "北摩高科：飞机刹车系统",
+   "卫星": "北摩高科：飞机刹车系统"
+  },
+  "business_summary": "主营铁路、船舶、航空航天和其他运输设备制造业",
+  "sector": "铁路、船舶、航空航天和其他运输设备制造业",
+  "ifind_profile": {
+   "main_products": "刹车盘业务、刹车控制系统及机轮业务、起落架着陆系统",
+   "main_business": "主要从事军、民两用航空航天飞行器起落架着陆系统及坦克装甲车辆、高速列车等高端装备刹车制动产品的研发、生产和销售",
+   "controller": "王淑敏",
+   "website": "www.bjgk.com"
+  },
+  "ifind_2025_segments": [
+   {
+    "industry_composition": "航空制造业:66.8424%;检测服务业:27.4068%;其他:5.7507%",
+    "industry": "航空制造业",
+    "industry_revenue_yi": 6.1361,
+    "industry_gross_margin_pct": "40.9718",
+    "product": "起降系统产品",
+    "product_revenue_yi": 6.1361,
+    "product_gross_margin_pct": "40.9718"
+   },
+   {
+    "industry_composition": "",
+    "industry": "检测服务",
+    "industry_revenue_yi": 2.5159,
+    "industry_gross_margin_pct": "62.9558",
+    "product": "检测试验",
+    "product_revenue_yi": 2.5159,
+    "product_gross_margin_pct": "62.9558"
+   },
+   {
+    "industry_composition": "",
+    "industry": "其他",
+    "industry_revenue_yi": 0.5279,
+    "industry_gross_margin_pct": "59.5223",
+    "product": "其他",
+    "product_revenue_yi": 0.5279,
+    "product_gross_margin_pct": "59.5223"
+   }
+  ]
+ },
+ {
+  "code": "003009",
+  "name": "中天火箭",
+  "pairs": [
+   {
+    "category": "商业航天",
+    "concept": "国家队",
+    "slot": 1
+   }
+  ],
+  "verdict": "核心",
+  "reasons": {
+   "国家队": "中天火箭：小型固体火箭整箭",
+   "火箭": "中天火箭：小型固体火箭整箭"
+  },
+  "business_summary": "小型固体火箭及其延伸产品的研发、生产和销售。",
+  "sector": "航天装备Ⅱ/军民融合/商业航天/军工",
+  "ifind_profile": {
+   "main_products": "增雨防雹火箭、探空火箭和小型制导火箭",
+   "main_business": "从事小型固体火箭及其延伸产品的研发、生产和销售。",
+   "controller": "国务院国有资产监督管理委员会",
+   "website": "www.zthj.com"
+  },
+  "ifind_2025_segments": [
+   {
+    "industry_composition": "小型固体火箭及其延伸产品:100.0000%",
+    "industry": "小型固体火箭及其延伸产品",
+    "industry_revenue_yi": 7.8301,
+    "industry_gross_margin_pct": "18.9230",
+    "product": "增雨防雹火箭及配套装备",
+    "product_revenue_yi": 3.9412,
+    "product_gross_margin_pct": "35.3919"
+   },
+   {
+    "industry_composition": "",
+    "industry": "",
+    "industry_revenue_yi": null,
+    "industry_gross_margin_pct": "",
+    "product": "炭/炭热场材料",
+    "product_revenue_yi": 1.3962,
+    "product_gross_margin_pct": "-40.7986"
+   },
+   {
+    "industry_composition": "",
+    "industry": "",
+    "industry_revenue_yi": null,
+    "industry_gross_margin_pct": "",
+    "product": "军用小型固体火箭",
+    "product_revenue_yi": 1.1088,
+    "product_gross_margin_pct": "25.4141"
+   },
+   {
+    "industry_composition": "",
+    "industry": "",
+    "industry_revenue_yi": null,
+    "industry_gross_margin_pct": "",
+    "product": "其他民品",
+    "product_revenue_yi": 0.9496,
+    "product_gross_margin_pct": "23.5130"
+   },
+   {
+    "industry_composition": "",
+    "industry": "",
+    "industry_revenue_yi": null,
+    "industry_gross_margin_pct": "",
+    "product": "固体火箭发动机耐烧蚀组件",
+    "product_revenue_yi": 0.4105,
+    "product_gross_margin_pct": "52.8914"
+   }
+  ]
+ },
+ {
+  "code": "300045",
+  "name": "华力创通",
+  "pairs": [
+   {
+    "category": "商业航天",
+    "concept": "卫星-地面设备",
+    "slot": 0
+   }
+  ],
+  "verdict": "核心",
+  "reasons": {
+   "卫星-地面设备": "华力创通：卫星导航/通信终端"
+  },
+  "business_summary": "主营计算机、通信和其他电子设备制造业",
+  "sector": "计算机、通信和其他电子设备制造业",
+  "ifind_profile": {
+   "main_products": "芯片、模块、终端、平台与系统解决方案、标准化产品、智慧试验与仿真测试平台、射频测试产品线、信号处理平台产品线、干扰设备产品线、中高速无人训练机、中大型复合翼无人机",
+   "main_business": "机电仿真测试、仿真应用开发、卫星导航及其仿真测试和雷达通信及其仿真测试等领域。",
+   "controller": "高小离",
+   "website": "www.hwacreate.com.cn"
+  },
+  "ifind_2025_segments": [
+   {
+    "industry_composition": "",
+    "industry": "",
+    "industry_revenue_yi": null,
+    "industry_gross_margin_pct": "",
+    "product": "北斗卫星导航",
+    "product_revenue_yi": 3.6696,
+    "product_gross_margin_pct": "34.6106"
+   },
+   {
+    "industry_composition": "",
+    "industry": "",
+    "industry_revenue_yi": null,
+    "industry_gross_margin_pct": "",
+    "product": "机电仿真测试",
+    "product_revenue_yi": 1.5562,
+    "product_gross_margin_pct": "27.0134"
+   },
+   {
+    "industry_composition": "",
+    "industry": "",
+    "industry_revenue_yi": null,
+    "industry_gross_margin_pct": "",
+    "product": "雷达仿真测试",
+    "product_revenue_yi": 0.9507,
+    "product_gross_margin_pct": "44.7005"
+   },
+   {
+    "industry_composition": "",
+    "industry": "",
+    "industry_revenue_yi": null,
+    "industry_gross_margin_pct": "",
+    "product": "仿真系统集成",
+    "product_revenue_yi": 0.8489,
+    "product_gross_margin_pct": "17.0125"
+   },
+   {
+    "industry_composition": "",
+    "industry": "",
+    "industry_revenue_yi": null,
+    "industry_gross_margin_pct": "",
+    "product": "其他主营业务",
+    "product_revenue_yi": 0.7866,
+    "product_gross_margin_pct": "7.6341"
+   }
+  ]
+ },
+ {
+  "code": "300053",
+  "name": "航宇微",
+  "pairs": [
+   {
+    "category": "商业航天",
+    "concept": "卫星",
+    "slot": 0
+   }
+  ],
+  "verdict": "核心",
+  "reasons": {
+   "卫星": "航宇微：宇航电子（SoC/存储）"
+  },
+  "business_summary": "主营半导体",
+  "sector": "半导体/卫星导航/商业航天/时空大数据",
+  "ifind_profile": {
+   "main_products": "SOC芯片、SIP芯片、EMBC、卫星数据及产品应用、地理信息及智能测绘、大数据运维、AI芯片及算法、智能安防及智能交通",
+   "main_business": "宇航电子、卫星大数据、人工智能、地理信息与智能测绘、智能安防与交通五大业务板块业务。",
+   "controller": "珠海市人民政府国有资产监督管理委员会",
+   "website": "www.myorbita.net"
+  },
+  "ifind_2025_segments": [
+   {
+    "industry_composition": "宇航电子:45.3485%;人工智能:29.3244%;卫星星座及卫星大数据:25.3271%",
+    "industry": "宇航电子",
+    "industry_revenue_yi": 1.2567,
+    "industry_gross_margin_pct": "59.3646",
+    "product": "SIP芯片类产品",
+    "product_revenue_yi": 1.0676,
+    "product_gross_margin_pct": "63.4144"
+   },
+   {
+    "industry_composition": "",
+    "industry": "人工智能",
+    "industry_revenue_yi": 0.8127,
+    "industry_gross_margin_pct": "38.5099",
+    "product": "铂亚安防业务",
+    "product_revenue_yi": 0.5197,
+    "product_gross_margin_pct": "12.7276"
+   },
+   {
+    "industry_composition": "",
+    "industry": "卫星大数据",
+    "industry_revenue_yi": 0.7019,
+    "industry_gross_margin_pct": "3.0055",
+    "product": "卫星大数据服务",
+    "product_revenue_yi": 0.43,
+    "product_gross_margin_pct": "-10.3381"
+   },
+   {
+    "industry_composition": "",
+    "industry": "",
+    "industry_revenue_yi": null,
+    "industry_gross_margin_pct": "",
+    "product": "AI芯片及算法",
+    "product_revenue_yi": 0.293,
+    "product_gross_margin_pct": "84.2455"
+   },
+   {
+    "industry_composition": "",
+    "industry": "",
+    "industry_revenue_yi": null,
+    "industry_gross_margin_pct": "",
+    "product": "测绘及信息系统工程",
+    "product_revenue_yi": 0.2722,
+    "product_gross_margin_pct": "23.9679"
+   }
+  ]
+ },
+ {
+  "code": "300065",
+  "name": "海兰信",
+  "pairs": [
+   {
+    "category": "商业航天",
+    "concept": "火箭",
+    "slot": 1
+   },
+   {
+    "category": "液冷",
+    "concept": "液冷服务器",
+    "slot": 2
+   }
+  ],
+  "verdict": "边缘",
+  "reasons": {
+   "火箭": "海兰信：智能航海",
+   "液冷服务器": "海兰信：智能航海"
+  },
+  "business_summary": "主营航海装备Ⅱ",
+  "sector": "航海装备Ⅱ/军工信息化/国产航母/商业航天",
+  "ifind_profile": {
+   "main_products": "海洋观探测装备与系统、智能船舶与智能航行系统",
+   "main_business": "智能航海、海洋观探测及海底数据中心业务。",
+   "controller": "申万秋",
+   "website": "www.highlander.com.cn"
+  },
+  "ifind_2025_segments": [
+   {
+    "industry_composition": "海洋观探测装备与系统:48.2162%;智能船舶与智能航行系统:47.8720%;其他:3.9118%",
+    "industry": "海洋观探测装备与系统",
+    "industry_revenue_yi": 3.4538,
+    "industry_gross_margin_pct": "12.2377",
+    "product": "海洋观探测装备与系统",
+    "product_revenue_yi": 3.4538,
+    "product_gross_margin_pct": "12.2377"
+   },
+   {
+    "industry_composition": "",
+    "industry": "智能船舶与智能航行系统",
+    "industry_revenue_yi": 3.4292,
+    "industry_gross_margin_pct": "45.5160",
+    "product": "智能船舶与智能航行系统",
+    "product_revenue_yi": 3.4292,
+    "product_gross_margin_pct": "45.5160"
+   },
+   {
+    "industry_composition": "",
+    "industry": "环境监测",
+    "industry_revenue_yi": 0.2802,
+    "industry_gross_margin_pct": "25.8322",
+    "product": "环境监测产品",
+    "product_revenue_yi": 0.2802,
+    "product_gross_margin_pct": "25.8322"
+   }
+  ]
+ },
+ {
+  "code": "300102",
+  "name": "乾照光电",
+  "pairs": [
+   {
+    "category": "商业航天",
+    "concept": "千帆星座",
+    "slot": 1
+   },
+   {
+    "category": "太空光伏",
+    "concept": "砷化镓电池",
+    "slot": 2
+   }
+  ],
+  "verdict": "相关",
+  "reasons": {
+   "千帆星座": "乾照光电：砷化镓电池（空间电源）",
+   "砷化镓电池": "乾照光电：砷化镓电池（空间电源）"
+  },
+  "business_summary": "主营计算机、通信和其他电子设备制造业",
+  "sector": "计算机、通信和其他电子设备制造业",
+  "ifind_profile": {
+   "main_products": "LED外延片及芯片、砷化镓太阳能电池产品、感测及光通信芯片",
+   "main_business": "半导体光电产品的研发、生产和销售",
+   "controller": "",
+   "website": "www.changelight.com.cn"
+  },
+  "ifind_2025_segments": [
+   {
+    "industry_composition": "半导体光电:100.0000%",
+    "industry": "半导体光电",
+    "industry_revenue_yi": 34.0089,
+    "industry_gross_margin_pct": "11.3833",
+    "product": "外延片芯片",
+    "product_revenue_yi": 17.7107,
+    "product_gross_margin_pct": "15.2399"
+   },
+   {
+    "industry_composition": "",
+    "industry": "",
+    "industry_revenue_yi": null,
+    "industry_gross_margin_pct": "",
+    "product": "其他",
+    "product_revenue_yi": 16.2982,
+    "product_gross_margin_pct": "7.1925"
+   }
+  ]
+ },
+ {
+  "code": "300118",
+  "name": "东方日升",
+  "pairs": [
+   {
+    "category": "电力",
+    "concept": "储能",
+    "slot": 1
+   },
+   {
+    "category": "商业航天",
+    "concept": "spacex-潜在供应商",
+    "slot": 2
+   },
+   {
+    "category": "太空光伏",
+    "concept": "太空光伏组件",
+    "slot": 3
+   }
+  ],
+  "verdict": "边缘",
+  "reasons": {
+   "spacex-潜在供应商": "东方日升：组件为主，储能为延伸",
+   "太空光伏组件": "东方日升：组件为主，储能为延伸",
+   "储能": "东方日升：组件为主，储能为延伸"
+  },
+  "business_summary": "主营光伏设备",
+  "sector": "光伏设备/TOPCON电池/HJT电池/钙钛矿电池",
+  "ifind_profile": {
+   "main_products": "太阳能电池及组件、太阳能电站EPC与转让、光伏电站电力、储能系统、灯具及辅助光伏产品",
+   "main_business": "太阳能电池片、太阳能电池组件以及太阳能灯具等太阳能光伏产品的生产和销售",
+   "controller": "林海峰",
+   "website": "www.risen.com"
+  },
+  "ifind_2025_segments": [
+   {
+    "industry_composition": "工业:96.5420%;其他:3.4580%",
+    "industry": "工业",
+    "industry_revenue_yi": 121.4926,
+    "industry_gross_margin_pct": "0.3009",
+    "product": "太阳能电池组件",
+    "product_revenue_yi": 65.6992,
+    "product_gross_margin_pct": "-7.4094"
+   },
+   {
+    "industry_composition": "",
+    "industry": "其他",
+    "industry_revenue_yi": 4.3517,
+    "industry_gross_margin_pct": "4.4472",
+    "product": "太阳能电站",
+    "product_revenue_yi": 33.5803,
+    "product_gross_margin_pct": "2.1172"
+   },
+   {
+    "industry_composition": "",
+    "industry": "",
+    "industry_revenue_yi": null,
+    "industry_gross_margin_pct": "",
+    "product": "储能系统、灯具及辅助光伏产品",
+    "product_revenue_yi": 17.434,
+    "product_gross_margin_pct": "19.5653"
+   },
+   {
+    "industry_composition": "",
+    "industry": "",
+    "industry_revenue_yi": null,
+    "industry_gross_margin_pct": "",
+    "product": "电费",
+    "product_revenue_yi": 4.779,
+    "product_gross_margin_pct": "23.2595"
+   },
+   {
+    "industry_composition": "",
+    "industry": "",
+    "industry_revenue_yi": null,
+    "industry_gross_margin_pct": "",
+    "product": "其他",
+    "product_revenue_yi": 4.3517,
+    "product_gross_margin_pct": "4.4472"
+   }
+  ]
+ },
+ {
+  "code": "300136",
+  "name": "信维通信",
+  "pairs": [
+   {
+    "category": "商业航天",
+    "concept": "spacex-参股",
+    "slot": 1
+   }
+  ],
+  "verdict": "相关",
+  "reasons": {
+   "spacex-参股": "信维通信：天线模组，卫星终端可用",
+   "卫星": "信维通信：天线模组，卫星终端可用"
+  },
+  "business_summary": "天线及模组、无线充电及模组、EMI/EMC器件、高精密连接器、声学器件、汽车互联产品",
+  "sector": "消费电子/同花顺果指数/6G概念/卫星导航",
+  "ifind_profile": {
+   "main_products": "天线及模组、无线充电模组及相关产品、EMI\\EMC器件、高精密连接器、声学器件、汽车互联产品、被动元件",
+   "main_business": "移动终端天线、3G终端天线、模组天线、3D精密成型天线、高性能天线连接器的生产与经营。",
+   "controller": "彭浩",
+   "website": "www.sz-sunway.com"
+  },
+  "ifind_2025_segments": [
+   {
+    "industry_composition": "射频零、部件:100.0000%",
+    "industry": "移动终端天线及其附件",
+    "industry_revenue_yi": 89.0978,
+    "industry_gross_margin_pct": "22.7889",
+    "product": "移动终端天线及附件",
+    "product_revenue_yi": 89.0978,
+    "product_gross_margin_pct": "22.7889"
+   }
+  ]
+ },
+ {
+  "code": "300228",
+  "name": "富瑞特装",
+  "pairs": [
+   {
+    "category": "商业航天",
+    "concept": "火箭",
+    "slot": 0
+   }
+  ],
+  "verdict": "边缘",
+  "reasons": {
+   "火箭": "富瑞特装：LNG 装备，火箭燃料装备为延伸"
+  },
+  "business_summary": "主营专用设备制造业",
+  "sector": "专用设备制造业",
+  "ifind_profile": {
+   "main_products": "液化工厂装置、LNG/L-CNG加气站设备、低温液体运输车、低温液体罐式集装箱、LNG储罐、车（船）用LNG供气系统、速必达、系列低温阀门、各类化工及海工等方面的塔器、换热器、反应器等压力容器及LNG船罐、LNG加工运维服务及销售",
+   "main_business": "天然气液化和LNG储存、运输、终端应用全产业链装备制造及提供一站式整体技术解决方案及运维服务、重型装备制造。",
+   "controller": "",
+   "website": "www.furuigroup.com"
+  },
+  "ifind_2025_segments": [
+   {
+    "industry_composition": "专用设备制造业:98.2851%;其他业务:1.7149%",
+    "industry": "专用设备制造业",
+    "industry_revenue_yi": 30.9558,
+    "industry_gross_margin_pct": "23.9816",
+    "product": "低温储运应用设备",
+    "product_revenue_yi": 13.4148,
+    "product_gross_margin_pct": "21.0777"
+   },
+   {
+    "industry_composition": "",
+    "industry": "其他业务",
+    "industry_revenue_yi": 0.5401,
+    "industry_gross_margin_pct": "61.3539",
+    "product": "LNG销售及运维服务",
+    "product_revenue_yi": 9.1497,
+    "product_gross_margin_pct": "19.5358"
+   },
+   {
+    "industry_composition": "",
+    "industry": "",
+    "industry_revenue_yi": null,
+    "industry_gross_margin_pct": "",
+    "product": "重装设备",
+    "product_revenue_yi": 7.3789,
+    "product_gross_margin_pct": "34.2557"
+   },
+   {
+    "industry_composition": "",
+    "industry": "",
+    "industry_revenue_yi": null,
+    "industry_gross_margin_pct": "",
+    "product": "装卸臂",
+    "product_revenue_yi": 1.0124,
+    "product_gross_margin_pct": "27.7567"
+   },
+   {
+    "industry_composition": "",
+    "industry": "",
+    "industry_revenue_yi": null,
+    "industry_gross_margin_pct": "",
+    "product": "其他设备",
+    "product_revenue_yi": 0.5401,
+    "product_gross_margin_pct": "61.3539"
+   }
+  ]
+ },
+ {
+  "code": "300316",
+  "name": "晶盛机电",
+  "pairs": [
+   {
+    "category": "半导体",
+    "concept": "半导体设备",
+    "slot": 1
+   },
+   {
+    "category": "半导体",
+    "concept": "半导体材料",
+    "slot": 2
+   },
+   {
+    "category": "商业航天",
+    "concept": "spacex-潜在供应商",
+    "slot": 3
+   },
+   {
+    "category": "太空光伏",
+    "concept": "太空光伏设备",
+    "slot": 4
+   }
+  ],
+  "verdict": "边缘",
+  "reasons": {
+   "半导体材料": "晶盛机电：晶体生长与半导体装备",
+   "spacex-潜在供应商": "晶盛机电：晶体生长与半导体装备",
+   "太空光伏设备": "晶盛机电：晶体生长与半导体装备",
+   "马斯克走访企业": "晶盛机电：晶体生长与半导体装备",
+   "半导体设备": "晶盛机电：晶体生长与半导体装备"
+  },
+  "business_summary": "半导体装备、半导体衬底材料、耗材及零部件的研发、生产和销售。",
+  "sector": "光伏设备/BC电池/第三代半导体/存储芯片",
+  "ifind_profile": {
+   "main_products": "半导体集成电路装备、化合物半导体装备、新能源光伏装备、半导体衬底材料、半导体耗材、半导体精密零部件",
+   "main_business": "光伏设备、半导体设备和LED衬底材料的研发、生产和销售。",
+   "controller": "曹建伟,邱敏秀",
+   "website": "www.jsjd.cc"
+  },
+  "ifind_2025_segments": [
+   {
+    "industry_composition": "制造业收入:96.3042%;其他业务收入:3.6958%",
+    "industry": "晶体硅生长设备制造业",
+    "industry_revenue_yi": 109.3773,
+    "industry_gross_margin_pct": "29.7831",
+    "product": "设备及其服务",
+    "product_revenue_yi": 84.0272,
+    "product_gross_margin_pct": "33.8818"
+   },
+   {
+    "industry_composition": "",
+    "industry": "其他业务",
+    "industry_revenue_yi": 4.1975,
+    "industry_gross_margin_pct": "5.3549",
+    "product": "蓝宝石材料",
+    "product_revenue_yi": 24.6151,
+    "product_gross_margin_pct": "16.1768"
+   },
+   {
+    "industry_composition": "",
+    "industry": "",
+    "industry_revenue_yi": null,
+    "industry_gross_margin_pct": "",
+    "product": "其他",
+    "product_revenue_yi": 4.9326,
+    "product_gross_margin_pct": "7.0737"
+   }
+  ]
+ },
+ {
+  "code": "300322",
+  "name": "硕贝德",
+  "pairs": [
+   {
+    "category": "商业航天",
+    "concept": "卫星",
+    "slot": 0
+   }
+  ],
+  "verdict": "相关",
+  "reasons": {
+   "卫星": "硕贝德：天线及模组，可用于卫星通信终端"
+  },
+  "business_summary": "研发、生产和销售无线通信终端天线及通信产品配件，以及指纹模组、线束等产品。",
+  "sector": "消费电子/毫米波雷达/6G概念/WiFi 6",
+  "ifind_profile": {
+   "main_products": "天线及模组、散热器件及模组、线束及连接件、传感器智能模组",
+   "main_business": "无线通信终端天线的研发、生产及销售",
+   "controller": "朱坤华",
+   "website": "www.speed-hz.com"
+  },
+  "ifind_2025_segments": [
+   {
+    "industry_composition": "通信设备、计算机及其他电子设备制造业:100.0000%",
+    "industry": "通信设备、计算机及其他电子设备制造业",
+    "industry_revenue_yi": 27.7,
+    "industry_gross_margin_pct": "22.4738",
+    "product": "天线及模组",
+    "product_revenue_yi": 14.3231,
+    "product_gross_margin_pct": "29.6690"
+   },
+   {
+    "industry_composition": "",
+    "industry": "",
+    "industry_revenue_yi": null,
+    "industry_gross_margin_pct": "",
+    "product": "线束及新能源结构件",
+    "product_revenue_yi": 6.9383,
+    "product_gross_margin_pct": "19.8407"
+   },
+   {
+    "industry_composition": "",
+    "industry": "",
+    "industry_revenue_yi": null,
+    "industry_gross_margin_pct": "",
+    "product": "传感器智能模组",
+    "product_revenue_yi": 3.336,
+    "product_gross_margin_pct": "12.2317"
+   },
+   {
+    "industry_composition": "",
+    "industry": "",
+    "industry_revenue_yi": null,
+    "industry_gross_margin_pct": "",
+    "product": "散热组件",
+    "product_revenue_yi": 2.8864,
+    "product_gross_margin_pct": "5.5170"
+   },
+   {
+    "industry_composition": "",
+    "industry": "",
+    "industry_revenue_yi": null,
+    "industry_gross_margin_pct": "",
+    "product": "其他",
+    "product_revenue_yi": 0.2162,
+    "product_gross_margin_pct": "14.7168"
+   }
+  ]
+ },
+ {
+  "code": "300342",
+  "name": "天银机电",
+  "pairs": [
+   {
+    "category": "商业航天",
+    "concept": "spacex-潜在供应商",
+    "slot": 1
+   }
+  ],
+  "verdict": "相关",
+  "reasons": {
+   "spacex-潜在供应商": "天银机电：星敏感器（卫星姿态）",
+   "千帆星座": "天银机电：星敏感器（卫星姿态）",
+   "卫星": "天银机电：星敏感器（卫星姿态）"
+  },
+  "business_summary": "主营家电零部件Ⅱ",
+  "sector": "家电零部件Ⅱ/太赫兹/军工信息化/军民融合",
+  "ifind_profile": {
+   "main_products": "冰箱压缩机起动器、吸气消音器、冰箱变频控制系统",
+   "main_business": "冰箱压缩机用配套产品",
+   "controller": "佛山市南海区国有资产监督管理局",
+   "website": "www.tyjd.cc"
+  },
+  "ifind_2025_segments": [
+   {
+    "industry_composition": "家电零配件行业:61.5953%;雷达与航天电子行业:38.4047%",
+    "industry": "家用电力器具专用配件制造业",
+    "industry_revenue_yi": 5.058,
+    "industry_gross_margin_pct": "17.5920",
+    "product": "冰箱压缩机用配套产品",
+    "product_revenue_yi": 5.058,
+    "product_gross_margin_pct": "17.5920"
+   },
+   {
+    "industry_composition": "",
+    "industry": "雷达与航天电子行业",
+    "industry_revenue_yi": 3.1537,
+    "industry_gross_margin_pct": "36.2526",
+    "product": "雷达与航天信息化装备",
+    "product_revenue_yi": 3.1537,
+    "product_gross_margin_pct": "36.2526"
+   }
+  ]
+ },
+ {
+  "code": "300416",
+  "name": "苏试试验",
+  "pairs": [
+   {
+    "category": "商业航天",
+    "concept": "卫星",
+    "slot": 0
+   }
+  ],
+  "verdict": "相关",
+  "reasons": {
+   "卫星": "苏试试验：环境与可靠性试验"
+  },
+  "business_summary": "中国仪器仪表协会常务理事单位，致力于环境试验设备的研发和生产",
+  "sector": "专业服务/先进封装/商业航天/汽车电子",
+  "ifind_profile": {
+   "main_products": "力学环境试验设备、气候环境试验设备、综合环境试验设备、空间环境试验设备、分析测试系统及传感器、环境与可靠性试验服务、集成电路验证与分析服务、电子电气测试认证服务、软件测评服务",
+   "main_business": "致力于环境试验设备的研发和生产，及为客户提供全面的环境与可靠性试验服务。",
+   "controller": "钟琼华",
+   "website": "www.chinasti.com"
+  },
+  "ifind_2025_segments": [
+   {
+    "industry_composition": "电子电器:41.8484%;航空航天:18.9679%;科研及检测机构:15.3500%;汽车及轨道交通:8.9477%;船舶:5.1663%;其他业务收入:4.9273%;其他:4.7926%",
+    "industry": "电子电器",
+    "industry_revenue_yi": 9.406,
+    "industry_gross_margin_pct": "41.2114",
+    "product": "试验服务",
+    "product_revenue_yi": 11.0603,
+    "product_gross_margin_pct": "52.6989"
+   },
+   {
+    "industry_composition": "",
+    "industry": "航空航天",
+    "industry_revenue_yi": 4.2633,
+    "industry_gross_margin_pct": "51.7522",
+    "product": "设备销售",
+    "product_revenue_yi": 6.7437,
+    "product_gross_margin_pct": "27.4732"
+   },
+   {
+    "industry_composition": "",
+    "industry": "科研及检测机构",
+    "industry_revenue_yi": 3.4501,
+    "industry_gross_margin_pct": "40.7174",
+    "product": "集成电路验证与分析服务",
+    "product_revenue_yi": 3.565,
+    "product_gross_margin_pct": "41.4584"
+   },
+   {
+    "industry_composition": "",
+    "industry": "汽车及轨道交通",
+    "industry_revenue_yi": 2.0111,
+    "industry_gross_margin_pct": "38.8487",
+    "product": "其他业务收入",
+    "product_revenue_yi": 1.1075,
+    "product_gross_margin_pct": "20.5285"
+   },
+   {
+    "industry_composition": "",
+    "industry": "船舶",
+    "industry_revenue_yi": 1.1612,
+    "industry_gross_margin_pct": "41.7651",
+    "product": "",
+    "product_revenue_yi": null,
+    "product_gross_margin_pct": ""
+   }
+  ]
+ },
+ {
+  "code": "300433",
+  "name": "蓝思科技",
+  "pairs": [
+   {
+    "category": "商业航天",
+    "concept": "spacex-潜在供应商-太阳能",
+    "slot": 1
+   },
+   {
+    "category": "太空光伏",
+    "concept": "太空光伏辅材",
+    "slot": 2
+   }
+  ],
+  "verdict": "边缘",
+  "reasons": {
+   "spacex-潜在供应商-太阳能": "蓝思科技：消费电子玻璃",
+   "太空光伏辅材": "蓝思科技：消费电子玻璃"
+  },
+  "business_summary": "智能手机与电脑、智能汽车及座舱、智能头显与智能穿戴、人形机器人等智能终端的结构件、功能模组、整机组装等配套服务的研发、生产和销售。",
+  "sector": "消费电子/同花顺果指数/AI手机/无线耳机",
+  "ifind_profile": {
+   "main_products": "智能手机和电脑、折叠屏手机、AI眼镜、智能座舱、超薄夹胶多功能车窗玻璃、具身智能业务、AI服务器业务、商业航天业务",
+   "main_business": "视窗防护玻璃的研发、生产和销售。",
+   "controller": "周群飞,郑俊龙",
+   "website": "www.hnlens.com"
+  },
+  "ifind_2025_segments": [
+   {
+    "industry_composition": "电子元器件制造业:100.0000%",
+    "industry": "电子元器件制造业",
+    "industry_revenue_yi": 744.0973,
+    "industry_gross_margin_pct": "15.9902",
+    "product": "智能手机与电脑类",
+    "product_revenue_yi": 611.842,
+    "product_gross_margin_pct": "15.4088"
+   },
+   {
+    "industry_composition": "",
+    "industry": "",
+    "industry_revenue_yi": null,
+    "industry_gross_margin_pct": "",
+    "product": "新能源汽车及智能座舱类",
+    "product_revenue_yi": 64.6166,
+    "product_gross_margin_pct": "7.2167"
+   },
+   {
+    "industry_composition": "",
+    "industry": "",
+    "industry_revenue_yi": null,
+    "industry_gross_margin_pct": "",
+    "product": "智能头显与智能穿戴类",
+    "product_revenue_yi": 39.7817,
+    "product_gross_margin_pct": "19.9129"
+   },
+   {
+    "industry_composition": "",
+    "industry": "",
+    "industry_revenue_yi": null,
+    "industry_gross_margin_pct": "",
+    "product": "其他业务收入",
+    "product_revenue_yi": 17.3421,
+    "product_gross_margin_pct": "59.6778"
+   },
+   {
+    "industry_composition": "",
+    "industry": "",
+    "industry_revenue_yi": null,
+    "industry_gross_margin_pct": "",
+    "product": "其他智能终端类",
+    "product_revenue_yi": 10.515,
+    "product_gross_margin_pct": "16.8408"
+   }
+  ]
+ },
+ {
+  "code": "300445",
+  "name": "康斯特",
+  "pairs": [
+   {
+    "category": "商业航天",
+    "concept": "spacex-潜在供应商",
+    "slot": 2
+   }
+  ],
+  "verdict": "已摘牌",
+  "reasons": {
+   "spacex-潜在供应商": "康斯特：校准仪器仪表，机器人关联弱"
+  },
+  "business_summary": "专注于数字压力、温度校准仪表的研究开发和产业化的企业",
+  "sector": "通用设备/传感器/商业航天/特斯拉概念",
+  "ifind_profile": {
+   "main_products": "数字压力检测产品、过程信号检测产品、温湿度检测产品、检测数字化平台产品、压力传感器产品",
+   "main_business": "数字压力检测、温度校准仪器仪表产品研发、生产和销售",
+   "controller": "姜维利,何欣",
+   "website": "www.constgroup.com"
+  },
+  "ifind_2025_segments": [
+   {
+    "industry_composition": "仪器仪表制造:93.9470%;其他:6.0530%",
+    "industry": "仪器仪表制造",
+    "industry_revenue_yi": 5.5401,
+    "industry_gross_margin_pct": "64.0579",
+    "product": "数字精密压力表",
+    "product_revenue_yi": 4.2464,
+    "product_gross_margin_pct": "71.1258"
+   },
+   {
+    "industry_composition": "",
+    "industry": "其他",
+    "industry_revenue_yi": 0.3569,
+    "industry_gross_margin_pct": "62.9413",
+    "product": "温度自动检定系统",
+    "product_revenue_yi": 0.9585,
+    "product_gross_margin_pct": "57.0752"
+   },
+   {
+    "industry_composition": "",
+    "industry": "",
+    "industry_revenue_yi": null,
+    "industry_gross_margin_pct": "",
+    "product": "其他",
+    "product_revenue_yi": 0.3569,
+    "product_gross_margin_pct": "-9.7802"
+   },
+   {
+    "industry_composition": "",
+    "industry": "",
+    "industry_revenue_yi": null,
+    "industry_gross_margin_pct": "",
+    "product": "过程校验仪",
+    "product_revenue_yi": 0.3353,
+    "product_gross_margin_pct": "71.9241"
+   }
+  ]
+ },
+ {
+  "code": "300455",
+  "name": "航天智装",
+  "pairs": [
+   {
+    "category": "商业航天",
+    "concept": "千帆星座",
+    "slot": 1
+   }
+  ],
+  "verdict": "相关",
+  "reasons": {
+   "千帆星座": "航天智装：航天科技集团体系，测控装备",
+   "卫星": "航天智装：航天科技集团体系，测控装备",
+   "国家队": "航天智装：航天科技集团体系，测控装备"
+  },
+  "business_summary": "主营计算机、通信和其他电子设备制造业",
+  "sector": "计算机、通信和其他电子设备制造业",
+  "ifind_profile": {
+   "main_products": "铁路车辆红外线轴温探测系统、车辆运行故障动态图像检测系统、车辆滚动轴承早期故障轨边声学诊断系统、车辆运行品质轨边检测系统、相关安全检测信息化产品、智能测试仿真系统、微系统及控制部组件、高放环境重载操作机器人、远程操作装置",
+   "main_business": "从事铁路车辆运行安全检测领域和机车车辆检修领域相关设备的研发、生产、销售、安装和服务。",
+   "controller": "国务院国有资产监督管理委员会",
+   "website": "www.asiet.net"
+  },
+  "ifind_2025_segments": [
+   {
+    "industry_composition": "计算机、通信和其他电子设备制造业:100.0000%",
+    "industry": "计算机、通信和其他电子设备制造业",
+    "industry_revenue_yi": 11.1443,
+    "industry_gross_margin_pct": "7.5195",
+    "product": "智能测试仿真系统和微系统与控制部组件",
+    "product_revenue_yi": 4.911,
+    "product_gross_margin_pct": "19.4887"
+   },
+   {
+    "industry_composition": "",
+    "industry": "",
+    "industry_revenue_yi": null,
+    "industry_gross_margin_pct": "",
+    "product": "核工业及特殊环境智能装备系统",
+    "product_revenue_yi": 3.4896,
+    "product_gross_margin_pct": "-33.8087"
+   },
+   {
+    "industry_composition": "",
+    "industry": "",
+    "industry_revenue_yi": null,
+    "industry_gross_margin_pct": "",
+    "product": "铁路车辆安全检测及检修和智能仓储系统",
+    "product_revenue_yi": 2.4145,
+    "product_gross_margin_pct": "34.7292"
+   },
+   {
+    "industry_composition": "",
+    "industry": "",
+    "industry_revenue_yi": null,
+    "industry_gross_margin_pct": "",
+    "product": "其他业务收入",
+    "product_revenue_yi": 0.3292,
+    "product_gross_margin_pct": "67.4891"
+   }
+  ]
+ },
+ {
+  "code": "300604",
+  "name": "长川科技",
+  "pairs": [
+   {
+    "category": "半导体",
+    "concept": "半导体设备-测试设备",
+    "slot": 1
+   },
+   {
+    "category": "半导体",
+    "concept": "半导体设备-后道",
+    "slot": 2
+   },
+   {
+    "category": "商业航天",
+    "concept": "spacex",
+    "slot": 3
+   }
+  ],
+  "verdict": "边缘",
+  "reasons": {
+   "半导体设备-后道": "长川科技：测试机/分选机（已成交核心供应商）",
+   "spacex": "长川科技：测试机/分选机（已成交核心供应商）",
+   "半导体设备-测试设备": "长川科技：测试机/分选机（已成交核心供应商）"
+  },
+  "business_summary": "主营专用设备制造业",
+  "sector": "专用设备制造业",
+  "ifind_profile": {
+   "main_products": "测试机、分选机、自动化设备、AOI光学检测设备",
+   "main_business": "集成电路专用设备的研发、生产和销售",
+   "controller": "赵轶,徐昕",
+   "website": "www.hzcctech.com"
+  },
+  "ifind_2025_segments": [
+   {
+    "industry_composition": "集成电路电子工业专用设备:100.0000%",
+    "industry": "集成电路电子工业专用设备",
+    "industry_revenue_yi": 52.9154,
+    "industry_gross_margin_pct": "55.0546",
+    "product": "测试机",
+    "product_revenue_yi": 32.0297,
+    "product_gross_margin_pct": "62.2511"
+   },
+   {
+    "industry_composition": "",
+    "industry": "",
+    "industry_revenue_yi": null,
+    "industry_gross_margin_pct": "",
+    "product": "分选机",
+    "product_revenue_yi": 15.6847,
+    "product_gross_margin_pct": "41.3403"
+   },
+   {
+    "industry_composition": "",
+    "industry": "",
+    "industry_revenue_yi": null,
+    "industry_gross_margin_pct": "",
+    "product": "其他业务",
+    "product_revenue_yi": 5.201,
+    "product_gross_margin_pct": "52.0948"
+   }
+  ]
+ },
+ {
+  "code": "300680",
+  "name": "隆盛科技",
+  "pairs": [
+   {
+    "category": "机器人",
+    "concept": "灵巧手",
+    "slot": 1
+   },
+   {
+    "category": "商业航天",
+    "concept": "千帆星座",
+    "slot": 2
+   },
+   {
+    "category": "太空光伏",
+    "concept": "太阳翼结构",
+    "slot": 3
+   }
+  ],
+  "verdict": "相关",
+  "reasons": {
+   "千帆星座": "隆盛科技：EGR/电机铁芯，机器人关联弱",
+   "卫星": "隆盛科技：EGR/电机铁芯，机器人关联弱",
+   "太阳翼结构": "隆盛科技：EGR/电机铁芯，机器人关联弱",
+   "灵巧手": "公司在汽车零部件主业之外布局灵巧手、谐波减速器、关节模组和驱动电机部件，自研“兰森”机器人面向制造业场景，已有真实产品和项目推进；但机器人业务收入贡献仍小，主要可核验落地集中在灵巧手及执行硬件，尚不足以将整机或电机标签定为核心，也不因此扩张为物理AI。"
+  },
+  "business_summary": "主营减速器",
+  "sector": "减速器/汽车热管理",
+  "ifind_profile": {
+   "main_products": "柴油商用车EGR系统、乘用车EGR系统、非道路工程机械EGR系统、天然气重卡EGR阀、天然气重卡喷射气轨总成、马达铁芯、定子总成、转子总成、汽车精密冲压件、精密注塑、铁件包塑组件、光电子器件产品、航空航天精密加工件包括卫星太阳翼铰链、压紧释放机构、大型外贸及列装无人机零部件、配套精密导弹零件、精密模具工装、人形机器人整机制造业场景解决方案及关键零部件、灵巧手、谐波减速器、驱动电机部件",
+   "main_business": "发动机废气再循环(EGR)系统的研发、生产和销售",
+   "controller": "倪茂生,倪铭",
+   "website": "www.china-lsh.com"
+  },
+  "ifind_2025_segments": [
+   {
+    "industry_composition": "汽车零部件行业:98.2705%;精密机加工行业:1.7295%",
+    "industry": "汽车零部件行业",
+    "industry_revenue_yi": 26.0016,
+    "industry_gross_margin_pct": "17.3655",
+    "product": "EGR阀",
+    "product_revenue_yi": 9.5544,
+    "product_gross_margin_pct": "23.5280"
+   },
+   {
+    "industry_composition": "",
+    "industry": "精密机加工行业",
+    "industry_revenue_yi": 0.4576,
+    "industry_gross_margin_pct": "18.6000",
+    "product": "新能源产品",
+    "product_revenue_yi": 9.2513,
+    "product_gross_margin_pct": "9.0261"
+   },
+   {
+    "industry_composition": "",
+    "industry": "",
+    "industry_revenue_yi": null,
+    "industry_gross_margin_pct": "",
+    "product": "冲压件产品",
+    "product_revenue_yi": 4.7084,
+    "product_gross_margin_pct": "20.9730"
+   },
+   {
+    "industry_composition": "",
+    "industry": "",
+    "industry_revenue_yi": null,
+    "industry_gross_margin_pct": "",
+    "product": "其他业务",
+    "product_revenue_yi": 1.1945,
+    "product_gross_margin_pct": ""
+   },
+   {
+    "industry_composition": "",
+    "industry": "",
+    "industry_revenue_yi": null,
+    "industry_gross_margin_pct": "",
+    "product": "其他产品",
+    "product_revenue_yi": 0.9332,
+    "product_gross_margin_pct": ""
+   }
+  ]
+ },
+ {
+  "code": "300751",
+  "name": "迈为股份",
+  "pairs": [
+   {
+    "category": "商业航天",
+    "concept": "spacex-潜在供应商",
+    "slot": 1
+   },
+   {
+    "category": "太空光伏",
+    "concept": "太空光伏设备",
+    "slot": 2
+   }
+  ],
+  "verdict": "边缘",
+  "reasons": {
+   "spacex-潜在供应商": "迈为股份：光伏设备",
+   "太空光伏设备": "迈为股份：光伏设备",
+   "特斯拉拟采购厂商": "迈为股份：光伏设备"
+  },
+  "business_summary": "主营光伏设备",
+  "sector": "光伏设备/HJT电池/钙钛矿电池/第三代半导体",
+  "ifind_profile": {
+   "main_products": "HJT异质结高效电池生产线、全自动太阳能电池片丝网印刷线、显示面板设备、半导体制造设备",
+   "main_business": "智能制造装备的设计、研发、生产与销售。",
+   "controller": "周剑,王正根",
+   "website": "www.maxwell-gp.com"
+  },
+  "ifind_2025_segments": [
+   {
+    "industry_composition": "太阳能光伏行业:91.3845%;半导体及显示行业:8.1212%;其他行业:0.4943%",
+    "industry": "太阳能光伏行业",
+    "industry_revenue_yi": 74.4964,
+    "industry_gross_margin_pct": "38.2953",
+    "product": "太阳能电池丝网印刷成套设备",
+    "product_revenue_yi": 60.2507,
+    "product_gross_margin_pct": "37.7669"
+   },
+   {
+    "industry_composition": "",
+    "industry": "半导体及显示行业",
+    "industry_revenue_yi": 6.6204,
+    "industry_gross_margin_pct": "45.5433",
+    "product": "单机",
+    "product_revenue_yi": 17.1781,
+    "product_gross_margin_pct": "37.2823"
+   },
+   {
+    "industry_composition": "",
+    "industry": "其他行业",
+    "industry_revenue_yi": 0.403,
+    "industry_gross_margin_pct": "-16.5891",
+    "product": "配件及其他",
+    "product_revenue_yi": 4.091,
+    "product_gross_margin_pct": "56.6523"
+   }
+  ]
+ },
+ {
+  "code": "300757",
+  "name": "罗博特科",
+  "pairs": [
+   {
+    "category": "光通信",
+    "concept": "设备",
+    "slot": 1
+   },
+   {
+    "category": "商业航天",
+    "concept": "spacex",
+    "slot": 2
+   },
+   {
+    "category": "太空光伏",
+    "concept": "太空光伏设备",
+    "slot": 3
+   },
+   {
+    "category": "光通信",
+    "concept": "设备",
+    "slot": 0
+   },
+   {
+    "category": "光通信",
+    "concept": "spacex",
+    "slot": 0
+   },
+   {
+    "category": "光通信",
+    "concept": "太空光伏设备",
+    "slot": 0
+   },
+   {
+    "category": "商业航天",
+    "concept": "设备",
+    "slot": 0
+   },
+   {
+    "category": "商业航天",
+    "concept": "spacex",
+    "slot": 0
+   },
+   {
+    "category": "商业航天",
+    "concept": "太空光伏设备",
+    "slot": 0
+   },
+   {
+    "category": "太空光伏",
+    "concept": "设备",
+    "slot": 0
+   },
+   {
+    "category": "太空光伏",
+    "concept": "spacex",
+    "slot": 0
+   },
+   {
+    "category": "太空光伏",
+    "concept": "太空光伏设备",
+    "slot": 0
+   }
+  ],
+  "verdict": "边缘",
+  "reasons": {
+   "设备": "罗博特科：光伏/半导体设备",
+   "spacex": "罗博特科：光伏/半导体设备",
+   "太空光伏设备": "罗博特科：光伏/半导体设备"
+  },
+  "business_summary": "主营自动化设备",
+  "sector": "自动化设备/共封装光学(CPO)/光纤概念/富士康概念",
+  "ifind_profile": {
+   "main_products": "光伏电池自动化设备、单晶圆清洗刻蚀系统、单晶圆涂胶系统、高速晶圆测试设备、高速晶粒测试设备、高速芯片测试设备、高速硅光模组/CPO模组测试设备、光子器件集成耦合设备、Bond自动化超高精度贴片设备、光纤预制设备、智能制造系统R2Fab、高效太阳能电池/铜互联整体解决方案",
+   "main_business": "研制高端自动化装备和基于工业互联网技术的智能制造执行系统软件",
+   "controller": "戴军",
+   "website": "www.robo-technik.com"
+  },
+  "ifind_2025_segments": [
+   {
+    "industry_composition": "光电子及半导体行业:51.1142%;光伏行业:48.4147%;其他行业:0.4710%",
+    "industry": "半导体行业",
+    "industry_revenue_yi": 4.8549,
+    "industry_gross_margin_pct": "39.2429",
+    "product": "光电子及半导体封测设备",
+    "product_revenue_yi": 4.3913,
+    "product_gross_margin_pct": "36.0505"
+   },
+   {
+    "industry_composition": "",
+    "industry": "光伏行业",
+    "industry_revenue_yi": 4.5985,
+    "industry_gross_margin_pct": "29.7925",
+    "product": "光伏设备及整体解决方案",
+    "product_revenue_yi": 4.3306,
+    "product_gross_margin_pct": "28.4165"
+   },
+   {
+    "industry_composition": "",
+    "industry": "电子行业",
+    "industry_revenue_yi": 0.0447,
+    "industry_gross_margin_pct": "7.8391",
+    "product": "其他",
+    "product_revenue_yi": 0.7762,
+    "product_gross_margin_pct": "59.9082"
+   }
+  ]
+ },
+ {
+  "code": "300762",
+  "name": "上海瀚讯",
+  "pairs": [
+   {
+    "category": "商业航天",
+    "concept": "千帆星座",
+    "slot": 1
+   }
+  ],
+  "verdict": "相关",
+  "reasons": {
+   "千帆星座": "上海瀚讯：卫星/专网通信装备",
+   "卫星-有效载荷": "上海瀚讯：卫星/专网通信装备"
+  },
+  "business_summary": "以专网4G/5G通信装备的研制、生产和售后服务为主，专注于陆、海、空、天领域行业用户的行业应用，提供专网宽带移动通信系统的设备及整体解决方案。",
+  "sector": "军工电子Ⅱ/卫星导航/军工信息化",
+  "ifind_profile": {
+   "main_products": "宽带移动通信设备",
+   "main_business": "从事行业宽带移动通信设备的研发、制造、销售及工程实施,结合业务应用软件、指挥调度软件等配套产品,向客户提供行业宽带移动通信系统的整体解决方案。",
+   "controller": "卜智勇",
+   "website": "www.jushri.com"
+  },
+  "ifind_2025_segments": [
+   {
+    "industry_composition": "宽带移动通信行业:99.8539%;其他行业:0.1461%",
+    "industry": "宽带移动通信行业",
+    "industry_revenue_yi": 5.0181,
+    "industry_gross_margin_pct": "33.0176",
+    "product": "宽带移动通信设备",
+    "product_revenue_yi": 4.6189,
+    "product_gross_margin_pct": "32.0726"
+   },
+   {
+    "industry_composition": "",
+    "industry": "其他行业",
+    "industry_revenue_yi": 0.0073,
+    "industry_gross_margin_pct": "27.3943",
+    "product": "其他产品",
+    "product_revenue_yi": 0.4066,
+    "product_gross_margin_pct": "43.6525"
+   }
+  ]
+ },
+ {
+  "code": "301005",
+  "name": "超捷股份",
+  "pairs": [
+   {
+    "category": "商业航天",
+    "concept": "结构件",
+    "slot": 1
+   }
+  ],
+  "verdict": "相关",
+  "reasons": {
+   "结构件": "超捷股份：精密紧固件，航天/机器人结构件配套（注：本条挂在机器人分类下但概念是航天）",
+   "spacex-潜在供应商": "超捷股份：精密紧固件，航天/机器人结构件配套（注：本条挂在机器人分类下但概念是航天）",
+   "火箭": "超捷股份：精密紧固件，航天/机器人结构件配套（注：本条挂在机器人分类下但概念是航天）"
+  },
+  "business_summary": "主营航空发动机",
+  "sector": "航空发动机/卫星导航",
+  "ifind_profile": {
+   "main_products": "螺栓螺钉、异形连接件、塑料紧固件、其他金属件、航空航天零部件、机器人零部件",
+   "main_business": "高强度精密紧固件、异形连接件等产品的研发、生产与销售。",
+   "controller": "宋广东",
+   "website": "www.shchaojie.com.cn"
+  },
+  "ifind_2025_segments": [
+   {
+    "industry_composition": "汽车:80.0050%;电子电器:10.2977%;航空航天:7.6166%;其他业务收入:1.7562%;机器人:0.2197%;通信行业:0.1047%",
+    "industry": "汽车",
+    "industry_revenue_yi": 7.0337,
+    "industry_gross_margin_pct": "21.3126",
+    "product": "螺钉螺栓",
+    "product_revenue_yi": 3.1986,
+    "product_gross_margin_pct": "22.4359"
+   },
+   {
+    "industry_composition": "",
+    "industry": "电子电器",
+    "industry_revenue_yi": 0.9053,
+    "industry_gross_margin_pct": "20.8819",
+    "product": "异形连接件",
+    "product_revenue_yi": 2.1432,
+    "product_gross_margin_pct": "17.6499"
+   },
+   {
+    "industry_composition": "",
+    "industry": "航空航天",
+    "industry_revenue_yi": 0.6696,
+    "industry_gross_margin_pct": "-3.7280",
+    "product": "塑料紧固件",
+    "product_revenue_yi": 1.8314,
+    "product_gross_margin_pct": "30.0223"
+   },
+   {
+    "industry_composition": "",
+    "industry": "其他业务收入",
+    "industry_revenue_yi": 0.1544,
+    "industry_gross_margin_pct": "33.3443",
+    "product": "其他",
+    "product_revenue_yi": 0.7771,
+    "product_gross_margin_pct": "5.6932"
+   },
+   {
+    "industry_composition": "",
+    "industry": "机器人",
+    "industry_revenue_yi": 0.0193,
+    "industry_gross_margin_pct": "",
+    "product": "航空零部件",
+    "product_revenue_yi": 0.6696,
+    "product_gross_margin_pct": "-3.7280"
+   }
+  ]
+ },
+ {
+  "code": "301071",
+  "name": "力量钻石",
+  "pairs": [
+   {
+    "category": "商业航天",
+    "concept": "spacex-供应商",
+    "slot": 0
+   }
+  ],
+  "verdict": "边缘",
+  "reasons": {
+   "spacex-供应商": "力量钻石：超硬材料，spacex 供应链为预期"
+  },
+  "business_summary": "钻石、工业金刚石、金刚石微粉等超硬材料的研发、生产与销售。",
+  "sector": "非金属材料Ⅱ/培育钻石/第三代半导体/芯片概念",
+  "ifind_profile": {
+   "main_products": "金刚石单晶、金刚石微粉、培育钻石",
+   "main_business": "人造金刚石产品研发、生产和销售。",
+   "controller": "邵增明,李爱真",
+   "website": "www.lldia.com"
+  },
+  "ifind_2025_segments": [
+   {
+    "industry_composition": "非金属矿物制品业:100.0000%",
+    "industry": "非金属矿物制品业",
+    "industry_revenue_yi": 6.3244,
+    "industry_gross_margin_pct": "22.2343",
+    "product": "培育钻石",
+    "product_revenue_yi": 3.8755,
+    "product_gross_margin_pct": "21.7752"
+   },
+   {
+    "industry_composition": "",
+    "industry": "",
+    "industry_revenue_yi": null,
+    "industry_gross_margin_pct": "",
+    "product": "金刚石单晶",
+    "product_revenue_yi": 1.3481,
+    "product_gross_margin_pct": "11.8035"
+   },
+   {
+    "industry_composition": "",
+    "industry": "",
+    "industry_revenue_yi": null,
+    "industry_gross_margin_pct": "",
+    "product": "金刚石微粉",
+    "product_revenue_yi": 0.618,
+    "product_gross_margin_pct": "24.6619"
+   },
+   {
+    "industry_composition": "",
+    "industry": "",
+    "industry_revenue_yi": null,
+    "industry_gross_margin_pct": "",
+    "product": "其他业务",
+    "product_revenue_yi": 0.4828,
+    "product_gross_margin_pct": "51.9362"
+   }
+  ]
+ }
+]

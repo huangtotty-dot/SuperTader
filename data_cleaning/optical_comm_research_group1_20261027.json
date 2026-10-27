@@ -1,0 +1,800 @@
+[
+  {
+    "code": "000070",
+    "name": "特发信息",
+    "pairs": [
+      {
+        "category": "光通信",
+        "concept": "光纤光缆",
+        "slot": 1
+      },
+      {
+        "category": "光通信",
+        "concept": "光纤光缆",
+        "slot": 0
+      }
+    ],
+    "verdict": "相关",
+    "reasons": {
+      "MPO": "特发信息：光纤光缆+通信设备",
+      "光纤光缆": "特发信息：光纤光缆+通信设备"
+    },
+    "business_summary": "线缆、智慧服务、融合、物业资产经营四大核心板块。",
+    "sector": "通信设备/光纤概念/F5G概念/共封装光学(CPO)"
+  },
+  {
+    "code": "000586",
+    "name": "汇源通信",
+    "pairs": [
+      {
+        "category": "光通信",
+        "concept": "光纤光缆",
+        "slot": 1
+      },
+      {
+        "category": "光通信",
+        "concept": "光纤光缆",
+        "slot": 0
+      }
+    ],
+    "verdict": "相关",
+    "reasons": {
+      "光纤光缆": "汇源通信：光纤光缆"
+    },
+    "business_summary": "光纤光缆的研发与制造、在线监测装置的研发与制造、高速公路机电及通信工程施工、车载电子模组的制造等业务。",
+    "sector": "通信设备/光纤概念/5G/特高压"
+  },
+  {
+    "code": "000988",
+    "name": "华工科技",
+    "pairs": [
+      {
+        "category": "光通信",
+        "concept": "光模块/CPO",
+        "slot": 1
+      },
+      {
+        "category": "超节点",
+        "concept": "光通信",
+        "slot": 2
+      },
+      {
+        "category": "光通信",
+        "concept": "光模块/CPO",
+        "slot": 0
+      },
+      {
+        "category": "光通信",
+        "concept": "光通信",
+        "slot": 0
+      },
+      {
+        "category": "超节点",
+        "concept": "光模块/CPO",
+        "slot": 0
+      },
+      {
+        "category": "超节点",
+        "concept": "光通信",
+        "slot": 0
+      }
+    ],
+    "verdict": "核心",
+    "reasons": {
+      "CPO/光模块": "主营：联接业务；与本标签一致",
+      "光引擎/LPO": "主营：联接业务；与本标签一致",
+      "光芯片": "主营：联接业务；与本标签一致",
+      "光通信": "主营：联接业务；与本标签一致"
+    },
+    "business_summary": "激光设备的生产与销售、激光防伪标识的生产与销售、敏感电子元器件的生产与销售、光通信电子元器件的生产与销售、计算机软件与信息系统集成等技术及产品的开发、研制、销售等业务。",
+    "sector": "自动化设备/共封装光学(CPO)/F5G概念/铜缆高速连接"
+  },
+  {
+    "code": "002179",
+    "name": "中航光电",
+    "pairs": [
+      {
+        "category": "光通信",
+        "concept": "MPO/连接器",
+        "slot": 1
+      },
+      {
+        "category": "超节点",
+        "concept": "连接器",
+        "slot": 2
+      },
+      {
+        "category": "军工",
+        "concept": "军工被动元件与连接器",
+        "slot": 3
+      },
+      {
+        "category": "光通信",
+        "concept": "MPO/连接器",
+        "slot": 0
+      },
+      {
+        "category": "光通信",
+        "concept": "连接器",
+        "slot": 0
+      },
+      {
+        "category": "光通信",
+        "concept": "军工电子",
+        "slot": 0
+      },
+      {
+        "category": "超节点",
+        "concept": "MPO/连接器",
+        "slot": 0
+      },
+      {
+        "category": "超节点",
+        "concept": "连接器",
+        "slot": 0
+      },
+      {
+        "category": "超节点",
+        "concept": "军工电子",
+        "slot": 0
+      }
+    ],
+    "verdict": "核心",
+    "reasons": {
+      "MPO": "主营：中高端光、电、流体连接技术与产品的研究与开发；与本标签一致",
+      "连接器": "主营：中高端光、电、流体连接技术与产品的研究与开发；与本标签一致",
+      "军工电子": "主营：中高端光、电、流体连接技术与产品的研究与开发；与本标签一致",
+      "军工电子-军用连接器": "主营：中高端光、电、流体连接技术与产品的研究与开发；与本标签一致",
+      "军工被动元件与连接器": "公司专业为航空及防务提供互连解决方案，电连接器、光连接器、流体连接器、线缆组件和集成化设备已用于防务领域，代表产品包括GJB598、GJB599、D38999、VPX、1553B及1394总线组件、宇航和深水密封等特种连接器，年报还明确其防务首选互连方案供应商地位，属于真实批量配套。2025年连接器行业收入210.7280亿元，占98.5352%；电连接器及集成互连组件159.4267亿元，光连接器及其他光器件36.5877亿元，流体连接器、齿科及其他17.8462亿元，未独立披露防务收入，不能将民机和数据中心收入全算军工。防务是长期核心市场且产品规模大，故列核心。旧“军工电子”及重复的MPO标签需统一为军工被动元件与连接器。"
+    },
+    "business_summary": "中高端光、电、流体连接技术与产品的研究与开发。",
+    "sector": "军工电子Ⅱ/铜缆高速连接/光纤概念/6G概念"
+  },
+  {
+    "code": "002199",
+    "name": "东晶电子",
+    "pairs": [
+      {
+        "category": "光通信",
+        "concept": "石英晶振",
+        "slot": 1
+      },
+      {
+        "category": "光通信",
+        "concept": "石英晶振",
+        "slot": 0
+      }
+    ],
+    "verdict": "相关",
+    "reasons": {
+      "石英晶振": "东晶电子：石英晶振"
+    },
+    "business_summary": "石英晶体元器件、电子元器件的研发、生产和销售。主营石英晶体谐振器、振荡器。",
+    "sector": "通信设备/光通信/石英晶振"
+  },
+  {
+    "code": "002281",
+    "name": "光迅科技",
+    "pairs": [
+      {
+        "category": "光通信",
+        "concept": "光模块/CPO",
+        "slot": 1
+      },
+      {
+        "category": "超节点",
+        "concept": "光通信",
+        "slot": 2
+      },
+      {
+        "category": "光通信",
+        "concept": "光模块/CPO",
+        "slot": 0
+      },
+      {
+        "category": "光通信",
+        "concept": "光通信",
+        "slot": 0
+      },
+      {
+        "category": "超节点",
+        "concept": "光模块/CPO",
+        "slot": 0
+      },
+      {
+        "category": "超节点",
+        "concept": "光通信",
+        "slot": 0
+      }
+    ],
+    "verdict": "核心",
+    "reasons": {
+      "CPO/光模块": "主营：传输类产品；与本标签一致",
+      "光芯片": "主营：传输类产品；与本标签一致",
+      "光通信": "主营：传输类产品；与本标签一致"
+    },
+    "business_summary": "光电子器件、模块和子系统的研发、生产及销售。",
+    "sector": "通信设备/F5G概念/光纤概念/共封装光学(CPO)"
+  },
+  {
+    "code": "002384",
+    "name": "东山精密",
+    "pairs": [
+      {
+        "category": "光通信",
+        "concept": "光芯片",
+        "slot": 1
+      },
+      {
+        "category": "光通信",
+        "concept": "光芯片",
+        "slot": 0
+      }
+    ],
+    "verdict": "核心",
+    "reasons": {
+      "光通信": "东山精密：PCB+光模块"
+    },
+    "business_summary": "电子电路、光模块（含光芯片）、精密组件、光电显示模组的全球设计、生产和销售。",
+    "sector": "元件/共封装光学(CPO)/光纤概念/PCB概念"
+  },
+  {
+    "code": "002428",
+    "name": "云南锗业",
+    "pairs": [
+      {
+        "category": "有色金属",
+        "concept": "锗",
+        "slot": 1
+      },
+      {
+        "category": "光通信",
+        "concept": "光材料",
+        "slot": 2
+      },
+      {
+        "category": "太空光伏",
+        "concept": "锗电池",
+        "slot": 3
+      },
+      {
+        "category": "有色金属",
+        "concept": "锗",
+        "slot": 0
+      },
+      {
+        "category": "有色金属",
+        "concept": "光材料",
+        "slot": 0
+      },
+      {
+        "category": "有色金属",
+        "concept": "锗电池",
+        "slot": 0
+      },
+      {
+        "category": "光通信",
+        "concept": "锗",
+        "slot": 0
+      },
+      {
+        "category": "光通信",
+        "concept": "光材料",
+        "slot": 0
+      },
+      {
+        "category": "光通信",
+        "concept": "锗电池",
+        "slot": 0
+      },
+      {
+        "category": "太空光伏",
+        "concept": "锗",
+        "slot": 0
+      },
+      {
+        "category": "太空光伏",
+        "concept": "光材料",
+        "slot": 0
+      },
+      {
+        "category": "太空光伏",
+        "concept": "锗电池",
+        "slot": 0
+      }
+    ],
+    "verdict": "核心",
+    "reasons": {
+      "锗": "云南锗业：锗矿开采与锗系列产品",
+      "光材料": "云南锗业：锗矿开采与锗系列产品",
+      "锗电池": "云南锗业：锗矿开采与锗系列产品"
+    },
+    "business_summary": "锗矿开采、火法富集、湿法提纯、区熔精炼、精深加工及研究开发。",
+    "sector": "小金属/光纤概念/第三代半导体/芯片概念"
+  },
+  {
+    "code": "002491",
+    "name": "通鼎互联",
+    "pairs": [
+      {
+        "category": "光通信",
+        "concept": "光纤光缆",
+        "slot": 1
+      },
+      {
+        "category": "光通信",
+        "concept": "光纤光缆",
+        "slot": 0
+      }
+    ],
+    "verdict": "相关",
+    "reasons": {
+      "光纤光缆": "通鼎互联：光纤光缆"
+    },
+    "business_summary": "主营光电线缆、通信设备，已构建“光纤预制棒—光纤—光缆—设备”完整产业链",
+    "sector": "通信设备/光纤概念/5G/数据中心(AIDC)"
+  },
+  {
+    "code": "300265",
+    "name": "通光线缆",
+    "pairs": [
+      {
+        "category": "光通信",
+        "concept": "光纤光缆",
+        "slot": 1
+      },
+      {
+        "category": "光通信",
+        "concept": "光纤光缆",
+        "slot": 0
+      }
+    ],
+    "verdict": "相关",
+    "reasons": {
+      "光纤光缆": "通光线缆：光纤光缆+电缆"
+    },
+    "business_summary": "主营电气机械和器材制造业",
+    "sector": "电气机械和器材制造业"
+  },
+  {
+    "code": "300292",
+    "name": "吴通控股",
+    "pairs": [
+      {
+        "category": "光通信",
+        "concept": "其他",
+        "slot": 1
+      },
+      {
+        "category": "光通信",
+        "concept": "其他",
+        "slot": 0
+      }
+    ],
+    "verdict": "边缘",
+    "reasons": {
+      "MPO": "吴通控股：移动信息服务"
+    },
+    "business_summary": "企业移动信息化服务业务。",
+    "sector": "通信服务/光纤概念/5G"
+  },
+  {
+    "code": "300308",
+    "name": "中际旭创",
+    "pairs": [
+      {
+        "category": "光通信",
+        "concept": "光模块/CPO",
+        "slot": 1
+      },
+      {
+        "category": "超节点",
+        "concept": "光通信",
+        "slot": 2
+      },
+      {
+        "category": "光通信",
+        "concept": "光模块/CPO",
+        "slot": 0
+      },
+      {
+        "category": "光通信",
+        "concept": "光通信",
+        "slot": 0
+      },
+      {
+        "category": "超节点",
+        "concept": "光模块/CPO",
+        "slot": 0
+      },
+      {
+        "category": "超节点",
+        "concept": "光通信",
+        "slot": 0
+      }
+    ],
+    "verdict": "核心",
+    "reasons": {
+      "CPO/光模块": "主营：高端光通信收发模块的研发、生产及销售；与本标签一致",
+      "光引擎/LPO": "主营：高端光通信收发模块的研发、生产及销售；与本标签一致",
+      "光通信": "主营：高端光通信收发模块的研发、生产及销售；与本标签一致"
+    },
+    "business_summary": "全球领先的光模块解决方案提供商，2024年光模块厂商排名全球第一",
+    "sector": "通信设备/共封装光学(CPO)/F5G概念/芯片概念"
+  },
+  {
+    "code": "300351",
+    "name": "永贵电器",
+    "pairs": [
+      {
+        "category": "光通信",
+        "concept": "MPO/连接器",
+        "slot": 1
+      },
+      {
+        "category": "光通信",
+        "concept": "MPO/连接器",
+        "slot": 0
+      }
+    ],
+    "verdict": "边缘",
+    "reasons": {
+      "MPO": "永贵电器：轨交/工业连接器"
+    },
+    "business_summary": "主营计算机、通信和其他电子设备制造业",
+    "sector": "计算机、通信和其他电子设备制造业"
+  },
+  {
+    "code": "300394",
+    "name": "天孚通信",
+    "pairs": [
+      {
+        "category": "光通信",
+        "concept": "光器件",
+        "slot": 1
+      },
+      {
+        "category": "光通信",
+        "concept": "光器件",
+        "slot": 0
+      }
+    ],
+    "verdict": "核心",
+    "reasons": {
+      "光器件": "天孚通信：光器件/光引擎",
+      "光引擎/LPO": "天孚通信：光器件/光引擎"
+    },
+    "business_summary": "高速光器件的研发、规模量产和销售业务。",
+    "sector": "通信设备/共封装光学(CPO)/光纤概念/先进封装"
+  },
+  {
+    "code": "300398",
+    "name": "飞凯材料",
+    "pairs": [
+      {
+        "category": "光通信",
+        "concept": "光材料",
+        "slot": 1
+      },
+      {
+        "category": "光通信",
+        "concept": "光材料",
+        "slot": 0
+      }
+    ],
+    "verdict": "相关",
+    "reasons": {
+      "光纤涂料": "飞凯材料：光纤涂料/电子化学品"
+    },
+    "business_summary": "主营化学原料和化学制品制造业",
+    "sector": "化学原料和化学制品制造业"
+  },
+  {
+    "code": "300408",
+    "name": "三环集团",
+    "pairs": [
+      {
+        "category": "电力",
+        "concept": "SOFC",
+        "slot": 1
+      },
+      {
+        "category": "光通信",
+        "concept": "MPO/连接器",
+        "slot": 2
+      },
+      {
+        "category": "PCB",
+        "concept": "MLCC",
+        "slot": 3
+      },
+      {
+        "category": "电力",
+        "concept": "SOFC",
+        "slot": 0
+      },
+      {
+        "category": "电力",
+        "concept": "MPO/连接器",
+        "slot": 0
+      },
+      {
+        "category": "电力",
+        "concept": "MLCC",
+        "slot": 0
+      },
+      {
+        "category": "光通信",
+        "concept": "SOFC",
+        "slot": 0
+      },
+      {
+        "category": "光通信",
+        "concept": "MPO/连接器",
+        "slot": 0
+      },
+      {
+        "category": "光通信",
+        "concept": "MLCC",
+        "slot": 0
+      },
+      {
+        "category": "PCB",
+        "concept": "SOFC",
+        "slot": 0
+      },
+      {
+        "category": "PCB",
+        "concept": "MPO/连接器",
+        "slot": 0
+      },
+      {
+        "category": "PCB",
+        "concept": "MLCC",
+        "slot": 0
+      }
+    ],
+    "verdict": "核心",
+    "reasons": {
+      "MPO": "三环集团：电子陶瓷，SOFC 电解质材料",
+      "插芯": "三环集团：电子陶瓷，SOFC 电解质材料",
+      "MLCC": "三环集团：电子陶瓷，SOFC 电解质材料",
+      "SOFC": "三环集团：电子陶瓷，SOFC 电解质材料"
+    },
+    "business_summary": "电子元件及其基础材料的研发、生产和销售。",
+    "sector": "元件/共封装光学(CPO)/消费电子概念/5G"
+  },
+  {
+    "code": "300502",
+    "name": "新易盛",
+    "pairs": [
+      {
+        "category": "光通信",
+        "concept": "光模块/CPO",
+        "slot": 1
+      },
+      {
+        "category": "光通信",
+        "concept": "光模块/CPO",
+        "slot": 0
+      }
+    ],
+    "verdict": "核心",
+    "reasons": {
+      "CPO/光模块": "新易盛：光模块",
+      "光引擎/LPO": "新易盛：光模块",
+      "光芯片": "新易盛：光模块"
+    },
+    "business_summary": "全系列光通信应用的光模块的研发、生产和销售。",
+    "sector": "通信设备/共封装光学(CPO)/5G/芯片概念"
+  },
+  {
+    "code": "300548",
+    "name": "长芯博创",
+    "pairs": [
+      {
+        "category": "光通信",
+        "concept": "光模块/CPO",
+        "slot": 1
+      },
+      {
+        "category": "超节点",
+        "concept": "光通信",
+        "slot": 2
+      },
+      {
+        "category": "光通信",
+        "concept": "光模块/CPO",
+        "slot": 0
+      },
+      {
+        "category": "光通信",
+        "concept": "光通信",
+        "slot": 0
+      },
+      {
+        "category": "超节点",
+        "concept": "光模块/CPO",
+        "slot": 0
+      },
+      {
+        "category": "超节点",
+        "concept": "光通信",
+        "slot": 0
+      }
+    ],
+    "verdict": "核心",
+    "reasons": {
+      "MPO": "主营：光通信产品及解决方案；与本标签一致",
+      "光芯片": "主营：光通信产品及解决方案；与本标签一致",
+      "光通信": "主营：光通信产品及解决方案；与本标签一致"
+    },
+    "business_summary": "光通信领域集成光电子器件的研发、生产和销售。",
+    "sector": "通信设备/F5G概念/光纤概念/共封装光学(CPO)"
+  },
+  {
+    "code": "300570",
+    "name": "太辰光",
+    "pairs": [
+      {
+        "category": "光通信",
+        "concept": "MPO/连接器",
+        "slot": 1
+      },
+      {
+        "category": "光通信",
+        "concept": "MPO/连接器",
+        "slot": 0
+      }
+    ],
+    "verdict": "核心",
+    "reasons": {
+      "MPO": "太辰光：光器件/MPO",
+      "光器件": "太辰光：光器件/MPO",
+      "插芯": "太辰光：光器件/MPO"
+    },
+    "business_summary": "各种光通信器件及其集成功能模块和光传感产品的研发、制造和销售。",
+    "sector": "通信设备/F5G概念/共封装光学"
+  },
+  {
+    "code": "300620",
+    "name": "光库科技",
+    "pairs": [
+      {
+        "category": "光通信",
+        "concept": "光器件",
+        "slot": 1
+      },
+      {
+        "category": "光通信",
+        "concept": "光器件",
+        "slot": 0
+      }
+    ],
+    "verdict": "核心",
+    "reasons": {
+      "调制器": "光库科技：光纤器件/调制器"
+    },
+    "business_summary": "光纤激光器件、光通讯器件和激光雷达光源模块及器件的设计、研发、生产、销售及服务。",
+    "sector": "通信设备/光纤概念/共封装光学"
+  },
+  {
+    "code": "300757",
+    "name": "罗博特科",
+    "pairs": [
+      {
+        "category": "光通信",
+        "concept": "设备",
+        "slot": 1
+      },
+      {
+        "category": "太空光伏",
+        "concept": "太空光伏设备",
+        "slot": 3
+      },
+      {
+        "category": "光通信",
+        "concept": "设备",
+        "slot": 0
+      },
+      {
+        "category": "光通信",
+        "concept": "spacex",
+        "slot": 0
+      },
+      {
+        "category": "光通信",
+        "concept": "太空光伏设备",
+        "slot": 0
+      },
+      {
+        "category": "太空光伏",
+        "concept": "设备",
+        "slot": 0
+      },
+      {
+        "category": "太空光伏",
+        "concept": "spacex",
+        "slot": 0
+      },
+      {
+        "category": "太空光伏",
+        "concept": "太空光伏设备",
+        "slot": 0
+      }
+    ],
+    "verdict": "边缘",
+    "reasons": {
+      "设备": "罗博特科：光伏/半导体设备",
+      "spacex": "罗博特科：光伏/半导体设备",
+      "太空光伏设备": "罗博特科：光伏/半导体设备"
+    },
+    "business_summary": "主营自动化设备",
+    "sector": "自动化设备/共封装光学(CPO)/光纤概念/富士康概念"
+  },
+  {
+    "code": "301196",
+    "name": "唯科科技",
+    "pairs": [
+      {
+        "category": "光通信",
+        "concept": "其他",
+        "slot": 1
+      },
+      {
+        "category": "光通信",
+        "concept": "其他",
+        "slot": 0
+      }
+    ],
+    "verdict": "边缘",
+    "reasons": {
+      "MPO": "唯科科技：精密注塑，MPO 为潜在配套"
+    },
+    "business_summary": "主营橡胶和塑料制品业",
+    "sector": "橡胶和塑料制品业"
+  },
+  {
+    "code": "301205",
+    "name": "联特科技",
+    "pairs": [
+      {
+        "category": "光通信",
+        "concept": "光模块/CPO",
+        "slot": 1
+      },
+      {
+        "category": "超节点",
+        "concept": "光通信",
+        "slot": 2
+      },
+      {
+        "category": "光通信",
+        "concept": "光模块/CPO",
+        "slot": 0
+      },
+      {
+        "category": "光通信",
+        "concept": "光通信",
+        "slot": 0
+      },
+      {
+        "category": "超节点",
+        "concept": "光模块/CPO",
+        "slot": 0
+      },
+      {
+        "category": "超节点",
+        "concept": "光通信",
+        "slot": 0
+      }
+    ],
+    "verdict": "核心",
+    "reasons": {
+      "CPO/光模块": "主营：光通信收发模块的研发、生产和销售；与本标签一致",
+      "光通信": "主营：光通信收发模块的研发、生产和销售；与本标签一致"
+    },
+    "business_summary": "外销为主的光模块制造商，在波分领域和中高速率光模块领域具备一定优势",
+    "sector": "通信设备/共封装光学(CPO)/数据中心/5G"
+  }
+]

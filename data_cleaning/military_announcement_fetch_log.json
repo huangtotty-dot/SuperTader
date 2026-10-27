@@ -1,0 +1,233 @@
+[
+  {
+    "batch": 1,
+    "tickers": "000519.SZ,000547.SZ,000561.SZ",
+    "ok": false,
+    "file": "E:\\superTrader\\data_cleaning\\military_ifind_announcements\\announcements_01.csv",
+    "log": "{'type': 'text', 'text': 'EMPTY_DATA - Response data is empty'}\n"
+  },
+  {
+    "batch": 2,
+    "tickers": "000576.SZ,000733.SZ,000738.SZ",
+    "ok": false,
+    "file": "E:\\superTrader\\data_cleaning\\military_ifind_announcements\\announcements_02.csv",
+    "log": "{'type': 'text', 'text': 'EMPTY_DATA - Response data is empty'}\n"
+  },
+  {
+    "batch": 3,
+    "tickers": "000768.SZ,000901.SZ,002025.SZ",
+    "ok": false,
+    "file": "E:\\superTrader\\data_cleaning\\military_ifind_announcements\\announcements_03.csv",
+    "log": "{'type': 'text', 'text': 'EMPTY_DATA - Response data is empty'}\n"
+  },
+  {
+    "batch": 4,
+    "tickers": "002049.SZ,002111.SZ,002149.SZ",
+    "ok": false,
+    "file": "E:\\superTrader\\data_cleaning\\military_ifind_announcements\\announcements_04.csv",
+    "log": "{'type': 'text', 'text': 'EMPTY_DATA - Response data is empty'}\n"
+  },
+  {
+    "batch": 5,
+    "tickers": "002151.SZ,002179.SZ,002190.SZ",
+    "ok": false,
+    "file": "E:\\superTrader\\data_cleaning\\military_ifind_announcements\\announcements_05.csv",
+    "log": "{'type': 'text', 'text': 'EMPTY_DATA - Response data is empty'}\n"
+  },
+  {
+    "batch": 6,
+    "tickers": "002222.SZ,002265.SZ,002342.SZ",
+    "ok": false,
+    "file": "E:\\superTrader\\data_cleaning\\military_ifind_announcements\\announcements_06.csv",
+    "log": "{'type': 'text', 'text': 'EMPTY_DATA - Response data is empty'}\n"
+  },
+  {
+    "batch": 7,
+    "tickers": "002383.SZ,002389.SZ,002414.SZ",
+    "ok": false,
+    "file": "E:\\superTrader\\data_cleaning\\military_ifind_announcements\\announcements_07.csv",
+    "log": "{'type': 'text', 'text': 'EMPTY_DATA - Response data is empty'}\n"
+  },
+  {
+    "batch": 8,
+    "tickers": "002465.SZ,002519.SZ,002535.SZ",
+    "ok": false,
+    "file": "E:\\superTrader\\data_cleaning\\military_ifind_announcements\\announcements_08.csv",
+    "log": "{'type': 'text', 'text': 'EMPTY_DATA - Response data is empty'}\n"
+  },
+  {
+    "batch": 9,
+    "tickers": "002625.SZ,002724.SZ,002747.SZ",
+    "ok": false,
+    "file": "E:\\superTrader\\data_cleaning\\military_ifind_announcements\\announcements_09.csv",
+    "log": "{'type': 'text', 'text': 'EMPTY_DATA - Response data is empty'}\n"
+  },
+  {
+    "batch": 10,
+    "tickers": "300008.SZ,300024.SZ,300034.SZ",
+    "ok": false,
+    "file": "E:\\superTrader\\data_cleaning\\military_ifind_announcements\\announcements_10.csv",
+    "log": "{'type': 'text', 'text': 'EMPTY_DATA - Response data is empty'}\n"
+  },
+  {
+    "batch": 11,
+    "tickers": "300101.SZ,300395.SZ,300581.SZ",
+    "ok": false,
+    "file": "E:\\superTrader\\data_cleaning\\military_ifind_announcements\\announcements_11.csv",
+    "log": "{'type': 'text', 'text': 'EMPTY_DATA - Response data is empty'}\n"
+  },
+  {
+    "batch": 12,
+    "tickers": "300589.SZ,300593.SZ,300627.SZ",
+    "ok": false,
+    "file": "E:\\superTrader\\data_cleaning\\military_ifind_announcements\\announcements_12.csv",
+    "log": "{'type': 'text', 'text': 'EMPTY_DATA - Response data is empty'}\n"
+  },
+  {
+    "batch": 13,
+    "tickers": "300696.SZ,300699.SZ,300726.SZ",
+    "ok": false,
+    "file": "E:\\superTrader\\data_cleaning\\military_ifind_announcements\\announcements_13.csv",
+    "log": "{'type': 'text', 'text': 'EMPTY_DATA - Response data is empty'}\n"
+  },
+  {
+    "batch": 14,
+    "tickers": "300775.SZ,300777.SZ,300810.SZ",
+    "ok": false,
+    "file": "E:\\superTrader\\data_cleaning\\military_ifind_announcements\\announcements_14.csv",
+    "log": "{'type': 'text', 'text': 'EMPTY_DATA - Response data is empty'}\n"
+  },
+  {
+    "batch": 15,
+    "tickers": "300855.SZ,300875.SZ,301050.SZ",
+    "ok": false,
+    "file": "E:\\superTrader\\data_cleaning\\military_ifind_announcements\\announcements_15.csv",
+    "log": "{'type': 'text', 'text': 'EMPTY_DATA - Response data is empty'}\n"
+  },
+  {
+    "batch": 16,
+    "tickers": "301302.SZ,302132.SZ,600038.SH",
+    "ok": false,
+    "file": "E:\\superTrader\\data_cleaning\\military_ifind_announcements\\announcements_16.csv",
+    "log": "{'type': 'text', 'text': 'EMPTY_DATA - Response data is empty'}\n"
+  },
+  {
+    "batch": 17,
+    "tickers": "600150.SH,600184.SH,600316.SH",
+    "ok": false,
+    "file": "E:\\superTrader\\data_cleaning\\military_ifind_announcements\\announcements_17.csv",
+    "log": "{'type': 'text', 'text': 'EMPTY_DATA - Response data is empty'}\n"
+  },
+  {
+    "batch": 18,
+    "tickers": "600343.SH,600353.SH,600363.SH",
+    "ok": false,
+    "file": "E:\\superTrader\\data_cleaning\\military_ifind_announcements\\announcements_18.csv",
+    "log": "{'type': 'text', 'text': 'EMPTY_DATA - Response data is empty'}\n"
+  },
+  {
+    "batch": 19,
+    "tickers": "600372.SH,600391.SH,600399.SH",
+    "ok": false,
+    "file": "E:\\superTrader\\data_cleaning\\military_ifind_announcements\\announcements_19.csv",
+    "log": "{'type': 'text', 'text': 'EMPTY_DATA - Response data is empty'}\n"
+  },
+  {
+    "batch": 20,
+    "tickers": "600416.SH,600435.SH,600456.SH",
+    "ok": false,
+    "file": "E:\\superTrader\\data_cleaning\\military_ifind_announcements\\announcements_20.csv",
+    "log": "{'type': 'text', 'text': 'EMPTY_DATA - Response data is empty'}\n"
+  },
+  {
+    "batch": 21,
+    "tickers": "600482.SH,600501.SH,600562.SH",
+    "ok": false,
+    "file": "E:\\superTrader\\data_cleaning\\military_ifind_announcements\\announcements_21.csv",
+    "log": "{'type': 'text', 'text': 'EMPTY_DATA - Response data is empty'}\n"
+  },
+  {
+    "batch": 22,
+    "tickers": "600590.SH,600685.SH,600698.SH",
+    "ok": false,
+    "file": "E:\\superTrader\\data_cleaning\\military_ifind_announcements\\announcements_22.csv",
+    "log": "{'type': 'text', 'text': 'EMPTY_DATA - Response data is empty'}\n"
+  },
+  {
+    "batch": 23,
+    "tickers": "600760.SH,600764.SH,600765.SH",
+    "ok": false,
+    "file": "E:\\superTrader\\data_cleaning\\military_ifind_announcements\\announcements_23.csv",
+    "log": "{'type': 'text', 'text': 'EMPTY_DATA - Response data is empty'}\n"
+  },
+  {
+    "batch": 24,
+    "tickers": "600862.SH,600879.SH,600893.SH",
+    "ok": false,
+    "file": "E:\\superTrader\\data_cleaning\\military_ifind_announcements\\announcements_24.csv",
+    "log": "{'type': 'text', 'text': 'EMPTY_DATA - Response data is empty'}\n"
+  },
+  {
+    "batch": 25,
+    "tickers": "600967.SH,600990.SH,600992.SH",
+    "ok": false,
+    "file": "E:\\superTrader\\data_cleaning\\military_ifind_announcements\\announcements_25.csv",
+    "log": "{'type': 'text', 'text': 'EMPTY_DATA - Response data is empty'}\n"
+  },
+  {
+    "batch": 26,
+    "tickers": "601606.SH,603267.SH,603678.SH",
+    "ok": false,
+    "file": "E:\\superTrader\\data_cleaning\\military_ifind_announcements\\announcements_26.csv",
+    "log": "{'type': 'text', 'text': 'EMPTY_DATA - Response data is empty'}\n"
+  },
+  {
+    "batch": 27,
+    "tickers": "603712.SH,605123.SH,688002.SH",
+    "ok": false,
+    "file": "E:\\superTrader\\data_cleaning\\military_ifind_announcements\\announcements_27.csv",
+    "log": "{'type': 'text', 'text': 'EMPTY_DATA - Response data is empty'}\n"
+  },
+  {
+    "batch": 28,
+    "tickers": "688011.SH,688070.SH,688084.SH",
+    "ok": false,
+    "file": "E:\\superTrader\\data_cleaning\\military_ifind_announcements\\announcements_28.csv",
+    "log": "{'type': 'text', 'text': 'EMPTY_DATA - Response data is empty'}\n"
+  },
+  {
+    "batch": 29,
+    "tickers": "688122.SH,688239.SH,688281.SH",
+    "ok": false,
+    "file": "E:\\superTrader\\data_cleaning\\military_ifind_announcements\\announcements_29.csv",
+    "log": "{'type': 'text', 'text': 'EMPTY_DATA - Response data is empty'}\n"
+  },
+  {
+    "batch": 30,
+    "tickers": "688297.SH,688333.SH,688375.SH",
+    "ok": false,
+    "file": "E:\\superTrader\\data_cleaning\\military_ifind_announcements\\announcements_30.csv",
+    "log": "{'type': 'text', 'text': 'EMPTY_DATA - Response data is empty'}\n"
+  },
+  {
+    "batch": 31,
+    "tickers": "688385.SH,688543.SH,688552.SH",
+    "ok": false,
+    "file": "E:\\superTrader\\data_cleaning\\military_ifind_announcements\\announcements_31.csv",
+    "log": "{'type': 'text', 'text': 'EMPTY_DATA - Response data is empty'}\n"
+  },
+  {
+    "batch": 32,
+    "tickers": "688563.SH,688568.SH,688708.SH",
+    "ok": false,
+    "file": "E:\\superTrader\\data_cleaning\\military_ifind_announcements\\announcements_32.csv",
+    "log": "{'type': 'text', 'text': 'EMPTY_DATA - Response data is empty'}\n"
+  },
+  {
+    "batch": 33,
+    "tickers": "688709.SH",
+    "ok": false,
+    "file": "E:\\superTrader\\data_cleaning\\military_ifind_announcements\\announcements_33.csv",
+    "log": "{'type': 'text', 'text': 'EMPTY_DATA - Response data is empty'}\n"
+  }
+]
