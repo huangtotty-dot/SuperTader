@@ -1,0 +1,9 @@
+{
+  "name": "supertrader-gui-preview",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Minimal static preview for the existing pywebview GUI",
+  "scripts": {
+    "dev": "node scripts/dev-server.js"
+  }
+}
