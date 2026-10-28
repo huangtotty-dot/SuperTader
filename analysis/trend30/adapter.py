@@ -41,6 +41,101 @@ _RAW_MAX = 400            # ≈ 400×640 行 ≈ 12MB，够一屏板块翻页用
 
 _STATE2TREND = {"BULL": "up", "BEAR": "down", "RANGE": "flat"}
 
+# ── 判定快照的**磁盘缓存**（2026-10-28，owner：各表"计算中"太久）────────────
+# 为什么：`_CACHE` 只在内存里，而 30min 趋势的输入（**已完成** bar 的序列）在一个 slot 内
+# 完全不变 —— 重启 GUI / 重开板块 / 另开进程都不该重跑那条 130~370ms 的 pandas 管线。
+# 实测 50 只的板块首次要 20~30s 的"⏳计算中"，其中一多半是重复计算。
+# 键 = (code, slot)；一个 slot 落一个 JSON，切 slot 时旧文件自动淘汰（保留最近 2 个）。
+_SNAP_DIR = os.path.join(_BASE, "t_io", "cache", "trend30_slot")
+_SNAP_PENDING = {}          # slot -> {code: value}
+_SNAP_LOADED = None         # 已灌进内存的 slot
+_SNAP_AT = 0.0
+
+
+def _snap_path(slot: str) -> str:
+    return os.path.join(_SNAP_DIR, slot.replace(" ", "_").replace(":", "") + ".json")
+
+
+def _jsonable(v):
+    """numpy 标量 → 原生（json.dump 不认识 np.float64）。"""
+    if isinstance(v, dict):
+        return {str(k): _jsonable(x) for k, x in v.items()}
+    if isinstance(v, (list, tuple)):
+        return [_jsonable(x) for x in v]
+    if isinstance(v, (np.floating,)):
+        return float(v)
+    if isinstance(v, (np.integer,)):
+        return int(v)
+    if isinstance(v, (np.bool_,)):
+        return bool(v)
+    return v
+
+
+def _snap_load(slot: str) -> None:
+    """把该 slot 的磁盘快照灌进 `_CACHE`（每个 slot 只读一次盘）。"""
+    global _SNAP_LOADED
+    if _SNAP_LOADED == slot:
+        return
+    _SNAP_LOADED = slot
+    try:
+        import json as _json
+        with open(_snap_path(slot), encoding="utf-8") as f:
+            d = _json.load(f)
+        if isinstance(d, dict):
+            with _LOCK:
+                for c, v in d.items():
+                    if isinstance(v, dict):
+                        _CACHE.setdefault(c, {"slot": slot, "value": v})
+            if d:
+                print(f"[trend30] 复用磁盘快照 {len(d)} 只（slot={slot}）", flush=True)
+    except Exception:
+        pass
+
+
+def _snap_add(slot: str, code: str, value: dict) -> None:
+    _SNAP_PENDING.setdefault(slot, {})[code] = _jsonable(value)
+    _snap_flush()
+
+
+def _snap_flush() -> None:
+    """节流落盘（≤1 次 / 1.5s）+ 淘汰旧 slot 文件。失败静默（缓存不是正确性依赖）。"""
+    global _SNAP_AT
+    if not _SNAP_PENDING:
+        return
+    now = time.time()
+    if now - _SNAP_AT < 1.5:
+        return
+    _SNAP_AT = now
+    with _LOCK:
+        pend = dict(_SNAP_PENDING)
+        _SNAP_PENDING.clear()
+    try:
+        import json as _json
+        os.makedirs(_SNAP_DIR, exist_ok=True)
+        for slot, items in pend.items():
+            path = _snap_path(slot)
+            old = {}
+            try:
+                with open(path, encoding="utf-8") as f:
+                    old = _json.load(f) or {}
+            except Exception:
+                old = {}
+            old.update(items)
+            tmp = path + ".tmp"
+            with open(tmp, "w", encoding="utf-8") as f:
+                _json.dump(old, f)
+            os.replace(tmp, path)
+        # 只留最近 2 个 slot 文件（一个 slot = 30 分钟，留 2 个够跨日边界）
+        try:
+            fs = [(os.path.getmtime(os.path.join(_SNAP_DIR, x)), x)
+                  for x in os.listdir(_SNAP_DIR) if x.endswith(".json")]
+            for _, x in sorted(fs)[:-2]:
+                os.remove(os.path.join(_SNAP_DIR, x))
+        except Exception:
+            pass
+    except Exception:
+        pass
+
 
 def state_to_trend(state) -> str:
     """BULL→up / BEAR→down / RANGE→flat（未知/None → flat）。"""
@@ -48,8 +143,18 @@ def state_to_trend(state) -> str:
 
 
 def _slot(dt=None) -> str:
-    """当前 30 分钟时段键（如 '2026-10-04 10:30'）。"""
+    """当前 30 分钟时段键（如 '2026-10-04 10:30'）。
+
+    **收盘后 / 非交易日冻结到 15:30**（2026-10-28）：一日之内的判定只随「已收盘 30min bar」
+    变化，收盘后序列不可能再变。原来收盘后键还每 30 分钟往前滚 ⇒ 判定缓存（含磁盘快照）
+    每半小时被整份作废、全部重算 —— 盘后打开板块依旧"⏳计算中"正是这么来的。
+    ⚠️ 冻结点是 **15:30 而不是 15:00**：末根 15:00 的 bar 要到 15:30 才算收盘
+    （`drop_forming_bar` 按 `bar_time+30min` 判），15:00~15:29 算出来的结果**不含末根**，
+    冻结它就等于整个晚上用错一版。
+    """
     dt = dt or datetime.now()
+    if dt.weekday() >= 5 or (dt.hour * 100 + dt.minute) >= 1530:
+        return dt.strftime("%Y-%m-%d") + " 15:30"
     return dt.strftime("%Y-%m-%d %H:") + ("00" if dt.minute < 30 else "30")
 
 
@@ -149,6 +254,7 @@ def prefetch_30min(codes, workers: int = 8) -> int:
     import threading as _th
 
     slot = _slot()
+    _snap_load(slot)          # 先把本 slot 的磁盘快照灌进 _CACHE（每个 slot 只读一次盘）
     todo = []
     with _LOCK:
         for c in codes or []:
@@ -157,6 +263,11 @@ def prefetch_30min(codes, workers: int = 8) -> int:
                 continue
             r = _RAW.get(c)
             if r and r.get("slot") == slot and r.get("df") is not None:
+                continue
+            # **已有本 slot 的判定快照 ⇒ 根本不需要再取 bars**（2026-10-28）。磁盘缓存上线后，
+            # 第二次打开同一个板块/重启后同一时段，取数原本还是照做（纯浪费：50 只 ≈ 10s 网络）。
+            _sn = _CACHE.get(c)
+            if _sn and _sn.get("slot") == slot:
                 continue
             if c not in todo:
                 todo.append(c)
@@ -189,6 +300,11 @@ def get_trend30(code: str, days: int = 35, cfg: Trend30Config = None, use_cache:
     cfg = cfg or Trend30Config()
     slot = _slot()
     if use_cache:
+        with _LOCK:
+            c = _CACHE.get(code)
+            if c and c.get("slot") == slot:
+                return c["value"]
+        _snap_load(slot)                 # 内存没有 → 看磁盘快照（重启后同 slot 免算）
         with _LOCK:
             c = _CACHE.get(code)
             if c and c.get("slot") == slot:
@@ -227,6 +343,7 @@ def get_trend30(code: str, days: int = 35, cfg: Trend30Config = None, use_cache:
     res["code"] = code
     with _LOCK:
         _CACHE[code] = {"slot": slot, "value": res}
+    _snap_add(slot, code, res)           # 落磁盘：同 slot 内重启/重开不再重算
     return res
 
 

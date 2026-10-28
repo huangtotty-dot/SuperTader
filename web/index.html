@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>trader pannel</title>
-<link rel="stylesheet" href="style.css?v=20261027g">
+<link rel="stylesheet" href="style.css?v=20261028n">
 </head>
 <body>
 <header class="topbar">
@@ -517,6 +517,16 @@
         <!-- 2026-10-26 owner：通达信本地分钟数据下载完之后，不用关窗重开 -->
         <button class="mini-btn" id="chartReloadBtn" onclick="reloadStockChart(true)"
                 title="强制重读数据：绕过内存/磁盘缓存，重新读通达信本地 .day/.lc5 与日线缓存（下载完分钟线后点这个）">🔄 重读</button>
+        <!-- 2026-10-28 owner：画框提醒 —— 上穿上沿 / 跌破下沿 各报一次（飞书 + 响铃） -->
+        <button class="mini-btn primary" id="paBoxBtn" onclick="openPaBoxDialog()"
+                title="设画框提醒：直接填「上沿 / 下沿」两个价格即出框。本票只有一个框时 = 原地修改它；也可右键框选「修改上下沿」">⌨ 设框</button>
+        <button class="mini-btn" id="paDrawBtn" onclick="togglePaDraw()"
+                title="备选：在 K 线上拖一个矩形（或点第一角再点对角）。Esc 取消">✏️ 拖框</button>
+        <button class="mini-btn" id="paClearBtn" onclick="clearPriceBoxes()"
+                style="display:none" title="删除本票所有画框提醒（单个框也可以右键删除）">🗑 全部框(0)</button>
+        <!-- 2026-10-28：缺口点掉后是**真消失**，用这个按钮一键恢复 -->
+        <button class="mini-btn" id="paGapBtn" onclick="restoreHiddenGaps()"
+                style="display:none" title="恢复显示本票本周期所有被点掉的缺口">👁 缺口(0)</button>
 
       </div>
     </div>
@@ -647,6 +657,6 @@
 <script src="vendor/echarts.min.js"></script>
 <!-- 2026-10-20：带版本号强制 WebView2 重新取 app.js（否则可能命中旧缓存，
      K 线提速/埋点改动不生效——表现为"改了跟没改一样"） -->
-<script src="app.js?v=20261027g"></script>
+<script src="app.js?v=20261028r"></script>
 </body>
 </html>

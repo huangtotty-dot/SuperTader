@@ -566,7 +566,9 @@ def build_card(events: list, top_n: int = None, date: str = None,
     return {
         "msg_type": "interactive",
         "card": {
-            "header": {"template": "green",
+            # 2026-10-27 owner：「站上5日线」与「破5/10日线」要一眼分得清 ⇒ A股配色
+            # （站上=红、破线=绿）。本卡是「站上」，用红。
+            "header": {"template": "red",
                        "title": {"tag": "plain_text",
                                   "content": ("📈 异常监控池·刚站上5日线" if universe != "hunter"
                                               else "📈 猎手热门板块·刚站上5日线")}},

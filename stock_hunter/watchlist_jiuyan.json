@@ -1385,13 +1385,14 @@
   "business_summary": "主营通用设备",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "机器人",
+  "jiuyan_concept": "加工设备",
   "name": "沈阳机床",
   "primary_source": "legacy",
   "sector": "通用设备/工业母机/高端装备/工业互联网",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-10-28 15:42:32",
+  "jiuyan_tag_source": "owner 2026-10-28 午盘涨停复盘简图"
  },
  "000411": {
   "business_summary": "主营医药商业",
@@ -3675,13 +3676,14 @@
   "business_summary": "电子元器件分销和集成电路芯片的研发、设计和销售。",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "半导体",
+  "jiuyan_concept": "芯片分销",
   "name": "盈方微",
   "primary_source": "legacy",
   "sector": "其他电子Ⅱ/存储芯片/芯片概念/小米概念",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-10-28 15:42:32",
+  "jiuyan_tag_source": "owner 2026-10-28 午盘涨停复盘简图"
  },
  "000672": {
   "business_summary": "主营非金属矿物制品业",
@@ -8601,13 +8603,14 @@
   "business_summary": "主营非金属矿物制品业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "机器人",
+  "jiuyan_concept": "材料",
   "name": "长江材料",
   "primary_source": "legacy",
   "sector": "非金属矿物制品业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-10-28 15:42:32",
+  "jiuyan_tag_source": "owner 2026-10-28 午盘涨停复盘简图"
  },
  "001298": {
   "business_summary": "主营批发业",
@@ -9184,13 +9187,14 @@
   "business_summary": "主营计算机设备",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "物理AI",
+  "jiuyan_concept": "物理AI_数据采集",
   "name": "智微智能",
   "primary_source": "legacy",
   "sector": "计算机设备/AI PC/算力租赁/中国AI 50",
   "sector_type": "legacy",
-  "updated_at": "2026-06-17 12:32:05"
+  "updated_at": "2026-10-28 15:42:32",
+  "jiuyan_tag_source": "owner 2026-10-28 午盘涨停复盘简图"
  },
  "001356": {
   "business_summary": "主营橡胶和塑料制品业",
@@ -9632,13 +9636,14 @@
   "business_summary": "铝型材挤压模具及配件、铝型材挤压配套设备、精密机械零部件等产品的研发、设计、生产和销售。",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "物理AI",
+  "jiuyan_concept": "物理AI_具身本体",
   "name": "江顺科技",
   "primary_source": "legacy",
   "sector": "专用设备/商业航天/液冷服务器/3D打印",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-10-28 15:42:32",
+  "jiuyan_tag_source": "owner 2026-10-28 午盘涨停复盘简图"
  },
  "001696": {
   "business_summary": "中小型动力机械产品及部分终端产品的研发、制造、销售。",
@@ -10666,13 +10671,14 @@
   "business_summary": "国内汽车内饰件龙头企业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "机器人",
+  "jiuyan_concept": "材料",
   "name": "宁波华翔",
   "primary_source": "legacy",
   "sector": "汽车零部件/减速器/华为汽车/人形机器人",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-10-28 15:42:32",
+  "jiuyan_tag_source": "owner 2026-10-28 午盘涨停复盘简图"
  },
  "002049": {
   "business_summary": "特种集成电路、智能安全芯片为两大主业。",
@@ -14940,7 +14946,7 @@
   "primary_source": "legacy",
   "sector": "汽车制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-10-27 11:26:00",
+  "updated_at": "2026-10-28 15:42:32",
   "jiuyan_tag_evidence": "text",
   "jiuyan_tag_verdict": "核心",
   "jiuyan_concept_reason": {
@@ -14978,7 +14984,10 @@
    "reason": "公司特品明确为轻型武器装备，产品实现谱系、口径和市场覆盖，属于枪械类轻武器研发制造，并推进武器装备机械化、信息化、智能化融合及有人、无人平台拓展，外贸产品已出口多个国家和地区；这不是汽车零部件业务衍生的泛军工标签。2025年机械制造业收入45.0998亿元，占100.0000%，输入未提供特品、汽车零部件和新兴产业的独立收入拆分，因此不能把全部制造业收入都视为军工，也不能虚构轻武器占比。年报同时明确主营业务以轻型武器装备为主、汽车零部件和战略性新兴产业为支撑，故列核心。旧“军工配套”严重低估并模糊了公司总装产品属性，应纠正为枪械与单兵装备。"
   },
   "jiuyan_category1": "军工",
-  "jiuyan_concept1": "枪械与单兵装备"
+  "jiuyan_concept1": "枪械与单兵装备",
+  "jiuyan_category2": "机器人",
+  "jiuyan_concept2": "本体及应用",
+  "jiuyan_tag_source": "owner 2026-10-28 午盘涨停复盘简图"
  },
  "002266": {
   "business_summary": "主营生态保护和环境治理业",
@@ -15372,13 +15381,14 @@
   "business_summary": "主营汽车制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "机器人",
+  "jiuyan_concept": "本体及应用",
   "name": "天润工业",
   "primary_source": "legacy",
   "sector": "汽车制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-10-28 15:42:32",
+  "jiuyan_tag_source": "owner 2026-10-28 午盘涨停复盘简图"
  },
  "002284": {
   "business_summary": "主营汽车制造业",
@@ -20291,13 +20301,14 @@
   "business_summary": "主营专用设备制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "机器人",
+  "jiuyan_concept": "自动化集成",
   "name": "山东矿机",
   "primary_source": "legacy",
   "sector": "专用设备制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-10-28 15:42:32",
+  "jiuyan_tag_source": "owner 2026-10-28 午盘涨停复盘简图"
  },
  "002527": {
   "business_summary": "海尔集团旗下，电梯控制器、SCARA机器人市占率国内领先",
@@ -21859,13 +21870,14 @@
   "business_summary": "智能瓦楞纸包装装备、工业互联网行业解决方案、数字印刷解决方案以及水上动力产品。",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "物理AI",
+  "jiuyan_concept": "物理AI_具身本体",
   "name": "东方精工",
   "primary_source": "legacy",
   "sector": "专用设备/人形机器人/多模态AI/新型工业化",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-10-28 15:42:32",
+  "jiuyan_tag_source": "owner 2026-10-28 午盘涨停复盘简图"
  },
  "002612": {
   "business_summary": "主营纺织服装、服饰业",
@@ -23233,17 +23245,56 @@
   "business_summary": "新能源与燃油汽车精密零部件、高端工业装备、智能机器人零部件、电子线路板及电子元器件的研发、生产与销售。",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "低空经济",
-  "jiuyan_concept": "零部件",
+  "jiuyan_category": "低空经济|机器人",
+  "jiuyan_concept": "零部件|轴承",
   "name": "光洋股份",
   "primary_source": "legacy",
   "sector": "汽车零部件/智能座舱/人形机器人/汽车电子",
   "sector_type": "legacy",
-  "updated_at": "2026-10-25 11:00:00",
+  "updated_at": "2026-10-27 16:10:00",
   "jiuyan_tag_evidence": "text",
   "jiuyan_tag_verdict": "相关",
   "jiuyan_concept_reason": {
-   "零部件": "光洋股份：汽车精密零部件"
+   "零部件": "光洋股份：汽车精密零部件",
+   "轴承": "主营仍是汽车精密零部件，但业务范围已明确包含“智能机器人零部件”：产品线有交叉滚子轴承、薄壁型圈环类精密锻件、行星排等，应用场景写明“机器人关节减速器”。属有真实产品与产能的新业务，机器人收入占比仍低，故定相关并归入机器人/轴承。"
+  },
+  "jiuyan_category1": "低空经济",
+  "jiuyan_concept1": "零部件",
+  "jiuyan_category2": "机器人",
+  "jiuyan_concept2": "轴承",
+  "jiuyan_concept_desc": {
+   "轴承": "交叉滚子、柔性、薄壁、自润滑等机器人关节或减速器轴承。"
+  },
+  "jiuyan_robot_physicalai_verdicts": {
+   "机器人": "相关"
+  },
+  "jiuyan_robot_physicalai_audited_at": "2026-10-27",
+  "jiuyan_robot_physicalai_evidence": {
+   "title": "东财F10·主营业务：产品应用于机器人关节减速器等总成（含交叉滚子轴承、行星排）",
+   "date": "2026-10-27",
+   "url": "https://emweb.securities.eastmoney.com/pc_hsf10/pages/index.html?type=web&code=SZ002708",
+   "profile_source": "东财F10 核心题材 + 公司公告/互动易",
+   "profile_asof": "2026-10-27"
+  },
+  "jiuyan_robot_physicalai_audit_20261027": {
+   "action": "新增",
+   "old_pairs": [
+    [
+     "低空经济",
+     "零部件"
+    ]
+   ],
+   "new_pairs": [
+    [
+     "机器人",
+     "轴承"
+    ]
+   ],
+   "verdict": "相关",
+   "category_verdicts": {
+    "机器人": "相关"
+   },
+   "reason": "主营仍是汽车精密零部件，但业务范围已明确包含“智能机器人零部件”：产品线有交叉滚子轴承、薄壁型圈环类精密锻件、行星排等，应用场景写明“机器人关节减速器”。属有真实产品与产能的新业务，机器人收入占比仍低，故定相关并归入机器人/轴承。"
   }
  },
  "002709": {
@@ -23675,13 +23726,14 @@
   "business_summary": "主营电子化学品Ⅱ",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "PCB",
+  "jiuyan_concept": "PCB化学品-电镀与湿制程",
   "name": "光华科技",
   "primary_source": "legacy",
   "sector": "电子化学品Ⅱ/PET铜箔/PCB概念/固态电池",
   "sector_type": "legacy",
-  "updated_at": "2026-06-17 12:29:31"
+  "updated_at": "2026-10-28 15:42:32",
+  "jiuyan_tag_source": "owner 2026-10-28 午盘涨停复盘简图"
  },
  "002742": {
   "business_summary": "主营非金属矿物制品业",
@@ -26558,12 +26610,15 @@
   "primary_source": "legacy",
   "sector": "化学原料和化学制品制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-10-25 03:00:00",
+  "updated_at": "2026-10-28 15:42:32",
   "jiuyan_tag_evidence": "text",
   "jiuyan_tag_verdict": "相关",
   "jiuyan_concept_reason": {
    "电解液": "中欣氟材：含氟精细化学品，电解液添加剂"
-  }
+  },
+  "jiuyan_category1": "机器人",
+  "jiuyan_concept1": "材料",
+  "jiuyan_tag_source": "owner 2026-10-28 午盘涨停复盘简图"
  },
  "002916": {
   "business_summary": "主营元件",
@@ -27367,12 +27422,15 @@
   "primary_source": "legacy",
   "sector": "光学光电子/汽车电子/MR(混合现实)/消费电子概念",
   "sector_type": "legacy",
-  "updated_at": "2026-10-25 15:00:00",
+  "updated_at": "2026-10-28 15:42:32",
   "jiuyan_tag_evidence": "text",
   "jiuyan_tag_verdict": "核心",
   "jiuyan_concept_reason": {
    "光学显示": "主营：精密光电薄膜元器件研发、生产和销售；与本标签一致"
-  }
+  },
+  "jiuyan_category1": "机器人",
+  "jiuyan_concept1": "机器视觉",
+  "jiuyan_tag_source": "owner 2026-10-28 午盘涨停复盘简图"
  },
  "002963": {
   "business_summary": "主营建筑装饰、装修和其他建筑业",
@@ -28517,13 +28575,14 @@
   "business_summary": "主营计算机、通信和其他电子设备制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "机器人",
+  "jiuyan_concept": "智能控制",
   "name": "振邦智能",
   "primary_source": "legacy",
   "sector": "计算机、通信和其他电子设备制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-10-28 15:42:32",
+  "jiuyan_tag_source": "owner 2026-10-28 午盘涨停复盘简图"
  },
  "003029": {
   "business_summary": "主营软件和信息技术服务业",
@@ -38907,13 +38966,49 @@
   "business_summary": "深耕光通信和移动通信产业，主营宽带网络终端设备，主要供货中国电信等公司",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "光通信",
+  "jiuyan_concept": "光传输与接入设备",
   "name": "天邑股份",
   "primary_source": "legacy",
   "sector": "通信设备/F5G概念/光纤概念",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-10-28 09:30:00",
+  "jiuyan_category1": "光通信",
+  "jiuyan_concept1": "光传输与接入设备",
+  "jiuyan_tag_verdict": "核心",
+  "jiuyan_tag_evidence": "text",
+  "jiuyan_concept_reason": {
+   "光传输与接入设备": "公司立足光通信和移动通信产业，主营**宽带网络终端设备**（PON 光猫/ONU、家庭网关），产品用于通信网络的**接入网**，长期是三大运营商核心供应商之一；另有通信网络物理连接与保护设备（ODN 配线/交接箱）。对应「光传输与接入设备」白名单口径里的 PON/光接入设备，且该业务是公司主营业务本身（不是参股或规划），故定核心。未把机顶盒归到消费电子、也未因行业政策段落把算力/数据中心算进来。"
+  },
+  "jiuyan_concept_desc": {
+   "光传输与接入设备": "OTN、PTN、PON、光传输、光接入和光网络系统设备。"
+  },
+  "jiuyan_optical_comm_verdicts": {
+   "光通信": "核心"
+  },
+  "jiuyan_optical_comm_audited_at": "2026-10-28",
+  "jiuyan_optical_comm_evidence": {
+   "title": "东财F10 主营业务：立足光通信和移动通信产业，向运营商提供接入网宽带网络终端设备",
+   "date": "2026-10-28",
+   "url": "https://emweb.securities.eastmoney.com/pc_hsf10/pages/index.html?type=web&code=SZ300504",
+   "profile_source": "东财F10 核心题材 + 2026-10-27 韭研涨停复盘关键词「光纤宽带网络设备」",
+   "profile_asof": "2026-10-28"
+  },
+  "jiuyan_optical_comm_audit_20261027": {
+   "action": "新增",
+   "old_pairs": [],
+   "new_pairs": [
+    [
+     "光通信",
+     "光传输与接入设备"
+    ]
+   ],
+   "verdict": "核心",
+   "category_verdicts": {
+    "光通信": "核心"
+   },
+   "reason": "公司立足光通信和移动通信产业，主营**宽带网络终端设备**（PON 光猫/ONU、家庭网关），产品用于通信网络的**接入网**，长期是三大运营商核心供应商之一；另有通信网络物理连接与保护设备（ODN 配线/交接箱）。对应「光传输与接入设备」白名单口径里的 PON/光接入设备，且该业务是公司主营业务本身（不是参股或规划），故定核心。未把机顶盒归到消费电子、也未因行业政策段落把算力/数据中心算进来。"
+  }
  },
  "300505": {
   "business_summary": "磷化工产品的研发、生产、销售，以及新能源材料产品的研发、生产、销售等业务。",
@@ -41042,7 +41137,7 @@
   "primary_source": "legacy",
   "sector": "半导体/汽车芯片/智能音箱/AI眼镜",
   "sector_type": "legacy",
-  "updated_at": "2026-10-27 13:46:00",
+  "updated_at": "2026-10-28 15:42:32",
   "jiuyan_tag_evidence": "text",
   "jiuyan_tag_verdict": "核心",
   "jiuyan_concept_reason": {
@@ -41080,7 +41175,10 @@
    ],
    "verdict": "核心",
    "reason": "公司真实产品为视频编解码IPC及NVR SoC、图像信号处理器ISP、智能显示和车载视频传输芯片，并提供相应芯片解决方案，属于智能终端和视觉处理芯片设计。2025年集成电路设计收入16.8970亿元，占总收入100%；其中视频监控芯片收入10.0393亿元，智能硬件收入3.3883亿元，汽车电子收入2.7952亿元，主业纯度和产品规模均支持核心定级。边界上，下游视频监控设备、智能硬件整机及汽车电子产品名称对应公司芯片应用分部，不可把终端整机市场收入混入公司收入，也不能仅凭AI应用前景额外推导数据中心算力芯片标签。此次纠错将旧“端侧AI芯片”规范为白名单“芯片设计-SoC与端侧AI”，保留核心并准确反映视频SoC与ISP产品实质。"
-  }
+  },
+  "jiuyan_category2": "机器人",
+  "jiuyan_concept2": "芯片",
+  "jiuyan_tag_source": "owner 2026-10-28 午盘涨停复盘简图"
  },
  "300614": {
   "business_summary": "主营生态保护和环境治理业",
@@ -44422,13 +44520,14 @@
   "business_summary": "主营业务：机械传动与传动联结件、机械非标定制件、工业机器人、数控机床和产业互联网平台服务。",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "机器人",
+  "jiuyan_concept": "本体及应用",
   "name": "德恩精工",
   "primary_source": "legacy",
   "sector": "通用设备/工业母机/减速器/机器视觉",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-10-28 15:42:32",
+  "jiuyan_tag_source": "owner 2026-10-28 午盘涨停复盘简图"
  },
  "300781": {
   "business_summary": "主营商务服务业",
@@ -49349,13 +49448,14 @@
   "business_summary": "主营化学原料和化学制品制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "机器人",
+  "jiuyan_concept": "材料",
   "name": "新瀚新材",
   "primary_source": "legacy",
   "sector": "化学原料和化学制品制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-10-28 15:42:32",
+  "jiuyan_tag_source": "owner 2026-10-28 午盘涨停复盘简图"
  },
  "301077": {
   "business_summary": "主营化学原料和化学制品制造业",
@@ -49946,12 +50046,15 @@
   "primary_source": "legacy",
   "sector": "汽车制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-10-25 15:00:00",
+  "updated_at": "2026-10-28 15:42:32",
   "jiuyan_tag_evidence": "text",
   "jiuyan_tag_verdict": "核心",
   "jiuyan_concept_reason": {
    "零部件": "主营：汽车零部件；与本标签一致"
-  }
+  },
+  "jiuyan_category1": "机器人",
+  "jiuyan_concept1": "结构件",
+  "jiuyan_tag_source": "owner 2026-10-28 午盘涨停复盘简图"
  },
  "301120": {
   "business_summary": "以变频用变压器为核心的各式特种变压器、电力变压器、电抗器的研发、生产、销售及配套产品的销售、储能行业的业务及产品研发、生产、销售。",
@@ -53392,13 +53495,14 @@
   "business_summary": "主营电气机械和器材制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "消费电子",
+  "jiuyan_concept": "微动开关",
   "name": "东南电子",
   "primary_source": "legacy",
   "sector": "电气机械和器材制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-10-28 15:42:32",
+  "jiuyan_tag_source": "owner 2026-10-28 午盘涨停复盘简图"
  },
  "301360": {
   "business_summary": "主营专用设备制造业",
@@ -54341,13 +54445,49 @@
   "business_summary": "主营计算机、通信和其他电子设备制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "物理AI",
+  "jiuyan_concept": "物理AI_机器视觉",
   "name": "弘景光电",
   "primary_source": "legacy",
   "sector": "计算机、通信和其他电子设备制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-10-27 16:10:00",
+  "jiuyan_category1": "物理AI",
+  "jiuyan_concept1": "物理AI_机器视觉",
+  "jiuyan_concept_reason": {
+   "物理AI_机器视觉": "光学镜头与摄像模组厂商。2025年机器视觉业务已放量（体感游戏模组持续放量、割草机器人摄像模组进入头部客户供应链），具身（人形）机器人摄像模组已完成项目定点并进入试产阶段，具备 RGB-D 深度相机等可覆盖具身智能视觉需求的产品。机器人业务尚未形成规模收入，故定相关并归入物理AI/机器视觉。"
+  },
+  "jiuyan_concept_desc": {
+   "物理AI_机器视觉": "工业相机、3D视觉、光源镜头和视觉算法，承担物理环境识别、定位、测量和引导。"
+  },
+  "jiuyan_robot_physicalai_verdicts": {
+   "物理AI": "相关"
+  },
+  "jiuyan_robot_physicalai_audited_at": "2026-10-27",
+  "jiuyan_robot_physicalai_evidence": {
+   "title": "弘景光电：公司的具身机器人摄像模组已完成项目定点并进入试点阶段（2026-05-14 投资者关系活动记录表）",
+   "date": "2026-05-15",
+   "url": "https://data.eastmoney.com/notices/detail/301479/AN202605151822335195.html",
+   "profile_source": "东财F10 核心题材 + 公司公告/互动易",
+   "profile_asof": "2026-10-27"
+  },
+  "jiuyan_robot_physicalai_audit_20261027": {
+   "action": "新增",
+   "old_pairs": [],
+   "new_pairs": [
+    [
+     "物理AI",
+     "物理AI_机器视觉"
+    ]
+   ],
+   "verdict": "相关",
+   "category_verdicts": {
+    "物理AI": "相关"
+   },
+   "reason": "光学镜头与摄像模组厂商。2025年机器视觉业务已放量（体感游戏模组持续放量、割草机器人摄像模组进入头部客户供应链），具身（人形）机器人摄像模组已完成项目定点并进入试产阶段，具备 RGB-D 深度相机等可覆盖具身智能视觉需求的产品。机器人业务尚未形成规模收入，故定相关并归入物理AI/机器视觉。"
+  },
+  "jiuyan_tag_verdict": "相关",
+  "jiuyan_tag_evidence": "text"
  },
  "301486": {
   "business_summary": "消费类电子、光通信产品及自动化设备的研发、设计、生产和销售。",
@@ -54422,13 +54562,14 @@
   "business_summary": "汽车智能驾驶感知系统的研发、设计、制造和销售。",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "机器人",
+  "jiuyan_concept": "传感器",
   "name": "豪恩汽电",
   "primary_source": "legacy",
   "sector": "汽车零部件/华为汽车/长安汽车概念/人形机器人",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-10-28 15:42:32",
+  "jiuyan_tag_source": "owner 2026-10-28 午盘涨停复盘简图"
  },
  "301489": {
   "business_summary": "电子电气产品功能性材料的研发、生产和销售。",
@@ -55007,12 +55148,15 @@
   "primary_source": "legacy",
   "sector": "汽车零部件/汽车电子/传感器/比亚迪概念",
   "sector_type": "legacy",
-  "updated_at": "2026-10-25 15:00:00",
+  "updated_at": "2026-10-28 15:42:32",
   "jiuyan_tag_evidence": "text",
   "jiuyan_tag_verdict": "核心",
   "jiuyan_concept_reason": {
    "零部件": "主营：功能件；与本标签一致"
-  }
+  },
+  "jiuyan_category1": "机器人",
+  "jiuyan_concept1": "材料",
+  "jiuyan_tag_source": "owner 2026-10-28 午盘涨停复盘简图"
  },
  "301531": {
   "business_summary": "主营计算机、通信和其他电子设备制造业",
@@ -58446,12 +58590,15 @@
   "primary_source": "legacy",
   "sector": "房地产业",
   "sector_type": "legacy",
-  "updated_at": "2026-10-25 15:00:00",
+  "updated_at": "2026-10-28 15:42:32",
   "jiuyan_tag_evidence": "text",
   "jiuyan_tag_verdict": "核心",
   "jiuyan_concept_reason": {
    "房地产开发": "主营：新能源业务；与本标签一致"
-  }
+  },
+  "jiuyan_category1": "机器人",
+  "jiuyan_concept1": "电机",
+  "jiuyan_tag_source": "owner 2026-10-28 午盘涨停复盘简图"
  },
  "600176": {
   "business_summary": "主营玻璃玻纤.中国建材集团旗下，产能规模全球第一的玻璃纤维生产企业",
@@ -73717,12 +73864,15 @@
   "primary_source": "legacy",
   "sector": "通用设备制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-10-25 10:00:00",
+  "updated_at": "2026-10-28 15:42:32",
   "jiuyan_tag_evidence": "text",
   "jiuyan_tag_verdict": "相关",
   "jiuyan_concept_reason": {
    "压缩机": "东贝集团：制冷压缩机（家用/商用）"
-  }
+  },
+  "jiuyan_category1": "机器人",
+  "jiuyan_concept1": "结构件",
+  "jiuyan_tag_source": "owner 2026-10-28 午盘涨停复盘简图"
  },
  "601958": {
   "business_summary": "钼系列产品的生产、销售、研发及钼相关产品贸易经营。",
@@ -74195,13 +74345,14 @@
   "business_summary": "主营其他",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "机器人",
+  "jiuyan_concept": "结构件",
   "name": "联明股份",
   "primary_source": "fallback",
   "sector": "其他",
   "sector_type": "fallback",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-10-28 15:42:32",
+  "jiuyan_tag_source": "owner 2026-10-28 午盘涨停复盘简图"
  },
  "603007": {
   "business_summary": "主营其他",
@@ -74330,13 +74481,14 @@
   "business_summary": "中国较大的塑料机械自动化控制系统供货商之一，业务已覆盖核聚变领域",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "机器人",
+  "jiuyan_concept": "智能控制",
   "name": "弘讯科技",
   "primary_source": "legacy",
   "sector": "自动化设备/新型工业化/工业母机/机器人概念",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-10-28 15:42:32",
+  "jiuyan_tag_source": "owner 2026-10-28 午盘涨停复盘简图"
  },
  "603016": {
   "business_summary": "断路器关键部件、低压断路器及刀熔开关的研发、生产与销售。",
@@ -74723,13 +74875,14 @@
   "business_summary": "主营汽车制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "机器人",
+  "jiuyan_concept": "结构件",
   "name": "凯众股份",
   "primary_source": "legacy",
   "sector": "汽车制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-10-28 15:42:32",
+  "jiuyan_tag_source": "owner 2026-10-28 午盘涨停复盘简图"
  },
  "603038": {
   "business_summary": "主营装饰复合材料和水处理设备，在饰边条领域市占率领先",
@@ -74765,12 +74918,15 @@
   "primary_source": "legacy",
   "sector": " 汽车零部件/汽车热管理/长安汽车概念",
   "sector_type": "legacy",
-  "updated_at": "2026-10-25 15:00:00",
+  "updated_at": "2026-10-28 15:42:32",
   "jiuyan_tag_evidence": "text",
   "jiuyan_tag_verdict": "核心",
   "jiuyan_concept_reason": {
    "零部件": "主营：精密零部件的研发、生产和销售；与本标签一致"
-  }
+  },
+  "jiuyan_category1": "机器人",
+  "jiuyan_concept1": "丝杠",
+  "jiuyan_tag_source": "owner 2026-10-28 午盘涨停复盘简图"
  },
  "603041": {
   "business_summary": "主营化学原料和化学制品制造业",
@@ -75940,13 +76096,14 @@
   "business_summary": "主营电气机械和器材制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "机器人",
+  "jiuyan_concept": "电机",
   "name": "神驰机电",
   "primary_source": "legacy",
   "sector": "电气机械和器材制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-10-28 15:42:32",
+  "jiuyan_tag_source": "owner 2026-10-28 午盘涨停复盘简图"
  },
  "603110": {
   "business_summary": "主营化学原料和化学制品制造业",
@@ -76936,12 +77093,15 @@
   "primary_source": "legacy",
   "sector": "汽车零部件/机器人概念/特斯拉概念/比亚迪概念",
   "sector_type": "legacy",
-  "updated_at": "2026-10-25 15:00:00",
+  "updated_at": "2026-10-28 15:42:32",
   "jiuyan_tag_evidence": "text",
   "jiuyan_tag_verdict": "核心",
   "jiuyan_concept_reason": {
    "零部件": "主营：汽车饰件整体解决方案；与本标签一致"
-  }
+  },
+  "jiuyan_category1": "机器人",
+  "jiuyan_concept1": "结构件",
+  "jiuyan_tag_source": "owner 2026-10-28 午盘涨停复盘简图"
  },
  "603180": {
   "business_summary": "主营家具制造业",
@@ -77510,13 +77670,14 @@
   "business_summary": "主营电气机械和器材制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "机器人",
+  "jiuyan_concept": "本体及应用",
   "name": "富佳股份",
   "primary_source": "legacy",
   "sector": "电气机械和器材制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-10-28 15:42:32",
+  "jiuyan_tag_source": "owner 2026-10-28 午盘涨停复盘简图"
  },
  "603220": {
   "business_summary": "主营通信服务",
@@ -77634,13 +77795,14 @@
   "business_summary": "主营木材加工和木、竹、藤、棕、草制品业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "PCB",
+  "jiuyan_concept": "PCB设备",
   "name": "菲林格尔",
   "primary_source": "legacy",
   "sector": "木材加工和木、竹、藤、棕、草制品业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-10-28 15:42:32",
+  "jiuyan_tag_source": "owner 2026-10-28 午盘涨停复盘简图"
  },
  "603227": {
   "business_summary": "主营化学原料和化学制品制造业",
@@ -81743,13 +81905,14 @@
   "business_summary": "主营非金属矿物制品业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "电池",
+  "jiuyan_concept": "固态电解质",
   "name": "索通发展",
   "primary_source": "legacy",
   "sector": "非金属矿物制品业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-10-28 15:42:32",
+  "jiuyan_tag_source": "owner 2026-10-28 午盘涨停复盘简图"
  },
  "603613": {
   "business_summary": "主营互联网和相关服务",
@@ -81848,12 +82011,15 @@
   "primary_source": "legacy",
   "sector": "消费电子/智能音箱/苹果概念",
   "sector_type": "legacy",
-  "updated_at": "2026-10-25 15:00:00",
+  "updated_at": "2026-10-28 15:42:32",
   "jiuyan_tag_evidence": "text",
   "jiuyan_tag_verdict": "核心",
   "jiuyan_concept_reason": {
    "消费电子": "主营：精密金属及塑胶结构件产品的研发、制造及部分相关组装服务；与本标签一致"
-  }
+  },
+  "jiuyan_category1": "机器人",
+  "jiuyan_concept1": "结构件",
+  "jiuyan_tag_source": "owner 2026-10-28 午盘涨停复盘简图"
  },
  "603628": {
   "business_summary": "主营电气机械和器材制造业",
@@ -81906,13 +82072,14 @@
   "business_summary": "模具及配件、电子产品、五金机电零配件的研发、生产和销售。",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "机器人",
+  "jiuyan_concept": "结构件",
   "name": "徕木股份",
   "primary_source": "legacy",
   "sector": "汽车零部件/毫米波雷达/消费电子概念/汽车电子",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-10-28 15:42:32",
+  "jiuyan_tag_source": "owner 2026-10-28 午盘涨停复盘简图"
  },
  "603636": {
   "business_summary": "主营其他",
@@ -82876,12 +83043,15 @@
   "primary_source": "legacy",
   "sector": "通用设备制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-10-25 14:00:00",
+  "updated_at": "2026-10-28 15:42:32",
   "jiuyan_tag_evidence": "text",
   "jiuyan_tag_verdict": "相关",
   "jiuyan_concept_reason": {
    "阀门": "纽威股份：工业阀门"
-  }
+  },
+  "jiuyan_category2": "液冷",
+  "jiuyan_concept2": "阀门",
+  "jiuyan_tag_source": "owner 2026-10-28 午盘涨停复盘简图"
  },
  "603700": {
   "business_summary": "主营仪器仪表制造业",
@@ -84222,13 +84392,14 @@
   "business_summary": "主营家用电器",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "大消费",
+  "jiuyan_concept": "大消费_个护电器",
   "name": "飞科电器",
   "primary_source": "legacy",
   "sector": "家用电器/短剧游戏",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-10-28 15:42:32",
+  "jiuyan_tag_source": "owner 2026-10-28 午盘涨停复盘简图"
  },
  "603871": {
   "business_summary": "主营多式联运和运输代理业",
@@ -84602,13 +84773,14 @@
   "business_summary": "特种电磁线、绕组线的生产、加工及销售。",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "机器人",
+  "jiuyan_concept": "线束",
   "name": "长城科技",
   "primary_source": "legacy",
   "sector": "电网设备/比亚迪概念/机器人概念/新能源汽车",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-10-28 15:42:32",
+  "jiuyan_tag_source": "owner 2026-10-28 午盘涨停复盘简图"
  },
  "603898": {
   "business_summary": "主营家具制造业",
@@ -84898,13 +85070,14 @@
   "business_summary": "各类印制电路板（PCB）的研发、生产与销售。",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "机器人",
+  "jiuyan_concept": "PCB",
   "name": "世运电路",
   "primary_source": "legacy",
   "sector": "元件/共封装光学(CPO)/PCB概念/5G",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-10-28 15:42:32",
+  "jiuyan_tag_source": "owner 2026-10-28 午盘涨停复盘简图"
  },
  "603926": {
   "business_summary": "汽车离合器产能及市占率国内领先",
@@ -84916,12 +85089,15 @@
   "primary_source": "legacy",
   "sector": "汽车零部件/机器人概念/长安汽车概念/新能源汽车",
   "sector_type": "legacy",
-  "updated_at": "2026-10-25 15:00:00",
+  "updated_at": "2026-10-28 15:42:32",
   "jiuyan_tag_evidence": "text",
   "jiuyan_tag_verdict": "核心",
   "jiuyan_concept_reason": {
    "零部件": "主营：机器人核心零部件制造板块；与本标签一致"
-  }
+  },
+  "jiuyan_category1": "机器人",
+  "jiuyan_concept1": "结构件",
+  "jiuyan_tag_source": "owner 2026-10-28 午盘涨停复盘简图"
  },
  "603927": {
   "business_summary": "主营软件和信息技术服务业",
@@ -85730,13 +85906,14 @@
   "business_summary": "大健康软硬件、智能厨卫等品类发展的IDM业务。",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "机器人",
+  "jiuyan_concept": "本体及应用",
   "name": "松霖科技",
   "primary_source": "legacy",
   "sector": "家居用品/C2M概念/养老概念/智能家居",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-10-28 15:42:32",
+  "jiuyan_tag_source": "owner 2026-10-28 午盘涨停复盘简图"
  },
  "603993": {
   "business_summary": "有色金属的采、选、冶等矿山采掘及加工业务和金属贸易业务。",
@@ -86164,13 +86341,14 @@
   "business_summary": "主营皮革、毛皮、羽毛及其制品和制鞋业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "机器人",
+  "jiuyan_concept": "电子皮肤",
   "name": "明新旭腾",
   "primary_source": "legacy",
   "sector": "皮革、毛皮、羽毛及其制品和制鞋业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-10-28 15:42:32",
+  "jiuyan_tag_source": "owner 2026-10-28 午盘涨停复盘简图"
  },
  "605069": {
   "business_summary": "主营生态保护和环境治理业",
@@ -87123,13 +87301,14 @@
   "business_summary": "线性驱动行业龙头，沙发电动推杆产品全球市占率领先",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "机器人",
+  "jiuyan_concept": "结构件",
   "name": "凯迪股份",
   "primary_source": "legacy",
   "sector": "自动化设备/自动化设备/智能家居/智能医疗",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-10-28 15:42:32",
+  "jiuyan_tag_source": "owner 2026-10-28 午盘涨停复盘简图"
  },
  "605289": {
   "business_summary": "城市照明、AI算力、数智能源、数字文娱四大业务。",
@@ -87254,12 +87433,15 @@
   "primary_source": "legacy",
   "sector": "汽车制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-10-25 15:00:00",
+  "updated_at": "2026-10-28 15:42:32",
   "jiuyan_tag_evidence": "text",
   "jiuyan_tag_verdict": "核心",
   "jiuyan_concept_reason": {
    "零部件": "主营：汽车高低压线束的研发、生产及销售；与本标签一致"
-  }
+  },
+  "jiuyan_category1": "机器人",
+  "jiuyan_concept1": "线束",
+  "jiuyan_tag_source": "owner 2026-10-28 午盘涨停复盘简图"
  },
  "605337": {
   "business_summary": "主营酒、饮料和精制茶制造业",
@@ -88986,13 +89168,14 @@
   "business_summary": "智能视频技术及整体解决方案的研发、设计与销售。",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "物理AI",
+  "jiuyan_concept": "物理AI_数据采集",
   "name": "当虹科技",
   "primary_source": "legacy",
   "sector": "IT服务Ⅱ/华为欧拉/AI视频/AI语料",
   "sector_type": "legacy",
-  "updated_at": "2026-06-17 12:32:05"
+  "updated_at": "2026-10-28 15:42:32",
+  "jiuyan_tag_source": "owner 2026-10-28 午盘涨停复盘简图"
  },
  "688041": {
   "business_summary": "国内CPU/GPU龙头，国内唯一一家生产x86芯片的企业",
@@ -89047,13 +89230,14 @@
   "business_summary": "主营软件和信息技术服务业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "机器人",
+  "jiuyan_concept": "芯片",
   "name": "必易微",
   "primary_source": "legacy",
   "sector": "软件和信息技术服务业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-10-28 15:42:32",
+  "jiuyan_tag_source": "owner 2026-10-28 午盘涨停复盘简图"
  },
  "688046": {
   "business_summary": "主营研究和试验发展",
@@ -100663,13 +100847,49 @@
   "business_summary": "半导体热电器件及以其为核心的热电系统、热电整机的研发、设计、制造与销售业务。",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "光通信",
+  "jiuyan_concept": "光通信配套-温控器件",
   "name": "富信科技",
   "primary_source": "legacy",
   "sector": "其他电子Ⅱ/共封装光学(CPO)/芯片概念/5G",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-10-28 10:30:00",
+  "jiuyan_category1": "光通信",
+  "jiuyan_concept1": "光通信配套-温控器件",
+  "jiuyan_tag_verdict": "相关",
+  "jiuyan_tag_evidence": "text",
+  "jiuyan_concept_reason": {
+   "光通信配套-温控器件": "公司主营半导体热电器件（Peltier 制冷片）+ 热电系统 + 热电整机，通信是**已批量供货**的真实业务：400G/800G 光模块用 Micro TEC 批量供货、1.6T 小批量，2026H1 通信领域收入 5,616.46 万元（同比 +145.96%，占营收 19.19%，其中 400G/800G+1.6T 的 Micro TEC 合计 3,583.97 万元）；客户为 Coherent、华工科技、索尔思、德科立、联特科技等光模块厂，产能 250 万片/月、利用率 95%+。但收入主体仍是消费电子（LG/SEB/美的/格力），且 CPO 新型封装用 TEC 尚处**送样验证**、公司明确预计不影响 2026 年收入 ⇒ 按「有真实产品与订单、但收入占比仍低」定**相关**，不定核心；也不按「CPO与硅光集成」计（该概念要求 CPO/硅光产品已形成收入）。"
+  },
+  "jiuyan_concept_desc": {
+   "光通信配套-温控器件": "用于光模块、激光器的 Micro TEC 等温控器件与温控模组；须有批量供货或量产订单。"
+  },
+  "jiuyan_optical_comm_verdicts": {
+   "光通信": "相关"
+  },
+  "jiuyan_optical_comm_audited_at": "2026-10-28",
+  "jiuyan_optical_comm_evidence": {
+   "title": "富信科技业绩会：400G/800G 光模块 Micro TEC 已批量供货，H1 通信收入 5616 万/+146%（占营收 19.19%）",
+   "date": "2026-10-12",
+   "url": "https://finance.eastmoney.com/a/202610123892494850.html",
+   "profile_source": "2026 三季报 + 业绩会/投资者关系 + 东财F10",
+   "profile_asof": "2026-10-28"
+  },
+  "jiuyan_optical_comm_audit_20261027": {
+   "action": "新增",
+   "old_pairs": [],
+   "new_pairs": [
+    [
+     "光通信",
+     "光通信配套-温控器件"
+    ]
+   ],
+   "verdict": "相关",
+   "category_verdicts": {
+    "光通信": "相关"
+   },
+   "reason": "公司主营半导体热电器件（Peltier 制冷片）+ 热电系统 + 热电整机，通信是**已批量供货**的真实业务：400G/800G 光模块用 Micro TEC 批量供货、1.6T 小批量，2026H1 通信领域收入 5,616.46 万元（同比 +145.96%，占营收 19.19%，其中 400G/800G+1.6T 的 Micro TEC 合计 3,583.97 万元）；客户为 Coherent、华工科技、索尔思、德科立、联特科技等光模块厂，产能 250 万片/月、利用率 95%+。但收入主体仍是消费电子（LG/SEB/美的/格力），且 CPO 新型封装用 TEC 尚处**送样验证**、公司明确预计不影响 2026 年收入 ⇒ 按「有真实产品与订单、但收入占比仍低」定**相关**，不定核心；也不按「CPO与硅光集成」计（该概念要求 CPO/硅光产品已形成收入）。"
+  }
  },
  "688663": {
   "business_summary": "主营其他",
@@ -107345,12 +107565,13 @@
   "business_summary": "",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "机器人",
+  "jiuyan_concept": "结构件",
   "sector": "底盘与发动机系统/汽车/汽车零部件/重庆板块/机器人概念/专精特新/融资融券/西部大开发",
   "sector_type": "sync_20260929",
   "primary_source": "sync_20260929",
-  "updated_at": "2026-09-29 17:08:50"
+  "updated_at": "2026-10-28 15:42:32",
+  "jiuyan_tag_source": "owner 2026-10-28 午盘涨停复盘简图"
  },
  "920906": {
   "name": "舜宇精工",

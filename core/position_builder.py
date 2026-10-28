@@ -1299,86 +1299,6 @@ def push_signal_feishu(result: dict, dry_run: bool = False) -> bool:
     )
 
 
-# F-7(2026-09-04): 收盘待确认清单（C18，owner 拍板 17 天强制上线）
-_C18_DEDUP_FILE = STATE_DIR / "c18_list_dedup.json"
-_C18_ORDER = {"signal": 2, "watch_signal": 1}
-
-
-def push_pending_confirm_list(date_str: str = "", dry_run: bool = False) -> bool:
-    """收盘建仓 signal 待确认清单推送——读 manual_signals build_signal 当日全量触发
-    （盘中+eod），按 code 去重取最高 verdict（signal>watch_signal），标注已即时推送/未推送 + veto；
-    0 只也推空卡（与 0 signal 计数器联动）。dedup 键 c18_list:{date}（state 落盘，防重复）。"""
-    if not _FEISHU_AVAILABLE:
-        return False
-    date_str = date_str or datetime.now().strftime("%Y-%m-%d")
-    fp = MANUAL_SIGNALS_DIR / f"manual_signals_{date_str}.jsonl"
-    try:
-        dedup = json.loads(_C18_DEDUP_FILE.read_text(encoding="utf-8")) if _C18_DEDUP_FILE.exists() else {}
-    except Exception:
-        dedup = {}
-    if dedup.get(date_str) == "pushed":
-        return True
-    best = {}
-    if fp.exists():
-        for line in open(fp, encoding="utf-8"):
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                e = json.loads(line)
-            except Exception:
-                continue
-            if e.get("event") != "build_signal":
-                continue
-            code = e.get("code")
-            if not code:
-                continue
-            verdict = str(e.get("verdict") or "")
-            _o = _C18_ORDER.get(verdict, 0)
-            cur = best.get(code)
-            if cur is None or _o > cur["_order"]:
-                best[code] = {"code": code, "name": e.get("name", code),
-                              "verdict": verdict, "score": e.get("score"),
-                              "pushed": bool(e.get("pushed")), "veto": list(e.get("veto") or []),
-                              "_order": _o}
-    rows = sorted(best.values(), key=lambda x: (-x["_order"], x["code"]))
-    lines = [f"**收盘建仓待确认清单**  {date_str}", ""]
-    if not rows:
-        lines.append("0 只触发建仓 signal——今日无待确认")
-    else:
-        lines.append(f"共 **{len(rows)}** 只触发建仓信号（盘中/eod 全量，供确认是否已买入）：")
-        lines.append("")
-        for r in rows:
-            icon = "🔴" if r["verdict"] == "signal" else "🟡"
-            pushed_txt = "✅ 已即时推送" if r["pushed"] else "❌ 未推送"
-            veto_txt = f"  🚫否决:{'、'.join(r['veto'])}" if r.get("veto") else ""
-            lines.append(f"{icon} {r['name']}({r['code']}) {r['verdict']} 分{r.get('score')} | {pushed_txt}{veto_txt}")
-    lines.append("")
-    lines.append("> 盘中 signal 可能因日内确认门降级，此处列全量触发供盘后核对")
-    text = "\n".join(lines)
-    card = {
-        "msg_type": "interactive",
-        "card": {
-            "config": {"wide_screen_mode": True},
-            "header": {"title": {"tag": "plain_text",
-                                 "content": f"📋 收盘建仓待确认 - {FEISHU_KEYWORD}"},
-                       "template": "blue"},
-            "elements": [{"tag": "div", "text": {"tag": "lark_md", "content": text}}],
-        },
-    }
-    if dry_run:
-        return True
-    ok = send_feishu_payload(card, success_log=f"C18 收盘待确认清单已推送: {len(rows)} 只",
-                             error_prefix="C18 收盘待确认清单推送")
-    if ok:
-        try:
-            dedup[date_str] = "pushed"
-            _C18_DEDUP_FILE.write_text(json.dumps(dedup, ensure_ascii=False, indent=2), encoding="utf-8")
-        except Exception:
-            pass
-    return ok
-
-
 # ============================================================
 # 破5/10日线检测与飞书推送（2026-08-14 新增）
 # ============================================================
@@ -1415,22 +1335,42 @@ def _mark_ma_break_pushed(code: str, date_str: str) -> None:
 MA_RECLAIM_STATE_FILE = STATE_DIR / "ma_reclaim_pushed.json"
 
 
+def _reclaim_period_tags(e: dict) -> list:
+    """本次事件命中的周期标签（"5"/"10"）。"""
+    return [p for p, k in (("5", "reclaim5"), ("10", "reclaim10")) if e.get(k)]
+
+
 def _load_ma_reclaim_dedup() -> dict:
+    """`{date: {code: ["5","10"]}}` —— **按周期**去重（2026-10-27 升级）。
+
+    为什么要按周期：原来只要当天推过一次就整只票去重。600900 长江电力 10-27 就是
+    11:15 先报「站上10日线」⇒ 整只被标记已推 ⇒ 13:10 真的站上 5 日线时**不再推**。
+    旧格式 `{date: [code,...]}` 读出时按「5/10 都已推过」处理（保守：不补推，避免升级当天
+    补发一大片；新一天起就按新口径走）。
+    """
     try:
         if MA_RECLAIM_STATE_FILE.exists():
-            return json.loads(MA_RECLAIM_STATE_FILE.read_text(encoding="utf-8"))
+            raw = json.loads(MA_RECLAIM_STATE_FILE.read_text(encoding="utf-8")) or {}
+            out = {}
+            for d, v in raw.items():
+                if isinstance(v, dict):
+                    out[d] = {str(c): [str(p) for p in (ps or [])] for c, ps in v.items()}
+                else:                                  # 旧格式：code 列表
+                    out[d] = {str(c): ["5", "10"] for c in (v or [])}
+            return out
     except Exception:
         pass
     return {}
 
 
-def _mark_ma_reclaim_pushed(code: str, date_str: str) -> None:
+def _mark_ma_reclaim_pushed(code: str, date_str: str, periods=("5", "10")) -> None:
     try:
         STATE_DIR.mkdir(parents=True, exist_ok=True)
         dedup = _load_ma_reclaim_dedup()
-        dedup.setdefault(date_str, [])
-        if code not in dedup[date_str]:
-            dedup[date_str].append(code)
+        day = dedup.setdefault(date_str, {})
+        cur = set(day.get(code) or [])
+        cur.update(str(p) for p in (periods or []))
+        day[code] = sorted(cur)
         dedup = {d: dedup[d] for d in sorted(dedup)[-15:]}
         MA_RECLAIM_STATE_FILE.write_text(
             json.dumps(dedup, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -1754,15 +1694,18 @@ def run_ma_reclaim_alert(date_str: str = None, dry_run: bool = False, silent: bo
             print("站上均线扫描完成：今日无刚由破线转为站上的股票")
         return []
     sig_date = date_str or datetime.now().strftime("%Y-%m-%d")
-    to_push = [e for e in events if e["code"] not in _load_ma_reclaim_dedup().get(sig_date, [])]
+    _sent = _load_ma_reclaim_dedup().get(sig_date, {}) or {}
+    # 按**周期**去重：当天已推过 10 日线，之后真站上 5 日线仍然要推（600900 10-27 实报）
+    to_push = [e for e in events
+               if set(_reclaim_period_tags(e)) - set(_sent.get(e["code"]) or [])]
     if not to_push:
         if not silent:
-            print(f"站上均线扫描完成：{len(events)} 只触发但当日均已推送过，跳过")
+            print(f"站上均线扫描完成：{len(events)} 只触发但当日对应周期均已推送过，跳过")
         return []
     pushed_ok = push_ma_reclaim_feishu(to_push, date_str=sig_date, dry_run=dry_run)
     if pushed_ok:
         for e in to_push:
-            _mark_ma_reclaim_pushed(e["code"], sig_date)
+            _mark_ma_reclaim_pushed(e["code"], sig_date, _reclaim_period_tags(e))
         if not silent:
             print(f"站上均线提醒已推送: {len(to_push)} 只")
     elif not silent:
@@ -1805,7 +1748,9 @@ def build_ma_break_card(events: list, date_str: str = "") -> dict:
         "msg_type": "interactive",
         "card": {
             "header": {
-                "template": "red",
+                # 2026-10-27 owner：站上/破线要一眼分得清 ⇒ A股配色（红=站上，绿=破线）。
+                # 这张是「破」，用绿；「站上」两张卡（hunter_ma5_alert / build_ma_reclaim_card）用红。
+                "template": "green",
                 "title": {"tag": "plain_text", "content": "⚠️ 破5/10日线提醒 - 可关注建仓"},
             },
             "elements": [{"tag": "markdown", "content": "\n".join(lines)}],
@@ -1865,7 +1810,8 @@ def build_ma_reclaim_card(events: list, date_str: str = "") -> dict:
         "msg_type": "interactive",
         "card": {
             "header": {
-                "template": "green",
+                # 2026-10-27 owner：与「破5/10日线」(绿) 区分开 ⇒ 站上用红（A股红涨绿跌）。
+                "template": "red",
                 "title": {"tag": "plain_text", "content": "🔺 站上5/10日线提醒 - 破线回站"},
             },
             "elements": [{"tag": "markdown", "content": "\n".join(lines)}],

@@ -1,16 +1,6 @@
 {
-  "updated_at": "2026-10-27 14:50:08",
+  "updated_at": "2026-10-28 14:50:06",
   "open": {
-    "002549": {
-      "entry_date": "2026-10-21",
-      "entry_price": 13.68,
-      "qty": 500,
-      "dev20": -0.023337,
-      "gap": 0.07137315748642359,
-      "board": "半导体",
-      "days_held": 4,
-      "last_check_date": "2026-10-27"
-    },
     "300014": {
       "entry_date": "2026-10-26",
       "entry_price": 46.4,
@@ -18,8 +8,8 @@
       "dev20": -0.072439,
       "gap": 0.046469659372885275,
       "board": "电池",
-      "days_held": 1,
-      "last_check_date": "2026-10-27"
+      "days_held": 2,
+      "last_check_date": "2026-10-28"
     },
     "002520": {
       "entry_date": "2026-10-27",
@@ -28,8 +18,8 @@
       "dev20": -0.003895,
       "gap": 0.06988352745424287,
       "board": "机器人",
-      "days_held": 0,
-      "last_check_date": null
+      "days_held": 1,
+      "last_check_date": "2026-10-28"
     },
     "600605": {
       "entry_date": "2026-10-27",
@@ -38,8 +28,8 @@
       "dev20": -0.035428,
       "gap": 0.019302152932442418,
       "board": "地产",
-      "days_held": 0,
-      "last_check_date": null
+      "days_held": 1,
+      "last_check_date": "2026-10-28"
     },
     "000882": {
       "entry_date": "2026-10-27",
@@ -48,8 +38,8 @@
       "dev20": -0.062395,
       "gap": 0.014388489208633004,
       "board": "大消费",
-      "days_held": 0,
-      "last_check_date": null
+      "days_held": 1,
+      "last_check_date": "2026-10-28"
     }
   },
   "closed": {
@@ -299,6 +289,22 @@
       "exit_qty": 200,
       "exit_reason": "horizon_expired",
       "exit_fee": 5.0,
+      "closed_by": "fill_event"
+    },
+    "002549": {
+      "entry_date": "2026-10-21",
+      "entry_price": 13.68,
+      "qty": 500,
+      "dev20": -0.023337,
+      "gap": 0.07137315748642359,
+      "board": "半导体",
+      "days_held": 5,
+      "last_check_date": "2026-10-28",
+      "exit_date": "2026-10-28",
+      "exit_price": 11.47,
+      "exit_qty": 500,
+      "exit_reason": "horizon_expired",
+      "exit_fee": 6.94,
       "closed_by": "fill_event"
     }
   },

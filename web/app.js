@@ -266,12 +266,13 @@ async function loadAndRender(date, silent) {
     if (_ibw) _ibw.style.display = isToday ? "" : "none";
     if (isToday) {
       await refreshLive(true);       // 立即拉一次 live + console（内含 refreshIndexBoard）
-      startLivePoll();               // 10s 实时
-      startSignalPoll();             // 5s 信号检测 + 报警
+      startLivePoll();               // 10s 实时（建仓信号/人工确认闸已并入这一拍）
+      // 2026-10-28：独立的 5s `startSignalPoll` 已下线 —— `poll_new_position_signals`
+      // 现在是 `poll_live_bundle` 里的一个键。代价是信号提示最迟晚 5s 出现，
+      // 换来少一个常驻轮询器（每拍一次 0.5~3s 的桥往返）。
       ensureAudio();                 // 尝试解锁音频
     } else {
       stopLivePoll();
-      stopSignalPoll();
       renderLive(null, false);       // 显示"非今日"
       refreshIndexDivergence();      // 全局背离条：非今日视图也反映实时告警
     }
@@ -313,7 +314,42 @@ function updateRefreshAlarm() {
 async function refreshLive(reset) {
   const date = state.date;
   if (!date) return;
+  /* 2026-10-28：一拍 6 个桥往返 → **1 个**（`poll_live_bundle`）。
+     桥接层每次调用固定 0.5~3s（空端点 `ping` 也是这个量级），6 个调用光排队就 3~7s，
+     而切 tab 时它们还在队列里，体感就是"点了没反应"。
+     任一项失败只影响那一块（保留上一帧），失败/老后端 ⇒ 回退到底下的原路径。 */
+  let b = null;
+  try { b = await apiCall("poll_live_bundle", date); } catch (e) { b = null; }
+  const _ok = k => (b && b[k] && !b[k].__error__) ? b[k] : null;
+  if (b && _ok("live")) {
+    try {
+      liveFailCnt = 0;
+      renderLive(_ok("live"), date === todayStr());
+      refreshIndexBoard({ indices: _ok("indices"), divergence: _ok("divergence"),
+                          turnover: _ok("turnover") });
+      // 先铺 quotes，下面 renderPB 才带得上涨幅；pb 也一并回来了就跳过这次多余的表重绘
+      if (_ok("quotes")) _applyQuotesPayload(_ok("quotes"), !!_ok("pb"));
+      if (_ok("pb")) {
+        pbFailCnt = 0;
+        // 与老路径同一契约：把带技术标签的结果合并回 state.payload，否则后续 quotes 路径
+        // 用无 tags 的旧 payload 重渲染，会覆盖掉已显示的技术标签（一会有一会无）
+        if (_ok("pb").rows && state.payload) state.payload.position_builder = _ok("pb");
+        renderPB(applyQuotesToPB(_ok("pb")));
+      }
+      // 2026-10-28：建仓信号增量 + 人工确认闸也搭这趟车（原本各挂一个 10s/5s 轮询器）
+      if (_ok("signals")) pollSignals(_ok("signals"));
+      if (_ok("buyconfirm")) pollBuyConfirm(_ok("buyconfirm"));
+      updateRefreshAlarm();
+      return;
+    } catch (e) {
+      // 渲染层出错 ⇒ 落到下面的老路径再试一次
+    }
+  }
   try {
+    // 老路径（bundle 不可用时）：信号/确认闸原来各有独立轮询器，现在搭这一拍，
+    // 频率从 5s 降到 10s，但少两个常驻轮询器的桥往返。
+    pollSignals();
+    pollBuyConfirm();
     const live = await apiCall("load_live", date);
     liveFailCnt = 0;   // fix P1-6: 主链路成功即清零
     renderLive(live, date === todayStr());
@@ -323,8 +359,8 @@ async function refreshLive(reset) {
     // 实时行情（10s 刷新）：更新侧栏汇总 + 存 quotes 供 PB 价格更新
     // 2026-10-23（GUI 卡顿排查）：**单飞闸**。这两条原来在 `refreshLive` 里**不 await** ⇒
     //   轮询器只等 `load_live` 就排下一拍，它们还在飞 ⇒ 慢的时候并发叠加（正是 2026-10-10
-    //   注释里那个正反馈，只是这两条漏在链外；`poll_new_position_signals` 走 `startSignalPoll`，
-    //   那边本来就有背压，不在此列）。实测 `refresh_pb` 峰值 19.4s。
+    //   注释里那个正反馈，只是这两条漏在链外）。实测 `refresh_pb` 峰值 19.4s。
+    //   （`poll_new_position_signals` 2026-10-28 已并入 `poll_live_bundle`。）
     //   上一次没回来就跳过这一次（背压），表格最多晚一拍更新。
     if (!_loadQuotesInflight) _refreshQuotesAndSidebar();
     // 2026-10-10: 「今日盘中 S」已下线，连带的 10s 重拉一并删除（跨日 S 是日频，改日期时拉一次即可）
@@ -356,31 +392,38 @@ async function refreshLive(reset) {
 
 // 2026-10-23（GUI 卡顿排查）：从 `refreshLive` 里抽出来，便于套**单飞闸**（见 `_loadQuotesInflight`）。
 // 原来这段是 `refreshLive` 里不 await 的内联调用 ⇒ 慢的时候与下一拍并发叠加。
-function _refreshQuotesAndSidebar() {
+/* 把一份 quotes 载荷应用出去（**同步**，2026-10-28 拆出来给 poll_live_bundle 复用：
+   bundle 已经带回了 quotes，不能再走一次桥；而且要**先**把 `state.quotes` 铺好，
+   紧接着的 `renderPB(applyQuotesToPB(pb))` 才拿得到实时涨幅）。 */
+function _applyQuotesPayload(q, skipPb) {
+  updateSidebarSummary((q && q.quotes) || []);
+  state.quotes = (q && q.quotes) || [];
+  if (state.payload && !skipPb) {
+    // PB 表价格/涨幅实时更新（2026-10-12 owner：「建仓信号扫描没有显示个股实时涨幅」。
+    // 根因=此处原先**只搬了 price、把 change_pct 丢了**，而 scan trace 里本就没有涨跌幅
+    // ⇒ 不叠加就永远没有。现已收进 `applyQuotesToPB`，与 refresh_pb 路径共用。）
+    const pbRows = state.payload.position_builder;
+    if (pbRows && pbRows.rows) {
+      renderPB(applyQuotesToPB(pbRows));
+    }
+  }
+  // 持仓体检表「现价」列同款：OB 表 45~60s 才整体重拉，现价用 10s quotes 就地叠加
+  applyQuotesToOB();
+  // 风向标「价/涨幅」列：面板就绪后自身轮询降到 60s，挂在 10s live 轮询上才能 ~15s 刷新
+  // （内部有 tab 可见性 + 15s TTL + 单飞闸，不在该页/在飞中都是零成本）
+  loadBeaconQuotes();
+  // 猎手展开页的实时价/涨幅：只刷**当前可见**的展开板块（TTL 15s 节流；
+  // 猎手页没打开/没展开任何板块时是零成本 —— 别为看不见的东西出网）
+  if (hunterOpenSectors.size && _hunterTabActive()) {
+    loadHunterQuotes();          // 一次覆盖全部展开板块（不再每板块一次）
+  }
+}
+
+function _refreshQuotesAndSidebar(pre) {
+  if (pre) { _applyQuotesPayload(pre); return; }      // bundle 已带回 ⇒ 同步应用，零桥往返
   _loadQuotesInflight = true;
-  apiCall("load_quotes").then(q => {
-    updateSidebarSummary((q && q.quotes) || []);
-    state.quotes = (q && q.quotes) || [];
-    if (state.payload) {
-      // PB 表价格/涨幅实时更新（2026-10-12 owner：「建仓信号扫描没有显示个股实时涨幅」。
-      // 根因=此处原先**只搬了 price、把 change_pct 丢了**，而 scan trace 里本就没有涨跌幅
-      // ⇒ 不叠加就永远没有。现已收进 `applyQuotesToPB`，与 refresh_pb 路径共用。）
-      const pbRows = state.payload.position_builder;
-      if (pbRows && pbRows.rows) {
-        renderPB(applyQuotesToPB(pbRows));
-      }
-    }
-    // 持仓体检表「现价」列同款：OB 表 45~60s 才整体重拉，现价用 10s quotes 就地叠加
-    applyQuotesToOB();
-    // 风向标「价/涨幅」列：面板就绪后自身轮询降到 60s，挂在 10s live 轮询上才能 ~15s 刷新
-    // （内部有 tab 可见性 + 15s TTL + 单飞闸，不在该页/在飞中都是零成本）
-    loadBeaconQuotes();
-    // 猎手展开页的实时价/涨幅：只刷**当前可见**的展开板块（TTL 15s 节流；
-    // 猎手页没打开/没展开任何板块时是零成本 —— 别为看不见的东西出网）
-    if (hunterOpenSectors.size && _hunterTabActive()) {
-      loadHunterQuotes();          // 一次覆盖全部展开板块（不再每板块一次）
-    }
-  }).catch(() => {}).then(() => { _loadQuotesInflight = false; });
+  apiCall("load_quotes").then(q => _applyQuotesPayload(q))
+    .catch(() => {}).then(() => { _loadQuotesInflight = false; });
 }
 
 
@@ -791,9 +834,18 @@ function renderMarket(ms) {
 
 /* ---- 历史成交盈亏（2026-10-10 需求3）：券商「历史成交」→ 逐股已实现盈亏 · 做T收益 ----
    全站账户列表的唯一来源就是这份台账；改完要连带刷新账户相关的各面板。 */
-async function loadTradeHistory() {
+/* 交割单台账（2026-10-28）：加 30s TTL。原来每次切到「图表分析」都重拉一次 ——
+   回来、出去、再回来就是三次桥往返（每次 ~0.5~3s）。台账是日频数据，30s 复用够。
+   需要立刻看到新导入的台账时，导入/刷新路径会显式传 force。 */
+let _tradeHistCache = { ts: 0, data: null };
+async function loadTradeHistory(force) {
   try {
+    if (!force && _tradeHistCache.data && Date.now() - _tradeHistCache.ts < 30000) {
+      renderTradeHistory(_tradeHistCache.data);
+      return;
+    }
     const d = await apiCall("load_trade_history");
+    _tradeHistCache = { ts: Date.now(), data: d || {} };
     renderTradeHistory(d || {});
   } catch (e) { /* 桥接未就绪时忽略 */ }
 }
@@ -804,7 +856,7 @@ async function importTradeHistory() {
   try {
     const d = await apiCall("import_trade_history");
     if (!d || !d.imported) {
-      if (d && d.cancelled) { loadTradeHistory(); return; }
+      if (d && d.cancelled) { loadTradeHistory(true); return; }   // 强制：取消后要反映真实状态
       if (meta) meta.innerHTML = `<span class="down">导入失败：${esc((d && d.error) || "未知错误")}</span>`;
       return;
     }
@@ -1810,18 +1862,35 @@ function _panelDate() {
   return _hunterPanelDate || state.date || null;
 }
 
+/* 板块星轨图（2026-10-28）：加 **60s TTL + 单飞**。
+   原来每次 `switchTab("hunter")` 都重拉 `load_sector_constellation`，而这个端点在
+   slow_calls 日志里稳定 1.2~3.2s ⇒ 切到猎手页"卡一下"有一半是它付的。
+   数据是**日频**（按 `_panelDate()` 取），60s 复用完全够；日期变了 key 不同，自动重拉。 */
+let _sectorStarsCache = { key: "", ts: 0, data: null };
+let _sectorStarsInflight = false;
 async function loadSectorStars(force) {
   const box = document.getElementById("echSectorStars");
   if (!box) return;
   if (!window.echarts) { echClear("echSectorStars"); return; }
+  const _key = String(_panelDate());
+  if (!force && !_sectorStarsInflight && _sectorStarsCache.data
+      && _sectorStarsCache.key === _key && Date.now() - _sectorStarsCache.ts < 60000) {
+    echGuard("板块星轨图", () => renderSectorStars(_sectorStarsCache.data));
+    return;
+  }
+  if (_sectorStarsInflight) return;                 // 已在飞：别叠
+  _sectorStarsInflight = true;
   try {
     const d = await apiCall("load_sector_constellation", 10, _panelDate());
+    _sectorStarsCache = { key: _key, ts: Date.now(), data: d };
     echGuard("板块星轨图", () => renderSectorStars(d));
   } catch (e) {
     console.error("[图表] 板块星轨图 取数失败：", e);
     echClear("echSectorStars");
     const n = document.getElementById("sectorStarsNote");
     if (n) n.textContent = `取数失败：${e.message}`;
+  } finally {
+    _sectorStarsInflight = false;
   }
 }
 
@@ -2633,6 +2702,10 @@ function playAlert(kind) {
       for (let i = 0; i < 5; i++) beepTone(ctx, 660, t0 + i * 0.2, 0.14);
     } else if (kind === "SELL_HIGH") { // 高频三连（880Hz）
       for (let i = 0; i < 3; i++) beepTone(ctx, 880, t0 + i * 0.2, 0.12);
+    } else if (kind === "PRICE_UP") {  // 画框上破：三连短促高音（清脆，2026-10-28）
+      for (let i = 0; i < 3; i++) beepTone(ctx, 1568, t0 + i * 0.11, 0.07);
+    } else if (kind === "PRICE_DOWN") { // 画框下破：三连低音（与上破区分）
+      for (let i = 0; i < 3; i++) beepTone(ctx, 740, t0 + i * 0.13, 0.09);
     } else if (kind === "JIANCANG") {  // 建仓 四连促音（520Hz）
       for (let i = 0; i < 4; i++) beepTone(ctx, 520, t0 + i * 0.18, 0.14);
     } else {                           // 买入/加仓 低频三连（440Hz）
@@ -2687,23 +2760,8 @@ function pushAlert(s) {
 }
 
 /* ================= 增量信号轮询 ================= */
-let sigTimer = null;
-function startSignalPoll() {
-  stopSignalPoll();
-  // 「完成后才排下一次」（2026-10-10，见 _startStaggered 的说明）：pollSignals 是 async，
-  // setInterval 不 await，投递慢时会并发叠加（实测 20s ÷ 5s = 叠 4 个）。
-  const tick = async () => {
-    try {
-      // 上限保护同 _startStaggered
-      await Promise.race([pollSignals(), new Promise(r => setTimeout(r, 30000))]);
-    } catch (e) { /* 静默 */ }
-    if (sigTimer !== null) sigTimer = setTimeout(tick, 5000);
-  };
-  sigTimer = setTimeout(tick, 5000);
-}
-function stopSignalPoll() {
-  if (sigTimer) { clearTimeout(sigTimer); sigTimer = null; }
-}
+/* 2026-10-28：独立的 5s 信号轮询已下线 —— `poll_new_position_signals` 现在是
+   `poll_live_bundle` 里的一个键，跟着 10s 的 live 拍一起回来（少一个常驻轮询器）。 */
 
 /* 2026-10-18：休眠/长时间挂起恢复（或 JS 主线程被饿死 >60s）后，所有 setTimeout 会**同时到期**
    ⇒ live/console/signal/beacon/hunter 十几个接口在 1 秒内一起打到 pywebview 桥上，
@@ -2719,7 +2777,6 @@ function _onWakeFromSleep(gapMs) {
     // 实时轮询只在看"今天"时存在（历史日视图 loadAndRender 会 stopLivePoll）
     if (state.date === todayStr()) {
       stopLivePoll(); startLivePoll();
-      stopSignalPoll(); startSignalPoll();
     }
     stopPoll(); startPoll();
     if (_beaconTimer) { clearTimeout(_beaconTimer); _beaconTimer = null; }
@@ -2728,16 +2785,18 @@ function _onWakeFromSleep(gapMs) {
     statusEl(`已从休眠/挂起恢复（间隔 ${Math.round(gapMs / 1000)}s）· 已重新错峰轮询`, "ok");
   } catch (e) { /* 静默 */ }
 }
-async function pollSignals() {
+/* `pre`（2026-10-28）：同上，bundle 已带回就不再多打一次桥。 */
+async function pollSignals(pre) {
+  const _apply = p => {
+    if (p && !p.baseline && p.signals && p.signals.length) p.signals.forEach(pushAlert);
+  };
+  if (pre) { _apply(pre); return; }
   const date = state.date;
   if (!date) return;
   try {
     // 建仓/加仓信号（position_builder intraday signal）
     // （盘中做T信号轮询 poll_new_signals 已随 manual 做T 于 2026-09-14 下线）
-    const p = await apiCall("poll_new_position_signals", date);
-    if (p && !p.baseline && p.signals && p.signals.length) {
-      p.signals.forEach(pushAlert);
-    }
+    _apply(await apiCall("poll_new_position_signals", date));
   } catch (e) { /* 静默 */ }
 }
 
@@ -3060,9 +3119,13 @@ function maReclaimInnerHtml(v, missingTip) {
   }
   return keys.map(k => {
     const x = ma[k] || {};
+    // 2026-10-27：kind=="vrev" = 盘内先跌破、之后收回（昨收本来就在 MA 上方，不算"回站"）。
+    // 与飞书「站上5/10日线」的 V 反转分支同一口径，尾巴加 V 让两种来源一眼可分。
+    const _v = x.kind === "vrev";
     const tip = `${k} 日线：${x.time} 首次站上（MA=${x.ma}，现价高出 ${x.dev_pct}%`
+      + (_v ? "；口径=盘内V反转（今日曾跌破后拉回）" : "")
       + (_basis ? `；${_basis}` : "") + "）";
-    return `<span class="badge t-long" title="${esc(tip)}">${k}日 ${esc(x.time || "")}</span>`;
+    return `<span class="badge t-long" title="${esc(tip)}">${k}日 ${esc(x.time || "")}${_v ? " V" : ""}</span>`;
   }).join(" ");
 }
 function maReclaimCellHtml(v, missingTip) {
@@ -3072,42 +3135,144 @@ function maReclaimCellHtml(v, missingTip) {
 /* 偏离 365 日线（2026-10-23 owner：「把四张表的『理由/依据』列改成偏离365日线百分比」）
    = (现价 − MA365) / MA365 × 100。A 股口径：正=红、负=绿；日线不足 365 根 → —（不猜）。
    注意 `reason` 不丢：塞进同一格的 tooltip。 */
-/* 偏离 365 日线的**"偏离过大"提醒**（2026-10-24 owner：「不是超买超卖，是偏离太大了直接提醒」）。
-   阈值同一次实验（doc/research/2026-10-24_偏离365日线_超买超卖阈值实验.md）：
-   257,054 股票·日 / 931 只 / 425 天，偏离度分布 p50 +12%、p90 +70%、p95 +99%。
-   ⚠️ 两侧阈值不对称是**故意的**：样本里 ≥+60% 占 12.8%、而 ≤−60% 一只都没有（下跌很少离年线这么远），
-   所以下方用 −20%（覆盖 6.3%）才拿到同量级的"极端"。**只提示"离年线太远"，不含涨跌方向判断**
-   —— 实测两个方向都没有可用的反转 alpha（上方 +0.19%/t=0.79；下方 +0.66%/t≈0 且分年符号翻转）。 */
-const DEV365_WARN_UP = 60;      // 偏离 ≥ +60%（约 13% 的股票·日）
-const DEV365_WARN_DOWN = -20;   // 偏离 ≤ −20%（约 6% 的股票·日）
+/* 偏离 365 日线 = **风险灯**（2026-10-28 owner：「研究下偏离多少会有风险，有风险红、没风险绿」）。
+
+   阈值来自本轮实验（`scripts/experiment/dev365_risk_20261028.py` →
+   `doc/research/2026-10-28_偏离365日线_风险阈值实验.md`；前复权 766,843 股票·日 / 2,648 只，
+   分半窗两段同形）。把「风险」拆成四族指标，不只看收益方向：
+
+     dev365 档   样本     P(5日回撤>10%)   P(>15%)   5日收益   超额     t
+     【基线】   766,843        11.07%      3.74%    +0.50%   0.00    —
+     ≤ −60          511        39.33%     25.83%    −4.09%  −3.28  −5.29   ← 唯一显著负收益
+     −60~−45      1,457        19.77%      9.13%    +1.08%  +1.04  −0.05
+     −45~−35      6,529         9.70%      2.85%    +1.78%  +1.71  +2.41   ← 超跌反弹
+     −5~+5      123,419         6.59%      2.00%    +0.46%  −0.16  −0.65   ← 最"安全"的平台
+     +30~+45     75,309        13.44%      4.28%    +0.60%  −0.01  −3.99
+     +45~+60     44,950        17.96%      5.92%    +0.47%  −0.05  −0.92
+     +60~+80     35,327        22.55%      8.45%    +0.48%  +0.04  −0.86
+     +80~+120    31,909        28.26%     11.08%    +0.29%  +0.02  −1.69
+     > +120      21,980        38.18%     18.06%    +0.17%  +0.15  +0.72
+
+   ⇒ **正偏越极端，回撤概率单调翻倍**（6.6% → 18.0%(+45~60) → 22.6%(+60~80) → 38.2%(>120)），
+     而收益不再变好（>120 档 5 日 +0.17%；更早那段 −0.17%）⇒ 红线取 **+60**（约 2× 基线）。
+   ⇒ **负偏只有 ≤−60 是真风险**（收益 −4.09%、超额 −3.28%、t=−5.29）；−60~−45 只有回撤翻倍、
+     没有负收益证据；−45~−35 反而是超跌反弹。所以下方红线从旧的 −20 **收窄到 −45**。
+   ⚠️ 颜色 = **风险灯**，与涨跌红绿无关；绿色只是"没超风险门限"，**不是看多**。 */
+const DEV365_WARN_UP = 60;      // ≥ +60%（约 12% 的股票·日）⇒ 红
+const DEV365_WARN_DOWN = -45;   // ≤ −45%（约 0.3%）⇒ 红
 function dev365Warn(n) {
   if (n >= DEV365_WARN_UP) {
-    return { dir: "↑", pct: "约 13%", text: "年线上方偏离 ≥+" + DEV365_WARN_UP + "%" };
+    return { dir: "↑", pct: "约 12%", text: "年线上方偏离 ≥+" + DEV365_WARN_UP + "%",
+             why: "该档 5 日内回撤 >10% 的概率 22.6%（基线 11.1%，约 2 倍），>120% 档到 38.2% 且收益不再变好" };
   }
   if (n <= DEV365_WARN_DOWN) {
-    return { dir: "↓", pct: "约 6%", text: "年线下方偏离 ≤" + DEV365_WARN_DOWN + "%" };
+    return { dir: "↓", pct: "约 0.3%", text: "年线下方偏离 ≤" + DEV365_WARN_DOWN + "%",
+             why: "≤−60% 档 5 日收益 −4.09%、超额 −3.28%（t=−5.29）；−60~−45 档回撤概率也翻倍（19.8%）" };
   }
   return null;
 }
 function dev365InnerHtml(v) {
   if (v == null || v === "" || isNaN(Number(v))) return '<span class="cell-dim">—</span>';
   const n = Number(v);
-  const cls = n > 0 ? "up" : n < 0 ? "down" : "cell-dim";
-  const base = `<b class="${cls}">${n >= 0 ? "+" : ""}${n.toFixed(2)}%</b>`;
   const w = dev365Warn(n);
+  // 颜色 = 风险灯（2026-10-28）：超门限 ⇒ 红，未超 ⇒ 绿。与涨跌红绿无关。
+  const cls = w ? "up" : "down";
+  const base = `<b class="${cls}">${n >= 0 ? "+" : ""}${n.toFixed(2)}%</b>`;
   if (!w) return base;
-  const tip = w.text + `（全市场 ${w.pct} 的股票·日）
-只提示「离年线太远」，不含涨跌方向判断`;
-  return base + ` <span class="badge approach" title="${esc(tip)}">⚠${w.dir} 偏离过大</span>`;
+  const tip = w.text + `（全市场 ${w.pct} 的股票·日）\n${w.why}\n`
+    + "⚠️ 颜色只是「风险灯」，不是看空信号";
+  return base + ` <span class="badge approach" title="${esc(tip)}">⚠${w.dir} 高风险</span>`;
 }
 function dev365Tip(v, extra) {
-  return "偏离 365 日线 = (现价 − 365 日均线) / 365 日均线"
-    + (v == null ? "　（该票日线不足 365 根，无法计算）" : "")
-    + (extra ? String.fromCharCode(10) + extra : "");
+  let t = "偏离 365 日线 = (现价 − 365 日均线) / 365 日均线"
+    + "\n着色 = 风险灯：≥ +" + DEV365_WARN_UP + "% 或 ≤ " + DEV365_WARN_DOWN + "% ⇒ 红，其余 ⇒ 绿"
+    + "（绿色 = 未超风险门限，**不是看多**）";
+  if (v == null || v === "" || isNaN(Number(v))) {
+    t += "\n（该票日线不足 365 根，无法计算）";
+  }
+  if (extra) t += String.fromCharCode(10) + extra;
+  return t;
 }
 function dev365CellHtml(v, extra, cls) {
   return `<td class="num ${cls || ""}" style="text-align:center" title="${esc(dev365Tip(v, extra))}">`
     + dev365InnerHtml(v) + `</td>`;
+}
+
+/* 5 日乖离度（2026-10-28 owner：「各板块加一列 5日乖离度」）
+   =（现价 − 5 日均线）/ 5 日均线 × 100，**描述列，不是买卖信号**。
+
+   阈值与措辞全部来自实测（`tmp/bias5_study.py` → `doc/research/2026-10-28_5日乖离度_次日调整概率实验.md`；
+   前复权 235 万股票·日 / 5,529 只，分半窗两段同号）：
+
+     bias5 桶      样本      次日振幅   次日跌>1%   次日涨>1%   次日收益
+     (0,  3]    799,828      3.61%     31.8%      28.0%     +0.02%
+     (3,  8]    246,530      5.43%     39.6%      34.1%     +0.13%
+     (8, 15]     50,632      7.89%     43.6%      41.9%     +0.51%
+     (15,∞)      11,952     10.80%     43.8%      48.8%     +1.45%
+
+   ⇒ **「偏离越大、次日越容易跌」不成立**：升的是**波动**（振幅 3.6%→10.8%，两侧同时变多），
+     而 ≥+15% 时「涨>1%」反超「跌>1%」、次日收益 +1.45%（超额 +1.56%，t≈9；最近一年 +1.55%/t=9.3、
+     前五年 +2.00%/t=6.4，两段同号）。「次日下跌概率」的峰值只在一个窄带 +4~+6%（≈53% vs 基线 50%），
+     高 3pp，扣成本没有交易价值。
+   ⇒ 本列只提示「离 5 日线太远 ⇒ 次日振幅明显变大」，**不提示方向**。 */
+const BIAS5_RED = 8;          // 门限（owner 2026-10-28：**超过这个数报红**，未超过显示绿）
+/* 四张表（建仓信号扫描 / 持仓30min体检 / 异常监控池 / 选股猎手）共用的表头 tooltip。 */
+const BIAS5_TH_TITLE = "5 日乖离度 =（现价 − 5 日均线）/ 5 日均线 × 100。**着色 = 门限灯**："
+  + `≥ +${BIAS5_RED}% 标红并加 ⚠，否则显示绿色（负乖离也是绿，但它同样放大波动，见单元格 tooltip）。`
+  + "描述列，不参与任何判定/排序。实测（前复权 235 万股票·日，分半窗两段同号）：乖离升高放大的是"
+  + "**次日振幅**（3.6% → 7.9% → 10.8%），不是方向 ——「跌>1%」与「涨>1%」同步升，"
+  + "≥+15% 时涨的反超跌的（次日收益 +1.45%）；「次日下跌概率」峰值只在 +4~+6%"
+  + "（≈53% vs 基线 50%），高 3pp 无交易价值";
+const BIAS5_WARN_DOWN = -8;   // 仅用于 tooltip 文案（负乖离同样放大波动）
+function bias5Hot(n) { return Number(n) >= BIAS5_RED; }
+/* 颜色（owner 2026-10-28 指定，与 A 股「涨红跌绿」无关，是**门限灯**）：
+   乖离 < 门限 → 绿；乖离 ≥ 门限 → 红。 */
+function bias5Color(n) { return bias5Hot(n) ? "up" : "down"; }
+function bias5InnerHtml(v) {
+  if (v == null || v === "" || isNaN(Number(v))) return '<span class="cell-dim">—</span>';
+  const n = Number(v);
+  const base = `<b class="${bias5Color(n)}">${n >= 0 ? "+" : ""}${n.toFixed(2)}%</b>`;
+  if (!bias5Hot(n)) return base;
+  return base + ` <span class="badge approach" title="${esc(bias5Tip(n))}">⚠↑ 超门限</span>`;
+}
+function bias5Tip(v, extra) {
+  let t = "5 日乖离度 =（现价 − 5 日均线）/ 5 日均线"
+    + `\n着色 = 门限灯（与涨跌红绿无关）：≥ +${BIAS5_RED}% 红、否则绿`;
+  if (v == null || v === "" || isNaN(Number(v))) {
+    t += "　（该票日线不足 5 根，无法计算）";
+  } else {
+    const n = Number(v);
+    t += `　当前 ${n >= 0 ? "+" : ""}${n.toFixed(2)}%`;
+    if (n >= 15) {
+      t += "\n实测：该档次日振幅 10.8%（常态 3.6%），但「涨>1%」48.8% **反超**「跌>1%」43.8%，"
+        + "次日收益均值 +1.45%（超额 +1.56%，t≈9，分半窗两段同号）⇒ 强趋势延续，不是见顶";
+    } else if (n >= BIAS5_RED) {
+      t += "\n实测：该档次日振幅 7.9%（常态 3.6%），「跌>1%」43.6% 与「涨>1%」41.9% 几乎持平，"
+        + "次日收益均值 +0.51% ⇒ 波动放大，**不是**方向信号";
+    } else if (n > 0) {
+      t += "\n实测：「次日下跌概率」峰值只在 +4~+6%（约 53% vs 基线 50%），只高 3pp 且次日收益仍为正，没有交易价值";
+    } else if (n <= BIAS5_WARN_DOWN) {
+      t += "\n⚠️ 注意：负乖离这一侧**同样**放大波动（次日振幅 6.6~8.3%，「跌>1%」41~43%），"
+        + "但按门限规则仍显示绿色 —— 颜色只表示「没超上沿门限」，不代表这里安全";
+    } else {
+      t += "\n实测：±3% 以内是 **72.7%** 的股票·日（常态），次日无可用的方向性差异";
+    }
+    t += "\n⚠️ 本列只描述「离 5 日线多远」，**不参与任何判定/排序**（与「偏离365日线」同性质）";
+  }
+  if (extra) t += String.fromCharCode(10) + extra;
+  return t;
+}
+/* 多窗口用：日线 MA5 由后端 `_daily_ma_bundle` 给，**已含当日现价**（与乖离率口径一致），
+   直接反算即可，零额外请求。 */
+function bias5FromDma(dma, price) {
+  const m = dma ? Number(dma.ma5) : NaN;
+  const p = Number(price);
+  if (!isFinite(m) || m <= 0 || !isFinite(p) || p <= 0) return null;
+  return (p / m - 1) * 100;
+}
+function bias5CellHtml(v, extra, cls) {
+  return `<td class="num ${cls || ""}" style="text-align:center" title="${esc(bias5Tip(v, extra))}">`
+    + bias5InnerHtml(v) + `</td>`;
 }
 
 /* 时机条件列（2026-10-16 owner：「选股猎手的时机条件列与建仓信号扫描的该列保持一致」）。
@@ -3295,6 +3460,7 @@ function renderAbnormalPool(d) {
       <td style="max-width:220px;line-height:1.7">${tagsTxt}</td>
       ${maReclaimCellHtml(r.ma_reclaim)}
       ${condCellHtml(r.conditions, labels, r._has_conf === false, null)}
+      ${bias5CellHtml(r.bias5, r.build_reason || "")}
       ${dev365CellHtml(r.dev365, r.build_reason || "")}
       <td onclick="event.stopPropagation()" ondblclick="event.stopPropagation()">
         <input class="mini-input" style="width:180px;font-size:11px" maxlength="120"
@@ -3314,7 +3480,8 @@ function renderAbnormalPool(d) {
       <th class="num">市值<br><span style="font-size:9px;opacity:.6">亿</span></th>
       <th title="通道/箱体/背离等技术形态，与「建仓信号扫描」同一来源与同一渲染">技术标签</th>
       <th title="**当日**刚站上 5/10/20/30/60 日线的**时刻**（与「建仓信号扫描」同源同渲染）">均线突破<br><span style="font-size:9px;opacity:.6">当日·时刻</span></th>
-      <th>时机条件</th><th title="(现价 − 365 日均线)/365 日均线（正=红、负=绿）；原来的「理由」已挪到本格 tooltip">偏离365日线</th>
+      <th>时机条件</th><th class="num" title="${BIAS5_TH_TITLE}">5日乖离<br><span style="font-size:9px;opacity:.6">(价−MA5)/MA5</span></th>
+      <th title="(现价 − 365 日均线)/365 日均线。**着色 = 风险灯**：≥ +60% 或 ≤ −45% 标红，其余绿（绿色≠看多）。实测：正偏 ≥+60% 时 5 日内回撤>10% 的概率翻倍到 22.6%（基线 11.1%），>120% 到 38.2%；负偏只有 ≤−60% 有负收益证据（5日 −4.09%，t=−5.29）">偏离365日线<br><span style="font-size:9px;opacity:.6">风险灯</span></th>
       <th title="**手动**记录的涨停原因（一句话，最多 120 字）。只展示、不参与任何判定；回车或点别处即保存">涨停原因<br><span style="font-size:9px;opacity:.6">手动</span></th>
       <th></th>
     </tr></thead><tbody>${body}</tbody></table>
@@ -3601,6 +3768,7 @@ function renderPB(pb) {
         ${mvCell}
         ${stCell}
         ${ma5CellHtml(r.structure)}
+        ${bias5CellHtml(r.bias5)}
         ${dev365CellHtml(r.dev365)}
         <td class="cell-dim">${esc(r.scan_type || "")}${r._scans > 1 ? `×${r._scans}` : ""}${scanTimeTxt ? ` <span class="mono">${esc(scanTimeTxt)}</span>` : ""}${staleBadge}</td>
         <td>${!r.in_holdings ? `<button class="mini-btn" style="font-size:10px;padding:0 5px;color:#3fb950" onclick="confirmPosition('${esc(r.code||'')}',document.getElementById('pb-row-${esc(r.code||'')}'))" title="人工确认建仓（回写 signal_history）">✓确认</button><button class="mini-btn" style="font-size:10px;padding:0 5px;color:#f85149" onclick="removeFromWatchlist('${esc(r.code||'')}',document.getElementById('pb-row-${esc(r.code||'')}'))" title="从股池移除">✕</button>` : ""}</td>
@@ -3641,10 +3809,11 @@ function renderPB(pb) {
           <th title="30分钟综合判定（与『持仓 30min 风险体检』同口径）：🔴减仓/避高=30min 顶背离(T1/T2)；🟠盯紧=T3顶分型+T4均线压制同现；🟢偏好=无顶信号且有新鲜底背离(≤16根)；⚪中性=其余。依据 981只×540日 离线验证；T3/T4 无前瞻区分度、单个不报警">30min判定</th>
           <th title="仓位结构（30min/10min，供仓位管理参考）：止损=10min 最近已确认摆动低点；阶段=10min 四阶段(①蓄势/②抬升/③派发/④下跌)；30m=30min MA65 中期方向；折价=现价/止损-1（到-4.3%记满）。破位时给出三档下档支撑挂单价与5日成交率估计。⚠️ 是**结构参考、不是买卖信号**——机械按阶段加减仓经实测无正贡献(纯择时-1.4~+2.7pp不显著)，「破前低就清仓」-30pp强有害；唯一有证据的是破位后在下档支撑挂限价补仓(改善成本结构、不提高期望)。悬停看明细">仓位结构</th>
           <th title="30min MA5 状态（**纯展示**）：现价相对 5×30min 均线 站上/跌破，及距上次翻转几根。⚠️ 实测**无前瞻信息量**（状态/跃迁 × 站上/跌破 四口径，同日同bar-of-day对照 |diff|≤0.03pp、|t|≤2.4）⇒ 仅供参考，不参与任何判定。朴素对照的 −0.343pp(t=−25.5) 是日内时段伪影">30m MA5<br><span style="font-size:9px;opacity:.6">仅展示</span></th>
-          <th title="(现价 − 365 日均线)/365 日均线（A股口径：正=红、负=绿）。日线不足 365 根显示 —">偏离365日线</th>
+          <th class="num" title="${BIAS5_TH_TITLE}">5日乖离<br><span style="font-size:9px;opacity:.6">(价−MA5)/MA5</span></th>
+          <th title="(现价 − 365 日均线)/365 日均线。**着色 = 风险灯**：≥ +60% 或 ≤ −45% 标红，其余绿（绿色≠看多）。日线不足 365 根显示 —">偏离365日线<br><span style="font-size:9px;opacity:.6">风险灯</span></th>
           <th>扫描</th><th></th>
         </tr></thead>
-        <tbody>${rows || '<tr><td colspan="19" class="empty">无扫描结果</td></tr>'}</tbody>
+        <tbody>${rows || '<tr><td colspan="20" class="empty">无扫描结果</td></tr>'}</tbody>
       </table>
       <div class="cell-dim" style="font-size:11px;margin-top:8px">●=通过 ○=未通过 · 时机条件：${Object.values(condLabels).join(" / ")} · 第5位🚫=否决因子(爆量≥3倍或偏离MA60超+20%) · GO(多头追强/空头抄底)→signal，震荡→降频 · 观察=震荡市结构达标(不推送) · 盘中每10s刷新</div>
     </div>`;
@@ -3957,9 +4126,10 @@ async function respondBuyConfirm(code, requestId, decision) {
   } catch (e) { statusEl("确认回复失败: " + e.message, "err"); }
 }
 
-async function pollBuyConfirm() {
+/* `pre`（2026-10-28）：poll_live_bundle 已带回挂起请求时直接用它，省一次桥往返。 */
+async function pollBuyConfirm(pre) {
   try {
-    const d = await apiCall("load_buy_confirm_pending");
+    const d = pre || await apiCall("load_buy_confirm_pending");
     const pending = (d && d.pending) || [];
     const answered = (d && d.answered) || {};
     const modal = document.getElementById("buyConfirmModal");
@@ -4244,11 +4414,22 @@ let stockChartPeriod = "daily";
 let stockChartInst = null;
 let stockChartTimer = null;
 let stockChartCode = null;
+// 上一次 setOption 的 series 指纹（"名字|类型" 按序拼接）。用于判断能否走普通 merge
+// 而不是 replaceMerge —— 后者每次销毁重建全部 series，见 renderStockChart 里的注释。
+let _chartSeriesKeys = null;
 // 2026-10-20：K 线弹窗打开期间**暂停后台重面板轮询**（auto/ob/beacon/live）。
 // 根因：pywebview 的 evaluate_js 串行，load_auto_pnl 这类 3~5s 的大响应会把
 // K 线首帧/实时尾堵在队列里；弹窗打开时背后的面板没人看，暂停最划算。
 let chartModalOpen = false;
 let stockChartName = "";
+/* 价格突破提醒（2026-10-28 owner）：K线上画价位线，**每次**穿越都飞书推送 + GUI 响铃。
+   链路：右键画线 → `save_price_alert` 落 `t_io/state/price_alerts.json`；
+   main.py 的 10s watcher 盯价并推飞书；本页 10s 轮询 events 后 `playAlert("PRICE")`。
+   `priceAlerts` 只装**当前这张图**那只票的线。 */
+let priceAlerts = [];
+let priceAlertsCode = null;
+let _paSeenEvents = null;      // 已响过的事件 id；null = 首轮只登记不响（刷新页面别重放）
+let _paMenuEl = null;          // 右键小菜单
 // 用户手动缩放（滚轮/拖拽 slider）后记住视窗，否则 10s 自动刷新重建图表时会弹回默认窗口。
 // 存 dataZoom 的百分比 {start, end}；null = 尚未手动缩放，用默认窗口。
 let stockChartZoom = null;
@@ -4921,6 +5102,9 @@ async function openStockChart(code, name) {
   modal.style.display = "flex";
   chartModalOpen = true;
   stockChartCode = code;
+  // 换票：先清掉上一只的价位线，再把本票的读进来（markLine 在首帧渲染时就要有）
+  priceAlerts = []; priceAlertsCode = null;
+  await loadPriceAlerts(code);
   _chartLog("open", JSON.stringify({code: code, period: stockChartPeriod}));
   stockChartName = name;
   // 换票先清空旧图数据：否则新代码加载失败时，实时尾会拿着上一只票的序列乱补
@@ -5188,6 +5372,8 @@ function toggleMaxStockChart() {
   }, 60);
 }
 function closeStockChart() {
+  // 关窗必须把「画框模式」一起收掉：否则提示条/监听会挂在一个不存在的图上
+  if (typeof _paDrawMode !== "undefined" && _paDrawMode) _paExitDraw();
   document.getElementById("stockModal").style.display = "none";
   if (stockChartInst) { stockChartInst.dispose(); stockChartInst = null; }
   // 关窗时断开尺寸监听（否则它还会对着已 dispose 的实例触发，且随 open/close 累积）
@@ -5488,14 +5674,17 @@ function buildOpenGapAreas(ohlc, dates, lookbackDays, minPct, maxN) {
     if (Math.abs(g) < MIN) continue;
     const up = g > 0;
     out.push([{
-      xAxis: i - 0.3, yAxis: pc,
+      // ⚠️ 2026-10-28 实报：这里原来是 i-0.3 / i+0.3 的**小数下标**，而类别轴的 markArea
+      //    只认整数索引 ⇒ ECharts 内部 `Cannot read properties of undefined (reading getRawIndex)`。
+      //    改成整数 i，靠 1px 边框画出那根竖直小条（宽度≈一根 K 线）。
+      xAxis: i, yAxis: pc,
       itemStyle: {
         color: up ? "rgba(248,81,73,.30)" : "rgba(63,185,80,.30)",
         borderColor: up ? "rgba(248,81,73,.75)" : "rgba(63,185,80,.75)",
         borderWidth: 1,
       },
       label: { show: false }, name: up ? "跳空高开" : "跳空低开",
-    }, { xAxis: i + 0.3, yAxis: op }]);
+    }, { xAxis: i, yAxis: op }]);
   }
   const MAX = maxN || 24;
   if (out.length > MAX) out.splice(0, out.length - MAX);
@@ -5547,6 +5736,716 @@ function buildGapAreas(ohlc, dates, lookbackDays, minPct, maxN) {
   const MAX = maxN || 24;
   if (out.length > MAX) out.splice(0, out.length - MAX);
   return out;
+}
+
+/* ---- 缺口色块：点击隐藏 / 再点恢复（2026-10-28 owner）----
+   5 分钟图上的缺口会挡视线。点一下色块 → 隐藏；再点同一处 → 恢复。
+   ⚠️ 隐藏**不是彻底消失**：留一条极淡的点线轮廓（否则就再也点不到它了）。
+   隐藏态只在本页内存里（不落盘），按 `code|period` 分作用域 —— 换票/换周期互不影响。 */
+let _gapRects = [];                       // 当前这一帧的缺口矩形（点击命中用）
+const _gapHiddenMap = new Map();          // `${code}|${period}` -> Set(gapKey)
+
+function _gapScope() {
+  return `${String(stockChartCode || "").split("_")[0]}|${stockChartPeriod}`;
+}
+function _gapHiddenSet() {
+  const k = _gapScope();
+  if (!_gapHiddenMap.has(k)) _gapHiddenMap.set(k, new Set());
+  return _gapHiddenMap.get(k);
+}
+
+/* 给缺口矩形打上稳定 key（日期+起点索引）、登记到命中表，隐藏态则改成淡点线轮廓。
+   `kind`: "g" = 真缺口（区间不重叠）/ "o" = 跳空开盘（昨收→今开）。 */
+function _gapTagAndFilter(areas, dates, kind) {
+  const out = [];
+  const hid = _gapHiddenSet();
+  (areas || []).forEach(a => {
+    if (!a || a.length < 2) return;
+    const i0 = Math.round(Number(a[0].xAxis));
+    const i1 = Math.round(Number(a[1].xAxis));
+    const y0 = Number(a[0].yAxis), y1 = Number(a[1].yAxis);
+    if (!isFinite(i0) || !isFinite(i1) || !isFinite(y0) || !isFinite(y1)) return;
+    // 防御：ECharts 类别轴的 markArea 只接受整数索引；任何 builder 传了小数/字符串，
+    // 内部 getRawIndex 都会抛 TypeError。这里统一写回整数。
+    try { a[0].xAxis = i0; a[1].xAxis = i1; } catch (e) { /* 忽略 */ }
+    const d = String((dates || [])[i0] || i0).slice(0, 10);
+    const key = `${kind}|${d}|${i0}|${i1}`;
+    _gapRects.push({ key: key, i0: i0, i1: Math.max(i0, i1),
+                     lo: Math.min(y0, y1), hi: Math.max(y0, y1) });
+    // 2026-10-28 owner：点一下要**真的消失**（上一版留了淡点线轮廓，看着像没生效）。
+    // rect 已经登记在上面了 ⇒ 再点同一个位置照样能恢复；另外 toolbar 有「👁 缺口(n)」一键恢复。
+    if (hid.has(key)) return;          // forEach 里不能 continue
+    out.push(a);
+  });
+  return out;
+}
+
+/* 一键恢复本票本周期被点掉的缺口（toolbar 的「👁 缺口(n)」）。
+   为什么要这个按钮：缺口点掉后是**真的消失**，光靠"再点同一位置"没人记得住点哪儿。 */
+function restoreHiddenGaps() {
+  const set = _gapHiddenSet();
+  if (!set.size) return;
+  set.clear();
+  if (stockChartInst) renderStockChart(false);
+  _paToast("已恢复显示全部缺口");
+}
+
+function _gapSyncButton() {
+  const b = document.getElementById("paGapBtn");
+  if (!b) return;
+  const n = _gapHiddenSet().size;
+  b.style.display = n ? "" : "none";
+  b.textContent = `👁 缺口(${n})`;
+}
+
+/* ---- 右键 = 对「我画的框」和「缺口」的唯一操作入口（2026-10-28 owner）----
+   命中画框 → 删除这个画框；命中缺口 → 隐藏 / 恢复这个缺口。
+   **左键不再做这些**：拖动/双击/缩放之后松手也会冒一个 click，左键切换容易误触发。
+   没命中任何东西时不拦截，浏览器默认右键菜单照旧。 */
+function _paCtxMenu(ev, items) {
+  const old = document.getElementById("paCtxMenu");
+  if (old) old.remove();
+  const m = document.createElement("div");
+  m.id = "paCtxMenu";
+  m.style.cssText = "position:fixed;z-index:2147483001;background:#161b22;"
+    + "border:1px solid #30363d;border-radius:6px;padding:4px 0;font-size:12px;"
+    + "color:#c9d1d9;box-shadow:0 8px 24px rgba(0,0,0,.6);user-select:none;min-width:170px";
+  items.forEach(it => {
+    const d = document.createElement("div");
+    d.textContent = it.label;
+    d.style.cssText = "padding:6px 12px;cursor:pointer;white-space:nowrap";
+    d.onmouseenter = () => { d.style.background = "#21262d"; };
+    d.onmouseleave = () => { d.style.background = ""; };
+    d.onclick = (e2) => { e2.stopPropagation(); m.remove(); try { it.run(); } catch (e3) { /* 忽略 */ } };
+    m.appendChild(d);
+  });
+  document.body.appendChild(m);
+  const r = m.getBoundingClientRect();
+  m.style.left = Math.min(ev.clientX, window.innerWidth - r.width - 6) + "px";
+  m.style.top = Math.min(ev.clientY, window.innerHeight - r.height - 6) + "px";
+  setTimeout(() => {
+    document.addEventListener("click", function _close(e2) {
+      if (!m.contains(e2.target)) { m.remove(); document.removeEventListener("click", _close, true); }
+    }, true);
+  }, 0);
+}
+
+(function _installChartContextMenu() {
+  if (window.__paCtxInstalled) return;
+  window.__paCtxInstalled = true;
+  document.addEventListener("contextmenu", (ev) => {
+    try {
+      const el = document.getElementById("stockChart");
+      if (!el || !stockChartInst || !stockChartCode) return;
+      if (!(el === ev.target || el.contains(ev.target))) return;
+      if (_paDrawMode) return;                       // 画框模式下不抢右键
+      const r = el.getBoundingClientRect();
+      const pt = _paPixToData(ev.clientX - r.left, ev.clientY - r.top);
+      const xi = pt.x, yv = pt.y;
+      if (!isFinite(xi) || !isFinite(yv)) return;    // 换算不出来就不抢
+      // 画框优先（框画在缺口之上）
+      const box = (_paBoxRects || []).find(g =>
+        xi >= g.i0 - 0.5 && xi <= g.i1 + 0.5 && yv >= g.lo && yv <= g.hi);
+      const gap = (_gapRects || []).find(g =>
+        xi >= g.i0 - 0.6 && xi <= g.i1 + 0.6 && yv >= g.lo && yv <= g.hi);
+      if (!box && !gap) return;                      // 没命中 → 保留默认右键菜单
+      ev.preventDefault();
+      ev.stopPropagation();
+      if (box) {
+        _paCtxMenu(ev, [{
+          label: "✏️ 修改上下沿",
+          run: () => openPaBoxDialog(box.id),
+        }, {
+          label: "🗑 删除这个画框",
+          run: async () => {
+            try {
+              await apiCall("delete_price_alert", stockChartCode, box.id);
+              await loadPriceAlerts(stockChartCode);
+              _mwSyncBoxesNow();             // 立刻同步到多窗口
+              if (stockChartInst) renderStockChart(false);
+              _paToast("已删除该画框");
+            } catch (e) { _paToast("删除画框失败：" + (e && e.message ? e.message : e), "err"); }
+          },
+        }]);
+        return;
+      }
+      const hidden = _gapHiddenSet().has(gap.key);
+      _paCtxMenu(ev, hidden
+        ? [{
+          label: "👁 恢复这个缺口",
+          run: () => {
+            _gapHiddenSet().delete(gap.key);
+            if (stockChartInst) renderStockChart(false);
+            _paToast("已恢复该缺口");
+          },
+        }]
+        : [{
+          label: "🚫 隐藏这个缺口",
+          run: () => {
+            _gapHiddenSet().add(gap.key);
+            if (stockChartInst) renderStockChart(false);
+            _paToast("已隐藏该缺口（右键同一处可恢复，或点工具栏「👁 缺口(n)」）");
+          },
+        }]);
+    } catch (e) { /* 右键失败不该影响看盘 */ }
+  }, true);
+})();
+
+/* 画框/缺口的提示必须显示在**弹窗之上**：
+   `#status` 在顶栏，K 线弹窗一开就被遮罩挡在后面 —— 早年所有提示都写在那里，
+   用户看到的就是"点了没反应、状态栏也没字"（2026-10-28 实报）。 */
+const PA_UI_BUILD = "20261028z";     // 用于确认页面上跑的是新版 app.js
+let _paToastTimer = null;
+function _paToast(msg, kind) {
+  try {
+    let d = document.getElementById("paToast");
+    if (d) d.remove();
+    d = document.createElement("div");
+    d.id = "paToast";
+    const bg = kind === "err" ? "#8b1d1d" : "#1f6feb";
+    d.style.cssText = "position:fixed;left:50%;top:64px;transform:translateX(-50%);"
+      + "z-index:2147483000;max-width:72vw;white-space:pre-wrap;line-height:1.5;"
+      + `background:${bg};color:#fff;font-size:13px;padding:8px 16px;border-radius:8px;`
+      + "box-shadow:0 10px 30px rgba(0,0,0,.55);pointer-events:none";
+    d.textContent = String(msg || "");
+    document.body.appendChild(d);
+    if (_paToastTimer) clearTimeout(_paToastTimer);
+    _paToastTimer = setTimeout(() => { d.remove(); _paToastTimer = null; },
+                               kind === "err" ? 9000 : 4200);
+  } catch (e) { /* 提示失败不影响功能 */ }
+}
+
+/* 读本票的画框（K 线打开/存删框后调用）。 */
+async function loadPriceAlerts(code) {
+  const c = String(code || "").split("_")[0];
+  if (!c) { priceAlerts = []; priceAlertsCode = null; return; }
+  try {
+    const r = await apiCall("load_price_alerts", c);
+    priceAlerts = ((r && r.items && r.items[c]) || []).slice();
+    priceAlertsCode = c;
+  } catch (e) { priceAlerts = []; }
+  _paSyncButtons();
+}
+
+/* 「🗑 全部框(n)」按钮：没框就隐藏。 */
+function _paSyncButtons() {
+  const b = document.getElementById("paClearBtn");
+  if (!b) return;
+  const n = (priceAlerts || []).length;
+  b.style.display = n ? "" : "none";
+  b.textContent = `🗑 全部框(${n})`;
+}
+
+/* 当前图最后一根的收盘价：画框时一起存，后端用它判「穿越」
+   （框整个画在现价上方/下方时不会一画上去就误报）。 */
+function _paCurrentPrice() {
+  try {
+    const p = (stockChartData && stockChartData.period_data
+      && stockChartData.period_data[stockChartPeriod]) || {};
+    if (p.last_close != null) {
+      const c0 = Number(p.last_close);
+      if (isFinite(c0) && c0 > 0) return c0;
+    }
+    const o = p.ohlc || [];
+    if (o.length) {
+      const last = o[o.length - 1];
+      const c = Array.isArray(last) ? Number(last[1]) : Number(last && last.close);
+      if (isFinite(c) && c > 0) return c;
+    }
+  } catch (e) { /* 忽略 */ }
+  return null;
+}
+
+/* 已保存的框 → markArea（画在 K 线主图上）。
+   ⚠️ **必须和缺口一眼分得开**（owner 2026-10-28 明确要求）：
+     · 缺口   = 红/绿填充 + **虚线细边**（1px dashed）
+     · 我的框 = **蓝色实线粗边**（2px solid）+ 几乎透明的底 + 带底色的标签 pill（📌 29.50~30.90）
+   触发后边框转红（上破）/ 绿（下破），标签加 ✓；两边都触发 = 灰。
+   同时登记 `_paBoxRects` 供"点击框 → 删除"命中用。
+   x0/x1 存的是画框时那两根 K 线的**完整时间串**；老数据只有日期也能按前缀兜底。 */
+/* 标记坐标消毒（2026-10-28）：markLine/markArea 里只要有一条 `yAxis/xAxis` 不是有限数，
+   ECharts 内部的 marker 坐标换算就可能抛 `Cannot read properties of undefined (reading getRawIndex)`。
+   进图前统一过滤——宁可不画那条线，也不能让整张图报错。 */
+function _finiteLineItem(it) {
+  if (!it) return false;
+  if (it.yAxis != null && !isFinite(Number(it.yAxis))) return false;
+  if (it.xAxis != null && !isFinite(Number(it.xAxis))) return false;
+  return true;
+}
+function _finiteAreaPair(a) {
+  if (!Array.isArray(a) || a.length < 2) return false;
+  return a.every(p => p
+    && (p.xAxis == null || isFinite(Number(p.xAxis)))
+    && (p.yAxis == null || isFinite(Number(p.yAxis))));
+}
+
+let _paBoxRects = [];
+
+/* 画框外观（2026-10-28 owner：「实线太丑」）——改成**细虚线 + 自上而下渐隐的淡填充 + 圆角标签**：
+   · 与缺口仍一眼可分：缺口是**红/绿实心块**，画框是**蓝色细虚线 + 淡渐变**；
+   · 不再用 2px 实线（压 K 线、显硬）。触发后只换色相，线型保持纤细。 */
+function _paRgba(hex, a) {
+  const m = String(hex || "").replace("#", "");
+  if (m.length !== 6) return `rgba(88,166,255,${a})`;
+  const r = parseInt(m.slice(0, 2), 16), g = parseInt(m.slice(2, 4), 16), b = parseInt(m.slice(4, 6), 16);
+  return `rgba(${r},${g},${b},${a})`;
+}
+function _paBoxStyle(color, small) {
+  return {
+    color: { type: "linear", x: 0, y: 0, x2: 0, y2: 1,
+      colorStops: [{ offset: 0, color: _paRgba(color, small ? 0.08 : 0.11) },
+                   { offset: 1, color: _paRgba(color, 0.015) }] },
+    borderColor: _paRgba(color, 0.5), borderWidth: 1, borderType: "dashed",
+  };
+}
+function _paBoxLabel(color, text, small) {
+  return {
+    show: true, position: "insideTopLeft", fontSize: small ? 8 : 10,
+    color: _paRgba(color, 0.95), backgroundColor: "rgba(13,17,23,.9)",
+    borderColor: _paRgba(color, 0.45), borderWidth: 1,
+    borderRadius: small ? 7 : 9, padding: small ? [1, 4] : [2, 7],
+    fontWeight: "bold", formatter: text,
+  };
+}
+
+function _paDateIdx(dates, d, pickLast) {
+  if (!d || !dates.length) return null;
+  const k = dates.indexOf(d);
+  if (k >= 0) return k;
+  const pre = String(d).slice(0, 10);
+  let first = -1, last = -1;
+  for (let i = 0; i < dates.length; i++) {
+    if (String(dates[i]).slice(0, 10) === pre) { if (first < 0) first = i; last = i; }
+  }
+  return pickLast ? (last >= 0 ? last : null) : (first >= 0 ? first : null);
+}
+
+function _paBoxAreas() {
+  _paBoxRects = [];
+  try {
+    if (!Array.isArray(priceAlerts) || !priceAlerts.length) return [];
+    const cur = String(stockChartCode || "").split("_")[0];
+    if (!cur || (priceAlertsCode && priceAlertsCode !== cur)) return [];
+    const pd = (stockChartData && stockChartData.period_data
+      && stockChartData.period_data[stockChartPeriod]) || {};
+    const dates = pd.dates || [];
+    const n = dates.length;
+    if (!n) return [];
+    const out = [];
+    priceAlerts.filter(a => a && a.kind === "box").forEach(a => {
+      const up = Number(a.upper), dn = Number(a.lower);
+      if (!isFinite(up) || !isFinite(dn) || up <= 0 || dn <= 0) return;   // 坏数据直接跳过
+      const iA = _paDateIdx(dates, a.x0, false);
+      const iB = _paDateIdx(dates, a.x1, true);
+      const i0 = Math.max(0, Math.min(n - 1, (iA != null ? iA : 0)));
+      const i1 = Math.max(0, Math.min(n - 1, (iB != null ? iB : n - 1)));
+      const xs = Math.min(i0, i1), xe = Math.max(i0, i1);
+      const lo = Math.min(up, dn), hi = Math.max(up, dn);
+      _paBoxRects.push({ id: a.id, i0: xs, i1: xe, lo: lo, hi: hi });
+      // 2026-10-28 owner：穿越可以反复报 ⇒ 标签显示**累计次数**，"✓"会被误读成"报完了"
+      const upN = Number(a.up_n || 0), dnN = Number(a.down_n || 0);
+      const upDone = upN > 0, dnDone = dnN > 0;
+      const col = (upDone && dnDone) ? "#8b949e" : (upDone ? "#f85149" : (dnDone ? "#3fb950" : "#58a6ff"));
+      const tag = (upDone ? `上破×${upN} ` : "") + (dnDone ? `下破×${dnN} ` : "");
+      out.push([
+        // ⚠️ xAxis 必须用**数字索引**（与缺口同一套）。类别轴上传日期字符串时，
+        //    ECharts 解析 rawIndex 会抛 `Cannot read properties of undefined (reading getRawIndex)`
+        //    —— 2026-10-28 实报，就是这条。
+        {
+          xAxis: xs, yAxis: hi,
+          itemStyle: _paBoxStyle(col, false),
+          label: _paBoxLabel(col, `📌 ${tag}${fmt(dn, 2)} ~ ${fmt(up, 2)}`, false),
+        },
+        { xAxis: xe, yAxis: lo },
+      ]);
+    });
+    return out;
+  } catch (e) {
+    return [];            // 画框出错绝不能拖垮整张 K 线
+  }
+}
+
+/* ---- 画框模式（2026-10-28 owner）：点工具栏「▭ 画框」→ 在图上按住拖一个矩形 ----
+   ⚠️ 拖拽期间 ECharts 的 dataZoom 平移会抢鼠标 ⇒ 用一个**透明覆盖层**盖在图上收事件，
+   画完就撤掉；矩形预览也用 DOM div（不走 ECharts graphic，简单且不会污染 setOption）。 */
+/* ---- 输入价格设框（2026-10-28 owner：手拖不准，改成直接填两个价格）----
+   上沿=向上突破提醒、下沿=向下跌破提醒；x 区间不填 ⇒ 框铺满可见区（**价位**才是重点）。
+   拖拽画框保留为备选（工具栏「✏️ 拖框」）。 */
+function openPaBoxDialog(boxId) {
+  try {
+    if (!stockChartCode) { _paToast("先打开一张 K 线再设框", "err"); return; }
+    const old = document.getElementById("paBoxDlg");
+    if (old) old.remove();
+    const cur = _paCurrentPrice();
+    const base = (cur && isFinite(cur) && cur > 0) ? cur : 10;
+    /* 目标框（2026-10-28 owner：「更改了画框上下区间，多窗口没同步」）：
+       原来再设一次只是**又加了一个框**，旧的还在 ⇒ 看着像没更新。
+       现在：带 boxId（右键「修改」）或本票**只有一个框**时 = **原地修改**；
+       没有框 / 有多个框且没指定 = 新建。 */
+    const _boxes = (priceAlerts || []).filter(a => a && a.kind === "box");
+    const target = boxId
+      ? (_boxes.find(a => a.id === boxId) || null)
+      : (_boxes.length === 1 ? _boxes[0] : null);
+    const up0 = target ? Number(target.upper) : +(base * 1.02).toFixed(2);
+    const dn0 = target ? Number(target.lower) : +(base * 0.98).toFixed(2);
+    const inp = "width:104px;background:#0d1117;color:#e6edf3;border:1px solid #30363d;"
+      + "border-radius:4px;padding:4px 6px;font-family:var(--mono,monospace);font-size:13px";
+    const d = document.createElement("div");
+    d.id = "paBoxDlg";
+    d.style.cssText = "position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);"
+      + "z-index:2147483002;background:#161b22;border:1px solid #58a6ff;border-radius:10px;"
+      + "padding:14px 16px;box-shadow:0 16px 48px rgba(0,0,0,.7);font-size:13px;"
+      + "color:#c9d1d9;min-width:280px";
+    d.innerHTML = `
+      <div style="font-weight:700;margin-bottom:10px">${target ? "✏️ 修改画框" : "⌨ 新建画框"}
+        <span class="cell-dim" style="font-weight:400;font-size:11px">${esc(stockChartCode)}</span></div>
+      <label style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px">
+        <span>上沿（上破提醒）</span>
+        <input id="paUp" type="number" step="0.01" value="${up0}" style="${inp}">
+      </label>
+      <label style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px">
+        <span>下沿（下破提醒）</span>
+        <input id="paDn" type="number" step="0.01" value="${dn0}" style="${inp}">
+      </label>
+      <div class="cell-dim" style="font-size:11px;margin-bottom:12px">
+        现价 ${cur != null ? fmt(cur, 2) : "—"} · 上穿/跌破都会提醒，来回穿**每次都报**（飞书 + 响铃）
+      </div>
+      <div style="display:flex;justify-content:flex-end;gap:8px">
+        <button class="mini-btn" id="paBoxCancel">取消</button>
+        <button class="mini-btn primary" id="paBoxOk">确定</button>
+      </div>`;
+    document.body.appendChild(d);
+    const upEl = d.querySelector("#paUp"), dnEl = d.querySelector("#paDn");
+    try { upEl.focus(); upEl.select(); } catch (e) { /* 忽略 */ }
+    const close = () => d.remove();
+    const submit = async () => {
+      const up = Number(upEl.value), dn = Number(dnEl.value);
+      if (!isFinite(up) || !isFinite(dn) || up <= 0 || dn <= 0) {
+        _paToast("价格要填大于 0 的数字", "err"); return;
+      }
+      if (up <= dn) { _paToast(`上沿（${fmt(up, 2)}）必须大于下沿（${fmt(dn, 2)}）`, "err"); return; }
+      try {
+        const r = target
+          ? await apiCall("update_price_box", stockChartCode, target.id, up, dn, _paCurrentPrice())
+          : await apiCall("save_price_box", stockChartCode, up, dn, null, null, _paCurrentPrice());
+        if (!r || !r.ok) {
+          _paToast("保存失败：" + ((r && r.error) || "后端没返回 ok") + "（改框需重启过 t_gui.py）", "err");
+          return;
+        }
+      } catch (e) {
+        _paToast("保存失败：" + (e && e.message ? e.message : e)
+          + "（若提示后端方法不可用 ⇒ 需要重启 t_gui.py）", "err");
+        return;
+      }
+      close();
+      _paToast(`✅ ${target ? "已修改画框" : "已设画框"} ${fmt(dn, 2)} ~ ${fmt(up, 2)}：`
+        + `上破上沿 / 下破下沿 都会提醒`);
+      await loadPriceAlerts(stockChartCode);
+      _mwSyncBoxesNow();                 // 立刻同步到多窗口
+      if (stockChartInst) renderStockChart(false);
+    };
+    d.querySelector("#paBoxCancel").onclick = close;
+    d.querySelector("#paBoxOk").onclick = submit;
+    d.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") { e.stopPropagation(); close(); }
+      if (e.key === "Enter") { e.preventDefault(); submit(); }
+    });
+  } catch (e) {
+    _paToast("打开设框面板失败：" + (e && e.message ? e.message : e), "err");
+  }
+}
+
+let _paDrawMode = false;
+let _paRectEl = null, _paStart = null, _paHintEl = null, _paChartRect = null;
+
+/* 2026-10-28 修（owner 报"画框没成功"）：上一版在图上盖了一层**透明 fixed 覆盖层**收鼠标，
+   一旦那层没被正确移除（尺寸取到 0 / 事件没走到），它会把之后**所有点击**吞掉 ——
+   连缺口也点不动。现在改成：
+     · 不再有覆盖层；直接在 `#stockChart` 的**捕获阶段**拦 pointerdown（先于 ECharts，
+       所以拖拽不会触发 dataZoom 平移），pointermove/up 挂 window；
+     · 矩形预览是 body 下的 fixed div，不受弹窗裁剪影响；
+     · 顶部有蓝色提示条，模式开没开一眼能看见；Esc / 再点按钮都能退出。 */
+function togglePaDraw() {
+  try {
+    if (!stockChartCode) { _paToast("先打开一张 K 线再画框", "err"); return; }
+    if (_paDrawMode) _paExitDraw(); else _paEnterDraw();
+  } catch (e) {
+    _paToast("画框按钮出错：" + ((e && (e.message || e)) || "未知"), "err");
+  }
+}
+
+function _paEnterDraw() {
+  const host = document.getElementById("stockChart");
+  if (!host || !stockChartInst) { _paToast("K 线还没画出来，稍等一下再点", "err"); return; }
+  const r = host.getBoundingClientRect();
+  if (!r.width || !r.height) { _paToast("图表区域尺寸为 0，切个页签再回来试试", "err"); return; }
+  _paDrawMode = true;
+  _paChartRect = r;
+  const btn = document.getElementById("paDrawBtn");
+  if (btn) { btn.classList.add("primary"); btn.textContent = "▭ 画框中…"; }
+  const hint = document.createElement("div");
+  hint.style.cssText = "position:fixed;z-index:9500;background:#1f6feb;color:#fff;font-size:12px;"
+    + "padding:4px 10px;border-radius:0 0 8px 0;pointer-events:none;"
+    + "box-shadow:0 2px 8px rgba(0,0,0,.4);white-space:nowrap";
+  hint.textContent = "画框模式：在图上按住拖一个矩形（Esc 取消）";
+  hint.style.left = r.left + "px";
+  hint.style.top = (r.top - 2) + "px";
+  document.body.appendChild(hint);
+  _paHintEl = hint;
+  host.addEventListener("pointerdown", _paOnDown, true);   // 捕获：拦在 ECharts 之前
+  window.addEventListener("pointermove", _paOnMove, true);
+  window.addEventListener("pointerup", _paOnUp, true);
+  _paToast(`画框模式已开 · ui ${PA_UI_BUILD} · 按住拖一个矩形，或点第一角再点对角（Esc 取消）`);
+}
+
+function _paExitDraw() {
+  _paDrawMode = false;
+  _paStart = null;
+  if (_paRectEl) { _paRectEl.remove(); _paRectEl = null; }
+  if (_paHintEl) { _paHintEl.remove(); _paHintEl = null; }
+  const host = document.getElementById("stockChart");
+  if (host) host.removeEventListener("pointerdown", _paOnDown, true);
+  window.removeEventListener("pointermove", _paOnMove, true);
+  window.removeEventListener("pointerup", _paOnUp, true);
+  const btn = document.getElementById("paDrawBtn");
+  if (btn) { btn.classList.remove("primary"); btn.textContent = "▭ 画框"; }
+}
+
+function _paPointInChart(ev) {
+  const host = document.getElementById("stockChart");
+  if (!host) return null;
+  const r = host.getBoundingClientRect();
+  if (ev.clientX < r.left || ev.clientX > r.right
+      || ev.clientY < r.top || ev.clientY > r.bottom) return null;
+  _paChartRect = r;
+  return { x: ev.clientX - r.left, y: ev.clientY - r.top };
+}
+
+/* 画框支持**两种**操作（2026-10-28 owner 报"拖不出来"之后加的兜底）：
+   ① 按住拖一个矩形（起手 → 移动 → 松手即完成）；
+   ② 点一下定第一角 → 再点一下定对角。拖拽在某些环境（触控板/合成事件）不一定稳，
+      所以两种都认；`_paStart` 有值时的下一次 pointerdown 直接成框。 */
+function _paOnDown(ev) {
+  if (!_paDrawMode) return;
+  const p = _paPointInChart(ev);
+  if (!p) return;                       // 点在图上才起框
+  ev.preventDefault(); ev.stopPropagation();
+  const far = _paStart && (Math.abs(p.x - _paStart.x) >= 8 || Math.abs(p.y - _paStart.y) >= 8);
+  if (far) {                            // 第二次点击 = 定对角，直接成框
+    const p0 = _paStart;
+    _paStart = null;
+    _paFinalize(p0, p);
+    return;
+  }
+  _paStart = p;                         // 第一角（拖拽模式下就是起手点）
+  if (!_paRectEl) {
+    const d = document.createElement("div");
+    d.style.cssText = "position:fixed;z-index:9600;border:1px dashed #e3b341;"
+      + "background:rgba(227,179,65,.12);pointer-events:none";
+    document.body.appendChild(d);
+    _paRectEl = d;
+  }
+  _paOnMove(ev);
+}
+
+function _paOnMove(ev) {
+  if (!_paStart || !_paChartRect || !_paRectEl) return;
+  const r = _paChartRect;
+  const x = Math.max(0, Math.min(r.width, ev.clientX - r.left));
+  const y = Math.max(0, Math.min(r.height, ev.clientY - r.top));
+  _paRectEl.style.left = (r.left + Math.min(_paStart.x, x)) + "px";
+  _paRectEl.style.top = (r.top + Math.min(_paStart.y, y)) + "px";
+  _paRectEl.style.width = Math.abs(x - _paStart.x) + "px";
+  _paRectEl.style.height = Math.abs(y - _paStart.y) + "px";
+}
+
+function _paOnUp(ev) {
+  if (!_paDrawMode || !_paStart) return;
+  const p = _paPointInChart(ev);
+  if (!p) return;
+  if (Math.abs(p.x - _paStart.x) < 8 || Math.abs(p.y - _paStart.y) < 8) {
+    // 只是"点了一下"（没拖动）⇒ 保留第一角，等第二次点击定对角
+    _paToast("已选第一角：再点一下对角即可（也可以按住拖动）");
+    return;
+  }
+  const p0 = _paStart;
+  _paStart = null;
+  _paFinalize(p0, p);
+}
+
+/* 像素 → (K线索引, 价格)。**三级兜底**（2026-10-28 实报 xi=NaN/yi=NaN）：
+   ① `convertFromPixel({seriesIndex:0})` —— 官方推荐用法，一次回 [xVal, yVal]；
+   ② 分轴 `{xAxisIndex:0}` / `{yAxisIndex:0}`（日K双击那条路用的就是这个）；
+   ③ 手动：从 grid 的像素矩形 + y 轴的数值区间线性反算（ECharts 内部同款算法）。
+   ECharts 在"坐标落在网格外 / 多网格 / 实例刚重建"时会返回 NaN 或 undefined，
+   只靠 ① 一旦踩到就永远画不出框。 */
+function _paPixToData(cx, cy) {
+  const out = { x: NaN, y: NaN, how: "" };
+  if (!stockChartInst) return out;
+  // ① series
+  try {
+    const v = stockChartInst.convertFromPixel({ seriesIndex: 0 }, [cx, cy]);
+    if (Array.isArray(v) && v.length >= 2) {
+      out.x = Number(v[0]); out.y = Number(v[1]); out.how = "series";
+    } else if (v != null && !Array.isArray(v)) {
+      out.y = Number(v); out.how = "series?";
+    }
+  } catch (e) { /* 下一级 */ }
+  if (isFinite(out.x) && isFinite(out.y)) return out;
+  // ② 分轴
+  try {
+    let xv = stockChartInst.convertFromPixel({ xAxisIndex: 0 }, [cx, cy]);
+    let yv = stockChartInst.convertFromPixel({ yAxisIndex: 0 }, [cx, cy]);
+    if (Array.isArray(xv)) xv = xv[0];
+    if (Array.isArray(yv)) yv = yv[1];
+    const nx = Number(xv), ny = Number(yv);
+    if (isFinite(ny)) { out.y = ny; out.x = nx; out.how = "axis"; }
+    if (isFinite(out.x) && isFinite(out.y)) return out;
+  } catch (e) { /* 下一级 */ }
+  // ③ 手动：grid 像素矩形 × y 轴数值区间
+  try {
+    const ecModel = stockChartInst.getModel();
+    const rect = ecModel.getComponent("grid", 0).coordinateSystem.getRect();
+    const yExt = ecModel.getComponent("yAxis", 0).axis.scale.getExtent();   // [min, max]
+    const dates = ((stockChartData && stockChartData.period_data
+      && stockChartData.period_data[stockChartPeriod]) || {}).dates || [];
+    if (rect && rect.height > 0 && yExt && isFinite(yExt[0]) && isFinite(yExt[1])) {
+      out.y = yExt[0] + (rect.y + rect.height - cy) / rect.height * (yExt[1] - yExt[0]);
+      if (dates.length > 1 && rect.width > 0) {
+        const f = (cx - rect.x) / rect.width;
+        out.x = Math.round(f * (dates.length - 1));
+      }
+      out.how = "manual";
+    }
+  } catch (e) { /* 保持 NaN */ }
+  return out;
+}
+
+/* 用两个角（容器内像素）成框：换算价格/日期 → 存后端 → 重画。 */
+async function _paFinalize(p0, p1) {
+  let up = null, dn = null, d0 = null, d1 = null, xi = null, yi = null, how = "";
+  try {
+    const yTop = Math.min(p0.y, p1.y), yBot = Math.max(p0.y, p1.y);
+    const xL = Math.min(p0.x, p1.x), xR = Math.max(p0.x, p1.x);
+    const t = _paPixToData(xL, yTop);
+    const b = _paPixToData(xL, yBot);
+    const l = _paPixToData(xL, yTop);
+    const rgt = _paPixToData(xR, yTop);
+    how = t.how || b.how || "";
+    up = Math.max(Number(t.y), Number(b.y));
+    dn = Math.min(Number(t.y), Number(b.y));
+    yi = up;
+    xi = l.x;
+    const pd = (stockChartData && stockChartData.period_data
+      && stockChartData.period_data[stockChartPeriod]) || {};
+    const dates = pd.dates || [];
+    if (dates.length && isFinite(l.x) && isFinite(rgt.x)) {
+      const _cl = i => Math.max(0, Math.min(dates.length - 1, Math.round(i)));
+      d0 = String(dates[_cl(l.x)]);        // 完整时间串（分钟图要区分 09:35 / 09:40）
+      d1 = String(dates[_cl(rgt.x)]);
+    }
+  } catch (e) { /* 走下面的错误提示 */ }
+  _paExitDraw();
+  if (!isFinite(up) || !isFinite(dn) || up <= 0 || dn <= 0) {
+    let _diag = "";
+    try {
+      const o = stockChartInst ? stockChartInst.getOption() : {};
+      const x0 = (o.xAxis || [{}])[0] || {}, y0 = (o.yAxis || [{}])[0] || {};
+      _diag = ` how=${how || "-"} xType=${x0.type || "?"} yType=${y0.type || "?"}`
+        + ` size=${(_paChartRect && _paChartRect.width) || 0}x${(_paChartRect && _paChartRect.height) || 0}`;
+    } catch (e2) { /* 忽略 */ }
+    _paToast(`画框失败：价格换算不出来（xi=${xi} yi=${yi}${_diag}）。请重试；反复失败把这条发我`, "err");
+    return;
+  }
+  let r2 = null;
+  try {
+    r2 = await apiCall("save_price_box", stockChartCode, +up.toFixed(2), +dn.toFixed(2),
+                       d0, d1, _paCurrentPrice());
+  } catch (e) {
+    _paToast("保存画框失败：" + (e && e.message ? e.message : e)
+      + "（若提示后端方法不可用 ⇒ 需要重启 t_gui.py）", "err");
+    return;
+  }
+  if (!r2 || !r2.ok) {
+    _paToast("保存画框失败：" + ((r2 && r2.error) || "后端未返回 ok"), "err");
+    return;
+  }
+  _paToast(`✅ 已存画框 ${fmt(dn, 2)}~${fmt(up, 2)}：上破上沿 / 下破下沿 都会提醒`);
+  try {
+    await loadPriceAlerts(stockChartCode);
+    _mwSyncBoxesNow();                // 立刻同步到多窗口（重画/拖框都走这里）
+    if (stockChartInst) renderStockChart(false);
+  } catch (e) {
+    _paToast("画框已存，但刷新失败：" + ((e && (e.message || e)) || "未知"), "err");
+  }
+}
+
+function clearPriceBoxes() {
+  if (!stockChartCode) return;
+  apiCall("delete_price_alert", stockChartCode, null).then(async () => {
+    await loadPriceAlerts(stockChartCode);
+    if (stockChartInst) renderStockChart(false);
+    _mwSyncBoxesNow();                 // 清空也要同步过去
+    _paToast("已清除本票全部画框");
+  }).catch(e => _paToast("清除失败：" + (e && e.message ? e.message : e), "err"));
+}
+
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && _paDrawMode) _paExitDraw();
+});
+
+/* 兜底：K 线弹窗开着时，任何未捕获的脚本错误都弹提示。
+   上一轮"点了没反应、状态栏也没字"就是因为错误被静默吞掉了（2026-10-28）。 */
+let _paErrLast = { msg: "", at: 0 };
+window.addEventListener("error", (e) => {
+  try {
+    if (!chartModalOpen) return;
+    const msg = String((e && (e.message || e.error)) || "未知");
+    const now = Date.now();
+    // 上游竞态，不是我们的 bug，也不影响使用：ECharts 重绘瞬间的残留 mousemove 打在
+    // 已销毁的 series 上（apache/echarts#21535，5.5 仍在）。下一次 mousemove 自动恢复；
+    // 唯一影响是这一帧的十字光标没更新。**只进日志，不弹红条**，否则每次重绘都可能刷一条。
+    if (/getRawIndex/.test(msg)) {
+      try { _chartLog("echarts_race", msg); } catch (_) { /* 忽略 */ }
+      return;
+    }
+    if (msg === _paErrLast.msg && now - _paErrLast.at < 60000) return;   // 同一错误不刷屏
+    _paErrLast = { msg: msg, at: now };
+    // 我们自己的 app.js 没压缩 ⇒ 栈里能直接看到是哪个函数；前 3 帧足够定位
+    let frames = "";
+    try {
+      const st = (e && e.error && e.error.stack) ? String(e.error.stack) : "";
+      frames = st.split(String.fromCharCode(10)).slice(1, 4)
+        .map(x => x.trim().replace(/^at\s+/, ""))
+        .filter(Boolean).join(" ← ");
+    } catch (_) { /* 忽略 */ }
+    _paToast(`脚本错误（ui ${PA_UI_BUILD}）：${msg}` + (frames ? " ｜ " + frames : ""), "err");
+  } catch (_) { /* 忽略 */ }
+});
+
+/* 事件轮询（10s，挂在 startLivePoll 上）：有新触发就响铃 + 状态栏提示，并刷新当前图的线。 */
+async function pollPriceAlerts() {
+  let r = null;
+  try { r = await apiCall("load_price_alerts"); } catch (e) { return; }
+  const evs = (r && r.events) || [];
+  const ids = evs.map(e => e && e.id).filter(Boolean);
+  if (_paSeenEvents === null) {           // 首轮：只登记，别把历史事件重放一遍
+    _paSeenEvents = new Set(ids);
+    return;
+  }
+  const fresh = evs.filter(e => e && e.id && !_paSeenEvents.has(e.id));
+  ids.forEach(i => _paSeenEvents.add(i));
+  if (!fresh.length) return;
+  playAlert(fresh.some(e => e.side === "down") && !fresh.some(e => e.side === "up")
+    ? "PRICE_DOWN" : "PRICE_UP");
+  fresh.forEach(e => _paToast(
+    `${e.side === "down" ? "🔻 向下跌破" : "🔔 向上突破"} ${e.name}(${e.code}) `
+    + `框沿 ${e.level}，现价 ${e.price}`, ""));
+  const cur = String(stockChartCode || "").split("_")[0];
+  if (cur && fresh.some(e => String(e.code) === cur)) {
+    await loadPriceAlerts(cur);
+    if (stockChartInst) renderStockChart(false);
+  }
 }
 
 function renderStockChart(applyZoom = true) {
@@ -5788,13 +6687,41 @@ function renderStockChart(applyZoom = true) {
     }
     return i0 < 0 ? null : [i0, i1];
   };
+  /* 箱体色块（2026-10-28 修）：`boxAreas` 在早前某次重构里**构造代码丢了、只剩引用**，
+     只要勾上「箱体」`renderStockChart` 就会抛 ReferenceError 把整张图带崩。
+     这里用上面现成的 `_boxRange` 补回来；任何异常都退回空数组。 */
+  const boxAreas = (() => {
+    if (!showBoxes) return [];
+    try {
+      const out = [];
+      (boxes || []).forEach(b => {
+        if (!b || b.start == null || b.end == null) return;
+        const r = _boxRange(boxIdx, b.start, b.end);
+        const lo = Number(b.low), hi = Number(b.high);
+        if (!r || !isFinite(lo) || !isFinite(hi) || lo === hi) return;
+        out.push([{
+          xAxis: r[0], yAxis: Math.max(lo, hi),
+          itemStyle: { color: "rgba(210,153,34,.10)", borderColor: "rgba(210,153,34,.6)",
+                       borderWidth: 1, borderType: "dashed" },
+          label: { show: false }, name: `箱体 ${lo}~${hi}`,
+        }, { xAxis: r[1], yAxis: Math.min(lo, hi) }]);
+      });
+      return out;
+    } catch (e) { return []; }
+  })();
+
   /* 缺口（2026-10-17 owner：「用颜色将区域显示出来」）—— 逻辑已抽到 `buildGapAreas`，
      六宫格复用同一套口径（2026-10-21 owner：多窗口里也要看到缺口）。 */
   // 2026-10-26 owner：「在日线级别要把缺口显示出来」——窗口从 15 天放宽到 250 天
   // （默认视窗是近 6 月 ≈120 根，15 天只看得到最近两周的缺口，大半屏都没有）。
-  const gapAreas = showGaps ? buildGapAreas(period.ohlc, period.dates, 250) : [];
+  // 缺口：先清空点击命中表，再按「本票本周期隐藏了哪些」打标/过滤（点一下隐藏、再点恢复）
+  _gapRects = [];
+  const gapAreas = showGaps
+    ? _gapTagAndFilter(buildGapAreas(period.ohlc, period.dates, 250), period.dates, "g") : [];
   // 跳空开盘（昨收→今开，≥1%）——与「真缺口（区间不重叠）」分开画，见 buildOpenGapAreas 注释
-  const openGapAreas = showGaps ? buildOpenGapAreas(period.ohlc, period.dates, 250) : [];
+  const openGapAreas = showGaps
+    ? _gapTagAndFilter(buildOpenGapAreas(period.ohlc, period.dates, 250), period.dates, "o") : [];
+  _gapSyncButton();                    // 「👁 缺口(n)」有隐藏才显示
 
   /* 成交额（亿元）+ 量能均线（2026-10-20 owner：量能窗口要「美化、醒目」）。
      单根柱子只能看出"今天放没放量"，**均线才看得出量能趋势**（东财的量能面板就是
@@ -5891,6 +6818,7 @@ function renderStockChart(applyZoom = true) {
   const el = document.getElementById("stockChart");
   const _firstInit = !stockChartInst;
   if (_firstInit) {
+    _chartSeriesKeys = null;                 // 新实例 ⇒ 上一次的 series 指纹作废
     // 清掉占位文本（'加载中...' / '该周期无分时数据'）：echarts.init 是**追加**一个 div，
     // 不清的话占位文字会一直留在图下面。仅首帧清 —— 复用时清会毁掉画布。
     el.innerHTML = "";
@@ -6037,7 +6965,7 @@ function renderStockChart(applyZoom = true) {
     period: stockChartPeriod, zoom: stockChartZoom, zStart: zStart, zEnd: zEnd,
     n: nBars, first: (period.dates || [])[0], last: (period.dates || []).slice(-1)[0],
   }));
-  stockChartInst.setOption({
+  const _opt = {
     // 2026-10-17 owner：K线图用**深色画布**（独立的深色主题，不是把浅色反相）。
     backgroundColor: "#0d1117",
     // 2026-10-17：首帧播一次入场动画（只有初次 init 时），后续 10s 重绘保持静态，避免闪。
@@ -6299,9 +7227,13 @@ function renderStockChart(applyZoom = true) {
         itemStyle: { color: "#f85149", color0: "#3fb950",
                      borderColor: "#ff6b62", borderColor0: "#56d364", borderWidth: 1 },
         // 箱体 + 缺口共用一个 markArea（ECharts 每个 series 只认一个）
+        // ⚠️ 即使为空也要给 `{data: []}`，不能给 undefined：series 集合没变时走的是
+        // **普通 merge**（见下面 setOption 注释），merge 不会因为 `markArea: undefined`
+        // 把旧色块清掉 ⇒ 取消勾选「箱体/缺口」后色块会赖在图上。
         markArea: (() => {
-          const _d = [...(showBoxes ? boxAreas : []), ...openGapAreas, ...gapAreas];
-          return _d.length ? { silent: true, data: _d } : undefined;
+          const _d = [...(showBoxes ? boxAreas : []), ...openGapAreas, ...gapAreas,
+                       ..._paBoxAreas()].filter(_finiteAreaPair);
+          return { silent: true, data: _d };
         })(),
         markLine: { symbol: "none",
           data: [
@@ -6311,7 +7243,7 @@ function renderStockChart(applyZoom = true) {
             ...(dailyMa20Line ? [dailyMa20Line] : []),
             ...(dailyMa30Line ? [dailyMa30Line] : []),
             ...(dailyMa60Line ? [dailyMa60Line] : []),
-          ],
+          ].filter(_finiteLineItem),
           label: { position: "insideEndTop" } } },
       ...divSeries,
       ...tradeSeries,
@@ -6426,7 +7358,21 @@ function renderStockChart(applyZoom = true) {
         markLine: { symbol: "none", data: [{ yAxis: 30, lineStyle: { color: "rgba(139,148,158,.4)", type: "dashed" } },
           { yAxis: 70, lineStyle: { color: "rgba(139,148,158,.4)", type: "dashed" } }] } },
     ],
-  }, { replaceMerge: ["series", "title"], lazyUpdate: true });
+  };
+
+  /* series 指纹（名字+类型，顺序敏感）：只在**系列集合真的变了**时才 replaceMerge。
+     为什么（2026-10-28 实报）：`replaceMerge:["series"]` 每次都会把全部 series **销毁重建**，
+     而这张图每 10s 就被实时尾重绘一次 —— 重建瞬间如果正好有 mousemove，ECharts 会在
+     已销毁的 series 上调 getDataParams ⇒ `Cannot read properties of undefined (reading
+     'getRawIndex')`（上游 apache/echarts#21535，5.5 仍有）。同一个票、同一组勾选时
+     series 集合是不变的，走普通 merge 就不会重建，这条竞态窗口直接消失。 */
+  const _skeys = (_opt.series || [])
+    .map(s => `${(s && s.name) || ""}|${(s && s.type) || ""}`).join(">");
+  const _sameSeries = (_skeys === _chartSeriesKeys);
+  _chartSeriesKeys = _skeys;
+  stockChartInst.setOption(_opt, _sameSeries
+    ? { lazyUpdate: true }
+    : { replaceMerge: ["series", "title"], lazyUpdate: true });
 
   // 现价胶囊：**等一帧**再定位 —— 主 setOption 是 lazyUpdate，同一 tick 里 convertToPixel
   // 拿到的还是上一帧的 y 轴刻度，直接定位会看到胶囊先跳一下再归位。
@@ -6997,6 +7943,12 @@ function applySectorTags(tbody, category) {
       // 2026-10-23：偏离365日线随标签批一起回来（同一份 payload），就地回填
       const _d365Td = row.querySelector("td.h-dev365");
       if (_d365Td) _d365Td.innerHTML = dev365InnerHtml(info.dev365);
+      // 2026-10-28：5 日乖离度同源同批（同一个 dict），同样就地回填
+      const _b5Td = row.querySelector("td.h-bias5");
+      if (_b5Td) {
+        _b5Td.innerHTML = bias5InnerHtml(info.bias5);
+        _b5Td.title = bias5Tip(info.bias5);
+      }
     }
     // 2026-10-17：30m MA5 走的是**仓位结构**缓存（比标签慢一拍）⇒ 这里同款回填
     const _st = (hunterStructCache[category] || {})[code];
@@ -7138,16 +8090,23 @@ function turnoverCard(t) {
   </div>`;
 }
 // 指数列表来自后端 core.board_index.GUI_INDEX_BOARD（单一真源），实时源掘金（不可用降级腾讯）。
-async function loadIndices() {
+// `pre`（2026-10-28）：`{d, turn}` 由 poll_live_bundle 一次带回；缺省时按原路各自取。
+async function loadIndices(pre) {
   const body = document.getElementById("indicesBody");
   const meta = document.getElementById("indexBoardMeta");
   if (!body) return;
   try {
     // 成交额与指数并行取（成交额后端 60s 去重，不随 10s 轮询打 GM）
-    const [d, turn] = await Promise.all([
-      apiCall("load_indices"),
-      apiCall("load_market_turnover").catch(() => null),
-    ]);
+    let d, turn;
+    if (pre && pre.d) {
+      d = pre.d;
+      turn = (pre.turn === undefined ? null : pre.turn);
+    } else {
+      [d, turn] = await Promise.all([
+        apiCall("load_indices"),
+        apiCall("load_market_turnover").catch(() => null),
+      ]);
+    }
     const idx = (d && d.indices) || [];
     if (!idx.length) {
       body.innerHTML = '<div class="empty">指数行情不可用</div>';
@@ -7222,14 +8181,17 @@ async function loadIndices() {
 // ⚠️ 观察提示，非交易信号：每条固定带证据分级 + 免责说明（口径见 analysis/index_divergence.py）。
 // 常驻不自动消失（区别于 pushAlert 的 10s 淡出）；只有**新事件**才闪烁+响铃。
 let _divSeenKeys = null;   // 首次装载不闪（避免整页刷新把所有事件都闪一遍）
-async function refreshIndexDivergence() {
+// `pre`（2026-10-28）：poll_live_bundle 已经把结果带回来时直接用它，省一次桥往返。
+async function refreshIndexDivergence(pre) {
   const banner = document.getElementById("divergenceBanner");
   if (!banner) return;
-  let res = null;
-  try {
-    res = await apiCall("load_index_divergence");
-  } catch (e) {
-    return;
+  let res = pre || null;
+  if (!res) {
+    try {
+      res = await apiCall("load_index_divergence");
+    } catch (e) {
+      return;
+    }
   }
   const alerts = (res && res.alerts) || [];
   const watching = (res && res.watching) || [];
@@ -7237,6 +8199,7 @@ async function refreshIndexDivergence() {
   if (!alerts.length && !watching.length) {
     banner.style.display = "none";
     banner.innerHTML = "";
+    banner._paSig = "";
     return;
   }
   const hasNew = _divSeenKeys !== null && alerts.some(a => !_divSeenKeys.has(a.key));
@@ -7244,22 +8207,27 @@ async function refreshIndexDivergence() {
       title="${esc(a.time + "｜已过 " + a.bars_ago + " 根 bar｜证据 " + a.tier + " " + a.evidence + "｜" + a.disclaimer)}">
       ${muted ? "观察中 " : ""}${esc(a.index)}·${esc(a.freq)}·${esc(a.type)} <em>${esc(a.tier)}</em>
     </span>`;
-  banner.style.display = "block";
-  banner.innerHTML = `
+  const _html = `
     <div class="div-strip ${hasNew ? "div-flash" : ""}">
       <span class="div-strip-title">📉 指数背离 <span class="cell-dim">观察项 · 非交易信号</span></span>
       ${alerts.map(a => item(a, false)).join("")}
       ${watching.map(a => item(a, true)).join("")}
       <span class="cell-dim" style="font-size:10px">背离需 3 根 bar 确认（30min 线即峰值后 1.5 小时）；「观察中」为宽窗口内的旧事件，不推送</span>
     </div>`;
+  // 内容没变就别重写 DOM（原来每 10s 一次 innerHTML，会触发重排 + ResizeObserver）
+  if (banner._paSig !== _html) {
+    banner.style.display = "block";
+    banner.innerHTML = _html;
+    banner._paSig = _html;
+  }
   _divSeenKeys = new Set(alerts.map(a => a.key));
   if (hasNew) { try { playAlert("SELL_HIGH"); } catch (e) {} }
 }
 
 // 指数板刷新入口：先取背离（供角标），再渲染板
-async function refreshIndexBoard() {
-  try { await refreshIndexDivergence(); } catch (e) {}
-  try { await loadIndices(); } catch (e) {}
+async function refreshIndexBoard(pre) {
+  try { await refreshIndexDivergence(pre && pre.divergence); } catch (e) {}
+  try { await loadIndices(pre ? { d: pre.indices, turn: pre.turnover } : undefined); } catch (e) {}
 }
 
 // 重新生成选中日期结果（拉行情+评分）
@@ -7983,6 +8951,8 @@ function renderHunter(h) {
         <td class="h-mr" data-mrcode="${esc(s.code)}" style="text-align:center;white-space:nowrap"
             title="当日刚站上 5/10/20/30/60 日线的时刻（展开板块后按可见个股现算）">${maReclaimInnerHtml(s.ma_reclaim, "展开板块后自动加载")}</td>
         ${condCellHtml(s.build_conds, condLabels, s.build_verdict === "insufficient_data", s.build_veto)}
+        <td class="num h-bias5" style="text-align:center"
+            title="${esc(bias5Tip((hunterTagsCache[category] || {})[s.code] && (hunterTagsCache[category] || {})[s.code].bias5, s.build_reason || ""))}">${bias5InnerHtml((hunterTagsCache[category] || {})[s.code] && (hunterTagsCache[category] || {})[s.code].bias5)}</td>
         <td class="num h-dev365" style="text-align:center"
             title="${esc(dev365Tip((hunterTagsCache[category] || {})[s.code] && (hunterTagsCache[category] || {})[s.code].dev365, s.build_reason || ""))}">${dev365InnerHtml((hunterTagsCache[category] || {})[s.code] && (hunterTagsCache[category] || {})[s.code].dev365)}</td>
       </tr>`;
@@ -8051,13 +9021,13 @@ function renderHunter(h) {
       const _withWhy = _members.filter(m => m[1]).length;
       const _noteId = ("hnote-" + category + "-" + gk).replace(/[^\w一-龥-]/g, "_");
       const _gTip = [_gDesc ? `${gk}：${_gDesc}` : ""].filter(Boolean).join("");
-      const head = `<tr class="h-subgroup-head"><td colspan="15">
+      const head = `<tr class="h-subgroup-head"><td colspan="16">
         <span class="h-subgroup-name"${_gTip ? ` title="${esc(_gTip)}" style="cursor:help"` : ""}>📂 ${esc(gk)}</span>
         <span class="cell-dim" style="font-size:10px">${gs.length}只 · ${gScoreTxt}${gUp ? ` · 涨停${gUp}` : ""}</span>
         ${_gDesc ? `<span class="h-subgroup-desc" title="${esc(_gTip)}">${esc(_gDesc)}</span>` : ""}
         <button class="mini-btn h-note-btn" onclick="hunterToggleNote('${_noteId}', this)">▸ 说明 · 个股理由</button>
       </td></tr>
-      <tr class="h-subgroup-note" id="${_noteId}" style="display:none"><td colspan="15">
+      <tr class="h-subgroup-note" id="${_noteId}" style="display:none"><td colspan="16">
         <div class="h-note-desc">${esc(_gDesc || "（该细分概念暂无解释）")}</div>
         <div class="h-note-hint cell-dim">本组 ${gs.length} 只，其中 ${_withWhy} 只有入选理由；再点一次按钮收起</div>
         <ul class="h-note-list">${_members.slice(0, 80).map(([n, r, v]) =>
@@ -8188,7 +9158,8 @@ function renderHunter(h) {
             <th>技术标签</th>
             <th title="**当日**刚站上 5/10/20/30/60 日线的**时刻**（与「建仓信号扫描」「持仓 30 分钟风险体检」「异常监控池」同源同渲染）。猎手池 2000+ 只，只对**展开板块当前页**的股票现算">均线突破<br><span style="font-size:9px;opacity:.6">当日·时刻</span></th>
             <th title="时机条件：市场有方向/多头结构/回撤到位 · 末位🚫=否决因子（爆量≥3倍或偏离MA60>+20%）">时机条件</th>
-            <th title="(现价 − 365 日均线) / 365 日均线（A股口径：正=红、负=绿）。原来这列是「理由」，已挪到本格 tooltip">偏离365日线</th>
+            <th class="num" title="${BIAS5_TH_TITLE}">5日乖离<br><span style="font-size:9px;opacity:.6">(价−MA5)/MA5</span></th>
+            <th title="(现价 − 365 日均线) / 365 日均线。**着色 = 风险灯**：≥ +60% 或 ≤ −45% 标红，其余绿（绿色≠看多）。原来这列是「理由」，已挪到本格 tooltip">偏离365日线<br><span style="font-size:9px;opacity:.6">风险灯</span></th>
           </tr></thead>
           <tbody class="h-sector-group" data-category="${esc(category)}">${stockRows}</tbody></table>
           ${pageInfo}
@@ -8369,7 +9340,7 @@ function renderOB(ob) {
   }
   const _VCLS = { high: "badge signal", watch: "badge approach", bull: "badge bear" };
   const rows = ob.stocks.map(s => {
-    if (s.error) return `<tr><td colspan="16" class="cell-dim">${esc(s.code)}: ${esc(s.error)}</td></tr>`;
+    if (s.error) return `<tr><td colspan="17" class="cell-dim">${esc(s.code)}: ${esc(s.error)}</td></tr>`;
     const ob_ = s.overbought || {};
     const vd = s.verdict || {};           // 2026-10-09：30min 综合判定 {level,label,reason}
     const dv = s.divergence || {};        // 30min {type,bars_ago}（进 tooltip）
@@ -8406,6 +9377,7 @@ function renderOB(ob) {
       <td title="30min 综合判定（趋势+顶部/底背离特征）&#10;${esc(tfTip)}&#10;${esc(dvTip)}">${vCell}</td>
       ${structCellHtml(s.structure)}
       ${ma5CellHtml(s.structure)}
+      ${bias5CellHtml(s.bias5, vd.reason || "")}
       ${dev365CellHtml(s.dev365, vd.reason || "")}
     </tr>`;
   }).join("");
@@ -8432,7 +9404,8 @@ function renderOB(ob) {
         <th title="30min 趋势+顶部/底背离特征 → 重视程度（读一列即可）">30min判定</th>
         <th title="仓位结构（30min/10min，与建仓信号扫描**同一真源**，供仓位管理参考）：止损=10min 最近已确认摆动低点；阶段=10min 四阶段；30m=30min MA65 中期方向；折价=现价/止损-1（到-4.3%记满）。破位时给三档下档支撑挂单价与5日成交率。⚠️ 是**结构参考、不是买卖信号**。悬停看明细">仓位结构</th>
         <th title="30min MA5 状态（**纯展示**）：站上/跌破 5×30min 均线，及距上次翻转几根。⚠️ 实测**无前瞻信息量**（同日同bar-of-day对照 |diff|≤0.03pp）⇒ 仅供参考，不参与任何判定">30m MA5<br><span style="font-size:9px;opacity:.6">仅展示</span></th>
-        <th title="(现价 − 365 日均线)/365 日均线（正=红、负=绿）；原来的「依据」已挪到本格 tooltip">偏离365日线</th>
+        <th class="num" title="${BIAS5_TH_TITLE}">5日乖离<br><span style="font-size:9px;opacity:.6">(价−MA5)/MA5</span></th>
+        <th title="(现价 − 365 日均线)/365 日均线。**着色 = 风险灯**：≥ +60% 或 ≤ −45% 标红，其余绿（绿色≠看多）。原来的「依据」已挪到本格 tooltip">偏离365日线<br><span style="font-size:9px;opacity:.6">风险灯</span></th>
       </tr></thead><tbody>${rows}</tbody></table>
       <div class="cell-dim" style="font-size:10px;margin-top:4px">口径(2026-10-09)：判定=30min顶部/底背离特征综合（依据 t_io/validation/m30_top 981只×540日离线验证）· 趋势=30min三层状态机 · RSI/KDJ/CCI/BOLL 为日线超买指标（不驱动判定）· <b>20日线</b>=收盘价 vs 20 日简单均线（2026-10-14 新增，与建仓表/猎手表同口径；**观察列，不驱动判定**）· 双击行看K线</div>
     </div>`;
@@ -9286,6 +10259,8 @@ function startLivePoll() {
     if (chartModalOpen) return;        // K 线弹窗打开：暂停背后的大盘/持仓刷新
     if (state.date) return refreshLive(false);
   }, 10000, 0);
+  // 价格突破提醒的事件轮询（响铃用）。**不受 chartModalOpen 影响** —— 正看 K 线时更要响。
+  _startStaggered("pricealert", () => pollPriceAlerts(), 10000, 5200);
   // P4-3: 自动盘 10s 轮询（自动盘 tab 或概览页（含自动盘持仓卡片）激活时拉取 bridge）
   _startStaggered("auto", () => {
     if (chartModalOpen) return;        // K 线弹窗打开：暂停 auto_pnl/auto_status（3~5s 重活）
@@ -9295,8 +10270,8 @@ function startLivePoll() {
     // 2026-10-10: auto tab 也要流水/每日盈亏
     return Promise.all([loadAutoStatus(), loadAutoPnl()]);
   }, 10000, 2200);
-  // 人工确认闸 10s 全局轮询（与 tab 无关：买入确认时效敏感，任何 tab 都弹窗打扰）
-  _startStaggered("buyConfirm", pollBuyConfirm, 10000, 3600);
+  // 人工确认闸（2026-10-28）：**不再单独轮询** —— 已并入 `poll_live_bundle`，
+  // 跟着 10s 的 live 拍一起回来（频率不变、少一次常驻桥往返）。这里只先拉一次首屏。
   pollBuyConfirm();
 }
 
@@ -9350,11 +10325,10 @@ async function init() {
   autoPoll.addEventListener("change", () => {
     if (autoPoll.checked) {
       startPoll();
-      if (state.date === todayStr()) { startLivePoll(); startSignalPoll(); }
+      if (state.date === todayStr()) { startLivePoll(); }   // 信号已并入 live 那一拍
     } else {
       stopPoll();
       stopLivePoll();
-      stopSignalPoll();
     }
   });
   // 首次用户交互解锁音频（autoplay 政策兜底）
@@ -9413,9 +10387,25 @@ document.addEventListener("DOMContentLoaded", () => {
   // 依其实测高度设 `--top-banner-h`（含与 topbar 的 6px 间隙），由 `.content` 顶部留白消费。
   const _tb = document.getElementById("topBanners");
   if (_tb) {
+    /* 2026-10-28 owner：「整个界面在跳」。横幅是 fixed，内容区 top = 38px + 横幅实测高；
+       原来每次 ResizeObserver 回调都无脑写 CSS 变量，横幅一旦重建（innerHTML 先清后写、
+       或内容在两态之间来回），`--top-banner-h` 就在 0 与 N 之间抖 ⇒ **整页上下跳**。
+       现在：① 值没变就不写；② 量到 0 先延迟 600ms 复核（避开重建瞬间），确认为空才收起来。 */
+    let _lastH = null, _zeroTimer = null;
+    const _apply = (h) => {
+      if (h === _lastH) return;
+      _lastH = h;
+      document.documentElement.style.setProperty("--top-banner-h", h > 0 ? (h + 6) + "px" : "0px");
+    };
     const _reserve = () => {
       const h = _tb.offsetHeight;
-      document.documentElement.style.setProperty("--top-banner-h", h > 0 ? (h + 6) + "px" : "0px");
+      if (h > 0) {
+        if (_zeroTimer) { clearTimeout(_zeroTimer); _zeroTimer = null; }
+        _apply(h);
+        return;
+      }
+      if (_zeroTimer) return;                 // 已经排了复核，别叠加
+      _zeroTimer = setTimeout(() => { _zeroTimer = null; _apply(_tb.offsetHeight); }, 600);
     };
     if (window.ResizeObserver) new ResizeObserver(_reserve).observe(_tb);
     _reserve();
@@ -9671,6 +10661,7 @@ function openMultiWatch() {
   _mwLoadLayout();
   _mwBuildCells();
   _mwBindDrag(win);
+  _mwRefreshBoxes(true);
   mwTick();
   if (mwTimer) clearInterval(mwTimer);
   mwTimer = setInterval(mwTick, MW_PERIOD_MS);
@@ -9950,8 +10941,92 @@ function mwPick(i, raw) {
    刻意不画 MACD/RSI/箱体 —— 每格只有 ~1/6 屏宽，塞满就成了噪声；要看细节点开大图。
    2026-10-21 owner：① 缺口没显示 ② 5日/10日/20日均线没显示 ⇒ 都补上，
    且缺口与单图**共用** `buildGapAreas`，口径不会漂。 */
-function _mwOption(s, dma, levels, trades, zoom) {
+/* ===== 画框提醒 × 多窗口看盘（2026-10-28 owner）=====
+   主图画的框在多窗口的每一格里也要能看到。
+   ⚠️ 视觉与单图同一套：**蓝色实线框**（缺口是红/绿虚线细边，一眼分得开）；
+      已上破转红、已下破转绿、两边都触发转灰。
+   ⚠️ 格子窗口只有最近 96 根 5 分钟：画框时的日期若不在窗口内就**铺满整格** ——
+      框的**价位**才是重点，位置找不准也不能让它消失。 */
+let _mwBoxes = {};        // code -> items
+let _mwBoxesAt = 0;       // 上次拉取时间（20s 一刷，别跟着 3s 的图一起打后端）
+
+async function _mwRefreshBoxes(force) {
+  const now = Date.now();
+  if (!force && now - _mwBoxesAt < 10000) return;
+  _mwBoxesAt = now;
+  try {
+    const r = await apiCall("load_price_alerts");
+    _mwBoxes = (r && r.items) || {};
+  } catch (e) { /* 保留旧值：拿不到就继续画上一次的，别让框闪没 */ }
+}
+
+/* 画框增删后**立刻**同步到多窗口（2026-10-28 owner：重画之后多窗口要跟着变）。
+   ⚠️ `_mwRefreshBoxes(true)` 是异步的：必须 await 完再 mwTick，否则下一拍用的还是旧框。
+   ⚠️ 只对**页面内的浮层**有效；独立原生窗口是另一个 JS 上下文，只能靠它自己 10s 一轮跟上。 */
+async function _mwSyncBoxesNow() {
+  try {
+    await _mwRefreshBoxes(true);
+    _mwKickTick();
+  } catch (e) { /* 多窗口没开/拿不到就忽略 */ }
+}
+
+function _mwKickTick() {
+  try {
+    const win = document.getElementById("multiWatchWin");
+    if (!win || win.style.display === "none") return;
+    if (typeof mwTick !== "function") return;
+    if (mwBusy) { setTimeout(_mwKickTick, 400); return; }   // 正在跑就等它跑完再补一拍
+    mwTick();
+  } catch (e) { /* 忽略 */ }
+}
+
+function _mwDateIdx(dates, d, pickLast) {
+  if (!d || !dates || !dates.length) return null;
+  const k = dates.indexOf(d);
+  if (k >= 0) return k;
+  const pre = String(d).slice(0, 10);
+  let first = -1, last = -1;
+  for (let i = 0; i < dates.length; i++) {
+    if (String(dates[i]).slice(0, 10) === pre) { if (first < 0) first = i; last = i; }
+  }
+  return pickLast ? (last >= 0 ? last : null) : (first >= 0 ? first : null);
+}
+
+function _mwBoxMarkAreas(code, dates) {
+  try {
+    const items = (_mwBoxes || {})[String(code || "").split("_")[0]] || [];
+    const n = (dates || []).length;
+    if (!items.length || !n) return [];
+    return items.filter(a => {
+      if (!a || a.kind !== "box") return false;
+      const up = Number(a.upper), dn = Number(a.lower);
+      return isFinite(up) && isFinite(dn) && up > 0 && dn > 0;     // 坏数据跳过
+    }).map(a => {
+      const upN = Number(a.up_n || 0), dnN = Number(a.down_n || 0);
+      const upDone = upN > 0, dnDone = dnN > 0;
+      const col = (upDone && dnDone) ? "#8b949e" : (upDone ? "#f85149" : (dnDone ? "#3fb950" : "#58a6ff"));
+      const up = Number(a.upper), dn = Number(a.lower);
+      const lo = Math.min(up, dn), hi = Math.max(up, dn);
+      let iA = _mwDateIdx(dates, a.x0, false);
+      let iB = _mwDateIdx(dates, a.x1, true);
+      if (iA == null || iB == null) { iA = 0; iB = n - 1; }   // 不在窗口内 ⇒ 铺满整格
+      const xs = Math.max(0, Math.min(n - 1, Math.min(iA, iB)));
+      const xe = Math.max(0, Math.min(n - 1, Math.max(iA, iB)));
+      const tag = (upDone ? `上破×${upN} ` : "") + (dnDone ? `下破×${dnN} ` : "");
+      return [
+        { xAxis: xs, yAxis: hi,
+          itemStyle: _paBoxStyle(col, true),
+          label: _paBoxLabel(col, `📌${tag}${fmt(dn, 2)}~${fmt(up, 2)}`, true) },
+        { xAxis: xe, yAxis: lo },
+      ];
+    });
+  } catch (e) { return []; }
+}
+
+function _mwOption(s, dma, levels, trades, zoom, code) {
   const gaps = buildGapAreas(s.ohlc, s.dates, 15, 0.003, 8);   // 最近 15 自然日的缺口，一格最多 8 块
+  // 2026-10-28 owner：主图画框提醒也要进多窗口（蓝实线框，与缺口的红绿虚线区分）
+  const _mwBoxes2 = _mwBoxMarkAreas(code, s.dates);
   const _dmaLine = (y, color, txt) => (y == null || !isFinite(y)) ? null : {
     yAxis: y,
     lineStyle: { color, type: "dashed", width: 1, opacity: .9 },
@@ -10124,7 +11199,8 @@ function _mwOption(s, dma, levels, trades, zoom) {
     series: [
       { name: "K线", type: "candlestick", data: ohlc, barMaxWidth: 10,
         // 缺口色块 + 日线均线（与单图同一套口径/颜色）
-        markArea: gaps.length ? { silent: true, data: gaps } : undefined,
+        markArea: (gaps.length || _mwBoxes2.length)
+          ? { silent: true, data: gaps.concat(_mwBoxes2) } : undefined,
         markLine: _lines.length ? { silent: true, symbol: "none", data: _lines } : undefined,
         itemStyle: { color: "#f85149", color0: "#3fb950",
                      borderColor: "#ff6b62", borderColor0: "#56d364", borderWidth: 1 } },
@@ -10177,6 +11253,7 @@ async function mwTick() {
   if (!codes.length) return;
   mwBusy = true;
   try {
+    await _mwRefreshBoxes();          // 画框：20s 节流，拿不到就沿用上一次
     const r = await apiCall("load_multi_chart", codes, "min5", MW_TAIL);
     const items = (r && r.items) || [];
     items.forEach(it => {
@@ -10187,8 +11264,15 @@ async function mwTick() {
       if (px && q.price != null) {
         const p = q.change_pct;
         const cls = (p == null || p === 0) ? "cell-dim" : (p > 0 ? "up" : "down");
-        px.innerHTML = `<span class="${cls}">${fmt(q.price)}`
+        let html = `<span class="${cls}">${fmt(q.price)}`
           + (p == null ? "" : ` ${p >= 0 ? "+" : ""}${Number(p).toFixed(2)}%`) + `</span>`;
+        // 2026-10-28 owner：价格旁边显示 5 日乖离度（门限灯：≥+8% 红、否则绿）
+        const _b5 = bias5FromDma(it.dma, q.price);
+        if (_b5 != null) {
+          html += ` <span class="${bias5Color(_b5)}" style="font-size:10px;opacity:.9"`
+            + ` title="${esc(bias5Tip(_b5))}">乖离${_b5 >= 0 ? "+" : ""}${_b5.toFixed(1)}%</span>`;
+        }
+        px.innerHTML = html;
       }
       if (!it.ok) return;
       const s = it.series || {};
@@ -10202,7 +11286,8 @@ async function mwTick() {
       }
       try {
         // 把该格当前的缩放窗口喂回去 —— `notMerge:true` 会把上一步的 dataZoom 一起清掉
-        inst.setOption(_mwOption(s, it.dma, it.levels, it.trades, mwZoom[i]), { notMerge: true });
+        inst.setOption(_mwOption(s, it.dma, it.levels, it.trades, mwZoom[i], it.code),
+                        { notMerge: true });
       } catch (e) { /* 单格失败不影响别的格 */ }
     });
   } catch (e) { /* 静默：下一跳重试 */ }

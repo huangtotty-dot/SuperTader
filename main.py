@@ -34,10 +34,9 @@ _mreq.get = lambda url, **kw: _MREQ_SESSION.request('GET', url, **kw)
 
 from config import (
     FEISHU_KEYWORD, FEISHU_WEBHOOK, HOLDINGS, INDEX_REGIME_CONTEXT,
-    INDEX_RESONANCE_PARAMS, MORNING_ALERT_PARAMS, PARAMS, SESSION_CONTEXT,
+    INDEX_RESONANCE_PARAMS, PARAMS, SESSION_CONTEXT,
     SIGNAL_OUTCOME_TRACKER, SNAPSHOT_DIR, STOCK_PARAMS, SYS_ALERT_AVAILABLE,
-    TRACE_DIR, load_runtime_config, log, send_feishu_payload, send_startup_self_test,
-    should_run_startup_self_test,
+    TRACE_DIR, load_runtime_config, log, send_feishu_payload,
 )
 from core.utils import (
     AI_REVIEW_STATS, DAILY_DECISION_STATS, _append_jsonl,
@@ -92,7 +91,6 @@ def _make_engine_ctx():
         now=_now, get_today_str=get_today_str,
         append_jsonl=_append_jsonl, trace_path=_trace_path,
         fetch_minute_bar=fetch_minute_bar, default_daily_context=_default_daily_context,
-        send_morning_alert=send_morning_alert, notify_alert_cleared=notify_alert_cleared,
     )
 
 
@@ -258,142 +256,9 @@ def _signal_whitelist(code, holding):
     return {"eval_buy": True, "eval_sell": True, "push": True}
 
 
-# ==================== V1.25: 早盘预警飞书推送 ====================
-def build_alert_card(code, name, alert_level, triggered_rules, morning_stats, oneway_ratio="N/A", avg_decline="N/A"):
-    """
-    构建早盘预警飞书卡片消息
-    alert_level: 0=正常(green) / 1=谨慎(orange) / 2=禁止买入(red)
-    """
-    level_config = {
-        0: {"emoji": "✅", "color": "green", "title": "正常交易", "bg": "efffe8"},
-        1: {"emoji": "⚠️", "color": "orange", "title": "【谨慎观望】只做减仓不做加仓", "bg": "fff7e6"},
-        2: {"emoji": "🚨", "color": "red", "title": "【禁止买入/清仓】早盘单边下行预警", "bg": "ffebeb"},
-    }
-    cfg = level_config.get(alert_level, level_config[0])
-
-    # P0-3(2026-09-01): triggered_rules 防御归一化——兼容 str 列表（旧调用退化的 name 列表）与 dict 列表
-    _rules_norm = [r if isinstance(r, dict) else {"name": str(r), "desc": "", "precision": 0}
-                   for r in (triggered_rules or [])]
-    rules_text = "\n".join([f"• **{r.get('name', '')}**: {r.get('desc', '')} (历史命中率{r.get('precision', 0)*100:.0f}%)" for r in _rules_norm])
-
-    stats_text = (
-        f"| 指标 | 数值 |\n"
-        f"|---|---|\n"
-        f"| 开盘5分钟 | {morning_stats.get('open_5min_ret', 'N/A')}% |\n"
-        f"| 开盘30分钟 | {morning_stats.get('open_30min_ret', 'N/A')}% |\n"
-        f"| 最高涨幅 | {morning_stats.get('max_gain_after_open', 'N/A')}% |\n"
-        f"| 低于VWAP | {morning_stats.get('below_vwap_ratio', 'N/A')}% |\n"
-        f"| 连续阴线 | {morning_stats.get('consecutive_bearish', 'N/A')}根 |"
-    )
-
-    card = {
-        "msg_type": "interactive",
-        "card": {
-            "config": {"wide_screen_mode": True},
-            "header": {
-                "template": cfg["color"],
-                "title": {
-                    "tag": "plain_text",
-                    "content": f"{cfg['emoji']} 【早盘预警】{name}({code}) — {cfg['title']}"
-                }
-            },
-            "elements": [
-                {
-                    "tag": "div",
-                    "text": {
-                        "tag": "lark_md",
-                        "content": f"**预警级别**: <font color='{cfg['color']}' size=4>**{cfg['title']}**</font>\n\n"
-                                   f"**触发规则**:\n{rules_text}\n\n"
-                                   f"**早盘统计**:\n{stats_text}\n\n"
-                                   f"<font color='grey' size=1>该标的历史单边下行占比: {oneway_ratio}% | 平均跌幅: {avg_decline}%</font>"
-                    }
-                },
-                {
-                    "tag": "hr"
-                },
-                {
-                    "tag": "div",
-                    "text": {
-                        "tag": "lark_md",
-                        "content": f"<font color='grey' size=1>📊 基于近两年分钟数据训练 | 模型AUC>0.85</font>"
-                    }
-                }
-            ]
-        }
-    }
-    return card
-
-
-# 2026-10-09（S0·任务COST，owner 授权）：做T账本费率切到单一真源 core/cost_model.py，
-# 废止 2026-09-15 阶段0-1 的旧口径（卖 0.00121 / 买 0.00015，内含 2023-08-28 已废止的 0.1% 印花税）。
-#   新口径：stock 买 0.00954% / 卖 0.05954%（含 0.05% 印花税）；etf 免印花税；
-#   ST_COST_VENUE ∈ {stock, etf, legacy} 可覆盖（legacy=旧值，仅供历史复算对照）。
-# 历史背景（2026-09-15 阶段0-1，诊断D1/F2）：config.py PARAMS["commission_rate"]=0.00025
-# 一刀切乘双腿，仅为当时真实双边（≈0.136%）的 37%，系统性低估费用、est_pnl 虚高；
-# config.py 保留不动（其他模块/回测脚本可能引用），est_pnl 口径以本模块常量为准。
-def notify_alert_cleared(code, name, reason, morning_stats):
-    """V1.25: 早盘预警纠正解除通知"""
-    try:
-        if not FEISHU_WEBHOOK:
-            return
-        card = {
-            "msg_type": "interactive",
-            "card": {
-                "config": {"wide_screen_mode": True},
-                "header": {
-                    "template": "green",
-                    "title": {
-                        "tag": "plain_text",
-                        "content": f"✅ 【预警解除】{name}({code}) — 早盘弱势已纠正"
-                    }
-                },
-                "elements": [
-                    {
-                        "tag": "div",
-                        "text": {
-                            "tag": "lark_md",
-                            "content": f"**纠正原因**: {reason}\n\n"
-                                       f"**早盘统计**: 30分钟涨跌幅 {morning_stats.get('open_30min_ret', 'N/A')}% | "
-                                       f"最高涨幅 {morning_stats.get('max_gain_after_open', 'N/A')}%\n\n"
-                                       f"<font color='green'>已恢复VWAP深V低吸策略</font>"
-                        }
-                    }
-                ]
-            }
-        }
-        send_feishu_payload(
-            payload=card,
-            success_log=f"✅ 早盘预警解除已推送: {name}({code})",
-            error_prefix="早盘预警解除推送",
-        )
-    except Exception as e:
-        log.warning(f"⚠️ notify_alert_cleared 异常: {str(e)[:100]}")
-
-def send_morning_alert(code, name, alert_level, triggered_rules, morning_stats):
-    """V1.25: 发送早盘预警到飞书（独立函数，便于在scan循环中调用）"""
-    try:
-        if not FEISHU_WEBHOOK:
-            return
-        # 获取历史统计信息
-        oneway_ratio = "N/A"
-        avg_decline = "N/A"
-        alert_cfg = MORNING_ALERT_PARAMS.get(code, {})
-        if alert_cfg:
-            # 从第一条level_2规则获取precision信息作为参考
-            pass
-        card = build_alert_card(code, name, alert_level, triggered_rules, morning_stats, oneway_ratio, avg_decline)
-        send_feishu_payload(
-            payload=card,
-            success_log=f"✅ 早盘预警已推送: {name}({code}) Level={alert_level}",
-            error_prefix="早盘预警推送",
-        )
-    except Exception as e:
-        log.warning(f"⚠️ send_morning_alert 异常: {str(e)[:100]}")
-
 # ==================== 大盘态势判定钩子（index_regime 日线 + 分时预警） ====================
 
 _INDEX_INTRADAY_LAST_FETCH_TS = 0.0   # 分时数据拉取节流（至多 300 秒一次）
-_index_intraday_alert_cache: Dict[str, float] = {}  # 同 tag 60 分钟不重复推（B-3: key=板块@tag）
 # V1.30: 盘中预警活动状态（注入引擎 feats["intraday_alerts"] 供展示/回溯）
 _INDEX_INTRADAY_ACTIVE_ALERTS: list = []
 _INDEX_INTRADAY_ACTIVE_TS: float = 0.0
@@ -401,7 +266,6 @@ _INDEX_INTRADAY_ACTIVE_TS: float = 0.0
 _INDEX_INTRADAY_ACTIVE_ALERTS_BY_BOARD: dict = {}
 _BOARD_INDEX_NAME = {"sh000001": "上证指数", "sz399001": "深证成指",
                      "sz399006": "创业板指", "sh000688": "科创50"}
-_BUY_FUSE_NOTIFY_DATE: str = ""   # 买入熔断飞书明示（每日一次）
 
 # 高抛低吸纯两点推送最小防重：同 (code, action, 5分钟桶) 每日只推一次
 _SWING_DEDUP_DATE: str = ""
@@ -1076,6 +940,93 @@ def _start_hunter_ma5_watch() -> None:
         log.warning(f"⚠️ 异常监控池实时播报启动失败（不阻断主循环）: {str(e)[:160]}")
 
 
+# ── 价格突破提醒（2026-10-28 owner）：K 线图上画价位线 → **每次**穿越都推飞书 ──────────
+# 为什么盯在 main.py 而不是 GUI：飞书是"人不在屏幕前"的兜底，GUI 关掉也得能报。
+# 响声由 GUI 轮询 `t_io/state/price_alerts.json` 的 events 后播放；两边共用 `core.price_alerts`。
+_price_alert_thread = None
+
+
+def _start_price_alert_watch() -> None:
+    global _price_alert_thread
+    try:
+        if _price_alert_thread is not None and _price_alert_thread.is_alive():
+            return
+        _price_alert_thread = _threading.Thread(target=_price_alert_loop, daemon=True,
+                                                name="price-alert-watch")
+        _price_alert_thread.start()
+        log.info("🔔 价格突破提醒: 已启动（10s 一拍，读 t_io/state/price_alerts.json）")
+    except Exception as e:
+        log.warning(f"⚠️ 价格突破提醒启动失败（不阻断主循环）: {str(e)[:160]}")
+
+
+def _price_alert_loop() -> None:
+    while True:
+        try:
+            _price_alert_tick()
+        except Exception as e:
+            log.warning(f"⚠️ 价格突破提醒异常（已吞掉）: {type(e).__name__}: {str(e)[:160]}")
+        _time.sleep(10)
+
+
+def _price_alert_tick() -> None:
+    """一拍：读全部框 → 拉快照 → 判穿越 → 推飞书。
+
+    **每次穿越都报**（owner 2026-10-28：「价格有可能全天波动 一会在价格上面一会在价格下面
+    需要连续报 不要只报一次」）。同侧要价格先退回框内才重新可报，避免贴边抖动刷屏 ——
+    判定与去抖都在 `price_alerts.evaluate()` 里，这里只负责取价和推送。
+    """
+    now = datetime.now()
+    t = now.time()
+    if now.weekday() >= 5 or not (dtime(9, 15) <= t <= dtime(15, 5)):
+        return          # 非交易时段不判：收盘价会把"线本来就在下方"的提醒瞬间全部触发
+    from core import price_alerts as pa
+    todo = pa.armed()
+    if not todo:
+        return
+    codes = sorted({x["code"] for x in todo})
+    try:
+        from core.market_data.quote_bus import get_quotes
+        snap = get_quotes(codes, max_age_sec=8.0) or {}
+    except Exception as e:
+        log.debug(f"价格突破提醒快照失败: {type(e).__name__}: {str(e)[:80]}")
+        return
+    hits = []
+    for x in todo:
+        s = snap.get(x["code"]) or {}
+        try:
+            px = float(s.get("price") or 0)
+        except Exception:
+            continue
+        if px <= 0:
+            continue
+        item = x["item"]
+        # 记价 + 判穿越 + 去抖 + 落事件，全在 evaluate 里一次做完（原子，不跨两拍）
+        hits.extend(pa.evaluate(x["code"], item.get("id"), px, name=s.get("name") or ""))
+    if hits:
+        _push_price_alert(hits)
+
+
+def _push_price_alert(hits: list) -> None:
+    try:
+        lines = ["**画框提醒 · 价格刚穿出你画的框**", ""]
+        for h in hits:
+            _ico = "🔔 向上突破" if h.get("side") == "up" else "🔻 向下跌破"
+            _n = int(h.get("n") or 1)
+            lines.append(f"{_ico} **{h['name']}（{h['code']}）**　现价 {h['price']}"
+                         f"（框沿 {h['level']}）"
+                         + (f"　今天第 {_n} 次" if _n > 1 else "")
+                         + f"　`{h['ts'][11:19]}`")
+        card = {"msg_type": "interactive", "notify_type": 1, "card": {
+            "config": {"wide_screen_mode": True},
+            "header": _feishu_card_header(f"🔔 突破预警 - {FEISHU_KEYWORD}", "red"),
+            "elements": [_feishu_md_div("\n".join(lines))]}}
+        send_feishu_payload(card,
+                            success_log=f"✅ 突破预警已推送: {[h['code'] for h in hits]}",
+                            error_prefix="突破预警推送")
+    except Exception as e:
+        log.warning(f"⚠️ 突破预警推送失败: {type(e).__name__}: {str(e)[:120]}")
+
+
 # 2026-10-11 owner：「实盘过程中选股猎手每隔 30 分钟做轮询；**异常信息一定要通过飞书发出来**」
 _hunter_poll_last = None      # 节流（30 分钟一轮）
 _hunter_poll_thread = None    # 单飞（上一轮没跑完不开新轮）
@@ -1348,13 +1299,6 @@ def _maybe_run_position_builder(now: datetime) -> None:
         else:
             log.info(f"🏗️ 建仓信号扫描完成{_tag}: 0/{len(results)} 只触发 signal")
 
-        # F-7(2026-09-04): C18 收盘待确认清单推送（读 manual_signals 全量触发）
-        try:
-            from core.position_builder import push_pending_confirm_list as _push_confirm_list
-            _push_confirm_list(today)
-        except Exception as _e:
-            log.warning(f"⚠️ C18 待确认清单推送异常（已吞掉）: {str(_e)[:120]}")
-
     except Exception as e:
         log.warning(f"⚠️ 建仓信号扫描异常（已吞掉，10分钟后重试）: {str(e)[:200]}")
     finally:
@@ -1507,10 +1451,12 @@ def _intraday_board_codes() -> list:
 
 
 def _maybe_check_index_intraday_alert(now: datetime) -> None:
-    """盘中 09:35-14:55 大盘分时预警（每轮检查；拉数据 300s 节流；同 板块@tag 60 分钟不重复推）。
+    """盘中 09:35-14:55 大盘分时预警**状态计算**（每轮检查；拉数据 300s 节流）。
 
-    B-3(2026-09-07)：按当前持仓所属板块逐指数检测（上证/深成/创业板/科创50 覆盖的板块），
-    各板独立预警 + 合并一张卡推送；活动预警状态按板块分别注入个股 daily_ctx（原全局单标量只盯上证）。
+    2026-10-27 owner：**取消飞书推送**（「大盘分时预警」卡不再发），只保留两个非通知副作用：
+      · `save_daily_index_minutes()` —— 当日指数分钟落盘（复盘直接用，绕过 tushare T-1）
+      · `_INDEX_INTRADAY_ACTIVE_ALERTS[_BY_BOARD]` —— 活动预警状态，按个股所属板块注入 daily_ctx
+    B-3(2026-09-07)：按当前持仓所属板块逐指数检测（上证/深成/创业板/科创50 覆盖的板块）。
     成本：300s 节流内每板块拉一次分钟线（×N，N≤4），owner 已拍板接受。
     """
     global _INDEX_INTRADAY_LAST_FETCH_TS
@@ -1551,16 +1497,12 @@ def _maybe_check_index_intraday_alert(now: datetime) -> None:
         global _INDEX_INTRADAY_ACTIVE_ALERTS, _INDEX_INTRADAY_ACTIVE_TS, \
             _INDEX_INTRADAY_ACTIVE_ALERTS_BY_BOARD
         _active_by_board: dict = {}
-        _all_alerts: list = []   # 合并卡行（含板块前缀）
-        _fresh: list = []        # 去重后待推（板块@tag 独立 60min 去重）
-        _snapshots: dict = {}
-        _mb_by: dict = {}        # 本轮各板分钟线（供 RSI5m 复用，避免重复拉取）
+        _all_alerts: list = []   # 活动预警行（含板块前缀；注入 daily_ctx）
         for _bc in _boards:
             try:
                 _mb = fetch_index_minutes_live(_bc)
             except Exception:
                 continue          # 单板分钟不可用 → 跳过该板，其余板块照常
-            _mb_by[_bc] = _mb
             try:
                 _res = detect_intraday_alert(
                     _mb,
@@ -1570,66 +1512,11 @@ def _maybe_check_index_intraday_alert(now: datetime) -> None:
             except Exception:
                 continue
             _al = _res.get("alerts") or []
-            if _res.get("snapshot"):
-                _snapshots[_bc] = _res["snapshot"]
             _active_by_board[_bc] = list(_al)
             for _a in _al:
                 _ta = dict(_a)
                 _ta["msg"] = f"【{_BOARD_INDEX_NAME.get(_bc, _bc)}】{_a.get('msg')}"
                 _all_alerts.append(_ta)
-                _dk = f"{_bc}@{_a.get('tag', '')}"
-                if now_ts - float(_index_intraday_alert_cache.get(_dk, 0)) >= 3600:
-                    _fresh.append(_ta)
-                    _index_intraday_alert_cache[_dk] = now_ts
-        # ── RSI(5min)<阈值 超卖报警（2026-09-11 owner 需求；独立醒目卡片，不与其他预警混卡） ──
-        try:
-            from config import INDEX_RSI5M_ALERT as _ra
-        except Exception:
-            _ra = {"enabled": True, "threshold": 20,
-                   "indices": ["sh000001", "sz399001", "sz399006", "sh000688"]}
-        if _ra.get("enabled", True):
-            try:
-                from analysis.indicators import add_5min_indicators as _a5
-                from core.market_data import get_provider as _get_provider
-                _th = float(_ra.get("threshold", 20))
-                _rsi_fresh: list = []
-                _prov = _get_provider()
-                for _ic in (_ra.get("indices") or []):
-                    try:
-                        # 2026-09-21 换源+换口径（owner 报"报的超卖与同花顺不吻合"）：
-                        # ① 数据源统一到掘金 300s（原生 5 分钟、时间戳=bar 结束时刻，同花顺同口径）
-                        # ② 拉多日连续序列：RSI 是递推指标，只喂当日 ~48 根会让种子主导结果
-                        #    （实测科创50单日 RSI6=3.6 / 同花顺 38.1；多日 796 根 Wilder=36.7）
-                        # ③ RSI 公式已改 Wilder 平滑（analysis.indicators.wilder_rsi）
-                        _df5 = _prov.index_minute(_ic, count_bars=800, freq="300s")
-                        if _df5 is None or _df5.empty or len(_df5) < 60:
-                            continue          # 预热不足 → 跳过，宁可不报也不误报
-                        _df5 = _a5(_df5)
-                        _rsi = float(_df5["rsi_5m_p6"].iloc[-1])
-                        if _rsi != _rsi:      # NaN
-                            continue
-                        if _rsi < _th:
-                            _ta = {"tag": f"RSI5<{_th:g}", "level": "warn",
-                                   "msg": f"{_BOARD_INDEX_NAME.get(_ic, _ic)} 5分钟RSI={_rsi:.1f}<{_th:g}（超卖）"}
-                            _active_by_board.setdefault(_ic, []).append(_ta)
-                            _dk = f"{_ic}@RSI5"
-                            if now_ts - float(_index_intraday_alert_cache.get(_dk, 0)) >= 3600:
-                                _rsi_fresh.append(_ta)
-                                _index_intraday_alert_cache[_dk] = now_ts
-                    except Exception:
-                        continue
-                if _rsi_fresh:
-                    try:
-                        from config import build_index_rsi5_alert_card as _mk_card
-                        send_feishu_payload(
-                            payload=_mk_card(_rsi_fresh, when=str(now)[:19]),
-                            success_log=f"✅ 指数5m超卖预警已推送: {[a['msg'] for a in _rsi_fresh]}",
-                            error_prefix="指数5m超卖预警推送",
-                        )
-                    except Exception as _e:
-                        log.debug(f"指数5m超卖推送异常(已吞): {str(_e)[:80]}")
-            except Exception:
-                pass
         # V1.30: 活动预警状态（分板注入 + 兼容旧全局列表），45 分钟未刷新自动过期
         _INDEX_INTRADAY_ACTIVE_ALERTS_BY_BOARD = _active_by_board
         if _all_alerts:
@@ -1637,30 +1524,6 @@ def _maybe_check_index_intraday_alert(now: datetime) -> None:
             _INDEX_INTRADAY_ACTIVE_TS = now_ts
         elif _INDEX_INTRADAY_ACTIVE_ALERTS and now_ts - _INDEX_INTRADAY_ACTIVE_TS > 2700:
             _INDEX_INTRADAY_ACTIVE_ALERTS = []
-        if not _fresh:
-            return
-        level_rank = {"alert": 2, "warn": 1, "info": 0}
-        top_level = max((level_rank.get(_a.get("level"), 0) for _a in _fresh), default=0)
-        template = "red" if top_level >= 2 else "blue"
-        icon = "🚨" if top_level >= 2 else ("⚠️" if top_level == 1 else "ℹ️")
-        title = f"{icon} 大盘分时预警 - {FEISHU_KEYWORD}"
-        lines = [f"- 【{_a.get('tag')}｜{_a.get('level')}】{_a.get('msg')}" for _a in _fresh]
-        _snap = _snapshots.get("sh000001") or (list(_snapshots.values())[0] if _snapshots else None)
-        if _snap:
-            lines.append(_feishu_hr())
-            lines.append(
-                f"现价 {_snap.get('last')}（{_snap.get('chg_pct', 0):+.2f}%）｜"
-                f"日线态势 {index_regime_name(_snap.get('daily_regime', 'range'))}｜"
-                f"VWAP {_snap.get('vwap')}")
-        card_elements = [_feishu_md_div(line) if not isinstance(line, dict) else line for line in lines]
-        card = {"config": {"wide_screen_mode": True},
-                "header": _feishu_card_header(title, template),
-                "elements": card_elements}
-        send_feishu_payload(
-            payload={"msg_type": "interactive", "card": card, "notify_type": 1},
-            success_log=f"✅ 大盘分时预警已推送: {[a.get('tag') for a in _fresh]}",
-            error_prefix="大盘分时预警推送",
-        )
     except Exception as e:
         log.warning(f"⚠️ 大盘分时预警钩子异常（已吞掉，不影响主循环）: {str(e)[:120]}")
 
@@ -1849,7 +1712,7 @@ def _log_scan_round(elapsed: float) -> None:
 
 
 def scan_once():
-    global _last_idle_log, _scan_count, _scan_lock, _BUY_FUSE_NOTIFY_DATE
+    global _last_idle_log, _scan_count, _scan_lock
     global _SWING_DEDUP_DATE
     if _scan_lock:
         log.warning("⚠️ 上一轮扫描仍在进行，跳过本轮触发")
@@ -2027,25 +1890,6 @@ def scan_once():
                         ]
                 except Exception:
                     pass
-                # V1.30: 买入熔断飞书明示（每日一次）—— uni_down 日"仅卖不买"不再沉默
-                try:
-                    if (str(daily_ctx.get("index_regime", "")) == "uni_down"
-                            and _BUY_FUSE_NOTIFY_DATE != now.strftime("%Y-%m-%d")):
-                        _BUY_FUSE_NOTIFY_DATE = now.strftime("%Y-%m-%d")
-                        send_feishu_payload(
-                            payload={"msg_type": "interactive", "card": {
-                                "config": {"wide_screen_mode": True},
-                                "header": _feishu_card_header(f"🧊 买入熔断 - {FEISHU_KEYWORD}", "red"),
-                                "elements": [_feishu_md_div(
-                                    f"大盘态势：**单边下行**（S={float(daily_ctx.get('index_score', 0) or 0):.1f}）\n"
-                                    "今日买入端已熔断（index_uni_down_clearance），仅卖不买。\n"
-                                    "盘中反弹由分时预警（I1~I5）监控，解除以收盘后日线状态机为准。")]},
-                                "notify_type": 1},
-                            success_log="✅ 买入熔断明示已推送（uni_down）",
-                            error_prefix="买入熔断推送",
-                        )
-                except Exception as _e:
-                    log.debug(f"买入熔断明示异常（已吞掉）: {_e}")
                 dec["daily_status"] = daily_ctx.get("daily_status", "unknown")
                 dec["last_daily_gate"] = daily_ctx.get("daily_gate", "neutral")
                 dec["last_daily_trend_bg"] = daily_ctx.get("daily_trend_bg", "unknown")
@@ -2880,8 +2724,6 @@ def run_watch():
     # 报警音已由 GUI 看板统一接管（Web Audio，方向区分），此处仅信息提示
     if not SYS_ALERT_AVAILABLE:
         log.info("🖥 报警音由 GUI 看板接管（Web Audio），无需 system_alert 模块")
-    if should_run_startup_self_test():
-        send_startup_self_test()
     log.info(f"⏱ 采用顺序轮询模式：每轮扫描结束后再等待 {PARAMS['poll_interval']} 秒（V1.8 确认型收敛）")
 
     try:
@@ -2944,6 +2786,10 @@ def _launch_gui():
             _time.sleep(3)
             try:
                 if _GUI_PROC.poll() is None:
+                    return
+                if _GUI_PROC.returncode == 7:
+                    # 单实例闸（2026-10-28）：已有 GUI 在跑，本次拉起的那个主动退出 —— 不是故障
+                    log.info("🖥 GUI 看板: 已有实例在运行，本次未重复启动（双开会压垮界面投递层）")
                     return
                 tail = ""
                 if _GUI_LOG_FP:
@@ -3008,7 +2854,9 @@ def _launch_turnover_widget():
             _WIDGET_LOG_FP = None
         flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)   # 别弹出黑框
         _WIDGET_PROC = subprocess.Popen(
-            [sys.executable, path],
+            # 带父 pid：main.py 被强杀（atexit 不跑）时，浮窗自己发现父进程没了就退出，
+            # 不会变成"占着单实例互斥量的孤儿"（2026-10-28 实报：浮窗打不开就是这么来的）
+            [sys.executable, path, "--parent-pid", str(os.getpid())],
             cwd=BASE_DIR,
             creationflags=flags,
             stdout=(_WIDGET_LOG_FP or subprocess.DEVNULL),
@@ -3020,6 +2868,12 @@ def _launch_turnover_widget():
             _time.sleep(2)
             if _WIDGET_PROC is None or _WIDGET_PROC.poll() is None:
                 return
+            rc = _WIDGET_PROC.returncode
+            if rc == 7:
+                # 浮窗自己用 7 表示"已有实例在跑，我退出" —— 不是崩溃，别报成"秒退"
+                log.info("🪟 成交额浮窗: 已有实例在跑，本次跳过"
+                         "（若屏幕上看不到，请在任务管理器结束旧的 python 进程后重开）")
+                return
             tail = ""
             try:
                 with open(os.path.join(BASE_DIR, "t_io", "logs", "turnover_widget.log"),
@@ -3027,7 +2881,7 @@ def _launch_turnover_widget():
                     tail = "".join(f.readlines()[-8:]).strip()
             except Exception:
                 pass
-            log.warning(f"🪟 成交额浮窗: 启动后秒退 (rc={_WIDGET_PROC.returncode})"
+            log.warning(f"🪟 成交额浮窗: 启动后秒退 (rc={rc})"
                         + (f"｜日志尾部:\n{tail}" if tail else ""))
 
         _threading.Thread(target=_check_alive, daemon=True, name="widget-check").start()
@@ -3091,4 +2945,5 @@ if __name__ == "__main__":
         _validate_pool_split_or_exit()
         _launch_gui()
         _launch_turnover_widget()
+        _start_price_alert_watch()      # 价格突破提醒（K线画线 → 飞书，10s 一拍）
         run_watch()

@@ -16,7 +16,10 @@
     两位小数 = 100 亿一格，10 秒才成交十几亿，看着仍像没动。
   · 对比基准（昨日同期累计）仍然来自 `t_gui.Api.load_market_turnover()`（每 60s 取一次，
     它本身就是 5 分钟口径），所以浮窗底部会**同时标出两个时刻**：
-    `实时 14:21:05 · 基准 14:20` —— 不把"混了两个口径"藏起来。
+    `实时 14:21:05 · 基准 2026-10-27 14:20` —— 不把"混了两个口径"藏起来。
+  · ⚠️ 分母**只认 `amount_prev_same_hm`**（2026-10-28 owner：「比的是昨天的此时不是全天」）。
+    旧实现直接拿 `amount_prev`：开盘头几分钟当日还没有 5min bar ⇒ t_gui 退化成
+    "前日全日"，09:33 于是显示 −91.92%（1,301亿 对 10-26 全日 16,088亿）。见 `choose_base`。
   · 任一条腿取不到 ⇒ **立刻退回卡片口径**并在底部写明原因（绝不静默少算北交所那 0.8%）。
 
 启动方式：
@@ -86,6 +89,33 @@ def fmt_liang(v):
     return f"{round(v / 1e8):,}亿"
 
 
+def choose_base(payload, now=None):
+    """给「实时累计」挑分母 —— 唯一合法来源是**上一交易日在同一时刻**的累计。
+
+    owner 2026-10-28：「两市成交额比的时昨天的此时不是全天」。
+    截图实况 09:33:05：1,301亿 / **−91.92%** / 「vs昨日全日　增量 −14,787亿」/「基准 15:00」。
+    旧实现直接拿载荷里的 `amount_prev` 当分母，而开盘头几分钟当日还没有 5min bar
+    （bar 按结束时刻打戳，第一根叫 09:35），t_gui 那条链会退化成"**前日**全日 vs 昨日全日"
+    ⇒ 分母 = 10-26 的 16,088亿，配今天开盘 3 分钟的实时累计，两个数都不是一个东西。
+
+    现在只认 `amount_prev_same_hm`（t_gui 按时钟 hm 截断上一交易日算出来的）。缺失 ⇒
+    不给对比（只报实时总额），绝不用全日量冒充同期 —— 那正是"看着像真的"的假数字。
+
+    返回 {base, day, hm, label, in_session}。
+    """
+    t = payload or {}
+    now = now or time.localtime()
+    hm = time.strftime("%H:%M", now)
+    in_session = now.tm_wday < 5 and "09:15" <= hm <= "15:00"
+    base = t.get("amount_prev_same_hm")
+    ok = isinstance(base, (int, float)) and not isinstance(base, bool) and base > 0
+    return {"base": float(base) if ok else None,
+            "day": t.get("prev_trading_day") or t.get("prev_day"),
+            "hm": t.get("hm") or "—",
+            "label": "vs昨日同期" if in_session else "vs昨日全日",
+            "in_session": in_session}
+
+
 def _enable_dpi():
     """高 DPI 屏幕上不让字糊（本机 GUI 是 150% 缩放）。"""
     try:
@@ -95,6 +125,29 @@ def _enable_dpi():
             ctypes.windll.user32.SetProcessDPIAware()
         except Exception:
             pass
+
+
+def _parent_alive(pid: int) -> bool:
+    """Windows：父进程还活着吗（OpenProcess + WaitForSingleObject，零依赖）。
+
+    为什么要它：main.py 被强杀（关控制台 / 任务管理器结束）时 atexit 不跑，
+    浮窗会变成**孤儿**——它握着单实例互斥量 ⇒ 下次开 main.py 新浮窗直接"秒退"，
+    而旧窗口可能早被拖到屏幕外，表现就是"浮窗没了"。让浮窗跟着 main.py 一起走。
+    """
+    try:
+        import ctypes
+        SYNCHRONIZE = 0x00100000
+        WAIT_TIMEOUT = 0x102
+        k32 = ctypes.windll.kernel32
+        h = k32.OpenProcess(SYNCHRONIZE, False, int(pid))
+        if not h:
+            return False                     # 打不开 ⇒ 进程已不在
+        try:
+            return k32.WaitForSingleObject(h, 0) == WAIT_TIMEOUT
+        finally:
+            k32.CloseHandle(h)
+    except Exception:
+        return True                          # 判断不了就当还活着，别自杀
 
 
 def _acquire_single_instance():
@@ -194,9 +247,10 @@ class Feed(threading.Thread):
 
 
 class Widget:
-    def __init__(self, root: tk.Tk, feed: Feed):
+    def __init__(self, root: tk.Tk, feed: Feed, parent_pid: int = 0):
         self.root = root
         self.feed = feed
+        self.parent_pid = int(parent_pid or 0)
         self._drag = None
         self._sig = None
         self._dot = None
@@ -312,6 +366,11 @@ class Widget:
 
     # ---------- 渲染 ----------
     def _tick(self):
+        # 父进程（main.py）没了 ⇒ 自己关掉：避免留下占着互斥量的孤儿窗口
+        if self.parent_pid and not _parent_alive(self.parent_pid):
+            try: self.close()
+            except Exception: pass
+            return
         t, live, live_at, err, at = self.feed.snapshot()
         try:
             self._render(t, live, live_at, err, at)
@@ -321,23 +380,24 @@ class Widget:
 
     def _render(self, t, live, live_at, err, at):
         av = bool(t.get("available"))
-        base = t.get("amount_prev")
-        basis = "vs昨日同期" if t.get("basis") == "同期" else "vs昨日全日"
-        # 实时优先：分子是 10 秒级快照，分母是卡片那条链给出的"昨日同期"基准
-        use_live = bool(live and av and isinstance(base, (int, float)) and base > 0)
+        pick = choose_base(t)
+        basis = pick["label"]
+        # 实时优先：分子是 10 秒级快照，分母**只能是上一交易日同一时刻**的累计（见 choose_base）
+        use_live = bool(live and pick["base"])
 
-        # 盘中叫"实时"，收盘后（basis=全日）金额不再变，写"实时"会误导
-        when = "实时" if t.get("basis") == "同期" else "收盘"
+        # 盘中叫"实时"，收盘后金额不再变，写"实时"会误导
+        when = "实时" if pick["in_session"] else "收盘"
         if use_live:
             amount = float(live)
-            pct = (amount - base) / base * 100.0
-            delta = amount - base
+            pct = (amount - pick["base"]) / pick["base"] * 100.0
+            delta = amount - pick["base"]
             frac = t.get("proj_frac")
             projected = (amount / frac) if isinstance(frac, (int, float)) and frac > 0 else None
             foot = (f"{when} {time.strftime('%H:%M:%S', time.localtime(live_at))}"
-                    f" · 基准 {t.get('as_of') or '—'}")
+                    f" · 基准 {pick['day'] or '—'} {pick['hm']}")
         elif live:
-            # 实时拿到了但基准（昨日同期）缺 ⇒ 照样显示实时总额，只是不给对比，底部写明
+            # 实时拿到了但昨日同期基准缺（开盘首 5 分钟昨日还没有 bar / 分钟链未就绪）
+            # ⇒ 照样显示实时总额，只是不给对比，底部写明
             amount, pct, delta, projected = float(live), None, None, None
             basis = ""
             foot = f"{when} {time.strftime('%H:%M:%S', time.localtime(live_at))}"
@@ -345,16 +405,19 @@ class Widget:
             # 实时源不可用 ⇒ 退回卡片口径（5 分钟），并在底部写明，绝不假装是实时
             amount, pct = t.get("amount"), t.get("pct")
             delta, projected = t.get("delta"), t.get("projected")
+            basis = "vs昨日同期" if t.get("basis") == "同期" else "vs昨日全日"
             foot = f"数据 {t.get('as_of') or '—'}"
         else:
             amount = pct = delta = projected = None
+            basis = ""
             foot = t.get("error") or ("取数中…" if t.get("warming") else "不可用")
 
         notes = []
         if use_live:
             pass          # 实时数字本身最新；基准时刻已经写在 footer 里，不再叠"快照"噪音
         elif live:
-            notes.append(f"基准不可用：{t.get('error') or '—'}")
+            notes.append("基准不可用："
+                         + (t.get("error") or "等昨日同期首根 5min 线"))
         elif av:
             notes.append(f"实时源不可用：{err}" if err else "实时源不可用")
             if t.get("stale"):
@@ -392,13 +455,23 @@ class Widget:
 
 def main():
     _enable_dpi()
+    ppid = 0
+    argv = sys.argv[1:]
+    if "--parent-pid" in argv:
+        i = argv.index("--parent-pid")
+        if i + 1 < len(argv):
+            try: ppid = int(argv[i + 1])
+            except Exception: ppid = 0
     guard = _acquire_single_instance()
     if guard is None:
-        return                                  # 已有实例在跑
+        # 专用退出码 7：让 main.py 能区分"重复启动"和"崩溃"
+        print(f"[{time.strftime('%H:%M:%S')}] already-running: 已有成交额浮窗在跑，本进程退出",
+              flush=True)
+        sys.exit(7)
     feed = Feed()
     feed.start()
     root = tk.Tk()
-    Widget(root, feed)
+    Widget(root, feed, parent_pid=ppid)
     try:
         root.mainloop()
     finally:

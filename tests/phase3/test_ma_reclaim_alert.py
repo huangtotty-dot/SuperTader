@@ -59,12 +59,13 @@ class TestReclaimDetect(unittest.TestCase):
 
 
 class TestCard(unittest.TestCase):
-    def test_卡片绿色且含标签(self):
+    def test_卡片红色且含标签(self):
         ev = [{"code": "600000", "name": "浦发", "is_holding": True, "reclaim5": True,
                "reclaim10": False, "price": 10.5, "ma5": 10.1, "ma10": 9.9,
                "dev5_pct": 3.96, "dev10_pct": 6.06}]
         c = pb.build_ma_reclaim_card(ev, "2026-10-08")
-        self.assertEqual(c["card"]["header"]["template"], "green")
+        # 2026-10-27：站上=红、破线=绿（与「破5/10日线」卡区分开）
+        self.assertEqual(c["card"]["header"]["template"], "red")
         self.assertIn("站上5日线", c["card"]["elements"][0]["content"])
         self.assertIn("持仓", c["card"]["elements"][0]["content"])
 

@@ -49,7 +49,6 @@ from dataclasses import dataclass, field
 from analysis.indicators import resample_to_15min, add_15min_indicators
 from analysis.indicators import resample_to_5min, add_5min_indicators
 # 2026-09-22（owner 指示）：做T决策核（core/t_decision.py）已删除 ⇒ 不再 import
-# Signal / TDecisionEngine。本文件保留的是「非T共享服务」：EngineContext、飞书早盘预警、
 # 盘中状态持久化（intraday_state.json）、decision_trace、FeatureExtractor。
 
 
@@ -71,8 +70,6 @@ class EngineContext:
     trace_path: Any = None
     fetch_minute_bar: Any = None
     default_daily_context: Any = None
-    send_morning_alert: Any = None
-    notify_alert_cleared: Any = None
 # ==========================================================
 
 class SignalEngine:
@@ -99,8 +96,6 @@ class SignalEngine:
         _g['fetch_minute_bar'] = ctx.fetch_minute_bar or (lambda *a, **kw: pd.DataFrame())
         _g['_default_daily_context'] = ctx.default_daily_context or (
             lambda c, s="", r="": {"daily_status": s, "daily_reason": r, "daily_buy_t_ok": False})
-        _g['send_morning_alert'] = ctx.send_morning_alert or (lambda *a, **kw: None)
-        _g['notify_alert_cleared'] = ctx.notify_alert_cleared or (lambda *a, **kw: None)
         if params is not None:
             _g['PARAMS'] = params
         self.buy_count_per_stock: Dict[str, int] = {}
@@ -114,7 +109,6 @@ class SignalEngine:
         self.daily_realized_loss_monitor = 0.0
         # V1.20/V1.21 dead states removed in V3.0 (peak_tracker, diagnostics, scenario_factor_state)
         # V1.25: 早盘预警状态机（基于近两年数据训练）
-        self.morning_alert_state: Dict[str, Dict[str, Any]] = {}
         # V3.0: 5分钟趋势状态机（每个持仓独立实例，重启从盘中状态恢复）
         self.trend_regimes: Dict[str, "TrendRegime"] = {} if TrendRegime else {}
         # V3.0: 5分钟 DataFrame 缓存（仅在5分钟边界重算，避免15s轮询×N只持仓的浪费）
@@ -136,7 +130,6 @@ class SignalEngine:
             self.cycle_count = {}
             self.cycle_direction = {}
             self.daily_realized_loss_monitor = 0.0
-            self.morning_alert_state = {}
             self._5min_cache = {}       # V3.0: 5分钟缓存每日重置
             self.trend_regimes = {}     # V3.0: 趋势状态机每日重置（开盘从头累积）
             self.state_reset_date = today
@@ -251,111 +244,6 @@ class SignalEngine:
             self.cycle_direction[code] = "sell"
         self._persist_intraday_state()  # V1.30
 
-    def _check_morning_alert(self, code, name, df, feats):
-        """V1.28: 早盘单边下行预警检测 (10:00触发, 每天一次)
-        Level 2 → 全天禁止买入
-        Level 1 → 提高买入门槛, 仅允许深V
-        """
-        today = get_today_str()
-        alert_state = self.morning_alert_state.get(code, {})
-        if alert_state.get("date") == today and alert_state.get("checked", False):
-            return
-        t_val = feats.get("t_val", 0)
-        if t_val < PARAMS.get("morning_no_sell_until", 1000):
-            return
-        if alert_state.get("date") != today:
-            self.morning_alert_state[code] = {"date": today}
-        # 计算早盘特征 (开盘~10:00)
-        try:
-            _pd_loc = pd
-            _morning = df[df["time"] < _pd_loc.Timestamp(today + " 10:00:00")]
-            if _morning.empty or len(_morning) < 5:
-                self.morning_alert_state[code].update({"checked": True, "level": 0})
-                return
-            first = _morning.iloc[0]
-            last_m = _morning.iloc[-1]
-            open_p = float(first.get("open", feats.get("today_open", 0)))
-            if open_p <= 0:
-                self.morning_alert_state[code].update({"checked": True, "level": 0})
-                return
-            open_30min_ret = (float(last_m["close"]) - open_p) / open_p
-            max_gain_after_open = (float(_morning["high"].max()) - open_p) / open_p
-            max_loss_after_open = (float(_morning["low"].min()) - open_p) / open_p
-            # 5分钟/10分钟开盘涨幅
-            _p5 = _morning[_morning["time"] < _pd_loc.Timestamp(today + " 09:35:00")]
-            _p10 = _morning[_morning["time"] < _pd_loc.Timestamp(today + " 09:40:00")]
-            open_5min_ret = (float(_p5.iloc[-1]["close"]) - open_p) / open_p if len(_p5) >= 3 else 0
-            open_10min_ret = (float(_p10.iloc[-1]["close"]) - open_p) / open_p if len(_p10) >= 5 else 0
-        except Exception:
-            self.morning_alert_state[code].update({"checked": True, "level": 0})
-            return
-        # 读取MORNING_ALERT_PARAMS
-        try:
-            from config import MORNING_ALERT_PARAMS
-        except ImportError:
-            self.morning_alert_state[code].update({"checked": True, "level": 0})
-            return
-        cfg = MORNING_ALERT_PARAMS.get(code, {})
-        if not cfg or not cfg.get("alert_enabled", False):
-            self.morning_alert_state[code].update({"checked": True, "level": 0})
-            return
-        # 检查Level 2 (最严格, 全天禁止买入)
-        for rule in cfg.get("level_2_rules", []):
-            cond = rule.get("condition", {})
-            match = True
-            for k, v in cond.items():
-                val = locals().get(k, None)
-                if val is None:
-                    match = False
-                    break
-                if k in ("open_30min_ret", "open_5min_ret", "open_10min_ret", "max_gain_after_open", "max_loss_after_open"):
-                    if val > v:
-                        match = False
-                        break
-            if match:
-                self.morning_alert_state[code].update({
-                    "checked": True, "level": 2,
-                    "rules": [rule.get("name", "L2")]
-                })
-                # V3.0fix P0-A5: 推送红色预警卡片
-                # P0-3(2026-09-01): 传完整 rule dict（此前退化 str 列表 → main.py 卡片构建 AttributeError 静默吞 → 卡片未发）；max_gain → max_gain_after_open
-                if 'send_morning_alert' in globals():
-                    try: send_morning_alert(code, name, 2, [rule],
-                        {"open_30min_ret": open_30min_ret, "max_gain_after_open": max_gain_after_open})
-                    except Exception: pass
-                return
-        # 检查Level 1 (提高买入门槛)
-        for rule in cfg.get("level_1_rules", []):
-            cond = rule.get("condition", {})
-            match = True
-            for k, v in cond.items():
-                val = locals().get(k, None)
-                if val is None:
-                    match = False
-                    break
-                if k in ("open_30min_ret", "open_5min_ret", "open_10min_ret", "max_gain_after_open", "max_loss_after_open"):
-                    if val > v:
-                        match = False
-                        break
-            if match:
-                self.morning_alert_state[code].update({
-                    "checked": True, "level": 1,
-                    "rules": [rule.get("name", "L1")]
-                })
-                # V3.0fix P0-A5: 推送黄色预警卡片
-                # P0-3(2026-09-01): 传完整 rule dict + max_gain_after_open 键名（对齐 main.py:504/569 读取）
-                if 'send_morning_alert' in globals():
-                    try: send_morning_alert(code, name, 1, [rule],
-                        {"open_30min_ret": open_30min_ret, "max_gain_after_open": max_gain_after_open})
-                    except Exception: pass
-                return
-        _was_alerted = self.morning_alert_state.get(code, {}).get("level", 0) > 0
-        self.morning_alert_state[code].update({"checked": True, "level": 0})
-        # V3.0fix P0-A5: 预警清除推送
-        if _was_alerted and 'notify_alert_cleared' in globals():
-            try: notify_alert_cleared(code, name, "预警解除", {"reason": "条件不再满足"})
-            except Exception: pass
-
     def evaluate(self, code, name, df, holding, daily_ctx=None):
         if df.empty or len(df) < 5:
             return 0, 0, None
@@ -450,11 +338,9 @@ class SignalEngine:
         decision_reason = "HOLD_NO_SWING"
         # 2026-09-22（owner 指示）：Renko 做T决策核（TDecisionEngine）已删除
         # ⇒ 本方法**恒不产生 T 信号**（BUY_LOW / SELL_HIGH 一律不再生成）。
-        # 刻意保留的三项**共享副作用**：
-        #   ① 飞书早盘预警 `_check_morning_alert`（纯通知，非 T）
+        # 刻意保留的两项**共享副作用**（原第①项「飞书早盘预警」已于 2026-10-27 按 owner 要求删除）：
         #   ② `last_decision`（GUI / 留痕）
         #   ③ `decision_trace_{date}.jsonl`（t_gui.py:3793 读取）
-        self._check_morning_alert(code, name, df, feats)  # 保留飞书早盘预警(纯通知)
         decision_reason = "T引擎已删除（无 T 信号）"
         self.last_decision[code] = {
             "reason": decision_reason, "ts": _now(),

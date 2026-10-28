@@ -160,6 +160,10 @@ body {
      横幅永久固定在顶、内容在下方独立滚动 ⇒ 任何滚动位置都不会被横幅盖住。 */
   position: fixed; top: calc(38px + var(--top-banner-h, 0px)); left: var(--sidebar-w); right: 0; bottom: 0;
   overflow-y: auto; overflow-x: hidden; padding: 14px 18px;
+  /* 2026-10-28 owner：「整个界面在跳」。根因之一：10s 一轮刷新时内容高度略变，
+     纵向滚动条反复出现/消失 ⇒ 宽度差 ~15px，整块内容**左右跳**。
+     scrollbar-gutter 让槽位常驻，高度变化不再影响布局。 */
+  scrollbar-gutter: stable;
 }
 .tab-page { display: none; }
 .tab-page.active { display: block; }

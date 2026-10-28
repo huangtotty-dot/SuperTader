@@ -150,6 +150,113 @@ class TestDeltaAndProjection(unittest.TestCase):
         self.assertLess(r.get("proj_frac") or 1, 0.05)
 
 
+class TestPrevTradingDaySameHm(unittest.TestCase):
+    """`amount_prev_same_hm` —— 浮窗「实时累计」的分母（2026-10-28 owner）。
+
+    原话：「两市成交额比的时**昨天的此时**不是全天」。
+    截图实况 09:33:05：`1,301亿 / −91.92% / vs昨日全日 · 增量 −14,787亿 / 基准 15:00`。
+
+    根因：bar 按**结束时刻**打戳（09:30-09:35 那根叫 09:35），开盘头几分钟当日一根都没有
+    ⇒ `cur_day` 停在昨天、`intraday` 判假 ⇒ `amount_prev` 变成"**前日**全日"
+    （10-26 的 16,088亿），浮窗拿它配今天开盘 3 分钟的实时累计。
+
+    修法：另给一份**只按时钟 hm 截断、且取上一交易日**的累计。缺就缺（给 None），
+    绝不用全日量冒充同期 —— 那正是"看着像真的"的假数字。
+    """
+
+    def _d(self, cur, prev):
+        return {"sh000001": pd.concat([_leg(cur), _leg(prev)]).reset_index(drop=True)}
+
+    def test_开盘首5分钟昨日还没有bar就不给同期基准(self):
+        """09:33 时昨天也只有 10:00 及以后的 bar ⇒ 无同期可比 ⇒ None（浮窗只报总额）。"""
+        r = CALC(self._d("2026-10-27", "2026-10-26"), datetime(2026, 10, 28, 9, 33))
+        self.assertTrue(r["available"])
+        self.assertEqual(r["basis"], "全日", "当日无 bar 时卡片仍按全日比（保持原口径）")
+        self.assertEqual(r["prev_trading_day"], "2026-10-27", "「昨日」必须是上一交易日")
+        self.assertIsNone(r["amount_prev_same_hm"],
+                          "昨日当时也没有成交额 ⇒ 不给数，绝不用全日量顶")
+        self.assertEqual(r["hm"], "09:33")
+
+    def test_开盘后按昨日同一时刻截断(self):
+        """10:35 ⇒ 分母是昨日**只累计到 10:00 那根**的 100 亿，不是全日 400 亿。"""
+        r = CALC(self._d("2026-10-28", "2026-10-27"), datetime(2026, 10, 28, 10, 35))
+        self.assertEqual(r["basis"], "同期")
+        self.assertEqual(r["prev_trading_day"], "2026-10-27")
+        self.assertAlmostEqual(r["amount_prev_same_hm"] / 1e8, 100.0, places=1,
+                               msg="全日是 400 亿 —— 拿它做分母会显示 −75%")
+        self.assertAlmostEqual(r["amount_prev_same_hm"], r["amount_prev"],
+                               msg="盘中同期口径下两者必须一致（不能各算一套）")
+
+    def test_当日无分钟线时也用昨日截断(self):
+        """开盘几分钟的真实形态：分钟数据最新只到昨天，但分母仍按"昨日+当前时刻"。"""
+        bars = [("09:35", 100e8), ("10:00", 100e8), ("15:00", 100e8)]
+        legs = {"sh000001": pd.concat([_leg("2026-10-27", bars),
+                                       _leg("2026-10-26", bars)]).reset_index(drop=True)}
+        r = CALC(legs, datetime(2026, 10, 28, 9, 36))
+        self.assertEqual(r["day"], "2026-10-27", "当日没有 bar，cur_day 停在昨天")
+        self.assertEqual(r["basis"], "全日", "卡片口径不变")
+        self.assertEqual(r["prev_trading_day"], "2026-10-27",
+                         "⚠️ 回归闸：「昨日」是 10-27，不是 10-26")
+        self.assertAlmostEqual(r["amount_prev_same_hm"] / 1e8, 100.0, places=1,
+                               msg="只该算昨日 09:35 那根；若得 300 亿说明用了全日")
+
+    def test_收盘后同期等于全日(self):
+        r = CALC(self._d("2026-10-28", "2026-10-27"), datetime(2026, 10, 28, 16, 0))
+        self.assertEqual(r["basis"], "全日")
+        self.assertAlmostEqual(r["amount_prev_same_hm"] / 1e8, 400.0, places=1)
+
+    def test_周六的昨日是周五(self):
+        legs = {"sh000001": pd.concat([_leg("2026-10-30"), _leg("2026-10-29")]).reset_index(drop=True)}
+        r = CALC(legs, datetime(2026, 10, 31, 10, 35))
+        self.assertEqual(r["prev_trading_day"], "2026-10-30",
+                         "非交易日：上一交易日仍是周五，不能退到周四")
+
+    def test_降级路径也带同期字段(self):
+        """日线兜底只在 ≥15:00 走，此刻同期==全日 ⇒ 也要给浮窗同一套字段。"""
+        import inspect
+        src = inspect.getsource(t_gui.Api._turnover_daily_fallback)
+        for k in ('"amount_prev_same_hm"', '"prev_trading_day"', '"hm"'):
+            self.assertIn(k, src, f"兜底载荷缺 {k} ⇒ 浮窗在降级时又回到'全日配实时'")
+
+
+class TestWidgetBasePick(unittest.TestCase):
+    """浮窗挑分母（`scripts/turnover_widget.py::choose_base`，纯函数，离线）。"""
+
+    @classmethod
+    def setUpClass(cls):
+        _scripts = os.path.join(_ROOT, "scripts")
+        if _scripts not in sys.path:
+            sys.path.insert(0, _scripts)
+        import turnover_widget as tw
+        cls.tw = tw
+
+    def test_只认同期基准(self):
+        p = {"available": True, "basis": "全日", "amount_prev": 16088e8,
+             "amount_prev_same_hm": 500e8, "prev_trading_day": "2026-10-27", "hm": "10:35"}
+        pick = self.tw.choose_base(p, datetime(2026, 10, 28, 10, 35).timetuple())
+        self.assertAlmostEqual(pick["base"], 500e8, msg="必须用同期，不能用 amount_prev")
+        self.assertEqual(pick["day"], "2026-10-27")
+        self.assertEqual(pick["label"], "vs昨日同期")
+        self.assertTrue(pick["in_session"])
+
+    def test_无同期基准就不给对比(self):
+        p = {"available": True, "basis": "全日", "amount_prev": 16088e8,
+             "amount_prev_same_hm": None, "hm": "09:33"}
+        pick = self.tw.choose_base(p, datetime(2026, 10, 28, 9, 33).timetuple())
+        self.assertIsNone(pick["base"], "没有同期基准时不许退化成 amount_prev")
+        self.assertEqual(pick["hm"], "09:33")
+
+    def test_收盘后标签转全日(self):
+        p = {"amount_prev_same_hm": 1.6e12, "prev_trading_day": "2026-10-27", "hm": "15:00"}
+        pick = self.tw.choose_base(p, datetime(2026, 10, 28, 16, 0).timetuple())
+        self.assertEqual(pick["label"], "vs昨日全日")
+        self.assertFalse(pick["in_session"])
+
+    def test_无载荷不抛(self):
+        for p in (None, {}, {"amount_prev_same_hm": "x"}, {"amount_prev_same_hm": 0}):
+            self.assertIsNone(self.tw.choose_base(p, datetime(2026, 10, 28, 10, 0).timetuple())["base"])
+
+
 class TestBasisFullDay(unittest.TestCase):
     """T2：收盘后按全日。"""
 

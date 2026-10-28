@@ -97,11 +97,6 @@ FEISHU_KEYWORD = resolve_feishu_keyword()
 FEISHU_SYSTEM_KEYWORD = resolve_feishu_system_keyword()
 PUSH_THROTTLE_SECONDS = 300
 
-def should_run_startup_self_test() -> bool:
-    config = load_runtime_config()
-    return bool(config.get("feishu", {}).get("startup_self_test", True))
-
-
 def _extract_push_title(payload: dict) -> str:
     """尽力从飞书 payload 提取标题（card.header.title → 首个文本元素 → content.text）。"""
     try:
@@ -181,64 +176,6 @@ def _send_feishu_payload(payload: dict, success_log: str, error_prefix: str, tri
             else:
                 log.error(f"❌ {error_prefix}3次重试均失败: {str(e)[:120]}")
     return False
-
-
-def send_startup_self_test():
-    if not FEISHU_WEBHOOK:
-        log.warning("⚠️  启动自检跳过：飞书 Webhook 未配置")
-        return
-
-    runtime_config = load_runtime_config()
-    feishu_cfg = runtime_config.get("feishu", {}) if isinstance(runtime_config, dict) else {}
-    at_all = feishu_cfg.get("at_all_on_signal", True)
-    at_text = "<at user_id=\"all\">所有人</at>" if at_all else ""
-
-    card_elements = []
-    if at_all:
-        card_elements.append({
-            "tag": "div",
-            "text": {"content": at_text, "tag": "lark_md"}
-        })
-    card_elements.append({
-        "tag": "div",
-        "text": {"content": f"📢 【提醒】{FEISHU_KEYWORD}：系统已启动，飞书推送链路正常。", "tag": "lark_md"}
-    })
-    # H3(2026-09-09): 自检卡附解释器+gm 探针——15:08/15:16 无 gm 解释器重启事故，当场即可发现
-    _pyexe = "?"
-    _gm_txt = "gm 探针未执行"
-    try:
-        import sys as _sys2
-        _pyexe = getattr(_sys2, "executable", "?")
-    except Exception:
-        pass
-    try:
-        import gm.api as _gma  # noqa: F401
-        try:
-            from core.market_data.gm_token import load_token as _lt
-            _tok = _lt()
-        except Exception:
-            _tok = None
-        _gm_txt = "gm 可用(token 就绪)" if _tok else "⚠️ gm SDK 在但 token 缺失"
-    except Exception as _ge:
-        _gm_txt = f"⚠️ gm 不可用({type(_ge).__name__}: {str(_ge)[:60]})"
-    card_elements.append({
-        "tag": "div",
-        "text": {"content": f"python={_pyexe}<br/>{_gm_txt}", "tag": "lark_md"}
-    })
-
-    payload = {
-        "msg_type": "interactive",
-        "card": {
-            "config": {"wide_screen_mode": True},
-            "elements": card_elements
-        },
-        "notify_type": 1
-    }
-    send_feishu_payload(
-        payload=payload,
-        success_log="✅ 启动自检飞书消息已成功送达",
-        error_prefix="启动自检飞书推送",
-    )
 
 
 SIM_NOW: Optional[datetime] = None
@@ -446,104 +383,6 @@ STOCK_PARAMS = {
 # 触发Level 1 → ⚠️ 只做减仓不做加仓
 # Level 0 → ✅ 正常执行VWAP深V低吸策略
 # 飞书推送格式见 notify() 函数中的 alert_card 模板
-MORNING_ALERT_PARAMS = {
-    # V3.0fix: 300153 (科泰电源) + 300364 (中文在线) 已不在持仓，MORNING_ALERT 整段删除
-    # ===== 双良节能 600481 =====
-    # 单边下行日：74天/374天(19.8%)，平均跌幅-3.55%，最大-9.05%
-    "600481": {
-        "alert_enabled": True,
-        "alert_window_end": 1000,
-        # V3.0fix: 删除含 deviation_vwap_1000 的规则（无测量逻辑）
-        "level_2_rules": [],
-        # V3.0fix: 删除含 deviation_vwap_1000 的规则（无测量逻辑）
-        "level_1_rules": [
-            {
-                "name": "【主】开盘30分钟大跌",
-                "desc": "开盘30分钟涨幅≤-1.00%（核心阈值）",
-                "precision": 0.55, "recall": 0.72,
-                "condition": {"open_30min_ret": -0.010},
-            },
-        ],
-    },
-    # ===== 华工科技 000988 =====
-    # 单边下行日：62天/465天(13.3%)，平均跌幅-3.74%，最大-11.21%
-    "000988": {
-        "alert_enabled": True,
-        "alert_window_end": 1000,
-        "level_2_rules": [
-            {
-                "name": "无反弹+开盘30分钟暴跌",
-                "desc": "开盘后最高涨幅≤0.18% 且 开盘30分钟涨幅≤-1.79%",
-                "precision": 1.00, "recall": 0.194,
-                "condition": {"max_gain_after_open": 0.0018, "open_30min_ret": -0.0179},
-            },
-        ],
-        "level_1_rules": [
-            {
-                "name": "【主】开盘30分钟大跌",
-                "desc": "开盘30分钟涨幅≤-1.00%（核心阈值）",
-                "precision": 0.55, "recall": 0.72,
-                "condition": {"open_30min_ret": -0.010},
-            },
-            {
-                "name": "开盘30分钟大跌(严格)",
-                "desc": "开盘30分钟涨幅≤-1.41%",
-                "precision": 0.582, "recall": 0.629,
-                "condition": {"open_30min_ret": -0.0141},
-            },
-            {
-                "name": "开盘5分+10分连续跌",
-                "desc": "开盘5分钟涨幅≤-1.20% 且 开盘10分钟涨幅≤-1.31%",
-                "precision": 0.576, "recall": 0.306,
-                "condition": {"open_5min_ret": -0.0120, "open_10min_ret": -0.0131},
-            },
-        ],
-    },
-    # ===== 科创芯片ETF 588170 =====
-    # 单边下行日：27天/243天(11.1%)，平均跌幅-3.46%，最大-7.97%
-    "588170": {
-        "alert_enabled": True,
-        "alert_window_end": 1000,
-        # V3.0fix: 删除含 price_slope_30min 的规则（无测量逻辑）
-        "level_2_rules": [],
-        "level_1_rules": [
-            {
-                "name": "【主】开盘30分钟大跌",
-                "desc": "开盘30分钟涨幅<-1.00%（核心阈值）",
-                "precision": 0.60, "recall": 0.70,
-                "condition": {"open_30min_ret": -0.010},
-            },
-            {
-                "name": "开盘30分钟大跌(严格)",
-                "desc": "开盘30分钟涨幅<-1.30%",
-                "precision": 0.708, "recall": 0.654,
-                "condition": {"open_30min_ret": -0.0130},
-            },
-            {
-                "name": "开盘后最低跌幅大",
-                "desc": "开盘后最低跌幅<-2.04%",
-                "precision": 0.583, "recall": 0.538,
-                "condition": {"max_loss_after_open": -0.0204},
-            },
-        ],
-    },
-    # ===== 摩恩电气 002451 =====
-    # 2026-08-29 新增持仓: 使用默认保守预警规则
-    "002451": {
-        "alert_enabled": True,
-        "alert_window_end": 1000,
-        "level_2_rules": [],
-        "level_1_rules": [
-            {
-                "name": "【主】开盘30分钟大跌",
-                "desc": "开盘30分钟涨幅≤-1.00%（核心阈值）",
-                "precision": 0.55, "recall": 0.72,
-                "condition": {"open_30min_ret": -0.010},
-            },
-        ],
-    },
-}
-
 # V3.0fix: CORRECTION_PARAMS + ETF_T0_PARAMS 删除（零消费，整段死字典）
 
 # ==================== 大盘态势判定参数（index_regime.py 日线核心 V2.2.4） ====================
@@ -694,35 +533,6 @@ INDEX_REGIME_PARAMS = {
 # V3.0fix: INDEX_INTRADAY_PARAMS 删除（9键全部与模块默认值相同，main.py 本就 merge，效果不变）
 
 # 2026-09-11 owner 需求：各大指数 5 分钟 RSI < threshold 时飞书报警（接入盘中预警节流/去重/合并卡）。
-INDEX_RSI5M_ALERT = {
-    "enabled": True,
-    "threshold": 20,
-    "indices": ["sh000001", "sz399001", "sz399006", "sh000688"],   # 上证/深成/创业板/科创50
-}
-
-
-def build_index_rsi5_alert_card(hits, when: str = "", sim: bool = False) -> dict:
-    """指数 5 分钟 RSI 超卖**独立醒目卡**（红头/大字/全体@，区别于常规大盘分时预警）。
-
-    hits: [{"msg": "创业板指 5分钟RSI=2.0<20（超卖）", ...}, ...]
-    sim=True 时标题带 🧪 模拟测试 前缀（供离线复现测试推送）。
-    """
-    tag = "🧪【模拟测试】" if sim else ""
-    title = f"🚨🚨 {tag}指数5分钟超卖预警 🚨🚨 - {FEISHU_KEYWORD}"
-    els = [{"tag": "div", "text": {"content": '<at user_id="all">所有人</at>', "tag": "lark_md"}},
-           {"tag": "div", "text": {"content": f"**{when}** 以下指数 5 分钟 RSI 进入超卖区：", "tag": "lark_md"}}]
-    for h in (hits or []):
-        els.append({"tag": "div", "text": {"content": f"## 🚨 {h.get('msg', '')}", "tag": "lark_md"}})
-    els.append({"tag": "hr"})
-    els.append({"tag": "note", "elements": [{"tag": "plain_text",
-                "content": f"口径：5分钟RSI(rsi_5m_p6)<{INDEX_RSI5M_ALERT.get('threshold', 20)} · "
-                           f"独立预警（与常规大盘分时预警区分）"}]})
-    return {"msg_type": "interactive", "notify_type": 1,
-            "card": {"config": {"wide_screen_mode": True},
-                     "header": {"template": "red",
-                                "title": {"tag": "plain_text", "content": title}},
-                     "elements": els}}
-
 # ==================== 日志双写配置 ====================
 log = logging.getLogger("做T助手")
 log.setLevel(logging.INFO)
@@ -758,7 +568,6 @@ _scan_lock = False
 INDEX_REGIME_CONTEXT: Dict[str, Any] = {}              # 最新大盘态势上下文（仿 PREOPEN_CONTEXT 范式，由 push_index_regime_context 更新）
 _index_regime_morning_pushed_date: Optional[str] = None  # 早盘基调推送每日去重
 _index_regime_eod_pushed_date: Optional[str] = None      # 收盘评分推送每日去重
-_index_intraday_alert_cache: Dict[str, float] = {}       # {预警tag: 上次推送时间戳}，同 tag 60 分钟内不重复推
 
 # ==================== 指数5分钟共振过滤（做T信号，2026-08-14 新增） ====================
 # 逻辑见 index_resonance.py；门控接在 main.py 信号推送前。

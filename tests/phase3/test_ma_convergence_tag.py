@@ -104,8 +104,94 @@ class TestDev365(unittest.TestCase):
         self.assertIn("偏离365日线", js)
 
 
+class TestBias5(unittest.TestCase):
+    """2026-10-28 owner：「各板块加一列 5日乖离度」。
+
+    ⚠️ 这列是**描述列**：实测（`tmp/bias5_study.py`，前复权 235 万股票·日）5 日乖离对
+    次日**方向**没有可用 edge —— 正乖离越大「次日跌>1%」概率单调升，但次日收益均值也是正的
+    （升的是波动）；「次日下跌概率」峰值只在 +4~+6%（≈53% vs 基线 50%）。
+    所以它只进展示，**不许驱动任何判定/排序**（与 dev365 同性质）。
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        import t_gui
+        cls.api = t_gui.Api()
+
+    def test_有5根时给出百分比(self):
+        closes = [10.0] * 9 + [11.0]
+        r = self.api._stock_tags_from_df(_df(closes), "000001", t30=False)
+        self.assertIn("bias5", r)
+        ma5 = sum(closes[-5:]) / 5          # 10,10,10,10,11 → 10.2
+        self.assertAlmostEqual(r["bias5"], (11.0 - ma5) / ma5 * 100, places=2)
+
+    def test_不足5根给None(self):
+        r = self.api._stock_tags_from_df(_df([10.0] * 4), "000001", t30=False)
+        self.assertIsNone(r.get("bias5"), "不足 5 根不能编一个数出来")
+
+    def test_猎手行有这一列(self):
+        from pathlib import Path as _P
+        js = (_P(_ROOT) / "web" / "app.js").read_text(encoding="utf-8")
+        self.assertIn("h-bias5", js, "猎手行按 class 就地回填")
+        self.assertIn("bias5InnerHtml(", js)
+        self.assertIn("5日乖离", js)
+
+    def test_阈值是描述性而非信号(self):
+        from pathlib import Path as _P
+        js = (_P(_ROOT) / "web" / "app.js").read_text(encoding="utf-8")
+        i = js.index("const BIAS5_RED")
+        blk = js[i:i + 1200]
+        self.assertIn("不参与任何判定", js[i:i + 4000])
+        self.assertNotIn("买入", blk, "描述列不要写交易动作")
+
+    def test_门限灯是红绿两态(self):
+        """owner 2026-10-28：「乖离度小于门限显示绿色 大于门限报红色」。
+
+        与 A 股「涨红跌绿」无关，是门限灯：≥ +8% 红、否则绿（负乖离也是绿）。
+        """
+        from pathlib import Path as _P
+        js = (_P(_ROOT) / "web" / "app.js").read_text(encoding="utf-8")
+        i = js.index("function bias5Hot")
+        self.assertIn("BIAS5_RED", js[i:i + 120], "门限由 BIAS5_RED 单一常量控制")
+        j = js.index("function bias5Color")
+        self.assertIn('? "up" : "down"', js[j:j + 200], "超门限=红(up)、否则=绿(down)")
+
+    def test_多窗口价格旁有乖离(self):
+        from pathlib import Path as _P
+        js = (_P(_ROOT) / "web" / "app.js").read_text(encoding="utf-8")
+        self.assertIn("function bias5FromDma", js)
+        self.assertIn("bias5FromDma(it.dma, q.price)", js, "多窗口价格旁必须用后端 dma 反算")
+
+    def test_四张表都有这一列(self):
+        """owner 2026-10-28：「建仓信号扫描 / 持仓30min体检 / 异常监控池 / 选股猎手」都要有。
+
+        猎手行要按 class 就地回填（`h-bias5`），另外三张走共用的 `bias5CellHtml`。
+        表头写在同一处 `BIAS5_TH_TITLE` 里，四张表的 tooltip 口径不会漂。
+        """
+        from pathlib import Path as _P
+        js = (_P(_ROOT) / "web" / "app.js").read_text(encoding="utf-8")
+        self.assertGreaterEqual(js.count(">5日乖离<br>"), 4,
+                                "四张表都要有「5日乖离」表头")
+        n_calls = js.count("bias5CellHtml(r.bias5") + js.count("bias5CellHtml(s.bias5")
+        self.assertEqual(n_calls, 3, "建仓信号扫描 / 异常监控池 / 持仓30min体检 三处调用")
+        self.assertIn('td class="num h-bias5"', js, "选股猎手行（就地回填）")
+
+    def test_后端三个端点都下发bias5(self):
+        from pathlib import Path as _P
+        src = (_P(_ROOT) / "t_gui.py").read_text(encoding="utf-8")
+        self.assertIn('"bias5": _tagres.get("bias5")', src, "持仓30min体检")
+        self.assertIn('"bias5": (_tags_map.get(c) or {}).get("bias5")', src, "异常监控池")
+        self.assertEqual(src.count('r["bias5"] = info.get("bias5")'), 2,
+                         "建仓信号扫描（load_position_builder + refresh_pb 两条路径）")
+
+
 class TestDev365Markers(unittest.TestCase):
-    """2026-10-24 owner：「不是超买超卖，是偏离太大了直接提醒」⇒ 中性告警，不含方向判断。"""
+    """偏离 365 日线 = **风险灯**（2026-10-28 owner：「研究下偏离多少会有风险，有风险红、没风险绿」）。
+
+    阈值来自 `scripts/experiment/dev365_risk_20261028.py`（前复权 766,843 股票·日 / 2,648 只，
+    分半窗两段同形）：正偏 ≥+60% 时 5 日内回撤>10% 的概率是基线的 2 倍；负偏只有 ≤−60% 有负收益证据，
+    −45~−35 反而是超跌反弹 ⇒ 下方红线从旧的 −20 收窄到 −45。
+    """
 
     @classmethod
     def setUpClass(cls):
@@ -114,20 +200,26 @@ class TestDev365Markers(unittest.TestCase):
 
     def test_阈值常量(self):
         self.assertIn("const DEV365_WARN_UP = 60;", self.js)
-        self.assertIn("const DEV365_WARN_DOWN = -20;", self.js)
+        self.assertIn("const DEV365_WARN_DOWN = -45;", self.js,
+                      "−20 那条门限没有数据支持（−25~−15 档与基线持平）")
 
-    def test_是中性的偏离过大_不是超买超卖(self):
-        # 只看 dev365 这一段：别处（RSI 标签）本来就有"超买/超卖"字样
+    def test_着色是风险灯不是涨跌红绿(self):
+        i = self.js.index("function dev365InnerHtml")
+        seg = self.js[i:i + 700]
+        self.assertIn("风险灯", seg)
+        self.assertIn('w ? "up" : "down"', seg,
+                      "超门限=红(up)、未超=绿(down)；旧实现按正负着色")
+
+    def test_不是超买超卖(self):
         i = self.js.index("function dev365Warn")
         seg = self.js[i:i + 1400]
-        self.assertIn("偏离过大", seg)
         self.assertNotIn("超买", seg)
         self.assertNotIn("超卖", seg)
 
-    def test_提示写明只提示偏离不含方向(self):
-        i = self.js.index("function dev365Warn")
-        seg = self.js[i:i + 1400]
-        self.assertIn("不含涨跌方向判断", seg)
+    def test_提示写明绿色不等于看多(self):
+        i = self.js.index("function dev365Tip")
+        seg = self.js[i:i + 600]
+        self.assertIn("不是看多", seg)
 
 
 class TestTagWiring(unittest.TestCase):

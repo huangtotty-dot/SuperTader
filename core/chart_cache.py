@@ -99,6 +99,22 @@ def daily_fp(code):
     return _DAILY_CACHE_DIR / f"{c}.json"
 
 
+# 解析结果缓存（2026-10-28）：`load_daily_display` 每次都要 read_json + DataFrame 构造，
+# 实测 **42ms/只**（批量技术标签 50 只 = 2.1s，且它在每个线程里重复做）。
+# 键含 (路径, mtime_ns, size)：盘中合并写会改 mtime ⇒ 自动失效，不会拿到旧帧。
+# 新鲜度/跳空/半成品这三道闸**仍每次重跑**（它们依赖 `now`，缓存里只放"已通过闸"的帧）。
+_DISPLAY_CACHE: dict = {}
+_DISPLAY_MAX = 128
+_DISPLAY_LOCK = threading.Lock()
+
+
+def _display_cache_put(key, rows, df, cached):
+    with _DISPLAY_LOCK:
+        if len(_DISPLAY_CACHE) > _DISPLAY_MAX:
+            _DISPLAY_CACHE.clear()
+        _DISPLAY_CACHE[key] = (rows, df, cached)
+
+
 def load_daily_display(code, now=None):
     """读日线缓存（指数走 `index_{code}.json`），按**交易日近似**新鲜度；命中返回 DataFrame，否则 None。
 
@@ -109,6 +125,26 @@ def load_daily_display(code, now=None):
     fp = daily_fp(code)
     if not fp.exists():
         return None
+    _key = None
+    try:
+        _st = fp.stat()
+        _key = (str(fp), _st.st_mtime_ns, _st.st_size)
+        with _DISPLAY_LOCK:
+            _hit = _DISPLAY_CACHE.get(_key)
+        if _hit is not None:
+            _rows, _df, _cached = _hit
+            if not _rows or not is_display_fresh(_rows, now):
+                return None
+            try:
+                _n = _as_dt(now) if not isinstance(now, datetime) else now
+                from core.market_data.tencent_provider import is_unconfirmed_today_bar
+                if is_unconfirmed_today_bar(_rows, _cached, now=_n):
+                    return None
+            except Exception:
+                pass
+            return _df.copy()
+    except Exception:
+        _key = None
     cached = _read_json(fp, None)
     rows = (cached or {}).get("rows") or []
     if not rows or not is_display_fresh(rows, now):
@@ -136,6 +172,8 @@ def load_daily_display(code, now=None):
     try:
         df = pd.DataFrame(rows)[_DAILY_COLS]
         df.attrs["source"] = "cache"
+        if _key is not None:
+            _display_cache_put(_key, rows, df, cached)
         return df
     except Exception:
         return None

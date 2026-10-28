@@ -2299,7 +2299,8 @@ _TAGS_TTL = 120.0
 _TREND30_ENABLED = True
 _TAGS_CACHE: dict = {}
 _TAGS_LOCK = threading.Lock()
-_TAGS_RUNNING = False
+# 正在算的**批次键**集合（2026-10-28 由"全局布尔"改成"按键单飞"，见 _spawn_bg）
+_TAGS_RUNNING: set = set()
 
 
 def _tags_ttl_now() -> float:
@@ -3065,6 +3066,10 @@ class Api:
                 "delta": (amt - prev) if prev else None,
                 "pct": ((amt / prev - 1.0) * 100.0) if prev else None,
                 "basis": "全日", "as_of": "15:00",
+                # 这条兜底只在 ≥15:00 走，此刻"同期"与"全日"是同一个数 —— 补上同样的三个字段，
+                # 浮窗不必为降级路径再写一套分支
+                "amount_prev_same_hm": prev if prev else None,
+                "prev_trading_day": prev_day, "hm": "15:00",
                 "day": today, "prev_day": prev_day,
                 "by_leg": {}, "legs": ["sh000001", "sz399106"],
                 "bse_included": bse_included, "degraded": degraded}
@@ -3106,8 +3111,8 @@ class Api:
            直接比昨日全日会显示 −80%，严重误导。故盘中取昨日**同一时刻**的累计值对比
            （owner 选定的口径）；已收盘（或今天不是交易日）则两边都取全日。
 
-        返回 {available, amount, amount_prev, pct, basis: "同期"|"全日", as_of, day, prev_day,
-              legs, bse_included}。
+        返回 {available, amount, amount_prev, amount_prev_same_hm, prev_trading_day, hm,
+              pct, basis: "同期"|"全日", as_of, day, prev_day, legs, bse_included}。
         """
         from core.market_data.facade import get_provider
         from core.market_data import sina_index
@@ -3249,9 +3254,32 @@ class Api:
         amount, amount_prev = sum(per_cur.values()), sum(per_prev.values())
         if not amount or not amount_prev:
             return {"available": False, "error": "成交额累计为 0", "degraded": ["index_minute"]}
+
+        # 2026-10-28 owner：「两市成交额比的时**昨天的此时**，不是全天」。
+        # 「昨日同期」基准要单独给一份，不能复用上面的 amount_prev —— 开盘头几分钟当日还没有
+        # 5min bar（bar 按**结束时刻**打戳：09:30-09:35 那根叫 09:35），cur_day 因此停在昨天，
+        # `intraday` 判假 ⇒ amount_prev 变成"**前日**全日"。浮窗拿它去配 10 秒级实时分子，
+        # 09:33 就显示 −91.92%（1,301亿 对 10-26 的 16,088亿 全日），既不是昨日也不同期。
+        # 这里**只按时钟 hm 截断、且取上一交易日**，与该退化路径彻底解耦。
+        _today_s = now.strftime("%Y-%m-%d")
+        _prior_td = [d for d in days if d < _today_s]
+        prev_trading_day = max(_prior_td) if _prior_td else None
+        amount_prev_same_hm = None
+        if prev_trading_day:
+            _acc = 0.0
+            for _sym, _d in per_leg.items():
+                _sub = _d[(_d["_day"] == prev_trading_day) & (_d["_hm"] <= hm)]
+                if len(_sub):
+                    _acc += float(_sub["amount"].sum())
+            amount_prev_same_hm = _acc if _acc > 0 else None
+
         out = {
             "available": True,
             "amount": amount, "amount_prev": amount_prev,
+            # 浮窗的「同期」分母（元）；开盘首 5 分钟昨日还没有任何 bar ⇒ None，宁可不给对比
+            "amount_prev_same_hm": amount_prev_same_hm,
+            "prev_trading_day": prev_trading_day,
+            "hm": hm,
             # 2026-10-23 owner：「要显示增量多少资金」——绝对值（元），不是只有百分比。
             # 盘中是"比昨日同期"、收盘后是"比昨日全日"，与 pct 同分母。
             "delta": amount - amount_prev,
@@ -5044,6 +5072,8 @@ class Api:
                 "tags": _tags,
                 # 偏离 365 日线（2026-10-23 owner：把「依据」列换成它）
                 "dev365": _tagres.get("dev365"),
+                # 5 日乖离度（2026-10-28 owner：四张表都要这一列）
+                "bias5": _tagres.get("bias5"),
                 # 20 日线观察（2026-10-14）：`above_ma20` True/False/None(数据不足)，
                 # `ma20_daily` 供 tooltip。**观察列、不驱动任何判定**（前端 ma20FlagCellHtml 同款）。
                 "above_ma20": _above_ma20,
@@ -7513,6 +7543,51 @@ class Api:
         }
 
 
+    # ---------- 价格突破提醒（2026-10-28 owner）----------
+    # K 线图上画价位线 → **每次**穿越 main.py 的 10s watcher 都推飞书、GUI 轮询到事件后响铃。
+    # 存储/读写全部走 `core.price_alerts`（GUI 与 main.py 两个进程共用，原子落盘）。
+    def save_price_box(self, code, upper, lower, x0=None, x1=None, ref_px=None):
+        """存一个画框（K线工具栏「▭ 画框」拖出来的矩形）。
+
+        上沿向上突破 / 下沿向下跌破**每次都报**（同侧需价格先退回框内才再报）；
+        `ref_px` = 画框时的现价（判穿越用）。
+        """
+        try:
+            from core import price_alerts as pa
+            items = pa.add_box(code, upper, lower, x0=x0, x1=x1, ref_px=ref_px)
+            return _clean({"ok": bool(items), "code": str(code).split("_")[0], "items": items})
+        except Exception as e:
+            return {"ok": False, "error": f"{type(e).__name__}: {str(e)[:80]}"}
+
+    def update_price_box(self, code, alert_id, upper, lower, ref_px=None):
+        """改某个画框的上下沿（原地改、并重置两侧触发状态）。"""
+        try:
+            from core import price_alerts as pa
+            items = pa.update_box(code, alert_id, upper, lower, ref_px=ref_px)
+            return _clean({"ok": bool(items), "code": str(code).split("_")[0], "items": items})
+        except Exception as e:
+            return {"ok": False, "error": f"{type(e).__name__}: {str(e)[:80]}"}
+
+    def delete_price_alert(self, code, alert_id=None):
+        """删一条（alert_id）或清空该票全部提醒。"""
+        try:
+            from core import price_alerts as pa
+            items = pa.remove(code, alert_id or None)
+            return _clean({"ok": True, "code": str(code).split("_")[0], "items": items})
+        except Exception as e:
+            return {"ok": False, "error": f"{type(e).__name__}: {str(e)[:80]}"}
+
+    def load_price_alerts(self, code=None):
+        """读提醒：code 给定时只回该票的 items（画线用）；events 恒回最近 50 条（GUI 响铃用）。"""
+        try:
+            from core import price_alerts as pa
+            d = pa.load()
+            c = str(code).split("_")[0] if code else ""
+            items = ({c: d["items"].get(c) or []} if c else d["items"])
+            return _clean({"items": items, "events": d.get("events") or []})
+        except Exception as e:
+            return {"items": {}, "events": [], "error": f"{type(e).__name__}: {str(e)[:80]}"}
+
     def load_ma_reclaim(self, codes):
         """给「选股猎手」**展开板块的可见个股**补「当日均线突破时刻」（2026-10-23 owner）。
 
@@ -8549,14 +8624,61 @@ class Api:
                 _thr = float(sum(closes[-(_p - 1):]) / (_p - 1))
                 out[_k] = bool(_price > _thr)
                 out[_k + "_ma"] = round((_thr * (_p - 1) + _price) / _p, 3)
-        if not cand:
-            return out
+        # ① 「回站」口径（昨收 < 昨MA、今日站上）—— 只算预筛剩的那几条均线；
+        #    basis = 均线基准日（缓存陈旧时前端 tooltip 会如实标出）
+        if cand:
+            try:
+                out["ma"] = reclaim_today(closes, bars, periods=cand) or {}
+            except Exception:
+                out["ma"] = {}
+        # ② 「盘内 V 反转」口径（2026-10-27 owner 实报 600900 长江电力）：
+        #    昨收**已在** MA 上方 ⇒ 回站永远不成立，但今日先跌破、午后又收回，交易上就是
+        #    「站上5日线」。飞书那条链（`position_builder.scan_ma_reclaims` 的 V 反转分支）
+        #    早就认这个口径，GUI 这一列原来只认回站 ⇒ 同一件事一边有提示、另一边显示「—」。
+        #    这里补齐，口径与飞书完全一致（动态 MA：(前 p-1 日收盘和 + 当根价) / p）。
+        self._ma_reclaim_add_v(out, closes, bars)
+        return out
+
+    @staticmethod
+    def _ma_reclaim_add_v(out: dict, closes: list, bars) -> None:
+        """把「今日先跌破、之后首次收回站上 MA(p)」的时刻补进 `out["ma"]`（kind=vrev）。
+
+        只在**昨收已在 MA 上方**（回站不成立）且今日确实先跌破过时才补，
+        避免与 ① 的回站时刻重复；已在 ma 里的周期不动。
+        """
         try:
-            # 只算预筛剩的那几条均线；basis = 均线基准日（缓存陈旧时前端 tooltip 会如实标出）
-            out["ma"] = reclaim_today(closes, bars, periods=cand)
-            return out
+            import numpy as _np
+            times = [str(t) for t in bars["time"]]
+            px = [float(c) for c in bars["close"]]
         except Exception:
-            return None
+            return
+        ma = out.setdefault("ma", {})
+        arr = _np.asarray(closes, dtype=float)
+        if len(px) < 2:
+            return
+        # ⚠️ 只算 5/10 日：与飞书那条链（reclaim5/reclaim10）完全对齐。
+        #    20/30/60 也跑过一版，但长周期「盘中短暂跌破又收回」极其常见（一次小回调就命中），
+        #    会把这一列刷满噪音；回站口径仍覆盖 5/10/20/30/60 不变。
+        for _p in (5, 10):
+            if _p in ma or len(arr) < _p:
+                continue
+            prev_close = float(arr[-1])
+            prev_ma = float(arr[-_p:].mean())
+            if prev_close < prev_ma:
+                continue                     # 回站口径，① 已处理
+            prior = float(arr[-(_p - 1):].sum())
+            dipped = False
+            for _t, _c in zip(times, px):
+                cur_ma = (prior + _c) / _p
+                if cur_ma <= 0:
+                    continue
+                if _c <= cur_ma:
+                    dipped = True
+                elif dipped:
+                    ma[_p] = {"time": _t[11:16], "ma": round(cur_ma, 3),
+                              "dev_pct": round((_c / cur_ma - 1.0) * 100.0, 2),
+                              "kind": "vrev"}
+                    break
 
     def _ma_reclaim_get(self, code, date=None, kick=True):
         """读缓存；过期/未热则踢预热并（有过期值时）先给旧值（SWR）。
@@ -9167,8 +9289,24 @@ class Api:
                     dev365 = round((cur - _m365) / _m365 * 100, 2)
         except Exception:
             dev365 = None
+        # 5 日乖离度 =（现价 − MA5）/ MA5 × 100（2026-10-28 owner：各板块加一列）。
+        # ⚠️ **描述列，不是买卖信号**。实测前复权 235 万股票·日 / 5,529 只
+        #    （tmp/bias5_study.py → doc/research/2026-10-28_5日乖离度_次日调整概率实验.md）：
+        #    乖离升高放大的是**次日振幅**（bias5 0~3% 时 3.61% → 8~15% 时 7.89% → ≥15% 时 10.80%），
+        #    「跌>1%」31.8%→43.6% 与「涨>1%」28.0%→41.9% **同步升** ⇒ 是波动不是方向；
+        #    ≥+15% 档「涨>1%」反超（48.8% vs 43.8%），次日收益 +1.45%（超额 +1.56%/t≈9，两段同号）。
+        #    「次日下跌概率」峰值只在 +4~+6%（≈53% vs 基线 50%），高 3pp，扣成本无价值。
+        bias5 = None
+        try:
+            if n >= 5:
+                _m5 = float(_ma5_s.iloc[-1])
+                if not np.isnan(_m5) and _m5 > 0:
+                    bias5 = round((cur - _m5) / _m5 * 100, 2)
+        except Exception:
+            bias5 = None
         return {"trend": trend, "box_pos": box_pos, "price": round(cur, 3),
-                "dev365": dev365, "trend_src": _trend_src, "tags": tags[:7]}
+                "dev365": dev365, "bias5": bias5,
+                "trend_src": _trend_src, "tags": tags[:7]}
 
     @staticmethod
     def _tags_partial(codes, offline, date=None):
@@ -9183,12 +9321,33 @@ class Api:
         except Exception:
             ttl = 120.0
         out = {}
+        _d = str(date or "")[:10]
+        today = datetime.now().strftime("%Y-%m-%d")
+        # **当日兜底**（2026-10-28，owner：各表"计算中"太久）：同一天的标签，不管哪条链路
+        # 先用 (offline, date) 的哪种组合算完，都可以先拿来显示。原来只认**完全相同**的键，
+        # 而 `prewarm_stock_tags`/`refresh_pb` 用 (False, None)、猎手用 (True, 今天)、
+        # 异常监控池用 (True, 今天) —— 互不可见 ⇒ 增量交付形同虚设，界面一直"⏳"。
+        # 只对"今天/未指定日期"兜底；历史日的标签绝不跨日借用。
+        _same_day = (not _d) or (_d >= today)
+        idx = {}
         with _TAGS_LOCK:
+            if _same_day:
+                for (_cb, _ob, _db), _h in _TAGS_ONE_CACHE.items():
+                    if _db and _db < today:
+                        continue
+                    if not (now - _h[0] < ttl and isinstance(_h[1], dict)):
+                        continue
+                    _prev = idx.get(_cb)
+                    # 优先同 offline 口径（是否含当日 forming bar 的唯一差别）
+                    if _prev is None or (_ob == bool(offline) and _prev[0] != bool(offline)):
+                        idx[_cb] = (_ob, _h[1])
             for c in codes or []:
                 base = str(c).split("_")[0]
-                hit = _TAGS_ONE_CACHE.get((base, bool(offline), str(date or "")[:10]))
+                hit = _TAGS_ONE_CACHE.get((base, bool(offline), _d))
                 if hit and (now - hit[0]) < ttl and isinstance(hit[1], dict):
                     out[c] = hit[1]
+                elif _same_day and base in idx:
+                    out[c] = idx[base][1]
         return out
 
     def load_stock_tags_batch(self, codes, offline=False, date=None):
@@ -9235,26 +9394,46 @@ class Api:
                 """
                 try:
                     with _BG_PANDAS_SEM:                 # 与仓位结构预热**共用**这 2 个名额
+                        # 同日跨口径复用（2026-10-28，owner：切 tab 变慢）：同一只票今天已经用
+                        # 别的 (offline, date) 组合算过了就别再算一遍。原来 prewarm（False,None）
+                        # 算完 120 只后，猎手（True,今天）还要把同一批**完整重算**一遍 ——
+                        # 纯重复 CPU，而 pywebview 的 js_bridge_call 是在 UI 线程上起线程的，
+                        # 后台越忙、切 tab 越迟钝。口径差异只是"含不含当日 forming bar"，
+                        # 当日展示可以接受（与 `_tags_partial` 的同日兜底同一规则）。
+                        _re = self._tags_partial([c], offline, date)
+                        if _re.get(c):
+                            return _re[c]
                         return self._stock_tags_one(c, offline, date)
                 finally:
                     _time_mod.sleep(0.005)
 
-            # ① 先把 30min bars **8 路并发取回来**（纯网络 I/O，不占 pandas 名额）。
+            # ① 30min bars **8 路并发取回来**（纯网络 I/O，不占 pandas 名额）。
             #    不拆的话，每只 190ms 的取数会占满 `_BG_PANDAS_SEM` 的 2 个名额
             #    ⇒ 50 只的板块 30~40s 才出标签（owner 2026-10-23 报「技术标签太慢」）。
+            # ② **按块流水**（2026-10-28，owner：各表"计算中"太久）：原来"先预取全部 50 只
+            #    （冷连接 ≈10s）→ 再逐只算（≈10s）"，**第一只标签也要等 10 秒**；前端虽然每
+            #    3s 轮询 `_tags_partial`，但那时一只都还没算出来。改成 12 只一块：预取→算→
+            #    预取→算…，第一块出结果约 2s，整页总耗时不变甚至更短（网络与计算重叠）。
+            _CHUNK = 12
             try:
                 from analysis.trend30.adapter import prefetch_30min as _pf30
-                _pf30(codes, workers=8)
             except Exception:
-                pass
+                _pf30 = None
             with ThreadPoolExecutor(max_workers=3) as ex:   # 6→3（2026-10-21）：纯 GIL 活，别和 UI 抢
-                futures = {ex.submit(_tags_one_yield, c): c for c in codes}
-                for fut in as_completed(futures, timeout=90):
-                    code = futures[fut]
-                    try:
-                        result[code] = fut.result()
-                    except Exception:
-                        result[code] = {"trend": "flat", "tags": []}
+                for _i in range(0, len(codes), _CHUNK):
+                    part = codes[_i:_i + _CHUNK]
+                    if _pf30 is not None:
+                        try:
+                            _pf30(part, workers=8)
+                        except Exception:
+                            pass
+                    futures = {ex.submit(_tags_one_yield, c): c for c in part}
+                    for fut in as_completed(futures, timeout=90):
+                        code = futures[fut]
+                        try:
+                            result[code] = fut.result()
+                        except Exception:
+                            result[code] = {"trend": "flat", "tags": []}
             # 标签算完，再排结构层（它要出网，别在标签期间抢那 2 个 pandas 名额）
             try:
                 self._kick_pb_struct_warm(codes)
@@ -9269,11 +9448,19 @@ class Api:
                 _TAGS_CACHE[_cache_key] = {"ts": _time_mod.time(), "tags": tags}
 
         def _spawn_bg():
-            """后台重算一次（全局单飞：_TAGS_RUNNING 保证同时只有一批在算）。"""
+            """后台重算一次（**按键单飞**：同一批只算一次，不同批互不阻塞）。
+
+            2026-10-28（owner：各表"计算中"太久）：原来是一个**全局布尔**，于是
+            `prewarm_stock_tags`（offline=False, date=None）一跑，猎手那张
+            （offline=True, date=今天）的请求就被**整个吞掉**；等预热跑完（实测 30s+），
+            猎手还得从零再算一遍自己的 50 只 ⇒ 一屏"⏳ 技术标签"能挂一分钟以上。
+            现在按 `_cache_key` 单飞：不同 (代码集, offline, date) 各自算、互不吞请求。
+            并发压力仍由 `_BG_PANDAS_SEM`（2 个 pandas 名额）兜底，不会被这个改动放大。
+            """
             global _TAGS_RUNNING
-            if _TAGS_RUNNING:
+            if _cache_key in _TAGS_RUNNING:
                 return
-            _TAGS_RUNNING = True
+            _TAGS_RUNNING.add(_cache_key)
 
             def _bg():
                 global _TAGS_RUNNING
@@ -9282,7 +9469,7 @@ class Api:
                 except Exception:
                     pass
                 finally:
-                    _TAGS_RUNNING = False
+                    _TAGS_RUNNING.discard(_cache_key)
             threading.Thread(target=_bg, daemon=True).start()
 
         # 2026-10-17 owner：「选股猎手加上一列 30min MA5，与 30 分钟风险体验同源」
@@ -11602,6 +11789,7 @@ class Api:
                 # 技术标签（空数组 = 后台还在批算，前端显示 ⏳ 标签 并按 15s 轮询补）
                 "tags": ((_tags_map.get(c) or {}).get("tags") or []),
                 "dev365": (_tags_map.get(c) or {}).get("dev365"),
+                "bias5": (_tags_map.get(c) or {}).get("bias5"),
                 # —— 以下与建仓表同名列同义 ——
                 "verdict": k.get("verdict") or ("insufficient_data" if not k else "pending"),
                 "composite_score": int(k.get("score") or 0),
@@ -12085,9 +12273,53 @@ class Api:
                         r["tags"] = info.get("tags", [])
                         r["trend"] = info.get("trend")
                         r["dev365"] = info.get("dev365")
+                        r["bias5"] = info.get("bias5")
         except Exception:
             pass
         return result
+
+    def poll_live_bundle(self, date=None):
+        """10 秒实时刷新的**合并端点**（2026-10-28）：6 次桥往返 → 1 次。
+
+        为什么（实测）：pywebview 每次 js_api 调用都要在 **UI 线程**上 `Thread.start()`，
+        返回时还要抢同一个全局 semaphore —— **空端点 `ping` 都要 0.4~3.8s**，
+        `load_buy_confirm_pending`（后端只读两个小 JSON）被拖到 6.4s。耗时与后端计算无关、
+        与**调用次数**强相关。而 live 刷新一拍要发 6 个调用：
+        live / indices / market_turnover / index_divergence / quotes / refresh_pb
+        ⇒ 光桥接就吃掉 3~7s，切 tab 时这些调用还在队列里排着，体感就是"点了没反应"。
+
+        这里在后端**并发**跑这 6 个（都是缓存读，本征毫秒级），一次返回一个 dict。
+        任一子项失败只在该键上给 `{"__error__": ...}`，前端按原样降级（保留上一帧），
+        不会因为一项挂了整包作废。
+
+        超时：每项 12s。先到的先收，慢的不再拖住整包（线程照旧跑完，与改造前行为一致）。
+        """
+        from concurrent.futures import ThreadPoolExecutor
+        _d = str(date or datetime.now().strftime("%Y-%m-%d"))[:10]
+        jobs = {
+            "live": lambda: self.load_live(_d),
+            "indices": lambda: self.load_indices(),
+            "turnover": lambda: self.load_market_turnover(),
+            "divergence": lambda: self.load_index_divergence(),
+            "quotes": lambda: self.load_quotes(),
+            "pb": lambda: self.refresh_pb(_d),
+            # 2026-10-28 第二批并入：这两个原本各自挂在一个 10s / 5s 的轮询器上，
+            # 后端只是「读小文件 + 比对增量」（本征 <5ms），却各付一次 0.5~3s 的桥往返。
+            "signals": lambda: self.poll_new_position_signals(_d),
+            "buyconfirm": lambda: self.load_buy_confirm_pending(),
+        }
+        out = {}
+        ex = ThreadPoolExecutor(max_workers=len(jobs), thread_name_prefix="pollbundle")
+        try:
+            futs = {k: ex.submit(fn) for k, fn in jobs.items()}
+            for k, f in futs.items():
+                try:
+                    out[k] = f.result(timeout=12)
+                except Exception as e:
+                    out[k] = {"__error__": f"{type(e).__name__}: {str(e)[:80]}"}
+        finally:
+            ex.shutdown(wait=False, cancel_futures=True)
+        return _clean(out)
 
     # ---------- 轻量 PB 刷新（盘中实时） ----------
     def refresh_pb(self, date):
@@ -12112,6 +12344,7 @@ class Api:
                         r["tags"] = info.get("tags", [])
                         r["trend"] = info.get("trend")
                         r["dev365"] = info.get("dev365")
+                        r["bias5"] = info.get("bias5")
         except Exception:
             pass
         # 当日「均线回站」+ 突破时刻（2026-10-23 owner，三张表同源）
@@ -12123,11 +12356,22 @@ class Api:
 
     def prewarm_stock_tags(self, date=None):
         """启动预热（2026-10-04）：后台算一次当日建仓池技术标签，避免首次进建仓表标签先空约 20s。
-        无返回值；仅触发 load_stock_tags_batch 的后台分支。失败静默（预热不该影响启动）。"""
+        无返回值；仅触发 load_stock_tags_batch 的后台分支。失败静默（预热不该影响启动）。
+
+        **2026-10-28 加 limit（GUI 卡死第六轮）**：原来一次性把**整个建仓池**（几百只）丢进去，
+        每只 ~0.3s、`_BG_PANDAS_SEM` 只有 2 个名额 ⇒ 启动后**头几分钟 2 个核被打满**。
+        而 pywebview 的 `js_bridge_call` 是在 **UI 线程**上 `Thread.start()` 的，GIL 被饿住时
+        那个 start 就要等 ⇒ 界面表现为"打开就卡死"。
+        现在只预热**判定靠前的前 120 只**（正是建仓表首屏会显示的），其余进表时按需算
+        （前端本来就有"⏳ 标签 → 轮询补齐"的路径）。
+        """
+        _LIMIT = 120
         try:
             date = date or datetime.now().strftime("%Y-%m-%d")
             rows = self._agg_position_builder(date).get("rows") or []
-            codes = [r.get("code") for r in rows if r.get("code")]
+            _pri = {"signal": 0, "approaching": 1, "watch_signal": 2}
+            rows = sorted(rows, key=lambda r: _pri.get(str((r or {}).get("verdict") or ""), 9))
+            codes = [r.get("code") for r in rows if r.get("code")][:_LIMIT]
             if codes:
                 self.load_stock_tags_batch(codes)  # 无缓存 ⇒ 起后台算，立即返回
         except Exception:
@@ -12145,7 +12389,9 @@ class Api:
             except Exception:
                 pass
         try:
-            with ThreadPoolExecutor(max_workers=4) as ex:
+            # 2026-10-28：4 并发 → 2。这四个都是"读缓存 + 网络"的重端点，启动瞬间与首帧扇出、
+            # 与标签批算抢同一批核；降到 2 只是晚几秒备好，但不会把 UI 线程饿住。
+            with ThreadPoolExecutor(max_workers=2) as ex:
                 list(ex.map(_safe, [self.load_indices, self.load_market_turnover,
                                     self.load_turnover_history, self.load_index_divergence]))
         except Exception:
@@ -12929,8 +13175,61 @@ def _start_ctrlc_abort_watchdog(grace_s=2.5, poll_s=0.4):
     _th.Thread(target=_loop, name="ctrlc-abort", daemon=True).start()
 
 
+def _acquire_gui_single_instance():
+    """单实例闸（2026-10-28）：同一时刻只允许一个 t_gui 在跑。
+
+    为什么（GUI 卡死第六轮）：**今天同时跑了两个 GUI**（09:38 那个没关，14:34 又开了一个）。
+    两个进程各跑一套 10s 轮询（live/quotes/pb/indices/beacon…），pywebview 的投递是每调用
+    **在 UI 线程上 `Thread.start()` + 返回时抢同一个 semaphore**，双开等于把这层直接翻倍 ⇒
+    空端点 `ping` 的往返都到 1~19s，界面像死了一样。
+    命名互斥量在进程退出时由内核释放，不会留下"僵尸锁"。
+    返回句柄（**必须保持引用**）；已有实例 → None；守卫本身失败 → True（照常启动，别因为防重复而打不开）。
+    """
+    try:
+        import ctypes
+        _k32 = ctypes.windll.kernel32
+        h = _k32.CreateMutexW(None, False, "Global\\SuperTraderGuiSingleInstance")
+        if not h:
+            return True                      # 调用失败 ⇒ fail-open（别因为防重复而打不开）
+        if _k32.GetLastError() == 183:       # ERROR_ALREADY_EXISTS
+            # ⚠️ **必须关掉这个句柄**（2026-10-28 实测踩到）：CreateMutexW 在"已存在"时
+            #    仍然返回一个**有效句柄**（相当于打开），不关就等于本进程也持有了该内核对象
+            #    ⇒ 旧实例退出后 mutex 也永远不会"变空"，重试循环次次失败（实测等了 20s 仍拿不到）。
+            try:
+                _k32.CloseHandle(h)
+            except Exception:
+                pass
+            return None
+        return h
+    except Exception:
+        return True
+
+
 if __name__ == "__main__":
     import webview
+
+    # 单实例闸（2026-10-28）：双开会把 pywebview 投递层翻倍压垮。`--allow-multi` 可强行跳过。
+    #
+    # ⚠️ 2026-10-28 16:06 实报：「运行 main.py 之后**始终没有跳出 GUI**」。
+    #    根因就是这里**太硬**：旧 GUI 还占着锁时，新实例立刻 `sys.exit(7)`；等旧的那个若干秒后
+    #    自己退出，就变成"一个窗口也没有"。**"没有窗口"比"两个窗口"糟得多。**
+    #    改为：先**等 20s** 给旧实例退出；仍占着就**照常启动**（fail-open），并打印醒目提示。
+    #    常见的"连点两次 main.py"仍然被挡住（第二个会等 20s 后才发现旧实例还活着——那时旧实例
+    #    通常已经开着窗口，双开风险远小于"看不到界面"）。
+    if "--allow-multi" not in sys.argv:
+        _gw = _acquire_gui_single_instance()
+        if _gw is None:
+            print("⚠️ 检测到另一个 GUI 实例，等待它退出（最多 20s）…", flush=True)
+            for _ in range(40):
+                _time_mod.sleep(0.5)
+                _gw = _acquire_gui_single_instance()
+                if _gw is not None:
+                    break
+            if _gw is None:
+                print("⚠️ 旧实例 20s 内未退出 —— 为「一定让你看到界面」**照常启动**。"
+                      "此时可能同时存在两个 GUI（会变慢），请用任务管理器关掉多余的那个。",
+                      flush=True)
+                _gw = True      # fail-open：宁可慢，也不能没有窗口
 
     # GIL 切换间隔（2026-10-10）：默认 5ms。启动时 3 个预热线程与 pywebview 主线程抢 GIL，
     # 主线程的 js_api 调用被拖成数秒（实测 kpi_trend 读 10 个小 JSON 从 0.01s → 9.4s）。
@@ -13027,8 +13326,16 @@ if __name__ == "__main__":
                 api.load_stock_chart(_first)      # 冷启动一次性：import + provider + 建图全链
         except Exception:
             pass
+        # 2026-10-28（GUI 卡死第六轮）：三路预热原来**同时**起 ⇒ 启动后头几分钟 CPU 打满，
+        # UI 线程在 `Thread.start()` 上被饿住 ⇒ 表现为"刚打开就卡死"（giu_freeze.log 14:40:58
+        # 现场：3 个线程在 `_tags_one_yield` 里跑 pandas，19 个在 evaluate_js 等 semaphore）。
+        # 改**串行** + 每路之间让 1.5s：总耗时略增，但峰值并发砍一半。
         for _fn in (api.prewarm_holdings_charts, api.prewarm_stock_tags, api.prewarm_overview):
-            _th.Thread(target=_fn, daemon=True).start()
+            try:
+                _fn()
+            except Exception:
+                pass
+            _time_mod.sleep(1.5)
 
     _th.Thread(target=_boot_warmup, daemon=True, name="boot-warmup").start()
 
