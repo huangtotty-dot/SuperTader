@@ -203,6 +203,34 @@ class TestPrescreenInit(unittest.TestCase):
         self._bar_0931(rt)
         self.assertEqual(self.ps.calls, 1, "合法的 0 候选日不得再付一次全市场取数成本")
 
+    def test_t8_first_reset_preserves_successful_init(self):
+        rt = self._rt()
+        self.assertTrue(osc_hooks.prescreen_init(rt, _TODAY))
+        osc_hooks.reset_day(_TODAY, preserve_prescreen=True)
+        self.assertTrue(osc_hooks._STATE["prepare"])
+        self.assertEqual(osc_hooks._STATE["prepare_via"], "init")
+        self.assertEqual(osc_hooks._STATE["candidates"], _CAND)
+        self._bar_0931(rt)
+        self.assertEqual(self.ps.calls, 1, "首根 bar 的保留重置后，09:31 仍只能取数一次")
+        self.assertIn("600001", osc_hooks._STATE["candidates"])
+
+    def test_t9_retry_failure_keeps_candidates_and_marks_degraded(self):
+        rt = self._rt()
+        self.assertTrue(osc_hooks.prescreen_init(rt, _TODAY))
+        self.ps.mode = "boom"
+        self.assertFalse(osc_hooks.prepare(rt, None, None, _TODAY))
+        self.assertEqual(self.ps.calls, 2)
+        self.assertEqual(osc_hooks._STATE["candidates"], _CAND,
+                         "第二次取数失败不得用空 dict 覆盖已有候选")
+        payload = json.loads(Path(rt.book_dir, "prescreen_%s.json" % _TODAY)
+                             .read_text(encoding="utf-8"))
+        self.assertTrue(payload["ok"], "有效旧候选仍应允许缓存读取")
+        self.assertFalse(payload["last_attempt_ok"])
+        self.assertTrue(payload["degraded"])
+        self.assertIn("数据源炸了", payload["last_attempt_error"])
+        self.assertEqual(payload["candidates_n"], 1)
+        self.assertEqual(osc_hooks._read_prescreen_cache(rt, _TODAY), _CAND)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

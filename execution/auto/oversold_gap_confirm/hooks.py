@@ -71,23 +71,33 @@ _STATE = {"date": None, "prepare": False, "buy": False, "sell": False,
           }
 
 
-def reset_day(today) -> None:
-    """按日重置（宿主在日期切换时调用；同时清空预筛候选与替补状态）。"""
+def reset_day(today, preserve_prescreen: bool = False) -> None:
+    """按日重置；仅 init 后的首次重置可保留已完成的预筛结果。"""
+    _keep = None
+    if (preserve_prescreen and _STATE.get("prepare")
+            and _STATE.get("prepare_via") == "init"):
+        _keep = {k: _STATE.get(k) for k in
+                 ("candidates", "prepare", "prepare_via", "prescreen_meta",
+                  "prepare_skip_logged")}
     _STATE.update(date=today, prepare=False, buy=False, sell=False,
                   morning=False, candidates={}, fills=None, pending=[], spares=[],
                   done_codes=set(), backfill={}, buy_done=False, prescreen_meta={},
                   prepare_via=None, prepare_skip_logged=False,
                   sell_retries=0, morning_retries=0,
                   probe_plan=False, probe_final=False)
+    if _keep is not None:
+        _STATE.update(_keep)
 
 
-def _write_prescreen(rt, date, cand, meta, ok=True) -> str | None:
+def _write_prescreen(rt, date, cand, meta, ok=True, last_attempt_ok=None,
+                     degraded=False, last_attempt_error=None) -> str | None:
     """盘前候选名单 → `prescreen_{date}.json`（2026-10-17，供 GUI「每日选股记录」）。
 
     ⚠️ **绝不抛**：这是纯展示留痕，写失败不该影响预筛/下单（fail-closed 语义不在这里）。
     ⚠️ 原子写（tmp+replace）：GUI 可能正在读，普通写会让它读到半截 JSON。
     `ok=False`（P0-3）：本次预筛**异常失败**的标记——`_read_prescreen_cache` 据此
     不把这份空名单当「当日新鲜结果」（否则 init 失败写出的空缓存会在重启时骗过兜底）。
+    若失败时仍有旧候选，`ok` 保持有效结果语义，另记本次尝试与降级状态。
     """
     try:
         fp = os.path.join(str(rt.book_dir), "prescreen_%s.json" % str(date))
@@ -103,6 +113,10 @@ def _write_prescreen(rt, date, cand, meta, ok=True) -> str | None:
                                            "board": v.get("board", ""),
                                            "name": v.get("name", "")}
                                   for c, v in (cand or {}).items() if isinstance(v, dict)}}
+        if last_attempt_ok is not None:
+            payload.update(last_attempt_ok=bool(last_attempt_ok),
+                           degraded=bool(degraded),
+                           last_attempt_error=last_attempt_error)
         tmp = fp + ".tmp"
         with open(tmp, "w", encoding="utf-8") as f:
             json.dump(payload, f, ensure_ascii=False, allow_nan=False)
@@ -184,7 +198,7 @@ def prepare(rt, context, now, today):
     """盘前预筛（每日一次）。返回是否**成功跑完**（异常 ⇒ False；0 只候选仍是成功）。
 
     P0-3（2026-10-26）起有两条入口：init 前移主路径（`prescreen_init`，开盘前跑）与
-    09:31 钩子兜底。候选语义不变：fail-closed——取数失败 ⇒ 空候选 ⇒ 当日不下单。
+    09:31 钩子兜底。无旧候选时取数失败仍 fail-closed；已有候选则降级保留。
     """
     _top = int(rt.param("osc_board_top_n", 5))
     # 宇宙总闸（2026-10-14）：True=全市场扩展（当前行为）；False=退回猎手池。
@@ -195,14 +209,19 @@ def prepare(rt, context, now, today):
     rt.log(f"[OSC] ── 盘前预筛开始 ──（前{_top}热门板块 ∩ "
            f"{'全市场' if _full else '猎手池(已回退)'} ∩ 昨收<MA20）")
     _ok = True
+    _error = None
+    _previous = dict(_STATE.get("candidates") or {})
     try:
         _cand = prescreen.premarket_candidates(_top, str(today), full_market=_full)
     except Exception as _e:
-        rt.log(f"[OSC] 盘前预筛失败（fail-closed，当日不下单）: {_e}")
+        _error = str(_e)
+        rt.log(f"[OSC] 盘前预筛失败: {_e}")
         rt.audit({"event": "osc_prepare_fail", "date": str(today),
-                      "error": str(_e)[:200]})
-        _cand = {}
+                      "error": _error[:200]})
+        _cand = _previous
         _ok = False
+        if _previous:
+            rt.log(f"[OSC] 保留此前 {len(_previous)} 只有效候选（degraded）")
     _STATE["candidates"] = _cand
     _el = _time.time() - _t0
     rt.log(f"[OSC] 盘前超跌候选 {len(_cand)} 只（前{_top}板块内 且 昨收<MA20）· 耗时 {_el:.1f}s")
@@ -223,7 +242,12 @@ def prepare(rt, context, now, today):
     # `_STATE["candidates"]` ⇒ 进程重启即丢，GUI 也无从回看）。供「每日选股记录」用。
     _STATE["prescreen_meta"] = {"universe": "full_market" if _full else "hunter_pool",
                                 "board_top_n": _top}
-    _write_prescreen(rt, today, _cand, _STATE["prescreen_meta"], ok=_ok)
+    if _ok:
+        _write_prescreen(rt, today, _cand, _STATE["prescreen_meta"], ok=True)
+    else:
+        _write_prescreen(rt, today, _cand, _STATE["prescreen_meta"],
+                         ok=bool(_cand), last_attempt_ok=False,
+                         degraded=bool(_cand), last_attempt_error=_error)
     return _ok
 
 
@@ -365,6 +389,15 @@ def try_buy(rt, context, now) -> int:
     _cand = dict(_STATE["candidates"])
     if not _cand:
         rt.audit({"event": "osc_skip", "reason": "no_candidates", "time": str(now)})
+        try:
+            _cash0 = float(rt.gateway(context).get_cash() or 0)
+        except Exception:
+            _cash0 = 0.0
+        _res = _exec._write_fills(
+            str(now.date()), "live", now.strftime("%Y-%m-%d %H:%M:%S"),
+            [], [], _cash0, 0.0, dict(_exec.DEFAULTS), rt.book_dir,
+            note="no_picks", spares=[], skip_reason="no_candidates")
+        _stamp_after_buy(rt, now, _res, {})
         return 0
     _pc, _ma = prescreen.split_into_prev_close_ma20(_cand)
     _board = {c: v.get("board", "") for c, v in _cand.items()}

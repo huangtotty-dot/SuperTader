@@ -916,9 +916,13 @@ def on_bar(context, bars):
 
     # ── D1: 按日重置 ──
     if context.cur_date is None or context.cur_date != today:
+        _first_reset = context.cur_date is None
         context.cur_date = today
-        # 策略侧按日重置（预筛候选 + 四个"每日一次"标记）——状态在策略包内
-        osc.reset_day(today)
+        # init 已完成预筛时，首根 bar 不得清掉候选；真实跨日仍完整重置。
+        if _first_reset:
+            osc.reset_day(today, preserve_prescreen=True)
+        else:
+            osc.reset_day(today)
         _audit_write({"event": "date_reset", "date": str(today)})
 
     # 双向看门狗：watcher 心跳缺失/过期自动重生（0806 红日整改）

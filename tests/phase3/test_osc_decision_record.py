@@ -236,5 +236,80 @@ class TestRunBuyExecWiresIt(unittest.TestCase):
         self.assertEqual(d["premarket"]["universe"], "full_market")
 
 
+class TestZeroCandidateBuyRecord(unittest.TestCase):
+    def test_no_candidates_writes_fills_and_report_without_market_or_orders(self):
+        from datetime import datetime
+        from oversold_gap_confirm import hooks
+
+        day = "2026-10-26"
+        hooks.reset_day(day)
+        self.addCleanup(hooks.reset_day, day)
+
+        class _Gateway:
+            def __init__(self):
+                self.orders = []
+
+            def get_cash(self):
+                raise RuntimeError("现金接口不可用（测试注入）")
+
+            def place_order(self, *args):
+                self.orders.append(args)
+                raise AssertionError("零候选不得下单")
+
+        class _RT:
+            def __init__(self, book_dir, gateway):
+                self.book_dir = book_dir
+                self._gateway = gateway
+                self.sdk_calls = []
+                self.audits = []
+
+            def kill_switch(self):
+                return False
+
+            def gateway(self, context):
+                return self._gateway
+
+            def sdk_call(self, *args):
+                self.sdk_calls.append(args)
+                raise AssertionError("零候选不得请求个股行情")
+
+            def audit(self, rec):
+                self.audits.append(rec)
+
+            def log(self, *args, **kwargs):
+                pass
+
+        with tempfile.TemporaryDirectory() as td:
+            gw = _Gateway()
+            rt = _RT(td, gw)
+            now = datetime(2026, 10, 26, 10, 0)
+            self.assertEqual(hooks.try_buy(rt, None, now), 0)
+
+            fills = json.loads(Path(td, "fills_%s.json" % day).read_text(encoding="utf-8"))
+            report = json.loads(Path(td, "exec_report_%s.json" % day)
+                                .read_text(encoding="utf-8"))
+            expected_summary = {
+                "buys_planned": 0, "buys_placed": 0, "rejected_count": 0,
+                "deferred_count": 0, "notional_placed": 0.0,
+                "candidates": 0, "cash_before": 0.0,
+            }
+            self.assertEqual(len(expected_summary), 7, "正常摘要七字段仍须完整")
+            self.assertEqual(set(fills["summary"]), set(expected_summary) | {"skip_reason"})
+            for key, value in expected_summary.items():
+                self.assertEqual(fills["summary"][key], value)
+            self.assertEqual(fills["summary"]["skip_reason"], "no_candidates")
+            self.assertEqual(report["summary"], fills["summary"])
+            self.assertEqual(fills["note"], "no_picks")
+            self.assertEqual(fills["picks"], [])
+            self.assertEqual(fills["spares"], [])
+            self.assertEqual(fills["buys"], [])
+            self.assertTrue(hooks._STATE["buy_done"])
+            day_state = json.loads(Path(td, "day_state_%s.json" % day)
+                                   .read_text(encoding="utf-8"))
+            self.assertTrue(day_state["buy_done"])
+            self.assertEqual(gw.orders, [])
+            self.assertEqual(rt.sdk_calls, [])
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

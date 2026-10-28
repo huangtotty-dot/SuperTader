@@ -141,13 +141,16 @@ def universe_board_map(full_market: bool = True) -> dict:
     的当天回退闸。**默认 True = 与扩展后的行为逐位一致**。
     """
     _jy = sym2board_map()
-    if not full_market:
-        return {c: b for c, b in _jy.items() if b}
-    m = {c: v["sw"] for c, v in full_market_meta().items() if v.get("sw")}
-    for code, board in _jy.items():
-        if board:
-            m[code] = board        # 韭研主板块优先（猎手池口径不变式）
-    return m
+    if full_market:
+        m = {c: v["sw"] for c, v in full_market_meta().items() if v.get("sw")}
+        for code, board in _jy.items():
+            if board:
+                m[code] = board    # 韭研主板块优先（猎手池口径不变式）
+    else:
+        m = {c: b for c, b in _jy.items() if b}
+    # 猎手表可能重新带入北交所/B股；两种口径都守住同一 OSC 可交易宇宙边界。
+    return {c: b for c, b in m.items()
+            if not (c[:1] in "48" or c[:3] in ("920", "200", "900"))}
 
 
 def _codes_with_board(board_map: dict) -> list:
@@ -218,6 +221,9 @@ def premarket_candidates(top_n: int, date: str = None, provider=None,
         pasts[c] = past
         if float(past.iloc[-1]) / float(past.iloc[-2]) - 1 >= _LU_THRESHOLD:
             lu[board_map[c]] += 1
+    if not pasts:
+        raise RuntimeError(
+            f"OSC 盘前预筛选取数失败：请求宇宙 {len(codes)} 只，但未获得任何有效日线/pasts")
     # top-N 排名（2026-10-16 tie-break 稳定化，owner 已拍板）：
     # `Counter.most_common` 并列时按**插入序**破 tie，而插入序受 industry_map.csv 行序、
     # 猎手表覆盖序、取数抖动（哪只票缺日线）影响 ⇒ 大涨家数稀疏日（并列家数仅个位数）

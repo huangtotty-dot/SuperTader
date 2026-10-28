@@ -913,13 +913,15 @@ def _buys_summary(buys_out: list) -> dict:
 
 
 def _write_fills(date, mode, started, buys_out, picks, cash0, total_placed,
-                 cfg, book_dir, note: str = "", spares=None) -> dict:
+                 cfg, book_dir, note: str = "", spares=None, skip_reason=None) -> dict:
     finished = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     # ⚠️ 2026-10-12：`buys_placed` 原先只数 `qty_placed>0`，把**被拒/被锁**的单也算成"已下单"
     # （与 S1 复盘里 `buys_placed=4/rejected=0` 的虚报同源）。改为只数未被终态否决的。
     # （2026-10-16：口径抽成 `_buys_summary` 与补单轮合并共用；数值不变，由单测钉住。）
     summary = {**_buys_summary(buys_out),
                "candidates": len(picks), "cash_before": round(cash0, 2)}
+    if skip_reason is not None:
+        summary["skip_reason"] = skip_reason
     fills = {"date": str(date), "mode": mode, "started_at": started, "finished_at": finished,
              "strategy": "oversold_gap_confirm", "note": note or "",
              "picks": [{"code": p["code"], "gap": p.get("gap"),

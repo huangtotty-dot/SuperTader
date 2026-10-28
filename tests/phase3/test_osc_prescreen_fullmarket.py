@@ -140,6 +140,15 @@ class TestUniverseBoardMap(_Sandbox):
         self.assertEqual(m, {c: b for c, b in self.WL.items() if b},
                          "industry_map 缺失 ⇒ 逐码退回扩展前猎手池旧口径")
 
+    def test_watchlist_merge_rechecks_bj_and_b_share_boundaries(self):
+        prescreen.sym2board_map = lambda: {
+            **self.WL, "830001": "机械设备", "430002": "电子",
+            "920003": "汽车", "200004": "交通运输", "900005": "轻工制造"}
+        m = prescreen.universe_board_map(full_market=True)
+        for bad in ("830001", "430002", "920003", "200004", "900005"):
+            self.assertNotIn(bad, m, f"猎手表合并不得重新带入 {bad}")
+        self.assertEqual(m["300001"], "锂电池")
+
 
 class TestPremarketCandidatesFullMarket(_Sandbox):
     """端到端（假日线）：扩展前后候选池的差异必须正好是全市场新增部分。"""
@@ -177,6 +186,20 @@ class TestPremarketCandidatesFullMarket(_Sandbox):
         self.assertIn("300001", cand, "猎手表超跌票应进候选（旧行为不变）")
         self.assertNotIn("300002", cand,
                          "industry_map 缺失 ⇒ 退回旧口径：非猎手表票不得进候选")
+
+    def test_nonempty_universe_without_any_valid_pasts_raises(self):
+        class _DownProvider:
+            def daily_many(self, codes, days=40):
+                raise RuntimeError("批量日线接口失败（测试注入）")
+
+        with self.assertRaisesRegex(RuntimeError, "未获得任何有效日线/pasts"):
+            prescreen.premarket_candidates(5, "2026-10-14", provider=_DownProvider())
+
+    def test_valid_pasts_with_zero_candidates_returns_empty(self):
+        frames = {"300001": _frame(_oversold())}  # 有有效 past，但无板块大涨家数
+        cand = prescreen.premarket_candidates(5, "2026-10-14",
+                                              provider=_FakeProvider(frames))
+        self.assertEqual(cand, {}, "合法 0 候选不得误报为取数失败")
 
 
 if __name__ == "__main__":
