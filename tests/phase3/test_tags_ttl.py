@@ -33,7 +33,11 @@ class TestTagsTTL:
         return t_gui._tags_ttl_now()
 
     def test_intraday_is_short(self, monkeypatch):
-        assert self._ttl_at(monkeypatch, datetime(2026, 10, 21, 10, 30)) == pytest.approx(120.0)
+        # 2026-10-30：120s → **300s**。实测盘中每 30 分钟边界都会起 6~9 个池线程、
+        # 单核占用冲到 55~62%（thread_cpu.jsonl），其中一大块是 120s 到期后的整批重算。
+        # 标签的"历史部分"已由**日线缓存指纹**兜底（缓存一变立刻重算）⇒ 只放宽"含当日
+        # forming bar 的那几项"的刷新节拍，最坏晚 5 分钟。
+        assert self._ttl_at(monkeypatch, datetime(2026, 10, 21, 10, 30)) == pytest.approx(300.0)
 
     def test_after_close_is_long(self, monkeypatch):
         assert self._ttl_at(monkeypatch, datetime(2026, 10, 21, 15, 30)) >= 6 * 3600 - 1

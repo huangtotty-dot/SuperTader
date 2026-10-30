@@ -1114,6 +1114,11 @@ _OB_M30_STATE: dict = {}                               # 刷新守护线程幂�
 # 变一次而没人填充 ⇒ 体检表「30min 判定」永远停在「计算中」（owner 截图 2026-10-18）。
 _OB_M30_DISK_WARM: dict = {"running": False, "slot": None}
 _OB_M30_DISK_LOCK = threading.Lock()
+# 在线按需补（2026-10-30）：当前 slot 未热且**允许出网**时，用腾讯拉当日 bars，单飞、按 slot 去重。
+# 背景：磁盘 30min 实测整体停在上一交易日（2026-10-30 12:35 抽查 600362/002176/300054 全部
+# 只到 10-29 15:00）⇒ 午休重启 GUI 后全表「⚠旧」。详见 `_m30_online_allowed`。
+_OB_M30_ONLINE_WARM: dict = {"running": False, "slot": None}
+_OB_M30_ONLINE_LOCK = threading.Lock()
 _M30_SNAP_CACHE: dict = {}                             # {f"{base}_{slot}": snapshot}
 _M30_SNAP_LOCK = threading.Lock()
 _M30_SNAP_MAX = 2000                                   # 无界增长防护
@@ -1240,6 +1245,24 @@ def _min_bars_slot():
     return now.strftime("%Y-%m-%d %H:") + ("00" if now.minute < 30 else "30")
 
 
+def _postclose_finalize_window(now=None):
+    """盘后补刷窗口 **15:30–16:30**（2026-10-28，owner 报「赛微电子低位却提示减仓/避高」）。
+
+    机理：末根 15:00 的 30min bar 要到 **15:30** 才算收盘（`drop_forming_bar` 按 bar_time+30min
+    判）。而 `_min_bars_slot()` 一过 15:30 就翻到新键 ⇒ 旧键的快照作废 ⇒
+    `_kick_ob_m30_disk` 用**磁盘**分钟线补算，而磁盘 30min 缓存实测**整体停在上一交易日**
+    （2026-10-28 15:00 抽查 300456/600362/002176/300054 全部只到 10-27）
+    ⇒ 体检表 15:30 之后显示的是**昨天的**顶部特征（那就是那条"低位票要求减仓"的来源）。
+
+    `refresh_ob_m30`（在线）原来只在 09:15-11:35 / 12:55-15:05 跑，收盘后永远不修正。
+    这里放开一个补刷窗，让 15:00 那根真收盘后重算一次。"""
+    now = now or datetime.now()
+    if now.weekday() >= 5:
+        return False
+    hm = now.strftime("%H:%M")
+    return "15:30" <= hm <= "16:30"
+
+
 def _in_trading_session(now=None):
     """**粗口径**交易时段（含 09:15 竞价与 15:05 收盘后缓冲）。
 
@@ -1251,6 +1274,24 @@ def _in_trading_session(now=None):
         return False
     hm = now.strftime("%H:%M")
     return ("09:15" <= hm <= "11:35") or ("12:55" <= hm <= "15:05")
+
+
+def _m30_online_allowed(now=None):
+    """30min 快照允许**出网**的时段（2026-10-30，owner 报「30min判定整列显示⚠旧」）。
+
+    原 `refresh_ob_m30` 只在 `_in_trading_session()`（09:15–11:35 / 12:55–15:05）或
+    15:30–16:30 补刷窗跑 —— **午休被排除**。于是午休重启 GUI 时没人翻新当前 slot，
+    体检表退回磁盘分钟线，而磁盘 30min 实测整体停在**上一交易日**（2026-10-30 12:35 抽查
+    600362/002176/300054 全部只到 10-29 15:00）⇒ 每一行都是「⚠旧」。
+
+    午休时腾讯照常返回当日 bars（末根 11:30，12:00 之后已是完成根），拉一次即可。
+    只在工作日放开（周末/节假日没有新 bar，白打网络，也是 2026-10-18 卡死后的硬约束）。
+    """
+    now = now or datetime.now()
+    if now.weekday() >= 5:
+        return False
+    hm = now.strftime("%H:%M")
+    return ("09:15" <= hm <= "15:35") or _postclose_finalize_window(now)
 
 
 def _minute_bucket_end(now, minutes):
@@ -1975,6 +2016,23 @@ def _build_m30_light(df):
         return {}
 
 
+def _m30_snap_put(key, snap):
+    """写体检 30min 快照缓存：**只许更新，不许降级**（2026-10-30）。
+
+    磁盘预热（`_warm_ob_m30_disk`）与在线刷新（`refresh_ob_m30`）会写同一个 slot 键。
+    磁盘分钟线实测落后一交易日 ⇒ 若它的 bar_time 比缓存里已有的旧，直接丢弃，
+    否则会把在线拉到的新鲜快照覆盖回昨天，整表「⚠旧」。"""
+    if not snap:
+        return
+    with _M30_SNAP_LOCK:
+        old = _M30_SNAP_CACHE.get(key) or {}
+        if str(snap.get("bar_time") or "") < str(old.get("bar_time") or ""):
+            return
+        if len(_M30_SNAP_CACHE) > _M30_SNAP_MAX:
+            _M30_SNAP_CACHE.clear()
+        _M30_SNAP_CACHE[key] = snap
+
+
 _MIN_BARS_ASOF_FILES = ("{ts}_{freq}.json", "{ts}_{freq}_d540.json")
 
 
@@ -2291,7 +2349,12 @@ def _reconcile_cash():
 # 技术标签 TTL 缓存：GUI 每 10s 轮询 refresh_pb → load_stock_tags_batch（单次约 7-12s，
 # 期间大量 pandas + 网络在 pywebview 主线程执行会冻结界面）。改为 TTL 缓存 + 后台异步重算，
 # 轮询永远读缓存即时返回，界面不卡。TTL 取 120s：标签变化慢，过长 TTL 减少后台重算的 CPU 尖峰。
-_TAGS_TTL = 120.0
+# 盘中标签缓存 TTL（2026-10-21 定 120s；**2026-10-30 起 300s**）。
+# 实测（t_io/logs/thread_cpu.jsonl 10-30 上午）：每 30 分钟边界起 6~11 个池线程，
+# 单核占用冲到 55~62%，全天峰值 69%；而 120s 到期就整批重算一次是持续底噪（安静窗口仍有 18%）。
+# 放宽到 300s 后"重复算"约降 2.5×；历史部分由**日线缓存指纹**兜底（缓存一变立刻重算），
+# 只牺牲"含当日 forming bar"那几项（bias5/破线/乖离）的新鲜度，最坏晚 5 分钟。
+_TAGS_TTL = 300.0
 
 # 30 分钟趋势判定（2026-10-04，方案 doc/solutions/2026-10-04_30分钟趋势判定方案.md）：
 # 技术标签的「上行/下行/震荡」由日线斜率改按 30min 三层状态机。开关便于回滚；
@@ -2303,8 +2366,32 @@ _TAGS_LOCK = threading.Lock()
 _TAGS_RUNNING: set = set()
 
 
+def _tags_daily_sig(code: str):
+    """该票**日线缓存文件**的版本指纹 `(mtime_ns, size)`；取不到 → None。
+
+    为什么需要（2026-10-29 owner 报「688102 明明站上 5 日线，技术标签却写破 5 日线」）：
+    标签（MA5/破线/乖离/背离…）**完全由这份日线缓存算出来**，而逐只标签缓存原来只按
+    `(代码, offline, 日期)` + TTL 记 —— **缓存补上了新 bar 它也不会重算**。
+    实测那天 688102 的标签是在缓存还停在 10-27（收 23.90）时算的（→ 破5日线、乖离 −5.0%），
+    之后缓存合并进 10-28/10-29（收 26.47 / 27.21），标签仍被 TTL 钉着，整晚都是错的。
+    把指纹并进 key：缓存一变，标签自动作废重算。
+    """
+    try:
+        import core.chart_cache as _cc
+        st = _cc.daily_fp(code).stat()
+        return (st.st_mtime_ns, st.st_size)
+    except Exception:
+        return None
+
+
+def _tags_key(code, offline, date=None):
+    """逐只标签缓存的键 = (代码, offline, 日期, **日线缓存指纹**)。"""
+    return (str(code).split("_")[0], bool(offline), str(date or "")[:10],
+            _tags_daily_sig(code))
+
+
 def _tags_ttl_now() -> float:
-    """标签缓存 TTL —— **盘中 120s、收盘后 6 小时**（2026-10-21）。
+    """标签缓存 TTL —— **盘中 300s、收盘后 6 小时**（盘中 120s→300s，2026-10-30）。
 
     实证：15:28 打开 K 线报「load_stock_chart 超时 20000ms」，`gui_freeze.log` 的现场栈里
     6 个线程全在 `_stock_tags_one → get_trend30 → _ir_adx/_ir_atr_wilder`（pandas ewm）
@@ -5074,6 +5161,8 @@ class Api:
                 "dev365": _tagres.get("dev365"),
                 # 5 日乖离度（2026-10-28 owner：四张表都要这一列）
                 "bias5": _tagres.get("bias5"),
+                "up30": _tagres.get("up30"),
+                "up30_prev": _tagres.get("up30_prev"),
                 # 20 日线观察（2026-10-14）：`above_ma20` True/False/None(数据不足)，
                 # `ma20_daily` 供 tooltip。**观察列、不驱动任何判定**（前端 ma20FlagCellHtml 同款）。
                 "above_ma20": _above_ma20,
@@ -5102,7 +5191,8 @@ class Api:
             # 在线刷新只在交易时段跑 ⇒ 周末/盘后没人翻新 slot，体检表会永远「计算中」。
             if _m30_cold:
                 try:
-                    self._kick_ob_m30_disk(_m30_cold)
+                    # 2026-10-30：优先在线（磁盘停在上一交易日 ⇒ 只走磁盘就是整列「⚠旧」）
+                    self._kick_ob_m30_fill(_m30_cold)
                 except Exception:
                     pass
         # 仓位结构未热：后台预热持仓（按 code 排队、槽位内去重），前端按 struct_pending 快速重拉
@@ -8191,10 +8281,7 @@ class Api:
         if not allow_compute:
             return None
         snap = _build_m30_snapshot(_m30_bars_cache_only(base))
-        with _M30_SNAP_LOCK:
-            if len(_M30_SNAP_CACHE) > _M30_SNAP_MAX:
-                _M30_SNAP_CACHE.clear()
-            _M30_SNAP_CACHE[key] = snap
+        _m30_snap_put(key, snap)      # 磁盘算的，不许盖掉在线更新的（2026-10-30）
         return snap
 
     def _m30_verdict_pb(self, code):
@@ -8296,7 +8383,8 @@ class Api:
                             if len(_PB_M30_CACHE) > _PB_M30_MAX:
                                 _PB_M30_CACHE.clear()
                             _PB_M30_CACHE[key] = snap
-                    with ThreadPoolExecutor(max_workers=3) as ex:
+                    with ThreadPoolExecutor(max_workers=3,
+                                            thread_name_prefix="pb-m30") as ex:
                         list(ex.map(_one, batch))
             except Exception:
                 with _PB_M30_WARM_LOCK:
@@ -8896,7 +8984,8 @@ class Api:
         def _run():
             try:
                 from concurrent.futures import ThreadPoolExecutor
-                with ThreadPoolExecutor(max_workers=2) as ex:
+                with ThreadPoolExecutor(max_workers=2,
+                                        thread_name_prefix="pb-hist") as ex:
                     list(ex.map(lambda c: self._pb_struct_hist(c, date, compute=True), codes))
             except Exception:
                 pass
@@ -8935,7 +9024,8 @@ class Api:
             codes = [str(c).split("_")[0] for c in (codes or [])]
             if not codes:
                 return
-            with ThreadPoolExecutor(max_workers=1) as ex:      # CPU 密集，GIL 串行 ⇒ 1 线程足够、少抢
+            with ThreadPoolExecutor(max_workers=1,
+                                    thread_name_prefix="ob-m30-disk") as ex:  # CPU 密集
                 list(ex.map(lambda c: self._m30_top_snapshot(c, allow_compute=True), codes))
         except Exception:
             pass
@@ -8966,13 +9056,63 @@ class Api:
                     _OB_M30_DISK_WARM["running"] = False
         _th.Thread(target=_bg, daemon=True, name="ob-m30-disk-warm").start()
 
+    def _kick_ob_m30_online(self, codes):
+        """**按需在线**补当前 slot 的 OB 快照（腾讯优先，单飞、按 slot 去重）。
+
+        2026-10-30：磁盘分钟线整体落后一交易日，午休/冷启动时磁盘预热只会把「昨天」写满缓存
+        ⇒ 体检表整列「⚠旧」。允许出网的时段（`_m30_online_allowed`）里改成先出网：
+        当天 bars 一次拿全，bar_time 立刻回到今天；失败时才由调用方回退磁盘预热。"""
+        codes = [str(c).split("_")[0] for c in (codes or []) if c]
+        if not codes:
+            return
+        slot = _min_bars_slot()
+        with _OB_M30_ONLINE_LOCK:
+            if _OB_M30_ONLINE_WARM.get("running"):
+                return
+            _OB_M30_ONLINE_WARM["running"] = True
+            _OB_M30_ONLINE_WARM["slot"] = slot
+
+        def _bg():
+            try:
+                self.refresh_ob_m30(codes)
+            except Exception:
+                pass
+            finally:
+                # 在线失败/不全 → **磁盘兜底**：否则体检表一直「计算中」，前端 3s 轮询会反复打网络
+                # （磁盘算出来的 bar_time 是昨天，界面照实标「⚠旧」，但至少不再挂 pending）。
+                try:
+                    _slot = _min_bars_slot()
+                    with _M30_SNAP_LOCK:
+                        _left = [c for c in codes if f"{c}_{_slot}" not in _M30_SNAP_CACHE]
+                    if _left:
+                        self._warm_ob_m30_disk(_left)
+                except Exception:
+                    pass
+                with _OB_M30_ONLINE_LOCK:
+                    _OB_M30_ONLINE_WARM["running"] = False
+        _th.Thread(target=_bg, daemon=True, name="ob-m30-online-warm").start()
+
+    def _kick_ob_m30_fill(self, codes):
+        """当前 slot 未热时补一次：**能出网就出网，否则磁盘**（2026-10-30）。
+
+        磁盘 30min 实测停在上一交易日（抽查 600362/002176/300054 全部只到 10-29 15:00）
+        ⇒ 午休重启后只走磁盘 = 整表「⚠旧」。所以这里先看 `_m30_online_allowed()`：
+        允许 → 在线补（`refresh_ob_m30` 自己会写缓存、失败静默）；不允许 → 原磁盘预热。"""
+        if _m30_online_allowed():
+            self._kick_ob_m30_online(codes)
+        else:
+            self._kick_ob_m30_disk(codes)
+
     def refresh_ob_m30(self, codes=None):
         """后台预热当前 30min 时段内的持仓 OB 快照（走 `_fetch_min_bars` ⇒ 腾讯优先）。
         只在**后台线程**调用（会出网）。codes 缺省 = 持仓（qty>0）∪ 自动盘持仓。失败静默。
 
         2026-10-18：**仅交易时段出网**。周末/盘后调这条链毫无收益，而卡死栈实测
-        3 个 worker 同时卡在 tushare 的 `getaddrinfo`（DNS 不受 timeout 管）⇒ 直接返回。"""
-        if not _in_trading_session():
+        3 个 worker 同时卡在 tushare 的 `getaddrinfo`（DNS 不受 timeout 管）⇒ 直接返回。
+        2026-10-28：**加开 15:30–16:30 补刷窗**（见 `_postclose_finalize_window`）——
+        否则 15:30 slot 翻页后，体检表用磁盘（落后一天）的分钟线重算，显示**昨天**的信号。"""
+        _postclose = _postclose_finalize_window()
+        if not _m30_online_allowed():
             return
         try:
             from concurrent.futures import ThreadPoolExecutor
@@ -8990,8 +9130,19 @@ class Api:
                 return
             slot = _min_bars_slot()
 
+            _today = datetime.now().strftime("%Y-%m-%d")
+
             def _one(bc):
                 key = f"{bc}_{slot}"
+                # 盘后补刷：这个 slot 的快照**已经包含今天 15:00 那根** ⇒ 已是最新，别再出网
+                if _postclose:
+                    try:
+                        with _M30_SNAP_LOCK:
+                            _cur = _M30_SNAP_CACHE.get(key) or {}
+                        if str(_cur.get("bar_time") or "") >= _today + " 15:00":
+                            return
+                    except Exception:
+                        pass
                 try:
                     df = _fetch_min_bars(bc, "30min")       # 在线→磁盘兜底（后台线程）
                 except Exception:
@@ -8999,11 +9150,9 @@ class Api:
                 snap = _build_m30_snapshot(df)
                 if not snap:                                # 失败/空 → 不覆盖已热（可能是磁盘档）
                     return
-                with _M30_SNAP_LOCK:
-                    if len(_M30_SNAP_CACHE) > _M30_SNAP_MAX:
-                        _M30_SNAP_CACHE.clear()
-                    _M30_SNAP_CACHE[key] = snap             # 在线档更新鲜 → 覆盖磁盘预热
-            with ThreadPoolExecutor(max_workers=3) as ex:
+                _m30_snap_put(key, snap)                    # 在线档更新鲜 → 覆盖磁盘预热
+            with ThreadPoolExecutor(max_workers=3,
+                                    thread_name_prefix="ob-m30") as ex:
                 list(ex.map(_one, codes))
         except Exception:
             pass
@@ -9031,7 +9180,8 @@ class Api:
         `date`（2026-10-23）：猎手看历史日时必须按**那一天**的日线切片算，键里必须带日期，
         否则今天的标签会被当成历史日的。"""
         _c = str(code).split("_")[0]
-        _ck = (_c, bool(offline), str(date or "")[:10])
+        # 键里带**日线缓存指纹**：缓存补了新 bar ⇒ 旧标签作废（2026-10-29 fix，见 _tags_daily_sig）
+        _ck = _tags_key(_c, offline, date)
         _now = _time_mod.time()
         with _TAGS_LOCK:
             _hit = _TAGS_ONE_CACHE.get(_ck)
@@ -9304,8 +9454,33 @@ class Api:
                     bias5 = round((cur - _m5) / _m5 * 100, 2)
         except Exception:
             bias5 = None
+        # 近 30 日上涨次数占比（2026-10-30 owner：五张表加一列）。
+        # = 最近 30 个日收益里 >0 的天数 / 30 × 100。**描述列**：衡量"这一个月涨的天数多不多"
+        # （持续性/胜率口径），不是涨幅——大涨两天 + 阴跌 28 天 也可能是 7%。
+        # 不足 31 根（要 30 个收益）→ None，绝不拿不足的窗口糊一个数。
+        up30 = None
+        try:
+            if n >= 31:
+                _c30 = closes[-31:]
+                _r30 = _c30[1:] / _c30[:-1] - 1.0
+                if len(_r30) == 30:
+                    up30 = round(float((_r30 > 0).mean() * 100.0), 1)
+        except Exception:
+            up30 = None
+        # **5 个交易日前的同口径比值**（2026-10-30 owner：这一列要能看出在升还是在降）。
+        # 窗口同样取 30 个收益，只是整体往前挪 5 根：closes[-36:-5]。
+        # 前端用 (up30 − up30_prev) 判方向；不足 36 根 → None（不画箭头，绝不猜）。
+        up30_prev = None
+        try:
+            if n >= 36:
+                _cp = closes[-36:-5]
+                _rp = _cp[1:] / _cp[:-1] - 1.0
+                if len(_rp) == 30:
+                    up30_prev = round(float((_rp > 0).mean() * 100.0), 1)
+        except Exception:
+            up30_prev = None
         return {"trend": trend, "box_pos": box_pos, "price": round(cur, 3),
-                "dev365": dev365, "bias5": bias5,
+                "dev365": dev365, "bias5": bias5, "up30": up30, "up30_prev": up30_prev,
                 "trend_src": _trend_src, "tags": tags[:7]}
 
     @staticmethod
@@ -9332,7 +9507,12 @@ class Api:
         idx = {}
         with _TAGS_LOCK:
             if _same_day:
-                for (_cb, _ob, _db), _h in _TAGS_ONE_CACHE.items():
+                for _k, _h in _TAGS_ONE_CACHE.items():
+                    # 防御：只认新形状的 4 元组键（旧键/测试里手工塞的 3 元组一律跳过，
+                    # 别为一条过期缓存把整张表打成异常）
+                    if not (isinstance(_k, tuple) and len(_k) == 4):
+                        continue
+                    _cb, _ob, _db, _dsig = _k
                     if _db and _db < today:
                         continue
                     if not (now - _h[0] < ttl and isinstance(_h[1], dict)):
@@ -9340,13 +9520,17 @@ class Api:
                     _prev = idx.get(_cb)
                     # 优先同 offline 口径（是否含当日 forming bar 的唯一差别）
                     if _prev is None or (_ob == bool(offline) and _prev[0] != bool(offline)):
-                        idx[_cb] = (_ob, _h[1])
+                        idx[_cb] = (_ob, _h[1], _dsig)
             for c in codes or []:
                 base = str(c).split("_")[0]
-                hit = _TAGS_ONE_CACHE.get((base, bool(offline), _d))
+                _k = _tags_key(base, offline, _d)
+                hit = _TAGS_ONE_CACHE.get(_k)
                 if hit and (now - hit[0]) < ttl and isinstance(hit[1], dict):
                     out[c] = hit[1]
-                elif _same_day and base in idx:
+                # 兜底**也要看日线指纹**：缓存补了新 bar 之后，别的口径算出的旧标签
+                # 同样不许再借（2026-10-29：否则 sig 只挡住"精确命中"，兜底那条路照样
+                # 把"破5日线"喂给 688102）。
+                elif _same_day and base in idx and idx[base][2] == _k[3]:
                     out[c] = idx[base][1]
         return out
 
@@ -9419,7 +9603,8 @@ class Api:
                 from analysis.trend30.adapter import prefetch_30min as _pf30
             except Exception:
                 _pf30 = None
-            with ThreadPoolExecutor(max_workers=3) as ex:   # 6→3（2026-10-21）：纯 GIL 活，别和 UI 抢
+            with ThreadPoolExecutor(max_workers=3,
+                                    thread_name_prefix="tags") as ex:   # 6→3（2026-10-21）：纯 GIL 活，别和 UI 抢
                 for _i in range(0, len(codes), _CHUNK):
                     part = codes[_i:_i + _CHUNK]
                     if _pf30 is not None:
@@ -9543,8 +9728,11 @@ class Api:
     # evaluate_js、后台 `_scan_breakout→daily_many`）。降到 200 每次只 ~4 万行、GIL 持有缩 ~4.5×，
     # 批间再显式让出，界面不再冻（代价：GM 调用次数变多、整轮慢一些，但在后台线程）。
     _BK_BATCH = 200
-    # 批量取数整批空时的等待（疑 GM 冷却窗/瞬时不可达）；覆盖为 0 可让测试不真等
-    _GM_BATCH_RETRY_WAIT = 62
+    # 批量取数整批空时的等待（疑 GM 冷却窗/瞬时不可达）；覆盖为 0 可让测试不真等。
+    # 2026-10-29：62 → **8**。实测今天 15:2x 一次扫描里 GM 连续 13 批全部 25s 超时
+    # ⇒ "等满 62 秒再重试"只会在已经卡死的路径上再白等一分钟（`core.scanners` 现在
+    # 一批拿不到就直接切本地缓存，不再逐批空等）。
+    _GM_BATCH_RETRY_WAIT = 8
 
     def _breakout_pool_codes(self):
         """扫描池 = watchlist_jiuyan.json 的**全部** 6 位码。
@@ -11747,14 +11935,14 @@ class Api:
         stocks[c] = e
         return {"ok": self._abn_write(stocks), "code": c, "reason": txt[:120]}
 
-    def load_abnormal_pool(self, date=None):
-        """异常监控池 → 与「建仓信号扫描」同列的数据。
+    def _pool_rows(self, stocks, date, note):
+        """「建仓表同款」行构造 —— **异常监控池 / 避风港湾共用**（两表的列与样式必须一模一样）。
 
+        `stocks`: {code: {name, added_at, reason?, ...}}；`note`: 表尾那句说明。
         行字段刻意做成**建仓表的形状**（verdict/composite_score/conditions/…），
         前端直接复用同一套单元格渲染（色阶、圆点、阶段徽章），不另写一份样式。
         """
         date = str(date or datetime.now().strftime("%Y-%m-%d"))
-        stocks = self._abn_read()
         codes = list(stocks.keys())
         if not codes:
             return _clean({"has_data": True, "date": date, "rows": [], "counts": {},
@@ -11790,6 +11978,8 @@ class Api:
                 "tags": ((_tags_map.get(c) or {}).get("tags") or []),
                 "dev365": (_tags_map.get(c) or {}).get("dev365"),
                 "bias5": (_tags_map.get(c) or {}).get("bias5"),
+                "up30": (_tags_map.get(c) or {}).get("up30"),
+                "up30_prev": (_tags_map.get(c) or {}).get("up30_prev"),
                 # —— 以下与建仓表同名列同义 ——
                 "verdict": k.get("verdict") or ("insufficient_data" if not k else "pending"),
                 "composite_score": int(k.get("score") or 0),
@@ -11820,8 +12010,71 @@ class Api:
         return _clean({"has_data": True, "date": date, "rows": rows,
                        "counts": {"total": len(rows)},
                        "cond_labels": COND_LABELS,
-                       "note": "判定/得分与建仓信号扫描同源（build_decision）；"
-                               "未在本地日线缓存里的票显示 —"})
+                       "note": note})
+
+    def load_abnormal_pool(self, date=None):
+        """异常监控池 → 与「建仓信号扫描」同列的数据（行构造见 `_pool_rows`）。"""
+        return self._pool_rows(self._abn_read(), date,
+                               "判定/得分与建仓信号扫描同源（build_decision）；"
+                               "未在本地日线缓存里的票显示 —")
+
+    # ---------- 避风港湾（2026-10-29 owner）----------
+    # 「建仓信号扫描」下方的**第二个手动池**：大盘不好的时候拿来看"我打算躲进去的票"。
+    # 与异常监控池**同一套行构造**（`_pool_rows`）⇒ 列与样式天然一致，不会各写一份漂掉。
+    _SHELTER_FP = STATE_DIR / "shelter_pool.json"
+
+    def _shelter_read(self):
+        d = _load_json(self._SHELTER_FP, {})
+        st = (d or {}).get("stocks") if isinstance(d, dict) else None
+        return st if isinstance(st, dict) else {}
+
+    def _shelter_write(self, stocks):
+        try:
+            self._SHELTER_FP.parent.mkdir(parents=True, exist_ok=True)
+            tmp = self._SHELTER_FP.with_suffix(".tmp")
+            tmp.write_text(json.dumps({"stocks": stocks, "updated_at":
+                                       datetime.now().strftime("%Y-%m-%d %H:%M:%S")},
+                                      ensure_ascii=False, indent=1), encoding="utf-8")
+            tmp.replace(self._SHELTER_FP)
+            return True
+        except Exception:
+            return False
+
+    def load_shelter_pool(self, date=None):
+        """避风港湾 → 与「建仓信号扫描」同列的数据（行构造与异常监控池共用）。"""
+        return self._pool_rows(self._shelter_read(), date,
+                               "判定/得分与建仓信号扫描同源（build_decision）；"
+                               "手动池，自己往里加票；未在本地日线缓存里的票显示 —")
+
+    def shelter_pool_add(self, code, name=None):
+        """加入避风港湾（代码或名称，同异常监控池的容错口径）。"""
+        t = str(code or "").strip()
+        if not t:
+            return {"ok": False, "error": "请输入代码或名称"}
+        names = _jiuyan_names()
+        c = str(t).split("_")[0]
+        if not (len(c) == 6 and c.isdigit()):
+            hits = [k for k, n in names.items() if str(n) == t] or \
+                   [k for k, n in names.items() if t in str(n)]
+            if not hits:
+                return {"ok": False, "error": f"没找到「{t}」（韭研表里没有）"}
+            if len(hits) > 1:
+                return {"ok": False, "error": f"「{t}」匹配到多只，请输入完整代码："
+                                              + "、".join(hits[:8])}
+            c = hits[0]
+        stocks = self._shelter_read()
+        if c in stocks:
+            return {"ok": True, "code": c, "already": True}
+        stocks[c] = {"name": name or names.get(c) or c,
+                     "added_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
+        return {"ok": self._shelter_write(stocks), "code": c}
+
+    def shelter_pool_remove(self, code):
+        stocks = self._shelter_read()
+        c = str(code or "").split("_")[0]
+        stocks.pop(c, None)
+        return {"ok": self._shelter_write(stocks), "code": c}
+
 
     def add_to_watchlist(self, code, name):
         """将股票加入 watchlist_buy.json（status=monitoring）。
@@ -12274,6 +12527,8 @@ class Api:
                         r["trend"] = info.get("trend")
                         r["dev365"] = info.get("dev365")
                         r["bias5"] = info.get("bias5")
+                        r["up30"] = info.get("up30")
+                        r["up30_prev"] = info.get("up30_prev")
         except Exception:
             pass
         return result
@@ -12345,6 +12600,8 @@ class Api:
                         r["trend"] = info.get("trend")
                         r["dev365"] = info.get("dev365")
                         r["bias5"] = info.get("bias5")
+                        r["up30"] = info.get("up30")
+                        r["up30_prev"] = info.get("up30_prev")
         except Exception:
             pass
         # 当日「均线回站」+ 突破时刻（2026-10-23 owner，三张表同源）
@@ -12391,7 +12648,8 @@ class Api:
         try:
             # 2026-10-28：4 并发 → 2。这四个都是"读缓存 + 网络"的重端点，启动瞬间与首帧扇出、
             # 与标签批算抢同一批核；降到 2 只是晚几秒备好，但不会把 UI 线程饿住。
-            with ThreadPoolExecutor(max_workers=2) as ex:
+            with ThreadPoolExecutor(max_workers=2,
+                                    thread_name_prefix="prewarm-ov") as ex:
                 list(ex.map(_safe, [self.load_indices, self.load_market_turnover,
                                     self.load_turnover_history, self.load_index_divergence]))
         except Exception:
@@ -13062,8 +13320,9 @@ def start_ob_m30_refresher(api):
                 slot = _min_bars_slot()
                 if slot != _last_slot:
                     _last_slot = slot
-                    # 周末/盘后不出网（见 refresh_ob_m30 内注释）；磁盘预热由面板按需触发
-                    if _in_trading_session():
+                    # 周末/盘后不出网（见 refresh_ob_m30 内注释）；磁盘预热由面板按需触发。
+                    # 2026-10-30：午休也算（原 `_in_trading_session` 排除午休 ⇒ 午休重启后全表 ⚠旧）
+                    if _m30_online_allowed():
                         api.refresh_ob_m30()
             except Exception:
                 pass

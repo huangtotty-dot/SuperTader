@@ -314,6 +314,22 @@ class TestHunterPollChecks(unittest.TestCase):
         generic = ["  [ERR] 数据加载失败，程序终止"]
         self.assertEqual(len(HP._pipeline_warnings(generic)), 1, "通用告警必须保留")
 
+    def test_06b_已处置的未确认快照根不报警但计数(self):
+        """2026-10-30 owner 截图误报：10:01「管线内部告警 37 条」全是这一句。
+
+        它是 2026-10-26（603200）事故后加的安全闸**在正常工作**（宁可今天缺一根，
+        也不把盘中快照当收盘价），每轮几十只 ⇒ 按"管线告警"报警等于每个交易日
+        上午必响一次假警报。处置：不进异常，但**条数要留着**（放大时能看出来）。
+        """
+        dropped = [f"  [WARN] tencent.daily 兜底丢弃未确认的当日快照根({c})"
+                   for c in ("002074", "600000", "300001")]
+        self.assertEqual(HP._pipeline_warnings(dropped), [], "已处置噪声不得进异常列表")
+        self.assertEqual(HP._handled_noise_count(dropped), 3, "条数必须留下来记账")
+        # 真告警不受影响
+        mixed = dropped + ["  [WARN] 3 只获取失败: 600000, 600001"]
+        self.assertEqual(len(HP._pipeline_warnings(mixed)), 1)
+        self.assertEqual(HP._handled_noise_count(mixed), 3)
+
     def test_07_logging_failures_are_captured(self):
         """走 `log.warning` 的失败也必须被抓到 —— `redirect_stdout` 看不见 logging（2026-10-12）。
 

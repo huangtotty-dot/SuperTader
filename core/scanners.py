@@ -188,6 +188,7 @@ def _scan_breakout(codes, state, date=None, *, jy, daily_many, retry_daily_many,
     _gm_off = _cov >= 0.8
     if _gm_off:
         print(f"[INFO] breakout: 本地日线缓存覆盖 {_cov:.0%}，本轮只用缓存", flush=True)
+    _gm_dead = 0            # 连续"整批拿不到"的批数
     for i in range(0, total, BATCH):
         chunk = codes[i:i + BATCH]
         if _gm_off:
@@ -205,6 +206,25 @@ def _scan_breakout(codes, state, date=None, *, jy, daily_many, retry_daily_many,
                 frames = retry_daily_many(chunk)
             except Exception:
                 frames = {}
+        # 2026-10-29（GUI 卡顿实报）：**一批都拿不到 ⇒ GM 本轮不可用，后续批直接改用本地缓存**。
+        # 原来只有开头 `_cov<0.8` 才判 `_gm_off`，中途 GM 挂掉后**每一批**仍照打 GM、
+        # 每批再烧 `_bk_daily_many` 的 25s 硬超时 —— 实测今天 15:2x 一次扫描连打 13 批
+        # `daily_many 超时(25s, 200只)`（≈5.5 分钟），`gm-call_0` 占掉 39.7% 单核，
+        # GIL 被它吃光 ⇒ UI 线程连 `Thread.start()` 都排不上（心跳停 12~57s）。
+        if not _gm_off:
+            if not frames:
+                _gm_dead += 1
+                if _gm_dead >= 1:
+                    _gm_off = True
+                    print("[WARN] breakout: GM 本批无数据 ⇒ 后续批全部改用本地缓存（不再逐批空等 25s）",
+                          flush=True)
+            else:
+                _gm_dead = 0
+        # 批间让出 GIL：一轮 13 批，每批 50ms 总共 0.65s，但足以让 UI 线程把
+        # `js_bridge_call` 的 `Thread.start()` 排上（卡死现场 MainThread CPU 仅 0.04%，
+        # 全是在等 GIL，不是在算）。
+        if i + BATCH < total:
+            _time_mod.sleep(0.05)
         _from_gm = 0
         for _n, code in enumerate(chunk):
             # 2026-10-26（owner 报「跑突破箱体卡顿」）：每 64 只显式让出一次，

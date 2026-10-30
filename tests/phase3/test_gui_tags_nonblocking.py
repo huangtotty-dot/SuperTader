@@ -7,7 +7,7 @@
 
 本测试把单票计算 `_stock_tags_one` 换成桩（离线、无网络），断言：
   T1 冷启动调用**立即**返回（< 慢桩耗时），且返回空 tags —— 证明未走同步计算。
-  T2 冷启动确实**起了后台线程**（_TAGS_RUNNING 置位）。
+  T2 冷启动确实**起了后台线程**（`_TAGS_RUNNING` 里多了一个批次键）。
   T3 后台算完后缓存被填充，标志复位；再次调用命中缓存拿到真值。
   T4 缓存**过期**时先返回旧值、不阻塞。
 
@@ -41,7 +41,7 @@ class TestTagsColdNonBlocking(unittest.TestCase):
         self._saved_cache = dict(t_gui._TAGS_CACHE)
         self._saved_running = t_gui._TAGS_RUNNING
         t_gui._TAGS_CACHE.clear()
-        t_gui._TAGS_RUNNING = False
+        t_gui._TAGS_RUNNING = set()      # 2026-10-28 起是「正在算的批次键集合」，不再是 bool
 
         def _fake_one(_self, code):
             time.sleep(SLOW)  # 模拟慢计算；同步调用会明显拖慢
@@ -60,9 +60,14 @@ class TestTagsColdNonBlocking(unittest.TestCase):
         t_gui._TAGS_RUNNING = self._saved_running
 
     def _key(self):
+        """与 `load_stock_tags_batch` 的 `_cache_key` 同形：`{today}:{_dkey}:{codes_fp}`。
+
+        2026-10-23 键里加了 `_dkey`（历史日回看），这里少写一段 ⇒ 永远取不到缓存
+        （既有失败，2026-10-29 修）。
+        """
         today = datetime.now().strftime("%Y-%m-%d")
         fp = hashlib.md5(",".join(sorted(set(self.codes))).encode()).hexdigest()[:12]
-        return f"{today}:{fp}"
+        return f"{today}::{fp}"
 
     def test_01_冷启动立即返回空且不起同步计算(self):
         t = time.perf_counter()
@@ -106,3 +111,46 @@ class TestTagsColdNonBlocking(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+
+
+class TestTagsInvalidateOnDailyCacheChange(unittest.TestCase):
+    """2026-10-29 owner：「688102 明明站上 5 日线，技术标签却写破 5 日线」。
+
+    根因：标签**完全由日线缓存算出来**，而逐只缓存只按 `(代码, offline, 日期)` + TTL 记
+    ⇒ 缓存后来合并进了新的 bar，旧标签仍被 TTL 钉住（盘后 6 小时）⇒ 整晚都是错的。
+    修法：key 里带上**日线缓存指纹**（mtime_ns, size）。本类钉住它。
+    """
+
+    def setUp(self):
+        self._orig = t_gui._tags_daily_sig
+        self._saved = dict(t_gui._TAGS_ONE_CACHE)
+        with t_gui._TAGS_LOCK:
+            t_gui._TAGS_ONE_CACHE.clear()
+
+    def tearDown(self):
+        t_gui._tags_daily_sig = self._orig
+        with t_gui._TAGS_LOCK:
+            t_gui._TAGS_ONE_CACHE.clear()
+            t_gui._TAGS_ONE_CACHE.update(self._saved)
+
+    def test_指纹变了key就变(self):
+        t_gui._tags_daily_sig = lambda code: (111, 222)
+        k1 = t_gui._tags_key("688102", False, None)
+        t_gui._tags_daily_sig = lambda code: (333, 444)
+        k2 = t_gui._tags_key("688102", False, None)
+        self.assertNotEqual(k1, k2, "日线缓存变了，标签键必须跟着变")
+
+    def test_缓存更新后不再命中旧标签(self):
+        t_gui._tags_daily_sig = lambda code: (111, 222)
+        with t_gui._TAGS_LOCK:
+            t_gui._TAGS_ONE_CACHE[t_gui._tags_key("688102", False, None)] = (
+                time.time(), {"tags": [{"label": "破5日线"}], "bias5": -5.02})
+        self.assertEqual(len(t_gui.Api._tags_partial(["688102"], False)), 1)
+        # 日线缓存补进了新 bar（mtime/size 变化）⇒ 旧标签必须**不再被交付**
+        t_gui._tags_daily_sig = lambda code: (999, 999)
+        self.assertEqual(t_gui.Api._tags_partial(["688102"], False), {},
+                         "缓存更新后还返回旧标签 ⇒ 就是 688102 那类'整晚显示破位'")
+
+    def test_指纹取不到时不影响可用性(self):
+        t_gui._tags_daily_sig = lambda code: None       # 文件不存在/权限问题
+        self.assertIsNotNone(t_gui._tags_key("999999", False, None))

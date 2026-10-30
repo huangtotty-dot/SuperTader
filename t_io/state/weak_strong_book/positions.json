@@ -1,5 +1,5 @@
 {
-  "updated_at": "2026-10-28 14:50:06",
+  "updated_at": "2026-10-30 10:00:03",
   "open": {
     "300014": {
       "entry_date": "2026-10-26",
@@ -8,8 +8,8 @@
       "dev20": -0.072439,
       "gap": 0.046469659372885275,
       "board": "电池",
-      "days_held": 2,
-      "last_check_date": "2026-10-28"
+      "days_held": 3,
+      "last_check_date": "2026-10-29"
     },
     "002520": {
       "entry_date": "2026-10-27",
@@ -18,8 +18,8 @@
       "dev20": -0.003895,
       "gap": 0.06988352745424287,
       "board": "机器人",
-      "days_held": 1,
-      "last_check_date": "2026-10-28"
+      "days_held": 2,
+      "last_check_date": "2026-10-29"
     },
     "600605": {
       "entry_date": "2026-10-27",
@@ -28,8 +28,8 @@
       "dev20": -0.035428,
       "gap": 0.019302152932442418,
       "board": "地产",
-      "days_held": 1,
-      "last_check_date": "2026-10-28"
+      "days_held": 2,
+      "last_check_date": "2026-10-29"
     },
     "000882": {
       "entry_date": "2026-10-27",
@@ -38,8 +38,48 @@
       "dev20": -0.062395,
       "gap": 0.014388489208633004,
       "board": "大消费",
-      "days_held": 1,
-      "last_check_date": "2026-10-28"
+      "days_held": 2,
+      "last_check_date": "2026-10-29"
+    },
+    "688066": {
+      "entry_date": "2026-10-30",
+      "entry_price": 5.57,
+      "qty": 17900,
+      "dev20": -0.406953,
+      "gap": 0.20043103448275867,
+      "board": "商业航天",
+      "days_held": 0,
+      "last_check_date": null
+    },
+    "000410": {
+      "entry_date": "2026-10-30",
+      "entry_price": 5.37,
+      "qty": 18600,
+      "dev20": -0.020179,
+      "gap": 0.10040983606557385,
+      "board": "机器人",
+      "days_held": 0,
+      "last_check_date": null
+    },
+    "000596": {
+      "entry_date": "2026-10-30",
+      "entry_price": 95.4,
+      "qty": 800,
+      "dev20": -0.009912,
+      "gap": 0.10000000000000009,
+      "board": "大消费",
+      "days_held": 0,
+      "last_check_date": null
+    },
+    "002582": {
+      "entry_date": "2026-10-30",
+      "entry_price": 9.91,
+      "qty": 500,
+      "dev20": -0.021509,
+      "gap": 0.09966777408637872,
+      "board": "大消费",
+      "days_held": 0,
+      "last_check_date": null
     }
   },
   "closed": {

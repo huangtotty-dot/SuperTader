@@ -154,9 +154,14 @@ class TestDailyBreakoutRule(unittest.TestCase):
             self.assertIsNone(self.api._breakout_probe_one("T", bad))
 
     def test_口径常量写死(self):
-        """owner 2026-09-29 拍板：0.3~8%。常量被人改动必须显式改这里。"""
+        """常量被人改动必须显式改这里。
+
+        2026-10-25 按研究收紧：突破幅度上限 8% → **3%**（3~5% 档 T+5 超额 −0.65%，
+        0.3~1% 档只有 −0.15%）；当日涨幅 >7% 另行剔除（`_BK_MAX_CHG`，实测 −0.58%）。
+        """
         self.assertEqual(self.api._BK_MIN_PCT, 0.3)
-        self.assertEqual(self.api._BK_MAX_PCT, 8.0)
+        self.assertEqual(self.api._BK_MAX_PCT, 3.0)
+        self.assertEqual(self.api._BK_MAX_CHG, 0.07)
 
 
 class TestPoolAndBatching(unittest.TestCase):
@@ -267,6 +272,39 @@ class TestBjDegrade(unittest.TestCase):
         self.assertGreaterEqual(r["high"], r["close"])
 
 
+class TestGmGivesUpAfterFirstEmptyBatch(unittest.TestCase):
+    """2026-10-29（GUI 卡顿实报）：GM 一批拿不到 ⇒ **后续批直接走缓存**，不许逐批空等。
+
+    实测那天一次扫描连打 13 批 `daily_many 超时(25s, 200只)`（≈5.5 分钟），
+    `gm-call_0` 吃掉 39.7% 单核、GIL 被占满 ⇒ UI 线程心跳停 12~57s。
+    """
+
+    def test_后续批不再调GM(self):
+        calls = {"n": 0}
+
+        class _Fake:
+            def daily_many(self, codes, days=0):
+                calls["n"] += 1
+                return {}
+
+        from core.market_data import facade as _fd
+        _orig = _fd.get_provider
+        _fd.get_provider = lambda: _Fake()
+        try:
+            import t_gui
+            api = t_gui.Api()
+            api._GM_BATCH_RETRY_WAIT = 0
+            api._bk_cache_covers = lambda codes, target, sample=80: 0.0   # 逼它先走 GM
+            api._bk_cache_last = lambda code, target=None: None
+            api._bk_cached_df = lambda code, days, target=None: None
+            codes = [f"{600000 + i}" for i in range(600)]                  # 3 批（BATCH=200）
+            api._scan_breakout(codes, {}, "2026-10-09")
+        finally:
+            _fd.get_provider = _orig
+        self.assertEqual(calls["n"], 2,
+                         f"只该打 1 批 + 1 次等窗重试，实际 {calls['n']} 次（逐批空等就是卡顿源）")
+
+
 class TestScanFetchFailure(unittest.TestCase):
     """2026-10-09 事故：整池取数失败被当成"当日 0 突破"。锁定"失败不可信"判据。"""
 
@@ -287,6 +325,11 @@ class TestScanFetchFailure(unittest.TestCase):
         self._patch_provider(_Fake())
         import t_gui
         api = t_gui.Api(); api._GM_BATCH_RETRY_WAIT = 0
+        # 三处都要堵：覆盖率闸、末根日期、缓存取帧 —— 否则本地缓存会"顶上"，
+        # 用例就不是在测"整池无数据"了（2026-10-29 修：本地缓存已覆盖该日）。
+        api._bk_cache_covers = lambda codes, target, sample=80: 0.0
+        api._bk_cache_last = lambda code, target=None: None
+        api._bk_cached_df = lambda code, days, target=None: None
         st = {}
         out = api._scan_breakout(["600000", "000001"], st, "2026-10-09")
         self.assertEqual(out, [])
@@ -306,7 +349,9 @@ class TestScanFetchFailure(unittest.TestCase):
         self._patch_provider(_Fake())
         import t_gui
         st = {}
-        t_gui.Api()._scan_breakout(["600000"], st, "2026-10-09")
+        _api = t_gui.Api()
+        _api._bk_cache_covers = lambda codes, target, sample=80: 0.0  # 同上：必须真的走 GM
+        _api._scan_breakout(["600000"], st, "2026-10-09")
         self.assertEqual(st.get("stale"), 1, "有历史无当日 bar 应计 stale")
         self.assertEqual(st.get("ok"), 0)
         self.assertTrue(st.get("fetch_failed"))

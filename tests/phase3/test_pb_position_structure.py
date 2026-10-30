@@ -537,6 +537,12 @@ class TestOfflineTagPath(unittest.TestCase):
     回退到 `fetch_daily_kline`（逐只 GM）或打实时快照（`_live_quote_forming`，~1.9s/只）。
     """
 
+    def setUp(self):
+        # 跨测试污染：别的用例可能已把 ("600000", False, "") 写进逐只标签缓存 ⇒ 本用例的
+        # `_stock_tags_one` 直接命中缓存、跳过"补当日 forming bar"，断言随执行顺序飘
+        #（既有缺陷，2026-10-29 修：只在本类里清，不动全局语义）。
+        t_gui._TAGS_ONE_CACHE.clear()
+
     def _api_with_cache(self, rows):
         api = t_gui.Api()
         api._daily_rows_cache_first = lambda code: rows

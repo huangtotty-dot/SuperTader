@@ -45,7 +45,9 @@ class TestIncrementalDelivery(unittest.TestCase):
 
     def test_已算好的逐只结果会先给出去(self):
         import time
-        t_gui._TAGS_ONE_CACHE[("600000", True, "")] = (
+        # 2026-10-29：逐只缓存的键多了「日线缓存指纹」一段（缓存变了旧标签必须作废），
+        # 这里用真 helper 生成键，别再手写 3 元组。
+        t_gui._TAGS_ONE_CACHE[t_gui._tags_key("600000", True, "")] = (
             time.time(), {"trend": "flat", "tags": [{"label": "震荡", "color": "neutral"}]})
         got = t_gui.Api._tags_partial(["600000", "600001"], True)
         self.assertIn("600000", got, "算好的那只必须能立刻拿到")

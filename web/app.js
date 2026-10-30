@@ -288,6 +288,23 @@ function todayStr() {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
 }
 
+/* 「此刻最新可用的 30min bar」应属于哪一天（2026-10-30，owner 报「30min判定整列 ⚠旧」）。
+   ⚠️ 不能拿日历日当基准：后端 `drop_forming_bar` 会丢掉未收盘根 ⇒ 每天 **10:30 之前**
+   最新一根仍是上一交易日的 15:00；周末/节假日同理。按日历日比会在每个交易日早盘
+   把整列都标成「旧」（假警报，2026-10-30 之前就是这样）。
+   返回 YYYY-MM-DD：工作日 10:30 之后 = 今天；其余 = 最近一个工作日。 */
+function m30ExpectedDate(d) {
+  const now = d || new Date();
+  const p = n => String(n).padStart(2, "0");
+  const ymd = x => `${x.getFullYear()}-${p(x.getMonth() + 1)}-${p(x.getDate())}`;
+  const cur = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const hm = now.getHours() * 60 + now.getMinutes();
+  const wd = now.getDay();
+  if (wd >= 1 && wd <= 5 && hm >= 10 * 60 + 30) return ymd(cur);
+  do { cur.setDate(cur.getDate() - 1); } while (cur.getDay() === 0 || cur.getDay() === 6);
+  return ymd(cur);
+}
+
 // 桥接就绪判定（2026-10-10）：pywebview 先建 `api: {}` 空对象再挂方法，
 // 仅判 `window.pywebview.api` 真值会在「空对象窗口」内误判为已就绪 ⇒ 改判**具体方法**是否已挂上。
 function _apiReady() {
@@ -434,7 +451,7 @@ function _refreshQuotesAndSidebar(pre) {
 //    −0.302pp t=−5.7）。本面板只回答「今天钱在哪个板块、谁在场」，**不是买卖依据**。
 //
 // 列沿用「建仓信号扫描」那套（判定/得分/通过/日线阶段/20日线观察/价涨幅/技术标签/时机条件/
-// 30min判定/仓位结构/30m MA5/依据），另加「梯队」。**刻意不含「池」与「扫描」两列**：
+// 30min判定/仓位结构/30m MA5），另加「梯队」。**刻意不含「池」「扫描」「依据」三列**：（「依据」2026-10-30 按 owner 要求移除）
 // 本面板不是扫描产物 —— 没有池归属、也没有 scan_time（后端返回里就没有这两个字段）。
 // date：缓存归属日期。风向标必须跟着**全局选中日**走（与选股猎手同一天），
 // 否则猎手跑历史日、风向标却总挑"≤今天的最新一天" ⇒ 两边排名对不上（2026-10-18 owner 报）。
@@ -558,7 +575,6 @@ function beaconRowHtml(s, labels) {
     <td style="text-align:center" title="${esc(_mv.reason || "")}">${m30Txt}</td>
     ${structCellHtml(s.structure)}
     ${ma5CellHtml(s.structure)}
-    <td class="cell-dim" style="max-width:240px;font-size:11px">${esc(s.build_reason || "—")}</td>
   </tr>`;
 }
 
@@ -591,7 +607,7 @@ function renderMarketBeacon(d) {
     <th>股票</th><th class="num" title="总市值（亿元，腾讯实时快照，与「价」同一轮 10s 刷新；悬停看流通市值）。取不到显示 ⏳">市值<br><span style="font-size:9px;opacity:.6">亿</span></th>
     <th>梯队</th><th>判定</th><th class="num">得分</th><th class="num">通过</th>
     <th>日线阶段</th><th title="是否站上 20 日线（观察列，不驱动判定）。⚠️ 得分里的 −70 扣分走的是 5 日线口径，与本列无关 ⇒ 本列不显示 −70">20日线<br><span style="font-size:9px;opacity:.6">观察</span></th><th class="num">价<br><span style="font-size:9px;opacity:.6">涨幅</span></th>
-    <th>技术标签</th><th>时机条件</th><th>30min判定</th><th>仓位结构</th><th>30m MA5<br><span style="font-size:9px;opacity:.6">仅展示</span></th><th>依据</th>
+    <th>技术标签</th><th>时机条件</th><th>30min判定</th><th>仓位结构</th><th>30m MA5<br><span style="font-size:9px;opacity:.6">仅展示</span></th>
   </tr></thead>`;
   // 板块名自带信息：龙头名字直接写在标题行 ⇒ **不展开也能一眼看到"谁在场"**
   // 2026-10-18 owner：「市场风向标使用方格显示」—— 每个板块一张**方格卡**（grid），
@@ -707,6 +723,7 @@ function renderAll(p, tradePnl) {
   // 2026-08-23: 持仓对照/盘中结算/系统看板已从"每日复盘"tab移除
   renderPB(p.position_builder);
   loadAbnormalPool();          // 「建仓信号扫描」下面的异常监控池（2026-10-22）
+  loadShelterPool();           // ⚓ 避风港湾（2026-10-29 owner，同款表）
   // P4-3: 概览页自动盘持仓卡片 + 全页 KILL_SWITCH 横幅
   loadAutoStatus();
 }
@@ -3275,6 +3292,69 @@ function bias5CellHtml(v, extra, cls) {
     + bias5InnerHtml(v) + `</td>`;
 }
 
+/* 近 30 日上涨次数占比（2026-10-30 owner：五个表各加一列）。
+   = 最近 30 个交易日里**收盘上涨**的天数 / 30 × 100（数据来自后端 `up30`，不足 31 根给 —）。
+   ⚠️ **描述列**：衡量"这一个月涨的天数多不多"（持续性/胜率口径），**不是涨幅** ——
+   两天大涨 + 28 天阴跌，占比也可能只有 7%。不参与任何判定/排序。 */
+function up30Tip(v, prev, extra) {
+  let t = "近30日上涨次数占比 = 最近 30 个交易日里收盘上涨的天数 / 30 × 100"
+    + "\n描述列（持续性/胜率口径，**不是涨幅**）：两天大涨 + 28 天阴跌也可能只有 7%"
+    + "\n红 = 45%~55% 且较5日前上升（研究里未来5日绝对收益/胜率最高的一档）；其余绿；灰=判不了"
+    + "\n箭头 = 与 **5 个交易日前**的同口径占比比较：▲ 上升 · ▼ 下降 · → 持平";
+  t += "\n\n研究判词（2.10M 股票·日，2023-08~2026-10，次日开盘进场持 5 日）："
+    + "\n· IC = −0.026（t −3.3）：占比越高，未来 5 日越差 —— 是**反指**，不是动量"
+    + "\n· 红色档：均值 +0.33%、胜率 47.8%、相对大盘超额 −0.07pp（t −0.95）"
+    + "\n· ≥55 且上升反而最差：+0.21%、胜率 46.5%、中位 −0.42%；≥70 且上升 −0.50%、胜率 42.8%"
+    + "\n· 所以红/绿只表示『落在历史最不差的一档』，**不构成交易信号**（扣成本后无优势）";
+  if (v == null || v === "" || isNaN(Number(v))) {
+    t += "\n\n（该票日线不足 31 根，无法计算）";
+  } else if (prev == null || prev === "" || isNaN(Number(prev))) {
+    t += "\n\n（日线不足 36 根，没有 5 个交易日前的同口径值 —— 判不了升降，不着红绿）";
+  } else {
+    const d = Number(v) - Number(prev);
+    t += "\n\n较 5 个交易日前 " + Number(prev).toFixed(1) + "% → " + Number(v).toFixed(1) + "%"
+      + "（" + (d > 0 ? "上升 +" : d < 0 ? "下降 " : "持平 ") + d.toFixed(1) + "pp）";
+  }
+  if (extra) t += String.fromCharCode(10) + extra;
+  return t;
+}
+/* 状态着色（2026-10-30 研究；owner 要求「满足=红 / 不满足=绿」）。
+   研究（`doc/research/2026-10-30_近30日上涨占比_升降_未来5日.md`）：
+     · up30 与未来 5 日收益 **负相关**（IC −0.026，t −3.25）：越高越差；
+     · 「高占比 + 上升」是最差的一族（≥55 升：胜率 46.5%、中位 −0.42%；≥70 升：−0.50%、42.8%）；
+     · 绝对收益/胜率最高的一档是 **45%~55% 且上升**（+0.33%、胜率 47.8%），
+       但它相对大盘仍 −0.07pp（t −0.95）⇒ 红/绿是"最不差"的标记，**不是交易信号**。
+   判不了方向（缺 up30_prev）→ 灰，不硬涂绿（数据不足 ≠ 不满足）。 */
+const UP30_RED_LO = 45, UP30_RED_HI = 55;
+function up30State(v, prev) {
+  if (v == null || v === "" || isNaN(Number(v))) return null;
+  if (prev == null || prev === "" || isNaN(Number(prev))) return null;
+  const n = Number(v), p = Number(prev);
+  return (n >= UP30_RED_LO && n < UP30_RED_HI && n > p) ? "on" : "off";
+}
+/* 方向箭头。形状=升/降/平，颜色跟随**状态**（红=满足 / 绿=不满足 / 灰=判不了）。 */
+function up30ArrowHtml(v, prev, cls) {
+  if (v == null || v === "" || prev == null || prev === "") return "";
+  const d = Number(v) - Number(prev);
+  if (isNaN(d)) return "";
+  const c = cls || "cell-dim";
+  if (d > 0) return ` <span class="${c}" style="font-size:10px">▲</span>`;
+  if (d < 0) return ` <span class="${c}" style="font-size:10px">▼</span>`;
+  return ' <span class="cell-dim" style="font-size:10px">→</span>';
+}
+function up30InnerHtml(v, prev) {
+  if (v == null || v === "" || isNaN(Number(v))) return '<span class="cell-dim">—</span>';
+  const n = Number(v);
+  const st = up30State(v, prev);
+  const cls = st === "on" ? "up" : (st === "off" ? "down" : "cell-dim");
+  return `<b class="${cls}">${n.toFixed(1)}%</b>` + up30ArrowHtml(v, prev, cls);
+}
+function up30CellHtml(v, prev, extra, cls) {
+  return `<td class="num ${cls || ""}" style="text-align:center" title="${esc(up30Tip(v, prev, extra))}">`
+    + up30InnerHtml(v, prev) + `</td>`;
+}
+const UP30_TH = `<th class="num" title="最近 30 个交易日里**收盘上涨**的天数 / 30 × 100。**描述列**（持续性/胜率口径，不是涨幅）：两天大涨+28天阴跌也可能只有 7%；不参与任何判定/排序。着色（2026-10-30 研究，2.10M 股票·日）：红 = 45%~55% 且较 5 日前上升（未来 5 日绝对收益/胜率最高的一档，但仍无超额）；其余绿；判不了方向灰。箭头 = 与 5 个交易日前的同口径占比比较：▲ 上升 / ▼ 下降 / → 持平">近30日上涨<br><span style="font-size:9px;opacity:.6">次数占比·红=45~55升</span></th>`;
+
 /* 时机条件列（2026-10-16 owner：「选股猎手的时机条件列与建仓信号扫描的该列保持一致」）。
    **建仓信号扫描 / 选股猎手 共用本渲染**（同 `structCellHtml`/`dayStageCellHtml`/`pctHtml` 的做法），
    别再各写一份 —— 此前猎手侧**硬编码只列 3 个条件键**，与真源脱钩，代价是：
@@ -3460,6 +3540,7 @@ function renderAbnormalPool(d) {
       <td style="max-width:220px;line-height:1.7">${tagsTxt}</td>
       ${maReclaimCellHtml(r.ma_reclaim)}
       ${condCellHtml(r.conditions, labels, r._has_conf === false, null)}
+      ${up30CellHtml(r.up30, r.up30_prev, r.build_reason || "")}
       ${bias5CellHtml(r.bias5, r.build_reason || "")}
       ${dev365CellHtml(r.dev365, r.build_reason || "")}
       <td onclick="event.stopPropagation()" ondblclick="event.stopPropagation()">
@@ -3480,7 +3561,7 @@ function renderAbnormalPool(d) {
       <th class="num">市值<br><span style="font-size:9px;opacity:.6">亿</span></th>
       <th title="通道/箱体/背离等技术形态，与「建仓信号扫描」同一来源与同一渲染">技术标签</th>
       <th title="**当日**刚站上 5/10/20/30/60 日线的**时刻**（与「建仓信号扫描」同源同渲染）">均线突破<br><span style="font-size:9px;opacity:.6">当日·时刻</span></th>
-      <th>时机条件</th><th class="num" title="${BIAS5_TH_TITLE}">5日乖离<br><span style="font-size:9px;opacity:.6">(价−MA5)/MA5</span></th>
+      <th>时机条件</th>${UP30_TH}<th class="num" title="${BIAS5_TH_TITLE}">5日乖离<br><span style="font-size:9px;opacity:.6">(价−MA5)/MA5</span></th>
       <th title="(现价 − 365 日均线)/365 日均线。**着色 = 风险灯**：≥ +60% 或 ≤ −45% 标红，其余绿（绿色≠看多）。实测：正偏 ≥+60% 时 5 日内回撤>10% 的概率翻倍到 22.6%（基线 11.1%），>120% 到 38.2%；负偏只有 ≤−60% 有负收益证据（5日 −4.09%，t=−5.29）">偏离365日线<br><span style="font-size:9px;opacity:.6">风险灯</span></th>
       <th title="**手动**记录的涨停原因（一句话，最多 120 字）。只展示、不参与任何判定；回车或点别处即保存">涨停原因<br><span style="font-size:9px;opacity:.6">手动</span></th>
       <th></th>
@@ -3490,13 +3571,14 @@ function renderAbnormalPool(d) {
 }
 
 /* 价/市值：与猎手同一条链（`load_quotes_for` 一次覆盖全部行），就地补单元格。 */
-async function _patchAbnormalQuotes() {
-  const codes = Array.from(new Set(_abnRows.map(r => r.code).filter(Boolean)));
+/* 池表的「价/涨幅/市值」就地补（2026-10-29：异常监控池与避风港湾共用一份实现）。 */
+async function _patchPoolQuotes(rows, sel) {
+  const codes = Array.from(new Set((rows || []).map(r => r.code).filter(Boolean)));
   if (!codes.length) return;
   try {
     const r = await apiCall("load_quotes_for", codes);
     const qm = (r && r.quotes) || {};
-    document.querySelectorAll("#abnormalPoolBody td[data-abncode]").forEach(td => {
+    document.querySelectorAll(`${sel} td[data-abncode]`).forEach(td => {
       const q = qm[td.getAttribute("data-abncode")];
       if (!q) return;
       td.innerHTML = td.getAttribute("data-kind") === "px"
@@ -3504,6 +3586,7 @@ async function _patchAbnormalQuotes() {
     });
   } catch (e) { /* 取不到就保持 ⏳，不刷成 0 */ }
 }
+async function _patchAbnormalQuotes() { return _patchPoolQuotes(_abnRows, "#abnormalPoolBody"); }
 
 async function abnormalAdd() {
   const inp = document.getElementById("abnSearch");
@@ -3543,6 +3626,129 @@ async function abnormalSetReason(code, text) {
 async function abnormalRemove(code) {
   try { await apiCall("abnormal_pool_remove", code); } catch (e) { /* 静默 */ }
   await loadAbnormalPool(true);
+}
+
+
+/* ================= ⚓ 避风港湾（2026-10-29 owner：「新增一个避风港湾的板块，样式和建仓信号扫描一样」）
+   与「异常监控池」**同一套行构造**（后端 `_pool_rows`）与同一套单元格渲染，
+   区别只有：成员存在另一个 store（`t_gui.shelter_pool_*`）、没有「涨停原因」列（那是涨停复盘专用的）。
+   刷新节奏与异常监控池一致：行情 15s / 整行 60s（有 pending 的「均线突破」时 15s）。 */
+let _shelterRows = [], _shelterLoadedAt = 0, _shelterInflight = false;
+
+async function loadShelterPool(force) {
+  const box = document.getElementById("shelterPoolBody");
+  if (!box || _shelterInflight) return;
+  if (!force && _shelterRows.length && !_tabActive("tab-signals")) return;   // 看不见就不整表刷新
+  if (!force && _shelterRows.length) {
+    const _age = Date.now() - _shelterLoadedAt;
+    const _mrPending = _shelterRows.some(r => (r.ma_reclaim || {}).pending);
+    if (_age < 15000) return;
+    if (_age < (_mrPending ? 15000 : 60000)) {
+      _patchPoolQuotes(_shelterRows, "#shelterPoolBody");
+      return;
+    }
+  }
+  _shelterInflight = true;
+  try {
+    const d = await apiCall("load_shelter_pool", state.date || null);
+    _shelterRows = (d && d.rows) || [];
+    _shelterLoadedAt = Date.now();
+    renderShelterPool(d || {});
+    _patchPoolQuotes(_shelterRows, "#shelterPoolBody");
+  } catch (e) {
+    box.innerHTML = `<div class="empty down">避风港湾加载失败：${esc((e && (e.message || e)) || "未知")}</div>`;
+  } finally { _shelterInflight = false; }
+}
+
+async function shelterAdd() {
+  const inp = document.getElementById("shelterSearch");
+  const t = (inp && inp.value || "").trim();
+  if (!t) return;
+  const btn = document.getElementById("shelterAddBtn");
+  if (btn) { btn.disabled = true; btn.textContent = "加入中…"; }
+  try {
+    const r = await apiCall("shelter_pool_add", t);
+    if (r && r.ok) {
+      if (inp) inp.value = "";
+      await loadShelterPool(true);
+    } else {
+      statusEl("加入失败：" + ((r && r.error) || "未知错误"), "err");
+    }
+  } catch (e) {
+    statusEl("加入失败：" + ((e && (e.message || e)) || "未知"), "err");
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = "＋ 加入"; }
+  }
+}
+
+async function shelterRemove(code) {
+  try { await apiCall("shelter_pool_remove", code); } catch (e) { /* 静默 */ }
+  await loadShelterPool(true);
+}
+
+function renderShelterPool(d) {
+  const el = document.getElementById("shelterPoolBody");
+  if (!el) return;
+  const rows = d.rows || [];
+  if (!rows.length) {
+    el.innerHTML = '<div class="empty">避风港湾还是空的。上面输代码/名称 → ＋加入</div>';
+    return;
+  }
+  const labels = d.cond_labels || {};
+  const _STG = { 1: "①蓄势", 2: "②抬升", 3: "③派发", 4: "④下跌" };
+  const body = rows.map(r => {
+    const stage = r.build_stage
+      ? `<span style="font-size:12px">${esc(_STG[r.build_stage] || "—")}</span>`
+      : '<span class="cell-dim">—</span>';
+    // 「通过 X/3」与建仓表同口径（t_regime + t_trend + t_drawdown），不是条件圆点总数
+    const metTxt = (r.build_met == null) ? "—" : `${r.build_met}/3`;
+    // 技术标签（2026-10-23 owner：异常监控池也要有）——与建仓表**同一个渲染器** `tagBadge`。
+    // 后端冷启动返空（后台批算中）⇒ 显示 ⏳，15s 轮询自填。
+    const tagsTxt = (r.tags && r.tags.length)
+      ? r.tags.map(t => tagBadge(t)).join(" ")
+      : '<span class="cell-dim" style="font-size:10px" title="技术标签后台批算，约 10~20s 自填">⏳ 标签</span>';
+    // 整行底色：与建仓信号扫描**同一条规则**（2026-10-19 owner）：站上 5 日线=绿 / 其它=红，
+    // 无 MA5 特征（缓存不足）不着色 —— 别把"无数据"画成"破位"。
+    // ⚠️ 优先用「均线突破」那份**新鲜基准**（分钟补齐的昨收 + 实时价）：监控池的票本地日线缓存
+    //    可能停在几天前，conformance 的 above_ma5 会拿几天前的收盘判 ⇒ 颜色反过来
+    //    （owner 2026-10-23 实报：深圳华强今天刚站上 5 日线，整行却是红的）。
+    const _mr5 = (r.ma_reclaim || {}).above5;
+    const _above5 = (typeof _mr5 === "boolean") ? _mr5 : (r.timing_features || {}).above_ma5;
+    const rowBg = (_above5 === true) ? "background:rgba(63,185,80,.10);"
+      : (_above5 === false) ? "background:rgba(248,81,73,.12);" : "";
+    return `<tr ondblclick="openStockChart('${esc(r.code)}','${esc(r.name)}')" style="cursor:pointer;${rowBg}"
+        title="双击看K线${r.added_at ? " · 加入于 " + esc(r.added_at) : ""}">
+      <td>${esc(r.name || "")} <span class="mono cell-dim">${esc(r.code || "")}</span></td>
+      <td>${verdictBadge(r.verdict)}</td>
+      <td class="num"><b>${r.composite_score != null ? r.composite_score : "—"}</b></td>
+      <td class="num"><b>${metTxt}</b></td>
+      <td style="text-align:center">${stage}</td>
+      ${ma20FlagCellHtml(r.build_above_ma20, "无该特征（本地日线缓存不足或尚未预热）")}
+      <td class="num" data-abncode="${esc(r.code)}" data-kind="px">${hunterPriceHtml(null)}</td>
+      <td class="num" data-abncode="${esc(r.code)}" data-kind="mc">${hunterMktcapHtml(null)}</td>
+      <td style="max-width:220px;line-height:1.7">${tagsTxt}</td>
+      ${maReclaimCellHtml(r.ma_reclaim)}
+      ${condCellHtml(r.conditions, labels, r._has_conf === false, null)}
+      ${up30CellHtml(r.up30, r.up30_prev, r.build_reason || "")}
+      ${bias5CellHtml(r.bias5, r.build_reason || "")}
+      ${dev365CellHtml(r.dev365, r.build_reason || "")}
+      <td style="text-align:center"><button class="mini-btn" title="从避风港湾移除"
+        onclick="event.stopPropagation();shelterRemove('${esc(r.code)}')">×</button></td>
+    </tr>`;
+  }).join("");
+  el.innerHTML = `<table><thead><tr>
+      <th>股票</th><th>判定</th><th class="num">得分</th><th class="num">通过</th>
+      <th>日线阶段</th><th title="是否站上 20 日线（观察列）">20日线<br><span style="font-size:9px;opacity:.6">观察</span></th>
+      <th class="num">价<br><span style="font-size:9px;opacity:.6">实时涨幅</span></th>
+      <th class="num">市值<br><span style="font-size:9px;opacity:.6">亿</span></th>
+      <th title="通道/箱体/背离等技术形态，与「建仓信号扫描」同一来源与同一渲染">技术标签</th>
+      <th title="**当日**刚站上 5/10/20/30/60 日线的**时刻**（与「建仓信号扫描」同源同渲染）">均线突破<br><span style="font-size:9px;opacity:.6">当日·时刻</span></th>
+      <th>时机条件</th>${UP30_TH}<th class="num" title="${BIAS5_TH_TITLE}">5日乖离<br><span style="font-size:9px;opacity:.6">(价−MA5)/MA5</span></th>
+      <th title="(现价 − 365 日均线)/365 日均线。**着色 = 风险灯**：≥ +60% 或 ≤ −45% 标红，其余绿（绿色≠看多）。实测：正偏 ≥+60% 时 5 日内回撤>10% 的概率翻倍到 22.6%（基线 11.1%），>120% 到 38.2%；负偏只有 ≤−60% 有负收益证据（5日 −4.09%，t=−5.29）">偏离365日线<br><span style="font-size:9px;opacity:.6">风险灯</span></th>
+      <th></th>
+    </tr></thead><tbody>${body}</tbody></table>
+    <div class="cell-dim" style="font-size:11px;margin-top:6px">共 <b>${rows.length}</b> 只 · 双击行看K线 ·
+      判定/得分/时机条件与「建仓信号扫描」同源；本地日线缓存不足的票显示 —</div>`;
 }
 
 /* ================= 区块折叠（2026-10-22 owner）=================
@@ -3755,7 +3961,6 @@ function renderPB(pb) {
           ${monitorBadge}${chBadge}${apBadge}${icBadge}${vetoBadge}${r.in_holdings ? `<span class="badge hold">持仓</span>` : ""}${errTxt}${blockLine}</td>
         <td style="text-align:center">${poolBadge}</td>
         <td class="num">${r.mktcap != null ? hunterMktcapHtml({ mktcap: r.mktcap }) : '<span class="cell-dim">—</span>'}</td>
-        <td>${verdictBadge(r.verdict)}</td>
         <td class="num" title="${esc(scoreCellTitle)}">${scoreCellHtml}</td>
         <td class="num ${metCls}"><b>${isNoData ? "—" : metCount + "/3"}</b></td>
         ${dayStageCellHtml(r.structure)}
@@ -3768,9 +3973,9 @@ function renderPB(pb) {
         ${mvCell}
         ${stCell}
         ${ma5CellHtml(r.structure)}
+        ${up30CellHtml(r.up30, r.up30_prev)}
         ${bias5CellHtml(r.bias5)}
         ${dev365CellHtml(r.dev365)}
-        <td class="cell-dim">${esc(r.scan_type || "")}${r._scans > 1 ? `×${r._scans}` : ""}${scanTimeTxt ? ` <span class="mono">${esc(scanTimeTxt)}</span>` : ""}${staleBadge}</td>
         <td>${!r.in_holdings ? `<button class="mini-btn" style="font-size:10px;padding:0 5px;color:#3fb950" onclick="confirmPosition('${esc(r.code||'')}',document.getElementById('pb-row-${esc(r.code||'')}'))" title="人工确认建仓（回写 signal_history）">✓确认</button><button class="mini-btn" style="font-size:10px;padding:0 5px;color:#f85149" onclick="removeFromWatchlist('${esc(r.code||'')}',document.getElementById('pb-row-${esc(r.code||'')}'))" title="从股池移除">✕</button>` : ""}</td>
       </tr>`;
   }).join("");
@@ -3798,7 +4003,7 @@ function renderPB(pb) {
         <thead><tr>
           <th>股票</th><th title="P3-2 池分管：人工=manual侧扫描 / 自动=auto侧管理">池</th>
           <th class="num" title="总市值（亿元，腾讯实时快照，与「价」同一轮 10s 刷新；悬停看流通市值）。取不到显示 —">市值<br><span style="font-size:9px;opacity:.6">亿</span></th>
-          <th>判定</th><th class="num">得分</th><th class="num">通过</th>
+          <th class="num">得分</th><th class="num">通过</th>
           <th title="日线四阶段（描述状态，紧挨得分便于对照）：②抬升/③派发/④下跌/①蓄势。⚠️ 实测横截面IC与直觉相反——抬升/追高前瞻更差(IC −0.031~−0.042, t=−12~−15)、下跌/超跌前瞻更好(IC +0.020~+0.034, t=+7~+12)，分半窗两段同号；效应量小(IC≈0.04)仅作相对强弱参照">日线阶段</th>
           <th title="是否站上 20 日线（观察列，不驱动判定）。⚠️ 行底色才是 5 日线口径（站上=绿、其它=红，得分 −70 悬崖同源）；本列只看 20 日线。">20日线<br><span style="font-size:9px;opacity:.6">观察</span></th>
           <th class="num" title="实时价 + 实时涨幅（随行情每 10s 刷新）。取不到显示 — 而不是 0.00%：不把「无数据」画成「平盘」">价<br><span style="font-size:9px;opacity:.6">涨幅</span></th>
@@ -3809,11 +4014,12 @@ function renderPB(pb) {
           <th title="30分钟综合判定（与『持仓 30min 风险体检』同口径）：🔴减仓/避高=30min 顶背离(T1/T2)；🟠盯紧=T3顶分型+T4均线压制同现；🟢偏好=无顶信号且有新鲜底背离(≤16根)；⚪中性=其余。依据 981只×540日 离线验证；T3/T4 无前瞻区分度、单个不报警">30min判定</th>
           <th title="仓位结构（30min/10min，供仓位管理参考）：止损=10min 最近已确认摆动低点；阶段=10min 四阶段(①蓄势/②抬升/③派发/④下跌)；30m=30min MA65 中期方向；折价=现价/止损-1（到-4.3%记满）。破位时给出三档下档支撑挂单价与5日成交率估计。⚠️ 是**结构参考、不是买卖信号**——机械按阶段加减仓经实测无正贡献(纯择时-1.4~+2.7pp不显著)，「破前低就清仓」-30pp强有害；唯一有证据的是破位后在下档支撑挂限价补仓(改善成本结构、不提高期望)。悬停看明细">仓位结构</th>
           <th title="30min MA5 状态（**纯展示**）：现价相对 5×30min 均线 站上/跌破，及距上次翻转几根。⚠️ 实测**无前瞻信息量**（状态/跃迁 × 站上/跌破 四口径，同日同bar-of-day对照 |diff|≤0.03pp、|t|≤2.4）⇒ 仅供参考，不参与任何判定。朴素对照的 −0.343pp(t=−25.5) 是日内时段伪影">30m MA5<br><span style="font-size:9px;opacity:.6">仅展示</span></th>
+          ${UP30_TH}
           <th class="num" title="${BIAS5_TH_TITLE}">5日乖离<br><span style="font-size:9px;opacity:.6">(价−MA5)/MA5</span></th>
           <th title="(现价 − 365 日均线)/365 日均线。**着色 = 风险灯**：≥ +60% 或 ≤ −45% 标红，其余绿（绿色≠看多）。日线不足 365 根显示 —">偏离365日线<br><span style="font-size:9px;opacity:.6">风险灯</span></th>
-          <th>扫描</th><th></th>
+          <th></th>
         </tr></thead>
-        <tbody>${rows || '<tr><td colspan="20" class="empty">无扫描结果</td></tr>'}</tbody>
+        <tbody>${rows || '<tr><td colspan="19" class="empty">无扫描结果</td></tr>'}</tbody>
       </table>
       <div class="cell-dim" style="font-size:11px;margin-top:8px">●=通过 ○=未通过 · 时机条件：${Object.values(condLabels).join(" / ")} · 第5位🚫=否决因子(爆量≥3倍或偏离MA60超+20%) · GO(多头追强/空头抄底)→signal，震荡→降频 · 观察=震荡市结构达标(不推送) · 盘中每10s刷新</div>
     </div>`;
@@ -5894,7 +6100,7 @@ function _paCtxMenu(ev, items) {
 /* 画框/缺口的提示必须显示在**弹窗之上**：
    `#status` 在顶栏，K 线弹窗一开就被遮罩挡在后面 —— 早年所有提示都写在那里，
    用户看到的就是"点了没反应、状态栏也没字"（2026-10-28 实报）。 */
-const PA_UI_BUILD = "20261028z";     // 用于确认页面上跑的是新版 app.js
+const PA_UI_BUILD = "20261030a";     // 用于确认页面上跑的是新版 app.js
 let _paToastTimer = null;
 function _paToast(msg, kind) {
   try {
@@ -7949,6 +8155,12 @@ function applySectorTags(tbody, category) {
         _b5Td.innerHTML = bias5InnerHtml(info.bias5);
         _b5Td.title = bias5Tip(info.bias5);
       }
+      // 2026-10-30：近30日上涨次数占比同源同批，就地回填
+      const _u30Td = row.querySelector("td.h-up30");
+      if (_u30Td) {
+        _u30Td.innerHTML = up30InnerHtml(info.up30, info.up30_prev);
+        _u30Td.title = up30Tip(info.up30, info.up30_prev);
+      }
     }
     // 2026-10-17：30m MA5 走的是**仓位结构**缓存（比标签慢一拍）⇒ 这里同款回填
     const _st = (hunterStructCache[category] || {})[code];
@@ -8951,6 +9163,8 @@ function renderHunter(h) {
         <td class="h-mr" data-mrcode="${esc(s.code)}" style="text-align:center;white-space:nowrap"
             title="当日刚站上 5/10/20/30/60 日线的时刻（展开板块后按可见个股现算）">${maReclaimInnerHtml(s.ma_reclaim, "展开板块后自动加载")}</td>
         ${condCellHtml(s.build_conds, condLabels, s.build_verdict === "insufficient_data", s.build_veto)}
+        <td class="num h-up30" style="text-align:center"
+            title="${esc(up30Tip((hunterTagsCache[category] || {})[s.code] && (hunterTagsCache[category] || {})[s.code].up30, (hunterTagsCache[category] || {})[s.code] && (hunterTagsCache[category] || {})[s.code].up30_prev, s.build_reason || ""))}">${up30InnerHtml((hunterTagsCache[category] || {})[s.code] && (hunterTagsCache[category] || {})[s.code].up30, (hunterTagsCache[category] || {})[s.code] && (hunterTagsCache[category] || {})[s.code].up30_prev)}</td>
         <td class="num h-bias5" style="text-align:center"
             title="${esc(bias5Tip((hunterTagsCache[category] || {})[s.code] && (hunterTagsCache[category] || {})[s.code].bias5, s.build_reason || ""))}">${bias5InnerHtml((hunterTagsCache[category] || {})[s.code] && (hunterTagsCache[category] || {})[s.code].bias5)}</td>
         <td class="num h-dev365" style="text-align:center"
@@ -9021,13 +9235,13 @@ function renderHunter(h) {
       const _withWhy = _members.filter(m => m[1]).length;
       const _noteId = ("hnote-" + category + "-" + gk).replace(/[^\w一-龥-]/g, "_");
       const _gTip = [_gDesc ? `${gk}：${_gDesc}` : ""].filter(Boolean).join("");
-      const head = `<tr class="h-subgroup-head"><td colspan="16">
+      const head = `<tr class="h-subgroup-head"><td colspan="18">
         <span class="h-subgroup-name"${_gTip ? ` title="${esc(_gTip)}" style="cursor:help"` : ""}>📂 ${esc(gk)}</span>
         <span class="cell-dim" style="font-size:10px">${gs.length}只 · ${gScoreTxt}${gUp ? ` · 涨停${gUp}` : ""}</span>
         ${_gDesc ? `<span class="h-subgroup-desc" title="${esc(_gTip)}">${esc(_gDesc)}</span>` : ""}
         <button class="mini-btn h-note-btn" onclick="hunterToggleNote('${_noteId}', this)">▸ 说明 · 个股理由</button>
       </td></tr>
-      <tr class="h-subgroup-note" id="${_noteId}" style="display:none"><td colspan="16">
+      <tr class="h-subgroup-note" id="${_noteId}" style="display:none"><td colspan="18">
         <div class="h-note-desc">${esc(_gDesc || "（该细分概念暂无解释）")}</div>
         <div class="h-note-hint cell-dim">本组 ${gs.length} 只，其中 ${_withWhy} 只有入选理由；再点一次按钮收起</div>
         <ul class="h-note-list">${_members.slice(0, 80).map(([n, r, v]) =>
@@ -9158,6 +9372,7 @@ function renderHunter(h) {
             <th>技术标签</th>
             <th title="**当日**刚站上 5/10/20/30/60 日线的**时刻**（与「建仓信号扫描」「持仓 30 分钟风险体检」「异常监控池」同源同渲染）。猎手池 2000+ 只，只对**展开板块当前页**的股票现算">均线突破<br><span style="font-size:9px;opacity:.6">当日·时刻</span></th>
             <th title="时机条件：市场有方向/多头结构/回撤到位 · 末位🚫=否决因子（爆量≥3倍或偏离MA60>+20%）">时机条件</th>
+            ${UP30_TH}
             <th class="num" title="${BIAS5_TH_TITLE}">5日乖离<br><span style="font-size:9px;opacity:.6">(价−MA5)/MA5</span></th>
             <th title="(现价 − 365 日均线) / 365 日均线。**着色 = 风险灯**：≥ +60% 或 ≤ −45% 标红，其余绿（绿色≠看多）。原来这列是「理由」，已挪到本格 tooltip">偏离365日线<br><span style="font-size:9px;opacity:.6">风险灯</span></th>
           </tr></thead>
@@ -9340,15 +9555,11 @@ function renderOB(ob) {
   }
   const _VCLS = { high: "badge signal", watch: "badge approach", bull: "badge bear" };
   const rows = ob.stocks.map(s => {
-    if (s.error) return `<tr><td colspan="17" class="cell-dim">${esc(s.code)}: ${esc(s.error)}</td></tr>`;
+    if (s.error) return `<tr><td colspan="14" class="cell-dim">${esc(s.code)}: ${esc(s.error)}</td></tr>`;
     const ob_ = s.overbought || {};
     const vd = s.verdict || {};           // 2026-10-09：30min 综合判定 {level,label,reason}
     const dv = s.divergence || {};        // 30min {type,bars_ago}（进 tooltip）
     const tf = s.top_features || {};      // 30min 顶部特征 T1–T4（进 tooltip）
-    const rsiHot = (ob_.rsi || 0) > 70;
-    const rsiExtreme = (ob_.rsi || 0) > 80;
-    const kdjHot = (ob_.kdj || 0) > 100;
-    const cciHot = (ob_.cci || 0) > 100;
     const trendTxt = s.trend === "down" ? `<b class="down">下行↘</b>`
       : s.trend === "up" ? `<b class="up">上行↗</b>` : `<span class="cell-dim">震荡→</span>`;
     const trendSrc = s.trend_src === "daily" ? ` <span class="cell-dim" style="font-size:10px">(日线)</span>` : "";
@@ -9357,6 +9568,18 @@ function renderOB(ob) {
                        : `<span class="cell-dim">${esc(vd.label || "—")}</span>`;
     const tfTip = (tf.ok && tf.fired && tf.fired.length) ? `顶部特征：${tf.fired.join("、")}` : "无顶部特征";
     const dvTip = dv.type ? `${dv.type}${dv.bars_ago != null ? `·${dv.bars_ago}根前` : ""}` : "无背离";
+    /* 判定所依据的最后一根 30min bar（2026-10-28，owner 报「赛微电子低位却提示减仓/避高」）。
+       ⚠️ 那条是**昨天的**信号：15:30 之后 slot 翻页、体检表改用磁盘分钟线重算，
+       而磁盘 30min 缓存整体落后一天。安全契约要求**过期数据必须自己说出来**，
+       所以这里把 asof 显式写进 tooltip，非当日时还加一句 ⚠。 */
+    const _asof = String(s.bar_time || "");
+    /* ⚠️ 基准是「此刻应有的最新根」而不是日历日（2026-10-30，见 `m30ExpectedDate`）：
+       10:30 之前/周末/节假日，最新可用根本来就是上一交易日的，不该标「旧」。 */
+    const _expAsOf = m30ExpectedDate();
+    const _asofStale = !!_asof && _asof.slice(0, 10) < _expAsOf;
+    const _asofTxt = _asof ? `判定依据：${_asof.slice(0, 16)} 那根 30min`
+      + (_asofStale ? `　⚠️ 比应有的最新根（${_expAsOf}）旧（数据陈旧，结论可能已不成立）` : "")
+      : "判定依据：—";
     const _obBg = ((s.tags || []).some(t => (t.label || "") === "破5日线"))
       ? "background:rgba(248,81,73,.10);" : "";
     return `<tr ondblclick="openStockChart('${esc(s.code)}','${esc(s.name)}')" style="cursor:pointer;${_obBg}" title="双击看K线">
@@ -9368,15 +9591,12 @@ function renderOB(ob) {
       ${ma20FlagCellHtml(s.above_ma20,
         "日线不足 20 根或未预热 —— 显示 — 而不当作「未站上」",
         s.ma20_daily ? `MA20=${s.ma20_daily}，现价=${s.price}` : "")}
-      <td class="num ${rsiHot ? 'up' : 'cell-dim'}" title="日线 RSI>70 提示 / >80 高危">${fmt(ob_.rsi, 0)} ${rsiHot ? `<span class="badge ${rsiExtreme ? 'signal' : 'approach'}">⚠</span>` : ''}</td>
-      <td class="num ${kdjHot ? 'up' : 'cell-dim'}" title="日线 KDJ-J>100 属动能(不计风险)">${fmt(ob_.kdj, 0)}</td>
-      <td class="num ${cciHot ? 'up' : 'cell-dim'}" title="日线 CCI>100 属动能(不计风险)">${fmt(ob_.cci, 0)}</td>
-      <td>${ob_.boll ? '<span class="badge chop" title="日线破BOLL上轨=突破动能">破</span>' : '<span class="cell-dim">—</span>'}</td>
       <td style="max-width:200px;line-height:1.7">${(s.tags || []).map(t => tagBadge(t)).join(" ") || '<span class="cell-dim">—</span>'}</td>
       ${maReclaimCellHtml(s.ma_reclaim)}
-      <td title="30min 综合判定（趋势+顶部/底背离特征）&#10;${esc(tfTip)}&#10;${esc(dvTip)}">${vCell}</td>
+      <td title="${esc("30min 综合判定（趋势+顶部/底背离特征）\n" + _asofTxt + "\n" + tfTip + "\n" + dvTip)}">${vCell}${_asofStale ? ` <span class="warn" title="判定所依据的 30min bar 比此刻应有的最新根（${_expAsOf}）更旧">⚠旧</span>` : ""}</td>
       ${structCellHtml(s.structure)}
       ${ma5CellHtml(s.structure)}
+      ${up30CellHtml(s.up30, s.up30_prev, vd.reason || "")}
       ${bias5CellHtml(s.bias5, vd.reason || "")}
       ${dev365CellHtml(s.dev365, vd.reason || "")}
     </tr>`;
@@ -9395,19 +9615,16 @@ function renderOB(ob) {
         <th>趋势(30m)</th>
         <th title="日线四阶段（描述状态）：②抬升/③派发/④下跌/①蓄势。⚠️ 实测横截面IC与直觉相反——抬升/追高前瞻更差(t=−12~−15)、下跌/超跌前瞻更好(t=+7~+12)，效应量小(IC≈0.04)仅作相对强弱参照">日线阶段</th>
         <th title="是否站上 20 日线（观察列，不驱动判定）。口径与「建仓信号扫描」/「选股猎手」同款：收盘价 > 20 日简单均线。⚠️ 本表不做 −70 悬崖扣分（那是建仓表 5 日线的口径），本列纯展示">20日线<br><span style="font-size:9px;opacity:.6">观察</span></th>
-        <th class="num" title="日线 RSI>70超买">RSI</th>
-        <th class="num" title="日线 KDJ J>100超买">KDJ-J</th>
-        <th class="num" title="日线 CCI>100超买">CCI</th>
-        <th title="日线收盘破BOLL上轨">BOLL</th>
         <th title="与建仓扫描同口径（通道/箱体/筑底顶/背离/超买/破均线）">技术标签</th>
         <th title="**当日**刚站上 5/10/20/30/60 日线的**时刻**（与「建仓信号扫描」「异常监控池」同源同渲染）。持仓票若刚回站 MA20/MA60，常是「趋势修复」的第一根证据">均线突破<br><span style="font-size:9px;opacity:.6">当日·时刻</span></th>
         <th title="30min 趋势+顶部/底背离特征 → 重视程度（读一列即可）">30min判定</th>
         <th title="仓位结构（30min/10min，与建仓信号扫描**同一真源**，供仓位管理参考）：止损=10min 最近已确认摆动低点；阶段=10min 四阶段；30m=30min MA65 中期方向；折价=现价/止损-1（到-4.3%记满）。破位时给三档下档支撑挂单价与5日成交率。⚠️ 是**结构参考、不是买卖信号**。悬停看明细">仓位结构</th>
         <th title="30min MA5 状态（**纯展示**）：站上/跌破 5×30min 均线，及距上次翻转几根。⚠️ 实测**无前瞻信息量**（同日同bar-of-day对照 |diff|≤0.03pp）⇒ 仅供参考，不参与任何判定">30m MA5<br><span style="font-size:9px;opacity:.6">仅展示</span></th>
+        ${UP30_TH}
         <th class="num" title="${BIAS5_TH_TITLE}">5日乖离<br><span style="font-size:9px;opacity:.6">(价−MA5)/MA5</span></th>
         <th title="(现价 − 365 日均线)/365 日均线。**着色 = 风险灯**：≥ +60% 或 ≤ −45% 标红，其余绿（绿色≠看多）。原来的「依据」已挪到本格 tooltip">偏离365日线<br><span style="font-size:9px;opacity:.6">风险灯</span></th>
       </tr></thead><tbody>${rows}</tbody></table>
-      <div class="cell-dim" style="font-size:10px;margin-top:4px">口径(2026-10-09)：判定=30min顶部/底背离特征综合（依据 t_io/validation/m30_top 981只×540日离线验证）· 趋势=30min三层状态机 · RSI/KDJ/CCI/BOLL 为日线超买指标（不驱动判定）· <b>20日线</b>=收盘价 vs 20 日简单均线（2026-10-14 新增，与建仓表/猎手表同口径；**观察列，不驱动判定**）· 双击行看K线</div>
+      <div class="cell-dim" style="font-size:10px;margin-top:4px">口径(2026-10-09)：判定=30min顶部/底背离特征综合（依据 t_io/validation/m30_top 981只×540日离线验证）· 趋势=30min三层状态机 · <b>20日线</b>=收盘价 vs 20 日简单均线（2026-10-14 新增，与建仓表/猎手表同口径；**观察列，不驱动判定**）· 双击行看K线</div>
     </div>`;
 }
 
@@ -10099,6 +10316,7 @@ function switchTab(tab) {
       // 切回本页时补一次异常监控池（内部有 TTL 节流：60s 内刚拉过就只刷行情，
       // 有「均线突破」pending 时 15s 重拉）。它不在 10s live 轮询里，别指望自动回来。
       loadAbnormalPool();
+      loadShelterPool();
       if (ma365Inst) { try { ma365Inst.resize(); } catch (e) { } }
       if (ma20Inst) { try { ma20Inst.resize(); } catch (e) { } }
       // 首次进 tab 才拉（默认在总览页，别让 5500 个日线缓存的解析和首屏抢 CPU）；

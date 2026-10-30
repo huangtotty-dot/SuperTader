@@ -170,10 +170,12 @@ class TestBias5(unittest.TestCase):
         """
         from pathlib import Path as _P
         js = (_P(_ROOT) / "web" / "app.js").read_text(encoding="utf-8")
-        self.assertGreaterEqual(js.count(">5日乖离<br>"), 4,
-                                "四张表都要有「5日乖离」表头")
+        # 2026-10-29：新增「⚓ 避风港湾」（与异常监控池共用行构造）⇒ 五张表
+        self.assertGreaterEqual(js.count(">5日乖离<br>"), 5,
+                                "五张表都要有「5日乖离」表头")
         n_calls = js.count("bias5CellHtml(r.bias5") + js.count("bias5CellHtml(s.bias5")
-        self.assertEqual(n_calls, 3, "建仓信号扫描 / 异常监控池 / 持仓30min体检 三处调用")
+        self.assertEqual(n_calls, 4,
+                         "建仓信号扫描 / 异常监控池 / 避风港湾 (r) + 持仓30min体检 (s)")
         self.assertIn('td class="num h-bias5"', js, "选股猎手行（就地回填）")
 
     def test_后端三个端点都下发bias5(self):

@@ -20,6 +20,8 @@ import sys
 import time as _time
 import unittest
 from datetime import datetime
+from pathlib import Path
+from unittest import mock
 
 sys.stdout.reconfigure(encoding="utf-8")
 _ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -140,6 +142,62 @@ class TestObM30(unittest.TestCase):
         label = s["tags"][0]["label"] if s.get("tags") else None      # 首个标签 = 上行/下行/震荡
         m = {"up": "上行", "down": "下行", "flat": "震荡"}
         self.assertEqual(label, m[s["trend"]], "趋势列与行内趋势标签必须同源一致")
+
+    # ---- 2026-10-30：整列「⚠旧」的修复（午休重启只走磁盘 ⇒ 全用上一交易日的 bars） ----
+
+    def test_04_午休等时段允许出网(self):
+        d = datetime.strptime
+        self.assertTrue(t_gui._m30_online_allowed(d("2026-10-30 12:35", "%Y-%m-%d %H:%M")),
+                        "午休必须允许在线补：磁盘 30min 停在上一交易日")
+        self.assertTrue(t_gui._m30_online_allowed(d("2026-10-30 10:15", "%Y-%m-%d %H:%M")))
+        self.assertTrue(t_gui._m30_online_allowed(d("2026-10-30 15:45", "%Y-%m-%d %H:%M")),
+                        "盘后补刷窗 15:30–16:30 仍在")
+        self.assertFalse(t_gui._m30_online_allowed(d("2026-10-30 16:45", "%Y-%m-%d %H:%M")))
+        self.assertFalse(t_gui._m30_online_allowed(d("2026-10-31 12:00", "%Y-%m-%d %H:%M")),
+                         "周末不出网（2026-10-18 卡死约束）")
+
+    def test_05_磁盘快照不许盖掉更新的(self):
+        key = "000001_test_slot"
+        t_gui._m30_snap_put(key, {"bar_time": "2026-10-30 11:30:00"})
+        t_gui._m30_snap_put(key, {"bar_time": "2026-10-29 15:00:00"})   # 磁盘（落后）
+        self.assertEqual(t_gui._M30_SNAP_CACHE[key]["bar_time"], "2026-10-30 11:30:00",
+                         "磁盘预热不得把在线快照降级成昨天")
+        t_gui._m30_snap_put(key, {"bar_time": "2026-10-30 14:00:00"})   # 更新 → 允许覆盖
+        self.assertEqual(t_gui._M30_SNAP_CACHE[key]["bar_time"], "2026-10-30 14:00:00")
+
+    def test_06_冷启动优先在线(self):
+        called = {}
+        self.api._kick_ob_m30_online = lambda codes: called.setdefault("online", list(codes))
+        self.api._kick_ob_m30_disk = lambda codes: called.setdefault("disk", list(codes))
+        with mock.patch.object(t_gui, "_m30_online_allowed", return_value=True):
+            self.api._kick_ob_m30_fill(["000001"])
+        self.assertEqual(called.get("online"), ["000001"], "允许出网时冷启动应走在线，而不是磁盘")
+        called.clear()
+        with mock.patch.object(t_gui, "_m30_online_allowed", return_value=False):
+            self.api._kick_ob_m30_fill(["000001"])
+        self.assertEqual(called.get("disk"), ["000001"], "周末/盘后仍走磁盘（不出网）")
+
+
+class TestObStaleMarker(unittest.TestCase):
+    """前端「⚠旧」基准（2026-10-30）：必须按"此刻应有的最新根"判，不能按日历日。"""
+
+    def setUp(self):
+        self.js = (Path(_ROOT) / "web" / "app.js").read_text(encoding="utf-8")
+
+    def test_01_基准函数存在且按10点30分界(self):
+        self.assertIn("function m30ExpectedDate(", self.js)
+        i = self.js.index("function m30ExpectedDate(")
+        seg = self.js[i:i + 900]
+        self.assertIn("10 * 60 + 30", seg, "首个可用根要等 10:30（drop_forming_bar 丢未收盘根）")
+        self.assertIn("getDay() === 0 || cur.getDay() === 6", seg, "周末回退到最近工作日")
+
+    def test_02_旧标记改用预期基准(self):
+        self.assertIn("const _expAsOf = m30ExpectedDate();", self.js)
+        i = self.js.index("const _asofStale =")
+        self.assertIn("_expAsOf", self.js[i:i + 120])
+        self.assertIn("_asofStale ?", self.js, "单元格里的 ⚠旧 要跟着新判据走")
+        self.assertNotIn("_asof.slice(0, 10) !== todayStr()", self.js,
+                         "不能再用日历日比较（每天早盘会全表误报）")
 
 
 if __name__ == "__main__":

@@ -289,6 +289,24 @@
       </h2>
       <div id="abnormalPoolBody"><div class="empty">还没有加入任何股票。上面输代码/名称 → ＋加入</div></div>
     </div>
+
+    <!-- 避风港湾（2026-10-29 owner）：**第二个手动池**，列与样式与「建仓信号扫描」一致。
+         与异常监控池同一套行构造（后端 `_pool_rows`）⇒ 判定/得分/时机条件同源、渲染同一份。 -->
+    <div class="section" id="shelter-pool">
+      <h2><button class="mini-btn sec-toggle" data-sec="shelter-pool" onclick="toggleSection('shelter-pool')"
+              title="折叠 / 展开本区块">▾</button> ⚓ 避风港湾
+        <span style="display:inline-flex;align-items:center;gap:6px;margin-left:12px;font-weight:400;font-size:12px">
+          <input type="text" id="shelterSearch" class="mini-input" placeholder="代码 或 名称" style="width:140px"
+                 onkeydown="if(event.key==='Enter'){event.preventDefault();shelterAdd();}">
+          <button class="mini-btn primary" id="shelterAddBtn" onclick="shelterAdd()" title="按代码/名称加入避风港湾">＋ 加入</button>
+          <button class="mini-btn" onclick="loadShelterPool(true)" title="重算并重绘">🔄 刷新</button>
+        </span>
+        <span class="cell-dim" style="font-size:11px;font-weight:400;margin-left:10px">
+          自己挑的"躲一躲"名单；判定/得分与「建仓信号扫描」同源，取不到本地日线缓存的票显示 —
+        </span>
+      </h2>
+      <div id="shelterPoolBody"><div class="empty">还没有加入任何股票。上面输代码/名称 → ＋加入</div></div>
+    </div>
   </div>
 
   <!-- ====== Tab 5: 选股猎手 ====== -->

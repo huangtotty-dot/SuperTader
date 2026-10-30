@@ -108,6 +108,21 @@ class _ThreadWarnCapture(logging.Handler):
             pass
 
 
+# 已知「**已经处置过**」的噪声（2026-10-30 owner 截图报误报）：
+#     `[WARN] tencent.daily 兜底丢弃未确认的当日快照根(<code>)`
+#   —— 这是 2026-10-26（603200）事故后加的**安全闸在正常工作**：宁可今天缺一根，
+#   也不把「收盘前的盘中快照」当收盘价交给下游。它每轮会对几十只票各打一行
+#   （10-30 10:01 实测 37 条 / 打分 2623 只），按"管线告警"报警 ⇒ **每个交易日
+#   上午必响一次假警报**。
+#   处置：**不进异常列表**，但把条数记进 stats 并留一行日志 —— 数量异常放大时
+#   （说明缓存被批量写入未确认的当日根）仍看得见，只是不再打扰。
+_HANDLED_NOISE_RE = re.compile(r"tencent\.daily 兜底丢弃未确认的当日快照根")
+
+
+def _handled_noise_count(lines) -> int:
+    return sum(1 for ln in lines or [] if _HANDLED_NOISE_RE.search(str(ln)))
+
+
 def _is_known_dead_line(s: str) -> bool:
     """该行是否**只**涉及已知常驻不可得的标的（北交所：日线四源全不通）。
 
@@ -133,7 +148,7 @@ def _pipeline_warnings(lines) -> list:
         s = str(ln).strip()
         if not re.search(r"\[(?:WARN|ERR|ERROR)\]", s):
             continue
-        if _is_known_dead_line(s):
+        if _is_known_dead_line(s) or _HANDLED_NOISE_RE.search(s):
             continue
         out.append(s)
     return out
@@ -148,7 +163,8 @@ def _log_warnings(lines) -> list:
     有值、`pipeline_warns` 却是空的）。级别过滤在挂 handler 时就做完（`level=WARNING`），
     这里只需再做已知常驻豁免。
     """
-    return [str(s).strip() for s in (lines or []) if not _is_known_dead_line(str(s))]
+    return [str(s).strip() for s in (lines or [])
+            if not _is_known_dead_line(str(s)) and not _HANDLED_NOISE_RE.search(str(s))]
 
 
 def _coverage(watchlist_df) -> float:
@@ -223,6 +239,13 @@ def poll_once(date_str: str = None) -> dict:
                                           + _log_warnings(_cap.lines))
         res["stats"]["log_warns"] = list(_cap.lines)
         res["stats"]["scored"] = len(scored or [])
+        # 已处置噪声单列计数（不进异常列表）：安全闸丢掉几只未确认的当日快照根。
+        # 留一行日志，数量异常放大时能从这里看出来。
+        _und = _handled_noise_count(_all)
+        res["stats"]["unconfirmed_dropped"] = _und
+        if _und:
+            log.info(f"猎手轮询：本轮丢弃 {_und} 只「未确认的当日快照根」"
+                     f"（安全闸正常工作，不计入异常）")
     except Exception as e:
         _bad("run_exception", f"{type(e).__name__}: {e}\n{traceback.format_exc()[-600:]}")
         return res
@@ -273,7 +296,175 @@ def poll_once(date_str: str = None) -> dict:
         _ads = data.get("actual_data_dates") or set()
         if _ads and date_str not in {str(x)[:10] for x in _ads}:
             _bad("stale_date", f"实际数据日期 {sorted(map(str, _ads))[:3]} 不含今天 {date_str}")
+    # 箱体突破提示（2026-10-29 owner）：「刚刚突破」的票跟着本轮卡片一起发（不额外发第二条，
+    # 保持 owner 2026-10-12 定的「每轮恰好一条消息」）。探测失败只记日志，绝不影响异常判定。
+    try:
+        res["breakouts"] = find_box_breakouts(wl, date_str)
+        if res["breakouts"]:
+            log.info(f"猎手突破提示：本轮 {len(res['breakouts'])} 只 "
+                     f"{[b['code'] for b in res['breakouts']]}")
+    except Exception as e:
+        res["breakouts"] = []
+        log.warning(f"猎手轮询：箱体突破探测失败（不影响异常判定）: {type(e).__name__}: {e}")
     return res
+
+
+# ============================================================================
+# 箱体突破提示（2026-10-29 owner：「对于刚刚突破箱体的股票发送飞书进行提示」）
+# ============================================================================
+# 口径**完全对齐** GUI「突破箱体」那张卡（`t_gui._breakout_probe_one` 的 2026-10-25 收紧版）：
+#   · 上沿取自 **as-of 上一交易日** 的箱体（`core.scanners._box_top_for`），
+#     命中 `昨收 ≤ 上沿 < 现价`，且突破幅度 ∈ [0.3%, 3%]（3~5% 档 T+5 超额 −0.65%，
+#     0.3~1% 档只有 −0.15% ⇒ 上限从 8% 收到 3%）；
+#   · 当日涨幅 > 7% 直接剔除（那一档是最差一组，−0.58%）；
+#   · **不做"放量确认"**（实测放量是反指，缩量档唯一不亏）⇒ 量比只展示。
+# ⚠️ 这四个常量必须与 `t_gui.Api` 的 `_BK_*` 一致；`test_hunter_breakout.py` 会钉住。
+BK_MIN_PCT = 0.3
+BK_MAX_PCT = 3.0
+BK_MAX_CHG = 0.07
+BK_MIN_BARS = 30
+_BK_MAX_PROBE = 1200          # 单轮探测上限（防御性：预筛异常时不至于把轮询拖到几分钟）
+_BK_DEDUP_FP = os.path.join(_BASE, "t_io", "state", "hunter_breakout_alerts.json")
+
+
+def _bk_dedup_load(date_str: str) -> set:
+    try:
+        with open(_BK_DEDUP_FP, encoding="utf-8") as f:
+            d = json.load(f) or {}
+        return set((d.get(date_str) or {}).get("codes") or [])
+    except Exception:
+        return set()
+
+
+def _bk_dedup_save(date_str: str, codes) -> None:
+    """每只票**一天只提示一次**（"刚刚突破"只在发生那一轮有意义）。"""
+    try:
+        d = {}
+        try:
+            with open(_BK_DEDUP_FP, encoding="utf-8") as f:
+                d = json.load(f) or {}
+        except Exception:
+            d = {}
+        d[date_str] = {"codes": sorted(set(list(_bk_dedup_load(date_str)) + list(codes))),
+                       "ts": datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
+        for k in sorted(d)[:-_DEDUP_KEEP]:
+            d.pop(k, None)
+        os.makedirs(os.path.dirname(_BK_DEDUP_FP), exist_ok=True)
+        tmp = _BK_DEDUP_FP + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(d, f, ensure_ascii=False, indent=1)
+        os.replace(tmp, _BK_DEDUP_FP)
+    except Exception as e:
+        log.warning(f"猎手突破提示：去重文件写失败（不影响本轮推送）: {e}")
+
+
+def find_box_breakouts(wl, date_str: str) -> list:
+    """从猎手 watchlist（**含实时行情**）里找出"刚刚突破箱体上沿"的票 → [{code,name,...}]。
+
+    **零网络**：历史只用本地日线缓存（`core.chart_cache.load_daily_display`），
+    当日价用 watchlist 里的实时快照。全离线、失败静默（提示不该拖累轮询本体）。
+
+    预筛：突破幅度 ≤ 当日涨幅（因为 `昨收 ≤ 上沿`）⇒ 当日涨幅 < 0.3% 或 > 7% 的票
+    根本不可能命中，先剔掉能砍掉九成探测。
+    """
+    if wl is None or getattr(wl, "empty", True):
+        return []
+    try:
+        import pandas as _pd
+        from core.scanners import _box_top_for
+        import core.chart_cache as _cc
+    except Exception:
+        return []
+    today = str(date_str)[:10]
+    out, probed, truncated = [], 0, False
+    prev_hit = _bk_dedup_load(today)
+    try:
+        chg = _pd.to_numeric(wl.get("涨跌幅"), errors="coerce")
+        px = _pd.to_numeric(wl.get("现价"), errors="coerce")
+        pc = _pd.to_numeric(wl.get("昨收"), errors="coerce")
+        m = (chg >= BK_MIN_PCT) & (chg <= BK_MAX_CHG * 100) & (px > 0) & (pc > 0)
+        cand = wl[m]
+    except Exception:
+        return []
+    for _, r in cand.iterrows():
+        code = str(r.get("代码") or "").split("_")[0]
+        if not code or code in prev_hit:
+            continue
+        if probed >= _BK_MAX_PROBE:
+            truncated = True
+            break
+        probed += 1
+        try:
+            df = _cc.load_daily_display(code)
+            if df is None or getattr(df, "empty", True):
+                continue
+            hist = df[df["date"].astype(str) < today]        # 只用**昨天及以前**的 bar 定箱体
+            if len(hist) < BK_MIN_BARS:
+                continue
+            box_top = _box_top_for(hist, min_bars=BK_MIN_BARS)
+            if not box_top:
+                continue
+            price = float(px.loc[r.name])
+            prev_close = float(pc.loc[r.name])
+            if not (prev_close <= box_top < price):
+                continue
+            pct = (price - box_top) / box_top * 100.0
+            if not (BK_MIN_PCT <= pct <= BK_MAX_PCT):
+                continue
+            _chg = (price / prev_close - 1.0) * 100.0
+            if _chg > BK_MAX_CHG * 100:
+                continue
+            vr = r.get("量比")
+            out.append({"code": code, "name": str(r.get("名称") or code),
+                        "price": round(price, 3), "prev_close": round(prev_close, 3),
+                        "box_top": round(float(box_top), 3),
+                        "pct": round(pct, 2), "chg": round(_chg, 2),
+                        "vol_ratio": (round(float(vr), 2) if _pd.notna(vr) else None)})
+        except Exception:
+            continue
+    # 漏斗打点（owner 2026-10-29 问「数量不全」）：预筛多少 / 实际探测多少 / 命中多少。
+    # 下一轮觉得少，看这行就知道卡在哪一步：预筛小 = 当日涨幅不在 0.3~7%；
+    # 探测小 = 候选都被去重跳过；命中 0 = 没有票满足 `昨收 ≤ 上沿 < 现价`。
+    try:
+        log.info(f"猎手突破提示：预筛 {len(cand)} 只 → 探测 {probed} 只 → 命中 {len(out)} 只"
+                 f"（已去重跳过 {len(prev_hit)} 只）")
+    except Exception:
+        pass
+    if truncated:
+        log.warning(f"猎手突破提示：候选超过 {_BK_MAX_PROBE} 只，本轮只探测了前 {_BK_MAX_PROBE} 只")
+    if out:
+        out.sort(key=lambda x: -x["pct"])
+        try:
+            _bk_dedup_save(today, [x["code"] for x in out])
+        except Exception:
+            pass
+    return out
+
+
+def _breakout_lines(res: dict, limit: int = 0) -> list:
+    """两类卡片共用的「刚突破箱体」清单（没有就是空列表 —— 不占位、不刷屏）。
+
+    2026-10-29 owner：「突破箱体通知的数量不全 且显示的风格太抽」——
+      · **默认全列**（`limit=0` 不截断）；只有异常卡这种"顺带提一句"的场景才传 limit。
+      · 每行改成**分字段**、带序号：`现价 / 箱体上沿（突破幅度）/ 今日涨幅 / 量比`，
+        不再把四个数字挤成一句「昨收6.57→6.9（上沿6.704 突破+2.9% 涨+5.0%）」。
+      · 末尾那行原来写「…等 N 只」（看着像还有没列出来的，其实总数就 N），改成
+        「…另有 K 只未列出」，只有真截断时才出现。
+    """
+    bk = res.get("breakouts") or []
+    if not bk:
+        return []
+    lines = [f"📦 刚突破箱体 {len(bk)} 只（今日首次，按突破幅度排序）"]
+    show = bk if not limit else bk[:limit]
+    for i, b in enumerate(show, 1):
+        bits = [f"现价 {b['price']}", f"箱体上沿 {b['box_top']}（突破 +{b['pct']:.1f}%）",
+                f"今日 {b['chg']:+.1f}%"]
+        if b.get("vol_ratio"):
+            bits.append(f"量比 {b['vol_ratio']}")
+        lines.append(f"{i}. {b['code']} {b['name']}　" + "　".join(bits))
+    if limit and len(bk) > limit:
+        lines.append(f"…另有 {len(bk) - limit} 只未列出")
+    return lines
 
 
 def _stats_line(st: dict) -> str:
@@ -310,6 +501,7 @@ def format_summary_card(res: dict, date_str: str, now: datetime = None) -> dict:
         lines.append("涨停前三：" + " / ".join(f"{n} {lu}" for n, lu, _ in st["top3"]))
     if st.get("top1_names"):
         lines.append(f"榜首三强（{st.get('top1_sector') or ''}）：{' '.join(st['top1_names'])}")
+    lines.extend(_breakout_lines(res))
     sl = _stats_line(st)
     if sl:
         lines.append(sl)
@@ -354,6 +546,7 @@ def format_anomaly_card(res: dict, date_str: str, now: datetime = None) -> dict:
     sl = _stats_line(st)
     if sl:
         lines.append(sl)
+    lines.extend(_breakout_lines(res, limit=3))     # 异常卡也带一行"刚突破"，仍是**一条**消息
     return {"msg_type": "text", "content": {"text": "\n".join(lines)}}
 
 

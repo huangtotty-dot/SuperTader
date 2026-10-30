@@ -355,175 +355,26 @@ def _index_regime_feishu_enabled() -> bool:
         return True
 
 
-def _build_index_regime_card(ctx: dict, title_prefix: str, switched: bool = False,
-                             prev_regime: Optional[str] = None, as_of_note: str = "",
-                             recent_days: Optional[list] = None,
-                             extra_lines: Optional[list] = None,
-                             regime_name_override: Optional[str] = None,
-                             banner_lines: Optional[list] = None,
-                             board_lines: Optional[list] = None) -> dict:
-    """组装大盘态势飞书卡片：标题模板按状态选 green/red/blue，切换日加急红/绿
+# 2026-10-29 owner：「这类消息删掉」——「大盘基调 / 大盘评分预判」两张飞书卡片整块移除，
+# 连带只服务于它们的两个渲染器 `_build_index_regime_card` / `_build_board_index_lines`
+# 也一并删掉（已无任何调用方；要恢复从 git 历史取）。
+# 数据侧**不受影响**：`detect_index_regime` / `push_index_regime_context` /
+# `push_daily_sentiment`（sentiment_daily.jsonl 落盘）全在原位。
 
-    recent_days：morning 模式 detail.recent_days（近3日 [{date,regime,score}]），
-    以 "MM-DD regime score → ..." 序列展示；extra_lines：附加说明行（插在基准日期之后）。
-    B-2(2026-08-21)：regime_name_override 覆盖显示基调（C20 Level2 推"震荡观察"）；
-    banner_lines 追加在卡片顶部（Level1 黄条 / Level2 红条）。
-    B-2(2026-09-07)：board_lines 分板指数行（上证/深成/创业板/科创50 各一行，方向=close vs MA60
-    缓冲带口径，非 uni 状态机）——插在状态区之后，供早盘看四板块强弱。
-    """
-    regime = str(ctx.get("regime", "range"))
-    regime_name = regime_name_override or (ctx.get("regime_name") or index_regime_name(regime))
-    score = float(ctx.get("score") or 0.0)
-    trend_score = ctx.get("trend_score")
-    env_score = ctx.get("env_score")
-    days_in_regime = ctx.get("days_in_regime", 0)
-    degraded = ctx.get("degraded") or []
-    gate = ctx.get("gate_advice", "normal_t")
-    gate_cn = _IR_GATE_ADVICE_CN.get(gate, str(gate))
-
-    if switched:
-        template = "green" if regime == "uni_up" else ("red" if regime == "uni_down" else "blue")
-        title = f"⚡ 大盘态势切换 → {regime_name} {score:+.1f}分 - {FEISHU_KEYWORD}"
-    else:
-        template = {"uni_up": "green", "uni_down": "red"}.get(regime, "blue")
-        title = f"{title_prefix} {regime_name} {score:+.1f}分 - {FEISHU_KEYWORD}"
-
-    lines = [
-        f"**状态**：{regime_name}（{regime}）｜持续 {days_in_regime} 个交易日",
-        f"**综合分 S**：{score:+.2f}（趋势T {trend_score} ／ 环境E {env_score}）",
-        f"**基准日期**：{ctx.get('date', '-')}{as_of_note}",
-    ]
-    if board_lines:
-        lines.append("**板块指数**（方向=收盘 vs MA60 缓冲带，同建仓/时机闸口径）：")
-        lines.extend(board_lines)
-    if banner_lines:
-        for _bl in banner_lines:
-            lines.insert(0, _bl)
-    if recent_days:
-        seq = " → ".join(
-            f"{str(r.get('date', '-'))[5:]} {r.get('regime', '-')} {float(r.get('score') or 0.0):+.1f}"
-            for r in recent_days[-3:]
-        )
-        lines.append(f"**近3日态势**：{seq}")
-    if extra_lines:
-        lines.extend(str(x) for x in extra_lines)
-    if switched and prev_regime:
-        lines.insert(0, f"**⚡ 状态切换**：{index_regime_name(prev_regime)} → {regime_name}")
-    if ctx.get("exhaust_flag"):
-        lines.append("**衰竭提示**：斜率/乖离处于近一年极值区，分数已×衰竭系数")
-    lines.append(f"**操作建议**：{gate_cn}")
-    if degraded:
-        lines.append(f"**降级项**：{'、'.join(str(d) for d in degraded[:8])}（已按权重归一化，宁缺毋崩）")
-
-    card_elements = [_feishu_md_div(line) for line in lines]
-    card = {"config": {"wide_screen_mode": True},
-            "header": _feishu_card_header(title, template),
-            "elements": card_elements}
-    return {"msg_type": "interactive", "card": card, "notify_type": 1}
-
-
-
-
-
-
-def _build_board_index_lines(as_of_date: str) -> list:
-    """B-2(2026-09-07): 分板指数行（上证/深成/创业板/科创50）——每行 = 指数名 + 方向
-    (close vs MA60 缓冲带，build_decision.regime_from_index_daily 同 A 层时机闸口径) + 当日涨跌幅。
-    只读日线、无 uni 状态机依赖；as_of 取已收盘交易日（morning 卡片基准=昨日收盘）。
-    单板数据失败跳过，不阻断整卡。"""
-    try:
-        from core import build_decision as _bd
-        from core.market_data import get_provider as _gp
-    except Exception:
-        return []
-    _boards = [("sh000001", "上证指数"), ("sz399001", "深证成指"),
-               ("sz399006", "创业板指"), ("sh000688", "科创50")]
-    out = []
-    for _c, _n in _boards:
-        try:
-            _df = _gp().index_daily(_c, days=120, end_date=as_of_date)
-            if _df is None or _df.empty:
-                continue
-            _df = _df[_df["date"].astype(str) <= str(as_of_date)]
-            if len(_df) < 2:
-                continue
-            _reg = _bd.regime_from_index_daily(_df, str(as_of_date)).get("regime", "unknown")
-            _last = float(_df["close"].iloc[-1])
-            _prev = float(_df["close"].iloc[-2])
-            _pct = (_last / _prev - 1.0) * 100.0 if _prev > 0 else 0.0
-            out.append(f"· {_n} {_c}  {_reg}  {_pct:+.2f}%")
-        except Exception:
-            continue
-    return out
-
-
-# 2026-10-26（D 轮回归）：两个「当日已推送」去重标记只在函数里 `global` 声明后**先读后写**，
-# 模块级从来没初始化过 ⇒ 当日第一次调用必然 NameError，被函数的 except 吞掉
-# ⇒ 早盘/尾盘大盘基调推送**一次都不会发**。这里补上模块级初值。
-_index_regime_morning_pushed_date = ""
+# 2026-10-26（D 轮回归）：去重标记只在函数里 `global` 声明后**先读后写**，模块级从来没初始化过
+# ⇒ 当日第一次调用必然 NameError，被 except 吞掉 ⇒ 推送一次都不会发。这里补上模块级初值。
+# 2026-10-29 owner：「这类消息删掉」——早盘大盘基调那条**整块已移除**（函数与调用都没了）。
 _index_regime_eod_pushed_date = ""
 
 
-def _maybe_push_index_regime_morning(now: datetime) -> None:
-    """09:26-09:31 早盘大盘基调推送（每日一次；须在 scan_once 的 <9:30 早退分支之前调用）
+def _maybe_record_index_regime_eod(now: datetime) -> None:
+    """14:30-14:55 尾盘大盘评分**落库**（每日一次，mode="tail" 含当日 forming bar）。
 
-    V2：调 detect_index_regime(mode="morning")，模块自动对齐到今天之前最近一个
-    已完成交易日（基于其收盘判定），并输出 detail.recent_days 近3日
-    [{date,regime,score}]；卡片注明 9:30-10:00 决策窗口主要参考前两日状态。
-    """
-    global _index_regime_morning_pushed_date
-    try:
-        t = now.time()
-        if now.weekday() >= 5:
-            return
-        # T-3(2026-09-02): 硬窗口 09:26-09:31 + 迟到补发(09:31<t≤11:30——进程晚于窗口启动时仍推送一次)
-        _late_push = False
-        if dtime(9, 26) <= t <= dtime(9, 31):
-            pass
-        elif dtime(9, 31) < t <= dtime(11, 30):
-            _late_push = True
-        else:
-            return
-        today = now.strftime("%Y-%m-%d")
-        if _index_regime_morning_pushed_date == today:
-            return
-        _index_regime_morning_pushed_date = today          # 先占位防重复触发（无论成败）
-        if not _index_regime_feishu_enabled():
-            return
-        # mode="morning"：as_of 默认=今天，模块内部对齐到 <今天 的最近已完成交易日，
-        # 保证评分基于昨日收盘（周一自动对齐到上周五），不受当日集合竞价 partial bar 影响
-        regime, score, ctx = detect_index_regime(mode="morning")
-        recent_days = (ctx.get("detail") or {}).get("recent_days") or []
-        _banner, _override_name = [], None
-        _extra_lines = ["**决策提示**：9:30-10:00 决策窗口主要参考前两日状态"]
-        if _late_push:
-            _extra_lines.insert(0, "⚠️ **迟到补发**（进程晚于推送窗口启动，仅供参考）")  # T-3(2026-09-02)
-        # B-2(2026-09-07): 卡片带分板指数行（上证/深成/创业板/科创50 方向+涨跌幅，喂 §5 日检）
-        _board_lines = _build_board_index_lines(str(ctx.get("date") or ""))
-        payload = _build_index_regime_card(
-            ctx, "🧭 早盘大盘基调",
-            as_of_note="（基于昨日收盘的判定）",
-            recent_days=recent_days,
-            extra_lines=_extra_lines,
-            regime_name_override=_override_name,
-            banner_lines=_banner,
-            board_lines=_board_lines,
-        )
-        send_feishu_payload(
-            payload=payload,
-            success_log=f"✅ 早盘大盘基调已推送: {_override_name or ctx.get('regime_name')} S={ctx.get('score')} (mode=morning)",
-            error_prefix="早盘大盘基调推送",
-        )
-    except Exception as e:
-        log.warning(f"⚠️ 早盘大盘基调钩子异常（已吞掉，不影响主循环）: {str(e)[:120]}")
-
-
-def _maybe_push_index_regime_eod(now: datetime) -> None:
-    """14:30-14:55 尾盘大盘评分预判推送（每日一次，mode="tail" 含当日 forming bar；
-    盘中预判 estimate，最终以收盘落库为准；标注状态切换；推送后更新 INDEX_REGIME_CONTEXT）。
-
-    数据落盘与飞书推送解耦：sentiment 记录（sentiment_daily.jsonl）无论飞书开关如何都要产出，
-    只有 send_feishu_payload 受 `_index_regime_feishu_enabled()` 门控。"""
+    **2026-10-29 owner「这类消息删掉」后本函数不再推送任何飞书卡片**，只剩三件数据活：
+      ① `detect_index_regime(mode="tail")` 出盘中预判；
+      ② `push_index_regime_context` 更新 INDEX_REGIME_CONTEXT / SESSION_CONTEXT（timing_gate 要读）；
+      ③ `push_daily_sentiment` 落 sentiment_daily.jsonl（每日复盘的情绪/板块/持仓段靠它）。
+    删推送**不能**顺手删这三件 —— 那会让复盘缺段、门控拿不到上下文。"""
     global _index_regime_eod_pushed_date
     try:
         t = now.time()
@@ -547,21 +398,15 @@ def _maybe_push_index_regime_eod(now: datetime) -> None:
                 push_daily_sentiment(now=now)
         except Exception as e:
             log.warning(f"⚠️ push_daily_sentiment 钩子异常（已吞掉，不影响主循环）: {str(e)[:120]}")
-        if not _index_regime_feishu_enabled():
-            return
+        # 2026-10-29 owner：「这类消息删掉」——同族的**尾盘大盘评分预判卡片也停发**。
+        # ⚠️ 只删**推送**：上面 `push_index_regime_context`（INDEX_REGIME_CONTEXT / SESSION_CONTEXT）
+        #    与 `push_daily_sentiment`（sentiment_daily.jsonl 落盘）照旧执行 —— 复盘要用的
+        #    情绪/板块/持仓段落全靠它，删了会让每日复盘缺段。
         state_detail = (ctx.get("detail") or {}).get("state") or {}
         prev_regime = state_detail.get("prev_regime")
         switched = bool(prev_regime) and str(prev_regime) != str(ctx.get("regime"))
-        payload = _build_index_regime_card(
-            ctx, "📊 尾盘大盘评分预判", switched=switched, prev_regime=prev_regime,
-            as_of_note="（盘中预判 estimate，最终以收盘落库为准）",
-        )
-        send_feishu_payload(
-            payload=payload,
-            success_log=f"✅ 尾盘大盘评分预判已推送: {ctx.get('regime_name')} S={ctx.get('score')} 切换={switched} (mode=tail)",
-            error_prefix="尾盘大盘评分预判推送",
-            trigger_urgent_alarm_after_success=switched,   # 切换日加急
-        )
+        log.info(f"尾盘大盘评分（不推送）: {ctx.get('regime_name')} S={ctx.get('score')} "
+                 f"切换={switched} (mode=tail)")
     except Exception as e:
         log.warning(f"⚠️ 尾盘大盘评分预判钩子异常（已吞掉，不影响主循环）: {str(e)[:120]}")
 
@@ -1723,13 +1568,12 @@ def scan_once():
         now = _now()
         t = now.time()
 
-        with _ScanStage("①早盘基调"):
-            _maybe_push_index_regime_morning(now)      # 09:26-09:31 早盘大盘基调（须在 <9:30 早退之前）
-
+        # ⚠️ 阶段编号里**没有 ①**：原「①早盘基调」（09:26 大盘基调飞书卡片）已按 owner
+        #    2026-10-29「这类消息删掉」整块移除。编号不重排，免得历史日志对不上。
         with _ScanStage("②收盘pnl"):
             _maybe_record_daily_pnl(now)               # 14:59 后每日一次：仅落盘 daily_pnl.jsonl + 收盘 pre_close（推送已删）
-        with _ScanStage("③尾盘基调"):
-            _maybe_push_index_regime_eod(now)          # 14:30-14:55 尾盘大盘评分预判 mode="tail"（须在 >15:00 早退之前）
+        with _ScanStage("③尾盘评分落库"):
+            _maybe_record_index_regime_eod(now)        # 14:30-14:55 尾盘大盘评分**落库**（不推送，2026-10-29）
 
         if dtime(14, 50) <= t <= dtime(15, 5):
             with _ScanStage("④pivot复盘"):
