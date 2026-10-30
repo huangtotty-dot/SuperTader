@@ -115,7 +115,20 @@ def snapshot(prev: dict, dt: float) -> dict:
             "total_pct": round(sum(by_group.values()), 2)}
 
 
-def _loop(interval: float, flush_sec: float, stop_event):
+def make_record(top: list, window_s: float, label: str = "", ts: str = None) -> dict:
+    """组装一条窗口记录（2026-10-30：抽出来便于单测 `proc` 字段与形状）。
+
+    `proc` = 进程标签（"gui" / "main"）。GUI 与 main 同时采样追加同一份 JSONL，
+    没有这个字段两边的线程名会混在一起（此前只有 GUI 在采，所以没暴露）。
+    """
+    return {"ts": ts or datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "proc": str(label or ""),
+            "window_s": round(float(window_s), 1),
+            "total_pct": round(sum(x["pct"] for x in (top or [])), 2),
+            "top": top or []}
+
+
+def _loop(interval: float, flush_sec: float, stop_event, label: str = ""):
     prev = {}
     win = []          # 本窗口内的各次快照（按组求和后再平均）
     t_last_flush = time.time()
@@ -148,10 +161,7 @@ def _loop(interval: float, flush_sec: float, stop_event):
             win = []
             t_last_flush = now
             continue
-        rec = {"ts": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-               "window_s": round(now - t_last_flush, 1),
-               "total_pct": round(sum(x["pct"] for x in top), 2),
-               "top": top}
+        rec = make_record(top, now - t_last_flush, label)
         try:
             os.makedirs(os.path.dirname(_LOG_FP), exist_ok=True)
             with open(_LOG_FP, "a", encoding="utf-8") as f:
@@ -163,15 +173,20 @@ def _loop(interval: float, flush_sec: float, stop_event):
 
 
 def start(interval: float = _INTERVAL, flush_sec: float = _FLUSH_SEC,
-          stop_event=None) -> bool:
-    """启动进程内线程采样（幂等）。返回是否真的启动了。"""
+          stop_event=None, label: str = "") -> bool:
+    """启动进程内线程采样（幂等）。返回是否真的启动了。
+
+    `label`（2026-10-30）：进程标签（"gui" / "main"）。GUI 与 main 同时采样会追加到
+    **同一个** JSONL ⇒ 必须能区分来源，否则两边的线程名混在一起。
+    """
     global _started
     with _lock:
         if _started:
             return False
         _started = True
     try:
-        threading.Thread(target=_loop, args=(float(interval), float(flush_sec), stop_event),
+        threading.Thread(target=_loop,
+                         args=(float(interval), float(flush_sec), stop_event, str(label or "")),
                          daemon=True, name="thread-watch").start()
         return True
     except Exception:

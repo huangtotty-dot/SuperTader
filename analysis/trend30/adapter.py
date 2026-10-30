@@ -287,7 +287,9 @@ def prefetch_30min(codes, workers: int = 8) -> int:
                 _RAW[c] = {"slot": slot, "df": df}
 
     from concurrent.futures import ThreadPoolExecutor
-    with ThreadPoolExecutor(max_workers=max(1, int(workers))) as ex:
+    # 2026-10-30：命名（线程级 CPU 归因；此前所有未命名池在 thread_cpu.jsonl 里混成一组）
+    with ThreadPoolExecutor(max_workers=max(1, int(workers)),
+                            thread_name_prefix="prefetch30") as ex:
         list(ex.map(_one, todo))
     return len(todo)
 

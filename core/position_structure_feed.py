@@ -65,9 +65,15 @@ def _in_session(now: datetime) -> bool:
 
 def _fresh_enough(df: pd.DataFrame, now: datetime = None) -> bool:
     """够新判定（决定 live 路径是否出网补）：
-      · **盘中** → 末根须是**当日**：每 30min 时段重取一次，尾部最多滞后一个时段；
-        落盘后同日后续时段命中磁盘，不会反复出网（一轮仅一次网络）。
-      · **盘后/周末/盘前** → 末根在 _FRESH_GAP_DAYS 自然日内（覆盖周末与短假）。
+
+      · **盘中**（09:30–11:35 / 12:55–15:05）→ 末根须是**当日**且滞后 **≤35min**
+        （=1 个 30min 时段 + 5min 余量）⇒ 每个槽位最多重取一次；
+      · **当日收盘后**（15:05 之后的工作日）→ 末根须是**当日**（把 15:00 那根最终 bar 取回来）；
+      · **盘前 / 周末 / 节假日** → 末根在 _FRESH_GAP_DAYS 自然日内（覆盖周末与短假）。
+
+    ⚠️ 2026-10-30 之前盘中只判「日期=今天」：数据源换成腾讯后该条件**整天满足**，
+    结构会冻结在上午第一根；而换源前（tushare 盘中只给到上一交易日）它又**永不满足**，
+    每槽位对每只票重打一次无效网络。两个方向都不对。
     """
     now = now or datetime.now()
     if df is None or df.empty:
@@ -77,6 +83,16 @@ def _fresh_enough(df: pd.DataFrame, now: datetime = None) -> bool:
     except Exception:
         return False
     if _in_session(now):
+        # 2026-10-30（owner：「那两处口径改动 做」）：原来只判「末根日期 == 今天」——
+        # 一旦数据源真能给出今天的首根（腾讯），这个判据就**整天都满足**，结构会冻结在
+        # 上午第一次取到的那根。改成「滞后 ≤ 1 个 30min 时段（+5min 余量）」：
+        #   · 每个槽位最多重取一次（腾讯 m30 右端时间最多滞后 30min）；
+        #   · 09:30~10:00 首根还没出来时，取回来仍不新鲜 ⇒ 走 `_net_cooldown` 的 10 分钟冷却，
+        #     不会变成每 10s 一次的轮询风暴。
+        return (last.date() >= now.date()) and (now - last) <= pd.Timedelta(minutes=35)
+    # 2026-10-30：**收盘后（15:05~24:00）要求末根是今天**——否则「当日已收盘」的最终 bars
+    # 永远进不来（旧规则在 5 个自然日内一律算新鲜 ⇒ 收盘后还停在昨天）。取不到就走冷却。
+    if now.weekday() < 5 and (now.hour, now.minute) > (15, 5):
         return last.date() >= now.date()
     return (now - last).days <= _FRESH_GAP_DAYS
 
@@ -128,10 +144,17 @@ def _minute_bars(ts_code: str, freq: str, days: int, date_str=None,
         return df, ("disk" if not df.empty else "none")
     if _net_cooling(ts_code, freq):    # 刚出网过、源还是老的 ⇒ 本轮直接吃磁盘
         return df, ("disk" if not df.empty else "none")
+    # 2026-10-30：**腾讯优先**（盘中唯一实时源，含未收盘根）；tushare 退为兜底
+    # （北交所腾讯返回空、或腾讯接口异常时）。两者同口径：量=手、不复权。
     try:
-        net = _cc.fetch_minute_online(ts_code, freq, days)
+        net = _cc.fetch_minute_tencent(ts_code, freq)
     except Exception:
         net = None
+    if net is None or getattr(net, "empty", True):
+        try:
+            net = _cc.fetch_minute_online(ts_code, freq, days)
+        except Exception:
+            net = None
     if net is None or net.empty:
         _net_cooldown_start(ts_code, freq)
         return df, ("disk" if not df.empty else "none")
@@ -143,6 +166,32 @@ def _minute_bars(ts_code: str, freq: str, days: int, date_str=None,
     if not _fresh_enough(merged):
         _net_cooldown_start(ts_code, freq)               # 拿了还是不够新 ⇒ 源滞后，冷却
     return merged, ("disk+net" if not df.empty else "net")
+
+
+def prefetch_minutes(code: str, date_str: str = None, allow_network: bool = True) -> dict:
+    """把 `load_structure` 要用的两档分钟线**先取回来**（纯 IO），返回 {freq: src}。
+
+    为什么单独拆出来（2026-10-30，owner「继续优化 CPU」）：
+    `_kick_pb_struct_warm._one` 原来在 `with _BG_PANDAS_SEM:` **里面**调 `load_structure`，
+    而该函数默认出网 ⇒ 2 个 pandas 名额被**网络等待**占住（实测单只出网 0.9~3.6s、
+    纯磁盘 0.12s），标签批（同样要这 2 个名额）排在后面 ⇒ 每 30 分钟边界 3~5 分钟的尖峰。
+    拆开后：取数在信号量外并发（IO 不吃名额），信号量里只做 CPU。
+
+    与 `load_structure` 内部**完全同参**（freq/days/date_str 一致）；取回即落盘
+    （`_minute_bars` 内部 save），随后 `load_structure(..., allow_network=False)` 读盘得到同一份。
+    失败静默（返回值里对应 src 仍是 none/disk，由调用方照实展示）。
+    """
+    ts_code = ts_code_of(code)
+    if not ts_code:
+        return {}
+    out = {}
+    for freq, days in (("5min", _DAYS_5MIN), ("30min", _DAYS_30MIN)):
+        try:
+            _df, src = _minute_bars(ts_code, freq, days, date_str, allow_network)
+            out[freq] = src
+        except Exception:
+            pass
+    return out
 
 
 def load_structure(code: str, date_str: str = None, allow_network: bool = True,

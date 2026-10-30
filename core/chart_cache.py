@@ -370,9 +370,43 @@ def enforce_payload_cap(max_files=_PAYLOAD_MAX) -> int:
 _MINUTE_COLS = ["time", "open", "high", "low", "close", "volume"]
 
 
+def fetch_minute_tencent(ts_code, freq, count: int = 640) -> "object":
+    """腾讯 mkline 分钟线（**盘中唯一实时源，含未收盘根**）→ 规范分钟帧；失败/空 → 空表。
+
+    2026-10-30（owner：「那两处口径改动 做」）：结构层原来只走 `fetch_minute_online`
+    （tushare `stk_mins`），而 tushare 盘中**只回到上一交易日**（2026-10-14 实测，t_gui 侧
+    2026-10-17 才改腾讯，core 层一直没跟上）⇒ `_fresh_enough` 盘中永不满足 ⇒ 每个 30min 槽位
+    对每只票重打一次注定无效的网络，且「仓位结构 / 30m MA5」整天在**昨天的分钟线**上算。
+
+    ⚠️ 只取最近 `count` 根（接口上限 640 ≈ 13 个交易日）。**长历史仍由磁盘档兜底**：
+    `_minute_bars` 会 merge 后落盘，调用方拿到的是合并结果，不会截短历史。
+    量为**手**（`minute_kline` 已按板块归一，含科创板）。不复权（与 tushare 分钟同口径）。
+    """
+    import pandas as pd
+    _m = {"5min": "m5", "30min": "m30", "60min": "m60"}.get(str(freq))
+    if not _m:
+        return pd.DataFrame()
+    code6 = str(ts_code).split(".")[0].split("_")[0]
+    try:
+        from core.market_data.tencent_provider import minute_kline
+        df = minute_kline(code6, _m, int(count or 640))
+    except Exception:
+        return pd.DataFrame()
+    if df is None or df.empty:
+        return df if df is not None else pd.DataFrame()
+    try:
+        return _norm_minutes(df)
+    except Exception:
+        return pd.DataFrame()
+
+
 def fetch_minute_online(ts_code, freq, days) -> "object":
     """tushare 原生 30/60min（镜像 t_gui._fetch_min_bars_online 的口径，但置于 core 层
-    供预下载复用；t_gui 的原函数保持不动）。异常/空 → 空 DataFrame。"""
+    供预下载复用；t_gui 的原函数保持不动）。异常/空 → 空 DataFrame。
+
+    ⚠️ **不要**把它改成腾讯优先：`prefetch_minute`（盘后批量预下载）靠它的宽时间窗
+    （5min 95 天）铺「近3月」K 线底座，腾讯单次最多 640 根（≈13 天）会截短底座。
+    盘中实时路径用 `fetch_minute_tencent`（见 `position_structure_feed._minute_bars`）。"""
     import pandas as pd
     try:
         from analysis.index_regime_intraday import _iri_tushare_pro

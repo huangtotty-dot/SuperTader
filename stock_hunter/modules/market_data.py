@@ -916,7 +916,10 @@ class MarketDataFetcher:
         # future.result() 无超时 + as_completed 等最后一个 future → 前端进度条卡"100%"永远无结果。
         # 给整体预算，超时带部分结果返回，不让卡死拖住选股猎手。
         _FETCH_BUDGET = 420.0  # 秒（< 前端 600s 轮询守卫）
-        executor = ThreadPoolExecutor(max_workers=max_workers)
+        # 2026-10-30：命名（"hunter-fetch"），否则在 GUI/main 的线程级 CPU 采样里
+        # 与其它未命名池混成一组，30 分钟尖峰无法归因。
+        executor = ThreadPoolExecutor(max_workers=max_workers,
+                                      thread_name_prefix="hunter-fetch")
         try:
             future_to_code = {executor.submit(fetch_one, c): c for c in codes}
             for i, future in enumerate(as_completed(future_to_code, timeout=_FETCH_BUDGET), 1):

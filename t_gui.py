@@ -8926,7 +8926,7 @@ class Api:
 
         def _run():
             from concurrent.futures import ThreadPoolExecutor
-            from core.position_structure_feed import load_structure
+            from core.position_structure_feed import load_structure, prefetch_minutes
             try:
                 while True:
                     with _PB_STRUCT_WARM_LOCK:
@@ -8946,8 +8946,31 @@ class Api:
                             if key in _PB_STRUCT_CACHE:
                                 return
                         try:
+                            # 2026-10-30：**取数（IO）挪到信号量外**。原来整个 `load_structure`
+                            # 都在 `_BG_PANDAS_SEM` 里，而它默认出网（单只 0.9~3.6s，纯磁盘 0.12s）
+                            # ⇒ 2 个 pandas 名额被网络等待占住，标签批排后面，30 分钟边界堆成
+                            # 3~5 分钟尖峰。现在：预取分钟线（不吃名额）→ 信号量里只算 CPU。
+                            # 等价性见 tests/phase3/test_struct_prefetch_equivalence.py（逐元素）。
+                            # 日线同样先取好：`load_structure` 内部在**本地缓存缺失**时会回退
+                            # `provider.daily()`（GM 优先，4.5s 限流窗）——那也是一次网络等待，
+                            # 不能放进信号量。取法与其内部**逐行同款**（缓存 → provider）。
+                            _dly = None
+                            try:
+                                from core import chart_cache as _cc_d
+                                _dly = _cc_d.load_daily_display(bc)
+                            except Exception:
+                                _dly = None
+                            if _dly is None or getattr(_dly, "empty", True):
+                                try:
+                                    from core.market_data import get_provider as _gp
+                                    _dly = _gp().daily(bc)
+                                except Exception:
+                                    _dly = None
+                            _src = prefetch_minutes(bc)
                             with _BG_PANDAS_SEM:             # 全局最多 2 个 pandas 批活并发
-                                st = load_structure(bc)      # 后台线程，允许出网
+                                st = load_structure(bc, allow_network=False, daily_df=_dly)
+                            if isinstance(st, dict) and isinstance(st.get("data_asof"), dict) and _src:
+                                st["data_asof"].update({f"src_{k}": v for k, v in _src.items()})
                         except Exception as e:
                             st = {"ok": False, "reason": str(e)[:80]}
                         with _PB_STRUCT_LOCK:
@@ -8963,7 +8986,11 @@ class Api:
                     # 的日线缓存 + position_structure 的 strftime 优化），4 线程把 10 只持仓的
                     # 排干时间从 7.3s 压到 ~2s；仍是**固定小池**（不是每请求开线程），
                     # 不会重演「线程爆炸拖死 UI 线程」那类事故。
-                    with ThreadPoolExecutor(max_workers=4) as ex:
+                    # 2026-10-30：命名（"pb-struct"）。此前是**未命名**的 ThreadPoolExecutor，
+                    # 在 `thread_cpu.jsonl` 里与其它十几个池混成一组 ⇒ 每 30 分钟边界的 60% 单核
+                    # 尖峰无法归因（占全部线程采样 60%）。命名后 `--threads-report` 可直接点名。
+                    with ThreadPoolExecutor(max_workers=4,
+                                            thread_name_prefix="pb-struct") as ex:
                         list(ex.map(_one, batch))
             except Exception:
                 with _PB_STRUCT_WARM_LOCK:
@@ -13549,7 +13576,7 @@ if __name__ == "__main__":
         import config as _cfg              # 本文件没有模块级 config（各处都是函数内 import）
         from core import thread_watch as _tw
         _tw_sec = float(_cfg.PARAMS.get("thread_watch_sec", 5) or 5)
-        if _tw.start(interval=_tw_sec):
+        if _tw.start(interval=_tw_sec, label="gui"):
             print(f"🧵 线程级 CPU 归因已启动（{_tw_sec:g}s 采样 / 60s 落盘 → "
                   f"t_io/logs/thread_cpu.jsonl）", flush=True)
     except Exception as _e:

@@ -2549,6 +2549,18 @@ def run_watch():
     # manual 做T 下线（2026-09-14）：VIRTUAL_TRADES 持久化恢复与 T_MODE（正/反T）自动决策
     # 均已随 manual 做T 一并删除；run_watch 只保留持仓加载 + 热度补算 + 引擎启动。
 
+    # 2026-10-30（owner 批准）：进程内**线程级 CPU 归因**。此前只有 GUI 挂了
+    # `core.thread_watch`，而外部采样显示 main 在 :00/:30 冲到 **314%（3.1 核）**
+    # （与猎手 30 分钟轮询全池重跑重合）却**没有任何线程级证据**。落同一份 JSONL，
+    # 用 `proc` 字段区分（`--threads-report` 会按 proc/线程 归并）。
+    try:
+        from core import thread_watch as _tw
+        _tw_sec = float(PARAMS.get("thread_watch_sec", 5) or 5)
+        if _tw.start(interval=_tw_sec, flush_sec=60.0, label="main"):
+            log.info(f"🧵 线程级 CPU 采样已启动（proc=main，{_tw_sec:g}s 采样 / 60s 落盘）")
+    except Exception:
+        pass
+
     # V3.1fix: 启动时补算昨日热度（如果缺失）
     _maybe_backfill_sentiment()
     # 2026-10-20：猎手「刚站上5日线」实时 watcher（独立线程，20s 节拍，不再等主循环）

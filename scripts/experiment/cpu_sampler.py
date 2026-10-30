@@ -218,8 +218,13 @@ def cmd_report_threads(path: str) -> int:
                 continue
             n += 1
             day = str(rec.get("ts", ""))[:10]
+            # 2026-10-30：GUI 与 main 同时采样、追加同一份 JSONL ⇒ 按 `proc` 区分。
+            # 旧记录没有 proc 字段（只有 GUI 在采），保持原样显示。
+            _proc = str(rec.get("proc") or "")
             for r in rec.get("top", []) or []:
-                by_day.setdefault(day, {}).setdefault(r.get("name") or "?", []).append(
+                _nm = r.get("name") or "?"
+                _key = f"{_proc}/{_nm}" if _proc else _nm
+                by_day.setdefault(day, {}).setdefault(_key, []).append(
                     float(r.get("pct") or 0))
     if not by_day:
         print("⛔ 线程级 JSONL 里没有可用样本")
