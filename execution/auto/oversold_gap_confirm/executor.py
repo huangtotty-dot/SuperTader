@@ -66,7 +66,7 @@ BOOK_DIR_DEFAULT = os.path.join(_ROOT, "t_io", "state", "weak_strong_book")
 DEFAULTS = {
     "top_n": 4,                     # 每日按 gap 取最强前 N（exp9 Sharpe 顶点）
     "single_budget": 100000.0,      # 单票名义上限（元，对齐 OGR 10 万/腿）
-    "daily_budget": 400000.0,       # 每日名义总额度（元）
+    "daily_budget": 200000.0,       # 每日名义总额度（元，首轮+补单共享）
     "cash_headroom": 0.95,          # 单票占用现金封顶比例
     "min_lot": 100,
     "order_poll_rounds": 3,
@@ -271,7 +271,11 @@ def reconcile_book(book_dir: str, acct_qty: dict) -> int:
 
 def register_buys_to_book(book_dir: str, date: str, buys_out: list, picks: list,
                           prev_close: dict, ma20: dict, log=print) -> dict:
-    """把当日已成交买单并入持仓账本（卖侧真源）。拒单/废单不入账。返回合并后的账本。"""
+    """把当日已成交买单并入持仓账本（卖侧真源）。拒单/废单不入账。返回合并后的账本。
+
+    每笔实际并入数量同步写入 ``booked_qty``：初始 submitted 为 qty_placed，同步
+    partial 仅为 filled_qty；后续终态只能回滚该数量中的未成交余量。
+    """
     board_map = {p["code"]: p.get("board", "") for p in (picks or [])}
     book = load_book(book_dir)
     for r in (buys_out or []):
@@ -284,6 +288,7 @@ def register_buys_to_book(book_dir: str, date: str, buys_out: list, picks: list,
         px = float(r.get("filled_price") or r.get("price") or 0)
         if px <= 0:
             continue
+        r["booked_qty"] = qty
         pc = float(prev_close.get(code) or 0)
         ma = float(ma20.get(code) or 0)
         dev20 = (pc / ma - 1.0) if (pc > 0 and ma > 0) else None
@@ -785,6 +790,9 @@ def run_buy_exec(gateway, date: str, prev_close: dict, ma20: dict, bars: dict,
         if rep.get("status") in _TERMINAL_BAD or rep.get("status") == "error":
             log(f"[WS] ⚠️ BUY {code} {rep.get('status')}: {rec['message']}")
         else:
+            # 与 register_buys_to_book 的实际入账口径一致，并随首轮 fills 落盘；
+            # register 成功入账后会再次写入同一值。
+            rec["booked_qty"] = int(rec["filled_qty"] or rec["qty_placed"] or 0)
             total_placed += (rec["filled_qty"] or b["qty_place"]) * float(eff_px or 0)
         log(f"[WS] BUY {code} gap={b['gap'] if b['gap'] is not None else 'nan':.4f} "
             f"{b['qty_place']}股@{b['price']:.3f} → {rec['status']}"
@@ -988,6 +996,10 @@ def merge_backfill_fills(book_dir: str, date: str, round_no: int, round_res: dic
                      "truncated": False, "defer_reason": None,
                      "status": p.get("status"), "filled_qty": filled,
                      "filled_price": p.get("filled_price"),
+                     # 先按 register 同款口径随 fills 落盘；实际入账时 register 再写实。
+                     "booked_qty": ((filled or qty)
+                                    if p.get("status") not in _TERMINAL_BAD
+                                    and p.get("status") != "error" else 0),
                      "fee_est": round(float(filled or qty) * float(eff_px or 0) * _FEE_BUY, 2),
                      "message": p.get("message") or "",
                      "order_id": p.get("order_id"),

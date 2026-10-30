@@ -149,6 +149,32 @@ class GmGateway(object):
         except Exception:
             pass
 
+    def _get_orders_for_symbol(self, code: str, desc: str):
+        """读取并**强制按 symbol 过滤**当日委托。
+
+        新旧 GM 的 `get_orders` 签名不同：带 symbol 调用 TypeError 时回退全账户。
+        两条路径都必须在本层再过滤——全账户回退尤其不能把其它票的在途单算进来；
+        缺 symbol 的记录也不猜、不接纳。
+        """
+        gm = self._gm
+        sym = self.sv.code_to_gm(code)
+        try:
+            orders = self.sv.sdk_call("%s_%s" % (self.strategy_id, desc),
+                                      partial(gm.get_orders, symbol=sym))
+        except TypeError:
+            orders = self.sv.sdk_call("%s_%s_all" % (self.strategy_id, desc), gm.get_orders)
+        rows = orders if isinstance(orders, list) else [orders]
+        out = []
+        for od in rows:
+            try:
+                osym = (od.get("symbol") if isinstance(od, dict)
+                        else getattr(od, "symbol", None))
+                if str(osym or "") == str(sym):
+                    out.append(od)
+            except Exception:
+                continue
+        return out
+
     # ── 下单 ────────────────────────────────────────────────
     def place_order(self, code: str, side: str, qty: int, price) -> dict:
         gm = self._gm
@@ -183,39 +209,60 @@ class GmGateway(object):
                              else gm.PositionEffect_Close),
             **_kw))
         self.sv.mark_pending_recon(self.context, code, sym, side, int(qty), px, _o)
-        # 同步返回里直接带拒单（status∈4/5/6/8/12）的情形与既有口径对齐
-        _oid, _rej = None, None
+        # 同步回报状态语义：3 全成 / 5 已撤 / 6 待撤 / 8 拒单 / 12 过期。
+        # status=3 也必须有真实成交量才可记 filled；filled_volume 优先，volume 仅在
+        # 全成状态可作总量。否则保持 submitted，绝不以 0 股伪报全成或让 pending 消失。
+        _oid, _sync_status, _raw_status = None, "submitted", None
+        _filled_qty, _filled_price, _sync_message = 0, None, ""
         for _od in (_o if isinstance(_o, list) else [_o]):
-            if isinstance(_od, dict):
-                _oid = _oid or (_od.get("id") or _od.get("order_id"))
-                if _rej is None and int(_od.get("status") or 0) in self.sv.reject_statuses:
-                    _rej = "status=%s" % _od.get("status")
-        if _rej:
-            return {"order_id": _oid, "status": "rejected", "filled_qty": 0,
-                    "filled_price": None, "message": "同步回报拒单 %s" % _rej}
-        return {"order_id": _oid, "status": "submitted", "filled_qty": 0,
-                "filled_price": None, "message": ""}
+            if not isinstance(_od, dict):
+                continue
+            _oid = _oid or (_od.get("id") or _od.get("order_id"))
+            _st = int(_od.get("status") or 0)
+            if _st == 3:
+                _fq = int(_od.get("filled_volume") or _od.get("volume") or 0)
+            else:
+                # 非全成状态的 volume 是委托量，不能当作成交量。
+                _fq = int(_od.get("filled_volume") or _od.get("filled_qty") or 0)
+            if _fq > 0:
+                _filled_qty = _fq
+                _filled_price = float(_od.get("filled_vwap") or _od.get("vwap")
+                                      or _od.get("filled_price") or 0) or None
+            if _st == 3:
+                _raw_status = _st
+                if _fq >= int(qty) and int(qty) > 0:
+                    _sync_status, _sync_message = "filled", ""
+                elif _fq > 0:
+                    _sync_status = "partial"
+                    _sync_message = "同步回报 status=3 但成交量小于委托量"
+                else:
+                    _sync_status = "submitted"
+                    _sync_message = "同步回报 status=3 但成交量缺失"
+            elif _st == 5:
+                _sync_status, _raw_status = "cancelled", _st
+            elif _st == 6:
+                _sync_status, _raw_status = "pending_cancel", _st
+            elif _st == 12:
+                _sync_status, _raw_status = "expired", _st
+            elif _st in self.sv.reject_statuses:
+                _sync_status, _raw_status = "rejected", _st
+            elif _st == 2 and _fq > 0:
+                _sync_status, _raw_status = "partial", _st
+        if _oid:
+            _ack = getattr(self.sv, "write_order_ack", None)
+            if _ack:
+                _ack(str(now), code, side, int(qty), px,
+                     order_id=str(_oid), order_type=self.strategy_id)
+        if _sync_status != "submitted":
+            return {"order_id": _oid, "status": _sync_status, "raw_status": _raw_status,
+                    "filled_qty": _filled_qty, "filled_price": _filled_price,
+                    "message": _sync_message or "同步回报 status=%s" % _raw_status}
+        return {"order_id": _oid, "status": "submitted", "raw_status": _raw_status,
+                "filled_qty": 0, "filled_price": None, "message": _sync_message}
 
     def poll_order(self, order_id, code: str) -> dict:
-        """get_orders 轮询终态（掘金拒单/成交异步，与 _poll_pending_recon 同款渠道）。
-
-        ⚠️ 2026-10-14 修正：**`status=6`(PendingCancel) 不再归入 `rejected`**。
-        原先 `6` 落在 `reject_statuses` 里 ⇒ 被映射成 `rejected`，而上层（买不进替补的撤单确认）
-        据此会认为"**资金已解冻**"⇒ 用同一笔钱再下单 ⇒ 超买。
-        6 的真实语义是「撤单在途、**钱还冻着**」（语义出处：
-        `doc/review/archive/goldminer/backlog/Phase-A_合成拒单注入验证方案.md:19-22`）
-        ⇒ 单列为 `pending_cancel`。
-
-        另：返回里带 `raw_status`（原始数字状态码），供调用方按**码**而不是按字符串判终态
-        （字符串会被上面这类映射改变含义）。
-        """
-        gm = self._gm
-        sym = self.sv.code_to_gm(code)
-        try:
-            _orders = self.sv.sdk_call("%s_get_orders" % self.strategy_id,
-                                       partial(gm.get_orders, symbol=sym))
-        except TypeError:
-            _orders = self.sv.sdk_call("%s_get_orders_all" % self.strategy_id, gm.get_orders)
+        """轮询单票委托；3/5/6/8/12 分语义返回，并保留 raw_status。"""
+        _orders = self._get_orders_for_symbol(code, "get_orders")
         for _od in (_orders or []):
             try:
                 if str(_od.get("id") or _od.get("order_id") or "") != str(order_id):
@@ -227,12 +274,18 @@ class GmGateway(object):
                 if _st == 3:
                     return {"order_id": order_id, "status": "filled", "raw_status": _st,
                             "filled_qty": _fq, "filled_price": _fp, "message": ""}
+                if _st == 5:
+                    return {"order_id": order_id, "status": "cancelled", "raw_status": _st,
+                            "filled_qty": _fq, "filled_price": _fp, "message": "status=5"}
                 if _st == 6:                       # 撤单在途：钱**未**解冻
                     return {"order_id": order_id, "status": "pending_cancel", "raw_status": _st,
                             "filled_qty": _fq, "filled_price": _fp, "message": "status=6"}
+                if _st == 12:
+                    return {"order_id": order_id, "status": "expired", "raw_status": _st,
+                            "filled_qty": _fq, "filled_price": _fp, "message": "status=12"}
                 if _st in self.sv.reject_statuses:
                     return {"order_id": order_id, "status": "rejected", "raw_status": _st,
-                            "filled_qty": 0, "filled_price": None,
+                            "filled_qty": _fq, "filled_price": _fp,
                             "message": "status=%s" % _st}
                 if _fq > 0:
                     return {"order_id": order_id, "status": "partial", "raw_status": _st,
@@ -256,17 +309,8 @@ class GmGateway(object):
         本方法把两边对上；`get_orders()` 在新版 GM 上**不接受 symbol 参数**（旧调用会
         TypeError），故保留"带参 → 无参"两级降级。
         """
-        gm = self._gm
-        sym = self.sv.code_to_gm(code)
         try:
-            _orders = self.sv.sdk_call("%s_get_orders_find" % self.strategy_id,
-                                       partial(gm.get_orders, symbol=sym))
-        except TypeError:
-            try:
-                _orders = self.sv.sdk_call("%s_get_orders_find_all" % self.strategy_id,
-                                           gm.get_orders)
-            except Exception:
-                return None
+            _orders = self._get_orders_for_symbol(code, "get_orders_find")
         except Exception:
             return None
         for _od in (_orders if isinstance(_orders, list) else [_orders]):
@@ -279,32 +323,13 @@ class GmGateway(object):
         return None
 
     def _resolve_open_buy_order_id(self, code: str):
-        """`order_id` 缺失时按 symbol 找回**在途买单**的 id（2026-10-16 生产施工）。
-
-        为什么需要：GM 仿真终端的**同步下单回报里 order_id 恒为空**（2026-10-14/10-16
-        两天 bridge events 里 `"order_id"` 无一非空；卖侧 10-16 的迟确认修复同源），
-        而 fills 账本只有这个空 id ⇒ 买不进替补的撤单链路"有单号才能撤"会**整体静默失效**。
-        但 `get_orders(symbol)` 能列出当日委托（`_poll_pending_recon` 同款渠道，已验证可用）
-        ⇒ 按「在途（非终态）且方向=买」筛出唯一候选，拿它的 id 去撤。
-
-        返回 `(order_id, reason)`；reason ∈ {"", no_open_order, ambiguous_open_orders,
-        order_id_unavailable, resolve_error}。**任何失败都不抛**。
-        """
-        gm = self._gm
-        sym = self.sv.code_to_gm(code)
+        """按 symbol 找回唯一在途买单；6 始终在途，同票多单绝不猜测。"""
         try:
-            _orders = self.sv.sdk_call("%s_get_orders_resolve" % self.strategy_id,
-                                       partial(gm.get_orders, symbol=sym))
-        except TypeError:
-            try:
-                _orders = self.sv.sdk_call("%s_get_orders_resolve_all" % self.strategy_id,
-                                           gm.get_orders)
-            except Exception:
-                return None, "resolve_error"
+            _orders = self._get_orders_for_symbol(code, "get_orders_resolve")
         except Exception:
             return None, "resolve_error"
-        # 终态 = 拒单码 ∪ {3=Filled}；在途 = 1/2/6 等。**买单** side=1（与拒单事件 raw 口径一致）。
-        terminal = set(self.sv.reject_statuses or ()) | {3}
+        # 终态不继承历史 reject_statuses（其中曾误含 6）；5/8/12 与 3 才可清，6 始终在途。
+        terminal = {3, 4, 5, 8, 12}
         cands = []
         for _od in (_orders if isinstance(_orders, list) else [_orders]):
             try:
@@ -390,7 +415,7 @@ class GmGateway(object):
                 _st = _od.get("status")
             else:
                 _st = getattr(_od, "status", None)
-            if _st is not None and int(_st) in self.sv.reject_statuses:
+            if _st is not None and int(_st) != 6 and int(_st) in self.sv.reject_statuses:
                 _bad = int(_st)
         if _bad is not None:
             return {"ok": False, "order_id": order_id, "message": "cancel_rejected:status=%s" % _bad}

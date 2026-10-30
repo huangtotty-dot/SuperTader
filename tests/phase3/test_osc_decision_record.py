@@ -311,5 +311,99 @@ class TestZeroCandidateBuyRecord(unittest.TestCase):
             self.assertEqual(rt.sdk_calls, [])
 
 
+class TestIndexRegimeBuyGate(unittest.TestCase):
+    """uni_down 首轮熔断：合法候选也零 BUY，且不得先读个股行情。"""
+
+    def _run(self, regime, book_dir):
+        from datetime import datetime
+        import pandas as pd
+        from oversold_gap_confirm import hooks
+        from tests.phase3.test_osc_backfill_shift import FakeGateway
+
+        day = "2026-10-26"
+        hooks.reset_day(day)
+        self.addCleanup(hooks.reset_day, day)
+        codes = ["600001", "600002", "600003"]
+        hooks._STATE["candidates"] = {
+            c: {"prev_close": 10.0, "ma20": 12.0, "board": "医药", "name": "测试股"}
+            for c in codes
+        }
+        df = pd.DataFrame([
+            {"symbol": "SHSE." + c, "eob": datetime(2026, 10, 26, 10, 0),
+             "low": 10.1, "close": 11.5, "amount": 11.4 * 1000, "volume": 1000}
+            for c in codes
+        ])
+        gw = FakeGateway(cash=1_000_000.0, cancel_status=0, place_status="submitted")
+
+        class _GM:
+            ADJUST_PREV = 1
+
+            @staticmethod
+            def history(**kwargs):
+                return df
+
+        class _RT:
+            def __init__(self):
+                self.book_dir = book_dir
+                self.gm = _GM()
+                self.sdk_calls = []
+                self.audits = []
+
+            def kill_switch(self):
+                return False
+
+            def gateway(self, context):
+                return gw
+
+            def code_to_gm(self, code):
+                return "SHSE." + code
+
+            def sdk_call(self, desc, fn, *args, **kwargs):
+                self.sdk_calls.append(desc)
+                return fn(*args, **kwargs)
+
+            def param(self, key, default=None):
+                return {"osc_top_n": 4, "osc_single_budget": 100000.0,
+                        "osc_daily_budget": 400000.0, "osc_cash_headroom": 0.95,
+                        "osc_order_poll_rounds": 1, "osc_order_poll_sleep_sec": 0.0
+                        }.get(key, default)
+
+            def audit(self, rec):
+                self.audits.append(rec)
+
+            def log(self, *args, **kwargs):
+                pass
+
+            def risk(self, *args, **kwargs):
+                pass
+
+        rt = _RT()
+        context = type("_Ctx", (), {"last_index_regime": regime})()
+        n = hooks.try_buy(rt, context, datetime(2026, 10, 26, 10, 0))
+        return n, rt, gw
+
+    def test_uni_down_valid_candidates_zero_orders_and_zero_market_calls(self):
+        from oversold_gap_confirm import hooks
+        with tempfile.TemporaryDirectory() as td:
+            n, rt, gw = self._run("uni_down", td)
+            self.assertEqual(n, 0)
+            self.assertEqual(gw.placed, [])
+            self.assertEqual(rt.sdk_calls, [], "熔断必须先于 10:00 个股行情读取")
+            self.assertTrue(any(a.get("reason") == "index_regime_uni_down" for a in rt.audits))
+            fills = json.loads(Path(td, "fills_2026-10-26.json").read_text(encoding="utf-8"))
+            self.assertEqual(fills["summary"]["skip_reason"], "index_regime_uni_down")
+            self.assertEqual(fills["summary"]["buys_placed"], 0)
+            self.assertTrue(hooks._STATE["buy_done"])
+            state = json.loads(Path(td, "day_state_2026-10-26.json").read_text(encoding="utf-8"))
+            self.assertTrue(state["buy_done"], "重启后必须凭落盘状态跳过首轮")
+
+    def test_range_control_reaches_market_and_places_orders(self):
+        with tempfile.TemporaryDirectory() as td:
+            n, rt, gw = self._run("range", td)
+            self.assertEqual(n, 3)
+            self.assertEqual(rt.sdk_calls, ["osc_10am_bars"])
+            self.assertEqual(len(gw.placed), 3)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

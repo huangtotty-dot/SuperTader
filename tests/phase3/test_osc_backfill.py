@@ -255,6 +255,9 @@ class _FakeGm(object):
 
     def get_orders(self, **kw):
         self.calls.append(("get_orders", kw))
+        if kw.get("symbol"):
+            return [dict(o, symbol=o.get("symbol") or kw["symbol"])
+                    if isinstance(o, dict) else o for o in self._orders]
         return list(self._orders)
 
     def current(self, **kw):

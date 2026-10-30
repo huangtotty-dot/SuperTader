@@ -161,8 +161,9 @@ def _get_orders(symbol=None, **kw):
         if symbol and od["symbol"] != symbol:
             continue
         px = float(od.get("price") or 0)
-        out.append({"id": "O%d" % (i + 1), "status": 3, "volume": int(od["volume"]),
-                    "filled_volume": int(od["volume"]), "filled_vwap": px, "price": px})
+        out.append({"id": "O%d" % (i + 1), "status": 3, "symbol": od["symbol"],
+                    "volume": int(od["volume"]), "filled_volume": int(od["volume"]),
+                    "filled_vwap": px, "price": px})
     return out
 
 

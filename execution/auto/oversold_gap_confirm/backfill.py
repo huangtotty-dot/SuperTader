@@ -332,7 +332,8 @@ def cancel_and_confirm(gateway, pending, poll_rounds=3, poll_sleep=2.0, sleep_fn
             except Exception:
                 break
         if st in CANCEL_LOST_RACE or (rep and rep.get("_filled")):
-            res["filled"].append({"code": code, "qty": filled_qty, "price": filled_px})
+            res["filled"].append({"code": code, "qty": filled_qty, "price": filled_px,
+                                  "order_id": oid})
         elif st in CANCEL_RELEASED:
             res["released"].append(code)
         else:

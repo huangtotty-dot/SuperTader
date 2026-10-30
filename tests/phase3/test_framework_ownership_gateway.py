@@ -72,6 +72,10 @@ class FakeGm(object):
 
     def get_orders(self, **kw):
         self.calls.append(("get_orders", kw))
+        # 真实带 symbol 响应必带标的字段；旧假件省略时补齐，不能靠生产端放宽过滤。
+        if kw.get("symbol"):
+            return [dict(o, symbol=o.get("symbol") or kw["symbol"])
+                    if isinstance(o, dict) else o for o in self._get_orders]
         return list(self._get_orders)
 
     def order_cancel(self, **kw):
@@ -384,8 +388,8 @@ class TestGatewayCancelAndRawStatus(unittest.TestCase):
         """`raw_status` 必须原样带出状态码，供上层按**码**判终态（字符串会被映射改义）。"""
         own = Ownership(strategies=[])
         for st, expect in ((0, "submitted"), (2, "partial"), (3, "filled"),
-                           (5, "rejected"), (6, "pending_cancel"), (8, "rejected"),
-                           (12, "rejected")):
+                           (5, "cancelled"), (6, "pending_cancel"), (8, "rejected"),
+                           (12, "expired")):
             gw, gm, ev, rk, au, order = self._gw(
                 own, get_orders=[{"id": "o1", "status": st,
                                   "filled_volume": 100 if st == 2 else 0,

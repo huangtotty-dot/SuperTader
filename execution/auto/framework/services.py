@@ -31,16 +31,17 @@ from __future__ import annotations
 class GmServices(object):
     """掘金能力的只读句柄。gm_main 构造一次，全局复用。"""
 
-    __slots__ = ("gm", "sdk_call", "write_order", "mark_pending_recon", "code_to_gm",
-                 "raw_code", "param", "clock", "reject_statuses", "ownership",
+    __slots__ = ("gm", "sdk_call", "write_order", "write_order_ack", "mark_pending_recon",
+                 "code_to_gm", "raw_code", "param", "clock", "reject_statuses", "ownership",
                  "risk", "audit", "kill_switch")
 
     def __init__(self, *, gm, sdk_call, write_order, mark_pending_recon, code_to_gm,
                  raw_code, param, clock, reject_statuses, ownership,
-                 risk=None, audit=None, kill_switch=None):
+                 risk=None, audit=None, kill_switch=None, write_order_ack=None):
         self.gm = gm
         self.sdk_call = sdk_call
         self.write_order = write_order
+        self.write_order_ack = write_order_ack
         self.mark_pending_recon = mark_pending_recon
         self.code_to_gm = code_to_gm
         self.raw_code = raw_code

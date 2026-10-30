@@ -4,9 +4,11 @@ gm_bridge/writer.py — 事件桥写入（仅写文件，不碰网络/飞书）
 
 事件 schema 见 docs/模拟盘实施方案_20260727.md 附录 A：
   signal: 信号生成
-  order:  委托发出
+  order:  委托发出（下单前意向）
+  order_ack: 柜台委托确认（真实 order_id）
   fill:   全部成交
-  reject: 拒单/撤单
+  reject: 拒单（status=4/8）
+  order_terminal: 撤单/过期终态（status=5/12）
   risk:   风控事件 (仓位/地板/PANIC/熔断/急停)
   heartbeat: 每分钟心跳（仓位+现金）
 """
@@ -131,6 +133,21 @@ def write_order(time_str: str, code: str, side: str, qty: int, price: float,
     })
 
 
+def write_order_ack(time_str: str, code: str, side: str, qty: int, price: float,
+                    order_id: str, order_type: str = "MKT"):
+    """下单后拿到真实柜台 ID 的追加确认；不替代下单前的 order 意向事件。"""
+    _append_jsonl(_events_path(), {
+        "event": "order_ack",
+        "time": time_str,
+        "code": code,
+        "side": side,
+        "qty": qty,
+        "price": price,
+        "order_id": str(order_id),
+        "order_type": order_type,
+    })
+
+
 def write_fill(time_str: str, code: str, side: str, qty: int, price: float,
                order_id: str = "", pos_after: int = 0, fee: float = 0.0, fee_source: str = "estimated",
                fee_rate: Optional[float] = None, order_price: Optional[float] = None,
@@ -172,16 +189,34 @@ def write_fill(time_str: str, code: str, side: str, qty: int, price: float,
 
 
 def write_reject(time_str: str, code: str, side: str, qty: int,
-                 reason: str = "", raw: dict = None):
-    """拒单/撤单事件"""
+                 reason: str = "", raw: dict = None, order_id: str = ""):
+    """真实拒单事件（撤单/过期走 write_order_terminal，不混称拒单）。"""
     _append_jsonl(_events_path(), {
         "event": "reject",
         "time": time_str,
         "code": code,
         "side": side,
         "qty": qty,
+        "order_id": str(order_id),
         "reason": reason,
         "raw": str(raw) if raw else "",
+    })
+
+
+def write_order_terminal(time_str: str, code: str, side: str, qty: int,
+                         terminal: str, raw_status: int, order_id: str = "",
+                         detail: str = ""):
+    """撤单/过期终态留痕；detail 只写柜台原话，不虚构具体原因。"""
+    _append_jsonl(_events_path(), {
+        "event": "order_terminal",
+        "time": time_str,
+        "code": code,
+        "side": side,
+        "qty": qty,
+        "order_id": str(order_id),
+        "terminal": str(terminal),
+        "raw_status": int(raw_status),
+        "detail": str(detail or ""),
     })
 
 

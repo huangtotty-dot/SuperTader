@@ -56,8 +56,8 @@ if _ROOT_DIR not in sys.path:
 from config.params import PARAMS
 from utils.helpers import _now
 from gm_bridge.writer import (
-    write_order, write_fill, write_reject, write_risk,
-    write_heartbeat, check_kill_switch,
+    write_order, write_order_ack, write_fill, write_reject, write_order_terminal,
+    write_risk, write_heartbeat, check_kill_switch,
 )
 from gm_bridge import ops_guard
 
@@ -147,16 +147,26 @@ def _poll_pending_recon(context, now):
                     _orders = _sdk_call("get_orders_poll", _partial(get_orders, symbol=_sym))
                 except TypeError:
                     _orders = _sdk_call("get_orders_poll_all", get_orders)
-                _hit = None
+                _ids = {str(_i) for _i in (_rec.get("order_ids") or []) if _i}
+                _hits = []
                 for _o in (_orders or []):
                     try:
+                        # 带 symbol 与全账户回退都必须再过滤：其他票/其他委托的 fill
+                        # 绝不能喂给当前 _sym，否则会错误补账并 closed 当前对账项。
+                        if not isinstance(_o, dict) or str(_o.get("symbol") or "") != str(_sym):
+                            continue
+                        _oid = str(_o.get("id") or _o.get("order_id") or "")
+                        if _ids and _oid not in _ids:
+                            continue
                         if int(_o.get("status") or 0) == 3 and int(_o.get("volume") or 0) > 0:
-                            _hit = _o
-                            break
+                            _hits.append(_o)
                     except Exception:
                         continue
-                if not _hit:
+                # 空 order_ids 时，同 symbol 可能有多条已成交委托；候选不唯一就无法
+                # 证明归属，必须保持 pending。带 ID 路径也只在唯一命中时恢复。
+                if len(_hits) != 1:
                     continue
+                _hit = _hits[0]
                 on_order_status(context, _hit)
                 _rec["closed"] = True
                 try:
@@ -788,7 +798,7 @@ def _code_to_gm(code: str) -> str:
     return ("SHSE." if code[:1] in "569" else "SZSE.") + code
 
 
-_REJ_STATUS = (4, 5, 6, 8, 12)   # gm 委托终态：这些 status = 拒单/撤单/过期
+_REJ_STATUS = (4, 5, 6, 8, 12)   # 回调处理集合：4/8 拒单、5 撤单、12 过期；6 待撤在途，单独早退
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -885,6 +895,7 @@ SERVICES = GmServices(
     gm=_GmPrimitives(),
     sdk_call=_sdk_call,
     write_order=write_order,
+    write_order_ack=write_order_ack,
     mark_pending_recon=_mark_pending_recon,
     code_to_gm=_code_to_gm,
     raw_code=_raw_code,
@@ -931,26 +942,8 @@ def on_bar(context, bars):
     if t < dtime(9, 30) or (dtime(11, 30) < t < dtime(13, 0)) or t > dtime(15, 0):
         return
 
-    # ── 唯一策略：超跌跳空确认的四时点钩子（09:31 预筛 / 10:00 早盘卖 → 10:00 买 / 14:50 卖）──
-    # 时间窗 · 每日一次 · MODE_LIVE 闸 · 逐钩子异常隔离**都在策略包内**（hooks.on_bar），
-    # 宿主不再持有任何策略状态。详见 execution/auto/oversold_gap_confirm/。
-    osc.on_bar(OSC_RT, context, now, today, t)
-
-    global _WB_DONE_DATE
-    # ── 持仓真源回写（2026-09-14 并表）：收盘后一次，把账户实际 qty/cost 写回 holdings.json ──
-    # 取 14:57 每日一次（on_bar 在 15:00 后 return，没有更晚的钩子）。与 superTrader 14:59 的
-    # pre_close 写并发也安全：本侧是"磁盘为基 + 只补丁 qty/cost"，且对方读后再写，两个方向都不丢。
-    # ⚠️ 必须 MODE_LIVE 才回写：回测/回放里的持仓是模拟的，写回会污染生产 holdings.json
-    # （2026-09-14 实证：跑回测把 588170 cost 从 0.914 改成回测播种价 0.8951）。
-    if (t >= dtime(14, 57) and _WB_DONE_DATE != today
-            and getattr(context, "mode", None) == MODE_LIVE):
-        _WB_DONE_DATE = today
-        try:
-            _writeback_holdings(context)
-        except Exception as _wbe:
-            print(f"[WRITEBACK] 失败（不阻断主循环）: {_wbe}")
-
-    # ── D4: 大盘态势 + 分板态势（每交易日一次） ──
+    # ── D4: 大盘态势 + 分板态势（每交易日一次；必须先于 OSC 钩子） ──
+    # 迟到启动首根 bar 直接落在 10:00 时，也要先刷新 regime，再让买侧消费，避免沿用 init 的 range。
     if today != getattr(context, "_last_ir_date", None):
         context._last_ir_date = today
         try:
@@ -1023,6 +1016,25 @@ def on_bar(context, bars):
                     for _k, _v in (context.board_regime or {}).items()))
         except Exception as e:
             print(f"[ir] 大盘态势判定失败: {e}")
+
+    # ── 唯一策略：超跌跳空确认的四时点钩子（09:31 预筛 / 10:00 早盘卖 → 10:00 买 / 14:50 卖）──
+    # 时间窗 · 每日一次 · MODE_LIVE 闸 · 逐钩子异常隔离**都在策略包内**（hooks.on_bar），
+    # 宿主不再持有任何策略状态。详见 execution/auto/oversold_gap_confirm/。
+    osc.on_bar(OSC_RT, context, now, today, t)
+
+    global _WB_DONE_DATE
+    # ── 持仓真源回写（2026-09-14 并表）：收盘后一次，把账户实际 qty/cost 写回 holdings.json ──
+    # 取 14:57 每日一次（on_bar 在 15:00 后 return，没有更晚的钩子）。与 superTrader 14:59 的
+    # pre_close 写并发也安全：本侧是"磁盘为基 + 只补丁 qty/cost"，且对方读后再写，两个方向都不丢。
+    # ⚠️ 必须 MODE_LIVE 才回写：回测/回放里的持仓是模拟的，写回会污染生产 holdings.json
+    # （2026-09-14 实证：跑回测把 588170 cost 从 0.914 改成回测播种价 0.8951）。
+    if (t >= dtime(14, 57) and _WB_DONE_DATE != today
+            and getattr(context, "mode", None) == MODE_LIVE):
+        _WB_DONE_DATE = today
+        try:
+            _writeback_holdings(context)
+        except Exception as _wbe:
+            print(f"[WRITEBACK] 失败（不阻断主循环）: {_wbe}")
 
     # Fix C(2026-09-11): 回调失效轮询兜底（挂心跳前，60s bar 自然节拍；fail-open 不阻塞）
     try:
@@ -1121,6 +1133,12 @@ def on_order_status(context, order):
     # 注：原「price<=0 回退到 context.latest_pre_close（昨收）」的取数源随旧引擎（_refresh_daily_ctx）
     # 删除 ⇒ 保留 0 并交由下游（_get_holding 的 cost=0 → gm vwap 修正）兜底。
     side = order["side"]
+    _event_oid = str(order.get("id") or order.get("order_id") or "")
+
+    # 6=PendingCancel：撤单仍在途，不是拒单也不是终态；资金/委托均不得释放。
+    if status == 6:
+        print(f"[ORDER] {symbol} 待撤 status=6（不计拒单、不回滚、不清 pending）")
+        return
 
     if status == 3:  # 全部成交
         # P2-3A(2026-09-10): 孤儿闸——账户级回调对非本策略成交（掘金仿真终端手工单）也触发，
@@ -1164,7 +1182,7 @@ def on_order_status(context, order):
             # （非期望价），slippage=fill_vwap-order_price 的方向解读归下游；
             # 无真实值的字段传 None（writer 落 null，禁止编造）；0 值经 or None 归一防假滑点。
             write_fill(str(datetime.now()), _raw_code(symbol), _side, volume, price,
-                       order_id=str(order.get("id") or ""), pos_after=_pos_after,
+                       order_id=_event_oid, pos_after=_pos_after,
                        fee=_fee, fee_source=_fsrc,
                        order_price=(order.get("price") or None),
                        fill_vwap=(order.get("filled_vwap") or order.get("vwap") or None))
@@ -1241,16 +1259,21 @@ def on_order_status(context, order):
                            code=code)
             except Exception:
                 pass
-    elif status in (4, 5, 6, 8, 12):  # 拒单/撤单/待撤/已拒绝(8)/已过期(12) —— F2修复: 2026-07-28前漏掉8导致所有拒单静默
+    elif status in (4, 5, 8, 12):  # 4/8 拒单；5 已撤；12 过期。6 已在上方单独早退。
         _rej_detail = ""
         try:
             _rej_detail = order.get("ord_rej_reason_detail", "") or ""
         except Exception:
             pass
-        context.rejected_order_count = getattr(context, 'rejected_order_count', 0) + 1
-        print(f"[ORDER] {symbol} 被拒 status={status} {_rej_detail}")
-        # N25-2: 卖出拒单回滚 manual_position（下单方在 on_order_status 之外只更 executed_orders，
-        # 但 OPEN_ALIGN 时代的虚减已随其删除；超跌跳空确认的腿账本自成一套，不走 manual_position）
+        _r_code = code
+        _r_side = "BUY" if side == 1 else "SELL"
+        _is_reject = status in (4, 8)
+        _terminal = {4: "rejected", 8: "rejected",
+                     5: "cancelled", 12: "expired"}[status]
+        if _is_reject:
+            context.rejected_order_count = getattr(context, 'rejected_order_count', 0) + 1
+        print(f"[ORDER] {symbol} {_terminal} status={status} {_rej_detail}".rstrip())
+        # 卖侧终态回滚 manual_position；待撤 status=6 已早退，绝不会虚增可用数量。
         if side == 2 and symbol in context.manual_position:
             mp = context.manual_position[symbol]
             mp["qty"] = mp.get("qty", 0) + volume
@@ -1259,19 +1282,21 @@ def on_order_status(context, order):
             _audit_write({"event": "sell_rollback", "code": code, "qty": volume,
                           "time": str(getattr(context, "now", None) or datetime.now())})
         try:
-            _r_code = _raw_code(symbol)
-            _r_side = "BUY" if side == 1 else "SELL"
-            write_reject(str(datetime.now()), _r_code, _r_side, volume,
-                         reason=f"status={status} {_rej_detail}",
-                         raw={"status": status, "side": side, "volume": volume,
-                              "rej_detail": _rej_detail})
-            write_risk(str(datetime.now()), "order_rejected",
-                         f"{_r_side} {volume}股被拒 status={status} {_rej_detail}", code=_r_code)
+            _raw = {"status": status, "side": side, "volume": volume,
+                    "order_id": _event_oid, "rej_detail": _rej_detail}
+            if _is_reject:
+                _reason = f"status={status}" + (f" {_rej_detail}" if _rej_detail else "")
+                write_reject(str(datetime.now()), _r_code, _r_side, volume,
+                             reason=_reason, raw=_raw, order_id=_event_oid)
+                write_risk(str(datetime.now()), "order_rejected",
+                           f"{_r_side} {volume}股被拒 {_reason}", code=_r_code)
+            else:
+                write_order_terminal(str(datetime.now()), _r_code, _r_side, volume,
+                                     terminal=_terminal, raw_status=status,
+                                     order_id=_event_oid, detail=_rej_detail)
         except Exception:
             pass
-        # ── 2026-10-21 拒单回填：OSC 买侧「挂单即入账」⇒ 拒单必须回滚账本虚挂份额
-        # 并把 fills/sells 留痕改 rejected（否则留痕永远 submitted、summary 虚报、
-        # 账本虚挂到次日 10:00 卖前 reconcile 才剔除——10-21 002591/688028 实证）。
+        # OSC 买侧「挂单即入账」：真实终态需回滚虚挂份额，并按原始状态修留痕。
         # 卖侧下单不扣账 ⇒ apply_reject 内部对 SELL 只修留痕不动账本。
         try:
             if getattr(context, "mode", None) == MODE_LIVE:
@@ -1279,17 +1304,16 @@ def on_order_status(context, order):
                     _OSC_BOOK_DIR,
                     {"time": str(getattr(context, "now", None) or datetime.now()),
                      "code": _r_code, "side": _r_side, "qty": int(volume or 0),
-                     "order_id": str(order.get("id") or order.get("order_id") or ""),
+                     "order_id": _event_oid,
                      "status": status, "rej_detail": _rej_detail}, log=print)
                 if _rj_res:
-                    print(f"[FB] 拒单回填 {_r_code} {_r_side} {volume} → "
+                    print(f"[FB] 终态回填 {_r_code} {_r_side} {volume} → "
                           f"{_rj_res.get('action')} {_rj_res.get('detail', '')}")
         except Exception as _rje:
-            # 回填失败绝不阻断主链（账本残差由卖前 reconcile_book 夹紧兜底）
-            print(f"[FB] ⚠️ 拒单回填异常（不阻断）: {_rje}")
+            print(f"[FB] ⚠️ 终态回填异常（不阻断）: {_rje}")
             try:
                 write_risk(str(datetime.now()), "reject_backfill_error",
-                           f"{code} {volume}股拒单回填异常: {str(_rje)[:150]}",
+                           f"{code} {volume}股终态回填异常: {str(_rje)[:150]}",
                            code=code)
             except Exception:
                 pass

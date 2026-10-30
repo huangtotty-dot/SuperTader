@@ -92,6 +92,19 @@ class TestGmMainOscHooks(unittest.TestCase):
         self.assertEqual(c, [_MORNING, _BUY],
                          "10:00 早盘冲高卖必须先于买侧（先回笼现金再买）")
 
+    def test_first_bar_at_1000_refreshes_regime_before_osc_hooks(self):
+        c = self._c("late_1000")
+        self.assertEqual(self.r.get("late_regime"), "uni_down")
+        self.assertIn("regime_refresh", c)
+        self.assertLess(c.index("regime_refresh"), c.index(_MORNING),
+                        "首根 10:00 也必须先刷新 regime，再进卖→买")
+        self.assertLess(c.index(_MORNING), c.index(_BUY))
+
+    def test_uni_down_does_not_block_sell_hooks(self):
+        self.assertIn(_MORNING, self._c("late_1000"))
+        self.assertEqual(self._c("late_1450"), [_SELL],
+                         "uni_down 只熔断买侧，14:50 风控卖侧必须照常执行")
+
     def test_t3_out_of_window(self):
         self.assertEqual(self._c("1505_oow"), [], ">15:00 应提前 return")
         self.assertEqual(self._c("1200_lunch"), [], "午休窗口不应放行")

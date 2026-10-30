@@ -187,6 +187,9 @@ class _FakeGm(object):
 
     def get_orders(self, **kw):
         self.calls.append(("get_orders", kw))
+        if kw.get("symbol"):
+            return [dict(o, symbol=o.get("symbol") or kw["symbol"])
+                    if isinstance(o, dict) else o for o in self._orders]
         return list(self._orders)
 
     def current(self, **kw):
@@ -455,8 +458,10 @@ class TestShiftTrailAndBook(unittest.TestCase):
         rounds = fills.get("backfill_rounds") or []
         self.assertEqual(len(rounds), 1)
         self.assertEqual(rounds[0]["cancel"]["released"], ["600001"])
-        self.assertEqual(fills["summary"]["buys_placed"], 2,
-                         "summary 要按合并后 buys 全量重算（首单 1 + 顺移 1）")
+        self.assertEqual(by_code["600001"]["status"], "cancelled",
+                         "released 必须先落 cancelled，防止重启后pending复活")
+        self.assertEqual(fills["summary"]["buys_placed"], 1,
+                         "已撤首单不计有效placed，顺移成交单计入；summary按最新fills重算")
 
         book = wse.load_book(self.book_dir)
         self.assertIn("600002", book["open"], "顺移成交必须并入持仓账本（否则卖侧看不见）")

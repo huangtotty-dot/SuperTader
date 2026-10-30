@@ -276,6 +276,28 @@ class TestHooksBackfillStateMachine(unittest.TestCase):
         self.assertEqual(rt.gw.cancelled, [], "KILL_SWITCH 下不应发撤单")
         self.assertTrue(any(a.get("reason") == "kill_switch" for a in rt.audits))
 
+    def test_uni_down_halts_round_without_cancel_quote_or_buy(self):
+        """uni_down 与 KILL_SWITCH 同向：原挂单保留，不撤、不取复检行情、不补新仓。"""
+        rt = self._rt(quotes={"600001": {"price": 10.0, "cum_volume": 1000, "ask_v": 500},
+                              "600002": {"price": 10.0, "cum_volume": 1000, "ask_v": 500}})
+        osc_hooks._STATE.update({
+            "buy": True, "candidates": {"600001": {"prev_close": 9.0},
+                                        "600002": {"prev_close": 9.0}},
+            "fills": _fills_with_pending(), "pending": bf.pending_from_fills(_fills_with_pending()),
+            "spares": [_spare("600002", 0.08)], "done_codes": {"600001"}})
+        context = type("_Ctx", (), {"last_index_regime": "uni_down"})()
+
+        def _no_market(*args, **kwargs):
+            raise AssertionError("uni_down 补单熔断不得读取复检行情")
+
+        rt.sdk_call = _no_market
+        n = osc_hooks.try_backfill(rt, context, _dt.datetime(2026, 10, 15, 10, 8),
+                                   "2026-10-15", 0)
+        self.assertEqual(n, 0)
+        self.assertEqual(rt.gw.cancelled, [])
+        self.assertEqual(rt.gw.placed, [])
+        self.assertTrue(any(a.get("reason") == "index_regime_uni_down" for a in rt.audits))
+
     def test_no_pending_is_noop(self):
         rt = self._rt()
         osc_hooks._STATE["pending"] = []

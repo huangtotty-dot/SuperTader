@@ -137,6 +137,24 @@ bt = FakeCtx(GM.MODE_BACKTEST)
 GM.init(bt)
 out["cases"]["bt_1000"] = run_at(10, 0, bt, 12)
 
+# 迟到启动：首根 bar 直接 10:00，D4 必须先刷新 uni_down，再进入 OSC 卖→买钩子。
+late = FakeCtx(GM.MODE_LIVE)
+GM.init(late)
+import analysis.index_regime as _ir                                # noqa: E402
+_ir.GM_DATA_READY = True
+GM._index_daily_df = lambda *a, **k: None
+
+
+def _fake_detect_index_regime(**kwargs):
+    calls.append("regime_refresh")
+    return type("_Regime", (), {"value": "uni_down"})(), 0.0, {"degraded": []}
+
+
+_ir.detect_index_regime = _fake_detect_index_regime
+out["cases"]["late_1000"] = run_at(10, 0, late, 14)
+out["late_regime"] = late.last_index_regime
+out["cases"]["late_1450"] = run_at(14, 50, late, 14)
+
 # ── D 段：网关整链（SERVICES 注入是否正确 + 归属硬锁端到端）─────────────
 # 用真 getattr 的假 order_volume 替换「一旦调用即失败」的桩，并给账户塞一只持仓。
 placed = []

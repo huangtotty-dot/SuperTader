@@ -47,7 +47,7 @@ from functools import partial
 
 import pandas as pd
 
-from . import backfill, executor, preplace_probe, prescreen
+from . import backfill, executor, fillbackfill, preplace_probe, prescreen
 
 # 每日一次状态（原先散在 gm_main 的模块级全局 `_OSC_*_DONE_DATE` + `context._osc_candidates`）
 _STATE = {"date": None, "prepare": False, "buy": False, "sell": False,
@@ -387,8 +387,17 @@ def try_buy(rt, context, now) -> int:
     except Exception:
         pass
     _cand = dict(_STATE["candidates"])
-    if not _cand:
-        rt.audit({"event": "osc_skip", "reason": "no_candidates", "time": str(now)})
+    _skip_reason = None
+    # 大盘单边下跌熔断：即使候选合法也零 BUY；必须在 10:00 个股行情读取之前判定。
+    if getattr(context, "last_index_regime", None) == "uni_down":
+        _skip_reason = "index_regime_uni_down"
+        rt.log("[OSC] [X] 大盘 regime=uni_down -> 今日零 BUY（不读取 10:00 个股行情）")
+        rt.audit({"event": "osc_skip", "reason": _skip_reason,
+                  "regime": "uni_down", "time": str(now)})
+    elif not _cand:
+        _skip_reason = "no_candidates"
+        rt.audit({"event": "osc_skip", "reason": _skip_reason, "time": str(now)})
+    if _skip_reason:
         try:
             _cash0 = float(rt.gateway(context).get_cash() or 0)
         except Exception:
@@ -396,7 +405,7 @@ def try_buy(rt, context, now) -> int:
         _res = _exec._write_fills(
             str(now.date()), "live", now.strftime("%Y-%m-%d %H:%M:%S"),
             [], [], _cash0, 0.0, dict(_exec.DEFAULTS), rt.book_dir,
-            note="no_picks", spares=[], skip_reason="no_candidates")
+            note="no_picks", spares=[], skip_reason=_skip_reason)
         _stamp_after_buy(rt, now, _res, {})
         return 0
     _pc, _ma = prescreen.split_into_prev_close_ma20(_cand)
@@ -425,7 +434,7 @@ def try_buy(rt, context, now) -> int:
     _params = {
         "top_n": int(rt.param("osc_top_n", 4)),
         "single_budget": float(rt.param("osc_single_budget", 100000.0)),
-        "daily_budget": float(rt.param("osc_daily_budget", 400000.0)),
+        "daily_budget": float(rt.param("osc_daily_budget", 200000.0)),
         "cash_headroom": float(rt.param("osc_cash_headroom", 0.95)),
         "order_poll_rounds": int(rt.param("osc_order_poll_rounds", 3)),
         "order_poll_sleep_sec": float(rt.param("osc_order_poll_sleep_sec", 2.0)),
@@ -596,7 +605,21 @@ def try_backfill(rt, context, now, today, round_idx) -> int:
             return 0
     except Exception:
         pass
+    # 与首轮同一熔断口径：uni_down 下保留原挂单，不撤单、不取复检行情、不补新仓。
+    if getattr(context, "last_index_regime", None) == "uni_down":
+        rt.log("[OSC] [X] 大盘 regime=uni_down -> 补单轮中止（不撤单、不开新仓）")
+        rt.audit({"event": "osc_backfill_skip", "reason": "index_regime_uni_down",
+                  "regime": "uni_down", "round": int(round_idx), "time": str(now)})
+        return 0
     load_day_state(rt, str(now.date()))
+    # 撤单前必须重读最新 fills：异步成交/终态可能已在上一轮之后落盘。
+    # `no_open_order` 本身不是清 pending 的证据；只有这里重建后确实无剩余量才清除。
+    _recon = fillbackfill.reconcile_day_state(rt.book_dir, str(now.date()))
+    if _recon:
+        _STATE["fills"] = _recon["fills"]
+        _STATE["pending"] = _recon["pending"]
+        if _recon.get("day_state") is not None:
+            save_day_state(rt, str(now.date()))
     _pend = list(_STATE.get("pending") or [])
     if not _pend:
         return 0                              # 首轮全成 / 无挂单 ⇒ 空转（不写日志刷屏）
@@ -620,7 +643,7 @@ def try_backfill(rt, context, now, today, round_idx) -> int:
         return 0
     _params = {
         "single_budget": float(rt.param("osc_single_budget", 100000.0)),
-        "daily_budget": float(rt.param("osc_daily_budget", 400000.0)),
+        "daily_budget": float(rt.param("osc_daily_budget", 200000.0)),
         "cash_headroom": float(rt.param("osc_cash_headroom", 0.95)),
         "order_poll_rounds": int(rt.param("osc_order_poll_rounds", 3)),
         "order_poll_sleep_sec": float(rt.param("osc_order_poll_sleep_sec", 2.0)),
@@ -650,6 +673,24 @@ def try_backfill(rt, context, now, today, round_idx) -> int:
                          for p in _placed],
               "skipped": _res.get("skipped"), "note": _res.get("note"),
               "time": str(now)})
+
+    # 先把 released / 撤单竞态成交写回 fills，再合并本轮 summary。
+    # 否则重启后仍会从 submitted 留痕重建 pending，已撤/已成委托会“复活”。
+    _oid_of = {str(p.get("code")): str(p.get("order_id") or "") for p in _pend}
+    for _code in (_cr.get("released") or []):
+        try:
+            fillbackfill.apply_cancelled(rt.book_dir, str(now.date()), _code,
+                                         _oid_of.get(str(_code), ""), log=print)
+        except Exception as _ce:
+            rt.log(f"[OSC] ⚠️ released 留痕失败 {_code}（不阻断）: {_ce}")
+    for _f in (_cr.get("filled") or []):
+        try:
+            fillbackfill.apply_race_fill(
+                rt.book_dir, str(now.date()), _f.get("code"), _f.get("qty"),
+                price=_f.get("price"), order_id=_f.get("order_id")
+                or _oid_of.get(str(_f.get("code")), ""), log=print)
+        except Exception as _fe:
+            rt.log(f"[OSC] ⚠️ 竞态成交留痕失败 {_f.get('code')}（不阻断）: {_fe}")
 
     # ── 留痕 + 入账（2026-10-16 生产施工）────────────────────────────────
     # ① 本轮结果并入 fills_{date}.json：buys 带 round/shift_from，撤单明细进 backfill_rounds；
@@ -690,9 +731,9 @@ def try_backfill(rt, context, now, today, round_idx) -> int:
         _next_pend.append(p)                  # 未确认的撤单**继续挂账**（额度不释放）
     for p in _placed:
         _done.add(str(p["code"]))
-        if p.get("qty_remaining") and p.get("order_id") and p.get("status") not in (
+        if p.get("qty_remaining") and p.get("status") not in (
                 "filled", "rejected", "expired", "cancelled", "error"):
-            _next_pend.append({"code": p["code"], "order_id": p["order_id"],
+            _next_pend.append({"code": p["code"], "order_id": p.get("order_id"),
                                "gap": None, "price": float(p.get("price") or 0),
                                "qty_placed": int(p.get("qty") or 0),
                                "filled_qty": int(p.get("filled_qty") or 0),
