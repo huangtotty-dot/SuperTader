@@ -40,7 +40,7 @@ class TestFrontend(unittest.TestCase):
         self.assertIn("#8250df", CSS)
         # 行首紫条用 box-shadow（不覆盖既有行背景）
         self.assertIn("tr.focus-row td:first-child", CSS)
-        self.assertIn("box-shadow: inset 3px 0 0 #8250df", CSS)
+        self.assertIn("box-shadow: inset 3px 0 0 var(--focus-c, #8250df)", CSS)
 
     def test_点击不冒泡到双击开图(self):
         self.assertIn("event.stopPropagation();toggleFocus(this)", JS)

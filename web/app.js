@@ -289,14 +289,49 @@ async function loadAndRender(date, silent) {
    ⚠️ 只是人工标记：不参与判定/排序/推送；颜色刻意用紫色 `#8250df`，与
    红（涨/风险）、绿（跌/通过）、橙（盯紧）、黄（预警）都不撞色。 */
 let FOCUS_SET = new Set();
+let FOCUS_META = {};        // {code: {src, ago, at}} —— ago=距最近一次周线翻红几周（手动标记为 null）
+/* 紫色深浅（2026-10-31 owner：「新翻红和已翻红很久用紫色变化区分，翻红越久越深」）：
+   · 手动标记 / 无 ago → 基准紫 #8250df
+   · 本周刚翻红（ago=0）→ **最浅** #d0b7fb
+   · 12 周及以上       → **最深** #4c1d95
+   线性插值。只影响颜色，不参与任何判定。 */
+function focusColor(code) {
+  const m = FOCUS_META[String(code || "").split("_")[0]];
+  if (!m || m.ago === null || m.ago === undefined || isNaN(Number(m.ago))) return "#8250df";
+  return focusBand(m.ago).c;
+}
+/* 色带（2026-10-31 owner：连续渐变区分度太小，改成**四档强对比**）：
+   0 周=本周 · 1–3 周=4 周内 · 4–7 周=8 周内 · ≥8 周=更久（越久越深）。 */
+function focusColorByAgo(ago) { return focusBand(ago).c; }
+function focusBand(ago) {
+  const a = Number(ago);
+  if (!isFinite(a)) return { c: "#8250df", n: "" };
+  if (a <= 0) return { c: "#a78bfa", n: "0" };
+  if (a <= 3) return { c: "#8b5cf6", n: String(a) };
+  if (a <= 7) return { c: "#6d28d9", n: String(a) };
+  return { c: "#3b0f78", n: a > 99 ? "99+" : String(a) };
+}
+function focusTip(code) {
+  const m = FOCUS_META[String(code || "").split("_")[0]];
+  if (!m) return "";
+  if (m.ago === null || m.ago === undefined) return m.src && m.src !== "manual" ? `来源 ${m.src}` : "手动标记";
+  return `周线 MACD 翻红 ${m.ago} 周前（越久颜色越深 · 来源 ${m.src || "weekly_macd"}）`;
+}
 function focusStarHtml(code, cls) {
   const c = String(code || "").split("_")[0];
   if (!c) return "";
   const on = FOCUS_SET.has(c);
-  const tip = on ? "已标记重点关注（点击取消）" : "标记为重点关注";
+  const extra = on ? focusTip(c) : "";
+  const tip = (on ? "已标记重点关注（点击取消）" : "标记为重点关注")
+    + (extra ? String.fromCharCode(10) + extra : "");
+  const m = FOCUS_META[c];
+  const band = (on && m && m.ago !== null && m.ago !== undefined && !isNaN(Number(m.ago)))
+    ? focusBand(m.ago) : null;
+  const style = on ? ` style="background:${focusColor(c)}"` : "";
+  const body = on ? `★${band ? `<span class="focus-ago">${band.n}</span>` : ""}` : "☆";
   return `<button class="focus-star${on ? " on" : ""}${cls ? " " + cls : ""}" data-focus-code="${esc(c)}"`
     + ` onclick="event.stopPropagation();toggleFocus(this)"`
-    + ` ondblclick="event.stopPropagation()" title="${tip}">${on ? "★" : "☆"}</button>`;
+    + ` ondblclick="event.stopPropagation()" title="${esc(tip)}"${style}>${body}</button>`;
 }
 /* 全池轮巡：周线 MACD 柱子翻红 → 自动标紫（2026-10-31 owner）
    按钮在顶栏（#wmScanBtn）。后端 `start_weekly_macd_scan` 后台跑（4 线程、零网络、
@@ -328,13 +363,16 @@ async function runWeeklyMacdScan() {
   }
   btn.dataset.running = "1";
   const label = btn.textContent;
+  const sel = document.getElementById("wmScanMode");
+  const mode = (sel && sel.value) || "red";
+  const modeCn = { red: "红柱（当前）", flip: "本周刚翻红", recent: "近4周翻红", recent4: "近4周翻红", recent8: "近8周翻红" }[mode] || mode;
   try {
-    const r = await apiCall("start_weekly_macd_scan");
+    const r = await apiCall("start_weekly_macd_scan", null, mode);
     if (!r) throw new Error("无返回");
     if (r.running) { statusEl("轮巡已在进行中，继续等结果…"); }
     else if (r.started === false) throw new Error(r.error || "未启动");
     const total = Number(r.total || 0);
-    statusEl(`周线MACD轮巡中… 0/${total}`);
+    statusEl(`周线MACD轮巡中（${modeCn}）… 0/${total}`);
     const poll = async () => {
       let st = null;
       try { st = await apiCall("weekly_macd_status"); } catch (e) { /* 下一跳重试 */ }
@@ -345,7 +383,7 @@ async function runWeeklyMacdScan() {
       }
       const done = Number(st.done || 0), tot = Number(st.total || 0);
       btn.textContent = `🟣 轮巡中 ${done}/${tot}`;
-      statusEl(`周线MACD轮巡中… ${done}/${tot}`);
+      statusEl(`周线MACD轮巡中（${modeCn}）… ${done}/${tot}`);
       if (st.running) { _wmTimer = setTimeout(poll, 1200); return; }
       delete btn.dataset.running; btn.textContent = label;
       await loadFocusCodes();
@@ -358,8 +396,8 @@ async function runWeeklyMacdScan() {
         btn.title = `上次轮巡 ${st.finished_at}：扫 ${Number(st.total || 0)} 只，`
           + `新标紫 ${added.length} 只` + _base;
       }
-      if (!added.length && !matched.length) statusEl("轮巡完成：没有周线 MACD 柱子翻红的票", "ok");
-      else statusEl(`轮巡完成：新标紫 ${added.length} 只`
+      if (!added.length && !matched.length) statusEl(`轮巡完成（${modeCn}）：没有命中的票`, "ok");
+      else statusEl(`轮巡完成（${modeCn}）：新标紫 ${added.length} 只`
         + (matched.length > added.length ? `（命中 ${matched.length}，其余已在关注）` : ""), "ok");
     };
     _wmTimer = setTimeout(poll, 800);
@@ -373,17 +411,32 @@ async function loadFocusCodes() {
   try {
     const r = await apiCall("load_focus_codes");
     FOCUS_SET = new Set((r && r.codes) || []);
+    FOCUS_META = (r && r.items) || {};
     syncFocusStars();
   } catch (e) { /* 桥未就绪：用空集，星标先按未标记渲染 */ }
 }
 function syncFocusStars() {
   document.querySelectorAll("button.focus-star[data-focus-code]").forEach(btn => {
-    const on = FOCUS_SET.has(btn.getAttribute("data-focus-code"));
+    const code = btn.getAttribute("data-focus-code");
+    const on = FOCUS_SET.has(code);
     btn.classList.toggle("on", on);
     btn.textContent = on ? "★" : "☆";
-    btn.title = on ? "已标记重点关注（点击取消）" : "标记为重点关注";
+    const extra = on ? focusTip(code) : "";
+    btn.title = (on ? "已标记重点关注（点击取消）" : "标记为重点关注")
+      + (extra ? String.fromCharCode(10) + extra : "");
+    btn.style.background = on ? focusColor(code) : "";
+    btn.style.color = on ? "#fff" : "";
+    const mm = FOCUS_META[code];
+    const hasAgo = on && mm && mm.ago !== null && mm.ago !== undefined && !isNaN(Number(mm.ago));
+    const _body = on ? ("★" + (hasAgo ? `<span class="focus-ago">${focusBand(mm.ago).n}</span>` : "")) : "☆";
+    if (btn.innerHTML !== _body) btn.innerHTML = _body;
     const tr = btn.closest("tr");
-    if (tr) tr.classList.toggle("focus-row", on);
+    if (tr) {
+      tr.classList.toggle("focus-row", on);
+      // 行首紫条跟着深浅走（CSS 用 var --focus-c）
+      if (on) tr.style.setProperty("--focus-c", focusColor(code));
+      else tr.style.removeProperty("--focus-c");
+    }
   });
 }
 async function toggleFocus(btn) {
@@ -397,6 +450,7 @@ async function toggleFocus(btn) {
     const r = await apiCall("toggle_focus", code);
     if (r && Array.isArray(r.codes)) {
       FOCUS_SET = new Set(r.codes);
+      await loadFocusCodes();          // 重拉明细：手工标记 ago=null ⇒ 基准紫
       syncFocusStars();
     } else if (r && r.error) {
       throw new Error(r.error);
@@ -686,8 +740,26 @@ function beaconRowHtml(s, labels) {
   const _rowBg = tierRowStyle(s.tier)
     || ((_sc === 0) ? "background:rgba(248,81,73,.12);"
       : (_sc !== null && _sc > 0) ? "background:rgba(63,185,80,.07);" : "");
+  /* 周线 MACD 标记（2026-10-31 owner：「市场风向也要显示周线 MACD 是否翻红」）：
+     红柱 = 紫色色块（翻红越久越深，和重点关注同一套色带），绿柱 = 灰块。
+     数据来自后端 enrich 的 `s.wm = {red, flip, flip_bars_ago}`；无数据不画。 */
+  const _wm = s.wm || null;
+  let wmTxt = "";
+  if (_wm && typeof _wm.red === "boolean") {
+    if (_wm.red) {
+      const a = _wm.flip_bars_ago;
+      const _n = (a === null || a === undefined) ? "" : "·" + a;
+      const _tip = (a === null || a === undefined)
+        ? "周线 MACD：红柱（翻红时间未知）"
+        : `周线 MACD：红柱，${a} 周前翻红（越久颜色越深）`;
+      const _col = (a === null || a === undefined) ? "#8250df" : focusColorByAgo(a);
+      wmTxt = `<span class="wm-chip on" style="background:${_col}" title="${esc(_tip)}">周红${_n}</span>`;
+    } else {
+      wmTxt = '<span class="wm-chip" title="周线 MACD：绿柱（未翻红）">周绿</span>';
+    }
+  }
   return `<tr class="h-expand-row" style="${_rowBg}" ondblclick="openStockChart('${esc(s.code)}','${esc(s.name)}')">
-    <td>${esc(s.name)} <span class="mono cell-dim">${esc(s.code)}</span></td>
+    <td>${esc(s.name)} <span class="mono cell-dim">${esc(s.code)}</span>${wmTxt}</td>
     <td class="num h-mktcap" data-hcode="${esc(s.code)}" title="总市值（亿元，随行情 10s 刷新）">${hunterMktcapHtml(null)}</td>
     <td style="text-align:center">${tierBadge(s.tier, s.tier_static, s.tier_reason)}</td>
     <td>${verdictBadge(s.build_verdict)}</td>
@@ -10622,7 +10694,7 @@ function startLivePoll() {
 async function init() {
   // 首先获取 DOM 元素（此时 DOM 已完全加载）
   // 2026-10-20：启动标记（0ms）写进慢调用日志 ⇒ 能确认 WebView2 是否加载了新版 app.js
-  try { window.pywebview.api.report_slow_call("app_boot_20261020m", 0); } catch (e) { /* 静默 */ }
+  try { window.pywebview.api.report_slow_call("app_boot_20261031a", 0); } catch (e) { /* 静默 */ }
   // 2026-10-31：重点关注标记（紫色星）——启动先拉一次，五个表的星标按它渲染；
   // 拉不到就用空集（星标显示未标记，不影响任何其它功能）。
   loadFocusCodes();

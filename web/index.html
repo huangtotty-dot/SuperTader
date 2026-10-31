@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>trader pannel</title>
-<link rel="stylesheet" href="style.css?v=20261028n">
+<link rel="stylesheet" href="style.css?v=20261031a">
 </head>
 <body>
 <header class="topbar">
@@ -29,9 +29,15 @@
     <select id="dateSelect" class="date-sel"></select>
     <button id="refreshBtn" class="mini-btn" title="手动刷新">刷新</button>
     <!-- 2026-10-31：全池轮巡（周线 MACD 柱子翻红 ⇒ 自动标紫=重点关注） -->
+    <select id="wmScanMode" class="date-sel" title="轮巡口径：本周刚翻红 / 近4周 / 近8周（都要当前是红柱）/ 红柱=当前柱子>0（不限翻红时间）。紫色深浅按翻红周数区分。">
+      <option value="flip">本周刚翻红</option>
+      <option value="recent">近4周翻红</option>
+      <option value="recent8" selected>近8周翻红</option>
+      <option value="red">红柱（当前）</option>
+    </select>
     <button id="wmScanBtn" class="mini-btn" style="border-color:#8250df;color:#8250df"
             onclick="runWeeklyMacdScan()"
-            title="把所有韭研板块轮巡一遍：周线 MACD 柱子由绿翻红的票，自动标成紫色重点关注（只加不删，零网络）">🟣 周线MACD翻红轮巡</button>
+            title="轮巡所有韭研板块：按左侧口径筛周线 MACD，命中的自动标成紫色重点关注（只加不删、零网络）">🟣 周线MACD轮巡</button>
     <span id="status" class="status"></span>
   </div>
 </header>
@@ -679,6 +685,6 @@
 <script src="vendor/echarts.min.js"></script>
 <!-- 2026-10-20：带版本号强制 WebView2 重新取 app.js（否则可能命中旧缓存，
      K 线提速/埋点改动不生效——表现为"改了跟没改一样"） -->
-<script src="app.js?v=20261028r"></script>
+<script src="app.js?v=20261031a"></script>
 </body>
 </html>

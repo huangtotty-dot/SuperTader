@@ -778,5 +778,16 @@ body.twin-winmode #turnoverWinTitle { cursor: default; }
 .focus-star { background: none; border: none; cursor: pointer; padding: 0 2px;
   font-size: 13px; line-height: 1; color: var(--text-faint); vertical-align: baseline; }
 .focus-star:hover { color: var(--accent); }
-.focus-star.on { color: #8250df; text-shadow: 0 0 6px rgba(130, 80, 223, .45); }
-tr.focus-row td:first-child { box-shadow: inset 3px 0 0 #8250df; }
+/* 已标记 = 紫色**色块**（不是淡色文字），四档强对比：0周/1-3周/4-7周/≥8周 越来越深；
+   色块右侧带翻红周数（手动标记没有数字、用基准紫）。 */
+.focus-star.on { color: #fff; border-radius: 9px; padding: 0 4px 0 3px; line-height: 15px;
+  font-size: 11px; font-weight: 700; text-shadow: none; }
+.focus-star.on .focus-ago { font-size: 9px; margin-left: 1px; opacity: .92; font-weight: 600; }
+tr.focus-row td:first-child { box-shadow: inset 3px 0 0 var(--focus-c, #8250df); }
+
+/* 风向标「周线 MACD」标记（2026-10-31 owner）：红柱=紫色色块（深浅同重点关注色带），
+   绿柱=灰块。9px 小字，贴在股票名右侧，不占列。 */
+.wm-chip { display: inline-block; font-size: 9px; line-height: 14px; padding: 0 4px;
+  border-radius: 7px; color: #fff; background: #9aa4b2; margin-left: 4px;
+  vertical-align: middle; font-weight: 600; }
+.wm-chip.on { font-weight: 700; }

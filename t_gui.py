@@ -2048,7 +2048,7 @@ def _focus_save(d: dict) -> None:
 # **周线 MACD(12,26,9)**；若**上一周柱子 ≤0 且本周 >0**（翻红）⇒ 自动写进 focus_stocks.json。
 # 只看本地日线缓存（前复权），零网络；结果与人工标记共存，不覆盖、不取消。
 _WM_SCAN = {"running": False, "done": 0, "total": 0, "hits": [], "matched": [],
-            "started_at": None, "finished_at": None, "error": ""}
+            "mode": "red", "started_at": None, "finished_at": None, "error": ""}
 _WM_LOCK = threading.Lock()
 # 2026-10-31：**上一次轮巡的结果落盘**（进程重启后还能看到"上次什么时候跑的、标了几只"）。
 # 注意：命中本身早已写进 focus_stocks.json（紫色标记是持久的）；这里只存"这次扫描的摘要"。
@@ -2103,11 +2103,86 @@ def weekly_macd_hist(closes):
 
 
 def weekly_macd_turned_red(closes):
-    """周一收盘序列 → True=本周柱子翻红（上周 ≤0 < 本周）；数据不足 → None。"""
+    """周收盘序列 → True=**本周**柱子翻红（上周 ≤0 < 本周）；数据不足 → None。"""
     h = weekly_macd_hist(closes)
     if h is None or len(h) < 2:
         return None
     return bool(h[-1] > 0 and h[-2] <= 0)
+
+
+def weekly_macd_state(closes):
+    """周收盘序列 → {red, flip, flip_bars_ago}；数据不足 → None。
+
+    2026-10-31 owner 报「赛福天周线 MACD 已经是红柱却没被扫出来」：原判据只认"**本周**翻红"，
+    而它是 8 周前就翻红了。这里把"状态"和"跃迁"分开：
+      · red           = 本周柱子 > 0（红柱，**状态**）
+      · flip          = 上周 ≤0 < 本周（**本周刚翻红**）
+      · flip_bars_ago = 最近一次由绿翻红距今几根（0=本周；None=数据里没有过翻转）
+    """
+    h = weekly_macd_hist(closes)
+    if h is None or len(h) < 2:
+        return None
+    flip_idx = None
+    for i in range(len(h) - 1, 0, -1):
+        if h[i] > 0 and h[i - 1] <= 0:
+            flip_idx = i
+            break
+    return {"red": bool(h[-1] > 0),
+            "flip": bool(h[-1] > 0 and h[-2] <= 0),
+            "flip_bars_ago": (None if flip_idx is None else len(h) - 1 - flip_idx)}
+
+
+_WM_STATE_CACHE = {}
+_WM_STATE_LOCK = threading.Lock()
+
+
+def _wm_state_of_code(code):
+    """按代码取**周线 MACD 状态**（给风向标每行用）。读本地日线缓存，零网络。
+
+    带 (code, 日线缓存 mtime/size) 记忆：同一份缓存被多行/多轮反复问也只解析一次
+    （288 只 × 120s 一轮，没有缓存的话纯解析就 ~4s）。
+    """
+    c = str(code).split("_")[0]
+    fp = BASE / "t_io" / "cache" / "daily_kline" / f"{c}.json"
+    try:
+        stt = fp.stat()
+    except OSError:
+        return None
+    key = (c, stt.st_mtime_ns, stt.st_size)
+    with _WM_STATE_LOCK:
+        if key in _WM_STATE_CACHE:
+            return _WM_STATE_CACHE[key]
+    val = None
+    try:
+        rows = (json.loads(fp.read_text(encoding="utf-8")) or {}).get("rows") or []
+        val = weekly_macd_state(_weekly_closes_from_rows(rows))
+    except Exception:
+        val = None
+    with _WM_STATE_LOCK:
+        if len(_WM_STATE_CACHE) > 20000:
+            _WM_STATE_CACHE.clear()
+        _WM_STATE_CACHE[key] = val
+    return val
+
+
+def weekly_macd_match_state(st, mode: str = "red", recent_weeks: int = 4) -> bool:
+    """按 `weekly_macd_state()` 的结果判是否命中（轮巡与单测共用同一口径）。"""
+    if not st:
+        return False
+    m = str(mode or "red").lower()
+    a = st.get("flip_bars_ago")
+    if m == "flip":
+        return bool(st["flip"])
+    if m in ("recent", "recent4"):
+        return bool(st["red"] and a is not None and a < max(1, int(recent_weeks or 4)))
+    if m == "recent8":
+        return bool(st["red"] and a is not None and a < 8)
+    return bool(st["red"])
+
+
+def weekly_macd_match(closes, mode: str = "red", recent_weeks: int = 4):
+    """轮巡匹配：mode ∈ red（当前红柱）/ flip（本周刚翻红）/ recent（近 N 周内翻红且当前红柱）。"""
+    return weekly_macd_match_state(weekly_macd_state(closes), mode, recent_weeks)
 
 
 def _weekly_closes_from_rows(rows):
@@ -8719,6 +8794,9 @@ class Api:
                 "build_above_ma5": g.get("above_ma5"),
                 "build_above_ma20": g.get("above_ma20"), "build_stage": g.get("stage"),
                 "build_price": g.get("price"),
+                # 2026-10-31 owner：「市场风向也要显示周线 MACD 是否翻红」——
+                # 后台 enrich 时顺带算好（零网络、按缓存 mtime 记忆），主线程只读。
+                "wm": _wm_state_of_code(c),
             }
         try:
             self._kick_pb_m30_warm(codes)      # 每 30min 时段节流一次
@@ -12154,10 +12232,19 @@ class Api:
     # 星标按钮，点一下变紫、再点取消。**只是人工标记**，不参与任何判定/排序/推送。
     # 存 `t_io/state/focus_stocks.json`（跨进程、跨重启）。
     def load_focus_codes(self):
-        """重点关注代码表（前端启动时拉一次；星标按它渲染）。"""
+        """重点关注代码表（前端启动时拉一次；星标按它渲染）。
+
+        `codes` 保持旧形状（列表）；`items` 给前端做**颜色深浅**：
+          {code: {"src": "manual|weekly_macd:red|…", "ago": 距最近一次翻红几周(可空), "at": …}}
+        """
         with _FOCUS_LOCK:
             d = _focus_load()
-        return _clean({"codes": sorted((d.get("codes") or {}).keys()),
+        items = {}
+        for c, v in (d.get("codes") or {}).items():
+            vv = v if isinstance(v, dict) else {}
+            items[str(c)] = {"src": str(vv.get("src") or "manual"),
+                             "ago": vv.get("ago"), "at": vv.get("at") or ""}
+        return _clean({"codes": sorted(items.keys()), "items": items,
                        "updated_at": d.get("updated_at") or ""})
 
     def toggle_focus(self, code):
@@ -12179,7 +12266,7 @@ class Api:
         return _clean({"code": c, "on": on, "codes": sorted(codes.keys())})
 
     # ---------- 周线 MACD 翻红 · 全池轮巡（2026-10-31 owner）----------
-    def start_weekly_macd_scan(self, codes=None):
+    def start_weekly_macd_scan(self, codes=None, mode="red"):
         """一键轮巡：所有（韭研）板块的票算周线 MACD，翻红的自动标重点（紫色）。
 
         只加不删；已在关注里的票跳过（不重复计数）。**后台线程**跑，接口立即返回；
@@ -12199,7 +12286,11 @@ class Api:
                 except Exception:
                     pool = []
             pool = [str(c).split("_")[0] for c in dict.fromkeys(pool or [])]
+            _mode = str(mode or "red").lower()
+            if _mode not in ("red", "flip", "recent", "recent4", "recent8"):
+                _mode = "red"
             _WM_SCAN.update({"running": True, "done": 0, "total": len(pool), "hits": [],
+                             "matched": [], "mode": _mode,
                              "started_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                              "finished_at": None, "error": ""})
         if not pool:
@@ -12212,7 +12303,8 @@ class Api:
                 fp = BASE / "t_io" / "cache" / "daily_kline" / f"{c}.json"
                 rows = (json.loads(fp.read_text(encoding="utf-8")) or {}).get("rows") or []
                 closes = _weekly_closes_from_rows(rows)
-                return c if weekly_macd_turned_red(closes) else None
+                st = weekly_macd_state(closes)
+                return (c, st) if weekly_macd_match_state(st, mode) else None
             except Exception:
                 return None
             finally:
@@ -12232,16 +12324,23 @@ class Api:
                     d = _focus_load()
                     codes_map = d.setdefault("codes", {})
                     added = []
-                    for c in hits:
+                    _src = f"weekly_macd:{_WM_SCAN.get('mode', 'red')}"
+                    for c, st in hits:
+                        ago = (st or {}).get("flip_bars_ago")
                         if c not in codes_map:
                             codes_map[c] = {"at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                                            "src": "weekly_macd"}
+                                            "src": _src, "ago": ago}
                             added.append(c)
+                        elif str((codes_map.get(c) or {}).get("src", "")).startswith("weekly_macd"):
+                            # 已在自动标记里 ⇒ 只刷新"翻红多久"（颜色深浅），不算新增、不动人工标记
+                            codes_map[c]["ago"] = ago
+                            codes_map[c]["src"] = _src
+                            codes_map[c]["at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                     d["updated_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                     _focus_save(d)
                 with _WM_LOCK:
                     _WM_SCAN["hits"] = sorted(added)
-                    _WM_SCAN["matched"] = sorted(hits)
+                    _WM_SCAN["matched"] = sorted(c for c, _ in hits)
             except Exception as e:
                 with _WM_LOCK:
                     _WM_SCAN["error"] = f"{type(e).__name__}: {e}"
@@ -12250,7 +12349,7 @@ class Api:
                     _WM_SCAN["running"] = False
                     _WM_SCAN["finished_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                     _last = {k: _WM_SCAN[k] for k in ("started_at", "finished_at", "total",
-                                                      "hits", "matched", "error")}
+                                                      "hits", "matched", "error", "mode")}
                 global _WM_LAST
                 _WM_LAST = _last
                 _wm_save_state(_last)

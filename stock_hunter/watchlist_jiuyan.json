@@ -1410,13 +1410,15 @@
   "business_summary": "主营多元金融",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "金融",
+  "jiuyan_concept": "租赁",
   "name": "渤海租赁",
   "primary_source": "legacy",
   "sector": "多元金融/参股保险/人民币贬值受益/雄安新区",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-10-31 14:24:59",
+  "jiuyan_category1": "金融",
+  "jiuyan_concept1": "租赁"
  },
  "000417": {
   "business_summary": "主营一般零售",
@@ -5997,13 +5999,15 @@
   "business_summary": "主营酒、饮料和精制茶制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "大消费",
+  "jiuyan_concept": "白酒",
   "name": "顺鑫农业",
   "primary_source": "legacy",
   "sector": "酒、饮料和精制茶制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-10-31 14:24:59",
+  "jiuyan_category1": "大消费",
+  "jiuyan_concept1": "白酒"
  },
  "000862": {
   "business_summary": "新能源发电和新能源装备业务。",
@@ -11071,13 +11075,15 @@
   "business_summary": "主营专用设备制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "机器人",
+  "jiuyan_concept": "专用设备",
   "name": "软控股份",
   "primary_source": "legacy",
   "sector": "专用设备制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-10-31 14:24:59",
+  "jiuyan_category1": "机器人",
+  "jiuyan_concept1": "专用设备"
  },
  "002074": {
   "business_summary": "主营电池",
@@ -12755,7 +12761,7 @@
   "primary_source": "legacy",
   "sector": "军工电子Ⅱ/军工信息化/卫星导航/商业航天",
   "sector_type": "legacy",
-  "updated_at": "2026-10-27 11:26:00",
+  "updated_at": "2026-10-31 09:07:40",
   "jiuyan_tag_evidence": "text",
   "jiuyan_tag_verdict": "相关",
   "jiuyan_concept_reason": {
@@ -12804,10 +12810,11 @@
    "reason": "公司并非只有民用北斗概念，年报产品清单明确包含特种基带芯片、特种射频基带一体化芯片、抗干扰芯片、特种类单点定位模块、RNSS/RDSS双模定位及高动态定位模块；同时披露部分产品已办理军品生产合同登记备案并执行军工产品增值税政策，可核验存在实际军品业务，而非单纯导航可军用。2025年芯片及数据服务收入11.6959亿元，占52.8603%，导航产品8.6004亿元，占38.8703%，陶瓷元器件1.8297亿元，占8.2694%，但未单列上述特种芯片和模块收入，且车载、消费和行业民用市场占重要位置，故列相关而非核心。旧“卫星-北斗导航”范围过宽，应聚焦军用导航与特种芯片。"
   },
   "jiuyan_category1": "军工",
-  "jiuyan_concept1": [
-   "军用导航与惯导",
-   "军工芯片与特种集成电路"
-  ]
+  "jiuyan_concept1": "军用导航与惯导|军工芯片与特种集成电路",
+  "jiuyan_category2": "商业航天",
+  "jiuyan_concept2": "北斗导航芯片与终端",
+  "jiuyan_category": "军工|商业航天",
+  "jiuyan_concept": "军用导航与惯导|军工芯片与特种集成电路|北斗导航芯片与终端"
  },
  "002152": {
   "business_summary": "主营计算机、通信和其他电子设备制造业",
@@ -13231,13 +13238,15 @@
   "business_summary": "铜基新材料和军工碳材料的研发与制造。",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "商业航天",
+  "jiuyan_concept": "航天铜基材料",
   "name": "楚江新材",
   "primary_source": "legacy",
   "sector": "工业金属/培育钻石/碳纤维/金属铜",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-10-31 09:07:40",
+  "jiuyan_category1": "商业航天",
+  "jiuyan_concept1": "航天铜基材料"
  },
  "002172": {
   "business_summary": "主营卫生",
@@ -15655,13 +15664,15 @@
   "business_summary": "飞机机轮刹车系统、航空用飞机刹车材料、航天用碳/碳复合材料、高性能硬质合金材料、稀有金属粉体材料",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "商业航天",
+  "jiuyan_concept": "航天复合材料与刹车材料",
   "name": "博云新材",
   "primary_source": "legacy",
   "sector": "航空装备Ⅱ/培育钻石/航空发动机/成飞概念",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-10-31 09:07:40",
+  "jiuyan_category1": "商业航天",
+  "jiuyan_concept1": "航天复合材料与刹车材料"
  },
  "002298": {
   "business_summary": "主营电气机械和器材制造业",
@@ -17615,13 +17626,15 @@
   "business_summary": "主营批发业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "医药",
+  "jiuyan_concept": "医药流通",
   "name": "信邦制药",
   "primary_source": "legacy",
   "sector": "批发业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-10-31 14:24:59",
+  "jiuyan_category1": "医药",
+  "jiuyan_concept1": "医药流通"
  },
  "002391": {
   "business_summary": "主营化学原料和化学制品制造业",
@@ -20750,13 +20763,15 @@
   "business_summary": "主营医药制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "医药",
+  "jiuyan_concept": "生物制药",
   "name": "千红制药",
   "primary_source": "legacy",
   "sector": "医药制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-10-31 14:24:59",
+  "jiuyan_category1": "医药",
+  "jiuyan_concept1": "生物制药"
  },
  "002551": {
   "business_summary": "主营专用设备制造业",
@@ -22514,13 +22529,15 @@
   "business_summary": "主营专用设备制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "商业航天",
+  "jiuyan_concept": "航空零部件与锻件",
   "name": "利君股份",
   "primary_source": "legacy",
   "sector": "专用设备制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-10-31 09:07:40",
+  "jiuyan_category1": "商业航天",
+  "jiuyan_concept1": "航空零部件与锻件"
  },
  "002652": {
   "business_summary": "主营金属制品业",
@@ -23516,7 +23533,7 @@
   "primary_source": "legacy",
   "sector": "电气机械和器材制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-10-27 11:26:00",
+  "updated_at": "2026-10-31 14:24:59",
   "jiuyan_military_audited_at": "2026-10-27",
   "jiuyan_military_evidence": {
    "title": "海洋王照明科技股份有限公司2025年年度报告",
@@ -23531,7 +23548,11 @@
    "new_pairs": [],
    "verdict": "摘除",
    "reason": "公司实际业务是特殊环境专业照明设备及照明工程，年报虽把军工与石化、电力、煤矿等并列为下游行业，并提到产品应用于部队，但没有披露专门军用照明型号、军队采购项目或军用产品收入，不能由通用防爆、防腐、防水照明可用于部队就推定军工落地。2025年电气机械和器材制造业收入16.0232亿元、占93.0604%，其中照明设备16.0126亿元；建筑工程1.1949亿元、占6.9396%，军工未独立拆分。旧“军工配套”仅概括应用场景，缺乏产品级和订单级证据，且会把多行业工业照明供应商误标为军工企业，故摘除。"
-  }
+  },
+  "jiuyan_category1": "消费电子",
+  "jiuyan_concept1": "LED",
+  "jiuyan_category": "消费电子",
+  "jiuyan_concept": "LED"
  },
  "002725": {
   "business_summary": "主营汽车制造业",
@@ -27387,13 +27408,15 @@
   "business_summary": "主营货币金融服务",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "金融",
+  "jiuyan_concept": "农商行",
   "name": "青农商行",
   "primary_source": "legacy",
   "sector": "货币金融服务",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-10-31 14:24:59",
+  "jiuyan_category1": "金融",
+  "jiuyan_concept1": "农商行"
  },
  "002959": {
   "business_summary": "主营电气机械和器材制造业",
@@ -29712,7 +29735,7 @@
   "primary_source": "legacy",
   "sector": "有色金属冶炼和压延加工业",
   "sector_type": "legacy",
-  "updated_at": "2026-10-27 11:26:00",
+  "updated_at": "2026-10-31 09:07:40",
   "jiuyan_role": "龙头",
   "jiuyan_role_reason": "2025年中国高温合金市场份额18.19%行业第一（前瞻产业研究院2026-06），铸造高温合金龙头",
   "jiuyan_tag_evidence": "text",
@@ -29752,7 +29775,11 @@
    "reason": "公司真实产品是航空航天用高温合金母合金、航空发动机精密铸件、盘环锻件及铝镁钛轻质合金制品，覆盖发动机叶片、机匣和转子类零件，已形成规模化产能并直接服务航空航天主机配套，而非普通金属材料的概念性军用。2025年有色金属冶炼及压延加工收入36.9697亿元、占100%，铸造高温合金24.8028亿元、变形高温合金9.5547亿元、新型高温合金2.3875亿元，分别约占67.09%、25.84%和6.46%；军用与民用航空、燃机收入未独立拆分。鉴于核心产品及规模均明确，维持核心；旧“军工材料”过宽，细化到钛合金与高温合金。"
   },
   "jiuyan_category1": "军工",
-  "jiuyan_concept1": "军工材料-钛合金与高温合金"
+  "jiuyan_concept1": "军工材料-钛合金与高温合金",
+  "jiuyan_category2": "商业航天",
+  "jiuyan_concept2": "高温合金与钛合金材料",
+  "jiuyan_category": "军工|商业航天",
+  "jiuyan_concept": "军工材料-钛合金与高温合金|高温合金与钛合金材料"
  },
  "300035": {
   "business_summary": "主营计算机、通信和其他电子设备制造业",
@@ -34302,13 +34329,15 @@
   "business_summary": "主营医药制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "医药",
+  "jiuyan_concept": "诊断试剂",
   "name": "利德曼",
   "primary_source": "legacy",
   "sector": "医药制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-10-31 14:24:59",
+  "jiuyan_category1": "医药",
+  "jiuyan_concept1": "诊断试剂"
  },
  "300291": {
   "business_summary": "主营广播、电视、电影和录音制作业",
@@ -38646,18 +38675,22 @@
   "business_summary": "红外光学器件、高性能铝合金材料研发、生产和销售。",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "消费电子",
-  "jiuyan_concept": "光学显示",
+  "jiuyan_category": "消费电子|商业航天",
+  "jiuyan_concept": "光学显示|红外光学材料",
   "name": "光智科技",
   "primary_source": "legacy",
   "sector": "光学光电子/第三代半导体/核污染防治/先进封装",
   "sector_type": "legacy",
-  "updated_at": "2026-10-25 15:00:00",
+  "updated_at": "2026-10-31 09:07:40",
   "jiuyan_tag_evidence": "text",
   "jiuyan_tag_verdict": "核心",
   "jiuyan_concept_reason": {
    "光学显示": "主营：红外光学业务；与本标签一致"
-  }
+  },
+  "jiuyan_category1": "消费电子",
+  "jiuyan_concept1": "光学显示",
+  "jiuyan_category2": "商业航天",
+  "jiuyan_concept2": "红外光学材料"
  },
  "300490": {
   "business_summary": "主营电气机械和器材制造业",
@@ -42835,13 +42868,15 @@
   "business_summary": "主营汽车制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "汽车",
+  "jiuyan_concept": "轮毂",
   "name": "兆丰股份",
   "primary_source": "legacy",
   "sector": "汽车制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-10-31 14:24:59",
+  "jiuyan_category1": "汽车",
+  "jiuyan_concept1": "轮毂"
  },
  "300696": {
   "business_summary": "主营铁路、船舶、航空航天和其他运输设备制造业",
@@ -42923,7 +42958,7 @@
   "primary_source": "legacy",
   "sector": "化学纤维制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-10-27 11:26:00",
+  "updated_at": "2026-10-31 09:07:40",
   "jiuyan_role": "龙头",
   "jiuyan_role_reason": "军品碳纤维市占率超70%，军品碳纤维'两强'之首（2025-03深度/2026-07竞争格局）",
   "jiuyan_tag_evidence": "text",
@@ -42933,8 +42968,6 @@
    "军工材料-碳纤维": "主营：碳纤维板块；与本标签一致",
    "军工材料-碳纤维与复合材料": "公司高性能碳纤维、预浸料和复合材料制品已长期服务航空航天及兵器装备，年报称其为我国航空航天等领域碳纤维主力供应商，并持续保障装备发展所需；光晟科技还开展火箭及导弹发动机壳体研发与自动化批量生产基地建设，具有明确装备应用而非一般风电材料外推。2025年新材料制造收入27.7000亿元、占96.8694%，碳纤维及织物14.5696亿元、碳梁9.4338亿元、预浸料2.3768亿元、制品及其他2.0934亿元，军工收入未独立拆分。航空航天核心材料和稳定批供构成重要主业，故维持核心；旧“军工材料”细化为碳纤维与复合材料。"
   },
-  "jiuyan_category1": "太空光伏",
-  "jiuyan_concept1": "太阳翼结构",
   "jiuyan_concept_desc": {
    "军工材料-碳纤维与复合材料": "用于军用装备承力与轻量化结构的碳纤维、预浸料和复合材料。"
   },
@@ -42966,8 +42999,14 @@
    "verdict": "核心",
    "reason": "公司高性能碳纤维、预浸料和复合材料制品已长期服务航空航天及兵器装备，年报称其为我国航空航天等领域碳纤维主力供应商，并持续保障装备发展所需；光晟科技还开展火箭及导弹发动机壳体研发与自动化批量生产基地建设，具有明确装备应用而非一般风电材料外推。2025年新材料制造收入27.7000亿元、占96.8694%，碳纤维及织物14.5696亿元、碳梁9.4338亿元、预浸料2.3768亿元、制品及其他2.0934亿元，军工收入未独立拆分。航空航天核心材料和稳定批供构成重要主业，故维持核心；旧“军工材料”细化为碳纤维与复合材料。"
   },
+  "jiuyan_category1": "太空光伏",
+  "jiuyan_concept1": "太阳翼结构",
   "jiuyan_category2": "军工",
-  "jiuyan_concept2": "军工材料-碳纤维与复合材料"
+  "jiuyan_concept2": "军工材料-碳纤维与复合材料",
+  "jiuyan_category3": "商业航天",
+  "jiuyan_concept3": "航天碳纤维与复材",
+  "jiuyan_category": "太空光伏|军工|商业航天",
+  "jiuyan_concept": "太阳翼结构|军工材料-碳纤维与复合材料|航天碳纤维与复材"
  },
  "300700": {
   "business_summary": "主营非金属矿物制品业",
@@ -43650,25 +43689,29 @@
   "business_summary": "拥有PCB全制程的生产能力，专注于印制电路板小批量板的制造",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "PCB",
+  "jiuyan_concept": "PCB",
   "name": "明阳电路",
   "primary_source": "legacy",
   "sector": "元件/PCB概念/共封装光学",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-10-31 14:24:59",
+  "jiuyan_category1": "PCB",
+  "jiuyan_concept1": "PCB"
  },
  "300740": {
   "business_summary": "主营化学原料和化学制品制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "大消费",
+  "jiuyan_concept": "化妆品",
   "name": "水羊股份",
   "primary_source": "legacy",
   "sector": "化学原料和化学制品制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-10-31 14:24:59",
+  "jiuyan_category1": "大消费",
+  "jiuyan_concept1": "化妆品"
  },
  "300741": {
   "business_summary": "主营化学原料和化学制品制造业",
@@ -43727,13 +43770,15 @@
   "business_summary": "主营自动化设备",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "商业航天",
+  "jiuyan_concept": "航天激光加工",
   "name": "锐科激光",
   "primary_source": "legacy",
   "sector": "自动化设备/光纤概念/5G/PCB概念",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-10-31 09:07:40",
+  "jiuyan_category1": "商业航天",
+  "jiuyan_concept1": "航天激光加工"
  },
  "300748": {
   "business_summary": "高性能钕铁硼永磁材料以及磁组件的研发、生产、销售。",
@@ -45519,13 +45564,15 @@
   "business_summary": "主营食品制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "化工",
+  "jiuyan_concept": "食品及饲料添加剂",
   "name": "金丹科技",
   "primary_source": "legacy",
   "sector": "食品制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-10-31 14:24:59",
+  "jiuyan_category1": "化工",
+  "jiuyan_concept1": "食品及饲料添加剂"
  },
  "300830": {
   "business_summary": "主营软件和信息技术服务业",
@@ -46048,13 +46095,15 @@
   "business_summary": "主营化学原料和化学制品制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "大消费",
+  "jiuyan_concept": "化妆品原料",
   "name": "科思股份",
   "primary_source": "legacy",
   "sector": "化学原料和化学制品制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-10-31 14:24:59",
+  "jiuyan_category1": "大消费",
+  "jiuyan_concept1": "化妆品原料"
  },
  "300857": {
   "business_summary": "研发先进的硬件和软件解决方案，提供一体化的产品和服务。",
@@ -47709,13 +47758,15 @@
   "business_summary": "印制电路板（PCB）的研发、生产与销售。",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "商业航天",
+  "jiuyan_concept": "航天PCB",
   "name": "本川智能",
   "primary_source": "legacy",
   "sector": "元件/共封装光学/PCB概念",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-10-31 09:07:40",
+  "jiuyan_category1": "商业航天",
+  "jiuyan_concept1": "航天PCB"
  },
  "300965": {
   "business_summary": "主营航空装备Ⅱ",
@@ -47947,13 +47998,15 @@
   "business_summary": "主营橡胶和塑料制品业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "化工",
+  "jiuyan_concept": "塑料制品",
   "name": "祥源新材",
   "primary_source": "legacy",
   "sector": "橡胶和塑料制品业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-10-31 14:24:59",
+  "jiuyan_category1": "化工",
+  "jiuyan_concept1": "塑料制品"
  },
  "300981": {
   "business_summary": "主营橡胶和塑料制品业",
@@ -48561,13 +48614,15 @@
   "business_summary": "主营批发业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "医药",
+  "jiuyan_concept": "医药流通",
   "name": "百洋医药",
   "primary_source": "legacy",
   "sector": "批发业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-10-31 14:24:59",
+  "jiuyan_category1": "医药",
+  "jiuyan_concept1": "医药流通"
  },
  "301016": {
   "business_summary": "主营铁路、船舶、航空航天和其他运输设备制造业",
@@ -49407,7 +49462,7 @@
   "primary_source": "legacy",
   "sector": "非金属材料Ⅱ/培育钻石/第三代半导体/芯片概念",
   "sector_type": "legacy",
-  "updated_at": "2026-10-27 12:23:00",
+  "updated_at": "2026-10-31 14:24:59",
   "jiuyan_commercial_space_audited_at": "2026-10-27",
   "jiuyan_commercial_space_evidence": {
    "title": "力量钻石：2025年年度报告",
@@ -49427,7 +49482,11 @@
    "new_pairs": [],
    "verdict": "摘除",
    "reason": "公司真实产品为金刚石单晶、金刚石微粉和培育钻石，主要用于工业超硬材料、消费钻石等领域。2025年培育钻石收入3.8755亿元，金刚石单晶收入1.3481亿元，金刚石微粉收入0.6180亿元，其他业务0.4828亿元，非金属矿物制品业收入6.3244亿元、占100%，年报未披露航天专用产品、商业火箭或卫星客户、SpaceX订单及商业航天收入。金刚石具备高硬度等通用材料属性，不代表已经用于SpaceX，也不能把超硬材料的理论应用空间当作实际供货。旧标签写作“spacex-供应商”但原理由已承认供应链仅为预期，核验亦未见正式供货证据，故摘除商业航天标签。"
-  }
+  },
+  "jiuyan_category1": "化工",
+  "jiuyan_concept1": "超硬材料",
+  "jiuyan_category": "化工",
+  "jiuyan_concept": "超硬材料"
  },
  "301072": {
   "business_summary": "主营汽车制造业",
@@ -49510,13 +49569,15 @@
   "business_summary": "主营通用设备制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "机器人",
+  "jiuyan_concept": "工程机械液压件",
   "name": "邵阳液压",
   "primary_source": "legacy",
   "sector": "通用设备制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-10-31 14:24:59",
+  "jiuyan_category1": "机器人",
+  "jiuyan_concept1": "工程机械液压件"
  },
  "301080": {
   "business_summary": "主营研究和试验发展",
@@ -51480,13 +51541,15 @@
   "business_summary": "主营电气机械和器材制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "电池",
+  "jiuyan_concept": "锂电池",
   "name": "金杨精密",
   "primary_source": "legacy",
   "sector": "电气机械和器材制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-10-31 14:24:59",
+  "jiuyan_category1": "电池",
+  "jiuyan_concept1": "锂电池"
  },
  "301211": {
   "business_summary": "主营医药制造业",
@@ -51834,7 +51897,7 @@
   "primary_source": "legacy",
   "sector": "风电设备/航空发动机/大飞机/商业航天",
   "sector_type": "legacy",
-  "updated_at": "2026-10-25 18:00:00",
+  "updated_at": "2026-10-31 09:07:40",
   "jiuyan_tag_evidence": "text",
   "jiuyan_tag_verdict": "相关",
   "jiuyan_concept_reason": {
@@ -51842,7 +51905,11 @@
    "风电设备": "飞沃科技：高强度紧固件（风电）"
   },
   "jiuyan_category1": "电力",
-  "jiuyan_concept1": "燃气轮机"
+  "jiuyan_concept1": "燃气轮机",
+  "jiuyan_category2": "商业航天",
+  "jiuyan_concept2": "航天紧固件",
+  "jiuyan_category": "电力|商业航天",
+  "jiuyan_concept": "燃气轮机|航天紧固件"
  },
  "301233": {
   "business_summary": "主营橡胶和塑料制品业",
@@ -53579,13 +53646,15 @@
   "business_summary": "医疗器械精密组件及产品的设计开发、制造和销售。",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "医药",
+  "jiuyan_concept": "医疗设备",
   "name": "美好医疗",
   "primary_source": "legacy",
   "sector": "医疗器械/脑机接口/PEEK材料/CRO概念",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-10-31 14:24:59",
+  "jiuyan_category1": "医药",
+  "jiuyan_concept1": "医疗设备"
  },
  "301365": {
   "business_summary": "主营AIGC概念",
@@ -55890,13 +55959,15 @@
   "business_summary": "主营消费电子",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "消费电子",
+  "jiuyan_concept": "品牌消费电子",
   "name": "绿联科技",
   "primary_source": "legacy",
   "sector": "消费电子/无线耳机/储能/无线充电",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-10-31 14:24:59",
+  "jiuyan_category1": "消费电子",
+  "jiuyan_concept1": "品牌消费电子"
  },
  "301607": {
   "business_summary": "从事新能源汽车高压电源系统研发、生产和销售业务。",
@@ -56634,13 +56705,15 @@
   "business_summary": "主营水上运输业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "交运",
+  "jiuyan_concept": "港口",
   "name": "上港集团",
   "primary_source": "legacy",
   "sector": "水上运输业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-10-31 14:24:59",
+  "jiuyan_category1": "交运",
+  "jiuyan_concept1": "港口"
  },
  "600019": {
   "business_summary": "主营黑色金属冶炼和压延加工业",
@@ -56864,13 +56937,15 @@
   "business_summary": "主营道路运输业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "交运",
+  "jiuyan_concept": "高速公路",
   "name": "楚天高速",
   "primary_source": "legacy",
   "sector": "道路运输业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-10-31 14:24:59",
+  "jiuyan_category1": "交运",
+  "jiuyan_concept1": "高速公路"
  },
  "600036": {
   "business_summary": "主营货币金融服务",
@@ -66086,13 +66161,15 @@
   "business_summary": "主营石油、煤炭及其他燃料加工业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "石油",
+  "jiuyan_concept": "炼油化工",
   "name": "上海石化",
   "primary_source": "legacy",
   "sector": "石油、煤炭及其他燃料加工业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-10-31 14:24:59",
+  "jiuyan_category1": "石油",
+  "jiuyan_concept1": "炼油化工"
  },
  "600689": {
   "business_summary": "主营批发业",
@@ -67776,13 +67853,15 @@
   "business_summary": "主营酒、饮料和精制茶制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "大消费",
+  "jiuyan_concept": "白酒",
   "name": "山西汾酒",
   "primary_source": "legacy",
   "sector": "酒、饮料和精制茶制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-10-31 14:24:59",
+  "jiuyan_category1": "大消费",
+  "jiuyan_concept1": "白酒"
  },
  "600810": {
   "business_summary": "主营化学纤维制造业",
@@ -68692,13 +68771,15 @@
   "business_summary": "主营计算机、通信和其他电子设备制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "商业航天",
+  "jiuyan_concept": "星载芯片",
   "name": "电科芯片",
   "primary_source": "legacy",
   "sector": "计算机、通信和其他电子设备制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-10-31 09:07:40",
+  "jiuyan_category1": "商业航天",
+  "jiuyan_concept1": "星载芯片"
  },
  "600879": {
   "business_summary": "航天电子信息、无人系统装备等产品的研发、生产与销售。",
@@ -69428,13 +69509,15 @@
   "business_summary": "主营货币金融服务",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "金融",
+  "jiuyan_concept": "城商行",
   "name": "西安银行",
   "primary_source": "legacy",
   "sector": "货币金融服务",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-10-31 14:24:59",
+  "jiuyan_category1": "金融",
+  "jiuyan_concept1": "城商行"
  },
  "600929": {
   "business_summary": "主营食品制造业",
@@ -70737,13 +70820,15 @@
   "business_summary": "主营水上运输业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "交运",
+  "jiuyan_concept": "航运",
   "name": "锦江航运",
   "primary_source": "legacy",
   "sector": "水上运输业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-10-31 14:24:59",
+  "jiuyan_category1": "交运",
+  "jiuyan_concept1": "航运"
  },
  "601086": {
   "business_summary": "主营零售业",
@@ -72932,13 +73017,15 @@
   "business_summary": "主营专用设备制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "机器人",
+  "jiuyan_concept": "重型装备",
   "name": "中创智领",
   "primary_source": "legacy",
   "sector": "专用设备制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-10-31 14:24:59",
+  "jiuyan_category1": "机器人",
+  "jiuyan_concept1": "重型装备"
  },
  "601727": {
   "business_summary": "主营其他电源设备Ⅱ",
@@ -73743,13 +73830,15 @@
   "business_summary": "主营水上运输业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "交运",
+  "jiuyan_concept": "航运",
   "name": "中远海控",
   "primary_source": "legacy",
   "sector": "水上运输业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-10-31 14:24:59",
+  "jiuyan_category1": "交运",
+  "jiuyan_concept1": "航运"
  },
  "601921": {
   "business_summary": "主营新闻和出版业",
@@ -76181,13 +76270,15 @@
   "business_summary": "各类定制化金属零部件的研发、生产和销售。",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "汽车",
+  "jiuyan_concept": "铸造件",
   "name": "华翔股份",
   "primary_source": "legacy",
   "sector": "家电零部件Ⅱ/新能源汽车/3D打印/工业互联网/DeepSeek概念",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-10-31 14:24:59",
+  "jiuyan_category1": "汽车",
+  "jiuyan_concept1": "铸造件"
  },
  "603113": {
   "business_summary": "主营化学原料和化学制品制造业",
@@ -78688,7 +78779,7 @@
   "primary_source": "legacy",
   "sector": "通用设备/人形机器人/商业航天/高端装备",
   "sector_type": "legacy",
-  "updated_at": "2026-10-27 09:30:00",
+  "updated_at": "2026-10-31 14:24:59",
   "jiuyan_robot_physicalai_verdicts": {},
   "jiuyan_robot_physicalai_audited_at": "2026-10-27",
   "jiuyan_robot_physicalai_evidence": {
@@ -78710,7 +78801,11 @@
    "verdict": "摘除",
    "category_verdicts": {},
    "reason": "公司与北邮开展腱绳材料及感知功能开发并进行小批量送样，但2026年10月21日再次明确尚未批量生产、未产生实质收益，也无证据支持特斯拉订单。胎圈钢丝和钢帘线主营不能外推为机器人核心，现阶段仍属研发送样及产业化预期，原核心标签明显过强，故摘除。"
-  }
+  },
+  "jiuyan_category1": "汽车",
+  "jiuyan_concept1": "轮胎骨架材料",
+  "jiuyan_category": "汽车",
+  "jiuyan_concept": "轮胎骨架材料"
  },
  "603279": {
   "business_summary": "主营通用设备制造业",
@@ -79610,7 +79705,7 @@
   "primary_source": "legacy",
   "sector": "塑料/芯片概念/共封装光学(CPO)/消费电子概念",
   "sector_type": "legacy",
-  "updated_at": "2026-10-27 13:13:00",
+  "updated_at": "2026-10-31 14:24:59",
   "jiuyan_concept_reason": {
    "CPO/光模块": "天洋新材：热熔胶为主，CPO 为依据弱"
   },
@@ -79634,7 +79729,11 @@
    "new_pairs": [],
    "verdict": "摘除",
    "reason": "公司主营是纺织和汽车用热熔胶、电子级胶黏剂、光伏封装胶膜及环保墙布。2025年热熔胶收入4.0996亿元、反应型胶黏剂1.7218亿元、光伏封装胶膜1.9316亿元；工业领域收入占90.0853%，但工业领域并不等于光通信。年报所列电子胶主要用于电路板保护、电池组装、电子器件结构粘接、电机组装，并披露新拓展半导体、汽车电子和储能导热应用，全文未核验到光通信、光模块或CPO产品、订单、供货和收入披露。通用环氧、丙烯酸或有机硅胶理论上可用于多种电子封装，不能据此认定光通信封装胶材。旧“光材料”及CPO联想缺乏真实业务支撑，故摘除，而不是把反应型胶黏剂收入全部归入光通信。"
-  }
+  },
+  "jiuyan_category1": "化工",
+  "jiuyan_concept1": "胶黏剂及胶带",
+  "jiuyan_category": "化工",
+  "jiuyan_concept": "胶黏剂及胶带"
  },
  "603331": {
   "business_summary": "主营通用设备制造业",
@@ -79782,13 +79881,15 @@
   "business_summary": "各类智能高空作业平台的研发、制造、销售和服务。",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "机器人",
+  "jiuyan_concept": "工程机械",
   "name": "浙江鼎力",
   "primary_source": "legacy",
   "sector": "工程机械/人民币贬值受益/一带一路/机器人概念",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-10-31 14:24:59",
+  "jiuyan_category1": "机器人",
+  "jiuyan_concept1": "工程机械"
  },
  "603339": {
   "business_summary": "主营金属制品业",
@@ -80144,25 +80245,29 @@
   "business_summary": "主营批发业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "医药",
+  "jiuyan_concept": "医药流通",
   "name": "柳药集团",
   "primary_source": "legacy",
   "sector": "批发业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-10-31 14:24:59",
+  "jiuyan_category1": "医药",
+  "jiuyan_concept1": "医药流通"
  },
  "603369": {
   "business_summary": "主营酒、饮料和精制茶制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "大消费",
+  "jiuyan_concept": "白酒",
   "name": "今世缘",
   "primary_source": "legacy",
   "sector": "酒、饮料和精制茶制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-10-31 14:24:59",
+  "jiuyan_category1": "大消费",
+  "jiuyan_concept1": "白酒"
  },
  "603370": {
   "business_summary": "新能源汽车驱动电机铁芯、微特电机铁芯、电气设备铁芯、点火线圈铁芯、精密冲压模具",
@@ -81645,13 +81750,15 @@
   "business_summary": "主营其他",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "大消费",
+  "jiuyan_concept": "白酒",
   "name": "口子窖",
   "primary_source": "fallback",
   "sector": "其他",
   "sector_type": "fallback",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-10-31 14:24:59",
+  "jiuyan_category1": "大消费",
+  "jiuyan_concept1": "白酒"
  },
  "603590": {
   "business_summary": "主营医药制造业",
@@ -83070,18 +83177,22 @@
   "business_summary": "煤气化技术及关键设备的研发、工程设计、技术服务、设备成套供应及工程总承包。",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "煤化工",
-  "jiuyan_concept": "煤化工",
+  "jiuyan_category": "煤化工|商业航天",
+  "jiuyan_concept": "煤化工|航天科技集团（煤气化）",
   "name": "航天工程",
   "primary_source": "legacy",
   "sector": "专用设备/军民融合/军工",
   "sector_type": "legacy",
-  "updated_at": "2026-10-25 13:00:00",
+  "updated_at": "2026-10-31 09:07:40",
   "jiuyan_tag_evidence": "text",
   "jiuyan_tag_verdict": "核心",
   "jiuyan_concept_reason": {
    "煤化工": "航天工程：煤气化技术（现代煤化工）"
-  }
+  },
+  "jiuyan_category1": "煤化工",
+  "jiuyan_concept1": "煤化工",
+  "jiuyan_category2": "商业航天",
+  "jiuyan_concept2": "航天科技集团（煤气化）"
  },
  "603699": {
   "business_summary": "主营通用设备制造业",
@@ -84854,13 +84965,15 @@
   "business_summary": "主营文教、工美、体育和娱乐用品制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "大消费",
+  "jiuyan_concept": "文化用品",
   "name": "晨光股份",
   "primary_source": "legacy",
   "sector": "文教、工美、体育和娱乐用品制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-10-31 14:24:59",
+  "jiuyan_category1": "大消费",
+  "jiuyan_concept1": "文化用品"
  },
  "603900": {
   "business_summary": "主营零售业",
@@ -85114,13 +85227,15 @@
   "business_summary": "主营酒、饮料和精制茶制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "大消费",
+  "jiuyan_concept": "白酒",
   "name": "金徽酒",
   "primary_source": "legacy",
   "sector": "酒、饮料和精制茶制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-10-31 14:24:59",
+  "jiuyan_category1": "大消费",
+  "jiuyan_concept1": "白酒"
  },
  "603920": {
   "business_summary": "各类印制电路板（PCB）的研发、生产与销售。",
@@ -85493,13 +85608,15 @@
   "business_summary": "主营零售业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "医药",
+  "jiuyan_concept": "线下药店",
   "name": "益丰药房",
   "primary_source": "legacy",
   "sector": "零售业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-10-31 14:24:59",
+  "jiuyan_category1": "医药",
+  "jiuyan_concept1": "线下药店"
  },
  "603948": {
   "business_summary": "主营化学原料和化学制品制造业",
@@ -86673,13 +86790,15 @@
   "business_summary": "主营计算机、通信和其他电子设备制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "消费电子",
+  "jiuyan_concept": "光学元件",
   "name": "力鼎光电",
   "primary_source": "legacy",
   "sector": "计算机、通信和其他电子设备制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-10-31 14:24:59",
+  "jiuyan_category1": "消费电子",
+  "jiuyan_concept1": "光学元件"
  },
  "605122": {
   "business_summary": "主营装配式建筑",
@@ -91151,13 +91270,15 @@
   "business_summary": "主营其他",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "电力",
+  "jiuyan_concept": "检测设备",
   "name": "中国电研",
   "primary_source": "fallback",
   "sector": "其他",
   "sector_type": "fallback",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-10-31 14:24:59",
+  "jiuyan_category1": "电力",
+  "jiuyan_concept1": "检测设备"
  },
  "688129": {
   "business_summary": "主营化学原料和化学制品制造业",
@@ -93247,7 +93368,7 @@
   "primary_source": "legacy",
   "sector": "铁路、船舶、航空航天和其他运输设备制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-10-27 11:26:00",
+  "updated_at": "2026-10-31 09:07:40",
   "jiuyan_tag_evidence": "text",
   "jiuyan_tag_verdict": "核心",
   "jiuyan_concept_reason": {
@@ -93256,8 +93377,6 @@
    "航空结构件与锻铸件": "公司专门制造航空难变形金属材料环形锻件，产品用于军用航空发动机机匣、涡轮和连接环等关键部位，也覆盖航天与燃气轮机装备，已进入国内外航空发动机及主机配套链，属于真实批量零部件而非普通金属加工可军用。2025年航空锻件收入14.8109亿元、约占总收入72.83%，燃气轮机锻件2.7812亿元、航天锻件1.1289亿元，锻造行业收入18.9562亿元、占93.2131%；航空产品是绝对主体和重要收入，虽军民航空未独立拆分，规模化核心产品及军工配套明确，故判核心。旧“航空发动机”只描述下游场景，容易误解为公司制造整机发动机，现以航空结构件与锻铸件为产品主标签，并保留航空发动机与燃气轮机作为实际应用分类。",
    "航空发动机与燃气轮机": "公司专门制造航空难变形金属材料环形锻件，产品用于军用航空发动机机匣、涡轮和连接环等关键部位，也覆盖航天与燃气轮机装备，已进入国内外航空发动机及主机配套链，属于真实批量零部件而非普通金属加工可军用。2025年航空锻件收入14.8109亿元、约占总收入72.83%，燃气轮机锻件2.7812亿元、航天锻件1.1289亿元，锻造行业收入18.9562亿元、占93.2131%；航空产品是绝对主体和重要收入，虽军民航空未独立拆分，规模化核心产品及军工配套明确，故判核心。旧“航空发动机”只描述下游场景，容易误解为公司制造整机发动机，现以航空结构件与锻铸件为产品主标签，并保留航空发动机与燃气轮机作为实际应用分类。"
   },
-  "jiuyan_category1": "电力",
-  "jiuyan_concept1": "燃气轮机",
   "jiuyan_concept_desc": {
    "航空结构件与锻铸件": "飞机和航空发动机用结构件、锻铸件、环形件及增材制造复杂零部件。",
    "航空发动机与燃气轮机": "航空发动机、燃气轮机整机或关键动力分系统及直接配套，按实际产品层级标注。"
@@ -93298,11 +93417,14 @@
    "verdict": "核心",
    "reason": "公司专门制造航空难变形金属材料环形锻件，产品用于军用航空发动机机匣、涡轮和连接环等关键部位，也覆盖航天与燃气轮机装备，已进入国内外航空发动机及主机配套链，属于真实批量零部件而非普通金属加工可军用。2025年航空锻件收入14.8109亿元、约占总收入72.83%，燃气轮机锻件2.7812亿元、航天锻件1.1289亿元，锻造行业收入18.9562亿元、占93.2131%；航空产品是绝对主体和重要收入，虽军民航空未独立拆分，规模化核心产品及军工配套明确，故判核心。旧“航空发动机”只描述下游场景，容易误解为公司制造整机发动机，现以航空结构件与锻铸件为产品主标签，并保留航空发动机与燃气轮机作为实际应用分类。"
   },
+  "jiuyan_category1": "电力",
+  "jiuyan_concept1": "燃气轮机",
   "jiuyan_category2": "军工",
-  "jiuyan_concept2": [
-   "航空结构件与锻铸件",
-   "航空发动机与燃气轮机"
-  ]
+  "jiuyan_concept2": "航空结构件与锻铸件|航空发动机与燃气轮机",
+  "jiuyan_category3": "商业航天",
+  "jiuyan_concept3": "火箭环形锻件",
+  "jiuyan_category": "电力|军工|商业航天",
+  "jiuyan_concept": "燃气轮机|航空结构件与锻铸件|航空发动机与燃气轮机|火箭环形锻件"
  },
  "688244": {
   "business_summary": "主营软件和信息技术服务业",
@@ -100631,7 +100753,7 @@
   "primary_source": "legacy",
   "sector": "软件和信息技术服务业",
   "sector_type": "legacy",
-  "updated_at": "2026-10-27 10:19:00",
+  "updated_at": "2026-10-31 09:07:40",
   "jiuyan_tag_evidence": "text",
   "jiuyan_tag_verdict": "核心",
   "jiuyan_concept_reason": {
@@ -100639,11 +100761,6 @@
    "漏洞与攻击面管理": "公司拥有安全检测、应用防护、网络资产及安全服务等完整产品线，2025年报披露RayScan漏洞扫描、RayWAF与RayAPI应用防护、网络空间地图和暴露面及攻击面SaaS监测，WAF已服务12306、中石化、人民银行等关键客户，产品持续迭代并形成收入。卫星互联网安全是新增方向，不影响既有网安主营核心判断；本轮去除国家队泛标签，改为漏洞与攻击面管理、Web应用安全。",
    "Web应用安全": "公司拥有安全检测、应用防护、网络资产及安全服务等完整产品线，2025年报披露RayScan漏洞扫描、RayWAF与RayAPI应用防护、网络空间地图和暴露面及攻击面SaaS监测，WAF已服务12306、中石化、人民银行等关键客户，产品持续迭代并形成收入。卫星互联网安全是新增方向，不影响既有网安主营核心判断；本轮去除国家队泛标签，改为漏洞与攻击面管理、Web应用安全。"
   },
-  "jiuyan_category1": "网络安全",
-  "jiuyan_concept1": [
-   "漏洞与攻击面管理",
-   "Web应用安全"
-  ],
   "jiuyan_concept_desc": {
    "漏洞与攻击面管理": "提供漏洞扫描、网络资产测绘、暴露面监测和攻击面持续管理。",
    "Web应用安全": "以WAF、API防护、漏洞检测等保护Web站点、接口和应用服务，须有正式产品或项目。"
@@ -100679,7 +100796,13 @@
    ],
    "verdict": "核心",
    "reason": "公司拥有安全检测、应用防护、网络资产及安全服务等完整产品线，2025年报披露RayScan漏洞扫描、RayWAF与RayAPI应用防护、网络空间地图和暴露面及攻击面SaaS监测，WAF已服务12306、中石化、人民银行等关键客户，产品持续迭代并形成收入。卫星互联网安全是新增方向，不影响既有网安主营核心判断；本轮去除国家队泛标签，改为漏洞与攻击面管理、Web应用安全。"
-  }
+  },
+  "jiuyan_category1": "网络安全",
+  "jiuyan_concept1": "漏洞与攻击面管理|Web应用安全",
+  "jiuyan_category2": "商业航天",
+  "jiuyan_concept2": "卫星网络安全",
+  "jiuyan_category": "网络安全|商业航天",
+  "jiuyan_concept": "漏洞与攻击面管理|Web应用安全|卫星网络安全"
  },
  "688652": {
   "business_summary": "主营半导体",
@@ -101033,16 +101156,18 @@
   "business_summary": "研发、生产、销售高速通讯连接器及其组件和汽车连接器及其组件。",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "液冷",
-  "jiuyan_concept": "快换接头",
+  "jiuyan_category": "液冷|商业航天",
+  "jiuyan_concept": "快换接头|航天连接器",
   "name": "鼎通科技",
   "primary_source": "legacy",
   "sector": "通信设备/铜缆高速连接/光纤概念/英伟达概念",
   "sector_type": "legacy",
-  "updated_at": "2026-10-26 18:47:06",
+  "updated_at": "2026-10-31 09:07:40",
+  "jiuyan_tag_source": "2026-10-26 液冷产业链全景图补漏（owner 确认）",
   "jiuyan_category1": "液冷",
   "jiuyan_concept1": "快换接头",
-  "jiuyan_tag_source": "2026-10-26 液冷产业链全景图补漏（owner 确认）"
+  "jiuyan_category2": "商业航天",
+  "jiuyan_concept2": "航天连接器"
  },
  "688669": {
   "business_summary": "主营橡胶和塑料制品业",
@@ -102258,13 +102383,15 @@
   "business_summary": "主营医药制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "医药",
+  "jiuyan_concept": "血液制品",
   "name": "禾元生物-U",
   "primary_source": "legacy",
   "sector": "医药制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-10-31 14:24:59",
+  "jiuyan_category1": "医药",
+  "jiuyan_concept1": "血液制品"
  },
  "688766": {
   "business_summary": "国内重要的存储器芯片供应商之一，NOR Flash、EEPROM销售额均进入全球前六",
@@ -102930,13 +103057,15 @@
   "business_summary": "电能源产品及系统的研发、生产、销售及服务。",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "商业航天",
+  "jiuyan_concept": "空间电源",
   "name": "电科蓝天",
   "primary_source": "legacy",
   "sector": "航天装备Ⅱ/卫星导航/商业航天/科创次新股",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-10-31 09:07:40",
+  "jiuyan_category1": "商业航天",
+  "jiuyan_concept1": "空间电源"
  },
  "688819": {
   "business_summary": "主营电气机械和器材制造业",
@@ -103448,13 +103577,15 @@
   "business_summary": "半导体玻璃基板原片已成功进入厦门云天、安捷利美维、京东方、沃格光电四大核心企业供应链体系。公司已成功开发出玻璃基板材料，并向国内多家知名半导体厂商送样，该产品用于玻璃基板TGV封装。",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "消费电子",
+  "jiuyan_concept": "光学元件",
   "name": "戈碧迦",
   "primary_source": "legacy",
   "sector": "玻璃/半导体材料/玻璃基板",
   "sector_type": "legacy",
-  "updated_at": "2026-06-17 12:25:44"
+  "updated_at": "2026-10-31 14:24:59",
+  "jiuyan_category1": "消费电子",
+  "jiuyan_concept1": "光学元件"
  },
  "920508": {
   "business_summary": "",
@@ -104411,12 +104542,14 @@
   "business_summary": "",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "汽车",
+  "jiuyan_concept": "摩托车",
   "sector": "摩托车/摩托车及其他/汽车/浙江板块/中俄贸易概念/一带一路/体育产业/融资融券/机构重仓/交运设备",
   "sector_type": "sync_20260929",
   "primary_source": "sync_20260929",
-  "updated_at": "2026-09-29 17:08:50"
+  "updated_at": "2026-10-31 14:24:59",
+  "jiuyan_category1": "汽车",
+  "jiuyan_concept1": "摩托车"
  },
  "920059": {
   "name": "双英集团",
@@ -105079,12 +105212,14 @@
   "business_summary": "",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "汽车",
+  "jiuyan_concept": "底盘与发动机",
   "sector": "底盘与发动机系统/汽车/汽车零部件/湖北板块/减速器/新能源车/氢能源/融资融券",
   "sector_type": "sync_20260929",
   "primary_source": "sync_20260929",
-  "updated_at": "2026-09-29 17:08:50"
+  "updated_at": "2026-10-31 14:24:59",
+  "jiuyan_category1": "汽车",
+  "jiuyan_concept1": "底盘与发动机"
  },
  "920149": {
   "name": "旭杰科技",
@@ -105115,12 +105250,14 @@
   "business_summary": "",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "机器人",
+  "jiuyan_concept": "自动化设备",
   "sector": "其他自动化设备/自动化设备/机械设备/河南板块/2026中报预增/2026一季报预增/专精特新/融资融券/次新股",
   "sector_type": "sync_20260929",
   "primary_source": "sync_20260929",
-  "updated_at": "2026-09-29 17:08:50"
+  "updated_at": "2026-10-31 14:24:59",
+  "jiuyan_category1": "机器人",
+  "jiuyan_concept1": "自动化设备"
  },
  "920158": {
   "name": "长江能科",
@@ -105504,12 +105641,14 @@
   "business_summary": "",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "医药",
+  "jiuyan_concept": "医疗耗材",
   "sector": "医疗耗材/医药生物/医疗器械/江苏板块/医疗器械概念/融资融券/次新股",
   "sector_type": "sync_20260929",
   "primary_source": "sync_20260929",
-  "updated_at": "2026-09-29 17:08:50"
+  "updated_at": "2026-10-31 14:24:59",
+  "jiuyan_category1": "医药",
+  "jiuyan_concept1": "医疗耗材"
  },
  "920202": {
   "name": "N安达",
@@ -106726,12 +106865,14 @@
   "business_summary": "",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "商业航天",
+  "jiuyan_concept": "遥感测绘与地理信息",
   "sector": "IT服务Ⅲ/IT服务Ⅱ/计算机/陕西板块/空间计算/数据要素/时空大数据/商业航天/数字孪生/华为概念/人工智能/国产软件/智慧城市/融资融券/西部大开发/物联网",
   "sector_type": "sync_20260929",
   "primary_source": "sync_20260929",
-  "updated_at": "2026-09-29 17:08:50"
+  "updated_at": "2026-10-31 09:07:40",
+  "jiuyan_category1": "商业航天",
+  "jiuyan_concept1": "遥感测绘与地理信息"
  },
  "920566": {
   "name": "梓橦宫",
@@ -106786,12 +106927,14 @@
   "business_summary": "",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "商业航天",
+  "jiuyan_concept": "航天金属复合材料",
   "sector": "其他金属新材料/金属新材料/有色金属/陕西板块/可控核聚变/专精特新/商业航天/央国企改革/海工装备/融资融券/西部大开发/核能核电",
   "sector_type": "sync_20260929",
   "primary_source": "sync_20260929",
-  "updated_at": "2026-09-29 17:08:50"
+  "updated_at": "2026-10-31 09:07:40",
+  "jiuyan_category1": "商业航天",
+  "jiuyan_concept1": "航天金属复合材料"
  },
  "920579": {
   "name": "机科股份",
@@ -106947,12 +107090,14 @@
   "business_summary": "",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "汽车",
+  "jiuyan_concept": "汽车零部件",
   "sector": "车身附件及饰件/汽车/汽车零部件/江苏板块/PEEK材料概念/减速器/专精特新/融资融券",
   "sector_type": "sync_20260929",
   "primary_source": "sync_20260929",
-  "updated_at": "2026-09-29 17:08:50"
+  "updated_at": "2026-10-31 14:24:59",
+  "jiuyan_category1": "汽车",
+  "jiuyan_concept1": "汽车零部件"
  },
  "920670": {
   "name": "数字人",
@@ -108085,17 +108230,12 @@
   "primary_source": "manual_backfill_20261010",
   "sector": "",
   "sector_type": "",
-  "updated_at": "2026-10-27 10:19:00",
+  "updated_at": "2026-10-31 09:07:40",
   "jiuyan_tag_verdict": "核心",
   "jiuyan_concept_reason": {
    "专用安全终端与测控安全": "公司信息化服务与网络信息安全综合解决方案并行，2025年报披露专用芯片、板卡、整机以及检测台安全防护、中低速测控安全和高速数据安全传输系统，采用编码、解码、身份鉴别、防篡改和加扰保障航空航天数据传输；网络信息安全产品收入9230.28万元、占28.86%，是重要收入板块而非概念。故维持核心，将其他细化为专用安全终端与测控安全、商用密码与安全传输。",
    "商用密码与安全传输": "公司信息化服务与网络信息安全综合解决方案并行，2025年报披露专用芯片、板卡、整机以及检测台安全防护、中低速测控安全和高速数据安全传输系统，采用编码、解码、身份鉴别、防篡改和加扰保障航空航天数据传输；网络信息安全产品收入9230.28万元、占28.86%，是重要收入板块而非概念。故维持核心，将其他细化为专用安全终端与测控安全、商用密码与安全传输。"
   },
-  "jiuyan_category1": "网络安全",
-  "jiuyan_concept1": [
-   "专用安全终端与测控安全",
-   "商用密码与安全传输"
-  ],
   "jiuyan_concept_desc": {
    "专用安全终端与测控安全": "面向航空航天及专用场景的芯片、板卡、整机、检测台和测控链路安全防护。",
    "商用密码与安全传输": "以密码、身份鉴别、防篡改和加扰技术保障专用网络及数据链路传输。"
@@ -108132,7 +108272,13 @@
    ],
    "verdict": "核心",
    "reason": "公司信息化服务与网络信息安全综合解决方案并行，2025年报披露专用芯片、板卡、整机以及检测台安全防护、中低速测控安全和高速数据安全传输系统，采用编码、解码、身份鉴别、防篡改和加扰保障航空航天数据传输；网络信息安全产品收入9230.28万元、占28.86%，是重要收入板块而非概念。故维持核心，将其他细化为专用安全终端与测控安全、商用密码与安全传输。"
-  }
+  },
+  "jiuyan_category1": "网络安全",
+  "jiuyan_concept1": "专用安全终端与测控安全|商用密码与安全传输",
+  "jiuyan_category2": "商业航天",
+  "jiuyan_concept2": "测控与信息安全",
+  "jiuyan_category": "网络安全|商业航天",
+  "jiuyan_concept": "专用安全终端与测控安全|商用密码与安全传输|测控与信息安全"
  },
  "300081": {
   "business_summary": "",
@@ -108562,5 +108708,61 @@
    "verdict": "核心",
    "reason": "公司以PIE软件、系统设计开发、遥感数据分析和女娲星座运营形成主营业务，直接提供卫星数据处理、遥感应用和星座运营服务，商业航天业务与主营收入高度对应。2025年卫星应用收入4.4781亿元，占营业收入100%，其中数据分析应用收入1.8592亿元、系统设计开发收入2.5859亿元，收入规模和产品闭环均支持核心判定。旧“卫星”标签过于宽泛，现纠正为“卫星数据与遥感应用”，明确公司优势在数据软件、应用和运营，不将其泛化为卫星总体制造或火箭业务。"
   }
+ },
+ "688270": {
+  "name": "ST臻镭",
+  "business_summary": "",
+  "concept_boards": [],
+  "industry_boards": [],
+  "primary_source": "manual",
+  "sector": "商业航天",
+  "sector_type": "manual",
+  "jiuyan_category": "商业航天",
+  "jiuyan_concept": "星载射频芯片",
+  "jiuyan_category1": "商业航天",
+  "jiuyan_concept1": "星载射频芯片",
+  "updated_at": "2026-10-31 09:07:40"
+ },
+ "688089": {
+  "name": "英科再生",
+  "business_summary": "",
+  "concept_boards": [],
+  "industry_boards": [],
+  "primary_source": "manual",
+  "sector": "固废治理",
+  "sector_type": "manual",
+  "jiuyan_category": "环保",
+  "jiuyan_concept": "固废治理",
+  "jiuyan_category1": "环保",
+  "jiuyan_concept1": "固废治理",
+  "updated_at": "2026-10-31 14:24:59"
+ },
+ "600187": {
+  "name": "*ST国中",
+  "business_summary": "",
+  "concept_boards": [],
+  "industry_boards": [],
+  "primary_source": "manual",
+  "sector": "水务",
+  "sector_type": "manual",
+  "jiuyan_category": "环保",
+  "jiuyan_concept": "水务",
+  "jiuyan_category1": "环保",
+  "jiuyan_concept1": "水务",
+  "updated_at": "2026-10-31 14:24:59"
+ },
+ "600289": {
+  "name": "ST信通",
+  "business_summary": "",
+  "concept_boards": [],
+  "industry_boards": [],
+  "primary_source": "manual",
+  "sector": "行业应用软件",
+  "sector_type": "manual",
+  "jiuyan_category": "AI应用",
+  "jiuyan_concept": "行业应用软件",
+  "jiuyan_category1": "AI应用",
+  "jiuyan_concept1": "行业应用软件",
+  "updated_at": "2026-10-31 14:24:59"
  }
 }
