@@ -803,11 +803,15 @@ def mark_run_today(kind, now=None) -> None:
         pass
 
 
-def run_prefetch(small=True, full=True, minutes=True, days_full=200,
+def run_prefetch(small=True, full=True, minutes=True, days_full=800,
                  payload_builder=None, force=False, now=None) -> dict:
     """盘后预下载编排：小池日线 → 全池日线 → 小池分钟 → 小池 payload。
 
     幂等：跨进程锁（防 main.py 子进程与 t_gui 守护线程同时跑）+ 当日状态标记。
+
+    ⚠️ 2026-10-30：`days_full` 200 → **800**。200 天只有 ~200 行，MA150/MA360、箱体、背离
+    全都算不出（实测 5149 只缓存行数比通达信少 470+ 行；301079 只有 213 行）。每天真正要
+    重下的只有"不新鲜"的那几百只，深度从 200 拉到 800 是**一次性**代价。
     payload_builder: 小池 payload 构建回调（由 t_gui 注入，避免 core→t_gui 反向依赖）。
     全程不抛，返回各项统计。
     """
@@ -837,6 +841,39 @@ def run_prefetch(small=True, full=True, minutes=True, days_full=200,
         return out
     finally:
         _release_lock()
+
+
+def deepen_daily(codes, limit: int = 600, days: int = 800, now=None,
+                 batch: int = 200) -> dict:
+    """把**历史偏短**的日线缓存用长窗口补全（2026-10-30）。
+
+    背景：全池预下载历史用 200 天 ⇒ 首次落盘的票只有 ~200 行；实测 5149 只比通达信少 470+ 行，
+    MA150/MA360、箱体、背离都会算错或算不出。`codes` 一般来自 `core.tdx_calibrate` 报告的
+    `short` 列表（按缺口降序）。
+
+    安全点：
+      · 先对**一只**探针调 `provider.daily(days=800)`；取不到 ⇒ 直接返回
+        `{"skipped": "provider_down"}` —— 避免几百只 × 25s 超时把盘后拖死（今天腾讯 fqkline
+        被 WAF 挡、GM 不可达就是这种状态）；
+      · 复用 `prefetch_daily(skip_current=False)` 的**分批 + merge** 写入（不截短历史）。
+    """
+    codes = [str(c).split("_")[0] for c in (codes or []) if c][:max(0, int(limit))]
+    if not codes:
+        return {"requested": 0, "skipped": "empty"}
+    try:
+        from core.market_data import get_provider
+        prov = get_provider()
+    except Exception as e:
+        return {"skipped": f"provider_init:{type(e).__name__}"}
+    probe = prov.daily(codes[0], days=days)
+    _src = str((getattr(probe, "attrs", {}) or {}).get("source") or "") if probe is not None else ""
+    # ⚠️ 探针必须拿到**非缓存**的数据：`facade.daily` 在 GM 不可用 + 腾讯被挡时会把磁盘缓存
+    # 原样返回（source="cache"）——那是"看着成功、其实一行没多"（2026-10-30 实测踩到）。
+    if probe is None or getattr(probe, "empty", True) or _src == "cache":
+        return {"requested": len(codes), "skipped": "provider_down", "probe_source": _src}
+    st = prefetch_daily(codes, days=days, now=now, skip_current=False, batch=batch)
+    st["deepened"] = True
+    return st
 
 
 # ── 日线缓存「日期+收盘」共享解析层（2026-10-26，P2-15）────────────────────

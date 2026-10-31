@@ -295,9 +295,20 @@ def merge_daily_cache(code: str, df, cap: int = 800, forming_date: str = None):
             if d in old_forming and d not in in_dates:
                 continue
             by_date[d] = r
+        # 2026-10-30：**"已确认的当日 bar"不许被快照覆盖**。
+        # 事故：收盘后用通达信校准把 10-30 写成真实收盘（volume 236260），随后开一次 K 线
+        # 触发 `write_daily_history(forming_date=today)`，把盘中快照（volume 191932）又盖回去。
+        # 判据：incoming 是 forming_date 且旧行存在、但旧行**不在 old_forming 里**
+        # ⇒ 旧行是"已确认"的，跳过；否则（旧行是盘中快照）照旧覆盖，保持原有的每轮刷新语义。
+        _skip_forming = False
         for r in df.itertuples():
             d = str(r.date)
             if not d:
+                continue
+            _old = by_date.get(d)
+            if (forming_date and d == str(forming_date) and _old is not None
+                    and d not in old_forming):
+                _skip_forming = True
                 continue
             by_date[d] = {"date": d, "open": float(r.open), "close": float(r.close),
                           "high": float(r.high), "low": float(r.low), "volume": float(r.volume)}
@@ -306,7 +317,9 @@ def merge_daily_cache(code: str, df, cap: int = 800, forming_date: str = None):
             rows = rows[-cap:]
         # 旧标记一律作废：没被确认的已被丢弃（上面 continue），被确认的已用真数据覆盖。
         # 本次若又追加了"当日快照根"，由调用方通过 forming_date 重新标上。
-        forming = {str(forming_date)} if forming_date else set()
+        # 若当日行的覆盖被挡（已确认），就不再把它标回 forming（否则下一轮快照又能盖它）
+        forming = (set() if _skip_forming
+                   else ({str(forming_date)} if forming_date else set()))
         from core.utils import write_json_atomic
         write_json_atomic(fp, {
             "date": datetime.now().strftime("%Y-%m-%d"),

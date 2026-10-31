@@ -227,3 +227,38 @@ class TestPayloadStaleMiddleRows:
                 self._row(day, 16.94, 1405729)]
         cc = self._mk(tmp_path, monkeypatch, rows, rows)
         assert cc.load_payload("300821") is not None, "逐根都对 ⇒ 应命中"
+
+
+class TestConfirmedBarNotOverwrittenBySnapshot:
+    """2026-10-30：收盘后用通达信校准写入的"真实收盘"，不许被后续开图/快照 merge 盖回。
+
+    事故现场：002275 10-30 校准后 volume=236260（真实），随后开一次 K 线触发
+    `write_daily_history(forming_date=today)`，把盘中快照 volume=191932 又写了回去。
+    """
+
+    def _df(self, d, o, c, vol=1000.0):
+        import pandas as pd
+        return pd.DataFrame([{"date": d, "open": o, "close": c, "high": max(o, c),
+                              "low": min(o, c), "volume": vol}])
+
+    def test_calibrated_bar_survives_snapshot_merge(self, cache_dir):
+        _write(cache_dir, "600900", _rows(("2026-10-19", 10.0, 10.0), (_TODAY, 10.1, 10.2)),
+               forming=[])                                  # 已确认（无 forming 标记）
+        tp.merge_daily_cache("600900", self._df(_TODAY, 10.1, 10.9, vol=500.0),
+                             forming_date=_TODAY)           # 快照根来了
+        rec = json.loads((cache_dir / "600900.json").read_text(encoding="utf-8"))
+        row = next(r for r in rec["rows"] if r["date"] == _TODAY)
+        assert row["close"] == 10.2, "已确认的收盘不得被快照覆盖"
+        assert row["volume"] == 1000.0
+        assert rec["forming"] == [], "被挡下的快照也不能把这一天重新标成 forming"
+
+    def test_forming_bar_still_updates(self, cache_dir):
+        """盘中语义不变：旧行本来就是 forming ⇒ 新快照照旧覆盖。"""
+        _write(cache_dir, "600900", _rows(("2026-10-19", 10.0, 10.0), (_TODAY, 10.1, 10.2)),
+               forming=[_TODAY])
+        tp.merge_daily_cache("600900", self._df(_TODAY, 10.1, 10.9, vol=800.0),
+                             forming_date=_TODAY)
+        rec = json.loads((cache_dir / "600900.json").read_text(encoding="utf-8"))
+        row = next(r for r in rec["rows"] if r["date"] == _TODAY)
+        assert row["close"] == 10.9, "盘中快照仍应逐轮刷新"
+        assert rec["forming"] == [_TODAY]

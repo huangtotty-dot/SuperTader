@@ -28,6 +28,10 @@
     <span id="liveTag" class="live-tag" style="display:none"></span>
     <select id="dateSelect" class="date-sel"></select>
     <button id="refreshBtn" class="mini-btn" title="手动刷新">刷新</button>
+    <!-- 2026-10-31：全池轮巡（周线 MACD 柱子翻红 ⇒ 自动标紫=重点关注） -->
+    <button id="wmScanBtn" class="mini-btn" style="border-color:#8250df;color:#8250df"
+            onclick="runWeeklyMacdScan()"
+            title="把所有韭研板块轮巡一遍：周线 MACD 柱子由绿翻红的票，自动标成紫色重点关注（只加不删，零网络）">🟣 周线MACD翻红轮巡</button>
     <span id="status" class="status"></span>
   </div>
 </header>

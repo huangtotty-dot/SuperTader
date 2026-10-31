@@ -1422,13 +1422,15 @@
   "business_summary": "主营一般零售",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "大消费",
+  "jiuyan_concept": "百货零售",
   "name": "合百集团",
   "primary_source": "legacy",
   "sector": "一般零售/充电桩/人工智能/互联网金融",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-10-30 21:40:08",
+  "jiuyan_category1": "大消费",
+  "jiuyan_concept1": "百货零售"
  },
  "000419": {
   "business_summary": "主营一般零售",
@@ -1944,13 +1946,15 @@
   "business_summary": "主营其他",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "化工",
+  "jiuyan_concept": "农药",
   "name": "红太阳",
   "primary_source": "fallback",
   "sector": "其他",
   "sector_type": "fallback",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-10-30 21:40:08",
+  "jiuyan_category1": "化工",
+  "jiuyan_concept1": "农药"
  },
  "000526": {
   "business_summary": "主营其他",
@@ -2760,13 +2764,15 @@
   "business_summary": "主营酒、饮料和精制茶制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "大消费",
+  "jiuyan_concept": "白酒",
   "name": "泸州老窖",
   "primary_source": "legacy",
   "sector": "酒、饮料和精制茶制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-10-30 21:40:08",
+  "jiuyan_category1": "大消费",
+  "jiuyan_concept1": "白酒"
  },
  "000570": {
   "business_summary": "主营乡村振兴",
@@ -4318,13 +4324,15 @@
   "business_summary": "主营食品制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "大消费",
+  "jiuyan_concept": "休闲食品",
   "name": "黑芝麻",
   "primary_source": "legacy",
   "sector": "食品制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-10-30 21:40:08",
+  "jiuyan_category1": "大消费",
+  "jiuyan_concept1": "休闲食品"
  },
  "000717": {
   "business_summary": "主营其他",
@@ -6389,13 +6397,15 @@
   "business_summary": "主营房地产业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "地产",
+  "jiuyan_concept": "天津国资",
   "name": "津滨发展",
   "primary_source": "legacy",
   "sector": "房地产业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-10-30 21:40:08",
+  "jiuyan_category1": "地产",
+  "jiuyan_concept1": "天津国资"
  },
  "000898": {
   "business_summary": "主营黑色金属冶炼和压延加工业",
@@ -11317,18 +11327,22 @@
   "business_summary": "主营渔业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "大农业",
-  "jiuyan_concept": "渔业",
+  "jiuyan_category": "大农业|大消费",
+  "jiuyan_concept": "渔业|海洋食品",
   "name": "东方海洋",
   "primary_source": "legacy",
   "sector": "渔业",
   "sector_type": "legacy",
-  "updated_at": "2026-10-25 15:00:00",
+  "updated_at": "2026-10-30 21:40:08",
   "jiuyan_tag_evidence": "text",
   "jiuyan_tag_verdict": "核心",
   "jiuyan_concept_reason": {
    "渔业": "主营：海水养殖业务；与本标签一致"
-  }
+  },
+  "jiuyan_category1": "大农业",
+  "jiuyan_concept1": "渔业",
+  "jiuyan_category2": "大消费",
+  "jiuyan_concept2": "海洋食品"
  },
  "002088": {
   "business_summary": "主营非金属矿物制品业",
@@ -11338,7 +11352,7 @@
   "primary_source": "legacy",
   "sector": "非金属矿物制品业",
   "sector_type": "legacy",
-  "updated_at": "2026-10-27 12:23:00",
+  "updated_at": "2026-10-30 21:40:08",
   "jiuyan_commercial_space_audited_at": "2026-10-27",
   "jiuyan_commercial_space_evidence": {
    "title": "鲁阳节能：2025年年度报告",
@@ -11358,7 +11372,11 @@
    "new_pairs": [],
    "verdict": "摘除",
    "reason": "公司的真实业务是陶瓷纤维棉、毯、湿法制品及相关耐火保温材料，主要服务石化、冶金、电力等工业炉窑的保温、耐火和防火场景。2025年陶瓷纤维制品收入22.1704亿元，工业收入24.7183亿元，年报没有披露卫星、火箭、发射场或商业航天客户收入，也没有可核验的SpaceX订单、认证、供货合同或批量交付。陶瓷纤维具备耐热性能，只能说明材料存在潜在用途，不能由此推出已经向SpaceX供应；本次检索亦未找到公司正式披露能够证实旧标签所指供应关系。因此旧“spacex-供应商-陶瓷纤维”是未经证实的客户映射，商业航天收入占比更无从确认，应整体摘除，而不是改写成泛化航天材料标签继续保留。"
-  }
+  },
+  "jiuyan_category1": "化工",
+  "jiuyan_concept1": "耐火材料",
+  "jiuyan_category": "化工",
+  "jiuyan_concept": "耐火材料"
  },
  "002090": {
   "business_summary": "主营电气机械和器材制造业",
@@ -15183,13 +15201,13 @@
   "business_summary": "主营医药制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "中药",
-  "jiuyan_concept": "中药品牌",
+  "jiuyan_category": "中药|医药",
+  "jiuyan_concept": "中药品牌|中药",
   "name": "桂林三金",
   "primary_source": "legacy",
   "sector": "医药制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-10-25 15:00:00",
+  "updated_at": "2026-10-30 21:40:08",
   "jiuyan_cleanup_note_2026_10_19_all": "去掉分层标签：'驰名药品|龙头-三金片龙头' → '驰名药品'",
   "jiuyan_concept_note": "2026-10-19 医药二级概念整合：剥AI4S前缀/删公司名标签/同义词收编",
   "jiuyan_concept_desc": {
@@ -15199,7 +15217,11 @@
   "jiuyan_tag_verdict": "核心",
   "jiuyan_concept_reason": {
    "中药品牌": "主营：中成药的研发、制造与销售；与本标签一致"
-  }
+  },
+  "jiuyan_category1": "中药",
+  "jiuyan_concept1": "中药品牌",
+  "jiuyan_category2": "医药",
+  "jiuyan_concept2": "中药"
  },
  "002276": {
   "business_summary": "主营电气机械和器材制造业",
@@ -22504,13 +22526,15 @@
   "business_summary": "主营金属制品业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "半导体",
+  "jiuyan_concept": "洁净室工程",
   "name": "扬子新材",
   "primary_source": "legacy",
   "sector": "金属制品业",
   "sector_type": "legacy",
-  "updated_at": "2026-06-24 11:21:37"
+  "updated_at": "2026-10-30 21:40:08",
+  "jiuyan_category1": "半导体",
+  "jiuyan_concept1": "洁净室工程"
  },
  "002653": {
   "business_summary": "主营医药制造业",
@@ -29628,13 +29652,15 @@
   "business_summary": "主营专用设备制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "医药",
+  "jiuyan_concept": "医疗器械",
   "name": "阳普医疗",
   "primary_source": "legacy",
   "sector": "专用设备制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-10-30 21:40:08",
+  "jiuyan_category1": "医药",
+  "jiuyan_concept1": "医疗器械"
  },
  "300031": {
   "business_summary": "主营互联网和相关服务",
@@ -50971,13 +50997,15 @@
   "business_summary": "主营电气机械和器材制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "机器人",
+  "jiuyan_concept": "护理机器人",
   "name": "欧圣电气",
   "primary_source": "legacy",
   "sector": "电气机械和器材制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-10-30 21:40:08",
+  "jiuyan_category1": "机器人",
+  "jiuyan_concept1": "护理机器人"
  },
  "301188": {
   "business_summary": "硼硅玻璃的研发、生产、销售。",
@@ -57766,13 +57794,15 @@
   "business_summary": "主营商务服务业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "大消费",
+  "jiuyan_concept": "农批市场",
   "name": "浙江东日",
   "primary_source": "legacy",
   "sector": "商务服务业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-10-30 21:40:08",
+  "jiuyan_category1": "大消费",
+  "jiuyan_concept1": "农批市场"
  },
  "600114": {
   "business_summary": "粉末冶金新材料研发、生产和销售。",
@@ -58878,17 +58908,21 @@
   "business_summary": "主营酒、饮料和精制茶制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "大农业",
-  "jiuyan_concept": "林业",
+  "jiuyan_category": "大农业|大消费",
+  "jiuyan_concept": "林业|矿泉水",
   "name": "泉阳泉",
   "primary_source": "legacy",
   "sector": "酒、饮料和精制茶制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-10-25 04:00:00",
+  "updated_at": "2026-10-30 21:40:08",
   "jiuyan_tag_verdict": "边缘",
   "jiuyan_concept_reason": {
    "林业": "泉阳泉：现主业矿泉水，林业是历史业务"
-  }
+  },
+  "jiuyan_category1": "大农业",
+  "jiuyan_concept1": "林业",
+  "jiuyan_category2": "大消费",
+  "jiuyan_concept2": "矿泉水"
  },
  "600191": {
   "business_summary": "主营农副食品加工业",
@@ -59754,13 +59788,15 @@
   "business_summary": "照明电器的研发、生产、销售，同时为客户提供综合照明解决方案。",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "商业航天",
+  "jiuyan_concept": "航天配套",
   "name": "阳光照明",
   "primary_source": "legacy",
   "sector": "照明设备Ⅱ/智能家居/人民币贬值受益/氢能源",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-10-30 21:40:08",
+  "jiuyan_category1": "商业航天",
+  "jiuyan_concept1": "航天配套"
  },
  "600262": {
   "business_summary": "主营专用设备制造业",
@@ -60025,13 +60061,15 @@
   "business_summary": "主营医药制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "医药",
+  "jiuyan_concept": "中药",
   "name": "羚锐制药",
   "primary_source": "legacy",
   "sector": "医药制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-10-30 21:40:08",
+  "jiuyan_category1": "医药",
+  "jiuyan_concept1": "中药"
  },
  "600287": {
   "business_summary": "主营批发业",
@@ -63175,13 +63213,15 @@
   "business_summary": "主营房地产业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "地产",
+  "jiuyan_concept": "新型城镇化",
   "name": "黑牡丹",
   "primary_source": "legacy",
   "sector": "房地产业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-10-30 21:40:08",
+  "jiuyan_category1": "地产",
+  "jiuyan_concept1": "新型城镇化"
  },
  "600511": {
   "business_summary": "主营批发业",
@@ -66526,7 +66566,7 @@
   "primary_source": "legacy",
   "sector": "研究和试验发展",
   "sector_type": "legacy",
-  "updated_at": "2026-10-25 18:00:00",
+  "updated_at": "2026-10-30 21:40:08",
   "jiuyan_concept_note": "2026-10-19 医药二级概念整合：剥AI4S前缀/删公司名标签/同义词收编；⚠️ 仿制药CRO（公告明确不涉创新药研发），2026-06实控人变更金华国资委",
   "jiuyan_concept_desc": {
    "临床CRO": "创新药的「临床试验外包」：新药进入人体试验阶段（I/II/III期）后的运营服务——招募受试者、数据管理、统计分析、注册申报。看得懂的一句话：帮药企「管临床试验」的公司。人力密集型，看在手订单和人员扩张。",
@@ -66539,7 +66579,11 @@
    "临床前CRO": "主营：新药早期发现与筛选、药物CMC开发、临床试验、注册申报、BE/PK生物样品分析及药学检测服务、临床SMO；与本标签一致"
   },
   "jiuyan_category1": "创新药",
-  "jiuyan_concept1": "临床CRO"
+  "jiuyan_concept1": "临床CRO",
+  "jiuyan_category2": "医药",
+  "jiuyan_concept2": "临床CRO",
+  "jiuyan_category": "创新药|医药",
+  "jiuyan_concept": "临床CRO|临床CRO"
  },
  "600722": {
   "business_summary": "主营化学原料和化学制品制造业",
@@ -77358,13 +77402,15 @@
   "business_summary": "主营酒、饮料和精制茶制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "大消费",
+  "jiuyan_concept": "白酒",
   "name": "迎驾贡酒",
   "primary_source": "legacy",
   "sector": "酒、饮料和精制茶制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-10-30 21:40:08",
+  "jiuyan_category1": "大消费",
+  "jiuyan_concept1": "白酒"
  },
  "603199": {
   "business_summary": "主营公共设施管理业",
@@ -77998,13 +78044,15 @@
   "business_summary": "主营医药电商",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "医药",
+  "jiuyan_concept": "连锁药房",
   "name": "大参林",
   "primary_source": "legacy",
   "sector": "医药电商/医疗器械概念",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-10-30 21:40:08",
+  "jiuyan_category1": "医药",
+  "jiuyan_concept1": "连锁药房"
  },
  "603235": {
   "business_summary": "主营食品制造业",
@@ -78581,13 +78629,15 @@
   "business_summary": "主营专用设备制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "机器人",
+  "jiuyan_concept": "人形机器人",
   "name": "天元智能",
   "primary_source": "legacy",
   "sector": "专用设备制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-10-30 21:40:08",
+  "jiuyan_category1": "机器人",
+  "jiuyan_concept1": "人形机器人"
  },
  "603275": {
   "business_summary": "主营仪器仪表制造业",
@@ -81569,13 +81619,15 @@
   "business_summary": "主营纺织服装、服饰业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "大消费",
+  "jiuyan_concept": "服装IP",
   "name": "地素时尚",
   "primary_source": "legacy",
   "sector": "纺织服装、服饰业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-10-30 21:40:08",
+  "jiuyan_category1": "大消费",
+  "jiuyan_concept1": "服装IP"
  },
  "603588": {
   "business_summary": "主营生态保护和环境治理业",
@@ -83081,18 +83133,22 @@
   "business_summary": "公司拥有内导体、屏蔽材料、护套材料、包装材料一体化生产优势",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "消费电子",
-  "jiuyan_concept": "光学显示",
+  "jiuyan_category": "消费电子|商业航天",
+  "jiuyan_concept": "光学显示|卫星通信",
   "name": "盛洋科技",
   "primary_source": "legacy",
   "sector": "光学光电子/卫星导航/商业航天/5G",
   "sector_type": "legacy",
-  "updated_at": "2026-10-25 15:00:00",
+  "updated_at": "2026-10-30 21:40:08",
   "jiuyan_tag_evidence": "text",
   "jiuyan_tag_verdict": "核心",
   "jiuyan_concept_reason": {
    "光学显示": "主营：多种射频电缆业务；与本标签一致"
-  }
+  },
+  "jiuyan_category1": "消费电子",
+  "jiuyan_concept1": "光学显示",
+  "jiuyan_category2": "商业航天",
+  "jiuyan_concept2": "卫星通信"
  },
  "603706": {
   "business_summary": "主营燃气生产和供应业",
@@ -86932,13 +86988,15 @@
   "business_summary": "主营燃气生产和供应业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "化工",
+  "jiuyan_concept": "天然气",
   "name": "洪通燃气",
   "primary_source": "legacy",
   "sector": "燃气生产和供应业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-10-30 21:40:08",
+  "jiuyan_category1": "化工",
+  "jiuyan_concept1": "天然气"
  },
  "605177": {
   "business_summary": "主营医药制造业",
@@ -89230,14 +89288,18 @@
   "business_summary": "主营软件和信息技术服务业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "机器人",
-  "jiuyan_concept": "芯片",
+  "jiuyan_category": "机器人|半导体",
+  "jiuyan_concept": "芯片|模拟芯片",
   "name": "必易微",
   "primary_source": "legacy",
   "sector": "软件和信息技术服务业",
   "sector_type": "legacy",
-  "updated_at": "2026-10-28 15:42:32",
-  "jiuyan_tag_source": "owner 2026-10-28 午盘涨停复盘简图"
+  "updated_at": "2026-10-30 21:40:08",
+  "jiuyan_tag_source": "owner 2026-10-28 午盘涨停复盘简图",
+  "jiuyan_category1": "机器人",
+  "jiuyan_concept1": "芯片",
+  "jiuyan_category2": "半导体",
+  "jiuyan_concept2": "模拟芯片"
  },
  "688046": {
   "business_summary": "主营研究和试验发展",

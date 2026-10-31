@@ -770,3 +770,13 @@ body.twin-winmode #turnoverWin {
 /* 原生窗口里「脱离」按钮没有意义（已经在独立窗口里了）；标题栏也不该显示"可拖"手势 */
 body.twin-winmode #turnoverWinDetachBtn { display: none; }
 body.twin-winmode #turnoverWinTitle { cursor: default; }
+
+/* ===== 重点关注标记（2026-10-31 owner）=====
+   五个表每行一颗星：点击变**紫色**（#8250df）= 重点盯的票，再点取消。
+   刻意用紫色：红=涨/风险、绿=跌/通过、橙=盯紧、黄=预警，都不与它撞色。
+   行首再加一条 3px 紫条，扫表时一眼能看到（不覆盖任何行背景色）。 */
+.focus-star { background: none; border: none; cursor: pointer; padding: 0 2px;
+  font-size: 13px; line-height: 1; color: var(--text-faint); vertical-align: baseline; }
+.focus-star:hover { color: var(--accent); }
+.focus-star.on { color: #8250df; text-shadow: 0 0 6px rgba(130, 80, 223, .45); }
+tr.focus-row td:first-child { box-shadow: inset 3px 0 0 #8250df; }

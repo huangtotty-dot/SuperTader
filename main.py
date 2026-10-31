@@ -1589,6 +1589,8 @@ def scan_once():
             _maybe_run_freshness_patrol(now)           # 2026-10-12: 15:40 后产物新鲜度巡检 → 飞书（零网络）
         with _ScanStage("⑨热度EOD"):
             _maybe_run_sentiment_eod(now)              # 2026-10-19: 15:30 后当日 EOD 落库（跨日 S 图当天更新）
+        with _ScanStage("⑩通达信日线校准"):
+            _maybe_run_tdx_calibrate(now)              # 2026-10-30: 15:40 后用通达信 .day 校准日线缓存
 
         if now.weekday() >= 5 or t < dtime(9, 30) or (dtime(11, 30) < t < dtime(13, 0)) or t > dtime(15, 0):
             if _last_idle_log is None or (_now() - _last_idle_log).total_seconds() >= PARAMS["idle_log_minutes"] * 60:
@@ -2494,6 +2496,8 @@ def _maybe_backfill_sentiment():
 
 # 2026-10-19：收盘后 EOD 热度/regime 当日落库（修「跨日 S 图停在上一交易日」）
 _sentiment_eod_state = {"date": "", "attempts": 0, "next_try": 0.0}
+# 2026-10-30：通达信日线校准的「当日已跑」标记（进程内；跨进程标记在 core.tdx_calibrate）
+_tdx_cal_state = {"date": ""}
 
 
 def _regime_state_last_date() -> str:
@@ -2506,6 +2510,53 @@ def _regime_state_last_date() -> str:
         return str((h[-1] or {}).get("date") or "") if h else ""
     except Exception:
         return ""
+
+
+def _maybe_run_tdx_calibrate(now: datetime) -> None:
+    """15:40 后交易日每日一次：用**通达信本地 `.day`** 校准日线缓存（2026-10-30 owner）。
+
+    背景：301079 邵阳液压缓存末行停在 10-26 而通达信/同花顺已到 10-30 —— 中间四根被画成
+    "一根从 26 跳到 36.79 的巨柱"；另有 000006 这类**盘中快照根**（量只有真实的 10%）
+    一直没被真实收盘覆盖（腾讯 fqkline 被 WAF 挡、GM 不可达时尤其明显）。
+    `core.tdx_calibrate` 会按"锚点（最后一天量对得上的重叠日）之前只读、之后按通达信重写"修复；
+    跨进程标记保证一天只跑一次。找不到通达信目录时静默跳过。
+    """
+    try:
+        from core import tdx_calibrate as _tc
+        _st = _tdx_cal_state
+        today = now.strftime("%Y-%m-%d")
+        if _st.get("date") == today:
+            return
+        if now.weekday() >= 5 or now.strftime("%H:%M") < "15:40":
+            return
+        _st["date"] = today
+
+        def _work():
+            try:
+                rep = _tc.run_daily_once(fix=True, now=now)
+                if rep is None:
+                    return
+                if rep.get("missing_home"):
+                    log.info("通达信日线校准：未找到 vipdoc，跳过")
+                    return
+                log.info("通达信日线校准：%s（落后 %d 只 / 比率异常 %d 只 / 历史偏短 %d 只）",
+                         rep.get("summary"), len(rep.get("behind") or []),
+                         len(rep.get("ratio_bad") or []), len(rep.get("short") or []))
+                # 2026-10-30：历史偏短的票用长窗口补（每天限量，约 13 天补齐 5147 只）。
+                # 数据源不可用（腾讯 fqkline 被 WAF、GM 不可达）时 `deepen_daily` 会先探针后直接跳过。
+                short = sorted((rep.get("short") or []),
+                               key=lambda r: -(int(r.get("tdx_rows") or 0)
+                                               - int(r.get("cache_rows") or 0)))
+                if short:
+                    from core import chart_cache as _cc
+                    st = _cc.deepen_daily([r["code"] for r in short], limit=600, days=800, now=now)
+                    log.info("日线补长历史：%s", st)
+            except Exception as e:
+                log.warning("通达信日线校准失败：%s", e)
+
+        _threading.Thread(target=_work, daemon=True, name="tdx-calibrate").start()
+    except Exception:
+        pass
 
 
 def _maybe_run_sentiment_eod(now: datetime) -> None:

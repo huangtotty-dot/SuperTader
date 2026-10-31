@@ -282,6 +282,132 @@ async function loadAndRender(date, silent) {
   }
 }
 
+/* ===== 重点关注标记（2026-10-31 owner）=====
+   五个表（持仓30min体检/建仓信号扫描/异常监控池/避风港湾/选股猎手）每行一颗星：
+   点击变**紫色**=我重点盯的票，再点取消。后端存 t_io/state/focus_stocks.json
+   （`toggle_focus`/`load_focus_codes`），跨重启有效。
+   ⚠️ 只是人工标记：不参与判定/排序/推送；颜色刻意用紫色 `#8250df`，与
+   红（涨/风险）、绿（跌/通过）、橙（盯紧）、黄（预警）都不撞色。 */
+let FOCUS_SET = new Set();
+function focusStarHtml(code, cls) {
+  const c = String(code || "").split("_")[0];
+  if (!c) return "";
+  const on = FOCUS_SET.has(c);
+  const tip = on ? "已标记重点关注（点击取消）" : "标记为重点关注";
+  return `<button class="focus-star${on ? " on" : ""}${cls ? " " + cls : ""}" data-focus-code="${esc(c)}"`
+    + ` onclick="event.stopPropagation();toggleFocus(this)"`
+    + ` ondblclick="event.stopPropagation()" title="${tip}">${on ? "★" : "☆"}</button>`;
+}
+/* 全池轮巡：周线 MACD 柱子翻红 → 自动标紫（2026-10-31 owner）
+   按钮在顶栏（#wmScanBtn）。后端 `start_weekly_macd_scan` 后台跑（4 线程、零网络、
+   只读本地日线缓存），前端每 1.2s 轮询 `weekly_macd_status` 直到 running=false，
+   然后重拉关注表 → 星标自动变紫。只加不删：人工标记不会被清掉。 */
+let _wmTimer = null;
+/* 上次轮巡摘要（后端落盘 weekly_macd_scan.json）——启动时拉到按钮 title 里，
+   重启 GUI 后也能看到"上次什么时候跑的、标了几只"。 */
+async function loadWeeklyMacdLastStatus() {
+  const btn = document.getElementById("wmScanBtn");
+  if (!btn) return;
+  try {
+    const st = await apiCall("weekly_macd_status");
+    const last = st && st.last;
+    if (!last || !last.finished_at) return;
+    if (btn.dataset.baseTip === undefined) btn.dataset.baseTip = btn.title || "";
+    const n = (last.hits || []).length;
+    btn.title = `上次轮巡 ${last.finished_at}：扫 ${Number(last.total || 0)} 只，新标紫 ${n} 只`
+      + (last.error ? `（出错：${last.error}）` : "")
+      + (btn.dataset.baseTip ? String.fromCharCode(10) + btn.dataset.baseTip : "");
+  } catch (e) { /* 旧进程没有该接口：忽略 */ }
+}
+async function runWeeklyMacdScan() {
+  const btn = document.getElementById("wmScanBtn");
+  if (!btn || btn.dataset.running === "1") return;
+  if (typeof _apiReady === "function" && !_apiReady()) {
+    statusEl("后端未就绪，稍后再试", "err");
+    return;
+  }
+  btn.dataset.running = "1";
+  const label = btn.textContent;
+  try {
+    const r = await apiCall("start_weekly_macd_scan");
+    if (!r) throw new Error("无返回");
+    if (r.running) { statusEl("轮巡已在进行中，继续等结果…"); }
+    else if (r.started === false) throw new Error(r.error || "未启动");
+    const total = Number(r.total || 0);
+    statusEl(`周线MACD轮巡中… 0/${total}`);
+    const poll = async () => {
+      let st = null;
+      try { st = await apiCall("weekly_macd_status"); } catch (e) { /* 下一跳重试 */ }
+      if (!st) {
+        statusEl("轮巡状态读取失败（可稍后重试）", "err");
+        delete btn.dataset.running; btn.textContent = label;
+        return;
+      }
+      const done = Number(st.done || 0), tot = Number(st.total || 0);
+      btn.textContent = `🟣 轮巡中 ${done}/${tot}`;
+      statusEl(`周线MACD轮巡中… ${done}/${tot}`);
+      if (st.running) { _wmTimer = setTimeout(poll, 1200); return; }
+      delete btn.dataset.running; btn.textContent = label;
+      await loadFocusCodes();
+      syncFocusStars();
+      if (st.error) { statusEl("轮巡出错：" + st.error, "err"); return; }
+      const added = (st.hits || []), matched = (st.matched || []);
+      if (st.finished_at) {
+        if (btn.dataset.baseTip === undefined) btn.dataset.baseTip = btn.getAttribute("title") || "";
+        const _base = btn.dataset.baseTip ? String.fromCharCode(10) + btn.dataset.baseTip : "";
+        btn.title = `上次轮巡 ${st.finished_at}：扫 ${Number(st.total || 0)} 只，`
+          + `新标紫 ${added.length} 只` + _base;
+      }
+      if (!added.length && !matched.length) statusEl("轮巡完成：没有周线 MACD 柱子翻红的票", "ok");
+      else statusEl(`轮巡完成：新标紫 ${added.length} 只`
+        + (matched.length > added.length ? `（命中 ${matched.length}，其余已在关注）` : ""), "ok");
+    };
+    _wmTimer = setTimeout(poll, 800);
+  } catch (e) {
+    delete btn.dataset.running; btn.textContent = label;
+    statusEl("轮巡失败：" + (e && e.message || e), "err");
+  }
+}
+
+async function loadFocusCodes() {
+  try {
+    const r = await apiCall("load_focus_codes");
+    FOCUS_SET = new Set((r && r.codes) || []);
+    syncFocusStars();
+  } catch (e) { /* 桥未就绪：用空集，星标先按未标记渲染 */ }
+}
+function syncFocusStars() {
+  document.querySelectorAll("button.focus-star[data-focus-code]").forEach(btn => {
+    const on = FOCUS_SET.has(btn.getAttribute("data-focus-code"));
+    btn.classList.toggle("on", on);
+    btn.textContent = on ? "★" : "☆";
+    btn.title = on ? "已标记重点关注（点击取消）" : "标记为重点关注";
+    const tr = btn.closest("tr");
+    if (tr) tr.classList.toggle("focus-row", on);
+  });
+}
+async function toggleFocus(btn) {
+  const code = btn && btn.getAttribute("data-focus-code");
+  if (!code) return;
+  const was = FOCUS_SET.has(code);
+  // 先乐观更新（点击立刻变紫/变灰），失败再回滚
+  if (was) FOCUS_SET.delete(code); else FOCUS_SET.add(code);
+  syncFocusStars();
+  try {
+    const r = await apiCall("toggle_focus", code);
+    if (r && Array.isArray(r.codes)) {
+      FOCUS_SET = new Set(r.codes);
+      syncFocusStars();
+    } else if (r && r.error) {
+      throw new Error(r.error);
+    }
+  } catch (e) {
+    if (was) FOCUS_SET.add(code); else FOCUS_SET.delete(code);
+    syncFocusStars();
+    statusEl("重点关注标记失败：" + (e && e.message || e), true);
+  }
+}
+
 function todayStr() {
   const d = new Date();
   const p = n => String(n).padStart(2, "0");
@@ -3529,7 +3655,7 @@ function renderAbnormalPool(d) {
       : (_above5 === false) ? "background:rgba(248,81,73,.12);" : "";
     return `<tr ondblclick="openStockChart('${esc(r.code)}','${esc(r.name)}')" style="cursor:pointer;${rowBg}"
         title="双击看K线${r.added_at ? " · 加入于 " + esc(r.added_at) : ""}">
-      <td>${esc(r.name || "")} <span class="mono cell-dim">${esc(r.code || "")}</span></td>
+      <td>${focusStarHtml(r.code || "")}${esc(r.name || "")} <span class="mono cell-dim">${esc(r.code || "")}</span></td>
       <td>${verdictBadge(r.verdict)}</td>
       <td class="num"><b>${r.composite_score != null ? r.composite_score : "—"}</b></td>
       <td class="num"><b>${metTxt}</b></td>
@@ -3718,7 +3844,7 @@ function renderShelterPool(d) {
       : (_above5 === false) ? "background:rgba(248,81,73,.12);" : "";
     return `<tr ondblclick="openStockChart('${esc(r.code)}','${esc(r.name)}')" style="cursor:pointer;${rowBg}"
         title="双击看K线${r.added_at ? " · 加入于 " + esc(r.added_at) : ""}">
-      <td>${esc(r.name || "")} <span class="mono cell-dim">${esc(r.code || "")}</span></td>
+      <td>${focusStarHtml(r.code || "")}${esc(r.name || "")} <span class="mono cell-dim">${esc(r.code || "")}</span></td>
       <td>${verdictBadge(r.verdict)}</td>
       <td class="num"><b>${r.composite_score != null ? r.composite_score : "—"}</b></td>
       <td class="num"><b>${metTxt}</b></td>
@@ -3957,7 +4083,7 @@ function renderPB(pb) {
     const stCell = structCellHtml(r.structure);
     return `
       <tr id="pb-row-${esc(r.code || '')}" ondblclick="openStockChart('${esc(r.code||'')}','${esc(r.name||r.code||'')}')" style="cursor:pointer;${_scoreBg}${isStale ? "opacity:.45;" : ""}" title="双击看K线${isStale ? "（数据陈旧，距今超过10分钟）" : ""}">
-        <td>${esc(r.name || "")} <span class="mono cell-dim">${esc(r.code || "")}</span>
+        <td>${focusStarHtml(r.code || "")}${esc(r.name || "")} <span class="mono cell-dim">${esc(r.code || "")}</span>
           ${monitorBadge}${chBadge}${apBadge}${icBadge}${vetoBadge}${r.in_holdings ? `<span class="badge hold">持仓</span>` : ""}${errTxt}${blockLine}</td>
         <td style="text-align:center">${poolBadge}</td>
         <td class="num">${r.mktcap != null ? hunterMktcapHtml({ mktcap: r.mktcap }) : '<span class="cell-dim">—</span>'}</td>
@@ -9129,7 +9255,7 @@ function renderHunter(h) {
         : '<span class="cell-dim">—</span>';
       return `<tr class="h-expand-row" style="${_rowBg}" ondblclick="openStockChart('${esc(s.code)}','${esc(s.name)}')">
         <td class="mono cell-dim" title="双击看技术分析">${esc(s.code)}</td>
-        <td title="双击看技术分析">${esc(s.name)}${(() => {
+        <td title="双击看技术分析">${focusStarHtml(s.code)}${esc(s.name)}${(() => {
           const tv = tagVerdicts[s.code];
           if (!tv) return "";
           const tip = `标签相关度：${tv[0]}${tv[1] ? "｜" + tv[1] : ""}`;
@@ -9583,7 +9709,7 @@ function renderOB(ob) {
     const _obBg = ((s.tags || []).some(t => (t.label || "") === "破5日线"))
       ? "background:rgba(248,81,73,.10);" : "";
     return `<tr ondblclick="openStockChart('${esc(s.code)}','${esc(s.name)}')" style="cursor:pointer;${_obBg}" title="双击看K线">
-      <td>${esc(s.name)} <span class="mono cell-dim">${esc(s.code)}</span></td>
+      <td>${focusStarHtml(s.code)}${esc(s.name)} <span class="mono cell-dim">${esc(s.code)}</span></td>
       <td class="num" data-obcode="${esc(s.code)}">${fmt(s.price, 2)}</td>
       <td class="num" data-obmkt="${esc(s.code)}" title="总市值（亿元，随行情 10s 刷新）"><span class="cell-dim">—</span></td>
       <td title="30min 三层状态机趋势${s.trend_src === 'daily' ? '（30min不可用，已回退日线）' : ''}">${trendTxt}${trendSrc}</td>
@@ -10497,6 +10623,10 @@ async function init() {
   // 首先获取 DOM 元素（此时 DOM 已完全加载）
   // 2026-10-20：启动标记（0ms）写进慢调用日志 ⇒ 能确认 WebView2 是否加载了新版 app.js
   try { window.pywebview.api.report_slow_call("app_boot_20261020m", 0); } catch (e) { /* 静默 */ }
+  // 2026-10-31：重点关注标记（紫色星）——启动先拉一次，五个表的星标按它渲染；
+  // 拉不到就用空集（星标显示未标记，不影响任何其它功能）。
+  loadFocusCodes();
+  loadWeeklyMacdLastStatus();
   dateSelect = document.getElementById("dateSelect");
   refreshBtn = document.getElementById("refreshBtn");
   autoPoll = document.getElementById("autoPoll");

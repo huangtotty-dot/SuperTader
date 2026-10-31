@@ -2016,6 +2016,116 @@ def _build_m30_light(df):
         return {}
 
 
+# ---- 重点关注标记（2026-10-31）：t_io/state/focus_stocks.json ----
+_FOCUS_FP = BASE / "t_io" / "state" / "focus_stocks.json"
+_FOCUS_LOCK = threading.Lock()
+
+
+def _focus_load() -> dict:
+    """读标记表；损坏/缺失 → 空表（绝不抛，别让一个坏 JSON 把五个表打挂）。"""
+    try:
+        d = json.loads(_FOCUS_FP.read_text(encoding="utf-8"))
+        if isinstance(d, dict) and isinstance(d.get("codes"), dict):
+            return d
+    except Exception:
+        pass
+    return {"codes": {}}
+
+
+def _focus_save(d: dict) -> None:
+    """原子写（tmp + replace）；失败静默（标记丢一次不影响交易）。"""
+    try:
+        _FOCUS_FP.parent.mkdir(parents=True, exist_ok=True)
+        tmp = _FOCUS_FP.with_suffix(".json.tmp")
+        tmp.write_text(json.dumps(d, ensure_ascii=False, indent=1), encoding="utf-8")
+        os.replace(tmp, _FOCUS_FP)
+    except Exception:
+        pass
+
+
+# ---- 周线 MACD 柱子翻红 → 自动标重点关注（2026-10-31 owner）----
+# 「轮巡所有板块一遍」：遍历韭研池（watchlist 里有 jiuyan_category 的票），对每只算
+# **周线 MACD(12,26,9)**；若**上一周柱子 ≤0 且本周 >0**（翻红）⇒ 自动写进 focus_stocks.json。
+# 只看本地日线缓存（前复权），零网络；结果与人工标记共存，不覆盖、不取消。
+_WM_SCAN = {"running": False, "done": 0, "total": 0, "hits": [], "matched": [],
+            "started_at": None, "finished_at": None, "error": ""}
+_WM_LOCK = threading.Lock()
+# 2026-10-31：**上一次轮巡的结果落盘**（进程重启后还能看到"上次什么时候跑的、标了几只"）。
+# 注意：命中本身早已写进 focus_stocks.json（紫色标记是持久的）；这里只存"这次扫描的摘要"。
+_WM_STATE_FP = BASE / "t_io" / "state" / "weekly_macd_scan.json"
+_WM_LAST = {}
+
+
+def _wm_load_state() -> dict:
+    try:
+        d = json.loads(_WM_STATE_FP.read_text(encoding="utf-8"))
+        return d if isinstance(d, dict) else {}
+    except Exception:
+        return {}
+
+
+def _wm_save_state(d: dict) -> None:
+    try:
+        _WM_STATE_FP.parent.mkdir(parents=True, exist_ok=True)
+        tmp = _WM_STATE_FP.with_suffix(".json.tmp")
+        tmp.write_text(json.dumps(d, ensure_ascii=False, indent=1), encoding="utf-8")
+        os.replace(tmp, _WM_STATE_FP)
+    except Exception:
+        pass
+
+
+_WM_LAST = _wm_load_state()
+
+
+def weekly_macd_hist(closes):
+    """收盘序列 → 周 MACD 柱子（hist = DIF − DEA）。调用方先按**周**取最后一个收盘。
+
+    ⚠️ 与 A 股软件同口径：EMA12/EMA26 → DIF；EMA9(DIF) → DEA；柱子 = DIF − DEA。
+    返回 numpy 数组；不足 35 周返回 None（EMA26+DEA9 的预热不够，不硬算）。
+    """
+    import numpy as _np
+    c = _np.asarray([float(x) for x in (closes or []) if x == x], dtype=float)
+    if len(c) < 35:
+        return None
+    a12, a26, a9 = 2.0 / 13.0, 2.0 / 27.0, 2.0 / 10.0
+    e12 = e26 = c[0]
+    dif = _np.empty(len(c))
+    for i, v in enumerate(c):
+        e12 = a12 * v + (1 - a12) * e12
+        e26 = a26 * v + (1 - a26) * e26
+        dif[i] = e12 - e26
+    dea = dif[0]
+    hist = _np.empty(len(c))
+    for i, v in enumerate(dif):
+        dea = a9 * v + (1 - a9) * dea
+        hist[i] = v - dea
+    return hist
+
+
+def weekly_macd_turned_red(closes):
+    """周一收盘序列 → True=本周柱子翻红（上周 ≤0 < 本周）；数据不足 → None。"""
+    h = weekly_macd_hist(closes)
+    if h is None or len(h) < 2:
+        return None
+    return bool(h[-1] > 0 and h[-2] <= 0)
+
+
+def _weekly_closes_from_rows(rows):
+    """日线 rows → 周收盘序列（按周五收口；含当周未走完的那根）。"""
+    import pandas as _pd
+    if not rows:
+        return []
+    df = _pd.DataFrame({"date": _pd.to_datetime([str(r.get("date"))[:10] for r in rows],
+                                                errors="coerce"),
+                        "close": _pd.to_numeric([r.get("close") for r in rows],
+                                                errors="coerce")})
+    df = df.dropna().sort_values("date")
+    if df.empty:
+        return []
+    w = df.set_index("date")["close"].resample("W-FRI").last().dropna()
+    return [float(x) for x in w.tolist()]
+
+
 def _m30_snap_put(key, snap):
     """写体检 30min 快照缓存：**只许更新，不许降级**（2026-10-30）。
 
@@ -12038,6 +12148,122 @@ class Api:
                        "counts": {"total": len(rows)},
                        "cond_labels": COND_LABELS,
                        "note": note})
+
+    # ---------- 重点关注标记（2026-10-31 owner）----------
+    # 五个表（持仓 30min 体检 / 建仓信号扫描 / 异常监控池 / 避风港湾 / 选股猎手）每行一个
+    # 星标按钮，点一下变紫、再点取消。**只是人工标记**，不参与任何判定/排序/推送。
+    # 存 `t_io/state/focus_stocks.json`（跨进程、跨重启）。
+    def load_focus_codes(self):
+        """重点关注代码表（前端启动时拉一次；星标按它渲染）。"""
+        with _FOCUS_LOCK:
+            d = _focus_load()
+        return _clean({"codes": sorted((d.get("codes") or {}).keys()),
+                       "updated_at": d.get("updated_at") or ""})
+
+    def toggle_focus(self, code):
+        """切换某只票的重点关注标记 → {code, on, codes}。幂等、线程安全、原子落盘。"""
+        c = str(code).split("_")[0][:6]
+        if not c:
+            return _clean({"error": "empty code"})
+        with _FOCUS_LOCK:
+            d = _focus_load()
+            codes = d.setdefault("codes", {})
+            if c in codes:
+                codes.pop(c, None)
+                on = False
+            else:
+                codes[c] = {"at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
+                on = True
+            d["updated_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            _focus_save(d)
+        return _clean({"code": c, "on": on, "codes": sorted(codes.keys())})
+
+    # ---------- 周线 MACD 翻红 · 全池轮巡（2026-10-31 owner）----------
+    def start_weekly_macd_scan(self, codes=None):
+        """一键轮巡：所有（韭研）板块的票算周线 MACD，翻红的自动标重点（紫色）。
+
+        只加不删；已在关注里的票跳过（不重复计数）。**后台线程**跑，接口立即返回；
+        前端轮询 `weekly_macd_status()` 拿进度/结果。零网络（只读本地日线缓存）。
+        """
+        with _WM_LOCK:
+            if _WM_SCAN["running"]:
+                return _clean({"started": False, "running": True,
+                               "done": _WM_SCAN["done"], "total": _WM_SCAN["total"]})
+            pool = codes
+            if not pool:
+                try:
+                    wl = _load_json(BASE / "stock_hunter" / "watchlist_jiuyan.json", {}) or {}
+                    pool = [c for c, e in wl.items()
+                            if isinstance(e, dict) and str(c)[:1].isdigit()
+                            and (e.get("jiuyan_category") or e.get("jiuyan_category1"))]
+                except Exception:
+                    pool = []
+            pool = [str(c).split("_")[0] for c in dict.fromkeys(pool or [])]
+            _WM_SCAN.update({"running": True, "done": 0, "total": len(pool), "hits": [],
+                             "started_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                             "finished_at": None, "error": ""})
+        if not pool:
+            with _WM_LOCK:
+                _WM_SCAN["running"] = False
+            return _clean({"started": False, "total": 0, "error": "池为空"})
+
+        def _one(c):
+            try:
+                fp = BASE / "t_io" / "cache" / "daily_kline" / f"{c}.json"
+                rows = (json.loads(fp.read_text(encoding="utf-8")) or {}).get("rows") or []
+                closes = _weekly_closes_from_rows(rows)
+                return c if weekly_macd_turned_red(closes) else None
+            except Exception:
+                return None
+            finally:
+                with _WM_LOCK:
+                    _WM_SCAN["done"] = int(_WM_SCAN["done"]) + 1
+
+        def _work():
+            hits = []
+            try:
+                from concurrent.futures import ThreadPoolExecutor
+                with ThreadPoolExecutor(max_workers=4, thread_name_prefix="wm-scan") as ex:
+                    for r in ex.map(_one, pool):
+                        if r:
+                            hits.append(r)
+                # 一次性落盘（只加不删；已在标记里的跳过）
+                with _FOCUS_LOCK:
+                    d = _focus_load()
+                    codes_map = d.setdefault("codes", {})
+                    added = []
+                    for c in hits:
+                        if c not in codes_map:
+                            codes_map[c] = {"at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                                            "src": "weekly_macd"}
+                            added.append(c)
+                    d["updated_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    _focus_save(d)
+                with _WM_LOCK:
+                    _WM_SCAN["hits"] = sorted(added)
+                    _WM_SCAN["matched"] = sorted(hits)
+            except Exception as e:
+                with _WM_LOCK:
+                    _WM_SCAN["error"] = f"{type(e).__name__}: {e}"
+            finally:
+                with _WM_LOCK:
+                    _WM_SCAN["running"] = False
+                    _WM_SCAN["finished_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    _last = {k: _WM_SCAN[k] for k in ("started_at", "finished_at", "total",
+                                                      "hits", "matched", "error")}
+                global _WM_LAST
+                _WM_LAST = _last
+                _wm_save_state(_last)
+
+        _th.Thread(target=_work, daemon=True, name="weekly-macd-scan").start()
+        return _clean({"started": True, "total": len(pool)})
+
+    def weekly_macd_status(self):
+        """周线 MACD 轮巡进度/结果：{running, done, total, hits(新加紫的), matched, error}。"""
+        with _WM_LOCK:
+            out = dict(_WM_SCAN)
+        out["last"] = _WM_LAST or {}      # 上次轮巡摘要（落盘、跨重启）
+        return _clean(out)
 
     def load_abnormal_pool(self, date=None):
         """异常监控池 → 与「建仓信号扫描」同列的数据（行构造见 `_pool_rows`）。"""
