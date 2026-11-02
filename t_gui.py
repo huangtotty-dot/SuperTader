@@ -2165,6 +2165,59 @@ def _wm_state_of_code(code):
     return val
 
 
+def _weekly_macd_flags_by_date(dates, closes):
+    """日线序列 → **每个交易日**「周线 MACD 柱子是否 >0」（2026-11-01 owner：
+    「板块站上5/20日线」面板里加一条周线 MACD 翻红占比）。
+
+    口径与 `weekly_macd_state()` 完全一致（EMA12/26 → DIF；EMA9(DIF) → DEA；柱子 = DIF−DEA），
+    区别只是**逐日推进**：当周未走完时把当日收盘当作本周临时收盘（等价于
+    `resample("W-FRI").last()` 里最后一组）；跨周时把上一周最后收盘落成一根已完成周线。
+    不足 35 周 → 返回 None（不做判断，与扫描器同一预热门槛）。
+    返回与 `dates` 等长的列表：True/False/None。
+    """
+    import datetime as _dtm
+    a12, a26, a9 = 2.0 / 13.0, 2.0 / 27.0, 2.0 / 10.0
+    e12 = e26 = dea = None
+    prev_week = None
+    prev_close = None
+    weeks = 0
+    flags = []
+    for d, c in zip(dates, closes):
+        try:
+            _x = float(c)
+        except Exception:
+            flags.append(None)
+            continue
+        try:
+            _d = _dtm.datetime.strptime(str(d)[:10], "%Y-%m-%d")
+            wk = (_d.isocalendar()[0], _d.isocalendar()[1])
+        except Exception:
+            flags.append(None)
+            continue
+        if prev_week is not None and wk != prev_week:
+            # 上一周结束：把上周末收盘落成一根完整周线并推进 EMA
+            if e12 is None:
+                e12 = e26 = float(prev_close)
+                dea = 0.0
+            else:
+                e12 = a12 * prev_close + (1 - a12) * e12
+                e26 = a26 * prev_close + (1 - a26) * e26
+                _dif = e12 - e26
+                dea = _dif if dea is None else a9 * _dif + (1 - a9) * dea
+            weeks += 1
+        prev_week = wk
+        prev_close = _x
+        if e12 is None or weeks < 34:
+            flags.append(None)
+            continue
+        _e12 = a12 * _x + (1 - a12) * e12
+        _e26 = a26 * _x + (1 - a26) * e26
+        _dif = _e12 - _e26
+        _dea = a9 * _dif + (1 - a9) * dea
+        flags.append(bool(_dif - _dea > 0))
+    return flags
+
+
 def weekly_macd_match_state(st, mode: str = "red", recent_weeks: int = 4) -> bool:
     """按 `weekly_macd_state()` 的结果判是否命中（轮巡与单测共用同一口径）。"""
     if not st:
@@ -2826,7 +2879,7 @@ _SECTOR_MA_END_RUNNING: set = set()
 _SECTOR_MA_END_MAX = 12
 # 缓存口径版本：**改样本口径/板块来源时 +1**（否则旧磁盘档会被当新鲜直接回放）。
 # 2（2026-10-21）：样本容忍 5 个自然日滞后 + 缓存键加板块指纹 board_fp。
-_SECTOR_MA_SCHEMA = 4   # v4: 板块来源剔除「北交所/央企」机构标签（2026-10-25）
+_SECTOR_MA_SCHEMA = 5   # v5: 加周线 MACD 红柱占比（pct_wm/n_wm，2026-11-01）
 
 
 def _watchlist_fp():
@@ -2865,7 +2918,7 @@ def _compute_sector_ma_breadth(days=_SECTOR_MA_MAX_DAYS, end=None):
     with _SECTOR_MA_LOCK:
         _SECTOR_MA_STATE.update({"done": 0, "total": total, "started": _time_mod.time()})
     # sec -> date -> [a5, a20, n, aconv, n60]（n60 = 当日**有 60 根以上历史**的只数，粘合的分母）
-    counts = defaultdict(lambda: defaultdict(lambda: [0, 0, 0, 0, 0]))
+    counts = defaultdict(lambda: defaultdict(lambda: [0, 0, 0, 0, 0, 0, 0]))
     scanned = 0
 
     def _one(p):
@@ -2900,6 +2953,7 @@ def _compute_sector_ma_breadth(days=_SECTOR_MA_MAX_DAYS, end=None):
         else:
             _carry = False
         n = len(closes)
+        _wflags = _weekly_macd_flags_by_date(dates, closes)   # 周线 MACD 红柱（逐日）
         start = max(19, n - days)
         s5 = sum(closes[start - 4:start + 1])
         s20 = sum(closes[start - 19:start + 1])
@@ -2923,7 +2977,8 @@ def _compute_sector_ma_breadth(days=_SECTOR_MA_MAX_DAYS, end=None):
                     _sps = (max(_ms) - min(_ms)) / closes[i] * 100.0
                     # 与「均线粘合」标签同一条规则：五线≤3% **或** 短线(5/10/20)≤2%
                     conv = (_sp5 <= _CONV_THR) or (_sps <= _CONV_THR_S)
-                out.append((dates[i], closes[i] > s5 / 5.0, closes[i] > s20 / 20.0, conv))
+                _wf = _wflags[i] if _wflags else None
+                out.append((dates[i], closes[i] > s5 / 5.0, closes[i] > s20 / 20.0, conv, _wf))
             if i + 1 < n:
                 s5 += closes[i + 1] - closes[i - 4]
                 s20 += closes[i + 1] - closes[i - 19]
@@ -2934,7 +2989,7 @@ def _compute_sector_ma_breadth(days=_SECTOR_MA_MAX_DAYS, end=None):
         # 只有 6 只有今日 bar ⇒ 图上显示"50%（6只）"，看着像坏了。顺延用的是它自己的收盘与均线
         # （停牌股价格本来就不动），不是把"没数据"当成"跌破均线"。
         if _carry and out:
-            out.append((latest, out[-1][1], out[-1][2], out[-1][3]))
+            out.append((latest, out[-1][1], out[-1][2], out[-1][3], out[-1][4]))
         return sec, out
 
     done = 0
@@ -2946,7 +3001,7 @@ def _compute_sector_ma_breadth(days=_SECTOR_MA_MAX_DAYS, end=None):
                 sec, out = res
                 scanned += 1
                 per = counts[sec]
-                for d, a5, a20, conv in out:
+                for d, a5, a20, conv, wf in out:
                     c = per[d]
                     c[2] += 1
                     if a5:
@@ -2957,6 +3012,10 @@ def _compute_sector_ma_breadth(days=_SECTOR_MA_MAX_DAYS, end=None):
                         c[4] += 1                      # n60：有 60 根历史、可判粘合的只数
                         if conv:
                             c[3] += 1
+                    if wf is not None:                 # 周线 MACD（需 ≥35 周历史，分母单独算）
+                        c[6] += 1
+                        if wf:
+                            c[5] += 1
             if done % 200 == 0:
                 with _SECTOR_MA_LOCK:
                     _SECTOR_MA_STATE["done"] = done
@@ -2966,8 +3025,10 @@ def _compute_sector_ma_breadth(days=_SECTOR_MA_MAX_DAYS, end=None):
     sectors = []
     for sec, per in counts.items():
         pts = [{"date": d, "pct5": round(a5 / t * 100, 2), "pct20": round(a20 / t * 100, 2), "n": t,
-                "pct_conv": (round(ac / n60 * 100, 2) if n60 else None), "n60": n60}
-               for d, (a5, a20, t, ac, n60) in sorted(per.items()) if t]
+                "pct_conv": (round(ac / n60 * 100, 2) if n60 else None), "n60": n60,
+                # 2026-11-01：周线 MACD 柱子 >0 的占比（分母=有 ≥35 周历史的只数）
+                "pct_wm": (round(wr / wn * 100, 2) if wn else None), "n_wm": wn}
+               for d, (a5, a20, t, ac, n60, wr, wn) in sorted(per.items()) if t]
         if pts:
             sectors.append({"name": sec, "points": pts[-days:]})
     rec = {"schema": _SECTOR_MA_SCHEMA,
@@ -3110,6 +3171,7 @@ class Api:
                                                "cold_start_pending": True}),
                     "stage_board": self._load_stage_board(),
                     "portfolio_config": self.load_portfolio_config(),
+                    "state_revision": self.state_revision(),
                     "report_md": "", "name_map": {},
                 })
                 return _clean(out)
@@ -3144,6 +3206,9 @@ class Api:
         out["stage_board"] = self._load_stage_board()
 
         out["portfolio_config"] = self.load_portfolio_config()
+        # 2026-11-02：文件版本指纹（holdings/accounts/ledger 的 mtime+size）——
+        # 前端比对后只重拉受影响的面板（仓位管理器 / 图表分析），不必整页重载。
+        out["state_revision"] = self.state_revision()
         out["name_map"] = self._build_name_map(
             out["sig_stat"], out["position_builder"], out["positions"]["current"]
         )
@@ -10565,6 +10630,8 @@ class Api:
             secs.append({"name": s.get("name"), "points": pts,
                          "last5": pts[-1].get("pct5"), "last20": pts[-1].get("pct20"),
                          "last_conv": pts[-1].get("pct_conv"),      # 2026-10-23 标题里也显示具体数值
+                         "last_wm": pts[-1].get("pct_wm"),          # 2026-11-01 周线 MACD 红柱占比
+                         "n_wm": pts[-1].get("n_wm"),
                          "n": pts[-1].get("n")})
         secs.sort(key=lambda x: (rank.get(str(x.get("name") or ""), 9999),
                                  str(x.get("name") or "")))
@@ -11085,7 +11152,32 @@ class Api:
         return _clean({
             "accounts": data.get("accounts", {}),
             "realized_loss": data.get("realized_loss", {}),
+            # 2026-11-02：有符号的累计已实现（含已清仓，来自交割单台账）。
+            # 之前这里**只回这两把**，`realized_pnl` 被 `_clean` 之外的白名单直接丢掉
+            # ⇒ 侧栏「已实现」永远走旧口径（只数当前持仓）⇒ 恒为 0。
+            "realized_pnl": data.get("realized_pnl", {}),
+            "updated": data.get("_updated", ""),
         })
+
+    def state_revision(self):
+        """账户/持仓/成交台账的**版本指纹**（mtime_ns + size），供前端判断"要不要重拉面板"。
+
+        2026-11-02 owner：「每次更新的时候要把仓位管理器、图表分析的信息都更新掉」——
+        更新是通过改文件发生的（交割单台账 / holdings_manual / accounts_config），
+        前端只需要一个便宜的指纹，变了就重拉受影响的面板，不用刷新整页。
+        ⚠️ 用 `st_mtime_ns` 而不是秒级 `st_mtime`：同一秒内连写两次且大小相同时，
+        秒级指纹不会变 ⇒ 面板静默不刷新。
+        """
+        out = {}
+        for key, fp in (("holdings", HOLDINGS_MANUAL),
+                        ("accounts", PORTFOLIO),
+                        ("ledger", TRADE_HISTORY_LEDGER)):
+            try:
+                st = fp.stat()
+                out[key] = f"{st.st_mtime_ns}-{st.st_size}"
+            except OSError:
+                out[key] = ""
+        return out
 
     def load_osc_day(self, date=None):
         """每日选股记录（OSC 超跌跳空确认）：盘前候选 → 10:00 三关漏斗 → 选中 + 逐只原因。
@@ -11615,6 +11707,10 @@ class Api:
                 "cost_basis": round(tot_cost, 2),
                 "cash": _cash,
                 "total_assets": round((_cash or 0.0) + tot_mv, 2),
+                # 2026-11-02 owner：「GUI 没有显示当日盈亏」——侧栏自动盘也加一行，
+                # 直接取每日权益序列最后一天的 day_pnl（相对上一快照日的权益差）。
+                "day_pnl": (daily[-1].get("day_pnl") if daily else None),
+                "day_pnl_date": (daily[-1].get("date") if daily else None),
                 "positions_count": len([s for s in stocks if s["open_qty"] > 0]),
             },
             "stocks": stocks,
@@ -11836,10 +11932,30 @@ class Api:
         # 2026-10-10: 手动/自动资金分离——本表行来自 HOLDINGS_MANUAL（手动盘），
         # 分母若含 paper 账户（账户C 国盛掘金仿真=自动盘）会让仓位占比被稀释偏小。
         # 口径同 _reconcile_cash：paper=true 归自动盘，单独汇总为 auto_capital 供展示。
-        total_capital = sum(float(a.get("total_capital") or 0)
-                            for a in accounts.values() if not a.get("paper"))
-        auto_capital = sum(float(a.get("total_capital") or 0)
-                           for a in accounts.values() if a.get("paper"))
+        # 2026-11-02 owner：「总资金是我初始时的资金，现在的资金已经亏损，还要显示现有总资金」
+        #   · 总资金     = 历史投入本金（principal / deposits 之和，不随盈亏漂移）；
+        #   · 现有总资金 = 持仓市值 + 各账户可用（随行情实时）—— **目标配比的分母用它**，
+        #     否则拿本金当分母会把"已亏损"当成"还欠配"，目标股数整体偏大。
+        def _principal_of(a):
+            if not isinstance(a, dict):
+                return 0.0
+            if a.get("principal") is not None:
+                return float(a.get("principal") or 0)
+            deps = a.get("deposits")
+            if isinstance(deps, list) and deps:
+                return sum(float(d.get("amount") or 0) for d in deps if isinstance(d, dict))
+            return float(a.get("total_capital") or 0)   # 都没有才回退旧口径
+
+        manual_accts = [a for a in accounts.values()
+                        if isinstance(a, dict) and not a.get("paper")]
+        total_capital = sum(_principal_of(a) for a in manual_accts)
+        _stale_assets = sum(float(a.get("total_capital") or 0) for a in manual_accts)
+        # available 是否存在决定"现有总资金"能不能算：全仓时可用确实可以是 0，
+        # 但若配置里**根本没有 available 字段**，就只能退回券商快照的 total_capital。
+        _has_avail = any("available" in a for a in manual_accts)
+        _avail = sum(float(a.get("available") or 0) for a in manual_accts)
+        auto_capital = sum(float(a.get("total_capital") or 0) for a in accounts.values()
+                           if isinstance(a, dict) and a.get("paper"))
         cur = _load_json(HOLDINGS_MANUAL, {})
         # 实时价
         px_map = {}
@@ -11883,7 +11999,11 @@ class Api:
                         "cost": (cost_total / total_qty) if total_qty else 0})
         # W33 A3: 归一化/欠配缺口/分批 抽到 config.build_position_gap 共享（避免 GUI/扫描器两处漂移）
         _cost_map = {r["base"]: r["cost"] for r in raw}
-        gap_ctx = config.build_position_gap(total_capital, raw, default_pct) if config else None
+        mkt_now = sum(r["mkt_val"] for r in raw)
+        current_assets = (mkt_now + _avail) if _has_avail else _stale_assets
+        # 目标配比分母：现有总资金（算不出来才退回本金，再不行退回券商快照）
+        target_capital = current_assets or total_capital or _stale_assets
+        gap_ctx = config.build_position_gap(target_capital, raw, default_pct) if config else None
         # 2026-09-14: manual 做T 下线——"可T仓位"列（config.suggest_t_budget → t_suggest/t_ratio/t_amp）删除。
         rows = []
         for r in (gap_ctx["rows"] if gap_ctx else []):
@@ -11892,10 +12012,14 @@ class Api:
             rows.append(row)
         rows.sort(key=lambda x: -x["pct"])
         return _clean({
-            "total_capital": round(total_capital, 0),
+            "total_capital": round(total_capital, 0),        # 历史投入本金（不随盈亏漂移）
+            "current_assets": round(current_assets, 0),     # 现有总资金 = 持仓市值 + 可用
+            # 配置里没有 available 字段时给 None（而不是 0）——"没记录"≠"可用为 0"
+            "available": (round(_avail, 0) if _has_avail else None),
+            "target_capital": round(target_capital, 0),     # 目标配比分母（=现有总资金）
             "auto_capital": round(auto_capital, 0),
             "rows": rows,
-            "sum_mkt": round(sum(r["mkt_val"] for r in rows), 0),
+            "sum_mkt": round(mkt_now, 0),
             "sum_pct": round(sum(r["pct"] for r in rows), 1),
         })
 
@@ -12914,6 +13038,9 @@ class Api:
             # 后端只是「读小文件 + 比对增量」（本征 <5ms），却各付一次 0.5~3s 的桥往返。
             "signals": lambda: self.poll_new_position_signals(_d),
             "buyconfirm": lambda: self.load_buy_confirm_pending(),
+            # 2026-11-02：账户/持仓/交割单台账的文件指纹（3 次 stat，本征微秒级）——
+            # 搭这一拍回来，前端据此只重拉「仓位管理器 / 图表分析」，零额外桥往返。
+            "state_rev": lambda: self.state_revision(),
         }
         out = {}
         ex = ThreadPoolExecutor(max_workers=len(jobs), thread_name_prefix="pollbundle")

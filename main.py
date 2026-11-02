@@ -853,13 +853,23 @@ def _price_alert_tick() -> None:
 
 def _push_price_alert(hits: list) -> None:
     try:
+        # 2026-11-02 owner：「飞书推送的这个信息要注明来自韭研概念的哪个板块」——
+        # 主板块口径与猎手/风向标同源（core.jiuyan_tags，有测试逐码守卫）；读不到就只少这个标签。
+        from core.jiuyan_tags import label_of
         lines = ["**画框提醒 · 价格刚穿出你画的框**", ""]
         for h in hits:
             _ico = "🔔 向上突破" if h.get("side") == "up" else "🔻 向下跌破"
             _n = int(h.get("n") or 1)
+            _lab = label_of(h.get("code"))
+            _tag = ""
+            if _lab.get("board"):
+                _tag = f"　🏷 **{_lab['board']}**"
+                if _lab.get("concepts"):
+                    _tag += f"（{' · '.join(_lab['concepts'])}）"
             lines.append(f"{_ico} **{h['name']}（{h['code']}）**　现价 {h['price']}"
                          f"（框沿 {h['level']}）"
                          + (f"　今天第 {_n} 次" if _n > 1 else "")
+                         + _tag
                          + f"　`{h['ts'][11:19]}`")
         card = {"msg_type": "interactive", "notify_type": 1, "card": {
             "config": {"wide_screen_mode": True},

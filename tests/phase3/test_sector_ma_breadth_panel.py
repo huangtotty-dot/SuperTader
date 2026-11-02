@@ -149,7 +149,8 @@ class TestConvergenceSeries(unittest.TestCase):
         self.assertIn('const SECMA_CONV = "#a371f7"', _JS)
         self.assertIn('series.push(mk(s.points.map(p => p.pct_conv), SECMA_CONV, "均线粘合"', _JS)
         # 改用「五线≤3% 或 短线≤2%」后中位 20.6%/p90 42.9%，与另两条同量级 ⇒ 共用 0~100 尺度
-        self.assertIn('legend: { data: ["站上5日线", "站上20日线", "均线粘合"]', _JS)
+        # 2026-11-01：图例多了「周线MACD红柱」（每板块 4 条系列）
+        self.assertIn('legend: { data: ["站上5日线", "站上20日线", "均线粘合", "周线MACD红柱"]', _JS)
         self.assertNotIn('position: "right"', _JS.split("function renderSectorMaBreadth")[1].split("function ")[0],
                          "粘合率已与另两条同量级，不需要单独右轴")
 
@@ -158,9 +159,11 @@ class TestConvergenceSeries(unittest.TestCase):
         self.assertIn("last_conv", _JS)
         self.assertIn("粘合 ${fmt(s.last_conv, 0)}%", _JS)
 
-    def test_提示框按每板块3条系列取索引(self):
-        self.assertIn("Math.floor((ps[0].seriesIndex || 0) / 3)", _JS,
-                      "每板块现在是 3 条系列，除 2 会串板块")
+    def test_提示框按每板块4条系列取索引(self):
+        # 2026-11-01：加了「周线MACD红柱」⇒ 每板块 4 条系列（5日/20日/粘合/周红）
+        self.assertIn("Math.floor((ps[0].seriesIndex || 0) / 4)", _JS,
+                      "每板块现在是 4 条系列，除 3 会串板块")
+        self.assertIn('const SECMA_WM = "#ff7b72"', _JS)
 
 
 if __name__ == "__main__":

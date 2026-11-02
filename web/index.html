@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>trader pannel</title>
-<link rel="stylesheet" href="style.css?v=20261031a">
+<link rel="stylesheet" href="style.css?v=20261102c">
 </head>
 <body>
 <header class="topbar">
@@ -76,13 +76,16 @@
   <div class="sidebar-summary" id="sidebarSummary">
     <div class="sum-group-title">手动盘</div>
     <div class="sum-row"><span class="sum-label">总市值</span><span class="sum-val" id="sumValue">—</span></div>
-    <div class="sum-row"><span class="sum-label">总资金</span><span class="sum-val" id="sumCapital">—</span></div>
+    <div class="sum-row"><span class="sum-label" title="历史投入本金（accounts_config 的 principal / deposits 之和，不随盈亏漂移）">总资金</span><span class="sum-val" id="sumCapital">—</span></div>
+    <div class="sum-row"><span class="sum-label" title="现有总资金 = 持仓市值 + 各账户可用资金（随行情实时）">现有总资金</span><span class="sum-val" id="sumAssets">—</span></div>
+    <div class="sum-row"><span class="sum-label">当日盈亏</span><span class="sum-val" id="sumDayPnl">—</span></div>
     <div class="sum-row"><span class="sum-label">仓位占比</span><span class="sum-val" id="sumPos">—</span></div>
     <div class="sum-row"><span class="sum-label">总浮亏</span><span class="sum-val" id="sumUnreal">—</span></div>
-    <div class="sum-row"><span class="sum-label">总实亏</span><span class="sum-val" id="sumRealLoss">—</span></div>
+    <div class="sum-row"><span class="sum-label">已实现</span><span class="sum-val" id="sumRealLoss">—</span></div>
     <div class="sum-group-title">自动盘</div>
     <div class="sum-row"><span class="sum-label">总资产</span><span class="sum-val" id="sumAutoTotal">—</span></div>
     <div class="sum-row"><span class="sum-label">持仓市值</span><span class="sum-val" id="sumAutoMv">—</span></div>
+    <div class="sum-row"><span class="sum-label">当日盈亏</span><span class="sum-val" id="sumAutoDayPnl">—</span></div>
     <div class="sum-row"><span class="sum-label">浮动盈亏</span><span class="sum-val" id="sumAutoUnreal">—</span></div>
     <div class="sum-row"><span class="sum-label">已实现</span><span class="sum-val" id="sumAutoReal">—</span></div>
   </div>
@@ -101,7 +104,7 @@
   <!-- ====== Tab 1: 概览仪表盘 ====== -->
   <div class="tab-page active" id="tab-overview">
     <div class="section" id="position-manager">
-      <h2>仓位管理器 <span class="cell-dim" style="font-size:12px;font-weight:normal">手动盘（截图 reconcile 口径）· 目标=总资金×个股比例 · 超配应减 / 欠配可加</span></h2>
+      <h2>仓位管理器 <span class="cell-dim" style="font-size:12px;font-weight:normal">手动盘（截图 reconcile 口径）· 总资金=历史投入本金 · 目标=现有总资金×个股比例 · 超配应减 / 欠配可加</span></h2>
       <div id="positionManagerBody"></div>
     </div>
 
@@ -359,7 +362,7 @@
            5 日线 / 20 日线的比例（同一个 0~100 坐标，小多图靠共享尺度对读）。 -->
       <h2>📉 板块「站上5/20日线」占比
         <span class="cell-dim" style="font-weight:normal;font-size:12px">
-          每个小图 = 一个板块 · 蓝=站上5日线占比 · 橙=站上20日线占比（近十日，与上方星轨同窗）
+          每个小图 = 一个板块 · 蓝=站上5日线占比 · 橙=站上20日线占比 · 紫=均线粘合占比 · <span style="color:#ff7b72">红=周线MACD红柱占比</span>（近十日，与上方星轨同窗）
         </span>
         <button class="mini-btn" onclick="loadSectorMaBreadth(true)" style="margin-left:8px">↻ 刷新</button>
       </h2>
@@ -685,6 +688,6 @@
 <script src="vendor/echarts.min.js"></script>
 <!-- 2026-10-20：带版本号强制 WebView2 重新取 app.js（否则可能命中旧缓存，
      K 线提速/埋点改动不生效——表现为"改了跟没改一样"） -->
-<script src="app.js?v=20261031a"></script>
+<script src="app.js?v=20261102c"></script>
 </body>
 </html>

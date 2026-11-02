@@ -3121,13 +3121,15 @@
   "business_summary": "主营橡胶和塑料制品业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "汽车",
+  "jiuyan_concept": "轮胎",
   "name": "青岛双星",
   "primary_source": "legacy",
   "sector": "橡胶和塑料制品业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-02 15:16:34",
+  "jiuyan_category1": "汽车",
+  "jiuyan_concept1": "轮胎"
  },
  "000600": {
   "business_summary": "主营电力",
@@ -5622,13 +5624,15 @@
   "business_summary": "主营石油、煤炭及其他燃料加工业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "石油",
+  "jiuyan_concept": "炼油化工",
   "name": "岳阳兴长",
   "primary_source": "legacy",
   "sector": "石油、煤炭及其他燃料加工业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-02 15:16:34",
+  "jiuyan_category1": "石油",
+  "jiuyan_concept1": "炼油化工"
  },
  "000820": {
   "business_summary": "",
@@ -7891,7 +7895,7 @@
   "primary_source": "legacy",
   "sector": "非金属矿物制品业",
   "sector_type": "legacy",
-  "updated_at": "2026-10-27 14:39:00",
+  "updated_at": "2026-11-02 15:16:34",
   "jiuyan_pcb_audited_at": "2026-10-27",
   "jiuyan_pcb_evidence": {
    "title": "湖南华联瓷业股份有限公司2025年年度报告",
@@ -7911,7 +7915,11 @@
    "new_pairs": [],
    "verdict": "摘除",
    "reason": "公司主要产品为色釉陶瓷、釉下五彩瓷等日用陶瓷，另有电瓷和陶瓷新材料，陶瓷材料身份并不代表生产MLCC，更不代表生产PCB或其专用材料。2025年色釉陶瓷收入13.9364亿元，釉下五彩瓷0.3876亿元，电瓷0.2021亿元，陶瓷新材料0.1251亿元，营业收入合计14.7154亿元；日用陶瓷占绝对主体，电瓷属于电力绝缘器材，也不能转为电子元件或电路板收入。年报未显示印制电路板、覆铜板、电子布、PCB设备或刀具等独立业务，故按真实产品和产业边界定级为摘除。旧“PCB-MLCC”没有任何对应主营产品支撑，是把陶瓷概念错误映射到电子元件后再错配到PCB，本次删除该标签，不处理其他产业属性。"
-  }
+  },
+  "jiuyan_category1": "超节点",
+  "jiuyan_concept1": "MLCC与陶瓷基板",
+  "jiuyan_category": "超节点",
+  "jiuyan_concept": "MLCC与陶瓷基板"
  },
  "001217": {
   "business_summary": "主营化学原料和化学制品制造业",
@@ -8118,13 +8126,15 @@
   "business_summary": "主营公共设施管理业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "机器人",
+  "jiuyan_concept": "本体及应用",
   "name": "劲旅环境",
   "primary_source": "legacy",
   "sector": "公共设施管理业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-02 15:16:34",
+  "jiuyan_category1": "机器人",
+  "jiuyan_concept1": "本体及应用"
  },
  "001231": {
   "business_summary": "主营化学原料和化学制品制造业",
@@ -16882,7 +16892,7 @@
   "primary_source": "legacy",
   "sector": "软件开发/电子身份证/在线教育/数据要素",
   "sector_type": "legacy",
-  "updated_at": "2026-10-27 10:19:00",
+  "updated_at": "2026-11-02 15:16:34",
   "jiuyan_cybersecurity_audited_at": "2026-10-27",
   "jiuyan_cybersecurity_evidence": {
    "title": "汉王科技股份有限公司2025年年度报告全文",
@@ -16902,7 +16912,11 @@
    "new_pairs": [],
    "verdict": "摘除",
    "reason": "公司以模式识别和智能交互为基础，2025年收入主要来自笔智能交互、AI终端和多模态大数据，应用包括数字绘画、无纸化签批、智慧司法及数字人文。年报及现有主营资料未证明AI生成内容标识、深度伪造检测或内容安全审核已形成对外销售产品，更无对应客户、项目或收入；电子签名、OCR、档案数字化及商用密码经营范围也不能替代实际网安业务证据。因此原“AI监管-内容标识”属于技术印象延伸，予以摘除。"
-  }
+  },
+  "jiuyan_category1": "AI应用",
+  "jiuyan_concept1": "AI视觉",
+  "jiuyan_category": "AI应用",
+  "jiuyan_concept": "AI视觉"
  },
  "002363": {
   "business_summary": "主营汽车制造业",
@@ -24273,13 +24287,15 @@
   "business_summary": "全球范围内提供电梯综合解决方案的优秀民族电梯供应商和服务商",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "AI应用",
+  "jiuyan_concept": "AI制造",
   "name": "快意电梯",
   "primary_source": "legacy",
   "sector": "专用设备/粤港澳大湾区/中俄贸易概念",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-02 15:16:34",
+  "jiuyan_category1": "AI应用",
+  "jiuyan_concept1": "AI制造"
  },
  "002775": {
   "business_summary": "主营土木工程建筑业",
@@ -24740,13 +24756,15 @@
   "business_summary": "主营专业技术服务业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "半导体",
+  "jiuyan_concept": "洁净室与厂务工程",
   "name": "郑中设计",
   "primary_source": "legacy",
   "sector": "专业技术服务业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-02 15:16:34",
+  "jiuyan_category1": "半导体",
+  "jiuyan_concept1": "洁净室与厂务工程"
  },
  "002812": {
   "business_summary": "主营橡胶和塑料制品业",
@@ -27289,13 +27307,15 @@
   "business_summary": "主营专业技术服务业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "AI应用",
+  "jiuyan_concept": "AI设计",
   "name": "华阳国际",
   "primary_source": "legacy",
   "sector": "专业技术服务业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-02 15:16:34",
+  "jiuyan_category1": "AI应用",
+  "jiuyan_concept1": "AI设计"
  },
  "002950": {
   "business_summary": "主营医药制造业",
@@ -27830,13 +27850,15 @@
   "business_summary": "新型显示材料、模组与终端的全产业链开发设计、生产制造、销售及技术服务的整体方案解决。",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "消费电子",
+  "jiuyan_concept": "光学显示",
   "name": "芯瑞达",
   "primary_source": "legacy",
   "sector": "光学光电子/MicroLED概念/MiniLED/汽车芯片",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-02 15:16:34",
+  "jiuyan_category1": "消费电子",
+  "jiuyan_concept1": "光学显示"
  },
  "002984": {
   "business_summary": "主营橡胶和塑料制品业",
@@ -28429,13 +28451,15 @@
   "business_summary": "主营光学光电子",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "机器人",
+  "jiuyan_concept": "本体及应用",
   "name": "宸展光电",
   "primary_source": "legacy",
   "sector": "光学光电子/人形机器人/特斯拉概念/新能源汽车",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-02 15:16:34",
+  "jiuyan_category1": "机器人",
+  "jiuyan_concept1": "本体及应用"
  },
  "003020": {
   "business_summary": "主营医药制造业",
@@ -39873,13 +39897,15 @@
   "business_summary": "主营软件和信息技术服务业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "AI应用",
+  "jiuyan_concept": "AI视觉",
   "name": "丝路视觉",
   "primary_source": "legacy",
   "sector": "软件和信息技术服务业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-02 15:16:34",
+  "jiuyan_category1": "AI应用",
+  "jiuyan_concept1": "AI视觉"
  },
  "300557": {
   "business_summary": "主营专用设备制造业",
@@ -51696,13 +51722,15 @@
   "business_summary": "计算机信息系统集成的设计、开发、安装和服务，软件开发、服务，建筑智能化工程、安全防范工程。",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "AI应用",
+  "jiuyan_concept": "AI影视短剧",
   "name": "华是科技",
   "primary_source": "legacy",
   "sector": "IT服务Ⅱ/智慧政务/AI应用/阿里巴巴概念",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-02 15:16:34",
+  "jiuyan_category1": "AI应用",
+  "jiuyan_concept1": "AI影视短剧"
  },
  "301219": {
   "business_summary": "钴、铜、镍、锂、电池材料前驱体等产品的研发、生产与销售。",
@@ -57783,13 +57811,15 @@
   "business_summary": "投资银行业务、财富管理业务、机构服务业务、资产管理业务、自营投资业务及做市交易业务、期货业务、境外业务。",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "金融",
+  "jiuyan_concept": "券商",
   "name": "国金证券",
   "primary_source": "legacy",
   "sector": "证券Ⅱ/期货概念/西部大开发/腾讯概念",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-02 15:16:34",
+  "jiuyan_category1": "金融",
+  "jiuyan_concept1": "券商"
  },
  "600110": {
   "business_summary": "主营电池",
@@ -59090,13 +59120,15 @@
   "business_summary": "主营白酒概念",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "大消费",
+  "jiuyan_concept": "白酒",
   "name": "金种子酒",
   "primary_source": "legacy",
   "sector": "白酒概念/啤酒概念",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-02 15:16:34",
+  "jiuyan_category1": "大消费",
+  "jiuyan_concept1": "白酒"
  },
  "600201": {
   "business_summary": "主营医药制造业",
@@ -59509,13 +59541,15 @@
   "business_summary": "主营新闻和出版业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "AI应用",
+  "jiuyan_concept": "AI出版",
   "name": "城市传媒",
   "primary_source": "legacy",
   "sector": "新闻和出版业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-02 15:16:34",
+  "jiuyan_category1": "AI应用",
+  "jiuyan_concept1": "AI出版"
  },
  "600230": {
   "business_summary": "主营化学原料和化学制品制造业",
@@ -60192,8 +60226,12 @@
   "primary_source": "legacy",
   "sector": "玻璃玻纤/硅能源/回购增持再贷款概念/国企改革",
   "sector_type": "legacy",
-  "updated_at": "2026-10-24 21:00:00",
-  "jiuyan_tag_removed_20261024": "电池/电解液（实际主营：平板玻璃）"
+  "updated_at": "2026-11-02 15:16:34",
+  "jiuyan_tag_removed_20261024": "电池/电解液（实际主营：平板玻璃）",
+  "jiuyan_category1": "光伏",
+  "jiuyan_concept1": "光伏玻璃",
+  "jiuyan_category": "光伏",
+  "jiuyan_concept": "光伏玻璃"
  },
  "600295": {
   "business_summary": "主营黑色金属冶炼和压延加工业",
@@ -60223,13 +60261,15 @@
   "business_summary": "主营食品制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "化工",
+  "jiuyan_concept": "基础化工",
   "name": "安迪苏",
   "primary_source": "legacy",
   "sector": "食品制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-02 15:16:34",
+  "jiuyan_category1": "化工",
+  "jiuyan_concept1": "基础化工"
  },
  "600300": {
   "business_summary": "主营酒、饮料和精制茶制造业",
@@ -67777,13 +67817,15 @@
   "business_summary": "主营非金属矿物制品业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "地产",
+  "jiuyan_concept": "地产基建",
   "name": "华新建材",
   "primary_source": "legacy",
   "sector": "非金属矿物制品业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-02 15:16:34",
+  "jiuyan_category1": "地产",
+  "jiuyan_concept1": "地产基建"
  },
  "600802": {
   "business_summary": "主营非金属矿物制品业",
@@ -69109,7 +69151,7 @@
   "primary_source": "audit_20260901",
   "sector": "",
   "sector_type": "",
-  "updated_at": "2026-10-27 11:20:00",
+  "updated_at": "2026-11-02 15:16:34",
   "jiuyan_aiapp_verdicts": {},
   "jiuyan_aiapp_audited_at": "2026-10-27",
   "jiuyan_aiapp_evidence": {
@@ -69130,7 +69172,11 @@
    "new_pairs": [],
    "verdict": "摘除",
    "reason": "公司2025年短剧收入1.311亿元来自普通真人短剧制作发行，不能据此认定为AI影视收入。星梦之缘仍处于开发调测和申请版号阶段，漫剧也仅是开始布局，未核到已经交付的AI产品、外部商业项目或AI收入，现有业务与AI应用缺乏可验证的直接商业关联，因此摘除原概念而非按普通短剧贴标。"
-  }
+  },
+  "jiuyan_category1": "AI应用",
+  "jiuyan_concept1": "AI影视短剧",
+  "jiuyan_category": "AI应用",
+  "jiuyan_concept": "AI影视短剧"
  },
  "600893": {
   "business_summary": "主营铁路、船舶、航空航天和其他运输设备制造业",
@@ -69748,13 +69794,15 @@
   "business_summary": "主营汽车制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "机器人",
+  "jiuyan_concept": "结构件",
   "name": "渤海汽车",
   "primary_source": "legacy",
   "sector": "汽车制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-02 15:16:34",
+  "jiuyan_category1": "机器人",
+  "jiuyan_concept1": "结构件"
  },
  "600961": {
   "business_summary": "集铅锌等有色金属的采选、冶炼、销售。",
@@ -70608,13 +70656,15 @@
   "business_summary": "主营新闻和出版业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "AI应用",
+  "jiuyan_concept": "AI出版",
   "name": "山东出版",
   "primary_source": "legacy",
   "sector": "新闻和出版业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-02 15:16:34",
+  "jiuyan_category1": "AI应用",
+  "jiuyan_concept1": "AI出版"
  },
  "601020": {
   "business_summary": "主营有色金属矿采选业",
@@ -72433,7 +72483,7 @@
   "primary_source": "legacy",
   "sector": "纺织业",
   "sector_type": "legacy",
-  "updated_at": "2026-10-27 11:20:00",
+  "updated_at": "2026-11-02 15:16:34",
   "jiuyan_aiapp_verdicts": {},
   "jiuyan_aiapp_audited_at": "2026-10-27",
   "jiuyan_aiapp_evidence": {
@@ -72454,7 +72504,11 @@
    "new_pairs": [],
    "verdict": "摘除",
    "reason": "公司主营毛纺织和影视业务，帧想目前主要服务内部剧本评估，AI真人剧仅处于创制合作和孵化阶段，未核到已经上线的AI影视作品、外部客户或相应收入。内部工具探索不足以证明形成可商业化的AI应用业务，更不能把普通影视收入视为AI收入，因此摘除原有AI相关概念。"
-  }
+  },
+  "jiuyan_category1": "AI应用",
+  "jiuyan_concept1": "AI影视短剧",
+  "jiuyan_category": "AI应用",
+  "jiuyan_concept": "AI影视短剧"
  },
  "601600": {
   "business_summary": "铝土矿、煤炭等资源的勘探开采，氧化铝、原铝、铝合金及炭素产品的生产、销售、技术研发，国际贸易，物流产业，火力及新能源发电等。",
@@ -74627,13 +74681,15 @@
   "business_summary": "断路器关键部件、低压断路器及刀熔开关的研发、生产与销售。",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "电力",
+  "jiuyan_concept": "电力设备",
   "name": "新宏泰",
   "primary_source": "legacy",
   "sector": "电网设备/国企改革/特高压",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-02 15:16:34",
+  "jiuyan_category1": "电力",
+  "jiuyan_concept1": "电力设备"
  },
  "603017": {
   "business_summary": "主营工程咨询服务Ⅱ",
@@ -80986,7 +81042,7 @@
   "primary_source": "owner_20261024_韭研表补漏",
   "sector": " 数字媒体/AI视频/文化传媒概念",
   "sector_type": "legacy",
-  "updated_at": "2026-10-27 08:11:00",
+  "updated_at": "2026-11-02 15:16:34",
   "jiuyan_dataelement_verdict": "错标",
   "jiuyan_dataelement_audited_at": "2026-10-27",
   "jiuyan_dataelement_evidence": {
@@ -81002,7 +81058,11 @@
     "物理AI_数据采集"
    ],
    "reason": "城市、文化及品牌体验空间按策划、设计、实施和维护项目收费，沉浸交互与AI视频用于展示内容。项目重点是空间体验和展陈工程，未核到独立数据采集产品、数据交付或授权收费。"
-  }
+  },
+  "jiuyan_category1": "AI应用",
+  "jiuyan_concept1": "AI视觉",
+  "jiuyan_category": "AI应用",
+  "jiuyan_concept": "AI视觉"
  },
  "603468": {
   "business_summary": "",
@@ -82184,13 +82244,15 @@
   "business_summary": "主营电气机械和器材制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "光伏",
+  "jiuyan_concept": "光伏支架",
   "name": "清源股份",
   "primary_source": "legacy",
   "sector": "电气机械和器材制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-02 15:16:34",
+  "jiuyan_category1": "光伏",
+  "jiuyan_concept1": "光伏支架"
  },
  "603629": {
   "business_summary": "液晶电视精密金属结构件、电子元器件的研发、生产及销售、算力产品销售及算力云服务。",
@@ -84766,13 +84828,15 @@
   "business_summary": "主营软件和信息技术服务业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "算力租赁",
+  "jiuyan_concept": "算力租赁",
   "name": "城地香江",
   "primary_source": "legacy",
   "sector": "软件和信息技术服务业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-02 15:16:34",
+  "jiuyan_category1": "算力租赁",
+  "jiuyan_concept1": "算力租赁"
  },
  "603888": {
   "business_summary": "全媒广告服务、政企综合服务、数字及智能化业务及文化创意服务。",
@@ -86038,13 +86102,15 @@
   "business_summary": "铝电解电容器、薄膜电容器、电极箔及金属化膜（薄膜用）的生产与销售。",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "消费电子",
+  "jiuyan_concept": "被动元件",
   "name": "艾华集团",
   "primary_source": "legacy",
   "sector": "元件/5G/液冷服务器/高压快充",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-02 15:16:34",
+  "jiuyan_category1": "消费电子",
+  "jiuyan_concept1": "被动元件"
  },
  "603990": {
   "business_summary": "临床医疗管理信息系统（CIS）系列应用软件产品和临床信息化整体解决方案。",
@@ -87226,13 +87292,15 @@
   "business_summary": "主营纺织制造",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "机器人",
+  "jiuyan_concept": "材料",
   "name": "富春染织",
   "primary_source": "legacy",
   "sector": "纺织制造/染料/PEEK材料/人形机器人",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-02 15:16:34",
+  "jiuyan_category1": "机器人",
+  "jiuyan_concept1": "材料"
  },
  "605196": {
   "business_summary": "线缆产品和油服产品的研发、生产与销售并提供综合服务。",
@@ -87471,8 +87539,12 @@
   "primary_source": "fallback",
   "sector": "其他",
   "sector_type": "fallback",
-  "updated_at": "2026-10-25 16:00:00",
-  "jiuyan_tag_removed_20261025": "AI应用/AI影视短剧（实际主营：装饰装修）"
+  "updated_at": "2026-11-02 15:16:34",
+  "jiuyan_tag_removed_20261025": "AI应用/AI影视短剧（实际主营：装饰装修）",
+  "jiuyan_category1": "AI应用",
+  "jiuyan_concept1": "AI影视短剧",
+  "jiuyan_category": "AI应用",
+  "jiuyan_concept": "AI影视短剧"
  },
  "605288": {
   "business_summary": "线性驱动行业龙头，沙发电动推杆产品全球市占率领先",
@@ -87556,13 +87628,15 @@
   "business_summary": "主营土木工程建筑业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "半导体",
+  "jiuyan_concept": "芯片设计-存储芯片",
   "name": "园林股份",
   "primary_source": "legacy",
   "sector": "土木工程建筑业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-02 15:16:34",
+  "jiuyan_category1": "半导体",
+  "jiuyan_concept1": "芯片设计-存储芯片"
  },
  "605305": {
   "business_summary": "主营其他",
@@ -88075,7 +88149,7 @@
   "primary_source": "legacy",
   "sector": "新闻和出版业",
   "sector_type": "legacy",
-  "updated_at": "2026-10-27 11:20:00",
+  "updated_at": "2026-11-02 15:16:34",
   "jiuyan_aiapp_verdicts": {},
   "jiuyan_aiapp_audited_at": "2026-10-27",
   "jiuyan_aiapp_evidence": {
@@ -88096,7 +88170,11 @@
    "new_pairs": [],
    "verdict": "摘除",
    "reason": "iFinD及2025年报显示，公司主营教材教辅、一般图书出版印刷发行和物资贸易，数字出版属于出版业态延伸。年报仅将人工智能列为影响数字出版行业的外部技术趋势，未披露自制或联合制作AI短剧、AI影视产品、相关客户、项目或收入，原有“出版业务”理由也不能证明AI影视关联，因此摘除AI影视短剧。"
-  }
+  },
+  "jiuyan_category1": "AI应用",
+  "jiuyan_concept1": "AI影视短剧",
+  "jiuyan_category": "AI应用",
+  "jiuyan_concept": "AI影视短剧"
  },
  "605580": {
   "business_summary": "热电联产业务与固废资源综合利用业务。",
@@ -92161,13 +92239,15 @@
   "business_summary": "主营计算机、通信和其他电子设备制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "商业航天",
+  "jiuyan_concept": "卫星通信终端与天线",
   "name": "高凌信息",
   "primary_source": "legacy",
   "sector": "计算机、通信和其他电子设备制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-02 15:16:34",
+  "jiuyan_category1": "商业航天",
+  "jiuyan_concept1": "卫星通信终端与天线"
  },
  "688176": {
   "business_summary": "主营医药制造业",

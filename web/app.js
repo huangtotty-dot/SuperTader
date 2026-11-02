@@ -244,6 +244,8 @@ async function loadAndRender(date, silent) {
     state.payload = payload;
     // 独立配置（账户总资金+已实现亏损），不随 holdings.json 更新丢失
     portfolioCfg = (payload.portfolio_config) || { accounts: {}, realized_loss: {} };
+    // 文件版本指纹基线（本次 loadAndRender 自己会重拉下面这些面板 ⇒ 只记基线）
+    _applyStateRev(payload.state_revision, true);
     // 账户详细信息（统一源头）
     state.accountsDetail = (payload.accounts_detail) || {};
     renderAll(payload);
@@ -258,6 +260,9 @@ async function loadAndRender(date, silent) {
     apiCall("load_market_score").then(ms => renderMarket(ms || {})).catch(() => {});
     loadAutoPnl();
     refreshAccountLabels();   // 全站账户列表（历史成交为源）：一次拉取，导入后刷新
+    // 2026-11-02 owner：点「刷新」/轮询重载时，图表分析（交割单台账）也要跟着更新。
+    // 静默轮询走 30s 客户端缓存（便宜）；手动刷新强制重拉。
+    loadTradeHistory(!silent);
 
     // 今日则进入实时模式
     const isToday = date === todayStr();
@@ -536,6 +541,8 @@ async function refreshLive(reset) {
       // 2026-10-28：建仓信号增量 + 人工确认闸也搭这趟车（原本各挂一个 10s/5s 轮询器）
       if (_ok("signals")) pollSignals(_ok("signals"));
       if (_ok("buyconfirm")) pollBuyConfirm(_ok("buyconfirm"));
+      // 2026-11-02：账户/持仓/交割单台账的文件指纹变了 ⇒ 重拉仓位管理器 + 图表分析
+      _applyStateRev(_ok("state_rev"));
       updateRefreshAlarm();
       return;
     } catch (e) {
@@ -1088,6 +1095,44 @@ async function refreshAccountLabels() {
     const d = await apiCall("load_accounts");
     state.accountList = (d && d.accounts) || [];
   } catch (e) { /* 忽略 */ }
+}
+
+/* ===== 文件版本指纹 → 按需重拉面板（2026-11-02 owner） =====
+   owner：「每次更新的时候要把仓位管理器，以及图表分析中的信息都更新掉」。
+   后端 `state_revision` 返回 holdings_manual / accounts_config / 交割单台账 三个文件的
+   mtime+size 指纹（3 次 stat，本征微秒级），搭在 `load_day` 和 10s `poll_live_bundle` 里回来，
+   **零额外桥往返**。指纹变了才重拉受影响的面板，不刷新整页（保住滚动位置/展开状态）。 */
+let _stateRev = null;      // 上一次指纹（JSON 串）
+/* baselineOnly=true：调用方（loadAndRender）自己就会重拉这些面板 ⇒ 只记基线，不重复触发。 */
+function _applyStateRev(rev, baselineOnly) {
+  if (!rev || typeof rev !== "object") return;
+  const sig = JSON.stringify(rev);
+  const prev = _stateRev;
+  _stateRev = sig;
+  if (baselineOnly) return;
+  if (prev === null) return;              // 首帧只记基线
+  if (prev === sig) return;
+  let old = {};
+  try { old = JSON.parse(prev) || {}; } catch (e) { old = {}; }
+  const ch = k => (rev[k] || "") !== (old[k] || "");
+  // 持仓文件变 → 仓位管理器（股数/市值/欠配）
+  if (ch("holdings") || ch("accounts")) {
+    apiCall("load_position_manager").then(pm => renderPositionManager(pm || {})).catch(() => {});
+  }
+  // 账户配置变 → 侧栏总资金/已实现 + 仓位管理器的本金/可用
+  if (ch("accounts")) {
+    apiCall("load_portfolio_config").then(cfg => {
+      if (!cfg) return;
+      portfolioCfg = cfg;
+      if (state.quotes && state.quotes.length) updateSidebarSummary(state.quotes);
+    }).catch(() => {});
+  }
+  // 交割单台账变 → 图表分析（逐股已实现/月度/累计曲线）+ 账户列表
+  if (ch("ledger")) {
+    _tradeHistCache = { ts: 0, data: null };   // 失效 30s TTL，强制重拉
+    loadTradeHistory(true);
+    refreshAccountLabels();
+  }
 }
 
 /* 按资金账号切一份台账视图：stocks 直接筛；monthly/t_monthly 筛完按月合并；
@@ -2287,6 +2332,7 @@ function renderSectorStars(d) {
 const SECMA_5 = "#388bfd";      // 站上5日线（蓝；dataviz 校验 dark：与橙 ΔE 32.1/35.6 全项过）
 const SECMA_20 = "#e3b341";     // 站上20日线（琥珀）
 const SECMA_CONV = "#a371f7";   // 均线粘合占比（紫；右轴 0-50%）—— 2026-10-23 owner
+const SECMA_WM = "#ff7b72";     // 周线 MACD 红柱占比（红；2026-11-01 owner）
 let sectorMaInst = null, sectorMaNode = null, sectorMaSig = "";
 let sectorMaData = null, sectorMaTimer = null, sectorMaInflight = false;
 
@@ -2363,7 +2409,7 @@ function renderSectorMaBreadth(d) {
   const H = topPad + rows * cellH + 6;
   // 签名带**整条轨迹的粗略校验和**：后端重算后中间值可能变而末值不变，只比末值会漏重画
   const sig = secs.map(s => `${s.name}:${s.points.length}:`
-    + s.points.reduce((a, p) => a + (p.pct5 || 0) + (p.pct20 || 0) + (p.pct_conv || 0), 0).toFixed(1)).join("|")
+    + s.points.reduce((a, p) => a + (p.pct5 || 0) + (p.pct20 || 0) + (p.pct_conv || 0) + (p.pct_wm || 0), 0).toFixed(1)).join("|")
     + `|${w}|${cols}`;
   if (sectorMaInst && sectorMaNode === el && sig === sectorMaSig) return;
   if (el.style.height !== H + "px") el.style.height = H + "px";
@@ -2422,6 +2468,10 @@ function renderSectorMaBreadth(d) {
         + " " + (s.last_conv == null
           ? "{n|粘合 —}"
           : `{v|粘合 ${fmt(s.last_conv, 0)}%${_arrow(s.last_conv, _prev && _prev.pct_conv)}}`)
+        // 2026-11-01 owner：「加上周 MACD 变红所占的比例」——红胶囊，与图里那条红线同色
+        + " " + (s.last_wm == null
+          ? "{n|周红 —}"
+          : `{m|周红 ${fmt(s.last_wm, 0)}%${_arrow(s.last_wm, _prev && _prev.pct_wm)}}`)
         + ` {n|${s.n || "—"}只}`,
       left: x0 + padL - 2, top: y0 + 2,
       textStyle: { color: "#c9d1d9", fontSize: 11, fontWeight: 600 },
@@ -2433,6 +2483,7 @@ function renderSectorMaBreadth(d) {
           r: { color: "#f85149", backgroundColor: "rgba(248,81,73,.14)", padding: [1, 4], borderRadius: 3 },
           n: { color: "#6e7681" },
           v: { color: "#a371f7", backgroundColor: "rgba(163,113,247,.14)", padding: [1, 4], borderRadius: 3 },
+          m: { color: "#ff7b72", backgroundColor: "rgba(255,123,114,.14)", padding: [1, 4], borderRadius: 3 },
         },
       },
     });
@@ -2469,6 +2520,8 @@ function renderSectorMaBreadth(d) {
     //   ⇒ 紫线（右轴 0~50%）：当日该板块里 MA5/10/20/30/60 离散度 ≤3% 的个股占比。
     //   口径与「均线粘合」技术标签同源（core.ma_reclaim.convergence_state）。
     series.push(mk(s.points.map(p => p.pct_conv), SECMA_CONV, "均线粘合", { dash: true }));
+    // 2026-11-01 owner：「加上周 MACD 变红所占的比例」——红线（虚线，与粘合区分）
+    series.push(mk(s.points.map(p => p.pct_wm), SECMA_WM, "周线MACD红柱", { dash: true }));
   });
   if (!sectorMaInst || sectorMaNode !== el || !el.querySelector("canvas")) {
     if (sectorMaInst) { try { sectorMaInst.dispose(); } catch (e) { } }
@@ -2480,7 +2533,7 @@ function renderSectorMaBreadth(d) {
     backgroundColor: "transparent",
     animation: false,
     // 图例按**系列名**筛选 ⇒ 点一下可以把全部板块的 5日线/20日线一起关掉（不是 50 个条目）
-    legend: { data: ["站上5日线", "站上20日线", "均线粘合"], top: 2, right: 10,
+    legend: { data: ["站上5日线", "站上20日线", "均线粘合", "周线MACD红柱"], top: 2, right: 10,
       itemWidth: 14, itemHeight: 8, icon: "roundRect", itemGap: 12,
       textStyle: { color: "#8b949e", fontSize: 10 } },
     title: titles,
@@ -2498,7 +2551,7 @@ function renderSectorMaBreadth(d) {
       borderRadius: 8, textStyle: { color: "#e6edf3", fontSize: 11 },
       formatter: (ps) => {
         if (!ps || !ps.length) return "";
-        const si = Math.floor((ps[0].seriesIndex || 0) / 3);   // 每板块 3 条系列（5日/20日/粘合）
+        const si = Math.floor((ps[0].seriesIndex || 0) / 4);   // 每板块 4 条系列（5日/20日/粘合/周红）
         const s = secs[si];
         if (!s) return "";
         const p = s.points[ps[0].dataIndex];
@@ -2508,6 +2561,8 @@ function renderSectorMaBreadth(d) {
           + `<br><span style="color:${SECMA_20}">●</span> 站上20日线 <b>${fmt(p.pct20, 1)}%</b>`
           + `<br><span style="color:${SECMA_CONV}">●</span> 均线粘合 <b>${p.pct_conv == null ? "—" : fmt(p.pct_conv, 1) + "%"}</b>`
           + `<span style="opacity:.7">（${p.n60 || 0} 只有 60 日以上历史）</span>`
+          + `<br><span style="color:${SECMA_WM}">●</span> 周线MACD红柱 <b>${p.pct_wm == null ? "—" : fmt(p.pct_wm, 1) + "%"}</b>`
+          + `<span style="opacity:.7">（${p.n_wm || 0} 只有 35 周以上历史）</span>`
           + `<br><span style="opacity:.7">样本 ${p.n} 只（当日有行情）</span>`;
       },
     },
@@ -3085,7 +3140,8 @@ function renderPositionManager(pm) {
     el.innerHTML = '<div class="empty">无持仓数据</div>';
     return;
   }
-  const totalCap = pm.total_capital || 0;
+  const totalCap = pm.total_capital || 0;        // 历史投入本金（不随盈亏漂移）
+  const curAssets = pm.current_assets || 0;      // 现有总资金 = 持仓市值 + 可用
   const sumMkt = pm.sum_mkt || 0;
   const sumPct = pm.sum_pct || 0;
   const rowsHtml = rows.map(r => {
@@ -3123,12 +3179,15 @@ function renderPositionManager(pm) {
   el.innerHTML = `
     <div class="card" style="margin-bottom:10px;padding:10px 14px">
       <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px">
-        <div style="display:flex;gap:16px;font-size:12px">
-          <span>总资金 <b class="mono">${fmt(totalCap, 0)}</b></span>
+        <div style="display:flex;gap:16px;font-size:12px;flex-wrap:wrap">
+          <span title="历史投入本金（principal / deposits 之和，不随盈亏漂移）">总资金 <b class="mono">${fmt(totalCap, 0)}</b></span>
+          <span title="现有总资金 = 持仓市值 + 各账户可用（随行情实时）">现有总资金 <b class="mono">${fmt(curAssets, 0)}</b>${pm.available != null
+            ? ` <span class="cell-dim" style="font-size:10px">可用 ${fmt(pm.available, 0)}</span>` : ""}</span>
           <span>总市值 <b class="mono">${fmt(sumMkt, 0)}</b></span>
           <span>总仓位 <b class="mono ${sumPct >= 100 ? 'down' : ''}">${fmt(sumPct, 1)}%</b></span>
+          ${totalCap ? `<span class="cell-dim" title="现有总资金 − 历史投入本金">累计盈亏 <b class="mono ${clsOf(curAssets - totalCap)}">${(curAssets - totalCap) >= 0 ? "+" : ""}${fmt(curAssets - totalCap, 0)}</b></span>` : ""}
         </div>
-        <span class="cell-dim mono" style="font-size:10px">目标=总资金×个股配比 · 数据随行情刷新</span>
+        <span class="cell-dim mono" style="font-size:10px">目标=现有总资金×个股配比 · 数据随行情刷新</span>
       </div>
       <div class="h-bar-track" style="height:6px;margin-top:6px">
         <div class="h-bar-fill ${sumPct >= 100 ? 'down' : 'up'}" style="width:${barW}%"></div>
@@ -10544,27 +10603,76 @@ let portfolioCfg = { accounts: {}, realized_loss: {} };  // 独立配置文件
 
 function updateSidebarSummary(quotes) {
   if (!quotes || !quotes.length) return;
-  let tv = 0, tc = 0, trl = 0, totalCap = 0;
+  let tv = 0, tc = 0, trl = 0, totalCap = 0, dayPnl = 0, dayN = 0;
   const accounts = portfolioCfg.accounts || {};
   const rl = portfolioCfg.realized_loss || {};
+  // 2026-11-02：已实现优先用 `realized_pnl`（**有符号**、覆盖已清仓的全部代码，来自交割单台账）；
+  // 旧 `realized_loss` 只对"当前持仓"逐票累加，清仓票的亏损根本进不来（这就是"总实亏 0"的根因）。
+  const rpnl = portfolioCfg.realized_pnl || {};
+  const _rpKeys = Object.keys(rpnl);
+  let realizedSigned = null;
+  if (_rpKeys.length) realizedSigned = _rpKeys.reduce((a2, k) => a2 + (Number(rpnl[k]) || 0), 0);
   quotes.forEach(x => {
     const qty = x.qty || 0;
     if (x.price && x.cost) {
       tv += x.price * qty;
       tc += x.cost * qty;
     }
+    // 2026-11-02 owner：「GUI 没有显示当日盈亏」——
+    // 口径 = Σ 持仓数量 ×（现价 − 昨收）；只算 qty>0 且两个价都有的条目，
+    // 缺昨收的（离线回退/新股）不计入，避免把"没数据"算成 0。
+    if (qty > 0 && Number(x.price) > 0 && Number(x.pre_close) > 0) {
+      dayPnl += qty * (Number(x.price) - Number(x.pre_close));
+      dayN++;
+    }
     trl += rl[x.code] || 0;
   });
   Object.values(accounts).forEach(a => {
     if (a && a.paper) return;   // 2026-10-10: 手动盘=非 paper 账户（自动盘另列）
-    totalCap += (a.total_capital || 0);
+    // 2026-11-02：总资金 = **历史投入本金**。优先 principal / deposits 之和（本金不随盈亏漂移），
+    // 都没有才退回旧的 total_capital（那是某次券商截图的"总资产"，会把盈亏算进去）。
+    if (a && a.principal != null) totalCap += Number(a.principal) || 0;
+    else if (a && Array.isArray(a.deposits) && a.deposits.length)
+      totalCap += a.deposits.reduce((s2, d) => s2 + (Number(d && d.amount) || 0), 0);
+    else totalCap += (a.total_capital || 0);
   });
   const pnl = tv - tc;
+  // 2026-11-02 owner：「总资金是我初始时的资金（已亏损），还要显示现有总资金」——
+  // 总资金 = 本金（上）；现有总资金 = 持仓市值 + 各账户可用（非 paper）之和（本行）。
+  let cash = 0;
+  Object.values(accounts).forEach(a => {
+    if (!a || a.paper) return;
+    cash += Number(a.available || 0) || 0;
+  });
+  const assets = tv + cash;
   document.getElementById("sumValue").textContent = tv ? fmt(tv, 0) : "—";
   document.getElementById("sumCapital").textContent = totalCap ? fmt(totalCap, 0) : "未设置";
-  document.getElementById("sumPos").textContent = totalCap ? Math.round(tv / totalCap * 100) + "%" : "—";
+  const _asEl = document.getElementById("sumAssets");
+  if (_asEl) {
+    _asEl.textContent = assets ? fmt(assets, 0) : "—";
+    _asEl.title = `现有总资金 = 持仓市值 ${fmt(tv, 0)} + 可用资金 ${fmt(cash, 0)}`
+      + (totalCap ? `
+累计盈亏（相对本金） ${(assets - totalCap) >= 0 ? "+" : ""}${fmt(assets - totalCap, 0)}` : "");
+  }
+  const _dp = document.getElementById("sumDayPnl");
+  if (_dp) {
+    if (dayN > 0) {
+      _dp.innerHTML = `<span class="${clsOf(dayPnl)}">${dayPnl >= 0 ? "+" : ""}${fmt(dayPnl, 0)}</span>`;
+      _dp.title = `当日盈亏 = Σ 持仓数量 ×（现价 − 昨收），${dayN} 只参与（不含当日已实现/新股缺昨收）`;
+    } else { _dp.textContent = "—"; _dp.title = "无昨收数据（离线回退，或今日无持仓行情）"; }
+  }
+  const _posBase = assets || totalCap;
+  document.getElementById("sumPos").textContent = _posBase ? Math.round(tv / _posBase * 100) + "%" : "—";
   document.getElementById("sumUnreal").innerHTML = `<span class="${clsOf(pnl)}">${pnl >= 0 ? "+" : ""}${fmt(pnl, 0)}</span>`;
-  document.getElementById("sumRealLoss").innerHTML = trl ? `<span class="${trl > 0 ? 'down' : 'neutral'}">${fmt(trl, 0)}</span>` : `<span class="neutral">0</span>`;
+  const _rlEl = document.getElementById("sumRealLoss");
+  if (_rlEl) {
+    if (realizedSigned != null) {
+      _rlEl.innerHTML = `<span class="${clsOf(realizedSigned)}">${realizedSigned >= 0 ? "+" : ""}${fmt(realizedSigned, 0)}</span>`;
+      _rlEl.title = "累计已实现盈亏（有符号，含已清仓个股；来源=t_io/state/trade_history_ledger.json）";
+    } else {
+      _rlEl.innerHTML = trl ? `<span class="${trl > 0 ? 'down' : 'neutral'}">${fmt(trl, 0)}</span>` : `<span class="neutral">0</span>`;
+    }
+  }
 }
 
 // 侧栏「自动盘」三行（数据来自 load_auto_pnl 的 summary）
@@ -10578,6 +10686,7 @@ function updateSidebarAuto(summary) {
   };
   set("sumAutoTotal", s.total_assets);
   set("sumAutoMv", s.market_value);
+  set("sumAutoDayPnl", (s.day_pnl != null ? s.day_pnl : null), s.day_pnl != null ? clsOf(s.day_pnl) : "");
   set("sumAutoUnreal", s.unreal_pnl, clsOf(s.unreal_pnl));
   set("sumAutoReal", s.realized_pnl, clsOf(s.realized_pnl));
 }
@@ -10694,7 +10803,7 @@ function startLivePoll() {
 async function init() {
   // 首先获取 DOM 元素（此时 DOM 已完全加载）
   // 2026-10-20：启动标记（0ms）写进慢调用日志 ⇒ 能确认 WebView2 是否加载了新版 app.js
-  try { window.pywebview.api.report_slow_call("app_boot_20261031a", 0); } catch (e) { /* 静默 */ }
+  try { window.pywebview.api.report_slow_call("app_boot_20261102c", 0); } catch (e) { /* 静默 */ }
   // 2026-10-31：重点关注标记（紫色星）——启动先拉一次，五个表的星标按它渲染；
   // 拉不到就用空集（星标显示未标记，不影响任何其它功能）。
   loadFocusCodes();
