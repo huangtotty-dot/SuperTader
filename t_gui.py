@@ -6090,7 +6090,7 @@ class Api:
             return hit[1], "stale"
         return None, "warming"
 
-    def open_multi_window(self, codes=None):
+    def open_multi_window(self, codes=None, opts=None):
         """把「多窗口看盘」开成**独立原生窗口**（owner 2026-10-22：要能独立于 GUI 拖动）。
 
         为什么必须是真窗口：页面内的浮层是 DOM，**拖不出 WebView 的视口**——只能在主窗口
@@ -6113,6 +6113,15 @@ class Api:
                 try:
                     w.show()
                     w.restore()
+                    # 2026-11-02：复用窗口不会再触发 loaded ⇒ 主动把开关状态同步过去，
+                    # 否则主窗口刚打开的「密集成交区」在看盘窗里还是上次的值。
+                    _o = opts if isinstance(opts, dict) else {}
+                    if _o:
+                        try:
+                            import json as _json
+                            w.evaluate_js("_mwApplyOpts && _mwApplyOpts(%s)" % _json.dumps(_o))
+                        except Exception:
+                            pass
                     return {"ok": True, "reused": True}
                 except Exception:
                     self._mw_window = None          # 旧窗口已销毁 ⇒ 重建
@@ -6147,13 +6156,16 @@ class Api:
             # 把主窗口当前选的票带过去：独立窗口可能是**另一个 origin**（file:// vs http），
             # localStorage 不通 ⇒ 九格会全是「— 选择标的 —」（2026-10-22 首版实测）。
             _codes = [str(c).split("_")[0] for c in (codes or []) if str(c).strip()][:12]
+            # 2026-11-02：前端开关状态（当前只有密集成交区 vp）一并透传，
+            # 否则主窗口开了、看盘窗还是默认关（独立窗口是另一个 JS 上下文）。
+            _opts = opts if isinstance(opts, dict) else {}
 
             def _on_loaded():
                 try:
                     import json as _json
                     win.evaluate_js(
-                        "mwEnterWindowMode && mwEnterWindowMode(%s)"
-                        % _json.dumps(_codes)
+                        "mwEnterWindowMode && mwEnterWindowMode(%s, %s)"
+                        % (_json.dumps(_codes), _json.dumps(_opts))
                     )
                 except Exception:
                     pass

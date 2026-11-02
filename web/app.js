@@ -6203,6 +6203,183 @@ function buildGapAreas(ohlc, dates, lookbackDays, minPct, maxN) {
   return out;
 }
 
+/* ===== 密集成交区（Volume Profile，2026-11-02 owner 实验） =====
+   把每根 K 的成交量按它自己的 [low, high] **均摊**到价格分箱里，累计出"哪个价位带
+   成交得最多"。这是筹码/成本分布的**描述性**工具（回答"套牢盘/成本带大概在哪"），
+   ⚠️ **不是买卖信号** —— 本仓对技术形态的一贯口径是先验证再用，别直接当入场依据。
+
+   口径（可复述）：
+     · 窗口 = 最近 `lookback` 根（默认 250）；权重优先成交额，没有则成交量；
+     · 分箱 = `bins` 个（默认 60），价格区间 = 窗口内 最低low ~ 最高high；
+     · 每根量按 K 线价格区间与分箱的重叠比例均摊（一字板/零振幅全量给所在箱）；
+     · POC = 量最大的箱（Point of Control，最密集价位）；
+     · 密集区 = 连续 ≥1.5×平均箱量 的箱段；不足窗口总量 3% 且不含 POC 的丢掉，
+       按累计量降序最多 3 段。
+   返回 {zones:[{lo,hi,share,poc}], poc, lo, hi, bins, lookback}；数据不足返回 null。 */
+function buildVolumeProfile(ohlc, weights, lookback, bins) {
+  const n = Array.isArray(ohlc) ? ohlc.length : 0;
+  const wn = Array.isArray(weights) ? weights.length : 0;
+  const m = Math.min(n, wn);
+  if (m < 20) return null;
+  const LB = Math.max(20, Math.min(m, lookback || 250));
+  const B = Math.max(12, Math.min(120, bins || 60));
+  const start = m - LB;
+  let lo = Infinity, hi = -Infinity, total = 0;
+  for (let i = start; i < m; i++) {
+    const o = ohlc[i];
+    if (!o) continue;
+    const l = Number(o[2]), h = Number(o[3]), w = Number(weights[i]);
+    if (!isFinite(l) || !isFinite(h) || !(h >= l)) continue;
+    lo = Math.min(lo, l);
+    hi = Math.max(hi, h);
+    if (isFinite(w) && w > 0) total += w;
+  }
+  if (!(hi > lo) || !(total > 0)) return null;
+  const bw = (hi - lo) / B;
+  const acc = new Array(B).fill(0);
+  for (let i = start; i < m; i++) {
+    const o = ohlc[i];
+    if (!o) continue;
+    const w = Number(weights[i]);
+    if (!isFinite(w) || w <= 0) continue;
+    const l = Number(o[2]), h = Number(o[3]);
+    if (!isFinite(l) || !isFinite(h) || h < l) continue;
+    let a = Math.floor((l - lo) / bw), b = Math.floor((h - lo) / bw);
+    a = Math.max(0, Math.min(B - 1, a));
+    b = Math.max(0, Math.min(B - 1, b));
+    if (b < a) { const t = a; a = b; b = t; }
+    if (a === b || h === l) { acc[a] += w; continue; }   // 一字板：全量给所在箱
+    const span = h - l;
+    for (let k = a; k <= b; k++) {
+      const bLo = lo + k * bw, bHi = bLo + bw;
+      const ov = Math.min(h, bHi) - Math.max(l, bLo);
+      if (ov > 0) acc[k] += w * (ov / span);
+    }
+  }
+  let pocK = 0;
+  for (let k = 1; k < B; k++) if (acc[k] > acc[pocK]) pocK = k;
+  const thr = (total / B) * 1.5;          // 平均箱量的 1.5 倍
+  const runs = [];
+  let cur = null;
+  for (let k = 0; k < B; k++) {
+    if (acc[k] >= thr) {
+      if (!cur) cur = { k0: k, k1: k, vol: acc[k] };
+      else { cur.k1 = k; cur.vol += acc[k]; }
+    } else if (cur) { runs.push(cur); cur = null; }
+  }
+  if (cur) runs.push(cur);
+  // POC 所在段周围都低于阈值时，单独成一段（POC 必须可见）
+  if (!runs.some(r => pocK >= r.k0 && pocK <= r.k1)) runs.push({ k0: pocK, k1: pocK, vol: acc[pocK] });
+  const zones = runs
+    .filter(r => r.vol >= total * 0.03 || (pocK >= r.k0 && pocK <= r.k1))
+    .sort((x, y) => y.vol - x.vol)
+    .slice(0, 3)
+    .map(r => ({
+      lo: +(lo + r.k0 * bw).toFixed(3),
+      hi: +(lo + (r.k1 + 1) * bw).toFixed(3),
+      share: +(r.vol / Math.max(total, 1e-9) * 100).toFixed(1),
+      poc: pocK >= r.k0 && pocK <= r.k1,
+    }));
+  // 全部箱的分布（2026-11-02：改成右侧横向直方图后，需要每一箱的占比，不再只要 3 段）
+  const profile = acc.map((v, k) => ({
+    lo: +(lo + k * bw).toFixed(3),
+    hi: +(lo + (k + 1) * bw).toFixed(3),
+    share: +(v / Math.max(total, 1e-9) * 100).toFixed(2),
+    poc: k === pocK,
+  }));
+  return {
+    zones: zones,
+    profile: profile,
+    poc: +(lo + (pocK + 0.5) * bw).toFixed(3),
+    lo: +lo.toFixed(3), hi: +hi.toFixed(3),
+    bins: B, lookback: LB,
+  };
+}
+
+/* 密集成交区的**画法**（2026-11-02 改版，owner：「还是和缺口、画框冲突」）。
+   ❌ 旧版：满宽半透明色带 —— 和缺口的红/绿块、自画框的蓝框都是"矩形叠矩形"，5 分钟线
+      上三者一叠就是一团糊色，靠色相/线型根本分不开。
+   ✅ 新版：**贴在主图右边缘外侧的横向量价直方图**（专业软件同款）——
+      · 画在 grid 右侧留白里（`grid.right` 临时加宽），**完全不压 K 线/缺口/画框**；
+      · 每根横条 = 一个价格箱的成交量占比，越长越密集；POC 那根最亮；
+      · 用 ECharts `custom` series：数据坐标→像素由它换算，缩放/重绘自动跟随；
+      · POC 价位另画一条紫色点线（全宽，1px，不构成色块）。
+   `marginPx` = 右侧留白宽度（与 grid.right 同值），`maxBarPx` = 最长横条像素。 */
+function _vpSeriesOption(profile, marginPx, maxBarPx, xAxisIndex) {
+  if (!Array.isArray(profile) || !profile.length) return null;
+  const maxShare = profile.reduce((m, b) => Math.max(m, Number(b.share) || 0), 0) || 1;
+  return {
+    name: "密集区", type: "custom", xAxisIndex: (xAxisIndex == null ? 0 : xAxisIndex),
+    yAxisIndex: 0, clip: false, silent: true, z: 6, animation: false,
+    /* 每个数据项 = [x=0, lo, hi, share, poc]。x 只用占位（画的位置由 marginPx 决定），
+       ⚠️ 必须挂在**不参与 dataZoom 的隐藏 x 轴**上：挂在主 x 轴上时，dataZoom 的
+       filter 模式会按 x 值过滤数据，缩放到别处这段直方图就整条消失（实测坑）。 */
+    data: profile.map(b => [0, b.lo, b.hi, b.share, b.poc ? 1 : 0]),
+    renderItem: (params, api) => {
+      const lo = api.value(1), hi = api.value(2), sh = api.value(3), isPoc = api.value(4);
+      const yA = api.coord([0, hi])[1];
+      const yB = api.coord([0, lo])[1];
+      const h = Math.max(1, Math.abs(yB - yA) - 0.6);
+      const x0 = api.getWidth() - marginPx;
+      const w = Math.max(1, (sh / maxShare) * maxBarPx);
+      return {
+        type: "rect",
+        shape: { x: x0, y: Math.min(yA, yB), width: w, height: h },
+        style: { fill: isPoc ? "rgba(190,160,255,.88)" : "rgba(163,113,247,.45)" },
+      };
+    },
+  };
+}
+
+/* 密集成交区开关（2026-11-02 owner 实验）——
+   按钮切换（不是勾选框）：开了才在 K 线主图 / 多窗口每一格画色带，默认**关闭**。
+   ⚠️ 状态**落 localStorage**：独立原生窗口是另一个 JS 上下文，不持久化的话主窗口开了、
+      看盘窗还是默认关（owner 2026-11-02 实报「多窗口没显示密集区」就是这条）。
+      同时 `mwEnterWindowMode(codes, {vp})` 会把当前状态随开窗一起传过去（origin 不同时的兜底）。 */
+// 换 key（v2）：旧 key 里可能残留 "0"（早期默认关时点到过），会导致"默认显示"不生效
+const VP_LS_KEY = "mwVolumeProfileOn2";
+/* 2026-11-02 owner：「多窗口显示密集成交区默认显示」⇒ **默认开**（没存过就是 true；
+   只有显式点按钮关掉过的那台机器才是 false）。localStorage 不可用（file:// 受限）也按 true 走。 */
+let _vpOn = (() => {
+  try {
+    const v = localStorage.getItem(VP_LS_KEY);
+    return v === null ? true : v === "1";
+  } catch (e) { return true; }
+})();
+function _mwWindowOpen() {
+  const w = document.getElementById("multiWatchWin");
+  return !!(w && w.style.display !== "none");
+}
+function _vpSyncButtons() {
+  ["vpBtn", "mwVpBtn"].forEach(id => {
+    const b = document.getElementById(id);
+    if (!b) return;
+    b.classList.toggle("primary", _vpOn);
+    b.textContent = _vpOn ? "◫ 密集区 开" : "◫ 密集区";
+  });
+}
+/* 后端复用已开着的看盘窗时（`open_multi_window` → reused），窗口不会再走 loaded 事件，
+   由它 evaluate_js 调本函数把开关状态同步过去。 */
+function _mwApplyOpts(opts) {
+  if (!opts || typeof opts.vp !== "boolean") return;
+  _vpOn = opts.vp;
+  try { localStorage.setItem(VP_LS_KEY, _vpOn ? "1" : "0"); } catch (e) { /* 忽略 */ }
+  _vpSyncButtons();
+  try { _mwKickTick(); } catch (e) { /* 忽略 */ }
+}
+function toggleVolumeProfile() {
+  // 入口有两个：K 线弹窗工具栏 与 多窗口标题栏（同一状态）。两边都没开时只提示不动作。
+  const hasChart = !!stockChartInst && !!stockChartData;
+  const mwOpen = _mwWindowOpen();
+  if (!hasChart && !mwOpen) { _paToast("先打开一张 K 线图或多窗口看盘", "err"); return; }
+  _vpOn = !_vpOn;
+  try { localStorage.setItem(VP_LS_KEY, _vpOn ? "1" : "0"); } catch (e) { /* 隐私模式忽略 */ }
+  _vpSyncButtons();
+  if (hasChart) renderStockChart(false);
+  // 多窗口每一格也要立刻跟着开/关（`_mwKickTick` 自带"窗口没开就返回"）
+  if (mwOpen) { try { _mwKickTick(); } catch (e) { /* 忽略 */ } }
+}
+
 /* ---- 缺口色块：点击隐藏 / 再点恢复（2026-10-28 owner）----
    5 分钟图上的缺口会挡视线。点一下色块 → 隐藏；再点同一处 → 恢复。
    ⚠️ 隐藏**不是彻底消失**：留一条极淡的点线轮廓（否则就再也点不到它了）。
@@ -7508,6 +7685,13 @@ function renderStockChart(applyZoom = true) {
         ? period.volume.map(v => (v == null || isNaN(Number(v))) ? null : Number(v))
         : []);
   const _voltUnit = _hasAmt ? "成交额" : "成交量";
+  /* 密集成交区（2026-11-02 实验）：按钮「◫ 密集区」开着才算。窗口=最近 250 根，
+     权重沿用上面这条量能序列（有成交额用成交额，没有用成交量）。 */
+  const _vp = _vpOn ? buildVolumeProfile(period.ohlc, _voltSeries, 250, 60) : null;
+  // 右侧直方图的位置：grid.right 从 58 → 112，多出来的 54px 只放量价分布，不压 K 线。
+  // 数据不足（_vp=null）时不加宽，避免留一块空白。
+  const _vpRight = _vp ? 112 : 58;
+  const vpSeries = _vp ? _vpSeriesOption(_vp.profile, _vpRight, _vpRight - 62, 4) : null;
   const _voltMa5 = _maOf(_voltSeries, 5);
   const _voltMa10 = _maOf(_voltSeries, 10);
   const _voltMaBase = _maOf(_voltSeries, VOL_MA_BASE);
@@ -7923,7 +8107,8 @@ function renderStockChart(applyZoom = true) {
 
         return html;
       } },
-    axisPointer: { link: [{ xAxisIndex: "all" }] },
+    // 只联动 4 个真实子图；新增的隐藏轴（指数 4，密集区直方图专用）不参与十字光标
+    axisPointer: { link: [{ xAxisIndex: [0, 1, 2, 3] }] },
     // 2026-10-17：整套轴/网格原来用的是 **GitHub 深色 token**（#30363d/#8b949e），
     // 而这个弹窗是**白底** ⇒ 轴线和标签都发灰、图像"平"。改成浅底墨色。
     // right: 20→58（2026-10-20）：给「现价胶囊」腾出**网格外**的位置，四个 grid 必须同值
@@ -7931,10 +8116,12 @@ function renderStockChart(applyZoom = true) {
     // 2026-10-20：量能窗口 9%→10%、MACD 10%→12%（主图让出 2%）—— MACD 要同时放
     // 柱 + 两条线 + 零轴，10% 太挤，柱子几乎贴着线看不出形态。
     grid: [
-      { left: 60, right: 58, top: 50, height: "48%" },   // 主图: K线+MA+BOLL+支撑压力+箱体
-      { left: 60, right: 58, top: "58%", height: "10%" }, // 成交额(独立窗口)
-      { left: 60, right: 58, top: "69%", height: "12%" }, // MACD
-      { left: 60, right: 58, top: "82%", height: "10%" }, // RSI
+      // 2026-11-02：开着「密集区」时右侧留白 58→112，多出的 54px 只放量价分布直方图
+      // （不压 K 线/缺口/画框；四个 grid 必须同值，否则共享 dataZoom 的 x 轴会错位）
+      { left: 60, right: _vpRight, top: 50, height: "48%" },   // 主图: K线+MA+BOLL+支撑压力+箱体
+      { left: 60, right: _vpRight, top: "58%", height: "10%" }, // 成交额(独立窗口)
+      { left: 60, right: _vpRight, top: "69%", height: "12%" }, // MACD
+      { left: 60, right: _vpRight, top: "82%", height: "10%" }, // RSI
     ],
     xAxis: [
       { type: "category", data: period.dates, gridIndex: 0, axisLine: { lineStyle: { color: "#2b333d" } },
@@ -7942,6 +8129,11 @@ function renderStockChart(applyZoom = true) {
       { type: "category", data: period.dates, gridIndex: 1, axisLabel: { show: false }, axisLine: { lineStyle: { color: "#2b333d" } } },
       { type: "category", data: period.dates, gridIndex: 2, axisLabel: { show: false }, axisLine: { lineStyle: { color: "#2b333d" } } },
       { type: "category", data: period.dates, gridIndex: 3, axisLabel: { color: "#8b949e", fontSize: 9 }, axisLine: { lineStyle: { color: "#2b333d" } } },
+      // 密集区直方图专用的隐藏 x 轴：**故意不列进 dataZoom 的 xAxisIndex**，
+      // 否则缩放时 filter 模式会把它当普通序列过滤掉，直方图整条消失。
+      { type: "category", data: period.dates, gridIndex: 0, show: false,
+        axisLine: { show: false }, axisTick: { show: false }, axisLabel: { show: false },
+        splitLine: { show: false } },
     ],
     yAxis: [
       { scale: true, gridIndex: 0, axisLabel: { color: "#8b949e", fontSize: 9 },
@@ -7985,6 +8177,14 @@ function renderStockChart(applyZoom = true) {
         })(),
         markLine: { symbol: "none",
           data: [
+            // 密集成交区的 POC（最密集价位）单画一条橙实线
+            ...((_vp && _vp.poc) ? [{
+              yAxis: _vp.poc,
+              // 与色带同色系（紫）；点线而非实线 —— 实线在这个图上已经是均线/支撑压力的形状
+              lineStyle: { color: "#c9a7ff", type: "dotted", width: 1, opacity: .9 },
+              label: { formatter: `POC ${fmt(_vp.poc, 2)}`, color: "#c9a7ff", fontSize: 9,
+                       position: "insideStartTop" },
+            }] : []),
             ...(showLevels ? [...resistanceLines, ...supportLines] : []), currentLine,
             ...(dailyMa5Line ? [dailyMa5Line] : []),
             ...(dailyMa10Line ? [dailyMa10Line] : []),
@@ -7993,6 +8193,8 @@ function renderStockChart(applyZoom = true) {
             ...(dailyMa60Line ? [dailyMa60Line] : []),
           ].filter(_finiteLineItem),
           label: { position: "insideEndTop" } } },
+      // 密集成交区：右侧横向直方图（画在网格外留白里，不压 K 线/缺口/画框）
+      ...(vpSeries ? [vpSeries] : []),
       ...divSeries,
       ...tradeSeries,
       ...(fibAnchor ? [fibAnchor] : []),
@@ -11095,11 +11297,12 @@ function startLivePoll() {
 async function init() {
   // 首先获取 DOM 元素（此时 DOM 已完全加载）
   // 2026-10-20：启动标记（0ms）写进慢调用日志 ⇒ 能确认 WebView2 是否加载了新版 app.js
-  try { window.pywebview.api.report_slow_call("app_boot_20261102e", 0); } catch (e) { /* 静默 */ }
+  try { window.pywebview.api.report_slow_call("app_boot_20261102k", 0); } catch (e) { /* 静默 */ }
   // 2026-10-31：重点关注标记（紫色星）——启动先拉一次，五个表的星标按它渲染；
   // 拉不到就用空集（星标显示未标记，不影响任何其它功能）。
   loadFocusCodes();
   loadWeeklyMacdLastStatus();
+  _vpSyncButtons();   // 密集成交区按钮按 localStorage 里的持久状态显示（默认关）
   dateSelect = document.getElementById("dateSelect");
   refreshBtn = document.getElementById("refreshBtn");
   autoPoll = document.getElementById("autoPoll");
@@ -11495,9 +11698,13 @@ function openMultiWatch() {
    图表/选股/刷新全部复用现有代码，没有第二份实现。 */
 let MW_WINDOW_MODE = false;
 
-async function mwEnterWindowMode(codes) {
+async function mwEnterWindowMode(codes, opts) {
   if (MW_WINDOW_MODE) return;
   MW_WINDOW_MODE = true;
+  // 主窗口把「密集成交区」开关随开窗一起带过来（独立窗口可能是另一个 origin，localStorage 不通）。
+  // 后端 `open_multi_window(codes, opts)` 原样透传；没带就沿用 localStorage 里的值。
+  if (opts && typeof opts.vp === "boolean") _vpOn = opts.vp;
+  _vpSyncButtons();
   // 独立窗口可能是**另一个 origin**（file:// vs http://127.0.0.1）⇒ localStorage 读不到主窗口
   // 里选的票，九格会全是「— 选择标的 —」。所以由后端把主窗口当前的代码表一起带过来。
   if (Array.isArray(codes) && codes.length) {
@@ -11539,7 +11746,15 @@ async function openMultiWatchWindow() {
     // 把当前九格里的代码带过去（独立窗口 localStorage 可能不通，见 mwEnterWindowMode）
     const _codes = (Array.isArray(mwCodes) && mwCodes.some(Boolean)) ? mwCodes.filter(Boolean)
       : _mwLoadCodes().filter(Boolean);
-    const r = await apiCall("open_multi_window", _codes);
+    // 带上「密集成交区」开关状态：原生窗口是另一个 JS 上下文，不带过去就得再点一次。
+    // ⚠️ 老后端（未重启）的 `open_multi_window(codes)` 只认一个参数，多传会 TypeError ⇒
+    //    退回单参数再试一次，保证原生窗口本身不因此打不开。
+    let r = null;
+    try {
+      r = await apiCall("open_multi_window", _codes, { vp: !!_vpOn });
+    } catch (e1) {
+      r = await apiCall("open_multi_window", _codes).catch(() => null);
+    }
     if (r && r.ok) return;
     if (r && r.error) console.warn("[多窗口] 原生窗口不可用，退回浮层：", r.error);
   } catch (e) {
@@ -11878,6 +12093,19 @@ function _mwOption(s, dma, levels, trades, zoom, code) {
     ? s.amount.map(v => (v == null || isNaN(Number(v))) ? null : +(Number(v) / 1e8).toFixed(2))
     : null;
   const vals = amtYi || s.volume || [];
+  /* 密集成交区（2026-11-02 owner）：多窗口每一格也要显示，与单图**同一口径/同一配色**
+     （紫色点线带 + POC 点线），窗口 = 格子里的全部根数（多窗口只取最近 96 根 5 分钟）。
+     ⚠️ 格子只有 ~100 根：分箱从 60 降到 48；非 POC 色带**不写字**（标签会挤成一团），
+        只给 POC 一段标「POC x%」。 */
+  const _vp = _vpOn ? buildVolumeProfile(ohlc, vals, MW_TAIL, 48) : null;
+  // 与单图一致：右侧留白里画横向直方图（格子只有 ~500px，留白 46px 够看形状）
+  const _mwVpRight = _vp ? 52 : 6;
+  const _vpSeries = _vp ? _vpSeriesOption(_vp.profile, _mwVpRight, 42, 3) : null;
+  const _vpLine = (_vp && _vp.poc) ? {
+    yAxis: _vp.poc,
+    lineStyle: { color: "#c9a7ff", type: "dotted", width: 1, opacity: .9 },
+    label: { formatter: "POC", color: "#c9a7ff", fontSize: 8, position: "insideStartTop" },
+  } : null;
   /* 成交额（亿）/ 成交量（手）的紧凑格式化 —— 成交额窗的**最大刻度**与左上角「最新值」共用。
      ⚠️ 单位取决于后端给的是成交额（亿）还是量（手），不能一律写"亿"。 */
   const _volFmt = (v) => {
@@ -11976,7 +12204,8 @@ function _mwOption(s, dma, levels, trades, zoom, code) {
     // 十字光标 + 悬停明细（2026-10-21 owner：多窗口要十字光标）。
     // `axisPointer.link` 让**同一格的三窗**共享一条竖线（K线/成交额/MACD 对齐），
     // 但**不跨格**联动 —— 九宫格里跨格跟着动会看花眼。
-    axisPointer: { link: [{ xAxisIndex: "all" }],
+    // 只联动 3 个真实子图（隐藏轴 3 是密集区直方图专用，不参与十字光标）
+    axisPointer: { link: [{ xAxisIndex: [0, 1, 2] }],
                    label: { fontSize: 9, backgroundColor: "#30363d", color: "#e6edf3" } },
     tooltip: {
       trigger: "axis",
@@ -12023,9 +12252,10 @@ function _mwOption(s, dma, levels, trades, zoom, code) {
     //   原比例 52/10/18 在九宫格里成交额只有 ~25px（3×3）/~39px（3×2），柱子糊成一条线。
     //   现在成交额 10%→**20%**（约 50~78px，翻倍），主图 52%→44%、MACD 18% 不变；
     //   三窗之间各留 ~2% 当分隔，底部 11% 给时间轴标签。
-    grid: [{ left: 40, right: 6, top: 3, height: "44%" },
-           { left: 40, right: 6, top: "49%", height: "20%" },
-           { left: 40, right: 6, top: "71%", height: "18%" }],
+    // 开着「密集区」时右侧留白 6→52，多出的 46px 放量价分布直方图（三窗必须同值对齐）
+    grid: [{ left: 40, right: _mwVpRight, top: 3, height: "44%" },
+           { left: 40, right: _mwVpRight, top: "49%", height: "20%" },
+           { left: 40, right: _mwVpRight, top: "71%", height: "18%" }],
     xAxis: [
       { type: "category", data: dates, axisLine: { lineStyle: { color: "#2b333d" } },
         axisLabel: { show: false } },
@@ -12035,6 +12265,10 @@ function _mwOption(s, dma, levels, trades, zoom, code) {
         // 不写死 interval：滚轮缩放后根数会变，固定的"每 dates.length/4 根一个"在放大后
         // 会只剩一两个标签。交给 ECharts 自动避让（默认 auto）。
         axisLabel: { color: "#8b949e", fontSize: 10 } },   // 9→10（2026-11-02：小屏也看得清）
+      // 密集区直方图专用的隐藏 x 轴（不参与 dataZoom，理由同单图）
+      { type: "category", data: dates, gridIndex: 0, show: false,
+        axisLine: { show: false }, axisTick: { show: false }, axisLabel: { show: false },
+        splitLine: { show: false } },
     ],
     yAxis: [
       { scale: true, splitNumber: 3, axisLabel: { color: "#8b949e", fontSize: 10 },
@@ -12054,9 +12288,13 @@ function _mwOption(s, dma, levels, trades, zoom, code) {
         // 缺口色块 + 日线均线（与单图同一套口径/颜色）
         markArea: (gaps.length || _mwBoxes2.length)
           ? { silent: true, data: gaps.concat(_mwBoxes2) } : undefined,
-        markLine: _lines.length ? { silent: true, symbol: "none", data: _lines } : undefined,
+        markLine: (_lines.length || _vpLine)
+          ? { silent: true, symbol: "none", data: _vpLine ? _lines.concat([_vpLine]) : _lines }
+          : undefined,
         itemStyle: { color: "#f85149", color0: "#3fb950",
                      borderColor: "#ff6b62", borderColor0: "#56d364", borderWidth: 1 } },
+      // 密集成交区：右侧横向直方图（画在网格外留白里，不压 K 线/缺口/画框）
+      ...(_vpSeries ? [_vpSeries] : []),
       line(s.ma5, "#e3b341", 1.2),   // 本周期 MA5（5 根 5 分 K = 25 分钟）
       // 2026-10-25 owner：「多窗口也要支持」——VWAP 与 0 轴，口径与单图同一函数
       ...(_mz.vwap.some(v => v != null) ? [line(_mz.vwap, "#f0b429", 1.6)] : []),

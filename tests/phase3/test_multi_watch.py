@@ -145,10 +145,11 @@ class TestFrontend:
         assert "buildGapAreas(period.ohlc, period.dates, 250)" in _JS
         assert "buildGapAreas(s.ohlc, s.dates, 15, 0.003, 8)" in _JS   # 九宫格
         # 2026-10-28 起九宫格的 markArea 还要装「画框提醒」
+        # （2026-11-02：密集成交区改成右侧直方图 custom series，不再进 markArea）
         assert "markArea: (gaps.length || _mwBoxes2.length)" in _JS
         # 日线均线三条（颜色与单图的「日线MA5/10/20」一致）
         assert '"日MA5"' in _JS and '"日MA10"' in _JS and '"日MA20"' in _JS
-        assert "markLine: _lines.length" in _JS
+        assert "markLine: (_lines.length || _vpLine)" in _JS
         assert '"#58a6ff"' in _JS and '"#bc8cff"' in _JS and '"#2dd4bf"' in _JS
 
     def test_realtime_polling(self):
@@ -278,8 +279,9 @@ class TestCrosshair:
 
     def test_crosshair_and_linked_grids(self):
         assert 'axisPointer: { type: "cross"' in _JS
-        # 同一格的三窗共享竖线（K线/成交额/MACD 对齐）
-        assert 'axisPointer: { link: [{ xAxisIndex: "all" }]' in _JS
+        # 同一格的三窗共享竖线（K线/成交额/MACD 对齐）；
+        # 2026-11-02：显式列 0/1/2 —— 隐藏轴 3 是密集区直方图专用，不参与联动
+        assert "axisPointer: { link: [{ xAxisIndex: [0, 1, 2] }]" in _JS
 
     def test_tooltip_shows_bar_details(self):
         assert 'trigger: "axis"' in _JS
@@ -406,7 +408,7 @@ class TestVolumePaneLegibility:
     """
 
     def _grid(self):
-        i = _JS.index("grid: [{ left: 40, right: 6, top: 3, height:")
+        i = _JS.index("grid: [{ left: 40, right: _mwVpRight, top: 3, height:")
         return _JS[i:i + 260]
 
     def test_成交额窗变高主图仍占大头(self):
