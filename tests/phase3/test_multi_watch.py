@@ -141,9 +141,11 @@ class TestFrontend:
         """owner：① 缺口没显示 ② 5/10/20 日均线没显示。"""
         # 缺口与单图共用同一个函数，口径不会漂
         assert "function buildGapAreas(ohlc, dates, lookbackDays, minPct, maxN)" in _JS
-        assert "buildGapAreas(period.ohlc, period.dates, 15)" in _JS   # 单图（最近 15 自然日）
+        # 2026-10-26 单图窗口从 15 天放宽到 250 天（默认视窗是近 6 月）
+        assert "buildGapAreas(period.ohlc, period.dates, 250)" in _JS
         assert "buildGapAreas(s.ohlc, s.dates, 15, 0.003, 8)" in _JS   # 九宫格
-        assert "markArea: gaps.length" in _JS
+        # 2026-10-28 起九宫格的 markArea 还要装「画框提醒」
+        assert "markArea: (gaps.length || _mwBoxes2.length)" in _JS
         # 日线均线三条（颜色与单图的「日线MA5/10/20」一致）
         assert '"日MA5"' in _JS and '"日MA10"' in _JS and '"日MA20"' in _JS
         assert "markLine: _lines.length" in _JS
@@ -321,7 +323,8 @@ class TestSupportResistance:
         assert api._daily_levels("600000") is None
 
     def test_frontend_draws_levels(self):
-        assert "function _mwOption(s, dma, levels, trades, zoom)" in _JS
+        # 2026-10-28 起多窗口也要画「画框提醒」⇒ 入参多了 code
+        assert "function _mwOption(s, dma, levels, trades, zoom, code)" in _JS
         assert '`${up ? "压" : "支"} ${Number(y).toFixed(2)}`' in _JS
         # 支撑绿、压力红（与单图一致）；标签在右侧（日线MA 在左，两拨不打架）
         assert '"#f85149", type: "dashed"' in _JS and '"#3fb950", type: "dashed"' in _JS
@@ -382,10 +385,50 @@ class TestTradeMarkersInCells:
 
     def test_frontend_buckets_same_as_main_chart(self):
         # 与单图同口径：成交落进 (bar_t - 5min, bar_t]
-        assert "function _mwOption(s, dma, levels, trades, zoom)" in _JS
+        assert "function _mwOption(s, dma, levels, trades, zoom, code)" in _JS
         assert "_be[bi] - 5 >= tm" in _JS
         # 买=红▲托在 low 下、卖=绿▼压在 high 上（与单图同色同形）
         assert 'color: "#f85149", borderColor: "#fff"' in _JS
         assert 'color: "#3fb950", borderColor: "#fff"' in _JS
         assert "symbolRotate: 180" in _JS
         assert "it.dma, it.levels, it.trades" in _JS
+
+
+class TestVolumePaneLegibility:
+    """2026-11-02 owner：「多窗口显示中，成交量的显示太小很难看清楚」。
+
+    原来三窗 52% / **10%** / 18%，九宫格里成交额窗只有 ~25px（3×3）/~39px（3×2），
+    柱子几乎糊成一条线。守四条：
+      ① 成交额窗高度 ≥16%（约 45~70px），主图让出空间但不低于 40%；
+      ② 成交额 y 轴不再整条空白：留 1 个刻度并显示**最大刻度值**（带亿/万单位）；
+      ③ 柱子更亮更宽 + 从 0 起算（`scale:false`），量能大小不被"缩放"骗；
+      ④ 左上角有「最新一根」的读数（不悬停也能看到当下量能）。
+    """
+
+    def _grid(self):
+        i = _JS.index("grid: [{ left: 40, right: 6, top: 3, height:")
+        return _JS[i:i + 260]
+
+    def test_成交额窗变高主图仍占大头(self):
+        g = self._grid()
+        assert 'height: "44%"' in g
+        assert 'top: "49%", height: "20%"' in g
+        assert 'top: "71%", height: "18%"' in g
+
+    def test_y轴显示最大刻度且按单位格式化(self):
+        i = _JS.index("scale: false, gridIndex: 1, splitNumber: 1")
+        seg = _JS[i:i + 400]
+        assert "axisLabel: { show: true" in seg
+        assert "formatter: _volFmt" in seg
+        # 亿 / 手 两种单位都要认
+        assert '"亿"' in _JS and '"万"' in _JS
+
+    def test_柱子更亮更宽且从0起算(self):
+        assert "rgba(248,81,73,.92)" in _JS and "rgba(63,185,80,.92)" in _JS
+        i = _JS.index('{ name: "量能", type: "bar"')
+        assert "barMaxWidth: 12" in _JS[i:i + 200]
+
+    def test_最新一根读数角标(self):
+        assert 'text: `${amtYi ? "额" : "量"}' in _JS
+        i = _JS.index("graphic: (() => {")
+        assert 'top: "49.4%"' in _JS[i:i + 700]

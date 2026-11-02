@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>trader pannel</title>
-<link rel="stylesheet" href="style.css?v=20261102c">
+<link rel="stylesheet" href="style.css?v=20261102e">
 </head>
 <body>
 <header class="topbar">
@@ -558,6 +558,9 @@
         <!-- 2026-10-28：缺口点掉后是**真消失**，用这个按钮一键恢复 -->
         <button class="mini-btn" id="paGapBtn" onclick="restoreHiddenGaps()"
                 style="display:none" title="恢复显示本票本周期所有被点掉的缺口">👁 缺口(0)</button>
+        <!-- 2026-11-02 owner：按住 Shift 拖一条线测幅度（幅度% / 价差 / 跨多少根 / 起止时间） -->
+        <span class="cell-dim" style="font-size:11px;align-self:center;white-space:nowrap"
+              title="按住 Shift 在 K 线主图上拖一条线：实时显示两点的幅度%、价差、跨多少根；Esc 或换票/换周期清除">⇧ 拖动 测幅度</span>
 
       </div>
     </div>
@@ -688,6 +691,6 @@
 <script src="vendor/echarts.min.js"></script>
 <!-- 2026-10-20：带版本号强制 WebView2 重新取 app.js（否则可能命中旧缓存，
      K 线提速/埋点改动不生效——表现为"改了跟没改一样"） -->
-<script src="app.js?v=20261102c"></script>
+<script src="app.js?v=20261102e"></script>
 </body>
 </html>

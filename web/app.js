@@ -5564,6 +5564,7 @@ async function openStockChart(code, name) {
   if (!modal) return;
   modal.style.display = "flex";
   chartModalOpen = true;
+  _msrClear();                 // 换票：上一只的测量框作废
   stockChartCode = code;
   // 换票：先清掉上一只的价位线，再把本票的读进来（markLine 在首帧渲染时就要有）
   priceAlerts = []; priceAlertsCode = null;
@@ -5837,6 +5838,7 @@ function toggleMaxStockChart() {
 function closeStockChart() {
   // 关窗必须把「画框模式」一起收掉：否则提示条/监听会挂在一个不存在的图上
   if (typeof _paDrawMode !== "undefined" && _paDrawMode) _paExitDraw();
+  _msrClear();                 // Shift 测量框同理（覆盖层在 body 上，不关会一直留着）
   document.getElementById("stockModal").style.display = "none";
   if (stockChartInst) { stockChartInst.dispose(); stockChartInst = null; }
   // 关窗时断开尺寸监听（否则它还会对着已 dispose 的实例触发，且随 open/close 累积）
@@ -6775,8 +6777,11 @@ function _paPixToData(cx, cy) {
     if (rect && rect.height > 0 && yExt && isFinite(yExt[0]) && isFinite(yExt[1])) {
       out.y = yExt[0] + (rect.y + rect.height - cy) / rect.height * (yExt[1] - yExt[0]);
       if (dates.length > 1 && rect.width > 0) {
+        // 2026-11-02：默认视窗只显示最近 N 根（barsToZStart），不能按"全量日期"线性映射，
+        // 否则兜底路径下算出的索引/日期整体偏移。用当前生效的 dataZoom 窗口换算。
+        const z = _msrZoomIdx(dates.length);
         const f = (cx - rect.x) / rect.width;
-        out.x = Math.round(f * (dates.length - 1));
+        out.x = Math.round(z.si + f * (z.ei - z.si));
       }
       out.how = "manual";
     }
@@ -6853,8 +6858,288 @@ function clearPriceBoxes() {
   }).catch(e => _paToast("清除失败：" + (e && e.message ? e.message : e), "err"));
 }
 
+/* ===== Shift + 拖动 = 测幅度（2026-11-02 owner） =====
+   owner：「按 shift 键再点击鼠标，然后移动可以测量幅度是多少」。
+   在 K 线主图上按住 Shift 拖一条线：实时显示「两点价格差 / 幅度% / 跨多少根 / 起止时间」。
+
+   实现要点（与「拖框」共用一套像素换算 `_paPixToData`）：
+     · 监听 **document 捕获阶段** 的 pointerdown（早于 ECharts），命中即
+       preventDefault + stopPropagation ⇒ 不会触发 ECharts 的平移/dataZoom；
+     · 覆盖层是 body 下的 fixed div（与画框预览同款），不受弹窗裁剪；
+     · 结果按**数据坐标**（K线索引, 价格）保存，每次整图重绘 / dataZoom 后重新投影 ——
+       盘中几秒一次的重绘若只记像素，框会停在错位置；
+     · Esc / 换票 / 换周期 / 关窗 清除；测量那一下的 click 会被吞掉（避免弹多空分布）。 */
+let _msr = null;                 // {code, period, a:{i,price,px}, b:{i,price,px}, rect, boxEl, labelEl}
+let _msrDragging = false;
+let _msrClickBlockUntil = 0;
+
+function _msrHostEl() { return document.getElementById("stockChart"); }
+
+function _msrChartRect() {
+  const h = _msrHostEl();
+  return h ? h.getBoundingClientRect() : null;
+}
+
+function _msrGridRect() {
+  try {
+    const g = stockChartInst.getModel().getComponent("grid", 0).coordinateSystem.getRect();
+    if (g && g.width > 0 && g.height > 0) return g;
+  } catch (e) { /* 实例未就绪 */ }
+  return null;
+}
+
+function _msrPix(ev, rect) {
+  return { x: Math.max(0, Math.min(rect.width, ev.clientX - rect.left)),
+           y: Math.max(0, Math.min(rect.height, ev.clientY - rect.top)) };
+}
+
+function _msrClampGrid(p) {
+  const g = _msrGridRect();
+  if (!g) return p;
+  return { x: Math.max(g.x, Math.min(g.x + g.width, p.x)),
+           y: Math.max(g.y, Math.min(g.y + g.height, p.y)) };
+}
+
+function _msrInGrid(p) {
+  const g = _msrGridRect();
+  return !g || (p.x >= g.x && p.x <= g.x + g.width && p.y >= g.y && p.y <= g.y + g.height);
+}
+
+function _msrDates() {
+  const pd = (stockChartData && stockChartData.period_data
+    && stockChartData.period_data[stockChartPeriod]) || {};
+  return pd.dates || [];
+}
+
+function _msrFmtDate(d) {
+  const s = String(d || "");
+  if (!s) return "";
+  return s.length >= 16 ? s.slice(5, 16) : s.slice(5, 10);   // MM-DD HH:MM / MM-DD
+}
+
+function _msrEls() {
+  if (!_msr || _msr.boxEl) return;
+  const box = document.createElement("div");
+  box.style.cssText = "position:fixed;z-index:9600;pointer-events:none;display:none;"
+    + "border:1px dashed #58a6ff;background:rgba(88,166,255,.10)";
+  const label = document.createElement("div");
+  label.style.cssText = "position:fixed;z-index:9601;pointer-events:none;display:none;"
+    + "background:rgba(13,17,23,.94);border:1px solid #58a6ff;border-radius:6px;"
+    + "padding:4px 8px;font-size:12px;line-height:1.35;color:#e6edf3;white-space:nowrap;"
+    + "font-family:ui-monospace,Consolas,monospace;box-shadow:0 4px 14px rgba(0,0,0,.55)";
+  document.body.appendChild(box);
+  document.body.appendChild(label);
+  _msr.boxEl = box;
+  _msr.labelEl = label;
+}
+
+function _msrPaint() {
+  if (!_msr || !_msr.boxEl) return;
+  const r = _msr.rect || _msrChartRect();
+  if (!r) return;
+  const ax = _msr.a.px.x, ay = _msr.a.px.y, bx = _msr.b.px.x, by = _msr.b.px.y;
+  const x0 = Math.min(ax, bx), y0 = Math.min(ay, by);
+  const w = Math.abs(bx - ax), h = Math.abs(by - ay);
+  const box = _msr.boxEl;
+  box.style.display = "block";
+  box.style.left = (r.left + x0) + "px";
+  box.style.top = (r.top + y0) + "px";
+  box.style.width = w + "px";
+  box.style.height = h + "px";
+
+  const aP = Number(_msr.a.price), bP = Number(_msr.b.price);
+  const chg = bP - aP;
+  const pct = aP ? (chg / aP * 100) : NaN;
+  const bars = Math.abs((Number(_msr.b.i) || 0) - (Number(_msr.a.i) || 0));
+  const up = !(chg < 0);
+  const col = up ? "#f85149" : "#3fb950";        // A股：涨红 / 跌绿
+  const dates = _msrDates();
+  const di = x => {
+    const k = Math.round(Number(x));
+    return (k >= 0 && k < dates.length) ? _msrFmtDate(dates[k]) : "";
+  };
+  const dA = di(_msr.a.i), dB = di(_msr.b.i);
+  const prec = Math.max(Math.abs(aP), Math.abs(bP)) < 1 ? 3 : 2;
+  // 幅度带符号（+12.34% / -12.34%）；价差取绝对值后补符号，避免 "-4.56" 变成 "4.56"
+  const pctTxt = isFinite(pct) ? (pct >= 0 ? "+" : "") + pct.toFixed(2) : "—";
+  const chgTxt = isFinite(chg) ? (chg >= 0 ? "+" : "-") + fmt(Math.abs(chg), prec) : "—";
+  const line1 = `<b style="color:${col};font-size:14px">${pctTxt}%</b>`
+    + `　<span style="color:${col}">${chgTxt}</span>`;
+  const line2 = [dA && dB ? `${dA} → ${dB}` : "", bars ? `${Math.round(bars)} 根` : ""]
+    .filter(Boolean).join(" · ");
+  const label = _msr.labelEl;
+  label.innerHTML = line1 + (line2
+    ? `<div style="color:#8b949e;font-size:11px;margin-top:1px">${line2}</div>` : "");
+  label.style.display = "block";
+  // 贴着终点放；超出视口就翻到另一侧/上方
+  const endX = r.left + bx, endY = r.top + by;
+  const lw = label.offsetWidth || 170, lh = label.offsetHeight || 42;
+  let lx = endX + 14, ly = endY - lh - 10;
+  if (lx + lw > window.innerWidth - 8) lx = endX - lw - 14;
+  if (ly < 8) ly = endY + 14;
+  if (ly + lh > window.innerHeight - 8) ly = window.innerHeight - lh - 8;
+  label.style.left = Math.max(8, lx) + "px";
+  label.style.top = Math.max(8, ly) + "px";
+}
+
+/* (K线索引, 价格) → 容器内像素（用于重绘后重新投影；与 `_paPixToData` 对应的反向换算，
+   同样带 grid 矩形兜底 —— 本机 convertToPixel 偶尔给不出值）。 */
+/* 当前 dataZoom 窗口对应的可见索引区间 [si, ei]。
+   ⚠️ 默认视窗只显示最近 N 根（`barsToZStart`），所以像素↔索引不能按"全量日期"线性换算。 */
+function _msrZoomIdx(n) {
+  const z = stockChartAppliedZoom || { start: 0, end: 100 };
+  const clamp = v => Math.max(0, Math.min(n - 1, v));
+  const si = clamp((Number(z.start) || 0) / 100 * (n - 1));
+  let ei = clamp((z.end == null ? 100 : Number(z.end)) / 100 * (n - 1));
+  if (!(ei > si)) ei = n - 1;
+  return { si, ei };
+}
+
+function _msrDataToPix(i, price) {
+  const out = { x: NaN, y: NaN };
+  if (!stockChartInst) return out;
+  try {
+    const vx = stockChartInst.convertToPixel({ xAxisIndex: 0 }, i);
+    if (vx != null) out.x = Number(Array.isArray(vx) ? vx[0] : vx);
+    const vy = stockChartInst.convertToPixel({ yAxisIndex: 0 }, price);
+    if (vy != null) out.y = Number(Array.isArray(vy) ? vy[1] : vy);
+  } catch (e) { /* 下一级 */ }
+  if (isFinite(out.x) && isFinite(out.y)) return out;
+  try {
+    const ecModel = stockChartInst.getModel();
+    const rect = ecModel.getComponent("grid", 0).coordinateSystem.getRect();
+    const yExt = ecModel.getComponent("yAxis", 0).axis.scale.getExtent();
+    const n = _msrDates().length;
+    if (rect && rect.width > 0 && rect.height > 0 && n > 1
+        && yExt && isFinite(yExt[0]) && isFinite(yExt[1]) && yExt[1] !== yExt[0]) {
+      const z = _msrZoomIdx(n);
+      out.x = rect.x + (Number(i) - z.si) / (z.ei - z.si) * rect.width;
+      out.y = rect.y + (yExt[1] - Number(price)) / (yExt[1] - yExt[0]) * rect.height;
+    }
+  } catch (e) { /* 保持 NaN */ }
+  return out;
+}
+
+function _msrRepaint() {
+  if (!_msr || _msrDragging) return;
+  if (!stockChartInst || _msr.code !== stockChartCode || _msr.period !== stockChartPeriod) {
+    _msrClear();
+    return;
+  }
+  const r = _msrChartRect();
+  if (!r) { _msrClear(); return; }
+  const pa = _msrDataToPix(_msr.a.i, _msr.a.price);
+  const pb = _msrDataToPix(_msr.b.i, _msr.b.price);
+  if (!isFinite(pa.x) || !isFinite(pa.y) || !isFinite(pb.x) || !isFinite(pb.y)) {
+    _msrClear();
+    return;
+  }
+  _msr.rect = r;
+  _msr.a.px = pa;
+  _msr.b.px = pb;
+  _msrPaint();
+}
+
+function _msrClear() {
+  _msrDragging = false;
+  _msrClickBlockUntil = 0;
+  if (!_msr) return;
+  try { if (_msr.boxEl) _msr.boxEl.remove(); } catch (e) { /* 已移除 */ }
+  try { if (_msr.labelEl) _msr.labelEl.remove(); } catch (e) { /* 已移除 */ }
+  _msr = null;
+}
+
+function _msrOnDown(ev) {
+  if (!ev.shiftKey || !chartModalOpen || !stockChartInst || _paDrawMode) return;
+  if (ev.button !== undefined && ev.button !== 0) return;   // 只认左键
+  const host = _msrHostEl();
+  if (!host || !host.contains(ev.target)) return;      // 只认图表区域
+  const r = _msrChartRect();
+  if (!r || !r.width || !r.height) return;
+  const p = _msrPix(ev, r);
+  if (!_msrInGrid(p)) return;                          // 起手点必须落在 K 线主图网格里
+  const d = _paPixToData(p.x, p.y);
+  if (!isFinite(d.y)) return;
+  ev.preventDefault();
+  ev.stopPropagation();                                // 拦在 ECharts 之前：不平移/不缩放
+  _msrClear();
+  _msr = { code: stockChartCode, period: stockChartPeriod,
+           a: { i: d.x, price: d.y, px: { x: p.x, y: p.y } },
+           b: { i: d.x, price: d.y, px: { x: p.x, y: p.y } },
+           rect: r, boxEl: null, labelEl: null };
+  _msrDragging = true;
+  _msrEls();
+  _msrPaint();
+}
+
+function _msrOnMove(ev) {
+  if (!_msrDragging || !_msr) return;
+  const r = _msrChartRect();
+  if (!r) return;
+  const p = _msrClampGrid(_msrPix(ev, r));
+  const d = _paPixToData(p.x, p.y);
+  if (isFinite(d.y)) _msr.b.price = d.y;
+  if (isFinite(d.x)) {
+    _msr.b.i = d.x;
+  } else {
+    const g = _msrGridRect();
+    const n = _msrDates().length;
+    if (g && n > 1) {
+      const z = _msrZoomIdx(n);
+      _msr.b.i = Math.round(z.si + (p.x - g.x) / g.width * (z.ei - z.si));
+    }
+  }
+  _msr.b.px = { x: p.x, y: p.y };
+  _msr.rect = r;
+  ev.preventDefault();
+  _msrPaint();
+}
+
+function _msrOnUp(ev) {
+  if (!_msrDragging) return;
+  _msrDragging = false;
+  ev.stopPropagation();
+  // 几乎没拖动 = 误触（Shift+单击），不画 0.00% 的框
+  const tiny = _msr && Math.abs(_msr.b.px.x - _msr.a.px.x) < 3
+    && Math.abs(_msr.b.px.y - _msr.a.px.y) < 3;
+  if (tiny) _msrClear();
+  else if (_msr) _msrRepaint();             // 用数据坐标再校正一次
+  // 无论成没成框，这一下 click 都别往下传（否则会弹出「多空分布」）
+  _msrClickBlockUntil = Date.now() + 300;
+}
+
+document.addEventListener("pointerdown", _msrOnDown, true);
+document.addEventListener("pointermove", _msrOnMove, true);
+window.addEventListener("pointerup", _msrOnUp, true);
+// 拖到窗口外松手 / 触控被打断：pointerup 可能收不到 ⇒ 用 blur / pointercancel 收尾
+function _msrAbort() {
+  if (!_msrDragging) return;
+  _msrDragging = false;
+  if (_msr) _msrRepaint();
+}
+window.addEventListener("blur", _msrAbort);
+document.addEventListener("pointercancel", _msrAbort, true);
+// 测量结束的那一下 click 不往下传（ECharts 的 zr click 会打开「多空分布」）
+document.addEventListener("click", (ev) => {
+  if (Date.now() < _msrClickBlockUntil) { ev.preventDefault(); ev.stopPropagation(); }
+}, true);
+// 按住 Shift 时光标变十字，松开恢复
+document.addEventListener("keydown", (ev) => {
+  if (ev.key === "Shift" && chartModalOpen) {
+    const h = _msrHostEl();
+    if (h) h.style.cursor = "crosshair";
+  }
+});
+document.addEventListener("keyup", (ev) => {
+  if (ev.key === "Shift") {
+    const h = _msrHostEl();
+    if (h) h.style.cursor = "";
+  }
+});
+
 document.addEventListener("keydown", (e) => {
   if (e.key === "Escape" && _paDrawMode) _paExitDraw();
+  if (e.key === "Escape") _msrClear();      // 测量框也一起收掉
 });
 
 /* 兜底：K 线弹窗开着时，任何未捕获的脚本错误都弹提示。
@@ -7867,6 +8152,12 @@ function renderStockChart(applyZoom = true) {
 
   _scheduleNowTag(stockChartInst, cur, _nowCol);
 
+  // Shift 测量框：整图重绘后按**数据坐标**重新投影（盘中几秒一次重绘，只记像素会飘）
+  if (_msr) {
+    if (_msr.code !== stockChartCode || _msr.period !== stockChartPeriod) _msrClear();
+    else setTimeout(_msrRepaint, 0);
+  }
+
   // 记住用户手动缩放。注意：**不要用 getOption()** —— 它会深拷贝整个 option
   // （1650 根K线 × ~16 条 series），而拖动/滚轮缩放会连续触发本事件 ⇒ 实测就是卡顿主因之一。
   // dataZoom 事件本身带 start/end 百分比，直接读。
@@ -7893,6 +8184,7 @@ function renderStockChart(applyZoom = true) {
         if (_nowTagState.price != null) {
           _scheduleNowTag(stockChartInst, _nowTagState.price, _nowTagState.color);
         }
+        setTimeout(_msrRepaint, 0);   // Shift 测量框同理：缩放后重投影
       });
     } catch (e) { /* 桩环境 on 不接受回调，忽略 */ }
   }
@@ -10803,7 +11095,7 @@ function startLivePoll() {
 async function init() {
   // 首先获取 DOM 元素（此时 DOM 已完全加载）
   // 2026-10-20：启动标记（0ms）写进慢调用日志 ⇒ 能确认 WebView2 是否加载了新版 app.js
-  try { window.pywebview.api.report_slow_call("app_boot_20261102c", 0); } catch (e) { /* 静默 */ }
+  try { window.pywebview.api.report_slow_call("app_boot_20261102e", 0); } catch (e) { /* 静默 */ }
   // 2026-10-31：重点关注标记（紫色星）——启动先拉一次，五个表的星标按它渲染；
   // 拉不到就用空集（星标显示未标记，不影响任何其它功能）。
   loadFocusCodes();
@@ -11586,6 +11878,14 @@ function _mwOption(s, dma, levels, trades, zoom, code) {
     ? s.amount.map(v => (v == null || isNaN(Number(v))) ? null : +(Number(v) / 1e8).toFixed(2))
     : null;
   const vals = amtYi || s.volume || [];
+  /* 成交额（亿）/ 成交量（手）的紧凑格式化 —— 成交额窗的**最大刻度**与左上角「最新值」共用。
+     ⚠️ 单位取决于后端给的是成交额（亿）还是量（手），不能一律写"亿"。 */
+  const _volFmt = (v) => {
+    const n = Number(v);
+    if (!isFinite(n) || n <= 0) return "";
+    if (amtYi) return (n >= 100 ? n.toFixed(0) : n >= 10 ? n.toFixed(1) : n.toFixed(2)) + "亿";
+    return n >= 10000 ? (n / 10000).toFixed(1) + "万" : String(Math.round(n));
+  };
   /* 2026-10-25：量能基准线（VOL_MA_BASE 根均量），与单图同窗口、同色（青色虚线）。
      ⚠️ 九宫格是 5 分钟口径 ⇒ "60 根" = 5 小时，只当"当日量能中枢"看，别按日线的 60 日读。 */
   const _volMaBaseM = (() => {
@@ -11604,7 +11904,9 @@ function _mwOption(s, dma, levels, trades, zoom, code) {
     const o = ohlc[i];
     const prev = i > 0 ? ohlc[i - 1][1] : null;
     const up = !o ? true : (prev == null ? o[1] >= o[0] : o[1] >= prev);
-    return { value: v, itemStyle: { color: up ? "rgba(248,81,73,.8)" : "rgba(63,185,80,.8)" } };
+    // 2026-11-02：透明度 .8→.92、最宽 10→12 —— 九宫格里柱子只有 4~5px 宽，
+    // 再压暗/压细就与深底糊在一起（owner：「成交量太小很难看清」）。
+    return { value: v, itemStyle: { color: up ? "rgba(248,81,73,.92)" : "rgba(63,185,80,.92)" } };
   });
   const _mz = buildIntradayVwapZero(dates, ohlc, s.volume, s.amount);
   const line = (arr, color, w) => ({
@@ -11657,6 +11959,20 @@ function _mwOption(s, dma, levels, trades, zoom, code) {
   }));
   return {
     animation: false, backgroundColor: "#0d1117",
+    // 成交额窗左上角的「最新一根」读数（2026-11-02）：
+    // 九宫格里刻度字小、柱子矮，不悬停也要能读出当下量能有多大。
+    // 文字描边（textBorder）保证压在柱子上也看得清；z 提到 series 之上。
+    graphic: (() => {
+      let li = -1;
+      for (let i = vals.length - 1; i >= 0; i--) {
+        if (vals[i] != null && isFinite(Number(vals[i]))) { li = i; break; }
+      }
+      const txt = li >= 0 ? _volFmt(vals[li]) : "";
+      if (!txt) return undefined;
+      return [{ type: "text", silent: true, z: 20, left: 44, top: "49.4%",
+        style: { text: `${amtYi ? "额" : "量"} ${txt}`, fill: "#c9d1d9",
+                 font: "9px ui-monospace", textBorderColor: "#0d1117", textBorderWidth: 2 } }];
+    })(),
     // 十字光标 + 悬停明细（2026-10-21 owner：多窗口要十字光标）。
     // `axisPointer.link` 让**同一格的三窗**共享一条竖线（K线/成交额/MACD 对齐），
     // 但**不跨格**联动 —— 九宫格里跨格跟着动会看花眼。
@@ -11702,12 +12018,14 @@ function _mwOption(s, dma, levels, trades, zoom, code) {
       zoomOnMouseWheel: true, moveOnMouseMove: true, moveOnMouseWheel: false,
       preventDefaultMouseMove: true,
     }],
-    // 三窗：主图 52% / 成交额 10% / MACD 18%。
-    // 2026-10-26：左轴留白 46→40、右边距 8→6、顶部 6→4 —— 窗口放大后格子变宽，
-    // 这 14px 全部让给绘图区（百分比没动，格子变高时三窗等比变高）。
-    grid: [{ left: 40, right: 6, top: 4, height: "52%" },
-           { left: 40, right: 6, top: "62%", height: "10%" },
-           { left: 40, right: 6, top: "75%", height: "18%" }],
+    // 三窗：主图 44% / 成交额 **20%** / MACD 18%（底部留给时间轴）。
+    // 2026-11-02 owner：「多窗口显示中，成交量的显示太小很难看清楚」——
+    //   原比例 52/10/18 在九宫格里成交额只有 ~25px（3×3）/~39px（3×2），柱子糊成一条线。
+    //   现在成交额 10%→**20%**（约 50~78px，翻倍），主图 52%→44%、MACD 18% 不变；
+    //   三窗之间各留 ~2% 当分隔，底部 11% 给时间轴标签。
+    grid: [{ left: 40, right: 6, top: 3, height: "44%" },
+           { left: 40, right: 6, top: "49%", height: "20%" },
+           { left: 40, right: 6, top: "71%", height: "18%" }],
     xAxis: [
       { type: "category", data: dates, axisLine: { lineStyle: { color: "#2b333d" } },
         axisLabel: { show: false } },
@@ -11716,12 +12034,18 @@ function _mwOption(s, dma, levels, trades, zoom, code) {
       { type: "category", data: dates, gridIndex: 2, axisLine: { lineStyle: { color: "#2b333d" } },
         // 不写死 interval：滚轮缩放后根数会变，固定的"每 dates.length/4 根一个"在放大后
         // 会只剩一两个标签。交给 ECharts 自动避让（默认 auto）。
-        axisLabel: { color: "#8b949e", fontSize: 9 } },   // 8→9（2026-10-26 owner：太小看不清）
+        axisLabel: { color: "#8b949e", fontSize: 10 } },   // 9→10（2026-11-02：小屏也看得清）
     ],
     yAxis: [
-      { scale: true, splitNumber: 3, axisLabel: { color: "#8b949e", fontSize: 9 },
+      { scale: true, splitNumber: 3, axisLabel: { color: "#8b949e", fontSize: 10 },
         splitLine: { lineStyle: { color: "rgba(139,148,158,.12)" } } },
-      { scale: true, gridIndex: 1, axisLabel: { show: false }, splitLine: { show: false } },
+      // 成交额窗（2026-11-02 owner：要能看清成交量）——
+      //   ① `scale:false` 从 0 起算（量能大小关系不被"缩放"骗）；
+      //   ② 只留 1 个刻度、显示**最大刻度值**（带亿/万单位），不再整条轴空白；
+      //   ③ 最小刻度（0）由 formatter 隐藏，免得 9px 小字挤在一起。
+      { scale: false, gridIndex: 1, splitNumber: 1,
+        axisLabel: { show: true, fontSize: 9, color: "#8b949e", margin: 2, formatter: _volFmt },
+        splitLine: { show: false }, axisLine: { show: false }, axisTick: { show: false } },
       { scale: true, splitNumber: 2, gridIndex: 2, axisLabel: { show: false },
         splitLine: { show: false } },
     ],
@@ -11742,7 +12066,8 @@ function _mwOption(s, dma, levels, trades, zoom, code) {
       // 买卖点（只在该格窗口里有成交时才建这个系列）
       ...(_tradePts.length ? [{ name: "成交", type: "scatter", data: _tradePts, z: 13,
                                symbol: "triangle", symbolSize: 8 }] : []),
-      { name: "量能", type: "bar", xAxisIndex: 1, yAxisIndex: 1, data: volSer, barMaxWidth: 10 },
+      { name: "量能", type: "bar", xAxisIndex: 1, yAxisIndex: 1, data: volSer,
+        barMaxWidth: 12 },   // 10→12（2026-11-02：九宫格里柱子太细看不清）
       { name: `均量${VOL_MA_BASE}`, type: "line", xAxisIndex: 1, yAxisIndex: 1, data: _volMaBaseM,
         symbol: "none", connectNulls: true, z: 3,
         // 格子里只有 ~120 根、又小，2px 会盖住柱子 ⇒ 这里收成 1.4px，同一色系不换色
