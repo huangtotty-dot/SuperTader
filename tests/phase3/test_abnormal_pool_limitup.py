@@ -82,10 +82,14 @@ class TestAddLimitupAccumulates(unittest.TestCase):
         self.api._ABN_FP = self.tmp / "abnormal_pool.json"
         # 测试禁网：腾讯兜底默认返回空，个别用例再覆盖
         self.api._tencent_limit_time = lambda code, day, lp: ("", None, "")
+        # 复盘兜底默认空（个别用例覆盖），避免读真实 sector_breadth.json
+        self._old_recap = t_gui._limitup_from_recap
+        t_gui._limitup_from_recap = lambda d, fp=None: []
 
     def tearDown(self):
         t_gui._market_csv_fp = self._old_fp
         t_gui._jiuyan_names = self._old_names
+        t_gui._limitup_from_recap = self._old_recap
         self._td.cleanup()
 
     def _mk(self, date, rows, data_date=""):
@@ -218,6 +222,28 @@ class TestAddLimitupAccumulates(unittest.TestCase):
         self.assertEqual((r["filled"], r["missing"]), (0, 1))
         self.assertIn("腾讯分钟线只覆盖", r["note"])
 
+    def test_市场快照缺失时用复盘名单兜底(self):
+        """owner 2026-11-03 实报：11-03 市场快照还没生成 ⇒ 不该直接失败，用已入库的复盘名单。"""
+        self.api._limit_price_guess = lambda code, day: 9.99
+        seen = {}
+
+        def _fake_tdx(code, day, lp):
+            seen[code] = lp
+            return "09:31", True, "2026-11-03"
+
+        self.api._tdx_first_limit_time = _fake_tdx
+        t_gui._limitup_from_recap = lambda d, fp=None: [
+            {"code": "600000", "name": "", "board": 2, "limit_price": 0.0, "data_date": d},
+            {"code": "300001", "name": "", "board": 1, "limit_price": 0.0, "data_date": d},
+        ]
+        r = self.api.abnormal_pool_add_limitup("2026-11-03")
+        self.assertTrue(r["ok"])
+        self.assertEqual(r["source"], "recap")
+        self.assertEqual((r["added"], r["total"]), (2, 2))
+        self.assertIn("复盘名单", r["note"])
+        self.assertEqual(seen.get("600000"), 9.99, "复盘来源没有涨停价 ⇒ 用推算值")
+
+
     def test_所选日期没有涨停票时自动退回最近日期(self):
         """实报根因：日期框默认是"今天"(11-03)，池里那批是 11-02 的 ⇒ 一只都匹配不上。"""
         self._mk("2026-11-02", [("600000", "", 1, 2)])
@@ -308,6 +334,47 @@ class TestLimitTimeFromDf(unittest.TestCase):
         import pandas as pd
         df = pd.DataFrame({"time": ["2026-11-01 09:31"], "high": [11.0], "close": [11.0]})
         self.assertEqual(t_gui._limit_time_from_min_df(df, "2026-11-02", 11.0), ("", None))
+
+class TestFallbacks(unittest.TestCase):
+    def test_涨跌停比例(self):
+        assert t_gui._limitup_ratio("600000") == 0.10
+        assert t_gui._limitup_ratio("300001") == 0.20
+        assert t_gui._limitup_ratio("688001") == 0.20
+        assert t_gui._limitup_ratio("830001") == 0.30
+        assert t_gui._limitup_ratio("600000", "*ST某某") == 0.05
+
+    def test_复盘成员解析与去重(self):
+        with tempfile.TemporaryDirectory() as td:
+            fp = Path(td) / "sector_breadth.json"
+            fp.write_text(json.dumps({"days": {"2026-11-03": {"sections": {
+                "大消费": {"members": [{"code": "600000", "name": "浦发", "board": 2},
+                                     {"code": "300001", "name": "特锐德", "board": 1}]},
+                "其他": {"members": [{"code": "600000", "name": "浦发", "board": 3}]},
+            }}}}, ensure_ascii=False), encoding="utf-8")
+            lst = t_gui._limitup_from_recap("2026-11-03", fp=fp)
+        assert [x["code"] for x in lst] == ["600000", "300001"]
+        assert lst[0]["board"] == 3, "同日多段出现取更大板数"
+        assert t_gui._limitup_from_recap("2026-12-01", fp=fp) == []
+
+    def test_按昨收推算涨停价(self):
+        with tempfile.TemporaryDirectory() as td:
+            d = Path(td)
+            (d / "600000.json").write_text(json.dumps({"rows": [
+                {"date": "2026-10-30", "close": 10.0}, {"date": "2026-11-02", "close": 11.0},
+                {"date": "2026-11-03", "close": 12.0}]}), encoding="utf-8")
+            old_dir = t_gui._DAILY_KLINE_DIR
+            old_names = t_gui._jiuyan_names
+            t_gui._DAILY_KLINE_DIR = d
+            t_gui._jiuyan_names = lambda: {"600000": "浦发银行"}
+            try:
+                api = t_gui.Api()
+                assert api._limit_price_guess("600000", "2026-11-02") == 11.0   # 10.0×1.1
+                assert api._limit_price_guess("600000", "2026-11-03") == 12.1   # 11.0×1.1
+                assert api._limit_price_guess("600000", "2026-10-30") == 0.0    # 没有昨收
+            finally:
+                t_gui._DAILY_KLINE_DIR = old_dir
+                t_gui._jiuyan_names = old_names
+
 
 class TestFrontendTime(unittest.TestCase):
     def test_涨停时间显示与补算按钮(self):

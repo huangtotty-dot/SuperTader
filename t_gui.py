@@ -255,6 +255,54 @@ def _limitup_from_market_csv(fp):
     return out
 
 
+def _limitup_ratio(code, name=""):
+    """涨跌停比例（用于「市场快照缺失时按昨收推算涨停价」）。
+
+    ST/退市 5%；创业板(30/301/302)、科创板(688/689) 20%；北交所(4/8/92 开头) 30%；其余 10%。
+    """
+    c = str(code or "")
+    nm = str(name or "").upper()
+    if "ST" in nm or "退" in nm:
+        return 0.05
+    if c.startswith(("30", "301", "302", "688", "689")):
+        return 0.20
+    if c.startswith(("4", "8", "92")):
+        return 0.30
+    return 0.10
+
+
+def _limitup_from_recap(date, fp=None):
+    """韭研复盘成员（`sector_breadth.json` 当天 sections.members）→ 涨停清单。
+
+    市场快照 `market_YYYYMMDD.csv` 缺失时的**兜底**（2026-11-03 实报：主循环当天没落快照，
+    但 11-03 的复盘已入库）。`board` = 「N天M板」里的 M。
+    ⚠️ 与市场快照的「连板天数」不完全同义（复盘是 N 天内 M 次涨停，不一定连续）。
+    """
+    if fp is None:
+        fp = BASE / "stock_hunter" / "data" / "sector_breadth.json"
+    d0 = str(date or "")[:10]
+    seen = {}
+    try:
+        d = json.loads(Path(fp).read_text(encoding="utf-8"))
+        rec = ((d.get("days") or {}).get(d0) or {})
+        for sec, v in (rec.get("sections") or {}).items():
+            for m in ((v or {}).get("members") or []):
+                code = str(m.get("code") or "").zfill(6)
+                if len(code) != 6 or not code.isdigit():
+                    continue
+                try:
+                    b = max(1, int(m.get("board") or 1))
+                except Exception:
+                    b = 1
+                cur = seen.get(code)
+                if cur is None or b > cur["board"]:
+                    seen[code] = {"code": code, "name": str(m.get("name") or ""),
+                                  "board": b, "limit_price": 0.0, "data_date": d0}
+    except Exception:
+        return []
+    return sorted(seen.values(), key=lambda r: (-r["board"], r["code"]))
+
+
 def _limit_time_from_min_df(df, day, limit_price):
     """分钟 K 帧 → 当日「首次触及涨停价」的 HH:MM + 是否收盘封板（纯函数，供测试/复用）。
 
@@ -4429,6 +4477,30 @@ class Api:
             return df
         except Exception:
             return None
+
+    def _limit_price_guess(self, code: str, date: str) -> float:
+        """市场快照缺失时按「昨收 × 涨跌停比例」推算涨停价（读本地日线缓存，零网络）。
+
+        ⚠️ 缓存是**前复权**：若目标日前发生除权，推算值会有偏差；正常近期交易日没问题。
+        """
+        try:
+            import math
+            c = str(code).split("_")[0]
+            d = json.loads((_DAILY_KLINE_DIR / f"{c}.json").read_text(encoding="utf-8"))
+            rows = d.get("rows") or []
+            d0 = str(date or "")[:10]
+            prev = 0.0
+            for r in rows:
+                if str(r.get("date"))[:10] < d0:
+                    prev = float(r.get("close") or 0)
+                else:
+                    break
+            if not prev:
+                return 0.0
+            nm = _jiuyan_names().get(c, "")
+            return math.floor(prev * (1 + _limitup_ratio(c, nm)) * 100 + 0.5) / 100.0
+        except Exception:
+            return 0.0
 
     def _tdx_first_limit_time(self, code: str, day: str, limit_price: float):
         """通达信本地 **1 分钟线** → 当日「首次触及涨停价」的分钟 + 是否收盘封板。
@@ -12502,6 +12574,11 @@ class Api:
         if fp is None:
             return {"ok": False, "error": "日期格式应为 YYYY-MM-DD"}
         lst = _limitup_from_market_csv(fp)
+        src = "market"
+        if not lst:
+            # 2026-11-03 实报：主循环当天没落 market_YYYYMMDD.csv，但复盘已入库 ⇒ 用复盘名单兜底
+            lst = _limitup_from_recap(d)
+            src = "recap"
         if not lst:
             try:
                 ds = sorted(p.stem.replace("market_", "") for p in fp.parent.glob("market_*.csv"))
@@ -12509,13 +12586,18 @@ class Api:
                 ds = []
             near = "、".join(ds[-8:]) if ds else "（无）"
             return {"ok": False, "date": d,
-                    "error": f"{d} 没有市场快照（market_{d.replace('-', '')}.csv 不存在）。"
-                             f"可用日期：{near}"}
+                    "error": f"{d} 既没有市场快照（market_{d.replace('-', '')}.csv），"
+                             f"复盘库里也没有这天的成员。可用市场快照：{near}"}
         names = _jiuyan_names()
         stocks = self._abn_read()
         now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         # 以 CSV 的「数据日期」为准（周末补跑的 market_20261031.csv 实际装的是 10-30 行情）
         data_date = next((r.get("data_date") for r in lst if r.get("data_date")), "") or d
+        # 复盘来源没有「涨停价」⇒ 按昨收 × 涨跌停比例推算，供后续算涨停时间
+        if src == "recap":
+            for r in lst:
+                if not r.get("limit_price"):
+                    r["limit_price"] = self._limit_price_guess(r["code"], data_date)
         added = updated = unchanged = 0
         for r in lst:
             c = r["code"]
@@ -12560,9 +12642,13 @@ class Api:
                 time_filled += 1
         ok = self._abn_write(stocks)
         out = {"ok": ok, "date": data_date, "requested": d, "total": len(lst),
+               "source": src,
                "added": added, "updated": updated, "unchanged": unchanged,
                "pool": len(stocks), "time_filled": time_filled, "tdx_last": tdx_last}
-        if data_date != d:
+        if src == "recap":
+            out["note"] = (f"{d} 的市场快照尚未生成（猎手今天还没跑扫描），"
+                           f"已用**韭研复盘名单**兜底（{len(lst)} 只；板数取「N天M板」的 M）")
+        elif data_date != d:
             out["note"] = f"所选 {d} 的快照实际是 {data_date} 的行情（周末补跑），已按 {data_date} 计板数"
         if tdx_last and tdx_last < data_date:
             out["time_note"] = (f"通达信 1 分钟线只到 {tdx_last}；在通达信「盘后数据下载」"
@@ -12602,7 +12688,8 @@ class Api:
                 fp = _market_csv_fp(d)
                 price_cache[d] = ({r["code"]: (r.get("limit_price") or 0)
                                    for r in _limitup_from_market_csv(fp)} if fp else {})
-            lp = price_cache[d].get(c, 0)
+            # 市场快照里没有这只（复盘兜底进来的）⇒ 按昨收推算涨停价
+            lp = price_cache[d].get(c, 0) or self._limit_price_guess(c, d)
             tstr, sealed, last_date = self._tdx_first_limit_time(c, d, lp)
             if last_date and last_date > tdx_last:
                 tdx_last = last_date
