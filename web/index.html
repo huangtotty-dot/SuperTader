@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>trader pannel</title>
-<link rel="stylesheet" href="style.css?v=20261103e">
+<link rel="stylesheet" href="style.css?v=20261103h">
 </head>
 <body>
 <header class="topbar">
@@ -683,6 +683,9 @@
                 title="九宫格：9 只">▦ 3×3</button>
         <button class="mini-btn" id="mwLay3x2" onclick="mwSetLayout('3x2')"
                 title="六宫格：6 只，每格更大">▤ 3×2</button>
+        <!-- 2026-11-03 owner：四宫格 -->
+        <button class="mini-btn" id="mwLay2x2" onclick="mwSetLayout('2x2')"
+                title="四宫格：4 只，每格最大（2 列 × 2 行）">▣ 2×2</button>
       </span>
       <!-- 2026-11-02 owner：多窗口也要显示密集成交区；与 K 线弹窗里的开关是同一状态 -->
       <button class="mini-btn" id="mwVpBtn" onclick="toggleVolumeProfile()"
@@ -709,6 +712,6 @@
 <script src="vendor/echarts.min.js"></script>
 <!-- 2026-10-20：带版本号强制 WebView2 重新取 app.js（否则可能命中旧缓存，
      K 线提速/埋点改动不生效——表现为"改了跟没改一样"） -->
-<script src="app.js?v=20261103e"></script>
+<script src="app.js?v=20261103h"></script>
 </body>
 </html>

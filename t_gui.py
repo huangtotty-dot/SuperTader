@@ -12757,10 +12757,13 @@ class Api:
         codes = list(stocks.keys())
         if not codes:
             return _clean({"has_data": True, "date": date, "rows": [], "counts": {},
-                           "cond_labels": COND_LABELS, "note": ""})
+                           "cond_labels": COND_LABELS, "note": "", "pending": 0})
+        # 2026-11-03：池子变大后一次冷算会卡住 js_api ⇒ 分批（已算的复用，新算每拍 ≤24 只）
         conf = {}
+        _pending = 0
         try:
-            conf = self._hunter_build_conformance(codes, date) or {}
+            _calc_codes, _pending = self._pool_conformance_budgeted(codes, date)
+            conf = self._hunter_build_conformance(_calc_codes, date) or {}
         except Exception:
             conf = {}
         # 技术标签（2026-10-23 owner：「异常监控池没有显示技术标签」）—— 与建仓表**同一来源**
@@ -12839,6 +12842,7 @@ class Api:
             rows.sort(key=lambda r: -int(r.get("composite_score") or 0))
         return _clean({"has_data": True, "date": date, "rows": rows,
                        "counts": {"total": len(rows)},
+                       "pending": int(_pending or 0),
                        "cond_labels": COND_LABELS,
                        "note": note})
 
@@ -12978,6 +12982,39 @@ class Api:
             out = dict(_WM_SCAN)
         out["last"] = _WM_LAST or {}      # 上次轮巡摘要（落盘、跨重启）
         return _clean(out)
+
+    def _pool_conformance_budgeted(self, codes, date, budget=24):
+        """池表算「建仓符合度」时的**分批预算**（2026-11-03 owner 报 GUI 卡死）。
+
+        背景：池子涨到 100+ 只后，`_hunter_build_conformance` 一次冷算要几十秒；
+        pywebview 的 js_api 投递是串行的 ⇒ 一个长调用把其它调用全堵在后面，界面像卡死。
+        做法：
+          · 已算过的（`_HUNTER_CONF_CACHE` 命中）照常带上 —— 复用是零成本；
+          · 有日线缓存但没算过的，**每次最多新算 `budget` 只**，其余留给下一拍（前端 15s 短轮询）；
+          · 连缓存文件都没有的票照常带上（函数里 stat 失败秒跳），且**不计 pending**，
+            避免"永远算不完 ⇒ 永远短轮询"。
+        返回 `(参与本次计算的 codes, pending 数)`。
+        """
+        try:
+            _cached = {k[0] for k in list(_HUNTER_CONF_CACHE.keys())
+                       if isinstance(k, tuple) and len(k) > 1 and str(k[1]) == str(date)}
+        except Exception:
+            _cached = set()
+        passthru, fresh = [], []
+        for c in codes:
+            _c6 = str(c).split("_")[0]
+            if _c6 in _cached:
+                passthru.append(c)
+                continue
+            try:
+                (_DAILY_KLINE_DIR / f"{_c6}.json").stat()
+            except OSError:
+                passthru.append(c)      # 没本地日线缓存 ⇒ conformance 本来也会 skip
+                continue
+            fresh.append(c)
+        _n = max(0, int(budget or 0))
+        take = fresh[:_n] if _n else fresh
+        return passthru + take, max(0, len(fresh) - len(take))
 
     def load_abnormal_pool(self, date=None):
         """异常监控池 → 与「建仓信号扫描」同列的数据（行构造见 `_pool_rows`）。"""

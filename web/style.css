@@ -352,6 +352,8 @@ body.mw-winmode #multiWatchWin {
    ⚠️ 必须一起改：只有 6 个格子时若还留着 repeat(3)，第 3 行会空着占掉 1fr，
       格子一点也不变大，等于白切。 */
 .mw-grid.mw-r2 { grid-template-rows: repeat(2, minmax(0, 1fr)); }
+/* 2×2（2026-11-03 owner）：2 列 × 2 行，每格面积约 2.25 倍（相对 3×3） */
+.mw-grid.mw-c2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 /* 布局切换按钮组 */
 .mw-lay { display: inline-flex; gap: 4px; }
 .mw-lay .mini-btn { padding: 3px 7px; }

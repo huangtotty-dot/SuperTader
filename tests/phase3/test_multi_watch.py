@@ -434,3 +434,18 @@ class TestVolumePaneLegibility:
         assert 'text: `${amtYi ? "额" : "量"}' in _JS
         i = _JS.index("graphic: (() => {")
         assert 'top: "49.4%"' in _JS[i:i + 700]
+
+
+class TestLayout2x2:
+    """2026-11-03 owner：多窗口要支持 2×2（2 列 × 2 行，4 格）。"""
+
+    def test_前端支持2x2(self):
+        assert 'mwLayout === "2x2" ? 4 : 9' in _JS
+        assert "lay === \"2x2\"" in _JS
+        assert 'v === "3x2" || v === "3x3" || v === "2x2"' in _JS
+        assert 'grid.classList.toggle("mw-c2", mwLayout === "2x2")' in _JS
+
+    def test_按钮与样式(self):
+        assert 'id="mwLay2x2"' in _HTML
+        css = (_ROOT / "web" / "style.css").read_text(encoding="utf-8")
+        assert ".mw-grid.mw-c2" in css

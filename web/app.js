@@ -3723,6 +3723,7 @@ function applyQuotesToOB() {
 let _abnRows = [];
 let _abnLoadedAt = 0;
 let _abnInflight = false;
+let _abnPending = 0;      // 后端还有多少只「建仓符合度」没算完（>0 时 15s 短轮询补齐）
 
 /* 涨停时间/累加的**可见**提示（2026-11-03 owner：「点了补涨停时间没有变化」——
    只看底部状态栏容易漏，改成留在表上方；空串 = 隐藏）。 */
@@ -3745,9 +3746,11 @@ async function loadAbnormalPool(force) {
   //   整行那部分每轮都要走 `_hunter_build_conformance` + 标签缓存，是这张表的主要 CPU。
   if (!force && _abnRows.length) {
     const _age = Date.now() - _abnLoadedAt;
-    // 「均线突破时刻」是后台预热的（首轮 5~20s）⇒ 有 pending 时按 15s 重拉，别等满 60s
+    // 「均线突破时刻」是后台预热的（首轮 5~20s）⇒ 有 pending 时按 15s 重拉，别等满 60s；
+    // 2026-11-03：池子涨到 100+ 只后后端改为**分批**算建仓符合度（每拍 ≤24 只），
+    // 还有没算完的（d.pending>0）同样按 15s 短轮询，逐拍补齐。
     const _mrPending = _abnRows.some(r => (r.ma_reclaim || {}).pending);
-    const _rowTTL = _mrPending ? 15000 : 60000;
+    const _rowTTL = (_mrPending || _abnPending > 0) ? 15000 : 60000;
     if (_age < 15000) return;
     if (_age < _rowTTL) { _patchAbnormalQuotes(); return; }
   }
@@ -3758,6 +3761,7 @@ async function loadAbnormalPool(force) {
   try {
     const d = await apiCall("load_abnormal_pool", state.date || null);
     _abnRows = (d && d.rows) || [];
+    _abnPending = (d && d.pending) || 0;
     _abnLoadedAt = Date.now();
     renderAbnormalPool(d || {});
     _patchAbnormalQuotes();
@@ -3842,6 +3846,8 @@ function renderAbnormalPool(d) {
       <th></th>
     </tr></thead><tbody>${body}</tbody></table>
     <div class="cell-dim" style="font-size:11px;margin-top:6px">共 <b>${rows.length}</b> 只${
+      (d.pending ? ` · <span style="color:#d29922">判定待算 ${d.pending} 只</span>（15s 内补齐）` : "")
+    }${
       rows.some(r => r.limit_date) ? " · 按涨停时间排序（新日期在前）"
         + (rows.filter(r => r.limit_date && !r.limit_time).length
           ? ` · <span style="color:#d29922">${rows.filter(r => r.limit_date && !r.limit_time).length} 只缺涨停时间</span>`
@@ -4036,6 +4042,7 @@ async function abnormalAddLimitup() {
    区别只有：成员存在另一个 store（`t_gui.shelter_pool_*`）、没有「涨停原因」列（那是涨停复盘专用的）。
    刷新节奏与异常监控池一致：行情 15s / 整行 60s（有 pending 的「均线突破」时 15s）。 */
 let _shelterRows = [], _shelterLoadedAt = 0, _shelterInflight = false;
+let _shelterPending = 0;   // 与异常池同款：后端分批算，没算完就 15s 短轮询
 
 async function loadShelterPool(force) {
   const box = document.getElementById("shelterPoolBody");
@@ -4045,7 +4052,7 @@ async function loadShelterPool(force) {
     const _age = Date.now() - _shelterLoadedAt;
     const _mrPending = _shelterRows.some(r => (r.ma_reclaim || {}).pending);
     if (_age < 15000) return;
-    if (_age < (_mrPending ? 15000 : 60000)) {
+    if (_age < ((_mrPending || _shelterPending > 0) ? 15000 : 60000)) {
       _patchPoolQuotes(_shelterRows, "#shelterPoolBody");
       return;
     }
@@ -4054,6 +4061,7 @@ async function loadShelterPool(force) {
   try {
     const d = await apiCall("load_shelter_pool", state.date || null);
     _shelterRows = (d && d.rows) || [];
+    _shelterPending = (d && d.pending) || 0;
     _shelterLoadedAt = Date.now();
     renderShelterPool(d || {});
     _patchPoolQuotes(_shelterRows, "#shelterPoolBody");
@@ -4150,6 +4158,8 @@ function renderShelterPool(d) {
       <th></th>
     </tr></thead><tbody>${body}</tbody></table>
     <div class="cell-dim" style="font-size:11px;margin-top:6px">共 <b>${rows.length}</b> 只${
+      (d.pending ? ` · <span style="color:#d29922">判定待算 ${d.pending} 只</span>（15s 内补齐）` : "")
+    }${
       rows.some(r => r.limit_date) ? " · 按涨停时间排序（新日期在前）"
         + (rows.filter(r => r.limit_date && !r.limit_time).length
           ? ` · <span style="color:#d29922">${rows.filter(r => r.limit_date && !r.limit_time).length} 只缺涨停时间</span>`
@@ -11447,7 +11457,7 @@ function startLivePoll() {
 async function init() {
   // 首先获取 DOM 元素（此时 DOM 已完全加载）
   // 2026-10-20：启动标记（0ms）写进慢调用日志 ⇒ 能确认 WebView2 是否加载了新版 app.js
-  try { window.pywebview.api.report_slow_call("app_boot_20261103e", 0); } catch (e) { /* 静默 */ }
+  try { window.pywebview.api.report_slow_call("app_boot_20261103h", 0); } catch (e) { /* 静默 */ }
   // 2026-10-31：重点关注标记（紫色星）——启动先拉一次，五个表的星标按它渲染；
   // 拉不到就用空集（星标显示未标记，不影响任何其它功能）。
   loadFocusCodes();
@@ -11705,7 +11715,8 @@ const MW_N = 9;                 // 3×3（2026-10-21 owner：六宫格→九宫�
       （每轮少 1/3 的取数与渲染，见 mwTick）。 */
 const MW_LS_LAYOUT = "multiWatchLayout";
 let mwLayout = "3x3";
-const mwN = () => (mwLayout === "3x2" ? 6 : 9);
+// 2026-11-03 owner：多窗口支持 2×2（4 格）—— 2 列 × 2 行，每格更大
+const mwN = () => (mwLayout === "3x2" ? 6 : mwLayout === "2x2" ? 4 : 9);
 const MW_LS_KEY = "multiWatchCodes";
 const MW_PERIOD_MS = 4000;      // 刷新间隔：九宫格 9 只 × 每轮 ~130ms 计算，4s 是 CPU 与实时性的折中（2026-10-21 抗卡顿）
 // 2026-10-25：48 → 96。48 根 5 分钟 = 正好一个交易日 ⇒ 窗口里没有"前一日收盘"，
@@ -11804,22 +11815,27 @@ function _mwSaveCodes() {
 function _mwLoadLayout() {
   try {
     const v = localStorage.getItem(MW_LS_LAYOUT);
-    if (v === "3x2" || v === "3x3") mwLayout = v;
+    if (v === "3x2" || v === "3x3" || v === "2x2") mwLayout = v;
   } catch (e) { /* 独立窗口 localStorage 不通，用默认 3×3 */ }
 }
 
 /* 布局落到 DOM：格子的行数 + 两个按钮的选中态（不重建格子，重建由调用方负责）。 */
 function _mwApplyLayoutUI() {
   const grid = document.getElementById("multiWatchGrid");
-  if (grid) grid.classList.toggle("mw-r2", mwLayout === "3x2");
+  if (grid) {
+    grid.classList.toggle("mw-r2", mwLayout === "3x2" || mwLayout === "2x2");
+    grid.classList.toggle("mw-c2", mwLayout === "2x2");   // 2 列（3x3/3x2 都是 3 列）
+  }
   const a = document.getElementById("mwLay3x3"), b = document.getElementById("mwLay3x2");
+  const c = document.getElementById("mwLay2x2");
   if (a) a.classList.toggle("primary", mwLayout === "3x3");
   if (b) b.classList.toggle("primary", mwLayout === "3x2");
+  if (c) c.classList.toggle("primary", mwLayout === "2x2");
 }
 
-/* 标题栏按钮：切换 3×3 / 3×2。重建格子（6↔9）后立刻拉一轮数据。 */
+/* 标题栏按钮：切换 3×3 / 3×2 / 2×2。重建格子（4↔6↔9）后立刻拉一轮数据。 */
 function mwSetLayout(lay) {
-  const v = (lay === "3x2") ? "3x2" : "3x3";
+  const v = (lay === "3x2" || lay === "2x2") ? lay : "3x3";
   if (v === mwLayout) return;
   mwLayout = v;
   try { localStorage.setItem(MW_LS_LAYOUT, v); } catch (e) { /* 忽略 */ }
@@ -12332,8 +12348,24 @@ function _mwOption(s, dma, levels, trades, zoom, code) {
   // MACD（2026-10-21 owner：多窗口也要 MACD）。配色与单图一致（已过 dataviz 校验器）：
   // DIF 蓝 #3987e5 / DEA 品红 #d55181，柱按正负红绿。
   const _macd = s.macd || {};
-  const _histSer = (_macd.hist || []).map(v => ({
-    value: v, itemStyle: { color: v >= 0 ? "rgba(248,81,73,.9)" : "rgba(63,185,80,.9)" },
+  /* 2026-11-03 owner：「第一根 MACD 的红线（翻红）要清晰，这个信号十分重要」——
+     找出**每一个由绿转红的首根**（hist 从 ≤0 变 >0），给它们：
+       · 柱子**亮红 #ff3b30 + 白边**（普通红柱是 rgba(...,.9)）；
+       · 柱顶一个白边红三角；**最近一次翻红**再加一条竖向虚线 + 「翻红」小标签。
+     小格子里 45px 高的 MACD 窗也能一眼看到。 */
+  const _hist = Array.isArray(_macd.hist) ? _macd.hist : [];
+  const _flips = [];
+  for (let i = 1; i < _hist.length; i++) {
+    const _a = Number(_hist[i - 1]), _b = Number(_hist[i]);
+    if (isFinite(_a) && isFinite(_b) && _a <= 0 && _b > 0) _flips.push(i);
+  }
+  const _flipLast = _flips.length ? _flips[_flips.length - 1] : -1;
+  const _flipSet = new Set(_flips);
+  const _histSer = _hist.map((v, i) => ({
+    value: v,
+    itemStyle: _flipSet.has(i)
+      ? { color: "#ff3b30", borderColor: "#ffffff", borderWidth: 1 }
+      : { color: Number(v) >= 0 ? "rgba(248,81,73,.9)" : "rgba(63,185,80,.9)" },
   }));
   return {
     animation: false, backgroundColor: "#0d1117",
@@ -12461,12 +12493,25 @@ function _mwOption(s, dma, levels, trades, zoom, code) {
         // 格子里只有 ~120 根、又小，2px 会盖住柱子 ⇒ 这里收成 1.4px，同一色系不换色
         lineStyle: { width: 1.4, color: "#0e9aa7", type: "dashed", opacity: .95 },
         itemStyle: { color: "#0e9aa7" } },
-      // MACD：柱 + DIF/DEA 两条线 + 零轴
+      // MACD：柱 + DIF/DEA 两条线 + 零轴；翻红首根加白边亮红柱 + 三角 + 竖向虚线（见上）
       { name: "MACD柱", type: "bar", xAxisIndex: 2, yAxisIndex: 2, data: _histSer,
         barMaxWidth: 8, z: 1,
-        markLine: { silent: true, symbol: "none", data: [{
-          yAxis: 0, label: { show: false },
-          lineStyle: { color: "rgba(139,148,158,.45)", type: "dashed", width: 1 } }] } },
+        markPoint: _flips.length ? {
+          symbol: "triangle", symbolSize: 9, silent: true, z: 12,
+          itemStyle: { color: "#ff3b30", borderColor: "#fff", borderWidth: 1 },
+          label: { show: false },
+          data: _flips.map(i => ({ coord: [i, Number(_hist[i]) || 0] })),
+        } : undefined,
+        markLine: { silent: true, symbol: "none", data: [
+          { yAxis: 0, label: { show: false },
+            lineStyle: { color: "rgba(139,148,158,.45)", type: "dashed", width: 1 } },
+          ...(_flipLast >= 0 ? [{
+            xAxis: _flipLast,
+            label: { formatter: "翻红", color: "#ff6b62", fontSize: 8,
+                     position: "insideEndTop" },
+            lineStyle: { color: "#ff6b62", type: "dashed", width: 1, opacity: .85 },
+          }] : []),
+        ] } },
       { name: "DIF", type: "line", xAxisIndex: 2, yAxisIndex: 2, data: _macd.dif || [],
         symbol: "none", connectNulls: true, z: 3,
         lineStyle: { width: 1.1, color: "#3987e5" } },

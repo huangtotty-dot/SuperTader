@@ -197,7 +197,7 @@ class TestMultiWindowOptionBehavior(unittest.TestCase):
     """把 `_mwOption` 整个跑起来（stub 掉画图无关的依赖），确认多窗口的 option 里
     **真的有**密集成交区序列 / POC 线 —— 单元测试只查字符串会漏掉运行时错误。"""
 
-    def _run(self, vp_on):
+    def _run(self, vp_on, hist=None):
         import datetime
         import random
         random.seed(11)
@@ -217,7 +217,8 @@ class TestMultiWindowOptionBehavior(unittest.TestCase):
             p = c
             t += datetime.timedelta(minutes=5)
         s = {"dates": dates, "ohlc": ohlc, "volume": vol, "amount": amt,
-             "ma5": [None] * 96, "macd": {"dif": [], "dea": [], "hist": []}}
+             "ma5": [None] * 96,
+             "macd": {"dif": [], "dea": [], "hist": (hist if hist is not None else [])}}
         js = (
             "global.buildGapAreas=()=>[]; global._mwBoxMarkAreas=()=>[];\n"
             "global.buildIntradayVwapZero=()=>({vwap:[],zero:[]});\n"
@@ -229,11 +230,15 @@ class TestMultiWindowOptionBehavior(unittest.TestCase):
             + f"const s={json.dumps(s)};\n"
             "const o=_mwOption(s,null,null,[],null,'600000');\n"
             "const vp=o.series.find(x=>x&&x.name==='密集区');\n"
+            "const mb=o.series.find(x=>x&&x.name==='MACD柱')||{};\n"
             "process.stdout.write(JSON.stringify({"
             "vp: vp?{type:vp.type,n:(vp.data||[]).length,clip:vp.clip,xAxisIndex:vp.xAxisIndex}:null,"
             "gridRight:o.grid[0].right,"
             "line: o.series[0].markLine?o.series[0].markLine.data:null,"
-            "areas: o.series[0].markArea?o.series[0].markArea.data:null}));"
+            "areas: o.series[0].markArea?o.series[0].markArea.data:null,"
+            "macdBars: mb.data||null,"
+            "macdMp: mb.markPoint?mb.markPoint.data.map(d=>d.coord):null,"
+            "macdMl: mb.markLine?mb.markLine.data:null}));"
         )
         with tempfile.TemporaryDirectory() as td:
             fp = Path(td) / "t.js"
@@ -253,6 +258,28 @@ class TestMultiWindowOptionBehavior(unittest.TestCase):
                             for x in (r.get("line") or [])), "POC 线没进 markLine")
         # 缺口/画框的 markArea 里不该混进密集区
         self.assertNotIn("163,113,247", json.dumps(r.get("areas") or []))
+
+
+    def test_翻红首根高亮且三角标出(self):
+        """owner：「第一根 MACD 的红线要清晰，这信号十分重要」——绿转红的首根要亮红+白边+三角。"""
+        hist = [-1.0, -0.5, 0.2, 0.4, -0.3, 0.1, 0.5]
+        r = self._run(False, hist=hist)
+        bars = r.get("macdBars") or []
+        self.assertEqual(bars[2]["itemStyle"]["color"], "#ff3b30", "翻红首根要亮红")
+        self.assertEqual(bars[2]["itemStyle"]["borderColor"], "#ffffff", "白边提高辨识度")
+        self.assertNotEqual(bars[3]["itemStyle"].get("color"), "#ff3b30", "同一段的后续红柱不重复高亮")
+        mp = r.get("macdMp") or []
+        self.assertIn([2, 0.2], mp)
+        self.assertIn([5, 0.1], mp)
+        ml = r.get("macdMl") or []
+        self.assertTrue(any(x.get("xAxis") == 5
+                            and (x.get("label") or {}).get("formatter") == "翻红" for x in ml),
+                        "最近一次翻红要有竖线+文字")
+
+    def test_没有翻红就不加标记(self):
+        r = self._run(False, hist=[0.1, 0.2, 0.3])
+        self.assertIsNone(r.get("macdMp"))
+        self.assertFalse(any("xAxis" in (x or {}) for x in (r.get("macdMl") or [])))
 
     def test_关时一条都不画(self):
         r = self._run(False)

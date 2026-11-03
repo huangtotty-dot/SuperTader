@@ -184,3 +184,43 @@ class TestFrontendWiring:
         assert "abnormalSetReason" in seg, "涨停原因格要可编辑并保存"
         assert "涨停原因" in seg
         assert "event.stopPropagation()" in seg, "格内输入框别触发整行的双击看图"
+
+
+class TestConformanceBudget:
+    """2026-11-03 owner 报 GUI 卡死：池子 100+ 只时一次冷算 conformance 几十秒 ⇒ 分期预算。"""
+
+    def test_已算的复用_新算每拍限量(self, api, monkeypatch, tmp_path):
+        monkeypatch.setattr(t_gui, "_DAILY_KLINE_DIR", tmp_path)
+        for c in ("600000", "600002"):
+            (tmp_path / f"{c}.json").write_text("{}", encoding="utf-8")
+        monkeypatch.setattr(t_gui, "_HUNTER_CONF_CACHE",
+                            {("600001", "2026-11-03", "range", 1): {"score": 1}})
+        codes, pending = api._pool_conformance_budgeted(
+            ["600000", "600001", "600002"], "2026-11-03", budget=1)
+        assert pending == 1, "还有 1 只没算"
+        assert "600001" in codes, "已算过的直接复用"
+        assert [c for c in codes if c != "600001"] in (["600000"], ["600002"])
+
+    def test_没有日线缓存的不计pending(self, api, monkeypatch, tmp_path):
+        monkeypatch.setattr(t_gui, "_DAILY_KLINE_DIR", tmp_path)
+        codes, pending = api._pool_conformance_budgeted(["999999"], "2026-11-03", budget=1)
+        assert pending == 0 and codes == ["999999"], "永远算不了的不该让前端一直短轮询"
+
+    def test_pool_rows_带pending(self, api, monkeypatch, tmp_path):
+        monkeypatch.setattr(t_gui, "_DAILY_KLINE_DIR", tmp_path)
+        (tmp_path / "600000.json").write_text("{}", encoding="utf-8")
+        (tmp_path / "600001.json").write_text("{}", encoding="utf-8")
+        monkeypatch.setattr(t_gui, "_HUNTER_CONF_CACHE", {})
+        monkeypatch.setattr(t_gui.Api, "_pool_conformance_budgeted",
+                            lambda self, codes, date, budget=24: (codes[:1], len(codes) - 1))
+        monkeypatch.setattr(t_gui.Api, "_hunter_build_conformance",
+                            lambda self, codes, date=None: {})
+        api.abnormal_pool_add("600000")
+        api.abnormal_pool_add("600001")
+        r = api.load_abnormal_pool("2026-11-03")
+        assert r["pending"] == 1
+
+    def test_前端按pending短轮询(self):
+        assert "let _abnPending = 0;" in _JS
+        assert "_abnPending > 0" in _JS
+        assert "判定待算" in _JS
