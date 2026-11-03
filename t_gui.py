@@ -205,6 +205,84 @@ def _jiuyan_names() -> dict:
     return _JY_NAMES_CACHE["map"]
 
 
+# ── 当日涨停清单（2026-11-03 owner：「异常监控池按某日把当天涨停股累加进来」）────
+# 数据源 = 猎手每日扫描落盘的 `stock_hunter/data/market_YYYYMMDD.csv`，零网络。
+# 列里有 `涨停`(1/0) 与 `连板天数`(1=首板, 2=二板 …)；`名称` 列常为空（猎手只存代码），
+# 所以名称以韭研表为准、CSV 兜底。
+def _market_csv_fp(date):
+    """日期(YYYY-MM-DD 或 YYYYMMDD) → 当日市场快照 CSV 路径；格式不对返回 None。"""
+    d = str(date or "").replace("-", "").strip()
+    if len(d) != 8 or not d.isdigit():
+        return None
+    return BASE / "stock_hunter" / "data" / f"market_{d}.csv"
+
+
+def _limitup_from_market_csv(fp):
+    """读一天的市场快照 CSV → 当日涨停清单 ``[{code, name, board, data_date}]``（按连板数降序）。
+
+    · `涨停` 列 = 1 才算；
+    · `board` = `连板天数`（1=首板、2=二板…），缺失/坏值按 1；
+    · `data_date` = CSV 里的 `数据日期` 列（⚠️ 周末补跑的 `market_20261031.csv`
+      实际装的是 **10-30** 的行情 ⇒ 板数/涨停日均以这一列为准，别信文件名）；
+    · 文件不存在/读坏 → ``[]``（调用方据此提示"该日没有快照"）。
+    """
+    import csv as _csv
+    out = []
+    try:
+        with open(fp, encoding="utf-8-sig", newline="") as f:
+            for x in _csv.DictReader(f):
+                if str(x.get("涨停", "")).strip() not in ("1", "1.0"):
+                    continue
+                code = str(x.get("代码", "")).strip().zfill(6)
+                if len(code) != 6 or not code.isdigit():
+                    continue
+                try:
+                    board = int(float(x.get("连板天数") or 1))
+                except Exception:
+                    board = 1
+                try:
+                    limit_price = float(x.get("涨停价") or 0)
+                except Exception:
+                    limit_price = 0.0
+                out.append({"code": code,
+                            "name": str(x.get("名称") or "").strip(),
+                            "board": max(1, board),
+                            "limit_price": limit_price,
+                            "data_date": str(x.get("数据日期") or "").strip()[:10]})
+    except Exception:
+        return []
+    out.sort(key=lambda r: (-r["board"], r["code"]))
+    return out
+
+
+def _limit_time_from_min_df(df, day, limit_price):
+    """分钟 K 帧 → 当日「首次触及涨停价」的 HH:MM + 是否收盘封板（纯函数，供测试/复用）。
+
+    `df` 需含 time/open/high/low/close；`time` 可以是 str 或 Timestamp。
+    ⚠️ 腾讯 m5 的 **time 是 K 线右端**（09:35 覆盖 09:30~09:35，且不含 09:30 竞价棒）
+    ⇒ 5 分钟档算出来的时间只会落在 :35/:40/…，属于"不晚于"的上界。
+    """
+    try:
+        d0 = str(day or "")[:10]
+        if df is None or getattr(df, "empty", True) or not d0 or not limit_price:
+            return "", None
+        tcol = df["time"].astype(str)
+        d = df[tcol.str.startswith(d0)]
+        if d.empty:
+            return "", None
+        tol = 0.005
+        hit = d[d["high"].astype(float) >= float(limit_price) - tol]
+        t = str(hit["time"].iloc[0])[11:16] if not hit.empty else ""
+        sealed = bool(float(d["close"].iloc[-1]) >= float(limit_price) - tol)
+        return t, sealed
+    except Exception:
+        return "", None
+
+
+# 腾讯分钟线补算的进程内缓存：(code, day) -> (time, sealed, gran)；同一会话不重复请求
+_TX_LIMIT_CACHE: dict = {}
+
+
 # ── K线弹窗「买卖点标记」数据源（2026-10-21 owner）────────────────────────────
 # 券商成交台账 → 某 code 的成交行 [{ts, side, qty, price, account}]。
 # ⚠️ **直接读文件**：`load_trade_history()` 下发前端前会把 `trades` 字段 pop 掉，
@@ -4352,6 +4430,114 @@ class Api:
         except Exception:
             return None
 
+    def _tdx_first_limit_time(self, code: str, day: str, limit_price: float):
+        """通达信本地 **1 分钟线** → 当日「首次触及涨停价」的分钟 + 是否收盘封板。
+
+        返回 ``(time_str, sealed, last_date)``：
+          · time_str = "HH:MM"（1 分钟 K 的**结束时刻**标签，09:31 = 开盘第一分钟）；
+          · sealed   = 收盘价是否仍在涨停价（True/False/None=无数据）；
+          · last_date = 该票本地 1 分钟线**覆盖到的最后一天** —— 用来告诉用户
+            "通达信数据只到 X，请先下载分钟线后重试"。
+
+        ⚠️ 性能：**不整文件读**。`.lc1` 是日期单调的定长记录，先二分定位当天那段
+        （~240 条 ≈ 7.7KB），再顺序扫，80 只票 <0.3s。整文件读 + pandas 要 ~0.2s/只，
+        那样点一次"加入当日涨停"就得等十几秒。
+        ⚠️ 本机实测（2026-11-03）`vipdoc/*/minline` 只到 **2026-10-14**，用户需要在
+        通达信里「盘后数据下载 → 1 分钟线」更新后重算。
+        """
+        import struct
+        fp_day = self._tdx_day_path(code)
+        if fp_day is None:
+            return "", None, ""
+        mk = fp_day.name[:2]
+        src = fp_day.parent.parent / "minline" / f"{mk}{str(code).split('_')[0]}.lc1"
+        if not src.exists():
+            return "", None, ""
+        try:
+            _y, _m, _d = (int(x) for x in str(day)[:10].split("-"))
+            dk = (_y - 2004) * 2048 + _m * 100 + _d
+        except Exception:
+            return "", None, ""
+        try:
+            n = src.stat().st_size // 32
+            if n < 1:
+                return "", None, ""
+            with open(src, "rb") as f:
+                def _rec(i):
+                    f.seek(i * 32)
+                    return struct.unpack("<HHfffffII", f.read(32))
+                # 覆盖范围：最后一条记录的日期（与请求日无关）
+                _ld = _rec(n - 1)[0]
+                _ly, _lmd = divmod(_ld, 2048)
+                _lmo, _ldy = divmod(_lmd, 100)
+                last_date = f"{2004 + _ly}-{_lmo:02d}-{_ldy:02d}" if _ld > 0 else ""
+                lo, hi = 0, n
+                while lo < hi:                      # 当天第一条
+                    mid = (lo + hi) // 2
+                    if _rec(mid)[0] < dk:
+                        lo = mid + 1
+                    else:
+                        hi = mid
+                i0 = lo
+                lo, hi = i0, n
+                while lo < hi:                      # 当天最后一条之后
+                    mid = (lo + hi) // 2
+                    if _rec(mid)[0] <= dk:
+                        lo = mid + 1
+                    else:
+                        hi = mid
+                i1 = lo
+                if i1 <= i0:
+                    return "", None, last_date      # 这一天不在本地数据里
+                t_first, close_last = "", None
+                tol = 0.005                          # 半分钱容差（价格是 float）
+                for i in range(i0, i1):
+                    _d, t, _o, h, _l, c, _a, _v, _x = _rec(i)
+                    if not t_first and limit_price and h >= limit_price - tol:
+                        t_first = f"{t // 60:02d}:{t % 60:02d}"
+                    close_last = c
+                sealed = None if close_last is None or not limit_price else \
+                    bool(close_last >= limit_price - tol)
+                return t_first, sealed, last_date
+        except Exception:
+            return "", None, ""
+
+    def _tencent_limit_time(self, code: str, day: str, limit_price: float):
+        """腾讯分钟线补算「首次触及涨停价」的时间（TDX 本地没覆盖该日时的兜底）。
+
+        返回 ``(time, sealed, gran)``：gran = "1m" / "5m" / ""。
+        覆盖（2026-11-03 实测）：m1 640 根 ≈ **最近 3 个交易日**；m5 640 根 ≈ **14 个交易日**。
+        先试 m1（分钟精度），该日不在 m1 窗口再退 m5（5 分钟粒度）。
+        结果进进程内缓存 `_TX_LIMIT_CACHE`（同一会话只请求一次）。
+        """
+        key = (str(code).split("_")[0], str(day or "")[:10])
+        hit = _TX_LIMIT_CACHE.get(key)
+        if hit is not None:
+            return hit
+        out = ("", None, "")
+        try:
+            from core.market_data.tencent_provider import minute_kline
+        except Exception:
+            return out
+        for freq, gran in (("m1", "1m"), ("m5", "5m")):
+            try:
+                df = minute_kline(key[0], freq, 640)
+            except Exception:
+                continue
+            if df is None or getattr(df, "empty", True):
+                continue
+            t, sealed = _limit_time_from_min_df(df, key[1], limit_price)
+            if t:
+                out = (t, sealed, gran)
+                break
+            # 该日不在这个频率的窗口里 ⇒ 换下一个（m1 只有最近 3 天）
+        # 只缓存**成功**结果：网络抖动/该日为空的失败下次还会重试
+        if out[0]:
+            if len(_TX_LIMIT_CACHE) > 2000:
+                _TX_LIMIT_CACHE.clear()
+            _TX_LIMIT_CACHE[key] = out
+        return out
+
     def _tdx_index_last(self, code: str):
         """通达信本地 `.day` 的最后两根 → (price, pre_close, asof)；读不到返回 (None, None, None)。
 
@@ -7338,6 +7524,20 @@ class Api:
                     if (str(hit.get("last_daily_date") or "") < str(_dfc["date"].iloc[-1])[:10]
                             and not _cache_short):
                         return None
+                    # 2026-11-03（owner 报「11-02 K 线明显不对」）：payload 与日线缓存**同一天
+                    # 但收盘价对不上** ⇒ payload 里存的是盘中快照根。日期/长度闸都拦不住它，
+                    # 这里按值比对（>1% 或 >0.011 元）判过期，逼重建。
+                    try:
+                        _lastd = str(_dfc["date"].iloc[-1])[:10]
+                        _pl = next((r for r in reversed(_prows0)
+                                    if str(r.get("date"))[:10] == _lastd), None)
+                        if _pl is not None:
+                            _pc = float(_pl.get("close") or 0)
+                            _dc = float(_dfc["close"].iloc[-1])
+                            if _pc > 0 and _dc > 0 and abs(_pc - _dc) > max(0.011, _dc * 0.01):
+                                return None
+                    except Exception:
+                        pass
                     # 2026-10-12: 除了"更新"，还要看"**更少**"。日线缓存被短窗口写入截短过之后
                     # （`save_daily_cache` 曾是盲覆盖），payload 会带着**残缺序列**被当成新鲜直接回放
                     # —— 日期闸拦不住（实测 600362：缓存 801 根、payload 只 21 根，
@@ -12286,6 +12486,179 @@ class Api:
         stocks[c] = e
         return {"ok": self._abn_write(stocks), "code": c, "reason": txt[:120]}
 
+    def abnormal_pool_add_limitup(self, date=None):
+        """把某个交易日的**全部涨停股**累加进异常监控池（2026-11-03 owner）。
+
+        口径：
+          · **累加**：已存在的票不删、不改名、不动手动填的涨停原因；只是补上「涨停日+连板数」；
+          · **标注**：每只写 `limit_board`（1=首板、2=二板…）与 `limit_date`，前端显示 首板/2板/3板；
+          · 同一只票出现在多个日期时**以更晚的日期为准**（不回退到旧数据）；
+          · 数据源 `stock_hunter/data/market_YYYYMMDD.csv`（猎手当天扫描落盘，零网络）。
+
+        返回 {ok, date, total, added, updated, unchanged, pool}；该日无快照时 ok=False 并列出可用日期。
+        """
+        d = str(date or datetime.now().strftime("%Y-%m-%d"))[:10]
+        fp = _market_csv_fp(d)
+        if fp is None:
+            return {"ok": False, "error": "日期格式应为 YYYY-MM-DD"}
+        lst = _limitup_from_market_csv(fp)
+        if not lst:
+            try:
+                ds = sorted(p.stem.replace("market_", "") for p in fp.parent.glob("market_*.csv"))
+            except Exception:
+                ds = []
+            near = "、".join(ds[-8:]) if ds else "（无）"
+            return {"ok": False, "date": d,
+                    "error": f"{d} 没有市场快照（market_{d.replace('-', '')}.csv 不存在）。"
+                             f"可用日期：{near}"}
+        names = _jiuyan_names()
+        stocks = self._abn_read()
+        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        # 以 CSV 的「数据日期」为准（周末补跑的 market_20261031.csv 实际装的是 10-30 行情）
+        data_date = next((r.get("data_date") for r in lst if r.get("data_date")), "") or d
+        added = updated = unchanged = 0
+        for r in lst:
+            c = r["code"]
+            e = stocks.get(c)
+            if isinstance(e, dict):
+                old_d = str(e.get("limit_date") or "")
+                old_b = int(e.get("limit_board") or 0)
+                if (old_d and old_d > data_date) or (old_d == data_date and old_b == r["board"]):
+                    unchanged += 1          # 已有更新的（或同日同板）记录，不回退
+                    continue
+                e["limit_date"] = data_date
+                e["limit_board"] = r["board"]
+                e["limit_at"] = now
+                stocks[c] = e
+                updated += 1
+            else:
+                stocks[c] = {"name": names.get(c) or r["name"] or c,
+                             "added_at": now,
+                             "added_from": f"limitup:{data_date}",
+                             "limit_date": data_date,
+                             "limit_board": r["board"],
+                             "limit_at": now}
+                added += 1
+        # 涨停时间（2026-11-03 owner）：用通达信本地 1 分钟线算「首次触及涨停价」的时刻。
+        # 只补空值（已有时间不重算；要重算点「⏱ 补涨停时间」）。读不到就留空并回传覆盖日期。
+        price_map = {r["code"]: (r.get("limit_price") or 0) for r in lst}
+        tdx_last, time_filled = "", 0
+        for r in lst:
+            c = r["code"]
+            e = stocks.get(c)
+            if not isinstance(e, dict) or str(e.get("limit_date") or "") != data_date:
+                continue
+            if e.get("limit_time"):
+                continue
+            tstr, sealed, last_date = self._tdx_first_limit_time(c, data_date, price_map.get(c, 0))
+            if last_date and last_date > tdx_last:
+                tdx_last = last_date
+            if tstr:
+                e["limit_time"] = tstr
+                if sealed is not None:
+                    e["limit_sealed"] = bool(sealed)
+                time_filled += 1
+        ok = self._abn_write(stocks)
+        out = {"ok": ok, "date": data_date, "requested": d, "total": len(lst),
+               "added": added, "updated": updated, "unchanged": unchanged,
+               "pool": len(stocks), "time_filled": time_filled, "tdx_last": tdx_last}
+        if data_date != d:
+            out["note"] = f"所选 {d} 的快照实际是 {data_date} 的行情（周末补跑），已按 {data_date} 计板数"
+        if tdx_last and tdx_last < data_date:
+            out["time_note"] = (f"通达信 1 分钟线只到 {tdx_last}；在通达信「盘后数据下载」"
+                                f"勾选 1 分钟线更新后，点「⏱ 补涨停时间」重算")
+        return out
+
+    def abnormal_pool_fill_limit_times(self, date=None):
+        """给池内票补算「首次涨停时间」（通达信 1 分钟线；2026-11-03 owner）。
+
+        · 只补 `limit_time` 为空的（已有时间不动）；
+        · `date` 为空 = 所有带 `limit_date` 的票；给定日期 = 只补那一天的；
+        · 涨停价取自当日 `market_YYYYMMDD.csv` 的「涨停价」列。
+        返回 {ok, date, filled, missing, tdx_last, note?}
+        """
+        stocks = self._abn_read()
+        d0 = str(date or "")[:10]
+        # 2026-11-03 实报：日期框默认是「今天」(11-03)，而池里那批是 11-02 涨停的 ⇒ 一只都
+        # 匹配不上、看起来"补了没变化"。这里**自动退回池里最近的涨停日**并在 note 里说明。
+        _dated = [str(e.get("limit_date") or "") for e in stocks.values()
+                  if isinstance(e, dict) and e.get("limit_date")]
+        _requested, _auto = d0, False
+        if d0 and _dated and not any(d == d0 for d in _dated):
+            d0 = max(_dated)
+            _auto = True
+        price_cache = {}
+        tdx_last, filled, from_tx = "", 0, 0
+        todo = []            # TDX 没覆盖的票 → 交给腾讯分钟线兜底
+        for c, e in stocks.items():
+            if not isinstance(e, dict):
+                continue
+            d = str(e.get("limit_date") or "")
+            if not d or (d0 and d != d0):
+                continue
+            if e.get("limit_time"):
+                continue
+            if d not in price_cache:
+                fp = _market_csv_fp(d)
+                price_cache[d] = ({r["code"]: (r.get("limit_price") or 0)
+                                   for r in _limitup_from_market_csv(fp)} if fp else {})
+            lp = price_cache[d].get(c, 0)
+            tstr, sealed, last_date = self._tdx_first_limit_time(c, d, lp)
+            if last_date and last_date > tdx_last:
+                tdx_last = last_date
+            if tstr:
+                e["limit_time"] = tstr
+                e["limit_time_gran"] = "1m"
+                if sealed is not None:
+                    e["limit_sealed"] = bool(sealed)
+                filled += 1
+            else:
+                todo.append((c, d, lp))
+        # 腾讯分钟线兜底（2026-11-03 owner 实报「补时间没变化」：本机通达信只到 10-14，
+        # 而 11-02 的票可以用腾讯 m1/m5 拿回来）。并发 6 路，80 只约 3~8 秒；结果进进程缓存。
+        if todo:
+            from concurrent.futures import ThreadPoolExecutor
+
+            def _tx_one(it):
+                try:
+                    return it, self._tencent_limit_time(it[0], it[1], it[2])
+                except Exception:
+                    return it, ("", None, "")
+
+            try:
+                with ThreadPoolExecutor(max_workers=6, thread_name_prefix="tx-limit") as ex:
+                    for (c, _d, _lp), (tstr, sealed, gran) in ex.map(_tx_one, todo):
+                        e = stocks.get(c)
+                        if not isinstance(e, dict) or e.get("limit_time"):
+                            continue
+                        if tstr:
+                            e["limit_time"] = tstr
+                            e["limit_time_gran"] = gran or ""
+                            if sealed is not None:
+                                e["limit_sealed"] = bool(sealed)
+                            filled += 1
+                            from_tx += 1
+            except Exception:
+                pass
+        missing = len(todo) - from_tx
+        ok = self._abn_write(stocks)
+        out = {"ok": ok, "date": d0, "requested": _requested, "auto": _auto,
+               "filled": filled, "missing": missing,
+               "from_tx": from_tx, "tdx_last": tdx_last,
+               "with_limit": len(_dated)}
+        notes = []
+        if _auto:
+            notes.append(f"所选 {_requested} 池里没有涨停票，已按最近的 {d0} 补算")
+        if missing:
+            tips = []
+            if tdx_last:
+                tips.append(f"通达信 1 分钟线只到 {tdx_last}")
+            tips.append("腾讯分钟线只覆盖最近约 14 个交易日")
+            notes.append("；".join(tips) + "。更早的日期需在通达信「盘后数据下载」勾选 1 分钟线后再补")
+        if notes:
+            out["note"] = "；".join(notes)
+        return out
+
     def _pool_rows(self, stocks, date, note):
         """「建仓表同款」行构造 —— **异常监控池 / 避风港湾共用**（两表的列与样式必须一模一样）。
 
@@ -12325,6 +12698,13 @@ class Api:
                 # 手动写的涨停原因（owner 2026-10-22）：只展示，不参与判定
                 "reason_manual": meta.get("reason") or "",
                 "reason_at": meta.get("reason_at") or "",
+                # 涨停累加（2026-11-03 owner）：1=首板、2=二板…；0/空 = 不是按涨停加进来的
+                "limit_board": int(meta.get("limit_board") or 0),
+                "limit_date": meta.get("limit_date") or "",
+                # 涨停时间（通达信 1 分钟线首个触及涨停价的分钟）；sealed=收盘是否仍封板
+                "limit_time": meta.get("limit_time") or "",
+                "limit_time_gran": meta.get("limit_time_gran") or "",
+                "limit_sealed": meta.get("limit_sealed"),
                 # 技术标签（空数组 = 后台还在批算，前端显示 ⏳ 标签 并按 15s 轮询补）
                 "tags": ((_tags_map.get(c) or {}).get("tags") or []),
                 "dev365": (_tags_map.get(c) or {}).get("dev365"),
@@ -12357,7 +12737,19 @@ class Api:
             self._attach_ma_reclaim(rows, date)
         except Exception:
             pass
-        rows.sort(key=lambda r: -int(r.get("composite_score") or 0))
+        # 排序（2026-11-03 owner：「太多了很乱，按时间的顺序显示」）：
+        #   · 有涨停日期的票在前（**新日期在前**），再按**首次涨停时间**升序；
+        #   · 没算到时间的排在当日末尾（"99:99"），板数高的靠前，最后按代码稳定排序；
+        #   · 池里一张涨停票都没有（纯手动池）⇒ 退回原来的「按得分降序」。
+        def _limit_key(r):
+            d = str(r.get("limit_date") or "")
+            dn = int(d.replace("-", "")) if d else 0
+            return (-dn, str(r.get("limit_time") or "99:99"),
+                    -int(r.get("limit_board") or 0), str(r.get("code") or ""))
+        if any(str(r.get("limit_date") or "") for r in rows):
+            rows.sort(key=_limit_key)
+        else:
+            rows.sort(key=lambda r: -int(r.get("composite_score") or 0))
         return _clean({"has_data": True, "date": date, "rows": rows,
                        "counts": {"total": len(rows)},
                        "cond_labels": COND_LABELS,

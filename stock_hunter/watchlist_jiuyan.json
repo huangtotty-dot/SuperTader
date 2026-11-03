@@ -1001,13 +1001,15 @@
   "business_summary": "主营贸易Ⅱ",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "环保",
+  "jiuyan_concept": "固废治理",
   "name": "中成股份",
   "primary_source": "legacy",
   "sector": "贸易Ⅱ/污水处理/固废处理/中俄贸易概念",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-03 15:03:10",
+  "jiuyan_category1": "环保",
+  "jiuyan_concept1": "固废治理"
  },
  "000153": {
   "business_summary": "主营化学制药",
@@ -9636,13 +9638,15 @@
   "business_summary": "主营专业技术服务业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "机器人",
+  "jiuyan_concept": "本体及应用",
   "name": "誉帆科技",
   "primary_source": "legacy",
   "sector": "专业技术服务业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-03 15:03:10",
+  "jiuyan_category1": "机器人",
+  "jiuyan_concept1": "本体及应用"
  },
  "001399": {
   "business_summary": "",
@@ -10290,13 +10294,15 @@
   "business_summary": "主营纺织服装、服饰业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "大消费",
+  "jiuyan_concept": "大消费_服装",
   "name": "七匹狼",
   "primary_source": "legacy",
   "sector": "纺织服装、服饰业",
   "sector_type": "legacy",
-  "updated_at": "2026-06-17 12:32:05"
+  "updated_at": "2026-11-03 15:03:10",
+  "jiuyan_category1": "大消费",
+  "jiuyan_concept1": "大消费_服装"
  },
  "002030": {
   "business_summary": "主营医药制造业",
@@ -10890,13 +10896,15 @@
   "business_summary": "",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "电池",
+  "jiuyan_concept": "其他关键材料及设备",
   "name": "紫竹高科",
   "primary_source": "audit_20260901",
   "sector": "",
   "sector_type": "",
-  "updated_at": "2026-09-01 09:39:24"
+  "updated_at": "2026-11-03 15:03:10",
+  "jiuyan_category1": "电池",
+  "jiuyan_concept1": "其他关键材料及设备"
  },
  "002059": {
   "business_summary": "主营公共设施管理业",
@@ -11672,13 +11680,15 @@
   "business_summary": "主营铁路、船舶、航空航天和其他运输设备制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "机器人",
+  "jiuyan_concept": "本体及应用",
   "name": "信隆健康",
   "primary_source": "legacy",
   "sector": "铁路、船舶、航空航天和其他运输设备制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-03 15:03:10",
+  "jiuyan_category1": "机器人",
+  "jiuyan_concept1": "本体及应用"
  },
  "002106": {
   "business_summary": "研发和生产平板显示材料及器件、触控器件。",
@@ -23070,13 +23080,15 @@
   "business_summary": "主营电气机械和器材制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "电力",
+  "jiuyan_concept": "电力设备",
   "name": "远程股份",
   "primary_source": "legacy",
   "sector": "电气机械和器材制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-03 15:03:10",
+  "jiuyan_category1": "电力",
+  "jiuyan_concept1": "电力设备"
  },
  "002693": {
   "business_summary": "主营其他",
@@ -53084,13 +53096,15 @@
   "business_summary": "主营通用设备制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "军工",
+  "jiuyan_concept": "军用无人装备与机器人",
   "name": "昆船智能",
   "primary_source": "legacy",
   "sector": "通用设备制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-03 15:03:10",
+  "jiuyan_category1": "军工",
+  "jiuyan_concept1": "军用无人装备与机器人"
  },
  "301312": {
   "business_summary": "主营专用设备制造业",
@@ -55009,13 +55023,15 @@
   "business_summary": "主营专用设备制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "电池",
+  "jiuyan_concept": "其他关键材料及设备",
   "name": "尚水智能",
   "primary_source": "legacy",
   "sector": "专用设备制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-03 15:03:10",
+  "jiuyan_category1": "电池",
+  "jiuyan_concept1": "其他关键材料及设备"
  },
  "301515": {
   "business_summary": "主营专用设备制造业",
@@ -61105,13 +61121,15 @@
   "business_summary": "主营商务服务业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "大消费",
+  "jiuyan_concept": "大消费_文旅旅游",
   "name": "国旅联合",
   "primary_source": "legacy",
   "sector": "商务服务业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-03 15:03:10",
+  "jiuyan_category1": "大消费",
+  "jiuyan_concept1": "大消费_文旅旅游"
  },
  "600359": {
   "business_summary": "主营农业",
@@ -64001,7 +64019,7 @@
   "primary_source": "legacy",
   "sector": "通用设备/水利/海工装备",
   "sector_type": "legacy",
-  "updated_at": "2026-10-27 09:30:00",
+  "updated_at": "2026-11-03 15:03:10",
   "jiuyan_tag_source": "2026-10-26 全天涨停复盘（手动补漏）",
   "jiuyan_robot_physicalai_verdicts": {},
   "jiuyan_robot_physicalai_audited_at": "2026-10-27",
@@ -64024,7 +64042,11 @@
    "verdict": "摘除",
    "category_verdicts": {},
    "reason": "公司主营焊条、焊丝、焊剂等通用焊接耗材，产品可用于人工或自动化焊接，但自动化焊接材料并不等于机器人专用产品。年报及主营资料未见机器人专用耗材、订单或项目，无法证明与机器人产品或应用业务存在直接对应关系，旧两条其他标签又属重复，故判为错标并摘除。"
-  }
+  },
+  "jiuyan_category1": "机器人",
+  "jiuyan_concept1": "材料",
+  "jiuyan_category": "机器人",
+  "jiuyan_concept": "材料"
  },
  "600559": {
   "business_summary": "主营酒、饮料和精制茶制造业",
@@ -65375,13 +65397,15 @@
   "business_summary": "主营纺织服装、服饰业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "大消费",
+  "jiuyan_concept": "大消费_服装",
   "name": "龙头股份",
   "primary_source": "legacy",
   "sector": "纺织服装、服饰业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-03 15:03:10",
+  "jiuyan_category1": "大消费",
+  "jiuyan_concept1": "大消费_服装"
  },
  "600633": {
   "business_summary": "主营互联网和相关服务",
@@ -67831,13 +67855,15 @@
   "business_summary": "主营非金属矿物制品业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "地产",
+  "jiuyan_concept": "地产基建",
   "name": "福建水泥",
   "primary_source": "legacy",
   "sector": "非金属矿物制品业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-03 15:03:10",
+  "jiuyan_category1": "地产",
+  "jiuyan_concept1": "地产基建"
  },
  "600803": {
   "business_summary": "主营燃气生产和供应业",
@@ -79081,13 +79107,15 @@
   "business_summary": "主营专用设备制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "半导体",
+  "jiuyan_concept": "半导体设备-其他专用设备",
   "name": "泰瑞机器",
   "primary_source": "legacy",
   "sector": "专用设备制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-03 15:03:10",
+  "jiuyan_category1": "半导体",
+  "jiuyan_concept1": "半导体设备-其他专用设备"
  },
  "603290": {
   "business_summary": "以IGBT和SiC为主的功率半导体芯片和模块的设计研发、生产及销售。",
@@ -80734,13 +80762,15 @@
   "business_summary": "主营文化艺术业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "大消费",
+  "jiuyan_concept": "大消费_文旅旅游",
   "name": "陕西旅游",
   "primary_source": "legacy",
   "sector": "文化艺术业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-03 15:03:10",
+  "jiuyan_category1": "大消费",
+  "jiuyan_concept1": "大消费_文旅旅游"
  },
  "603406": {
   "business_summary": "主营化学纤维制造业",
@@ -87917,13 +87947,15 @@
   "business_summary": "主营其他",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "电池",
+  "jiuyan_concept": "其他关键材料及设备",
   "name": "野马电池",
   "primary_source": "fallback",
   "sector": "其他",
   "sector_type": "fallback",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-03 15:03:10",
+  "jiuyan_category1": "电池",
+  "jiuyan_concept1": "其他关键材料及设备"
  },
  "605388": {
   "business_summary": "主营酒、饮料和精制茶制造业",

@@ -137,8 +137,11 @@ def load_daily_display(code, now=None):
                 return None
             try:
                 _n = _as_dt(now) if not isinstance(now, datetime) else now
-                from core.market_data.tencent_provider import is_unconfirmed_today_bar
+                from core.market_data.tencent_provider import (
+                    is_unconfirmed_today_bar, is_stale_forming_tail)
                 if is_unconfirmed_today_bar(_rows, _cached, now=_n):
+                    return None
+                if is_stale_forming_tail(_rows, _cached, now=_n):
                     return None
             except Exception:
                 pass
@@ -163,9 +166,14 @@ def load_daily_display(code, now=None):
     # 日期差（≤12 自然日）也放行 ⇒ 半成品一路当收盘用。判 None 逼调用方重取。
     # 判据与 `tencent.daily` 兜底共用同一个函数，避免两处漂移。
     try:
-        from core.market_data.tencent_provider import is_unconfirmed_today_bar
+        from core.market_data.tencent_provider import is_unconfirmed_today_bar, is_stale_forming_tail
         _n = _as_dt(now) if not isinstance(now, datetime) else now
         if is_unconfirmed_today_bar(rows, cached, now=_n):
+            return None
+        # 2026-11-03（owner 报「11-02 的 K 线明显不对」）：**过去某天**还挂着 forming ⇒
+        # 那根从未被真收盘确认（11-02 早盘快照被当收盘留档，全池 2102 只）。判 None 逼重取，
+        # 取回真数据后 `merge_daily_cache` 会覆盖该行并清掉 forming 标记。
+        if is_stale_forming_tail(rows, cached, now=_n):
             return None
     except Exception:
         pass

@@ -3724,6 +3724,15 @@ let _abnRows = [];
 let _abnLoadedAt = 0;
 let _abnInflight = false;
 
+/* 涨停时间/累加的**可见**提示（2026-11-03 owner：「点了补涨停时间没有变化」——
+   只看底部状态栏容易漏，改成留在表上方；空串 = 隐藏）。 */
+function _abnNotice(html) {
+  const el = document.getElementById("abnLimitNotice");
+  if (!el) return;
+  el.innerHTML = html || "";
+  el.style.display = html ? "" : "none";
+}
+
 async function loadAbnormalPool(force) {
   const box = document.getElementById("abnormalPoolBody");
   if (!box || _abnInflight) return;
@@ -3742,6 +3751,9 @@ async function loadAbnormalPool(force) {
     if (_age < 15000) return;
     if (_age < _rowTTL) { _patchAbnormalQuotes(); return; }
   }
+  // 涨停日期选择框：没填过就跟随全局选中日（用户改过就保留）
+  const _di = document.getElementById("abnLimitDate");
+  if (_di && !_di.value && state.date) _di.value = state.date;
   _abnInflight = true;
   try {
     const d = await apiCall("load_abnormal_pool", state.date || null);
@@ -3749,6 +3761,11 @@ async function loadAbnormalPool(force) {
     _abnLoadedAt = Date.now();
     renderAbnormalPool(d || {});
     _patchAbnormalQuotes();
+    // 日期框跟随池里**最近一个有涨停数据的日期**（2026-11-03 实报：默认"今天"会让
+    // 「补涨停时间」一只都匹配不上，看起来"点了没反应"）。用户显式改过则保留。
+    const _di2 = document.getElementById("abnLimitDate");
+    const _lds = _abnRows.map(x => x.limit_date).filter(Boolean).sort();
+    if (_di2 && _lds.length && !_lds.includes(_di2.value)) _di2.value = _lds[_lds.length - 1];
   } catch (e) {
     box.innerHTML = `<div class="empty down">异常监控池加载失败：${esc((e && (e.message || e)) || "未知")}</div>`;
   } finally { _abnInflight = false; }
@@ -3786,7 +3803,7 @@ function renderAbnormalPool(d) {
       : (_above5 === false) ? "background:rgba(248,81,73,.12);" : "";
     return `<tr ondblclick="openStockChart('${esc(r.code)}','${esc(r.name)}')" style="cursor:pointer;${rowBg}"
         title="双击看K线${r.added_at ? " · 加入于 " + esc(r.added_at) : ""}">
-      <td>${focusStarHtml(r.code || "")}${esc(r.name || "")} <span class="mono cell-dim">${esc(r.code || "")}</span></td>
+      <td>${focusStarHtml(r.code || "")}${esc(r.name || "")} <span class="mono cell-dim">${esc(r.code || "")}</span>${limitBoardBadge(r.limit_board, r.limit_date)}</td>
       <td>${verdictBadge(r.verdict)}</td>
       <td class="num"><b>${r.composite_score != null ? r.composite_score : "—"}</b></td>
       <td class="num"><b>${metTxt}</b></td>
@@ -3801,6 +3818,7 @@ function renderAbnormalPool(d) {
       ${bias5CellHtml(r.bias5, r.build_reason || "")}
       ${dev365CellHtml(r.dev365, r.build_reason || "")}
       <td onclick="event.stopPropagation()" ondblclick="event.stopPropagation()">
+        ${limitTimeHtml(r)}
         <input class="mini-input" style="width:180px;font-size:11px" maxlength="120"
                value="${esc(r.reason_manual || "")}" placeholder="手动填涨停原因…"
                title="手动记录的涨停原因（只展示、不参与任何判定）${r.reason_at ? " · 更新于 " + esc(r.reason_at) : ""}"
@@ -3820,10 +3838,15 @@ function renderAbnormalPool(d) {
       <th title="**当日**刚站上 5/10/20/30/60 日线的**时刻**（与「建仓信号扫描」同源同渲染）">均线突破<br><span style="font-size:9px;opacity:.6">当日·时刻</span></th>
       <th>时机条件</th>${UP30_TH}<th class="num" title="${BIAS5_TH_TITLE}">5日乖离<br><span style="font-size:9px;opacity:.6">(价−MA5)/MA5</span></th>
       <th title="(现价 − 365 日均线)/365 日均线。**着色 = 风险灯**：≥ +60% 或 ≤ −45% 标红，其余绿（绿色≠看多）。实测：正偏 ≥+60% 时 5 日内回撤>10% 的概率翻倍到 22.6%（基线 11.1%），>120% 到 38.2%；负偏只有 ≤−60% 有负收益证据（5日 −4.09%，t=−5.29）">偏离365日线<br><span style="font-size:9px;opacity:.6">风险灯</span></th>
-      <th title="**手动**记录的涨停原因（一句话，最多 120 字）。只展示、不参与任何判定；回车或点别处即保存">涨停原因<br><span style="font-size:9px;opacity:.6">手动</span></th>
+      <th title="上方 🕘 = **涨停时间**（通达信本地 1 分钟线里**首次触及涨停价**的分钟；封=收盘仍封板）。下方是**手动**记录的涨停原因（一句话，最多 120 字），只展示、不参与任何判定；回车或点别处即保存">涨停原因<br><span style="font-size:9px;opacity:.6">时间 · 手动</span></th>
       <th></th>
     </tr></thead><tbody>${body}</tbody></table>
-    <div class="cell-dim" style="font-size:11px;margin-top:6px">共 <b>${rows.length}</b> 只 · 双击行看K线 ·
+    <div class="cell-dim" style="font-size:11px;margin-top:6px">共 <b>${rows.length}</b> 只${
+      rows.some(r => r.limit_date) ? " · 按涨停时间排序（新日期在前）"
+        + (rows.filter(r => r.limit_date && !r.limit_time).length
+          ? ` · <span style="color:#d29922">${rows.filter(r => r.limit_date && !r.limit_time).length} 只缺涨停时间</span>`
+          : " · 涨停时间已齐") : ""
+    } · 双击行看K线 ·
       判定/得分/时机条件与「建仓信号扫描」同源；本地日线缓存不足的票显示 —</div>`;
 }
 
@@ -3883,6 +3906,128 @@ async function abnormalSetReason(code, text) {
 async function abnormalRemove(code) {
   try { await apiCall("abnormal_pool_remove", code); } catch (e) { /* 静默 */ }
   await loadAbnormalPool(true);
+}
+
+/* 2026-11-03 owner：「增加时间选项，运行某日把当天涨停股加进来；要累加，并注明首板/二板/三板」。
+   后端 `abnormal_pool_add_limitup(date)` 读猎手当天的 market_{YYYYMMDD}.csv（零网络），
+   只增不删：已有票不动，只补「涨停日 + 连板数」。 */
+const _CN_NUM = ["", "首", "二", "三", "四", "五", "六", "七", "八", "九"];
+/* 板数 → 中文（首板/二板/三板…；≥10 用数字）。2026-11-03 owner：
+   「没有显示到底是首板还是几板」——统一成中文板数，名字旁和涨停原因列都显示。 */
+function limitBoardText(board) {
+  const n = Number(board) || 0;
+  if (n <= 0) return "";
+  return n <= 9 ? `${_CN_NUM[n]}板` : `${n}板`;
+}
+function limitBoardBadge(board, date) {
+  const n = Number(board) || 0;
+  if (n <= 0) return "";
+  const txt = limitBoardText(n);
+  // 板数越高颜色越深（都是涨红色系，与"涨停"语义一致；首板淡、3板+ 最重）
+  const bg = n <= 1 ? "rgba(248,81,73,.12)" : n === 2 ? "rgba(248,81,73,.22)" : "rgba(248,81,73,.35)";
+  const bd = n <= 1 ? "rgba(248,81,73,.45)" : "rgba(248,81,73,.85)";
+  const tip = `${date ? date + " 涨停 · " : ""}连板 ${n} 天`;
+  return `<span title="${esc(tip)}" style="display:inline-block;font-size:10px;line-height:1.2;`
+    + `padding:0 4px;margin-left:4px;border-radius:3px;border:1px solid ${bd};`
+    + `background:${bg};color:#f85149;white-space:nowrap;vertical-align:1px">${txt}</span>`;
+}
+
+/* 涨停时间（2026-11-03 owner：「涨停原因中添加涨停时间」）——
+   后端用通达信本地 **1 分钟线**算「首次触及涨停价」的分钟，存在池条目里。
+   显示在「涨停原因」输入框上方；「封」= 收盘仍在涨停价，「未封」= 盘中触板后开板。 */
+function limitTimeHtml(r) {
+  const t = r && r.limit_time ? String(r.limit_time) : "";
+  const bd = limitBoardText(r && r.limit_board);      // 二板/三板 …（本列也显示一次，别只看名字旁）
+  const bdTxt = bd ? ` · <span style="color:#f85149">${bd}</span>` : "";
+  if (!t) {
+    return `<div class="cell-dim" style="font-size:10px;margin-bottom:2px;white-space:nowrap"`
+      + ` title="涨停时间：通达信本地 1 分钟线里**首次触及涨停价**的分钟。`
+      + `通达信没覆盖该日时会自动用腾讯分钟线兜底（最近约 14 个交易日，5 分钟粒度）">`
+      + `🕘 时间 —${bdTxt}</div>`;
+  }
+  const sealed = r.limit_sealed === true
+    ? `<span style="color:#f85149">封</span>`
+    : r.limit_sealed === false ? `<span class="cell-dim">未封</span>` : "";
+  const gran = r.limit_time_gran === "5m"
+    ? `<span class="cell-dim" style="font-size:9px">（5分）</span>` : "";
+  const tip = `首次触及涨停价：${t}`
+    + (r.limit_time_gran === "5m" ? "（腾讯 5 分钟 K，向上取到 5 分钟边界）" : "（1 分钟 K）")
+    + ` · ${r.limit_date || ""}`
+    + (r.limit_sealed === true ? " · 收盘封板" : r.limit_sealed === false ? " · 收盘未封板" : "")
+    + (bd ? ` · ${bd}` : "");
+  return `<div style="font-size:10px;margin-bottom:2px;white-space:nowrap;color:#8b949e"`
+    + ` title="${esc(tip)}">🕘 <b style="color:#c9d1d9">${esc(t)}</b>${gran} ${sealed}${bdTxt}</div>`;
+}
+
+async function abnormalFillLimitTimes() {
+  const inp = document.getElementById("abnLimitDate");
+  const d = (inp && inp.value) || state.date || todayStr();
+  const btn = document.getElementById("abnTimeBtn");
+  if (btn) { btn.disabled = true; btn.textContent = "计算中…"; }
+  try {
+    const r = await apiCall("abnormal_pool_fill_limit_times", d);
+    if (!r || !r.ok) {
+      const msg = (r && r.error) || "未知错误";
+      statusEl("补涨停时间失败：" + msg, "err");
+      _abnNotice(`❌ 补涨停时间失败：${esc(msg)}`
+        + (/未知|not|error|undefined/i.test(msg)
+          ? "<br>若是「方法不存在」，请重启 main.py（后端新增了该方法）" : ""));
+      return;
+    }
+    statusEl(`⏱ ${r.date || "全部"}：补上 ${r.filled} 只`
+      + (r.from_tx ? `（腾讯分钟线 ${r.from_tx} 只）` : "")
+      + `、仍缺 ${r.missing} 只` + (r.note ? ` · ${r.note}` : ""), r.missing ? "err" : "ok");
+    // 提示留在表上方（状态栏容易漏看）：为什么没补上 / 通达信数据只到哪天
+    if (r.note) {
+      _abnNotice(`⚠️ ${esc(r.date || "所选日期")}：补上 ${r.filled} 只、仍缺 ${r.missing} 只。<br>`
+        + `${esc(r.note)}`);
+    } else if (!r.filled && !r.missing) {
+      _abnNotice(r.with_limit
+        ? "ℹ️ 所选日期没有需要补算的票（这些票已经有涨停时间了）。"
+        : "ℹ️ 池里还没有带涨停日期的票：先选日期点「🚀 加入当日涨停」，再补时间。");
+    } else {
+      _abnNotice("");
+    }
+    await loadAbnormalPool(true);
+  } catch (e) {
+    const msg = (e && (e.message || e)) || "未知";
+    statusEl("补涨停时间失败：" + msg, "err");
+    _abnNotice(`❌ 补涨停时间失败：${esc(String(msg))}`);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = "⏱ 补涨停时间"; }
+  }
+}
+
+async function abnormalAddLimitup() {
+  const inp = document.getElementById("abnLimitDate");
+  const d = (inp && inp.value) || state.date || todayStr();
+  const btn = document.getElementById("abnLimitBtn");
+  if (btn) { btn.disabled = true; btn.textContent = "加入中…"; }
+  try {
+    const r = await apiCall("abnormal_pool_add_limitup", d);
+    if (r && r.ok) {
+      statusEl(`✅ ${r.date} 涨停 ${r.total} 只：新增 ${r.added}、更新板数 ${r.updated}、`
+        + `不变 ${r.unchanged}；池内共 ${r.pool} 只`
+        + (r.time_filled ? ` · 涨停时间补上 ${r.time_filled} 只` : "")
+        + (r.time_note ? ` · ${r.time_note}` : "")
+        + (r.note ? ` · ${r.note}` : ""), "ok");
+      const _msgs = [];
+      if (r.note) _msgs.push(esc(r.note));
+      if (r.time_note) _msgs.push(esc(r.time_note));
+      _abnNotice(_msgs.join("<br>"));
+      await loadAbnormalPool(true);
+    } else {
+      const msg = (r && r.error) || "未知错误";
+      statusEl("加入当日涨停失败：" + msg, "err");
+      _abnNotice(`❌ 加入当日涨停失败：${esc(msg)}`);
+    }
+  } catch (e) {
+    const msg = (e && (e.message || e)) || "未知";
+    statusEl("加入当日涨停失败：" + msg, "err");
+    _abnNotice(`❌ 加入当日涨停失败：${esc(String(msg))}`);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = "🚀 加入当日涨停"; }
+  }
 }
 
 
@@ -3975,7 +4120,7 @@ function renderShelterPool(d) {
       : (_above5 === false) ? "background:rgba(248,81,73,.12);" : "";
     return `<tr ondblclick="openStockChart('${esc(r.code)}','${esc(r.name)}')" style="cursor:pointer;${rowBg}"
         title="双击看K线${r.added_at ? " · 加入于 " + esc(r.added_at) : ""}">
-      <td>${focusStarHtml(r.code || "")}${esc(r.name || "")} <span class="mono cell-dim">${esc(r.code || "")}</span></td>
+      <td>${focusStarHtml(r.code || "")}${esc(r.name || "")} <span class="mono cell-dim">${esc(r.code || "")}</span>${limitBoardBadge(r.limit_board, r.limit_date)}</td>
       <td>${verdictBadge(r.verdict)}</td>
       <td class="num"><b>${r.composite_score != null ? r.composite_score : "—"}</b></td>
       <td class="num"><b>${metTxt}</b></td>
@@ -4004,7 +4149,12 @@ function renderShelterPool(d) {
       <th title="(现价 − 365 日均线)/365 日均线。**着色 = 风险灯**：≥ +60% 或 ≤ −45% 标红，其余绿（绿色≠看多）。实测：正偏 ≥+60% 时 5 日内回撤>10% 的概率翻倍到 22.6%（基线 11.1%），>120% 到 38.2%；负偏只有 ≤−60% 有负收益证据（5日 −4.09%，t=−5.29）">偏离365日线<br><span style="font-size:9px;opacity:.6">风险灯</span></th>
       <th></th>
     </tr></thead><tbody>${body}</tbody></table>
-    <div class="cell-dim" style="font-size:11px;margin-top:6px">共 <b>${rows.length}</b> 只 · 双击行看K线 ·
+    <div class="cell-dim" style="font-size:11px;margin-top:6px">共 <b>${rows.length}</b> 只${
+      rows.some(r => r.limit_date) ? " · 按涨停时间排序（新日期在前）"
+        + (rows.filter(r => r.limit_date && !r.limit_time).length
+          ? ` · <span style="color:#d29922">${rows.filter(r => r.limit_date && !r.limit_time).length} 只缺涨停时间</span>`
+          : " · 涨停时间已齐") : ""
+    } · 双击行看K线 ·
       判定/得分/时机条件与「建仓信号扫描」同源；本地日线缓存不足的票显示 —</div>`;
 }
 
@@ -11297,7 +11447,7 @@ function startLivePoll() {
 async function init() {
   // 首先获取 DOM 元素（此时 DOM 已完全加载）
   // 2026-10-20：启动标记（0ms）写进慢调用日志 ⇒ 能确认 WebView2 是否加载了新版 app.js
-  try { window.pywebview.api.report_slow_call("app_boot_20261102k", 0); } catch (e) { /* 静默 */ }
+  try { window.pywebview.api.report_slow_call("app_boot_20261103e", 0); } catch (e) { /* 静默 */ }
   // 2026-10-31：重点关注标记（紫色星）——启动先拉一次，五个表的星标按它渲染；
   // 拉不到就用空集（星标显示未标记，不影响任何其它功能）。
   loadFocusCodes();

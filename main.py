@@ -2563,6 +2563,18 @@ def _maybe_run_tdx_calibrate(now: datetime) -> None:
                     log.info("日线补长历史：%s", st)
             except Exception as e:
                 log.warning("通达信日线校准失败：%s", e)
+            # 2026-11-03（owner：「11-02 的 K 线明显不对」）：通达信 `.day` 没更新到当天时，
+            # 当天早盘的**快照根**会一直挂着 forming，次日被当成收盘。这里用腾讯日线兜底：
+            # 找出「过去某天仍标 forming」的缓存，逐只重拉真数据覆盖（最多 3000 只/天）。
+            try:
+                from core import daily_repair as _dr
+                _log_fp = os.path.join(BASE_DIR, "t_io", "logs",
+                                       f"fix_forming_{now.strftime('%Y%m%d')}.jsonl")
+                _st = _dr.fix_forming_tails(workers=4, limit=3000, log_fp=_log_fp)
+                if _st.get("total"):
+                    log.info("日线 forming 根修复：%s", _st)
+            except Exception as e:
+                log.warning("日线 forming 根修复失败：%s", e)
 
         _threading.Thread(target=_work, daemon=True, name="tdx-calibrate").start()
     except Exception:

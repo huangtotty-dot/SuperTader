@@ -224,6 +224,29 @@ def is_unconfirmed_today_bar(rows, cached=None, now=None) -> bool:
         return False
 
 
+def is_stale_forming_tail(rows, cached=None, now=None) -> bool:
+    """末行是**过去某天**、却还挂在 `forming` 里 ⇒ 从未被真数据确认的盘中快照（2026-11-03 事故）。
+
+    事故：11-02 09:31 写的快照根（001219 收 19.98，当天实际涨停 21.93）带着
+    `forming: ['2026-11-02']` 落盘；`is_unconfirmed_today_bar` 只认"末行 == 今天"，
+    到 11-03 这条闸就不再命中 ⇒ 半成品被当成 11-02 的收盘画进 K 线（全池 2102 只中招）。
+
+    判据：末行日期 **不是今天** 且仍在 `forming` 里。
+    ⚠️ 当日 forming 是**正常**的盘中口径（15 分钟 TTL / 实时尾会刷新），不能拦。
+    """
+    try:
+        if not rows:
+            return False
+        _n = now or datetime.now()
+        _last = str(rows[-1].get("date"))[:10]
+        if not _last or _last >= _n.strftime("%Y-%m-%d"):
+            return False
+        _form = {str(x) for x in (((cached or {}).get("forming")) or [])}
+        return _last in _form
+    except Exception:
+        return False
+
+
 def save_daily_cache(code: str, df, days: int = 800, forming_date: str = None):
     """写个股日线缓存（不变式 {date, saved_at, rows:[{date,open,close,high,low,volume}]}）。
     gm 结果也写缓存（审核 P1 阻断6：gm 路径不能每次直拉）。

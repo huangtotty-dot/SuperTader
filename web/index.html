@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>trader pannel</title>
-<link rel="stylesheet" href="style.css?v=20261102k">
+<link rel="stylesheet" href="style.css?v=20261103e">
 </head>
 <body>
 <header class="topbar">
@@ -294,12 +294,24 @@
           <input type="text" id="abnSearch" class="mini-input" placeholder="代码 或 名称" style="width:140px"
                  onkeydown="if(event.key==='Enter'){event.preventDefault();abnormalAdd();}">
           <button class="mini-btn primary" id="abnAddBtn" onclick="abnormalAdd()" title="按代码/名称加入监控池">＋ 加入</button>
+          <!-- 2026-11-03 owner：选一个交易日 → 把当天涨停股**累加**进池，并标注首板/2板/3板 -->
+          <input type="date" id="abnLimitDate" class="mini-input" style="width:132px"
+                 title="选择交易日：把当天全部涨停股累加进监控池（数据源=猎手当日市场快照 market_YYYYMMDD.csv）">
+          <button class="mini-btn" id="abnLimitBtn" onclick="abnormalAddLimitup()"
+                  title="把所选交易日的全部涨停股加入监控池：只增不删、已有票不动；每只标注首板/2板/3板（连板天数）">🚀 加入当日涨停</button>
+          <!-- 2026-11-03 owner：涨停时间（通达信本地 1 分钟线 → 首次触及涨停价） -->
+          <button class="mini-btn" id="abnTimeBtn" onclick="abnormalFillLimitTimes()"
+                  title="用通达信本地 1 分钟线，给所选日期的票补算「首次触及涨停价」的时间（只补空的）；通达信需先下载到该日分钟线">⏱ 补涨停时间</button>
           <button class="mini-btn" onclick="loadAbnormalPool(true)" title="重算并重绘">🔄 刷新</button>
         </span>
         <span class="cell-dim" style="font-size:11px;font-weight:400;margin-left:10px">
           自己挑票盯着；判定/得分与「建仓信号扫描」同源，取不到本地日线缓存的票显示 —
         </span>
       </h2>
+      <!-- 涨停时间/累加的**可见**提示（2026-11-03）：只看状态栏容易漏掉，
+           例如"通达信 1 分钟线只到 10-14、所选日期算不出来"必须醒目地留在表上方。 -->
+      <div id="abnLimitNotice" class="cell-dim"
+           style="display:none;font-size:11px;line-height:1.6;margin:0 0 6px;color:#d29922"></div>
       <div id="abnormalPoolBody"><div class="empty">还没有加入任何股票。上面输代码/名称 → ＋加入</div></div>
     </div>
 
@@ -697,6 +709,6 @@
 <script src="vendor/echarts.min.js"></script>
 <!-- 2026-10-20：带版本号强制 WebView2 重新取 app.js（否则可能命中旧缓存，
      K 线提速/埋点改动不生效——表现为"改了跟没改一样"） -->
-<script src="app.js?v=20261102k"></script>
+<script src="app.js?v=20261103e"></script>
 </body>
 </html>

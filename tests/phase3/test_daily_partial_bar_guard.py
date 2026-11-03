@@ -112,8 +112,10 @@ class TestReadersRejectPoison:
         assert cc.load_daily_display("002929") is None
 
     def test_healthy_cache_still_reads(self, cache_dir):
-        _write(cache_dir, "600900", _rows(("2026-10-20", 10.0, 10.2),
-                                          ("2026-10-21", 10.2, 10.4)))
+        # ⚠️ 用**相对日期**：写死 10-20/21 会随日期腐烂（`MAX_DISPLAY_GAP_DAYS=12`，
+        #    2026-11-03 已超窗 ⇒ 本用例会因为"陈旧"而不是"健康"被拒）
+        _y2 = (datetime.now() - timedelta(days=2)).strftime("%Y-%m-%d")
+        _write(cache_dir, "600900", _rows((_y2, 10.0, 10.2), (_YDAY, 10.2, 10.4)))
         df = cc.load_daily_display("600900")
         assert df is not None and len(df) == 2
 

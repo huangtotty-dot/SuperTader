@@ -123,7 +123,7 @@ class TestPayloadShorterThanCacheRebuilds(unittest.TestCase):
 
     def test_payload_length_guard_present(self):
         i = self.src.index("def _serve_payload_cache")
-        window = self.src[i:i + 2600]
+        window = self.src[i:i + 4600]
         self.assertIn("daily_rows", window, "要读 payload 的 daily_rows 长度")
         self.assertIn("len(_prows) * 2 < len(_dfc)", window,
                       "payload 明显短于日线缓存时应 return None（触发重建）")
@@ -131,7 +131,7 @@ class TestPayloadShorterThanCacheRebuilds(unittest.TestCase):
     def test_guard_uses_cache_it_already_reads(self):
         """长度判据必须复用已经读过的 `_dfc` —— 别为此再加一次磁盘 I/O。"""
         i = self.src.index("def _serve_payload_cache")
-        window = self.src[i:i + 2600]
+        window = self.src[i:i + 4600]
         self.assertEqual(window.count("load_daily_display"), 1,
                          "payload 命中路径只应读一次日线缓存")
 
