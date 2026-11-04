@@ -12356,14 +12356,30 @@ function _mwOption(s, dma, levels, trades, zoom, code) {
   const gaps = buildGapAreas(s.ohlc, s.dates, 15, 0.003, 8);   // 最近 15 自然日的缺口，一格最多 8 块
   // 2026-10-28 owner：主图画框提醒也要进多窗口（蓝实线框，与缺口的红绿虚线区分）
   const _mwBoxes2 = _mwBoxMarkAreas(code, s.dates);
-  const _dmaLine = (y, color, txt) => (y == null || !isFinite(y)) ? null : {
+  /* 2026-11-04 owner：「多窗口里 5 日均线要相比其它线更显眼」。
+     日线 MA5 = 蓝色**实线 2.4px + 微发光**、标签白字加粗带蓝底；
+     MA10/MA20 仍是 1px 虚线小字（透明度略降）⇒ 一眼分出主次。
+     ⚠️ MA5 放进 markLine 的**最后**（见下方 `_lines`），压在其他参考线之上。 */
+  const _dmaLine = (y, color, txt, emph) => (y == null || !isFinite(y)) ? null : {
     yAxis: y,
-    lineStyle: { color, type: "dashed", width: 1, opacity: .9 },
-    label: { formatter: `${txt} ${Number(y).toFixed(2)}`, color, fontSize: 8,
-             position: "insideStartTop" },
+    lineStyle: emph
+      ? { color, type: "solid", width: 2.4, opacity: 1,
+          shadowColor: "rgba(88,166,255,.6)", shadowBlur: 6 }
+      : { color, type: "dashed", width: 1, opacity: .8 },
+    label: {
+      formatter: `${txt} ${Number(y).toFixed(2)}`,
+      color: emph ? "#ffffff" : color,
+      fontSize: emph ? 10 : 8,
+      fontWeight: emph ? 700 : 400,
+      backgroundColor: emph ? "rgba(88,166,255,.9)" : "transparent",
+      padding: emph ? [1, 3] : 0,
+      borderRadius: emph ? 3 : 0,
+      // MA5 标签放线**上方**，MA10/20 放线**下方** —— 两条线挨得近时标签不会互相压
+      position: emph ? "insideStartTop" : "insideStartBottom",
+    },
   };
+  const _ma5Line = _dmaLine(dma && dma.ma5, "#58a6ff", "日MA5", true);
   const _dmaData = [
-    _dmaLine(dma && dma.ma5, "#58a6ff", "日MA5"),
     _dmaLine(dma && dma.ma10, "#bc8cff", "日MA10"),
     _dmaLine(dma && dma.ma20, "#2dd4bf", "日MA20"),
   ].filter(Boolean);
@@ -12380,6 +12396,7 @@ function _mwOption(s, dma, levels, trades, zoom, code) {
     ((levels && levels.resistances) || []).map(y => _lvlLine(y, true)),
     ((levels && levels.supports) || []).map(y => _lvlLine(y, false)),
   ).filter(Boolean);
+  // 其余参考线（MA10/20、支撑压力、POC）；日MA5 单独抽出、最后画 ⇒ 永远压在最上层
   const _lines = _dmaData.concat(_lvlData);
   const dates = s.dates || [], ohlc = s.ohlc || [];
   const amtYi = (s.amount && s.amount.length === dates.length)
@@ -12598,8 +12615,10 @@ function _mwOption(s, dma, levels, trades, zoom, code) {
         // 缺口色块 + 日线均线（与单图同一套口径/颜色）
         markArea: (gaps.length || _mwBoxes2.length)
           ? { silent: true, data: gaps.concat(_mwBoxes2) } : undefined,
-        markLine: (_lines.length || _vpLine)
-          ? { silent: true, symbol: "none", data: _vpLine ? _lines.concat([_vpLine]) : _lines }
+        // 绘制顺序 = 数组顺序 ⇒ 日MA5 放最后（压过 MA10/20、支撑压力、POC）
+        markLine: (_lines.length || _vpLine || _ma5Line)
+          ? { silent: true, symbol: "none",
+              data: _lines.concat(_vpLine ? [_vpLine] : [], _ma5Line ? [_ma5Line] : []) }
           : undefined,
         itemStyle: { color: "#f85149", color0: "#3fb950",
                      borderColor: "#ff6b62", borderColor0: "#56d364", borderWidth: 1 } },
