@@ -2048,9 +2048,12 @@ function _putBackNode(slotId, node, fallbackHtml) {
 /* ---- 板块星轨图（2026-10-17）：近十日 排名(位置) × 平均分(星大小) × 轨迹(排名变化) ----
    口径见后端 `Api.load_sector_constellation` 的 docstring：排名只在当日集合内可比、
    平均分不能跨"入池日"直接比 —— 这两条会随图显示在 #sectorStarsNote 里，别删。 */
-const SECTOR_STAR_COLORS = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300"];
-const SECTOR_STAR_MUTED = "#b9c2cf";     // 未高亮板块：中性灰，作为背景星
-const SECTOR_STAR_HL = 6;                // 高亮条数（浅色下对比度 <3:1 的三个槽位靠直标+表格兜底）
+// 2026-11-04 owner：「当日有排名上升的板块都用彩色进行显示」⇒ 颜色改编码**状态**而非身份：
+//   上升 = 红（与全仓 A 股「涨红」同源 #f85149），其余中性灰作背景。
+//   ⚠️ 不给每个上升板块分不同色：上升板块每天 5~15 个，逐块配色会变成彩虹，而且
+//   "谁和谁挨着"每天在变（CVD 可辨性无法保证）。身份交给末端直标 + 悬浮提示 + 下方名单。
+const SECTOR_STAR_ROSE = "#f85149";      // 当日排名上升
+const SECTOR_STAR_MUTED = "#b9c2cf";     // 未上升板块：中性灰，作为背景星
 
 /* 「连续提升」筛选（2026-10-17 owner）：只看最近 10 日排名持续提升的板块。
    判定在后端 `load_sector_constellation`（sector.sustained）：
@@ -2180,12 +2183,22 @@ function renderSectorStars(d) {
     _fbtn.textContent = `🔍 该关注 (${focus.length})`;
     _fbtn.classList.toggle("primary", _starFocusOnly);
   }
-  const hl = shownSecs.slice(0, SECTOR_STAR_HL);
-  const rest = shownSecs.slice(SECTOR_STAR_HL);
   const maxS = Math.max(1e-9, d.max_score || 1);
   // 面积编码：size ∝ √score（面积≈得分），最小 8px 满足标记下限
   const sizeOf = (s, isHl) => (isHl ? 8 + 10 * Math.sqrt(Math.max(0, s) / maxS) : 8);
   const at = (sec, xi) => sec.points.find(q => q.ymd === ymds[xi]) || null;
+  // 2026-11-04 owner：「当日有排名上升的板块都用彩色进行显示」。
+  //   口径 = 窗口**最后一日 vs 前一日**的名次（严格变好才算；任一天没上榜就不算 ——
+  //   用 points 按日期取，而不是拿"倒数第二个点"，避免把落榜后重新上榜当成上升）。
+  //   筛选模式（连续提升/该关注）下同样按"命中集合里谁今天在升"着色。
+  const _xiLast = ymds.length - 1;
+  const _xiPrev = ymds.length - 2;
+  const rose = _xiPrev >= 0 ? shownSecs.map(s => {
+    const a = at(s, _xiPrev), b = at(s, _xiLast);
+    return (a && b && b.rank < a.rank) ? { s, up: a.rank - b.rank } : null;
+  }).filter(Boolean) : [];
+  const roseSet = new Set(rose.map(r => r.s.name));
+  const roseUp = new Map(rose.map(r => [r.s.name, r.up]));
 
   const mk = (sec, color, isHl) => ({
     name: sec.name,
@@ -2219,17 +2232,21 @@ function renderSectorStars(d) {
     z: isHl ? 3 : 1,
   });
 
-  const hlSet = new Set(hl.map(s => s.name));
-  const series = [...hl.map((s, i) => mk(s, SECTOR_STAR_COLORS[i], true)),
-                  ...rest.map(s => mk(s, SECTOR_STAR_MUTED, false))];
+  const series = shownSecs.map(s => {
+    const isRose = roseSet.has(s.name);
+    return mk(s, isRose ? SECTOR_STAR_ROSE : SECTOR_STAR_MUTED, isRose);
+  });
 
   echRender("echSectorStars", {
     backgroundColor: "transparent",
     textStyle: { color: "#6b7280" },
-    // 图例只列高亮的 6 个（其余灰星不进图例，避免 20+ 项噪音）
+    // 图例只列**当日上升**的板块（红），其余灰星不进图例；上升可能 10+ 个 ⇒ 可滚动单行
     legend: {
-      data: hl.map(s => s.name), top: 0, itemWidth: 14, itemHeight: 8,
+      show: rose.length > 0,
+      type: "scroll", width: "84%",
+      data: rose.map(r => r.s.name), top: 0, itemWidth: 14, itemHeight: 8,
       textStyle: { color: "#6b7280", fontSize: 11 }, icon: "roundRect",
+      inactiveColor: "#c9ced8",
     },
     // 右边距留给**全部**板块的末端直标（最长 5 个汉字 ≈ 60px）+ 一点余量
     grid: { left: 56, right: 150, top: 34, bottom: 30 },
@@ -2247,10 +2264,10 @@ function renderSectorStars(d) {
         let out = `<b>${esc(labels[xi])}</b>`
           + `<span style="color:#6b7280;font-size:11px">　${rows.length} 个板块上榜</span>`;
         rows.slice(0, 8).forEach(({ s, p }) => {
-          const dot = hlSet.has(s.name)
-            ? `<span style="color:${SECTOR_STAR_COLORS[hl.findIndex(x => x.name === s.name)]}">●</span>`
-            : '<span style="color:#b9c2cf">·</span>';
-          out += `<br>${dot} ${esc(s.name)}　<b>#${p.rank}</b>　`
+          const isRose = roseSet.has(s.name);
+          const dot = `<span style="color:${isRose ? SECTOR_STAR_ROSE : SECTOR_STAR_MUTED}">●</span>`;
+          const up = isRose ? ` <span style="color:${SECTOR_STAR_ROSE};font-size:11px">↑${roseUp.get(s.name)}</span>` : "";
+          out += `<br>${dot} ${esc(s.name)}　<b>#${p.rank}</b>${up}　`
             + `${p.score.toFixed(2)} 分　涨停 ${p.lu}`;
         });
         if (rows.length > 8) {
@@ -2284,11 +2301,19 @@ function renderSectorStars(d) {
     const moved = d.sectors.filter(s => s.days >= 2)
       .sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta)).slice(0, 3)
       .map(s => `${esc(s.name)} ${s.delta > 0 ? "+" : ""}${s.delta}`).join(" · ");
+    // 三种模式都要说明红线含义；上升名单只在这里列（图例可滚动，但文字版更好抄）
+    const roseTxt = rose.length
+      ? rose.map(r => `${esc(r.s.name)} <b>↑${r.up}</b>`).join(" · ")
+      : "无";
+    const roseNote = `<b style="color:${SECTOR_STAR_ROSE}">当日排名上升</b>的 <b>${rose.length}</b> 个用红色直标，`
+      + `其余灰星。`
+      + (rose.length ? `<br><span class="cell-dim">上升：${roseTxt}</span>` : "");
     let line;
     if (_starSustainedOnly) {
       line = `● <b>只看连续提升</b>：${sust.length} 个板块（口径：${d.dates.length} 日里至少 `
         + `${Math.ceil(d.dates.length / 2)} 天名次变好、且净提升 ≥ 5 名）—— `
         + (sust.map(s => `${esc(s.name)} <b>+${s.delta}</b>（改善 ${s.ups} 天）`).join(" · ") || "无")
+        + `<br>${roseNote}`
         + `<br><span class="cell-dim">⚠ 实验结论：这条轨迹**没有**前瞻增量（前进 vs 不变 t&lt;1），仅作观察。</span>`;
     } else if (_starFocusOnly) {
       // 依据直接写在这儿 —— 这个按钮的意义就是"照实验结论筛"，必须让人看见凭什么
@@ -2299,10 +2324,11 @@ function renderSectorStars(d) {
         + `⇒ 追前面的会跑输；<b>11-15 名 +0.88%</b>(t+2.92)、16 名以后 +0.74%(t+2.87) ⇒ 只有这一段有正超额。`
         + `非重叠检验 +1.26%(t2.27)，按板块大小分半两个半边都成立。`
         + `<br><span class="cell-dim">⚠ 这是<b>相对</b>优势：样本期大盘下行，三档绝对收益全为负（−0.8%~−2.3%）。`
-        + `这张图只选板块、不择时；且样本仅 60 天单一 regime，别当铁律。</span>`;
+        + `这张图只选板块、不择时；且样本仅 60 天单一 regime，别当铁律。</span>`
+        + `<br>${roseNote}`;
     } else {
-      line = `● 图上共 <b>${d.sectors.length}</b> 个板块（<b>全部</b>已画出）：前 ${SECTOR_STAR_HL} 名上色直标，`
-        + `其余为灰星背景；星越大＝当日平均分越高（面积≈得分）。　排名变动最大：${moved || "—"}`;
+      line = `● 图上共 <b>${d.sectors.length}</b> 个板块（<b>全部</b>已画出）：${roseNote}`
+        + `<br>星越大＝当日平均分越高（面积≈得分）。　近 ${d.dates.length} 日变动最大：${moved || "—"}`;
     }
     noteEl.innerHTML = line + `<br>⚠ ${esc(d.note || "")}`;
   }
