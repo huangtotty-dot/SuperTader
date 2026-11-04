@@ -12411,32 +12411,32 @@ function _mwOption(s, dma, levels, trades, zoom, code) {
   const gaps = buildGapAreas(s.ohlc, s.dates, 15, 0.003, 8);   // 最近 15 自然日的缺口，一格最多 8 块
   // 2026-10-28 owner：主图画框提醒也要进多窗口（蓝实线框，与缺口的红绿虚线区分）
   const _mwBoxes2 = _mwBoxMarkAreas(code, s.dates);
-  /* 2026-11-04 owner：「多窗口里 5 日均线要相比其它线更显眼」。
-     日线 MA5 = 蓝色**实线 2.4px + 微发光**、标签白字加粗带蓝底；
-     MA10/MA20 仍是 1px 虚线小字（透明度略降）⇒ 一眼分出主次。
-     ⚠️ MA5 放进 markLine 的**最后**（见下方 `_lines`），压在其他参考线之上。 */
-  const _dmaLine = (y, color, txt, emph) => (y == null || !isFinite(y)) ? null : {
+  /* 2026-11-04 owner：「多窗口里 5 日均线要相比其它线更显眼」→ 随后又改口
+     「其它的日线也像5日均线一样显示，清晰明了」⇒ 三条日线**统一同款**：
+     实线 2.2px + 同色微光 + 加粗胶囊标签（各自线色作底色，浅色底用深字保证对比度）。
+     区分只靠颜色与标签文字；标签位置错开：MA5 在线上方、MA10/MA20 在线下方。
+     ⚠️ 绘制顺序见下方 `_lines`：MA5 最后画（压过 MA10/20、支撑压力、POC）。 */
+  const _dmaLine = (y, color, txt, lab) => (y == null || !isFinite(y)) ? null : {
     yAxis: y,
-    lineStyle: emph
-      ? { color, type: "solid", width: 2.4, opacity: 1,
-          shadowColor: "rgba(88,166,255,.6)", shadowBlur: 6 }
-      : { color, type: "dashed", width: 1, opacity: .8 },
+    lineStyle: { color, type: "solid", width: 2.2, opacity: 1,
+                 shadowColor: color, shadowBlur: 6 },
     label: {
       formatter: `${txt} ${Number(y).toFixed(2)}`,
-      color: emph ? "#ffffff" : color,
-      fontSize: emph ? 10 : 8,
-      fontWeight: emph ? 700 : 400,
-      backgroundColor: emph ? "rgba(88,166,255,.9)" : "transparent",
-      padding: emph ? [1, 3] : 0,
-      borderRadius: emph ? 3 : 0,
-      // MA5 标签放线**上方**，MA10/20 放线**下方** —— 两条线挨得近时标签不会互相压
-      position: emph ? "insideStartTop" : "insideStartBottom",
+      color: (lab && lab.fg) || "#ffffff",
+      fontSize: 10, fontWeight: 700,
+      backgroundColor: (lab && lab.bg) || color,
+      padding: [1, 3], borderRadius: 3,
+      // MA5 标签在线**上方**，MA10/20 在线**下方** —— 三条线挨得近时标签不互相压
+      position: (lab && lab.pos) || "insideStartBottom",
     },
   };
-  const _ma5Line = _dmaLine(dma && dma.ma5, "#58a6ff", "日MA5", true);
+  const _ma5Line = _dmaLine(dma && dma.ma5, "#58a6ff", "日MA5",
+                            { bg: "rgba(88,166,255,.95)", fg: "#ffffff", pos: "insideStartTop" });
   const _dmaData = [
-    _dmaLine(dma && dma.ma10, "#bc8cff", "日MA10"),
-    _dmaLine(dma && dma.ma20, "#2dd4bf", "日MA20"),
+    _dmaLine(dma && dma.ma10, "#bc8cff", "日MA10",
+             { bg: "rgba(124,77,255,.95)", fg: "#ffffff", pos: "insideStartBottom" }),
+    _dmaLine(dma && dma.ma20, "#2dd4bf", "日MA20",
+             { bg: "rgba(13,148,136,.95)", fg: "#ffffff", pos: "insideStartBottom" }),
   ].filter(Boolean);
   // 支撑/压力位（2026-10-21 owner：多窗口也要画）。颜色与单图一致：支撑绿、压力红。
   // 标签放**右侧**（日线MA 的标签在左），两拨不打架；每方向最多 2 条（格子里地方小）。

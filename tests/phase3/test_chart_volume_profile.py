@@ -150,7 +150,7 @@ class TestVolumeProfileWiring(unittest.TestCase):
         """owner：「在多窗口显示中也要显示密集成交区」。"""
         self.assertIn("_vpOn ? buildVolumeProfile(ohlc, vals, MW_TAIL, 48)", JS)
         self.assertIn("_vpSeries ? [_vpSeries] : []", JS)
-        self.assertIn("_vpLine ? _lines.concat([_vpLine]) : _lines", JS)
+        self.assertIn("_lines.concat(_vpLine ? [_vpLine] : [], _ma5Line ? [_ma5Line] : [])", JS)
         # 开关要立刻同步到已打开的多窗口
         i = JS.index("function toggleVolumeProfile")
         self.assertIn("_mwKickTick()", JS[i:i + 1200])

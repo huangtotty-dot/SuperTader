@@ -149,7 +149,7 @@ class TestFrontend:
         assert "markArea: (gaps.length || _mwBoxes2.length)" in _JS
         # 日线均线三条（颜色与单图的「日线MA5/10/20」一致）
         assert '"日MA5"' in _JS and '"日MA10"' in _JS and '"日MA20"' in _JS
-        assert "markLine: (_lines.length || _vpLine)" in _JS
+        assert "markLine: (_lines.length || _vpLine || _ma5Line)" in _JS
         assert '"#58a6ff"' in _JS and '"#bc8cff"' in _JS and '"#2dd4bf"' in _JS
 
     def test_realtime_polling(self):
