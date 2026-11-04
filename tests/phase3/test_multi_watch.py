@@ -36,7 +36,7 @@ def _frame(n=120):
 class TestLoadMultiChart:
     def test_trims_every_series_to_tail(self, monkeypatch):
         api = t_gui.Api()
-        monkeypatch.setattr(api, "_mw_frame", lambda c: (_frame(120), "fresh"))
+        monkeypatch.setattr(api, "_mw_frame", lambda c, period="min5": (_frame(120), "fresh"))
         r = api.load_multi_chart(["600000"], "min5", 90)
         it = r["items"][0]
         assert it["ok"] and it["code"] == "600000"
@@ -48,14 +48,14 @@ class TestLoadMultiChart:
 
     def test_warming_item_is_reported_not_raised(self, monkeypatch):
         api = t_gui.Api()
-        monkeypatch.setattr(api, "_mw_frame", lambda c: (None, "warming"))
+        monkeypatch.setattr(api, "_mw_frame", lambda c, period="min5": (None, "warming"))
         r = api.load_multi_chart(["600000"], "min5", 90)
         it = r["items"][0]
         assert it["ok"] is False and it["warming"] is True
 
     def test_capped_at_12_and_strips_underscore_suffix(self, monkeypatch):
         api = t_gui.Api()
-        monkeypatch.setattr(api, "_mw_frame", lambda c: (_frame(60), "fresh"))
+        monkeypatch.setattr(api, "_mw_frame", lambda c, period="min5": (_frame(60), "fresh"))
         codes = [f"{600000 + i}" for i in range(20)]
         r = api.load_multi_chart(codes, "min5", 40)
         assert len(r["items"]) == 12                     # 防误传整池
@@ -67,7 +67,7 @@ class TestLoadMultiChart:
     def test_never_raises_on_bad_frame(self, monkeypatch):
         api = t_gui.Api()
 
-        def _boom(c):
+        def _boom(c, period="min5"):
             raise RuntimeError("x")
         monkeypatch.setattr(api, "_mw_frame", _boom)
         r = api.load_multi_chart(["600000"], "min5", 90)
@@ -157,7 +157,7 @@ class TestFrontend:
         assert "mwTimer = setInterval(mwTick, MW_PERIOD_MS)" in _JS
         # 2026-10-21 起每格画 96 根（两个交易日）；更早是 48 根
         assert "MW_TAIL = 96" in _JS
-        assert '"load_multi_chart", codes, "min5", MW_TAIL' in _JS
+        assert '"load_multi_chart", codes, mwPeriod, MW_TAIL' in _JS
         # 单飞：上一轮没回来不叠请求（6 格 × 每格 ~1s 计算，叠起来会拖死）
         assert "if (mwBusy) return;" in _JS
 
@@ -388,7 +388,7 @@ class TestTradeMarkersInCells:
     def test_frontend_buckets_same_as_main_chart(self):
         # 与单图同口径：成交落进 (bar_t - 5min, bar_t]
         assert "function _mwOption(s, dma, levels, trades, zoom, code)" in _JS
-        assert "_be[bi] - 5 >= tm" in _JS
+        assert "_be[bi] - _pMin >= tm" in _JS
         # 买=红▲托在 low 下、卖=绿▼压在 high 上（与单图同色同形）
         assert 'color: "#f85149", borderColor: "#fff"' in _JS
         assert 'color: "#3fb950", borderColor: "#fff"' in _JS
@@ -449,3 +449,64 @@ class TestLayout2x2:
         assert 'id="mwLay2x2"' in _HTML
         css = (_ROOT / "web" / "style.css").read_text(encoding="utf-8")
         assert ".mw-grid.mw-c2" in css
+
+
+class TestMainChartMacdFlip:
+    """2026-11-03 owner：「K线图也要支持 MACD 第一根红标记」——与多窗口同一口径。"""
+
+    def test_按可视窗口找翻红首根(self):
+        assert "const _macdHist = ((period.macd || {}).hist) || [];" in _JS
+        assert "Math.floor(zStart / 100 * (_mN - 1))" in _JS
+        assert "_a <= 0 && _b > 0" in _JS
+
+    def test_首根亮红加白边与三角(self):
+        assert "data: _macdHist.map((v, i) => ({" in _JS
+        assert 'color: "#ff3b30", borderColor: "#ffffff"' in _JS
+        assert "symbol: \"triangle\", symbolSize: 10" in _JS
+        assert "xAxis: _mFlipLast" in _JS
+        assert 'formatter: "翻红"' in _JS
+
+
+class TestPeriodSwitch:
+    """2026-11-04 owner：窗口看盘可选 5 / 30 / 60 分钟。"""
+
+    def test_前端周期按钮与切换(self):
+        for p in ("min5", "min10", "min30", "min60"):
+            assert f'id="mwPer{p}"' in _HTML, p
+        assert "function mwSetPeriod(p)" in _JS
+        assert 'apiCall("load_multi_chart", codes, mwPeriod, MW_TAIL)' in _JS
+        assert "mwZoom = [];" in _JS.split("function mwSetPeriod")[1][:600]
+        assert 'id="mwSubTitle"' in _HTML
+
+    def test_周期写进后端记忆(self):
+        assert 'apiCall("save_multi_watch", null, null, p)' in _JS
+        assert "MW_LS_PERIOD" in _JS
+        assert "_mwRemotePeriod" in _JS
+
+
+class TestPeriodBackend:
+    def test_load_multi_chart_透传周期(self):
+        import t_gui
+        api = t_gui.Api()
+        seen = {}
+
+        def _fake_frame(code, period="min5"):
+            seen[code] = period
+            return {"dates": [], "ohlc": [], "volume": [], "amount": None,
+                    "ma5": [], "macd": {"dif": [], "dea": [], "hist": []}, "quote": {}}, "fresh"
+        api._mw_frame = _fake_frame
+        r = api.load_multi_chart(["600000"], "min30", 96)
+        assert seen["600000"] == "min30"
+        assert r["period"] == "min30"
+        r2 = api.load_multi_chart(["600000"], "bogus", 96)
+        assert r2["period"] == "min5", "非法周期回落 5 分钟"
+
+    def test_周期记忆往返(self, tmp_path):
+        import t_gui
+        api = t_gui.Api()
+        api._MW_STATE_FP = tmp_path / "mw.json"
+        api.save_multi_watch(["600000"], "3x2", "min60")
+        d = api.load_multi_watch()
+        assert (d["codes"], d["layout"], d["period"]) == (["600000"], "3x2", "min60")
+        api.save_multi_watch(None, None, "bogus")
+        assert api.load_multi_watch()["period"] == "min60", "非法周期不能覆盖旧值"

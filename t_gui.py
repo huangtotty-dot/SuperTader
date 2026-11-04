@@ -6603,12 +6603,14 @@ class Api:
         """
         items = []
         _tail = max(20, int(tail or 90))
+        # 2026-11-04：周期可选 5/10/30/60 分钟（非法值回落 min5）
+        _p = period if period in self._MW_PERIODS else "min5"
         for c in (codes or [])[:12]:
             _c = str(c).split("_")[0].strip()
             if not _c:
                 continue
             try:
-                fr, st = self._mw_frame(_c)
+                fr, st = self._mw_frame(_c, _p)
                 if not fr:
                     items.append({"code": _c, "ok": False, "warming": True})
                     continue
@@ -6636,7 +6638,7 @@ class Api:
             except Exception as e:
                 items.append({"code": _c, "ok": False,
                               "error": f"{type(e).__name__}: {str(e)[:60]}"})
-        return {"items": items, "period": period}
+        return {"items": items, "period": _p}
 
     def _mw_trades(self, code, dates):
         """该 code 的成交行，**裁到九宫格窗口内**（只画最近 48 根 5 分 K）。
@@ -6653,44 +6655,52 @@ class Api:
         except Exception:
             return []
 
-    def _mw_frame(self, code):
+    _MW_PERIODS = ("min5", "min10", "min30", "min60")
+
+    def _mw_frame(self, code, period="min5"):
         """多窗口专用的**轻量帧**（SWR 取）：返回 `(frame|None, state)`。
+
+        2026-11-04 owner：「窗口看盘可以选择 5 分钟 / 30 分钟 / 60 分钟」——
+        缓存键必须带周期（`code|period`），否则切周期会命中上一个周期的帧。
 
         只算 K 线 / MA5 / 成交额，**不碰** MACD/RSI/BOLL/黄金分割/深档 ——
         细胞只有 1/6 屏宽，48 根就够，深档的代价（~1s/只 × 6 只并发）直接把它拖成"不动"。
         TTL 见 `_MW_TTL`（4.6s，须略大于前端 4s 轮询，否则相位对齐每拍全量重算，见 P1-8）。
         """
         _c = str(code).split("_")[0]
+        _p = period if period in self._MW_PERIODS else "min5"
+        _k = f"{_c}|{_p}"
         _now = _time_mod.time()
         with _MW_LOCK:
-            hit = _MW_CACHE.get(_c)
-            _run = bool(_MW_RUN.get(_c))
+            hit = _MW_CACHE.get(_k)
+            _run = bool(_MW_RUN.get(_k))
         if hit is not None and (_now - hit[0]) < _MW_TTL:
             return hit[1], "fresh"
         if not _run:
             with _MW_LOCK:
-                _MW_RUN[_c] = True
-            _th.Thread(target=self._mw_worker, args=(_c,), daemon=True,
-                       name=f"mw-{_c}").start()
+                _MW_RUN[_k] = True
+            _th.Thread(target=self._mw_worker, args=(_c, _p), daemon=True,
+                       name=f"mw-{_c}-{_p}").start()
         if hit is not None:
             return hit[1], "stale"
         return None, "warming"
 
-    def _mw_worker(self, code):
+    def _mw_worker(self, code, period="min5"):
+        _k = f"{str(code).split('_')[0]}|{period}"
         try:
-            fr = self._mw_compute(code)
+            fr = self._mw_compute(code, period)
             if fr:
                 with _MW_LOCK:
                     if len(_MW_CACHE) > 200:
                         _MW_CACHE.clear()
-                    _MW_CACHE[code] = (_time_mod.time(), fr)
+                    _MW_CACHE[_k] = (_time_mod.time(), fr)
         except Exception as e:
-            print(f"[WARN] [多窗口] {code} 取帧失败: {type(e).__name__}: {str(e)[:120]}")
+            print(f"[WARN] [多窗口] {code}({period}) 取帧失败: {type(e).__name__}: {str(e)[:120]}")
         finally:
             with _MW_LOCK:
-                _MW_RUN[code] = False
+                _MW_RUN[_k] = False
 
-    def _mw_compute(self, code):
+    def _mw_compute(self, code, period="min5"):
         """轻量帧本体：腾讯 m5 尾（340 根，含未收盘根=实时）→ 最近 120 根 + MA5 + MACD + 成交额。
 
         ⚠️ MACD 在**完整 340 根**上算完再截尾，不能只喂 120 根：EMA12/26 的头几十根
@@ -6699,9 +6709,11 @@ class Api:
         # ⚠️ 直接用**腾讯 m5 尾 340 根**，不走 `_fetch_min_df`：后者会再跟「3 个月深档」
         # （近 3000 行）做一次 concat+去重，而九宫格每格只要 120 根 —— 实测白烧 ~80ms/只/轮。
         # 340 根也够 MACD 收敛（EMA26 的 3 倍预热期 ≈ 78 根），与单图逐位一致（见测试）。
-        df = _fetch_min_bars_tencent(code, "5min")
+        _freq = {"min5": "5min", "min10": "10min",
+                 "min30": "30min", "min60": "60min"}.get(period, "5min")
+        df = _fetch_min_bars_tencent(code, _freq)
         if df is None or getattr(df, "empty", True):
-            df = self._fetch_min_df(code, "min5")     # 兜底：含深底/磁盘
+            df = self._fetch_min_df(code, period if period in self._MW_PERIODS else "min5")
         if df is None or getattr(df, "empty", True):
             return None
         _closes_all = [float(x) for x in df["close"].astype(float).values]
@@ -13021,6 +13033,45 @@ class Api:
         return self._pool_rows(self._abn_read(), date,
                                "判定/得分与建仓信号扫描同源（build_decision）；"
                                "未在本地日线缓存里的票显示 —")
+
+    # ---------- 多窗口看盘：记忆上次的股票与布局（2026-11-04 owner）----------
+    # 为什么落到后端而不是只用 localStorage：多窗口常用**独立原生窗口**，它与主窗口
+    # 可能是不同 origin（file:// vs http），localStorage 不通 ⇒ 在那边改的票回来就丢；
+    # 而且主窗口开窗时会把内存里的 codes 作为 seed 传过去，反而覆盖掉看盘窗自己存的列表。
+    # 落一个共享状态文件后，两个窗口/重启都以它为准。
+    _MW_STATE_FP = STATE_DIR / "multi_watch.json"
+    _MW_LAYOUTS = ("3x3", "3x2", "2x2")
+
+    def load_multi_watch(self):
+        """多窗口记忆：{codes: [最多9个], layout: '3x3'|'3x2'|'2x2', updated_at}。"""
+        d = _load_json(self._MW_STATE_FP, {}) or {}
+        # ⚠️ 保留空位（槽位=格子）：某格空着不能把后面的票往前挤
+        codes = [str(x or "").strip() for x in (d.get("codes") or [])][:9]
+        layout = str(d.get("layout") or "")
+        period = str(d.get("period") or "")
+        return _clean({"codes": codes,
+                       "layout": layout if layout in self._MW_LAYOUTS else "",
+                       "period": period if period in self._MW_PERIODS else "",
+                       "updated_at": str(d.get("updated_at") or "")})
+
+    def save_multi_watch(self, codes=None, layout=None, period=None):
+        """写多窗口记忆（原子替换）。codes 传 None = 不动；layout/period 非法值忽略。"""
+        try:
+            cur = _load_json(self._MW_STATE_FP, {}) or {}
+            if codes is not None:
+                cur["codes"] = [str(c or "").strip() for c in (codes or [])][:9]
+            if layout in self._MW_LAYOUTS:
+                cur["layout"] = layout
+            if period in self._MW_PERIODS:
+                cur["period"] = period
+            cur["updated_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            self._MW_STATE_FP.parent.mkdir(parents=True, exist_ok=True)
+            tmp = self._MW_STATE_FP.with_suffix(".tmp")
+            tmp.write_text(json.dumps(cur, ensure_ascii=False, indent=1), encoding="utf-8")
+            tmp.replace(self._MW_STATE_FP)
+            return {"ok": True}
+        except Exception as e:
+            return {"ok": False, "error": f"{type(e).__name__}: {str(e)[:120]}"}
 
     # ---------- 避风港湾（2026-10-29 owner）----------
     # 「建仓信号扫描」下方的**第二个手动池**：大盘不好的时候拿来看"我打算躲进去的票"。

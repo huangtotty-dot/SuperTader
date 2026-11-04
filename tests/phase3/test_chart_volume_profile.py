@@ -222,7 +222,7 @@ class TestMultiWindowOptionBehavior(unittest.TestCase):
         js = (
             "global.buildGapAreas=()=>[]; global._mwBoxMarkAreas=()=>[];\n"
             "global.buildIntradayVwapZero=()=>({vwap:[],zero:[]});\n"
-            "global.VOL_MA_BASE=60; global.MW_TAIL=96;\n"
+            "global.VOL_MA_BASE=60; global.MW_TAIL=96; let mwPeriod='min5';\n"
             f"let _vpOn={'true' if vp_on else 'false'};\n"
             + _extract_fn("buildVolumeProfile") + "\n"
             + _extract_fn("_vpSeriesOption") + "\n"

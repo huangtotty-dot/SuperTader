@@ -7731,6 +7731,23 @@ function renderStockChart(applyZoom = true) {
   }
   const zEnd = stockChartZoom ? stockChartZoom.end : 100;
 
+  /* 2026-11-03 owner：「K线图也要支持 MACD 第一根红需要标记出来」——
+     只在**当前可视窗口**里找 hist 由 ≤0 转 >0 的首根（全历史 800+ 根会标满屏）。
+     口径与多窗口 `_mwOption` 完全一致（hist[i-1] ≤ 0 < hist[i]）：
+       · 每个翻红首根：亮红 #ff3b30 + 白边；
+       · 最近一次：柱顶白边红三角 + 竖向虚线 +「翻红」标签。 */
+  const _macdHist = ((period.macd || {}).hist) || [];
+  const _mN = _macdHist.length;
+  const _mI0 = _mN > 1 ? Math.max(0, Math.floor(zStart / 100 * (_mN - 1))) : 0;
+  const _mI1 = _mN > 1 ? Math.min(_mN - 1, Math.ceil(zEnd / 100 * (_mN - 1))) : 0;
+  const _mFlips = [];
+  for (let i = Math.max(1, _mI0); i <= _mI1; i++) {
+    const _a = Number(_macdHist[i - 1]), _b = Number(_macdHist[i]);
+    if (isFinite(_a) && isFinite(_b) && _a <= 0 && _b > 0) _mFlips.push(i);
+  }
+  const _mFlipLast = _mFlips.length ? _mFlips[_mFlips.length - 1] : -1;
+  const _mFlipSet = new Set(_mFlips);
+
   // 标题：通道(左) + 黄金分割锚点说明(右)
   const titles = [];
   if (data.channel && data.channel.direction !== "flat") {
@@ -8455,13 +8472,33 @@ function renderStockChart(applyZoom = true) {
         symbol: "none", z: 3, lineStyle: { color: "#3987e5", width: 1.4 } },
       { name: "MACD-DEA", type: "line", data: period.macd.dea, xAxisIndex: 2, yAxisIndex: 2,
         symbol: "none", z: 3, lineStyle: { color: "#d55181", width: 1.4 } },
-      { name: "MACD柱", type: "bar", data: period.macd.hist, xAxisIndex: 2, yAxisIndex: 2,
-        z: 1, itemStyle: { color: p => p.value >= 0 ? "rgba(248,81,73,.9)" : "rgba(63,185,80,.9)",
-          borderRadius: [1, 1, 0, 0] },
-        // 零轴：MACD 的正负分界，没这条基准线时柱子的"翻红/翻绿"只能靠猜
-        markLine: { silent: true, symbol: "none",
-          data: [{ yAxis: 0, lineStyle: { color: "rgba(139,148,158,.45)", type: "dashed", width: 1 },
-                   label: { show: false } }] } },
+      { name: "MACD柱", type: "bar", xAxisIndex: 2, yAxisIndex: 2,
+        data: _macdHist.map((v, i) => ({
+          value: v,
+          itemStyle: _mFlipSet.has(i)
+            ? { color: "#ff3b30", borderColor: "#ffffff", borderWidth: 1, borderRadius: [1, 1, 0, 0] }
+            : { color: Number(v) >= 0 ? "rgba(248,81,73,.9)" : "rgba(63,185,80,.9)",
+                borderRadius: [1, 1, 0, 0] },
+        })),
+        z: 1,
+        // 翻红首根：柱顶白边红三角（见函数开头 `_mFlips` 的说明）
+        markPoint: _mFlips.length ? {
+          symbol: "triangle", symbolSize: 10, silent: true, z: 12,
+          itemStyle: { color: "#ff3b30", borderColor: "#fff", borderWidth: 1 },
+          label: { show: false },
+          data: _mFlips.map(i => ({ coord: [i, Number(_macdHist[i]) || 0] })),
+        } : undefined,
+        // 零轴：MACD 的正负分界；最近一次翻红再加一条竖向虚线 +「翻红」标签
+        markLine: { silent: true, symbol: "none", data: [
+          { yAxis: 0, lineStyle: { color: "rgba(139,148,158,.45)", type: "dashed", width: 1 },
+            label: { show: false } },
+          ...(_mFlipLast >= 0 ? [{
+            xAxis: _mFlipLast,
+            label: { formatter: "翻红", color: "#ff6b62", fontSize: 9,
+                     position: "insideEndTop" },
+            lineStyle: { color: "#ff6b62", type: "dashed", width: 1, opacity: .85 },
+          }] : []),
+        ] } },
       // RSI 窗口
       { name: "RSI", type: "line", data: period.rsi, xAxisIndex: 3, yAxisIndex: 3,
         symbol: "none", lineStyle: { color: "#bc8cff", width: 1 },
@@ -11457,7 +11494,7 @@ function startLivePoll() {
 async function init() {
   // 首先获取 DOM 元素（此时 DOM 已完全加载）
   // 2026-10-20：启动标记（0ms）写进慢调用日志 ⇒ 能确认 WebView2 是否加载了新版 app.js
-  try { window.pywebview.api.report_slow_call("app_boot_20261103h", 0); } catch (e) { /* 静默 */ }
+  try { window.pywebview.api.report_slow_call("app_boot_20261104b", 0); } catch (e) { /* 静默 */ }
   // 2026-10-31：重点关注标记（紫色星）——启动先拉一次，五个表的星标按它渲染；
   // 拉不到就用空集（星标显示未标记，不影响任何其它功能）。
   loadFocusCodes();
@@ -11718,6 +11755,10 @@ let mwLayout = "3x3";
 // 2026-11-03 owner：多窗口支持 2×2（4 格）—— 2 列 × 2 行，每格更大
 const mwN = () => (mwLayout === "3x2" ? 6 : mwLayout === "2x2" ? 4 : 9);
 const MW_LS_KEY = "multiWatchCodes";
+const MW_LS_PERIOD = "multiWatchPeriod";   // 2026-11-04：5/10/30/60 分钟
+const MW_PERIOD_LABEL = { min5: "5分", min10: "10分", min30: "30分", min60: "60分" };
+let mwPeriod = "min5";
+let _mwRemotePeriod = null;
 const MW_PERIOD_MS = 4000;      // 刷新间隔：九宫格 9 只 × 每轮 ~130ms 计算，4s 是 CPU 与实时性的折中（2026-10-21 抗卡顿）
 // 2026-10-25：48 → 96。48 根 5 分钟 = 正好一个交易日 ⇒ 窗口里没有"前一日收盘"，
 // 新加的「0 轴（昨收）」会整条为空（VWAP 不受影响）。96 根 = 2 个交易日，
@@ -11746,6 +11787,9 @@ function _mwNormCode(raw) {
   return d ? d[1] : "";
 }             // 每格只画最后 48 根 = 5 分 K 的一个交易日（owner：别显示太多 K 线）
 let mwCodes = [], mwInsts = [], mwTimer = null, mwBusy = false;
+// 2026-11-04：多窗口记忆（后端共享状态）——独立原生窗口与主窗口 origin 可能不同，
+// localStorage 不通，而主窗口开窗时还会用内存 codes 当 seed 覆盖看盘窗自己的列表。
+let _mwRemoteCodes = null, _mwRemoteLayout = null;
 /* 2026-10-26 owner：「可以通过鼠标滚轮放大或者缩小」——每格独立的 dataZoom 状态。
    ⚠️ 必须**存在外面**：`mwTick` 每 4 秒用 `notMerge:true` 重画一次，
       不把 start/end 重新喂进去，用户滚出来的缩放每一跳都会被冲掉。
@@ -11785,15 +11829,31 @@ function _mwHoldings() {
   return out;
 }
 
+/* 后端共享状态（2026-11-04）：多窗口**记忆上次打开的股票/布局**的唯一真源。
+   老后端没有这两个方法 ⇒ catch 后沿用 localStorage/seed，行为与以前一致。 */
+async function _mwSyncFromServer() {
+  try {
+    const d = await apiCall("load_multi_watch");
+    if (d && Array.isArray(d.codes) && d.codes.some(Boolean)) {
+      _mwRemoteCodes = d.codes.slice(0, MW_N);
+    }
+    if (d && d.layout) _mwRemoteLayout = d.layout;
+    if (d && d.period) _mwRemotePeriod = d.period;
+  } catch (e) { /* 老后端 / 桥未就绪：保持本地 */ }
+}
+
 function _mwLoadCodes() {
   let saved = [];
-  // 独立窗口：用后端带过来的代码表（本窗口 localStorage 可能是空的，origin 不同）
-  if (window._mwSeedCodes && window._mwSeedCodes.length) {
+  // 优先级：后端共享状态 > 开窗 seed > 本窗口 localStorage
+  if (_mwRemoteCodes && _mwRemoteCodes.some(Boolean)) {
+    saved = _mwRemoteCodes.slice();
+  } else if (window._mwSeedCodes && window._mwSeedCodes.length) {
+    // 独立窗口：主窗口带过来的代码表（本窗口 localStorage 可能是空的，origin 不同）
     saved = window._mwSeedCodes.slice();
-    window._mwSeedCodes = null;
   } else {
     try { saved = JSON.parse(localStorage.getItem(MW_LS_KEY) || "[]"); } catch (e) { saved = []; }
   }
+  window._mwSeedCodes = null;
   if (!Array.isArray(saved)) saved = [];
   // 老版本存的是 6 格 ⇒ **别因为长度变了就把用户选的全丢掉**：截到 9 后，
   // 空位依次用体检持仓里还没选过的票补齐。
@@ -11810,9 +11870,45 @@ function _mwLoadCodes() {
 
 function _mwSaveCodes() {
   try { localStorage.setItem(MW_LS_KEY, JSON.stringify(mwCodes)); } catch (e) { /* 忽略 */ }
+  _mwRemoteCodes = mwCodes.slice();                 // 本窗口内的"记忆"立刻生效
+  try { apiCall("save_multi_watch", mwCodes, null).catch(() => {}); } catch (e) { /* 忽略 */ }
+}
+
+function _mwLoadPeriod() {
+  if (_mwRemotePeriod && MW_PERIOD_LABEL[_mwRemotePeriod]) { mwPeriod = _mwRemotePeriod; return; }
+  try {
+    const v = localStorage.getItem(MW_LS_PERIOD);
+    if (v && MW_PERIOD_LABEL[v]) mwPeriod = v;
+  } catch (e) { /* 独立窗口 localStorage 不通，用默认 5 分 */ }
+}
+
+function _mwPeriodUI() {
+  const el = document.getElementById("mwSubTitle");
+  if (el) el.textContent = `${MW_PERIOD_LABEL[mwPeriod] || "5分"} K · 每 4 秒刷新`;
+  ["min5", "min10", "min30", "min60"].forEach(p => {
+    const b = document.getElementById("mwPer" + p);
+    if (b) b.classList.toggle("primary", mwPeriod === p);
+  });
+}
+
+/* 2026-11-04 owner：「窗口看盘可以选择 5 分钟 / 30 分钟 / 60 分钟」。
+   切周期：清掉每格缩放（根数尺度变了）、重拉数据；选择写本地 + 后端记忆。 */
+function mwSetPeriod(p) {
+  if (!MW_PERIOD_LABEL[p] || p === mwPeriod) return;
+  mwPeriod = p;
+  _mwRemotePeriod = p;
+  try { localStorage.setItem(MW_LS_PERIOD, p); } catch (e) { /* 忽略 */ }
+  try { apiCall("save_multi_watch", null, null, p).catch(() => {}); } catch (e) { /* 老后端 */ }
+  mwZoom = [];
+  _mwPeriodUI();
+  _mwKickTick();
 }
 
 function _mwLoadLayout() {
+  if (_mwRemoteLayout === "3x3" || _mwRemoteLayout === "3x2" || _mwRemoteLayout === "2x2") {
+    mwLayout = _mwRemoteLayout;
+    return;
+  }
   try {
     const v = localStorage.getItem(MW_LS_LAYOUT);
     if (v === "3x2" || v === "3x3" || v === "2x2") mwLayout = v;
@@ -11838,18 +11934,23 @@ function mwSetLayout(lay) {
   const v = (lay === "3x2" || lay === "2x2") ? lay : "3x3";
   if (v === mwLayout) return;
   mwLayout = v;
+  _mwRemoteLayout = v;
   try { localStorage.setItem(MW_LS_LAYOUT, v); } catch (e) { /* 忽略 */ }
+  try { apiCall("save_multi_watch", null, v).catch(() => {}); } catch (e) { /* 老后端 */ }
   _mwBuildCells();       // 重建 6/9 格并落布局类；顺带把 mwZoom 归位（几何变了，旧缩放没意义）
   mwTick();
 }
 
-function openMultiWatch() {
+async function openMultiWatch() {
   const win = document.getElementById("multiWatchWin");
   if (!win) return;
   win.style.display = "flex";
+  await _mwSyncFromServer();                        // 先取后端记忆，再决定票/布局
   mwCodes = _mwLoadCodes();
   _mwLoadLayout();
+  _mwLoadPeriod();
   _mwBuildCells();
+  _mwPeriodUI();
   _mwBindDrag(win);
   _mwRefreshBoxes(true);
   mwTick();
@@ -12323,7 +12424,8 @@ function _mwOption(s, dma, levels, trades, zoom, code) {
         + (Number(ts.slice(17, 19)) || 0) / 60;
       while (bi < dates.length && (_bd[bi] < td || (_bd[bi] === td && _be[bi] < tm))) bi++;
       if (bi >= dates.length) break;
-      if (_bd[bi] !== td || _be[bi] - 5 >= tm) continue;   // 落在桶外（早于首根/午休空档）
+      const _pMin = ({ min5: 5, min10: 10, min30: 30, min60: 60 })[mwPeriod] || 5;
+      if (_bd[bi] !== td || _be[bi] - _pMin >= tm) continue;   // 落在桶外（早于首根/午休空档）
       const side = t.side === "S" ? "S" : "B";
       const e = _tm[bi] || (_tm[bi] = { B: 0, S: 0 });
       e[side] += Number(t.qty) || 0;
@@ -12541,7 +12643,7 @@ async function mwTick() {
   mwBusy = true;
   try {
     await _mwRefreshBoxes();          // 画框：20s 节流，拿不到就沿用上一次
-    const r = await apiCall("load_multi_chart", codes, "min5", MW_TAIL);
+    const r = await apiCall("load_multi_chart", codes, mwPeriod, MW_TAIL);
     const items = (r && r.items) || [];
     items.forEach(it => {
       const i = mwCodes.indexOf(it.code);

@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>trader pannel</title>
-<link rel="stylesheet" href="style.css?v=20261103h">
+<link rel="stylesheet" href="style.css?v=20261104b">
 </head>
 <body>
 <header class="topbar">
@@ -206,7 +206,7 @@
         <!-- 2026-10-22 owner：要能**独立于 GUI 拖动** ⇒ 优先开独立原生窗口（可挪到别的显示器），
              原生窗口不可用时自动退回页面内浮层（见 openMultiWatchWindow）。 -->
         <button class="mini-btn" id="obMultiBtn" onclick="openMultiWatchWindow()"
-                title="多窗口看盘：3×3 九格，每格自选一只股票的 5 分 K（实时刷新）。开成**独立窗口**，可拖到任意位置/另一个显示器">🔲 多窗口看盘</button>
+                title="多窗口看盘：3×3 / 3×2 / 2×2 可选，每格自选一只股票，周期 5/10/30/60 分钟可切（实时刷新）。开成**独立窗口**，可拖到任意位置/另一个显示器">🔲 多窗口看盘</button>
       </h2>
       <div id="obBody"></div>
     </div>
@@ -674,10 +674,17 @@
      看盘时照样能操作后面的 GUI；标题栏可拖动，右下角可缩放。 -->
 <div id="multiWatchWin" class="mw-win" style="display:none">
   <div class="mw-title" id="mwTitle">
-    <span>🔲 多窗口看盘 <span class="cell-dim" style="font-size:11px;font-weight:400">5 分 K · 每 4 秒刷新</span></span>
+    <span>🔲 多窗口看盘 <span class="cell-dim" id="mwSubTitle" style="font-size:11px;font-weight:400">5分 K · 每 4 秒刷新</span></span>
     <span style="display:flex;gap:6px;align-items:center">
       <!-- 2026-10-26 owner：「需要有按钮我可以选择 3×3 / 3×2」。
            切换会重建格子（3×2 只画前 6 只、也只请求这 6 只），选择存 localStorage。 -->
+      <!-- 2026-11-04 owner：窗口看盘可选 5/10/30/60 分钟 -->
+      <span class="mw-lay" id="mwPerBox">
+        <button class="mini-btn" id="mwPermin5" onclick="mwSetPeriod('min5')" title="5 分钟 K">5分</button>
+        <button class="mini-btn" id="mwPermin10" onclick="mwSetPeriod('min10')" title="10 分钟 K">10分</button>
+        <button class="mini-btn" id="mwPermin30" onclick="mwSetPeriod('min30')" title="30 分钟 K">30分</button>
+        <button class="mini-btn" id="mwPermin60" onclick="mwSetPeriod('min60')" title="60 分钟 K">60分</button>
+      </span>
       <span class="mw-lay" id="mwLayBox">
         <button class="mini-btn" id="mwLay3x3" onclick="mwSetLayout('3x3')"
                 title="九宫格：9 只">▦ 3×3</button>
@@ -712,6 +719,6 @@
 <script src="vendor/echarts.min.js"></script>
 <!-- 2026-10-20：带版本号强制 WebView2 重新取 app.js（否则可能命中旧缓存，
      K 线提速/埋点改动不生效——表现为"改了跟没改一样"） -->
-<script src="app.js?v=20261103h"></script>
+<script src="app.js?v=20261104b"></script>
 </body>
 </html>
