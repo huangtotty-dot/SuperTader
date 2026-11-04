@@ -56783,15 +56783,13 @@
   "business_summary": "主营水上运输业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "交运",
-  "jiuyan_concept": "港口",
+  "jiuyan_category": "",
+  "jiuyan_concept": "",
   "name": "上港集团",
   "primary_source": "legacy",
   "sector": "水上运输业",
   "sector_type": "legacy",
-  "updated_at": "2026-10-31 14:24:59",
-  "jiuyan_category1": "交运",
-  "jiuyan_concept1": "港口"
+  "updated_at": "2026-11-04 22:53:53"
  },
  "600019": {
   "business_summary": "主营黑色金属冶炼和压延加工业",
@@ -57015,15 +57013,13 @@
   "business_summary": "主营道路运输业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "交运",
-  "jiuyan_concept": "高速公路",
+  "jiuyan_category": "",
+  "jiuyan_concept": "",
   "name": "楚天高速",
   "primary_source": "legacy",
   "sector": "道路运输业",
   "sector_type": "legacy",
-  "updated_at": "2026-10-31 14:24:59",
-  "jiuyan_category1": "交运",
-  "jiuyan_concept1": "高速公路"
+  "updated_at": "2026-11-04 22:53:53"
  },
  "600036": {
   "business_summary": "主营货币金融服务",
@@ -70930,15 +70926,13 @@
   "business_summary": "主营水上运输业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "交运",
-  "jiuyan_concept": "航运",
+  "jiuyan_category": "",
+  "jiuyan_concept": "",
   "name": "锦江航运",
   "primary_source": "legacy",
   "sector": "水上运输业",
   "sector_type": "legacy",
-  "updated_at": "2026-10-31 14:24:59",
-  "jiuyan_category1": "交运",
-  "jiuyan_concept1": "航运"
+  "updated_at": "2026-11-04 22:53:53"
  },
  "601086": {
   "business_summary": "主营零售业",
@@ -73946,15 +73940,13 @@
   "business_summary": "主营水上运输业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "交运",
-  "jiuyan_concept": "航运",
+  "jiuyan_category": "",
+  "jiuyan_concept": "",
   "name": "中远海控",
   "primary_source": "legacy",
   "sector": "水上运输业",
   "sector_type": "legacy",
-  "updated_at": "2026-10-31 14:24:59",
-  "jiuyan_category1": "交运",
-  "jiuyan_concept1": "航运"
+  "updated_at": "2026-11-04 22:53:53"
  },
  "601921": {
   "business_summary": "主营新闻和出版业",
