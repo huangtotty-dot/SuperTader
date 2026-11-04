@@ -10219,6 +10219,12 @@ function renderHunter(h) {
         (subGroups[gk] = subGroups[gk] || []).push(s);
       }
     }
+    // 2026-11-04 owner：「选股猎手板块中的个股显示优先显示多头股票」。
+    //   每个二级分组内：日线三态=多头（build_stage===1）排前面；其余保持后端原序
+    //   （GO → 通过数 → 建仓得分，Backend 已排好；Array.sort 稳定 ⇒ 组内相对顺序不变）。
+    for (const _gk of Object.keys(subGroups)) {
+      subGroups[_gk].sort((a, b) => (b.build_stage === 1 ? 1 : 0) - (a.build_stage === 1 ? 1 : 0));
+    }
     const groupKeys = Object.keys(subGroups)
       .sort((a, b) => (subGroups[b].length - subGroups[a].length) || a.localeCompare(b));
     const gStart = pageIdx * PAGE;
