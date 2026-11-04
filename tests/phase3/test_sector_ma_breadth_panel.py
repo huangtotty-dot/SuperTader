@@ -25,6 +25,7 @@ import t_gui  # noqa: E402
 
 _JS = (_ROOT / "web" / "app.js").read_text(encoding="utf-8")
 _HTML = (_ROOT / "web" / "index.html").read_text(encoding="utf-8")
+_PY = (_ROOT / "t_gui.py").read_text(encoding="utf-8")
 
 
 def _rec():
@@ -107,15 +108,24 @@ class TestFrontend(unittest.TestCase):
 
     def test_x_axis_shows_dates_on_every_cell(self):
         """2026-10-20 owner：「坐标轴横轴需要有日期」——不能只在最后一行标。"""
-        self.assertIn('axisLabel: { show: true, color: "#6e7681", fontSize: 8, hideOverlap: true,', _JS)
+        self.assertIn('axisLabel: { show: true, color: "#', _JS)
+        self.assertIn("hideOverlap: true", _JS)
         self.assertNotIn("axisLabel: { show: r === rows - 1", _JS)
 
     def test_hover_crosshair_shows_intersections_and_values(self):
         """竖线 snap 到当天 + 交点有实心圆 + 日期胶囊/百分比数值。"""
-        self.assertIn('showSymbol: true, symbol: "circle", symbolSize: 3.2', _JS)
+        self.assertIn('showSymbol: true, symbol: "circle", symbolSize: 3.4', _JS)
         self.assertIn('axisPointer: { type: "line", snap: true,', _JS)
         self.assertIn('label: { show: true, backgroundColor: "#30363d"', _JS)
         self.assertIn("站上5日线 <b>${fmt(p.pct5, 1)}%</b>", _JS)
+
+    def test_20261104_每行两个与深色坐标系(self):
+        """owner：「每行显示 2 个；坐标系用深色背景；名字改成板块指标」。"""
+        self.assertIn("const cols = 2;", _JS)
+        self.assertIn('backgroundColor: "#0b1117"', _JS, "整张画布必须深色")
+        self.assertIn('fill: "#121d29"', _JS, "每个坐标系要垫深色卡片")
+        self.assertIn("板块指标", _HTML)
+        self.assertNotIn("板块「站上5/20日线」占比", _HTML)
 
     def test_wired_into_hunter_tab_and_date_change(self):
         self.assertIn("loadSectorStars(); loadSectorMaBreadth();", _JS)
@@ -150,7 +160,7 @@ class TestConvergenceSeries(unittest.TestCase):
         self.assertIn('series.push(mk(s.points.map(p => p.pct_conv), SECMA_CONV, "均线粘合"', _JS)
         # 改用「五线≤3% 或 短线≤2%」后中位 20.6%/p90 42.9%，与另两条同量级 ⇒ 共用 0~100 尺度
         # 2026-11-01：图例多了「周线MACD红柱」（每板块 4 条系列）
-        self.assertIn('legend: { data: ["站上5日线", "站上20日线", "均线粘合", "周线MACD红柱"]', _JS)
+        self.assertIn('legend: { data: ["站上5日线", "站上20日线", "多头占比", "均线粘合", "周线MACD红柱"]', _JS)
         self.assertNotIn('position: "right"', _JS.split("function renderSectorMaBreadth")[1].split("function ")[0],
                          "粘合率已与另两条同量级，不需要单独右轴")
 
@@ -161,9 +171,34 @@ class TestConvergenceSeries(unittest.TestCase):
 
     def test_提示框按每板块4条系列取索引(self):
         # 2026-11-01：加了「周线MACD红柱」⇒ 每板块 4 条系列（5日/20日/粘合/周红）
-        self.assertIn("Math.floor((ps[0].seriesIndex || 0) / 4)", _JS,
-                      "每板块现在是 4 条系列，除 3 会串板块")
+        self.assertIn("Math.floor((ps[0].seriesIndex || 0) / 5)", _JS,
+                      "每板块现在是 5 条系列，除错会串板块")
         self.assertIn('const SECMA_WM = "#ff7b72"', _JS)
+
+
+class TestBullShare(unittest.TestCase):
+    """2026-11-04 owner：「再增加一个指标，多头占比」。
+
+    口径 = 日线三态的「多头」（MA60 的 20 交易日变化率 > +3%，与
+    `core.position_structure.MA60_FLAT_PCT` 同源）；分母只算有 80 根以上历史的票。
+    """
+
+    def test_后端输出多头占比且分母独立(self):
+        import inspect
+        src = inspect.getsource(t_gui._compute_sector_ma_breadth)
+        self.assertIn('"pct_bull"', src)
+        self.assertIn('"n_bull"', src)
+        self.assertIn("MA60_FLAT_PCT", src, "阈值必须与日线三态同源，不能各写一份")
+        self.assertIn("_SECTOR_MA_SCHEMA = 6", _PY,
+                      "加字段必须升 schema，否则旧磁盘档会被当新鲜回放")
+        self.assertIn('"last_bull"', _PY)
+
+    def test_前端青线胶囊与提示框(self):
+        self.assertIn('const SECMA_BULL = "#2dd4bf"', _JS)
+        self.assertIn('series.push(mk(s.points.map(p => p.pct_bull), SECMA_BULL, "多头占比")', _JS)
+        self.assertIn("多头 ${fmt(s.last_bull, 0)}%", _JS, "标题胶囊要显示具体数值")
+        self.assertIn("多头占比 <b>${p.pct_bull == null", _JS, "tooltip 要有一行")
+        self.assertIn("青=多头占比", _HTML, "面板说明文字要提到多头")
 
 
 if __name__ == "__main__":

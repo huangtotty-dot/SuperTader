@@ -3005,7 +3005,8 @@ _SECTOR_MA_END_RUNNING: set = set()
 _SECTOR_MA_END_MAX = 12
 # 缓存口径版本：**改样本口径/板块来源时 +1**（否则旧磁盘档会被当新鲜直接回放）。
 # 2（2026-10-21）：样本容忍 5 个自然日滞后 + 缓存键加板块指纹 board_fp。
-_SECTOR_MA_SCHEMA = 5   # v5: 加周线 MACD 红柱占比（pct_wm/n_wm，2026-11-01）
+_SECTOR_MA_SCHEMA = 6   # v6: 加多头占比（pct_bull/n_bull，2026-11-04）
+                        # v5: 加周线 MACD 红柱占比（pct_wm/n_wm，2026-11-01）
 
 
 def _watchlist_fp():
@@ -3026,8 +3027,8 @@ def _compute_sector_ma_breadth(days=_SECTOR_MA_MAX_DAYS, end=None):
         否则会把"没数据"算成"跌破均线"。
       · **站上** = 当日收盘 > N 日简单均线（含当日），与得分里 −70 悬崖 / 20日线观察列同口径。
 
-    返回 {computed_at, latest_date, sectors:[{name, points:[{date,pct5,pct20,n}]}],
-          coverage:{codes, scanned}}。
+    返回 {computed_at, latest_date, sectors:[{name, points:[{date,pct5,pct20,pct_conv,
+          pct_wm,pct_bull,n,...}]}], coverage:{codes, scanned}}。
     """
     from collections import defaultdict
     # P2-15（2026-10-26）：JSON 解析改走 core.chart_cache 共享记忆化层（详见
@@ -3043,8 +3044,10 @@ def _compute_sector_ma_breadth(days=_SECTOR_MA_MAX_DAYS, end=None):
     total = len(files)
     with _SECTOR_MA_LOCK:
         _SECTOR_MA_STATE.update({"done": 0, "total": total, "started": _time_mod.time()})
-    # sec -> date -> [a5, a20, n, aconv, n60]（n60 = 当日**有 60 根以上历史**的只数，粘合的分母）
-    counts = defaultdict(lambda: defaultdict(lambda: [0, 0, 0, 0, 0, 0, 0]))
+    # sec -> date -> [a5, a20, n, aconv, n60, wm红, n_wm, 多头, n_bull]
+    #   n60 = 当日有 60 根以上历史（粘合分母）；n_wm = 有 ≥35 周历史（周线 MACD 分母）；
+    #   n_bull = 有 80 根以上历史（MA60 的 20 日前值可算，多头分母）
+    counts = defaultdict(lambda: defaultdict(lambda: [0, 0, 0, 0, 0, 0, 0, 0, 0]))
     scanned = 0
 
     def _one(p):
@@ -3080,6 +3083,18 @@ def _compute_sector_ma_breadth(days=_SECTOR_MA_MAX_DAYS, end=None):
             _carry = False
         n = len(closes)
         _wflags = _weekly_macd_flags_by_date(dates, closes)   # 周线 MACD 红柱（逐日）
+        # 2026-11-04 owner：「再增加一个指标，多头占比」——口径 = 日线三态的多头
+        # （MA60 的 20 交易日变化率 > +3%，与 core.position_structure.MA60_FLAT_PCT 同源）。
+        # 这里预先把 MA60 逐日算出来（O(n) 滑窗），判定时再取 20 日前那根。
+        from core.position_structure import MA60_FLAT_PCT as _MA60_FLAT
+        _ma60 = [None] * n
+        _run60 = 0.0
+        for _i in range(n):
+            _run60 += closes[_i]
+            if _i >= 60:
+                _run60 -= closes[_i - 60]
+            if _i >= 59:
+                _ma60[_i] = _run60 / 60.0
         start = max(19, n - days)
         s5 = sum(closes[start - 4:start + 1])
         s20 = sum(closes[start - 19:start + 1])
@@ -3104,7 +3119,11 @@ def _compute_sector_ma_breadth(days=_SECTOR_MA_MAX_DAYS, end=None):
                     # 与「均线粘合」标签同一条规则：五线≤3% **或** 短线(5/10/20)≤2%
                     conv = (_sp5 <= _CONV_THR) or (_sps <= _CONV_THR_S)
                 _wf = _wflags[i] if _wflags else None
-                out.append((dates[i], closes[i] > s5 / 5.0, closes[i] > s20 / 20.0, conv, _wf))
+                # 多头：需要 i-20 那根 MA60（i≥79）；判不了 ⇒ None（不进分母）
+                _bull = None
+                if i >= 79 and _ma60[i - 20]:
+                    _bull = bool((_ma60[i] / _ma60[i - 20] - 1.0) > _MA60_FLAT)
+                out.append((dates[i], closes[i] > s5 / 5.0, closes[i] > s20 / 20.0, conv, _wf, _bull))
             if i + 1 < n:
                 s5 += closes[i + 1] - closes[i - 4]
                 s20 += closes[i + 1] - closes[i - 19]
@@ -3115,7 +3134,7 @@ def _compute_sector_ma_breadth(days=_SECTOR_MA_MAX_DAYS, end=None):
         # 只有 6 只有今日 bar ⇒ 图上显示"50%（6只）"，看着像坏了。顺延用的是它自己的收盘与均线
         # （停牌股价格本来就不动），不是把"没数据"当成"跌破均线"。
         if _carry and out:
-            out.append((latest, out[-1][1], out[-1][2], out[-1][3], out[-1][4]))
+            out.append((latest,) + tuple(out[-1][1:]))    # 全部指标按最后状态顺延
         return sec, out
 
     done = 0
@@ -3127,7 +3146,7 @@ def _compute_sector_ma_breadth(days=_SECTOR_MA_MAX_DAYS, end=None):
                 sec, out = res
                 scanned += 1
                 per = counts[sec]
-                for d, a5, a20, conv, wf in out:
+                for d, a5, a20, conv, wf, bull in out:
                     c = per[d]
                     c[2] += 1
                     if a5:
@@ -3142,6 +3161,10 @@ def _compute_sector_ma_breadth(days=_SECTOR_MA_MAX_DAYS, end=None):
                         c[6] += 1
                         if wf:
                             c[5] += 1
+                    if bull is not None:               # 多头（需 80 根历史：MA60 要跟 20 日前比）
+                        c[8] += 1
+                        if bull:
+                            c[7] += 1
             if done % 200 == 0:
                 with _SECTOR_MA_LOCK:
                     _SECTOR_MA_STATE["done"] = done
@@ -3153,8 +3176,10 @@ def _compute_sector_ma_breadth(days=_SECTOR_MA_MAX_DAYS, end=None):
         pts = [{"date": d, "pct5": round(a5 / t * 100, 2), "pct20": round(a20 / t * 100, 2), "n": t,
                 "pct_conv": (round(ac / n60 * 100, 2) if n60 else None), "n60": n60,
                 # 2026-11-01：周线 MACD 柱子 >0 的占比（分母=有 ≥35 周历史的只数）
-                "pct_wm": (round(wr / wn * 100, 2) if wn else None), "n_wm": wn}
-               for d, (a5, a20, t, ac, n60, wr, wn) in sorted(per.items()) if t]
+                "pct_wm": (round(wr / wn * 100, 2) if wn else None), "n_wm": wn,
+                # 2026-11-04：日线多头（MA60 20 日变化率 > +3%）占比（分母=有 80 根以上历史的只数）
+                "pct_bull": (round(ab / nb * 100, 2) if nb else None), "n_bull": nb}
+               for d, (a5, a20, t, ac, n60, wr, wn, ab, nb) in sorted(per.items()) if t]
         if pts:
             sectors.append({"name": sec, "points": pts[-days:]})
     rec = {"schema": _SECTOR_MA_SCHEMA,
@@ -10933,6 +10958,8 @@ class Api:
                          "last_conv": pts[-1].get("pct_conv"),      # 2026-10-23 标题里也显示具体数值
                          "last_wm": pts[-1].get("pct_wm"),          # 2026-11-01 周线 MACD 红柱占比
                          "n_wm": pts[-1].get("n_wm"),
+                         "last_bull": pts[-1].get("pct_bull"),      # 2026-11-04 日线多头占比
+                         "n_bull": pts[-1].get("n_bull"),
                          "n": pts[-1].get("n")})
         secs.sort(key=lambda x: (rank.get(str(x.get("name") or ""), 9999),
                                  str(x.get("name") or "")))

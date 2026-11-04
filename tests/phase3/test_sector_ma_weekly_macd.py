@@ -58,14 +58,14 @@ class TestPanelWiring(unittest.TestCase):
     def test_后端输出pct_wm且schema升版(self):
         self.assertIn('"pct_wm"', PY)
         self.assertIn('"n_wm"', PY)
-        self.assertIn("_SECTOR_MA_SCHEMA = 5", PY)
+        self.assertIn("_SECTOR_MA_SCHEMA = 6", PY)
         self.assertIn('"last_wm"', PY)
 
     def test_前端新系列与胶囊(self):
         self.assertIn("SECMA_WM", JS)
         self.assertIn('"周线MACD红柱"', JS, "图例/系列名")
         self.assertIn("周红", JS, "标题里的红胶囊")
-        self.assertIn("/ 4", JS, "tooltip 按每板块 4 条系列切分")
+        self.assertIn("/ 5", JS, "tooltip 按每板块 5 条系列切分（2026-11-04 加多头）")
         self.assertIn("pct_wm", JS)
         self.assertIn("周线MACD红柱", HTML, "面板说明文字要提到周线 MACD")
 

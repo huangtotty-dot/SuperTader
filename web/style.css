@@ -226,6 +226,8 @@ tr:hover td { background: rgba(243,93,43,.03); }
 /* ===== ECharts ===== */
 .echart { width: 100%; height: 280px; }
 .ech-sm { height: 200px; }
+/* 2026-11-04：「板块指标」整张深色画布 ⇒ 圆角 + 外阴影，嵌在白卡片里更像一块独立面板 */
+#echSectorMa { border-radius: 12px; overflow: hidden; box-shadow: 0 6px 22px rgba(15, 23, 42, .18); }
 
 
 /* ===== 盘中实时 ===== */

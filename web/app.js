@@ -2359,6 +2359,7 @@ const SECMA_5 = "#388bfd";      // 站上5日线（蓝；dataviz 校验 dark：�
 const SECMA_20 = "#e3b341";     // 站上20日线（琥珀）
 const SECMA_CONV = "#a371f7";   // 均线粘合占比（紫；右轴 0-50%）—— 2026-10-23 owner
 const SECMA_WM = "#ff7b72";     // 周线 MACD 红柱占比（红；2026-11-01 owner）
+const SECMA_BULL = "#2dd4bf";   // 日线多头占比（青；2026-11-04 owner）
 let sectorMaInst = null, sectorMaNode = null, sectorMaSig = "";
 let sectorMaData = null, sectorMaTimer = null, sectorMaInflight = false;
 
@@ -2424,13 +2425,16 @@ function renderSectorMaBreadth(d) {
       + (d.computed_at ? ` · 计算于 ${esc(d.computed_at)}` : "")
       + `<br>口径：站上 N 日线 = 当日收盘 &gt; N 日简单均线（含当日），与得分里 −70 悬崖 / 20日线观察列同源；`
       + `每只个股只归一个韭研主板块，不重复计数。`
+      + `<br><span style="color:${SECMA_BULL}">▬</span> 多头占比 = 当日该板块里 <b>MA60 近 20 交易日上涨 &gt; 3%</b>（日线三态的「多头」）的个股占比`
       + `<br><span style="color:${SECMA_CONV}">▬</span> 均线粘合 = 当日该板块里 <b>五线(5/10/20/30/60)离散度 ≤3% 或 短线(5/10/20)≤2%</b> 的个股占比`
       + `（与「均线粘合」技术标签同源；分母只算有 60 根以上历史的票）。`
       + `<span class="cell-dim">⚠️ 该比例是描述性状态：实测粘合后 T+5 超额 −0.07%(t=−2.75)，无正向 alpha。</span>`;
   }
-  // 列数随宽度自适应；每格高度固定 132px（含标题），整体高度随之变化
-  const cols = w >= 1200 ? 4 : (w >= 880 ? 3 : 2);
-  const cellH = 132, padL = 30, padR = 10, padT = 34, padB = 18, topPad = 22;
+  // 2026-11-04 owner：「每行显示 2 个 + 坐标系用深色背景 + 高大上一些」
+  //   ⇒ 固定 2 列（宽度不再决定列数）、格子更高更宽；整张画布用深色，每个坐标系
+  //   再垫一层略亮的深色卡片（grid 背景 + 细边 + 阴影），与上方星轨图的深色语境一致。
+  const cols = 2;
+  const cellH = 176, padL = 44, padR = 18, padT = 44, padB = 26, topPad = 34;
   const rows = Math.ceil(secs.length / cols);
   const H = topPad + rows * cellH + 6;
   // 签名带**整条轨迹的粗略校验和**：后端重算后中间值可能变而末值不变，只比末值会漏重画
@@ -2440,20 +2444,25 @@ function renderSectorMaBreadth(d) {
   if (sectorMaInst && sectorMaNode === el && sig === sectorMaSig) return;
   if (el.style.height !== H + "px") el.style.height = H + "px";
   const cellW = w / cols;
-  const grids = [], xAxes = [], yAxes = [], series = [], titles = [];
+  const grids = [], xAxes = [], yAxes = [], series = [], titles = [], graphics = [];
   secs.forEach((s, i) => {
     const r = Math.floor(i / cols), c = i % cols;
     const x0 = c * cellW, y0 = topPad + r * cellH;
+    // 深色卡片（圆角 rect 垫在坐标系下面，比画布亮一档 + 细边 + 轻投影）
+    graphics.push({ type: "rect", silent: true, z: 0,
+      shape: { x: x0 + 10, y: y0 + 6, width: cellW - 20, height: cellH - 14, r: 10 },
+      style: { fill: "#121d29", stroke: "rgba(139,148,158,.28)", lineWidth: 1,
+               shadowColor: "rgba(0,0,0,.5)", shadowBlur: 14, shadowOffsetY: 3 } });
     grids.push({ left: x0 + padL, top: y0 + padT,
                  width: Math.max(40, cellW - padL - padR), height: cellH - padT - padB });
     xAxes.push({
       type: "category", gridIndex: i, boundaryGap: false,
       data: s.points.map(p => String(p.date).slice(5)),
-      axisLine: { lineStyle: { color: "#30363d" } }, axisTick: { show: false },
+      axisLine: { lineStyle: { color: "rgba(139,148,158,.35)" } }, axisTick: { show: false },
       // 2026-10-20 owner：「横轴需要有日期」——**每一格都标**（原来只有最后一行标）。
       // 10 个点按 ~3 个间隔抽样，不至于糊成一片；鼠标所指的那天再由 axisPointer 的
       // 胶囊标签精确显示（snap 到最近的 K 线，见 tooltip.axisPointer）。
-      axisLabel: { show: true, color: "#6e7681", fontSize: 8, hideOverlap: true,
+      axisLabel: { show: true, color: "#8b949e", fontSize: 9, hideOverlap: true,
         interval: Math.max(1, Math.ceil(s.points.length / 3) - 1) },
       axisPointer: { show: true, snap: true,
         label: { show: true, backgroundColor: "#30363d", borderColor: "#484f58",
@@ -2465,9 +2474,9 @@ function renderSectorMaBreadth(d) {
     yAxes.push({
       type: "value", gridIndex: i, min: 0, max: 100, interval: 50,
       // 只在最左列标 0/50/100：所有格子共享同一尺度，标一次就够
-      axisLabel: { show: c === 0, color: "#6e7681", fontSize: 8, formatter: "{value}" },
+      axisLabel: { show: c === 0, color: "#8b949e", fontSize: 9, formatter: "{value}" },
       axisLine: { show: false }, axisTick: { show: false },
-      splitLine: { lineStyle: { color: "rgba(139,148,158,.14)" } },
+      splitLine: { lineStyle: { color: "rgba(139,148,158,.16)", type: "dashed" } },
     });
 
     // 2026-10-21 owner：「占比显示不够美观直观」——数值从一行灰字改成**两块带底色的胶囊**
@@ -2490,6 +2499,10 @@ function renderSectorMaBreadth(d) {
       text: `${i + 1}. ${s.name}`,
       subtext: _chip("5日", s.last5, _prev && _prev.pct5)
         + " " + _chip("20日", s.last20, _prev && _prev.pct20)
+        // 2026-11-04 owner：「再增加一个指标，多头占比」——青色胶囊，与图里那条线同色
+        + " " + (s.last_bull == null
+          ? "{t|多头 —}"
+          : `{t|多头 ${fmt(s.last_bull, 0)}%${_arrow(s.last_bull, _prev && _prev.pct_bull)}}`)
         // 2026-10-23 owner：「板块当天粘合占比也显示具体数值」——紫色胶囊，与图里那条线同色
         + " " + (s.last_conv == null
           ? "{n|粘合 —}"
@@ -2499,17 +2512,18 @@ function renderSectorMaBreadth(d) {
           ? "{n|周红 —}"
           : `{m|周红 ${fmt(s.last_wm, 0)}%${_arrow(s.last_wm, _prev && _prev.pct_wm)}}`)
         + ` {n|${s.n || "—"}只}`,
-      left: x0 + padL - 2, top: y0 + 2,
-      textStyle: { color: "#c9d1d9", fontSize: 11, fontWeight: 600 },
+      left: x0 + padL - 4, top: y0 + 4,
+      textStyle: { color: "#e6edf3", fontSize: 13, fontWeight: 600 },
       subtextStyle: {
-        fontSize: 9,
+        fontSize: 10,
         rich: {
-          g: { color: "#3fb950", backgroundColor: "rgba(63,185,80,.14)", padding: [1, 4], borderRadius: 3 },
-          a: { color: "#d29922", backgroundColor: "rgba(210,153,34,.14)", padding: [1, 4], borderRadius: 3 },
-          r: { color: "#f85149", backgroundColor: "rgba(248,81,73,.14)", padding: [1, 4], borderRadius: 3 },
-          n: { color: "#6e7681" },
-          v: { color: "#a371f7", backgroundColor: "rgba(163,113,247,.14)", padding: [1, 4], borderRadius: 3 },
-          m: { color: "#ff7b72", backgroundColor: "rgba(255,123,114,.14)", padding: [1, 4], borderRadius: 3 },
+          g: { color: "#56d364", backgroundColor: "rgba(63,185,80,.18)", padding: [2, 6], borderRadius: 4 },
+          a: { color: "#e3b341", backgroundColor: "rgba(210,153,34,.18)", padding: [2, 6], borderRadius: 4 },
+          r: { color: "#ff7b72", backgroundColor: "rgba(248,81,73,.18)", padding: [2, 6], borderRadius: 4 },
+          n: { color: "#8b949e", padding: [2, 2] },
+          t: { color: "#2dd4bf", backgroundColor: "rgba(45,212,191,.16)", padding: [2, 6], borderRadius: 4 },
+          v: { color: "#c297ff", backgroundColor: "rgba(163,113,247,.18)", padding: [2, 6], borderRadius: 4 },
+          m: { color: "#ff9c94", backgroundColor: "rgba(255,123,114,.18)", padding: [2, 6], borderRadius: 4 },
         },
       },
     });
@@ -2519,15 +2533,24 @@ function renderSectorMaBreadth(d) {
        ③ 具体数值 = axisPointer 的日期胶囊 + tooltip 里两项百分比 + 下方 y 轴读数（0~100 网格）。 */
     const mk = (vals, color, name, opts) => ({
       name, type: "line", xAxisIndex: i, yAxisIndex: i,
-      data: vals, smooth: 0.25, connectNulls: false,
-      showSymbol: true, symbol: "circle", symbolSize: 3.2,
-      lineStyle: { width: 1.5, color },
-      itemStyle: { color, borderColor: "#0d1117", borderWidth: 1 },
+      data: vals, smooth: 0.28, connectNulls: false,
+      showSymbol: true, symbol: "circle", symbolSize: 3.4,
+      lineStyle: { width: 2, color, shadowColor: color, shadowBlur: 6, shadowOffsetY: 1 },
+      itemStyle: { color, borderColor: "#141b24", borderWidth: 1.2 },
       // 2026-10-21：5 日线加**极淡的面积填充**（两条线叠在一起时更容易分清主次）；
       // 再画一条 **50% 参考虚线**——强弱分界不用心算。只画一次（挂 5 日线上）。
-      ...(opts && opts.area ? { areaStyle: { opacity: 0.10, color } } : {}),
-      // 虚线（粘合那条用）：一眼区分"另一套刻度"的系列
-      ...(opts && opts.dash ? { lineStyle: { width: 1.5, color, type: "dashed" } } : {}),
+      // 2026-11-04：深色底上改成自上而下的**渐隐渐变**，比纯色块更干净。
+      ...(opts && opts.area ? {
+        areaStyle: {
+          opacity: 1,
+          color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+            { offset: 0, color: "rgba(56,139,253,.30)" },
+            { offset: 1, color: "rgba(56,139,253,0)" },
+          ]),
+        },
+      } : {}),
+      // 虚线（粘合 / 周红用）：一眼区分"另一套口径"的系列
+      ...(opts && opts.dash ? { lineStyle: { width: 1.6, color, type: "dashed", shadowBlur: 0 } } : {}),
       ...(opts && opts.half ? {
         markLine: {
           silent: true, symbol: "none", animation: false,
@@ -2542,6 +2565,8 @@ function renderSectorMaBreadth(d) {
     });
     series.push(mk(s.points.map(p => p.pct5), SECMA_5, "站上5日线", { area: true, half: true }));
     series.push(mk(s.points.map(p => p.pct20), SECMA_20, "站上20日线"));
+    // 2026-11-04 owner：「再增加一个指标，多头占比」——青色实线（日线三态的多头）
+    series.push(mk(s.points.map(p => p.pct_bull), SECMA_BULL, "多头占比"));
     // 2026-10-23 owner：「这个部分再加一个，统计均线粘合在坐标轴中占板块的比例」
     //   ⇒ 紫线（右轴 0~50%）：当日该板块里 MA5/10/20/30/60 离散度 ≤3% 的个股占比。
     //   口径与「均线粘合」技术标签同源（core.ma_reclaim.convergence_state）。
@@ -2556,12 +2581,16 @@ function renderSectorMaBreadth(d) {
     sectorMaNode = el;
   }
   sectorMaInst.setOption({
-    backgroundColor: "transparent",
+    // 2026-11-04 owner：「坐标系用深色背景显示」——整张画布深色（与上方星轨图同一语境），
+    // 每个坐标系再垫一层 #141b24 的卡片（见 grids.backgroundColor）。
+    backgroundColor: "#0b1117",
+    textStyle: { color: "#c9d1d9" },
     animation: false,
     // 图例按**系列名**筛选 ⇒ 点一下可以把全部板块的 5日线/20日线一起关掉（不是 50 个条目）
-    legend: { data: ["站上5日线", "站上20日线", "均线粘合", "周线MACD红柱"], top: 2, right: 10,
-      itemWidth: 14, itemHeight: 8, icon: "roundRect", itemGap: 12,
-      textStyle: { color: "#8b949e", fontSize: 10 } },
+    legend: { data: ["站上5日线", "站上20日线", "多头占比", "均线粘合", "周线MACD红柱"], top: 4, right: 14,
+      itemWidth: 16, itemHeight: 9, icon: "roundRect", itemGap: 14,
+      textStyle: { color: "#a9b4c0", fontSize: 11 } },
+    graphic: graphics,
     title: titles,
     grid: grids,
     xAxis: xAxes,
@@ -2577,7 +2606,7 @@ function renderSectorMaBreadth(d) {
       borderRadius: 8, textStyle: { color: "#e6edf3", fontSize: 11 },
       formatter: (ps) => {
         if (!ps || !ps.length) return "";
-        const si = Math.floor((ps[0].seriesIndex || 0) / 4);   // 每板块 4 条系列（5日/20日/粘合/周红）
+        const si = Math.floor((ps[0].seriesIndex || 0) / 5);   // 每板块 5 条系列（5日/20日/多头/粘合/周红）
         const s = secs[si];
         if (!s) return "";
         const p = s.points[ps[0].dataIndex];
@@ -2585,6 +2614,8 @@ function renderSectorMaBreadth(d) {
         return `<div style="font-weight:bold;margin-bottom:3px">${esc(s.name)} · ${esc(p.date)}</div>`
           + `<span style="color:${SECMA_5}">●</span> 站上5日线 <b>${fmt(p.pct5, 1)}%</b>`
           + `<br><span style="color:${SECMA_20}">●</span> 站上20日线 <b>${fmt(p.pct20, 1)}%</b>`
+          + `<br><span style="color:${SECMA_BULL}">●</span> 多头占比 <b>${p.pct_bull == null ? "—" : fmt(p.pct_bull, 1) + "%"}</b>`
+          + `<span style="opacity:.7">（${p.n_bull || 0} 只有 80 根以上历史）</span>`
           + `<br><span style="color:${SECMA_CONV}">●</span> 均线粘合 <b>${p.pct_conv == null ? "—" : fmt(p.pct_conv, 1) + "%"}</b>`
           + `<span style="opacity:.7">（${p.n60 || 0} 只有 60 日以上历史）</span>`
           + `<br><span style="color:${SECMA_WM}">●</span> 周线MACD红柱 <b>${p.pct_wm == null ? "—" : fmt(p.pct_wm, 1) + "%"}</b>`
