@@ -851,13 +851,90 @@ def _price_alert_tick() -> None:
         _push_price_alert(hits)
 
 
-def _push_price_alert(hits: list) -> None:
+def _price_alert_feishu_enabled() -> bool:
+    """读取 config.json 的 feishu.enabled + notify_on_price_alert（2026-11-04 新增）。"""
     try:
+        runtime_config = load_runtime_config()
+        feishu_cfg = runtime_config.get("feishu", {}) if isinstance(runtime_config, dict) else {}
+        if not bool(feishu_cfg.get("enabled", True)):
+            return False
+        return bool(feishu_cfg.get("notify_on_price_alert", True))
+    except Exception:
+        return True
+
+
+# 2026-11-04 owner：「飞书弹出的消息太多」——突破预警一天 66 条（同票来回穿框反复推）。
+# 节流三条：同票同向 10 分钟冷却；全局两条至少隔 60s、每小时 ≤30 条；
+# 被压住的先攒着，下一次可发时**合并成一条**（不丢事件）。状态落盘，重启沿用。
+_PRICE_ALERT_COOLDOWN_SEC = 600
+_PRICE_ALERT_MIN_GAP_SEC = 120
+_PRICE_ALERT_HOURLY_MAX = 30
+_PRICE_ALERT_PENDING_MAX = 12
+_PUSH_RATE_FP = os.path.join(BASE_DIR, "t_io", "state", "push_rate.json")
+
+
+def _load_push_rate(today: str) -> dict:
+    d = {}
+    try:
+        with open(_PUSH_RATE_FP, encoding="utf-8") as f:
+            d = json.load(f) or {}
+    except Exception:
+        d = {}
+    if str(d.get("day") or "") != today:
+        d = {"day": today, "per": {}, "times": [], "pending": []}
+    d.setdefault("per", {})
+    d.setdefault("times", [])
+    d.setdefault("pending", [])
+    return d
+
+
+def _save_push_rate(d: dict) -> None:
+    try:
+        os.makedirs(os.path.dirname(_PUSH_RATE_FP), exist_ok=True)
+        tmp = _PUSH_RATE_FP + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(d, f, ensure_ascii=False)
+        os.replace(tmp, _PUSH_RATE_FP)
+    except Exception:
+        pass
+
+
+def _push_price_alert(hits: list, now_ts: float = None) -> None:
+    """画框突破推送（2026-11-04 加节流：同票同向冷却 + 全局限流 + 积压合并）。"""
+    if not _price_alert_feishu_enabled():
+        return
+    try:
+        now = datetime.now()
+        _ts = float(now_ts if now_ts is not None else now.timestamp())
+        _now = datetime.fromtimestamp(_ts) if now_ts is not None else now
+        today = _now.strftime("%Y-%m-%d")
+        st = _load_push_rate(today)
+        per, pending, times = st["per"], st["pending"], st["times"]
+        for h in hits:
+            key = f"{h.get('code')}|{h.get('side')}"
+            if _ts - float(per.get(key) or 0) < _PRICE_ALERT_COOLDOWN_SEC:
+                continue                       # 同票同向 10 分钟内不重复
+            per[key] = _ts
+            pending.append(h)
+        if not pending:
+            _save_push_rate(st)
+            return
+        times = [t for t in times if _ts - float(t) < 3600]
+        st["times"] = times
+        _last = max(times) if times else 0.0
+        _end_of_day = _now.strftime("%H:%M") >= "15:00"
+        _due = (_end_of_day
+                or len(pending) >= _PRICE_ALERT_PENDING_MAX
+                or (_ts - _last >= _PRICE_ALERT_MIN_GAP_SEC
+                    and len(times) < _PRICE_ALERT_HOURLY_MAX))
+        if not _due:
+            _save_push_rate(st)                # 攒到下一拍合并
+            return
         # 2026-11-02 owner：「飞书推送的这个信息要注明来自韭研概念的哪个板块」——
         # 主板块口径与猎手/风向标同源（core.jiuyan_tags，有测试逐码守卫）；读不到就只少这个标签。
         from core.jiuyan_tags import label_of
         lines = ["**画框提醒 · 价格刚穿出你画的框**", ""]
-        for h in hits:
+        for h in pending:
             _ico = "🔔 向上突破" if h.get("side") == "up" else "🔻 向下跌破"
             _n = int(h.get("n") or 1)
             _lab = label_of(h.get("code"))
@@ -870,14 +947,20 @@ def _push_price_alert(hits: list) -> None:
                          f"（框沿 {h['level']}）"
                          + (f"　今天第 {_n} 次" if _n > 1 else "")
                          + _tag
-                         + f"　`{h['ts'][11:19]}`")
+                         + f"　`{str(h.get('ts') or '')[11:19]}`")
+        if len(pending) > 1:
+            lines += ["", f"ℹ️ 同票同向 10 分钟内只报一次，本条合并了 {len(pending)} 次穿越"]
         card = {"msg_type": "interactive", "notify_type": 1, "card": {
             "config": {"wide_screen_mode": True},
             "header": _feishu_card_header(f"🔔 突破预警 - {FEISHU_KEYWORD}", "red"),
             "elements": [_feishu_md_div("\n".join(lines))]}}
-        send_feishu_payload(card,
-                            success_log=f"✅ 突破预警已推送: {[h['code'] for h in hits]}",
-                            error_prefix="突破预警推送")
+        ok = send_feishu_payload(card,
+                                 success_log=f"✅ 突破预警已推送: {[h['code'] for h in pending]}",
+                                 error_prefix="突破预警推送")
+        if ok:
+            st["pending"] = []
+            st["times"].append(_ts)
+        _save_push_rate(st)                    # 失败保留积压，下一拍重试
     except Exception as e:
         log.warning(f"⚠️ 突破预警推送失败: {type(e).__name__}: {str(e)[:120]}")
 

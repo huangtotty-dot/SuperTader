@@ -434,6 +434,70 @@ def push_events(events: list, date: str = None, top_n: int = None,
     return fresh
 
 
+# 2026-11-04 owner：「飞书消息太多」——池子 141 只时逐只推一天 34 条。
+# 改为**窗口汇总**：命中先进缓冲，每 `_DIGEST_WINDOW_SEC` 发一张卡（同票当天只报一次）。
+_DIGEST = {"day": "", "pending": [], "last_flush": 0.0}
+_DIGEST_WINDOW_SEC = 600
+_DIGEST_MAX = 20            # 攒够 20 只提前发，避免大行情时卡太久
+
+
+def push_events_batched(events: list, date: str = None, top_n: int = None,
+                        universe: str = "pool", now: datetime = None,
+                        window_sec: float = _DIGEST_WINDOW_SEC) -> list:
+    """去重 + **窗口汇总**后发飞书；返回本次真正发出去的（可能是空）。
+
+    · 命中先进 `_DIGEST["pending"]`，窗口从**第一只**命中开始计时；
+    · 到 `window_sec`（默认 10 分钟）或攒够 `_DIGEST_MAX` 只才发一张卡；
+    · 收盘后（>=15:00）调用且仍有积压 ⇒ 立即补发；
+    · 发送失败保留积压（下轮重试），去重表**发送成功才写**。
+    """
+    target = str(date or _today())
+    now = now or datetime.now()
+    now_ts = now.timestamp()
+    if _DIGEST["day"] != target:
+        _DIGEST.update({"day": target, "pending": [], "last_flush": 0.0})
+    pend = _DIGEST["pending"]
+    if not events and not pend:
+        return []
+    dedup = _load_dedup()
+    seen = set(dedup.get(target) or [])
+    pend_codes = {e.get("code") for e in pend}
+    fresh = [e for e in (events or [])
+             if e.get("code") and e["code"] not in seen and e["code"] not in pend_codes]
+    if fresh and not pend:
+        _DIGEST["last_flush"] = now_ts          # 窗口从第一只命中开始
+    pend.extend(fresh)
+    if not pend:
+        return []
+    _due = ((now_ts - float(_DIGEST["last_flush"] or 0) >= float(window_sec))
+            or len(pend) >= _DIGEST_MAX
+            or now.strftime("%H:%M") >= "15:00")
+    if not _due:
+        return []
+    mins = max(1, int(round(float(window_sec) / 60.0)))
+    card = build_card(list(pend), top_n=top_n, date=target, universe=universe,
+                      note_extra=f"⏱ **{mins} 分钟汇总**（同票当天只报一次；大行情攒满 {_DIGEST_MAX} 只提前发）")
+    try:
+        from config import send_feishu_payload
+        ok = send_feishu_payload(
+            card, success_log=f"猎手热门板块站上5日线飞书推送: {len(pend)} 只",
+            error_prefix="猎手热门板块站上5日线推送")
+    except Exception as e:
+        log.warning(f"⚠️ {_uni_cn(universe)}站上5日线汇总推送异常（保留积压，下轮重试）: "
+                    f"{type(e).__name__}: {str(e)[:180]}")
+        return []
+    if not ok:
+        log.warning(f"⚠️ {_uni_cn(universe)}站上5日线汇总推送返回失败（保留积压）")
+        return []
+    sent = list(pend)
+    _DIGEST["pending"] = []
+    _DIGEST["last_flush"] = now_ts
+    seen.update(e["code"] for e in sent)
+    dedup[target] = sorted(seen)
+    _save_dedup(dedup)
+    return sent
+
+
 def _in_live_session(now: datetime) -> bool:
     if now.weekday() >= 5:
         return False
@@ -481,6 +545,14 @@ def run_live_watch(poll_sec: float = None, top_n: int = None, stop_event=None,
     while not (stop_event is not None and stop_event.is_set()):
         now = now_fn()
         if not _in_live_session(now):
+            # 收盘后把窗口里剩下的命中补发一次（>=15:00 立即发）
+            try:
+                leftover = push_events_batched([], date=now.strftime("%Y-%m-%d"),
+                                               top_n=top_n, universe=universe, now=now)
+                for e in leftover or []:
+                    log.info(f"⬆️ 异常监控池·站上5日线(收盘补发): {e['code']} {e['name']}")
+            except Exception:
+                pass
             if sleep_fn:
                 sleep_fn(30)
             continue
@@ -515,8 +587,11 @@ def run_live_watch(poll_sec: float = None, top_n: int = None, stop_event=None,
                 _alert_live_failure(now)
         if hits:
             try:
-                fresh = (push_fn or push_events)(hits, date=today, top_n=top_n,
-                                                 universe=universe)
+                if push_fn is not None:          # 测试缝：按旧语义逐轮回调
+                    fresh = push_fn(hits, date=today, top_n=top_n, universe=universe)
+                else:
+                    fresh = push_events_batched(hits, date=today, top_n=top_n,
+                                                universe=universe, now=now)
             except Exception as e:
                 fresh = []
                 log.warning(f"[MA5实时] 推送异常（下轮重试）: {str(e)[:160]}")
@@ -532,7 +607,7 @@ def _uni_cn(universe: str) -> str:
 
 
 def build_card(events: list, top_n: int = None, date: str = None,
-               universe: str = "pool") -> dict:
+               universe: str = "pool", note_extra: str = "") -> dict:
     if not events:
         return None
     tn = int(top_n or _TOPN_DEFAULT)
@@ -547,6 +622,9 @@ def build_card(events: list, top_n: int = None, date: str = None,
     # 2026-10-16 owner：「飞书消息要有代码 + 中文名称 + 所属行业」——
     # 原来这里只写 `**{code}** {name}`（无行业）。真源 `core.stock_meta`（industry_map.csv）。
     from core.stock_meta import stock_label as _stock_label
+    if note_extra:
+        lines.append(note_extra)
+        lines.append("")
     shown = events[:_CARD_MAX_ROWS]
     for e in shown:
         tag = " ｜盘内V反转" if e.get("kind") == "vrev" else ""
