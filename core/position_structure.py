@@ -62,7 +62,10 @@ def expected_fill_rate(dist_pct: float) -> float:
         return round(max(8.0, ys[-1] + slope * (d - xs[-1])), 1)
     return round(float(np.interp(d, xs, ys)), 1)
 
-STAGE_LABEL = {1: "①蓄势", 2: "②抬升", 3: "③派发", 4: "④下跌"}
+STAGE_LABEL = {1: "①蓄势", 2: "②抬升", 3: "③派发", 4: "④下跌"}   # 仅 10min 四阶段在用
+STAGE_D_LABEL = {1: "多头", 2: "震荡", 3: "空头"}                   # 日线三态（2026-11-04）
+# 日线三态阈值：MA60 的 20 交易日变化率 ±3% 以内算「走平」（口径依据见 stage_daily docstring）
+MA60_FLAT_PCT = 0.03
 TREND_LABEL = {"up": "向上", "flat": "走平", "down": "向下"}
 
 
@@ -137,25 +140,33 @@ def resample_5min_to_10min(df5: pd.DataFrame) -> pd.DataFrame:
 
 
 # --------------------------------------------------------------------------
-# 日线四阶段（**单一真源**；研究脚本 t_io/validation/daily_stage/ 直接 import 本函数）
+# 日线三态（**单一真源**；研究脚本 t_io/validation/daily_stage/ 直接 import 本函数）
 # --------------------------------------------------------------------------
 def stage_daily(daily: pd.DataFrame) -> dict:
-    """日线 → 四阶段（蓄势/抬升/派发/下跌），**全因果**（只用当根及之前）。
+    """日线 → **三态**（多头/震荡/空头），**全因果**（只用当根及之前）。
 
-    定义（判定优先级：④ > ③ > ② > ①）：
-      ②抬升 = 多头排列(close>MA20>MA60) 且 MA20 较 5 日前上行
-      ③派发 = MA20>MA60（曾在上方）但 close<MA20（丢了短均线）
-      ④下跌 = 空头排列(close<MA20<MA60) 且 MA20 较 5 日前下行
-      ①蓄势 = 其余（MA20/MA60 缠绕、价格在均线附近）
+    2026-11-04 owner：「日线阶段现在改成只有空头、多头、震荡；多头=60日均线朝上，
+    震荡的规则你研究下」。
 
-    ⚠️ 实测（977 只 × 2265 日 / 163 万股票·日）：
-      · 分布不退化：①26.9% ②24.8% ③21.2% ④27.1%（对比 10min 版末根 ①83%）。
-      · 横截面 IC 上**方向与直觉相反**：②抬升 IC −0.031~−0.042(t=−12~−15)，
-        ④下跌 IC +0.020~+0.034(t=+7~+12) ⇒ **"抬升/追高"前瞻更差、"下跌/超跌"前瞻更好**，
-        分半窗两段同号。效应量小（IC≈0.04）⇒ 只作**相对强弱排序**，不是独立交易依据。
-        见 doc/research/2026-10-11_日线四阶段_得分区分度实验.md
+    定义（单一判据 = MA60 的 **20 个交易日**变化率 `s20 = MA60_t / MA60_{t-20} - 1`）：
+      多头 = s20 > +3%
+      空头 = s20 < −3%
+      震荡 = |s20| ≤ 3%（60 日线一个月内几乎没动）
+
+    ⚠️ 为什么用「20 日变化率 ±3%」而不是「今天 MA60 > 昨天 MA60」：
+      · 符号版实测 震荡占比 ≈ **0%**（MA60 逐日几乎不可能恰好相等）⇒ 三态退化成两态；
+      · 977 只 × 2017-03~2026-10（156 万股票·日）上比较 k∈{5,10,20} × 阈值：
+        本口径三组分布 **多头 31% / 震荡 39% / 空头 30%**（2018 年起按年 31%~47%，不随行情消失），
+        且前向 20 日超额单调：**多头 +0.05% ≈ 震荡 +0.03% > 空头 −0.35%(t=−3.5)**，
+        H=5/10/20 排序一致；两个半窗里「空头最差」都成立（−0.50 / −0.13）。
+      · ±2% 更紧（震荡 27%）但三组差异更小、±4% 则震荡占一半、标签失去信息量 ⇒ 取 ±3%。
+      见 `t_io/validation/daily_stage/exp3_ma60_three_stage.py`。
+
+    ⚠️ 与旧四阶段（蓄势/抬升/派发/下跌）**不是同一条规则**，别把旧结论直接套过来：
+      旧「④下跌」要求 MA20<MA60 且 MA20 下行（急跌/超跌段，前瞻反而更好）；新「空头」只看
+      MA60 一个月在往下走（阴跌段，前瞻更差）——两者方向相反是条件不同，不是矛盾。
     """
-    need = max(MA_MID_D, 60) + 6
+    need = 60 + 21
     if daily is None or len(daily) < need:
         return {"ok": False, "reason": f"日线不足(<{need})",
                 "stage_daily": None, "stage_daily_code": None}
@@ -165,20 +176,19 @@ def stage_daily(daily: pd.DataFrame) -> dict:
     c = d["close"].astype(float)
     ma20 = c.rolling(MA_MID_D).mean()
     ma60 = c.rolling(60).mean()
-    px = float(c.iloc[-1])
     m20, m60 = float(ma20.iloc[-1]), float(ma60.iloc[-1])
-    up20 = m20 > float(ma20.iloc[-6])                # MA20 较 5 日前上行
-    dn20 = m20 < float(ma20.iloc[-6])
-    code = 1                                         # 默认 ①蓄势
-    if px > m20 > m60 and up20:
-        code = 2
-    if m20 > m60 and px < m20:
-        code = 3
-    if px < m20 < m60 and dn20:
-        code = 4
-    return {"ok": True, "stage_daily": STAGE_LABEL[code], "stage_daily_code": code,
+    _m60_20ago = float(ma60.iloc[-21])
+    s20 = (m60 / _m60_20ago - 1.0) if _m60_20ago > 0 else 0.0
+    if s20 > MA60_FLAT_PCT:
+        code = 1                                     # 多头
+    elif s20 < -MA60_FLAT_PCT:
+        code = 3                                     # 空头
+    else:
+        code = 2                                     # 震荡
+    return {"ok": True, "stage_daily": STAGE_D_LABEL[code], "stage_daily_code": code,
             "ma20_daily": round(m20, 3), "ma60_daily": round(m60, 3),
-            "ma20_daily_up5": bool(up20)}
+            "ma60_slope20": round(s20 * 100, 3),
+            "ma20_daily_up5": bool(m20 > float(ma20.iloc[-6]))}
 
 
 # --------------------------------------------------------------------------
@@ -327,9 +337,11 @@ def compute_structure(bars10: pd.DataFrame, bars30: pd.DataFrame,
         "support_30min": round(sup30, 3) if np.isfinite(sup30) else None,
         "stage10": STAGE_LABEL[stage],
         "stage10_code": stage,
-        # 日线四阶段（与 10min 版并列；日线版分布不退化，且横截面有区分度——方向见 stage_daily 注释）
+        # 日线三态（2026-11-04；与 10min 四阶段并列）。`ma60_slope20` = MA60 的 20 日变化率%，
+        # 供 tooltip 展示「为什么判成这个状态」。
         "stage_daily": _sd.get("stage_daily"),
         "stage_daily_code": _sd.get("stage_daily_code"),
+        "ma60_slope20": _sd.get("ma60_slope20"),
         "ma60_daily": _sd.get("ma60_daily"),
         "ma20_daily_up5": _sd.get("ma20_daily_up5"),
         "ma20_10min": round(float(s10["ma20"][-1]), 3) if np.isfinite(s10["ma20"][-1]) else None,

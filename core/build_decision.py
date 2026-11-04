@@ -110,13 +110,24 @@ def features_from_daily(df: pd.DataFrame, date_str: str) -> dict:
         _v20 = float(_v.rolling(20).mean().iloc[-1]) if len(_v) >= 20 else float("nan")
         if _v20 and _v20 > 0:
             _vol_ratio20 = round(float(_v.iloc[-1]) / _v20, 2)
-    # 日线四阶段（2026-10-11）：与 `core/position_structure.stage_daily` **同规则**。
+    # 日线阶段（2026-11-04 改三态）：**显示列** = 多头/震荡/空头，与
+    # `core/position_structure.stage_daily` 同规则（MA60 20 交易日变化率 ±3%）。
+    # 得分里的阶段项**仍用旧四阶段**（`stage4_code`）—— 实测三态映射会把得分 IC 从
+    # +0.0123 打到 −0.0303（exp4_three_stage_score_ic.py，h1/h2 同号），故不动得分口径。
     # 此处内联而非 import：goldminer 以 SUPERTRADER_ROOT 绝对路径 importlib 加载本文件，
-    # 不能反向依赖 core 包。一致性由单测守卫（tests/phase3/test_pb_position_structure.py）。
+    # 不能反向依赖 core 包。两条规则的一致性都由单测守卫
+    # （tests/phase3/test_pb_position_structure.py）。
     _m20, _m60 = float(ma20), float(ma60)                   # 上方已转为 float
     _ma20_5ago = float(c.rolling(20).mean().iloc[-6])
     _up20 = _m20 > _ma20_5ago
     _dn20 = _m20 < _ma20_5ago
+    _m60_20ago = float(c.rolling(60).mean().iloc[-21])
+    if np.isfinite(_m60_20ago) and _m60_20ago > 0:
+        _s20 = _m60 / _m60_20ago - 1.0
+        _stage3 = 1 if _s20 > 0.03 else (3 if _s20 < -0.03 else 2)   # 多头 / 空头 / 震荡
+    else:
+        # 日线只有 61~79 根 ⇒ MA60 的 20 日前值还是 NaN，判不了三态（别默认成"震荡"）
+        _s20, _stage3 = None, None
     # 2026-10-15（owner）：关键支撑企稳 = 收盘站上 MA60 且近 3 日最低价都没跌破 MA60。
     # 取「近 3 日**最低价**」而不是只看收盘：要的是"整段都站在支撑上"（真企稳），
     # 而不是"最后一根恰好收在上面"（可能是刚反抽）。缺 low 列 ⇒ False（fail-closed）。
@@ -126,7 +137,7 @@ def features_from_daily(df: pd.DataFrame, date_str: str) -> dict:
         _m60_now = float(c.rolling(60).mean().iloc[-1])
         _support_hold = bool(_m60_now > 0 and _low3 == _low3
                              and price > _m60_now and float(_low3) >= _m60_now)
-    _stage = 1                                              # ①蓄势（默认）
+    _stage = 1                                              # 旧四阶段：①蓄势（默认）
     if price > _m20 > _m60 and _up20:
         _stage = 2                                          # ②抬升
     if _m20 > _m60 and price < _m20:
@@ -139,7 +150,11 @@ def features_from_daily(df: pd.DataFrame, date_str: str) -> dict:
         # 用来顶替原来那个随大盘 regime 变阈值的「回撤到位」。见 timing_score docstring。
         # 支撑 = MA60（长期支撑）；企稳 = 收盘站上 MA60 **且**近 3 个交易日最低价都没跌破它。
         "support_hold": bool(_support_hold),
-        "stage_daily_code": _stage,
+        # 显示用（三态：1多头 / 2震荡 / 3空头）——2026-11-04 owner 改口径
+        "stage_daily_code": _stage3,
+        # 得分用（旧四阶段 1蓄势/2抬升/3派发/4下跌）——**刻意与显示列分开**，别合并
+        "stage4_code": _stage,
+        "ma60_slope20": (round(_s20 * 100, 3) if _s20 is not None else None),
         "trend_multihead": bool(price > ma20 and price > ma60),
         "above_ma60": bool(price > ma60),
         "drawdown": round(price / rec_high - 1, 4) if rec_high > 0 else 0.0,
@@ -230,6 +245,8 @@ def timing_decision(features: dict, regime: str, params: dict = None) -> dict:
 # verdict 映射（scan_stock 生产口径）
 # ═══════════════════════════════════════════
 
+# 旧四阶段（1蓄势/2抬升/3派发/4下跌）在得分里的逆向序 —— **与显示列的「日线阶段」三态无关**
+# （2026-11-04 起显示列改多头/震荡/空头；得分项刻意保留旧口径，依据见 timing_score）。
 _STAGE_REV_ORD = {4: 3, 3: 2, 1: 1, 2: 0}   # ④下跌最高 … ②抬升最低（证据：两半窗同号）
 
 # 2026-10-15 owner：「站上 MA20」在综合得分里的权重（其余项均 ±1）。
@@ -283,7 +300,11 @@ def timing_score(features: dict, trend_ok: bool, golden_ok: bool,
     if data_insufficient:
         return 0
     f = features or {}
-    stage = int(f.get("stage_daily_code") or 1)
+    # ⚠️ 2026-11-04：日线阶段列已改三态（多头/震荡/空头），但**得分项仍用旧四阶段**
+    #   （`stage4_code`）—— 三态映射会把本得分 IC 从 +0.0123 打到 −0.0303（exp4 实测，
+    #   h1/h2 同号）。旧调用方若只给了 `stage_daily_code`（老语义 1..4）则回退到它。
+    _s4 = f.get("stage4_code")
+    stage = int(_s4 if _s4 is not None else (f.get("stage_daily_code") or 1))
     raw = (-(1 if trend_ok else 0)
            - (1 if golden_ok else 0)
            - (1 if f.get("above_ma5") is True else 0)

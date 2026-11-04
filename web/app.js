@@ -3333,13 +3333,28 @@ function ma5CellHtml(st, cls) {
   return `<td${_c} style="text-align:center;line-height:1.5" title="${esc(title)}"><b class="${up ? "up" : "down"}">${up ? "站上" : "跌破"}</b><div class="cell-dim" style="font-size:10px">${n == null ? "" : n + "根"}</div></td>`;
 }
 
-/* 日线四阶段（2026-10-11）：摆**状态**，紧挨「得分/通过」便于对照。
-   ⚠️ 实测横截面 IC **与直觉相反**：②抬升 IC −0.031~−0.042(t=−12~−15)、
-   ④下跌 IC +0.020~+0.034(t=+7~+12) —— 抬升/追高前瞻更差、下跌/超跌前瞻更好，分半窗两段同号。
-   效应量小（IC≈0.04，低于往返成本）⇒ 只作相对强弱参照，不是独立交易依据。
-   依据 doc/research/2026-10-11_日线四阶段_得分区分度实验.md */
-const DAY_STAGE_TIP = "日线四阶段（描述状态）：②抬升=多头排列(收盘>MA20>MA60)且MA20上行；③派发=MA20>MA60但收盘丢了MA20；④下跌=空头排列且MA20下行；①蓄势=其余（均线缠绕）。"
-  + "⚠️ 实测(977只×2265日/163万股票·日)横截面IC与直觉相反：②抬升 −0.031~−0.042(t=−12~−15)、④下跌 +0.020~+0.034(t=+7~+12)，分半窗两段同号；效应量小(IC≈0.04)，仅作相对强弱参照。";
+/* 日线三态（2026-11-04 owner：「日线阶段改成只有空头、多头、震荡；多头=60日均线朝上」）。
+   判据只有一条：MA60 的 20 个交易日变化率 s20 = MA60_t / MA60_{t-20} − 1
+     · 多头 = s20 > +3%　· 空头 = s20 < −3%　· 震荡 = |s20| ≤ 3%（60日线一个月几乎没动）
+   ⚠️ 不能写成「今天 MA60 > 昨天 MA60」：符号版实测震荡占比≈0% ⇒ 三态退化成两态。
+   ⚠️ 实测（977只×2017-09~2026-10 / 156万股票·日）：分布 多头31% / 震荡39% / 空头30%，
+   未来20日横截面超额 多头 +0.05% ≈ 震荡 +0.03% > **空头 −0.35%(t=−3.5)**，H=5/10/20 排序一致、
+   两个半窗「空头最差」都成立。效应量小 ⇒ 只作状态描述，不是买卖信号。
+   依据 t_io/validation/daily_stage/exp3_ma60_three_stage.py */
+const MA60_FLAT_PCT = 0.03;   // 与后端 core/position_structure.MA60_FLAT_PCT 同值（只用于 tooltip 展示，改一处要同步）
+const DAY_STAGE_TIP = "日线三态（描述状态）：多头=MA60 近20个交易日上涨>3%；空头=MA60 近20日下跌>3%；震荡=其余（60日线走平，±3%以内）。"
+  + "⚠️ 实测(977只×2017-2026/156万股票·日)：分布 多头31%/震荡39%/空头30%；未来20日超额 多头 +0.05% ≈ 震荡 +0.03% > 空头 −0.35%(t=−3.5)，H=5/10/20 排序一致。仅作状态描述，不是买卖信号。";
+/* 日线阶段徽标（2026-11-04 owner：「多头用红色 logo 显示」）。
+   多头 = 红色圆点徽标（`.badge.bull`，与 A 股「涨红」同源）；震荡/空头保持普通小字。
+   未知码（旧四阶段 4 或数据不足）返回空串，由调用方兜底显示。 */
+const STAGE3_LABEL = { 1: "多头", 2: "震荡", 3: "空头" };
+function dayStageBadgeHtml(code) {
+  const c = Number(code);
+  if (!STAGE3_LABEL[c]) return "";
+  if (c === 1) return '<span class="badge bull">● 多头</span>';
+  return `<span style="font-size:12px">${esc(STAGE3_LABEL[c])}</span>`;
+}
+
 function dayStageCellHtml(st) {
   st = st || {};
   if (st.pending || (!st.ok && !st.reason)) {
@@ -3348,7 +3363,13 @@ function dayStageCellHtml(st) {
   if (!st.ok || !st.stage_daily) {
     return `<td style="text-align:center" title="${esc((st.reason || "日线数据不足") + " " + DAY_STAGE_TIP)}"><span class="cell-dim">—</span></td>`;
   }
-  return `<td style="text-align:center" title="${esc(st.stage_daily + "。" + DAY_STAGE_TIP)}"><span style="font-size:12px">${esc(st.stage_daily)}</span></td>`;
+  // 把这票的 MA60 20 日变化率也写进 tooltip —— 否则「为什么是震荡」只能靠猜
+  const _sl = (st.ma60_slope20 == null || isNaN(Number(st.ma60_slope20)))
+    ? "" : `MA60 20日变化 ${Number(st.ma60_slope20) > 0 ? "+" : ""}${Number(st.ma60_slope20).toFixed(2)}%`
+      + `（阈值 ±${(MA60_FLAT_PCT * 100).toFixed(0)}%）。`;
+  const _badge = dayStageBadgeHtml(st.stage_daily_code)
+    || `<span style="font-size:12px">${esc(st.stage_daily)}</span>`;
+  return `<td style="text-align:center" title="${esc(st.stage_daily + "。" + (_sl ? " " + _sl : "") + " " + DAY_STAGE_TIP)}">${_badge}</td>`;
 }
 
 /* 实时涨幅（2026-10-12，owner 要求）：**建仓表** 与 **猎手个股行** 共用同一渲染。
@@ -3810,11 +3831,9 @@ function renderAbnormalPool(d) {
     return;
   }
   const labels = d.cond_labels || {};
-  const _STG = { 1: "①蓄势", 2: "②抬升", 3: "③派发", 4: "④下跌" };
   const body = rows.map(r => {
-    const stage = r.build_stage
-      ? `<span style="font-size:12px">${esc(_STG[r.build_stage] || "—")}</span>`
-      : '<span class="cell-dim">—</span>';
+    // 2026-11-04：多头用红色徽标（dayStageBadgeHtml 统一渲染，三态未知码兜底「—」）
+    const stage = dayStageBadgeHtml(r.build_stage) || '<span class="cell-dim">—</span>';
     // 「通过 X/3」与建仓表同口径（t_regime + t_trend + t_drawdown），不是条件圆点总数
     const metTxt = (r.build_met == null) ? "—" : `${r.build_met}/3`;
     // 技术标签（2026-10-23 owner：异常监控池也要有）——与建仓表**同一个渲染器** `tagBadge`。
@@ -4131,11 +4150,9 @@ function renderShelterPool(d) {
     return;
   }
   const labels = d.cond_labels || {};
-  const _STG = { 1: "①蓄势", 2: "②抬升", 3: "③派发", 4: "④下跌" };
   const body = rows.map(r => {
-    const stage = r.build_stage
-      ? `<span style="font-size:12px">${esc(_STG[r.build_stage] || "—")}</span>`
-      : '<span class="cell-dim">—</span>';
+    // 2026-11-04：多头用红色徽标（dayStageBadgeHtml 统一渲染，三态未知码兜底「—」）
+    const stage = dayStageBadgeHtml(r.build_stage) || '<span class="cell-dim">—</span>';
     // 「通过 X/3」与建仓表同口径（t_regime + t_trend + t_drawdown），不是条件圆点总数
     const metTxt = (r.build_met == null) ? "—" : `${r.build_met}/3`;
     // 技术标签（2026-10-23 owner：异常监控池也要有）——与建仓表**同一个渲染器** `tagBadge`。
@@ -4312,6 +4329,8 @@ function renderPB(pb) {
     //   旧文案「震荡市 市场有方向那30分锁死、上限70」早已不成立，删掉。
     const scoreCellTitle = _reachable
       ? "综合得分(0~100) = −多头结构 −MACD金叉 −站上MA5 + 3×站上MA20 + 支撑企稳 + 日线阶段分"
+        + "（⚠️ 这里的「阶段分」是**旧四阶段**内部口径，与表格「日线阶段」列的三态不同："
+        + "实测把得分项换成三态会让得分 IC 由 +0.012 变 −0.030，故只换显示列、不动得分）"
         + "（不站上MA5扣70、不站上MA20扣40；GO ⟹ 两条都站上 ⟹ 得分>0）"
       : `综合得分 · 当前市况(震荡)下 signal 结构性不可达（t_regime 不过）；`
         + `得分本身**与大盘无关**、仍可 0~100`;
@@ -4447,7 +4466,7 @@ function renderPB(pb) {
           <th>股票</th><th title="P3-2 池分管：人工=manual侧扫描 / 自动=auto侧管理">池</th>
           <th class="num" title="总市值（亿元，腾讯实时快照，与「价」同一轮 10s 刷新；悬停看流通市值）。取不到显示 —">市值<br><span style="font-size:9px;opacity:.6">亿</span></th>
           <th class="num">得分</th><th class="num">通过</th>
-          <th title="日线四阶段（描述状态，紧挨得分便于对照）：②抬升/③派发/④下跌/①蓄势。⚠️ 实测横截面IC与直觉相反——抬升/追高前瞻更差(IC −0.031~−0.042, t=−12~−15)、下跌/超跌前瞻更好(IC +0.020~+0.034, t=+7~+12)，分半窗两段同号；效应量小(IC≈0.04)仅作相对强弱参照">日线阶段</th>
+          <th title="日线三态（描述状态，紧挨得分/通过便于对照）：多头=MA60 近20个交易日上涨>3%；空头=MA60 近20日下跌>3%；震荡=其余（60日线走平）。⚠️ 实测(977只×2017-2026/156万股票·日)：分布 多头31%/震荡39%/空头30%；未来20日超额 多头 +0.05% ≈ 震荡 +0.03% > 空头 −0.35%(t=−3.5)，H=5/10/20 排序一致。仅作状态描述，不是买卖信号。⚠️ 得分里的阶段项**仍是旧四阶段口径**（三态映射会让得分 IC 变负）">日线阶段</th>
           <th title="是否站上 20 日线（观察列，不驱动判定）。⚠️ 行底色才是 5 日线口径（站上=绿、其它=红，得分 −70 悬崖同源）；本列只看 20 日线。">20日线<br><span style="font-size:9px;opacity:.6">观察</span></th>
           <th class="num" title="实时价 + 实时涨幅（随行情每 10s 刷新）。取不到显示 — 而不是 0.00%：不把「无数据」画成「平盘」">价<br><span style="font-size:9px;opacity:.6">涨幅</span></th>
           <th title="突破箱体=第一优先级">突破</th>
@@ -10097,10 +10116,9 @@ function renderHunter(h) {
       const _px = (s.build_price != null) ? fmt(s.build_price, 2) : "—";
       // 日线阶段：由后端 `_hunter_build_conformance` **白给**（它本就要算日线特征）⇒ 立即出、零额外取数。
       // 猎手池 5000+ 只，逐只出网取 30min/10min 要 ~1.5s/只（400 只 >5min），故本表**不挂**那两列。
-      const _STG = { 1: "①蓄势", 2: "②抬升", 3: "③派发", 4: "④下跌" };
-      const _stageTxt = s.build_stage
-        ? `<span style="font-size:12px">${esc(_STG[s.build_stage] || "—")}</span>`
-        : '<span class="cell-dim">—</span>';
+      const _stageTxt = dayStageBadgeHtml(s.build_stage) || '<span class="cell-dim">—</span>';
+      const _stageSlope = (s.build_stage_slope20 == null || isNaN(Number(s.build_stage_slope20)))
+        ? "" : ` MA60 20日变化 ${Number(s.build_stage_slope20) > 0 ? "+" : ""}${Number(s.build_stage_slope20).toFixed(2)}%。`;
       return `<tr class="h-expand-row" style="${_rowBg}" ondblclick="openStockChart('${esc(s.code)}','${esc(s.name)}')">
         <td class="mono cell-dim" title="双击看技术分析">${esc(s.code)}</td>
         <td title="双击看技术分析">${focusStarHtml(s.code)}${esc(s.name)}${(() => {
@@ -10129,7 +10147,7 @@ function renderHunter(h) {
             + `</td>`;
         })()}
         <td class="num">${_metTxt}</td>
-        <td style="text-align:center" title="${esc("日线阶段" + "。" + DAY_STAGE_TIP)}">${_stageTxt}</td>
+        <td style="text-align:center" title="${esc("日线阶段。" + _stageSlope + " " + DAY_STAGE_TIP)}">${_stageTxt}</td>
         ${maStateCellHtml(s.build_above_ma20, 20, s.build_above_ma5, 5, undefined, "#d29922", "未站上")}
         ${ma5CellHtml((hunterStructCache[category] || {})[s.code], "h-ma5")}
         <td class="num h-price" data-hcode="${esc(s.code)}" title="**实时**价/涨幅（展开时取、10s 刷新）。⚠️ 刻意不显示扫描时的旧值：扫描可能隔了几天，旧涨幅会严重误导（实测 300821 旧值 +20.01% vs 实时 +5.83%）">${hunterPriceHtml(null)}</td>
@@ -10339,7 +10357,7 @@ function renderHunter(h) {
             <th class="num" title="综合得分（与建仓表同口径；破5日线扣70且不给signal）">得分</th>
             <th class="num" title="韭研 D1~D12 打分合计（选股猎手的原始评分，满分 47；D3/D10 未在 config 启用）。⚠️ 与左边「得分」不是一回事：那个是建仓综合得分 0~100。下方小字＝命中的维度与分数。&#10;D1 强势形态且新高 8 · D2 强势形态 6 · D4 首板资金池 3 · D5 潜在突破10日 2 · D6 潜在突破5日 1 · D7 持续性(二板+) 5 · D8 情绪分数(一字板) 6 · D9 活跃程度(近10日有涨停) 3 · D11 刚站上5日线 2 · D12 趋势性(站上20日线) 8 · 大额(成交额≥50亿) 3">D分<br><span style="font-size:9px;opacity:.6">D1~D12</span></th>
             <th class="num" title="时机门控通过数（市场有方向/多头结构/回撤到位）">通过</th>
-            <th title="日线四阶段（描述状态，紧挨得分/通过便于对照）：②抬升/③派发/④下跌/①蓄势。⚠️ 实测横截面IC与直觉相反——抬升/追高前瞻更差(IC −0.031~−0.042, t=−12~−15)、下跌/超跌前瞻更好(IC +0.020~+0.034, t=+7~+12)，分半窗两段同号；效应量小(IC≈0.04)仅作相对强弱参照">日线阶段</th>
+            <th title="日线三态（描述状态，紧挨得分/通过便于对照）：多头=MA60 近20个交易日上涨>3%；空头=MA60 近20日下跌>3%；震荡=其余（60日线走平）。⚠️ 实测(977只×2017-2026/156万股票·日)：分布 多头31%/震荡39%/空头30%；未来20日超额 多头 +0.05% ≈ 震荡 +0.03% > 空头 −0.35%(t=−3.5)，H=5/10/20 排序一致。仅作状态描述，不是买卖信号。⚠️ 得分里的阶段项**仍是旧四阶段口径**（三态映射会让得分 IC 变负）">日线阶段</th>
             <th title="现价 vs 20 日简单均线（观察列，不驱动判定）。选股猎手口径：**站上=绿、其它=黄**（建仓信号扫描用绿/红）；5 日线状态放在单元格 tooltip。⚠️「得分」里那个 −70 悬崖扣分走的是 **5 日线**口径（owner 决定保留），与本列不是同一条线；行底色也仍按 5 日线">20日线<br><span style="font-size:9px;opacity:.6">规则口径</span></th>
             <th title="30 分钟 K 线的 5 根均线（现价站上/跌破 + 距上次翻转多少根）。**与「持仓 30 分钟风险体检」同源**（position_structure，同一缓存）。⚠️ 实测无前瞻信息量 ⇒ 只展示，不参与任何判定">30m MA5<br><span style="font-size:9px;opacity:.6">仅展示</span></th>
             <th class="num" title="**实时**价 + 实时涨幅（展开时取、10s 刷新；取不到显示 ⏳/—）。⚠️ 刻意不显示扫描时的旧价旧涨幅——扫描可能隔了几天，旧涨幅会严重误导">价<br><span style="font-size:9px;opacity:.6">实时涨幅</span></th>
@@ -10587,7 +10605,7 @@ function renderOB(ob) {
         <th>股票</th><th class="num">现价</th>
         <th class="num" title="总市值（亿元，腾讯实时快照；悬停看流通市值）。与「现价」同一轮 10s 刷新；取不到显示 —">市值<br><span style="font-size:9px;opacity:.6">亿</span></th>
         <th>趋势(30m)</th>
-        <th title="日线四阶段（描述状态）：②抬升/③派发/④下跌/①蓄势。⚠️ 实测横截面IC与直觉相反——抬升/追高前瞻更差(t=−12~−15)、下跌/超跌前瞻更好(t=+7~+12)，效应量小(IC≈0.04)仅作相对强弱参照">日线阶段</th>
+        <th title="日线三态（描述状态，紧挨得分/通过便于对照）：多头=MA60 近20个交易日上涨>3%；空头=MA60 近20日下跌>3%；震荡=其余（60日线走平）。⚠️ 实测(977只×2017-2026/156万股票·日)：分布 多头31%/震荡39%/空头30%；未来20日超额 多头 +0.05% ≈ 震荡 +0.03% > 空头 −0.35%(t=−3.5)，H=5/10/20 排序一致。仅作状态描述，不是买卖信号。⚠️ 得分里的阶段项**仍是旧四阶段口径**（三态映射会让得分 IC 变负）">日线阶段</th>
         <th title="是否站上 20 日线（观察列，不驱动判定）。口径与「建仓信号扫描」/「选股猎手」同款：收盘价 > 20 日简单均线。⚠️ 本表不做 −70 悬崖扣分（那是建仓表 5 日线的口径），本列纯展示">20日线<br><span style="font-size:9px;opacity:.6">观察</span></th>
         <th title="与建仓扫描同口径（通道/箱体/筑底顶/背离/超买/破均线）">技术标签</th>
         <th title="**当日**刚站上 5/10/20/30/60 日线的**时刻**（与「建仓信号扫描」「异常监控池」同源同渲染）。持仓票若刚回站 MA20/MA60，常是「趋势修复」的第一根证据">均线突破<br><span style="font-size:9px;opacity:.6">当日·时刻</span></th>

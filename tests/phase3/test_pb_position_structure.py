@@ -361,7 +361,7 @@ def _daily_series(n=120, start=100.0, drift=0.0):
 
 
 class TestStageDaily(unittest.TestCase):
-    """日线四阶段（生产单一真源）；研究脚本直接 import 同一函数。"""
+    """日线三态（2026-11-04 owner 改口径：多头/震荡/空头）；研究脚本直接 import 同一函数。"""
 
     def test_01_insufficient(self):
         r = PS.stage_daily(_daily_series(30))
@@ -369,20 +369,20 @@ class TestStageDaily(unittest.TestCase):
         self.assertIsNone(r["stage_daily"])
 
     def test_02_trending_series(self):
-        self.assertEqual(PS.stage_daily(_daily_series(120, drift=+0.8))["stage_daily"], "②抬升")
-        self.assertEqual(PS.stage_daily(_daily_series(120, drift=-0.8))["stage_daily"], "④下跌")
-        r = PS.stage_daily(_daily_series(120, drift=0.0))          # 恒定价 → 均线全等 → ①蓄势
-        self.assertEqual(r["stage_daily"], "①蓄势")
+        self.assertEqual(PS.stage_daily(_daily_series(120, drift=+0.8))["stage_daily"], "多头")
+        self.assertEqual(PS.stage_daily(_daily_series(120, drift=-0.8))["stage_daily"], "空头")
+        r = PS.stage_daily(_daily_series(120, drift=0.0))          # 恒定价 → MA60 走平 → 震荡
+        self.assertEqual(r["stage_daily"], "震荡")
 
-    def test_03_distribution_after_rise_then_break(self):
-        """先涨后急跌：MA20 仍 > MA60，但收盘丢了 MA20 ⇒ ③派发。"""
-        d = _daily_series(100, drift=+0.9)                          # 涨到 ~190（日期止于 2026-04）
-        # ⚠️ 追加段的日期必须**严格晚于**原序列：函数按 date 排序，日期撞车会把急跌插到中间
-        tail = pd.DataFrame([{"date": f"2026-06-{i+1:02d}", "open": 190 - i * 8,
-                              "high": 191 - i * 8, "low": 189 - i * 8,
-                              "close": 190 - i * 8, "volume": 1e5} for i in range(1, 7)])
-        r = PS.stage_daily(pd.concat([d, tail], ignore_index=True))
-        self.assertEqual(r["stage_daily"], "③派发", f"实际 {r}")
+    def test_03_slow_grind_is_flat_but_fast_rise_is_bull(self):
+        """同一方向、不同斜率：慢涨（20日 MA60 变化 <3%）判震荡，急涨判多头。"""
+        slow = _daily_series(160, start=40.0, drift=+0.02)          # MA60≈40 → 20日 +0.4 ≈ +1%
+        fast = _daily_series(160, start=40.0, drift=+0.30)          # MA60≈64 → 20日 +6 ≈ +9%
+        self.assertEqual(PS.stage_daily(slow)["stage_daily"], "震荡")
+        self.assertEqual(PS.stage_daily(fast)["stage_daily"], "多头")
+        # 反向同理
+        self.assertEqual(PS.stage_daily(_daily_series(160, start=100.0, drift=-0.02))["stage_daily"], "震荡")
+        self.assertEqual(PS.stage_daily(_daily_series(160, start=100.0, drift=-0.30))["stage_daily"], "空头")
 
     def test_04_definition_pin_no_future_data(self):
         """定义钉：逐点复算必须与函数一致 ⇒ ①规则未被意外改 ②只用 ≤t 的数据。"""
@@ -392,20 +392,14 @@ class TestStageDaily(unittest.TestCase):
         for i in (80, 100, 120, 140, 159):
             sub = d.iloc[:i + 1]
             c = sub["close"].astype(float)
-            ma20, ma60 = c.rolling(20).mean(), c.rolling(60).mean()
-            m20, m60, px = float(ma20.iloc[-1]), float(ma60.iloc[-1]), float(c.iloc[-1])
-            up = m20 > float(ma20.iloc[-6])
-            want = 1
-            if px > m20 > m60 and up:
-                want = 2
-            if m20 > m60 and px < m20:
-                want = 3
-            if px < m20 < m60 and m20 < float(ma20.iloc[-6]):
-                want = 4
+            ma60 = c.rolling(60).mean()
+            m60, m60_20ago = float(ma60.iloc[-1]), float(ma60.iloc[-21])
+            s20 = (m60 / m60_20ago - 1.0) if m60_20ago > 0 else 0.0
+            want = 1 if s20 > PS.MA60_FLAT_PCT else (3 if s20 < -PS.MA60_FLAT_PCT else 2)
             got = PS.stage_daily(sub)["stage_daily_code"]
-            self.assertEqual(got, want, f"i={i}: 函数={got} 复算={want}")
+            self.assertEqual(got, want, f"i={i}: 函数={got} 复算={want}（s20={s20:+.3%}）")
             seen.add(got)
-        self.assertGreaterEqual(len(seen), 2, f"样本应覆盖多个阶段，实际 {seen}")
+        self.assertGreaterEqual(len(seen), 2, f"样本应覆盖多个状态，实际 {seen}")
 
 
 # 2026-10-15：`_mk_forming_bar` 的**生产调用点是 `self._mk_forming_bar(...)`**，
@@ -596,25 +590,38 @@ class TestStageRuleSingleSource(unittest.TestCase):
     逐点一致。本测试就是那条守卫；两边任一改动不一致会在这里红。"""
 
     def test_inlined_rule_matches_stage_daily(self):
+        """两条内联规则都要钉住：
+        ① `stage_daily_code` = 三态（显示列）——与 PS.stage_daily 逐点一致；
+        ② `stage4_code` = 旧四阶段（**得分项**，刻意保留）——与重算一致。
+        """
         import core.build_decision as bd
-        # 覆盖四种阶段：上行 / 下行 / 恒定价(缠绕) / 先涨后急跌
         rise = _daily_series(150, drift=+0.7)
         fall = _daily_series(150, drift=-0.7)
         flat = _daily_series(150, drift=0.0)
-        topped = pd.concat([_daily_series(120, drift=+0.9),
-                            pd.DataFrame([{"date": f"2026-07-{i+1:02d}", "open": 210 - i * 9,
-                                           "high": 211 - i * 9, "low": 209 - i * 9,
-                                           "close": 210 - i * 9, "volume": 1e5}
-                                          for i in range(1, 7)])], ignore_index=True)
-        for name, df in (("rise", rise), ("fall", fall), ("flat", flat), ("topped", topped)):
+        slow = _daily_series(150, start=40.0, drift=+0.02)           # 慢涨 ⇒ 震荡
+        for name, df in (("rise", rise), ("fall", fall), ("flat", flat), ("slow", slow)):
             last = str(df["date"].iloc[-1])
-            a = bd.features_from_daily(df, last).get("stage_daily_code")
+            f = bd.features_from_daily(df, last)
             b = PS.stage_daily(df)["stage_daily_code"]
-            self.assertEqual(a, b, f"{name}: build_decision={a} vs position_structure={b}")
-        # 且四种阶段确实都被覆盖到（否则这个测试等于没测）
+            self.assertEqual(f.get("stage_daily_code"), b,
+                             f"{name}: build_decision={f.get('stage_daily_code')} vs position_structure={b}")
+            # ② 旧四阶段重算（评分用，别再改）
+            c = df["close"].astype(float)
+            ma20, ma60 = c.rolling(20).mean(), c.rolling(60).mean()
+            price, m20, m60 = float(c.iloc[-1]), float(ma20.iloc[-1]), float(ma60.iloc[-1])
+            up = m20 > float(ma20.iloc[-6])
+            want4 = 1
+            if price > m20 > m60 and up:
+                want4 = 2
+            if m20 > m60 and price < m20:
+                want4 = 3
+            if price < m20 < m60 and m20 < float(ma20.iloc[-6]):
+                want4 = 4
+            self.assertEqual(f.get("stage4_code"), want4, f"{name}: stage4={f.get('stage4_code')} 重算={want4}")
+        # 三态必须被覆盖全（否则这个测试等于没测）
         codes = {bd.features_from_daily(df, str(df["date"].iloc[-1])).get("stage_daily_code")
-                 for df in (rise, fall, flat, topped)}
-        self.assertGreaterEqual(len(codes), 3, f"样本应覆盖多个阶段，实际 {codes}")
+                 for df in (rise, fall, flat, slow)}
+        self.assertEqual(codes, {1, 2, 3}, f"样本应覆盖三态，实际 {codes}")
 
 
 class TestPanelWiring(unittest.TestCase):

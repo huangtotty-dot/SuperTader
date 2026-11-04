@@ -8356,10 +8356,13 @@ class Api:
                         "veto": list(_dec["veto"]), "above_ma5": _f.get("above_ma5"),
                         "above_ma20": _f.get("above_ma20"),
                         "price": _f.get("price"),
-                        # 日线四阶段：**本函数已算出**（features_from_daily 的副产品）⇒ 白给，零额外取数。
+                        # 日线阶段：**本函数已算出**（features_from_daily 的副产品）⇒ 白给，零额外取数。
+                        # 2026-11-04 改三态（多头/震荡/空头，显示列）；得分里的阶段项是另一个字段
+                        # stage4_code（旧四阶段），刻意不在这张表里显示。
                         # 猎手池 5000+ 只，30min/10min 那两列要逐只出网（实测 ~1.5s/只、400 只 >5min），
                         # 故猎手个股表**只给这一列**（见 doc/solutions §5.10）。
                         "stage": _f.get("stage_daily_code"),
+                        "stage_slope20": _f.get("ma60_slope20"),   # 供 tooltip 解释「为什么是震荡」
                     }
                     # 写进进程内缓存（键含 mtime ⇒ 缓存文件一变就重算）。
                     # 只存"算成功"的；条数上限防进程长跑无限增长（每周新日期都会进来）。
@@ -8654,6 +8657,7 @@ class Api:
                                 s["build_above_ma5"] = c.get("above_ma5")
                                 s["build_above_ma20"] = c.get("above_ma20")
                                 s["build_stage"] = c.get("stage")
+                                s["build_stage_slope20"] = c.get("stage_slope20")
                                 s["build_price"] = c.get("price")
             except Exception:
                 pass
@@ -9154,6 +9158,7 @@ class Api:
                 "build_verdict": g.get("verdict"), "build_veto": g.get("veto") or [],
                 "build_above_ma5": g.get("above_ma5"),
                 "build_above_ma20": g.get("above_ma20"), "build_stage": g.get("stage"),
+                "build_stage_slope20": g.get("stage_slope20"),
                 "build_price": g.get("price"),
                 # 2026-10-31 owner：「市场风向也要显示周线 MACD 是否翻红」——
                 # 后台 enrich 时顺带算好（零网络、按缓存 mtime 记忆），主线程只读。
@@ -12822,7 +12827,7 @@ class Api:
                 "timing": None,
                 "timing_features": {"above_ma5": k.get("above_ma5"),
                                     "above_ma20": k.get("above_ma20")},
-                "build_stage": k.get("stage"),
+                "build_stage": k.get("stage"), "build_stage_slope20": k.get("stage_slope20"),
                 # 与建仓表「通过 X/3」同口径：t_regime + t_trend + t_drawdown 三条
                 "build_met": int(k.get("met") or 0) if k else None,
                 "build_above_ma20": k.get("above_ma20"),
