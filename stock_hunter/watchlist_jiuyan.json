@@ -8171,13 +8171,15 @@
   "business_summary": "主营其他",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "汽车",
+  "jiuyan_concept": "轮胎",
   "name": "海安集团",
   "primary_source": "fallback",
   "sector": "其他",
   "sector_type": "fallback",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-04 15:56:49",
+  "jiuyan_category1": "汽车",
+  "jiuyan_concept1": "轮胎"
  },
  "001234": {
   "business_summary": "主营纺织服装、服饰业",
@@ -8504,13 +8506,15 @@
   "business_summary": "主营汽车制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "机器人",
+  "jiuyan_concept": "结构件",
   "name": "三联锻造",
   "primary_source": "legacy",
   "sector": "汽车制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-04 15:56:49",
+  "jiuyan_category1": "机器人",
+  "jiuyan_concept1": "结构件"
  },
  "001283": {
   "business_summary": "主营电气机械和器材制造业",
@@ -9308,13 +9312,15 @@
   "business_summary": "主营专用设备制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "有色金属",
+  "jiuyan_concept": "黄金_金矿",
   "name": "南矿集团",
   "primary_source": "legacy",
   "sector": "专用设备制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-04 15:56:49",
+  "jiuyan_category1": "有色金属",
+  "jiuyan_concept1": "黄金_金矿"
  },
  "001365": {
   "business_summary": "主营汽车制造业",
@@ -11290,13 +11296,15 @@
   "business_summary": "多年蝉联“中国建筑装饰行业百强”榜首，主要聚焦公共建筑装饰装修市场",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "半导体",
+  "jiuyan_concept": "洁净室与厂务工程",
   "name": "金螳螂",
   "primary_source": "legacy",
   "sector": "装修装饰Ⅱ/新型城镇化/第三代半导体/光伏建筑一体化",
   "sector_type": "legacy",
-  "updated_at": "2026-06-24 11:21:37"
+  "updated_at": "2026-11-04 15:56:49",
+  "jiuyan_category1": "半导体",
+  "jiuyan_concept1": "洁净室与厂务工程"
  },
  "002083": {
   "business_summary": "主营纺织业",
@@ -14289,7 +14297,7 @@
   "primary_source": "legacy",
   "sector": "光学光电子/光纤概念/共封装光学(CPO)/海峡两岸",
   "sector_type": "legacy",
-  "updated_at": "2026-10-27 11:26:00",
+  "updated_at": "2026-11-04 15:56:49",
   "jiuyan_concept_note": "军工属性弱：非线性光学晶体以民用为主",
   "jiuyan_military_audited_at": "2026-10-27",
   "jiuyan_military_evidence": {
@@ -14305,7 +14313,11 @@
    "new_pairs": [],
    "verdict": "摘除",
    "reason": "公司主营晶体元器件、精密光学元件和激光器件，年报列示用途为固体及光纤激光器、光通信、AR、激光雷达、半导体设备、工业测量、生命科学和精密仪器等，未披露军用激光器、武器装备型号、军工客户或军品合同，不能因激光晶体具有潜在军事用途就归入红外光电与激光军工概念。2025年光电子行业收入11.5778亿元，占100%；激光光学元器件4.5501亿元，非线性光学晶体2.6669亿元，激光器件2.0405亿元，激光晶体2.0194亿元，其他0.3008亿元，所有分部均未独立披露军工收入。基于现有可核验资料应摘除。旧“军工电子-激光晶体”把通用光电元器件直接等同军工核心，证据不足且定位过度。"
-  }
+  },
+  "jiuyan_category1": "光通信",
+  "jiuyan_concept1": "光器件-无源器件",
+  "jiuyan_category": "光通信",
+  "jiuyan_concept": "光器件-无源器件"
  },
  "002223": {
   "business_summary": "主营专用设备制造业",
@@ -20434,13 +20446,15 @@
   "business_summary": "",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "光伏",
+  "jiuyan_concept": "光伏组件",
   "name": "海源复材",
   "primary_source": "audit_20260901",
   "sector": "",
   "sector_type": "",
-  "updated_at": "2026-09-01 09:39:24"
+  "updated_at": "2026-11-04 15:56:49",
+  "jiuyan_category1": "光伏",
+  "jiuyan_concept1": "光伏组件"
  },
  "002530": {
   "business_summary": "主营金属制品业",
@@ -21177,8 +21191,12 @@
   "primary_source": "legacy",
   "sector": "造纸和纸制品业",
   "sector_type": "legacy",
-  "updated_at": "2026-10-24 21:00:00",
-  "jiuyan_tag_removed_20261024": "太空光伏/太阳翼结构（实际主营：环保纸/新型烟草）"
+  "updated_at": "2026-11-04 15:56:49",
+  "jiuyan_tag_removed_20261024": "太空光伏/太阳翼结构（实际主营：环保纸/新型烟草）",
+  "jiuyan_category1": "商业航天",
+  "jiuyan_concept1": "太空算力",
+  "jiuyan_category": "商业航天",
+  "jiuyan_concept": "太空算力"
  },
  "002566": {
   "business_summary": "主营医药制造业",
@@ -22859,13 +22877,15 @@
   "business_summary": "主营海峡两岸",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "超节点",
+  "jiuyan_concept": "其他",
   "name": "兴业科技",
   "primary_source": "legacy",
   "sector": "海峡两岸/华为汽车",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-04 15:56:49",
+  "jiuyan_category1": "超节点",
+  "jiuyan_concept1": "其他"
  },
  "002675": {
   "business_summary": "主营医药制造业",
@@ -25933,13 +25953,15 @@
   "business_summary": "偏光片产品的研发、生产和销售。",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "消费电子",
+  "jiuyan_concept": "光学显示",
   "name": "三利谱",
   "primary_source": "legacy",
   "sector": "光学光电子/柔性屏(折叠屏)/虚拟现实/消费电子概念",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-04 15:56:49",
+  "jiuyan_category1": "消费电子",
+  "jiuyan_concept1": "光学显示"
  },
  "002877": {
   "business_summary": "设计、研发、生产和销售全系列智能控制阀产品。",
@@ -27785,13 +27807,15 @@
   "business_summary": "测试测量仪器仪表产品的研发、生产与销售。",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "超节点",
+  "jiuyan_concept": "其他",
   "name": "华盛昌",
   "primary_source": "legacy",
   "sector": "电网设备/共封装光学(CPO)/血氧仪/AI眼镜",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-04 15:56:49",
+  "jiuyan_category1": "超节点",
+  "jiuyan_concept1": "其他"
  },
  "002981": {
   "business_summary": "声学产品（耳机、音响）业务、精密零组件业务等。",
@@ -28028,13 +28052,15 @@
   "business_summary": "主营计算机、通信和其他电子设备制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "电池",
+  "jiuyan_concept": "其他关键材料及设备",
   "name": "宝明科技",
   "primary_source": "legacy",
   "sector": "计算机、通信和其他电子设备制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-04 15:56:49",
+  "jiuyan_category1": "电池",
+  "jiuyan_concept1": "其他关键材料及设备"
  },
  "002993": {
   "business_summary": "AI能源设备、新能源汽车电控与电源系统解决方案、绿色能源转换产品的设计、研发、生产和销售。",
@@ -44848,13 +44874,15 @@
   "business_summary": "主营新闻和出版业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "AI应用",
+  "jiuyan_concept": "AI出版",
   "name": "中信出版",
   "primary_source": "legacy",
   "sector": "新闻和出版业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-04 15:56:49",
+  "jiuyan_category1": "AI应用",
+  "jiuyan_concept1": "AI出版"
  },
  "300789": {
   "business_summary": "主营软件和信息技术服务业",
@@ -49484,13 +49512,15 @@
   "business_summary": "HVLS风扇的研发、生产、销售、安装及相关技术服务。",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "超节点",
+  "jiuyan_concept": "其他",
   "name": "开勒股份",
   "primary_source": "legacy",
   "sector": "通用设备/东数西算(算力)/华为昇腾/光伏概念",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-04 15:56:49",
+  "jiuyan_category1": "超节点",
+  "jiuyan_concept1": "其他"
  },
  "301071": {
   "business_summary": "钻石、工业金刚石、金刚石微粉等超硬材料的研发、生产与销售。",
@@ -55739,13 +55769,15 @@
   "business_summary": "",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "半导体",
+  "jiuyan_concept": "设备核心零部件",
   "name": "托伦斯",
   "primary_source": "audit_20260901",
   "sector": "",
   "sector_type": "",
-  "updated_at": "2026-09-01 09:39:24"
+  "updated_at": "2026-11-04 15:56:49",
+  "jiuyan_category1": "半导体",
+  "jiuyan_concept1": "设备核心零部件"
  },
  "301584": {
   "business_summary": "主营批发业",
@@ -56499,13 +56531,15 @@
   "business_summary": "",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "半导体",
+  "jiuyan_concept": "半导体材料-封装材料",
   "name": "N贝特利",
   "primary_source": "audit_20260901",
   "sector": "",
   "sector_type": "",
-  "updated_at": "2026-09-01 09:39:24"
+  "updated_at": "2026-11-04 15:56:49",
+  "jiuyan_category1": "半导体",
+  "jiuyan_concept1": "半导体材料-封装材料"
  },
  "301707": {
   "business_summary": "",
@@ -71209,13 +71243,15 @@
   "business_summary": "",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "有色金属",
+  "jiuyan_concept": "其他",
   "name": "N马矿",
   "primary_source": "audit_20260901",
   "sector": "",
   "sector_type": "",
-  "updated_at": "2026-09-01 09:39:24"
+  "updated_at": "2026-11-04 15:56:49",
+  "jiuyan_category1": "有色金属",
+  "jiuyan_concept1": "其他"
  },
  "601126": {
   "business_summary": "主营电气机械和器材制造业",
@@ -75254,13 +75290,15 @@
   "business_summary": "汽车精密零部件产品的研发、生产和销售业务。",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "机器人",
+  "jiuyan_concept": "结构件",
   "name": "浙江黎明",
   "primary_source": "legacy",
   "sector": "汽车零部件/共同富裕示范区/长安汽车概念/专精特新",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-04 15:56:49",
+  "jiuyan_category1": "机器人",
+  "jiuyan_concept1": "结构件"
  },
  "603049": {
   "business_summary": "主营橡胶和塑料制品业",
@@ -76383,13 +76421,15 @@
   "business_summary": "铝电解电容器用电极箔的研发、生产与销售。",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "消费电子",
+  "jiuyan_concept": "被动元件",
   "name": "海星股份",
   "primary_source": "legacy",
   "sector": "电子化学品Ⅱ/汽车电子/数据中心(AIDC)/储能",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-04 15:56:49",
+  "jiuyan_category1": "消费电子",
+  "jiuyan_concept1": "被动元件"
  },
  "603116": {
   "business_summary": "主营皮革、毛皮、羽毛及其制品和制鞋业",
@@ -85771,7 +85811,7 @@
   "primary_source": "legacy",
   "sector": "土木工程建筑业",
   "sector_type": "legacy",
-  "updated_at": "2026-10-27 09:30:00",
+  "updated_at": "2026-11-04 15:56:49",
   "jiuyan_tag_source": "2026-10-26 全天涨停复盘（手动补漏）",
   "jiuyan_robot_physicalai_verdicts": {},
   "jiuyan_robot_physicalai_audited_at": "2026-10-27",
@@ -85794,7 +85834,11 @@
    "verdict": "摘除",
    "category_verdicts": {},
    "reason": "公司业务为生态工程、文旅和宠物消费，智能硬件仅包括已量产宠物定位项圈及在研健康监测产品，未见机器人本体、巡检设备或具身智能产品和项目证据。宠物智能终端不能直接归为机器人本体，原两条重复的机器人本体及应用标签均缺乏产品、订单和交付依据，属于错标，去重后全部摘除。"
-  }
+  },
+  "jiuyan_category1": "机器人",
+  "jiuyan_concept1": "本体及应用",
+  "jiuyan_category": "机器人",
+  "jiuyan_concept": "本体及应用"
  },
  "603956": {
   "business_summary": "主营其他",
@@ -97087,13 +97131,15 @@
   "business_summary": "中国领先的半导体设备精密零部件企业，全球为数不多的能够量产应用于7纳米工艺制程半导体设备的精密零部件制造商",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "半导体",
+  "jiuyan_concept": "设备核心零部件",
   "name": "富创精密",
   "primary_source": "legacy",
   "sector": "半导体/光刻机/芯片概念/专精特新",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-04 15:56:49",
+  "jiuyan_category1": "半导体",
+  "jiuyan_concept1": "设备核心零部件"
  },
  "688410": {
   "business_summary": "主营医疗器械概念",
@@ -98292,13 +98338,15 @@
   "business_summary": "主营电气机械和器材制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "光伏",
+  "jiuyan_concept": "光储充",
   "name": "金冠电气",
   "primary_source": "legacy",
   "sector": "电气机械和器材制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-04 15:56:49",
+  "jiuyan_category1": "光伏",
+  "jiuyan_concept1": "光储充"
  },
  "688518": {
   "business_summary": "精密激光焊接设备及自动化解决方案的研发、生产、销售。",
@@ -98702,13 +98750,15 @@
   "business_summary": "模拟与数模混合集成电路产品的研发与销售。",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "半导体",
+  "jiuyan_concept": "芯片设计-模拟与电源管理",
   "name": "思瑞浦",
   "primary_source": "legacy",
   "sector": "半导体/汽车芯片/MCU芯片/芯片概念",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-04 15:56:49",
+  "jiuyan_category1": "半导体",
+  "jiuyan_concept1": "芯片设计-模拟与电源管理"
  },
  "688538": {
   "business_summary": "AMOLED半导体显示面板的研发、生产和销售。",
@@ -100920,13 +100970,15 @@
   "business_summary": "主营半导体",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "半导体",
+  "jiuyan_concept": "半导体设备-其他专用设备",
   "name": "京仪装备",
   "primary_source": "legacy",
   "sector": "半导体/中芯国际概念/存储芯片/芯片概念",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-04 15:56:49",
+  "jiuyan_category1": "半导体",
+  "jiuyan_concept1": "半导体设备-其他专用设备"
  },
  "688653": {
   "business_summary": "主营计算机、通信和其他电子设备制造业",
@@ -103121,13 +103173,15 @@
   "business_summary": "聚焦晶圆测试核心硬件探针卡的研发、设计、生产与销售。",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "半导体",
+  "jiuyan_concept": "封装测试",
   "name": "强一股份",
   "primary_source": "legacy",
   "sector": "半导体/存储芯片/科创次新股/芯片概念",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-04 15:56:49",
+  "jiuyan_category1": "半导体",
+  "jiuyan_concept1": "封装测试"
  },
  "688811": {
   "business_summary": "主营有色金属冶炼和压延加工业",
@@ -103291,13 +103345,15 @@
   "business_summary": "",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "半导体",
+  "jiuyan_concept": "设备核心零部件",
   "name": "高凯技术",
   "primary_source": "audit_20260901",
   "sector": "",
   "sector_type": "",
-  "updated_at": "2026-09-01 09:39:24"
+  "updated_at": "2026-11-04 15:56:49",
+  "jiuyan_category1": "半导体",
+  "jiuyan_concept1": "设备核心零部件"
  },
  "688836": {
   "business_summary": "",
@@ -106303,12 +106359,14 @@
   "business_summary": "",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "半导体",
+  "jiuyan_concept": "设备核心零部件",
   "sector": "能源及重型设备/机械设备/专用设备/广东板块/半导体概念/贬值受益/粤港自贸/医疗器械概念/油气设服/融资融券/次新股/航天航空",
   "sector_type": "sync_20260929",
   "primary_source": "sync_20260929",
-  "updated_at": "2026-09-29 17:08:50"
+  "updated_at": "2026-11-04 15:56:49",
+  "jiuyan_category1": "半导体",
+  "jiuyan_concept1": "设备核心零部件"
  },
  "920300": {
   "name": "辰光医疗",
@@ -107538,12 +107596,14 @@
   "business_summary": "",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "光伏",
+  "jiuyan_concept": "光伏电站",
   "sector": "光伏电池组件/电力设备/光伏设备/浙江板块/超跌股/绿色电力/融资融券/光伏概念/新能源",
   "sector_type": "sync_20260929",
   "primary_source": "sync_20260929",
-  "updated_at": "2026-09-29 17:08:50"
+  "updated_at": "2026-11-04 15:56:49",
+  "jiuyan_category1": "光伏",
+  "jiuyan_concept1": "光伏电站"
  },
  "920779": {
   "name": "武汉蓝电",
