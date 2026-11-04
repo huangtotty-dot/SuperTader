@@ -76,6 +76,64 @@ class TestJudge:
         assert [h["code"] for h in hits] == ["b", "a"]     # 越贴近线越靠前
 
 
+class TestMa60:
+    """回踩 60 日线不破（2026-11-04 owner）：与 MA5 同构 + 要求昨日 MA60 上行。"""
+
+    @staticmethod
+    def _ctx60(prev_close, prev_ma60, sum_prev=590.0, rising=True):
+        return {"prev_close": prev_close, "prev_ma": prev_ma60,
+                "sum_prev": sum_prev, "prev_ma_rising": rising}
+
+    def test_hit(self):
+        # ma60=(590+10.2)/60=10.0033：low 9.95（−0.53%）、现价 10.2（+1.97%）都在带内
+        hits = mp.judge_ma60({"000001": self._ctx60(10.5, 9.9)},
+                             {"000001": _snap(10.2, 9.95)}, TODAY)
+        assert len(hits) == 1
+        assert hits[0]["ma60"] == pytest.approx(10.0033, abs=1e-3)
+        assert hits[0]["dev60_pct"] == pytest.approx(1.97, abs=0.01)
+
+    def test_reject_when_ma60_falling(self):
+        """下行的 60 日线不是支撑 ⇒ 不报。"""
+        hits = mp.judge_ma60({"000001": self._ctx60(10.5, 9.9, rising=False)},
+                             {"000001": _snap(10.2, 9.95)}, TODAY)
+        assert hits == []
+
+    def test_reject_when_yesterday_below_ma60(self):
+        assert mp.judge_ma60({"000001": self._ctx60(9.8, 9.9)},
+                             {"000001": _snap(10.2, 9.95)}, TODAY) == []
+
+    def test_run_once_uses_own_dedup(self, tmp_path, monkeypatch):
+        """MA60 走独立去重文件与卡片标题；不污染 MA5 的去重表。"""
+        monkeypatch.setattr(mp, "_DEDUP_FP", str(tmp_path / "pushed5.json"))
+        monkeypatch.setattr(mp, "_DEDUP60_FP", str(tmp_path / "pushed60.json"))
+        from core import stage_gate as _sg
+        monkeypatch.setattr(_sg, "DAILY_DIR", tmp_path / "daily_empty")
+        _sg.clear_cache()
+        uni = {"000001": {"name": "甲", "sources": ["pool"]}}
+        ctx = {"000001": self._ctx60(10.5, 9.9)}
+        snap = {"000001": _snap(10.2, 9.95, ts="2026-11-04")}
+        sent = []
+        r = mp.run_once(now=datetime(2026, 11, 4, 10, 0), uni=uni, ctx=ctx,
+                        snapshot_fn=lambda c: snap,
+                        push_fn=lambda c: sent.append(c) or True,
+                        profile=mp.PROFILE_MA60)
+        assert r["pushed"] and len(r["hits"]) == 1
+        assert "回踩60日线不破" in sent[0]["card"]["header"]["title"]["content"]
+        assert mp._load_dedup() == {}, "MA5 去重表不应被写"
+        assert mp._load_dedup(str(tmp_path / "pushed60.json")) == {"2026-11-04": ["000001"]}
+
+    def test_card_title_mentions_ma60(self):
+        hits = mp.judge_ma60({"000001": self._ctx60(10.5, 9.9)},
+                             {"000001": _snap(10.2, 9.95)}, TODAY)
+        for h in hits:
+            h["sources"] = ["pool"]
+        card = mp.build_card(hits, datetime(2026, 11, 4, 10, 0), {}, mp.PROFILE_MA60)
+        title = card["card"]["header"]["title"]["content"]
+        assert "回踩60日线不破" in title
+        md = card["card"]["elements"][0]["content"]
+        assert "MA60" in md and "MA5" not in md
+
+
 class TestUniverse:
     def test_merge_and_source_tags(self, monkeypatch):
         monkeypatch.setattr(mp, "holdings_codes", lambda: {"600000": "浦发银行"})
@@ -102,6 +160,10 @@ class TestRunOnce:
 
     def _setup(self, tmp_path, monkeypatch):
         monkeypatch.setattr(mp, "_DEDUP_FP", str(tmp_path / "pushed.json"))
+        # 「飞书只播日线多头」闸隔离：空日线目录 ⇒ 判不了 ⇒ fail-open（闸本身另测）
+        from core import stage_gate as _sg
+        monkeypatch.setattr(_sg, "DAILY_DIR", tmp_path / "daily_empty")
+        _sg.clear_cache()
 
     def _args(self):
         uni = {"000001": {"name": "平安银行", "sources": ["pool"]}}

@@ -41,7 +41,8 @@ def load_config(config_path: str = "config.json") -> dict:
         return json.load(f)
 
 
-def prepare_data(config: dict, date_str: str, save_spot: bool = False) -> dict:
+def prepare_data(config: dict, date_str: str, save_spot: bool = False,
+                 only_codes=None) -> dict:
     """
     以 watchlist_jiuyan.json 为唯一数据源，获取真实行情数据，生成全部报告数据
     :param date_str: 日期 'YYYY-MM-DD'（用于获取行情和保存缓存）
@@ -66,6 +67,13 @@ def prepare_data(config: dict, date_str: str, save_spot: bool = False) -> dict:
         return data
 
     watchlist_df = data["watchlist"]
+    # 2026-11-04 owner：「选股猎手轮询只轮询股票在多头，同时均线粘合的股票」。
+    # `only_codes` 由 core.hunter_poll 传进来（CLI/其它调用不传 ⇒ 行为不变）。
+    if only_codes is not None:
+        _n0 = len(watchlist_df)
+        watchlist_df = watchlist_df[watchlist_df["代码"].astype(str).isin({str(c) for c in only_codes})].copy()
+        data["watchlist"] = watchlist_df
+        print(f"  [筛选] 多头+均线粘合候选 {len(watchlist_df)} 行 / 全池 {_n0} 行")
     # 只保留带韭研概念的标的作为打分池
     df_pool = watchlist_df[watchlist_df["韭研概念"].str.strip().ne("")].copy()
     codes = df_pool["代码"].astype(str).tolist()

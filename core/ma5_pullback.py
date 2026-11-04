@@ -31,6 +31,12 @@
     被裸 except 吞掉 ⇒ 告警自上线起从未发出过」的血案，见 hunter_ma5_alert 头注释）。
 
 ⚠️ 纯通知，**不触发任何交易**。
+
+## 2026-11-04：新增「回踩 60 日均线不破」
+owner：「飞书通知增加一个：回踩60日均线不破」。判定与 MA5 同构（见 `PROFILE_MA60`），
+差别只有 ①周期 60（需要 ≥80 根完成日线）②**昨日 MA60 较 20 日前上行**才认支撑。
+两个剖面共用本模块（独立去重文件 `ma60_pullback_pushed.json`、独立开关
+`feishu.notify_on_ma60_pullback`、main.py 里独立 daemon 线程）。
 """
 import json
 import logging
@@ -61,6 +67,31 @@ DEDUP_KEEP = 10          # 去重文件保留最近 N 天
 _SRC_ORDER = ("ob", "pb", "pool")
 _SRC_TITLE = {"ob": "🏥 体检持仓", "pb": "🏗️ 建仓池", "pool": "🚨 异常监控池"}
 _SRC_SHORT = {"ob": "体检", "pb": "建仓", "pool": "监控池"}
+
+# ── 两种「回踩不破」（2026-11-04 owner：「飞书通知增加一个：回踩60日均线不破」）──
+# 判定同构，只是均线周期不同；MA60 额外要求**昨日 MA60 较 20 日前上行**（下行的 60 日线
+# 不是支撑），且 Feishu 闸门本来也只播日线多头（core/stage_gate）。
+_DEDUP60_FP = os.path.join(_STATE_DIR, "ma60_pullback_pushed.json")
+
+PROFILE_MA5 = {
+    "key": "ma5", "window": 5, "line": "MA5",
+    "ma_key": "ma5", "dev_key": "dev5_pct",
+    "touch_tol": TOUCH_TOL, "touch_min": TOUCH_MIN, "above_max": ABOVE_MAX,
+    "require_ma_rising": False,
+    "title": "回踩5日线不破", "dedup_attr": "_DEDUP_FP",
+}
+PROFILE_MA60 = {
+    "key": "ma60", "window": 60, "line": "MA60",
+    "ma_key": "ma60", "dev_key": "dev60_pct",
+    "touch_tol": TOUCH_TOL, "touch_min": TOUCH_MIN, "above_max": ABOVE_MAX,
+    "require_ma_rising": True,
+    "title": "回踩60日线不破", "dedup_attr": "_DEDUP60_FP",
+}
+
+
+def _profile_dedup_fp(profile: dict) -> str:
+    """去重文件路径（读模块级常量 ⇒ 测试 monkeypatch `_DEDUP_FP` 仍然生效）。"""
+    return globals().get(profile.get("dedup_attr") or "_DEDUP_FP") or _DEDUP_FP
 
 
 # ---------------------------------------------------------------- 三源名单
@@ -128,14 +159,41 @@ def universe(top_n: int = None) -> dict:
 
 
 # ---------------------------------------------------------------- 判定
-def build_context(codes, today: str = None) -> dict:
-    """{code: {prev_close, prev_ma5, last4_sum}} —— 全部来自**本地日线缓存**（零网络）。
+def _completed_closes_all(fr, today: str) -> list | None:
+    """日线帧 → **今日之前**的全部收盘（MA60 需要 80+ 根；NaN 行丢掉）。
 
-    今日 MA5 随现价变，故只预存「前 4 个完成日之和」，判定时再 (sum+price)/5。
+    与 `hunter_ma5_alert._completed_history` 同一套口径（停牌 >15 天 ⇒ 不做实时判定），
+    只是那个函数只返回尾部 10 根（MA5 够用，MA60 不够）。
+    """
+    if fr is None or getattr(fr, "empty", True):
+        return None
+    try:
+        dts = [str(x)[:10] for x in fr["date"].astype(str).values]
+        closes = [float(x) for x in fr["close"].astype(float).values]
+    except Exception:
+        return None
+    rows = [(d, c) for d, c in zip(dts, closes) if d < str(today)[:10] and c == c]
+    if len(rows) < 5:
+        return None
+    try:
+        _last = datetime.strptime(rows[-1][0], "%Y-%m-%d").date()
+        _today_d = datetime.strptime(str(today)[:10], "%Y-%m-%d").date()
+        if (_today_d - _last).days > 15:
+            return None
+    except Exception:
+        pass
+    return [c for _, c in rows]
+
+
+def build_context(codes, today: str = None, profile: dict = None) -> dict:
+    """{code: {prev_close, prev_ma, sum_prev[, prev_ma_rising]}} —— 本地日线缓存（零网络）。
+
+    今日均线随现价变，故只预存「前 w-1 个完成日之和」，判定时再 (sum+price)/w。
+    MA60 剖面额外存 `prev_ma_rising`（昨日 MA60 较 20 日前是否上行）。
     """
     from core import chart_cache as _cc
-    # 复用 hunter_ma5_alert 的「完成日收盘尾部」实现：同一套停牌/陈旧闸，别各写一份
-    from core.hunter_ma5_alert import _completed_history
+    profile = profile or PROFILE_MA5
+    w = int(profile["window"])
     today = str(today or datetime.now().strftime("%Y-%m-%d"))
     hist = {}
     for c in codes:
@@ -143,18 +201,28 @@ def build_context(codes, today: str = None) -> dict:
             fr = _cc.load_daily_display(c)
         except Exception:
             continue
-        closes = _completed_history(fr, today)
-        if not closes:
+        closes = _completed_closes_all(fr, today)
+        if not closes or len(closes) < w + 1:
             continue
-        hist[c] = {"prev_close": float(closes[-1]),
-                   "prev_ma5": float(sum(closes[-5:]) / 5.0),
-                   "last4_sum": float(sum(closes[-4:]))}
+        prev_ma = float(sum(closes[-w:]) / w)
+        e = {"prev_close": float(closes[-1]),
+             "prev_ma": prev_ma,
+             "sum_prev": float(sum(closes[-(w - 1):]))}
+        if profile.get("require_ma_rising"):
+            if len(closes) < w + 20:
+                continue
+            ma_20ago = float(sum(closes[-w - 20:-20]) / w)
+            e["prev_ma_rising"] = bool(prev_ma > ma_20ago)
+        hist[c] = e
     return hist
 
 
-def judge(ctx: dict, snap: dict, today: str = None) -> list:
-    """完成日上下文 + 实时快照 → 命中列表（未去重、未排序以外的加工）。"""
+def _judge(ctx: dict, snap: dict, today: str | None, profile: dict) -> list:
+    """通用判定（MA5/MA60 同构，只差周期、键名与是否要求均线上行）。"""
     today = str(today or datetime.now().strftime("%Y-%m-%d"))
+    w = int(profile["window"])
+    tol, tmin, amax = profile["touch_tol"], profile["touch_min"], profile["above_max"]
+    ma_key, dev_key = profile["ma_key"], profile["dev_key"]
     hits = []
     for c, h in (ctx or {}).items():
         q = (snap or {}).get(c) or {}
@@ -172,57 +240,80 @@ def judge(ctx: dict, snap: dict, today: str = None) -> list:
         # 停牌/陈旧：快照日期不是今天 ⇒ 那个「最低/现价」不是今天的，别当回踩
         if str(q.get("ts_date") or "")[:10] != today:
             continue
-        ma5 = (h["last4_sum"] + px) / 5.0
-        if ma5 <= 0:
+        # 兼容旧键（历史 ctx/测试注入的是 prev_ma5 / last4_sum）
+        sum_prev = h.get("sum_prev", h.get("last4_sum"))
+        prev_ma = h.get("prev_ma", h.get("prev_ma5"))
+        if sum_prev is None or prev_ma is None:
             continue
-        if h["prev_close"] <= h["prev_ma5"]:
+        ma = (sum_prev + px) / w
+        if ma <= 0:
+            continue
+        if h["prev_close"] <= prev_ma:
             continue                                  # ① 昨天没站在线上，谈不上回踩
-        if low > ma5 * (1 + TOUCH_TOL):
+        if profile.get("require_ma_rising") and not h.get("prev_ma_rising", True):
+            continue                                  # ①' 均线本身不在上行（下行的线不是支撑）
+        if low > ma * (1 + tol):
             continue                                  # ② 今天没回踩到线附近
-        if low < ma5 * (1 + TOUCH_MIN):
+        if low < ma * (1 + tmin):
             continue                                  # ②' 破太深（＞2%）= 破位后又拉回，不是回踩
-        if not (ma5 <= px <= ma5 * (1 + ABOVE_MAX)):
+        if not (ma <= px <= ma * (1 + amax)):
             continue                                  # ③ 破了 或 已经飞走
-        hits.append({"code": c, "price": round(px, 3), "ma5": round(ma5, 3),
+        hits.append({"code": c, "price": round(px, 3), ma_key: round(ma, 3),
                      "low": round(low, 3),
-                     "dev5_pct": round((px - ma5) / ma5 * 100, 2),
-                     "touch_pct": round((low - ma5) / ma5 * 100, 2),
+                     dev_key: round((px - ma) / ma * 100, 2),
+                     "touch_pct": round((low - ma) / ma * 100, 2),
                      "pct": q.get("pct")})
-    hits.sort(key=lambda x: x["dev5_pct"])            # 越贴近线越靠前
+    hits.sort(key=lambda x: x[dev_key])               # 越贴近线越靠前
     return hits
 
 
+def judge(ctx: dict, snap: dict, today: str = None) -> list:
+    """回踩 5 日线判定（保留原签名/返回键：ma5 / dev5_pct）。"""
+    return _judge(ctx, snap, today, PROFILE_MA5)
+
+
+def judge_ma60(ctx: dict, snap: dict, today: str = None) -> list:
+    """回踩 60 日线判定（返回键：ma60 / dev60_pct）。"""
+    return _judge(ctx, snap, today, PROFILE_MA60)
+
+
 # ---------------------------------------------------------------- 去重
-def _load_dedup() -> dict:
-    d = _load_json(_DEDUP_FP, {})
+def _load_dedup(fp: str = None) -> dict:
+    d = _load_json(fp or _DEDUP_FP, {})
     return d if isinstance(d, dict) else {}
 
 
-def _save_dedup(d: dict) -> None:
+def _save_dedup(d: dict, fp: str = None) -> None:
+    fp = fp or _DEDUP_FP
     try:
         for k in sorted(k for k in d if k)[:-DEDUP_KEEP]:
             d.pop(k, None)
-        os.makedirs(os.path.dirname(_DEDUP_FP), exist_ok=True)
-        tmp = _DEDUP_FP + ".tmp"
+        os.makedirs(os.path.dirname(fp), exist_ok=True)
+        tmp = fp + ".tmp"
         with open(tmp, "w", encoding="utf-8") as f:
             json.dump(d, f, ensure_ascii=False, indent=1)
-        os.replace(tmp, _DEDUP_FP)
+        os.replace(tmp, fp)
     except Exception:
         pass
 
 
 # ---------------------------------------------------------------- 卡片
-def _row(h: dict, uni: dict) -> str:
+def _row(h: dict, uni: dict, profile: dict = None) -> str:
+    profile = profile or PROFILE_MA5
+    ma_key, dev_key, line = profile["ma_key"], profile["dev_key"], profile["line"]
     name = (uni.get(h["code"]) or {}).get("name") or h["code"]
     _pct = h.get("pct")
     _pct_txt = ("　今日 " + ("+" if _pct >= 0 else "") + f"{_pct:.2f}%") if isinstance(_pct, (int, float)) else ""
-    return (f"· `{h['code']}` **{name}**　现价 {h['price']}　MA5 {h['ma5']}"
-            f"（{'+' if h['dev5_pct'] >= 0 else ''}{h['dev5_pct']}%）"
+    return (f"· `{h['code']}` **{name}**　现价 {h['price']}　{line} {h[ma_key]}"
+            f"（{'+' if h[dev_key] >= 0 else ''}{h[dev_key]}%）"
             f"　最低 {h['low']}（{'+' if h['touch_pct'] >= 0 else ''}{h['touch_pct']}%）{_pct_txt}")
 
 
-def build_card(hits: list, now: datetime = None, uni: dict = None) -> dict:
+def build_card(hits: list, now: datetime = None, uni: dict = None,
+               profile: dict = None) -> dict:
     """命中列表 → 飞书交互卡（按来源分组；多源命中标在括号里）。"""
+    profile = profile or PROFILE_MA5
+    line = profile["line"]
     now = now or datetime.now()
     uni = uni or {}
     date_str = now.strftime("%Y-%m-%d")
@@ -242,49 +333,54 @@ def build_card(hits: list, now: datetime = None, uni: dict = None) -> dict:
             if shown >= CARD_MAX_ROWS:
                 break
             extra = ("（同时属：" + "、".join(_SRC_SHORT[s] for s in srcs[1:]) + "）") if len(srcs) > 1 else ""
-            rows.append(_row(h, uni) + extra)
+            rows.append(_row(h, uni, profile) + extra)
             shown += 1
         rest = len(items) - shown if len(items) > shown else 0
         if rest > 0:
             rows.append(f"　…另有 {rest} 只（见 GUI）")
 
-    head = (f"**口径**：昨收 > 昨 MA5 · 今日最低在 MA5-{abs(TOUCH_MIN) * 100:.0f}% ~ "
-            f"MA5+{TOUCH_TOL * 100:.1f}% 之间 · 现价在 MA5 ~ MA5+{ABOVE_MAX * 100:.0f}% 之间\n"
+    _rising = " · 昨日均线需上行" if profile.get("require_ma_rising") else ""
+    head = (f"**口径**：昨收 > 昨 {line}{_rising} · 今日最低在 {line}-{abs(profile['touch_min']) * 100:.0f}% ~ "
+            f"{line}+{profile['touch_tol'] * 100:.1f}% 之间 · 现价在 {line} ~ {line}+{profile['above_max'] * 100:.0f}% 之间\n"
             f"共 **{len(hits)}** 只 · 每只每日只报一次 · 纯通知，不构成交易指令")
     markdown = head + "\n" + "\n".join(rows)
     return {"msg_type": "interactive",
             "card": {"header": {"template": "orange",
                                 "title": {"tag": "plain_text",
-                                          "content": f"📉 回踩5日线不破 - {date_str} {now.strftime('%H:%M')}"}},
+                                          "content": f"📉 {profile['title']} - {date_str} {now.strftime('%H:%M')}"}},
                      "elements": [{"tag": "markdown", "content": markdown}]}}
 
 
-def _push(card: dict, n: int) -> bool:
+def _push(card: dict, n: int, profile: dict = None) -> bool:
     """**必传三参并检查返回值**（本仓血案：只传 card ⇒ TypeError 被吞 ⇒ 从未发出过）。"""
+    profile = profile or PROFILE_MA5
     try:
         from config import send_feishu_payload
         return bool(send_feishu_payload(
-            card, success_log=f"回踩5日线不破飞书推送: {n} 只",
-            error_prefix="回踩5日线不破推送"))
+            card, success_log=f"{profile['title']}飞书推送: {n} 只",
+            error_prefix=f"{profile['title']}推送"))
     except Exception as e:
-        log.warning(f"⚠️ [回踩MA5] 推送异常（不写去重，下轮重试）: {type(e).__name__}: {str(e)[:160]}")
+        log.warning(f"⚠️ [{profile['title']}] 推送异常（不写去重，下轮重试）: {type(e).__name__}: {str(e)[:160]}")
         return False
 
 
 # ---------------------------------------------------------------- 一轮
 def run_once(now: datetime = None, dry_run: bool = False, top_n: int = None,
-             push_fn=None, snapshot_fn=None, uni=None, ctx=None) -> dict:
+             push_fn=None, snapshot_fn=None, uni=None, ctx=None,
+             profile: dict = None) -> dict:
     """跑一轮：建名单 → 完成日上下文 → 实时快照 → 判定 → 去重 → 推送。**不抛。**
 
-    返回 {"ok","hits","pushed","reason"}；`push_fn`/`snapshot_fn`/`uni`/`ctx` 是测试缝。
+    `profile` 选哪种均线（PROFILE_MA5 默认 / PROFILE_MA60）；
+    `push_fn`/`snapshot_fn`/`uni`/`ctx` 是测试缝。
     """
+    profile = profile or PROFILE_MA5
     now = now or datetime.now()
     today = now.strftime("%Y-%m-%d")
     uni = uni if uni is not None else universe(top_n)
     if not uni:
         return {"ok": False, "hits": [], "pushed": False, "reason": "三源名单为空"}
     if ctx is None:
-        ctx = build_context(list(uni), today)
+        ctx = build_context(list(uni), today, profile)
     if not ctx:
         return {"ok": False, "hits": [], "pushed": False, "reason": "完成日线上下文为空（日线缓存没就绪）"}
 
@@ -295,15 +391,26 @@ def run_once(now: datetime = None, dry_run: bool = False, top_n: int = None,
     try:
         snap = snapshot_fn(list(ctx)) or {}
     except Exception as e:
-        log.warning(f"⚠️ [回踩MA5] 快照失败: {type(e).__name__}: {str(e)[:120]}")
+        log.warning(f"⚠️ [{profile['title']}] 快照失败: {type(e).__name__}: {str(e)[:120]}")
         return {"ok": False, "hits": [], "pushed": False, "reason": f"快照失败: {type(e).__name__}"}
     if not snap:
         return {"ok": False, "hits": [], "pushed": False, "reason": "快照为空"}
 
-    hits = judge(ctx, snap, today)
+    hits = _judge(ctx, snap, today, profile)
+    # 2026-11-04 owner：飞书只播日线多头（判不了 ⇒ 放行，见 core/stage_gate）
+    try:
+        from core.stage_gate import filter_bull
+        hits, _drop = filter_bull(hits)
+        if _drop:
+            log.info("[%s] 过滤非日线多头 %d 只: %s", profile["title"], len(_drop),
+                     [h.get("code") for h in _drop])
+    except Exception as e:                     # noqa: BLE001
+        log.warning("[%s] 多头过滤异常（按原样播报）: %s: %s", profile["title"],
+                    type(e).__name__, str(e)[:120])
     for h in hits:
         h["sources"] = (uni.get(h["code"]) or {}).get("sources") or []
-    dedup = _load_dedup()
+    _dedup_fp = _profile_dedup_fp(profile)
+    dedup = _load_dedup(_dedup_fp)
     seen = set(dedup.get(today) or [])
     fresh = [h for h in hits if h["code"] not in seen]
     if not fresh:
@@ -311,27 +418,28 @@ def run_once(now: datetime = None, dry_run: bool = False, top_n: int = None,
     if dry_run:
         return {"ok": True, "hits": fresh, "pushed": False, "reason": "dry_run"}
 
-    card = build_card(fresh, now, uni)
-    ok = (push_fn(card) if push_fn else _push(card, len(fresh)))
+    card = build_card(fresh, now, uni, profile)
+    ok = (push_fn(card) if push_fn else _push(card, len(fresh), profile))
     if not ok:
         return {"ok": True, "hits": fresh, "pushed": False, "reason": "推送失败（不写去重，下轮重试）"}
     seen.update(h["code"] for h in fresh)
     dedup[today] = sorted(seen)
-    _save_dedup(dedup)
+    _save_dedup(dedup, _dedup_fp)
     return {"ok": True, "hits": fresh, "pushed": True, "reason": ""}
 
 
 def run_loop(poll_sec: float = None, stop_event=None, sleep_fn=_time.sleep,
-             now_fn=datetime.now, on_run=None) -> None:
+             now_fn=datetime.now, on_run=None, profile: dict = None) -> None:
     """daemon 线程：交易时段每 `poll_sec` 秒跑一轮（默认 30 分钟）。
 
     与主循环**解耦**（main.py 一轮可达 15 分钟，挂主循环会把 30 分钟稀释成 30+ 分钟）。
-    60s 粒度轮转，避免长 sleep 错过开盘/收盘窗口。
+    60s 粒度轮转，避免长 sleep 错过开盘/收盘窗口。`profile` 选 MA5 / MA60。
     """
     from core.hunter_poll import in_trading_hours
+    profile = profile or PROFILE_MA5
     poll_sec = float(poll_sec or POLL_SEC)
     last = None
-    log.info("📉 回踩5日线不破轮询已启动（每 %.0f 分钟，交易时段）", poll_sec / 60.0)
+    log.info("📉 %s轮询已启动（每 %.0f 分钟，交易时段）", profile["title"], poll_sec / 60.0)
     while True:
         if stop_event is not None and stop_event.is_set():
             return
@@ -340,16 +448,16 @@ def run_loop(poll_sec: float = None, stop_event=None, sleep_fn=_time.sleep,
             if in_trading_hours(now) and (last is None
                                           or (now - last).total_seconds() >= poll_sec):
                 last = now
-                res = run_once(now)
+                res = run_once(now, profile=profile)
                 if on_run is not None:
                     try:
                         on_run(res)
                     except Exception:
                         pass
                 if res.get("pushed"):
-                    log.info("📉 回踩5日线不破：推送 %d 只", len(res.get("hits") or []))
+                    log.info("📉 %s：推送 %d 只", profile["title"], len(res.get("hits") or []))
                 elif res.get("hits"):
-                    log.warning("📉 回踩5日线不破：%s", res.get("reason"))
+                    log.warning("📉 %s：%s", profile["title"], res.get("reason"))
         except Exception as e:      # 轮询本体不许死
-            log.warning("⚠️ [回踩MA5] 本轮异常: %s: %s", type(e).__name__, str(e)[:160])
+            log.warning("⚠️ [%s] 本轮异常: %s: %s", profile["title"], type(e).__name__, str(e)[:160])
         sleep_fn(60)

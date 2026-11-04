@@ -32,6 +32,14 @@ from core import hunter_ma5_alert as ha  # noqa: E402
 from core import jiuyan_tags as core_label  # noqa: E402
 
 
+def setUpModule():
+    """闸门隔离：把「只播多头」闸的日线目录指到**空临时目录** ⇒ 判不了 ⇒ fail-open，
+    保持本文件原有的节流/汇总断言不变。闸门本身的行为见 test_stage_gate.py。"""
+    from core import stage_gate
+    stage_gate.DAILY_DIR = Path(tempfile.mkdtemp(prefix="stage_gate_empty_"))
+    stage_gate.clear_cache()
+
+
 def _hit(code="600000", side="up", ts="2026-11-04T10:00:00"):
     return {"code": code, "name": code, "side": side, "price": 10.0,
             "level": 10.0, "n": 1, "ts": ts}

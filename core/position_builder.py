@@ -1286,9 +1286,19 @@ def build_signal_card(result: dict) -> dict:
 
 
 def push_signal_feishu(result: dict, dry_run: bool = False) -> bool:
-    """推送建仓信号到飞书。返回是否成功。"""
+    """推送建仓信号到飞书。返回是否成功。
+
+    2026-11-04 owner：「飞书播报的信息目前仅限于多头的股票」——非日线多头不播
+    （判不了 ⇒ 放行，见 core/stage_gate）。"""
     if not _FEISHU_AVAILABLE:
         return False
+    try:
+        from core.stage_gate import is_bull
+        if not is_bull(result.get("code")):
+            log.info("[建仓信号] %s %s 非日线多头，跳过播报", result.get("code"), result.get("name"))
+            return False
+    except Exception as e:                     # noqa: BLE001  闸门异常不阻断播报
+        log.warning("[建仓信号] 多头过滤异常（按原样播报）: %s: %s", type(e).__name__, str(e)[:120])
     if dry_run:
         print(f"  [DRY-RUN] 跳过飞书推送: {result['code']} {result['name']}")
         return False

@@ -5,6 +5,7 @@ import os
 import sys
 import tempfile
 import unittest
+from pathlib import Path
 
 import pandas as pd
 
@@ -13,6 +14,14 @@ if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
 
 import core.ma_reclaim as mr  # noqa: E402
+
+
+def setUpModule():
+    """闸门隔离：日线目录指到空临时目录 ⇒ 判不了 ⇒ fail-open，保住旧断言。
+    「只播多头」闸本身由 tests/phase3/test_stage_gate.py 覆盖。"""
+    from core import stage_gate
+    stage_gate.DAILY_DIR = Path(tempfile.mkdtemp(prefix="stage_gate_empty_"))
+    stage_gate.clear_cache()
 
 
 class TestReclaim5(unittest.TestCase):

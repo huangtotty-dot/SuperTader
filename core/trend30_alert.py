@@ -154,6 +154,16 @@ def run_trend30_alert(codes=None, dry_run=False) -> list:
     events = check_trend30_flips(codes=codes, persist=True)
     if not events:
         return []
+    # 2026-11-04 owner：飞书只播日线多头（判不了 ⇒ 放行，见 core/stage_gate）
+    try:
+        from core.stage_gate import filter_bull
+        events, _drop = filter_bull(events)
+        if _drop:
+            log.info("[30min趋势] 过滤非日线多头 %d 只: %s", len(_drop), [e.get("code") for e in _drop])
+        if not events:
+            return []
+    except Exception as e:                     # noqa: BLE001
+        log.warning("[30min趋势] 多头过滤异常（按原样播报）: %s: %s", type(e).__name__, str(e)[:120])
     card = build_trend30_card(events)
     if dry_run:
         return events

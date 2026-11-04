@@ -222,7 +222,9 @@ class TestHunterPollChecks(unittest.TestCase):
     def _poll_with(self, data, scored):
         import core.hunter_poll as hp
         orig_ensure = hp._ensure_path
+        orig_cand = hp.bull_converged_codes
         hp._ensure_path = lambda: None
+        hp.bull_converged_codes = lambda today=None: {"000000"}   # 桩：非空即可（筛选逻辑另测）
         try:
             import stock_hunter.main as H
             orig_pd, orig_ss = H.prepare_data, H.score_stocks
@@ -234,6 +236,7 @@ class TestHunterPollChecks(unittest.TestCase):
                 H.prepare_data, H.score_stocks = orig_pd, orig_ss
         finally:
             hp._ensure_path = orig_ensure
+            hp.bull_converged_codes = orig_cand
 
     @staticmethod
     def _wl(cov_rows=100, total=100):
@@ -401,6 +404,8 @@ class TestHunterPollChecks(unittest.TestCase):
     def test_03_exception_captured_not_raised(self):
         import core.hunter_poll as hp
         hp._ensure_path = lambda: None
+        orig_cand = hp.bull_converged_codes
+        hp.bull_converged_codes = lambda today=None: {"000000"}
         import stock_hunter.main as H
         orig = H.prepare_data
         H.prepare_data = lambda cfg, d: (_ for _ in ()).throw(RuntimeError("行情源挂了"))
@@ -408,6 +413,7 @@ class TestHunterPollChecks(unittest.TestCase):
             res = hp.poll_once("2026-10-11")
         finally:
             H.prepare_data = orig
+            hp.bull_converged_codes = orig_cand
         self.assertFalse(res["ok"])
         self.assertEqual(res["anomalies"][0]["kind"], "run_exception")
         self.assertIn("行情源挂了", res["anomalies"][0]["msg"])

@@ -753,6 +753,36 @@ def _start_ma5_pullback_watch() -> None:
 _ma5_pullback_thread = None
 
 
+def _start_ma60_pullback_watch() -> None:
+    """2026-11-04 owner：「飞书通知增加一个：回踩60日均线不破」。
+
+    与「回踩5日线」同源同代码（`core.ma5_pullback.PROFILE_MA60`），只是均线周期 60：
+    判定 = 昨收站在 MA60 上 · 今日最低回到 MA60 附近 ±容差 · 现价未破线也没飞走 ·
+    **昨日 MA60 较 20 日前上行**（下行的 60 日线不当支撑）；飞书闸门另限日线多头。
+    独立 daemon 线程 + 独立去重文件（ma60_pullback_pushed.json）；
+    开关：feishu.enabled + feishu.notify_on_ma60_pullback。
+    """
+    global _ma60_pullback_thread
+    try:
+        if not _hunter_ma5_feishu_enabled("notify_on_ma60_pullback"):
+            log.info("📉 回踩60日线不破轮询: 已在配置中关闭（feishu.notify_on_ma60_pullback）")
+            return
+        if _ma60_pullback_thread is not None and _ma60_pullback_thread.is_alive():
+            return
+        from core.ma5_pullback import run_loop, POLL_SEC, PROFILE_MA60
+        _interval = float(PARAMS.get("ma60_pullback_poll_sec", POLL_SEC) or POLL_SEC)
+        _ma60_pullback_thread = _threading.Thread(
+            target=run_loop, kwargs={"poll_sec": _interval, "profile": PROFILE_MA60},
+            name="ma60-pullback-watch", daemon=True)
+        _ma60_pullback_thread.start()
+        log.info("📉 回踩60日线不破轮询已启动（独立线程，每 %.0f 分钟，交易时段）" % (_interval / 60.0))
+    except Exception as e:
+        log.warning(f"⚠️ 回踩60日线不破轮询启动失败（不阻断主循环）: {str(e)[:160]}")
+
+
+_ma60_pullback_thread = None
+
+
 def _start_hunter_ma5_watch() -> None:
     """启动「**异常监控池**内个股·刚站上5日线」实时 watcher（2026-10-20 建，2026-10-22 换名单）。
 
@@ -903,6 +933,16 @@ def _push_price_alert(hits: list, now_ts: float = None) -> None:
     """画框突破推送（2026-11-04 加节流：同票同向冷却 + 全局限流 + 积压合并）。"""
     if not _price_alert_feishu_enabled():
         return
+    # 2026-11-04 owner：「飞书播报的信息目前仅限于多头的股票」——非日线多头不播（判不了 ⇒ 放行）。
+    # ⚠️ 即便 hits 全被滤掉也**不能 return**：调用方会用 `hits=[]` 来"冲刷积压"（下面还要合并发）。
+    try:
+        from core.stage_gate import filter_bull
+        hits, _drop = filter_bull(hits)
+        if _drop:
+            log.info("[突破预警] 过滤非日线多头 %d 只: %s",
+                     len(_drop), [h.get("code") for h in _drop])
+    except Exception as e:                     # noqa: BLE001  闸门异常不得阻断告警
+        log.warning("[突破预警] 多头过滤异常（按原样播报）: %s: %s", type(e).__name__, str(e)[:120])
     try:
         now = datetime.now()
         _ts = float(now_ts if now_ts is not None else now.timestamp())
@@ -2723,6 +2763,8 @@ def run_watch():
     _start_hunter_ma5_watch()
     # 2026-10-20：回踩5日线不破 · 30 分钟轮询（体检持仓 + 建仓池 + **异常监控池**）
     _start_ma5_pullback_watch()
+    # 2026-11-04：回踩60日线不破 · 同一套轮询（独立线程/独立去重/独立开关）
+    _start_ma60_pullback_watch()
 
 
     log.info("========= 做T终极护城河防御版 启动 =========")

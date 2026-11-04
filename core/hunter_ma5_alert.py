@@ -403,10 +403,30 @@ def scan_live_once(ctx: dict, below_today: set, provider=None, today: str = None
     return hits, bool(snap)
 
 
+def _bull_only(events: list, tag: str) -> list:
+    """2026-11-04 owner：「飞书播报的信息目前仅限于多头的股票」。
+    判不了（本地日线缺失/不足）⇒ **放行**（fail-open，见 core/stage_gate 模块头）。"""
+    if not events:
+        return events
+    try:
+        from core.stage_gate import filter_bull
+        kept, dropped = filter_bull(events)
+        if dropped:
+            log.info("[%s] 过滤非日线多头 %d 只: %s", tag, len(dropped),
+                     [e.get("code") for e in dropped])
+        return kept
+    except Exception as e:                       # noqa: BLE001  闸门异常不得阻断告警
+        log.warning("[%s] 多头过滤异常（按原样播报）: %s: %s", tag, type(e).__name__, str(e)[:120])
+        return events
+
+
 def push_events(events: list, date: str = None, top_n: int = None,
                 dry_run: bool = False, universe: str = "pool") -> list:
     """去重 → 发飞书；返回**本次新推**的事件。推送成功才写去重（失败下轮重试）。"""
     target = str(date or _today())
+    if not events:
+        return []
+    events = _bull_only(events, "站上5日线")
     if not events:
         return []
     dedup = _load_dedup()
@@ -454,6 +474,7 @@ def push_events_batched(events: list, date: str = None, top_n: int = None,
     target = str(date or _today())
     now = now or datetime.now()
     now_ts = now.timestamp()
+    events = _bull_only(events, "站上5日线汇总")
     if _DIGEST["day"] != target:
         _DIGEST.update({"day": target, "pending": [], "last_flush": 0.0})
     pend = _DIGEST["pending"]

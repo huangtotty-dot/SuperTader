@@ -8,6 +8,10 @@ owner 原话：「在实盘过程中，选股猎手应该每隔 30 分钟做轮�
 · **由 main.py 主循环驱动**（无头、不依赖 GUI 是否打开）——见 `main._maybe_run_hunter_poll`。
 · 每轮**重跑猎手取数 + 打分**（`prepare_data` → `score_stocks`），随后**校验结果**；
   任何异常 / 数据异常 ⇒ 飞书告警。
+· **2026-11-04 owner：「只轮询股票在多头，同时均线粘合的股票」**——
+  轮询池先按**完成日线**筛成「日线三态=多头（MA60 20日变化率>+3%）且均线粘合
+  （五线≤3% 或短线5/10/20≤2%）」，再交给 `prepare_data(only_codes=...)`；
+  筛选结果按日缓存（首轮 ~15s，之后 30 分钟轮询零成本）；筛不出票 ⇒ 本轮跳过取数（不算异常）。
 · **只发异常，不发常规报告**（30 分钟推一次报告会刷屏）；按 (日期, 异常类型) 去重。
 · 推送走 **`config.send_feishu_payload`，必传三参并检查返回值** —— 本仓有过血案：
   `core/hunter_ma5_alert.py` 里记着「2026-10-10 前这里只传了 card，每次都抛 TypeError，
@@ -18,6 +22,7 @@ owner 原话：「在实盘过程中，选股猎手应该每隔 30 分钟做轮�
 """
 from __future__ import annotations
 
+import inspect
 import io
 import json
 import logging
@@ -40,6 +45,13 @@ _DEDUP_FP = os.path.join(_BASE, "t_io", "state", "hunter_poll_alerts.json")
 # 0.95 留 5pp 余量：只有"池内 >5% 拿不到行情"才报，正常波动够不着。
 _MIN_COVERAGE = 0.95
 _DEDUP_KEEP = 10             # 去重文件保留最近 N 天
+
+# 2026-11-04 owner：「选股猎手轮询只轮询股票在多头，同时均线粘合的股票」。
+# 口径：日线三态=多头（MA60 20日变化率>+3%）**且** 均线粘合（core.ma_reclaim.convergence_state：
+# 五线≤3% 或 短线5/10/20≤2%）。用**完成日线**（不含今日盘中形成根）判，日线同日不变 ⇒ 按日缓存。
+_CAND_CACHE = {"date": None, "codes": None, "total": 0}
+_POOL_CACHE = {"mtime": None, "codes": None}
+_WATCHLIST_FP = os.path.join(_HUNTER_DIR, "watchlist_jiuyan.json")
 
 # 管线 stdout 里**已知常驻**的噪声：北交所日线四源全不通（见 memory/文档），每轮必然出现
 # 若干条 "920xxx 获取失败"，报警它 = 每轮永久噪声。证据：2026-10-12 三次观测中出现的
@@ -79,6 +91,88 @@ def _ensure_path() -> None:
     """
     if _HUNTER_DIR not in sys.path:
         sys.path.append(_HUNTER_DIR)
+
+
+def _hunter_pool_codes() -> list:
+    """猎手打分池的代码（`watchlist_jiuyan.json` 里**韭研概念非空**的票）。
+
+    与 `DataLoader` 的列口径一致（概念为空的行不进池）；按文件 mtime 缓存。
+    """
+    try:
+        mt = os.stat(_WATCHLIST_FP).st_mtime_ns
+    except OSError:
+        return []
+    if _POOL_CACHE["mtime"] == mt and _POOL_CACHE["codes"] is not None:
+        return _POOL_CACHE["codes"]
+    try:
+        with open(_WATCHLIST_FP, encoding="utf-8") as f:
+            wl = json.load(f)
+    except Exception as e:                      # noqa: BLE001
+        log.warning("猎手轮询：读 watchlist 失败，本轮按全池跑: %s: %s", type(e).__name__, str(e)[:120])
+        return []
+    codes = []
+    for code, info in (wl or {}).items():
+        if not isinstance(info, dict):
+            continue
+        has = any(str(info.get("jiuyan_concept" + ("" if k == 0 else str(k))) or "").strip()
+                  for k in range(10))
+        if has:
+            codes.append(str(code))
+    _POOL_CACHE.update({"mtime": mt, "codes": codes})
+    return codes
+
+
+def _completed_closes(code: str, today: str) -> list | None:
+    """本地日线缓存里**今天之前**的全部收盘（零网络；含 NaN 的坏行丢掉）。"""
+    from core import stage_gate
+    fp = stage_gate.DAILY_DIR / f"{stage_gate._norm_code(code)}.json"
+    try:
+        rows = json.loads(fp.read_text(encoding="utf-8")).get("rows") or []
+    except Exception:                           # noqa: BLE001
+        return None
+    out = []
+    for r in rows:
+        d = str(r.get("date") or "")[:10]
+        if not d or d >= today:
+            continue
+        try:
+            c = float(r.get("close"))
+        except (TypeError, ValueError):
+            continue
+        if c == c and c > 0:
+            out.append(c)
+    return out or None
+
+
+def bull_converged_codes(today: str = None) -> set:
+    """选股猎手轮询的**候选池**：日线多头 且 均线粘合（2026-11-04 owner）。
+
+    完成日线同日不变 ⇒ 结果按日期缓存一整天（首轮算一次，后续 30 分钟轮询零成本）。
+    """
+    today = str(today or datetime.now().strftime("%Y-%m-%d"))[:10]
+    try:
+        _wl_mt = os.stat(_WATCHLIST_FP).st_mtime_ns
+    except OSError:
+        _wl_mt = None
+    if (_CAND_CACHE["date"] == today and _CAND_CACHE.get("mtime") == _wl_mt
+            and _CAND_CACHE["codes"] is not None):
+        return set(_CAND_CACHE["codes"])
+    from core.ma_reclaim import convergence_state
+    from core.stage_gate import _stage_of_closes
+    pool = _hunter_pool_codes()
+    out = set()
+    for c in pool:
+        closes = _completed_closes(c, today)
+        if not closes or len(closes) < 81:       # 三态要 60+20 根；粘合要 60 根
+            continue
+        if _stage_of_closes(closes) != "多头":
+            continue
+        st = convergence_state(closes)
+        if st and st.get("conv"):
+            out.add(str(c))
+    _CAND_CACHE.update({"date": today, "codes": set(out), "total": len(pool), "mtime": _wl_mt})
+    log.info("猎手轮询筛选：日线多头+均线粘合 %d / %d 只", len(out), len(pool))
+    return out
 
 
 class _ThreadWarnCapture(logging.Handler):
@@ -198,6 +292,21 @@ def poll_once(date_str: str = None) -> dict:
         res["ok"] = False
         res["anomalies"].append({"kind": kind, "msg": str(msg)[:400]})
 
+    # 2026-11-04 owner：「只轮询股票在多头，同时均线粘合的股票」。
+    # 筛选失败 ⇒ 退回全池（宁可多跑，也别因为本地缓存异常让轮询停摆）。
+    _cands = None
+    try:
+        _cands = bull_converged_codes(date_str)
+        res["stats"]["filter"] = {"desc": "日线多头+均线粘合", "candidates": len(_cands)}
+        if not _cands:
+            res["stats"]["skipped"] = "本轮无「日线多头+均线粘合」的票"
+            log.info("猎手轮询：本轮无「日线多头+均线粘合」的票，跳过取数")
+            return res
+    except Exception as e:                     # noqa: BLE001
+        log.warning("猎手轮询：多头+均线粘合筛选失败（本轮按全池跑）: %s: %s",
+                    type(e).__name__, str(e)[:120])
+        _cands = None
+
     try:
         _ensure_path()
         import stock_hunter.main as H          # noqa: N813  （`if __name__` 有守卫，import 安全）
@@ -216,7 +325,11 @@ def poll_once(date_str: str = None) -> dict:
             with redirect_stdout(buf):
                 # ⚠️ `prepare_data` 的 docstring 写"返回 dict"，实际正常路径是 **`(data, loader)`** 元组
                 #（watchlist 缺失时才早退返回 dict）⇒ 两种形态都要收。
-                _out = H.prepare_data(cfg, date_str)
+                # 2026-11-04：把候选池传进去（老签名/测试桩不认 only_codes ⇒ 退回全池调用）。
+                if _cands is not None and "only_codes" in inspect.signature(H.prepare_data).parameters:
+                    _out = H.prepare_data(cfg, date_str, only_codes=_cands)
+                else:
+                    _out = H.prepare_data(cfg, date_str)
                 data, loader = (_out if isinstance(_out, tuple) else (_out, None))
                 scored = H.score_stocks(data, cfg)
                 # ⚠️ `summary/detail/sectors` **不在 prepare_data 里填**——CLI 是在 main() 里用
@@ -257,11 +370,19 @@ def poll_once(date_str: str = None) -> dict:
     cov = _coverage(wl)
     res["stats"]["coverage"] = round(cov, 3)
     res["stats"]["pool_rows"] = int(len(wl))
+    # ⚠️ 2026-11-04：候选池筛选开启时，"空"可能只是**筛完没剩下**，不是数据故障 ⇒ 只记日志。
+    #    （候选池本身为空的情况已在 poll_once 开头跳过本轮，不会走到这里。）
     if not scored:
-        _bad("empty_pool", "打分结果为空（打分池可能无有效行情）")
+        if _cands is None:
+            _bad("empty_pool", "打分结果为空（打分池可能无有效行情）")
+        else:
+            log.info("猎手轮询：筛选池 %d 只本轮无有效打分（不按数据故障告警）", len(_cands))
     summary = data.get("summary")
     if summary is None or getattr(summary, "empty", True):
-        _bad("empty_summary", "板块排名(summary)为空")
+        if _cands is None:
+            _bad("empty_summary", "板块排名(summary)为空")
+        else:
+            log.info("猎手轮询：筛选池本轮板块排名为空（不按数据故障告警）")
     # 摘要素材（owner 2026-10-12：每轮要能收到一条精简猎手信息，不只是异常）
     try:
         import pandas as _pd
@@ -300,6 +421,15 @@ def poll_once(date_str: str = None) -> dict:
     # 保持 owner 2026-10-12 定的「每轮恰好一条消息」）。探测失败只记日志，绝不影响异常判定。
     try:
         res["breakouts"] = find_box_breakouts(wl, date_str)
+        # 2026-11-04 owner：飞书只播日线多头（判不了 ⇒ 放行，见 core/stage_gate）
+        try:
+            from core.stage_gate import filter_bull
+            res["breakouts"], _drop = filter_bull(res["breakouts"])
+            if _drop:
+                log.info(f"猎手突破提示：过滤非日线多头 {len(_drop)} 只 "
+                         f"{[b['code'] for b in _drop]}")
+        except Exception as e:                 # noqa: BLE001  闸门异常不阻断播报
+            log.warning(f"猎手突破：多头过滤异常（按原样播报）: {type(e).__name__}: {e}")
         if res["breakouts"]:
             log.info(f"猎手突破提示：本轮 {len(res['breakouts'])} 只 "
                      f"{[b['code'] for b in res['breakouts']]}")
@@ -497,6 +627,12 @@ def format_summary_card(res: dict, date_str: str, now: datetime = None) -> dict:
         more = f"（等 {len(anoms)} 项）" if len(anoms) > 1 else ""
         lines.append(f"{_KIND_SHORT.get(a['kind'], a['kind'])}：{msg}{more}")
     st = res.get("stats") or {}
+    # 2026-11-04 owner：轮询池只保留「多头+均线粘合」⇒ 心跳里必须写清楚筛剩多少
+    _f = st.get("filter") or {}
+    if _f.get("desc"):
+        lines.append(f"轮询池：{_f['desc']} {_f.get('candidates', 0)} 只")
+    if st.get("skipped"):
+        lines.append(str(st["skipped"]))
     if st.get("top3"):
         lines.append("涨停前三：" + " / ".join(f"{n} {lu}" for n, lu, _ in st["top3"]))
     if st.get("top1_names"):
