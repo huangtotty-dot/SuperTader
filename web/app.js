@@ -5752,6 +5752,8 @@ async function tickStockChartLive() {
     const r = await apiCall("load_chart_realtime", code, period,
                             stockChartLiveSig[period] || "");
     if (code !== stockChartCode || !r) return;         // 期间换票/关窗
+    // 2026-11-05：分钟图上的「贴关键均线」概率标记（后端只在 min* 周期给）
+    _paintHintEl(document.getElementById("stockMaHint"), r.hint || null);
     if (r.quote && r.quote.price) {
       stockChartData.current_price = r.quote.price;
       stockChartData.live = { ts: r.ts, quote: r.quote, session: !!r.session };
@@ -5830,6 +5832,7 @@ async function openStockChart(code, name) {
   if (_flowEl) { _flowEl.style.display = "none"; document.getElementById("stockFlowBody").innerHTML = ""; }
   _flowCache = { code: null, step: 0, data: null, ts: 0 };
   document.getElementById("stockModalTitle").textContent = `${name} (${code}) 技术分析`;
+  _paintHintEl(document.getElementById("stockMaHint"), null);   // 换票先清掉上一只的标记
   // 必须先 dispose 再清 innerHTML：实例复用后它绑在旧 DOM 上，节点被换掉会让 setOption 报错
   if (stockChartInst) { stockChartInst.dispose(); stockChartInst = null; }
   stockChartVersion = null;
@@ -12796,8 +12799,7 @@ function _mwSigOf(it, i) {
 /* 2026-11-05：贴关键均线的「站稳概率」标记 —— 只有 5 分钟周期后端才给。
    颜色：≥38% 红（历史上更可能站上）、30~38% 黄、<30% 灰。
    ⚠️ 只表示「能否站上均线」，不是买入信号：实验里各档的 30 分钟收益几乎无差。 */
-function _mwPaintHint(i, h) {
-  const el = document.getElementById("mwHint" + i);
+function _paintHintEl(el, h) {
   if (!el) return;
   if (!h || h.prob == null) { el.textContent = ""; el.title = ""; return; }
   const p = Math.round(h.prob * 100);
@@ -12805,11 +12807,15 @@ function _mwPaintHint(i, h) {
   el.style.color = p >= 38 ? "#f85149" : (p >= 30 ? "#d29922" : "#6e7681");
   el.style.borderColor = p >= 38 ? "rgba(248,81,73,.55)"
     : (p >= 30 ? "rgba(210,153,34,.5)" : "rgba(139,148,158,.28)");
-  el.title = `5 分钟口径：距线 ${h.dist_pct != null ? h.dist_pct.toFixed(2) : "—"}%`
+  el.title = `5 分钟口径（与看盘周期无关）：距线 ${h.dist_pct != null ? h.dist_pct.toFixed(2) : "—"}%`
     + ` · 20 日波动 ${h.atr_pct != null ? h.atr_pct.toFixed(1) : "—"}%`
     + ` · 当日第 ${(h.bar || 0) + 1} 根\n`
-    + `30 分钟后仍站在该均线上方 0.2% 的历史概率约 ${p}%（同期基准约 30%）`
+    + `走到该均线下方 2% 以内时，30 分钟后仍站在上方的历史概率约 ${p}%（同期基准约 24%）`
     + `\n⚠️ 只表示能否站上均线，不是买入信号`;
+}
+
+function _mwPaintHint(i, h) {
+  _paintHintEl(document.getElementById("mwHint" + i), h);
 }
 
 async function mwTick() {

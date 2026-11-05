@@ -650,17 +650,16 @@ class TestMaTouchHint:
         assert 0.0 < h["prob"] < 1.0
         assert abs(h["dist_pct"] - 0.1) < 0.02
 
-    def test_盘中没摸到线_不标注(self):
-        assert self._call(last_high=9.95, last_close=9.90) is None
+    def test_没摸到线但走进贴近带_也要标注(self):
+        """2026-11-05 owner 反馈：60 分图上 1.4% 的距离也该有提示 ⇒ 不要求「摸到」。"""
+        h = self._call(last_high=9.95, last_close=9.90)      # 离 MA20 1%，没摸到
+        assert h and h["ma"] == 20
 
     def test_收盘已站上_不标注(self):
         assert self._call(last_close=10.02) is None
 
     def test_离得太远_不标注(self):
         assert self._call(ma_now={20: 10.0}, last_high=10.0, last_close=9.70) is None
-
-    def test_上一根还在线上方_不算自下而上(self):
-        assert self._call(prev_close=10.05) is None
 
     def test_取最近的那条线(self):
         h = self._call(ma_now={5: 9.995, 20: 10.30},
@@ -672,16 +671,20 @@ class TestMaTouchHint:
         far = self._call(last_close=9.94)
         assert near["prob"] > far["prob"]
 
-    def test_只标注5分钟周期(self):
+    def test_与看盘周期无关(self):
+        """60/30/10 分也要标注：内部固定用 5 分钟 bar 判断（模型是 5min 口径）。"""
         py = (_ROOT / "t_gui.py").read_text(encoding="utf-8")
-        assert '"hint": self._mw_ma_hint(_c, fr) if _p == "min5" else None' in py
+        assert '"hint": self._mw_ma_hint(_c),' in py
+        assert 'def _mw_hint_bars(self, code):' in py
+        assert '_fetch_min_bars_tencent(code, "5min")' in py, "标记固定用 5 分钟 bar"
+        assert "def _hint_bars_worker(code):" in py
 
     def test_瘦帧也带标记(self, monkeypatch):
         api = t_gui.Api()
         fr = _frame(120)
         fr["sig"] = "d119|2.000|120"
         monkeypatch.setattr(api, "_mw_frame", lambda c, period="min5": (fr, "fresh"))
-        monkeypatch.setattr(api, "_mw_ma_hint", lambda c, f: {"ma": 20, "prob": 0.35})
+        monkeypatch.setattr(api, "_mw_ma_hint", lambda c: {"ma": 20, "prob": 0.35})
         r = api.load_multi_chart(["600000"], "min5", 90, {"600000": "d119|2.000|120"})
         it = r["items"][0]
         assert it.get("unchanged") is True
@@ -706,9 +709,37 @@ class TestMaTouchHint:
         ctx = api._daily_ma_ctx("600000")
         assert ctx and ctx["sums"][20] == 190.0      # 前 19 个完成日 × 10.0
         assert abs(ctx["atr_pct"] - 4.0) < 0.01      # (10.2−9.8)/10 = 4%
-        # 上一根收 9.98（在线下 >0.1%），最后一根盘中摸到 10.01、收 9.99（仍在线上方之下）
-        fr = {"dates": [f"2026-11-05 10:{i:02d}" for i in range(20)],
-              "ohlc": [[10.0, 9.98, 9.95, 10.01]] * 19 + [[10.0, 9.99, 9.95, 10.01]]}
-        h = api._mw_ma_hint("600000", fr)
+        # 标记的数据源固定是 5 分钟 bar（与看盘周期无关）⇒ 打桩 `_mw_hint_bars`
+        monkeypatch.setattr(api, "_mw_hint_bars", lambda c: {
+            "dates": ["2026-11-05 10:00", "2026-11-05 10:05"],
+            "ohlc": [[10.0, 9.98, 9.95, 10.01], [10.0, 9.99, 9.95, 10.01]],
+            "n_today": 7})
+        h = api._mw_ma_hint("600000")
         # 平盘造的数据里几条均线几乎重合 ⇒ 取最近的那条，不限定是哪一条
         assert h and h["ma"] in (5, 10, 20, 30) and 0 < h["prob"] < 1
+
+    def test_单图分钟周期也带标记(self, monkeypatch):
+        """owner 2026-11-05：「我要在 5 分钟线图中显示」——单图 5 分/其它分钟档都要有。"""
+        api = t_gui.Api()
+        fr = _frame(120)
+        fr["sig"] = "s1"
+        monkeypatch.setattr(api, "_chart_live_frame", lambda c, p: (fr, "fresh"))
+        monkeypatch.setattr(api, "_mw_ma_hint", lambda c: {"ma": 20, "prob": 0.31})
+        r = api.load_chart_realtime("600000", "min5", None)
+        assert r["hint"]["prob"] == 0.31
+        r2 = api.load_chart_realtime("600000", "daily", None)
+        assert r2.get("hint") is None, "日/周/月 K 不挂「接下来 30 分钟」的概率"
+
+    def test_5分钟bar走缓存_调用线程不取数(self):
+        """`_mw_hint_bars` 是 SWR：命中缓存直接回，不在 js_api 线程上发网络请求。"""
+        import time as _t
+        t_gui._HINT_BARS.clear()
+        t_gui._HINT_BARS_RUN.clear()
+        bars = {"dates": ["2026-11-05 14:55", "2026-11-05 15:00"],
+                "ohlc": [[10.0, 9.98, 9.95, 10.01], [10.0, 9.99, 9.95, 10.01]],
+                "n_today": 48}
+        t_gui._HINT_BARS["600000"] = (_t.time(), bars)
+        api = t_gui.Api.__new__(t_gui.Api)
+        assert api._mw_hint_bars("600000") is bars
+        t_gui._HINT_BARS.clear()
+        t_gui._HINT_BARS_RUN.clear()

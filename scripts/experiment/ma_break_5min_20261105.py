@@ -49,6 +49,10 @@ CACHE = BASE / "t_io" / "cache" / "tushare_mins"
 OUT = BASE / "tmp" / "ma_break_5min_events.parquet"
 MAS = (5, 10, 20, 30, 60)
 HS = (6, 12, 24)
+RELAX = "--relax" in sys.argv       # 贴近带口径（不要求「摸到」，只要求走进线下方 2%）
+RELAX_BAND = 0.02
+if RELAX:
+    OUT = BASE / "tmp" / "ma_break_5min_events_relax.parquet"
 EPS_BRK = 0.002         # 站上均线 0.2% 才算「翻过去」
 BELOW_MARGIN = 0.001    # 前一根须在均线下方 0.1% 以上
 
@@ -132,14 +136,29 @@ def build() -> pd.DataFrame:
 
         for nn in MAS:
             m = ma_rt[nn]
-            cond = (
-                (day_codes >= nn - 1)
-                & (day_codes == prev_day)
-                & np.isfinite(m) & np.isfinite(prev_close)
-                & (prev_close < prev_ma[nn] * (1 - BELOW_MARGIN))  # 上一根仍在下方
-                & (high >= m)                                     # 本根盘中摸到
-                & (close < m)                                     # 收盘仍在下方（问题才干净）
-            )
+            if RELAX:
+                # 2026-11-05 放宽口径（owner 反馈「60 分图上看不到标记」）：不算「摸到」，
+                # 只要求**走进均线下方 2% 的贴近带**（从带外进入的第一根）——
+                # 这才是「走到关键位置」的完整集合（摸线只是其中 dist→0 的一小部分）。
+                _dp = (prev_ma[nn] - prev_close) / prev_ma[nn]
+                _in_band = (np.isfinite(_dp) & np.isfinite(prev_close)
+                            & (_dp > 0) & (_dp <= RELAX_BAND))
+                cond = (
+                    (day_codes >= nn - 1)
+                    & np.isfinite(m) & np.isfinite(prev_ma[nn])
+                    & (close < m)
+                    & (((m - close) / m) <= RELAX_BAND)
+                    & ((day_codes != prev_day) | ~_in_band)
+                )
+            else:
+                cond = (
+                    (day_codes >= nn - 1)
+                    & (day_codes == prev_day)
+                    & np.isfinite(m) & np.isfinite(prev_close)
+                    & (prev_close < prev_ma[nn] * (1 - BELOW_MARGIN))  # 上一根仍在下方
+                    & (high >= m)                                     # 本根盘中摸到
+                    & (close < m)                                     # 收盘仍在下方（问题才干净）
+                )
             if not cond.any():
                 continue
             # 每日只取第一根（同一日均线的一次接触）
