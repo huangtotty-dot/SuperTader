@@ -1376,7 +1376,13 @@ function renderTradeHistory(d) {
             + `<br><span style="color:#8b949e">已实现 ${f(r.cum_realized)} · 累计买入 ${fmt(r.cum_buy || 0, 0)}</span>`
             + (r.today_est ? '<br><span style="color:#8b949e">今日点：当天无成交，浮动按台账最新收盘价估</span>' : "");
         } },
-        xAxis: { ...ECH_BASE.xAxis, type: "category", data: curve.map(x => x.date.slice(5)) },
+        // 2026-11-05 owner：「累计收益趋势没有更新11月月份的坐标」——数据里最后一点是
+        // 收盘后补的「今天」（11-05），但 category 轴默认**不强制标注末端**，自动抽稀后
+        // 最后一个刻度停在 10-28，看着像没进 11 月 ⇒ showMaxLabel 钉住最后一天（首日同理）。
+        xAxis: { ...ECH_BASE.xAxis, type: "category",
+                 data: curve.map(x => x.date.slice(5)),
+                 axisLabel: { ...(ECH_BASE.xAxis.axisLabel || {}),
+                              showMinLabel: true, showMaxLabel: true } },
         yAxis: [
           { ...ECH_BASE.yAxis, name: "%", nameTextStyle: { color: "#8b949e", fontSize: 10 },
             axisLabel: { color: "#8b949e", fontSize: 10, formatter: v => (v >= 0 ? "+" : "") + fmt(v, 2) + "%" } },
@@ -2452,7 +2458,7 @@ function renderSectorMaBreadth(d) {
     graphics.push({ type: "rect", silent: true, z: 0,
       shape: { x: x0 + 10, y: y0 + 6, width: cellW - 20, height: cellH - 14, r: 10 },
       style: { fill: "#121d29", stroke: "rgba(139,148,158,.28)", lineWidth: 1,
-               shadowColor: "rgba(0,0,0,.5)", shadowBlur: 14, shadowOffsetY: 3 } });
+               shadowColor: "rgba(0,0,0,.45)", shadowBlur: 8, shadowOffsetY: 2 } });
     grids.push({ left: x0 + padL, top: y0 + padT,
                  width: Math.max(40, cellW - padL - padR), height: cellH - padT - padB });
     xAxes.push({
@@ -2535,7 +2541,7 @@ function renderSectorMaBreadth(d) {
       name, type: "line", xAxisIndex: i, yAxisIndex: i,
       data: vals, smooth: 0.28, connectNulls: false,
       showSymbol: true, symbol: "circle", symbolSize: 3.4,
-      lineStyle: { width: 2, color, shadowColor: color, shadowBlur: 6, shadowOffsetY: 1 },
+      lineStyle: { width: 2, color },   // 2026-11-05：去掉逐线阴影（35 格 × 5 线 = 175 条带 shadow 的折线，渲染明显变慢）
       itemStyle: { color, borderColor: "#141b24", borderWidth: 1.2 },
       // 2026-10-21：5 日线加**极淡的面积填充**（两条线叠在一起时更容易分清主次）；
       // 再画一条 **50% 参考虚线**——强弱分界不用心算。只画一次（挂 5 日线上）。
@@ -11868,6 +11874,12 @@ function _mwNormCode(raw) {
   return d ? d[1] : "";
 }             // 每格只画最后 48 根 = 5 分 K 的一个交易日（owner：别显示太多 K 线）
 let mwCodes = [], mwInsts = [], mwTimer = null, mwBusy = false;
+/* 2026-11-05：每格的**渲染签名** —— 数据/缩放/画框都没变就跳过 setOption。
+   4s 一跳、6 格全量重画，盘前/盘后数据根本不变，没必要反复走 ECharts（notMerge 重建）；
+   跳过渲染后 JS 主线程空出来，pywebview 的返回通道也不堵（这是"多窗口卡死"的主因之一）。 */
+let mwSig = [];
+/* 2026-11-05：每只票**后端帧签名**（sig）—— 传给后端，没变就不回序列（省 ~30KB/格/跳）。 */
+let mwFrameSig = {};
 // 2026-11-04：多窗口记忆（后端共享状态）——独立原生窗口与主窗口 origin 可能不同，
 // localStorage 不通，而主窗口开窗时还会用内存 codes 当 seed 覆盖看盘窗自己的列表。
 let _mwRemoteCodes = null, _mwRemoteLayout = null;
@@ -11981,6 +11993,7 @@ function mwSetPeriod(p) {
   try { localStorage.setItem(MW_LS_PERIOD, p); } catch (e) { /* 忽略 */ }
   try { apiCall("save_multi_watch", null, null, p).catch(() => {}); } catch (e) { /* 老后端 */ }
   mwZoom = [];
+  mwFrameSig = {};       // 2026-11-05：帧 sig 是按周期的 ⇒ 换周期必须重取整帧
   _mwPeriodUI();
   _mwKickTick();
 }
@@ -12259,6 +12272,7 @@ function _mwBuildCells() {
   mwInsts.forEach(i => { try { i.dispose(); } catch (e) { /* 忽略 */ } });
   mwInsts = [];
   mwZoom = [];                 // 重开窗口 / 重建格子 ⇒ 缩放归位（换票同理，见 mwPick）
+  mwSig = [];                  // 渲染签名一并清空 ⇒ 重建后必定重画一次
   const hs = _mwHoldings();
   // 候选写进共享 datalist：输入框有提示、也能直接敲别的代码
   const dl = document.getElementById("mwNames");
@@ -12306,6 +12320,8 @@ function mwPick(i, raw) {
   const code = _mwNormCode(raw);
   mwCodes[i] = code;
   mwZoom[i] = null;            // 换票 ⇒ 缩放归位（上一只票的窗口对这只没意义）
+  mwSig[i] = "";               // 换票必须重画
+  delete mwFrameSig[code];     // 换回同一只票时也要重取整帧
   _mwSaveCodes();
   // 下拉回填成裸码（与格子里的图对齐）；下拉里没有该码时它自然显示空，不影响出图
   const sel = document.querySelectorAll(".mw-sel")[i];
@@ -12421,23 +12437,52 @@ function _mwOption(s, dma, levels, trades, zoom, code) {
     lineStyle: { color, type: "solid", width: 2.2, opacity: 1,
                  shadowColor: color, shadowBlur: 6 },
     label: {
+      show: !(lab && lab.showLabel === false),
       formatter: `${txt} ${Number(y).toFixed(2)}`,
       color: (lab && lab.fg) || "#ffffff",
       fontSize: 10, fontWeight: 700,
       backgroundColor: (lab && lab.bg) || color,
       padding: [1, 3], borderRadius: 3,
-      // MA5 标签在线**上方**，MA10/20 在线**下方** —— 三条线挨得近时标签不互相压
+      // MA5 标签在线**上方**，MA10/20/30/60 在线**下方**；distance 让贴近的几条错开
       position: (lab && lab.pos) || "insideStartBottom",
+      distance: (lab && lab.dist) || 0,
     },
   };
-  const _ma5Line = _dmaLine(dma && dma.ma5, "#58a6ff", "日MA5",
-                            { bg: "rgba(88,166,255,.95)", fg: "#ffffff", pos: "insideStartTop" });
-  const _dmaData = [
-    _dmaLine(dma && dma.ma10, "#bc8cff", "日MA10",
-             { bg: "rgba(124,77,255,.95)", fg: "#ffffff", pos: "insideStartBottom" }),
-    _dmaLine(dma && dma.ma20, "#2dd4bf", "日MA20",
-             { bg: "rgba(13,148,136,.95)", fg: "#ffffff", pos: "insideStartBottom" }),
-  ].filter(Boolean);
+  /* 2026-11-05 owner：「多窗口里如果上方有 30 日线/60 日线，也要显示，前提是离得很近，
+     不要影响现在的显示比例」。判定 = 该线落在**当前可见 K 线的价格区间**内（±0.5% 容差）：
+     区间外的价位 ECharts 本来就会裁掉、也不会撑大 y 轴（已实测），加上这个条件是为了
+     "远的不画、近的才画"的口径与语义明确。颜色沿用单图的 日MA30 橙 / 日MA60 紫。
+     标签位置**按价格从高到低交替上下**（相邻两条永远不在一侧），比固定位置更抗贴线重叠。 */
+  const _ohlc0 = s.ohlc || [];
+  let _lo = null, _hi = null;
+  for (const b of _ohlc0) {
+    if (!b) continue;
+    if (_lo == null || b[2] < _lo) _lo = b[2];
+    if (_hi == null || b[3] > _hi) _hi = b[3];
+  }
+  const _near = y => (y != null && isFinite(y) && _lo != null
+    && y >= _lo * 0.995 && y <= _hi * 1.005);
+  const _dmaDefs = [
+    { key: "ma5", color: "#58a6ff", txt: "日MA5", bg: "rgba(88,166,255,.95)", pos: "insideStartTop", dist: 0 },
+    { key: "ma10", color: "#bc8cff", txt: "日MA10", bg: "rgba(124,77,255,.95)", pos: "insideStartBottom", dist: 0 },
+    { key: "ma20", color: "#2dd4bf", txt: "日MA20", bg: "rgba(13,148,136,.95)", pos: "insideStartBottom", dist: 16 },
+    { key: "ma30", color: "#f0883e", txt: "日MA30", bg: "rgba(240,136,62,.95)", pos: "insideEndTop", dist: 0 },
+    { key: "ma60", color: "#a371f7", txt: "日MA60", bg: "rgba(163,113,247,.95)", pos: "insideEndBottom", dist: 0 },
+  ];
+  const _present = _dmaDefs
+    .map(d => ({ ...d, y: dma ? dma[d.key] : null }))
+    .filter(d => d.y != null && isFinite(d.y))
+    .filter(d => d.key === "ma5" || d.key === "ma10" || d.key === "ma20" || _near(d.y));
+  // MA5/10/20 标签在**左**列、MA30/60 在**右**列 ⇒ 价格贴近时两组标签也不会挤在一起。
+  let _ma5Line = null;
+  const _dmaData = [];
+  _present.forEach(d => {
+    const ln = _dmaLine(d.y, d.color, d.txt, {
+      bg: d.bg, fg: "#ffffff", pos: d.pos, dist: d.dist,
+    });
+    if (d.key === "ma5") _ma5Line = ln;
+    else if (ln) _dmaData.push(ln);
+  });
   // 支撑/压力位（2026-10-21 owner：多窗口也要画）。颜色与单图一致：支撑绿、压力红。
   // 标签放**右侧**（日线MA 的标签在左），两拨不打架；每方向最多 2 条（格子里地方小）。
   const _lvlLine = (y, up) => (y == null || !isFinite(y)) ? null : {
@@ -12733,21 +12778,41 @@ window.addEventListener("resize", () => {
   _mwResizeCharts();
 });
 
+/* 2026-11-05：渲染签名 —— 「这只票这一格该画的东西」有任何变化才重画。
+   包含：代码/周期/根数/末根时间与收盘/实时价/日线MA/支撑压力/成交点数/缩放/密集区开关/画框。 */
+function _mwSigOf(it, i) {
+  const s = it.series || {}, d = s.dates || [], o = s.ohlc || [];
+  const q = it.quote || {}, z = mwZoom[i] || {};
+  const bx = (_mwBoxes || {})[String(it.code || "").split("_")[0]] || [];
+  return [it.code, mwPeriod, d.length, d[d.length - 1] || "",
+          o.length ? o[o.length - 1][1] : "", q.price, q.change_pct,
+          it.dma ? JSON.stringify(it.dma) : "",
+          it.levels ? JSON.stringify(it.levels) : "",
+          (it.trades || []).length, z.start, z.end, _vpOn ? 1 : 0,
+          bx.length, bx.length ? JSON.stringify(bx) : ""].join("|");
+}
+
 async function mwTick() {
   if (mwBusy) return;                       // 单飞：上一轮没回来就别叠
   // 窗口最小化/切后台时跳过：6 只票每轮 ~6s 的计算量，没必要喂给看不见的窗口
   if (document.visibilityState === "hidden") return;
+  // 2026-11-05：浮层已关掉就别空跑（独立原生窗口模式没有这个浮层，跳过该判断）
+  const _win = document.getElementById("multiWatchWin");
+  if (!MW_WINDOW_MODE && _win && _win.style.display === "none") return;
   // 只请求**当前布局可见**的那几只：3×2 时后 3 只不下发（省 1/3 的取数与渲染）
   const codes = mwCodes.slice(0, mwN()).filter(Boolean);
   if (!codes.length) return;
   mwBusy = true;
   try {
-    await _mwRefreshBoxes();          // 画框：20s 节流，拿不到就沿用上一次
-    const r = await apiCall("load_multi_chart", codes, mwPeriod, MW_TAIL);
+    await _mwRefreshBoxes();          // 画框：10s 节流，拿不到就沿用上一次
+    const _known = {};
+    codes.forEach(c => { if (mwFrameSig[c]) _known[c] = mwFrameSig[c]; });
+    const r = await apiCall("load_multi_chart", codes, mwPeriod, MW_TAIL, _known);
     const items = (r && r.items) || [];
     items.forEach(it => {
       const i = mwCodes.indexOf(it.code);
       if (i < 0) return;
+      if (it.sig) mwFrameSig[it.code] = it.sig;   // 记下版本（下一跳据此换瘦帧）
       const px = document.getElementById("mwPx" + i);
       const q = it.quote || {};
       if (px && q.price != null) {
@@ -12763,9 +12828,13 @@ async function mwTick() {
         }
         px.innerHTML = html;
       }
+      if (it.unchanged) return;                 // 后端帧没变（瘦帧）：价格已更新，图不动
       if (!it.ok) return;
       const s = it.series || {};
       if (!s.dates || !s.dates.length) return;
+      // 数据/缩放/画框都没变 ⇒ 不重建（盘前盘后这是绝大多数情况）
+      const _sig = _mwSigOf(it, i);
+      if (_sig === mwSig[i]) return;
       let inst = mwInsts[i];
       if (!inst) {
         const el = document.getElementById("mwChart" + i);
@@ -12777,6 +12846,7 @@ async function mwTick() {
         // 把该格当前的缩放窗口喂回去 —— `notMerge:true` 会把上一步的 dataZoom 一起清掉
         inst.setOption(_mwOption(s, it.dma, it.levels, it.trades, mwZoom[i], it.code),
                         { notMerge: true });
+        mwSig[i] = _sig;
       } catch (e) { /* 单格失败不影响别的格 */ }
     });
   } catch (e) { /* 静默：下一跳重试 */ }

@@ -74,6 +74,122 @@ class TestLoadMultiChart:
         assert r["items"][0]["ok"] is False and "error" in r["items"][0]
 
 
+class TestSlimUnchanged:
+    """2026-11-05：后端帧没变（sig 相同）⇒ 只回价格/均线，**不回序列**。
+
+    背景：pywebview 的 `evaluate_js` 是串行的，6 格 × ~30KB 每 4s 反复过桥会把返回通道堵死。
+    """
+
+    def test_known_sig_returns_slim_frame(self, monkeypatch):
+        api = t_gui.Api()
+        fr = _frame(120)
+        fr["sig"] = "d119|2.000|120"
+        monkeypatch.setattr(api, "_mw_frame", lambda c, period="min5": (fr, "fresh"))
+        r = api.load_multi_chart(["600000"], "min5", 90, {"600000": "d119|2.000|120"})
+        it = r["items"][0]
+        assert it.get("unchanged") is True
+        assert "series" not in it, "未变就不回序列（省 ~30KB/格）"
+        assert it["quote"]["price"] == 10.0, "实时价仍要回（价格标签照常刷新）"
+        assert it["dma"] is not None or "dma" in it, "均线/支撑压力仍回（前端 tooltip 要用）"
+
+    def test_帧自带sig(self):
+        """`_mw_compute` 必须给帧打 sig（末根时间|收|根数，与单图同一约定）。"""
+        py = (_ROOT / "t_gui.py").read_text(encoding="utf-8")
+        assert '"sig": _sig,' in py
+        assert '_sig = f"{_dates_out[-1] if _dates_out else \'\'}|{_close_last:.3f}|{len(_dates_out)}"' in py
+
+    def test_different_sig_sends_full_series(self, monkeypatch):
+        api = t_gui.Api()
+        fr = _frame(120)
+        fr["sig"] = "d119|2.000|120"
+        monkeypatch.setattr(api, "_mw_frame", lambda c, period="min5": (fr, "fresh"))
+        r = api.load_multi_chart(["600000"], "min5", 90, {"600000": "stale-sig"})
+        it = r["items"][0]
+        assert "unchanged" not in it and it["series"]["dates"]
+
+
+class TestQuietTtl:
+    """2026-11-05：非交易时段分钟帧 TTL 放宽到 60s（盘前/盘后数据不变，4.6s 一次纯白烧）。"""
+
+    def test_TTL放宽后旧帧仍判fresh(self, monkeypatch):
+        import time as _t
+        api = t_gui.Api.__new__(t_gui.Api)
+        key = "600000|min5"
+        t_gui._MW_CACHE.clear()
+        t_gui._MW_CACHE[key] = (_t.time() - 10.0, _frame(30))   # 10s 前：交易时段已过期
+        monkeypatch.setattr(api, "_mw_worker", lambda *a, **k: None)
+        monkeypatch.setattr(t_gui, "_mw_ttl_now", lambda: 60.0)   # 盘前/盘后
+        _fr, st = api._mw_frame("600000", "min5")
+        assert st == "fresh", "盘前 10s 的帧应判新鲜（quiet TTL 60s）"
+        monkeypatch.setattr(t_gui, "_mw_ttl_now", lambda: 4.6)    # 交易时段
+        _fr, st = api._mw_frame("600000", "min5")
+        assert st == "stale", "交易时段 10s 已超 4.6s ⇒ stale（后台刷新）"
+        t_gui._MW_CACHE.clear()
+        t_gui._MW_RUN.clear()
+
+    def test_竞价窗口用10s(self, monkeypatch):
+        """09:15-09:30：价格在动、K 线不动 ⇒ 既不是 4.6s 也不是 60s。"""
+        import core.hunter_poll as hp
+        monkeypatch.setattr(hp, "in_trading_hours", lambda now: False)
+        class _Now:
+            @staticmethod
+            def strftime(fmt):
+                return "09:20"
+        monkeypatch.setattr(t_gui, "datetime", type("D", (), {
+            "now": staticmethod(lambda: _Now)}))
+        assert t_gui._mw_ttl_now() == t_gui._MW_TTL_AUCTION
+
+
+class TestWebViewNoThrottle:
+    def test_关闭遮挡_后台节流(self):
+        py = (_ROOT / "t_gui.py").read_text(encoding="utf-8")
+        assert "WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS" in py
+        for flag in ("--disable-background-timer-throttling",
+                     "--disable-renderer-backgrounding",
+                     "--disable-backgrounding-occluded-windows"):
+            assert flag in py, flag
+
+
+class TestDma30_60:
+    """2026-11-05 owner：「多窗口里如果上方有 30 日线/60 日线也要显示，前提是离得很近，
+    不要影响现在的显示比例」。"""
+
+    def test_后端均线包包含30和60(self, monkeypatch):
+        import pandas as pd
+        import core.chart_cache as cc
+        api = t_gui.Api.__new__(t_gui.Api)
+        api._dma_memo = {}
+        dates = pd.date_range("2026-01-01", periods=100).strftime("%Y-%m-%d").tolist()
+        df = pd.DataFrame({"date": dates, "close": [10.0 + i * 0.01 for i in range(100)]})
+        monkeypatch.setattr(cc, "load_daily_display", lambda c: df)
+        d = api._daily_ma_bundle("600000", 11.0)
+        for k in ("ma5", "ma10", "ma20", "ma30", "ma60"):
+            assert k in d, k
+        # 口径 = (前 n-1 个完成日收盘 + 现价)/n
+        basis = [10.0 + i * 0.01 for i in range(100)]
+        assert d["ma30"] == pytest.approx(round((sum(basis[-29:]) + 11.0) / 30, 3))
+
+    def test_前端只在价格区间内画(self):
+        assert '"ma30"' in _JS and '"ma60"' in _JS
+        assert "dma[d.key]" in _JS, "五条日线按 key 统一取"
+        assert "_near(d.y)" in _JS, "MA30/60 只在可见价格区间内才画"
+        assert "y >= _lo * 0.995 && y <= _hi * 1.005" in _JS
+        # 右列标签（与左侧 MA5/10/20 分开，贴近时不叠）
+        assert 'pos: "insideEndTop"' in _JS and 'pos: "insideEndBottom"' in _JS
+
+
+class TestFrontendRenderSkip:
+    """2026-11-05：数据/缩放/画框都没变就不 setOption（否则 6 格 × 4s 全量重建）。"""
+
+    def test_渲染签名与瘦帧(self):
+        assert "let mwSig = [];" in _JS
+        assert "function _mwSigOf(it, i)" in _JS
+        assert "if (_sig === mwSig[i]) return;" in _JS
+        assert "if (it.unchanged) return;" in _JS, "后端瘦帧（未变）直接跳过重画"
+        assert "let mwFrameSig = {};" in _JS
+        assert "_known[c] = mwFrameSig[c]" in _JS
+
+
 class TestFrontend:
     def test_button_on_ob_panel(self):
         # 2026-10-26：按钮改成优先开**独立原生窗口**，不可用才退回浮层（见 openMultiWatchWindow）
@@ -474,7 +590,7 @@ class TestPeriodSwitch:
         for p in ("min5", "min10", "min30", "min60"):
             assert f'id="mwPer{p}"' in _HTML, p
         assert "function mwSetPeriod(p)" in _JS
-        assert 'apiCall("load_multi_chart", codes, mwPeriod, MW_TAIL)' in _JS
+        assert 'apiCall("load_multi_chart", codes, mwPeriod, MW_TAIL, _known)' in _JS
         assert "mwZoom = [];" in _JS.split("function mwSetPeriod")[1][:600]
         assert 'id="mwSubTitle"' in _HTML
 

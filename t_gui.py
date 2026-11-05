@@ -1200,6 +1200,25 @@ _MW_CACHE: dict = {}
 _MW_RUN: dict = {}
 _MW_LOCK = threading.Lock()
 _MW_TTL = 4.6
+# 2026-11-05：**非交易时段**放宽到 60s —— 盘前/盘后分钟线不会变，4.6s 一次全量取数
+# （6 只 × 网络）纯属白烧，还会和 GUI 的其它计算抢 GIL、把 pywebview 返回通道堵死。
+_MW_TTL_QUIET = 60.0
+_MW_TTL_AUCTION = 10.0     # 09:15-09:30 集合竞价：价格在动、K 线不动 ⇒ 别用 60s，也别 4.6s
+
+
+def _mw_ttl_now() -> float:
+    """当前该用的分钟帧 TTL（交易 4.6s / 竞价 10s / 其余 60s）。"""
+    now = datetime.now()
+    try:
+        from core.hunter_poll import in_trading_hours
+        if in_trading_hours(now):
+            return _MW_TTL
+    except Exception:
+        return _MW_TTL
+    hm = now.strftime("%H:%M")
+    if "09:15" <= hm < "09:30":
+        return _MW_TTL_AUCTION
+    return _MW_TTL_QUIET
 
 
 def _slim_if_same(frame, known_sig):
@@ -6616,7 +6635,7 @@ class Api:
             self._log_turnover_win(f"DESTROY FAIL: {type(e).__name__}: {e}")
             return {"ok": False, "error": f"{type(e).__name__}: {str(e)[:100]}"}
 
-    def load_multi_chart(self, codes, period="min5", tail=90):
+    def load_multi_chart(self, codes, period="min5", tail=90, known_sigs=None):
         """**多窗口看盘**：一次给多只票的实时尾。
 
         ⚠️ 2026-10-21 改走 `_mw_frame`（**多窗口专用轻量帧**），不再复用单图的 SWR。
@@ -6630,6 +6649,8 @@ class Api:
         _tail = max(20, int(tail or 90))
         # 2026-11-04：周期可选 5/10/30/60 分钟（非法值回落 min5）
         _p = period if period in self._MW_PERIODS else "min5"
+        if not isinstance(known_sigs, dict):
+            known_sigs = {}
         for c in (codes or [])[:12]:
             _c = str(c).split("_")[0].strip()
             if not _c:
@@ -6641,9 +6662,10 @@ class Api:
                     continue
                 _at = lambda a: (a[-_tail:] if isinstance(a, list) else a)   # noqa: E731
                 _q = fr.get("quote") or {}
-                items.append({
+                _item = {
                     "code": _c, "ok": bool(fr.get("dates")),
                     "stale": st == "stale",
+                    "sig": fr.get("sig") or "",
                     "name": self._instrument_name(_c),
                     "quote": _q,
                     # 日线 MA5/10/20：六宫格与单图一样要画「日线均线」参考线
@@ -6652,14 +6674,20 @@ class Api:
                     "levels": self._daily_levels(_c),
                     # 买卖点（券商成交台账）—— 裁到本格窗口内，前端按 5 分钟桶归位
                     "trades": self._mw_trades(_c, fr.get("dates")),
-                    "series": {
+                }
+                # 2026-11-05：前端已持有同一帧（sig 相同）⇒ **不回序列**（每格 ~30KB × 6 格）。
+                # pywebview 的 evaluate_js 是串行的，静止时反复搬同样的 100KB+ 会把返回通道堵死。
+                if known_sigs and str(known_sigs.get(_c) or "") == str(fr.get("sig") or ""):
+                    _item["unchanged"] = True
+                else:
+                    _item["series"] = {
                         "dates": _at(fr.get("dates")), "ohlc": _at(fr.get("ohlc")),
                         "volume": _at(fr.get("volume")), "amount": _at(fr.get("amount")),
                         "ma5": _at(fr.get("ma5")),
                         # MACD 三条线也要按 tail 截齐（2026-10-21 owner：多窗口要 MACD）
                         "macd": {k: _at(v) for k, v in (fr.get("macd") or {}).items()},
-                    },
-                })
+                    }
+                items.append(_item)
             except Exception as e:
                 items.append({"code": _c, "ok": False,
                               "error": f"{type(e).__name__}: {str(e)[:60]}"})
@@ -6696,10 +6724,11 @@ class Api:
         _p = period if period in self._MW_PERIODS else "min5"
         _k = f"{_c}|{_p}"
         _now = _time_mod.time()
+        _ttl = _mw_ttl_now()
         with _MW_LOCK:
             hit = _MW_CACHE.get(_k)
             _run = bool(_MW_RUN.get(_k))
-        if hit is not None and (_now - hit[0]) < _MW_TTL:
+        if hit is not None and (_now - hit[0]) < _ttl:
             return hit[1], "fresh"
         if not _run:
             with _MW_LOCK:
@@ -6755,8 +6784,14 @@ class Api:
         _amt = None if _index_code(code) else [
             round(((float(h) + float(l) + float(c)) / 3.0) * float(v) * 100.0)
             for h, l, c, v in zip(df["high"], df["low"], df["close"], df["volume"])]
+        _dates_out = [str(x)[:16] for x in df["time"].astype(str).values]
+        _close_last = float(df["close"].iloc[-1])
+        # 版本签名（2026-11-05）：末根 (时间:收:根数)。与单图 `load_chart_realtime` 同一约定——
+        # 前端把它传回来，没变就**不回序列**，省掉每格 ~30KB × 6 格过桥的串行 evaluate_js。
+        _sig = f"{_dates_out[-1] if _dates_out else ''}|{_close_last:.3f}|{len(_dates_out)}"
         return {
-            "dates": [str(x)[:16] for x in df["time"].astype(str).values],
+            "sig": _sig,
+            "dates": _dates_out,
             "ohlc": [[round(float(o), 3), round(float(c), 3), round(float(lo), 3),
                       round(float(hi), 3)]
                      for o, c, lo, hi in zip(df["open"], df["close"], df["low"], df["high"])],
@@ -6806,7 +6841,11 @@ class Api:
             _px = float(price) if price else float(_cls[-1])
             if _px <= 0:
                 return None
-            out = {f"ma{n}": round((sum(_basis[-(n - 1):]) + _px) / n, 3) for n in (5, 10, 20)}
+            # 2026-11-05 owner：「如果上方有30日线、60日线也要显示，前提是离得很近」——
+            # 这里把 MA30/MA60 一并算出来；**画不画**由前端按当日价格区间判断（近了才画）。
+            # MA_n = (前 n-1 个完成日收盘 + 现价)/n，与 MA5/10/20 同一口径。
+            out = {f"ma{n}": round((sum(_basis[-(n - 1):]) + _px) / n, 3)
+                   for n in (5, 10, 20, 30, 60) if len(_basis) >= n - 1}
             _memo[_c] = (_now, out)
             return out
         except Exception:
@@ -12150,6 +12189,38 @@ class Api:
         cum, cum_all = d.get("cum") or [], d.get("cum_all") or []
         if not cum or not cum_all:
             return
+        # 2026-11-05：**用当前日线缓存重算浮动**再补点。台账里的 `unrealized` 是导入时的
+        # 快照；今天收盘后不刷新的话，「今日」这个点用的还是导入那天的价（owner 实报：
+        # 11 月的坐标不更新、末值也不动）。只改内存，不写盘（下次导入仍按原始成交重算）。
+        try:
+            from core.trade_history import daily_last_close as _dlc
+            _acc_u, _acc_mv = {}, {}
+            for s in d.get("stocks") or []:
+                q = int(s.get("open_qty") or 0)
+                if q <= 0:
+                    continue
+                px = _dlc(s.get("code"))
+                if px and px > 0:
+                    s["last_price"] = round(float(px), 3)
+                    s["market_value"] = round(float(px) * q, 2)
+                    s["unrealized"] = round(s["market_value"] - float(s.get("cost_basis") or 0), 2)
+                    s["total_pnl"] = round(float(s.get("realized") or 0) + s["unrealized"], 2)
+                a = s.get("account") or ""
+                _acc_u[a] = _acc_u.get(a, 0.0) + float(s.get("unrealized") or 0)
+                _acc_mv[a] = _acc_mv.get(a, 0.0) + float(s.get("market_value") or 0)
+            for a in d.get("accounts") or []:
+                k = a.get("account") or ""
+                if k in _acc_u:
+                    a["unrealized"] = round(_acc_u[k], 2)
+                    a["market_value"] = round(_acc_mv[k], 2)
+                    a["total_pnl"] = round(float(a.get("realized") or 0) + a["unrealized"], 2)
+                    _buy = float(a.get("buy_amt") or 0)
+                    if _buy:
+                        a["total_pct"] = round(a["total_pnl"] / _buy * 100.0, 3)
+            if _acc_u:
+                d["total_unrealized"] = round(sum(_acc_u.values()), 2)
+        except Exception:
+            pass
         unreal_by_acc = {}
         for s in d.get("stocks") or []:
             a = s.get("account") or ""
@@ -14709,6 +14780,23 @@ if __name__ == "__main__":
     _th.Thread(target=_prewarm_chart_build, daemon=True).start()
     here = Path(__file__).parent
     entry = here / "web" / "index.html"
+
+    # 2026-11-05：**关掉 WebView2 的后台/遮挡节流**。实症：GUI/多窗口被别的窗口盖住或
+    # 最小化后，Chromium 把渲染进程节流/挂起 ⇒ 定时器停摆 28~33s（`gui_client_diag.log`
+    # 的 `jsblock` 实测），回来后整页像"卡死"；`gui_freeze.log` 里同步表现为心跳停 12~14s。
+    # WebView2 支持用环境变量追加 Chromium 参数（pywebview 自己的 AdditionalBrowserArguments
+    # 仍会叠加），实测 5 个 msedgewebview2 进程都带上了这些 flag。
+    _os = __import__("os")
+    _wv2_args = ("--disable-background-timer-throttling --disable-renderer-backgrounding "
+                 "--disable-backgrounding-occluded-windows "
+                 "--disable-features=CalculateNativeWinOcclusion")
+    _prev = _os.environ.get("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS", "")
+    if "--disable-background-timer-throttling" not in _prev:
+        _os.environ["WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS"] = (_prev + " " + _wv2_args).strip()
+        try:
+            print(f"[webview2] 已关闭后台/遮挡节流: {_wv2_args}", flush=True)
+        except Exception:
+            pass
 
     # 前端开发调试: 设置 WEBVIEW_DEBUG=1 打开 devtools
     debug = sys.argv[1] == "--debug" if len(sys.argv) > 1 else False
