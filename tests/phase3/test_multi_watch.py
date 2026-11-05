@@ -626,3 +626,89 @@ class TestPeriodBackend:
         assert (d["codes"], d["layout"], d["period"]) == (["600000"], "3x2", "min60")
         api.save_multi_watch(None, None, "bogus")
         assert api.load_multi_watch()["period"] == "min60", "非法周期不能覆盖旧值"
+
+
+class TestMaTouchHint:
+    """2026-11-05 owner：5 分钟线走到日线关键均线（5/10/20/30/60）能否翻过去。
+
+    实验见 `scripts/experiment/ma_break_5min_*_20261105.py`（981 只 × 357 日，23.7 万事件）：
+      · 无条件：60 分钟内**摸过** 59~62%、**收上去过** 47~50%、30 分钟后**仍站在上方 0.2%** 28~30%；
+      · 唯一强特征是「离均线有多近」（贴线 34% → 离 1.2% 以上 17%）；
+      · 量能（修正前视后）**没有**区分度；波动高、早盘、均线上行各 +1~5pp；
+      · 3 特征模型时间外 AUC 0.583，按月 0.54~0.62，校准良好。
+    """
+
+    def _call(self, **kw):
+        base = dict(ma_now={20: 10.0}, ma_prev={20: 10.0}, prev_close=9.98,
+                    last_high=10.01, last_close=9.99, atr_pct=4.5, tod_frac=0.2)
+        base.update(kw)
+        return t_gui._ma_touch_hint(**base)
+
+    def test_摸到线且收盘在线下_给出概率(self):
+        h = self._call()
+        assert h and h["ma"] == 20
+        assert 0.0 < h["prob"] < 1.0
+        assert abs(h["dist_pct"] - 0.1) < 0.02
+
+    def test_盘中没摸到线_不标注(self):
+        assert self._call(last_high=9.95, last_close=9.90) is None
+
+    def test_收盘已站上_不标注(self):
+        assert self._call(last_close=10.02) is None
+
+    def test_离得太远_不标注(self):
+        assert self._call(ma_now={20: 10.0}, last_high=10.0, last_close=9.70) is None
+
+    def test_上一根还在线上方_不算自下而上(self):
+        assert self._call(prev_close=10.05) is None
+
+    def test_取最近的那条线(self):
+        h = self._call(ma_now={5: 9.995, 20: 10.30},
+                       ma_prev={5: 9.995, 20: 10.30}, last_high=10.31, last_close=9.99)
+        assert h["ma"] == 5, "两条都摸到时取距离最近的"
+
+    def test_概率随距离单调下降(self):
+        near = self._call(last_close=9.995)
+        far = self._call(last_close=9.94)
+        assert near["prob"] > far["prob"]
+
+    def test_只标注5分钟周期(self):
+        py = (_ROOT / "t_gui.py").read_text(encoding="utf-8")
+        assert '"hint": self._mw_ma_hint(_c, fr) if _p == "min5" else None' in py
+
+    def test_瘦帧也带标记(self, monkeypatch):
+        api = t_gui.Api()
+        fr = _frame(120)
+        fr["sig"] = "d119|2.000|120"
+        monkeypatch.setattr(api, "_mw_frame", lambda c, period="min5": (fr, "fresh"))
+        monkeypatch.setattr(api, "_mw_ma_hint", lambda c, f: {"ma": 20, "prob": 0.35})
+        r = api.load_multi_chart(["600000"], "min5", 90, {"600000": "d119|2.000|120"})
+        it = r["items"][0]
+        assert it.get("unchanged") is True
+        assert it["hint"]["prob"] == 0.35, "瘦帧（图不重画）也要能刷新文字标记"
+
+    def test_前端渲染标记(self):
+        assert 'class="mw-hint" id="mwHint${i}"' in _JS
+        assert "function _mwPaintHint(i, h)" in _JS
+        assert "_mwPaintHint(i, it.hint);" in _JS
+        assert "不是买入信号" in _JS, "标记必须写明不是买入信号"
+
+    def test_mw_ma_hint_用实时价现算均线(self, monkeypatch):
+        """`_daily_ma_ctx` 只缓存与价格无关的基准 ⇒ 每跳用实时价算 MA。"""
+        import pandas as pd
+        api = t_gui.Api.__new__(t_gui.Api)
+        api._dma_ctx_memo = {}
+        dates = pd.date_range("2026-01-01", periods=40).strftime("%Y-%m-%d").tolist()
+        df = pd.DataFrame({"date": dates, "open": [10.0] * 40, "high": [10.2] * 40,
+                           "low": [9.8] * 40, "close": [10.0] * 40, "volume": [1e6] * 40})
+        import core.chart_cache as cc
+        monkeypatch.setattr(cc, "load_daily_display", lambda c: df)
+        ctx = api._daily_ma_ctx("600000")
+        assert ctx and ctx["sums"][20] == 190.0      # 前 19 个完成日 × 10.0
+        assert abs(ctx["atr_pct"] - 4.0) < 0.01      # (10.2−9.8)/10 = 4%
+        # 上一根收 9.98（在线下 >0.1%），最后一根盘中摸到 10.01、收 9.99（仍在线上方之下）
+        fr = {"dates": [f"2026-11-05 10:{i:02d}" for i in range(20)],
+              "ohlc": [[10.0, 9.98, 9.95, 10.01]] * 19 + [[10.0, 9.99, 9.95, 10.01]]}
+        h = api._mw_ma_hint("600000", fr)
+        # 平盘造的数据里几条均线几乎重合 ⇒ 取最近的那条，不限定是哪一条
+        assert h and h["ma"] in (5, 10, 20, 30) and 0 < h["prob"] < 1

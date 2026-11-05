@@ -12297,6 +12297,7 @@ function _mwBuildCells() {
       <div class="mw-head">
         <select class="mw-sel" title="大盘指数，或「持仓 30 分钟风险体检」里的股票"
                 onchange="mwPick(${i}, this.value)">${opts}</select>
+        <span class="mw-hint" id="mwHint${i}"></span>
         <span class="mw-px" id="mwPx${i}"></span>
       </div>
       <div class="mw-chart" id="mwChart${i}"></div>
@@ -12792,6 +12793,25 @@ function _mwSigOf(it, i) {
           bx.length, bx.length ? JSON.stringify(bx) : ""].join("|");
 }
 
+/* 2026-11-05：贴关键均线的「站稳概率」标记 —— 只有 5 分钟周期后端才给。
+   颜色：≥38% 红（历史上更可能站上）、30~38% 黄、<30% 灰。
+   ⚠️ 只表示「能否站上均线」，不是买入信号：实验里各档的 30 分钟收益几乎无差。 */
+function _mwPaintHint(i, h) {
+  const el = document.getElementById("mwHint" + i);
+  if (!el) return;
+  if (!h || h.prob == null) { el.textContent = ""; el.title = ""; return; }
+  const p = Math.round(h.prob * 100);
+  el.textContent = `贴MA${h.ma} 站稳≈${p}%`;
+  el.style.color = p >= 38 ? "#f85149" : (p >= 30 ? "#d29922" : "#6e7681");
+  el.style.borderColor = p >= 38 ? "rgba(248,81,73,.55)"
+    : (p >= 30 ? "rgba(210,153,34,.5)" : "rgba(139,148,158,.28)");
+  el.title = `5 分钟口径：距线 ${h.dist_pct != null ? h.dist_pct.toFixed(2) : "—"}%`
+    + ` · 20 日波动 ${h.atr_pct != null ? h.atr_pct.toFixed(1) : "—"}%`
+    + ` · 当日第 ${(h.bar || 0) + 1} 根\n`
+    + `30 分钟后仍站在该均线上方 0.2% 的历史概率约 ${p}%（同期基准约 30%）`
+    + `\n⚠️ 只表示能否站上均线，不是买入信号`;
+}
+
 async function mwTick() {
   if (mwBusy) return;                       // 单飞：上一轮没回来就别叠
   // 窗口最小化/切后台时跳过：6 只票每轮 ~6s 的计算量，没必要喂给看不见的窗口
@@ -12828,6 +12848,9 @@ async function mwTick() {
         }
         px.innerHTML = html;
       }
+      // 2026-11-05：贴日线关键均线 → 「30 分钟后能否站稳」概率文字标记。
+      // 瘦帧（unchanged）也要更新：价格与标记是每跳都刷的，图才跳过。
+      _mwPaintHint(i, it.hint);
       if (it.unchanged) return;                 // 后端帧没变（瘦帧）：价格已更新，图不动
       if (!it.ok) return;
       const s = it.series || {};

@@ -368,6 +368,10 @@ body.mw-winmode #multiWatchWin {
 .mw-name { font-size: 12px; color: #c9d1d9; white-space: nowrap; overflow: hidden;
   text-overflow: ellipsis; max-width: 96px; }
 .mw-px { font-size: 12px; font-family: var(--mono, monospace); white-space: nowrap; }
+/* 2026-11-05：贴日线关键均线时的概率标记（5 分钟口径；不是买入信号） */
+.mw-hint { font-size: 11px; white-space: nowrap; padding: 0 4px; border-radius: 3px;
+  border: 1px solid rgba(139,148,158,.28); color: #8b949e; cursor: default; }
+.mw-hint:empty { display: none; }
 .mw-chart { flex: 1; min-height: 0; }
 /* 窄屏退化：1 列（笔记本竖屏/小窗） */
 @media (max-width: 900px) {
