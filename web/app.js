@@ -5591,8 +5591,10 @@ async function openDayIntraday(code, name, date) {
     xAxis: d.dates[d.hint.bar],
     lineStyle: { color: "#f0b429", type: "dashed", width: 1.4, opacity: .95 },
     label: { formatter: `贴MA${d.hint.ma} 站稳≈${Math.round((d.hint.prob || 0) * 100)}%`,
-             color: "#0d1117", fontSize: 10, fontWeight: 700, backgroundColor: "#f0b429",
-             padding: [2, 5], borderRadius: 3, position: "insideEndTop" },
+             color: "#0d1117", fontSize: 11, fontWeight: 800, backgroundColor: "#f2cc60",
+             borderColor: "#ffffff", borderWidth: 1,
+             padding: [3, 6], borderRadius: 4, position: "insideEndTop",
+             rotate: 0 },   // 2026-11-05 owner：竖线标签默认会随线旋转 ⇒ 强制横排
   } : null;
   // ⚠️ markLine 不会把 y 轴撑开 —— 不显式给 min/max，线会被裁掉。
   const _maVals = _shown.map(k => MA[k]);
@@ -12834,11 +12836,11 @@ function _paintHintEl(el, h) {
   const _hi = _isIdx ? 25 : 38, _mid = _isIdx ? 12 : 30;
   el.textContent = (h.time ? `${h.time} ` : "") + `贴MA${h.ma} 站稳≈${p}%`;
   // 2026-11-05 owner：「需要清晰地标注」—— 底色块 + 加粗，不再是一行灰字
-  el.style.color = p >= _hi ? "#ffffff" : (p >= _mid ? "#ffd66b" : "#e6edf3");
-  el.style.background = p >= _hi ? "rgba(248,81,73,.85)"
-    : (p >= _mid ? "rgba(210,153,34,.30)" : "rgba(110,118,129,.38)");
+  el.style.color = "#ffffff";                       // 一律白字：黄字在深底上读不清
+  el.style.background = p >= _hi ? "#c93c37"
+    : (p >= _mid ? "#9e6a03" : "#3d444d");
   el.style.borderColor = p >= _hi ? "#ff7b72"
-    : (p >= _mid ? "rgba(210,153,34,.85)" : "rgba(139,148,158,.6)");
+    : (p >= _mid ? "#e3b341" : "#6e7681");
   el.title = (_isIdx ? "指数口径（距离×波动分档；通达信样本 6,407 次 / 2025-01~2026-11）"
                      : "5 分钟口径（与看盘周期无关）")
     + `：距线 ${h.dist_pct != null ? h.dist_pct.toFixed(2) : "—"}%`
