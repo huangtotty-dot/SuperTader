@@ -8390,13 +8390,15 @@
   "business_summary": "主营废弃资源综合利用业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "半导体",
+  "jiuyan_concept": "半导体材料-硅片与硅部件",
   "name": "欧晶科技",
   "primary_source": "legacy",
   "sector": "废弃资源综合利用业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-05 15:10:21",
+  "jiuyan_category1": "半导体",
+  "jiuyan_concept1": "半导体材料-硅片与硅部件"
  },
  "001270": {
   "business_summary": "微波毫米波相控阵T/R芯片的研发、生产、销售和技术服务。",
@@ -10598,13 +10600,15 @@
   "business_summary": "主营计算机、通信和其他电子设备制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "消费电子",
+  "jiuyan_concept": "AI眼镜",
   "name": "国光电器",
   "primary_source": "legacy",
   "sector": "计算机、通信和其他电子设备制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-05 15:10:21",
+  "jiuyan_category1": "消费电子",
+  "jiuyan_concept1": "AI眼镜"
  },
  "002046": {
   "business_summary": "轴承行业、工磨具行业及相关领域的研发制造、行业服务与技术咨询、贸易服务等。",
@@ -12425,13 +12429,15 @@
   "business_summary": "由单一的钢结构建筑企业向装配式集成建筑服务商转型升级",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "光伏",
+  "jiuyan_concept": "光伏建筑一体化",
   "name": "东南网架",
   "primary_source": "legacy",
   "sector": "专业工程/光伏概念/储能",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-05 15:10:21",
+  "jiuyan_category1": "光伏",
+  "jiuyan_concept1": "光伏建筑一体化"
  },
  "002136": {
   "business_summary": "主营化学原料和化学制品制造业",
@@ -15810,13 +15816,15 @@
   "business_summary": "主营土木工程建筑业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "地产",
+  "jiuyan_concept": "地产基建",
   "name": "北新路桥",
   "primary_source": "legacy",
   "sector": "土木工程建筑业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-05 15:10:21",
+  "jiuyan_category1": "地产",
+  "jiuyan_concept1": "地产基建"
  },
  "002309": {
   "business_summary": "特种电缆业务和新能源光伏组件业务板块。",
@@ -16028,13 +16036,15 @@
   "business_summary": "主营金属制品业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "军工",
+  "jiuyan_concept": "军工材料-其他关键材料",
   "name": "久立特材",
   "primary_source": "legacy",
   "sector": "金属制品业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-05 15:10:21",
+  "jiuyan_category1": "军工",
+  "jiuyan_concept1": "军工材料-其他关键材料"
  },
  "002319": {
   "business_summary": "主营化学原料和化学制品制造业",
@@ -30168,13 +30178,15 @@
   "business_summary": "主营专用设备制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "医药",
+  "jiuyan_concept": "医疗服务",
   "name": "福瑞医科",
   "primary_source": "legacy",
   "sector": "专用设备制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-05 15:10:21",
+  "jiuyan_category1": "医药",
+  "jiuyan_concept1": "医疗服务"
  },
  "300050": {
   "business_summary": "主营软件和信息技术服务业",
@@ -51597,13 +51609,15 @@
   "business_summary": "主营化学原料和化学制品制造业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "半导体",
+  "jiuyan_concept": "半导体材料-光刻胶与配套试剂",
   "name": "联合化学",
   "primary_source": "legacy",
   "sector": "化学原料和化学制品制造业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-05 15:10:21",
+  "jiuyan_category1": "半导体",
+  "jiuyan_concept1": "半导体材料-光刻胶与配套试剂"
  },
  "301210": {
   "business_summary": "主营电气机械和器材制造业",
@@ -76159,13 +76173,15 @@
   "business_summary": "主营建筑装饰、装修和其他建筑业",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "光伏",
+  "jiuyan_concept": "光储充",
   "name": "森特股份",
   "primary_source": "legacy",
   "sector": "建筑装饰、装修和其他建筑业",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-05 15:10:21",
+  "jiuyan_category1": "光伏",
+  "jiuyan_concept1": "光储充"
  },
  "603099": {
   "business_summary": "主营公共设施管理业",
@@ -86182,13 +86198,15 @@
   "business_summary": "临床医疗管理信息系统（CIS）系列应用软件产品和临床信息化整体解决方案。",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "机器人",
+  "jiuyan_concept": "本体及应用",
   "name": "麦迪科技",
   "primary_source": "legacy",
   "sector": "软件开发/三胎概念/民营医院",
   "sector_type": "legacy",
-  "updated_at": "2026-05-30 21:48:57"
+  "updated_at": "2026-11-05 15:10:21",
+  "jiuyan_category1": "机器人",
+  "jiuyan_concept1": "本体及应用"
  },
  "603991": {
   "business_summary": "主营橡胶和塑料制品业",
@@ -104318,12 +104336,14 @@
   "business_summary": "",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "",
-  "jiuyan_concept": "",
+  "jiuyan_category": "光伏",
+  "jiuyan_concept": "光伏支架",
   "sector": "光伏辅材/电力设备/光伏设备/江苏板块/超跌股/专精特新/融资融券/光伏概念",
   "sector_type": "sync_20260929",
   "primary_source": "sync_20260929",
-  "updated_at": "2026-09-29 17:08:50"
+  "updated_at": "2026-11-05 15:10:21",
+  "jiuyan_category1": "光伏",
+  "jiuyan_concept1": "光伏支架"
  },
  "920008": {
   "name": "成电光信",
