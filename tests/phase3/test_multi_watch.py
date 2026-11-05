@@ -747,3 +747,30 @@ class TestMaTouchHint:
         assert api._mw_hint_bars("600000") is bars
         t_gui._HINT_BARS.clear()
         t_gui._HINT_BARS_RUN.clear()
+
+    def test_指数用距离分档(self, monkeypatch):
+        """owner 2026-11-05：「指数（科创50/上证）也需要标」。
+
+        个股模型在指数上高估 2~5 倍（预测 30% vs 实际 18%），故指数走**距离分档**：
+        ≤0.2% 18.5% / 0.2~0.5% 5.8% / 0.5~1% 4.4% / 1~2% 2.4%（726 次，2026-08~11）。
+        """
+        assert t_gui._index_hint_prob(0.001) == 0.185
+        assert t_gui._index_hint_prob(0.004) == 0.058
+        assert t_gui._index_hint_prob(0.008) == 0.044
+        assert t_gui._index_hint_prob(0.015) == 0.024
+        api = t_gui.Api.__new__(t_gui.Api)
+        api._dma_ctx_memo = {}
+        monkeypatch.setattr(api, "_mw_hint_bars", lambda c: {
+            "dates": ["2026-11-05 10:00", "2026-11-05 10:05"],
+            "ohlc": [[10.0, 9.98, 9.95, 10.01], [10.0, 9.99, 9.95, 10.01]],
+            "n_today": 7})
+        monkeypatch.setattr(api, "_daily_ma_ctx",
+                            lambda c: {"sums": {n: 10.0 * (n - 1) + 1.0 for n in (5, 10, 20)},
+                                       "atr_pct": 1.2})
+        h = api._mw_ma_hint("sh000688")
+        assert h and h["kind"] == "index" and h["prob"] in (0.185, 0.058, 0.044, 0.024)
+
+    def test_前端指数阈值与口径(self):
+        assert 'h.kind === "index"' in _JS
+        assert "指数口径（按距离分档" in _JS
+        assert "const _hi = _isIdx ? 15 : 38, _mid = _isIdx ? 5 : 30;" in _JS

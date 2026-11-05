@@ -1267,6 +1267,18 @@ _MA_HINT_DIST = -1.126585     # 贴线距离（%）
 _MA_HINT_ATR = 0.175215       # 20 日日均振幅（%）
 _MA_HINT_TOD = -0.741803      # 当日第几根 / 48（收盘后钳到 0.85）
 _MA_HINT_MAX_DIST = 2.0       # 距离超过 2% 不标注（模型训练范围外）
+# 指数（2026-11-05 owner 要求）：个股模型直接套**严重高估**（预测 30% vs 实际 18%），
+# 指数自己样本又少（9 个指数 × 53 日 = 726 次，2026-08~11），拟合模型不稳（低端校准差）
+# ⇒ 用**距离分档**的经验概率（每档 n≥86），并在 tooltip 标明是指数口径。
+#   档位: (距离上限比率, 历史站稳率)
+_HINT_INDEX_BUCKETS = ((0.002, 0.185), (0.005, 0.058), (0.01, 0.044), (9.9, 0.024))
+
+
+def _index_hint_prob(dist_ratio: float) -> float:
+    for hi, p in _HINT_INDEX_BUCKETS:
+        if dist_ratio <= hi:
+            return p
+    return _HINT_INDEX_BUCKETS[-1][1]
 
 
 def _ma_touch_hint(ma_now, ma_prev, prev_close, last_high, last_close, atr_pct, tod_frac):
@@ -7023,9 +7035,11 @@ class Api:
             return None
 
     def _mw_ma_hint(self, code, frame=None):
-        """多窗口文字标记：最新 5 分钟 bar 走到日线均线下方 2% 以内 → 站稳概率。"""
-        if _index_code(code):
-            return None
+        """多窗口文字标记：最新 5 分钟 bar 走到日线均线下方 2% 以内 → 站稳概率。
+
+        个股走三特征模型；**指数走距离分档**（个股模型在指数上高估 2~5 倍，见实验）。
+        """
+        _is_idx = bool(_index_code(code))
         _bars = self._mw_hint_bars(code)
         if not _bars:
             return None
@@ -7047,6 +7061,11 @@ class Api:
                             _ctx.get("atr_pct") or 0.0, _tod)
         if _h:
             _h["bar"] = int(_tod * 48)
+            if _is_idx:
+                _h["prob"] = round(_index_hint_prob(_h["dist_pct"] / 100.0), 4)
+                _h["kind"] = "index"
+            else:
+                _h["kind"] = "stock"
         return _h
 
     def _daily_levels(self, code):

@@ -12815,17 +12815,23 @@ function _paintHintEl(el, h) {
   if (!el) return;
   if (!h || h.prob == null) { el.textContent = ""; el.title = ""; return; }
   const p = Math.round(h.prob * 100);
+  const _isIdx = h.kind === "index";
+  // 指数与个股的基准差一个量级（指数整体站稳 6.2%、个股 23.9%）⇒ 颜色阈值分开
+  const _hi = _isIdx ? 15 : 38, _mid = _isIdx ? 5 : 30;
   el.textContent = `贴MA${h.ma} 站稳≈${p}%`;
   // 2026-11-05 owner：「需要清晰地标注」—— 底色块 + 加粗，不再是一行灰字
-  el.style.color = p >= 38 ? "#ffffff" : (p >= 30 ? "#ffd66b" : "#e6edf3");
-  el.style.background = p >= 38 ? "rgba(248,81,73,.85)"
-    : (p >= 30 ? "rgba(210,153,34,.30)" : "rgba(110,118,129,.38)");
-  el.style.borderColor = p >= 38 ? "#ff7b72"
-    : (p >= 30 ? "rgba(210,153,34,.85)" : "rgba(139,148,158,.6)");
-  el.title = `5 分钟口径（与看盘周期无关）：距线 ${h.dist_pct != null ? h.dist_pct.toFixed(2) : "—"}%`
+  el.style.color = p >= _hi ? "#ffffff" : (p >= _mid ? "#ffd66b" : "#e6edf3");
+  el.style.background = p >= _hi ? "rgba(248,81,73,.85)"
+    : (p >= _mid ? "rgba(210,153,34,.30)" : "rgba(110,118,129,.38)");
+  el.style.borderColor = p >= _hi ? "#ff7b72"
+    : (p >= _mid ? "rgba(210,153,34,.85)" : "rgba(139,148,158,.6)");
+  el.title = (_isIdx ? "指数口径（按距离分档；样本 726 次 / 2026-08~11）"
+                     : "5 分钟口径（与看盘周期无关）")
+    + `：距线 ${h.dist_pct != null ? h.dist_pct.toFixed(2) : "—"}%`
     + ` · 20 日波动 ${h.atr_pct != null ? h.atr_pct.toFixed(1) : "—"}%`
     + ` · 当日第 ${(h.bar || 0) + 1} 根\n`
-    + `走到该均线下方 2% 以内时，30 分钟后仍站在上方的历史概率约 ${p}%（同期基准约 24%）`
+    + `走到该均线下方 2% 以内时，30 分钟后仍站在上方的历史概率约 ${p}%`
+    + `（同期基准约 ${_isIdx ? "6" : "24"}%）`
     + `\n⚠️ 只表示能否站上均线，不是买入信号`;
 }
 
