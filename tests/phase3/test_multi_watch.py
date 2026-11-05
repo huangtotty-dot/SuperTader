@@ -442,7 +442,7 @@ class TestSupportResistance:
 
     def test_frontend_draws_levels(self):
         # 2026-10-28 起多窗口也要画「画框提醒」⇒ 入参多了 code
-        assert "function _mwOption(s, dma, levels, trades, zoom, code)" in _JS
+        assert "function _mwOption(s, dma, levels, trades, zoom, code, hint)" in _JS
         assert '`${up ? "压" : "支"} ${Number(y).toFixed(2)}`' in _JS
         # 支撑绿、压力红（与单图一致）；标签在右侧（日线MA 在左，两拨不打架）
         assert '"#f85149", type: "dashed"' in _JS and '"#3fb950", type: "dashed"' in _JS
@@ -503,7 +503,7 @@ class TestTradeMarkersInCells:
 
     def test_frontend_buckets_same_as_main_chart(self):
         # 与单图同口径：成交落进 (bar_t - 5min, bar_t]
-        assert "function _mwOption(s, dma, levels, trades, zoom, code)" in _JS
+        assert "function _mwOption(s, dma, levels, trades, zoom, code, hint)" in _JS
         assert "_be[bi] - _pMin >= tm" in _JS
         # 买=红▲托在 low 下、卖=绿▼压在 high 上（与单图同色同形）
         assert 'color: "#f85149", borderColor: "#fff"' in _JS
@@ -692,9 +692,13 @@ class TestMaTouchHint:
 
     def test_前端渲染标记(self):
         assert 'class="mw-hint" id="mwHint${i}"' in _JS
-        assert "function _mwPaintHint(i, h)" in _JS
+        assert "function _paintHintEl(el, h)" in _JS
         assert "_mwPaintHint(i, it.hint);" in _JS
         assert "不是买入信号" in _JS, "标记必须写明不是买入信号"
+        # 2026-11-05 owner：「需要清晰地标注」⇒ 概率直接写进**那条均线自己的标签**
+        assert "· 站稳≈" in _JS
+        assert "_mwOption(s, it.dma, it.levels, it.trades, mwZoom[i], it.code, it.hint)" in _JS
+        assert "it.hint ? JSON.stringify(it.hint) : \"\"" in _JS, "标记变化要触发重绘"
 
     def test_mw_ma_hint_用实时价现算均线(self, monkeypatch):
         """`_daily_ma_ctx` 只缓存与价格无关的基准 ⇒ 每跳用实时价算 MA。"""

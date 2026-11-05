@@ -12427,7 +12427,7 @@ function _mwBoxMarkAreas(code, dates) {
   } catch (e) { return []; }
 }
 
-function _mwOption(s, dma, levels, trades, zoom, code) {
+function _mwOption(s, dma, levels, trades, zoom, code, hint) {
   const gaps = buildGapAreas(s.ohlc, s.dates, 15, 0.003, 8);   // 最近 15 自然日的缺口，一格最多 8 块
   // 2026-10-28 owner：主图画框提醒也要进多窗口（蓝实线框，与缺口的红绿虚线区分）
   const _mwBoxes2 = _mwBoxMarkAreas(code, s.dates);
@@ -12444,9 +12444,14 @@ function _mwOption(s, dma, levels, trades, zoom, code) {
       show: !(lab && lab.showLabel === false),
       formatter: `${txt} ${Number(y).toFixed(2)}`,
       color: (lab && lab.fg) || "#ffffff",
-      fontSize: 10, fontWeight: 700,
+      // 命中的那条线（走到了它附近）标签更大更粗 + 白边，一眼能看见
+      fontSize: (lab && lab.hit) ? 11 : 10,
+      fontWeight: (lab && lab.hit) ? 800 : 700,
       backgroundColor: (lab && lab.bg) || color,
-      padding: [1, 3], borderRadius: 3,
+      borderWidth: (lab && lab.hit) ? 1 : 0,
+      borderColor: (lab && lab.hit) ? "#ffffff" : "transparent",
+      padding: (lab && lab.hit) ? [2, 5] : [1, 3],
+      borderRadius: 3,
       // MA5 标签在线**上方**，MA10/20/30/60 在线**下方**；distance 让贴近的几条错开
       position: (lab && lab.pos) || "insideStartBottom",
       distance: (lab && lab.dist) || 0,
@@ -12480,9 +12485,15 @@ function _mwOption(s, dma, levels, trades, zoom, code) {
   // MA5/10/20 标签在**左**列、MA30/60 在**右**列 ⇒ 价格贴近时两组标签也不会挤在一起。
   let _ma5Line = null;
   const _dmaData = [];
+  /* 2026-11-05：走到哪条线、30 分钟站稳概率多少 —— **直接标在那条均线自己的标签上**
+     （`日MA20 0.74 · 站稳≈10%`），比只在格头写一行小字清楚得多；命中的那条线加粗 + 光晕。 */
+  const _hk = (hint && hint.ma != null) ? ("ma" + hint.ma) : null;
   _present.forEach(d => {
-    const ln = _dmaLine(d.y, d.color, d.txt, {
+    const _hit = d.key === _hk;
+    const _suffix = _hit ? ` · 站稳≈${Math.round((hint.prob || 0) * 100)}%` : "";
+    const ln = _dmaLine(d.y, d.color, d.txt + _suffix, {
       bg: d.bg, fg: "#ffffff", pos: d.pos, dist: d.dist,
+      hit: _hit,
     });
     if (d.key === "ma5") _ma5Line = ln;
     else if (ln) _dmaData.push(ln);
@@ -12791,6 +12802,7 @@ function _mwSigOf(it, i) {
   return [it.code, mwPeriod, d.length, d[d.length - 1] || "",
           o.length ? o[o.length - 1][1] : "", q.price, q.change_pct,
           it.dma ? JSON.stringify(it.dma) : "",
+          it.hint ? JSON.stringify(it.hint) : "",
           it.levels ? JSON.stringify(it.levels) : "",
           (it.trades || []).length, z.start, z.end, _vpOn ? 1 : 0,
           bx.length, bx.length ? JSON.stringify(bx) : ""].join("|");
@@ -12804,9 +12816,12 @@ function _paintHintEl(el, h) {
   if (!h || h.prob == null) { el.textContent = ""; el.title = ""; return; }
   const p = Math.round(h.prob * 100);
   el.textContent = `贴MA${h.ma} 站稳≈${p}%`;
-  el.style.color = p >= 38 ? "#f85149" : (p >= 30 ? "#d29922" : "#6e7681");
-  el.style.borderColor = p >= 38 ? "rgba(248,81,73,.55)"
-    : (p >= 30 ? "rgba(210,153,34,.5)" : "rgba(139,148,158,.28)");
+  // 2026-11-05 owner：「需要清晰地标注」—— 底色块 + 加粗，不再是一行灰字
+  el.style.color = p >= 38 ? "#ffffff" : (p >= 30 ? "#ffd66b" : "#e6edf3");
+  el.style.background = p >= 38 ? "rgba(248,81,73,.85)"
+    : (p >= 30 ? "rgba(210,153,34,.30)" : "rgba(110,118,129,.38)");
+  el.style.borderColor = p >= 38 ? "#ff7b72"
+    : (p >= 30 ? "rgba(210,153,34,.85)" : "rgba(139,148,158,.6)");
   el.title = `5 分钟口径（与看盘周期无关）：距线 ${h.dist_pct != null ? h.dist_pct.toFixed(2) : "—"}%`
     + ` · 20 日波动 ${h.atr_pct != null ? h.atr_pct.toFixed(1) : "—"}%`
     + ` · 当日第 ${(h.bar || 0) + 1} 根\n`
@@ -12873,7 +12888,7 @@ async function mwTick() {
       }
       try {
         // 把该格当前的缩放窗口喂回去 —— `notMerge:true` 会把上一步的 dataZoom 一起清掉
-        inst.setOption(_mwOption(s, it.dma, it.levels, it.trades, mwZoom[i], it.code),
+        inst.setOption(_mwOption(s, it.dma, it.levels, it.trades, mwZoom[i], it.code, it.hint),
                         { notMerge: true });
         mwSig[i] = _sig;
       } catch (e) { /* 单格失败不影响别的格 */ }
