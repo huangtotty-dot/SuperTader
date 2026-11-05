@@ -12442,7 +12442,7 @@ function _mwOption(s, dma, levels, trades, zoom, code, hint) {
                  shadowColor: color, shadowBlur: 6 },
     label: {
       show: !(lab && lab.showLabel === false),
-      formatter: `${txt} ${Number(y).toFixed(2)}`,
+      formatter: `${txt} ${Number(y).toFixed(2)}${(lab && lab.suffix) || ""}`,
       color: (lab && lab.fg) || "#ffffff",
       // 命中的那条线（走到了它附近）标签更大更粗 + 白边，一眼能看见
       fontSize: (lab && lab.hit) ? 11 : 10,
@@ -12491,9 +12491,9 @@ function _mwOption(s, dma, levels, trades, zoom, code, hint) {
   _present.forEach(d => {
     const _hit = d.key === _hk;
     const _suffix = _hit ? ` · 站稳≈${Math.round((hint.prob || 0) * 100)}%` : "";
-    const ln = _dmaLine(d.y, d.color, d.txt + _suffix, {
+    const ln = _dmaLine(d.y, d.color, d.txt, {
       bg: d.bg, fg: "#ffffff", pos: d.pos, dist: d.dist,
-      hit: _hit,
+      hit: _hit, suffix: _suffix,
     });
     if (d.key === "ma5") _ma5Line = ln;
     else if (ln) _dmaData.push(ln);
