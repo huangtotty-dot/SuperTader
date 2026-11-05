@@ -178,6 +178,9 @@ def main() -> int:
         print(f"  {code}: 事件={len(ev)}")
         rows.extend(ev)
     ev = pd.DataFrame(rows).dropna(subset=["atr"]) if rows else pd.DataFrame()
+    if not ev.empty:
+        TMP.mkdir(exist_ok=True)
+        ev.to_parquet(TMP / "index_ma_events_tdx.parquet", index=False)
     if ev.empty:
         print("\n没有指数事件：TDX 本地没有 5 分钟档，pytdx 也没取到。\n"
               "请在通达信客户端执行：盘后数据下载 → 5 分钟K线 → 上海/深圳指数，再重跑本脚本。")
@@ -224,6 +227,18 @@ def main() -> int:
             raw = lr.coef_[0] / sc.scale_
             itc = lr.intercept_[0] - float(np.sum(lr.coef_[0] * sc.mean_ / sc.scale_))
             print(f"    原始尺度: intercept={itc:.6f} dist={raw[0]:.6f} atr={raw[1]:.6f} tod={raw[2]:.6f}")
+            q = pd.qcut(pd.Series(p), 10, duplicates="drop")
+            cal = pd.DataFrame({"p": p, "y": te["hold"].to_numpy()}).groupby(q.values, observed=True).agg(
+                n=("y", "size"), 预测=("p", "mean"), 实际=("y", "mean"))
+            cal["预测"] = (100 * cal["预测"]).round(1)
+            cal["实际"] = (100 * cal["实际"]).round(1)
+            print("    十分位校准:")
+            print(cal.to_string())
+            # 分指数
+            for code, sub in te.groupby("code"):
+                ps = m.predict_proba(sub[cols])[:, 1]
+                print(f"      {code}: n={len(sub):>4} 基准={100*sub['hold'].mean():4.1f}%  "
+                      f"AUC={roc_auc_score(sub['hold'], ps):.3f}")
     return 0
 
 

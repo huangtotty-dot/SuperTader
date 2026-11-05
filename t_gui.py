@@ -1267,18 +1267,24 @@ _MA_HINT_DIST = -1.126585     # 贴线距离（%）
 _MA_HINT_ATR = 0.175215       # 20 日日均振幅（%）
 _MA_HINT_TOD = -0.741803      # 当日第几根 / 48（收盘后钳到 0.85）
 _MA_HINT_MAX_DIST = 2.0       # 距离超过 2% 不标注（模型训练范围外）
-# 指数（2026-11-05 owner 要求）：个股模型直接套**严重高估**（预测 30% vs 实际 18%），
-# 指数自己样本又少（9 个指数 × 53 日 = 726 次，2026-08~11），拟合模型不稳（低端校准差）
-# ⇒ 用**距离分档**的经验概率（每档 n≥86），并在 tooltip 标明是指数口径。
-#   档位: (距离上限比率, 历史站稳率)
-_HINT_INDEX_BUCKETS = ((0.002, 0.185), (0.005, 0.058), (0.01, 0.044), (9.9, 0.024))
+# 指数（2026-11-05 owner 要求；通达信 5 分钟 438 日严格验证）：个股模型直接套会**高估**，
+# 指数另算。用通达信 `vipdoc/*/fzline/*.lc5`（8 个指数 × 395 日 = **6,407 次**，
+# 2025-01~2026-11）得到「距离 × 波动」二维经验表（每格 n≥494，95%CI 见判词 §9）：
+#   距离≤0.2% 低波 23.8% / 高波 32.6%；0.2~0.5% 13.2% / 22.9%；
+#   0.5~1% 2.0% / 12.7%；1~2% 0.0% / 2.6%。
+# 波动用 20 日日振幅中位 ~1.5% 切两档（低波=上证50/沪深300，高波=创业板/科创50/中证500）。
+#   每行: (距离上限比率, 低波概率, 高波概率)
+_HINT_INDEX_TABLE = ((0.002, 0.238, 0.326), (0.005, 0.132, 0.229),
+                     (0.010, 0.020, 0.127), (0.020, 0.000, 0.026))
+_HINT_INDEX_ATR_SPLIT = 1.5   # 20 日振幅（%）：低于=低波指数
 
 
-def _index_hint_prob(dist_ratio: float) -> float:
-    for hi, p in _HINT_INDEX_BUCKETS:
-        if dist_ratio <= hi:
-            return p
-    return _HINT_INDEX_BUCKETS[-1][1]
+def _index_hint_prob(dist_ratio: float, atr_pct: float) -> float:
+    _hi = float(atr_pct or 0.0) >= _HINT_INDEX_ATR_SPLIT
+    for cap, lo, high in _HINT_INDEX_TABLE:
+        if dist_ratio <= cap:
+            return high if _hi else lo
+    return 0.0
 
 
 def _ma_touch_hint(ma_now, ma_prev, prev_close, last_high, last_close, atr_pct, tod_frac):
@@ -6106,6 +6112,36 @@ class Api:
                     out["macd_warm"] = len(_cl) >= 60
             except Exception:
                 pass
+            # 2026-11-05 owner：「点日线某根看 5 分钟图时也要显示这个」——贴均线概率标记。
+            # 口径 = 该日**收盘那一根**（末根 close 与当日均线比），tod 由 bar 下标推。
+            try:
+                _mas = {int(k): float(v) for k, v in (out.get("ma") or {}).items()
+                        if k in ("5", "10", "20", "30", "60") and v}
+                if _mas and _ohlc:
+                    _last = _ohlc[-1]
+                    _prev_c = float(_ohlc[-2][1]) if len(_ohlc) >= 2 else float(_last[1])
+                    _atr = 0.0
+                    if _rows and len(_rows) >= 21:
+                        _rng = []
+                        for _r in _rows[-21:-1]:
+                            try:
+                                _rng.append((float(_r["high"]) - float(_r["low"])) / float(_r["close"]))
+                            except Exception:
+                                pass
+                        if _rng:
+                            _atr = sum(_rng) / len(_rng) * 100.0
+                    _h = _ma_touch_hint(_mas, _mas, _prev_c, float(_last[3]),
+                                        float(_last[1]), _atr, len(_ohlc) / 48.0)
+                    if _h:
+                        _h["bar"] = len(_ohlc) - 1
+                        if _index_code(code):
+                            _h["prob"] = round(_index_hint_prob(_h["dist_pct"] / 100.0, _atr), 4)
+                            _h["kind"] = "index"
+                        else:
+                            _h["kind"] = "stock"
+                        out["hint"] = _h
+            except Exception:
+                pass
             out["available"] = True
             return out
         except Exception as e:
@@ -7062,7 +7098,8 @@ class Api:
         if _h:
             _h["bar"] = int(_tod * 48)
             if _is_idx:
-                _h["prob"] = round(_index_hint_prob(_h["dist_pct"] / 100.0), 4)
+                _h["prob"] = round(_index_hint_prob(_h["dist_pct"] / 100.0,
+                                                    _ctx.get("atr_pct") or 0.0), 4)
                 _h["kind"] = "index"
             else:
                 _h["kind"] = "stock"

@@ -754,10 +754,15 @@ class TestMaTouchHint:
         个股模型在指数上高估 2~5 倍（预测 30% vs 实际 18%），故指数走**距离分档**：
         ≤0.2% 18.5% / 0.2~0.5% 5.8% / 0.5~1% 4.4% / 1~2% 2.4%（726 次，2026-08~11）。
         """
-        assert t_gui._index_hint_prob(0.001) == 0.185
-        assert t_gui._index_hint_prob(0.004) == 0.058
-        assert t_gui._index_hint_prob(0.008) == 0.044
-        assert t_gui._index_hint_prob(0.015) == 0.024
+        # 通达信 6,407 次验证后的「距离 × 波动」二维表
+        assert t_gui._index_hint_prob(0.001, 1.1) == 0.238   # 低波（上证50/沪深300）
+        assert t_gui._index_hint_prob(0.001, 2.5) == 0.326   # 高波（创业板/科创50）
+        assert t_gui._index_hint_prob(0.004, 1.1) == 0.132
+        assert t_gui._index_hint_prob(0.004, 2.5) == 0.229
+        assert t_gui._index_hint_prob(0.008, 1.1) == 0.020
+        assert t_gui._index_hint_prob(0.008, 2.5) == 0.127
+        assert t_gui._index_hint_prob(0.015, 1.1) == 0.0
+        assert t_gui._index_hint_prob(0.015, 2.5) == 0.026
         api = t_gui.Api.__new__(t_gui.Api)
         api._dma_ctx_memo = {}
         monkeypatch.setattr(api, "_mw_hint_bars", lambda c: {
@@ -768,9 +773,16 @@ class TestMaTouchHint:
                             lambda c: {"sums": {n: 10.0 * (n - 1) + 1.0 for n in (5, 10, 20)},
                                        "atr_pct": 1.2})
         h = api._mw_ma_hint("sh000688")
-        assert h and h["kind"] == "index" and h["prob"] in (0.185, 0.058, 0.044, 0.024)
+        assert h and h["kind"] == "index" and h["prob"] in (0.238, 0.326, 0.132, 0.229, 0.020, 0.127, 0.0, 0.026)
 
     def test_前端指数阈值与口径(self):
         assert 'h.kind === "index"' in _JS
-        assert "指数口径（按距离分档" in _JS
-        assert "const _hi = _isIdx ? 15 : 38, _mid = _isIdx ? 5 : 30;" in _JS
+        assert "指数口径（距离×波动分档" in _JS
+        assert "const _hi = _isIdx ? 25 : 38, _mid = _isIdx ? 12 : 30;" in _JS
+
+    def test_点日线看5分钟也带标记(self):
+        """owner 2026-11-05：「点击日线图的某个K线 显示5分钟图时 也要显示这个」。"""
+        py = (_ROOT / "t_gui.py").read_text(encoding="utf-8")
+        assert 'out["hint"] = _h' in py, "load_day_intraday 要回 hint"
+        assert 'id="dayMaHint"' in _HTML
+        assert '_paintHintEl(document.getElementById("dayMaHint"), d.hint || null);' in _JS
