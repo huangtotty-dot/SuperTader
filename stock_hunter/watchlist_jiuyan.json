@@ -1001,15 +1001,13 @@
   "business_summary": "主营贸易Ⅱ",
   "concept_boards": [],
   "industry_boards": [],
-  "jiuyan_category": "环保",
-  "jiuyan_concept": "固废治理",
+  "jiuyan_category": "",
+  "jiuyan_concept": "",
   "name": "中成股份",
   "primary_source": "legacy",
   "sector": "贸易Ⅱ/污水处理/固废处理/中俄贸易概念",
   "sector_type": "legacy",
-  "updated_at": "2026-11-03 15:03:10",
-  "jiuyan_category1": "环保",
-  "jiuyan_concept1": "固废治理"
+  "updated_at": "2026-11-05 17:31:26"
  },
  "000153": {
   "business_summary": "主营化学制药",
@@ -108915,11 +108913,9 @@
   "primary_source": "manual",
   "sector": "固废治理",
   "sector_type": "manual",
-  "jiuyan_category": "环保",
-  "jiuyan_concept": "固废治理",
-  "jiuyan_category1": "环保",
-  "jiuyan_concept1": "固废治理",
-  "updated_at": "2026-10-31 14:24:59"
+  "jiuyan_category": "",
+  "jiuyan_concept": "",
+  "updated_at": "2026-11-05 17:31:26"
  },
  "600187": {
   "name": "*ST国中",
@@ -108929,11 +108925,9 @@
   "primary_source": "manual",
   "sector": "水务",
   "sector_type": "manual",
-  "jiuyan_category": "环保",
-  "jiuyan_concept": "水务",
-  "jiuyan_category1": "环保",
-  "jiuyan_concept1": "水务",
-  "updated_at": "2026-10-31 14:24:59"
+  "jiuyan_category": "",
+  "jiuyan_concept": "",
+  "updated_at": "2026-11-05 17:31:26"
  },
  "600289": {
   "name": "ST信通",
