@@ -5585,6 +5585,15 @@ async function openDayIntraday(code, name, date) {
              backgroundColor: "#e6edf3", padding: [1, 4], borderRadius: 2,
              position: _posOf.get(`昨收 ${d.prev_close}`) || "insideStartTop" },
   } : null;
+  /* 2026-11-05：走到关键均线的那一刻 —— 用竖虚线标出来（横轴=时间）。
+     hint 由后端按「当天最贴近均线的那个时点」给出（不是收盘那根）。 */
+  const _hintLine = (d.hint && d.hint.bar != null && d.dates[d.hint.bar] != null) ? {
+    xAxis: d.dates[d.hint.bar],
+    lineStyle: { color: "#f0b429", type: "dashed", width: 1.4, opacity: .95 },
+    label: { formatter: `贴MA${d.hint.ma} 站稳≈${Math.round((d.hint.prob || 0) * 100)}%`,
+             color: "#0d1117", fontSize: 10, fontWeight: 700, backgroundColor: "#f0b429",
+             padding: [2, 5], borderRadius: 3, position: "insideEndTop" },
+  } : null;
   // ⚠️ markLine 不会把 y 轴撑开 —— 不显式给 min/max，线会被裁掉。
   const _maVals = _shown.map(k => MA[k]);
   const _lo = Math.min(...d.ohlc.map(o => o[2]), ..._maVals,
@@ -5652,7 +5661,8 @@ async function openDayIntraday(code, name, date) {
         // 缺口色块（zn 放在 K 线之下，别盖住蜡烛）
         markArea: _gapArea ? { silent: true, z: -1, data: _gapArea } : undefined,
         markLine: { symbol: "none", silent: true,
-          data: [..._maLines, ...(zero ? [zero] : [])], label: { show: true } } },
+          data: [..._maLines, ...(zero ? [zero] : []), ...(_hintLine ? [_hintLine] : [])],
+          label: { show: true } } },
       { name: "VWAP(日内)", type: "line", data: d.vwap, symbol: "none", connectNulls: true,
         lineStyle: { color: "#f0b429", width: 1.6 }, itemStyle: { color: "#f0b429" } },
       { name: "成交量(手)", type: "bar", xAxisIndex: 1, yAxisIndex: 1, data: _vol,
@@ -12822,7 +12832,7 @@ function _paintHintEl(el, h) {
   const _isIdx = h.kind === "index";
   // 指数与个股的基准差一个量级（指数整体站稳 6.2%、个股 23.9%）⇒ 颜色阈值分开
   const _hi = _isIdx ? 25 : 38, _mid = _isIdx ? 12 : 30;
-  el.textContent = `贴MA${h.ma} 站稳≈${p}%`;
+  el.textContent = (h.time ? `${h.time} ` : "") + `贴MA${h.ma} 站稳≈${p}%`;
   // 2026-11-05 owner：「需要清晰地标注」—— 底色块 + 加粗，不再是一行灰字
   el.style.color = p >= _hi ? "#ffffff" : (p >= _mid ? "#ffd66b" : "#e6edf3");
   el.style.background = p >= _hi ? "rgba(248,81,73,.85)"
@@ -12833,7 +12843,7 @@ function _paintHintEl(el, h) {
                      : "5 分钟口径（与看盘周期无关）")
     + `：距线 ${h.dist_pct != null ? h.dist_pct.toFixed(2) : "—"}%`
     + ` · 20 日波动 ${h.atr_pct != null ? h.atr_pct.toFixed(1) : "—"}%`
-    + ` · 当日第 ${(h.bar || 0) + 1} 根\n`
+    + ` · 当日第 ${(h.bar || 0) + 1} 根${h.time ? "（" + h.time + "）" : ""}\n`
     + `走到该均线下方 2% 以内时，30 分钟后仍站在上方的历史概率约 ${p}%`
     + `（同期基准约 ${_isIdx ? "13" : "24"}%）`
     + `\n⚠️ 只表示能否站上均线，不是买入信号`;

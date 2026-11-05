@@ -786,3 +786,15 @@ class TestMaTouchHint:
         assert 'out["hint"] = _h' in py, "load_day_intraday 要回 hint"
         assert 'id="dayMaHint"' in _HTML
         assert '_paintHintEl(document.getElementById("dayMaHint"), d.hint || null);' in _JS
+
+    def test_日内弹窗按最贴近时点标注(self):
+        """2026-11-04 科创50 收盘离 MA5 还有 3.6%，但盘中 14:15 走到 MA10 附近 0.32%。
+
+        owner 截图问「没有显示站稳概率」⇒ 日内弹窗按**当天最贴近均线的时点**算，
+        并在图上画一条竖虚线标出那个时刻。
+        """
+        py = (_ROOT / "t_gui.py").read_text(encoding="utf-8")
+        assert '_best = {"ma": _n, "dist": _d, "i": _i' in py
+        assert '_h["time"] = _dates[_best["i"]][-5:]' in py
+        assert "const _hintLine = (d.hint && d.hint.bar != null" in _JS
+        assert "xAxis: d.dates[d.hint.bar]," in _JS

@@ -6112,14 +6112,15 @@ class Api:
                     out["macd_warm"] = len(_cl) >= 60
             except Exception:
                 pass
-            # 2026-11-05 owner：「点日线某根看 5 分钟图时也要显示这个」——贴均线概率标记。
-            # 口径 = 该日**收盘那一根**（末根 close 与当日均线比），tod 由 bar 下标推。
+            # 2026-11-05 owner：「点日线某根看 5 分钟图时也要显示这个」。
+            # ⚠️ 不能用**收盘那根**算：2026-11-04 科创50 收盘 1156.99、最近的 MA5 是 1200.52
+            # （差 3.6%）⇒ 全天没有标记；而盘中 14 点前后确实走到过线附近。
+            # ⇒ 扫当天每一根，找「从带外走进均线下方 2% 以内」的时点，取**最贴近**的那一段。
             try:
                 _mas = {int(k): float(v) for k, v in (out.get("ma") or {}).items()
                         if k in ("5", "10", "20", "30", "60") and v}
-                if _mas and _ohlc:
-                    _last = _ohlc[-1]
-                    _prev_c = float(_ohlc[-2][1]) if len(_ohlc) >= 2 else float(_last[1])
+                _basis = [float(r["close"]) for r in (_rows or []) if str(r.get("date"))[:10] < day]
+                if _mas and _basis and _ohlc:
                     _atr = 0.0
                     if _rows and len(_rows) >= 21:
                         _rng = []
@@ -6130,16 +6131,35 @@ class Api:
                                 pass
                         if _rng:
                             _atr = sum(_rng) / len(_rng) * 100.0
-                    _h = _ma_touch_hint(_mas, _mas, _prev_c, float(_last[3]),
-                                        float(_last[1]), _atr, len(_ohlc) / 48.0)
-                    if _h:
-                        _h["bar"] = len(_ohlc) - 1
-                        if _index_code(code):
-                            _h["prob"] = round(_index_hint_prob(_h["dist_pct"] / 100.0, _atr), 4)
-                            _h["kind"] = "index"
-                        else:
-                            _h["kind"] = "stock"
-                        out["hint"] = _h
+                    _cl = [float(o[1]) for o in _ohlc]
+                    _hi = [float(o[3]) for o in _ohlc]
+                    _best = None
+                    for _n, _ma_day in _mas.items():
+                        if len(_basis) < _n - 1:
+                            continue
+                        _s = sum(_basis[-(_n - 1):]) if _n > 1 else 0.0
+                        _dist = [( (_s + c) / _n - c) / ((_s + c) / _n) for c in _cl]
+                        for _i, _d in enumerate(_dist):
+                            if not (0 < _d <= 0.02):
+                                continue
+                            _prev_in = (_i == 0) or (0 < _dist[_i - 1] <= 0.02)
+                            if _prev_in:
+                                continue      # 已在带内 ⇒ 不是「刚走到」
+                            if _best is None or _d < _best["dist"]:
+                                _best = {"ma": _n, "dist": _d, "i": _i, "ma_val": (_s + _cl[_i]) / _n}
+                    if _best:
+                        _ma_now = {_best["ma"]: _best["ma_val"]}
+                        _h = _ma_touch_hint(_ma_now, _ma_now, _cl[_best["i"]], _hi[_best["i"]],
+                                            _cl[_best["i"]], _atr, _best["i"] / 48.0)
+                        if _h:
+                            _h["bar"] = int(_best["i"])
+                            _h["time"] = _dates[_best["i"]][-5:]
+                            if _index_code(code):
+                                _h["prob"] = round(_index_hint_prob(_h["dist_pct"] / 100.0, _atr), 4)
+                                _h["kind"] = "index"
+                            else:
+                                _h["kind"] = "stock"
+                            out["hint"] = _h
             except Exception:
                 pass
             out["available"] = True
