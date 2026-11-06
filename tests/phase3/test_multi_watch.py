@@ -798,3 +798,28 @@ class TestMaTouchHint:
         assert '_h["time"] = _dates[_best["i"]][-5:]' in py
         assert "const _hintLine = (d.hint && d.hint.bar != null" in _JS
         assert "xAxis: d.dates[d.hint.bar]," in _JS
+
+    def test_盘中半成品根不再让日均线消失(self, monkeypatch):
+        """2026-11-06 owner：多窗口跑一段时间后很多票没有日均线。
+
+        根因：盘中日线缓存写入**当天半成品根** ⇒ `load_daily_display` 的
+        `is_unconfirmed_today_bar` 闸返回 None ⇒ `_daily_ma_bundle/_daily_ma_ctx/_daily_levels`
+        全变 None。这些计算只用已完成日 ⇒ 必须退回原始行，不能被那道闸卡死。
+        """
+        import datetime as _dt
+        import core.chart_cache as cc
+        api = t_gui.Api.__new__(t_gui.Api)
+        api._dma_memo = {}
+        api._dma_ctx_memo = {}
+        rows = []
+        d0 = _dt.date(2026, 6, 1)
+        for i in range(120):
+            rows.append({"date": str(d0 + _dt.timedelta(days=i)), "open": 10.0 + i * 0.01,
+                         "high": 10.2 + i * 0.01, "low": 9.8 + i * 0.01,
+                         "close": 10.0 + i * 0.01, "volume": 1e6})
+        monkeypatch.setattr(cc, "load_daily_display", lambda c: None)   # 模拟 display 闸返回 None
+        monkeypatch.setattr(t_gui, "_daily_rows_before_today", lambda c: rows)
+        d = api._daily_ma_bundle("600584")
+        assert d and d["ma5"] > 0 and d["ma60"] > 0
+        ctx = api._daily_ma_ctx("600584")
+        assert ctx and ctx["sums"][20] > 0 and ctx["atr_pct"] > 0

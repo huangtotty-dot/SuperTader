@@ -1756,6 +1756,25 @@ def _attach_divergence(payload):
     return payload
 
 
+def _daily_rows_before_today(code):
+    """日线缓存**原始行**，只保留「已完成日」（date < 今天）。
+
+    2026-11-06（owner 截图：多窗口跑一段时间后很多票没有日均线）：
+    盘中缓存一旦写入**当天半成品根**，`chart_cache.load_daily_display` 的
+    `is_unconfirmed_today_bar` 闸就会返回 None ⇒ 依赖它的日线均线 / 支撑压力 / 贴均线标记
+    整批消失（指数和还没写当天根的票不受影响，所以看起来是"部分票"）。
+    这些计算本来**只用已完成日**（MAn 的基准里当日由实时价代替），完全不需要那道闸。
+    """
+    try:
+        import core.chart_cache as _cc
+        _d = _load_json(_cc.daily_fp(code), {}) or {}
+        _rows = _d.get("rows") or []
+        _today = datetime.now().strftime("%Y-%m-%d")
+        return [r for r in _rows if str(r.get("date"))[:10] < _today]
+    except Exception:
+        return []
+
+
 def _index_code(code) -> bool:
     """带市场前缀的**指数**码（sh000001 / sz399001 / sh000300 / bj899050…）。
 
@@ -6992,13 +7011,19 @@ class Api:
             if _hit is not None and (_now - _hit[0]) < 60:
                 return _hit[1]
             import core.chart_cache as _cc
-            df = _cc.load_daily_display(_c)
-            if df is None or getattr(df, "empty", True):
-                return None
             _today = datetime.now().strftime("%Y-%m-%d")
-            _dts = [str(x)[:10] for x in df["date"].astype(str).values]
-            _cls = [float(x) for x in df["close"].astype(float).values]
-            _basis = [c for d, c in zip(_dts, _cls) if d < _today and c == c]
+            df = _cc.load_daily_display(_c)
+            if df is not None and not getattr(df, "empty", True):
+                _dts = [str(x)[:10] for x in df["date"].astype(str).values]
+                _cls = [float(x) for x in df["close"].astype(float).values]
+                _basis = [c for d, c in zip(_dts, _cls) if d < _today and c == c]
+            else:
+                # 2026-11-06：盘中有当日半成品根 ⇒ display 闸返回 None。只用已完成日 ⇒ 读原始行。
+                _rows = _daily_rows_before_today(_c)
+                if not _rows:
+                    return None
+                _cls = [float(r["close"]) for r in _rows]
+                _basis = [c for c in _cls if c == c]
             if len(_basis) < 19:
                 return None
             _px = float(price) if price else float(_cls[-1])
@@ -7030,15 +7055,23 @@ class Api:
             if _hit is not None and (_now - _hit[0]) < 60:
                 return _hit[1]
             import core.chart_cache as _cc
-            df = _cc.load_daily_display(_c)
-            if df is None or getattr(df, "empty", True):
-                return None
             _today = datetime.now().strftime("%Y-%m-%d")
-            _dts = [str(x)[:10] for x in df["date"].astype(str).values]
-            _cls = [float(x) for x in df["close"].astype(float).values]
-            _hi = [float(x) for x in df["high"].astype(float).values]
-            _lo = [float(x) for x in df["low"].astype(float).values]
-            _rowsel = [i for i, d in enumerate(_dts) if d < _today]
+            df = _cc.load_daily_display(_c)
+            if df is not None and not getattr(df, "empty", True):
+                _dts = [str(x)[:10] for x in df["date"].astype(str).values]
+                _cls = [float(x) for x in df["close"].astype(float).values]
+                _hi = [float(x) for x in df["high"].astype(float).values]
+                _lo = [float(x) for x in df["low"].astype(float).values]
+                _rowsel = [i for i, d in enumerate(_dts) if d < _today]
+            else:
+                # 2026-11-06：盘中当日半成品根让 display 闸返回 None ⇒ 退回原始行（只用已完成日）
+                _rows = _daily_rows_before_today(_c)
+                if len(_rows) < 20:
+                    return None
+                _cls = [float(r["close"]) for r in _rows]
+                _hi = [float(r["high"]) for r in _rows]
+                _lo = [float(r["low"]) for r in _rows]
+                _rowsel = list(range(len(_rows)))
             _basis = [_cls[i] for i in _rowsel if _cls[i] == _cls[i]]
             if len(_basis) < 20:
                 return None
@@ -7144,7 +7177,16 @@ class Api:
                 return _hit[1]
             import core.chart_cache as _cc
             df = _cc.load_daily_display(_c)
-            if df is None or getattr(df, "empty", True) or len(df) < 30:
+            if df is None or getattr(df, "empty", True):
+                # 2026-11-06：盘中当日半成品根让 display 闸返回 None ⇒ 支撑压力也跟着消失。
+                # 只用已完成日 ⇒ 用原始行重建（与均线同一套兜底）。
+                _rows = _daily_rows_before_today(_c)
+                if len(_rows) < 30:
+                    _memo[_c] = (_now, None)
+                    return None
+                import pandas as _pd
+                df = _pd.DataFrame(_rows)
+            if len(df) < 30:
                 _memo[_c] = (_now, None)
                 return None
             # ⚠️ **不要**为了 3 条均线去跑 `_calc_ma_and_indicators`：实测 800 行要 **1.26s/只**
