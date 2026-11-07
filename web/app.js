@@ -5463,7 +5463,6 @@ function _ensureDayModal() {
   m.id = "dayModal"; m.className = "modal-mask"; m.style.display = "none";
   m.innerHTML = `<div class="modal" style="width:1020px;max-width:94vw;height:660px;display:flex;flex-direction:column">
       <div class="modal-title"><span id="dayModalTitle">日内 5 分钟</span>
-        <span id="dayMaHint" class="mw-hint"></span>
         <div style="display:flex;gap:6px"><button class="mini-btn" onclick="closeDayIntraday()">×</button></div></div>
       <div id="dayModalInfo" class="cell-dim" style="font-size:11px;padding:2px 10px;line-height:1.6"></div>
       <div id="dayModalChart" style="flex:1;min-height:0;background:#0d1117"></div>
@@ -5480,7 +5479,6 @@ async function openDayIntraday(code, name, date) {
   const info = document.getElementById("dayModalInfo");
   const box = document.getElementById("dayModalChart");
   if (title) title.textContent = `${name || code} · ${date} 日内（5 分钟）`;
-  _paintHintEl(document.getElementById("dayMaHint"), null);   // 换日期先清掉上一天的标记
   if (info) info.textContent = "加载中…";
   if (box) box.innerHTML = "";
   if (dayInst) { try { dayInst.dispose(); } catch (e) { /* 忽略 */ } dayInst = null; }
@@ -5490,8 +5488,6 @@ async function openDayIntraday(code, name, date) {
     if (info) info.innerHTML = `<span style="color:#f85149">${esc((d && d.error) || "取不到该日分时")}</span>`;
     return;
   }
-  // 2026-11-05 owner：「点日线某根看 5 分钟图时也要显示这个」
-  _paintHintEl(document.getElementById("dayMaHint"), d.hint || null);
   try {
   const MA = d.ma || {};
   const _maKeys = ["5", "10", "20", "30", "60", "180", "365"];
@@ -5585,17 +5581,6 @@ async function openDayIntraday(code, name, date) {
              backgroundColor: "#e6edf3", padding: [1, 4], borderRadius: 2,
              position: _posOf.get(`昨收 ${d.prev_close}`) || "insideStartTop" },
   } : null;
-  /* 2026-11-05：走到关键均线的那一刻 —— 用竖虚线标出来（横轴=时间）。
-     hint 由后端按「当天最贴近均线的那个时点」给出（不是收盘那根）。 */
-  const _hintLine = (d.hint && d.hint.bar != null && d.dates[d.hint.bar] != null) ? {
-    xAxis: d.dates[d.hint.bar],
-    lineStyle: { color: "#f0b429", type: "dashed", width: 1.4, opacity: .95 },
-    label: { formatter: `贴MA${d.hint.ma} 站稳≈${Math.round((d.hint.prob || 0) * 100)}%`,
-             color: "#0d1117", fontSize: 11, fontWeight: 800, backgroundColor: "#f2cc60",
-             borderColor: "#ffffff", borderWidth: 1,
-             padding: [3, 6], borderRadius: 4, position: "insideEndTop",
-             rotate: 0 },   // 2026-11-05 owner：竖线标签默认会随线旋转 ⇒ 强制横排
-  } : null;
   // ⚠️ markLine 不会把 y 轴撑开 —— 不显式给 min/max，线会被裁掉。
   const _maVals = _shown.map(k => MA[k]);
   const _lo = Math.min(...d.ohlc.map(o => o[2]), ..._maVals,
@@ -5663,8 +5648,7 @@ async function openDayIntraday(code, name, date) {
         // 缺口色块（zn 放在 K 线之下，别盖住蜡烛）
         markArea: _gapArea ? { silent: true, z: -1, data: _gapArea } : undefined,
         markLine: { symbol: "none", silent: true,
-          data: [..._maLines, ...(zero ? [zero] : []), ...(_hintLine ? [_hintLine] : [])],
-          label: { show: true } } },
+          data: [..._maLines, ...(zero ? [zero] : [])], label: { show: true } } },
       { name: "VWAP(日内)", type: "line", data: d.vwap, symbol: "none", connectNulls: true,
         lineStyle: { color: "#f0b429", width: 1.6 }, itemStyle: { color: "#f0b429" } },
       { name: "成交量(手)", type: "bar", xAxisIndex: 1, yAxisIndex: 1, data: _vol,
@@ -5768,8 +5752,6 @@ async function tickStockChartLive() {
     const r = await apiCall("load_chart_realtime", code, period,
                             stockChartLiveSig[period] || "");
     if (code !== stockChartCode || !r) return;         // 期间换票/关窗
-    // 2026-11-05：分钟图上的「贴关键均线」概率标记（后端只在 min* 周期给）
-    _paintHintEl(document.getElementById("stockMaHint"), r.hint || null);
     if (r.quote && r.quote.price) {
       stockChartData.current_price = r.quote.price;
       stockChartData.live = { ts: r.ts, quote: r.quote, session: !!r.session };
@@ -5848,7 +5830,6 @@ async function openStockChart(code, name) {
   if (_flowEl) { _flowEl.style.display = "none"; document.getElementById("stockFlowBody").innerHTML = ""; }
   _flowCache = { code: null, step: 0, data: null, ts: 0 };
   document.getElementById("stockModalTitle").textContent = `${name} (${code}) 技术分析`;
-  _paintHintEl(document.getElementById("stockMaHint"), null);   // 换票先清掉上一只的标记
   // 必须先 dispose 再清 innerHTML：实例复用后它绑在旧 DOM 上，节点被换掉会让 setOption 报错
   if (stockChartInst) { stockChartInst.dispose(); stockChartInst = null; }
   stockChartVersion = null;
@@ -12316,7 +12297,6 @@ function _mwBuildCells() {
       <div class="mw-head">
         <select class="mw-sel" title="大盘指数，或「持仓 30 分钟风险体检」里的股票"
                 onchange="mwPick(${i}, this.value)">${opts}</select>
-        <span class="mw-hint" id="mwHint${i}"></span>
         <span class="mw-px" id="mwPx${i}"></span>
       </div>
       <div class="mw-chart" id="mwChart${i}"></div>
@@ -12443,7 +12423,7 @@ function _mwBoxMarkAreas(code, dates) {
   } catch (e) { return []; }
 }
 
-function _mwOption(s, dma, levels, trades, zoom, code, hint) {
+function _mwOption(s, dma, levels, trades, zoom, code) {
   const gaps = buildGapAreas(s.ohlc, s.dates, 15, 0.003, 8);   // 最近 15 自然日的缺口，一格最多 8 块
   // 2026-10-28 owner：主图画框提醒也要进多窗口（蓝实线框，与缺口的红绿虚线区分）
   const _mwBoxes2 = _mwBoxMarkAreas(code, s.dates);
@@ -12458,16 +12438,11 @@ function _mwOption(s, dma, levels, trades, zoom, code, hint) {
                  shadowColor: color, shadowBlur: 6 },
     label: {
       show: !(lab && lab.showLabel === false),
-      formatter: `${txt} ${Number(y).toFixed(2)}${(lab && lab.suffix) || ""}`,
+      formatter: `${txt} ${Number(y).toFixed(2)}`,
       color: (lab && lab.fg) || "#ffffff",
-      // 命中的那条线（走到了它附近）标签更大更粗 + 白边，一眼能看见
-      fontSize: (lab && lab.hit) ? 11 : 10,
-      fontWeight: (lab && lab.hit) ? 800 : 700,
+      fontSize: 10, fontWeight: 700,
       backgroundColor: (lab && lab.bg) || color,
-      borderWidth: (lab && lab.hit) ? 1 : 0,
-      borderColor: (lab && lab.hit) ? "#ffffff" : "transparent",
-      padding: (lab && lab.hit) ? [2, 5] : [1, 3],
-      borderRadius: 3,
+      padding: [1, 3], borderRadius: 3,
       // MA5 标签在线**上方**，MA10/20/30/60 在线**下方**；distance 让贴近的几条错开
       position: (lab && lab.pos) || "insideStartBottom",
       distance: (lab && lab.dist) || 0,
@@ -12501,15 +12476,9 @@ function _mwOption(s, dma, levels, trades, zoom, code, hint) {
   // MA5/10/20 标签在**左**列、MA30/60 在**右**列 ⇒ 价格贴近时两组标签也不会挤在一起。
   let _ma5Line = null;
   const _dmaData = [];
-  /* 2026-11-05：走到哪条线、30 分钟站稳概率多少 —— **直接标在那条均线自己的标签上**
-     （`日MA20 0.74 · 站稳≈10%`），比只在格头写一行小字清楚得多；命中的那条线加粗 + 光晕。 */
-  const _hk = (hint && hint.ma != null) ? ("ma" + hint.ma) : null;
   _present.forEach(d => {
-    const _hit = d.key === _hk;
-    const _suffix = _hit ? ` · 站稳≈${Math.round((hint.prob || 0) * 100)}%` : "";
     const ln = _dmaLine(d.y, d.color, d.txt, {
       bg: d.bg, fg: "#ffffff", pos: d.pos, dist: d.dist,
-      hit: _hit, suffix: _suffix,
     });
     if (d.key === "ma5") _ma5Line = ln;
     else if (ln) _dmaData.push(ln);
@@ -12818,7 +12787,6 @@ function _mwSigOf(it, i) {
   return [it.code, mwPeriod, d.length, d[d.length - 1] || "",
           o.length ? o[o.length - 1][1] : "", q.price, q.change_pct,
           it.dma ? JSON.stringify(it.dma) : "",
-          it.hint ? JSON.stringify(it.hint) : "",
           it.levels ? JSON.stringify(it.levels) : "",
           (it.trades || []).length, z.start, z.end, _vpOn ? 1 : 0,
           bx.length, bx.length ? JSON.stringify(bx) : ""].join("|");
@@ -12827,34 +12795,6 @@ function _mwSigOf(it, i) {
 /* 2026-11-05：贴关键均线的「站稳概率」标记 —— 只有 5 分钟周期后端才给。
    颜色：≥38% 红（历史上更可能站上）、30~38% 黄、<30% 灰。
    ⚠️ 只表示「能否站上均线」，不是买入信号：实验里各档的 30 分钟收益几乎无差。 */
-function _paintHintEl(el, h) {
-  if (!el) return;
-  if (!h || h.prob == null) { el.textContent = ""; el.title = ""; return; }
-  const p = Math.round(h.prob * 100);
-  const _isIdx = h.kind === "index";
-  // 指数与个股的基准差一个量级（指数整体站稳 6.2%、个股 23.9%）⇒ 颜色阈值分开
-  const _hi = _isIdx ? 25 : 38, _mid = _isIdx ? 12 : 30;
-  el.textContent = (h.time ? `${h.time} ` : "") + `贴MA${h.ma} 站稳≈${p}%`;
-  // 2026-11-05 owner：「需要清晰地标注」—— 底色块 + 加粗，不再是一行灰字
-  el.style.color = "#ffffff";                       // 一律白字：黄字在深底上读不清
-  el.style.background = p >= _hi ? "#c93c37"
-    : (p >= _mid ? "#9e6a03" : "#3d444d");
-  el.style.borderColor = p >= _hi ? "#ff7b72"
-    : (p >= _mid ? "#e3b341" : "#6e7681");
-  el.title = (_isIdx ? "指数口径（距离×波动分档；通达信样本 6,407 次 / 2025-01~2026-11）"
-                     : "5 分钟口径（与看盘周期无关）")
-    + `：距线 ${h.dist_pct != null ? h.dist_pct.toFixed(2) : "—"}%`
-    + ` · 20 日波动 ${h.atr_pct != null ? h.atr_pct.toFixed(1) : "—"}%`
-    + ` · 当日第 ${(h.bar || 0) + 1} 根${h.time ? "（" + h.time + "）" : ""}\n`
-    + `走到该均线下方 2% 以内时，30 分钟后仍站在上方的历史概率约 ${p}%`
-    + `（同期基准约 ${_isIdx ? "13" : "24"}%）`
-    + `\n⚠️ 只表示能否站上均线，不是买入信号`;
-}
-
-function _mwPaintHint(i, h) {
-  _paintHintEl(document.getElementById("mwHint" + i), h);
-}
-
 async function mwTick() {
   if (mwBusy) return;                       // 单飞：上一轮没回来就别叠
   // 窗口最小化/切后台时跳过：6 只票每轮 ~6s 的计算量，没必要喂给看不见的窗口
@@ -12891,9 +12831,6 @@ async function mwTick() {
         }
         px.innerHTML = html;
       }
-      // 2026-11-05：贴日线关键均线 → 「30 分钟后能否站稳」概率文字标记。
-      // 瘦帧（unchanged）也要更新：价格与标记是每跳都刷的，图才跳过。
-      _mwPaintHint(i, it.hint);
       if (it.unchanged) return;                 // 后端帧没变（瘦帧）：价格已更新，图不动
       if (!it.ok) return;
       const s = it.series || {};
@@ -12910,7 +12847,7 @@ async function mwTick() {
       }
       try {
         // 把该格当前的缩放窗口喂回去 —— `notMerge:true` 会把上一步的 dataZoom 一起清掉
-        inst.setOption(_mwOption(s, it.dma, it.levels, it.trades, mwZoom[i], it.code, it.hint),
+        inst.setOption(_mwOption(s, it.dma, it.levels, it.trades, mwZoom[i], it.code),
                         { notMerge: true });
         mwSig[i] = _sig;
       } catch (e) { /* 单格失败不影响别的格 */ }

@@ -1205,39 +1205,6 @@ _MW_TTL = 4.6
 _MW_TTL_QUIET = 60.0
 _MW_TTL_AUCTION = 10.0     # 09:15-09:30 集合竞价：价格在动、K 线不动 ⇒ 别用 60s，也别 4.6s
 
-# 贴均线标记的 5 分钟 bar 缓存（SWR：调用线程只读，后台线程取数）
-_HINT_BARS: dict = {}
-_HINT_BARS_RUN: set = set()
-_HINT_BARS_LOCK = threading.Lock()
-
-
-def _hint_bars_worker(code):
-    """后台取两只 5 分钟 bar（标记只看最后两根 + 当日根数），写回缓存。"""
-    try:
-        _df = _fetch_min_bars_tencent(code, "5min")
-        if _df is None or getattr(_df, "empty", True) or len(_df) < 2:
-            return
-        _dts = [str(x)[:16] for x in _df["time"].astype(str).values]
-        _op = _df["open"].astype(float).values
-        _cl = _df["close"].astype(float).values
-        _lo = _df["low"].astype(float).values
-        _hi = _df["high"].astype(float).values
-        _n = len(_df)
-        _out = {
-            "dates": _dts[-2:],
-            "ohlc": [[float(_op[i]), float(_cl[i]), float(_lo[i]), float(_hi[i])]
-                     for i in (_n - 2, _n - 1)],
-            "n_today": sum(1 for d in _dts if d[:10] == _dts[-1][:10]),
-        }
-        with _HINT_BARS_LOCK:
-            _HINT_BARS[code] = (_time_mod.time(), _out)
-    except Exception:
-        pass
-    finally:
-        with _HINT_BARS_LOCK:
-            _HINT_BARS_RUN.discard(code)
-
-
 def _mw_ttl_now() -> float:
     """当前该用的分钟帧 TTL（交易 4.6s / 竞价 10s / 其余 60s）。"""
     now = datetime.now()
@@ -1251,76 +1218,6 @@ def _mw_ttl_now() -> float:
     if "09:15" <= hm < "09:30":
         return _MW_TTL_AUCTION
     return _MW_TTL_QUIET
-
-
-# ── 5 分钟线「走到关键均线能否翻过去」概率（owner 2026-11-05，实验见
-#    scripts/experiment/ma_break_5min_*_20261105.py）────────────────────────────
-# 口径（2026-11-05 第二版，按 owner 反馈放宽到「贴近带」）：5 分钟收盘走到日线 MA_n
-# **下方 2% 以内**，未来 6 根（30 分钟）后仍站在 MA×1.002 上方的概率。
-# 数据：981 只 × 341 日（2025-04~2026-09）**55.5 万**条贴近带样本；
-# 时间外 AUC **0.671**（MA5 0.649 / MA10 0.682 / MA20 0.688 / MA30 0.683 / MA60 0.678），
-# 十分位校准 7%/10%/13%/16%/21%/25%/30%/34%/39%/50%（实际 6/11/15/19/23/27/30/33/36/40）。
-# 基准 23.9%；最好 10% 实测 ~40%，最差 10% ~4~9%。
-# ⚠️ 只表示「能否站上均线」，**不是买入信号**：各档 30 分钟收益几乎无差。
-_MA_HINT_B0 = -0.981473
-_MA_HINT_DIST = -1.126585     # 贴线距离（%）
-_MA_HINT_ATR = 0.175215       # 20 日日均振幅（%）
-_MA_HINT_TOD = -0.741803      # 当日第几根 / 48（收盘后钳到 0.85）
-_MA_HINT_MAX_DIST = 2.0       # 距离超过 2% 不标注（模型训练范围外）
-# 指数（2026-11-05 owner 要求；通达信 5 分钟 438 日严格验证）：个股模型直接套会**高估**，
-# 指数另算。用通达信 `vipdoc/*/fzline/*.lc5`（8 个指数 × 395 日 = **6,407 次**，
-# 2025-01~2026-11）得到「距离 × 波动」二维经验表（每格 n≥494，95%CI 见判词 §9）：
-#   距离≤0.2% 低波 23.8% / 高波 32.6%；0.2~0.5% 13.2% / 22.9%；
-#   0.5~1% 2.0% / 12.7%；1~2% 0.0% / 2.6%。
-# 波动用 20 日日振幅中位 ~1.5% 切两档（低波=上证50/沪深300，高波=创业板/科创50/中证500）。
-#   每行: (距离上限比率, 低波概率, 高波概率)
-_HINT_INDEX_TABLE = ((0.002, 0.238, 0.326), (0.005, 0.132, 0.229),
-                     (0.010, 0.020, 0.127), (0.020, 0.000, 0.026))
-_HINT_INDEX_ATR_SPLIT = 1.5   # 20 日振幅（%）：低于=低波指数
-
-
-def _index_hint_prob(dist_ratio: float, atr_pct: float) -> float:
-    _hi = float(atr_pct or 0.0) >= _HINT_INDEX_ATR_SPLIT
-    for cap, lo, high in _HINT_INDEX_TABLE:
-        if dist_ratio <= cap:
-            return high if _hi else lo
-    return 0.0
-
-
-def _ma_touch_hint(ma_now, ma_prev, prev_close, last_high, last_close, atr_pct, tod_frac):
-    """最新一根 bar 走到哪条日线均线下方 2% 以内 → 30 分钟后站稳该线的概率。
-
-    `ma_now/ma_prev`：{n: 该 n 日均线在**当前价 / 上一根收盘**下的值}（都含当日）。
-    `atr_pct`：前 20 个完成日的 (high−low)/close 均值 ×100。
-    `tod_frac`：当日第几根 / 48。返回 None 或 dict(ma, dist_pct, atr_pct, prob)。
-    """
-    best = None
-    for n, ma in (ma_now or {}).items():
-        try:
-            if not ma or ma <= 0:
-                continue
-            if not (last_close < ma):          # 已站上 ⇒ 不是「能否翻过去」的场景
-                continue
-            dist_pct = (ma - last_close) / ma * 100.0
-            if dist_pct <= 0 or dist_pct > _MA_HINT_MAX_DIST:
-                continue
-        except Exception:
-            continue
-        if best is None or dist_pct < best["dist_pct"]:
-            best = {"ma": n, "dist_pct": dist_pct}
-    if best is None:
-        return None
-    import math as _m
-    # 训练里 hold_12 要求后面还有 6 根 ⇒ 当日第 43 根以后没有样本；收盘后（tod≈1.0）不外推
-    _tod = min(max(float(tod_frac or 0.0), 0.0), 0.85)
-    _x = (_MA_HINT_B0 + _MA_HINT_DIST * best["dist_pct"]
-          + _MA_HINT_ATR * float(atr_pct or 0.0)
-          + _MA_HINT_TOD * _tod)
-    best["atr_pct"] = round(float(atr_pct or 0.0), 2)
-    best["tod"] = round(float(tod_frac or 0.0), 3)
-    best["prob"] = round(1.0 / (1.0 + _m.exp(-max(-30.0, min(30.0, _x)))), 4)
-    best["dist_pct"] = round(best["dist_pct"], 3)
-    return best
 
 
 def _slim_if_same(frame, known_sig):
@@ -6131,56 +6028,6 @@ class Api:
                     out["macd_warm"] = len(_cl) >= 60
             except Exception:
                 pass
-            # 2026-11-05 owner：「点日线某根看 5 分钟图时也要显示这个」。
-            # ⚠️ 不能用**收盘那根**算：2026-11-04 科创50 收盘 1156.99、最近的 MA5 是 1200.52
-            # （差 3.6%）⇒ 全天没有标记；而盘中 14 点前后确实走到过线附近。
-            # ⇒ 扫当天每一根，找「从带外走进均线下方 2% 以内」的时点，取**最贴近**的那一段。
-            try:
-                _mas = {int(k): float(v) for k, v in (out.get("ma") or {}).items()
-                        if k in ("5", "10", "20", "30", "60") and v}
-                _basis = [float(r["close"]) for r in (_rows or []) if str(r.get("date"))[:10] < day]
-                if _mas and _basis and _ohlc:
-                    _atr = 0.0
-                    if _rows and len(_rows) >= 21:
-                        _rng = []
-                        for _r in _rows[-21:-1]:
-                            try:
-                                _rng.append((float(_r["high"]) - float(_r["low"])) / float(_r["close"]))
-                            except Exception:
-                                pass
-                        if _rng:
-                            _atr = sum(_rng) / len(_rng) * 100.0
-                    _cl = [float(o[1]) for o in _ohlc]
-                    _hi = [float(o[3]) for o in _ohlc]
-                    _best = None
-                    for _n, _ma_day in _mas.items():
-                        if len(_basis) < _n - 1:
-                            continue
-                        _s = sum(_basis[-(_n - 1):]) if _n > 1 else 0.0
-                        _dist = [( (_s + c) / _n - c) / ((_s + c) / _n) for c in _cl]
-                        for _i, _d in enumerate(_dist):
-                            if not (0 < _d <= 0.02):
-                                continue
-                            _prev_in = (_i == 0) or (0 < _dist[_i - 1] <= 0.02)
-                            if _prev_in:
-                                continue      # 已在带内 ⇒ 不是「刚走到」
-                            if _best is None or _d < _best["dist"]:
-                                _best = {"ma": _n, "dist": _d, "i": _i, "ma_val": (_s + _cl[_i]) / _n}
-                    if _best:
-                        _ma_now = {_best["ma"]: _best["ma_val"]}
-                        _h = _ma_touch_hint(_ma_now, _ma_now, _cl[_best["i"]], _hi[_best["i"]],
-                                            _cl[_best["i"]], _atr, _best["i"] / 48.0)
-                        if _h:
-                            _h["bar"] = int(_best["i"])
-                            _h["time"] = _dates[_best["i"]][-5:]
-                            if _index_code(code):
-                                _h["prob"] = round(_index_hint_prob(_h["dist_pct"] / 100.0, _atr), 4)
-                                _h["kind"] = "index"
-                            else:
-                                _h["kind"] = "stock"
-                            out["hint"] = _h
-            except Exception:
-                pass
             out["available"] = True
             return out
         except Exception as e:
@@ -6524,23 +6371,15 @@ class Api:
         if period not in ("daily", "weekly", "monthly") + _MIN_PERIODS:
             out["error"] = f"未知周期: {period}"
             return out
-        # 2026-11-05 owner：「要在 5 分钟线图里显示」——分钟图上挂贴均线概率标记
-        # （日/周/月 K 不挂：那个概率讲的是「接下来 30 分钟」）。
-        _hint = self._mw_ma_hint(base) if str(period).startswith("min") else None
         _fr, _state = self._chart_live_frame(base, period)
         if _state == "fresh":
-            _o = dict(_slim_if_same(_fr, known_sig))   # TTL 内直接回（分钟 0.4s / 日线 1.2s）
-            _o["hint"] = _hint
-            return _o
+            return _slim_if_same(_fr, known_sig)   # TTL 内直接回（分钟 0.4s / 日线 1.2s）
         if _state == "stale":                      # 有旧快照：立刻回它，后端在刷新
             _o = dict(_fr)
             _o["stale"] = True
-            _o = dict(_slim_if_same(_o, known_sig))
-            _o["hint"] = _hint
-            return _o
+            return _slim_if_same(_o, known_sig)
         out["warming"] = True
         out["session"] = _in_trading_session()
-        out["hint"] = _hint
         return out
 
     def _chart_live_frame(self, base, period):
@@ -6853,9 +6692,6 @@ class Api:
                     "levels": self._daily_levels(_c),
                     # 买卖点（券商成交台账）—— 裁到本格窗口内，前端按 5 分钟桶归位
                     "trades": self._mw_trades(_c, fr.get("dates")),
-                    # 2026-11-05：走到日线关键均线附近时的「站稳概率」文字标记。
-                    # **与看盘周期无关**：内部固定用 5 分钟 bar 判断（模型就是 5min 口径）。
-                    "hint": self._mw_ma_hint(_c),
                 }
                 # 2026-11-05：前端已持有同一帧（sig 相同）⇒ **不回序列**（每格 ~30KB × 6 格）。
                 # pywebview 的 evaluate_js 是串行的，静止时反复搬同样的 100KB+ 会把返回通道堵死。
@@ -7038,125 +6874,6 @@ class Api:
             return out
         except Exception:
             return None
-
-    def _daily_ma_ctx(self, code):
-        """日线基准（零网络、60 秒记忆）：{n: 前 n-1 个完成日收盘之和} + 20 日振幅%。
-
-        ⚠️ 与 `_daily_ma_bundle` 分开：那个 60 秒记忆把**现价烘进了 MA**，盘中价格变了
-        MA 却不动 60 秒。这里只记**与价格无关**的基准，每次用实时价现算 MA。
-        """
-        try:
-            _c = str(code).split("_")[0]
-            _now = _time_mod.time()
-            _memo = getattr(self, "_dma_ctx_memo", None)
-            if _memo is None:
-                _memo = self._dma_ctx_memo = {}
-            _hit = _memo.get(_c)
-            if _hit is not None and (_now - _hit[0]) < 60:
-                return _hit[1]
-            import core.chart_cache as _cc
-            _today = datetime.now().strftime("%Y-%m-%d")
-            df = _cc.load_daily_display(_c)
-            if df is not None and not getattr(df, "empty", True):
-                _dts = [str(x)[:10] for x in df["date"].astype(str).values]
-                _cls = [float(x) for x in df["close"].astype(float).values]
-                _hi = [float(x) for x in df["high"].astype(float).values]
-                _lo = [float(x) for x in df["low"].astype(float).values]
-                _rowsel = [i for i, d in enumerate(_dts) if d < _today]
-            else:
-                # 2026-11-06：盘中当日半成品根让 display 闸返回 None ⇒ 退回原始行（只用已完成日）
-                _rows = _daily_rows_before_today(_c)
-                if len(_rows) < 20:
-                    return None
-                _cls = [float(r["close"]) for r in _rows]
-                _hi = [float(r["high"]) for r in _rows]
-                _lo = [float(r["low"]) for r in _rows]
-                _rowsel = list(range(len(_rows)))
-            _basis = [_cls[i] for i in _rowsel if _cls[i] == _cls[i]]
-            if len(_basis) < 20:
-                return None
-            _sums = {n: sum(_basis[-(n - 1):]) for n in (5, 10, 20, 30, 60) if len(_basis) >= n - 1}
-            _last20 = _rowsel[-20:]
-            _rng = [(_hi[i] - _lo[i]) / _cls[i] for i in _last20
-                    if _cls[i] > 0 and _hi[i] == _hi[i] and _lo[i] == _lo[i]]
-            _atr = (sum(_rng) / len(_rng) * 100.0) if _rng else 0.0
-            out = {"sums": _sums, "atr_pct": _atr}
-            _memo[_c] = (_now, out)
-            return out
-        except Exception:
-            return None
-
-    def _mw_hint_bars(self, code):
-        """贴均线标记用的最近两根 **5 分钟** bar（SWR：调用线程**零网络**）。
-
-        2026-11-05 owner：「要在 5 分钟线图里显示，尤其在多窗口」——标记讲的是**日线均线**，
-        5 分钟 bar 才是验证过的口径 ⇒ 无论看盘选的是 5/10/30/60 分，都用 5 分钟数据判断。
-        只取最后两根 + 当日根数，**不拉整帧**。
-
-        ⚠️ 取数是**后台线程**：`load_multi_chart`/`load_chart_realtime` 都在 pywebview 的
-        js_api 上跑，实测慢调用会把串行的 `evaluate_js` 拖死（见 memory gui_freeze_*）
-        ⇒ 这里只读缓存，没有就 kick 一次、这一跳先不出标记。
-        """
-        try:
-            _c = str(code).split("_")[0]
-            _now = _time_mod.time()
-            _ttl = 3600.0
-            try:
-                from core.hunter_poll import in_trading_hours
-                if in_trading_hours(datetime.now()):
-                    _ttl = 60.0
-            except Exception:
-                _ttl = 60.0
-            with _HINT_BARS_LOCK:
-                _hit = _HINT_BARS.get(_c)
-                _run = _c in _HINT_BARS_RUN
-            if _hit is not None and (_now - _hit[0]) < _ttl:
-                return _hit[1]
-            if not _run:
-                with _HINT_BARS_LOCK:
-                    if len(_HINT_BARS) > 400:
-                        _HINT_BARS.clear()
-                    _HINT_BARS_RUN.add(_c)
-                _th.Thread(target=_hint_bars_worker, args=(_c,), daemon=True,
-                           name=f"hint-bars-{_c}").start()
-            return _hit[1] if _hit is not None else None
-        except Exception:
-            return None
-
-    def _mw_ma_hint(self, code, frame=None):
-        """多窗口文字标记：最新 5 分钟 bar 走到日线均线下方 2% 以内 → 站稳概率。
-
-        个股走三特征模型；**指数走距离分档**（个股模型在指数上高估 2~5 倍，见实验）。
-        """
-        _is_idx = bool(_index_code(code))
-        _bars = self._mw_hint_bars(code)
-        if not _bars:
-            return None
-        _ohlc = _bars.get("ohlc") or []
-        if len(_ohlc) < 2:
-            return None
-        _o, _c, _lo, _hi = _ohlc[-1]
-        _prev_close = float(_ohlc[-2][1])
-        _tod = max(0, int(_bars.get("n_today") or 1) - 1) / 48.0
-        _ctx = self._daily_ma_ctx(code)
-        if not _ctx:
-            return None
-        _lc = float(_c)
-        if _lc <= 0:
-            return None
-        _ma_now = {n: (s + _lc) / n for n, s in _ctx["sums"].items()}
-        _ma_prev = {n: (s + _prev_close) / n for n, s in _ctx["sums"].items()}
-        _h = _ma_touch_hint(_ma_now, _ma_prev, _prev_close, float(_hi), _lc,
-                            _ctx.get("atr_pct") or 0.0, _tod)
-        if _h:
-            _h["bar"] = int(_tod * 48)
-            if _is_idx:
-                _h["prob"] = round(_index_hint_prob(_h["dist_pct"] / 100.0,
-                                                    _ctx.get("atr_pct") or 0.0), 4)
-                _h["kind"] = "index"
-            else:
-                _h["kind"] = "stock"
-        return _h
 
     def _daily_levels(self, code):
         """日线口径的**支撑/压力位**（与单图同一个 `_calc_support_resistance`），60 秒记忆。

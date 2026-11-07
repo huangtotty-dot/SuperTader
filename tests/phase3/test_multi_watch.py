@@ -442,7 +442,7 @@ class TestSupportResistance:
 
     def test_frontend_draws_levels(self):
         # 2026-10-28 起多窗口也要画「画框提醒」⇒ 入参多了 code
-        assert "function _mwOption(s, dma, levels, trades, zoom, code, hint)" in _JS
+        assert "function _mwOption(s, dma, levels, trades, zoom, code)" in _JS
         assert '`${up ? "压" : "支"} ${Number(y).toFixed(2)}`' in _JS
         # 支撑绿、压力红（与单图一致）；标签在右侧（日线MA 在左，两拨不打架）
         assert '"#f85149", type: "dashed"' in _JS and '"#3fb950", type: "dashed"' in _JS
@@ -503,7 +503,7 @@ class TestTradeMarkersInCells:
 
     def test_frontend_buckets_same_as_main_chart(self):
         # 与单图同口径：成交落进 (bar_t - 5min, bar_t]
-        assert "function _mwOption(s, dma, levels, trades, zoom, code, hint)" in _JS
+        assert "function _mwOption(s, dma, levels, trades, zoom, code)" in _JS
         assert "_be[bi] - _pMin >= tm" in _JS
         # 买=红▲托在 low 下、卖=绿▼压在 high 上（与单图同色同形）
         assert 'color: "#f85149", borderColor: "#fff"' in _JS
@@ -628,189 +628,19 @@ class TestPeriodBackend:
         assert api.load_multi_watch()["period"] == "min60", "非法周期不能覆盖旧值"
 
 
-class TestMaTouchHint:
-    """2026-11-05 owner：5 分钟线走到日线关键均线（5/10/20/30/60）能否翻过去。
+class TestDailyMaFallback:
+    """2026-11-06 owner：多窗口跑一段时间后很多票没有日均线。
 
-    实验见 `scripts/experiment/ma_break_5min_*_20261105.py`（981 只 × 357 日，23.7 万事件）：
-      · 无条件：60 分钟内**摸过** 59~62%、**收上去过** 47~50%、30 分钟后**仍站在上方 0.2%** 28~30%；
-      · 唯一强特征是「离均线有多近」（贴线 34% → 离 1.2% 以上 17%）；
-      · 量能（修正前视后）**没有**区分度；波动高、早盘、均线上行各 +1~5pp；
-      · 3 特征模型时间外 AUC 0.583，按月 0.54~0.62，校准良好。
+    根因：盘中日线缓存写入**当天半成品根** ⇒ `load_daily_display` 的
+    `is_unconfirmed_today_bar` 闸返回 None ⇒ `_daily_ma_bundle/_daily_levels` 变 None。
+    这些计算只用已完成日 ⇒ 必须退回原始行，不能被那道闸卡死。
     """
 
-    def _call(self, **kw):
-        base = dict(ma_now={20: 10.0}, ma_prev={20: 10.0}, prev_close=9.98,
-                    last_high=10.01, last_close=9.99, atr_pct=4.5, tod_frac=0.2)
-        base.update(kw)
-        return t_gui._ma_touch_hint(**base)
-
-    def test_摸到线且收盘在线下_给出概率(self):
-        h = self._call()
-        assert h and h["ma"] == 20
-        assert 0.0 < h["prob"] < 1.0
-        assert abs(h["dist_pct"] - 0.1) < 0.02
-
-    def test_没摸到线但走进贴近带_也要标注(self):
-        """2026-11-05 owner 反馈：60 分图上 1.4% 的距离也该有提示 ⇒ 不要求「摸到」。"""
-        h = self._call(last_high=9.95, last_close=9.90)      # 离 MA20 1%，没摸到
-        assert h and h["ma"] == 20
-
-    def test_收盘已站上_不标注(self):
-        assert self._call(last_close=10.02) is None
-
-    def test_离得太远_不标注(self):
-        assert self._call(ma_now={20: 10.0}, last_high=10.0, last_close=9.70) is None
-
-    def test_取最近的那条线(self):
-        h = self._call(ma_now={5: 9.995, 20: 10.30},
-                       ma_prev={5: 9.995, 20: 10.30}, last_high=10.31, last_close=9.99)
-        assert h["ma"] == 5, "两条都摸到时取距离最近的"
-
-    def test_概率随距离单调下降(self):
-        near = self._call(last_close=9.995)
-        far = self._call(last_close=9.94)
-        assert near["prob"] > far["prob"]
-
-    def test_与看盘周期无关(self):
-        """60/30/10 分也要标注：内部固定用 5 分钟 bar 判断（模型是 5min 口径）。"""
-        py = (_ROOT / "t_gui.py").read_text(encoding="utf-8")
-        assert '"hint": self._mw_ma_hint(_c),' in py
-        assert 'def _mw_hint_bars(self, code):' in py
-        assert '_fetch_min_bars_tencent(code, "5min")' in py, "标记固定用 5 分钟 bar"
-        assert "def _hint_bars_worker(code):" in py
-
-    def test_瘦帧也带标记(self, monkeypatch):
-        api = t_gui.Api()
-        fr = _frame(120)
-        fr["sig"] = "d119|2.000|120"
-        monkeypatch.setattr(api, "_mw_frame", lambda c, period="min5": (fr, "fresh"))
-        monkeypatch.setattr(api, "_mw_ma_hint", lambda c: {"ma": 20, "prob": 0.35})
-        r = api.load_multi_chart(["600000"], "min5", 90, {"600000": "d119|2.000|120"})
-        it = r["items"][0]
-        assert it.get("unchanged") is True
-        assert it["hint"]["prob"] == 0.35, "瘦帧（图不重画）也要能刷新文字标记"
-
-    def test_前端渲染标记(self):
-        assert 'class="mw-hint" id="mwHint${i}"' in _JS
-        assert "function _paintHintEl(el, h)" in _JS
-        assert "_mwPaintHint(i, it.hint);" in _JS
-        assert "不是买入信号" in _JS, "标记必须写明不是买入信号"
-        # 2026-11-05 owner：「需要清晰地标注」⇒ 概率直接写进**那条均线自己的标签**
-        assert "· 站稳≈" in _JS
-        assert "_mwOption(s, it.dma, it.levels, it.trades, mwZoom[i], it.code, it.hint)" in _JS
-        assert "it.hint ? JSON.stringify(it.hint) : \"\"" in _JS, "标记变化要触发重绘"
-
-    def test_mw_ma_hint_用实时价现算均线(self, monkeypatch):
-        """`_daily_ma_ctx` 只缓存与价格无关的基准 ⇒ 每跳用实时价算 MA。"""
-        import pandas as pd
-        api = t_gui.Api.__new__(t_gui.Api)
-        api._dma_ctx_memo = {}
-        dates = pd.date_range("2026-01-01", periods=40).strftime("%Y-%m-%d").tolist()
-        df = pd.DataFrame({"date": dates, "open": [10.0] * 40, "high": [10.2] * 40,
-                           "low": [9.8] * 40, "close": [10.0] * 40, "volume": [1e6] * 40})
-        import core.chart_cache as cc
-        monkeypatch.setattr(cc, "load_daily_display", lambda c: df)
-        ctx = api._daily_ma_ctx("600000")
-        assert ctx and ctx["sums"][20] == 190.0      # 前 19 个完成日 × 10.0
-        assert abs(ctx["atr_pct"] - 4.0) < 0.01      # (10.2−9.8)/10 = 4%
-        # 标记的数据源固定是 5 分钟 bar（与看盘周期无关）⇒ 打桩 `_mw_hint_bars`
-        monkeypatch.setattr(api, "_mw_hint_bars", lambda c: {
-            "dates": ["2026-11-05 10:00", "2026-11-05 10:05"],
-            "ohlc": [[10.0, 9.98, 9.95, 10.01], [10.0, 9.99, 9.95, 10.01]],
-            "n_today": 7})
-        h = api._mw_ma_hint("600000")
-        # 平盘造的数据里几条均线几乎重合 ⇒ 取最近的那条，不限定是哪一条
-        assert h and h["ma"] in (5, 10, 20, 30) and 0 < h["prob"] < 1
-
-    def test_单图分钟周期也带标记(self, monkeypatch):
-        """owner 2026-11-05：「我要在 5 分钟线图中显示」——单图 5 分/其它分钟档都要有。"""
-        api = t_gui.Api()
-        fr = _frame(120)
-        fr["sig"] = "s1"
-        monkeypatch.setattr(api, "_chart_live_frame", lambda c, p: (fr, "fresh"))
-        monkeypatch.setattr(api, "_mw_ma_hint", lambda c: {"ma": 20, "prob": 0.31})
-        r = api.load_chart_realtime("600000", "min5", None)
-        assert r["hint"]["prob"] == 0.31
-        r2 = api.load_chart_realtime("600000", "daily", None)
-        assert r2.get("hint") is None, "日/周/月 K 不挂「接下来 30 分钟」的概率"
-
-    def test_5分钟bar走缓存_调用线程不取数(self):
-        """`_mw_hint_bars` 是 SWR：命中缓存直接回，不在 js_api 线程上发网络请求。"""
-        import time as _t
-        t_gui._HINT_BARS.clear()
-        t_gui._HINT_BARS_RUN.clear()
-        bars = {"dates": ["2026-11-05 14:55", "2026-11-05 15:00"],
-                "ohlc": [[10.0, 9.98, 9.95, 10.01], [10.0, 9.99, 9.95, 10.01]],
-                "n_today": 48}
-        t_gui._HINT_BARS["600000"] = (_t.time(), bars)
-        api = t_gui.Api.__new__(t_gui.Api)
-        assert api._mw_hint_bars("600000") is bars
-        t_gui._HINT_BARS.clear()
-        t_gui._HINT_BARS_RUN.clear()
-
-    def test_指数用距离分档(self, monkeypatch):
-        """owner 2026-11-05：「指数（科创50/上证）也需要标」。
-
-        个股模型在指数上高估 2~5 倍（预测 30% vs 实际 18%），故指数走**距离分档**：
-        ≤0.2% 18.5% / 0.2~0.5% 5.8% / 0.5~1% 4.4% / 1~2% 2.4%（726 次，2026-08~11）。
-        """
-        # 通达信 6,407 次验证后的「距离 × 波动」二维表
-        assert t_gui._index_hint_prob(0.001, 1.1) == 0.238   # 低波（上证50/沪深300）
-        assert t_gui._index_hint_prob(0.001, 2.5) == 0.326   # 高波（创业板/科创50）
-        assert t_gui._index_hint_prob(0.004, 1.1) == 0.132
-        assert t_gui._index_hint_prob(0.004, 2.5) == 0.229
-        assert t_gui._index_hint_prob(0.008, 1.1) == 0.020
-        assert t_gui._index_hint_prob(0.008, 2.5) == 0.127
-        assert t_gui._index_hint_prob(0.015, 1.1) == 0.0
-        assert t_gui._index_hint_prob(0.015, 2.5) == 0.026
-        api = t_gui.Api.__new__(t_gui.Api)
-        api._dma_ctx_memo = {}
-        monkeypatch.setattr(api, "_mw_hint_bars", lambda c: {
-            "dates": ["2026-11-05 10:00", "2026-11-05 10:05"],
-            "ohlc": [[10.0, 9.98, 9.95, 10.01], [10.0, 9.99, 9.95, 10.01]],
-            "n_today": 7})
-        monkeypatch.setattr(api, "_daily_ma_ctx",
-                            lambda c: {"sums": {n: 10.0 * (n - 1) + 1.0 for n in (5, 10, 20)},
-                                       "atr_pct": 1.2})
-        h = api._mw_ma_hint("sh000688")
-        assert h and h["kind"] == "index" and h["prob"] in (0.238, 0.326, 0.132, 0.229, 0.020, 0.127, 0.0, 0.026)
-
-    def test_前端指数阈值与口径(self):
-        assert 'h.kind === "index"' in _JS
-        assert "指数口径（距离×波动分档" in _JS
-        assert "const _hi = _isIdx ? 25 : 38, _mid = _isIdx ? 12 : 30;" in _JS
-
-    def test_点日线看5分钟也带标记(self):
-        """owner 2026-11-05：「点击日线图的某个K线 显示5分钟图时 也要显示这个」。"""
-        py = (_ROOT / "t_gui.py").read_text(encoding="utf-8")
-        assert 'out["hint"] = _h' in py, "load_day_intraday 要回 hint"
-        assert 'id="dayMaHint"' in _HTML
-        assert '_paintHintEl(document.getElementById("dayMaHint"), d.hint || null);' in _JS
-
-    def test_日内弹窗按最贴近时点标注(self):
-        """2026-11-04 科创50 收盘离 MA5 还有 3.6%，但盘中 14:15 走到 MA10 附近 0.32%。
-
-        owner 截图问「没有显示站稳概率」⇒ 日内弹窗按**当天最贴近均线的时点**算，
-        并在图上画一条竖虚线标出那个时刻。
-        """
-        py = (_ROOT / "t_gui.py").read_text(encoding="utf-8")
-        assert '_best = {"ma": _n, "dist": _d, "i": _i' in py
-        assert '_h["time"] = _dates[_best["i"]][-5:]' in py
-        assert "const _hintLine = (d.hint && d.hint.bar != null" in _JS
-        assert "xAxis: d.dates[d.hint.bar]," in _JS
-
     def test_盘中半成品根不再让日均线消失(self, monkeypatch):
-        """2026-11-06 owner：多窗口跑一段时间后很多票没有日均线。
-
-        根因：盘中日线缓存写入**当天半成品根** ⇒ `load_daily_display` 的
-        `is_unconfirmed_today_bar` 闸返回 None ⇒ `_daily_ma_bundle/_daily_ma_ctx/_daily_levels`
-        全变 None。这些计算只用已完成日 ⇒ 必须退回原始行，不能被那道闸卡死。
-        """
         import datetime as _dt
         import core.chart_cache as cc
         api = t_gui.Api.__new__(t_gui.Api)
         api._dma_memo = {}
-        api._dma_ctx_memo = {}
         rows = []
         d0 = _dt.date(2026, 6, 1)
         for i in range(120):
@@ -821,5 +651,3 @@ class TestMaTouchHint:
         monkeypatch.setattr(t_gui, "_daily_rows_before_today", lambda c: rows)
         d = api._daily_ma_bundle("600584")
         assert d and d["ma5"] > 0 and d["ma60"] > 0
-        ctx = api._daily_ma_ctx("600584")
-        assert ctx and ctx["sums"][20] > 0 and ctx["atr_pct"] > 0
