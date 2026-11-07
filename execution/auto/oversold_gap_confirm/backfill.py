@@ -203,7 +203,7 @@ def pending_from_fills(fills) -> list:
     for r in ((fills or {}).get("buys") or []):
         try:
             st = str(r.get("status") or "")
-            if st in ("rejected", "expired", "cancelled", "error", "skipped"):
+            if st in ("rejected", "expired", "cancelled", "skipped"):
                 continue
             qp = int(r.get("qty_placed") or 0)
             fq = int(r.get("filled_qty") or 0)
@@ -220,34 +220,109 @@ def pending_from_fills(fills) -> list:
     return [p for p in out if p["code"] and p["ref_price"] > 0]
 
 
-def committed_notional(fills, released_codes=()) -> dict:
-    """逐 code 的**已占用名义** = 已成交 + 未终态且撤单**未确认**的冻结部分。
+def _execution_limit(rec) -> float | None:
+    """只读真实委托限价；参考价和旧 exchange_limit_up 都不是执行限价。"""
+    try:
+        value = float((rec or {}).get("execution_limit_price") or 0)
+        if math.isfinite(value) and value > 0:
+            return value
+        ceiling = float((rec or {}).get("execution_ceiling_price") or 0)
+        if math.isfinite(ceiling) and ceiling > 0 \
+                and (rec or {}).get("budget_price_kind") != "exchange_limit_up":
+            return ceiling
+    except (TypeError, ValueError):
+        pass
+    return None
 
-    `released_codes`：撤单已确认（status ∈ {5,4}）的 code —— 其冻结部分不再占用额度。
-    落实 owner 决策 #4「撤单回报确认后再用释放额度」。
-    """
+
+def _known_filled_notional(rec):
+    """返回真实成交额；量有价缺失时返回 None，绝不拿参考价/限价冒充成交。"""
+    qty = max(0, int((rec or {}).get("filled_qty") or 0))
+    if qty <= 0:
+        return 0.0
+    explicit = (rec or {}).get("filled_notional")
+    if explicit is not None:
+        try:
+            value = float(explicit)
+            if math.isfinite(value) and value > 0:
+                return value
+        except (TypeError, ValueError):
+            pass
+    try:
+        px = float((rec or {}).get("filled_price") or 0)
+        if math.isfinite(px) and px > 0:
+            return qty * px
+    except (TypeError, ValueError):
+        pass
+    return None
+
+
+def filled_notional(rec) -> float:
+    """一笔买单的真实成交额；缺真实 VWAP 时返回 0，由 committed 另行保守计提。"""
+    try:
+        value = _known_filled_notional(rec)
+        return float(value or 0.0)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def actual_buy_notional(fills) -> float:
+    """当日所有已知真实 BUY fill 的累计成交额（不含缺价成交与未成交预留）。"""
+    return sum(filled_notional(r) for r in ((fills or {}).get("buys") or []))
+
+
+def record_reserved_notional(rec, released=False) -> float:
+    """未成交量 × 实际限价；旧在途缺真实限价直接抛错，调用方必须 fail-closed。"""
+    qty_placed = max(0, int((rec or {}).get("qty_placed") or 0))
+    filled_qty = min(qty_placed, max(0, int((rec or {}).get("filled_qty") or 0)))
+    terminal = str((rec or {}).get("status") or "") in (
+        "rejected", "expired", "cancelled", "skipped")
+    remaining = max(0, qty_placed - filled_qty)
+    if terminal or released or remaining <= 0:
+        return 0.0
+    limit = _execution_limit(rec)
+    if limit is None:
+        raise ValueError("missing_execution_limit:%s:%s" % (
+            (rec or {}).get("code"), (rec or {}).get("order_id")))
+    return remaining * limit
+
+
+def reserved_notional(fills) -> dict:
+    """逐 code 汇总仍在途的限价预留，不含任何已成交数量。"""
+    out = {}
+    for rec in ((fills or {}).get("buys") or []):
+        code = str((rec or {}).get("code") or "")
+        if not code:
+            continue
+        value = record_reserved_notional(rec)
+        out[code] = out.get(code, 0.0) + value
+    return {k: v for k, v in out.items() if v > 0}
+
+
+def record_committed_notional(rec, released=False) -> float:
+    """真实成交（缺价时按实际限价保守计提）+ 未成交实际限价预留。"""
+    filled_qty = max(0, int((rec or {}).get("filled_qty") or 0))
+    known = _known_filled_notional(rec)
+    if known is None:
+        limit = _execution_limit(rec)
+        if limit is None:
+            raise ValueError("missing_execution_limit_for_priceless_fill:%s:%s" % (
+                (rec or {}).get("code"), (rec or {}).get("order_id")))
+        known = filled_qty * limit
+    return float(known or 0.0) + record_reserved_notional(rec, released=released)
+
+
+def committed_notional(fills, released_codes=()) -> dict:
+    """逐 code 的额度占用，全程保留原始精度；无法证明限价时抛出并闭锁。"""
     rel = set(released_codes or ())
     out = {}
-    for r in ((fills or {}).get("buys") or []):
-        try:
-            c = str(r.get("code") or "")
-            if not c:
-                continue
-            qp = int(r.get("qty_placed") or 0)
-            fq = int(r.get("filled_qty") or 0)
-            fp = float(r.get("filled_price") or 0)
-            ref = float(r.get("price") or 0)
-            filled_notional = fq * (fp or ref)
-            st = str(r.get("status") or "")
-            terminal_bad = st in ("rejected", "expired", "cancelled", "error")
-            frozen = 0.0
-            if not terminal_bad and c not in rel:
-                frozen = max(0, qp - fq) * ref
-            out[c] = out.get(c, 0.0) + filled_notional + frozen
-        except Exception:
+    for rec in ((fills or {}).get("buys") or []):
+        code = str((rec or {}).get("code") or "")
+        if not code:
             continue
-    # 只留**真正占用额度**的 code（0 不入表：调用方按"有没有这条"判占用，留 0 会误判）
-    return {k: round(v, 2) for k, v in out.items() if v > 0}
+        value = record_committed_notional(rec, released=code in rel)
+        out[code] = out.get(code, 0.0) + value
+    return {k: v for k, v in out.items() if v > 0}
 
 
 def budget_for_round(daily_budget, single_budget, committed, cash_free, cash_headroom=0.95):
@@ -270,28 +345,30 @@ def budget_for_round(daily_budget, single_budget, committed, cash_free, cash_hea
 
 # ════════════════════════ 撤单（注入式，可干跑） ════════════════════════
 
-# 撤单后「资金真的释放了」的终态：5=Canceled、4=DoneForDay。
-# ⚠️ 6=PendingCancel **不算**（还没撤成、钱还冻着）；3=Filled 是竞态成交（撤单没赢）；
-#    2=PartiallyFilled 只释放未成交部分。语义出处见
-#    `doc/review/archive/goldminer/backlog/Phase-A_合成拒单注入验证方案.md:19-22`。
-CANCEL_RELEASED = (5, 4)
+# 只有 5=Canceled 是“撤单确认释放”。4/8=rejected、12=expired 是其它终态；
+# 6=PendingCancel 永远在途，3=Filled 是撤单竞态成交。
+CANCEL_RELEASED = (5,)
 CANCEL_PENDING = (6,)
 CANCEL_LOST_RACE = (3,)
+CANCEL_TERMINAL = (4, 5, 8, 12)
+
+
+def _raw_order_status(rep):
+    raw = (rep or {}).get("raw_status")
+    try:
+        return int(raw) if raw is not None else None
+    except (TypeError, ValueError):
+        pass
+    return {"rejected": 8, "cancelled": 5, "expired": 12,
+            "pending_cancel": 6, "filled": 3}.get((rep or {}).get("status"))
 
 
 def cancel_and_confirm(gateway, pending, poll_rounds=3, poll_sleep=2.0, sleep_fn=None, log=print):
-    """对**未成交的**买单发撤单并轮询确认。返回
-
-        {"released": [code...],        # 撤单已确认（status∈{5,4}）⇒ 额度可用
-         "filled":   [{code, qty, price}...],   # 竞态成交（撤单没赢）⇒ 按成交处理
-         "unconfirmed": [code...],     # 撤单发出但没确认（含 6/2/超时）⇒ 额度**不**释放
-         "failed": [code...]}          # 撤单下发失败（原语缺席/异常）
-
-    ⚠️ **不抛异常**：撤单环节任何失败都只是"额度不释放"，绝不能因此中断主循环。
-    """
+    """逐委托撤单并确认；released/terminal 均携带 order_id，绝不按 code 批量结算。"""
     import time as _t
     sleep_fn = sleep_fn or _t.sleep
-    res = {"released": [], "filled": [], "unconfirmed": [], "failed": []}
+    res = {"released": [], "filled": [], "unconfirmed": [], "failed": [],
+           "terminal_orders": [], "released_orders": []}
     for p in (pending or []):
         code, oid = p.get("code"), p.get("order_id")
         if not code:
@@ -302,40 +379,45 @@ def cancel_and_confirm(gateway, pending, poll_rounds=3, poll_sleep=2.0, sleep_fn
             log(f"[OSC] ⚠️ 撤单下发异常 {code} {oid}: {type(e).__name__}: {e}")
             res["failed"].append(code)
             continue
-        # order_id 缺省时 gateway 会按 symbol 解析在途单（2026-10-16）⇒ 后续轮询用**解析后**的 id
         oid = (rep or {}).get("order_id") or oid
         if not (rep or {}).get("ok"):
             if (rep or {}).get("not_found"):
-                # 该 code 已无在途买单（成交/已拒/已撤）：既不是"撤成了"也不是"撤单失败"，
-                # 钱的去向不明 ⇒ 保守按**未确认**处理（额度不释放，但不中止本轮补单）。
                 log(f"[OSC] ℹ️ {code} 无在途买单（已成交/已终态）⇒ 不按撤成处理")
                 res["unconfirmed"].append(code)
             else:
                 log(f"[OSC] ⚠️ 撤单未成功 {code} {oid}: {(rep or {}).get('message')}")
                 res["failed"].append(code)
             continue
-        # 轮询确认
         st, filled_qty, filled_px = None, 0, None
+        last = {}
         for _ in range(int(poll_rounds)):
             try:
-                rep2 = gateway.poll_order(oid, code) or {}
+                last = gateway.poll_order(oid, code) or {}
             except Exception:
                 break
-            raw = rep2.get("raw_status")
-            st = raw if raw is not None else rep2.get("status")
-            filled_qty = int(rep2.get("filled_qty") or 0)
-            filled_px = rep2.get("filled_price")
-            if st in CANCEL_RELEASED or st in CANCEL_LOST_RACE or rep2.get("status") == "filled":
+            st = _raw_order_status(last)
+            filled_qty = int(last.get("filled_qty") or 0)
+            filled_px = last.get("filled_price")
+            if st in CANCEL_TERMINAL or st in CANCEL_LOST_RACE:
                 break
             try:
                 sleep_fn(float(poll_sleep))
             except Exception:
                 break
+        detail = {"code": code, "order_id": oid, "raw_status": st,
+                  "qty_placed": int(p.get("qty_placed") or p.get("qty") or 0),
+                  "filled_qty": filled_qty, "filled_price": filled_px,
+                  "message": last.get("message") or ""}
         if st in CANCEL_LOST_RACE or (rep and rep.get("_filled")):
             res["filled"].append({"code": code, "qty": filled_qty, "price": filled_px,
-                                  "order_id": oid})
-        elif st in CANCEL_RELEASED:
-            res["released"].append(code)
+                                  "order_id": oid, "raw_status": 3})
+        elif st in CANCEL_TERMINAL:
+            detail["status"] = {4: "rejected", 8: "rejected",
+                                5: "cancelled", 12: "expired"}[st]
+            res["terminal_orders"].append(detail)
+            if st in CANCEL_RELEASED:
+                res["released"].append(code)
+                res["released_orders"].append(dict(detail))
         else:
             res["unconfirmed"].append(code)
     return res
@@ -345,19 +427,9 @@ def cancel_and_confirm(gateway, pending, poll_rounds=3, poll_sleep=2.0, sleep_fn
 
 def run_backfill_exec(gateway, date, fills, pending, spares, prev_close, quotes,
                       positions=None, params=None, dry_run=False,
-                      sleep_fn=None, log=print) -> dict:
-    """**一轮**补单：撤单确认 → 额度重算 → 候补复检 → 顺移下单。
-
-    参数
-        fills      : 当日首轮（或上一轮）的 fills dict —— 额度账 `committed` 由它算
-        pending    : `pending_from_fills(fills)` 的结果（待补单）
-        spares     : `build_spares(...)` 的结果（顺移候补，gap 降序）
-        prev_close : {code: 昨收}（复检"缺口未回补"与涨停价都要）
-        quotes     : {code: {price, vwap, ask_v}}（hooks 取数；缺 → 该票 fail-closed 跳过）
-
-    返回 `{cancel, committed, cash_budget, placed, skipped, released, note}`。
-    **不抛**：任何异常都收窄成"这轮不补"，绝不中断主循环。
-    """
+                      sleep_fn=None, log=print, book_dir=None) -> dict:
+    """一轮补单：逐委托撤单/终态结算后，才以原数量和真实限价安排新 BUY。"""
+    import copy
     from . import executor as _ex                      # 函数级 import，避免与 executor 循环
     cfg = {**_ex.DEFAULTS, **(params or {})}
     lot = int(cfg["min_lot"])
@@ -368,40 +440,85 @@ def run_backfill_exec(gateway, date, fills, pending, spares, prev_close, quotes,
     poll_sleep = float(cfg["order_poll_sleep_sec"])
     sleep_fn = sleep_fn or time.sleep
 
-    out = {"date": str(date), "cancel": None, "committed": {}, "cash_budget": 0.0,
-           "placed": [], "skipped": [], "released": [], "note": ""}
+    out = {"date": str(date), "cancel": None, "committed": {}, "reserved": {},
+           "cash_budget": 0.0, "placed": [], "skipped": [], "released": [], "note": "",
+           "budget_bound_breaches": []}
 
-    # ① 撤单并**确认**（未确认 ⇒ 额度不释放，见 ②）
     cres = cancel_and_confirm(gateway, pending, poll_rounds, poll_sleep, sleep_fn, log)
     out["cancel"] = cres
     out["released"] = list(cres.get("released") or [])
 
-    # ② 额度账：撤单确认后才释放（owner 决策 #4）
-    committed = committed_notional(fills, released_codes=cres.get("released"))
-    out["committed"] = committed
+    # 独立预算视图按 order_id + raw_status 逐单更新；同 code 的其他委托绝不受牵连。
+    budget_view = copy.deepcopy(fills or {"buys": []})
+    budget_view.setdefault("buys", [])
+    match_issues = []
 
-    # ②′ 安全闸（2026-10-16 生产施工，owner 拍板）：**撤单失败 ⇒ 本轮不补单**。
-    # 「撤单下发失败」意味着账户委托状态不可知（原语缺席/拒撤/解析不到单号）——
-    # 此时账户里可能仍挂着有效买单，再补单就是拿"以为释放了、实际没释放"的额度超买。
-    # 与 gateway.cancel_order 的防御式降级口径一致：`cancel_unavailable` ⇒ 不做补单。
-    # 注意只闸 `failed`：`unconfirmed`（含 PendingCancel 钱未解冻、无在途单）**不**中止——
-    # 它们只是"那笔额度不释放"，剩余额度内的补单仍允许（既有测试钉住此口径）。
+    def _match(code, oid):
+        candidates = [r for r in budget_view["buys"]
+                      if str(r.get("code") or "") == str(code)
+                      and str(r.get("status") or "") not in _ex._TERMINAL_ORDER_STATUS]
+        if oid:
+            for rec in reversed(candidates):
+                if str(rec.get("order_id") or rec.get("id") or "") == str(oid):
+                    return rec
+            blank = [r for r in candidates if not str(r.get("order_id") or r.get("id") or "")]
+            return blank[0] if len(blank) == 1 else None
+        return candidates[0] if len(candidates) == 1 else None
+
+    for terminal in (cres.get("terminal_orders") or []):
+        code, oid = terminal.get("code"), str(terminal.get("order_id") or "")
+        hit = _match(code, oid)
+        if hit is None:
+            match_issues.append({"kind": "terminal_order_unmatched", "code": code,
+                                 "order_id": oid, "raw_status": terminal.get("raw_status")})
+            continue
+        _ex._settle_buy_budget_record(hit, {
+            "order_id": oid or hit.get("order_id"), "status": terminal.get("status"),
+            "raw_status": terminal.get("raw_status"),
+            "filled_qty": int(terminal.get("filled_qty") or 0),
+            "filled_price": terminal.get("filled_price"),
+            "message": terminal.get("message") or ""})
+    for race in (cres.get("filled") or []):
+        code, oid = race.get("code"), str(race.get("order_id") or "")
+        hit = _match(code, oid)
+        if hit is None:
+            match_issues.append({"kind": "race_order_unmatched", "code": code, "order_id": oid})
+            continue
+        _ex._settle_buy_budget_record(hit, {
+            "order_id": oid or hit.get("order_id"), "status": "filled", "raw_status": 3,
+            "filled_qty": int(race.get("qty") or 0), "filled_price": race.get("price"),
+            "message": "撤单竞态成交"})
+
+    bound_issues = match_issues + _ex._budget_bound_issues(budget_view, prev_close)
+    out["budget_bound_breaches"] = list(bound_issues)
+    try:
+        committed = committed_notional(budget_view)
+        out["committed"] = committed
+        out["reserved"] = reserved_notional(budget_view)
+    except (TypeError, ValueError) as exc:
+        bound_issues.append({"kind": "missing_execution_limit", "error": str(exc)})
+        out["budget_bound_breaches"] = list(bound_issues)
+        committed = {}
+
     if cres.get("failed"):
         out["note"] = "cancel_failed_abort"
         log(f"[OSC] ⛔ 撤单失败 {cres['failed']} ⇒ 本轮中止补单（挂单保持不动，等下轮/15:00 拒单）")
         return out
+    if bound_issues:
+        out["note"] = "budget_bound_breach"
+        log(f"[OSC] ⛔ 在途/成交上界不可证明 ⇒ 本轮禁止新 BUY: {bound_issues}")
+        return out
 
     try:
-        cash_free = float(gateway.get_cash() or 0)     # 已扣在途冻结 ⇒ 天然不超买
+        cash_free = float(gateway.get_cash() or 0)
     except Exception:
         cash_free = 0.0
     cash_budget, _single = budget_for_round(daily, single, committed, cash_free, headroom)
     out["cash_budget"] = round(cash_budget, 2)
-    if cash_budget < lot * 1:                          # 连一手都买不起 ⇒ 别白跑
+    if cash_budget < lot * 1:
         out["note"] = "budget_exhausted"
         return out
 
-    # ③ 候补**时效复检**（封死跳过、跌破昨收/均价跳过、量纲异常跳过）
     cands = []
     for s in (spares or []):
         code = str(s.get("code") or "")
@@ -415,15 +532,11 @@ def run_backfill_exec(gateway, date, fills, pending, spares, prev_close, quotes,
             out["skipped"].append({"code": code, "reason": why})
             continue
         cands.append({"code": code, "gap": s.get("gap"),
-                      # 入场参考价 = **复检时的现价**（不是 10:00 收盘）：顺移本就是"现在买"，
-                      # 用 10:00 价折算股数会低估占用。这也是方案 B「隐性追价」的代价所在，
-                      # 回测对齐（exp26）要按同一口径算。
                       "price": float(q.get("price") or 0)})
     if not cands:
         out["note"] = "no_eligible_spare"
         return out
 
-    # ④ 下单（复用首轮的额度折算与下单原语，保持单一真源）
     positions = positions if positions is not None else (gateway.get_positions() or {})
     try:
         positions = {_ex.code_of(k) or str(k): v for k, v in positions.items()}
@@ -432,27 +545,18 @@ def run_backfill_exec(gateway, date, fills, pending, spares, prev_close, quotes,
     plan = _ex.build_buy_plan(cands, positions, cash_budget, single,
                               min_lot=lot, cash_headroom=headroom,
                               code_committed=committed)
-    for b in plan:
-        if b["defer_reason"] or b["qty_place"] <= 0:
-            out["skipped"].append({"code": b["code"],
-                                   "reason": b["defer_reason"] or "qty_zero"})
+    records, issues = _ex._execute_buy_plan_with_budget(
+        gateway, plan, prev_close, budget_view, cash_free, daily, single, cfg,
+        dry_run=dry_run, sleep_fn=sleep_fn, log=log, book_dir=book_dir, date=date)
+    out["budget_bound_breaches"] = list(issues)
+    for rec in records:
+        if int(rec.get("qty_placed") or 0) <= 0:
+            out["skipped"].append({"code": rec.get("code"),
+                                   "reason": rec.get("defer_reason") or "qty_zero"})
             continue
-        if dry_run:
-            out["placed"].append({"code": b["code"], "qty": b["qty_place"],
-                                  "price": b["price"], "status": "dry",
-                                  "order_id": None, "filled_qty": 0})
-            continue
-        rep = _ex._place_and_poll(gateway, b["code"], "BUY", b["qty_place"], b["price"],
-                                  poll_rounds, poll_sleep, sleep_fn, log)
-        out["placed"].append({
-            "code": b["code"], "qty": b["qty_place"], "price": b["price"],
-            "order_id": rep.get("order_id"), "status": rep.get("status"),
-            "filled_qty": int(rep.get("filled_qty") or 0),
-            "filled_price": rep.get("filled_price"),
-            "qty_remaining": max(0, b["qty_place"] - int(rep.get("filled_qty") or 0)),
-            "message": rep.get("message") or ""})
-        log(f"[OSC] 顺移 BUY {b['code']} {b['qty_place']}股@{b['price']:.3f} → "
-            f"{rep.get('status')}")
+        out["placed"].append(dict(rec, qty=int(rec["qty_placed"])))
+    if issues:
+        out["note"] = "budget_bound_breach"
     if not out["placed"]:
         out["note"] = out["note"] or "nothing_placed"
     return out

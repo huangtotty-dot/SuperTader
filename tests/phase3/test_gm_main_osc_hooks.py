@@ -100,6 +100,65 @@ class TestGmMainOscHooks(unittest.TestCase):
                         "首根 10:00 也必须先刷新 regime，再进卖→买")
         self.assertLess(c.index(_MORNING), c.index(_BUY))
 
+    def test_same_round_board_context_preserves_regime_map_shape(self):
+        board = self.r.get("late_board_regime") or {}
+        self.assertTrue(board)
+        self.assertTrue(all(isinstance(v, str) for v in board.values()),
+                        "原 context.board_regime 仍必须是 {GM指数: regime字符串}")
+        self.assertEqual(set(board), set(self.r.get("late_board_ctx_keys") or []),
+                         "每个分板判定必须保存同轮 detect ctx 供拦截留痕")
+        ctx = self.r.get("late_market_ctx") or {}
+        self.assertEqual(ctx.get("requested_date"), "2026-10-14")
+        self.assertEqual(ctx.get("index_symbol"), "SHSE.000001")
+        self.assertEqual(ctx.get("regime"), "uni_down")
+        self.assertEqual(ctx.get("effective_date"), "2026-10-13")
+        self.assertEqual(ctx.get("expected_effective_date"), "2026-10-13")
+        self.assertEqual(ctx.get("degraded"), [], "合法 morning=D-1 不得误标 stale")
+
+    def test_refresh_failure_evicts_stale_cache_and_never_calls_detect(self):
+        ctx = self.r.get("refresh_fail_ctx") or {}
+        self.assertIn("index_refresh_empty", ctx.get("degraded") or [])
+        self.assertFalse(self.r.get("refresh_fail_cache_present"))
+        self.assertEqual(self.r.get("refresh_fail_detect_calls"), 0)
+        self.assertNotIn("SHSE.000001", self.r.get("refresh_fail_board") or {})
+        self.assertEqual(self._c("refresh_fail_1450"), [_SELL], "刷新失败不得阻断卖侧")
+        audits = [a for a in self.r.get("regime_degraded_audits") or []
+                  if a.get("requested_date") == "2026-10-16"]
+        self.assertTrue(audits)
+        self.assertIn("index_refresh_empty", audits[0].get("degraded") or [])
+
+    def test_second_init_empty_or_exception_evicts_old_cache_and_readiness(self):
+        for failure in ("empty", "exception"):
+            with self.subTest(failure=failure):
+                result = self.r.get("reinit_prefetch_%s" % failure) or {}
+                self.assertTrue(result.get("first_cache_present"))
+                self.assertTrue(result.get("first_ready"))
+                self.assertFalse(result.get("second_cache_present"),
+                                 "第二次 init 失败/为空不得保留第一次旧缓存")
+                self.assertFalse(result.get("second_ready"),
+                                 "第二次 init 必须按新缓存重算 GM_DATA_READY")
+
+    def test_stale_effective_input_is_degraded_even_when_regime_uni_up(self):
+        ctx = self.r.get("stale_input_ctx") or {}
+        self.assertEqual(ctx.get("regime"), "uni_up")
+        self.assertIn("stale_input", ctx.get("degraded") or [])
+        self.assertEqual(ctx.get("effective_date"), "2026-10-14")
+        self.assertEqual(ctx.get("expected_effective_date"), "2026-10-16")
+        self.assertNotIn("SHSE.000001", self.r.get("stale_input_board") or {})
+        self.assertEqual(self._c("stale_input_1450"), [_SELL], "旧输入不得阻断卖侧")
+        audits = [a for a in self.r.get("regime_degraded_audits") or []
+                  if a.get("requested_date") == "2026-10-19"]
+        self.assertTrue(audits)
+        self.assertIn("stale_input", audits[0].get("degraded") or [])
+
+    def test_board_detect_exception_is_not_rewritten_to_range(self):
+        board = self.r.get("board_error_regime") or {}
+        self.assertNotIn("SZSE.399006", board,
+                         "分板 detect 异常不得伪写 range 放行")
+        ctx = self.r.get("board_error_ctx") or {}
+        self.assertEqual(ctx.get("degraded"), ["detect_exception"])
+        self.assertIsNone(ctx.get("regime"))
+
     def test_uni_down_does_not_block_sell_hooks(self):
         self.assertIn(_MORNING, self._c("late_1000"))
         self.assertEqual(self._c("late_1450"), [_SELL],
@@ -172,6 +231,67 @@ class TestGatewayChainEndToEnd(unittest.TestCase):
     def test_sell_is_not_locked(self):
         self.assertEqual(self.gw["sell_owned"], "submitted",
                          "卖侧不设锁（各策略账本本就是卖侧真源）")
+
+
+class TestSellTerminalPartialRollback(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        driver = os.path.join(_ROOT, "tests", "phase3",
+                              "gm_main_sell_terminal_rollback_driver.py")
+        env = dict(os.environ, SMOKE_ROOT=_ROOT, PYTHONIOENCODING="utf-8")
+        env.pop("PYTHONPATH", None)
+        proc = subprocess.run([sys.executable, driver], capture_output=True,
+                              text=True, encoding="utf-8", errors="replace",
+                              env=env, timeout=120)
+        line = next((ln for ln in proc.stdout.splitlines() if ln.startswith("RESULT ")), None)
+        if proc.returncode != 0 or line is None:
+            raise AssertionError("卖侧终态驱动失败\nSTDOUT:\n%s\nSTDERR:\n%s"
+                                 % (proc.stdout, proc.stderr))
+        cls.result = json.loads(line[len("RESULT "):])
+
+    def _assert_terminal_case(self, raw, scenario):
+        row = next(r for r in self.result["cases"]
+                   if r["raw_status"] == raw and r["scenario"] == scenario)
+        self.assertEqual((row["volume"], row["filled_volume"]), (1000, 400))
+        self.assertEqual(row["position"], {"qty": 600, "available": 600, "t_qty": 600})
+        self.assertEqual(row["osc_qty_after"], 600)
+        self.assertEqual(row["osc_delta"], 400 if scenario == "submitted_zero" else 200)
+        if scenario == "prior_fill_200":
+            self.assertEqual(row["prior_fill_action"], "sell_reduced")
+            self.assertEqual(row["osc_qty_before"], 800)
+        sell, intent = row["sell"], row["intent"]
+        terminal = "cancelled" if raw == 5 else "expired"
+        self.assertEqual(sell["status"], terminal)
+        self.assertEqual(sell["filled_qty"], 400)
+        self.assertEqual(sell["qty_remaining"], 0)
+        self.assertEqual(sell["filled_price"], self.result["expected"]["filled_vwap"])
+        self.assertEqual(sell["fee_actual"], self.result["expected"]["filled_commission"])
+        self.assertEqual(intent["status"], terminal)
+        self.assertEqual(intent["filled_qty"], 400)
+        self.assertEqual(intent["qty_remaining"], 0)
+        self.assertEqual(intent["filled_price"], sell["filled_price"])
+        self.assertEqual(intent["fee_actual"], sell["fee_actual"])
+        audits = [r for r in self.result["rollback_audits"] if r.get("code") == row["code"]]
+        self.assertEqual(len(audits), 2, "双审计文件各一条，重放不得新增")
+        self.assertTrue(all(int(r["qty"]) == 600 for r in audits))
+
+    def test_raw5_partial_fill_restores_only_600(self):
+        for scenario in ("submitted_zero", "prior_fill_200"):
+            with self.subTest(scenario=scenario):
+                self._assert_terminal_case(5, scenario)
+
+    def test_raw12_partial_fill_restores_only_600(self):
+        for scenario in ("submitted_zero", "prior_fill_200"):
+            with self.subTest(scenario=scenario):
+                self._assert_terminal_case(12, scenario)
+
+    def test_same_terminal_event_replay_is_fully_idempotent(self):
+        for row in self.result["cases"]:
+            with self.subTest(code=row["code"]):
+                self.assertTrue(row["host_replay_idempotent"])
+                self.assertTrue(row["reject_replay_idempotent"])
+                self.assertEqual(row["reject_replay_action"], "skipped")
+                self.assertEqual(row["reject_replay_reason"], "duplicate_key")
 
 
 if __name__ == "__main__":

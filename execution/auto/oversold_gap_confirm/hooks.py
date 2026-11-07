@@ -61,6 +61,9 @@ _STATE = {"date": None, "prepare": False, "buy": False, "sell": False,
           "done_codes": set(),  # 今日已碰过的 code（防重复顺移/追价）
           "backfill": {},     # {round_idx: True} 每日一次标记
           "buy_done": False,  # 首轮已执行（落盘，防进程重启后重复下单）
+          # W45 P1：本轮分板过滤完成证明 + 永久 tombstone；写盘失败当日闭锁。
+          "board_gate": {}, "board_gate_blocked_codes": set(),
+          "board_gate_unproved": False, "board_gate_persist_failed": False,
           # 盘前宇宙/板块档位（2026-10-17）：只给「每日选股记录」落盘用
           "prescreen_meta": {},
           # P0-3（2026-10-26）：init 前移主路径的标记
@@ -82,6 +85,8 @@ def reset_day(today, preserve_prescreen: bool = False) -> None:
     _STATE.update(date=today, prepare=False, buy=False, sell=False,
                   morning=False, candidates={}, fills=None, pending=[], spares=[],
                   done_codes=set(), backfill={}, buy_done=False, prescreen_meta={},
+                  board_gate={}, board_gate_blocked_codes=set(),
+                  board_gate_unproved=False, board_gate_persist_failed=False,
                   prepare_via=None, prepare_skip_logged=False,
                   sell_retries=0, morning_retries=0,
                   probe_plan=False, probe_final=False)
@@ -140,7 +145,7 @@ def _day_state_fp(rt, date):
 
 
 def save_day_state(rt, date) -> bool:
-    """把补单相关状态落盘。异常吞掉（落盘失败不该拖垮主循环），返回是否成功。"""
+    """把补单状态与分板过滤证明一起落盘；调用方必须用返回值决定是否继续执行。"""
     try:
         fp = _day_state_fp(rt, date)
         os.makedirs(os.path.dirname(fp), exist_ok=True)
@@ -150,6 +155,9 @@ def save_day_state(rt, date) -> bool:
                        "pending": _STATE.get("pending") or [],
                        "spares": _STATE.get("spares") or [],
                        "done_codes": sorted(_STATE.get("done_codes") or []),
+                       "board_gate": _STATE.get("board_gate") or {},
+                       "board_gate_blocked_codes": sorted(
+                           _STATE.get("board_gate_blocked_codes") or []),
                        "backfill": {str(k): v for k, v in (_STATE.get("backfill") or {}).items()}},
                       f, ensure_ascii=False)
         os.replace(tmp, fp)
@@ -159,7 +167,7 @@ def save_day_state(rt, date) -> bool:
 
 
 def load_day_state(rt, date) -> bool:
-    """回读当日状态（仅当**同日**且内存里还没有时）。返回是否载入。"""
+    """回读当日状态；无当日分板过滤证明的旧状态会标记为不可执行。"""
     if _STATE.get("pending") or _STATE.get("buy_done"):
         return False
     try:
@@ -174,6 +182,20 @@ def load_day_state(rt, date) -> bool:
         _STATE["pending"] = list(d.get("pending") or [])
         _STATE["spares"] = list(d.get("spares") or [])
         _STATE["done_codes"] = set(d.get("done_codes") or [])
+        _gate = d.get("board_gate") if isinstance(d.get("board_gate"), dict) else {}
+        _stage = str(_gate.get("stage") or "")
+        _proof = _gate.get("input_proof")
+        _stage_valid = bool((_stage == "initial" and _gate.get("filter_complete") is False)
+                            or (_stage == "filtered" and _gate.get("filter_complete") is True))
+        _gate_valid = bool(_gate.get("version") == 2 and _stage_valid
+                           and str(_gate.get("date")) == str(date)
+                           and isinstance(_proof, dict) and str(_proof.get("date")) == str(date)
+                           and isinstance(_proof.get("boards"), dict))
+        _STATE["board_gate"] = dict(_gate) if _gate_valid else {}
+        _STATE["board_gate_blocked_codes"] = set(
+            d.get("board_gate_blocked_codes") or _gate.get("blocked_codes") or [])
+        _STATE["board_gate_unproved"] = not _gate_valid
+        _STATE["board_gate_persist_failed"] = False
         # ⚠️ 2026-10-16 修：**合并**而不是覆盖轮次标记。`on_bar` 在调 `try_backfill` **之前**
         #    就把本轮标 True；而 `try_backfill` 开头的 `load_day_state` 若整体覆盖，
         #    会把刚打的标记冲掉 ⇒ 同一轮在后续 bar 被**重复触发**（生产上 buy_done=True
@@ -373,6 +395,144 @@ def bars_from_10am_df(df, codes, now):
     return out
 
 
+def _expected_regime_effective_date(requested_date, mode):
+    """买闸接受的已完成输入日；周末顺延，无法确认的节假日宁可 fail-closed。"""
+    day = _dt.date.fromisoformat(str(requested_date)[:10])
+    if mode in ("eod", "tail"):
+        return day.isoformat()
+    if mode not in ("morning", "live"):
+        return None
+    day -= _dt.timedelta(days=1)
+    while day.weekday() >= 5:
+        day -= _dt.timedelta(days=1)
+    return day.isoformat()
+
+
+def _board_context_errors(board_ctx, symbol, regime, now) -> list:
+    """校验买侧消费的是本轮、同指数、同方向且输入新鲜的 detect 上下文。"""
+    if not isinstance(board_ctx, dict) or not board_ctx:
+        return ["context_missing"]
+    errors = []
+    requested = str(now.date()) if hasattr(now, "date") else str(now)[:10]
+    mode = str(board_ctx.get("mode") or "")
+    expected_effective = _expected_regime_effective_date(requested, mode)
+    if str(board_ctx.get("requested_date") or "") != requested:
+        errors.append("wrong_round")
+    if str(board_ctx.get("index_symbol") or "") != str(symbol):
+        errors.append("index_symbol_mismatch")
+    if board_ctx.get("regime") != regime:
+        errors.append("regime_mismatch")
+    if expected_effective is None:
+        errors.append("mode_invalid")
+    effective = str(board_ctx.get("effective_date") or "")
+    input_last = str(board_ctx.get("input_last_date") or "")
+    if expected_effective and effective != expected_effective:
+        errors.append("stale_input")
+    if mode in ("morning", "live"):
+        if input_last not in (requested, expected_effective):
+            errors.append("input_last_date_invalid")
+        if input_last == requested and not bool(board_ctx.get("forming_bar_removed")):
+            errors.append("forming_bar_not_removed")
+    elif mode in ("eod", "tail") and input_last != requested:
+        errors.append("input_last_date_invalid")
+    if str(board_ctx.get("expected_effective_date") or expected_effective) != expected_effective:
+        errors.append("expected_effective_date_mismatch")
+    if not str(board_ctx.get("input_version") or "").startswith("sha256:"):
+        errors.append("input_version_missing")
+    try:
+        if int(board_ctx.get("input_rows") or 0) <= 0 or int(board_ctx.get("effective_rows") or 0) <= 0:
+            errors.append("input_rows_invalid")
+    except Exception:
+        errors.append("input_rows_invalid")
+    return errors
+
+
+def _regime_input_proof(context, now) -> dict:
+    """从真实 detect context 生成可落盘、可比较的当轮输入证明（不使用常量假证明）。"""
+    fields = ("requested_date", "index_symbol", "regime", "mode", "data_source",
+              "input_last_date", "effective_date", "expected_effective_date",
+              "input_version", "forming_bar_removed", "input_rows", "effective_rows")
+
+    def _part(ctx):
+        ctx = ctx if isinstance(ctx, dict) else {}
+        out = {k: ("" if ctx.get(k) is None else str(ctx.get(k))) for k in fields}
+        out["degraded"] = [str(x) for x in (ctx.get("degraded") or [])]
+        return out
+
+    boards = getattr(context, "board_regime_ctx", None)
+    boards = boards if isinstance(boards, dict) else {}
+    regimes = getattr(context, "board_regime", None)
+    regimes = regimes if isinstance(regimes, dict) else {}
+    return {"date": str(now.date()),
+            "last_index_regime": str(getattr(context, "last_index_regime", "") or ""),
+            "market": _part(getattr(context, "last_index_regime_ctx", None)),
+            "board_regime": {str(k): str(v) for k, v in sorted(regimes.items())},
+            "boards": {str(k): _part(v) for k, v in sorted(boards.items())}}
+
+
+def _board_buy_candidates(context, codes, now) -> dict:
+    """按个股所属板裁剪买侧执行候选；缺/错轮/旧输入上下文均逐票 fail-closed。"""
+    try:
+        from core.board_index import index_gm_symbol, resolve_index
+    except Exception as e:
+        return {"allowed": [], "blocked": [], "unavailable": [
+            {"code": str(c), "index_symbol": None, "reason": "board_regime_unavailable",
+             "error": "board_index_import:%s" % e} for c in (codes or [])]}
+
+    regimes = getattr(context, "board_regime", None)
+    regimes = regimes if isinstance(regimes, dict) else {}
+    contexts = getattr(context, "board_regime_ctx", None)
+    contexts = contexts if isinstance(contexts, dict) else {}
+    allowed, blocked, unavailable = [], [], []
+    for code in (codes or []):
+        code = str(code)
+        symbol = None
+        try:
+            index_code, _ = resolve_index(code)
+            symbol = index_gm_symbol(index_code)
+            regime = regimes.get(symbol)
+            board_ctx = contexts.get(symbol)
+            degraded_raw = (board_ctx.get("degraded") or []) if isinstance(board_ctx, dict) else []
+            degraded = ([degraded_raw] if isinstance(degraded_raw, str) else list(degraded_raw))
+            context_errors = _board_context_errors(board_ctx, symbol, regime, now)
+            if degraded:
+                context_errors.append("degraded")
+            if regime not in ("range", "uni_up", "uni_down"):
+                context_errors.append("regime_invalid")
+            if context_errors:
+                unavailable.append({"code": code, "index_symbol": symbol,
+                                    "regime": regime, "degraded": degraded,
+                                    "context_errors": context_errors,
+                                    "reason": "board_regime_unavailable"})
+            elif regime == "uni_down":
+                blocked.append({"code": code, "index_symbol": symbol,
+                                "regime": regime, "reason": "board_regime_uni_down"})
+            else:
+                allowed.append(code)
+        except Exception as e:
+            unavailable.append({"code": code, "index_symbol": symbol,
+                                "reason": "board_regime_unavailable",
+                                "error": "%s:%s" % (type(e).__name__, str(e)[:160])})
+    return {"allowed": allowed, "blocked": blocked, "unavailable": unavailable}
+
+
+def _audit_board_buy_filter(rt, context, now, stage, result, round_idx=None) -> None:
+    """拦截及同轮 regime 输入一起留痕；无拦截时不增加审计噪声。"""
+    result = result or {}
+    if not (result.get("blocked") or result.get("unavailable")):
+        return
+    rec = {"event": "osc_board_regime_filter", "stage": stage,
+           "time": str(now), "allowed": list(result.get("allowed") or []),
+           "blocked": list(result.get("blocked") or []),
+           "unavailable": list(result.get("unavailable") or []),
+           "regime_context": {
+               "market": getattr(context, "last_index_regime_ctx", {}) or {},
+               "board_regime": dict(getattr(context, "board_regime", {}) or {}),
+               "boards": getattr(context, "board_regime_ctx", {}) or {}}}
+    if round_idx is not None:
+        rec["round"] = int(round_idx)
+    rt.audit(rec)
+
 
 def try_buy(rt, context, now) -> int:
     """10:00 超跌跳空确认买入（每日一次）。返回已下单腿数。fail-closed：候选/棒缺失当日不下单。"""
@@ -397,6 +557,17 @@ def try_buy(rt, context, now) -> int:
     elif not _cand:
         _skip_reason = "no_candidates"
         rt.audit({"event": "osc_skip", "reason": _skip_reason, "time": str(now)})
+    else:
+        # W45⑳：首发候选拆分前逐板过滤；预筛 candidates 本身保持不变。
+        _gate = _board_buy_candidates(context, sorted(_cand), now)
+        _audit_board_buy_filter(rt, context, now, "initial", _gate)
+        _allowed = set(_gate.get("allowed") or [])
+        _cand = {c: v for c, v in _cand.items() if c in _allowed}
+        if not _cand:
+            _skip_reason = ("board_regime_unavailable" if _gate.get("unavailable")
+                            else "board_regime_uni_down")
+            rt.log(f"[OSC] [X] 分板买闸后无合法候选 -> 今日零 BUY（{_skip_reason}）")
+            rt.audit({"event": "osc_skip", "reason": _skip_reason, "time": str(now)})
     if _skip_reason:
         try:
             _cash0 = float(rt.gateway(context).get_cash() or 0)
@@ -406,7 +577,7 @@ def try_buy(rt, context, now) -> int:
             str(now.date()), "live", now.strftime("%Y-%m-%d %H:%M:%S"),
             [], [], _cash0, 0.0, dict(_exec.DEFAULTS), rt.book_dir,
             note="no_picks", spares=[], skip_reason=_skip_reason)
-        _stamp_after_buy(rt, now, _res, {})
+        _stamp_after_buy(rt, context, now, _res, {})
         return 0
     _pc, _ma = prescreen.split_into_prev_close_ma20(_cand)
     _board = {c: v.get("board", "") for c, v in _cand.items()}
@@ -457,7 +628,7 @@ def try_buy(rt, context, now) -> int:
         else:
             rt.log("[OSC] 10:00 无信号触发（缺口未守住/未站上昨收或 VWAP）-> 今日不买")
         rt.log(f"[OSC] 10:00 买侧执行: {json.dumps(_sm, ensure_ascii=False)}")
-        _stamp_after_buy(rt, now, _res, _pc)
+        _stamp_after_buy(rt, context, now, _res, _pc)
         return int(_sm.get("buys_placed") or 0)
     except Exception as _e:
         rt.log(f"[OSC] 买侧执行失败（不阻断主循环）: {_e}")
@@ -468,8 +639,8 @@ def try_buy(rt, context, now) -> int:
         return 0
 
 
-def _stamp_after_buy(rt, now, res, prev_close) -> None:
-    """首轮买侧跑完 → 把补单所需状态存进 `_STATE` 并落盘（2026-10-14）。
+def _stamp_after_buy(rt, context, now, res, prev_close) -> None:
+    """首轮买侧跑完 → 落盘补单状态及带真实输入证明的 initial gate。
 
     存什么：
       · `fills`      —— 额度账真源（`backfill.committed_notional` 用它算"已占用名义"）
@@ -504,6 +675,13 @@ def _stamp_after_buy(rt, now, res, prev_close) -> None:
         _STATE["spares"] = _spares
         _STATE["done_codes"] = _done
         _STATE["buy_done"] = True
+        _STATE["board_gate"] = {
+            "version": 2, "date": str(now.date()), "stage": "initial", "round": None,
+            "filter_complete": False, "input_proof": _regime_input_proof(context, now),
+            "blocked_codes": []}
+        _STATE["board_gate_blocked_codes"] = set()
+        _STATE["board_gate_unproved"] = False
+        _STATE["board_gate_persist_failed"] = False
         save_day_state(rt, str(now.date()))
         if _pend:
             rt.log("[OSC] 10:00 未成交 %d 只（%s）→ 等候补轮（%d 只候补、%s 起）" % (
@@ -590,6 +768,20 @@ def fetch_current_snapshot(rt, codes, now) -> dict:
     return out
 
 
+def _backfill_gate_abort(rt, now, round_idx, reason, message) -> int:
+    """分板过滤证明不可用：审计 + 风险后，在行情/撤单/BUY 之前硬停。"""
+    rt.log(f"[OSC] [X] {message}")
+    rt.audit({"event": "osc_backfill_skip", "reason": reason,
+              "round": int(round_idx), "time": str(now),
+              "board_gate": _STATE.get("board_gate") or {},
+              "blocked_codes": sorted(_STATE.get("board_gate_blocked_codes") or [])})
+    try:
+        rt.risk(str(now), reason, message, code="")
+    except Exception:
+        pass
+    return 0
+
+
 def try_backfill(rt, context, now, today, round_idx) -> int:
     """一轮补单：**未成交 ⇒ 撤单 ⇒ 候补复检 ⇒ 顺移**（2026-10-14）。
 
@@ -612,6 +804,20 @@ def try_backfill(rt, context, now, today, round_idx) -> int:
                   "regime": "uni_down", "round": int(round_idx), "time": str(now)})
         return 0
     load_day_state(rt, str(now.date()))
+    if _STATE.get("board_gate_persist_failed"):
+        return _backfill_gate_abort(
+            rt, now, round_idx, "board_gate_persist_failed",
+            "分板过滤结果此前落盘失败，当日补单闭锁（不取行情、不撤单、不开新仓）")
+    if _STATE.get("board_gate_unproved"):
+        return _backfill_gate_abort(
+            rt, now, round_idx, "board_gate_unproved_after_reload",
+            "重启读到旧版无证明或 filtering 未完成状态，补单 fail-closed（不允许 range 洗白）")
+    _input_proof = _regime_input_proof(context, now)
+    _prior_gate = _STATE.get("board_gate") or {}
+    if _prior_gate and _prior_gate.get("input_proof") != _input_proof:
+        return _backfill_gate_abort(
+            rt, now, round_idx, "board_gate_input_proof_mismatch",
+            "当前 regime/input_version 与已落盘证明不一致，补单保守闭锁")
     # 撤单前必须重读最新 fills：异步成交/终态可能已在上一轮之后落盘。
     # `no_open_order` 本身不是清 pending 的证据；只有这里重建后确实无剩余量才清除。
     _recon = fillbackfill.reconcile_day_state(rt.book_dir, str(now.date()))
@@ -623,12 +829,47 @@ def try_backfill(rt, context, now, today, round_idx) -> int:
     _pend = list(_STATE.get("pending") or [])
     if not _pend:
         return 0                              # 首轮全成 / 无挂单 ⇒ 空转（不写日志刷屏）
-    # 候补按 done_codes 剪枝（2026-10-16 生产施工）：上一轮已顺移买过的票**不得再买**——
-    # 「顺移下一名」的语义是往候补列表**下游**走，不是撤了上一轮的挂单再原票追回
-    # （那是方案 A 的追价，owner 已否决）。done_codes 在首轮登记与每轮下单后更新。
+    # 候补按 done_codes 与当日持久化 tombstone 剪枝；已拦代码不得因后续 range 复活。
     _done0 = set(_STATE.get("done_codes") or ())
-    _spares = [s for s in (_STATE.get("spares") or []) if str(s.get("code")) not in _done0]
+    _tombstones = set(_STATE.get("board_gate_blocked_codes") or ())
+    _spares = [s for s in (_STATE.get("spares") or [])
+               if str(s.get("code")) not in _done0
+               and str(s.get("code")) not in _tombstones]
+    # 先持久化 filtering：若过滤完成后的保存失败，重启能看到“开始但未完成”而非首轮 initial。
+    _STATE["board_gate"] = {
+        "version": 2, "date": str(now.date()), "stage": "filtering",
+        "round": int(round_idx), "filter_complete": False,
+        "input_proof": _input_proof, "blocked_codes": sorted(_tombstones)}
+    if not save_day_state(rt, str(now.date())):
+        _STATE["board_gate_persist_failed"] = True
+        return _backfill_gate_abort(
+            rt, now, round_idx, "board_gate_persist_failed",
+            "分板 filtering 状态落盘失败，本轮硬停（不取行情、不撤单、不开新仓）")
+    # W45⑳：每轮复检行情前重查同一轮分板判定；缺判定只封对应候补，不回退 range。
+    _gate = _board_buy_candidates(context, [s.get("code") for s in _spares], now)
+    _audit_board_buy_filter(rt, context, now, "backfill", _gate, round_idx=round_idx)
+    _allowed = set(_gate.get("allowed") or [])
+    _round_blocked = {str(b.get("code")) for b in (_gate.get("blocked") or [])
+                      if b.get("code")}
+    _tombstones.update(_round_blocked)
+    _spares = [s for s in _spares if str(s.get("code")) in _allowed]
     _STATE["spares"] = _spares
+    _STATE["board_gate_blocked_codes"] = _tombstones
+    _STATE["board_gate"] = {
+        "version": 2, "date": str(now.date()), "stage": "filtered",
+        "round": int(round_idx), "filter_complete": True,
+        "input_proof": _input_proof, "blocked_codes": sorted(_tombstones),
+        "round_blocked_codes": sorted(_round_blocked),
+        "unavailable_codes": sorted(str(u.get("code")) for u in (_gate.get("unavailable") or [])
+                                    if u.get("code")),
+        "allowed_codes": sorted(_allowed)}
+    # 本轮过滤结果与 tombstone 必须先持久化；失败不得继续行情、撤单或 BUY。
+    if not save_day_state(rt, str(now.date())):
+        _STATE["board_gate_persist_failed"] = True
+        return _backfill_gate_abort(
+            rt, now, round_idx, "board_gate_persist_failed",
+            "分板过滤结果/tombstone 落盘失败，本轮硬停（不取行情、不撤单、不开新仓）")
+    _STATE["board_gate_persist_failed"] = False
     _fills = _STATE.get("fills") or {}
     if not _spares:
         rt.log(f"[OSC] 补单第{int(round_idx) + 1}轮：有 {len(_pend)} 只未成交但**候补已耗尽** "
@@ -652,7 +893,7 @@ def try_backfill(rt, context, now, today, round_idx) -> int:
         _res = backfill.run_backfill_exec(
             rt.gateway(context), str(now.date()), _fills, _pend, _spares, _pc, _quotes,
             positions=None, params=_params, dry_run=False,
-            sleep_fn=_time.sleep, log=print)
+            sleep_fn=_time.sleep, log=print, book_dir=rt.book_dir)
     except Exception as _e:
         rt.log(f"[OSC] 补单第{int(round_idx) + 1}轮执行失败（不阻断主循环）: {_e}")
         return 0
@@ -674,21 +915,36 @@ def try_backfill(rt, context, now, today, round_idx) -> int:
               "skipped": _res.get("skipped"), "note": _res.get("note"),
               "time": str(now)})
 
-    # 先把 released / 撤单竞态成交写回 fills，再合并本轮 summary。
-    # 否则重启后仍会从 submitted 留痕重建 pending，已撤/已成委托会“复活”。
-    _oid_of = {str(p.get("code")): str(p.get("order_id") or "") for p in _pend}
-    for _code in (_cr.get("released") or []):
+    # 先把逐委托 terminal/race 写回 fills，再合并本轮 summary；绝不按 code 批量释放。
+    _terminal_orders = list(_cr.get("terminal_orders") or [])
+    if not _terminal_orders:                  # 兼容旧注入结果；真实执行器始终给 terminal_orders
+        for _code in (_cr.get("released") or []):
+            _matches = [p for p in _pend if str(p.get("code")) == str(_code)]
+            if len(_matches) == 1:
+                _terminal_orders.append({
+                    "code": _code, "order_id": _matches[0].get("order_id"),
+                    "qty_placed": _matches[0].get("qty_placed"), "raw_status": 5,
+                    "status": "cancelled"})
+    for _t in _terminal_orders:
+        _code = str(_t.get("code") or "")
+        _oid = str(_t.get("order_id") or "")
         try:
-            fillbackfill.apply_cancelled(rt.book_dir, str(now.date()), _code,
-                                         _oid_of.get(str(_code), ""), log=print)
+            if int(_t.get("raw_status") or 0) == 5:
+                fillbackfill.apply_cancelled(rt.book_dir, str(now.date()), _code,
+                                             _oid, log=print)
+            else:
+                fillbackfill.apply_reject(rt.book_dir, {
+                    "time": str(now), "code": _code, "side": "BUY",
+                    "qty": int(_t.get("qty_placed") or _t.get("filled_qty") or 0),
+                    "order_id": _oid, "status": int(_t.get("raw_status") or 0),
+                    "rej_detail": _t.get("message") or ""}, log=print)
         except Exception as _ce:
-            rt.log(f"[OSC] ⚠️ released 留痕失败 {_code}（不阻断）: {_ce}")
+            rt.log(f"[OSC] ⚠️ terminal 留痕失败 {_code}/{_oid}（不阻断）: {_ce}")
     for _f in (_cr.get("filled") or []):
         try:
             fillbackfill.apply_race_fill(
                 rt.book_dir, str(now.date()), _f.get("code"), _f.get("qty"),
-                price=_f.get("price"), order_id=_f.get("order_id")
-                or _oid_of.get(str(_f.get("code")), ""), log=print)
+                price=_f.get("price"), order_id=_f.get("order_id") or "", log=print)
         except Exception as _fe:
             rt.log(f"[OSC] ⚠️ 竞态成交留痕失败 {_f.get('code')}（不阻断）: {_fe}")
 
@@ -718,29 +974,32 @@ def try_backfill(rt, context, now, today, round_idx) -> int:
         except Exception as _e:
             rt.log(f"[OSC] ⚠️ 顺移买入入账失败（不阻断；卖前对账会夹紧）: {_e}")
 
-    # 状态推进：撤单确认的不再挂账；本轮下单的票若仍未成交，进下一轮 pending
-    _released = set(_cr.get("released") or [])
-    for _f in (_cr.get("filled") or []):      # 竞态成交的委托也算"已了结"，不再挂账
-        if _f.get("code"):
-            _released.add(_f["code"])
+    # pending 以合并后的最新 fills 重建；同 code 多单只按各自 qty_remaining 存活。
     _done = set(_STATE.get("done_codes") or ())
-    _next_pend = []
-    for p in _pend:
-        if p["code"] in _released:
-            continue                          # 已撤成 / 已竞态成交 ⇒ 不再挂账
-        _next_pend.append(p)                  # 未确认的撤单**继续挂账**（额度不释放）
     for p in _placed:
         _done.add(str(p["code"]))
-        if p.get("qty_remaining") and p.get("status") not in (
-                "filled", "rejected", "expired", "cancelled", "error"):
-            _next_pend.append({"code": p["code"], "order_id": p.get("order_id"),
-                               "gap": None, "price": float(p.get("price") or 0),
-                               "qty_placed": int(p.get("qty") or 0),
-                               "filled_qty": int(p.get("filled_qty") or 0),
-                               "qty_remaining": int(p.get("qty_remaining") or 0),
-                               "ref_price": float(p.get("filled_price")
-                                                  or p.get("price") or 0)})
-    _STATE["pending"] = _next_pend
+    _recon_after = fillbackfill.reconcile_day_state(rt.book_dir, str(now.date()))
+    if _recon_after:
+        _STATE["fills"] = _recon_after["fills"]
+        _STATE["pending"] = _recon_after["pending"]
+    else:
+        # 无 fills 文件的旧注入测试/异常路径仅作兼容兜底，生产正常不会走这里。
+        _released = set(_cr.get("released") or [])
+        for _f in (_cr.get("filled") or []):
+            if _f.get("code"):
+                _released.add(_f["code"])
+        _next_pend = [p for p in _pend if p["code"] not in _released]
+        for p in _placed:
+            if p.get("qty_remaining") and p.get("status") not in (
+                    "filled", "rejected", "expired", "cancelled"):
+                _next_pend.append({"code": p["code"], "order_id": p.get("order_id"),
+                                   "gap": None, "price": float(p.get("price") or 0),
+                                   "qty_placed": int(p.get("qty") or 0),
+                                   "filled_qty": int(p.get("filled_qty") or 0),
+                                   "qty_remaining": int(p.get("qty_remaining") or 0),
+                                   "ref_price": float(p.get("filled_price")
+                                                      or p.get("price") or 0)})
+        _STATE["pending"] = _next_pend
     _STATE["done_codes"] = _done
     save_day_state(rt, str(now.date()))
     return len(_placed)

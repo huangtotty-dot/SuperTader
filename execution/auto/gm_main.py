@@ -96,50 +96,87 @@ _atexit.register(_gm_atexit_banner)
 
 
 # ── P0-2 Fix B/C(2026-09-11 Q-20260911-2): fill 记账与下单解耦（轮询兜底版，低风险替代抽取） ──
-def _mark_pending_recon(context, code, sym, side, qty, px, orders):
-    """下单成功登记待对账项（Fix B 步1）。orders=order_volume 返回（List[Dict] 或单 dict）。"""
+def _pending_recon_candidates(context, sym, side=None):
+    """兼容旧单槽 fixture，并读取新多委托记录；只返回未关闭候选项。"""
+    out = []
+    for key, rec in (getattr(context, "_pending_recon", None) or {}).items():
+        if not isinstance(rec, dict) or rec.get("closed"):
+            continue
+        rec_sym = rec.get("sym") or str(key).split("#")[0]
+        if str(rec_sym) != str(sym):
+            continue
+        if side is not None and str(rec.get("side") or "").upper() != str(side).upper():
+            continue
+        out.append(rec)
+    return out
+
+
+def _find_pending_recon(context, sym, order_id="", side=None):
+    """真实 ID 只精确匹配；空 ID 仅在 symbol+side 候选唯一时认领。"""
+    candidates = _pending_recon_candidates(context, sym, side=side)
+    wanted = str(order_id or "")
+    if wanted:
+        hits = [rec for rec in candidates
+                if wanted in {str(i) for i in (rec.get("order_ids") or []) if i}]
+        return hits[0] if len(hits) == 1 else None
+    return candidates[0] if len(candidates) == 1 else None
+
+
+def _mark_pending_recon(context, code, sym, side, qty, px, orders,
+                        order_price_kind="market_protection"):
+    """逐委托登记参考价；同 symbol 新委托使用独立键，绝不覆盖旧委托。"""
     try:
         if getattr(context, "mode", None) != MODE_LIVE:
-            return   # 仅实盘需要对账；回测不登记（省内存/无轮询）
+            return
         _ids = []
         for _o in (orders if isinstance(orders, list) else [orders]):
             if isinstance(_o, dict):
                 _i = _o.get("id") or _o.get("order_id")
                 if _i:
-                    _ids.append(_i)
+                    _ids.append(str(_i))
         _rec = getattr(context, "_pending_recon", None)
         if _rec is None:
             context._pending_recon = {}
             _rec = context._pending_recon
-        _rec[sym] = {"code": code, "side": side, "qty": int(qty or 0), "px": float(px or 0),
+        key = str(sym)
+        if key in _rec:
+            suffix = _ids[0] if len(_ids) == 1 else str(len(_rec) + 1)
+            key = "%s#%s" % (sym, suffix)
+            seq = 2
+            while key in _rec:
+                key = "%s#%s-%d" % (sym, suffix, seq)
+                seq += 1
+        _rec[key] = {"code": code, "sym": sym, "side": side, "qty": int(qty or 0),
+                     "px": float(px or 0),
+                     "order_price_kind": str(order_price_kind or "market_protection"),
                      "ts_dt": datetime.now(), "order_ids": _ids, "closed": False}
     except Exception:
         pass
 
 
-def _pending_recon_close(context, sym):
+def _pending_recon_close(context, sym, order_id="", side=None):
     try:
-        _rec = getattr(context, "_pending_recon", None)
-        if _rec and sym in _rec:
-            _rec[sym]["closed"] = True
+        rec = _find_pending_recon(context, sym, order_id=order_id, side=side)
+        if rec is not None:
+            rec["closed"] = True
     except Exception:
         pass
 
 
 def _poll_pending_recon(context, now):
-    """Fix C: 回调失效轮询兜底。扫 _pending_recon，age≥90s 用 get_orders 查当日委托，
-    status==3 → 合成 order 喂 on_order_status 补记（回调/轮询经 _fills_done 防重）。整段 fail-open。"""
+    """回调失效轮询兜底；多委托逐条恢复，空 ID 多候选保持 pending。"""
     try:
         if context.mode != MODE_LIVE:
-            return   # 回测无回调失效问题；轮询仅实盘需要，避免每 bar 多余 get_orders 拖慢/污染回放
+            return
         _prec = getattr(context, "_pending_recon", None)
         if not _prec:
             return
-        for _sym, _rec in list(_prec.items()):
+        for _key, _rec in list(_prec.items()):
             try:
                 if _rec.get("closed"):
-                    _prec.pop(_sym, None)
+                    _prec.pop(_key, None)
                     continue
+                _sym = _rec.get("sym") or str(_key).split("#")[0]
                 _ts = _rec.get("ts_dt")
                 if _ts and (now - _ts).total_seconds() < 90:
                     continue
@@ -148,11 +185,12 @@ def _poll_pending_recon(context, now):
                 except TypeError:
                     _orders = _sdk_call("get_orders_poll_all", get_orders)
                 _ids = {str(_i) for _i in (_rec.get("order_ids") or []) if _i}
+                if not _ids and _find_pending_recon(
+                        context, _sym, side=_rec.get("side")) is not _rec:
+                    continue
                 _hits = []
                 for _o in (_orders or []):
                     try:
-                        # 带 symbol 与全账户回退都必须再过滤：其他票/其他委托的 fill
-                        # 绝不能喂给当前 _sym，否则会错误补账并 closed 当前对账项。
                         if not isinstance(_o, dict) or str(_o.get("symbol") or "") != str(_sym):
                             continue
                         _oid = str(_o.get("id") or _o.get("order_id") or "")
@@ -162,8 +200,6 @@ def _poll_pending_recon(context, now):
                             _hits.append(_o)
                     except Exception:
                         continue
-                # 空 order_ids 时，同 symbol 可能有多条已成交委托；候选不唯一就无法
-                # 证明归属，必须保持 pending。带 ID 路径也只在唯一命中时恢复。
                 if len(_hits) != 1:
                     continue
                 _hit = _hits[0]
@@ -688,7 +724,9 @@ def init(context):
     context.executed_orders = {}
     context.last_index_regime = "range"
     context.last_index_score = 0.0
+    context.last_index_regime_ctx = {}  # 市场级本轮输入/降级审计，供买闸留痕
     context.board_regime = {}      # A-7: {GM指数sym: regime} 分板 regime（上证=市场级恒有，键 GM 全称）
+    context.board_regime_ctx = {}  # 同轮 {GM指数sym: detect ctx}；原 board_regime 结构不变
     context._board_gm_symbols = _needed_index_gm_symbols()  # A-7: 本池所需板块指数（预取/每日刷新共用）
     context.manual_position = {}
     context.cur_date = None
@@ -764,18 +802,21 @@ def init(context):
     for _gm_idx in context._board_gm_symbols:
         try:
             df_idx = _index_daily_df(_gm_idx)
-            if df_idx is not None:
-                # 2026-08-31: 实盘补当日 forming bar（gm history_n 盘中不含当日指数 → 否则 regime 用昨日收盘）
-                if context.mode == MODE_LIVE:
-                    df_idx = _append_index_forming(df_idx, _gm_idx)
-                ir.GM_INDEX_CACHE[_gm_idx] = df_idx
-                print(f"[init] 指数日线已缓存 {_gm_idx}: {len(df_idx)} 行, "
-                      f"{df_idx['date'].iloc[0]} ~ {df_idx['date'].iloc[-1]}")
-            else:
-                print(f"[init] 警告: history_n 未返回指数日线 {_gm_idx}")
+            if df_idx is None or getattr(df_idx, "empty", False):
+                raise ValueError("index_prefetch_empty")
+            # 2026-08-31: 实盘补当日 forming bar（gm history_n 盘中不含当日指数 → 否则 regime 用昨日收盘）
+            if context.mode == MODE_LIVE:
+                df_idx = _append_index_forming(df_idx, _gm_idx)
+            if df_idx is None or getattr(df_idx, "empty", False):
+                raise ValueError("index_prefetch_empty")
+            ir.GM_INDEX_CACHE[_gm_idx] = df_idx
+            print(f"[init] 指数日线已缓存 {_gm_idx}: {len(df_idx)} 行, "
+                  f"{df_idx['date'].iloc[0]} ~ {df_idx['date'].iloc[-1]}")
         except Exception as e:
-            print(f"[init] 指数日线预取失败 {_gm_idx}: {e}")
-    # GM_DATA_READY = 上证市场级就绪（大盘 regime 判定依赖；板指数缺失时 detect 单板降级 range）
+            # W45 P1：同进程二次 init 不得由上一轮旧缓存重建 readiness。
+            ir.GM_INDEX_CACHE.pop(_gm_idx, None)
+            print(f"[init] 指数日线预取失败/为空 {_gm_idx}: {e}")
+    # 每次 init 都按本轮缓存重算；上证预取失败/为空后不得保留旧 True。
     ir.GM_DATA_READY = bool(ir.GM_INDEX_CACHE.get("SHSE.000001") is not None
                             and not ir.GM_INDEX_CACHE["SHSE.000001"].empty)
 
@@ -917,6 +958,87 @@ OSC_RT = osc.Runtime(
 )
 
 
+def _ir_expected_effective_date(target, mode):
+    """本轮允许的有效输入日；周末顺延，节假日不确定时由买闸保守拒绝。"""
+    target = str(target)[:10]
+    if mode in ("eod", "tail"):
+        return target
+    if mode not in ("morning", "live"):
+        return None
+    ts = pd.Timestamp(target) - pd.Timedelta(days=1)
+    while ts.weekday() >= 5:
+        ts -= pd.Timedelta(days=1)
+    return ts.strftime("%Y-%m-%d")
+
+
+def _ir_degraded_context(target, mode, symbol, reason, error=None):
+    """刷新/detect 失败的完整本轮审计；不带旧缓存版本或有效日期。"""
+    ctx = {"requested_date": str(target)[:10], "input_last_date": None,
+           "effective_date": None,
+           "expected_effective_date": _ir_expected_effective_date(target, mode),
+           "forming_bar_removed": False, "input_version": None,
+           "input_rows": 0, "effective_rows": 0, "data_source": None,
+           "mode": mode, "index_symbol": symbol, "date": str(target)[:10],
+           "regime": None, "score": 0.0, "degraded": [str(reason)],
+           "gate_advice": "normal_t"}
+    if error:
+        ctx["error"] = str(error)[:200]
+    return ctx
+
+
+def _ir_validate_regime_context(ctx, target, mode, symbol):
+    """标记错轮/旧输入/forming 未剔除；标记后由买侧 fail-closed，卖侧不消费。"""
+    out = dict(ctx or {})
+    out["requested_date"] = str(out.get("requested_date") or str(target)[:10])
+    out["mode"] = str(out.get("mode") or mode)
+    out["index_symbol"] = str(out.get("index_symbol") or symbol)
+    expected = _ir_expected_effective_date(target, mode)
+    out["expected_effective_date"] = expected
+    degraded_raw = out.get("degraded") or []
+    degraded = [degraded_raw] if isinstance(degraded_raw, str) else list(degraded_raw)
+    effective = str(out.get("effective_date") or "")
+    input_last = str(out.get("input_last_date") or "")
+    if str(out.get("requested_date")) != str(target)[:10] or out.get("index_symbol") != symbol:
+        degraded.append("wrong_round_context")
+    if not expected or effective != expected:
+        degraded.append("stale_input")
+    if mode in ("morning", "live"):
+        if input_last not in (str(target)[:10], expected):
+            degraded.append("stale_input")
+        if input_last == str(target)[:10] and not bool(out.get("forming_bar_removed")):
+            degraded.append("forming_bar_not_removed")
+    elif mode in ("eod", "tail") and input_last != str(target)[:10]:
+        degraded.append("stale_input")
+    if not str(out.get("input_version") or "").startswith("sha256:"):
+        degraded.append("input_version_missing")
+    out["degraded"] = list(dict.fromkeys(str(x) for x in degraded if x))
+    return out
+
+
+def _ir_audit_input_degraded(now, symbol, ctx):
+    """刷新失败/旧输入必须留审计与风险事件；只记录，不阻断卖侧主循环。"""
+    degraded = (ctx or {}).get("degraded") or []
+    if not degraded:
+        return
+    rec = {"event": "regime_input_degraded", "time": str(now),
+           "requested_date": (ctx or {}).get("requested_date"),
+           "index_symbol": symbol, "mode": (ctx or {}).get("mode"),
+           "input_last_date": (ctx or {}).get("input_last_date"),
+           "effective_date": (ctx or {}).get("effective_date"),
+           "expected_effective_date": (ctx or {}).get("expected_effective_date"),
+           "input_version": (ctx or {}).get("input_version"),
+           "degraded": list(degraded), "error": (ctx or {}).get("error")}
+    try:
+        _audit_write(rec)
+    except Exception:
+        pass
+    try:
+        write_risk(str(now), "regime_degraded",
+                   f"{symbol} degraded={list(degraded)} effective={rec['effective_date']}", code="")
+    except Exception:
+        pass
+
+
 def on_bar(context, bars):
     now = context.now if hasattr(context, "now") else datetime.now()
     import utils.helpers as uh
@@ -946,67 +1068,100 @@ def on_bar(context, bars):
     # 迟到启动首根 bar 直接落在 10:00 时，也要先刷新 regime，再让买侧消费，避免沿用 init 的 range。
     if today != getattr(context, "_last_ir_date", None):
         context._last_ir_date = today
+        _target = now.strftime("%Y-%m-%d")
+        # 先清掉上一轮可放行状态；任何后续异常都只能留下本轮 degraded 上下文。
+        context.last_index_regime = "range"
+        context.last_index_score = 0.0
+        context.last_index_regime_ctx = _ir_degraded_context(
+            _target, "morning", "SHSE.000001", "regime_refresh_pending")
+        context.board_regime = {}
+        context.board_regime_ctx = {}
         try:
             import analysis.index_regime as ir
-            if ir.GM_DATA_READY:
-                # 每个交易日重新拉指数日线（回测时钟下自动对齐；A-7: 分板指数逐指数刷新）
-                for _gm_idx in getattr(context, "_board_gm_symbols", []) or []:
+            try:
+                _ir_mode = ("eod" if now.time() >= dtime(15, 5) else "morning") \
+                    if context.mode == MODE_LIVE else "eod"
+            except Exception:
+                _ir_mode = "eod"
+            if not ir.GM_DATA_READY:
+                ir_ctx = _ir_degraded_context(
+                    _target, _ir_mode, "SHSE.000001", "gm_data_not_ready")
+                context.last_index_regime_ctx = ir_ctx
+                context.board_regime_ctx = {"SHSE.000001": ir_ctx}
+                _ir_audit_input_degraded(now, "SHSE.000001", ir_ctx)
+            else:
+                # 每个交易日重新拉指数日线。失败/空返回立即移除对应旧缓存，绝不让 detect 无标记复用。
+                _symbols = list(getattr(context, "_board_gm_symbols", []) or [])
+                if "SHSE.000001" not in _symbols:
+                    _symbols.insert(0, "SHSE.000001")
+                _refresh_errors = {}
+                for _gm_idx in _symbols:
                     try:
                         df_idx = _index_daily_df(_gm_idx)
-                        if df_idx is not None:
-                            # 2026-08-31: 实盘补当日 forming bar（gm history_n 盘中不含当日指数）
-                            if context.mode == MODE_LIVE:
-                                df_idx = _append_index_forming(df_idx, _gm_idx)
-                            ir.GM_INDEX_CACHE[_gm_idx] = df_idx
+                        if df_idx is None or getattr(df_idx, "empty", False):
+                            raise ValueError("index_refresh_empty")
+                        if context.mode == MODE_LIVE:
+                            df_idx = _append_index_forming(df_idx, _gm_idx)
+                        if df_idx is None or getattr(df_idx, "empty", False):
+                            raise ValueError("index_refresh_empty")
+                        ir.GM_INDEX_CACHE[_gm_idx] = df_idx
                     except Exception as _e2:
+                        ir.GM_INDEX_CACHE.pop(_gm_idx, None)
+                        _reason = ("index_refresh_empty" if str(_e2) == "index_refresh_empty"
+                                   else "index_refresh_failed")
+                        _refresh_errors[_gm_idx] = _ir_degraded_context(
+                            _target, _ir_mode, _gm_idx, _reason, _e2)
                         print(f"[ir] 指数日线刷新失败 {_gm_idx}: {_e2}")
-                        # R-3(2026-08-07 W32表决): regime 数据故障不再静默——fail-open 保留但要告警
-                        try: write_risk(str(now), "regime_degraded",
-                                        f"指数日线刷新失败 {_gm_idx}: {str(_e2)[:120]}", code="")
-                        except Exception: pass
 
-                # R-1(2026-08-07 W32表决): 实盘剔除当日未成形K线再判定
-                # （原实现传 mode="live"，但 index_regime 不接受该值 ⇒ 2026-10-19 修）
-                try:
-                    if context.mode == MODE_LIVE:
-                        # 2026-10-19 修：index_regime 只接受 eod/morning/tail——旧代码传 "live"
-                        # 每次都 ValueError 并被外层吞掉（策略侧 regime 从未更新成功）。
-                        # 收盘前用 morning（对齐上一已完成日，天然剔除当日 forming bar）；
-                        # 15:05 后当日已收盘，用 eod 落当日。
-                        _ir_mode = "eod" if now.time() >= dtime(15, 5) else "morning"
-                    else:
-                        _ir_mode = "eod"
-                except Exception:
-                    _ir_mode = "eod"
-                # 市场级（上证腿）——context.last_index_regime 兼容字段恒 = 上证（D2 双轨：市场级保留，不替换）
-                ir_regime, ir_score, ir_ctx = ir.detect_index_regime(
-                    as_of=now.strftime("%Y-%m-%d"), force=True, mode=_ir_mode)
-                context.last_index_regime = ir_regime.value if hasattr(ir_regime, "value") else str(ir_regime)
-                context.last_index_score = float(ir_score)
-                # A-7: 分板级 regime（board_regime 键 = GM 指数全称；上证复用市场级结果）
-                _br = {"SHSE.000001": context.last_index_regime}
-                for _gm_idx in getattr(context, "_board_gm_symbols", []) or []:
+                # 市场级（上证腿）与分板都保存同轮、同指数、带输入版本的上下文。
+                if "SHSE.000001" in _refresh_errors:
+                    ir_ctx = _refresh_errors["SHSE.000001"]
+                    ir_score = 0.0
+                else:
+                    try:
+                        ir_regime, ir_score, ir_ctx = ir.detect_index_regime(
+                            as_of=_target, force=True, mode=_ir_mode,
+                            index_symbol="SHSE.000001")
+                        ir_ctx = _ir_validate_regime_context(
+                            ir_ctx, _target, _ir_mode, "SHSE.000001")
+                    except Exception as _e3:
+                        ir_ctx = _ir_degraded_context(
+                            _target, _ir_mode, "SHSE.000001", "detect_exception", _e3)
+                        ir_score = 0.0
+                context.last_index_regime = str(ir_ctx.get("regime") or "range")
+                context.last_index_score = float(ir_score or 0.0)
+                context.last_index_regime_ctx = ir_ctx
+                _br, _br_ctx = {}, {"SHSE.000001": ir_ctx}
+                if not ir_ctx.get("degraded") and ir_ctx.get("regime") in ("range", "uni_up", "uni_down"):
+                    _br["SHSE.000001"] = context.last_index_regime
+                _ir_audit_input_degraded(now, "SHSE.000001", ir_ctx)
+
+                for _gm_idx in _symbols:
                     if _gm_idx == "SHSE.000001":
                         continue
-                    try:
-                        _r, _s, _c = ir.detect_index_regime(
-                            as_of=now.strftime("%Y-%m-%d"), force=True, mode=_ir_mode,
-                            index_symbol=_gm_idx)
-                        _br[_gm_idx] = _r.value if hasattr(_r, "value") else str(_r)
-                    except Exception as _e3:
-                        print(f"[ir] {_gm_idx} 分板态势判定失败: {_e3}")
-                        _br[_gm_idx] = "range"
+                    if _gm_idx in _refresh_errors:
+                        _c = _refresh_errors[_gm_idx]
+                    else:
+                        try:
+                            _r, _s, _c = ir.detect_index_regime(
+                                as_of=_target, force=True, mode=_ir_mode,
+                                index_symbol=_gm_idx)
+                            _c = _ir_validate_regime_context(_c, _target, _ir_mode, _gm_idx)
+                        except Exception as _e3:
+                            print(f"[ir] {_gm_idx} 分板态势判定失败: {_e3}")
+                            _c = _ir_degraded_context(
+                                _target, _ir_mode, _gm_idx, "detect_exception", _e3)
+                    _br_ctx[_gm_idx] = _c
+                    if not _c.get("degraded") and _c.get("regime") in ("range", "uni_up", "uni_down"):
+                        _br[_gm_idx] = str(_c.get("regime"))
+                    _ir_audit_input_degraded(now, _gm_idx, _c)
                 context.board_regime = _br
+                context.board_regime_ctx = _br_ctx
                 degraded = ir_ctx.get("degraded", [])
                 if degraded:
                     print(f"[ir] {str(today)} regime={context.last_index_regime} score={context.last_index_score:.1f} degraded={degraded}")
-                    # R-3: degraded fail-open 但写 risk 告警
-                    try: write_risk(str(now), "regime_degraded", f"degraded={degraded} regime={context.last_index_regime}", code="")
-                    except Exception: pass
                 else:
                     print(f"[ir] {str(today)} regime={context.last_index_regime} score={context.last_index_score:.1f}")
-                # 2026-10-15：原来直接 print(dict) 一行 ~130 字符，控制台必折行。
-                # 压成「简称=regime」空格分隔（无解析方，见 grep；context.board_regime 原样不变）。
                 _SHORT_IDX = {"SHSE.000001": "上证", "SHSE.000300": "沪深300",
                               "SHSE.000688": "科创50", "SHSE.000905": "中证500",
                               "SHSE.000852": "中证1000", "SZSE.399001": "深成",
@@ -1016,6 +1171,12 @@ def on_bar(context, bars):
                     for _k, _v in (context.board_regime or {}).items()))
         except Exception as e:
             print(f"[ir] 大盘态势判定失败: {e}")
+            ir_ctx = _ir_degraded_context(
+                _target, "morning", "SHSE.000001", "regime_refresh_exception", e)
+            context.last_index_regime_ctx = ir_ctx
+            context.board_regime = {}
+            context.board_regime_ctx = {"SHSE.000001": ir_ctx}
+            _ir_audit_input_degraded(now, "SHSE.000001", ir_ctx)
 
     # ── 唯一策略：超跌跳空确认的四时点钩子（09:31 预筛 / 10:00 早盘卖 → 10:00 买 / 14:50 卖）──
     # 时间窗 · 每日一次 · MODE_LIVE 闸 · 逐钩子异常隔离**都在策略包内**（hooks.on_bar），
@@ -1127,9 +1288,8 @@ def on_order_status(context, order):
     status = order["status"]
     volume = order["volume"]
     code = _raw_code(symbol)  # 提前到price兜底之前
-    # ①-1/F6: 成交价优先 filled_vwap —— 掘金市价单 order["price"] 携带涨跌停保护价
-    # (2026-07-29 C1: 600481卖出真实成交4.01被记为跌停价3.52；买入路径会用此价计算cost，错误价会毒化成本)
-    price = order.get("filled_vwap") or order.get("vwap") or order.get("price") or 0
+    # 成交价只认真实 VWAP；order["price"] 是委托价/保护价，缺失时保持 0。
+    price = order.get("filled_vwap") or order.get("vwap") or 0
     # 注：原「price<=0 回退到 context.latest_pre_close（昨收）」的取数源随旧引擎（_refresh_daily_ctx）
     # 删除 ⇒ 保留 0 并交由下游（_get_holding 的 cost=0 → gm vwap 修正）兜底。
     side = order["side"]
@@ -1177,18 +1337,24 @@ def on_order_status(context, order):
             else:
                 _fee_rate = float(PARAMS.get("commission_ratio", 0.00015) or 0.00015)
                 _fee, _fsrc = round(float(price) * int(volume) * _fee_rate, 2), "estimated"
-            # 2026-09-15 阶段0-5 接线（诊断D3，W4 已在 writer.write_fill 加可空字段）：
-            # 补真实委托价/成交均价。口径注意——市价单 order["price"] 是**涨跌停保护价**
-            # （非期望价），slippage=fill_vwap-order_price 的方向解读归下游；
-            # 无真实值的字段传 None（writer 落 null，禁止编造）；0 值经 or None 归一防假滑点。
+            # W45⑲：order["price"] 只是柜台委托价/市价保护价，绝不是滑点基准。
+            # 策略意向价来自下单时 pending_recon.px；缺失则 reference/slippage 均落 null。
+            _recon = _find_pending_recon(context, symbol, order_id=_event_oid,
+                                         side=_side) or {}
+            _reference_price = _recon.get("px") or None
+            _order_price_kind = (order.get("order_price_kind")
+                                 or _recon.get("order_price_kind") or None)
             write_fill(str(datetime.now()), _raw_code(symbol), _side, volume, price,
                        order_id=_event_oid, pos_after=_pos_after,
                        fee=_fee, fee_source=_fsrc,
                        order_price=(order.get("price") or None),
+                       broker_order_price=(order.get("price") or None),
+                       reference_price=_reference_price,
+                       order_price_kind=_order_price_kind,
                        fill_vwap=(order.get("filled_vwap") or order.get("vwap") or None))
         except Exception:
             pass
-        _pending_recon_close(context, symbol)   # Fix B: 该 symbol 已完成对账，轮询不再兜底
+        _pending_recon_close(context, symbol, order_id=_event_oid, side=_side)
         if side == 1:  # 买入
             old = context.executed_orders.get(symbol, {"qty": 0, "available": 0, "cost": price})
             old_qty = int(old.get("qty", 0))
@@ -1260,6 +1426,19 @@ def on_order_status(context, order):
             except Exception:
                 pass
     elif status in (4, 5, 8, 12):  # 4/8 拒单；5 已撤；12 过期。6 已在上方单独早退。
+        _terminal_filled = int(order.get("filled_volume") or order.get("filled_qty") or 0)
+        # 同一柜台终态可能由回调与轮询重复送达；有真实 ID 时整条终态只应用一次。
+        if _event_oid:
+            _terminal_key = (symbol, _event_oid, int(status), int(volume or 0),
+                             _terminal_filled)
+            _terminal_done = getattr(context, "_terminal_done", None)
+            if _terminal_done is None:
+                context._terminal_done = set()
+                _terminal_done = context._terminal_done
+            if _terminal_key in _terminal_done:
+                print(f"[ORDER] 重复终态已跳过 {code} status={status} order_id={_event_oid}")
+                return
+            _terminal_done.add(_terminal_key)
         _rej_detail = ""
         try:
             _rej_detail = order.get("ord_rej_reason_detail", "") or ""
@@ -1273,13 +1452,14 @@ def on_order_status(context, order):
         if _is_reject:
             context.rejected_order_count = getattr(context, 'rejected_order_count', 0) + 1
         print(f"[ORDER] {symbol} {_terminal} status={status} {_rej_detail}".rstrip())
-        # 卖侧终态回滚 manual_position；待撤 status=6 已早退，绝不会虚增可用数量。
+        # 卖侧终态只回补未成交余量；raw4/5/8/12 的 volume 是委托量，不是成交量。
         if side == 2 and symbol in context.manual_position:
             mp = context.manual_position[symbol]
-            mp["qty"] = mp.get("qty", 0) + volume
-            mp["available"] = mp.get("available", 0) + volume
-            mp["t_qty"] = mp.get("t_qty", 0) + volume
-            _audit_write({"event": "sell_rollback", "code": code, "qty": volume,
+            _unfilled = max(int(volume or 0) - _terminal_filled, 0)
+            mp["qty"] = mp.get("qty", 0) + _unfilled
+            mp["available"] = mp.get("available", 0) + _unfilled
+            mp["t_qty"] = mp.get("t_qty", 0) + _unfilled
+            _audit_write({"event": "sell_rollback", "code": code, "qty": _unfilled,
                           "time": str(getattr(context, "now", None) or datetime.now())})
         try:
             _raw = {"status": status, "side": side, "volume": volume,
@@ -1296,15 +1476,22 @@ def on_order_status(context, order):
                                      order_id=_event_oid, detail=_rej_detail)
         except Exception:
             pass
-        # OSC 买侧「挂单即入账」：真实终态需回滚虚挂份额，并按原始状态修留痕。
-        # 卖侧下单不扣账 ⇒ apply_reject 内部对 SELL 只修留痕不动账本。
+        # 买侧回滚虚挂份额；卖侧先按终态累计量补对真实成交，再写终态并清余量。
         try:
             if getattr(context, "mode", None) == MODE_LIVE:
+                _terminal_fee = None
+                try:
+                    _terminal_fee = float(order.get("filled_commission")) \
+                        if order.get("filled_commission") is not None else None
+                except Exception:
+                    _terminal_fee = None
                 _rj_res = _osc_fillbackfill.apply_reject(
                     _OSC_BOOK_DIR,
                     {"time": str(getattr(context, "now", None) or datetime.now()),
                      "code": _r_code, "side": _r_side, "qty": int(volume or 0),
-                     "order_id": _event_oid,
+                     "order_id": _event_oid, "filled_qty": _terminal_filled,
+                     "filled_vwap": order.get("filled_vwap") or order.get("vwap") or None,
+                     "fee": _terminal_fee,
                      "status": status, "rej_detail": _rej_detail}, log=print)
                 if _rj_res:
                     print(f"[FB] 终态回填 {_r_code} {_r_side} {volume} → "

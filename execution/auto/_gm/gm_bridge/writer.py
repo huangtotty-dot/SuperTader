@@ -151,25 +151,26 @@ def write_order_ack(time_str: str, code: str, side: str, qty: int, price: float,
 def write_fill(time_str: str, code: str, side: str, qty: int, price: float,
                order_id: str = "", pos_after: int = 0, fee: float = 0.0, fee_source: str = "estimated",
                fee_rate: Optional[float] = None, order_price: Optional[float] = None,
-               fill_vwap: Optional[float] = None, slippage: Optional[float] = None):
-    """全部成交事件。F-9/Q-20260911: 落 fee + fee_source（gm=实收 filled_commission / estimated=费率估算），
-    全周费用可机读核对（N11 防线费率=0.00015）。
+               fill_vwap: Optional[float] = None, slippage: Optional[float] = None,
+               reference_price: Optional[float] = None,
+               broker_order_price: Optional[float] = None,
+               order_price_kind: Optional[str] = None):
+    """全部成交事件；真实成交价量费原样落盘，审计价与滑点基准分栏。
 
-    2026-09-15 阶段0-5（诊断D3）：成本归因实验铺路，新增 4 个可空字段（新增不删旧，向后兼容）：
-      fee_rate    费用率 = fee / (price*qty)（仅当 fee>0 且成交额>0 时由真实值推导，否则 null）
-      order_price 委托价（gm SDK Order.price / ExecRpt.price；市价单为涨跌停保护价，注意口径）
-      fill_vwap   成交均价（gm SDK Order.filled_vwap，调用侧现有兜底链 filled_vwap→vwap→price）
-      slippage    滑点 = fill_vwap - order_price（仅当两者均传入时推导；BUY 正=买贵不利，
-                  SELL 负=卖贱不利；符号为原始价差，方向解释归下游）
-    当前唯一调用侧 gm_main.py:2580 未传新参数 → 实盘暂落 null（禁止编造；
-    接线 gm_main 为建议项，见阶段0-5施工报告）。数据源备查：order.get("filled_vwap") /
-    order.get("price") / order.get("filled_commission")（gm_main.py:2530/2574）。"""
-    # 仅由传入的真实值推导，缺失保持 None（不落估算假值）
+    `reference_price` 是策略下单意向价，也是**唯一**滑点基准；
+    `broker_order_price` 是柜台 `Order.price`（市价单通常为涨跌停保护价），绝不参与滑点。
+    旧 `order_price` 仅保留为 broker_order_price 的 deprecated alias。缺任一真实基准时
+    slippage 落 null，不用柜台保护价、策略参考价以外的字段推导或编造。
+    """
     _amount = float(price or 0) * int(qty or 0)
     if fee_rate is None and fee and _amount > 0:
         fee_rate = round(float(fee) / _amount, 6)
-    if slippage is None and order_price is not None and fill_vwap is not None:
-        slippage = round(float(fill_vwap) - float(order_price), 4)
+    _broker_price = broker_order_price if broker_order_price is not None else order_price
+    if reference_price is not None and fill_vwap is not None:
+        if slippage is None:
+            slippage = round(float(fill_vwap) - float(reference_price), 4)
+    else:
+        slippage = None
     _append_jsonl(_events_path(), {
         "event": "fill",
         "time": time_str,
@@ -182,7 +183,11 @@ def write_fill(time_str: str, code: str, side: str, qty: int, price: float,
         "fee": fee,
         "fee_source": fee_source,
         "fee_rate": fee_rate,
-        "order_price": order_price,
+        "order_price": _broker_price,
+        "order_price_semantics": "deprecated_alias_of_broker_order_price",
+        "reference_price": reference_price,
+        "broker_order_price": _broker_price,
+        "order_price_kind": order_price_kind,
         "fill_vwap": fill_vwap,
         "slippage": slippage,
     })

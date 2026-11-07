@@ -196,9 +196,10 @@ class TestPendingAndCommitted(unittest.TestCase):
     def test_committed_counts_filled_plus_unconfirmed_frozen(self):
         f = self._fills([
             {"code": "600001", "order_id": "o1", "status": "submitted", "qty_placed": 1000,
-             "filled_qty": 0, "price": 10.0},                       # 全冻 10000
+             "filled_qty": 0, "price": 10.0, "execution_limit_price": 10.0},  # 全冻 10000
             {"code": "600002", "order_id": "o2", "status": "partial", "qty_placed": 1000,
-             "filled_qty": 400, "price": 20.0, "filled_price": 20.0},  # 成交 8000 + 冻 12000
+             "filled_qty": 400, "price": 20.0, "filled_price": 20.0,
+             "execution_limit_price": 20.0},  # 成交 8000 + 冻 12000
             {"code": "600003", "order_id": "o3", "status": "rejected", "qty_placed": 1000,
              "filled_qty": 0, "price": 30.0},                       # 终态 ⇒ 0
         ])
@@ -211,7 +212,7 @@ class TestPendingAndCommitted(unittest.TestCase):
         """owner 决策 #4：**撤单确认后**才释放额度。已成交部分永远保留。"""
         f = self._fills([{"code": "600002", "order_id": "o2", "status": "submitted",
                           "qty_placed": 1000, "filled_qty": 400, "price": 20.0,
-                          "filled_price": 20.0}])
+                          "filled_price": 20.0, "execution_limit_price": 20.0}])
         before = bf.committed_notional(f)["600002"]
         after = bf.committed_notional(f, released_codes=["600002"])["600002"]
         self.assertAlmostEqual(before, 20000.0)

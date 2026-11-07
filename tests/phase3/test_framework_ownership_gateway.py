@@ -33,6 +33,7 @@ for _p in (_ROOT, os.path.join(_ROOT, "execution", "auto")):
 from framework.gateway import GmGateway                       # noqa: E402
 from framework.ownership import LEGACY, Ownership             # noqa: E402
 from framework.services import GmServices                     # noqa: E402
+from oversold_gap_confirm import backfill, executor           # noqa: E402
 
 
 # ── 假件 ────────────────────────────────────────────────────
@@ -56,13 +57,14 @@ class FakeGm(object):
     ADJUST_PREV = 1
 
     def __init__(self, orders=None, positions=None, cash=1000000.0,
-                 get_orders=None, cancel_ok=True):
+                 get_orders=None, cancel_ok=True, cancel_status=0):
         self.calls = []
         self._orders = orders if orders is not None else [{"id": "o1", "status": 0}]
         # `get_orders` 原先**写死返回 []**（只够 place_order 用）；撤单确认要按状态码回报 ⇒
         # 改成可编程，默认仍是 []（保持既有用例行为逐位不变）。
         self._get_orders = get_orders if get_orders is not None else []
         self._cancel_ok = cancel_ok
+        self._cancel_status = cancel_status
         self._positions = positions or {}
         self._cash = cash
 
@@ -83,7 +85,7 @@ class FakeGm(object):
         self.calls.append(("order_cancel", kw))
         if not self._cancel_ok:
             return [{"id": kw.get("order_id"), "status": 8}]
-        return [{"id": kw.get("order_id"), "status": 0}]
+        return [{"id": kw.get("order_id"), "status": self._cancel_status}]
 
     def current(self, **kw):
         return [{"open": 10.0}]
@@ -363,6 +365,44 @@ class TestGatewayCancelAndRawStatus(unittest.TestCase):
         rep = gw.cancel_order("o123", "600001")
         self.assertFalse(rep["ok"])
         self.assertIn("cancel_rejected", rep["message"])
+
+    def test_sync_raw_4_and_8_are_cancel_rejections(self):
+        for raw in (4, 8):
+            with self.subTest(raw_status=raw):
+                gw, gm, ev, rk, au, order = self._gw(
+                    Ownership(strategies=[]), cancel_status=raw)
+                rep = gw.cancel_order("o123", "600001")
+                self.assertFalse(rep["ok"])
+                self.assertIn("cancel_rejected:status=%s" % raw, rep["message"])
+
+    def test_sync_terminal_flow_settles_budget_and_raw6_stays_reserved(self):
+        for raw in (5, 12, 6):
+            with self.subTest(raw_status=raw):
+                gw, gm, ev, rk, au, order = self._gw(
+                    Ownership(strategies=[]), cancel_status=raw,
+                    get_orders=[{"id": "o123", "status": raw, "filled_volume": 0}])
+                rec = {"code": "600001", "side": "BUY", "order_id": "o123",
+                       "price": 10.0, "execution_limit_price": 10.0,
+                       "qty_placed": 1000, "filled_qty": 0, "filled_price": None,
+                       "status": "submitted", "qty_remaining": 1000,
+                       "reserved_notional": 10000.0}
+                pending = {"code": "600001", "order_id": "o123", "qty_placed": 1000}
+                result = backfill.cancel_and_confirm(
+                    gw, [pending], poll_rounds=1, poll_sleep=0,
+                    sleep_fn=lambda _: None, log=lambda *a: None)
+                self.assertEqual(len([c for c in gm.calls if c[0] == "order_cancel"]), 1)
+                if raw in (5, 12):
+                    terminal = result["terminal_orders"][0]
+                    executor._settle_buy_budget_record(rec, terminal)
+                    self.assertEqual(rec["status"], "cancelled" if raw == 5 else "expired")
+                    self.assertEqual(rec["qty_remaining"], 0)
+                    self.assertEqual(rec["reserved_notional"], 0.0)
+                    self.assertEqual(result["released"], ["600001"] if raw == 5 else [])
+                else:
+                    self.assertEqual(result["unconfirmed"], ["600001"])
+                    self.assertEqual(rec["status"], "submitted")
+                    self.assertEqual(rec["qty_remaining"], 1000)
+                    self.assertEqual(rec["reserved_notional"], 10000.0)
 
     def test_cancel_uses_cl_ord_id_for_gm_style_primitive(self):
         """GM 真实 `order_cancel(wait_cancel_orders)` 只认 `cl_ord_id/account_id`。

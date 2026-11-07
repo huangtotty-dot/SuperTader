@@ -141,19 +141,132 @@ out["cases"]["bt_1000"] = run_at(10, 0, bt, 12)
 late = FakeCtx(GM.MODE_LIVE)
 GM.init(late)
 import analysis.index_regime as _ir                                # noqa: E402
+from tests.phase3.regime_fixtures import valid_regime_ctx           # noqa: E402
 _ir.GM_DATA_READY = True
-GM._index_daily_df = lambda *a, **k: None
+GM._index_daily_df = lambda *a, **k: types.SimpleNamespace(empty=False)
+GM._append_index_forming = lambda df, symbol: df
 
 
 def _fake_detect_index_regime(**kwargs):
     calls.append("regime_refresh")
-    return type("_Regime", (), {"value": "uni_down"})(), 0.0, {"degraded": []}
+    regime = "uni_down"
+    symbol = kwargs.get("index_symbol") or "SHSE.000001"
+    ctx = valid_regime_ctx(kwargs["as_of"], symbol, regime, mode=kwargs.get("mode") or "morning")
+    return type("_Regime", (), {"value": regime})(), 0.0, ctx
 
 
 _ir.detect_index_regime = _fake_detect_index_regime
 out["cases"]["late_1000"] = run_at(10, 0, late, 14)
 out["late_regime"] = late.last_index_regime
+out["late_board_regime"] = dict(late.board_regime)
+out["late_board_ctx_keys"] = sorted(late.board_regime_ctx)
+out["late_market_ctx"] = dict(late.last_index_regime_ctx)
 out["cases"]["late_1450"] = run_at(14, 50, late, 14)
+
+# W45⑳：分板 detect 异常不得伪写 range；异常上下文必须与本轮结果一起保留。
+board_error = FakeCtx(GM.MODE_LIVE)
+GM.init(board_error)
+_ir.GM_DATA_READY = True
+board_error._board_gm_symbols = ["SHSE.000001", "SZSE.399006"]
+
+
+def _fake_detect_board_error(**kwargs):
+    symbol = kwargs.get("index_symbol") or "SHSE.000001"
+    if symbol == "SZSE.399006":
+        raise RuntimeError("frozen board detect error")
+    regime = "range"
+    ctx = valid_regime_ctx(kwargs["as_of"], symbol, regime, mode=kwargs.get("mode") or "morning")
+    return type("_Regime", (), {"value": regime})(), 0.0, ctx
+
+
+_ir.detect_index_regime = _fake_detect_board_error
+out["cases"]["board_error_1000"] = run_at(10, 0, board_error, 15)
+out["board_error_regime"] = dict(board_error.board_regime)
+out["board_error_ctx"] = dict(board_error.board_regime_ctx.get("SZSE.399006") or {})
+
+# P0 stale cache：refresh=None 时必须移除旧缓存，且不得调用 detect 生成无 degraded 的 uni_up。
+refresh_fail = FakeCtx(GM.MODE_LIVE)
+GM.init(refresh_fail)
+refresh_fail._board_gm_symbols = ["SHSE.000001"]
+_ir.GM_DATA_READY = True
+_ir.GM_INDEX_CACHE["SHSE.000001"] = types.SimpleNamespace(empty=False, stale="old")
+GM._index_daily_df = lambda *a, **k: None
+stale_detect_calls = []
+
+
+def _detect_must_not_run(**kwargs):
+    stale_detect_calls.append(kwargs)
+    regime = "uni_up"
+    return type("_Regime", (), {"value": regime})(), 9.0, valid_regime_ctx(
+        kwargs["as_of"], kwargs.get("index_symbol") or "SHSE.000001", regime)
+
+
+_ir.detect_index_regime = _detect_must_not_run
+out["cases"]["refresh_fail_1000"] = run_at(10, 0, refresh_fail, 16)
+out["refresh_fail_ctx"] = dict(refresh_fail.last_index_regime_ctx)
+out["refresh_fail_board"] = dict(refresh_fail.board_regime)
+out["refresh_fail_cache_present"] = "SHSE.000001" in _ir.GM_INDEX_CACHE
+out["refresh_fail_detect_calls"] = len(stale_detect_calls)
+out["cases"]["refresh_fail_1450"] = run_at(14, 50, refresh_fail, 16)
+
+
+# W45 P1：同进程第二次 init 预取为空/异常，必须清掉第一次留下的缓存并重算 readiness。
+def _reinit_prefetch_case(failure):
+    import pandas as pd
+    first = FakeCtx(GM.MODE_LIVE)
+    GM._index_daily_df = lambda *a, **k: pd.DataFrame([{"date": "2026-10-15"}])
+    GM._append_index_forming = lambda df, symbol: df
+    GM.init(first)
+    first_ready = bool(_ir.GM_DATA_READY)
+    first_cache_present = "SHSE.000001" in _ir.GM_INDEX_CACHE
+
+    second = FakeCtx(GM.MODE_LIVE)
+    if failure == "empty":
+        GM._index_daily_df = lambda *a, **k: None
+    else:
+        def _prefetch_exception(*a, **k):
+            raise RuntimeError("frozen init prefetch exception")
+        GM._index_daily_df = _prefetch_exception
+    GM.init(second)
+    return {"first_ready": first_ready, "first_cache_present": first_cache_present,
+            "second_ready": bool(_ir.GM_DATA_READY),
+            "second_cache_present": "SHSE.000001" in _ir.GM_INDEX_CACHE}
+
+
+out["reinit_prefetch_empty"] = _reinit_prefetch_case("empty")
+out["reinit_prefetch_exception"] = _reinit_prefetch_case("exception")
+
+# P0 stale input：refresh 本身返回数据，但 detect 的有效输入日早于合法 morning=D-1，仍须 degraded。
+stale_input = FakeCtx(GM.MODE_LIVE)
+GM.init(stale_input)
+stale_input._board_gm_symbols = ["SHSE.000001"]
+_ir.GM_DATA_READY = True
+GM._index_daily_df = lambda *a, **k: types.SimpleNamespace(empty=False)
+
+
+def _fake_stale_input_detect(**kwargs):
+    regime = "uni_up"
+    symbol = kwargs.get("index_symbol") or "SHSE.000001"
+    ctx = valid_regime_ctx(kwargs["as_of"], symbol, regime)
+    ctx.update(effective_date="2026-10-14", input_last_date="2026-10-14")
+    return type("_Regime", (), {"value": regime})(), 9.0, ctx
+
+
+_ir.detect_index_regime = _fake_stale_input_detect
+out["cases"]["stale_input_1000"] = run_at(10, 0, stale_input, 19)
+out["stale_input_ctx"] = dict(stale_input.last_index_regime_ctx)
+out["stale_input_board"] = dict(stale_input.board_regime)
+out["cases"]["stale_input_1450"] = run_at(14, 50, stale_input, 19)
+
+out["regime_degraded_audits"] = []
+if os.path.exists(GM._AUDIT_LOG_PATH):
+    for ln in open(GM._AUDIT_LOG_PATH, encoding="utf-8"):
+        try:
+            event = json.loads(ln)
+        except Exception:
+            continue
+        if event.get("event") == "regime_input_degraded":
+            out["regime_degraded_audits"].append(event)
 
 # ── D 段：网关整链（SERVICES 注入是否正确 + 归属硬锁端到端）─────────────
 # 用真 getattr 的假 order_volume 替换「一旦调用即失败」的桩，并给账户塞一只持仓。

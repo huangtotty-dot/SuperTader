@@ -17,6 +17,7 @@ import os
 import math
 import time
 import logging
+import hashlib
 import numpy as np
 import pandas as pd
 from enum import Enum
@@ -162,6 +163,41 @@ def _ir_clip(x: float, lo: float, hi: float) -> float:
 
 def _ir_now() -> datetime:
     return datetime.now()
+
+
+def _ir_input_version(df: Optional[pd.DataFrame], symbol: str, source: str = "") -> Optional[str]:
+    """输入数据的内容版本；只由本次实际输入计算，绝不用当前时间伪造。"""
+    if df is None:
+        return None
+    try:
+        payload = "%s|%s\n%s" % (str(symbol), str(source or ""), df.to_csv(index=False))
+        return "sha256:" + hashlib.sha256(payload.encode("utf-8")).hexdigest()
+    except Exception:
+        return None
+
+
+def _ir_context_base(target: str, mode: str, symbol: str,
+                     df: Optional[pd.DataFrame] = None,
+                     source: str = "") -> Dict[str, Any]:
+    """正常/降级/异常路径共用的可复算输入审计字段。"""
+    input_last = None
+    try:
+        if df is not None and len(df) > 0 and "date" in df.columns:
+            input_last = str(df["date"].iloc[-1])
+    except Exception:
+        pass
+    return {
+        "requested_date": str(target),
+        "input_last_date": input_last,
+        "effective_date": None,
+        "forming_bar_removed": False,
+        "input_version": _ir_input_version(df, symbol, source),
+        "input_rows": int(len(df)) if df is not None else 0,
+        "effective_rows": 0,
+        "data_source": source or None,
+        "mode": mode,
+        "index_symbol": symbol,
+    }
 
 
 # ============================================================================
@@ -652,8 +688,9 @@ class _IndexRegimeEngine:
         except Exception as e:
             _ir_log.warning(f"[index_regime] detect 异常: {e}")
             regime, score = IndexRegime.RANGE, 0.0
-            ctx = {"regime": regime.value, "score": 0.0, "degraded": ["internal_error"],
-                   "gate_advice": "normal_t", "mode": mode, "index_symbol": sym}
+            ctx = {**_ir_context_base(target, mode, sym),
+                   "date": target, "regime": regime.value, "score": 0.0,
+                   "degraded": ["internal_error"], "gate_advice": "normal_t"}
 
         _IR_MEM_CACHE[cache_key] = (time.time(), regime, score, ctx)
         return regime, score, ctx
@@ -667,28 +704,32 @@ class _IndexRegimeEngine:
         # 指数日线（A-7: 按 index_symbol 取所属板指数 df；缺省=市场级上证，行为不变）
         df, px_src = _ir_fetch_index_daily(sym, target,
                                             int(p.get("kline_count_sh", 900)), p)
+        audit = _ir_context_base(target, mode, sym, df, px_src)
         if df is None or len(df) == 0:
-            ctx = {"date": target, "regime": IndexRegime.RANGE.value,
+            ctx = {**audit, "date": target, "regime": IndexRegime.RANGE.value,
                    "score": 0.0, "degraded": ["指数日线不可用"], "gate_advice": "normal_t"}
             return IndexRegime.RANGE, 0.0, ctx
 
         df = df[df["date"] <= target].reset_index(drop=True)
         if len(df) == 0:
-            ctx = {"date": target, "regime": IndexRegime.RANGE.value,
+            ctx = {**audit, "date": target, "regime": IndexRegime.RANGE.value,
                    "score": 0.0, "degraded": ["无指数日线"], "gate_advice": "normal_t"}
             return IndexRegime.RANGE, 0.0, ctx
 
-        # R-1(2026-08-07 W32表决): 实盘剔除当日未成形K线——K-day/评分只基于已完成交易日，
-        # 消除"09:31开盘1分钟±1%定死全天"（0806审计F-R2）。回测(eod)为完整数据不剔除。
-        if mode == "live" and str(df["date"].iloc[-1]) == target:
+        # 盘前 morning 与实盘 live 都只能使用已完成K线；eod/tail 保留原语义。
+        # 审计记录原始末根、实际有效末根和内容版本，重放不依赖当前时间。
+        if mode in ("live", "morning") and str(df["date"].iloc[-1]) == target:
             df = df.iloc[:-1].reset_index(drop=True)
+            audit["forming_bar_removed"] = True
             if len(df) == 0:
-                ctx = {"date": target, "regime": IndexRegime.RANGE.value,
+                ctx = {**audit, "date": target, "regime": IndexRegime.RANGE.value,
                        "score": 0.0, "degraded": ["剔除未成形K线后无数据"],
-                       "gate_advice": "normal_t", "mode": mode}
+                       "gate_advice": "normal_t"}
                 return IndexRegime.RANGE, 0.0, ctx
 
         date_str = str(df["date"].iloc[-1])
+        audit["effective_date"] = date_str
+        audit["effective_rows"] = int(len(df))
         close = df["close"].astype(float)
 
         feat = _ir_streak_features(df, p)
@@ -746,6 +787,7 @@ class _IndexRegimeEngine:
             gate_advice = "defensive_t"
 
         ctx = {
+            **audit,
             "date": date_str,
             "regime": regime.value,
             "regime_name": index_regime_name(regime),
@@ -766,8 +808,6 @@ class _IndexRegimeEngine:
             },
             "degraded": degraded,
             "gate_advice": gate_advice,
-            "mode": mode,
-            "index_symbol": sym,   # A-7: 分板判定归因（哪个指数判的 regime）
         }
         return regime, s, ctx
 

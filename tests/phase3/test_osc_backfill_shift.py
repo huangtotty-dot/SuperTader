@@ -34,6 +34,8 @@ for _p in (str(_ROOT), str(_AUTO)):
     if _p not in sys.path:
         sys.path.insert(0, _p)
 
+from tests.phase3.regime_fixtures import valid_regime_ctx                 # noqa: E402
+
 from oversold_gap_confirm import backfill as bf                           # noqa: E402
 from oversold_gap_confirm import executor as wse                          # noqa: E402
 from oversold_gap_confirm import hooks as osc_hooks                       # noqa: E402
@@ -75,12 +77,13 @@ class FakeGateway(object):
                 "raw_status": self.cancel_status,
                 "filled_qty": 0, "filled_price": None, "message": ""}
 
-    def place_order(self, code, side, qty, price):
-        self.placed.append((code, side, qty, price))
+    def place_order(self, code, side, qty, price, execution_limit_price=None):
+        limit = execution_limit_price if execution_limit_price is not None else price
+        self.placed.append((code, side, qty, limit))
         fq = qty if self.place_fills else 0
         return {"order_id": "o_new_%d" % len(self.placed),
                 "status": ("filled" if self.place_fills else self.place_status),
-                "filled_qty": fq, "filled_price": (price if self.place_fills else None),
+                "filled_qty": fq, "filled_price": (limit if self.place_fills else None),
                 "message": ""}
 
 
@@ -88,7 +91,8 @@ def _fills_with_pending(codes=("600001",), qty=1000, px=10.0, with_oid=True):
     """首轮 fills：给定票全部「挂单未成交」。with_oid=False 模拟 GM 仿真常态（无单号）。"""
     return {"date": "2026-10-15", "buys": [
         {"code": c, "order_id": ("o_" + c) if with_oid else None, "status": "submitted",
-         "qty_placed": qty, "filled_qty": 0, "price": px, "gap": 0.1, "filled_price": None}
+         "qty_placed": qty, "filled_qty": 0, "price": px, "execution_limit_price": px,
+         "gap": 0.1, "filled_price": None}
         for c in codes]}
 
 
@@ -149,7 +153,8 @@ class TestShiftExecGates(unittest.TestCase):
         res = _run_exec(gw, [_spare("600002", 0.08)])
         self.assertEqual(res["cancel"]["released"], [])
         self.assertEqual(res["cancel"]["unconfirmed"], ["600001"])
-        self.assertEqual(res["committed"].get("600001"), 10000.0, "未确认冻结必须继续占额度")
+        self.assertEqual(res["committed"].get("600001"), 10000.0,
+                         "未确认冻结必须按实际限价 10.00 继续占额度")
         self.assertEqual([p["code"] for p in res["placed"]], ["600002"],
                          "未确认 ≠ 失败：剩余额度内的补单仍允许")
 
@@ -383,12 +388,17 @@ class TestHooksShiftGates(unittest.TestCase):
         rt = self._rt(quotes=_quotes("600001", "600002", "600003"))
         _seed_state(date="2026-10-15", prepare=True, morning=True, sell=True,
                     spares=[_spare("600002", 0.08), _spare("600003", 0.07)])
+        context = type("_Ctx", (), {
+            "last_index_regime": "range",
+            "board_regime": {"SHSE.000001": "range"},
+            "board_regime_ctx": {"SHSE.000001": valid_regime_ctx(
+                "2026-10-15", "SHSE.000001", "range")}})()
         # 第 1 轮：撤 600001 → 顺移买候补（保持 submitted 进下一轮 pending）
-        osc_hooks.on_bar(rt, None, _dt.datetime(2026, 10, 15, 10, 8), "2026-10-15", dtime(10, 8))
+        osc_hooks.on_bar(rt, context, _dt.datetime(2026, 10, 15, 10, 8), "2026-10-15", dtime(10, 8))
         placed_r1 = [p[0] for p in rt.gw.placed]
         self.assertIn("600002", placed_r1, "第 1 轮应顺移买入候补 600002")
         # 第 2 轮：撤上一轮的顺移挂单 → 候补已剪枝 ⇒ 不得重买 600002
-        osc_hooks.on_bar(rt, None, _dt.datetime(2026, 10, 15, 10, 14), "2026-10-15", dtime(10, 14))
+        osc_hooks.on_bar(rt, context, _dt.datetime(2026, 10, 15, 10, 14), "2026-10-15", dtime(10, 14))
         all_placed = [p[0] for p in rt.gw.placed]
         self.assertEqual(all_placed.count("600002"), 1,
                          "600002 只能被买一次：第 2 轮不得原票追回")
@@ -444,7 +454,12 @@ class TestShiftTrailAndBook(unittest.TestCase):
                     book_dir=self.book_dir, quotes=_quotes("600001", "600002"))
         rt.gw = FakeGateway(cancel_status=5, place_fills=True)
         _seed_state()
-        n = osc_hooks.try_backfill(rt, None, _dt.datetime(2026, 10, 15, 10, 8),
+        context = type("_Ctx", (), {
+            "last_index_regime": "range",
+            "board_regime": {"SHSE.000001": "range"},
+            "board_regime_ctx": {"SHSE.000001": valid_regime_ctx(
+                "2026-10-15", "SHSE.000001", "range")}})()
+        n = osc_hooks.try_backfill(rt, context, _dt.datetime(2026, 10, 15, 10, 8),
                                    "2026-10-15", 0)
         self.assertEqual(n, 1)
 

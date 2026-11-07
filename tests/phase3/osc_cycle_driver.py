@@ -197,6 +197,7 @@ OSC.prescreen.sym2board_map = lambda: {c: "半导体" for c in SECTOR_CODES}
 # P0-3（2026-10-26）：init 预筛主路径置 no-op——本驱动验的是逐日全周期交易行为，
 # 不让 init 预筛抢跑 09:31 钩子的戏份；prescreen_init 自身由 test_osc_prescreen_init 覆盖。
 OSC.prescreen_init = lambda *a, **k: False
+from tests.phase3.regime_fixtures import valid_board_regime_ctx, valid_regime_ctx  # noqa: E402
 
 
 class Ctx(object):
@@ -208,6 +209,23 @@ class Ctx(object):
 
 ctx = Ctx()
 GM.init(ctx)
+
+# 正常全周期使用结构完整的 range detect 返回；冻结 uni_down 仍由 W45 专项测试覆盖。
+import analysis.index_regime as _ir                                   # noqa: E402
+_ir.GM_DATA_READY = True
+GM._index_daily_df = lambda *a, **k: types.SimpleNamespace(empty=False)
+GM._append_index_forming = lambda df, symbol: df
+
+
+def _fake_range_detect(**kwargs):
+    regime = "range"
+    symbol = kwargs.get("index_symbol") or "SHSE.000001"
+    context = valid_regime_ctx(kwargs["as_of"], symbol, regime,
+                               mode=kwargs.get("mode") or "morning")
+    return type("_Regime", (), {"value": regime})(), 0.0, context
+
+
+_ir.detect_index_regime = _fake_range_detect
 out = {"stock_n": len(GM.STOCKS), "days": {}}
 FED = set()
 

@@ -317,8 +317,9 @@ class _BudgetGateway:
     def get_positions(self):
         return {}
 
-    def place_order(self, code, side, qty, price):
-        self.placed.append((code, qty, price))
+    def place_order(self, code, side, qty, price, execution_limit_price=None):
+        limit = execution_limit_price if execution_limit_price is not None else price
+        self.placed.append((code, qty, limit))
         return {"order_id": None, "status": "submitted", "filled_qty": 0,
                 "filled_price": None, "message": ""}
 
@@ -352,8 +353,8 @@ class TestDailyBudgetTwoHundredK(unittest.TestCase):
             self.assertEqual([r["qty_placed"] for r in fills["buys"]],
                              [10000, 9500, 400, 0])
 
-            # 600001 撤单释放、600002/600003 待撤仍冻结；补单只剩 10.1 万额度，
-            # 实际候补下 9.5 万后，已成交+冻结+新补单累计活跃名义为 19.4 万。
+            # 600001 撤单释放、600002/600003 待撤仍按实际限价 10 元冻结；
+            # 补单可用 101,000 元，新单保持整数手并预留 95,000 元。
             pending = backfill.pending_from_fills(fills)
             result = backfill.run_backfill_exec(
                 gateway, DATE, fills, pending,
@@ -369,7 +370,7 @@ class TestDailyBudgetTwoHundredK(unittest.TestCase):
             self.assertEqual(result["cancel"]["unconfirmed"], ["600002", "600003"])
             self.assertEqual(result["cash_budget"], 101000.0)
             self.assertEqual(len(result["placed"]), 1)
-            new_notional = result["placed"][0]["qty"] * result["placed"][0]["price"]
+            new_notional = result["placed"][0]["reserved_notional"]
             active = sum(result["committed"].values()) + new_notional
             self.assertEqual(active, 194000.0)
             self.assertLessEqual(active, 200000.0)

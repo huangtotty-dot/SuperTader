@@ -33,9 +33,10 @@ executor 的迟确认兜底**保留不删**（双保险）；两者叠加安全�
 write_risk，从不回填 OSC——而买侧「挂单即入账」，委托未成交即终态 ⇒ 账本虚挂 +
 fills 留痕永远 submitted + summary `rejected_count=0` 虚报（10-21 002591/688028 实证）。
 `apply_reject(book_dir, event)` 对称于 `apply_fill`：按原始状态把留痕分别修为
-rejected/cancelled/expired（summary 按 `_buys_summary` 重算即自动正确）、BUY 时把该笔
-「qty_placed@委托价」份额从账本剔除（加权反算还原旧成本）、SELL 时账本不动（卖侧
-下单不扣账，无账可回滚）。status=6 是待撤在途而非终态，直接跳过且不释放任何份额。
+rejected/cancelled/expired、BUY 时把该笔未成交虚挂份额从账本剔除（加权反算还原旧成本）。
+SELL 终态若携带累计 filled_qty/filled_vwap/fee，先按累计量与留痕已有量之差补真实成交，
+再写终态并清剩余量；累计 VWAP/费用覆盖留痕，重复终态不重复扣账或叠加费用。
+status=6 是待撤在途而非终态，直接跳过且不释放任何份额。
 
 ## 并发与幂等
 
@@ -65,7 +66,7 @@ from . import executor
 JOURNAL_FILE = "fill_backfill_journal.jsonl"
 
 # 与 executor._TERMINAL_BAD 同义（不 import 私有名，避免耦合内部常量演化）
-_BAD_STATUS = {"rejected", "expired", "cancelled", "error"}
+_BAD_STATUS = {"rejected", "expired", "cancelled"}
 
 
 # ════════════════════════ 工具 ════════════════════════
@@ -184,11 +185,12 @@ def _find_unconfirmed_buy_rec(fills: dict, code: str, order_id=None,
         for rec in candidates:
             if str(rec.get("order_id") or rec.get("id") or "") == wanted:
                 return rec
-        for rec in candidates:
-            if not str(rec.get("order_id") or rec.get("id") or ""):
-                return rec
-        return None
-    return candidates[0] if candidates else None
+        # 真实 ID 只能认领唯一空 ID 留痕；多个空候选绝不按时间/代码猜测。
+        blank = [rec for rec in candidates
+                 if not str(rec.get("order_id") or rec.get("id") or "")]
+        return blank[0] if len(blank) == 1 else None
+    # 空 ID 事件也只有唯一活动候选才可认领。
+    return candidates[0] if len(candidates) == 1 else None
 
 
 def _already_confirmed_buy_rec(fills: dict, code: str, qty: int, price: float) -> bool:
@@ -215,6 +217,18 @@ def _already_confirmed_buy_rec(fills: dict, code: str, qty: int, price: float) -
     return False
 
 
+def _sync_existing_intent(book_dir, date, rec, log):
+    """只更新 SDK 前已存在的意图；旧留痕无意图时不事后补造证明。"""
+    if not isinstance(rec, dict) or not rec.get("intent_id"):
+        return
+    try:
+        executor.sync_order_intent_from_record(book_dir, date, rec)
+    except Exception as exc:
+        rec["intent_sync_error"] = str(exc)
+        log("[FB] ⚠️ order_intent 同步失败 %s %s: %s" % (
+            rec.get("code"), rec.get("order_id"), exc))
+
+
 def _fix_buy_fills_file(book_dir: str, date: str, code: str, qty: int,
                         price: float, fee, order_id: str, log) -> dict | None:
     """修正 fills_{date}.json 里匹配的买单留痕；返回被修正的 rec（未命中/失败 → None）。"""
@@ -228,19 +242,24 @@ def _fix_buy_fills_file(book_dir: str, date: str, code: str, qty: int,
     if rec is None:
         return None
     rec["status"] = "filled_by_event"
-    # 事件 qty 是该委托的成交总量（status==3 全成）⇒ 覆盖到总量而非累加；
-    # 有真实成交价才写价，撤单竞态回报缺价时保留 null，绝不编造。
     rec["filled_qty"] = max(int(rec.get("filled_qty") or 0), int(qty))
+    raw_price = None
     if price is not None and float(price) > 0:
-        rec["filled_price"] = round(float(price), 4)
+        raw_price = float(price)
+        # 原始高精度 VWAP 同时用于留痕、成交额与越界判定，不做有损写回。
+        rec["filled_price"] = raw_price
+        rec["filled_notional"] = int(rec["filled_qty"]) * raw_price
+    elif not rec.get("filled_price"):
+        rec["filled_notional"] = None
     if fee:
-        rec["fee_actual"] = round(float(rec.get("fee_actual") or 0) + float(fee), 2)
+        # 真实费用完整保留；两位小数仅用于展示，不能破坏生产锚点与跨重启恢复。
+        rec["fee_actual"] = float(rec.get("fee_actual") or 0) + float(fee)
     if order_id:
         rec["order_id"] = str(order_id)
-    rec["qty_remaining"] = max(0, int(rec.get("qty_placed") or 0)
-                               - int(rec["filled_qty"]))
+    executor._settle_buy_budget_record(rec)
+    if rec.get("budget_bound_breach"):
+        rec["budget_bound_breach"]["source"] = "async_fill"
     rec["fill_confirmed_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    # summary 按合并口径全量重算（与首轮/补单轮同一函数），exec_report 同步
     try:
         summary = dict(fills.get("summary") or {})
         summary.update(executor._buys_summary(fills.get("buys") or []))
@@ -257,23 +276,19 @@ def _fix_buy_fills_file(book_dir: str, date: str, code: str, qty: int,
             _atomic_dump(_rep, _rep_fp)
     except Exception as e:
         log("[FB] ⚠️ fills 留痕修正落盘失败（账本已修）: %s" % e)
+    _sync_existing_intent(book_dir, date, rec, log)
     return rec
 
 
 def _find_sell_rec(book_dir: str, date: str, code: str, order_id=None):
-    """在当日 sells_morning_/sells_close_ 里找有效卖单留痕。
-
-    有真实 order_id 时精确匹配；仅旧空 ID 留痕允许被真实回报认领，绝不认领另一
-    真实 ID。返回 (fills, fp, rec)；无命中 → (None, None, None)。**只读不改**。
-    """
+    """真实 ID 精确匹配；真实/空 ID 都只在空留痕候选唯一时允许认领。"""
     wanted = str(order_id or "")
+    blank_matches, empty_matches = [], []
     for tag in ("morning", "close"):
         fp = os.path.join(book_dir, "sells_%s_%s.json" % (tag, date))
         fills = _load_json(fp)
         if not isinstance(fills, dict):
             continue
-        hit = None
-        blank = None
         for rec in reversed(fills.get("sells") or []):
             if str(rec.get("code")) != str(code):
                 continue
@@ -281,62 +296,79 @@ def _find_sell_rec(book_dir: str, date: str, code: str, order_id=None):
                 continue
             if rec.get("status") in _BAD_STATUS:
                 continue
-            if wanted:
-                existing = str(rec.get("order_id") or rec.get("id") or "")
-                if existing == wanted:
-                    return fills, fp, rec
-                if not existing and blank is None:
-                    blank = rec
-                continue
-            hit = rec
-        if wanted and blank is not None:
-            return fills, fp, blank
-        if not wanted and hit is not None:
-            return fills, fp, hit
+            existing = str(rec.get("order_id") or rec.get("id") or "")
+            if wanted and existing == wanted:
+                return fills, fp, rec
+            empty_matches.append((fills, fp, rec))
+            if wanted and not existing:
+                blank_matches.append((fills, fp, rec))
+    if wanted and len(blank_matches) == 1:
+        return blank_matches[0]
+    if not wanted and len(empty_matches) == 1:
+        return empty_matches[0]
     return None, None, None
 
 
-def _fix_sell_fills_file(book_dir: str, date: str, code: str, qty: int,
-                         price: float, fee, log) -> str:
-    """修正当日 sells_morning_/sells_close_ 里匹配的卖单留痕；返回卖出原因（无命中 → ''）。
+def _refresh_sell_summary(fills, open_after=None):
+    """成交/终态共用完整卖侧摘要，保留持有到期与柜台 expired 的独立口径。"""
+    rows = fills.get("sells") or []
+    summary = dict(fills.get("summary") or {})
+    horizon = sum(1 for r in rows
+                  if r.get("reason") == "horizon_expired" and int(r.get("qty_placed") or 0) > 0)
+    summary.update({
+        "sells_planned": len(rows),
+        "sells_placed": sum(1 for r in rows if int(r.get("qty_placed") or 0) > 0),
+        "sells_filled": sum(1 for r in rows if int(r.get("filled_qty") or 0) > 0),
+        **executor._sell_order_terminal_summary(rows),
+        "stop_count": sum(1 for r in rows if r.get("reason") == "sl5_deep"
+                          and int(r.get("qty_placed") or 0) > 0),
+        "pop_count": sum(1 for r in rows if r.get("reason") == "pop_sell"
+                         and int(r.get("qty_placed") or 0) > 0),
+        "notional_placed": round(sum(
+            (r.get("filled_qty") or r.get("qty_placed") or 0)
+            * (r.get("filled_price") or r.get("price") or 0)
+            for r in rows if int(r.get("qty_placed") or 0) > 0), 2),
+        "expired_count": horizon,
+        "horizon_expired_count": horizon,
+    })
+    if open_after is not None:
+        summary["open_after"] = int(open_after)
+    fills["summary"] = summary
 
-    已**全额**确认的留痕不再累加（迟确认/同步成交/先前事件，哪个先到都行）。
-    """
-    fills, fp, hit = _find_sell_rec(book_dir, date, code)
+
+def _fix_sell_fills_file(book_dir: str, date: str, code: str, qty: int,
+                         price: float, fee, log, order_id="") -> str:
+    """按累计成交修正卖单留痕；累计 VWAP/费用覆盖旧值，不做有损写回。"""
+    fills, fp, hit = _find_sell_rec(book_dir, date, code, order_id)
     if hit is None:
         return ""
     if int(hit.get("filled_qty") or 0) >= int(hit.get("qty_placed") or 0):
-        return str(hit.get("reason") or "")         # 已全额确认：只取原因，不再累加
+        return str(hit.get("reason") or "")
     reason = str(hit.get("reason") or "")
     hit["status"] = "filled_by_event"
-    # 事件 qty 是该委托的**成交总量**（status==3 全成）⇒ 覆盖到总量而非累加；
-    # 价取真实成交价（executor 迟确认只能记估算价/委托价，此处是更准的真源）。
     hit["filled_qty"] = max(int(hit.get("filled_qty") or 0), int(qty))
-    hit["filled_price"] = round(float(price), 4)
-    if fee:
-        hit["fee_actual"] = round(float(fee), 2)
+    hit["filled_price"] = float(price)
+    if fee is not None:
+        hit["fee_actual"] = float(fee)
+    if order_id:
+        hit["order_id"] = str(order_id)
     hit["fill_confirmed_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     try:
-        summary = dict(fills.get("summary") or {})
-        summary["sells_filled"] = sum(
-            1 for r in (fills.get("sells") or [])
-            if int(r.get("filled_qty") or 0) > 0)
-        fills["summary"] = summary
+        _refresh_sell_summary(fills)
         _atomic_dump(fills, fp)
     except Exception as e:
         log("[FB] ⚠️ sells 留痕修正落盘失败（账本已修）: %s" % e)
     return reason
 
 
-def _fix_sell_open_after(book_dir: str, date: str, code: str, open_after: int, log) -> None:
-    """卖出账本更新后补写终态持仓数；重读文件以保留已落盘的成交确认字段。"""
-    fills, fp, hit = _find_sell_rec(book_dir, date, code)
+def _fix_sell_open_after(book_dir: str, date: str, code: str, open_after: int, log,
+                         order_id="") -> None:
+    """卖出账本更新后补写终态持仓数；重读文件以保留成交确认字段。"""
+    fills, fp, hit = _find_sell_rec(book_dir, date, code, order_id)
     if hit is None:
         return
     try:
-        summary = dict(fills.get("summary") or {})
-        summary["open_after"] = int(open_after)
-        fills["summary"] = summary
+        _refresh_sell_summary(fills, open_after=open_after)
         _atomic_dump(fills, fp)
     except Exception as e:
         log("[FB] ⚠️ sells open_after 落盘失败（账本已修）: %s" % e)
@@ -377,7 +409,8 @@ def apply_fill(book_dir: str, event: dict, log=print) -> dict | None:
                 "code": code, "side": side}
 
     if side == "SELL":
-        result = _apply_sell(book, open_pos, book_dir, date, code, qty, price, fee, log)
+        result = _apply_sell(book, open_pos, book_dir, date, code, qty, price,
+                             fee, order_id, log)
     else:
         result = _apply_buy(book, open_pos, book_dir, date, code, qty, price,
                             fee, order_id, log)
@@ -387,7 +420,8 @@ def apply_fill(book_dir: str, event: dict, log=print) -> dict | None:
                   "code": code, "side": side, "qty": qty, "price": price}
     else:
         if side == "SELL":
-            _fix_sell_open_after(book_dir, date, code, len(open_pos), log)
+            _fix_sell_open_after(book_dir, date, code, len(open_pos), log,
+                                 order_id=order_id)
         _atomic_dump(book, os.path.join(book_dir, executor.BOOK_FILE))
 
     result["key"] = key
@@ -400,20 +434,27 @@ def apply_fill(book_dir: str, event: dict, log=print) -> dict | None:
     return result
 
 
-def _apply_sell(book, open_pos, book_dir, date, code, qty, price, fee, log):
-    """卖出回填：剔除/减量 + closed 留痕 + sells json 修正。无需动作返回 None。
-
-    ⚠️ 双保险去重（与 executor 迟确认/同步成交叠加安全）：
-    fill 事件的 qty 是该委托的**成交总量**（status==3 全成 ⇒ = qty_placed）；
-    executor 侧若已扣账（同步 filled 或迟确认 filled_by_position），会同步把
-    sells 留痕 rec.filled_qty 写成已扣数量 ⇒ 本函数只回填 **差额** `qty − rec.filled_qty`，
-    差额 ≤0 即视为「executor 已处理」，账本不动（防二次减量）。
-    """
-    _fills, _fp, rec = _find_sell_rec(book_dir, date, code)
+def _apply_sell(book, open_pos, book_dir, date, code, qty, price, fee, order_id, log):
+    """卖出回填：先精确认领委托，再按累计成交差额减量，防止同票多单串账。"""
+    _fills, _fp, rec = _find_sell_rec(book_dir, date, code, order_id)
+    if rec is None:
+        # 有活动卖单但无法唯一认领时，绝不能绕过留痕直接删持仓。
+        for tag in ("morning", "close"):
+            payload = _load_json(os.path.join(book_dir, "sells_%s_%s.json" % (tag, date))) or {}
+            if any(str(r.get("code")) == str(code)
+                   and int(r.get("qty_placed") or 0) > 0
+                   and r.get("status") not in _BAD_STATUS
+                   for r in (payload.get("sells") or [])):
+                log("[FB] SELL %s order_id=%s 无法唯一匹配活动卖单 ⇒ 账本不动"
+                    % (code, order_id))
+                return None
     prior = int(rec.get("filled_qty") or 0) if rec else 0
     reason = str(rec.get("reason") or "") if rec else ""
     delta = int(qty) - prior
     if rec is not None and delta <= 0:
+        # 数量已入账仍允许终态累计 VWAP/费用覆盖留痕，但账本绝不重复扣减。
+        _fix_sell_fills_file(book_dir, date, code, qty, price, fee, log,
+                             order_id=order_id)
         log("[FB] SELL %s %d股@%.4f：executor 已扣账 %d 股（%s）⇒ 账本不动"
             % (code, qty, price, prior, rec.get("status")))
         return None
@@ -423,16 +464,17 @@ def _apply_sell(book, open_pos, book_dir, date, code, qty, price, fee, log):
         log("[FB] SELL %s %d股@%.4f：账本已无该票（迟确认或先前事件已回填）⇒ 跳过"
             % (code, qty, price))
         return None
-    _fix_sell_fills_file(book_dir, date, code, qty, price, fee, log)
+    _fix_sell_fills_file(book_dir, date, code, qty, price, fee, log,
+                         order_id=order_id)
     oq = int(entry.get("qty") or 0)
     nq = oq - delta
     if nq <= 0:
         open_pos.pop(code, None)
         closed = book.setdefault("closed", {})
         closed[code] = {**entry,
-                        "exit_date": date, "exit_price": round(float(price), 4),
+                        "exit_date": date, "exit_price": float(price),
                         "exit_qty": oq, "exit_reason": reason or "event_backfill",
-                        "exit_fee": (round(float(fee), 2) if fee else None),
+                        "exit_fee": (float(fee) if fee is not None else None),
                         "closed_by": "fill_event"}
         log("[FB] SELL %s %d股@%.4f 全平 ⇒ 账本剔除，入 closed（%s）"
             % (code, oq, price, reason or "event_backfill"))
@@ -441,8 +483,8 @@ def _apply_sell(book, open_pos, book_dir, date, code, qty, price, fee, log):
                 "detail": "open %d→0，入 closed" % oq}
     entry["qty"] = nq
     entry.setdefault("partial_exits", []).append(
-        {"date": date, "qty": delta, "price": round(float(price), 4),
-         "fee": (round(float(fee), 2) if fee else None),
+        {"date": date, "qty": delta, "price": float(price),
+         "fee": (float(fee) if fee is not None else None),
          "reason": reason or "event_backfill"})
     log("[FB] SELL %s %d股@%.4f 部分回填（executor 已扣 %d）⇒ 账本 %d→%d"
         % (code, qty, price, prior, oq, nq))
@@ -460,6 +502,15 @@ def _apply_buy(book, open_pos, book_dir, date, code, qty, price, fee, order_id, 
         # 语义守卫②：留痕已是 confirmed 且参数一致 ⇒ 重复事件，跳过
         if _already_confirmed_buy_rec(fills, code, qty, price):
             log("[FB] BUY %s %d股@%.4f：留痕已确认（重复事件）⇒ 跳过" % (code, qty, price))
+            return None
+        unresolved = [r for r in (fills.get("buys") or [])
+                      if str(r.get("code")) == str(code)
+                      and int(r.get("qty_placed") or 0) > 0
+                      and r.get("status") not in _BAD_STATUS
+                      and int(r.get("filled_qty") or 0) < int(r.get("qty_placed") or 0)]
+        if unresolved:
+            log("[FB] BUY %s order_id=%s 无法唯一匹配活动买单 ⇒ 不兜底加仓"
+                % (code, order_id))
             return None
         # 兜底合入：找不到对应委托留痕（异常路径，如账本缺失但真实成交）——
         # 按 register_buys_to_book 同款加权合并直接入账，标 created_by 供复盘追查。
@@ -568,7 +619,7 @@ def _terminal_semantics(status, detail=""):
 
 def _reject_buy_fills_file(book_dir: str, date: str, code: str,
                            status, rej_detail: str, order_id: str, log):
-    """按原始状态修正买单留痕（拒单/撤单/过期），重算 summary 并同步 exec_report。"""
+    """按原始状态修正买单留痕；部分成交保留，未成交余量才随终态释放。"""
     sem = _terminal_semantics(status, rej_detail)
     if sem is None:
         return None
@@ -579,17 +630,18 @@ def _reject_buy_fills_file(book_dir: str, date: str, code: str,
         return None
     rec = _find_unconfirmed_buy_rec(fills, code, order_id)
     if rec is None:
-        return None                       # 孤儿/手工单或留痕已终态（rejected/全成）
-    if str(rec.get("status")) in _CONFIRMED_STATUS:
-        log("[FB] BUY 终态 %s：留痕已 %s（成交与终态矛盾）⇒ 语义守卫跳过"
-            % (code, rec.get("status")))
+        return None
+    placed = int(rec.get("qty_placed") or 0)
+    filled = int(rec.get("filled_qty") or 0)
+    if str(rec.get("status")) in _CONFIRMED_STATUS and placed > 0 and filled >= placed:
+        log("[FB] BUY 终态 %s：留痕已全成 ⇒ 语义守卫跳过" % code)
         return None
     rec["status"] = terminal
     rec["message"] = message
     rec[confirmed_field] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    rec["qty_remaining"] = 0
     if order_id:
         rec["order_id"] = str(order_id)
+    executor._settle_buy_budget_record(rec)
     try:
         summary = dict(fills.get("summary") or {})
         summary.update(executor._buys_summary(fills.get("buys") or []))
@@ -605,23 +657,24 @@ def _reject_buy_fills_file(book_dir: str, date: str, code: str,
             _atomic_dump(_rep, _rep_fp)
     except Exception as e:
         log("[FB] ⚠️ 终态 fills 留痕落盘失败（账本照修）: %s" % e)
+    _sync_existing_intent(book_dir, date, rec, log)
     return rec
 
 
 def _reject_sell_fills_file(book_dir: str, date: str, code: str,
                             status, rej_detail: str, order_id: str, log) -> bool:
-    """按原始状态修正卖单留痕；账本不动（卖侧下单时不扣账）。"""
+    """卖单部分成交后仍可进入终态：保留成交量、清余量、重算完整摘要。"""
     sem = _terminal_semantics(status, rej_detail)
     if sem is None:
         return False
     terminal, message, confirmed_field = sem
     fills, fp, hit = _find_sell_rec(book_dir, date, code, order_id)
     if hit is None:
-        return False                        # 孤儿/手工单或留痕已终态
-    if str(hit.get("status")) in _CONFIRMED_STATUS \
-            or int(hit.get("filled_qty") or 0) > 0:
-        log("[FB] SELL 终态 %s：留痕已 %s（成交与终态矛盾）⇒ 语义守卫跳过"
-            % (code, hit.get("status")))
+        return False
+    placed = int(hit.get("qty_placed") or 0)
+    filled = int(hit.get("filled_qty") or 0)
+    if str(hit.get("status")) in _CONFIRMED_STATUS and placed > 0 and filled >= placed:
+        log("[FB] SELL 终态 %s：留痕已全成 ⇒ 语义守卫跳过" % code)
         return False
     hit["status"] = terminal
     hit["message"] = message
@@ -630,24 +683,22 @@ def _reject_sell_fills_file(book_dir: str, date: str, code: str,
     if order_id:
         hit["order_id"] = str(order_id)
     try:
-        summary = dict(fills.get("summary") or {})
-        summary["rejected_count"] = sum(
-            1 for r in (fills.get("sells") or [])
-            if r.get("status") in _BAD_STATUS or r.get("status") == "error")
-        fills["summary"] = summary
+        _refresh_sell_summary(fills)
         _atomic_dump(fills, fp)
     except Exception as e:
         log("[FB] ⚠️ 终态 sells 留痕落盘失败: %s" % e)
+    _sync_existing_intent(book_dir, date, hit, log)
     return True
 
 
 def apply_reject(book_dir: str, event: dict, log=print) -> dict | None:
     """把一条委托终态事件回填：4/8→rejected、5→cancelled、12→expired，并重算 summary。
-    BUY 时回滚账本虚挂份额；status=6 待撤在途，跳过且不释放。函数名为兼容既有调用保留。
-    幂等；全程 fail-open（单条失败 log 后继续，由调用方兜底）。
+    BUY 时回滚账本虚挂份额；SELL 先按累计成交差额补账，再写终态并清剩余量。
+    status=6 待撤在途，跳过且不释放。函数名为兼容既有调用保留。
 
     event 字段（宿主终态分支构造）：
         time / code / side∈{BUY,SELL} / qty / order_id / status(原始数字码) / rej_detail
+        SELL 可另带累计 filled_qty、原始 filled_vwap、累计 fee。
     返回动作描述 dict（跳过返回 {"action": "skipped", ...}；事件非法返回 None）。
     """
     code = executor.code_of(event.get("code")) or str(event.get("code") or "")
@@ -656,9 +707,12 @@ def apply_reject(book_dir: str, event: dict, log=print) -> dict | None:
     date = ts[:10]
     try:
         qty = int(event.get("qty") or 0)
+        filled_qty = int(event.get("filled_qty") or event.get("filled_volume") or 0)
     except (TypeError, ValueError):
         return None
     if not code or side not in ("BUY", "SELL") or qty <= 0 or len(date) != 10:
+        return None
+    if filled_qty < 0 or filled_qty > qty:
         return None
     status = event.get("status")
     rej_detail = str(event.get("rej_detail") or "")
@@ -677,16 +731,35 @@ def apply_reject(book_dir: str, event: dict, log=print) -> dict | None:
         return {"action": "skipped", "reason": "duplicate_key", "key": key,
                 "code": code, "side": side}
 
+    terminal_fill = None
+    if side == "SELL" and filled_qty > 0:
+        try:
+            filled_vwap = float(event.get("filled_vwap") or event.get("fill_vwap") or 0)
+        except (TypeError, ValueError):
+            filled_vwap = 0.0
+        if filled_vwap > 0:
+            fee = event.get("fee")
+            if fee is None:
+                fee = event.get("filled_commission")
+            terminal_fill = apply_fill(book_dir, {
+                "time": ts, "code": code, "side": side, "qty": filled_qty,
+                "fill_vwap": filled_vwap, "fee": fee, "order_id": order_id}, log=log)
+        else:
+            log("[FB] ⚠️ SELL %s 终态含累计成交 %d 股但缺真实 VWAP，不编造成交价"
+                % (code, filled_qty))
+
     book = executor.load_book(book_dir)
     open_pos = book.setdefault("open", {})
     book_dirty = False
 
     if side == "SELL":
         if _reject_sell_fills_file(book_dir, date, code, status, rej_detail, order_id, log):
-            log("[FB] SELL 终态 %s %d股：留痕→%s（账本不动，卖侧下单不扣账）"
-                % (code, qty, terminal))
+            fill_action = str((terminal_fill or {}).get("action") or "none")
+            log("[FB] SELL 终态 %s %d股：累计成交对账=%s，留痕→%s"
+                % (code, qty, fill_action, terminal))
             result = {"action": "sell_" + terminal, "code": code, "qty": qty,
-                      "detail": "卖单留痕→%s；账本不动" % terminal}
+                      "filled_qty": filled_qty, "fill_action": fill_action,
+                      "detail": "累计成交对账=%s；卖单留痕→%s" % (fill_action, terminal)}
         else:
             result = {"action": "skipped", "reason": "semantic_guard",
                       "code": code, "side": side, "qty": qty,

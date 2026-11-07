@@ -27,6 +27,7 @@ for _p in (str(_ROOT), str(_AUTO)):
 
 from oversold_gap_confirm import executor as ex                     # noqa: E402
 from oversold_gap_confirm.decision import evaluate                  # noqa: E402
+from tests.phase3.regime_fixtures import valid_regime_ctx           # noqa: E402
 
 
 def _bar(low=11.0, close=11.5, amount=11.4 * 1000, volume=1000):
@@ -290,10 +291,14 @@ class TestZeroCandidateBuyRecord(unittest.TestCase):
                                 .read_text(encoding="utf-8"))
             expected_summary = {
                 "buys_planned": 0, "buys_placed": 0, "rejected_count": 0,
+                "cancelled_count": 0, "expired_count": 0, "error_count": 0,
+                "terminal_counts": {"rejected": 0, "cancelled": 0, "expired": 0, "error": 0},
                 "deferred_count": 0, "notional_placed": 0.0,
+                "actual": 0.0, "reserved": 0.0, "committed": 0.0,
+                "budget_bound_breaches": [],
                 "candidates": 0, "cash_before": 0.0,
             }
-            self.assertEqual(len(expected_summary), 7, "正常摘要七字段仍须完整")
+            self.assertEqual(len(expected_summary), 15, "正常摘要与四个终态分栏仍须完整")
             self.assertEqual(set(fills["summary"]), set(expected_summary) | {"skip_reason"})
             for key, value in expected_summary.items():
                 self.assertEqual(fills["summary"][key], value)
@@ -378,7 +383,11 @@ class TestIndexRegimeBuyGate(unittest.TestCase):
                 pass
 
         rt = _RT()
-        context = type("_Ctx", (), {"last_index_regime": regime})()
+        board = {"SHSE.000001": regime}
+        context = type("_Ctx", (), {
+            "last_index_regime": regime, "board_regime": board,
+            "board_regime_ctx": {"SHSE.000001": valid_regime_ctx(
+                "2026-10-26", "SHSE.000001", regime)}})()
         n = hooks.try_buy(rt, context, datetime(2026, 10, 26, 10, 0))
         return n, rt, gw
 

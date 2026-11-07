@@ -19,6 +19,7 @@ for path in (str(ROOT), str(AUTO)):
 from framework.gateway import GmGateway  # noqa: E402
 from framework.services import GmServices  # noqa: E402
 from oversold_gap_confirm import backfill, executor, fillbackfill, hooks  # noqa: E402
+from tests.phase3.regime_fixtures import valid_regime_ctx                 # noqa: E402
 
 DATE = "2026-10-30"
 
@@ -36,7 +37,8 @@ def _read_json(directory, name):
 def _buy(code, order_id="o1", status="submitted", qty=100, filled=0, price=10.0,
          filled_price=None):
     return {"code": code, "symbol": "SHSE." + code, "side": "BUY",
-            "gap": 0.05, "price": price, "qty_target": qty, "qty_placed": qty,
+            "gap": 0.05, "price": price, "execution_limit_price": price,
+            "qty_target": qty, "qty_placed": qty,
             "status": status, "filled_qty": filled, "filled_price": filled_price,
             "order_id": order_id, "qty_remaining": qty - filled, "message": ""}
 
@@ -179,8 +181,9 @@ class _FakeGateway:
         return {"order_id": order_id, "status": "cancelled", "raw_status": 5,
                 "filled_qty": 0, "filled_price": None}
 
-    def place_order(self, code, side, qty, price):
-        self.placed.append((code, side, qty, price))
+    def place_order(self, code, side, qty, price, execution_limit_price=None):
+        limit = execution_limit_price if execution_limit_price is not None else price
+        self.placed.append((code, side, qty, limit))
         return {"order_id": None if self.empty_new_id else "new-1",
                 "status": "submitted", "filled_qty": 0, "filled_price": None,
                 "message": ""}
@@ -250,7 +253,12 @@ class TestHooksFillsTruthAndRestart(unittest.TestCase):
         return _FakeRT(self.dir, gateway)
 
     def _run(self, rt):
-        return hooks.try_backfill(rt, None, dt.datetime(2026, 10, 30, 10, 8), DATE, 0)
+        context = type("_Ctx", (), {
+            "last_index_regime": "range",
+            "board_regime": {"SHSE.000001": "range"},
+            "board_regime_ctx": {"SHSE.000001": valid_regime_ctx(
+                DATE, "SHSE.000001", "range")}})()
+        return hooks.try_backfill(rt, context, dt.datetime(2026, 10, 30, 10, 8), DATE, 0)
 
     def test_latest_filled_fills_clears_stale_pending_before_any_cancel(self):
         rec = _buy("600001", status="filled_by_event", filled=100, filled_price=10.5)

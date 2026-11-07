@@ -26,6 +26,7 @@ for _p in (str(_ROOT), str(_AUTO)):
 from oversold_gap_confirm import backfill as bf                           # noqa: E402
 from oversold_gap_confirm import executor as wse                          # noqa: E402
 from oversold_gap_confirm import hooks as osc_hooks                       # noqa: E402
+from tests.phase3.regime_fixtures import valid_regime_ctx                 # noqa: E402
 
 
 # ════════════════════════ 鸭子类型 FakeGateway ════════════════════════
@@ -65,8 +66,9 @@ class FakeGateway(object):
                 "filled_price": 10.0 if self.cancel_status == 3 else None,
                 "message": ""}
 
-    def place_order(self, code, side, qty, price):
-        self.placed.append((code, side, qty, price))
+    def place_order(self, code, side, qty, price, execution_limit_price=None):
+        limit = execution_limit_price if execution_limit_price is not None else price
+        self.placed.append((code, side, qty, limit))
         return {"order_id": "o_new_%d" % len(self.placed), "status": self.place_status,
                 "filled_qty": self.place_filled, "filled_price": None, "message": ""}
 
@@ -75,7 +77,8 @@ def _fills_with_pending(codes=("600001",), qty=1000, px=10.0):
     """首轮 fills：给定票全部「挂单未成交」。"""
     return {"date": "2026-10-15", "buys": [
         {"code": c, "order_id": "o_" + c, "status": "submitted", "qty_placed": qty,
-         "filled_qty": 0, "price": px, "gap": 0.1, "filled_price": None}
+         "filled_qty": 0, "price": px, "execution_limit_price": px,
+         "gap": 0.1, "filled_price": None}
         for c in codes]}
 
 
@@ -115,7 +118,7 @@ class TestRunBackfillExec(unittest.TestCase):
         self.assertEqual(res["cancel"]["released"], [])
         self.assertEqual(res["cancel"]["unconfirmed"], ["600001"])
         self.assertEqual(res["committed"].get("600001"), 10000.0,
-                         "未确认的冻结必须继续占额度")
+                         "未确认的冻结必须按实际限价 10.00 继续占额度")
         self.assertEqual([p["code"] for p in res["placed"]], ["600002"],
                          "候补仍可买，但额度必须扣掉未释放的部分")
 
@@ -152,14 +155,19 @@ class TestRunBackfillExec(unittest.TestCase):
         gw = FakeGateway(cancel_status=5)
         fills = {"buys": [{"code": "600002", "order_id": "o2", "status": "submitted",
                            "qty_placed": 8000, "filled_qty": 6000, "price": 10.0,
-                           "filled_price": 10.0}]}
+                           "execution_limit_price": 10.0, "filled_price": 10.0}]}
         pend = bf.pending_from_fills(fills)
         res = bf.run_backfill_exec(gw, "2026-10-15", fills, pend,
-                                   [_spare("600002", 0.08)], self.PC, self.Q,
+                                   [_spare("600002", 0.08)],
+                                   dict(self.PC, **{"600002": 10.0}), self.Q,
                                    params=self.PARAMS, sleep_fn=lambda s: None,
                                    log=lambda *a: None)
-        # 已成交 6 万 ⇒ 单票只剩 4 万 ⇒ 4000 股（而不是满额 1 万股）
+        # 已成交 6 万 ⇒ 单票只剩 4 万；新增委托按实际限价 10 元预留，
+        # 原数量不足时整笔跳过，不再按涨停上界动态缩量。
         self.assertEqual([p["qty"] for p in res["placed"]], [4000])
+        placed = res["placed"][0]
+        self.assertEqual(placed["execution_limit_price"], 10.0)
+        self.assertLessEqual(60000.0 + placed["qty"] * 10.0, 100000.0)
 
 
 class TestBackfillTimes(unittest.TestCase):
@@ -323,7 +331,12 @@ class TestHooksBackfillStateMachine(unittest.TestCase):
             "buy": True, "candidates": {"600001": {"prev_close": 9.0}, "600002": {"prev_close": 9.0}},
             "fills": _fills_with_pending(), "pending": bf.pending_from_fills(_fills_with_pending()),
             "spares": [_spare("600002", 0.08)], "done_codes": {"600001"}})
-        n = osc_hooks.try_backfill(rt, None, _dt.datetime(2026, 10, 15, 10, 8),
+        context = type("_Ctx", (), {
+            "last_index_regime": "range",
+            "board_regime": {"SHSE.000001": "range"},
+            "board_regime_ctx": {"SHSE.000001": valid_regime_ctx(
+                "2026-10-15", "SHSE.000001", "range")}})()
+        n = osc_hooks.try_backfill(rt, context, _dt.datetime(2026, 10, 15, 10, 8),
                                    "2026-10-15", 0)
         self.assertEqual(n, 1)
         self.assertEqual([p[0] for p in rt.gw.placed], ["600002"])

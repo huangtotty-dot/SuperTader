@@ -41,6 +41,7 @@ import math
 import os
 import time
 from datetime import datetime
+from decimal import Decimal, InvalidOperation, ROUND_DOWN
 
 # 仓库根：本文件在 execution/auto/oversold_gap_confirm/ ⇒ 上溯 4 层
 _ROOT = os.environ.get("SUPERTRADER_ROOT") or os.path.dirname(
@@ -126,29 +127,53 @@ def evaluate_full(prev_close: dict, ma20: dict, bars: dict,
 
 # ════════════════════════ 计划构建（纯函数，可单测） ════════════════════════
 
+def _dec(value, default="0") -> Decimal:
+    """十进制预算真源：字符串进 Decimal，NaN/inf/非法值按 default。"""
+    try:
+        value = Decimal(str(value))
+        return value if value.is_finite() else Decimal(default)
+    except (InvalidOperation, TypeError, ValueError):
+        return Decimal(default)
+
+
+def _floor_lot(cap, price, lot) -> int:
+    """金额/参考价/整数手全部向下取整；绝不使用 epsilon 松一格。"""
+    px, lot_d = _dec(price), Decimal(int(lot))
+    if px <= 0 or lot_d <= 0:
+        return 0
+    lots = (_dec(cap) / px / lot_d).to_integral_value(rounding=ROUND_DOWN)
+    return max(0, int(lots * lot_d))
+
+
+def execution_limit_price(reference_price) -> float | None:
+    """BUY 实际限价 = 策略参考价向下到分；它不是涨停价，也不用于重算数量。"""
+    px = _dec(reference_price)
+    if px <= 0:
+        return None
+    return float((px * 100).to_integral_value(rounding=ROUND_DOWN) / 100)
+
+
 def build_buy_plan(picks: list, positions: dict, cash_budget: float,
                    single_budget: float, min_lot: int = 100,
                    cash_headroom: float = 0.95, code_committed: dict | None = None) -> list:
-    """按 gap 顺序（picks 已排序）折算买入量并做现金截断。纯函数。
+    """按参考价和十进制金额构建原始数量；执行阶段不得再动态缩手数。
 
-    `code_committed`（2026-10-14，买不进替补用）：`{code: 已占用名义}` —— 该票**今日已下单**
-    （成交 + 未确认撤单的冻结）的名义。单票上限扣掉它 ⇒ 顺移时不会把同一票买超 `single_budget`。
-    **默认 None ⇒ 行为与加此参数之前逐位一致**（现有额度测试原样通过）。
-
-    返回 [{code, gap, price, qty_target, qty_place, truncated, defer_reason, cash_left}]。
+    `code_committed` 仍先扣单票已占用额。现金在票间顺序分配，数量按整数手向下；
+    后续若日额度/现金/单票余量不足，执行器整笔跳过，不把原委托缩成另一笔委托。
     """
-    plan, cash_left = [], float(cash_budget)
+    plan, cash_left = [], _dec(cash_budget)
     _committed = code_committed or {}
+    headroom = _dec(cash_headroom, "0.95")
     for p in picks:
         code = p["code"]
-        px = float((p.get("price") or p.get("close") or 0))
+        px = _dec(p.get("price") or p.get("close") or 0)
         gap = p.get("gap")
-        rec = {"code": code, "gap": gap, "price": px, "qty_target": 0,
+        rec = {"code": code, "gap": gap, "price": float(px), "qty_target": 0,
                "qty_place": 0, "truncated": False, "defer_reason": None,
                "cash_left": None}
         held_qty = max(0, int((positions.get(code) or {}).get("qty") or 0))
         avail = max(0, int((positions.get(code) or {}).get("available") or 0))
-        if not (px > 0):
+        if px <= 0:
             rec["defer_reason"] = "no_price(10:00收盘缺失)"
             plan.append(rec)
             continue
@@ -156,15 +181,12 @@ def build_buy_plan(picks: list, positions: dict, cash_budget: float,
             rec["defer_reason"] = "t1_locked(当日已持无可卖,加仓暂缓)"
             plan.append(rec)
             continue
-        try:
-            _used = max(0.0, float(_committed.get(code) or 0))
-        except (TypeError, ValueError):
-            _used = 0.0
-        _single_left = max(0.0, float(single_budget) - _used)
-        cap = min(_single_left, cash_left * cash_headroom)
-        qty_target = int(cap / px / min_lot) * min_lot
+        used = max(Decimal(0), _dec(_committed.get(code) or 0))
+        single_left = max(Decimal(0), _dec(single_budget) - used)
+        cap = min(single_left, cash_left * headroom)
+        qty_target = _floor_lot(cap, px, min_lot)
         rec["qty_target"] = qty_target
-        afford = int(cash_left / px / min_lot) * min_lot
+        afford = _floor_lot(cash_left, px, min_lot)
         qty_place = min(qty_target, afford)
         if qty_place < qty_target and qty_target >= min_lot:
             rec["truncated"] = True
@@ -173,8 +195,8 @@ def build_buy_plan(picks: list, positions: dict, cash_budget: float,
             rec["defer_reason"] = ("cash_insufficient(现金不足截断至0)"
                                    if qty_target >= min_lot else "below_min_lot(不足一手)")
         else:
-            cash_left -= qty_place * px
-        rec["cash_left"] = round(cash_left, 2)
+            cash_left -= Decimal(qty_place) * px
+        rec["cash_left"] = float(cash_left.quantize(Decimal("0.01"), rounding=ROUND_DOWN))
         plan.append(rec)
     return plan
 
@@ -184,14 +206,36 @@ def build_buy_plan(picks: list, positions: dict, cash_budget: float,
 _TERMINAL_BAD = {"rejected", "expired", "cancelled"}
 
 
-def _place_and_poll(gateway, code, side, qty, price, poll_rounds, poll_sleep, sleep_fn, log):
+def _place_and_poll(gateway, code, side, qty, price, poll_rounds, poll_sleep, sleep_fn, log,
+                    execution_limit=None, on_ack=None):
+    """下单后立即持久化认领信息，再轮询；BUY 限价缺失时绝不回退市价。"""
     try:
-        rep = gateway.place_order(code, side, qty, price)
+        if side == "BUY" and execution_limit is not None:
+            rep = gateway.place_order(code, side, qty, price,
+                                      execution_limit_price=execution_limit)
+        else:
+            rep = gateway.place_order(code, side, qty, price)
     except Exception as e:
-        return {"order_id": None, "status": "error", "filled_qty": 0,
-                "filled_price": None, "message": f"place_order异常:{type(e).__name__}:{e}"}
+        # 异常不等于柜台未接单：结果未知时只能保留预留，等待恢复核验。
+        failure = {"order_id": None, "status": "unresolved", "filled_qty": 0,
+                   "filled_price": None,
+                   "message": f"place_order异常:{type(e).__name__}:{e}"}
+        if on_ack is not None:
+            try:
+                on_ack(failure)
+            except Exception as persist_error:
+                failure["intent_persist_error"] = str(persist_error)
+        return failure
     rep = {"order_id": None, "status": "submitted", "filled_qty": 0,
            "filled_price": None, "message": "", **(rep or {})}
+    if on_ack is not None:
+        try:
+            on_ack(rep)
+        except Exception as e:
+            # 柜台已经接单但 ID/状态没可靠落盘：标记未知并闭锁，重启继续核验。
+            rep["status"] = "unresolved"
+            rep["intent_persist_error"] = str(e)
+            return rep
     if rep["status"] in ("submitted", "partial") and rep.get("order_id") \
             and hasattr(gateway, "poll_order") and poll_rounds > 0:
         for _ in range(int(poll_rounds)):
@@ -201,11 +245,375 @@ def _place_and_poll(gateway, code, side, qty, price, poll_rounds, poll_sleep, sl
                 sleep_fn(float(poll_sleep))
                 rep2 = gateway.poll_order(rep["order_id"], code)
             except Exception as e:
-                log(f"[WS] poll_order {code} 异常（保持上一状态）: {e}")
+                log(f"[WS] poll_order {code} 异常（结果未知，保留预留）: {e}")
+                rep["status"] = "unresolved"
+                rep["message"] = "%s poll_order异常:%s:%s" % (
+                    rep.get("message") or "", type(e).__name__, e)
                 break
             if rep2:
                 rep = {**rep, **rep2}
     return rep
+
+
+# ════════════════════════ 买侧 · 成交上界预留与动态额度（W45 P0） ════════════════════════
+
+_TERMINAL_ORDER_STATUS = {"rejected", "expired", "cancelled"}
+
+
+def _positive_price(value):
+    try:
+        px = float(value)
+    except (TypeError, ValueError):
+        return None
+    return px if math.isfinite(px) and px > 0 else None
+
+
+def _limit_of_record(rec):
+    """读取真实委托限价；旧涨停预留价绝不升格为新限价。"""
+    limit = _positive_price((rec or {}).get("execution_limit_price"))
+    if limit is not None:
+        return limit
+    ceiling = _positive_price((rec or {}).get("execution_ceiling_price"))
+    if ceiling is not None and (rec or {}).get("budget_price_kind") != "exchange_limit_up":
+        return ceiling
+    return None
+
+
+def _settle_buy_budget_record(rec, rep=None):
+    """按真实价量结算；缺 VWAP 的成交仅以实际限价保守占用。"""
+    if rep is not None:
+        raw = rep.get("raw_status")
+        status = rep.get("status") or "error"
+        try:
+            status = {4: "rejected", 8: "rejected", 5: "cancelled",
+                      12: "expired", 6: "pending_cancel"}.get(int(raw), status) \
+                if raw is not None else status
+        except (TypeError, ValueError):
+            pass
+        rec["status"] = status
+        if rep.get("order_id"):
+            rec["order_id"] = rep.get("order_id")
+        rec["message"] = rep.get("message") or ""
+        if raw is not None:
+            rec["raw_status"] = raw
+        # 同步/轮询若带回真实费用，必须随真实价量保留；后续缺费用轮询不清空旧值。
+        if rep.get("fee_actual") is not None:
+            rec["fee_actual"] = rep.get("fee_actual")
+        elif rep.get("fee") is not None:
+            rec["fee_actual"] = rep.get("fee")
+        if rep.get("fee") is not None:
+            rec["fee"] = rep.get("fee")
+        reported_qty = max(0, int(rep.get("filled_qty") or 0))
+        rec["filled_qty"] = max(int(rec.get("filled_qty") or 0), reported_qty)
+        reported_px = _positive_price(rep.get("filled_price"))
+        if reported_px is not None:
+            rec["filled_price"] = reported_px
+            rec["filled_notional"] = int(rec["filled_qty"]) * reported_px
+        elif int(rec["filled_qty"]) > 0 and not _positive_price(rec.get("filled_price")):
+            rec["filled_notional"] = None
+    placed = max(0, int(rec.get("qty_placed") or 0))
+    filled = min(placed, max(0, int(rec.get("filled_qty") or 0)))
+    rec["filled_qty"] = filled
+    remaining = max(0, placed - filled)
+    terminal = str(rec.get("status") or "") in _TERMINAL_ORDER_STATUS
+    rec["qty_remaining"] = 0 if terminal else remaining
+    limit = _limit_of_record(rec)
+    if limit is not None:
+        rec["execution_limit_price"] = limit
+        rec["execution_ceiling_price"] = limit  # 兼容别名，语义仍是真实限价
+    rec["reserved_notional"] = (0.0 if terminal or limit is None
+                                else float(Decimal(remaining) * _dec(limit)))
+    actual_px = _positive_price(rec.get("filled_price"))
+    if actual_px is not None and limit is not None and _dec(actual_px) > _dec(limit):
+        rec["budget_bound_breach"] = {
+            "kind": "fill_above_execution_limit", "code": rec.get("code"),
+            "order_id": rec.get("order_id"), "filled_price": actual_px,
+            "execution_limit_price": limit, "execution_ceiling_price": limit,
+            "source": "sync_or_poll"}
+    return rec
+
+
+def _budget_bound_issues(fills, prev_close=None):
+    """验证在途单的真实限价与成交上界；旧涨停上界不再兜底。"""
+    issues = []
+    for rec in ((fills or {}).get("buys") or []):
+        code = str(rec.get("code") or "")
+        placed = max(0, int(rec.get("qty_placed") or 0))
+        filled = min(placed, max(0, int(rec.get("filled_qty") or 0)))
+        status = str(rec.get("status") or "")
+        remaining = max(0, placed - filled)
+        limit = _limit_of_record(rec)
+        active = remaining > 0 and status not in _TERMINAL_ORDER_STATUS and status != "skipped"
+        if (active or (filled > 0 and not _positive_price(rec.get("filled_price")))) \
+                and limit is None:
+            issues.append({"kind": "missing_execution_limit", "code": code,
+                           "order_id": rec.get("order_id")})
+        elif active:
+            rec["execution_limit_price"] = limit
+            rec["execution_ceiling_price"] = limit
+            rec["reserved_notional"] = float(Decimal(remaining) * _dec(limit))
+        actual_px = _positive_price(rec.get("filled_price"))
+        if actual_px is not None and limit is not None and _dec(actual_px) > _dec(limit):
+            issues.append({"kind": "fill_above_execution_limit", "code": code,
+                           "order_id": rec.get("order_id"), "filled_price": actual_px,
+                           "execution_limit_price": limit})
+    return issues
+
+
+def _intent_to_fill(row):
+    limit = _positive_price(row.get("execution_limit_price"))
+    qty = max(0, int(row.get("qty") or 0))
+    rec = {"code": str(row.get("code") or ""), "side": "BUY",
+           "symbol": gm_symbol_of(str(row.get("code") or "")),
+           "intent_id": str(row.get("intent_id") or ""),
+           "gap": row.get("gap"), "price": row.get("reference_price"),
+           "qty_target": qty, "qty_placed": qty, "truncated": False,
+           "defer_reason": None, "status": row.get("status") or "reserved",
+           "filled_qty": max(0, int(row.get("filled_qty") or 0)),
+           "filled_price": row.get("filled_price"),
+           "filled_notional": row.get("filled_notional"),
+           "reserved_notional": row.get("reserved_notional"),
+           "order_id": row.get("order_id"), "raw_status": row.get("raw_status"),
+           "qty_remaining": max(0, int(row.get("qty_remaining") or 0)),
+           "message": row.get("message") or "",
+           "execution_limit_price": limit, "execution_ceiling_price": limit,
+           "budget_price_kind": "reference_limit"}
+    for key in ("budget_bound_breach", "fee_actual", "fee"):
+        if row.get(key) is not None:
+            rec[key] = row.get(key)
+    return _settle_buy_budget_record(rec)
+
+
+def _merge_recovered_buys(view, recovered):
+    """恢复记录并入 fills 预算视图，覆盖崩溃时 fills 尚未落盘的窗口。"""
+    rows = view.setdefault("buys", [])
+    for saved in recovered:
+        iid = str(saved.get("intent_id") or "")
+        oid = str(saved.get("order_id") or "")
+        hit = None
+        for idx, old in enumerate(rows):
+            if iid and str(old.get("intent_id") or "") == iid:
+                hit = idx
+                break
+            if oid and str(old.get("order_id") or "") == oid:
+                hit = idx
+                break
+        if hit is None:
+            rows.append(saved)
+        else:
+            # 持久化意图与 fills 冲突时保留较新的真实价量字段，但身份仍按 intent/order。
+            rows[hit] = {**rows[hit], **saved}
+
+
+def recover_order_intents(gateway, date, book_dir, log=print):
+    """重启恢复：有 ID 先逐单 poll；无 ID/查不到/写回失败都禁止后续新 BUY。"""
+    from . import order_intents as _oi
+    out = {"fills": {"date": str(date), "buys": []}, "issues": [], "blocked": False}
+    try:
+        rows = _oi.load(book_dir, date, strict=True)
+    except Exception as e:
+        out["issues"].append({"kind": "order_intent_read_failed", "error": str(e)})
+        out["blocked"] = True
+        return out
+    dirty = False
+    for row in rows:
+        rec = _intent_to_fill(row)
+        status = str(rec.get("status") or "")
+        active = status not in _TERMINAL_ORDER_STATUS and int(rec.get("qty_remaining") or 0) > 0
+        if active:
+            oid = str(rec.get("order_id") or "")
+            if not oid:
+                out["issues"].append({"kind": "recovery_order_id_missing",
+                                      "code": rec.get("code"), "intent_id": rec.get("intent_id")})
+            elif not hasattr(gateway, "poll_order"):
+                out["issues"].append({"kind": "recovery_poll_unavailable",
+                                      "code": rec.get("code"), "order_id": oid})
+            else:
+                try:
+                    rep = gateway.poll_order(oid, rec.get("code")) or {}
+                    if str(rep.get("message") or "") == "order_not_found":
+                        raise LookupError("order_not_found")
+                    _settle_buy_budget_record(rec, rep)
+                    if str(rec.get("status") or "") in ("unresolved", "unknown", "error"):
+                        raise RuntimeError("recovery_status_unresolved")
+                    row.update({"status": rec.get("status"),
+                                "filled_qty": rec.get("filled_qty"),
+                                "filled_price": rec.get("filled_price"),
+                                "filled_notional": rec.get("filled_notional"),
+                                "qty_remaining": rec.get("qty_remaining"),
+                                "reserved_notional": rec.get("reserved_notional"),
+                                "raw_status": rec.get("raw_status"),
+                                "fee_actual": rec.get("fee_actual"),
+                                "fee": rec.get("fee"),
+                                "message": rec.get("message")})
+                    if rec.get("budget_bound_breach"):
+                        row["budget_bound_breach"] = rec["budget_bound_breach"]
+                    dirty = True
+                except Exception as e:
+                    out["issues"].append({"kind": "recovery_order_unresolved",
+                                          "code": rec.get("code"), "order_id": oid,
+                                          "error": "%s:%s" % (type(e).__name__, e)})
+        if rec.get("budget_bound_breach"):
+            out["issues"].append(rec["budget_bound_breach"])
+        out["fills"]["buys"].append(rec)
+    out["issues"].extend(_budget_bound_issues(out["fills"]))
+    if dirty:
+        try:
+            _oi.write_all(book_dir, date, rows)
+        except Exception as e:
+            out["issues"].append({"kind": "order_intent_recovery_persist_failed",
+                                  "error": str(e)})
+    out["blocked"] = bool(out["issues"])
+    if out["blocked"]:
+        try:
+            log(f"[WS] ⛔ 委托意图恢复未闭环，禁止新 BUY: {out['issues']}")
+        except Exception:
+            pass
+    return out
+
+
+def sync_order_intent_from_record(book_dir, date, rec):
+    """异步 fill/terminal 同步既有意图；找不到证明时抛错，不事后伪造预留。"""
+    from . import order_intents as _oi
+    return _oi.upsert_fill_record(book_dir, date, rec)
+
+
+def _execute_buy_plan_with_budget(gateway, buy_plan, prev_close, budget_fills,
+                                  cash_available, daily_budget, single_budget, cfg,
+                                  dry_run=False, sleep_fn=time.sleep, log=print,
+                                  external_committed=None, book_dir=None, date=None):
+    """原数量＋真实限价的顺序 BUY 链；额度不足整笔跳过，不缩手数。"""
+    from . import backfill as _bf
+    from . import order_intents as _oi
+    lot = int(cfg["min_lot"])
+    headroom = _dec(cfg["cash_headroom"], "0.95")
+    external = {str(k): _dec(v or 0) for k, v in (external_committed or {}).items()}
+    view = budget_fills if isinstance(budget_fills, dict) else {"buys": []}
+    view.setdefault("buys", [])
+    live_intents = bool(book_dir and date and not dry_run)
+    issues = []
+    if live_intents:
+        recovered = recover_order_intents(gateway, date, book_dir, log=log)
+        _merge_recovered_buys(view, recovered["fills"]["buys"])
+        issues.extend(recovered["issues"])
+    issues.extend(_budget_bound_issues(view, prev_close))
+    all_issues = list(issues)
+    start = len(view["buys"])
+    records = []
+    for b in (buy_plan or []):
+        code = str(b.get("code") or "")
+        limit = execution_limit_price(b.get("price"))
+        rec = {"code": code, "symbol": gm_symbol_of(code), "side": "BUY",
+               "gap": b.get("gap"), "price": b.get("price"),
+               "qty_target": int(b.get("qty_target") or 0), "qty_placed": 0,
+               "truncated": bool(b.get("truncated")),
+               "defer_reason": b.get("defer_reason"),
+               "status": "skipped", "filled_qty": 0, "filled_price": None,
+               "filled_notional": 0.0, "reserved_notional": 0.0,
+               "fee_est": 0.0, "message": b.get("defer_reason") or "",
+               "order_id": None, "qty_remaining": 0,
+               "execution_limit_price": limit, "execution_ceiling_price": limit,
+               "budget_price_kind": "reference_limit"}
+        if issues:
+            rec["defer_reason"] = "budget_or_recovery_blocked"
+            rec["message"] = "budget_or_recovery_blocked"
+            rec["budget_bound_breach"] = list(issues)
+            records.append(rec)
+            continue
+        if b.get("defer_reason") or int(b.get("qty_place") or 0) <= 0:
+            records.append(rec)
+            continue
+        if limit is None:
+            rec["defer_reason"] = "missing_execution_limit"
+            rec["message"] = "参考价无法形成有效限价"
+            records.append(rec)
+            continue
+        qty = int(b.get("qty_place") or 0)  # 原数量；这里绝不再按 cap 重算或缩小
+        required = Decimal(qty) * _dec(limit)
+        committed = {k: _dec(v) for k, v in _bf.committed_notional(view).items()}
+        external_total = sum(external.values(), Decimal(0))
+        daily_left = max(Decimal(0), _dec(daily_budget) - external_total
+                         - sum(committed.values(), Decimal(0)))
+        local_used = sum((_dec(_bf.record_committed_notional(r))
+                          for r in view["buys"][start:]), Decimal(0))
+        cash_left = max(Decimal(0), _dec(cash_available or 0) - local_used)
+        single_left = max(Decimal(0), _dec(single_budget)
+                          - external.get(code, Decimal(0)) - committed.get(code, Decimal(0)))
+        if required > daily_left or required > single_left or required > cash_left * headroom:
+            rec.update({"defer_reason": "budget_exceeds_original_order",
+                        "message": "原数量×实际限价超过 daily/cash/single 余量，整笔不下单",
+                        "qty_target": qty, "required_notional": float(required),
+                        "daily_left": float(daily_left), "single_left": float(single_left),
+                        "cash_left": float(cash_left)})
+            records.append(rec)
+            continue
+
+        rec.update({"intent_id": _oi.new_id(), "qty_placed": qty, "qty_remaining": qty,
+                    "status": "reserved", "reserved_notional": float(required),
+                    "message": "", "defer_reason": None})
+        view["buys"].append(rec)  # 内存预算先锁定；下一步必须在 SDK 前持久化同一意图
+        if live_intents:
+            try:
+                _oi.upsert_fill_record(book_dir, date, rec, creating=True)
+            except Exception as e:
+                view["buys"].remove(rec)
+                rec.update({"intended_qty": qty, "qty_placed": 0, "qty_remaining": 0,
+                            "reserved_notional": 0.0, "status": "error",
+                            "defer_reason": "order_intent_persist_failed",
+                            "message": "SDK 前意图落盘失败，未调用柜台: %s" % e})
+                issue = {"kind": "order_intent_persist_failed", "code": code,
+                         "error": str(e)}
+                issues.append(issue)
+                all_issues.append(issue)
+                records.append(rec)
+                continue
+        if dry_run:
+            rep = {"order_id": None, "status": "dry", "filled_qty": 0,
+                   "filled_price": None, "message": ""}
+        else:
+            def _ack(reply):
+                _settle_buy_budget_record(rec, reply)
+                if live_intents:
+                    _oi.acknowledge(book_dir, date, rec)
+            rep = _place_and_poll(gateway, code, "BUY", qty, b.get("price"),
+                                  cfg["order_poll_rounds"], cfg["order_poll_sleep_sec"],
+                                  sleep_fn, log, execution_limit=limit, on_ack=_ack)
+        _settle_buy_budget_record(rec, rep)
+        if live_intents:
+            try:
+                _oi.upsert_fill_record(book_dir, date, rec)
+            except Exception as e:
+                rep["intent_persist_error"] = str(e)
+                rep["status"] = "unresolved"
+                _settle_buy_budget_record(rec, rep)
+        if rep.get("intent_persist_error"):
+            issue = {"kind": "order_intent_ack_persist_failed", "code": code,
+                     "order_id": rec.get("order_id"), "error": rep["intent_persist_error"]}
+            issues.append(issue)
+            all_issues.append(issue)
+        if str(rec.get("status") or "") in ("unresolved", "unknown", "error") \
+                and int(rec.get("qty_remaining") or 0) > 0:
+            issue = {"kind": "order_result_unresolved", "code": code,
+                     "order_id": rec.get("order_id"),
+                     "qty_remaining": int(rec.get("qty_remaining") or 0),
+                     "reserved_notional": rec.get("reserved_notional")}
+            issues.append(issue)
+            all_issues.append(issue)
+        eff_px = rec.get("filled_price") or b.get("price") or 0
+        rec["fee_est"] = round(float(rec.get("filled_qty") or qty)
+                               * float(eff_px or 0) * _FEE_BUY, 2)
+        if rec.get("status") not in _TERMINAL_ORDER_STATUS:
+            rec["booked_qty"] = int(rec.get("filled_qty") or qty)
+        breach = rec.get("budget_bound_breach")
+        if breach:
+            issues.append(breach)
+            all_issues.append(breach)
+        log(f"[WS] BUY {code} gap={b.get('gap') if b.get('gap') is not None else float('nan'):.4f} "
+            f"{qty}股@参考{float(b.get('price') or 0):.3f}/实际限价{limit:.2f} → "
+            f"{rec.get('status')} 实际={rec.get('filled_notional')} 预留={rec.get('reserved_notional')}"
+            f"{' [truncated]' if b.get('truncated') else ''} {rec.get('message') or ''}")
+        records.append(rec)
+    return records, all_issues
 
 
 # ════════════════════════ 持仓账本（positions.json，卖侧真源） ════════════════════════
@@ -279,7 +687,7 @@ def register_buys_to_book(book_dir: str, date: str, buys_out: list, picks: list,
     board_map = {p["code"]: p.get("board", "") for p in (picks or [])}
     book = load_book(book_dir)
     for r in (buys_out or []):
-        if r.get("status") in _TERMINAL_BAD or r.get("status") == "error":
+        if r.get("status") in _TERMINAL_BAD:
             continue
         qty = int(r.get("filled_qty") or r.get("qty_placed") or 0)
         if qty <= 0:
@@ -490,16 +898,19 @@ def _execute_sell_decisions(gateway, open_pos: dict, positions: dict, decisions:
 def _finish_sell(date, mode, started, sells_out, open_pos, note, tag, book_dir, cfg) -> dict:
     """卖侧收尾：写 sells_{tag}_{date}.json + 摘要。返回 fills dict。"""
     finished = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    n_rej = sum(1 for r in sells_out if r["status"] in _TERMINAL_BAD or r["status"] == "error")
     notional = sum((r.get("filled_qty") or r.get("qty_placed") or 0)
                    * (r.get("filled_price") or r.get("price") or 0)
                    for r in sells_out if r["qty_placed"] > 0)
+    horizon_expired = sum(1 for r in sells_out
+                          if r.get("reason") == "horizon_expired" and r["qty_placed"] > 0)
     summary = {"sells_planned": len(sells_out),
                "sells_placed": sum(1 for r in sells_out if r["qty_placed"] > 0),
                "sells_filled": sum(1 for r in sells_out if r.get("filled_qty") and r["filled_qty"] > 0),
-               "rejected_count": n_rej,
+               **_sell_order_terminal_summary(sells_out),
                "stop_count": sum(1 for r in sells_out if r.get("reason") == "sl5_deep" and r["qty_placed"] > 0),
-               "expired_count": sum(1 for r in sells_out if r.get("reason") == "horizon_expired" and r["qty_placed"] > 0),
+               # 兼容字段：expired_count 仍表示持有到期，不表示柜台 status=12。
+               "expired_count": horizon_expired,
+               "horizon_expired_count": horizon_expired,
                "pop_count": sum(1 for r in sells_out if r.get("reason") == "pop_sell" and r["qty_placed"] > 0),
                "open_after": len(open_pos),
                "notional_placed": round(notional, 2)}
@@ -747,11 +1158,13 @@ def run_buy_exec(gateway, date: str, prev_close: dict, ma20: dict, bars: dict,
                                         "cost": float((v or {}).get("cost") or 0)}
                  for k, v in (gateway.get_positions() or {}).items()}
     positions = {k: v for k, v in positions.items() if v["qty"] > 0}
-    cash_budget = min(daily_budget, cash0)
+    external_committed = {str(k): max(0.0, float(v or 0))
+                          for k, v in (code_committed or {}).items()}
+    cash_budget = min(max(0.0, daily_budget - sum(external_committed.values())), cash0)
     log(f"[WS] {date} 候选={len(picks)} 现金={cash0:.0f} 预算={cash_budget:.0f} "
         f"picks={[(p['code'], round(p.get('gap') or 0, 4)) for p in picks]}")
 
-    # 买入参考价 = 10:00 收盘（信号入场价口径）
+    # 买入参考价 = 10:00 收盘（信号入场价口径）；它不再承担成交上界或异步额度结算。
     for p in picks:
         b = bars.get(p["code"]) or {}
         p["price"] = p.get("price") or float(b.get("close") or 0)
@@ -759,51 +1172,33 @@ def run_buy_exec(gateway, date: str, prev_close: dict, ma20: dict, bars: dict,
     buy_plan = build_buy_plan(picks, positions, cash_budget, single_budget,
                               min_lot=lot, cash_headroom=float(cfg["cash_headroom"]),
                               code_committed=code_committed)
-    buys_out, total_placed = [], 0.0
-    for b in buy_plan:
-        code = b["code"]
-        rec = {"code": code, "symbol": gm_symbol_of(code), "side": "BUY",
-               "gap": b["gap"], "price": b["price"],
-               "qty_target": b["qty_target"], "qty_placed": 0,
-               "truncated": b["truncated"], "defer_reason": b["defer_reason"],
-               "status": "skipped", "filled_qty": 0, "filled_price": None,
-               "fee_est": 0.0, "message": "",
-               # 2026-10-14 买不进替补：撤单+顺移要靠这两个字段重建"待补单"，
-               # 原先 rec 里没有 order_id ⇒ 挂单在内存外就找不回来了。
-               "order_id": None, "qty_remaining": 0}
-        if b["defer_reason"] or b["qty_place"] <= 0:
-            rec["message"] = b["defer_reason"] or "无需买入"
-            buys_out.append(rec)
+    budget_view = {"date": str(date), "buys": []}
+    new_buys, budget_issues = _execute_buy_plan_with_budget(
+        gateway, buy_plan, prev_close, budget_view, cash0, daily_budget, single_budget,
+        cfg, dry_run=dry_run, sleep_fn=sleep_fn, log=log,
+        external_committed=external_committed, book_dir=book_dir, date=date)
+    # new_buys 是本轮完整决策记录（含零数量/deferred）；budget_view 只含
+    # 恢复旧单与真正走到 SDK 前预留的委托，不能用它覆盖并丢掉未下单记录。
+    new_ids = {id(rec) for rec in new_buys}
+    recovered = [rec for rec in (budget_view.get("buys") or [])
+                 if id(rec) not in new_ids]
+    buys_out = recovered + list(new_buys)
+    total_placed = 0.0
+    for rec in buys_out:
+        if rec.get("status") in _TERMINAL_ORDER_STATUS or not rec.get("qty_placed"):
             continue
-        rep = _place_and_poll(gateway, code, "BUY", b["qty_place"], b["price"],
-                              cfg["order_poll_rounds"], cfg["order_poll_sleep_sec"],
-                              sleep_fn, log)
-        rec.update({"qty_placed": b["qty_place"], "status": rep.get("status"),
-                    "filled_qty": int(rep.get("filled_qty") or 0),
-                    "filled_price": rep.get("filled_price"),
-                    "message": rep.get("message") or "",
-                    "order_id": rep.get("order_id"),
-                    "qty_remaining": max(0, int(b["qty_place"])
-                                         - int(rep.get("filled_qty") or 0))})
-        eff_px = rec["filled_price"] or b["price"]
-        rec["fee_est"] = round(float(rec["filled_qty"] or b["qty_place"]) * float(eff_px or 0) * _FEE_BUY, 2)
-        if rep.get("status") in _TERMINAL_BAD or rep.get("status") == "error":
-            log(f"[WS] ⚠️ BUY {code} {rep.get('status')}: {rec['message']}")
-        else:
-            # 与 register_buys_to_book 的实际入账口径一致，并随首轮 fills 落盘；
-            # register 成功入账后会再次写入同一值。
-            rec["booked_qty"] = int(rec["filled_qty"] or rec["qty_placed"] or 0)
-            total_placed += (rec["filled_qty"] or b["qty_place"]) * float(eff_px or 0)
-        log(f"[WS] BUY {code} gap={b['gap'] if b['gap'] is not None else 'nan':.4f} "
-            f"{b['qty_place']}股@{b['price']:.3f} → {rec['status']}"
-            f"{' [truncated]' if b['truncated'] else ''} {rec['message']}")
-        buys_out.append(rec)
+        eff_px = rec.get("filled_price") or rec.get("price") or 0
+        total_placed += float(rec.get("filled_qty") or rec.get("qty_placed") or 0) \
+            * float(eff_px or 0)
+    if budget_issues:
+        log(f"[WS] ⛔ 买入上界审计异常，后续 BUY 已 fail-closed: {budget_issues}")
 
     fills = _write_fills(date, mode, started, buys_out, picks, cash0, total_placed,
                          cfg, book_dir, spares=spares)
     if not dry_run:
         try:
-            register_buys_to_book(book_dir, date, buys_out, picks, prev_close, ma20, log)
+            # 恢复出的旧委托只回填 fills，不再次加进 positions；仅本轮新记录入账。
+            register_buys_to_book(book_dir, date, new_buys, picks, prev_close, ma20, log)
         except Exception as e:
             log(f"[WS] ⚠️ 买入入账失败（不阻断）: {e}")
     return fills
@@ -899,25 +1294,80 @@ def _write_decision(date, mode, started, full, picks, spares, *,
         return None
 
 
-def _buys_summary(buys_out: list) -> dict:
-    """从 buys 记录列表重算执行摘要（首轮 `_write_fills` 与补单轮合并**同一口径**）。
+def _order_terminal_summary(records) -> dict:
+    """委托终态四栏；持有到期不是委托 expired，绝不在此混计。"""
+    counts = {name: sum(1 for r in (records or []) if r.get("status") == name)
+              for name in ("rejected", "cancelled", "expired", "error")}
+    return {"rejected_count": counts["rejected"],
+            "cancelled_count": counts["cancelled"],
+            "expired_count": counts["expired"],
+            "error_count": counts["error"],
+            "terminal_counts": dict(counts)}
 
-    与首轮 `run_buy_exec` 内联口径逐位一致：未终态否决（rejected/expired/cancelled/error）
-    且 qty_placed>0 才算 placed；名义额 = Σ (filled_qty or qty_placed) × (filled_price or price)。
-    """
+
+def _sell_order_terminal_summary(records) -> dict:
+    """卖侧委托终态分栏；`expired_count` 留给既有 horizon 字段，故另设 order_expired。"""
+    counts = {name: sum(1 for r in (records or []) if r.get("status") == name)
+              for name in ("rejected", "cancelled", "expired", "error")}
+    return {"rejected_count": counts["rejected"],
+            "cancelled_count": counts["cancelled"],
+            "order_expired_count": counts["expired"],
+            "error_count": counts["error"],
+            "terminal_counts": dict(counts)}
+
+
+def _buys_summary(buys_out: list) -> dict:
+    """重算委托摘要，严格分开真实成交、在途预留与保守占用。"""
     _ok = [r for r in (buys_out or [])
-           if not (r.get("status") in _TERMINAL_BAD or r.get("status") == "error")]
-    notional = 0.0
-    for r in _ok:
-        if not (r.get("qty_placed") or 0):
-            continue
-        eff_px = r.get("filled_price") or r.get("price") or 0
-        notional += float(r.get("filled_qty") or r.get("qty_placed") or 0) * float(eff_px or 0)
+           if not (r.get("status") in _TERMINAL_BAD)]
+    actual = 0.0
+    reserved = 0.0
+    committed = 0.0
+    breaches = []
+    for r in (buys_out or []):
+        placed = max(0, int(r.get("qty_placed") or 0))
+        filled = min(placed, max(0, int(r.get("filled_qty") or 0)))
+        actual_px = _positive_price(r.get("filled_price"))
+        known_notional = None
+        try:
+            explicit = r.get("filled_notional")
+            if explicit is not None:
+                value = float(explicit)
+                if math.isfinite(value) and value > 0:
+                    known_notional = value
+        except (TypeError, ValueError):
+            pass
+        if known_notional is None and filled > 0 and actual_px is not None:
+            known_notional = filled * actual_px
+        if known_notional is not None:
+            actual += known_notional
+            committed += known_notional
+        elif filled > 0:
+            # 量已到、VWAP 未到：actual 不编造，committed 按真实限价保守计提。
+            limit = _limit_of_record(r)
+            if limit is not None:
+                committed += filled * limit
+        status = str(r.get("status") or "")
+        if status not in _TERMINAL_ORDER_STATUS and status != "skipped":
+            remaining = max(0, placed - filled)
+            limit = _limit_of_record(r)
+            if remaining > 0 and limit is not None:
+                value = float(Decimal(remaining) * _dec(limit))
+                reserved += value
+                committed += value
+        breach = r.get("budget_bound_breach")
+        if isinstance(breach, list):
+            breaches.extend(breach)
+        elif breach:
+            breaches.append(breach)
     return {"buys_planned": len(buys_out or []),
             "buys_placed": sum(1 for r in _ok if (r.get("qty_placed") or 0) > 0),
-            "rejected_count": len(buys_out or []) - len(_ok),
+            **_order_terminal_summary(buys_out),
             "deferred_count": sum(1 for r in (buys_out or []) if r.get("defer_reason")),
-            "notional_placed": round(notional, 2)}
+            "actual": round(actual, 2), "reserved": round(reserved, 2),
+            "committed": round(committed, 2), "budget_bound_breaches": breaches,
+            # 兼容旧展示字段；新口径不再把未成交委托价冒充实际成交额。
+            "notional_placed": round(committed, 2)}
 
 
 def _write_fills(date, mode, started, buys_out, picks, cash0, total_placed,
@@ -989,23 +1439,26 @@ def merge_backfill_fills(book_dir: str, date: str, round_no: int, round_res: dic
     for p in (placed or []):
         qty = int(p.get("qty") or p.get("qty_placed") or 0)
         filled = int(p.get("filled_qty") or 0)
-        eff_px = p.get("filled_price") or p.get("price") or 0
-        recs.append({"code": p.get("code"), "symbol": gm_symbol_of(str(p.get("code") or "")),
-                     "side": "BUY", "gap": p.get("gap"), "price": p.get("price"),
-                     "qty_target": qty, "qty_placed": qty,
-                     "truncated": False, "defer_reason": None,
-                     "status": p.get("status"), "filled_qty": filled,
-                     "filled_price": p.get("filled_price"),
-                     # 先按 register 同款口径随 fills 落盘；实际入账时 register 再写实。
-                     "booked_qty": ((filled or qty)
-                                    if p.get("status") not in _TERMINAL_BAD
-                                    and p.get("status") != "error" else 0),
-                     "fee_est": round(float(filled or qty) * float(eff_px or 0) * _FEE_BUY, 2),
-                     "message": p.get("message") or "",
-                     "order_id": p.get("order_id"),
-                     "qty_remaining": int(p.get("qty_remaining") or max(0, qty - filled)),
-                     # ★ 留痕字段：第几轮补的、顶了谁的额度
-                     "round": rn, "shift_from": shift})
+        # 以执行器原始记录为底，intent_id、真实限价、VWAP/成交额与 breach 全部保留；
+        # 这里只补留痕字段，不再用展示价或参考价重算执行事实。
+        rec = dict(p)
+        rec.update({"code": p.get("code"),
+                    "symbol": p.get("symbol") or gm_symbol_of(str(p.get("code") or "")),
+                    "side": "BUY", "gap": p.get("gap"), "price": p.get("price"),
+                    "qty_target": int(p.get("qty_target") or qty), "qty_placed": qty,
+                    "truncated": bool(p.get("truncated")),
+                    "defer_reason": p.get("defer_reason"), "status": p.get("status"),
+                    "filled_qty": filled, "filled_price": p.get("filled_price"),
+                    "message": p.get("message") or "", "order_id": p.get("order_id"),
+                    "qty_remaining": int(p.get("qty_remaining") or max(0, qty - filled)),
+                    "round": rn, "shift_from": shift})
+        if "booked_qty" not in rec:
+            rec["booked_qty"] = ((filled or qty)
+                                 if p.get("status") not in _TERMINAL_BAD else 0)
+        if "fee_est" not in rec:
+            eff_px = p.get("filled_price") or p.get("price") or 0
+            rec["fee_est"] = round(float(filled or qty) * float(eff_px or 0) * _FEE_BUY, 2)
+        recs.append(rec)
 
     buys = [b for b in (fills.get("buys") or []) if int(b.get("round") or 0) != rn]
     buys.extend(recs)

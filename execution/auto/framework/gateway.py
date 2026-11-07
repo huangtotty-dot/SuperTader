@@ -176,11 +176,17 @@ class GmGateway(object):
         return out
 
     # ── 下单 ────────────────────────────────────────────────
-    def place_order(self, code: str, side: str, qty: int, price) -> dict:
+    def place_order(self, code: str, side: str, qty: int, price,
+                    execution_limit_price=None) -> dict:
         gm = self._gm
         sym = self.sv.code_to_gm(code)
         now = self._now()
         px = float(price or 0)
+        explicit_limit = None
+        if execution_limit_price is not None:
+            explicit_limit = float(execution_limit_price)
+            if not (0 < explicit_limit < float("inf")):
+                raise ValueError("invalid_execution_limit_price")
 
         # ⓪ 归属硬锁（仅开仓）：被别的策略持有 ⇒ 直接拒，且**不落 order 事件**
         if side == "BUY":
@@ -196,19 +202,32 @@ class GmGateway(object):
         #    `order_type` = 策略 id ⇒ 多策略下孤儿闸按 (code, order_type) 判归属。
         self.sv.write_order(str(now), code, side, int(qty), px, order_type=self.strategy_id)
         _slip_bp = int(self._param("limit_slippage_bp", 0) or 0)
-        if _slip_bp > 0 and px > 0:
-            # 限价口径：开盘价±滑点容忍（买+/卖-），0 则沿用 gm_main 市价风格
+        if explicit_limit is not None:
+            # OSC 新语义：显式限价优先于旧滑点参数，绝不 silently 回退市价单。
+            _kw = dict(order_type=gm.OrderType_Limit, price=explicit_limit)
+            _price_kind = "limit"
+        elif _slip_bp > 0 and px > 0:
+            # 未显式传限价的外部调用保持旧行为。
             _lp = px * (1 + _slip_bp / 1e4) if side == "BUY" else px * (1 - _slip_bp / 1e4)
             _kw = dict(order_type=gm.OrderType_Limit, price=round(_lp, 2))
+            _price_kind = "limit"
         else:
             _kw = dict(order_type=gm.OrderType_Market)
+            _price_kind = "market_protection"
         _o = self.sv.sdk_call("%s_order_%s" % (self.strategy_id, side.lower()), partial(
             gm.order_volume, symbol=sym, volume=int(qty),
             side=gm.OrderSide_Buy if side == "BUY" else gm.OrderSide_Sell,
             position_effect=(gm.PositionEffect_Open if side == "BUY"
                              else gm.PositionEffect_Close),
             **_kw))
-        self.sv.mark_pending_recon(self.context, code, sym, side, int(qty), px, _o)
+        try:
+            self.sv.mark_pending_recon(self.context, code, sym, side, int(qty), px, _o,
+                                       order_price_kind=_price_kind)
+        except TypeError as _e:
+            if "order_price_kind" not in str(_e):
+                raise
+            # 兼容旧测试/外部注入的七参数服务；生产 gm_main 接收并保存 kind。
+            self.sv.mark_pending_recon(self.context, code, sym, side, int(qty), px, _o)
         # 同步回报状态语义：3 全成 / 5 已撤 / 6 待撤 / 8 拒单 / 12 过期。
         # status=3 也必须有真实成交量才可记 filled；filled_volume 优先，volume 仅在
         # 全成状态可作总量。否则保持 submitted，绝不以 0 股伪报全成或让 pending 消失。
@@ -268,9 +287,13 @@ class GmGateway(object):
                 if str(_od.get("id") or _od.get("order_id") or "") != str(order_id):
                     continue
                 _st = int(_od.get("status") or 0)
-                _fq = int(_od.get("filled_volume") or _od.get("volume") or 0)
+                if _st == 3:
+                    _fq = int(_od.get("filled_volume") or _od.get("volume") or 0)
+                else:
+                    # 5/6/12 等非全成状态的 volume 是委托量，不得冒充成交量。
+                    _fq = int(_od.get("filled_volume") or _od.get("filled_qty") or 0)
                 _fp = float(_od.get("filled_vwap") or _od.get("vwap")
-                            or _od.get("price") or 0) or None
+                            or _od.get("filled_price") or 0) or None
                 if _st == 3:
                     return {"order_id": order_id, "status": "filled", "raw_status": _st,
                             "filled_qty": _fq, "filled_price": _fp, "message": ""}
@@ -415,7 +438,8 @@ class GmGateway(object):
                 _st = _od.get("status")
             else:
                 _st = getattr(_od, "status", None)
-            if _st is not None and int(_st) != 6 and int(_st) in self.sv.reject_statuses:
+            # 同步 4/8 才是撤单拒绝；5/12 是可继续轮询结算的确认终态，6 仍在途。
+            if _st is not None and int(_st) in (4, 8):
                 _bad = int(_st)
         if _bad is not None:
             return {"ok": False, "order_id": order_id, "message": "cancel_rejected:status=%s" % _bad}
